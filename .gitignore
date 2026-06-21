@@ -1,0 +1,15 @@
+# Rust
+/target/
+**/*.rs.bk
+
+# Editors / OS
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# Local env
+.env
+.env.local
+
+# Keep Cargo.lock committed (this workspace ships a binary).

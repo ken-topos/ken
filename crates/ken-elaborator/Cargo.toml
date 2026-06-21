@@ -1,0 +1,12 @@
+[package]
+name = "ken-elaborator"
+description = "Ken's surface-to-kernel elaborator and (later) the verification surface: specs, obligations, prover backend."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+ken-kernel = { path = "../ken-kernel" }

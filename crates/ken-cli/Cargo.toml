@@ -1,0 +1,18 @@
+[package]
+name = "ken-cli"
+description = "The `ken` command-line driver."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "ken"
+path = "src/main.rs"
+
+[dependencies]
+ken-kernel = { path = "../ken-kernel" }
+ken-elaborator = { path = "../ken-elaborator" }
+ken-interp = { path = "../ken-interp" }

@@ -1,0 +1,17 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/ken-kernel",
+    "crates/ken-elaborator",
+    "crates/ken-interp",
+    "crates/ken-cli",
+]
+
+# Shared package metadata. Individual crates inherit with `field.workspace = true`.
+[workspace.package]
+version = "0.0.0"
+edition = "2021"
+license = "MIT"
+authors = ["Pat Lasswell"]
+repository = "https://github.com/ken-topos/ken" # PLACEHOLDER — set in WP F1
+rust-version = "1.79"

@@ -1,0 +1,41 @@
+name: CI
+
+# Gates every PR to `main`. These checks are intended to be REQUIRED status
+# checks in branch protection (configure when the GitHub repo is created, WP F1).
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  build-test:
+    name: build + test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: cargo build --workspace --locked
+      - name: Test
+        run: cargo test --workspace --locked
+
+  conformance:
+    name: conformance suite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # TODO(F2/Team Spec): run the black-box conformance corpus once it exists.
+      - name: Conformance (placeholder)
+        run: echo "conformance suite not yet implemented (WP F2)"
+
+  clean-room:
+    name: clean-room provenance check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # TODO(F1/Team Foundation): scan for AGPL license headers / known prototype
+      # source markers in implementation crates. Start as a denylist + manual
+      # review; tighten over time. See CLEAN-ROOM.md.
+      - name: Clean-room scan (placeholder)
+        run: echo "clean-room provenance scan not yet implemented (WP F1)"

@@ -1,0 +1,31 @@
+# Ken code ownership — maps crates/areas to the owning team, so PRs auto-request
+# the right domain review. The Integrator reviews everything and is the only
+# merger of `main`.
+#
+# PLACEHOLDER org/team handles (`@ken-topos/...`) — replace with the real GitHub
+# org and team slugs when the repo is created (WP F1).
+
+# Trusted kernel — highest scrutiny
+/crates/ken-kernel/        @ken-topos/team-kernel
+
+# Verification surface
+/crates/ken-elaborator/    @ken-topos/team-verify
+/crates/ken-prover/        @ken-topos/team-verify
+
+# Language surface & stdlib
+/crates/ken-lang/          @ken-topos/team-language
+
+# Execution / runtime
+/crates/ken-interp/        @ken-topos/team-runtime
+/crates/ken-cli/           @ken-topos/team-runtime
+
+# Spec & conformance — clean-room mediator
+/spec/                     @ken-topos/team-spec
+/conformance/              @ken-topos/team-spec
+
+# Decisions & process
+/docs/adr/                 @ken-topos/team-foundation
+/agent/                    @ken-topos/team-foundation
+
+# Integrator reviews everything (last match wins in CODEOWNERS).
+*                          @ken-topos/integration
