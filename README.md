@@ -36,6 +36,17 @@ not just tests — is the deployable guarantee.
 cargo build --workspace
 ```
 
+Agents (and anyone on the shared dev box) build/test through the machine-wide
+build lock instead, scoped to the touched crate:
+
+```
+source scripts/ken-env.sh           # shared sccache + registry (once per shell)
+scripts/ken-cargo build -p ken-kernel
+```
+
+See [`docs/ops/compute-budget.md`](docs/ops/compute-budget.md) — the build is the
+binding resource on the current hardware.
+
 ## License
 
 MIT. Programs you write in Ken are yours under any license you choose.

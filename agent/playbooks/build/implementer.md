@@ -51,3 +51,6 @@ Mention only the next actor; do not wait for an ack.
   `bug`-typed note to that team (cap your own dig at ~5 min) and continue.
 - **Non-blocking bug never stops the ring.** File it, keep going.
 - Re-resolve thread IDs after a context reset before replying.
+- **Build/test only via `scripts/ken-cargo`, scoped to your crate** (`-p`), never
+  raw `cargo` or `--workspace` — the box is shared and OOMs under parallel builds.
+  Lean on CI for full-workspace + conformance. See COORDINATION §12.

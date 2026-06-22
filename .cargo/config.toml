@@ -1,0 +1,19 @@
+# Ken cargo configuration — laptop-tuned, CI-safe.
+# Full rationale + the shared-cache env in docs/ops/compute-budget.md.
+
+[build]
+# Per-build job cap. The machine-wide build lock (scripts/ken-cargo) ensures only
+# one build runs at a time on the dev laptop, so this many jobs is for THAT build;
+# it leaves cores for the OS, the agent harness, and a scoped test. CI runners
+# (fewer cores) clamp this to their core count automatically.
+jobs = 6
+
+# A faster, lower-memory linker is the single biggest local build win. Linking is
+# the serial bottleneck and the worst RAM spike. Uncomment ONE after installing it
+# (`mold` preferred). Left off by default so a fresh clone always builds.
+#
+# [target.x86_64-unknown-linux-gnu]
+# rustflags = ["-C", "link-arg=-fuse-ld=mold"]   # apt/dnf install mold
+#
+# [target.aarch64-apple-darwin]
+# rustflags = ["-C", "link-arg=-fuse-ld=lld"]    # brew install llvm (ld64.lld)

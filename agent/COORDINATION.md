@@ -140,3 +140,25 @@ Use them sparingly and always event-driven:
    next team never asks again; or, for a real fork, a **Decision**. Every query
    should leave the shared artifacts better — the query rate is a health gauge,
    and it should decay over time.
+
+## 12. Resource discipline (shared 8-core / 16 GB laptop)
+
+Build parallelism multiplies with agent parallelism; the dev box is small.
+Violating this OOMs the machine and stalls everyone. Full rationale +
+configuration: `../docs/ops/compute-budget.md`.
+
+- **Build and test only through `scripts/ken-cargo`** — never raw `cargo build`/
+  `cargo test`. It holds a machine-wide lock (`KEN_BUILD_SLOTS`, default 1) so
+  only one build runs at a time across all agents. Bypassing it is the fastest
+  way to swap-death the box.
+- **Scope to the touched crate** (`-p <crate>`), not `--workspace`. Full-workspace
+  builds, the conformance suite, and any `--release`/LTO build run **in CI**, not
+  on the laptop. Lean on CI green (the Integrator does), don't reproduce it
+  locally.
+- **`source scripts/ken-env.sh`** at session start for the shared `sccache` +
+  `CARGO_HOME`, so you don't recompile dependencies other agents already built.
+- **Idle = paused.** A resident agent costs RAM even when not building. If your
+  ring is blocked or waiting, don't hold the box hot.
+- This is a *current-hardware* constraint, not a design value — it relaxes as
+  hardware grows (the Steward/operator raises the caps; do not raise them
+  unilaterally).

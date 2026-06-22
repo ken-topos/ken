@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# ken-cargo — run cargo under a machine-wide build lock so that N parallel agents
+# don't oversubscribe CPU or OOM the box during compilation/linking.
+#
+# Usage:  ken-cargo build -p ken-kernel
+#         ken-cargo test  -p ken-kernel
+# Agents MUST build/test through this wrapper, never raw `cargo build` (see
+# COORDINATION.md §12 and docs/ops/compute-budget.md).
+#
+# Concurrency: KEN_BUILD_SLOTS (default 1) = how many cargo invocations may run
+# at once machine-wide. 1 is correct for an 8-core / 16 GB laptop (one build at a
+# time, with -j from .cargo/config.toml). Raise it as hardware grows.
+set -euo pipefail
+
+slots="${KEN_BUILD_SLOTS:-1}"
+lockdir="${KEN_LOCK_DIR:-${TMPDIR:-/tmp}/ken-build-locks}"
+mkdir -p "$lockdir"
+
+run() { exec cargo "$@"; }
+
+# Preferred: GNU `sem` gives a correct counting semaphore for slots > 1.
+if [[ "$slots" -gt 1 ]] && command -v sem >/dev/null 2>&1; then
+  exec sem --id ken-build --fg -j "$slots" -- cargo "$@"
+fi
+
+# Default path: a single flock mutex (slots == 1, or no `sem` available).
+# Acquire fd 9 on a lock file; block until free, then run cargo holding the lock.
+exec 9>"$lockdir/build.lock"
+if ! flock -w "${KEN_BUILD_WAIT:-1800}" 9; then
+  echo "ken-cargo: timed out waiting for the build lock ($lockdir/build.lock)" >&2
+  exit 1
+fi
+run "$@"

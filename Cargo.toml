@@ -15,3 +15,23 @@ license = "MIT"
 authors = ["Pat Lasswell"]
 repository = "https://github.com/ken-topos/ken" # PLACEHOLDER — set in WP F1
 rust-version = "1.79"
+
+# --- Compute/disk discipline (see docs/ops/compute-budget.md) ---
+# The dominant cost on the dev laptop is the Rust build, and the biggest memory
+# spike is debuginfo + linking. We minimize debuginfo (most of it lives in
+# dependencies we never step through) to cut RAM, link time, and target/ size.
+
+[profile.dev]
+# Keep backtraces but drop full debuginfo for our own crates.
+debug = "line-tables-only"
+split-debuginfo = "unpacked"   # faster linking on Linux/macOS
+
+[profile.dev.package."*"]
+# Dependencies: no debuginfo at all — they're the bulk of compiled code.
+debug = false
+
+[profile.dev.build-override]
+debug = false                  # build scripts / proc-macros
+
+# CI builds the full workspace and runs release/conformance; agents build
+# scoped + debug locally. Release profile is left at defaults (CI owns it).
