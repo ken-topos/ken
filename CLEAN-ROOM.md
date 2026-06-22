@@ -1,7 +1,7 @@
 # Clean-Room Policy
 
 Ken is an **MIT-licensed, clean-room reimplementation**. It draws on the *design*
-of an AGPLv3 prototype ("Yon", a sibling checkout at `../yon`) but must not be a
+of an AGPLv3 prototype (a sibling checkout at `../yon`) but must not be a
 derivative of its **source code**. This policy is load-bearing: the permissive
 license depends on it.
 

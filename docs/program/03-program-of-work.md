@@ -1,11 +1,9 @@
 # Program of Work
 
 Decomposed, team-sized work packages (WPs) for **Ken** — a new, MIT-licensed,
-Rust-hosted, interpreter-first verified topos language. The AGPLv3 Yon fork is a
-**reference prototype**: study it, derive specs and tests from its behavior, but
-**never copy or closely paraphrase its source** into Ken. Where a WP cites a
-prototype anchor, that anchor is a *spec source* (something to understand and
-re-specify), not code to port.
+Rust-hosted, interpreter-first verified topos language. Where a WP cites a
+prototype anchor, treat it as a *spec source* — behavior to understand and
+re-specify, never code to port (see `../../CLEAN-ROOM.md`).
 
 **Conventions.** Size: S / M / L. Risk: ★ low, ★★ medium, ★★★ high (trust- or
 research-critical). Every WP leaves the conformance suite green, adds its own

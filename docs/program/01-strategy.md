@@ -1,9 +1,5 @@
 # Strategy: a Verified Topos Language for Agentic Development
 
-> **Ken** is a **new, distinct, MIT-licensed language** — a clean-room
-> reimplementation that uses the AGPLv3 Yon fork only as a *reference prototype*,
-> never as a code basis.
-
 **Premise.** Agents can already write working — even high-quality — code. The
 binding constraint on *deploying* agent-written code is **verification**: an
 ethical obligation to assert that code does what it intends without putting users
@@ -18,10 +14,10 @@ surface, whose proof obligations are discharged automatically, and whose proof
 language an agent can write **and prove correct**, at commercial scale, under a
 permissive license with a small auditable trust root.
 
-The Yon prototype demonstrated the core ideas are buildable (a computing
-dependent + cubical kernel, content-addressing, mechanical Yoneda checking). Ken
-takes the validated *design* and reimplements it cleanly, free of the prototype's
-license, name, soundness debt, and accreted constraints.
+The core ideas are demonstrably buildable — a computing dependent + cubical
+kernel, content-addressing, mechanical Yoneda checking. Ken takes that validated
+*design* and reimplements it cleanly, with correct universes, dependent Sigma,
+real types, and a small auditable kernel from day one.
 
 This document defines the goal, the clean-room ground rules, the locked
 architecture, and the workstreams. Sequencing is in `02-roadmap.md`; team-sized
@@ -48,7 +44,8 @@ The MIT goal makes these load-bearing, not optional hygiene.
 5. **Dependencies:** `mmgroup` (BSD-2) is reusable with attribution, or
    reimplement; LLVM/Cranelift are permissive. Prefer permissive or
    reimplemented math.
-6. **Identity:** new name and new trademark posture; do not invoke "Yon."
+6. **Identity:** Ken has its own name and branding; do not carry over the
+   prototype's name or identity.
 
 ---
 

@@ -12,6 +12,14 @@ not just tests — is the deployable guarantee.
   audit.
 - **License:** MIT (see `LICENSE`).
 
+## Origin
+
+Ken's design grew out of studying **Yon**, an AGPLv3 research prototype that
+showed the core ideas are buildable (a content-addressed heap, a dependent +
+cubical kernel). Ken reuses that *design*, never its source — it is a clean-room
+reimplementation and its own language from here on. See
+[`CLEAN-ROOM.md`](CLEAN-ROOM.md).
+
 > **Status: pre-implementation scaffold.** No language code exists yet. This repo
 > currently holds the program of work and the team workflow. Start at
 > [`docs/program/`](docs/program/README.md).
@@ -23,9 +31,8 @@ not just tests — is the deployable guarantee.
 - **Workflow:** [`CONTRIBUTING.md`](CONTRIBUTING.md),
   [`docs/program/04-git-and-integration.md`](docs/program/04-git-and-integration.md),
   and the per-role agent playbooks under [`agent/playbooks/`](agent/playbooks/).
-- **Clean room:** [`CLEAN-ROOM.md`](CLEAN-ROOM.md) — Ken is a clean-room
-  reimplementation; it uses the AGPLv3 "Yon" prototype only as a behavioral
-  reference, never as a code basis.
+- **Clean room:** [`CLEAN-ROOM.md`](CLEAN-ROOM.md) — Ken is implemented from a
+  behavioral spec, never from prototype source.
 - **Code:** `crates/` — `ken-kernel`, `ken-elaborator`, `ken-interp`, `ken-cli`
   (skeletons).
 - **Decisions:** `docs/adr/`.

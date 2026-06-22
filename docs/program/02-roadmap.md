@@ -1,8 +1,8 @@
 # Roadmap
 
 Phased sequence for **Ken** — a new, MIT-licensed,
-Rust-hosted, interpreter-first verified topos language, with the AGPLv3 Yon fork
-as a reference prototype only. Phases are ordered by dependency and risk, not
+Rust-hosted, interpreter-first verified topos language. Phases are ordered by
+dependency and risk, not
 calendar. Each has an **entry state**, an objective **exit gate**, and the **work
 packages** (see `03-program-of-work.md`) it contains.
 

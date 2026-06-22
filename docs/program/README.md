@@ -4,9 +4,9 @@ A plan to build **Ken**: a new, **MIT-licensed**, Rust-hosted, interpreter-first
 **verified topos-oriented language for agentic development**, where
 machine-checkable correctness — not just tests — is the deployable guarantee.
 
-Ken is a **clean-room reimplementation** that draws on the *design* of an AGPLv3
-research prototype ("Yon") but never its source code — a separate behavioral
-spec, written by Team Spec, is the legal bridge (see `01-strategy.md`).
+Ken is a **clean-room reimplementation**: Team Spec turns the prototype's
+*behavior* into a written spec, and all implementation is done from that spec —
+never from prototype source (see `../../CLEAN-ROOM.md`).
 
 ## Read in this order
 
@@ -24,12 +24,7 @@ spec, written by Team Spec, is the legal bridge (see `01-strategy.md`).
 
 ## The one-paragraph version
 
-The Yon prototype proved the hard ideas are buildable — a computing dependent +
-cubical kernel, content-addressing, mechanical Yoneda checking — but it is
-AGPLv3, named, and carries soundness debt (unchecked universes, non-dependent
-Sigma) and accreted constraints (a hard Λ₂₄ slot ceiling, a float-only numeric
-model) that a commercial language should not inherit. Ken takes the validated
-*design*, not the code: a small permanent **Rust trusted kernel** (the de Bruijn
+Ken is a small permanent **Rust trusted kernel** (the de Bruijn
 trust root) with **correct universes and dependent Sigma from day one**, an
 **interpreter** as reference semantics, surface **specification syntax** wired to
 the kernel so an agent can state and check a correctness property, an automated
@@ -59,8 +54,7 @@ AGPL source kept out of their context. Math and ideas are reusable; code is not.
 
 ## Status
 
-Draft v2 (reframed from fork-enhancement to greenfield new language after the
-2026-06-21 decisions: name **Ken**, MIT, clean-room, Rust interpreter-first,
-small permanent kernel, deferred self-hosting). Planning artifacts only; no Ken
-code written. Architecture decisions locked and the name chosen; design ADRs
-remain open.
+Draft v2 — planning artifacts only; no Ken code written. The architecture (MIT,
+clean-room, Rust, interpreter-first, small permanent kernel, deferred
+self-hosting) and the name are locked; design ADRs (content store, syntax,
+effect/Space model) remain open.
