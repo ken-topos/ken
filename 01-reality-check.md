@@ -14,6 +14,9 @@ carries `file:line` evidence from those passes.
 > copied or closely paraphrased into the new MIT codebase. Carry the
 > *understanding* forward; write the code from specs and tests. The AGPL source
 > stays out of the implementation context.
+>
+> This file contains **no copied prototype source** — only `file:line` references
+> and original analysis, which is why it is safe to keep in this public repo.
 
 The companion analysis (`../yon/Yon Programming Language Analysis.md`) is a strong
 *idea map* but was written almost entirely from `yon-lang.org`, the LLVM

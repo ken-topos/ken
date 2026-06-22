@@ -65,10 +65,12 @@ templates) and depends on the GitHub repo existing — which it does not yet
 - **One work package (or one reviewable sub-task) per PR.** Small PRs merge
   faster and keep `main` green. A large WP (e.g. K1, V3) is split into a series.
 - **Every PR must:** target `main`; cite its WP ID and the acceptance criteria it
-  satisfies; be conformance-green in CI; pass the clean-room check; and pass the
-  **review trio** — the owning team (CODEOWNERS), the **Architect**
-  (design/correctness), and the **Integrator** (gate + merge). **Teams do not
-  click merge.**
+  satisfies; be conformance-green in CI; pass the clean-room + path-guard checks;
+  carry **Architect** approval (always) and **Spec** approval (when it touches
+  `/spec`, `/conformance`, or a designated soundness path); then be merged by the
+  **Integrator**. Domain correctness is gated *before* the PR by the team's QA
+  step in the ring — it is not a separate GitHub reviewer. **Teams do not click
+  merge.**
 - **PR template** (F1 deliverable) prompts for: WP ID, acceptance criteria met,
   spec source (not prototype source), cross-team impact, and a conformance note.
 
@@ -83,9 +85,10 @@ why the Integrator can run on a light model. The **Steward** is the escalation
 point for cross-team conflicts; Pat decides scope and anything crossing an ADR.
 Responsibilities:
 
-1. **Confirm the review trio is satisfied:** owning team (CODEOWNERS) approved
-   **and** the Architect approved. The Integrator does not perform the design
-   review itself.
+1. **Confirm the required reviews are present:** the Architect approved (always),
+   and the Spec enclave approved if the PR touched its paths. The Integrator does
+   not perform the design review itself; domain correctness was gated pre-PR by
+   the owning team's QA in the ring.
 2. **Enforce the clean-room gate:** confirm the PR introduces no AGPL-derived
    code and cites spec sources, not prototype source. Reject otherwise.
 3. **Require conformance-green** (CI) and **serialize merges** through a merge
@@ -139,17 +142,25 @@ Steward and Pat.
 ## 5. The merge lifecycle (end to end)
 
 ```
-1. Team branches  wp/<WP-ID>-<slug>  off latest main.
-2. Team implements from SPEC (not prototype source); CI runs build +
-   conformance + clean-room check on each push.
-3. Team opens PR → main, cites WP ID + acceptance criteria; CODEOWNERS +
-   Integrator auto-requested.
-4. Team leader  propose_decision  in ken-integration with the PR URL.
-5. Integrator reviews: correctness, clean-room, conformance-green,
-   cross-cutting impact. Requests changes or proceeds.
-6. Integrator merges (squash, WP-ID in subject) via the merge queue.
-7. Integrator  resolve_decision  (merged) and posts a fresh-main Event,
-   mentioning impacted team leaders with rebase guidance.
+0. (intra-team ring) implementer builds+tests scoped via ken-cargo → QA verifies
+   → leader packages. Domain correctness is gated here, before the PR.
+1. Leader opens a DRAFT PR from wp/<WP-ID>-<slug>, under the team's GitHub
+   identity (the ken-ci App; see docs/ops/github-setup.md), citing WP ID +
+   acceptance criteria + spec sources.
+2. CI runs on the draft: build+test · conformance · clean-room · path-guard.
+   concurrency:cancel-in-progress kills superseded runs on new pushes.
+3. CI green → auto-transition draft → ready-for-review (the ken-ci App).
+4. "Ready" fires CODEOWNERS review requests: Architect (always) + Spec (only if
+   /spec, /conformance, or a designated soundness path is touched). The leader
+   posts a `review_request` Event with the PR URL, mentioning the reviewer(s).
+5. Reviewers approve on GitHub. A change request → push fixes → CI re-runs →
+   stale approvals dismissed → re-review on green. (No draft toggle needed.)
+6. Required approvals + green + merge queue → INTEGRATOR (sole merge identity)
+   squash-merges via the queue (re-checks against latest main). The merge
+   Decision resolves.
+7. Integrator verifies the merge landed + CI green, then posts the ship Event in
+   ken-integration, mentioning only the affected team leaders with rebase
+   guidance. Steward digests the merge log; Pat hears only gate-level news.
 8. Impacted teams rebase active branches on the new main.
 ```
 
@@ -158,20 +169,24 @@ queue re-checks against the latest `main` before landing.
 
 ---
 
-## 6. Setup decisions & automation (for F1 / Pat)
+## 6. Setup & automation
 
-Open items to confirm before this goes live:
+Decided: org/repo **`ken-topos/ken`** (public OSS); **GitHub Actions** CI;
+**squash** merges. Identities follow the **App-plus-accounts** model — a `ken-ci`
+GitHub App for automation + agent authoring, and a small set of machine-user
+accounts for the CODEOWNERS-eligible reviewers and the restricted merger. The
+full mechanics — App permissions, the ~5 accounts (`+tag` emails), branch
+protection, merge queue, CI concurrency, and the auto-ready automation — live in
+**`docs/ops/github-setup.md`**.
 
-- **GitHub org + repo name** (e.g. `ken-topos/ken`), and **private vs public**.
-  Branch protection and CODEOWNERS need real team handles.
-- **Integrator identity:** a dedicated integration agent (recommended) vs. a
-  small team vs. Pat directly for the first phases.
-- **CI provider:** GitHub Actions assumed; confirm.
-- **Merge style:** squash (recommended) for a clean WP-keyed history.
-- **Bridge automation (nice-to-have):** a GitHub-webhook → convo bridge that
-  auto-posts PR-opened / merged Events and opens/resolves the merge Decision.
-  Until it exists, the Integrator agent posts via the convo MCP tools manually —
-  the workflow does not depend on the bridge.
+Still optional:
+- **convo bridge (nice-to-have):** a GitHub-webhook → convo bridge that auto-posts
+  PR-opened / merged Events and opens/resolves the merge Decision. Until it
+  exists, the Integrator posts via the convo MCP tools manually — the workflow
+  does not depend on the bridge.
+- **Per-team owning-review:** off to start (the QA ring covers domain
+  correctness). Add per-team leader accounts + CODEOWNERS crate lines only if
+  review quality later warrants it.
 
 ---
 

@@ -1,30 +1,34 @@
-# Ken code ownership. CODEOWNERS routes domain review to the owning team; the
-# Architect (design/correctness) and Integrator (gate + merge) are required
-# reviewers — listed on each line because GitHub uses only the last-matching
-# pattern per file, so required reviewers don't union across patterns.
+# Ken code ownership = REVIEW routing only. CODEOWNERS requests reviews; it does
+# not restrict who may edit a path (cross-cutting edits are allowed and simply
+# pull the owning area's review). Write/merge restriction is done in branch
+# protection, not here.
 #
-# PLACEHOLDER: these teams/roles must exist under the ken-topos org (WP F1).
-# Models per role are in /agent/MODELS.md.
+# Model (see docs/ops/github-setup.md and 05-git-and-integration.md):
+#   - The Architect is the required reviewer on EVERY PR (the catch-all owner).
+#   - The Spec enclave reviews only its own paths (behavioral contract); the
+#     conformance CI is Spec's automated gate on every PR.
+#   - Owning-team review is NOT a GitHub gate to start — domain correctness is
+#     gated pre-PR by each team's QA in the ring.
+#   - The Integrator is NOT a reviewer; it is the sole merger, enforced by a
+#     branch-protection merge restriction to the `integration` identity.
+#
+# Authors are typically the `ken-ci` App (not a code owner → no self-approval
+# conflict). Reviewer/merger handles must be GitHub teams with member accounts.
+# PLACEHOLDER handles — create under the ken-topos org (docs/ops/github-setup.md).
 
-# Code crates: owning build team + Architect + Integrator
-/crates/ken-kernel/      @ken-topos/team-kernel     @ken-topos/architect @ken-topos/integration
-/crates/ken-elaborator/  @ken-topos/team-verify     @ken-topos/architect @ken-topos/integration
-/crates/ken-prover/      @ken-topos/team-verify     @ken-topos/architect @ken-topos/integration
-/crates/ken-lang/        @ken-topos/team-language   @ken-topos/architect @ken-topos/integration
-/crates/ken-interp/      @ken-topos/team-runtime    @ken-topos/architect @ken-topos/integration
-/crates/ken-cli/         @ken-topos/team-runtime    @ken-topos/architect @ken-topos/integration
-# (Ergo team's crates added when they exist, e.g. /crates/ken-repl/)
+# Architect: required review everywhere.
+*                        @ken-topos/architect
 
-# Spec enclave (clean-room): Spec team + Integrator
-/spec/                   @ken-topos/team-spec       @ken-topos/integration
-/conformance/            @ken-topos/team-spec       @ken-topos/integration
+# Spec enclave (clean-room): its contract, plus Architect.
+/spec/                   @ken-topos/team-spec  @ken-topos/architect
+/conformance/            @ken-topos/team-spec  @ken-topos/architect
 
-# Docs: Librarian + Integrator; ADRs additionally owned by Foundation
-/docs/                   @ken-topos/librarian       @ken-topos/integration
-/docs/adr/               @ken-topos/team-foundation @ken-topos/integration
-
-# Workflow corpus: Steward owns (promotion + topology guard) + Integrator merges
-/agent/                  @ken-topos/steward         @ken-topos/integration
-
-# Everything else: Architect + Integrator
-*                        @ken-topos/architect       @ken-topos/integration
+# --- Optional, enable by uncommenting when the accounts exist ---
+# Force Spec (soundness) review on the trusted kernel / prover:
+# /crates/ken-kernel/    @ken-topos/team-spec  @ken-topos/architect
+# /crates/ken-prover/    @ken-topos/team-spec  @ken-topos/architect
+# Steward owns the workflow corpus (Architect co-owns so Steward PRs aren't
+# self-approval-blocked):
+# /agent/                @ken-topos/steward    @ken-topos/architect
+# Librarian owns product docs:
+# /docs/                 @ken-topos/librarian  @ken-topos/architect

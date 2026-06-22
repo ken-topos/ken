@@ -8,6 +8,13 @@ on:
     branches: [main]
   push:
     branches: [main]
+  merge_group:            # run on the merge queue too, against latest main
+
+# Cancel superseded runs on the same PR/ref so rapid pushes don't pile up CI
+# (matters even though public-repo Actions minutes are free — it shortens queues).
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-test:
@@ -39,3 +46,16 @@ jobs:
       # review; tighten over time. See CLEAN-ROOM.md.
       - name: Clean-room scan (placeholder)
         run: echo "clean-room provenance scan not yet implemented (WP F1)"
+
+  path-guard:
+    name: path-guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # TODO(F1/Team Foundation): SOFT attribution guard — map the PR's team
+      # (from branch prefix `wp/<ID>-` or a `team:*` label) to its allowed paths;
+      # if a PR touches outside them, don't hard-fail — flag it so the owning
+      # area's review (CODEOWNERS) is pulled in. Cross-cutting edits are normal;
+      # never block them. See 05-git-and-integration.md.
+      - name: Path guard (placeholder)
+        run: echo "path-guard not yet implemented (WP F1)"
