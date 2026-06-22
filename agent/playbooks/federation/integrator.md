@@ -44,6 +44,23 @@ next move this triggers (e.g. a kernel-API change → the verify and language
 leaders, with rebase guidance). A routine "merged, nothing pending" mentions
 nobody.
 
+## Keep the pipeline moving (watchdog)
+
+You run a recurring watchdog over the **PR pipeline** — the second of the three
+liveness layers (COORDINATION §13). Enumerate the patterns explicitly:
+green-draft-not-marked-ready, ready-but-unreviewed-past-interval,
+approved-but-unmerged, merge-queue stuck. Per stall, mention the one agent whose
+move it is (the reviewer who hasn't reviewed, the leader whose PR is ready);
+diagnose before restarting; escalate a stuck pipeline to the Steward.
+
+## Mirror GitHub into convo
+
+Agents get **no** GitHub notifications, and you own the integration space. Until
+the `ken-ci` bridge exists, **you mirror PR-state events into convo** per the §4
+map in `../../../05-git-and-integration.md` — post the ship event on merge (above)
+and make sure ready/approval/merge signals reach the right actor with a mention.
+A GitHub event nobody mirrors is a silent stall.
+
 ## Escalation
 
 Ship-criteria changes, cross-team conflicts, or anything needing judgment → the

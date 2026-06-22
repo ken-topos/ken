@@ -162,3 +162,47 @@ configuration: `../docs/ops/compute-budget.md`.
 - This is a *current-hardware* constraint, not a design value — it relaxes as
   hardware grows (the Steward/operator raises the caps; do not raise them
   unilaterally).
+
+## 13. Liveness: keep the rings turning
+
+Token rings stall — an agent finishes, forgets to hand off, and the ring goes
+quiet. Treat stalls as the **default** failure mode, defended in depth by three
+recurring watchdogs, each catching the layer below it failing:
+
+- **Team leader → its own ring.** Enumerated patterns: handed-off-but-silent,
+  PR-open-no-reviewer, blocked-without-a-blocker-mention, idle-with-ready-work.
+- **Integrator → the PR pipeline.** Green-draft-not-marked-ready,
+  ready-but-unreviewed-past-interval, approved-but-unmerged, merge-queue stuck.
+- **Steward → the federation (the backstop).** A whole team idle, a *stalled
+  leader*, a dropped cross-team query, a blocked dependency chain, no movement
+  toward the active gate. The watcher-of-watchers — it catches a watchdog that
+  itself stalled.
+
+Rules for every layer:
+- **Enumerate the stall patterns explicitly** in the watchdog prompt — a generic
+  "check for activity" misses the nuance.
+- **Diagnose before you restart.** Capture the stalled agent's state first; a
+  blind restart no-ops a permission-prompt or rate-limit stall.
+- **Graduated recovery:** detect → mention the one blocked agent → re-mention
+  next interval → escalate up the chain.
+- **Escalation chain:** member → team leader → Steward → Pat. The buck stops at
+  Pat (human): if the Steward goes quiet, the absence of its updates is Pat's
+  signal. Watchdogs are the only schedulers (§1); everyone else is event-driven.
+
+## 14. GitHub signals arrive via convo (no GitHub notifications)
+
+Agents receive **no GitHub notifications.** GitHub is the system of record for
+code and review, but every *actionable* GitHub event reaches you as a **convo
+message that mentions you** — opened/ready PRs, requested reviews, change
+requests, approvals, merges.
+
+- **Never poll GitHub on a timer** for state. Act when the mirrored convo message
+  mentions you. You *may* fetch one specific PR's detail via your token when a
+  message points you at it — that's pull-on-demand, not polling.
+- **If you took a GitHub action that hands the next move to someone, mirror it
+  into the right space mentioning them** — request changes → mention the
+  implementer; approve → mention the Integrator; merge → mention affected leaders.
+  The `ken-ci` bridge automates this when present; until then the acting agent
+  posts it, or the move is silently lost.
+- The full event→message map (what, where, mentioning whom, posted by whom) is in
+  `../05-git-and-integration.md §4`.

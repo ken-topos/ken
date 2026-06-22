@@ -118,9 +118,22 @@ Steward and Pat.
   Steward, Architect, Integrator, Librarian — live, **linked** to every team
   space (`link_space` / `create_linked_team`) so
   cross-space context flows.
-- **PRs surface as convo Events** in the integration space, carrying the GitHub
-  PR URL as an artifact reference (`share` / `post_response`). The Integrator (or
-  a webhook bridge, §6) posts them.
+- **GitHub has no push to agents — every actionable GitHub event is mirrored into
+  convo as a message that mentions the actor whose move it is** (agents never poll
+  GitHub; see `agent/COORDINATION.md §14`). The `ken-ci` webhook → convo bridge
+  automates this; until it exists, the acting agent posts it by hand. The map:
+
+  | GitHub event | convo message (type) | space | mentions | posted by |
+  |---|---|---|---|---|
+  | Draft PR opened | `status_update` | team | — | leader / bridge |
+  | CI red on a PR | `blocked` | team | implementer | bridge |
+  | CI green → ready | `review_request` | integration | Architect (+Spec on its paths) | leader / bridge |
+  | Changes requested | `review_request` (back to impl) | team | implementer (+leader) | reviewer / bridge |
+  | All required approvals | `decision` (merge) | integration | Integrator | leader / bridge |
+  | Merged to `main` | `status_update` (ship) | integration | affected team leaders | Integrator / bridge |
+
+  The PR URL rides each message as an artifact reference; the *detail* stays on
+  GitHub and is fetched on demand.
 - **Merge approvals are convo Decisions.** When a PR is review-ready the owning
   team `propose_decision` ("merge wp/K1 …", PR URL attached); the Integrator
   `resolve_decision` on merge or rejection. This yields an auditable decision log
@@ -179,11 +192,13 @@ full mechanics — App permissions, the ~5 accounts (`+tag` emails), branch
 protection, merge queue, CI concurrency, and the auto-ready automation — live in
 **`docs/ops/github-setup.md`**.
 
+- **convo bridge (recommended — build early):** a GitHub-webhook → convo bridge
+  that mirrors the §4 event map and opens/resolves the merge Decision. Because
+  agents get **no** GitHub notifications, until the bridge exists each acting
+  agent must mirror its GitHub action into convo by hand — workable but toilsome,
+  and a dropped mirror is a silent stall. Worth building early, not last.
+
 Still optional:
-- **convo bridge (nice-to-have):** a GitHub-webhook → convo bridge that auto-posts
-  PR-opened / merged Events and opens/resolves the merge Decision. Until it
-  exists, the Integrator posts via the convo MCP tools manually — the workflow
-  does not depend on the bridge.
 - **Per-team owning-review:** off to start (the QA ring covers domain
   correctness). Add per-team leader accounts + CODEOWNERS crate lines only if
   review quality later warrants it.
