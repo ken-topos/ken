@@ -61,7 +61,8 @@ templates) and depends on the GitHub repo existing — which it does not yet
 
 - **Branch naming ties to work packages:** `wp/<WP-ID>-<slug>` — e.g.
   `wp/K1-core-type-theory`, `wp/V3-prover-backend`. Exploratory spikes:
-  `spike/<team>/<topic>`. The WP IDs are from `03-program-of-work.md`.
+  `spike/<team>/<topic>`. Work packages — definition, lifecycle, and ownership
+  (the Steward) — are in `03-program-of-work.md`.
 - **One work package (or one reviewable sub-task) per PR.** Small PRs merge
   faster and keep `main` green. A large WP (e.g. K1, V3) is split into a series.
 - **Every PR must:** target `main`; cite its WP ID and the acceptance criteria it

@@ -16,6 +16,28 @@ writing Ken implementation code work from specs, not from prototype source.
 
 ---
 
+## Work packages: definition & lifecycle
+
+A **work package (WP)** is the unit of assignable work below: one reviewable
+deliverable owned by a single team, with a stable ID (e.g. `K1`), a one-line
+objective, scope, deliverables, acceptance criteria, dependencies, size
+(S/M/L), and risk (★). One WP = one branch `wp/<ID>-<slug>` and one PR (a short
+series for an `L`). WPs are the nodes of the dependency graph; the roadmap gates
+(G0–G8, `02-roadmap.md`) are checkpoints over sets of them.
+
+Lifecycle: **proposed** (in this catalog) → **ready** (deps merged, open
+questions resolved, its gate not blocked) → **active** (pulled into a team's
+ring) → **in review** (PR open, CI green, Architect/Spec reviewing) → **merged**
+(by the Integrator) → **done** (acceptance criteria met; catalog + gate updated).
+
+The **Steward** owns this catalog and cross-team sequencing — decompose, size,
+sequence, track, close. The operator sets scope and priority; the Architect
+advises on technical decomposition; team leaders pull *ready* WPs and run them
+through the ring, proposing any newly-discovered WPs back to the Steward rather
+than starting unsequenced work. See `../../agent/playbooks/federation/steward.md`.
+
+---
+
 ## WS-F — Foundations & clean-room process (Phase 0, always-on)
 
 ### F1 — Name, license, repo, IP hygiene · S · ★
