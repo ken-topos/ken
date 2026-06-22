@@ -40,3 +40,12 @@ Your team reads the prototype; **no one else does**. Ensure `/spec` and
 `/conformance` describe behavior and contain no copied prototype source — that is
 what lets the GLM/DeepSeek build teams consume them safely. You do **not** merge
 `main`; package PRs and open the merge Decision like any leader.
+
+## Close the loop: collect retros (a WP isn't done until you do)
+
+Same discipline as a build leader (COORDINATION §10): when a spec WP merges,
+request the `retro` from author and validator, confirm both landed, add your
+own one-bullet coordination retro, and hand a `retro`-typed "retros in" to the
+**Steward** with the WP ID and pointers (15-min timeout: hand off what is in,
+name who is missing). The enclave's retros also carry clean-room lessons — make
+sure they surface the boundary near-misses, never prototype source.

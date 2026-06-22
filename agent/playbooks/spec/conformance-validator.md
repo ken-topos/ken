@@ -37,3 +37,14 @@ the whole federation. Read `../../COORDINATION.md`, `../../MODELS.md`,
 
 The conformance corpus is the contract the entire build fleet codes against — its
 correctness is the highest-leverage thing in the project.
+
+## Retro (closes the WP — do not skip)
+
+When a conformance WP merges, post a short `retro` in its thread — three
+bullets: **trap** (a coverage gap or oracle-disagreement that nearly slipped
+through, a
+case that mis-specified behavior), **held** (a testability or oracle-agreement
+discipline that worked, with its prior-run validation count if it has one),
+**carry** (a rule worth promoting). A wrong conformance case licenses wrong code
+fleet-wide, so your retros carry outsized weight (COORDINATION §10). Tag each
+bullet node-internal or topology-touching.

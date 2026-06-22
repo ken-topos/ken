@@ -41,8 +41,10 @@ direction and priority; you turn that into WPs and sequence them across teams.
   gate not blocked). Team leaders pull ready WPs; they don't start work that
   isn't ready.
 - **Track & close.** Hold the federation-level WP state (ready / active /
-  blocked, and gate progress). A WP closes when the Integrator merges it and
-  its acceptance criteria are met — update the catalog and the gate (G0–G8).
+  blocked, and gate progress). A WP closes when the Integrator merges it, its
+  acceptance criteria are met, **and its retro is in** (COORDINATION §10) —
+  update the catalog and the gate (G0–G8). A merged WP with no retro is not
+  done; chase the owning leader's "retros in" before closing.
 - **Mid-flight.** If execution surfaces a needed new WP, the team leader
   proposes it to you; you add and sequence it. Agents don't spawn unsequenced
   work. A WP that grows or forks comes back to you to split or re-scope.
@@ -51,8 +53,10 @@ direction and priority; you turn that into WPs and sequence them across teams.
 
 The tooling provisions skills as **per-team copies with no inheritance**, so
 without you good ideas don't propagate and copies drift. You are the
-inheritance the tooling lacks. Harvest retros across all teams and promote up
-three tiers:
+inheritance the tooling lacks. The teams *produce* the retros (one per WP, per
+working agent, handed to you as a leader's "retros in" — COORDINATION §10); you
+are the only consumer that turns them into propagated discipline. Harvest across
+all teams and promote up three tiers:
 
 1. **Team-local overlay** (`teams/<team>/<role>.md`) — where a lesson first
    appears; a candidate.
@@ -94,7 +98,9 @@ You run the **top** liveness layer (COORDINATION §13) — the watcher-of-watche
 — on the same recurring pass. Enumerate the federation-level stall patterns
 explicitly: a whole team gone idle, a **stalled team leader** (its own watchdog
 died), a dropped cross-team query, a blocked dependency chain (team B waiting on
-a merge from A that never came), and no movement toward the active roadmap gate.
+a merge from A that never came), a **merged WP with no "retros in"** (the
+learning loop dropped — chase the leader), and no movement toward the active
+roadmap gate.
 Diagnose before restarting; graduated recovery (nudge → re-nudge → act);
 escalate to the operator what you cannot restart. You are the backstop when a
 watchdog itself stalls — the only thing above you is the operator, who reads the

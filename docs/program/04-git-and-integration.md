@@ -182,6 +182,11 @@ Steward and the operator.
    guidance. Steward digests the merge log; the operator hears only gate-level
    news.
 8. Impacted teams rebase active branches on the new main.
+9. Owning team runs the retro: each working agent posts a `retro` in the WP
+   thread; the leader collects, adds a coordination retro, and hands "retros in"
+   to the Steward. The WP is not *done* until this lands
+   (`agent/COORDINATION.md` §10). The Steward harvests and feeds the promotion
+   ladder.
 ```
 
 `main` stays green at every step because (a) CI gates the PR and (b) the merge

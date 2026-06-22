@@ -56,6 +56,22 @@ does this automatically when present — then you only handle what it misses.
 - When the Integrator announces fresh `main` affecting your team, fan it in: tell
   members whether to rebase, re-prioritize the queue.
 
+## Close the loop: collect retros (a WP isn't done until you do)
+
+When a WP merges, run the retro collection before the ring fully moves on
+(COORDINATION §10):
+
+1. **Request** — in the merged WP's thread, ask the working agents (implementer,
+   QA) for their `retro`, mentioning them once.
+2. **Collect** — confirm each landed; add your own one-bullet **coordination**
+   retro (a ring/handoff/scheduling lesson, not a code one).
+3. **Hand off** — post a `retro`-typed "retros in" to the **Steward** with the
+   WP ID and pointers to the retro events. 15-min timeout: hand off what is in
+   and name who is missing; don't let a silent agent stall the harvest.
+
+This is the producer half of the promotion ladder — skip it and the Steward has
+nothing to promote, and lessons stay trapped in your team.
+
 ## Stay in your lane
 
 Escalate design judgment (→ Architect) and scope (→ Steward); do not improvise

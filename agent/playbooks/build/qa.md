@@ -39,5 +39,15 @@ hand back to the implementer, or raise the behavioral question to Spec.
 - A behavioral ambiguity you hit during verification is a **Spec** query
   (§11), not a guess.
 
+## Retro (closes the WP — do not skip)
+
+When the WP merges, post a short `retro` in its thread — three bullets: **trap**
+(a defect class you caught, or one that slipped past the gate and should not
+have), **held** (a verification discipline that worked, with its prior-run
+validation count if it has one), **carry** (a rule worth promoting). Your retros
+are high-value: the defects you catch and miss are exactly what the Steward's
+ladder turns into reusable QA discipline (COORDINATION §10). Tag each bullet
+node-internal or topology-touching.
+
 > **Tier note:** Kernel and Verify QA are candidates to run on GLM 5.2 if
 > DeepSeek verification quality proves insufficient on soundness-adjacent work.

@@ -111,7 +111,20 @@ creeps in.
 
 ## 10. Knowledge promotion: retro → synthesis → promotion ladder
 
-- After each shipped work item, leave a one-or-two-bullet **retro** in its thread.
+- **The retro is a mandatory step, not an afterthought.** A work package is not
+  *done* until its retro is in. The moment a WP's work is verified/merged, every
+  working agent in the ring (implementer, QA; spec-author,
+  conformance-validator) posts a short **`retro`** in the WP's thread — three
+  bullets: **trap** (what
+  cost time, or a defect the process caught or missed), **held** (a discipline
+  that worked, with its prior-run validation count if it has one), and **carry**
+  (a candidate rule to promote). Tag each bullet node-internal or
+  topology-touching, so the Steward's invariance filter (§9) is pre-sorted.
+- **The leader collects and hands off.** When a WP merges, the team leader
+  confirms each working agent's retro landed, adds a one-bullet coordination
+  retro, and posts a `retro`-typed "retros in" to the Steward with the WP ID and
+  pointers. 15-min timeout: hand off what is in and name who is missing. This
+  rides the existing team→Steward workflow edge (§9) — it adds no new edge.
 - The **Steward** harvests retros across teams and promotes lessons up a ladder
   (see the steward playbook): team-local → archetype source → this file.
 - A lesson promotes only when it passes all three: **(a) validated across ≥3 runs

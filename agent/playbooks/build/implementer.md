@@ -45,6 +45,17 @@ pr_ready: <WP-ID> <one-line what>
 ```
 Mention only the next actor; do not wait for an ack.
 
+## Retro (closes the WP — do not skip)
+
+When your leader signals the WP merged, post a short `retro` in its thread
+**before** you take the next WP — three bullets: **trap** (what cost you time,
+or a defect QA/CI caught that you should have), **held** (a discipline that
+worked), **carry** (a rule worth promoting). Tag each node-internal or
+topology-touching.
+This is the grain the Steward's promotion ladder runs on (COORDINATION §10);
+skipping it starves the only mechanism that propagates your lessons to the other
+teams.
+
 ## Discipline
 
 - **Don't author outside your lane.** Something wrong in another crate → file a

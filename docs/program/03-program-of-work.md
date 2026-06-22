@@ -28,7 +28,8 @@ series for an `L`). WPs are the nodes of the dependency graph; the roadmap gates
 Lifecycle: **proposed** (in this catalog) → **ready** (deps merged, open
 questions resolved, its gate not blocked) → **active** (pulled into a team's
 ring) → **in review** (PR open, CI green, Architect/Spec reviewing) → **merged**
-(by the Integrator) → **done** (acceptance criteria met; catalog + gate updated).
+(by the Integrator) → **done** (acceptance criteria met, **retro in** per
+`../../agent/COORDINATION.md` §10; catalog + gate updated).
 
 The **Steward** owns this catalog and cross-team sequencing — decompose, size,
 sequence, track, close. The operator sets scope and priority; the Architect
