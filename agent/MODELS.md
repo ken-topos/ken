@@ -1,0 +1,40 @@
+# Model tiers
+
+Ken runs a heterogeneous fleet to concentrate spend on the highest-judgment and
+clean-room-critical work while using cheaper models for high-volume code
+generation and coordination. Three tiers:
+
+| Tier | Model | Roles | Why |
+|---|---|---|---|
+| **T1** | **Opus 4.8 (1M, high effort, extended thinking)** | Spec-author, Conformance-validator, **Steward**, **Architect** | Highest judgment; the clean-room enclave; design + workflow authority. These calls are worth the most. |
+| **T2** | **GLM 5.2** (Fireworks) | Implementers | High-volume code generation. |
+| **T3** | **DeepSeek V4 Pro** | Build-team Leaders, Build-team QA, Spec-team Leader, Integrator, Librarian | Coordination, mechanical gates, verification runs, doc observation. |
+
+Pat is the human product owner; Steward is the primary proxy into the federation.
+
+## Knobs (tune by observed quality, not up front)
+
+- **Kernel and Verify QA** are the likeliest T3→T2 upgrades — soundness-adjacent
+  testing may warrant a stronger model. Start T3; upgrade if quality lags.
+- **Integrator stays T3.** It enforces gates and merges; the deep correctness and
+  architectural review is the **Architect's** (T1) job on the PR, so the
+  Integrator does not need a strong model.
+
+## Clean-room × models (load-bearing)
+
+The tiering *reinforces* the clean-room boundary:
+
+- Only the **T1 Opus Spec enclave** (Anthropic-hosted) ever reads the AGPLv3
+  prototype. The build teams (GLM/DeepSeek) see only `/spec` and `/conformance`,
+  which are clean by construction.
+- **Never send AGPLv3 prototype source to Fireworks or DeepSeek.** Prototype
+  content goes only to the Anthropic-hosted Spec agents. Ken's own MIT source is
+  fine to send anywhere.
+
+## Portability
+
+Playbooks and `COORDINATION.md` are written **model-agnostic** — no reliance on
+Claude-specific behaviors — because the same coordination law must hold across
+Anthropic, Fireworks, and DeepSeek. The harness must be configured to route each
+role to its tier's model/provider; that wiring is an infra concern, recorded per
+role in each team's `team.toml` (`model = …`).

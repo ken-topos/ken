@@ -1,31 +1,30 @@
-# Ken code ownership — maps crates/areas to the owning team, so PRs auto-request
-# the right domain review. The Integrator reviews everything and is the only
-# merger of `main`.
+# Ken code ownership. CODEOWNERS routes domain review to the owning team; the
+# Architect (design/correctness) and Integrator (gate + merge) are required
+# reviewers — listed on each line because GitHub uses only the last-matching
+# pattern per file, so required reviewers don't union across patterns.
 #
-# PLACEHOLDER org/team handles (`@ken-topos/...`) — replace with the real GitHub
-# org and team slugs when the repo is created (WP F1).
+# PLACEHOLDER: these teams/roles must exist under the ken-topos org (WP F1).
+# Models per role are in /agent/MODELS.md.
 
-# Trusted kernel — highest scrutiny
-/crates/ken-kernel/        @ken-topos/team-kernel
+# Code crates: owning build team + Architect + Integrator
+/crates/ken-kernel/      @ken-topos/team-kernel     @ken-topos/architect @ken-topos/integration
+/crates/ken-elaborator/  @ken-topos/team-verify     @ken-topos/architect @ken-topos/integration
+/crates/ken-prover/      @ken-topos/team-verify     @ken-topos/architect @ken-topos/integration
+/crates/ken-lang/        @ken-topos/team-language   @ken-topos/architect @ken-topos/integration
+/crates/ken-interp/      @ken-topos/team-runtime    @ken-topos/architect @ken-topos/integration
+/crates/ken-cli/         @ken-topos/team-runtime    @ken-topos/architect @ken-topos/integration
+# (Ergo team's crates added when they exist, e.g. /crates/ken-repl/)
 
-# Verification surface
-/crates/ken-elaborator/    @ken-topos/team-verify
-/crates/ken-prover/        @ken-topos/team-verify
+# Spec enclave (clean-room): Spec team + Integrator
+/spec/                   @ken-topos/team-spec       @ken-topos/integration
+/conformance/            @ken-topos/team-spec       @ken-topos/integration
 
-# Language surface & stdlib
-/crates/ken-lang/          @ken-topos/team-language
+# Docs: Librarian + Integrator; ADRs additionally owned by Foundation
+/docs/                   @ken-topos/librarian       @ken-topos/integration
+/docs/adr/               @ken-topos/team-foundation @ken-topos/integration
 
-# Execution / runtime
-/crates/ken-interp/        @ken-topos/team-runtime
-/crates/ken-cli/           @ken-topos/team-runtime
+# Workflow corpus: Steward owns (promotion + topology guard) + Integrator merges
+/agent/                  @ken-topos/steward         @ken-topos/integration
 
-# Spec & conformance — clean-room mediator
-/spec/                     @ken-topos/team-spec
-/conformance/              @ken-topos/team-spec
-
-# Decisions & process
-/docs/adr/                 @ken-topos/team-foundation
-/agent/                    @ken-topos/team-foundation
-
-# Integrator reviews everything (last match wins in CODEOWNERS).
-*                          @ken-topos/integration
+# Everything else: Architect + Integrator
+*                        @ken-topos/architect       @ken-topos/integration

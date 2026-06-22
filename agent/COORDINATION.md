@@ -1,17 +1,31 @@
 # Ken coordination law (read by every agent)
 
-Cross-cutting rules for every Ken agent, regardless of role. Role-specific
-discipline is in `playbooks/`. The git/PR model is in
-`../05-git-and-integration.md`. These rules are adapted from hard-won convo
-team lessons; each exists because skipping it caused a real stall or a real bug.
+Cross-cutting rules for every Ken agent, regardless of role, team, or model.
+Role-specific discipline is in `playbooks/`; model tiers are in `MODELS.md`; the
+git/PR model is in `../05-git-and-integration.md`. These rules are adapted from
+hard-won convo team lessons; each exists because skipping it caused a real stall
+or a real bug. They must hold identically across Opus, GLM, and DeepSeek agents.
+
+## 0. The shape: a ring of rings
+
+- **Within a team — a sequential token-ring.** Generally one agent is active at a
+  time; the others are in a supporting role, called on when the active agent
+  needs them (e.g. an implementer asks for a clarification). Keeping the whole
+  team on one task maximizes coherence and effectiveness. Do not fan a team onto
+  several tasks to chase parallelism — coherence beats it.
+- **Across teams — parallel.** The teams are independent rings spinning at once;
+  that parallelism is the entire reason the work is articulated into teams. The
+  rings couple at only three points: PRs to `main` (via the Integrator), the
+  roadmap gate dependencies, and the **sanctioned cross-team query edges** (§9,
+  §11). Keep that coupling thin — it is what serializes the federation if abused.
 
 ## 1. Event-driven, never poll
 
 After you finish a unit of work or hand off, **post, set status, and stop.** Do
-not `/loop`, self-wake, or poll for replies. The notification system already
-delivers what you need; polling burns tokens for zero value. A missing
-notification is a *stall* — and catching stalls is the team leader's watchdog
-job, not yours. (Only team leaders and the Integrator run schedulers.)
+not `/loop`, self-wake, or poll for replies. The notification system delivers
+what you need; polling burns tokens for zero value. A missing notification is a
+*stall* — catching stalls is the team leader's watchdog job, not yours. Only team
+leaders, the Integrator, and the Steward run schedulers.
 
 ## 2. Mention discipline
 
@@ -26,10 +40,10 @@ costs the recipient tokens and fires a notification.
 
 ## 3. Status = what you're doing, in your own words
 
-There are three liveness signals; only the third is yours to post:
+Three liveness signals exist; only the third is yours to post:
 1. connection (automatic — never post "I'm online");
 2. activity (file/transcript mtime — automatic);
-3. **semantic status** — "drafting K2 conversion", "blocked on OQ-content-store".
+3. **semantic status** — "drafting K2 conversion", "blocked-on-spec: OQ-17".
    Agent-composed, never auto-classified. Update it on: receiving a handoff,
    completing one, changing focus, and becoming idle or blocked.
 
@@ -44,50 +58,85 @@ summarized memory (it may be stale).
 ## 5. Decisions are for judgment, not deduction
 
 Open a convo Decision (`propose_decision`) for choices with tradeoffs where a
-reasonable peer might choose differently — kernel/semantics design, an API shape,
-a content-store policy. Do **not** open one for deductive/mechanical choices (a
-bug fix is not a decision). Decisions are how future agents query *why* Ken is the
+reasonable peer might differ — kernel/semantics design, an API shape, a
+content-store policy. Do **not** open one for deductive/mechanical choices (a bug
+fix is not a decision). Decisions are how future agents query *why* Ken is the
 way it is. PR-merge approvals are also Decisions (see the integrator playbook).
 
 ## 6. Resolve when structurally determined; escalate only real forks
 
-Before escalating a question, ask: *is there a strategic choice between materially
-different futures?* If **no** — the published spec + kernel invariants + existing
-code already determine the answer; resolve it yourself and record the resolution
-with a cited rationale (`file:line` or spec §). If **yes** — escalate. For
-clean-room questions, "the published spec" means `/spec`, never prototype source;
-escalate genuine spec ambiguity to Team Spec.
+Before escalating or querying another team, ask: *is there a strategic choice
+between materially different futures?* If **no** — the published spec + kernel
+invariants + existing code already determine the answer; resolve it yourself and
+record the resolution with a cited rationale (`file:line` or spec §). If **yes**
+— escalate. For clean-room questions, "the published spec" means `/spec`, never
+prototype source. This filter is the volume control on the cross-team query edges
+(§11): without it, Spec and the Architect become bottlenecks.
 
 ## 7. Ground every premise before locking
 
 Before locking a spec, ADR, or design claim, verify each premise against reality:
-"X exists" → grep for it; "matches pattern Y" → read Y end-to-end. Especially for
-a *verified* language: a spec claim about the kernel must be checked against the
+"X exists" → grep for it; "matches pattern Y" → read Y end-to-end. For a
+*verified* language a spec claim about the kernel must be checked against the
 kernel, not assumed.
 
 ## 8. Message-type taxonomy (routing metadata)
 
-Tag each message with a type; the **first line is the thread title** — do not put
-a `[TYPE]` prefix in the body. Types: `kickoff`, `question`, `pr_ready` (points at
+Tag each message with a type; the **first line is the thread title** — no
+`[TYPE]` prefix in the body. Types: `kickoff`, `question`, `pr_ready` (points at
 a GitHub PR), `review_request`, `blocked`, `bug`, `status_update`, `retro`,
 `decision`.
 
-## 9. Topology is invariant
+## 9. Topology is invariant — including the query edges
 
-Who PRs to whom, who reviews, and who merges is **operator-owned and fixed** (see
-`../05-git-and-integration.md`). Agents may improve *what they do inside a node*,
-never *add a communication edge or a review cycle* between nodes. When integrating
-a retro lesson, reject any carry-forward that would add/move an edge — and do not
-soften the rejection to "candidate, watch one more run." That softening is exactly
-how coordination entropy creeps in.
+Who PRs to whom, who reviews, who merges, and **which cross-team query edges
+exist** is operator-owned and fixed. The sanctioned edges are exactly:
 
-## 10. Knowledge promotion: retro → synthesis → memory audit
+- any team → **Spec** leader — behavioral-contract questions ("what must this do
+  to be correct?").
+- any team → **Architect** — component-design questions ("how should I structure
+  this / which design?").
+- any team → **Steward** — scope/priority (forwarded to Pat), workflow/process,
+  and research requests.
+- any team → **Integrator** — merge status (usually via the team's own leader).
+
+Agents may improve *what they do inside a node*, never *add a communication edge
+or a review cycle* between nodes. When integrating a retro lesson, reject any
+carry-forward that would add/move an edge — and do not soften the rejection to
+"candidate, watch one more run." That softening is how coordination entropy
+creeps in.
+
+## 10. Knowledge promotion: retro → synthesis → promotion ladder
 
 - After each shipped work item, leave a one-or-two-bullet **retro** in its thread.
-- Periodically, synthesize retros into durable docs/skills.
-- A lesson is promoted into a durable skill **only** when it passes all three:
-  **(a) validated across ≥3 runs, (b) effort-/operator-agnostic, (c) a normative
-  rule, not a one-off fact.** Exception: an explicit operator correction promotes
-  on a single data point. On promotion, retire the source note atomically.
+- The **Steward** harvests retros across teams and promotes lessons up a ladder
+  (see the steward playbook): team-local → archetype source → this file.
+- A lesson promotes only when it passes all three: **(a) validated across ≥3 runs
+  *or* independently in ≥2 teams, (b) effort-/model-/operator-agnostic, (c) a
+  normative rule, not a one-off fact.** Exception: an explicit operator (Pat)
+  correction promotes on a single data point. On promotion, retire the source
+  note atomically. Cross-team replication is a *stronger* generalization signal
+  than single-team repetition — use it.
 
-This rubric is why this file is short: lessons earn their way in.
+## 11. Cross-team query protocol
+
+The edges in §9 are thin synchronous couplings between otherwise-parallel rings.
+Use them sparingly and always event-driven:
+
+1. **Filter first (§6).** Most "what should I do here" answers are already in
+   `/spec` + conformance + the component design. Only a genuine gap or fork earns
+   a query.
+2. **Ask and stop.** Post a `question` mentioning **only** the target's leader
+   (Spec leader / Architect / Steward), set status `blocked-on-<target>`, and
+   stop. Resume on notification — never poll.
+3. **Bias to staying on-task.** Your team's default is to *wait out* a short
+   block, preserving ring coherence; your leader reorders to an independent ready
+   task only when the block is genuinely long.
+4. **Front-desk on the answering side.** The target's leader triages to protect
+   its own ring's focus — answers trivial/known questions itself, batches
+   non-urgent ones, interrupts its active agent only for true blockers.
+5. **Outcomes:** a quick interpretive answer; a **durable artifact edit** (a
+   `/spec` clarification + conformance test, or a component-design note) so the
+   next team never asks again; or, for a real fork, a **Decision**. Every query
+   should leave the shared artifacts better — the query rate is a health gauge,
+   and it should decay over time.

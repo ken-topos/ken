@@ -65,8 +65,10 @@ templates) and depends on the GitHub repo existing — which it does not yet
 - **One work package (or one reviewable sub-task) per PR.** Small PRs merge
   faster and keep `main` green. A large WP (e.g. K1, V3) is split into a series.
 - **Every PR must:** target `main`; cite its WP ID and the acceptance criteria it
-  satisfies; be conformance-green in CI; pass the clean-room check; and request
-  review from the Integrator + CODEOWNERS. **Teams do not click merge.**
+  satisfies; be conformance-green in CI; pass the clean-room check; and pass the
+  **review trio** — the owning team (CODEOWNERS), the **Architect**
+  (design/correctness), and the **Integrator** (gate + merge). **Teams do not
+  click merge.**
 - **PR template** (F1 deliverable) prompts for: WP ID, acceptance criteria met,
   spec source (not prototype source), cross-team impact, and a conformance note.
 
@@ -74,38 +76,44 @@ templates) and depends on the GitHub repo existing — which it does not yet
 
 ## 3. The Integration authority ("the Integrator")
 
-A **single agent** (recommended) — or a small dedicated team — with **sole merge
-rights to `main`**. Pat is the escalation point for disputes and for changes that
-cross an ADR. Responsibilities:
+A **single agent** (DeepSeek V4 Pro — see `agent/MODELS.md`) with **sole merge
+rights to `main`**. The Integrator is deliberately *mechanical*: the deep
+correctness and architectural review is the **Architect's** job (Opus), which is
+why the Integrator can run on a light model. The **Steward** is the escalation
+point for cross-team conflicts; Pat decides scope and anything crossing an ADR.
+Responsibilities:
 
-1. **Review for correctness** and architectural fit, beyond the owning team's
-   domain review.
+1. **Confirm the review trio is satisfied:** owning team (CODEOWNERS) approved
+   **and** the Architect approved. The Integrator does not perform the design
+   review itself.
 2. **Enforce the clean-room gate:** confirm the PR introduces no AGPL-derived
    code and cites spec sources, not prototype source. Reject otherwise.
 3. **Require conformance-green** (CI) and **serialize merges** through a merge
    queue so `main` never goes red from interacting PRs.
 4. **Merge** (squash, with the WP ID in the commit subject, e.g.
    `K1: dependent Pi/Sigma kernel core (#123)`).
-5. **Notify** affected team leaders of the fresh `main` commit (see §4), with a
-   one-line changelog and explicit **rebase guidance** for any team whose active
-   branch is impacted (especially cross-cutting changes — e.g. a kernel API
-   change that touches the verify and language teams).
+5. **Verify, then notify:** confirm the merge landed and CI is green, then notify
+   affected team leaders of the fresh `main` commit (see §4) with a one-line
+   changelog and **rebase guidance** for any team whose active branch is impacted.
 6. **Guard the gates:** tag G0–G8 milestones (`03-roadmap.md`) when their
    acceptance criteria are met; refuse merges that would regress a passed gate.
 
-The Integrator is a *gatekeeper and notifier*, not a designer. Design happens in
-the teams and in ADRs; the Integrator enforces the agreed rules.
+The Integrator is a *gatekeeper and notifier*, not a designer or reviewer-of-record
+for design. Design judgment lives with the Architect; scope and process with the
+Steward and Pat.
 
 ---
 
 ## 4. convo / mootup mapping
 
 - **One space per team** (`ken-kernel`, `ken-verify`, `ken-language`,
-  `ken-runtime`, `ken-spec`, `ken-foundation`, `ken-ergo`, `ken-research`). The
-  team leader is the accountable participant; members set presence with
-  `update_status`.
-- **One integration space** (`ken-integration`) where the Integrator lives,
-  **linked** to every team space (`link_space` / `create_linked_team`) so
+  `ken-runtime`, `ken-ergo`, `ken-foundation` — build teams — plus `ken-spec`,
+  the clean-room enclave). The team leader is the accountable participant;
+  members set presence with `update_status`. (Research is not a standing team —
+  the Steward dispatches it ad hoc; see `agent/playbooks/federation/steward.md`.)
+- **One integration space** (`ken-integration`) where the federation roles —
+  Steward, Architect, Integrator, Librarian — live, **linked** to every team
+  space (`link_space` / `create_linked_team`) so
   cross-space context flows.
 - **PRs surface as convo Events** in the integration space, carrying the GitHub
   PR URL as an artifact reference (`share` / `post_response`). The Integrator (or
