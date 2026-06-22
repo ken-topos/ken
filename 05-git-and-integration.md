@@ -133,7 +133,10 @@ Steward and Pat.
   | Merged to `main` | `status_update` (ship) | integration | affected team leaders | Integrator / bridge |
 
   The PR URL rides each message as an artifact reference; the *detail* stays on
-  GitHub and is fetched on demand.
+  GitHub and is fetched on demand. **CI red/green** is delivered the same way: the
+  bridge pushes it from the `check_suite` webhook; until then the owning leader and
+  the Integrator read it (`gh pr checks`) in their recurring watchdog pass and
+  post the outcome — workers never watch their own CI (`agent/COORDINATION.md §14`).
 - **Merge approvals are convo Decisions.** When a PR is review-ready the owning
   team `propose_decision` ("merge wp/K1 …", PR URL attached); the Integrator
   `resolve_decision` on merge or rejection. This yields an auditable decision log

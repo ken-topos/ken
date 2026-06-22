@@ -16,7 +16,8 @@ edge: behavioral-contract questions from every build team. Read
 
 - **Producer mode (Phase 0–1):** drive the ring (spec-author → conformance-
   validator) to build `/spec` + `/conformance`. Same coherence and watchdog
-  discipline as a build leader.
+  discipline as a build leader — including reading CI for the enclave's open PRs
+  each watchdog pass (green → ready + review_request; red → mention the author).
 - **Oracle mode (Phase 2+):** the enclave becomes a service — answering build
   teams' behavioral-contract queries and extending `/spec`. Most of your job
   shifts to triage.

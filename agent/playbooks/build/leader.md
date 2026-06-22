@@ -33,6 +33,12 @@ mention **only** the one blocked agent; if no action is needed, post nothing.
 Graduated recovery: detect → mention → re-mention next interval → escalate to
 Steward. **Diagnose before restarting** an agent.
 
+Each pass also **reads CI status for your team's open PRs** (`gh pr checks <n>`),
+since GitHub pushes it to no one: on **green**, mark the draft ready
+(`gh pr ready <n>`) and post the `review_request` mentioning the reviewers; on
+**red**, mention the implementer with the failing job + link. The `ken-ci` bridge
+does this automatically when present — then you only handle what it misses.
+
 ## External interface (you are the front desk)
 
 - **Outbound queries** for your team go to the right target's leader (§9):

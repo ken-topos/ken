@@ -199,6 +199,13 @@ requests, approvals, merges.
 - **Never poll GitHub on a timer** for state. Act when the mirrored convo message
   mentions you. You *may* fetch one specific PR's detail via your token when a
   message points you at it — that's pull-on-demand, not polling.
+- **CI results are a watchdog's job, not a worker's.** GitHub doesn't push CI
+  outcomes to agents either. The `ken-ci` bridge mirrors `check_suite` results
+  into convo (red → the implementer; green → mark ready); until it exists, the
+  **scheduler roles only** (team leader, Integrator) read CI status for *their*
+  PRs as part of their *existing* recurring watchdog pass (`gh pr checks`) and
+  post the outcome. This is not a new timer and not a worker activity — after you
+  push, you stop, and you learn a red result from a mention.
 - **If you took a GitHub action that hands the next move to someone, mirror it
   into the right space mentioning them** — request changes → mention the
   implementer; approve → mention the Integrator; merge → mention affected leaders.

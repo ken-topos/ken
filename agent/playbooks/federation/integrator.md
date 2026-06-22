@@ -49,9 +49,12 @@ nobody.
 You run a recurring watchdog over the **PR pipeline** — the second of the three
 liveness layers (COORDINATION §13). Enumerate the patterns explicitly:
 green-draft-not-marked-ready, ready-but-unreviewed-past-interval,
-approved-but-unmerged, merge-queue stuck. Per stall, mention the one agent whose
-move it is (the reviewer who hasn't reviewed, the leader whose PR is ready);
-diagnose before restarting; escalate a stuck pipeline to the Steward.
+approved-but-unmerged, merge-queue stuck. **Reading CI/check status for pipeline
+PRs is part of this pass** (`gh pr checks` / the checks API) — the green→ready and
+merge-queue-advance steps depend on it; the bridge pushes it via `check_suite`
+webhook when present. Per stall, mention the one agent whose move it is (the
+reviewer who hasn't reviewed, the leader whose PR is ready); diagnose before
+restarting; escalate a stuck pipeline to the Steward.
 
 ## Mirror GitHub into convo
 

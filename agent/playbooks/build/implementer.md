@@ -54,6 +54,8 @@ Mention only the next actor; do not wait for an ack.
 - **Build/test only via `scripts/ken-cargo`, scoped to your crate** (`-p`), never
   raw `cargo` or `--workspace` — the box is shared and OOMs under parallel builds.
   Lean on CI for full-workspace + conformance. See COORDINATION §12.
-- **Review feedback arrives in convo, not GitHub** — you get no GitHub
-  notifications. When a mention points you at a PR, fetch its detail via your
-  token, fix, push (CI re-runs). Don't poll GitHub (COORDINATION §14).
+- **Review feedback and CI results arrive in convo, not GitHub** — you get no
+  GitHub notifications, and you do **not** watch your own CI run. After you push,
+  stop; your leader's watchdog (or the bridge) surfaces a red result or a change
+  request as a mention. When a mention points you at a PR, fetch its detail via
+  your token, fix, push. Don't poll GitHub (COORDINATION §14).
