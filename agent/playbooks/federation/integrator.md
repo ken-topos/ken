@@ -37,7 +37,7 @@ Your value is *being a reliable gate*.
 ## Verify, then announce
 
 After merging, **confirm it actually landed on `main` and CI is green before you
-post anything.** Then: resolve the convo merge Decision (merged); post a terse
+post anything.** Then: resolve the mootup merge Decision (merged); post a terse
 ship note (commit SHA, what landed, gate results — real content, not restated
 scope); and **notify with discipline** — mention exactly the team leader(s) whose
 next move this triggers (e.g. a kernel-API change → the verify and language
@@ -56,10 +56,10 @@ webhook when present. Per stall, mention the one agent whose move it is (the
 reviewer who hasn't reviewed, the leader whose PR is ready); diagnose before
 restarting; escalate a stuck pipeline to the Steward.
 
-## Mirror GitHub into convo
+## Mirror GitHub into mootup
 
 Agents get **no** GitHub notifications, and you own the integration space. Until
-the `ken-ci` bridge exists, **you mirror PR-state events into convo** per the §4
+the `ken-ci` bridge exists, **you mirror PR-state events into mootup** per the §4
 map in `../../../docs/program/04-git-and-integration.md` — post the ship event on merge (above)
 and make sure ready/approval/merge signals reach the right actor with a mention.
 A GitHub event nobody mirrors is a silent stall.

@@ -1,7 +1,7 @@
 # Ken agent workflow
 
 Ken is built by a federation of agent teams coordinating through
-[convo/mootup](https://mootup.io) spaces and GitHub PRs. This directory holds the
+[mootup](https://mootup.io) spaces and GitHub PRs. This directory holds the
 behavioral discipline those agents follow, in three tiers — the structure exists
 because the moot tooling provisions skills as **per-team copies with no
 inheritance**, so cross-team sharing has to be deliberate.
@@ -35,8 +35,8 @@ lacks. See `playbooks/federation/steward.md` and `COORDINATION.md §10`.
 
 ## Provenance
 
-These patterns are lifted and adapted from the workflow skills the convo team
-developed by dogfooding convo on a different (SaaS) codebase — the coordination
+These patterns are lifted and adapted from the workflow skills the mootup team
+developed by dogfooding mootup on a different (SaaS) codebase — the coordination
 nuance transfers; SaaS/tooling specifics were dropped. The governing git model is
 [`../docs/program/04-git-and-integration.md`](../docs/program/04-git-and-integration.md); roles map to teams
 in [`../docs/program/03-program-of-work.md`](../docs/program/03-program-of-work.md).

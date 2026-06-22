@@ -83,8 +83,8 @@ exist for future per-team review and for dashboards, and may start empty.
 - **Merge queue:** the Integrator agent enqueues an approved+green PR; the queue
   re-runs CI against latest `main` before landing (the `merge_group` trigger in
   `ci.yml`).
-- **(Optional) convo bridge:** webhook → convo, to auto-post PR/merge Events and
-  open/resolve the merge Decision. Until built, the Integrator posts via the convo
+- **(Optional) mootup bridge:** webhook → mootup, to auto-post PR/merge Events and
+  open/resolve the merge Decision. Until built, the Integrator posts via the mootup
   MCP tools manually; the workflow does not depend on it.
 
 ## CI cost note

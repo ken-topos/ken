@@ -20,7 +20,7 @@ never from prototype source (see `../../CLEAN-ROOM.md`).
    agent teams.
 4. **`04-git-and-integration.md`** — the git workflow and coordination model:
    protected `main`, per-team PRs, a single Integrator who merges and notifies,
-   and how it maps onto convo/mootup spaces and Decisions. Realized by WP F1.
+   and how it maps onto mootup spaces and Decisions. Realized by WP F1.
 
 ## The one-paragraph version
 

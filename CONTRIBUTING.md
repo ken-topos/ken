@@ -1,7 +1,7 @@
 # Contributing to Ken
 
 Ken is built by multiple agent teams coordinating through
-[convo/mootup](https://mootup.io) spaces and GitHub. This file is the short
+[mootup](https://mootup.io) spaces and GitHub. This file is the short
 version; the authoritative workflow is
 [`docs/program/04-git-and-integration.md`](docs/program/04-git-and-integration.md), and the per-role
 behavioral playbooks live under [`agent/playbooks/`](agent/playbooks/).
@@ -24,10 +24,10 @@ behavioral playbooks live under [`agent/playbooks/`](agent/playbooks/).
 - The PR must: target `main`, cite its WP ID + the acceptance criteria it
   satisfies, cite **spec sources** (not prototype source), be conformance-green,
   and request review from CODEOWNERS + the Integrator.
-- Don't click merge. When the PR is review-ready, the team leader opens a convo
+- Don't click merge. When the PR is review-ready, the team leader opens a mootup
   Decision (PR URL attached); the Integrator resolves it on merge.
 
-## Coordination (convo/mootup)
+## Coordination (mootup)
 
 - Each team has its own space; the Integrator's space links them all.
 - One thread per work item; reply in-thread; mention an agent **iff** the next

@@ -3,7 +3,7 @@
 Cross-cutting rules for every Ken agent, regardless of role, team, or model.
 Role-specific discipline is in `playbooks/`; model tiers are in `MODELS.md`; the
 git/PR model is in `../docs/program/04-git-and-integration.md`. These rules are adapted from
-hard-won convo team lessons; each exists because skipping it caused a real stall
+hard-won mootup team lessons; each exists because skipping it caused a real stall
 or a real bug. They must hold identically across Opus, GLM, and DeepSeek agents.
 
 ## 0. The shape: a ring of rings
@@ -52,7 +52,7 @@ Three liveness signals exist; only the third is yours to post:
 
 ## 4. Threads are the spine
 
-One convo thread per work item; the kickoff message *is* the spine. All handoffs,
+One mootup thread per work item; the kickoff message *is* the spine. All handoffs,
 questions, status, and retros for that item are **replies in that thread** — a
 top-level post fragments the work. After any context reset/compaction, resolve
 the live thread from fresh context; do **not** reuse a thread/event ID from a
@@ -60,7 +60,7 @@ summarized memory (it may be stale).
 
 ## 5. Decisions are for judgment, not deduction
 
-Open a convo Decision (`propose_decision`) for choices with tradeoffs where a
+Open a mootup Decision (`propose_decision`) for choices with tradeoffs where a
 reasonable peer might differ — kernel/semantics design, an API shape, a
 content-store policy. Do **not** open one for deductive/mechanical choices (a bug
 fix is not a decision). Decisions are how future agents query *why* Ken is the
@@ -198,19 +198,19 @@ Rules for every layer:
   updates is the operator's signal. Watchdogs are the only schedulers (§1);
   everyone else is event-driven.
 
-## 14. GitHub signals arrive via convo (no GitHub notifications)
+## 14. GitHub signals arrive via mootup (no GitHub notifications)
 
 Agents receive **no GitHub notifications.** GitHub is the system of record for
-code and review, but every *actionable* GitHub event reaches you as a **convo
+code and review, but every *actionable* GitHub event reaches you as a **mootup
 message that mentions you** — opened/ready PRs, requested reviews, change
 requests, approvals, merges.
 
-- **Never poll GitHub on a timer** for state. Act when the mirrored convo message
+- **Never poll GitHub on a timer** for state. Act when the mirrored mootup message
   mentions you. You *may* fetch one specific PR's detail via your token when a
   message points you at it — that's pull-on-demand, not polling.
 - **CI results are a watchdog's job, not a worker's.** GitHub doesn't push CI
   outcomes to agents either. The `ken-ci` bridge mirrors `check_suite` results
-  into convo (red → the implementer; green → mark ready); until it exists, the
+  into mootup (red → the implementer; green → mark ready); until it exists, the
   **scheduler roles only** (team leader, Integrator) read CI status for *their*
   PRs as part of their *existing* recurring watchdog pass (`gh pr checks`) and
   post the outcome. This is not a new timer and not a worker activity — after you

@@ -36,7 +36,7 @@ interface fit, and whether the change matches its component design. A blocking
 review names the concern and the alternative; an approval is a real judgment, not
 a rubber stamp.
 
-**Post your verdict to convo.** The author gets no GitHub notification of your
+**Post your verdict to mootup.** The author gets no GitHub notification of your
 review — so when you request changes or approve, mirror it (changes → the team's
 space mentioning the implementer; approval → the integration space mentioning the
 Integrator), with the PR link. An unmirrored review is a silent stall

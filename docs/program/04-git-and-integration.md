@@ -5,11 +5,11 @@ split of responsibility:
 
 - **GitHub** — source of truth for **code and review**: branches, PRs, CI,
   protected `main`.
-- **convo / mootup** — source of truth for **coordination**: per-team spaces,
+- **mootup** — source of truth for **coordination**: per-team spaces,
   cross-team **Decisions**, and **notifications** of fresh `main`.
 
-They are bridged by artifact references: a convo Event can carry a GitHub PR URL
-(convo is designed for this — see its README "artifact references"), so a PR and
+They are bridged by artifact references: a mootup Event can carry a GitHub PR URL
+(mootup is designed for this — see its README "artifact references"), so a PR and
 its merge decision live in both places without either being authoritative over
 the other's domain.
 
@@ -21,7 +21,7 @@ Governing rules (non-negotiable):
 3. **Clean-room is enforced at the merge gate.** No AGPL-derived code enters
    `main`; only **Team Spec** mediates prototype knowledge (see `01-strategy.md`).
 4. **One source of truth per concern.** Code/review → GitHub. Decisions/notify →
-   convo. Don't duplicate authority.
+   mootup. Don't duplicate authority.
 
 This doc is realized by work package **F1** (repo, branch protection, CODEOWNERS,
 templates) and depends on the GitHub repo existing — which it does not yet
@@ -108,7 +108,7 @@ Steward and the operator.
 
 ---
 
-## 4. convo / mootup mapping
+## 4. mootup mapping
 
 - **One space per team** (`ken-kernel`, `ken-verify`, `ken-language`,
   `ken-runtime`, `ken-ergo`, `ken-foundation` — build teams — plus `ken-spec`,
@@ -120,11 +120,11 @@ Steward and the operator.
   space (`link_space` / `create_linked_team`) so
   cross-space context flows.
 - **GitHub has no push to agents — every actionable GitHub event is mirrored into
-  convo as a message that mentions the actor whose move it is** (agents never poll
-  GitHub; see `agent/COORDINATION.md §14`). The `ken-ci` webhook → convo bridge
+  mootup as a message that mentions the actor whose move it is** (agents never poll
+  GitHub; see `agent/COORDINATION.md §14`). The `ken-ci` webhook → mootup bridge
   automates this; until it exists, the acting agent posts it by hand. The map:
 
-  | GitHub event | convo message (type) | space | mentions | posted by |
+  | GitHub event | mootup message (type) | space | mentions | posted by |
   |---|---|---|---|---|
   | Draft PR opened | `status_update` | team | — | leader / bridge |
   | CI red on a PR | `blocked` | team | implementer | bridge |
@@ -138,14 +138,14 @@ Steward and the operator.
   bridge pushes it from the `check_suite` webhook; until then the owning leader and
   the Integrator read it (`gh pr checks`) in their recurring watchdog pass and
   post the outcome — workers never watch their own CI (`agent/COORDINATION.md §14`).
-- **Merge approvals are convo Decisions.** When a PR is review-ready the owning
+- **Merge approvals are mootup Decisions.** When a PR is review-ready the owning
   team `propose_decision` ("merge wp/K1 …", PR URL attached); the Integrator
   `resolve_decision` on merge or rejection. This yields an auditable decision log
   aligned 1:1 with GitHub merges (`list_decisions`).
-- **Architecture decisions (ADRs) are also convo Decisions** — proposed in the
+- **Architecture decisions (ADRs) are also mootup Decisions** — proposed in the
   integration space, resolved by the operator/Integrator, then committed to
   `docs/adr/`.
-  The convo Decision is the discussion+ratification record; the committed ADR is
+  The mootup Decision is the discussion+ratification record; the committed ADR is
   the durable artifact.
 - **Notification of fresh `main`:** on merge, the Integrator posts an Event in
   `ken-integration` and **mentions** the leaders of impacted team spaces
@@ -198,10 +198,10 @@ full mechanics — App permissions, the ~5 accounts (`+tag` emails), branch
 protection, merge queue, CI concurrency, and the auto-ready automation — live in
 **`docs/ops/github-setup.md`**.
 
-- **convo bridge (recommended — build early):** a GitHub-webhook → convo bridge
+- **mootup bridge (recommended — build early):** a GitHub-webhook → mootup bridge
   that mirrors the §4 event map and opens/resolves the merge Decision. Because
   agents get **no** GitHub notifications, until the bridge exists each acting
-  agent must mirror its GitHub action into convo by hand — workable but toilsome,
+  agent must mirror its GitHub action into mootup by hand — workable but toilsome,
   and a dropped mirror is a silent stall. Worth building early, not last.
 
 Still optional:

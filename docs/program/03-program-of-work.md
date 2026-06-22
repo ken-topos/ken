@@ -300,9 +300,9 @@ Reproduce the conformance suite from the self-hosted build. **Deps.** S1.
   team leaders of fresh `main`. A single agent (recommended) with the operator
   as escalation. See `04-git-and-integration.md` for the full workflow.
 
-Each team gets its own convo/mootup space; the Integrator's space is linked to
-all of them. PRs surface as convo Events (PR URL as artifact), merge approvals as
-convo Decisions. Synchronization is at the roadmap gates (G0–G8): no team
+Each team gets its own mootup space; the Integrator's space is linked to
+all of them. PRs surface as mootup Events (PR URL as artifact), merge approvals as
+mootup Decisions. Synchronization is at the roadmap gates (G0–G8): no team
 advances past a gate until its acceptance criteria are met and the conformance
 suite is green on a fresh checkout. The clean-room boundary (Team Spec mediates
 prototype knowledge; implementation teams work from specs) holds at every step,

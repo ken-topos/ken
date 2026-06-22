@@ -51,7 +51,7 @@ does this automatically when present — then you only handle what it misses.
 - **PRs (no GitHub notifications):** package the ready PR; post the
   `review_request` in the integration space mentioning the Architect (+ Spec on
   its paths) and open the merge Decision with the PR URL. **Relay any
-  change-request back to your implementer as a convo mention** — they will not see
+  change-request back to your implementer as a mootup mention** — they will not see
   GitHub (COORDINATION §14). You do **not** merge — the Integrator does.
 - When the Integrator announces fresh `main` affecting your team, fan it in: tell
   members whether to rebase, re-prioritize the queue.

@@ -24,4 +24,4 @@ WP:
 <!-- Does this change an interface other teams depend on? Name the teams; the Integrator will notify them. -->
 
 ---
-<!-- Reminder: do not merge. When review-ready, the team leader opens a convo Decision with this PR's URL; the Integrator merges and notifies. -->
+<!-- Reminder: do not merge. When review-ready, the team leader opens a mootup Decision with this PR's URL; the Integrator merges and notifies. -->

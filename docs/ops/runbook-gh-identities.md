@@ -95,7 +95,7 @@ Org → **Settings → Developer settings → GitHub Apps → New GitHub App** (
 **under the org**, not your personal account).
 
 - [ ] Name `ken-ci`; homepage = the repo URL.
-- [ ] **Webhook: uncheck Active** for now (re-enable later only for the convo
+- [ ] **Webhook: uncheck Active** for now (re-enable later only for the mootup
       bridge).
 - [ ] **Repository permissions:** Contents = **Read & write**; Pull requests =
       **Read & write**; Checks = **Read & write**; Actions = **Read**; Metadata =
@@ -196,5 +196,5 @@ names above, `required_pull_request_reviews.require_code_owner_reviews=true` +
 | ken-ci (App) | — | — | App ID + install ID + .pem | — |
 
 Rotation: PATs every 90 days; App key if ever exposed. Each agent's harness maps
-its convo identity → the right GitHub credential (App token for authors; the role
+its mootup identity → the right GitHub credential (App token for authors; the role
 PAT for Architect / Spec / Integrator).
