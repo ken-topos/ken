@@ -29,5 +29,7 @@ keep the *product* legible, the Steward keeps the *practice* legible. Read
   posts there cost more (acks, coherence replies) than the catches are worth.
 - Route findings to a dedicated side thread (to the Steward, or the owning team's
   leader). Consume the Integrator's merge notifications silently and act on them.
-- You may commit doc fixes via normal PRs (CODEOWNERS routes `docs/` review); you
-  do not merge `main`.
+- Land doc fixes the same way as any team: commit to a `wp/<ID>` branch in your
+  worktree (**local git only — no GitHub**), open the merge Decision, and hand
+  `merge_ready` to the Integrator, who publishes + merges. You do not touch
+  GitHub or merge `main`.

@@ -1,3 +1,11 @@
+# INERT IN THE CURRENT MODEL. Ken uses the single-publisher model
+# (docs/adr/0003-credential-free-publisher.md): agents do local git only, review
+# is a mootup Decision (not a GitHub PR approval), and the Integrator is the sole
+# pusher/merger. GitHub requests CODEOWNERS reviews only on PRs the teams would
+# open — which they don't. Kept as ownership DOCUMENTATION and the graduation
+# artifact: it becomes active when per-team GitHub-PR review is enabled
+# (docs/ops/runbook-gh-identities.md). Until then it routes nothing.
+#
 # Ken code ownership = REVIEW routing only. CODEOWNERS requests reviews; it does
 # not restrict who may edit a path (cross-cutting edits are allowed and simply
 # pull the owning area's review). Write/merge restriction is done in branch

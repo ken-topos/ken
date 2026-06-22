@@ -1,6 +1,15 @@
 # Runbook: set up the GitHub identities
 
-Operator runbook to stand up the identities the agent workflow needs.
+> **DEFERRED — graduation path, not the current setup.** Ken now uses the
+> **single-publisher** model (`../adr/0003-credential-free-publisher.md`): agents
+> do local git only, and **one** publisher identity (the Integrator) is the sole
+> GitHub actor. To go live now, follow **`github-setup.md`** — one identity +
+> branch protection, *not* this runbook. This multi-identity runbook applies only
+> when you **graduate** to per-team GitHub identities + CODEOWNERS-routed PR
+> review (when external contributors arrive or per-team GitHub review becomes
+> load-bearing). Keep it for that day; skip it until then.
+
+Operator runbook to stand up the identities the *graduated* PR workflow needs.
 Reference/rationale is `github-setup.md`; this is the **ordered manual procedure**.
 Do the phases in order — the ordering avoids lockout and CODEOWNERS dead-ends
 (branch protection goes on **last**, after a smoke test).

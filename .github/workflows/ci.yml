@@ -1,14 +1,16 @@
 name: CI
 
-# Gates every PR to `main`. These checks are intended to be REQUIRED status
-# checks in branch protection (configure when the GitHub repo is created, WP F1).
+# Pre-merge gate. The Integrator (sole publisher) pushes each wp/<ID> branch and
+# opens a PR; these checks are REQUIRED status checks in branch protection, so a
+# branch can't merge until they're green (docs/ops/github-setup.md, WP F1). This
+# is the compute offload: the heavy jobs run on GitHub runners, not the laptop.
+# No merge_group — one publisher serialises merges, so there's no queue.
 
 on:
   pull_request:
     branches: [main]
   push:
     branches: [main]
-  merge_group:            # run on the merge queue too, against latest main
 
 # Cancel superseded runs on the same PR/ref so rapid pushes don't pile up CI
 # (matters even though public-repo Actions minutes are free — it shortens queues).
@@ -52,10 +54,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # TODO(F1/Team Foundation): SOFT attribution guard — map the PR's team
-      # (from branch prefix `wp/<ID>-` or a `team:*` label) to its allowed paths;
-      # if a PR touches outside them, don't hard-fail — flag it so the owning
-      # area's review (CODEOWNERS) is pulled in. Cross-cutting edits are normal;
-      # never block them. See docs/program/04-git-and-integration.md.
+      # TODO(F1/Team Foundation): SOFT attribution guard — map the branch's team
+      # (from prefix `wp/<ID>-` or a `team:*` label) to its allowed paths; if it
+      # touches outside them, don't hard-fail — surface it so the owning area's
+      # reviewer is pulled onto the merge Decision (CODEOWNERS is inert in the
+      # single-publisher model). Cross-cutting edits are normal; never block them.
+      # See docs/program/04-git-and-integration.md.
       - name: Path guard (placeholder)
         run: echo "path-guard not yet implemented (WP F1)"

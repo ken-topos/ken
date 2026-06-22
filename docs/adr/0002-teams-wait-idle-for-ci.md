@@ -6,15 +6,16 @@
 
 ## Context
 
-After a team opens a PR, it must wait for CI (build + conformance + clean-room +
-path-guard) before the work proceeds to review and merge. The question: should a
-team stay idle during that wait, or keep busy — e.g. **stacked PRs** on a
-dependent sequence, or starting a second independent work package to fill the gap?
+After a team hands a WP off and the Integrator publishes its branch (ADR 0003),
+it must wait for CI (build + conformance + clean-room + path-guard) before the
+work merges. The question: should a team stay idle during that wait, or keep
+busy — e.g. **stacked branches** on a dependent sequence, or starting a second
+independent work package to fill the gap?
 
 ## Decision
 
-**Teams wait idle for their CI runs.** No stacked PRs; no starting a second task
-to fill the wait. A team carries **one** task through its ring at a time
+**Teams wait idle for their CI runs.** No stacked branches; no starting a second
+task to fill the wait. A team carries **one** task through its ring at a time
 (reinforces COORDINATION §0).
 
 ## Rationale
@@ -31,17 +32,18 @@ to fill the wait. A team carries **one** task through its ring at a time
    wait would compete for the global build lock and the 16 GB box (COORDINATION
    §12 / `../ops/compute-budget.md`). A *waiting* team is a *non-competing* team —
    idle is load-friendly.
-5. **Stacked PRs add churn.** If the base PR gets change requests, the stacked
-   work must rework/rebase — exactly the bookkeeping agents handle badly.
+5. **Stacked branches add churn.** If the base WP gets change requests, the
+   stacked work must rework/rebase — exactly the bookkeeping agents do badly.
 
 ## Consequences
 
 - **Idle means quiescent, not resident.** A team waiting on CI pauses to free RAM
   (COORDINATION §12), especially on constrained hardware — it does not sit
   resident spinning.
-- **The watchdog must not treat CI-wait as a stall.** "PR with a CI run in
-  progress, team idle" is a *normal* state; only "CI finished with no follow-up
-  action" is a stall (COORDINATION §13). The liveness watchdogs distinguish them.
+- **The watchdog must not treat CI-wait as a stall.** "Published branch with a
+  CI run in progress, team idle" is a *normal* state; only "CI finished with no
+  follow-up" is a stall (COORDINATION §13). The liveness watchdogs distinguish
+  them.
 - More wall-clock per work item — accepted.
 
 ## Revisit if

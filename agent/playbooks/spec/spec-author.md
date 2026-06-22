@@ -51,7 +51,7 @@ topology-touching. **Never** put prototype source in a retro.
 
 ## Hard line
 
-Never paste prototype source into an implementation crate, a PR, or a message to
-a build team. Prototype content stays with Anthropic-hosted enclave agents and is
-never sent to Fireworks/DeepSeek. When in doubt, stop and raise it with the
-leader.
+Never paste prototype source into an implementation crate, a commit, or a
+message to a build team. Prototype content stays with Anthropic-hosted enclave
+agents and is never sent to Fireworks/DeepSeek. When in doubt, stop and raise it
+with the leader.

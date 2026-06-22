@@ -74,8 +74,9 @@ rediscovering the same lesson beats one team repeating it.
 
 ## 4. Guard topology invariance
 
-You own `agent/` (via CODEOWNERS). Reject any retro carry-forward or skill PR
-that would add or move an inter-team communication edge or a review cycle (§9).
+You own `agent/` (the workflow corpus) — its merge Decisions route to you.
+Reject any retro carry-forward or skill change that would add or move an
+inter-team communication edge or a review cycle (§9).
 Do not soften a rejection to "candidate / one more run." Node-internal
 improvements are welcome; the inter-team graph is the operator's to change.
 
@@ -89,8 +90,10 @@ not a role.
 ## 6. Cadence
 
 Run a periodic synthesis pass (not a busy poll): collect new retros, apply the
-ladder, open skill PRs to `agent/`, and brief the operator. You, the team
-leaders, and the Integrator are the only schedulers in the federation.
+ladder, land skill changes to `agent/` (commit to a `wp/<ID>` branch, open the
+merge Decision, hand `merge_ready` to the Integrator), and brief the operator.
+You, the team leaders, and the Integrator are the only schedulers in the
+federation.
 
 ## 7. Federation watchdog (the backstop)
 

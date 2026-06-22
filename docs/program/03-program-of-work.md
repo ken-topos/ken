@@ -27,9 +27,10 @@ series for an `L`). WPs are the nodes of the dependency graph; the roadmap gates
 
 Lifecycle: **proposed** (in this catalog) → **ready** (deps merged, open
 questions resolved, its gate not blocked) → **active** (pulled into a team's
-ring) → **in review** (PR open, CI green, Architect/Spec reviewing) → **merged**
-(by the Integrator) → **done** (acceptance criteria met, **retro in** per
-`../../agent/COORDINATION.md` §10; catalog + gate updated).
+ring) → **in review** (merge Decision open, branch published, CI green,
+Architect/Spec voting) → **merged** (the Integrator squash-merges) → **done**
+(acceptance criteria met, **retro in** per `../../agent/COORDINATION.md` §10;
+catalog + gate updated).
 
 The **Steward** owns this catalog and cross-team sequencing — decompose, size,
 sequence, track, close. The operator sets scope and priority; the Architect
@@ -47,10 +48,14 @@ than starting unsequenced work. See `../../agent/playbooks/federation/steward.md
 Rust workspace skeleton (kernel / elaborator / interpreter / cli crates);
 contribution rules and a written **clean-room process** (who may read AGPL source,
 how knowledge crosses to implementers via specs/tests only); attribution file for
-permissive deps.
-**Deliverables.** Repo, license, `CLEAN-ROOM.md`, `CONTRIBUTING.md`.
-**Acceptance.** A new contributor can read the process and know exactly what they
-may and may not look at; license is MIT; CI builds an empty workspace.
+permissive deps. Stand up the **git workspace** per `04-git-and-integration.md`:
+the shared-clone worktree layout, the single **publisher** identity, and branch
+protection (`../ops/github-setup.md`, ADR 0003).
+**Deliverables.** Repo, license, `CLEAN-ROOM.md`, `CONTRIBUTING.md`, the
+worktree/publisher dev-setup, branch protection configured.
+**Acceptance.** A new contributor can read the process and know exactly what
+they may and may not look at; license is MIT; CI builds an empty workspace; a
+`wp/<ID>` branch the publisher pushes is gated by required checks before merge.
 **Deps.** none.
 
 ### F2 — Spec extraction from the prototype · L · ★★

@@ -16,8 +16,9 @@ edge: behavioral-contract questions from every build team. Read
 
 - **Producer mode (Phase 0–1):** drive the ring (spec-author → conformance-
   validator) to build `/spec` + `/conformance`. Same coherence and watchdog
-  discipline as a build leader — including reading CI for the enclave's open PRs
-  each watchdog pass (green → ready + review_request; red → mention the author).
+  discipline as a build leader. You and the enclave do **local git only** — no
+  GitHub; the Integrator publishes + gates + merges, and CI-red comes back as
+  its mootup mention to the author (COORDINATION §14).
 - **Oracle mode (Phase 2+):** the enclave becomes a service — answering build
   teams' behavioral-contract queries and extending `/spec`. Most of your job
   shifts to triage.
@@ -38,8 +39,9 @@ Inbound `question`s land on you. Triage:
 
 Your team reads the prototype; **no one else does**. Ensure `/spec` and
 `/conformance` describe behavior and contain no copied prototype source — that is
-what lets the GLM/DeepSeek build teams consume them safely. You do **not** merge
-`main`; package PRs and open the merge Decision like any leader.
+what lets the GLM/DeepSeek build teams consume them safely. You do **not** touch
+GitHub or merge `main`; package the WP, open the merge Decision, and post
+`merge_ready` to the Integrator like any leader.
 
 ## Close the loop: collect retros (a WP isn't done until you do)
 

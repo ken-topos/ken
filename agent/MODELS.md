@@ -18,8 +18,8 @@ federation.
 - **Kernel and Verify QA** are the likeliest T3→T2 upgrades — soundness-adjacent
   testing may warrant a stronger model. Start T3; upgrade if quality lags.
 - **Integrator stays T3.** It enforces gates and merges; the deep correctness and
-  architectural review is the **Architect's** (T1) job on the PR, so the
-  Integrator does not need a strong model.
+  architectural review is the **Architect's** (T1) job on the merge Decision, so
+  the Integrator does not need a strong model.
 
 ## Clean-room × models (load-bearing)
 

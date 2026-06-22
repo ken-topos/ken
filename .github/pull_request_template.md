@@ -1,4 +1,8 @@
-<!-- Keep PRs to one work package (or one reviewable sub-task). Small merges keep `main` green. -->
+<!-- This PR is opened by the INTEGRATOR (the sole publisher) from a team's local
+     wp/<ID> branch, to run CI. Review happens in mootup (the merge Decision), not
+     here — see docs/program/04-git-and-integration.md. One work package per PR;
+     small merges keep `main` green. -->
+<!-- Authoring agents never open PRs; this template is the Integrator's checklist. -->
 
 ## Work package
 <!-- WP ID from docs/program/03-program-of-work.md, e.g. K1, V3, L2 -->
@@ -14,14 +18,15 @@ WP:
 ## Spec source (clean room)
 <!-- Cite /spec and /conformance entries this implements. Do NOT cite prototype source. -->
 <!-- Confirm: no AGPLv3-prototype source was copied or closely paraphrased. -->
-- [ ] This PR is implemented from spec/conformance, not from prototype source.
+- [ ] Implemented from spec/conformance, not from prototype source.
 
 ## Conformance
-<!-- Confirm CI is green: build + conformance + clean-room check. -->
+<!-- The pre-merge gate: build + conformance + clean-room must be green. -->
 - [ ] Build + conformance suite green in CI.
 
 ## Cross-team impact
-<!-- Does this change an interface other teams depend on? Name the teams; the Integrator will notify them. -->
+<!-- Does this change an interface other teams depend on? Name the teams; the Integrator notifies them on merge. -->
 
 ---
-<!-- Reminder: do not merge. When review-ready, the team leader opens a mootup Decision with this PR's URL; the Integrator merges and notifies. -->
+<!-- Merge gate (Integrator): merge Decision approved (Architect always + Spec on its paths) AND CI green AND clean-room green AND no gate regression. -->
+

@@ -2,7 +2,7 @@
 
 Cross-cutting rules for every Ken agent, regardless of role, team, or model.
 Role-specific discipline is in `playbooks/`; model tiers are in `MODELS.md`; the
-git/PR model is in `../docs/program/04-git-and-integration.md`. These rules are adapted from
+git model is in `../docs/program/04-git-and-integration.md`. These rules are adapted from
 hard-won mootup team lessons; each exists because skipping it caused a real stall
 or a real bug. They must hold identically across Opus, GLM, and DeepSeek agents.
 
@@ -13,12 +13,13 @@ or a real bug. They must hold identically across Opus, GLM, and DeepSeek agents.
   needs them (e.g. an implementer asks for a clarification). Keeping the whole
   team on one task maximizes coherence and effectiveness. Do not fan a team onto
   several tasks to chase parallelism — coherence beats it. This includes waiting
-  on CI: a team **waits idle** for its CI run rather than pipelining or stacking
-  PRs (ADR 0002). Idle is cheap and load-friendly; throughput comes from other
-  teams' rings, not from this one multitasking.
+  on CI: once a WP is published, the team **waits idle** for its CI run
+  rather than pipelining or stacking work (ADR 0002). Idle is cheap and
+  load-friendly; throughput comes from other teams' rings, not from this one
+  multitasking.
 - **Across teams — parallel.** The teams are independent rings spinning at once;
   that parallelism is the entire reason the work is articulated into teams. The
-  rings couple at only three points: PRs to `main` (via the Integrator), the
+  rings couple at only three points: merges to `main` (via the Integrator), the
   roadmap gate dependencies, and the **sanctioned cross-team query edges** (§9,
   §11). Keep that coupling thin — it is what serializes the federation if abused.
 
@@ -64,7 +65,8 @@ Open a mootup Decision (`propose_decision`) for choices with tradeoffs where a
 reasonable peer might differ — kernel/semantics design, an API shape, a
 content-store policy. Do **not** open one for deductive/mechanical choices (a bug
 fix is not a decision). Decisions are how future agents query *why* Ken is the
-way it is. PR-merge approvals are also Decisions (see the integrator playbook).
+way it is. **Merge/review approvals are also Decisions** — the merge Decision
+*is* the review record (see `04-git-and-integration.md`).
 
 ## 6. Resolve when structurally determined; escalate only real forks
 
@@ -86,14 +88,14 @@ kernel, not assumed.
 ## 8. Message-type taxonomy (routing metadata)
 
 Tag each message with a type; the **first line is the thread title** — no
-`[TYPE]` prefix in the body. Types: `kickoff`, `question`, `pr_ready` (points at
-a GitHub PR), `review_request`, `blocked`, `bug`, `status_update`, `retro`,
-`decision`.
+`[TYPE]` prefix in the body. Types: `kickoff`, `question`, `merge_ready`
+(a local `wp/<ID>` branch ready for the Integrator to publish + merge),
+`review_request`, `blocked`, `bug`, `status_update`, `retro`, `decision`.
 
 ## 9. Topology is invariant — including the query edges
 
-Who PRs to whom, who reviews, who merges, and **which cross-team query edges
-exist** is operator-owned and fixed. The sanctioned edges are exactly:
+Who hands off to whom, who reviews, who merges, and **which cross-team query
+edges exist** is operator-owned and fixed. The sanctioned edges are exactly:
 
 - any team → **Spec** leader — behavioral-contract questions ("what must this do
   to be correct?").
@@ -187,9 +189,11 @@ quiet. Treat stalls as the **default** failure mode, defended in depth by three
 recurring watchdogs, each catching the layer below it failing:
 
 - **Team leader → its own ring.** Enumerated patterns: handed-off-but-silent,
-  PR-open-no-reviewer, blocked-without-a-blocker-mention, idle-with-ready-work.
-- **Integrator → the PR pipeline.** Green-draft-not-marked-ready,
-  ready-but-unreviewed-past-interval, approved-but-unmerged, merge-queue stuck.
+  merge-Decision-open-no-reviewer, blocked-without-a-blocker-mention,
+  idle-with-ready-work.
+- **Integrator → the merge pipeline.** Branch-published-CI-pending-too-long,
+  CI-green-but-Decision-unresolved, Decision-approved-but-CI-red,
+  approved-and-green-but-unmerged.
 - **Steward → the federation (the backstop).** A whole team idle, a *stalled
   leader*, a dropped cross-team query, a blocked dependency chain, no movement
   toward the active gate. The watcher-of-watchers — it catches a watchdog that
@@ -202,8 +206,8 @@ Rules for every layer:
   blind restart no-ops a permission-prompt or rate-limit stall.
 - **Distinguish waiting from stalling.** A team idle while its CI run is *in
   progress* is normal (ADR 0002), not a stall — leave it alone. Recover only when
-  CI has *finished* and no one took the next step (mark-ready, mention reviewer,
-  fix red, merge).
+  CI has *finished* and no one took the next step (open the merge Decision, vote
+  it, fix red, merge).
 - **Graduated recovery:** detect → mention the one blocked agent → re-mention
   next interval → escalate up the chain.
 - **Escalation chain:** member → team leader → Steward → the operator. The buck
@@ -211,27 +215,31 @@ Rules for every layer:
   updates is the operator's signal. Watchdogs are the only schedulers (§1);
   everyone else is event-driven.
 
-## 14. GitHub signals arrive via mootup (no GitHub notifications)
+## 14. Agents never touch GitHub; the Integrator is the gateway
 
-Agents receive **no GitHub notifications.** GitHub is the system of record for
-code and review, but every *actionable* GitHub event reaches you as a **mootup
-message that mentions you** — opened/ready PRs, requested reviews, change
-requests, approvals, merges.
+**Only the Integrator has GitHub credentials.** Every other agent does **local
+git only** in its worktree (commit, rebase onto the already-fetched
+`origin/main`) — no `gh`, no push, no fetch, no token, no PR. The Integrator is
+the federation's sole GitHub-network actor: it pushes `wp/<ID>` branches to
+trigger CI, reads the checks, merges, and fetches `main`
+(`../docs/program/04-git-and-integration.md`).
 
-- **Never poll GitHub on a timer** for state. Act when the mirrored mootup message
-  mentions you. You *may* fetch one specific PR's detail via your token when a
-  message points you at it — that's pull-on-demand, not polling.
-- **CI results are a watchdog's job, not a worker's.** GitHub doesn't push CI
-  outcomes to agents either. The `ken-ci` bridge mirrors `check_suite` results
-  into mootup (red → the implementer; green → mark ready); until it exists, the
-  **scheduler roles only** (team leader, Integrator) read CI status for *their*
-  PRs as part of their *existing* recurring watchdog pass (`gh pr checks`) and
-  post the outcome. This is not a new timer and not a worker activity — after you
-  push, you stop, and you learn a red result from a mention.
-- **If you took a GitHub action that hands the next move to someone, mirror it
-  into the right space mentioning them** — request changes → mention the
-  implementer; approve → mention the Integrator; merge → mention affected leaders.
-  The `ken-ci` bridge automates this when present; until then the acting agent
-  posts it, or the move is silently lost.
+- **Agents get no GitHub notifications and never poll GitHub.** Because GitHub
+  is one identity's concern, every actionable signal reaches the fleet only as a
+  **mootup message that mentions the actor whose move it is.** Act on the
+  mention, not on a timer.
+- **CI is the Integrator's to watch — never a worker's.** Only the Integrator
+  can see CI. It reads check status for the branches it published as part of its
+  *existing* watchdog pass (`gh pr checks` / the checks API) and posts the
+  outcome: red → mention the implementer (team space) with the failing job;
+  green → advance toward merge. The optional `ken-ci` bridge mirrors
+  `check_suite` results automatically; until then the Integrator posts them.
+  After you hand a WP off, you **stop** and learn a red result from a mention.
+- **Review is a mootup Decision, not a GitHub action.** The Architect/Spec read
+  the diff from the shared local branch (`git diff origin/main...wp/<ID>`) and
+  vote the merge Decision in mootup. There is no GitHub PR approval to mirror.
+- **The Integrator mirrors each GitHub state change into mootup mentioning whoever
+  moves next** — CI red → the implementer; merged → affected team leaders. A
+  GitHub state change nobody mirrors is a silent stall.
 - The full event→message map (what, where, mentioning whom, posted by whom) is in
-  `../docs/program/04-git-and-integration.md §4`.
+  `../docs/program/04-git-and-integration.md §5`.

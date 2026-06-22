@@ -59,10 +59,14 @@ The laptop does **scoped, incremental** work; GitHub Actions (off-laptop compute
 does the **comprehensive** work.
 
 - Agents build/test the **touched crate** (`-p <crate>`), not `--workspace`.
-- **Full-workspace build, the conformance suite, and any release/LTO build run in
-  CI**, not on the laptop. The Integrator relies on CI being green (per
-  `../program/04-git-and-integration.md`), not on local full builds. LTO/`--release` are
-  RAM-killers — never run N× locally.
+- **Full-workspace build, the conformance suite, and any release/LTO build run
+  in CI**, not on the laptop. LTO/`--release` are RAM-killers — never run N×
+  locally.
+- The offload is intact under the single-publisher model (ADR 0003): the
+  **Integrator** pushes each `wp/<ID>` branch, so CI runs on **GitHub's** CPU
+  as a **pre-merge gate** — the local squash-merge compiles nothing, and the
+  laptop never runs a full-workspace build. Only one identity drives the push;
+  the compute story is unchanged (`../program/04-git-and-integration.md`).
 
 ## 5. Phase the teams (don't run all 8 hot)
 

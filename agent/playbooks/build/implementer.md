@@ -12,15 +12,24 @@ your team's ring. Read `../../COORDINATION.md` and `../../MODELS.md`.
 
 ## Your loop
 
+You work in **your own worktree** in the shared clone and do **local git
+only** — no `gh`, no push, no GitHub (04 §1, COORDINATION §14). The Integrator
+publishes and merges.
+
 1. Take one WP (or one reviewable sub-task) from your leader. One at a time.
-2. Branch `wp/<WP-ID>-<slug>` off the latest `main`.
+2. Your leader opens `wp/<WP-ID>-<slug>` off `main`; check it out in your
+   worktree. `git rebase origin/main` first (the ref is already fetched — no
+   network).
 3. Implement **from `/spec`, `/conformance`, and the component design** — **never
    from prototype source** (`../../../CLEAN-ROOM.md`). You run on GLM via
    Fireworks; prototype source must never enter your context.
-4. Write the common-case tests before you hand off. Keep the PR small.
-5. Open the PR; cite the WP ID, the acceptance criteria met, and your spec
-   sources. Do **not** merge.
-6. **Hand off, then stop** (template below). Set status, wait for notification.
+4. Write the common-case tests. Keep the change small.
+5. **Commit to `wp/<ID>` before you hand off** — never hand off uncommitted work
+   (the next agent and the Integrator only see committed state). Cite the WP ID,
+   acceptance criteria met, and your spec sources in the commit/handoff.
+6. **Return to your home branch** so QA can check `wp/<ID>` out (two worktrees
+   can't hold one branch), then **hand off and stop** (template below). Set
+   status, wait for notification.
 
 ## When you're unsure, query — but filter first
 
@@ -36,11 +45,11 @@ Post the `question` (mention the target's leader/Architect only), set status
 ## Handoff template (prevents the silent handoff)
 
 ```
-pr_ready: <WP-ID> <one-line what>
-- branch: wp/<WP-ID>-<slug>   PR: <url>
+merge_ready: <WP-ID> <one-line what>
+- branch: wp/<WP-ID>-<slug>   (committed; I'm back on my home branch)
 - did: <2-3 bullets>
 - spec: <spec §/file this implements>
-- next: <what the reviewer/QA needs to do>
+- next: <what QA needs to verify>
 - watch: <risk / cross-team interface touched>
 ```
 Mention only the next actor; do not wait for an ack.
@@ -65,8 +74,8 @@ teams.
 - **Build/test only via `scripts/ken-cargo`, scoped to your crate** (`-p`), never
   raw `cargo` or `--workspace` — the box is shared and OOMs under parallel builds.
   Lean on CI for full-workspace + conformance. See COORDINATION §12.
-- **Review feedback and CI results arrive in mootup, not GitHub** — you get no
-  GitHub notifications, and you do **not** watch your own CI run. After you push,
-  stop; your leader's watchdog (or the bridge) surfaces a red result or a change
-  request as a mention. When a mention points you at a PR, fetch its detail via
-  your token, fix, push. Don't poll GitHub (COORDINATION §14).
+- **Local git only — you never touch GitHub.** No `gh`, no push, no token; the
+  Integrator publishes and merges (COORDINATION §14). After you hand off, stop.
+  Review feedback and CI-red arrive as a **mootup mention** (from the Architect
+  or the Integrator); to act on one, check `wp/<ID>` out again, `git rebase
+  origin/main`, fix, commit, hand back. Don't poll anything.
