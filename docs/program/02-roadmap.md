@@ -43,7 +43,6 @@ BSD vs. reimplement; content-addressing design).
   kernel's type theory) with a conformance test corpus derived from prototype
   *behavior* (not code).
 - ADRs record every architecture decision with rationale.
-- IP-counsel checkpoint cleared (or explicitly waived in writing).
 
 ---
 

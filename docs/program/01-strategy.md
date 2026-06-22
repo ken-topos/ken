@@ -31,8 +31,7 @@ packages in `03-program-of-work.md`.
 
 ## 1. Clean-room ground rules (non-negotiable)
 
-The MIT goal makes these load-bearing, not optional hygiene. (Not legal advice;
-confirm with IP counsel before Phase 1.)
+The MIT goal makes these load-bearing, not optional hygiene.
 
 1. **No relicensing.** AGPLv3 code cannot be relicensed to MIT. Ken is a separate
    work, written from specifications — not a port.

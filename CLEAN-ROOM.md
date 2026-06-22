@@ -3,8 +3,7 @@
 Ken is an **MIT-licensed, clean-room reimplementation**. It draws on the *design*
 of an AGPLv3 prototype ("Yon", a sibling checkout at `../yon`) but must not be a
 derivative of its **source code**. This policy is load-bearing: the permissive
-license depends on it. (This is process guidance, not legal advice; confirm with
-IP counsel before Phase 1.)
+license depends on it.
 
 ## What is reusable vs. not
 

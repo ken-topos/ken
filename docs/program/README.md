@@ -48,8 +48,7 @@ MIT requires that Ken not be a derivative of the AGPLv3 prototype. A dedicated
 **Team Spec** reads the prototype and produces a written spec + black-box
 conformance corpus (WS-F/F2); implementation teams work **from the spec**, with
 AGPL source kept out of their context. Math and ideas are reusable; code is not.
-`mmgroup` is BSD-2 (reusable with attribution). Confirm with IP counsel before
-Phase 1. (Not legal advice.)
+`mmgroup` is BSD-2 (reusable with attribution).
 
 ## Open decisions for the user (pre–Phase 1)
 
@@ -57,8 +56,6 @@ Phase 1. (Not legal advice.)
   unbounded/large content-addressed store; retain the lattice only for
   error-correction and set-bitmap roles. See ADR in WS-F/F3.)
 - **Syntax**, **effect model**, **Space/process model** — ADRs in Phase 0.
-- **Name**: decided — **Ken**. A trademark / registry (crates.io) sanity-check is
-  still advisable before any public launch.
 
 ## Status
 
