@@ -56,6 +56,6 @@ jobs:
       # (from branch prefix `wp/<ID>-` or a `team:*` label) to its allowed paths;
       # if a PR touches outside them, don't hard-fail — flag it so the owning
       # area's review (CODEOWNERS) is pulled in. Cross-cutting edits are normal;
-      # never block them. See 05-git-and-integration.md.
+      # never block them. See docs/program/04-git-and-integration.md.
       - name: Path guard (placeholder)
         run: echo "path-guard not yet implemented (WP F1)"

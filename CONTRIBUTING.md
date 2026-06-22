@@ -3,7 +3,7 @@
 Ken is built by multiple agent teams coordinating through
 [convo/mootup](https://mootup.io) spaces and GitHub. This file is the short
 version; the authoritative workflow is
-[`05-git-and-integration.md`](05-git-and-integration.md), and the per-role
+[`docs/program/04-git-and-integration.md`](docs/program/04-git-and-integration.md), and the per-role
 behavioral playbooks live under [`agent/playbooks/`](agent/playbooks/).
 
 ## The rules that matter
@@ -19,7 +19,7 @@ behavioral playbooks live under [`agent/playbooks/`](agent/playbooks/).
 ## Branch & PR
 
 - Branch per work package: `wp/<WP-ID>-<slug>` (e.g. `wp/K1-core-type-theory`).
-  WP IDs are in [`04-program-of-work.md`](04-program-of-work.md).
+  WP IDs are in [`docs/program/03-program-of-work.md`](docs/program/03-program-of-work.md).
 - One work package (or one reviewable sub-task) per PR; keep PRs small.
 - The PR must: target `main`, cite its WP ID + the acceptance criteria it
   satisfies, cite **spec sources** (not prototype source), be conformance-green,

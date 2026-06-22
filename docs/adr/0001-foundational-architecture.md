@@ -7,7 +7,7 @@
 ## Context
 
 Ken is a new, distinct programming language whose goal is commercial-grade
-*verified* development for agents (see `02-strategy.md`). It draws on the design
+*verified* development for agents (see `../program/01-strategy.md`). It draws on the design
 of an AGPLv3 research prototype ("Yon") but cannot inherit its license, name, or
 accreted constraints. The architecture must make the verification loop credible
 quickly, keep the trust root small, and remain implementable by parallel agent

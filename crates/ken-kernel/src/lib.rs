@@ -4,7 +4,7 @@
 //! whether a term is well-typed and whether a proof is valid. Everything a user
 //! must trust to believe a Ken proof lives here, and nowhere else.
 //!
-//! Design constraints (see `../../02-strategy.md`, `../../docs/adr/`):
+//! Design constraints (see `docs/program/01-strategy.md`, `docs/adr/`):
 //! - **Small and auditable** (the de Bruijn criterion). Resist growth.
 //! - **Correct from day one** — universe checking, dependent Sigma, and a
 //!   decidable, termination-certified conversion. No `Type: Type`.

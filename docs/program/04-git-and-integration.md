@@ -19,7 +19,7 @@ Governing rules (non-negotiable):
 2. **Teams never merge to `main`.** Teams open PRs; a single **Integrator**
    merges.
 3. **Clean-room is enforced at the merge gate.** No AGPL-derived code enters
-   `main`; only **Team Spec** mediates prototype knowledge (see `02-strategy.md`).
+   `main`; only **Team Spec** mediates prototype knowledge (see `01-strategy.md`).
 4. **One source of truth per concern.** Code/review → GitHub. Decisions/notify →
    convo. Don't duplicate authority.
 
@@ -61,7 +61,7 @@ templates) and depends on the GitHub repo existing — which it does not yet
 
 - **Branch naming ties to work packages:** `wp/<WP-ID>-<slug>` — e.g.
   `wp/K1-core-type-theory`, `wp/V3-prover-backend`. Exploratory spikes:
-  `spike/<team>/<topic>`. The WP IDs are from `04-program-of-work.md`.
+  `spike/<team>/<topic>`. The WP IDs are from `03-program-of-work.md`.
 - **One work package (or one reviewable sub-task) per PR.** Small PRs merge
   faster and keep `main` green. A large WP (e.g. K1, V3) is split into a series.
 - **Every PR must:** target `main`; cite its WP ID and the acceptance criteria it
@@ -99,7 +99,7 @@ Responsibilities:
 5. **Verify, then notify:** confirm the merge landed and CI is green, then notify
    affected team leaders of the fresh `main` commit (see §4) with a one-line
    changelog and **rebase guidance** for any team whose active branch is impacted.
-6. **Guard the gates:** tag G0–G8 milestones (`03-roadmap.md`) when their
+6. **Guard the gates:** tag G0–G8 milestones (`02-roadmap.md`) when their
    acceptance criteria are met; refuse merges that would regress a passed gate.
 
 The Integrator is a *gatekeeper and notifier*, not a designer or reviewer-of-record
@@ -151,7 +151,7 @@ Steward and the operator.
   `ken-integration` and **mentions** the leaders of impacted team spaces
   (`reply_to` / mention), with the merged WP, the commit, and rebase guidance.
   Team leaders pull/rebase and fan the update into their own space.
-- **Cross-team dependencies** (the graph in `03-roadmap.md`/`04`) are coordinated
+- **Cross-team dependencies** (the graph in `02-roadmap.md`/`03`) are coordinated
   via the linked spaces and mentions: when WP-B depends on WP-A landing, the
   B-team leader watches A's Decision and is mentioned on its resolution.
 

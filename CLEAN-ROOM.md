@@ -30,10 +30,6 @@ reusable with attribution; LLVM/Cranelift are permissive.)
    `file:line`.
 3. **The merge gate enforces it.** The Integrator confirms each PR cites spec
    sources and introduces no AGPL-derived code; CI runs a provenance check.
-4. **The planning docs `01-reality-check.md` … contain short prototype `file:line`
-   citations as analysis/commentary.** They are knowledge artifacts, not
-   implementation input, and should be excluded from any distributed release
-   artifact.
 
 ## If in doubt
 

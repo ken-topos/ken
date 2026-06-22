@@ -4,7 +4,7 @@ Phased sequence for **Ken** — a new, MIT-licensed,
 Rust-hosted, interpreter-first verified topos language, with the AGPLv3 Yon fork
 as a reference prototype only. Phases are ordered by dependency and risk, not
 calendar. Each has an **entry state**, an objective **exit gate**, and the **work
-packages** (see `04-program-of-work.md`) it contains.
+packages** (see `03-program-of-work.md`) it contains.
 
 Governing principle: every step is additive and verified against the conformance
 suite before the next; one clean change at a time; design (and spec) on paper

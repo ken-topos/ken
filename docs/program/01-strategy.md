@@ -23,10 +23,9 @@ dependent + cubical kernel, content-addressing, mechanical Yoneda checking). Ken
 takes the validated *design* and reimplements it cleanly, free of the prototype's
 license, name, soundness debt, and accreted constraints.
 
-Read `01-reality-check.md` first (what the prototype actually does). This
-document defines the goal, the clean-room ground rules, the locked architecture,
-and the workstreams. Sequencing is in `03-roadmap.md`; team-sized packages in
-`04-program-of-work.md`.
+This document defines the goal, the clean-room ground rules, the locked
+architecture, and the workstreams. Sequencing is in `02-roadmap.md`; team-sized
+packages in `03-program-of-work.md`.
 
 ---
 
@@ -41,8 +40,8 @@ confirm with IP counsel before Phase 1.)
    topos/HoTT approach, content-addressing as identity, and all mathematics
    (Leech Λ₂₄, Golay, Co₀, hashing). Ideas, methods, and math are not
    copyrightable. Interfaces are defensible to reimplement.
-3. **Not reusable:** copying or close paraphrase of AGPL source. The reality
-   check's `file:line` excerpts are commentary, not implementation input.
+3. **Not reusable:** copying or close paraphrase of AGPL source. References to
+   prototype `file:line` are commentary, not implementation input.
 4. **Process:** derive a written behavioral **spec + conformance test corpus**
    from the prototype (docs, observed behavior, the regression suite's
    *behaviors*), then implement from the spec. Keep AGPL source out of the
@@ -118,9 +117,9 @@ is ergonomics/agent interface; S and R are deferred/parallel.
 
 ### WS-F — Foundations, clean-room process, governance (always on)
 Name, MIT license setup, IP hygiene, repo scaffolding (Rust workspace), ADRs, and
-— critically — **spec extraction**: turn the reality-check knowledge into a
-written language spec + conformance test corpus that Ken is implemented against.
-This is the legal-safe bridge from prototype to new code.
+— critically — **spec extraction**: turn knowledge of the prototype's behavior
+into a written language spec + conformance test corpus that Ken is implemented
+against. This is the legal-safe bridge from prototype to new code.
 
 ### WS-K — Trusted kernel (Rust) ★ trust root
 The small permanent core: core dependent type theory (Pi, dependent Sigma, Id, J,

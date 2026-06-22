@@ -3,7 +3,7 @@
 # pull the owning area's review). Write/merge restriction is done in branch
 # protection, not here.
 #
-# Model (see docs/ops/github-setup.md and 05-git-and-integration.md):
+# Model (see docs/ops/github-setup.md and docs/program/04-git-and-integration.md):
 #   - The Architect is the required reviewer on EVERY PR (the catch-all owner).
 #   - The Spec enclave reviews only its own paths (behavioral contract); the
 #     conformance CI is Spec's automated gate on every PR.

@@ -19,7 +19,7 @@ keep the *product* legible, the Steward keeps the *practice* legible. Read
   match `main`. Docs that drift from code are worse than no docs.
 - **Honesty:** every doc claim matches the code (ground before writing, §7). You
   are the standing defense against the kind of stale claims the prototype
-  accumulated (see `../../../01-reality-check.md`).
+  accumulated.
 - **Reference + pedagogy:** maintain the reference and the teaching material
   (the "Little Topologist" track lives here when it starts).
 

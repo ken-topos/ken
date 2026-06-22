@@ -4,28 +4,21 @@ A plan to build **Ken**: a new, **MIT-licensed**, Rust-hosted, interpreter-first
 **verified topos-oriented language for agentic development**, where
 machine-checkable correctness — not just tests — is the deployable guarantee.
 
-Ken is a **clean-room reimplementation**. The AGPLv3 Yon fork (this repo's
-sibling at `../yon`) and the exploratory
-`../yon/Yon Programming Language Analysis.md` are **reference prototype + idea map
-only** — studied, specified from, and tested against, but never copied. The
-analysis was written from public 1.0 docs and is factually unreliable about the
-prototype; the reality check corrects it against source.
+Ken is a **clean-room reimplementation** that draws on the *design* of an AGPLv3
+research prototype ("Yon") but never its source code — a separate behavioral
+spec, written by Team Spec, is the legal bridge (see `01-strategy.md`).
 
 ## Read in this order
 
-1. **`01-reality-check.md`** — what the prototype actually does, where the
-   analysis is wrong (the f64 thesis is refuted; the prototype kernel is already
-   partway to L2), evidence-backed. A **knowledge artifact**, not implementation
-   material (clean-room note inside). **Start here.**
-2. **`02-strategy.md`** — the thesis, the clean-room ground rules, the locked
+1. **`01-strategy.md`** — the thesis, the clean-room ground rules, the locked
    architecture (Rust host, interpreter-first, small permanent Rust kernel,
    deferred self-hosting), success criteria G1–G8, and the eight workstreams.
-3. **`03-roadmap.md`** — phases 0–7, each with an objective exit gate; the
+2. **`02-roadmap.md`** — phases 0–7, each with an objective exit gate; the
    work-package dependency graph.
-4. **`04-program-of-work.md`** — self-contained, team-sized work packages with
+3. **`03-program-of-work.md`** — self-contained, team-sized work packages with
    spec sources, acceptance criteria, dependencies, and a fan-out plan across
    agent teams.
-5. **`05-git-and-integration.md`** — the git workflow and coordination model:
+4. **`04-git-and-integration.md`** — the git workflow and coordination model:
    protected `main`, per-team PRs, a single Integrator who merges and notifies,
    and how it maps onto convo/mootup spaces and Decisions. Realized by WP F1.
 

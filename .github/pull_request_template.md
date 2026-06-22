@@ -1,7 +1,7 @@
 <!-- Keep PRs to one work package (or one reviewable sub-task). Small merges keep `main` green. -->
 
 ## Work package
-<!-- WP ID from 04-program-of-work.md, e.g. K1, V3, L2 -->
+<!-- WP ID from docs/program/03-program-of-work.md, e.g. K1, V3, L2 -->
 WP:
 
 ## What this does

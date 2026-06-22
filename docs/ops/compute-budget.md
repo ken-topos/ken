@@ -61,7 +61,7 @@ does the **comprehensive** work.
 - Agents build/test the **touched crate** (`-p <crate>`), not `--workspace`.
 - **Full-workspace build, the conformance suite, and any release/LTO build run in
   CI**, not on the laptop. The Integrator relies on CI being green (per
-  `05-git-and-integration.md`), not on local full builds. LTO/`--release` are
+  `../program/04-git-and-integration.md`), not on local full builds. LTO/`--release` are
   RAM-killers — never run N× locally.
 
 ## 5. Phase the teams (don't run all 8 hot)

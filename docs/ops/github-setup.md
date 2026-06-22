@@ -1,7 +1,7 @@
 # GitHub setup
 
 How `ken-topos/ken` (public OSS) is wired so the federation's PR workflow
-(`../../05-git-and-integration.md`) is enforced, not just documented. Public repo
+(`../program/04-git-and-integration.md`) is enforced, not just documented. Public repo
 ⇒ org membership and GitHub-hosted Actions minutes are **free**, so the cost of
 identities is *operational* (accounts, 2FA, tokens), not billing — which is why
 we minimize the account count.

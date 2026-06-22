@@ -2,7 +2,7 @@
 
 Cross-cutting rules for every Ken agent, regardless of role, team, or model.
 Role-specific discipline is in `playbooks/`; model tiers are in `MODELS.md`; the
-git/PR model is in `../05-git-and-integration.md`. These rules are adapted from
+git/PR model is in `../docs/program/04-git-and-integration.md`. These rules are adapted from
 hard-won convo team lessons; each exists because skipping it caused a real stall
 or a real bug. They must hold identically across Opus, GLM, and DeepSeek agents.
 
@@ -100,8 +100,7 @@ exist** is operator-owned and fixed. The sanctioned edges are exactly:
 - any team → **Architect** — component-design questions ("how should I structure
   this / which design?").
 - any team → **Steward** — scope/priority (forwarded to the operator),
-  workflow/process,
-  and research requests.
+  workflow/process, and research requests.
 - any team → **Integrator** — merge status (usually via the team's own leader).
 
 Agents may improve *what they do inside a node*, never *add a communication edge
@@ -222,4 +221,4 @@ requests, approvals, merges.
   The `ken-ci` bridge automates this when present; until then the acting agent
   posts it, or the move is silently lost.
 - The full event→message map (what, where, mentioning whom, posted by whom) is in
-  `../05-git-and-integration.md §4`.
+  `../docs/program/04-git-and-integration.md §4`.

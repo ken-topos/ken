@@ -38,5 +38,5 @@ lacks. See `playbooks/federation/steward.md` and `COORDINATION.md §10`.
 These patterns are lifted and adapted from the workflow skills the convo team
 developed by dogfooding convo on a different (SaaS) codebase — the coordination
 nuance transfers; SaaS/tooling specifics were dropped. The governing git model is
-[`../05-git-and-integration.md`](../05-git-and-integration.md); roles map to teams
-in [`../04-program-of-work.md`](../04-program-of-work.md).
+[`../docs/program/04-git-and-integration.md`](../docs/program/04-git-and-integration.md); roles map to teams
+in [`../docs/program/03-program-of-work.md`](../docs/program/03-program-of-work.md).

@@ -35,8 +35,8 @@ may and may not look at; license is MIT; CI builds an empty workspace.
 ### F2 — Spec extraction from the prototype · L · ★★
 **Objective.** The legal-safe bridge: turn prototype *behavior* into a written
 spec Ken is implemented against.
-**Scope.** From the reality-check knowledge + running the prototype + its
-regression *behaviors*, write: core type-theory spec (terms, types, evaluation,
+**Scope.** From study of the prototype + running it + its regression
+*behaviors*, write: core type-theory spec (terms, types, evaluation,
 conversion, universes), surface-language spec (syntax, modules, effects), and a
 **conformance test corpus** (input → expected behavior) that does not embed AGPL
 source. Mark every area where Ken will deliberately diverge (e.g. `Int` from day
@@ -81,8 +81,8 @@ scale; license provenance of any reused math is clean.
 induction; universes **with stratification checking from day one** (no
 `Type:Type`); the cubical machinery Ken commits to (decide scope in F2/F3 —
 transport/comp/hcomp/Glue/HITs as warranted). Keep it minimal and auditable.
-**Spec source (understand, don't copy).** Prototype kernel behaviors; reality
-check §1.3.
+**Spec source (understand, don't copy).** Prototype kernel behaviors, via the
+`/spec` Team Spec produces.
 **Deliverables.** `kernel` crate core + property tests.
 **Acceptance.** A universe loop is rejected; dependent Sigma type-checks; J
 reduces over a non-`refl` path; the conformance core subset passes.
@@ -300,7 +300,7 @@ Reproduce the conformance suite from the self-hosted build. **Deps.** S1.
 - **Integration (the Integrator)** → owns `main`: reviews, enforces the
   clean-room and conformance gates, merges (no other team merges), and notifies
   team leaders of fresh `main`. A single agent (recommended) with the operator
-  as escalation. See `05-git-and-integration.md` for the full workflow.
+  as escalation. See `04-git-and-integration.md` for the full workflow.
 
 Each team gets its own convo/mootup space; the Integrator's space is linked to
 all of them. PRs surface as convo Events (PR URL as artifact), merge approvals as
@@ -308,4 +308,4 @@ convo Decisions. Synchronization is at the roadmap gates (G0–G8): no team
 advances past a gate until its acceptance criteria are met and the conformance
 suite is green on a fresh checkout. The clean-room boundary (Team Spec mediates
 prototype knowledge; implementation teams work from specs) holds at every step,
-and is enforced mechanically at the merge gate (`05-git-and-integration.md §7`).
+and is enforced mechanically at the merge gate (`04-git-and-integration.md §7`).

@@ -14,15 +14,15 @@ not just tests — is the deployable guarantee.
 
 > **Status: pre-implementation scaffold.** No language code exists yet. This repo
 > currently holds the program of work and the team workflow. Start at
-> [`00-INDEX.md`](00-INDEX.md).
+> [`docs/program/`](docs/program/README.md).
 
 ## Map
 
-- **Plan:** [`00-INDEX.md`](00-INDEX.md) → reality check, strategy, roadmap,
-  program of work, and the git/integration model (`01`–`05`).
+- **Plan:** [`docs/program/`](docs/program/README.md) → strategy, roadmap,
+  program of work, and the git/integration model.
 - **Workflow:** [`CONTRIBUTING.md`](CONTRIBUTING.md),
-  [`05-git-and-integration.md`](05-git-and-integration.md), and the per-role agent
-  playbooks under [`agent/playbooks/`](agent/playbooks/).
+  [`docs/program/04-git-and-integration.md`](docs/program/04-git-and-integration.md),
+  and the per-role agent playbooks under [`agent/playbooks/`](agent/playbooks/).
 - **Clean room:** [`CLEAN-ROOM.md`](CLEAN-ROOM.md) — Ken is a clean-room
   reimplementation; it uses the AGPLv3 "Yon" prototype only as a behavioral
   reference, never as a code basis.
