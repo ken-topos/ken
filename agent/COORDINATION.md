@@ -12,7 +12,10 @@ or a real bug. They must hold identically across Opus, GLM, and DeepSeek agents.
   time; the others are in a supporting role, called on when the active agent
   needs them (e.g. an implementer asks for a clarification). Keeping the whole
   team on one task maximizes coherence and effectiveness. Do not fan a team onto
-  several tasks to chase parallelism — coherence beats it.
+  several tasks to chase parallelism — coherence beats it. This includes waiting
+  on CI: a team **waits idle** for its CI run rather than pipelining or stacking
+  PRs (ADR 0002). Idle is cheap and load-friendly; throughput comes from other
+  teams' rings, not from this one multitasking.
 - **Across teams — parallel.** The teams are independent rings spinning at once;
   that parallelism is the entire reason the work is articulated into teams. The
   rings couple at only three points: PRs to `main` (via the Integrator), the
@@ -158,7 +161,8 @@ configuration: `../docs/ops/compute-budget.md`.
 - **`source scripts/ken-env.sh`** at session start for the shared `sccache` +
   `CARGO_HOME`, so you don't recompile dependencies other agents already built.
 - **Idle = paused.** A resident agent costs RAM even when not building. If your
-  ring is blocked or waiting, don't hold the box hot.
+  ring is blocked or waiting (including waiting on a CI run — ADR 0002), quiesce;
+  don't hold the box hot.
 - This is a *current-hardware* constraint, not a design value — it relaxes as
   hardware grows (the Steward/operator raises the caps; do not raise them
   unilaterally).
@@ -183,6 +187,10 @@ Rules for every layer:
   "check for activity" misses the nuance.
 - **Diagnose before you restart.** Capture the stalled agent's state first; a
   blind restart no-ops a permission-prompt or rate-limit stall.
+- **Distinguish waiting from stalling.** A team idle while its CI run is *in
+  progress* is normal (ADR 0002), not a stall — leave it alone. Recover only when
+  CI has *finished* and no one took the next step (mark-ready, mention reviewer,
+  fix red, merge).
 - **Graduated recovery:** detect → mention the one blocked agent → re-mention
   next interval → escalate up the chain.
 - **Escalation chain:** member → team leader → Steward → Pat. The buck stops at
