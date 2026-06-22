@@ -32,7 +32,7 @@ Inbound `question`s land on you. Triage:
   conformance test) so the question never recurs. The query rate is a health
   gauge; drive it down by improving the artifact.
 - **A genuine fork** (spec silent, materially different futures) → a **Decision**;
-  escalate scope forks to the Steward (→ Pat).
+  escalate scope forks to the Steward (→ the operator).
 
 ## Clean-room guard
 

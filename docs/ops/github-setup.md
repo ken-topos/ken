@@ -29,7 +29,7 @@ and auto-rotating — safer on a public repo than long-lived PATs on many accoun
 
 ### Machine-user accounts (CODEOWNERS-eligible reviewers + the merger)
 
-Create via gmail `+tag` (each `pat+ken-<role>@gmail.com` is a distinct GitHub
+Create via gmail `+tag` (each `<you>+ken-<role>@gmail.com` is a distinct GitHub
 account). Give each 2FA and a fine-grained PAT scoped to this repo; the agent
 holds its token in the harness. Minimum set:
 

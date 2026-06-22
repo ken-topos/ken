@@ -16,7 +16,8 @@ Integrator owns `main` mechanics and the Architect owns design judgment. Read
 - **One task at a time** through the ring (implementer → QA → back), per
   COORDINATION §0. Coherence beats opportunistic parallelism inside a team.
 - **Pipeline-ready predicate:** when a WP finishes, auto-start the next *ready*
-  WP without waiting on Pat. Ready = scope/spec exists, open questions resolved,
+  WP without waiting on the operator. Ready = scope/spec exists, open questions
+  resolved,
   dependencies merged to `main`, no operator pause.
 - **Operator-blocking ≠ pipeline-blocking:** if a WP surfaces a question only the
   Architect/Spec/Steward can answer and the block is long, **reorder** to an

@@ -10,7 +10,8 @@ generation and coordination. Three tiers:
 | **T2** | **GLM 5.2** (Fireworks) | Implementers | High-volume code generation. |
 | **T3** | **DeepSeek V4 Pro** | Build-team Leaders, Build-team QA, Spec-team Leader, Integrator, Librarian | Coordination, mechanical gates, verification runs, doc observation. |
 
-Pat is the human product owner; Steward is the primary proxy into the federation.
+The operator is the human product owner; Steward is the primary proxy into the
+federation.
 
 ## Knobs (tune by observed quality, not up front)
 

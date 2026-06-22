@@ -99,7 +99,8 @@ exist** is operator-owned and fixed. The sanctioned edges are exactly:
   to be correct?").
 - any team → **Architect** — component-design questions ("how should I structure
   this / which design?").
-- any team → **Steward** — scope/priority (forwarded to Pat), workflow/process,
+- any team → **Steward** — scope/priority (forwarded to the operator),
+  workflow/process,
   and research requests.
 - any team → **Integrator** — merge status (usually via the team's own leader).
 
@@ -116,7 +117,7 @@ creeps in.
   (see the steward playbook): team-local → archetype source → this file.
 - A lesson promotes only when it passes all three: **(a) validated across ≥3 runs
   *or* independently in ≥2 teams, (b) effort-/model-/operator-agnostic, (c) a
-  normative rule, not a one-off fact.** Exception: an explicit operator (Pat)
+  normative rule, not a one-off fact.** Exception: an explicit operator
   correction promotes on a single data point. On promotion, retire the source
   note atomically. Cross-team replication is a *stronger* generalization signal
   than single-team repetition — use it.
@@ -193,9 +194,10 @@ Rules for every layer:
   fix red, merge).
 - **Graduated recovery:** detect → mention the one blocked agent → re-mention
   next interval → escalate up the chain.
-- **Escalation chain:** member → team leader → Steward → Pat. The buck stops at
-  Pat (human): if the Steward goes quiet, the absence of its updates is Pat's
-  signal. Watchdogs are the only schedulers (§1); everyone else is event-driven.
+- **Escalation chain:** member → team leader → Steward → the operator. The buck
+  stops at the operator (human): if the Steward goes quiet, the absence of its
+  updates is the operator's signal. Watchdogs are the only schedulers (§1);
+  everyone else is event-driven.
 
 ## 14. GitHub signals arrive via convo (no GitHub notifications)
 

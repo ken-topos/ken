@@ -299,8 +299,8 @@ Reproduce the conformance suite from the self-hosted build. **Deps.** S1.
 
 - **Integration (the Integrator)** → owns `main`: reviews, enforces the
   clean-room and conformance gates, merges (no other team merges), and notifies
-  team leaders of fresh `main`. A single agent (recommended) with Pat as
-  escalation. See `05-git-and-integration.md` for the full workflow.
+  team leaders of fresh `main`. A single agent (recommended) with the operator
+  as escalation. See `05-git-and-integration.md` for the full workflow.
 
 Each team gets its own convo/mootup space; the Integrator's space is linked to
 all of them. PRs surface as convo Events (PR URL as artifact), merge approvals as

@@ -82,7 +82,8 @@ A **single agent** (DeepSeek V4 Pro — see `agent/MODELS.md`) with **sole merge
 rights to `main`**. The Integrator is deliberately *mechanical*: the deep
 correctness and architectural review is the **Architect's** job (Opus), which is
 why the Integrator can run on a light model. The **Steward** is the escalation
-point for cross-team conflicts; Pat decides scope and anything crossing an ADR.
+point for cross-team conflicts; the operator decides scope and anything crossing
+an ADR.
 Responsibilities:
 
 1. **Confirm the required reviews are present:** the Architect approved (always),
@@ -103,7 +104,7 @@ Responsibilities:
 
 The Integrator is a *gatekeeper and notifier*, not a designer or reviewer-of-record
 for design. Design judgment lives with the Architect; scope and process with the
-Steward and Pat.
+Steward and the operator.
 
 ---
 
@@ -142,7 +143,8 @@ Steward and Pat.
   `resolve_decision` on merge or rejection. This yields an auditable decision log
   aligned 1:1 with GitHub merges (`list_decisions`).
 - **Architecture decisions (ADRs) are also convo Decisions** — proposed in the
-  integration space, resolved by Pat/Integrator, then committed to `docs/adr/`.
+  integration space, resolved by the operator/Integrator, then committed to
+  `docs/adr/`.
   The convo Decision is the discussion+ratification record; the committed ADR is
   the durable artifact.
 - **Notification of fresh `main`:** on merge, the Integrator posts an Event in
@@ -176,7 +178,8 @@ Steward and Pat.
    Decision resolves.
 7. Integrator verifies the merge landed + CI green, then posts the ship Event in
    ken-integration, mentioning only the affected team leaders with rebase
-   guidance. Steward digests the merge log; Pat hears only gate-level news.
+   guidance. Steward digests the merge log; the operator hears only gate-level
+   news.
 8. Impacted teams rebase active branches on the new main.
 ```
 

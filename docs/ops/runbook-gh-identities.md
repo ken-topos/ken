@@ -1,6 +1,6 @@
 # Runbook: set up the GitHub identities
 
-Operator runbook (for Pat) to stand up the identities the agent workflow needs.
+Operator runbook to stand up the identities the agent workflow needs.
 Reference/rationale is `github-setup.md`; this is the **ordered manual procedure**.
 Do the phases in order — the ordering avoids lockout and CODEOWNERS dead-ends
 (branch protection goes on **last**, after a smoke test).

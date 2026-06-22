@@ -67,5 +67,5 @@ A GitHub event nobody mirrors is a silent stall.
 ## Escalation
 
 Ship-criteria changes, cross-team conflicts, or anything needing judgment → the
-Steward (and through them, Pat). You enforce the agreed rules; you do not change
-them.
+Steward (and through them, the operator). You enforce the agreed rules; you do
+not change them.

@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-06-22
-- **Deciders:** Pat Lasswell (operator)
+- **Deciders:** the operator
 
 ## Context
 
