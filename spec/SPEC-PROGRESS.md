@@ -66,9 +66,9 @@ Status: TODO · DRAFT (first pass written) · REVISED (refined w/ digest) · DON
 | `30-surface/README.md` | Surface language overview | DRAFT |
 | `30-surface/31-lexical.md` | Lexical structure, tokens, literals | DRAFT |
 | `30-surface/32-grammar.md` | Concrete grammar | DRAFT |
-| `30-surface/33-declarations.md` | Modules, declarations, definitions, visibility | TODO |
-| `30-surface/34-data-match.md` | Sum types, `match`, exhaustiveness, `Result`/`Option` | TODO |
-| `30-surface/35-numbers.md` | `Int`/`Decimal`/reals — the f64 correction | TODO |
+| `30-surface/33-declarations.md` | Modules, declarations, definitions, visibility | DRAFT |
+| `30-surface/34-data-match.md` | Sum types, `match`, exhaustiveness, `Result`/`Option` | DRAFT |
+| `30-surface/35-numbers.md` | `Int`/`Decimal`/reals — the f64 correction | DRAFT |
 | `30-surface/36-effects.md` | Effect tracking surface | TODO |
 | `30-surface/37-strings-collections.md` | Strings, core collections | TODO |
 | `30-surface/38-ffi-io.md` | `Bytes`, binary I/O, FFI | TODO |
