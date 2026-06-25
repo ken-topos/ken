@@ -63,9 +63,9 @@ Status: TODO · DRAFT (first pass written) · REVISED (refined w/ digest) · DON
 | `20-verification/23-prover.md` | Classifier; Z3-for-decidable; Kripke embedding; certificates | DRAFT |
 | `20-verification/24-diagnostics.md` | Countermodels; typed holes + `unknown`; three-region Heyting | DRAFT |
 | `20-verification/25-protocol.md` | Machine-readable diagnostic protocol (agent contract) | DRAFT |
-| `30-surface/README.md` | Surface language overview | TODO |
-| `30-surface/31-lexical.md` | Lexical structure, tokens, literals | TODO |
-| `30-surface/32-grammar.md` | Concrete grammar | TODO |
+| `30-surface/README.md` | Surface language overview | DRAFT |
+| `30-surface/31-lexical.md` | Lexical structure, tokens, literals | DRAFT |
+| `30-surface/32-grammar.md` | Concrete grammar | DRAFT |
 | `30-surface/33-declarations.md` | Modules, declarations, definitions, visibility | TODO |
 | `30-surface/34-data-match.md` | Sum types, `match`, exhaustiveness, `Result`/`Option` | TODO |
 | `30-surface/35-numbers.md` | `Int`/`Decimal`/reals — the f64 correction | TODO |
