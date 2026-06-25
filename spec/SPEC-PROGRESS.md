@@ -52,8 +52,8 @@ Status: TODO · DRAFT (first pass written) · REVISED (refined w/ digest) · DON
 | `10-kernel/11-syntax.md` | Core term/type syntax, de Bruijn, telescopes, contexts | DRAFT |
 | `10-kernel/12-universes.md` | Universe hierarchy, predicativity, checking, cumulativity | DRAFT |
 | `10-kernel/13-pi-sigma.md` | Dependent Π and Σ: formation/intro/elim/compute + η | DRAFT |
-| `10-kernel/14-inductive.md` | Inductive families, eliminators, strict positivity | TODO |
-| `10-kernel/15-identity.md` | `Id`/`J` path induction; relation to the cubical `Path` | TODO |
+| `10-kernel/14-inductive.md` | Inductive families, eliminators, strict positivity | DRAFT |
+| `10-kernel/15-identity.md` | `Id`/`J` path induction; relation to the cubical `Path` | DRAFT |
 | `10-kernel/16-cubical.md` | Interval, Path, transport, hcomp/comp, Glue, univalence, HITs | TODO |
 | `10-kernel/17-conversion.md` | Definitional eq, NbE, decidable conversion, β/η/δ, SCT | TODO |
 | `10-kernel/18-judgments.md` | Full typing judgment, algorithm, the kernel API surface | TODO |
