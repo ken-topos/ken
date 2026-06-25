@@ -46,10 +46,10 @@ Status: TODO · DRAFT (first pass written) · REVISED (refined w/ digest) · DON
 
 | File | Scope | Status |
 |---|---|---|
-| `README.md` | Index, organization, conventions, status | TODO |
-| `00-overview.md` | Thesis, L0/L1/L2, goals, scope, non-goals, glossary | TODO |
-| `10-kernel/README.md` | Trusted kernel overview; de Bruijn criterion; what it checks | TODO |
-| `10-kernel/11-syntax.md` | Core term/type syntax, de Bruijn, telescopes, contexts | TODO |
+| `README.md` | Index, organization, conventions, status | DRAFT |
+| `00-overview.md` | Thesis, L0/L1/L2, goals, scope, non-goals, glossary | DRAFT |
+| `10-kernel/README.md` | Trusted kernel overview; de Bruijn criterion; what it checks | DRAFT |
+| `10-kernel/11-syntax.md` | Core term/type syntax, de Bruijn, telescopes, contexts | DRAFT |
 | `10-kernel/12-universes.md` | Universe hierarchy, predicativity, checking, cumulativity | TODO |
 | `10-kernel/13-pi-sigma.md` | Dependent Π and Σ: formation/intro/elim/compute + η | TODO |
 | `10-kernel/14-inductive.md` | Inductive families, eliminators, strict positivity | TODO |
@@ -80,7 +80,7 @@ Status: TODO · DRAFT (first pass written) · REVISED (refined w/ digest) · DON
 | `40-runtime/44-capacity.md` | Content store; slot-ceiling decision; lattice's real roles | TODO |
 | `50-stdlib/README.md` | Prelude + core stdlib shape | TODO |
 | `90-open-decisions.md` | The forks register (for the operator) | TODO |
-| `_notes/analysis-digest.md` | Distilled digest of analysis + reality-check (subagent) | IN PROGRESS |
+| `_notes/analysis-digest.md` | Distilled digest of analysis + reality-check (subagent) | DONE |
 
 (Conformance corpus seeds live in `../conformance/`, referenced from spec
 sections; seeded opportunistically as core sections are written.)
@@ -100,12 +100,13 @@ sections; seeded opportunistically as core sections are written.)
 
 ## Next action
 
-Subagent is digesting the analysis + reality-check into
-`_notes/analysis-digest.md`. While it runs: write `00-overview.md` and
-`README.md` (grounded in `01-strategy.md`, not the digest), then begin
-`10-kernel/` (kernel type theory is standard MLTT + cubical, pinned by the
-strategy — writable now, refine with the digest where it adds prototype-specific
-nuance).
+Digest is DONE (`_notes/analysis-digest.md`, 750 lines — 11 sections incl. the
+f64 correction, the FNV-1a-not-Leech addressing finding, 16 enumerated forks,
+~25 corrected claims). Frame + `10-kernel/README.md` + `11-syntax.md` are DRAFT.
+**Continue the kernel:** `12-universes.md` → `13-pi-sigma.md` → `14-inductive.md`
+→ `15-identity.md` → `16-cubical.md` → `17-conversion.md` → `18-judgments.md`,
+folding in digest specifics. Then seed `90-open-decisions.md` from the digest's
+16 forks. Read the digest before the cubical/topos/numbers/runtime chapters.
 
 ## Open decisions captured so far
 
