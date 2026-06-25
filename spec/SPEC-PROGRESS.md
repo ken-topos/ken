@@ -57,10 +57,10 @@ Status: TODO · DRAFT (first pass written) · REVISED (refined w/ digest) · DON
 | `10-kernel/16-cubical.md` | Interval, Path, transport, hcomp/comp, Glue, univalence, HITs | DRAFT |
 | `10-kernel/17-conversion.md` | Definitional eq, NbE, decidable conversion, β/η/δ, SCT | DRAFT |
 | `10-kernel/18-judgments.md` | Full typing judgment, algorithm, the kernel API surface | DRAFT |
-| `20-verification/README.md` | The differentiator: overview | TODO |
-| `20-verification/21-spec-syntax.md` | `requires`/`ensures`/refinements/goals | TODO |
-| `20-verification/22-obligations.md` | VC generation; body-as-motive plumbing | TODO |
-| `20-verification/23-prover.md` | Classifier; Z3-for-decidable; Kripke embedding; certificates | TODO |
+| `20-verification/README.md` | The differentiator: overview | DRAFT |
+| `20-verification/21-spec-syntax.md` | `requires`/`ensures`/refinements/goals | DRAFT |
+| `20-verification/22-obligations.md` | VC generation; body-as-motive plumbing | DRAFT |
+| `20-verification/23-prover.md` | Classifier; Z3-for-decidable; Kripke embedding; certificates | DRAFT |
 | `20-verification/24-diagnostics.md` | Countermodels; typed holes + `unknown`; three-region Heyting | TODO |
 | `20-verification/25-protocol.md` | Machine-readable diagnostic protocol (agent contract) | TODO |
 | `30-surface/README.md` | Surface language overview | TODO |

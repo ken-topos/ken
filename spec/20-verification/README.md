@@ -36,9 +36,9 @@ again.
  prove / law       obligations : Ω      HO higher-ord ──► native / tactic
                                               │
                                         certificate ───► KERNEL re-check (18 §4)
-                                          pass → proved
-                                          fail → diagnostics (24) → protocol (25)
-                                                  countermodel · hole · region
+                                       pass → proved
+                                       fail → diagnostics (24) → protocol (25)
+                                               countermodel · hole · region
 ```
 
 ## 3. Two non-negotiable principles
