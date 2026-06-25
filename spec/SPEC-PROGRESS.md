@@ -69,10 +69,10 @@ Status: TODO · DRAFT (first pass written) · REVISED (refined w/ digest) · DON
 | `30-surface/33-declarations.md` | Modules, declarations, definitions, visibility | DRAFT |
 | `30-surface/34-data-match.md` | Sum types, `match`, exhaustiveness, `Result`/`Option` | DRAFT |
 | `30-surface/35-numbers.md` | `Int`/`Decimal`/reals — the f64 correction | DRAFT |
-| `30-surface/36-effects.md` | Effect tracking surface | TODO |
-| `30-surface/37-strings-collections.md` | Strings, core collections | TODO |
-| `30-surface/38-ffi-io.md` | `Bytes`, binary I/O, FFI | TODO |
-| `30-surface/39-elaboration.md` | Surface → kernel elaboration, implicits, inference | TODO |
+| `30-surface/36-effects.md` | Effect tracking surface | DRAFT |
+| `30-surface/37-strings-collections.md` | Strings, core collections | DRAFT |
+| `30-surface/38-ffi-io.md` | `Bytes`, binary I/O, FFI | DRAFT |
+| `30-surface/39-elaboration.md` | Surface → kernel elaboration, implicits, inference | DRAFT |
 | `40-runtime/README.md` | Runtime / reference-semantics overview | TODO |
 | `40-runtime/41-values.md` | Value rep, content-addressed heap, O(1) structural eq, dedup | TODO |
 | `40-runtime/42-evaluation.md` | Operational semantics of the reference interpreter | TODO |
