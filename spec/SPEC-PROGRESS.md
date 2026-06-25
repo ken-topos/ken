@@ -61,8 +61,8 @@ Status: TODO · DRAFT (first pass written) · REVISED (refined w/ digest) · DON
 | `20-verification/21-spec-syntax.md` | `requires`/`ensures`/refinements/goals | DRAFT |
 | `20-verification/22-obligations.md` | VC generation; body-as-motive plumbing | DRAFT |
 | `20-verification/23-prover.md` | Classifier; Z3-for-decidable; Kripke embedding; certificates | DRAFT |
-| `20-verification/24-diagnostics.md` | Countermodels; typed holes + `unknown`; three-region Heyting | TODO |
-| `20-verification/25-protocol.md` | Machine-readable diagnostic protocol (agent contract) | TODO |
+| `20-verification/24-diagnostics.md` | Countermodels; typed holes + `unknown`; three-region Heyting | DRAFT |
+| `20-verification/25-protocol.md` | Machine-readable diagnostic protocol (agent contract) | DRAFT |
 | `30-surface/README.md` | Surface language overview | TODO |
 | `30-surface/31-lexical.md` | Lexical structure, tokens, literals | TODO |
 | `30-surface/32-grammar.md` | Concrete grammar | TODO |
