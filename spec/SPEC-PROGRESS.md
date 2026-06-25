@@ -73,11 +73,11 @@ Status: TODO · DRAFT (first pass written) · REVISED (refined w/ digest) · DON
 | `30-surface/37-strings-collections.md` | Strings, core collections | DRAFT |
 | `30-surface/38-ffi-io.md` | `Bytes`, binary I/O, FFI | DRAFT |
 | `30-surface/39-elaboration.md` | Surface → kernel elaboration, implicits, inference | DRAFT |
-| `40-runtime/README.md` | Runtime / reference-semantics overview | TODO |
-| `40-runtime/41-values.md` | Value rep, content-addressed heap, O(1) structural eq, dedup | TODO |
-| `40-runtime/42-evaluation.md` | Operational semantics of the reference interpreter | TODO |
-| `40-runtime/43-termination.md` | Totality, SCT, partial/`unknown` execution | TODO |
-| `40-runtime/44-capacity.md` | Content store; slot-ceiling decision; lattice's real roles | TODO |
+| `40-runtime/README.md` | Runtime / reference-semantics overview | DRAFT |
+| `40-runtime/41-values.md` | Value rep, content-addressed heap, O(1) structural eq, dedup | DRAFT |
+| `40-runtime/42-evaluation.md` | Operational semantics of the reference interpreter | DRAFT |
+| `40-runtime/43-termination.md` | Totality, SCT, partial/`unknown` execution | DRAFT |
+| `40-runtime/44-capacity.md` | Content store; slot-ceiling decision; lattice's real roles | DRAFT |
 | `50-stdlib/README.md` | Prelude + core stdlib shape | TODO |
 | `90-open-decisions.md` | The forks register (for the operator) | TODO |
 | `_notes/analysis-digest.md` | Distilled digest of analysis + reality-check (subagent) | DONE |

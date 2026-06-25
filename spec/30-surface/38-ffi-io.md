@@ -4,8 +4,8 @@
 > effect discipline*. `Bytes`, binary I/O, and the foreign-function interface —
 > three things the prototype genuinely lacks (general FFI; `Bytes`/binary I/O;
 > the prototype's `File` is text-only — digest §7/§9). These are how a verified
-> core meets the unverified outside world, so the **boundary discipline** matters
-> more than the syntax.
+> core meets the outside world, so the **boundary discipline** matters more than
+> the syntax.
 
 ## 1. `Bytes` and binary I/O
 
