@@ -55,8 +55,8 @@ Status: TODO · DRAFT (first pass written) · REVISED (refined w/ digest) · DON
 | `10-kernel/14-inductive.md` | Inductive families, eliminators, strict positivity | DRAFT |
 | `10-kernel/15-identity.md` | `Id`/`J` path induction; relation to the cubical `Path` | DRAFT |
 | `10-kernel/16-cubical.md` | Interval, Path, transport, hcomp/comp, Glue, univalence, HITs | DRAFT |
-| `10-kernel/17-conversion.md` | Definitional eq, NbE, decidable conversion, β/η/δ, SCT | TODO |
-| `10-kernel/18-judgments.md` | Full typing judgment, algorithm, the kernel API surface | TODO |
+| `10-kernel/17-conversion.md` | Definitional eq, NbE, decidable conversion, β/η/δ, SCT | DRAFT |
+| `10-kernel/18-judgments.md` | Full typing judgment, algorithm, the kernel API surface | DRAFT |
 | `20-verification/README.md` | The differentiator: overview | TODO |
 | `20-verification/21-spec-syntax.md` | `requires`/`ensures`/refinements/goals | TODO |
 | `20-verification/22-obligations.md` | VC generation; body-as-motive plumbing | TODO |
@@ -100,13 +100,13 @@ sections; seeded opportunistically as core sections are written.)
 
 ## Next action
 
-Digest is DONE (`_notes/analysis-digest.md`, 750 lines — 11 sections incl. the
-f64 correction, the FNV-1a-not-Leech addressing finding, 16 enumerated forks,
-~25 corrected claims). Frame + `10-kernel/README.md` + `11-syntax.md` are DRAFT.
-**Continue the kernel:** `12-universes.md` → `13-pi-sigma.md` → `14-inductive.md`
-→ `15-identity.md` → `16-cubical.md` → `17-conversion.md` → `18-judgments.md`,
-folding in digest specifics. Then seed `90-open-decisions.md` from the digest's
-16 forks. Read the digest before the cubical/topos/numbers/runtime chapters.
+**Kernel section (10-kernel/11–18) is DRAFT and complete.** Next: write
+`20-verification/*` (the differentiator — README, 21-spec-syntax, 22-obligations,
+23-prover [classifier + Kripke embedding + certificates], 24-diagnostics
+[countermodels, typed holes + unknown, three-region Heyting], 25-protocol). Then
+`30-surface/*`, `40-runtime/*` (use digest §5 content-addressing + §6 numerics +
+the FNV-1a-not-Leech finding), `50-stdlib`, and seed `90-open-decisions.md` from
+the digest's 16 forks (OQ-1..16 already referenced inline across chapters).
 
 ## Open decisions captured so far
 
