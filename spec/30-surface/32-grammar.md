@@ -9,20 +9,20 @@
 
 ```
 unit   ::= module_hdr? import* decl*
-module_hdr ::= "module" ConId "{"            -- or a file-level implicit module
+module_hdr ::= "module" ConId "{"  -- or a file-level implicit module
 import ::= "import" ModPath ("as" ConId)? ("(" name ("," name)* ")")?
-        |  "use"    ModPath                  -- bring names into scope unqualified
+        |  "use" ModPath  -- bring names into scope unqualified
 
 decl ::=
-    "view" ident binder* (":" type)? effects? contract* "=" expr   -- function
-  | "let"  ident (":" type)? "=" expr                              -- value
-  | "type" ConId tyvar* "=" type                                   -- alias/refinement
-  | "record" ConId tyvar* "{" field ("," field)* "}" derive?       -- product
-  | "data" ConId tyvar* "=" ctor ("|" ctor)* derive?               -- sum/inductive
-  | "foreign" ident ":" type foreign_spec                          -- FFI (38)
-  | "space" ConId "{" decl* "}"                                    -- state region (36)
-  | spec_decl                                                      -- prove/law (20)
-  | fixity_decl                                                    -- infixl/r N op
+    "view" ident binder* (":" type)? effects? contract* "=" expr  -- function
+  | "let"  ident (":" type)? "=" expr  -- value
+  | "type" ConId tyvar* "=" type  -- alias / refinement
+  | "record" ConId tyvar* "{" field ("," field)* "}" derive?  -- product
+  | "data" ConId tyvar* "=" ctor ("|" ctor)* derive?  -- sum / inductive
+  | "foreign" ident ":" type foreign_spec  -- FFI (38)
+  | "space" ConId "{" decl* "}"  -- state region (36)
+  | spec_decl  -- prove / law (20)
+  | fixity_decl  -- infixl/r N op
 
 binder  ::= "(" ident+ ":" type ")" | "{" ident+ ":" type "}"   -- {…} implicit
 field   ::= ident ":" type
@@ -37,14 +37,13 @@ derive  ::= "derive" "(" ConId ("," ConId)* ")"    -- Eq, Show, … (33)
 
 ```
 type ::=
-    "view" "(" binder* ")" "->" type        -- function type (Π), right assoc
-  | "(" ident ":" type ")" "->" type        -- dependent function
-  | type "->" type                          -- non-dependent arrow
-  | "(" ident ":" type ")" "×" type         -- dependent pair (Σ)
-  | "{" ident ":" type "|" expr "}"         -- refinement (12 §5, 34)
-  | ConId atype*                            -- type application  (List Int, Vec a n)
-  | "Type" level?                           -- a universe (12)
-  | "forall" tyvar+ "." type                -- explicit polymorphism (usually implicit)
+    "(" ident ":" type ")" "->" type  -- dependent function (Π)
+  | type "->" type  -- non-dependent arrow
+  | "(" ident ":" type ")" "×" type  -- dependent pair (Σ)
+  | "{" ident ":" type "|" expr "}"  -- refinement (12 §5, 34)
+  | ConId atype*  -- type application (List Int, Vec a n)
+  | "Type" level?  -- a universe (12)
+  | "forall" tyvar+ "." type  -- explicit polymorphism (usually implicit)
   | tyvar | atype
 atype ::= ConId | tyvar | "(" type ")"
 ```
@@ -56,20 +55,20 @@ inferred `ℓ`. Implicit arguments `{…}` are inserted by elaboration (`39`).
 
 ```
 expr ::=
-    "λ" binder+ "." expr  |  "\\" binder+ "->" expr     -- lambda
-  | expr expr                                            -- application (left assoc)
-  | expr binop expr                                      -- operators (declared fixity)
-  | "let" ident (":" type)? "=" expr "in" expr           -- local binding
-  | "if" expr "then" expr "else" expr                    -- = match on Bool
-  | "match" expr ("," expr)* "{" arm+ "}"                -- pattern match (34)
-  | expr "." ident      |  expr ".1" | expr ".2"         -- field / projection
-  | "(" expr ("," expr)* ")"                             -- tuple / pair / grouping
-  | "{" field_assign ("," field_assign)* "}"             -- record literal
-  | expr "@" expr                                        -- path application (15)
+    "λ" binder+ "." expr | "\\" binder+ "->" expr  -- lambda
+  | expr expr  -- application (left assoc)
+  | expr binop expr  -- operators (declared fixity)
+  | "let" ident (":" type)? "=" expr "in" expr  -- local binding
+  | "if" expr "then" expr "else" expr  -- = match on Bool
+  | "match" expr ("," expr)* "{" arm+ "}"  -- pattern match (34)
+  | expr "." ident | expr ".1" | expr ".2"  -- field / projection
+  | "(" expr ("," expr)* ")"  -- tuple / pair / grouping
+  | "{" field_assign ("," field_assign)* "}"  -- record literal
+  | expr "@" expr  -- path application (15)
   | literal | ident | ConId | "(" operator ")"
-  | "(" expr ":" type ")"                                -- type ascription
-arm  ::= pattern ("if" expr)? "=>" expr                  -- guard optional
-field_assign ::= ident "=" expr | ident                 -- punning allowed
+  | "(" expr ":" type ")"  -- type ascription
+arm  ::= pattern ("if" expr)? "=>" expr  -- guard optional
+field_assign ::= ident "=" expr | ident  -- punning allowed
 ```
 
 ## 4. Patterns

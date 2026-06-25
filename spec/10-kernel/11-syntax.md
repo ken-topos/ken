@@ -1,8 +1,8 @@
 # Core syntax
 
 > Status: **DRAFT v0**. Normative. Defines the kernel's term language, contexts,
-> the global environment, binding/de Bruijn representation, and substitution. The
-> *typing* of these forms is in `13`–`16` and `18`; this chapter fixes only
+> the global environment, binding/de Bruijn representation, and substitution.
+> The *typing* of these forms is in `13`–`16` and `18`; this chapter fixes only
 > the grammar and its scoping.
 
 The kernel operates on **core terms**: a small, fully-explicit language with no
@@ -22,32 +22,26 @@ There are four mutually-referential categories:
   (`16-cubical.md`).
 
 ```
-ℓ  ::= 0 | suc ℓ | max ℓ ℓ | lvar                    -- universe levels (12)
+ℓ ::= 0 | suc ℓ | max ℓ ℓ | lvar    -- universe levels (12)
 
 t, u, A, B ::=
-    Type ℓ                                            -- universe (12)
-  | x                                                 -- variable (de Bruijn)
-  | c                                                 -- global constant / definition
-  | D | c_D                                           -- inductive type former / constructor (14)
-  -- functions (Π) ---------------------------------------------------- (13)
-  | (x : A) → B          | λ (x : A). t     | t u
-  -- pairs (Σ) ------------------------------------------------------- (13)
-  | (x : A) × B          | (t , u)          | t.1 | t.2
-  -- identity / paths ------------------------------------------------ (15,16)
-  | Path A t u           | ⟨i⟩ t            | t @ r        -- path type, abstr, app
+    Type ℓ                           -- universe (12)
+  | x                                -- variable (de Bruijn)
+  | c                                -- global constant / definition
+  | D | c_D                          -- inductive former / constructor (14)
+  | (x : A) → B | λ (x : A). t | t u           -- functions Π (13)
+  | (x : A) × B | (t , u) | t.1 | t.2          -- pairs Σ (13)
+  | Path A t u | ⟨i⟩ t | t @ r                 -- identity / paths (15,16)
   | refl t
-  -- inductive elimination ------------------------------------------- (14)
-  | elim_D M [c_k ↦ t_k]ₖ s            -- dependent eliminator (motive M, methods, scrutinee s)
-  -- cubical operations ---------------------------------------------- (16)
-  | transp (⟨i⟩ A) r t
-  | hcomp {φ ↦ ⟨i⟩ u} t                | comp (⟨i⟩ A) {φ ↦ ⟨i⟩ u} t
-  | Glue A {φ ↦ (T , e)}              | glue {φ ↦ t} u   | unglue t
-  -- definitions / ascription ---------------------------------------- 
+  | elim_D M [c_k ↦ t_k]ₖ s                    -- inductive elim (14)
+  | transp (⟨i⟩ A) r t                         -- cubical (16)
+  | hcomp {φ ↦ ⟨i⟩ u} t | comp (⟨i⟩ A) {φ ↦ ⟨i⟩ u} t
+  | Glue A {φ ↦ (T,e)} | glue {φ ↦ t} u | unglue t
   | let x := t : A in u
-  | (t : A)                            -- type ascription (erased after checking)
+  | (t : A)                          -- ascription (erased after check)
 
-r, s ::= 0 | 1 | i | r ∧ s | r ∨ s | ~ r       -- interval, de Morgan algebra (16)
-φ, ψ ::= (r = 0) | (r = 1) | φ ∧ ψ | φ ∨ ψ | ⊤ | ⊥    -- cofibrations (16)
+r, s ::= 0 | 1 | i | r ∧ s | r ∨ s | ~ r       -- interval (de Morgan) (16)
+φ, ψ ::= (r=0) | (r=1) | φ ∧ ψ | φ ∨ ψ | ⊤ | ⊥  -- cofibrations (16)
 ```
 
 Notes:
@@ -125,7 +119,7 @@ local context Γ) recording top-level declarations in dependency order:
     | Σ, c : A := t          -- transparent definition (δ-unfoldable)
     | Σ, c : A               -- opaque constant / postulate (no unfolding)
     | Σ, data D …            -- inductive family declaration (14-inductive.md)
-    | Σ, c : A := prim p      -- primitive: opaque constant + registered reduction p (41)
+    | Σ, c : A := prim p     -- primitive: opaque const + reduction (41)
 ```
 
 - A **transparent definition** `c : A := t` requires `· ⊢ t : A` in the

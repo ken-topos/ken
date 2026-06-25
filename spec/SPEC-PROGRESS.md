@@ -100,13 +100,22 @@ sections; seeded opportunistically as core sections are written.)
 
 ## Next action
 
-**Kernel section (10-kernel/11–18) is DRAFT and complete.** Next: write
-`20-verification/*` (the differentiator — README, 21-spec-syntax, 22-obligations,
-23-prover [classifier + Kripke embedding + certificates], 24-diagnostics
-[countermodels, typed holes + unknown, three-region Heyting], 25-protocol). Then
-`30-surface/*`, `40-runtime/*` (use digest §5 content-addressing + §6 numerics +
-the FNV-1a-not-Leech finding), `50-stdlib`, and seed `90-open-decisions.md` from
-the digest's 16 forks (OQ-1..16 already referenced inline across chapters).
+**DRAFT v0 of the full spec is complete** — every chapter in the outline is
+DRAFT, the open-decisions register (`90-open-decisions.md`) consolidates the
+forks, and the conformance corpus (`../conformance/`) is seeded with the
+load-bearing cases per area. The spec is ready for the build teams (Kernel,
+Verify, Language, Runtime) to start against.
+
+Remaining / future passes (not blocking team start):
+- Spec enclave: cross-check the **(oracle)**-tagged points against the prototype
+  (exact cubical by-type normal forms `16`, SCT size order `17`, reduction-order
+  choices) — confirm or correct, never copy source.
+- Operator: review `90-open-decisions.md`; veto/confirm DRAFT recommendations;
+  decided OQs → ADRs under `../docs/adr/`.
+- Grow the conformance corpus from the seeds as implementation lands (every spec
+  claim should earn a case).
+- Raise chapters from DRAFT → REVISED as the enclave/teams validate them.
+
 
 ## Open decisions captured so far
 

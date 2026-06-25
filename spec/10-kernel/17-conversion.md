@@ -1,7 +1,7 @@
 # Definitional equality, conversion, and termination
 
-> Status: **DRAFT v0**. Normative. Defines what the kernel treats as *the
-> same* — the reductions (β/ι/δ/cubical), the type-directed η, the conversion
+> Status: **DRAFT v0**. Normative. Defines what the kernel treats as *the same*
+> — the reductions (β/ι/δ/cubical), the type-directed η, the conversion
 > algorithm (NbE), and the **size-change termination (SCT)** gate that keeps
 > δ-unfolding — and therefore type-checking — decidable. The contract for K2.
 
@@ -58,8 +58,8 @@ algorithm is `conv Γ A a b`, not `conv a b`.
 
 ## 3. The conversion algorithm (NbE)
 
-The reference algorithm is **normalization by evaluation (NbE)** (OQ-eval-strategy
-confirms NbE as the kernel's evaluation strategy):
+The reference algorithm is **normalization by evaluation (NbE)** — the
+`OQ-eval-strategy` decision confirms NbE as the kernel's evaluation strategy:
 
 1. **Evaluate** each side into a semantic domain of **values** — weak-head
    normal forms with closures for binders and **neutrals** for stuck
