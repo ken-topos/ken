@@ -50,8 +50,8 @@ Status: TODO · DRAFT (first pass written) · REVISED (refined w/ digest) · DON
 | `00-overview.md` | Thesis, L0/L1/L2, goals, scope, non-goals, glossary | DRAFT |
 | `10-kernel/README.md` | Trusted kernel overview; de Bruijn criterion; what it checks | DRAFT |
 | `10-kernel/11-syntax.md` | Core term/type syntax, de Bruijn, telescopes, contexts | DRAFT |
-| `10-kernel/12-universes.md` | Universe hierarchy, predicativity, checking, cumulativity | TODO |
-| `10-kernel/13-pi-sigma.md` | Dependent Π and Σ: formation/intro/elim/compute + η | TODO |
+| `10-kernel/12-universes.md` | Universe hierarchy, predicativity, checking, cumulativity | DRAFT |
+| `10-kernel/13-pi-sigma.md` | Dependent Π and Σ: formation/intro/elim/compute + η | DRAFT |
 | `10-kernel/14-inductive.md` | Inductive families, eliminators, strict positivity | TODO |
 | `10-kernel/15-identity.md` | `Id`/`J` path induction; relation to the cubical `Path` | TODO |
 | `10-kernel/16-cubical.md` | Interval, Path, transport, hcomp/comp, Glue, univalence, HITs | TODO |
