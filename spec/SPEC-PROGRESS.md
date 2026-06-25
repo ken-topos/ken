@@ -78,8 +78,8 @@ Status: TODO · DRAFT (first pass written) · REVISED (refined w/ digest) · DON
 | `40-runtime/42-evaluation.md` | Operational semantics of the reference interpreter | DRAFT |
 | `40-runtime/43-termination.md` | Totality, SCT, partial/`unknown` execution | DRAFT |
 | `40-runtime/44-capacity.md` | Content store; slot-ceiling decision; lattice's real roles | DRAFT |
-| `50-stdlib/README.md` | Prelude + core stdlib shape | TODO |
-| `90-open-decisions.md` | The forks register (for the operator) | TODO |
+| `50-stdlib/README.md` | Prelude + core stdlib shape | DRAFT |
+| `90-open-decisions.md` | The forks register (for the operator) | DRAFT |
 | `_notes/analysis-digest.md` | Distilled digest of analysis + reality-check (subagent) | DONE |
 
 (Conformance corpus seeds live in `../conformance/`, referenced from spec

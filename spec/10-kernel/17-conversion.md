@@ -58,8 +58,8 @@ algorithm is `conv Γ A a b`, not `conv a b`.
 
 ## 3. The conversion algorithm (NbE)
 
-The reference algorithm is **normalization by evaluation (NbE)** (OQ-1 confirms
-NbE as the kernel's evaluation strategy):
+The reference algorithm is **normalization by evaluation (NbE)** (OQ-eval-strategy
+confirms NbE as the kernel's evaluation strategy):
 
 1. **Evaluate** each side into a semantic domain of **values** — weak-head
    normal forms with closures for binders and **neutrals** for stuck
