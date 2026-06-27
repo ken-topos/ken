@@ -1,188 +1,130 @@
-# Identity, paths, and `J`
+# Identity, equality, and `J`
 
-> Status: **DRAFT v0**. Normative. Ken's propositional equality is the cubical
-> **`Path`** type. This chapter fixes `Path`, `refl`, path application, the `J`
-> eliminator and **its computation rule on non-`refl` paths**, and the derived
-> equalities (funext, Σ/Π paths). The interval and the composition operators `J`
-> is built from are in `16-cubical.md`; this is the identity *interface*.
+> Status: **DRAFT v0**. Normative. Ken's propositional equality is
+> **observational equality `Eq`** (ADR 0005) — not an inductive `Id`, not a
+> cubical `Path`. This chapter is the identity *interface* (`Eq`, `refl`,
+> `cast`, `J` and its computation, the derived equalities); the *machinery* it
+> computes by — `Eq`-by- type, `cast`, Ω, quotients — is in
+> `16-observational.md`.
 
-## 1. Why `Path`, not an inductive `Id`
+## 1. Why observational equality
 
-Martin-Löf type theory makes equality an inductive type `Id A a b` with a single
-constructor `refl` and the eliminator `J`. That works, but `J` only *computes*
-when its scrutinee is literally `refl`; on a neutral path it is stuck. The
-prototype inherited exactly this limitation (`J` on non-`refl` did not reduce),
-which is one of the three soundness/ergonomics gaps Ken corrects by construction
-(`README.md §6`).
+Martin-Löf type theory makes equality an inductive `Id A a b` whose eliminator
+`J` **only computes on `refl`** — the prototype's gap. Cubical type theory fixes
+that (via the interval) but at the cost of the largest, most canonicity-fragile
+part of a kernel, and it provides univalence + higher structure that *software*
+does not use.
 
-Ken instead takes equality to be the **cubical path type** `Path A a b`: a path
-is a function out of an abstract **interval** `𝕀` (`16 §interval`) with fixed
-endpoints. Because transport and composition over the interval *compute* (`16
-§comp`), `J` is **derived** and **reduces on any path**, not only on `refl`.
-This is the single most important design choice in the identity layer.
+Ken takes equality to be **observational** (`TTobs`/`CICobs`, ADR 0005): `Eq A a
+b` is a **proposition computed by recursion on the type `A`**, and a `cast`
+coercion transports along type-equalities and **reduces on reflexivity**. From
+`cast`, `J` is derived and **reduces on any equality, not only `refl`** —
+closing the prototype's gap — while the kernel stays small and **set-level**
+(UIP holds), which is exactly what software data is. `K1`'s required "`Id`, `J`"
+is satisfied by `Eq` + the derived `J` (§4); `Id A a b` and `a = b` MAY be
+surface synonyms for `Eq A a b`.
 
-`K1`'s required "`Id`, `J`" is satisfied by `Path` + the derived `J` (§4); the
-name `Id A a b` MAY be provided as a surface synonym for `Path A a b`.
-
-## 2. The path type
+## 2. The equality type
 
 **Formation.**
 ```
   Γ ⊢ A : Type ℓ      Γ ⊢ a : A      Γ ⊢ b : A
-  ───────────────────────────────────────────────  (Path-Form)
-  Γ ⊢ Path A a b : Type ℓ
+  ───────────────────────────────────────────────  (Eq-Form)
+  Γ ⊢ Eq A a b : Ω
 ```
-`Path A a b` is the type of paths in `A` from `a` to `b`. (A heterogeneous /
-dependent path `PathP (⟨i⟩ A) a b`, over a *line of types* `A`, is the primitive
-form; `Path A a b :≡ PathP (⟨i⟩ A) a b` for a constant line. `PathP` is in `16
-§PathP` and is needed for paths between elements of different-but-equal types;
-this chapter uses the non-dependent `Path` except where noted.)
+`Eq A a b` is a **proposition** (`Ω`, `16 §1`), so it is **proof-irrelevant**:
+any two proofs are definitionally equal (no coherence baggage; `16 §1`).
 
-**Introduction — path abstraction.**
-```
-  Γ, i : 𝕀 ⊢ t : A      Γ ⊢ t[0/i] ≡ a : A      Γ ⊢ t[1/i] ≡ b : A
-  ──────────────────────────────────────────────────────────  (Path-Intro)
-  Γ ⊢ ⟨i⟩ t : Path A a b
-```
-A path is an interval-indexed term whose two endpoints are *definitionally* `a`
-and `b`. The endpoint conditions are **boundary** conditions checked by
-conversion.
+**Reflexivity.** `refl a : Eq A a a`.
 
-**Reflexivity.**
-```
-  refl a  :≡  ⟨i⟩ a   :   Path A a a            (the constant path)
-```
+**Computation.** `Eq A a b` reduces *by recursion on `A`* (`16 §2`): pointwise
+at a Π-type (so **funext is definitional**), componentwise at a Σ-type,
+structurally at an inductive, to the user relation at a quotient, to mutual
+implication at Ω (**propext**), and to literal equality at a primitive. On a
+neutral `A` it is a neutral proposition.
 
-**Elimination — path application.**
-```
-  Γ ⊢ p : Path A a b      Γ ⊢ r : 𝕀
-  ─────────────────────────────────────  (Path-Elim)
-  Γ ⊢ p @ r : A
-```
-with the **definitional** boundary computations
-```
-  p @ 0  ≡  a        p @ 1  ≡  b        (⟨i⟩ t) @ r  ≡  t[r/i]    (Path-β)
-```
-So applying a path at the endpoints yields the endpoints *by computation*, and
-applying an abstraction substitutes into the body. Path application at an
-interior point `r` is the value "partway along" the path.
+## 3. Transport — `cast` / `subst`
 
-**Uniqueness (η).**
-```
-  Γ ⊢ p : Path A a b
-  ──────────────────────────────────  (Path-η)
-  Γ ⊢ p  ≡  ⟨i⟩ (p @ i)  :  Path A a b
-```
-
-## 3. Transport (the computational core)
-
-The operation that makes paths *do* something is **transport**: a path between
-types (or a type-family applied along a path) lets you move an inhabitant from
-one end to the other.
+The operation that makes equality *do* something is **`cast`** (`16 §3`):
+transporting along a type-equality, with `cast A A refl a ≡ a` (regularity) and
+`cast`-by-type computation. For a family `P : A → Type ℓ` and `e : Eq A a b`,
+substitution is
 
 ```
-  transp (⟨i⟩ A) 0 a   moves  a : A[0/i]   to   A[1/i]          (16 §transp)
+  subst P e  :≡  cast (P a) (P b) (cong P e)  :  P a → P b
 ```
 
-For a family `P : A → Type ℓ` and a path `p : Path A a b`, transport along `p`
-is
-
-```
-  transport P p  :≡  λ x. transp (⟨i⟩ P (p @ i)) 0 x   :   P a → P b
-```
-
-The defining computation: transport along `refl` is the identity, up to the
-family's structure,
-
-```
-  transport P (refl a)  ≡  λ x. x        (regularity; 16 §regularity)
-```
-
-and on a *non-trivial* path `transp` reduces **by recursion on the type `A`**
-(`16 §transp-by-type`) — pushing through Π, Σ, inductive families, `Path`,
-`Glue`, etc. This is why everything below computes.
+`subst P (refl a) ≡ id`, and on a non-trivial equality `subst`/`cast` reduce by
+recursion on `P`/the type (`16 §3`) — this is why everything below computes.
 
 ## 4. `J` (path induction) and its computation rule
 
-`J` is the dependent eliminator for `Path`: to prove a property `P` of "any path
-out of `a`," it suffices to prove it for `refl`.
+`J` is the eliminator: to prove a property `P` of "any equality out of `a`",
+prove it for `refl`.
 
 **Type.**
 ```
   J : (A : Type ℓ) (a : A)
-      (P : (b : A) → Path A a b → Type ℓ')
+      (P : (b : A) → Eq A a b → Type ℓ')
       (d : P a (refl a))
-      (b : A) (p : Path A a b)
-    → P b p
+      (b : A) (e : Eq A a b)
+    → P b e
 ```
 
-**Definition (derived from transport).** `J` transports the base case `d` along
-the path `p`, viewing `(b, p)` as moving within the total space of paths out of
-`a` (the based-path space, which is contractible). Concretely it is a `transp`
-over the line `⟨i⟩ P (p @ i) (⟨j⟩ p @ (i ∧ j))` (a `comp`; `16 §comp`). The
-kernel provides `J` as a defined operation with the computation rule below; it
-need not be a separate primitive.
+**Definition (derived from `cast`).** `J` transports the base case `d` along `e`
+using `cast` (`16 §3`); since `Eq` is proof-irrelevant (`16 §1`), the equality
+proof itself carries no content, so `J` is determined by the endpoints. The
+kernel provides `J` as a defined operation with the rules below; it need not be
+primitive.
 
-**Computation on `refl` (the β-rule for `J`).**
+**Computation on `refl` (β).**
 ```
   J A a P d a (refl a)  ≡  d  :  P a (refl a)            (J-β)
 ```
 
-**Computation on a non-`refl` path (the correction).** Because `J` is built from
-`transp`/`comp`, when its path argument is a *non-`refl`* but otherwise
-canonical path — e.g. a path produced by `transport`, by a constructor's
-congruence, by `Glue`/univalence, or by a HIT path constructor — `J` **reduces**
-by the corresponding `transp`/`comp` computation rather than getting stuck. A
-conforming kernel MUST exhibit this: there is a conformance test
-(`../../conformance/kernel/identity/j-nonrefl`) in which `J` applied to a
-non-`refl` path computes to a constructor form, **failing on any kernel that
-only reduces `J` on `refl`.** This directly encodes the corrected behaviour.
+**Computation on a non-`refl` equality (the correction).** Because `J` is built
+from `cast`, when its equality argument is a *non-`refl`* but otherwise
+canonical proof — e.g. one produced by `subst`, by a constructor's congruence,
+or by a quotient relation — `J` **reduces** by the corresponding `cast`
+computation rather than getting stuck. A conforming kernel MUST exhibit this: a
+conformance test (`../../conformance/kernel/observational/j-nonrefl`) in which
+`J` on a non-`refl` equality computes to a constructor form, **failing on any
+kernel that only reduces `J` on `refl`.** This is the prototype's gap closed —
+via observational equality rather than cubical paths.
 
-## 5. Derived equalities (theorems, not axioms)
+## 5. Derived equalities (theorems, mostly definitional)
 
-The cubical presentation makes several equalities that classical MLTT must take
-as axioms (or do without) into **provable, computing** theorems:
+The observational presentation makes the equalities classical MLTT must
+axiomatise into **definitional or computing** facts (`16 §4`):
 
-- **`refl`, symmetry, transitivity, congruence** — `sym p :≡ ⟨i⟩ p @ (~ i)`;
-  `cong f p :≡ ⟨i⟩ f (p @ i)`; transitivity is a `comp` (`16`). All compute.
-- **Function extensionality (funext).** A path in a Π-type is pointwise:
-  ```
-  funext : ((x : A) → Path (B x) (f x) (g x)) → Path ((x:A)→B x) f g
-  funext h  :≡  ⟨i⟩ λ x. h x @ i
-  ```
-  funext is *definitional structure*, not an axiom — a major ergonomic win for
-  the verification layer, where extensional function equality is constantly
-  needed.
-- **Σ-paths.** A path in `(x:A)×B` is a pair of (dependent) paths: `Path
-  ((x:A)×B) p q ≃ (e : Path A p.1 q.1) × PathP (⟨i⟩ B (e@i)) p.2 q.2`. Record
-  equality is therefore componentwise (`../30-surface/34-data-match.md`).
-- **`transport`/`subst`.** `subst P p : P a → P b` is `transport P p`; rewriting
-  along an equality is transport, and it computes.
-- **`isProp`, `isSet`, h-levels.** Defined as in `12 §5` over `Path`; truncation
-  levels are expressible, and `Ω` = mere-props is built here.
+- **Function extensionality (funext)** — *definitional*: `Eq` at a Π-type **is**
+  pointwise `Eq` (`16 §2`). Two functions are equal iff equal at every argument,
+  with no axiom — a major win for the verification layer, which constantly needs
+  extensional function equality.
+- **Propositional extensionality (propext)** — *definitional*: equal
+  propositions are mutually-implying (`16 §2`).
+- **UIP / proof irrelevance** — *definitional*: `Eq : Ω` (`16 §1`). Ken is
+  set-level: there is no nontrivial `Eq (Eq A a b) p q`.
+- **`sym`, `trans`, `cong`, `subst`** — derivable and computing (`16 §4`).
 
-## 6. Univalence (stated here, built in `16`)
+## 6. No univalence (set-level, by design)
 
-For types `A B : Type ℓ`, an **equivalence** `A ≃ B` (`16 §isEquiv`) yields a
-**path** `ua : A ≃ B → Path (Type ℓ) A B`, and transporting along `ua e`
-computes to applying the equivalence:
-
-```
-  transport (λ X. X) (ua e)  ≡  e.fun        (up to Glue computation; 16 §ua)
-```
-
-Univalence is thus a *computing* operation in Ken, not a postulate — "equal
-types are interchangeable, and the interchange runs." The construction (via
-`Glue`) and its precise computation are in `16-cubical.md §univalence`. The
-verification layer relies on univalence + funext to make structurally-equal data
-definitionally interchangeable for proof purposes.
+Ken has **no univalence** (`(A ≃ B) → Eq Type A B`) and no higher-dimensional
+structure — these are cubical/HoTT features for *mathematics*, deliberately
+absent (ADR 0005, `16 §7`). Type-equality `Eq Type A B` is **structural** (`16
+§3`): same head former with equal parts. So you cannot transport a program
+across an arbitrary *equivalence* of types; you transport across *structural*
+type-equalities (which covers reindexing, parameter equalities, and the like —
+what software needs). The generic-programming-via-univalence idiom is the one
+thing given up, and for set-level software it is a non-loss.
 
 ## 7. What the kernel checks here
 
-A conforming kernel MUST: form `Path`/`PathP`; check path-abstraction **boundary
-conditions** by conversion; compute `Path-β` (endpoints and `@`-substitution)
-and `Path-η`; provide `J` with **both** `J-β` (on `refl`) **and** reduction on
-non-`refl` paths via `transp`/`comp` (§4); and derive funext, `sym`, `cong`,
-`subst`, and the Σ/Π path characterizations. The non-`refl` `J` computation is a
-required, separately-tested behaviour (§4). Conformance:
-`../../conformance/kernel/identity/`.
+A conforming kernel MUST: form `Eq A a b : Ω`; compute `Eq`-by-type (`16 §2`)
+including **definitional funext and propext**; provide `cast`/`subst` with
+**`cast`-refl** and by-type computation (`16 §3`); provide `J` with **both**
+`J-β` (on `refl`) **and** reduction on non-`refl` equalities via `cast` (§4);
+and derive `sym`/`trans`/`cong` and **definitional UIP** (`Eq : Ω`). The
+non-`refl` `J` computation and definitional funext are required,
+separately-tested behaviours. Conformance:
+`../../conformance/kernel/observational/`.

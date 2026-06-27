@@ -3,7 +3,7 @@
 > Status: **DRAFT v0**. Normative. Declaration of inductive types, the
 > strict-positivity requirement, the dependent eliminator and its ι-computation,
 > and how primitive types attach. Identity is **not** a plain inductive in Ken —
-> it is the cubical `Path` (`15`, `16`); this chapter is the machinery `Path`'s
+> it is observational `Eq` (`15`, `16`); this chapter is the machinery `Eq`'s
 > `J` and everything else reuse.
 
 ## 1. Declarations
@@ -99,9 +99,9 @@ elim_D : (M : (Δ_i) → D Δ_p Δ_i → Type ℓ')
        → (i̅ : Δ_i) → (x : D Δ_p i̅) → M i̅ x
 ```
 
-The method type for a constructor `cₖ : (Δₖ) → D Δ_p t̄ₖ` is: abstract over
-`Δₖ`, add an induction hypothesis `M (…) r` for each recursive argument `r` in
-`Δₖ`, and conclude `M t̄ₖ (cₖ …)`.
+The method type for a constructor `cₖ : (Δₖ) → D Δ_p t̄ₖ` is: abstract over `Δₖ`,
+add an induction hypothesis `M (…) r` for each recursive argument `r` in `Δₖ`,
+and conclude `M t̄ₖ (cₖ …)`.
 
 **Computation (ι).** On a constructor the eliminator reduces to the
 corresponding method, applied to the constructor's arguments and the recursive
@@ -111,8 +111,8 @@ results:
 elim_D M m̄ i̅ (cₖ ā)  ≡  mₖ ā [elim_D M m̄ … r  for each recursive r in ā]   (D-ι)
 ```
 
-i.e. each recursive argument `r` is replaced in the method by `elim_D M m̄ … r`
-— the structural recursive call. Because recursion is only ever on *structurally
+i.e. each recursive argument `r` is replaced in the method by `elim_D M m̄ … r` —
+the structural recursive call. Because recursion is only ever on *structurally
 smaller* sub-values, ι-reduction terminates; this is the totality of the
 eliminator.
 
@@ -167,7 +167,7 @@ They attach as **primitives** (`11 §4`):
 - Primitives are **trusted**: a wrong primitive reduction is a soundness bug, so
   the set of primitives is small, audited, and part of the kernel's trusted base
   (listed in `18 §Primitives`). This is the one place computation enters the
-  kernel from outside the term language; everything else is β/ι/δ/cubical.
+  kernel from outside the term language; everything else is β/ι/δ/obs.
 - Equational properties of primitives that are *not* definitional (e.g.
   commutativity of `add`) are **propositions to prove**, provided as a small
   axiomatized interface or proved against a reference model, not assumed.

@@ -12,16 +12,17 @@ deliberately keeps *out*.
 
 ## 1. What the kernel does
 
-The kernel implements a **dependent type theory with a cubical identity layer**.
-Concretely it provides exactly these capabilities, and no more:
+The kernel implements a **dependent type theory with an observational equality
+layer** (OTT; ADR 0005). Concretely it provides exactly these capabilities, and
+no more:
 
 1. **Type-checking** of fully-explicit **core terms** (`11-syntax.md`): given a
    context Γ, a term `t`, and a type `A`, decide whether `Γ ⊢ t : A`.
 2. **Type inference** for the syntax-directed fragment: given Γ and `t`, produce
    the `A` for which `Γ ⊢ t : A`, or fail.
 3. **Conversion** (`17-conversion.md`): decide definitional equality `Γ ⊢ a ≡ b
-   : A`, via normalization-by-evaluation, with η for Π/Σ and the cubical
-   boundary/regularity equations.
+   : A`, via lazy-WHNF + NbE, with η for Π/Σ, **proof irrelevance** for Ω, and
+   the observational `Eq`/`cast` equations.
 4. **Normalization / evaluation** to (weak head) normal form, used by conversion
    and exposed for the interpreter and the prover's certificate checker.
 5. **Admission of definitions** into a global environment, each gated by a
@@ -72,16 +73,19 @@ The kernel's type theory is:
 - **Inductive families** with dependent eliminators and a strict-positivity
   requirement (`14-inductive.md`): `Nat`, `Bool`, `List`, `Vec`, `Σ`/`W` as
   needed, and user inductives.
-- **An interval** `𝕀` and a **path type** `Path A a b` as the identity type
-  (`15-identity.md`, `16-cubical.md`). `J` is *defined* via composition and
-  **reduces on non-`refl` paths** — directly closing the prototype's
-  `J`-only-on-`refl` gap.
-- **Cubical operations**: `transp`, homogeneous composition `hcomp`,
-  heterogeneous `comp`, `Glue`/`unglue`, and **univalence** as a computing rule;
-  **higher inductive types** as a bounded extension (`16-cubical.md`).
-- The **subobject classifier / proposition universe** and its Heyting structure,
-  used by the verification layer, are introduced in `12-universes.md §Prop` and
-  developed in `../20-verification/`.
+- **Observational equality** `Eq A a b` as the identity type, a proposition
+  computed by recursion on `A` (`15-identity.md`, `16-observational.md`). `J` is
+  *derived* from the `cast` coercion and **reduces on non-`refl` equalities** —
+  closing the prototype's `J`-only-on-`refl` gap, via OTT not cubical (ADR
+  0005). **funext, propext, UIP** are *definitional*; Ken is **set-level**.
+- **`cast`** (transport along a type-equality, computing by type structure, with
+  `cast A A refl a ≡ a`), **native set-quotients** `A / R`, and **propositional
+  truncation** `‖A‖` (`16-observational.md`). No interval, `Glue`, univalence,
+  or higher inductive types (ADR 0005).
+- The **strict proposition universe Ω** (`SProp`) — the subobject classifier,
+  with **definitional proof irrelevance** and a Heyting structure — where `Eq`
+  and the logic live (`12-universes.md §5`, `16-observational.md §1`), developed
+  in `../20-verification/`.
 
 The metatheoretic commitments this calculus must satisfy — and that the kernel's
 tests encode — are in §5.
@@ -91,11 +95,11 @@ tests encode — are in §5.
 | File | Subject |
 |---|---|
 | `11-syntax.md` | Core grammar: terms, de Bruijn indices, telescopes, contexts, the global environment |
-| `12-universes.md` | Universe hierarchy, predicativity, checking, `Prop`/Ω, cumulativity (OQ-2) |
+| `12-universes.md` | Universe hierarchy, predicativity, checking, the strict-prop Ω, cumulativity |
 | `13-pi-sigma.md` | Π and Σ: formation, intro, elim, computation, η |
 | `14-inductive.md` | Inductive families, constructors, the dependent eliminator, strict positivity, reduction |
-| `15-identity.md` | The identity type as `Path`; `refl`; `J` and its computation rule; transport |
-| `16-cubical.md` | Interval, faces/cofibrations, `hcomp`/`comp`, `Glue`, univalence, HITs, `isEquiv` |
+| `15-identity.md` | Identity as observational `Eq`; `refl`; `cast`; `J` and its computation; funext/UIP |
+| `16-observational.md` | The strict-prop Ω, `Eq`-by-type, `cast`, quotient types, propositional truncation |
 | `17-conversion.md` | Definitional equality, NbE, decidable conversion, β/η/δ/ι, regularity, SCT termination |
 | `18-judgments.md` | The complete typing judgment, the checking/inference algorithm, and the kernel's Rust API |
 
@@ -110,9 +114,9 @@ A conforming kernel MUST satisfy, and its test suite MUST exercise:
 3. **Decidable type-checking.** `Γ ⊢ t : A` is decidable; conversion terminates
    (guaranteed by SCT-gated δ and a terminating NbE, `17-conversion.md`).
 4. **Canonicity / normalization.** Every closed term of an inductive type
-   reduces to a constructor form; cubical operations on closed terms compute
-   (the *computational* content that makes `J`-on-non-`refl` and univalence
-   reduce).
+   reduces to a constructor form; `Eq`/`cast` on closed terms compute (the
+   *computational* content that makes `J`-on-non-`refl` reduce). Proven for OTT
+   (`TTobs`/`CICobs`, ADR 0005).
 5. **Consistency.** There is no closed proof of the empty type `⊥`; the logic is
    not degenerate. *(A documented argument, not a kernel runtime check.)*
 

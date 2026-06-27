@@ -117,16 +117,16 @@ giving field-update and reconstruction their expected definitional behaviour.
 ## 4. Interaction with the rest of the kernel
 
 - **Universes.** Both formation rules use predicative `max` (`12 §2`); neither
-  drops a level. Under OQ-Prop's impredicative `Prop`, only `Π` into `Prop`
-  would change (`12 §2`).
+  drops a level. A `Π`/`Σ` whose codomain is a proposition lands in the strict-
+  prop universe Ω (`12 §5`); impredicative `Prop` is ruled out (`OQ-Prop`).
 - **Conversion.** β, the projection-β rules, and both η rules are part of
   definitional equality (`17`). η for Π and Σ is what makes conversion *typed*
   (η-expansion is driven by the type), so the conversion algorithm needs the
   type at η-points (`17 §algorithm`).
-- **Identity/transport.** Transport in a Π- or Σ-type computes structurally
-  (`transp` pushes into domain/codomain and components); the rules are in
-  `16-cubical.md §transp-by-type`. `Path ((x:A)×B) p q` is equivalent to a pair
-  of paths (`15 §Σ-paths`), which the surface uses for record equality.
+- **Equality/transport.** `cast` in a Π- or Σ-type computes structurally
+  (pushing into domain/codomain and components); the rules are in
+  `16-observational.md §3`. `Eq ((x:A)×B) p q` reduces componentwise (`16 §2`),
+  which the surface uses for record equality.
 - **Functions out of data.** Defining a function by cases on an inductive
   argument is `elim_D` (`14`), not a Π primitive; `λ` introduces Π, `elim`
   consumes data.

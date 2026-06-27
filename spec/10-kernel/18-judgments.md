@@ -19,8 +19,8 @@ The kernel decides four judgments, all relative to a global environment `Σ` (`1
 ```
 
 Context well-formedness threads through the binder rules: `⊢ · ctx`, and `⊢ (Γ,
-x : A) ctx` when `⊢ Γ ctx` and `Γ ⊢ A type`; interval and cofibration entries as
-in `16`.
+x : A) ctx` when `⊢ Γ ctx` and `Γ ⊢ A type`. There are no interval/cofibration
+entries (ADR 0005); the context is term variables only.
 
 ## 2. The rules, collected
 
@@ -33,8 +33,8 @@ chapters and are the typing relation's clauses:
 | Π (functions) | `13 §1` |
 | Σ (pairs) | `13 §2` |
 | Inductives `D`, `cₖ`, `elim_D` | `14` |
-| `Path`/`PathP`, `refl`, `@`, `J` | `15`, `16 §4` |
-| Interval, cofibrations, `transp`, `hcomp`/`comp`, `Glue`, `ua`, HITs | `16` |
+| `Eq`, `refl`, `J` | `15`, `16 §2` |
+| `cast`, Ω + proof irrelevance, quotients `A/R`, truncation `‖A‖` | `16` |
 | Primitives | `14 §5` |
 
 One rule lives here because it ties typing to conversion (`17`) — the
@@ -65,19 +65,20 @@ This split keeps the algorithm deterministic and minimizes annotations.
 - variable `x` → its type from Γ; constant `c` → its type from Σ.
 - application `f u`: infer `f ⇒ (x:A)→B`; check `u ⇐ A`; result `B[u/x]`.
 - projection `p.1`/`p.2`: infer `p ⇒ (x:A)×B`; results `A`, `B[p.1/x]`.
-- `elim_D M m̄ … s`, path application `p @ r`, `transp`/`hcomp`/`comp`, `unglue`:
-  infer from the eliminated/operated subject and the annotations.
+- `elim_D M m̄ … s`, `cast A B e t`, quotient-elim `elim_/`: infer from the
+  eliminated/operated subject and the annotations.
 - ascription `(t : A)`: check `A ⇐ Type ℓ`, then `t ⇐ A`, result `A`.
-- `Type ℓ`, `(x:A)→B`, `(x:A)×B`, `Path …`, `Glue …`, `D …`: infer their
-  universe (formation rules), result `Type (…)`.
+- `Type ℓ`, `Ω`, `(x:A)→B`, `(x:A)×B`, `Eq …`, `A / R`, `D …`: infer their
+  universe (formation rules), result `Type (…)` or `Ω`.
 
 **Checking terms** (the type drives the rule; this is where η enters):
 - `λ (x:A). t ⇐ (x:A')→B`: check `A ≡ A'`, then `t ⇐ B` under `x:A`.
 - `(a,b) ⇐ (x:A)×B`: check `a ⇐ A`, then `b ⇐ B[a/x]`.
-- `⟨i⟩ t ⇐ PathP (⟨i⟩A) a₀ a₁`: check `t ⇐ A` under `i:𝕀` and the **boundary**
-  `t[0/i] ≡ a₀`, `t[1/i] ≡ a₁` (`15 §2`).
-- `glue …`, constructor applications, system branches: checked against their
-  target type with the boundary/agreement conditions of `16`.
+- `refl a ⇐ Eq A a a`; any proof of `Eq A a b` is checked against the
+  proposition `Eq A a b` (which computes by `16 §2`) — and since `Eq : Ω`, proof
+  irrelevance (`16 §1`) means the *content* is not compared.
+- `[a] ⇐ A / R`; constructor applications and quotient classes: checked against
+  their target type (`14`, `16 §5`).
 - **mode switch (fallback):** any other `t ⇐ A` infers `t ⇒ A'` and checks `A ≡
   A'` via conversion (`17`) — this is the algorithmic form of (Conv) and the
   single place conversion is called during checking.
@@ -153,18 +154,20 @@ The kernel's soundness commitments (`README.md §5`) and their current status:
 | No `Type:Type` / universe consistency | **By construction** (`12`); tested. |
 | Subject reduction | **Argued** from the rules; to be mechanized. |
 | Confluence / unique normal forms | **Argued** (standard for this calculus). |
-| Strong normalization of the core | **Argued** (β/ι/η/cubical); the hard metatheorem. |
+| Strong normalization of the core | **Argued** (β/ι/η/obs); the hard metatheorem. |
 | δ-termination → decidable checking | **By the SCT gate** (`17 §4`); tested. |
-| Canonicity (closed terms compute) | **Required + tested** (`16 §11`, cubical). |
+| Canonicity (closed terms compute) | **Required + tested** (`16 §9`, observational). |
+| Decidable conversion | **Proven** for OTT (`TTobs`/`CICobs`, ADR 0005); Ken follows. |
 | Consistency (no closed `· ⊢ p : ⊥`) | **Argued** from SN + canonicity. |
 
-"Argued" means there is a standard proof for systems of this shape (CCHM cubical
-+ inductives + a terminating δ) and Ken intends to *follow* it, not that Ken has
-a machine-checked proof yet. A mechanized kernel-soundness proof is a later goal
-(strategy G5 documents the story; full mechanization is post-self-host, `02
-§5`). This table is the kernel's "known-risk register"; the conformance corpus
-exercises each commitment behaviorally even where the metatheorem is not yet
-mechanized.
+"Argued" means there is a standard proof for systems of this shape
+(observational TT — `TTobs`/`CICobs` — + inductives + a terminating δ;
+canonicity and decidable conversion are *proven* for OTT, ADR 0005) and Ken
+intends to *follow* it, not that Ken has a machine-checked proof yet. A
+mechanized kernel-soundness proof is a later goal (strategy G5 documents the
+story; full mechanization is post-self-host, `02 §5`). This table is the
+kernel's "known-risk register"; the conformance corpus exercises each commitment
+behaviorally even where the metatheorem is not yet mechanized.
 
 ## 7. What the kernel checks here
 

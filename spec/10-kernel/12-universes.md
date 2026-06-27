@@ -51,12 +51,13 @@ for Π and Σ (`13-pi-sigma.md`) take the `max` of the domain and codomain level
 
 so a function type does **not** drop to a lower universe than its parts. This
 blocks the impredicative encodings that, combined with large elimination,
-threaten consistency. Whether to add an **impredicative** proposition universe
-(à la Coq's `Prop`, where `(x : A) → P : Prop` regardless of `A`'s level) is
-**OQ-3 / OQ-Prop**: it buys convenience for the logic but complicates the
-soundness argument and interacts subtly with the cubical layer. The DRAFT
-baseline is **fully predicative**, with Ω a *defined* sub-universe (§5), not a
-primitive impredicative sort.
+threaten consistency. An **impredicative** proposition universe (à la Coq's
+`Prop`, where `(x : A) → P : Prop` regardless of `A`'s level) is **ruled out**
+(`OQ-Prop`): it is incompatible with canonicity, and the impredicative-`Prop`
+systems are not observational. Ken is **fully predicative**. Ω (§5) is a
+*primitive strict, proof-irrelevant* proposition universe (`SProp`,
+`16-observational.md §1`) — **predicative**, not impredicative — introduced by
+the observational foundation (ADR 0005).
 
 ## 3. Cumulativity — non-cumulative (`OQ-2` DECIDED)
 
@@ -64,9 +65,8 @@ Ken is **non-cumulative** (`OQ-2` decided, operator 2026-06-27): `A : Type ℓ`
 does *not* automatically give `A : Type (suc ℓ)`; lifting is explicit.
 Non-cumulative is simpler to specify and check and keeps a **subtyping relation
 out of the trusted kernel** — consistent with the small-kernel principle, with
-following Lean's (non-cumulative) kernel (`17 §3`), and with the cubical
-commitment (the cubical systems are non-cumulative; cumulative-cubical is
-unexplored).
+following Lean's (non-cumulative) kernel (`17 §3`), and with the observational,
+set-level foundation (ADR 0005; OTT-style systems are non-cumulative).
 
 Cumulativity (a subtyping `Type ℓ ≤ Type ℓ'` for `ℓ ≤ ℓ'`, propagated
 structurally through Π/Σ) is ergonomic — it removes a class of "universe too
@@ -76,9 +76,8 @@ conversion *and* inference. Ken does not pay that kernel cost. Instead the
 ergonomics: **universe polymorphism** (§4), **typical ambiguity** (write bare
 `Type`, infer a consistent level), and **inserted lifts** where genuinely
 needed. So the surface cost is low while the kernel stays small — Ken's
-"cleverness outside, certainty inside." (Coq is the main cumulative system, and
-is non-cubical with a heavier kernel; Lean and the cubical implementations are
-all non-cumulative.)
+"cleverness outside, certainty inside." (Coq is the main cumulative system, with
+a heavier kernel; Lean and the observational/OTT systems are non-cumulative.)
 
 ## 4. Level polymorphism
 
@@ -109,42 +108,26 @@ Ken's logic lives in a distinguished object **Ω**, the **subobject classifier**
 — the "type of propositions." It is where the verification layer (`../20-`) and
 the surface refinement types (`{x : A | φ x}`) take their truth values.
 
-### 5.1 Propositions are mere propositions
+### 5.1 Ω is the strict proposition universe
 
-A **proposition** is a type with **at most one inhabitant up to the path
-equality** — a *mere proposition* (h-proposition):
+A **proposition** is an inhabitant of **Ω**, the **primitive strict,
+definitionally proof-irrelevant** proposition universe (`SProp`,
+`16-observational.md §1`, ADR 0005): any two proofs of a `P : Ω` are
+**definitionally equal**. So propositions are **proof-irrelevant** and **UIP**
+holds — Ken is **set-level**. Equality `Eq A a b` lands in Ω (`15`, `16 §2`). Ω
+is the **subobject classifier**: a predicate on `A` is a map `A → Ω` (the topos
+reading), and a refinement `{x : A | φ x}` requires `φ x : Ω`. Ω is
+**predicative** (§2) and is *not* the impredicative `Prop` of Coq/Lean.
 
-```
-isProp A  :≡  (x y : A) → Path A x y
-```
-
-`Ω` is the type of mere propositions at the base level:
-
-```
-Ω  :≡  (A : Type 0) × isProp A     -- a type bundled with a proof it's a prop
-```
-
-with the first projection `⟨A, _⟩ ↦ A` coercing a proposition to its underlying
-type (so "having a proof `p : P`" and "`P` holds" coincide). Defining
-propositions as mere (proof-irrelevant up to path) rather than as a primitive
-impredicative sort keeps the kernel uniform: Ω is *derived* from the universe +
-identity layers, not a new primitive. This is the HoTT presentation of the
-subobject classifier and matches the topos reading "a predicate on `A` is a map
-`A → Ω`."
-
-> **(OQ-Prop / OQ-3) — DECIDED (operator, 2026-06-27): derived Ω.** The fork
-> bundled two separable features. **Impredicativity** is **ruled out** — it is
-> incompatible with computational univalence / canonicity (`16`,
-> `../20-verification/23 §3`), and the systems that have it (Coq, Lean) are not
-> cubical. **Definitional proof irrelevance** (a strict-prop sort, `SProp`) is a
-> *separable, predicative* option Ken does **not** adopt: it would enlarge the
-> trusted kernel, and Ken's expected proof profile — many small, propositionally
-> simple obligations, complexity living in the effect/flow codomain — makes its
-> performance benefit unlikely to surface. So Ken keeps **derived Ω with
-> propositional proof irrelevance**. `SProp` remains a *benchmarked-later*
-> performance escape hatch only (and even then, automate the `isProp`-path in
-> the untrusted elaborator first); Agda's `SProp`+cubical is the precedent if
-> ever needed.
+> **(OQ-Prop / OQ-3) — DECIDED, revised by ADR 0005.** Impredicativity stays
+> **ruled out** (incompatible with canonicity; predicative Ω). The earlier call
+> (cubical-era) was "derived Ω, *propositional* proof irrelevance, no `SProp`."
+> The observational foundation (ADR 0005) **supersedes** that: Ω **is** the
+> strict proof-irrelevant universe (`SProp`), so proof irrelevance is now
+> **definitional** — and it comes *for free* in the smaller OTT kernel (it even
+> *helps* agent-generated proofs: equality goals discharge definitionally, fewer
+> coherence terms to synthesise). No separate `SProp` add-on or kernel growth:
+> the observational core already includes it.
 
 ### 5.2 Heyting structure (intuitionistic, not Boolean)
 
@@ -152,10 +135,10 @@ subobject classifier and matches the topos reading "a predicate on `A` is a map
 
 | Connective | On Ω |
 |---|---|
-| truth | `⊤ : Ω` (the unit type, `isProp` trivially) |
+| truth | `⊤ : Ω` (the trivially-true proposition) |
 | falsity | `⊥ : Ω` (the empty type) |
 | conjunction | `φ ∧ ψ` (product of props) |
-| disjunction | `φ ∨ ψ` (propositional truncation of the sum, `16-cubical.md §HIT`) |
+| disjunction | `φ ∨ ψ` (propositional truncation of the sum, `16 §6`) |
 | implication | `φ ⇒ ψ` (function type `φ → ψ`, which is a prop when `ψ` is) |
 | negation | `¬ φ :≡ φ ⇒ ⊥` |
 | ∀ / ∃ | dependent product / truncated dependent sum over a type |
@@ -181,12 +164,11 @@ default.
 
 ### 5.3 Ω and the universe levels
 
-`Ω` as defined sits in `Type 1` (it quantifies over `Type 0`). Propositions
-about larger types form `Ω ℓ :≡ (A : Type ℓ) × isProp A : Type (suc ℓ)`, a
-level-polymorphic family (§4). The unqualified `Ω` means `Ω 0`. Refinement types
-`{x : A | φ x}` (`../30-surface/34-data-match.md`,
-`../20-verification/21-spec-syntax.md`) require `φ x : Ω ℓ` for the appropriate
-`ℓ`.
+The base `Ω` sits in `Type 1`. Propositions about larger types form a
+level-polymorphic strict-prop universe `Ω ℓ : Type (suc ℓ)` (§4). The
+unqualified `Ω` means `Ω 0`. Refinement types `{x : A | φ x}`
+(`../30-surface/34-data-match.md`, `../20-verification/21-spec-syntax.md`)
+require `φ x : Ω ℓ` for the appropriate `ℓ`.
 
 ## 6. What the kernel checks here
 
@@ -198,11 +180,12 @@ For the universe layer specifically, a conforming kernel MUST:
 3. Apply the predicative `max` rule at Π/Σ formation (§2, `13`).
 4. Check explicit level arguments at every polymorphic instantiation and
    re-verify level constraints (§4).
-5. Treat `isProp`, `Ω`, `⊤`, `⊥`, and the Heyting operations as **ordinary
-   defined terms** over the identity/inductive/cubical layers — Ω requires no
-   new kernel primitive (§5). Only if OQ-Prop selects a primitive `Prop` does
-   the kernel gain a sort here.
+5. Provide **Ω** as a **primitive strict, proof-irrelevant** proposition
+   universe (`SProp`, `16-observational.md §1`): two proofs of a `P : Ω` are
+   definitionally equal (definitional proof irrelevance), and Ω is predicative.
+   `⊤`, `⊥`, and the Heyting operations are defined terms over Ω + the inductive
+   layer (§5).
 
 Conformance: `../../conformance/kernel/universes/` — includes the `Type:Type`
-rejection, predicative-`max` formation, level-poly instantiation, and the
-`isProp`/Ω constructions.
+rejection, predicative-`max` formation, level-poly instantiation, and
+definitional proof irrelevance in Ω.
