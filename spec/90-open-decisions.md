@@ -37,9 +37,9 @@ surfaced while drafting. Resolved items move to an ADR (`../docs/adr/`).
   algorithm = **lazy weak-head normalization + on-the-fly structural conversion
   + lazy δ-unfolding** (Lean 4's approach; consistent with Ken's Lean-style
   trusted kernel, ADR 0001), realised over an **NbE-style value domain**
-  (closures + neutrals) **extended to compute the cubical operations** Lean
-  lacks. **NbE stays the declarative reference**; lazy-WHNF is the recommended
-  implementation.
+  (closures + neutrals) **extended to compute the observational operations**
+  (`Eq`-by-type, `cast`) and Ω proof irrelevance (ADR 0005). **NbE stays the
+  declarative reference**; lazy-WHNF is the recommended implementation.
 - **Deliberate divergences from Lean's *theory*** (fixed by other Ken decisions,
   ADR 0005): observational `J`-on-non-`refl` via `cast` (not
   `Eq.rec`-on-`refl`); **canonicity kept** — Ken needs **no** axioms where Lean
@@ -91,10 +91,18 @@ surfaced while drafting. Resolved items move to an ADR (`../docs/adr/`).
 - **Affects.** `10-kernel/15`, `16` (rewritten), `11`, `12`, `17`, `README`,
   `18`.
 
-### OQ-η-records — Definitional η for single-constructor inductives
-- **Fork.** Extend definitional η beyond Σ to all single-constructor records.
-- **Recommendation.** η for **Σ/records only** in the DRAFT.
-- **Affects.** `10-kernel/14`.
+### OQ-η-records — η for single-constructor inductives — **DECIDED**
+- **Fork.** Extend definitional η beyond Σ to all single-constructor inductives,
+  or keep it to the record/Σ class?
+- **Decision (operator, 2026-06-27): η is the `record`/Σ class, not `data`.**
+  Records (nested Σ) get definitional η; `data` declarations — incl.
+  single-constructor — do not (declare a `record` if you want η). Rationale: one
+  kernel η rule (already needed for Σ); **safe by construction** (records are
+  non-recursive nested Σ, so η terminates; recursive single-ctor types are
+  `data` and stay η-free, dodging recursive-η undecidability); **low-cost under
+  OTT** (record `Eq` already computes componentwise, `16 §2`). Matches Agda
+  `record`-vs-`data` and Lean structure-η.
+- **Affects.** `10-kernel/14 §4` (updated), `13 §3`.
 
 ---
 
@@ -310,6 +318,7 @@ are **fixed** by ADR 0004; only the mechanics below are open.
 | **OQ-2** | 2026-06-27 — **non-cumulative** universes; ergonomics via universe polymorphism + typical ambiguity + elaborator lifts. | — (recorded in `10-kernel/12`) |
 | **OQ-4** | 2026-06-27 — **observational equality (OTT), not cubical**: `Eq`-by-type + `cast` + strict-prop Ω + set-quotients; no univalence/HITs. Smallest auditable TCB; exact set-level-software fit. | **ADR 0005** |
 | **OQ-Prop** | 2026-06-27 — predicative Ω; impredicativity ruled out. Proof irrelevance **definitional** via OTT's strict-prop Ω (`SProp`), free in the smaller kernel (revised by ADR 0005). | **ADR 0005** (recorded in `10-kernel/12`) |
+| **OQ-η-records** | 2026-06-27 — definitional η is the **`record`/Σ class**, not `data`; safe-by-construction (records are non-recursive nested Σ), low-cost under OTT. | — (recorded in `10-kernel/14`) |
 
 When an OQ is decided, record it here and, if architecturally significant, write
 an ADR under `../docs/adr/` and update the affected chapters (replacing the OQ

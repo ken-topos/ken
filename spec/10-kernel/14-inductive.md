@@ -138,11 +138,30 @@ special restriction beyond the universe-level checks.
 inductive, because surjective-pairing η is wanted definitionally and a positive
 inductive `Σ`'s η is only propositional. A *positive* inductive presentation
 `data Σ' (A)(B) where pair : (a:A) → B a → Σ' A B` is **derivable** and
-inter-derivable up to a path, but the kernel's primitive Σ is the negative one
-(`13 §2`). Single-constructor inductives in general MAY be given η by the kernel
-(definitional η for records); whether to extend definitional η to all
-single-constructor inductives is **OQ-η-records** (`90-open-decisions.md`); the
-DRAFT gives η to Σ (and hence records) and not to other inductives.
+inter-derivable up to `Eq`, but the kernel's primitive Σ is the negative one
+(`13 §2`).
+
+**Definitional η is the `record` knob, not the `data` knob (`OQ-η-records`,
+DECIDED).** η belongs to the **record / Σ class** — the negative,
+projection-based presentation: a `record` (one field or many) elaborates to
+right-nested Σ (`13 §3`) and inherits η, so `mk r.a r.b ≡ r` definitionally.
+**`data` declarations — including single-constructor ones — do *not* get
+definitional η**; if you want η on a wrapper, declare it a `record`, not a
+`data`. This is deliberate, not an omission:
+
+- It keeps the kernel's η rule to **one class** (negative records/Σ) — the
+  type-directed machinery already needed for Σ (`17 §2`), not a new feature.
+- It is **safe by construction**: records are finite nested Σ and therefore
+  **never recursive**, so record-η always terminates; recursive
+  single-constructor types must be `data` (η-free), sidestepping the well-known
+  undecidability of η on recursive/coinductive records. (This is why a blanket
+  "η for all single-constructor inductives" is *not* adopted.)
+- It is **low-cost under observational equality**: even without η, `Eq` at a
+  record type computes componentwise (`16 §2`), so `mk r.a r.b` and `r` are
+  propositionally equal *and that equality reduces to `refl`* — η just makes it
+  definitional. So `data` types lose little by lacking η.
+
+The split matches Agda (`record` has η, `data` does not) and Lean's structure-η.
 
 ## 5. Primitive types
 

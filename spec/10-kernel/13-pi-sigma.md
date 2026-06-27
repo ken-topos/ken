@@ -112,7 +112,9 @@ Iterated Π and Σ over a **telescope** `Δ = (x₁ : A₁) … (xₙ : Aₙ)` a
 kernel has only the binary forms; the elaborator
 (`../30-surface/39-elaboration.md`) expands telescopes. Records with named
 fields (`../30-surface/33-declarations.md`) elaborate to right-nested Σ with η
-giving field-update and reconstruction their expected definitional behaviour.
+giving field-update and reconstruction their expected definitional behaviour. (η
+is the **record/Σ** knob; `data` declarations do not get it — `OQ-η-records`,
+`14 §4`.)
 
 ## 4. Interaction with the rest of the kernel
 
