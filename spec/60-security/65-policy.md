@@ -42,6 +42,12 @@ instantiation of the IFC discipline (`61 §2`, lattice-parametric):
   `requires`, `61 §4`).
 - **Trusted classification points** — which ingestion boundaries may assign
   **data-derived** labels (the audited dual of declassification, `61 §3`).
+- **Constant-time requirements** — which data classes **must be handled
+  constant-time** (e.g. "`KeyMaterial` is `@ct`", `61 §5a`). This compiles to
+  the static `@ct` leakage-sink discipline (enforced by typing, a compile error
+  to violate) **and** emits a `Ward` runtime CT-validation requirement into the
+  discharge attestation (`63 §5a`) — the runtime constraint bound to a data
+  class, authored by security, enforced statically and validated at runtime.
 
 ## 3. Mandatory and orthogonal (the load-bearing property)
 

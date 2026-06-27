@@ -360,19 +360,36 @@ are **fixed** by ADR 0004; only the mechanics below are open.
   **monotone-tightening only**); version/attestation interplay.
 - **Affects.** `60-security/65` (new), `63`, `61`. **ADR 0007.**
 
-### OQ-relational — Relational / 2-safety verification
+### OQ-relational — Relational / 2-safety verification — **DECIDED**
 - **Fork.** How relational properties (non-interference, **constant-time**) are
   generated and proved: self-composition / product programs vs. relational
   refinement types vs. a dedicated relational logic; and whether the default is
   **termination-/progress-sensitive** (does divergence or a crash leak?).
-- **Recommendation.** Provide a relational mode whose certificates are
-  **kernel-re-checked** like any other (no new trusted primitive); pick the
-  encoding the Verify enclave finds most tractable; default to a clearly-stated
-  sensitivity level. This mode also serves constant-time (a side-channel
-  concern, `60-security/64 §4.2`).
-- **Affects.** `60-security/61 §5`, `20-verification/`, `40-runtime/43`. **Why
-  open.** Real engineering choice; relational reasoning is less settled than
-  unary.
+- **Decision (operator, 2026-06-27).** **By-proof relational mode reduces to
+  unary obligations the kernel re-checks** — **product programs** preferred over
+  naive self-composition (lock-step keeps invariants solver-tractable); a
+  first-class relational logic, if ever needed, is a **reflective deep
+  embedding**, never a kernel primitive (reflect-don't-extend). **Default is
+  progress-sensitive** (a crash / non-termination *is* an observable leak);
+  termination-insensitive only by **explicit annotation** (shows in the four-way
+  status / delta). The heavy product-program machinery is **deferred** until a
+  concrete value-dependent declassification case needs it — the **by-typing
+  taint** path covers the load-bearing security work.
+- **Constant-time — split out, not a relational proof.** CT is a distinct
+  **opt-in `@ct` (timing-sensitive) label** (separate from `Secret`); its values
+  may never reach a **leakage-relevant effect sink** (secret-dependent branch /
+  index / var-time op), enforced **by typing** — a unary taint discipline that
+  **soundly enforces the source-level 2-safety property** (FaCT/ct-verif), so
+  **no product programs**. The sensitive **range = the `@ct` label's live span**
+  (intro → `declassify`), so **no `constant_time { }` region**. The *timing
+  guarantee* (codegen/hardware-relative — cache lines, `cmov`-vs-branch) is
+  **delegated to `Ward` + the toolchain** under a stated **leakage
+  model**/platform, recorded in the discharge attestation (`63 §5a`); a
+  **policy** may require `@ct` for a data class (`65`). Ken's static part is a
+  *necessary precondition*, honestly not the whole guarantee.
+- **Affects.** `60-security/61 §5/§5a`, `30-surface/36 §3`, `60-security/64
+  §4.2`, `65`, `63 §5a`; product-program engine deferred to `20-verification/`.
+  **Recorded.**
 
 ### OQ-provenance — signing, attestation & package format — **DECIDED**
 - **Fork.** Signing mechanism; SLSA integration; the `.keni` format; registry
@@ -549,6 +566,7 @@ states what it cannot prove; the sibling models/tests/monitors it.
 | **OQ-classical-bridge** | 2026-06-27 — **strictly one-way (Ken → Ward)**; Ward results never promoted to `proved`; sound by **assume-guarantee** (`Q ⊣ P`); **translation faithfulness** Ken-checked **once at the compiler level** (analog of Kripke adequacy) + generated-model + conformance; trust edge pinned as Ward version in the discharge attestation. | **ADR 0006** (recorded in `70-behavioral/71 §5`, `20-verification/23`) |
 | **OQ-discharge-attestation** | 2026-06-27 — post-build validation = a **signed, runtime-checkable discharge attestation** (export hash + Ward policy + optional sampling + per-obligation four-way outcome + Ward-version signature); a **deployment gate** enforces per-target-environment validation; policy-attestation ladder. Schema deferred (needs Ward's runner). | — (deferred; `60-security/63 §5a`) |
 | **OQ-conformance** | 2026-06-27 — **reframed to Ken's half**: Ken emits a **trace/instrumentation contract** (concrete `Σ`-event schema at the effect boundary + correlation/identity for multi-space + runtime `Q`/`P`/`T` monitors), making the running system observable in the model's vocabulary. Export = **broadcast contract** to a family of engines; runtime monitor likely a **distinct sidecar**. Gate/monitor/both + response = downstream policy. | **ADR 0006** (recorded in `70-behavioral/73`) |
+| **OQ-relational** | 2026-06-27 — by-proof relational = **re-checked unary obligations** (product programs; reflective embedding if ever first-class), **progress-sensitive** default, heavy machinery **deferred**. **Constant-time split out**: a distinct **opt-in `@ct` label** enforced **by typing** (taint to leakage-effect sinks; sound 2-safety enforcement, no product programs); timing guarantee **delegated to Ward** under a leakage model; policy may require `@ct` per data class. | — (recorded in `60-security/61 §5a`, `30-surface/36`, `64`, `65`) |
 
 When an OQ is decided, record it here and, if architecturally significant, write
 an ADR under `../docs/adr/` and update the affected chapters (replacing the OQ

@@ -87,14 +87,20 @@ right?", and the latter is a **human judgment** no checker can make.
 
 ### 4.2 Side channels and resource bounds
 Functional + flow proofs cover *what is computed* and *where data flows*, not
-*how long it takes* or *how much it costs*. **Constant-time** execution (timing
-side channels in crypto) is itself a **relational** property (two runs, same
-timing) and shares the foundation IFC needs (`61 §5`, `OQ-relational`);
-**worst-case time/space bounds** (a dependency as a DoS vector) are a complexity
-discipline the totality checker does not provide (termination ≠ cheapness,
-`../40-runtime/43`). Both are **optional/research**, not core — but the
-relational machinery IFC introduces is the natural home for constant-time if it
-is pursued.
+*how long it takes* or *how much it costs*. **Constant-time** (timing side
+channels in crypto) is handled by a **layered split** (decided, `61 §5a`): Ken
+**statically** guarantees the *source-level precondition* — a `@ct`-labeled
+value never steers a leakage-relevant operation (branch/index/var-time),
+enforced by typing — but the **timing guarantee itself is
+hardware/codegen-relative** (cache lines, `cmov`-vs-branch lowering) and lives
+**below Ken**. So the running-time guarantee is **delegated to `Ward` + the
+toolchain**: CT-preservation through compilation plus empirical timing
+validation under an explicit **leakage model** on a **platform**, recorded in
+the discharge attestation (`63 §5a`). Ken's static part is a *necessary
+precondition*, honestly not the whole guarantee — the leakage model bounds the
+strength of every CT claim. **Worst-case time/space bounds** (a dependency as a
+DoS vector) remain a complexity discipline the totality checker does not provide
+(termination ≠ cheapness, `../40-runtime/43`), **optional/research**.
 
 ### 4.3 The kernel, the FFI, and the runtime stay trusted
 Proof covers the **pure core**. The kernel itself (§3), `foreign` C code

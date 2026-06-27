@@ -98,10 +98,26 @@ discipline is the host for two security mechanisms (ADR 0004):
   strictly weaker token for a child) and **revocable** at a boundary, with use
   audited — the principle-of-least-authority story
   (`../60-security/62-authority.md`).
+- **Constant-time (`@ct`) — leakage-relevant operations as an effect sink.** A
+  distinct, **opt-in** timing-sensitive label `@ct` (separate from `Secret`
+  confidentiality) marks data whose *influence* must not reach a **leakage-
+  relevant operation** — a secret-dependent **branch guard**, **memory index**,
+  or **variable-time primitive**. Those operations are a distinguished **effect
+  sink**, and the rule is the IFC rule reused: a `@ct` value reaching such a
+  sink is a **type error** (you cannot leak by accident; no per-operation
+  annotation). This **unary taint discipline soundly enforces the source-level
+  constant-time (2-safety) property** — no relational/product-program machinery.
+  The sensitive *range* is the `@ct` label's live span (intro → `declassify`),
+  so there is **no `constant_time { … }` region**; a function carries a
+  **signature-level CT promise** (constant-time in a parameter) for boundary
+  checking and export. The *timing guarantee itself* is
+  codegen/hardware-relative and **delegated to `Ward`** under a stated leakage
+  model (`../60-security/61 §5a`, `64 §4.2`, `63 §5a`); a **policy** may require
+  `@ct` for a data class (`../60-security/65`).
 
 So a function's effect-and-capability type is simultaneously its **capability
-manifest** and its **flow manifest**. Details, the label lattice, and
-declassification are in `../60-security/`.
+manifest** and its **flow manifest**. Details, the label lattice,
+declassification, and the constant-time discipline are in `../60-security/`.
 
 ## 4. State — the `space` model
 

@@ -1,11 +1,14 @@
 # Information-flow control
 
-> Status: **DRAFT v0**. Normative for the *commitment and shape*; the label
-> model and the static-vs-relational mechanics are flagged **OQ-ifc /
-> OQ-relational**. This is the centerpiece of Ken's tier-1 security goal (ADR
-> 0004): **data-flow control is intrinsic to Ken**, built on the machinery Ken
-> already has, and it directly attacks the dominant AI-codegen failure — secret
-> leakage and data crossing trust boundaries.
+> Status: **DRAFT v0**. Normative for the *commitment and shape*. **`OQ-ifc`
+> DECIDED** (lattice-parametric + DLM, §2); **`OQ-relational` DECIDED +
+> narrowed** (by-proof = re-checked product programs, progress-sensitive, heavy
+> machinery deferred; **constant-time** = an opt-in `@ct` label enforced by
+> typing, with the timing guarantee delegated to `Ward`, §5/§5a). This is the
+> centerpiece of Ken's tier-1 security goal (ADR 0004): **data-flow control is
+> intrinsic to Ken**, built on the machinery Ken already has, and it directly
+> attacks the dominant AI-codegen failure — secret leakage and data crossing
+> trust boundaries.
 
 ## 1. Why flow is a *discipline*, not "more refinements"
 
@@ -167,17 +170,61 @@ where an authorised `declassify` permits. Ken offers this at two strengths:
    specific declassification policy, a quantitative bound ("at most `n` bits
    leak"), or integrity of a specific pipeline — the claim is a **relational
    obligation** discharged by the relational verification mode
-   (`OQ-relational`): product programs / relational refinement types comparing
-   two runs, with the certificate kernel-re-checked like any other
-   (`../20-verification/23 §1`).
+   (`OQ-relational`): product programs comparing two runs, with the certificate
+   kernel-re-checked like any other (`../20-verification/23 §1`). **Decided +
+   narrowed** (`OQ-relational`): the relational mode reduces to **unary
+   obligations the kernel re-checks** (product programs preferred over naive
+   self-composition for solver tractability; a first-class relational logic, if
+   ever needed, comes as a *reflective deep embedding*, never a kernel
+   primitive); the **default is progress-sensitive** (a crash or non-termination
+   *is* an observable leak), with a weaker termination-insensitive mode
+   available only by **explicit annotation** (the relaxation shows in the
+   four-way status / delta). The heavy product-program machinery is **deferred**
+   until a concrete value-dependent case needs it — the taint/typing path (§5a,
+   strength 1) covers the load-bearing security work.
 
-> **(OQ-relational)** How relational/2-safety obligations are generated and
-> proved (self-composition / product programs vs. relational refinement types
-> vs. a dedicated logic), and whether the **default** discipline is
-> termination-sensitive or -insensitive (does non-termination or a crash leak?),
-> are open. The same machinery serves **constant-time** (`64`,
-> `../40-runtime/43`) — a relational property over timing — so IFC and
-> side-channel reasoning share a foundation.
+### 5a. Constant-time — a timing-sensitive label, statically enforced
+
+Constant-time (timing side-channel freedom) is a **2-safety** property — two
+runs with equal public inputs but different secrets must produce the **same
+observable trace** — but Ken does **not** prove it with the relational engine,
+and Ken does **not** own the *timing guarantee* itself (that is
+hardware/codegen-relative — cache lines, `cmov`-vs-branch lowering — and belongs
+to `Ward` + the toolchain, `64 §4.2`). Ken owns the **source-level
+precondition**, statically, via a distinguished label + the effect machinery
+(`../30-surface/36 §`):
+
+- **A distinct, opt-in `@ct` (timing-sensitive) label**, separate from `Secret`
+  confidentiality. Confidentiality constrains *where the value goes* (don't
+  output it to a low sink); `@ct` constrains *where the value's influence goes*
+  (don't let it **steer** a leakage-relevant operation). A value may be `Secret`
+  without being `@ct` (a PII field you mustn't log, but branching on it leaks
+  nothing to a timing adversary); crypto keys are both. `@ct` is restrictive and
+  **rare**, so it is opt-in — and, IFC being **lattice-parametric** (`OQ-ifc`),
+  it is just another axis of the lattice: **no metatheory cost**.
+- **The leakage-relevant operations are a distinguished effect sink** — a
+  secret-dependent **branch guard**, **memory index**, or **variable-time
+  primitive**. The discipline is then exactly an IFC constraint: **a `@ct` value
+  may never flow into a leakage sink**, enforced automatically (such a use is a
+  *type error* — you cannot leak by accident, no per-operation annotation). This
+  **unary taint property is a sound static enforcement of the 2-safety
+  property** (the FaCT / ct-verif "secret types" result), so constant-time needs
+  **no product programs**.
+- **The sensitive range is the label's live span** — introduced at the secret
+  source, ended by an authorised `declassify` (§4) — captured by the existing
+  label lifecycle, so there is **no `constant_time { … }` region construct**. (A
+  lexical region that *balances* timing by padding is a runtime *mitigation* —
+  `Ward`'s, not Ken's.) A function exports a **signature-level CT promise**
+  (constant-time in a given parameter) for boundary checking and for the `Ward`
+  runtime-validation requirement (`63 §5a`).
+- **The split, honestly.** Ken statically guarantees the source has no
+  secret-dependent leakage operation (a *necessary precondition*, exported as
+  `Q`); `Ward` + the toolchain validate that compilation **preserves** it and
+  the binary is empirically constant-time under a stated **leakage model** on a
+  **platform** (the model lives there, not in Ken). A **policy** (`65`) may
+  declare "data of class `X` must be handled constant-time", which compiles to
+  the `@ct` discipline *and* emits the `Ward` validation requirement — the
+  runtime constraint bound to a data class you wanted, realized end-to-end.
 
 **Crucially, none of this enlarges the trusted kernel.** Labels are
 surface/effect constructs; the discipline elaborates to the kernel's existing
@@ -236,12 +283,18 @@ enforced by construction instead of by scanning.
   guarantee; **no kernel enlargement**. The concrete lattice/classifications/
   clearances/edges are supplied by a **separately-authored policy**
   (`65-policy.md`, `OQ-policy`, ADR 0007).
-- **Still open:** `OQ-relational` — how relational/2-safety claims are *proved*
-  (self-composition / product programs vs. relational refinement types vs. a
-  dedicated logic) and whether the default is termination-sensitive. **Deferred
-  and decided with `64`/constant-time** (both are relational over a hidden
-  channel — shared foundation). The **by-typing** default (§5.1) needs none of
-  it.
+- **Decided + narrowed (`OQ-relational`, §5):** the by-proof relational mode
+  reduces to **unary obligations the kernel re-checks** (product programs;
+  reflective embedding if a first-class logic is ever needed); **progress-
+  sensitive default**, explicit termination-insensitive opt-out; the heavy
+  product-program machinery **deferred** until a value-dependent case needs it.
+- **Decided (`OQ-relational`/constant-time, §5a):** **constant-time** is *not*
+  proved by the relational engine — it is a distinct **opt-in `@ct` label**
+  whose values may never reach a leakage-relevant effect sink
+  (branch/index/var-time), enforced **by typing** (a sound static enforcement of
+  the 2-safety property, no product programs); the **timing guarantee** itself
+  (codegen/hardware-relative) is delegated to `Ward` + the toolchain under a
+  stated leakage model (`64 §4.2`, `63 §5a`).
 
 ## 9. What WS-V / WS-L must deliver here
 
