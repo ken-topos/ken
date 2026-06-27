@@ -132,10 +132,19 @@ identity layers, not a new primitive. This is the HoTT presentation of the
 subobject classifier and matches the topos reading "a predicate on `A` is a map
 `A → Ω`."
 
-> **(OQ-Prop / OQ-3)** Alternative: a primitive impredicative `Prop`
-> (definitional proof irrelevance, impredicative quantification). Faster surface
-> logic, heavier kernel and metatheory. The DRAFT uses derived Ω; revisit if the
-> verification layer needs impredicativity.
+> **(OQ-Prop / OQ-3) — DECIDED (operator, 2026-06-27): derived Ω.** The fork
+> bundled two separable features. **Impredicativity** is **ruled out** — it is
+> incompatible with computational univalence / canonicity (`16`,
+> `../20-verification/23 §3`), and the systems that have it (Coq, Lean) are not
+> cubical. **Definitional proof irrelevance** (a strict-prop sort, `SProp`) is a
+> *separable, predicative* option Ken does **not** adopt: it would enlarge the
+> trusted kernel, and Ken's expected proof profile — many small, propositionally
+> simple obligations, complexity living in the effect/flow codomain — makes its
+> performance benefit unlikely to surface. So Ken keeps **derived Ω with
+> propositional proof irrelevance**. `SProp` remains a *benchmarked-later*
+> performance escape hatch only (and even then, automate the `isProp`-path in
+> the untrusted elaborator first); Agda's `SProp`+cubical is the precedent if
+> ever needed.
 
 ### 5.2 Heyting structure (intuitionistic, not Boolean)
 

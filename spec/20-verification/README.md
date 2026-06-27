@@ -27,6 +27,17 @@ failure emits a **structured diagnostic** (§`24`) over a **machine-readable
 protocol** (§`25`) that an agent consumes to repair the code or the spec and try
 again.
 
+**Design assumption — the software proof profile.** Ken targets *software*
+verification, not mathematics. The expected obligation profile is **many small,
+propositionally-simple obligations**, with the real complexity living in the
+**effect/flow codomain** (`../30-surface/36`, `../60-security/61`), not in deep
+propositional/higher-order logic. So this layer optimises for **throughput and
+automation over many small obligations** — fast routing, the
+decidable/reflective fast path (`23 §3`), parallel discharge, stable diagnostics
+— rather than for depth on a few hard theorems. (This also informs kernel
+choices: e.g. `OQ-Prop` keeps proof comparison out of the hot concerns because
+proofs are small and numerous, not large and few.)
+
 ## 2. Pipeline
 
 ```
