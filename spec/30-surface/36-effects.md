@@ -1,10 +1,12 @@
 # Effects, capabilities, and state
 
 > Status: **DRAFT v0**. Proposal-level for syntax; normative for the *model*.
-> Effect tracking, capabilities, and the state/`space` escape hatch. Ken adopts
-> the prototype's **proven** shape — statically-checked, transitively-inferred
-> effects (`visits`) — over the analysis's hypothetical Kleisli scheme (digest
-> §7, OQ-8).
+> Effect tracking, capabilities, and the state/`space` escape hatch. **`OQ-8` /
+> `OQ-8a` DECIDED** (operator, 2026-06-27): static, transitively-inferred effect
+> **rows** (`visits`), pure by default; a **layered encoding**
+> (authority/denotation/spec, §2) that keeps the kernel pure; capabilities as
+> static value tokens (§3). The *stateful-effect verification methodology* is
+> handed to `OQ-Space` (§4).
 
 ## 1. Effects as a static row
 
@@ -31,16 +33,36 @@ view greet (name : String) : Unit           visits [Console] = …
   rows, which keeps the verification core (`../20-verification/`) reasoning over
   pure terms.
 
-## 2. Effects in the type / kernel view
+## 2. The encoding — three layers, one pure kernel (`OQ-8` DECIDED)
 
-An effect row elaborates to an **indexing of the result** by the capabilities
-required — the simplest sound encoding is a parametrized monad `Eff [E] A`
-(`../50-stdlib/`) or an explicit capability-passing translation
-(`../10-kernel/`-level it is ordinary Π over capability tokens). Either way the
-kernel sees a pure dependent term; effects are a surface discipline, not a new
-kernel primitive (OQ-8 fixes the encoding). The reference semantics
-(`../40-runtime/42-evaluation.md`) gives each primitive effect its operational
-meaning.
+An effect row is **not** a kernel primitive. The surface `Eff [E] A` monad
+(`../50-stdlib/`) elaborates into a **pure** dependent term through three
+layers, each answering a different question — and the *same denotation* powers
+verification, capabilities, information flow, and Ward's behavioral export:
+
+1. **Authority — "who may perform this effect?"** A **capability-passing**
+   translation: performing an effect requires a **capability token** (a value)
+   in scope; at the `../10-kernel/` level this is ordinary Π over capability
+   tokens (§3). Static and visible; no runtime gate.
+2. **Denotation — "what does this computation *do*?"** The effectful computation
+   denotes to an **interaction tree** (a free-monad-style *pure data structure*:
+   `Ret a` | `perform e then continue with the response`). `Eff`'s bind is tree
+   grafting. The kernel sees only this inductive datatype — it stays pure. One
+   choice serves four masters: **handlers are folds** over the tree (§5);
+   **Ward's event alphabet is the tree's `perform` nodes** (`../70-behavioral/
+   §3`); **information-flow labels are labels on those nodes** (§3,
+   `../60-security/61`); and **verification is predicates over the tree**.
+3. **Specification — "what must it guarantee?"** `requires`/`ensures` on an
+   effectful function are **WP/Hoare-style predicates over the denotation**. For
+   *stateful* effects the pre/post relation is the genuinely hard part and is
+   handed to **`OQ-Space`** (§4).
+
+So effects are a **surface + elaborator + runtime** discipline; the kernel
+reasons about a pure denotation and the runtime
+(`../40-runtime/42-evaluation.md`) executes the real effects via the boundary.
+The trusted base gains nothing — the same small-TCB invariant that governs the
+rest of the kernel (ADR 0001/0004/0005). *(Precedents, one per layer: Koka rows
+· Interaction Trees · F\* Dijkstra monads.)*
 
 ## 3. Capabilities (`requires`-as-capability)
 
@@ -55,9 +77,13 @@ Ken separates them:
   *principle of least authority* expressible: a function gets exactly the
   capabilities it needs, visible in its type.
 
-Whether capabilities are a separate construct or just specific effects in the
-row is **OQ-8a**; the requirement is that authority is **static and visible**,
-not the prototype's runtime-only FNV-gate.
+**`OQ-8a` DECIDED (operator, 2026-06-27): capabilities are first-class value
+tokens, not a separate effect kind and not a runtime gate.** A capability is a
+*value* (`c : Cap`) threaded explicitly or supplied by an enclosing handler (a
+handler is a capability provider, §5); authority is **static and visible** in
+the type, **attenuable** and **revocable** with use audited
+(`../60-security/62`). It is kept distinct from the logical `requires φ` (a
+proposition); conflating the two was the prototype's mistake.
 
 **Security extension (tier-1, `../60-security/`).** The effect/capability
 discipline is the host for two security mechanisms (ADR 0004):
@@ -105,13 +131,22 @@ space Counter {
   effect-tracked, and identified*, leaving the runtime model to `../40-runtime/`
   + OQ-Space.
 
-## 5. Algebraic effects / handlers (research)
+## 5. Handlers — tail-resumptive only (`OQ-8`; multishot → `OQ-9`)
 
-Reified, multi-shot continuations and general algebraic-effect handlers (the
-analysis's `shift`/`reset`, `with multishot`) are **research track** (`02 §7`,
-digest §7/§10). The prototype "parses but ignores" multishot; Ken does **not**
-promise them. The DRAFT effect model is the simpler static-row + handler-as-
-tail-resumptive form; richer handlers are a possible future extension (OQ-9).
+A **handler** interprets an effect — operationally, a **fold over the
+interaction tree** (§2.2). Handlers are how user-defined effects are given
+meaning and how capabilities are provided (a handler is a capability provider,
+§3).
+
+Ken's core admits **tail-resumptive** handlers only: the continuation is invoked
+**at most once, in tail position** — which keeps the fold well-founded,
+preserves **totality** (the SCT/termination story, `../10-kernel/17 §4`), and
+keeps effectful code tractable to verify. **Reified, multi-shot continuations**
+(the analysis's `shift`/`reset`, `with multishot`) are **not** promised — they
+break totality and are hard to verify — and stay **research track** (`OQ-9`, `02
+§7`; the prototype "parses but ignores" them). Genuinely reactive/nonterminating
+interaction (coinductive trees) is Ward's domain (`../70-behavioral/`) and
+touches `OQ-coinduction`.
 
 ## 6. What WS-L must deliver here (L5)
 

@@ -167,18 +167,29 @@ surfaced while drafting. Resolved items move to an ADR (`../docs/adr/`).
   predictability.
 - **Affects.** `30-surface/33`, `39`.
 
-### OQ-8 — Effect-system shape *(digest fork 8)*
+### OQ-8 — Effect-system shape *(digest fork 8)* — **DECIDED**
 - **Fork.** `visits`-style static+transitive rows vs. Kleisli/monadic effects
-  vs. algebraic-effects-with-handlers. Sub-fork OQ-8a: capabilities a separate
-  construct or just effects; static vs. runtime.
-- **Recommendation.** **`visits`-style static rows** (proven, simpler), pure by
-  default; capabilities **static and visible** (not the prototype's runtime
-  gate). **Security requirement (ADR 0004, fixed regardless of construct
-  form):** capabilities MUST be **attenuable** and **revocable**, with boundary
-  audit, and the effect machinery MUST host information-flow **labels** (see
-  `OQ-ifc`). So OQ-8a settles the *form*, not *whether* authority is
-  least/attenuable/labeled.
-- **Affects.** `30-surface/36`, `60-security/61`, `60-security/62`.
+  vs. algebraic-effects-with-handlers; and the **kernel encoding**. Sub-fork
+  `OQ-8a`: capabilities a separate construct or just effects; static vs.
+  runtime.
+- **Decision (operator, 2026-06-27).** **Static effect rows** (`visits`), pure
+  by default, transitively inferred. **Encoding = three layers into a pure
+  kernel** (`30-surface/36 §2`): **authority** = capability-passing (Π over
+  tokens); **denotation** = an **interaction-tree / free-monad** pure data
+  structure (one denotation powers handlers-as-folds, Ward's event alphabet, IFC
+  labels, and verification); **specification** = WP/Hoare predicates over the
+  denotation. The kernel never gains an effect primitive (small-TCB invariant).
+  Handlers **tail-resumptive only**; multishot → `OQ-9`/research.
+- **`OQ-8a` DECIDED.** Capabilities are **first-class value tokens** — static,
+  visible, **attenuable + revocable + audited** (ADR 0004), handler-or-row
+  supplied — distinct from logical `requires`. Not a runtime gate.
+- **Stateful-effect verification methodology → `OQ-Space`.** Decided here:
+  effect *shape/encoding*; deferred there: how stateful effects' pre/post is
+  reasoned.
+- **Unblocks.** `OQ-export-ir` (event alphabet = interaction-tree nodes),
+  `OQ-ifc` (labels ride the row).
+- **Affects.** `30-surface/36` (updated), `60-security/61`, `60-security/62`,
+  `70-behavioral/`.
 
 ### OQ-9 — Continuations / handlers *(digest fork 9)*
 - **Fork.** Tail-resumptive handlers only vs. reified/multishot continuations.
@@ -399,6 +410,7 @@ states what it cannot prove; the sibling models/tests/monitors it.
 | **OQ-12** | 2026-06-27 — Kripke embedding primary; three-tier routing; **reflective proved-adequacy + verified checker (a) is the target** (intrinsic merits, not effort), reconstruction (b) a feasibility hedge; Z3 primary, cvc5 optional, **Coq retired**. | — (recorded in `20-verification/23`) |
 | **OQ-spec** | 2026-06-27 — proof interface = **both, as one gradient**; **four-way epistemic status** (proved/tested/delegated/unknown) visible + exportable. `old`/state deferred → `OQ-Space` (lean explicit-state). | — (recorded in `20-verification/21`) |
 | **OQ-behavioral** | 2026-06-27 — downstream complement is a **sibling** (`Ward`) fed by an assumption-boundary export; temporal obligations as **data, not kernel modalities**; one logic, two engines. | **ADR 0006** |
+| **OQ-8 / OQ-8a** | 2026-06-27 — static effect **rows** (`visits`), pure by default; **layered encoding** authority(tokens)/denotation(interaction-tree)/spec(WP) into a pure kernel; handlers tail-resumptive only; capabilities = static value tokens (attenuable/revocable/audited). Stateful verification → `OQ-Space`. | — (recorded in `30-surface/36`) |
 
 When an OQ is decided, record it here and, if architecturally significant, write
 an ADR under `../docs/adr/` and update the affected chapters (replacing the OQ
