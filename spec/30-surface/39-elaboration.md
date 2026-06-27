@@ -37,8 +37,15 @@ is a core term the kernel `check`s (`../10-kernel/18 §4`). Consequences:
 4. **Universe/level inference** — solve level metavariables (`../10-kernel/12
    §4`), emitting explicit levels to the kernel.
 5. **Instance resolution** — discharge `where C A` constraints (`33 §5`) by
-   instance search, inserting the found class-record (proof of a subobject
-   membership); ambiguity/coherence per OQ-classes.
+   instance search, inserting the found class-record (a proof of subobject
+   membership). **Canonical & coherent** (`OQ-classes`): for structure classes
+   exactly one canonical instance per (class, head-type) is searchable (orphans
+   are rejected at declaration, `33 §5`); search is deterministic and
+   structurally bounded (`../10-kernel/17 §4`); two viable candidates is a
+   surface error naming both, never a silent pick; overlap is not permitted.
+   Property (Ω-valued) classes resolve to any instance — all are equal. A
+   wanted-but-non-canonical dictionary is supplied by passing a named instance
+   value explicitly (not via search).
 6. **`match` compilation** — translate `match` (`34 §3`) into nested `elim_D`
    (`../10-kernel/14 §3`) with the recovered **dependent motive**, and run
    **exhaustiveness + reachability** checking (`34 §4`).

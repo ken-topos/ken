@@ -159,13 +159,20 @@ surfaced while drafting. Resolved items move to an ADR (`../docs/adr/`).
 - **Affects.** all of `30-surface/`. **Why open.** Taste + ergonomics; settle
   with the team.
 
-### OQ-classes — Typeclass/instance coherence
+### OQ-classes — Typeclass/instance coherence — **DECIDED**
 - **Fork.** Instance-resolution ambiguity & coherence policy (global uniqueness?
   named instances? overlap?).
-- **Recommendation.** Lawful classes-as-subobjects (`30-surface/33 §5`);
-  coherence policy to be pinned — lean toward **global coherence** for
-  predictability.
-- **Affects.** `30-surface/33`, `39`.
+- **Decision (operator, 2026-06-27, ADR 0008).** Split by where the dictionary
+  lives. **Property classes** (Ω-valued) get coherence **free** from proof
+  irrelevance. **Structure classes** (`Type`-valued): **one canonical instance
+  per (class, head-type)** in implicit search (resolution = a function of the
+  type, which the law-carrying prover relies on); **orphan instances a hard
+  error** (instance with class or head-type); **no overlap**; **ambiguity is a
+  compile error**, never a silent pick; search terminates (SCT-family bound).
+  **Named instances are first-class values passed explicitly** — the
+  dependent-types escape hatch (no `newtype` gymnastics): implicit search stays
+  canonical, explicit passing is unrestricted.
+- **Affects.** `30-surface/33 §5`, `39 §2`. **Recorded.**
 
 ### OQ-8 — Effect-system shape *(digest fork 8)* — **DECIDED**
 - **Fork.** `visits`-style static+transitive rows vs. Kleisli/monadic effects
@@ -461,6 +468,7 @@ states what it cannot prove; the sibling models/tests/monitors it.
 | **OQ-ifc** | 2026-06-27 — **lattice-parametric** non-interference (proved once, any lattice); **DLM** standard; static type-index labels + first-class **boundary** labels for data-derived classification (per-tenant), no full dynamic IFC; by-typing default; lattice supplied by policy. | — (recorded in `60-security/61`) |
 | **OQ-policy** | 2026-06-27 — **policy as code**: a mandatory, static, separately-authored security-policy surface **in Ken** (role separation, not a sibling); the lattice-parametric *instantiation*; non-weakenable; governance via supply-chain. | **ADR 0007** (recorded in `60-security/65`) |
 | **OQ-provenance** | 2026-06-27 — package = (source, artifact, .keni, proof-bundle, delta, provenance); consume = **re-check**; **keyless sigstore + in-toto/SLSA**; two ladders distinct; **+ policy attestation** (governing policy in provenance, monotone-compatible consume check). Impl deferred. | — (recorded in `60-security/63`) |
+| **OQ-classes** | 2026-06-27 — **property classes** (Ω) coherent for free; **structure classes** = **one canonical instance per (class, head-type)**, **orphans a hard error**, no overlap, ambiguity is an error; named instances are first-class values passed **explicitly** (the dependent escape hatch); search terminates. | **ADR 0008** (recorded in `30-surface/33`, `39`) |
 
 When an OQ is decided, record it here and, if architecturally significant, write
 an ADR under `../docs/adr/` and update the affected chapters (replacing the OQ
