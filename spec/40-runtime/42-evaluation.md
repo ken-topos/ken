@@ -26,17 +26,42 @@ closed, ground computations). The two MUST agree on results — the interpreter 
   form; `Eq`/`cast` on closed terms compute (`../10-kernel/16 §9`). No closed
   program "gets stuck" on a well-typed ground computation.
 
-## 2. Evaluation order
+## 2. Evaluation order (`OQ-eval-order` DECIDED)
 
-- The reference order is **call-by-value with sharing** for the pure fragment
-  (arguments evaluated once, results shared via the content-addressed heap,
-  `41`), except where laziness is semantically required (e.g. `if`/`match`
-  evaluate only the taken branch; short-circuit `&&`/`||`). Strictness vs.
-  laziness for `let` and data fields is **OQ-eval-order** — the *observable
-  values* are fixed; the *evaluation strategy* (and thus space/time, not
-  meaning) is the choice.
-- **Sharing via interning** means a value computed twice is stored once;
-  repeated subcomputations over equal data are deduplicated (`41 §4`).
+**Totality makes evaluation order meaning-preserving.** Because every Ken
+program terminates (SCT, `../10-kernel/17 §4`), there is no ⊥/divergence to
+distinguish strict from lazy — both compute the *same value*. So evaluation
+order is a purely **operational** choice (space, time, legibility), **not**
+semantics — unlike a partial language, where laziness is observable. That frees
+the choice to favor predictability.
+
+**Decision (operator, 2026-06-27): call-by-value (strict) with sharing, strict
+by default, lazy only where required or annotated.**
+
+- **Strict CBV is the default** — arguments and `let` bindings are evaluated
+  eagerly, left-to-right; results are shared via the content-addressed heap
+  (`41`), so equal subcomputations are deduplicated (CBV's predictability + the
+  store's space efficiency, no recomputation). Chosen because, the choice being
+  meaning-preserving, strict is the most **legible and predictable**: a cost
+  model you can reason about, an order that matches how the code reads, and no
+  thunk/space-leak footguns. **Predictability is also a precondition for the
+  time/space reasoning security depends on** — the `@ct` timing discipline
+  (`../60-security/61 §5a`) and worst-case bounds need a non-data-dependent
+  "when"; lazy-by-default would undermine them.
+- **Laziness where semantically required** — `if`/`match` evaluate only the
+  taken arm; `&&`/`||` short-circuit. (CBV evaluates the scrutinee, then only
+  the taken branch.) The coinductive fragment, if added (`OQ-coinduction`,
+  deferred), brings its own *local* lazy/guarded evaluation — opt-in for that
+  type class, no conflict with the strict inductive core.
+- **Laziness by explicit annotation** — an opt-in **`Lazy a`** (thunk) type
+  defers an expensive, possibly-unused computation, **forced** on demand and
+  memoized (call-by-need *locally*). Laziness is thus **visible in the type**,
+  never a pervasive implicit default — strict-by-default, lazy-by-annotation.
+- **Distinct from the kernel's conversion (`OQ-eval-strategy`).** The kernel
+  decides definitional equality by **lazy WHNF** (`§1`, `../10-kernel/17`); the
+  *runtime* executes **CBV-with-sharing**. Different layers, allowed to differ —
+  as Lean's kernel reduces lazily for defeq while compiled code runs strictly.
+  The two need only agree on final values (`§1`).
 
 ## 3. Effects
 

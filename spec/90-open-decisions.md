@@ -252,12 +252,22 @@ surfaced while drafting. Resolved items move to an ADR (`../docs/adr/`).
   model); revisit if working sets demand it.
 - **Affects.** `40-runtime/44`.
 
-### OQ-eval-order — Strictness
+### OQ-eval-order — Strictness — **DECIDED**
 - **Fork.** Strictness vs. laziness for `let`/data fields (observable values
   fixed; this is space/time, not meaning).
-- **Recommendation.** **Call-by-value with sharing**; branch/short-circuit
-  laziness where semantically required.
-- **Affects.** `40-runtime/42`.
+- **Decision (operator, 2026-06-27).** **Call-by-value (strict) with sharing,
+  strict by default.** Totality makes eval-order **meaning-preserving**, so pick
+  the most **predictable/legible** order — strict wins (reason-able cost model,
+  reading order, no thunk/space-leak footguns, composes with content-addressed
+  sharing). **Predictability is a precondition for the time/space reasoning
+  security needs** (`@ct`/`61 §5a`, worst-case bounds). Laziness only **where
+  required** (`if`/`match` taken-arm, `&&`/`||` short-circuit) or **by explicit
+  annotation** — an opt-in **`Lazy a`** thunk (forced-on-demand, memoized;
+  laziness *visible in the type*, never implicit). Distinct from the kernel's
+  lazy-WHNF conversion (`OQ-eval-strategy`): runtime executes CBV, kernel
+  decides defeq lazily; they agree only on final values. Coinductive fragment,
+  if added (`OQ-coinduction`), brings its own local guarded laziness.
+- **Affects.** `40-runtime/42` (updated), `41` (sharing). **Recorded.**
 
 ---
 
@@ -567,6 +577,7 @@ states what it cannot prove; the sibling models/tests/monitors it.
 | **OQ-discharge-attestation** | 2026-06-27 — post-build validation = a **signed, runtime-checkable discharge attestation** (export hash + Ward policy + optional sampling + per-obligation four-way outcome + Ward-version signature); a **deployment gate** enforces per-target-environment validation; policy-attestation ladder. Schema deferred (needs Ward's runner). | — (deferred; `60-security/63 §5a`) |
 | **OQ-conformance** | 2026-06-27 — **reframed to Ken's half**: Ken emits a **trace/instrumentation contract** (concrete `Σ`-event schema at the effect boundary + correlation/identity for multi-space + runtime `Q`/`P`/`T` monitors), making the running system observable in the model's vocabulary. Export = **broadcast contract** to a family of engines; runtime monitor likely a **distinct sidecar**. Gate/monitor/both + response = downstream policy. | **ADR 0006** (recorded in `70-behavioral/73`) |
 | **OQ-relational** | 2026-06-27 — by-proof relational = **re-checked unary obligations** (product programs; reflective embedding if ever first-class), **progress-sensitive** default, heavy machinery **deferred**. **Constant-time split out**: a distinct **opt-in `@ct` label** enforced **by typing** (taint to leakage-effect sinks; sound 2-safety enforcement, no product programs); timing guarantee **delegated to Ward** under a leakage model; policy may require `@ct` per data class. | — (recorded in `60-security/61 §5a`, `30-surface/36`, `64`, `65`) |
+| **OQ-eval-order** | 2026-06-27 — **CBV (strict) with sharing, strict by default**; totality makes eval-order meaning-preserving so pick the predictable order (cost model, reading order, no space leaks; precondition for `@ct`/bounds). Laziness only where required (branches/short-circuit) or by explicit **`Lazy a`** thunk. Distinct from kernel lazy-WHNF conversion. | — (recorded in `40-runtime/42`) |
 
 When an OQ is decided, record it here and, if architecturally significant, write
 an ADR under `../docs/adr/` and update the affected chapters (replacing the OQ
