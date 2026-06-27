@@ -189,7 +189,8 @@ the kernel checks (`31 §1a`, no homoglyph backdoor).
 - **Record decisions where they live.** Genuine forks →
   `spec/90-open-decisions.md`; architecturally significant ones → an ADR under
   `docs/adr/`; the deciding authority is the operator. Wrap markdown at 80
-  columns.
+  columns, and **use Mermaid for diagrams/charts** (fenced ` ```mermaid `),
+  never ASCII art (`CLAUDE.md`).
 
 ## How to use this document
 

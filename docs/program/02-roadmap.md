@@ -10,13 +10,15 @@ suite before the next; one clean change at a time; design (and spec) on paper
 before foundational code; no claim a test has not confirmed; and AGPL source
 never enters the implementation context.
 
-```
-Phase 0  Clean-room foundations ──► Phase 1  Trusted kernel + vertical slice ──► Phase 2  Verification surface (the thesis)
-                                                                                          │
-   Phase 3  Language surface & stdlib  ◄── (starts in parallel once the kernel API is stable)
-                                                                                          ▼
-                              Phase 4  Native codegen & scale ──► Phase 5  Self-hosting ──► Phase 6  Ergonomics & ecosystem
-   Phase 7 (research, WS-R) runs alongside from Phase 1 onward, never blocking
+```mermaid
+flowchart LR
+  P0["Phase 0 · Clean-room foundations"] --> P1["Phase 1 · Trusted kernel + vertical slice"]
+  P1 --> P2["Phase 2 · Verification surface — the thesis"]
+  P1 -. kernel API stable .-> P3["Phase 3 · Language surface & stdlib"]
+  P2 --> P4["Phase 4 · Native codegen & scale"]
+  P3 --> P4
+  P4 --> P5["Phase 5 · Self-hosting"] --> P6["Phase 6 · Ergonomics & ecosystem"]
+  P7["Phase 7 · Research WS-R — never blocks"] -. parallel .-> P1
 ```
 
 ---

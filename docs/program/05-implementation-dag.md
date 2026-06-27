@@ -43,26 +43,106 @@ never-a-gate research (all per `01-strategy §4`). Two workstreams are added:
 Each wave may start once its predecessors' *interfaces* are stable, not their
 completion — overlap aggressively where the table permits.
 
+```mermaid
+flowchart TD
+  subgraph WSF["WS-F · Foundations"]
+    F2["F2 spec — written"]
+    F3["F3 ADRs 0001-0008"]
+    F4["F4 content-addr design"]
+  end
+  subgraph WSK["WS-K · Kernel trust root"]
+    K1["K1 Pi/Sigma/inductive/universes"]
+    K2["K2 observational Eq/cast/Omega/quotient"]
+    K2c["K2c conversion NbE + SCT"]
+    Kapi["K-api judgment + kernel API"]
+    K3["K3 value model"]
+  end
+  subgraph WSV["WS-V · Verification thesis"]
+    V0["V0 minimal elaborator"]
+    V1["V1 spec syntax + 4-way status"]
+    V2["V2 obligation gen"]
+    V3["V3 prover Kripke + reflective cert"]
+    V4["V4 diagnostics"]
+    T1["T1 protocol"]
+  end
+  subgraph WSL["WS-L · Surface & stdlib"]
+    L1["L1 Int/Decimal/overflow"]
+    L2["L2 sum/match"]
+    L3["L3 strings/collections"]
+    L4["L4 modules/pkg"]
+    L5["L5 effects — interaction-tree HUB"]
+    L6["L6 Bytes/IO"]
+    L7["L7 FFI"]
+    L8["L8 stdlib"]
+    Lc["L-classes coherence"]
+    Lf["L-fmt formatter + TR39 lexer"]
+  end
+  subgraph WSSec["WS-Sec · Security tier-1"]
+    Se1["Sec1 IFC by-typing"]
+    Sct["Sec1ct @ct constant-time"]
+    Se2["Sec2 capabilities"]
+    Se3["Sec3 supply-chain re-check"]
+    Se4["Sec4 trust-model + audit"]
+    Se5["Sec5 policy-as-code"]
+  end
+  subgraph WSB["WS-B · Behavioral seam, Ken half"]
+    B1["B1 export emitter"]
+    B2["B2 Temporal-as-data"]
+    B3["B3 trace contract"]
+    B4["B4 agentic boundary"]
+  end
+  subgraph WSX["WS-X · Runtime & scale"]
+    X1["X1 interpreter strict-CBV"]
+    X2["X2 runtime hardening"]
+    X3["X3 native backend"]
+    X4["X4 scale/limits"]
+  end
+  subgraph WSS["WS-S · Self-hosting"]
+    SH1["S1 subset compiler"]
+    SH2["S2 full self-host"]
+  end
+  Ward(["Ward — sibling project"])
+
+  F2 & F3 --> K1
+  F4 --> K3
+  K1 --> K2 --> K2c --> Kapi
+  K1 --> K3 --> X1
+  K1 --> X1 & V0
+  X1 & V0 --> G1{{G1 vertical slice}}
+  V0 --> V1 --> V2 --> V3 --> V4
+  Kapi --> V2
+  V2 --> T1 --> V4
+  V3 & V4 --> G24{{G2+G3+G4 thesis}}
+  K1 --> L1 --> L2
+  K1 --> L3 & L4 & L5 & L6 & Lc
+  L6 --> L7
+  L1 & Lc --> L8
+  V0 --> Lf
+  K3 --> X2
+  L5 --> Se1 --> Sct
+  L5 --> Se2
+  L4 & Kapi --> Se3
+  Kapi --> Se4
+  Se1 & L4 --> Se5
+  Se1 & Se2 & Se3 & Se5 --> GSec{{G-Sec}}
+  V1 & L5 --> B1 --> B2
+  B1 & X1 --> B3
+  Se1 & B3 --> B4
+  B3 --> GWard{{G-Ward-seam}} --> Ward
+  L8 & X1 --> X3 --> X4
+  X2 --> X4
+  X4 --> Gperf{{G5-perf}}
+  L8 --> SH1 --> SH2 --> G8{{G8 self-host}}
+
+  classDef hub fill:#d6f0ff,stroke:#0a78c8,stroke-width:2px;
+  classDef gate fill:#ffe6e6,stroke:#cc3333,stroke-width:2px;
+  class L5 hub
+  class G1,G24,GSec,GWard,Gperf,G8 gate
 ```
-Wave 0  Foundations (WS-F)         F1 ─ F2(spec) ─ F3(ADRs) ─ F4(content-addr design)
-                                        │  (F2/F3 largely DONE: spec written, ADRs 0001–0008)
-                                        ▼
-Wave 1  Kernel trust root (WS-K)   K1 ─ K2 ─ K2c ─ K-api      + K3(value model) ── X1(interp) ── V0(elab)
-        + vertical slice           └────────────────────────────────────────────────────────┘  ► G1
-                                        │
-Wave 2  Verification (WS-V)         V1 ─ V2 ─ V3(prover) ─ V4(diag) ; T1(protocol)              ► G2+G3+G4
-                                        │
-Wave 3  Surface & stdlib (WS-L)     L1 L2 L3 L4 L5(effects) L6 L7 L8 ; L-classes ; L-fmt ; X2    ► G6
-        (starts at G1, || Wave 2)        │
-Wave 3s Security (WS-Sec)           Sec1(IFC)+Sec1ct(@ct) ─ Sec2(caps) ─ Sec3(supply) ─ Sec5(policy) ; Sec4(trust doc)
-        (rides L5 + kernel)             │                                                         ► G-Sec
-Wave 4  Behavioral seam (WS-B)      B1(export) ─ B2(Temporal) ─ B3(trace contract) ; B4(agentic doc)  ► G-Ward-seam
-        (rides V + L5 + X)              │   → feeds sibling **Ward** (separate project)
-Wave 5  Native & scale (WS-X)       X3(native backend) ─ X4(scale/limits)                          ► G5-perf
-Wave 6  Self-hosting (WS-S)         S1(subset compiler) ─ S2(full self-host)                        ► G8
-Wave 7  Ergonomics (WS-T)           T2(REPL) T3(test fw) T4(docs) T5(ecosystem)                     ► G5+G7
-Parallel WS-R research              never a gate
-```
+
+*(WS-T ergonomics — T2 REPL, T3 test framework, T4 docs, T5 ecosystem — and WS-R
+research are omitted from the graph for clarity; see the table. T-stream hangs
+off V4/X1/L; WS-R never gates.)*
 
 ## Work packages & dependencies (the table the Steward decomposes)
 
