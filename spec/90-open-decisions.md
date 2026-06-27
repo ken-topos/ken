@@ -26,9 +26,14 @@ surfaced while drafting. Resolved items move to an ADR (`../docs/adr/`).
   type. The **full fixed-width set is native**: signed `Int8/Int16/Int32/Int64`
   and unsigned `UInt8/UInt16/UInt32/UInt64` (everyday for bitfields, wire/byte
   layout, C-ABI FFI). Naming is the **verbose** form (`Int64`, not `I64`).
-- **Still open (`OQ-1a`).** The *default* overflow behaviour on fixed-width `+`
-  (checked / wrapping / obligation-generating). DRAFT: checked.
-- **Affects.** `30-surface/35` (updated), `40-runtime/41`, `30-surface/38`.
+- **`OQ-1a` DECIDED (2026-06-27).** Default fixed-width overflow is
+  **obligation-generating** — a bare `+`/`-`/`*` emits a no-overflow proof
+  obligation (`40-runtime/43 §2`); proven ⇒ total, unproven ⇒ degrades to a
+  runtime check (so "checked" is *subsumed*). **Wrapping stays explicit**
+  (`wrapping_add`/`+%`/`Wrapping[T]`) for intended-modular domains; never the
+  silent default.
+- **Affects.** `30-surface/35` (updated), `40-runtime/41`, `43`,
+  `30-surface/38`.
 
 ### OQ-eval-strategy — conversion algorithm *(fork 2)* — **DECIDED**
 - **Fork.** What conversion algorithm the kernel uses to decide definitional
@@ -198,11 +203,20 @@ surfaced while drafting. Resolved items move to an ADR (`../docs/adr/`).
 - **Affects.** `30-surface/36` (updated), `60-security/61`, `60-security/62`,
   `70-behavioral/`.
 
-### OQ-9 — Continuations / handlers *(digest fork 9)*
+### OQ-9 — Continuations / handlers *(digest fork 9)* — **DECIDED (excluded)**
 - **Fork.** Tail-resumptive handlers only vs. reified/multishot continuations.
-- **Recommendation.** **Tail-resumptive** in core; multishot is **research**
-  (`02 §7`).
-- **Affects.** `30-surface/36`.
+- **Decision (operator, 2026-06-27): tail-resumptive only; multishot excluded —
+  a positive design choice.** The expressiveness multishot is reached for is
+  **already subsumed**: generators (`visits [Yield]`),
+  nondeterminism/backtracking as **search-as-data** folded by total recursion,
+  async/concurrency via the **seam** (`OQ-Space`), and delimited control
+  captured *denotationally* by the interaction tree (`OQ-8`). What it *uniquely*
+  adds — first-class dynamic `call/cc` — is unpredictable, **complicates**
+  proofs (breaks single-consumption WP; single-shot is a proof
+  *simplification*), and is costly to compile — cutting against every Ken
+  commitment. Not "research someday"; a footnote only if a concrete
+  *unsubsumable* need appears.
+- **Affects.** `30-surface/36 §5` (updated).
 
 ### OQ-coinduction — Infinite data & productivity — **DECIDED (deferred)**
 - **Fork.** Coinductive types + productivity checker vs. streams-as-functions
@@ -342,11 +356,14 @@ surfaced while drafting. Resolved items move to an ADR (`../docs/adr/`).
 
 ## F. Research-track (never core; strategy WS-R)
 
-### OQ-coalgebra — The coalgebraic layer *(digest fork 15)*
+### OQ-coalgebra — The coalgebraic layer *(digest fork 15)* — **DECIDED (excluded)**
 - **Fork.** Pursue Store-comonad cells/lenses, process coalgebras +
   bisimulation, profunctor wires, co-Heyting boundaries — at all?
-- **Recommendation.** **Research only**; harvest pragmatic wins back as ordinary
-  packages. Partly subsumed by `visits` + `space`.
+- **Decision (operator, 2026-06-27): not in the core — same reasoning as
+  `OQ-9`.** The pragmatic wins are **subsumed** by `visits` + `space` (and
+  reactive/temporal concerns are Ward's, `OQ-temporal`/`OQ-coinduction`); the
+  rest is a mathematical probe, not a software-engineering need. Harvest any
+  concrete pragmatic win back as an ordinary package; no core/kernel layer.
 - **Affects.** `02 §7`, `50-stdlib §6`.
 
 ---
@@ -610,6 +627,9 @@ states what it cannot prove; the sibling models/tests/monitors it.
 | **OQ-6** | 2026-06-27 — Leech/Golay/Co₀ machinery **out of the core**, optional research packages only, never the hot path — the final break with the prototype's lattice conceit. | — (recorded in `40-runtime/44`) |
 | **OQ-gc** | 2026-06-27 — manual + region-scoped now; **automatic GC a deferred implementation detail** (semantics-invisible — addable later with no language fork). | — (recorded in `40-runtime/44`) |
 | **OQ-witness** | 2026-06-27 — **process-level stats only** (extensional-safe `witness`); **never** per-value identity/provenance (referential transparency). | — (recorded in `40-runtime/41`) |
+| **OQ-9** | 2026-06-27 — **tail-resumptive only; multishot excluded** (positive choice). Expressiveness subsumed (generators / search-as-data / seam / interaction-tree denotation); `call/cc` uniquely adds unpredictability + breaks single-consumption WP (single-shot *simplifies* proofs). Footnote only if an unsubsumable need appears. | — (recorded in `30-surface/36 §5`) |
+| **OQ-1a** | 2026-06-27 — fixed-width overflow **obligation-generating by default** (proven ⇒ total; unproven ⇒ runtime check, so "checked" subsumed); **wrapping explicit** (`+%`/`Wrapping[T]`) for intended-modular domains, never silent. | — (recorded in `30-surface/35 §3`, `40-runtime/43`) |
+| **OQ-coalgebra** | 2026-06-27 — **excluded from core** (same reasoning as `OQ-9`); pragmatic wins subsumed by `visits` + `space`, reactive concerns are Ward's; harvest any win as a package, no core layer. | — (recorded in register; `02 §7`) |
 
 When an OQ is decided, record it here and, if architecturally significant, write
 an ADR under `../docs/adr/` and update the affected chapters (replacing the OQ

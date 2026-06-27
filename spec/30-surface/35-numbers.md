@@ -64,11 +64,18 @@ typed handles" workstream (which targets a non-problem):
   partial case — `div`/`mod` either require a `{ d | d ≠ 0 }` refinement (`34
   §5`, total) or return `Option`/a checked error (`36`); raw `/` on
   possibly-zero is an obligation, not a silent trap.
-- **Fixed-width** integers: overflow is **explicit** via distinct operations —
-  `wrapping_add` (modular), `checked_add : … → Option`, `saturating_add`. A bare
-  `+` on fixed-width is **checked by default** (panics/`unknown` on overflow) so
-  it never silently wraps; opting into wrapping is a named choice. (Exact
-  default — checked vs. obligation-generating — is OQ-1a.)
+- **Fixed-width** integers (`OQ-1a` DECIDED): a bare `+`/`-`/`*` is
+  **obligation-generating by default** — it emits a **no-overflow proof
+  obligation** (the partial-primitive discipline, `../40-runtime/43 §2`),
+  discharged statically like any other. Proven in-range ⇒ total and safe;
+  unproven ⇒ a marked partial point that **degrades to a runtime check
+  (panic/`unknown`)** — so "checked" is *subsumed* as the runtime face of an
+  undischarged obligation, not a separate mode. **Wrapping stays explicit** —
+  `wrapping_add`/`+%` (modular) or a `Wrapping[T]` type — for domains where
+  modular arithmetic is the *intended* semantics (hashing, crypto, checksums),
+  visible and provably-modular, **never** the silent default. (`checked_add : …
+  → Option`, `saturating_add` remain available named operations.) It never
+  silently wraps.
 - **`Float`**: IEEE semantics (NaN, ±∞, signed zero) exactly; no hidden
   "corrections."
 

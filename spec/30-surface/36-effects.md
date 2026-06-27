@@ -170,7 +170,7 @@ boundary may use shared memory, but it is already an explicitly unsafe/untrusted
 boundary, `38-ffi-io.md §3`, so it does not weaken the in-Ken isolation
 property.)*
 
-## 5. Handlers — tail-resumptive only (`OQ-8`; multishot → `OQ-9`)
+## 5. Handlers — tail-resumptive only (`OQ-8`/`OQ-9` DECIDED)
 
 A **handler** interprets an effect — operationally, a **fold over the
 interaction tree** (§2.2). Handlers are how user-defined effects are given
@@ -181,11 +181,18 @@ Ken's core admits **tail-resumptive** handlers only: the continuation is invoked
 **at most once, in tail position** — which keeps the fold well-founded,
 preserves **totality** (the SCT/termination story, `../10-kernel/17 §4`), and
 keeps effectful code tractable to verify. **Reified, multi-shot continuations**
-(the analysis's `shift`/`reset`, `with multishot`) are **not** promised — they
-break totality and are hard to verify — and stay **research track** (`OQ-9`, `02
-§7`; the prototype "parses but ignores" them). Genuinely reactive/nonterminating
-interaction (coinductive trees) is Ward's domain (`../70-behavioral/`) and
-touches `OQ-coinduction`.
+(the analysis's `shift`/`reset`, `with multishot`) are **excluded — a positive
+design choice, not a hedge** (`OQ-9` DECIDED): the expressiveness they are
+reached for is **already subsumed** — generators via `visits [Yield]` (`37 §3`),
+nondeterminism/backtracking as **search-as-data** folded by total recursion,
+async/concurrency via the **seam** (`OQ-Space`), and delimited control captured
+*denotationally* by the interaction tree itself (§2). What multishot uniquely
+adds — first-class dynamic `call/cc` — is unpredictable, **complicates** proofs
+(it breaks the single-consumption WP reasoning over the tree, so single-shot is
+a proof *simplification*), and is costly to compile, cutting against every Ken
+commitment; it returns only as a research footnote if a concrete unsubsumable
+need appears. Genuinely reactive/nonterminating interaction is Ward's domain
+(`../70-behavioral/`, `OQ-coinduction`).
 
 ## 6. What WS-L must deliver here (L5)
 
