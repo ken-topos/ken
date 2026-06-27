@@ -1,9 +1,11 @@
 # Supply-chain security
 
 > Status: **DRAFT v0**. Normative for the consumption model and the artifact
-> shape; signing/registry mechanics are flagged **OQ-provenance**. How a Ken
-> package is consumed *safely* — the area where Ken's de Bruijn criterion pays
-> an unusual dividend. ADR 0004 Decision 5.
+> shape. **`OQ-provenance` DECIDED** (operator, 2026-06-27): keyless
+> **sigstore/cosign** signing + **in-toto/SLSA** attestation, the two ladders
+> kept distinct (§5), plus **policy attestation** (the governing policy travels
+> in provenance, §2/§3). How a Ken package is consumed *safely* — the area where
+> Ken's de Bruijn criterion pays an unusual dividend. ADR 0004 Decision 5.
 
 ## 1. The Ken superpower: consume = **re-check**, not re-prove, not re-trust
 
@@ -36,7 +38,8 @@ ken-package :=
   , interface      -- a compiled `.keni`: exported types + contract certificates
   , proof-bundle   -- the Σ-fragment: proof terms the consumer re-checks
   , trusted_base_delta   -- every postulate/hole/declassify-authority assumed
-  , provenance     -- (OQ-provenance) signature + SLSA attestation
+  , provenance     -- sigstore signature + in-toto/SLSA attestation
+                   --   + the GOVERNING POLICY hash/version (61, 65)
   )
 ```
 
@@ -62,14 +65,19 @@ ken-package :=
 4. Verify provenance signature + SLSA attestation  — origin (OQ-provenance §5).
 5. Kernel RE-CHECKS the proof-bundle / .keni certificates.   ← the trust step
 6. Audit trusted_base_delta against your policy
-     (empty? acceptable postulates? acceptable declassifications/FFI?).
+     (empty? acceptable postulates? acceptable declassifications/FFI?)
+     AND check the dep's governing policy is COMPATIBLE — monotone-tightening:
+     a dependency's policy may be stricter than yours, never laxer (65).
 7. Only on all-pass: extend your Σ with the verified fragment.
 8. Your module's new obligations discharge against the extended Σ.
 ```
 
 Step 5 is where trust is established **by your kernel**, not the author. Steps
 3–4 add *identity* and *origin*; step 5 adds *verified correctness*; step 6
-makes the residual *assumptions* a policy decision.
+makes the residual *assumptions* a policy decision **and** confirms the
+dependency honoured a policy compatible with yours (`65-policy.md`). Together:
+**"this build provably honoured org policy `vX`"** is checkable across the whole
+dependency graph.
 
 ## 4. Threat model (what each step defends)
 
@@ -90,27 +98,40 @@ given, absent an explicit declassification that shows in its delta. That is a
 structural answer to the "malicious package phones home with your secrets"
 attack.
 
-## 5. Provenance — the complementary axis (OQ-provenance)
+## 5. Provenance — the complementary axis (`OQ-provenance` DECIDED)
 
 Content-addressing proves **identity** ("this is the artifact with that hash");
 it does **not** prove **origin** ("this came from that author and that build").
-The completion:
+The completion (decided, operator 2026-06-27):
 
-- **Signing.** The author signs `(source hash, artifact hash, interface hash,
-  proof-bundle hash, trusted_base_delta)` — keyless via sigstore/cosign (OIDC
-  identity + transparency log) or in-toto link metadata. Consumers verify
-  against a known identity / key-transparency log.
-- **SLSA build attestation.** Records *what built the artifact and from what* —
-  the Ken compiler version and a hermetic build environment — closing the
-  compiler-substitution gap.
+- **Signing — keyless sigstore/cosign + in-toto/SLSA attestation.** The author
+  signs `(source, artifact, interface, proof-bundle, trusted_base_delta,
+  policy)` hashes; **sigstore** (OIDC identity + public transparency log)
+  provides the signing/identity and **in-toto/SLSA** provides the attestation
+  *content*. **Keyless is the default** — no long-lived signing keys for humans
+  *or agents* to manage and leak, with identity backed by a transparency log;
+  the right fit for an agent-driven ecosystem.
+- **SLSA build attestation — aim high.** Records *what built the artifact and
+  from what* (the Ken compiler version + a hermetic, reproducible build),
+  closing the compiler-substitution gap. Ken's reproducible builds (content hash
+  from source + compiler) make a high SLSA level natural.
+- **Policy attestation.** The provenance carries the **governing policy
+  hash/version** the package was built under (`65-policy.md`); a consumer
+  verifies the dependency honoured a **monotone-compatible** policy (§3 step 6).
+  This is what makes "provably honoured org policy" checkable, not just
+  asserted.
 
-**Keep the two axes distinct.** SLSA attests the **build pipeline**; Ken's
-proofs attest the **program**. They are *complementary*, not the same ladder: a
-high SLSA level does not imply correctness, and a Ken proof does not imply a
-trustworthy build. A strong posture wants **both** — provenance (origin) *and*
-re-checked proofs (correctness) *and* an audited delta (assumptions). Ken is
-unusual in supplying the middle one natively; `OQ-provenance` tracks adding the
-first.
+**Keep the two ladders distinct.** SLSA/provenance attests the **build pipeline
+and origin** (*trusted*); Ken's proofs attest the **program** (*re-checked*,
+zero-trust). A high SLSA level does not imply correctness, and a Ken proof does
+not imply a trustworthy build — *complementary*, not the same ladder. A strong
+posture wants **all** of: provenance (origin) + re-checked proofs (correctness)
++ audited delta (assumptions) + compatible policy (compliance). Ken supplies the
+proof ladder natively and re-checks it; provenance is the adopted-standards
+origin ladder.
+
+*(Implementation sequences after the core toolchain; this fixes the shape and
+the standards.)*
 
 ## 6. The registry (ecosystem governance — above the language)
 

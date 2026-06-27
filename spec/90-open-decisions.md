@@ -367,16 +367,21 @@ are **fixed** by ADR 0004; only the mechanics below are open.
   open.** Real engineering choice; relational reasoning is less settled than
   unary.
 
-### OQ-provenance — Signing, build attestation & the package format
-- **Fork.** The artifact/`​.keni` interface format; cryptographic signing
-  (sigstore/cosign keyless vs. in-toto); SLSA build-attestation integration; the
-  registry attestation policy.
-- **Recommendation.** Define the package = `(source, artifact, .keni,
-  proof-bundle, trusted_base_delta, provenance)` with **consume = re-check, not
-  re-prove**; add **signing + SLSA** as the *complementary* origin/build axis
-  (distinct from Ken's program-level proofs — keep the two ladders separate).
-- **Affects.** `60-security/63`, `30-surface/33`. **Why open.** Ecosystem
-  tooling; multiple equivalent mechanisms; sequencing after the core toolchain.
+### OQ-provenance — Signing, build attestation & the package format — **DECIDED**
+- **Fork.** Signing mechanism; SLSA integration; the `.keni` format; registry
+  attestation policy.
+- **Decision (operator, 2026-06-27).** Package = `(source, artifact, .keni,
+  proof-bundle, trusted_base_delta, provenance)`; **consume = re-check, not
+  re-prove**. Signing = **keyless sigstore/cosign + in-toto/SLSA** attestation
+  content (keyless suits an agent ecosystem — no keys to leak); **aim high on
+  SLSA** (reproducible builds make it natural). **Two ladders kept distinct:**
+  program-proof (re-checked, zero-trust) vs build-provenance (trusted, origin).
+  **+ Policy attestation** (new, ties `OQ-policy`): the governing policy
+  hash/version travels in provenance; consume checks a **monotone-compatible**
+  policy ⇒ "provably honoured org policy `vX`" across the dep graph. Registry =
+  namespace ownership + mandatory provenance. **Implementation deferred** to
+  post-core-toolchain; this fixes the shape + standards.
+- **Affects.** `60-security/63` (updated), `65`, `30-surface/33`.
 
 ---
 
@@ -455,6 +460,7 @@ states what it cannot prove; the sibling models/tests/monitors it.
 | **OQ-Space** | 2026-06-27 — encapsulated non-aliased `space` cells → **bounded per-space Hoare, no separation logic**; **`old` scoped to space ops** (resolves `OQ-spec` deferral); **shared-nothing message-passing** (in-Ken), content-addressed transport; runtime realization → `40-runtime`; concurrent/temporal correctness **delegated to Ward**; FFI shared memory is the (unsafe) exception. | — (recorded in `30-surface/36 §4`); ADR when `40-runtime` settles |
 | **OQ-ifc** | 2026-06-27 — **lattice-parametric** non-interference (proved once, any lattice); **DLM** standard; static type-index labels + first-class **boundary** labels for data-derived classification (per-tenant), no full dynamic IFC; by-typing default; lattice supplied by policy. | — (recorded in `60-security/61`) |
 | **OQ-policy** | 2026-06-27 — **policy as code**: a mandatory, static, separately-authored security-policy surface **in Ken** (role separation, not a sibling); the lattice-parametric *instantiation*; non-weakenable; governance via supply-chain. | **ADR 0007** (recorded in `60-security/65`) |
+| **OQ-provenance** | 2026-06-27 — package = (source, artifact, .keni, proof-bundle, delta, provenance); consume = **re-check**; **keyless sigstore + in-toto/SLSA**; two ladders distinct; **+ policy attestation** (governing policy in provenance, monotone-compatible consume check). Impl deferred. | — (recorded in `60-security/63`) |
 
 When an OQ is decided, record it here and, if architecturally significant, write
 an ADR under `../docs/adr/` and update the affected chapters (replacing the OQ
