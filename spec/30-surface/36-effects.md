@@ -133,7 +133,7 @@ reasoning about a space operation is **local, bounded Hoare** over its own cells
 — Ken needs **no separation logic / frame rules** (the machinery a big aliasable
 heap would force). `requires`/`ensures` on a space operation relate pre- and
 post-state; **`old(e)` is admitted, scoped to the operation's `ensures`** (a
-cell's pre-call value, well- defined because the denotation is state-passing) —
+cell's pre-call value, well-defined because the denotation is state-passing) —
 *not* a global `\old` (`../20-verification/21 §4`). Ken proves **local,
 sequential, per-space** correctness; **concurrent/distributed/temporal**
 correctness is delegated to Ward (below, `../70-behavioral/`).
