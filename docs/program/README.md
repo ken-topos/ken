@@ -17,12 +17,17 @@ never from prototype source (see `../../CLEAN-ROOM.md`).
 1. **`01-strategy.md`** — the thesis, the clean-room ground rules, the locked
    architecture (Rust host, interpreter-first, small permanent Rust kernel,
    deferred self-hosting), success criteria G1–G8, and the eight workstreams.
-2. **`02-roadmap.md`** — phases 0–7, each with an objective exit gate; the
-   work-package dependency graph.
-3. **`03-program-of-work.md`** — self-contained, team-sized work packages with
+2. **`02-roadmap.md`** — phases 0–7, each with an objective exit gate (the phase
+   narrative; the WP dependencies are refreshed in `05`).
+3. **`05-implementation-dag.md`** — the **post-design-freeze** work-package DAG:
+   the settled-design dependency graph (incl. the OTT kernel, the tier-1
+   security workstream, and the behavioral seam) that the Steward decomposes
+   into the catalog. Supersedes `02`'s dependency summary where the design
+   changed it.
+4. **`03-program-of-work.md`** — self-contained, team-sized work packages with
    spec sources, acceptance criteria, dependencies, and a fan-out plan across
    agent teams.
-4. **`04-git-and-integration.md`** — the git workflow and coordination model:
+5. **`04-git-and-integration.md`** — the git workflow and coordination model:
    protected `main`, per-team PRs, a single Integrator who merges and notifies,
    and how it maps onto mootup spaces and Decisions. Realized by WP F1.
 

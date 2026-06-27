@@ -1,10 +1,9 @@
 # Roadmap
 
-Phased sequence for **Ken** — a new, MIT-licensed,
-Rust-hosted, interpreter-first verified topos language. Phases are ordered by
-dependency and risk, not
-calendar. Each has an **entry state**, an objective **exit gate**, and the **work
-packages** (see `03-program-of-work.md`) it contains.
+Phased sequence for **Ken** — a new, MIT-licensed, Rust-hosted,
+interpreter-first verified topos language. Phases are ordered by dependency and
+risk, not calendar. Each has an **entry state**, an objective **exit gate**, and
+the **work packages** (see `03-program-of-work.md`) it contains.
 
 Governing principle: every step is additive and verified against the conformance
 suite before the next; one clean change at a time; design (and spec) on paper
@@ -33,8 +32,8 @@ be implemented *from behavior* rather than from AGPL source.
 **Work packages:** F1 (name + MIT + repo/Rust workspace + IP hygiene process),
 F2 (**spec extraction**: language spec + conformance test corpus from the
 prototype), F3 (ADRs — record the locked decisions + the open ones: content
-store, syntax, effect model, Space model), F4 (math-core decision: reuse `mmgroup`
-BSD vs. reimplement; content-addressing design).
+store, syntax, effect model, Space model), F4 (math-core decision: reuse
+`mmgroup` BSD vs. reimplement; content-addressing design).
 
 **Exit gate G0:**
 - Repo exists: MIT `LICENSE`, Rust workspace skeleton, clean-room process doc,
@@ -70,8 +69,8 @@ V0 (minimal elaborator: surface → kernel).
 
 ## Phase 2 — Verification surface (the thesis)
 
-**Why.** This is the differentiator: a programmer (or agent) states a correctness
-property and gets a legible verdict.
+**Why.** This is the differentiator: a programmer (or agent) states a
+correctness property and gets a legible verdict.
 
 **Entry:** G1.
 
@@ -85,7 +84,8 @@ V4 (proof-failure diagnostics), T1 (machine-readable diagnostic protocol).
   rejected (G2).
 - The classifier routes obligations; decidable ones discharge directly,
   first-order-intuitionistic ones via the Kripke embedding with kernel-checked
-  certificates; a documented test shows Z3 cannot make an Ken proof unsound (G3).
+  certificates; a documented test shows Z3 cannot make an Ken proof unsound
+  (G3).
 - Every failed obligation emits a schema-valid diagnostic with a countermodel or
   typed hole plus suggested actions; a partially-verified program still runs,
   propagating `unknown` (G4).
@@ -101,8 +101,8 @@ as the kernel API is stable (overlapping Phase 2).
 **Entry:** G1 (kernel API stable).
 
 **Work packages:** L1 (`Int`/`Decimal`), L2 (sum types + `match` + `Result`/
-`Option`), L3 (strings + collections), L4 (modules + package manager), L5 (effect
-tracking), L6 (`Bytes` + binary I/O), L7 (FFI), L8 (curated stdlib). X2
+`Option`), L3 (strings + collections), L4 (modules + package manager), L5
+(effect tracking), L6 (`Bytes` + binary I/O), L7 (FFI), L8 (curated stdlib). X2
 (content-addressed runtime hardening) supports this.
 
 **Exit gate G6 (= criterion G6):**
@@ -116,8 +116,8 @@ tracking), L6 (`Bytes` + binary I/O), L7 (FFI), L8 (curated stdlib). X2
 
 ## Phase 4 — Native codegen & scale
 
-**Why.** The interpreter proves semantics and the thesis; production needs native
-performance. The interpreter remains the reference oracle.
+**Why.** The interpreter proves semantics and the thesis; production needs
+native performance. The interpreter remains the reference oracle.
 
 **Entry:** G2+G3+G4 (loop working) and enough of Phase 3 to be worth compiling.
 
@@ -170,12 +170,18 @@ publish a test library + a verified utility).
 ## Phase 7 — Research (parallel, WS-R)
 
 Runs alongside Phases 1–6 with spare capacity; **never a gate**. Coalgebraic
-layer, linear/affine types, real delimited continuations. Deliverables are design
-notes and prototypes; harvest pragmatic results back via normal work packages.
+layer, linear/affine types, real delimited continuations. Deliverables are
+design notes and prototypes; harvest pragmatic results back via normal work
+packages.
 
 ---
 
 ## Dependency summary (work-package level)
+
+> **Refreshed for the settled design in `05-implementation-dag.md`.** The table
+> below is the original spine; `05` updates it for the OTT kernel and adds the
+> tier-1 security (WS-Sec) and behavioral-seam (WS-B) work packages. Use `05`
+> for WP sequencing; the phase narrative above still holds.
 
 | WP | Depends on | Parallel with |
 |---|---|---|
