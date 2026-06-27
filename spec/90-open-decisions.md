@@ -367,7 +367,7 @@ are **fixed** by ADR 0004; only the mechanics below are open.
   open.** Real engineering choice; relational reasoning is less settled than
   unary.
 
-### OQ-provenance — Signing, build attestation & the package format — **DECIDED**
+### OQ-provenance — signing, attestation & package format — **DECIDED**
 - **Fork.** Signing mechanism; SLSA integration; the `.keni` format; registry
   attestation policy.
 - **Decision (operator, 2026-06-27).** Package = `(source, artifact, .keni,
