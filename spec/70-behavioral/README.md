@@ -2,9 +2,9 @@
 
 > Status: **DRAFT v0**. Normative for *Ken's half of the seam* (what Ken exports
 > and how delegated/tested obligations are stated); the **sibling** project that
-> consumes it — provisionally **`Ward`** (ADR 0006) — is specified separately.
-> This area is the surface form of the second half of Ken's mandate: **prove
-> what can be proven, and state what must be tested.**
+> consumes it — **`Ward`** (ADR 0006) — is specified separately. This area is
+> the surface form of the second half of Ken's mandate: **prove what can be
+> proven, and state what must be tested.**
 
 ## 1. Why this belongs to Ken (one logic, two engines)
 

@@ -1,6 +1,6 @@
 # ADR 0006 — Behavioral-assurance complement (the sibling)
 
-- **Status:** Accepted (architecture); sibling name provisional
+- **Status:** Accepted; sibling named **Ward**
 - **Date:** 2026-06-27
 - **Deciders:** the operator
 
@@ -33,8 +33,8 @@ them is **Ken's statement of what it assumed**.
 ## Decision
 
 **Ken's behavioral-assurance complement is a tightly-coupled but *separate*
-sibling project — provisionally `Ward` — joined to Ken by an
-`assumption-boundary` export. One logic, two engines.**
+sibling project — **`Ward`** — joined to Ken by an `assumption-boundary` export.
+One logic, two engines.**
 
 1. **One logic, one source of truth, two engines.** The *assertion language and
    its topos semantics* are designed as a **single whole**: a property means the
@@ -93,9 +93,10 @@ sibling project — provisionally `Ward` — joined to Ken by an
   conformance as CI gate vs production monitor vs both; the agentic-oracle
   policy (metamorphic relations + RV watchdogs; the safety FSM the agent is a
   nondeterministic oracle inside).
-- **Naming.** The sibling is provisionally **`Ward`** ("to keep watch / guard";
-  it watches what proof cannot reach, and is the agentic safety envelope).
-  Operator to finalise; alternates `Heed`, `Vigil`.
+- **Naming.** The sibling is **`Ward`** (operator, 2026-06-27) — "to keep watch
+  / guard": it watches what proof cannot reach, and is the agentic safety
+  envelope. Pairs with Ken ("the range of what one can know"): Ward handles what
+  is beyond Ken's ken.
 
 ## Revisit if
 

@@ -330,8 +330,8 @@ are **fixed** by ADR 0004; only the mechanics below are open.
 
 ## H. Behavioral assurance (downstream; ADR 0006)
 
-The sibling (`Ward`, provisional) and the seam to it. *One logic, two engines:*
-Ken states what it cannot prove; the sibling models/tests/monitors it.
+The sibling (**`Ward`**) and the seam to it. *One logic, two engines:* Ken
+states what it cannot prove; the sibling models/tests/monitors it.
 
 ### OQ-behavioral — The downstream complement's shape — **DECIDED**
 - **Fork.** Extend Ken's kernel with temporal/modal types vs. a separate
