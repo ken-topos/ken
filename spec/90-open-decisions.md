@@ -30,12 +30,23 @@ surfaced while drafting. Resolved items move to an ADR (`../docs/adr/`).
   (checked / wrapping / obligation-generating). DRAFT: checked.
 - **Affects.** `30-surface/35` (updated), `40-runtime/41`, `30-surface/38`.
 
-### OQ-eval-strategy — Kernel evaluation strategy *(digest fork 2)*
-- **Fork.** NbE vs. another reduction strategy for conversion.
-- **Recommendation.** **NbE** (the natural fit for a dependent + cubical
-  kernel).
-- **Affects.** `10-kernel/17`. **Why open.** Confirm against the prototype;
-  small chance an alternative suits the cubical computations better.
+### OQ-eval-strategy — conversion algorithm *(fork 2)* — **DECIDED**
+- **Fork.** What conversion algorithm the kernel uses to decide definitional
+  equality.
+- **Decision (operator, 2026-06-27): follow Lean's kernel.** Operational
+  algorithm = **lazy weak-head normalization + on-the-fly structural conversion
+  + lazy δ-unfolding** (Lean 4's approach; consistent with Ken's Lean-style
+  trusted kernel, ADR 0001), realised over an **NbE-style value domain**
+  (closures + neutrals) **extended to compute the cubical operations** Lean
+  lacks. **NbE stays the declarative reference**; lazy-WHNF is the recommended
+  implementation.
+- **Deliberate divergences from Lean's *theory*** (fixed by other Ken
+  decisions): cubical `J`-on-non-`refl` (not `Eq.rec`-on-`refl`); **canonicity
+  kept** (no `propext`/`Quot.sound`/choice canonicity-breaking axioms — the
+  reflective prover needs computation). Lean's **definitional proof
+  irrelevance** is gated on a primitive impredicative `Prop` Ken has not adopted
+  (`OQ-Prop`, still open).
+- **Affects.** `10-kernel/17` (updated). Interacts with `OQ-Prop`, `OQ-4`.
 
 ### OQ-2 — Cumulativity *(part of digest fork 3)*
 - **Fork.** Cumulative universes (`Type ℓ ≤ Type ℓ'`) vs. non-cumulative.
@@ -275,6 +286,7 @@ are **fixed** by ADR 0004; only the mechanics below are open.
 | OQ | Decided | ADR |
 |---|---|---|
 | **OQ-int** | 2026-06-27 — arbitrary-precision `Int`; `Decimal` core; full native `Int8…Int64`/`UInt8…UInt64` (verbose names). `OQ-1a` (overflow default) still open. | — (recorded in `30-surface/35`) |
+| **OQ-eval-strategy** | 2026-06-27 — follow Lean: lazy-WHNF + on-the-fly conversion + lazy δ over a cubical-capable NbE value domain; NbE the reference. Diverges from Lean's theory on cubical `J`/canonicity; `OQ-Prop` (definitional proof irrelevance) still open. | — (recorded in `10-kernel/17`) |
 
 When an OQ is decided, record it here and, if architecturally significant, write
 an ADR under `../docs/adr/` and update the affected chapters (replacing the OQ

@@ -56,10 +56,20 @@ applied by the conversion algorithm at the relevant type:
 Type-directed η is why conversion needs the type, not just the two terms — the
 algorithm is `conv Γ A a b`, not `conv a b`.
 
-## 3. The conversion algorithm (NbE)
+## 3. The conversion algorithm
 
-The reference algorithm is **normalization by evaluation (NbE)** — the
-`OQ-eval-strategy` decision confirms NbE as the kernel's evaluation strategy:
+**`OQ-eval-strategy` — DECIDED (operator, 2026-06-27): follow Lean's kernel.**
+The *operational* algorithm is **lazy weak-head normalization with on-the-fly
+structural conversion and lazy δ-unfolding** — Lean 4's battle-tested,
+heavily-scrutinised approach (consistent with Ken already adopting Lean's
+small-trusted-kernel model, ADR 0001): reduce only enough to expose a head,
+compare heads incrementally, and unfold a transparent definition (δ) **only when
+forced** (heads differ and at least one is transparent), preferring *not* to
+unfold. **Normalization by evaluation (NbE)** is the **declarative reference** —
+the meaning of "equal" — realised over a value domain of closures + neutrals
+that is **extended to compute the cubical operations**
+(`transp`/`hcomp`/`comp`/`Glue`/ `ua`/HITs), the part Lean's (non-cubical)
+kernel does not have. The reference read-back is:
 
 1. **Evaluate** each side into a semantic domain of **values** — weak-head
    normal forms with closures for binders and **neutrals** for stuck
@@ -82,9 +92,22 @@ The reference algorithm is **normalization by evaluation (NbE)** — the
    normal-form checks); η-long, δ-short normal forms are the reference output.
 
 The algorithm is **sound and complete** for definitional equality and
-**terminates** (§4). Implementations MAY use a different but equivalent strategy
-(e.g. WHNF-directed conversion with on-the-fly η); the observable equality MUST
-be identical, and NbE is the reference.
+**terminates** (§4). The **recommended implementation** is the **Lean-style
+lazy-WHNF + on-the-fly conversion** above (avoid full normalization; compare
+incrementally; unfold δ lazily); NbE read-back is the declarative reference and
+is used where a syntactic normal form is genuinely needed. The observable
+equality MUST be identical whichever way it is computed.
+
+**Where Ken deliberately does *not* follow Lean** (its *theory*, not its engine,
+fixed by other Ken decisions): `J` reduces on **non-`refl`** paths via the
+cubical rules (`15`, opposite of Lean's `Eq.rec`); **canonicity is kept** — Ken
+bakes in **no** canonicity-breaking classical axioms
+(`propext`/`Quot.sound`/choice), since computational univalence comes from
+cubical and the reflective prover (`../20-verification/23 §3`) relies on closed
+terms computing. Lean's **definitional proof irrelevance** depends on a
+primitive impredicative `Prop`, which Ken has **not** adopted (`OQ-Prop` open,
+derived Ω); if that proof irrelevance is later wanted, it is an argument to
+revisit `OQ-Prop`.
 
 **Fast paths (non-normative, for performance).** Because the runtime is
 content-addressed (`../40-runtime/41-values.md`), two closed terms with the same
