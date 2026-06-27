@@ -407,15 +407,40 @@ states what it cannot prove; the sibling models/tests/monitors it.
   One logic, two engines.
 - **Affects.** `70-behavioral/`, `20-verification/21`. **ADR 0006.**
 
-### OQ-export-ir — The assumption-boundary export schema
+### OQ-export-ir — The assumption-boundary export schema — **DECIDED**
 - **Fork.** The concrete schema of Ken's behavioral export (`Q` invariants, `P`
   assumptions, refinements-as-generators, effect alphabet, temporal
   obligations); ITF-compatible traces vs a Ken-native format.
-- **Recommendation.** Define the schema as the first `70-behavioral/`
-  deliverable; adopt **ITF** for the trace half (immediate Quint/Apalache
-  interop).
-- **Affects.** `70-behavioral/71`. **Why open.** First real design artifact of
-  the seam; needs the effect model (`OQ-8`) settled.
+- **Decision (operator, 2026-06-27, ADR 0006).** The export is an
+  **assume-guarantee contract**, **generated** from verified content (never
+  hand-authored, so it cannot overclaim — a projection of the four-way status).
+  Five parts: `guarantees Q` (proved), `assumptions P` (the `trusted_base_delta`
+  + explicit `assume`s + boundary labels), `alphabet Σ` (**= the
+  interaction-tree perform-node signatures**, `OQ-8` — reuse, not reinvention),
+  `obligations T` (the `Temporal` data, delegated), `generators G`. **Two
+  layers:** Ken-native for the propositional contract, **ITF** for traces.
+  Versioned + content-addressed + travels in provenance (`63`). **`G` carries
+  support structure only** — the equivalence-class partition, boundaries, and
+  case decomposition (derivable) — **never a sampling measure**;
+  invariant-exclusions ride `P`/`Q`, judgment-exclusions go to the sampling
+  policy (`OQ-sampling-policy`).
+- **Affects.** `70-behavioral/71` (drafted), `README`. **Recorded.**
+
+### OQ-sampling-policy — The test-sampling measure (Ward-side) — *deferred*
+- **Fork.** The *measure* over the valid state space for empirical testing
+  (likelihood / risk-cost weighting / soft exclusions) is human + environmental
+  judgment, not derivable. Where does it live and how is it authored?
+- **Decision (operator, 2026-06-27): outside Ken source, durably.** It is
+  **per-deployment** (the same Ken component needs a different measure as an
+  internal API vs. an external endpoint), so it belongs in the class of
+  deployment-adjacent artifacts (`Dockerfile`/Terraform), **not** in source. It
+  is a separately-authored **sampling policy** on `Ward`'s side, governed like
+  the security policy (`60-security/65`): distinct authoring role (QA/risk/
+  domain), versioned, attested in provenance ("tested under sampling policy
+  `vX`, coverage `Y`"). Ken's exported `G` partition is the **vocabulary** it
+  indexes. **Open (deferred):** the policy *language* + attestation interplay —
+  needs `Ward`'s sampler design (downstream).
+- **Affects.** `Ward` (sibling); `70-behavioral/71 §4` notes the seam.
 
 ### OQ-temporal — In-language temporal layer: data-only vs reasoning
 - **Fork.** Keep temporal logic as exported *data* only, or add a guarded/`▷`
@@ -469,6 +494,8 @@ states what it cannot prove; the sibling models/tests/monitors it.
 | **OQ-policy** | 2026-06-27 — **policy as code**: a mandatory, static, separately-authored security-policy surface **in Ken** (role separation, not a sibling); the lattice-parametric *instantiation*; non-weakenable; governance via supply-chain. | **ADR 0007** (recorded in `60-security/65`) |
 | **OQ-provenance** | 2026-06-27 — package = (source, artifact, .keni, proof-bundle, delta, provenance); consume = **re-check**; **keyless sigstore + in-toto/SLSA**; two ladders distinct; **+ policy attestation** (governing policy in provenance, monotone-compatible consume check). Impl deferred. | — (recorded in `60-security/63`) |
 | **OQ-classes** | 2026-06-27 — **property classes** (Ω) coherent for free; **structure classes** = **one canonical instance per (class, head-type)**, **orphans a hard error**, no overlap, ambiguity is an error; named instances are first-class values passed **explicitly** (the dependent escape hatch); search terminates. | **ADR 0008** (recorded in `30-surface/33`, `39`) |
+| **OQ-export-ir** | 2026-06-27 — export = **assume-guarantee contract**, **generated** from verified content (can't overclaim); five parts `Q`/`P`/`Σ`(=interaction-tree alphabet)/`T`/`G`; **Ken-native contract + ITF traces**; versioned/content-addressed/in provenance; **`G` = support structure only, never a measure**. | **ADR 0006** (recorded in `70-behavioral/71`) |
+| **OQ-sampling-policy** | 2026-06-27 — the test-sampling **measure** lives **outside Ken source, durably** (per-deployment; `Dockerfile`/Terraform class); a Ward-side **sampling policy** governed like the security policy; Ken's `G` partition is its vocabulary. Policy *language* deferred (needs Ward's sampler). | — (deferred; `70-behavioral/71 §4`) |
 
 When an OQ is decided, record it here and, if architecturally significant, write
 an ADR under `../docs/adr/` and update the affected chapters (replacing the OQ

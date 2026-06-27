@@ -54,9 +54,12 @@ Ken emits a stable artifact (the elaborator's behavioral export) carrying:
 | Stated temporal obligations (§4) | **LTL / μ-calculus** properties to model-check and to monitor |
 | The running implementation | instrumented **traces** validated against the model (trace conformance) |
 
-The trace half is **ITF-compatible** (Apalache/Quint's Informal Trace Format)
-for direct interop. The **exact schema is an open question** (`OQ-export-ir`,
-`../90-open-decisions.md`) — the first concrete deliverable of this area.
+The schema is **decided** (`OQ-export-ir`, ADR 0006): an **assume-guarantee
+contract**, *generated* from verified content (so it cannot overclaim),
+**Ken-native for the propositional parts** and **ITF-compatible for traces**
+(Apalache/Quint interop). Generators carry **support structure only — never a
+sampling measure**, which lives outside Ken source. Full schema in
+[`71-assumption-boundary.md`](71-assumption-boundary.md).
 
 ## 4. Temporal obligations as *data*, not kernel modalities
 
@@ -106,10 +109,10 @@ Specified in the sibling's own project; summarised here for the seam:
 
 | File | Subject |
 |---|---|
-| `71-assumption-boundary.md` | The export IR: `Q`/`P`/refinements/effects/temporal; schema; ITF traces |
+| `71-assumption-boundary.md` | The export IR: `Q`/`P`/refinements/effects/temporal; schema; ITF traces — **DRAFT** (`OQ-export-ir` decided) |
 | `72-temporal.md` | `Temporal` as deeply-embedded data; surface notation; LTL/μ-calculus encoding |
 | `73-conformance.md` | Trace emission, instrumentation, trace-conformance (does code refine the model?) |
 | `74-agentic.md` | Oracle-free outputs: metamorphic relations + RV watchdogs; the agent safety FSM |
 
-These are stubs pending `OQ-export-ir` and the sibling's bring-up; this README
-is the binding overview.
+`71` is drafted (the export schema); `72`–`74` are stubs pending the sibling's
+bring-up. This README is the binding overview.
