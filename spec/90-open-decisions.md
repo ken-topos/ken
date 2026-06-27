@@ -584,12 +584,18 @@ states what it cannot prove; the sibling models/tests/monitors it.
   recorded in the discharge attestation (`OQ-discharge-attestation`).
 - **Affects.** `70-behavioral/73` (drafted), `71 §1`, `README`. **Recorded.**
 
-### OQ-agentic-oracle — Oracle-free agent outputs
+### OQ-agentic-oracle — Oracle-free agent outputs — **DECIDED (scoped out)**
 - **Fork.** How to assure agent outputs with no propositional oracle.
-- **Recommendation.** **Metamorphic relations + RV watchdogs**; a default safety
-  envelope (the verifiable FSM the agent is a nondeterministic oracle inside).
-- **Affects.** `70-behavioral/74`. **Why open.** The distinctive agentic
-  surface.
+- **Decision (operator, 2026-06-27): not a Ken mechanism — it reduces to
+  already-decided machinery.** An embedded agent is a
+  **maximally-nondeterministic input** (the strongest `P`); assurance =
+  **constrain** (verified envelope = `62` capabilities + `61` IFC + contracts;
+  `proved`), **relate** (metamorphic = `OQ-relational`, oracle-free; test-gen
+  L2), **watch** (RV monitors = `73`/`72`). **Honesty boundary:**
+  safety/structural/relational assured, **quality never** — the envelope is
+  `proved`; agent output is `tested`/`delegated`/`unknown`. Ken builds nothing
+  new.
+- **Affects.** `70-behavioral/74` (drafted, boundary-statement). **Recorded.**
 
 ---
 
@@ -630,6 +636,7 @@ states what it cannot prove; the sibling models/tests/monitors it.
 | **OQ-9** | 2026-06-27 — **tail-resumptive only; multishot excluded** (positive choice). Expressiveness subsumed (generators / search-as-data / seam / interaction-tree denotation); `call/cc` uniquely adds unpredictability + breaks single-consumption WP (single-shot *simplifies* proofs). Footnote only if an unsubsumable need appears. | — (recorded in `30-surface/36 §5`) |
 | **OQ-1a** | 2026-06-27 — fixed-width overflow **obligation-generating by default** (proven ⇒ total; unproven ⇒ runtime check, so "checked" subsumed); **wrapping explicit** (`+%`/`Wrapping[T]`) for intended-modular domains, never silent. | — (recorded in `30-surface/35 §3`, `40-runtime/43`) |
 | **OQ-coalgebra** | 2026-06-27 — **excluded from core** (same reasoning as `OQ-9`); pragmatic wins subsumed by `visits` + `space`, reactive concerns are Ward's; harvest any win as a package, no core layer. | — (recorded in register; `02 §7`) |
+| **OQ-agentic-oracle** | 2026-06-27 — **scoped out (not a Ken mechanism)**: agent = maximal `P`; constrain (envelope = `61`/`62`) + relate (metamorphic = `OQ-relational`) + watch (RV = `73`). Safety assured, **quality never** (envelope `proved`; output `tested`/`delegated`/`unknown`). | **ADR 0006** (recorded in `70-behavioral/74`) |
 
 When an OQ is decided, record it here and, if architecturally significant, write
 an ADR under `../docs/adr/` and update the affected chapters (replacing the OQ

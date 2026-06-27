@@ -117,8 +117,7 @@ sharing one export and one logic** (`71 §1`, `73 §4`):
 | `71-assumption-boundary.md` | The export IR: `Q`/`P`/refinements/effects/temporal; schema; ITF traces — **DRAFT** (`OQ-export-ir` decided) |
 | `72-temporal.md` | `Temporal` as deeply-embedded data; surface notation; LTL/μ-calculus encoding — **DRAFT** (`OQ-temporal` decided) |
 | `73-conformance.md` | Ken's observability contract: `Σ`-event schema, correlation, runtime `Q`/`P`/`T`; engine/mode/response downstream — **DRAFT** (`OQ-conformance` decided) |
-| `74-agentic.md` | Oracle-free outputs: metamorphic relations + RV watchdogs; the agent safety FSM |
+| `74-agentic.md` | The boundary: Ken builds no agentic mechanism (envelope = `61`/`62`; metamorphic = `OQ-relational`; RV = `73`); safety assured, quality never — **DRAFT** (`OQ-agentic-oracle` decided) |
 
-`71`–`73` are drafted (export schema; temporal-as-data; the observability
-contract); `74` is a stub pending the sibling's bring-up. This README is the
-binding overview.
+`71`–`74` are drafted. The seam's Ken-side is complete; downstream engine
+details belong to the sibling's project. This README is the binding overview.
