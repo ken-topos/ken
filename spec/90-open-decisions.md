@@ -204,12 +204,25 @@ surfaced while drafting. Resolved items move to an ADR (`../docs/adr/`).
   (`02 §7`).
 - **Affects.** `30-surface/36`.
 
-### OQ-coinduction — Infinite data & productivity
+### OQ-coinduction — Infinite data & productivity — **DECIDED (deferred)**
 - **Fork.** Coinductive types + productivity checker vs. streams-as-functions
   with a fuel/size discipline.
-- **Recommendation.** **Defer**; total inductive core stands. Decide when
-  streaming becomes load-bearing.
-- **Affects.** `30-surface/37`, `40-runtime/43`.
+- **Decision (operator, 2026-06-27): inductive/total core — no coinductive
+  types, no productivity checker; deferred.** A productivity/guardedness checker
+  is real TCB growth (dual of SCT, the guarded-modal machinery `OQ-temporal`
+  declined). **Infinitude is routed away from the value layer:** a *total*
+  program's interaction tree is **finite** (reaches `Ret`); forever-running
+  processes are total per-message handlers + the runtime loop + Ward's temporal
+  model (`OQ-Space`, `OQ-temporal`). Streaming is served by **generators**,
+  **`Lazy` streams (fuel/depth-bounded)**, or the **seam** — finite-by-
+  construction, totality unchanged. "Defer" ≠ "cannot stream".
+- **Re-open trigger.** A concrete recurring need for first-class infinite values
+  or coinductive/bisimulation proofs the three idioms cannot serve → a
+  **contained sized-types/guardedness** discipline or a **deep-embedded
+  coinductive layer with reflective productivity**, never clock-modal kernel
+  growth.
+- **Affects.** `30-surface/37 §3` (updated), `40-runtime/43 §4` (updated).
+  **Recorded.**
 
 ---
 
@@ -578,6 +591,7 @@ states what it cannot prove; the sibling models/tests/monitors it.
 | **OQ-conformance** | 2026-06-27 — **reframed to Ken's half**: Ken emits a **trace/instrumentation contract** (concrete `Σ`-event schema at the effect boundary + correlation/identity for multi-space + runtime `Q`/`P`/`T` monitors), making the running system observable in the model's vocabulary. Export = **broadcast contract** to a family of engines; runtime monitor likely a **distinct sidecar**. Gate/monitor/both + response = downstream policy. | **ADR 0006** (recorded in `70-behavioral/73`) |
 | **OQ-relational** | 2026-06-27 — by-proof relational = **re-checked unary obligations** (product programs; reflective embedding if ever first-class), **progress-sensitive** default, heavy machinery **deferred**. **Constant-time split out**: a distinct **opt-in `@ct` label** enforced **by typing** (taint to leakage-effect sinks; sound 2-safety enforcement, no product programs); timing guarantee **delegated to Ward** under a leakage model; policy may require `@ct` per data class. | — (recorded in `60-security/61 §5a`, `30-surface/36`, `64`, `65`) |
 | **OQ-eval-order** | 2026-06-27 — **CBV (strict) with sharing, strict by default**; totality makes eval-order meaning-preserving so pick the predictable order (cost model, reading order, no space leaks; precondition for `@ct`/bounds). Laziness only where required (branches/short-circuit) or by explicit **`Lazy a`** thunk. Distinct from kernel lazy-WHNF conversion. | — (recorded in `40-runtime/42`) |
+| **OQ-coinduction** | 2026-06-27 — **inductive/total core, deferred**: no coinductive types/productivity checker (TCB growth `OQ-temporal` declined). Infinitude routed away from the value layer (total ITree is finite; forever = per-message handler + runtime loop + Ward). Streaming via generators / `Lazy` (fuel-bounded) / the seam — finite-by-construction. Re-open → contained sized-types or reflective deep embedding. | — (recorded in `30-surface/37`, `40-runtime/43`) |
 
 When an OQ is decided, record it here and, if architecturally significant, write
 an ADR under `../docs/adr/` and update the affected chapters (replacing the OQ

@@ -56,14 +56,26 @@ points, never silently:
 This is stronger than "tests pass" (L0) and honest about the boundary, which is
 the posture a *verified* language must take.
 
-## 4. Coinduction / productivity (OQ-coinduction)
+## 4. Coinduction / productivity (`OQ-coinduction` DECIDED — deferred)
 
 Infinite/streaming data (`../30-surface/37 §3`) needs **productivity** (each
-step makes progress), the dual of termination. Whether Ken includes coinductive
-types with a productivity checker, or models streams as functions with an
-explicit fuel/ size discipline, is **OQ-coinduction**
-(`../90-open-decisions.md`). The DRAFT does not commit; the total inductive core
-stands regardless.
+step makes progress), the dual of termination. **Decision (operator,
+2026-06-27): Ken's core is inductive/total — no coinductive types, no
+productivity checker.** A productivity/guardedness checker is real TCB growth
+(the dual of SCT, the same guarded-modal machinery `OQ-temporal` declined), and
+infinitude is **already routed away from the value layer**: the interaction-tree
+denotation of a *total* program is **finite** (it reaches `Ret`), and genuinely
+forever-running processes are total per-message handlers + the runtime loop +
+Ward's temporal model (`OQ-Space`, `OQ-temporal`). Streaming needs are met by
+**generators**, **`Lazy` streams with a fuel/depth bound**, or the **seam**
+(`../30-surface/37 §3`) — each **finite-by-construction** at every use, so the
+totality story is unchanged.
+
+**Re-open trigger.** A concrete, recurring need for first-class infinite
+*values* or coinductive/bisimulation proofs the three idioms cannot serve. The
+route then — consistent with `OQ-temporal`/`OQ-12` — is a **contained
+sized-types/guardedness discipline** or a **deep-embedded coinductive layer with
+reflective productivity**, never native clock-modal kernel growth.
 
 ## 5. What WS-X/WS-K must deliver here
 

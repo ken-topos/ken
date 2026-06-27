@@ -50,10 +50,24 @@
 - **Comprehensions / `for`** (if included) are sugar over the combinators
   (OQ-syntax). The semantic core is the combinators + recursion; no special
   iteration protocol is a kernel concept.
-- Lazy/streaming iteration (the prototype's missing `Stream.flatMap`/`bind`) is
-  a stdlib `Stream`/`Iterator` type, not a language primitive; totality of
-  stream consumers is the usual productivity concern (coinduction is
-  OQ-coinduction, `../90-open-decisions.md`).
+- **Streaming / infinite sequences (`OQ-coinduction` DECIDED — deferred).**
+  Ken's core is **inductive and total**; it has **no coinductive types and no
+  productivity checker** (that machinery is the dual of SCT and the
+  guarded-modal growth `OQ-temporal` already declined — deferred until a
+  concrete need the idioms below cannot serve). "Defer coinduction" does **not**
+  mean "cannot stream" — infinitude is served three ways, all available now:
+  - **Generators** — a finite-step, effectful producer (`view … visits [Yield]`,
+    the iterator idiom): each step terminates; the "ongoing" is the consumer's
+    loop, not an infinite value.
+  - **`Lazy a` streams** — an explicit lazy sequence built on the opt-in `Lazy`
+    thunk (`../40-runtime/42 §2`) with a **fuel / depth bound**: `take n`,
+    unfold-to-depth. Finite-by-construction at every use.
+  - **The behavioral seam** — a genuinely forever-running process is a `space`/
+    actor with a **total per-message handler** (`36 §4`, `OQ-Space`); the
+    "forever" lives in the runtime loop + Ward's temporal model
+    (`../70-behavioral/`, `OQ-temporal`), never in a Ken value. A stdlib
+    `Stream`/`Iterator` is thus a **library type over these idioms**, not a
+    language primitive.
 
 ## 4. Equality and ordering
 
