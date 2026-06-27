@@ -26,25 +26,31 @@ typed handles" workstream (which targets a non-problem):
 | Type | Meaning | Literal | Lowering (`41`) |
 |---|---|---|---|
 | **`Int`** | **arbitrary-precision** integer (default) | `42`, `0xFF` | small-int fast path `i64` + bignum overflow (§3) |
-| `Int64`, `Int32`, `UInt64`, … | fixed-width machine integers | `42 : Int64` | the named machine width |
-| **`Decimal`** | base-10 exact fixed/large decimal (money) | `3.14d` | a decimal struct (`{i128 coeff, i32 exp}` or sim.) |
+| **`Int8 Int16 Int32 Int64`** | native signed fixed-width integers | `42 : Int32` | `i8`/`i16`/`i32`/`i64` |
+| **`UInt8 UInt16 UInt32 UInt64`** | native unsigned fixed-width integers | `0xFF : UInt8` | `u8`/`u16`/`u32`/`u64` |
+| **`Decimal`** | base-10 exact decimal (money) — **core type** | `3.14d` | a decimal struct (`{i128 coeff, i32 exp}` or sim.) |
 | **`Float`** | IEEE-754 binary64 | `3.14`, `1e-9` | `f64` |
 | `Float32` | IEEE-754 binary32 | `1.5f32` | `f32` |
 | `Bool` | boolean | `true`/`false` | `i1` |
 | `Char` | Unicode scalar value | `'a'` | `u32` |
 
-- **`Int` is arbitrary-precision by default** (OQ-1 records the alternative of
-  fixed-64 default). Rationale: for a *verified* language, silent overflow is a
-  correctness hazard; arbitrary precision makes `a + b` mean addition, so
-  arithmetic specs (`a + b == b + a`, `../20-verification/`) hold without
-  overflow side-conditions. The implementation uses a small-integer fast path so
-  the common case is a machine word (`41 §numbers`); only values exceeding the
-  word grow.
-- **Fixed-width** integers (`Int64`, `UInt32`, …) are available where machine
-  semantics/representation are wanted (FFI, byte layout, performance); their
-  **overflow semantics are explicit** (§3).
-- **`Decimal`** is the money/exact-base-10 type (the prototype's `money` was an
-  f64 alias — Ken makes it exact). Distinct literal suffix `d`.
+- **`Int` is arbitrary-precision by default** (`OQ-int` **DECIDED** —
+  arbitrary-precision, not fixed-64). Rationale: for a *verified* language,
+  silent overflow is a correctness hazard; arbitrary precision makes `a + b`
+  mean addition, so arithmetic specs (`a + b == b + a`, `../20-verification/`)
+  hold without overflow side-conditions. The implementation uses a small-integer
+  fast path so the common case is a machine word (`41 §numbers`); only values
+  exceeding the word grow.
+- **Native fixed-width integers** — the full signed `Int8/Int16/Int32/Int64` and
+  unsigned `UInt8/UInt16/UInt32/UInt64` set are **first-class native types**
+  (`OQ-int` DECIDED), not an afterthought: they are the everyday currency of
+  **bitfields, wire/byte layout, and FFI interop with C ABIs**
+  (`../30-surface/38`). Their **overflow semantics are explicit** (§3); their
+  widths/signedness lower directly to the machine type.
+- **`Decimal` is a core, essential type** (`OQ-int` DECIDED) — exact base-10 for
+  money and any computation where binary floating point is wrong by construction
+  (the prototype's `money` was an f64 alias; Ken makes it exact). Literal suffix
+  `d`.
 - **`Float`** is IEEE-754, *honestly named*. It is **not** the universal value
   carrier and **not** the default for integer literals. Be explicit that ℝ does
   not embed faithfully in `Float` (the analysis's one fair caveat): `Float`

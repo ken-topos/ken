@@ -17,19 +17,18 @@ surfaced while drafting. Resolved items move to an ADR (`../docs/adr/`).
 
 ## A. Kernel & type theory
 
-### OQ-int — Integer type & precision *(digest fork 1; tag OQ-1)*
+### OQ-int — Integer type & precision *(digest fork 1; tag OQ-1)* — **DECIDED**
 - **Fork.** Is `Int` arbitrary-precision or fixed-64 by default? Is `Decimal` a
-  core type? Default overflow behaviour for fixed-width (tag OQ-1a).
-- **Options.** (a) arbitrary-precision `Int` default + fixed-width siblings; (b)
-  fixed-64 default + a separate bignum. Overflow: checked / wrapping /
-  obligation-generating.
-- **Recommendation (DRAFT).** Arbitrary-precision `Int` default (correctness
-  over silent overflow), small-int fast path; `Decimal` is core; fixed-width `+`
-  checked by default. *The one real numeric defect the analysis found — fix it
-  well.*
-- **Affects.** `30-surface/35`, `40-runtime/41`. **Why open.**
-  Perf/representation vs. correctness trade; the operator may want fixed-64
-  default for a systems feel.
+  core type? Which fixed-width integers are native? (Default overflow behaviour
+  for fixed-width remains open as `OQ-1a`.)
+- **Decision (operator, 2026-06-27).** `Int` is **arbitrary precision** (not
+  fixed-64), with a small-int fast path. `Decimal` is a **core, essential**
+  type. The **full fixed-width set is native**: signed `Int8/Int16/Int32/Int64`
+  and unsigned `UInt8/UInt16/UInt32/UInt64` (everyday for bitfields, wire/byte
+  layout, C-ABI FFI). Naming is the **verbose** form (`Int64`, not `I64`).
+- **Still open (`OQ-1a`).** The *default* overflow behaviour on fixed-width `+`
+  (checked / wrapping / obligation-generating). DRAFT: checked.
+- **Affects.** `30-surface/35` (updated), `40-runtime/41`, `30-surface/38`.
 
 ### OQ-eval-strategy — Kernel evaluation strategy *(digest fork 2)*
 - **Fork.** NbE vs. another reduction strategy for conversion.
@@ -275,7 +274,7 @@ are **fixed** by ADR 0004; only the mechanics below are open.
 
 | OQ | Decided | ADR |
 |---|---|---|
-| *(none yet — all DRAFT recommendations pending operator confirmation)* | | |
+| **OQ-int** | 2026-06-27 — arbitrary-precision `Int`; `Decimal` core; full native `Int8…Int64`/`UInt8…UInt64` (verbose names). `OQ-1a` (overflow default) still open. | — (recorded in `30-surface/35`) |
 
 When an OQ is decided, record it here and, if architecturally significant, write
 an ADR under `../docs/adr/` and update the affected chapters (replacing the OQ
