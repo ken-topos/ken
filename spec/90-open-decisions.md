@@ -155,14 +155,25 @@ surfaced while drafting. Resolved items move to an ADR (`../docs/adr/`).
 
 ## C. Surface language
 
-### OQ-syntax — Concrete syntax
+### OQ-syntax — Concrete syntax — **DECIDED (principles); table iterates**
 - **Fork.** Keyword set, layout-vs-braces, operator set, Unicode extent,
   visibility default — the whole concrete spelling.
-- **Recommendation.** The proposal in `30-surface/31`,`32` (layout with brace
-  fallback; `view`/`data`/`record`/`match`; Unicode + ASCII spellings).
-  **Bikeshed, deferred — not load-bearing.**
-- **Affects.** all of `30-surface/`. **Why open.** Taste + ergonomics; settle
-  with the team.
+- **Decision (operator, 2026-06-27): the *principles* are decided; the concrete
+  *token table* iterates with the team under them.** Because agents write and
+  humans read, the canonical form is **optimized for reading** (the typability
+  tax doesn't bind agent-written code): **(1)** rich notation that **matches
+  established CS/Math convention, never invents**; **(2)** a **total ASCII
+  transliteration** (write either; glyph carries zero extra info); **(3)** a
+  **single mandated formatter** canonicalizing ASCII → Unicode + layout (no
+  style latitude); **(4)** **keywords stay ASCII words**, notation reserved for
+  operators; **(5)** a **bounded, confusable-resistant** blessed set with lexer
+  normalization/rejection of Unicode look-alikes (TR39) — a *security* property
+  (the reviewer reads exactly what the kernel checks; no homoglyph backdoor,
+  `60-security/64`). A starter glyph↔ASCII table is in `30-surface/31 §1b`.
+- **Still iterating (team, under the principles):** the exact glyph for each
+  construct (notably `≡`-vs-`==` equality and the lattice-op/`ℓ` ASCII),
+  layout-vs-brace details, the keyword set, visibility default.
+- **Affects.** `30-surface/31 §1a/§1b` (updated), all of `30-surface/`.
 
 ### OQ-classes — Typeclass/instance coherence — **DECIDED**
 - **Fork.** Instance-resolution ambiguity & coherence policy (global uniqueness?
@@ -637,6 +648,7 @@ states what it cannot prove; the sibling models/tests/monitors it.
 | **OQ-1a** | 2026-06-27 — fixed-width overflow **obligation-generating by default** (proven ⇒ total; unproven ⇒ runtime check, so "checked" subsumed); **wrapping explicit** (`+%`/`Wrapping[T]`) for intended-modular domains, never silent. | — (recorded in `30-surface/35 §3`, `40-runtime/43`) |
 | **OQ-coalgebra** | 2026-06-27 — **excluded from core** (same reasoning as `OQ-9`); pragmatic wins subsumed by `visits` + `space`, reactive concerns are Ward's; harvest any win as a package, no core layer. | — (recorded in register; `02 §7`) |
 | **OQ-agentic-oracle** | 2026-06-27 — **scoped out (not a Ken mechanism)**: agent = maximal `P`; constrain (envelope = `61`/`62`) + relate (metamorphic = `OQ-relational`) + watch (RV = `73`). Safety assured, **quality never** (envelope `proved`; output `tested`/`delegated`/`unknown`). | **ADR 0006** (recorded in `70-behavioral/74`) |
+| **OQ-syntax** | 2026-06-27 — **principles decided** (canonical form optimized for *reading* since agents write / humans read): rich notation matching CS/Math convention + total ASCII transliteration + one mandated formatter + keywords-as-words + a bounded **confusable-resistant** set (TR39, a security property). Concrete token **table iterates** with the team. | — (recorded in `30-surface/31 §1a/§1b`) |
 
 When an OQ is decided, record it here and, if architecturally significant, write
 an ADR under `../docs/adr/` and update the affected chapters (replacing the OQ

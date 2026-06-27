@@ -1,18 +1,81 @@
 # Lexical structure
 
-> Status: **DRAFT v0**. Proposal-level (OQ-syntax). Tokens, identifiers,
-> literals, comments, and the layout rule. Spelling is revisable; the *token
-> categories* (especially the literal forms feeding `35-numbers.md`) are the
-> part that matters for downstream chapters.
+> Status: **DRAFT v0**. **`OQ-syntax` principles DECIDED** (operator,
+> 2026-06-27, §1a); the concrete *token table* below is a **starter** that
+> iterates with the team, now *governed by* those principles. The literal forms
+> feeding `35-numbers.md` are the part that most matters for downstream
+> chapters.
 
 ## 1. Source text
 
-- Source is **UTF-8**. Ken is Unicode-aware: identifiers and operators may use
-  non-ASCII letters and a curated set of mathematical symbols (so `→`, `×`, `∧`,
-  `Ω`, `≤`, `≠` can appear in source, matching the spec's notation). An ASCII
-  spelling exists for every such symbol (`->`, `*`/`×`, `/\`, `<=`, `/=`) so no
-  program *requires* a special keyboard (OQ-syntax: how much Unicode to bless).
+- Source is **UTF-8**. Ken is Unicode-aware: identifiers and operators may use a
+  **curated** set of mathematical symbols (so `→`, `×`, `∧`, `Ω`, `≤`, `≠`, `⊑`
+  appear in source, matching the spec's notation). An ASCII spelling exists for
+  every such symbol so no program *requires* a special keyboard (§1a).
 - Files use the extension `.ken`. Line endings are LF (CRLF tolerated).
+
+## 1a. Notation: read-optimized canonical Unicode (`OQ-syntax` DECIDED)
+
+Ken is **written by agents and read by humans**, so *writing* is cheap and
+*reading* is dear — which **inverts** the usual ASCII-because-humans-type
+tradeoff. Ken optimizes its **canonical form for reading**: the typability tax
+that binds mainstream languages does not bind a language whose writers are
+agents. Five principles (decided; the §2–§6 spellings are a starter under them):
+
+1. **Match established CS/Math notation; never invent.** The legibility win
+   comes from the reader's *existing training* — admit a glyph only if a
+   type-theory/ CS-educated reader already knows it (`→ × ∀ ∃ λ Σ Π Ω ⊢ ⊑ ⊔ ⊓ ¬
+   ∧ ∨ ∈ ≤ ≠ ≡ ℓ`). Decorative or novel glyphs are rejected — they *cost*
+   legibility with no convention to amortize.
+2. **A total ASCII transliteration.** Every notation token has a typeable ASCII
+   form (§1b). A human may write either; the glyph carries **zero** extra
+   information (round-trippable), so reading the ASCII loses nothing — the
+   exploration/self-learning affordance.
+3. **Formatter-canonicalized.** A **single mandated formatter** (gofmt-style)
+   normalizes ASCII → canonical Unicode and fixes layout on save. Because humans
+   read and agents write, **one canonical format** means the reader always sees
+   consistent notation — no style variance to parse. (No formatting latitude.)
+4. **Keywords stay ASCII words.** `view data record match space visits requires
+   ensures` are *names* — word-legibility beats symbol density, and they are
+   already typeable. Notation is reserved for *operators*, where a symbol
+   carries established meaning; Unicode-ifying keywords would be decoration.
+5. **Curated and confusable-resistant (a security property, not only
+   legibility).** The blessed set is **bounded** (a fixed table, not "any
+   Unicode"), and the lexer **normalizes/rejects Unicode confusables** (the TR39
+   security profile: `⊔`/`U`, `∨`/`v`, `×`/`x`, `ℓ`/`l`, Cyrillic look- alikes).
+   A reviewer must read **exactly** what the kernel checks — no homoglyph can
+   smuggle code past a human reader (`../60-security/64`). This makes the rich
+   notation *safe*, part of the "human reviews, kernel checks" integrity story.
+
+## 1b. Starter notation table (iterates with the team)
+
+Canonical glyph ↔ ASCII input, drawn from the notation the spec already uses.
+**Starter, not final** — the team tunes spellings against real code; the
+*principles* (§1a) are fixed. The ASCII fallback prefers an established TeX/CS
+digraph where one is unambiguous, else the spelled-out name.
+
+| Glyph | ASCII | Role |
+|---|---|---|
+| `→` | `->` | function type / arrow |
+| `λ` | `\` | anonymous function (named is `view`) |
+| `∀` | `forall` | universal quantifier (propositions) |
+| `∃` | `exists` | existential quantifier |
+| `Σ` `Π` | `Sigma` `Pi` | dependent sum / product (binders) |
+| `Ω` | `Omega` | strict-prop universe (`../10-kernel/12`) |
+| `≡` | `===` | propositional equality (`Eq`, `../10-kernel/15`) † |
+| `≤` `≥` `≠` | `<=` `>=` `/=` | comparison |
+| `¬` `∧` `∨` | `not` `/\` `\/` | logical connectives |
+| `∈` | `in` | membership |
+| `⊑` `⊔` `⊓` | `<:` `\/` `/\` | IFC lattice flows-to / join / meet (`../60-security/61`) ‡ |
+| `×` | `><` | product type |
+| `ℓ` | `level` / `l` | universe level / label (context-disambiguated) ‡ |
+
+† Equality notation is the load-bearing fine choice: `≡` propositional vs. `==`
+boolean `DecEq` (`33 §5`) must stay distinct (Lean/Agda convention); `=` is
+**binding only**. The exact ASCII for `≡` (`===` vs. a named form) is a team
+call. ‡ The lattice-op ASCII (`⊑`/`⊔`/`⊓`) and the `ℓ` overload (level vs.
+label) are the other genuinely-contested cells — flagged for the team, not fixed
+here.
 
 ## 2. Tokens
 
