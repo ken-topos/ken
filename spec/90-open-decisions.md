@@ -356,7 +356,7 @@ surfaced while drafting. Resolved items move to an ADR (`../docs/adr/`).
 
 ## F. Research-track (never core; strategy WS-R)
 
-### OQ-coalgebra — The coalgebraic layer *(digest fork 15)* — **DECIDED (excluded)**
+### OQ-coalgebra — The coalgebraic layer *(fork 15)* — **DECIDED (excluded)**
 - **Fork.** Pursue Store-comonad cells/lenses, process coalgebras +
   bisimulation, profunctor wires, co-Heyting boundaries — at all?
 - **Decision (operator, 2026-06-27): not in the core — same reasoning as
