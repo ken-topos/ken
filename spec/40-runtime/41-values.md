@@ -50,7 +50,9 @@ The reality-check's key correction: content addressing is **conventional**.
   canonical byte encoding, with **`memcmp`** to resolve hash collisions exactly.
   Slot ids are a **monotonic counter**. (A cryptographic/Merkle hash is used for
   *serialization/verification*, `../30-surface/38 §1` — a separate concern from
-  in-process addressing; OQ-hash picks the exact functions.)
+  in-process addressing). **`OQ-hash` DECIDED:** a fast non-cryptographic hash +
+  `memcmp` in-process, a cryptographic/Merkle hash for serialization — two
+  hashes, two jobs; the exact functions are an X2 constant.
 - **No Leech-lattice quantizer, no Co₀-orbit canonicalization on the allocation
   path.** The analysis's "heap addressing is Leech-lattice geometry" is refuted;
   Ken MUST NOT put lattice math on the hot path. (The lattice's *legitimate*,
@@ -77,14 +79,14 @@ runtime property the prototype's heap provides and Ken keeps:
   two agree on closed first-order data but the proof story does not depend on
   the heap.
 
-## 5. Which values are content-addressed (OQ-7)
+## 5. Which values are content-addressed (`OQ-7` DECIDED)
 
-The DRAFT: **scalars are immediate**; **compound/identity-bearing values are
-content-addressed**. The exact boundary — e.g. are small tuples interned? are
-closures interned by code+env hash? — is **OQ-7** (`../90-open-decisions.md`),
-with the equality story stated per case (slot-equality for interned, native for
-immediate). The principle is fixed: cheap things stay immediate; shared/compared
-things are interned.
+**Decided (operator, 2026-06-27):** **scalars are immediate**;
+**compound/identity-bearing values are content-addressed**, with the equality
+story per case (slot-equality for interned, native for immediate). The principle
+is fixed — cheap things stay immediate; shared/compared things are interned —
+and the **exact small-aggregate boundary** (are tiny tuples interned? closures
+by code+env hash?) is an **empirical X2 tuning**, not a semantic commitment.
 
 ## 6. The `unknown` value
 
@@ -100,15 +102,15 @@ an open verification hole, `../20-verification/24 §2`):
   (`../20-verification/21 §5`). A fully-verified program never produces
   `unknown` from holes (it has none).
 
-## 7. Introspection (extensional-safe)
+## 7. Introspection (extensional-safe) (`OQ-witness` DECIDED)
 
-The runtime MAY expose **process-level** statistics — slots used, dedup rate,
-arena bytes, a Merkle root — as a first-class, **extensional-safe** facility
-(the analysis's `witness`, addressing a real gap: the prototype has C-level
-introspection but no surface primitive). It MUST NOT expose **per-value identity
-or provenance** (which slot a value occupies, allocation order), as that would
-break referential transparency. Stats about the *store*, yes; identity of
-*values*, no.
+**Decided (operator, 2026-06-27):** the runtime MAY expose **process-level**
+statistics — slots used, dedup rate, arena bytes, a Merkle root — as a
+first-class, **extensional-safe** facility (the analysis's `witness`, addressing
+a real gap: the prototype has C-level introspection but no surface primitive).
+It **MUST NOT** expose **per-value identity or provenance** (which slot a value
+occupies, allocation order), as that would break referential transparency. Stats
+about the *store*, yes; identity of *values*, no.
 
 ## 8. What WS-X must deliver here (X1/X2)
 

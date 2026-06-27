@@ -1,10 +1,14 @@
 # The content store: capacity, reclamation, and the lattice
 
 > Status: **DRAFT v0**. Normative for the *principles* (loud refusal, dedup
-> accounting, no-lattice-on-the-hot-path); the exact capacity bound and whether
-> to include the lattice machinery at all are **OQ-5/OQ-6**. Contract for WS-X
-> **X2/X4**. Encodes the reality-check's biggest structural correction: the
-> Leech-lattice numbers are *aesthetic*, not load-bearing (digest §5).
+> accounting, no-lattice-on-the-hot-path). **`OQ-5`/`OQ-6`/`OQ-gc` DECIDED**
+> (operator, 2026-06-27): **engineering-chosen** capacity (wide handles → no
+> practical ceiling) with **loud refusal**; the **lattice machinery out of the
+> core** (optional research packages only); **reclamation a semantics-invisible
+> implementation detail** (manual+region now, automatic GC addable later without
+> touching surface or semantics — deferred). Contract for WS-X **X2/X4**.
+> Encodes the reality-check's biggest structural correction: the Leech-lattice
+> numbers are *aesthetic*, not load-bearing (digest §5).
 
 ## 1. The store
 
@@ -24,12 +28,12 @@ lattice Λ₂₄ — and 256 heaps/chain (an 8-bit heap id + 24-bit slot), givin
 **Ken's stance:** choose any capacity bound on **engineering grounds** (encoding
 width, arena sizing, target scale), *not* lattice numerology.
 
-- The DRAFT keeps the **"loud refusal over silent degradation"** *philosophy* —
-  at a limit, fail loudly with a clear error; never silently drop, alias, or
-  corrupt — while leaving the **actual bound** to X2/X4 (e.g. a 32- or 48-bit
-  slot field for billions of values, sized to the hardware). **OQ-5** records
-  this; the bound is "deliberate and loud" (strategy G5-perf), whatever its
-  value.
+- **`OQ-5` DECIDED:** keep the **"loud refusal over silent degradation"**
+  philosophy — at a limit, fail loudly with a clear error; never silently drop,
+  alias, or corrupt — with **no practical ceiling** (wide handles: a 48-/64-bit
+  slot field for billions+, sized to the hardware). The exact width is an X2/X4
+  constant; the *stance* — deliberate, loud, no Leech ceiling (strategy G5-perf)
+  — is permanent.
 - Dedup means real consumption is **one slot per distinct value**, not per
   occurrence — capacity is in *distinct* values, an important accounting point
   for any bound chosen.
@@ -40,10 +44,15 @@ width, arena sizing, target scale), *not* lattice numerology.
   append-mostly store keeps slots stable for fast ids and O(1) equality.
 - **Manual reclamation exists** — `clear`/`reset`/`strip`-style operations
   release an arena's pages (e.g. `madvise(MADV_DONTNEED)`); a `space`/region
-  boundary (`../30-surface/36 §4`) bounds a working set's lifetime. Whether Ken
-  later adds automatic reclamation (refcount/GC for the content heap) is
-  **OQ-gc**; the DRAFT is manual + region-scoped, which suits the immutable,
-  dedup'd model.
+  boundary (`../30-surface/36 §4`) bounds a working set's lifetime.
+- **Automatic reclamation is a deferred implementation detail (`OQ-gc`
+  DECIDED).** Start **manual + region-scoped** (suits the immutable, dedup'd
+  model). Adding automatic refcount/GC later is a **well-demonstrated benefit at
+  modest cost** and — crucially — **invisible to the language surface and
+  semantics** (values are immutable and identity is content; reclaiming an
+  unreachable slot changes nothing observable). So it collapses to an
+  implementation choice the runtime may adopt when working sets demand it,
+  **without a language fork**.
 
 ## 4. The lattice machinery — three separate optional roles (OQ-6)
 
@@ -62,8 +71,10 @@ includes any of it, it is scoped to these and **never** the hot path:
 - The unverified doc claim of specific Co₀ orbit cardinalities
   (98280/8386560/8292375) is **not** carried as fact (digest §5b); if such a
   facility is built, those are to be computed/verified, not assumed.
-- **OQ-6** records whether to build any of this at all (the DRAFT: not in the
-  core; available as research/optional packages, strategy WS-R).
+- **`OQ-6` DECIDED:** the lattice machinery is **not in the core** — available
+  only as research/optional packages (strategy WS-R), **never on the allocation
+  hot path**. This is the final break with the prototype's central aesthetic
+  conceit (the reality-check's biggest structural correction).
 
 ## 5. Scale and limits validation (X4)
 

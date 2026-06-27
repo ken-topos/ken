@@ -228,42 +228,52 @@ surfaced while drafting. Resolved items move to an ADR (`../docs/adr/`).
 
 ## D. Runtime & representation
 
-### OQ-7 — Content-addressed boundary *(digest fork 7)*
+### OQ-7 — Content-addressed boundary *(digest fork 7)* — **DECIDED**
 - **Fork.** Exactly which values are interned (small tuples? closures by
   code+env hash?) vs. immediate, and the per-case equality story.
-- **Recommendation.** Scalars immediate; compound/identity-bearing interned; the
-  small-aggregate boundary tuned in X2.
-- **Affects.** `40-runtime/41`.
+- **Decision (operator, 2026-06-27).** **Scalars immediate; compound/identity-
+  bearing interned**, equality per case (slot-equality interned, native
+  immediate). The principle is fixed; the **small-aggregate boundary is an
+  empirical X2 tuning**, not semantics.
+- **Affects.** `40-runtime/41 §5` (updated).
 
-### OQ-hash — Addressing & hashing functions
+### OQ-hash — Addressing & hashing functions — **DECIDED**
 - **Fork.** Exact in-process hash (FNV-1a vs. other), collision strategy, and
   the separate serialization/Merkle hash.
-- **Recommendation.** Fast non-cryptographic hash + `memcmp` in-process (**not**
-  lattice geometry); a cryptographic/Merkle hash for serialization.
-- **Affects.** `40-runtime/41`, `44`.
+- **Decision (operator, 2026-06-27).** **Two hashes, two jobs:** a fast
+  **non-cryptographic hash + `memcmp`** in-process (**not** lattice geometry); a
+  **cryptographic/Merkle** hash for serialization (`63`). The exact functions
+  are an X2 constant.
+- **Affects.** `40-runtime/41 §3` (updated), `44`.
 
-### OQ-5 — Heap capacity bound *(digest fork 5)*
+### OQ-5 — Heap capacity bound *(digest fork 5)* — **DECIDED**
 - **Fork.** Keep the Λ₂₄-derived 196,560 ceiling vs. an engineering-chosen
   bound.
-- **Recommendation.** **Engineering-chosen** (wider slot field for billions),
-  with the **loud-refusal** philosophy kept. The Leech number is aesthetic, not
-  load-bearing.
-- **Affects.** `40-runtime/44`.
+- **Decision (operator, 2026-06-27).** **Engineering-chosen, no practical
+  ceiling** (wide 48-/64-bit handles for billions+), **loud refusal** kept as a
+  permanent stance; the Leech number is aesthetic. Exact width is an X2/X4
+  constant.
+- **Affects.** `40-runtime/44 §2` (updated).
 
-### OQ-6 — Leech/Golay/Co₀ machinery *(digest fork 6)*
+### OQ-6 — Leech/Golay/Co₀ machinery *(digest fork 6)* — **DECIDED**
 - **Fork.** Include the lattice math at all, and if so in which of its three
   *separate* roles (Golay EC lists; kissing-number bitmap; Co₀
   canonicalization)?
-- **Recommendation.** **Not in the core**; available as optional research
-  packages, never on the allocation hot path.
-- **Affects.** `40-runtime/44`, `50-stdlib`.
+- **Decision (operator, 2026-06-27).** **Not in the core** — optional research
+  packages only (WS-R), never on the allocation hot path. The final break with
+  the prototype's central aesthetic conceit.
+- **Affects.** `40-runtime/44 §4` (updated), `50-stdlib`.
 
-### OQ-gc — Reclamation
+### OQ-gc — Reclamation — **DECIDED (deferred impl detail)**
 - **Fork.** Manual/region reclamation only vs. adding automatic GC/refcount for
   the content heap.
-- **Recommendation.** **Manual + region-scoped** (suits the immutable dedup
-  model); revisit if working sets demand it.
-- **Affects.** `40-runtime/44`.
+- **Decision (operator, 2026-06-27).** **Manual + region-scoped** now. Automatic
+  GC is a **well-demonstrated benefit at modest cost** and **invisible to the
+  language surface and semantics** (immutable values + content identity ⇒
+  reclaiming an unreachable slot changes nothing observable), so it **collapses
+  to a deferred implementation detail** the runtime may adopt when working sets
+  demand — **no language fork**.
+- **Affects.** `40-runtime/44 §3` (updated).
 
 ### OQ-eval-order — Strictness — **DECIDED**
 - **Fork.** Strictness vs. laziness for `let`/data fields (observable values
@@ -319,12 +329,14 @@ surfaced while drafting. Resolved items move to an ADR (`../docs/adr/`).
 - **Affects.** `30-surface/36 §4` (updated), `20-verification/21 §4` (`old`),
   `40-runtime/`, `60-security/62`, `70-behavioral/`.
 
-### OQ-witness — Surface runtime introspection *(digest fork 16)*
+### OQ-witness — Surface runtime introspection *(digest fork 16)* — **DECIDED**
 - **Fork.** Expose process-level heap stats / Merkle root (extensional-safe) —
   and the exact surface.
-- **Recommendation.** **Yes**, process-level stats only; **never** per-value
-  identity/provenance (would break referential transparency).
-- **Affects.** `40-runtime/41 §7`.
+- **Decision (operator, 2026-06-27).** **Process-level stats only** (slots,
+  dedup rate, arena bytes, Merkle root) as an extensional-safe `witness`
+  facility; **never** per-value identity/provenance/address — that would let a
+  program observe sharing and break **referential transparency**.
+- **Affects.** `40-runtime/41 §7` (updated).
 
 ---
 
@@ -592,6 +604,12 @@ states what it cannot prove; the sibling models/tests/monitors it.
 | **OQ-relational** | 2026-06-27 — by-proof relational = **re-checked unary obligations** (product programs; reflective embedding if ever first-class), **progress-sensitive** default, heavy machinery **deferred**. **Constant-time split out**: a distinct **opt-in `@ct` label** enforced **by typing** (taint to leakage-effect sinks; sound 2-safety enforcement, no product programs); timing guarantee **delegated to Ward** under a leakage model; policy may require `@ct` per data class. | — (recorded in `60-security/61 §5a`, `30-surface/36`, `64`, `65`) |
 | **OQ-eval-order** | 2026-06-27 — **CBV (strict) with sharing, strict by default**; totality makes eval-order meaning-preserving so pick the predictable order (cost model, reading order, no space leaks; precondition for `@ct`/bounds). Laziness only where required (branches/short-circuit) or by explicit **`Lazy a`** thunk. Distinct from kernel lazy-WHNF conversion. | — (recorded in `40-runtime/42`) |
 | **OQ-coinduction** | 2026-06-27 — **inductive/total core, deferred**: no coinductive types/productivity checker (TCB growth `OQ-temporal` declined). Infinitude routed away from the value layer (total ITree is finite; forever = per-message handler + runtime loop + Ward). Streaming via generators / `Lazy` (fuel-bounded) / the seam — finite-by-construction. Re-open → contained sized-types or reflective deep embedding. | — (recorded in `30-surface/37`, `40-runtime/43`) |
+| **OQ-7** | 2026-06-27 — scalars **immediate**, compound/identity-bearing **interned** (equality per case); small-aggregate boundary an **X2 tuning**, not semantics. | — (recorded in `40-runtime/41`) |
+| **OQ-hash** | 2026-06-27 — **two hashes**: fast non-crypto + `memcmp` in-process; crypto/Merkle for serialization (`63`). Exact functions an X2 constant. | — (recorded in `40-runtime/41`) |
+| **OQ-5** | 2026-06-27 — **engineering-chosen capacity, no practical ceiling** (wide handles), **loud refusal** permanent; Leech number aesthetic. | — (recorded in `40-runtime/44`) |
+| **OQ-6** | 2026-06-27 — Leech/Golay/Co₀ machinery **out of the core**, optional research packages only, never the hot path — the final break with the prototype's lattice conceit. | — (recorded in `40-runtime/44`) |
+| **OQ-gc** | 2026-06-27 — manual + region-scoped now; **automatic GC a deferred implementation detail** (semantics-invisible — addable later with no language fork). | — (recorded in `40-runtime/44`) |
+| **OQ-witness** | 2026-06-27 — **process-level stats only** (extensional-safe `witness`); **never** per-value identity/provenance (referential transparency). | — (recorded in `40-runtime/41`) |
 
 When an OQ is decided, record it here and, if architecturally significant, write
 an ADR under `../docs/adr/` and update the affected chapters (replacing the OQ
