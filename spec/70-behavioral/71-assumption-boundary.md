@@ -99,12 +99,66 @@ rides the existing **`P`/`Q`** channels (tightening the support, where Ken can
 low-risk") is a **measure** decision (weight ≈ 0) and belongs to the sampling
 policy. Ken handles the first kind already; it stays silent on the second.
 
-## 5. What WS-L / the seam must deliver
+## 5. Seam soundness — one-way flow & translation faithfulness
+
+Ken is intuitionistic/total/constructive; `Ward`'s engines are classical
+(model-checkers decide truth in a model). The seam composes the two **soundly**
+and **legibly** by three commitments (`OQ-classical-bridge`).
+
+**One-way flow (Ken → Ward), strictly.** Ken *exports* obligations `T` and
+assumptions `P`; `Ward` discharges them by classical means; **results never
+re-enter Ken as proof terms.** A depth-`k` model-check is not a proof for all
+`N`; a green monitor is not a proof. So a discharged obligation stays
+`delegated`/`tested` in the four-way status (`../20-verification/21 §5`) and
+rides in `trusted_base_delta` — it is **never promoted to `proved`**. This is a
+deliberate choice for **human legibility** as much as soundness: consumers read
+one direction of flow, not a bidirectional logic.
+
+**Soundness by assume-guarantee construction.** Every Ken theorem is conditional
+— "**given** `P`, **then** `Q`" — and that implication is intuitionistically
+valid and kernel-checked *regardless of how `P` is later discharged*. Because
+Ken never imports `Ward`'s conclusion, no classical strength leaks into the
+kernel; the classical discharge of `P` is a separate, lower-trust artifact (the
+discharge attestation, below). Where the obligation is *decidable/finite-state*,
+classical and intuitionistic truth coincide anyway (a decision procedure gives
+`P ∨ ¬P` constructively, `../20-verification/23 §2`); where it is unbounded, it
+is an honest assumption.
+
+**Translation faithfulness — the Ken-checked half.** `Ward` consumes a
+model-checker input, not Ken's datatype, so a translation `τ` mediates; an
+*unfaithful* `τ` (a green check on a spec that doesn't match the code) is worse
+than none. `τ` splits:
+
+- **Property translation** `compile : Temporal Σ → WardFormula` (`72 §3`). Both
+  sides are syntax over the same alphabet `Σ`, so Ken proves `compile`
+  **semantics-preserving once, at the compiler level** — `⟦φ⟧ = ⟦compile φ⟧`
+  over `Σ`-traces, an ordinary structural induction (the "reason *about*
+  formulas" power, `72 §2`). Required, but **amortized to zero per obligation**
+  — every delegated property reuses the one lemma. This is the exact analog of
+  the prover's Kripke-adequacy lemma (`../20-verification/23 §4`).
+- **Model translation** — the transition system `Ward` explores corresponds to
+  the program's denoted behaviors. Ken's contribution is *structural*: the model
+  is **generated** from the code (`Σ` *is* the perform-node signatures; the
+  state machine derives from the space semantics), so authoring drift is
+  impossible by construction. The residual concrete-vs-abstract gap is the
+  **conformance** story (`73`) plus an honest assumption — not a single Ken
+  proof.
+
+**The one trust edge, pinned.** The faithfulness proof is *relative to an
+axiomatized `Ward` semantics*; that `Ward` *implements* it is the one explicit,
+version-bounded assumption — **pinned as the `Ward` version in the discharge
+attestation** (`../60-security/63 §5a`). The attestation is therefore not
+bureaucracy: it is the anchor of the faithfulness argument.
+
+## 6. What WS-L / the seam must deliver
 
 The export emitter in `ken-elaborator`: the five-part contract (§2) projected
 from verified content; the Ken-native serialization plus the ITF trace layer
-(§3); content-addressing + provenance embedding; and the `G` support-structure
-extraction (§4) with an explicit *no-measure* invariant. Acceptance: the export
-is reproducible from the checked program (same code → same export hash); it
-never asserts a claim Ken did not prove or state; a removed assumption shows up
-as a changed `P`. Conformance: `../../conformance/behavioral/export/`.
+(§3); content-addressing + provenance embedding; the `G` support-structure
+extraction (§4) with an explicit *no-measure* invariant; the one-way-flow +
+`delegated`-status discipline (§5); and the compiler-level faithfulness lemma
+for `compile` (§5). Acceptance: the export is reproducible from the checked
+program (same code → same export hash); it never asserts a claim Ken did not
+prove or state; a removed assumption shows up as a changed `P`; no `Ward` result
+is ever recorded as `proved`. Conformance:
+`../../conformance/behavioral/export/`.

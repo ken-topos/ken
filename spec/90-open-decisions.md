@@ -462,13 +462,39 @@ states what it cannot prove; the sibling models/tests/monitors it.
   **never** kernel modalities.
 - **Affects.** `70-behavioral/72` (drafted), `README`. **Recorded.**
 
-### OQ-classical-bridge — Intuitionistic↔classical refinement mapping
+### OQ-classical-bridge — Intuitionistic↔classical seam — **DECIDED**
 - **Fork.** Ken's logic is intuitionistic/total/static; the model-checkers are
   classical/temporal. Which direction does refinement flow, and is the mapping
   itself a Ken-checked artifact?
-- **Recommendation.** Treat the embedding like `OQ-12`'s — prefer a *checked*
-  mapping where feasible; precedent exists (Coq+TLA refinement).
-- **Affects.** `70-behavioral/`, `20-verification/23`.
+- **Decision (operator, 2026-06-27, ADR 0006).** **Strictly one-way (Ken →
+  Ward).** Ken exports obligations + assumptions; Ward discharges them; results
+  **never re-enter Ken as proofs** (never promoted to `proved`) — for human
+  legibility as much as soundness. **Sound by assume-guarantee construction:**
+  Ken proves `Q ⊣ P`, kernel-checked, intuitionistically valid however `P` is
+  later discharged; no classical strength leaks in (and on
+  decidable/finite-state obligations the gap vanishes anyway).
+- **Translation faithfulness (the Ken-checked half).** `τ` splits: **property
+  translation** `compile : Temporal Σ → WardFormula` is proved
+  semantics-preserving **once, at the compiler level** (amortized to zero per
+  obligation; the analog of the Kripke-adequacy lemma, `20-verification/23 §4`);
+  **model translation** is structural — the model is *generated* from code (no
+  authoring drift) + conformance (`OQ-conformance`) + an honest assumption. The
+  one trust edge (Ward implements the axiomatized semantics) is **pinned as the
+  Ward version in the discharge attestation** (`OQ-discharge-attestation`).
+- **Affects.** `70-behavioral/71 §5`, `20-verification/23 §7`. **Recorded.**
+
+### OQ-discharge-attestation — Post-build validation artifact — *deferred*
+- **Fork.** How to represent "the delegated obligations were discharged by Ward"
+  as a first-class compliance artifact (vs. text logs + coverage XML).
+- **Decision (operator, 2026-06-27): a signed, runtime-checkable discharge
+  attestation** (`60-security/63 §5a`) carrying (1) the Ken export answered
+  (hash), (2) the Ward policy used (hash+version), (3) optional sampling
+  choices/ coverage, (4) the per-obligation four-way outcome, (5) a signature
+  incl. Ward version — so a **deployment gate** enforces that an artifact
+  carries the post-build validation its **target environment** requires. Same
+  governance ladder as the policy attestation (`65`). **Open (deferred):** the
+  concrete schema + gate semantics — needs Ward's runner.
+- **Affects.** `60-security/63 §5a`, `65`; `70-behavioral/`.
 
 ### OQ-conformance — Trace conformance: gate, monitor, or both
 - **Fork.** Is implementation-refines-model conformance a CI gate, a production
@@ -508,6 +534,8 @@ states what it cannot prove; the sibling models/tests/monitors it.
 | **OQ-export-ir** | 2026-06-27 — export = **assume-guarantee contract**, **generated** from verified content (can't overclaim); five parts `Q`/`P`/`Σ`(=interaction-tree alphabet)/`T`/`G`; **Ken-native contract + ITF traces**; versioned/content-addressed/in provenance; **`G` = support structure only, never a measure**. | **ADR 0006** (recorded in `70-behavioral/71`) |
 | **OQ-sampling-policy** | 2026-06-27 — the test-sampling **measure** lives **outside Ken source, durably** (per-deployment; `Dockerfile`/Terraform class); a Ward-side **sampling policy** governed like the security policy; Ken's `G` partition is its vocabulary. Policy *language* deferred (needs Ward's sampler). | — (deferred; `70-behavioral/71 §4`) |
 | **OQ-temporal** | 2026-06-27 — **data-only, durably**: no kernel temporal modalities; `Temporal` is inert inductive data, stated + exported + delegated to Ward. Boundary: Ken reasons **about** formulas, **not with** modalities. Unbounded liveness → contained reflective model, never kernel modalities. | **ADR 0006** (recorded in `70-behavioral/72`) |
+| **OQ-classical-bridge** | 2026-06-27 — **strictly one-way (Ken → Ward)**; Ward results never promoted to `proved`; sound by **assume-guarantee** (`Q ⊣ P`); **translation faithfulness** Ken-checked **once at the compiler level** (analog of Kripke adequacy) + generated-model + conformance; trust edge pinned as Ward version in the discharge attestation. | **ADR 0006** (recorded in `70-behavioral/71 §5`, `20-verification/23`) |
+| **OQ-discharge-attestation** | 2026-06-27 — post-build validation = a **signed, runtime-checkable discharge attestation** (export hash + Ward policy + optional sampling + per-obligation four-way outcome + Ward-version signature); a **deployment gate** enforces per-target-environment validation; policy-attestation ladder. Schema deferred (needs Ward's runner). | — (deferred; `60-security/63 §5a`) |
 
 When an OQ is decided, record it here and, if architecturally significant, write
 an ADR under `../docs/adr/` and update the affected chapters (replacing the OQ

@@ -175,6 +175,20 @@ obligation on the prover's construction and (4) is a quality property. The
 trusted base (`../10-kernel/18 §5`) gains **nothing** from the prover — Z3/cvc5
 are never trusted.
 
+**Two classical bridges, not one (contrast with the Ward seam).** This chapter's
+bridge uses a classical solver to discharge an obligation **here, with a kernel
+certificate** — the result becomes `proved`. The downstream **behavioral seam**
+(`../70-behavioral/71`) also runs a classical engine under Ken's logic, but its
+results are **not re-checkable as Ken proofs** (a depth-`k` model-check is not a
+proof for all `N`; a green monitor is not a proof). So that bridge is
+**one-way** (`OQ-classical-bridge`): Ken exports obligations + assumptions, Ward
+discharges them, and the outcome returns as a signed **discharge attestation**
+(`../60-security/63 §5a`) tagged `delegated`/`tested` — **never promoted to
+`proved`**. Soundness is by *assume-guarantee construction* (Ken proves `Q ⊣ P`;
+the discharge of `P` is a separate, lower-trust artifact), and the strong,
+*Ken-checked* part is **translation faithfulness** (`../70-behavioral/71 §5`),
+the exact analog of §4's adequacy lemma — proved once at the compiler level.
+
 ## 8. What WS-V must deliver here (V3)
 
 The classifier (D/FO/HO); reflective decision for D + SMT search/reconstruction;

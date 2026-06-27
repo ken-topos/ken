@@ -133,6 +133,39 @@ origin ladder.
 *(Implementation sequences after the core toolchain; this fixes the shape and
 the standards.)*
 
+## 5a. The discharge attestation (post-build validation)
+
+Provenance (§5) attests **origin** and Ken's proofs attest **correctness**; a
+third artifact attests **post-build validation** — that the behavioral
+obligations Ken *delegated* (`../70-behavioral/71`) were actually discharged by
+the sibling (`Ward`). In enterprise compliance "the tests ran and passed" is
+already a required artifact; Ken/`Ward` replace text logs + coverage XML with a
+**signed, runtime-checkable discharge attestation** carrying:
+
+1. **The Ken export answered** — content-hash of the `71` assume-guarantee
+   contract (`Q`/`P`/`Σ`/`T`/`G`). Binds the attestation to exactly what was
+   asked.
+2. **The `Ward` policy used** — the sampling policy (`OQ-sampling-policy`) and
+   model/monitor config, by hash + version.
+3. **(optional) sampling choices** — seeds, coverage achieved, equivalence
+   classes exercised (the reproducibility/coverage record).
+4. **The discharge result** — per obligation (Ken-delegated `T` *and*
+   policy-inferred/explicit), the honest four-way outcome: discharged /
+   bounded-to-`k` / monitored / failed.
+5. **A signature** — `Ward` version + the above, keyless-signed (§5), so a
+   **deployment gate** can enforce that an artifact carries the post-build
+   validation its **target environment requires** (an external endpoint may
+   demand a stricter discharge than the same binary going internal —
+   `OQ-sampling-policy`'s per-deployment measure realized at the gate).
+
+The pinned `Ward` version (5) is load-bearing, not bureaucratic: Ken's
+translation-faithfulness proof (`../70-behavioral/71 §5`) holds *relative to* an
+axiomatized `Ward` semantics, and this pin is the one explicit, version-bounded
+assumption that `Ward` implements it. The attestation is governed on the same
+ladder as the policy attestation (`65 §`): same keyless signing, same provenance
+transport, runtime-enforceable. Concrete schema is
+**`OQ-discharge-attestation`** (deferred — needs `Ward`'s runner).
+
 ## 6. The registry (ecosystem governance — above the language)
 
 A package registry enforces what the language cannot: **namespace ownership**
