@@ -315,19 +315,43 @@ These are sub-decisions *within* committed security goals — the commitments
 themselves (IFC intrinsic, least authority, re-check-on-consume, honest limits)
 are **fixed** by ADR 0004; only the mechanics below are open.
 
-### OQ-ifc — Information-flow label model
-- **Fork.** The security-label model: a fixed level lattice vs. a principal-set
-  decentralised label model (DLM) vs. fully user-defined lattices; labels as
-  first-class values, type indices, or both; the static **discipline** giving
-  non-interference *by typing* (DCC/sealing-calculus style) vs. relational
-  *proof* obligations for it.
-- **Recommendation.** Commit to a **lattice + upward-only flow + audited
-  declassification + non-interference** (fixed); start with a **principal/level
-  lattice** and a **by-typing** discipline (the scalable default), adding
-  relational proof (`OQ-relational`) for bespoke/quantitative claims. Labels
-  ride the indexed-effect machinery (`OQ-8`), **no kernel enlargement**.
-- **Affects.** `60-security/61`, `30-surface/36`. **Why open.** Several viable
-  label models; the choice trades expressiveness vs. inference/ergonomics.
+### OQ-ifc — Information-flow label model — **DECIDED**
+- **Fork.** Fixed level lattice vs. principal-set DLM vs. user-defined; labels
+  as values vs. type indices vs. both; non-interference by typing vs. by proof.
+- **Decision (operator, 2026-06-27).** The discipline is **lattice-parametric**:
+  non-interference proved **once for any bounded lattice** (so the fixed/DLM/
+  user-defined split dissolves — all are instances). **Standard lattice = DLM**
+  (confidentiality = readers, integrity = endorsers; levels as sugar,
+  compartments as products). Labels **static type indices by default**
+  (erasable; annotate the interaction-tree `perform` nodes, `OQ-8`), with
+  **first-class labels at audited boundaries** for **data-derived
+  classification** — tag at ingestion (a trusted, capability-gated, audited
+  point), carry as `∃ℓ. A@ℓ` statically, one runtime check at the sink (covers
+  per-tenant routing); **full dynamic/faceted IFC excluded** ("better is the
+  enemy of good"). **By-typing** non-interference is the default;
+  bespoke/quantitative → `OQ-relational`. The concrete lattice/
+  classifications/clearances/edges come from a **separately-authored policy**
+  (`OQ-policy`). **No kernel enlargement.**
+- **Affects.** `60-security/61` (updated), `65`, `30-surface/36`,
+  `70-behavioral/`.
+
+### OQ-policy — Security policy as code *(new; ADR 0007)* — **DECIDED**
+- **Fork.** Does Ken need a separately-authored policy surface so security/
+  compliance specify enforced policy orthogonal to implementation — and is it in
+  Ken or a sibling?
+- **Decision (operator, 2026-06-27, ADR 0007).** **Yes — a mandatory, static,
+  separately-authored policy surface *in Ken* (not a sibling).** Role
+  separation, not engine separation: enforced by Ken's own checker. A policy
+  supplies the
+  lattice/classifications/clearances/declassification-edges/ingestion-points
+  (`65 §2`), **bound program-wide and non-weakenable** (relabel/over-clear =
+  compile error). It is the **instantiation** of the lattice-parametric
+  discipline → **no metatheory/kernel cost**. Org-scale governance rides
+  supply-chain attestation (`63`).
+- **Still open (within `OQ-policy`).** Concrete policy **syntax**; **binding**
+  (per package/build/deploy) and **composition** (org→team→service,
+  **monotone-tightening only**); version/attestation interplay.
+- **Affects.** `60-security/65` (new), `63`, `61`. **ADR 0007.**
 
 ### OQ-relational — Relational / 2-safety verification
 - **Fork.** How relational properties (non-interference, **constant-time**) are
@@ -429,6 +453,8 @@ states what it cannot prove; the sibling models/tests/monitors it.
 | **OQ-behavioral** | 2026-06-27 — downstream complement is a **sibling** (`Ward`) fed by an assumption-boundary export; temporal obligations as **data, not kernel modalities**; one logic, two engines. | **ADR 0006** |
 | **OQ-8 / OQ-8a** | 2026-06-27 — static effect **rows** (`visits`), pure by default; **layered encoding** authority(tokens)/denotation(interaction-tree)/spec(WP) into a pure kernel; handlers tail-resumptive only; capabilities = static value tokens (attenuable/revocable/audited). Stateful verification → `OQ-Space`. | — (recorded in `30-surface/36`) |
 | **OQ-Space** | 2026-06-27 — encapsulated non-aliased `space` cells → **bounded per-space Hoare, no separation logic**; **`old` scoped to space ops** (resolves `OQ-spec` deferral); **shared-nothing message-passing** (in-Ken), content-addressed transport; runtime realization → `40-runtime`; concurrent/temporal correctness **delegated to Ward**; FFI shared memory is the (unsafe) exception. | — (recorded in `30-surface/36 §4`); ADR when `40-runtime` settles |
+| **OQ-ifc** | 2026-06-27 — **lattice-parametric** non-interference (proved once, any lattice); **DLM** standard; static type-index labels + first-class **boundary** labels for data-derived classification (per-tenant), no full dynamic IFC; by-typing default; lattice supplied by policy. | — (recorded in `60-security/61`) |
+| **OQ-policy** | 2026-06-27 — **policy as code**: a mandatory, static, separately-authored security-policy surface **in Ken** (role separation, not a sibling); the lattice-parametric *instantiation*; non-weakenable; governance via supply-chain. | **ADR 0007** (recorded in `60-security/65`) |
 
 When an OQ is decided, record it here and, if architecturally significant, write
 an ADR under `../docs/adr/` and update the affected chapters (replacing the OQ

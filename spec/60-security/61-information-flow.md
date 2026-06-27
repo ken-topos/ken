@@ -43,12 +43,19 @@ compartments / data-residency regions for compliance). `ℒ` is an ordinary
 lattice value in Ken (Ken has Heyting/lattice structure natively,
 `../10-kernel/12 §5`), so **no new kernel primitive is introduced** to host it.
 
-> **(OQ-ifc)** The exact label model — fixed level lattice vs. principal-set
-> (decentralised label model, DLM-style) vs. fully user-defined lattices;
-> whether labels are first-class values, type indices, or both — is open. The
-> *commitment* (a lattice + upward-only flow + audited declassification +
-> non-interference) is fixed; the model is `OQ-ifc` in
-> `../90-open-decisions.md`.
+> **(OQ-ifc) — DECIDED (operator, 2026-06-27).** The **discipline is
+> lattice-parametric**: non-interference (§5) is proved **once, for any bounded
+> lattice `ℒ`** — so the concrete lattice is a *policy* choice (`65-policy.md`),
+> not baked into the metatheory, and "fixed levels vs principal-sets vs
+> user-defined" dissolves (all are instances). The **standard lattice is the
+> decentralised label model (DLM)** — confidentiality = the set of principals a
+> value is readable-by, integrity = the dual (endorsers) — with `Public ⊑
+> Internal ⊑ Secret` as totally-ordered **sugar** and compartments /
+> data-residency regions as **products**. Labels are **static type indices by
+> default** (erasable, by-typing) with **first-class label values admitted at
+> boundaries** for data-derived classification (§3). The concrete lattice,
+> classifications, clearances, and declassification edges are supplied by a
+> **separately-authored policy** (`65-policy.md`, ADR 0007).
 
 ## 3. Labeled values and labeled effects (riding the effect machinery)
 
@@ -81,6 +88,41 @@ monad `T_ℓ`/`Labeled ℓ` in the DCC (Dependency Core Calculus) lineage.
 The effect row therefore evolves from *what a function may do* to *what may flow
 where*: a function's type is simultaneously its **capability manifest** and its
 **flow manifest**.
+
+**Where labels live (riding the decided machinery).** Concretely, a label
+**annotates each `perform` node of the interaction-tree denotation** (`OQ-8`,
+`../30-surface/36 §2`) — so the same structure that carries effects and
+authority carries flow, and non-interference is a property of the *labeled
+tree*. Labels are **erasable type indices** (zero runtime cost) in the common
+case. Across spaces, **shared-nothing messages carry labels** (`OQ-Space`,
+`../30-surface/36 §4`): cross-space flow is checked at `send` against the
+receiving space's clearance — **distributed IFC** for free — and Ward may
+monitor labeled message events at runtime (`../70-behavioral/`).
+
+### Data-derived classification — static by default, dynamic at the boundary
+
+Most classification is **static** (policy- or source-determined; §`65-policy`)
+and costs nothing at runtime. But real systems also classify **from data at
+runtime** — e.g. per-tenant isolation: *"customer X's records go only to bucket
+X."* Ken supports this **minimally**, not via full dynamic IFC:
+
+- **Tag at ingestion.** A boundary reads the datum's compartment (the tenant)
+  and assigns a label — a **first-class label value** — producing `A @
+  Tenant[X]`. The label is then carried **statically** through the computation
+  as an **existential** `∃ ℓ. A @ ℓ`; only the *value* of `ℓ` is dynamic.
+- **Check at the sink.** Writing `@ Tenant[X]` to a sink whose policy clearance
+  is `Tenant[Y]` is a flow violation — so misrouting to the wrong bucket is
+  caught by the channel rule (§3), with a **single runtime label comparison**
+  where two dynamic labels meet. The static majority pays nothing.
+- **Ingestion is a trusted, audited point.** Asserting "this record *is*
+  Tenant[X]" is a classification, not a proof — so it is **capability-gated and
+  audited**, the dual of declassification (§4), and only **policy-sanctioned**
+  ingestion points may classify (`65-policy`).
+
+Deliberately **excluded**: faceted execution / pervasive runtime taint / dynamic
+lattices (full dynamic IFC). That power is not worth its cost for the cases Ken
+targets — *better is the enemy of good*. Ken pays for dynamism only at the
+boundary where the data actually demands it.
 
 ## 4. Declassification — the only downgrade, explicit and audited
 
@@ -184,15 +226,22 @@ enforced by construction instead of by scanning.
 
 ## 8. What is committed vs. open
 
-- **Committed (intrinsic to Ken):** a label lattice (confidentiality +
-  integrity); labeled types/effects extending the effect discipline; upward-only
-  flow; channel/sink clearances; declassification as the sole, explicit,
-  capability-gated, audited downgrade; non-interference as the guarantee; no
-  kernel enlargement.
-- **Open:** `OQ-ifc` (label model + first-class-value vs. type-index);
-  `OQ-relational` (how relational claims are proved; termination/progress
-  sensitivity). These are sub-decisions *within* the committed design, in
-  `../90-open-decisions.md`.
+- **Committed + decided (`OQ-ifc`):** a **lattice-parametric** discipline (non-
+  interference proved once for any bounded `ℒ`); the **DLM** standard lattice
+  (levels as sugar, compartments as products); labeled types/effects riding the
+  interaction-tree denotation; **static type-index labels** by default with
+  **first-class labels at audited boundaries** for data-derived classification;
+  upward-only flow; channel/sink clearances; **declassification** as the sole,
+  explicit, capability-gated, audited downgrade; **non-interference** as the
+  guarantee; **no kernel enlargement**. The concrete lattice/classifications/
+  clearances/edges are supplied by a **separately-authored policy**
+  (`65-policy.md`, `OQ-policy`, ADR 0007).
+- **Still open:** `OQ-relational` — how relational/2-safety claims are *proved*
+  (self-composition / product programs vs. relational refinement types vs. a
+  dedicated logic) and whether the default is termination-sensitive. **Deferred
+  and decided with `64`/constant-time** (both are relational over a hidden
+  channel — shared foundation). The **by-typing** default (§5.1) needs none of
+  it.
 
 ## 9. What WS-V / WS-L must deliver here
 

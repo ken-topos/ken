@@ -19,7 +19,7 @@ shape, the design principles, scope/non-goals, and the glossary.
 | Surface language | `30-surface/` | Lexer, grammar, modules, data/`match`, numbers, effects, FFI, elaboration |
 | Runtime | `40-runtime/` | Value model, content-addressed heap, reference operational semantics, termination, capacity |
 | Stdlib | `50-stdlib/` | Prelude and core library shape |
-| **Security** (tier-1) | `60-security/` | Threat model, information-flow control, capabilities/authority, supply-chain, the trust model + honest limits |
+| **Security** (tier-1) | `60-security/` | Threat model, information-flow control, capabilities/authority, supply-chain, the trust model, **policy-as-code** + honest limits |
 | **Behavioral** (seam) | `70-behavioral/` | What Ken can't prove but must state: the assumption-boundary export to the sibling (`Ward`); proved/tested/delegated/unknown; temporal-as-data (ADR 0006) |
 | Open decisions | `90-open-decisions.md` | Unresolved design forks (for the operator) |
 
