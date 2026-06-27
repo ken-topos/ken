@@ -12,7 +12,7 @@ it is also how the Spec enclave cross-checks the spec against the prototype
 ```
 conformance/
   kernel/        — 10-kernel/ behaviors (universes, pi-sigma, inductive,
-                   identity, cubical, conversion, judgments)
+                   identity, observational, conversion, judgments)
   verify/        — 20-verification/ (spec-syntax, obligations, prover,
                    diagnostics, protocol)
   surface/       — 30-surface/ (lexical, grammar, declarations, data-match,

@@ -5,11 +5,11 @@
 > later chapter disagree, the chapter wins and this overview is to be corrected.
 
 Ken is an **MIT-licensed, Rust-hosted, interpreter-first verified topos
-language**. It exposes a dependent + cubical type theory at the surface,
-discharges correctness obligations automatically where it can, and makes proof
-*failures* legible to both humans and agents — so that a program can be written
-*and proved correct* at commercial scale, on top of a small auditable trust
-root.
+language**. It exposes a dependent type theory with observational equality at
+the surface, discharges correctness obligations automatically where it can, and
+makes proof *failures* legible to both humans and agents — so that a program can
+be written *and proved correct* at commercial scale, on top of a small auditable
+trust root.
 
 This specification is what Ken's implementation is built against. It descends
 from the design ideas explored for an AGPLv3 prototype but is a **clean-room**
@@ -110,10 +110,12 @@ Two invariants govern this shape:
 
 ## 4. Design principles
 
-1. **Small, permanent, auditable trust root.** The kernel — core dependent +
-   cubical type theory, decidable conversion, the proof checker — stays small
-   and in Rust forever (Lean's C++-kernel model). The elaborator and prover
-   build on top and may self-host later; the kernel does not.
+1. **Small, permanent, auditable trust root.** The kernel — core dependent type
+   theory with observational equality, decidable conversion, the proof checker —
+   stays small and in Rust forever (Lean's C++-kernel model). The smaller
+   observational core (no cubical machinery, ADR 0005) makes this trust root
+   smaller still. The elaborator and prover build on top and may self-host
+   later; the kernel does not.
 2. **Soundness from day one.** Universes are checked (no `Type:Type`); `Sigma`
    is genuinely dependent; `J` reduces on non-`refl` paths; conversion is
    decidable and certified. The prototype's documented soundness gaps are
@@ -150,8 +152,8 @@ Two invariants govern this shape:
 **In scope, at full rigor (unblocks the build spine):**
 
 - The **trusted kernel**: core syntax, universes, Π/Σ, inductive types,
-  identity/`J`, the cubical layer, definitional equality and decidable
-  conversion, the typing judgment and kernel API (`10-kernel/`).
+  identity/`J`, the observational equality layer, definitional equality and
+  decidable conversion, the typing judgment and kernel API (`10-kernel/`).
 - The **verification surface**: specification syntax, obligation generation, the
   prover architecture, diagnostics, and the machine-readable protocol
   (`20-verification/`).
@@ -227,8 +229,9 @@ cite the spec section they pin.
 - **Π / Σ** — dependent function and dependent pair types (`10-kernel/13`).
 - **Identity type / `J`** — propositional equality and its eliminator
   (`10-kernel/15`).
-- **Cubical** — the interval-based presentation of paths that makes transport,
-  composition, `Glue`, and univalence *compute* (`10-kernel/16`).
+- **Observational equality** — `Eq` computed by recursion on the type, with a
+  `cast` transport that makes `J`/`subst` *compute* on non-`refl` equalities;
+  funext/UIP definitional, set-level, no univalence (`10-kernel/16`, ADR 0005).
 - **Definitional vs propositional equality** — the kernel's decidable conversion
   vs. equality one must prove (`10-kernel/17`).
 - **Obligation / verification condition (VC)** — a proposition whose proof

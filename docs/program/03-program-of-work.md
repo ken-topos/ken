@@ -20,9 +20,9 @@ writing Ken implementation code work from specs, not from prototype source.
 
 A **work package (WP)** is the unit of assignable work below: one reviewable
 deliverable owned by a single team, with a stable ID (e.g. `K1`), a one-line
-objective, scope, deliverables, acceptance criteria, dependencies, size
-(S/M/L), and risk (★). One WP = one branch `wp/<ID>-<slug>` and one PR (a short
-series for an `L`). WPs are the nodes of the dependency graph; the roadmap gates
+objective, scope, deliverables, acceptance criteria, dependencies, size (S/M/L),
+and risk (★). One WP = one branch `wp/<ID>-<slug>` and one PR (a short series
+for an `L`). WPs are the nodes of the dependency graph; the roadmap gates
 (G0–G8, `02-roadmap.md`) are checkpoints over sets of them.
 
 Lifecycle: **proposed** (in this catalog) → **ready** (deps merged, open
@@ -36,65 +36,62 @@ The **Steward** owns this catalog and cross-team sequencing — decompose, size,
 sequence, track, close. The operator sets scope and priority; the Architect
 advises on technical decomposition; team leaders pull *ready* WPs and run them
 through the ring, proposing any newly-discovered WPs back to the Steward rather
-than starting unsequenced work. See `../../agent/playbooks/federation/steward.md`.
+than starting unsequenced work. See
+`../../agent/playbooks/federation/steward.md`.
 
 ---
 
 ## WS-F — Foundations & clean-room process (Phase 0, always-on)
 
 ### F1 — Name, license, repo, IP hygiene · S · ★
-**Objective.** Stand up the new project cleanly.
-**Scope.** Choose the name + check basic trademark availability; MIT `LICENSE`;
-Rust workspace skeleton (kernel / elaborator / interpreter / cli crates);
-contribution rules and a written **clean-room process** (who may read AGPL source,
-how knowledge crosses to implementers via specs/tests only); attribution file for
-permissive deps. Stand up the **git workspace** per `04-git-and-integration.md`:
-the shared-clone worktree layout, the single **publisher** identity, and branch
-protection (`../ops/github-setup.md`, ADR 0003).
-**Deliverables.** Repo, license, `CLEAN-ROOM.md`, `CONTRIBUTING.md`, the
-worktree/publisher dev-setup, branch protection configured.
-**Acceptance.** A new contributor can read the process and know exactly what
-they may and may not look at; license is MIT; CI builds an empty workspace; a
-`wp/<ID>` branch the publisher pushes is gated by required checks before merge.
-**Deps.** none.
+**Objective.** Stand up the new project cleanly. **Scope.** Choose the name +
+check basic trademark availability; MIT `LICENSE`; Rust workspace skeleton
+(kernel / elaborator / interpreter / cli crates); contribution rules and a
+written **clean-room process** (who may read AGPL source, how knowledge crosses
+to implementers via specs/tests only); attribution file for permissive deps.
+Stand up the **git workspace** per `04-git-and-integration.md`: the shared-clone
+worktree layout, the single **publisher** identity, and branch protection
+(`../ops/github-setup.md`, ADR 0003). **Deliverables.** Repo, license,
+`CLEAN-ROOM.md`, `CONTRIBUTING.md`, the worktree/publisher dev-setup, branch
+protection configured. **Acceptance.** A new contributor can read the process
+and know exactly what they may and may not look at; license is MIT; CI builds an
+empty workspace; a `wp/<ID>` branch the publisher pushes is gated by required
+checks before merge. **Deps.** none.
 
 ### F2 — Spec extraction from the prototype · L · ★★
 **Objective.** The legal-safe bridge: turn prototype *behavior* into a written
-spec Ken is implemented against.
-**Scope.** From study of the prototype + running it + its regression
-*behaviors*, write: core type-theory spec (terms, types, evaluation,
-conversion, universes), surface-language spec (syntax, modules, effects), and a
-**conformance test corpus** (input → expected behavior) that does not embed AGPL
-source. Mark every area where Ken will deliberately diverge (e.g. `Int` from day
-one, checked universes, no hard slot ceiling).
-**Deliverables.** `spec/` (language spec docs) + `conformance/` (black-box tests).
-**Acceptance.** The spec covers the core end-to-end; conformance tests run against
-the prototype binary as an oracle and pass; no AGPL source text appears in `spec/`
-or `conformance/`.
-**Deps.** F1. **Feeds.** all of WS-K, WS-V, WS-L.
+spec Ken is implemented against. **Scope.** From study of the prototype +
+running it + its regression *behaviors*, write: core type-theory spec (terms,
+types, evaluation, conversion, universes), surface-language spec (syntax,
+modules, effects), and a **conformance test corpus** (input → expected behavior)
+that does not embed AGPL source. Mark every area where Ken will deliberately
+diverge (e.g. `Int` from day one, checked universes, no hard slot ceiling).
+**Deliverables.** `spec/` (language spec docs) + `conformance/` (black-box
+tests). **Acceptance.** The spec covers the core end-to-end; conformance tests
+run against the prototype binary as an oracle and pass; no AGPL source text
+appears in `spec/` or `conformance/`. **Deps.** F1. **Feeds.** all of WS-K,
+WS-V, WS-L.
 
 ### F3 — Architecture Decision Records · S · ★
 **Objective.** Record decisions with rationale so teams don't relitigate.
 **Scope.** ADRs for the locked decisions (Rust host, interpreter-first, small
 permanent Rust kernel, deferred self-host) and the open ones: **content store**
-(keep a hard capacity bound at all? — the prototype's 196,560 Λ₂₄ slot ceiling is
-not categorically motivated; recommend an unbounded/large content-addressed store,
-lattice retained only for error-correction + set-bitmap roles), concrete syntax,
-effect-tracking model, and whether to keep a Space/process-isolation model.
-**Deliverables.** `docs/adr/*.md`.
-**Acceptance.** Every Phase-0/1 design choice has an ADR; open decisions have a
-recommendation + decision owner.
+(keep a hard capacity bound at all? — the prototype's 196,560 Λ₂₄ slot ceiling
+is not categorically motivated; recommend an unbounded/large content-addressed
+store, lattice retained only for error-correction + set-bitmap roles), concrete
+syntax, effect-tracking model, and whether to keep a Space/process-isolation
+model. **Deliverables.** `docs/adr/*.md`. **Acceptance.** Every Phase-0/1 design
+choice has an ADR; open decisions have a recommendation + decision owner.
 **Deps.** F1. **Parallel.** F2, F4.
 
 ### F4 — Math core decision · M · ★★
-**Objective.** Settle the content-addressing + any lattice math.
-**Scope.** Decide reuse `mmgroup` (BSD-2, attribution) vs. reimplement the pieces
-Ken actually needs; design the content-addressed equality (hash + verify) and
-dedup index. Resolve the F3 content-store ADR with a concrete design.
-**Deliverables.** Math-core design doc + a chosen dependency or a reimplementation
-plan.
-**Acceptance.** Content-addressing design is specified and benchmarked at small
-scale; license provenance of any reused math is clean.
+**Objective.** Settle the content-addressing + any lattice math. **Scope.**
+Decide reuse `mmgroup` (BSD-2, attribution) vs. reimplement the pieces Ken
+actually needs; design the content-addressed equality (hash + verify) and dedup
+index. Resolve the F3 content-store ADR with a concrete design.
+**Deliverables.** Math-core design doc + a chosen dependency or a
+reimplementation plan. **Acceptance.** Content-addressing design is specified
+and benchmarked at small scale; license provenance of any reused math is clean.
 **Deps.** F1. **Parallel.** F2, F3.
 
 ---
@@ -102,100 +99,92 @@ scale; license provenance of any reused math is clean.
 ## WS-K — Trusted kernel in Rust (Phase 1) ★ TRUST ROOT
 
 ### K1 — Core dependent type theory · L · ★★★
-**Objective.** The small, correct, permanent kernel core.
-**Scope.** Terms/types; **dependent** Pi, **dependent** Sigma, Id, J/path
-induction; universes **with stratification checking from day one** (no
-`Type:Type`); the cubical machinery Ken commits to (decide scope in F2/F3 —
-transport/comp/hcomp/Glue/HITs as warranted). Keep it minimal and auditable.
-**Spec source (understand, don't copy).** Prototype kernel behaviors, via the
-`/spec` Team Spec produces.
-**Deliverables.** `kernel` crate core + property tests.
-**Acceptance.** A universe loop is rejected; dependent Sigma type-checks; J
-reduces over a non-`refl` path; the conformance core subset passes.
-**Deps.** F2, F3. **Note.** Highest-trust WP; small surface area is a feature.
+**Objective.** The small, correct, permanent kernel core. **Scope.**
+Terms/types; **dependent** Pi, **dependent** Sigma; observational equality `Eq`,
+`cast`, derived `J` (computes on non-`refl`); the strict-prop Ω; set-quotients +
+propositional truncation; universes **with stratification checking from day
+one** (no `Type:Type`). No cubical machinery (ADR 0005). Keep it minimal and
+auditable. **Spec source (understand, don't copy).** Prototype kernel behaviors,
+via the `/spec` Team Spec produces. **Deliverables.** `kernel` crate core +
+property tests. **Acceptance.** A universe loop is rejected; dependent Sigma
+type-checks; J reduces over a non-`refl` path; the conformance core subset
+passes. **Deps.** F2, F3. **Note.** Highest-trust WP; small surface area is a
+feature.
 
 ### K2 — Proof checker & decidable conversion · L · ★★★
-**Objective.** The judgement that makes a proof valid.
-**Scope.** Conversion/definitional equality with **size-change termination**
-gating δ-unfolding (decidable, no fuel/heuristics); the closed-term proof checker
-(the thing the prover backend's certificates are checked against).
-**Deliverables.** Checker + conversion in `kernel`; termination tests (inverse
-functions accepted, `g(x)=x+1` rejected, certified-recursive normalizes,
-non-terminating not admitted as a δ-rule).
-**Acceptance.** Conversion is decidable and certified; a closed proof obligation
-checks; bad proofs are rejected.
-**Deps.** K1. **Parallel.** K3.
+**Objective.** The judgement that makes a proof valid. **Scope.**
+Conversion/definitional equality with **size-change termination** gating
+δ-unfolding (decidable, no fuel/heuristics); the closed-term proof checker (the
+thing the prover backend's certificates are checked against). **Deliverables.**
+Checker + conversion in `kernel`; termination tests (inverse functions accepted,
+`g(x)=x+1` rejected, certified-recursive normalizes, non-terminating not
+admitted as a δ-rule). **Acceptance.** Conversion is decidable and certified; a
+closed proof obligation checks; bad proofs are rejected. **Deps.** K1.
+**Parallel.** K3.
 
 ### K3 — Content-addressed value model · M · ★★
-**Objective.** Values with structural O(1) equality and global dedup.
-**Scope.** Implement the F4 design: content hash + verify, global dedup index,
-the value representation (heterogeneously typed from day one — `Int`, float,
-bool, handles, structs; no uniform-number model). No hard capacity ceiling unless
-F3 decides otherwise.
-**Deliverables.** `value`/runtime-core module + tests.
+**Objective.** Values with structural O(1) equality and global dedup. **Scope.**
+Implement the F4 design: content hash + verify, global dedup index, the value
+representation (heterogeneously typed from day one — `Int`, float, bool,
+handles, structs; no uniform-number model). No hard capacity ceiling unless F3
+decides otherwise. **Deliverables.** `value`/runtime-core module + tests.
 **Acceptance.** Identical content shares one slot; equality is one comparison on
-the handle; dedup is global; no precision-losing integer model.
-**Deps.** F4. **Parallel.** K1.
+the handle; dedup is global; no precision-losing integer model. **Deps.** F4.
+**Parallel.** K1.
 
 ---
 
 ## WS-V — Verification surface (Phase 2) ★ DIFFERENTIATOR
 
 ### V0 — Minimal elaborator · M · ★★
-**Objective.** Surface → kernel, enough for the vertical slice.
-**Scope.** Parser for a minimal surface; elaboration to kernel terms; the glue for
-the G1 slice.
-**Deliverables.** `elaborator` crate (minimal) + parse/elaborate tests.
-**Acceptance.** A trivial program elaborates and kernel-checks.
-**Deps.** K1. **Parallel.** X1.
+**Objective.** Surface → kernel, enough for the vertical slice. **Scope.**
+Parser for a minimal surface; elaboration to kernel terms; the glue for the G1
+slice. **Deliverables.** `elaborator` crate (minimal) + parse/elaborate tests.
+**Acceptance.** A trivial program elaborates and kernel-checks. **Deps.** K1.
+**Parallel.** X1.
 
 ### V1 — Surface specification syntax · M · ★★
-**Objective.** Let a programmer attach propositions to functions.
-**Scope.** `ensures` postconditions, refinements on arrow domain/codomain,
-standalone goals over Id/Pi; desugar to kernel obligations. This is the
-"becomes a distinct language" commitment — design the vocabulary deliberately.
-**Deliverables.** Grammar + AST + desugaring + a doc page.
-**Acceptance.** A spec annotation parses, type-checks the spec itself, and emits a
-well-formed kernel obligation; no grammar ambiguity.
-**Deps.** V0. **Parallel.** L1.
+**Objective.** Let a programmer attach propositions to functions. **Scope.**
+`ensures` postconditions, refinements on arrow domain/codomain, standalone goals
+over Id/Pi; desugar to kernel obligations. This is the "becomes a distinct
+language" commitment — design the vocabulary deliberately. **Deliverables.**
+Grammar + AST + desugaring + a doc page. **Acceptance.** A spec annotation
+parses, type-checks the spec itself, and emits a well-formed kernel obligation;
+no grammar ambiguity. **Deps.** V0. **Parallel.** L1.
 
 ### V2 — Obligation generation & body-as-motive · L · ★★★
-**Objective.** Route a user function's spec into the kernel checker.
-**Scope.** Generate the kernel obligation from a V1 spec; feed the function body
-in as a motive; manage contexts/assumptions; reuse K2 conversion.
-**Deliverables.** Obligation pipeline + a worked example proven with an explicit
-proof.
+**Objective.** Route a user function's spec into the kernel checker. **Scope.**
+Generate the kernel obligation from a V1 spec; feed the function body in as a
+motive; manage contexts/assumptions; reuse K2 conversion. **Deliverables.**
+Obligation pipeline + a worked example proven with an explicit proof.
 **Acceptance.** **G2**: a correct postcondition proof is accepted to a runnable
-artifact; a wrong one rejected.
-**Deps.** K2, V1.
+artifact; a wrong one rejected. **Deps.** K2, V1.
 
 ### V3 — Automated prover backend · L · ★★★
-**Objective.** Discharge most obligations automatically and soundly.
-**Scope.** Fragment classifier (decidable / first-order-intuitionistic /
-higher-order); direct Z3 encoding for the decidable fragment (incl. the
-content-equality theory `hash(v)=hash(v') ⇔ v=v'`); **Kripke embedding**
-(validity-preserving `φ ↦ φ#`) for the FO-intuitionistic fragment so Z3 is sound
-without classical rechecking; certificate checking in the K2 kernel; higher-order
-deferred to interactive tactics. Enforce **oracle-not-authority**.
-**Deliverables.** Classifier + encoders + Kripke translation + certificate
-checker; a benchmark obligation set with an automation-rate metric; an
-unsoundness test (a classical-only "theorem" is rejected).
-**Acceptance.** **G3**: routing correct; unsoundness test passes; automation rate
-meets the Phase-2 target.
-**Deps.** V2. **Parallel.** V4, L-stream. **Note.** Riskiest WP — checkpoint after
-classifier + decidable path before building the Kripke layer.
+**Objective.** Discharge most obligations automatically and soundly. **Scope.**
+Fragment classifier (decidable / first-order-intuitionistic / higher-order);
+direct Z3 encoding for the decidable fragment (incl. the content-equality theory
+`hash(v)=hash(v') ⇔ v=v'`); **Kripke embedding** (validity-preserving `φ ↦ φ#`)
+for the FO-intuitionistic fragment so Z3 is sound without classical rechecking;
+certificate checking in the K2 kernel; higher-order deferred to interactive
+tactics. Enforce **oracle-not-authority**. **Deliverables.** Classifier +
+encoders + Kripke translation + certificate checker; a benchmark obligation set
+with an automation-rate metric; an unsoundness test (a classical-only "theorem"
+is rejected). **Acceptance.** **G3**: routing correct; unsoundness test passes;
+automation rate meets the Phase-2 target. **Deps.** V2. **Parallel.** V4,
+L-stream. **Note.** Riskiest WP — checkpoint after classifier + decidable path
+before building the Kripke layer.
 
 ### V4 — Proof-failure diagnostics · L · ★★
-**Objective.** Make every failure legible to humans and agents.
-**Scope.** Countermodel extraction; **typed holes with provenance** (program still
+**Objective.** Make every failure legible to humans and agents. **Scope.**
+Countermodel extraction; **typed holes with provenance** (program still
 type-checks and runs, `unknown` propagates — natural here because `unknown` is a
-first-class Ω value); three-region Heyting decomposition (true / false / unknown);
-suggested-actions generator. Emits the data T1 serializes.
+first-class Ω value); three-region Heyting decomposition (true / false /
+unknown); suggested-actions generator. Emits the data T1 serializes.
 **Deliverables.** Diagnostic structures + extraction + human-readable render +
-examples per failure mode.
-**Acceptance.** **G4**: all four diagnostic kinds produced on representative
-failures; a partially-verified program compiles and runs.
-**Deps.** V2, T1. **Parallel.** V3.
+examples per failure mode. **Acceptance.** **G4**: all four diagnostic kinds
+produced on representative failures; a partially-verified program compiles and
+runs. **Deps.** V2, T1. **Parallel.** V3.
 
 ---
 
@@ -207,16 +196,16 @@ first-class types distinct from float. **Deps.** K1. **Parallel.** V-stream.
 
 ### L2 — Sum types, `match`, `Result`/`Option` · L · ★★
 Real constructors + eliminator + tagged runtime value; `match`/`case` with
-exhaustiveness; `Result`/`Option`/`Either` in stdlib. Designed in, not retrofitted.
-**Deps.** L1 (recommended). **Parallel.** L3.
+exhaustiveness; `Result`/`Option`/`Either` in stdlib. Designed in, not
+retrofitted. **Deps.** L1 (recommended). **Parallel.** L3.
 
 ### L3 — Strings & collections · M · ★
 First-class strings (Unicode-aware roadmap) and the core collections (list, map,
 set) over the content-addressed runtime. **Deps.** K1. **Parallel.** L2.
 
 ### L4 — Modules & package manager · M · ★★
-Import/module system + a registry-less, git-based package manager (the prototype's
-`yon.toml`/lockfile model is a good design reference). **Deps.** K1.
+Import/module system + a registry-less, git-based package manager (the
+prototype's `yon.toml`/lockfile model is a good design reference). **Deps.** K1.
 
 ### L5 — Effect tracking · M · ★★
 A statically-checked, inferred effect discipline (the prototype's `visits` is a
@@ -228,8 +217,8 @@ Prerequisite for FFI buffers and crypto. **Deps.** K1. **Parallel.** L2.
 
 ### L7 — FFI · L · ★★★
 A `foreign` mechanism to call C with marshalling for scalars/`Bytes`/handles;
-`pure`/`impure` via L5; document the trust boundary (FFI can violate invariants).
-**Deps.** L6. **Parallel.** L2.
+`pure`/`impure` via L5; document the trust boundary (FFI can violate
+invariants). **Deps.** L6. **Parallel.** L2.
 
 ### L8 — Curated stdlib · M · ★
 A coherent standard library (IO, file, env, time, math, collections, crypto-via-
@@ -245,13 +234,14 @@ slice, the REPL, and later differential testing of native codegen. **Deps.** K1.
 **Parallel.** V0.
 
 ### X2 — Content-addressed runtime hardening · M · ★★
-Production-grade dedup index, reclamation strategy (manual/arena/epoch — decide in
-ADR), introspection hooks (occupancy/dedup-rate) exposed safely. **Deps.** K3.
+Production-grade dedup index, reclamation strategy (manual/arena/epoch — decide
+in ADR), introspection hooks (occupancy/dedup-rate) exposed safely. **Deps.**
+K3.
 
 ### X3 — Native backend · L · ★★★
 Cranelift (recommended for pure-Rust simplicity) or LLVM, **behind** the
-interpreter and differential-tested against it. **Deps.** X1, L-core. **Parallel.**
-X4.
+interpreter and differential-tested against it. **Deps.** X1, L-core.
+**Parallel.** X4.
 
 ### X4 — Scale & limits validation · M · ★★
 Characterize content-store scale, any process/Space model, and the
@@ -269,8 +259,9 @@ emit: V4.
 
 ### T2 — REPL · L · ★★
 Incremental elaboration + the interpreter + ephemeral evaluation; the *Little
-Prover* loop (`prove:`/`assume:` surfacing V4 diagnostics). The interpreter-first
-choice makes this natural. **Deps.** V4, X1. **Parallel.** T3, T4.
+Prover* loop (`prove:`/`assume:` surfacing V4 diagnostics). The
+interpreter-first choice makes this natural. **Deps.** V4, X1. **Parallel.** T3,
+T4.
 
 ### T3 — Test / property framework · M · ★
 `assert`, a runner, property-based testing over generated inputs. **Deps.** L2.
@@ -312,7 +303,8 @@ Reproduce the conformance suite from the self-hosted build. **Deps.** S1.
 ## Fan-out plan for agent teams
 
 - **Team Foundation** → F1, F3, F4, then T1-schema; supports F2.
-- **Team Spec** → F2 (the oracle bridge), then conformance maintenance throughout.
+- **Team Spec** → F2 (the oracle bridge), then conformance maintenance
+  throughout.
 - **Team Kernel** → K1 → K2 (with K3 alongside); the highest-trust spine.
 - **Team Verify** → V0 → V2 → V3 (the prover; riskiest), with V1/V4 from Team
   Surface.
@@ -321,15 +313,16 @@ Reproduce the conformance suite from the self-hosted build. **Deps.** S1.
   commercial + self-host substrate.
 - **Team Runtime** → K3, X1, X2, later X3/X4.
 - **Team Ergo** → T2/T3/T4/T5 (Phase 6).
-- **Team Research** → R1/R2/R3 with spare capacity; outputs are notes, not gates.
+- **Team Research** → R1/R2/R3 with spare capacity; outputs are notes, not
+  gates.
 
 - **Integration (the Integrator)** → owns `main`: reviews, enforces the
   clean-room and conformance gates, merges (no other team merges), and notifies
   team leaders of fresh `main`. A single agent (recommended) with the operator
   as escalation. See `04-git-and-integration.md` for the full workflow.
 
-Each team gets its own mootup space; the Integrator's space is linked to
-all of them. PRs surface as mootup Events (PR URL as artifact), merge approvals as
+Each team gets its own mootup space; the Integrator's space is linked to all of
+them. PRs surface as mootup Events (PR URL as artifact), merge approvals as
 mootup Decisions. Synchronization is at the roadmap gates (G0–G8): no team
 advances past a gate until its acceptance criteria are met and the conformance
 suite is green on a fresh checkout. The clean-room boundary (Team Spec mediates

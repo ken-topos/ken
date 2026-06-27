@@ -13,18 +13,18 @@ it (`../00-overview.md §3`).
 
 Evaluation realizes the same reductions the kernel uses for conversion
 (`../10-kernel/17 §1`): β, Σ-projection, ι (eliminators on constructors), δ
-(definition unfolding), `Path`-β, the cubical computations, and **prim** (the
-audited primitive reductions, `../10-kernel/14 §5`). The kernel evaluates lazily
-to *weak-head* normal form for conversion (NbE); the interpreter evaluates
-programs to **values** (full normal forms of closed, ground computations). The
-two MUST agree on results — the interpreter is "the kernel's evaluator, run to
-completion, with primitives and effects."
+(definition unfolding), the observational computations (`Eq`-by-type, `cast`,
+quotient elim), and **prim** (the audited primitive reductions, `../10-kernel/14
+§5`). The kernel evaluates lazily to *weak-head* normal form for conversion
+(NbE); the interpreter evaluates programs to **values** (full normal forms of
+closed, ground computations). The two MUST agree on results — the interpreter is
+"the kernel's evaluator, run to completion, with primitives and effects."
 
 - **Determinism.** Evaluation of a closed, effect-free term is a function: same
   term → same value. This is what makes the interpreter a usable oracle.
 - **Canonicity.** A closed term of an inductive type evaluates to a constructor
-  form; cubical operations on closed terms compute (`../10-kernel/16 §11`). No
-  closed program "gets stuck" on a well-typed ground computation.
+  form; `Eq`/`cast` on closed terms compute (`../10-kernel/16 §9`). No closed
+  program "gets stuck" on a well-typed ground computation.
 
 ## 2. Evaluation order
 
@@ -80,6 +80,6 @@ kernel's reductions + primitives + effects, deterministically and with
 canonicity for closed ground programs; `unknown` propagation; sharing via the
 content-addressed heap; and the oracle role for later backends. It runs the
 **G1** vertical slice end-to-end. Conformance:
-`../../conformance/runtime/evaluation/` — canonicity of closed inductive/cubical
-computations, determinism, short-circuit/branch laziness, and `unknown`
-propagation.
+`../../conformance/runtime/evaluation/` — canonicity of closed
+inductive/observational computations, determinism, short-circuit/branch
+laziness, and `unknown` propagation.

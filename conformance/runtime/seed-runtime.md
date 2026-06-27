@@ -26,7 +26,7 @@ properties.
 
 ## runtime/evaluation/canonicity
 - spec: `spec/40-runtime/42-evaluation.md §1`
-- given: a closed computation of an inductive (or a closed cubical op)
+- given: a closed computation of an inductive (or a closed `Eq`/`cast` op)
 - expect: **reduces** to a constructor form (resp. computes); no closed
   well-typed ground program gets stuck
 - why: canonicity (a soundness commitment).

@@ -21,8 +21,9 @@ The implicitly-imported core the surface chapters reference:
 - **Core data** — `Unit`, `Empty`, `Bool`, `Nat`, `Option`, `Result`, `Either`,
   `Pair`/tuples (`../30-surface/34`); `Ordering`.
 - **Text & bytes** — `String`, `Bytes` (`../30-surface/37`, `../30-surface/38`).
-- **Logic & equality** — `Ω`, `⊤`/`⊥`, the Heyting connectives, `Path`/`Id`,
-  `Decidable`, `isProp`/`isSet` (`../10-kernel/12 §5`, `../10-kernel/15`).
+- **Logic & equality** — `Ω`, `⊤`/`⊥`, the Heyting connectives, `Eq`/`Id`
+  (observational), `Decidable`, `DecEq` (`../10-kernel/12 §5`,
+  `../10-kernel/15`).
 - **Core functions** — `id`, `∘` (compose), `const`, `flip`, basic combinators.
 
 ## 2. Lawful classes (the verification-aware core)

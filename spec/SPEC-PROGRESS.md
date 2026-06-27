@@ -24,11 +24,11 @@ enclave later refines it against the prototype as a behavioral oracle.
 
 ## Conventions (hold these across the whole effort)
 
-- **Clean-room.** Write from the analysis digest + type-theory/topos/cubical
-  first principles + the strategy docs. Do **NOT** read the AGPL prototype
-  source under `/home/pat/src/yon/` (only the analysis + reality-check files
-  there are in scope). Describe behavior in our own words; never transcribe
-  source. See `../CLEAN-ROOM.md`.
+- **Clean-room.** Write from the analysis digest + type-theory/topos/OTT first
+  principles + the strategy docs. Do **NOT** read the AGPL prototype source
+  under `/home/pat/src/yon/` (only the analysis + reality-check files there are
+  in scope). Describe behavior in our own words; never transcribe source. See
+  `../CLEAN-ROOM.md`.
 - **Design latitude.** We *design* Ken (distill + extend). Make reasonable
   calls; log genuine forks in `90-open-decisions.md` rather than blocking.
 - **Don't reproduce the prototype's gaps** (per strategy non-goals): Ken has
@@ -53,8 +53,8 @@ Status: TODO · DRAFT (first pass written) · REVISED (refined w/ digest) · DON
 | `10-kernel/12-universes.md` | Universe hierarchy, predicativity, checking, cumulativity | DRAFT |
 | `10-kernel/13-pi-sigma.md` | Dependent Π and Σ: formation/intro/elim/compute + η | DRAFT |
 | `10-kernel/14-inductive.md` | Inductive families, eliminators, strict positivity | DRAFT |
-| `10-kernel/15-identity.md` | `Id`/`J` path induction; relation to the cubical `Path` | DRAFT |
-| `10-kernel/16-cubical.md` | Interval, Path, transport, hcomp/comp, Glue, univalence, HITs | DRAFT |
+| `10-kernel/15-identity.md` | Observational `Eq`; `refl`/`cast`; `J` and its computation | DRAFT |
+| `10-kernel/16-observational.md` | Strict-prop Ω, `Eq`-by-type, `cast`, quotients, truncation | DRAFT |
 | `10-kernel/17-conversion.md` | Definitional eq, NbE, decidable conversion, β/η/δ, SCT | DRAFT |
 | `10-kernel/18-judgments.md` | Full typing judgment, algorithm, the kernel API surface | DRAFT |
 | `20-verification/README.md` | The differentiator: overview | DRAFT |
@@ -113,8 +113,10 @@ Verify, Language, Runtime) to start against.
 
 Remaining / future passes (not blocking team start):
 - Spec enclave: cross-check the **(oracle)**-tagged points against the prototype
-  (exact cubical by-type normal forms `16`, SCT size order `17`, reduction-order
-  choices) — confirm or correct, never copy source.
+  (exact observational `Eq`/`cast` by-type normal forms `16`, SCT size order
+  `17`, reduction-order choices) — confirm or correct, never copy source. The
+  observational forms also cross-check against `CICobs`/`TTobs` (permissive
+  refs, read-not-copy, ADR 0005).
 - Operator: review `90-open-decisions.md`; veto/confirm DRAFT recommendations;
   decided OQs → ADRs under `../docs/adr/`.
 - Grow the conformance corpus from the seeds as implementation lands (every spec

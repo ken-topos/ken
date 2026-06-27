@@ -66,13 +66,13 @@ predicate `C : Type → Ω` (a subobject of the universe, `../10-kernel/12 §5`)
 greenfield (the prototype has none).
 
 ```
-class Eq (A : Type) {                 -- a record of operations + their laws
-  eq    : A → A → Bool
-  refl  : (x : A) → eq x x == true    -- laws are propositions (20), provable
+class DecEq (A : Type) {              -- a record of operations + their laws
+  eq    : A → A → Bool                 -- (the propositional equality is the
+  ok    : (x y : A) → eq x y == true → Eq A x y   --  kernel's Eq, 10-kernel/15)
 }
-instance Eq Int { eq = int_eq, refl = … }
+instance DecEq Int { eq = int_eq, ok = … }
 
-view nub {A : Type} (xs : List A) : List A  where Eq A = …   -- a constraint
+view nub {A : Type} (xs : List A) : List A  where DecEq A = …   -- a constraint
 ```
 
 - A `class` elaborates to a **record type** (a Σ of operations *and* their law
@@ -84,7 +84,7 @@ view nub {A : Type} (xs : List A) : List A  where Eq A = …   -- a constraint
   resolves by instance search (`39`) — exactly an implicit `Π` over the class
   record. Resolution is just proof search for a subobject membership; ambiguity
   and coherence policy are **OQ-classes** (`../90-open-decisions.md`).
-- `derive (Eq, Show)` requests an elaborator-generated instance for a `data`/
+- `derive (DecEq, Show)` requests an elaborator-generated instance for a `data`/
   `record` (structural); generation is untrusted (the kernel checks the result).
 
 ## 6. Fixity and operators

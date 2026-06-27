@@ -40,52 +40,56 @@ surfaced while drafting. Resolved items move to an ADR (`../docs/adr/`).
   (closures + neutrals) **extended to compute the cubical operations** Lean
   lacks. **NbE stays the declarative reference**; lazy-WHNF is the recommended
   implementation.
-- **Deliberate divergences from Lean's *theory*** (fixed by other Ken
-  decisions): cubical `J`-on-non-`refl` (not `Eq.rec`-on-`refl`); **canonicity
-  kept** (no `propext`/`Quot.sound`/choice canonicity-breaking axioms — the
-  reflective prover needs computation). Lean's **definitional proof
-  irrelevance** is gated on a primitive impredicative `Prop` Ken has not adopted
-  (`OQ-Prop`, still open).
+- **Deliberate divergences from Lean's *theory*** (fixed by other Ken decisions,
+  ADR 0005): observational `J`-on-non-`refl` via `cast` (not
+  `Eq.rec`-on-`refl`); **canonicity kept** — Ken needs **no** axioms where Lean
+  postulates them (funext/propext and quotient soundness are *definitional* in
+  OTT), and assumes no `choice`. Lean's **definitional proof irrelevance** Ken
+  **also has**, from the predicative strict-prop Ω (`OQ-Prop`/ADR 0005), without
+  impredicativity.
 - **Affects.** `10-kernel/17` (updated). Interacts with `OQ-Prop`, `OQ-4`.
 
 ### OQ-2 — Cumulativity *(part of digest fork 3)* — **DECIDED**
 - **Fork.** Cumulative universes (`Type ℓ ≤ Type ℓ'`) vs. non-cumulative.
 - **Decision (operator, 2026-06-27): non-cumulative.** Keeps a subtyping
   relation out of the trusted kernel; consistent with the small-kernel
-  principle, following Lean (non-cumulative), and cubical (cumulative-cubical is
-  unexplored). Ergonomics come from the untrusted elaborator: universe
-  polymorphism + typical ambiguity + inserted lifts. (Coq is the lone major
-  cumulative system — non-cubical, heavier kernel.)
+  principle, following Lean (non-cumulative), and the observational/OTT setting.
+  Ergonomics come from the untrusted elaborator: universe polymorphism + typical
+  ambiguity + inserted lifts. (Coq is the lone major cumulative system — heavier
+  kernel.)
 - **Affects.** `10-kernel/12` (updated), `18`.
 
-### OQ-Prop — proposition sort *(fork 3; tag OQ-3)* — **DECIDED**
-- **Fork.** A primitive impredicative proof-irrelevant `Prop` vs. a derived Ω of
-  mere propositions — which bundles *two* separable features: impredicativity,
-  and definitional proof irrelevance.
-- **Decision (operator, 2026-06-27): derived Ω.** **Impredicativity ruled out**
-  (incompatible with cubical/canonicity; the impredicative-`Prop` systems are
-  non-cubical). **Definitional proof irrelevance** (`SProp`, separable +
-  predicative) **not adopted**: it enlarges the trusted kernel, and the
-  *production* tedium it removes is absorbed by agents (agents write, humans
-  verify the *propositions*, which are identical either way), while the
-  *performance* benefit is unlikely to surface given Ken's proof profile (many
-  small, propositionally-simple obligations; complexity in the effect/flow
-  codomain).
-- **`SProp` is a benchmarked-later perf escape hatch only** — and elaborator
-  automation of `isProp`-paths is tried first (keeps the kernel small). Agda's
-  `SProp`+cubical is the precedent.
-- **Affects.** `10-kernel/12` (updated). Interacts with `OQ-4` (an observational
-  core would re-bundle proof irrelevance).
+### OQ-Prop — proposition sort *(fork 3; tag OQ-3)* — **DECIDED (revised)**
+- **Fork.** A primitive impredicative proof-irrelevant `Prop` vs. Ω of mere
+  propositions — bundling *two* separable features: impredicativity, and
+  definitional proof irrelevance.
+- **Decision (operator, 2026-06-27; revised by ADR 0005).** **Impredicativity
+  ruled out** (incompatible with canonicity; predicative Ω). **Definitional
+  proof irrelevance:** the cubical-era call was "no `SProp`, propositional
+  irrelevance"; the observational foundation (`OQ-4`/ADR 0005) **supersedes** it
+  — Ω *is* a strict proof-irrelevant universe (`SProp`), so proof irrelevance is
+  now **definitional and free** in the smaller OTT kernel (and *helps* agent
+  proof generation: equality goals discharge definitionally). No separate
+  `SProp` add-on or kernel growth.
+- **Affects.** `10-kernel/12`, `16` (updated).
 
-### OQ-4 — Cubical scope *(digest fork 4)*
+### OQ-4 — Equality foundation *(digest fork 4)* — **DECIDED**
 - **Fork.** Full cubical (interval, comp/hcomp, Glue, computing univalence,
-  HITs) vs. a lighter HoTT-with-`Id`/`J` core. Sub-fork OQ-4a: general user HITs
-  vs. a fixed kernel menu.
-- **Recommendation.** **Full cubical** (it is what makes `J`-on-non-`refl` and
-  univalence reduce; a lighter core reopens the prototype's `J` gap). HITs:
-  **fixed menu** first, general user HITs an extension.
-- **Affects.** `10-kernel/15`, `16`. **Why open.** Kernel size vs. computational
-  univalence/HITs.
+  HITs) vs. observational TT vs. plain `Id`/`J`.
+- **Decision (operator, 2026-06-27, ADR 0005): observational (OTT), not
+  cubical.** After a research review (`local/`): `Eq` by recursion on type
+  structure + `cast` + a strict-prop Ω (`SProp`) + native set-quotients +
+  propositional truncation. `J`/`subst` compute on non-`refl` (closing the
+  prototype's gap, via `cast` not the interval); funext/propext/UIP
+  definitional; canonicity + decidable conversion proven; **no**
+  univalence/higher-HITs (the mathematics features software does not use).
+  Chosen for **exact fit to set-level software** and the **smallest auditable
+  TCB** (tier-1) — cubical's `--safe` canonicity bugs are the adversarial
+  surface agent-generated proofs probe. Blueprints: `CICobs`/`CCobs`/`TTobs`.
+- **Quotients (was OQ-4a).** Set-quotients in the DRAFT; general QITs a possible
+  later extension.
+- **Affects.** `10-kernel/15`, `16` (rewritten), `11`, `12`, `17`, `README`,
+  `18`.
 
 ### OQ-η-records — Definitional η for single-constructor inductives
 - **Fork.** Extend definitional η beyond Σ to all single-constructor records.
@@ -302,9 +306,10 @@ are **fixed** by ADR 0004; only the mechanics below are open.
 | OQ | Decided | ADR |
 |---|---|---|
 | **OQ-int** | 2026-06-27 — arbitrary-precision `Int`; `Decimal` core; full native `Int8…Int64`/`UInt8…UInt64` (verbose names). `OQ-1a` (overflow default) still open. | — (recorded in `30-surface/35`) |
-| **OQ-eval-strategy** | 2026-06-27 — follow Lean: lazy-WHNF + on-the-fly conversion + lazy δ over a cubical-capable NbE value domain; NbE the reference. Diverges from Lean's theory on cubical `J`/canonicity; `OQ-Prop` (definitional proof irrelevance) still open. | — (recorded in `10-kernel/17`) |
+| **OQ-eval-strategy** | 2026-06-27 — follow Lean: lazy-WHNF + on-the-fly conversion + lazy δ over an NbE value domain extended to compute observational `Eq`/`cast`; NbE the reference. Diverges from Lean's theory on observational `J`/canonicity. | — (recorded in `10-kernel/17`) |
 | **OQ-2** | 2026-06-27 — **non-cumulative** universes; ergonomics via universe polymorphism + typical ambiguity + elaborator lifts. | — (recorded in `10-kernel/12`) |
-| **OQ-Prop** | 2026-06-27 — **derived Ω**; impredicativity ruled out (cubical); `SProp`/definitional irrelevance not adopted (benchmarked-later escape hatch only). | — (recorded in `10-kernel/12`) |
+| **OQ-4** | 2026-06-27 — **observational equality (OTT), not cubical**: `Eq`-by-type + `cast` + strict-prop Ω + set-quotients; no univalence/HITs. Smallest auditable TCB; exact set-level-software fit. | **ADR 0005** |
+| **OQ-Prop** | 2026-06-27 — predicative Ω; impredicativity ruled out. Proof irrelevance **definitional** via OTT's strict-prop Ω (`SProp`), free in the smaller kernel (revised by ADR 0005). | **ADR 0005** (recorded in `10-kernel/12`) |
 
 When an OQ is decided, record it here and, if architecturally significant, write
 an ADR under `../docs/adr/` and update the affected chapters (replacing the OQ

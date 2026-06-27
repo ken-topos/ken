@@ -36,19 +36,33 @@ non-reproductions (`../../spec/10-kernel/README.md §6`).
 - expect: **reduces-to** `d` (J-β)
 - why: the base computation rule.
 
-## kernel/identity/j-on-nonrefl (soundness, the headline non-reproduction)
+## kernel/observational/j-on-nonrefl (soundness, the headline non-reproduction)
 - spec: `spec/10-kernel/15-identity.md §4`
-- given: `J` applied to a **non-`refl`** canonical path (e.g. produced by
-  `transport`/`ua`/a constructor congruence)
+- given: `J` applied to a **non-`refl`** canonical equality (e.g. produced by
+  `subst`/`cast`/a constructor congruence)
 - expect: **reduces** (to a constructor form), does **not** get stuck
-- why: closes the prototype's `J`-only-on-`refl` gap. **Fails on any kernel that
-  only reduces `J` on `refl`.**
+- why: closes the prototype's `J`-only-on-`refl` gap, via `cast` (ADR 0005).
+  **Fails on any kernel that only reduces `J` on `refl`.**
 
-## kernel/cubical/ua-beta (soundness, canonicity)
-- spec: `spec/10-kernel/16-cubical.md §8`
-- given: `transport (λ X. X) (ua e)` for an equivalence `e`
-- expect: **reduces-to** `e.fun` (ua-β)
-- why: univalence computes; cubical canonicity.
+## kernel/observational/cast-refl (soundness, canonicity/regularity)
+- spec: `spec/10-kernel/16-observational.md §3`
+- given: `cast A A refl a`
+- expect: **reduces-to** `a` (regularity)
+- why: `cast` on a reflexive type-equality is the identity — the clean
+  equational theory OTT achieves (and De Morgan cubical does not).
+
+## kernel/observational/funext-definitional (soundness)
+- spec: `spec/10-kernel/16-observational.md §2`
+- given: `Eq ((x:A)→B) f g`
+- expect: **reduces-to** `(x:A) → Eq B (f x) (g x)` (funext is definitional)
+- why: observational `Eq` at a Π-type *is* pointwise equality.
+
+## kernel/observational/quotient-eq
+- spec: `spec/10-kernel/16-observational.md §5`
+- given: `Eq (A / R) [a] [b]`
+- expect: **reduces-to** `R a b`
+- why: quotient equality is the user relation; quotient soundness is
+  definitional.
 
 ## kernel/inductive/elim-computes
 - spec: `spec/10-kernel/14-inductive.md §3`

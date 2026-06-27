@@ -58,9 +58,9 @@
 ## 4. Equality and ordering
 
 - Value **equality** is structural and content-addressed by default
-  (`../40-runtime/41 §equality`); `Eq` instances (`33 §5`) make it usable in
-  constraints, and the `Path`-equality (`../10-kernel/15`) is the propositional
-  version proofs use.
+  (`../40-runtime/41 §equality`); `DecEq` instances (`33 §5`) make it usable in
+  constraints, and `Eq` (observational equality, `../10-kernel/15`) is the
+  propositional version proofs use.
 - **Ordering** (`Ord`) is a lawful class (total order propositions provable),
   underpinning `Map`/`Set` and sorting; sortedness is expressible as a
   refinement (`34 §5`) and provable (the canonical verification example,

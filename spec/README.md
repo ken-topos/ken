@@ -14,7 +14,7 @@ shape, the design principles, scope/non-goals, and the glossary.
 | Area | Directory | Covers |
 |---|---|---|
 | Overview | `00-overview.md` | Thesis, L0/L1/L2, north star, principles, scope |
-| **Trusted kernel** | `10-kernel/` | Core type theory: syntax, universes, Π/Σ, inductives, identity/`J`, cubical, conversion, the typing judgment + kernel API |
+| **Trusted kernel** | `10-kernel/` | Core type theory: syntax, universes, Π/Σ, inductives, identity/`J`, observational equality, conversion, the typing judgment + kernel API |
 | **Verification** | `20-verification/` | Spec syntax, obligation generation, the prover (Z3 + Kripke), diagnostics, the machine-readable protocol |
 | Surface language | `30-surface/` | Lexer, grammar, modules, data/`match`, numbers, effects, FFI, elaboration |
 | Runtime | `40-runtime/` | Value model, content-addressed heap, reference operational semantics, termination, capacity |

@@ -2,11 +2,11 @@
 
 **Premise.** Agents can already write working — even high-quality — code. The
 binding constraint on *deploying* agent-written code is **verification**: an
-ethical obligation to assert that code does what it intends without putting users
-at risk. Industry's answers are empirical (tests) and the shift to stricter type
-systems (Rust, TypeScript). At the far end, dependent-type systems (Lean 4, F*,
-Coq) offer propositional correctness but are aimed at mathematicians, not
-commercial software.
+ethical obligation to assert that code does what it intends without putting
+users at risk. Industry's answers are empirical (tests) and the shift to
+stricter type systems (Rust, TypeScript). At the far end, dependent-type systems
+(Lean 4, F*, Coq) offer propositional correctness but are aimed at
+mathematicians, not commercial software.
 
 **Thesis.** A topos-oriented language whose dependent kernel is exposed to the
 surface, whose proof obligations are discharged automatically, and whose proof
@@ -14,10 +14,11 @@ surface, whose proof obligations are discharged automatically, and whose proof
 language an agent can write **and prove correct**, at commercial scale, under a
 permissive license with a small auditable trust root.
 
-The core ideas are demonstrably buildable — a computing dependent + cubical
-kernel, content-addressing, mechanical Yoneda checking. Ken takes that validated
-*design* and reimplements it cleanly, with correct universes, dependent Sigma,
-real types, and a small auditable kernel from day one.
+The core ideas are demonstrably buildable — a computing dependent kernel with
+observational equality (ADR 0005), content-addressing, mechanical Yoneda
+checking. Ken takes that validated *design* and reimplements it cleanly, with
+correct universes, dependent Sigma, real types, and a small auditable kernel
+from day one.
 
 This document defines the goal, the clean-room ground rules, the locked
 architecture, and the workstreams. Sequencing is in `02-roadmap.md`; team-sized
@@ -29,8 +30,8 @@ packages in `03-program-of-work.md`.
 
 The MIT goal makes these load-bearing, not optional hygiene.
 
-1. **No relicensing.** AGPLv3 code cannot be relicensed to MIT. Ken is a separate
-   work, written from specifications — not a port.
+1. **No relicensing.** AGPLv3 code cannot be relicensed to MIT. Ken is a
+   separate work, written from specifications — not a port.
 2. **Reusable from the prototype:** language *design* and semantics, the
    topos/HoTT approach, content-addressing as identity, and all mathematics
    (Leech Λ₂₄, Golay, Co₀, hashing). Ideas, methods, and math are not
@@ -59,11 +60,11 @@ The MIT goal makes these load-bearing, not optional hygiene.
 | Self-hosting | **Deferred** | Build a complete Rust-hosted reference first; get the write→spec→verify→repair loop credible; self-host once the language can host a compiler. Self-hosting early competes with the differentiator. |
 
 Open design decisions (ADRs, Phase 0): the content-addressed value model
-(whether to keep a hard per-store capacity bound at all — the prototype's 196,560
-Λ₂₄ slot ceiling is *not* categorically motivated, per the analysis, and a clean
-design may prefer an unbounded/large content store with the lattice kept only for
-the roles that earn it: error-correction and set bitmaps); concrete syntax;
-effect-tracking surface; the Space/process-isolation model.
+(whether to keep a hard per-store capacity bound at all — the prototype's
+196,560 Λ₂₄ slot ceiling is *not* categorically motivated, per the analysis, and
+a clean design may prefer an unbounded/large content store with the lattice kept
+only for the roles that earn it: error-correction and set bitmaps); concrete
+syntax; effect-tracking surface; the Space/process-isolation model.
 
 ---
 
@@ -98,11 +99,11 @@ Gates (objective, testable; tied to roadmap phases):
 8. **G8 — Self-hosting** (later): Ken's elaborator/compiler is rewritten in Ken
    atop the permanent Rust kernel.
 
-**Non-goals (commercial track):** full higher-order automated proving (interactive
-tactics instead); native codegen before the verification loop works; the
-coalgebraic-layer research program; linear types; delimited continuations;
-reproducing the prototype's f64-number-only model (Ken has `Int` from day one) or
-its unchecked universes or its hard slot ceiling.
+**Non-goals (commercial track):** full higher-order automated proving
+(interactive tactics instead); native codegen before the verification loop
+works; the coalgebraic-layer research program; linear types; delimited
+continuations; reproducing the prototype's f64-number-only model (Ken has `Int`
+from day one) or its unchecked universes or its hard slot ceiling.
 
 ---
 
@@ -112,14 +113,14 @@ Eight workstreams. F is the always-on foundation; K→V→L→X is the build spi
 is ergonomics/agent interface; S and R are deferred/parallel.
 
 ### WS-F — Foundations, clean-room process, governance (always on)
-Name, MIT license setup, IP hygiene, repo scaffolding (Rust workspace), ADRs, and
-— critically — **spec extraction**: turn knowledge of the prototype's behavior
-into a written language spec + conformance test corpus that Ken is implemented
-against. This is the legal-safe bridge from prototype to new code.
+Name, MIT license setup, IP hygiene, repo scaffolding (Rust workspace), ADRs,
+and — critically — **spec extraction**: turn knowledge of the prototype's
+behavior into a written language spec + conformance test corpus that Ken is
+implemented against. This is the legal-safe bridge from prototype to new code.
 
 ### WS-K — Trusted kernel (Rust) ★ trust root
-The small permanent core: core dependent type theory (Pi, dependent Sigma, Id, J,
-universes **with checking**), the proof checker, decidable conversion with
+The small permanent core: core dependent type theory (Pi, dependent Sigma, Id,
+J, universes **with checking**), the proof checker, decidable conversion with
 size-change termination, and the content-addressed value model. Designed correct
 from the start — the prototype's soundness gaps (unchecked universes,
 non-dependent Sigma, J-only-on-refl) are simply not reproduced. Spec'd and,
@@ -136,10 +137,11 @@ native; certificates re-checked in the kernel); and proof-failure diagnostics
 decomposition).
 
 ### WS-L — Language surface & stdlib
-The commercial surface, which is *also* the self-hosting substrate, so it is core,
-not a late bolt-on: `Int`/`Decimal` (designed in, no f64-int legacy), sum types +
-`match` + exhaustiveness + `Result`/`Option`, strings/collections, modules +
-package manager, effect tracking, `Bytes`/binary I/O, FFI, and a curated stdlib.
+The commercial surface, which is *also* the self-hosting substrate, so it is
+core, not a late bolt-on: `Int`/`Decimal` (designed in, no f64-int legacy), sum
+types + `match` + exhaustiveness + `Result`/`Option`, strings/collections,
+modules + package manager, effect tracking, `Bytes`/binary I/O, FFI, and a
+curated stdlib.
 
 ### WS-X — Execution & runtime
 The interpreter (reference semantics) first; the content-addressed runtime
@@ -158,9 +160,9 @@ Rust kernel; bootstrap chain (Stage0 Rust reference → Stage1 Ken subset → fu
 
 ### WS-R — Research (parallel, never a gate)
 The analysis's deep material: coalgebraic layer (Store-comonad cells, process
-coalgebras, profunctor wires, co-Heyting boundaries), linear/affine types,
-real delimited continuations. Design notes + prototypes; harvest pragmatic wins
-back as normal packages.
+coalgebras, profunctor wires, co-Heyting boundaries), linear/affine types, real
+delimited continuations. Design notes + prototypes; harvest pragmatic wins back
+as normal packages.
 
 ---
 
@@ -169,9 +171,9 @@ back as normal packages.
 Clean-room reimplementation **+** dependent-type verification **+** (eventual)
 self-hosting is a *new language project* — a multi-year program, not an
 enhancement. Two things make it tractable: (1) it is unusually well-suited to
-agent teams — greenfield, spec-driven, with the prototype as a behavioral oracle;
-and (2) the locked architecture de-risks it — an interpreter-first Rust reference
-with a small kernel gets the differentiating verification loop working long
-before any heavy codegen or self-hosting investment. The discipline that matters
-most: ship a thin vertical slice early (G1), then widen — and never let WS-R or
-the elegance of total generality displace the focused thesis (WS-V).
+agent teams — greenfield, spec-driven, with the prototype as a behavioral
+oracle; and (2) the locked architecture de-risks it — an interpreter-first Rust
+reference with a small kernel gets the differentiating verification loop working
+long before any heavy codegen or self-hosting investment. The discipline that
+matters most: ship a thin vertical slice early (G1), then widen — and never let
+WS-R or the elegance of total generality displace the focused thesis (WS-V).

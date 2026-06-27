@@ -118,7 +118,7 @@ By default specs are static-only (erased). Two opt-ins:
 
 - Specs elaborate to refined types + obligations (`22`,
   `../30-surface/39-elaboration.md`); the kernel sees only the core encoding (Σ,
-  Π, Ω, `Path`).
+  Π, Ω, `Eq`).
 - Refinement subtyping (`{x:A|φ} ≤ A` always; `A ≤ {x:A|φ}` generates an
   obligation `φ`) is the elaborator's, checked by emitting obligations — the
   kernel has no subtyping for refinements beyond the Σ encoding.
