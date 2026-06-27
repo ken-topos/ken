@@ -134,6 +134,14 @@ Two invariants govern this shape:
    correction from the reality-check; see `30-surface/35-numbers.md`).
 7. **Clean-room and permissively licensed.** The design is reusable; the
    prototype's source is not. The MIT license depends on this discipline.
+8. **Security is structural and tier-1.** Trust is **authorship-independent** —
+   the kernel re-checks every certificate, so a property holds regardless of who
+   (a human, an LLM, an adversary) wrote the code. On that base, Ken makes whole
+   classes of bad behaviour **unrepresentable** (purity, least-authority
+   capabilities, and **intrinsic information-flow control**) or **undeniable**
+   (every assumption is listed in the `trusted_base_delta`). Security is a
+   tier-1 goal, co-equal with verification, specified in `60-security/` (ADR
+   0004) — and the limits a language cannot exceed are stated there, not hidden.
 
 ---
 
@@ -147,6 +155,9 @@ Two invariants govern this shape:
 - The **verification surface**: specification syntax, obligation generation, the
   prover architecture, diagnostics, and the machine-readable protocol
   (`20-verification/`).
+- The **security model** (tier-1): the threat model, information-flow control,
+  authority/capabilities, supply-chain consumption, and the trust model + honest
+  limits (`60-security/`).
 
 **In scope, at decreasing resolution:**
 
@@ -223,5 +234,17 @@ cite the spec section they pin.
 - **Obligation / verification condition (VC)** — a proposition whose proof
   certifies a spec is met (`20-verification/22`).
 - **de Bruijn criterion** — soundness rests only on a small re-checking kernel;
-  see §3.
+  see §3. Its security reading is **authorship-independence**
+  (`60-security/64`).
 - **Content-addressed** — identified by the hash of structure (`40-runtime/41`).
+- **Information-flow control (IFC) / non-interference** — a *relational*
+  (2-safety) discipline ensuring data flows only upward in a security-label
+  lattice; "no secret reaches a public sink" (`60-security/61`).
+- **Capability** — an unforgeable, static, attenuable authority token; a
+  function's type is its authority manifest (`60-security/62`).
+- **Trusted computing base (TCB)** — exactly the kernel + listed primitives +
+  listed postulates; everything else is re-checked (`60-security/64`,
+  `10-kernel/18 §5`).
+- **`trusted_base_delta`** — the machine-readable ledger of every assumption an
+  artifact introduces; empty = fully verified (`20-verification/25`,
+  `60-security/63`).

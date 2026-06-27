@@ -79,6 +79,11 @@ Status: TODO · DRAFT (first pass written) · REVISED (refined w/ digest) · DON
 | `40-runtime/43-termination.md` | Totality, SCT, partial/`unknown` execution | DRAFT |
 | `40-runtime/44-capacity.md` | Content store; slot-ceiling decision; lattice's real roles | DRAFT |
 | `50-stdlib/README.md` | Prelude + core stdlib shape | DRAFT |
+| `60-security/README.md` | Security (tier-1): frame, threat model, taxonomy | DRAFT |
+| `60-security/61-information-flow.md` | IFC: label lattice, declassification, non-interference | DRAFT |
+| `60-security/62-authority.md` | Capabilities, PoLA, attenuation, revocation, audit | DRAFT |
+| `60-security/63-supply-chain.md` | Package/`.keni` format, re-check, provenance | DRAFT |
+| `60-security/64-trust-model.md` | TCB, de-Bruijn-as-security, trusting-trust, limits | DRAFT |
 | `90-open-decisions.md` | The forks register (for the operator) | DRAFT |
 | `_notes/analysis-digest.md` | Distilled digest of analysis + reality-check (subagent) | DONE |
 

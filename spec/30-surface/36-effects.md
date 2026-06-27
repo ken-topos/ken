@@ -59,6 +59,24 @@ Whether capabilities are a separate construct or just specific effects in the
 row is **OQ-8a**; the requirement is that authority is **static and visible**,
 not the prototype's runtime-only FNV-gate.
 
+**Security extension (tier-1, `../60-security/`).** The effect/capability
+discipline is the host for two security mechanisms (ADR 0004):
+
+- **Information-flow labels.** Effect channels (`Net`, `FS`, a log, a `space`
+  cell) carry a **clearance label**, and data carries a security label; writing
+  data `@ ℓ` to a sink of clearance `κ` type-checks only when `ℓ ⊑ κ`. The same
+  indexed-effect machinery that indexes capabilities here indexes **labels** —
+  this is how Ken gets **intrinsic information-flow control** without a new
+  kernel primitive (`../60-security/61-information-flow.md`).
+- **Attenuation + revocation.** Capabilities are **attenuable** (derive a
+  strictly weaker token for a child) and **revocable** at a boundary, with use
+  audited — the principle-of-least-authority story
+  (`../60-security/62-authority.md`).
+
+So a function's effect-and-capability type is simultaneously its **capability
+manifest** and its **flow manifest**. Details, the label lattice, and
+declassification are in `../60-security/`.
+
 ## 4. State — the `space` model
 
 Pure code cannot mutate. Genuine mutable state and process isolation live in a

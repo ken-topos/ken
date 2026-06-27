@@ -116,8 +116,12 @@ surfaced while drafting. Resolved items move to an ADR (`../docs/adr/`).
   construct or just effects; static vs. runtime.
 - **Recommendation.** **`visits`-style static rows** (proven, simpler), pure by
   default; capabilities **static and visible** (not the prototype's runtime
-  gate).
-- **Affects.** `30-surface/36`.
+  gate). **Security requirement (ADR 0004, fixed regardless of construct
+  form):** capabilities MUST be **attenuable** and **revocable**, with boundary
+  audit, and the effect machinery MUST host information-flow **labels** (see
+  `OQ-ifc`). So OQ-8a settles the *form*, not *whether* authority is
+  least/attenuable/labeled.
+- **Affects.** `30-surface/36`, `60-security/61`, `60-security/62`.
 
 ### OQ-9 — Continuations / handlers *(digest fork 9)*
 - **Fork.** Tail-resumptive handlers only vs. reified/multishot continuations.
@@ -192,9 +196,13 @@ surfaced while drafting. Resolved items move to an ADR (`../docs/adr/`).
   commitment.
 - **Recommendation.** Encapsulated, effect-tracked, identified mutable state
   (`30-surface/36 §4`); the concrete process/transport model is a **deliberate,
-  later** design choice — do **not** inherit the prototype's.
-- **Affects.** `30-surface/36`, `40-runtime/`. **Why open.** A significant
-  systems design with security implications; deserves its own ADR.
+  later** design choice — do **not** inherit the prototype's. **Security
+  requirement (ADR 0004):** the chosen model MUST carry a **stated, proven
+  isolation property** (it can no longer stay "deliberate choice, not
+  inherited"), since capability revocation (`60-security/62 §4`) and confinement
+  rest on it.
+- **Affects.** `30-surface/36`, `40-runtime/`, `60-security/62`. **Why open.** A
+  significant systems design with security implications; deserves its own ADR.
 
 ### OQ-witness — Surface runtime introspection *(digest fork 16)*
 - **Fork.** Expose process-level heap stats / Merkle root (extensional-safe) —
@@ -213,6 +221,53 @@ surfaced while drafting. Resolved items move to an ADR (`../docs/adr/`).
 - **Recommendation.** **Research only**; harvest pragmatic wins back as ordinary
   packages. Partly subsumed by `visits` + `space`.
 - **Affects.** `02 §7`, `50-stdlib §6`.
+
+---
+
+## G. Security (tier-1; ADR 0004)
+
+These are sub-decisions *within* committed security goals — the commitments
+themselves (IFC intrinsic, least authority, re-check-on-consume, honest limits)
+are **fixed** by ADR 0004; only the mechanics below are open.
+
+### OQ-ifc — Information-flow label model
+- **Fork.** The security-label model: a fixed level lattice vs. a principal-set
+  decentralised label model (DLM) vs. fully user-defined lattices; labels as
+  first-class values, type indices, or both; the static **discipline** giving
+  non-interference *by typing* (DCC/sealing-calculus style) vs. relational
+  *proof* obligations for it.
+- **Recommendation.** Commit to a **lattice + upward-only flow + audited
+  declassification + non-interference** (fixed); start with a **principal/level
+  lattice** and a **by-typing** discipline (the scalable default), adding
+  relational proof (`OQ-relational`) for bespoke/quantitative claims. Labels
+  ride the indexed-effect machinery (`OQ-8`), **no kernel enlargement**.
+- **Affects.** `60-security/61`, `30-surface/36`. **Why open.** Several viable
+  label models; the choice trades expressiveness vs. inference/ergonomics.
+
+### OQ-relational — Relational / 2-safety verification
+- **Fork.** How relational properties (non-interference, **constant-time**) are
+  generated and proved: self-composition / product programs vs. relational
+  refinement types vs. a dedicated relational logic; and whether the default is
+  **termination-/progress-sensitive** (does divergence or a crash leak?).
+- **Recommendation.** Provide a relational mode whose certificates are
+  **kernel-re-checked** like any other (no new trusted primitive); pick the
+  encoding the Verify enclave finds most tractable; default to a clearly-stated
+  sensitivity level. This mode also serves constant-time (a side-channel
+  concern, `60-security/64 §4.2`).
+- **Affects.** `60-security/61 §5`, `20-verification/`, `40-runtime/43`. **Why
+  open.** Real engineering choice; relational reasoning is less settled than
+  unary.
+
+### OQ-provenance — Signing, build attestation & the package format
+- **Fork.** The artifact/`​.keni` interface format; cryptographic signing
+  (sigstore/cosign keyless vs. in-toto); SLSA build-attestation integration; the
+  registry attestation policy.
+- **Recommendation.** Define the package = `(source, artifact, .keni,
+  proof-bundle, trusted_base_delta, provenance)` with **consume = re-check, not
+  re-prove**; add **signing + SLSA** as the *complementary* origin/build axis
+  (distinct from Ken's program-level proofs — keep the two ladders separate).
+- **Affects.** `60-security/63`, `30-surface/33`. **Why open.** Ecosystem
+  tooling; multiple equivalent mechanisms; sequencing after the core toolchain.
 
 ---
 

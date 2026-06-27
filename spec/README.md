@@ -19,6 +19,7 @@ shape, the design principles, scope/non-goals, and the glossary.
 | Surface language | `30-surface/` | Lexer, grammar, modules, data/`match`, numbers, effects, FFI, elaboration |
 | Runtime | `40-runtime/` | Value model, content-addressed heap, reference operational semantics, termination, capacity |
 | Stdlib | `50-stdlib/` | Prelude and core library shape |
+| **Security** (tier-1) | `60-security/` | Threat model, information-flow control, capabilities/authority, supply-chain, the trust model + honest limits |
 | Open decisions | `90-open-decisions.md` | Unresolved design forks (for the operator) |
 
 Each chapter is self-contained and cites the kernel rules it relies on.
@@ -32,6 +33,9 @@ section they pin.
 - **Language team (WS-L):** `30-surface/` (+ `10-kernel/13,14` and
   `30-surface/39-elaboration.md`).
 - **Runtime/execution (WS-X):** `40-runtime/`.
+- **Everyone (security is tier-1):** `60-security/` — its README first; IFC
+  (`61`) and authority (`62`) bind WS-L + WS-V; supply-chain (`63`) + trust
+  model (`64`) bind tooling + WS-K.
 
 ## Status & conventions
 
