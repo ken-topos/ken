@@ -103,20 +103,21 @@ law    Monoid (M) { assoc : … ; unit_l : … ; unit_r : … }   -- a property 
 |---|---|---|
 | parameters `x : A` | the whole contract + body | as declared |
 | `result` | `ensures` clauses only | the function's return type |
-| `old(e)` *(deferred → OQ-Space)* | `ensures`, for mutating ops | value of `e` in the pre-state |
+| `old(e)` *(scoped to `space` ops)* | `ensures` of a `space` operation | value of `e` in the pre-state |
 | `φ` in `requires`/`ensures`/`{·|φ}`/`prove` | as above | **must be `: Ω`** |
 
 - Every specification proposition MUST type-check at `Ω` (`12 §5`) in its scope;
   a `requires`/`ensures` whose body is not a proposition is a surface type
   error, not a verification failure.
-- **`old(e)`** (referring to a pre-state value in a postcondition) is only
-  meaningful for effectful/mutating operations (`../30-surface/36-effects.md`);
-  for pure `view`s the pre/post states coincide. The proof interface is decided
-  (`OQ-spec`), but **`old` and the state model are deferred to `OQ-Space`**: the
-  DRAFT leans **explicit state** (name the pre/post state as values; no implicit
-  heap, no `old`), adding `old`-style sugar only if a settled `space` model
-  threads state *implicitly* — and never the framing/separation machinery unless
-  forced (`90-open-decisions.md`).
+- **`old(e)`** (referring to a pre-state value in a postcondition) is meaningful
+  only for **`space` operations** (`../30-surface/36-effects.md §4`); for pure
+  `view`s the pre/post states coincide. **`OQ-Space` DECIDED:** `old(e)` is
+  admitted, **scoped to a `space` operation's `ensures`** (a cell's pre-call
+  value), well-defined because a space's state is encapsulated and its
+  denotation is state-passing. There is **no global `\old`/heap** and **no
+  separation logic** — a space's cells are non-aliased, so reasoning is bounded
+  per-space Hoare. For explicitly-threaded state you simply name the pre/post
+  values.
 
 ## 5. Epistemic status — proved / tested / delegated / unknown
 

@@ -256,21 +256,38 @@ surfaced while drafting. Resolved items move to an ADR (`../docs/adr/`).
 
 ## E. Concurrency, wire, process
 
-### OQ-Space — State, concurrency & isolation model *(digest forks 13,14)*
+### OQ-Space — State, concurrency & isolation *(forks 13,14)* — **DECIDED**
 - **Fork.** What a `space` maps to (OS process / thread / logical region); the
-  transport/wire data model (the prototype's real DTO/frame stream — and the
-  unimplemented LIST/MAP tags — **not** the false 4×f64 ceiling); the isolation
-  guarantee. The prototype's `spawn` is `fork()`+shared memory — *not* a
-  commitment.
-- **Recommendation.** Encapsulated, effect-tracked, identified mutable state
-  (`30-surface/36 §4`); the concrete process/transport model is a **deliberate,
-  later** design choice — do **not** inherit the prototype's. **Security
-  requirement (ADR 0004):** the chosen model MUST carry a **stated, proven
-  isolation property** (it can no longer stay "deliberate choice, not
-  inherited"), since capability revocation (`60-security/62 §4`) and confinement
-  rest on it.
-- **Affects.** `30-surface/36`, `40-runtime/`, `60-security/62`. **Why open.** A
-  significant systems design with security implications; deserves its own ADR.
+  transport/wire data model; the isolation guarantee; and (handed from `OQ-8`)
+  the stateful-effect verification methodology + `old`.
+- **Decision (operator, 2026-06-27).** **State:** `space` = **encapsulated,
+  non-aliased** cells with identity; mutation `becomes` denotes to a
+  state-passing fold of the interaction tree (`OQ-8`). Because state is
+  partitioned per-space with **no cross-space aliasing**, reasoning is **bounded
+  per-space Hoare — no separation logic**. **`old(e)` admitted, scoped to a
+  `space` operation's `ensures`** (a cell's pre-call value); no global
+  `\old`/heap — this resolves the `OQ-spec` deferral. **Concurrency:**
+  **shared-nothing, message-passing** (actor-style) for *in-Ken* communication —
+  isolation is a **guarantee** (no shared mutable memory ⇒ no data races),
+  pairing with capabilities (a space handle is authority), effects
+  (send/receive), IFC labels (on messages), and Ward (message events = the
+  behavioral alphabet). Distribution-ready; the **runtime realization**
+  (process/thread/green/distributed) is deferred to `40-runtime`. **Transport:**
+  content-addressed **immutable value passing** (cross-space dedup by hash;
+  composes with K3); labels ride; typed/session channels a later refinement.
+  **Division of labor:** Ken proves **local/sequential/per-space** correctness;
+  **global/concurrent/distributed/temporal** correctness is **delegated to
+  Ward** (Quint/Apalache/P model-check the message protocol).
+- **FFI caveat (ancillary).** The shared-nothing guarantee is for *in-Ken*
+  communication. **FFI** may use **shared memory** at the foreign boundary — but
+  that boundary is already explicitly *unsafe/untrusted* (`30-surface/38 §3`),
+  so it does not weaken the in-Ken isolation property.
+- **Isolation property (ADR 0004).** Shared-nothing gives a *stated* isolation
+  guarantee on which capability revocation (`60-security/62 §4`) and confinement
+  rest; the runtime realization MUST preserve it. Warrants an ADR when
+  `40-runtime` settles the realization.
+- **Affects.** `30-surface/36 §4` (updated), `20-verification/21 §4` (`old`),
+  `40-runtime/`, `60-security/62`, `70-behavioral/`.
 
 ### OQ-witness — Surface runtime introspection *(digest fork 16)*
 - **Fork.** Expose process-level heap stats / Merkle root (extensional-safe) —
@@ -411,6 +428,7 @@ states what it cannot prove; the sibling models/tests/monitors it.
 | **OQ-spec** | 2026-06-27 — proof interface = **both, as one gradient**; **four-way epistemic status** (proved/tested/delegated/unknown) visible + exportable. `old`/state deferred → `OQ-Space` (lean explicit-state). | — (recorded in `20-verification/21`) |
 | **OQ-behavioral** | 2026-06-27 — downstream complement is a **sibling** (`Ward`) fed by an assumption-boundary export; temporal obligations as **data, not kernel modalities**; one logic, two engines. | **ADR 0006** |
 | **OQ-8 / OQ-8a** | 2026-06-27 — static effect **rows** (`visits`), pure by default; **layered encoding** authority(tokens)/denotation(interaction-tree)/spec(WP) into a pure kernel; handlers tail-resumptive only; capabilities = static value tokens (attenuable/revocable/audited). Stateful verification → `OQ-Space`. | — (recorded in `30-surface/36`) |
+| **OQ-Space** | 2026-06-27 — encapsulated non-aliased `space` cells → **bounded per-space Hoare, no separation logic**; **`old` scoped to space ops** (resolves `OQ-spec` deferral); **shared-nothing message-passing** (in-Ken), content-addressed transport; runtime realization → `40-runtime`; concurrent/temporal correctness **delegated to Ward**; FFI shared memory is the (unsafe) exception. | — (recorded in `30-surface/36 §4`); ADR when `40-runtime` settles |
 
 When an OQ is decided, record it here and, if architecturally significant, write
 an ADR under `../docs/adr/` and update the affected chapters (replacing the OQ

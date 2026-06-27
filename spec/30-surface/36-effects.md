@@ -120,16 +120,39 @@ space Counter {
 
 - A `space` encapsulates **cells** (`mut`) with identity; operations on it carry
   the space as an effect. Mutation is `becomes` (cell update). Reads/writes are
-  ordered by the effect discipline.
+  ordered by the effect discipline. Semantically, `becomes` denotes to a
+  **state-passing fold** of the interaction tree (§2.2) — imperative surface,
+  functional denotation.
 - A `space` is the **only** place identity-bearing mutable state exists; pure
   values are immutable and content-addressed (`../40-runtime/41-values.md`).
-- **Concurrency / isolation model is OQ-Space.** Whether spaces map to OS
-  processes, threads, or logical regions; the message/transport model; and the
-  isolation guarantee are deliberate design choices, not inherited (the
-  prototype's actual model — `fork` + shared memory — is *not* a spec
-  commitment). The DRAFT fixes only that mutable state is *encapsulated,
-  effect-tracked, and identified*, leaving the runtime model to `../40-runtime/`
-  + OQ-Space.
+
+**State verification — bounded Hoare, no separation logic (`OQ-Space`
+DECIDED).** Because each `space`'s cells are **encapsulated and non-aliased**
+(state is partitioned per space, with no shared mutable heap across spaces),
+reasoning about a space operation is **local, bounded Hoare** over its own cells
+— Ken needs **no separation logic / frame rules** (the machinery a big aliasable
+heap would force). `requires`/`ensures` on a space operation relate pre- and
+post-state; **`old(e)` is admitted, scoped to the operation's `ensures`** (a
+cell's pre-call value, well- defined because the denotation is state-passing) —
+*not* a global `\old` (`../20-verification/21 §4`). Ken proves **local,
+sequential, per-space** correctness; **concurrent/distributed/temporal**
+correctness is delegated to Ward (below, `../70-behavioral/`).
+
+**Concurrency & isolation — shared-nothing message-passing (`OQ-Space`
+DECIDED).** For *in-Ken* communication, spaces are **shared-nothing**: they
+share no mutable memory and communicate only by **passing immutable,
+content-addressed values** (actor-style). Isolation is therefore a
+**guarantee**, not a discipline — no shared mutable state ⇒ no data races — on
+which capability revocation and confinement rest (`../60-security/62 §4`, ADR
+0004). This pairs with the rest of the model: a space handle is a **capability**
+(§3), send/receive are **effects** (§2), messages carry **IFC labels** (§3), and
+message events are **Ward's behavioral alphabet** (`../70-behavioral/`). The
+**runtime realization** — process, thread, green-thread, or distributed — is
+deferred to `../40-runtime/` (the *model* is shared-nothing; the *mapping* is an
+implementation choice, distribution-ready). *(FFI is the exception: a `foreign`
+boundary may use shared memory, but it is already an explicitly unsafe/untrusted
+boundary, `38-ffi-io.md §3`, so it does not weaken the in-Ken isolation
+property.)*
 
 ## 5. Handlers — tail-resumptive only (`OQ-8`; multishot → `OQ-9`)
 
