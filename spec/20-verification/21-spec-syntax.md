@@ -8,7 +8,21 @@
 
 A **specification** is one or more **propositions** (`../10-kernel/12 §5`,
 elements of Ω) attached to a definition, asserting how it must behave. Ken
-offers three layered ways to state one, from lightest to most expressive.
+offers three layered ways to state one, from lightest to most expressive (§1–3),
+discharged through one smooth **gradient** — declarative contract → automatic
+proof → typed hole → tactic/term (`23`), never a cliff between "automatic" and
+"hand-written."
+
+**The defining discipline (`OQ-spec`, DECIDED).** Because Ken is a *software
+engineering* language — written by agents, read by humans — every claim carries
+a **visible, exportable epistemic status**: **proved** (kernel-discharged),
+**tested** (assumed, with a runtime/test obligation), **delegated** (a
+temporal/behavioral property Ken can *state* but not close as a static
+proposition — exported downstream), or **unknown** (an open typed hole). The
+source distinguishes proof from test from model from gap *on its face* (§5); the
+delegated/tested set is emitted as the **assumption boundary** consumed by the
+behavioral sibling (`../70-behavioral/`, ADR 0006). This is the surface form of
+"prove what can be proven and state what must be tested."
 
 ## 1. Function contracts — `requires` / `ensures`
 
@@ -89,7 +103,7 @@ law    Monoid (M) { assoc : … ; unit_l : … ; unit_r : … }   -- a property 
 |---|---|---|
 | parameters `x : A` | the whole contract + body | as declared |
 | `result` | `ensures` clauses only | the function's return type |
-| `old(e)` *(OQ-spec)* | `ensures`, for mutating ops | value of `e` in the pre-state |
+| `old(e)` *(deferred → OQ-Space)* | `ensures`, for mutating ops | value of `e` in the pre-state |
 | `φ` in `requires`/`ensures`/`{·|φ}`/`prove` | as above | **must be `: Ω`** |
 
 - Every specification proposition MUST type-check at `Ω` (`12 §5`) in its scope;
@@ -97,22 +111,52 @@ law    Monoid (M) { assoc : … ; unit_l : … ; unit_r : … }   -- a property 
   error, not a verification failure.
 - **`old(e)`** (referring to a pre-state value in a postcondition) is only
   meaningful for effectful/mutating operations (`../30-surface/36-effects.md`);
-  for pure `view`s the pre/post states coincide. Whether to include `old` and
-  the state model is **OQ-spec** (`90-open-decisions.md`).
+  for pure `view`s the pre/post states coincide. The proof interface is decided
+  (`OQ-spec`), but **`old` and the state model are deferred to `OQ-Space`**: the
+  DRAFT leans **explicit state** (name the pre/post state as values; no implicit
+  heap, no `old`), adding `old`-style sugar only if a settled `space` model
+  threads state *implicitly* — and never the framing/separation machinery unless
+  forced (`90-open-decisions.md`).
 
-## 5. Runtime contracts (opt-in) and the partial story
+## 5. Epistemic status — proved / tested / delegated / unknown
 
-By default specs are static-only (erased). Two opt-ins:
+Every specification claim has one of four **statuses**, each visible in the
+source and (for the latter three) carried in the **assumption-boundary export**
+(`../70-behavioral/`). This four-way distinction is the heart of `OQ-spec` and
+the feature that makes Ken a *software engineering* language rather than a
+programming language: a reader sees, per claim, whether it is *proved*, merely
+*tested*, *delegated* to behavioral checking, or still *open*.
 
-- **Runtime-checked contracts** — a build/annotation mode lowering `requires`/
-  `ensures` to runtime assertions (for boundaries, FFI, untrusted input). Useful
-  where a static proof is absent but a fail-fast check is wanted.
-- **Partial verification** — if an obligation is *not* discharged, the
-  definition is admitted with a **typed hole** for the missing proof and the
-  program **still runs**, with the result carrying `unknown` where the unproven
-  property is observed (`24-diagnostics.md §holes`). This is the "still
-  type-checks and runs" behaviour (Hazel-style) the digest calls out:
-  verification is *incremental*, not all-or-nothing.
+- **`proved`** — the obligation (`22`) was discharged and the kernel re-checked
+  the certificate (`23`, `../10-kernel/18 §4`). The default for a contract that
+  goes through. No annotation; it simply holds.
+- **`tested`** — a property that **cannot (yet) be proven** but is **asserted
+  with a runtime/test obligation**: a first-class `assume`/`test`-tagged clause
+  that lowers `requires`/`ensures` to a runtime assertion (boundaries, FFI,
+  untrusted input) *and* registers a test/generator obligation. It is
+  **visible** — a reader knows this guarantee rests on tests, not proof — and it
+  is **exported** as part of the assumption boundary (the refinement predicate
+  becomes a generator/oracle spec, `../70-behavioral/`, §2/Layer 2).
+- **`delegated`** — a **temporal/behavioral** property (liveness, fairness,
+  ordering, eventual consistency, an interleaving safety property) that is **not
+  a static proposition over a pure function** and so cannot be closed in the
+  kernel. Ken can *state* it — as ordinary **deeply-embedded temporal-logic
+  data** (an inductive `Temporal`/μ-calculus value, *not* a kernel modality, so
+  the TCB is untouched, `../70-behavioral/`) — and **exports** it to the
+  behavioral sibling for model-checking and runtime monitoring. Stated here,
+  discharged there.
+- **`unknown`** — the obligation is *not* discharged and no test/delegation is
+  given: the definition is admitted with a **typed hole** and the program
+  **still runs**, the result carrying `unknown` where the unproven property is
+  observed (`24-diagnostics.md §holes`). Verification is *incremental*, not
+  all-or-nothing (Hazel-style); a hole is the honest "not done yet."
+
+By default `proved` specs are static-only (erased); `tested` adds runtime code
+by construction; `delegated` adds none to Ken (it is exported); `unknown` adds
+none. The **assumption boundary** (`../70-behavioral/`) is precisely the
+`tested` + `delegated` + open-`assume` set — what Ken could not guarantee
+statically, handed to the sibling as the exact specification of what to model,
+test, and monitor.
 
 ## 6. Interaction & elaboration
 

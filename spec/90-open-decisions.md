@@ -128,13 +128,23 @@ surfaced while drafting. Resolved items move to an ADR (`../docs/adr/`).
   (a) slice (not an effort estimate).
 - **Affects.** `20-verification/23` (updated). Interacts with `OQ-spec`.
 
-### OQ-spec — Surface proof interface & state model
+### OQ-spec — Surface proof interface & state model — **DECIDED (interface)**
 - **Fork.** Refinement types on arrows vs. a separate tactic language vs. both;
   and whether `ensures` may reference pre-state (`old(e)`), i.e. the
   state/mutation model for contracts. *(digest fork 11.)*
-- **Recommendation.** **Both** refinements *and* a small tactic surface; `old`
-  included only once the `space` state model (OQ-Space) settles.
-- **Affects.** `20-verification/21`, `30-surface/36`.
+- **Decision (operator, 2026-06-27): interface = both, as one gradient.**
+  Declarative `requires`/`ensures` + refinement types (the human-readable
+  contract) → automatic proof → typed hole → tactic/term — one smooth descent,
+  not two languages; tactics produce kernel-rechecked terms (`23`). **Every
+  claim carries a visible, exportable four-way epistemic status — proved /
+  tested / delegated / unknown** (`20-verification/21 §5`) — the surface form of
+  "prove what can be proven, state what must be tested," and the seam to the
+  behavioral sibling (`OQ-behavioral`, ADR 0006).
+- **Still deferred → `OQ-Space`.** `old`/pre-state and the mutation model. DRAFT
+  leans **explicit state** (name pre/post as values; no implicit heap, no `old`,
+  no framing/separation machinery unless forced).
+- **Affects.** `20-verification/21` (updated), `70-behavioral/`,
+  `30-surface/36`.
 
 ---
 
@@ -318,6 +328,64 @@ are **fixed** by ADR 0004; only the mechanics below are open.
 
 ---
 
+## H. Behavioral assurance (downstream; ADR 0006)
+
+The sibling (`Ward`, provisional) and the seam to it. *One logic, two engines:*
+Ken states what it cannot prove; the sibling models/tests/monitors it.
+
+### OQ-behavioral — The downstream complement's shape — **DECIDED**
+- **Fork.** Extend Ken's kernel with temporal/modal types vs. a separate
+  behavioral sibling consuming Ken's export.
+- **Decision (operator, 2026-06-27, ADR 0006): tightly-coupled *sibling***
+  (`Ward`) fed by an **assumption-boundary export**; Ken stays the small static
+  core. Temporal obligations are **stated as deeply-embedded data**
+  (LTL/μ-calculus `Temporal` type), **not kernel modalities** — TCB untouched.
+  One logic, two engines.
+- **Affects.** `70-behavioral/`, `20-verification/21`. **ADR 0006.**
+
+### OQ-export-ir — The assumption-boundary export schema
+- **Fork.** The concrete schema of Ken's behavioral export (`Q` invariants, `P`
+  assumptions, refinements-as-generators, effect alphabet, temporal
+  obligations); ITF-compatible traces vs a Ken-native format.
+- **Recommendation.** Define the schema as the first `70-behavioral/`
+  deliverable; adopt **ITF** for the trace half (immediate Quint/Apalache
+  interop).
+- **Affects.** `70-behavioral/71`. **Why open.** First real design artifact of
+  the seam; needs the effect model (`OQ-8`) settled.
+
+### OQ-temporal — In-language temporal layer: data-only vs reasoning
+- **Fork.** Keep temporal logic as exported *data* only, or add a guarded/`▷`
+  modal layer so Ken can *reason* about temporal properties internally?
+- **Recommendation.** **Data-only** for v1 (state + export; no kernel
+  modalities), per the small-TCB principle; revisit only on a concrete need to
+  prove temporal properties *inside* Ken.
+- **Affects.** `70-behavioral/72`. **Why open.** Movable line; kernel-cost vs
+  expressiveness.
+
+### OQ-classical-bridge — Intuitionistic↔classical refinement mapping
+- **Fork.** Ken's logic is intuitionistic/total/static; the model-checkers are
+  classical/temporal. Which direction does refinement flow, and is the mapping
+  itself a Ken-checked artifact?
+- **Recommendation.** Treat the embedding like `OQ-12`'s — prefer a *checked*
+  mapping where feasible; precedent exists (Coq+TLA refinement).
+- **Affects.** `70-behavioral/`, `20-verification/23`.
+
+### OQ-conformance — Trace conformance: gate, monitor, or both
+- **Fork.** Is implementation-refines-model conformance a CI gate, a production
+  monitor, or both? (The antidote to the two-artifact tax.)
+- **Recommendation.** **Both**, eventually; CI gate first. Keep instrumentation
+  cheap (RV overhead is instrumentation-dominated).
+- **Affects.** `70-behavioral/73`.
+
+### OQ-agentic-oracle — Oracle-free agent outputs
+- **Fork.** How to assure agent outputs with no propositional oracle.
+- **Recommendation.** **Metamorphic relations + RV watchdogs**; a default safety
+  envelope (the verifiable FSM the agent is a nondeterministic oracle inside).
+- **Affects.** `70-behavioral/74`. **Why open.** The distinctive agentic
+  surface.
+
+---
+
 ## Resolution log
 
 | OQ | Decided | ADR |
@@ -329,6 +397,8 @@ are **fixed** by ADR 0004; only the mechanics below are open.
 | **OQ-Prop** | 2026-06-27 — predicative Ω; impredicativity ruled out. Proof irrelevance **definitional** via OTT's strict-prop Ω (`SProp`), free in the smaller kernel (revised by ADR 0005). | **ADR 0005** (recorded in `10-kernel/12`) |
 | **OQ-η-records** | 2026-06-27 — definitional η is the **`record`/Σ class**, not `data`; safe-by-construction (records are non-recursive nested Σ), low-cost under OTT. | — (recorded in `10-kernel/14`) |
 | **OQ-12** | 2026-06-27 — Kripke embedding primary; three-tier routing; **reflective proved-adequacy + verified checker (a) is the target** (intrinsic merits, not effort), reconstruction (b) a feasibility hedge; Z3 primary, cvc5 optional, **Coq retired**. | — (recorded in `20-verification/23`) |
+| **OQ-spec** | 2026-06-27 — proof interface = **both, as one gradient**; **four-way epistemic status** (proved/tested/delegated/unknown) visible + exportable. `old`/state deferred → `OQ-Space` (lean explicit-state). | — (recorded in `20-verification/21`) |
+| **OQ-behavioral** | 2026-06-27 — downstream complement is a **sibling** (`Ward`) fed by an assumption-boundary export; temporal obligations as **data, not kernel modalities**; one logic, two engines. | **ADR 0006** |
 
 When an OQ is decided, record it here and, if architecturally significant, write
 an ADR under `../docs/adr/` and update the affected chapters (replacing the OQ

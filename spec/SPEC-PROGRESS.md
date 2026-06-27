@@ -84,6 +84,7 @@ Status: TODO · DRAFT (first pass written) · REVISED (refined w/ digest) · DON
 | `60-security/62-authority.md` | Capabilities, PoLA, attenuation, revocation, audit | DRAFT |
 | `60-security/63-supply-chain.md` | Package/`.keni` format, re-check, provenance | DRAFT |
 | `60-security/64-trust-model.md` | TCB, de-Bruijn-as-security, trusting-trust, limits | DRAFT |
+| `70-behavioral/README.md` | Behavioral seam: assumption-boundary export to the sibling (`Ward`); proved/tested/delegated/unknown; temporal-as-data | DRAFT |
 | `90-open-decisions.md` | The forks register (for the operator) | DRAFT |
 | `_notes/analysis-digest.md` | Distilled digest of analysis + reality-check (subagent) | DONE |
 
