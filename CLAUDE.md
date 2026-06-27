@@ -21,6 +21,10 @@ no — ask the operator or the Spec enclave.
 
 ## Conventions
 
+- **Read `docs/PRINCIPLES.md`** — the project's reasoning charter (agents-write/
+  humans-read, decide on intrinsic merits not effort, small auditable TCB,
+  reflect-don't-extend, subsume-don't-proliferate, honesty about the boundary).
+  When the spec does not settle a choice, reason from it.
 - **Wrap markdown at 80 columns.**
 - The spec is in `spec/` (`spec/SPEC-PROGRESS.md` is the status backbone); open
   design decisions are in `spec/90-open-decisions.md`; architecture decisions in

@@ -10,6 +10,10 @@ never from prototype source (see `../../CLEAN-ROOM.md`).
 
 ## Read in this order
 
+0. **`../PRINCIPLES.md`** — the reasoning charter: the project's values made
+   explicit (agents-write/humans-read, intrinsic-merits-not-effort, small
+   auditable TCB, reflect-don't-extend, honesty about the boundary). Strategy
+   and every design decision flow from it; read it first.
 1. **`01-strategy.md`** — the thesis, the clean-room ground rules, the locked
    architecture (Rust host, interpreter-first, small permanent Rust kernel,
    deferred self-hosting), success criteria G1–G8, and the eight workstreams.
@@ -24,12 +28,12 @@ never from prototype source (see `../../CLEAN-ROOM.md`).
 
 ## The one-paragraph version
 
-Ken is a small permanent **Rust trusted kernel** (the de Bruijn
-trust root) with **correct universes and dependent Sigma from day one**, an
-**interpreter** as reference semantics, surface **specification syntax** wired to
-the kernel so an agent can state and check a correctness property, an automated
-prover backend that uses Z3 as an **oracle** with a **Kripke embedding** to keep
-the intuitionistic logic sound, and **legible, machine-readable proof-failure
+Ken is a small permanent **Rust trusted kernel** (the de Bruijn trust root) with
+**correct universes and dependent Sigma from day one**, an **interpreter** as
+reference semantics, surface **specification syntax** wired to the kernel so an
+agent can state and check a correctness property, an automated prover backend
+that uses Z3 as an **oracle** with a **Kripke embedding** to keep the
+intuitionistic logic sound, and **legible, machine-readable proof-failure
 diagnostics** (countermodels, typed holes, three-region decomposition) as the
 agentic differentiator. Real types (`Int`, sum types, `Bytes`, FFI) are designed
 in because they are also the self-hosting substrate. Native codegen and
