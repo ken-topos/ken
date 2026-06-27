@@ -110,9 +110,9 @@ Specified in the sibling's own project; summarised here for the seam:
 | File | Subject |
 |---|---|
 | `71-assumption-boundary.md` | The export IR: `Q`/`P`/refinements/effects/temporal; schema; ITF traces — **DRAFT** (`OQ-export-ir` decided) |
-| `72-temporal.md` | `Temporal` as deeply-embedded data; surface notation; LTL/μ-calculus encoding |
+| `72-temporal.md` | `Temporal` as deeply-embedded data; surface notation; LTL/μ-calculus encoding — **DRAFT** (`OQ-temporal` decided) |
 | `73-conformance.md` | Trace emission, instrumentation, trace-conformance (does code refine the model?) |
 | `74-agentic.md` | Oracle-free outputs: metamorphic relations + RV watchdogs; the agent safety FSM |
 
-`71` is drafted (the export schema); `72`–`74` are stubs pending the sibling's
-bring-up. This README is the binding overview.
+`71`–`72` are drafted (export schema; temporal-as-data); `73`–`74` are stubs
+pending the sibling's bring-up. This README is the binding overview.

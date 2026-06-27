@@ -442,14 +442,25 @@ states what it cannot prove; the sibling models/tests/monitors it.
   needs `Ward`'s sampler design (downstream).
 - **Affects.** `Ward` (sibling); `70-behavioral/71 §4` notes the seam.
 
-### OQ-temporal — In-language temporal layer: data-only vs reasoning
+### OQ-temporal — In-language temporal layer — **DECIDED**
 - **Fork.** Keep temporal logic as exported *data* only, or add a guarded/`▷`
   modal layer so Ken can *reason* about temporal properties internally?
-- **Recommendation.** **Data-only** for v1 (state + export; no kernel
-  modalities), per the small-TCB principle; revisit only on a concrete need to
-  prove temporal properties *inside* Ken.
-- **Affects.** `70-behavioral/72`. **Why open.** Movable line; kernel-cost vs
-  expressiveness.
+- **Decision (operator, 2026-06-27, ADR 0006): data-only, durably.** No temporal
+  modalities in the kernel (no `▷`/clocks/Löb — that grows the TCB, the surface
+  ADR 0005 rejected cubical to avoid). **Durable, not a v1 hedge:** it is the
+  consistent application of Ken's *reflect-don't-extend* principle (OTT over
+  cubical; reflective `decide` over trusting Z3; `Temporal`-as-data here) and
+  the topos-fragment decomposition that justifies the seam (Ken = static/
+  propositional fragment, Ward = temporal/modal fragment of one logic).
+- **The boundary (load-bearing).** Ken reasons **about** temporal formulas (they
+  are inductive data — transformations, normalizations, well-formedness, all
+  ordinary static proofs) but **not with** temporal modalities (no `▷` in the
+  judgment); discharging the obligations is Ward's.
+- **Revisit-trigger.** Unbounded liveness ("no deadlock for *all* `N`", which
+  model-checking only covers for `N ≤ k`) — handled, if it bites, by a
+  **contained reflective model** (prove in the deep-embedded semantics),
+  **never** kernel modalities.
+- **Affects.** `70-behavioral/72` (drafted), `README`. **Recorded.**
 
 ### OQ-classical-bridge — Intuitionistic↔classical refinement mapping
 - **Fork.** Ken's logic is intuitionistic/total/static; the model-checkers are
@@ -496,6 +507,7 @@ states what it cannot prove; the sibling models/tests/monitors it.
 | **OQ-classes** | 2026-06-27 — **property classes** (Ω) coherent for free; **structure classes** = **one canonical instance per (class, head-type)**, **orphans a hard error**, no overlap, ambiguity is an error; named instances are first-class values passed **explicitly** (the dependent escape hatch); search terminates. | **ADR 0008** (recorded in `30-surface/33`, `39`) |
 | **OQ-export-ir** | 2026-06-27 — export = **assume-guarantee contract**, **generated** from verified content (can't overclaim); five parts `Q`/`P`/`Σ`(=interaction-tree alphabet)/`T`/`G`; **Ken-native contract + ITF traces**; versioned/content-addressed/in provenance; **`G` = support structure only, never a measure**. | **ADR 0006** (recorded in `70-behavioral/71`) |
 | **OQ-sampling-policy** | 2026-06-27 — the test-sampling **measure** lives **outside Ken source, durably** (per-deployment; `Dockerfile`/Terraform class); a Ward-side **sampling policy** governed like the security policy; Ken's `G` partition is its vocabulary. Policy *language* deferred (needs Ward's sampler). | — (deferred; `70-behavioral/71 §4`) |
+| **OQ-temporal** | 2026-06-27 — **data-only, durably**: no kernel temporal modalities; `Temporal` is inert inductive data, stated + exported + delegated to Ward. Boundary: Ken reasons **about** formulas, **not with** modalities. Unbounded liveness → contained reflective model, never kernel modalities. | **ADR 0006** (recorded in `70-behavioral/72`) |
 
 When an OQ is decided, record it here and, if architecturally significant, write
 an ADR under `../docs/adr/` and update the affected chapters (replacing the OQ
