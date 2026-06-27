@@ -108,16 +108,25 @@ surfaced while drafting. Resolved items move to an ADR (`../docs/adr/`).
 
 ## B. Verification
 
-### OQ-12 — SMT integration strategy *(digest fork 12)*
-- **Fork.** Kripke-embedding-as-classical-FOL vs. SMTCoq-style certificate
-  reconstruction vs. Herbrand constructivization; which solvers (Z3/cvc5/both);
-  keep the Coq backend?
-- **Recommendation.** **Kripke embedding** primary (it is Ken's native
-  semantics), with a kernel-certificate route — **(a) proved soundness
-  meta-lemma** preferred, **(b) reconstruction** as fallback. Reflective
-  decision for the decidable fragment. Z3 first; cvc5 optional; retire Coq.
-- **Affects.** `20-verification/23`. **Why open.** (a) vs. (b) is real
-  engineering; both end at a kernel-checked term.
+### OQ-12 — SMT integration strategy *(digest fork 12)* — **DECIDED**
+- **Fork.** How to discharge obligations soundly with a classical solver under
+  an intuitionistic logic, ending at a kernel-checked term.
+- **Decision (operator, 2026-06-27).** **Kripke embedding** primary (Ken's
+  native topos = Kripke semantics). Three-tier routing: decidable → direct Z3 +
+  **reflective `decide`**; first-order intuitionistic → embedding + certificate;
+  higher-order → tactics + typed holes. Certificate bridge: **route (a) — the
+  reflective proved-adequacy meta-lemma + a verified certificate checker — is
+  the *target*** (discharge by computation), chosen on intrinsic merits
+  (permanent artifact, robust to solver drift, scales, and it yields the G5
+  kernel-soundness adequacy theorem), **not** on effort. **(b) reconstruction**
+  (SMTCoq-style / Herbrand) is kept **only as a feasibility hedge** + bring-up
+  cross-check. Leans on OTT canonicity + definitional proof irrelevance (ADR
+  0005). **Z3** primary; **cvc5** optional second oracle; **Coq retired**
+  (external checker would enlarge the TCB).
+- **Residual risk.** Whether the adequacy + checker-soundness metatheory
+  *mechanizes cleanly* — a **feasibility** risk, retired by a thin front-loaded
+  (a) slice (not an effort estimate).
+- **Affects.** `20-verification/23` (updated). Interacts with `OQ-spec`.
 
 ### OQ-spec — Surface proof interface & state model
 - **Fork.** Refinement types on arrows vs. a separate tactic language vs. both;
@@ -319,6 +328,7 @@ are **fixed** by ADR 0004; only the mechanics below are open.
 | **OQ-4** | 2026-06-27 — **observational equality (OTT), not cubical**: `Eq`-by-type + `cast` + strict-prop Ω + set-quotients; no univalence/HITs. Smallest auditable TCB; exact set-level-software fit. | **ADR 0005** |
 | **OQ-Prop** | 2026-06-27 — predicative Ω; impredicativity ruled out. Proof irrelevance **definitional** via OTT's strict-prop Ω (`SProp`), free in the smaller kernel (revised by ADR 0005). | **ADR 0005** (recorded in `10-kernel/12`) |
 | **OQ-η-records** | 2026-06-27 — definitional η is the **`record`/Σ class**, not `data`; safe-by-construction (records are non-recursive nested Σ), low-cost under OTT. | — (recorded in `10-kernel/14`) |
+| **OQ-12** | 2026-06-27 — Kripke embedding primary; three-tier routing; **reflective proved-adequacy + verified checker (a) is the target** (intrinsic merits, not effort), reconstruction (b) a feasibility hedge; Z3 primary, cvc5 optional, **Coq retired**. | — (recorded in `20-verification/23`) |
 
 When an OQ is decided, record it here and, if architecturally significant, write
 an ADR under `../docs/adr/` and update the affected chapters (replacing the OQ

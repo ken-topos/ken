@@ -94,21 +94,40 @@ reason this is principled and not a trick: **Ken's topos semantics *are* Kripke
 semantics** (`README.md §4`), so `φ#` is `φ`'s *native meaning*.
 
 **Producing a kernel certificate (the trust step).** Even here, "Z3 says `φ#` is
-valid" is **not** accepted by itself. One of:
+valid" is **not** accepted by itself. Two routes, both ending at a
+kernel-checked term:
 
-- **(a) Embedding-as-proved-lemma + reflection.** The soundness theorem is
-  itself a **proved Ken meta-lemma** (proved once, in the kernel); a positive Z3
-  result instantiates it to a certificate of `φ`. *(Route the analysis prefers —
-  "no per-certificate re-check" of the *logic*, but the lemma instantiation is
-  still a kernel-checked term.)*
-- **(b) Constructivize + reconstruct.** Translate Z3's classical proof of `φ#`
-  into an intuitionistic proof of `φ` (Herbrand/expansion-proof
-  constructivization) and re-check it in the kernel.
+- **(a) Reflective: proved adequacy + verified certificate checker (the target,
+  `OQ-12` DECIDED).** Mechanize, *once and in the kernel*, two theorems: the
+  **embedding-adequacy** lemma `classically_valid(φ#) → φ` (the §4 soundness
+  theorem, internalized — Ken's topos = Kripke semantics makes it a genuine
+  theorem), and the **soundness of a deep-embedded checker** `check : Form →
+  Cert → Bool` for the solver's proof certificate. Then a positive Z3 result
+  discharges `φ` by **computation**: `check (embed φ) π` reduces to `true`
+  (canonicity, `16 §9`), and the discharge term is `sound φ π (refl true)`. Per
+  obligation is a tiny term + a kernel evaluation; no per-proof reconstruction.
+- **(b) Reconstruction (feasibility hedge).** Translate the solver's proof of
+  `φ#` rule-by-rule into a native kernel proof (SMTCoq-style), or constructivize
+  a classical proof (Herbrand/expansion-proof) — re-checked by the kernel.
+  Retained **only** for any theory whose adequacy/checker proof turns out
+  genuinely intractable, and as a differential cross-check during bring-up.
 
-Both end at a kernel-checked term; **(a)** is cheaper once the meta-lemma
-exists. Which to build first is **OQ-12** (`90-open-decisions.md`). Cost note:
-the embedding adds a `World` sort and +1 arity to every predicate, slowing Z3 —
-so it is reserved for FO; D uses direct/decision (§3).
+**Decision (`OQ-12`, ADR-class):** **(a) is the target architecture**, chosen on
+*intrinsic* merits — it is a permanent semantic artifact (the kernel is
+permanent), robust to solver proof-format drift, scales (tiny proof terms), and
+**yields the mechanized embedding-adequacy theorem the kernel-soundness story
+(G5) wants anyway**. It is *not* deferred on effort grounds; effort is the wrong
+axis for a foundation (`SPEC-PROGRESS.md §stance`). (a) leans on the kernel
+already decided: **canonicity** (proven for OTT, ADR 0005) makes the reflective
+discharge compute, and **definitional proof irrelevance** (Ω is strict-prop)
+means *any* kernel-accepted inhabitant discharges a propositional goal. The one
+residual risk — whether the adequacy + checker-soundness metatheory *mechanizes
+cleanly* — is a **feasibility** risk, not a labor one; it is retired by
+front-loading a thin vertical slice of (a) (a minimal rule set, proved
+end-to-end) before the full build, with (b) as the hedge if a fragment resists.
+
+Cost note: the embedding adds a `World` sort and +1 arity to every predicate,
+slowing Z3 — so it is reserved for FO; D uses direct/decision (§3).
 
 ## 5. Fragment HO — native intuitionistic + tactics
 
@@ -133,14 +152,20 @@ transformations with single-variable Real-arithmetic bodies** (digest §8b). V3
 is to **generalize**: arbitrary decidable atoms over
 `Int`/`Decimal`/`Bool`/handles and finite domains (D); the full Kripke embedding
 for FO; the IPC tactic and the induction tactics for HO — not to build a prover
-from scratch. Keeping (or retiring) the Coq backend is part of **OQ-12**.
+from scratch. The **Coq backend is retired** (`OQ-12`): Ken's own kernel is the
+proof checker, so an external Coq dependency would enlarge the trusted base
+against the small-permanent-Rust-kernel principle (ADR 0001/0004). Z3 is the
+primary solver; **cvc5** is an optional second oracle (proof-friendly
+Alethe/LFSC output, useful for the (a) checker and for cross-checking).
 
 ## 7. Soundness obligations (what must actually be proved/ensured)
 
 1. **Kernel re-checks every certificate** (§1) — the backbone; nothing else here
    can break soundness if this holds.
-2. **The Kripke embedding's soundness theorem** (§4) — proved once, as a
-   meta-lemma (route a) or relied on for reconstruction (route b).
+2. **The Kripke embedding's adequacy theorem** (§4) — mechanized once as a
+   kernel meta-lemma (route a, the target), paired with the verified certificate
+   checker; reconstruction (b) is the feasibility hedge. Needed for the FO tier
+   either way.
 3. **Reflective decision procedures are kernel-verified** (§3, §5) — `dec`
    returns a genuine `Decidable φ`, checked by the kernel like any term.
 4. **The classifier is conservative** (§2) — and even if it weren't, (1) holds.
@@ -153,12 +178,14 @@ are never trusted.
 ## 8. What WS-V must deliver here (V3)
 
 The classifier (D/FO/HO); reflective decision for D + SMT search/reconstruction;
-the Kripke embedding + a kernel-certificate route (a or b) with the soundness
-meta-lemma; the IPC reflective tactic and the core induction/rewrite tactics;
-generalization beyond the naturality domain; and the documented guarantee (G3)
-that the classical solver cannot yield a false `proved`. Acceptance ties to
-**G3**. Conformance: `../../conformance/verify/prover/` — a decidable arithmetic
-goal (reflective), an FO-intuitionistic goal via the embedding (with a
-re-checked certificate), an IPC propositional goal, and a **soundness
-regression** in which Z3 "proves" a classically-valid-but-topos-invalid `φ`
-whose certificate the kernel **rejects** (demonstrating the criterion).
+the Kripke embedding + the **reflective certificate route (a)** — mechanized
+adequacy + a verified certificate checker — with (b) reconstruction as a
+feasibility hedge; the IPC reflective tactic and the core induction/rewrite
+tactics; generalization beyond the naturality domain; and the documented
+guarantee (G3) that the classical solver cannot yield a false `proved`.
+Acceptance ties to **G3**. Conformance: `../../conformance/verify/prover/` — a
+decidable arithmetic goal (reflective), an FO-intuitionistic goal via the
+embedding (with a re-checked certificate), an IPC propositional goal, and a
+**soundness regression** in which Z3 "proves" a
+classically-valid-but-topos-invalid `φ` whose certificate the kernel **rejects**
+(demonstrating the criterion).
