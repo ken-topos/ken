@@ -496,12 +496,24 @@ states what it cannot prove; the sibling models/tests/monitors it.
   concrete schema + gate semantics — needs Ward's runner.
 - **Affects.** `60-security/63 §5a`, `65`; `70-behavioral/`.
 
-### OQ-conformance — Trace conformance: gate, monitor, or both
+### OQ-conformance — Ken's observability contract — **DECIDED**
 - **Fork.** Is implementation-refines-model conformance a CI gate, a production
   monitor, or both? (The antidote to the two-artifact tax.)
-- **Recommendation.** **Both**, eventually; CI gate first. Keep instrumentation
-  cheap (RV overhead is instrumentation-dominated).
-- **Affects.** `70-behavioral/73`.
+- **Decision (operator, 2026-06-27, ADR 0006): reframed to Ken's half.** The
+  spec question is **not** gate/monitor/both (that is a downstream engine's
+  policy) but **what Ken emits to make the running system observable in the
+  model's vocabulary**. Ken provides a **trace/instrumentation contract** (a
+  companion to the `71` export, generated): concrete **`Σ`-event schema** at the
+  effect boundary (cheap — instrumentation-dominated), **correlation/identity**
+  keys for multi-space traces (`OQ-Space`), runtime forms of `Q`/`P`, and the
+  **monitor spec synthesized from `T`** (LTL→Büchi). The export is a **broadcast
+  contract** to a *family* of engines (verifier, test-gen, runtime monitor); the
+  runtime monitor is likely a **distinct engine** (a k8s sidecar) with a
+  *conformance* policy, not Ward's *discharge* policy.
+- **Out of scope (downstream).** Gate vs. monitor vs. both, the engine, the
+  failure response (halt/alert/degrade/rollback) — per-deployment policy,
+  recorded in the discharge attestation (`OQ-discharge-attestation`).
+- **Affects.** `70-behavioral/73` (drafted), `71 §1`, `README`. **Recorded.**
 
 ### OQ-agentic-oracle — Oracle-free agent outputs
 - **Fork.** How to assure agent outputs with no propositional oracle.
@@ -536,6 +548,7 @@ states what it cannot prove; the sibling models/tests/monitors it.
 | **OQ-temporal** | 2026-06-27 — **data-only, durably**: no kernel temporal modalities; `Temporal` is inert inductive data, stated + exported + delegated to Ward. Boundary: Ken reasons **about** formulas, **not with** modalities. Unbounded liveness → contained reflective model, never kernel modalities. | **ADR 0006** (recorded in `70-behavioral/72`) |
 | **OQ-classical-bridge** | 2026-06-27 — **strictly one-way (Ken → Ward)**; Ward results never promoted to `proved`; sound by **assume-guarantee** (`Q ⊣ P`); **translation faithfulness** Ken-checked **once at the compiler level** (analog of Kripke adequacy) + generated-model + conformance; trust edge pinned as Ward version in the discharge attestation. | **ADR 0006** (recorded in `70-behavioral/71 §5`, `20-verification/23`) |
 | **OQ-discharge-attestation** | 2026-06-27 — post-build validation = a **signed, runtime-checkable discharge attestation** (export hash + Ward policy + optional sampling + per-obligation four-way outcome + Ward-version signature); a **deployment gate** enforces per-target-environment validation; policy-attestation ladder. Schema deferred (needs Ward's runner). | — (deferred; `60-security/63 §5a`) |
+| **OQ-conformance** | 2026-06-27 — **reframed to Ken's half**: Ken emits a **trace/instrumentation contract** (concrete `Σ`-event schema at the effect boundary + correlation/identity for multi-space + runtime `Q`/`P`/`T` monitors), making the running system observable in the model's vocabulary. Export = **broadcast contract** to a family of engines; runtime monitor likely a **distinct sidecar**. Gate/monitor/both + response = downstream policy. | **ADR 0006** (recorded in `70-behavioral/73`) |
 
 When an OQ is decided, record it here and, if architecturally significant, write
 an ADR under `../docs/adr/` and update the affected chapters (replacing the OQ

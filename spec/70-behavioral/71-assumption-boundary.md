@@ -11,10 +11,19 @@
 ## 1. What the export is
 
 When Ken finishes checking a program it emits a stable artifact — the
-**behavioral export** — that hands the sibling (`Ward`, ADR 0006) exactly the
-part of the specification Ken could **not** close as a static proof. It is the
-seam's contract: a faithful statement of *what Ken guaranteed*, *what Ken
-assumed*, and *what Ken stated but delegated*.
+**behavioral export** — carrying exactly the part of the specification Ken could
+**not** close as a static proof. It is the seam's contract: a faithful statement
+of *what Ken guaranteed*, *what Ken assumed*, and *what Ken stated but
+delegated*.
+
+The export is a **broadcast contract**, not a point-to-point channel: it is read
+by a *family* of downstream consumers — a **static verifier** (model-check `T`
+against `Q`/`P`), a **test generator** (`G` + the sampling policy), and a
+**runtime conformance monitor** (`73`) — each applying its own policy to many of
+the same outputs. `Ward` (ADR 0006) is the umbrella for these engines; the
+runtime monitor is plausibly a *distinct* engine (a sidecar), which sharpens the
+"two engines" framing to **Ken + a family of behavioral engines sharing one
+export and one logic**.
 
 Two properties make it trustworthy:
 

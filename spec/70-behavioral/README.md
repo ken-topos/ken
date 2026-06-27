@@ -75,9 +75,14 @@ and export*, not to *prove*; proving is the sibling's job. (If Ken ever needs to
 *reason* internally about temporal properties, reopening a guarded/modal kernel
 layer is `OQ-temporal` — weighed against the small-TCB principle.)
 
-## 5. The three layers the sibling orchestrates (overview)
+## 5. The family of downstream engines (overview)
 
-Specified in the sibling's own project; summarised here for the seam:
+The export (§3) is a **broadcast contract** read by a *family* of consumers, not
+a single sibling — each applies its own policy to many of the same outputs.
+Specified in the sibling's own project; summarised here for the seam. `Ward` is
+the umbrella; the runtime monitor (L3) is plausibly a **distinct engine** (a
+sidecar), sharpening "two engines" to **Ken + a family of behavioral engines
+sharing one export and one logic** (`71 §1`, `73 §4`):
 
 - **L1 — Behavioral modeling & model checking** (the TLA+ slot; **Quint +
   Apalache** are the most Ken-congruent — typed, effect-aware, SMT-backed). Fed
@@ -111,8 +116,9 @@ Specified in the sibling's own project; summarised here for the seam:
 |---|---|
 | `71-assumption-boundary.md` | The export IR: `Q`/`P`/refinements/effects/temporal; schema; ITF traces — **DRAFT** (`OQ-export-ir` decided) |
 | `72-temporal.md` | `Temporal` as deeply-embedded data; surface notation; LTL/μ-calculus encoding — **DRAFT** (`OQ-temporal` decided) |
-| `73-conformance.md` | Trace emission, instrumentation, trace-conformance (does code refine the model?) |
+| `73-conformance.md` | Ken's observability contract: `Σ`-event schema, correlation, runtime `Q`/`P`/`T`; engine/mode/response downstream — **DRAFT** (`OQ-conformance` decided) |
 | `74-agentic.md` | Oracle-free outputs: metamorphic relations + RV watchdogs; the agent safety FSM |
 
-`71`–`72` are drafted (export schema; temporal-as-data); `73`–`74` are stubs
-pending the sibling's bring-up. This README is the binding overview.
+`71`–`73` are drafted (export schema; temporal-as-data; the observability
+contract); `74` is a stub pending the sibling's bring-up. This README is the
+binding overview.
