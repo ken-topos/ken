@@ -58,20 +58,27 @@ soundness argument and interacts subtly with the cubical layer. The DRAFT
 baseline is **fully predicative**, with Ω a *defined* sub-universe (§5), not a
 primitive impredicative sort.
 
-## 3. Cumulativity (OQ-2)
+## 3. Cumulativity — non-cumulative (`OQ-2` DECIDED)
 
-The DRAFT baseline is **non-cumulative**: `A : Type ℓ` does *not* automatically
-give `A : Type (suc ℓ)`; lifting is explicit. Non-cumulative is simpler to
-specify and check and is friendlier to a small kernel.
+Ken is **non-cumulative** (`OQ-2` decided, operator 2026-06-27): `A : Type ℓ`
+does *not* automatically give `A : Type (suc ℓ)`; lifting is explicit.
+Non-cumulative is simpler to specify and check and keeps a **subtyping relation
+out of the trusted kernel** — consistent with the small-kernel principle, with
+following Lean's (non-cumulative) kernel (`17 §3`), and with the cubical
+commitment (the cubical systems are non-cumulative; cumulative-cubical is
+unexplored).
 
 Cumulativity (a subtyping `Type ℓ ≤ Type ℓ'` for `ℓ ≤ ℓ'`, propagated
 structurally through Π/Σ) is ergonomic — it removes a class of "universe too
-low" errors that the elaborator otherwise resolves by inserting lifts — but adds
-a subtyping relation to the kernel and complicates conversion. **OQ-2** records
-the choice; if cumulativity is rejected at the kernel, the elaborator
-(`../30-surface/39-elaboration.md`) hides level bookkeeping from the programmer
-via universe polymorphism (§4) and inserted lifts, so the surface cost is low
-either way.
+low" errors — but adds a subtyping relation to the kernel and complicates
+conversion *and* inference. Ken does not pay that kernel cost. Instead the
+**elaborator** (`../30-surface/39-elaboration.md`, untrusted) supplies the
+ergonomics: **universe polymorphism** (§4), **typical ambiguity** (write bare
+`Type`, infer a consistent level), and **inserted lifts** where genuinely
+needed. So the surface cost is low while the kernel stays small — Ken's
+"cleverness outside, certainty inside." (Coq is the main cumulative system, and
+is non-cubical with a heavier kernel; Lean and the cubical implementations are
+all non-cumulative.)
 
 ## 4. Level polymorphism
 

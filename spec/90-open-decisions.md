@@ -48,11 +48,15 @@ surfaced while drafting. Resolved items move to an ADR (`../docs/adr/`).
   (`OQ-Prop`, still open).
 - **Affects.** `10-kernel/17` (updated). Interacts with `OQ-Prop`, `OQ-4`.
 
-### OQ-2 — Cumulativity *(part of digest fork 3)*
+### OQ-2 — Cumulativity *(part of digest fork 3)* — **DECIDED**
 - **Fork.** Cumulative universes (`Type ℓ ≤ Type ℓ'`) vs. non-cumulative.
-- **Recommendation.** **Non-cumulative** (simpler kernel; elaborator hides the
-  cost via level polymorphism + lifts).
-- **Affects.** `10-kernel/12`, `18`.
+- **Decision (operator, 2026-06-27): non-cumulative.** Keeps a subtyping
+  relation out of the trusted kernel; consistent with the small-kernel
+  principle, following Lean (non-cumulative), and cubical (cumulative-cubical is
+  unexplored). Ergonomics come from the untrusted elaborator: universe
+  polymorphism + typical ambiguity + inserted lifts. (Coq is the lone major
+  cumulative system — non-cubical, heavier kernel.)
+- **Affects.** `10-kernel/12` (updated), `18`.
 
 ### OQ-Prop — Impredicative `Prop` *(part of digest fork 3; tag OQ-3)*
 - **Fork.** A primitive impredicative proof-irrelevant `Prop` vs. a derived Ω of
@@ -287,6 +291,7 @@ are **fixed** by ADR 0004; only the mechanics below are open.
 |---|---|---|
 | **OQ-int** | 2026-06-27 — arbitrary-precision `Int`; `Decimal` core; full native `Int8…Int64`/`UInt8…UInt64` (verbose names). `OQ-1a` (overflow default) still open. | — (recorded in `30-surface/35`) |
 | **OQ-eval-strategy** | 2026-06-27 — follow Lean: lazy-WHNF + on-the-fly conversion + lazy δ over a cubical-capable NbE value domain; NbE the reference. Diverges from Lean's theory on cubical `J`/canonicity; `OQ-Prop` (definitional proof irrelevance) still open. | — (recorded in `10-kernel/17`) |
+| **OQ-2** | 2026-06-27 — **non-cumulative** universes; ergonomics via universe polymorphism + typical ambiguity + elaborator lifts. | — (recorded in `10-kernel/12`) |
 
 When an OQ is decided, record it here and, if architecturally significant, write
 an ADR under `../docs/adr/` and update the affected chapters (replacing the OQ

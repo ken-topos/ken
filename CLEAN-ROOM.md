@@ -1,8 +1,8 @@
 # Clean-Room Policy
 
-Ken is an **MIT-licensed, clean-room reimplementation**. It draws on the *design*
-of an AGPLv3 prototype (a sibling checkout at `../yon`) but must not be a
-derivative of its **source code**. This policy is load-bearing: the permissive
+Ken is an **MIT-licensed, clean-room reimplementation**. It draws on the
+*design* of an AGPLv3 prototype (a sibling checkout at `../yon`) but must not be
+a derivative of its **source code**. This policy is load-bearing: the permissive
 license depends on it.
 
 ## What is reusable vs. not
@@ -20,15 +20,32 @@ reusable with attribution; LLVM/Cranelift are permissive.)
 
 ## The process
 
-1. **Team Spec is the only conduit.** Team Spec may read the prototype to produce
-   a written specification (`/spec`) and a black-box **conformance** corpus
-   (`/conformance`). Those artifacts describe *behavior*, and contain no copied
-   source.
-2. **Implementation teams work from the spec**, with prototype source kept out of
-   their working context. Implementation PRs cite spec sources, not prototype
+1. **Team Spec is the only conduit.** Team Spec may read the prototype to
+   produce a written specification (`/spec`) and a black-box **conformance**
+   corpus (`/conformance`). Those artifacts describe *behavior*, and contain no
+   copied source.
+2. **Implementation teams work from the spec**, with prototype source kept out
+   of their working context. Implementation PRs cite spec sources, not prototype
    `file:line`.
 3. **The merge gate enforces it.** The Integrator confirms each PR cites spec
    sources and introduces no AGPL-derived code; CI runs a provenance check.
+
+## Local reference implementations (`local/refs/`)
+
+The operator keeps reference implementations under `local/refs/` (gitignored —
+never in this repo). They fall in two tiers:
+
+- **The AGPLv3 prototype (`local/refs/yon/`)** — clean-room critical, governed
+  by the process above: Team Spec only, off-limits to implementer agents, never
+  copied. In any environment where it exists locally, treat it as
+  read-restricted (the repo `CLAUDE.md` + `.claude/settings.json` may enforce a
+  deny).
+- **Permissive references** (Lean, Agda/cubical Agda, cooltt, smalltt, cctt, …)
+  — Apache-2.0 / MIT-style, *not* copyleft. The Architect / Spec enclave may
+  **read them to understand** and to resolve `(oracle)`-tagged spec details;
+  Ken's code is then written **from the spec**, in Ken's own words. Do **not**
+  vendor their source into the repo (keeps Ken uniformly MIT). Implementer
+  agents build from `/spec`, never from `local/refs/`.
 
 ## If in doubt
 
