@@ -126,8 +126,18 @@ Remaining / future passes (not blocking team start):
 - Raise chapters from DRAFT → REVISED as the enclave/teams validate them.
 
 
-## Open decisions captured so far
+## Open decisions — RESOLVED (2026-06-27)
 
-See `90-open-decisions.md` (created with the first fork). Known forks from the
-strategy: content-store capacity bound (recommend: no hard ceiling); concrete
-syntax; effect-tracking surface; the Space/process-isolation model.
+The forks register (`90-open-decisions.md`) is **fully dispositioned.** Every OQ
+is DECIDED / DECIDED-deferred / DECIDED-excluded / DECIDED-principles, with a
+resolution-log row each. Architecturally significant ones produced **ADRs
+0005–0008** (observational equality; the Ward behavioral-assurance sibling;
+security policy-as-code; typeclass coherence). The behavioral seam
+(`70-behavioral/71–74`) is drafted.
+
+**Still genuinely open** (not blocking, not decidable now):
+- `OQ-sampling-policy`, `OQ-discharge-attestation` — **Ward-blocked**; need the
+  sibling's runner before their concrete schema/language can be designed.
+- Concrete syntax **token table** (`OQ-syntax` principles are decided; spellings
+  iterate with the team) and `OQ-policy` concrete policy syntax — team
+  iteration.
