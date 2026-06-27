@@ -12,4 +12,10 @@
 .env
 .env.local
 
+# Local drop zone — put research notes, conversation transcripts, scratch files,
+# and anything not meant for the public repo here. Everything in /local/ is
+# gitignored except this folder's README.
+/local/*
+!/local/README.md
+
 # Keep Cargo.lock committed (this workspace ships a binary).
