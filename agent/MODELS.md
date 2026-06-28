@@ -45,13 +45,19 @@ Playbooks and `COORDINATION.md` are written **model-agnostic** — no reliance o
 Claude-specific behaviors — because the same coordination law must hold across
 Anthropic, Fireworks, and DeepSeek.
 
-**Routing mechanism.** Each agent is a normal Claude Code process; its
-model/provider is selected by a **per-role backend env file**
-(`.devcontainer/agent-backends/<CONVO_ROLE>.env`) sourced at launch by
-`launch-agent.sh` (verified against the convo source, 2026-06-28) — there is
-*no* `team.toml` model field. ken uses **direct** connections: the Opus enclave
-on Anthropic **subscription** (OAuth), the GLM/DeepSeek build tiers on the
-providers' **Anthropic-compatible endpoints** (`ANTHROPIC_BASE_URL` + a
-per-provider key from `/home/node/.secrets/`). Full setup, the `<role>.env`
-recipes, the `CONVO_ROLE` scheme, and the clean-room/worktree-mount scoping are
-the operator's runbook `local/mootup-agent-backends-setup.md`.
+**Routing mechanism (hybrid).** Each agent is a normal Claude Code process
+launched by `moot up`, which reads its `model` + `effort` per role from
+`moot.toml` (`[agents.<role>]`) and passes `--model`/`--effort`. Provider routing
+is **hybrid**:
+
+- **Opus enclave** (4 roles) runs **direct on the Anthropic subscription**
+  (OAuth) — never through the proxy (the convo guardrail rejects subscription
+  tokens at the proxy).
+- **Build tiers** (GLM/DeepSeek) route through a **local LLM proxy**
+  (`mootup_harness_sdk.llm_proxy`, `127.0.0.1:8090`) that dispatches by model
+  prefix (`accounts/fireworks/*`→Fireworks, `deepseek-*`→DeepSeek); the proxy
+  holds the upstream keys from `/home/node/.secrets/`.
+
+Per-role selection (proxy env for build, clean OAuth for enclave) is injected by
+`CONVO_ROLE` in `.devcontainer/ken-setup.sh`; the proxy is started by
+`run-llm-proxy.sh`. Operator runbook: `local/mootup-agent-backends-setup.md`.

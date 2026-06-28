@@ -33,6 +33,39 @@ fi
 #     "https://github.com/cvc5/cvc5/releases/download/cvc5-${CVC5_VER}/cvc5-Linux-x86_64-static" \
 #     && sudo install -m755 /tmp/cvc5 /usr/local/bin/cvc5
 
+# LLM proxy package — the build tiers (GLM/DeepSeek) route through a local
+# proxy (mootup_harness_sdk.llm_proxy); see run-llm-proxy.sh. Installed to the
+# same system python the moot post-create uses for `pip install mootup`.
+echo "[ken-setup] installing mootup-harness-sdk (llm proxy)..."
+pip install --quiet mootup-harness-sdk || echo "[ken-setup] WARN harness-sdk install failed (non-fatal)"
+
+# Per-role provider routing (HYBRID), keyed on CONVO_ROLE (set by moot's
+# launcher): the build tiers point at the local proxy; the Opus enclave stays
+# direct on the Anthropic subscription. Written to a sourced file so each
+# agent shell self-configures at startup.
+# NOTE: validate on first `moot up` that the agent shell sources this — if
+# moot execs `claude` without a login/interactive shell, fall back to a
+# per-worktree .claude/settings.json `env` block instead.
+cat > /home/node/.ken-agent-routing.sh <<'ROUTING'
+# ken hybrid LLM routing — branches on CONVO_ROLE.
+case "${CONVO_ROLE:-}" in
+  spec-author|conformance-validator|steward|architect)
+    # enclave: clean subscription (OAuth) — no proxy, no API key
+    unset ANTHROPIC_BASE_URL ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN ;;
+  "")
+    : ;;  # no role assigned — leave ambient env untouched
+  *)
+    # build tiers: through the local proxy, presenting the shared secret
+    export ANTHROPIC_BASE_URL="http://127.0.0.1:8090"
+    [ -r /home/node/.secrets/llm-proxy-secret ] && \
+      export ANTHROPIC_API_KEY="$(cat /home/node/.secrets/llm-proxy-secret)" ;;
+esac
+ROUTING
+for rc in /home/node/.bashrc /home/node/.profile; do
+  grep -q ken-agent-routing "$rc" 2>/dev/null || \
+    echo '[ -r /home/node/.ken-agent-routing.sh ] && . /home/node/.ken-agent-routing.sh' >> "$rc"
+done
+
 echo "[ken-setup] versions:"
 rustc --version 2>/dev/null || echo "  rustc: MISSING (rust feature?)"
 cargo --version 2>/dev/null || true

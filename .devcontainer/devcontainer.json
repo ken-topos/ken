@@ -16,6 +16,7 @@
   },
   "onCreateCommand": "bash .devcontainer/ken-setup.sh",
   "postCreateCommand": "bash .devcontainer/post-create.sh",
+  "postStartCommand": "bash .devcontainer/run-llm-proxy.sh",
   "runArgs": [
     "--name", "moot-${localWorkspaceFolderBasename}"
   ],
