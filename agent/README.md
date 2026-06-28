@@ -19,6 +19,14 @@ inheritance**, so cross-team sharing has to be deliberate.
      enclave; the only team that reads the prototype).
    - `federation/` — singletons: `steward`, `architect`, `integrator`,
      `librarian`.
+
+   **Security (WS-Sec, tier-1) and the behavioral seam (WS-B) are cross-cutting,
+   owned by these existing teams** — not separate teams. Security rides Language
+   (IFC/`@ct`/capabilities/policy on L5) + Foundation (supply-chain) + Kernel
+   (trust/audit), enforced by the Architect's review of `Sec`-tagged WPs; the
+   seam is Verify. **Ward** — the seam's downstream consumer — is a **sibling
+   project**, coupled only through the generated export artifact, not a Ken team
+   (`../docs/program/03-program-of-work.md`).
 3. **`teams/<team>/<role>.md`** — **per-team overlays** (created when a team is
    instantiated). Thin deltas that reference the archetype and add only that
    team's specifics. Where local refinement and retros land first.
@@ -37,6 +45,8 @@ lacks. See `playbooks/federation/steward.md` and `COORDINATION.md §10`.
 
 These patterns are lifted and adapted from the workflow skills the mootup team
 developed by dogfooding mootup on a different (SaaS) codebase — the coordination
-nuance transfers; SaaS/tooling specifics were dropped. The governing git model is
-[`../docs/program/04-git-and-integration.md`](../docs/program/04-git-and-integration.md); roles map to teams
-in [`../docs/program/03-program-of-work.md`](../docs/program/03-program-of-work.md).
+nuance transfers; SaaS/tooling specifics were dropped. The governing git model
+is
+[`../docs/program/04-git-and-integration.md`](../docs/program/04-git-and-integration.md);
+roles map to teams in
+[`../docs/program/03-program-of-work.md`](../docs/program/03-program-of-work.md).

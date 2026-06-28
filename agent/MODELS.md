@@ -17,9 +17,9 @@ federation.
 
 - **Kernel and Verify QA** are the likeliest T3→T2 upgrades — soundness-adjacent
   testing may warrant a stronger model. Start T3; upgrade if quality lags.
-- **Integrator stays T3.** It enforces gates and merges; the deep correctness and
-  architectural review is the **Architect's** (T1) job on the merge Decision, so
-  the Integrator does not need a strong model.
+- **Integrator stays T3.** It enforces gates and merges; the deep correctness
+  and architectural review is the **Architect's** (T1) job on the merge
+  Decision, so the Integrator does not need a strong model.
 
 ## Clean-room × models (load-bearing)
 
@@ -31,6 +31,13 @@ The tiering *reinforces* the clean-room boundary:
 - **Never send AGPLv3 prototype source to Fireworks or DeepSeek.** Prototype
   content goes only to the Anthropic-hosted Spec agents. Ken's own MIT source is
   fine to send anywhere.
+- **Copyleft references (⚠ GPL/AGPL/CeCILL — `smtcoq`, `spot`, `jif`) are
+  enclave-only too.** Only the T1 Opus Spec enclave (Architect / Spec) reads
+  them, for *approach and behavior* only, under the leakage recheck
+  (`CLEAN-ROOM.md`); they are never sent to build-team providers and never
+  vendored. Permissive refs (Lean, Z3, Quint, …) may be read by the enclave but,
+  like all refs, are not a source for implementer agents — those build from
+  `/spec`.
 
 ## Portability
 

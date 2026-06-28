@@ -277,6 +277,80 @@ L4, T3.
 
 ---
 
+## WS-Sec — Security (tier-1; ADR 0004/0007) — cross-cutting
+
+Security is a **property every team upholds**, not a separate team: the work
+rides existing substrate (IFC/`@ct`/capabilities are the effect system, L5;
+supply-chain is the package layer; trust/audit is the kernel). The Architect's
+merge-Decision review of any `Sec`-tagged WP **explicitly checks the
+`60-security` invariants** (non-interference-by-typing, no-ambient-authority,
+re-check-on-consume, policy non-weakenable) — a checklist on the existing review
+edge, not a new edge. DAG + deps: `05-implementation-dag.md`.
+
+### Sec1 — Information-flow control + `@ct` · Language · ★★★
+Lattice-parametric non-interference by typing (DLM), labels on interaction-tree
+nodes, and the opt-in `@ct` constant-time discipline (taint-to-leakage-sink).
+**Spec.** `60-security/61`. **Deps.** L5. **Owner.** Team Language.
+
+### Sec2 — Capabilities · Language · ★★
+First-class authority tokens: attenuation, revocation, audit. **Spec.**
+`60-security/62`. **Deps.** L5. **Owner.** Team Language.
+
+### Sec3 — Supply-chain (re-check, provenance) · Foundation · ★★
+Package/`.keni` format, re-check-on-consume, keyless sigstore + in-toto/SLSA,
+the discharge-attestation hook. **Spec.** `60-security/63`. **Deps.** L4, K-api.
+**Owner.** Team Foundation.
+
+### Sec4 — Trust model + kernel audit · Kernel · ★★
+The TCB statement and the published independent kernel audit (G5 input).
+**Spec.** `60-security/64`. **Deps.** K-api. **Owner.** Team Kernel.
+
+### Sec5 — Policy-as-code · Language · ★★
+Separately-authored, compiler-enforced, non-weakenable policy surface (the
+lattice-parametric instantiation). **Spec.** `60-security/65`. **Deps.** Sec1,
+L4. **Owner.** Team Language. (*Authoring* policies is a downstream user/org
+role, not a build-team role — ADR 0007.)
+
+**Gate G-Sec.** IFC-by-typing demonstrable on a real flow; a capability
+attenuated+revoked; a dependency re-checked with its `trusted_base_delta`
+surfaced; one policy compiler-enforced.
+
+---
+
+## WS-B — Behavioral seam, Ken's half (ADR 0006)
+
+Ken emits the assumption-boundary export and trace contract; the consuming
+engine — **Ward** — is a **sibling project** (separate repo/roadmap), not a Ken
+WP. The seam was designed as a **one-way, generated, versioned broadcast
+artifact**, so Ward couples to Ken *only* through that export schema — a future
+**parallel federation consuming an artifact**, never a synchronous cross-team
+edge. Ward bring-up is deferred until B1–B3 are stable; the Steward tracks it as
+a sibling (`IMPLEMENTATION-PROGRESS.md`). DAG: `05-implementation-dag.md`.
+
+### B1 — Assumption-boundary export emitter · Verify · ★★★
+Generated `Q`/`P`/`Σ`/`T`/`G` contract + ITF traces; a projection of the
+four-way status, so it cannot overclaim. **Spec.** `70-behavioral/71`. **Deps.**
+V1, L5. **Owner.** Team Verify.
+
+### B2 — `Temporal`-as-data · Verify/Language · ★★
+The deeply-embedded `Temporal` datatype + surface notation (no kernel
+modalities). **Spec.** `70-behavioral/72`. **Deps.** L2, B1. **Owner.** Team
+Verify (datatype) + Team Language (surface).
+
+### B3 — Trace / instrumentation contract · Verify · ★★
+Concrete `Σ`-event schema at the effect boundary, correlation/identity, runtime
+`Q`/`P`/`T` monitors. **Spec.** `70-behavioral/73`. **Deps.** B1, X1. **Owner.**
+Team Verify.
+
+### B4 — Agentic boundary (doc/conformance) · Verify · ★
+The envelope = capabilities + IFC (no new mechanism); safety assured, quality
+never. **Spec.** `70-behavioral/74`. **Deps.** Sec1, Sec2, B3.
+
+**Gate G-Ward-seam.** Ken emits a reproducible export + trace contract a *stub*
+consumer can read; no Ward result is ever recorded as `proved`.
+
+---
+
 ## WS-S — Self-hosting (Phase 5, deferred)
 
 ### S1 — Stage1 Ken-subset compiler · L · ★★★
@@ -302,19 +376,33 @@ Reproduce the conformance suite from the self-hosted build. **Deps.** S1.
 
 ## Fan-out plan for agent teams
 
-- **Team Foundation** → F1, F3, F4, then T1-schema; supports F2.
+- **Team Foundation** → F1, F3, F4, then T1-schema; **Sec3** (supply-chain);
+  supports F2.
 - **Team Spec** → F2 (the oracle bridge), then conformance maintenance
-  throughout.
-- **Team Kernel** → K1 → K2 (with K3 alongside); the highest-trust spine.
+  throughout; **owns the copyleft-leakage recheck** (the conformance-validator,
+  ≠ the spec-author — `CLEAN-ROOM.md`).
+- **Team Kernel** → K1 → K2 (with K3 alongside); **Sec4** (trust/audit); the
+  highest-trust spine.
 - **Team Verify** → V0 → V2 → V3 (the prover; riskiest), with V1/V4 from Team
-  Surface.
+  Surface; **B1 → B3, B2/B4** (the behavioral seam, Ken's half).
 - **Team Surface** → V1, V4, T1-emit (specs + diagnostics + protocol).
-- **Team Language** → L1 → L2 → L3 → L6 → L7 → L8 (+ L4, L5 in parallel); the
-  commercial + self-host substrate.
+- **Team Language** → L1 → L2 → L3 → L6 → L7 → L8 (+ L4, L5 in parallel);
+  **Sec1, Sec2, Sec5** (security rides L5) + the B2 surface; the commercial +
+  self-host substrate.
 - **Team Runtime** → K3, X1, X2, later X3/X4.
 - **Team Ergo** → T2/T3/T4/T5 (Phase 6).
 - **Team Research** → R1/R2/R3 with spare capacity; outputs are notes, not
   gates.
+
+**Security review (no new edge).** Security is a cross-cutting *property*: the
+**Architect's existing merge-Decision review** of any `Sec`-tagged WP checks the
+`60-security` invariants (WS-Sec). No Security team; the work rides L5 / the
+package layer / the kernel.
+
+**Ward (the seam's consumer) is a deferred *sibling project*,** not a Ken team —
+coupled only through the generated export artifact (`70-behavioral/71`), so when
+it stands up it is a **parallel federation**, not a new cross-team edge. The
+Steward tracks its bring-up (`IMPLEMENTATION-PROGRESS.md`).
 
 - **Integration (the Integrator)** → owns `main`: reviews, enforces the
   clean-room and conformance gates, merges (no other team merges), and notifies

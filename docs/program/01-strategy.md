@@ -99,6 +99,13 @@ Gates (objective, testable; tied to roadmap phases):
 8. **G8 — Self-hosting** (later): Ken's elaborator/compiler is rewritten in Ken
    atop the permanent Rust kernel.
 
+The settled design adds two gates (`05-implementation-dag.md`): **G-Sec**
+(tier-1 security — IFC-by-typing demonstrable, a capability attenuated+revoked,
+a dependency re-checked with its delta surfaced, one policy compiler-enforced;
+ADR 0004/0007) and **G-Ward-seam** (Ken emits a reproducible export + trace
+contract a stub consumer can read, with no Ward result ever recorded as
+`proved`; ADR 0006 — Ward itself is a sibling project).
+
 **Non-goals (commercial track):** full higher-order automated proving
 (interactive tactics instead); native codegen before the verification loop
 works; the coalgebraic-layer research program; linear types; delimited
