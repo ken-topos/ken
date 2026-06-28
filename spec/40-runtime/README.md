@@ -29,15 +29,15 @@ interpreter never stops being the oracle.
 ## 2. The two corrections this section encodes
 
 - **No uniform f64.** Scalars (`Int`, `Bool`, `Float`, handles) are **unboxed,
-  typed** machine values, never routed through a float or a heap slot (`41
-  §scalars`). The prototype already does this; the analysis's "every value is an
-  f64" premise is not Ken's model (`35-numbers.md`).
+  typed** machine values, never routed through a float or a heap slot (`41 §1`).
+  The prototype already does this; the analysis's "every value is an f64"
+  premise is not Ken's model (`35-numbers.md`).
 - **Conventional content addressing.** The heap is addressed by a **fast hash
   (FNV-1a-style) + `memcmp`**, with slot ids a monotonic counter — **not** by
   Leech-lattice geometry or Co₀-orbit canonicalization, which the reality-check
-  showed are *never* on the allocation path (`41 §addressing`, `44`). The
-  Leech/Golay/Co₀ machinery, if used at all, is scoped to three *separate,
-  optional* roles (`44 §lattice`).
+  showed are *never* on the allocation path (`41 §3`, `44`). The Leech/Golay/Co₀
+  machinery, if used at all, is scoped to three *separate, optional* roles (`44
+  §4`).
 
 ## 3. Design principles
 

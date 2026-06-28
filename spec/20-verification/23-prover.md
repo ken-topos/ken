@@ -117,14 +117,14 @@ kernel-checked term:
 permanent), robust to solver proof-format drift, scales (tiny proof terms), and
 **yields the mechanized embedding-adequacy theorem the kernel-soundness story
 (G5) wants anyway**. It is *not* deferred on effort grounds; effort is the wrong
-axis for a foundation (`SPEC-PROGRESS.md §stance`). (a) leans on the kernel
-already decided: **canonicity** (proven for OTT, ADR 0005) makes the reflective
-discharge compute, and **definitional proof irrelevance** (Ω is strict-prop)
-means *any* kernel-accepted inhabitant discharges a propositional goal. The one
-residual risk — whether the adequacy + checker-soundness metatheory *mechanizes
-cleanly* — is a **feasibility** risk, not a labor one; it is retired by
-front-loading a thin vertical slice of (a) (a minimal rule set, proved
-end-to-end) before the full build, with (b) as the hedge if a fragment resists.
+axis for a foundation (`OQ-12`). (a) leans on the kernel already decided:
+**canonicity** (proven for OTT, ADR 0005) makes the reflective discharge
+compute, and **definitional proof irrelevance** (Ω is strict-prop) means *any*
+kernel-accepted inhabitant discharges a propositional goal. The one residual
+risk — whether the adequacy + checker-soundness metatheory *mechanizes cleanly*
+— is a **feasibility** risk, not a labor one; it is retired by front-loading a
+thin vertical slice of (a) (a minimal rule set, proved end-to-end) before the
+full build, with (b) as the hedge if a fragment resists.
 
 Cost note: the embedding adds a `World` sort and +1 arity to every predicate,
 slowing Z3 — so it is reserved for FO; D uses direct/decision (§3).
@@ -141,7 +141,7 @@ slowing Z3 — so it is reserved for FO; D uses direct/decision (§3).
   applies a small library of **tactics**
   (intro/apply/induction/rewrite-by-`Eq`/`decide`) and, where automation stops,
   leaves a **typed hole** with the remaining goal and context for an agent or
-  human to fill (`24 §holes`, the REPL loop `21 §3`).
+  human to fill (`24 §2`, the REPL loop `21 §3`).
 - Full higher-order *automated* proving is an explicit non-goal
   (`01-strategy.md`); interactive tactics + the agent loop serve instead.
 

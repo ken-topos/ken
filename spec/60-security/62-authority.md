@@ -96,10 +96,14 @@ policy can say no.
 - **Committed:** no ambient authority; static + visible capabilities; least by
   default; **attenuation** (monotone-weakening); **revocation** (transitive);
   boundary **audit**; capabilities gate effects and carry clearance.
-- **Open (`OQ-8a`, `OQ-Space`):** whether a capability is a distinct construct
-  or a specific effect; the exact revocation/isolation mechanism. The *security
-  requirement* (attenuable, revocable, audited, least) is fixed regardless of
-  the construct form.
+- **Decided (`OQ-8a`):** capabilities are first-class value tokens,
+  handler-or-row supplied, attenuable/revocable/audited, distinct from logical
+  `requires` (`../30-surface/36 §3`).
+- **Decided (`OQ-Space`):** shared-nothing message-passing over encapsulated
+  non-aliased `space` cells (`../30-surface/36 §4`); revocation via the space
+  model (forwarder/membrane in a controlling space); runtime realization
+  deferred to `40-runtime`. The *security requirement* (attenuable, revocable,
+  audited, least) is fixed regardless of the construct form.
 
 ## 8. What WS-L must deliver here
 

@@ -46,8 +46,8 @@ Notes:
 - **Primitive types and literals** (`Int`, `Bytes`, …) are *not* primitive term
   formers here. They enter the kernel as ordinary global declarations — opaque
   constants plus reduction rules registered with the environment
-  (`14-inductive.md §Primitives`, `../40-runtime/41-values.md`). This keeps the
-  core grammar closed and small.
+  (`14-inductive.md §5`, `../40-runtime/41-values.md`). This keeps the core
+  grammar closed and small.
 - The grammar is **intrinsically typed in spirit but extrinsically presented**:
   the same syntax can be ill-typed; typing (`18`) is what admits a term.
 
@@ -111,7 +111,7 @@ local context Γ) recording top-level declarations in dependency order:
   represented. Postulating a closed term of `⊥` would break consistency, so
   introducing opaque constants of empty types is a soundness-relevant action the
   kernel records but does not itself forbid — policy is the elaborator's (`18
-  §Postulates`).
+  §4`).
 - **Inductive declarations** and **primitives** are detailed in `14` and `41`.
 - The environment is **append-only and acyclic**: a declaration may reference
   only earlier ones. This is what makes δ-unfolding well-founded and is a

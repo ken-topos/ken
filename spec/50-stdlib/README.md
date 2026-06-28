@@ -32,7 +32,7 @@ A curated set of **classes with laws** (`../30-surface/33 §5`):
 
 | Class | Operations | Laws (propositions) |
 |---|---|---|
-| `Eq` | `eq` | reflexive, symmetric, transitive (or decidable equality) |
+| `DecEq` | `eq` | reflexive, symmetric, transitive (decidable equality) |
 | `Ord` | `cmp`, `≤` | total order |
 | `Semigroup`/`Monoid` | `<>`, `empty` | associativity, unit |
 | `Functor`/`Applicative`/`Monad` | `map`, `pure`, `>>=` | functor/monad laws |

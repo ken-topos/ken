@@ -115,7 +115,7 @@ determine the numeric story (`35`):
   The prototype's "every number is `f64`" defect does not even exist at Ken's
   lexer — integers and floats are *different tokens with different default
   types*. Numeric literals are **polymorphic** over the numeric classes via the
-  elaborator (`35 §literals`, `39`), defaulting as above when unconstrained.
+  elaborator (`35 §4`, `39`), defaulting as above when unconstrained.
 - Underscores are digit separators and are ignored.
 
 ## 4. Keywords (proposal)
@@ -124,10 +124,19 @@ determine the numeric story (`35`):
 view let type data record module import use space
 match if then else where requires ensures prove law
 visits foreign forall exists in as mut
+becomes declassify policy temporal
 ```
 
 Reserved but spelling-revisable (OQ-syntax). Contextual keywords (`infixl`,
-`derive`, …) are not globally reserved.
+`derive`, …) are not globally reserved. The decided post-freeze surface tokens
+are also lexed here (all spellings OQ-syntax):
+
+- the wrapping-arithmetic operator `+%` (and `wrapping_add`, …) in the operator
+  set (`35 §3`, OQ-1a);
+- the type-level identifiers `Lazy` (OQ-eval-order) and `Wrapping` (OQ-1a,
+  `Wrapping[T]`);
+- an annotation token `annotation ::= "@" ident`, with `@ct` a named attribute
+  (`../60-security/61 §5a`), distinct from any binary use of `@`.
 
 ## 5. Comments and documentation
 

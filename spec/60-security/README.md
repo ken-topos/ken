@@ -52,10 +52,10 @@ differently. This taxonomy is the spine of the section:
 | Class | Example | Shape | Ken's mechanism |
 |---|---|---|---|
 | **Unary / functional** | access-control logic, input validation, "result is sorted" | a predicate over **one** run, `Γ ⊢ φ : Ω` | the verification layer (`../20-verification/`) — already provided |
-| **Relational / 2-safety** | non-interference (no secret→public flow), constant-time | a property over **pairs** of runs | the **information-flow discipline** (`61-information-flow.md`) + relational verification (`OQ-relational`) |
+| **Relational / 2-safety** | non-interference (no secret→public flow), constant-time | a property over **pairs** of runs | the **information-flow discipline** (`61-information-flow.md`) + relational verification (product programs / `@ct` taint; `OQ-relational` DECIDED, `61 §5/§5a`) |
 | **Authority** | "this helper may not touch the network" | a capability/effect bound | effects + **capabilities** (`62-authority.md`) |
 | **Provenance / supply-chain** | "this binary came from that source + build" | an attestation over artifacts | re-check + signing/SLSA (`63-supply-chain.md`) |
-| **Meta (out of reach)** | "the spec captures my intent" | not a program property | **not solvable by a language** (`64-trust-model.md §limits`) |
+| **Meta (out of reach)** | "the spec captures my intent" | not a program property | **not solvable by a language** (`64-trust-model.md §4`) |
 
 The crucial, easily-missed point: **information flow and constant-time are
 *relational*** — they compare two executions ("for inputs differing only in a
@@ -74,7 +74,7 @@ secret, the public outputs agree"). They are **not** expressible as ordinary
 | **Intrinsic information-flow control** | a security-label lattice on the effect discipline; flow type-checked; declassification explicit + audited; **non-interference** the guarantee | `61` |
 | **Least authority** | capabilities are static, visible, and **attenuable**; no ambient authority | `62` |
 | **Re-checked dependencies** | consuming a package **re-checks** its proof terms in your kernel (cheap), never trusts the author | `63` |
-| **Trusting-trust defence** | the permanent Rust kernel is an independent second checker even after self-hosting | `64 §trusting-trust` |
+| **Trusting-trust defence** | the permanent Rust kernel is an independent second checker even after self-hosting | `64 §3` |
 | **No hidden native trust** | every `foreign`/FFI is a listed postulate in the delta | `63`, `../30-surface/38 §3` |
 
 ## 5. Chapter map
@@ -92,8 +92,8 @@ A language is most valuable as defence not by *detecting* bad code but by making
 classes of bad behaviour **unrepresentable** (purity, capabilities, IFC labels
 rule them out by construction) or **undeniable** (proofs and the
 `trusted_base_delta` make every assumption explicit and machine-auditable). Ken
-aims at both — and is deliberately clear (`64 §limits`) about the residue it
-cannot reach: that a *spec* captures *intent* is a human engineering-discipline
+aims at both — and is deliberately clear (`64 §4`) about the residue it cannot
+reach: that a *spec* captures *intent* is a human engineering-discipline
 problem, not something any checker can decide. Over-rotating on "it's verified"
 while ignoring that residue is itself a security failure, and this section says
 so out loud.

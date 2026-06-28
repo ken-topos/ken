@@ -66,7 +66,7 @@ is the digest's "typeclasses-as-subobjects" idea — the most category-faithful
 account — and is greenfield (the prototype has none).
 
 Two kinds of class, split by where the dictionary lives — the distinction that
-governs coherence (`OQ-classes`):
+governs coherence (`OQ-classes`, decided):
 
 - **Property classes** (Ω-valued: `Decidable p`, `IsHom f`). Proof-irrelevant
   (`../10-kernel/16 §1`), so **any two instances are definitionally equal** —

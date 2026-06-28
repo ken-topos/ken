@@ -24,11 +24,10 @@ logic.
 
 - Any two proofs of a proposition are **definitionally equal**. So **UIP** and
   proof irrelevance hold by construction, and the conversion checker may **skip
-  the contents of propositional arguments** entirely (`17 §proof-irrelevance`) —
-  which also means agents need not synthesise coherence/transport terms for
-  them.
+  the contents of propositional arguments** entirely (`17 §2`) — which also
+  means agents need not synthesise coherence/transport terms for them.
 - Ω is **predicative** (consistent with `12 §2`): it is not an impredicative
-  sort (`OQ-Prop`: impredicativity stays ruled out). `Ω : Type 1`;
+  sort (OQ-Prop DECIDED, ADR 0005: impredicativity ruled out). `Ω : Type 1`;
   level-polymorphic `Ω ℓ` for larger props (`12 §5.3`).
 - Ω carries the **Heyting** structure (`12 §5.2`) — `⊤`, `⊥`, `∧`, `⇒`, `¬`,
   plus `∨` and `∃` via truncation (§6); intuitionistic, not Boolean. Excluded

@@ -145,7 +145,7 @@ declassify : Cap_declassify[ℓ→ℓ'] → A @ ℓ → A @ ℓ'      -- require
   implicit, so "where does PII get released?" is answered by *grepping for
   `declassify`*.
 - It is **audited**: each declassification is a recorded event at a trust
-  boundary (`62 §audit`), and a declassification authority used by a dependency
+  boundary (`62 §5`), and a declassification authority used by a dependency
   appears in its **`trusted_base_delta`** (`63`, `../20-verification/25 §3`). A
   package that downgrades secrets cannot hide it.
 - A **declassification policy** (which edges are permitted, under what proven
@@ -192,7 +192,7 @@ and Ken does **not** own the *timing guarantee* itself (that is
 hardware/codegen-relative — cache lines, `cmov`-vs-branch lowering — and belongs
 to `Ward` + the toolchain, `64 §4.2`). Ken owns the **source-level
 precondition**, statically, via a distinguished label + the effect machinery
-(`../30-surface/36 §`):
+(`../30-surface/36 §3`):
 
 - **A distinct, opt-in `@ct` (timing-sensitive) label**, separate from `Secret`
   confidentiality. Confidentiality constrains *where the value goes* (don't

@@ -71,9 +71,10 @@ This is deliberate and load-bearing: it gives Ken a first-class way to *say*
 "eventually settled" / "never two leaders" while leaving the **kernel
 untouched** (no `▷`/clock modalities in the trusted core — that would bloat the
 TCB against ADR 0001/0004). The in-language layer is *expressive enough to state
-and export*, not to *prove*; proving is the sibling's job. (If Ken ever needs to
-*reason* internally about temporal properties, reopening a guarded/modal kernel
-layer is `OQ-temporal` — weighed against the small-TCB principle.)
+and export*, not to *prove*; proving is the sibling's job. This is the
+`OQ-temporal` decision (decided, ADR 0006): data-only is durable; if unbounded
+liveness ever forces a revisit, the response is a contained reflective model,
+never kernel modalities.
 
 ## 5. The family of downstream engines (overview)
 
@@ -106,11 +107,14 @@ sharing one export and one logic** (`71 §1`, `73 §4`):
   *visible* in source and *exported*.
 - **Conformance hooks**: instrumentation points for trace emission (cheap — RV
   overhead is instrumentation-dominated), and the trace format.
-- The **open questions** (`../90-open-decisions.md §H`): export-IR schema,
-  intuitionistic↔classical bridge, trace-format commitment (ITF vs native),
-  conformance as CI-gate vs production-monitor vs both, agentic-oracle policy.
+- The seam OQs are **decided** (`../90-open-decisions.md §H`, Resolution log):
+  export-IR schema (`OQ-export-ir`), intuitionistic↔classical bridge
+  (`OQ-classical-bridge`), temporal obligations as data (`OQ-temporal`),
+  conformance contract (`OQ-conformance`), agentic-oracle policy
+  (`OQ-agentic-oracle`). Only `OQ-sampling-policy` and
+  `OQ-discharge-attestation` remain deferred/Ward-blocked.
 
-## Chapter map (planned)
+## Chapter map (drafted)
 
 | File | Subject |
 |---|---|

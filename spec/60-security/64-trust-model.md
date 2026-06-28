@@ -133,8 +133,9 @@ Consuming a Ken artifact safely:
 3. **`trusted_base_delta` audit** against policy — *assumptions* (empty = fully
    verified+confined; non-empty = exactly what you inherit, incl. FFI and
    declassifications). ✅ in design.
-4. **Provenance signature + SLSA** verify — *origin and build* (`63 §5`). ⬜
-   `OQ-provenance` — the one piece still to add.
+4. **Provenance signature + SLSA** verify — *origin and build* (`63 §5`). ✅ in
+   design; `OQ-provenance` decided (2026-06-27: keyless sigstore/cosign +
+   in-toto/SLSA), implementation deferred.
 
 ## 6. What WS-K / tooling must deliver here
 

@@ -53,7 +53,11 @@ is a core term the kernel `check`s (`../10-kernel/18 §4`). Consequences:
    §2`), `if` → `elim_Bool`, contracts/refinements → the obligation encoding
    (`../20-verification/21 §6`, `22`), `do`/comprehensions (if any) →
    combinators, numeric literals → `fromInteger`/… (`35 §4`), layout → braces
-   (`31 §6`).
+   (`31 §6`); `@ct`-annotated expressions → IFC taint label on the
+   interaction-tree perform node (`36 §3`, `../60-security/61 §5a`);
+   `temporal{}`/`Temporal` surface notation → `Temporal` inductive data
+   (`../70-behavioral/72`); `Wrapping[T]` / `+%` → wrapping-arithmetic
+   primitives (`35 §3`).
 8. **Obligation emission** — where a refinement/contract is introduced, emit the
    proof obligation (`../20-verification/22`) and leave a hole/`prove` slot.
 

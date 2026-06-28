@@ -25,7 +25,7 @@
 |---|---|---|
 | `List a` | immutable singly-linked list | the inductive `data List` (`34 §1`); pattern-matchable |
 | `Array a` | immutable contiguous sequence, O(1) index | persistent/structural-sharing under the hood |
-| `Map k v` | immutable key→value | needs `Eq`/`Ord` (or hashable) `k` (`33 §5`) |
+| `Map k v` | immutable key→value | needs `DecEq`/`Ord` (or hashable) `k` (`33 §5`) |
 | `Set a` | immutable set | as `Map a Unit`; the lattice-bitmap option is `../40-runtime/44` |
 | `Option a`, `Result e a` | optionality / fallibility | sum types (`34 §1`); replace the `0.0` convention |
 
@@ -72,13 +72,13 @@
 ## 4. Equality and ordering
 
 - Value **equality** is structural and content-addressed by default
-  (`../40-runtime/41 §equality`); `DecEq` instances (`33 §5`) make it usable in
+  (`../40-runtime/41 §4`); `DecEq` instances (`33 §5`) make it usable in
   constraints, and `Eq` (observational equality, `../10-kernel/15`) is the
   propositional version proofs use.
 - **Ordering** (`Ord`) is a lawful class (total order propositions provable),
   underpinning `Map`/`Set` and sorting; sortedness is expressible as a
   refinement (`34 §5`) and provable (the canonical verification example,
-  `../20-`).
+  `../20-verification/21 §2`).
 
 ## 5. What WS-L must deliver here (L3, L8)
 

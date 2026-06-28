@@ -6,7 +6,8 @@
 > **rows** (`visits`), pure by default; a **layered encoding**
 > (authority/denotation/spec, §2) that keeps the kernel pure; capabilities as
 > static value tokens (§3). The *stateful-effect verification methodology* is
-> handed to `OQ-Space` (§4).
+> resolved by `OQ-Space` DECIDED (§4): bounded per-space Hoare, shared-nothing
+> message-passing.
 
 ## 1. Effects as a static row
 
@@ -55,7 +56,7 @@ verification, capabilities, information flow, and Ward's behavioral export:
 3. **Specification — "what must it guarantee?"** `requires`/`ensures` on an
    effectful function are **WP/Hoare-style predicates over the denotation**. For
    *stateful* effects the pre/post relation is the genuinely hard part and is
-   handed to **`OQ-Space`** (§4).
+   resolved by **`OQ-Space` DECIDED** (§4).
 
 So effects are a **surface + elaborator + runtime** discipline; the kernel
 reasons about a pure denotation and the runtime
@@ -71,7 +72,8 @@ Distinct from logical preconditions (`../20-verification/21 §1`), a
 a file, hit the network). The prototype conflates two readings of `requires`;
 Ken separates them:
 
-- **Logical `requires φ`** — a proposition, discharged by proof (`../20-`).
+- **Logical `requires φ`** — a proposition, discharged by proof
+  (`../20-verification/21 §1`).
 - **Capability `using c : Cap`** — a value-level authority, passed explicitly or
   via the effect row, enabling the corresponding effect. Capabilities make the
   *principle of least authority* expressible: a function gets exactly the
@@ -199,7 +201,9 @@ need appears. Genuinely reactive/nonterminating interaction is Ward's domain
 The static effect row (`visits`) with transitive inference + checking; the
 pure-by-default discipline; a capability/authority story (static, visible); and
 the `space` state model (cells, `becomes`, effect-tracked) with the
-concurrency/isolation model deferred to OQ-Space. Acceptance: a pure-typed
-`view` is provably effect-free (the verification layer may treat it as a
-function); performing an undeclared effect is a compile error. Conformance:
+concurrency/isolation model per **OQ-Space DECIDED**: shared-nothing
+message-passing, `old` scoped to space ops; and the `@ct` timing-sensitive label
+with taint-to-leakage-sink enforcement and `declassify` (§3). Acceptance: a
+pure-typed `view` is provably effect-free (the verification layer may treat it
+as a function); performing an undeclared effect is a compile error. Conformance:
 `../../conformance/surface/effects/`.

@@ -149,7 +149,7 @@ programming language: a reader sees, per claim, whether it is *proved*, merely
 - **`unknown`** — the obligation is *not* discharged and no test/delegation is
   given: the definition is admitted with a **typed hole** and the program
   **still runs**, the result carrying `unknown` where the unproven property is
-  observed (`24-diagnostics.md §holes`). Verification is *incremental*, not
+  observed (`24-diagnostics.md §2`). Verification is *incremental*, not
   all-or-nothing (Hazel-style); a hole is the honest "not done yet."
 
 By default `proved` specs are static-only (erased); `tested` adds runtime code

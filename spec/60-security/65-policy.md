@@ -74,7 +74,7 @@ Because the IFC discipline is **lattice-parametric** (`61 §2`, non-interference
 proved once for any bounded `ℒ`), a policy is precisely the **configuration the
 generic proof was waiting for** — the lattice + classifications + clearances +
 edges. Adding the policy layer therefore **adds nothing to the metatheory and
-nothing to the kernel**: the same by-typing non-interference theorem (`61 §5.1`)
+nothing to the kernel**: the same by-typing non-interference theorem (`61 §5`)
 holds for whatever lattice the policy supplies, and the relational/bespoke route
 (`OQ-relational`) is unchanged. Policy is *data + binding*, not new logic.
 

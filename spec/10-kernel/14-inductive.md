@@ -185,8 +185,8 @@ They attach as **primitives** (`11 §4`):
   literals. On non-literal (stuck) arguments it is a neutral term.
 - Primitives are **trusted**: a wrong primitive reduction is a soundness bug, so
   the set of primitives is small, audited, and part of the kernel's trusted base
-  (listed in `18 §Primitives`). This is the one place computation enters the
-  kernel from outside the term language; everything else is β/ι/δ/obs.
+  (listed in `18 §5`). This is the one place computation enters the kernel from
+  outside the term language; everything else is β/ι/δ/obs.
 - Equational properties of primitives that are *not* definitional (e.g.
   commutativity of `add`) are **propositions to prove**, provided as a small
   axiomatized interface or proved against a reference model, not assumed.

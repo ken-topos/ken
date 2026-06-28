@@ -153,9 +153,9 @@ classical ones:
 - **Double-negation elimination `¬¬φ ⇒ φ` is not assumed.** In general `¬¬φ ≠
   φ`. The gap between `φ` and `¬¬φ` is where Ken's third truth value —
   **`unknown`** — lives at the surface (`../20-verification/24-diagnostics.md
-  §three-region`). The kernel does not have a primitive `unknown`; it has
-  *proofs*, *refutations*, and the *absence* of either, and the surface renders
-  that trichotomy as proved/disproved/unknown.
+  §3`). The kernel does not have a primitive `unknown`; it has *proofs*,
+  *refutations*, and the *absence* of either, and the surface renders that
+  trichotomy as proved/disproved/unknown.
 
 Classical reasoning is available only by **explicitly assuming** an axiom (an
 opaque constant `lem : (φ : Ω) → φ ∨ ¬φ`), which the kernel records as a

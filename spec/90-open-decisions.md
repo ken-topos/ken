@@ -20,7 +20,7 @@ surfaced while drafting. Resolved items move to an ADR (`../docs/adr/`).
 ### OQ-int — Integer type & precision *(digest fork 1; tag OQ-1)* — **DECIDED**
 - **Fork.** Is `Int` arbitrary-precision or fixed-64 by default? Is `Decimal` a
   core type? Which fixed-width integers are native? (Default overflow behaviour
-  for fixed-width remains open as `OQ-1a`.)
+  for fixed-width resolved below as `OQ-1a` (DECIDED 2026-06-27).)
 - **Decision (operator, 2026-06-27).** `Int` is **arbitrary precision** (not
   fixed-64), with a small-int fast path. `Decimal` is a **core, essential**
   type. The **full fixed-width set is native**: signed `Int8/Int16/Int32/Int64`
@@ -375,7 +375,7 @@ surfaced while drafting. Resolved items move to an ADR (`../docs/adr/`).
   reactive/temporal concerns are Ward's, `OQ-temporal`/`OQ-coinduction`); the
   rest is a mathematical probe, not a software-engineering need. Harvest any
   concrete pragmatic win back as an ordinary package; no core/kernel layer.
-- **Affects.** `02 §7`, `50-stdlib §6`.
+- **Affects.** `00-overview.md §5`, `50-stdlib §6`.
 
 ---
 
@@ -383,7 +383,8 @@ surfaced while drafting. Resolved items move to an ADR (`../docs/adr/`).
 
 These are sub-decisions *within* committed security goals — the commitments
 themselves (IFC intrinsic, least authority, re-check-on-consume, honest limits)
-are **fixed** by ADR 0004; only the mechanics below are open.
+are **fixed** by ADR 0004; the mechanics below are now **DECIDED** (see each
+entry and the Resolution log).
 
 ### OQ-ifc — Information-flow label model — **DECIDED**
 - **Fork.** Fixed level lattice vs. principal-set DLM vs. user-defined; labels
@@ -614,7 +615,7 @@ states what it cannot prove; the sibling models/tests/monitors it.
 
 | OQ | Decided | ADR |
 |---|---|---|
-| **OQ-int** | 2026-06-27 — arbitrary-precision `Int`; `Decimal` core; full native `Int8…Int64`/`UInt8…UInt64` (verbose names). `OQ-1a` (overflow default) still open. | — (recorded in `30-surface/35`) |
+| **OQ-int** | 2026-06-27 — arbitrary-precision `Int`; `Decimal` core; full native `Int8…Int64`/`UInt8…UInt64` (verbose names). `OQ-1a` also DECIDED (overflow obligation-generating; wrapping explicit). | — (recorded in `30-surface/35`) |
 | **OQ-eval-strategy** | 2026-06-27 — follow Lean: lazy-WHNF + on-the-fly conversion + lazy δ over an NbE value domain extended to compute observational `Eq`/`cast`; NbE the reference. Diverges from Lean's theory on observational `J`/canonicity. | — (recorded in `10-kernel/17`) |
 | **OQ-2** | 2026-06-27 — **non-cumulative** universes; ergonomics via universe polymorphism + typical ambiguity + elaborator lifts. | — (recorded in `10-kernel/12`) |
 | **OQ-4** | 2026-06-27 — **observational equality (OTT), not cubical**: `Eq`-by-type + `cast` + strict-prop Ω + set-quotients; no univalence/HITs. Smallest auditable TCB; exact set-level-software fit. | **ADR 0005** |
@@ -646,7 +647,7 @@ states what it cannot prove; the sibling models/tests/monitors it.
 | **OQ-witness** | 2026-06-27 — **process-level stats only** (extensional-safe `witness`); **never** per-value identity/provenance (referential transparency). | — (recorded in `40-runtime/41`) |
 | **OQ-9** | 2026-06-27 — **tail-resumptive only; multishot excluded** (positive choice). Expressiveness subsumed (generators / search-as-data / seam / interaction-tree denotation); `call/cc` uniquely adds unpredictability + breaks single-consumption WP (single-shot *simplifies* proofs). Footnote only if an unsubsumable need appears. | — (recorded in `30-surface/36 §5`) |
 | **OQ-1a** | 2026-06-27 — fixed-width overflow **obligation-generating by default** (proven ⇒ total; unproven ⇒ runtime check, so "checked" subsumed); **wrapping explicit** (`+%`/`Wrapping[T]`) for intended-modular domains, never silent. | — (recorded in `30-surface/35 §3`, `40-runtime/43`) |
-| **OQ-coalgebra** | 2026-06-27 — **excluded from core** (same reasoning as `OQ-9`); pragmatic wins subsumed by `visits` + `space`, reactive concerns are Ward's; harvest any win as a package, no core layer. | — (recorded in register; `02 §7`) |
+| **OQ-coalgebra** | 2026-06-27 — **excluded from core** (same reasoning as `OQ-9`); pragmatic wins subsumed by `visits` + `space`, reactive concerns are Ward's; harvest any win as a package, no core layer. | — (recorded in register; `00-overview.md §5`) |
 | **OQ-agentic-oracle** | 2026-06-27 — **scoped out (not a Ken mechanism)**: agent = maximal `P`; constrain (envelope = `61`/`62`) + relate (metamorphic = `OQ-relational`) + watch (RV = `73`). Safety assured, **quality never** (envelope `proved`; output `tested`/`delegated`/`unknown`). | **ADR 0006** (recorded in `70-behavioral/74`) |
 | **OQ-syntax** | 2026-06-27 — **principles decided** (canonical form optimized for *reading* since agents write / humans read): rich notation matching CS/Math convention + total ASCII transliteration + one mandated formatter + keywords-as-words + a bounded **confusable-resistant** set (TR39, a security property). Concrete token **table iterates** with the team. | — (recorded in `30-surface/31 §1a/§1b`) |
 

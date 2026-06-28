@@ -162,8 +162,8 @@ The pinned `Ward` version (5) is load-bearing, not bureaucratic: Ken's
 translation-faithfulness proof (`../70-behavioral/71 §5`) holds *relative to* an
 axiomatized `Ward` semantics, and this pin is the one explicit, version-bounded
 assumption that `Ward` implements it. The attestation is governed on the same
-ladder as the policy attestation (`65 §`): same keyless signing, same provenance
-transport, runtime-enforceable. Concrete schema is
+ladder as the policy attestation (`65 §5`): same keyless signing, same
+provenance transport, runtime-enforceable. Concrete schema is
 **`OQ-discharge-attestation`** (deferred — needs `Ward`'s runner).
 
 ## 6. The registry (ecosystem governance — above the language)
@@ -171,7 +171,7 @@ transport, runtime-enforceable. Concrete schema is
 A package registry enforces what the language cannot: **namespace ownership**
 (only `alice` publishes `alice/*`), **mandatory provenance** before listing, and
 **automated `trusted_base_delta` display** so a consumer sees a package's
-assumptions at a glance. This is social/governance layer (`64 §limits`), not a
+assumptions at a glance. This is social/governance layer (`64 §4`), not a
 language feature, but the language makes it *meaningful* by giving the registry
 real attestations (deltas, proof bundles) to police.
 

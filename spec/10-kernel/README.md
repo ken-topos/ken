@@ -64,8 +64,8 @@ it.
 The kernel's type theory is:
 
 - A **predicative, non-cumulative** hierarchy of universes `Type 0 : Type 1 :
-  …`, **checked** — there is no `Type : Type` (`12-universes.md`). (Cumulativity
-  is OQ-2.)
+  …`, **checked** — there is no `Type : Type` (`12-universes.md`). (OQ-2 decided
+  — non-cumulative; ergonomics via the elaborator, see `12-universes.md §3`.)
 - **Dependent functions** `(x : A) → B` (Π) with β and η (`13-pi-sigma.md`).
 - **Dependent pairs** `(x : A) × B` (Σ), genuinely dependent — `B` may mention
   `x` — with projections and η (`13-pi-sigma.md`). The prototype's non-dependent

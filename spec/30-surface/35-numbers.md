@@ -39,7 +39,7 @@ typed handles" workstream (which targets a non-problem):
   silent overflow is a correctness hazard; arbitrary precision makes `a + b`
   mean addition, so arithmetic specs (`a + b == b + a`, `../20-verification/`)
   hold without overflow side-conditions. The implementation uses a small-integer
-  fast path so the common case is a machine word (`41 §numbers`); only values
+  fast path so the common case is a machine word (`41 §1`); only values
   exceeding the word grow.
 - **Native fixed-width integers** — the full signed `Int8/Int16/Int32/Int64` and
   unsigned `UInt8/UInt16/UInt32/UInt64` set are **first-class native types**

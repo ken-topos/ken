@@ -22,15 +22,15 @@ An **obligation** is a triple
 
 Discharging an obligation means producing a term `p` with `Γ ⊢ p : φ`, which the
 kernel re-checks (`../10-kernel/18 §4`). **An obligation is exactly a typed
-hole** of type `φ` in context `Γ` (`24 §holes`): obligation generation *is* the
+hole** of type `φ` in context `Γ` (`24 §2`): obligation generation *is* the
 process of finding the holes elaboration leaves where a proof is required, and
 proving = hole-filling. This unification is deliberate — partial verification
 (`21 §5`) is just leaving some holes unfilled.
 
 ## 2. Where obligations come from
 
-Three sources, all arising during elaboration
-(`../30-surface/39-elaboration.md`) of the spec encoding (`21 §6`):
+Four sources, all arising during elaboration (`../30-surface/39-elaboration.md`)
+of the spec encoding (`21 §6`):
 
 1. **Refinement introduction** — using `a : A` where `{ x : A | φ x }` is
    expected emits `Γ ⊢ φ a` (the value really satisfies the refinement). The
@@ -41,6 +41,11 @@ Three sources, all arising during elaboration
 3. **Precondition discharge at call sites** — calling `f` whose parameter
    requires `φ` emits, at the call, `Γ_call ⊢ φ[args]` (the caller meets the
    precondition). Inside `f`'s body, `φ` is instead an *assumption* in Γ.
+4. **Partial-primitive application** — a bare fixed-width `+`/`-`/`*` or an
+   unrefined `/` (or `%`) on `Int` emits a no-overflow / non-zero obligation at
+   the operation site (`../30-surface/35-numbers.md §3`,
+   `../40-runtime/43-termination.md §2`), per the OQ-1a partial-primitive
+   discipline.
 
 Standalone `prove name : φ` (`21 §3`) is the degenerate case: one obligation `·
 ⊢ φ` (or `Γ ⊢ φ` under its binders) with no body.

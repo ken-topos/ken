@@ -56,13 +56,13 @@ The reality-check's key correction: content addressing is **conventional**.
 - **No Leech-lattice quantizer, no Co₀-orbit canonicalization on the allocation
   path.** The analysis's "heap addressing is Leech-lattice geometry" is refuted;
   Ken MUST NOT put lattice math on the hot path. (The lattice's *legitimate*,
-  optional, separate roles are in `44 §lattice`.)
+  optional, separate roles are in `44 §4`.)
 - **Canonical encoding.** Dedup requires a canonical byte form per value so that
   "same value ⇒ same bytes ⇒ same hash." The canonicalization rules (field
   order, normalization of which values are interned) are part of X2 and must be
   deterministic.
 
-## 4. Structural equality is O(1)
+## 4. Structural equality is O(1) {#equality}
 
 Because identical values share a slot, **structural equality of two heap values
 is a slot-id comparison — O(1)** (after construction). This is the headline
@@ -75,9 +75,9 @@ runtime property the prototype's heap provides and Ken keeps:
   kernel (`../10-kernel/17 §3`): closed terms with equal content hashes are
   definitionally equal.
 - It realizes "extensionality made physical" *as an optimization*, while the
-  *propositional* equality that proofs use is `Path` (`../10-kernel/15`) — the
-  two agree on closed first-order data but the proof story does not depend on
-  the heap.
+  *propositional* equality that proofs use is `Eq` (`../10-kernel/15`, `16`) —
+  the two agree on closed first-order data but the proof story does not depend
+  on the heap.
 
 ## 5. Which values are content-addressed (`OQ-7` DECIDED)
 

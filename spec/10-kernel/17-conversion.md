@@ -36,8 +36,8 @@ the following reductions and the η rules (§2):
 
 **Confluence.** The reduction system is confluent (Church–Rosser); normal forms
 are unique up to α (de Bruijn identity) and Ω proof-irrelevance. This is a
-metatheoretic commitment (`18 §Metatheory`), tested behaviorally by the
-conformance corpus.
+metatheoretic commitment (`18 §6`), tested behaviorally by the conformance
+corpus.
 
 ## 2. η (type-directed)
 
@@ -159,17 +159,20 @@ recursive) transparent definition, the kernel:
   and needs no SCT. Most surface functions elaborate to eliminators; SCT covers
   the rest.
 
-**(oracle)** The exact size order (what counts as `↓` for coinductive or
-primitive values, and the treatment of `cast` under recursion) is to be
-confirmed against the prototype's working SCT; the *principle* and the accept
-condition above are the commitment.
+**(oracle)** The exact size order (what counts as `↓` for primitive values, and
+the treatment of `cast` under recursion) is to be confirmed against the
+prototype's working SCT; the *principle* and the accept condition above are the
+commitment. The resolution path: primitives are treated as neutral (no
+strict-decrease ordering) and `cast` under recursion is conservatively flagged
+`?` pending the prototype check. (Coinductive values do not arise: coinduction
+is excluded per `OQ-coinduction`.)
 
 ## 5. Decidability (the payoff)
 
 Together: the core reductions are **strongly normalizing** (β/ι/η/obs on
 well-typed terms), and δ-unfolding is **SCT-bounded**, so conversion terminates
 on well-typed inputs and **type-checking is decidable** (soundness commitment
-`README.md §5.3`; metatheory status in `18`). Decidability is what lets the
+`README.md §5 item 3`; metatheory status in `18`). Decidability is what lets the
 kernel be a *checker* (always halts with yes/no) rather than a semi-decision
 procedure — the precondition for the whole verification loop.
 

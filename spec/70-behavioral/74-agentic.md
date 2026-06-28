@@ -30,7 +30,7 @@ systems safe *for all values* of a nondeterministic input. So the problem
 | Mechanism | What it gives | Where it lives (already decided) |
 |---|---|---|
 | **Safety envelope / verified shield** | the system is safe *whatever* the agent emits | **capabilities (`62`) + IFC (`61`) + contracts** — the agent holds only a *propose* capability; a verified validator holds the *act* capability; the system's invariants are proved independent of the agent. `proved`. |
-| **Metamorphic relations** | oracle-free *relational* checks (round-trip, permutation-invariance, monotonicity) — no ground truth needed | **`OQ-relational`** (stated) + test-gen (L2) exercises them. |
+| **Metamorphic relations** | oracle-free *relational* checks (round-trip, permutation-invariance, monotonicity) — no ground truth needed | **`OQ-relational`** (decided, `61 §5`/`§5a`, `30-surface/36 §3`) + test-gen (L2) exercises them. |
 | **RV watchdogs** | the agent's observable actions obey safety/temporal obligations | **`73` + `72`** — agent actions are events in `Σ`; monitors synthesized from `T`. |
 
 The unifying point: the agent = maximal `P`; the **envelope** proves `Q` for all

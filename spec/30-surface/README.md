@@ -45,7 +45,7 @@ new trusted semantics.
 | Proposition / spec | `requires`/`ensures`/`prove`/`law` | Ω terms + obligations (`20`) |
 | Effectful function | `view f (…) visits [E] = …` | effect-rowed type (`36`) |
 | Module | `module M { … }` / `import` | namespaced env (`33`) |
-| Stateful region | `space S { … }` | the state/effect model (`36`, OQ-Space) |
+| Stateful region | `space S { … }` | the state/effect model (`36`, OQ-Space DECIDED) |
 
 ## 3. Chapter map
 

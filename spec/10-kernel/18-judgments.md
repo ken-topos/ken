@@ -47,8 +47,10 @@ One rule lives here because it ties typing to conversion (`17`) — the
 ```
 
 A term keeps its type up to definitional equality. (Conv) is where the whole
-conversion machinery of `17` is invoked during checking. Under cumulativity
-(OQ-2) this generalizes to a subsumption `Γ ⊢ A ≤ B`; the DRAFT uses equality.
+conversion machinery of `17` is invoked during checking. Ken is non-cumulative
+(OQ-2 DECIDED; `10-kernel/12 §3`), so (Conv) uses definitional equality, not
+subsumption; any required universe lift is inserted explicitly by the
+elaborator. There is no subtype relation `Γ ⊢ A ≤ B` in the kernel.
 
 ## 3. The bidirectional algorithm
 

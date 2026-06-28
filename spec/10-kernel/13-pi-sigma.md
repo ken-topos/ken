@@ -61,8 +61,8 @@ component, `B`, may depend on the first component `a`. When `B` does not mention
 point** and is what the prototype lacked; Ken requires it.
 
 Ken presents Σ **negatively**, by its projections, which yields a definitional η
-(§2.4). (An equivalent positive presentation with a dependent eliminator is
-derivable; see `14-inductive.md §Σ-as-record`.)
+(the Σ-η rule below). (An equivalent positive presentation with a dependent
+eliminator is derivable; see `14-inductive.md §4`.)
 
 **Formation.**
 ```
@@ -124,7 +124,7 @@ is the **record/Σ** knob; `data` declarations do not get it — `OQ-η-records`
 - **Conversion.** β, the projection-β rules, and both η rules are part of
   definitional equality (`17`). η for Π and Σ is what makes conversion *typed*
   (η-expansion is driven by the type), so the conversion algorithm needs the
-  type at η-points (`17 §algorithm`).
+  type at η-points (`17 §2`).
 - **Equality/transport.** `cast` in a Π- or Σ-type computes structurally
   (pushing into domain/codomain and components); the rules are in
   `16-observational.md §3`. `Eq ((x:A)×B) p q` reduces componentwise (`16 §2`),
