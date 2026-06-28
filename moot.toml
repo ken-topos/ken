@@ -1,9 +1,11 @@
 # ken federation — moot launch profile (hybrid routing).
 #
-# Enclave (Opus) runs DIRECT on the Anthropic subscription (OAuth); the build
-# tiers route through the local LLM proxy (127.0.0.1:8090) by model prefix:
-# accounts/fireworks/* -> Fireworks (GLM), deepseek-* -> DeepSeek. The proxy
-# env is injected per-role by CONVO_ROLE (see .devcontainer/ken-setup.sh).
+# Enclave (Opus) runs DIRECT on the Anthropic subscription (OAuth) — no `env`.
+# Build tiers route through the local LLM proxy (127.0.0.1:8090) via each role's
+# `env` below: ANTHROPIC_BASE_URL + the shared secret (`${secret:llm-proxy-secret}`,
+# resolved by moot from /home/node/.secrets at launch). The proxy dispatches by
+# model prefix: accounts/fireworks/* -> Fireworks (GLM), deepseek-* -> DeepSeek.
+# (Per-role `env` requires mootup >= 0.5.4.)
 #
 # Model slugs: deepseek-v4-pro and accounts/fireworks/models/glm-5p2 confirmed by
 # the operator (2026-06-28). The Opus enclave slug is still to confirm at first
@@ -46,104 +48,125 @@ startup_prompt = "You are Ken's Architect (component design + security review). 
 [agents.spec-leader]
 display_name = "spec-leader"
 model = "deepseek-v4-pro"
+env = { ANTHROPIC_BASE_URL = "http://127.0.0.1:8090", ANTHROPIC_API_KEY = "${secret:llm-proxy-secret}" }
 startup_prompt = "You lead Ken's spec enclave. Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/spec/leader.md, set status, and await the Steward's kickoff. Do not poll."
 
 [agents.integrator]
 display_name = "integrator"
 model = "deepseek-v4-pro"
+env = { ANTHROPIC_BASE_URL = "http://127.0.0.1:8090", ANTHROPIC_API_KEY = "${secret:llm-proxy-secret}" }
 startup_prompt = "You are Ken's Integrator (sole GitHub actor; merges to main). Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/federation/integrator.md and docs/program/04-git-and-integration.md, set status, await merge_ready handoffs. Do not poll."
 
 [agents.librarian]
 display_name = "librarian"
 model = "deepseek-v4-pro"
+env = { ANTHROPIC_BASE_URL = "http://127.0.0.1:8090", ANTHROPIC_API_KEY = "${secret:llm-proxy-secret}" }
 startup_prompt = "You are Ken's Librarian (knowledge curation). Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/federation/librarian.md, set status, and stand ready. Do not poll."
 
 [agents.kernel-leader]
 display_name = "Kernel leader"
 model = "deepseek-v4-pro"
+env = { ANTHROPIC_BASE_URL = "http://127.0.0.1:8090", ANTHROPIC_API_KEY = "${secret:llm-proxy-secret}" }
 startup_prompt = "You lead Ken's Kernel team. Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/build/leader.md and agent/teams/kernel/leader.md if present, set status, await the Steward's kickoff. Do not poll."
 
 [agents.kernel-implementer]
 display_name = "Kernel implementer"
 model = "accounts/fireworks/models/glm-5p2"
+env = { ANTHROPIC_BASE_URL = "http://127.0.0.1:8090", ANTHROPIC_API_KEY = "${secret:llm-proxy-secret}" }
 startup_prompt = "You are the Kernel team implementer. Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/build/implementer.md and agent/teams/kernel/implementer.md if present, set status, await your leader's kickoff. Do not poll."
 
 [agents.kernel-qa]
 display_name = "Kernel QA"
 model = "deepseek-v4-pro"
+env = { ANTHROPIC_BASE_URL = "http://127.0.0.1:8090", ANTHROPIC_API_KEY = "${secret:llm-proxy-secret}" }
 startup_prompt = "You are the Kernel team QA. Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/build/qa.md and agent/teams/kernel/qa.md if present, set status, await your leader's kickoff. Do not poll."
 
 [agents.verify-leader]
 display_name = "Verify leader"
 model = "deepseek-v4-pro"
+env = { ANTHROPIC_BASE_URL = "http://127.0.0.1:8090", ANTHROPIC_API_KEY = "${secret:llm-proxy-secret}" }
 startup_prompt = "You lead Ken's Verify team. Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/build/leader.md and agent/teams/verify/leader.md if present, set status, await the Steward's kickoff. Do not poll."
 
 [agents.verify-implementer]
 display_name = "Verify implementer"
 model = "accounts/fireworks/models/glm-5p2"
+env = { ANTHROPIC_BASE_URL = "http://127.0.0.1:8090", ANTHROPIC_API_KEY = "${secret:llm-proxy-secret}" }
 startup_prompt = "You are the Verify team implementer. Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/build/implementer.md and agent/teams/verify/implementer.md if present, set status, await your leader's kickoff. Do not poll."
 
 [agents.verify-qa]
 display_name = "Verify QA"
 model = "deepseek-v4-pro"
+env = { ANTHROPIC_BASE_URL = "http://127.0.0.1:8090", ANTHROPIC_API_KEY = "${secret:llm-proxy-secret}" }
 startup_prompt = "You are the Verify team QA. Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/build/qa.md and agent/teams/verify/qa.md if present, set status, await your leader's kickoff. Do not poll."
 
 [agents.language-leader]
 display_name = "Language leader"
 model = "deepseek-v4-pro"
+env = { ANTHROPIC_BASE_URL = "http://127.0.0.1:8090", ANTHROPIC_API_KEY = "${secret:llm-proxy-secret}" }
 startup_prompt = "You lead Ken's Language team. Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/build/leader.md and agent/teams/language/leader.md if present, set status, await the Steward's kickoff. Do not poll."
 
 [agents.language-implementer]
 display_name = "Language implementer"
 model = "accounts/fireworks/models/glm-5p2"
+env = { ANTHROPIC_BASE_URL = "http://127.0.0.1:8090", ANTHROPIC_API_KEY = "${secret:llm-proxy-secret}" }
 startup_prompt = "You are the Language team implementer. Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/build/implementer.md and agent/teams/language/implementer.md if present, set status, await your leader's kickoff. Do not poll."
 
 [agents.language-qa]
 display_name = "Language QA"
 model = "deepseek-v4-pro"
+env = { ANTHROPIC_BASE_URL = "http://127.0.0.1:8090", ANTHROPIC_API_KEY = "${secret:llm-proxy-secret}" }
 startup_prompt = "You are the Language team QA. Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/build/qa.md and agent/teams/language/qa.md if present, set status, await your leader's kickoff. Do not poll."
 
 [agents.runtime-leader]
 display_name = "Runtime leader"
 model = "deepseek-v4-pro"
+env = { ANTHROPIC_BASE_URL = "http://127.0.0.1:8090", ANTHROPIC_API_KEY = "${secret:llm-proxy-secret}" }
 startup_prompt = "You lead Ken's Runtime team. Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/build/leader.md and agent/teams/runtime/leader.md if present, set status, await the Steward's kickoff. Do not poll."
 
 [agents.runtime-implementer]
 display_name = "Runtime implementer"
 model = "accounts/fireworks/models/glm-5p2"
+env = { ANTHROPIC_BASE_URL = "http://127.0.0.1:8090", ANTHROPIC_API_KEY = "${secret:llm-proxy-secret}" }
 startup_prompt = "You are the Runtime team implementer. Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/build/implementer.md and agent/teams/runtime/implementer.md if present, set status, await your leader's kickoff. Do not poll."
 
 [agents.runtime-qa]
 display_name = "Runtime QA"
 model = "deepseek-v4-pro"
+env = { ANTHROPIC_BASE_URL = "http://127.0.0.1:8090", ANTHROPIC_API_KEY = "${secret:llm-proxy-secret}" }
 startup_prompt = "You are the Runtime team QA. Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/build/qa.md and agent/teams/runtime/qa.md if present, set status, await your leader's kickoff. Do not poll."
 
 [agents.ergo-leader]
 display_name = "Ergo leader"
 model = "deepseek-v4-pro"
+env = { ANTHROPIC_BASE_URL = "http://127.0.0.1:8090", ANTHROPIC_API_KEY = "${secret:llm-proxy-secret}" }
 startup_prompt = "You lead Ken's Ergo team. Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/build/leader.md and agent/teams/ergo/leader.md if present, set status, await the Steward's kickoff. Do not poll."
 
 [agents.ergo-implementer]
 display_name = "Ergo implementer"
 model = "accounts/fireworks/models/glm-5p2"
+env = { ANTHROPIC_BASE_URL = "http://127.0.0.1:8090", ANTHROPIC_API_KEY = "${secret:llm-proxy-secret}" }
 startup_prompt = "You are the Ergo team implementer. Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/build/implementer.md and agent/teams/ergo/implementer.md if present, set status, await your leader's kickoff. Do not poll."
 
 [agents.ergo-qa]
 display_name = "Ergo QA"
 model = "deepseek-v4-pro"
+env = { ANTHROPIC_BASE_URL = "http://127.0.0.1:8090", ANTHROPIC_API_KEY = "${secret:llm-proxy-secret}" }
 startup_prompt = "You are the Ergo team QA. Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/build/qa.md and agent/teams/ergo/qa.md if present, set status, await your leader's kickoff. Do not poll."
 
 [agents.foundation-leader]
 display_name = "Foundation leader"
 model = "deepseek-v4-pro"
+env = { ANTHROPIC_BASE_URL = "http://127.0.0.1:8090", ANTHROPIC_API_KEY = "${secret:llm-proxy-secret}" }
 startup_prompt = "You lead Ken's Foundation team. Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/build/leader.md and agent/teams/foundation/leader.md if present, set status, await the Steward's kickoff. Do not poll."
 
 [agents.foundation-implementer]
 display_name = "Foundation implementer"
 model = "accounts/fireworks/models/glm-5p2"
+env = { ANTHROPIC_BASE_URL = "http://127.0.0.1:8090", ANTHROPIC_API_KEY = "${secret:llm-proxy-secret}" }
 startup_prompt = "You are the Foundation team implementer. Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/build/implementer.md and agent/teams/foundation/implementer.md if present, set status, await your leader's kickoff. Do not poll."
 
 [agents.foundation-qa]
 display_name = "Foundation QA"
 model = "deepseek-v4-pro"
+env = { ANTHROPIC_BASE_URL = "http://127.0.0.1:8090", ANTHROPIC_API_KEY = "${secret:llm-proxy-secret}" }
 startup_prompt = "You are the Foundation team QA. Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/build/qa.md and agent/teams/foundation/qa.md if present, set status, await your leader's kickoff. Do not poll."

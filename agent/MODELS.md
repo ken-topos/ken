@@ -58,6 +58,10 @@ routing is **hybrid**:
   prefix (`accounts/fireworks/*`→Fireworks, `deepseek-*`→DeepSeek); the proxy
   holds the upstream keys from `/home/node/.secrets/`.
 
-Per-role selection (proxy env for build, clean OAuth for enclave) is injected by
-`CONVO_ROLE` in `.devcontainer/ken-setup.sh`; the proxy is started by
-`run-llm-proxy.sh`. Operator runbook: `local/mootup-agent-backends-setup.md`.
+Per-role selection is declared in `moot.toml`: each build role's
+`[agents.<role>].env` sets `ANTHROPIC_BASE_URL` + `ANTHROPIC_API_KEY`
+(`${secret:llm-proxy-secret}`, resolved from `/home/node/.secrets/` at launch;
+requires mootup ≥ 0.5.4), and moot injects it into the agent's launch env;
+enclave roles set no `env`, so they use the default Anthropic endpoint + OAuth.
+The proxy is started by `run-llm-proxy.sh`. Operator runbook:
+`local/mootup-agent-backends-setup.md`.
