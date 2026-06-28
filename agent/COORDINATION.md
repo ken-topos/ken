@@ -2,34 +2,35 @@
 
 Cross-cutting rules for every Ken agent, regardless of role, team, or model.
 Role-specific discipline is in `playbooks/`; model tiers are in `MODELS.md`; the
-git model is in `../docs/program/04-git-and-integration.md`. These rules are adapted from
-hard-won mootup team lessons; each exists because skipping it caused a real stall
-or a real bug. They must hold identically across Opus, GLM, and DeepSeek agents.
+git model is in `../docs/program/04-git-and-integration.md`. These rules are
+adapted from hard-won mootup team lessons; each exists because skipping it
+caused a real stall or a real bug. They must hold identically across Opus, GLM,
+and DeepSeek agents.
 
 ## 0. The shape: a ring of rings
 
-- **Within a team — a sequential token-ring.** Generally one agent is active at a
-  time; the others are in a supporting role, called on when the active agent
+- **Within a team — a sequential token-ring.** Generally one agent is active at
+  a time; the others are in a supporting role, called on when the active agent
   needs them (e.g. an implementer asks for a clarification). Keeping the whole
   team on one task maximizes coherence and effectiveness. Do not fan a team onto
   several tasks to chase parallelism — coherence beats it. This includes waiting
-  on CI: once a WP is published, the team **waits idle** for its CI run
-  rather than pipelining or stacking work (ADR 0002). Idle is cheap and
-  load-friendly; throughput comes from other teams' rings, not from this one
-  multitasking.
+  on CI: once a WP is published, the team **waits idle** for its CI run rather
+  than pipelining or stacking work (ADR 0002). Idle is cheap and load-friendly;
+  throughput comes from other teams' rings, not from this one multitasking.
 - **Across teams — parallel.** The teams are independent rings spinning at once;
   that parallelism is the entire reason the work is articulated into teams. The
   rings couple at only three points: merges to `main` (via the Integrator), the
   roadmap gate dependencies, and the **sanctioned cross-team query edges** (§9,
-  §11). Keep that coupling thin — it is what serializes the federation if abused.
+  §11). Keep that coupling thin — it is what serializes the federation if
+  abused.
 
 ## 1. Event-driven, never poll
 
 After you finish a unit of work or hand off, **post, set status, and stop.** Do
 not `/loop`, self-wake, or poll for replies. The notification system delivers
 what you need; polling burns tokens for zero value. A missing notification is a
-*stall* — catching stalls is the team leader's watchdog job, not yours. Only team
-leaders, the Integrator, and the Steward run schedulers.
+*stall* — catching stalls is the team leader's watchdog job, not yours. Only
+team leaders, the Integrator, and the Steward run schedulers.
 
 ## 2. Mention discipline
 
@@ -39,8 +40,8 @@ costs the recipient tokens and fires a notification.
 - Handoff that passes work to B → mention **B only**.
 - "Your request is done," nothing pending → mention **nobody**.
 - **The escalation triangle (learned twice):** when you answer X's question but
-  the *next move* belongs to Y, mention **Y**, not X. Naming Y in prose without a
-  real mention is the classic silent stall.
+  the *next move* belongs to Y, mention **Y**, not X. Naming Y in prose without
+  a real mention is the classic silent stall.
 
 ## 3. Status = what you're doing, in your own words
 
@@ -53,20 +54,37 @@ Three liveness signals exist; only the third is yours to post:
 
 ## 4. Threads are the spine
 
-One mootup thread per work item; the kickoff message *is* the spine. All handoffs,
-questions, status, and retros for that item are **replies in that thread** — a
-top-level post fragments the work. After any context reset/compaction, resolve
-the live thread from fresh context; do **not** reuse a thread/event ID from a
-summarized memory (it may be stale).
+One mootup thread per work item; the kickoff message *is* the spine. All
+handoffs, questions, status, and retros for that item are **replies in that
+thread** — a top-level post fragments the work. After any context
+reset/compaction, resolve the live thread from fresh context; do **not** reuse a
+thread/event ID from a summarized memory (it may be stale).
+
+**Title convention (the single-space articulation tag).** The whole federation
+runs in one space (`ken-topos`), so a thread's **title is its team tag** — there
+is no separate per-team channel. Begin every kickoff title with a tag, then a
+terse subject:
+
+- **Work-package threads:** the WP ID, whose letter encodes the owning team —
+  `K*` Kernel · `V*` Verify · `L*` Language · `X*` Runtime · `Sec*` security ·
+  `B*` seam · `T*` tooling · `F*` foundation. E.g. `K2: decidable conversion`.
+- **Non-WP threads** (a cross-team query, a process/retro note): prefix with the
+  originating role/team and an arrow if it targets one — `steward: cadence
+  pass`, `kernel→spec: OQ on cast normal form`.
+
+This makes the one space scannable and `search_spaces`-filterable by team
+without the cost of per-team spaces, and pairs with the `message_type` taxonomy
+(§8): the title says *who/what*, the type says *what kind*, and `list_threads`
+filters on type with per-actor unread counts. Keep both accurate.
 
 ## 5. Decisions are for judgment, not deduction
 
 Open a mootup Decision (`propose_decision`) for choices with tradeoffs where a
 reasonable peer might differ — kernel/semantics design, an API shape, a
-content-store policy. Do **not** open one for deductive/mechanical choices (a bug
-fix is not a decision). Decisions are how future agents query *why* Ken is the
-way it is. **Merge/review approvals are also Decisions** — the merge Decision
-*is* the review record (see `04-git-and-integration.md`).
+content-store policy. Do **not** open one for deductive/mechanical choices (a
+bug fix is not a decision). Decisions are how future agents query *why* Ken is
+the way it is. **Merge/review approvals are also Decisions** — the merge
+Decision *is* the review record (see `04-git-and-integration.md`).
 
 ## 6. Resolve when structurally determined; escalate only real forks
 
@@ -75,21 +93,21 @@ between materially different futures?* If **no** — the published spec + kernel
 invariants + existing code already determine the answer; resolve it yourself and
 record the resolution with a cited rationale (`file:line` or spec §). If **yes**
 — escalate. For clean-room questions, "the published spec" means `/spec`, never
-prototype source. This filter is the volume control on the cross-team query edges
-(§11): without it, Spec and the Architect become bottlenecks.
+prototype source. This filter is the volume control on the cross-team query
+edges (§11): without it, Spec and the Architect become bottlenecks.
 
 ## 7. Ground every premise before locking
 
-Before locking a spec, ADR, or design claim, verify each premise against reality:
-"X exists" → grep for it; "matches pattern Y" → read Y end-to-end. For a
-*verified* language a spec claim about the kernel must be checked against the
+Before locking a spec, ADR, or design claim, verify each premise against
+reality: "X exists" → grep for it; "matches pattern Y" → read Y end-to-end. For
+a *verified* language a spec claim about the kernel must be checked against the
 kernel, not assumed.
 
 ## 8. Message-type taxonomy (routing metadata)
 
 Tag each message with a type; the **first line is the thread title** — no
-`[TYPE]` prefix in the body. Types: `kickoff`, `question`, `merge_ready`
-(a local `wp/<ID>` branch ready for the Integrator to publish + merge),
+`[TYPE]` prefix in the body. Types: `kickoff`, `question`, `merge_ready` (a
+local `wp/<ID>` branch ready for the Integrator to publish + merge),
 `review_request`, `blocked`, `bug`, `status_update`, `retro`, `decision`.
 
 ## 9. Topology is invariant — including the query edges
@@ -117,11 +135,11 @@ creeps in.
   *done* until its retro is in. The moment a WP's work is verified/merged, every
   working agent in the ring (implementer, QA; spec-author,
   conformance-validator) posts a short **`retro`** in the WP's thread — three
-  bullets: **trap** (what
-  cost time, or a defect the process caught or missed), **held** (a discipline
-  that worked, with its prior-run validation count if it has one), and **carry**
-  (a candidate rule to promote). Tag each bullet node-internal or
-  topology-touching, so the Steward's invariance filter (§9) is pre-sorted.
+  bullets: **trap** (what cost time, or a defect the process caught or missed),
+  **held** (a discipline that worked, with its prior-run validation count if it
+  has one), and **carry** (a candidate rule to promote). Tag each bullet
+  node-internal or topology-touching, so the Steward's invariance filter (§9) is
+  pre-sorted.
 - **The leader collects and hands off.** When a WP merges, the team leader
   confirms each working agent's retro landed, adds a one-bullet coordination
   retro, and posts a `retro`-typed "retros in" to the Steward with the WP ID and
@@ -129,9 +147,9 @@ creeps in.
   rides the existing team→Steward workflow edge (§9) — it adds no new edge.
 - The **Steward** harvests retros across teams and promotes lessons up a ladder
   (see the steward playbook): team-local → archetype source → this file.
-- A lesson promotes only when it passes all three: **(a) validated across ≥3 runs
-  *or* independently in ≥2 teams, (b) effort-/model-/operator-agnostic, (c) a
-  normative rule, not a one-off fact.** Exception: an explicit operator
+- A lesson promotes only when it passes all three: **(a) validated across ≥3
+  runs *or* independently in ≥2 teams, (b) effort-/model-/operator-agnostic, (c)
+  a normative rule, not a one-off fact.** Exception: an explicit operator
   correction promotes on a single data point. On promotion, retire the source
   note atomically. Cross-team replication is a *stronger* generalization signal
   than single-team repetition — use it.
@@ -142,14 +160,14 @@ The edges in §9 are thin synchronous couplings between otherwise-parallel rings
 Use them sparingly and always event-driven:
 
 1. **Filter first (§6).** Most "what should I do here" answers are already in
-   `/spec` + conformance + the component design. Only a genuine gap or fork earns
-   a query.
+   `/spec` + conformance + the component design. Only a genuine gap or fork
+   earns a query.
 2. **Ask and stop.** Post a `question` mentioning **only** the target's leader
    (Spec leader / Architect / Steward), set status `blocked-on-<target>`, and
    stop. Resume on notification — never poll.
 3. **Bias to staying on-task.** Your team's default is to *wait out* a short
-   block, preserving ring coherence; your leader reorders to an independent ready
-   task only when the block is genuinely long.
+   block, preserving ring coherence; your leader reorders to an independent
+   ready task only when the block is genuinely long.
 4. **Front-desk on the answering side.** The target's leader triages to protect
    its own ring's focus — answers trivial/known questions itself, batches
    non-urgent ones, interrupts its active agent only for true blockers.
@@ -169,15 +187,15 @@ configuration: `../docs/ops/compute-budget.md`.
   `cargo test`. It holds a machine-wide lock (`KEN_BUILD_SLOTS`, default 1) so
   only one build runs at a time across all agents. Bypassing it is the fastest
   way to swap-death the box.
-- **Scope to the touched crate** (`-p <crate>`), not `--workspace`. Full-workspace
-  builds, the conformance suite, and any `--release`/LTO build run **in CI**, not
-  on the laptop. Lean on CI green (the Integrator does), don't reproduce it
-  locally.
+- **Scope to the touched crate** (`-p <crate>`), not `--workspace`.
+  Full-workspace builds, the conformance suite, and any `--release`/LTO build
+  run **in CI**, not on the laptop. Lean on CI green (the Integrator does),
+  don't reproduce it locally.
 - **`source scripts/ken-env.sh`** at session start for the shared `sccache` +
   `CARGO_HOME`, so you don't recompile dependencies other agents already built.
 - **Idle = paused.** A resident agent costs RAM even when not building. If your
-  ring is blocked or waiting (including waiting on a CI run — ADR 0002), quiesce;
-  don't hold the box hot.
+  ring is blocked or waiting (including waiting on a CI run — ADR 0002),
+  quiesce; don't hold the box hot.
 - This is a *current-hardware* constraint, not a design value — it relaxes as
   hardware grows (the Steward/operator raises the caps; do not raise them
   unilaterally).
@@ -205,9 +223,9 @@ Rules for every layer:
 - **Diagnose before you restart.** Capture the stalled agent's state first; a
   blind restart no-ops a permission-prompt or rate-limit stall.
 - **Distinguish waiting from stalling.** A team idle while its CI run is *in
-  progress* is normal (ADR 0002), not a stall — leave it alone. Recover only when
-  CI has *finished* and no one took the next step (open the merge Decision, vote
-  it, fix red, merge).
+  progress* is normal (ADR 0002), not a stall — leave it alone. Recover only
+  when CI has *finished* and no one took the next step (open the merge Decision,
+  vote it, fix red, merge).
 - **Graduated recovery:** detect → mention the one blocked agent → re-mention
   next interval → escalate up the chain.
 - **Escalation chain:** member → team leader → Steward → the operator. The buck
@@ -238,8 +256,8 @@ trigger CI, reads the checks, merges, and fetches `main`
 - **Review is a mootup Decision, not a GitHub action.** The Architect/Spec read
   the diff from the shared local branch (`git diff origin/main...wp/<ID>`) and
   vote the merge Decision in mootup. There is no GitHub PR approval to mirror.
-- **The Integrator mirrors each GitHub state change into mootup mentioning whoever
-  moves next** — CI red → the implementer; merged → affected team leaders. A
-  GitHub state change nobody mirrors is a silent stall.
-- The full event→message map (what, where, mentioning whom, posted by whom) is in
-  `../docs/program/04-git-and-integration.md §5`.
+- **The Integrator mirrors each GitHub state change into mootup mentioning
+  whoever moves next** — CI red → the implementer; merged → affected team
+  leaders. A GitHub state change nobody mirrors is a silent stall.
+- The full event→message map (what, where, mentioning whom, posted by whom) is
+  in `../docs/program/04-git-and-integration.md §5`.
