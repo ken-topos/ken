@@ -11,12 +11,11 @@ makes proof *failures* legible to both humans and agents — so that a program c
 be written *and proved correct* at commercial scale, on top of a small auditable
 trust root.
 
-This specification is what Ken's implementation is built against. It descends
-from the design ideas explored for an AGPLv3 prototype but is a **clean-room**
-design: it is written from those ideas and from type-theoretic first principles,
-not from the prototype's source (`../CLEAN-ROOM.md`). The prototype is, at most,
-a behavioral oracle for the Spec enclave to consult; this document is the
-authority.
+This specification is what Ken's implementation is built against. It is a
+**clean-room** design, written from type-theoretic first principles
+(`../CLEAN-ROOM.md`); this document is the authority. Ken's reference
+interpreter (X1) defines its operational semantics, and claims here are
+validated against that interpreter during implementation.
 
 ---
 
@@ -118,8 +117,8 @@ Two invariants govern this shape:
    later; the kernel does not.
 2. **Soundness from day one.** Universes are checked (no `Type:Type`); `Sigma`
    is genuinely dependent; `J` reduces on non-`refl` equalities; conversion is
-   decidable and certified. The prototype's documented soundness gaps are
-   **not** reproduced (see `../docs/program/01-strategy.md` non-goals).
+   decidable and certified. There are no known soundness gaps (see
+   `../docs/program/01-strategy.md` non-goals).
 3. **Total by default.** Definitions admitted to the kernel are checked for
    termination (size-change termination over δ-unfolding); non-terminating or
    partial computation is explicit, not silent.
@@ -132,10 +131,11 @@ Two invariants govern this shape:
    `20-verification/`.
 6. **Real types from the start.** `Int` (arbitrary precision) and `Decimal` are
    foundational; floating point, if present, is one numeric type among several
-   and never the substrate. Ken is not an f64-only calculator (the central
-   correction from the reality-check; see `30-surface/35-numbers.md`).
-7. **Clean-room and permissively licensed.** The design is reusable; the
-   prototype's source is not. The MIT license depends on this discipline.
+   and never the substrate. Ken's numeric model is exact by default, not an
+   f64-only calculator (see `30-surface/35-numbers.md`).
+7. **Clean-room and permissively licensed.** The design is written from first
+   principles and is freely reusable. The MIT license depends on this
+   discipline.
 8. **Security is structural and tier-1.** Trust is **authorship-independent** —
    the kernel re-checks every certificate, so a property holds regardless of who
    (a human, an LLM, an adversary) wrote the code. On that base, Ken makes whole
@@ -177,8 +177,8 @@ Two invariants govern this shape:
   profunctor wires, co-Heyting boundaries), linear/affine types, and real
   delimited continuations — these are research (WS-R), harvested back as
   ordinary features if they earn it.
-- Reproducing the prototype's f64-only numeric model, unchecked universes, or
-  hard per-store slot ceiling.
+- An f64-only numeric model, unchecked universes, or a hard per-store slot
+  ceiling — Ken admits none of these.
 
 Genuine design forks encountered while writing are recorded in
 `90-open-decisions.md` for the operator, not silently resolved.
@@ -209,8 +209,8 @@ cite the spec section they pin.
 - **SHOULD / SHOULD NOT** — a strong recommendation; deviations need a recorded
   rationale.
 - **MAY** — genuinely optional.
-- A claim tagged **(oracle)** is to be cross-checked against the prototype's
-  observed behavior by the Spec enclave; it is provisional until confirmed.
+- A claim tagged **(oracle)** is to be validated against Ken's reference
+  interpreter during implementation; it is provisional until confirmed.
 - A claim tagged **(OQ-n)** is an open design decision tracked in
   `90-open-decisions.md`.
 - Inline core terms use de Bruijn-free named notation for readability; the
@@ -252,3 +252,15 @@ cite the spec section they pin.
 - **`trusted_base_delta`** — the machine-readable ledger of every assumption an
   artifact introduces; empty = fully verified (`20-verification/25`,
   `60-security/63`).
+
+## Acknowledgements
+
+Ken's design was **inspired by Yon**, an earlier research prototype that
+explored verified, content-addressed, topos-oriented computing. Ken began in the
+same region of the design space and shares that lineage of ideas — but it has
+since evolved into a **distinct language** with its own foundations: an
+observational kernel, a small permanent trusted core, an
+effects-and-capabilities surface, a tier-1 security model, and a
+behavioral-assurance seam to its sibling Ward. This specification stands on its
+own; it defines Ken in its own terms, not as a port. We gratefully acknowledge
+Yon as the spark.

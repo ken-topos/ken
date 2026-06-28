@@ -4,20 +4,20 @@
 > with materially different futures that the spec deliberately does **not**
 > resolve unilaterally (per the drafting stance, `SPEC-PROGRESS.md`). Each has a
 > **DRAFT recommendation** the spec currently assumes; the operator (or the Spec
-> enclave, against the prototype oracle) confirms or overrides. Entries are
-> keyed by a stable **name**; the numeric `OQ-n` tags used inline are noted.
+> enclave) confirms or overrides. Entries are keyed by a stable **name**; the
+> numeric `OQ-n` tags used inline are noted.
 
 How to read an entry: **Fork** (the choice) · **Options** · **Recommendation**
 (what the DRAFT assumes) · **Affects** (chapters) · **Why it's open**.
 
-This register consolidates the digest's 16 enumerated forks (§10) plus decisions
-surfaced while drafting. Resolved items move to an ADR (`../docs/adr/`).
+This register consolidates the principal design forks plus decisions surfaced
+while drafting. Resolved items move to an ADR (`../docs/adr/`).
 
 ---
 
 ## A. Kernel & type theory
 
-### OQ-int — Integer type & precision *(digest fork 1; tag OQ-1)* — **DECIDED**
+### OQ-int — Integer type & precision *(tag OQ-1)* — **DECIDED**
 - **Fork.** Is `Int` arbitrary-precision or fixed-64 by default? Is `Decimal` a
   core type? Which fixed-width integers are native? (Default overflow behaviour
   for fixed-width resolved below as `OQ-1a` (DECIDED 2026-06-27).)
@@ -35,7 +35,7 @@ surfaced while drafting. Resolved items move to an ADR (`../docs/adr/`).
 - **Affects.** `30-surface/35` (updated), `40-runtime/41`, `43`,
   `30-surface/38`.
 
-### OQ-eval-strategy — conversion algorithm *(fork 2)* — **DECIDED**
+### OQ-eval-strategy — conversion algorithm — **DECIDED**
 - **Fork.** What conversion algorithm the kernel uses to decide definitional
   equality.
 - **Decision (operator, 2026-06-27): follow Lean's kernel.** Operational
@@ -54,7 +54,7 @@ surfaced while drafting. Resolved items move to an ADR (`../docs/adr/`).
   impredicativity.
 - **Affects.** `10-kernel/17` (updated). Interacts with `OQ-Prop`, `OQ-4`.
 
-### OQ-2 — Cumulativity *(part of digest fork 3)* — **DECIDED**
+### OQ-2 — Cumulativity — **DECIDED**
 - **Fork.** Cumulative universes (`Type ℓ ≤ Type ℓ'`) vs. non-cumulative.
 - **Decision (operator, 2026-06-27): non-cumulative.** Keeps a subtyping
   relation out of the trusted kernel; consistent with the small-kernel
@@ -64,7 +64,7 @@ surfaced while drafting. Resolved items move to an ADR (`../docs/adr/`).
   kernel.)
 - **Affects.** `10-kernel/12` (updated), `18`.
 
-### OQ-Prop — proposition sort *(fork 3; tag OQ-3)* — **DECIDED (revised)**
+### OQ-Prop — proposition sort *(tag OQ-3)* — **DECIDED (revised)**
 - **Fork.** A primitive impredicative proof-irrelevant `Prop` vs. Ω of mere
   propositions — bundling *two* separable features: impredicativity, and
   definitional proof irrelevance.
@@ -78,14 +78,13 @@ surfaced while drafting. Resolved items move to an ADR (`../docs/adr/`).
   `SProp` add-on or kernel growth.
 - **Affects.** `10-kernel/12`, `16` (updated).
 
-### OQ-4 — Equality foundation *(digest fork 4)* — **DECIDED**
+### OQ-4 — Equality foundation — **DECIDED**
 - **Fork.** Full cubical (interval, comp/hcomp, Glue, computing univalence,
   HITs) vs. observational TT vs. plain `Id`/`J`.
 - **Decision (operator, 2026-06-27, ADR 0005): observational (OTT), not
-  cubical.** After a research review (`local/`): `Eq` by recursion on type
-  structure + `cast` + a strict-prop Ω (`SProp`) + native set-quotients +
-  propositional truncation. `J`/`subst` compute on non-`refl` (closing the
-  prototype's gap, via `cast` not the interval); funext/propext/UIP
+  cubical.** `Eq` by recursion on type structure + `cast` + a strict-prop Ω
+  (`SProp`) + native set-quotients + propositional truncation. `J`/`subst`
+  compute on non-`refl` (via `cast`, not the interval); funext/propext/UIP
   definitional; canonicity + decidable conversion proven; **no**
   univalence/higher-HITs (the mathematics features software does not use).
   Chosen for **exact fit to set-level software** and the **smallest auditable
@@ -113,7 +112,7 @@ surfaced while drafting. Resolved items move to an ADR (`../docs/adr/`).
 
 ## B. Verification
 
-### OQ-12 — SMT integration strategy *(digest fork 12)* — **DECIDED**
+### OQ-12 — SMT integration strategy — **DECIDED**
 - **Fork.** How to discharge obligations soundly with a classical solver under
   an intuitionistic logic, ending at a kernel-checked term.
 - **Decision (operator, 2026-06-27).** **Kripke embedding** primary (Ken's
@@ -136,7 +135,7 @@ surfaced while drafting. Resolved items move to an ADR (`../docs/adr/`).
 ### OQ-spec — Surface proof interface & state model — **DECIDED (interface)**
 - **Fork.** Refinement types on arrows vs. a separate tactic language vs. both;
   and whether `ensures` may reference pre-state (`old(e)`), i.e. the
-  state/mutation model for contracts. *(digest fork 11.)*
+  state/mutation model for contracts.
 - **Decision (operator, 2026-06-27): interface = both, as one gradient.**
   Declarative `requires`/`ensures` + refinement types (the human-readable
   contract) → automatic proof → typed hole → tactic/term — one smooth descent,
@@ -190,7 +189,7 @@ surfaced while drafting. Resolved items move to an ADR (`../docs/adr/`).
   canonical, explicit passing is unrestricted.
 - **Affects.** `30-surface/33 §5`, `39 §2`. **Recorded.**
 
-### OQ-8 — Effect-system shape *(digest fork 8)* — **DECIDED**
+### OQ-8 — Effect-system shape — **DECIDED**
 - **Fork.** `visits`-style static+transitive rows vs. Kleisli/monadic effects
   vs. algebraic-effects-with-handlers; and the **kernel encoding**. Sub-fork
   `OQ-8a`: capabilities a separate construct or just effects; static vs.
@@ -214,7 +213,7 @@ surfaced while drafting. Resolved items move to an ADR (`../docs/adr/`).
 - **Affects.** `30-surface/36` (updated), `60-security/61`, `60-security/62`,
   `70-behavioral/`.
 
-### OQ-9 — Continuations / handlers *(digest fork 9)* — **DECIDED (excluded)**
+### OQ-9 — Continuations / handlers — **DECIDED (excluded)**
 - **Fork.** Tail-resumptive handlers only vs. reified/multishot continuations.
 - **Decision (operator, 2026-06-27): tail-resumptive only; multishot excluded —
   a positive design choice.** The expressiveness multishot is reached for is
@@ -253,7 +252,7 @@ surfaced while drafting. Resolved items move to an ADR (`../docs/adr/`).
 
 ## D. Runtime & representation
 
-### OQ-7 — Content-addressed boundary *(digest fork 7)* — **DECIDED**
+### OQ-7 — Content-addressed boundary — **DECIDED**
 - **Fork.** Exactly which values are interned (small tuples? closures by
   code+env hash?) vs. immediate, and the per-case equality story.
 - **Decision (operator, 2026-06-27).** **Scalars immediate; compound/identity-
@@ -271,7 +270,7 @@ surfaced while drafting. Resolved items move to an ADR (`../docs/adr/`).
   are an X2 constant.
 - **Affects.** `40-runtime/41 §3` (updated), `44`.
 
-### OQ-5 — Heap capacity bound *(digest fork 5)* — **DECIDED**
+### OQ-5 — Heap capacity bound — **DECIDED**
 - **Fork.** Keep the Λ₂₄-derived 196,560 ceiling vs. an engineering-chosen
   bound.
 - **Decision (operator, 2026-06-27).** **Engineering-chosen, no practical
@@ -280,13 +279,13 @@ surfaced while drafting. Resolved items move to an ADR (`../docs/adr/`).
   constant.
 - **Affects.** `40-runtime/44 §2` (updated).
 
-### OQ-6 — Leech/Golay/Co₀ machinery *(digest fork 6)* — **DECIDED**
+### OQ-6 — Leech/Golay/Co₀ machinery — **DECIDED**
 - **Fork.** Include the lattice math at all, and if so in which of its three
   *separate* roles (Golay EC lists; kissing-number bitmap; Co₀
   canonicalization)?
 - **Decision (operator, 2026-06-27).** **Not in the core** — optional research
-  packages only (WS-R), never on the allocation hot path. The final break with
-  the prototype's central aesthetic conceit.
+  packages only (WS-R), never on the allocation hot path. The lattice math is an
+  aesthetic flourish, kept out of the load-bearing runtime.
 - **Affects.** `40-runtime/44 §4` (updated), `50-stdlib`.
 
 ### OQ-gc — Reclamation — **DECIDED (deferred impl detail)**
@@ -321,7 +320,7 @@ surfaced while drafting. Resolved items move to an ADR (`../docs/adr/`).
 
 ## E. Concurrency, wire, process
 
-### OQ-Space — State, concurrency & isolation *(forks 13,14)* — **DECIDED**
+### OQ-Space — State, concurrency & isolation — **DECIDED**
 - **Fork.** What a `space` maps to (OS process / thread / logical region); the
   transport/wire data model; the isolation guarantee; and (handed from `OQ-8`)
   the stateful-effect verification methodology + `old`.
@@ -354,7 +353,7 @@ surfaced while drafting. Resolved items move to an ADR (`../docs/adr/`).
 - **Affects.** `30-surface/36 §4` (updated), `20-verification/21 §4` (`old`),
   `40-runtime/`, `60-security/62`, `70-behavioral/`.
 
-### OQ-witness — Surface runtime introspection *(digest fork 16)* — **DECIDED**
+### OQ-witness — Surface runtime introspection — **DECIDED**
 - **Fork.** Expose process-level heap stats / Merkle root (extensional-safe) —
   and the exact surface.
 - **Decision (operator, 2026-06-27).** **Process-level stats only** (slots,
@@ -367,7 +366,7 @@ surfaced while drafting. Resolved items move to an ADR (`../docs/adr/`).
 
 ## F. Research-track (never core; strategy WS-R)
 
-### OQ-coalgebra — The coalgebraic layer *(fork 15)* — **DECIDED (excluded)**
+### OQ-coalgebra — The coalgebraic layer — **DECIDED (excluded)**
 - **Fork.** Pursue Store-comonad cells/lenses, process coalgebras +
   bisimulation, profunctor wires, co-Heyting boundaries — at all?
 - **Decision (operator, 2026-06-27): not in the core — same reasoning as
@@ -642,7 +641,7 @@ states what it cannot prove; the sibling models/tests/monitors it.
 | **OQ-7** | 2026-06-27 — scalars **immediate**, compound/identity-bearing **interned** (equality per case); small-aggregate boundary an **X2 tuning**, not semantics. | — (recorded in `40-runtime/41`) |
 | **OQ-hash** | 2026-06-27 — **two hashes**: fast non-crypto + `memcmp` in-process; crypto/Merkle for serialization (`63`). Exact functions an X2 constant. | — (recorded in `40-runtime/41`) |
 | **OQ-5** | 2026-06-27 — **engineering-chosen capacity, no practical ceiling** (wide handles), **loud refusal** permanent; Leech number aesthetic. | — (recorded in `40-runtime/44`) |
-| **OQ-6** | 2026-06-27 — Leech/Golay/Co₀ machinery **out of the core**, optional research packages only, never the hot path — the final break with the prototype's lattice conceit. | — (recorded in `40-runtime/44`) |
+| **OQ-6** | 2026-06-27 — Leech/Golay/Co₀ machinery **out of the core**, optional research packages only, never the hot path — the lattice math kept out of the load-bearing runtime. | — (recorded in `40-runtime/44`) |
 | **OQ-gc** | 2026-06-27 — manual + region-scoped now; **automatic GC a deferred implementation detail** (semantics-invisible — addable later with no language fork). | — (recorded in `40-runtime/44`) |
 | **OQ-witness** | 2026-06-27 — **process-level stats only** (extensional-safe `witness`); **never** per-value identity/provenance (referential transparency). | — (recorded in `40-runtime/41`) |
 | **OQ-9** | 2026-06-27 — **tail-resumptive only; multishot excluded** (positive choice). Expressiveness subsumed (generators / search-as-data / seam / interaction-tree denotation); `call/cc` uniquely adds unpredictability + breaks single-consumption WP (single-shot *simplifies* proofs). Footnote only if an unsubsumable need appears. | — (recorded in `30-surface/36 §5`) |

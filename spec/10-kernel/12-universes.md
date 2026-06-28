@@ -32,9 +32,9 @@ associative/commutative/idempotent, `max ℓ 0 = ℓ`, `suc (max ℓ₁ ℓ₂) 
 ```
 
 A universe lives in the *next* universe up. There is **no** `Type ℓ : Type ℓ`,
-and in particular no `Type : Type`. Reproducing `Type : Type` (as the
-prototype's unchecked universes effectively did) makes the system inconsistent
-(Girard's paradox); a conforming kernel MUST reject it. This is soundness
+and in particular no `Type : Type`. Admitting `Type : Type` (which is what
+unchecked universes amount to) makes the system inconsistent (Girard's paradox);
+a conforming kernel MUST reject it. This is soundness
 commitment §5.1 of `README.md` and is tested directly (G1, G5).
 
 ## 2. Predicativity

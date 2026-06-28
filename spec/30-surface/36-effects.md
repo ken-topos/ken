@@ -69,8 +69,7 @@ rest of the kernel (ADR 0001/0004/0005). *(Precedents, one per layer: Koka rows
 
 Distinct from logical preconditions (`../20-verification/21 §1`), a
 **capability** is an authority token a computation must be *given* to act (open
-a file, hit the network). The prototype conflates two readings of `requires`;
-Ken separates them:
+a file, hit the network). Ken keeps the two readings of `requires` distinct:
 
 - **Logical `requires φ`** — a proposition, discharged by proof
   (`../20-verification/21 §1`).
@@ -85,7 +84,8 @@ tokens, not a separate effect kind and not a runtime gate.** A capability is a
 handler is a capability provider, §5); authority is **static and visible** in
 the type, **attenuable** and **revocable** with use audited
 (`../60-security/62`). It is kept distinct from the logical `requires φ` (a
-proposition); conflating the two was the prototype's mistake.
+proposition); a capability is an authority, a precondition is a proof
+obligation, and Ken never conflates them.
 
 **Security extension (tier-1, `../60-security/`).** The effect/capability
 discipline is the host for two security mechanisms (ADR 0004):
@@ -124,9 +124,9 @@ declassification, and the constant-time discipline are in `../60-security/`.
 ## 4. State — the `space` model
 
 Pure code cannot mutate. Genuine mutable state and process isolation live in a
-**`space`** — Ken's analog of the prototype's `Space` (kept as the *concept*,
-not the implementation; the digest notes the prototype's `Space`/`spawn` is
-`fork()` + POSIX shared memory, logical isolation only):
+**`space`** — a unit of encapsulated mutable state and isolation defined by its
+*semantics* (cells, ordered effectful operations), not by any particular
+OS-level implementation:
 
 ```
 space Counter {
@@ -183,9 +183,9 @@ Ken's core admits **tail-resumptive** handlers only: the continuation is invoked
 **at most once, in tail position** — which keeps the fold well-founded,
 preserves **totality** (the SCT/termination story, `../10-kernel/17 §4`), and
 keeps effectful code tractable to verify. **Reified, multi-shot continuations**
-(the analysis's `shift`/`reset`, `with multishot`) are **excluded — a positive
-design choice, not a hedge** (`OQ-9` DECIDED): the expressiveness they are
-reached for is **already subsumed** — generators via `visits [Yield]` (`37 §3`),
+(`shift`/`reset`, `with multishot`) are **excluded — a positive design choice,
+not a hedge** (`OQ-9` DECIDED): the expressiveness they are reached for is
+**already subsumed** — generators via `visits [Yield]` (`37 §3`),
 nondeterminism/backtracking as **search-as-data** folded by total recursion,
 async/concurrency via the **seam** (`OQ-Space`), and delimited control captured
 *denotationally* by the interaction tree itself (§2). What multishot uniquely

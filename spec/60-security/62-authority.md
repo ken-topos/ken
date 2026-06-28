@@ -23,8 +23,8 @@ perform the corresponding effect (`Cap_FS`, `Cap_Net`, `Cap_declassify[ℓ→ℓ
 
 - **Static + visible.** A capability is part of a function's type, so a
   function's signature *is* its authority manifest: you can read, per function,
-  exactly what it is permitted to touch. (Not the prototype's runtime-only
-  gate.)
+  exactly what it is permitted to touch — authority is checked statically, not
+  by a runtime-only gate.
 - **Least by default.** Because authority is never ambient, the default
   authority of any function is **none**; it receives exactly the capabilities
   its callers pass. This makes the principle of least authority (PoLA) the *path

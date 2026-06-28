@@ -6,9 +6,8 @@
 > practical ceiling) with **loud refusal**; the **lattice machinery out of the
 > core** (optional research packages only); **reclamation a semantics-invisible
 > implementation detail** (manual+region now, automatic GC addable later without
-> touching surface or semantics — deferred). Contract for WS-X **X2/X4**.
-> Encodes the reality-check's biggest structural correction: the Leech-lattice
-> numbers are *aesthetic*, not load-bearing (digest §5).
+> touching surface or semantics — deferred). Contract for WS-X **X2/X4**. Its
+> central stance: the Leech-lattice numbers are *aesthetic*, not load-bearing.
 
 ## 1. The store
 
@@ -19,11 +18,11 @@ across arenas.
 
 ## 2. Capacity is an engineering choice, not numerology (OQ-5)
 
-The prototype fixes **196,560 slots/heap** — the kissing number of the Leech
-lattice Λ₂₄ — and 256 heaps/chain (an 8-bit heap id + 24-bit slot), giving
-~50.3M distinct contents and ~17–18 GB/process. The reality-check confirms these
-*numbers* but shows the **196,560 is aesthetic**: a 24-bit slot field holds
-~16M; nothing in addressing needs the Leech kissing number.
+A capacity scheme tied to the Leech lattice would fix **196,560 slots/heap** —
+the kissing number of Λ₂₄ — and 256 heaps/chain (an 8-bit heap id + 24-bit
+slot), giving ~50.3M distinct contents and ~17–18 GB/process. But the **196,560
+is aesthetic**: a 24-bit slot field holds ~16M; nothing in addressing needs the
+Leech kissing number.
 
 **Ken's stance:** choose any capacity bound on **engineering grounds** (encoding
 width, arena sizing, target scale), *not* lattice numerology.
@@ -40,8 +39,8 @@ width, arena sizing, target scale), *not* lattice numerology.
 
 ## 3. Reclamation
 
-- **No automatic GC / compaction** in the DRAFT (matching the prototype): the
-  append-mostly store keeps slots stable for fast ids and O(1) equality.
+- **No automatic GC / compaction** in the DRAFT: the append-mostly store keeps
+  slots stable for fast ids and O(1) equality.
 - **Manual reclamation exists** — `clear`/`reset`/`strip`-style operations
   release an arena's pages (e.g. `madvise(MADV_DONTNEED)`); a `space`/region
   boundary (`../30-surface/36 §4`) bounds a working set's lifetime.
@@ -56,9 +55,9 @@ width, arena sizing, target scale), *not* lattice numerology.
 
 ## 4. The lattice machinery — three separate optional roles (OQ-6)
 
-The reality-check is explicit that the Leech/Golay/Co₀ math is **not** the
-allocator and decomposes into **three distinct, code-separate** roles. If Ken
-includes any of it, it is scoped to these and **never** the hot path:
+The Leech/Golay/Co₀ math is **not** the allocator and decomposes into **three
+distinct, code-separate** roles. If Ken includes any of it, it is scoped to
+these and **never** the hot path:
 
 | Role | What it is | Where it'd live |
 |---|---|---|
@@ -68,13 +67,13 @@ includes any of it, it is scoped to these and **never** the hot path:
 
 - **None is required** for the core language; all are opt-in libraries
   (`../50-`).
-- The unverified doc claim of specific Co₀ orbit cardinalities
-  (98280/8386560/8292375) is **not** carried as fact (digest §5b); if such a
-  facility is built, those are to be computed/verified, not assumed.
+- The claim of specific Co₀ orbit cardinalities (98280/8386560/8292375) is
+  **not** carried as fact; if such a facility is built, those are to be
+  computed/verified, not assumed.
 - **`OQ-6` DECIDED:** the lattice machinery is **not in the core** — available
   only as research/optional packages (strategy WS-R), **never on the allocation
-  hot path**. This is the final break with the prototype's central aesthetic
-  conceit (the reality-check's biggest structural correction).
+  hot path**. Capacity rests on engineering choices, never on lattice
+  aesthetics.
 
 ## 5. Scale and limits validation (X4)
 

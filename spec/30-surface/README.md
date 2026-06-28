@@ -15,17 +15,15 @@ new trusted semantics.
 
 ## 1. Design stance
 
-- **Clean-room but informed.** Ken's vocabulary is its own; where the
-  prototype's shape is proven (effects, modules) Ken adopts the *shape*, not the
-  names or code (digest §7).
-- **Finish what the prototype left stubbed.** The prototype *parses* sum types
-  but lowers them to an opaque base with no constructor/eliminator — the single
-  most important thing to get right. Ken has **real** sum types, `match`, and
-  exhaustiveness from day one (`34-data-match.md`); this is the prime cautionary
-  tale.
-- **`Int` from day one.** One surface numeric type lowered to `f64` was the
-  prototype's real defect. Ken has `Int`, `Decimal`, and an honestly-named
-  `Float` (`35-numbers.md`).
+- **Vocabulary is Ken's own.** The effect and module forms follow
+  category-faithful shapes proven in practice; the names and code are Ken's.
+- **Sum types are real from day one.** Sum types lower to genuine inductive
+  families with real constructors and eliminators — the single most important
+  thing to get right. Ken has **real** sum types, `match`, and exhaustiveness
+  from day one (`34-data-match.md`).
+- **`Int` from day one.** Ken has `Int`, `Decimal`, and an honestly-named
+  `Float` (`35-numbers.md`); numeric types are exact and distinct, never a
+  single type lowered to `f64`.
 - **Verification is in the surface, not bolted on.** `requires`/`ensures`,
   refinement types, and `prove` (`../20-verification/21-spec-syntax.md`) are
   first-class surface forms.
@@ -55,7 +53,7 @@ new trusted semantics.
 | `32-grammar.md` | The concrete grammar (declarations, types, expressions, patterns) |
 | `33-declarations.md` | Modules, imports, definitions, records, visibility, typeclasses-as-subobjects |
 | `34-data-match.md` | Sum types, constructors, `match`, exhaustiveness, `Result`/`Option`, refinements |
-| `35-numbers.md` | `Int`/`Decimal`/`Float` — the f64 correction in full |
+| `35-numbers.md` | `Int`/`Decimal`/`Float` — Ken's exact numeric model in full |
 | `36-effects.md` | Effect tracking (`visits`), capabilities, the state/`space` model |
 | `37-strings-collections.md` | `String`, `List`, `Map`, `Set`, iteration |
 | `38-ffi-io.md` | `Bytes`, binary I/O, the FFI surface |

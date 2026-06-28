@@ -10,17 +10,17 @@
 ## 1. Why observational equality
 
 Martin-Löf type theory makes equality an inductive `Id A a b` whose eliminator
-`J` **only computes on `refl`** — the prototype's gap. Cubical type theory fixes
-that (via the interval) but at the cost of the largest, most canonicity-fragile
-part of a kernel, and it provides univalence + higher structure that *software*
-does not use.
+`J` **only computes on `refl`**. Cubical type theory fixes that (via the
+interval) but at the cost of the largest, most canonicity-fragile part of a
+kernel, and it provides univalence + higher structure that *software* does not
+use.
 
 Ken takes equality to be **observational** (`TTobs`/`CICobs`, ADR 0005): `Eq A a
 b` is a **proposition computed by recursion on the type `A`**, and a `cast`
 coercion transports along type-equalities and **reduces on reflexivity**. From
-`cast`, `J` is derived and **reduces on any equality, not only `refl`** —
-closing the prototype's gap — while the kernel stays small and **set-level**
-(UIP holds), which is exactly what software data is. `K1`'s required "`Id`, `J`"
+`cast`, `J` is derived and **reduces on any equality, not only `refl`**, while
+the kernel stays small and **set-level** (UIP holds), which is exactly what
+software data is. `K1`'s required "`Id`, `J`"
 is satisfied by `Eq` + the derived `J` (§4); `Id A a b` and `a = b` MAY be
 surface synonyms for `Eq A a b`.
 
@@ -89,8 +89,8 @@ or by a quotient relation — `J` **reduces** by the corresponding `cast`
 computation rather than getting stuck. A conforming kernel MUST exhibit this: a
 conformance test (`../../conformance/kernel/observational/j-nonrefl`) in which
 `J` on a non-`refl` equality computes to a constructor form, **failing on any
-kernel that only reduces `J` on `refl`.** This is the prototype's gap closed —
-via observational equality rather than cubical paths.
+kernel that only reduces `J` on `refl`.** This is achieved via observational
+equality rather than cubical paths.
 
 ## 5. Derived equalities (theorems, mostly definitional)
 

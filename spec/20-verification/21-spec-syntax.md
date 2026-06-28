@@ -3,8 +3,8 @@
 > Status: **DRAFT v0**. Normative for the forms and their meaning; concrete
 > surface spelling cross-refs `../30-surface/`. Contract for WS-V **V1**. How a
 > programmer or agent attaches a *correctness specification* to code — the
-> surface the whole verification loop hangs off. This is the L1→L2 bridge the
-> prototype lacked at the surface (digest §1, §8).
+> surface the whole verification loop hangs off. This is the L1→L2 bridge at the
+> surface level.
 
 A **specification** is one or more **propositions** (`../10-kernel/12 §5`,
 elements of Ω) attached to a definition, asserting how it must behave. Ken
@@ -71,7 +71,7 @@ view head (xs : { l : List A | l ≠ nil }) : A = …      -- non-empty by type
   comprehension/Σ reading) pairs `(x, proof-of-φx)`, but the proof component is
   a **mere proposition** (`12 §5.1`), so refinements carry *no runtime payload*
   and coerce silently to `A`.
-- Refinements are the **route to L2 at the surface** the digest highlights:
+- Refinements are the **route to L2 at the surface**:
   pushing a property into a type makes the checker enforce it at every use, with
   obligations generated where a plain `A` is used as `{x:A|φ}` (`22`).
 - They compose with Π/Σ: function arguments, results, and record fields may all
@@ -90,8 +90,8 @@ law    Monoid (M) { assoc : … ; unit_l : … ; unit_r : … }   -- a property 
 
 - **`prove name : φ`** registers `φ : Ω` as an obligation; on success `name`
   becomes a usable proof term of `φ` in the environment (`../10-kernel/11 §4`).
-- **`law`** bundles related propositions (the algebraic-law form the digest
-  notes the prototype supports via `law`/`verify`); proving a `law` for a type
+- **`law`** bundles related propositions (the algebraic-law form, stated via
+  `law`/`verify`); proving a `law` for a type
   makes the bundle available as a record of proofs, usable by constraint
   resolution (typeclasses-as-subobjects, `../30-surface/33-declarations.md`).
 - Goals are where Ken is used as a *proof assistant*, and where the REPL's

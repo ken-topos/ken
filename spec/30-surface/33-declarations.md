@@ -2,9 +2,8 @@
 
 > Status: **DRAFT v0**. Proposal-level for syntax; normative for the *features*.
 > Modules/imports, definitions, records, visibility, and Ken's constraint
-> mechanism — **typeclasses-as-subobjects-of-the-universe** (the digest's
-> elegant idea, genuinely greenfield since the prototype has no open user
-> typeclasses).
+> mechanism — **typeclasses-as-subobjects-of-the-universe**, a from-scratch
+> design for open user typeclasses.
 
 ## 1. Definitions
 
@@ -43,9 +42,8 @@ record User  { name : String, age : { n : Int | n ≥ 0 } }   -- refined field
   unqualified (use sparingly).
 - **Cross-package imports** resolve through the package manager
   (`38`/`../50-stdlib/`): a manifest (`ken.toml`) + lockfile (`ken.lock`) with
-  content-addressed, pinned dependencies (the prototype's git-pinned model,
-  generalized; content-addressing makes builds reproducible — a marketable
-  feature, digest §9).
+  content-addressed, pinned dependencies; content-addressing makes builds
+  reproducible — a marketable feature.
 - A package/module is itself an environment fragment; the kernel sees a single
   flattened, append-only `Σ` (`../10-kernel/11 §4`).
 
@@ -62,8 +60,8 @@ record User  { name : String, age : { n : Int | n ≥ 0 } }   -- refined field
 Ken's constraint/trait mechanism is **structure on types**. A "class" is a
 structure `C : Type → Type` (its members carve out a subobject of the universe,
 `../10-kernel/12 §5`); an "instance" exhibits that a given type carries it. This
-is the digest's "typeclasses-as-subobjects" idea — the most category-faithful
-account — and is greenfield (the prototype has none).
+"typeclasses-as-subobjects" design is the most category-faithful account of open
+user typeclasses.
 
 Two kinds of class, split by where the dictionary lives — the distinction that
 governs coherence (`OQ-classes`, decided):

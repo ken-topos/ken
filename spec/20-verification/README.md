@@ -3,8 +3,7 @@
 > Status: **DRAFT v0**. Normative for the interface and the soundness
 > obligations; some prover internals are tagged for the Verify team to fix.
 > Contract for WS-V (V1–V4, T1). Builds on `../10-kernel/` (Ω in `12 §5`,
-> certificate checking in `18 §4`). Grounded in digest §8 — the analysis's
-> strongest technical seam, which the reality-check adopts wholesale.
+> certificate checking in `18 §4`).
 
 This is what makes Ken **Ken**: a programmer or agent states a correctness
 property, and the toolchain returns a verdict it can act on — `proved`,
@@ -72,7 +71,7 @@ will happily use those laws and "prove" things that are false in the topos — s
 you **cannot** naively encode Ω into Z3 (F\*'s direct-classical approach is
 unsound for a genuinely non-Boolean Ω).
 
-Ken's resolution, the analysis's headline idea (digest §8): **Ken's topos
+Ken's resolution is its headline idea: **Ken's topos
 semantics *are* Kripke semantics** — a context/world is a stage of knowledge,
 the slice/accessibility relation is information growth. So instead of encoding
 `φ` directly, the prover encodes **`φ`'s Kripke truth condition `φ#`** as a

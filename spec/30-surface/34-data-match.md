@@ -1,11 +1,11 @@
 # Sum types, pattern matching, and refinements
 
 > Status: **DRAFT v0**. Proposal-level for syntax; **normative and high-priority
-> for the feature** — this is the prototype's prime cautionary tale. Sum types,
-> real constructors and eliminators, `match` with exhaustiveness, `Result`/
-> `Option`/`Either`, and refinement types. Ken **finishes** what the prototype
-> left stubbed (parses `A | B`, lowers to an opaque base with no
-> constructor/eliminator).
+> for the feature.** Sum types, real constructors and eliminators, `match` with
+> exhaustiveness, `Result`/`Option`/`Either`, and refinement types are
+> first-class and fully checked from day one — each `data` declaration lowers to
+> a genuine inductive type with real constructors and a real eliminator, never
+> an opaque base.
 
 ## 1. Sum types (real, not stubbed)
 
@@ -19,14 +19,14 @@ data Expr = Lit Int | Add Expr Expr | Neg Expr
 
 - `data` declares an **inductive type** (`../10-kernel/14`): the type former,
   its **constructors**, and (generated) its **dependent eliminator** `elim_D`.
-  Unlike the prototype, constructors are *real introduction forms* and there is
-  a *real eliminator* — values can be built and taken apart, with computation
-  (`elim_D … (Some x) ≡ …`).
+  Constructors are *real introduction forms* and there is a *real eliminator* —
+  values can be built and taken apart, with computation (`elim_D … (Some x) ≡
+  …`).
 - Constructors may carry arguments (positional or named-record style, `32 §1`)
   and may be **recursive** (subject to strict positivity, `14 §2`).
 - `Result`, `Option`, `Either` are ordinary `data` decls in the prelude
-  (`../50-stdlib/`), replacing the prototype's `0.0`-handle failure convention
-  with honest sum types.
+  (`../50-stdlib/`): fallibility and absence are honest sum types, not sentinel
+  values.
 
 ## 2. Indexed families (GADT-like)
 
@@ -76,9 +76,8 @@ The checker MUST verify:
   be written.)
 - **Reachability** — every arm is reachable; a redundant arm is a warning/error.
 
-This is the safety the prototype lacks and Ken requires from day one. Exhaustive
-`match` over a closed `data` needs no "default" and the compiler proves totality
-of the case analysis.
+Ken requires this safety from day one. Exhaustive `match` over a closed `data`
+needs no "default" and the compiler proves totality of the case analysis.
 
 ## 5. Refinement types
 
@@ -115,5 +114,5 @@ reachability** checking; `Result`/`Option`/`Either` in the prelude; and
 refinement types with coercion + obligation emission. Acceptance is part of
 **G6** (real sum types end-to-end). Conformance:
 `../../conformance/surface/data-match/` — including an exhaustiveness-failure
-regression and a "construct then eliminate computes" test that the prototype's
-stub would fail.
+regression and a "construct then eliminate computes" test confirming
+constructors and eliminators reduce as specified.

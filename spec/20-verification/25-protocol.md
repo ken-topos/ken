@@ -12,9 +12,9 @@
 Ken's differentiator is only real if an **agent** can act on a verification
 result mechanically. Human-readable error text is not enough; the toolchain
 emits a **structured, versioned** document per verification run. The same
-document renders to a human view, but the machine view is primary (the inversion
-the digest argues for: current languages are "human-interface languages"; Ken's
-diagnostics are agent-interface first).
+document renders to a human view, but the machine view is primary: where current
+languages are "human-interface languages", Ken's diagnostics are
+agent-interface first.
 
 ## 2. Transport and invocation
 

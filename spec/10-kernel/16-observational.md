@@ -97,8 +97,7 @@ Everything `15-identity.md` exposes is derived here and computes:
 
 - **`subst` / `J` / transport** — `subst P (e : Eq A a b) : P a → P b :≡ cast (P
   a) (P b) (cong P e)`. Because `cast` computes (§3), `J` **reduces on
-  non-`refl`** (`15 §4`) — the prototype's gap closed, via observational
-  equality.
+  non-`refl`** (`15 §4`), via observational equality.
 - **funext** — *definitional* (`Eq` at a Π-type **is** pointwise `Eq`, §2). A
   major ergonomic and verification win.
 - **propext** — *definitional* (`Eq` at Ω is mutual implication, §2).

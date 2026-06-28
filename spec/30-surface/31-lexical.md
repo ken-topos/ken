@@ -110,12 +110,12 @@ determine the numeric story (`35`):
 | **bytes** | `b"…"`, `0x[deadbeef]` | `Bytes` (`38`) |
 | **bool** | `true`, `false` | `Bool` |
 
-- **Critical rule (the f64 correction at the lexer):** a bare integer literal is
+- **Critical rule (exact numerics at the lexer):** a bare integer literal is
   **`Int`**, never a float. `2` is `Int`; `2.0` is `Float`; `2.0d` is `Decimal`.
-  The prototype's "every number is `f64`" defect does not even exist at Ken's
-  lexer — integers and floats are *different tokens with different default
-  types*. Numeric literals are **polymorphic** over the numeric classes via the
-  elaborator (`35 §4`, `39`), defaulting as above when unconstrained.
+  Integers and floats are *different tokens with different default types*; there
+  is no universal `f64` carrier at Ken's lexer. Numeric literals are
+  **polymorphic** over the numeric classes via the elaborator (`35 §4`, `39`),
+  defaulting as above when unconstrained.
 - Underscores are digit separators and are ignored.
 
 ## 4. Keywords (proposal)

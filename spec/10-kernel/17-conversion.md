@@ -123,8 +123,7 @@ vice versa.
 Type-checking calls conversion; conversion unfolds δ; an unrestricted recursive
 definition would make δ-unfolding (and hence conversion, and hence
 type-checking) **loop**. Ken keeps decidability with a **size-change termination
-(SCT)** check at definition-admission time (`11 §4`). This is the mechanism the
-digest confirms the prototype already uses to close its "δ-debt."
+(SCT)** check at definition-admission time (`11 §4`).
 
 **What SCT checks.** When admitting a (possibly recursive, possibly mutually
 recursive) transparent definition, the kernel:
@@ -160,12 +159,12 @@ recursive) transparent definition, the kernel:
   the rest.
 
 **(oracle)** The exact size order (what counts as `↓` for primitive values, and
-the treatment of `cast` under recursion) is to be confirmed against the
-prototype's working SCT; the *principle* and the accept condition above are the
-commitment. The resolution path: primitives are treated as neutral (no
-strict-decrease ordering) and `cast` under recursion is conservatively flagged
-`?` pending the prototype check. (Coinductive values do not arise: coinduction
-is excluded per `OQ-coinduction`.)
+the treatment of `cast` under recursion) is to be validated against Ken's
+reference interpreter during implementation; the *principle* and the accept
+condition above are the commitment. The resolution path: primitives are treated
+as neutral (no strict-decrease ordering) and `cast` under recursion is
+conservatively flagged `?` pending that validation. (Coinductive values do not
+arise: coinduction is excluded per `OQ-coinduction`.)
 
 ## 5. Decidability (the payoff)
 

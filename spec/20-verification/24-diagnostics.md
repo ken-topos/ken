@@ -4,7 +4,7 @@
 > meaning; concrete serialization is in `25-protocol.md`. Contract for WS-V
 > **V4**. This is the feature that most differentiates Ken for agentic use: a
 > proof that does not go through yields a *structured, machine-readable
-> explanation*, not an opaque error (digest §8 — "high value for agents").
+> explanation*, not an opaque error — high value for agents.
 
 When an obligation `Γ ⊢ φ` (`22`) is not discharged, the verification layer
 emits one or more of four diagnostics, each derived from the **topos/Heyting
@@ -54,7 +54,7 @@ An undischarged obligation becomes a **typed hole**:
   computation (Kleene/Heyting-style: `unknown ∧ false = false`, `unknown ∨ true
   = true`, `unknown` otherwise). So a partially-verified program *runs and shows
   you where the unproven property actually bites* — the Hazel "total error
-  localization, program still runs" model the digest cites.
+  localization, program still runs" model.
 - Holes are **precisely located** (provenance from `22`) and carry their goal +
   context, so an agent (or the REPL "Little Prover" loop, `21 §3`) can pick one
   up and try to fill it without re-deriving where it came from.

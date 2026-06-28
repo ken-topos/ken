@@ -3,9 +3,7 @@
 > Status: **DRAFT v0**. Normative for the architecture, the soundness
 > discipline, and the classifier boundaries; the embedding's exact encoding is
 > specified to the level the Verify team needs and tagged where it must be
-> proved. Contract for WS-V **V3**. The analysis's strongest seam (digest §8),
-> adopted wholesale; the prototype already has narrow Z3/Coq backends to
-> **generalize**, not rebuild.
+> proved. Contract for WS-V **V3**.
 
 ## 1. Contract
 
@@ -36,7 +34,7 @@ it mentions) to the cheapest **sound** method. Three fragments:
 
 - For **D**, classical and intuitionistic logic **coincide** (excluded middle is
   available *because the atom is decidable*), so the classical solver is sound
-  with no embedding (the analysis's key boundary).
+  with no embedding (the key fragment boundary).
 - The classifier is **conservative**: when unsure whether an atom is decidable
   or a formula is FO, it routes *upward* (to the more general, more expensive
   method). Misclassification downward would risk unsoundness *if the certificate
@@ -146,18 +144,16 @@ slowing Z3 — so it is reserved for FO; D uses direct/decision (§3).
   (`../../docs/program/01-strategy.md`); interactive tactics + the agent loop
   serve instead.
 
-## 6. Generalize the existing backends (the V3 work)
+## 6. Backend scope (the V3 work)
 
-The prototype's Z3/Coq backends handle only **naturality of natural
-transformations with single-variable Real-arithmetic bodies** (digest §8b). V3
-is to **generalize**: arbitrary decidable atoms over
+V3 builds the SMT-backed tiers in full: arbitrary decidable atoms over
 `Int`/`Decimal`/`Bool`/handles and finite domains (D); the full Kripke embedding
-for FO; the IPC tactic and the induction tactics for HO — not to build a prover
-from scratch. The **Coq backend is retired** (`OQ-12`): Ken's own kernel is the
-proof checker, so an external Coq dependency would enlarge the trusted base
-against the small-permanent-Rust-kernel principle (ADR 0001/0004). Z3 is the
-primary solver; **cvc5** is an optional second oracle (proof-friendly
-Alethe/LFSC output, useful for the (a) checker and for cross-checking).
+for FO; the IPC tactic and the induction tactics for HO. There is **no external
+proof-checker dependency**: Ken's own kernel is the proof checker, so an
+external Coq dependency would enlarge the trusted base against the
+small-permanent-Rust-kernel principle (ADR 0001/0004). Z3 is the primary solver;
+**cvc5** is an optional second solver (proof-friendly Alethe/LFSC output, useful
+for the (a) checker and for cross-checking).
 
 ## 7. Soundness obligations (what must actually be proved/ensured)
 

@@ -68,16 +68,15 @@ The kernel's type theory is:
   — non-cumulative; ergonomics via the elaborator, see `12-universes.md §3`.)
 - **Dependent functions** `(x : A) → B` (Π) with β and η (`13-pi-sigma.md`).
 - **Dependent pairs** `(x : A) × B` (Σ), genuinely dependent — `B` may mention
-  `x` — with projections and η (`13-pi-sigma.md`). The prototype's non-dependent
-  Σ is *not* reproduced.
+  `x` — with projections and η (`13-pi-sigma.md`).
 - **Inductive families** with dependent eliminators and a strict-positivity
   requirement (`14-inductive.md`): `Nat`, `Bool`, `List`, `Vec`, `Σ`/`W` as
   needed, and user inductives.
 - **Observational equality** `Eq A a b` as the identity type, a proposition
   computed by recursion on `A` (`15-identity.md`, `16-observational.md`). `J` is
-  *derived* from the `cast` coercion and **reduces on non-`refl` equalities** —
-  closing the prototype's `J`-only-on-`refl` gap, via OTT not cubical (ADR
-  0005). **funext, propext, UIP** are *definitional*; Ken is **set-level**.
+  *derived* from the `cast` coercion and **reduces on non-`refl` equalities**,
+  via OTT not cubical (ADR 0005). **funext, propext, UIP** are *definitional*;
+  Ken is **set-level**.
 - **`cast`** (transport along a type-equality, computing by type structure, with
   `cast A A refl a ≡ a`), **native set-quotients** `A / R`, and **propositional
   truncation** `‖A‖` (`16-observational.md`). No interval, `Glue`, univalence,
@@ -125,13 +124,12 @@ verification of it) is judged. Where a commitment is currently an argument
 rather than a mechanized proof, `18-judgments.md §Metatheory` says so
 explicitly.
 
-## 6. Relationship to the prototype (clean-room)
+## 6. Design discipline
 
 The kernel is designed from type-theoretic first principles and the strategy's
-locked decisions, **not** transcribed from the prototype. Three of the
-prototype's documented soundness gaps are corrected *by construction* here and
-MUST NOT be reintroduced: unchecked universes, non-dependent Σ, and `J` that
-only reduces on `refl`. Where this spec needs a behavioral detail it cannot
-derive (e.g. an exact reduction-order choice the prototype made), it tags the
-point **(oracle)** for the Spec enclave to confirm against the prototype — never
-by copying source.
+locked decisions. Three soundness properties are guaranteed *by construction*
+here and MUST NOT be compromised: universes are checked, Σ is genuinely
+dependent, and `J` reduces on non-`refl` equalities. Where this spec fixes a
+behavioral detail that is a free implementation choice (e.g. an exact
+reduction-order), it tags the point **(oracle)**: the detail is to be validated
+against Ken's reference interpreter during implementation.

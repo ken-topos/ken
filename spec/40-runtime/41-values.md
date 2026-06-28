@@ -1,12 +1,12 @@
 # The value model
 
 > Status: **DRAFT v0**. Normative for the model and equality; exact encodings
-> are implementation latitude (flagged OQ where a real fork). Contract for WS-X
-> **X1/X2**. Encodes the digest's two corrections: heterogeneous typed values
+> are implementation latitude (flagged OQ where genuinely open). Contract for
+> WS-X **X1/X2**. Encodes two design commitments: heterogeneous typed values
 > (not uniform f64, §1) and conventional content addressing (FNV-1a + memcmp,
 > not Leech, §3).
 
-## 1. Scalars are typed immediates (the f64 correction at runtime)
+## 1. Scalars are typed immediates
 
 A Ken value is **not** a uniform `f64` handle. Scalars are **unboxed, typed
 machine values**, dispatched by their static type
@@ -24,8 +24,8 @@ machine values**, dispatched by their static type
 
 There is **no decode-from-f64 stratum**; the type determines the representation
 directly. A `section`/handle crossing a boundary *may* be shuttled as an
-integer- in-`f64` **wire convention** (the one grain of truth in the analysis),
-but that is a transport detail, not the value model (`44`/`../30-surface/38`).
+integer- in-`f64` **wire convention**, but that is a transport detail, not the
+value model (`44`/`../30-surface/38`).
 
 ## 2. Compound values and the content-addressed heap
 
@@ -44,7 +44,7 @@ records (Σ), `String`, `Bytes`, `Array`/`Map`/`Set`, closures, and big integers
 
 ## 3. Addressing: a fast hash + memcmp (NOT lattice geometry)
 
-The reality-check's key correction: content addressing is **conventional**.
+Content addressing is **conventional**.
 
 - The content key is a **fast non-cryptographic hash (FNV-1a-style)** of the
   canonical byte encoding, with **`memcmp`** to resolve hash collisions exactly.
@@ -54,9 +54,9 @@ The reality-check's key correction: content addressing is **conventional**.
   `memcmp` in-process, a cryptographic/Merkle hash for serialization — two
   hashes, two jobs; the exact functions are an X2 constant.
 - **No Leech-lattice quantizer, no Co₀-orbit canonicalization on the allocation
-  path.** The analysis's "heap addressing is Leech-lattice geometry" is refuted;
-  Ken MUST NOT put lattice math on the hot path. (The lattice's *legitimate*,
-  optional, separate roles are in `44 §4`.)
+  path.** Heap addressing is not lattice geometry; Ken MUST NOT put lattice math
+  on the hot path. (The lattice's *legitimate*, optional, separate roles are in
+  `44 §4`.)
 - **Canonical encoding.** Dedup requires a canonical byte form per value so that
   "same value ⇒ same bytes ⇒ same hash." The canonicalization rules (field
   order, normalization of which values are interned) are part of X2 and must be
@@ -66,7 +66,7 @@ The reality-check's key correction: content addressing is **conventional**.
 
 Because identical values share a slot, **structural equality of two heap values
 is a slot-id comparison — O(1)** (after construction). This is the headline
-runtime property the prototype's heap provides and Ken keeps:
+runtime property of the content-addressed heap:
 
 - `a == b` on heap values is `slot(a) == slot(b)`; on scalars it is the native
   comparison. No deep traversal at comparison time (the traversal happened once,
@@ -106,9 +106,8 @@ an open verification hole, `../20-verification/24 §2`):
 
 **Decided (operator, 2026-06-27):** the runtime MAY expose **process-level**
 statistics — slots used, dedup rate, arena bytes, a Merkle root — as a
-first-class, **extensional-safe** facility (the analysis's `witness`, addressing
-a real gap: the prototype has C-level introspection but no surface primitive).
-It **MUST NOT** expose **per-value identity or provenance** (which slot a value
+first-class, **extensional-safe** facility (a `witness` surface primitive). It
+**MUST NOT** expose **per-value identity or provenance** (which slot a value
 occupies, allocation order), as that would break referential transparency. Stats
 about the *store*, yes; identity of *values*, no.
 

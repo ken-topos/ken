@@ -9,10 +9,8 @@ after every section you complete, and commit.
 ## The task
 
 Draft a solid language specification for **Ken** — an MIT-licensed, Rust-hosted,
-interpreter-first **verified topos language** — distilling, extending, and
-filling out the ideas from the research conversation (`/home/pat/src/yon/Yon
-Programming Language Analysis.md`) and its corrections
-(`/home/pat/src/yon/01-reality-check.md`), aligned to the locked architecture in
+interpreter-first **verified topos language** — designed from type-theory /
+topos / OTT first principles, aligned to the locked architecture in
 `../docs/program/01-strategy.md` and `../docs/program/02-roadmap.md`. The goal
 is a spec the build teams (Kernel, Verify, Language) can start work on — i.e. it
 must cover, at full rigor, the **kernel core** that unblocks K1/K2/K3/X1/V0, and
@@ -20,21 +18,19 @@ at decreasing resolution the verification surface, language surface, runtime,
 and stdlib.
 
 This is the spec-author bootstrap the Opus Spec enclave would do; the real
-enclave later refines it against the prototype as a behavioral oracle.
+enclave later refines it against Ken's reference interpreter.
 
 ## Conventions (hold these across the whole effort)
 
-- **Clean-room.** Write from the analysis digest + type-theory/topos/OTT first
-  principles + the strategy docs. Do **NOT** read the AGPL prototype source
-  under `/home/pat/src/yon/` (only the analysis + reality-check files there are
-  in scope). Describe behavior in our own words; never transcribe source. See
-  `../CLEAN-ROOM.md`.
-- **Design latitude.** We *design* Ken (distill + extend). Make reasonable
+- **Clean-room.** Write from type-theory/topos/OTT first principles + the
+  strategy docs. Describe Ken's design in our own words; never transcribe
+  outside source. See `../CLEAN-ROOM.md`.
+- **Design latitude.** We *design* Ken from first principles. Make reasonable
   calls; log genuine forks in `90-open-decisions.md` rather than blocking.
-- **Don't reproduce the prototype's gaps** (per strategy non-goals): Ken has
-  checked universes (no `Type:Type`), genuinely dependent `Sigma`, `J` that
-  reduces on non-`refl`, `Int` from day one (no f64-only model), and no hard
-  slot ceiling.
+- **Foundational guarantees** (per strategy non-goals): Ken has checked
+  universes (no `Type:Type`), genuinely dependent `Sigma`, `J` that reduces on
+  non-`refl`, an exact `Int` from day one (no f64-only numeric model), and no
+  hard slot ceiling.
 - **Wrap markdown at 80 columns.** Run `python3 /tmp/reflow.py <file>` after
   writing a long file (it skips frontmatter/tables/fences) to guarantee it.
 - **Commit after each completed section** (`spec: draft <file>`), so progress is
@@ -42,7 +38,7 @@ enclave later refines it against the prototype as a behavioral oracle.
 
 ## Outline & status
 
-Status: TODO · DRAFT (first pass written) · REVISED (refined w/ digest) · DONE
+Status: TODO · DRAFT (first pass written) · REVISED (refined) · DONE
 
 | File | Scope | Status |
 |---|---|---|
@@ -68,7 +64,7 @@ Status: TODO · DRAFT (first pass written) · REVISED (refined w/ digest) · DON
 | `30-surface/32-grammar.md` | Concrete grammar | DRAFT |
 | `30-surface/33-declarations.md` | Modules, declarations, definitions, visibility | DRAFT |
 | `30-surface/34-data-match.md` | Sum types, `match`, exhaustiveness, `Result`/`Option` | DRAFT |
-| `30-surface/35-numbers.md` | `Int`/`Decimal`/reals — the f64 correction | DRAFT |
+| `30-surface/35-numbers.md` | `Int`/`Decimal`/reals — Ken's exact numeric model | DRAFT |
 | `30-surface/36-effects.md` | Effect tracking surface | DRAFT |
 | `30-surface/37-strings-collections.md` | Strings, core collections | DRAFT |
 | `30-surface/38-ffi-io.md` | `Bytes`, binary I/O, FFI | DRAFT |
@@ -87,16 +83,15 @@ Status: TODO · DRAFT (first pass written) · REVISED (refined w/ digest) · DON
 | `60-security/65-policy.md` | Policy-as-code: separately-authored, mandatory, static security policy (ADR 0007) | DRAFT |
 | `70-behavioral/README.md` | Behavioral seam: assumption-boundary export to the sibling (`Ward`); proved/tested/delegated/unknown; temporal-as-data | DRAFT |
 | `90-open-decisions.md` | The forks register (for the operator) | DRAFT |
-| `_notes/analysis-digest.md` | Distilled digest of analysis + reality-check (subagent) | DONE |
+| `_notes/analysis-digest.md` | Background design notes (subagent) | DONE |
 
 (Conformance corpus seeds live in `../conformance/`, referenced from spec
 sections; seeded opportunistically as core sections are written.)
 
 ## Drafting order (priority)
 
-1. `_notes/analysis-digest.md` (subagent, in progress) — wait for it before
-   writing analysis-specific detail; kernel core can start from first
-   principles.
+1. `_notes/analysis-digest.md` (subagent, in progress) — background design
+   notes; kernel core can start from first principles.
 2. `00-overview.md` + `README.md` — frame.
 3. `10-kernel/*` — the trust root; highest rigor; unblocks K1/K2/K3/X1/V0.
 4. `20-verification/*` — the differentiator; unblocks V0–V4, T1.
@@ -114,9 +109,9 @@ load-bearing cases per area. The spec is ready for the build teams (Kernel,
 Verify, Language, Runtime) to start against.
 
 Remaining / future passes (not blocking team start):
-- Spec enclave: cross-check the **(oracle)**-tagged points against the prototype
-  (exact observational `Eq`/`cast` by-type normal forms `16`, SCT size order
-  `17`, reduction-order choices) — confirm or correct, never copy source. The
+- Spec enclave: validate the **(oracle)**-tagged points against Ken's reference
+  interpreter (exact observational `Eq`/`cast` by-type normal forms `16`, SCT
+  size order `17`, reduction-order choices) — confirm or correct. The
   observational forms also cross-check against `CICobs`/`TTobs` (permissive
   refs, read-not-copy, ADR 0005).
 - Operator: review `90-open-decisions.md`; veto/confirm DRAFT recommendations;

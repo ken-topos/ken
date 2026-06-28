@@ -3,8 +3,9 @@
 This directory is the **normative specification** for Ken — the MIT-licensed,
 Rust-hosted, interpreter-first verified topos language. Ken's implementation
 (the kernel, elaborator, prover, interpreter, stdlib) is built **against this
-spec**, not against the AGPLv3 prototype. The prototype is at most a behavioral
-oracle for the Spec enclave; this spec is the authority (`../CLEAN-ROOM.md`).
+spec**: it is a clean-room design and this spec is the authority
+(`../CLEAN-ROOM.md`). Ken stands on its own; for its lineage see the
+Acknowledgements in `00-overview.md`.
 
 Start with **[`00-overview.md`](00-overview.md)** — the thesis, the system
 shape, the design principles, scope/non-goals, and the glossary.

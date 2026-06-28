@@ -1,11 +1,10 @@
 # Bytes, I/O, and the FFI
 
 > Status: **DRAFT v0**. Proposal-level for syntax; normative for the *trust and
-> effect discipline*. `Bytes`, binary I/O, and the foreign-function interface —
-> three things the prototype genuinely lacks (general FFI; `Bytes`/binary I/O;
-> the prototype's `File` is text-only — digest §7/§9). These are how a verified
-> core meets the outside world, so the **boundary discipline** matters more than
-> the syntax.
+> effect discipline*. `Bytes`, binary I/O, and the foreign-function interface
+> are how a verified core meets the outside world: a general FFI, first-class
+> `Bytes`/binary I/O, and binary-capable file access. The **boundary
+> discipline** matters more than the syntax.
 
 ## 1. `Bytes` and binary I/O
 
@@ -17,8 +16,7 @@
   **effect-tracked** (`36`): `read_bytes : Path → Bytes visits [FS]`, `send :
   Socket → Bytes → Unit visits [Net]`. Text I/O is `Bytes` + an explicit
   `String` encode/decode (no hidden charset).
-- **Serialization** is a stdlib facility over `Bytes` (the prototype's
-  `serialize`/`deserialize` + Merkle generalized): a derivable, *lawful*
+- **Serialization** is a stdlib facility over `Bytes`: a derivable, *lawful*
   `encode`/`decode` with the round-trip property `decode (encode x) == Ok x`
   provable (`../20-verification/`) — a natural verified-component target (G6).
 
@@ -37,11 +35,10 @@ foreign os_write : Int32 → Bytes → Int  visits [FS]
 - A `foreign` decl gives the external function a **Ken type** and an **effect
   row** (`pure` ≡ empty row). Marshalling between Ken values and C ABI types
   follows the primitive lowering (`../40-runtime/41`): scalars pass as their
-  machine types, `Bytes` as `(ptr, len)`, etc. The general C/BLAS FFI the
-  prototype lacks (its externals are a fixed prefix-gated allowlist) is the L7
+  machine types, `Bytes` as `(ptr, len)`, etc. A general C/BLAS FFI is the L7
   deliverable.
-- The FFI replaces the prototype's narrow allowlist with a **general** but
-  **explicitly-trusted** mechanism (§3).
+- The FFI is a **general** but **explicitly-trusted** mechanism (§3), not a
+  fixed allowlist of externals.
 
 ## 3. The trust boundary (the load-bearing part)
 

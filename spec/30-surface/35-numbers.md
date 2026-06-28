@@ -1,25 +1,21 @@
 # Numbers and primitive scalars
 
-> Status: **DRAFT v0**. Normative for the numeric model (the single most
-> important correction the reality-check made). The prototype's central defect —
-> *one* surface numeric type `number` lowered to `f64`, silently losing integer
-> precision above 2⁵³ — is **not reproduced**. Ken has `Int` from day one and a
-> clear, honestly-typed scalar story.
+> Status: **DRAFT v0**. Normative for the numeric model. Ken has `Int` from day
+> one and a clear, honestly-typed scalar story: distinct numeric types, integer
+> precision that never silently degrades above 2⁵³, and no universal `f64`
+> carrier.
 
-## 1. The correction, stated plainly
+## 1. The model, stated plainly
 
-The analysis claimed "every value is a uniform f64" was a foundational flaw. The
-reality-check **refuted** the ontology (the prototype already lowers
-heterogeneously — `i1`/`i8`/`i64`/`f64`/structs — scalars are unboxed SSA
-values), but confirmed **one real, narrow defect: there is no distinct `Int`**;
-the lone numeric type is `number → f64`. Ken's response is the small, contained
-fix the reality-check prescribes, **not** the analysis's giant "abandon f64 /
-typed handles" workstream (which targets a non-problem):
+Ken's numeric model has **distinct, honestly-typed scalars**, not a single
+universal numeric type. Values lower heterogeneously — `i1`/`i8`/`i64`/`f64`/
+structs — as unboxed SSA values (`../40-runtime/41-values.md`). The design rests
+on three commitments:
 
-> Ken adds `Int` (and `Decimal`) as first-class types and keeps `Float` as one
-> honestly-named numeric type among several. Use heterogeneous typed lowering
-> (`../40-runtime/41-values.md`). Do not build Ken around a uniform-f64 ontology
-> or a 4×f64 wire framing.
+> Ken has `Int` (and `Decimal`) as first-class types and keeps `Float` as one
+> honestly-named numeric type among several. Lowering is heterogeneous and typed
+> (`../40-runtime/41-values.md`). There is no uniform-f64 ontology and no 4×f64
+> wire framing.
 
 ## 2. The numeric types
 
@@ -48,15 +44,14 @@ typed handles" workstream (which targets a non-problem):
   (`../30-surface/38`). Their **overflow semantics are explicit** (§3); their
   widths/signedness lower directly to the machine type.
 - **`Decimal` is a core, essential type** (`OQ-int` DECIDED) — exact base-10 for
-  money and any computation where binary floating point is wrong by construction
-  (the prototype's `money` was an f64 alias; Ken makes it exact). Literal suffix
+  money and any computation where binary floating point is wrong by
+  construction. Ken's money type is exact, not an `f64` alias. Literal suffix
   `d`.
 - **`Float`** is IEEE-754, *honestly named*. It is **not** the universal value
   carrier and **not** the default for integer literals. Be explicit that ℝ does
-  not embed faithfully in `Float` (the analysis's one fair caveat): `Float`
-  equality is the usual IEEE minefield and Ken does not pretend otherwise —
-  proofs about reals use `Decimal`/rationals or an explicit error-bound
-  discipline, not `Float ==`.
+  not embed faithfully in `Float`: `Float` equality is the usual IEEE minefield
+  and Ken does not pretend otherwise — proofs about reals use
+  `Decimal`/rationals or an explicit error-bound discipline, not `Float ==`.
 
 ## 3. Overflow and partiality
 
@@ -112,9 +107,8 @@ Decimal.toFloat: Decimal → Float         -- lossy; named
 ```
 
 Lossy conversions are **named and visible** in the type (`Option` for may-fail,
-documented-lossy for `toFloat`), so the precision pitfalls the analysis
-attributed to f64 are surfaced as ordinary, checkable function boundaries —
-never silent.
+documented-lossy for `toFloat`), so the precision pitfalls of `f64` are surfaced
+as ordinary, checkable function boundaries — never silent.
 
 ## 6. Kernel view
 
@@ -131,7 +125,6 @@ as a small, visible interface (`14 §5`, `../50-stdlib/`).
 overflow; `Decimal`; honestly-named `Float`/`Float32`; `Bool`/`Char`; typed
 literal defaulting (`2:Int`, `2.0:Float`, `2.0d:Decimal`); numeric classes for
 literal overloading; and explicit, visibly-lossy conversions. Acceptance:
-integer arithmetic above 2⁵³ is exact (the prototype's defect, fixed) and `2 :
-Int` / `2.0 : Float` are distinct. Conformance:
-`../../conformance/surface/numbers/` — the `> 2^53` exactness regression and the
-literal-defaulting tests.
+integer arithmetic above 2⁵³ is exact and `2 : Int` / `2.0 : Float` are
+distinct. Conformance: `../../conformance/surface/numbers/` — the `> 2^53`
+exactness regression and the literal-defaulting tests.

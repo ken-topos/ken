@@ -10,8 +10,7 @@
 - **`String`** — an immutable **UTF-8** text value; a primitive type
   (`../10-kernel/14 §5`) at runtime (`../40-runtime/41-values.md`), content-
   addressed like any compound value (so equal strings share storage, and
-  equality is O(1)). The prototype already crosses strings on the wire
-  `[len][bytes]`; Ken treats `String` as first-class from the start.
+  equality is O(1)). Ken treats `String` as first-class from the start.
 - **`Char`** — a Unicode scalar value (`35 §2`).
 - Indexing is by **code point** or explicit byte view; the API distinguishes
   byte-length from character-length to avoid the usual UTF-8 traps. Raw bytes
@@ -27,14 +26,13 @@
 | `Array a` | immutable contiguous sequence, O(1) index | persistent/structural-sharing under the hood |
 | `Map k v` | immutable key→value | needs `DecEq`/`Ord` (or hashable) `k` (`33 §5`) |
 | `Set a` | immutable set | as `Map a Unit`; the lattice-bitmap option is `../40-runtime/44` |
-| `Option a`, `Result e a` | optionality / fallibility | sum types (`34 §1`); replace the `0.0` convention |
+| `Option a`, `Result e a` | optionality / fallibility | sum types (`34 §1`); explicit absence/error |
 
 - All core collections are **immutable and persistent** (updates return new
   values, sharing structure). Mutation, where needed, is in a `space` (`36 §4`).
 - Because the runtime is content-addressed (`../40-runtime/41`),
-  structurally-equal collections are **shared and O(1)-comparable** — a natural
-  fit the prototype's heap already provides; Ken exposes it as the default
-  semantics of value equality.
+  structurally-equal collections are **shared and O(1)-comparable** — Ken
+  exposes this as the default semantics of value equality.
 - `List` is the canonical *inductive* collection (good for proofs/`match`);
   `Array`/`Map`/`Set` are *abstract* types with proven operations (and, where
   relevant, laws as propositions — e.g. `Map` lookup/insert laws, usable by the

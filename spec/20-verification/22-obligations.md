@@ -75,8 +75,7 @@ logic.
 
 For a function whose correctness is *inductive* — a recursive `view`, or one
 whose result type depends on a recursive argument — the obligation's structure
-follows the **body as the motive** (the digest's "function-body-as-motive
-plumbing"):
+follows the **body as the motive**:
 
 - The function elaborates to an application of the relevant **eliminator**
   (`../10-kernel/14 §3`) whose **motive** `M` is the (refined) result type as a

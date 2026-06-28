@@ -29,11 +29,10 @@ is a core term the kernel `check`s (`../10-kernel/18 §4`). Consequences:
 2. **Implicit insertion** — insert implicit arguments `{x:A}` (`32`, `33 §1`) at
    uses, creating metavariables for them.
 3. **Type inference & unification** — a bidirectional, **Hindley–Milner +
-   dependent** elaboration (the prototype has both; digest §7): propagate
-   expected types inward (checking) and synthesize where needed (inference),
-   solving metavariables by **unification** up to definitional equality
-   (`../10-kernel/17`). Higher-order cases use pattern unification; genuine
-   ambiguity is a reported error, not a guess.
+   dependent** elaboration: propagate expected types inward (checking) and
+   synthesize where needed (inference), solving metavariables by **unification**
+   up to definitional equality (`../10-kernel/17`). Higher-order cases use
+   pattern unification; genuine ambiguity is a reported error, not a guess.
 4. **Universe/level inference** — solve level metavariables (`../10-kernel/12
    §4`), emitting explicit levels to the kernel.
 5. **Instance resolution** — discharge `where C A` constraints (`33 §5`) by

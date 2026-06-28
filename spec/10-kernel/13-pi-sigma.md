@@ -2,8 +2,7 @@
 
 > Status: **DRAFT v0**. Normative. Formation, introduction, elimination,
 > computation (β/ι), and η for the two core dependent connectives. Σ here is
-> **genuinely dependent** — the prototype's non-dependent Σ is corrected by
-> construction (`README.md §6`).
+> **genuinely dependent** (`README.md §6`).
 
 Notation: `Γ ⊢ t : A` typing; `Γ ⊢ a ≡ b : A` definitional equality (`17`);
 `t[u/x]` capture-avoiding substitution (`11 §5`). Premises above the line,
@@ -58,7 +57,7 @@ This makes, e.g., `λ x. f x ≡ f` hold without a proof.
 The type `(x : A) × B` classifies pairs `(a, b)` where the *type* of the second
 component, `B`, may depend on the first component `a`. When `B` does not mention
 `x` it is the ordinary product `A × B`. **`B` mentioning `x` is the whole
-point** and is what the prototype lacked; Ken requires it.
+point**; Ken requires it.
 
 Ken presents Σ **negatively**, by its projections, which yields a definitional η
 (the Σ-η rule below). (An equivalent positive presentation with a dependent
