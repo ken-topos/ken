@@ -1,0 +1,33 @@
+{
+  "name": "moot-agent-team",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:22",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {
+      "moby": false
+    },
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "3.11"
+    },
+    "ghcr.io/devcontainers/features/rust:1": {
+      "version": "latest",
+      "profile": "default"
+    },
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+  "onCreateCommand": "bash .devcontainer/ken-setup.sh",
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+  "runArgs": [
+    "--name", "moot-${localWorkspaceFolderBasename}"
+  ],
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "rust-lang.rust-analyzer",
+        "tamasfe.even-better-toml",
+        "ms-python.python",
+        "ms-pyright.pyright"
+      ]
+    }
+  },
+  "remoteUser": "node"
+}
