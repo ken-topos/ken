@@ -59,9 +59,13 @@ routing is **hybrid**:
   holds the upstream keys from `/home/node/.secrets/`.
 
 Per-role selection is declared in `moot.toml`: each build role's
-`[agents.<role>].env` sets `ANTHROPIC_BASE_URL` + `ANTHROPIC_API_KEY`
+`[agents.<role>].env` sets `ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN`
 (`${secret:llm-proxy-secret}`, resolved from `/home/node/.secrets/` at launch;
 requires mootup ≥ 0.5.4), and moot injects it into the agent's launch env;
 enclave roles set no `env`, so they use the default Anthropic endpoint + OAuth.
-The proxy is started by `run-llm-proxy.sh`. Operator runbook:
+It must be **`ANTHROPIC_AUTH_TOKEN`** (a Bearer), not `ANTHROPIC_API_KEY`: the
+proxy reads `Authorization: Bearer`, and AUTH_TOKEN also overrides the shared
+claude.ai OAuth login (from the enclave's `/login`) that build agents would
+otherwise send — which the proxy rejects as a subscription token. The proxy is
+started by `run-llm-proxy.sh`. Operator runbook:
 `local/mootup-agent-backends-setup.md`.
