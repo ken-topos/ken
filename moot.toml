@@ -13,6 +13,12 @@
 api_url = "https://mootup.io"
 space_id = "spc_4q7g0se87rgje"
 
+[harness]
+# Cold-start role: launched first on `moot up`, used for the interactive
+# Anthropic OAuth /login (an Opus/subscription enclave role). The operator's
+# primary proxy into the federation.
+human_interface = "steward"
+
 [agents.spec-author]
 display_name = "spec-author"
 model = "claude-opus-4-8[1m]"
