@@ -40,12 +40,48 @@ never in this repo). They fall in two tiers:
   copied. In any environment where it exists locally, treat it as
   read-restricted (the repo `CLAUDE.md` + `.claude/settings.json` may enforce a
   deny).
-- **Permissive references** (Lean, Agda/cubical Agda, cooltt, smalltt, cctt, …)
-  — Apache-2.0 / MIT-style, *not* copyleft. The Architect / Spec enclave may
+- **Permissive references** (Lean, Agda, smalltt/elaboration-zoo, Z3, cvc5, F\*,
+  Interaction Trees, Koka, LIO, sigstore/in-toto, Quint/Apalache, QuickChick,
+  Unison, …) — Apache-2.0 / BSD / MIT-style. The Architect / Spec enclave may
   **read them to understand** and to resolve `(oracle)`-tagged spec details;
   Ken's code is then written **from the spec**, in Ken's own words. Do **not**
   vendor their source into the repo (keeps Ken uniformly MIT). Implementer
-  agents build from `/spec`, never from `local/refs/`.
+  agents build from `/spec`, never from `local/refs/`. The full curated shelf
+  and its spec-section mapping live in `local/refs/README.md`.
+- **Copyleft references** (GPL / AGPL / CeCILL — e.g. SMTCoq, Spot, Jif) —
+  permitted for the Spec enclave to **read for *approach and behavior* only**,
+  under a stricter discipline: describe the *what* (the algorithm's behavior,
+  the design idea) in Ken's own words, never the *how* (the source's structure,
+  identifiers, comments, ordering). **Never vendored, never read by
+  implementers.** Because a copyleft transcription into the spec would taint the
+  whole MIT channel, these are subject to the **leakage recheck** below.
+
+## The copyleft-leakage recheck (the originality gate)
+
+The spec is the channel from copyleft-readable references to MIT implementation,
+so the spec must stay **provably original** with respect to any copyleft source
+it consulted. Two layers:
+
+1. **Front-line discipline** (always). A spec section informed by a copyleft ref
+   describes *behavior and design intent* in Ken's own words and structure, and
+   reproduces none of the source's *expression* — identifiers, comment text,
+   code structure, or statement ordering.
+2. **The recheck gate** (before a spec area is handed to the build teams, and
+   whenever a section is refined against a flagged ref). An **independent
+   originality review**: a reviewer or agent confirms, for each spec section
+   that consulted a copyleft ref, that it is original expression (the *what*,
+   not the *how*). A textual/structural **similarity scan** (n-gram /
+   MOSS-style) between the spec prose and the flagged source is run as a
+   *flagging aid*; any high-overlap span is escalated to a human. The reviewer
+   is never the author of the section.
+
+**Provenance.** A section that consulted a copyleft ref records it (an internal
+note, not in the normative text) so the recheck knows where to look. The current
+spec was authored from first principles + permissive material *before* this
+copyleft shelf existed, so the recheck's live scope is the **refinement phase**
+— as the enclave uses these references to sharpen the spec and resolve
+`(oracle)` points. Run it as a gate on that phase, not retroactively on text it
+never touched.
 
 ## If in doubt
 
