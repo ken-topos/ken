@@ -5,8 +5,9 @@
 # accounts/fireworks/* -> Fireworks (GLM), deepseek-* -> DeepSeek. The proxy
 # env is injected per-role by CONVO_ROLE (see .devcontainer/ken-setup.sh).
 #
-# MODEL SLUGS BELOW ARE BEST-GUESS PLACEHOLDERS — verify against each provider's
-# live catalog before first `moot up` (MODELS.md tiers).
+# Model slugs: deepseek-v4-pro and accounts/fireworks/models/glm-5p2 confirmed by
+# the operator (2026-06-28). The Opus enclave slug is still to confirm at first
+# `moot up` — it runs direct on the Anthropic subscription, not via the proxy.
 
 [convo]
 api_url = "https://mootup.io"
@@ -58,7 +59,7 @@ startup_prompt = "You lead Ken's Kernel team. Read agent/COORDINATION.md (federa
 
 [agents.kernel-implementer]
 display_name = "Kernel implementer"
-model = "accounts/fireworks/routers/glm-latest"
+model = "accounts/fireworks/models/glm-5p2"
 startup_prompt = "You are the Kernel team implementer. Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/build/implementer.md and agent/teams/kernel/implementer.md if present, set status, await your leader's kickoff. Do not poll."
 
 [agents.kernel-qa]
@@ -73,7 +74,7 @@ startup_prompt = "You lead Ken's Verify team. Read agent/COORDINATION.md (federa
 
 [agents.verify-implementer]
 display_name = "Verify implementer"
-model = "accounts/fireworks/routers/glm-latest"
+model = "accounts/fireworks/models/glm-5p2"
 startup_prompt = "You are the Verify team implementer. Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/build/implementer.md and agent/teams/verify/implementer.md if present, set status, await your leader's kickoff. Do not poll."
 
 [agents.verify-qa]
@@ -88,7 +89,7 @@ startup_prompt = "You lead Ken's Language team. Read agent/COORDINATION.md (fede
 
 [agents.language-implementer]
 display_name = "Language implementer"
-model = "accounts/fireworks/routers/glm-latest"
+model = "accounts/fireworks/models/glm-5p2"
 startup_prompt = "You are the Language team implementer. Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/build/implementer.md and agent/teams/language/implementer.md if present, set status, await your leader's kickoff. Do not poll."
 
 [agents.language-qa]
@@ -103,7 +104,7 @@ startup_prompt = "You lead Ken's Runtime team. Read agent/COORDINATION.md (feder
 
 [agents.runtime-implementer]
 display_name = "Runtime implementer"
-model = "accounts/fireworks/routers/glm-latest"
+model = "accounts/fireworks/models/glm-5p2"
 startup_prompt = "You are the Runtime team implementer. Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/build/implementer.md and agent/teams/runtime/implementer.md if present, set status, await your leader's kickoff. Do not poll."
 
 [agents.runtime-qa]
@@ -118,7 +119,7 @@ startup_prompt = "You lead Ken's Ergo team. Read agent/COORDINATION.md (federati
 
 [agents.ergo-implementer]
 display_name = "Ergo implementer"
-model = "accounts/fireworks/routers/glm-latest"
+model = "accounts/fireworks/models/glm-5p2"
 startup_prompt = "You are the Ergo team implementer. Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/build/implementer.md and agent/teams/ergo/implementer.md if present, set status, await your leader's kickoff. Do not poll."
 
 [agents.ergo-qa]
@@ -133,7 +134,7 @@ startup_prompt = "You lead Ken's Foundation team. Read agent/COORDINATION.md (fe
 
 [agents.foundation-implementer]
 display_name = "Foundation implementer"
-model = "accounts/fireworks/routers/glm-latest"
+model = "accounts/fireworks/models/glm-5p2"
 startup_prompt = "You are the Foundation team implementer. Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/build/implementer.md and agent/teams/foundation/implementer.md if present, set status, await your leader's kickoff. Do not poll."
 
 [agents.foundation-qa]
