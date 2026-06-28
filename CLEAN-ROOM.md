@@ -70,10 +70,14 @@ it consulted. Two layers:
    whenever a section is refined against a flagged ref). An **independent
    originality review**: a reviewer or agent confirms, for each spec section
    that consulted a copyleft ref, that it is original expression (the *what*,
-   not the *how*). A textual/structural **similarity scan** (n-gram /
-   MOSS-style) between the spec prose and the flagged source is run as a
-   *flagging aid*; any high-overlap span is escalated to a human. The reviewer
-   is never the author of the section.
+   not the *how*). A textual/structural **similarity scan**
+   (`scripts/originality-scan.py spec local/refs/<ref> --fail 0.04`, k-gram
+   shingles) between the spec prose and the flagged source is run as a *flagging
+   aid*; long matched **runs** are the suspicious signal (short matches over
+   shared domain vocabulary are expected), and any flagged span is escalated to
+   a human. The reviewer is never the author of the section. Run it only against
+   the **copyleft** refs (the ones that taint the MIT channel) — not against
+   Ken's own docs, which legitimately share phrasing.
 
 **Provenance.** A section that consulted a copyleft ref records it (an internal
 note, not in the normative text) so the recheck knows where to look. The current
