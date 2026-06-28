@@ -45,8 +45,7 @@ lacks. See `playbooks/federation/steward.md` and `COORDINATION.md §10`.
 
 These patterns are lifted and adapted from the workflow skills the mootup team
 developed by dogfooding mootup on a different (SaaS) codebase — the coordination
-nuance transfers; SaaS/tooling specifics were dropped. The governing git model
-is
-[`../docs/program/04-git-and-integration.md`](../docs/program/04-git-and-integration.md);
-roles map to teams in
-[`../docs/program/03-program-of-work.md`](../docs/program/03-program-of-work.md).
+nuance transfers; SaaS/tooling specifics were dropped. The governing git model is
+[`04-git-and-integration.md`](../docs/program/04-git-and-integration.md); roles
+map to teams in
+[`03-program-of-work.md`](../docs/program/03-program-of-work.md).
