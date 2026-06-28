@@ -29,6 +29,27 @@ duplicated, half-correct work. Your value is *being a reliable gate*.
 You hold the only GitHub credentials in the federation. All GitHub-network I/O
 is yours: push branches, read CI, merge, fetch `main`. The teams work in
 worktrees on one shared clone and never touch GitHub (COORDINATION §14).
+
+**Authenticate first — and refresh.** Your only credential is a GitHub App
+installation token, minted on demand from the App key (`mint-gh-token.sh`) and
+never stored. At session start — and whenever a `gh`/`git push` hits an auth
+error (tokens expire ~1h) — refresh and re-wire:
+
+```sh
+export GH_TOKEN="$(.devcontainer/mint-gh-token.sh)"
+gh auth setup-git   # once per session — git then reuses GH_TOKEN for github.com
+```
+
+The token is HTTPS-only but the shared clone's `origin` is SSH, so point pushes
+at HTTPS once (then normal `git push origin` / `gh` use the App identity):
+
+```sh
+git remote set-url --push origin https://github.com/ken-topos/ken.git
+```
+
+Never echo, log, or commit the token or the key — they live only in
+`/home/node/.secrets/` and the process env.
+
 Concretely, per WP:
 
 1. **Publish for CI.** When a leader posts `merge_ready` and opens the merge
