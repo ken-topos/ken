@@ -13,6 +13,17 @@ while [ "$PROJECT_ROOT" != "/" ]; do
     PROJECT_ROOT="$(dirname "$PROJECT_ROOT")"
 done
 
+# .moot/actors.json is gitignored, so a per-role git worktree carries only the
+# committed moot.toml, not .moot/. When the walk-up landed in a worktree,
+# resolve the MAIN worktree (first `git worktree list` entry) — it holds the
+# real .moot/. (Runs as the worktree's owner, so no dubious-ownership guard.)
+if [ ! -f "$PROJECT_ROOT/$ACTORS_FILE" ]; then
+    MAIN_ROOT="$(git -C "$PROJECT_ROOT" worktree list --porcelain 2>/dev/null | awk '/^worktree /{print $2; exit}')"
+    if [ -n "$MAIN_ROOT" ] && [ -f "$MAIN_ROOT/$ACTORS_FILE" ]; then
+        PROJECT_ROOT="$MAIN_ROOT"
+    fi
+fi
+
 # Read per-role actor identity from .moot/actors.json. We MUST export
 # CONVO_AGENT_ID and CONVO_AGENT_NAME — the mcp_runner defaults them to
 # "unknown-agent", and the backend rejects any post whose agent_id in the

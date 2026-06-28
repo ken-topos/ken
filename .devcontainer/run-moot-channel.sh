@@ -12,6 +12,15 @@ while [ "$PROJECT_ROOT" != "/" ]; do
     PROJECT_ROOT="$(dirname "$PROJECT_ROOT")"
 done
 
+# In a per-role git worktree, .moot/ (gitignored) is absent; resolve the MAIN
+# worktree for the real .moot/. (See run-moot-mcp.sh for the full rationale.)
+if [ ! -f "$PROJECT_ROOT/$ACTORS_FILE" ]; then
+    MAIN_ROOT="$(git -C "$PROJECT_ROOT" worktree list --porcelain 2>/dev/null | awk '/^worktree /{print $2; exit}')"
+    if [ -n "$MAIN_ROOT" ] && [ -f "$MAIN_ROOT/$ACTORS_FILE" ]; then
+        PROJECT_ROOT="$MAIN_ROOT"
+    fi
+fi
+
 # Read per-role actor identity from .moot/actors.json. See run-moot-mcp.sh
 # for the full rationale — same rule applies to the channel adapter.
 #
