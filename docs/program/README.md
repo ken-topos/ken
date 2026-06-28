@@ -31,6 +31,11 @@ never from prototype source (see `../../CLEAN-ROOM.md`).
    protected `main`, per-team PRs, a single Integrator who merges and notifies,
    and how it maps onto mootup spaces and Decisions. Realized by WP F1.
 
+**Living status:** `IMPLEMENTATION-PROGRESS.md` is the build backbone — the
+Steward-owned tracker of WP/gate state against the DAG (`05`), surviving
+compaction (the analog of `spec/SPEC-PROGRESS.md`). Read it to see where the
+build stands now.
+
 ## The one-paragraph version
 
 Ken is a small permanent **Rust trusted kernel** (the de Bruijn trust root) with

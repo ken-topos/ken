@@ -50,6 +50,53 @@ direction and priority; you turn that into WPs and sequence them across teams.
   proposes it to you; you add and sequence it. Agents don't spawn unsequenced
   work. A WP that grows or forks comes back to you to split or re-scope.
 
+### 2a. The implementation progress tracker (your durable backbone)
+
+You **own and maintain a single progress file** —
+`docs/program/IMPLEMENTATION-PROGRESS.md` — tracking where the build stands
+**against the implementation DAG** (`05-implementation-dag.md`). This is the
+build's analog of `spec/SPEC-PROGRESS.md`: a durable record that **survives
+compaction** and is both your resume point and the operator's at-a-glance view.
+If it does not exist yet, **create it** from the DAG.
+
+Keep it current — **update it every synthesis pass and on every WP state
+change** — with at least:
+
+- **A per-WP status table** keyed to the DAG's work packages
+  (F/K/V/L/X/Sec/B/S/T): `not-ready · ready · active · in-review · merged`, plus
+  the owning team and the gate it feeds (G0–G8, G-Sec, G-Ward-seam, G5-perf).
+- **The active frontier** — the WPs whose dependencies are met and that are
+  *ready* now (the next things to release), and the **critical path** position
+  (kernel observational core → L5/effects hub, per `05`).
+- **Blockers** — what is waiting on what, with the escalation status of each
+  (self-resolvable / needs Architect / needs operator).
+- **Gate progress** — which of G0–G8 (+ G-Sec, G-Ward-seam) are met, in
+  progress, or not started, and the Ward sibling's seam-dependency status.
+- **A "last updated / next action" line** so a cold resume continues
+  immediately.
+
+On resume (after a compact or a cold start), **read this file first**, then
+continue from the frontier. Update the DAG itself (`05`) only when the *plan*
+changes (a new WP, a re-scoped dependency); the progress file tracks *execution*
+against it.
+
+### 2b. Run until complete, blocked, or told to stop
+
+The build is a **long-running effort across many sessions and compactions.**
+Keep working the DAG — sequence ready WPs, unblock teams, run the promotion
+ladder, update the progress tracker, brief the operator — and **do not yield**
+until one of three conditions holds:
+
+1. **Complete** — the DAG is delivered: all gates (G0–G8, G-Sec, G-Ward-seam)
+   met, every WP merged with its retro in.
+2. **Blocked** — a genuine blocker you cannot resolve at your level; escalate it
+   to the operator (with the specific decision needed) and record it in the
+   tracker, then keep all *unblocked* work moving while you wait.
+3. **Instructed** — the operator tells you to stop, pause, or re-prioritize.
+
+A quiet federation is not "done": if teams are idle and the DAG is not complete,
+that is a stall to diagnose (§7), not a stopping point.
+
 ## 3. The promotion ladder (your core mechanism)
 
 The tooling provisions skills as **per-team copies with no inheritance**, so
@@ -92,9 +139,11 @@ a role.
 
 Run a periodic synthesis pass (not a busy poll): collect new retros, apply the
 ladder, land skill changes to `agent/` (commit to a `wp/<ID>` branch, open the
-merge Decision, hand `merge_ready` to the Integrator), and brief the operator.
-You, the team leaders, and the Integrator are the only schedulers in the
-federation.
+merge Decision, hand `merge_ready` to the Integrator), **update the
+implementation progress tracker (§2a)**, sequence newly-ready WPs, and brief the
+operator. You, the team leaders, and the Integrator are the only schedulers in
+the federation. Between passes you do not idle-stop — you persist until
+complete, blocked, or instructed (§2b).
 
 ## 7. Federation watchdog (the backstop)
 
