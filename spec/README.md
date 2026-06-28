@@ -21,7 +21,7 @@ shape, the design principles, scope/non-goals, and the glossary.
 | Stdlib | `50-stdlib/` | Prelude and core library shape |
 | **Security** (tier-1) | `60-security/` | Threat model, information-flow control, capabilities/authority, supply-chain, the trust model, **policy-as-code** + honest limits |
 | **Behavioral** (seam) | `70-behavioral/` | What Ken can't prove but must state: the assumption-boundary export to the sibling (`Ward`); proved/tested/delegated/unknown; temporal-as-data (ADR 0006) |
-| Open decisions | `90-open-decisions.md` | Unresolved design forks (for the operator) |
+| Open decisions | `90-open-decisions.md` | The design-fork register — all forks **DECIDED** (operator, 2026-06-27); the resolution log + per-OQ outcomes |
 
 Each chapter is self-contained and cites the kernel rules it relies on.
 Executable **conformance** cases live in `../conformance/` and cite the spec

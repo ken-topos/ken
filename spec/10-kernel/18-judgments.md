@@ -167,9 +167,10 @@ The kernel's soundness commitments (`README.md §5`) and their current status:
 canonicity and decidable conversion are *proven* for OTT, ADR 0005) and Ken
 intends to *follow* it, not that Ken has a machine-checked proof yet. A
 mechanized kernel-soundness proof is a later goal (strategy G5 documents the
-story; full mechanization is post-self-host, `02 §5`). This table is the
-kernel's "known-risk register"; the conformance corpus exercises each commitment
-behaviorally even where the metatheorem is not yet mechanized.
+story; full mechanization is post-self-host, `../../docs/program/02-roadmap.md`
+Phase 5). This table is the kernel's "known-risk register"; the conformance
+corpus exercises each commitment behaviorally even where the metatheorem is not
+yet mechanized.
 
 ## 7. What the kernel checks here
 

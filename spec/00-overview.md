@@ -117,7 +117,7 @@ Two invariants govern this shape:
    smaller still. The elaborator and prover build on top and may self-host
    later; the kernel does not.
 2. **Soundness from day one.** Universes are checked (no `Type:Type`); `Sigma`
-   is genuinely dependent; `J` reduces on non-`refl` paths; conversion is
+   is genuinely dependent; `J` reduces on non-`refl` equalities; conversion is
    decidable and certified. The prototype's documented soundness gaps are
    **not** reproduced (see `../docs/program/01-strategy.md` non-goals).
 3. **Total by default.** Definitions admitted to the kernel are checked for
@@ -168,7 +168,8 @@ Two invariants govern this shape:
   termination (`40-runtime/`).
 - The **prelude / core stdlib** shape (`50-stdlib/`).
 
-**Out of scope (non-goals for this track; recorded in `01-strategy.md`):**
+**Out of scope (non-goals for this track; recorded in
+`../docs/program/01-strategy.md`):**
 
 - Full higher-order automated proving (interactive tactics serve instead).
 - Native code generation before the verification loop works.

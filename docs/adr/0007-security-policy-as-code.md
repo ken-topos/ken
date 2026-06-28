@@ -65,10 +65,11 @@ policy surface — part of Ken, not a sibling.**
   interaction-tree label denotation (`OQ-8`), distributed IFC over labeled
   messages (`OQ-Space`), and Ward's runtime monitoring of labeled events
   (`OQ-behavioral`).
-- **New open question `OQ-policy`:** the concrete policy syntax; the binding
-  mechanism (per package/build/deployment); how policies **compose** (org → team
-  → service, **monotone-tightening only** — a sub-policy may restrict, never
-  relax); version/attestation interplay.
+- **Residual within the decided design (`OQ-policy` sub-decisions, `65 §6`):**
+  the concrete policy syntax; the binding mechanism (per package/build/
+  deployment); how policies **compose** (org → team → service,
+  **monotone-tightening only** — a sub-policy may restrict, never relax);
+  version/attestation interplay. (`OQ-policy` itself is **DECIDED**, this ADR.)
 - **Federation:** security/compliance becomes an explicit authoring **role**
   alongside the implementation teams.
 

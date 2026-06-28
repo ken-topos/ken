@@ -14,18 +14,23 @@ import ::= "import" ModPath ("as" ConId)? ("(" name ("," name)* ")")?
         |  "use" ModPath  -- bring names into scope unqualified
 
 decl ::=
-    "view" ident binder* (":" type)? effects? contract* "=" expr  -- function
+    "view" ident binder* (":" type)? effects? contract* constraints? "=" expr  -- function
   | "let"  ident (":" type)? "=" expr  -- value
   | "type" ConId tyvar* "=" type  -- alias / refinement
   | "record" ConId tyvar* "{" field ("," field)* "}" derive?  -- product
   | "data" ConId tyvar* "=" ctor ("|" ctor)* derive?  -- sum / inductive
+  | "class" ConId binder* "{" field ("," field)* "}"  -- typeclass (33 §5, ADR 0008)
+  | "instance" ConId atype* "{" field_assign ("," field_assign)* "}"  -- instance (33 §5)
   | "foreign" ident ":" type foreign_spec  -- FFI (38)
-  | "space" ConId "{" (decl | becomes)* "}"  -- state region (36)
+  | "space" ConId "{" (cell | decl | becomes)* "}"  -- state region (36)
   | "policy" ConId "{" decl* "}"  -- policy module (65) [OQ-syntax]
   | spec_decl  -- prove / law (20)
   | fixity_decl  -- infixl/r N op
 
+cell    ::= "mut" ident ":" type "=" expr           -- mutable space cell (36 §4)
 becomes ::= ident "becomes" expr  -- space cell update (36 §4) [OQ-syntax]
+constraints ::= "where" constraint ("," constraint)*  -- instance constraints (33 §5)
+constraint  ::= ConId atype+                          -- e.g.  DecEq A
 binder  ::= "(" ident+ ":" type ")" | "{" ident+ ":" type "}"   -- {…} implicit
 field   ::= ident ":" type
 ctor    ::= ConId arg_types?                       -- e.g.  Cons a (List a)
@@ -43,7 +48,7 @@ type ::=
   | type "->" type  -- non-dependent arrow
   | "(" ident ":" type ")" "×" type  -- dependent pair (Σ)
   | "{" ident ":" type "|" expr "}"  -- refinement (12 §5, 34)
-  | ConId atype*  -- type application (List Int, Vec a n); also Lazy a, Wrapping T
+  | ConId atype*  -- type application (List Int, Vec a n); also Lazy a, Wrapping[T]
   | type "@" label  -- IFC labeled type A @ ℓ (60-security/61 §3) [OQ-syntax]
   | "Type" level?  -- a universe (12)
   | "forall" tyvar+ "." type  -- explicit polymorphism (usually implicit)
@@ -53,7 +58,10 @@ label ::= expr | "ct"  -- a lattice label ℓ, or timing-sensitive ct (61 §3,§
 ```
 
 Universe levels are usually inferred (`12 §4`); `Type` means `Type ℓ` for an
-inferred `ℓ`. Implicit arguments `{…}` are inserted by elaboration (`39`).
+inferred `ℓ`. Implicit arguments `{…}` are inserted by elaboration (`39`). Type
+application is shown by juxtaposition (`ConId atype*`); the chapters also use
+the bracketed spelling `F[T]` (e.g. `Wrapping[T]`, `35 §3`) — the same
+construct, spelling `[OQ-syntax]`.
 
 ## 3. Expressions
 

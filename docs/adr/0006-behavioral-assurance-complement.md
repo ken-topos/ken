@@ -93,6 +93,13 @@ One logic, two engines.**
   conformance as CI gate vs production monitor vs both; the agentic-oracle
   policy (metamorphic relations + RV watchdogs; the safety FSM the agent is a
   nondeterministic oracle inside).
+
+  > **Update (2026-06-27):** these follow-on questions are now **DECIDED**
+  > (kept for the record) — `OQ-export-ir`, `OQ-classical-bridge`,
+  > `OQ-conformance`, `OQ-agentic-oracle`, and `OQ-Space` (the `old`/state
+  > model). See the resolution log in `../../spec/90-open-decisions.md` and
+  > `../../spec/70-behavioral/`. Only `OQ-sampling-policy` and
+  > `OQ-discharge-attestation` remain deferred (Ward-blocked).
 - **Naming.** The sibling is **`Ward`** (operator, 2026-06-27) — "to keep watch
   / guard": it watches what proof cannot reach, and is the agentic safety
   envelope. Pairs with Ken ("the range of what one can know"): Ward handles what

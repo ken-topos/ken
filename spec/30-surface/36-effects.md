@@ -139,8 +139,8 @@ space Counter {
 - A `space` encapsulates **cells** (`mut`) with identity; operations on it carry
   the space as an effect. Mutation is `becomes` (cell update). Reads/writes are
   ordered by the effect discipline. Semantically, `becomes` denotes to a
-  **state-passing fold** of the interaction tree (§2.2) — imperative surface,
-  functional denotation.
+  **state-passing fold** of the interaction tree (§2, layer 2) — imperative
+  surface, functional denotation.
 - A `space` is the **only** place identity-bearing mutable state exists; pure
   values are immutable and content-addressed (`../40-runtime/41-values.md`).
 
@@ -175,9 +175,9 @@ property.)*
 ## 5. Handlers — tail-resumptive only (`OQ-8`/`OQ-9` DECIDED)
 
 A **handler** interprets an effect — operationally, a **fold over the
-interaction tree** (§2.2). Handlers are how user-defined effects are given
-meaning and how capabilities are provided (a handler is a capability provider,
-§3).
+interaction tree** (§2, layer 2). Handlers are how user-defined effects are
+given meaning and how capabilities are provided (a handler is a capability
+provider, §3).
 
 Ken's core admits **tail-resumptive** handlers only: the continuation is invoked
 **at most once, in tail position** — which keeps the fold well-founded,

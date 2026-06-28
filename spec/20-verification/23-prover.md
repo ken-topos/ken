@@ -143,7 +143,8 @@ slowing Z3 — so it is reserved for FO; D uses direct/decision (§3).
   leaves a **typed hole** with the remaining goal and context for an agent or
   human to fill (`24 §2`, the REPL loop `21 §3`).
 - Full higher-order *automated* proving is an explicit non-goal
-  (`01-strategy.md`); interactive tactics + the agent loop serve instead.
+  (`../../docs/program/01-strategy.md`); interactive tactics + the agent loop
+  serve instead.
 
 ## 6. Generalize the existing backends (the V3 work)
 

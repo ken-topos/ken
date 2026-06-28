@@ -133,11 +133,13 @@ programming language: a reader sees, per claim, whether it is *proved*, merely
   goes through. No annotation; it simply holds.
 - **`tested`** — a property that **cannot (yet) be proven** but is **asserted
   with a runtime/test obligation**: a first-class `assume`/`test`-tagged clause
-  that lowers `requires`/`ensures` to a runtime assertion (boundaries, FFI,
-  untrusted input) *and* registers a test/generator obligation. It is
-  **visible** — a reader knows this guarantee rests on tests, not proof — and it
-  is **exported** as part of the assumption boundary (the refinement predicate
-  becomes a generator/oracle spec, `../70-behavioral/`, §2/Layer 2).
+  (the keywords are reserved, `../30-surface/31 §4`; the exact clause grammar is
+  `OQ-syntax`) that lowers `requires`/`ensures` to a runtime assertion
+  (boundaries, FFI, untrusted input) *and* registers a test/generator
+  obligation. It is **visible** — a reader knows this guarantee rests on tests,
+  not proof — and it is **exported** as part of the assumption boundary (the
+  refinement predicate becomes a generator/oracle spec, `../70-behavioral/`,
+  §2/Layer 2).
 - **`delegated`** — a **temporal/behavioral** property (liveness, fairness,
   ordering, eventual consistency, an interleaving safety property) that is **not
   a static proposition over a pure function** and so cannot be closed in the

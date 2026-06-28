@@ -123,8 +123,8 @@ determine the numeric story (`35`):
 ```
 view let type data record module import use space
 match if then else where requires ensures prove law
-visits foreign forall exists in as mut
-becomes declassify policy temporal
+visits foreign forall exists in as mut class instance
+becomes declassify policy temporal assume test
 ```
 
 Reserved but spelling-revisable (OQ-syntax). Contextual keywords (`infixl`,

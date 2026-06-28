@@ -7,11 +7,11 @@
 ## Context
 
 Ken is a new, distinct programming language whose goal is commercial-grade
-*verified* development for agents (see `../program/01-strategy.md`). It draws on the design
-of an AGPLv3 research prototype but cannot inherit its license, name, or
-accreted constraints. The architecture must make the verification loop credible
-quickly, keep the trust root small, and remain implementable by parallel agent
-teams.
+*verified* development for agents (see `../program/01-strategy.md`). It draws on
+the design of an AGPLv3 research prototype but cannot inherit its license, name,
+or accreted constraints. The architecture must make the verification loop
+credible quickly, keep the trust root small, and remain implementable by
+parallel agent teams.
 
 ## Decisions
 
@@ -24,13 +24,13 @@ teams.
    LLVM) comes later, *behind* the interpreter and differential-tested against
    it.
 5. **Small permanent Rust trusted kernel.** The type/proof checker stays small
-   and in Rust forever (de Bruijn criterion). The elaborator, prover, and codegen
-   build on top and may self-host later; the kernel does not.
-6. **Defer self-hosting** until the language is feature-complete enough to host a
-   compiler.
+   and in Rust forever (de Bruijn criterion). The elaborator, prover, and
+   codegen build on top and may self-host later; the kernel does not.
+6. **Defer self-hosting** until the language is feature-complete enough to host
+   a compiler.
 7. **Kernel correctness from day one.** Universe stratification is checked (no
-   `Type: Type`), `Sigma` is genuinely dependent, and conversion is decidable and
-   termination-certified. The prototype's known soundness gaps are not
+   `Type: Type`), `Sigma` is genuinely dependent, and conversion is decidable
+   and termination-certified. The prototype's known soundness gaps are not
    reproduced.
 
 ## Open (tracked separately)
@@ -41,10 +41,18 @@ teams.
   To be settled in a follow-up ADR (WP F3/F4).
 - **Concrete syntax, effect model, Space/process model** — follow-up ADRs.
 
+> **Update (2026-06-27):** all of the above are now **DECIDED** (this section is
+> kept for the record). Content store / lattice math → `OQ-5`/`OQ-6` (no hard
+> ceiling, loud refusal; lattice math out of core, `40-runtime/44`). Concrete
+> syntax → `OQ-syntax` principles (`30-surface/31 §1a`). Effect model → `OQ-8`
+> (ADR 0006 names the behavioral sibling). Space/process → `OQ-Space`
+> (`30-surface/36 §4`). See the resolution log in
+> `../../spec/90-open-decisions.md`.
+
 ## Consequences
 
-- The differentiating verification loop can be demonstrated long before any heavy
-  codegen or self-hosting investment.
+- The differentiating verification loop can be demonstrated long before any
+  heavy codegen or self-hosting investment.
 - The trust surface is one small Rust crate (`ken-kernel`), auditable and a
   candidate for later formal verification.
 - Teams can parallelize against a stable kernel API early.
