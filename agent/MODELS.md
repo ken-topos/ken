@@ -43,6 +43,15 @@ The tiering *reinforces* the clean-room boundary:
 
 Playbooks and `COORDINATION.md` are written **model-agnostic** — no reliance on
 Claude-specific behaviors — because the same coordination law must hold across
-Anthropic, Fireworks, and DeepSeek. The harness must be configured to route each
-role to its tier's model/provider; that wiring is an infra concern, recorded per
-role in each team's `team.toml` (`model = …`).
+Anthropic, Fireworks, and DeepSeek.
+
+**Routing mechanism.** Each agent is a normal Claude Code process; its
+model/provider is selected by a **per-role backend env file**
+(`.devcontainer/agent-backends/<CONVO_ROLE>.env`) sourced at launch by
+`launch-agent.sh` (verified against the convo source, 2026-06-28) — there is
+*no* `team.toml` model field. ken uses **direct** connections: the Opus enclave
+on Anthropic **subscription** (OAuth), the GLM/DeepSeek build tiers on the
+providers' **Anthropic-compatible endpoints** (`ANTHROPIC_BASE_URL` + a
+per-provider key from `/home/node/.secrets/`). Full setup, the `<role>.env`
+recipes, the `CONVO_ROLE` scheme, and the clean-room/worktree-mount scoping are
+the operator's runbook `local/mootup-agent-backends-setup.md`.
