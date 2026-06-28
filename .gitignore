@@ -13,6 +13,9 @@
 .env.local
 .mootup
 .moot/
+# Belt-and-suspenders: never let a private key or a secrets dir into the repo.
+*.pem
+.secrets/
 
 # Local drop zone — put research notes, conversation transcripts, scratch files,
 # and anything not meant for the public repo here. Everything in /local/ is
