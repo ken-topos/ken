@@ -47,8 +47,8 @@ Anthropic, Fireworks, and DeepSeek.
 
 **Routing mechanism (hybrid).** Each agent is a normal Claude Code process
 launched by `moot up`, which reads its `model` + `effort` per role from
-`moot.toml` (`[agents.<role>]`) and passes `--model`/`--effort`. Provider routing
-is **hybrid**:
+`moot.toml` (`[agents.<role>]`) and passes `--model`/`--effort`. Provider
+routing is **hybrid**:
 
 - **Opus enclave** (4 roles) runs **direct on the Anthropic subscription**
   (OAuth) — never through the proxy (the convo guardrail rejects subscription
