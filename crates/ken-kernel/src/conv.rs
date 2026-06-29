@@ -365,7 +365,19 @@ pub fn convert(env: &GlobalEnv, ctx: &Context, ty: &Term, a: &Term, b: &Term) ->
             let b2 = whnf(env, ctx, &Term::proj2(b_w.clone()));
             convert(env, ctx, &cod_a1, &a2, &b2)
         }
-        _ => conv_struct(env, ctx, a, b),
+        _ => {
+            // (4) Unit-η / single-constructor-no-field inductive (`17 §2`):
+            // any two values of a no-field single-constructor type are equal.
+            let (ty_head, _ty_args) = crate::inductive::peel_app(&ty_w);
+            if let Term::IndFormer { id, .. } = &ty_head {
+                if let Some(ind) = env.inductive(*id) {
+                    if ind.constructors.len() == 1 && ind.constructors[0].args.is_empty() {
+                        return true;
+                    }
+                }
+            }
+            conv_struct(env, ctx, a, b)
+        }
     }
 }
 

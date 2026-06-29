@@ -47,13 +47,14 @@ pub mod env;
 pub mod error;
 pub mod inductive;
 pub mod obs;
+pub mod sct;
 pub mod subst;
 pub mod term;
 
 // --- re-exports (the provisional internal entry points; stable API is K-api) ---
 pub use check::{
-    check, declare_def, declare_inductive, declare_postulate, declare_primitive, infer,
-    raw_well_formed, CtorSpec, InductiveSpec,
+    check, declare_def, declare_inductive, declare_postulate, declare_primitive,
+    declare_recursive_group, infer, raw_well_formed, CtorSpec, InductiveSpec,
 };
 pub use conv::{convert, convert_type, level_eq, normalize, whnf};
 pub use env::{ConstructorDecl, Context, Decl, GlobalEnv, InductiveDecl, PrimReduction};
