@@ -44,11 +44,13 @@ This is the load-bearing boundary of your role — hold it precisely:
 - **Producer mode (Phase 0–1):** drive the ring **by assignment** — hand each WP
   (or Steward frame) to **spec-author** to author `/spec`, then to
   **conformance-validator** for `/conformance`; you sequence and unblock, you do
-  not write. Same coherence and watchdog discipline as a build leader. **Compact
-  a member before you assign it** (`moot compact spec-author` /
-  `moot compact conformance-validator`, when quiescent) so it starts the WP with
-  a clean context (COORDINATION compaction discipline; you were compacted by the
-  Steward before this WP reached you). You and the enclave do **local git only**
+  not write. Same coherence and watchdog discipline as a build leader.
+  **Compaction is the Steward's, not yours** (operator 2026-06-29) — it compacts
+  the whole enclave (you + spec-author + conformance-validator) before delivering
+  each WP, after the prior WP's retros are in; you arrive already clean and don't
+  `moot compact` anyone. Your compaction-adjacent duty is to **call for retros
+  in-thread** at WP completion and **signal the Steward "retros in."** You and
+  the enclave do **local git only**
   — no GitHub; the Integrator publishes + gates + merges, and CI-red comes back
   as its mootup mention to the author (COORDINATION §14).
 - **Oracle mode (Phase 2+):** the enclave becomes a service — answering build

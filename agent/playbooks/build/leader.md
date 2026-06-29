@@ -27,14 +27,13 @@ Integrator owns `main` mechanics and the Architect owns design judgment. Read
   worktree — the implementer commits and returns to its home branch, *then* QA
   checks it out. Enforce that hand-off order; two worktrees can't hold one
   branch (04 §1, §2).
-- **Compact members before you instruct them (token efficiency, operator
-  2026-06-29).** When you start a WP, **`moot compact <implementer>`** before you
-  hand it the task — and `moot compact <qa>` before its turn — so each member
-  begins with a clean, minimal context instead of carrying accumulated
-  onboarding/idle chatter into the work. **Only when the member is quiescent**
-  (never mid-reasoning — compaction summarizes away in-flight work). You were
-  yourself compacted by the Steward before this WP reached you; pass the same
-  hygiene down the ring.
+- **Compaction is the Steward's, not yours (operator 2026-06-29).** You do **not**
+  compact your members. The Steward compacts your whole team (you + implementer +
+  QA) *before* it delivers each WP, so you arrive already clean — and it does so
+  only after your prior WP's retros are in. Your compaction-related duty is the
+  retro half: when a WP completes, **call for retros in the WP thread**, confirm
+  all are in, and **signal the Steward "retros in"** (it then reviews them and
+  compacts the team for the next WP). Don't `moot compact` anyone.
 
 ## Own the watchdog (the only poll on your team)
 

@@ -115,9 +115,11 @@ brief** — the implementer should execute mostly mechanically, not design
    criteria**; and state the **do-not-reopen guardrails**. This is the *frame* —
    scope, acceptance, sequencing, settled-decision pinning — not the full spec.
 2. **Hand the WP branch to the spec-leader for full elaboration** (operator,
-   2026-06-29). **First compact the spec-leader** — `moot compact spec-leader`
-   (the enclave is quiescent before a kickoff) — so it starts the elaboration
-   with a clean, minimal context (see *Compaction discipline* below). The spec
+   2026-06-29). **First compact the whole spec enclave** — `moot compact
+   spec-leader`, `spec-author`, `conformance-validator` (quiescent before a
+   kickoff; only after their prior WP's retros are in) — so they start the
+   elaboration with clean, minimal context (see *Compaction discipline* below).
+   The spec
    enclave (clean-room authority, Opus) then brings the brief + the relevant
    `/spec` and `/conformance` to **full, team-ready rigor** on that branch — the
    deep technical/behavioral detail a ~1-year-behind build model cannot be
@@ -132,11 +134,11 @@ brief** — the implementer should execute mostly mechanically, not design
    (COORDINATION §14). It **must be on `main`** so every team reads the canonical
    artifact from its own worktree, not a drifting inline message.
 4. **Then the responsible team is released/kicked off** — **first compact the
-   owning leader** (`moot compact <leader>`, team quiescent), then mention the
-   **leader only** (§2) in the WP thread, pointing at the now-on-`main`
-   elaborated brief + spec. The team continues `wp/<ID>-<slug>` for the
-   implementation. The leader, in turn, compacts its members before fanning the
-   work in (build-leader playbook).
+   whole team** (`moot compact <leader>` + its implementer + QA; team quiescent,
+   its prior-WP retros already in), then mention the **leader only** (§2) in the
+   WP thread, pointing at the now-on-`main` elaborated brief + spec. The team
+   continues `wp/<ID>-<slug>` for the implementation. (Leaders do **not** compact
+   their members — compaction is yours; see below.)
 
 So the pipeline is **Steward (frame) → spec-leader (elaborate) → build team
 (execute)** — each Opus enclave layer adds rigor before the weaker model
@@ -144,16 +146,30 @@ receives it. *Steward-internal* operational docs that no build team needs to
 spec against (the progress tracker, playbook/`agent/` corpus edits) skip the
 spec-leader step and go straight to `main` via a Steward-owned Integrator merge.
 
-**Compaction discipline (token efficiency, operator 2026-06-29).** Before
-handing a task to another agent, **compact it first** so it starts with a clean,
-minimal context instead of carrying accumulated onboarding/idle chatter into the
-work: `moot compact <role>`. **Precondition: the target is quiescent** — never
-compact an agent mid-reasoning (it summarizes away in-flight work). The push
-model: the **Steward compacts a leader** before handing it a WP; the **leader
-compacts its members** before instructing them to begin (build-leader playbook).
-Each agent may also self-compact at its own task boundaries
-(`request_context_reset`, which is self-only — it cannot reset another agent, so
-the *cross-agent* compaction goes through `moot compact`).
+**Compaction discipline (token efficiency; operator 2026-06-29, revised).**
+Context compaction is **strictly the Steward's responsibility** — you direct the
+work flow, so you own the clean context boundary that flows with it. The rules:
+
+- **Compact the whole team before delivering a WP to its leader.** `moot compact
+  <role>` for **every** member — a build team's leader + implementer + QA, or the
+  spec enclave's spec-leader + spec-author + conformance-validator — so they all
+  start the WP with clean, minimal context. **Leaders do NOT compact their
+  members; that is yours now.**
+- **Gated by retros on both sides.** Compact a team **only after** its prior WP's
+  retros are posted (else compaction summarizes the retro away), and deliver a
+  new WP **only after** you've compacted. So the per-team WP boundary is: prior
+  WP done → leader calls for retros in-thread → members post → leader signals you
+  *"retros in"* → you collect + review (promotion ladder §3) → **you compact the
+  team** → you deliver the next WP.
+- **Precondition: quiescent.** Never compact an agent mid-reasoning — it
+  summarizes away in-flight work. Compact only at a clean boundary.
+- **Singletons self-compact.** Agents with no team/leader — **Steward, Architect,
+  Integrator, Librarian** — call `request_context_reset` (self-only) at their own
+  task boundaries (you after a directing cycle; Architect after a review;
+  Integrator after a merge; Librarian after a pass), since their work arrives
+  event-driven from many sources and isn't synced to one team's WP flow.
+  `request_context_reset` cannot reset another agent — cross-agent compaction is
+  always `moot compact`, and it is the Steward's alone.
 
 ## 3. The promotion ladder (your core mechanism)
 
