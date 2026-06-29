@@ -37,6 +37,17 @@ team leaders, the Integrator, and the Steward run schedulers.
 **Mention an agent iff the next move in the workflow is theirs.** Every mention
 costs the recipient tokens and fires a notification.
 
+**A mootup mention is the *only* way you reach a teammate.** Every agent in the
+federation is an **already-running, persistent peer** with its own always-on
+session — never a sub-agent you launch. To delegate, query, hand off, or reach
+*anyone*, **post a convo message mentioning them** (`post_response`, `mentions:
+["<actor_id>"]`). **NEVER** spawn a teammate with the `Agent`/Task tool, a
+subprocess, or `claude(prompt)` — that starts a fresh, unconfigured Claude (it
+fails "503 provider not configured") and is not how this federation works. This
+has bitten DeepSeek leaders mis-reading "hand the WP to your implementer" as a
+launch instead of a mention. Assignment, query, handoff — all are mentions; local
+git only.
+
 - Handoff that passes work to B → mention **B only**.
 - "Your request is done," nothing pending → mention **nobody**.
 - **The escalation triangle (learned twice):** when you answer X's question but
