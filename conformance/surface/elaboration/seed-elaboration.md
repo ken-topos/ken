@@ -26,12 +26,16 @@ split, what elaboration does/guarantees, errors); `10-kernel/12-universes.md`
 §1–§4 (levels); `13-pi-sigma.md §1` (Π-Form, Π-Intro, Π-η); `11-syntax.md §1,§2`
 (core formers, de Bruijn binding); `18-judgments.md §3,§4` (bidirectional
 `check`/`infer`, kernel verdict); `17-conversion.md §3.6` (decidable
-`convLevel`). The **V0 elaborator algorithm** lives in `39 §5.1–§5.7` — fleshed
-to pseudocode by spec-author **concurrently** with this corpus; the `§5.x`
-sub-numbers below follow the elaboration-plan structure and are **reconciled
-against spec-author's landed numbering before lock** (section numbers drift —
-the K2c lesson). Expected results are determined by the on-`main` spec + the
-settled level/conversion decisions; none required reading the prototype.
+`convLevel`). The **V0 elaborator algorithm** lives in `39 §5.1–§5.7` (landed on
+`wp/V0-elaborator` by spec-author). The `§5.x` cites below are **reconciled
+against that landed §5**: §5.1 surface subset, §5.3 name-res/de Bruijn, §5.4 the
+`check`/`infer`/`elabType` algorithm, §5.5 pipeline, §5.6 errors, §5.7 level
+reconcile — sub-numbers match (no drift), and one **content** refinement is
+folded — the landed §5.6 detects a λ-vs-non-Π `LambdaVsNonFunction`
+**structurally in V0** before the kernel, so `wrong-arity-rejected` attributes
+that stage correctly (not "kernel"). Expected results are determined by the
+on-`main` spec + the settled level/conversion decisions; none required reading
+the prototype.
 
 **Three brief corrections folded in** (flagged to spec-leader, not silently
 dropped): the AC2 ascription example `(\x . x) : (A:Type) -> (x:A) -> A` is a
@@ -124,10 +128,13 @@ elaborates, and checks (frame Acceptance 2; `39 §5.1`).
 
 ---
 
-## AC3 — ill-typed surface is rejected (by the kernel, surfaced not swallowed)
+## AC3 — ill-typed surface is rejected (surfaced, not swallowed)
 
-V0 emits a well-formed core term; the **kernel** judges it and the rejection is
-surfaced with location (frame Acceptance 3; `39 §3` well-typed-output, `§4`).
+A body/return mismatch is rejected by the **kernel's `convert`** at the (Conv)
+mode switch (`39 §5.4`, `18 §3`); a λ-vs-non-Π or non-function-head is detected
+**structurally by V0** (`LambdaVsNonFunction` / `NotAFunction`, `39 §5.6`)
+*before* the kernel call. Either way the error carries the surface span and is
+surfaced, never swallowed (frame Acceptance 3; `39 §3` well-typed-output, `§4`).
 
 ### surface/elaboration/type-mismatch-rejected
 - spec: `39 §5.6`; `18 §3` (the `(Conv)` switch); `12 §3` (non-cumulative)
@@ -148,12 +155,17 @@ surfaced with location (frame Acceptance 3; `39 §3` well-typed-output, `§4`).
   mismatch is at the inferred result type of the spine.
 
 ### surface/elaboration/wrong-arity-rejected
-- spec: `39 §5.6`; `13 §1`; `18 §3` (checking a λ requires a Π)
+- spec: `39 §5.4` (`check (RLam, notPi) → error`), `§5.6`
+  (`LambdaVsNonFunction`); `13 §1`
 - given: `view badLam (x : Nat) : (y : Nat) -> Nat = \y . \z . x`
-- expect: kernel **rejects** — after binding `y : Nat`, the inner `\z . x` is
-  checked against `Nat`, which is not a Π type (an **over**-saturated λ).
-- why: too many λs for the declared codomain. A λ can only check against a Π
-  (`18 §3`); `\z . …` against `Nat` fails.
+- expect: **rejected** — after binding `y : Nat`, the inner `\z . x` is checked
+  against `Nat`, which is not a Π. V0 raises `LambdaVsNonFunction`
+  **structurally** (`39 §5.6`), surfaced in the type-mismatch class with the λ's
+  span; the kernel is **not** reached for this term.
+- why: too many λs for the declared codomain — an **over**-saturated λ. A λ can
+  only `check` against a Π (`39 §5.4`); per the landed §5.6 this λ/non-Π
+  mismatch is a V0-stage structural error, not a kernel `convert` failure. Pins
+  the stage attribution (complements AC5).
 
 ### surface/elaboration/under-applied-lambda-rejected
 - spec: `39 §5.6`; `13 §1`; `18 §3`
