@@ -1,7 +1,7 @@
 # The trusted kernel
 
-> Status: **K1 elaborated**. Normative. This is the contract for WS-K
-> (K1/K2/K3) and the re-checking target for WS-V. Conformance:
+> Status: **K2 elaborated**. Normative. This is the contract for WS-K
+> (K1/K2/K2c/K-api) and the re-checking target for WS-V. Conformance:
 > `../../conformance/kernel/`.
 
 The kernel is Ken's **trust root**: the one component whose correctness the
@@ -72,7 +72,7 @@ below maps what each phase delivers.
 | Phase | Files | What it delivers | Blocked by |
 |-------|-------|------------------|------------|
 | **K1** — core calculus | `11`, `12`, `13`, `14` | Syntax + de Bruijn, predicative non-cumulative checked universes, Π/Σ with βη, inductive families with dependent eliminator + strict positivity, basic structural conversion (β/η/ι/δ) | F2, F3 (both merged) |
-| **K2** — observational layer | `15`, `16` | `Eq`-by-type, `cast`, derived `J`, strict-prop Ω with proof irrelevance + Heyting logic, set-quotients `A/R`, propositional truncation `‖A‖` | K1 |
+| **K2** — observational layer | `15`, `16` | `Eq`-by-type (definitional funext/propext), `cast` with regularity + by-type computation, derived `J` (reduces on non-`refl`), strict-prop Ω with proof irrelevance + Heyting logic, set-quotients `A/R` with relation-as-equality, propositional truncation `‖A‖` | K1 |
 | **K2c** — full conversion | `17` | Lazy-WHNF NbE, `Eq`/`cast` conversion equations, SCT termination gating δ, full decidable conversion | K1, K2 |
 | **K-api** — stable API | `18` | Audited `check`/`infer`/`convert`/`whnf` TCB boundary, complete typing judgment, kernel Rust API | K1, K2, K2c |
 
@@ -122,8 +122,8 @@ tests encode — are in §6.
 | `12-universes.md` | Universe hierarchy, predicativity, checking, level polymorphism; Ω stub (K1) | **K1** (Ω fully in K2) |
 | `13-pi-sigma.md` | Π and Σ: formation, intro, elim, computation, η; K1 conversion + subject reduction | **K1** |
 | `14-inductive.md` | Inductive families, constructors, dependent eliminator, strict positivity, ι-reduction | **K1** |
-| `15-identity.md` | Identity as observational `Eq`; `refl`; `cast`; `J` and its computation; funext/UIP | K2 |
-| `16-observational.md` | The strict-prop Ω, `Eq`-by-type, `cast`, quotient types, propositional truncation | K2 |
+| `15-identity.md` | Identity as observational `Eq`; `refl`; `cast`; `J` and its computation; funext/UIP | **K2** |
+| `16-observational.md` | The strict-prop Ω, `Eq`-by-type, `cast`, quotient types, propositional truncation | **K2** |
 | `17-conversion.md` | Full definitional equality, NbE, decidable conversion, β/η/δ/ι, regularity, SCT termination | K2c |
 | `18-judgments.md` | The complete typing judgment, the checking/inference algorithm, and the kernel's Rust API | K-api |
 
@@ -150,9 +150,15 @@ must also satisfy:
 
 | # | Commitment | Gated by | Notes |
 |---|-----------|----------|-------|
-| 9 | **Full subject reduction.** Across all formers including `Eq`, `cast`, `J`, `A/R`, `‖A‖`, and Ω. | K2 + K2c | Designed in `15`, `16`; the K1 subject-reduction architecture is structured for extension. |
-| 10 | **Canonicity / normalization.** Every closed term of an inductive type reduces to a constructor form; `Eq`/`cast` on closed terms compute (the computational content that makes `J`-on-non-`refl` reduce). Proven for OTT (`TTobs`/`CICobs`, ADR 0005). | K2 + K2c | Requires the full NbE in `17`. |
-| 11 | **Consistency.** There is no closed proof of the empty type `⊥`; the logic is not degenerate. | K2 | A documented argument; the positivity + predicativity + termination architecture is designed to support a future mechanized proof. |
+| 9 | **Omega proof-irrelevance.** Any two `p, q : P : Omega` are definitionally equal; conversion skips propositional argument contents. | K2 | `16` par. 1.2; `observational/omega-pi-convertible` |
+| 10 | **Definitional funext.** `Eq ((x:A)->B) f g` reduces to `(x:A) -> Eq B (f x) (g x)`. | K2 | `16` par. 2.2; `observational/funext-definitional` |
+| 11 | **Definitional propext.** `Eq Omega P Q` reduces to `(P->Q) and (Q->P)`. | K2 | `16` par. 2.2; `observational/propext-definitional` |
+| 12 | **cast regularity.** `cast A A refl a` reduces to `a` definitionally. | K2 | `16` par. 3.2; `observational/cast-refl` |
+| 13 | **J reduces on non-refl.** `J` on a non-`refl` canonical equality reduces to a constructor form (not stuck). | K2 | `15` par. 4; `observational/j-nonrefl` |
+| 14 | **Quotient equality.** `Eq (A/R) [a] [b]` reduces to `R a b`; `elim_/ M f r [a]` reduces to `f a`. | K2 | `16` par. 5; `observational/quotient-eq`, `observational/quotient-elim` |
+| 15 | **Full subject reduction.** Across all formers including `Eq`, `cast`, `J`, `A/R`, `‖A‖`, and Ω. | K2 + K2c | Designed in `15`, `16`; the K1 subject-reduction architecture is structured for extension. |
+| 16 | **Canonicity / normalization.** Every closed term of an inductive type reduces to a constructor form; `Eq`/`cast` on closed terms compute (the computational content that makes `J`-on-non-`refl` reduce). Proven for OTT (`TTobs`/`CICobs`, ADR 0005). | K2 + K2c | Requires the full NbE in `17`. |
+| 17 | **Consistency.** There is no closed proof of the empty type `⊥`; the logic is not degenerate. | K2 | A documented argument; the positivity + predicativity + termination architecture is designed to support a future mechanized proof. |
 
 Where a commitment is currently an argument rather than a mechanized proof,
 `18-judgments.md §Metatheory` says so explicitly.

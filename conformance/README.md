@@ -52,6 +52,11 @@ claim with no conformance case is a claim no one can rely on
 - `kernel/seed-kernel.md` — `Type:Type` rejection, dependent Σ, `J` on
   non-`refl`, SCT accept/reject (the four kernel commitments most worth pinning
   first).
+- `kernel/seed-k1.md` — K1-scoped subset (33 seed cases covering AC-1 through
+  AC-8).
+- `kernel/observational/seed-observational.md` — K2-scoped seed cases (Omega-PI,
+  funext, propext, Eq-by-type, cast regularity/computation, J-on-nonrefl,
+  quotients, truncation, UIP).
 - `verify/seed-verify.md` — a proved postcondition, a disproved one with a
   countermodel, an incomplete one with a hole, and the soundness regression (Z3
   cannot force a false `proved`).

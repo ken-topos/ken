@@ -4,9 +4,10 @@ Format: `../README.md`. These pin the kernel's load-bearing soundness
 commitments (`../../spec/10-kernel/README.md §5`) and the three prototype-gap
 non-reproductions (`../../spec/10-kernel/README.md §6`).
 
-**Phase tags.** Cases tagged [K2], [K2c], or [K-api] are out of K1 scope — they
+**Phase tags.** Cases tagged [K2], [K2c], or [K-api] are out of K1 scope -- they
 are acceptance criteria for later WPs. The K1 subset is extracted separately in
-`seed-k1.md`.
+`seed-k1.md`. K2-tagged cases are elaborated in the K2 seed file
+`observational/seed-observational.md`.
 
 ## kernel/universes/type-in-type-rejected (soundness)
 - spec: `spec/10-kernel/12-universes.md §1`
