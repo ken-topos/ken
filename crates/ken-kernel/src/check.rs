@@ -919,13 +919,15 @@ pub fn declare_def(
     classify(env, &empty, &ty)?;
     // Pre-admit as opaque so the body can self-reference.
     let id = env.fresh_id();
-    env.add_decl(Decl::Opaque { id, level_params: level_params.clone(), ty: ty.clone() });
+    env.add_decl(Decl::Opaque {
+        id,
+        level_params: level_params.clone(),
+        ty: ty.clone(),
+    });
     // Type-check (self-calls see c as opaque with type `ty`).
     let check_result = check(env, &empty, &body, &ty);
     // SCT gate.
-    let sct_result = check_result.and_then(|_| {
-        crate::sct::sct_check(env, &[(id, body.clone())])
-    });
+    let sct_result = check_result.and_then(|_| crate::sct::sct_check(env, &[(id, body.clone())]));
     match sct_result {
         Ok(()) => {
             env.upgrade_to_transparent(id, body);
@@ -954,7 +956,9 @@ pub fn declare_recursive_group<F>(
 where
     F: FnOnce(&[GlobalId]) -> Vec<Term>,
 {
-    if specs.is_empty() { return Ok(Vec::new()); }
+    if specs.is_empty() {
+        return Ok(Vec::new());
+    }
     let empty = Context::new();
 
     // Check all types.
@@ -976,7 +980,11 @@ where
     }
 
     let bodies = bodies_fn(&ids);
-    assert_eq!(bodies.len(), ids.len(), "bodies_fn must return one body per member");
+    assert_eq!(
+        bodies.len(),
+        ids.len(),
+        "bodies_fn must return one body per member"
+    );
 
     // Type-check all bodies.
     let check_result: KernelResult<()> = (|| {
@@ -988,7 +996,8 @@ where
     })();
 
     // SCT gate on the whole group.
-    let group_bodies: Vec<(GlobalId, Term)> = ids.iter().cloned().zip(bodies.iter().cloned()).collect();
+    let group_bodies: Vec<(GlobalId, Term)> =
+        ids.iter().cloned().zip(bodies.iter().cloned()).collect();
     let sct_result = check_result.and_then(|_| crate::sct::sct_check(env, &group_bodies));
 
     match sct_result {

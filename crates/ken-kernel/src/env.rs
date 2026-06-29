@@ -349,15 +349,21 @@ impl GlobalEnv {
     /// Upgrade a pre-admitted `Opaque` declaration in-place to `Transparent`
     /// (with a body) after SCT has approved it (`18 §4`). Returns `false` if
     /// `id` is not present or is not opaque.
-    pub fn upgrade_to_transparent(
-        &mut self,
-        id: GlobalId,
-        body: Term,
-    ) -> bool {
-        let Some(&idx) = self.by_id.get(&id) else { return false; };
+    pub fn upgrade_to_transparent(&mut self, id: GlobalId, body: Term) -> bool {
+        let Some(&idx) = self.by_id.get(&id) else {
+            return false;
+        };
         let decl = self.decls[idx].clone();
-        if let Decl::Opaque { level_params, ty, .. } = decl {
-            self.decls[idx] = Decl::Transparent { id, level_params, ty, body };
+        if let Decl::Opaque {
+            level_params, ty, ..
+        } = decl
+        {
+            self.decls[idx] = Decl::Transparent {
+                id,
+                level_params,
+                ty,
+                body,
+            };
             true
         } else {
             false

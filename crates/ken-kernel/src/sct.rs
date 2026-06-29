@@ -52,7 +52,11 @@ struct ScMatrix {
 
 impl ScMatrix {
     fn zero(nrows: usize, ncols: usize) -> Self {
-        Self { entries: vec![vec![SizeOrd::Unknown; ncols]; nrows], nrows, ncols }
+        Self {
+            entries: vec![vec![SizeOrd::Unknown; ncols]; nrows],
+            nrows,
+            ncols,
+        }
     }
 
     /// Element-wise max (union / "take best").
@@ -75,7 +79,9 @@ impl ScMatrix {
                 let mut best = SizeOrd::Unknown;
                 for j in 0..self.ncols {
                     let v = compose_ord(self.entries[i][j], rhs.entries[j][k]);
-                    if v > best { best = v; }
+                    if v > best {
+                        best = v;
+                    }
                 }
                 out.entries[i][k] = best;
             }
@@ -83,10 +89,14 @@ impl ScMatrix {
         out
     }
 
-    fn is_square(&self) -> bool { self.nrows == self.ncols }
+    fn is_square(&self) -> bool {
+        self.nrows == self.ncols
+    }
 
     fn is_idempotent(&self) -> bool {
-        if !self.is_square() { return false; }
+        if !self.is_square() {
+            return false;
+        }
         self.compose(self) == *self
     }
 
@@ -117,7 +127,9 @@ fn prov_get(p: &Provenances, i: usize) -> Option<(usize, SizeOrd)> {
 fn size_rel(param_idx: usize, arg: &Term, prov: &Provenances) -> SizeOrd {
     if let Term::Var(i) = arg {
         if let Some((p, ord)) = prov_get(prov, *i) {
-            if p == param_idx { return ord; }
+            if p == param_idx {
+                return ord;
+            }
         }
     }
     SizeOrd::Unknown // constructor-wrapping, app, prim, cast are all ?
@@ -184,7 +196,11 @@ fn collect_calls(
                             m.entries[i][j] = size_rel(i, arg, prov);
                         }
                     }
-                    out.push(CallEdge { caller: caller_idx, callee: callee_idx, matrix: m });
+                    out.push(CallEdge {
+                        caller: caller_idx,
+                        callee: callee_idx,
+                        matrix: m,
+                    });
                 }
             }
             // Recurse into head and all args.
@@ -209,7 +225,15 @@ fn collect_calls(
             let p2 = prov_push(prov, None);
             collect_calls(body, caller_idx, n_caller, group, &p2, env, out);
         }
-        Term::Elim { fam, params, motive, methods, indices, scrut, .. } => {
+        Term::Elim {
+            fam,
+            params,
+            motive,
+            methods,
+            indices,
+            scrut,
+            ..
+        } => {
             for p in params {
                 collect_calls(p, caller_idx, n_caller, group, prov, env, out);
             }
@@ -227,13 +251,15 @@ fn collect_calls(
 
             if let Some(ind) = env.inductive(*fam) {
                 for (k, method) in methods.iter().enumerate() {
-                    if k >= ind.constructors.len() { break; }
+                    if k >= ind.constructors.len() {
+                        break;
+                    }
                     let c = &ind.constructors[k];
                     let n_fields = c.args.len();
                     let n_ihs = c.recursive_positions.len();
                     enter_method(
-                        method, n_fields, n_ihs, field_prov,
-                        prov, caller_idx, n_caller, group, env, out,
+                        method, n_fields, n_ihs, field_prov, prov, caller_idx, n_caller, group,
+                        env, out,
                     );
                 }
             } else {
@@ -247,8 +273,12 @@ fn collect_calls(
             collect_calls(a, caller_idx, n_caller, group, prov, env, out);
             collect_calls(b, caller_idx, n_caller, group, prov, env, out);
         }
-        Term::Proj1(p) | Term::Proj2(p) | Term::Refl(p)
-        | Term::QuotClass(p) | Term::Trunc(p) | Term::TruncProj(p) => {
+        Term::Proj1(p)
+        | Term::Proj2(p)
+        | Term::Refl(p)
+        | Term::QuotClass(p)
+        | Term::Trunc(p)
+        | Term::TruncProj(p) => {
             collect_calls(p, caller_idx, n_caller, group, prov, env, out);
         }
         Term::Eq(a, x, y) => {
@@ -267,15 +297,24 @@ fn collect_calls(
             collect_calls(d, caller_idx, n_caller, group, prov, env, out);
             collect_calls(e, caller_idx, n_caller, group, prov, env, out);
         }
-        Term::QuotElim { motive, method, respect, scrut } => {
+        Term::QuotElim {
+            motive,
+            method,
+            respect,
+            scrut,
+        } => {
             collect_calls(motive, caller_idx, n_caller, group, prov, env, out);
             collect_calls(method, caller_idx, n_caller, group, prov, env, out);
             collect_calls(respect, caller_idx, n_caller, group, prov, env, out);
             collect_calls(scrut, caller_idx, n_caller, group, prov, env, out);
         }
         // Leaves: no sub-terms with calls.
-        Term::Var(_) | Term::Type(_) | Term::Omega(_)
-        | Term::Const { .. } | Term::IndFormer { .. } | Term::Constructor { .. } => {}
+        Term::Var(_)
+        | Term::Type(_)
+        | Term::Omega(_)
+        | Term::Const { .. }
+        | Term::IndFormer { .. }
+        | Term::Constructor { .. } => {}
     }
 }
 
@@ -304,26 +343,31 @@ fn idempotent_self_loops(edges: &[CallEdge], n_group: usize) -> Vec<ScMatrix> {
             for i in 0..n_group {
                 for k in 0..n_group {
                     let composed = match (&agg[i][j], &agg[j][k]) {
-                        (Some(m1), Some(m2)) if m1.ncols == m2.nrows => {
-                            Some(m1.compose(m2))
-                        }
+                        (Some(m1), Some(m2)) if m1.ncols == m2.nrows => Some(m1.compose(m2)),
                         _ => None,
                     };
                     if let Some(comp) = composed {
                         let slot = &mut agg[i][k];
                         match slot {
-                            None => { *slot = Some(comp); changed = true; }
+                            None => {
+                                *slot = Some(comp);
+                                changed = true;
+                            }
                             Some(existing) => {
                                 let before = existing.entries.clone();
                                 existing.union_assign(&comp);
-                                if existing.entries != before { changed = true; }
+                                if existing.entries != before {
+                                    changed = true;
+                                }
                             }
                         }
                     }
                 }
             }
         }
-        if !changed { break; }
+        if !changed {
+            break;
+        }
     }
 
     // Collect idempotent self-loops.
@@ -338,14 +382,23 @@ fn idempotent_self_loops(edges: &[CallEdge], n_group: usize) -> Vec<ScMatrix> {
 pub fn count_params(body: &Term) -> usize {
     let mut n = 0;
     let mut cur = body;
-    while let Term::Lam(_, b) = cur { n += 1; cur = b; }
+    while let Term::Lam(_, b) = cur {
+        n += 1;
+        cur = b;
+    }
     n
 }
 
 /// Skip `n` leading `Lam` binders, returning the inner body.
 fn skip_lams(body: &Term, n: usize) -> &Term {
     let mut cur = body;
-    for _ in 0..n { if let Term::Lam(_, b) = cur { cur = b; } else { break; } }
+    for _ in 0..n {
+        if let Term::Lam(_, b) = cur {
+            cur = b;
+        } else {
+            break;
+        }
+    }
     cur
 }
 
@@ -364,7 +417,9 @@ pub fn sct_check(
     env: &GlobalEnv,
     group_bodies: &[(GlobalId, Term)],
 ) -> crate::error::KernelResult<()> {
-    if group_bodies.is_empty() { return Ok(()); }
+    if group_bodies.is_empty() {
+        return Ok(());
+    }
 
     let group: Vec<(GlobalId, usize)> = group_bodies
         .iter()
@@ -379,7 +434,9 @@ pub fn sct_check(
         collect_calls(inner, caller_idx, n, &group, &prov, env, &mut edges);
     }
 
-    if edges.is_empty() { return Ok(()); } // non-recursive
+    if edges.is_empty() {
+        return Ok(());
+    } // non-recursive
 
     let self_loops = idempotent_self_loops(&edges, group.len());
 
@@ -417,7 +474,8 @@ mod tests {
         // M = [[↓=]] — self-loop, no strict decrease.
         let m = ScMatrix {
             entries: vec![vec![SizeOrd::DownEq]],
-            nrows: 1, ncols: 1,
+            nrows: 1,
+            ncols: 1,
         };
         assert!(m.is_idempotent());
         assert!(!m.has_strict_diagonal());
@@ -427,7 +485,8 @@ mod tests {
     fn strict_self_loop_accepted() {
         let m = ScMatrix {
             entries: vec![vec![SizeOrd::Down]],
-            nrows: 1, ncols: 1,
+            nrows: 1,
+            ncols: 1,
         };
         assert!(m.is_idempotent());
         assert!(m.has_strict_diagonal());
@@ -440,7 +499,8 @@ mod tests {
         use SizeOrd::*;
         let m = ScMatrix {
             entries: vec![vec![Unknown, Unknown], vec![Unknown, Down]],
-            nrows: 2, ncols: 2,
+            nrows: 2,
+            ncols: 2,
         };
         assert!(m.is_idempotent());
         assert!(m.has_strict_diagonal());
@@ -451,8 +511,16 @@ mod tests {
         // p→q: [[↓]], q→p: [[?]].
         // compose(↓, ?) = ? (per conformance seed) → self-loop [[?]] → REJECT.
         use SizeOrd::*;
-        let m_pq = ScMatrix { entries: vec![vec![Down]], nrows: 1, ncols: 1 };
-        let m_qp = ScMatrix { entries: vec![vec![Unknown]], nrows: 1, ncols: 1 };
+        let m_pq = ScMatrix {
+            entries: vec![vec![Down]],
+            nrows: 1,
+            ncols: 1,
+        };
+        let m_qp = ScMatrix {
+            entries: vec![vec![Unknown]],
+            nrows: 1,
+            ncols: 1,
+        };
         let composed = m_pq.compose(&m_qp); // p→q then q→p = p self-loop
         assert_eq!(composed.entries[0][0], Unknown);
         assert!(composed.is_idempotent());
