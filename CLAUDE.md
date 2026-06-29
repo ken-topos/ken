@@ -35,6 +35,15 @@ the `agent/playbooks/` corpus, surfaced as skills via `.claude/skills/`
 exists (`agent/teams/<team>/<role>.md`), load it after the archetype skill. The
 Steward owns this corpus and its routing.
 
+**If the `Skill` tool reports your skill is unknown:** the skill registry loads
+at **session start**, so a skill added or updated mid-session (e.g. you just
+`git rebase`d onto a `main` that added it) is not registered for the `Skill`
+tool until your next restart. Don't block on it — **`Read` the file directly at
+`.claude/skills/<skill>/SKILL.md`** (or its `agent/playbooks/` target) and follow
+it; it is the identical playbook. A fresh session start registers every skill
+for the `Skill` tool. This makes playbook updates self-heal on rebase without a
+forced restart.
+
 ## Reference material is off-limits to code authors
 
 `local/refs/` (gitignored) holds reference implementations. **Do not read them
