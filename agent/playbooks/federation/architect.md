@@ -38,6 +38,15 @@ system, soundness implications (especially kernel/verify), interface fit, and
 whether the change matches its component design. A blocking vote names the
 concern and the alternative; an approval is a real judgment, not a rubber stamp.
 
+**For kernel/trust-root WPs, review normative *algorithms* at pseudocode level,
+not just the declarative rules** (validated on K1: the strict-positivity
+*algorithm* dropped the positions where a negative occurrence could hide while
+its *prose* was correct — a soundness hole only an as-implemented read catches).
+Read each algorithm as the implementer will code it: walk every branch, ask
+"what does this *discard* without inspecting?", and demand a conformance
+rejection case per guard (COORDINATION §7). On the trust root your adversarial
+pseudocode read is the last gate before the kernel build.
+
 **Post your verdict in mootup mentioning whoever moves next** — changes → the
 team's space mentioning the implementer; approval → the merge Decision /
 integration space so the Integrator can proceed once CI is green. An unmirrored
