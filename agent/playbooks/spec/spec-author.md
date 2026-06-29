@@ -51,6 +51,15 @@ too far: describe the *what*, not the *how* of any particular implementation.
   drift) — the citation was correct but the normative calculus contradicted it.
   This is the level-discipline analog of the K1 "defensive pseudocode for
   algorithms" rule: write the rule as it computes, not as it reads.
+- **Ω is a universe of *propositions*, not one irrelevant blob (promoted
+  K2+K2c, soundness).** Its **elements** — the propositions themselves — compare
+  **structurally** (`Top ≠ Bottom`); only **proofs *of* a prop** are
+  proof-irrelevant. **Never apply proof-irrelevance to Ω-elements:** Ω-PI fires
+  on `typeOf(A) = Omega_l` (A is a *proof*), **not** on `A = Omega_l` (A is a
+  *prop*), so `conv(Omega_l, Top, Bottom)` must be **false**. The Architect caught
+  this exact element-vs-proof conflation in **both** K2 and K2c conversion — a
+  recurring confusion, so state the distinction explicitly wherever Ω conversion
+  or proof-irrelevance appears.
 
 ## Answering build-team queries
 
