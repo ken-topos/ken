@@ -192,8 +192,11 @@ function conv(env, ctx, A, a, b):
   A := whnf(env, ctx, A)
 
   // (1) Ω proof-irrelevance (16 §1.2): any two proofs of a strict prop are equal.
-  if A is Ω_l OR typeOf(A) is Ω_l:        // A is a proposition
+  if typeOf(A) is Ω_l:                     // A is a *proposition* (A : Ω_l), NOT the universe Ω_l itself
     return true                            // constant-time "yes"; contents unread
+  // NB: do NOT short-circuit when A *is* the universe Ω_l — then a, b are
+  // propositions compared as elements, and must fall to (5)/convStruct. Equating
+  // them here would make Top ≡ Bottom and inhabit Empty (unsound).
 
   // (2) η at Π (13 §1): compare bodies under a fresh argument.
   if A is Pi(x, A1, B1):
@@ -248,16 +251,27 @@ function convStruct(env, ctx, A, a, b):
     _ : return false                       // canonical/neutral head mismatch
 ```
 
-The Ω test at (1) uses the membership check of `16 §8.2`: `A` is a proposition
-when `Γ ⊢ A : Ω_l`. The level `l` here is the **predicative** Ω-level of the
-proposition (`12 §2`, `16 §1.1`): the shortcut fires at *every* `Ω_l`, and is
-sound at each because proof irrelevance (`16 §1.2`) holds level-by-level — there
-is **no cumulativity** collapsing the `Ω_l` (`12 §3`), and none is needed, since
-the verdict (`true`) does not depend on `l`. When the governing type is itself
-`Ω_l` (i.e. `a`, `b` are *propositions*, compared as elements of the universe
-Ω), η/proof-irrelevance do not apply to the universe and the comparison falls to
-(5) — two propositions are convertible iff structurally equal, exactly like two
-types at `Type ℓ`, with `convLevel` (§3.6) deciding any embedded level equality.
+The Ω test at (1) uses the membership check of `16 §8.2`: it fires **only** when
+`A` is a *proposition* — `Γ ⊢ A : Ω_l` — never when `A` *is* the universe `Ω_l`.
+The level `l` here is the **predicative** Ω-level of the proposition (`12 §2`,
+`16 §1.1`): the shortcut fires at *every* `Ω_l`, and is sound at each because
+proof irrelevance (`16 §1.2`) holds level-by-level — there is **no
+cumulativity** collapsing the `Ω_l` (`12 §3`), and none is needed, since the
+verdict (`true`) does not depend on `l`.
+
+**The universe case is deliberately excluded.** When the governing type is
+itself `Ω_l` — i.e. `a`, `b` are *propositions*, compared as elements of the
+universe Ω — proof irrelevance does **not** apply (it equates proofs *of* a
+fixed prop, not distinct props), and the comparison falls through to
+(5)/`convStruct`. Two propositions are convertible iff **structurally equal**,
+exactly like two types at `Type ℓ`, with `convLevel` (§3.6) deciding any
+embedded level equality. This is load-bearing: short-circuiting `true` at the
+universe would equate every pair of propositions — `conv(Ω_l, Top, Bottom)`
+would succeed, `Top ≡ Bottom`, and a closed inhabitant of `Empty` would follow.
+Distinct props (`Top` vs `Bottom`, distinct `Eq`/`Π`-props) have distinct heads
+and are correctly **not** convertible; mutual implication is *propositional*
+equality (propext, `16 §2.2`), never definitional. The conformance corpus pins
+this with `conversion/omega-universe-not-pi` (`Top ≢ Bottom` at `Ω_0`).
 
 ### 3.4 `convSpine` — argument-by-argument at the head's type
 
@@ -466,17 +480,27 @@ function sizeRel(env, x, e):          // x : caller parameter,  e : call argumen
   e := whnf_deferδ(env, ·, e)         // expose head without unfolding the recursion
   if e is a strict subterm of x reached by ≥1 constructor field projection
        or pattern-match destructuring of x:        return ↓     // strictly smaller
-  if e == x  (up to α),  or e is x re-paired/re-tagged without growth:  return ↓=
-  return ?                            // anything else: result of app/prim/cast — unknown
+  if e ≡ x (up to α),
+       or e is a projection/permutation of x that is provably ≤ x in the
+       subterm order and adds NO constructor:        return ↓=  // structurally ≤ x
+  return ?     // EVERYTHING else: any constructor-wrapping (x ↦ c x GROWS), app, prim, cast
 ```
 
 **The structural subterm order** is the well-founded order on canonical
 (inductive) values: a constructor's field is strictly smaller than the
 constructor (`14 §3`), transitively. `↓` is recorded when the argument is
 reached from the parameter by at least one such field access (e.g. matching `x =
-suc n` and calling with `n`, or `x = c ā` and calling with some `a_j`); `↓=`
-when the argument is the parameter itself or a non-growing repackaging; `?`
-otherwise.
+suc n` and calling with `n`, or `x = c ā` and calling with some `a_j`). `↓=` is
+recorded **only** for the parameter itself (`e ≡ x` up to α) or a
+projection/permutation that is provably `≤ x` and adds no constructor — `↓=`
+means "not larger" in the order, and `compose(↓=, ↓) = ↓`, so a *single*
+mis-recorded `↓=` on a **growing** argument manufactures a spurious decreasing
+thread and admits a non-terminating definition (the exact failure SCT exists to
+prevent). Therefore constructor-**wrapping** is never `↓=`: `x ↦ c x` *grows*
+and is `?`. Everything that is not identity or a non-growing
+projection/permutation — any constructor application, `app`, `prim`, `cast` — is
+`?`. The conformance corpus pins this with `conversion/sct-reject-ctor-wrap` (a
+re-wrapping recursion must be **rejected**).
 
 **The size order — resolved.** The `17 §4` `(oracle)` is **pinned** (K2c
 decision; rationale below), with a scoped reference-validation note:
@@ -602,9 +626,11 @@ K1/K2 retro discipline applies:
    e.g. `even`/`odd` — exercising cross-edge matrix composition, §4.3), and
    `sct-accept-permuted` (a definition that recurses with permuted parameter
    order, exercising "decrease in *some* parameter, not the first").
-2. **SCT-reject.** `sct-reject-loop` (`f x := f x`, no decrease) and
-   `sct-reject-growing` (`f n := f (suc n)`, a parameter grows) are **rejected**
-   at admission — the kernel never admits uncertified transparent recursion.
+2. **SCT-reject.** `sct-reject-loop` (`f x := f x`, no decrease),
+   `sct-reject-growing` (`f n := f (suc n)`, a parameter grows), and
+   `sct-reject-ctor-wrap` (a parameter re-wrapped in a constructor — `↓=` would
+   be unsound here, §4.2) are all **rejected** at admission — the kernel never
+   admits uncertified transparent recursion.
 3. **δ-heavy convertibility terminates.** `delta-termination`: a query that
    forces substantial controlled δ-unfolding along a certified-terminating
    definition (e.g. `ackermann 3 3` converted against its numeral result)
@@ -612,8 +638,11 @@ K1/K2 retro discipline applies:
 4. **Full η + proof irrelevance.** `pi-eta` (`f ≡ λx. f x` at a Π type, ≥2
    distinct type variables), `sigma-eta` (`p ≡ (p.1, p.2)`), `unit-eta` (any two
    `Unit` elements equal), `omega-pi` (any two proofs of `P : Ω` equal,
-   re-tested through the unified §3 path), and `prop-arg-skip` (a propositional
-   spine argument skipped during structural comparison, §3.4).
+   re-tested through the unified §3 path), `omega-universe-not-pi`
+   (`conv(Ω_0, Top, Bottom)` is **false** — distinct props are *not* equal as
+   elements of the universe; proof irrelevance is for proofs *of* a prop, §3.3),
+   and `prop-arg-skip` (a propositional spine argument skipped during structural
+   comparison, §3.4).
 5. **Obs conversions through the unified algorithm.** `cast-refl`
    (`cast A A refl a ≡ a`), `eq-by-type-funext` (`Eq ((x:A)→B) f g` reduces and
    conversion uses the result), and `quotient-eq` (`Eq (A/R) [a] [b] ≡ R a b`) —
