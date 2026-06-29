@@ -38,6 +38,23 @@ implementations across the whole federation. Read `../../COORDINATION.md`,
   behavior and tag them (`[K2c]`, …) **in the seed then** — not at build-review
   (K2 shipped two seeds expecting reductions that needed K2c's NbE, caught only
   at the merge review).
+- **Run the verdict-flip check before you tag a case `discriminating` (promoted
+  V0, soundness).** A case billed as discriminating — "correct code passes, the
+  bug it targets fails" — *guards nothing* unless the two paths produce
+  **different observable outcomes**. Before the tag, trace **both** branches to a
+  verdict: the correct resolution and the exact bug must land on **opposite**
+  results (accept-vs-reject), **or** assert a **verdict-independent structural
+  output** (the emitted core term, a resolved de Bruijn index) that the bug
+  changes regardless of downstream type-checking. A case where correct and buggy
+  code give the **same** verdict (both reject) is vacuous, however right the
+  prose reads. Ask: *"would this go green-vs-red, or green-vs-green, under the
+  precise bug it targets?"* This is the **2nd recurrence of same-name/same-
+  type-role masking** — the Ω-element-vs-proof conflation (K2c) and the
+  shadow-guard same-verdict masking (V0 `shadow-outer-not-captured`: the inner
+  `\A` shared type `Type` with the codomain's `A`, so the dependent `(A:Type)→A`
+  rejected both paths) are the same class: a guard that looks right but fires
+  identically on both branches. Prefer the structural assertion — it cannot go
+  vacuous.
 
 ## Discipline
 
