@@ -316,6 +316,30 @@ pub fn iota_reduct(
     let c = &ind.constructors[k];
     let m = ind.params.len();
     let n = c.args.len();
+    // Arity guards: `raw_wf` checks only scoping for an `Elim`, but `whnf` calls
+    // `iota_reduct` on any constructor-headed scrutinee. A raw-well-formed
+    // `Elim` with too few params/methods/level-args would index out of bounds
+    // here — the kernel contract is yes/no, never a crash (`18 §4`).
+    if params.len() != m {
+        return Err(KernelError::BadEliminator(format!(
+            "expected {m} params, got {}",
+            params.len()
+        )));
+    }
+    if methods.len() != ind.constructors.len() {
+        return Err(KernelError::BadEliminator(format!(
+            "expected {} methods, got {}",
+            ind.constructors.len(),
+            methods.len()
+        )));
+    }
+    if level_args.len() != ind.level_params.len() {
+        return Err(KernelError::BadEliminator(format!(
+            "expected {} level args, got {}",
+            ind.level_params.len(),
+            level_args.len()
+        )));
+    }
     if ctor_all_args.len() != m + n {
         return Err(KernelError::BadEliminator(format!(
             "constructor {:?} arity mismatch: expected {} args, got {}",
@@ -366,7 +390,7 @@ pub fn iota_reduct(
 mod tests {
     use super::*;
     use crate::env::telescope_to_pi;
-    use crate::term::Level;
+    use crate::term::{Level, LevelVar};
 
     fn d(id: u32) -> GlobalId {
         GlobalId(id)
@@ -520,5 +544,98 @@ mod tests {
             check_no_pi_bound_recursive(&ind).is_err(),
             "W-style Π-bound recursive deferred to K1.5"
         );
+    }
+
+    // --- B3a regression: iota_reduct must not panic on arity mismatch ---
+    // (Architect review on dec_2hnhhdb7mrxze.) `raw_wf` checks only scoping for
+    // an `Elim`; `whnf` calls `iota_reduct` on any constructor-headed scrutinee.
+    // A raw-well-formed `Elim` with too few params/methods/level-args must
+    // return `KernelError::BadEliminator`, never panic.
+
+    fn nat_decl() -> InductiveDecl {
+        // data Nat : Type 0 where zero : Nat ; suc : Nat → Nat
+        let mut ind = InductiveDecl {
+            id: d(0),
+            level_params: vec![],
+            params: vec![],
+            indices: vec![],
+            level: Level::zero(),
+            constructors: vec![
+                ConstructorDecl {
+                    id: d(1),
+                    args: vec![],
+                    target_indices: vec![],
+                    type_: Term::Type(Level::zero()),
+                    recursive_positions: vec![],
+                },
+                ConstructorDecl {
+                    id: d(2),
+                    args: vec![Term::indformer(d(0), vec![])],
+                    target_indices: vec![],
+                    type_: Term::Type(Level::zero()),
+                    recursive_positions: vec![],
+                },
+            ],
+            former_type: Term::Type(Level::zero()),
+        };
+        ind.build_types();
+        ind
+    }
+
+    #[test]
+    fn iota_reduct_wrong_methods_arity_errors_not_panics() {
+        let ind = nat_decl();
+        // `zero` (k=0) has no args; ctor_all_args = [] (m=0, n=0). But supply
+        // only ONE method (Nat has two constructors) → must error, not panic.
+        let motive = Term::lam(Term::indformer(d(0), vec![]), Term::indformer(d(0), vec![]));
+        let res = iota_reduct(
+            &ind,
+            0,
+            &[],
+            &[],
+            &motive,
+            std::slice::from_ref(&motive), // 1 method, expected 2
+            &[],
+        );
+        assert!(matches!(res, Err(KernelError::BadEliminator(_))));
+    }
+
+    #[test]
+    fn iota_reduct_wrong_ctor_arity_errors_not_panics() {
+        let ind = nat_decl();
+        // `suc` (k=1) expects 1 ctor arg; supply 0 → must error, not panic.
+        let motive = Term::lam(Term::indformer(d(0), vec![]), Term::indformer(d(0), vec![]));
+        let m1 = Term::lam(
+            Term::indformer(d(0), vec![]),
+            Term::lam(Term::indformer(d(0), vec![]), Term::indformer(d(0), vec![])),
+        );
+        let res = iota_reduct(
+            &ind,
+            1, // suc
+            &[],
+            &[],
+            &motive,
+            &[motive.clone(), m1],
+            &[], // 0 ctor args, expected 1
+        );
+        assert!(matches!(res, Err(KernelError::BadEliminator(_))));
+    }
+
+    #[test]
+    fn iota_reduct_wrong_level_arity_errors_not_panics() {
+        // A level-polymorphic family: supply the wrong number of level args.
+        let mut ind = nat_decl();
+        ind.level_params = vec![LevelVar(0)]; // one level param
+        let motive = Term::lam(Term::indformer(d(0), vec![]), Term::indformer(d(0), vec![]));
+        let res = iota_reduct(
+            &ind,
+            0,
+            &[Level::zero(), Level::zero()], // 2 level args, expected 1
+            &[],
+            &motive,
+            &[motive.clone(), motive.clone()],
+            &[],
+        );
+        assert!(matches!(res, Err(KernelError::BadEliminator(_))));
     }
 }

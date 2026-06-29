@@ -702,6 +702,83 @@ fn ac4_elim_vec_iota_vcons_var() {
     assert_eq!(w, whnf(&env, &ctx, &nat_const(&s, s.zero)));
 }
 
+#[test]
+fn ac4_elim_vec_iota_open_telescope_index_correct() {
+    // BLOCKER 2 regression (Architect review on dec_2hnhhdb7mrxze): an ι/elim
+    // over a length-≥2 dependent telescope with OPEN args, where the step
+    // method RETURNS the induction hypothesis (so the IH's index survives β and
+    // must be correct for subject reduction). The Vec tests above hid the
+    // `subst_tel` bug by using closed indices / β-discarding methods; this one
+    // would mis-index the IH (a instead of n) on the old code.
+    //
+    // M = λn.λxs. Nat ; vc = λn.λa.λxs.λih. ih  (returns the IH).
+    // elim_Vec M vn vc (suc n) (vcons Nat n a xs)  ⇝  vc n a xs (elim_Vec M vn vc n xs)
+    //   ⇝ (β, vc returns ih)  elim_Vec M vn vc n xs   — stuck, scrut = xs, index = n.
+    // The IH index must be `n` (Var(2)), not `a` (Var(1)) — i.e. the recursive
+    // call is `elim … n xs`, well-typed because xs : Vec Nat n.
+    let (env, s) = std_env();
+    let nat_t = Term::indformer(s.nat, vec![]);
+    let mut ctx = Context::new();
+    ctx.push(nat_t.clone()); // n : Nat  (var 2 once xs pushed)
+    ctx.push(nat_t.clone()); // a : Nat  (var 1)
+    ctx.push(vec_nat(&s, Term::var(1))); // xs : Vec Nat n  (n@1 in [n,a])
+
+    // M : (n:Nat) → (xs:Vec Nat n) → Type 0,  M = λn.λxs. Nat
+    let m_type = Term::pi(
+        nat_t.clone(),
+        Term::pi(vec_nat(&s, Term::var(0)), Term::Type(Level::zero())),
+    );
+    let motive = Term::Ascript(
+        Box::new(Term::lam(
+            nat_t.clone(),
+            Term::lam(vec_nat(&s, Term::var(0)), nat_t.clone()),
+        )),
+        Box::new(m_type),
+    );
+    let vn = nat_const(&s, s.zero); // vn : M zero vnil = Nat
+                                    // vc : (n:Nat)→(a:Nat)→(xs:Vec Nat n)→(ih:Nat)→ Nat,  vc = λn.λa.λxs.λih. ih
+    let vc = Term::lam(
+        nat_t.clone(),
+        Term::lam(
+            nat_t.clone(),
+            Term::lam(
+                vec_nat(&s, Term::var(1)),              // xs : Vec Nat n  (n@1 in [n,a])
+                Term::lam(nat_t.clone(), Term::var(0)), // ih : Nat ; body = ih
+            ),
+        ),
+    );
+
+    let elim = Term::Elim {
+        fam: s.vec_,
+        level_args: vec![Level::zero()],
+        params: vec![nat_t.clone()],
+        motive: Box::new(motive.clone()),
+        methods: vec![vn, vc.clone()],
+        indices: vec![Term::app(nat_const(&s, s.suc), Term::var(2))], // suc n
+        scrut: Box::new(vcons_nat(&s, Term::var(2), Term::var(1), Term::var(0))),
+    };
+    assert!(
+        ken_kernel::infer(&env, &ctx, &elim).is_ok(),
+        "the dependent elim type-checks"
+    );
+    let w = whnf(&env, &ctx, &elim);
+    // whnf is the stuck IH `elim_Vec M vn vc n xs` — extract its index + scrut.
+    match w {
+        Term::Elim { indices, scrut, .. } => {
+            assert_eq!(
+                indices,
+                vec![Term::var(2)],
+                "IH index must be n (Var(2)), not a (Var(1)) — the subst_tel fix"
+            );
+            assert_eq!(*scrut, Term::var(0), "IH scrutinee must be xs (Var(0))");
+        }
+        other => panic!(
+            "ι-reduct should be the stuck IH elim_Vec M vn vc n xs; got {:?}",
+            other
+        ),
+    }
+}
+
 // ===========================================================================
 // AC-5 — Strict positivity (`seed-k1.md` AC-5)
 // ===========================================================================
@@ -928,7 +1005,8 @@ fn ac5_d_in_own_indices_rejected() {
 fn ac7_beta_reduction_terminates() {
     let (env, s) = std_env();
     let ctx = Context::new();
-    // A term with nested β-redexes; leftmost-outermost whnf must terminate.
+    // A term with nested β-redexes; leftmost-outermost whnf must terminate AND
+    // produce the right reduct (not merely not-loop).
     let t = Term::app(
         Term::lam(Term::Type(Level::zero()), Term::var(0)),
         Term::app(
@@ -936,13 +1014,15 @@ fn ac7_beta_reduction_terminates() {
             Term::indformer(s.nat, vec![]),
         ),
     );
-    let _ = whnf(&env, &ctx, &t); // returns (does not loop)
+    // (λx.x) ((λx.x) Nat)  ⇝  (λx.x) Nat  ⇝  Nat
+    assert_eq!(whnf(&env, &ctx, &t), Term::indformer(s.nat, vec![]));
 }
 
 #[test]
 fn ac7_eta_expansion_terminates() {
     // Convert two functions at a Π-type with a nested η opportunity; the
-    // type-directed η descent is finite (the type is finite).
+    // type-directed η descent is finite (the type is finite), and Π-η makes
+    // `f ≡ λx. f x` hold definitionally.
     let (env, _s) = std_env();
     let a = Term::Type(Level::zero());
     let pi_ty = Term::pi(a.clone(), a.clone());
@@ -950,17 +1030,18 @@ fn ac7_eta_expansion_terminates() {
     ctx.push(pi_ty.clone());
     let f = Term::var(0);
     let g = Term::lam(a.clone(), Term::app(Term::var(1), Term::var(0)));
-    let _ = convert(&env, &ctx, &pi_ty, &f, &g); // terminates
+    assert!(convert(&env, &ctx, &pi_ty, &f, &g)); // terminates AND holds
 }
 
 #[test]
 fn ac7_iota_reduction_terminates() {
     // elim_Nat over a deep numeral — ι descends on structurally smaller
-    // scrutinees, so it terminates.
+    // scrutinees, so it terminates. With M=λn.Nat, z=zero, s=λn.λh.suc n, the
+    // eliminator computes the successor of its input: elim (suc^k zero) =
+    // suc^k zero (s ignores its IH and returns suc n). For 3: suc^3 zero.
     let (env, s) = std_env();
     let ctx = Context::new();
     let (motive, z, sm) = nat_elim_pieces(&s);
-    // suc (suc (suc zero))
     let deep = Term::app(
         nat_const(&s, s.suc),
         Term::app(
@@ -975,15 +1056,15 @@ fn ac7_iota_reduction_terminates() {
         motive: Box::new(motive),
         methods: vec![z, sm],
         indices: vec![],
-        scrut: Box::new(deep),
+        scrut: Box::new(deep.clone()),
     };
-    let _ = whnf(&env, &ctx, &elim); // terminates
+    assert_eq!(whnf(&env, &ctx, &elim), whnf(&env, &ctx, &deep));
 }
 
 #[test]
 fn ac7_delta_unfolding_terminates() {
     // A chain of transparent definitions c1 := c2, c2 := c3, c3 := zero; δ is
-    // acyclic so unfolding terminates.
+    // acyclic so unfolding terminates — and reaches `zero`, not just anything.
     let (mut env, s) = std_env();
     let ctx = Context::new();
     let nat_t = Term::indformer(s.nat, vec![]);
@@ -1009,19 +1090,23 @@ fn ac7_delta_unfolding_terminates() {
         },
     )
     .unwrap();
-    let _ = whnf(
-        &env,
-        &ctx,
-        &Term::Const {
-            id: c1,
-            level_args: vec![],
-        },
-    ); // terminates at zero
+    assert_eq!(
+        whnf(
+            &env,
+            &ctx,
+            &Term::Const {
+                id: c1,
+                level_args: vec![],
+            }
+        ),
+        whnf(&env, &ctx, &nat_const(&s, s.zero))
+    );
 }
 
 #[test]
 fn ac7_checking_terminates_k1() {
-    // `check`/`infer` on a suite exercising all K1 formers terminate.
+    // `check`/`infer` on a suite exercising all K1 formers terminate AND
+    // succeed (each infers a type).
     let (env, s) = std_env();
     let ctx = Context::new();
     let suite = [
@@ -1032,7 +1117,11 @@ fn ac7_checking_terminates_k1() {
         Term::app(nat_const(&s, s.suc), nat_const(&s, s.zero)),
     ];
     for t in &suite {
-        let _ = ken_kernel::infer(&env, &ctx, t); // terminates
+        assert!(
+            ken_kernel::infer(&env, &ctx, t).is_ok(),
+            "infer should terminate and succeed for {:?}",
+            t
+        );
     }
 }
 

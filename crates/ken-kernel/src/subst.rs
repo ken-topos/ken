@@ -9,11 +9,23 @@ use crate::term::{Level, LevelVar, Term};
 
 /// Shift free de Bruijn indices `>= cutoff` by `d` (Pierce TaPL §6). Used for
 /// weakening (`cutoff = 0`) and internally by [`subst_var`].
+///
+/// Defensive against underflow: a negative `d` that would take a free index
+/// below 0 is left unchanged rather than wrapped (which `as usize` would turn
+/// into a huge, silently-corrupt index). No current caller causes underflow
+/// (`weaken` only increases context size), but `shift`/`weaken` are `pub` — the
+/// guard keeps the contract "no corruption on any input."
 pub fn shift(term: &Term, d: i64, cutoff: usize) -> Term {
     match term {
         Term::Var(i) => {
             if *i >= cutoff {
-                Term::Var(((*i as i64) + d) as usize)
+                let new_i = (*i as i64) + d;
+                if new_i >= 0 {
+                    Term::Var(new_i as usize)
+                } else {
+                    // Underflow guard: leave unchanged rather than wrap.
+                    Term::Var(*i)
+                }
             } else {
                 Term::Var(*i)
             }
@@ -319,29 +331,31 @@ pub fn subst_outer(term: &Term, m: usize, params: &[Term], inner_depth: usize) -
 }
 
 /// Substitute a telescope of arguments `[u₁,…,uₙ]` for the bound variables of
-/// a telescope, leftmost variable first. `body` is in the context of the
-/// telescope (depth `n`); the result is in the context outside it. Used for
-/// `B[a/x]` and applying a type former to arguments.
+/// a telescope, leftmost (outermost) variable first. `body` is in the context of
+/// the telescope (depth `n`); the result is in the context outside it (where the
+/// `args` live). Used for `B[a/x]`, applying a type former to its param/index
+/// instance, and the eliminator's induction-hypothesis index computation.
 ///
-/// Substitutes `u₁` for the outermost (highest-index) variable and works
-/// inward, so each `uᵢ` is substituted at the depth matching its binder.
+/// **Implementation:** the telescope variables are *implicit* context entries,
+/// not syntactic `Pi`/`Lam` nodes, so a naive `subst_var` over those positions
+/// does **not** capture-avoid — its shifting only fires under syntactic
+/// binders, and each non-innermost arg is left un-weakened and then clobbered
+/// by a later iteration (e.g. `subst_tel(Var(1), [Var(0), Var(1)])` wrongly
+/// returned `Var(1)` instead of `Var(0)`). The fix reuses the already-correct
+/// [`instantiate_codomain`]/[`subst0`] machinery: wrap `body` in a real Π-chain
+/// (closed dummy domains, which `instantiate_codomain` discards) so each arg is
+/// shifted past the remaining binders exactly as `subst_var` does under
+/// syntactic `Pi` nodes.
 pub fn subst_tel(body: &Term, args: &[Term]) -> Term {
-    // The telescope binds n variables; body's var n-1 is the outermost (first)
-    // param, var 0 the innermost (last). Substitute from the outermost in:
-    // replace var (n-1) with args[0], then var (n-2) with args[1], etc. Each
-    // subst decrements the remaining indices, so substitute in descending order
-    // of the original index, which after prior substitutions still lines up.
-    let mut t = body.clone();
-    let n = args.len();
-    for (k, u) in args.iter().enumerate() {
-        // At this point `t` is in a context of depth (n - k); the variable to
-        // replace is the outermost, index (n - k - 1). Substitute it with u
-        // (weakened to the current outer context if needed — u is already in
-        // the outer context, depth 0 here, so no weakening).
-        let j = n - k - 1;
-        t = subst_var(&t, j, u);
+    if args.is_empty() {
+        return body.clone();
     }
-    t
+    // Wrap: Π p₁. Π p₂. … Π pₙ. body  (p₁ outermost = args[0]'s slot).
+    let wrapped = (0..args.len()).fold(body.clone(), |acc, _| {
+        Term::pi(Term::Type(Level::zero()), acc)
+    });
+    instantiate_codomain(&wrapped, args)
+        .expect("subst_tel: wrapped body is a Π-chain of length args.len()")
 }
 
 /// Apply a term `head` (a type former / constructor / function) to a vector of
@@ -492,5 +506,71 @@ pub fn subst_levels(term: &Term, params: &[LevelVar], args: &[Level]) -> Term {
             scrut: Box::new(subst_levels(scrut, params, args)),
         },
         Term::Omega | Term::Var(_) => term.clone(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::term::Level;
+
+    // --- BLOCKER 2 regression: dependent-telescope substitution ---
+    // (Architect review on dec_2hnhhdb7mrxze.) The old `subst_tel` substituted
+    // by descending index without weakening each arg past the remaining inner
+    // (implicit) binders, so it clobbered earlier args. These pin the fix
+    // (wrap in a real Π-chain + instantiate_codomain, which shifts correctly).
+
+    #[test]
+    fn subst_tel_outermost_var_picks_first_arg() {
+        // body = Var(1) in a depth-2 telescope (Var(1) = the outermost var p₁);
+        // its value is args[0] = Var(0). Old code returned Var(1) (clobbered).
+        assert_eq!(
+            subst_tel(&Term::var(1), &[Term::var(0), Term::var(1)]),
+            Term::var(0)
+        );
+    }
+
+    #[test]
+    fn subst_tel_application_spine() {
+        // Architect reproduction: App(Var(1),Var(0)) with [Var(0),Var(1)].
+        assert_eq!(
+            subst_tel(
+                &Term::app(Term::var(1), Term::var(0)),
+                &[Term::var(0), Term::var(1)]
+            ),
+            Term::app(Term::var(0), Term::var(1))
+        );
+    }
+
+    #[test]
+    fn subst_tel_length3_dependent_spine() {
+        // A length-3 dependent telescope: body p₁ (p₂ p₃) = App(Var(2),
+        // App(Var(1), Var(0))) in depth-3. With args [a₁,a₂,a₃] = [Var(0),
+        // Var(1), Var(2)] (in Γ), the result is a₁ (a₂ a₃) = App(Var(0),
+        // App(Var(1), Var(2))). Exercises the 3rd-dependent-position path the
+        // old code got wrong.
+        let body = Term::app(Term::var(2), Term::app(Term::var(1), Term::var(0)));
+        let expected = Term::app(Term::var(0), Term::app(Term::var(1), Term::var(2)));
+        assert_eq!(
+            subst_tel(&body, &[Term::var(0), Term::var(1), Term::var(2)]),
+            expected
+        );
+    }
+
+    #[test]
+    fn subst_tel_empty_is_identity() {
+        let t = Term::app(Term::var(0), Term::Type(Level::zero()));
+        assert_eq!(subst_tel(&t, &[]), t);
+    }
+
+    #[test]
+    fn shift_negative_does_not_underflow() {
+        // B3b: a negative shift that would take a free index below 0 must not
+        // wrap to a huge index (silent corruption). It leaves the var unchanged.
+        assert_eq!(shift(&Term::var(0), -5, 0), Term::var(0));
+        // Vars below the cutoff are untouched regardless of d.
+        assert_eq!(shift(&Term::var(2), -10, 5), Term::var(2));
+        // A valid negative shift (index stays >= 0) still applies.
+        assert_eq!(shift(&Term::var(3), -2, 0), Term::var(1));
     }
 }

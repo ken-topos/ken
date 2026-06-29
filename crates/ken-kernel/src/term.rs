@@ -127,25 +127,39 @@ enum Atom {
 }
 
 /// Rebuild a level from a flattened, suc-offset atom list, applying the
-/// semilattice laws: drop `Zero` atoms whose offset is dominated by another,
-/// deduplicate, sort, and right-nest as `Max`.
+/// semilattice laws: absorb dominated atoms, deduplicate, sort, and right-nest
+/// as `Max`.
+///
+/// **Domination respects atom identity** (`12 §1`). A level `suc^n a` is
+/// dominated (absorbed into a larger `max`) only by an atom that is provably
+/// `>=` it:
+/// - `Zero@n` (`suc^n 0`) is dominated by any atom at offset `> n`, and by a
+///   `Var` at offset `== n` (`max (suc^n v) (suc^n 0) = suc^n v`). (The
+///   `max ℓ 0 = ℓ` absorption.)
+/// - `Var(a)@n` (`suc^n a`) is dominated **only** by `Var(a)@m` with `m > n`
+///   — the *same* variable at a higher offset (`max (suc^m a) (suc^n a) =
+///   suc^m a`). **Distinct variables never dominate each other** (their levels
+///   are incomparable: `max (suc u) v` is not `suc u`, since `v` may exceed
+///   `u`), and `Zero` never dominates a `Var`.
 fn normalize_max_atoms(atoms: Vec<(u32, Atom)>) -> Level {
     // Deduplicate identical (offset, atom) pairs.
     let mut pairs: Vec<(u32, Atom)> = atoms;
     pairs.sort();
     pairs.dedup();
 
-    // `max ℓ 0 = ℓ`: a `Zero` atom at offset n is dominated by any other atom
-    // at offset >= n (and is absorbed entirely if a `Var`/larger `Zero` wins).
-    // Keep only the maximal atoms; `Zero` survives only if it is the sole top.
+    // Keep only the non-dominated atoms (see the domination rules above). An
+    // atom is never dominated by itself (offsets use strict `<`, or the
+    // same-offset `Zero`-by-`Var` case which requires distinct atoms).
     let mut kept: Vec<(u32, Atom)> = Vec::new();
     for &p in &pairs {
-        let dominated = pairs.iter().any(|&q| {
-            // q dominates p if q is "higher": greater offset, or same offset and
-            // q is a Var while p is Zero (a Var at offset n >= p's offset beats
-            // Zero at p's offset when n >= p.0). For simplicity we keep all
-            // non-dominated atoms and let `max ℓ 0 = ℓ` drop pure-Zero tails.
-            p.0 < q.0 || (p.0 == q.0 && matches!(p.1, Atom::Zero) && !matches!(q.1, Atom::Zero))
+        let dominated = pairs.iter().any(|&q| match (p.1, q.1) {
+            // `Zero@n` dominated by any atom at offset > n, or by a Var at == n.
+            (Atom::Zero, Atom::Zero) => p.0 < q.0,
+            (Atom::Zero, Atom::Var(_)) => p.0 <= q.0,
+            // `Var(a)@n` dominated only by the SAME variable at a higher offset.
+            (Atom::Var(a), Atom::Var(b)) => a == b && p.0 < q.0,
+            // `Var@n` is never dominated by `Zero`.
+            (Atom::Var(_), Atom::Zero) => false,
         });
         if !dominated {
             kept.push(p);

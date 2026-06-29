@@ -413,7 +413,7 @@ fn conv_struct(env: &GlobalEnv, ctx: &Context, a: &Term, b: &Term) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::term::Level;
+    use crate::term::{Level, LevelVar};
 
     #[test]
     fn level_semilattice_eq() {
@@ -423,11 +423,56 @@ mod tests {
             &Level::suc(Level::zero())
         ));
         assert!(level_eq(
-            &Level::suc(Level::zero()).max(Level::zero()),
+            &Level::suc(Level::zero()).max(Level::Zero),
             &Level::suc(Level::zero())
         ));
         assert!(level_eq(&Level::zero().max(Level::zero()), &Level::zero())); // idempotent
         assert!(!level_eq(&Level::zero(), &Level::suc(Level::zero())));
+    }
+
+    // --- BLOCKER 1 regression: distinct level variables must not collapse ---
+    // (Architect review on dec_2hnhhdb7mrxze.) The old domination test dropped
+    // `max`-atoms by offset ignoring atom identity, so `max (suc u) v`
+    // normalized to `suc u`. Distinct variables are incomparable.
+
+    #[test]
+    fn level_max_two_distinct_vars_do_not_collapse() {
+        let u = Level::Var(LevelVar(0));
+        let v = Level::Var(LevelVar(1));
+        // max u v  must NOT equal u or v (they are distinct, incomparable vars).
+        assert!(!level_eq(&u.clone().max(v.clone()), &u));
+        assert!(!level_eq(&u.clone().max(v.clone()), &v));
+        // max (suc u) v  must NOT equal suc u (v may exceed u).
+        assert!(!level_eq(&u.clone().suc().max(v.clone()), &u.clone().suc()));
+    }
+
+    #[test]
+    fn level_max_same_var_higher_offset_dominates() {
+        // max (suc u) u = suc u  — same variable, higher offset absorbs lower.
+        let u = Level::Var(LevelVar(0));
+        assert!(level_eq(&u.clone().suc().max(u.clone()), &u.clone().suc()));
+        // max u u = u  (idempotent, same variable).
+        assert!(level_eq(&u.clone().max(u.clone()), &u));
+    }
+
+    #[test]
+    fn level_max_zero_absorbed_by_var_at_same_offset() {
+        // max (suc^n v) (suc^n 0) = suc^n v  — Zero absorbed by a Var at the
+        // same offset (the `max ℓ 0 = ℓ` law at a non-zero offset).
+        let v = Level::Var(LevelVar(2));
+        assert!(level_eq(
+            &v.clone().suc().max(Level::zero().suc()),
+            &v.clone().suc()
+        ));
+    }
+
+    #[test]
+    fn level_equiv_reproduction_max_suc_u_v() {
+        // The Architect's exact reproduction: equiv(max (suc u) v, suc u) must
+        // be FALSE. (At u:=0, v:=5, `max 1 5 = 5 != 1`.)
+        let u = Level::Var(LevelVar(0));
+        let v = Level::Var(LevelVar(1));
+        assert!(!u.clone().suc().max(v).equiv(&u.clone().suc()));
     }
 
     #[test]
