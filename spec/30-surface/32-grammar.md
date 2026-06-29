@@ -137,3 +137,51 @@ and pair types, refinements, `data`/`record`, `match`, contracts, FFI, effect
 rows) is the normative part; token spelling is OQ. Conformance:
 `../../conformance/surface/grammar/` — round-trip parse/print and coverage of
 each production.
+
+## 8. V0 minimal grammar (the G1 slice)
+
+V0 (the minimal elaborator, `../30-surface/39-elaboration.md §5`) parses
+**only** the subset below — the brace form, against the V0 lexer (`31 §8`). It
+is a
+strict sub-grammar of §1–§3: no `data`/`record`/`module`, no `match`/`if`, no
+operators or fixity, no implicit binders `{…}`, no effects/contracts, no
+literals. Every V0 argument is explicit.
+
+```
+decl   ::= "view" ident binder+ (":" type)? "=" expr   -- named function
+         | "let"  ident (":" type)?         "=" expr   -- value definition
+binder ::= "(" ident+ ":" type ")"                     -- explicit telescope
+type   ::= "(" ident ":" type ")" "->" type            -- dependent Π
+         | type "->" type                               -- non-dependent arrow
+         | "Type" level?                                -- universe (level optional)
+         | ConId                                        -- base type by name
+expr   ::= ("\" | "λ") ident+ "." expr                  -- lambda
+         | expr expr                                    -- application (left assoc)
+         | "let" ident (":" type)? "=" expr "in" expr   -- local binding
+         | "(" expr ":" type ")"                        -- type ascription
+         | ident                                        -- variable
+         | ConId                                        -- base type used as a term
+         | "Type" level?                                -- universe used as a term
+level  ::= NAT                                          -- 0, 1, 2, …
+```
+
+The `ConId` and `Type` atoms in `expr` reflect that **types are terms**
+(`../10-kernel/11 §1`): a base type and a universe may stand in expression
+position (e.g. `let x : Type = Type in x`). `->`/Π is type-position only, so a
+bare function type is not a V0 expression.
+
+`->` is right-associative; application binds tightest; ascription `:` is loosest
+(§6). A type-position `ident` (lowercase) is a bound type variable (e.g. the `A`
+in `(A : Type) -> A`); a `ConId` (uppercase) is a base type resolved against the
+kernel environment (`31 §2`, `39 §5.2`). This is genuinely minimal: enough to
+write
+
+```
+view id (A : Type) (x : A) : A = x
+view const (A : Type) (B : Type) (x : A) (y : B) : A = x
+view apply (A : Type) (B : Type) (f : (x : A) -> B) (x : A) : B = f x
+```
+
+and have each parse → elaborate (`39 §5`) → kernel-check (`18 §3`). Everything
+else in §1–§5 is out of V0 and owned by a later WP (the full surface, Team
+Language; specifications, V1).
