@@ -159,6 +159,8 @@ must also satisfy:
 | 15 | **Full subject reduction.** Across all formers including `Eq`, `cast`, `J`, `A/R`, `‖A‖`, and Ω. | K2 + K2c | Designed in `15`, `16`; the K1 subject-reduction architecture is structured for extension. |
 | 16 | **Canonicity / normalization.** Every closed term of an inductive type reduces to a constructor form; `Eq`/`cast` on closed terms compute (the computational content that makes `J`-on-non-`refl` reduce). Proven for OTT (`TTobs`/`CICobs`, ADR 0005). | K2 + K2c | Requires the full NbE in `17`. |
 | 17 | **Consistency.** There is no closed proof of the empty type `⊥`; the logic is not degenerate. | K2 | A documented argument; the positivity + predicativity + termination architecture is designed to support a future mechanized proof. |
+| 18 | **SCT termination gate.** Every transparent definition is admitted only if a size-change-termination check certifies it (`17 §4`): a lexicographic and a mutually-recursive def are admitted; a non-terminating def is **rejected** at admission. The kernel never admits uncertified transparent recursion. | K2c | `17 §4`; `conversion/sct-accept-*`, `conversion/sct-reject-*` |
+| 19 | **Operational decidability (termination).** `convert` — and hence `check`/`infer` — is **total**: it halts with yes/no on every well-typed input. SCT-bounded δ (#18) + strong normalization of the core reductions give termination (`17 §5`); the kernel never loops or panics on raw-well-formed input. | K2c | `17 §5`; `conversion/delta-termination`, `conversion/decidable-halts` |
 
 Where a commitment is currently an argument rather than a mechanized proof,
 `18-judgments.md §Metatheory` says so explicitly.
