@@ -115,8 +115,12 @@ local context Γ) recording top-level declarations in dependency order:
 ```
 
 - A **transparent definition** `c : A := t` requires `· ⊢ t : A` in the
-  environment so far, and `t` to pass the **termination check**
-  (`17-conversion.md §SCT`) before admission. δ-reduction may unfold `c` to `t`.
+  environment so far. δ-reduction may unfold `c` to `t`. In K1, transparent
+  definitions are **non-recursive** (they may reference only earlier
+  definitions, per the acyclic environment rule below); recursive definitions
+  must use the inductive eliminator (`14`). The full **termination check**
+  (SCT-gated, `17-conversion.md §SCT`) that admits general recursive δ
+  definitions is K2c.
 - An **opaque constant** `c : A` (postulate) blocks δ; it is how axioms, FFI
   signatures (`../30-surface/38-ffi-io.md`), and abstract interfaces are
   represented. Postulating a closed term of `⊥` would break consistency, so

@@ -176,8 +176,11 @@ Definitional equality `Γ ⊢ a ≡ b : A` for the K1 fragment is decided by:
    (`11 §2`): if `a` and `b` are syntactically identical (modulo α-renaming, which
    de Bruijn makes trivial) then `Γ ⊢ a ≡ b : A`.
 
-2. **Reduction to a common reduct**: if `a ⇝* r` and `b ⇝* r` (where `⇝*` is the
-   reflexive-transitive closure of `⇝`) then `Γ ⊢ a ≡ b : A`.
+2. **Reduction to normal form**: reduce both `a` and `b` to their normal forms
+   using a leftmost-outermost reduction strategy (which terminates on K1 terms,
+   `14-inductive.md §9.2`; normal forms are unique by confluence). If the two
+   normal forms are equal up to α and type-directed η (step 3), then
+   `Γ ⊢ a ≡ b : A`.
 
 3. **η-expansion (type-directed).** When β-reduction alone does not identify
    the terms, the conversion algorithm inspects the type `A`:

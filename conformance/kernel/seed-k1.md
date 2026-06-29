@@ -178,6 +178,28 @@ Spec: `spec/10-kernel/14-inductive.md §2, §8`; frame §2 item 5.
   recursive occurrence there (even at depth 2) is negative and
   rejected. Frame AC-5.
 
+### kernel/inductive/nested-negative-in-application-rejected
+- spec: `spec/10-kernel/14-inductive.md §8.1–8.3`
+- given: declaration `data Bad3 : Type 0 where { mk : Pair (Bad3 → Empty)
+  Unit → Bad3 }` — `Bad3` occurs in the argument of an application (`Pair
+  (Bad3 → Empty) Unit`), hidden from the structural polarisation check.
+- expect: **rejected** at admission (non-strictly-positive occurrence in
+  application argument)
+- why: the positivity algorithm's `occurs` guard on `C u` inspects the
+  application argument `u` and finds `Bad3` there (negatively, under the
+  arrow in `Bad3 → Empty`). Without this guard the algorithm would
+  recurse only into the head `Pair`, return true, and admit the paradox.
+  Frame AC-5; Architect review blocker.
+
+### kernel/inductive/d-in-own-indices-rejected
+- spec: `spec/10-kernel/14-inductive.md §8.1–8.3`
+- given: declaration `data Bad4 : (Bad4 → Empty) → Type 0 where { mk :
+  Bad4 Empty }` — `Bad4` occurs negatively in its own index telescope.
+- expect: **rejected** at admission (non-strictly-positive occurrence
+  in indices)
+- why: the `occurs` guard on `D Δ_p t̄` inspects the index tuple `t̄` and
+  finds `Bad4` there. Frame AC-5; Architect review blocker.
+
 ---
 
 ## Acceptance criterion 6 — Subject reduction on K1 fragment (AC-6)
@@ -311,5 +333,5 @@ implement the union of both files' K1 cases:
 - `kernel/inductive/elim-computes` — same as §AC-4 `elim-nat-iota-suc`
   above
 
-The K1 subset is: 5 seed-kernel.md cases (untagged) + 26 seed-k1.md
-cases above = 31 seed cases total.
+The K1 subset is: 5 seed-kernel.md cases (untagged) + 28 seed-k1.md
+cases above = 33 seed cases total.

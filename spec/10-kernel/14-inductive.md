@@ -234,10 +234,12 @@ elim_D : (M : (Δ_i) → D Δ_p Δ_i → Type ℓ')
 ### 7.2 ι-redex condition
 
 `elim_D M m̄ i̅ s` is an **ι-redex** when `s` is a constructor-headed term
-`cₖ ā` for some constructor `cₖ` of `D`. The indices in the scrutinee must
-match `i̅`; if they are not syntactically identical (e.g. one is `zero`, the
-other is a neutral `n`), the eliminator is **stuck** (neutral) — ι does not
-fire.
+`cₖ ā` for some constructor `cₖ` of `D`. ι fires on the scrutinee's head
+constructor alone — it does not require the index arguments `i̅` to be
+syntactically identical to the constructor's index instance. (In a well-typed
+term the indices are definitionally equal to the constructor's target indices;
+gating ι on syntactic identity would make conversion incomplete — valid
+programs with computed indices stuck.)
 
 ### 7.3 Reduction rule (algorithmic)
 
@@ -294,13 +296,15 @@ A n` at the index `n`, producing the induction hypothesis shown.
 
 ### 7.6 Stuck eliminators
 
-When the scrutinee `s` is not a constructor — it is a variable, a neutral
-application, or any term whose head is not a constructor of `D` — the
-eliminator is **stuck** (neutral, no ι-reduction fires). Conversion treats it
-as a neutral term: two stuck eliminators are convertible iff their scrutinees
-and arguments are pointwise convertible. The full NbE in K2c (`17`) gives this
-a systematic treatment in a semantic domain; K1's structural conversion handles
-it via the congruence rules in `13 §6.2`.
+When the scrutinee `s` is not a constructor-headed term — it is a variable,
+a neutral application, or any term whose head is not a constructor of `D` —
+the eliminator is **stuck** (neutral, no ι-reduction fires). Conversion treats
+it as a neutral term: two stuck eliminators are convertible iff their
+scrutinees and arguments are pointwise convertible. The full NbE in K2c (`17`)
+gives this a systematic treatment in a semantic domain; K1's structural
+conversion handles it via the congruence rules in `13 §6.2`. (The index
+arguments `i̅` are part of the pointwise comparison but do not gate ι firing
+— a constructor-headed scrutinee always fires ι, per §7.2.)
 
 ## 8. Strict-positivity check algorithm
 
@@ -312,25 +316,35 @@ recursive descent the kernel runs at admission time.
 For a family `D` being declared, the judgment `Pos_D^n(A)` — "`A` is positive
 in `D` at polarisation `n`" — where `n ∈ {+, -}` (positive/negative
 polarisation). The check starts with each constructor argument type at `n = +`
-and recurses structurally:
+and recurses structurally. Every case that would discard subterms without
+inspection **must** confirm `D` does not occur in those subterms; if it does,
+the declaration is rejected (K1 conservatively forbids nested occurrences,
+per §8.4).
 
 ```
-Pos_D^+(D Δ_p t̄)        holds  (strictly-positive recursive occurrence)
-Pos_D^+(X)              holds  if X is a parameter or a different type
-Pos_D^+(A)              holds  if A is a universe Type ℓ
+Pos_D^+(D Δ_p t̄)        holds  if D does not occur in t̄
+Pos_D^+(X)              holds  if D does not occur in X
+Pos_D^+(A)              holds  if A is a universe Type ℓ (and D not in ℓ)
 Pos_D^+(x : A) → B      holds  if Pos_D^-(A) and Pos_D^+(B)
 Pos_D^+(x : A) × B      holds  if Pos_D^+(A) and Pos_D^+(B)
 
 Pos_D^-(D Δ_p t̄)        FAILS  (negative occurrence — reject)
-Pos_D^-(X)              holds  if X is a parameter or a different type
+Pos_D^-(X)              holds  if D does not occur in X
 Pos_D^-(A)              holds  if A is a universe Type ℓ
 Pos_D^-(x : A) → B      holds  if Pos_D^+(A) and Pos_D^-(B)
 Pos_D^-(x : A) × B      holds  if Pos_D^-(A) and Pos_D^-(B)
 ```
 
+Here `D` occurring in a term `t` means `D` appears as a sub-expression
+anywhere in `t` (syntactic occurrence, resolved by de Bruijn indices — trivial
+since the environment determines what names refer to).
+
 Key: `D` may appear strictly positively (as the target of a function type under
-`+` polarisation), but never under `-` polarisation. This blocks `(D → ⊥) → D`
-and similar negative encodings.
+`+` polarisation), but never under `-` polarisation. Any position the algorithm
+cannot structurally classify (application arguments, indices, type parameters
+containing `D`) is **conservatively rejected** — K1 accepts only the clean
+non-nested strictly-positive patterns. This blocks `(D → ⊥) → D`, nested
+negatives like `T (D → ⊥)`, and index-embedded occurrences.
 
 ### 8.2 Algorithm
 
@@ -343,17 +357,21 @@ check-positivity(D):
 
 check-pos-arg(D, pol, A):
   match A:
-    D Δ_p t̄  →  return (pol == +)     -- only positive allowed
-    Type ℓ   →  return true
-    X        →  return true           -- parameter or other type
+    D Δ_p t̄  →  return (pol == +) and not occurs(D, t̄)
+    Type ℓ   →  return true                    -- ℓ is a level, D is a type
+    X        →  return not occurs(D, X)        -- parameter or other type:
+                                                 reject if D appears within
     (x : C) → B  →  return check-pos-arg(D, flip(pol), C)
                     and check-pos-arg(D, pol, B)
     (x : C) × B  →  return check-pos-arg(D, pol, C)
                     and check-pos-arg(D, pol, B)
-    C u      →  return check-pos-arg(D, pol, C)   -- application, recurse into head
+    C u      →  return check-pos-arg(D, pol, C)   -- recurse into head
+                    and not occurs(D, u)            -- reject D in argument
 ```
 
-where `flip(+) = -`, `flip(-) = +`.
+where `flip(+) = -`, `flip(-) = +`, and `occurs(D, t)` is true iff `D` appears
+as a sub-expression anywhere in `t` (a simple term traversal — de Bruijn
+indices make this unambiguous).
 
 ### 8.3 Worked examples
 
@@ -392,6 +410,31 @@ check-pos-arg(Nat, +, (x : Nat) → Nat)
 
 Note: even though the outermost polarisation is `+`, the domain of the arrow
 flips to `-`, so `Nat` appears negatively and is caught.
+
+**Rejected (nested negative in application argument):**
+`data Bad3 = mk : Pair (Bad3 → Empty) Unit → Bad3`. Argument telescope
+`(f : Pair (Bad3 → Empty) Unit)`, argument type `Pair (Bad3 → Empty) Unit`.
+Under `+`:
+
+```
+check-pos-arg(Bad3, +, Pair (Bad3 → Empty) Unit)
+  = check-pos-arg(Bad3, +, Pair)      -- recurse into head (X → not occurs → true)
+    and not occurs(Bad3, (Bad3 → Empty, Unit))
+  = true and false                    -- occurs finds Bad3 in arguments
+  = false → FAILS
+```
+
+The application argument `(Bad3 → Empty)` is inspected by `occurs`; `Bad3`
+appears there (and negatively, since it's under a Π whose domain flips
+polarity), so the check correctly rejects. Without the `occurs` guard on
+application arguments, the algorithm would have recursed into the head `Pair`,
+returned `true` for the unknown type, and admitted the paradox.
+
+**Rejected (D in its own indices):**
+`data Vec (A : Type) : Nat → Type where …` is fine (the index `Nat` is not
+`Vec`), but `data Bad4 : (Bad4 → Empty) → Type where …` — where `D` occurs
+negatively in its own index — is caught by `occurs(D, t̄)` on the recursive
+`D Δ_p t̄` case at `+` polarity: `occurs(Bad4, (Bad4 → Empty))` is true, reject.
 
 ### 8.4 Nested and mutually-defined inductives
 
