@@ -202,11 +202,59 @@ pub struct GlobalEnv {
     /// constructors).
     ctor_index: HashMap<GlobalId, (usize, usize)>,
     next_id: u32,
+    /// The prelude `Top : Ω_0` constant (`16 §1.3`) — the truth proposition,
+    /// produced by Eq-by-type at `Trunc` (`Eq ‖A‖ _ _ ⇝ Top`) and the canonical
+    /// "trivial proof" target. Set by [`GlobalEnv::new`].
+    top_id: Option<GlobalId>,
+    /// The prelude `Bottom : Ω_0` constant (`16 §1.3`) — the falsity
+    /// proposition, produced by Eq-by-type's different-constructor case
+    /// (`Eq (D …) (c_k …) (c_l …) ⇝ Bottom`). Set by [`GlobalEnv::new`].
+    bottom_id: Option<GlobalId>,
 }
 
 impl GlobalEnv {
     pub fn new() -> Self {
-        Self::default()
+        let mut env = Self::default();
+        // K2 prelude — the truth/falsity propositions as direct `Ω_0`
+        // constants (`16 §1.3`; the unsound general `Up : Type → Ω` coercion is
+        // dropped, so these are standalone declarations, not wrappings). They
+        // are kernel vocabulary (like `Type`/`Ω`), kept out of `trusted_base`.
+        env.bottom_id = Some(env.declare_prelude_prop());
+        env.top_id = Some(env.declare_prelude_prop());
+        env
+    }
+
+    /// Declare a prelude proposition constant `c : Ω_0` (opaque, no δ). Used
+    /// only by [`new`] for `Top`/`Bottom`. The type `Ω_0 : Type 1` is well-formed
+    /// by the `Omega` formation rule (`16 §1.1`), so this is admitted directly
+    /// without re-running the check pipeline.
+    fn declare_prelude_prop(&mut self) -> GlobalId {
+        let id = self.fresh_id();
+        self.add_decl(Decl::Opaque {
+            id,
+            level_params: Vec::new(),
+            ty: Term::Omega(Level::zero()),
+        });
+        id
+    }
+
+    /// The prelude `Top : Ω_0` constant id (`16 §1.3`); always present after
+    /// [`GlobalEnv::new`].
+    pub fn top_id(&self) -> GlobalId {
+        self.top_id
+            .expect("prelude Top is declared in GlobalEnv::new")
+    }
+
+    /// The prelude `Bottom : Ω_0` constant id (`16 §1.3`); always present after
+    /// [`GlobalEnv::new`].
+    pub fn bottom_id(&self) -> GlobalId {
+        self.bottom_id
+            .expect("prelude Bottom is declared in GlobalEnv::new")
+    }
+
+    /// Is `id` one of the prelude `Top`/`Bottom` constants?
+    fn is_prelude(&self, id: GlobalId) -> bool {
+        self.top_id == Some(id) || self.bottom_id == Some(id)
     }
 
     /// Allocate a fresh, unused [`GlobalId`]. Used during admission so a
@@ -305,11 +353,14 @@ impl GlobalEnv {
     }
 
     /// The postulates and primitives in `Σ` — the unchecked assumptions a
-    /// program rests on (`18 §5`).
+    /// program rests on (`18 §5`). The prelude `Top`/`Bottom` constants are
+    /// excluded: they are fixed kernel vocabulary (`16 §1.3`), not user
+    /// assumptions.
     pub fn trusted_base(&self) -> Vec<GlobalId> {
         self.decls
             .iter()
             .filter(|d| matches!(d, Decl::Opaque { .. } | Decl::Primitive { .. }))
+            .filter(|d| !self.is_prelude(d.id()))
             .map(|d| d.id())
             .collect()
     }

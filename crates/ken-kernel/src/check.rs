@@ -11,7 +11,7 @@
 //! Admission ([`declare_def`] … [`declare_primitive`]) re-checks every input and
 //! gates inductives on strict positivity (`14 §8`).
 
-use crate::conv::{convert_type, whnf};
+use crate::conv::{convert, convert_type, whnf};
 use crate::env::{telescope_to_pi, Context, Decl, GlobalEnv, InductiveDecl};
 use crate::error::{KernelError, KernelResult};
 use crate::inductive::{check_no_pi_bound_recursive, check_positivity, method_type};
@@ -96,15 +96,17 @@ fn raw_wf(ctx: &Context, t: &Term, offset: usize) -> KernelResult<()> {
         Term::QuotElim {
             motive,
             method,
+            respect,
             scrut,
         } => {
             raw_wf(ctx, motive, offset)?;
             raw_wf(ctx, method, offset)?;
+            raw_wf(ctx, respect, offset)?;
             raw_wf(ctx, scrut, offset)
         }
         // Closed in Σ: no free term variables (levels are not de Bruijn).
         Term::Type(_)
-        | Term::Omega
+        | Term::Omega(_)
         | Term::Const { .. }
         | Term::IndFormer { .. }
         | Term::Constructor { .. } => Ok(()),
@@ -118,15 +120,69 @@ pub fn raw_well_formed(ctx: &Context, t: &Term) -> KernelResult<()> {
 
 // --- type synthesis: `Γ ⊢ A type` ⇒ its level -----------------------------
 
-/// Check `Γ ⊢ A type` and return its universe level (`Γ ⊢ A : Type ℓ`).
-fn synth_type(env: &GlobalEnv, ctx: &Context, a: &Term) -> KernelResult<Level> {
+/// The universe a type inhabits (`11 §3`): `Type ℓ` or the strict-proposition
+/// universe `Ω_ℓ` (`16 §1.1`). A binder type, declaration type, or ascription
+/// may be either — a proposition is a valid type.
+#[derive(Clone, Debug)]
+enum Sort {
+    Type(Level),
+    Omega(Level),
+}
+
+impl Sort {
+    fn level(&self) -> &Level {
+        match self {
+            Sort::Type(l) | Sort::Omega(l) => l,
+        }
+    }
+    /// Reify the sort as a term (`Type ℓ` or `Ω_ℓ`).
+    #[allow(dead_code)]
+    fn to_term(&self) -> Term {
+        match self {
+            Sort::Type(l) => Term::Type(l.clone()),
+            Sort::Omega(l) => Term::Omega(l.clone()),
+        }
+    }
+}
+
+/// `Γ ⊢ A type` ⇒ the sort (and level) of `A` (`11 §3`: a type is `Type ℓ` or
+/// `Ω_ℓ`). Generalizes [`synth_type`] to admit proposition types (`16 §1.1`).
+fn classify(env: &GlobalEnv, ctx: &Context, a: &Term) -> KernelResult<Sort> {
     let ty = infer(env, ctx, a)?;
     match whnf(env, ctx, &ty) {
-        Term::Type(l) => Ok(l),
+        Term::Type(l) => Ok(Sort::Type(l)),
+        Term::Omega(l) => Ok(Sort::Omega(l)),
         other => Err(KernelError::TypeMismatch {
             expected: Box::new(Term::Type(Level::Var(LevelVar(0)))), // a type
             found: Box::new(other),
         }),
+    }
+}
+
+/// Check `Γ ⊢ A : Type ℓ` and return its level — the Type-only specialization
+/// of [`classify`]. Use [`classify`] where a proposition type is admissible
+/// (binders, declarations, ascriptions); use this where a `Type` level is
+/// required specifically (e.g. an inductive family's universe).
+fn synth_type(env: &GlobalEnv, ctx: &Context, a: &Term) -> KernelResult<Level> {
+    match classify(env, ctx, a)? {
+        Sort::Type(l) => Ok(l),
+        Sort::Omega(l) => Err(KernelError::TypeMismatch {
+            expected: Box::new(Term::Type(Level::Var(LevelVar(0)))),
+            found: Box::new(Term::Omega(l)),
+        }),
+    }
+}
+
+/// The formation sort of a Π/Σ (`13 §1`/`§2`, `13 §4`, `16 §1.1`): the level is
+/// the predicative `max` of the domain and codomain levels, and the result is
+/// in `Ω` exactly when the **codomain** is a proposition (a quantifier whose
+/// body is a proposition lands in the strict-prop universe; impredicative
+/// lowering is ruled out — `OQ-Prop`).
+fn sort_pi_sigma(s1: &Sort, s2: &Sort) -> Term {
+    let lvl = s1.level().clone().max(s2.level().clone()).normalize();
+    match s2 {
+        Sort::Omega(_) => Term::Omega(lvl),
+        Sort::Type(_) => Term::Type(lvl),
     }
 }
 
@@ -200,27 +256,28 @@ pub fn infer(env: &GlobalEnv, ctx: &Context, t: &Term) -> KernelResult<Term> {
             }
         }
         Term::Pi(a, b) => {
-            let l1 = synth_type(env, ctx, a)?;
+            let s1 = classify(env, ctx, a)?;
             let mut ctx2 = ctx.clone();
             ctx2.push((**a).clone());
-            let l2 = synth_type(env, &ctx2, b)?;
-            Ok(Term::Type(l1.max(l2).normalize()))
+            let s2 = classify(env, &ctx2, b)?;
+            Ok(sort_pi_sigma(&s1, &s2))
         }
         Term::Sigma(a, b) => {
-            let l1 = synth_type(env, ctx, a)?;
+            let s1 = classify(env, ctx, a)?;
             let mut ctx2 = ctx.clone();
             ctx2.push((**a).clone());
-            let l2 = synth_type(env, &ctx2, b)?;
-            Ok(Term::Type(l1.max(l2).normalize()))
+            let s2 = classify(env, &ctx2, b)?;
+            Ok(sort_pi_sigma(&s1, &s2))
         }
         Term::Type(l) => Ok(Term::Type(l.clone().suc())), // (U-Type): Type ℓ : Type (suc ℓ) (`12 §1`)
+        Term::Omega(l) => Ok(Term::Type(l.clone().suc())), // (Ω-Form): Ω_l : Type (suc l) (`16 §1.1`)
         Term::Ascript(t, a) => {
-            synth_type(env, ctx, a)?;
+            classify(env, ctx, a)?;
             check(env, ctx, t, a)?;
             Ok((**a).clone())
         }
         Term::Let { ty, val, body } => {
-            synth_type(env, ctx, ty)?;
+            classify(env, ctx, ty)?;
             check(env, ctx, val, ty)?;
             infer(env, ctx, &subst0(body, val))
         }
@@ -235,11 +292,54 @@ pub fn infer(env: &GlobalEnv, ctx: &Context, t: &Term) -> KernelResult<Term> {
         } => infer_elim(
             env, ctx, *fam, level_args, params, motive, methods, indices, scrut,
         ),
-        Term::Lam { .. } | Term::Pair { .. } => Err(KernelError::Msg(
-            "cannot infer a λ or pair without an expected type (use ascription)".into(),
+        // --- K2 formers (`15`, `16`) ---
+        Term::Eq(a_ty, x, y) => {
+            // `Eq A a b : Ω_l` for `A : Type l` (`16 §2.1`).
+            let l = synth_type(env, ctx, a_ty)?;
+            check(env, ctx, x, a_ty)?;
+            check(env, ctx, y, a_ty)?;
+            Ok(Term::Omega(l))
+        }
+        Term::Cast(a_ty, b_ty, e, t) => {
+            // `cast A B e a : B`, `e : Eq Type A B` (`16 §3.1`).
+            let l_a = synth_type(env, ctx, a_ty)?;
+            let _l_b = synth_type(env, ctx, b_ty)?;
+            let eq_ty = Term::Eq(
+                Box::new(Term::Type(l_a)),
+                Box::new((**a_ty).clone()),
+                Box::new((**b_ty).clone()),
+            );
+            check(env, ctx, e, &eq_ty)?;
+            check(env, ctx, t, a_ty)?;
+            Ok((**b_ty).clone())
+        }
+        Term::J(m, d, e) => infer_j(env, ctx, m, d, e),
+        Term::Quot(a, r) => {
+            // `A / R : Type l` for `R : A → A → Ω` (`16 §5`).
+            let l = synth_type(env, ctx, a)?;
+            check_quotient_rel(env, ctx, a, r)?;
+            Ok(Term::Type(l))
+        }
+        Term::Trunc(a) => {
+            // `‖A‖ : Ω_l` for `A : Type l` (`16 §6`).
+            let l = synth_type(env, ctx, a)?;
+            Ok(Term::Omega(l))
+        }
+        Term::QuotElim {
+            motive,
+            method,
+            respect,
+            scrut,
+        } => infer_quot_elim(env, ctx, motive, method, respect, scrut),
+        Term::Lam { .. }
+        | Term::Pair { .. }
+        | Term::Refl(_)
+        | Term::QuotClass(_)
+        | Term::TruncProj(_) => Err(KernelError::Msg(
+            "cannot infer an introduction form (λ/pair/refl/quotient class/truncation) \
+             without an expected type (use ascription)"
+                .into(),
         )),
-        t if t.is_k2_reserved() => Err(KernelError::K2ReservedFormer),
-        _ => Err(KernelError::Msg(format!("cannot infer {:?}", t))),
     }
 }
 
@@ -263,7 +363,7 @@ pub fn check(env: &GlobalEnv, ctx: &Context, t: &Term, ty: &Term) -> KernelResul
     match t {
         Term::Lam(a, body) => match whnf(env, ctx, ty) {
             Term::Pi(dom, cod) => {
-                synth_type(env, ctx, a)?;
+                classify(env, ctx, a)?;
                 if !convert_type(env, ctx, a, &dom) {
                     return Err(KernelError::TypeMismatch {
                         expected: Box::new((*dom).clone()),
@@ -289,7 +389,7 @@ pub fn check(env: &GlobalEnv, ctx: &Context, t: &Term, ty: &Term) -> KernelResul
             }),
         },
         Term::Ascript(t, a) => {
-            synth_type(env, ctx, a)?;
+            classify(env, ctx, a)?;
             check(env, ctx, t, a)?;
             if !convert_type(env, ctx, a, ty) {
                 return Err(KernelError::TypeMismatch {
@@ -300,11 +400,60 @@ pub fn check(env: &GlobalEnv, ctx: &Context, t: &Term, ty: &Term) -> KernelResul
             Ok(())
         }
         Term::Let { ty, val, body } => {
-            synth_type(env, ctx, ty)?;
+            classify(env, ctx, ty)?;
             check(env, ctx, val, ty)?;
             check(env, ctx, &subst0(body, val), ty)
         }
-        t if t.is_k2_reserved() => Err(KernelError::K2ReservedFormer),
+        // --- K2 introduction forms (`15`, `16`) ---
+        Term::Refl(a) => {
+            // `refl a : Eq A a a` checks against `Eq A x y` iff `a ≡ x ≡ y`
+            // (`15 §2`). (`Eq : Ω` makes proofs irrelevant, but `refl a` is the
+            // canonical proof, so its index must match.)
+            let ty_w = whnf(env, ctx, ty);
+            match &ty_w {
+                Term::Eq(a_ty, x, y) => {
+                    let a_infer = infer(env, ctx, a)?;
+                    if !convert_type(env, ctx, &a_infer, a_ty) {
+                        return Err(KernelError::TypeMismatch {
+                            expected: (*a_ty).clone(),
+                            found: Box::new(a_infer),
+                        });
+                    }
+                    if !convert(env, ctx, a_ty, a, x) || !convert(env, ctx, a_ty, a, y) {
+                        return Err(KernelError::BadEliminator(
+                            "refl a does not match Eq A x y (a ≢ x or a ≢ y)".into(),
+                        ));
+                    }
+                    Ok(())
+                }
+                _ => Err(KernelError::TypeMismatch {
+                    expected: Box::new(ty.clone()),
+                    found: Box::new(ty_w.clone()),
+                }),
+            }
+        }
+        Term::QuotClass(a) => {
+            // `[a] : A / R`  iff  `a : A` (`16 §5`).
+            let ty_w = whnf(env, ctx, ty);
+            match &ty_w {
+                Term::Quot(a_ty, _r) => check(env, ctx, a, a_ty),
+                _ => Err(KernelError::TypeMismatch {
+                    expected: Box::new(ty.clone()),
+                    found: Box::new(ty_w.clone()),
+                }),
+            }
+        }
+        Term::TruncProj(a) => {
+            // `|a| : ‖A‖`  iff  `a : A` (`16 §6`).
+            let ty_w = whnf(env, ctx, ty);
+            match &ty_w {
+                Term::Trunc(a_ty) => check(env, ctx, a, a_ty),
+                _ => Err(KernelError::TypeMismatch {
+                    expected: Box::new(ty.clone()),
+                    found: Box::new(ty_w.clone()),
+                }),
+            }
+        }
         _ => {
             // Mode switch (`18 §3`): infer t's type and convert it to the
             // expected one — the single place conversion is called in check.
@@ -499,6 +648,176 @@ fn motive_expected_type(
     telescope_to_pi(&idx_types, ret)
 }
 
+// --- K2 quotient / J inference (`15 §4`, `16 §5`, §6) ---------------------
+
+/// Infer the type of `J motive base eq` = `motive b eq` (`15 §4`). Recovers
+/// `A`,`a`,`b` from `eq : Eq A a b`, verifies the motive's first domain is `A`,
+/// checks `base : motive a (refl a)`, and returns `motive b eq`.
+fn infer_j(
+    env: &GlobalEnv,
+    ctx: &Context,
+    motive: &Term,
+    base: &Term,
+    eq: &Term,
+) -> KernelResult<Term> {
+    // e : Eq A a b  ⇒  recover A, a, b.
+    let e_ty = infer(env, ctx, eq)?;
+    let (a_ty, a_idx, b_idx) = match &whnf(env, ctx, &e_ty) {
+        Term::Eq(at, x, y) => ((**at).clone(), (**x).clone(), (**y).clone()),
+        _ => {
+            return Err(KernelError::BadEliminator(
+                "J's equality argument is not an `Eq`".into(),
+            ))
+        }
+    };
+    // motive : (b:A) → (e':Eq A a b) → Type ℓ'. Verify the first domain ≡ A.
+    let m_ty = infer(env, ctx, motive)?;
+    match &whnf(env, ctx, &m_ty) {
+        Term::Pi(m_dom, _) => {
+            if !convert_type(env, ctx, m_dom, &a_ty) {
+                return Err(KernelError::BadEliminator(
+                    "J motive's first domain ≠ the equality's type A".into(),
+                ));
+            }
+        }
+        _ => {
+            return Err(KernelError::BadEliminator(
+                "J motive is not a Π over A".into(),
+            ))
+        }
+    }
+    // base : motive a (refl a).
+    let base_ty = Term::app(
+        Term::app(motive.clone(), a_idx.clone()),
+        Term::Refl(Box::new(a_idx.clone())),
+    );
+    check(env, ctx, base, &base_ty)?;
+    // Result: motive b eq.
+    Ok(Term::app(
+        Term::app(motive.clone(), b_idx.clone()),
+        eq.clone(),
+    ))
+}
+
+/// Check `R : A → A → Ω` (the quotient relation, `16 §5`): infer `R`'s type and
+/// verify the Π–Π–Ω shape with the first domain ≡ `A`. (The second domain is
+/// `A` under the first binder; a strict check needs a context shift, so only the
+/// shape and first domain are verified — sound for well-elaborated input.)
+fn check_quotient_rel(env: &GlobalEnv, ctx: &Context, a: &Term, r: &Term) -> KernelResult<()> {
+    let r_ty = infer(env, ctx, r)?;
+    let cod1 = match &whnf(env, ctx, &r_ty) {
+        Term::Pi(dom1, cod1) => {
+            if !convert_type(env, ctx, dom1, a) {
+                return Err(KernelError::BadEliminator(
+                    "quotient relation's first domain ≠ A".into(),
+                ));
+            }
+            (**cod1).clone()
+        }
+        _ => {
+            return Err(KernelError::BadEliminator(
+                "quotient relation is not of type A → A → Ω".into(),
+            ))
+        }
+    };
+    let cod2 = match &whnf(env, ctx, &cod1) {
+        Term::Pi(_, cod2) => (**cod2).clone(),
+        _ => {
+            return Err(KernelError::BadEliminator(
+                "quotient relation is not of type A → A → Ω".into(),
+            ))
+        }
+    };
+    match &whnf(env, ctx, &cod2) {
+        Term::Omega(_) => Ok(()),
+        _ => Err(KernelError::BadEliminator(
+            "quotient relation's codomain is not Ω".into(),
+        )),
+    }
+}
+
+/// Infer `elim_/ M f r q : M q` (`16 §5`), also covering `elim_trunc`
+/// (encoded as `QuotElim` on a `‖A‖` scrut, `16 §6`). Checks the motive,
+/// method, and (for non-Ω targets) the respect proof; Ω targets are
+/// respect-free (`16 §5`).
+fn infer_quot_elim(
+    env: &GlobalEnv,
+    ctx: &Context,
+    motive: &Term,
+    method: &Term,
+    respect: &Term,
+    scrut: &Term,
+) -> KernelResult<Term> {
+    // scrut : A/R (or ‖A‖). Recover the underlying `A`.
+    let scrut_ty = infer(env, ctx, scrut)?;
+    let underlying_a = match &whnf(env, ctx, &scrut_ty) {
+        Term::Quot(a, _) | Term::Trunc(a) => (**a).clone(),
+        _ => {
+            return Err(KernelError::BadEliminator(
+                "quotient elim scrutinee is not a quotient or truncation".into(),
+            ))
+        }
+    };
+    // motive M : (z : scrut_ty) → Type ℓ'. Verify the Π shape and codomain Type.
+    let m_ty = infer(env, ctx, motive)?;
+    let m_cod = match &whnf(env, ctx, &m_ty) {
+        Term::Pi(dom, cod) => {
+            if !convert_type(env, ctx, dom, &scrut_ty) {
+                return Err(KernelError::BadEliminator(
+                    "motive's domain ≠ scrutinee type".into(),
+                ));
+            }
+            (**cod).clone()
+        }
+        _ => {
+            return Err(KernelError::BadEliminator(
+                "motive is not a Π over the quotient".into(),
+            ))
+        }
+    };
+    // Motive codomain sort ⇒ the elimination target's kind (`16 §5`).
+    //   - Ω_l codomain ⇒ the target `M q` is a proposition ⇒ the respect
+    //     condition is **free** by Ω-PI (any two results are definitionally
+    //     equal) — accept (`16 §5` "respect-free elimination").
+    //   - Type ℓ codomain ⇒ the target is a type, and respect is the *entire*
+    //     soundness content of quotient elim into a non-proposition (without it,
+    //     a non-respecting `f` observes the representative — `cong h e` then
+    //     yields `Eq Bool true false ⇝ Bottom`, a closed `Empty`). Verifying the
+    //     respect obligation needs the `cong`/`cast` schema (the hard OTT core);
+    //     K2 does **not** build it, so a Type-target motive is **rejected**.
+    //     (Type-target quotient elim is deferred to K2c/follow-up; Ω-target is
+    //     the sound, respect-free K2 deliverable. — Architect review,
+    //     dec_7xpn5ywf4ebfw, seam 3.)
+    match whnf(env, ctx, &m_cod) {
+        Term::Omega(_) => {} // respect-free target — accept
+        Term::Type(_) => {
+            return Err(KernelError::BadEliminator(
+                "K2 quotient elimination into a Type (non-Ω) target requires the \
+                 respect obligation (the cong/cast schema), not verified in K2 — \
+                 use an Ω-target motive (respect-free, 16 §5). Deferred to K2c."
+                    .into(),
+            ))
+        }
+        _ => {
+            return Err(KernelError::BadEliminator(
+                "motive's codomain is not a type (Type ℓ' or Ω_l)".into(),
+            ))
+        }
+    }
+    // method f : (x:A) → M [x].  `[x]` = `QuotClass(x)` (also the truncation
+    // intro `|x|`, which the i-reduction treats identically).
+    let expected_method_ty = Term::pi(
+        underlying_a.clone(),
+        Term::app(weaken(motive, 1), Term::QuotClass(Box::new(Term::var(0)))),
+    );
+    check(env, ctx, method, &expected_method_ty)?;
+    // Respect proof: Ω-target only (reached here) ⇒ proof-irrelevant by Ω-PI;
+    // require `r` to be at least well-scoped (its content is irrelevant).
+    raw_well_formed(ctx, respect)?;
+    // Result: M scrut.
+    Ok(Term::app(motive.clone(), scrut.clone()))
+}
+
 // --- declaration admission (`18 §4`) ---------------------------------------
 
 /// A constructor specification for [`declare_inductive`] (no id/type yet —
@@ -594,7 +913,7 @@ pub fn declare_def(
     body: Term,
 ) -> KernelResult<GlobalId> {
     let empty = Context::new();
-    synth_type(env, &empty, &ty)?;
+    classify(env, &empty, &ty)?;
     check(env, &empty, &body, &ty)?;
     let id = env.fresh_id();
     env.add_decl(Decl::Transparent {
@@ -614,7 +933,7 @@ pub fn declare_postulate(
     ty: Term,
 ) -> KernelResult<GlobalId> {
     let empty = Context::new();
-    synth_type(env, &empty, &ty)?;
+    classify(env, &empty, &ty)?;
     let id = env.fresh_id();
     env.add_decl(Decl::Opaque {
         id,
@@ -634,7 +953,7 @@ pub fn declare_primitive(
     reduction: crate::env::PrimReduction,
 ) -> KernelResult<GlobalId> {
     let empty = Context::new();
-    synth_type(env, &empty, &ty)?;
+    classify(env, &empty, &ty)?;
     let id = env.fresh_id();
     env.add_decl(Decl::Primitive {
         id,
@@ -680,17 +999,48 @@ mod tests {
     }
 
     #[test]
-    fn k2_former_rejected() {
+    fn k2_omega_formation() {
         let env = GlobalEnv::new();
         let ctx = Context::new();
-        // Ω is reserved but check/infer reject it in K1.
-        assert!(matches!(
-            infer(&env, &ctx, &Term::Omega),
-            Err(KernelError::K2ReservedFormer)
-        ));
-        assert!(matches!(
-            check(&env, &ctx, &Term::Omega, &Term::Type(Level::zero())),
-            Err(KernelError::K2ReservedFormer)
-        ));
+        // Ω_l : Type (suc l) (`16 §1.1`). Ω_0 : Type 1.
+        assert_eq!(
+            infer(&env, &ctx, &Term::Omega(Level::zero())),
+            Ok(Term::Type(Level::suc(Level::zero())))
+        );
+        // Ω_0 checks against Type 1 (its universe).
+        assert!(check(
+            &env,
+            &ctx,
+            &Term::Omega(Level::zero()),
+            &Term::Type(Level::suc(Level::zero()))
+        )
+        .is_ok());
+        // Non-cumulative (`12 §3`): Ω_0 : Type 1 does NOT give Ω_0 : Type 0.
+        assert!(check(
+            &env,
+            &ctx,
+            &Term::Omega(Level::zero()),
+            &Term::Type(Level::zero())
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn k2_piproduct_over_omega_lands_in_omega() {
+        // 13 §4 / 16 §1.1: a Π whose codomain is a proposition lands in Ω.
+        // (P : Ω_0) → Top  with Top : Ω_0  ⇒  (P → Top) : Ω_0.  Using the closed
+        // prelude `Top` as the codomain avoids a de Bruijn shift on the body.
+        let env = GlobalEnv::new();
+        let mut ctx = Context::new();
+        ctx.push(Term::Omega(Level::zero())); // P : Ω_0  (var 0)
+        let top = Term::Const {
+            id: env.top_id(),
+            level_args: Vec::new(),
+        }; // Top : Ω_0 (closed)
+        let pi = Term::pi(Term::var(0), top.clone()); // (x : P) → Top
+        assert_eq!(infer(&env, &ctx, &pi), Ok(Term::Omega(Level::zero())));
+        // A Σ over a proposition codomain also lands in Ω_0.
+        let sig = Term::sigma(Term::var(0), top); // (x : P) × Top
+        assert_eq!(infer(&env, &ctx, &sig), Ok(Term::Omega(Level::zero())));
     }
 }

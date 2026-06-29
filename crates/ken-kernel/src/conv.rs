@@ -147,6 +147,68 @@ pub fn whnf(env: &GlobalEnv, ctx: &Context, t: &Term) -> Term {
                 cur = (**t).clone();
                 continue;
             }
+            // --- K2 observational reductions (`16 §8.1`) ---
+            Term::Eq(ty, x, y) => {
+                // `Eq A a b` reduces by recursion on `whnf(A)` (`15 §2`, `16
+                // §2.2`); a neutral `A` leaves it a neutral proposition.
+                let ty_w = whnf(env, ctx, ty);
+                if let Some(r) = crate::obs::eq_reduce(env, ctx, &ty_w, x, y) {
+                    cur = r;
+                    continue;
+                }
+                return Term::Eq(Box::new(ty_w), (*x).clone(), (*y).clone());
+            }
+            Term::Cast(a, b, e, t) => {
+                // `cast A B e t` reduces by recursion on `whnf(A)`,`whnf(B)`
+                // (`16 §3.2`); mismatched/neutral heads or a neutral proof leave
+                // it a neutral cast.
+                let a_w = whnf(env, ctx, a);
+                let b_w = whnf(env, ctx, b);
+                if let Some(r) = crate::obs::cast_reduce(env, ctx, &a_w, &b_w, e, t) {
+                    cur = r;
+                    continue;
+                }
+                return Term::Cast(Box::new(a_w), Box::new(b_w), (*e).clone(), (*t).clone());
+            }
+            Term::J(motive, base, eq) => {
+                // Derived `J` (`15 §4`): `J-β` on `refl`, and reduction on
+                // non-`refl` via `cast`. A neutral `eq` (or non-constant motive)
+                // leaves `J` neutral.
+                if let Some(r) = crate::obs::j_reduce(env, ctx, motive, base, eq) {
+                    cur = r;
+                    continue;
+                }
+                return Term::J((*motive).clone(), (*base).clone(), (*eq).clone());
+            }
+            Term::QuotElim {
+                motive,
+                method,
+                respect,
+                scrut,
+            } => {
+                // Quotient/truncation i-reduction: `elim_/ M f r [a] ⇝ f a`
+                // (`16 §5`); `elim_trunc P f |a| ⇝ f a` (truncation elim encoded
+                // as `QuotElim` on a `TruncProj` scrut, `16 §6`). A neutral
+                // scrutinee leaves the eliminator neutral.
+                let s_w = whnf(env, ctx, scrut);
+                match &s_w {
+                    Term::QuotClass(a0) => {
+                        cur = Term::app((**method).clone(), (**a0).clone());
+                        continue;
+                    }
+                    Term::TruncProj(a0) => {
+                        cur = Term::app((**method).clone(), (**a0).clone());
+                        continue;
+                    }
+                    _ => {}
+                }
+                return Term::QuotElim {
+                    motive: (*motive).clone(),
+                    method: (*method).clone(),
+                    respect: (*respect).clone(),
+                    scrut: Box::new(s_w),
+                };
+            }
             _ => return cur, // already in weak-head normal form
         }
     }
@@ -225,10 +287,12 @@ pub fn normalize(env: &GlobalEnv, ctx: &Context, t: &Term) -> Term {
         Term::QuotElim {
             motive,
             method,
+            respect,
             scrut,
         } => Term::QuotElim {
             motive: Box::new(normalize(env, ctx, motive)),
             method: Box::new(normalize(env, ctx, method)),
+            respect: Box::new(normalize(env, ctx, respect)),
             scrut: Box::new(normalize(env, ctx, scrut)),
         },
         Term::Let { ty: _, val, body } => {
@@ -238,7 +302,7 @@ pub fn normalize(env: &GlobalEnv, ctx: &Context, t: &Term) -> Term {
         Term::Ascript(t, _) => normalize(env, ctx, t),
         // Leaves and closed-ish nodes: no sub-terms to normalize (levels aside).
         Term::Type(_)
-        | Term::Omega
+        | Term::Omega(_)
         | Term::Var(_)
         | Term::Const { .. }
         | Term::IndFormer { .. }
@@ -246,14 +310,31 @@ pub fn normalize(env: &GlobalEnv, ctx: &Context, t: &Term) -> Term {
     }
 }
 
+/// Is `ty` a proposition — `Γ ⊢ ty : Ω_ℓ` for some `ℓ` (`16 §1.1`)? This is the
+/// guard for the Ω proof-irrelevance shortcut (`16 §8.2`): any two terms at a
+/// proposition type are definitionally equal. Infallible — an ill-typed `ty` is
+/// treated as "not a proposition" (conversion never crashes).
+fn is_omega_type(env: &GlobalEnv, ctx: &Context, ty: &Term) -> bool {
+    crate::check::infer(env, ctx, ty)
+        .map(|t| matches!(whnf(env, ctx, &t), Term::Omega(_)))
+        .unwrap_or(false)
+}
+
 /// Definitional equality `Γ ⊢ a ≡ b : A` for the K1 fragment (`13 §6.2`):
 /// α (de Bruijn syntactic identity), then type-directed η (Π-η, Σ-η) when the
 /// type is a Π/Σ, else structural congruence with whnf. This is the **K2c
 /// extension seam** — K2c replaces this body with lazy-WHNF NbE without
-/// changing the signature (`13 §6.3`).
+/// changing the signature (`13 §6.3`). K2 adds the Ω-PI shortcut (`16 §8.2`).
 pub fn convert(env: &GlobalEnv, ctx: &Context, ty: &Term, a: &Term, b: &Term) -> bool {
     if a == b {
         return true; // α: syntactic identity under de Bruijn (`13 §6.2` step 1)
+    }
+    // Ω proof-irrelevance shortcut (`16 §8.2`): if `ty : Ω`, any two terms are
+    // definitionally equal — a constant-time "yes" without inspecting contents.
+    // This is what makes `Eq : Ω` (and the whole logic) proof-irrelevant, and
+    // lets conversion skip propositional arguments.
+    if is_omega_type(env, ctx, ty) {
+        return true;
     }
     let ty_w = whnf(env, ctx, ty);
     match &ty_w {
@@ -363,7 +444,21 @@ fn conv_struct(env: &GlobalEnv, ctx: &Context, a: &Term, b: &Term) -> bool {
             conv_struct(env, ctx, a1, a2) && conv_struct(env, ctx, b1, b2)
         }
         (Term::App(f1, a1), Term::App(f2, a2)) => {
-            conv_struct(env, ctx, f1, f2) && conv_struct(env, ctx, a1, a2)
+            if !conv_struct(env, ctx, f1, f2) {
+                return false;
+            }
+            // Propositional-argument skip (`16 §8.2`): compare the argument at
+            // the function's domain type via [`convert`], so an Ω-typed
+            // argument is skipped (Ω-PI) and a Π/Σ-typed argument gets η. Falls
+            // back to structural congruence if the function's type can't be
+            // inferred (then this matches the K1 behaviour exactly).
+            if let Ok(tf) = crate::check::infer(env, ctx, f1) {
+                let tf_w = whnf(env, ctx, &tf);
+                if let Term::Pi(dom, _cod) = &tf_w {
+                    return convert(env, ctx, dom, a1, a2);
+                }
+            }
+            conv_struct(env, ctx, a1, a2)
         }
         (Term::Proj1(p1), Term::Proj1(p2)) => conv_struct(env, ctx, p1, p2),
         (Term::Proj2(p1), Term::Proj2(p2)) => conv_struct(env, ctx, p1, p2),
@@ -491,12 +586,15 @@ mod tests {
     fn sigma_beta_whnf() {
         let env = GlobalEnv::new();
         let ctx = Context::new();
-        let pair = Term::pair(Term::Type(Level::zero()), Term::Omega);
+        let pair = Term::pair(Term::Type(Level::zero()), Term::Omega(Level::zero()));
         assert_eq!(
             whnf(&env, &ctx, &Term::proj1(pair.clone())),
             Term::Type(Level::zero())
         );
-        assert_eq!(whnf(&env, &ctx, &Term::proj2(pair)), Term::Omega);
+        assert_eq!(
+            whnf(&env, &ctx, &Term::proj2(pair)),
+            Term::Omega(Level::zero())
+        );
     }
 
     #[test]
