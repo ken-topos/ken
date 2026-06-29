@@ -74,16 +74,20 @@ This split keeps the algorithm deterministic and minimizes annotations.
   universe (formation rules), result `Type (…)` or `Ω`.
 
 **Checking terms** (the type drives the rule; this is where η enters):
-- `λ (x:A). t ⇐ (x:A')→B`: check `A ≡ A'`, then `t ⇐ B` under `x:A`.
+- `λ (x:A). t ⇐ (x:A')→B`: check the domains convert —
+  `convert(env, ctx, Type ℓ, A, A')` (`17 §3.3`) — then `t ⇐ B` under `x:A`.
 - `(a,b) ⇐ (x:A)×B`: check `a ⇐ A`, then `b ⇐ B[a/x]`.
 - `refl a ⇐ Eq A a a`; any proof of `Eq A a b` is checked against the
   proposition `Eq A a b` (which computes by `16 §2`) — and since `Eq : Ω`, proof
   irrelevance (`16 §1`) means the *content* is not compared.
 - `[a] ⇐ A / R`; constructor applications and quotient classes: checked against
   their target type (`14`, `16 §5`).
-- **mode switch (fallback):** any other `t ⇐ A` infers `t ⇒ A'` and checks `A ≡
-  A'` via conversion (`17`) — this is the algorithmic form of (Conv) and the
-  single place conversion is called during checking.
+- **mode switch (fallback):** any other `t ⇐ A` infers `t ⇒ A'` and calls
+  `convert(env, ctx, Type ℓ, A, A')` (`17 §3.3`); succeeds iff it returns
+  `true`. This is the algorithmic form of (Conv) and the **single place**
+  conversion is invoked during checking. Because `convert` is total and
+  decidable (`17 §5`), the mode switch always halts with a definite yes/no —
+  there is no third "unknown" outcome in the kernel.
 
 The elaborator (`../30-surface/39-elaboration.md`) produces fully-explicit core
 terms with enough ascription that infer/check never need to *guess* (no
@@ -99,7 +103,11 @@ illustrative Rust (`ken-kernel`); names are normative, types are indicative.
 ```rust
 // Environment construction (each call re-checks; nothing is trusted on input).
 fn declare_def(env, name, ty: Term, body: Term) -> Result<(), KernelError>;
-   //  checks `ty type`, `body ⇐ ty`, runs SCT (17 §4); admits transparent.
+   //  (1) check `· ⊢ ty type`; (2) check `body ⇐ ty`; (3) run SCT (17 §4) on the
+   //  mutually-recursive group; (4) on Accept, admit `name` TRANSPARENT
+   //  (δ-unfoldable); on Reject, return KernelError — the kernel NEVER admits a
+   //  transparent definition it cannot certify terminating. Opaque admission of
+   //  a rejected def is a surface-level choice (30-surface/), not the kernel's.
 fn declare_postulate(env, name, ty: Term) -> Result<(), KernelError>;
    //  checks `· ⊢ ty type`; admits OPAQUE; records it in the trusted base (§5).
 fn declare_inductive(env, decl: InductiveDecl) -> Result<(), KernelError>;
@@ -157,9 +165,9 @@ The kernel's soundness commitments (`README.md §5`) and their current status:
 | Subject reduction | **Argued** from the rules; to be mechanized. |
 | Confluence / unique normal forms | **Argued** (standard for this calculus). |
 | Strong normalization of the core | **Argued** (β/ι/η/obs); the hard metatheorem. |
-| δ-termination → decidable checking | **By the SCT gate** (`17 §4`); tested. |
+| δ-termination → decidable checking | **By the SCT gate** (`17 §4`); the size-change principle (Lee/Jones/Ben-Amram 2001) bounds δ-unfolding (`17 §5`); tested. |
 | Canonicity (closed terms compute) | **Required + tested** (`16 §9`, observational). |
-| Decidable conversion | **Proven** for OTT (`TTobs`/`CICobs`, ADR 0005); Ken follows. |
+| Decidable conversion | **Proven** for OTT (`TTobs`/`CICobs`, ADR 0005); Ken follows. **K2c delivers the operational decidability**: `convert` is total via the SCT gate (`17 §4`–§5), so the (Conv) mode switch (§3) always halts. |
 | Consistency (no closed `· ⊢ p : ⊥`) | **Argued** from SN + canonicity. |
 
 "Argued" means there is a standard proof for systems of this shape
