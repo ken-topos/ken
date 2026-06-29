@@ -37,7 +37,12 @@ publishes and merges.
    **distinct** type/level variables (not one), **open** terms / dependent
    telescopes (not closed/concrete), eliminator methods that **use** the IH (not
    discard it via β). A green suite on single-variable/closed paths is a *false
-   green*. Keep the change small.
+   green*. **Test every guard you add, including the ones you defer** — in the
+   TCB, a check you ship as `TODO`/partial while its reduction still fires
+   **unconditionally** is an unsound *accept*, not a "sound stuck fallback" (K2:
+   an un-invoked `check_respect` admitted a closed `Empty`). Either **gate the
+   reduction** on the check or **reject the case** (return stuck/`Err`) — and add
+   the adversarial test that the gap would mis-accept. Keep the change small.
 5. **Commit to `wp/<ID>` before you hand off** — never hand off uncommitted work
    (the next agent and the Integrator only see committed state). Cite the WP ID,
    acceptance criteria met, and your spec sources in the commit/handoff.
