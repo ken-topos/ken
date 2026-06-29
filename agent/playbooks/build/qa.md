@@ -24,6 +24,20 @@ the code, and that independence is the point. Read `../../COORDINATION.md` and
    terms / dependent telescopes, eliminator methods that **use** the IH (not
    discard it via β). A green suite that only explores single-variable/closed
    instances is **Blocked**, not Approved (COORDINATION §7).
+   - **Every TCB guard must be *invoked* at least once — not just varied where
+     already called** (sharpened from K2, where the suite varied cast/`Eq`
+     inputs but **never type-checked a `QuotElim`**, so the `check_respect` guard
+     was never called *at any universe* and silently admitted a closed `Empty`).
+     "Vary the inputs" does not cover "call every guard." Enumerate the checks in
+     the diff; **Block** if any guard, eliminator, or reduction case has zero
+     invoking test.
+   - **A "sound stuck/neutral fallback" claim must be verified at the *reduction*
+     site, not just the check.** If a check is deferred / `TODO` / partial but
+     `whnf` reduces the corresponding redex **unconditionally**, the deferral is
+     an unsound **accept**, not a fallback — Block it. Build the adversarial
+     input that the deferred path would mis-accept and assert it errors / stays
+     stuck (the K2 fixes added exactly these: the `Empty` exploit asserting
+     `Err`, the index-change cast asserting neutral).
 4. **No gate regression:** a passed roadmap gate (G0–G8) still holds.
 
 ## Verdict discipline
