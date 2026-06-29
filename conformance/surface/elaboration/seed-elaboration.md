@@ -181,25 +181,52 @@ surfaced, never swallowed (frame Acceptance 3; `39 §3` well-typed-output, `§4`
 
 ## AC4 — name resolution: nested binders + shadowing (the load-bearing guard)
 
-The one place V0 can corrupt a *well-typed-looking* term: a capture bug yields
-core the kernel **accepts**. So the key case is **discriminating** — correct
-resolution rejects, a capture bug accepts (frame guardrails; `39 §5.3`).
+The one place V0 can corrupt a *well-typed-looking* term: a mis-scoping/capture
+bug resolves a variable to the wrong binder. The key case is **discriminating**
+— correct resolution and a capture bug give **opposite** verdicts — and is
+backed by a **structural** assertion on the resolved de Bruijn index that holds
+*regardless* of the verdict, so it cannot pass vacuously (frame guardrails;
+`39 §5.3`).
 
 ### surface/elaboration/shadow-outer-not-captured  ← discriminating
-- spec: `39 §5.3` (first-binder resolution, capture-avoidance); `11-syntax §2`;
-  `18 §3`
-- given: `view shadow (A : Type) (x : A) : (A : Type) -> A = \A . x`
-  (full term `λ A. λ x. λ A. x`)
-- expect: kernel **rejects**. Under correct capture-avoiding resolution the body
-  `x` is `Var 1`, whose type is the **outer** `A` (`Var 2` at the body); it is
-  checked against the codomain `A` of `(A : Type) -> A`, which is the **inner**
-  shadowing `A` (`Var 0`). Distinct binders → distinct de Bruijn indices → `Var
-  2 ≢ Var 0` → reject.
-- why: **the** name-resolution guard. If the resolver instead *captured* `x`
-  under the inner `\A` — giving its type as the inner `A` — the term would
-  type-check and be **wrongly accepted**. Correct ⇒ reject, capture bug ⇒
-  accept: opposite verdicts, so this case isolates the bug the kernel cannot
-  backstop. (The discriminating-case discipline — the K2c carry.)
+- spec: `39 §5.3` (first/innermost-match resolution); `11-syntax §2`; `18 §3`;
+  `13 §1` (non-dependent `→` codomain)
+- given: `view f (A : Type) (x : A) : Type -> A = \B . x`
+  (full term `λ A. λ x. λ B. x`; the body `x` must resolve **past** the
+  intervening `\B` binder to the outer `x`)
+- expect: kernel **accepts** under correct resolution; a capture bug
+  **rejects**. The return type `Type -> A` is **non-dependent** — its codomain
+  `A` is resolved at the signature, so it is the **outer** parameter `A`
+  (`Var 2` at the body), *not* the intervening `\B`. Correct: body `x` is
+  `Var 1` (the outer `x`), whose type is that same outer `A` (`Var 2`) →
+  `Var 2 ≡ Var 2` → **accept**. Capture bug (`x` → `Var 0` = the inner
+  `B : Type`): the body now has type `Type`, checked against the codomain `A`
+  (`Var 2`) → `Type ≢ Var 2` → **reject**.
+- why: **the** name-resolution guard, made genuinely discriminating. The
+  non-dependent `Type -> A` codomain pins the expected type to the *outer* `A`,
+  so correct resolution (body `x` : outer `A`) accepts while a capture to the
+  intervening `\B` (body : `Type`) rejects — opposite verdicts isolate the bug
+  the kernel cannot otherwise backstop. **(Corrected — Architect-caught.)** A
+  prior draft used a *dependent* `(A : Type) -> A` codomain (its `A` = the inner
+  `Var 0`), under which the body rejects on **both** correct (`Var 2 ≢ Var 0`)
+  and buggy (`Type ≢ Var 0`) resolution — vacuous, guarding nothing. The
+  discriminating ingredient is the outer-referencing codomain. (Program matches
+  the Architect's suggested form; the discriminating-case discipline — the K2c
+  carry.)
+
+### surface/elaboration/shadow-resolver-emits-outer-index (oracle)
+- spec: `39 §5.3` (`indexOf` = first/innermost match); `11-syntax §2`
+- given: the same `view f (A : Type) (x : A) : Type -> A = \B . x`
+- expect: name resolution emits the body `x` as **`Var 1`** (the outer `x`
+  parameter), **not** `Var 0` (the intervening `\B`). A direct,
+  **verdict-independent** assertion on the resolver output.
+- why: the most direct pin on the correctness-critical pass — it holds whether
+  or not the term type-checks, so it **cannot go vacuous** (the failure mode of
+  a verdict-only assertion). `indexOf` scans innermost-first and matches the
+  first entry equal to `x`; since the intervening binder is named `B` (`≠ x`),
+  `x` skips it and lands on the outer parameter. This is the same
+  innermost-match rule that implements shadowing (`39 §5.3` property 1).
+  Complements the discriminating behavioral case above.
 
 ### surface/elaboration/nested-app-each-binder (oracle)
 - spec: `39 §5.3`, `§5.4`; `11-syntax §2`; `13 §1`
