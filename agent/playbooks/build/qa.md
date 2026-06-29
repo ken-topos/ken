@@ -16,8 +16,14 @@ the code, and that independence is the point. Read `../../COORDINATION.md` and
 1. **Conformance:** the change passes the relevant `/conformance` tests.
 2. **Spec compliance:** behavior matches `/spec` and the component design — diff
    it, don't eyeball it.
-3. **Tests exist and are honest:** common-case + the edge cases the WP named; no
-   tautological or disabled tests.
+3. **Tests exercise the *property*, not just one corner** (promoted from K1,
+   where a 0-defect run on a narrow input space hid two soundness bugs — a *false
+   green*). Honest + non-tautological + no-disabled-tests is necessary but
+   **insufficient**: for each parameterized path, require the suite to vary
+   **every degree of freedom** — ≥2 **distinct** type/level variables, **open**
+   terms / dependent telescopes, eliminator methods that **use** the IH (not
+   discard it via β). A green suite that only explores single-variable/closed
+   instances is **Blocked**, not Approved (COORDINATION §7).
 4. **No gate regression:** a passed roadmap gate (G0–G8) still holds.
 
 ## Verdict discipline
