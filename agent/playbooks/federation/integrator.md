@@ -75,7 +75,7 @@ Merge only when **all** hold:
    the owning team's QA in the ring.
 2. **CI green** — build + conformance + clean-room + path-guard, on the branch
    you published.
-3. **Clean-room** — the change derives from spec sources (not prototype source);
+3. **Clean-room** — the change derives from spec sources (not copyleft source);
    the provenance check is green. Reject otherwise (`../../../CLEAN-ROOM.md`).
 4. **No gate regression** — the change does not regress a passed roadmap gate
    (G0–G8).

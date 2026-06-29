@@ -25,12 +25,15 @@ federation.
 
 The tiering *reinforces* the clean-room boundary:
 
-- Only the **T1 Opus Spec enclave** (Anthropic-hosted) ever reads the AGPLv3
-  prototype. The build teams (GLM/DeepSeek) see only `/spec` and `/conformance`,
-  which are clean by construction.
-- **Never send AGPLv3 prototype source to Fireworks or DeepSeek.** Prototype
-  content goes only to the Anthropic-hosted Spec agents. Ken's own MIT source is
-  fine to send anywhere.
+- Only the **T1 Opus Spec enclave** (Anthropic-hosted) may consult copyleft
+  references. The build teams (GLM/DeepSeek) see only `/spec` and
+  `/conformance`, which are clean by construction. The AGPLv3 prototype
+  (`yon`) is **not mounted** and is not consulted by anyone — there is zero
+  AGPLv3 contact, which is strictly cleaner than the alternative.
+- **Never send copyleft material to Fireworks or DeepSeek.** Only the
+  behavioral description in Ken's own words (the spec/conformance artifacts)
+  may pass to the build tier; never copyleft source text itself. Ken's own
+  MIT source is fine to send anywhere.
 - **Copyleft references (⚠ GPL/AGPL/CeCILL — `smtcoq`, `spot`, `jif`) are
   enclave-only too.** Only the T1 Opus Spec enclave (Architect / Spec) reads
   them, for *approach and behavior* only, under the leakage recheck

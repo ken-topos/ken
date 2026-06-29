@@ -12,9 +12,10 @@ behavioral playbooks live under [`agent/playbooks/`](agent/playbooks/).
    suite pass in CI.
 2. **Teams open PRs; teams never merge.** A single **Integrator** reviews and
    merges, then notifies affected team leaders of fresh `main`.
-3. **Clean room.** Implement from `/spec` and conformance tests — never from the
-   AGPLv3 prototype's source. See [`CLEAN-ROOM.md`](CLEAN-ROOM.md). Only **Team
-   Spec** reads the prototype.
+3. **Clean room.** Implement from `/spec` and conformance tests — never from
+   AGPLv3 or other copyleft source. See [`CLEAN-ROOM.md`](CLEAN-ROOM.md). The
+   **Spec enclave** (Opus, Anthropic-hosted) is the only team that may consult
+   copyleft references, and only for behavior/approach, never code structure.
 
 ## Branch & PR
 

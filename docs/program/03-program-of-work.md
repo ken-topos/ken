@@ -2,17 +2,19 @@
 
 Decomposed, team-sized work packages (WPs) for **Ken** — a new, MIT-licensed,
 Rust-hosted, interpreter-first verified topos language. Where a WP cites a
-prototype anchor, treat it as a *spec source* — behavior to understand and
-re-specify, never code to port (see `../../CLEAN-ROOM.md`).
+behavioral anchor from an earlier design, treat it as a pointer to `/spec` —
+behavior already captured in the spec, never code to port (see
+`../../CLEAN-ROOM.md`).
 
 **Conventions.** Size: S / M / L. Risk: ★ low, ★★ medium, ★★★ high (trust- or
 research-critical). Every WP leaves the conformance suite green, adds its own
 tests, and makes no claim a test has not confirmed. Branch per WP; merge on
 green. Definition of done = acceptance criteria + docs + conformance green.
 
-**Clean-room reminder:** any team that reads the AGPL prototype to *understand*
-behavior must hand off via the spec/tests (WS-F), not by pasting code. Teams
-writing Ken implementation code work from specs, not from prototype source.
+**Clean-room reminder:** all behavioral understanding flows from the spec and
+conformance tests, not from prototype material. Teams writing Ken
+implementation code work from `/spec`, never from AGPLv3 or other copyleft
+source.
 
 ---
 
@@ -58,19 +60,20 @@ and know exactly what they may and may not look at; license is MIT; CI builds an
 empty workspace; a `wp/<ID>` branch the publisher pushes is gated by required
 checks before merge. **Deps.** none.
 
-### F2 — Spec extraction from the prototype · L · ★★
-**Objective.** The legal-safe bridge: turn prototype *behavior* into a written
-spec Ken is implemented against. **Scope.** From study of the prototype +
-running it + its regression *behaviors*, write: core type-theory spec (terms,
-types, evaluation, conversion, universes), surface-language spec (syntax,
-modules, effects), and a **conformance test corpus** (input → expected behavior)
-that does not embed AGPL source. Mark every area where Ken will deliberately
-diverge (e.g. `Int` from day one, checked universes, no hard slot ceiling).
-**Deliverables.** `spec/` (language spec docs) + `conformance/` (black-box
-tests). **Acceptance.** The spec covers the core end-to-end; conformance tests
-run against the prototype binary as an oracle and pass; no AGPL source text
-appears in `spec/` or `conformance/`. **Deps.** F1. **Feeds.** all of WS-K,
-WS-V, WS-L.
+### F2 — Spec authoring (clean-room) · L · ★★ *(substantially complete)*
+**Objective.** The legal-safe bridge: author Ken's written spec and conformance
+corpus from permissive references and first principles. **Scope.** From study
+of permissive references (Lean, Agda, cooltt, smalltt, cctt), settled
+decisions, and first principles, write: core type-theory spec (terms, types,
+evaluation, conversion, universes), surface-language spec (syntax, modules,
+effects), and a **conformance test corpus** (input → expected behavior)
+containing no AGPLv3 source. Deliberately divergent design choices (e.g. `Int`
+from day one, checked universes, no hard slot ceiling) are recorded inline with
+rationale. **Deliverables.** `spec/` (language spec docs) + `conformance/`
+(black-box tests). **Acceptance.** The spec covers the core end-to-end;
+conformance cases are grounded in permissive references + first principles;
+no AGPLv3 text appears in `spec/` or `conformance/`. **Deps.** F1. **Feeds.**
+all of WS-K, WS-V, WS-L.
 
 ### F3 — Architecture Decision Records · S · ★
 **Objective.** Record decisions with rationale so teams don't relitigate.
@@ -204,12 +207,12 @@ First-class strings (Unicode-aware roadmap) and the core collections (list, map,
 set) over the content-addressed runtime. **Deps.** K1. **Parallel.** L2.
 
 ### L4 — Modules & package manager · M · ★★
-Import/module system + a registry-less, git-based package manager (the
-prototype's `yon.toml`/lockfile model is a good design reference). **Deps.** K1.
+Import/module system + a registry-less, git-based package manager (git-based
+pinning, per-package lockfile — design captured in `/spec`). **Deps.** K1.
 
 ### L5 — Effect tracking · M · ★★
-A statically-checked, inferred effect discipline (the prototype's `visits` is a
-design reference). Wire `pure`/`impure` to FFI. **Deps.** K1.
+A statically-checked, inferred effect discipline (design captured in `/spec`).
+Wire `pure`/`impure` to FFI. **Deps.** K1.
 
 ### L6 — `Bytes` & binary I/O · M · ★
 Byte-sequence type (slice/concat/hex/string conversions) + binary file ops.
@@ -378,7 +381,7 @@ Reproduce the conformance suite from the self-hosted build. **Deps.** S1.
 
 - **Team Foundation** → F1, F3, F4, then T1-schema; **Sec3** (supply-chain);
   supports F2.
-- **Team Spec** → F2 (the oracle bridge), then conformance maintenance
+- **Team Spec** → F2 (spec authoring + conformance corpus), then conformance maintenance
   throughout; **owns the copyleft-leakage recheck** (the conformance-validator,
   ≠ the spec-author — `CLEAN-ROOM.md`).
 - **Team Kernel** → K1 → K2 (with K3 alongside); **Sec4** (trust/audit); the
@@ -413,6 +416,7 @@ Each team gets its own mootup space; the Integrator's space is linked to all of
 them. PRs surface as mootup Events (PR URL as artifact), merge approvals as
 mootup Decisions. Synchronization is at the roadmap gates (G0–G8): no team
 advances past a gate until its acceptance criteria are met and the conformance
-suite is green on a fresh checkout. The clean-room boundary (Team Spec mediates
-prototype knowledge; implementation teams work from specs) holds at every step,
-and is enforced mechanically at the merge gate (`04-git-and-integration.md §7`).
+suite is green on a fresh checkout. The clean-room boundary (Spec enclave grounds the spec in permissive
+references and first principles; implementation teams work from the spec) holds
+at every step, and is enforced mechanically at the merge gate
+(`04-git-and-integration.md §7`).

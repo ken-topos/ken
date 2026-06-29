@@ -59,8 +59,17 @@ hand back to the implementer, or raise the behavioral question to Spec.
   origin/main`, and verify against the branch (not a stale worktree — the §1
   worktree/`main`-mismatch trap). Commit any small repairs to `wp/<ID>`, then
   return to your home branch.
-- Hand off on a clean gate: mention only the next actor (usually the leader, to
-  request the merge Decision), then stop.
+- **Hand off with a REAL mention, not prose** (sharpened: a QA approval that
+  *named* the leader in text but omitted the mention left a build QA-approved but
+  unmerged — the leader was never notified). On a clean gate, hand off by
+  **`post_response` that actually mentions the leader** — the leader's actor_id
+  in the `mentions: ["<actor_id>"]` array (resolve it from `list_participants` /
+  `orientation()`), type `review_request` — to request the merge Decision; on a
+  Blocked verdict, mention the **implementer** the same way. **Writing
+  "@leader" or "handoff → leader" in the message body is NOT a mention** — it
+  fires no notification and the next move never happens (the classic silent
+  stall, COORDINATION §2). Confirm the recipient is in your `mentions:` array
+  before you post, then stop.
 - A behavioral ambiguity you hit during verification is a **Spec** query
   (§11), not a guess.
 

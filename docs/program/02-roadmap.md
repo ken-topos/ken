@@ -32,17 +32,18 @@ be implemented *from behavior* rather than from AGPL source.
 **Entry:** decision to proceed (made).
 
 **Work packages:** F1 (name + MIT + repo/Rust workspace + IP hygiene process),
-F2 (**spec extraction**: language spec + conformance test corpus from the
-prototype), F3 (ADRs — record the locked decisions + the open ones: content
-store, syntax, effect model, Space model), F4 (math-core decision: reuse
-`mmgroup` BSD vs. reimplement; content-addressing design).
+F2 (**spec authoring**: language spec + conformance test corpus from permissive
+references and first principles), F3 (ADRs — record the locked decisions + the
+open ones: content store, syntax, effect model, Space model), F4 (math-core
+decision: reuse `mmgroup` BSD vs. reimplement; content-addressing design).
 
 **Exit gate G0:**
 - Repo exists: MIT `LICENSE`, Rust workspace skeleton, clean-room process doc,
-  contribution rules that keep AGPL source out of the implementation path.
+  contribution rules that keep AGPLv3 and copyleft source out of the
+  implementation path.
 - A written language spec v0 covers the core (types, terms, evaluation, the
-  kernel's type theory) with a conformance test corpus derived from prototype
-  *behavior* (not code).
+  kernel's type theory) with a conformance test corpus grounded in permissive
+  references and first principles.
 - ADRs record every architecture decision with rationale.
 
 ---

@@ -29,8 +29,9 @@ publishes and merges.
    compaction, `git reflog -10` / `status` / `branch -vv` + check mentions
    (COORDINATION §15) before trusting a summary.
 3. Implement **from `/spec`, `/conformance`, and the component design** —
-   **never from prototype source** (`../../../CLEAN-ROOM.md`). You run on GLM
-   via Fireworks; prototype source must never enter your context.
+   **never from AGPLv3 or other copyleft source** (`../../../CLEAN-ROOM.md`).
+   You run on GLM via Fireworks; copyleft material must never enter your
+   context.
 4. **Write tests that exercise the *property*, not just the obvious case**
    (COORDINATION §7; promoted from K1, where 45 green tests hid two soundness
    bugs). For any parameterized path, vary **every degree of freedom**: ≥2

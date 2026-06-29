@@ -4,9 +4,10 @@ A plan to build **Ken**: a new, **MIT-licensed**, Rust-hosted, interpreter-first
 **verified topos-oriented language for agentic development**, where
 machine-checkable correctness — not just tests — is the deployable guarantee.
 
-Ken is a **clean-room reimplementation**: Team Spec turns the prototype's
-*behavior* into a written spec, and all implementation is done from that spec —
-never from prototype source (see `../../CLEAN-ROOM.md`).
+Ken is a **clean-room reimplementation**: Team Spec authors and extends the
+spec from permissive references and first principles, and all implementation is
+done from that spec — never from AGPLv3 or other copyleft source (see
+`../../CLEAN-ROOM.md`).
 
 ## Read in this order
 
@@ -53,10 +54,11 @@ research-grade and kept off the critical path.
 
 ## Clean-room boundary (load-bearing)
 
-MIT requires that Ken not be a derivative of the AGPLv3 prototype. A dedicated
-**Team Spec** reads the prototype and produces a written spec + black-box
-conformance corpus (WS-F/F2); implementation teams work **from the spec**, with
-AGPL source kept out of their context. Math and ideas are reusable; code is not.
+MIT requires that Ken not be a derivative of any AGPLv3 source. The dedicated
+**Spec enclave** (Opus, Anthropic-hosted) authors and maintains the spec and
+conformance corpus from permissive references and first principles (WS-F/F2);
+implementation teams work **from the spec**, with copyleft material kept out of
+their context. Math and ideas are reusable; copyleft code is not.
 `mmgroup` is BSD-2 (reusable with attribution).
 
 ## Open decisions for the user (pre–Phase 1)

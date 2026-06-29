@@ -26,9 +26,9 @@ Governing rules (non-negotiable):
    GitHub identity: it pushes branches, reads CI, merges, and fetches `main`.
 3. **Teams never merge.** Teams produce commits on a local branch; the
    Integrator merges.
-4. **Clean-room is enforced at the merge gate.** No AGPL-derived code enters
-   `main`; only **Team Spec** mediates prototype knowledge (see
-   `01-strategy.md`).
+4. **Clean-room is enforced at the merge gate.** No AGPLv3 or other
+   copyleft-derived code enters `main`; the **Spec enclave** grounds the spec
+   in permissive references and first principles (see `01-strategy.md`).
 5. **One source of truth per concern.** Code/CI → GitHub. Coordination + the
    review/merge Decision → mootup. Don't duplicate authority.
 
@@ -225,13 +225,14 @@ merge, and branch protection refuses a merge whose required checks aren't green.
 The merge gate is where clean-room compliance is *mechanically* enforced:
 
 - Implementation work must derive from **spec sources** (`/spec`, conformance
-  tests), not prototype `file:line`. The merge Decision records this; the
-  Integrator checks it.
+  tests), not from any copyleft `file:line`. The merge Decision records this;
+  the Integrator checks it.
 - The CI **clean-room/provenance check** scans for copied AGPL text and flags
   license headers. (Design in F1; can start as a denylist + manual review.)
-- **Team Spec** is the only team that reads the AGPL prototype to produce specs;
-  its branches touch `/spec` and `/conformance`, never implementation crates.
-  This is visible in the team's branch/review boundaries.
+- The **Spec enclave** is the only team that may consult copyleft references
+  (for behavior and approach only, under the leakage recheck); its branches
+  touch `/spec` and `/conformance`, never implementation crates. This is
+  visible in the team's branch/review boundaries.
 
 ---
 

@@ -16,8 +16,9 @@ parallel agent teams.
 ## Decisions
 
 1. **New language, new name: Ken.** Not a fork of the prototype.
-2. **MIT license.** A clean-room reimplementation; the prototype is a behavioral
-   reference only (see `CLEAN-ROOM.md`).
+2. **MIT license.** A clean-room reimplementation; Yon is the *excluded
+   inspiration* — not a consultable reference in any environment, giving zero
+   AGPLv3 contact (see `CLEAN-ROOM.md`).
 3. **Host language: Rust.**
 4. **Interpreter-first.** The initial backend is a tree-walking/bytecode
    interpreter that defines reference semantics. Native codegen (Cranelift or

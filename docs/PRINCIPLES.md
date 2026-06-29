@@ -182,10 +182,10 @@ the kernel checks (`31 §1a`, no homoglyph backdoor).
 
 - **Clean-room, and skeptical of inherited artifacts.** Design from first
   principles + the analysis digest + permissive references *understood, never
-  copied*; the AGPL prototype is off-limits except to the Spec enclave
-  (`CLEAN-ROOM.md`, `CLAUDE.md`). Treat any inherited candidate (including the
-  prototype's surface) with skepticism — it may reflect uncritical wandering,
-  not a considered choice.
+  copied*; AGPLv3 and copyleft material is off-limits except to the Spec
+  enclave for behavior/approach only (`CLEAN-ROOM.md`, `CLAUDE.md`). Treat
+  any inherited design candidate with skepticism — it may reflect uncritical
+  wandering, not a considered choice.
 - **Record decisions where they live.** Genuine forks →
   `spec/90-open-decisions.md`; architecturally significant ones → an ADR under
   `docs/adr/`; the deciding authority is the operator. Wrap markdown at 80
