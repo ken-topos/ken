@@ -107,7 +107,8 @@ brief** — the implementer should execute mostly mechanically, not design
 (operator, 2026-06-29). The release sequence is **fixed, in this order**:
 
 1. **Steward authors the brief** at `docs/program/wp/<ID>-<slug>.md`, on the WP
-   branch `wp/<ID>-<slug>` (`git branch wp/<ID>-<slug> main`). It must: pin every
+   branch `wp/<ID>-<slug>` (`git branch wp/<ID>-<slug> origin/main` — the fetched
+   ref, never stale local `main`). It must: pin every
    **settled** decision as a *fixed input* (cite `/spec` + the OQ register; never
    leave a decided fork "open" for a weaker model to relitigate — that is the
    failure mode); give a **mandated deliverable outline** (each section ending in
