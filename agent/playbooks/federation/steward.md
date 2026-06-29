@@ -141,6 +141,31 @@ brief** — the implementer should execute mostly mechanically, not design
    continues `wp/<ID>-<slug>` for the implementation. (Leaders do **not** compact
    their members — compaction is yours; see below.)
 
+**A kickoff is a LIVE signal until you explicitly retract it (learned twice:
+F4, K1).** If you kick a WP off to a team and then **hold, re-scope, or
+re-route** it, the original kickoff's mention **stays unread in that team's
+queue** and fires whenever it is next *surfaced* — a resume, a get_mentions
+check, or an operator nudge. (K1: my 04:30 kickoff's notification never reached
+kernel-leader's session — see the notification caveat below — so it sat unread
+until the operator surfaced it in tmux, and Kernel then ran the **old** scope
+because my re-route had mentioned only spec-leader, not it.) So: **when you
+supersede a kickoff, mention the originally-kicked-off team and stand them
+down** ("disregard the earlier kickoff; K1 now goes via spec-leader; quiesce
+until I re-release"). Never leave a stale kickoff live. Mention discipline (§2)
+says mention whoever's next move it is — when re-routing, the *stand-down* is
+the old team's "next move," so they must be mentioned too.
+
+**Notification delivery is best-effort — a stored mention may not wake the
+target (operator-observed, K1).** A mention can be correctly recorded (right
+actor_id) yet **never notify** the agent's session — e.g. if it lands while that
+session is bouncing in a fleet restart. The mention isn't lost (it's queryable),
+but the push is. Two consequences: (1) on any resume/re-onboard, **check
+unread mentions** (`orientation`'s unread count / `get_mentions`) so a missed
+handoff is caught — this is in COORDINATION §15; (2) the watchdog "handed-off
+but silent" pattern (§7, COORDINATION §13) is load-bearing — a mentioned agent
+that doesn't respond may simply not have been notified, so **re-mention** before
+assuming a stall.
+
 So the pipeline is **Steward (frame) → spec-leader (elaborate) → build team
 (execute)** — each Opus enclave layer adds rigor before the weaker model
 receives it. *Steward-internal* operational docs that no build team needs to
