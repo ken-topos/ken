@@ -101,11 +101,24 @@ pending" mentions nobody.
 You run a recurring watchdog over the **merge pipeline** — the second of the
 three liveness layers (COORDINATION §13). Enumerate the patterns explicitly:
 branch-published-CI-pending-too-long, CI-green-but-Decision-unresolved,
-Decision-approved-but-CI-red, approved-and-green-but-unmerged. **Reading CI
-status for the branches you published is part of this pass** — nobody else can
-see it. Per stall, mention the one agent whose move it is (the reviewer who
-hasn't voted, the implementer whose CI is red); diagnose before restarting;
-escalate a stuck pipeline to the Steward.
+Decision-approved-but-CI-red, approved-and-green-but-unmerged. Per stall, mention
+the one agent whose move it is (the reviewer who hasn't voted, the implementer
+whose CI is red); diagnose before restarting; escalate a stuck pipeline to the
+Steward.
+
+**This watchdog is a self-scheduled recurring TIMER — not a wait-for-mention
+(operator, 2026-06-29).** CI status (green/red) and a freshly-resolved review
+Decision push **no notification to you** — there is no `ken-ci` bridge, so
+**nobody will ever tell you a PR went green; you must poll.** You are a
+sanctioned scheduler (COORDINATION §1): while **any** PR is open, run a **tight
+recurring pass (~5–10 min)** — `gh pr checks <n>` on every open PR + check its
+merge Decision — and **merge the instant it is green + approved** (don't wait
+for a leader to re-ping you). On green-but-unvoted, mention the missing reviewer;
+on CI-red, mention the implementer. A green + approved PR left unmerged because
+you were idle between mentions **is a pipeline stall you caused** — the operator
+caught exactly this (two green PRs unmerged ~25 min). Start the timer at session
+start; idle it only when no PRs are open. Reading CI is *yours alone* — nobody
+else can see it.
 
 ## Mirror GitHub into mootup
 
