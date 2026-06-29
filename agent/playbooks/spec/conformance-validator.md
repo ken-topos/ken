@@ -26,6 +26,15 @@ implementations across the whole federation. Read `../../COORDINATION.md`,
   prototype oracle before locking it; a case that disagrees with the oracle is
   either a bug in the case or a real divergence to record — never silently "fix"
   to match.
+- **Precise expected results — pin the level (promoted K2).** A case's expected
+  result must assert the **exact** type/level (e.g. `Omega_2`, not a loose
+  "Omega, level-poly") — a loose level annotation hides impredicativity-by-
+  cumulativity being baked into an implementation and isn't precise enough to
+  code from. **Tag deferred-seam cases at elaboration time:** when `/spec` defers
+  a computation to a later phase, flag which seed cases exercise the deferred
+  behavior and tag them (`[K2c]`, …) **in the seed then** — not at build-review
+  (K2 shipped two seeds expecting reductions that needed K2c's NbE, caught only
+  at the merge review).
 
 ## Discipline
 
