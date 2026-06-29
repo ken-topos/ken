@@ -1783,3 +1783,191 @@ fn k2_omega_skip_prop_args() {
     let rhs = Term::app(Term::var(2), Term::var(0)); // f q
     assert!(convert(&env, &ctx, &Term::var(3), &lhs, &rhs));
 }
+
+// ===========================================================================
+// K2 — Architect review (dec_7xpn5ywf4ebfw) adversarial regressions.
+// Three seams the green corpus never exercised (same closed-input-avoidance
+// class as K1's subst_tel): the closed-`Empty` exploit (now rejected), the
+// index-change cast (now stuck), the dependent-telescope Eq (now stuck).
+// ===========================================================================
+
+/// `Bool` as an inductive-former term (from the std prelude).
+fn bool_ty(s: &Std) -> Term {
+    Term::indformer(s.bool_, vec![])
+}
+/// `Vec A n` (level-polymorphic former applied to `A` and index `n`).
+fn vec_ty(s: &Std, a: Term, n: Term) -> Term {
+    Term::app(Term::app(Term::indformer(s.vec_, vec![lvar()]), a), n)
+}
+/// `vcons A n a xs` (the Vec constructor spine: param A, args n a xs).
+fn vcons(s: &Std, a: Term, n: Term, hd: Term, tl: Term) -> Term {
+    Term::app(
+        Term::app(
+            Term::app(Term::app(Term::constructor(s.vcons, vec![lvar()]), a), n),
+            hd,
+        ),
+        tl,
+    )
+}
+
+// --- Seam 3: non-Ω quotient elim MUST be rejected (closed-`Empty` exploit) --
+// The Architect's exploit: A:=Bool, R:=total, M:=λ_.Bool (Type-target), f:=λx.x,
+// r:=any. `check_respect` used to raw-well-form `r` and `whnf` reduced
+// `elim_/ M f r [a] ⇝ f a` unconditionally → `cong h e : Eq Bool true false ⇝
+// Empty`. Now `infer_quot_elim` rejects a Type-codomain motive outright.
+#[test]
+fn k2_seam3_nonomega_quot_elim_rejected() {
+    let (env, s) = std_env();
+    let bool_ = bool_ty(&s);
+    let mut ctx = Context::new();
+    // R : Bool → Bool → Ω
+    ctx.push(Term::pi(
+        bool_.clone(),
+        Term::pi(bool_.clone(), Term::Omega(Level::zero())),
+    ));
+    // M : (z:Bool/R) → Type 0   (NON-Ω codomain — the exploit motive)
+    ctx.push(Term::pi(
+        Term::Quot(Box::new(bool_.clone()), Box::new(Term::var(0))), // Bool/R (R at 0)
+        Term::Type(Level::zero()),
+    ));
+    // f : (x:Bool) → M [x]
+    ctx.push(Term::pi(
+        bool_.clone(),
+        Term::app(Term::var(1), Term::QuotClass(Box::new(Term::var(0)))),
+    ));
+    // q : Bool/R   (R now at 2)
+    ctx.push(Term::Quot(Box::new(bool_.clone()), Box::new(Term::var(2))));
+    // Final: q=0, f=1, M=2, R=3.
+    let elim = Term::QuotElim {
+        motive: Box::new(Term::var(2)),               // M  (Type-codomain)
+        method: Box::new(Term::var(1)),               // f
+        respect: Box::new(Term::Type(Level::zero())), // dummy (rejected before use)
+        scrut: Box::new(Term::var(0)),                // q : Bool/R
+    };
+    assert!(
+        infer(&env, &ctx, &elim).is_err(),
+        "non-Ω (Type-target) quotient elim MUST be rejected — it admits the \
+         closed-`Empty` exploit (Architect dec_7xpn5ywf4ebfw seam 3)"
+    );
+}
+
+// --- Seam 3 (positive): Ω-target quotient elim ACCEPTS (respect-free) --------
+// An Ω-codomain motive type-checks (the target is a proposition ⇒ respect is
+// free by Ω-PI, 16 §5). `infer` returns `M q`.
+#[test]
+fn k2_seam3_omega_quot_elim_accepted() {
+    let (env, s) = std_env();
+    let bool_ = bool_ty(&s);
+    let mut ctx = Context::new();
+    ctx.push(Term::pi(
+        bool_.clone(),
+        Term::pi(bool_.clone(), Term::Omega(Level::zero())),
+    ));
+    // M : (z:Bool/R) → Ω_0   (Ω codomain — respect-free)
+    ctx.push(Term::pi(
+        Term::Quot(Box::new(bool_.clone()), Box::new(Term::var(0))),
+        Term::Omega(Level::zero()),
+    ));
+    ctx.push(Term::pi(
+        bool_.clone(),
+        Term::app(Term::var(1), Term::QuotClass(Box::new(Term::var(0)))),
+    ));
+    ctx.push(Term::Quot(Box::new(bool_.clone()), Box::new(Term::var(2))));
+    let elim = Term::QuotElim {
+        motive: Box::new(Term::var(2)),
+        method: Box::new(Term::var(1)),
+        respect: Box::new(Term::Type(Level::zero())),
+        scrut: Box::new(Term::var(0)),
+    };
+    assert_eq!(
+        infer(&env, &ctx, &elim),
+        Ok(Term::app(Term::var(2), Term::var(0)))
+    );
+}
+
+// --- Seam 1: cast across a family-index change is STUCK (not best-effort) ----
+// `cast (Vec A n) (Vec A m) e (vcons A n a xs)` with n≢m: the result-index
+// transport (dependent telescope) is the hard OTT core, not built in K2, so the
+// cast is a *neutral* `Cast` — NOT a rewritten `vcons m …` (which the unsound
+// `subst_index` best-effort used to emit, risking subject reduction).
+#[test]
+fn k2_seam1_cast_inductive_index_change_stuck() {
+    let (env, s) = std_env();
+    let mut ctx = Context::new();
+    ctx.push(Term::Type(Level::zero())); // A : Type 0  (A=0)
+    ctx.push(Term::indformer(s.nat, vec![])); // n : Nat  (n=0, A=1)
+    ctx.push(Term::indformer(s.nat, vec![])); // m : Nat  (m=0, n=1, A=2)
+    ctx.push(Term::var(2)); // a : A  (a=0, m=1, n=2, A=3)
+    ctx.push(vec_ty(&s, Term::var(3), Term::var(2))); // xs : Vec A n  (A=3,n=2 at push time)
+                                                      // e : Eq Type (Vec A n) (Vec A m)  (Vec A n : Type (max 0 0)=Type 0)
+    ctx.push(Term::Eq(
+        Box::new(Term::Type(Level::zero())),
+        Box::new(vec_ty(&s, Term::var(4), Term::var(3))), // Vec A n  (A=4,n=3 at push time)
+        Box::new(vec_ty(&s, Term::var(4), Term::var(2))), // Vec A m  (A=4,m=2 at push time)
+    ));
+    // Final: e=0, xs=1, a=2, m=3, n=4, A=5.
+    let cast = Term::Cast(
+        Box::new(vec_ty(&s, Term::var(5), Term::var(4))), // Vec A n
+        Box::new(vec_ty(&s, Term::var(5), Term::var(3))), // Vec A m
+        Box::new(Term::var(0)),                           // e
+        Box::new(vcons(
+            &s,
+            Term::var(5),
+            Term::var(4),
+            Term::var(2),
+            Term::var(1),
+        )),
+        // vcons A n a xs
+    );
+    let result = whnf(&env, &ctx, &cast);
+    assert!(
+        matches!(result, Term::Cast(..)),
+        "cast across a family-index change must be STUCK (neutral Cast), not a \
+         rewritten constructor — got {:?}",
+        result
+    );
+}
+
+// --- Seam 1b: Eq at an inductive with a dependent telescope is STUCK --------
+// `Eq (Vec A (suc n)) (vcons A n a xs) (vcons A m a' xs')`: the `xs` arg's type
+// `Vec A n` depends on the earlier arg `n`, which differs from `m`, so the
+// dependent-telescope `cast` is needed — not built in K2 ⇒ the `Eq` is a
+// *neutral* `Eq`, not a `Σ` reduct with dangling de Bruijn indices.
+#[test]
+fn k2_seam1b_eq_inductive_dependent_stuck() {
+    let (env, s) = std_env();
+    let mut ctx = Context::new();
+    ctx.push(Term::Type(Level::zero())); // A  (A=0)
+    ctx.push(Term::indformer(s.nat, vec![])); // n  (n=0, A=1)
+    ctx.push(Term::indformer(s.nat, vec![])); // m  (m=0, n=1, A=2)
+    ctx.push(Term::var(2)); // a : A  (a=0, m=1, n=2, A=3)
+    ctx.push(Term::var(3)); // a' : A  (a'=0, a=1, m=2, n=3, A=4)
+    ctx.push(vec_ty(&s, Term::var(4), Term::var(3))); // xs : Vec A n  (A=4,n=3 at push time)
+    ctx.push(vec_ty(&s, Term::var(5), Term::var(3))); // xs' : Vec A m  (A=5,m=3 at push time)
+                                                      // Final: xs'=0, xs=1, a'=2, a=3, m=4, n=5, A=6.
+    let suc_n = Term::app(ctor(s.suc), Term::var(5)); // suc n  (n=5)
+    let eq = Term::Eq(
+        Box::new(vec_ty(&s, Term::var(6), suc_n)), // Vec A (suc n)
+        Box::new(vcons(
+            &s,
+            Term::var(6),
+            Term::var(5),
+            Term::var(3),
+            Term::var(1),
+        )), // vcons A n a xs
+        Box::new(vcons(
+            &s,
+            Term::var(6),
+            Term::var(4),
+            Term::var(2),
+            Term::var(0),
+        )), // vcons A m a' xs'
+    );
+    let result = whnf(&env, &ctx, &eq);
+    assert!(
+        matches!(result, Term::Eq(..)),
+        "Eq at an inductive with a dependent telescope must be STUCK (neutral \
+         Eq), not a Σ reduct — got {:?}",
+        result
+    );
+}

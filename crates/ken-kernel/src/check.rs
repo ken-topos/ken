@@ -775,10 +775,34 @@ fn infer_quot_elim(
             ))
         }
     };
-    if !matches!(whnf(env, ctx, &m_cod), Term::Type(_)) {
-        return Err(KernelError::BadEliminator(
-            "motive's codomain is not Type ℓ'".into(),
-        ));
+    // Motive codomain sort ⇒ the elimination target's kind (`16 §5`).
+    //   - Ω_l codomain ⇒ the target `M q` is a proposition ⇒ the respect
+    //     condition is **free** by Ω-PI (any two results are definitionally
+    //     equal) — accept (`16 §5` "respect-free elimination").
+    //   - Type ℓ codomain ⇒ the target is a type, and respect is the *entire*
+    //     soundness content of quotient elim into a non-proposition (without it,
+    //     a non-respecting `f` observes the representative — `cong h e` then
+    //     yields `Eq Bool true false ⇝ Bottom`, a closed `Empty`). Verifying the
+    //     respect obligation needs the `cong`/`cast` schema (the hard OTT core);
+    //     K2 does **not** build it, so a Type-target motive is **rejected**.
+    //     (Type-target quotient elim is deferred to K2c/follow-up; Ω-target is
+    //     the sound, respect-free K2 deliverable. — Architect review,
+    //     dec_7xpn5ywf4ebfw, seam 3.)
+    match whnf(env, ctx, &m_cod) {
+        Term::Omega(_) => {} // respect-free target — accept
+        Term::Type(_) => {
+            return Err(KernelError::BadEliminator(
+                "K2 quotient elimination into a Type (non-Ω) target requires the \
+                 respect obligation (the cong/cast schema), not verified in K2 — \
+                 use an Ω-target motive (respect-free, 16 §5). Deferred to K2c."
+                    .into(),
+            ))
+        }
+        _ => {
+            return Err(KernelError::BadEliminator(
+                "motive's codomain is not a type (Type ℓ' or Ω_l)".into(),
+            ))
+        }
     }
     // method f : (x:A) → M [x].  `[x]` = `QuotClass(x)` (also the truncation
     // intro `|x|`, which the i-reduction treats identically).
@@ -787,43 +811,11 @@ fn infer_quot_elim(
         Term::app(weaken(motive, 1), Term::QuotClass(Box::new(Term::var(0)))),
     );
     check(env, ctx, method, &expected_method_ty)?;
-    // Respect proof (free when the target is in Ω).
-    check_respect(env, ctx, motive, method, respect, &scrut_ty, &underlying_a)?;
+    // Respect proof: Ω-target only (reached here) ⇒ proof-irrelevant by Ω-PI;
+    // require `r` to be at least well-scoped (its content is irrelevant).
+    raw_well_formed(ctx, respect)?;
     // Result: M scrut.
     Ok(Term::app(motive.clone(), scrut.clone()))
-}
-
-/// Check the quotient-eliminator respect proof (`16 §5`): `r : (x y:A) → R x y
-/// → Eq (M [x]) (f x) (cast (M [x]) (M [y]) (cong M (R x y)) (f y))`. When the
-/// target `M [x] : Ω`, the obligation is trivially true by Ω-PI and `r` is
-/// accepted (respect-free, `16 §5`). For a non-Ω target, the full obligation
-/// must be discharged; this build is involved (it needs `cong`/`cast` schemas),
-/// so the non-Ω path currently only raw-well-forms `r` — a **soundness TODO**
-/// flagged for the Architect (the conformance `quotient-elim` provides a correct
-/// `r`, so the i-reduction holds; full respect verification is the gap).
-fn check_respect(
-    env: &GlobalEnv,
-    ctx: &Context,
-    motive: &Term,
-    method: &Term,
-    respect: &Term,
-    scrut_ty: &Term,
-    _underlying_a: &Term,
-) -> KernelResult<()> {
-    let _ = (env, ctx, method, scrut_ty);
-    // Target kind: the motive's codomain `M [z]` (under z:scrut_ty) — Ω ⇒ free.
-    let m_ty = infer(env, ctx, motive)?;
-    let m_cod = match &whnf(env, ctx, &m_ty) {
-        Term::Pi(_, cod) => (*cod).clone(),
-        _ => return Ok(()), // unreachable (infer_quot_elim already checked)
-    };
-    if matches!(whnf(env, ctx, &m_cod), Term::Omega(_)) {
-        // Respect-free (Ω-PI): accept `r` (proof-irrelevant).
-        return Ok(());
-    }
-    // Non-Ω target: the respect obligation must hold. Full verification needs
-    // the `cong`/`cast` schema; raw-well-form `r` for now (TODO soundness).
-    raw_well_formed(ctx, respect)
 }
 
 // --- declaration admission (`18 §4`) ---------------------------------------

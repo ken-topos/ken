@@ -17,7 +17,7 @@
 use crate::conv::{convert_type, whnf};
 use crate::env::{Context, GlobalEnv};
 use crate::inductive::peel_app;
-use crate::subst::{apply_args, subst0, subst_levels, subst_outer, weaken};
+use crate::subst::{apply_args, subst0, subst_levels, subst_outer, subst_tel, weaken};
 use crate::term::Term;
 
 // --- prelude proposition terms (`16 §1.3`) ---
@@ -223,45 +223,45 @@ fn eq_at_inductive(env: &GlobalEnv, ctx: &Context, ty: &Term, a: &Term, b: &Term
     // Right-nested Σ (conjunction), `Top` the unit. A nullary ctor ⇒ `Top`.
     let mut acc = top_term(env);
     for j in (0..n).rev() {
-        let a_ty_j = subst_levels(
+        // `A_j` with the `m` params substituted; the `j` earlier-arg binders
+        // (de Bruijn 0..j-1) remain. Instantiate them with the actual earlier
+        // args — `a_bar[..j]` for the source, `b_bar[..j]` for the target — via
+        // `subst_tel` (the K1-fixed telescope subst). This is what makes the
+        // dependent-telescope detection sound: a non-dependent position has
+        // `a_ty_j ≡ b_ty_j` (the earlier-arg subst is irrelevant), while a
+        // dependent one (whose type mentions a differing earlier arg) does not.
+        let a_ty_tpl = subst_levels(
             &subst_outer(&c.args[j], m, a_param_args, j),
             &ind2.level_params,
             &a_level_args,
         );
-        let b_ty_j = subst_levels(
+        let b_ty_tpl = subst_levels(
             &subst_outer(&c.args[j], m, b_param_args, j),
             &ind2.level_params,
             &a_level_args,
         );
-        let conjunct = if convert_type(env, ctx, &a_ty_j, &b_ty_j) {
-            // Non-dependent position: `A_j[a-bar] ≡ A_j[b-bar]`, so `a_j` is
-            // already at the comparison type — no transport (an identity `cast`
-            // here would sit inside the `Eq` and not be head-reduced, leaving a
-            // spurious `cast` in the reduct).
-            Term::Eq(
-                Box::new(b_ty_j.clone()),
-                Box::new(a_bar[j].clone()),
-                Box::new(b_bar[j].clone()),
-            )
-        } else {
-            // Dependent telescope: transport `a_j` along the accumulated
-            // earlier-argument equalities. The proof is the congruence of the
-            // family `A_j`; left as a `refl` placeholder (the `cast` is then
-            // stuck — sound). K2 conformance `eq-inductive-same-ctor` uses
-            // `Nat`/`suc` (non-dependent), so this branch is not exercised there.
-            let proof = Term::Refl(Box::new(a_ty_j.clone()));
-            let a_j_cast = Term::Cast(
-                Box::new(a_ty_j.clone()),
-                Box::new(b_ty_j.clone()),
-                Box::new(proof),
-                Box::new(a_bar[j].clone()),
-            );
-            Term::Eq(
-                Box::new(b_ty_j.clone()),
-                Box::new(a_j_cast),
-                Box::new(b_bar[j].clone()),
-            )
-        };
+        let a_ty_j = subst_tel(&a_ty_tpl, &a_bar[..j]);
+        let b_ty_j = subst_tel(&b_ty_tpl, &b_bar[..j]);
+        if !convert_type(env, ctx, &a_ty_j, &b_ty_j) {
+            // Dependent telescope: `A_j` depends on an earlier arg that differs
+            // between the two scrutinees, so `a_j` and `b_j` live at different
+            // types and must be compared after a `cast` along the earlier-arg
+            // equalities. That transport is the hard OTT core, **not** built in
+            // K2 — so the `Eq` is **stuck** (neutral), not a best-effort
+            // reduct with dangling de Bruijn indices. (The prior code used
+            // `subst_outer` alone, leaving earlier-arg indices dangling and
+            // emitting an ill-typed reduct. — Architect review,
+            // dec_7xpn5ywf4ebfw, seam 1b.)
+            return None;
+        }
+        // Non-dependent position: `a_ty_j ≡ b_ty_j`, so `a_j` is already at the
+        // comparison type — no transport (an identity `cast` here would sit
+        // inside the `Eq` and not be head-reduced, leaving a spurious `cast`).
+        let conjunct = Term::Eq(
+            Box::new(b_ty_j.clone()),
+            Box::new(a_bar[j].clone()),
+            Box::new(b_bar[j].clone()),
+        );
         acc = Term::sigma(conjunct, acc);
     }
     Some(strip_trailing_top(acc))
@@ -425,36 +425,58 @@ fn cast_at_inductive(
         return None;
     }
     let c = &ind2.constructors[k];
-    let ctor_param_args = &ctor_args[..m];
     let ctor_arg_vals = &ctor_args[m..];
     if ctor_arg_vals.len() != c.args.len() {
         return None; // arity guard
     }
-    let i_bar = &a_args[m..];
-    let j_bar = &b_args[m..];
-    let mut new_args: Vec<Term> = ctor_param_args.to_vec();
+    let a_param_args = &a_args[..m]; // source family params (from `a = D p̄ ī`)
+    let b_param_args = &b_args[..m]; // target family params (from `b = D p̄' j̄`)
+    let i_bar = &a_args[m..]; // source result indices
+    let j_bar = &b_args[m..]; // target result indices
+                              // Index change ⇒ the result-index transport (the dependent telescope:
+                              // arg 0 `n` → `m`, which shifts later args' types) is needed. That transport
+                              // is the hard OTT core, **not** built in K2 — so a genuine index change is
+                              // **stuck** (sound), not a best-effort reduct. (The prior `subst_index`
+                              // rewrite was unsound: constructor arg types mention *earlier args*, not
+                              // family indices, so it was a no-op that left the reduct ill-typed. —
+                              // Architect review, dec_7xpn5ywf4ebfw, seam 1.)
+    for (ix, jx) in i_bar.iter().zip(j_bar) {
+        if !convert_type(env, ctx, ix, jx) {
+            return None; // index change — stuck (K2c)
+        }
+    }
+    // Indices agree ⇒ only a param change could remain (`cast_reduce`'s
+    // regularity already handled the `a ≡ b` case). Transport each arg from its
+    // source-param type to its target-param type; if any arg type *depends on*
+    // the differing param (so the source and target arg types are not
+    // convertible), the transport is again the dependent core — stuck.
+    let mut new_args: Vec<Term> = b_param_args.to_vec(); // target params in the reduct
     for (j, val) in ctor_arg_vals.iter().enumerate() {
-        let a_ty_j = subst_levels(
-            &subst_outer(&c.args[j], m, ctor_param_args, j),
+        // Source/target arg types: `A_j` with params substituted (source vs
+        // target), then the `j` earlier-arg binders instantiated with the
+        // *same* earlier args `ctor_arg_vals[..j]` (a param-only change does
+        // not alter the arg values, only their types). `subst_tel` (the K1-fixed
+        // telescope subst) replaces the earlier-arg de Bruijn indices so
+        // `convert_type` compares the real types, not dangling indices against
+        // `ctx`.
+        let a_ty_tpl = subst_levels(
+            &subst_outer(&c.args[j], m, a_param_args, j),
             &ind2.level_params,
             &level_args,
         );
-        // Rewrite family-index references in A_j from i-bar to j-bar (so
-        // `xs : Vec A n` becomes `xs : Vec A m` when casting `Vec A n`→`Vec A m`).
-        let b_ty_j = subst_index(a_ty_j.clone(), i_bar, j_bar);
-        let proof = if convert_type(env, ctx, &a_ty_j, &b_ty_j) {
-            Term::Refl(Box::new(a_ty_j.clone()))
-        } else {
-            // Dependent index change: transport along `e`'s index equalities.
-            // Left as `refl` placeholder (the cast is then stuck — sound).
-            Term::Refl(Box::new(a_ty_j.clone()))
-        };
-        new_args.push(Term::Cast(
-            Box::new(a_ty_j),
-            Box::new(b_ty_j),
-            Box::new(proof),
-            Box::new(val.clone()),
-        ));
+        let b_ty_tpl = subst_levels(
+            &subst_outer(&c.args[j], m, b_param_args, j),
+            &ind2.level_params,
+            &level_args,
+        );
+        let a_ty_j = subst_tel(&a_ty_tpl, &ctor_arg_vals[..j]);
+        let b_ty_j = subst_tel(&b_ty_tpl, &ctor_arg_vals[..j]);
+        if !convert_type(env, ctx, &a_ty_j, &b_ty_j) {
+            return None; // arg type depends on the differing param — stuck
+        }
+        // `a_ty_j ≡ b_ty_j` ⇒ `val : a_ty_j` is also `: b_ty_j` (definitional) ⇒
+        // identity transport.
+        new_args.push(val.clone());
     }
     Some(apply_args(
         Term::Constructor {
@@ -463,84 +485,6 @@ fn cast_at_inductive(
         },
         &new_args,
     ))
-}
-
-/// Substitute source-index expressions `i_bar` with target-index expressions
-/// `j_bar` throughout a constructor-argument type (a family index `n` is
-/// rewritten to `m`). Syntactic best-effort, pairing indices positionally;
-/// sound because `cast` computes from endpoints.
-fn subst_index(ty: Term, i_bar: &[Term], j_bar: &[Term]) -> Term {
-    if i_bar.is_empty() || j_bar.is_empty() {
-        return ty;
-    }
-    let mut cur = ty;
-    for (i_expr, j_expr) in i_bar.iter().zip(j_bar) {
-        cur = rewrite_subterm(&cur, i_expr, j_expr);
-    }
-    cur
-}
-
-/// Replace occurrences of `from` with `to` inside `ty` (structural rewrite of
-/// equal sub-terms — suitable for closed index expressions).
-fn rewrite_subterm(ty: &Term, from: &Term, to: &Term) -> Term {
-    if ty == from {
-        return to.clone();
-    }
-    let children: Vec<Term> = ty
-        .children()
-        .iter()
-        .map(|c| rewrite_subterm(c, from, to))
-        .collect();
-    rebuild_with_children(ty, children)
-}
-
-/// Rebuild a term with replaced children (same head, new children in
-/// [`Term::children`] order).
-fn rebuild_with_children(head: &Term, children: Vec<Term>) -> Term {
-    match head {
-        Term::Type(_)
-        | Term::Omega(_)
-        | Term::Var(_)
-        | Term::Const { .. }
-        | Term::IndFormer { .. }
-        | Term::Constructor { .. } => head.clone(),
-        Term::Pi(_, _) => Term::pi(children[0].clone(), children[1].clone()),
-        Term::Lam(_, _) => Term::lam(children[0].clone(), children[1].clone()),
-        Term::Sigma(_, _) => Term::sigma(children[0].clone(), children[1].clone()),
-        Term::Pair(_, _) => Term::pair(children[0].clone(), children[1].clone()),
-        Term::App(_, _) => Term::app(children[0].clone(), children[1].clone()),
-        Term::Ascript(_, _) => {
-            Term::Ascript(Box::new(children[0].clone()), Box::new(children[1].clone()))
-        }
-        Term::Proj1(_) => Term::proj1(children[0].clone()),
-        Term::Proj2(_) => Term::proj2(children[0].clone()),
-        Term::Refl(_) => Term::Refl(Box::new(children[0].clone())),
-        Term::Eq(_, _, _) => Term::Eq(
-            Box::new(children[0].clone()),
-            Box::new(children[1].clone()),
-            Box::new(children[2].clone()),
-        ),
-        Term::Cast(_, _, _, _) => Term::Cast(
-            Box::new(children[0].clone()),
-            Box::new(children[1].clone()),
-            Box::new(children[2].clone()),
-            Box::new(children[3].clone()),
-        ),
-        Term::J(_, _, _) => Term::J(
-            Box::new(children[0].clone()),
-            Box::new(children[1].clone()),
-            Box::new(children[2].clone()),
-        ),
-        Term::Quot(_, _) => {
-            Term::Quot(Box::new(children[0].clone()), Box::new(children[1].clone()))
-        }
-        Term::QuotClass(_) => Term::QuotClass(Box::new(children[0].clone())),
-        Term::Trunc(_) => Term::Trunc(Box::new(children[0].clone())),
-        Term::TruncProj(_) => Term::TruncProj(Box::new(children[0].clone())),
-        // Let/Elim/QuotElim carry fields not recovered by `children` alone; leave
-        // unchanged (indices/params are closed here).
-        Term::Let { .. } | Term::Elim { .. } | Term::QuotElim { .. } => head.clone(),
-    }
 }
 
 /// `cast (A1/R) (A2/S) e [a] ⇝ [cast A1 A2 e0 a]` where `e0 = e.1` is the
