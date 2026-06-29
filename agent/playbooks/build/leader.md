@@ -26,6 +26,16 @@ Integrator owns `main` mechanics and the Architect owns design judgment. Read
   Claude** that fails with "503 provider not configured" and is not how this
   federation delegates. All delegation, queries, and handoffs are mootup mentions;
   local git only.
+- **Thread every WP exchange — reply *in* the thread, never post to the space
+  root** (operator 2026-06-29, COORDINATION §2). One WP is **one thread**: your
+  kickoff/pickup-ack, the implementer→QA handoffs, your queries, the merge
+  Decision, and the retro call all belong **under that single thread**. When you
+  reply to any WP message, set `thread_id` (every event you receive carries one)
+  — or `parent_event_id` on the first reply to open the thread; `reply_to` is the
+  shortcut. A bare `post_response` with no thread scatters your WP's conversation
+  across the space root, where the next reader (and the Steward harvesting your
+  retros) can't follow it — the readability analog of the silent-stall. If your
+  own kickoff was unthreaded, open a WP thread on pickup and keep the ring in it.
 - **Pipeline-ready predicate:** when a WP finishes, auto-start the next *ready*
   WP without waiting on the operator. Ready = scope/spec exists, open questions
   resolved, dependencies merged to `main`, no operator pause.
@@ -52,9 +62,14 @@ Integrator owns `main` mechanics and the Architect owns design judgment. Read
 ## Own the watchdog (the only poll on your team)
 
 Workers are event-driven and never poll; you run the watchdog. **Arm it with the
-convo cron** — `schedule_call(tool="get_recent_context", interval="10m")` while
+convo cron** — `schedule_call(tool="get_space_status", interval="10m")` while
 your ring has open work (COORDINATION §13; `cancel_call` when idle), **not**
-`/loop`/`CronCreate`/a remembered intention. **A watchdog you never arm catches
+`/loop`/`CronCreate`/a remembered intention. **Tick on `get_space_status` or
+`get_mentions`, never `get_recent_context`** — a timer's fire posts its result
+back into the space, so a `get_recent_context` tick reads its own prior fires and
+recursively nests them (§13). **Record the returned `timer_id`** and `cancel_call`
+it when your ring closes — a timer is cancellable only by the session that armed
+it, so an unrecorded one orphans after a compaction. **A watchdog you never arm catches
 nothing:** `QA-approved-but-no-merge-request` is on the list below precisely
 because a leader that wasn't watching let a QA-approved WP sit unmerged (operator-
 caught). Each wake, check the stall patterns — the prompt **enumerates each
