@@ -279,6 +279,16 @@ Rules for every layer:
   mechanism. **A leader that never arms its `schedule_call` never catches its own
   ring's stalls** — the operator caught exactly this (a QA-approved WP left
   unmerged because the leader wasn't watching).
+- **Record the `timer_id` your `schedule_call` returns — and `cancel_call` it
+  when your work closes** (promoted 2026-06-29). A timer is cancellable **only by
+  its creating session**; if you compact without recording the id, post-compaction
+  you can no longer cancel it (`cancel_call` → 404 not-owned) and it keeps firing
+  stale context at the space until the operator kills it at the source. So:
+  (1) stash the returned `timer_id` in your status/notes the moment you arm it,
+  (2) `cancel_call` it the moment your ring/WP closes — an idle watchdog on a
+  finished WP is an orphan-in-waiting (a K3 runtime watchdog outlived its ring
+  and spammed runtime-leader for hours). `list_calls` shows the timers you still
+  own; reconcile it against your open work after every compaction.
 
 ## 14. Agents never touch GitHub; the Integrator is the gateway
 
