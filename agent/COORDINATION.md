@@ -65,6 +65,38 @@ git only.
   merge Decision → retros all live under it. `reply_to` is the threaded-reply
   shortcut; prefer it over a root `post_response` whenever you're answering.
 
+### 2a. Convo call cheat-sheet (form valid parameters — recurring failure)
+
+Malformed convo calls fail **silently to the workflow** (the post never lands,
+so the next move never fires). The two parameters that get rejected:
+
+- **`message_type` MUST be one of the backend enum values** — guessing a
+  natural-language type is a 400 reject. **Valid:** `question`, `code_share`,
+  `git_request`, `review_request`, `retro`, `status_update`, `bug`, `feature`,
+  `decision_propagated`, `pause_issued`, `connection_status`. **REJECTED (do not
+  use):** `message`, `kickoff`, `assignment`, `merge_ready`, `handoff`, `nudge`,
+  `ack`. Map your *intent* to a valid type:
+  | Intent | `message_type` |
+  |---|---|
+  | kickoff / assign a WP / hand work to a teammate / deliver code | `code_share` |
+  | question / query / nudge / ack / general note | `question` |
+  | ask the Integrator to publish+merge a branch (the old "merge_ready") | `git_request` |
+  | QA→leader merge-Decision request; "request review" | `review_request` |
+  | a retro bullet-set | `retro` |
+  | a status line | `status_update` |
+  | a defect note to another team | `bug` |
+  When unsure, **`question`** is always accepted. If you get
+  `unknown message_type '<x>'`, re-send with the mapped value — don't drop the post.
+- **`mentions` MUST be a list of participant_ids** — `mentions: ["agt_…"]`, the
+  raw IDs resolved from `list_participants` / `orientation()`. **Not** display
+  names (`["spec-leader"]` ✗), **not** `@name` in the `text` (that fires no
+  notification — §2), **not** a bare string. One id per actor whose move is next.
+- **`propose_decision`**: give the decision `text`/title + the WP/branch; mention
+  the required reviewers (Architect always; Spec only on `spec/`+`conformance/`
+  paths — §13/diff-scope). **`thread_id`/`parent_event_id`** take an event/thread
+  id string (§2), never a name. When a call 400s, **read the error, fix the one
+  named field, and re-send** — a dropped post is a silent stall.
+
 ## 3. Status = what you're doing, in your own words
 
 Three liveness signals exist; only the third is yours to post:
