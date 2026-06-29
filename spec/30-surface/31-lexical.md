@@ -163,3 +163,27 @@ especially `Int`-default integers), Unicode + ASCII spellings, comments/doc
 comments, and the layout-to-braces translation. Conformance:
 `../../conformance/surface/lexical/` — including the regression that `2 : Int`
 and `2.0 : Float` are distinct (the f64 non-reproduction at the lexer).
+
+## 8. V0 minimal lexer (the G1 slice)
+
+V0 (the minimal elaborator, `../30-surface/39-elaboration.md §5`) lexes **only**
+the token subset below — just enough to write a trivial dependently-typed
+program. The full token set (§2–§4) is for the complete surface; V0 recognises
+none of the rest (no literals, no operators, no layout, no annotations).
+
+- **Keywords:** `view`, `let`, `in`, `Type`. (`Type` lexes as a keyword in V0,
+  not a `conid` — it is the universe former, `../10-kernel/12`.)
+- **Punctuation:** `(`, `)`, `:`, `=`, `.`, and the arrow `->` (canonical `→`;
+  the two are the same token, §1b).
+- **Lambda:** ASCII `\` (canonical `λ`; same token, §1b).
+- **Identifiers:** the §2 case distinction is load-bearing in V0 —
+  **lowercase-initial** `ident` is a term variable; **uppercase-initial**
+  `conid` is a base type (`Nat`, `Bool`) or other type constructor. Name
+  resolution (`39 §5.3`) and type-position parsing (`39 §5.2`) rely on it.
+- **Level digits:** bare non-negative integers (`0`, `1`, …) appear **only** as
+  the optional explicit level after `Type` (`Type 0`); V0 has no other numeric
+  literals (§3 is out of V0).
+
+Whitespace separates tokens; line comments `-- …` (§5) are skipped. Everything
+else in §2–§4 — block comments, doc comments, operators, the literal forms of
+§3, layout (§6) — is **out of V0** and lexes only under the full lexer.
