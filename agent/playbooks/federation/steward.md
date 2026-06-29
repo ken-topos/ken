@@ -97,6 +97,64 @@ until one of three conditions holds:
 A quiet federation is not "done": if teams are idle and the DAG is not complete,
 that is a stall to diagnose (§7), not a stopping point.
 
+### 2c. The WP release process (author → commit → merge → kick off)
+
+A WP is **not** releasable as a terse catalog pointer. The build teams run
+**open-weight models ~1 year behind SOTA**; the Opus enclave
+(Steward/spec-author/architect, the most capable models in the fleet) must
+**front-load the design judgment** and hand the team a **detailed, shovel-ready
+brief** — the implementer should execute mostly mechanically, not design
+(operator, 2026-06-29). The release sequence is **fixed, in this order**:
+
+1. **Steward authors the brief** at `docs/program/wp/<ID>-<slug>.md`, on the WP
+   branch `wp/<ID>-<slug>` (`git branch wp/<ID>-<slug> main`). It must: pin every
+   **settled** decision as a *fixed input* (cite `/spec` + the OQ register; never
+   leave a decided fork "open" for a weaker model to relitigate — that is the
+   failure mode); give a **mandated deliverable outline** (each section ending in
+   a concrete implementable choice, not a survey); list **testable acceptance
+   criteria**; and state the **do-not-reopen guardrails**. This is the *frame* —
+   scope, acceptance, sequencing, settled-decision pinning — not the full spec.
+2. **Hand the WP branch to the spec-leader for full elaboration** (operator,
+   2026-06-29). **First compact the spec-leader** — `moot compact spec-leader`
+   (the enclave is quiescent before a kickoff) — so it starts the elaboration
+   with a clean, minimal context (see *Compaction discipline* below). The spec
+   enclave (clean-room authority, Opus) then brings the brief + the relevant
+   `/spec` and `/conformance` to **full, team-ready rigor** on that branch — the
+   deep technical/behavioral detail a ~1-year-behind build model cannot be
+   trusted to invent. You mention **only the spec-leader** (the §9 edge to the
+   spec enclave); the spec-leader assigns spec-author / conformance-validator
+   internally. This elaboration step sits **between** you and the build team —
+   the team never receives a brief that the spec enclave has not elaborated.
+3. **On elaboration-complete, the elaborated brief + spec merges to `main`** via
+   the Integrator — the spec-leader opens the merge Decision (it touches
+   `/spec`, so the Spec paths apply) and hands `merge_ready` to the Integrator
+   (`message_type: git_request`); only the Integrator touches `main`
+   (COORDINATION §14). It **must be on `main`** so every team reads the canonical
+   artifact from its own worktree, not a drifting inline message.
+4. **Then the responsible team is released/kicked off** — **first compact the
+   owning leader** (`moot compact <leader>`, team quiescent), then mention the
+   **leader only** (§2) in the WP thread, pointing at the now-on-`main`
+   elaborated brief + spec. The team continues `wp/<ID>-<slug>` for the
+   implementation. The leader, in turn, compacts its members before fanning the
+   work in (build-leader playbook).
+
+So the pipeline is **Steward (frame) → spec-leader (elaborate) → build team
+(execute)** — each Opus enclave layer adds rigor before the weaker model
+receives it. *Steward-internal* operational docs that no build team needs to
+spec against (the progress tracker, playbook/`agent/` corpus edits) skip the
+spec-leader step and go straight to `main` via a Steward-owned Integrator merge.
+
+**Compaction discipline (token efficiency, operator 2026-06-29).** Before
+handing a task to another agent, **compact it first** so it starts with a clean,
+minimal context instead of carrying accumulated onboarding/idle chatter into the
+work: `moot compact <role>`. **Precondition: the target is quiescent** — never
+compact an agent mid-reasoning (it summarizes away in-flight work). The push
+model: the **Steward compacts a leader** before handing it a WP; the **leader
+compacts its members** before instructing them to begin (build-leader playbook).
+Each agent may also self-compact at its own task boundaries
+(`request_context_reset`, which is self-only — it cannot reset another agent, so
+the *cross-agent* compaction goes through `moot compact`).
+
 ## 3. The promotion ladder (your core mechanism)
 
 The tooling provisions skills as **per-team copies with no inheritance**, so
@@ -140,8 +198,9 @@ a role.
 Run a periodic synthesis pass (not a busy poll): collect new retros, apply the
 ladder, land skill changes to `agent/` (commit to a `wp/<ID>` branch, open the
 merge Decision, hand `merge_ready` to the Integrator), **update the
-implementation progress tracker (§2a)**, sequence newly-ready WPs, and brief the
-operator. You, the team leaders, and the Integrator are the only schedulers in
+implementation progress tracker (§2a)**, author shovel-ready briefs and release
+newly-ready WPs via the §2c sequence (author → commit → Integrator-merge → kick
+off), and brief the operator. You, the team leaders, and the Integrator are the only schedulers in
 the federation. Between passes you do not idle-stop — you persist until
 complete, blocked, or instructed (§2b).
 

@@ -14,24 +14,55 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-- **Updated:** 2026-06-27 (seeded at design freeze; states reconcile against
-  actual crate code on the Steward's first pass).
-- **Next action:** decompose **Wave 1** into full WP specs in
-  `03-program-of-work.md` and release the ready frontier — **F4, K1** — to the
-  kernel team. Front-load the kernel observational core (K2/K2c); it is the
-  critical-path, highest-risk work (§ guidance in `05`).
+- **Updated:** 2026-06-29 (Steward first live pass: Bug 12 cleared, frontier
+  released).
+- **Next action:** **F4 runs first** (operator call, 2026-06-29). Its Steward
+  frame is authored (`wp/F4-content-addr-design.md`) and is being **handed to the
+  spec-leader for full elaboration** before Foundation is released; Foundation is
+  **held** meanwhile (re-pinged off the premature pull). While F4 elaborates,
+  **frame K1's brief** (then it too goes spec-leader → team). **K1 stays held**
+  from any team until F4 reaches in-review. Run the watchdog + promotion-ladder
+  pass each cadence.
 
-## Active frontier (ready now)
+- **WP release pipeline (operator, 2026-06-29):** **Steward (frame) →
+  spec-leader (full elaboration) → build team (execute).** The Opus enclave
+  front-loads all design/spec rigor; the open-weight build teams execute, not
+  design. Steward authors the frame at `docs/program/wp/<ID>.md` on the WP branch
+  (scope, deliverable outline, acceptance, settled-decision pinning); the
+  spec-leader elaborates it + `/spec`/`/conformance` to team-ready rigor; it
+  merges to `main` via the Integrator; **then** the team is kicked off. Thin
+  catalog-recap kickoffs and unsequenced team design are out. Full rule: steward
+  playbook §2c.
 
-| WP | Why ready | Note |
-|---|---|---|
-| **F4** content-addr / value-model design | F1 done | feeds K3; design-only |
-| **K1** Π/Σ/inductive/checked-universes | F2, F3 **done** | the critical path starts here |
+### 2026-06-29 session log (Steward)
 
-Everything else is `not-ready` until its predecessors land. The two pivots to
-watch (per `05`): **K2/K2c** (kernel observational core — retire feasibility
-risk early) and **L5** (effects/interaction-tree — the hub WS-Sec *and* WS-B
-both hang off; pull it forward once K1's API is stable).
+- **Bug 12 cleared.** The convo `/response` post path was broken federation-wide
+  (it 422'd because the body used the legacy `agent_id`; the backend requires
+  `participant_id`). All posting — kickoffs, handoffs, retros, merge coord — was
+  blocked since 2026-06-28. The fix is a one-field rename; verified live. Posting
+  now works.
+- **Post-API facts (the live backend, vs. docs):** message body uses
+  `participant_id` (not `agent_id`); `mentions` must be **actor_ids**, not
+  display names (name-mentions are silently dropped → no notification); and
+  `message_type` must be in the **backend enum** — `kickoff`/`merge_ready`/
+  `blocked`/`decision` from COORDINATION §8 are **not** accepted and 400. Working
+  map: kickoff→`feature`, merge_ready→`git_request`, blocked→`status_update`,
+  decision→the Decision object (not a message type). Recorded as **Bug 13**
+  (`local/moot-bugs.md`); flagged to the fleet in the steward cadence thread.
+- **Frontier released:** **K1**→kernel-leader (thread `evt_44k4934q2nfjz`),
+  **F4**→foundation-leader (thread `evt_3f87m6kcqgkg3`). Both now `active`.
+
+## Active frontier
+
+| WP | State | Owner | Thread |
+|---|---|---|---|
+| **F4** content-addr / value-model design | **frame authored → spec-leader elaborating** (Foundation held) | Foundation (via Spec) | `evt_3f87m6kcqgkg3` |
+| **K1** Π/Σ/inductive/checked-universes | **ready — held until F4 in-review** | Kernel | `evt_44k4934q2nfjz` |
+
+Next to unlock: **K2/K2c** (kernel observational core — retire feasibility risk
+early) once K1's API is stable; **K3** once F4 lands; **L5**
+(effects/interaction-tree — the hub WS-Sec *and* WS-B both hang off) pulled
+forward once K1's API is stable.
 
 ## Work-package status (vs. the DAG)
 
@@ -40,8 +71,8 @@ both hang off; pull it forward once K1's API is stable).
 | F1 repo / MIT / workspace / IP hygiene | active (skeleton landed) | F | G0 |
 | F2 spec + conformance corpus | **merged** (spec written) | Spec | G0 |
 | F3 ADRs 0001–0008 | **merged** | F/Architect | G0 |
-| F4 content-addressing + value-model design | **ready** | F/Architect | G0 |
-| K1 Π/Σ/inductive/universes | **ready** | K | G1 |
+| F4 content-addressing + value-model design | **spec-leader elaborating** (frame done 2026-06-29; Foundation held) | F (via Spec) | G0 |
+| K1 Π/Σ/inductive/universes | **ready — held** until F4 in-review (2026-06-29) | K | G1 |
 | K2 observational Eq/cast/Ω/quotient/truncation | not-ready (K1) | K | G1 |
 | K2c conversion NbE + SCT | not-ready (K2) | K | G1 |
 | K-api judgment + kernel API | not-ready (K2c) | K | G1 |
@@ -100,6 +131,14 @@ both hang off; pull it forward once K1's API is stable).
 
 ## Blockers / escalations
 
-- *None active.* (Standing item: the **Ward** sibling project is not yet stood
+- **Bug 13 (post-API drift, recorded `local/moot-bugs.md`).** COORDINATION §8's
+  message-type taxonomy diverges from the live backend enum; mentions need
+  actor_ids. Mitigated by the working map above and a fleet notice. *Underlying
+  fix is the operator/maintainer's:* either extend the backend enum to accept
+  the §8 types, or reconcile §8 to the backend. Not blocking (work proceeds on
+  the mapped types) — but flag for a moot patch so the law and the substrate
+  agree.
+- *No work blockers active.* (Standing item: the **Ward** sibling project is not
+  yet stood
   up; it is not a blocker until WS-B reaches B1–B3 — track its bring-up as a
   sibling, `05 §Ken-vs-Ward`.)
