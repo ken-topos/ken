@@ -4,8 +4,8 @@ The executable, black-box behavioral tests that define "correct Ken." Each case
 pins a specific spec section (`../spec/`) and states an **input → expected
 behavior** that any conforming implementation must satisfy. Conformance is the
 CI gate every team's work passes (`../docs/program/04-git-and-integration.md`);
-it is also how the Spec enclave cross-checks the spec against the prototype
-**oracle** without copying source (`../CLEAN-ROOM.md`).
+it is also how the Spec enclave cross-checks the spec against permissive
+references and first principles (`../CLEAN-ROOM.md`).
 
 ## Layout
 
@@ -37,9 +37,11 @@ OQ-harness). Each case:
                       prototype gap, or a soundness commitment)
 ```
 
-Cases tagged **(oracle)** are to be confirmed against the prototype's observed
-behavior by the Spec enclave; cases tagged **(soundness)** encode a kernel
-soundness commitment (`../spec/10-kernel/README.md §5`) and must never regress.
+Cases tagged **(oracle)** are to be confirmed against Ken's reference
+interpreter once it is available; before then, ground them against the existing
+`/spec`, permissive references, and first principles. Cases tagged
+**(soundness)** encode a kernel soundness commitment
+(`../spec/10-kernel/README.md §5`) and must never regress.
 
 ## Seeds
 

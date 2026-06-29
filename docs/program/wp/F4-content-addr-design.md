@@ -158,8 +158,9 @@ under-determined for implementation, that is a **`question` to the Spec leader**
 
 - **Deps:** F1 (done). **Build/test:** `scripts/ken-cargo -p <crate>` only
   (COORDINATION §12); full-workspace/bench-release runs in CI.
-- **Clean-room:** build from `/spec`; never read `local/refs/` or the prototype
-  (CLEAN-ROOM.md). The design is ours, from the spec.
+- **Clean-room:** build from `/spec`; never read `local/refs/` (permissive or
+  otherwise) as an implementation source (CLEAN-ROOM.md). The design is
+  ours, from the spec.
 - **Edges (§9):** behavioral-contract Q → Spec leader; component-design Q →
   Architect. The Architect reviews the merge Decision (where the `60-security`
   /design invariants are checked) — no pre-review edge.

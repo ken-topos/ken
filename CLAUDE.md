@@ -47,19 +47,22 @@ forced restart.
 ## Reference material is off-limits to code authors
 
 `local/refs/` (gitignored) holds reference implementations. **Do not read them
-to write Ken's code.** Two tiers, per `CLEAN-ROOM.md`:
+to write Ken's code.** Per `CLEAN-ROOM.md`:
 
-- **`local/refs/yon/` is the AGPLv3 prototype — clean-room critical.** Only the
-  **Spec enclave** may consult it (to write `/spec` + `/conformance` in its own
-  words). It is **off-limits** to implementer agents and to anyone writing Ken's
-  MIT-licensed code. Never copy or close-paraphrase it.
+- **The AGPLv3 prototype (`yon`) is NOT mounted in this environment.** It
+  is the *excluded inspiration* — Ken's design is its own; `yon` is not a
+  consultable reference. There is zero AGPLv3 contact, which is strictly
+  cleaner. **No agent should go looking for it.**
 - **The permissive references** (Lean, Agda, cooltt, smalltt, cctt, …) may be
   **read to understand** by the Architect / Spec enclave to sharpen the spec,
-  but **not copied** into the repo. Implementer agents build from `/spec`, never
-  from `local/refs/`.
+  but **not copied** into the repo. Implementer agents build from `/spec`,
+  never from `local/refs/`.
+- **Copyleft references** (GPL/AGPL/CeCILL — e.g. smtcoq, spot, jif) are
+  **Spec-enclave-only** for approach and behavior only, under the leakage
+  recheck. Never consulted by implementer agents, never vendored.
 
-When unsure whether you may look at something under `local/refs/`, the answer is
-no — ask the operator or the Spec enclave.
+When unsure whether you may look at something under `local/refs/`, the answer
+is no — ask the operator or the Spec enclave.
 
 ## Conventions
 

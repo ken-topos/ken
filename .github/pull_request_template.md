@@ -16,9 +16,9 @@ WP:
 - [ ]
 
 ## Spec source (clean room)
-<!-- Cite /spec and /conformance entries this implements. Do NOT cite prototype source. -->
-<!-- Confirm: no AGPLv3-prototype source was copied or closely paraphrased. -->
-- [ ] Implemented from spec/conformance, not from prototype source.
+<!-- Cite /spec and /conformance entries this implements. Do NOT cite copyleft source. -->
+<!-- Confirm: no AGPLv3 or other copyleft source was copied or closely paraphrased. -->
+- [ ] Implemented from spec/conformance, not from copyleft source.
 
 ## Conformance
 <!-- The pre-merge gate: build + conformance + clean-room must be green. -->

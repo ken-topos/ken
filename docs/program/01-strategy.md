@@ -38,10 +38,10 @@ The MIT goal makes these load-bearing, not optional hygiene.
    copyrightable. Interfaces are defensible to reimplement.
 3. **Not reusable:** copying or close paraphrase of AGPL source. References to
    prototype `file:line` are commentary, not implementation input.
-4. **Process:** derive a written behavioral **spec + conformance test corpus**
-   from the prototype (docs, observed behavior, the regression suite's
-   *behaviors*), then implement from the spec. Keep AGPL source out of the
-   context of whatever writes Ken's code.
+4. **Process:** author a written behavioral **spec + conformance test corpus**
+   from permissive references and first principles, then implement from the
+   spec. Keep AGPLv3 and other copyleft source out of the context of whatever
+   writes Ken's code.
 5. **Dependencies:** `mmgroup` (BSD-2) is reusable with attribution, or
    reimplement; LLVM/Cranelift are permissive. Prefer permissive or
    reimplemented math.
@@ -121,9 +121,10 @@ is ergonomics/agent interface; S and R are deferred/parallel.
 
 ### WS-F — Foundations, clean-room process, governance (always on)
 Name, MIT license setup, IP hygiene, repo scaffolding (Rust workspace), ADRs,
-and — critically — **spec extraction**: turn knowledge of the prototype's
-behavior into a written language spec + conformance test corpus that Ken is
-implemented against. This is the legal-safe bridge from prototype to new code.
+and — critically — **spec authoring**: author and maintain a written language
+spec + conformance test corpus from permissive references and first principles,
+that Ken is implemented against. This is the legal-safe foundation for all
+implementation work.
 
 ### WS-K — Trusted kernel (Rust) ★ trust root
 The small permanent core: core dependent type theory (Pi, dependent Sigma, Id,
@@ -178,8 +179,9 @@ as normal packages.
 Clean-room reimplementation **+** dependent-type verification **+** (eventual)
 self-hosting is a *new language project* — a multi-year program, not an
 enhancement. Two things make it tractable: (1) it is unusually well-suited to
-agent teams — greenfield, spec-driven, with the prototype as a behavioral
-oracle; and (2) the locked architecture de-risks it — an interpreter-first Rust
+agent teams — greenfield, spec-driven, with a clean written spec as the
+implementation contract; and (2) the locked architecture de-risks it — an
+interpreter-first Rust
 reference with a small kernel gets the differentiating verification loop working
 long before any heavy codegen or self-hosting investment. The discipline that
 matters most: ship a thin vertical slice early (G1), then widen — and never let

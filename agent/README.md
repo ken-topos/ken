@@ -16,7 +16,7 @@ inheritance**, so cross-team sharing has to be deliberate.
    - `build/` — `leader`, `implementer`, `qa` (teams: Kernel, Verify, Language,
      Runtime, Ergo, Foundation).
    - `spec/` — `leader`, `spec-author`, `conformance-validator` (the clean-room
-     enclave; the only team that reads the prototype).
+     enclave; grounds the spec in permissive references and first principles).
    - `federation/` — singletons: `steward`, `architect`, `integrator`,
      `librarian`.
 

@@ -1,9 +1,12 @@
 # Clean-Room Policy
 
-Ken is an **MIT-licensed, clean-room reimplementation**. It draws on the
-*design* of an AGPLv3 prototype (a sibling checkout at `../yon`) but must not be
-a derivative of its **source code**. This policy is load-bearing: the permissive
-license depends on it.
+Ken is an **MIT-licensed, clean-room reimplementation**. It was *inspired* by
+Yon, an AGPLv3 research prototype — but Yon is an **excluded inspiration**: it is
+**not mounted in any worktree** and is **not consulted in any environment**, and
+its core design (cubical paths / cofibrations) was deliberately not adopted (Ken
+chose observational type theory, ADR 0005). Ken's design is its own; the
+permissive license rests on the **absence of AGPLv3 source contact** — strictly
+cleaner than reading-then-not-copying. This policy is load-bearing.
 
 ## What is reusable vs. not
 
@@ -20,10 +23,11 @@ reusable with attribution; LLVM/Cranelift are permissive.)
 
 ## The process
 
-1. **Team Spec is the only conduit.** Team Spec may read the prototype to
-   produce a written specification (`/spec`) and a black-box **conformance**
-   corpus (`/conformance`). Those artifacts describe *behavior*, and contain no
-   copied source.
+1. **The Spec enclave authors from permissive references + first principles.**
+   It produces a written specification (`/spec`) and a black-box **conformance**
+   corpus (`/conformance`) from the permissive shelf (Lean, Agda, cooltt, …),
+   settled decisions, and first principles — **not** from Yon (which is absent).
+   Those artifacts describe *behavior* in Ken's own words, with no copied source.
 2. **Implementation teams work from the spec**, with prototype source kept out
    of their working context. Implementation PRs cite spec sources, not prototype
    `file:line`.
@@ -35,11 +39,11 @@ reusable with attribution; LLVM/Cranelift are permissive.)
 The operator keeps reference implementations under `local/refs/` (gitignored —
 never in this repo). They fall in two tiers:
 
-- **The AGPLv3 prototype (`local/refs/yon/`)** — clean-room critical, governed
-  by the process above: Team Spec only, off-limits to implementer agents, never
-  copied. In any environment where it exists locally, treat it as
-  read-restricted (the repo `CLAUDE.md` + `.claude/settings.json` may enforce a
-  deny).
+- **The AGPLv3 prototype (Yon)** is **not mounted** in any environment and is
+  **not a reference** — it is the excluded inspiration (see the top of this
+  file). Zero AGPLv3 contact is the posture; **no agent should seek it out.** If
+  it ever becomes available in a future environment, **stop and ask the
+  operator** before consulting it.
 - **Permissive references** (Lean, Agda, smalltt/elaboration-zoo, Z3, cvc5, F\*,
   Interaction Trees, Koka, LIO, sigstore/in-toto, Quint/Apalache, QuickChick,
   Unison, …) — Apache-2.0 / BSD / MIT-style. The Architect / Spec enclave may
