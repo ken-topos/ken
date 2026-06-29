@@ -292,8 +292,12 @@ context. Who triggers a compaction is fixed (operator, 2026-06-29):
 - **On resume after a compaction, ground-truth your state before trusting the
   summary.** A compaction can summarize away the fact that you *finished* — so
   re-orient from reality, not the lossy summary: `orientation()` **plus**
-  `git reflog -10`, `git status`, `git branch -vv`. Your pre-compact self's
-  commits and checkouts are in the reflog; check there before concluding you (or
-  a teammate) are "stalled" or re-doing delivered work. (F4 retro, Foundation —
-  promoted here because the Steward-compacts-every-WP rule makes post-compact
-  resume a constant for every team member.)
+  `git reflog -10`, `git status`, `git branch -vv`, **plus check unread
+  mentions** (`orientation`'s unread count / `get_mentions`). Your pre-compact
+  self's commits and checkouts are in the reflog; check there before concluding
+  you (or a teammate) are "stalled" or re-doing delivered work. **Notification
+  delivery is best-effort** — a mention that landed while your session was
+  bouncing (e.g. a fleet restart) is recorded but may never have woken you, so a
+  resume is when you catch it. (F4 + K1, operator-observed — promoted here
+  because the Steward-compacts-every-WP rule makes post-compact resume a constant
+  for every team member.)
