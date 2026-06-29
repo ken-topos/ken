@@ -69,6 +69,21 @@ implementations across the whole federation. Read `../../COORDINATION.md`,
   assertion silently. (A content-reconcile that surfaces a **spec-internal**
   inconsistency — a bad cross-cite, contradictory clauses — is your
   independent-checker catch; route it to the author via the leader, no new edge.)
+- **For a property NOT observable in the result value, assert a STRUCTURAL/TRACE
+  output — never a vacuous value-assertion (promoted X1; the dual of verdict-flip).**
+  Some ACs target properties a *value* can't witness: **branch laziness** in a
+  pure total core (forcing the untaken arm wastes work but changes no value),
+  **sharing/dedup**, **evaluation order**. A "the result is correct" case for
+  these is **green-vs-green** — it guards nothing. Instead assert a structural or
+  trace fact the bug perturbs: *the untaken eliminator method is never interned*,
+  *equal subcomputations resolve to the **same heap slot*** (not just `==`), the
+  emitted constructor head. **And flag honestly** *why* it isn't a value-flip and
+  the exact condition that would make it one (e.g. "becomes a value-flip once an
+  effect or an opaque-non-total divergent branch sits in the untaken arm — a
+  deferred follow-on"). This generalizes verdict-flip from "correct≠buggy verdict"
+  to "correct≠buggy *observable*". (Tooling corollary: keep each backtick span on
+  **one source line** — an 80-col reflow that joins-then-rewraps a span straddling
+  the join injects a space mid-token, silently corrupting a path/identifier.)
 
 ## Discipline
 

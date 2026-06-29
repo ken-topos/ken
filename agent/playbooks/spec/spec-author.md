@@ -88,6 +88,19 @@ too far: describe the *what*, not the *how* of any particular implementation.
   kernel admits" routinely diverge. When a construct needs a not-yet-landed
   kernel feature, **declare which stage gates it and split the deliverable**
   (buildable-now vs blocked-on-stage) rather than presenting it as satisfied.
+- **Elaborating an operational semantics over a strict core? Name the non-strict
+  positions explicitly — a paradigm label is not a uniform rule (promoted X1).**
+  "CBV / strict" does **not** mean strict-everywhere: in X1's interpreter the one
+  non-strict position is an **eliminator's unselected methods** (held unevaluated;
+  only the scrutinee-selected one is forced), and *branch laziness*, `&&`/`||`
+  *short-circuit*, and `∧false`/`∨true` *`unknown`-absorption* all derive from
+  that single rule ("ι fires exactly one method"). State the exceptions and derive
+  the observable properties from them, with a **structural** conformance assertion
+  (the untaken arm is never forced/interned). A build team reaching for the
+  paradigm's reflex ("strict everywhere") implements it wrong and **passes
+  happy-path tests** while violating the property — the operational twin of
+  positivity≠admittance (a natural default silently breaks a property the
+  obvious corpus won't catch).
 
 ## Answering build-team queries
 
