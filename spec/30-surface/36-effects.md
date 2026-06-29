@@ -11,7 +11,11 @@
 > handlers only (§5). **`OQ-Space` DECIDED** (§4) — bounded per-space Hoare,
 > shared-nothing message-passing. The kernel gains **nothing**: every construct
 > below denotes to ordinary Π/Σ/inductive terms (`../10-kernel/`) — no effect
-> machinery enters the TCB.
+> machinery enters the TCB. **L5's *implementation* is gated on `K1.5`** — the
+> `ITree` denotation's `Vis` constructor needs Π-bound (W-style)
+> recursive-inductive admission + its eliminator, which the current kernel
+> defers; the design is sound and adds no TCB primitive, it just lands after
+> K1.5 (§2.1, §7.0).
 
 ## 1. Effects as a static row
 
@@ -218,13 +222,28 @@ data ITree (E : Effect) (R : Type ℓ_R) : Type (max ℓ_R ℓ_op ℓ_resp) wher
   runtime's response `E.Resp e` to the rest of the tree. The continuation is a
   *function into the tree*, so the response is not yet known: this is the pure
   data for "perform `e`, then proceed."
-- **It is an ordinary inductive (`14`), hence already in the pure kernel** — no
-  new TCB. `Vis`'s recursive argument `E.Resp e → ITree E R` is **strictly
-  positive** (`14 §2`: the recursive occurrence is the *codomain* of a function
-  type — the allowed `W`-style branching argument), so the declaration is
-  admitted and the eliminator `elim_ITree` (§5) is generated. Ken is total, so
-  the tree is a **finite inductive** value, not a coinductive one; genuinely
-  nonterminating interaction is Ward's domain (§5, `../70-behavioral/`).
+- **It is a genuine strictly-positive inductive — sound, and adding no kernel
+  primitive (no new TCB).** `Vis`'s recursive argument `E.Resp e → ITree E R` is
+  strictly positive: the recursive occurrence is the *codomain* of a function
+  type, the `W`-style branching shape (`14 §2`; the positivity algorithm `14
+  §8.2` accepts it — `D` under a `+`-codomain).
+- **Dependency — gated on `K1.5` (kernel admittance, not soundness).** That
+  `Vis` argument is a **Π-bound (W-style) recursive occurrence** (a function
+  *into* the recursive type), and the current kernel (`origin/main`) **defers
+  admitting it**: the admission check `check_no_pi_bound_recursive` rejects this
+  shape today, because generating `elim_ITree` with a **Π-abstracted induction
+  hypothesis** (`14 §3`) is a **K1.5** feature, not yet in K1. So `ITree` — and
+  with it `bind` (§2.2), the handlers (§5), the denotation (§2.4), and the
+  *realization* of the §3.1 contract — becomes admittable **once K1.5 lands**,
+  not on the current kernel. This is a **sequencing dependency, not a soundness
+  gap**: the positivity is genuine and `ITree` adds no trusted primitive. *(`14
+  §2`'s prose on `origin/main` still reads this shape as plainly "allowed",
+  diverging from the kernel that rejects it; that text is being reconciled to
+  "deferred to K1.5" — Architect-flagged, §7.0. The L5 citation here points at
+  the shape **K1.5 will admit**, robust either way.)*
+- Ken is total, so the tree is a **finite inductive** value, not a coinductive
+  one; genuinely nonterminating interaction is Ward's domain (§5,
+  `../70-behavioral/`).
 
 **Level reconciliation (`12 §2`, `14 §1`) — the level is *forced*, not chosen:**
 
@@ -608,10 +627,11 @@ kernel re-checks the emitted core (the elaborator is **not** in the TCB, §7):
 2. **Pure-kernel encoding** — the `ITree` datatype with its forced level (§2.1),
    `ret`/`bind`/`perform` (§2.2), the row signature `⊕` (§2.3), and the
    denotation `⟦·⟧` collapsing pure code (§2.4). The kernel checks the pure tree
-   with no effect machinery. *Acceptance 2.*
+   with no effect machinery. **Gated on `K1.5`** for `ITree` admittance (§7.0).
+   *Acceptance 2.*
 3. **Capabilities** — `Cap E` and the capability-passing translation (§2.5), the
    `requires`-as-capability distinction (§3), and the pinned cross-workstream
-   interface contract (§3.4). *Acceptance 3.*
+   interface contract (§3.1). *Acceptance 3.*
 4. **`space` state** — desugaring to a `State S` effect with `becomes` (§4.1),
    the `runState` state-passing fold (§4.2), bounded Hoare with `old` (§4.3),
    and shared-nothing message-passing (§4.4). *Acceptance 4.*
@@ -623,6 +643,30 @@ kernel re-checks the emitted core (the elaborator is **not** in the TCB, §7):
 Conformance: `../../conformance/surface/effects/` (§7.5).
 
 ## 7. Elaboration pipeline, boundary, and checks
+
+### 7.0 Dependency — L5 implementation is gated on K1.5
+
+The denotation (§2) rests on the `ITree` inductive, whose `Vis` constructor is a
+**Π-bound (W-style) recursive occurrence** (§2.1). The current kernel
+(`origin/main`) **does not admit this shape** — `check_no_pi_bound_recursive`
+rejects it, and `elim_ITree` with a Π-abstracted induction hypothesis (`14 §3`)
+is a **K1.5** feature. So:
+
+- **Blocked on K1.5:** the *realization* of §2 (the `ITree` type, `bind`,
+  `perform`), §5 (handlers/`runState`), the denotation `⟦·⟧`, and therefore the
+  *implementation* of the §3.1 contract any Sec/B WP rides. These land **after**
+  K1.5 admits Π-bound recursive inductives + generates their eliminator.
+- **Not blocked (buildable now, K1-only):** the row machinery is independent of
+  the kernel admittance — the finite-row lattice and latent arrows (§1.1),
+  `infer_row` and the call-graph least-fixpoint (§1.2–1.3), the §1.4 escape
+  check, and the `⊕` row algebra (§2.3) are ordinary static analyses over the
+  surface AST; they need no new kernel feature.
+
+This is a **sequencing dependency, not a soundness gap** — the encoding is
+sound; it simply cashes a kernel feature (`K1.5`) not yet in.
+*(Architect-flagged at the L5 design review; `14 §2`'s "allowed" prose is being
+reconciled to "deferred to K1.5" in the kernel chapter so the spec and the
+kernel agree.)*
 
 ### 7.1 Pipeline (surface → pure kernel term)
 
@@ -653,8 +697,16 @@ over `Cap`, do-notation by `bind`, mutation by `runState`.
   fixes the interface** — the effect signatures (`Op`/`Resp`) and that every
   foreign op is a `perform` (a `Vis` node) — and exposes it; **L7 provides the
   interpreters**. So L5 ↔ L7 couple at exactly the `Effect`-signature +
-  `Vis`-node contract, nothing else. A `pure` foreign is an *unchecked claim*
-  confined to that postulate (`38 §3`), listed in the trusted boundary.
+  `Vis`-node contract, nothing else.
+- **Two readings of `pure` on a `foreign`, kept distinct by `pure ≡ empty
+  row`:** a **fully-opaque `pure` foreign** (declares *no* row) is the **trusted
+  postulate** — an *unchecked claim* confined to that boundary (`38 §3`), listed
+  in the trusted base and **allowed**. A `foreign` that declares a **non-empty**
+  row yet is tagged `pure` is **self-contradictory** (`pure` *is* the empty row)
+  and is **rejected** — the boundary case of the §1.4 escape error, pinned by
+  §7.5 case 5 (`impure`-masquerading-as-`pure`). The `foreign`-specific
+  trusted-postulate rule itself is `38`/L7's; L5 settles only this
+  escape-at-the-boundary.
 
 ### 7.3 Error classes (caught at elaboration, before the kernel)
 
