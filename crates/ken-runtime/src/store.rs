@@ -52,7 +52,7 @@ impl Page {
     }
 
     fn remaining(&self) -> usize {
-        PAGE_SIZE - self.data.len()
+        PAGE_SIZE.saturating_sub(self.data.len())
     }
 }
 
@@ -79,10 +79,14 @@ impl Arena {
         let cur = self.pages.len() - 1;
         if bytes.len() > self.pages[cur].remaining() {
             // Large values that exceed PAGE_SIZE get their own oversized page.
+            // Push a fresh empty page after it so `cur` always points to a
+            // page that `remaining()` can report without saturating_sub.
             let mut p = Page::new();
             p.data.extend_from_slice(bytes);
             self.pages.push(p);
-            (self.pages.len() - 1, 0)
+            let page_idx = self.pages.len() - 1;
+            self.pages.push(Page::new()); // fresh cur for subsequent appends
+            (page_idx, 0)
         } else {
             let page = &mut self.pages[cur];
             let offset = page.data.len();
@@ -735,6 +739,29 @@ mod tests {
             store.stats().arena_bytes > PAGE_SIZE as u64,
             "should have spanned multiple pages"
         );
+    }
+
+    // --- Architect should-fix: oversized-value (>PAGE_SIZE) does not corrupt
+    //     the arena's remaining() check for subsequent appends.
+    #[test]
+    fn oversized_value_no_remaining_underflow() {
+        let mut store = Store::new();
+
+        // One value larger than PAGE_SIZE (4 MiB + 1 byte).
+        let huge_bytes = vec![0x42u8; PAGE_SIZE + 1];
+        let big = Value::Bytes(huge_bytes.clone());
+        let id_big = store.intern(&big).slot_id();
+
+        // A normal-sized value interned AFTER the oversized one — exercises
+        // the `cur` page that follows the oversized page.
+        let small = Value::String("after-big".into());
+        let id_small = store.intern(&small).slot_id();
+        assert_ne!(id_big, id_small);
+
+        // Both dedup correctly.
+        assert_eq!(store.intern(&big).slot_id(), id_big);
+        assert_eq!(store.intern(&small).slot_id(), id_small);
+        assert_eq!(store.distinct_count(), 2);
     }
 
     // Collision-handling path: exercise the memcmp branch on a true collision.
