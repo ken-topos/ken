@@ -55,6 +55,20 @@ implementations across the whole federation. Read `../../COORDINATION.md`,
   rejected both paths) are the same class: a guard that looks right but fires
   identically on both branches. Prefer the structural assertion — it cannot go
   vacuous.
+- **Lock a structural-output assertion against the *landed* spec body, never a
+  heading or a pre-landing draft (promoted V0+L5, 2 instances).** When you author
+  in parallel with the spec-author, the **exact tokens** of a structural
+  assertion — a **constructor** name, a **stage**, a **level**, `⊆`-vs-`=` — are
+  not *ground* until the spec **body** lands; a draft guessed from prose will be
+  wrong. Run a **content-verified reconcile**: re-read the landed §-**body** and
+  check each structural token against it — **not** the heading (which often stays
+  stable while the body is refined). Two instances, both caught only by reading
+  the body: V0 `§5.6` (a λ/non-Π reject moved kernel→V0-structural under an
+  unchanged heading) and L5 `§2.1` (the interaction-tree node was pinned `Vis e k`,
+  not the `perform`-from-prose draft). A heading-only reconcile ships the wrong
+  assertion silently. (A content-reconcile that surfaces a **spec-internal**
+  inconsistency — a bad cross-cite, contradictory clauses — is your
+  independent-checker catch; route it to the author via the leader, no new edge.)
 
 ## Discipline
 

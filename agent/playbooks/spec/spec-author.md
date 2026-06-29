@@ -73,6 +73,21 @@ too far: describe the *what*, not the *how* of any particular implementation.
   the **verdict-independent structural signal** (the resolved de Bruijn index)
   so it stays load-bearing whatever the kernel later does. This is the worked-
   example twin of the conformance validator's verdict-flip check.
+- **"The kernel admits / checks / generates X" is a claim about the kernel that
+  *exists now*, not a sibling chapter's prose (promoted L5, Architect-caught).**
+  Before you write that a construct is already supported, verify it against the
+  **current** kernel — its `check_*` **admission gates** + the chapter's explicit
+  **K1/K2 delivers-vs-defers scope** (`14 §6`/`§8.4`) — **never** a sibling
+  chapter's permissive examples. **Positivity ≠ admittance:** `14 §2`/`§8.2` may
+  accept a shape as strictly positive while a *separate* admission gate restricts
+  the staged kernel to a subset (L5: I claimed `ITree.Vis`'s Π-bound recursive
+  occurrence was "already admitted" citing `14 §2` "Allowed: W-style", but
+  `check_no_pi_bound_recursive` rejects it — W-style is deferred to K1.5; worse,
+  the `14 §2` prose was itself stale, so a sibling chapter *falsely confirmed*
+  the claim). In a **staged** language "the spec allows" and "the implemented
+  kernel admits" routinely diverge. When a construct needs a not-yet-landed
+  kernel feature, **declare which stage gates it and split the deliverable**
+  (buildable-now vs blocked-on-stage) rather than presenting it as satisfied.
 
 ## Answering build-team queries
 
