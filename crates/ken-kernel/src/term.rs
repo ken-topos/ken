@@ -228,9 +228,13 @@ pub enum Term {
     // --- Universes (`12`) ---
     /// `Type ℓ` — a universe (`12 §1`).
     Type(Level),
-    /// `Ω` — `[K2]` strict-proposition universe; reserved in the grammar,
-    /// rejected by K1 `check`/`infer` (`12 §5`).
-    Omega,
+    /// `Ω_ℓ` — the strict-proposition universe at level `ℓ` (`16 §1.1`):
+    /// `Omega_l : Type (suc l)`, **predicative and level-indexed**. K1 carried a
+    /// bare `Omega` placeholder (raw-wf only, rejected by `check`/`infer`);
+    /// K2 implements the level-indexed form (`12 §5`, `16 §1.1`). The level is
+    /// explicit, mirroring `Type ℓ` — `Eq A a b` infers to `Omega_l` for
+    /// `A : Type l`, and the funext Pi lands in `Omega_(max l1 l2)`.
+    Omega(Level),
 
     // --- Variables & constants ---
     /// A de Bruijn-indexed bound variable (`11 §2`).
@@ -314,10 +318,16 @@ pub enum Term {
     Quot(Box<Term>, Box<Term>),
     /// `[t]` — `[K2]` quotient class (`16`).
     QuotClass(Box<Term>),
-    /// `elim_/ M f s` — `[K2]` quotient eliminator (`16`).
+    /// `elim_/ M f r q` — `[K2]` quotient eliminator (`16 §5`): motive `M`,
+    /// method `f`, **respect proof `r`** (free/trivial when the target is in Ω,
+    /// `16 §5` "respect-free elimination"), scrutinee `q`. K1 reserved a
+    /// 3-field placeholder; K2 carries the respect proof the non-Ω-target case
+    /// requires (the kernel never synthesises it — `18 §7` forbids proof
+    /// search; conformance writes `elim_/ M f r [a]`).
     QuotElim {
         motive: Box<Term>,
         method: Box<Term>,
+        respect: Box<Term>,
         scrut: Box<Term>,
     },
     /// `‖ A ‖` — `[K2]` propositional truncation (`16`).
@@ -333,6 +343,10 @@ impl Term {
     }
     pub fn ty(l: Level) -> Term {
         Term::Type(l)
+    }
+    /// `Ω_ℓ` — the strict-proposition universe at level `ℓ` (`16 §1.1`).
+    pub fn omega(l: Level) -> Term {
+        Term::Omega(l)
     }
     pub fn pi(a: Term, b: Term) -> Term {
         Term::Pi(Box::new(a), Box::new(b))
@@ -365,28 +379,19 @@ impl Term {
         Term::Constructor { id, level_args }
     }
 
-    /// Is this term a `[K2]`-reserved former? K1 `check`/`infer` reject these
-    /// as unrecognised (`11 §6`, `12 §5`).
+    /// Is this term a `[K2]`-reserved former that K1 `check`/`infer` reject as
+    /// unrecognised (`11 §6`, `12 §5`)? **K2 implements all of these formers'**
+    /// **typing and computation**, so this is always `false` once K2 lands; the
+    /// `check.rs` guards using it are inert safety nets. (K1 returned `true`
+    /// here for the reserved set; K2 empties it.)
     pub fn is_k2_reserved(&self) -> bool {
-        matches!(
-            self,
-            Term::Omega
-                | Term::Eq(..)
-                | Term::Refl(_)
-                | Term::Cast(..)
-                | Term::J(..)
-                | Term::Quot(..)
-                | Term::QuotClass(_)
-                | Term::QuotElim { .. }
-                | Term::Trunc(_)
-                | Term::TruncProj(_)
-        )
+        false
     }
 
     /// The immediate sub-terms (for traversals: substitution, raw-wf, occurs).
     pub fn children(&self) -> Vec<&Term> {
         match self {
-            Term::Type(_) | Term::Omega | Term::Var(_) => Vec::new(),
+            Term::Type(_) | Term::Omega(_) | Term::Var(_) => Vec::new(),
             Term::Const { .. } | Term::IndFormer { .. } | Term::Constructor { .. } => Vec::new(),
             Term::Elim {
                 params,
@@ -419,8 +424,9 @@ impl Term {
             Term::QuotElim {
                 motive,
                 method,
+                respect,
                 scrut,
-            } => vec![motive, method, scrut],
+            } => vec![motive, method, respect, scrut],
         }
     }
 }
@@ -429,7 +435,7 @@ impl fmt::Debug for Term {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Term::Type(l) => write!(f, "Type {:?}", l),
-            Term::Omega => write!(f, "Ω"),
+            Term::Omega(l) => write!(f, "Ω{:?}", l),
             Term::Var(i) => write!(f, "@{}", i),
             Term::Const { id, level_args } => {
                 write!(f, "{:?}", id)?;
@@ -482,9 +488,14 @@ impl fmt::Debug for Term {
             Term::QuotElim {
                 motive,
                 method,
+                respect,
                 scrut,
             } => {
-                write!(f, "elim_/ {:?} {:?} {:?}", motive, method, scrut)
+                write!(
+                    f,
+                    "elim_/ {:?} {:?} [r={:?}] {:?}",
+                    motive, method, respect, scrut
+                )
             }
             Term::Trunc(a) => write!(f, "‖{:?}‖", a),
             Term::TruncProj(t) => write!(f, "|{:?}|", t),

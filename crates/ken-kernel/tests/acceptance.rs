@@ -9,7 +9,9 @@
 use ken_kernel::env::Context;
 use ken_kernel::inductive::peel_app;
 use ken_kernel::term::{Level, LevelVar, Term};
-use ken_kernel::{convert, declare_inductive, whnf, CtorSpec, GlobalEnv, GlobalId, InductiveSpec};
+use ken_kernel::{
+    convert, declare_inductive, infer, whnf, CtorSpec, GlobalEnv, GlobalId, InductiveSpec,
+};
 
 /// Identifiers for the standard prelude of inductive families.
 #[allow(dead_code)]
@@ -1251,4 +1253,389 @@ fn ac6_subject_reduction_k1_property() {
             t
         );
     }
+}
+
+// ===========================================================================
+// K2 — observational equality layer (`conformance/kernel/observational/`).
+// Each case pins a `16 §9` soundness-critical behaviour, exercising the
+// *property* (open terms, ≥2 distinct level variables, dependent telescopes)
+// per the K1 retro lesson — not just the obvious closed instance.
+// ===========================================================================
+
+/// Prelude `Bottom : Ω_0` term.
+fn bot(env: &GlobalEnv) -> Term {
+    Term::Const {
+        id: env.bottom_id(),
+        level_args: Vec::new(),
+    }
+}
+/// Prelude `Top : Ω_0` term.
+fn top(env: &GlobalEnv) -> Term {
+    Term::Const {
+        id: env.top_id(),
+        level_args: Vec::new(),
+    }
+}
+/// `c` (a constructor) applied to no level args.
+fn ctor(id: GlobalId) -> Term {
+    Term::Constructor {
+        id,
+        level_args: Vec::new(),
+    }
+}
+
+// --- C5: cast regularity (`16 §3.2`) ---------------------------------------
+
+#[test]
+fn k2_cast_refl_regularity() {
+    // `cast A A (refl A) a ⇝ a` with `A : Type 0`, `a : A` open.
+    let (env, _s) = std_env();
+    let mut ctx = Context::new();
+    ctx.push(Term::Type(Level::zero())); // A : Type 0  (A is var 0 here)
+    ctx.push(Term::var(0)); // a : A  (a's type is A = var 0 at push time)
+                            // Now: var 0 = a, var 1 = A.
+    let cast = Term::Cast(
+        Box::new(Term::var(1)),
+        Box::new(Term::var(1)),
+        Box::new(Term::Refl(Box::new(Term::var(1)))), // refl A : Eq Type A A
+        Box::new(Term::var(0)),
+    );
+    assert_eq!(whnf(&env, &ctx, &cast), Term::var(0));
+    // And it type-checks: `cast A A (refl A) a : A`.
+    assert_eq!(infer(&env, &ctx, &cast), Ok(Term::var(1)));
+}
+
+// --- C4: Eq at an inductive (`16 §2.2`) ------------------------------------
+
+#[test]
+fn k2_eq_inductive_diff_ctor_is_bottom() {
+    // `Eq Nat zero (suc n) ⇝ Bottom`, with `n : Nat` open (exercises the
+    // different-constructor path, not a closed instance).
+    let (env, s) = std_env();
+    let mut ctx = Context::new();
+    ctx.push(Term::indformer(s.nat, vec![])); // n : Nat  (var 0)
+    let eq = Term::Eq(
+        Box::new(Term::indformer(s.nat, vec![])),
+        Box::new(ctor(s.zero)),
+        Box::new(Term::app(ctor(s.suc), Term::var(0))),
+    );
+    assert_eq!(whnf(&env, &ctx, &eq), bot(&env));
+}
+
+#[test]
+fn k2_eq_inductive_same_ctor_nat_suc() {
+    // `Eq Nat (suc (suc zero)) (suc x) ⇝ Eq Nat (suc zero) x`, with `x : Nat`
+    // open. `suc`'s telescope is non-dependent, so no transport `cast`.
+    let (env, s) = std_env();
+    let mut ctx = Context::new();
+    ctx.push(Term::indformer(s.nat, vec![])); // x : Nat  (var 0)
+    let eq = Term::Eq(
+        Box::new(Term::indformer(s.nat, vec![])),
+        Box::new(Term::app(ctor(s.suc), Term::app(ctor(s.suc), ctor(s.zero)))),
+        Box::new(Term::app(ctor(s.suc), Term::var(0))),
+    );
+    let expected = Term::Eq(
+        Box::new(Term::indformer(s.nat, vec![])),
+        Box::new(Term::app(ctor(s.suc), ctor(s.zero))),
+        Box::new(Term::var(0)),
+    );
+    assert_eq!(whnf(&env, &ctx, &eq), expected);
+}
+
+// --- C2: Eq at Pi (funext definitional, `16 §2.2`) -------------------------
+
+#[test]
+fn k2_funext_definitional() {
+    // `Eq ((x:A)→B) f g ⇝ (x:A)→Eq B (f x) (g x)` with `A:Type 0`,
+    // `f g : (x:A)→Type 0` open (B = Type 0, non-dependent).
+    let (env, _s) = std_env();
+    let mut ctx = Context::new();
+    ctx.push(Term::Type(Level::zero())); // A  (var 2)
+    ctx.push(Term::pi(Term::var(2), Term::Type(Level::zero()))); // f  (var 1)
+    ctx.push(Term::pi(Term::var(2), Term::Type(Level::zero()))); // g  (var 0)
+    let pi_ty = Term::pi(Term::var(2), Term::Type(Level::zero())); // (x:A)→Type 0
+    let eq = Term::Eq(
+        Box::new(pi_ty),
+        Box::new(Term::var(1)),
+        Box::new(Term::var(0)),
+    );
+    // (x:A)→Eq Type 0 (f x) (g x): f weakens to 2, g to 1, x at 0.
+    let expected = Term::pi(
+        Term::var(2),
+        Term::Eq(
+            Box::new(Term::Type(Level::zero())),
+            Box::new(Term::app(Term::var(2), Term::var(0))),
+            Box::new(Term::app(Term::var(1), Term::var(0))),
+        ),
+    );
+    assert_eq!(whnf(&env, &ctx, &eq), expected);
+}
+
+// --- C3: Eq at Omega (propext definitional, `16 §2.2`) ---------------------
+
+#[test]
+fn k2_propext_definitional() {
+    // `Eq Ω P Q ⇝ (P→Q) and (Q→P)` with `P Q : Ω_0` open.
+    let (env, _s) = std_env();
+    let mut ctx = Context::new();
+    ctx.push(Term::Omega(Level::zero())); // P : Ω_0  (var 1)
+    ctx.push(Term::Omega(Level::zero())); // Q : Ω_0  (var 0)
+    let eq = Term::Eq(
+        Box::new(Term::Omega(Level::zero())),
+        Box::new(Term::var(1)),
+        Box::new(Term::var(0)),
+    );
+    let expected = Term::sigma(
+        Term::pi(Term::var(1), Term::var(0)), // (P→Q)
+        Term::pi(Term::var(0), Term::var(1)), // (Q→P)
+    );
+    assert_eq!(whnf(&env, &ctx, &eq), expected);
+}
+
+// --- C1: Ω proof-irrelevance (`16 §1.2`, §8.2) -----------------------------
+
+#[test]
+fn k2_omega_pi_convertible() {
+    // Any two proofs `p, q : P : Ω_0` are definitionally equal (constant-time
+    // "yes", contents not inspected).
+    let (env, _s) = std_env();
+    let mut ctx = Context::new();
+    ctx.push(Term::Omega(Level::zero())); // P : Ω_0  (var 2)
+    ctx.push(Term::var(2)); // p : P  (var 1)
+    ctx.push(Term::var(2)); // q : P  (var 0)
+    assert!(convert(
+        &env,
+        &ctx,
+        &Term::var(2),
+        &Term::var(1),
+        &Term::var(0)
+    ));
+}
+
+#[test]
+fn k2_uip_definitional() {
+    // `Eq : Ω` ⇒ any two proofs `p, q : Eq A a b` are definitionally equal (UIP),
+    // even with `a /= b` open. Build the context by push-time indices:
+    //   A : Type 0; a : A; b : A; p : Eq A a b; q : Eq A a b.
+    let (env, _s) = std_env();
+    let mut ctx = Context::new();
+    ctx.push(Term::Type(Level::zero())); // A : Type 0   (A = var 0)
+    ctx.push(Term::var(0)); // a : A   (a's type = A = var 0; now a=0, A=1)
+    ctx.push(Term::var(1)); // b : A   (b's type = A = var 1; now b=0, a=1, A=2)
+                            // Eq A a b in the current ctx: A=var2, a=var1, b=var0.
+    let eq_ty = Term::Eq(
+        Box::new(Term::var(2)),
+        Box::new(Term::var(1)),
+        Box::new(Term::var(0)),
+    );
+    ctx.push(eq_ty.clone()); // p : Eq A a b  (p=0, b=1, a=2, A=3)
+    ctx.push(Term::Eq(
+        // Eq A a b in the ctx with p added: A=var3, a=var2, b=var1.
+        Box::new(Term::var(3)),
+        Box::new(Term::var(2)),
+        Box::new(Term::var(1)),
+    )); // q : Eq A a b  (q=0, p=1, b=2, a=3, A=4)
+        // Compare p (var 1) and q (var 0) at `Eq A a b` (in the final ctx:
+        // A=var4, a=var3, b=var2). Ω-PI ⇒ convertible (contents not inspected).
+    let eq_ty_final = Term::Eq(
+        Box::new(Term::var(4)),
+        Box::new(Term::var(3)),
+        Box::new(Term::var(2)),
+    );
+    assert!(convert(
+        &env,
+        &ctx,
+        &eq_ty_final,
+        &Term::var(1),
+        &Term::var(0)
+    ));
+}
+
+// --- C7 (beta): J on refl (`15 §4.2`) --------------------------------------
+
+#[test]
+fn k2_j_on_refl_is_base() {
+    // `J motive base (refl a) ≡ base` (J-β), with `a : A` open.
+    let (env, _s) = std_env();
+    let mut ctx = Context::new();
+    ctx.push(Term::Type(Level::zero())); // A : Type 0  (var 1)
+    ctx.push(Term::var(1)); // a : A  (var 0)
+                            // motive is irrelevant to J-β (the rule fires on `refl` before using it);
+                            // use a dummy well-formed term.
+    let motive = Term::Type(Level::zero());
+    let base = Term::var(0);
+    let j = Term::J(
+        Box::new(motive),
+        Box::new(base.clone()),
+        Box::new(Term::Refl(Box::new(Term::var(0)))),
+    );
+    assert_eq!(whnf(&env, &ctx, &j), base);
+}
+
+// --- C8: quotient equality (`16 §5`) ---------------------------------------
+
+#[test]
+fn k2_quotient_eq_is_relation() {
+    // `Eq (A/R) [a] [b] ⇝ R a b`, with `A:Type 0`, `R:A→A→Ω`, `a b : A` open.
+    let (env, _s) = std_env();
+    let mut ctx = Context::new();
+    ctx.push(Term::Type(Level::zero())); // A  (A=0)
+                                         // R : A → A → Ω = (x:A)→(y:A)→Ω. Inner A weakens past each binder.
+    ctx.push(Term::pi(
+        Term::var(0),
+        Term::pi(Term::var(1), Term::Omega(Level::zero())),
+    )); // R  (R=0, A=1)
+    ctx.push(Term::var(1)); // a : A  (a=0, R=1, A=2)
+    ctx.push(Term::var(2)); // b : A  (b=0, a=1, R=2, A=3)
+                            // Now A=var3, R=var2, a=var1, b=var0.
+    let eq = Term::Eq(
+        Box::new(Term::Quot(Box::new(Term::var(3)), Box::new(Term::var(2)))),
+        Box::new(Term::QuotClass(Box::new(Term::var(1)))),
+        Box::new(Term::QuotClass(Box::new(Term::var(0)))),
+    );
+    // R a b = App(App(R, a), b).
+    let expected = Term::app(Term::app(Term::var(2), Term::var(1)), Term::var(0));
+    assert_eq!(whnf(&env, &ctx, &eq), expected);
+}
+
+// --- C9: quotient eliminator i-reduction (`16 §5`) -------------------------
+
+#[test]
+fn k2_quotient_elim_on_class() {
+    // `elim_/ M f r [a] ⇝ f a`. The motive/respect are not reduced by the
+    // i-step (only the scrutinee's class representative is applied to `f`).
+    let (env, _s) = std_env();
+    let mut ctx = Context::new();
+    ctx.push(Term::Type(Level::zero())); // A  (A=0)
+    ctx.push(Term::pi(Term::var(0), Term::Type(Level::zero()))); // f : (x:A)→Type 0
+                                                                 // (f=0, A=1)
+    ctx.push(Term::var(1)); // a : A  (a=0, f=1, A=2)
+    let elim = Term::QuotElim {
+        motive: Box::new(Term::Type(Level::zero())), // dummy motive (i-step ignores)
+        method: Box::new(Term::var(1)),              // f
+        respect: Box::new(Term::Type(Level::zero())), // dummy respect
+        scrut: Box::new(Term::QuotClass(Box::new(Term::var(0)))), // [a]
+    };
+    assert_eq!(
+        whnf(&env, &ctx, &elim),
+        Term::app(Term::var(1), Term::var(0))
+    );
+}
+
+// --- C10: truncation eliminator i-reduction (`16 §6`) ----------------------
+
+#[test]
+fn k2_trunc_elim_on_proj() {
+    // `elim_trunc P f |a| ⇝ f a` (truncation elim encoded as `QuotElim` on a
+    // `TruncProj` scrut, `16 §6`).
+    let (env, _s) = std_env();
+    let mut ctx = Context::new();
+    ctx.push(Term::Type(Level::zero())); // A  (A=0)
+    ctx.push(Term::pi(Term::var(0), Term::Type(Level::zero()))); // f : (x:A)→Type 0
+    ctx.push(Term::var(1)); // a : A  (a=0, f=1, A=2)
+    let elim = Term::QuotElim {
+        motive: Box::new(Term::Type(Level::zero())),
+        method: Box::new(Term::var(1)), // f
+        respect: Box::new(Term::Type(Level::zero())),
+        scrut: Box::new(Term::TruncProj(Box::new(Term::var(0)))), // |a|
+    };
+    assert_eq!(
+        whnf(&env, &ctx, &elim),
+        Term::app(Term::var(1), Term::var(0))
+    );
+}
+
+#[test]
+fn k2_trunc_eq_is_top() {
+    // `Eq ‖A‖ |a| |b| ⇝ Top` — a truncation is a proposition (quotient by the
+    // total relation), so any two elements are equal.
+    let (env, _s) = std_env();
+    let mut ctx = Context::new();
+    ctx.push(Term::Type(Level::zero())); // A  (A=0)
+    ctx.push(Term::var(0)); // a : A  (a=0, A=1)
+    ctx.push(Term::var(1)); // b : A  (b=0, a=1, A=2)
+    let eq = Term::Eq(
+        Box::new(Term::Trunc(Box::new(Term::var(2)))), // ‖A‖
+        Box::new(Term::TruncProj(Box::new(Term::var(1)))), // |a|
+        Box::new(Term::TruncProj(Box::new(Term::var(0)))), // |b|
+    );
+    assert_eq!(whnf(&env, &ctx, &eq), top(&env));
+}
+
+// --- funext with ≥2 distinct level variables (K1 retro lesson) -------------
+
+#[test]
+fn k2_funext_with_levels() {
+    // `A : Type 1`, `B x = Type 1` (so `B x : Type 2`); `(x:A)→B x : Type (max 1
+    // 2) = Type 2`; `Eq ((x:A)→B x) f g : Ω_(max 1 2) = Ω_2`. Exercises ≥2
+    // distinct levels (1, 2) — the gap that hid K1's universe-normalization
+    // soundness bug. (Note: `B x = Type 1` *inhabits* `Type 2`, not `Type 1` —
+    // the Ω level is the max of the universes `A` and `B x` inhabit.)
+    let (env, _s) = std_env();
+    let l_a = Level::suc(Level::zero()); // 1 (A : Type 1)
+    let b_val = Level::suc(Level::zero()); // 1 (B x = Type 1, inhabits Type 2)
+    let omega_l = Level::suc(Level::suc(Level::zero())); // 2 = max(1, 2)
+    let mut ctx = Context::new();
+    ctx.push(Term::Type(l_a.clone())); // A : Type 1  (A=0)
+    ctx.push(Term::pi(Term::var(0), Term::Type(b_val.clone()))); // f : (x:A)→Type 1
+    ctx.push(Term::pi(Term::var(1), Term::Type(b_val.clone()))); // g : (x:A)→Type 1
+                                                                 // (g=0, f=1, A=2)
+    let pi_ty = Term::pi(Term::var(2), Term::Type(b_val.clone())); // (x:A)→Type 1 : Type 2
+    let eq = Term::Eq(
+        Box::new(pi_ty),
+        Box::new(Term::var(1)),
+        Box::new(Term::var(0)),
+    );
+    assert_eq!(infer(&env, &ctx, &eq), Ok(Term::Omega(omega_l.clone())));
+    let expected = Term::pi(
+        Term::var(2),
+        Term::Eq(
+            Box::new(Term::Type(b_val.clone())),
+            Box::new(Term::app(Term::var(2), Term::var(0))), // f x  (f weakens 1→2)
+            Box::new(Term::app(Term::var(1), Term::var(0))), // g x  (g weakens 0→1)
+        ),
+    );
+    assert_eq!(whnf(&env, &ctx, &eq), expected);
+}
+
+// --- C7 (non-refl): J reduces on a non-refl equality (`15 §4.3`) -----------
+// The headline. `J` on a canonical non-`refl` proof (here a *variable*
+// `e : Eq A a b`, neutral — not `refl`) must reduce, not get stuck. With a
+// constant motive `P = λb.λe. Type 0`, `P a (refl a) ≡ P b e ≡ Type 0`, so
+// `J ≡ cast Type 0 Type 0 (refl ...) base → base` by regularity.
+#[test]
+fn k2_j_nonrefl_reduces_not_stuck() {
+    let (env, _s) = std_env();
+    let mut ctx = Context::new();
+    ctx.push(Term::Type(Level::zero())); // A : Type 0  (A=0)
+    ctx.push(Term::var(0)); // a : A  (a=0, A=1)
+    ctx.push(Term::var(1)); // b : A  (b=0, a=1, A=2)
+                            // e : Eq A a b  (A=var2, a=var1, b=var0).
+    ctx.push(Term::Eq(
+        Box::new(Term::var(2)),
+        Box::new(Term::var(1)),
+        Box::new(Term::var(0)),
+    )); // e=0, b=1, a=2, A=3
+        // Constant motive P = λ(b:A). λ(e:Eq A a b). Type 0, in the ctx above
+        // (A=var3, a=var2). Under the outer b-binder (b'=0): A=var4, a=var3, b'=0.
+    let motive = Term::lam(
+        Term::var(3), // A
+        Term::lam(
+            Term::Eq(
+                Box::new(Term::var(4)), // A (weakened)
+                Box::new(Term::var(3)), // a (weakened)
+                Box::new(Term::var(0)), // b' (the bound b)
+            ),
+            Term::Type(Level::zero()),
+        ),
+    );
+    let base = Term::Type(Level::zero()); // the constant K
+    let j = Term::J(
+        Box::new(motive),
+        Box::new(base.clone()),
+        Box::new(Term::var(0)), // e : Eq A a b  (non-refl: a variable)
+    );
+    // J on the non-refl `e` reduces (to `base`), it does NOT stay stuck at a
+    // neutral `J` node.
+    assert_eq!(whnf(&env, &ctx, &j), base);
 }

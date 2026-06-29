@@ -13,9 +13,23 @@
 //! with the strict-positivity admission and a dependent eliminator + ι (`14`),
 //! and just enough structural conversion (β/η/ι/δ) to check them. The
 //! `[K2]`-reserved formers (`Ω`, `Eq`, `cast`, `J`, quotients, truncation) are
-//! carried in the grammar for forward compatibility but rejected by
-//! `check`/`infer`; the full decidable conversion (NbE + SCT) is K2c; the
-//! stable API surface is K-api.
+//! carried in the grammar for forward compatibility; the full decidable
+//! conversion (NbE + SCT) is K2c; the stable API surface is K-api.
+//!
+//! ## K2 scope — the observational equality layer (`spec/10-kernel/15`–`16`)
+//!
+//! K2 makes the reserved formers type and compute (extending K1's
+//! `check`/`infer`/`whnf`/`conv`, never rewriting them): the strict-proposition
+//! universe **Ωₗ** (level-indexed, predicative, definitional proof-irrelevance,
+//! `16 §1`), observational **`Eq`-by-type** (funext/propext definitional; the
+//! inductive same-ctor conjunct with dependent-telescope `cast`s / diff-ctor ⇒
+//! `Bottom`; `16 §2`), **`cast`-by-type** (regularity + by-type computation,
+//! computing from endpoints never the proof; `16 §3`), the derived **`J`**
+//! (J-β on `refl` **and** reduction on non-`refl` via `cast`; `15 §4`), set-
+//! quotients `A/R` (`16 §5`), propositional truncation `‖A‖` (`16 §6`), and the
+//! conversion extension — Ω-PI shortcut + propositional-argument-skip plugged
+//! into K1's `convert` seam (`16 §8`). The reductions live in [`obs`]; the
+//! typing rules in [`check`]; the seam in [`conv`].
 //!
 //! ## Design constraints
 //!
@@ -32,6 +46,7 @@ pub mod conv;
 pub mod env;
 pub mod error;
 pub mod inductive;
+pub mod obs;
 pub mod subst;
 pub mod term;
 

@@ -73,10 +73,12 @@ pub fn shift(term: &Term, d: i64, cutoff: usize) -> Term {
         Term::QuotElim {
             motive,
             method,
+            respect,
             scrut,
         } => Term::QuotElim {
             motive: Box::new(shift(motive, d, cutoff)),
             method: Box::new(shift(method, d, cutoff)),
+            respect: Box::new(shift(respect, d, cutoff)),
             scrut: Box::new(shift(scrut, d, cutoff)),
         },
         Term::Elim {
@@ -98,7 +100,7 @@ pub fn shift(term: &Term, d: i64, cutoff: usize) -> Term {
         },
         // Closed-ish nodes: no free variables to shift (levels are not de Bruijn).
         Term::Type(_)
-        | Term::Omega
+        | Term::Omega(_)
         | Term::Const { .. }
         | Term::IndFormer { .. }
         | Term::Constructor { .. } => term.clone(),
@@ -167,10 +169,12 @@ pub fn subst_var(term: &Term, j: usize, u: &Term) -> Term {
         Term::QuotElim {
             motive,
             method,
+            respect,
             scrut,
         } => Term::QuotElim {
             motive: Box::new(subst_var(motive, j, u)),
             method: Box::new(subst_var(method, j, u)),
+            respect: Box::new(subst_var(respect, j, u)),
             scrut: Box::new(subst_var(scrut, j, u)),
         },
         Term::Elim {
@@ -191,7 +195,7 @@ pub fn subst_var(term: &Term, j: usize, u: &Term) -> Term {
             scrut: Box::new(subst_var(scrut, j, u)),
         },
         Term::Type(_)
-        | Term::Omega
+        | Term::Omega(_)
         | Term::Const { .. }
         | Term::IndFormer { .. }
         | Term::Constructor { .. } => term.clone(),
@@ -289,10 +293,12 @@ pub fn subst_outer(term: &Term, m: usize, params: &[Term], inner_depth: usize) -
         Term::QuotElim {
             motive,
             method,
+            respect,
             scrut,
         } => Term::QuotElim {
             motive: Box::new(subst_outer(motive, m, params, inner_depth)),
             method: Box::new(subst_outer(method, m, params, inner_depth)),
+            respect: Box::new(subst_outer(respect, m, params, inner_depth)),
             scrut: Box::new(subst_outer(scrut, m, params, inner_depth)),
         },
         Term::Elim {
@@ -323,7 +329,7 @@ pub fn subst_outer(term: &Term, m: usize, params: &[Term], inner_depth: usize) -
         },
         // No free term variables; levels are untouched (term-var subst only).
         Term::Type(_)
-        | Term::Omega
+        | Term::Omega(_)
         | Term::Const { .. }
         | Term::IndFormer { .. }
         | Term::Constructor { .. } => term.clone(),
@@ -499,13 +505,19 @@ pub fn subst_levels(term: &Term, params: &[LevelVar], args: &[Level]) -> Term {
         Term::QuotElim {
             motive,
             method,
+            respect,
             scrut,
         } => Term::QuotElim {
             motive: Box::new(subst_levels(motive, params, args)),
             method: Box::new(subst_levels(method, params, args)),
+            respect: Box::new(subst_levels(respect, params, args)),
             scrut: Box::new(subst_levels(scrut, params, args)),
         },
-        Term::Omega | Term::Var(_) => term.clone(),
+        // `Ω_ℓ` carries a level that may mention level params (`12 §4`); the
+        // other leaves have no level fields. `Var` is not de Bruijn-shifted by
+        // level instantiation.
+        Term::Omega(l) => Term::Omega(subst_level(l, params, args)),
+        Term::Var(_) => term.clone(),
     }
 }
 
