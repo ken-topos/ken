@@ -261,3 +261,34 @@ trigger CI, reads the checks, merges, and fetches `main`
   leaders. A GitHub state change nobody mirrors is a silent stall.
 - The full event→message map (what, where, mentioning whom, posted by whom) is
   in `../docs/program/04-git-and-integration.md §5`.
+
+## 15. Context compaction is the Steward's (teams) or self (singletons)
+
+Token efficiency: an agent should start each work package with a clean, minimal
+context. Who triggers a compaction is fixed (operator, 2026-06-29):
+
+- **Teams are compacted by the Steward**, not by their own leader. The Steward
+  `moot compact`s the **whole team** (leader + implementer + QA, or spec-leader +
+  spec-author + conformance-validator) **before delivering a WP** to the leader.
+  Leaders never `moot compact` anyone — `request_context_reset` is self-only, so
+  only the Steward can compact another agent (`moot compact`), and it does so for
+  teams alone.
+- **Gated by retros.** The Steward compacts a team **only after** its prior WP's
+  retros are posted (compaction would otherwise summarize the retro away), and
+  delivers the next WP **only after** compacting. So a team's WP boundary is:
+  done → leader calls for retros in-thread → members post → leader signals the
+  Steward "retros in" → Steward reviews → Steward compacts → next WP.
+- **Singletons self-compact.** Agents with no team/leader — **Steward, Architect,
+  Integrator, Librarian** — call `request_context_reset` at their own task
+  boundaries (Architect after a review, Integrator after a merge, Librarian after
+  a pass, Steward after a directing cycle).
+- **Never mid-reasoning.** Compact only at a clean boundary; it summarizes away
+  in-flight work.
+- **On resume after a compaction, ground-truth your state before trusting the
+  summary.** A compaction can summarize away the fact that you *finished* — so
+  re-orient from reality, not the lossy summary: `orientation()` **plus**
+  `git reflog -10`, `git status`, `git branch -vv`. Your pre-compact self's
+  commits and checkouts are in the reflog; check there before concluding you (or
+  a teammate) are "stalled" or re-doing delivered work. (F4 retro, Foundation —
+  promoted here because the Steward-compacts-every-WP rule makes post-compact
+  resume a constant for every team member.)
