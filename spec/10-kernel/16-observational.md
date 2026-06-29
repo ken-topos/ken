@@ -85,10 +85,12 @@ primitive kernel support beyond the Omega formation and PI rules above:
 | not P      | `P -> Empty`    | Pi-type + Bottom |
 
 `Unit` and `Empty` as defined in K1 live in `Type 0`. When used as
-propositions in `Omega_0`, the kernel treats them as Omega-typed constants
-via an explicit embedding `Up : Type 0 → Omega_0` — a no-op at the term
-level that adjusts the type annotation. Concretely, `Top` and `Bottom` are
-Omega-typed constants defined in the prelude, not new kernel primitives.
+propositions in `Omega_0`, the kernel provides them as **Omega-typed
+prelude constants** — `Top : Omega_0` (wrapping `Unit`) and `Bottom :
+Omega_0` (wrapping `Empty`). These are direct declarations, not a
+general `Type → Omega` coercion (only genuine sub-singleton types may
+enter the strict-prop universe; an unrestricted `Type 0 → Omega_0` would
+admit `Bool`, making `true ≡ false` by Ω-PI and breaking consistency).
 
 `P or Q` and `exists x. P` are provided via truncation (par. 6):
 `P or Q := || P + Q ||` and `exists x:A. P x := || (x:A) x P x ||`. These
