@@ -293,27 +293,47 @@ only — the index is what elaboration emits).
 3. **Unbound is a name-resolution error**, raised *here* with a source span
    (`§5.6`), never deferred to the kernel.
 
-**Worked shadowing case** (the load-bearing guard — AC4 `shadow`):
+**Worked shadowing case** (the load-bearing guard — AC4). The guard must be
+**discriminating**: correct resolution and a capture bug have to produce
+*observably different* outcomes, or the test passes vacuously and catches
+nothing (the discriminating-case discipline). A program whose body merely
+*rejects* under both resolutions does **not** qualify — the verdict, or the
+emitted index, has to differ. The right shape pairs a shadowing binder of a
+**different type** than the intended one with a codomain the **intended**
+binder satisfies:
 
 ```
-view shadow (A : Type) (x : A) : (A : Type) -> A = \A . x
+view f (A : Type) (x : A) : Type -> A = \B . x
 ```
 
-Desugar the params and result; resolving the body `\A . x`, the scope stack at
-the occurrence of `x` is (innermost first):
+Its declared type is `(A : Type) → (x : A) → (Type → A)`, i.e.
+`Pi(Univ 0, Pi(Var 0, Pi(Univ 0, Var 2)))`. Resolving the body `\B . x`, the
+scope stack at the occurrence of `x` is (innermost first):
 
 ```
-[ A_inner ,  x ,  A_outer ]      -- from \A , then the params (x : A)(A : Type)
-    0          1        2
+[ B ,  x ,  A ]      -- from \B , then the params (x : A)(A : Type)
+  0    1    2
 ```
 
-`indexOf(scope, "x")` skips `A_inner` (name `A` ≠ `x`) and matches at **index
-1** — the outer `x` parameter, whose type is the outer `A`. It does **not**
-resolve to `A_inner` (the shadowing λ-bound `A : Type`). A bug that resolved `x`
-to the inner binder would yield a term that still *type-checks* (with `x : Type`
-under the inner `A`), which is exactly the silent corruption the kernel cannot
-catch — so this case is a required conformance guard (`§5.6`, AC4), not an
-optional one.
+`indexOf(scope, "x")` skips `B` (name `B` ≠ `x`) and matches at **index 1** —
+the outer `x` parameter (type `A`). The elaborated core is
+`Lam(Univ 0, Lam(Var 0, Lam(Univ 0, Var 1)))`; checked against the declared
+type, the body `x : A` meets the codomain `A` (`Var 2` under the three binders),
+so it **kernel-accepts**. A capture bug that instead resolved `x` to the
+innermost binder (**index 0** = `B : Type`) would emit `… Lam(Univ 0, Var 0)`,
+whose body has type `Type ≢ A` — the kernel **rejects**. The two resolutions
+give **opposite verdicts**, so the case genuinely exercises the resolver.
+
+The discriminating signal is the **resolved index itself** (`Var 1`, not
+`Var 0`); conformance asserts it **structurally** on the emitted core term —
+verdict-independent, so the guard holds even where a kernel verdict alone would
+be ambiguous (`§5.6`, AC4). (Contrast the tempting non-example
+`… : (A : Type) → A = \A . x`: the inner λ shadows with the *same* name and
+type-role as the codomain binder, so *both* the correct and the captured
+resolution reject — the test would pass vacuously and guard nothing.) This case
+is **required**, not optional: name resolution is the one V0 pass whose errors
+the kernel cannot backstop — a mis-resolution that stayed well-typed would be a
+silent, well-typed-but-wrong term (`§1`).
 
 ### 5.4 Elaboration — surface → core (the algorithm)
 
