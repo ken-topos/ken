@@ -5,6 +5,7 @@ members = [
     "crates/ken-elaborator",
     "crates/ken-interp",
     "crates/ken-cli",
+    "crates/ken-foundation",
 ]
 
 # Shared package metadata. Individual crates inherit with `field.workspace = true`.
