@@ -61,15 +61,19 @@ Integrator owns `main` mechanics and the Architect owns design judgment. Read
 
 ## Own the watchdog (the only poll on your team)
 
-Workers are event-driven and never poll; you run the watchdog. **Arm it with the
-convo cron** — `schedule_call(tool="get_space_status", interval="10m")` while
-your ring has open work (COORDINATION §13; `cancel_call` when idle), **not**
-`/loop`/`CronCreate`/a remembered intention. **Tick on `get_space_status` or
-`get_mentions`, never `get_recent_context`** — a timer's fire posts its result
-back into the space, so a `get_recent_context` tick reads its own prior fires and
-recursively nests them (§13). **Record the returned `timer_id`** and `cancel_call`
-it when your ring closes — a timer is cancellable only by the session that armed
-it, so an unrecorded one orphans after a compaction. **A watchdog you never arm catches
+Workers are event-driven and never poll; you run the watchdog. **Arm it with a
+private `CronCreate` timer — NOT the convo `schedule_call`** (COORDINATION §13):
+`CronCreate(cron="7,17,27,37,47,57 * * * *", prompt="Watchdog tick: pull recent
+context, scan the stall patterns, mention only a blocked agent; if clear, do
+nothing", recurring=true)` while your ring has open work. `CronCreate` enqueues a
+prompt into **your own session** and posts **nothing** to the space; on each fire
+you run your *own* `get_recent_context`/`get_space_status` read (private) and
+message the space only when there's a real stall to nudge. **Never use the convo
+`schedule_call`** — it posts its read result into the space as a System event
+every participant sees (broadcast noise; the `get_recent_context` variant
+self-nests). A `durable:false` cron dies on session exit, so **re-arm at session
+start** and `CronDelete` it when your ring closes (`CronList` shows your jobs) —
+this is why it can't orphan the way the convo timer did. **A watchdog you never arm catches
 nothing:** `QA-approved-but-no-merge-request` is on the list below precisely
 because a leader that wasn't watching let a QA-approved WP sit unmerged (operator-
 caught). Each wake, check the stall patterns — the prompt **enumerates each
