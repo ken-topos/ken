@@ -125,6 +125,36 @@ reference interpreter can ground them, rather than locked unground here.)
   thread ⇒ reject. Guards against a check that mistakes "the argument changed"
   for "the argument decreased."
 
+### conversion/sct-reject-ctor-wrap (soundness)
+- spec: `17 §4.2` (sizeRel: a constructor-wrap is `?`, never `↓=`)
+- given: transparent `f : Nat -> Nat`, `f (suc x) = f (suc (suc x))` — the
+  recursive argument re-wraps the parameter's field in another constructor;
+  admit
+- expect: **rejected at admission**
+- why: the argument `suc (suc x)` wraps `suc x` in a constructor, so it is
+  strictly **larger** — the size relation is `?` (unknown / not-≤), **never**
+  `↓=`. `↓=` means structurally ≤ (identity or a non-growing
+  projection/permutation); a constructor application grows and must be `?`. The
+  self-loop has no `↓` thread ⇒ reject. (Architect blocker companion: the `↓=`
+  class must exclude constructor-wrapping.)
+
+### conversion/sct-reject-ctor-wrap-compose (soundness)
+- spec: `17 §4.2` (sizeRel `↓=` vs `?`), `§4.3` (`compose(↓=, ↓) = ↓`)
+- given: a mutually-recursive transparent pair where one edge **unwraps** (a
+  real `↓`) and the other **re-wraps** in a constructor (which must be `?`):
+  `p (suc x) = q x`; `q x = p (suc (suc x))`; admit both
+- expect: **rejected at admission** — the pair is non-terminating
+  (`p 1 → q 0 → p 2 → q 1 → p 3 → …`, the `p`-argument grows without bound)
+- why: the **discriminating** case for the `↓=` rule. The `q -> p` edge
+  re-wraps `x` as `suc (suc x)` (grows) and MUST be `?`; composed with the real
+  `↓` on the `p -> q` unwrap edge, `compose(↓, ?) = ?`, so the idempotent loop
+  has no `↓` ⇒ **reject** (correct). If an implementation mis-records the
+  constructor re-wrap as `↓=`, then `compose(↓, ↓=) = ↓` fabricates a spurious
+  decreasing thread and the **non-terminating** pair is wrongly **admitted** —
+  the exact unsoundness the Architect flagged. The single-function
+  `sct-reject-ctor-wrap` is rejected under either classification, so it does not
+  isolate the bug; this composed pair does.
+
 ---
 
 ## Acceptance criterion: δ-heavy convertibility terminates (frame item 3)
@@ -201,6 +231,39 @@ reference interpreter can ground them, rather than locked unground here.)
   short-circuits at an Ω-typed comparison **before** any structural work.
   Re-tests `observational/omega-pi-convertible` through the unified `17 §3.3`
   conv entry point (the K2c path).
+
+### conversion/omega-universe-not-pi (soundness)
+- spec: `17 §3.3` (conv step 1 fires only when `typeOf(A) is Omega_l`; step 5
+  structural); `16 §1.2`, `16 §2.2` (propext is *propositional*, not
+  definitional, equality)
+- given: `Top : Omega_0` (the unit proposition) and `Bottom : Omega_0` (the
+  empty proposition); `convert(Omega_0, Top, Bottom)` — the **governing type is
+  the universe `Omega_0`**, so `Top`/`Bottom` are compared **as elements**
+- expect: **not convertible (false)**
+- why: proof irrelevance (`conv` step 1) fires only when the governing type is
+  itself a proposition (`typeOf(A) is Omega_l` — comparing two *proofs* of one
+  prop). Here the governing type **is the universe** `Omega_0` (a type, not a
+  proposition), so the comparison falls through to structural (step 5): two
+  **distinct** propositions are not definitionally equal — they are equal only
+  when mutually implying (propext, the *propositional* `Eq Omega`, not
+  definitional convertibility). If conversion equated all elements of `Omega_l`
+  (the unsound `A is Omega_l` disjunct), then `Top ≡ Bottom`, giving a closed
+  inhabitant of `Empty` — a consistency break. **Contrast with
+  `omega-proof-irrelevance`**: proofs *of* a prop are all equal; propositions
+  *as elements of the universe* are not. The existing `omega-pi` case tests the
+  former and would not catch this — this case pins the latter (Architect
+  blocker regression).
+
+### conversion/omega-universe-distinct-props (soundness)
+- spec: `17 §3.3` (conv step 1 guard; step 5 structural)
+- given: open distinct propositions `P Q : Omega_0` (distinct variables);
+  `convert(Omega_0, P, Q)`
+- expect: **not convertible (false)**
+- why: the open-term generalization — distinct propositions compared as
+  elements of the universe are structurally distinct neutral heads ⇒ not
+  convertible. Guards against a checker that special-cases the `Top`/`Bottom`
+  literals but still collapses general props at `Omega_l`. (K1 lesson: open
+  terms, not just the named-literal instance.)
 
 ### conversion/prop-arg-skip-spine (soundness)
 - spec: `17 §3.4` (convSpine; prop-argument skip); `16 §8.2`
