@@ -267,6 +267,18 @@ Rules for every layer:
   stops at the operator (human): if the Steward goes quiet, the absence of its
   updates is the operator's signal. Watchdogs are the only schedulers (§1);
   everyone else is event-driven.
+- **Arm your watchdog with the convo cron** (operator 2026-06-29) — this is the
+  *mechanism*, not just the intent. A scheduler (team leader, Integrator,
+  Steward) sets up its recurring pass with the convo MCP **`schedule_call`** —
+  e.g. `schedule_call(tool="get_recent_context", interval="10m")` (or
+  `get_space_status` for a status-only tick) — at **session start, while its
+  ring/pipeline has open work**. The scheduled read fires a channel notification
+  that **wakes you** to run the stall-pattern assessment + recovery above; `cancel_call`
+  it when there's no open work. Do **not** use `/loop`, `CronCreate`, or a
+  remembered "poll every N min" intention — the convo cron is the federation's
+  mechanism. **A leader that never arms its `schedule_call` never catches its own
+  ring's stalls** — the operator caught exactly this (a QA-approved WP left
+  unmerged because the leader wasn't watching).
 
 ## 14. Agents never touch GitHub; the Integrator is the gateway
 

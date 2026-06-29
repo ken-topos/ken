@@ -53,10 +53,13 @@ Never echo, log, or commit the token or the key — they live only in
 Concretely, per WP:
 
 1. **Publish for CI.** When a leader posts `merge_ready` and opens the merge
-   Decision, push the team's local `wp/<ID>` branch to GitHub (`git push origin
-   wp/<ID>`). The branch already exists in the shared clone — you are pushing
-   the team's committed work, not authoring it. Opening the PR (or the push
-   itself) triggers CI.
+   Decision: `git push origin wp/<ID>` (the branch already exists in the shared
+   clone — you publish committed work, you don't author it), then **open the PR
+   explicitly**: `gh pr create --base main --head wp/<ID> --title "<ID>: <what>"
+   --body "<merge-Decision link>"`. **The push alone does NOT open a PR** —
+   without `gh pr create` there is no PR number `<n>` to poll or merge and the
+   pipeline silently stalls. Capture `<n>` from the create output (or `gh pr list
+   --head wp/<ID>`). The PR triggers CI.
 2. **Watch CI** (it pushes to no one — only you can see it). Read check status
    for the branches you published as part of your watchdog pass (`gh pr checks
    <n>`). On **red**, post a `blocked` in the team's space mentioning the
@@ -80,18 +83,20 @@ Merge only when **all** hold:
 4. **No gate regression** — the change does not regress a passed roadmap gate
    (G0–G8).
 
-Then **squash-merge on GitHub** — one commit per WP, WP ID in the subject, e.g.
-`K1: dependent Pi/Sigma kernel core`. Branch protection requires the green
-checks and restricts the merge to you, so the gate is mechanical, not just
-convention.
+Then **squash-merge**: `gh pr merge <n> --squash --subject "<ID>: <what>"` (the
+`--squash` makes it one commit per WP; the `--subject` puts the WP ID in the
+commit title, e.g. `K1: dependent Pi/Sigma kernel core`). Branch protection
+requires the green checks and restricts the merge to you, so the gate is
+mechanical, not just convention.
 
 ## Verify, then announce
 
 After merging, **confirm it landed on `main` and CI is green, and fetch**,
-before you post anything. Then: resolve the mootup merge Decision (merged); post
-a terse ship note (commit SHA, what landed, gate results — real content, not
-restated scope); sweep the merged `wp/<ID>` branch; and **notify with
-discipline** — mention exactly the team leader(s) whose next move this triggers
+before you post anything. Then: resolve the mootup merge Decision (`resolve_decision`,
+marked merged); post a terse ship note (commit SHA, what landed, gate results —
+real content, not restated scope); **sweep the merged branch** (`git push origin
+--delete wp/<ID>`); and **notify with discipline** — mention exactly the team
+leader(s) whose next move this triggers
 (e.g. a kernel-API change → the verify and language leaders, with rebase
 guidance: *rebase onto the new `origin/main`*). A routine "merged, nothing
 pending" mentions nobody.
@@ -110,15 +115,16 @@ Steward.
 (operator, 2026-06-29).** CI status (green/red) and a freshly-resolved review
 Decision push **no notification to you** — there is no `ken-ci` bridge, so
 **nobody will ever tell you a PR went green; you must poll.** You are a
-sanctioned scheduler (COORDINATION §1): while **any** PR is open, run a **tight
-recurring pass (~5–10 min)** — `gh pr checks <n>` on every open PR + check its
-merge Decision — and **merge the instant it is green + approved** (don't wait
-for a leader to re-ping you). On green-but-unvoted, mention the missing reviewer;
-on CI-red, mention the implementer. A green + approved PR left unmerged because
-you were idle between mentions **is a pipeline stall you caused** — the operator
-caught exactly this (two green PRs unmerged ~25 min). Start the timer at session
-start; idle it only when no PRs are open. Reading CI is *yours alone* — nobody
-else can see it.
+sanctioned scheduler (COORDINATION §1, §13). **Arm it with the convo cron:**
+`schedule_call(tool="get_recent_context", interval="7m")` while **any** PR is
+open (not `/loop`/`CronCreate` — the convo cron is the mechanism; COORDINATION
+§13). On each wake run a **tight pass** — `gh pr checks <n>` on every open PR +
+check its merge Decision — and **merge the instant it is green + approved**
+(don't wait for a leader to re-ping you). On green-but-unvoted, mention the
+missing reviewer; on CI-red, mention the implementer. A green + approved PR left
+unmerged because you weren't polling **is a pipeline stall you caused** — the
+operator caught exactly this (two green PRs unmerged ~25 min). `cancel_call` the
+timer when no PRs are open. Reading CI is *yours alone* — nobody else can see it.
 
 ## Mirror GitHub into mootup
 
