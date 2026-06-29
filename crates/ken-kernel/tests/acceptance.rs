@@ -1764,3 +1764,22 @@ fn k2_cast_computes_quotient_class_preserved() {
         Term::QuotClass(Box::new(Term::var(1)))
     );
 }
+
+// --- propositional-argument skip (`16 §1.2`, §8.2) -------------------------
+// `f p ≡ f q` at `B` when `f : P → B`, `P : Ω`, and `p q : P` differ as terms
+// but are both proofs of the same proposition — the propositional argument is
+// skipped (Ω-PI), so conversion succeeds without comparing `p`/`q`.
+#[test]
+fn k2_omega_skip_prop_args() {
+    let (env, _s) = std_env();
+    let mut ctx = Context::new();
+    ctx.push(Term::Omega(Level::zero())); // P : Ω_0  (P=0)
+    ctx.push(Term::Type(Level::zero())); // B : Type 0  (B=0, P=1)
+    ctx.push(Term::pi(Term::var(1), Term::var(1))); // f : P → B  (f=0, B=1, P=2)
+    ctx.push(Term::var(2)); // p : P  (p=0, f=1, B=2, P=3)
+    ctx.push(Term::var(3)); // q : P  (q=0, p=1, f=2, B=3, P=4)
+                            // f p vs f q at B.  f=var2, p=var1, q=var0, B=var3.
+    let lhs = Term::app(Term::var(2), Term::var(1)); // f p
+    let rhs = Term::app(Term::var(2), Term::var(0)); // f q
+    assert!(convert(&env, &ctx, &Term::var(3), &lhs, &rhs));
+}
