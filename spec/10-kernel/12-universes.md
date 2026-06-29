@@ -1,8 +1,10 @@
 # Universes and the proposition classifier
 
-> Status: **DRAFT v0**. Normative. Defines the universe hierarchy, its checking
-> rules (the anchor of soundness), level polymorphism, and the proposition
-> universe Ω (the subobject classifier) the verification layer builds on.
+> Status: **K1 elaborated**. Normative. Defines the universe hierarchy, its
+> checking rules (the anchor of soundness), and level polymorphism. The
+> proposition universe Ω is a reserved grammar former (see `11-syntax.md §1`);
+> its typing rules, proof irrelevance, and Heyting structure are defined in K2
+> (`16-observational.md`). K1 delivers §§1–4 and §6.
 
 ## 1. The hierarchy
 
@@ -102,73 +104,26 @@ c {ℓ₁ … ℓₙ}                          -- a use, with explicit level arg
   the elaborator and **re-checked** by the kernel as ordinary level equalities
   at each instantiation.
 
-## 5. The proposition classifier Ω
+## 5. The proposition classifier Ω (K2)
 
-Ken's logic lives in a distinguished object **Ω**, the **subobject classifier**
-— the "type of propositions." It is where the verification layer (`../20-`) and
-the surface refinement types (`{x : A | φ x}`) take their truth values.
+`Ω` is a **reserved grammar former** (`11-syntax.md §1`, tagged `[K2]`). It is
+the strict, definitionally proof-irrelevant proposition universe (`SProp`) —
+the subobject classifier where `Eq` and the logic live.
 
-### 5.1 Ω is the strict proposition universe
+K1 reserves `Ω` in the grammar (it parses and is raw-well-formed) but
+implements **none** of its typing rules, proof irrelevance, or conversion
+behaviour. Those are defined in K2:
 
-A **proposition** is an inhabitant of **Ω**, the **primitive strict,
-definitionally proof-irrelevant** proposition universe (`SProp`,
-`16-observational.md §1`, ADR 0005): any two proofs of a `P : Ω` are
-**definitionally equal**. So propositions are **proof-irrelevant** and **UIP**
-holds — Ken is **set-level**. Equality `Eq A a b` lands in Ω (`15`, `16 §2`). Ω
-is the **subobject classifier**: a predicate on `A` is a map `A → Ω` (the topos
-reading), and a refinement `{x : A | φ x}` requires `φ x : Ω`. Ω is
-**predicative** (§2) and is *not* the impredicative `Prop` of Coq/Lean.
+- **Typing of Ω, its inhabitants, and the Heyting structure** —
+  `16-observational.md §1`.
+- **Definitional proof irrelevance** (any two proofs of `P : Ω` are
+  definitionally equal) — `16-observational.md §1`.
+- **Interaction with `Eq` and `cast`** — `Eq A a b : Ω` (`15-identity.md`),
+  `16-observational.md §2`.
+- **Level-polymorphic Ω** — `16-observational.md §1`.
 
-> **(OQ-Prop / OQ-3) — DECIDED, revised by ADR 0005.** Impredicativity stays
-> **ruled out** (incompatible with canonicity; predicative Ω). The earlier call
-> (cubical-era) was "derived Ω, *propositional* proof irrelevance, no `SProp`."
-> The observational foundation (ADR 0005) **supersedes** that: Ω **is** the
-> strict proof-irrelevant universe (`SProp`), so proof irrelevance is now
-> **definitional** — and it comes *for free* in the smaller OTT kernel (it even
-> *helps* agent-generated proofs: equality goals discharge definitionally, fewer
-> coherence terms to synthesise). No separate `SProp` add-on or kernel growth:
-> the observational core already includes it.
-
-### 5.2 Heyting structure (intuitionistic, not Boolean)
-
-Ω carries the operations of a **Heyting algebra**, *not* a Boolean one:
-
-| Connective | On Ω |
-|---|---|
-| truth | `⊤ : Ω` (the trivially-true proposition) |
-| falsity | `⊥ : Ω` (the empty type) |
-| conjunction | `φ ∧ ψ` (product of props) |
-| disjunction | `φ ∨ ψ` (propositional truncation of the sum, `16 §6`) |
-| implication | `φ ⇒ ψ` (function type `φ → ψ`, which is a prop when `ψ` is) |
-| negation | `¬ φ :≡ φ ⇒ ⊥` |
-| ∀ / ∃ | dependent product / truncated dependent sum over a type |
-
-The defining intuitionistic facts hold and MUST NOT be "optimized" into
-classical ones:
-
-- **Excluded middle `φ ∨ ¬φ` is not assumed.** It is provable only for
-  *decidable* propositions (`isDecidable φ :≡ φ ∨ ¬φ` as data) — exactly the
-  boundary the verification fragment classifier exploits
-  (`../20-verification/23-prover.md`).
-- **Double-negation elimination `¬¬φ ⇒ φ` is not assumed.** In general `¬¬φ ≠
-  φ`. The gap between `φ` and `¬¬φ` is where Ken's third truth value —
-  **`unknown`** — lives at the surface (`../20-verification/24-diagnostics.md
-  §3`). The kernel does not have a primitive `unknown`; it has *proofs*,
-  *refutations*, and the *absence* of either, and the surface renders that
-  trichotomy as proved/disproved/unknown.
-
-Classical reasoning is available only by **explicitly assuming** an axiom (an
-opaque constant `lem : (φ : Ω) → φ ∨ ¬φ`), which the kernel records as a
-postulate (`11-syntax.md §4`); doing so is a deliberate, visible act, never the
-default.
-
-### 5.3 Ω and the universe levels
-
-The base `Ω` sits in `Type 1`. Propositions about larger types form a
-level-polymorphic strict-prop universe `Ω ℓ : Type (suc ℓ)` (§4). The
-unqualified `Ω` means `Ω 0`. Refinement types `{x : A | φ x}`
-(`../30-surface/34-data-match.md`, `../20-verification/21-spec-syntax.md`)
-require `φ x : Ω ℓ` for the appropriate `ℓ`.
+Until K2 is delivered, the kernel's `check`/`infer` treat `Ω` as an
+unrecognised former (it fails typing).
 
 ## 6. What the kernel checks here
 
@@ -180,12 +135,11 @@ For the universe layer specifically, a conforming kernel MUST:
 3. Apply the predicative `max` rule at Π/Σ formation (§2, `13`).
 4. Check explicit level arguments at every polymorphic instantiation and
    re-verify level constraints (§4).
-5. Provide **Ω** as a **primitive strict, proof-irrelevant** proposition
-   universe (`SProp`, `16-observational.md §1`): two proofs of a `P : Ω` are
-   definitionally equal (definitional proof irrelevance), and Ω is predicative.
-   `⊤`, `⊥`, and the Heyting operations are defined terms over Ω + the inductive
-   layer (§5).
+5. Reserve **Ω** as a grammar former (raw-well-formed, `11-syntax.md §1`).
+   Ω's typing rules, definitional proof irrelevance, and Heyting structure
+   are K2 (`16-observational.md`). K1's `check`/`infer` reject Ω terms as
+   unrecognised.
 
-Conformance: `../../conformance/kernel/universes/` — includes the `Type:Type`
-rejection, predicative-`max` formation, level-poly instantiation, and
-definitional proof irrelevance in Ω.
+Conformance: `../../conformance/kernel/universes/` — K1 tests: the `Type:Type`
+rejection, predicative-`max` formation, level-poly instantiation. Ω conformance
+tests are K2-gated.
