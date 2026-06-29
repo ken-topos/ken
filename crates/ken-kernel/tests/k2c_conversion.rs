@@ -644,6 +644,56 @@ fn declare_def_non_recursive_admitted() {
 }
 
 // ---------------------------------------------------------------------------
+// SCT-reject: union-masking regression (Architect soundness blocker)
+//
+// f : Nat → Nat with two self-call sites in the same body:
+//   zero case:  f x  (x = original param → ↓= on param 0)
+//   suc  case:  f n  (n = field of suc x → ↓  on param 0)
+//
+// Buggy union-based closure merges [[↓=]] ∪ [[↓]] = [[↓]] → wrongly admits.
+// Correct set-based closure keeps [[↓=]] as a distinct idempotent loop with no
+// strict diagonal → REJECT.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn sct_reject_union_masking() {
+    let (mut env, nb) = mk_env();
+    let nat = nb.nat;
+    let ty = Term::pi(nat_t(&nb), nat_t(&nb));
+    let result = declare_recursive_group(&mut env, vec![(vec![], ty)], |ids| {
+        let f = ids[0];
+        let nat_t = Term::indformer(nat, vec![]);
+        // f = λ x.
+        //   elim_Nat (λ_. Nat)
+        //     (f x)              -- zero case: f x (↓= on param0)
+        //     (λ n. λ _ih. f n)  -- suc case:  f n (↓  on param0)
+        //     x
+        //
+        // Edge M_A = [[↓=]] (zero case), M_B = [[↓]] (suc case).
+        // [[↓=]] idempotent, no strict diagonal → REJECT.
+        let suc_method = Term::lam(
+            nat_t.clone(),
+            Term::lam(nat_t.clone(), Term::app(cref(f), Term::var(1))),
+        );
+        vec![Term::lam(
+            nat_t.clone(),
+            nat_elim(
+                &nb,
+                asc_motive(&nb, nat_t.clone()),
+                Term::app(cref(f), Term::var(0)), // zero: f x
+                suc_method,
+                Term::var(0),
+            ),
+        )]
+    });
+    assert!(
+        result.is_err(),
+        "f with a stationary self-call must be rejected"
+    );
+    assert!(matches!(result.unwrap_err(), KernelError::ScfFailed(_)));
+}
+
+// ---------------------------------------------------------------------------
 // Declare-def: self-loop is rejected by SCT.
 // ---------------------------------------------------------------------------
 

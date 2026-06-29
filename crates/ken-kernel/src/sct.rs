@@ -59,17 +59,6 @@ impl ScMatrix {
         }
     }
 
-    /// Element-wise max (union / "take best").
-    fn union_assign(&mut self, other: &ScMatrix) {
-        for i in 0..self.nrows {
-            for j in 0..self.ncols {
-                if other.entries[i][j] > self.entries[i][j] {
-                    self.entries[i][j] = other.entries[i][j];
-                }
-            }
-        }
-    }
-
     /// Matrix product `self ⊙ rhs`.  `self.ncols` must equal `rhs.nrows`.
     fn compose(&self, rhs: &ScMatrix) -> ScMatrix {
         assert_eq!(self.ncols, rhs.nrows);
@@ -319,59 +308,68 @@ fn collect_calls(
 }
 
 // ---------------------------------------------------------------------------
-// Idempotent closure (Floyd-Warshall with union)
+// Composition-set closure (correct SCT algorithm)
 // ---------------------------------------------------------------------------
 
-/// Compute the union of all reachable path matrices for each (caller, callee)
-/// pair, then collect idempotent self-loops.
-fn idempotent_self_loops(edges: &[CallEdge], n_group: usize) -> Vec<ScMatrix> {
-    // aggregate[caller][callee] = union matrix for that pair (or None).
-    let mut agg: Vec<Vec<Option<ScMatrix>>> = vec![vec![None; n_group]; n_group];
+/// Compute the composition closure of the call-edge set and return every
+/// distinct idempotent self-loop matrix.
+///
+/// The size-change principle (Ben-Amram / Lee–Jones) requires that **every**
+/// idempotent matrix in the reachable composition set has a strict diagonal —
+/// not just the element-wise max (union) over all paths.  The union
+/// over-approximates: two distinct loops `M_A = [[↓]]` and `M_B = [[↓=]]`
+/// union to `[[↓]]`, making the gate miss `M_B`'s lack of strict decrease and
+/// wrongly admit a non-terminating definition.
+///
+/// This function keeps each distinct `(caller, callee, matrix)` triple
+/// separately; the closure is closed under composition until no new triple
+/// appears.  Idempotent self-loops are then collected without merging.
+fn composition_closure_self_loops(edges: &[CallEdge]) -> Vec<ScMatrix> {
+    // G* = full reachable set of (caller, callee, matrix) triples.
+    let mut closure: Vec<(usize, usize, ScMatrix)> = Vec::new();
 
+    // Seed from direct edges.
     for e in edges {
-        let slot = &mut agg[e.caller][e.callee];
-        match slot {
-            None => *slot = Some(e.matrix.clone()),
-            Some(existing) => existing.union_assign(&e.matrix),
+        let triple = (e.caller, e.callee, e.matrix.clone());
+        if !closure.contains(&triple) {
+            closure.push(triple);
         }
     }
 
-    // Floyd-Warshall: for each intermediate j, try to improve (i, k) via i→j→k.
+    // Close under composition: each round works from a snapshot so that new
+    // entries discovered this round are composed in the next round.
     loop {
-        let mut changed = false;
-        for j in 0..n_group {
-            for i in 0..n_group {
-                for k in 0..n_group {
-                    let composed = match (&agg[i][j], &agg[j][k]) {
-                        (Some(m1), Some(m2)) if m1.ncols == m2.nrows => Some(m1.compose(m2)),
-                        _ => None,
-                    };
-                    if let Some(comp) = composed {
-                        let slot = &mut agg[i][k];
-                        match slot {
-                            None => {
-                                *slot = Some(comp);
-                                changed = true;
-                            }
-                            Some(existing) => {
-                                let before = existing.entries.clone();
-                                existing.union_assign(&comp);
-                                if existing.entries != before {
-                                    changed = true;
-                                }
-                            }
-                        }
-                    }
+        let snap = closure.clone();
+        let mut added = false;
+        for &(ci, cj, ref mi) in &snap {
+            for &(cj2, ck, ref mj) in &snap {
+                if cj != cj2 || mi.ncols != mj.nrows {
+                    continue;
+                }
+                let composed = mi.compose(mj);
+                let triple = (ci, ck, composed);
+                if !closure.contains(&triple) {
+                    closure.push(triple);
+                    added = true;
                 }
             }
         }
-        if !changed {
+        if !added {
             break;
         }
     }
 
-    // Collect idempotent self-loops.
-    (0..n_group).filter_map(|i| agg[i][i].clone()).collect()
+    // Collect all distinct idempotent self-loop matrices.
+    closure
+        .into_iter()
+        .filter_map(|(i, k, m)| {
+            if i == k && m.is_idempotent() {
+                Some(m)
+            } else {
+                None
+            }
+        })
+        .collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -438,7 +436,7 @@ pub fn sct_check(
         return Ok(());
     } // non-recursive
 
-    let self_loops = idempotent_self_loops(&edges, group.len());
+    let self_loops = composition_closure_self_loops(&edges);
 
     for m in &self_loops {
         if m.is_idempotent() && !m.has_strict_diagonal() {
@@ -525,5 +523,52 @@ mod tests {
         assert_eq!(composed.entries[0][0], Unknown);
         assert!(composed.is_idempotent());
         assert!(!composed.has_strict_diagonal());
+    }
+
+    #[test]
+    fn union_masking_correctly_rejected() {
+        // Architect counterexample: f has two distinct self-loops.
+        //   M_A = [[↓]]  — structural call: strictly decreasing.
+        //   M_B = [[↓=]] — stationary call: no strict decrease → idempotent, must REJECT.
+        //
+        // A union-based gate merges to [[↓]] and wrongly accepts.
+        // The composition-set gate keeps M_B separate and rejects.
+        use SizeOrd::*;
+        let m_a = ScMatrix {
+            entries: vec![vec![Down]],
+            nrows: 1,
+            ncols: 1,
+        };
+        let m_b = ScMatrix {
+            entries: vec![vec![DownEq]],
+            nrows: 1,
+            ncols: 1,
+        };
+        assert!(m_a.is_idempotent() && m_b.is_idempotent());
+        assert!(!m_b.has_strict_diagonal());
+
+        // Verify the union would incorrectly mask M_B.
+        assert_eq!(
+            if Down > DownEq { Down } else { DownEq },
+            Down // union = [[↓]], looks OK but hides M_B
+        );
+
+        let edges = vec![
+            CallEdge {
+                caller: 0,
+                callee: 0,
+                matrix: m_a,
+            },
+            CallEdge {
+                caller: 0,
+                callee: 0,
+                matrix: m_b,
+            },
+        ];
+        let loops = composition_closure_self_loops(&edges);
+        assert!(
+            loops.iter().any(|m| !m.has_strict_diagonal()),
+            "M_B = [[↓=]] must survive as a distinct idempotent loop"
+        );
     }
 }
