@@ -115,16 +115,22 @@ Steward.
 (operator, 2026-06-29).** CI status (green/red) and a freshly-resolved review
 Decision push **no notification to you** — there is no `ken-ci` bridge, so
 **nobody will ever tell you a PR went green; you must poll.** You are a
-sanctioned scheduler (COORDINATION §1, §13). **Arm it with the convo cron:**
-`schedule_call(tool="get_recent_context", interval="7m")` while **any** PR is
-open (not `/loop`/`CronCreate` — the convo cron is the mechanism; COORDINATION
-§13). On each wake run a **tight pass** — `gh pr checks <n>` on every open PR +
-check its merge Decision — and **merge the instant it is green + approved**
-(don't wait for a leader to re-ping you). On green-but-unvoted, mention the
-missing reviewer; on CI-red, mention the implementer. A green + approved PR left
-unmerged because you weren't polling **is a pipeline stall you caused** — the
-operator caught exactly this (two green PRs unmerged ~25 min). `cancel_call` the
-timer when no PRs are open. Reading CI is *yours alone* — nobody else can see it.
+sanctioned scheduler (COORDINATION §1, §13). **Arm it with a *private*
+`CronCreate` timer — NOT the convo `schedule_call`:**
+`CronCreate(cron="3,11,19,27,35,43,51,59 * * * *", prompt="Integrator poll:
+gh pr checks on every open PR + its merge Decision; merge any green+approved,
+mention the missing reviewer on green-but-unvoted, the implementer on CI-red",
+recurring=true)` while **any** PR is open. `CronCreate` wakes **your own
+session** and posts nothing to the space; the convo `schedule_call` would
+broadcast its read into the space as a System event everyone sees (and can't run
+`gh` anyway). On each wake run a **tight pass** — `gh pr checks <n>` on every
+open PR + check its merge Decision — and **merge the instant it is green +
+approved** (don't wait for a leader to re-ping you). On green-but-unvoted, mention
+the missing reviewer; on CI-red, mention the implementer. A green + approved PR
+left unmerged because you weren't polling **is a pipeline stall you caused** — the
+operator caught exactly this (two green PRs unmerged ~25 min). A `durable:false`
+cron dies on session exit, so **re-arm at session start**; `CronDelete` it when no
+PRs are open (`CronList` shows your jobs). Reading CI is *yours alone* — nobody else can see it.
 
 ## Mirror GitHub into mootup
 

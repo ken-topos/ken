@@ -278,34 +278,39 @@ Rules for every layer:
   stops at the operator (human): if the Steward goes quiet, the absence of its
   updates is the operator's signal. Watchdogs are the only schedulers (§1);
   everyone else is event-driven.
-- **Arm your watchdog with the convo cron** (operator 2026-06-29) — this is the
-  *mechanism*, not just the intent. A scheduler (team leader, Integrator,
-  Steward) sets up its recurring pass with the convo MCP **`schedule_call`** —
-  e.g. `schedule_call(tool="get_space_status", interval="10m")` (or
-  `get_mentions` for an actionable-signal tick) — at **session start, while its
-  ring/pipeline has open work**. **Tick on `get_space_status` / `get_mentions`,
-  never `get_recent_context`** (promoted 2026-06-29): a timer's fire posts its
-  result back into the space as a System message, so a `get_recent_context` tick
-  reads *its own prior fires* in the window and recursively nests them — each
-  fire quotes the last, an exponentially-growing self-feeding noise loop the
-  Architect and runtime-leader both caught. Status/mentions ticks don't echo the
-  timer's own posts. The scheduled read fires a channel notification
-  that **wakes you** to run the stall-pattern assessment + recovery above; `cancel_call`
-  it when there's no open work. Do **not** use `/loop`, `CronCreate`, or a
-  remembered "poll every N min" intention — the convo cron is the federation's
-  mechanism. **A leader that never arms its `schedule_call` never catches its own
-  ring's stalls** — the operator caught exactly this (a QA-approved WP left
-  unmerged because the leader wasn't watching).
-- **Record the `timer_id` your `schedule_call` returns — and `cancel_call` it
-  when your work closes** (promoted 2026-06-29). A timer is cancellable **only by
-  its creating session**; if you compact without recording the id, post-compaction
-  you can no longer cancel it (`cancel_call` → 404 not-owned) and it keeps firing
-  stale context at the space until the operator kills it at the source. So:
-  (1) stash the returned `timer_id` in your status/notes the moment you arm it,
-  (2) `cancel_call` it the moment your ring/WP closes — an idle watchdog on a
-  finished WP is an orphan-in-waiting (a K3 runtime watchdog outlived its ring
-  and spammed runtime-leader for hours). `list_calls` shows the timers you still
-  own; reconcile it against your open work after every compaction.
+- **Arm your watchdog with a *private* `CronCreate` timer — NOT the convo
+  `schedule_call`** (operator 2026-06-29, validated). A scheduler (team leader,
+  Integrator, Steward) sets up its recurring pass at **session start, while its
+  ring/pipeline has open work**, with the Claude Code harness tool
+  **`CronCreate`** — e.g.
+  `CronCreate(cron="7,17,27,37,47,57 * * * *", prompt="Watchdog tick: pull
+  get_recent_context, scan the enumerated stall patterns, mention only a blocked
+  agent; if clear, do nothing", recurring=true)`. `CronCreate` **enqueues a
+  prompt into your own session** — it posts **nothing** to the convo space — and
+  fires only while you're idle. On each fire you run your *own* direct
+  `get_recent_context` / `get_space_status` read (private, not posted) and do the
+  stall-pattern assessment + recovery above, **messaging the space only when
+  there is an actual stall to nudge.**
+  **Do NOT use the convo `schedule_call`** for a watchdog: it executes the read
+  *on the backend* and posts the result back into the space as a **System event
+  visible to every participant** — pure broadcast noise (and the
+  `get_recent_context` variant reads its own prior fires and recursively nests
+  them — an exponential self-feeding loop the Architect + runtime-leader caught).
+  A watchdog is a *private* wake, not a public post; `CronCreate` is private,
+  `schedule_call` is not. **A scheduler that never arms its watchdog catches
+  nothing** — the operator caught exactly this (a QA-approved WP left unmerged
+  because the leader wasn't watching).
+- **`CronCreate` is session-local, which is a feature — it cannot orphan across a
+  restart.** A `durable: false` (default) cron **dies when your session exits**,
+  so you simply **re-arm it at session start** while you have open work, and
+  **`CronDelete` it when your ring/WP closes** (`CronList` shows the jobs you own;
+  reconcile after every compaction). This is strictly safer than the convo timer,
+  which is cancellable **only by its creating session** and, if you compacted
+  without recording its `timer_id`, became an un-killable orphan firing stale
+  context until the operator killed it at the source (a K3 runtime watchdog and a
+  spec-leader timer both orphaned this way before we switched). Recurring crons
+  also auto-expire after 7 days. **If you still hold a convo `schedule_call`
+  timer from the old guidance, `cancel_call` it and re-arm with `CronCreate`.**
 
 ## 14. Agents never touch GitHub; the Integrator is the gateway
 
