@@ -2,6 +2,39 @@
 
 Guidance for any Claude Code session (and any agent) operating in this repo.
 
+## Load your role playbook first (every agent, every session)
+
+You are **one role** in a multi-agent federation, and your operating
+instructions live in a role-specific **skill**. Before doing any work — and
+again **after every context compaction** — orient yourself:
+
+1. Call **`orientation()`** (convo MCP) to learn your **role** (e.g. `steward`,
+   `kernel-leader`, `spec-author`) and focus space.
+2. Read **`agent/COORDINATION.md`** (federation law) and **`agent/MODELS.md`**
+   (model tiers) — binding on every role.
+3. **Invoke the skill for your role** (the Skill tool) and follow it as your
+   standing playbook — route from your `orientation()` role:
+
+| Your role (from `orientation()`) | Skill to load |
+|---|---|
+| `steward` | `ken-steward` |
+| `architect` | `ken-architect` |
+| `integrator` | `ken-integrator` |
+| `librarian` | `ken-librarian` |
+| `spec-leader` | `ken-spec-leader` |
+| `spec-author` | `ken-spec-author` |
+| `conformance-validator` | `ken-conformance-validator` |
+| `<team>-leader` — kernel/verify/language/runtime/ergo/foundation | `ken-build-leader` |
+| `<team>-implementer` | `ken-build-implementer` |
+| `<team>-qa` | `ken-build-qa` |
+
+Build-team roles share the `ken-build-*` archetype skills — your team is the
+prefix on your role name (`kernel-leader` → `ken-build-leader`). The skills are
+the `agent/playbooks/` corpus, surfaced as skills via `.claude/skills/`
+(symlinks); editing a playbook edits its skill. If a team-specific overlay
+exists (`agent/teams/<team>/<role>.md`), load it after the archetype skill. The
+Steward owns this corpus and its routing.
+
 ## Reference material is off-limits to code authors
 
 `local/refs/` (gitignored) holds reference implementations. **Do not read them
