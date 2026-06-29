@@ -60,6 +60,19 @@ too far: describe the *what*, not the *how* of any particular implementation.
   this exact element-vs-proof conflation in **both** K2 and K2c conversion — a
   recurring confusion, so state the distinction explicitly wherever Ω conversion
   or proof-irrelevance appears.
+- **A worked example that illustrates a guard must *flip* on the bug (promoted
+  V0, soundness).** When your `/spec` prose carries a worked trace to show a
+  correctness-critical pass behaving correctly (e.g. the §5.3 name-resolution
+  shadow trace), the example earns its place only if the **bug it guards against
+  would produce a *different* observable outcome** on that same program — a
+  rejection where the correct path accepts, or a different emitted term/index.
+  An example where the correct trace and the bug-trace reach the **same** verdict
+  documents nothing (V0 §5.3 first shipped `view shadow … :(A:Type)→A = \A.x`,
+  where capture and non-capture **both** rejected — the Architect caught it).
+  Run the bug branch to a verdict before you commit the example; prefer to name
+  the **verdict-independent structural signal** (the resolved de Bruijn index)
+  so it stays load-bearing whatever the kernel later does. This is the worked-
+  example twin of the conformance validator's verdict-flip check.
 
 ## Answering build-team queries
 
