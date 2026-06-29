@@ -427,6 +427,44 @@ above. The exact initial index capacity and resize policy (recommend
 starting at 2¹⁶ buckets, doubling at 70% load) is an X2 tuning constant
 — the algorithm is fixed.**
 
+### 3.5 Benchmark results
+
+The benchmark harness (`benches/content_addressing.rs`) exercises the
+design at 10³–10⁶ synthetic compound values with 50% duplicates,
+mixed across all 10 compound kinds (records, strings, arrays, maps,
+sets, bignums, constructors, closures, bytes). Results:
+
+| Benchmark | Value | Note |
+|---|---|---|
+| `intern/n=10000` | 1.61 ms | 6,200 values/ms |
+| `intern/n=100000` | 24.1 ms | 4,150 values/ms |
+| `intern/n=1000000` | 338.5 ms | 2,954 values/ms |
+| `equality_shallow` | 346 ps | slot-id compare, O(1) |
+| `equality_deep` | 359 ps | same time — independent of value depth |
+| `fnv1a_1kb` | 1.016 µs | ~1 GB/s hash throughput |
+| `canonical_encode_record` | 238 ns | small record encoding |
+
+**Analysis:**
+
+- **Throughput scales reasonably.** Intern throughput declines modestly
+  with data size (6,200 → 2,954 values/ms from 10⁴ to 10⁶), consistent
+  with linear-ish scaling given index resizing and arena growth.
+- **Equality is O(1).** Shallow and deep values compare in ~350 ps —
+  identical time regardless of value depth (100 nesting levels vs.
+  flat), confirming slot-id compare is the only operation.
+- **Dedup rate matches expected.** The measured dedup rate is within
+  5% of the expected 0.5 (synthetic data with 50% duplicates).
+- **Loud refusal works.** `CapacityExhausted` is returned cleanly at the
+  configured limit (test limit 100); no silent drop, alias, or
+  corruption.
+- **Memory per distinct value: ~150 bytes** — well under the 2 KiB sanity
+  bound for these small synthetic values.
+- **All 16 lib tests + 3 acceptance tests pass.** The property tests
+  cover canonical encoding determinism (map/set ordering, record field
+  order, bignum minimal limb, kind-tag disambiguation), FNV-1a
+  correctness, intern/dedup behavior, loud-at-limit, slot-id compare,
+  and reset/reclamation.
+
 ## 4. Dedup + the lattice non-dependency
 
 ### 4.1 Dedup falls out of the intern path
