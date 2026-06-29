@@ -17,22 +17,31 @@ Ken has a universe **Omega** of **strict (definitionally proof-irrelevant)
 propositions** -- the subobject classifier and the home of equality and the
 logic.
 
-### 1.1 Formation and cumulativity
+### 1.1 Formation and level discipline
+
+Omega is **level-indexed** and **predicative**: propositions about types at
+level `l` live in `Omega_l : Type (suc l)`. The formation rule:
 
 ```
-  ────────────────────────────────  (Omega-Form)
-  Omega : Type 1
+Omega_l : Type (suc l)                                    (Omega-Form)
 ```
 
-Omega is predicative (OQ-Prop DECIDED, ADR 0005); it is a universe, not an
-impredicative sort. `Omega : Type 1`, so `Omega` itself is a small type.
-Level polymorphism is covered by `Omega l : Type (suc l)` in the
-level-polymorphic regime (`12-universes.md`); the formation rule above is
-the `l = 0` instance.
+`Omega_l` is a strict proposition universe at each level. Propositions over
+small types (`Type 0`) are in `Omega_0`; propositions over larger types are
+in the corresponding `Omega_l`. For brevity, unqualified `Omega` in prose
+refers to `Omega_0`, but the kernel implements the level-indexed form.
+This matches the level-polymorphic regime of `12-universes.md` §4.
 
-A type `P : Omega` is a **strict proposition** -- its terms carry no
-computational content. By the conversion rule below they are all equal, so
-Omega-land is a subsingleton world inside the type theory.
+- Omega is **predicative** (OQ-Prop DECIDED, ADR 0005): `Omega_l : Type (suc l)`,
+  and a quantifier over a large type `(x : A) → P` where `A : Type l` and
+  `P : Omega_l` is itself in `Omega_l` — no impredicative lowering. The level
+  is determined by the **predicative `max`** rule (same as Π/Σ formation in
+  `13-pi-sigma.md`).
+- Ω is **strict**: any two proofs `p, q : P : Omega_l` are definitionally
+  equal (§1.2). This makes propositional arguments computationally irrelevant.
+- There is **no cumulativity** for Omega (Ken is non-cumulative, `12 §3`):
+  `Omega_l` does not automatically inhabit `Omega_(suc l)`. Lifting is
+  explicit when needed.
 
 ### 1.2 Proof irrelevance (definitional)
 
@@ -75,11 +84,11 @@ primitive kernel support beyond the Omega formation and PI rules above:
 | P => Q     | `(x : P) -> Q`  | Pi-type (`13-pi-sigma.md` par. 1) |
 | not P      | `P -> Empty`    | Pi-type + Bottom |
 
-`Unit` and `Empty` as defined in K1 live in `Type 0`, but since Omega is a
-universe (Omega : Type 1), we embed them: `Unit : Omega` via the subuniversing
-of Omega (any small type used as a proposition is lifted). Concretely, `Top`
-and `Bottom` are Omega-typed constants defined in the prelude, not new kernel
-primitives.
+`Unit` and `Empty` as defined in K1 live in `Type 0`. When used as
+propositions in `Omega_0`, the kernel treats them as Omega-typed constants
+via an explicit embedding `Up : Type 0 → Omega_0` — a no-op at the term
+level that adjusts the type annotation. Concretely, `Top` and `Bottom` are
+Omega-typed constants defined in the prelude, not new kernel primitives.
 
 `P or Q` and `exists x. P` are provided via truncation (par. 6):
 `P or Q := || P + Q ||` and `exists x:A. P x := || (x:A) x P x ||`. These
@@ -88,8 +97,8 @@ land in Omega because truncation lands in Omega.
 All connectives are intuitionistic, not Boolean. Excluded middle is not
 assumed (it holds for *decidable* props as data, via `14-inductive.md`).
 
-- **`Eq` (below) lands in Omega**, so equality is a proof-irrelevant
-  proposition.
+- **`Eq` (below) lands in `Omega_l`** (for the appropriate level `l`),
+  so equality is a proof-irrelevant proposition.
 
 ## 2. Observational equality `Eq`
 
@@ -102,8 +111,12 @@ on the structure of the type `A`* -- equality "observes" the type.
 ```
   Gamma |- A : Type l     Gamma |- a : A     Gamma |- b : A
   ───────────────────────────────────────────────────────────  (Eq-Form)
-  Gamma |- Eq A a b : Omega
+  Gamma |- Eq A a b : Omega_l
 ```
+
+Equality is a proposition at the level of `A`. For `A : Type l`, `Eq A a b`
+lands in `Omega_l : Type (suc l)` — predicative, matching the formation rule
+for Omega (§1.1).
 
 ### 2.2 Reduction rules (by type structure)
 
@@ -128,8 +141,21 @@ Eq ((x : A1) -> B1) f g
 ```
 
 This is **funext definitional**: two functions are equal exactly when they
-are pointwise equal. No axiom needed. The result type is an Omega-typed
-Pi, which is itself in Omega by cumulativity.
+are pointwise equal. No axiom needed. The reduct is a Π whose body is an
+`Eq` in `Omega_l` (where `l` is determined by the level of `B1 x`); since
+the whole Π quantifies over propositions, the result lives in `Omega_l` by
+the **predicative** formation rule — `Omega_l` is closed under Π-types
+whose codomain is in `Omega_l`. No cumulativity is required (Ken is
+non-cumulative, `12 §3`).
+
+If `A1 : Type l1` and `B1 x : Type l2` (so `(x:A1)→B1 : Type (max l1 l2)`),
+then `Eq ((x:A1)→B1) f g : Omega_(max l1 l2)` and reduces to
+`(x:A1) → Eq (B1 x) (f x) (g x) : Omega_(max l1 l2)` — the level is the
+same, determined by the predicative `max` of `13 §1` applied to the
+Omega-level domains. This is **not** impredicative: the quantifier ranges
+over the large domain `A1` at level `l1`, but the body `Eq (B1 x) (f x)
+(g x) : Omega_l2` is already in `Omega_l2`, and the Π lands in
+`Omega_(max l1 l2)`.
 
 **Neutral case.** When `f` or `g` is neutral and `A1` is neutral, `Eq`
 stays neutral (no reduction). If `A1` is canonical but `f` or `g` is
@@ -173,13 +199,38 @@ inductive family (`14-inductive.md`) with parameters `Delta_p` and indices
 *Same constructor* (both `c_k`):
 ```
 Eq (D Delta_p i-bar) (c_k a-bar) (c_k b-bar)
-  ⇝ /\(j) Eq A_j a_j b_j
+  ⇝ Eq A_1 a_1 b_1
+      and Eq (A_2[b_1/x_1]) (cast (A_2[a_1/x_1]) (A_2[b_1/x_1]) eq_1' a_2) b_2
+      and ...
+      and Eq (A_n[b_1/x_1 ... b_{n-1}/x_{n-1}])
+            (cast (A_n[a_1/x_1 ... a_{n-1}/x_{n-1}])
+                  (A_n[b_1/x_1 ... b_{n-1}/x_{n-1}])
+                  eq_{n-1}' a_n)
+            b_n
 ```
-where the big conjunction (`/\`) iterates over the constructor arguments,
-and `A_j` is the type of the `j`-th argument (from the constructor
-telescope, with parameters and indices substituted). Each `a_j`, `b_j` is
-at the same `A_j` (the family is non-dependent across the same
-constructor).
+where the constructor telescope is `(x_1 : A_1) ... (x_n : A_n)`. For each
+argument position `j > 1`, the type `A_j` may depend on earlier arguments
+`x_1 … x_{j-1}`. When comparing `a_j` at type `A_j[a_1/x_1 … a_{j-1}/x_{j-1}]`
+and `b_j` at type `A_j[b_1/x_1 … b_{j-1}/x_{j-1}]`, the latter argument must
+be transported to the former's type along the equalities of all earlier
+arguments — the same `cast`-on-dependent-component pattern as the Σ rule.
+Each `eq_j'` is the `cong` of the family `A_{j+1}` along the accumulated
+equalities of arguments `1…j`.
+
+This is the **dependent telescope** treatment the `cast`-at-inductive rule
+(`§3.2`) already applies, mirrored here for `Eq`-at-inductive. For a
+concrete example see the Vec instance below.
+
+**Example (Vec).** For `Vec A : Nat → Type`:
+```
+Eq (Vec A (suc n)) (vcons A n a xs) (vcons A n' a' xs')
+  ⇝ Eq Nat n n'                              -- index equality (suc n vs suc n')
+      and Eq A (cast A A refl a) a'           -- element type A, a : A, a' : A
+      and Eq (Vec A n) (cast (Vec A n) (Vec A n') (cong (Vec A) eq_n) xs) xs'
+```
+where `eq_n : Eq Nat n n'` is the first argument equality. The third
+component transports `xs : Vec A n` to `Vec A n'` using `eq_n` before
+comparing with `xs' : Vec A n'` — the dependent-telescope `cast`.
 
 *Different constructors* (`k /= l`):
 ```
@@ -271,11 +322,11 @@ type (`14-inductive.md` par. 5).
   neutral scrutinee, or a stuck cast), `Eq A a b` is a **neutral
   proposition** -- no reduction applies. The conversion checker treats it
   as stuck (K2c's NbE will handle incomplete `Eq` forms).
-- **Proof irrelevance.** `Eq A a b : Omega`, so any two proofs of equality
+- **Proof irrelevance.** `Eq A a b : Omega_l`, so any two proofs of equality
   are definitionally equal (par. 1.2). There is no "equality of
   equalities."
 - **UIP.** `Eq (Eq A a b) p q` is definitionally trivial: the type is in
-  Omega, so `p ≡ q` by Omega-PI. Ken is set-level.
+  `Omega_l`, so `p ≡ q` by Omega-PI. Ken is set-level.
 - **refl.** `refl a : Eq A a a` is the canonical proof; it is neutral when
   `a` is neutral, and reduces (by the rules above) when `A` is canonical.
 
@@ -420,14 +471,17 @@ neutral, `cast` is neutral.
 **Omega.**
 
 ```
-cast Omega Omega e P  ⇝  P
+cast Omega_l Omega_l e P  ⇝  P
 ```
 
-Omega has no interesting non-refl transport: because Omega is
-proof-irrelevant, any two `P, Q : Omega` are indistinguishable. A `cast`
-between Omega-typed endpoints just returns the input, regardless of `e`.
-(This is sound because the type annotation on the output -- `Omega` -- is
-necessarily true, and any Omega term is definitionally equal to any other.)
+Transport at the Omega universe is the identity: `Omega_l` is a universe
+constant on both sides, so `cast` returns `P` unchanged — the same
+behaviour as `cast` at any universe (`Type`, `Omega`). This is justified
+by the `e : Eq Type (Omega_l) (Omega_l)` reducing structurally to `refl`
+(§2.2, `Type` rule), triggering regularity, except in the (oracle) non-refl
+Type case where `cast` at a universe is stuck. Note: this is about
+transport of propositions *as elements* of Omega, not about proof
+irrelevance (which says proofs of a *single* proposition are equal, §1.2).
 
 ---
 
@@ -452,7 +506,30 @@ would reduce to `Bottom` by par. 2's structural type-equality rule -- so
 `e : Bottom` is impossible in a consistent context). In the well-typed
 case, heads always match.
 
-### 3.3 Key properties
+### 3.3 Termination of Eq/cast mutual recursion
+
+`Eq`-by-type (par. 2) and `cast`-by-type (par. 3) form a **single mutual
+reduction system**: `Eq` at a compound type may call `cast` on component
+types (Σ, inductive), and `cast` at a compound type calls `Eq` to
+decompose the type-equality proof into sub-equalities. This mutual
+recursion **terminates structurally** on the type `A` being traversed:
+
+- Each `Eq` reduction at type `A` reduces the problem to sub-equalities at
+  **strictly smaller** types (the domain/codomain for Π, the component
+  types for Σ, the argument types for an inductive constructor).
+- Each `cast` reduction at type `A` reduces to transporting at
+  **strictly smaller** types (the domain/codomain for Π, the component
+  types for Σ, the constructor arguments for an inductive).
+- The type structure is a finite tree; structural descent bottoms out at
+  primitive types, neutral types, Omega, or the Type universe.
+
+The K1 conversion algorithm's structural termination argument
+(`14-inductive.md §9.2`) extends directly to this mutual system: each
+step reduces the type being traversed. The full decidable conversion with
+NbE (K2c, `17`) subsumes this structural argument with a semantic
+termination proof.
+
+### 3.4 Key properties
 
 - **`cast` never inspects the proof `e`.** It computes by recursion on the
   type structure of `A` and `B`. The proof is only passed along to

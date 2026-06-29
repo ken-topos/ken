@@ -15,12 +15,12 @@ build time by the Spec enclave.
 
 ### observational/omega-pi-convertible (soundness)
 - spec: `spec/10-kernel/16-observational.md` par. 1.2
-- given: `P : Omega`, `p : P`, `q : P` in context; conversion check
+- given: `P : Omega_l`, `p : P`, `q : P` in context; conversion check
   `p` vs `q` at type `P`
 - expect: **convertible** (conversion returns true)
 - why: Omega-PI is definitional -- any two proofs of a proposition are
-  equal. The checker must not inspect the terms. Conversion at Omega
-  type is a constant-time "yes."
+  equal. The checker must not inspect the terms. Conversion at an
+  Omega_l type is a constant-time "yes."
 
 ### observational/omega-skip-prop-args
 - spec: `spec/10-kernel/16-observational.md` par. 1.2, 8.2
@@ -50,11 +50,14 @@ build time by the Spec enclave.
 ### observational/funext-with-levels
 - spec: `spec/10-kernel/16-observational.md` par. 2.2
 - given: `A : Type 1`, `B : A -> Type 2`, `f g : (x:A) -> B x`;
-  `Eq ((x:A) -> B x) f g`
+  `Eq ((x:A) -> B x) f g` — the type is at `Type (max 1 2) = Type 2`
 - expect: **reduces-to** `(x : A) -> Eq (B x) (f x) (g x)` at
-  `Omega` (level poly)
-- why: Eq-by-type works at higher universe levels. The result is
-  level-polymorphic Omega.
+  `Omega_2` — the Omega level is the predicative `max` of the domain
+  and codomain levels
+- why: Eq-by-type is level-polymorphic — `Eq A a b : Omega_l` for
+  `A : Type l`. The funext Pi lands in `Omega_2`, not `Omega_0`.
+  Tests distinct level variables (≥2 distinct levels) per the K1
+  retro lesson.
 
 ### observational/propext-definitional (soundness)
 - spec: `spec/10-kernel/16-observational.md` par. 2.2

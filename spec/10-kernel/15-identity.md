@@ -30,11 +30,11 @@ MAY be surface synonyms for `Eq A a b`.
 ```
   Gamma |- A : Type l      Gamma |- a : A      Gamma |- b : A
   ───────────────────────────────────────────────────────────  (Eq-Form)
-  Gamma |- Eq A a b : Omega
+  Gamma |- Eq A a b : Omega_l
 ```
-`Eq A a b` is a **proposition** (`Omega`, `16` par. 1), so it is
-**proof-irreducible**: any two proofs are definitionally equal (no
-coherence baggage; `16` par. 1.2).
+`Eq A a b` lands in `Omega_l` (the strict proposition universe at the
+level of `A`; `16` par. 1.1), so it is **proof-irrelevant**: any two
+proofs are definitionally equal (no coherence baggage; `16` par. 1.2).
 
 **Reflexivity.** `refl a : Eq A a a`.
 
