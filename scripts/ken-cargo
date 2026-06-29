@@ -16,7 +16,7 @@ slots="${KEN_BUILD_SLOTS:-1}"
 lockdir="${KEN_LOCK_DIR:-${TMPDIR:-/tmp}/ken-build-locks}"
 mkdir -p "$lockdir"
 
-run() { exec cargo "$@"; }
+run() { cargo "$@" 9>&-; }
 
 # Preferred: GNU `sem` gives a correct counting semaphore for slots > 1.
 if [[ "$slots" -gt 1 ]] && command -v sem >/dev/null 2>&1; then
