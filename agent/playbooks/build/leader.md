@@ -15,6 +15,17 @@ Integrator owns `main` mechanics and the Architect owns design judgment. Read
 
 - **One task at a time** through the ring (implementer → QA → back), per
   COORDINATION §0. Coherence beats opportunistic parallelism inside a team.
+- **HOW you assign — by mootup mention, NEVER by spawning** (sharpened: DeepSeek
+  leaders have mis-delegated by trying to `claude(prompt)`-launch a teammate).
+  Your implementer and QA are **already-running, persistent agents** — their own
+  always-on sessions — **not sub-agents you launch.** Kick off a WP / assign a
+  task by **posting a convo message that mentions them** (`post_response`,
+  `mentions: ["<actor_id>"]` — resolve each actor_id from `list_participants` or
+  your `orientation()`). **NEVER** use the `Agent`/Task tool, a subprocess, or
+  `claude(prompt)` to reach a teammate — that spawns a **fresh, unconfigured
+  Claude** that fails with "503 provider not configured" and is not how this
+  federation delegates. All delegation, queries, and handoffs are mootup mentions;
+  local git only.
 - **Pipeline-ready predicate:** when a WP finishes, auto-start the next *ready*
   WP without waiting on the operator. Ready = scope/spec exists, open questions
   resolved, dependencies merged to `main`, no operator pause.
