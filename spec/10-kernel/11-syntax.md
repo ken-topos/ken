@@ -1,9 +1,11 @@
 # Core syntax
 
-> Status: **DRAFT v0**. Normative. Defines the kernel's term language, contexts,
-> the global environment, binding/de Bruijn representation, and substitution.
-> The *typing* of these forms is in `13`–`16` and `18`; this chapter fixes only
-> the grammar and its scoping.
+> Status: **K1 elaborated**. Normative. Defines the kernel's term language,
+> contexts, the global environment, binding/de Bruijn representation, and
+> substitution. The *typing* of these forms is in `13`–`16` and `18`; this
+> chapter fixes only the grammar and its scoping. K1 delivers the full syntax
+> (all reserved formers) + raw well-formedness; K2-reserved formers (tagged
+> `[K2]`) parse and scope-check but their typing/computation is in `15`,`16`.
 
 The kernel operates on **core terms**: a small, fully-explicit language with no
 implicit arguments, no notation, and no surface sugar. Elaboration
@@ -23,18 +25,18 @@ There are two mutually-referential categories:
 
 t, u, A, B ::=
     Type ℓ                           -- universe (12)
-  | Ω                                -- strict proposition universe (12, 16)
+  | Ω                                -- [K2] strict proposition universe (12, 16)
   | x                                -- variable (de Bruijn)
   | c                                -- global constant / definition
   | D | c_D                          -- inductive former / constructor (14)
   | (x : A) → B | λ (x : A). t | t u           -- functions Π (13)
   | (x : A) × B | (t , u) | t.1 | t.2          -- pairs Σ (13)
-  | Eq A t u | refl t                  -- observational equality (15,16)
-  | cast A B e t                       -- cast along Eq Type A B (16)
-  | J M d e                            -- eq eliminator (derived) (15)
+  | Eq A t u | refl t                  -- [K2] observational equality (15,16)
+  | cast A B e t                       -- [K2] cast along Eq Type A B (16)
+  | J M d e                            -- [K2] eq eliminator (derived) (15)
   | elim_D M [c_k ↦ t_k]ₖ s            -- inductive elim (14)
-  | A / R | [t] | elim_/ M f s         -- quotient: type / class / elim (16)
-  | ‖ A ‖ | |t|                        -- propositional truncation (16)
+  | A / R | [t] | elim_/ M f s         -- [K2] quotient: type / class / elim (16)
+  | ‖ A ‖ | |t|                        -- [K2] propositional truncation (16)
   | let x := t : A in u
   | (t : A)                          -- ascription (erased after check)
 ```
@@ -50,6 +52,15 @@ Notes:
   grammar closed and small.
 - The grammar is **intrinsically typed in spirit but extrinsically presented**:
   the same syntax can be ill-typed; typing (`18`) is what admits a term.
+
+**K2 reservations.** The formers tagged `[K2]` — `Ω`, `Eq`, `cast`, `J`, `A/R`,
+`‖A‖`, and the quotient/truncation eliminators — are **reserved in the
+grammar** for K1: they parse, and raw-well-formedness (§6) checks their scoping
+(variable indices resolve, sub-terms are well-formed). But K1 implements
+**none** of their typing, computation, or conversion rules. That work is K2
+(`15-identity.md`, `16-observational.md`), and the full conversion for them is
+K2c (`17-conversion.md`). Keeping them in the grammar from K1 means forward
+compatibility — the core-term type does not change shape between K1 and K2.
 
 ## 2. Binding and de Bruijn representation
 
@@ -104,8 +115,12 @@ local context Γ) recording top-level declarations in dependency order:
 ```
 
 - A **transparent definition** `c : A := t` requires `· ⊢ t : A` in the
-  environment so far, and `t` to pass the **termination check**
-  (`17-conversion.md §SCT`) before admission. δ-reduction may unfold `c` to `t`.
+  environment so far. δ-reduction may unfold `c` to `t`. In K1, transparent
+  definitions are **non-recursive** (they may reference only earlier
+  definitions, per the acyclic environment rule below); recursive definitions
+  must use the inductive eliminator (`14`). The full **termination check**
+  (SCT-gated, `17-conversion.md §SCT`) that admits general recursive δ
+  definitions is K2c.
 - An **opaque constant** `c : A` (postulate) blocks δ; it is how axioms, FFI
   signatures (`../30-surface/38-ffi-io.md`), and abstract interfaces are
   represented. Postulating a closed term of `⊥` would break consistency, so
@@ -140,6 +155,12 @@ entry. It does **not** decide typing. A raw-well-formed term may still be
 ill-typed (e.g. applying a non-function). The kernel's `check` and `infer`
 (`18`) decide typing; raw well-formedness is their precondition and is what the
 parser/elaborator must guarantee before calling the kernel.
+
+In K1, the `[K2]`-tagged formers (Ω, `Eq`, `cast`, `J`, `A/R`, `‖A‖`) are
+**raw-well-formed** under the same scoping rules as the rest of the grammar —
+their sub-terms must be well-formed and their variable indices must resolve.
+Their typing and computation rules are defined in K2 (`15`,`16`); until then,
+`check`/`infer` treat them as unrecognised (they fail typing).
 
 ## 7. Notation used in the rest of `10-kernel/`
 

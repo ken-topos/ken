@@ -1,10 +1,12 @@
 # Inductive families
 
-> Status: **DRAFT v0**. Normative. Declaration of inductive types, the
+> Status: **K1 elaborated**. Normative. Declaration of inductive types, the
 > strict-positivity requirement, the dependent eliminator and its ι-computation,
 > and how primitive types attach. Identity is **not** a plain inductive in Ken —
 > it is observational `Eq` (`15`, `16`); this chapter is the machinery `Eq`'s
-> `J` and everything else reuse.
+> `J` and everything else reuse. §§7–9 add algorithmic ι-reduction, the
+> strict-positivity check algorithm, K1 subject reduction, and the termination
+> argument for K1-scoped conversion.
 
 ## 1. Declarations
 
@@ -195,16 +197,324 @@ They attach as **primitives** (`11 §4`):
 
 A conforming kernel MUST:
 
-1. Type-check inductive declarations and **enforce strict positivity** (§2),
+1. Type-check inductive declarations and **enforce strict positivity** (§2, §8),
    rejecting negative occurrences.
 2. Generate the constructors and the **dependent** eliminator with induction
    hypotheses for recursive arguments (§3).
-3. Implement **ι-reduction** of the eliminator on constructor forms (§3),
+3. Implement **ι-reduction** of the eliminator on constructor forms (§3, §7),
    driving structural recursion; ensure it terminates (structural decrease).
 4. Permit **large elimination** under the predicative universe rules (§3).
 5. Treat **primitive** types/operations as opaque constants with registered,
-   audited reductions (§5), never as inductives.
+   audited reductions (§5), never as inductives. K1 defines only the interface;
+   the value model (`../40-runtime/41-values.md`, K3) and the kernel API
+   (`18-judgments.md`, K-api) elaborate the registration mechanism.
 
 Conformance: `../../conformance/kernel/inductive/` — positivity acceptance and
 rejection, `elim_Nat`/`elim_Vec` ι-computation, large elimination (`elim_Bool`
 into `Type`), and primitive-literal reduction (`add 2 3 ⇓ 5`).
+
+## 7. Algorithmic ι-reduction for conversion
+
+The ι-reduction scheme described in §3 is declarative; this section gives the
+algorithmic form the conversion checker (`13-pi-sigma.md §6`) calls.
+
+### 7.1 Eliminator application form
+
+The eliminator is applied to `n+3` arguments: the motive `M`, one method per
+constructor `m₁ … mₙ`, the index tuple `i̅`, and the scrutinee `s`:
+
+```
+elim_D : (M : (Δ_i) → D Δ_p Δ_i → Type ℓ')
+       → (m₁ : MethodType(c₁, D, M))
+       → …
+       → (mₙ : MethodType(cₙ, D, M))
+       → (i̅ : Δ_i) → (s : D Δ_p i̅) → M i̅ s
+```
+
+### 7.2 ι-redex condition
+
+`elim_D M m̄ i̅ s` is an **ι-redex** when `s` is a constructor-headed term
+`cₖ ā` for some constructor `cₖ` of `D`. ι fires on the scrutinee's head
+constructor alone — it does not require the index arguments `i̅` to be
+syntactically identical to the constructor's index instance. (In a well-typed
+term the indices are definitionally equal to the constructor's target indices;
+gating ι on syntactic identity would make conversion incomplete — valid
+programs with computed indices stuck.)
+
+### 7.3 Reduction rule (algorithmic)
+
+```
+elim_D M m₁…mₙ i̅ (cₖ ā)  ⇝  mₖ ā [ih₁ … ih_p]
+```
+
+where:
+
+- `cₖ` has constructor arguments `Δₖ = (x₁ : A₁) … (x_q : A_q)`.
+- `ā = a₁ … a_q` are the actual constructor arguments.
+- For each constructor argument position `j` where `A_j` is a **recursive
+  occurrence** of `D` (applied to its parameters and some index), the induction
+  hypothesis `ih` is:
+
+  ```
+  ih = elim_D M m₁…mₙ idx(a_j) a_j
+  ```
+
+  where `idx(a_j)` computes the index instance for that recursive argument (the
+  indices at which `D` appears in `A_j`). For a simple recursive occurrence `D
+  Δ_p t̄`, the indices are `t̄`; for a Π-bound recursive occurrence `(y:Y) → D Δ_p
+  t̄ y`, the indices are `t̄ y` applied to the bound variable (which is abstracted
+  in the method type convention of §3).
+
+- `p` is the number of recursive positions in `cₖ`'s constructor arguments.
+
+The reduction is **capture-avoiding**: the method `mₖ` is applied to the
+constructor arguments and the induction hypotheses, with substitutions handled
+by the kernel's capture-avoiding substitution engine (`11 §5`).
+
+### 7.4 Example: Nat
+
+```
+elim_Nat M z s zero      ⇝  z
+elim_Nat M z s (suc n)   ⇝  s n (elim_Nat M z s n)
+```
+
+Constructor `zero`: no recursive arguments, `p = 0`. Constructor `suc`: one
+recursive argument at position 0, giving one induction hypothesis `elim_Nat M z
+s n`.
+
+### 7.5 Example: Vec
+
+Given `Vec (A : Type ℓ) : Nat → Type ℓ`:
+
+```
+elim_Vec M vn vc zero     (vnil A)        ⇝  vn
+elim_Vec M vn vc (suc n)  (vcons A n a xs) ⇝  vc n a xs (elim_Vec M vn vc n xs)
+```
+
+`vnil` has no recursive arguments. `vcons` has one recursive argument `xs : Vec
+A n` at the index `n`, producing the induction hypothesis shown.
+
+### 7.6 Stuck eliminators
+
+When the scrutinee `s` is not a constructor-headed term — it is a variable,
+a neutral application, or any term whose head is not a constructor of `D` —
+the eliminator is **stuck** (neutral, no ι-reduction fires). Conversion treats
+it as a neutral term: two stuck eliminators are convertible iff their
+scrutinees and arguments are pointwise convertible. The full NbE in K2c (`17`)
+gives this a systematic treatment in a semantic domain; K1's structural
+conversion handles it via the congruence rules in `13 §6.2`. (The index
+arguments `i̅` are part of the pointwise comparison but do not gate ι firing
+— a constructor-headed scrutinee always fires ι, per §7.2.)
+
+## 8. Strict-positivity check algorithm
+
+§2 defines *what* strict positivity means. This section gives the *how* — the
+recursive descent the kernel runs at admission time.
+
+### 8.1 Positivity judgment
+
+For a family `D` being declared, the judgment `Pos_D^n(A)` — "`A` is positive
+in `D` at polarisation `n`" — where `n ∈ {+, -}` (positive/negative
+polarisation). The check starts with each constructor argument type at `n = +`
+and recurses structurally. Every case that would discard subterms without
+inspection **must** confirm `D` does not occur in those subterms; if it does,
+the declaration is rejected (K1 conservatively forbids nested occurrences,
+per §8.4).
+
+```
+Pos_D^+(D Δ_p t̄)        holds  if D does not occur in t̄
+Pos_D^+(X)              holds  if D does not occur in X
+Pos_D^+(A)              holds  if A is a universe Type ℓ (and D not in ℓ)
+Pos_D^+(x : A) → B      holds  if Pos_D^-(A) and Pos_D^+(B)
+Pos_D^+(x : A) × B      holds  if Pos_D^+(A) and Pos_D^+(B)
+
+Pos_D^-(D Δ_p t̄)        FAILS  (negative occurrence — reject)
+Pos_D^-(X)              holds  if D does not occur in X
+Pos_D^-(A)              holds  if A is a universe Type ℓ
+Pos_D^-(x : A) → B      holds  if Pos_D^+(A) and Pos_D^-(B)
+Pos_D^-(x : A) × B      holds  if Pos_D^-(A) and Pos_D^-(B)
+```
+
+Here `D` occurring in a term `t` means `D` appears as a sub-expression
+anywhere in `t` (syntactic occurrence, resolved by de Bruijn indices — trivial
+since the environment determines what names refer to).
+
+Key: `D` may appear strictly positively (as the target of a function type under
+`+` polarisation), but never under `-` polarisation. Any position the algorithm
+cannot structurally classify (application arguments, indices, type parameters
+containing `D`) is **conservatively rejected** — K1 accepts only the clean
+non-nested strictly-positive patterns. This blocks `(D → ⊥) → D`, nested
+negatives like `T (D → ⊥)`, and index-embedded occurrences.
+
+### 8.2 Algorithm
+
+```
+check-positivity(D):
+  for each constructor cₖ of D:
+    for each argument type A_j in cₖ's telescope Δₖ:
+      if not check-pos-arg(D, +, A_j):
+        reject "non-strictly-positive occurrence of D in cₖ"
+
+check-pos-arg(D, pol, A):
+  match A:
+    D Δ_p t̄  →  return (pol == +) and not occurs(D, t̄)
+    Type ℓ   →  return true                    -- ℓ is a level, D is a type
+    X        →  return not occurs(D, X)        -- parameter or other type:
+                                                 reject if D appears within
+    (x : C) → B  →  return check-pos-arg(D, flip(pol), C)
+                    and check-pos-arg(D, pol, B)
+    (x : C) × B  →  return check-pos-arg(D, pol, C)
+                    and check-pos-arg(D, pol, B)
+    C u      →  return check-pos-arg(D, pol, C)   -- recurse into head
+                    and not occurs(D, u)            -- reject D in argument
+```
+
+where `flip(+) = -`, `flip(-) = +`, and `occurs(D, t)` is true iff `D` appears
+as a sub-expression anywhere in `t` (a simple term traversal — de Bruijn
+indices make this unambiguous).
+
+### 8.3 Worked examples
+
+**Accepted:**
+```
+data Nat : Type 0 where
+  zero : Nat
+  suc  : Nat → Nat
+```
+
+Constructor `zero`: no arguments, trivially positive. Constructor `suc`:
+argument telescope `(n : Nat)`, argument type `Nat`. Under `+`:
+
+```
+check-pos-arg(Nat, +, Nat) → D = Nat at pol = + → true
+```
+
+**Rejected:** `data Bad = mk : (Bad → Bool) → Bad`. Argument telescope `(f : Bad
+→ Bool)`, argument type `Bad → Bool = (x : Bad) → Bool`. Under `+`:
+
+```
+check-pos-arg(Bad, +, (x : Bad) → Bool)
+  = check-pos-arg(Bad, -, Bad) and check-pos-arg(Bad, +, Bool)
+  = false (D under -) → FAILS
+```
+
+**Rejected (negative under a Π):** `data Lam = mk : (Nat → Nat) → Nat`.
+Argument telescope `(f : (Nat → Nat))`, argument type `(x : Nat) → Nat`. Under
+`+`:
+
+```
+check-pos-arg(Nat, +, (x : Nat) → Nat)
+  = check-pos-arg(Nat, -, Nat) and check-pos-arg(Nat, +, Nat)
+  = false (D under -) → FAILS
+```
+
+Note: even though the outermost polarisation is `+`, the domain of the arrow
+flips to `-`, so `Nat` appears negatively and is caught.
+
+**Rejected (nested negative in application argument):**
+`data Bad3 = mk : Pair (Bad3 → Empty) Unit → Bad3`. Argument telescope
+`(f : Pair (Bad3 → Empty) Unit)`, argument type `Pair (Bad3 → Empty) Unit`.
+Under `+`:
+
+```
+check-pos-arg(Bad3, +, Pair (Bad3 → Empty) Unit)
+  = check-pos-arg(Bad3, +, Pair)      -- recurse into head (X → not occurs → true)
+    and not occurs(Bad3, (Bad3 → Empty, Unit))
+  = true and false                    -- occurs finds Bad3 in arguments
+  = false → FAILS
+```
+
+The application argument `(Bad3 → Empty)` is inspected by `occurs`; `Bad3`
+appears there (and negatively, since it's under a Π whose domain flips
+polarity), so the check correctly rejects. Without the `occurs` guard on
+application arguments, the algorithm would have recursed into the head `Pair`,
+returned `true` for the unknown type, and admitted the paradox.
+
+**Rejected (D in its own indices):**
+`data Vec (A : Type) : Nat → Type where …` is fine (the index `Nat` is not
+`Vec`), but `data Bad4 : (Bad4 → Empty) → Type where …` — where `D` occurs
+negatively in its own index — is caught by `occurs(D, t̄)` on the recursive
+`D Δ_p t̄` case at `+` polarity: `occurs(Bad4, (Bad4 → Empty))` is true, reject.
+
+### 8.4 Nested and mutually-defined inductives
+
+K1 handles **non-mutual, non-nested** inductives. Mutually-defined inductive
+families and nested inductive occurrences (e.g. `data Rose A = node : A → List
+(Rose A) → Rose A`) are **K1.5** (a future extension within the inductive
+chapter). K1 rejects mutual declarations and nested `D` occurrences under other
+type formers. The strict-positivity algorithm above is the **base case**; the
+extension to nested occurrences is a straightforward generalisation (treat
+`List (Rose A)` by unfolding `List`'s definition to check positivity of `Rose`
+within it) but is deferred to keep K1's kernel minimal.
+
+## 9. K1 subject reduction and termination
+
+### 9.1 Subject reduction for ι
+
+**Theorem (ι subject reduction).** If `Γ ⊢ elim_D M m̄ i̅ (cₖ ā) : M i̅ (cₖ ā)`
+(under ambient `Σ`) and the eliminator is applied to the constructor `cₖ` with
+arguments `ā`, then `Γ ⊢ mₖ ā [ih₁ … ih_p] : M i̅ (cₖ ā)` — the ι-reduct has
+the same type.
+
+*Proof.* The typing of the eliminator application gives:
+
+- `Γ ⊢ M : (Δ_i) → D Δ_p Δ_i → Type ℓ'` (motive well-typed).
+- For each method `m_j`: `Γ ⊢ m_j : MethodType(c_j, D, M)`.
+- `Γ ⊢ i̅ : Δ_i` (the index arguments inhabit the index telescope).
+- `Γ ⊢ cₖ ā : D Δ_p i̅` (the scrutinee is well-typed at the given indices).
+
+The method type for `cₖ` is defined in §3 to conclude `M t̄ₖ (cₖ …)` when
+applied to the constructor arguments and the induction hypotheses. Since the
+actual indices `i̅` match the constructor's index instance `t̄ₖ` (they must, for
+the scrutinee to have type `D Δ_p i̅`), the method application has type `M i̅
+(cₖ ā)`. The result follows.
+
+### 9.2 Termination of K1-scoped conversion
+
+The K1 conversion algorithm (`13 §6.2`) terminates on the K1 fragment for the
+following reasons:
+
+1. **β-reduction (Π, Σ).** Each β-redex `(λx.t) a`, `(a,b).1`, `(a,b).2` is
+   eliminated in one step; the reduct is structurally smaller than the redex (a
+   subterm is substituted). The conversion checker does not iterate β-reduction
+   indefinitely — it reduces to a normal form using a leftmost-outermost
+   strategy, and the total size of terms *strictly decreases* at each β-step
+   (substitution replaces a variable with a term, but the λ binder and
+   application node are removed, and K1 terms have no recursive letrec — only
+   acyclic δ unfolding).
+
+2. **η-expansion.** η-expansion (Π-η, Σ-η) is type-directed and compares
+   subterms at strictly smaller types (the domain/codomain for Π; the component
+   types for Σ). The type structure is finite, so η-expansion descends
+   finitely.
+
+3. **ι-reduction.** Each ι-redex `elim_D … (cₖ ā)` replaces the eliminator
+   applied to a constructor with a method application. The recursive calls
+   `elim_D … a_j` are on **structurally smaller** sub-values `a_j` (the
+   constructor arguments that are recursive). Structural decrease guarantees
+   termination: the scrutinee of each recursive call is a proper subterm of the
+   original scrutinee. Because K1 terms are finite trees (no coinduction, no
+   recursive letrec), structural descent bottoms out at non-recursive
+   constructors.
+
+4. **δ-unfolding.** The global environment is **acyclic** (`11 §4`), so
+   unfolding a definition `c` to its body `t` replaces a constant with a term
+   that may contain references to *earlier* definitions only. Chasing δ never
+   loops; the conversion checker memoises unfolded constants to avoid
+   re-unfolding.
+
+5. **No Ω, Eq, cast, or quotient equations** — those are K2/K2c, and their
+   termination depends on the NbE + SCT machinery of `17`.
+
+The full SCT-gated termination argument for general recursive δ-definitions is
+in K2c (`17-conversion.md §SCT`). K1's δ is only for non-recursive transparent
+definitions; recursive definitions are admitted via the inductive eliminator
+(whose termination is structural, not SCT-reliant) or deferred to K2c.
+
+### 9.3 Decidable checking
+
+**Corollary.** `check`/`infer` for the K1 fragment (Π, Σ, universes, inductive
+families, and their eliminators, with K1-scoped conversion as in `13 §6`) is
+decidable — it always terminates. The type-checker is syntax-directed (one rule
+per term former); conversion is called at the leaves (checking inferred against
+expected types) and terminates by §9.2.
