@@ -170,13 +170,12 @@ Spec: `spec/10-kernel/14-inductive.md §2, §8`; frame §2 item 5.
 
 ### kernel/inductive/negative-under-pi-rejected
 - spec: `spec/10-kernel/14-inductive.md §2, §8.3`
-- given: declaration `data Bad2 : Type 0 where { mk : ((Bad2 → Bool) →
-  Nat) → Bad2 }` — `Bad2` appears in the domain of the domain of the
-  constructor argument, a nested negative position.
+- given: declaration `data Bad2 : Type 0 where { mk : (Bad2 → Bool) →
+  Bad2 }` — `Bad2` appears in the domain of the constructor argument
+  (to the left of an arrow), a negative position.
 - expect: **rejected** at admission (non-strictly-positive occurrence)
-- why: the domain of an arrow flips polarisation to negative, so any
-  recursive occurrence there (even at depth 2) is negative and
-  rejected. Frame AC-5.
+- why: under `+` polarisation, `(x : Bad2) → Bool` checks the domain at
+  `-` (flipped), and `D` at `-` polarity is always rejected. Frame AC-5.
 
 ### kernel/inductive/nested-negative-in-application-rejected
 - spec: `spec/10-kernel/14-inductive.md §8.1–8.3`
