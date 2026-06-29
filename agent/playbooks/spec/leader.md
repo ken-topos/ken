@@ -45,6 +45,14 @@ This is the load-bearing boundary of your role — hold it precisely:
   (or Steward frame) to **spec-author** to author `/spec`, then to
   **conformance-validator** for `/conformance`; you sequence and unblock, you do
   not write. Same coherence and watchdog discipline as a build leader.
+  **Before handing a kernel WP to the Architect, run a level-discipline reconcile
+  pass (promoted K1+K2, soundness):** for each new formation rule, confirm your
+  authors wrote its **explicit level computation** and that it *reconciles* with
+  `12`'s settled universe decisions (predicative `max`, non-cumulative `OQ-2`,
+  level-indexed Ω) — not merely cites them. Two consecutive kernel WPs shipped a
+  soundness gap the Architect caught at review (K1 positivity algorithm; K2
+  impredicative-Ω) where the prose cited the decision but the calculus
+  contradicted it; this pass moves the catch to authoring and lightens the review.
   **Compaction is the Steward's, not yours** (operator 2026-06-29) — it compacts
   the whole enclave (you + spec-author + conformance-validator) before delivering
   each WP, after the prior WP's retros are in; you arrive already clean and don't

@@ -33,6 +33,16 @@ describe the *what*, not the *how* of their implementation.
   for scope).
 - **Mark deliberate divergences** from the prototype explicitly (e.g. `Int` from
   day one, checked universes, no hard slot ceiling) — Ken is not a port.
+- **Reconcile the level calculus — don't just cite it (promoted K1+K2,
+  soundness).** For every formation rule, **inline its explicit level
+  computation** (e.g. `Eq A a b : Omega_l` for `A : Type l`; a funext Π lands at
+  `Omega_(max l1 l2)`) and **check it against the settled universe decisions**
+  (`12`: predicative `max`, non-cumulative `OQ-2`, level-indexed Ω) — *citing*
+  `12` is not *reconciling with* it. Twice the Architect caught a soundness gap
+  the prose hid (K1 positivity **algorithm**; K2 impredicative-Ω-by-cumulativity
+  drift) — the citation was correct but the normative calculus contradicted it.
+  This is the level-discipline analog of the K1 "defensive pseudocode for
+  algorithms" rule: write the rule as it computes, not as it reads.
 
 ## Answering build-team queries
 
