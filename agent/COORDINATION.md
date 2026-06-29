@@ -103,6 +103,21 @@ reality: "X exists" → grep for it; "matches pattern Y" → read Y end-to-end. 
 a *verified* language a spec claim about the kernel must be checked against the
 kernel, not assumed.
 
+**Verify the *property*, not the representative case (promoted from F4 + K1).**
+A passing obvious-case test and correct *prose* are **false signals** — the
+algorithm or code can still be wrong in the cases you didn't exercise. (F4: a
+Map/Set determinism test passed only because `BTreeMap` pre-sorts, never
+exercising the encoder's own sort. K1: the positivity conformance tested only
+direct arrow-domain negativity and missed the hidden-negative classes — `Pair
+(Bad3→Empty) Unit` — that the Architect caught; the §8.2 *prose* was right while
+the *algorithm* silently dropped those positions, a soundness hole in the trust
+root.) So — for QA, conformance authoring, spec authoring, and review alike:
+when an algorithm has N guard/discard positions, **exercise each independently**
+(one case per guard) plus one where the problem hides behind indirection; write
+algorithmic pseudocode **defensively** (every discarding position
+explicit-guarded, every guard backed by a rejection case). The obvious case
+passing ≠ the property holds.
+
 ## 8. Message-type taxonomy (routing metadata)
 
 Tag each message with a type; the **first line is the thread title** — no
