@@ -530,19 +530,37 @@ one.
 
 ### 4.3 Matrix composition and the idempotent closure
 
-Entries are ordered `? < ↓= < ↓` (`?` worst, `↓` best). Composition of two
-consecutive call steps composes their entries pointwise and takes, for each
-caller→callee thread, the **best** value along any intermediate parameter:
+Entries are ordered `? < ↓= < ↓` (`?` worst, `↓` best). Composing two
+consecutive call steps `M_1 : f→g` then `M_2 : g→h` yields `M_2 ⊙ M_1 : f→h`.
+Two operations are involved and **must not be conflated**:
+
+**`compose`** chains the size relation *along one thread* `i → j → k` (caller
+param `i`, intermediate callee param `j`, final param `k`). It is relation
+composition over the subterm order — `↓` is `>`, `↓=` is `≥`, `?` is "no known
+relation" — so an `?` step **breaks** the thread (it is absorbing):
 
 ```
-compose(↓,  e)   = ↓        // a strict decrease anywhere in the thread dominates
-compose(↓=, ↓)   = ↓
-compose(↓=, ↓=)  = ↓=
-compose(↓=, ?)   = ?
-compose(?,  e)   = ?        // an unknown step breaks the thread
+compose(↓,  ↓)   = ↓     // i > j > k     ⇒ i > k
+compose(↓,  ↓=)  = ↓     // i > j ≥ k     ⇒ i > k
+compose(↓,  ?)   = ?     // i > j , j ? k ⇒ i ? k   (NOT ↓ — the thread breaks)
+compose(↓=, ↓)   = ↓     // i ≥ j > k     ⇒ i > k
+compose(↓=, ↓=)  = ↓=    // i ≥ j ≥ k     ⇒ i ≥ k
+compose(↓=, ?)   = ?     // i ≥ j , j ? k ⇒ i ? k
+compose(?,  e)   = ?     // i ? j         ⇒ i ? k
+```
 
+**`max`** then picks the *best* (strongest) thread across all intermediates `j`
+— and only here does a strict decrease dominate:
+
+```
 (M_2 ⊙ M_1)[i,k] = max over j of compose(M_1[i,j], M_2[j,k])   // max in ? < ↓= < ↓
 ```
+
+So `↓` dominates **across** threads (`max`) but is never *manufactured*
+**along** a thread through an unknown step: `compose(↓, ?) = ?`, not `↓`.
+Recording it as `↓` would invent a spurious decreasing thread and flip a
+non-terminating definition from reject to **accept** — the exact over-recording
+§4.2 warns against (conformance `sct-reject-ctor-wrap-compose`).
 
 `idempotent_closure(G)` composes edge matrices along every path within each
 strongly-connected component until no new self-loop matrix appears (the set of
