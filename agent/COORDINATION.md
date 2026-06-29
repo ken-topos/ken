@@ -60,6 +60,15 @@ thread** — a top-level post fragments the work. After any context
 reset/compaction, resolve the live thread from fresh context; do **not** reuse a
 thread/event ID from a summarized memory (it may be stale).
 
+**Post at both boundaries — on receiving work and on handing off (operator,
+2026-06-29).** When you **pick up** a task, post a brief *taking-this* ack in its
+WP thread and set your semantic status to it (§3); when you **finish or hand
+off**, post what you did + the mention of whoever moves next (§2) and update your
+status again. **Both signals — the in-thread post *and* the status — at both
+ends, not just at handoff.** The pickup ack is what keeps the flow legible in the
+web view and preserves the full interaction history; without it there is a silent
+gap between assignment and completion that no one can audit or replay.
+
 **Title convention (the single-space articulation tag).** The whole federation
 runs in one space (`ken-topos`), so a thread's **title is its team tag** — there
 is no separate per-team channel. Begin every kickoff title with a tag, then a
