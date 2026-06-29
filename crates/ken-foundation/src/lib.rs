@@ -19,3 +19,7 @@ pub use canonical::Canonical;
 pub use hash::fnv1a_64;
 pub use store::{InternResult, Store, StoreStats};
 pub use values::Value;
+
+// --- testing utilities (not part of the public API) ---
+#[doc(hidden)]
+pub mod testing;
