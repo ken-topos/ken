@@ -1,9 +1,9 @@
 # WP V0 — Minimal elaborator (surface → kernel)
 
-> **Status:** Steward frame — **awaiting spec-leader elaboration** (2nd in the
-> fan-out serial chain, after K2c). spec-leader elaborates `spec/30-surface/
-> 39-elaboration.md` (+ the minimal slice of `31-lexical`/`32-grammar`) to
-> implementation-ready rigor, then the **Verify team** builds.
+> **Status:** **Elaboration LANDED on `main` (`65adf30`)** — `spec/30-surface/
+> 39-elaboration.md` §5.1–§5.7, `31`/`32` §8, and `conformance/surface/
+> elaboration/seed-elaboration.md` (20 cases), Architect + Spec approved.
+> **Released to the Verify team for the build** (2026-06-29, on `wp/V0-build`).
 >
 > **Team:** Verify · **Deps:** K1 (done) · **Size:** M · **Risk:** ★★ · **Parallel**
 > with X1. ► **Feeds G1** (the vertical slice) together with X1. Foundational for
