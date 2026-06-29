@@ -102,10 +102,20 @@ read checks yourself.
 - **Merge hand-off (you never touch GitHub):** when QA approves, package the WP
   and **open the merge Decision via `propose_decision`** — in the space
   (`ken-topos`; there is **no** separate "integration space", §4) — with a **real
-  `mentions:` mention** of the Architect (always) + Spec (on its paths), naming
-  the WP ID + `wp/<ID>` branch + the diff range (`git diff origin/main...wp/<ID>`),
+  `mentions:` mention** of the reviewers the diff actually requires, naming the
+  WP ID + `wp/<ID>` branch + the diff range (`git diff origin/main...wp/<ID>`),
   then post a `git_request`-typed `merge_ready` **mentioning the Integrator** to
   publish the branch for CI.
+  - **Run the diff-scope check *before* you propose the Decision (promoted V0,
+    recurring):** `git diff --name-only origin/main...wp/<ID>` and request only
+    the reviewers whose **owned paths** the diff touches. The **Architect always**
+    (design review). **Spec only if a `spec/` or `conformance/` path is touched** —
+    a **crates-only** build WP (it *implements* an already-merged spec without
+    changing it) is **Architect + CI, no Spec vote** (the K3/V0 ruling; the kernel
+    re-checks anything it produces). Requesting a Spec vote you don't need invites
+    a stall — the reviewer may be compacted onto its next WP — and the Steward had
+    to correct exactly this post-hoc on **both K3 and V0**. The one-line check at
+    Decision time removes that window.
   The Integrator pushes, gates, and merges. **Relay any change-request or CI-red
   back to your implementer as a mootup mention** — they never see GitHub
   (COORDINATION §14). You do **not** push or merge.

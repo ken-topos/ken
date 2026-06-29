@@ -64,6 +64,15 @@ hand back to the implementer, or raise the behavioral question to Spec.
   origin/main`, and verify against the branch (not a stale worktree — the §1
   worktree/`main`-mismatch trap). Commit any small repairs to `wp/<ID>`, then
   return to your home branch.
+- **Branch-identity pre-flight before you trust any test run (promoted V0):** a
+  test run reporting **0 tests is a false green, not a pass** — it usually means
+  you're on a stale worktree/scaffold branch, not `wp/<ID>`. Before running the
+  suite, confirm `git rev-parse HEAD` **matches the handoff commit** (and that the
+  `wp/<ID>` ref is checked out); after, confirm the **test count is non-zero and
+  matches what the implementer reported**. A `0/0 green` slipping through is a
+  silent stall vector (V0 QA hit this — caught only by reading the zero count).
+  This mechanizes the §1 worktree/`main`-mismatch warning the playbook already
+  carries.
 - **Hand off with a REAL mention, not prose** (sharpened: a QA approval that
   *named* the leader in text but omitted the mention left a build QA-approved but
   unmerged — the leader was never notified). On a clean gate, hand off by
