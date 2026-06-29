@@ -270,9 +270,15 @@ Rules for every layer:
 - **Arm your watchdog with the convo cron** (operator 2026-06-29) — this is the
   *mechanism*, not just the intent. A scheduler (team leader, Integrator,
   Steward) sets up its recurring pass with the convo MCP **`schedule_call`** —
-  e.g. `schedule_call(tool="get_recent_context", interval="10m")` (or
-  `get_space_status` for a status-only tick) — at **session start, while its
-  ring/pipeline has open work**. The scheduled read fires a channel notification
+  e.g. `schedule_call(tool="get_space_status", interval="10m")` (or
+  `get_mentions` for an actionable-signal tick) — at **session start, while its
+  ring/pipeline has open work**. **Tick on `get_space_status` / `get_mentions`,
+  never `get_recent_context`** (promoted 2026-06-29): a timer's fire posts its
+  result back into the space as a System message, so a `get_recent_context` tick
+  reads *its own prior fires* in the window and recursively nests them — each
+  fire quotes the last, an exponentially-growing self-feeding noise loop the
+  Architect and runtime-leader both caught. Status/mentions ticks don't echo the
+  timer's own posts. The scheduled read fires a channel notification
   that **wakes you** to run the stall-pattern assessment + recovery above; `cancel_call`
   it when there's no open work. Do **not** use `/loop`, `CronCreate`, or a
   remembered "poll every N min" intention — the convo cron is the federation's
