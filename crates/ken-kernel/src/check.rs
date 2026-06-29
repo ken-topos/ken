@@ -904,8 +904,11 @@ where
 }
 
 /// `declare_def` — admit a transparent definition `c : A := t` after checking
-/// `· ⊢ A type` and `· ⊢ t ⇐ A` (`11 §4`). Non-recursive in K1 (acyclic env);
-/// general recursive δ is K2c. Returns `c`'s [`GlobalId`].
+/// `· ⊢ A type`, `· ⊢ t ⇐ A`, and the SCT gate (`17 §4`, `18 §4`).
+///
+/// The definition is **pre-admitted as opaque** before type-checking, so `t`
+/// may contain self-recursive `Const(c)` references.  SCT either accepts (→
+/// upgrades to transparent) or rejects (→ removes `c` and returns an error).
 pub fn declare_def(
     env: &mut GlobalEnv,
     level_params: Vec<LevelVar>,
@@ -914,15 +917,96 @@ pub fn declare_def(
 ) -> KernelResult<GlobalId> {
     let empty = Context::new();
     classify(env, &empty, &ty)?;
-    check(env, &empty, &body, &ty)?;
+    // Pre-admit as opaque so the body can self-reference.
     let id = env.fresh_id();
-    env.add_decl(Decl::Transparent {
-        id,
-        level_params,
-        ty,
-        body,
+    env.add_decl(Decl::Opaque { id, level_params: level_params.clone(), ty: ty.clone() });
+    // Type-check (self-calls see c as opaque with type `ty`).
+    let check_result = check(env, &empty, &body, &ty);
+    // SCT gate.
+    let sct_result = check_result.and_then(|_| {
+        crate::sct::sct_check(env, &[(id, body.clone())])
     });
-    Ok(id)
+    match sct_result {
+        Ok(()) => {
+            env.upgrade_to_transparent(id, body);
+            Ok(id)
+        }
+        Err(e) => {
+            env.remove_last();
+            Err(e)
+        }
+    }
+}
+
+/// Declare a group of mutually-recursive transparent definitions.
+///
+/// All members are pre-admitted as opaque before any body is type-checked, so
+/// each body may reference any member.  SCT is run on the whole group; on
+/// rejection all pre-admitted members are rolled back.
+///
+/// `specs` — `(level_params, ty)` for each member.  `bodies_fn` receives the
+/// freshly-allocated IDs and must return one body per member in the same order.
+pub fn declare_recursive_group<F>(
+    env: &mut GlobalEnv,
+    specs: Vec<(Vec<LevelVar>, Term)>,
+    bodies_fn: F,
+) -> KernelResult<Vec<GlobalId>>
+where
+    F: FnOnce(&[GlobalId]) -> Vec<Term>,
+{
+    if specs.is_empty() { return Ok(Vec::new()); }
+    let empty = Context::new();
+
+    // Check all types.
+    for (lp, ty) in &specs {
+        let _ = lp; // level params checked via classify
+        classify(env, &empty, ty)?;
+    }
+
+    // Pre-admit all members as opaque.
+    let mut ids: Vec<GlobalId> = Vec::new();
+    for (level_params, ty) in &specs {
+        let id = env.fresh_id();
+        env.add_decl(Decl::Opaque {
+            id,
+            level_params: level_params.clone(),
+            ty: ty.clone(),
+        });
+        ids.push(id);
+    }
+
+    let bodies = bodies_fn(&ids);
+    assert_eq!(bodies.len(), ids.len(), "bodies_fn must return one body per member");
+
+    // Type-check all bodies.
+    let check_result: KernelResult<()> = (|| {
+        for (i, body) in bodies.iter().enumerate() {
+            let ty = &specs[i].1;
+            check(env, &empty, body, ty)?;
+        }
+        Ok(())
+    })();
+
+    // SCT gate on the whole group.
+    let group_bodies: Vec<(GlobalId, Term)> = ids.iter().cloned().zip(bodies.iter().cloned()).collect();
+    let sct_result = check_result.and_then(|_| crate::sct::sct_check(env, &group_bodies));
+
+    match sct_result {
+        Ok(()) => {
+            // Upgrade all to transparent.
+            for (id, body) in ids.iter().zip(bodies) {
+                env.upgrade_to_transparent(*id, body);
+            }
+            Ok(ids)
+        }
+        Err(e) => {
+            // Rollback all pre-admitted members (remove in reverse order).
+            for _ in 0..ids.len() {
+                env.remove_last();
+            }
+            Err(e)
+        }
+    }
 }
 
 /// `declare_postulate` — admit an opaque constant `c : A` after checking
