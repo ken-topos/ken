@@ -1,0 +1,1 @@
+../../../agent/playbooks/federation/integrator.md

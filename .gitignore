@@ -24,3 +24,7 @@
 !/local/README.md
 
 # Keep Cargo.lock committed (this workspace ships a binary).
+
+# Claude Code: ignore per-session state, but keep the role-skill corpus tracked
+.claude/*
+!.claude/skills/

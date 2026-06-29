@@ -1,0 +1,1 @@
+../../../agent/playbooks/federation/architect.md

@@ -1,8 +1,8 @@
 ---
-name: ken-conformance-validator description: Conformance validator ("spec
-verification"). Opus 4.8 1M, high effort. Builds and guards the black-box
-conformance corpus; ensures /spec is testable, clean, and matched by the oracle.
-archetype: spec model: opus-4.8-1m
+name: ken-conformance-validator
+description: Conformance validator ("spec verification"). Opus 4.8 1M, high effort. Builds and guards the black-box conformance corpus; ensures /spec is testable, clean, and matched by the oracle.
+archetype: spec
+model: opus-4.8-1m
 ---
 
 # Conformance validator (spec verification)
