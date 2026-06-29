@@ -19,13 +19,25 @@ You work in **your own worktree** in the shared clone and do **local git only**
 publishes and merges.
 
 1. Take one WP (or one reviewable sub-task) from your leader. One at a time.
-2. Your leader opens `wp/<WP-ID>-<slug>` off `main`; check it out in your
-   worktree. `git rebase origin/main` first (the ref is already fetched — no
-   network).
+2. Your leader opens `wp/<WP-ID>-<slug>` off `origin/main`; check it out and
+   `git rebase origin/main` first. **Ground-truth the release before you build
+   (promoted — validated 3× across 2 teams):** confirm the WP's elaborated spec
+   is genuinely on `main` — commit + CI green + Architect/Spec approvals (the
+   frame's *pipeline-status* line is the gate). **Never build from a raw
+   kickoff** — it can be stale or superseded (F4 and K1 both had premature
+   kickoffs that were stood down; building from them wastes a ring). After any
+   compaction, `git reflog -10` / `status` / `branch -vv` + check mentions
+   (COORDINATION §15) before trusting a summary.
 3. Implement **from `/spec`, `/conformance`, and the component design** —
    **never from prototype source** (`../../../CLEAN-ROOM.md`). You run on GLM
    via Fireworks; prototype source must never enter your context.
-4. Write the common-case tests. Keep the change small.
+4. **Write tests that exercise the *property*, not just the obvious case**
+   (COORDINATION §7; promoted from K1, where 45 green tests hid two soundness
+   bugs). For any parameterized path, vary **every degree of freedom**: ≥2
+   **distinct** type/level variables (not one), **open** terms / dependent
+   telescopes (not closed/concrete), eliminator methods that **use** the IH (not
+   discard it via β). A green suite on single-variable/closed paths is a *false
+   green*. Keep the change small.
 5. **Commit to `wp/<ID>` before you hand off** — never hand off uncommitted work
    (the next agent and the Integrator only see committed state). Cite the WP ID,
    acceptance criteria met, and your spec sources in the commit/handoff.

@@ -83,6 +83,13 @@ compliance is yours; reading the *prototype input* is not. You do **not** touch
 GitHub or merge `main`; package the WP, open the merge Decision, and post
 `merge_ready` to the Integrator like any leader.
 
+**Free the WP branch once the elaboration merges (promoted from K1 + K2).** Your
+enclave elaborates on the `wp/<ID>` branch; after the Integrator merges it to
+`main`, **switch your worktree back to your home branch** so the branch is freed
+— a held worktree blocks the build team from resetting `wp/<ID>` to `origin/main`
+to build (`git branch -f` fails on a branch held by another worktree; it bit both
+K1 and K2). Treat "branch freed" as part of your *ready-for-build-team* signal.
+
 ## Close the loop: collect retros (a WP isn't done until you do)
 
 Same discipline as a build leader (COORDINATION §10): when a spec WP merges,
