@@ -53,6 +53,17 @@ git only.
 - **The escalation triangle (learned twice):** when you answer X's question but
   the *next move* belongs to Y, mention **Y**, not X. Naming Y in prose without
   a real mention is the classic silent stall.
+- **Thread your reply — don't scatter to the space root** (operator 2026-06-29).
+  Every event you receive carries a `thread_id`. When you respond to a message
+  that belongs to a thread — a kickoff, assignment, query, handoff, review
+  request, or retro call — **reply *into that thread*** (`post_response` with
+  `thread_id` set to that message's thread; or `parent_event_id` on the first
+  reply, which opens the thread). A bare `post_response` with no thread drops
+  your message at the space root, **scattering one WP's conversation across the
+  space** so the next reader — and the Steward harvesting retros — can't follow
+  the exchange. **One WP = one thread:** kickoff → ack → queries → handoff →
+  merge Decision → retros all live under it. `reply_to` is the threaded-reply
+  shortcut; prefer it over a root `post_response` whenever you're answering.
 
 ## 3. Status = what you're doing, in your own words
 
