@@ -43,7 +43,10 @@ publishes and merges.
    **unconditionally** is an unsound *accept*, not a "sound stuck fallback" (K2:
    an un-invoked `check_respect` admitted a closed `Empty`). Either **gate the
    reduction** on the check or **reject the case** (return stuck/`Err`) — and add
-   the adversarial test that the gap would mis-accept. Keep the change small.
+   the adversarial test that the gap would mis-accept. **Test the boundaries, not
+   just typical magnitudes** — at-limit, limit±1, empty, and oversized inputs (K3:
+   a `>4 MiB` value underflowed the arena, untested because the max test value was
+   8 KiB; the Architect caught it). Keep the change small.
 5. **Commit to `wp/<ID>` before you hand off** — never hand off uncommitted work
    (the next agent and the Integrator only see committed state). Cite the WP ID,
    acceptance criteria met, and your spec sources in the commit/handoff.

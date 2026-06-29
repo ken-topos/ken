@@ -38,6 +38,11 @@ the code, and that independence is the point. Read `../../COORDINATION.md` and
      input that the deferred path would mis-accept and assert it errors / stays
      stuck (the K2 fixes added exactly these: the `Empty` exploit asserting
      `Err`, the index-change cast asserting neutral).
+   - **Test the boundaries, not just typical magnitudes** (sharpened from K3,
+     where a `>4 MiB` value underflowed the arena — untested because the max test
+     value was 8 KiB, the same edge-avoidance class as K1/K2). For any
+     capacity/size/limit, require **at-limit, limit±1, empty, and oversized**
+     cases; **Block** a suite that only exercises mid-range magnitudes.
 4. **No gate regression:** a passed roadmap gate (G0–G8) still holds.
 
 ## Verdict discipline

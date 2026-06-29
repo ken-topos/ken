@@ -187,6 +187,13 @@ work flow, so you own the clean context boundary that flows with it. The rules:
   WP done → leader calls for retros in-thread → members post → leader signals you
   *"retros in"* → you collect + review (promotion ladder §3) → **you compact the
   team** → you deliver the next WP.
+- **Also gated on outstanding obligations, not just retros.** Before compacting
+  an agent, confirm it owes **nothing in flight** — a **pending review vote** on
+  another team's open Decision (the spec enclave reviews `/spec`+`/conformance`
+  merges), an unfinished handoff, an open `question` it must answer. Compaction
+  **drops** the obligation (K3: the spec enclave was compacted for its next WP
+  while a K3 merge-review request was open → the vote was dropped, surfaced only
+  at the merge gate). Resolve, reassign, or confirm-not-actually-required first.
 - **Precondition: quiescent.** Never compact an agent mid-reasoning — it
   summarizes away in-flight work. Compact only at a clean boundary.
 - **Singletons self-compact.** Agents with no team/leader — **Steward, Architect,
