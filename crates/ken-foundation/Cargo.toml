@@ -1,0 +1,21 @@
+[package]
+name = "ken-foundation"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+description = "Foundation crate — content-addressing design validation (F4)"
+
+# No dependencies beyond std — F4 is a design validation at small scale,
+# intentionally self-contained to keep the benchmark auditable and
+# dependency-free. The production store (K3) will add real dependencies.
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "content_addressing"
+harness = false
