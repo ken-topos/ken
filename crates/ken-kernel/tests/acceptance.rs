@@ -8,6 +8,7 @@
 
 use ken_kernel::env::Context;
 use ken_kernel::inductive::peel_app;
+use ken_kernel::subst::weaken;
 use ken_kernel::term::{Level, LevelVar, Term};
 use ken_kernel::{
     convert, declare_inductive, infer, whnf, CtorSpec, GlobalEnv, GlobalId, InductiveSpec,
@@ -1638,4 +1639,128 @@ fn k2_j_nonrefl_reduces_not_stuck() {
     // J on the non-refl `e` reduces (to `base`), it does NOT stay stuck at a
     // neutral `J` node.
     assert_eq!(whnf(&env, &ctx, &j), base);
+}
+
+// --- C6: cast computes on a compound type (`16 §3.2`) ----------------------
+// `cast ((x:A)→Type 0) ((x:A)→Type 1) e f` (non-convertible codomain) ⇝ a
+// λ (a constructor form), not stuck. The sub-equality proofs are projected
+// from `e` (`e.1` dom-eq, `e.2` cod-eq); the inner `cast` is neutral on the
+// neutral proof but the *outer* cast reduces to a lambda — canonicity.
+#[test]
+fn k2_cast_computes_pi_to_lambda() {
+    let (env, _s) = std_env();
+    let l0 = Level::zero();
+    let l1 = Level::suc(Level::zero());
+    let mut ctx = Context::new();
+    ctx.push(Term::Type(l0.clone())); // A : Type 0  (A=0)
+    ctx.push(Term::pi(Term::var(0), Term::Type(l0.clone()))); // f : (x:A)→Type 0
+                                                              // (f=0, A=1)
+                                                              // e : Eq Type ((x:A)→Type 0) ((x:A)→Type 1).  (x:A)→Type 0 : Type (max 0 1) = Type 1.
+    ctx.push(Term::Eq(
+        Box::new(Term::Type(l1.clone())),
+        Box::new(Term::pi(Term::var(1), Term::Type(l0.clone()))),
+        Box::new(Term::pi(Term::var(1), Term::Type(l1.clone()))),
+    )); // e=0, f=1, A=2
+    let cast = Term::Cast(
+        Box::new(Term::pi(Term::var(2), Term::Type(l0.clone()))), // (x:A)→Type 0
+        Box::new(Term::pi(Term::var(2), Term::Type(l1.clone()))), // (x:A)→Type 1
+        Box::new(Term::var(0)),                                   // e
+        Box::new(Term::var(1)),                                   // f
+    );
+    // Expected: λ(x:A). cast Type 0 Type 1 ((e.2)(back x)) (f (back x))
+    //   where back x = cast A A (sym (e.1)) x  (A=var3 weakened, x=var0; e neutral
+    //   ⇒ sym (e.1) = e.1, and cast A A … x is left as a cast here).
+    let back_x = Term::Cast(
+        Box::new(Term::var(3)), // A (weaken of var2 by 1)
+        Box::new(Term::var(3)),
+        Box::new(weaken(&Term::proj1(Term::var(0)), 1)), // sym(e.1) = e.1 (e neutral)
+        Box::new(Term::var(0)),                          // x
+    );
+    let cod_eq_x = Term::app(weaken(&Term::proj2(Term::var(0)), 1), back_x.clone());
+    let f_back = Term::app(Term::var(2), back_x); // f (weaken of var1 by 1) (back x)
+    let expected = Term::lam(
+        Term::var(2), // A
+        Term::Cast(
+            Box::new(Term::Type(l0.clone())), // B1 (back x) = Type 0 (non-dep)
+            Box::new(Term::Type(l1.clone())), // B2 x = Type 1
+            Box::new(cod_eq_x),
+            Box::new(f_back),
+        ),
+    );
+    assert_eq!(whnf(&env, &ctx, &cast), expected);
+}
+
+// `cast ((x:A)×Type 0) ((x:A)×Type 1) e p` (non-convertible second component)
+// ⇝ a pair (constructor form), not stuck. `p` is a variable so its projections
+// stay neutral; the outer cast still reduces to a pair — canonicity.
+#[test]
+fn k2_cast_computes_sigma_to_pair() {
+    let (env, _s) = std_env();
+    let l0 = Level::zero();
+    let l1 = Level::suc(Level::zero());
+    let mut ctx = Context::new();
+    ctx.push(Term::Type(l0.clone())); // A : Type 0  (A=0)
+    ctx.push(Term::sigma(Term::var(0), Term::Type(l0.clone()))); // p : (x:A)×Type 0
+                                                                 // (p=0, A=1)
+                                                                 // e : Eq Type ((x:A)×Type 0) ((x:A)×Type 1).  Σ lands in Type (max 0 1) = 1.
+    ctx.push(Term::Eq(
+        Box::new(Term::Type(l1.clone())),
+        Box::new(Term::sigma(Term::var(1), Term::Type(l0.clone()))),
+        Box::new(Term::sigma(Term::var(1), Term::Type(l1.clone()))),
+    )); // e=0, p=1, A=2
+    let cast = Term::Cast(
+        Box::new(Term::sigma(Term::var(2), Term::Type(l0.clone()))),
+        Box::new(Term::sigma(Term::var(2), Term::Type(l1.clone()))),
+        Box::new(Term::var(0)), // e
+        Box::new(Term::var(1)), // p
+    );
+    // ⇝ (cast A A (e.1) p.1, cast Type 0 Type 1 ((e.2) p.1) p.2)
+    let p1 = Term::proj1(Term::var(1));
+    let expected = Term::pair(
+        Term::Cast(
+            Box::new(Term::var(2)),
+            Box::new(Term::var(2)),
+            Box::new(Term::proj1(Term::var(0))), // e.1
+            Box::new(p1.clone()),
+        ),
+        Term::Cast(
+            Box::new(Term::Type(l0.clone())), // B1 p.1 = Type 0 (non-dep)
+            Box::new(Term::Type(l1.clone())), // B2 (p.1 cast) = Type 1
+            Box::new(Term::app(Term::proj2(Term::var(0)), p1)), // (e.2) p.1
+            Box::new(Term::proj2(Term::var(1))), // p.2
+        ),
+    );
+    assert_eq!(whnf(&env, &ctx, &cast), expected);
+}
+
+// `cast (A/R) (A/R) e [a] ⇝ [a]` — casting a quotient class across a reflexive
+// quotient type-equality preserves the class (regularity). The class structure
+// is preserved (the reduct is `[a]`, a class), not stuck.
+#[test]
+fn k2_cast_computes_quotient_class_preserved() {
+    let (env, _s) = std_env();
+    let mut ctx = Context::new();
+    ctx.push(Term::Type(Level::zero())); // A : Type 0  (A=0)
+    ctx.push(Term::pi(
+        Term::var(0),
+        Term::pi(Term::var(1), Term::Omega(Level::zero())),
+    )); // R : A→A→Ω  (R=0, A=1)
+    ctx.push(Term::var(1)); // a : A  (a=0, R=1, A=2)
+                            // e : Eq Type (A/R) (A/R) — use a variable (the reflexive type-equality).
+    ctx.push(Term::Eq(
+        Box::new(Term::Type(Level::zero())),
+        Box::new(Term::Quot(Box::new(Term::var(3)), Box::new(Term::var(2)))),
+        Box::new(Term::Quot(Box::new(Term::var(3)), Box::new(Term::var(2)))),
+    )); // e=0, a=1, R=2, A=3
+    let quot = Term::Quot(Box::new(Term::var(3)), Box::new(Term::var(2)));
+    let cast = Term::Cast(
+        Box::new(quot.clone()),
+        Box::new(quot),
+        Box::new(Term::var(0)),                            // e
+        Box::new(Term::QuotClass(Box::new(Term::var(1)))), // [a]
+    );
+    assert_eq!(
+        whnf(&env, &ctx, &cast),
+        Term::QuotClass(Box::new(Term::var(1)))
+    );
 }

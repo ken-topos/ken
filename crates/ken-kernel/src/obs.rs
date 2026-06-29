@@ -334,8 +334,8 @@ fn cast_at_pi(a1: &Term, b1: &Term, a2: &Term, b2: &Term, e: &Term, f: &Term) ->
         Box::new(weaken(&sym_dom, 1)),
         Box::new(Term::var(0)),
     );
-    let b1_back = Term::app(weaken(b1, 1), back_x.clone()); // B1 (back x)
-    let b2_x = Term::app(weaken(b2, 1), Term::var(0)); // B2 x
+    let b1_back = subst0(b1, &back_x); // B1[back x / x]  (B1's var 0 is the Π's x)
+    let b2_x = b2.clone(); // B2[x / x] = B2  (B2's var 0 is already the λ's x)
     let cod_eq_x = Term::app(weaken(&Term::proj2(e.clone()), 1), back_x.clone()); // (e.2)(back x)
     let f_back = Term::app(weaken(f, 1), back_x); // f (back x)
     Term::lam(
