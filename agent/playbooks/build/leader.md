@@ -51,11 +51,18 @@ Integrator owns `main` mechanics and the Architect owns design judgment. Read
 
 ## Own the watchdog (the only poll on your team)
 
-Workers are event-driven and never poll; you run the watchdog. Its prompt
-**enumerates each stall pattern explicitly**: handed-off-but-silent,
-merge-Decision-open-but-no-reviewer, blocked-without-a-blocker-mention,
-QA-approved-but-no-merge-request, idle-with-ready-work. Per detected stall,
-mention **only** the one blocked agent; if no action is needed, post nothing.
+Workers are event-driven and never poll; you run the watchdog. **Arm it with the
+convo cron** — `schedule_call(tool="get_recent_context", interval="10m")` while
+your ring has open work (COORDINATION §13; `cancel_call` when idle), **not**
+`/loop`/`CronCreate`/a remembered intention. **A watchdog you never arm catches
+nothing:** `QA-approved-but-no-merge-request` is on the list below precisely
+because a leader that wasn't watching let a QA-approved WP sit unmerged (operator-
+caught). Each wake, check the stall patterns — the prompt **enumerates each
+explicitly**: handed-off-but-silent, merge-Decision-open-but-no-reviewer,
+blocked-without-a-blocker-mention, QA-approved-but-no-merge-request,
+idle-with-ready-work. Per detected stall, mention **only** the one blocked agent
+(a **real** `mentions:` mention, never prose — §2); if no action is needed, post
+nothing.
 Graduated recovery: detect → mention → re-mention next interval → escalate to
 Steward. **Diagnose before restarting** an agent.
 
@@ -74,9 +81,12 @@ read checks yourself.
   agent's focus — answer what you can, batch the rest, interrupt only for
   blockers.
 - **Merge hand-off (you never touch GitHub):** when QA approves, package the WP
-  and **open the merge Decision** in the integration space mentioning the
-  Architect (always) + Spec (on its paths), naming the WP ID + `wp/<ID>` branch,
-  and post `merge_ready` asking the **Integrator** to publish the branch for CI.
+  and **open the merge Decision via `propose_decision`** — in the space
+  (`ken-topos`; there is **no** separate "integration space", §4) — with a **real
+  `mentions:` mention** of the Architect (always) + Spec (on its paths), naming
+  the WP ID + `wp/<ID>` branch + the diff range (`git diff origin/main...wp/<ID>`),
+  then post a `git_request`-typed `merge_ready` **mentioning the Integrator** to
+  publish the branch for CI.
   The Integrator pushes, gates, and merges. **Relay any change-request or CI-red
   back to your implementer as a mootup mention** — they never see GitHub
   (COORDINATION §14). You do **not** push or merge.
