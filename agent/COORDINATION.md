@@ -284,6 +284,11 @@ context. Who triggers a compaction is fixed (operator, 2026-06-29):
   a pass, Steward after a directing cycle).
 - **Never mid-reasoning.** Compact only at a clean boundary; it summarizes away
   in-flight work.
+- **Start new work from current `origin/main` (operator, 2026-06-29).** A WP
+  branch is born from the **fetched** ref — leaders cut `wp/<ID>` with
+  `git branch wp/<ID>-<slug> origin/main`, and every member `git rebase
+  origin/main` before working. Never build on stale local `main` or a stale
+  worktree (the §1 / 04-git worktree-mismatch trap). New work = latest `main`.
 - **On resume after a compaction, ground-truth your state before trusting the
   summary.** A compaction can summarize away the fact that you *finished* — so
   re-orient from reality, not the lossy summary: `orientation()` **plus**

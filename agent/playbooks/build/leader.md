@@ -22,11 +22,14 @@ Integrator owns `main` mechanics and the Architect owns design judgment. Read
   Architect/Spec/Steward can answer and the block is long, **reorder** to an
   independent ready WP rather than idling the whole ring. For short blocks, wait
   it out (coherence).
-- **Open each WP branch off `main`:** `git branch wp/<ID>-<slug> main` (never
-  `checkout -b`). The ring is sequential, so the branch is handed worktree to
-  worktree — the implementer commits and returns to its home branch, *then* QA
-  checks it out. Enforce that hand-off order; two worktrees can't hold one
-  branch (04 §1, §2).
+- **Open each WP branch off current `origin/main`:** `git branch wp/<ID>-<slug>
+  origin/main` (the **fetched** ref — never stale local `main`, never
+  `checkout -b`). Every WP starts from the latest merged state; your members then
+  `git rebase origin/main` when they pick the branch up (build-implementer/QA
+  playbooks), so the whole ring works on current `main`, never stale. The ring is
+  sequential, so the branch is handed worktree to worktree — the implementer
+  commits and returns to its home branch, *then* QA checks it out. Enforce that
+  hand-off order; two worktrees can't hold one branch (04 §1, §2).
 - **Compaction is the Steward's, not yours (operator 2026-06-29).** You do **not**
   compact your members. The Steward compacts your whole team (you + implementer +
   QA) *before* it delivers each WP, so you arrive already clean — and it does so
