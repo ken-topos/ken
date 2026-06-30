@@ -27,6 +27,18 @@ the code, and that independence is the point. Read `../../COORDINATION.md` and
      passed and the Architect caught at diff-scope.) Ground not just the
      **presence** of what's built but the **absence** of what's required — the QA
      refinement of COORDINATION §7.
+   - **Trace the *mechanism* that enforces each cited prior-lesson — not the
+     comment (promoted X1; 2nd Architect-catch-QA-missed).** When the
+     implementer's handoff says "K1/K2/F4 lesson X is applied," a code **comment**
+     saying the right thing is **not** evidence the dataflow does it. Follow the
+     execution path that would enforce X (construction → encoding → interning →
+     use) and ask *"what if the mechanism differed from what the comment says?"*
+     (X1: the handoff + comments cited "closure equality is memcmp-exact, F4
+     lesson," but `code_id = fnv1a_64(Debug(body))` silently substituted a
+     collision-prone hash — the Architect caught it; QA had verified conformance
+     exhaustively but never traced `make_closure → to_rt → code_id`. Twice now a
+     defect QA missed was an un-traced cited-lesson: K3 `Arena::remaining()`, X1
+     `code_id`.) For each cited lesson, **trace it to the line that enforces it.**
 3. **Tests exercise the *property*, not just one corner** (promoted from K1,
    where a 0-defect run on a narrow input space hid two soundness bugs — a *false
    green*). Honest + non-tautological + no-disabled-tests is necessary but
