@@ -10,16 +10,23 @@ triple
 required it. (Partial-primitive grounding `35 §3`/`43 §2` confirmed landed —
 not a forward reference.)
 
-**The layer is ★★ (untrusted), so the cases live at the two load-bearing
-properties.** Every obligation is discharged in V3 and the cert is
-kernel-re-checked (`18 §4`); a V2 bug is a **missed** obligation (a burden
-silently treated as holding → a wrong `proved`/`unknown` verdict caught
-downstream) or a **spurious** one (over-conservative → a false `unknown`),
-**never** unsoundness. So the cases pin **completeness of extraction** (every
-burden-bearing clause → its obligation — and the *absent-clause scan*, §2.5,
-audits that no burden is silently skipped *and* no trivial clause over-skipped)
-and **honest provenance** (each obligation traces to its source clause + has a
-stable id).
+**The layer is ★★ (untrusted) — but read the backstop precisely (Architect).** A
+V2 bug never breaks **kernel** soundness: the kernel re-checks every *supplied*
+certificate (`18 §4`), so a **spurious** obligation is over-conservatism (a
+false
+`unknown`) and a *bad* cert is kernel-rejected. But a **missed** obligation — a
+burden the extractor **never emits** — is **not** caught downstream: the V1 §5.4
+honesty guard (`trusted_base()`) catches **generated-but-undischarged** holes,
+not
+sites that were never turned into holes, so a never-emitted burden reads as
+`proved` though unproven. **Completeness-of-extraction is therefore the
+*verification*-soundness linchpin, backstopped by nothing but the absent-clause
+scan (§2.5)** — "all obligations discharged ⇒ correct" is only as strong as the
+guarantee that **no burden was silently skipped**. So these cases pin
+**completeness of extraction** (every burden site → its obligation; the
+absent-clause scan audits that no burden is silently skipped *and* no trivial
+clause over-skipped — the load-bearing safeguard, not a nicety) and **honest
+provenance** (each obligation traces to its source clause + has a stable id).
 
 **Decoupled from the Σ-sort erratum (`22 §1.1`).** V2 reads V1's
 **bare-carrier + separate-obligation** form — never a proof-carrying `Σ(B,ψ)`
@@ -196,6 +203,33 @@ verdict model rests on (`22 §2.5`, `21 §5.4`) and must never regress.
   check), on emission keyed to clause presence. The load-bearing completeness
   audit.
 
+### verify/obligations/exhaustive-traversal-no-silent-skip (soundness)
+- spec: `22 §2.5` (the exhaustiveness property, Architect-required), `§5`
+- given: a core construct at a position the extractor has **no explicit rule
+  for** — neither an emit site (§2.1–§2.4) nor an explicit Γ-extension (§3) nor
+  an explicitly-guarded no-emit (§2.5) — e.g. a future burden-bearing core form
+  added without an extraction rule
+- expect: the extractor surfaces a **visible gap** — an **error** (or a
+  conservative emit) — **never** a silent recurse-past. The traversal is
+  **exhaustive by construction**: every core form is an emit site, an explicit
+  Γ-extension, or an explicitly-guarded no-emit; there is **no** catch-all
+  `_ ⇒ skip`.
+- why: completeness-of-extraction is the **sole** backstop of verification
+  soundness (preamble) — a missed obligation is *not* caught downstream — so the
+  one thing that must never happen is a burden silently no-emitted. **Structural
+  / absence assertion (the guard is exhaustiveness by construction, not a value
+  flip):** adding a burden-bearing core form **without** an emit rule must be a
+  **compile/visible failure**, not a silent miss. This is not a value-verdict
+  (no program exhibits it today — the core `Term` set is fixed); it is a
+  property of the **extractor's shape** — assert that the traversal `match` has
+  **no catch-all `_ ⇒ skip`** (which would silently swallow a future variant),
+  so an unmatched construct is emit-or-error. **Disconfirming:** would a future
+  burden-bearing variant be silently skipped under a catch-all skip? **Yes** —
+  that is exactly the bug this forbids; the property is green (visible gap /
+  error) vs red (silent vanish). The normative form of §2.5's "every no-emit is
+  an **explicit guarded skip**, so a missing clause is a **visible gap, not a
+  silent drop**."
+
 ---
 
 ## C. Path-sensitive hypothesis accumulation — the context Γ (`22 §3`)
@@ -348,7 +382,9 @@ verdict model rests on (`22 §2.5`, `21 §5.4`) and must never regress.
   `body-requires-assumed-not-reobligated`,
   `present-cert-yields-zero-new-obligations`,
   `forgetful-coercion-emits-nothing`) + the counter-rule
-  (`trivial-clause-still-emits-obligation`).
+  (`trivial-clause-still-emits-obligation`) + the exhaustiveness backstop
+  (`exhaustive-traversal-no-silent-skip` — the sole verification-soundness
+  safeguard).
 - **#2 Ω + context correctness** —
   `match-branch-gamma-carries-scrutinee-equation`,
   `let-binding-adds-equation-to-gamma`,
