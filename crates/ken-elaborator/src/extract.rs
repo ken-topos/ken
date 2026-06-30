@@ -130,6 +130,10 @@ fn lift_obligation(def_name: &str, obl: &Obligation) -> ObligationTriple {
             format!("{}.law.{}", def_name, field),
             ProvKind::LawField { field_name: field.clone() },
         ),
+        ObligationKind::PartialPrim => (
+            format!("{}.prim.{}", def_name, obl.id),
+            ProvKind::PartialPrim,
+        ),
     };
 
     ObligationTriple {

@@ -353,7 +353,7 @@ impl Parser {
     }
 
     pub fn parse_expr(&mut self) -> Result<Expr, ElabError> {
-        let lhs = self.parse_app_expr()?;
+        let lhs = self.parse_infix_expr()?;
         if matches!(self.peek(), Token::Colon) {
             let colon_span = self.peek_span().clone();
             self.advance();
@@ -361,6 +361,42 @@ impl Parser {
             let span = Span::merge(lhs.span(), ty.span());
             let _ = colon_span;
             return Ok(Expr::EAsc(Box::new(lhs), Box::new(ty), span));
+        }
+        Ok(lhs)
+    }
+
+    /// `parse_infix_expr` — handles `==` (lowest precedence infix).
+    fn parse_infix_expr(&mut self) -> Result<Expr, ElabError> {
+        use crate::ast::BinOp;
+        let mut lhs = self.parse_additive_expr()?;
+        loop {
+            if matches!(self.peek(), Token::EqEq) {
+                self.advance();
+                let rhs = self.parse_additive_expr()?;
+                let span = Span::merge(lhs.span(), rhs.span());
+                lhs = Expr::EBinOp(BinOp::EqEq, Box::new(lhs), Box::new(rhs), span);
+            } else {
+                break;
+            }
+        }
+        Ok(lhs)
+    }
+
+    /// `parse_additive_expr` — handles `+` and `+%`.
+    fn parse_additive_expr(&mut self) -> Result<Expr, ElabError> {
+        use crate::ast::BinOp;
+        let mut lhs = self.parse_app_expr()?;
+        loop {
+            let op = match self.peek() {
+                Token::Plus => BinOp::Add,
+                Token::PlusPercent => BinOp::WrappingAdd,
+                Token::Star => BinOp::Mul,
+                _ => break,
+            };
+            self.advance();
+            let rhs = self.parse_app_expr()?;
+            let span = Span::merge(lhs.span(), rhs.span());
+            lhs = Expr::EBinOp(op, Box::new(lhs), Box::new(rhs), span);
         }
         Ok(lhs)
     }
@@ -392,6 +428,11 @@ impl Parser {
                 | Token::KwType
                 | Token::LParen
                 | Token::KwOld
+                | Token::Nat(_)
+                | Token::IntLit(_)
+                | Token::FloatLit(_)
+                | Token::DecimalLit(_, _)
+                | Token::Float32Lit(_)
         )
     }
 
@@ -437,7 +478,7 @@ impl Parser {
             None
         };
         self.expect(&Token::Eq)?;
-        let rhs = self.parse_app_expr()?;
+        let rhs = self.parse_infix_expr()?;
         self.expect(&Token::KwIn)?;
         let body = self.parse_expr()?;
         let end = body.span().end;
@@ -451,8 +492,34 @@ impl Parser {
     }
 
     fn parse_atom_expr(&mut self) -> Result<Expr, ElabError> {
+        use crate::ast::NumLit;
         let start = self.peek_span().start;
         match self.peek().clone() {
+            Token::Nat(n) => {
+                let span = self.peek_span().clone();
+                self.advance();
+                Ok(Expr::ENumLit(NumLit::Int(n as i128), span))
+            }
+            Token::IntLit(n) => {
+                let span = self.peek_span().clone();
+                self.advance();
+                Ok(Expr::ENumLit(NumLit::Int(n), span))
+            }
+            Token::FloatLit(f) => {
+                let span = self.peek_span().clone();
+                self.advance();
+                Ok(Expr::ENumLit(NumLit::Float(f), span))
+            }
+            Token::DecimalLit(c, e) => {
+                let span = self.peek_span().clone();
+                self.advance();
+                Ok(Expr::ENumLit(NumLit::Decimal(c, e), span))
+            }
+            Token::Float32Lit(f) => {
+                let span = self.peek_span().clone();
+                self.advance();
+                Ok(Expr::ENumLit(NumLit::Float32(f), span))
+            }
             Token::Ident(s) => {
                 let span = self.peek_span().clone();
                 self.advance();
@@ -498,6 +565,8 @@ impl Parser {
                         Expr::ELet(x, ty, r, body, _) => Expr::ELet(x, ty, r, body, span),
                         Expr::EAsc(e, t, _) => Expr::EAsc(e, t, span),
                         Expr::EOld(e, _) => Expr::EOld(e, span),
+                        Expr::ENumLit(lit, _) => Expr::ENumLit(lit, span),
+                        Expr::EBinOp(op, l, r, _) => Expr::EBinOp(op, l, r, span),
                     },
                 })
             }
