@@ -10,6 +10,7 @@ mod ast;
 pub mod diagnostics;
 pub mod elab;
 pub mod effects;
+pub mod protocol;
 pub mod error;
 pub mod extract;
 mod lexer;
@@ -35,6 +36,13 @@ pub use diagnostics::{
 };
 pub use prover::{
     attempt_obligation, attempt_with_cert, classify, Countermodel, ProverResult, Route, Verdict,
+};
+pub use protocol::{
+    hole_id_string, obligation_id_string, project_obligation_status, project_wire_verdict,
+    rollup_doc_status, round_trip, serialize_action, serialize_countermodel, serialize_decomposition,
+    serialize_diagnostic, serialize_document, serialize_hole, serialize_obligation,
+    serialize_slice, trusted_base_entry, validate_document, DocStatus, ObligationStatus,
+    WireVerdict,
 };
 pub use resolve::{RDecl, RDeclKind, RExpr, RType};
 
