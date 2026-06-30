@@ -81,6 +81,12 @@ the code, and that independence is the point. Read `../../COORDINATION.md` and
      (the core/AST, resolved de Bruijn indices, the obligation/cert shape) — the
      same "assert the structural output, at non-degenerate endpoints" rule the
      trust-root uses, here for any producer whose output a *later* checker accepts.
+     **A round-trip test (`parse(repr(x)) == x`) checks self-*consistency*, not
+     *truth* (promoted T1-build).** A mis-serialized value — a `verdict` written
+     `false` when V3 said `unknown` — **round-trips green** (it deserializes back
+     to the same wrong value), so round-trip alone is vacuously self-satisfying.
+     Pair **every** round-trip case with ≥1 **structural assertion on the
+     serialized form** (the exact tag/field on the wire), or it guards nothing.
    - **An untrusted layer's *positive verdict* must reach its constructor through
      exactly ONE grep-able kernel-check call — verify the single path (promoted
      V3-build; pairs with assert-output).** When a layer is believed only because
