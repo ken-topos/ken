@@ -27,6 +27,18 @@ the code, and that independence is the point. Read `../../COORDINATION.md` and
      passed and the Architect caught at diff-scope.) Ground not just the
      **presence** of what's built but the **absence** of what's required — the QA
      refinement of COORDINATION §7.
+   - **An intentionally-vacuous (deferred-to-a-later-WP) test must carry a *local*
+     marker, not just live in the conformance seed (promoted V1-build).** When a
+     conformance case is correct-but-vacuous at the current WP's scope — its body
+     asserts nothing because the behavior reifies in a later build (V1's
+     `disproved_distinct_from_unknown` is comments-only; the countermodel is V3) —
+     a future implementer adding that behavior with a **bug sees the test still
+     green** and reads it as coverage. Require a standard in-body marker
+     (`// [placeholder — reifies in <WP>]`) so the gap is visible **in the test
+     file**, greppable, not discoverable only by tracing back to the seed. A green
+     vacuous test with no local marker is a soft trap; flag it. (Dual of the
+     make-absence-visible discipline — the test file should disclose its own
+     deferred coverage.)
    - **Trace the *mechanism* that enforces each cited prior-lesson — not the
      comment (promoted X1; 2nd Architect-catch-QA-missed).** When the
      implementer's handoff says "K1/K2/F4 lesson X is applied," a code **comment**
