@@ -100,7 +100,7 @@ view head (xs : { l : List A | l ≠ nil }) : A = …      -- non-empty by type
 
 - `{ x : A | φ x }` requires `φ x : Ω`. Its inhabitants are, by the
   comprehension reading, pairs `(x, proof-of-φx)` with the proof component a
-  **mere proposition** (`12 §5.1`), so refinements carry *no runtime payload*
+  **mere proposition** (`16 §1.2`), so refinements carry *no runtime payload*
   and coerce silently to `A`.
 - Refinements are the **route to L2 at the surface**: pushing a property into a
   type makes the checker enforce it at every use, with obligations generated
@@ -220,7 +220,7 @@ syntax.
 ### 5.1 The verdict (per-obligation, operational)
 
 Attempting an obligation `Γ ⊢ φ` (`22 §1`) yields one of **three** verdicts —
-the surface rendering of the kernel trichotomy (`12 §5.2`, `24 §3`), the spine
+the surface rendering of the kernel trichotomy (`16 §1`, `24 §3`), the spine
 of the protocol's verdict (`25`) — each carrying the evidence that makes it
 actionable and (for `proved`) re-checkable:
 
