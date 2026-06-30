@@ -386,6 +386,23 @@ trigger CI, reads the checks, merges, and fetches `main`
   branch checks the post-merge `main` carries all of them. (3) **Authors ground
   the WP *base* against the landed corpus, not the notifications,** before
   building on it.
+  **(4) PREVENTIVE — a multi-piece erratum is ONE branch, ONE Decision (promoted
+  Σ-sort, the *2nd* recurrence).** The §5.1 drop recurred **immediately** on the
+  Σ-sort 3-piece (`badc78d` shipped only the kernel `sort_sigma` split; spec `13`
+  + the pi-sigma conformance were absent from `main`) — so points (1)–(3) are the
+  *detective* control; this is the *preventive* one. **Root cause:** when one
+  piece is a **crates-only kernel fix**, its diff-scope reads crates-only
+  (Architect + CI, **no Spec**) and it merges **alone** — the spec + conformance
+  pieces, sitting on *other* branches, are never in the merged tree. It isn't the
+  squash dropping commits; the pieces were **never assembled onto the branch that
+  merged**. **Fix:** assemble **all** N pieces (kernel + spec + conformance) onto
+  a **single** `wp/<erratum>` branch *before* the merge Decision — the combined
+  diff-scope then **touches `spec/`+`conformance/`**, correctly pulls a **Spec
+  vote**, and all N commits ride **one squash** to `main` together. Never publish
+  the kernel piece on its own crates-only branch while siblings wait. **The
+  Integrator confirms the Decision's branch carries every cited piece before
+  merge** (validated on `s51-sigma-reland`: one branch, both `spec/`+`conformance/`
+  pieces → the Decision correctly pulled a Spec vote → "§14 compliant").
 - **Review is a mootup Decision, not a GitHub action.** The Architect/Spec read
   the diff from the shared local branch (`git diff origin/main...wp/<ID>`) and
   vote the merge Decision in mootup. There is no GitHub PR approval to mirror.
