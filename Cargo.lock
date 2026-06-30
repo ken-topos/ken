@@ -277,7 +277,9 @@ dependencies = [
 name = "ken-interp"
 version = "0.0.0"
 dependencies = [
+ "ken-elaborator",
  "ken-kernel",
+ "ken-runtime",
 ]
 
 [[package]]
