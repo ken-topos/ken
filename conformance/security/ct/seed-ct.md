@@ -4,7 +4,7 @@ Format: `../../README.md`. These pin the **`@ct` constant-time discipline** of
 `spec/60-security/61-information-flow.md §5a` — Sec1ct elaborates the Sec1
 *hook* (parse/attach/carry/reject-a-leakage-sink-flow) to the enforced
 **discipline** (the `CT` axis §5a.1, the sealed `LeakSink` set §5a.2, the
-`L-CT-SINK` rule §5a.3, the CT-promise/`Q` export §5a.4, declassify-ends-span
+`L-CT-SINK` rule §5a.3, the CT-promise/`P` export §5a.4, declassify-ends-span
 §5a.5, the honest split §5a.6/§H). They sit beside the Sec1 IFC seed
 (`../ifc/seed-ifc.md`) and **absorb** its two `@ct`-hook cases (F1/F2 — see
 "Hook absorption" below); they reuse Sec1's lattice, `pc` discipline,
@@ -21,7 +21,8 @@ Sec1ct conformance note), `61 §H` (honest limits + the three `[Sec1-*]`
 triggers); `36 §3.1` (the cross-workstream effect-sink contract: the `@ct` taint
 row "a label whose sink is a distinguished `Vis` op", and branch-guard /
 memory-index / variable-time-primitive as a distinguished effect sink);
-`71 §2` (the assume-guarantee contract `guarantees` (`Q`) channel); `63 §5a`
+`71 §2`/`§2.1` (the CT-promise feeds the `assumptions` (`P`) channel, tagged
+`tested`; `Q` is reserved for kernel-certified claims); `63 §5a`
 (the discharge attestation — field #1 binds the `71` contract hash, field #4
 carries `Ward`'s timing-validation result); `64 §4.2` (timing is
 codegen/hardware-relative under a stated leakage model); `61 §4`/`62` + `25 §3`
@@ -80,21 +81,23 @@ consequence. Each negative case below **drives a real `@ct` value into a real
 value/shape past the same sink and observes the accept. The verdict **flips**
 on the exact bug the case targets.
 
-**Honest split — Ken owns `Q` (the source precondition), `Ward` owns the binary
-(`61 §5a.6`/`§H`; `64 §4.2`, `63 §5a`).** The `L-CT-SINK` check gives the
-**source-level** constant-time precondition `Q` (no `@ct` value steers a
-`LeakSink`) — **not** constant-time *execution* (which needs CT-preserving
-lowering + an empirical leakage-model validation, both `Ward`'s). **No case
-asserts Ken proves constant-time execution** — that is the exact over-claim §H
-forecloses (AC7). The CT-promise `Q` (CT-D1) is a **source-level** guarantee
-clause, paired **1:1** with a `63 §5a` `Ward` discharge result.
+**Honest split — Ken owns the source precondition (exported `P`/`tested`),
+`Ward` owns the binary (`61 §5a.6`/`§H`; `64 §4.2`, `63 §5a`).** The `L-CT-SINK`
+check gives the **source-level** constant-time precondition (no `@ct` value
+steers a `LeakSink`) — **not** constant-time *execution* (which needs
+CT-preserving lowering + an empirical leakage-model validation, both `Ward`'s).
+**No case asserts Ken proves constant-time execution** — that is the exact
+over-claim §H forecloses (AC7). The CT-promise (CT-D1) is a **source-level**
+boundary obligation on `P`/`tested`, paired **1:1** with a `63 §5a` `Ward`
+discharge result.
 
 **Tags.** `(soundness)` = a real constant-time-precondition commitment that must
 never regress. `(oracle)` = an expected result to confirm against Ken's
 reference elaborator once it exists; and per defer-spelling-not-concept the
 **literal surface token `@ct`** stays `OQ-syntax`-deferred and the **literal
-`Q`-clause field token** stays B1-/`71`-deferred — cases pin the value-set
-(`{ct⊥, ct⊤}`) + the flow/contract invariants, **not** the surface/field tokens.
+boundary-obligation field token** stays B1-/`71`-deferred — cases pin the
+value-set (`{ct⊥, ct⊤}`) + the flow/contract invariants, **not** the
+surface/field tokens.
 
 ---
 
@@ -208,35 +211,47 @@ reference elaborator once it exists; and per defer-spelling-not-concept the
   **CT-axis-specific** behavior (`ct⊤ → ct⊥` ends the span) + that the `@ct` cap
   surfaces in the delta.
 
-## CT-D. CT-in-parameter promise + the `Q` export (AC6)
+## CT-D. CT-in-parameter promise + the `P`/`tested` boundary obligation (AC6)
 
-### security/ct/ct-in-parameter-promise-checked-emits-Q
-- spec: `61 §5a.4` (the CT-promise + `Q` export), `71 §2` (the `guarantees`
-  (`Q`) channel), `63 §5a` (the `Ward` discharge attestation), `61 §7` (`ct_eq`)
+### security/ct/ct-in-parameter-promise-checked-emits-P-tested
+- spec: `61 §5a.4` (the CT-promise + `P`/`tested` boundary obligation),
+  `71 §2.1` (the honesty discriminator + the `assumptions` (`P`) channel — `Q`
+  is reserved for kernel-certified claims), `63 §5a` (the `Ward` discharge
+  attestation), `61 §7` (`ct_eq`)
 - given: `ct_eq (k : Bytes @ ct) (g : Bytes) : Bool @ ct` **declaring**
   constant-time-in-`k`, with body `fold_and (map2 ct_byte_eq k g)` (no
   `LeakSink` op's timing-relevant operand depends on `k`)
-- expect: **accepts** AND **structurally emits a source-level guarantee clause**
-  onto the `71` `guarantees` (`Q`) channel — "constant-time-in-`k` at the source
-  level, relative to the stated leakage model" — content-hashed into the `71`
-  contract. **Assert the emitted boundary obligation structurally** (the clause
-  is present, names parameter `k`, is a **source-level precondition** not a
-  timing guarantee, and pairs 1:1 with a `63 §5a` discharge field), **not merely
-  "accepts."** A sibling body that did `branch_on k[0]` instead is **rejected**
-  (the promise is checked **by typing**, the §5a.3 rule applied with the named
-  parameter as the `@ct` source) — the **flip**.
-- why: (soundness) **AC6** — the promise is a *checked* obligation, not a
-  decoration, and an accepted promise **produces** a `Q` clause the boundary can
-  rely on. The structural claim (clause present + well-formed) guards against
-  the silent-omission hole: an accepted function emitting **no** clause would
-  read "constant-time-promised" to a consumer while supplying nothing (the V2
-  completeness-of-extraction backstop, in the CT domain). **`(oracle)`:** the
-  **literal field-token spelling** of the `Q` clause is B1-/`71`-deferred
-  (defer-spelling-not-concept) — pin the concept (a `Q`-channel clause naming
-  the parameter), the value-set/invariants (source-level, 1:1 with a `63 §5a`
-  `Ward` discharge, relative to a leakage model), and **content-hash stability**
-  (renaming the field after binding is a contract break, `63 §5a` #1); do
-  **not** freeze the token.
+- expect: **accepts** AND **structurally emits a source-level boundary
+  obligation** onto the `71` `assumptions` (`P`) channel, **tagged `tested`** —
+  "constant-time-in-`k` at the source level, relative to the stated leakage
+  model" — content-hashed into the `71` contract. **It is NOT a `guarantees`/
+  `Q` entry.** **Assert the emitted boundary obligation structurally** (the
+  clause is present on `P`, tagged `tested`, names parameter `k`, is a
+  **source-level precondition** not a timing guarantee, and pairs 1:1 with a
+  `63 §5a` discharge field), **not merely "accepts."** A sibling body that did
+  `branch_on k[0]` instead is **rejected** (the promise is checked **by
+  typing**, the §5a.3 rule applied with the named parameter as the `@ct`
+  source) — the **flip**.
+- why: (soundness) **AC6 + the B1 honesty discriminator (`71 §2.1`, the
+  authority).** The promise is a *checked* obligation, not a decoration, and an
+  accepted promise **produces** a boundary clause the consumer can rely on — but
+  it rides **`P`/`tested`, never `Q`**: the CT-promise is **proved by trusted
+  typing** (the `L-CT-SINK` rule is a trusted meta-theorem and `@ct` labels are
+  **erased before the kernel**, §9 N1), so it is **never kernel-re-checked**;
+  and `71 §2.1` reserves `Q` for **kernel-certified** claims (certificate
+  re-checked, goal absent from `trusted_base()`). Filing it under `Q` would
+  **over-claim kernel certification** of a trusted-by-typing guarantee;
+  `P`/`tested` is the
+  **safe (under-claim) direction**. The structural claim (clause present +
+  well-formed + tagged `tested`) guards the silent-omission hole: an accepted
+  function emitting **no** clause would read "constant-time-promised" to a
+  consumer while supplying nothing (the V2 completeness-of-extraction backstop,
+  in the CT domain). **`(oracle)`:** the **literal field-token spelling** is
+  B1-/`71`-deferred (defer-spelling-not-concept) — pin the concept (a `P`/
+  `tested` boundary obligation naming the parameter), the value-set/invariants
+  (source-level, 1:1 with a `63 §5a` `Ward` discharge, relative to a leakage
+  model), and **content-hash stability** (renaming the field after binding is a
+  contract break, `63 §5a` #1); do **not** freeze the token.
 
 ## CT-E. Honest limits — no over-claim (AC7)
 
@@ -246,8 +261,9 @@ reference elaborator once it exists; and per defer-spelling-not-concept the
 - given: the full `@ct` corpus above (A–D), read as a body of claims about what
   Ken proves
 - expect: **no case asserts Ken proves constant-time *execution*.** Ken proves
-  only the **source-level precondition `Q`** (no `@ct` value steers a
-  `LeakSink`), **by typing**, with the `L-CT-SINK` rule + `LeakSink`
+  only the **source-level CT precondition** (no `@ct` value steers a
+  `LeakSink`), **by typing** — exported on `P`/`tested`, not `Q` (§5a.4) — with
+  the `L-CT-SINK` rule + `LeakSink`
   classification **trusted** (labels erased, N1). The **timing guarantee** is
   **delegated to `[Ward]` + the toolchain** under a stated leakage model
   (`64 §4.2`, `63 §5a`) — and §H carries the three kernel-blind surfaces as
@@ -275,7 +291,8 @@ reference elaborator once it exists; and per defer-spelling-not-concept the
 - **AC4** `Secret`-but-not-`@ct` branches freely → accept (the `[Sec1-dual]`
   distinguishing pair) → CT-B1.
 - **AC5** declassify ends the span (accept + in delta) → CT-C1.
-- **AC6** CT-in-parameter promise checked + emits `Q` (structural) → CT-D1.
+- **AC6** CT-in-parameter promise checked + emits `P`/`tested` (structural) →
+  CT-D1.
 - **AC7** honesty — timing delegated, no over-claim, three `[Sec1-*]` triggers
   named → CT-E1 (and the `(oracle)`/defer-tags throughout CT-D1, CT-E1).
 
@@ -308,8 +325,9 @@ reference elaborator once it exists; and per defer-spelling-not-concept the
   and passes "would this also be absent/accepted under the precise bug it
   targets?": A1 the `CT` orientation (`ct⊤ ⋢ ct⊥`); A3 the `var-time`
   signature flag; A4 the `pc.ct`-join; C1 the declassify-`ct⊥` span end +
-  delta entry; D1 the **emitted** `Q` clause (a producer omission the consumer
-  cannot see); E1 the three **present** `[Sec1-*]` reify-triggers + the absent
+  delta entry; D1 the **emitted** `P`/`tested` clause (a producer omission the
+  consumer cannot see); E1 the three **present** `[Sec1-*]` reify-triggers + the
+  absent
   CT-execution claim.
 
 ## Hook absorption (reconcile note)
@@ -336,10 +354,11 @@ All Sec1ct cases (A–D) exercise the elaborator's **flow-typing pass** (the
 the **same** untyped-then-erased path as the Sec1 by-typing cases, needing **no
 kernel feature** beyond landed K1.5 and **no** by-proof/product-program
 machinery (`@ct` is unary taint, §5a.3 — the relational engine is *not* on this
-path). CT-D1's `Q` export rides the **`71` guarantees channel** and couples to
-**B1** (the export emitter, Kernel/WS-B) — the `Q`-clause **field token** is
-`(oracle)`-tagged and bound by B1, so CT-D1 asserts the clause **structurally**
-(present, names the parameter, source-level, 1:1 with a `63 §5a` discharge),
+path). CT-D1's CT-promise export rides the **`71` assumptions (`P`/`tested`)
+channel** and couples to **B1** (the export emitter, Kernel/WS-B) — the
+clause **field token** is `(oracle)`-tagged and bound by B1, so CT-D1 asserts
+the clause **structurally** (present, names the parameter, source-level, 1:1
+with a `63 §5a` discharge),
 not the literal spelling. The literal surface token `@ct` stays
 `OQ-syntax`-deferred (`(oracle)`); cases pin the value-set `{ct⊥, ct⊤}` +
 invariants, not the surface token. `[Ward]` (runtime timing validation under a

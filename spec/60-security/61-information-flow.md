@@ -5,7 +5,7 @@
 > non-interference statement and its honest limits, and the `@ct` constant-time
 > discipline** (§2–§5a, §H) — Sec1ct elaborates §5a from the Sec1 *hook* to the
 > enforced `@ct` discipline (the `CT` axis, the sealed `LeakSink` set, the
-> `L-CT-SINK` rule, the CT-promise/`Q` export, declassify-ends-span); the
+> `L-CT-SINK` rule, the CT-promise/`P` export, declassify-ends-span); the
 > concrete surface *spelling* of labels stays proposal-level (`OQ-syntax`).
 > **Settled inputs (do *not* reopen): `OQ-ifc` DECIDED** (lattice-parametric +
 > DLM, §2); **`OQ-relational` DECIDED** (by-proof = re-checked product
@@ -508,29 +508,40 @@ Sec1's `pc` discipline verbatim:
   is a different mode (verdict-mapping pinned at source, the §5.3 discipline
   applied to foreclose the cross-mode silence).
 
-#### 5a.4 The CT signature promise + the `Q` export
+#### 5a.4 The CT signature promise + the `P` boundary obligation
 
 A function **declares** constant-time-in-a-named-parameter — a
 **signature-level CT promise** on parameter `x` — and the boundary **checks** it
-and **emits** the source-level guarantee `Q`:
+and **emits** it as a source-level boundary obligation on `P` (tagged `tested`):
 
 - **Check (by typing, no product program).** The body is checked with `x` bound
   at `ct⊤`; if any `LeakSink` op's timing-relevant operand depends on `x` —
   directly or via `pc.ct` — the function is **rejected**. A body that passes
   **discharges** the promise; this *is* the §5a.3 rule applied with the named
   parameter as the `@ct` source.
-- **Export `Q` (the assumption boundary).** An accepted CT-promising function
-  emits a **source-level guarantee clause** onto the `71` **`guarantees` (`Q`)**
-  channel (`70-behavioral/71 §2`) — "constant-time-in-`x` *at the source level*,
-  relative to the stated leakage model" — content-hashed into the `71`
-  assume-guarantee contract. The loop closes at the **`63 §5a` discharge
-  attestation**: its field #1 binds the `71` contract hash, and its field #4
-  carries **Ward's** timing-validation result for exactly this `Q`.
+- **Export to `P` (the assumption boundary), tagged `tested`.** An accepted
+  CT-promising function emits a **source-level boundary obligation** onto the
+  `71` **`assumptions` (`P`)** channel, **tagged `tested`** — "constant-time-in-
+  `x` *at the source level*, relative to the stated leakage model" —
+  content-hashed into the `71` assume-guarantee contract. It is **not** a
+  `guarantees`/`Q` entry: B1 is the authority, and the projection's honesty
+  discriminator (`70-behavioral/71 §2.1`) reserves `Q` for **kernel-certified**
+  claims (a certificate the kernel re-checks, its goal **absent** from
+  `trusted_base()`). The CT promise is **proved by trusted typing** — the
+  `L-CT-SINK` rule is a trusted meta-theorem and `@ct` labels are **erased
+  before the kernel** (§9 N1), so it is **never kernel-re-checked** — a
+  **trusted-by-typing boundary obligation**, which rides `P`/`tested`, the
+  safe direction. *(Whether trusted-by-typing eventually earns a distinct
+  epistemic status is a separate, deferred question — not reopened here; the
+  `P`/`tested` routing holds regardless.)* The loop still closes at the
+  **`63 §5a` discharge attestation**: its field #1 binds the `71` contract hash,
+  and its field #4 carries **Ward's** timing-validation result for exactly this
+  obligation.
 - **Coordinate the shape with B1; do not pre-bind names
   (defer-spelling-not-concept).** **Locked:** the *concept* (a CT promise is a
-  `Q`-channel guarantee clause naming the parameter), the *value-set +
-  invariants* (it is a **source-level** precondition, **not** a timing
-  guarantee; it pairs
+  `P`-channel boundary obligation, tagged `tested`, naming the parameter), the
+  *value-set + invariants* (it is a **source-level** precondition, **not** a
+  timing guarantee; it pairs
   **1:1** with a `63 §5a` Ward discharge result; it is relative to a stated
   leakage model), and the *stability discipline* (the clause binds to the `71`
   contract **content-hash** — **renaming the field after binding is a contract
@@ -588,8 +599,8 @@ re-checked by the *same* small kernel (ADR 0004 Decision 3, ADR 0001).
 | The lattice / policy is the *right* policy | **assumed** | a wrong policy ⇒ a wrong guarantee — the `64 §4.1` spec≠intent analog; the policy (`65`) is the human-reviewed boundary |
 | Classification at ingestion ("this datum *is* Tenant[X]") | **assumed — a claim, audited** | capability-gated + audited (§3.3), the dual of declassification; not a proof |
 | Declassification | **authorised release, audited** | NI holds *up to* declassify; each downgrade is explicit, capability-gated, optionally conditional, and in `trusted_base_delta` |
-| `@ct` source-level precondition `Q` (no `@ct` value steers a `LeakSink`) | **proven *by typing* — but the flow rule is trusted** | the `L-CT-SINK` check (§5a.3) statically enforces `Q` by unary taint, no product program; but `@ct` labels are **erased** before the kernel, so the rule + the `LeakSink` classification are **trusted** (§9 N1) — the discriminating conformance corpus, not the kernel, is the net |
-| `@ct` **timing** guarantee (constant-time *execution*) | **delegated → `[Ward]` / toolchain** | Ken proves only the source precondition `Q` (above); the timing guarantee is codegen/hardware-relative under a stated leakage model and needs CT-preserving lowering + empirical validation (`64 §4.2`, `63 §5a`) — **Ken must not claim it** |
+| `@ct` source-level CT precondition (no `@ct` value steers a `LeakSink`) | **proven *by typing* — but the flow rule is trusted** | the `L-CT-SINK` check (§5a.3) statically enforces the precondition by unary taint, no product program; but `@ct` labels are **erased** before the kernel, so the rule + the `LeakSink` classification are **trusted** (§9 N1) — the discriminating conformance corpus, not the kernel, is the net; exported on `P`/`tested`, not `Q` (§5a.4) |
+| `@ct` **timing** guarantee (constant-time *execution*) | **delegated → `[Ward]` / toolchain** | Ken proves only the source precondition (above, exported on `P`/`tested`); the timing guarantee is codegen/hardware-relative under a stated leakage model and needs CT-preserving lowering + empirical validation (`64 §4.2`, `63 §5a`) — **Ken must not claim it** |
 | Heavy value-dependent relational machinery | **deferred → `[rel-deferred]`** | named, not faked; a reflective embedding if ever needed, **never** a kernel primitive |
 | Kernel / FFI / native runtime | **trusted (listed)** | `64 §4.3`; the IFC discipline adds **no** trusted primitive |
 | Worst-case time / space (DoS) | **out of scope** | `64 §4.2`; totality ≠ cheapness |
@@ -682,8 +693,8 @@ view cmp_ok (k : Bytes @ ct) (d : Cap_declassify[ct⊤→ct⊥]) (g : Bytes) : B
 -- AC6 — CT-in-parameter signature promise: declared CT-in-`k`, checked by typing.
 view ct_eq (k : Bytes @ ct) (g : Bytes) : Bool @ ct   -- promises constant-time-in-k
   = fold_and (map2 ct_byte_eq k g)
-                     -- ACCEPTED + emits Q("constant-time-in-k", source-level) onto the 71 guarantees
-                     --   channel; a body that did `branch_on k[0]` instead would be REJECTED (the flip).
+                     -- ACCEPTED + emits P/tested("constant-time-in-k", source-level) onto the 71
+                     --   assumptions channel; a body that did `branch_on k[0]` instead is REJECTED (flip).
 ```
 
 A CISO reads these and sees PII boundaries, API-key confinement, injection
@@ -719,8 +730,9 @@ the controls compliance frameworks (GDPR/CCPA data boundaries, PCI key handling,
   (`BranchGuard`/`MemIndex`/`VarTimePrim`,
   §5a.2, no catch-all) — enforced **by typing** via the `pc`-aware `L-CT-SINK`
   rule (§5a.3, sound static enforcement of the source precondition, no product
-  programs); a function exports a **CT-in-parameter promise** onto the `71` `Q`
-  channel (§5a.4); the span ends **only** at an authorised `declassify` (§5a.5).
+  programs); a function exports a **CT-in-parameter promise** onto the `71` `P`
+  (`tested`) channel (§5a.4); the span ends **only** at an authorised
+  `declassify` (§5a.5).
   The **timing guarantee** stays delegated to **`[Ward]` + the toolchain** under
   a stated leakage model (Sec1 landed the **label + hook**; Sec1ct landed the
   **discipline**; `[Ward]` owns the **timing**).
@@ -755,8 +767,9 @@ erased **flow** property):
 5. **The `@ct` discipline** (Sec1 landed the *hook*; **Sec1ct** elaborates the
    *discipline*, §5a) — the opt-in `CT` product-factor axis (§5a.1); the
    **sealed** `LeakSink` classification, no catch-all (§5a.2); the `pc`-aware
-   `L-CT-SINK` flow rule (§5a.3); the CT-in-parameter promise + `Q` export
-   (§5a.4); declassify as the sole span terminator (§5a.5); the timing
+   `L-CT-SINK` flow rule (§5a.3); the CT-in-parameter promise + `P`/`tested`
+   boundary obligation (§5a.4); declassify as the sole span terminator (§5a.5);
+   the timing
    guarantee delegated to
    **`[Ward]`** with the three `[Sec1-*]` triggers named in §H (§5a.6).
    *Acceptance 4; Sec1ct AC1–AC7.*
@@ -823,8 +836,9 @@ rejects / the same shape on a `ct⊥` value accepts (AC1); likewise `MemIndex`
 non-degenerate `[Sec1-dual]` distinguishing pair, not green-vs-green); after an
 authorised `declassify` the formerly-`@ct` value steers a sink and **accepts**,
 its declassify cap in `trusted_base_delta` (AC5); a CT-in-parameter promise is
-checked and the accepted function **emits the `Q` clause** — a *structural*
-assertion on the emitted boundary obligation, not merely "accepts" (AC6); and an
+checked and the accepted function **emits the `P`/`tested` boundary-obligation
+clause** — a *structural* assertion on the emitted boundary obligation, not
+merely "accepts" (AC6); and an
 **honesty** case asserts **no** test claims Ken proves constant-time *execution*
 — §H carries the split + the three `[Sec1-*]` triggers (AC7). **Cross-case
 sweep:** the `@ct`-reject class agrees (AC1–AC3), the accept class agrees
