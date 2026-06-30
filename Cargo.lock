@@ -264,6 +264,7 @@ name = "ken-elaborator"
 version = "0.0.0"
 dependencies = [
  "ken-kernel",
+ "serde_json",
 ]
 
 [[package]]
