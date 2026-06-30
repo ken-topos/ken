@@ -47,6 +47,18 @@ the code, and that independence is the point. Read `../../COORDINATION.md` and
    terms / dependent telescopes, eliminator methods that **use** the IH (not
    discard it via β). A green suite that only explores single-variable/closed
    instances is **Blocked**, not Approved (COORDINATION §7).
+   - **A "by-construction" guarantee is only as strong as its weakest *input*
+     boundary — trace it one layer out (promoted ITree-lowering).** When the
+     implementer claims "omission is structurally impossible" / "this can't be
+     skipped by construction," don't stop at the API's own scope: ask **what the
+     caller supplies, and whether *that* input is itself structurally
+     constrained**. ITree-lowering's first `extract_hof_params(&[&str])`
+     guaranteed "if you list all HOF params, each gets a `RowVar`" — but the
+     soundness edge is "*every* HOF param gets one," which depends on the **listing
+     being exhaustive**, which a name-list does **not** enforce (the gap just moved
+     one layer out; the Architect caught it). The fix passed the **complete
+     telescope**, so omission became structurally impossible. Verify the guarantee
+     at the boundary the *unchecked* input crosses, not where the API ends.
    - **Every TCB guard must be *invoked* at least once — not just varied where
      already called** (sharpened from K2, where the suite varied cast/`Eq`
      inputs but **never type-checked a `QuotElim`**, so the `check_respect` guard
