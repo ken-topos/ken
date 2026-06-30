@@ -38,16 +38,10 @@ properties.
   the program **runs**
 - why: partial verification runs and marks where the gap bites.
 
-## runtime/capacity/loud-refusal (not silent)
-- spec: `spec/40-runtime/44-capacity.md §2`
-- given: exhausting the (engineering-chosen) capacity bound
-- expect: a **loud, clear failure** — never silent drop/alias/corruption
-- why: loud refusal over silent degradation, decoupled from Leech numerology.
-
-## runtime/addressing/no-lattice-on-hot-path (oracle)
-- spec: `spec/40-runtime/41-values.md §3`, `44 §4`
-- given: the allocation/addressing path
-- expect: addressing is hash (FNV-1a-style) + `memcmp`, slot ids a monotonic
-  counter; **no** Leech quantizer / Co₀ canonicalization on the path
-- why: the reality-check's correction — the lattice is not load-bearing for
-  addressing.
+> **The capacity / addressing cases moved.** The store-capacity commitments —
+> loud refusal (`CapacityExhausted`, never silent), dedup-aware accounting,
+> reclamation, and `no-lattice-on-hot-path` — are now pinned at X2 rigor in
+> `capacity/seed-capacity.md` (grounded on `44` + the landed `store.rs`). The
+> two cases that lived here (`runtime/capacity/loud-refusal`,
+> `runtime/addressing/no-lattice-on-hot-path`) are **subsumed** there (one home
+> per property); see that file for AC1–AC5.

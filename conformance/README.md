@@ -73,6 +73,11 @@ claim with no conformance case is a claim no one can rely on
   vs prelude-law boundary, `Char` surrogate exclusion.
 - `runtime/seed-runtime.md` — dedup + O(1) equality; `Int` past 2⁵³ exact;
   `unknown` propagation.
+- `runtime/capacity/seed-capacity.md` — X2 store hardening (`44`): dedup-aware
+  accounting (distinct, not occurrences), the **loud** at-limit failure
+  (`CapacityExhausted` raised, never the silent `NULL_SLOT` drop), reclamation
+  page release (`arena_bytes → 0`), region-scoped lifetime + escape-survival,
+  retired-ids-never-resurrected, and no-lattice-on-the-hot-path.
 - `security/ifc/seed-ifc.md` — Sec1 information-flow-by-typing (the
   implicit-flow discriminator, label joins, capability-gated declassify, the
   relational by-proof mode).
