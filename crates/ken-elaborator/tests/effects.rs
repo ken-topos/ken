@@ -1046,6 +1046,467 @@ fn row_poly_mixed_concrete_and_var() {
 }
 
 // ============================================================
+// EFF-LOW — ITree kernel-term lowering (emit Term::Elim, kernel-checked)
+// ============================================================
+//
+// Tests emit kernel `Term::Elim` via `lower_*` and verify with the kernel's
+// `infer` / `normalize`. Every negative case is discriminating:
+// - "kernel rejects" cases: `kernel_infer` returns `Err`.
+// - "computation" cases: `normalize` returns the expected value (kernel
+//   processed the term) vs wrong/stuck value for mis-lowerings.
+//
+// NOTE: `kernel_infer` cannot synthesize bare-lambda motives (it needs an
+// explicit ascription, as in `ac2_indexed_wstyle_method_type_agreement`).
+// "Accepts" tests therefore use `normalize` for the computation assertion;
+// "rejects" tests use `kernel_infer` which correctly fails for structural
+// violations (wrong method count, swapped-method type errors).
+//
+// Kernel environment setup mirrors `k1p5_wstyle.rs` AC5 helpers.
+
+use ken_elaborator::effects::{
+    lower_bind, lower_elim_itree, lower_handler_fold_uniform,
+    build_decl_from_telescope, classify_telescope, ParamTy, RowVarAllocator,
+};
+use ken_kernel::{
+    declare_inductive, infer as kernel_infer, normalize, whnf,
+    CtorSpec, GlobalEnv, InductiveSpec,
+};
+use ken_kernel::term::{Level, Term};
+use ken_kernel::env::Context;
+
+fn lv0() -> Level { Level::zero() }
+
+fn setup_nat(env: &mut GlobalEnv) -> (
+    ken_kernel::GlobalId, ken_kernel::GlobalId, ken_kernel::GlobalId,
+) {
+    let nat = declare_inductive(env, |nat| InductiveSpec {
+        level_params: vec![],
+        params: vec![],
+        indices: vec![],
+        level: lv0(),
+        constructors: vec![
+            CtorSpec { args: vec![], target_indices: vec![] },
+            CtorSpec {
+                args: vec![Term::indformer(nat, vec![])],
+                target_indices: vec![],
+            },
+        ],
+    }).unwrap();
+    let decl = env.inductive(nat).unwrap();
+    let zero = decl.constructors[0].id;
+    let suc  = decl.constructors[1].id;
+    (nat, zero, suc)
+}
+
+fn setup_itree(
+    env: &mut GlobalEnv,
+    nat_id: ken_kernel::GlobalId,
+) -> (
+    ken_kernel::GlobalId, ken_kernel::GlobalId, ken_kernel::GlobalId,
+) {
+    let itree = declare_inductive(env, |itree| InductiveSpec {
+        level_params: vec![],
+        params: vec![Term::Type(lv0())],
+        indices: vec![],
+        level: lv0(),
+        constructors: vec![
+            CtorSpec { args: vec![Term::var(0)], target_indices: vec![] },
+            CtorSpec {
+                args: vec![Term::pi(
+                    Term::indformer(nat_id, vec![]),
+                    Term::app(Term::indformer(itree, vec![]), Term::var(1)),
+                )],
+                target_indices: vec![],
+            },
+        ],
+    }).unwrap();
+    let decl = env.inductive(itree).unwrap();
+    let ret_id = decl.constructors[0].id;
+    let vis_id = decl.constructors[1].id;
+    (itree, ret_id, vis_id)
+}
+
+/// Helper: `Ret_R r` = `App(App(Constructor(ret), R), r)`.
+fn ret_term(
+    ret_id: ken_kernel::GlobalId,
+    r_type: Term,
+    r_val: Term,
+) -> Term {
+    Term::app(Term::app(Term::constructor(ret_id, vec![]), r_type), r_val)
+}
+
+/// Helper: `Vis_R k` = `App(App(Constructor(vis), R), k)`.
+fn vis_term(
+    vis_id: ken_kernel::GlobalId,
+    r_type: Term,
+    k_val: Term,
+) -> Term {
+    Term::app(Term::app(Term::constructor(vis_id, vec![]), r_type), k_val)
+}
+
+/// EFF-LOW1: `lower_elim_itree` on a `Ret` scrutinee — kernel computes the
+/// Ret method correctly.
+///
+/// Structural assertion: `elim_ITree M mr mv (Ret Nat zero) ⇝ mr zero = suc zero`.
+/// Discriminating vs EFF-LOW2: correct `Term::Elim` computes `suc zero`;
+/// wrong method count → kernel rejects (type error).
+#[test]
+fn lower_elim_itree_ret_kernel_accepts() {
+    let mut env = GlobalEnv::new();
+    let (nat_id, zero_id, suc_id) = setup_nat(&mut env);
+    let (itree_id, ret_id, _vis_id) = setup_itree(&mut env, nat_id);
+    let ctx = Context::new();
+    let r = Term::indformer(nat_id, vec![]);
+
+    // M = λ_:ITree Nat. Nat
+    let motive = Term::lam(
+        Term::app(Term::indformer(itree_id, vec![]), r.clone()),
+        Term::indformer(nat_id, vec![]),
+    );
+    // mr = λ(x:Nat). suc x
+    let mr = Term::lam(
+        Term::indformer(nat_id, vec![]),
+        Term::app(Term::constructor(suc_id, vec![]), Term::var(0)),
+    );
+    // mv = λ(k:Nat→ITree Nat). λ(ih:Nat→Nat). zero
+    let mv = Term::lam(
+        Term::pi(
+            Term::indformer(nat_id, vec![]),
+            Term::app(Term::indformer(itree_id, vec![]), Term::indformer(nat_id, vec![])),
+        ),
+        Term::lam(
+            Term::pi(Term::indformer(nat_id, vec![]), Term::indformer(nat_id, vec![])),
+            Term::constructor(zero_id, vec![]),
+        ),
+    );
+
+    // Scrutinee: Ret Nat zero
+    let scrut = ret_term(ret_id, r.clone(), Term::constructor(zero_id, vec![]));
+
+    let elim = lower_elim_itree(itree_id, r, motive, mr.clone(), mv, scrut);
+
+    // Computation: ⇝ mr zero = suc zero (ι fires; kernel processed the term).
+    let result = normalize(&env, &ctx, &elim);
+    let expected = whnf(&env, &ctx, &Term::app(
+        Term::constructor(suc_id, vec![]), Term::constructor(zero_id, vec![]),
+    ));
+    assert_eq!(result, expected, "elim_ITree M mr mv (Ret zero) ⇝ suc zero");
+}
+
+/// EFF-LOW2: mis-lowering — wrong method count (`methods = [mr]`, Vis method
+/// missing) → kernel rejects.
+///
+/// Verdict flip vs EFF-LOW1: correct → `Ok`; one method → `Err`.
+#[test]
+fn lower_elim_itree_wrong_method_count_rejected() {
+    let mut env = GlobalEnv::new();
+    let (nat_id, zero_id, _suc_id) = setup_nat(&mut env);
+    let (itree_id, ret_id, _vis_id) = setup_itree(&mut env, nat_id);
+    let ctx = Context::new();
+    let r = Term::indformer(nat_id, vec![]);
+
+    let motive = Term::lam(
+        Term::app(Term::indformer(itree_id, vec![]), r.clone()),
+        Term::indformer(nat_id, vec![]),
+    );
+    let mr = Term::lam(Term::indformer(nat_id, vec![]), Term::constructor(zero_id, vec![]));
+    let scrut = ret_term(ret_id, r.clone(), Term::constructor(zero_id, vec![]));
+
+    // Mis-lowering: only one method (Vis method missing)
+    let bad_elim = Term::Elim {
+        fam: itree_id,
+        level_args: vec![],
+        params: vec![r],
+        motive: Box::new(motive),
+        methods: vec![mr], // ← only 1 method; ITree has 2 constructors
+        indices: vec![],
+        scrut: Box::new(scrut),
+    };
+    let ty = kernel_infer(&env, &ctx, &bad_elim);
+    assert!(ty.is_err(), "mis-lowering (1 method for 2-ctor ITree) must be rejected");
+}
+
+/// EFF-LOW3: `lower_bind` with `R = S = Nat` — emits a `Term::Elim` that
+/// reduces correctly.
+///
+/// `bind (Ret zero) f` where `f = λ(r:Nat). Ret Nat (suc r)` → `Ret (suc zero)`.
+/// Structural assertion on the reduct: `Ret (suc zero)`.
+/// Discriminating vs EFF-LOW4: correct reduces to `Ret(suc zero)`;
+/// swapped methods produce a different (wrong) value.
+#[test]
+fn lower_bind_ret_kernel_checks_and_reduces() {
+    let mut env = GlobalEnv::new();
+    let (nat_id, zero_id, suc_id) = setup_nat(&mut env);
+    let (itree_id, ret_id, vis_id) = setup_itree(&mut env, nat_id);
+    let ctx = Context::new();
+    let nat = Term::indformer(nat_id, vec![]);
+
+    // f = λ(r:Nat). Ret Nat (suc r)
+    // In body (under [r]): Ret Nat (suc r) = App(App(Ret, Nat), App(suc, Var(0)))
+    let f = Term::lam(
+        nat.clone(),
+        ret_term(
+            ret_id,
+            nat.clone(),
+            Term::app(Term::constructor(suc_id, vec![]), Term::var(0)),
+        ),
+    );
+
+    // t = Ret Nat zero
+    let t = ret_term(ret_id, nat.clone(), Term::constructor(zero_id, vec![]));
+
+    let bind_term = lower_bind(itree_id, nat_id, vis_id, nat.clone(), nat.clone(), t, f);
+
+    // Computation: bind (Ret zero) f ⇝ f zero = Ret Nat (suc zero).
+    let result = normalize(&env, &ctx, &bind_term);
+    let expected = whnf(&env, &ctx, &ret_term(
+        ret_id, nat.clone(),
+        Term::app(Term::constructor(suc_id, vec![]), Term::constructor(zero_id, vec![])),
+    ));
+    assert_eq!(result, expected, "bind(Ret zero)(λr.Ret(suc r)) ⇝ Ret(suc zero)");
+}
+
+/// EFF-LOW4 (discriminating): `lower_bind` with swapped methods (mr↔mv) →
+/// computes a DIFFERENT (wrong) value. Verdict flip vs EFF-LOW3.
+///
+/// With swapped methods, the ι rule for `Ret r` fires `methods[0] = mv` instead
+/// of `mr`. β-reducing `mv r` (where `r : Nat`, not a function) yields a lambda
+/// — NOT `Ret(suc zero)`. So the computation diverges from the correct result.
+///
+/// Correct: `normalize` ⇝ `Ret(suc zero)`.
+/// Swapped: `normalize` ⇝ a different term (β-residue of Vis-method applied
+/// to a Nat argument).
+#[test]
+fn lower_bind_swapped_methods_rejected() {
+    let mut env = GlobalEnv::new();
+    let (nat_id, zero_id, suc_id) = setup_nat(&mut env);
+    let (itree_id, ret_id, vis_id) = setup_itree(&mut env, nat_id);
+    let ctx = Context::new();
+    let nat = Term::indformer(nat_id, vec![]);
+
+    let f = Term::lam(
+        nat.clone(),
+        ret_term(
+            ret_id, nat.clone(),
+            Term::app(Term::constructor(suc_id, vec![]), Term::var(0)),
+        ),
+    );
+    let t = ret_term(ret_id, nat.clone(), Term::constructor(zero_id, vec![]));
+    let correct = lower_bind(itree_id, nat_id, vis_id, nat.clone(), nat.clone(), t.clone(), f.clone());
+
+    // Compute the correct result
+    let result_correct = normalize(&env, &ctx, &correct);
+    let expected = whnf(&env, &ctx, &ret_term(
+        ret_id, nat.clone(),
+        Term::app(Term::constructor(suc_id, vec![]), Term::constructor(zero_id, vec![])),
+    ));
+    assert_eq!(result_correct, expected, "EFF-LOW3 sanity: correct gives Ret(suc zero)");
+
+    // Swap methods and compute — must give a different value
+    if let Term::Elim { fam, level_args, params, motive, methods, indices, scrut } = correct {
+        assert_eq!(methods.len(), 2);
+        let swapped = Term::Elim {
+            fam, level_args, params,
+            motive,
+            methods: vec![methods[1].clone(), methods[0].clone()], // swap mr ↔ mv
+            indices,
+            scrut,
+        };
+        let result_swapped = normalize(&env, &ctx, &swapped);
+        assert_ne!(result_correct, result_swapped,
+            "swapped Ret/Vis methods must compute a DIFFERENT value (verdict flip)");
+        // Extra structural assertion: swapped result is not a Ret node.
+        // Correct is Ret(suc zero); swapped fires the Vis method on `zero`
+        // (a Nat, not a function) → β-residue is a Lam, not a Ret application.
+        assert!(!matches!(&result_swapped,
+            Term::App(fun, _) if matches!(fun.as_ref(),
+                Term::App(head, _) if matches!(head.as_ref(),
+                    Term::Constructor { id, .. } if *id == ret_id))),
+            "swapped result must not be a Ret node: {:?}", result_swapped);
+    } else {
+        panic!("lower_bind must produce a Term::Elim");
+    }
+}
+
+/// EFF-LOW5: `lower_bind` on a `Vis` scrutinee — W-ι fires, giving a Vis node.
+///
+/// `bind (Vis k) f` where `k = λ_:Nat. Ret Nat zero`:
+/// W-ι: → `Vis_S (λx. bind (k x) f)` — still a Vis node (not Ret).
+/// Discriminating vs EFF-LOW3 (Ret case): Ret → Ret; Vis → Vis.
+#[test]
+fn lower_bind_vis_kernel_checks_vis_reduct() {
+    let mut env = GlobalEnv::new();
+    let (nat_id, zero_id, _suc_id) = setup_nat(&mut env);
+    let (itree_id, ret_id, vis_id) = setup_itree(&mut env, nat_id);
+    let ctx = Context::new();
+    let nat = Term::indformer(nat_id, vec![]);
+
+    // k = λ_:Nat. Ret Nat zero
+    let k = Term::lam(nat.clone(), ret_term(ret_id, nat.clone(), Term::constructor(zero_id, vec![])));
+    // t = Vis Nat k
+    let t = vis_term(vis_id, nat.clone(), k);
+    // f = λ(r:Nat). Ret Nat r  (identity)
+    let f = Term::lam(nat.clone(), ret_term(ret_id, nat.clone(), Term::var(0)));
+
+    let bind_term = lower_bind(itree_id, nat_id, vis_id, nat.clone(), nat.clone(), t, f);
+
+    // W-ι fires: bind (Vis k) f → Vis_S (λx. bind (k x) f) — still a Vis.
+    let nf = normalize(&env, &ctx, &bind_term);
+    let is_vis = matches!(&nf,
+        Term::App(fun, _) if matches!(fun.as_ref(), Term::App(head, _)
+            if matches!(head.as_ref(), Term::Constructor { id, .. } if *id == vis_id))
+    );
+    assert!(is_vis, "bind(Vis k)(id) must reduce to a Vis node (W-ι fires): {:?}", nf);
+}
+
+/// EFF-LOW6: `lower_handler_fold_uniform` — computes correctly via W-ι + IH.
+///
+/// `handler_fold_uniform (Vis (λ_. Ret Nat zero)) zero`:
+/// W-ι: mv k ih → ih zero = elim_ITree … (k zero) = elim_ITree … (Ret zero)
+/// → Ret method → Ret Nat zero.
+/// Discriminating: Vis scrutinee + correct handler → final Ret; Ret scrutinee
+/// → Ret identity (EFF-LOW1 baseline).
+#[test]
+fn lower_handler_fold_uniform_kernel_checks_and_reduces() {
+    let mut env = GlobalEnv::new();
+    let (nat_id, zero_id, _suc_id) = setup_nat(&mut env);
+    let (itree_id, ret_id, vis_id) = setup_itree(&mut env, nat_id);
+    let ctx = Context::new();
+    let nat = Term::indformer(nat_id, vec![]);
+    let zero = Term::constructor(zero_id, vec![]);
+
+    // k = λ_:Nat. Ret Nat zero  (constructor-producing)
+    let k = Term::lam(nat.clone(), ret_term(ret_id, nat.clone(), zero.clone()));
+    // t = Vis Nat k
+    let t = vis_term(vis_id, nat.clone(), k);
+
+    let fold = lower_handler_fold_uniform(itree_id, nat_id, ret_id, nat.clone(), zero.clone(), t);
+
+    // Computation: handler_fold_uniform (Vis (λ_. Ret zero)) zero
+    //   W-ι → ih zero → elim_ITree … (k zero) → elim_ITree … (Ret zero) → Ret zero.
+    let result = normalize(&env, &ctx, &fold);
+    let expected = whnf(&env, &ctx, &ret_term(ret_id, nat.clone(), zero.clone()));
+    assert_eq!(result, expected,
+        "handler_fold_uniform(Vis(λ_.Ret zero), 0) ⇝ Ret zero");
+}
+
+// ============================================================
+// EFF-EXTRACT — type-driven param_rows extraction (telescope API)
+// ============================================================
+//
+// All three tests exercise `classify_telescope` — the by-construction API
+// that takes the COMPLETE parameter telescope and selects HOF-effectful params
+// mechanically by type. No caller-filtered name list; omission is structurally
+// impossible (you must actively misclassify, not silently leave out).
+
+/// EFF-EXTRACT1 (identification): a mixed telescope selects exactly the
+/// HOF-effectful params — Base and HofPure get `None`.
+///
+/// Telescope: (x: Base), (f: HofEffectful), (g: HofPure)
+/// Expected classification: [None, Some(RowVar(0)), None].
+/// Discriminating: the telescope is exhaustive — every param MUST appear.
+/// To "drop" f you would have to remove it from the slice, not leave it out
+/// of a separate filtered list.
+#[test]
+fn classify_telescope_identifies_hof_effectful_params() {
+    let telescope = vec![
+        ("x", ParamTy::Base),
+        ("f", ParamTy::HofEffectful),
+        ("g", ParamTy::HofPure),
+    ];
+    let mut alloc = RowVarAllocator::new();
+    let classified = classify_telescope(&telescope, &mut alloc);
+
+    assert_eq!(classified.len(), 3, "one entry per param");
+    assert_eq!(classified[0], ("x".to_string(), None), "Base → no RowVar");
+    assert!(classified[1].1.is_some(), "HofEffectful → gets RowVar");
+    assert_eq!(classified[2], ("g".to_string(), None), "HofPure → no RowVar");
+
+    // Exactly one RowVar across the whole telescope.
+    let rv_count = classified.iter().filter(|(_, rv)| rv.is_some()).count();
+    assert_eq!(rv_count, 1, "exactly 1 HOF-effectful param → exactly 1 RowVar");
+
+    // EffectDecl gets exactly 1 param_row (for f).
+    let decl = build_decl_from_telescope("test_fn", &classified);
+    assert_eq!(decl.param_rows.len(), 1);
+    assert_eq!(decl.param_rows[0], classified[1].1.unwrap());
+}
+
+/// EFF-EXTRACT2 (unknown-conservative): an `Unknown`-typed param gets a
+/// `RowVar` (fail-closed — unknown type might be HOF-effectful).
+///
+/// This covers the pre-wiring gap: before full surface-type traversal is
+/// wired, params whose types are not yet resolved must not silently infer ∅.
+#[test]
+fn classify_telescope_unknown_is_conservative() {
+    let telescope = vec![
+        ("h", ParamTy::Unknown),
+    ];
+    let mut alloc = RowVarAllocator::new();
+    let classified = classify_telescope(&telescope, &mut alloc);
+    assert!(classified[0].1.is_some(),
+        "Unknown param must get a RowVar (fail-closed against unresolved types)");
+}
+
+/// EFF-EXTRACT3 (fail-closed, discriminating): correct classification catches
+/// an escaping row var; misclassification (active, not silent) misses it.
+///
+/// The "by-construction" guarantee: the only way to miss an HOF-effectful param
+/// is to classify it as `HofPure` or `Base` — an ACTIVE wrong answer, not a
+/// passive omission from a name list.
+///
+/// `fn_a (f: HofEffectful)` with declared pure row:
+/// - Correct (HofEffectful): RowVar ρ_f assigned → inferred row contains ρ_f
+///   → ρ_f escapes declared ∅ → `check_row_poly_escape` returns `Err`.
+/// - Misclassified (HofPure): no RowVar assigned → inferred row = ∅ →
+///   passes vacuously → `Ok`.
+///
+/// Verdict flip: correct=Err, misclassified=Ok. The telescope API makes the
+/// correct path the one that requires no extra work; the wrong path requires
+/// explicit misclassification.
+#[test]
+fn classify_telescope_hof_effectful_cannot_be_silently_dropped() {
+    use ken_elaborator::effects::{check_row_poly_escape, infer_row_poly, RowType};
+
+    // Correct: f classified as HofEffectful.
+    let telescope_correct = vec![("f", ParamTy::HofEffectful)];
+    let mut alloc = RowVarAllocator::new();
+    let classified = classify_telescope(&telescope_correct, &mut alloc);
+    let rv_f = classified[0].1.expect("HofEffectful must get a RowVar");
+
+    let param_rows_correct = vec![rv_f];
+    let inferred_correct = infer_row_poly(
+        &Default::default(), &[], &[], &param_rows_correct,
+    );
+    // Declared: ∅ (pure). ρ_f's latent effects escape declared-∅ → reject.
+    let declared_empty = RowType::Concrete(Default::default());
+    let r_correct = check_row_poly_escape(
+        "fn_a", &inferred_correct, Some(&declared_empty), None,
+    );
+    assert!(r_correct.is_err(),
+        "correct: ρ_f escapes declared-∅ → rejects");
+
+    // Misclassified: f classified as HofPure (the only remaining escape path).
+    let telescope_wrong = vec![("f", ParamTy::HofPure)];
+    let mut alloc2 = RowVarAllocator::new();
+    let classified_wrong = classify_telescope(&telescope_wrong, &mut alloc2);
+    assert!(classified_wrong[0].1.is_none(), "HofPure → no RowVar assigned");
+
+    let inferred_wrong = infer_row_poly(
+        &Default::default(), &[], &[], &[],
+    );
+    let r_wrong = check_row_poly_escape(
+        "fn_a", &inferred_wrong, Some(&declared_empty), None,
+    );
+    assert!(r_wrong.is_ok(),
+        "misclassified HofPure: no RowVar → inferred ∅ → accepts spuriously");
+
+    // Verdict flip confirmed: correct=Err (escape caught), wrong=Ok (missed).
+    assert!(r_correct.is_err() && r_wrong.is_ok(),
+        "verdict must flip: by-construction catches what misclassification misses");
+}
+
+// ============================================================
 // Regression — existing elaboration invariants still green
 // ============================================================
 
