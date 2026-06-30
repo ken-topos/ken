@@ -173,16 +173,27 @@ fn synth_type(env: &GlobalEnv, ctx: &Context, a: &Term) -> KernelResult<Level> {
     }
 }
 
-/// The formation sort of a Π/Σ (`13 §1`/`§2`, `13 §4`, `16 §1.1`): the level is
-/// the predicative `max` of the domain and codomain levels, and the result is
-/// in `Ω` exactly when the **codomain** is a proposition (a quantifier whose
-/// body is a proposition lands in the strict-prop universe; impredicative
-/// lowering is ruled out — `OQ-Prop`).
-fn sort_pi_sigma(s1: &Sort, s2: &Sort) -> Term {
+/// Formation sort of a Π-type (`13 §1`, `13 §4`, `16 §1.1`): level is
+/// `max(s1,s2)`; result is Ω exactly when the **codomain** is a proposition
+/// (a function into a prop is a prop, regardless of the domain's sort).
+fn sort_pi(s1: &Sort, s2: &Sort) -> Term {
     let lvl = s1.level().clone().max(s2.level().clone()).normalize();
     match s2 {
         Sort::Omega(_) => Term::Omega(lvl),
         Sort::Type(_) => Term::Type(lvl),
+    }
+}
+
+/// Formation sort of a Σ-type (`13 §2`, `13 §4`): level is `max(s1,s2)`;
+/// result is Ω only when **both** components are propositions (the conjunction
+/// case). A subset with a **relevant** (`Type`-sorted) first component carries
+/// content and must stay in `Type` — collapsing it to Ω would trigger Ω-PI
+/// proof-irrelevance on the carrier, closing to `Empty` via a transport motive.
+fn sort_sigma(s1: &Sort, s2: &Sort) -> Term {
+    let lvl = s1.level().clone().max(s2.level().clone()).normalize();
+    match (s1, s2) {
+        (Sort::Omega(_), Sort::Omega(_)) => Term::Omega(lvl),
+        _ => Term::Type(lvl),
     }
 }
 
@@ -260,14 +271,14 @@ pub fn infer(env: &GlobalEnv, ctx: &Context, t: &Term) -> KernelResult<Term> {
             let mut ctx2 = ctx.clone();
             ctx2.push((**a).clone());
             let s2 = classify(env, &ctx2, b)?;
-            Ok(sort_pi_sigma(&s1, &s2))
+            Ok(sort_pi(&s1, &s2))
         }
         Term::Sigma(a, b) => {
             let s1 = classify(env, ctx, a)?;
             let mut ctx2 = ctx.clone();
             ctx2.push((**a).clone());
             let s2 = classify(env, &ctx2, b)?;
-            Ok(sort_pi_sigma(&s1, &s2))
+            Ok(sort_sigma(&s1, &s2))
         }
         Term::Type(l) => Ok(Term::Type(l.clone().suc())), // (U-Type): Type ℓ : Type (suc ℓ) (`12 §1`)
         Term::Omega(l) => Ok(Term::Type(l.clone().suc())), // (Ω-Form): Ω_l : Type (suc l) (`16 §1.1`)
