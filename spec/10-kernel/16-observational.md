@@ -1,6 +1,8 @@
 # Observational equality and computation
 
-> Status: **K2 elaborated**. Normative for the interface, computation rules,
+> Status: **K2 elaborated; K2c series-2 completes the three obs-reduction
+> seams** (§3.2 inductive index rewrite, §4.1 non-constant-motive `J`, §5.1
+> full quotient `respect`). Normative for the interface, computation rules,
 > and algorithmic reduction behavior. This is the machinery `15-identity.md`
 > reuses: the strict proposition universe Omega, observational equality `Eq`
 > computed by recursion on type structure, the `cast` coercion, quotient
@@ -10,6 +12,14 @@
 > type. Ken is a **set-level** theory (UIP holds), which is what software
 > is. Rules tagged **(oracle)** are to be validated against the prototype at
 > build time; all other rules are normative.
+>
+> **Series-2 note.** The three seams K2 left **sound-stuck** (cast at an
+> inductive index change, `J` at a dependent motive, quotient elim into a
+> Type target) now **compute**, each gated on a structural condition
+> (canonical index decomposition / endpoint type structure / the verified
+> respect schema) — derived from first principles, **not** (oracle). The
+> kernel's prior fallbacks were *stuck/reject* (sound but incomplete); these
+> rules make them reduce without weakening any guard.
 
 ## 1. The strict proposition universe Omega (SProp)
 
@@ -430,21 +440,92 @@ neutral, the outer `cast` is neutral.
 
 **Inductive type.** `A` is `D Delta_p i-bar`, `B` is `D Delta_p j-bar`.
 Both are the same inductive family `D`. `a = c_k a-bar` (constructed by
-`c_k`).
+`c_k`). The constructor is `c_k : (x_1:A_1) … (x_n:A_n) → D Delta_p
+t-bar_k(x-bar)`, so its *target indices* `t-bar_k` are expressions in the
+constructor arguments, and the scrutinee's source indices satisfy
+`i-bar = t-bar_k(a-bar)`.
+
+There are two regimes, split by whether the family **indices** change.
+
+*Parameters only (`i-bar ≡ j-bar`).* Each constructor argument keeps its
+value and is re-typed under the target parameters; an argument whose type
+does not depend on the changed parameter transports by regularity:
 
 ```
-cast (D Delta_p i-bar) (D Delta_p j-bar) e (c_k a-bar)
-  ⇝ c_k (cast A_1 A_1' eq_1 a_1 , ... , cast A_n A_n' eq_n a_n)
-  where each argument is coerced from its type in the i-bar instance
-  to its type in the j-bar instance, using the sub-equalities derived
-  from the type-equality decomposition
+cast (D p-bar i-bar) (D p-bar' i-bar) e (c_k a-bar)
+  ⇝ c_k a-bar'        where a_l' = cast A_l[a-bar'_<l, p-bar]
+                                        A_l[a-bar'_<l, p-bar'] eq_l a_l
 ```
 
-When the scrutinee is a constructor, each constructor argument is
-transported individually. When the indices `i-bar` and `j-bar` differ,
-the argument types shift accordingly -- the sub-equalities come from the
-Eq-by-type reduction of `Eq Type (D Delta_p i-bar) (D Delta_p j-bar)` at
-the inductive case.
+*Index rewrite (`i-bar ≢ j-bar`) — the suc-injectivity seam.* The naive
+move ("keep the index argument, re-head the constructor at `j-bar`") is
+**unsound**: a constructor argument's type is written in terms of *earlier
+arguments* (`vcons`'s `xs : Vec A x_1`), not the family index, so
+substituting `j-bar` for `i-bar` in the argument types is a **no-op that
+leaves the reduct ill-typed** (`xs : Vec A n` under a `Vec A (suc m)`
+head). The reduction must instead **rewrite the index-determining
+arguments** and **sub-cast the dependent arguments**, driven by the
+decomposition of the index equality:
+
+1. **Decompose the type equality (the *same* path as `Eq`-at-inductive).**
+   `Eq Type (D p-bar i-bar) (D p-bar j-bar)` reduces to parameter
+   equalities and one **index equality** `eq_idx,m : Eq (IdxT_m) i_m j_m`
+   per index position `m`. This decomposition is the **same** `Eq`-at-
+   inductive machinery (§2.2) being completed in parallel (the mutual
+   sibling) — `cast` consumes it rather than re-implementing an index
+   comparison, so `cast` and `Eq` cannot diverge on what "canonically
+   decomposes" means.
+2. **Invert each index constructor (suc-injectivity).** Where the
+   constructor's index expression applies an index constructor to a
+   forced argument — `t_k,m = suc x_l`, and `i_m = suc(v)`, `j_m = suc(w)`
+   are headed by that same constructor — the `Eq`-at-inductive rule
+   (§2.2) decomposes `eq_idx,m` to the **argument-level** equality
+   `eq' : Eq (…) v w`, exposing the forced argument's new value `w` on the
+   `j-bar` side.
+3. **Rebuild `c_k`.** Form `a-bar'` left-to-right:
+   - a **forced** argument (one the index expression `t-bar_k` is built
+     from) takes its **`j-bar`-side value**, read off by peeling the index
+     constructors of `j-bar` that `t-bar_k` applies (`vcons`'s `n ↦ m`);
+   - a **non-forced** argument transports along its type equality
+     (regularity when index-independent: `cast A A refl a ⇝ a`);
+   - a **dependent/recursive** argument whose type mentions a forced
+     argument is **sub-cast** along the induced equality
+     (`cong` of the family at `eq'`).
+   Re-apply: `c_k a-bar' : D p-bar j-bar`.
+
+**Worked example (Vec).** `vcons : (x_1:Nat)(x_2:A)(x_3:Vec A x_1) → Vec A
+(suc x_1)`. Casting `vcons n a xs : Vec A (suc n)` to `Vec A (suc m)`:
+
+```
+cast (Vec A (suc n)) (Vec A (suc m)) e (vcons n a xs)
+  ⇝ vcons m a (cast (Vec A n) (Vec A m) (cong (Vec A) eq') xs)
+  where eq' : Eq Nat n m  is the suc-injective decomposition of
+        eq_idx : Eq Nat (suc n) (suc m)
+```
+
+The forced index argument `n` becomes `m` (read off the target index
+`suc m`), the element `a : A` is unchanged (regularity), and the recursive
+`xs : Vec A n` is sub-cast to `Vec A m`. The reduct is constructor-headed
+at the **target** index — the cast computed through, not stuck — and is
+well-typed (`vcons m a (…:Vec A m) : Vec A (suc m)`), which the removed
+naive rewrite was not.
+
+**Where the guard sits.** The index rewrite fires **only** when every
+index equality `eq_idx,m` decomposes **canonically** — `i_m` and `j_m` are
+headed by the **same index constructor**, so the forced arguments are
+exposed. If any index equality is **neutral** (an index is a variable, not
+constructor-headed, or the two heads differ without the structural
+decomposition reducing), the cast stays **neutral** — it does **not**
+fabricate a re-indexed constructor. (When the indices are headed by
+*different* constructors, `Eq Type (D … i-bar)(D … j-bar)` reduces to
+`Bottom` by §2.2, so the proof `e : Bottom` is unavailable except in an
+inconsistent context, and the cast is never formed on a closed term —
+consistent with `cast` never inspecting `e`.) This gate is the K2
+closed-`Empty` discipline applied to index transport: the rewrite is
+gated on the index condition being **structurally derivable**, never
+deferred past a fired redex. Index maps that are not constructor patterns
+(non-invertible index expressions) remain **sound-stuck** — out of scope,
+not wrong.
 
 **Neutral case.** When the scrutinee is not constructor-headed, `cast` is
 neutral.
@@ -524,6 +605,17 @@ recursion **terminates structurally** on the type `A` being traversed:
   types for Σ, the constructor arguments for an inductive).
 - The type structure is a finite tree; structural descent bottoms out at
   primitive types, neutral types, Omega, or the Type universe.
+- **The index-rewrite edge (§3.2 "Index rewrite") adds no divergence.**
+  Completing `cast`-at-inductive on an index change calls `Eq`-at-inductive
+  to **decompose the index equality** — but that decomposition is at the
+  **index types** (`Nat` for `Vec`), which are arguments of, hence
+  **strictly smaller than**, the inductive type `D Delta_p i-bar` being
+  traversed; and the sub-casts it emits are at the family at smaller
+  indices (`Vec A n` under `Vec A (suc n)`). So the new mutual edge
+  (`cast`-at-inductive → `Eq`-at-inductive on indices → sub-`cast`s)
+  descends on the same finite type-tree measure and bottoms out. The guard
+  (canonical decomposition only, §3.2) means a non-decomposing index leaves
+  the cast neutral — no edge is taken at all.
 
 The K1 conversion algorithm's structural termination argument
 (`14-inductive.md §9.2`) extends directly to this mutual system: each
@@ -572,6 +664,57 @@ So Ken is a **set-level** theory: every type's equality is a proposition
 with UIP. There is no higher path structure (no `Eq (Eq A a b) p q`
 content) -- which is exactly right for software data (ADR 0005).
 
+### 4.1 `J` at a dependent motive (the non-constant-motive rule)
+
+`J` (`15 §4`) is `cast` at the singleton type. On a non-`refl` equality it
+reduces to a transport of the base case:
+
+```
+J A a P d b e   ⇝   cast (P a (refl a)) (P b e) pair-eq d        (J-cast)
+```
+
+(the `refl` case is `J-β`, reducing to `d` — `15 §4.2`). This rule fires
+for **every** non-`refl` `e`; the motive being **constant or dependent is
+not a side condition** — both are subsumed by the single `cast`:
+
+- **Constant motive.** `P a (refl a) ≡ P b e` (the two instantiations are
+  convertible), so `pair-eq` is `refl` and the cast reduces by
+  **regularity** (§3.2) to `d` — the headline non-`refl`-`J` computation,
+  unchanged.
+- **Dependent motive.** `P a (refl a)` and `P b e` are **different** type
+  expressions; the cast computes by **`cast`-by-type** (§3.2) on their
+  structure — descending into Π/Σ, and **through the inductive index
+  rewrite (§3.2 "Index rewrite")** when `P` lands in an indexed family
+  (`P b e = Vec A (f b)`). This is the seam K2 left stuck.
+
+**`pair-eq` is a typing witness, not a computation driver.** The proof
+`pair-eq : Eq Type (P a (refl a)) (P b e)` is built by the fixed singleton
+schema of `15 §4.1`: from `Eq S (a, refl a) (b, e)` where `S := (b':A) ×
+Eq A a b'` (its first conjunct is `e`, its second is trivial by Ω-PI),
+apply `cong (λ s:S. P s.1 s.2)`. Because **`cast` never inspects its proof**
+(§3.4), `pair-eq` is needed **only** to make `(J-cast)` well-typed — the
+*computation* is entirely the `cast`-by-type on the two endpoint types.
+The kernel therefore **synthesizes** `pair-eq` by this schema (any witness
+of that `Omega` type serves; one exists because `a = b` via `e` and `refl
+a = e` via Ω-PI) and never branches on the motive's shape.
+
+**Firing and the residual (stress-tested at an open proof).** Do not state
+that a dependent-motive `J` is "stuck": `(J-cast)` **fires**, and the cast
+makes structural progress as far as the endpoint types are determined. The
+residual neutrality lives precisely at **`cast`'s** guards — a Π/Σ head
+descends; an indexed-inductive endpoint descends only when its index
+equality decomposes canonically (§3.2 guard). When `e` is **open** and `P`
+depends on the index through `e` (so the index equality needs `e` and stays
+neutral), the cast halts there as a neutral `Cast` — `J` has still reduced
+(to that cast), and the stall is the **seam-1 index guard**, not a special
+`J` rule. (Asking "does this redex fire when the proof is abstract?": yes —
+`(J-cast)` fires on any non-`refl` `e`; only the inner `cast` may stall.)
+
+**Termination.** `(J-cast)` fires once and hands off to `cast`-by-type,
+which terminates by structural descent on the finite type `P a (refl a)`
+(§3.3). No new recursion enters `whnf`; the K2c decidability/SCT gate (`17
+§4`) is unaffected (it already scores `cast` under recursion as `?`).
+
 ## 5. Quotient types
 
 Set-quotients are **native** (not HITs):
@@ -618,6 +761,63 @@ Set-quotients are **native** (not HITs):
   and the set-level constructions HITs would have provided. *General*
   quotient-inductive types (QITs) are a possible later extension
   (blueprint: QITs-in-OTT); K2 delivers set-quotients.
+
+### 5.1 Respect verification (the `cong`/`cast` schema for non-Ω targets)
+
+The eliminator's admission **gates on the respect proof `r`**. The kernel
+dispatches on the **sort of the motive's codomain** — `M : (z : A/R) →
+S`, where `S` is `whnf`'d:
+
+- **`S = Omega_l` (proposition target) — respect-free.** When every `M z`
+  is a proposition, any two inhabitants of `M [x]` are definitionally equal
+  by Ω-PI (§1.2), so the respect equality holds for free; the kernel fills
+  a trivial proof and **requires only that `r` be well-scoped**. (The test
+  is on the codomain **sort** — `typeOf(M z) = Omega_l`, i.e. `M z : Ω` —
+  not `M z ≡ Omega_l`; PI is about *elements of a proposition*, §1.2.) This
+  is the K2 deliverable and is **unchanged** — do not regress it.
+
+- **`S = Type ℓ` (genuine type target) — the full schema.** Here respect
+  is the **entire** soundness content: without it a non-respecting `f`
+  (one that *observes* the class representative) would let `elim_/`
+  distinguish `R`-related elements, and `cong` of the observation across
+  `Eq (A/R) [x] [y] ⇝ R x y` (§2.2) would derive `Eq Bool true false ⇝
+  Bottom` — a **closed inhabitant of `Empty`**. So the kernel MUST verify
+  `r` against the exact `cong`/`cast` schema:
+
+  ```
+  r : (x y : A) → (h : R x y)
+        → Eq (M [x]) (f x) (cast (M [x]) (M [y]) (cong M h') (f y))
+    where h' : Eq (A/R) [x] [y]   is h transported through the quotient-Eq
+          reduction Eq (A/R) [x] [y] ⇝ R x y (§2.2), and
+          cong M h' : Eq Type (M [x]) (M [y])   (a proof in Omega, §4)
+  ```
+
+  i.e. `r` must prove that `f x` equals — at the type `M [x]`, after
+  transporting `f y` from `M [y]` to `M [x]` along the motive's action on
+  the class equality — the result `f y`. The kernel **forms this expected
+  type and `check`s `r` against it** (`check Gamma r expected`); admission
+  **fires only if that check succeeds**. An `r` that does not inhabit the
+  schema — because `f` genuinely fails to respect `R` — is **rejected**.
+
+**Where the guard sits.** Admission is gated on the schema `check`, never
+deferred: the eliminator is added to the term language only after `r` is
+verified against the exact respect type (Type target) or confirmed
+well-scoped (Ω target). This is the K2 closed-`Empty` discipline — an
+un-invoked respect check while `elim_/` reduces unconditionally
+(`elim_/ M f r [a] ⇝ f a`, §5) would be an unsound **accept**, not a sound
+stuck fallback. The **i-reduction itself is unchanged**; respect is purely
+an admission-time obligation, so completing it adds **no** new reduction to
+`whnf` and cannot affect conversion termination.
+
+**Adversarial (the `Empty` probe).** `A/R = Bool/(λ_ _. Top)` (the total
+relation, collapsing `Bool` to one class), `M := λ_. Bool` (a **Type**
+target), `f := λx. x` (observes the representative). No valid `r` exists:
+`r` would have to prove `Eq Bool (f true) (cast … (f false))`, i.e. `Eq
+Bool true false ⇝ Bottom` — uninhabited. So the elim is **rejected** (the
+verdict flips: a *respecting* `f`, e.g. `λ_. true`, supplies `r : Eq Bool
+true true ⇝ Top` and is **accepted**). A kernel that raw-well-formed `r`
+instead of checking the schema would accept the observing `f` and reduce
+`elim_/ … [true]` to a closed proof of `Empty`.
 
 ## 6. Propositional truncation
 
@@ -739,8 +939,22 @@ critical cases:
 - cast reduction (par. 3.2): `cast A B e a : B`, and each recursive
   `cast` in the reduct has its target type preserved by the structural
   decomposition.
+- cast at an inductive **index change** (par. 3.2 "Index rewrite"):
+  `cast (D p-bar i-bar) (D p-bar j-bar) e (c_k a-bar) ⇝ c_k a-bar'`, and
+  the reduct is constructor-headed at the **target** indices —
+  `c_k a-bar' : D p-bar j-bar = B` — because each forced argument takes its
+  `j-bar`-side value and each dependent argument is sub-cast to its
+  `j-bar`-instance type (so it is the unsound naive rewrite, which left
+  `a-bar` at the source index, that *failed* subject reduction; the
+  decomposition-driven reduct restores it).
+- `J` at a dependent motive (par. 4.1): `J A a P d b e ⇝ cast (P a (refl
+  a)) (P b e) pair-eq d : P b e`, the declared result type — `pair-eq`
+  witnesses `Eq Type (P a (refl a)) (P b e)`, so the `cast` lands in
+  `P b e`.
 - Quotient elim: `elim_/ M f r [a] ⇝ f a : M [a]`, which is the type of
-  `f` applied to `a`.
+  `f` applied to `a` — sound for a **Type** target precisely because
+  admission verified `r` against the respect schema (par. 5.1), so `f`
+  is well-defined on classes; the i-reduction is unchanged.
 - Truncation elim: `elim_trunc P f |a| ⇝ f a : P`, preserved.
 
 The subject-reduction argument for the full OTT system is proved in the
@@ -780,8 +994,19 @@ The soundness-critical, separately-tested behaviours:
 | C9 | `elim_/ M f r [a]` reduces to `f a` | par. 5 | `observational/quotient-elim` |
 | C10 | `elim_trunc P f |a|` reduces to `f a` | par. 6 | `observational/trunc-elim` |
 | C11 | All K1 rules preserved (no regression) | par. 8.3 | CI on K1 conformance subset |
+| C12 | `cast` at an inductive **index change** computes through (suc-injectivity decomposition + sub-cast) to the target-indexed constructor; a non-canonical/neutral index stays stuck | par. 3.2 "Index rewrite" | `observational/cast-inductive-index` |
+| C13 | `Eq` at an inductive with a **dependent telescope** decomposes with the inter-argument `cast`s (the mutual sibling of C12) | par. 2.2 | `observational/eq-inductive-dependent` |
+| C14 | `J` reduces at a **dependent (non-constant) motive** via `cast` on the endpoint types (bottoming through C12); stays stuck only where the inner `cast` stalls on an open index | par. 4.1 | `observational/j-dependent-motive` |
+| C15 | quotient elim into a **Type** target checks `r` against the `cong`/`cast` respect schema — a respecting `f` is **accepted**, a non-respecting `f` is **rejected** (closed-`Empty` guard); Ω targets stay respect-free | par. 5.1 | `conversion/quotient-respect-schema` |
 
-Conformance corpus: `../../conformance/kernel/observational/`.
+Conformance corpus: `../../conformance/kernel/observational/` and
+`../../conformance/kernel/conversion/`. C12–C15 are the **series-2**
+obs-reduction completions (cast-at-inductive index rewrite, the mutual
+`Eq`-at-inductive dependent telescope, non-constant-motive `J`, full
+quotient `respect`); each is **discriminating** (verdict-flips or asserts a
+structural reduct), and each carries the adversarial "would this seam
+inhabit `Empty`?" case (ill-justified index → stuck; non-respecting `f` →
+rejected).
 
 ### 9.1 Oracle-tagged behaviours
 

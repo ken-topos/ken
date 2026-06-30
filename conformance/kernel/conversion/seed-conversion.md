@@ -396,29 +396,69 @@ merely cited**.
 
 ---
 
-## Series-2 (obs-completion) deferred seams — NOT series-1 cases
+## Series-2 (obs-completion) — LANDED
 
-Per the K2c branch-series split (`docs/program/wp/K2c-elaboration-plan.md §0,
-§5`), the three K2 obs-reduction completeness seams are **series 2**
-(`seed-obs-completion.md`, NbE-dependent). They are tagged here so the series-1
-build and review know these are **expected to remain sound-stuck** under
-series-1 — each falls back to a neutral/stuck term, never a wrong result:
+The three K2 obs-reduction completeness seams (placeheld here as sound-stuck
+under series-1) are **completed by K2c series-2**; they now **reduce / gate**.
+The two **reduction**-side seams are pinned in
+`../observational/seed-obs-completion.md`:
 
-- **[K2c-series2] conversion/cast-at-inductive-index** — `cast (Vec A n)
-  (Vec A m) e (vcons n a xs)` with `n ≢ m`: series-1 leaves the index `n` and
-  the recursive cast stuck (sound); series-2 rewrites the index to `m` via NbE
-  read-back. (`observational/seed-observational.md` already tags
-  `cast-computes-inductive` `[K2c]`.)
-- **[K2c-series2] conversion/j-non-constant-motive** — `J` on a non-`refl`
-  equality with a **non-constant** motive: series-1 stays neutral (sound);
-  series-2 builds the full `cong`/`sym` pair-equality transport.
-- **[K2c-series2] conversion/quotient-respect-full** — `elim_/` into a non-Ω
-  target: series-1 gates reduction on a raw-well-formed respect proof
-  (sound-stuck when unverified); series-2 verifies the full `cong`/`cast`
-  respect schema.
+- **cast-at-inductive-index** → `cast-inductive-index-rewrite` (reduces, suc-
+  injectivity) + `cast-inductive-open-index-stuck` (the guard-gated adversarial)
+  + the mutual sibling `eq-inductive-dependent-telescope`.
+- **j-non-constant-motive** → `j-dependent-motive-fires` (the J-cast fires for
+  **every** non-`refl` `e`; only the inner cast may stall at an open index — not
+  a stuck `J`).
 
-A series-1 conformance run MUST NOT mark these as passing reductions; they are
-the series-2 acceptance surface.
+The **quotient-`respect`** seam is an **admission-time** gate (no new `whnf`
+reduction, so conversion termination is untouched, `16 §5.1`), so its
+discriminating cases live here.
+
+### conversion/quotient-respect-schema-rejects-non-respecting (soundness)
+- spec: `16 §5.1`, `§5` (Quot-Elim)
+- given: `A/R = Bool / (λ _ _. Top)` (the total relation, collapsing `Bool` to
+  one class); motive `M := λ _. Bool` (a **Type** target, `Type 0`); function
+  `f := λ x. x` (observes the representative); `elim_/ M f r q`
+- expect: **rejected** at admission — **no** valid respect proof `r` exists
+- why: a Type target gates admission on the full `cong`/`cast` respect schema
+  (`§5.1`): `r` must prove `Eq (M [x]) (f x)
+  (cast (M [x]) (M [y]) (cong M h') (f y))` for all `R`-related `x y`. With `M`
+  constant, `cong M h' ≡ refl`, so the
+  demand reduces to `Eq Bool (f true) (f false) = Eq Bool true false ⇝
+  Bottom` (`§2.2`) — uninhabited. The kernel **forms the expected type and
+  `check`s `r`**; admission fires only on success, so the observing `f` is
+  **rejected**. The K2 closed-`Empty` adversarial: a kernel that raw-well-formed
+  `r` (the series-1 "soundness TODO") would **accept** it and reduce `elim_/ M
+  f r [true] ⇝ f true = true`, distinguishing `R`-related `true`/`false` — a
+  closed inhabitant of `Empty`.
+
+### conversion/quotient-respect-schema-accepts-respecting (soundness)
+- spec: `16 §5.1`
+- given: the same `A/R = Bool / (λ _ _. Top)`, `M := λ _. Bool` (Type target),
+  but a **respecting** `f := λ _. true` (ignores the representative)
+- expect: **accepted**, and `elim_/ M f r [a] ⇝ f a = true` (the i-reduction,
+  `§5`, unchanged)
+- why: a constant `f` respects any relation — the schema demands `Eq Bool (f x)
+  (cast … (f y)) = Eq Bool true (cast Bool Bool refl true)`, which reduces
+  (`cast` regularity, `§3.2`) to `Eq Bool true true ⇝ Top` — inhabited.
+  **Verdict-flip:**
+  same `A/R`/`M`, the verdict flips on **respect-validity** — observing `f`
+  rejected (above) vs respecting `f` accepted here. Admission-gate only; the
+  i-reduction is unchanged.
+
+### conversion/quotient-respect-omega-target-unchanged (soundness)
+- spec: `16 §5.1`, `§5` (respect-free Ω target)
+- given: a quotient `A/R` with motive `M : (z : A/R) → Omega` (an **Ω** target);
+  `elim_/ M f r [a]`
+- expect: **accepted** respect-free, `⇝ f a` — **unchanged** from K2
+- why: the dispatch is on the motive-codomain **sort** — `typeOf(M z) = Omega_l`
+  (i.e. `M z : Ω`), **not** `M z ≡ Omega_l` (the Ω-element-vs-proof line: PI is
+  about *elements of a proposition*, `16 §1.2`). For an Ω target any two
+  inhabitants of `M [x]` are equal by Ω-PI, so `r` is free (well-scoped only).
+  Series-2 must **not** regress this K2 deliverable. Adjacent-case guard (the
+  Ω-shortcut trap): a kernel dispatching on `M z ≡ Omega_l` (syntactic) instead
+  of `typeOf(M z) = Ω` (sort) would mis-gate a respecting Ω-target elim, or
+  wrongly free a Type-target elim whose motive merely *mentions* Ω.
 
 ---
 

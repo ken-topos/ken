@@ -157,14 +157,22 @@ Concretely:
   component), and `cast` recurses on the structure of `P` -- which is
   well-founded since `P` is a finite type expression.
 
-- When `P` does depend on the equality proof, the `cast` still computes
-  because `pair-eq` is a canonical type-equality (built from `e` via
-  Eq-by-type), and `cast` reduces by type structure on `P a (refl a)` and
-  `P b e`.
+- When `P` does depend on the equality proof (a **non-constant /
+  dependent** motive), `J` still reduces — `(J-cast)` fires and the `cast`
+  computes by type structure on `P a (refl a)` and `P b e`, descending
+  through Π/Σ and, where `P` lands in an indexed family, through the
+  inductive **index rewrite** (`16 §3.2`, §4.1). `pair-eq` is only the
+  typing witness; computation is the `cast`-by-type (it never inspects the
+  proof). The precise rule is `16 §4.1`.
 
-- In all cases, `J` on a non-`refl` canonical equality reduces to a
-  constructor form (lambda, pair, constructor application) -- it never
-  gets stuck at a neutral `J` node.
+- So `J` on a non-`refl` equality **always reduces** (to the `cast`, never
+  a stuck `J` node) and, on a **canonical** equality, computes on to a
+  constructor form. The one residual is a `cast` left **neutral** at an
+  **open index** — when `P` depends on the index through an abstract proof
+  `e`, the inner index `cast` stalls (`16 §3.2` guard); `J` has still
+  reduced (to that cast), it has not stuck *as a `J`*. (Honest boundary:
+  the dependent-motive `J` is as complete as the inductive index `cast` it
+  bottoms out in — `16 §4.1`.)
 
 A conforming kernel MUST exhibit this: a conformance test
 (`../../conformance/kernel/observational/j-nonrefl`) in which `J` on a
