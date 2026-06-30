@@ -88,6 +88,17 @@ claim with no conformance case is a claim no one can rely on
   referenced not duplicated), explicit `encode`/`decode` (no hidden charset),
   and the one-directional round-trip law (`decode (encode s) == Ok s` provable;
   the reverse is **not** a law).
+- `surface/ffi-io/seed-ffi-io.md` — L7 `foreign` FFI + the trust boundary
+  (`38 §2–§4`): a `foreign` is a typed, effect-rowed, capability-gated **listed
+  postulate** (`declare_postulate` → `trusted_base()`); foreign-as-listed-
+  postulate routed through the **real** B1 export (the dependency pair —
+  relied-on-by-**call** listed in `P` / not-relied-on absent), `pure`-as-claim
+  projects to *trusted* **never** `Q` (the over-claim pair, trusted-by-typing-
+  is-not-`Q`), boundary `requires`/`ensures` lower to runtime-checked `tested`
+  assertions, effects mandatory via the real `36 §1.4` escape check (the flip)
+  with the **`pure`-but-effectful** named residual, capability+effect
+  composition (couples Sec2), and a G6 round-trip proof in an FFI-using verified
+  component.
 - `runtime/seed-runtime.md` — dedup + O(1) equality; `Int` past 2⁵³ exact;
   `unknown` propagation.
 - `runtime/capacity/seed-capacity.md` — X2 store hardening (`44`): dedup-aware

@@ -1,13 +1,15 @@
 # Bytes, I/O, and the FFI
 
-> Status: **DRAFT v0** overall — proposal-level for syntax; normative for the
-> *trust and effect discipline*. **§1 (`Bytes` + binary I/O) is impl-ready
-> (L6)** — elaborated to team-ready rigor against the **landed** kernel/runtime
-> (`14 §5` primitives, `41 §3a` encoding, `36 §1` effect rows); Team Foundation
-> builds `Bytes` + binary I/O from §1. **§2–§4 (the `foreign` FFI + trust
-> boundary) stay proposal-level — they are L7**, not elaborated here. `Bytes`,
-> binary I/O, and the FFI are how a verified core meets the outside world; the
-> **boundary discipline** matters more than the syntax.
+> Status: **§1 impl-ready (L6); §2–§4 impl-ready (L7)** — elaborated to
+> team-ready rigor; normative for the *trust and effect discipline*. **§1
+> (`Bytes` + binary I/O, L6)** is built against the **landed** kernel/runtime
+> (`14 §5` primitives, `41 §3a` encoding, `36 §1` effect rows). **§2–§4 (the
+> `foreign` FFI + the trust boundary, L7)** are elaborated below: the `foreign`
+> declaration + C-ABI marshalling (§2), the trust-boundary discipline
+> (foreign-as-listed-postulate, `pure`-as-claim, runtime contracts at the edge,
+> mandatory effects — §3), and capability gating (§4). `Bytes`, binary I/O, and
+> the FFI are how a verified core meets the outside world; the **boundary
+> discipline** matters more than the syntax.
 >
 > **L6 grounding (perishable-frame reconcile):** `Bytes` is the landed `41 §3a`
 > content-addressed kind tag `0x05` (an interned compound, `41 §5`); its
@@ -17,6 +19,18 @@
 > inductives for the `ITree` `Vis` node (`14 §8.4`) — **has landed in K1.5**
 > (`check_no_pi_bound_recursive` retired, `crates/ken-kernel/src/inductive.rs`),
 > so **L6 carries no kernel-staging block** and adds **no new kernel rule**.
+>
+> **L7 grounding (perishable-frame reconcile):** a `foreign` rides the
+> **landed** postulate machinery — `declare_postulate` → opaque constant (`11
+> §4`: "how axioms, **FFI signatures**, and abstract interfaces are
+> represented") recorded in `trusted_base()` (`18 §4.2`/`§5`) — and the
+> **landed** B1 export, which projects every `trusted_base_delta` postulate
+> (`25 §3`) into its `P` (assumptions) field under the boundary-label case
+> (`71 §2.1`). Marshalling reuses L6's `Bytes`↔`(ptr,len)` (`§1.1`, `41 §1`);
+> effects ride the `36 §1.4`
+> escape check; capability gating couples Sec2 (`62`). **L7 adds no new kernel
+> rule** — `foreign` is an existing postulate, not a new former. Pin against the
+> landed code, not this line.
 
 ## 1. `Bytes` and binary I/O
 
@@ -242,9 +256,12 @@ effect-tracking cases route a **real** I/O signature through the **actual** `36
 (The L7 `foreign`/trust-boundary cases live separately under
 `../../conformance/surface/ffi-io/`, `§5`.)
 
-## 2. The FFI surface
+## 2. The FFI surface — the `foreign` declaration
 
-A **`foreign`** declaration binds a Ken name to an external (C ABI) symbol:
+A **`foreign`** declaration binds a Ken name to an external (C-ABI) symbol,
+giving it a **Ken type** and a **declared effect row**. It is the one surface
+form that crosses out of the checked language, so it is built to make that
+crossing **typed, effect-rowed, and visible** — never an untyped escape hatch.
 
 ```
 foreign c_sqrt : Float → Float
@@ -254,55 +271,279 @@ foreign os_write : Int32 → Bytes → Int  visits [FS]
   = symbol "write"  library "c"
 ```
 
-- A `foreign` decl gives the external function a **Ken type** and an **effect
-  row** (`pure` ≡ empty row). Marshalling between Ken values and C ABI types
-  follows the primitive lowering (`../40-runtime/41`): scalars pass as their
-  machine types, `Bytes` as `(ptr, len)`, etc. A general C/BLAS FFI is the L7
-  deliverable.
-- The FFI is a **general** but **explicitly-trusted** mechanism (§3), not a
-  fixed allowlist of externals.
+### 2.1 The declaration form (grammar + elaboration entry)
+
+The `foreign` form extends the V0/`33` declaration grammar:
+
+```
+foreign-decl ::= "foreign" ident ":" type effect-row? "=" foreign-body
+foreign-body ::= "symbol" string ("library" string)? "pure"?
+effect-row   ::= "visits" "[" label ("," label)* "]"      -- 36 §1
+```
+
+- A `foreign` decl carries four things: a Ken **type** `T`, a **declared effect
+  row** `ρ` (`visits [...]`; `pure` is the surface spelling of the **empty row**
+  `ρ = ∅`), a C **symbol** name, and an optional **library**.
+- `pure` and a non-empty `visits ρ` are **mutually exclusive**: `pure ≡ visits
+  []`. A decl with neither defaults to `pure` (empty row) — and is then subject
+  to §3.4 (a world-touching symbol with no row is the named residual, not a
+  silent pass).
+- **Spelling deferral (`OQ-syntax`, defer-spelling-not-concept).** The exact
+  surface tokens (`foreign`/`symbol`/`library`/`pure`/`visits`) are reserved
+  keywords whose literal spelling the build team finalizes; what is **locked
+  here** is the **structure** (type + row + symbol + library), the **type+row
+  obligation**, and the **postulate wiring** (§2.3). Conformance pins the
+  structure and `(oracle)`-tags the literal keyword (assert-at-locked-
+  granularity).
+
+### 2.2 C-ABI marshalling (reuses L6)
+
+A call to a `foreign` marshals Ken values to/from their C-ABI representations
+following the primitive lowering (`41 §1`):
+
+| Ken type | C-ABI representation | Source |
+|---|---|---|
+| scalars `Int*`/`UInt*`/`Float*`/`Bool`/`Char` | the named machine type (`i64`/`f64`/`i1`/`u32`/…) | `41 §1` typed immediates |
+| `Bytes` | **`(ptr, len)`** — a pointer + length pair | L6 `§1.1`, `41 §1` |
+| handle / `section` | tagged pointer / slot-id (transport convention) | `41 §1`/`§3`, `44` |
+
+- `Bytes` ↔ `(ptr, len)` is the **L6 boundary** (`§1.1`) — L7 **rides it, does
+  not re-derive** (guardrail). L6 keeps that boundary clean and explicit
+  precisely so this marshalling needs no rework.
+- Marshalling is a **runtime-lowering** concern (`41`), **not a kernel rule**:
+  the kernel sees only the `foreign`'s assumed Ken type (§2.3); the (ptr,len) /
+  scalar lowering happens at the call in the runtime, below the trusted
+  boundary.
+- The FFI is **general** — any C-ABI symbol — **not** a fixed allowlist of
+  externals. Generality is safe because every use is an explicit, *listed*
+  concession (§3).
+
+### 2.3 Elaboration — a `foreign` is a postulate
+
+A `foreign f : T visits ρ = symbol "…"` elaborates to a **postulate** of the
+rowed Ken type. The defensive elaboration entry:
+
+```
+elabForeign(Σ, ⟨ foreign f : T visits ρ = symbol s library l [pure] ⟩):
+  T'  := elabType(·, rowed(T, ρ))      -- the latent-row type A →[ρ] B (36 §1); pure ⇒ ρ=∅
+  id  := declare_postulate(Σ, [], T')  -- opaque constant (11 §4); enters trusted_base() (18 §4.2/§5)
+  recordForeign(id, symbol = s, library = l, row = ρ)   -- elaborator-side link/marshalling record
+  bind f ↦ id
+```
+
+- The kernel admits `f` as an **opaque constant** `f : T'` (`11 §4`: an opaque
+  constant blocks δ and "is how axioms, **FFI signatures**, and abstract
+  interfaces are represented") — there is **no body to unfold**, and it is
+  **recorded in `trusted_base()`** (`18 §4.2`, the `declare_postulate` contract:
+  "`id` admitted opaque; recorded in the trusted base").
+- **No new kernel rule** (guardrail). `declare_postulate` is the **existing**
+  kernel API (`18 §4.1`); the type+row is ordinary `36 §1` machinery; the
+  symbol/library/marshalling is an **elaborator-side** record consulted by the
+  runtime, never by the kernel. L7 adds **zero** kernel formation rules (the
+  level-discipline reconcile is therefore trivially a pass — no new universe or
+  former appears).
 
 ## 3. The trust boundary (the load-bearing part)
 
-FFI and I/O are where Ken's guarantees stop and must be marked honestly:
+FFI is where Ken's guarantees **stop**. The discipline marks that frontier
+**honestly and structurally**: every foreign is assumed, *listed*, effect-rowed,
+and capability-gated — and the one soundness gap the type system cannot
+mechanically close is **named** (§3.4), never hidden.
 
-- **A `foreign` function is a postulate** (`../10-kernel/11 §4`, `18 §5`): the
-  kernel cannot check C code, so a `foreign` decl's type is *assumed*, and it
-  appears in the **trusted base** / `trusted_base_delta` (`../20-verification/25
-  §3`). A verified artifact's trust base therefore lists exactly which foreign
-  functions (and which of their assumed contracts) it relies on — visible, not
-  hidden.
-- **`pure` on a `foreign` is a claim, not a check.** Declaring `c_sqrt` pure
-  asserts referential transparency the kernel cannot verify; it is part of the
-  trusted boundary and SHOULD be used only for genuinely pure externals. A wrong
-  `pure` is a soundness bug confined to that postulate — and it is *listed*.
-- **Contracts at the boundary.** `requires`/`ensures` on a `foreign` become
-  **runtime-checked** assertions (`../20-verification/21 §5`) where statically
-  unprovable — the place runtime contracts earn their keep (untrusted input, FFI
-  results). This converts an unverifiable boundary into a fail-fast one.
-- **Effects are mandatory at the boundary.** Any `foreign`/I/O that touches the
-  world MUST carry the appropriate effect row (`36`); a `pure`-but-effectful
-  foreign is the one thing the discipline cannot catch and the reviewer must.
+### 3.1 Foreign-as-listed-postulate → the trusted base (the honesty headline)
 
-## 4. Capabilities and least authority
+This is the load-bearing AC2 mechanism — the honesty-about-the-boundary
+principle made structural.
 
-I/O effects (`FS`, `Net`, …, `36 §3`) gate which foreign/IO functions a
-computation may call; a function gets exactly the I/O capabilities its type
-declares. This keeps the unverified surface area of any given program explicit
-and minimal — the verified core stays pure, and the trusted boundary is a small,
-enumerated set of `foreign` postulates + capabilities.
+- A `foreign` postulate (§2.3) is in `trusted_base()` (`18 §5`).
+- A verified **artifact's** `trusted_base_delta` (`25 §3`) is the set of
+  `trusted_base()` postulates its checked content **transitively depends on** —
+  its **dependency cone**. The B1 export (`71`) computes it from
+  `trusted_base()` membership over the artifact's verified content.
+- **Resolve the silence — "relies on" is by *use*, not *declaration*.** A
+  `foreign` decl in scope is **not** itself a reliance; what lists `os_write` in
+  an artifact's delta is a verified definition that **calls** `os_write`. A
+  `view` that calls it has `os_write` in its delta; a `view` that does not is
+  **absent** from it — even with the `foreign` decl visible in the same module.
+  The honesty property ranges over **the foreign functions the verified content
+  reaches**, exactly as `18 §5` reads `trusted_base()` ("the assumptions a given
+  program *depends on*") and `71 §2.1` reads the boundary ("which foreign
+  functions it *relies on*"). (Pinning this at the source so the conformance
+  author nets reliance-by-call, not the vacuous decl-lists-itself.)
+- The B1 export projects every `trusted_base_delta` postulate into the **`P`
+  (assumptions)** field, tagged `tested`, under the **FFI boundary-label** case
+  (`71 §2.1` names "FFI" among the boundary labels feeding `P`; invariant I2,
+  `71 §3.1`). So **a verified artifact's exported contract lists exactly the
+  foreign functions it relies on — visible, not hidden.**
+- **AC2 flips on dependency:** relied-on ⇒ the foreign's postulate is a `P`
+  entry; not-relied-on ⇒ absent (and the export hash changes, `71 §3.3`).
+  Conformance routes a **real** `foreign` decl through the **real** B1 export
+  and observes the foreign in `P` — never a synthetic trust-base literal. This
+  is the **FFI instance** of B1's assumption-visibility (subsumes
+  `export/removing-assume-shrinks-P`, `71 §3.1` I2 — subsume-don't-proliferate).
 
-## 5. What WS-L must deliver here (L6, L7)
+### 3.2 `pure` is a claim, not a check — projects to *trusted*, never `Q`
+
+The kernel **cannot check C**. A `foreign`'s type — including a `pure`
+(empty-row) claim of referential transparency — is **assumed**, never verified;
+it is part of the trusted boundary, and is the AC3 mechanism.
+
+- **The no-over-claim projection (`71` I1).** A `foreign`'s assumed guarantee is
+  a **postulate** of its type, so its goal **is** a member of `trusted_base()`.
+  By the structural discriminator (`21 §5.4`, `71 §2.1`: a claim is `Q` **iff**
+  its certificate `check`s **and** its goal is **not** a `trusted_base()`
+  postulate) it can **never** project to `Q`. A `pure foreign`'s guarantee lands
+  in **`P`/trusted** (`tested`), **never** kernel-certified `Q`. **Under-claim
+  is the safe direction**: filing the assumed claim as `Q` would over-claim a
+  kernel certification that does not exist.
+- This is the FFI instance of the **trusted-by-typing-is-not-`Q`** discipline
+  (cf. Sec1's declassify edge, B1's I1): a guarantee resting on a **trusted
+  meta-claim** ("the C symbol is referentially transparent") is **not
+  kernel-proved**, so it projects to *trusted*, not `Q`.
+- A **wrong `pure`** is a soundness bug **confined to that postulate — and it is
+  *listed*** (§3.1): even an incorrect purity claim cannot masquerade as proved,
+  and the assumption itself is visible in `P`.
+- **Discriminating, not green-vs-green.** *Nothing* about a foreign is ever in
+  `Q`, so "the foreign is absent from `Q`" alone is vacuous. The net is the
+  **pair on the same artifact**: a genuinely kernel-proved Ken-side
+  postcondition (a `view` wrapping the foreign, whose `ensures` over the
+  *marshalling* — not the C body — discharges) projects to **`Q`** **while** the
+  foreign's assumed `pure`/type claim projects to **`P`** — the field tracks
+  **kernel-provedness**, not the `pure` keyword. The bug (trust the `pure`
+  annotation, bucket it as a guarantee) lands the assumption in `Q` → red.
+  (Reuses B1 EX-A's proved↔assumed pair, here
+  `kernel-proved`↔`foreign-assumed`.)
+
+### 3.3 Boundary contracts → runtime-checked assertions
+
+A `requires`/`ensures` on a `foreign` is a proposition over an **opaque**
+postulate (the AC4 mechanism).
+
+- Where it is **statically unprovable** (the kernel has no body to reason
+  about), it lowers to the **`tested`** epistemic status (`21 §5.2`): a
+  **runtime-checked, fail-fast assertion** at the call boundary, **plus** a
+  visible `P`/`tested` entry in the assumption boundary. This is **the** place
+  runtime contracts earn their keep (`21 §5.2` names exactly "boundaries, FFI,
+  untrusted input"): an unverifiable boundary becomes a **fail-fast** one rather
+  than a silently-assumed one.
+- **Structural, not "accepts."** Conformance observes the **emitted runtime
+  check** (the lowered assertion exists at the call site) + the `tested` `P`
+  entry — never merely that the program compiles (the discriminating-output
+  discipline). A `foreign` `ensures` that **is** statically discharged (proved
+  over the Ken-side marshalling) needs no runtime check and may reach `Q`
+  (§3.2); the **unprovable** one **must** emit the runtime check — the two faces
+  flip on static provability.
+
+### 3.4 Effects are mandatory — and the one residual the discipline cannot catch
+
+The AC5 mechanism: a catchable flip plus the single named gap (the honest limit,
+`64`).
+
+- **The catchable flip (the net).** A world-touching `foreign` carries its
+  effect row (§2.1). A caller that performs the foreign's effect **without**
+  declaring the matching row in its own signature is an **EFFECT-ESCAPE** static
+  error (`36 §1.4`: `ρ_inf ⊄ ρ_decl`) — the **same** escape check L6 I/O rides
+  (`§1.3`), **not** a new gate. A `view` calling `os_write` (`visits [FS]`)
+  without `[FS]` in its declared row is **rejected**; with `[FS]`, it
+  **accepts** — a **verdict flip** on a **real** foreign through the **real**
+  escape check.
+- **The residual (the honest limit).** A `foreign` declared **`pure`** (empty
+  row) whose C symbol **actually performs I/O** is the **one** gap the type
+  discipline **cannot mechanically catch**: the kernel sees an empty row, no
+  caller is forced to declare an effect, and the real I/O is invisible to
+  typing. This is a **reviewer-surfaced flag**, **not** a verdict the type
+  system flips. It is **mitigated, not eliminated**, by §3.1 — the mis-declared
+  foreign is still a *listed* postulate, so the wrong claim is at least
+  **visible** in `P`. Name it as the residual; **never** silently treat a
+  `pure`-but-effectful foreign as sound (the conformance case asserts it is
+  *flagged*, not accepted as a netted verdict).
+
+## 4. Capabilities and least authority (couples Sec2)
+
+A `foreign` world-action requires **two independent concessions**, and dropping
+**either** rejects (the AC6 composition with Sec1/Sec2):
+
+1. its **effect row** (`36 §1.4`, §3.4) — *may this code perform this effect*;
+   and
+2. the **gating capability** — a `Cap_FS`/`Cap_Net`/… token passed at the call
+   (`using c : Cap E`, `36 §3`; the authority face, Sec2 `62`) — *is this code
+   authorized to perform it*.
+
+- The capability gate is **Sec2's** discipline (`62`): no ambient authority,
+  least by default, the cap a real Π value the call needs (`36 §2.5`). A
+  `foreign os_write` call in a context holding **no** `Cap_FS` is rejected
+  **even if** its `[FS]` row is declared (the authority is missing); a context
+  with `Cap_FS` but **no** `[FS]` row is rejected by the escape check (§3.4).
+  **Both** are required — the composition keeps the unverified surface of any
+  program **explicit and minimal**.
+- **The trusted boundary is a small, enumerated set** (guardrail): the verified
+  core stays pure; every FFI use is a *listed* foreign postulate (§3.1) **plus**
+  an explicit capability — never an ambient escape.
+
+## 5. Honest limits — kernel-checked vs trusted vs the named residual
+
+Where Ken's guarantee sits, per boundary fact — the honest accounting (`64`):
+
+| Boundary fact | Status | Netted by |
+|---|---|---|
+| The foreign's **Ken type** (arg/result shape, effect row) | **assumed** (postulate, `11 §4`) | listed in `trusted_base_delta` → `P` (§3.1) |
+| A **statically-proved** Ken-side contract over the marshalling | **`Q`** (kernel-certified) | kernel `check` (`18 §4.5`) |
+| A **statically-unprovable** `requires`/`ensures` on the foreign | **`tested`** | runtime-checked assertion (§3.3) + `P` |
+| The **`pure`** / referential-transparency claim | **trusted**, never `Q` (§3.2) | listed; never kernel-certified |
+| The **effect row** on the foreign, at call sites | **enforced** | `36 §1.4` escape check (§3.4) — the flip |
+| A **`pure`-but-effectful** foreign | **the residual** | reviewer flag only (§3.4) — listed, not caught |
+
+The single honest gap is the last row: the discipline **names** it but cannot
+mechanically close it. Everything else is either kernel-checked (`Q`),
+runtime-checked (`tested`), or **listed-as-assumed** (`P`) — never hidden. The
+goal of the whole chapter is that the unverified surface of any program is
+**small, explicit, and enumerable** — not zero (FFI is necessary), but *honest*.
+
+## 6. What WS-L must deliver here (L6, L7)
 
 `Bytes` + binary I/O (effect-tracked, encode/decode to `String`) — **elaborated
 in §1, the L6 deliverable**; lawful, derivable serialization with a provable
-round-trip (the **law/interface in §1.5**; the generic derivation is L8); a
-**general** `foreign` FFI with typed/effect-rowed bindings and C-ABI marshalling
-(**L7**, §2–§3); the trust-boundary discipline (foreign-as-listed-postulate,
-`pure`-as-claim, runtime contracts at the edge — **L7**). Acceptance is part of
-**G6** (≥1 FFI call in the verified component, with the trust base showing
-exactly what is assumed). Conformance:
+round-trip (the **law/interface in §1.5**; the generic derivation is L8). And
+(**L7**, §2–§5): a **general** `foreign` FFI with typed/effect-rowed bindings
+and C-ABI marshalling (§2); the trust-boundary discipline — foreign-as-listed-
+postulate (§3.1), `pure`-as-claim-not-`Q` (§3.2), runtime contracts at the edge
+(§3.3), mandatory effects + the named residual (§3.4); and capability gating
+(§4). **No new kernel rule** (§2.3).
+
+**L7 acceptance (AC1–AC5; ties to G6** — ≥1 FFI call in a verified component,
+with the trust base showing exactly what is assumed):
+
+- **AC1 — `foreign` binds + marshals.** A `foreign` decl elaborates to a typed,
+  effect-rowed postulate (§2.3); a call marshals `Bytes`↔`(ptr,len)` + scalars↔
+  machine types (§2.2) — a **structural** assertion on the binding/marshalling,
+  not "compiles".
+- **AC2 — foreign-as-listed-postulate (honesty headline, discriminating).** An
+  artifact that **relies on** `foreign f` (calls it) has `f`'s postulate in its
+  `trusted_base_delta` → `P`; one that does **not** is **absent** (§3.1). Routed
+  through the **real** B1 export; the verdict flips on **dependency**.
+- **AC3 — `pure` projects to *trusted*, never `Q`.** A `pure foreign`'s
+  guarantee is assumed → `P`/`tested`, **never** `Q` (§3.2); under-claim is the
+  safe direction. A genuinely-proved Ken-side claim in the *same* artifact
+  reaches `Q` — the field tracks kernel-provedness, not the `pure` keyword.
+- **AC4 — boundary contracts runtime-checked.** A statically-unprovable
+  `requires`/`ensures` on a `foreign` lowers to a **runtime-checked** fail-fast
+  assertion + a `tested` `P` entry (§3.3) — observe the **emitted** check, not a
+  silent assumption.
+- **AC5 — effects mandatory (discriminating).** A world-touching `foreign` whose
+  effect escapes the caller's declared row is **rejected** (`36 §1.4`); the
+  properly-rowed call **accepts** — a verdict flip (§3.4). The **`pure`-but-
+  effectful** case is the **named residual** (flagged, not silently accepted as
+  sound).
+
+Conformance:
 - `../../conformance/surface/bytes-io/` — the L6 `Bytes`/I/O/encode-decode/
   round-trip cases (`§1.6`).
-- `../../conformance/surface/ffi-io/` — (L7) a serialization round-trip proof
-  and a `foreign` decl whose postulate shows up in `trusted_base_delta`.
+- `../../conformance/surface/ffi-io/` — (L7) AC1–AC5 with per-case verdict/
+  structural flip, the **AC2 honesty pair** (relied-on listed / not-relied-on
+  absent, through the real export) and the **AC3 pure-not-`Q` pair**, the **AC5
+  effects-mandatory flip + the named residual**, the **capability+effect
+  composition** (`§4`), and a **G6 serialization round-trip proof** in an
+  FFI-using verified component (a `foreign` decl whose postulate shows up in
+  `trusted_base_delta`). **QA gate:** AC2/AC3 route a **real** `foreign` through
+  the **actual** export/trust-base machinery (postulate listed, never `Q`); no
+  synthetic trust-base literal.
