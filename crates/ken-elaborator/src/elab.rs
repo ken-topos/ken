@@ -18,6 +18,17 @@ use crate::resolve::{RDecl, RDeclKind, RExpr, RType};
 
 // ----- obligation model -----
 
+/// Source clause kind for a V1 obligation hole (`22 §1`, §2).
+#[derive(Debug, Clone)]
+pub enum ObligationKind {
+    /// From an `ensures ψ` clause or an implicit return-type refinement (`22 §2.2`/§2.1).
+    Ensures,
+    /// From a `prove name : φ` declaration (`22 §2.4`).
+    Prove,
+    /// From a `law Name { field : φ }` field (`22 §2.4`).
+    LawField(String),
+}
+
 /// A single open obligation hole (`21 §6.5`).
 ///
 /// The hole is admitted as a postulate in the kernel (`trusted_base()` membership
@@ -34,11 +45,15 @@ pub struct Obligation {
     pub goal_closed: Term,
     /// The span of the originating clause.
     pub span: Span,
+    /// The source clause kind (for V2 provenance and stable ids).
+    pub kind: ObligationKind,
 }
 
 /// Result of a V1 declaration elaboration.
 #[derive(Debug)]
 pub struct ElabResult {
+    /// Declaration name — used by V2 for stable obligation ids (`22 §1`).
+    pub name: String,
     /// The definition's `GlobalId` (or, for `prove`, the hole's postulate id).
     pub def_id: GlobalId,
     /// Open obligation holes emitted during elaboration.
@@ -397,12 +412,28 @@ fn elaborate_view_or_let(
     globals: &mut HashMap<String, GlobalId>,
     rdecl: &RDecl,
 ) -> Result<ElabResult, ElabError> {
-    if rdecl.requires.is_empty() && rdecl.ensures.is_empty() {
-        // V0 path: no spec clauses
+    // Check for implicit ensures from a return-type refinement (`22 §2.1`).
+    let has_refine_return = rdecl.ty.as_ref()
+        .and_then(|ty| innermost_refine_pred(ty))
+        .is_some();
+    if rdecl.requires.is_empty() && rdecl.ensures.is_empty() && !has_refine_return {
+        // V0 path: no spec clauses and no return-type refinement
         return elaborate_v0(env, globals, rdecl);
     }
-    // V1 path: has requires/ensures
+    // V1 path: has requires/ensures or implicit return-type refinement obligation
     elaborate_view_with_spec(env, globals, rdecl)
+}
+
+/// Extract the predicate from the innermost refinement in a resolved type.
+///
+/// `{ k : A | φ }` at the end of a Pi-chain → `Some(φ)`. Used by V2 to
+/// emit a refinement-introduction obligation for the return type (`22 §2.1`).
+fn innermost_refine_pred(ty: &RType) -> Option<&RExpr> {
+    match ty {
+        RType::RPi(_, _, cod, _) | RType::RArr(_, cod, _) => innermost_refine_pred(cod),
+        RType::RRefine(_, _, phi, _) => Some(phi),
+        _ => None,
+    }
 }
 
 fn elaborate_v0(
@@ -426,7 +457,7 @@ fn elaborate_v0(
         ElabError::KernelRejected { error: e, span: rdecl.span.clone() }
     })?;
     globals.insert(rdecl.name.clone(), id);
-    Ok(ElabResult { def_id: id, obligations: vec![] })
+    Ok(ElabResult { name: rdecl.name.clone(), def_id: id, obligations: vec![] })
 }
 
 /// Elaborate a `view` with `requires`/`ensures` clauses (`21 §6.3`).
@@ -476,9 +507,17 @@ fn elaborate_view_with_spec(
     // body_inner = the inner body term (past all param lambdas)
     let body_inner = unwrap_lam(&body_raw, param_types.len());
 
+    // Collect ensures: explicit clauses + implicit from return-type refinement (`22 §2.1`).
+    // A `{ x : A | φ }` return type is a refinement introduction at the body site;
+    // its predicate φ is an implicit ensures with the same ψ[body/result] structure.
+    let mut all_ensures: Vec<&RExpr> = rdecl.ensures.iter().collect();
+    if let Some(phi) = rdecl.ty.as_ref().and_then(|ty| innermost_refine_pred(ty)) {
+        all_ensures.push(phi);
+    }
+
     let mut ens_obligations: Vec<Obligation> = Vec::new();
     let mut obl_counter = 0u32;
-    for ens in &rdecl.ensures {
+    for ens in &all_ensures {
         let psi_core = elab_in_ctx_at_omega(
             env, globals, &ens_ctx, ens, &omega, &rdecl.span,
         )?;
@@ -492,6 +531,7 @@ fn elaborate_view_with_spec(
             hole_id,
             goal_closed: closed,
             span: rdecl.span.clone(),
+            kind: ObligationKind::Ensures,
         });
         obl_counter += 1;
     }
@@ -518,7 +558,7 @@ fn elaborate_view_with_spec(
         ElabError::KernelRejected { error: e, span: rdecl.span.clone() }
     })?;
     globals.insert(rdecl.name.clone(), id);
-    Ok(ElabResult { def_id: id, obligations: ens_obligations })
+    Ok(ElabResult { name: rdecl.name.clone(), def_id: id, obligations: ens_obligations })
 }
 
 /// Elaborate `prove name : φ` (`21 §6.3`, §3).
@@ -546,8 +586,9 @@ fn elaborate_prove(
         hole_id,
         goal_closed: phi_core,
         span: rdecl.span.clone(),
+        kind: ObligationKind::Prove,
     };
-    Ok(ElabResult { def_id: hole_id, obligations: vec![obl] })
+    Ok(ElabResult { name: rdecl.name.clone(), def_id: hole_id, obligations: vec![obl] })
 }
 
 /// Elaborate `law Name (param) { f : φ ; … }` (`21 §3`).
@@ -587,6 +628,7 @@ fn elaborate_law(
             hole_id,
             goal_closed: phi_core,
             span: rdecl.span.clone(),
+            kind: ObligationKind::LawField(field_name.clone()),
         });
     }
 
@@ -598,7 +640,7 @@ fn elaborate_law(
     globals.insert(rdecl.name.clone(), law_id);
 
     // Return: def_id = law_id (the law postulate), obligations = per-field holes
-    Ok(ElabResult { def_id: law_id, obligations })
+    Ok(ElabResult { name: rdecl.name.clone(), def_id: law_id, obligations })
 }
 
 // ----- helpers -----
