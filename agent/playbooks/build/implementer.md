@@ -52,7 +52,14 @@ publishes and merges.
    acceptance criteria met, and your spec sources in the commit/handoff.
 6. **Return to your home branch** so QA can check `wp/<ID>` out (two worktrees
    can't hold one branch), then **hand off and stop** (template below). Set
-   status, wait for notification.
+   status, wait for notification. **Keep your status *current* — update it the
+   moment you change state (promoted V2-build).** A status left stale on a
+   *finished* WP while you work silently on the next makes a stall **undiagnosable**:
+   your leader's watchdog sees "silent + status says old-WP" and can't tell
+   deep-work from wedged (V2-build: an implementer silent 27 min with a status
+   still showing V1 — the leader had to nudge to disambiguate). Silence is only
+   safe when your status accurately says what you're doing; `update_status` on
+   every pickup/handoff/block so silence + status stay consistent.
 
 ## When you're unsure, query — but filter first
 
