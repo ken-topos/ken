@@ -13,6 +13,7 @@ pub mod error;
 pub mod extract;
 mod lexer;
 pub mod parser;
+pub mod prover;
 pub mod resolve;
 
 use std::collections::HashMap;
@@ -25,6 +26,9 @@ pub use elab::{elaborate_rdecl, elaborate_rexpr, ElabResult, Obligation, Obligat
 pub use error::{ElabError, Span};
 pub use extract::{
     v2_extract, ExtractionResult, ObligationId, ObligationTriple, ProvKind, Provenance,
+};
+pub use prover::{
+    attempt_obligation, attempt_with_cert, classify, Countermodel, ProverResult, Route, Verdict,
 };
 pub use resolve::{RDecl, RDeclKind, RExpr, RType};
 
