@@ -83,6 +83,15 @@ claim with no conformance case is a claim no one can rely on
   `2.0d:Decimal`), the fixed-width no-overflow obligation + no-silent-wrap seal,
   `Decimal`-exact-vs-`Float`-honest, explicit conversions, the kernel-primitive
   vs prelude-law boundary, `Char` surrogate exclusion.
+- `surface/collections/seed-collections.md` — L3 strings & collections (`37`):
+  `String` as a content-addressed **NFC UTF-8 primitive** (byte-length ≠
+  char-length, **not** `List Char`); `List`/`Option`/`Result` transparent
+  inductive (L2) and `Array`/`Map`/`Set` abstract over the `41` heap (kinds
+  `0x06`–`0x08`) with **persistence observable as slot-id**; the combinator laws
+  as **emitted propositions**; **infinitude without coinduction** (the
+  fuel-bounded inductive `unfoldUpTo` + the no-coinductive-**construct** absence
+  net); the `DecEq`-key **verdict flip**; and the verified `sort` whose
+  `isSorted ∧ Perm` obligation is asserted **with the `Perm` conjunct present**.
 - `surface/bytes-io/seed-bytes-io.md` — L6 `Bytes` + binary I/O (`38 §1`):
   `Bytes` as a `14 §5` primitive (`0x05`, immutable, `b"…"`/`0x[…]` literals),
   registered reductions + no-silent-OOB partiality, effect-tracked I/O
