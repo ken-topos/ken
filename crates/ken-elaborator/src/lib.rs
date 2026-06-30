@@ -10,6 +10,7 @@ mod ast;
 pub mod diagnostics;
 pub mod elab;
 pub mod effects;
+pub mod export;
 pub mod ifc;
 pub mod protocol;
 pub mod error;
@@ -37,6 +38,10 @@ pub use diagnostics::{
 };
 pub use prover::{
     attempt_obligation, attempt_with_cert, classify, Countermodel, ProverResult, Route, Verdict,
+};
+pub use export::{
+    emit_export, serialize_export, BehavioralExport, ExportError, GEntry, PEntry, PStatus, QEntry,
+    TEntry,
 };
 pub use protocol::{
     hole_id_string, obligation_id_string, project_obligation_status, project_wire_verdict,
