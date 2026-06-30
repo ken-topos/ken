@@ -25,6 +25,13 @@ space_id = "spc_4q7g0se87rgje"
 # primary proxy into the federation.
 human_interface = "steward"
 
+# Launch-cascade pacing. mootup defaults this to 2.0s/agent to avoid storming
+# the convo join_space endpoint on cold start; we disable it (0) because the
+# server-side rate limit was relaxed 10x and the box (t3.small) peaked at ~35%
+# CPU under the full 25-agent burst — so the stagger only slows launch for no
+# benefit. Re-enable (e.g. 1-2s) if a future, larger fleet herds join_space.
+launch_stagger_seconds = 0
+
 [agents.spec-author]
 display_name = "spec-author"
 model = "claude-opus-4-8[1m]"
@@ -75,8 +82,8 @@ startup_prompt = "You lead Ken's Kernel team. Read agent/COORDINATION.md (federa
 
 [agents.kernel-implementer]
 display_name = "Kernel implementer"
-model = "accounts/fireworks/models/glm-5p2"
-env = { ANTHROPIC_BASE_URL = "http://127.0.0.1:8090", ANTHROPIC_AUTH_TOKEN = "${secret:llm-proxy-secret}" }
+model = "claude-sonnet-4-6"
+effort = "high"
 startup_prompt = "You are the Kernel team implementer. Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/build/implementer.md and agent/teams/kernel/implementer.md if present, set status, await your leader's kickoff. Do not poll."
 
 [agents.kernel-qa]
@@ -93,8 +100,8 @@ startup_prompt = "You lead Ken's Verify team. Read agent/COORDINATION.md (federa
 
 [agents.verify-implementer]
 display_name = "Verify implementer"
-model = "accounts/fireworks/models/glm-5p2"
-env = { ANTHROPIC_BASE_URL = "http://127.0.0.1:8090", ANTHROPIC_AUTH_TOKEN = "${secret:llm-proxy-secret}" }
+model = "claude-sonnet-4-6"
+effort = "high"
 startup_prompt = "You are the Verify team implementer. Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/build/implementer.md and agent/teams/verify/implementer.md if present, set status, await your leader's kickoff. Do not poll."
 
 [agents.verify-qa]
@@ -111,8 +118,8 @@ startup_prompt = "You lead Ken's Language team. Read agent/COORDINATION.md (fede
 
 [agents.language-implementer]
 display_name = "Language implementer"
-model = "accounts/fireworks/models/glm-5p2"
-env = { ANTHROPIC_BASE_URL = "http://127.0.0.1:8090", ANTHROPIC_AUTH_TOKEN = "${secret:llm-proxy-secret}" }
+model = "claude-sonnet-4-6"
+effort = "medium"
 startup_prompt = "You are the Language team implementer. Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/build/implementer.md and agent/teams/language/implementer.md if present, set status, await your leader's kickoff. Do not poll."
 
 [agents.language-qa]
@@ -129,8 +136,8 @@ startup_prompt = "You lead Ken's Runtime team. Read agent/COORDINATION.md (feder
 
 [agents.runtime-implementer]
 display_name = "Runtime implementer"
-model = "accounts/fireworks/models/glm-5p2"
-env = { ANTHROPIC_BASE_URL = "http://127.0.0.1:8090", ANTHROPIC_AUTH_TOKEN = "${secret:llm-proxy-secret}" }
+model = "claude-sonnet-4-6"
+effort = "medium"
 startup_prompt = "You are the Runtime team implementer. Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/build/implementer.md and agent/teams/runtime/implementer.md if present, set status, await your leader's kickoff. Do not poll."
 
 [agents.runtime-qa]
@@ -147,8 +154,8 @@ startup_prompt = "You lead Ken's Ergo team. Read agent/COORDINATION.md (federati
 
 [agents.ergo-implementer]
 display_name = "Ergo implementer"
-model = "accounts/fireworks/models/glm-5p2"
-env = { ANTHROPIC_BASE_URL = "http://127.0.0.1:8090", ANTHROPIC_AUTH_TOKEN = "${secret:llm-proxy-secret}" }
+model = "claude-sonnet-4-6"
+effort = "medium"
 startup_prompt = "You are the Ergo team implementer. Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/build/implementer.md and agent/teams/ergo/implementer.md if present, set status, await your leader's kickoff. Do not poll."
 
 [agents.ergo-qa]
@@ -165,8 +172,8 @@ startup_prompt = "You lead Ken's Foundation team. Read agent/COORDINATION.md (fe
 
 [agents.foundation-implementer]
 display_name = "Foundation implementer"
-model = "accounts/fireworks/models/glm-5p2"
-env = { ANTHROPIC_BASE_URL = "http://127.0.0.1:8090", ANTHROPIC_AUTH_TOKEN = "${secret:llm-proxy-secret}" }
+model = "claude-sonnet-4-6"
+effort = "medium"
 startup_prompt = "You are the Foundation team implementer. Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/build/implementer.md and agent/teams/foundation/implementer.md if present, set status, await your leader's kickoff. Do not poll."
 
 [agents.foundation-qa]
