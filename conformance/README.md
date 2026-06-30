@@ -64,8 +64,13 @@ claim with no conformance case is a claim no one can rely on
 - `verify/seed-verify.md` — a proved postcondition, a disproved one with a
   countermodel, an incomplete one with a hole, and the soundness regression (Z3
   cannot force a false `proved`).
-- `surface/seed-surface.md` — `2 : Int` vs `2.0 : Float`; sum-type
-  construct-then-eliminate computes; `match` exhaustiveness failure.
+- `surface/seed-surface.md` — sum-type construct-then-eliminate computes;
+  `match` exhaustiveness failure; refinement obligation; elaboration invariants.
+- `surface/numbers/seed-numbers.md` — L1 numeric model (`35`): arbitrary-
+  precision `Int` exactness above 2⁵³, literal defaulting (`2:Int`/`2.0:Float`/
+  `2.0d:Decimal`), the fixed-width no-overflow obligation + no-silent-wrap seal,
+  `Decimal`-exact-vs-`Float`-honest, explicit conversions, the kernel-primitive
+  vs prelude-law boundary, `Char` surrogate exclusion.
 - `runtime/seed-runtime.md` — dedup + O(1) equality; `Int` past 2⁵³ exact;
   `unknown` propagation.
 - `security/ifc/seed-ifc.md` — Sec1 information-flow-by-typing (the

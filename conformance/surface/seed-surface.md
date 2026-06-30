@@ -3,17 +3,12 @@
 Format: `../README.md`. These pin the surface non-reproductions of the
 prototype's gaps (the f64 defect; stubbed sum types; no exhaustiveness).
 
-## surface/numbers/int-not-float (the f64 correction)
-- spec: `spec/30-surface/31-lexical.md §3`, `35-numbers.md`
-- given: the literals `2` and `2.0`
-- expect: `2 : Int`, `2.0 : Float` — **distinct types**
-- why: the f64-only model is not reproduced even at the lexer.
-
-## surface/numbers/int-exact-above-2^53
-- spec: `spec/30-surface/35-numbers.md §1,§3`
-- given: `100000000000000000000 + 1 : Int`
-- expect: the exact value (no rounding)
-- why: arbitrary-precision `Int` fixes the prototype's real numeric defect.
+> **The `surface/numbers/*` cases moved.** The numeric model (the f64
+> non-reproduction, `Int` exactness above 2⁵³, literal defaulting, the overflow
+> obligation, `Decimal`/`Float` honesty, conversions) is now pinned to L1 rigor
+> in `numbers/seed-numbers.md`. The two bootstrap cases that lived here —
+> `surface/numbers/int-not-float` and `surface/numbers/int-exact-above-2^53` —
+> are **subsumed** there (one home per property); see that file for AC1–AC6.
 
 ## surface/data-match/construct-then-eliminate
 - spec: `spec/30-surface/34-data-match.md §1,§3`
