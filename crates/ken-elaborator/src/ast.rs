@@ -1,4 +1,4 @@
-//! Surface AST for the V0 minimal elaborator (`39 §5.2`).
+//! Surface AST for the V0/V1 elaborator (`39 §5.2`, `21 §6.1`/§6.2).
 
 use crate::error::Span;
 
@@ -10,14 +10,20 @@ pub struct Binder {
     pub span: Span,
 }
 
-/// A top-level V0 declaration (`32 §8`).
+/// A top-level V0/V1 declaration (`32 §8`, `21 §6.2`).
 #[derive(Clone, Debug)]
 pub enum Decl {
     ViewDecl {
         name: String,
         params: Vec<Binder>,
         ret_ty: Option<Type>,
+        /// `requires φ` clauses (V1; empty in V0 programs).
+        requires: Vec<Expr>,
+        /// `ensures ψ` clauses (V1; empty in V0 programs).
+        ensures: Vec<Expr>,
         body: Expr,
+        /// Whether the `space` prefix was present (V1 §6.4).
+        is_space_op: bool,
         span: Span,
     },
     LetDecl {
@@ -26,26 +32,41 @@ pub enum Decl {
         val: Expr,
         span: Span,
     },
+    /// `prove name : φ` — a standalone obligation (`21 §3`, §6.3).
+    ProveDecl {
+        name: String,
+        prop: Expr,
+        span: Span,
+    },
+    /// `law Name (param) { field : φ ; … }` — a named law (`21 §3`).
+    LawDecl {
+        name: String,
+        param: String,
+        fields: Vec<(String, Expr)>,
+        span: Span,
+    },
 }
 
 impl Decl {
     pub fn name(&self) -> &str {
         match self {
-            Decl::ViewDecl { name, .. } | Decl::LetDecl { name, .. } => name,
+            Decl::ViewDecl { name, .. }
+            | Decl::LetDecl { name, .. }
+            | Decl::ProveDecl { name, .. }
+            | Decl::LawDecl { name, .. } => name,
         }
     }
     pub fn span(&self) -> &Span {
         match self {
-            Decl::ViewDecl { span, .. } | Decl::LetDecl { span, .. } => span,
+            Decl::ViewDecl { span, .. }
+            | Decl::LetDecl { span, .. }
+            | Decl::ProveDecl { span, .. }
+            | Decl::LawDecl { span, .. } => span,
         }
     }
 }
 
-/// A surface expression (`39 §5.2`).
-///
-/// Names in `EVar`/`ECon` are still surface names; `§5.3` converts them to
-/// de Bruijn indices. `ELam` carries multiple binder names (desugared to
-/// single-binder form during resolution).
+/// A surface expression (`39 §5.2`, `21 §6.1`).
 #[derive(Clone, Debug)]
 pub enum Expr {
     /// `ident` — a term variable (lowercase).
@@ -62,6 +83,8 @@ pub enum Expr {
     ELet(String, Option<Type>, Box<Expr>, Box<Expr>, Span),
     /// `e : A` — type ascription (checking hint).
     EAsc(Box<Expr>, Box<Type>, Span),
+    /// `old e` — pre-state reference in `space`-op `ensures` (`21 §6.4`).
+    EOld(Box<Expr>, Span),
 }
 
 impl Expr {
@@ -73,15 +96,13 @@ impl Expr {
             | Expr::EApp(_, _, s)
             | Expr::ELam(_, _, s)
             | Expr::ELet(_, _, _, _, s)
-            | Expr::EAsc(_, _, s) => s,
+            | Expr::EAsc(_, _, s)
+            | Expr::EOld(_, s) => s,
         }
     }
 }
 
-/// A surface type expression (`39 §5.2`).
-///
-/// Types and terms are unified at the kernel level, but V0's parser separates
-/// them syntactically (types appear after `:` in binders and declarations).
+/// A surface type expression (`39 §5.2`, `21 §6.1`).
 #[derive(Clone, Debug)]
 pub enum Type {
     /// `(x : A) -> B` — dependent function type (Π).
@@ -94,6 +115,8 @@ pub enum Type {
     TCon(String, Span),
     /// `ident` — a bound type variable (lowercase, e.g. `A` in `(A : Type) → A`).
     TVar(String, Span),
+    /// `{ x : A | φ }` — refinement type (`21 §6.1`).
+    TRefine(String, Box<Type>, Box<Expr>, Span),
 }
 
 impl Type {
@@ -103,7 +126,8 @@ impl Type {
             | Type::TArr(_, _, s)
             | Type::TUniv(_, s)
             | Type::TCon(_, s)
-            | Type::TVar(_, s) => s,
+            | Type::TVar(_, s)
+            | Type::TRefine(_, _, _, s) => s,
         }
     }
 }
