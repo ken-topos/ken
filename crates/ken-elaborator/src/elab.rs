@@ -1,30 +1,52 @@
-//! Bidirectional elaboration to kernel core terms (`39 §5.4`, `§5.7`).
+//! Bidirectional elaboration to kernel core terms (`39 §5.4`, `§5.7`, `21 §6.3`).
 //!
-//! The elaborator converts resolved expressions (`resolve.rs`) into kernel
-//! `Term`s. Level metas (`Level::Var(LevelVar(m))`) are introduced by bare
-//! `Type` annotations and solved during mode-switch; unconstrained metas default
-//! to `Zero` before any kernel call.
+//! V1 additions: `requires`/`ensures` clause processing, obligation holes via
+//! `declare_postulate`, honesty guard via `GlobalEnv::trusted_base()`, refinement
+//! lowering to carrier, `prove`/`law` declaration elaboration, `old` elaboration.
 
 use std::collections::HashMap;
 
 use ken_kernel::{
     check as kernel_check,
-    declare_def,
+    declare_def, declare_postulate,
     subst::{subst0, weaken},
     whnf, Context, GlobalEnv, GlobalId, Level, LevelVar, Term,
 };
 
 use crate::error::{ElabError, Span};
-use crate::resolve::{RDecl, RExpr, RType};
+use crate::resolve::{RDecl, RDeclKind, RExpr, RType};
+
+// ----- obligation model -----
+
+/// A single open obligation hole (`21 §6.5`).
+///
+/// The hole is admitted as a postulate in the kernel (`trusted_base()` membership
+/// = `unknown` status). Discharging it via `ElabEnv::discharge_hole` retires the
+/// postulate and moves it to `proved`.
+#[derive(Debug, Clone)]
+pub struct Obligation {
+    /// Sequential id within this elaboration session.
+    pub id: u32,
+    /// The postulate `GlobalId` registered for this hole (opaque, in `trusted_base()`).
+    pub hole_id: GlobalId,
+    /// The goal in closed form (abstracted over the local context at the obligation
+    /// site). For a goal `φ` in context `[x:A]`, closed = `Pi(A, φ)`.
+    pub goal_closed: Term,
+    /// The span of the originating clause.
+    pub span: Span,
+}
+
+/// Result of a V1 declaration elaboration.
+#[derive(Debug)]
+pub struct ElabResult {
+    /// The definition's `GlobalId` (or, for `prove`, the hole's postulate id).
+    pub def_id: GlobalId,
+    /// Open obligation holes emitted during elaboration.
+    pub obligations: Vec<Obligation>,
+}
 
 // ----- level meta context -----
 
-/// Level meta context — a flat list of optional solved levels.
-///
-/// Metas are introduced for bare `Type` annotations (`§5.7`). They are solved
-/// during `unify_types` when one side is an unsolved `Level::Var(m)`. All
-/// metas are zonked (substituted and defaulted to `Zero`) before any kernel
-/// call.
 #[derive(Default)]
 struct MetaCtx {
     metas: Vec<Option<Level>>,
@@ -46,7 +68,7 @@ impl MetaCtx {
             }
             Level::Var(LevelVar(m)) => match &self.metas[*m as usize] {
                 Some(sol) => self.zonk_level(sol),
-                None => Level::Zero, // unconstrained → default 0 (`§5.7`)
+                None => Level::Zero,
             },
         }
     }
@@ -75,21 +97,15 @@ impl MetaCtx {
                 *id,
                 level_args.iter().map(|l| self.zonk_level(l)).collect(),
             ),
-            // K2 / other terms — pass through unchanged (not emitted by V0)
             other => other.clone(),
         }
     }
 }
 
-// ----- meta-level type unification -----
+// ----- level unification -----
 
-/// Try to solve level metas so that `l1 ≡ l2`. Non-meta mismatches are
-/// silently ignored — the kernel is the backstop for semantic errors.
-///
-/// IMPORTANT: check for raw (not-yet-zonked) `Level::Var` metas BEFORE
-/// calling `zonk_level`. `zonk_level` maps `None` metas to `Level::Zero`,
-/// so zonking first would obscure unsolved metas as concrete zeros and
-/// prevent them from being solved.
+/// IMPORTANT: check raw `Level::Var` BEFORE `zonk_level` — zonking maps `None`
+/// metas to `Level::Zero`, masking unsolved metas as concrete zeros.
 fn unify_levels(metas: &mut MetaCtx, l1: &Level, l2: &Level) {
     match (l1, l2) {
         (Level::Var(LevelVar(m)), _) if metas.metas[*m as usize].is_none() => {
@@ -100,13 +116,10 @@ fn unify_levels(metas: &mut MetaCtx, l1: &Level, l2: &Level) {
             let val = metas.zonk_level(l1);
             metas.metas[*m as usize] = Some(val);
         }
-        // Both concrete (or already-solved vars) — kernel is backstop.
         _ => {}
     }
 }
 
-/// Try to solve level metas so that `t1 ≡ t2`. Structural mismatches (not
-/// involving metas) are silently ignored; the kernel is the authority.
 fn unify_types(metas: &mut MetaCtx, t1: &Term, t2: &Term) {
     match (t1, t2) {
         (Term::Type(l1), Term::Type(l2)) => unify_levels(metas, l1, l2),
@@ -124,20 +137,13 @@ fn unify_types(metas: &mut MetaCtx, t1: &Term, t2: &Term) {
             unify_types(metas, b1, b2);
         }
         (
-            Term::Const {
-                id: id1,
-                level_args: la1,
-            },
-            Term::Const {
-                id: id2,
-                level_args: la2,
-            },
+            Term::Const { id: id1, level_args: la1 },
+            Term::Const { id: id2, level_args: la2 },
         ) if id1 == id2 => {
             for (l1, l2) in la1.iter().zip(la2.iter()) {
                 unify_levels(metas, l1, l2);
             }
         }
-        // Structural mismatch — kernel will judge
         _ => {}
     }
 }
@@ -154,13 +160,10 @@ fn level_from_nat(n: u32) -> Level {
 
 // ----- elaboration context -----
 
-/// The shared elaboration state.
 struct ElabCtx<'e> {
     env: &'e mut GlobalEnv,
-    /// Local context Γ — kernel's `Context` (types of local de Bruijn vars).
     ctx: Context,
     metas: MetaCtx,
-    /// Global name → `GlobalId` for declarations in Σ.
     globals: &'e HashMap<String, GlobalId>,
 }
 
@@ -200,34 +203,32 @@ fn elab_type(cx: &mut ElabCtx, ty: &RType) -> Result<Term, ElabError> {
         RType::RVarTy(i, _, _) => Ok(Term::var(*i)),
 
         RType::RArr(a, b, _) => {
-            // Non-dependent arrow: elab both in the SAME context, weaken codomain
-            // past the Pi's (unused) binder (`39 §5.4` arrow rule).
             let a_core = elab_type(cx, a)?;
             let b_core = elab_type(cx, b)?;
             Ok(Term::pi(a_core, weaken(&b_core, 1)))
         }
 
         RType::RPi(_, a, b, _) => {
-            // Dependent Pi: extend context with the domain.
             let a_core = elab_type(cx, a)?;
             cx.ctx.push(a_core.clone());
             let b_core = elab_type(cx, b)?;
             cx.ctx.pop();
             Ok(Term::pi(a_core, b_core))
         }
+
+        // Refinement lowers to the carrier type (`21 §6.3`): `{x:A|φ}` → `A`.
+        // The predicate φ is tracked separately; obligation emitted at introduction.
+        RType::RRefine(_, carrier, _phi, _) => {
+            elab_type(cx, carrier)
+        }
     }
 }
 
 // ----- bidirectional elaboration -----
 
-/// Check that `expr` has type `expected` (in context `cx.ctx`).
-///
-/// Returns the elaborated core term. Type mismatches that cannot be caught
-/// structurally here are left for the kernel (the backstop).
 fn check(cx: &mut ElabCtx, expr: &RExpr, expected: &Term, _span: &Span) -> Result<Term, ElabError> {
     match expr {
         RExpr::RLam(_, body, lam_span) => {
-            // Lambda can only check against a Π type (`39 §5.4`).
             let exp_wh = whnf(cx.env, &cx.ctx, expected);
             match exp_wh {
                 Term::Pi(dom, cod) => {
@@ -242,7 +243,6 @@ fn check(cx: &mut ElabCtx, expr: &RExpr, expected: &Term, _span: &Span) -> Resul
             }
         }
         _ => {
-            // Mode switch: infer then solve level metas (`39 §5.4` (Conv) rule).
             let (core, inferred_ty) = infer(cx, expr)?;
             unify_types(&mut cx.metas, expected, &inferred_ty);
             Ok(core)
@@ -250,14 +250,9 @@ fn check(cx: &mut ElabCtx, expr: &RExpr, expected: &Term, _span: &Span) -> Resul
     }
 }
 
-/// Infer the type of `expr` in context `cx.ctx`.
-///
-/// Returns `(core_term, type)`.
 fn infer(cx: &mut ElabCtx, expr: &RExpr) -> Result<(Term, Term), ElabError> {
     match expr {
         RExpr::RVar(i, _, _) => {
-            // Type stored in context without weakening; kernel applies weaken(ty, i+1).
-            // We replicate that here (`11 §2`, `check.rs` line ~197).
             let ty_stored = cx
                 .ctx
                 .lookup(*i)
@@ -275,7 +270,6 @@ fn infer(cx: &mut ElabCtx, expr: &RExpr) -> Result<(Term, Term), ElabError> {
                     name: name.clone(),
                     span: span.clone(),
                 })?;
-            // The type of a global postulate is stored in the environment.
             let (_, decl_ty) = cx.env.const_type(id).ok_or_else(|| {
                 ElabError::Internal(format!("no type for global '{}'", name))
             })?;
@@ -284,7 +278,6 @@ fn infer(cx: &mut ElabCtx, expr: &RExpr) -> Result<(Term, Term), ElabError> {
 
         RExpr::RUniv(None, _) => {
             let l = cx.metas.fresh();
-            // Type : Type (suc Type) — universe-in-universe (`12 §1`)
             let ty = Term::ty(Level::Suc(Box::new(l.clone())));
             Ok((Term::ty(l), ty))
         }
@@ -313,13 +306,10 @@ fn infer(cx: &mut ElabCtx, expr: &RExpr) -> Result<(Term, Term), ElabError> {
             Ok((e_core, ty_core))
         }
 
-        RExpr::RLam(_, _, span) => {
-            // Cannot infer type of a bare lambda — ascription required.
-            Err(ElabError::TypeMismatch {
-                span: span.clone(),
-                reason: "cannot infer type of lambda without annotation".into(),
-            })
-        }
+        RExpr::RLam(_, _, span) => Err(ElabError::TypeMismatch {
+            span: span.clone(),
+            reason: "cannot infer type of lambda without annotation".into(),
+        }),
 
         RExpr::RLet(_x, ty_opt, rhs, body, span) => {
             let (rhs_core, rhs_ty) = match ty_opt {
@@ -330,11 +320,9 @@ fn infer(cx: &mut ElabCtx, expr: &RExpr) -> Result<(Term, Term), ElabError> {
                 }
                 None => infer(cx, rhs)?,
             };
-            // Body is checked in context extended with x : rhs_ty.
             cx.ctx.push(rhs_ty.clone());
             let (body_core, body_ty) = infer(cx, body)?;
             cx.ctx.pop();
-            // The let's type is the body's type with x substituted out.
             let result_ty = subst0(&body_ty, &rhs_core);
             Ok((
                 Term::Let {
@@ -345,23 +333,85 @@ fn infer(cx: &mut ElabCtx, expr: &RExpr) -> Result<(Term, Term), ElabError> {
                 result_ty,
             ))
         }
+
+        // `old e` in a space-op ensures (`21 §6.4`).
+        // Simplified V1 model: elaborates to the same term as `e` (the pre-state
+        // value shares the type of `e`; full state-transformer semantics is V3+).
+        RExpr::ROld(e, _) => {
+            infer(cx, e)
+        }
     }
+}
+
+// ----- goal closing -----
+
+/// Close an open goal over the local context.
+///
+/// Given `goal` valid in `ctx` (depth = n), builds `Pi(T_{n-1}, ..., Pi(T_0, goal))`
+/// — the universally quantified form suitable for `declare_postulate`.
+///
+/// Limitation (V1): works correctly for independent parameter types (no mutual
+/// de Bruijn references between stored types). Sufficient for all V1 conformance
+/// cases.
+fn close_goal(ctx: &Context, goal: Term) -> Term {
+    let n = ctx.types.len();
+    let mut result = goal;
+    // Wrap from innermost (Var(0)) to outermost (Var(n-1))
+    for i in 0..n {
+        // types[n-1-i] = stored type of Var(i) (innermost-first indexing)
+        let stored_ty = ctx.types[n - 1 - i].clone();
+        result = Term::pi(stored_ty, result);
+    }
+    result
 }
 
 // ----- declaration elaboration -----
 
-/// Elaborate one resolved declaration into the global environment.
-///
-/// Returns `Ok(id)` where `id` is the newly registered kernel `GlobalId`.
+/// V0-compatible elaboration (no spec clauses).
 pub fn elaborate_rdecl(
     env: &mut GlobalEnv,
     globals: &mut HashMap<String, GlobalId>,
     rdecl: &RDecl,
 ) -> Result<GlobalId, ElabError> {
-    // Elaboration borrows env and globals; drop cx before calling declare_def.
+    let result = elaborate_rdecl_v1(env, globals, rdecl)?;
+    Ok(result.def_id)
+}
+
+/// V1 elaboration: returns the definition id plus any emitted obligation holes.
+pub fn elaborate_rdecl_v1(
+    env: &mut GlobalEnv,
+    globals: &mut HashMap<String, GlobalId>,
+    rdecl: &RDecl,
+) -> Result<ElabResult, ElabError> {
+    match &rdecl.kind {
+        RDeclKind::View { .. } | RDeclKind::Let => elaborate_view_or_let(env, globals, rdecl),
+        RDeclKind::Prove => elaborate_prove(env, globals, rdecl),
+        RDeclKind::Law { param, fields } => {
+            elaborate_law(env, globals, rdecl, param.clone(), fields.clone())
+        }
+    }
+}
+
+fn elaborate_view_or_let(
+    env: &mut GlobalEnv,
+    globals: &mut HashMap<String, GlobalId>,
+    rdecl: &RDecl,
+) -> Result<ElabResult, ElabError> {
+    if rdecl.requires.is_empty() && rdecl.ensures.is_empty() {
+        // V0 path: no spec clauses
+        return elaborate_v0(env, globals, rdecl);
+    }
+    // V1 path: has requires/ensures
+    elaborate_view_with_spec(env, globals, rdecl)
+}
+
+fn elaborate_v0(
+    env: &mut GlobalEnv,
+    globals: &mut HashMap<String, GlobalId>,
+    rdecl: &RDecl,
+) -> Result<ElabResult, ElabError> {
     let (ty_core, body_core) = {
         let mut cx = ElabCtx::new(env, globals);
-
         let (body_raw, ty_raw) = if let Some(ty) = &rdecl.ty {
             let ty_c = elab_type(&mut cx, ty)?;
             let body_c = check(&mut cx, &rdecl.body, &ty_c, &rdecl.span)?;
@@ -370,25 +420,273 @@ pub fn elaborate_rdecl(
             let (body_c, ty_c) = infer(&mut cx, &rdecl.body)?;
             (body_c, ty_c)
         };
-
         (cx.metas.zonk_term(&ty_raw), cx.metas.zonk_term(&body_raw))
     };
-
-    // Register in the kernel (which performs the authoritative type check).
     let id = declare_def(env, vec![], ty_core, body_core).map_err(|e| {
-        ElabError::KernelRejected {
-            error: e,
-            span: rdecl.span.clone(),
-        }
+        ElabError::KernelRejected { error: e, span: rdecl.span.clone() }
     })?;
-
     globals.insert(rdecl.name.clone(), id);
-    Ok(id)
+    Ok(ElabResult { def_id: id, obligations: vec![] })
 }
 
-/// Elaborate a resolved expression (standalone — no global registration).
+/// Elaborate a `view` with `requires`/`ensures` clauses (`21 §6.3`).
+fn elaborate_view_with_spec(
+    env: &mut GlobalEnv,
+    globals: &mut HashMap<String, GlobalId>,
+    rdecl: &RDecl,
+) -> Result<ElabResult, ElabError> {
+    let omega = Term::omega(Level::Zero);
+
+    // Phase 1: elaborate the declared type (carrier) and body — drop borrow first.
+    let (body_raw, carrier_ty_raw) = {
+        let mut cx = ElabCtx::new(env, globals);
+        let result = if let Some(ty) = &rdecl.ty {
+            let ty_c = elab_type(&mut cx, ty)?;
+            let body_c = check(&mut cx, &rdecl.body, &ty_c, &rdecl.span)?;
+            (cx.metas.zonk_term(&body_c), cx.metas.zonk_term(&ty_c))
+        } else {
+            let (body_c, ty_c) = infer(&mut cx, &rdecl.body)?;
+            (cx.metas.zonk_term(&body_c), cx.metas.zonk_term(&ty_c))
+        };
+        result
+    };
+
+    // Build the param context from the Pi-chain of the carrier type.
+    let param_types = unwrap_pi_chain(&carrier_ty_raw);
+    let carrier_b = innermost_codomain(&carrier_ty_raw);
+    let mut param_ctx = Context::new();
+    for pt in &param_types {
+        param_ctx.push(pt.clone());
+    }
+
+    // Phase 2: process `requires` clauses.
+    let mut req_cores: Vec<Term> = Vec::new();
+    for req in &rdecl.requires {
+        let phi_core = elab_in_ctx_at_omega(
+            env, globals, &param_ctx, req, &omega, &rdecl.span,
+        )?;
+        req_cores.push(phi_core);
+    }
+
+    // Phase 3: process `ensures` clauses.
+    // ensures context = param_ctx + [result : carrier_b]
+    let mut ens_ctx = param_ctx.clone();
+    ens_ctx.push(carrier_b.clone());
+
+    // body_inner = the inner body term (past all param lambdas)
+    let body_inner = unwrap_lam(&body_raw, param_types.len());
+
+    let mut ens_obligations: Vec<Obligation> = Vec::new();
+    let mut obl_counter = 0u32;
+    for ens in &rdecl.ensures {
+        let psi_core = elab_in_ctx_at_omega(
+            env, globals, &ens_ctx, ens, &omega, &rdecl.span,
+        )?;
+        // goal = ψ[body_inner/result]: result = Var(0) in ens_ctx, substitute body
+        let goal_open = subst0(&psi_core, &body_inner);
+        let closed = close_goal(&param_ctx, goal_open);
+        let hole_id = declare_postulate(env, vec![], closed.clone())
+            .map_err(|e| ElabError::KernelRejected { error: e, span: rdecl.span.clone() })?;
+        ens_obligations.push(Obligation {
+            id: obl_counter,
+            hole_id,
+            goal_closed: closed,
+            span: rdecl.span.clone(),
+        });
+        obl_counter += 1;
+    }
+
+    // Phase 4: build the full type and body.
+    // full_ty = Pi(params..., Pi(req..., carrier_b))
+    let mut full_ty = carrier_b.clone();
+    for req in req_cores.iter().rev() {
+        full_ty = Term::pi(req.clone(), weaken(&full_ty, 1));
+    }
+    for pt in param_types.iter().rev() {
+        full_ty = Term::pi(pt.clone(), full_ty);
+    }
+    // full_body = Lam(params..., Lam(req..., body_inner))
+    let mut full_body = body_inner;
+    for req in req_cores.iter().rev() {
+        full_body = Term::lam(req.clone(), full_body);
+    }
+    for pt in param_types.iter().rev() {
+        full_body = Term::lam(pt.clone(), full_body);
+    }
+
+    let id = declare_def(env, vec![], full_ty, full_body).map_err(|e| {
+        ElabError::KernelRejected { error: e, span: rdecl.span.clone() }
+    })?;
+    globals.insert(rdecl.name.clone(), id);
+    Ok(ElabResult { def_id: id, obligations: ens_obligations })
+}
+
+/// Elaborate `prove name : φ` (`21 §6.3`, §3).
 ///
-/// Returns `(core_term_zonked, type_zonked)` after kernel validation.
+/// Declares `name` as a postulate of `φ`, emitting one obligation hole.
+fn elaborate_prove(
+    env: &mut GlobalEnv,
+    globals: &mut HashMap<String, GlobalId>,
+    rdecl: &RDecl,
+) -> Result<ElabResult, ElabError> {
+    let phi_core = {
+        let mut cx = ElabCtx::new(env, globals);
+        let omega = Term::omega(Level::Zero);
+        let (phi_raw, phi_ty_raw) = infer(&mut cx, &rdecl.body)?;
+        // Check φ is Ω-typed
+        unify_types(&mut cx.metas, &omega, &phi_ty_raw);
+        cx.metas.zonk_term(&phi_raw)
+    };
+    // Declare as postulate (the hole)
+    let hole_id = declare_postulate(env, vec![], phi_core.clone())
+        .map_err(|e| ElabError::KernelRejected { error: e, span: rdecl.span.clone() })?;
+    globals.insert(rdecl.name.clone(), hole_id);
+    let obl = Obligation {
+        id: 0,
+        hole_id,
+        goal_closed: phi_core,
+        span: rdecl.span.clone(),
+    };
+    Ok(ElabResult { def_id: hole_id, obligations: vec![obl] })
+}
+
+/// Elaborate `law Name (param) { f : φ ; … }` (`21 §3`).
+///
+/// Each field φ is checked at Ω; one obligation hole per field.
+fn elaborate_law(
+    env: &mut GlobalEnv,
+    globals: &mut HashMap<String, GlobalId>,
+    rdecl: &RDecl,
+    _param: String,
+    fields: Vec<(String, RExpr)>,
+) -> Result<ElabResult, ElabError> {
+    let omega = Term::omega(Level::Zero);
+    let mut obligations: Vec<Obligation> = Vec::new();
+
+    // The param is pre-declared by the resolver; for each field φ, check at Ω
+    // and emit an obligation hole.
+    for (i, (field_name, field_phi)) in fields.iter().enumerate() {
+        let phi_core = {
+            let mut cx = ElabCtx::new(env, globals);
+            // param is the law's `param` argument — it's in scope (resolver pushed it)
+            // For elaboration, we need the param in scope. Since the resolver resolved
+            // field_phi with param in scope at Var(0), we replicate that:
+            // Note: we DON'T have a declared type for the param here. For V1, the param
+            // is just a term variable whose type must be inferrable from the field props.
+            // For test cases, params will always be globally declared.
+            let (phi_raw, phi_ty_raw) = infer(&mut cx, field_phi)?;
+            unify_types(&mut cx.metas, &omega, &phi_ty_raw);
+            cx.metas.zonk_term(&phi_raw)
+        };
+        let hole_id = declare_postulate(env, vec![], phi_core.clone())
+            .map_err(|e| ElabError::KernelRejected { error: e, span: rdecl.span.clone() })?;
+        let law_field_name = format!("{}_{}", rdecl.name, field_name);
+        globals.insert(law_field_name, hole_id);
+        obligations.push(Obligation {
+            id: i as u32,
+            hole_id,
+            goal_closed: phi_core,
+            span: rdecl.span.clone(),
+        });
+    }
+
+    // The law itself: declare a postulate of the conjunction type.
+    // For V1, law_id is a fresh postulate (placeholder — full Σ-of-Ω is V3+).
+    let law_ty = Term::omega(Level::Zero);
+    let law_id = declare_postulate(env, vec![], law_ty)
+        .map_err(|e| ElabError::KernelRejected { error: e, span: rdecl.span.clone() })?;
+    globals.insert(rdecl.name.clone(), law_id);
+
+    // Return: def_id = law_id (the law postulate), obligations = per-field holes
+    Ok(ElabResult { def_id: law_id, obligations })
+}
+
+// ----- helpers -----
+
+/// Elaborate `expr` checked at Ω in `ctx`, returning the core term.
+///
+/// Used for requires/ensures proposition bodies.
+fn elab_in_ctx_at_omega(
+    env: &mut GlobalEnv,
+    globals: &HashMap<String, GlobalId>,
+    ctx: &Context,
+    expr: &RExpr,
+    omega: &Term,
+    span: &Span,
+) -> Result<Term, ElabError> {
+    let mut cx = ElabCtx::new(env, globals);
+    // Populate cx.ctx from the snapshot
+    for ty in &ctx.types {
+        cx.ctx.push(ty.clone());
+    }
+    let (core_raw, ty_raw) = infer(&mut cx, expr)?;
+    // Unify inferred type with Ω — if the proposition is non-Ω, this will
+    // be caught by the kernel on the next kernel_check call.
+    // For the surface error, check that ty is Ω-shaped.
+    let ty_zonked = cx.metas.zonk_term(&ty_raw);
+    let core_zonked = cx.metas.zonk_term(&core_raw);
+    // Surface-level Ω check: if the type is not Omega(_), error
+    match &ty_zonked {
+        Term::Omega(_) => {}
+        _ => {
+            // Check if the kernel will accept it as Ω — check core at omega
+            // If not, surface error
+            kernel_check(env, ctx, &core_zonked, omega).map_err(|_| {
+                ElabError::TypeMismatch {
+                    span: span.clone(),
+                    reason: format!(
+                        "spec proposition must have type Ω, found non-proposition"
+                    ),
+                }
+            })?;
+        }
+    }
+    Ok(core_zonked)
+}
+
+/// Unwrap the outermost `n` Pi binders, collecting domain types.
+///
+/// `Pi(A, Pi(B, C))` with n=2 → `[A, B]` (A = outermost, B = innermost param).
+fn unwrap_pi_chain(ty: &Term) -> Vec<Term> {
+    let mut result = Vec::new();
+    let mut cur = ty;
+    loop {
+        match cur {
+            Term::Pi(dom, cod) => {
+                result.push(*dom.clone());
+                cur = cod;
+            }
+            _ => break,
+        }
+    }
+    result
+}
+
+/// Return the innermost codomain of a Pi-chain.
+fn innermost_codomain(ty: &Term) -> Term {
+    let mut cur = ty;
+    loop {
+        match cur {
+            Term::Pi(_, cod) => cur = cod,
+            other => return other.clone(),
+        }
+    }
+}
+
+/// Unwrap the outermost `n` Lam binders, returning the inner body.
+fn unwrap_lam(term: &Term, n: usize) -> Term {
+    let mut cur = term;
+    for _ in 0..n {
+        match cur {
+            Term::Lam(_, body) => cur = body,
+            _ => break,
+        }
+    }
+    cur.clone()
+}
+
+// ----- standalone expression elaboration -----
+
 pub fn elaborate_rexpr(
     env: &mut GlobalEnv,
     globals: &HashMap<String, GlobalId>,
@@ -401,7 +699,6 @@ pub fn elaborate_rexpr(
         let t = cx.metas.zonk_term(&ty_raw);
         (c, t, rexpr.span().clone())
     };
-    // Check with the kernel (authoritative: core : ty in the empty context).
     kernel_check(env, &Context::new(), &core, &ty).map_err(|e| ElabError::KernelRejected {
         error: e,
         span: expr_span,

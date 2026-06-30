@@ -274,7 +274,10 @@ fn shadow_outer_not_captured() {
         name: "f_buggy".into(),
         ty: Some(full_ty),
         body: bug_body,
+        requires: vec![],
+        ensures: vec![],
         span: sp,
+        kind: ken_elaborator::resolve::RDeclKind::Let,
     };
 
     let mut env2 = mk_env();

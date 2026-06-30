@@ -1,18 +1,27 @@
-//! V0 minimal lexer (`31 §8`).
+//! V0/V1 lexer (`31 §8`, `21 §6.1`).
 //!
-//! Recognises only the token subset for the G1 slice: keywords `view let in
-//! Type`, punctuation `( ) : = . -> \`, case-distinguished identifiers, and
-//! level digits. Whitespace and `-- …` line comments are skipped.
+//! Recognises the token subset for G1 (V0) plus V1 spec-annotation keywords:
+//! `requires`, `ensures`, `prove`, `law`, `old`, `space`, and punctuation
+//! `{ } |`. Whitespace and `-- …` line comments are skipped.
 
 use crate::error::{ElabError, Span};
 
-/// A V0 token.
+/// A V0/V1 token.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Token {
+    // V0 keywords
     KwView,
     KwLet,
     KwIn,
     KwType,
+    // V1 keywords
+    KwRequires,
+    KwEnsures,
+    KwProve,
+    KwLaw,
+    KwOld,
+    KwSpace,
+    // V0 punctuation
     LParen,
     RParen,
     Colon,
@@ -20,6 +29,11 @@ pub enum Token {
     Dot,
     Arrow,
     Lambda,
+    Semicolon,
+    // V1 punctuation
+    LBrace,
+    RBrace,
+    Pipe,
     Ident(String),   // lowercase-initial term variable
     ConId(String),   // uppercase-initial base type / constructor
     Nat(u32),        // level digit
@@ -84,6 +98,22 @@ impl<'s> Lexer<'s> {
                 self.advance();
                 return Ok((Token::RParen, Span::new(start, self.pos)));
             }
+            '{' => {
+                self.advance();
+                return Ok((Token::LBrace, Span::new(start, self.pos)));
+            }
+            '}' => {
+                self.advance();
+                return Ok((Token::RBrace, Span::new(start, self.pos)));
+            }
+            '|' => {
+                self.advance();
+                return Ok((Token::Pipe, Span::new(start, self.pos)));
+            }
+            ';' => {
+                self.advance();
+                return Ok((Token::Semicolon, Span::new(start, self.pos)));
+            }
             ':' => {
                 self.advance();
                 return Ok((Token::Colon, Span::new(start, self.pos)));
@@ -142,6 +172,12 @@ impl<'s> Lexer<'s> {
                 "let" => Token::KwLet,
                 "in" => Token::KwIn,
                 "Type" => Token::KwType,
+                "requires" => Token::KwRequires,
+                "ensures" => Token::KwEnsures,
+                "prove" => Token::KwProve,
+                "law" => Token::KwLaw,
+                "old" => Token::KwOld,
+                "space" => Token::KwSpace,
                 _ => {
                     let first = s.chars().next().unwrap();
                     if first.is_uppercase() {

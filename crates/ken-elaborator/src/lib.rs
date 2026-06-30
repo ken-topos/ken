@@ -1,8 +1,10 @@
-//! `ken-elaborator` — V0 minimal surface elaborator (`docs/program/wp/V0-elaborator.md`).
+//! `ken-elaborator` — V0/V1 surface elaborator (`docs/program/wp/V0-elaborator.md`,
+//! `spec/20-verification/21-spec-syntax.md`).
 //!
 //! Pipeline: `lex → parse → resolve → elaborate → kernel-check`.
 //!
-//! Clean-room: built from `/spec` and `/conformance` only. Never reads `local/refs/`.
+//! V1 extensions: requires/ensures, obligation holes, honesty guard.
+//! Clean-room: built from `/spec` and `/conformance` only.
 
 mod ast;
 pub mod elab;
@@ -14,24 +16,21 @@ pub mod resolve;
 
 use std::collections::HashMap;
 
-use ken_kernel::{declare_postulate, GlobalEnv, GlobalId, Level, Term};
+use ken_kernel::{
+    check as kernel_check, declare_postulate, Context, GlobalEnv, GlobalId, Level, Term,
+};
 
-pub use elab::{elaborate_rdecl, elaborate_rexpr};
+pub use elab::{elaborate_rdecl, elaborate_rexpr, ElabResult, Obligation};
 pub use error::{ElabError, Span};
-pub use resolve::{RExpr, RType};
+pub use resolve::{RDecl, RDeclKind, RExpr, RType};
 
 /// The surface-level elaboration environment.
-///
-/// Wraps the kernel `GlobalEnv` and a name→id map for top-level declarations.
-/// Call `ElabEnv::new()` to get a pre-populated environment with the V0 base
-/// types (`Nat : Type 0`, `Bool : Type 0`) that the conformance suite expects.
 pub struct ElabEnv {
     pub env: GlobalEnv,
     pub globals: HashMap<String, GlobalId>,
 }
 
 impl ElabEnv {
-    /// Create an environment with no pre-declared types.
     pub fn empty() -> Self {
         Self {
             env: GlobalEnv::new(),
@@ -39,8 +38,7 @@ impl ElabEnv {
         }
     }
 
-    /// Create an environment with `Nat : Type 0` and `Bool : Type 0`
-    /// pre-declared as postulates (required by several conformance cases).
+    /// Create an environment with `Nat : Type 0` and `Bool : Type 0`.
     pub fn new() -> Result<Self, ElabError> {
         let mut this = Self::empty();
         let nat_id = declare_postulate(&mut this.env, vec![], Term::ty(Level::Zero))
@@ -52,10 +50,24 @@ impl ElabEnv {
         Ok(this)
     }
 
-    /// Elaborate and kernel-check a single top-level declaration from source.
+    /// Declare a postulate `name : ty_term` in the environment.
     ///
-    /// On success the declaration is registered in `self.env` and can be
-    /// referenced by subsequent calls.
+    /// Used by tests to pre-declare types, predicates, and propositions needed
+    /// for conformance test setup.
+    pub fn declare_postulate_raw(
+        &mut self,
+        name: &str,
+        ty: Term,
+    ) -> Result<GlobalId, ElabError> {
+        let id = declare_postulate(&mut self.env, vec![], ty)
+            .map_err(|e| ElabError::Internal(format!("declare_postulate failed: {}", e)))?;
+        self.globals.insert(name.to_string(), id);
+        Ok(id)
+    }
+
+    /// Elaborate a single V0/V1 declaration from source.
+    ///
+    /// On success the declaration is registered in `self.env`.
     pub fn elaborate_decl(&mut self, src: &str) -> Result<GlobalId, ElabError> {
         let decls = parser::parse_decls(src)?;
         if decls.len() != 1 {
@@ -68,9 +80,40 @@ impl ElabEnv {
         elaborate_rdecl(&mut self.env, &mut self.globals, &rdecl)
     }
 
-    /// Elaborate and kernel-check a standalone expression from source.
+    /// Elaborate a V1 declaration, returning obligations alongside the id.
+    pub fn elaborate_decl_v1(&mut self, src: &str) -> Result<ElabResult, ElabError> {
+        let decls = parser::parse_decls(src)?;
+        if decls.len() != 1 {
+            return Err(ElabError::ParseError {
+                msg: format!("expected exactly one declaration, found {}", decls.len()),
+                span: Span::zero(),
+            });
+        }
+        let rdecl = resolve::resolve_decl(&decls[0])?;
+        elab::elaborate_rdecl_v1(&mut self.env, &mut self.globals, &rdecl)
+    }
+
+    /// Try to discharge an obligation hole with a certificate term.
     ///
-    /// Returns `(core_term, inferred_type)` — fully explicit, no metas.
+    /// `cert` is a CLOSED term (no free variables) of type `closed_goal`.
+    /// If `check(env, [], cert, closed_goal)` succeeds, the postulate is
+    /// upgraded to a transparent definition (`trusted_base()` membership removed).
+    /// Returns `true` if the discharge succeeded.
+    pub fn discharge_hole(&mut self, obl: &Obligation, cert: Term) -> bool {
+        // Kernel-check the certificate against the closed goal
+        if kernel_check(&self.env, &Context::new(), &cert, &obl.goal_closed).is_err() {
+            return false;
+        }
+        // Retire the hole postulate by upgrading to transparent
+        self.env.upgrade_to_transparent(obl.hole_id, cert)
+    }
+
+    /// Returns `true` if `hole_id` is still in `trusted_base()` (status = `unknown`).
+    pub fn is_open_hole(&self, hole_id: GlobalId) -> bool {
+        self.env.trusted_base().contains(&hole_id)
+    }
+
+    /// Elaborate a standalone expression from source.
     pub fn elaborate_expr(&mut self, src: &str) -> Result<(Term, Term), ElabError> {
         let expr = parser::parse_expr(src)?;
         let rexpr = resolve::resolve_expr_standalone(&expr)?;
@@ -88,7 +131,6 @@ impl Default for ElabEnv {
     }
 }
 
-/// Stub API from the original scaffold.
 pub fn kernel_version() -> &'static str {
     ken_kernel::version()
 }
