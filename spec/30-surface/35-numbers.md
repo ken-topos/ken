@@ -168,8 +168,13 @@ kernel re-checks.
 **total and safe**, no residual runtime cost. Undischarged (an open hole) ⇒ a
 **marked partial point** that degrades to a runtime check: at the unguarded use
 it panics / yields `unknown` (`43 §2` case 2, `24 §2` — the hole is a listed
-postulate). "Checked arithmetic" is therefore **subsumed** as the runtime face
-of an *undischarged* obligation, not a separate mode the user selects.
+postulate). This degrade — a **fault/`unknown`** at the unguarded site — is
+**distinct from the `checked` op class** (`checked_add : … → Option T`, the
+table below): the degrade is the *involuntary* runtime face of an
+**undischarged** obligation, whereas `checked_add` is the *explicit, total* op a
+user names to obtain an `Option` (it never faults). The colloquial "checked
+arithmetic" is therefore **subsumed** as the former — not a separate mode the
+user selects.
 
 **The op-class dispatch is sealed — no silent-wrap default.** The arithmetic
 surface over a fixed-width type partitions into exactly **four explicit op
@@ -227,7 +232,7 @@ fixed elaborator rule — *not* instance search:
 
 ```
 view f (x : Int64) = x + 1      -- `1` checks against the expected Int64; no default
-let big = 100000000000000000000 -- Int (arbitrary precision); not f64-rounded
+let big = 100000000000000000001 -- Int (arbitrary precision); not f64-rounded
 let pi  = 3.14159               -- Float (has a `.`, no `d`)
 let amt = 19.99d                -- Decimal
 ```
@@ -340,7 +345,9 @@ laws as prelude propositions (§6.2). **No new kernel rules** (§6.1).
 discipline):**
 
 - **AC1 (Int exactness)** Integer arithmetic above 2⁵³ is **exact** —
-  `100000000000000000000 : Int` is an exact bignum, not `f64`-rounded. A
+  `100000000000000000001 : Int` is an exact bignum, not `f64`-rounded (10²⁰+1
+  is **off the `f64` grid** — the ULP at 10²⁰ is 2¹⁴, so an `f64` rounds it
+  back to 10²⁰; the exact `Int` does not). A
   **structural value assertion** (the stored value), not a type check (§2.1).
 - **AC2 (literal types distinct)** `2 : Int`, `2.0 : Float`, `2.0d : Decimal`
   are **distinct types**; a program relying on `2 ≡ 2.0` is **rejected**

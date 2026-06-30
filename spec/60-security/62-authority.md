@@ -421,7 +421,7 @@ formation (`36 §7.4`, `61 §9`):
 | Construct | Level | Rule |
 |---|---|---|
 | `Cap E` (capability token) | `Type ℓ_op` | a value type (`36 §2.5`); opaque (§2.2), no new former |
-| `Authority` (carrier + ops record) | `Type (suc ℓ)` | record / Σ-Form (`13 §1`), laws at `Ω` — a `61 §2.1` lattice value |
+| `Authority` (carrier + ops record) | `Type (suc ℓ)` | record / Σ-Form (`13 §2`), laws at `Ω` — a `61 §2.1` lattice value |
 | `authority : Cap E → Authority` | ordinary Π | a projection; no new rule |
 | `{ c' : Cap E \| authority c' ⊑ authority c ⊓ w }` | `level(Cap E) = ℓ_op` | refinement = carrier + obligation (`21 §2`, `34 §5`); **predicative** (`12 §2`), **non-cumulative** (`12 §3`), same level as the carrier — adds no Σ over `Ω` |
 | `authority c' ⊑ authority c ⊓ w` | `Ω` | an ordinary `Ω`-valued obligation (`22 §1`, `16 §1`) |

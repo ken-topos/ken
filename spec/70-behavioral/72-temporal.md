@@ -88,6 +88,18 @@ Whatever the final set: it is **inert data** to the kernel — `Temporal` is a
 normal inductive type (`../10-kernel/14`), elimination is ordinary `elim`, and
 nothing about it touches conversion or the judgmental structure.
 
+**Two sibling `compile` projections (disambiguation).** `Temporal Σ` is the
+shared source of **two distinct functions**, both conventionally written
+`compile` — *not* one function with two directions:
+
+- `compile : Temporal Σ → WardFormula` — the **property translation** for static
+  `Ward` model-checking, proved semantics-preserving once (`71 §5`, B1/B2).
+- `compile : Temporal Σ → Monitor` — the **runtime monitor synthesis** (LTL →
+  Büchi, `73 §2.4`, B3).
+
+They share only the `Temporal` source and the alphabet `Σ`; their codomains and
+purposes differ. A faithfulness claim names **which** projection it is over.
+
 ## 4. Surface notation (sketch)
 
 A `temporal { … }` block (or a `delegated`/`assume` clause carrying a temporal

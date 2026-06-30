@@ -333,7 +333,9 @@ model-checker input, not Ken's datatype, so a translation `τ` mediates; an
 *unfaithful* `τ` (a green check on a spec that doesn't match the code) is worse
 than none. `τ` splits:
 
-- **Property translation** `compile : Temporal Σ → WardFormula` (`72 §3`). Both
+- **Property translation** `compile : Temporal Σ → WardFormula` (`72 §3`; **one
+  of the two sibling `compile` projections** — distinct from `73 §2.4`'s `→
+  Monitor` runtime synthesis, not a second "direction" of one function). Both
   sides are syntax over the same alphabet `Σ`, so Ken proves `compile`
   **semantics-preserving once, at the compiler level** — `⟦φ⟧ = ⟦compile φ⟧`
   over `Σ`-traces, an ordinary structural induction (the "reason *about*

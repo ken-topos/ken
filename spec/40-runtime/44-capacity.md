@@ -194,12 +194,13 @@ CapacityExhausted` — there is **no "drop" arm** by construction.
    *catchable*; hardware OOM is *loud-fatal* — both satisfy loud-never-silent
    (`OQ-5`); the honest distinction is catchable-vs-fatal, not loud-vs-silent.
 
-**Placement in the runtime-fault taxonomy (`43 §2`).** `CapacityExhausted` is a
-**loud resource-limit fault** — a class **distinct** from the
-*obligation-generating* partial primitives (`43 §2.2`: div-by-zero, fixed-width
-overflow). Ken does **not** generate a static obligation "this program never
-exhausts the store" (unprovable in general; the stance is
-**detect-and-fail-loud**, not prove-absence). It is always loud, never silent,
+**Registered in the runtime-fault taxonomy (`43 §2`, 5th class).**
+`CapacityExhausted` is a **loud resource-limit fault** — a class **distinct**
+from the *obligation-generating* partial primitives (`43 §2` case 2:
+div-by-zero, fixed-width overflow). Ken does **not** generate a static
+obligation "this program never exhausts the store" (unprovable in general; the
+stance is **detect-and-fail-loud**, not prove-absence). It is always loud,
+never silent,
 and surfaced at the `space` boundary — honesty-about-the-boundary (`43 §3`), not
 a pre-discharged proof obligation.
 
@@ -227,9 +228,14 @@ plus a `distinct_count()`:
 | `arena_bytes` | total arena bytes (sum of page lengths) |
 | `index_buckets`, `index_load` | index table size and occupancy fraction |
 
-- **Invariant** (within a `space`, between resets): `total_interns = total_slots
-  + dedup_hits`, and `distinct_count() = total_slots`. A bound of *K* admits *K*
-  **distinct** contents regardless of occurrence count (AC1).
+- **Invariant** (within a `space`, between resets, **absent
+  `CapacityExhausted`**): `total_interns = total_slots + dedup_hits`, and
+  `distinct_count() = total_slots`. A bound of *K* admits *K* **distinct**
+  contents regardless of occurrence count (AC1). **Carve-out (landed):** a
+  **refused** `intern` (the at-limit `CapacityExhausted`, §2) increments
+  `total_interns` but adds **no** slot and **no** dedup hit, so under refusals
+  `total_interns = total_slots + dedup_hits + refused` — the bare equality holds
+  only on the no-refusal path.
 - **Reset asymmetry (landed — pin it).** A `space` reset (§3) sets `total_slots
   → 0` (occupancy is now zero) but **`total_interns`/`dedup_hits` persist** —
   they are **lifetime witness** counters (`41 §7`), not occupancy. A consumer
