@@ -72,6 +72,20 @@ the code, and that independence is the point. Read `../../COORDINATION.md` and
      (the core/AST, resolved de Bruijn indices, the obligation/cert shape) — the
      same "assert the structural output, at non-degenerate endpoints" rule the
      trust-root uses, here for any producer whose output a *later* checker accepts.
+   - **An untrusted layer's *positive verdict* must reach its constructor through
+     exactly ONE grep-able kernel-check call — verify the single path (promoted
+     V3-build; pairs with assert-output).** When a layer is believed only because
+     the kernel re-checks it ("distrust the layer, trust the kernel"), the
+     soundness rides on there being **no path to the positive constructor that
+     bypasses the check**. So `grep` the positive constructor (V3: `Proved { cert`)
+     and confirm **exactly one** site reaches it, **through** the kernel-check call
+     (`check(env, [], cert, goal)` in `attempt_with_cert`); every other path must
+     route to the honest negative (`emit_unknown_hole`). A second `Proved` site, or
+     one reachable without the check, is an unsound-accept hole the kernel can't
+     save you from — because the layer never handed it a cert to reject. This is
+     V1's `trusted_base()` honesty guard generalized to **any** verdict-bearing
+     layer (prover/elaborator/extractor); QA + the Architect verify the single
+     kernel-gated path is the *sole* constructor of the positive verdict.
    - **A "by-construction" guarantee is only as strong as its weakest *input*
      boundary — trace it one layer out (promoted ITree-lowering).** When the
      implementer claims "omission is structurally impossible" / "this can't be
