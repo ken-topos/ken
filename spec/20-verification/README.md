@@ -14,10 +14,9 @@ proofs and to *explain* failures, never to be believed on its own authority.
 
 ## 1. The loop
 
-```
-  write ──► spec ──► verify ──► repair ──┐
-    ▲                                    │
-    └────────────────────────────────────┘   (agent-driven; strategy G7)
+```mermaid
+flowchart LR
+    write --> spec --> verify --> repair --> write
 ```
 
 A definition carries a **specification** (§`21`). The toolchain **generates
@@ -39,16 +38,18 @@ proofs are small and numerous, not large and few.)
 
 ## 2. Pipeline
 
-```
- spec (21)         obligations (22)     classify (23)     backends (23)
- requires/ensures  VC extraction,       D decidable  ───► Z3 direct
- refinement types  body-as-motive  ───► FO first-ord ───► Kripke embed → Z3
- prove / law       obligations : Ω      HO higher-ord ──► native / tactic
-                                              │
-                                        certificate ───► KERNEL re-check (18 §4)
-                                       pass → proved
-                                       fail → diagnostics (24) → protocol (25)
-                                               countermodel · hole · region
+```mermaid
+flowchart TD
+    re["requires / ensures"] --> vc["VC extraction"] --> dd["D decidable"] --> z3["Z3 direct"]
+    rt["refinement types"] --> bam["body-as-motive"] --> fo["FO first-ord"] --> kr["Kripke embed to Z3"]
+    pl["prove / law"] --> oobl["obligations : Omega"] --> ho["HO higher-ord"] --> nt["native / tactic"]
+    z3 --> cert["certificate"]
+    kr --> cert
+    nt --> cert
+    cert -->|"KERNEL re-check (18 Sec 4)"| krnl["re-check"]
+    krnl -->|pass| proved["proved"]
+    krnl -->|fail| dg["diagnostics (24)"]
+    dg --> prot["protocol (25)<br/>countermodel / hole / region"]
 ```
 
 ## 3. Two non-negotiable principles

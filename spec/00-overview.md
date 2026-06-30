@@ -70,25 +70,17 @@ The verdict is actionable without reading the kernel. This loop — **write → 
 
 ## 3. Shape of the system
 
-```
-  surface syntax
-        │  parse
-        ▼
-   surface AST ──elaborate──►  core terms  ──check──►  ┌───────────────┐
-        │         (V0)          (de Bruijn)            │ TRUSTED KERNEL │
-        │                                              │  (small, Rust, │
-        │                                              │   permanent)   │
-        │  obligation gen (V2)                         │  type theory + │
-        ▼                                              │  conversion +  │
-   proof obligations ──classify──► prover (V3)         │  proof check   │
-        │                            │ Z3 / Kripke      └───────────────┘
-        │                            ▼                         ▲
-        │                       certificate ──re-check─────────┘
-        ▼
-   diagnostics (V4): countermodel · typed hole · three-region decomposition
-        │
-        ▼
-   interpreter (X1) — the reference operational semantics
+```mermaid
+flowchart TD
+    syntax["surface syntax"] -->|parse| sast["surface AST"]
+    sast -->|"elaborate (V0)"| core["core terms (de Bruijn)"]
+    core -->|check| kernel["TRUSTED KERNEL<br/>small, Rust, permanent<br/>type theory + conversion<br/>+ proof check"]
+    sast -->|"obligation gen (V2)"| obls["proof obligations"]
+    obls -->|classify| prover["prover (V3)<br/>Z3 / Kripke"]
+    prover --> cert["certificate"]
+    cert -->|re-check| kernel
+    obls --> diag["diagnostics (V4)<br/>countermodel<br/>typed hole<br/>three-region decomposition"]
+    diag --> interp["interpreter (X1)<br/>reference operational semantics"]
 ```
 
 Two invariants govern this shape:
