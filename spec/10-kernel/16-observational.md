@@ -20,6 +20,14 @@
 > respect schema) — derived from first principles, **not** (oracle). The
 > kernel's prior fallbacks were *stuck/reject* (sound but incomplete); these
 > rules make them reduce without weakening any guard.
+>
+> **§5.1 erratum (transport direction).** The quotient-respect schema's
+> transport `cast` is `cast (M [y]) (M [x]) (sym (cong M h')) (f y)` —
+> source `M [y]`, target `M [x]` (it carries `f y : M [y]` into `M [x]`,
+> the type the obligation `Eq (M [x]) (f x) …` requires). An earlier
+> revision had the source/target reversed; the prose intent ("transport
+> `f y` from `M [y]` to `M [x]`") was always correct. The direction is
+> only observable at a **dependent** motive (`M [x] ≢ M [y]`) — see §5.1.
 
 ## 1. The strict proposition universe Omega (SProp)
 
@@ -735,7 +743,7 @@ Set-quotients are **native** (not HITs):
     Gamma |- M : (z : A/R) -> Type k
     Gamma |- f : (x : A) -> M [x]
     Gamma |- r : (x y : A) -> R x y -> Eq (M [x]) (f x)
-                    (cast (M [x]) (M [y]) (cong M (R x y)) (f y))
+                    (cast (M [y]) (M [x]) (sym (cong M (R x y))) (f y))
     Gamma |- q : A / R
     ─────────────────────────────────────────────────────────  (Quot-Elim)
     Gamma |- elim_/ M f r q : M q
@@ -786,10 +794,14 @@ S`, where `S` is `whnf`'d:
 
   ```
   r : (x y : A) → (h : R x y)
-        → Eq (M [x]) (f x) (cast (M [x]) (M [y]) (cong M h') (f y))
+        → Eq (M [x]) (f x) (cast (M [y]) (M [x]) (sym (cong M h')) (f y))
     where h' : Eq (A/R) [x] [y]   is h transported through the quotient-Eq
           reduction Eq (A/R) [x] [y] ⇝ R x y (§2.2), and
           cong M h' : Eq Type (M [x]) (M [y])   (a proof in Omega, §4)
+          sym (cong M h') : Eq Type (M [y]) (M [x])   — the transport
+              direction: with the kernel convention cast A B e (a:A) : B
+              (§3.1), the value f y : M [y] is the source and the result
+              lands in M [x] (the type the enclosing Eq (M [x]) … requires)
   ```
 
   i.e. `r` must prove that `f x` equals — at the type `M [x]`, after
@@ -818,6 +830,24 @@ verdict flips: a *respecting* `f`, e.g. `λ_. true`, supplies `r : Eq Bool
 true true ⇝ Top` and is **accepted**). A kernel that raw-well-formed `r`
 instead of checking the schema would accept the observing `f` and reduce
 `elim_/ … [true]` to a closed proof of `Empty`.
+
+**The transport direction is load-bearing — verify it at a *dependent*
+motive.** The probe above uses a **constant** motive (`M := λ_. Bool`), so
+`M [x] ≡ M [y]` and the schema's `cast (M [y]) (M [x]) …` collapses by
+**regularity** (`cast B B refl a ⇝ a`, §3.2) *regardless of source/target
+order* — it confirms the respect *check fires* but cannot witness the
+**direction**. A conforming kernel MUST therefore also be exercised at a
+**dependent** motive where `M [x] ≢ M [y]` (only `[x] = [y]`
+*propositionally*, so the two motive instances are not definitionally
+equal): the **correct-direction** respect proof — written by the user as
+`cast (M [y]) (M [x]) (sym (cong M h')) (f y)` — must be **accepted**, and a
+**reversed** one (`cast (M [x]) (M [y]) (cong M h') (f y)`) must be
+**rejected** (it is ill-typed: it feeds `f y : M [y]` to a cast whose source
+is `M [x]`, and lands in `M [y]` where the enclosing `Eq (M [x]) …` requires
+`M [x]`). The verdict thus **flips on the transport direction itself** — the
+dimension a constant motive holds fixed. (Conformance:
+`conversion/quotient-respect-schema-dependent-motive`; this is the
+discriminating case the constant-motive probe structurally cannot be.)
 
 ## 6. Propositional truncation
 
@@ -997,7 +1027,7 @@ The soundness-critical, separately-tested behaviours:
 | C12 | `cast` at an inductive **index change** computes through (suc-injectivity decomposition + sub-cast) to the target-indexed constructor; a non-canonical/neutral index stays stuck | par. 3.2 "Index rewrite" | `observational/cast-inductive-index` |
 | C13 | `Eq` at an inductive with a **dependent telescope** decomposes with the inter-argument `cast`s (the mutual sibling of C12) | par. 2.2 | `observational/eq-inductive-dependent` |
 | C14 | `J` reduces at a **dependent (non-constant) motive** via `cast` on the endpoint types (bottoming through C12); stays stuck only where the inner `cast` stalls on an open index | par. 4.1 | `observational/j-dependent-motive` |
-| C15 | quotient elim into a **Type** target checks `r` against the `cong`/`cast` respect schema — a respecting `f` is **accepted**, a non-respecting `f` is **rejected** (closed-`Empty` guard); Ω targets stay respect-free | par. 5.1 | `conversion/quotient-respect-schema` |
+| C15 | quotient elim into a **Type** target checks `r` against the `cong`/`cast` respect schema — a respecting `f` is **accepted**, a non-respecting `f` is **rejected** (closed-`Empty` guard); the **transport direction** `cast (M [y]) (M [x]) (sym (cong M h'))` is exercised at a **dependent** motive (`M [x] ≢ M [y]`): correct-direction `r` accepted, reversed rejected; Ω targets stay respect-free | par. 5.1 | `conversion/quotient-respect-schema{,-dependent-motive}` |
 
 Conformance corpus: `../../conformance/kernel/observational/` and
 `../../conformance/kernel/conversion/`. C12–C15 are the **series-2**
