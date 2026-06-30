@@ -1,10 +1,10 @@
-//! Row algebra (`36 §2.3`) — K1-buildable set-level operations.
+//! Row algebra (`36 §2.3`) — set-level join and capability operations.
 //!
-//! The full `⊕` (coproduct of `Op`/`Resp` signatures into a combined `ITree`)
-//! is **K1.5-gated** — it requires `ITree` which the current kernel does not
-//! admit yet (`check_no_pi_bound_recursive`, §7.0). This module implements the
-//! **K1-buildable part**: the set-level row join `ρ1 ⊕ ρ2 = ρ1 ∪ ρ2` that the
-//! row-inference and escape-check passes need.
+//! **K1.5 gate lifted.** K1.5 merged at `f037451` — `ITree` is now admitted;
+//! the full `⊕` (coproduct of `Op`/`Resp` signatures into a combined `ITree`)
+//! is buildable. This module implements the **set-level** `ρ1 ⊕ ρ2 = ρ1 ∪ ρ2`
+//! used by row-inference and escape-check; the full container-level `⊕` (indexing
+//! injections into `⟦ρ⟧.Op`) is the downstream WP that consumes `itree.rs`.
 
 use super::row::{EffectName, EffectRow};
 

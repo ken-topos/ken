@@ -227,20 +227,14 @@ data ITree (E : Effect) (R : Type ℓ_R) : Type (max ℓ_R ℓ_op ℓ_resp) wher
   strictly positive: the recursive occurrence is the *codomain* of a function
   type, the `W`-style branching shape (`14 §2`; the positivity algorithm `14
   §8.2` accepts it — `D` under a `+`-codomain).
-- **Dependency — gated on `K1.5` (kernel admittance, not soundness).** That
-  `Vis` argument is a **Π-bound (W-style) recursive occurrence** (a function
-  *into* the recursive type), and the current kernel (`origin/main`) **defers
-  admitting it**: the admission check `check_no_pi_bound_recursive` rejects this
-  shape today, because generating `elim_ITree` with a **Π-abstracted induction
-  hypothesis** (`14 §3`) is a **K1.5** feature, not yet in K1. So `ITree` — and
-  with it `bind` (§2.2), the handlers (§5), the denotation (§2.4), and the
-  *realization* of the §3.1 contract — becomes admittable **once K1.5 lands**,
-  not on the current kernel. This is a **sequencing dependency, not a soundness
-  gap**: the positivity is genuine and `ITree` adds no trusted primitive. *(`14
-  §2`'s prose on `origin/main` still reads this shape as plainly "allowed",
-  diverging from the kernel that rejects it; that text is being reconciled to
-  "deferred to K1.5" — Architect-flagged, §7.0. The L5 citation here points at
-  the shape **K1.5 will admit**, robust either way.)*
+- **Admitted as of K1.5 (`f037451`).** The `Vis` argument is a **Π-bound
+  (W-style) recursive occurrence**; `K1.5` (`f037451`, merged) lifted the
+  `check_no_pi_bound_recursive` gate and generates `elim_ITree` with a
+  **Π-abstracted induction hypothesis** (`14 §3`, AC5 in
+  `kernel/tests/k1p5_wstyle.rs`). `ITree`, `bind` (§2.2), the handlers (§5),
+  the denotation (§2.4), and the §3.1 contract realization are now all
+  **admitted and buildable**. This was a sequencing dependency, not a soundness
+  gap: the positivity is genuine and `ITree` adds no trusted primitive.
 - Ken is total, so the tree is a **finite inductive** value, not a coinductive
   one; genuinely nonterminating interaction is Ward's domain (§5,
   `../70-behavioral/`).
@@ -627,7 +621,7 @@ kernel re-checks the emitted core (the elaborator is **not** in the TCB, §7):
 2. **Pure-kernel encoding** — the `ITree` datatype with its forced level (§2.1),
    `ret`/`bind`/`perform` (§2.2), the row signature `⊕` (§2.3), and the
    denotation `⟦·⟧` collapsing pure code (§2.4). The kernel checks the pure tree
-   with no effect machinery. **Gated on `K1.5`** for `ITree` admittance (§7.0).
+   with no effect machinery. **Admitted as of K1.5 (`f037451`).**
    *Acceptance 2.*
 3. **Capabilities** — `Cap E` and the capability-passing translation (§2.5), the
    `requires`-as-capability distinction (§3), and the pinned cross-workstream
@@ -644,29 +638,24 @@ Conformance: `../../conformance/surface/effects/` (§7.5).
 
 ## 7. Elaboration pipeline, boundary, and checks
 
-### 7.0 Dependency — L5 implementation is gated on K1.5
+### 7.0 Dependency — RESOLVED at K1.5 (`f037451`)
 
 The denotation (§2) rests on the `ITree` inductive, whose `Vis` constructor is a
-**Π-bound (W-style) recursive occurrence** (§2.1). The current kernel
-(`origin/main`) **does not admit this shape** — `check_no_pi_bound_recursive`
-rejects it, and `elim_ITree` with a Π-abstracted induction hypothesis (`14 §3`)
-is a **K1.5** feature. So:
+**Π-bound (W-style) recursive occurrence** (§2.1). **K1.5 merged at `f037451`**
+and lifted the `check_no_pi_bound_recursive` gate; `elim_ITree` with a
+Π-abstracted induction hypothesis is now generated (`14 §3`, AC5 in
+`kernel/tests/k1p5_wstyle.rs`). All of §2 is now buildable:
 
-- **Blocked on K1.5:** the *realization* of §2 (the `ITree` type, `bind`,
-  `perform`), §5 (handlers/`runState`), the denotation `⟦·⟧`, and therefore the
-  *implementation* of the §3.1 contract any Sec/B WP rides. These land **after**
-  K1.5 admits Π-bound recursive inductives + generates their eliminator.
-- **Not blocked (buildable now, K1-only):** the row machinery is independent of
-  the kernel admittance — the finite-row lattice and latent arrows (§1.1),
-  `infer_row` and the call-graph least-fixpoint (§1.2–1.3), the §1.4 escape
-  check, and the `⊕` row algebra (§2.3) are ordinary static analyses over the
-  surface AST; they need no new kernel feature.
+- **Unblocked:** the `ITree` type, `bind`, `perform`, §5 (handlers/`runState`),
+  the denotation `⟦·⟧`, and the §3.1 contract any Sec/B WP rides — all admitted
+  and implemented in `ken-elaborator/src/effects/itree.rs` and `row_poly.rs`.
+- **Always buildable (K1-only row machinery):** the finite-row lattice and latent
+  arrows (§1.1), `infer_row` and the call-graph least-fixpoint (§1.2–1.3), the
+  §1.4 escape check, and the `⊕` row algebra (§2.3) remain ordinary static
+  analyses; they need no kernel feature (unchanged from L5-build).
 
-This is a **sequencing dependency, not a soundness gap** — the encoding is
-sound; it simply cashes a kernel feature (`K1.5`) not yet in.
-*(Architect-flagged at the L5 design review; `14 §2`'s "allowed" prose is being
-reconciled to "deferred to K1.5" in the kernel chapter so the spec and the
-kernel agree.)*
+This was a **sequencing dependency, not a soundness gap** — the encoding was
+always sound; it simply required a kernel feature (`K1.5`) that is now in.
 
 ### 7.1 Pipeline (surface → pure kernel term)
 

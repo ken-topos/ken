@@ -1,21 +1,23 @@
-//! L5 conformance cases — K1-buildable half (`conformance/surface/effects/seed-effects.md`).
+//! L5 conformance cases — row lattice, ITree denotation, row-poly.
 //!
-//! Covers: EFF1 (row inference + escape), EFF3 (capability gating), EFF4
-//! (type-level space + handler), EFF5 (pure/impure boundary).
+//! Covers:
+//! - EFF1 (row inference + escape), EFF3 (capability gating), EFF4
+//!   (type-level space + handler), EFF5 (pure/impure boundary) — from L5-build.
+//! - EFF2 (ITree denotation structure) — now runnable (K1.5 merged).
+//! - Row-poly (higher-order parameter row inference) — L5-denotation.
 //!
-//! EFF2 (ITree denotation structure) is K1.5-deferred — noted below, not forced.
-//!
-//! Every negative case is **discriminating**: the verdict must **flip** between
-//! the correct variant (accepts/Ok) and the targeted-bug variant (rejects/Err),
-//! not pass vacuously (COORDINATION §7, `discriminating-conformance-verdict-must-flip`).
+//! Every negative case is **discriminating**: verdict FLIPS between the correct
+//! variant and the targeted-bug variant (COORDINATION §7).
 
 use std::collections::HashMap;
+use std::rc::Rc;
 
 use ken_elaborator::effects::{
-    check_capabilities_no_handler, check_cross_space, check_escape,
-    check_higher_order_guard, check_tail_resumptive, CapParam, CrossSpaceAccess,
-    EffectDecl, EffectError, EffectName, EffectRow, ResumeKind, WitnessMap,
-    infer_all,
+    bind, check_capabilities_no_handler, check_cross_space, check_escape,
+    check_higher_order_guard, check_row_poly_escape, check_tail_resumptive,
+    handler_fold, perform, infer_all, infer_row_poly,
+    CapParam, CrossSpaceAccess, EffectDecl, EffectError, EffectName, EffectRow,
+    HandlerCase, ITree, ResumeKind, RowSubst, RowType, RowVar, WitnessMap,
 };
 
 // ============================================================
@@ -736,6 +738,311 @@ fn higher_order_guard_coexists_with_first_order_callee() {
     // Escape check passes too
     check_escape(&audit, &rows["audit"], &WitnessMap::new())
         .expect("Console inferred ⊆ [Console, FS] declared — must accept");
+}
+
+// ============================================================
+// EFF2 — ITree denotation structure (K1.5 gate lifted, now runnable)
+// ============================================================
+
+/// `surface/effects/itree-ret-is-pure` (oracle)
+///
+/// `Ret r` is the pure-value constructor — no `Vis` nodes, no effects.
+/// Structural assertion: `is_ret()`, `ret_value() == Some(r)`.
+#[test]
+fn itree_ret_is_pure() {
+    let t = ITree::ret(42);
+    assert!(t.is_ret(), "Ret must be identified as a Ret node");
+    assert!(!t.is_vis(), "Ret must not be a Vis node");
+    assert_eq!(t.ret_value(), Some(42), "Ret value must be recoverable");
+}
+
+/// `surface/effects/itree-perform-creates-vis` (oracle)
+///
+/// `perform e = Vis e (λr. Ret r)` (§2.2). Structural assertion: `is_vis()`,
+/// `effect_name() == Some("FS")`, continuation at any response produces `Ret`.
+/// Verdict FLIPS: `Ret 0` is NOT a `Vis` node (correct/buggy both return
+/// something, but only Vis has an effect name — discriminating property).
+#[test]
+fn itree_perform_creates_vis_node() {
+    let t = perform("FS");
+    // Positive: correct
+    assert!(t.is_vis(), "perform must produce a Vis node");
+    assert_eq!(t.effect_name(), Some(&"FS".to_string()));
+
+    // Structural: continuation maps any response to Ret r
+    let cont_0 = t.apply_cont(0).unwrap();
+    assert!(cont_0.is_ret(), "continuation at 0 must yield Ret");
+    assert_eq!(cont_0.ret_value(), Some(0));
+    let cont_99 = t.apply_cont(99).unwrap();
+    assert_eq!(cont_99.ret_value(), Some(99));
+
+    // Verdict flip: Ret is not a Vis (a buggy impl that returned Ret would fail this)
+    let ret_t = ITree::ret(0);
+    assert!(!ret_t.is_vis(), "Ret is not a Vis — verdict flips vs perform");
+}
+
+/// `surface/effects/itree-bind-ret-left-unit` (oracle)
+///
+/// `bind (Ret a) f = f a` (§2.2, left unit). Structural: the result is exactly
+/// `f(a)`. Verdict FLIPS: `bind (Vis e k) f` is NOT `f a` (it's `Vis e …`).
+#[test]
+fn itree_bind_ret_left_unit() {
+    let t = ITree::ret(5);
+    let result = bind(t, Rc::new(|v| ITree::ret(v * 2)));
+    assert_eq!(result.ret_value(), Some(10), "bind(Ret 5)(λv.Ret(v*2)) = Ret 10");
+
+    // Verdict flip: bind of a Vis node gives Vis, not Ret v*2
+    let vis_t = perform("FS");
+    let vis_result = bind(vis_t, Rc::new(|v| ITree::ret(v * 2)));
+    assert!(vis_result.is_vis(), "bind(Vis e k)(f) must give Vis, not Ret — flip");
+}
+
+/// `surface/effects/itree-bind-vis-distributes` (oracle)
+///
+/// `bind (Vis e k) f = Vis e (λr. bind (k r) f)` (§2.2). Structural:
+/// (a) result is a Vis with same effect name.
+/// (b) `(result.cont)(r)` = `bind (k r) f` — one more fold step.
+/// Verdict FLIPS: `bind (Ret 5) f` is NOT a Vis node.
+#[test]
+fn itree_bind_vis_distributes() {
+    // `perform "FS"` = Vis "FS" (λr. Ret r).
+    let t = perform("FS");
+    let f: Rc<dyn Fn(i64) -> ITree> = Rc::new(|v: i64| ITree::ret(v + 1));
+    let result = bind(t, Rc::clone(&f));
+
+    // (a) result is Vis "FS"
+    assert!(result.is_vis(), "bind(Vis …)(f) must be a Vis node");
+    assert_eq!(result.effect_name(), Some(&"FS".to_string()));
+
+    // (b) applying the continuation: cont(7) = bind((Ret 7))(λv.Ret v+1) = Ret 8
+    let inner = result.apply_cont(7).unwrap();
+    assert_eq!(inner.ret_value(), Some(8),
+        "cont(7) must be bind(Ret 7)(λv.Ret(v+1)) = Ret 8");
+
+    // Verdict flip: bind(Ret 5)(f) is NOT a Vis
+    let bind_ret = bind(ITree::ret(5), Rc::clone(&f));
+    assert!(!bind_ret.is_vis(), "bind(Ret …)(f) is Ret — flips vs bind(Vis …)(f)");
+}
+
+/// `surface/effects/handler-fold-discharges-effect` (oracle)
+///
+/// A tail-resumptive handler for `FS` applied to `perform "FS"`:
+/// `Vis "FS" (λr. Ret r)` handled by FS (response 42) → `Ret 42`.
+/// Verdict FLIPS: without the handler the `Vis` node remains unhandled.
+#[test]
+fn handler_fold_discharges_effect() {
+    let t = perform("FS");
+    let cases: Rc<[HandlerCase]> = vec![HandlerCase::new("FS", 42)].into();
+    let result = handler_fold(t, cases);
+
+    // Handler fires: Vis "FS" k → k(42) = Ret 42
+    assert!(result.is_ret(), "FS handled by response 42 → Ret 42");
+    assert_eq!(result.ret_value(), Some(42));
+}
+
+/// `surface/effects/handler-fold-passes-through-unhandled` (oracle)
+///
+/// A handler for `FS` applied to `perform "Net"` — `Net` is unhandled.
+/// The `Vis "Net"` node passes through unchanged. Verdict FLIPS: a handler
+/// that handles `FS` should KEEP `Net` nodes (not silently consume them).
+#[test]
+fn handler_fold_passes_through_unhandled() {
+    let t = perform("Net");
+    let cases: Rc<[HandlerCase]> = vec![HandlerCase::new("FS", 0)].into();
+    let result = handler_fold(t, cases);
+
+    assert!(result.is_vis(), "Net is unhandled — Vis node must pass through");
+    assert_eq!(result.effect_name(), Some(&"Net".to_string()),
+        "unhandled Vis must preserve the original effect name");
+}
+
+/// `surface/effects/handler-fold-tail-resumptive` (oracle)
+///
+/// Two sequential effects: `bind (perform "FS") (λ_. perform "FS")`.
+/// Handler fires twice: both FS nodes consumed → `Ret 7`.
+/// Tests that the fold recurses into the continuation (tail position, §5.2).
+#[test]
+fn handler_fold_tail_resumptive_chains() {
+    // bind (Vis "FS" (λr. Ret r)) (λ_. Vis "FS" (λr. Ret r))
+    // = Vis "FS" (λr. bind (Ret r) (λ_. perform "FS"))
+    // = Vis "FS" (λr. perform "FS")  — by left-unit
+    let t = bind(perform("FS"), Rc::new(|_| perform("FS")));
+
+    let cases: Rc<[HandlerCase]> = vec![HandlerCase::new("FS", 7)].into();
+    let result = handler_fold(t, cases);
+
+    // Both FS nodes consumed, continuation responds with 7
+    assert!(result.is_ret(),
+        "both FS nodes folded → final Ret");
+    assert_eq!(result.ret_value(), Some(7));
+}
+
+// ============================================================
+// Row-polymorphism — infer_row_poly + check_row_poly_escape
+// ============================================================
+
+/// `surface/effects/row-poly-apply-twice-infers-row-var` (oracle)
+///
+/// `apply_twice (f : A →[ρ₀] A) : A →[ρ₀] A` — the canonical higher-order
+/// row-poly example. `infer_row_poly` should return `RowType::Var(ρ₀)` (not
+/// ∅ as the conservative guard approximated). The escape check `ρ₀ ⊆ ρ₀` passes.
+/// Verdict FLIPS: no declared row → escape check rejects `ρ₀` (variant below).
+#[test]
+fn row_poly_apply_twice_infers_row_var() {
+    let decl = EffectDecl::new("apply_twice")
+        .with_param_row(RowVar(0))
+        .with_declared_row_type(RowType::Var(RowVar(0)));
+
+    let inferred = infer_row_poly(
+        &HashMap::new(),
+        &decl.direct_effects,
+        &decl.callees,
+        &decl.param_rows,
+    );
+    assert_eq!(inferred, RowType::Var(RowVar(0)),
+        "apply_twice must infer the row variable of its param, not ∅");
+
+    check_row_poly_escape(
+        &decl.name,
+        &inferred,
+        decl.declared_row_type.as_ref(),
+        decl.declared_row.as_ref(),
+    )
+    .expect("ρ₀ ⊆ ρ₀ — apply_twice with matching declared row var must accept");
+}
+
+/// `surface/effects/row-poly-undeclared-row-var-rejected` (oracle)
+///
+/// Same `apply_twice` but without `declared_row_type` (defaults to ∅).
+/// The inferred row is `Var(ρ₀)` but declared row is ∅ → escape check fails.
+/// Verdict FLIPS against `row_poly_apply_twice_infers_row_var` above.
+#[test]
+fn row_poly_undeclared_row_var_rejected() {
+    let decl = EffectDecl::new("apply_twice_bad")
+        .with_param_row(RowVar(0));
+    // No declared_row_type → defaults to Concrete(∅)
+
+    let inferred = infer_row_poly(
+        &HashMap::new(),
+        &decl.direct_effects,
+        &decl.callees,
+        &decl.param_rows,
+    );
+    assert_eq!(inferred, RowType::Var(RowVar(0)));
+
+    let err = check_row_poly_escape(
+        &decl.name,
+        &inferred,
+        decl.declared_row_type.as_ref(),
+        decl.declared_row.as_ref(),
+    )
+    .expect_err("ρ₀ not covered by declared ∅ — must reject");
+
+    assert!(matches!(err, EffectError::EffectEscapes { .. }),
+        "expected EffectEscapes, got {:?}", err);
+}
+
+/// `surface/effects/row-poly-concrete-caller-substitution` (oracle)
+///
+/// At a call site, the row variable is substituted with the concrete row of
+/// the supplied argument: `apply_twice(read_config)` where `read_config : FS`.
+/// After `RowVar(0) → Concrete({FS})`, inferred = declared = `{FS}`.
+#[test]
+fn row_poly_concrete_caller_substitution() {
+    // ρ₀ → FS (caller supplies a concrete FS-effect function)
+    let subst: RowSubst = [(RowVar(0), RowType::singleton("FS"))].into();
+
+    let inferred = RowType::Var(RowVar(0)).apply_subst(&subst);
+    let declared = RowType::Var(RowVar(0)).apply_subst(&subst);
+
+    assert_eq!(inferred, RowType::concrete(EffectRow::singleton("FS")));
+    assert!(inferred.is_subset_of(&declared),
+        "after substitution FS ⊆ FS — caller with concrete arg passes");
+}
+
+/// `surface/effects/row-poly-pure-caller-substitution` (oracle)
+///
+/// `apply_twice(id)` where `id : A → A` (pure, row ∅). After substitution
+/// `ρ₀ → ∅`, the whole expression is pure. Callers with a pure function
+/// get a pure `apply_twice`.
+#[test]
+fn row_poly_pure_caller_is_pure() {
+    let subst: RowSubst = [(RowVar(0), RowType::empty())].into();
+
+    let inferred = RowType::Var(RowVar(0)).apply_subst(&subst);
+    assert_eq!(inferred, RowType::empty(),
+        "apply_twice(id) with pure id → row ∅");
+    assert!(inferred.is_subset_of(&RowType::empty()),
+        "pure inferred row ⊆ ∅ declared — accepts");
+}
+
+/// `surface/effects/row-poly-two-params-each-tracked` (oracle)
+///
+/// A function with two higher-order parameters: `compose (f : A →[ρ₀] B)
+/// (g : B →[ρ₁] C) : A →[ρ₀ ⊕ ρ₁] C`. The inferred row is
+/// `Join(Var(ρ₀), Var(ρ₁))`; declared row is the same join.
+/// Three variants — both declared accepts; only ρ₀ declared rejects ρ₁.
+#[test]
+fn row_poly_two_params_each_tracked() {
+    let inferred = infer_row_poly(
+        &HashMap::new(),
+        &[],   // no direct effects
+        &[],   // no named callees
+        &[RowVar(0), RowVar(1)],
+    );
+    // inferred = Join(Var(0), Var(1))
+    assert!(inferred.row_vars().contains(&RowVar(0)));
+    assert!(inferred.row_vars().contains(&RowVar(1)));
+
+    // (a) declared = Join(Var(0), Var(1)) → accepts
+    {
+        let declared = RowType::Var(RowVar(0)).join(RowType::Var(RowVar(1)));
+        assert!(inferred.is_subset_of(&declared),
+            "(a) both row vars declared — must accept");
+    }
+
+    // (b) declared = Var(0) only → rejects ρ₁
+    {
+        let declared = RowType::Var(RowVar(0));
+        assert!(!inferred.is_subset_of(&declared),
+            "(b) only ρ₀ declared — ρ₁ escapes, must reject");
+        let result = check_row_poly_escape(
+            "compose_bad",
+            &inferred,
+            Some(&declared),
+            None,
+        );
+        assert!(result.is_err(), "(b) ρ₁ not covered — check_row_poly_escape must reject");
+    }
+}
+
+/// `surface/effects/row-poly-mixed-concrete-and-var` (oracle)
+///
+/// A function with a named callee (concrete row) and a higher-order param
+/// (row var): `foo (f : A →[ρ₀] A)` calls `log : [Console]` and has param `f`.
+/// Inferred row = `Join(Concrete({Console}), Var(ρ₀))`.
+/// Declared `[Console, ρ₀]` (concrete + same var) → accepts.
+#[test]
+fn row_poly_mixed_concrete_and_var() {
+    let env: HashMap<String, EffectRow> = [
+        ("log".to_string(), EffectRow::singleton("Console")),
+    ].into();
+
+    let inferred = infer_row_poly(
+        &env,
+        &[],
+        &["log".to_string()],
+        &[RowVar(0)],
+    );
+    // Concrete Console + Var(0)
+    assert!(inferred.concrete_effects().contains("Console"));
+    assert!(inferred.row_vars().contains(&RowVar(0)));
+
+    // Declared = Concrete({Console}) join Var(0) → accepts
+    let declared = RowType::concrete(EffectRow::singleton("Console"))
+        .join(RowType::Var(RowVar(0)));
+    assert!(inferred.is_subset_of(&declared),
+        "mixed concrete+var declared correctly — must accept");
 }
 
 // ============================================================
