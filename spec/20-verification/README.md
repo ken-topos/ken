@@ -18,6 +18,7 @@ proofs and to *explain* failures, never to be believed on its own authority.
 flowchart LR
     write --> spec --> verify --> repair --> write
 ```
+*(Agent-driven; strategy G7)*
 
 A definition carries a **specification** (§`21`). The toolchain **generates
 obligations** (§`22`), **classifies and discharges** them (§`23`), and on
@@ -40,9 +41,13 @@ proofs are small and numerous, not large and few.)
 
 ```mermaid
 flowchart TD
-    re["requires / ensures"] --> vc["VC extraction"] --> dd["D decidable"] --> z3["Z3 direct"]
-    rt["refinement types"] --> bam["body-as-motive"] --> fo["FO first-ord"] --> kr["Kripke embed to Z3"]
-    pl["prove / law"] --> oobl["obligations : Omega"] --> ho["HO higher-ord"] --> nt["native / tactic"]
+    re["requires / ensures"] --> gen
+    rt["refinement types"] --> gen
+    pl["prove / law"] --> gen
+    gen["obligation generation (22)<br/>VC extraction, body-as-motive,<br/>obligations: Omega"] --> cls{"classify (23)"}
+    cls -->|"D decidable"| z3["Z3 direct"]
+    cls -->|"FO first-ord"| kr["Kripke embed to Z3"]
+    cls -->|"HO higher-ord"| nt["native / tactic"]
     z3 --> cert["certificate"]
     kr --> cert
     nt --> cert
