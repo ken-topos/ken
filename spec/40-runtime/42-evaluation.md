@@ -3,10 +3,12 @@
 > Status: **X1 elaborated** — implementation-ready for Team Runtime, **pure-core
 > G1 scope**. Normative for *what evaluation computes* and its role as the
 > reference; the interpreter's internal strategy is implementation latitude so
-> long as it realizes these results. Contract for WS-X **X1**. Effects
-> (`FS`/`Net`/`space`/`becomes`) are **explicitly deferred** to the L5 follow-on
-> (§6) — their denotation rides `36`'s `ITree`, which is K1.5-gated; the G1
-> interpreter is the pure, effect-free fragment.
+> long as it realizes these results. Contract for WS-X **X1**: the **pure core**
+> (§1–§5, §7) plus **effect evaluation** (§6): the interaction-tree driver that
+> runs an effectful program's denotation, now that L5's `ITree` is admitted at
+> **K1.5** (`f037451`, `36 §7.0`). The pure fragment and the effect driver
+> together are the reference semantics; effects ride `36`'s `ITree`, the kernel
+> stays effect-free.
 
 The interpreter defines **the meaning of a Ken program**. It evaluates **core
 terms** (`../10-kernel/11`) — the elaborator's output — to **values** (`41`).
@@ -322,24 +324,230 @@ discriminating test (AC4) flips on **hole-present → `unknown`** vs **hole-abse
   inspect values — the "Little Prover" loop. Incremental re-checking is the only
   non-trivial REPL piece (`../30-surface/39`).
 
-## 6. Effects — explicitly deferred to the L5 follow-on (seam)
+## 6. Effect evaluation (running the interaction tree)
 
-**Out of G1 pure-core scope.** Effectful operations — the primitive effects
-(`FS`/`Net`/`Clock`/`Console`/`Rand`) and the `space`/`becomes` mutable-cell
-model (`../30-surface/36 §1`, `36 §4`) — have their operational meaning **here
-eventually**, but it rides L5's **interaction-tree denotation** (`36 §2`): an
-effectful program denotes to a pure `ITree`, and evaluation **runs** that tree
-(forcing `Vis` nodes against the runtime's real-world handlers, `36 §7.2`). That
-denotation's `ITree` is **K1.5-gated** (`36 §7.0`), so effectful evaluation is a
-**follow-on once L5 lands**, not part of X1.
+Effectful evaluation is **two pieces, one of them already built.** (1) The
+denotation `⟦e⟧ : ITree ⟦ρ⟧ R` (`../30-surface/36 §2.4`) is an ordinary **pure**
+core term, so §3 **already evaluates it** — `Ret`/`Vis` are constructors (§3.1)
+and `bind`/`handle`/`runState` are `elim_ITree` folds that ι-reduce (§3.3). (2)
+The **effect driver** forces the resulting `Vis`-tree against the runtime's
+real-world handlers, performing each world-interaction and resuming with the
+response. The agreement with L5 is therefore **definitional, not parallel**: X1
+runs the *very term* L5 denotes — there is no second effect semantics to
+reconcile, only the pure tree, evaluated, with the world's responses substituted
+at the `Vis` nodes. (L5's `ITree` is admitted as of **K1.5**, `f037451`,
+`36 §7.0` — the dependency that gated this section is in.)
 
-**Seam for the build team:** in the G1 interpreter, a `perform`/effect node and
-a `space` cell operation are **not** reduced — they are **out-of-scope stuck
-forms**, to be wired by the L5 follow-on, *not* forgotten. The pure fragment X1
-delivers is **referentially transparent and reproducible** (the part with a
-mathematical semantics, `36 §1`); `space` cell state, when added, is **not**
-content-addressed (it has identity, `41 §2`) and its ordering follows the effect
-sequencing (`36 §4`).
+### 6.1 The denotation evaluates to a tree (pure, §3 unchanged)
+
+`⟦e⟧` is closed and well-typed of type `ITree ⟦ρ⟧ R`, so by **canonicity**
+(§3.6) §3 evaluates it to a head constructor (§3.5):
+
+- `Ret r` — the computation finished purely; `r` is the result value.
+- `Vis e k` — the next operation `e : ⟦ρ⟧.Op` is forced to a value (CBV
+  constructor argument, §3.2); the continuation `k : ⟦ρ⟧.Resp e → ITree ⟦ρ⟧ R`
+  is a **closure** (a function value at WHNF — not reduced under its binder,
+  §3.5). The response is **not yet known**, which is exactly why `k` is a
+  function *into* the tree (`36 §2.1`).
+
+Two classes of effect are discharged **here, purely**, with no world
+interaction, because their handler is itself an `elim_ITree` fold (`36 §5`):
+
+- a **`space`** operation: `runState s₀ ⟦body⟧` (`36 §4.2`) threads the state
+  through the tree and reduces to `(r, s_final) : R × S` (§3.3 ι). A program
+  whose only effect is its `space` runs **entirely in pure §3** — no driver. The
+  runtime *may* realize the fold with a real identity-bearing mutable cell (not
+  content-addressed, `41 §2`) as an operational strategy (the §3 latitude),
+  provided the result agrees with `runState`.
+- any **user handler** `handle ret ops` (`36 §5.1`) that discharges an effect
+  `E` into another tree.
+
+So the **open row** `ρ_open` (`36 §2.5`) — the I/O effects with no enclosing
+pure handler (`FS`/`Net`/`Clock`/`Console`/`Rand`) — survives as `Vis` nodes the
+driver must perform. A fully pure program (`ρ = ∅`) denotes to `ITree 𝟘 R ≅ R`
+(`36 §2.4`) and never reaches the driver at all — purity stays free (§3).
+
+### 6.2 The effect driver (the real-world handler, `36 §7.2`)
+
+The driver is the **real-world handler** the `36 §7.2` hook names: the same
+`Vis`-forcing shape as a pure handler, but its action **performs an actual world
+interaction** in the evaluator instead of returning a pure tree. X1 is
+**parametric** in this handler `H` — L7 supplies the production `H` (real
+syscalls, `../30-surface/38-ffi-io.md`); the conformance corpus supplies a
+**deterministic** `H` (a mock world) so a trace is reproducible. `H` is the
+**only** place X1 leaves the pure fragment.
+
+```
+-- H performs one open-row operation and observes its response (the world step).
+-- Supplied by L7 (production) or conformance (deterministic mock); the §7.2 hook.
+H : (e : ⟦ρ_open⟧.Op) → ⟦ρ_open⟧.Resp e        -- the IMPURE world boundary
+
+-- The driver: evaluate to a Vis, perform it, resume with the response, loop.
+drive_H : ITree ⟦ρ_open⟧ R → R
+drive_H t = case whnf t of                 -- whnf = pure §3 eval to head ctor (§3.5)
+  Ret r    → r                             -- finished
+  Vis e k  → drive_H (apply k (H e))       -- perform+observe (H e), resume (apply, §3.2), loop
+  unknown  → unknown                       -- §4: an open hole in the tree is strict
+```
+
+- **perform → observe → resume.** `H e` performs `e`'s world-interaction and
+  observes the response `resp : ⟦ρ_open⟧.Resp e`; `apply k resp` (β, §3.2)
+  **resumes** the computation with that response, producing the next sub-tree;
+  the loop re-evaluates it. This interleaving of **pure reduction** (`whnf`) and
+  **world interaction** (`H`) is the whole of effect evaluation.
+- **Tail-recursive *because* tail-resumptive.** `OQ-9`'s single-shot,
+  tail-position resumption (`36 §5.2`) is exactly what lets `drive_H` be a
+  **loop**: `k` is applied **once**, in tail position, so no continuation is
+  reified and no stack of suspended resumptions is needed. A multi-shot handler
+  would break the loop — excluded by `36 §5.2`, and this is the operational
+  reason it is.
+
+```mermaid
+flowchart TD
+  E["evaluate t to WHNF — pure section 3"] --> D{head constructor}
+  D -->|Ret r| R["return r — finished"]
+  D -->|Vis e k| P["perform e via H, observe resp"]
+  D -->|unknown| U["return unknown — strict, section 4"]
+  P --> S["resume: apply k resp"]
+  S --> E
+```
+
+### 6.3 Per-effect operational rules
+
+The **rule** is uniform — `drive_H` forces a `Vis`, `H` performs the op and
+observes its response, `apply` resumes — and **per effect class the only
+difference is which world-interaction `H` performs and the response it
+observes** (`36 §2.1`'s `Op`/`Resp`). Schematically:
+
+| Effect | Operation (`Op`) | Performs / observes | Response (`Resp`) |
+|---|---|---|---|
+| `Console` | `Write s` | write `s` to the console | `Unit` |
+| `Clock` | read-clock | read the wall clock | `Instant` |
+| `FS` | read / write `p` | read / write file `p` | `Bytes` / `Unit` |
+| `Net` | send / recv | send / receive on a socket | `Unit` / `Bytes` |
+| `Rand` | draw | draw from the entropy source | the drawn value |
+
+The op-tag column is **illustrative**: the `Op`/`Resp` signatures per class
+are `38`/stdlib's to fix, and are tagged `(oracle)` here — §6 fixes the
+**operational contract** (perform→observe→resume, uniform), the binding to
+concrete syscalls + signatures is L7's (`36 §7.2`). The dispatch is
+**exhaustive over `ρ_open`** — a rule for **every** op-tag the open row admits
+(§6.5), with **no** catch-all `_ → skip` (the two-soundnesses point, §6.5).
+
+### 6.4 Effect sequencing and ordering
+
+Effects are performed in **exactly the order their `Vis` nodes appear along the
+tree's spine**, and that spine is fixed by `bind`'s grafting (`36 §2.2`):
+`bind (Vis e f) k = Vis e (λ r. bind (f r) k)` puts the left computation's first
+effect at the head and its continuation (then `k`'s effects) underneath. So:
+
+- **CBV fixes the build order.** `⟦let x = e1 in e2⟧ = bind ⟦e1⟧ (λx. ⟦e2⟧)`
+  (`36 §2.4`); evaluating it (§3, strict left-to-right) puts every `Vis` of `e1`
+  ahead of every `Vis` of `e2` on the spine. The driver consumes the spine
+  **linearly**, so `e1`'s effects are performed, in order, before `e2`'s.
+- **Single tail resumption fixes run order.** Because `k` is resumed once, in
+  tail position (§6.2), the driver never interleaves or reorders — the performed
+  order **is** the spine order. This realizes `36`'s sequencing discipline.
+- **Discriminating (the trace).** The observable result of an effectful program
+  is its **interaction trace** — the sequence of `Vis` op-tags performed and the
+  `Ret` leaf. A **reordered**/**dropped** interaction is a **different trace**
+  (a different tree), so the case **flips**: the correct order is one
+  trace, any reordering or omission is a distinct, detectable one.
+
+### 6.5 Row-bounding at evaluation (normative property)
+
+**Every `Vis` op-tag the driver can encounter lies in the declared row.** The
+escape check (`36 §1.4`) rejects, *at elaboration*, any function whose inferred
+row exceeds its declaration; so the denotation `⟦e⟧ : ITree ⟦ρ⟧ R` is built over
+**exactly** the signature `⟦ρ⟧` (`36 §2.3`) — an op outside `ρ` is **not
+constructible** in the term that reaches X1. Therefore:
+
+- **An out-of-row effect is a type-level impossibility, not a runtime one.**
+  The driver performs **no** runtime row-membership check — there is nothing to
+  check; the kernel-checked type `ITree ⟦ρ⟧ R` already witnesses it.
+- **`H` is total over `ρ_open` — and that totality is load-bearing.** The driver
+  must have a rule for **every** op-tag in `ρ_open`, and needs **none** outside
+  it. This is §6.3's exhaustiveness made precise — the **two-soundnesses
+  split**: a *wrong* response is detectable against L5 (§6.6), but a *missing*
+  effect rule supplies no world step **and** no error — the kernel re-checks
+  *types*, not *traces*, so nothing downstream catches a silently-dropped
+  interaction. Completeness of `H`'s dispatch over the open row is the **sole**
+  backstop. Build it **exhaustive-by-construction** (dispatch on the finite
+  `⟦ρ_open⟧.Op`, no catch-all), so an unhandled op is a **build error**, never a
+  silent skip.
+
+### 6.6 Reconciliation with L5 — X1 realizes the ITree L5 denotes
+
+The reconciliation obligation (the ★★ load-bearing property) holds
+**definitionally**: X1 evaluates the *same kernel term* `⟦e⟧` that `36 §2.4`
+produces, by the *same reductions* the kernel uses for conversion (§1). So:
+
+- The value `whnf` reaches at each step **is** the head of L5's denotation — the
+  `Vis` op-tag X1 performs is the one `36 §2.4` placed there, and the `Ret` leaf
+  is the one it denotes. The two semantics are **one denotation**: L5 says *what
+  tree the program is*; X1 *runs* that tree, substituting the world's responses
+  at the `Vis` nodes via `H`.
+- **The agreement is the trace.** For a **fixed** handler `H` (the same
+  responses), X1's performed sequence of `Vis` op-tags and its `Ret` result are
+  exactly the spine and leaf of L5's `⟦e⟧`. This is what conformance asserts:
+  on a corpus, **X1's trace == L5's ITree** (same `Vis`-tag sequence, same
+  `Ret` leaf) — not "it elaborates," but the structural identity of the *run*
+  with the *denotation*.
+
+### 6.7 `unknown` through effects
+
+`unknown` (§4) propagates through effect evaluation by the **same strict rule**,
+since the driver's scrutinee is the tree:
+
+- `drive_H unknown = unknown` — a tree position that is an open hole (§4) is
+  strict; the driver yields `unknown` rather than performing anything.
+- a `Vis e k` whose **op** `e` is `unknown` (the operation depends on an open
+  hole) gives `unknown` — there is no determinate interaction to perform; the
+  op is the driver's scrutinee for dispatch (strict, §4).
+- a response fed to `k` that produces `unknown` downstream propagates by §4.
+
+A **hole-free** effectful program never produces an `unknown` *tree* (§4,
+`43 §2.1`): its `Vis`/`Ret` structure is fully determinate and every operation
+performs — the world's responses are real values, not holes. The discriminating
+case (per §4) flips on hole-present → `unknown` vs hole-free → a real trace.
+
+### 6.8 Determinism and the oracle role (effects)
+
+Pure evaluation is a function (§3.7); **effectful** runs are a function **of
+its world responses** — given the same `H`, X1 produces the same trace and
+result. So X1 is the **oracle for effectful programs relative to a fixed
+handler**: a native backend (X3) is judged by running the same corpus with the
+same mock `H` and requiring the **identical trace** (`44`/X4, §5). The pure
+fragment's determinism + canonicity (§3.6–3.7) are **unchanged** — effect
+evaluation wraps the driver *around* the pure core; it does not alter pure
+reduction (no regression, acceptance 5).
+
+**Level discipline:** §6 forms **no new types** — the `ITree`/`Effect`/`State`
+types are `36 §2.1`/`§7.4`'s, already level-reconciled; evaluation carries their
+explicit levels verbatim (§3.5) and introduces **no** new level computation to
+reconcile against `12`.
+
+### 6.9 What WS-X / Runtime must deliver here (effect evaluation)
+
+The **effect driver** `drive_H` (§6.2) parametric in the real-world handler `H`
+(the `36 §7.2` hook); the **per-effect operational contract** (§6.3) realized
+**exhaustively over `ρ_open`** (no catch-all on open-row dispatch, §6.5); the
+**sequencing** as linear consumption of the `bind`-built `Vis` spine (§6.4);
+**row-bounding** as a type fact, not runtime (§6.5); **`unknown`** strict
+through the driver (§6.7); and the **X1 == L5 trace agreement** (§6.6) as the
+reference-correctness property — the ★★ load-bearing obligation. Built in
+`ken-interp`, **wrapping** the unchanged pure core (§7). Pure handlers (`space`
+via `runState`, user `handle`) discharge in §3; only the open row reaches the
+driver.
+
+Conformance: `../../conformance/runtime/effects/` — per-effect perform+resume;
+the trace order (a reorder/drop **flips**); row-bounding (an out-of-row op is
+uninstantiable, caught at elaboration); handled-vs-unhandled (a pure handler
+discharges in §3, the open row hits the driver); **X1-trace == L5-ITree** on a
+shared corpus; exhaustive-traversal (no catch-all on the open-row dispatch); and
+`unknown` strict through `perform`. Each case **flips** on its targeted bug or
+asserts a structural output (the `Vis`-tag sequence, the `Ret` leaf), per
+COORDINATION §7.
 
 ## 7. What WS-X must deliver here (X1, pure-core)
 
@@ -349,11 +557,11 @@ the kernel's reductions (`§1`, `§3.3`) + audited primitives,
 (§3.6); **CBV with sharing** via the content-addressed heap (§2, §3.4) with
 **branch-lazy** eliminators (§2); **`unknown` propagation** (§4); and the
 **oracle** role for later backends (§5). It runs the **G1** vertical slice
-end-to-end (V0 elaborates surface → core, X1 runs the core). Effects are
-deferred (§6). The interpreter is the semantic reference — **not** in the TCB
-for soundness, but a wrong value here propagates to every backend, so
-correctness is **agreement with the kernel's own reductions** plus the
-conformance corpus.
+end-to-end (V0 elaborates surface → core, X1 runs the core); effect evaluation —
+the interaction-tree driver — is in §6. The interpreter is the semantic
+reference — **not** in the TCB for soundness, but a wrong value here propagates
+to every backend, so correctness is **agreement with the kernel's own
+reductions** plus the conformance corpus.
 
 Conformance: `../../conformance/runtime/evaluation/` — canonicity of closed
 inductive/observational computations (constructor form; `cast`-refl → `a`;
