@@ -1,9 +1,12 @@
 # Information-flow control
 
-> Status: **Sec1 elaborated** — implementation-ready for WS-Sec. **Normative
-> for the label lattice, the flow-typing discipline, the non-interference
-> statement and its honest limits, and the `@ct` hook** (§2–§5a, §H);
-> the concrete surface *spelling* of labels stays proposal-level (`OQ-syntax`).
+> Status: **Sec1 + Sec1ct elaborated** — implementation-ready for WS-Sec.
+> **Normative for the label lattice, the flow-typing discipline, the
+> non-interference statement and its honest limits, and the `@ct` constant-time
+> discipline** (§2–§5a, §H) — Sec1ct elaborates §5a from the Sec1 *hook* to the
+> enforced `@ct` discipline (the `CT` axis, the sealed `LeakSink` set, the
+> `L-CT-SINK` rule, the CT-promise/`Q` export, declassify-ends-span); the
+> concrete surface *spelling* of labels stays proposal-level (`OQ-syntax`).
 > **Settled inputs (do *not* reopen): `OQ-ifc` DECIDED** (lattice-parametric +
 > DLM, §2); **`OQ-relational` DECIDED** (by-proof = re-checked product
 > programs, progress-sensitive; heavy machinery deferred, §5); **constant-time =
@@ -393,43 +396,181 @@ verdict with a distinguishing-pair witness** (strength 2); a clean program
 with a hole** — the prover's honesty guard (`23 §1.3`) carries to the relational
 domain, so a prover bug is a *weaker* verdict, never a false `proved`.
 
-### 5a. Constant-time — the `@ct` *hook* (Sec1 lands the label, not the timing)
+### 5a. Constant-time — the `@ct` discipline (by typing; timing delegated)
 
-Constant-time (timing side-channel freedom) is a **2-safety** property, but Ken
-does **not** prove it with the relational engine and does **not** own the
-*timing guarantee* itself (hardware/codegen-relative — cache lines,
-`cmov`-vs-branch lowering — `64 §4.2`). **Sec1 lands the source label + the
-enforcement hook; the timing guarantee is delegated.**
+> **Sec1 landed the `@ct` *hook* (parse, attach, carry, reject a
+> leakage-sink flow); Sec1ct elaborates it to the enforced *discipline*
+> below.** Constant-time (timing side-channel freedom) is a **2-safety**
+> property, but Ken enforces only the **source-level precondition** by
+> **unary taint-typing** — **not** the relational engine, **no product
+> programs** (the FaCT / ct-verif "secret-types" result — *named, not
+> copied*) — and Ken does **not** own the *timing guarantee* itself
+> (hardware/codegen-relative — cache lines, `cmov`-vs-branch lowering —
+> `64 §4.2`), which is **delegated to `[Ward]` + the toolchain**. The
+> split is fixed (§H): Ken proves the precondition `Q`; Ward proves the
+> binary.
 
-- **A distinct, opt-in `@ct` label**, separate from `Secret` confidentiality.
-  Confidentiality constrains *where the value goes*; `@ct` constrains *where the
-  value's influence goes* (it may not **steer** a leakage-relevant operation). A
-  value may be `Secret` without `@ct` (a PII field not to log, but branching
-  on it leaks nothing to a timing adversary); crypto keys are both. By `OQ-ifc`
-  lattice-parametricity, `@ct` is just **another product factor** of the lattice
-  (§2.2) — **no metatheory cost**.
-- **Leakage-relevant operations are a distinguished `Vis` op class** — a
-  secret-dependent **branch guard**, **memory index**, or **variable-time
-  primitive** (`36 §3.1`: "a label whose sink is a distinguished `Vis` op").
-- **What Sec1 lands (the hook):** the `@ct` label **parses, attaches, and is
-  carried** through the denotation (riding a `Vis` index like any label), and a
-  `@ct` value reaching a leakage-sink `Vis` op is a **type error** — the §3
-  `L-SINK` rule **reused** with the leakage-sink as `κ`. This unary-taint check
-  is a **sound static enforcement of the source-level constant-time precondition
-  `Q`** (the FaCT / ct-verif "secret-types" result — *named, not copied*), so it
-  needs **no product programs**. A function exports a **signature-level CT
-  promise** (constant-time in a named parameter) for boundary checking.
-- **What Sec1 does NOT land (deferred + named, not silent):** the **timing
-  guarantee itself** is delegated to **`[Ward]`** + toolchain — CT-preservation
-  through compilation + empirical validation under a stated **leakage model** on
-  a **platform** (`64 §4.2`, `63 §5a`). The **full enforcement/validation pass**
-  is a separate WP, **`[Sec1ct]`**. Sec1 plants a **reify-trigger** at the
-  leakage-sink op pointing to `[Sec1ct]` / `[Ward]` — the precondition is real
-  and checked; the timing claim is honestly *not yet* Ken's to make.
-- **No region construct.** The sensitive *range* is the `@ct` label's live span
-  (intro → authorised `declassify`, §4); there is **no `constant_time { … }`
-  block** (a padding-based balancer is a runtime *mitigation*, `Ward`'s, not
-  Ken's).
+`@ct` reuses Sec1's lattice, `pc` discipline, declassify, and labeled effects —
+**extended, not rebuilt**. The discipline is six parts.
+
+#### 5a.1 The `@ct` lattice axis (a distinct product factor)
+
+`@ct` rides the existing lattice (`OQ-ifc` lattice-parametricity, §2.2) as a
+**distinct product factor** `CT` of the full label
+`(Conf × Integ × …compartments × CT)` — ordered **componentwise** (§2.2), so the
+`@ct` axis is **independent** of confidentiality and integrity (a value may be
+`Secret` without `@ct` and vice versa; a crypto key is both). `CT` is the
+**two-point lattice**:
+
+```
+CT = { ct⊥, ct⊤ }      ct⊥ ⊑ ct⊤        -- one non-trivial edge
+  ct⊥  = not-timing-sensitive (its influence may steer a leakage op)   -- "@ct-bottom"
+  ct⊤  = @ct = timing-sensitive (its influence may NOT steer one)
+  _⊔_  = ∨   (any @ct input ⇒ @ct result; join is the OR — a value computed
+              from a @ct value is itself @ct; you cannot compute @ct away)
+  _⊓_  = ∧
+  an UN-annotated value is  ct⊥  (the default: code is timing-agnostic until opted in)
+```
+
+**Orientation (pin both directions — the `[Sec1-dual]` discipline).** `@ct` is a
+**taint** axis: it is the **order-dual of confidentiality**, oriented exactly
+like **integrity** (§2.2) — `⊥` is *safe* (low taint), `⊤` is *the taint*, and a
+**sink demands `ct⊥`**. Concretely: `@ct` joins **upward** by `L-COMBINE` (its
+influence spreads to anything computed from it), and a leakage sink carries
+clearance `κ.ct = ct⊥`, so a `@ct` value (`ct⊤`) reaching it satisfies
+`ct⊤ ⋢ ct⊥` → **reject**. Getting the order *backwards* (confidentiality-style,
+sink demands `⊤`) would **silently invert** accept/reject — so both directions
+are stated, and the **discriminating conformance net** (§5a.3, AC4) is the
+non-degenerate distinguishing pair that holds the orientation.
+
+**Surface.** `A @ ct` rides the existing labeled-type production
+`type "@" label`, with `label ::= … | "ct"` (`../30-surface/32 §`,
+`[OQ-syntax]`). The **value-set (`{ct⊥, ct⊤}`) and the invariants above
+are locked**; the
+**literal surface token spelling `@ct` is `(oracle)`-tagged** — the surface
+grammar is proposal-level (`OQ-syntax`), so the token is the deferred degree of
+freedom, the concept/value-set is not (assert-at-locked-granularity).
+
+#### 5a.2 The leakage-sink classification (a sealed set, no catch-all)
+
+The leakage-relevant operations are a **distinguished `Vis` op class** (`36
+§3.1`: "a label whose sink is a distinguished `Vis` op"), enumerated as a
+**sealed sum** — **exactly three**, each with its exact trigger:
+
+```
+LeakSink =                                    -- a sealed Vis-op classification; NO `_ => non-sink`
+  | BranchGuard    -- the SCRUTINEE of a control-flow branch that lowers to a machine
+  |                --   branch/`match`; trigger: a non-ct⊥ discriminant steers `if`/`match`
+  | MemIndex       -- a DATA-DEPENDENT memory/array index feeding an indexing Vis op;
+  |                --   trigger: a non-ct⊥ index expression (data-dependent cache access)
+  | VarTimePrim    -- a primitive whose run time depends on operand VALUE (naive bignum
+                   --   compare/divide, non-CT `==`); trigger: a non-ct⊥ operand reaches a
+                   --   primitive flagged `var-time` in the effect signature (`36 §3.1`)
+```
+
+**Exhaustive-by-construction (COORDINATION §7; the omission-hole discipline).**
+There is **no `_ => non-sink` catch-all**. Adding an effect/`Vis` op that
+can leak timing **without** classifying it into `LeakSink` must be a
+**compile error** (an exhaustiveness obligation over the `Vis`-op
+alphabet), **never** a silent
+non-sink. This is load-bearing because labels are **erased** before the kernel
+(§9 N1): a *silent omission* — a new leaky op defaulting to non-sink — is
+**invisible** to the kernel re-check, so the classification's totality is the
+sole structural guard against an un-netted leak.
+
+#### 5a.3 The flow rule (`L-CT-SINK` — a `pc`-aware instance of `L-SINK`)
+
+One rule, a **projection of `L-SINK` (§3.1) onto the `CT` factor**, reusing
+Sec1's `pc` discipline verbatim:
+
+```
+(L-CT-SINK)  Γ; pc ⊢ g : A @ ℓ        o : LeakSink   (BranchGuard | MemIndex | VarTimePrim)
+             g is o's TIMING-RELEVANT operand  (the guard / the index / the var-time operand)
+             ──────────────────────────────────────────────────────────────────────────────
+             o(g, …)  WELL-FORMED iff  (ℓ.ct ⊔ pc.ct) = ct⊥
+                                       else  IFC-CT static error
+                                             -- name ℓ.ct, pc.ct, and the sink site (a source
+                                             --   location), per L-SINK's diagnostic contract
+```
+
+- **`pc.ct` closes the implicit channel.** Branching on a `@ct` value raises
+  `pc.ct = ct⊤` in both branches (`L-OBSERVE` projected onto the `CT`
+  factor), so a leakage op **inside** a `@ct`-guarded branch is caught **even
+  when its own operand is `ct⊥`** — the implicit-flow case, identical to
+  Sec1's `L-OBSERVE → L-SINK` composition.
+- **Each path is backed by a reject case:** `BranchGuard` (AC1), `MemIndex`
+  (AC2), `VarTimePrim` (AC3) — each a verdict **flip** (the correct program with
+  no such steering **accepts**).
+- **The observable is elaboration accept/reject — *never* a V3 verdict.**
+  `@ct` does **not** route through the by-proof engine (§5.3): a `@ct` leak
+  is a **type error** (reject), a clean program **accepts**, full stop. *Do
+  not* map a `@ct` leak to `disproved`/`unknown` — that strength-2 trichotomy
+  is a different mode (verdict-mapping pinned at source, the §5.3 discipline
+  applied to foreclose the cross-mode silence).
+
+#### 5a.4 The CT signature promise + the `Q` export
+
+A function **declares** constant-time-in-a-named-parameter — a
+**signature-level CT promise** on parameter `x` — and the boundary **checks** it
+and **emits** the source-level guarantee `Q`:
+
+- **Check (by typing, no product program).** The body is checked with `x` bound
+  at `ct⊤`; if any `LeakSink` op's timing-relevant operand depends on `x` —
+  directly or via `pc.ct` — the function is **rejected**. A body that passes
+  **discharges** the promise; this *is* the §5a.3 rule applied with the named
+  parameter as the `@ct` source.
+- **Export `Q` (the assumption boundary).** An accepted CT-promising function
+  emits a **source-level guarantee clause** onto the `71` **`guarantees` (`Q`)**
+  channel (`70-behavioral/71 §2`) — "constant-time-in-`x` *at the source level*,
+  relative to the stated leakage model" — content-hashed into the `71`
+  assume-guarantee contract. The loop closes at the **`63 §5a` discharge
+  attestation**: its field #1 binds the `71` contract hash, and its field #4
+  carries **Ward's** timing-validation result for exactly this `Q`.
+- **Coordinate the shape with B1; do not pre-bind names
+  (defer-spelling-not-concept).** **Locked:** the *concept* (a CT promise is a
+  `Q`-channel guarantee clause naming the parameter), the *value-set +
+  invariants* (it is a **source-level** precondition, **not** a timing
+  guarantee; it pairs
+  **1:1** with a `63 §5a` Ward discharge result; it is relative to a stated
+  leakage model), and the *stability discipline* (the clause binds to the `71`
+  contract **content-hash** — **renaming the field after binding is a contract
+  break**, `63 §5a` #1). **`(oracle)`-tagged:** the **literal field-token
+  spelling** of the CT-promise clause — the B1 / `71` emitter binds it.
+
+#### 5a.5 Declassify ends the span (the sole terminator)
+
+The sensitive **span = the `@ct` label's live span** — introduced where a value
+becomes `@ct`, ended **only** by an authorised **`declassify`** (§4), reused as
+the sole terminator on the `CT` axis:
+
+```
+declassify : Cap_declassify[ct⊤ → ct⊥] → A @ ct⊤ → A @ ct⊥      -- requires ct⊥ ⊑ ct⊤ + the cap
+```
+
+- After an **authorised** declassify the value is `ct⊥`, so its influence into a
+  leakage sink is **unconstrained** (`(ct⊥ ⊔ pc.ct)` — accepted when `pc.ct =
+  ct⊥`). The downgrade asserts "this value is now safe to leak timing-wise" (it
+  was blinded, or is public after a CT operation completed) — an **intended**
+  release.
+- **Capability-gated, explicit, audited, in `trusted_base_delta`** —
+  identical to confidentiality declassify (§4): the `@ct` declassify authority
+  a dependency holds appears in its delta (AC5).
+- **No region construct.** There is **no `constant_time { … }` block** — the
+  span *is* the label lifecycle. (A padding/balancing region is a *runtime
+  mitigation*, `Ward`'s, not Ken's.)
+
+#### 5a.6 What this does and does **not** prove (honest split → §H)
+
+The §5a.3 check, projected to the `@ct` observer, gives the **source-level
+constant-time precondition** `Q` (no `@ct` value steers a `LeakSink`) — **not**
+constant-time *execution*. The execution guarantee additionally requires (a) the
+compiler **preserves** the source CT property through lowering, and (b) the
+hardware **honours** the assumed **leakage model** — both **`[Ward]`**'s
+(`64 §4.2`, `63 §5a`). Claiming "well-typed ⇒ constant-time execution" is the
+exact over-claim §H forecloses. And because `@ct` labels are **erased** before
+the kernel (§9 N1), the `L-CT-SINK` rule and the `LeakSink` classification are
+**trusted** — the **discriminating conformance corpus**, not the kernel, is the
+net (§H names the three kernel-blind surfaces as scoped work).
 
 ## H. Honest limits — proven vs. assumed vs. delegated vs. deferred
 
@@ -447,10 +588,38 @@ re-checked by the *same* small kernel (ADR 0004 Decision 3, ADR 0001).
 | The lattice / policy is the *right* policy | **assumed** | a wrong policy ⇒ a wrong guarantee — the `64 §4.1` spec≠intent analog; the policy (`65`) is the human-reviewed boundary |
 | Classification at ingestion ("this datum *is* Tenant[X]") | **assumed — a claim, audited** | capability-gated + audited (§3.3), the dual of declassification; not a proof |
 | Declassification | **authorised release, audited** | NI holds *up to* declassify; each downgrade is explicit, capability-gated, optionally conditional, and in `trusted_base_delta` |
-| `@ct` **timing** guarantee | **delegated → `[Ward]` / `[Sec1ct]`** | Ken proves only the source-level precondition `Q`; the timing guarantee is codegen/hardware-relative under a stated leakage model (`64 §4.2`) |
+| `@ct` source-level precondition `Q` (no `@ct` value steers a `LeakSink`) | **proven *by typing* — but the flow rule is trusted** | the `L-CT-SINK` check (§5a.3) statically enforces `Q` by unary taint, no product program; but `@ct` labels are **erased** before the kernel, so the rule + the `LeakSink` classification are **trusted** (§9 N1) — the discriminating conformance corpus, not the kernel, is the net |
+| `@ct` **timing** guarantee (constant-time *execution*) | **delegated → `[Ward]` / toolchain** | Ken proves only the source precondition `Q` (above); the timing guarantee is codegen/hardware-relative under a stated leakage model and needs CT-preserving lowering + empirical validation (`64 §4.2`, `63 §5a`) — **Ken must not claim it** |
 | Heavy value-dependent relational machinery | **deferred → `[rel-deferred]`** | named, not faked; a reflective embedding if ever needed, **never** a kernel primitive |
 | Kernel / FFI / native runtime | **trusted (listed)** | `64 §4.3`; the IFC discipline adds **no** trusted primitive |
 | Worst-case time / space (DoS) | **out of scope** | `64 §4.2`; totality ≠ cheapness |
+
+**Named scoped work (the kernel-blind surfaces — reify-triggers for the next
+increment).** Three flow-property surfaces are **trusted** today (the kernel
+does **not** see them, §9 N1) and netted only by the conformance corpus + the
+design-level argument; each is named here as scoped work, **not silently
+absorbed**:
+
+- **`[Sec1-dual]` — IntegLabel (and `@ct`) ordering.** The integrity axis (§2.2)
+  and the `@ct` axis (§5a.1) are **both** the order-dual of confidentiality
+  (taint-oriented: `⊥` safe, `⊤` the taint, sink demands `⊥`). A flipped order
+  **silently inverts** accept/reject. The orientation is asserted in prose and
+  netted by the **non-degenerate discriminating pair** (`@ct` rejects *while*
+  `Secret`-not-`@ct` accepts on the same branch, AC4); **mechanizing** the
+  dual-ordering check is the scoped follow-up.
+- **`[Sec1-launder]` — real `Vis`-routed label preservation.** The
+  no-laundering invariant (§3.2) — that `bind`/`incl`/handler routing
+  preserves the label index (including the `CT` factor) on **every** `Vis`
+  node — rests today on the **L5
+  contract** (`36 §3.1`) as a *design* guarantee; verifying the **actual
+  elaborator's** `Vis`-routing drops/lowers no index at a boundary is the scoped
+  follow-up (the AC2 label-dropping flip is its conformance net).
+- **`[Sec1-reduce]` — `Φ_post` reduction-faithfulness.** The by-proof
+  reduction's `Φ_post` faithfully encoding 2-safety is **trusted** (§5.3 N2).
+  `@ct` uses
+  **unary taint, not** the relational engine, so this trigger does **not** gate
+  Sec1ct's `@ct` path — it names the general reduction-faithfulness surface for
+  the **strength-2** increment, carried here so it is tracked, not absorbed.
 
 ## 6. The topos grounding (why this is native, not bolted on)
 
@@ -489,11 +658,32 @@ view leak (secret : Bool @ Secret) (s : Socket Public) : Unit  visits [Net]
   = if secret then send s 1 else send s 0
                      -- REJECTED: in each branch pc = ⊥ ⊔ Secret = Secret ⋢ Public  (L-OBSERVE→L-SINK)
 
--- @ct hook: a key may not steer a leakage-relevant operation.
+-- @ct: a key may not STEER a leakage-relevant operation (BranchGuard sink).
 view cmp (k : Bytes @ ct) (g : Bytes) : Bool
   = branch_on (k[0] == g[0]) …
-                     -- REJECTED: @ct value steers a branch guard (a leakage sink); the source-level
-                     --   precondition. Timing validation itself is [Ward]/[Sec1ct].
+                     -- REJECTED (L-CT-SINK): @ct value (ct⊤) steers a BranchGuard sink; ct⊤ ⋢ ct⊥.
+                     --   Source-level precondition only; timing validation itself is [Ward].
+
+-- AC4 — the axes are INDEPENDENT: Secret-but-not-@ct branches freely (a verdict
+--   FLIP vs cmp above on the same branch shape — not green-vs-green).
+view route (p : Tag @ Secret) (g : Bytes) : Resp
+  = if p == Admin then handleA else handleB
+                     -- ACCEPTED: p is Secret (confidentiality) but ct⊥ — branching on it leaks
+                     --   nothing to a TIMING adversary. Conf and CT are orthogonal product factors.
+
+-- AC5 — declassify ends the @ct span: after an AUTHORISED downgrade the formerly-
+--   @ct value steers freely (and the @ct declassify cap shows in trusted_base_delta).
+view cmp_ok (k : Bytes @ ct) (d : Cap_declassify[ct⊤→ct⊥]) (g : Bytes) : Bool
+  = let k' = declassify d (ct_eq k g)   -- k' : Bool @ ct⊥  (blinded/CT-compared, now safe to act on)
+    in branch_on k' …
+                     -- ACCEPTED: k' is ct⊥ post-declassify; span ended. (Same sink as cmp; the only
+                     --   difference is the authorised, audited downgrade — a real flip.)
+
+-- AC6 — CT-in-parameter signature promise: declared CT-in-`k`, checked by typing.
+view ct_eq (k : Bytes @ ct) (g : Bytes) : Bool @ ct   -- promises constant-time-in-k
+  = fold_and (map2 ct_byte_eq k g)
+                     -- ACCEPTED + emits Q("constant-time-in-k", source-level) onto the 71 guarantees
+                     --   channel; a body that did `branch_on k[0]` instead would be REJECTED (the flip).
 ```
 
 A CISO reads these and sees PII boundaries, API-key confinement, injection
@@ -522,13 +712,18 @@ the controls compliance frameworks (GDPR/CCPA data boundaries, PCI key handling,
   in the four-way status; **verdict mapping pinned at source** (distinguishing
   pair → `disproved`-with-witness; unprovable → `unknown`-with-hole); the heavy
   product-program machinery **deferred `[rel-deferred]`**.
-- **Decided (`@ct`, §5a):** constant-time is a distinct **opt-in `@ct` label**
-  whose values may never reach a leakage `Vis` sink (branch/index/var-time),
-  enforced **by typing** (sound static enforcement of the source-level
-  precondition, no product programs); the **timing guarantee** is delegated to
-  **`[Ward]` + the toolchain** under a stated leakage model, and the full
-  pass is **`[Sec1ct]`** — Sec1 lands the **label + hook + reify-trigger**,
-  not the timing.
+- **Decided (`@ct`, §5a) — elaborated to the enforced discipline (Sec1ct):**
+  constant-time is a distinct **opt-in `@ct` label**, the order-dual `CT`
+  product factor of the lattice (§5a.1), whose values may never **steer** a
+  leakage `Vis` sink — the **sealed** `LeakSink` set
+  (`BranchGuard`/`MemIndex`/`VarTimePrim`,
+  §5a.2, no catch-all) — enforced **by typing** via the `pc`-aware `L-CT-SINK`
+  rule (§5a.3, sound static enforcement of the source precondition, no product
+  programs); a function exports a **CT-in-parameter promise** onto the `71` `Q`
+  channel (§5a.4); the span ends **only** at an authorised `declassify` (§5a.5).
+  The **timing guarantee** stays delegated to **`[Ward]` + the toolchain** under
+  a stated leakage model (Sec1 landed the **label + hook**; Sec1ct landed the
+  **discipline**; `[Ward]` owns the **timing**).
 - **Honest-limits (§H):** proven (by typing, meta-theorem trusted) vs. proven
   (by proof, kernel-re-checked) vs. assumed (policy, ingestion) vs. delegated
   (`@ct` timing) vs. deferred (heavy relational) — stated exactly.
@@ -557,9 +752,14 @@ erased **flow** property):
    the **by-proof** product-program reduction to a unary kernel-re-checked
    obligation with the **verdict mapping pinned at source** (§5.3,
    progress-sensitive default). *Acceptance 1, 3.*
-5. **The `@ct` hook** — the opt-in label parses + is carried; a `@ct` value
-   reaching a leakage-sink `Vis` op is a type error; the **reify-trigger** to
-   **`[Sec1ct]` / `[Ward]`** is present, not silent (§5a). *Acceptance 4.*
+5. **The `@ct` discipline** (Sec1 landed the *hook*; **Sec1ct** elaborates the
+   *discipline*, §5a) — the opt-in `CT` product-factor axis (§5a.1); the
+   **sealed** `LeakSink` classification, no catch-all (§5a.2); the `pc`-aware
+   `L-CT-SINK` flow rule (§5a.3); the CT-in-parameter promise + `Q` export
+   (§5a.4); declassify as the sole span terminator (§5a.5); the timing
+   guarantee delegated to
+   **`[Ward]`** with the three `[Sec1-*]` triggers named in §H (§5a.6).
+   *Acceptance 4; Sec1ct AC1–AC7.*
 6. **Honest limits** — the proven/assumed/delegated/deferred boundary as a
    first-class artifact, no over-claim (§H). *Acceptance 5.*
 
@@ -587,6 +787,8 @@ existing formation (`36 §7.4`):
 | `Lattice` (the carrier + ops record) | `Type (suc ℓ)` | record / Σ-Form (`13 §1`), laws at `Ω` |
 | `A @ ℓ` (labeled type) | same as `A` | `ℓ` is an **erasable index**; the kernel sees `A` |
 | label index on a `Vis` op/resp | `≤ ℓ_ITree` | rides the existing `Vis` container (`36 §2.1`); no new universe |
+| `CT` factor `{ct⊥, ct⊤}` (§5a.1) | level `0` | a finite two-point lattice — **another product factor** (§2.2), an *instance* of the `Lattice`/product rules above; **no new level rule** |
+| `A @ ct` (the `CT` projection of `A @ ℓ`) | same as `A` | `ct` is an **erasable index** like any label; the kernel sees `A`; `LeakSink` is a `Vis`-op classification, not a type former |
 | relational obligation `Γ ⊢ (Φ_pre ⇒ Φ_post) : Ω` | `Ω` | an ordinary unary obligation (`22 §1`, `21 §5`) |
 
 The `Vis` label-index row carries the side-condition **`ℓ_carrier ≤ ℓ_ITree`**
@@ -599,12 +801,33 @@ Every level is the **predicative `max`** of its parts (`12 §2`), non-cumulative
 (`12 §4`). The IFC discipline is impredicative nowhere — it adds **no new level
 rule**, only Π/Σ/inductive/`ITree` instances.
 
-Conformance: `../../conformance/security/ifc/` — covering the five acceptance
-criteria with **discriminating** cases (COORDINATION §7; each negative case must
-**flip** on the bug it targets): a `Secret`→`Public` flow rejects and an
-authorised `declassify` accepts + shows in the delta (AC1); a label routed
-through an effect to a low sink **still rejects** under no-laundering
-and **wrongly accepts under a label-dropping `bind`/`incl`** (AC2, §3.2); a
-forged label/cert is **kernel-rejected** (AC3); the `@ct` hook parses,
-carries, and rejects a leakage-sink use, with the `[Sec1ct]`/`[Ward]` trigger
-present (AC4); the proven-vs-assumed boundary is explicit (AC5).
+Conformance (Sec1): `../../conformance/security/ifc/` — covering the five
+Sec1 acceptance criteria with **discriminating** cases (COORDINATION §7; each
+negative case must **flip** on the bug it targets): a `Secret`→`Public` flow
+rejects and an authorised `declassify` accepts + shows in the delta (AC1); a
+label routed through an effect to a low sink **still rejects** under
+no-laundering and **wrongly accepts under a label-dropping `bind`/`incl`**
+(AC2, §3.2); a forged label/cert is **kernel-rejected** (AC3); the `@ct` hook
+parses, carries, and rejects a leakage-sink use, with the `[Sec1ct]`/`[Ward]`
+trigger present (AC4); the proven-vs-assumed boundary is explicit (AC5).
+
+**Conformance (Sec1ct, the `@ct` discipline):** extends `ifc/` (or a `ct/`
+sibling) covering §5a. Because `@ct` labels are **erased before the kernel**
+(N1), these cases — not the kernel — are the trust boundary, so each must
+**route a real `@ct` value through a real `LeakSink`** and observe the verdict
+(never *predicate about* a synthetic `is_ct`/`is_sink` over literals — that
+guards nothing). **Per-case flip:** a `@ct` value steering a `BranchGuard`
+rejects / the same shape on a `ct⊥` value accepts (AC1); likewise `MemIndex`
+(AC2) and `VarTimePrim` (AC3); a `Secret`-but-not-`@ct` value branches freely —
+**accepts** — *while* the `@ct` case rejects on the same branch shape (AC4, the
+non-degenerate `[Sec1-dual]` distinguishing pair, not green-vs-green); after an
+authorised `declassify` the formerly-`@ct` value steers a sink and **accepts**,
+its declassify cap in `trusted_base_delta` (AC5); a CT-in-parameter promise is
+checked and the accepted function **emits the `Q` clause** — a *structural*
+assertion on the emitted boundary obligation, not merely "accepts" (AC6); and an
+**honesty** case asserts **no** test claims Ken proves constant-time *execution*
+— §H carries the split + the three `[Sec1-*]` triggers (AC7). **Cross-case
+sweep:** the `@ct`-reject class agrees (AC1–AC3), the accept class agrees
+(AC4–AC6), and **every** `@ct` observable is **accept/reject — never** a V3
+verdict (§5a.3): a case mapping a `@ct` leak to `disproved`/`unknown` is a
+mode-confusion bug.

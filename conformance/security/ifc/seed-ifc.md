@@ -10,7 +10,8 @@ placeholders in `../seed-security.md` (retired in the same WP — see
 `trust/` placeholders there are Sec2+ and untouched.
 
 Grounding (landed `§`-bodies, content-reconciled — not the plan):
-`61 §1`–`§9`/`§H` (the lattice, flow-typing, NI, `@ct` hook, honest limits);
+`61 §1`–`§9`/`§H` (the lattice, flow-typing, NI, honest limits; the `@ct`
+discipline §5a is elaborated as Sec1ct in `../ct/seed-ct.md`);
 `36 §2.1`/`§2.2`/`§2.4`/`§3.1` (`ITree`/`Vis`, `bind`, `incl`, the fixed
 cross-workstream contract: an IFC label is an index on a `Vis` op/resp,
 nothing effectful hides between nodes); `23 §1.2`/`§1.3` (verdict trichotomy +
@@ -39,7 +40,7 @@ is never authored as one here. The corpus splits cleanly:
   `bind`/`incl`) emits a **well-typed core term the kernel accepts** while NI is
   violated — the by-typing flow rules are **trusted**, and these flip cases are
   the **sole net** (the §H meta-theorem + discriminating conformance, never the
-  kernel). Groups A, C, F1.
+  kernel). Groups A, C (and the `@ct` axis — Sec1ct `../ct/`).
 - **By proof (strength 2, bespoke, `61 §5.3`).** Observable = **kernel re-check
   of the product-program certificate** → a V3 verdict (`23 §1`): a *related*
   pair → `proved`; a *distinguishing* pair → `disproved` with the pair as the
@@ -56,8 +57,9 @@ is never authored as one here. The corpus splits cleanly:
 **Honest-limits is a conformance-SCOPE constraint (`61 §H`, `64 §4`; LP-2).**
 Over-claiming is itself the security failure, so each case asserts **exactly
 what Ken proves** and **defer-tags (a reify-trigger, never silent)** what Ken
-delegates: `[Sec1ct]` (the `@ct` timing-enforcement WP), `[Ward]` (runtime
-timing validation under a leakage model), `[rel-deferred]` (the heavy
+delegates: `[Ward]` (runtime timing validation under a leakage model — the
+`@ct` source-precondition *enforcement* is now landed as Sec1ct, `../ct/`),
+`[rel-deferred]` (the heavy
 value-dependent product-program machinery). A case that asserted a delegated
 guarantee (e.g. "`@ct` prevents a timing leak") would over-claim past Ken's
 locked granularity — it is a wrong case.
@@ -276,30 +278,17 @@ the flow invariant, not the surface token.
   false accept (`64 §2`). The IFC discipline adds **no** trusted primitive
   (labels are `Vis` indices); the same small kernel filters it.
 
-## F. The `@ct` hook — source precondition only (AC4)
+## F. The `@ct` discipline → elaborated to Sec1ct (`../ct/seed-ct.md`)
 
-### security/ifc/ct-value-steers-leakage-sink-rejected
-- spec: `61 §5a` (the `@ct` hook), `36 §3.1` (leakage-sink `Vis` op class)
-- given: `cmp (k : Bytes @ ct) (g : Bytes)` whose body `branch_on (k[0]==g[0])`
-  lets the `@ct` key steer a **branch guard** (a leakage-relevant `Vis` op)
-- expect: **rejects** — `L-SINK` reused with the leakage-sink as `κ`; a type
-  error (the source-level constant-time precondition `Q`)
-- why: (soundness) the unary-taint enforcement of the source-level CT
-  precondition (no product programs). Flip: the same value not steering a
-  leakage op (or `k` not `@ct`) accepts. Also covers memory-index and
-  variable-time-primitive sinks.
-
-### security/ifc/ct-label-parses-carries-and-defers-timing
-- spec: `61 §5a`/`§H`, `64 §4.2`, `63 §5a`
-- given: a function exporting a signature-level CT promise; the `@ct` label is
-  attached and routed through the denotation (riding a `Vis` index)
-- expect: the `@ct` label **parses, attaches, and is carried** (assert the
-  label **survives** the denotation, structurally) AND a `[Sec1ct]`/`[Ward]`
-  **reify-trigger is present** at the leakage-sink op — **not silent**
-- why: (soundness) for the precondition the label is real and checked;
-  **(oracle) the timing guarantee itself is NOT asserted** — it is delegated to
-  `[Ward]`/`[Sec1ct]` under a leakage model (LP-2 honest-limits scope). A case
-  asserting "no timing leak" here would over-claim past what Sec1 lands.
+> The Sec1 `@ct` *hook* cases (F1 `ct-value-steers-leakage-sink-rejected`, F2
+> `ct-label-parses-carries-and-defers-timing`) are **superseded** by the Sec1ct
+> `@ct` *discipline* in **`../ct/seed-ct.md`** (AC1–AC7): F1 splits into the
+> per-sink discriminating cases CT-A1/A2/A3 (the proper `pc`-aware `L-CT-SINK`
+> rule over the sealed `LeakSink` set) + the implicit-flow CT-A4; F2 is absorbed
+> into the honesty case CT-E1 (the proven-`Q`-vs-delegated-timing split, now
+> naming the three `[Sec1-*]` triggers — F2's reify-trigger pointed at this
+> `[Sec1ct]` WP, now landed). See that file's "Hook absorption" note. The `@ct`
+> reject/accept flips, formerly F1, are now owned by `../ct/` group CT-A/CT-B.
 
 ## G. Honest limits — scope, no over-claim (AC5)
 
@@ -333,9 +322,13 @@ the flow invariant, not the surface token.
 - **AC2** labels compose through effects (no laundering) → C1.
 - **AC3** kernel-re-checkable (by-proof + forged cert) → D1–D5, E1 (D5 = the
   N2 positive-soundness reduction-faithfulness backstop).
-- **AC4** `@ct` hook present, enforcement deferred → F1, F2.
+- **AC4 (Sec1)** the `@ct` hook → **elaborated to the Sec1ct discipline** in
+  `../ct/seed-ct.md` (Sec1ct AC1–AC7); the Sec1 hook cases F1/F2 are absorbed
+  there (group F above is now a pointer). Note the *different* AC namespaces:
+  this is Sec1 AC4; `../ct/` runs its own Sec1ct AC1–AC7.
 - **AC5** honest limits (proven/assumed/delegated/deferred, no over-claim) →
-  G1, G2 (and the `(oracle)`/defer-tags throughout F2, D3).
+  G1, G2 (and the `(oracle)`/defer-tags throughout D3; the `@ct` honesty case
+  is now `../ct/` CT-E1).
 
 ## Cross-case consistency sweep (pre-handoff gate)
 
@@ -347,21 +340,24 @@ the flow invariant, not the surface token.
   progress-sensitive default (D4). The Glivenko-analog for IFC.
 - **The two trusted parts conformance is the sole net for (N1/N2,
   `61 §9`/`§H`).** (i) the **by-typing flow rules** — labels erased = the kernel
-  is blind to a flow bug, so the flip cases {A1–A4, C1, F1} are the sole net;
+  is blind to a flow bug, so the flip cases {A1–A4, C1} (+ the `@ct` axis,
+  `../ct/` CT-A/CT-B/CT-C) are the sole net;
   (ii) **reduction-faithfulness** in the by-proof path — the kernel re-checks
   the cert, not the obligation's fidelity to 2-safety, so the positive case D5
   (interfering → `disproved`) is the sole net. Both are the security analog of
   the verification layer's silent-omission backstop: a producer's *omission*
   (an over-accepting flow rule, an unfaithful reduction) is invisible to the
   re-checker — only a discriminating/positive conformance case nets it.
-- **By-typing accept/reject class {A1–A4, C1, F1}** — each is a clean verdict
+- **By-typing accept/reject class {A1–A4, C1}** — each is a clean verdict
   flip (right=accept / targeted-bug=reject), none green-vs-green; the targeted
   bug is named per case (dropped `pc`-raise, `⊓`-for-`⊔`, integrity-as-
-  confidentiality, label-dropping `bind`/`incl`, non-`@ct`-steer).
-- **Absence-gate cases {C1, D3, D5, B3, F2}** — each names its exact guard (the
+  confidentiality, label-dropping `bind`/`incl`). The `@ct`-steer flip class
+  moved to `../ct/` (CT-A/CT-B), which runs its own per-case-flip + cross-case
+  sweep over the sealed `LeakSink` set.
+- **Absence-gate cases {C1, D3, D5, B3}** — each names its exact guard (the
   `Vis`-index label, the listed-postulate hole, reduction-faithfulness, the
-  delta-completeness backstop, the present reify-trigger) and passes "would
-  this also be absent/rejected under the precise bug it targets?".
+  delta-completeness backstop) and passes "would this also be absent/rejected
+  under the precise bug it targets?". (The `@ct` absence-gates are in `../ct/`.)
 
 ## Placeholder absorption (reconcile note)
 
@@ -375,12 +371,14 @@ and `trust/` placeholders there are out of Sec1 scope and untouched.
 
 ## Build-sequencing note
 
-By-typing cases (A, B1–B2, C, F1) exercise the elaborator's flow-typing pass
+By-typing cases (A, B1–B2, C) exercise the elaborator's flow-typing pass
 (§3 rules) and need no kernel feature beyond landed K1.5. By-proof cases
 (D1–D5) ride V3's prover + the kernel re-check (`23 §1`, `18 §4`) and the
-product-program reduction; D3/D4 + F2 + G1 carry the `[rel-deferred]`/`[Ward]`/
-`[Sec1ct]` reify-triggers — the deferred enforcement lands in those follow-on
-WPs, not Sec1. E1 rides the kernel's existing re-check. The `Vis` label index
+product-program reduction; D3/D4 + G1 carry the `[rel-deferred]`/`[Ward]`
+reify-triggers — the deferred enforcement lands in those follow-on WPs, not
+Sec1. The `@ct` discipline (formerly the F-group hook) is elaborated in
+`../ct/seed-ct.md` (Sec1ct AC1–AC7), on the same erased-before-kernel
+flow-typing path. E1 rides the kernel's existing re-check. The `Vis` label index
 carries the side-condition **`ℓ_carrier ≤ ℓ_ITree`** (`61 §9` level table): a
 parametric `Lattice` with a high-universe carrier must place its label at or
 below `ℓ_ITree` (trivially true for DLM's level-0 `Set Principal`). Literal
