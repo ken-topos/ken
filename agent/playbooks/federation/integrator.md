@@ -55,8 +55,10 @@ Concretely, per WP:
 1. **Publish for CI.** When a leader posts `merge_ready` and opens the merge
    Decision: `git push origin wp/<ID>` (the branch already exists in the shared
    clone — you publish committed work, you don't author it), then **open the PR
-   explicitly**: `gh pr create --base main --head wp/<ID> --title "<ID>: <what>"
-   --body "<merge-Decision link>"`. **The push alone does NOT open a PR** —
+   explicitly** with a **substantive what/why body** (see *PR description* below
+   — **never** a coordination-object link): write the description to a file and
+   `gh pr create --base main --head wp/<ID> --title "<ID>: <what>" --body-file
+   <desc.md>`. **The push alone does NOT open a PR** —
    without `gh pr create` there is no PR number `<n>` to poll or merge and the
    pipeline silently stalls. Capture `<n>` from the create output (or `gh pr list
    --head wp/<ID>`). The PR triggers CI.
@@ -67,20 +69,53 @@ Concretely, per WP:
 3. **Fetch after every merge** so the shared `origin/main` ref updates for all
    worktrees; the teams rebase locally with no network.
 
+## PR description — for humans and their agents, not the federation
+
+The PR title + body are the **durable public record** of the change. This is an
+open-source repo: the primary readers are **humans and their coding agents who
+have never seen the internal coordination** — not mootup-connected agents. A
+near-empty body, or one that just links a coordination object, is useless to
+them. Write every PR description as the change's **standalone** summary.
+
+**Two hard rules:**
+
+1. **Say WHAT and — most importantly — WHY.** *What:* the change in plain terms
+   (which component/behavior, what a reader will notice). *Why:* the motivation
+   and design rationale — the problem it solves, the decision behind it, what it
+   unblocks. The *why* is what a reader **cannot** reconstruct from the diff, so
+   it is the most valuable thing the description carries. Source it from the WP
+   frame (`docs/program/wp/<ID>.md` — objective + settled decisions) and the
+   spec sections the WP cites, **rewritten as plain prose** (don't paste
+   internal notes verbatim).
+2. **NEVER reference mootup or internal-only objects.** No Decision / event /
+   thread ids, no agent handles or role names, no "the space", no `mootup.io`
+   links — the platform is invite-only and may never be public, so any such
+   reference is **dead to every external reader**. State the gates as plain
+   facts ("independently reviewed for soundness; conformance + CI green;
+   clean-room verified"), never as an id or link.
+
+Shape — tight, a few short paragraphs or bullets: **What changed** (component +
+observable behavior) · **Why** (motivation + rationale) · **How it's verified**
+(reviewed for soundness, conformance + CI green, clean-room verified — plain
+words, no ids). Write the body to a file and pass it with `--body-file`, then
+reuse that same file as the squash `--body-file` (below) so the landed `main`
+commit carries the same what/why, not just the title.
+
+**Deferred — one-time backfill (after the main work program completes).** The
+PRs merged *before* this rule have near-empty descriptions; once the program is
+done, **backfill a proper what/why description onto each already-merged PR**
+(via `gh pr edit <n> --body-file <desc.md>`), sourced from that WP's frame
+(`docs/program/wp/<ID>.md`) + spec, same two rules above (no internal-object
+references). The Steward signals when the program is complete; until then,
+prioritize live WPs over the backfill.
+
 ## Merge gate (every WP)
 
 Merge only when **all** hold:
 
-1. **Review Decision *resolved* with approvals recorded — verify it FRESH, never
-   infer it from `merge_ready` prose (promoted Sec1ct breach).** Re-read
-   `list_decisions` at merge time and confirm `status: resolved` (not
-   `proposed`) with the **Architect** (always) and the **Spec** approval
-   if the change touches `/spec`, `/conformance`, or a designated soundness
-   path — the Spec vote comes from the **conformance-validator** (the
-   frontier-class Spec reviewer, COORDINATION §14), never the `Spec` template
-   placeholder. **A `merge_ready` naming "`(Architect + Spec)`" is a reviewer
-   *list*, not an approval** — reading it as approval is exactly how the Sec1ct
-   merge skipped the gate. The review *is* the mootup Decision; you do not
+1. **Review Decision approved** — the Architect approved (always), and the Spec
+   enclave approved if the change touches `/spec`, `/conformance`, or a
+   designated soundness path. The review *is* the mootup Decision; you do not
    perform the design review yourself. Domain correctness was gated pre-merge by
    the owning team's QA in the ring.
 2. **CI green** — build + conformance + clean-room + path-guard, on the branch
@@ -90,9 +125,11 @@ Merge only when **all** hold:
 4. **No gate regression** — the change does not regress a passed roadmap gate
    (G0–G8).
 
-Then **squash-merge**: `gh pr merge <n> --squash --subject "<ID>: <what>"` (the
-`--squash` makes it one commit per WP; the `--subject` puts the WP ID in the
-commit title, e.g. `K1: dependent Pi/Sigma kernel core`). Branch protection
+Then **squash-merge**: `gh pr merge <n> --squash --subject "<ID>: <what>"
+--body-file <desc.md>` (the `--squash` makes it one commit per WP; the
+`--subject` puts the WP ID in the commit title, e.g. `K1: dependent Pi/Sigma
+kernel core`; the `--body-file` reuses the PR description so the landed `main`
+commit carries the same what/why — the durable record, not just a title). Branch protection
 requires the green checks and restricts the merge to you, so the gate is
 mechanical, not just convention.
 
