@@ -370,6 +370,22 @@ trigger CI, reads the checks, merges, and fetches `main`
   green → advance toward merge. The optional `ken-ci` bridge mirrors
   `check_suite` results automatically; until then the Integrator posts them.
   After you hand a WP off, you **stop** and learn a red result from a mention.
+- **Landing integrity: a merge isn't trusted until *verified on `main`* — and a
+  multi-piece WP isn't landed until *every* piece is (promoted V1, ★★★
+  near-miss).** A **squash-merge can silently drop pieces** of an assembly built
+  from multiple cherry-picks: the K2c-s2 seam-3 erratum shipped its **kernel**
+  fix in `ecbb279` but **dropped the spec (`da344a6`) + conformance (`f3ece75`)**
+  pieces, leaving `16 §5.1` normatively **contradicting its own kernel** and the
+  corpus guarding nothing — and it **survived the ship**, invisible in every
+  "shipped" status/notification. Caught only by **grounding against the landed
+  files**. So: (1) **don't trust a "shipped `<sha>`" notification or a status
+  line** that a thing landed — for anything load-bearing, confirm it on `origin/
+  main` (the files: `git grep`/`git show`). (2) **An approved N-piece erratum/WP
+  is not "landed" until you verify each piece on `main`** (the Architect's
+  3-piece-on-main gate) — the Integrator/leader who assembles a multi-cherry-pick
+  branch checks the post-merge `main` carries all of them. (3) **Authors ground
+  the WP *base* against the landed corpus, not the notifications,** before
+  building on it.
 - **Review is a mootup Decision, not a GitHub action.** The Architect/Spec read
   the diff from the shared local branch (`git diff origin/main...wp/<ID>`) and
   vote the merge Decision in mootup. There is no GitHub PR approval to mirror.
