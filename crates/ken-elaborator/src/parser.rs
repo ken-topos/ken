@@ -102,10 +102,11 @@ impl Parser {
             Token::KwLaw => self.parse_law_decl(start),
             Token::KwData => self.parse_data_decl(start),
             Token::KwTypeAlias => self.parse_type_alias_decl(start),
+            Token::KwForeign => self.parse_foreign_decl(start),
             other => Err(ElabError::ParseError {
                 msg: format!(
-                    "expected 'view', 'let', 'prove', 'law', 'data', 'type', or 'space view', \
-                     found {:?}",
+                    "expected 'view', 'let', 'prove', 'law', 'data', 'type', 'foreign', or \
+                     'space view', found {:?}",
                     other
                 ),
                 span: self.peek_span().clone(),
@@ -341,6 +342,74 @@ impl Parser {
         Ok(Decl::TypeAlias {
             name,
             ty,
+            span: Span::new(start, end),
+        })
+    }
+
+    /// `foreign f : T = "symbol" "library" [pure] [E1, E2, …]` (`38 §2.1`).
+    ///
+    /// Keyword spellings are `(oracle)` — the exact tokens are finalized by
+    /// the build team. This implementation uses `foreign`, `pure` (as a
+    /// contextual ident), and effect labels as ConIds.
+    fn parse_foreign_decl(&mut self, start: usize) -> Result<Decl, ElabError> {
+        self.advance(); // consume 'foreign'
+        let (name, _) = self.expect_ident()?;
+        self.expect(&Token::Colon)?;
+        let ty = self.parse_type()?;
+        self.expect(&Token::Eq)?;
+        // symbol string literal
+        let symbol = match self.advance() {
+            (Token::Str(s), _) => s,
+            (other, span) => {
+                return Err(ElabError::ParseError {
+                    msg: format!("expected string literal for symbol name, found {:?}", other),
+                    span,
+                })
+            }
+        };
+        // library string literal
+        let library = match self.advance() {
+            (Token::Str(s), _) => s,
+            (other, span) => {
+                return Err(ElabError::ParseError {
+                    msg: format!("expected string literal for library name, found {:?}", other),
+                    span,
+                })
+            }
+        };
+        // optional `pure` contextual keyword
+        let is_pure = if matches!(self.peek(), Token::Ident(s) if s == "pure") {
+            self.advance();
+            true
+        } else {
+            false
+        };
+        // optional `[E1, E2, …]` effect-row annotation
+        let visits = if matches!(self.peek(), Token::LBracket) {
+            self.advance(); // consume '['
+            let mut labels = Vec::new();
+            while !matches!(self.peek(), Token::RBracket | Token::Eof) {
+                let (label, _) = self.expect_ident()?;
+                labels.push(label);
+                if matches!(self.peek(), Token::Comma) {
+                    self.advance();
+                }
+            }
+            let end = self.peek_span().end;
+            self.expect(&Token::RBracket)?;
+            let _ = end;
+            labels
+        } else {
+            Vec::new()
+        };
+        let end = self.peek_span().start;
+        Ok(Decl::ForeignDecl {
+            name,
+            ty,
+            symbol,
+            library,
+            is_pure,
+            visits,
             span: Span::new(start, end),
         })
     }

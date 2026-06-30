@@ -1,9 +1,11 @@
-//! V0/V1/L1/L2 lexer (`31 §8`, `21 §6.1`, `35 §4.1`, `34`).
+//! V0/V1/L1/L2/L7 lexer (`31 §8`, `21 §6.1`, `35 §4.1`, `34`, `38 §2`).
 //!
-//! Recognises the token subset for G1 (V0), V1 spec-annotation keywords, L1
-//! numeric literals (integer, float, decimal, float32) plus arithmetic
-//! operators, and L2 sum-type/pattern-match keywords (`data`, `match`, `type`,
-//! `=>` fat-arrow).  Whitespace and `-- …` line comments are skipped.
+//! Recognises the token subset for G1 (V0), V1 spec-annotation keywords,
+//! L1 numeric literals (integer, float, decimal with `d`-suffix, float32 with
+//! `f32`-suffix), infix arithmetic operators `+`, `+%`, `*`, `==`,
+//! L2 sum-type/pattern-match keywords (`data`, `match`, `type`, `=>`
+//! fat-arrow), and L7 `foreign` declaration tokens (`38 §2.1`, `(oracle)`
+//! keyword spellings).  Whitespace and `-- …` line comments are skipped.
 
 use crate::error::{ElabError, Span};
 
@@ -26,6 +28,8 @@ pub enum Token {
     KwData,       // "data"  — inductive type declaration
     KwMatch,      // "match" — pattern matching
     KwTypeAlias,  // "type"  — surface type alias
+    // L7 keywords (`38 §2.1`, spellings are `(oracle)`)
+    KwForeign,
     // V0 punctuation
     LParen,
     RParen,
@@ -39,6 +43,11 @@ pub enum Token {
     LBrace,
     RBrace,
     Pipe,
+    // L7 punctuation (foreign effect-row list + string attributes)
+    LBracket,  // `[`
+    RBracket,  // `]`
+    Comma,     // `,`
+    Str(String), // `"…"` — symbol name / library name in `foreign` decls
     // L1 arithmetic operators
     Plus,         // `+`  — type-directed infix addition
     PlusPercent,  // `+%` — explicit wrapping add
@@ -123,6 +132,41 @@ impl<'s> Lexer<'s> {
             '}' => {
                 self.advance();
                 return Ok((Token::RBrace, Span::new(start, self.pos)));
+            }
+            '[' => {
+                self.advance();
+                return Ok((Token::LBracket, Span::new(start, self.pos)));
+            }
+            ']' => {
+                self.advance();
+                return Ok((Token::RBracket, Span::new(start, self.pos)));
+            }
+            ',' => {
+                self.advance();
+                return Ok((Token::Comma, Span::new(start, self.pos)));
+            }
+            '"' => {
+                self.advance(); // consume opening '"'
+                let mut s = String::new();
+                loop {
+                    match self.cur() {
+                        None | Some('\n') => {
+                            return Err(ElabError::ParseError {
+                                msg: "unterminated string literal".to_string(),
+                                span: Span::new(start, self.pos),
+                            });
+                        }
+                        Some('"') => {
+                            self.advance(); // consume closing '"'
+                            break;
+                        }
+                        Some(c) => {
+                            self.advance();
+                            s.push(c);
+                        }
+                    }
+                }
+                return Ok((Token::Str(s), Span::new(start, self.pos)));
             }
             '|' => {
                 self.advance();
@@ -211,6 +255,7 @@ impl<'s> Lexer<'s> {
                 "data"     => Token::KwData,
                 "match"    => Token::KwMatch,
                 "type"     => Token::KwTypeAlias,
+                "foreign"  => Token::KwForeign,
                 _ => {
                     let first = s.chars().next().unwrap();
                     if first.is_uppercase() {

@@ -15,6 +15,7 @@ pub mod diagnostics;
 pub mod elab;
 pub mod effects;
 pub mod export;
+pub mod foreign;
 pub mod ifc;
 pub mod trace;
 pub mod protocol;
@@ -63,6 +64,9 @@ pub use protocol::{
 pub use resolve::{RDecl, RDeclKind, RExpr, RType};
 pub use numbers::{NumericEnv, NumericLitVal};
 pub use bytes::BytesEnv;
+pub use foreign::{
+    trusted_base_delta, FfiRuntimeCheck, ForeignBinding, ForeignEnv, MarshalKind, MarshalSig,
+};
 
 /// The surface-level elaboration environment.
 pub struct ElabEnv {
@@ -75,6 +79,8 @@ pub struct ElabEnv {
     pub numeric_env: NumericEnv,
     /// The Bytes layer (L6): type ids, I/O effect row registry (`38 §1`, `41`).
     pub bytes_env: BytesEnv,
+    /// The foreign FFI layer (L7): binding registry (`38 §2–§4`).
+    pub foreign_env: ForeignEnv,
 }
 
 impl ElabEnv {
@@ -100,6 +106,7 @@ impl ElabEnv {
             num_values: HashMap::new(),
             numeric_env,
             bytes_env,
+            foreign_env: foreign::ForeignEnv::empty(),
         })
     }
 
@@ -135,13 +142,17 @@ impl ElabEnv {
             });
         }
         let rdecl = resolve::resolve_decl(&decls[0])?;
-        elaborate_rdecl(
+        let result = elab::elaborate_rdecl_v1(
             &mut self.env,
             &mut self.globals,
             &mut self.num_values,
             &self.numeric_env,
             &rdecl,
-        )
+        )?;
+        if let Some(fb) = &result.foreign_binding {
+            self.foreign_env.register(result.name.clone(), fb.clone());
+        }
+        Ok(result.def_id)
     }
 
     /// Elaborate a V1/L1 declaration, returning obligations alongside the id.
@@ -154,13 +165,18 @@ impl ElabEnv {
             });
         }
         let rdecl = resolve::resolve_decl(&decls[0])?;
-        elab::elaborate_rdecl_v1(
+        let result = elab::elaborate_rdecl_v1(
             &mut self.env,
             &mut self.globals,
             &mut self.num_values,
             &self.numeric_env,
             &rdecl,
-        )
+        )?;
+        // Register foreign bindings in the foreign env (AC1/AC5 tests).
+        if let Some(fb) = &result.foreign_binding {
+            self.foreign_env.register(result.name.clone(), fb.clone());
+        }
+        Ok(result)
     }
 
     /// Try to discharge an obligation hole with a certificate term.

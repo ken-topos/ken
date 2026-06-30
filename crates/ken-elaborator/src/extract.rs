@@ -134,6 +134,11 @@ fn lift_obligation(def_name: &str, obl: &Obligation) -> ObligationTriple {
             format!("{}.prim.{}", def_name, obl.id),
             ProvKind::PartialPrim,
         ),
+        // A `foreign` runtime-check slot: listed postulate, tested status (`38 §3.3`).
+        ObligationKind::FfiRuntimeCheck => (
+            format!("{}.ffi_runtime_check.{}", def_name, obl.id),
+            ProvKind::CallPrecond, // closest existing kind; treated as `tested` in export
+        ),
     };
 
     ObligationTriple {
