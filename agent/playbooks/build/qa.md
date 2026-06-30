@@ -38,7 +38,16 @@ the code, and that independence is the point. Read `../../COORDINATION.md` and
      file**, greppable, not discoverable only by tracing back to the seed. A green
      vacuous test with no local marker is a soft trap; flag it. (Dual of the
      make-absence-visible discipline — the test file should disclose its own
-     deferred coverage.)
+     deferred coverage.) **And the marker must name a *reify trigger*, not just a
+     `<WP>` — a deferred placeholder with no lifecycle *fossilizes* (promoted
+     X1-effects).** A `[placeholder]` that doesn't say **what unblocks it** (a
+     landed capability, a named WP, a dependency) becomes permanent: X1-effects
+     EFF3/EFF4 are sound deferrals but reify only when the elaboration layer / the
+     **K1.5 Π-bound-IH `elim_reduce`** lands — write that trigger into the marker
+     (`// [placeholder — reifies when K1.5 Π-bound IH lands]`). A deferred
+     placeholder is a **tracked debt**, not a label: the leader carries it forward
+     and the Steward tracks it to reification (a placeholder whose trigger has
+     since landed but is still vacuous is a stall to flag).
    - **Trace the *mechanism* that enforces each cited prior-lesson — not the
      comment (promoted X1; 2nd Architect-catch-QA-missed).** When the
      implementer's handoff says "K1/K2/F4 lesson X is applied," a code **comment**
