@@ -62,8 +62,12 @@ git only.
   your message at the space root, **scattering one WP's conversation across the
   space** so the next reader — and the Steward harvesting retros — can't follow
   the exchange. **One WP = one thread:** kickoff → ack → queries → handoff →
-  merge Decision → retros all live under it. `reply_to` is the threaded-reply
-  shortcut; prefer it over a root `post_response` whenever you're answering.
+  merge Decision → retros all live under it. **`reply_to` needs an *existing*
+  thread** — it 404s ("Thread not found") on a **top-level** event that has no
+  thread yet (e.g. a kickoff, which is itself a root post). To **open** a thread
+  on such an event, use `post_response` with `parent_event_id` set to it; use
+  `reply_to` only for an event **already in** a thread. (L5: an implementer lost a
+  round-trip when `reply_to` on the kickoff 404'd.)
 
 ### 2a. Convo call cheat-sheet (form valid parameters — recurring failure)
 
@@ -94,8 +98,10 @@ so the next move never fires). The two parameters that get rejected:
 - **`propose_decision`**: give the decision `text`/title + the WP/branch; mention
   the required reviewers (Architect always; Spec only on `spec/`+`conformance/`
   paths — §13/diff-scope). **`thread_id`/`parent_event_id`** take an event/thread
-  id string (§2), never a name. When a call 400s, **read the error, fix the one
-  named field, and re-send** — a dropped post is a silent stall.
+  id string (§2), never a name. **`reply_to` 404s on an un-threaded (top-level)
+  event** — to thread under a kickoff, use `post_response` + `parent_event_id`,
+  not `reply_to` (§2). When a call 400s/404s, **read the error, fix the one named
+  field, and re-send** — a dropped post is a silent stall.
 
 ## 3. Status = what you're doing, in your own words
 

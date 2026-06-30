@@ -16,6 +16,17 @@ the code, and that independence is the point. Read `../../COORDINATION.md` and
 1. **Conformance:** the change passes the relevant `/conformance` tests.
 2. **Spec compliance:** behavior matches `/spec` and the component design — diff
    it, don't eyeball it.
+   - **Absent-clause scan — verify what's *missing*, not just what's present
+     (promoted L5-build).** Cross-referencing "does each spec clause have a
+     matching test?" checks **presence**; it misses a clause the code **silently
+     doesn't handle**. For each spec section the WP cites as implemented,
+     enumerate the **sub-cases** the spec describes and flag any with **no
+     corresponding code path or test**. (L5: `36 §1.2`'s `f a` has two sub-cases —
+     named first-order callee + higher-order parameter with row variables;
+     `infer_row` handled only the first, a silent under-inference gap this QA
+     passed and the Architect caught at diff-scope.) Ground not just the
+     **presence** of what's built but the **absence** of what's required — the QA
+     refinement of COORDINATION §7.
 3. **Tests exercise the *property*, not just one corner** (promoted from K1,
    where a 0-defect run on a narrow input space hid two soundness bugs — a *false
    green*). Honest + non-tautological + no-disabled-tests is necessary but
