@@ -5,12 +5,18 @@
 > produces them. Contract for WS-V **V2** (the verification-condition extractor,
 > second WP of the spine V1→V2→V3). **★★ (untrusted):** every obligation is
 > discharged in V3 and the cert is **kernel-re-checked** (`../10-kernel/18
-> §4`) — a bug here is a **missed** obligation (a property silently treated as
-> holding → a wrong verdict caught downstream) or a **spurious** one
-> (over-conservative — a false `unknown`), **never** unsoundness. Turns a
-> V1-spec'd program into **proof obligations** — propositions in Ω, each
-> in its local hypothesis context — that the prover (`23`) discharges and the
-> kernel re-checks.
+> §4`). A V2 bug never breaks **kernel** soundness — the kernel re-checks every
+> *supplied* certificate, so a **spurious** or malformed obligation is at worst
+> over-conservative (a false `unknown`). But a **missed** obligation (a burden
+> the extractor never emits) is **not** caught downstream: it supplies no cert,
+> so the honesty guard (`21 §5.4`) — which catches generated-but-undischarged
+> holes — never sees an *un-generated* site; a false property reads `proved`.
+> **Completeness of extraction is therefore the *verification*-soundness
+> linchpin, backstopped by nothing but the absent-clause scan (§2.5)** — not by
+> the kernel, which only ever sees what V2 chose to emit. Turns a V1-spec'd
+> program into **proof obligations** — propositions in Ω, each in its local
+> hypothesis context — that the prover (`23`) discharges and the kernel
+> re-checks.
 
 V2 is the bridge from V1's *syntax* (`requires`/`ensures`/refinements/goals,
 `21`) to V3's proof search (`23`): it **consumes** V1's carrier-plus-obligation
@@ -89,15 +95,25 @@ carrier encoding it is the identity on `A`) and emits **no** obligation (§2.5).
 
 ### 2.2 Postcondition
 
-Checking a function body `b` against `ensures ψ` emits
+A postcondition `ensures ψ` makes the **refined result type** `{r : B | ψ}` the
+body's expected type and **pushes it through the body's structure** (§3/§4) —
+it is *not* a single obligation over a branchy body. The result type is the
+**motive** (§4); extraction realizes it at the body's leaves:
 
-```
-  Γ, Δ ⊢ ψ[b/result]                      (the body establishes the postcondition)
-```
+- a **straight-line** body `b` emits the single obligation `Γ, Δ ⊢ ψ[b/result]`
+  (the §2.1 refinement obligation on `b`, `result` replaced by the body,
+  `21 §6.3`) — the degenerate, non-branchy case;
+- a **branchy** body (an eliminator — `match`/`if`/recursion) **splits per
+  branch** via the motive (§4, `39 §2.6`): each branch leaf `bₖ` emits
+  `Γ, Γₖ ⊢ ψ[bₖ/result]` under that branch's path hypotheses (§3: scrutinee/bool
+  equation, plus the **induction hypothesis** for a recursive branch).
 
-over the parameter telescope `Δ` and the in-scope hypotheses `Γ` (§3). `result`
-is replaced by the elaborated body `b` (`21 §6.3`). For a refined *result type*
-`{r:B|φ}` this is the §2.1 refinement obligation on the body.
+Splitting is **required**, not an optimization: a recursive function's
+postcondition is only provable *by induction*, which is exactly the
+per-constructor obligation-with-IH the motive yields (§4) — a single obligation
+over the whole recursive body carries no induction hypothesis and cannot be
+discharged. There is **no** separate over-the-whole-body postcondition
+obligation; the postcondition is the result-type motive, realized per path.
 
 ### 2.3 Precondition discharge at call sites
 
@@ -131,6 +147,16 @@ burden — but each no-emit position is **explicitly guarded with its reason**, 
 a *missing* guard (a silently-dropped clause) is detectable. The hazard is a
 missed obligation reading as "verified"; the discipline is to enumerate the
 no-emit positions and name the guard for each:
+
+**The exhaustiveness property (normative).** The traversal is **exhaustive by
+construction**: over the *fixed* core `Term` set (`11 §1`), **every** form is
+one of an emit site (§2.1–§2.4), a Γ-extension (§3), or a **guarded**
+no-emit (below) — there is **no catch-all silent skip**. An unrecognized or
+future core form with no rule is an **emit-or-error** (a visible build failure),
+never a silent recurse-past. This is what makes "a missing clause is a visible
+gap, not a silent drop" concrete: because completeness is backstopped by nothing
+but this scan (the intro), a *new* burden-bearing construct cannot be silently
+no-emitted — it has no guarded-skip rule, so it fails loudly until one is added.
 
 1. **A refined *parameter*** `(x : {y:A|φ})` is a **Γ-hypothesis, not a
    definition-site obligation.** It contributes `φ[x]` to `Γ` (§3); its proof is
@@ -243,9 +269,8 @@ extract(Γ, term, expectedTy) → ObligationSet:        -- Γ: hypotheses; term:
   -- (§2.2) a contracted function definition (V1's elabView output)
   ViewDef(Δ, requires φ̄, ensures ψ̄, body, B):
         Γ' := Γ ⊕ Δ ⊕ { (_ : φᵢ) | φᵢ ∈ φ̄ } ⊕ refinedParamHyps(Δ)  -- §3: precond + refined-param assumed
-        for ψⱼ ∈ ψ̄:
-           obls ∪= ⟨fresh(), Γ' ⊢ ψⱼ[body/result], prov(ψⱼ)⟩    -- §2.2 postcondition
-        obls ∪= extract(Γ', body, carrier(B))                    -- recurse into the body
+        resultTy := refine(B, ψ̄)                                  -- {r : B | ψ₁ ∧ … ∧ ψₙ}: the postcondition AS the result-type motive (§4)
+        obls ∪= extract(Γ', body, resultTy)                       -- §2.2: push it through the body — straight-line ⇒ one ψ[b/result]; branchy ⇒ per-path/per-ctor (the Elim/If clauses below, §3/§4). NO separate over-the-body obligation.
 
   -- (§2.3) a call of a contracted function: the CALLER's burden
   App(f, ā)  when hasPreconds(f):
@@ -262,12 +287,12 @@ extract(Γ, term, expectedTy) → ObligationSet:        -- Γ: hypotheses; term:
   Let(x, e, A, body):
         Γ' := Γ ⊕ (x : A) ⊕ infoEq(x, e, A)                      -- §3 let-equation (if informative)
         obls ∪= extract(Γ, e, A) ∪ extract(Γ', body, expectedTy)
-  Elim(M, methods, scrut, A):                                    -- §4 match/case-split
+  Elim(M, methods, scrut, A):                                    -- §4 match/case-split; M = the (refined) result-type motive (§2.2)
         for (cₖ, branchₖ) ∈ methods:
            Γₖ := Γ ⊕ fields(cₖ)
                    ⊕ (_ : Eq A scrut (cₖ fields(cₖ)))            -- §3 scrutinee equation
                    ⊕ { (_ : M zᵢ) | zᵢ ∈ recursiveFields(cₖ) }  -- §4 induction hypotheses
-           obls ∪= extract(Γₖ, branchₖ, M (cₖ fields(cₖ)))
+           obls ∪= extract(Γₖ, branchₖ, M (cₖ fields(cₖ)))      -- the refined motive carries the postcondition into each branch
   If(c, thn, els):                                               -- §3 conditional (elim_Bool)
         obls ∪= extract(Γ ⊕ (_ : Eq Bool c true),  thn, expectedTy)
         obls ∪= extract(Γ ⊕ (_ : Eq Bool c false), els, expectedTy)
@@ -275,15 +300,25 @@ extract(Γ, term, expectedTy) → ObligationSet:        -- Γ: hypotheses; term:
   -- (§2.5) GUARDED no-emit positions — recurse structurally, emit nothing here
   RefinedParamBinder(x, A, φ):  skip            -- a binder ⇒ Γ-hypothesis (done above), not an obligation
   Forget(refined → carrier):    skip            -- {x:A|φ} ≤ A is free
-  Var | Const | Lam | Pair | …:  recurse into immediate subterms with the same Γ
+  Var | Const | Lam | Pair | Proj | Type | …:   -- the known burden-free structural formers
+        recurse into immediate subterms with the same Γ
 
+  -- NO catch-all `_ => skip`. The dispatch is EXHAUSTIVE over the fixed core
+  -- Term set (`11 §1`): every variant is an emit site, a Γ-extension, or an
+  -- explicitly-guarded no-emit above. An unmatched form is a build **error**,
+  -- never a silent recurse-past (§2.5: the exhaustiveness property).
   return obls
 ```
 
-- **Untrusted.** A missing or malformed obligation cannot cause unsoundness: the
-  *kernel* still `check`s every supplied certificate against its goal (`18 §4`),
-  so a bug here causes a spurious failure or a missed check **surfaced as an
-  unfilled hole / wrong verdict**, never a false `proved`.
+- **Untrusted — but completeness is the verification-soundness linchpin.** A
+  **spurious** or malformed obligation is harmless: the *kernel* `check`s every
+  *supplied* certificate against its goal (`18 §4`), so it is at worst
+  over-conservative (a false `unknown`), never a false **kernel** acceptance. A
+  **missed** obligation, however, is **not** caught downstream — it supplies no
+  cert, so the honesty guard (`21 §5.4`) never sees an un-generated site, and a
+  false property reads as `proved`. So extraction completeness rests on the
+  **absent-clause scan (§2.5)** alone — the exhaustive, no-silent-skip traversal
+  is what makes "all obligations discharged ⇒ correct" sound.
 - **Completeness target.** Every refinement/contract/goal use generates the
   obligations whose discharge (plus kernel checking) suffices for the spec to
   hold (acceptance §1). The absent-clause scan (§2.5) is the audit that no
