@@ -6,6 +6,7 @@
 
 mod ast;
 pub mod elab;
+pub mod effects;
 pub mod error;
 mod lexer;
 pub mod parser;
