@@ -73,7 +73,16 @@ message the space only when there's a real stall to nudge. **Never use the convo
 every participant sees (broadcast noise; the `get_recent_context` variant
 self-nests). A `durable:false` cron dies on session exit, so **re-arm at session
 start** and `CronDelete` it when your ring closes (`CronList` shows your jobs) —
-this is why it can't orphan the way the convo timer did. **A watchdog you never arm catches
+this is why it can't orphan the way the convo timer did. **"Ring closes" =
+retros-in, NOT an intermediate milestone — keep the watchdog armed the WHOLE ring
+lifetime (promoted T1).** Killing it when *your* setup step finishes (frame
+landed, branch cut, kickoff posted) while members are still authoring/building
+leaves the ring **unbacked precisely when the comms-drop defect bites** — the
+watchdog is the *only* backstop for a handoff whose notification dropped
+(`handed-off-but-silent`). Spec-leader killed its T1 watchdog at frame-landing
+with two ring steps still open; a completed `spec-author` handoff then sat **40
+minutes** undelivered until the Steward relayed it manually. Disarm **only** once
+retros are in. **A watchdog you never arm catches
 nothing:** `QA-approved-but-no-merge-request` is on the list below precisely
 because a leader that wasn't watching let a QA-approved WP sit unmerged (operator-
 caught). Each wake, check the stall patterns — the prompt **enumerates each

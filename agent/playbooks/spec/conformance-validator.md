@@ -29,11 +29,22 @@ implementations across the whole federation. Read `../../COORDINATION.md`,
   `/spec` and permissive references before locking it. A case that disagrees
   with the spec is either a bug in the case or a real spec gap to surface — never
   silently "fix" to match; surface the disagreement so the spec-author can rule.
-- **Precise expected results — pin the level (promoted K2).** A case's expected
-  result must assert the **exact** type/level (e.g. `Omega_2`, not a loose
-  "Omega, level-poly") — a loose level annotation hides impredicativity-by-
-  cumulativity being baked into an implementation and isn't precise enough to
-  code from. **Tag deferred-seam cases at elaboration time:** when `/spec` defers
+- **Precise expected results — match the spec's *exact granularity*, neither
+  looser NOR tighter (promoted K2 + T1).** A case's expected result must assert
+  the **exact** type/level (e.g. `Omega_2`, not a loose "Omega, level-poly") — a
+  loose level annotation hides impredicativity-by-cumulativity being baked into an
+  implementation and isn't precise enough to code from. **And the dual (T1): do
+  not pin *tighter* than the spec locks.** When the spec locks a **concept +
+  value-set + cross-field invariant** but explicitly **defers a finer degree of
+  freedom** (a literal wire-token spelling, an OQ-harness syntax, a finalized-
+  later reference), pin the **value-set + invariants** and **`(oracle)`-tag the
+  deferred token** — **over-freezing a deferred spelling yields a case that falsely
+  fails (or blocks) a valid implementation once the token finalizes**: a wrong
+  case that guards nothing (T1: `25` locks `countermodel.verdict`'s value-set
+  `{false,unknown}` + "rename fails" but defers the literal field *names* to the
+  agent-team — pin the concept, not the spelling). Under-pinning (K2) and
+  over-pinning (T1) are one rule: **the conformance granularity equals the spec's
+  locked granularity.** **Tag deferred-seam cases at elaboration time:** when `/spec` defers
   a computation to a later phase, flag which seed cases exercise the deferred
   behavior and tag them (`[K2c]`, …) **in the seed then** — not at build-review
   (K2 shipped two seeds expecting reductions that needed K2c's NbE, caught only
