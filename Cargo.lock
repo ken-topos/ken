@@ -263,6 +263,7 @@ dependencies = [
 name = "ken-elaborator"
 version = "0.0.0"
 dependencies = [
+ "ken-interp",
  "ken-kernel",
  "serde_json",
 ]
