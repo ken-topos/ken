@@ -101,6 +101,15 @@ lessons to the other teams.
   passed; the fix made the guard reject any under-declared higher-order effect).
   A conservative reject over a silent accept is the right shape for a soundness
   property with a deferred feature behind it; the gate must fail closed.
+- **A shared-structure field another crate "populates" is a claim to verify —
+  grep its init sites before you rely on it (promoted X1).** A field that exists
+  and is read elsewhere may be **always-empty** at every construction site. Before
+  writing code that reads such a field for cross-crate semantics, `grep` its
+  initializers and confirm it's actually set. (X1: `ConstructorDecl.recursive_
+  positions` is `vec![]` at every kernel build site — `elim_reduce` applied zero
+  IHs, so `add 2 3` returned a half-applied closure; the one-minute grep would
+  have caught it before the first test run. Fix: compute it on-the-fly instead of
+  trusting the empty field.)
 - **Non-blocking bug never stops the ring.** File it, keep going.
 - Re-resolve thread IDs after a context reset before replying.
 - **Build/test only via `scripts/ken-cargo`, scoped to your crate** (`-p`),
