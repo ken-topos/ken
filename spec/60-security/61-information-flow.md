@@ -371,6 +371,22 @@ pair could naively read as `unknown`; it is pinned `disproved`):
 | a **distinguishing pair** exists (ζ-outputs differ) | refuted | `disproved` | **the distinguishing pair IS the leak-witness** (countermodel) |
 | neither provable nor refutable by the prover | open | `unknown` | a **typed hole** in `trusted_base()` — honest; **never a false `proved`** (`23 §1.3`) |
 
+**The reduction is itself a trusted step (N2).** The kernel re-checks the
+*certificate* for **whatever obligation it is handed** — **not** that the
+obligation **faithfully encodes 2-safety**. The product-program construction
+(the renaming, the `lowEq_ζ` / `coterminates_ζ` encoding) is done by the
+**untrusted** verifier, so a **wrong reduction** — a too-weak `Φ_post`, a
+silently-dropped `coterminates_ζ` — yields a **kernel-valid cert for a non-NI
+claim**: a **false `proved` the kernel cannot catch** (AC3's forged-cert
+reject does *not* cover a **correct cert for an unsound obligation**). So
+**reduction-faithfulness is the trusted part** of the by-proof path; its sole
+backstops are (a) the reduction's own soundness argument and (b) a
+**positive-soundness conformance case — a known-interfering program must
+reduce to `disproved`** (the reduction cannot be massaged to make a leak look
+`proved`). This is the exhaustiveness-as-sole-backstop discipline (a
+producer's *omission* is invisible to a re-checker) carried to the relational
+domain.
+
 So a leak surfaces as either a **type error** (strength 1) or a **`disproved`
 verdict with a distinguishing-pair witness** (strength 2); a clean program
 **accepts** / is **`proved`**; an undischarged relational claim is **`unknown`
@@ -426,8 +442,8 @@ re-checked by the *same* small kernel (ADR 0004 Decision 3, ADR 0001).
 
 | Aspect | Status | Detail |
 |---|---|---|
-| Well-typed ⇒ non-interfering (progress-sensitive, up-to-declassify) | **proven *by typing*, but the meta-theorem is trusted** | a **design-level meta-theorem** over the discipline (DCC/sealing tradition); **mechanization is a named future deliverable, not claimed done** — this is the security analog of metatheory-honesty |
-| A specific relational / quantitative claim | **proven *by proof*, kernel-re-checked** | product program → unary obligation → V3 cert re-checked (`23 §1`, `18 §4`); **never a false `proved`** (`23 §1.3`) |
+| Well-typed ⇒ non-interfering (progress-sensitive, up-to-declassify) | **proven *by typing*, but the meta-theorem AND the flow rules are trusted** | a **design-level meta-theorem** over the discipline (DCC/sealing tradition); **mechanization is a named future deliverable, not claimed done** — the security analog of metatheory-honesty. **The kernel backstops core type-safety only; labels are erased, so the elaborator's flow rules are trusted** (§9 N1) — conformance, not the kernel, nets a flow bug |
+| A specific relational / quantitative claim | **proven *by proof* — cert kernel-re-checked, *reduction* trusted** | product program → unary obligation → V3 cert re-checked (`23 §1`, `18 §4`); `proved` is honest **for the handed obligation** (`23 §1.3`), but **the reduction's faithfulness to 2-safety is trusted** (§5.3 N2) — cert-re-check ≠ reduction-faithfulness; positive-soundness AC: interfering → `disproved` |
 | The lattice / policy is the *right* policy | **assumed** | a wrong policy ⇒ a wrong guarantee — the `64 §4.1` spec≠intent analog; the policy (`65`) is the human-reviewed boundary |
 | Classification at ingestion ("this datum *is* Tenant[X]") | **assumed — a claim, audited** | capability-gated + audited (§3.3), the dual of declassification; not a proof |
 | Declassification | **authorised release, audited** | NI holds *up to* declassify; each downgrade is explicit, capability-gated, optionally conditional, and in `trusted_base_delta` |
@@ -521,7 +537,9 @@ the controls compliance frameworks (GDPR/CCPA data boundaries, PCI key handling,
 
 The deliverable is the elaboration above, made implementation-ready. Each item
 is a concrete, codeable section; an implementer builds from these and the kernel
-re-checks the emitted core (the elaborator is **not** in the TCB):
+re-checks the emitted core **for core type-safety** (the elaborator is **not**
+in the TCB *for type-safety* — but see the two-soundnesses note below for the
+erased **flow** property):
 
 1. **The label lattice** — the `Lattice` record interface (§2.1) and the **DLM
    instance** (§2.2: reader-sets, the dual integrity lattice, products, level
@@ -545,6 +563,21 @@ re-checks the emitted core (the elaborator is **not** in the TCB):
 6. **Honest limits** — the proven/assumed/delegated/deferred boundary as a
    first-class artifact, no over-claim (§H). *Acceptance 5.*
 
+**The two soundnesses — what the kernel does and does *not* backstop (N1).**
+The kernel re-check backstops **core type-safety only**. IFC labels are
+**erased** before the kernel (§3: at the kernel a labeled value *is* `A`), so
+a **flow-typing bug** — a wrong `⊑` in `L-SINK`, a dropped `pc`-join, a
+label-laundering `bind`/`incl` — emits a **well-typed** core term the kernel
+**accepts** while non-interference is **violated**. So **IFC-by-typing's flow
+rules ARE trusted** (consistent with §H row 1): the by-typing discipline's
+**only** backstops are the **§H-trusted meta-theorem** + the **discriminating
+conformance corpus** (§8) — **never the kernel**. This is the security analog
+of the verification layer's two-soundnesses (a wrong or *omitted* obligation
+reads as verified because the kernel checks only what it is *handed*); it is
+why §8's flow cases must **flip** — a label-dropping `bind`/`incl` must
+*wrongly accept* — so conformance, not the kernel, is the net under the erased
+discipline.
+
 **Level reconciliation (the soundness check — spec-author duty before Architect
 handoff).** The labeled constructs add **no new level rule** — only instances of
 existing formation (`36 §7.4`):
@@ -555,6 +588,11 @@ existing formation (`36 §7.4`):
 | `A @ ℓ` (labeled type) | same as `A` | `ℓ` is an **erasable index**; the kernel sees `A` |
 | label index on a `Vis` op/resp | `≤ ℓ_ITree` | rides the existing `Vis` container (`36 §2.1`); no new universe |
 | relational obligation `Γ ⊢ (Φ_pre ⇒ Φ_post) : Ω` | `Ω` | an ordinary unary obligation (`22 §1`, `21 §5`) |
+
+The `Vis` label-index row carries the side-condition **`ℓ_carrier ≤ ℓ_ITree`**
+on the parametric `Lattice` (trivially true for DLM's finite `Set Principal`
+carrier at level 0): a label index **never raises** the ITree universe, so a
+high-carrier instance must place its label at or below `ℓ_ITree`.
 
 Every level is the **predicative `max`** of its parts (`12 §2`), non-cumulative
 (`12 §3`); the elaborator emits explicit levels and the kernel re-checks them
