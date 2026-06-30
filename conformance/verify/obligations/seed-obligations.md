@@ -66,13 +66,23 @@ verdict model rests on (`22 §2.5`, `21 §5.4`) and must never regress.
 
 ### verify/obligations/postcondition-emits-substituted-goal
 - spec: `22 §2.2`; `21 §6.3`
-- given: `view abs (n : Int) : Int ensures result ≥ 0 = if n < 0 then -n else n`
-- expect: emits an obligation `⟨id, Γ,(n:Int) ⊢ b ≥ 0, prov⟩` where `b` is the
-  elaborated body — `ψ[b/result]` with `result` replaced by the body; at Ω; `Γ`
-  carries the parameter telescope.
-- why: §2.2 — checking body `b` against `ensures ψ` emits `Γ,Δ ⊢ ψ[b/result]`.
-  Structural: the goal mentions the **body** (`result` substituted), not a free
-  `result`. A bug leaving `result` free, or omitting the obligation, flips it.
+- given: `view inc (n : Int) : Int ensures result > n = n + 1` — a
+  **straight-line** body
+- expect: emits **one** obligation `⟨id, Γ,(n:Int) ⊢ (n + 1) > n, prov⟩` —
+  `ψ[b/result]` with `result` replaced by the straight-line body `b = n + 1`; at
+  Ω; `Γ` carries the parameter telescope.
+- why: §2.2 — for a **straight-line** body the postcondition is the single
+  substituted goal `ψ[b/result]` (the refined-result-type motive degenerates to
+  one). Structural: the goal mentions the **body** (`result` substituted), not a
+  free `result`; a bug leaving `result` free, or omitting the obligation, flips
+  it. **A branchy/recursive body does *not* yield a single over-the-body
+  obligation** — it pushes the motive through **per path / per constructor**
+  (`§3`/§4; cases `conditional-branch-adds-boolean-equation`,
+  `recursive-fn-per-ctor-obligation-with-ih`, the flagship), which carry the
+  path-conditions and the induction hypothesis. This illustration uses a
+  straight-line body deliberately: a single over-the-body obligation carries
+  **no** IH and cannot verify a recursive function (§2.2/§4) — the
+  internal-consistency alignment with `C`/`D1`.
 
 ### verify/obligations/precondition-obligation-at-call-not-in-body (soundness)
 - spec: `22 §2.3`, `§2.5.2`
@@ -187,8 +197,9 @@ verdict model rests on (`22 §2.5`, `21 §5.4`) and must never regress.
 - spec: `22 §2.5` (the completeness counter-rule); acceptance `§8` / frame `§1`
 - given: (a) `view f (n : Int) : Int ensures result == result = n` (a
   **trivially-true** postcondition); (b)
-  `view g (n : Int) : Int ensures result ≥ 0 = …` (a **real-burden**
-  postcondition)
+  `view g (n : Int) : Int ensures result ≥ 0 = n * n` (a **real-burden**
+  postcondition) — both **straight-line** bodies (one obligation each, isolating
+  the trivial-vs-real axis from path-sensitivity)
 - expect: **both** emit a postcondition obligation — (a)
   `⟨id, Γ ⊢ b_f == b_f, prov⟩` (provable, discharged trivially by `refl`); (b)
   `⟨id, Γ ⊢ b_g ≥ 0, prov⟩` (a real burden). **Neither** yields *no* obligation.
