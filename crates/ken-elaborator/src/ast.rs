@@ -98,6 +98,18 @@ pub enum Decl {
         ty: Type,
         span: Span,
     },
+    /// `foreign f : T = "symbol" "library" [pure] [E1, …]` — a C-ABI binding
+    /// (`38 §2.1`, L7). Keyword spellings are `(oracle)`.
+    ForeignDecl {
+        name: String,
+        ty: Type,
+        symbol: String,
+        library: String,
+        is_pure: bool,
+        /// Effect labels (e.g. `["FS", "Net"]`). Empty for `pure`.
+        visits: Vec<String>,
+        span: Span,
+    },
 }
 
 impl Decl {
@@ -108,7 +120,8 @@ impl Decl {
             | Decl::ProveDecl { name, .. }
             | Decl::LawDecl { name, .. }
             | Decl::DataDecl { name, .. }
-            | Decl::TypeAlias { name, .. } => name,
+            | Decl::TypeAlias { name, .. }
+            | Decl::ForeignDecl { name, .. } => name,
         }
     }
     pub fn span(&self) -> &Span {
@@ -118,7 +131,8 @@ impl Decl {
             | Decl::ProveDecl { span, .. }
             | Decl::LawDecl { span, .. }
             | Decl::DataDecl { span, .. }
-            | Decl::TypeAlias { span, .. } => span,
+            | Decl::TypeAlias { span, .. }
+            | Decl::ForeignDecl { span, .. } => span,
         }
     }
 }

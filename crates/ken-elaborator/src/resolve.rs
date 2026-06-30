@@ -72,6 +72,13 @@ pub enum RDeclKind {
     },
     /// A `type T = A` surface type alias.
     TypeAlias { ty: RType },
+    /// `foreign f : T = "symbol" "library" [pure] [E1, …]` (`38 §2.1`).
+    Foreign {
+        symbol: String,
+        library: String,
+        is_pure: bool,
+        visits: Vec<String>,
+    },
 }
 
 /// A resolved expression — names replaced by de Bruijn indices.
@@ -382,6 +389,25 @@ pub fn resolve_decl(decl: &Decl) -> Result<RDecl, ElabError> {
                 ensures: vec![],
                 span: span.clone(),
                 kind: RDeclKind::TypeAlias { ty: rty },
+            })
+        }
+
+        Decl::ForeignDecl { name, ty, symbol, library, is_pure, visits, span } => {
+            let mut scope = Scope::new();
+            let rty = resolve_type(&mut scope, ty)?;
+            Ok(RDecl {
+                name: name.clone(),
+                ty: Some(rty),
+                body: RExpr::RUniv(None, span.clone()), // placeholder — unused for Foreign
+                requires: vec![],
+                ensures: vec![],
+                span: span.clone(),
+                kind: RDeclKind::Foreign {
+                    symbol: symbol.clone(),
+                    library: library.clone(),
+                    is_pure: *is_pure,
+                    visits: visits.clone(),
+                },
             })
         }
     }

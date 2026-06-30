@@ -33,6 +33,9 @@ pub enum ObligationKind {
     LawField(String),
     /// From a bare fixed-width arithmetic op (`35 §3`, `43 §2`).
     PartialPrim,
+    /// A `foreign` boundary contract that is statically unprovable → lowered
+    /// to a runtime-checked assertion (`21 §5.2`, `38 §3.3`).
+    FfiRuntimeCheck,
 }
 
 /// A single open obligation hole (`21 §6.5`).
@@ -64,6 +67,9 @@ pub struct ElabResult {
     pub def_id: GlobalId,
     /// Open obligation holes emitted during elaboration.
     pub obligations: Vec<Obligation>,
+    /// For `foreign` declarations: the full binding record (AC1/AC5 tests).
+    /// `None` for all other declaration kinds.
+    pub foreign_binding: Option<crate::foreign::ForeignBinding>,
 }
 
 // ----- level meta context -----
@@ -653,7 +659,76 @@ pub fn elaborate_rdecl_v1(
             globals.insert(rdecl.name.clone(), id);
             Ok(ElabResult { name: rdecl.name.clone(), def_id: id, obligations: vec![] })
         }
+        RDeclKind::Foreign { symbol, library, is_pure, visits } => {
+            elaborate_foreign_decl(
+                env, globals, num_values, numeric_env, rdecl,
+                symbol, library, *is_pure, visits,
+            )
+        }
     }
+}
+
+/// Elaborate a `foreign` declaration (`38 §2`, L7).
+fn elaborate_foreign_decl(
+    env: &mut GlobalEnv,
+    globals: &mut HashMap<String, GlobalId>,
+    num_values: &mut HashMap<GlobalId, NumericLitVal>,
+    numeric_env: &NumericEnv,
+    rdecl: &RDecl,
+    symbol: &str,
+    library: &str,
+    is_pure: bool,
+    visits: &[String],
+) -> Result<ElabResult, ElabError> {
+    use crate::foreign::elaborate_foreign;
+
+    let ty_core = {
+        let mut cx = ElabCtx::new(env, globals, num_values, numeric_env);
+        let ty = rdecl.ty.as_ref().ok_or_else(|| ElabError::Internal(
+            "foreign decl must have a type annotation".into()
+        ))?;
+        let ty_c = elab_type(&mut cx, ty)?;
+        cx.metas.zonk_term(&ty_c)
+    };
+
+    let bytes_id = globals.get("Bytes").copied().ok_or_else(|| {
+        ElabError::Internal("Bytes not registered before foreign layer".into())
+    })?;
+
+    // Foreign ensures → runtime check obligations (AC4).
+    let ensures_strs: Vec<String> = rdecl.ensures
+        .iter()
+        .map(|e| format!("{:?}", e))
+        .collect();
+
+    let binding = elaborate_foreign(
+        env, globals, bytes_id,
+        &rdecl.name, ty_core,
+        symbol, library, is_pure, visits,
+        &ensures_strs,
+        &rdecl.span,
+    )?;
+
+    let def_id = binding.postulate_id;
+
+    let obligations: Vec<Obligation> = binding.runtime_checks
+        .iter()
+        .enumerate()
+        .map(|(i, rc)| Obligation {
+            id: i as u32,
+            hole_id: rc.hole_id,
+            goal_closed: Term::omega(Level::Zero),
+            span: rdecl.span.clone(),
+            kind: ObligationKind::FfiRuntimeCheck,
+        })
+        .collect();
+
+    Ok(ElabResult {
+        name: rdecl.name.clone(),
+        def_id,
+        obligations,
+        foreign_binding: Some(binding),
+    })
 }
 
 fn elaborate_view_or_let(
@@ -711,7 +786,7 @@ fn elaborate_v0(
         ElabError::KernelRejected { error: e, span: rdecl.span.clone() }
     })?;
     globals.insert(rdecl.name.clone(), id);
-    Ok(ElabResult { name: rdecl.name.clone(), def_id: id, obligations: body_obligations })
+    Ok(ElabResult { name: rdecl.name.clone(), def_id: id, obligations: body_obligations, foreign_binding: None })
 }
 
 /// Elaborate a `view` with `requires`/`ensures` clauses (`21 §6.3`).
@@ -817,7 +892,7 @@ fn elaborate_view_with_spec(
         ElabError::KernelRejected { error: e, span: rdecl.span.clone() }
     })?;
     globals.insert(rdecl.name.clone(), id);
-    Ok(ElabResult { name: rdecl.name.clone(), def_id: id, obligations: ens_obligations })
+    Ok(ElabResult { name: rdecl.name.clone(), def_id: id, obligations: ens_obligations, foreign_binding: None })
 }
 
 /// Elaborate `prove name : φ` (`21 §6.3`, §3).
@@ -849,7 +924,7 @@ fn elaborate_prove(
         span: rdecl.span.clone(),
         kind: ObligationKind::Prove,
     };
-    Ok(ElabResult { name: rdecl.name.clone(), def_id: hole_id, obligations: vec![obl] })
+    Ok(ElabResult { name: rdecl.name.clone(), def_id: hole_id, obligations: vec![obl], foreign_binding: None })
 }
 
 /// Elaborate `law Name (param) { f : φ ; … }` (`21 §3`).
@@ -903,7 +978,7 @@ fn elaborate_law(
     globals.insert(rdecl.name.clone(), law_id);
 
     // Return: def_id = law_id (the law postulate), obligations = per-field holes
-    Ok(ElabResult { name: rdecl.name.clone(), def_id: law_id, obligations })
+    Ok(ElabResult { name: rdecl.name.clone(), def_id: law_id, obligations, foreign_binding: None })
 }
 
 // ----- helpers -----
