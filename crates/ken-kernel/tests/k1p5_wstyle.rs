@@ -12,7 +12,7 @@
 use ken_kernel::inductive::peel_app;
 use ken_kernel::term::{Level, LevelVar, Term};
 use ken_kernel::{
-    declare_inductive, normalize, whnf, CtorSpec, GlobalEnv, GlobalId,
+    declare_inductive, infer, normalize, whnf, CtorSpec, GlobalEnv, GlobalId,
     InductiveSpec, KernelError,
 };
 use ken_kernel::env::Context;
@@ -845,6 +845,224 @@ fn qa_mixed_direct_and_wstyle_recursive_args() {
         result,
         whnf(&env, &ctx, &suc_t(suc_id, zero_t(zero_id))),
         "Mixed2 (direct + W-style): uses λ-wrapped IH on the W-style arg, gives suc zero"
+    );
+}
+
+// ===========================================================================
+// Architect-required regressions for the de Bruijn cutoff fix in method_type
+//
+// The bug: method_type used `weaken(t, d)` (cutoff=0) for the W-style IH's
+// index expressions, shifting the branch binders b₁..b_{nb} that are bound
+// by the IH's own Π-wrap.  Fix: `shift(t, d, nb)` preserves b₁..b_{nb}.
+//
+// The corpus only tested indexless families (idxs=[]) with nb=1, so the bug
+// was latent.  These two tests fill the gap:
+//   1. indexed W-style: idxs=[Var(0)] (branch-dependent index) — iota reduces
+//      correctly and the IH is applied at a concrete branch value.
+//   2. method_type agreement (infer): dependent motive makes the IH type
+//      observable at the type level; buggy code yields ih:(b:Bool)→W2 f
+//      instead of ih:(b:Bool)→W2 b, and w2_node ih fails to type-check.
+// ===========================================================================
+
+/// `data W2 : Bool → Type 0 where w2_leaf : W2 false ; w2_node : ((b:Bool) → W2 b) → W2 true`
+///
+/// Indexed W-style: the recursive arg's target index is the branch variable
+/// `b` — so `idxs = [Var(0)]` after `peel_pi`.  This is the structural gap
+/// the Architect required.  Returns `(w2_id, w2_leaf_id, w2_node_id)`.
+fn mk_w2_indexed(
+    env: &mut GlobalEnv,
+    bool_id: GlobalId,
+    false_id: GlobalId,
+    true_id: GlobalId,
+) -> (GlobalId, GlobalId, GlobalId) {
+    let w2 = declare_inductive(env, |w2| InductiveSpec {
+        level_params: vec![],
+        params: vec![],
+        indices: vec![Term::indformer(bool_id, vec![])], // index type: Bool
+        level: lv0(),
+        constructors: vec![
+            // w2_leaf : W2 false
+            CtorSpec { args: vec![], target_indices: vec![ctor(false_id)] },
+            // w2_node : ((b:Bool) → W2 b) → W2 true
+            // arg type in context [] (no params):
+            //   Pi(Bool, App(IndFormer(W2), Var(0)))
+            //   Inside Pi: Var(0)=b, App(IndFormer(W2), Var(0)) = W2 b ← branch-dep index
+            CtorSpec {
+                args: vec![Term::pi(
+                    Term::indformer(bool_id, vec![]),
+                    Term::app(Term::indformer(w2, vec![]), Term::var(0)),
+                )],
+                target_indices: vec![ctor(true_id)],
+            },
+        ],
+    })
+    .unwrap();
+    let decl = env.inductive(w2).unwrap();
+    let w2_leaf_id = decl.constructors[0].id;
+    let w2_node_id = decl.constructors[1].id;
+    (w2, w2_leaf_id, w2_node_id)
+}
+
+/// Regression: indexed W-style iota fires and the IH is applied at a concrete
+/// branch value (`false`), testing `iota_reduct`'s branch-dependent index path.
+///
+/// `elim_W2 (λb.λ_.Nat) (suc zero) (λk.λih. ih false) (w2_node (λ_.w2_leaf))`
+/// ⇝  m_node (λ_.w2_leaf) (λb. elim_W2 ... ((λ_.w2_leaf) b))     [ι]
+/// ⇝  (λb. elim_W2 ... ((λ_.w2_leaf) b)) false                    [m_node β]
+/// ⇝  elim_W2 ... ((λ_.w2_leaf) false)                            [β]
+/// ⇝  elim_W2 ... w2_leaf                                          [β on k]
+/// ⇝  suc zero                                                      [ι on leaf]
+#[test]
+fn ac2_indexed_wstyle_iota_branch_ih() {
+    let mut env = GlobalEnv::new();
+    let (bool_id, false_id, true_id) = mk_bool(&mut env);
+    let (nat_id, zero_id, suc_id) = mk_nat(&mut env);
+    let (w2, w2_leaf_id, w2_node_id) = mk_w2_indexed(&mut env, bool_id, false_id, true_id);
+    let ctx = Context::new();
+
+    // M = λ(b:Bool). λ(_:W2 b). Nat  (constant motive)
+    // Under outer Lam (b:Bool): b=Var(0), W2 b = App(fmr(w2), Var(0))
+    let motive = Term::lam(
+        fmr(bool_id),
+        Term::lam(Term::app(fmr(w2), Term::var(0)), fmr(nat_id)),
+    );
+
+    // m_leaf = suc zero  (leaf contributes 1)
+    let m_leaf = suc_t(suc_id, zero_t(zero_id));
+
+    // m_node = λ(k:(b:Bool)→W2 b). λ(ih:(b:Bool)→Nat). ih false
+    // In context [k, ih]: ih=Var(0).  App(Var(0), ctor(false_id)) = ih false.
+    let m_node = Term::lam(
+        Term::pi(fmr(bool_id), Term::app(fmr(w2), Term::var(0))),
+        Term::lam(
+            Term::pi(fmr(bool_id), fmr(nat_id)),
+            Term::app(Term::var(0), ctor(false_id)),
+        ),
+    );
+
+    // scrutinee = w2_node (λ_:Bool. w2_leaf)
+    let k_leaf = Term::lam(fmr(bool_id), ctor(w2_leaf_id));
+    let scrut = Term::app(ctor(w2_node_id), k_leaf);
+
+    let elim = Term::Elim {
+        fam: w2,
+        level_args: vec![],
+        params: vec![],
+        motive: Box::new(motive),
+        methods: vec![m_leaf.clone(), m_node],
+        indices: vec![ctor(true_id)],
+        scrut: Box::new(scrut),
+    };
+
+    let result = normalize(&env, &ctx, &elim);
+    let expected = whnf(&env, &ctx, &m_leaf);
+    assert_eq!(
+        result, expected,
+        "indexed W-style: IH applied at branch `false` gives suc zero"
+    );
+}
+
+/// Regression: `method_type` / `iota_reduct` agreement for indexed W-style —
+/// the **discriminating** test that the cutoff bug would have failed.
+///
+/// Uses dependent motive `M = λ(b:Bool). λ(_:W2 b). W2 b` so the IH index
+/// is observable at the type level.  The method `λk. λih. w2_node ih` passes
+/// `ih` directly to `w2_node`, which expects `(b:Bool)→W2 b`.
+///
+/// With the bug, `method_type` gives `ih : (b:Bool)→W2 k_fn` (k_fn = outer
+/// function arg, wrong de Bruijn), and `infer` rejects `w2_node ih` because
+/// `(b:Bool)→W2 k_fn` is not convertible to `(b:Bool)→W2 b`.
+/// With the fix, `ih : (b:Bool)→W2 b` and `infer` accepts.
+#[test]
+fn ac2_indexed_wstyle_method_type_agreement() {
+    let mut env = GlobalEnv::new();
+    let (bool_id, false_id, true_id) = mk_bool(&mut env);
+    let (w2, w2_leaf_id, w2_node_id) = mk_w2_indexed(&mut env, bool_id, false_id, true_id);
+    let ctx = Context::new();
+
+    // Dependent motive M = λ(b:Bool). λ(_:W2 b). W2 b
+    // Under outer Lam (b:Bool): b=Var(0), W2 b = App(fmr(w2), Var(0))
+    // Under inner Lam (_:W2 b): b=Var(1), return W2 b = App(fmr(w2), Var(1))
+    let motive_lam = Term::lam(
+        fmr(bool_id),
+        Term::lam(
+            Term::app(fmr(w2), Term::var(0)), // W2 b
+            Term::app(fmr(w2), Term::var(1)), // W2 b  (b shifted to Var(1))
+        ),
+    );
+    // `infer` cannot synthesize bare lambdas — wrap in ascription so
+    // `infer_motive_level` can call `infer(Ascript(M, M_ty))` → `check(M, M_ty)`.
+    // motive_ty = (b:Bool) → W2 b → Type 0
+    //           = Pi(Bool, Pi(App(W2, Var(0)), Type 0))
+    let motive_ty = Term::pi(
+        fmr(bool_id),
+        Term::pi(Term::app(fmr(w2), Term::var(0)), Term::Type(lv0())),
+    );
+    let motive = Term::Ascript(Box::new(motive_lam), Box::new(motive_ty));
+
+    // m_leaf = w2_leaf : W2 false  (= M false w2_leaf after β)
+    let m_leaf = ctor(w2_leaf_id);
+
+    // m_node = λk. λih. w2_node ih
+    // Correct expected method type: (k:(b:Bool)→W2 b) → (ih:(b:Bool)→W2 b) → W2 true
+    // In context [k, ih]: ih=Var(0).  App(ctor(w2_node_id), Var(0)) = w2_node ih.
+    // w2_node : ((b:Bool)→W2 b) → W2 true — so this requires ih:(b:Bool)→W2 b.
+    // Bug: ih would have type (b:Bool)→W2 k_fn → infer fails.
+    //
+    // Annotation for ih (in context [k]):
+    //   Pi(Bool, App(W2, Var(0))) = (b:Bool)→W2 b  — Var(0) is b inside the Pi.
+    //   With correct method_type: ih_ty = (b:Bool)→W2 b → annotation matches ✓
+    //   With bug: ih_ty = (b:Bool)→W2 k_fn         → annotation ≠ ih_ty → TypeMismatch
+    let m_node = Term::lam(
+        Term::pi(fmr(bool_id), Term::app(fmr(w2), Term::var(0))), // k ann
+        Term::lam(
+            Term::pi(fmr(bool_id), Term::app(fmr(w2), Term::var(0))), // ih ann: (b:Bool)→W2 b
+            Term::app(ctor(w2_node_id), Term::var(0)),                 // w2_node ih
+        ),
+    );
+
+    // scrutinee = w2_node (λ_:Bool. w2_leaf) : W2 true
+    // (The λ_. w2_leaf has syntactic type (b:Bool)→W2 false, not (b:Bool)→W2 b.
+    //  The scrut check will reject it — use w2_node applied to an identity-like
+    //  term.  To keep the test purely about method_type, use an ascription.)
+    //
+    // Actually, for `infer` we need the scrutinee to typecheck.  Build:
+    //   k_id = λ(b:Bool). (w2_leaf : W2 false)  — wrong type, so use Ascript:
+    //   k_asc = (λb. w2_leaf : (b:Bool) → W2 b)  — kernel accepts if W2 false ≤ W2 b?
+    //
+    // Easiest: scrutinee = (w2_node k_id_asc : W2 true) where
+    //   k_id_asc : (b:Bool) → W2 b  via ascription.
+    //   But w2_leaf : W2 false ≠ W2 b (no subtyping at Bool).
+    //
+    // Instead: give the scrutinee as an opaque variable.  But Context::new() has
+    // no variables.  Use a Const — but we haven't declared one.
+    //
+    // Simplest correct approach: declare a postulate `f : (b:Bool) → W2 b` and
+    // use `w2_node f` as the scrutinee.
+    let f_id = ken_kernel::declare_postulate(
+        &mut env,
+        vec![],
+        Term::pi(fmr(bool_id), Term::app(fmr(w2), Term::var(0))),
+    )
+    .unwrap();
+    let f = Term::Const { id: f_id, level_args: vec![] };
+    let scrut = Term::app(ctor(w2_node_id), f);
+
+    let elim = Term::Elim {
+        fam: w2,
+        level_args: vec![],
+        params: vec![],
+        motive: Box::new(motive),
+        methods: vec![m_leaf, m_node],
+        indices: vec![ctor(true_id)],
+        scrut: Box::new(scrut),
+    };
+
+    let result = infer(&env, &ctx, &elim);
+    assert!(
+        result.is_ok(),
+        "indexed W-style elim with method using IH (as w2_node arg) must type-check: {:?}",
+        result.err()
     );
 }
 

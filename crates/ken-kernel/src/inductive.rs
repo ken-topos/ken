@@ -26,7 +26,7 @@
 
 use crate::env::{ConstructorDecl, InductiveDecl};
 use crate::error::{KernelError, KernelResult};
-use crate::subst::{apply_args, subst_levels, subst_outer, subst_tel, weaken};
+use crate::subst::{apply_args, shift, subst_levels, subst_outer, subst_tel, weaken};
 use crate::term::{GlobalId, Level, Term};
 
 /// Does the inductive former `d` occur anywhere in `t` (syntactic sub-term)?
@@ -257,18 +257,21 @@ pub fn method_type(
         // Inside the nb Π-binders of the IH: [Γ, args, ih₁..ih_{j-1}, b₁..b_{nb}].
         let m_w_body = weaken(motive, (n + j + nb) as i64);
         // Index exprs are in [Δ_p, args_before_pos, b₁..b_{nb}].
-        // subst_outer replaces m params (inner_depth = pos+nb); weaken lifts
-        // past remaining args and IHs but NOT b vars (we're building inside Pis).
+        // subst_outer replaces m params (inner_depth = pos+nb).
+        // shift with cutoff=nb lifts args_before_pos and Γ vars past the n-pos
+        // remaining args and j preceding IHs, while PRESERVING the branch binders
+        // b₁..b_{nb} at indices 0..nb-1 (they are bound by the Π-wrap below).
         let idxs_in_body: Vec<Term> = idxs
             .iter()
             .map(|t| {
-                weaken(
+                shift(
                     &subst_levels(
                         &subst_outer(t, m, params, *pos + nb),
                         &ind.level_params,
                         level_args,
                     ),
                     (n - pos + j) as i64,
+                    nb,
                 )
             })
             .collect();
@@ -285,19 +288,21 @@ pub fn method_type(
         }
         ih_inner = Term::app(ih_inner, scrut_body);
         // Wrap in Π-binders from innermost (B_{nb}) to outermost (B₁).
-        // B_k is in [Δ_p, args_before_pos, b₁..b_{k-1}] (under k-1 extra binders,
-        // 0-indexed: branching_tel[k] has k Pi-binders above it from peel_pi).
+        // B_k is in [Δ_p, args_before_pos, b₁..b_{k-1}] (under bk extra binders;
+        // branching_tel[bk] has bk Pi-binders above it from peel_pi).
         let mut ih_ty = ih_inner;
         for bk in (0..nb).rev() {
             // branching_tel[bk] is in context [Δ_p, args_before_pos, b₁..b_{bk}].
-            // Need it in [Γ, args, ihs_so_far, b₁..b_{bk}].
-            let b_dom = weaken(
+            // shift with cutoff=bk lifts args_before_pos and Γ vars while PRESERVING
+            // b₁..b_{bk} at indices 0..bk-1 (bound by the Π-binders already added).
+            let b_dom = shift(
                 &subst_levels(
                     &subst_outer(&branching_tel[bk], m, params, *pos + bk),
                     &ind.level_params,
                     level_args,
                 ),
                 (n - pos + j) as i64,
+                bk,
             );
             ih_ty = Term::pi(b_dom, ih_ty);
         }
