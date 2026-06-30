@@ -422,15 +422,20 @@ discriminating cases live here.
 - expect: **rejected** at admission — **no** valid respect proof `r` exists
 - why: a Type target gates admission on the full `cong`/`cast` respect schema
   (`§5.1`): `r` must prove `Eq (M [x]) (f x)
-  (cast (M [x]) (M [y]) (cong M h') (f y))` for all `R`-related `x y`. With `M`
-  constant, `cong M h' ≡ refl`, so the
-  demand reduces to `Eq Bool (f true) (f false) = Eq Bool true false ⇝
-  Bottom` (`§2.2`) — uninhabited. The kernel **forms the expected type and
-  `check`s `r`**; admission fires only on success, so the observing `f` is
-  **rejected**. The K2 closed-`Empty` adversarial: a kernel that raw-well-formed
-  `r` (the series-1 "soundness TODO") would **accept** it and reduce `elim_/ M
-  f r [true] ⇝ f true = true`, distinguishing `R`-related `true`/`false` — a
-  closed inhabitant of `Empty`.
+  (cast (M [y]) (M [x]) (sym (cong M h')) (f y))` for all `R`-related `x y` —
+  transporting `f y : M [y]` to the result `M [x]` (kernel convention `cast A B
+  e (a:A) : B`, `§3.1`; **corrected per the `16 §5.1` erratum**, not the
+  reverse). With `M` constant `cong M h' ≡ refl` and the `cast` collapses by
+  regularity (`§3.2`) **regardless of direction**, so the demand reduces to `Eq
+  Bool (f true) (f false) = Eq Bool true false ⇝ Bottom` (`§2.2`) — uninhabited.
+  The kernel **forms the expected type and `check`s `r`**; admission fires only
+  on success, so the observing `f` is **rejected**. The K2 closed-`Empty`
+  adversarial: a kernel that raw-well-formed `r` (the series-1 "soundness TODO")
+  would **accept** it and reduce `elim_/ M f r [true] ⇝ f true = true`,
+  distinguishing `R`-related `true`/`false` — a closed inhabitant of `Empty`.
+  **Constant motive: the verdict flips on respect-validity but NOT on the cast
+  direction** (regularity collapses it) — the direction is exercised by
+  `quotient-respect-schema-dependent-motive` below.
 
 ### conversion/quotient-respect-schema-accepts-respecting (soundness)
 - spec: `16 §5.1`
@@ -439,12 +444,13 @@ discriminating cases live here.
 - expect: **accepted**, and `elim_/ M f r [a] ⇝ f a = true` (the i-reduction,
   `§5`, unchanged)
 - why: a constant `f` respects any relation — the schema demands `Eq Bool (f x)
-  (cast … (f y)) = Eq Bool true (cast Bool Bool refl true)`, which reduces
-  (`cast` regularity, `§3.2`) to `Eq Bool true true ⇝ Top` — inhabited.
-  **Verdict-flip:**
-  same `A/R`/`M`, the verdict flips on **respect-validity** — observing `f`
-  rejected (above) vs respecting `f` accepted here. Admission-gate only; the
-  i-reduction is unchanged.
+  (cast (M [y]) (M [x]) (sym (cong M h')) (f y))`, which at the constant motive
+  is `Eq Bool true (cast Bool Bool refl true)` and reduces (`cast` regularity,
+  `§3.2`) to `Eq Bool true true ⇝ Top` — inhabited. **Verdict-flip:** same
+  `A/R`/`M`, the verdict flips on **respect-validity** — observing `f` rejected
+  (above) vs respecting `f` accepted here. Admission-gate only; the i-reduction
+  is unchanged. (Direction-agnostic at a constant motive — the cast-direction
+  flip is `quotient-respect-schema-dependent-motive` below.)
 
 ### conversion/quotient-respect-omega-target-unchanged (soundness)
 - spec: `16 §5.1`, `§5` (respect-free Ω target)
@@ -459,6 +465,40 @@ discriminating cases live here.
   Ω-shortcut trap): a kernel dispatching on `M z ≡ Omega_l` (syntactic) instead
   of `typeOf(M z) = Ω` (sort) would mis-gate a respecting Ω-target elim, or
   wrongly free a Type-target elim whose motive merely *mentions* Ω.
+
+### conversion/quotient-respect-schema-dependent-motive (soundness)
+- spec: `16 §5.1` (transport-direction note), `§5` (Quot-Elim), `§3.1` (`cast`
+  convention)
+- given: an **open** context — `R := λ _ _. Top` on `Bool`, reps `x := true`,
+  `y := false`, class equality `h' : Eq (Bool/R) [true] [false]` (inhabited
+  because `Eq (Bool/R) [x] [y] ⇝ R x y = Top`, `§2.2`); an **abstract** motive
+  `M : (z : Bool / R) → Type 0` (a context variable, so `M [true]` and `M
+  [false]` are **distinct neutral types** — `M [true] ≢ M [false]`, equal only
+  propositionally via `cong M h'`); `f : (b : Bool) → M [b]`. Form the respect
+  obligation and `elim_/ M f r [true]`
+- expect: the **correct-direction** proof `r_ok : … Eq (M [x]) (f x) (cast (M
+  [y]) (M [x]) (sym (cong M h')) (f y))` is **accepted** (admission fires; `⇝ f
+  true`); the **reversed** proof `r_bad : … (cast (M [x]) (M [y]) (cong M h') (f
+  y))` is **rejected** — **ill-typed** (it feeds `f y : M [y]` to a `cast` whose
+  **source** is `M [x]`, and lands in `M [y]` where the enclosing `Eq (M [x]) …`
+  requires `M [x]`)
+- why: this is the discriminating case the constant-motive probes
+  **structurally cannot be**. At a constant motive `M [x] ≡ M [y]`, so `cast B B
+  refl _` (`§3.2` regularity) collapses **regardless of source/target order** —
+  the direction is invisible. Here `M` is abstract over the **distinct** reps
+  `[true]`, `[false]`, so `M [true] ≢ M [false]` and the `cast` does **not**
+  collapse; the source/target order is load-bearing. **Verdict-flips on the
+  cast direction itself:** a kernel forming the **corrected** schema (`cast (M
+  [y]) (M [x]) (sym (cong M h'))`) accepts `r_ok` and rejects `r_bad`; a kernel
+  with the **pre-erratum reversed** schema (`cast (M [x]) (M [y]) (cong M h')`)
+  does the opposite — green↔red precisely on the direction bug. **Guard
+  named:** the schema `check` against the **correct-direction** expected type.
+  **Disconfirming check:** would `r_ok` also be accepted by the reversed-schema
+  kernel? **No** — it would be *rejected* there, so the verdict pins the
+  **direction**, not merely "some respect check fires." Pairs with the
+  constant-motive `quotient-respect-schema-{rejects,accepts}` (which pin the
+  check fires + the respect-validity flip); this pins the **direction** they
+  hold fixed.
 
 ---
 
