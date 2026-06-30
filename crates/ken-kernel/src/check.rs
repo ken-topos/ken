@@ -15,7 +15,7 @@ use crate::conv::{convert, convert_type, whnf};
 use crate::env::{telescope_to_pi, Context, Decl, GlobalEnv, InductiveDecl};
 use crate::error::{KernelError, KernelResult};
 use crate::inductive::{check_positivity, method_type};
-use crate::subst::{subst0, subst_levels, subst_outer, subst_tel, weaken};
+use crate::subst::{apply_args, subst0, subst_levels, subst_outer, subst_tel, weaken};
 use crate::term::{GlobalId, Level, LevelVar, Term};
 
 // --- raw well-formedness (`11 §6`) -----------------------------------------
@@ -748,10 +748,12 @@ fn infer_quot_elim(
     respect: &Term,
     scrut: &Term,
 ) -> KernelResult<Term> {
-    // scrut : A/R (or ‖A‖). Recover the underlying `A`.
+    // scrut : A/R (or ‖A‖). Recover the underlying `A` and relation (if Quot).
     let scrut_ty = infer(env, ctx, scrut)?;
-    let underlying_a = match &whnf(env, ctx, &scrut_ty) {
-        Term::Quot(a, _) | Term::Trunc(a) => (**a).clone(),
+    let scrut_whnf = whnf(env, ctx, &scrut_ty);
+    let (underlying_a, opt_rel) = match scrut_whnf {
+        Term::Quot(a, r) => (*a, Some(*r)),
+        Term::Trunc(a) => (*a, None),
         _ => {
             return Err(KernelError::BadEliminator(
                 "quotient elim scrutinee is not a quotient or truncation".into(),
@@ -775,45 +777,63 @@ fn infer_quot_elim(
             ))
         }
     };
-    // Motive codomain sort ⇒ the elimination target's kind (`16 §5`).
-    //   - Ω_l codomain ⇒ the target `M q` is a proposition ⇒ the respect
-    //     condition is **free** by Ω-PI (any two results are definitionally
-    //     equal) — accept (`16 §5` "respect-free elimination").
-    //   - Type ℓ codomain ⇒ the target is a type, and respect is the *entire*
-    //     soundness content of quotient elim into a non-proposition (without it,
-    //     a non-respecting `f` observes the representative — `cong h e` then
-    //     yields `Eq Bool true false ⇝ Bottom`, a closed `Empty`). Verifying the
-    //     respect obligation needs the `cong`/`cast` schema (the hard OTT core);
-    //     K2 does **not** build it, so a Type-target motive is **rejected**.
-    //     (Type-target quotient elim is deferred to K2c/follow-up; Ω-target is
-    //     the sound, respect-free K2 deliverable. — Architect review,
-    //     dec_7xpn5ywf4ebfw, seam 3.)
-    match whnf(env, ctx, &m_cod) {
-        Term::Omega(_) => {} // respect-free target — accept
-        Term::Type(_) => {
-            return Err(KernelError::BadEliminator(
-                "K2 quotient elimination into a Type (non-Ω) target requires the \
-                 respect obligation (the cong/cast schema), not verified in K2 — \
-                 use an Ω-target motive (respect-free, 16 §5). Deferred to K2c."
-                    .into(),
-            ))
-        }
+    // Motive codomain sort ⇒ target kind (§5):
+    //   Ω_l ⇒ respect-free (Ω-PI); Type ℓ ⇒ verify cong/cast schema (§5.1).
+    let type_target = match whnf(env, ctx, &m_cod) {
+        Term::Omega(_) => false,
+        Term::Type(_) => true,
         _ => {
             return Err(KernelError::BadEliminator(
                 "motive's codomain is not a type (Type ℓ' or Ω_l)".into(),
             ))
         }
-    }
-    // method f : (x:A) → M [x].  `[x]` = `QuotClass(x)` (also the truncation
-    // intro `|x|`, which the i-reduction treats identically).
+    };
+    // method f : (x:A) → M [x].
     let expected_method_ty = Term::pi(
         underlying_a.clone(),
         Term::app(weaken(motive, 1), Term::QuotClass(Box::new(Term::var(0)))),
     );
     check(env, ctx, method, &expected_method_ty)?;
-    // Respect proof: Ω-target only (reached here) ⇒ proof-irrelevant by Ω-PI;
-    // require `r` to be at least well-scoped (its content is irrelevant).
-    raw_well_formed(ctx, respect)?;
+    // Respect proof.
+    if type_target {
+        // §5.1 cong/cast schema: r must have type
+        //   (x:A) → (y:A) → (h:R x y) → Eq(M[x])(f x)(cast M[x] M[y] refl(M[x]) (f y))
+        // Requires a proper Quot (not Trunc).
+        let rel = match opt_rel {
+            Some(r) => r,
+            None => {
+                return Err(KernelError::BadEliminator(
+                    "quotient-elim Type target requires a Quot (not Trunc)".into(),
+                ))
+            }
+        };
+        // depth 3: x=Var(2), y=Var(1), h=Var(0) under (x:A)(y:A)(h:R x y)
+        let x_class = Term::QuotClass(Box::new(Term::var(2)));
+        let y_class = Term::QuotClass(Box::new(Term::var(1)));
+        let m_x = Term::app(weaken(motive, 3), x_class);
+        let m_y = Term::app(weaken(motive, 3), y_class);
+        let f_x = Term::app(weaken(method, 3), Term::var(2));
+        let f_y = Term::app(weaken(method, 3), Term::var(1));
+        // Transport f_y from M[y] (its type) to M[x] (the Eq's required RHS type).
+        // Source = M[y], target = M[x]; cast ignores the proof (§3.4).
+        let cast_fy = Term::Cast(
+            Box::new(m_y.clone()),
+            Box::new(m_x.clone()),
+            Box::new(Term::Refl(Box::new(m_y.clone()))),
+            Box::new(f_y),
+        );
+        let eq_body = Term::Eq(Box::new(m_x), Box::new(f_x), Box::new(cast_fy));
+        // h_ty = R x y at depth 2: x=Var(1), y=Var(0)
+        let h_ty = apply_args(weaken(&rel, 2), &[Term::var(1), Term::var(0)]);
+        let expected = Term::pi(
+            underlying_a.clone(),
+            Term::pi(weaken(&underlying_a, 1), Term::pi(h_ty, eq_body)),
+        );
+        check(env, ctx, respect, &expected)?;
+    } else {
+        // Ω-target: respect-free by Ω-PI; well-formedness only.
+        raw_well_formed(ctx, respect)?;
+    }
     // Result: M scrut.
     Ok(Term::app(motive.clone(), scrut.clone()))
 }

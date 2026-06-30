@@ -242,24 +242,23 @@ fn eq_at_inductive(env: &GlobalEnv, ctx: &Context, ty: &Term, a: &Term, b: &Term
         );
         let a_ty_j = subst_tel(&a_ty_tpl, &a_bar[..j]);
         let b_ty_j = subst_tel(&b_ty_tpl, &b_bar[..j]);
-        if !convert_type(env, ctx, &a_ty_j, &b_ty_j) {
-            // Dependent telescope: `A_j` depends on an earlier arg that differs
-            // between the two scrutinees, so `a_j` and `b_j` live at different
-            // types and must be compared after a `cast` along the earlier-arg
-            // equalities. That transport is the hard OTT core, **not** built in
-            // K2 — so the `Eq` is **stuck** (neutral), not a best-effort
-            // reduct with dangling de Bruijn indices. (The prior code used
-            // `subst_outer` alone, leaving earlier-arg indices dangling and
-            // emitting an ill-typed reduct. — Architect review,
-            // dec_7xpn5ywf4ebfw, seam 1b.)
-            return None;
-        }
-        // Non-dependent position: `a_ty_j ≡ b_ty_j`, so `a_j` is already at the
-        // comparison type — no transport (an identity `cast` here would sit
-        // inside the `Eq` and not be head-reduced, leaving a spurious `cast`).
+        // Dependent telescope: when a_ty_j ≡ b_ty_j, compare directly
+        // (non-dep position). When they differ, transport a_j to b_ty_j via
+        // cast — cast ignores its proof (§3.4), so refl(b_ty_j) is a valid
+        // Ω witness even though it has type Eq Type b_ty_j b_ty_j.
+        let lhs = if convert_type(env, ctx, &a_ty_j, &b_ty_j) {
+            a_bar[j].clone()
+        } else {
+            Term::Cast(
+                Box::new(a_ty_j),
+                Box::new(b_ty_j.clone()),
+                Box::new(Term::Refl(Box::new(b_ty_j.clone()))),
+                Box::new(a_bar[j].clone()),
+            )
+        };
         let conjunct = Term::Eq(
             Box::new(b_ty_j.clone()),
-            Box::new(a_bar[j].clone()),
+            Box::new(lhs),
             Box::new(b_bar[j].clone()),
         );
         acc = Term::sigma(conjunct, acc);
@@ -433,32 +432,113 @@ fn cast_at_inductive(
     let b_param_args = &b_args[..m]; // target family params (from `b = D p̄' j̄`)
     let i_bar = &a_args[m..]; // source result indices
     let j_bar = &b_args[m..]; // target result indices
-                              // Index change ⇒ the result-index transport (the dependent telescope:
-                              // arg 0 `n` → `m`, which shifts later args' types) is needed. That transport
-                              // is the hard OTT core, **not** built in K2 — so a genuine index change is
-                              // **stuck** (sound), not a best-effort reduct. (The prior `subst_index`
-                              // rewrite was unsound: constructor arg types mention *earlier args*, not
-                              // family indices, so it was a no-op that left the reduct ill-typed. —
-                              // Architect review, dec_7xpn5ywf4ebfw, seam 1.)
-    for (ix, jx) in i_bar.iter().zip(j_bar) {
+    let n_ctor = c.args.len();
+
+    // Phase 1: detect whether any index pair differs.
+    let mut index_changed = false;
+    for (ix, jx) in i_bar.iter().zip(j_bar.iter()) {
         if !convert_type(env, ctx, ix, jx) {
-            return None; // index change — stuck (K2c)
+            index_changed = true;
+            break;
         }
     }
-    // Indices agree ⇒ only a param change could remain (`cast_reduce`'s
-    // regularity already handled the `a ≡ b` case). Transport each arg from its
-    // source-param type to its target-param type; if any arg type *depends on*
-    // the differing param (so the source and target arg types are not
-    // convertible), the transport is again the dependent core — stuck.
-    let mut new_args: Vec<Term> = b_param_args.to_vec(); // target params in the reduct
-    for (j, val) in ctor_arg_vals.iter().enumerate() {
-        // Source/target arg types: `A_j` with params substituted (source vs
-        // target), then the `j` earlier-arg binders instantiated with the
-        // *same* earlier args `ctor_arg_vals[..j]` (a param-only change does
-        // not alter the arg values, only their types). `subst_tel` (the K1-fixed
-        // telescope subst) replaces the earlier-arg de Bruijn indices so
-        // `convert_type` compares the real types, not dangling indices against
-        // `ctx`.
+
+    if !index_changed {
+        // Indices agree — only a param change could remain. Transport each arg
+        // from its source-param type to its target-param type; stuck if the
+        // type depends on a differing param.
+        let mut new_args: Vec<Term> = b_param_args.to_vec();
+        for (j, val) in ctor_arg_vals.iter().enumerate() {
+            let a_ty_tpl = subst_levels(
+                &subst_outer(&c.args[j], m, a_param_args, j),
+                &ind2.level_params,
+                &level_args,
+            );
+            let b_ty_tpl = subst_levels(
+                &subst_outer(&c.args[j], m, b_param_args, j),
+                &ind2.level_params,
+                &level_args,
+            );
+            let a_ty_j = subst_tel(&a_ty_tpl, &ctor_arg_vals[..j]);
+            let b_ty_j = subst_tel(&b_ty_tpl, &ctor_arg_vals[..j]);
+            if !convert_type(env, ctx, &a_ty_j, &b_ty_j) {
+                return None;
+            }
+            new_args.push(val.clone());
+        }
+        return Some(apply_args(Term::Constructor { id: ctor, level_args }, &new_args));
+    }
+
+    // Index change present. Require params to agree; a mixed param+index
+    // change is out of scope — conservative stuck (sound).
+    for (ap, bp) in a_param_args.iter().zip(b_param_args.iter()) {
+        if !convert_type(env, ctx, ap, bp) {
+            return None;
+        }
+    }
+
+    // Phase 2: for each differing index slot, peel the ctor heads and read
+    // off which ctor arg positions are "forced" to target-index values. The
+    // guard (§3.2): both sides must be headed by the SAME ctor; a neutral or
+    // mismatched-ctor index ⇒ stuck.
+    //
+    // `c.target_indices[p]` (after param-subst, inner_depth=n_ctor) is a
+    // template whose `Var(k)` slots identify ctor arg positions: nat_pos =
+    // (n_ctor - 1) - k. The target inner value at that position gives the
+    // forced value.
+    let mut forced_values: Vec<Option<Term>> = vec![None; n_ctor];
+    for p in 0..i_bar.len() {
+        if convert_type(env, ctx, &i_bar[p], &j_bar[p]) {
+            continue; // this index slot agrees — skip
+        }
+        let (i_head, i_inner) = peel_app(&i_bar[p]);
+        let (j_head, j_inner) = peel_app(&j_bar[p]);
+        let i_ctor = match i_head {
+            Term::Constructor { id, .. } => id,
+            _ => return None, // neutral index — stuck (§3.2 guard)
+        };
+        let j_ctor = match j_head {
+            Term::Constructor { id, .. } => id,
+            _ => return None,
+        };
+        if i_ctor != j_ctor || i_inner.len() != j_inner.len() {
+            return None; // different ctors or arity mismatch — stuck
+        }
+        let ti = subst_levels(
+            &subst_outer(&c.target_indices[p], m, a_param_args, n_ctor),
+            &ind2.level_params,
+            &level_args,
+        );
+        let (ti_head, ti_inner) = peel_app(&ti);
+        let ti_ctor = match ti_head {
+            Term::Constructor { id, .. } => id,
+            _ => return None,
+        };
+        if ti_ctor != i_ctor || ti_inner.len() != i_inner.len() {
+            return None;
+        }
+        for (ti_arg, j_val) in ti_inner.iter().zip(j_inner.iter()) {
+            if let Term::Var(vi) = ti_arg {
+                let vi = *vi as usize;
+                if vi < n_ctor {
+                    forced_values[(n_ctor - 1) - vi] = Some(j_val.clone());
+                }
+            }
+        }
+    }
+
+    // Phase 3: rebuild the constructor's arg list.
+    //   forced position  → target index value
+    //   non-dep position → source arg (same type on both sides)
+    //   dep position     → sub-cast from a_ty_j to b_ty_j
+    //
+    // `target_earlier` tracks target-side earlier arg values so that
+    // `subst_tel(&b_ty_tpl, &target_earlier)` gives the correct b_ty_j for
+    // dependent arg types (those whose type mentions an earlier forced arg).
+    // cast ignores its proof (§3.4), so refl(a_ty_j) is a valid Ω witness.
+    let mut new_args: Vec<Term> = b_param_args.to_vec();
+    let mut target_earlier: Vec<Term> = vec![];
+    for j in 0..n_ctor {
         let a_ty_tpl = subst_levels(
             &subst_outer(&c.args[j], m, a_param_args, j),
             &ind2.level_params,
@@ -470,21 +550,24 @@ fn cast_at_inductive(
             &level_args,
         );
         let a_ty_j = subst_tel(&a_ty_tpl, &ctor_arg_vals[..j]);
-        let b_ty_j = subst_tel(&b_ty_tpl, &ctor_arg_vals[..j]);
-        if !convert_type(env, ctx, &a_ty_j, &b_ty_j) {
-            return None; // arg type depends on the differing param — stuck
-        }
-        // `a_ty_j ≡ b_ty_j` ⇒ `val : a_ty_j` is also `: b_ty_j` (definitional) ⇒
-        // identity transport.
-        new_args.push(val.clone());
+        let b_ty_j = subst_tel(&b_ty_tpl, &target_earlier);
+        let (new_val, target_val) = if let Some(fv) = &forced_values[j] {
+            (fv.clone(), fv.clone())
+        } else if convert_type(env, ctx, &a_ty_j, &b_ty_j) {
+            (ctor_arg_vals[j].clone(), ctor_arg_vals[j].clone())
+        } else {
+            let cast_val = Term::Cast(
+                Box::new(a_ty_j.clone()),
+                Box::new(b_ty_j),
+                Box::new(Term::Refl(Box::new(a_ty_j))),
+                Box::new(ctor_arg_vals[j].clone()),
+            );
+            (cast_val.clone(), cast_val)
+        };
+        new_args.push(new_val);
+        target_earlier.push(target_val);
     }
-    Some(apply_args(
-        Term::Constructor {
-            id: ctor,
-            level_args,
-        },
-        &new_args,
-    ))
+    Some(apply_args(Term::Constructor { id: ctor, level_args }, &new_args))
 }
 
 /// `cast (A1/R) (A2/S) e [a] ⇝ [cast A1 A2 e0 a]` where `e0 = e.1` is the
@@ -535,11 +618,10 @@ pub fn j_reduce(
 }
 
 /// `J` on a non-`refl` equality (`15 §4.3`): `J ≡ cast (P a (refl a)) (P b e)
-/// pair-eq d`. Recover `A`,`a`,`b` by inferring `eq`'s type; build the cast.
-/// For a constant motive `P a (refl a) ≡ P b e` and `pair-eq = refl`, so the
-/// cast reduces by regularity — the headline non-refl-J computation. A
-/// non-constant motive needs the full singleton-`pair-eq` schema; left stuck
-/// (sound) for now.
+/// pair-eq d`. Fires for every non-`refl` `e` — motive constancy is not a gate
+/// (`§4.1`). pair-eq is a typing witness only, never inspected by cast (`§3.4`).
+/// For a constant motive cast reduces by regularity; for a dependent motive cast
+/// descends by type structure (`§3.2`).
 fn j_nonrefl(
     env: &GlobalEnv,
     ctx: &Context,
@@ -557,11 +639,8 @@ fn j_nonrefl(
         &[a_idx.clone(), Term::Refl(Box::new(a_idx.clone()))],
     );
     let p_b_e = apply_args(motive.clone(), &[b_idx.clone(), eq.clone()]);
-    if !convert_type(env, ctx, &p_a_refl, &p_b_e) {
-        // Non-constant motive: the full singleton pair-eq is needed; leave J
-        // stuck (sound). (K2 conformance `j-nonrefl` uses a constant motive.)
-        return None;
-    }
+    // J-cast fires for every non-refl e (§4.1). pair-eq is a typing witness
+    // only, never inspected by cast (§3.4).
     let pair_eq = Term::Refl(Box::new(p_a_refl.clone()));
     Some(Term::Cast(
         Box::new(p_a_refl),

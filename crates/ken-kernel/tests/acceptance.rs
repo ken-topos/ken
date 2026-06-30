@@ -1928,11 +1928,10 @@ fn k2_seam1_cast_inductive_index_change_stuck() {
     );
 }
 
-// --- Seam 1b: Eq at an inductive with a dependent telescope is STUCK --------
+// --- Seam 1b: Eq at an inductive with a dependent telescope REDUCES (K2c) ---
 // `Eq (Vec A (suc n)) (vcons A n a xs) (vcons A m a' xs')`: the `xs` arg's type
-// `Vec A n` depends on the earlier arg `n`, which differs from `m`, so the
-// dependent-telescope `cast` is needed — not built in K2 ⇒ the `Eq` is a
-// *neutral* `Eq`, not a `Σ` reduct with dangling de Bruijn indices.
+// depends on the earlier (forced) arg, so K2c emits a transported conjunct via
+// Cast. Result is a Σ, not a stuck neutral Eq.
 #[test]
 fn k2_seam1b_eq_inductive_dependent_stuck() {
     let (env, s) = std_env();
@@ -1964,10 +1963,17 @@ fn k2_seam1b_eq_inductive_dependent_stuck() {
         )), // vcons A m a' xs'
     );
     let result = whnf(&env, &ctx, &eq);
+    // K2c: dependent telescope now reduces to a Σ conjunction with Cast in the
+    // xs position (seam 1b). Must NOT stay stuck as a neutral Eq.
     assert!(
-        matches!(result, Term::Eq(..)),
-        "Eq at an inductive with a dependent telescope must be STUCK (neutral \
-         Eq), not a Σ reduct — got {:?}",
+        !matches!(result, Term::Eq(..)),
+        "K2c seam 1b: Eq at a dependent telescope must REDUCE (not stay stuck); \
+         got {:?}",
+        result
+    );
+    assert!(
+        matches!(result, Term::Sigma(..)),
+        "K2c seam 1b: result must be a Σ conjunction; got {:?}",
         result
     );
 }
