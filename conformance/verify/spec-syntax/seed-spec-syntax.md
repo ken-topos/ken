@@ -217,7 +217,9 @@ rests on (`21 §5.4`) and must never regress.
 - spec: `21 §5.1` (`disproved` = verification error), `§5.3` (projection),
   `24 §3`
 - given: `view f (n : Int) : Int ensures result > 0 = n` — false for `n ≤ 0`,
-  with a prover-produced countermodel at the `n ≤ 0` world
+  with a **given** countermodel at the `n ≤ 0` world (the prover is V3 — the
+  countermodel is supplied here, as the certificate is in the
+  `proved`/bogus-cert cases)
 - expect: verdict **`disproved`** (carried evidence: the countermodel) — a hard
   **verification error** (`24 §3`) with **no epistemic status** (it is fixed,
   not exported); **distinct** from `unknown`: a `disproved` claim is an error to
@@ -262,9 +264,11 @@ rests on (`21 §5.4`) and must never regress.
   postconditions `ensures result ≥ n` and `ensures result ≥ 0`, and body `n + m`
 - expect: the elaborated form exposes exactly the four-part V1→V2 interface: (1)
   the kernel-checkable core term (precondition Π proof-arg, carrier result,
-  refined-param `m` lowered to `Int`); (2) the **obligation-hole set** — one
-  hole per `ensures` (2 here) + one per refined-parameter-introduction site,
-  each `⟨id, Γ ⊢ φ, provenance⟩`; (3) each hole's `Γ` carries the
+  refined-param `m` lowered to `Int`); (2) the **obligation-hole set** — exactly
+  **2** holes here, one per `ensures`, each `⟨id, Γ ⊢ φ, provenance⟩` (a refined
+  **parameter** is **not** a definition-site hole — its `m ≠ 0` is a
+  Γ-hypothesis per part (3), and the obligation to *establish* it is the
+  **caller's**, at the call site, `22 §2.3`/§3); (3) each hole's `Γ` carries the
   **at-introduction hypotheses** — the precondition `n > 0` and the
   refined-param fact `m ≠ 0`; (4) provenance (source span + responsible clause)
   per hole.
