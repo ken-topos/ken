@@ -117,6 +117,16 @@ teams (and you) consume them safely. Reviewing their *output* for clean-room
 compliance is yours; consulting copyleft or prototype material is not. You do
 **not** touch GitHub or merge `main`; package the WP, open the merge Decision,
 and post `merge_ready` to the Integrator like any leader.
+**When you assemble the merge Decision (promoted Sec1ct/B1 + operator):** name
+the **conformance-
+validator as the Spec reviewer** and fire a **real @mention to its actor_id** —
+*it* casts the Spec soundness vote, **you do not** (you are DeepSeek
+coordination, not the frontier-class soundness gate, COORDINATION §14); name the
+**Architect** likewise; **never** route the vote to the dead `Spec` template
+placeholder (§2 live-participant). State the status explicitly — `Decision:
+dec_XXX — status: proposed — awaiting Architect + Spec` → `resolved` once both
+votes are in — never just a reviewer *list* in prose (that ambiguity is how the
+Sec1ct merge skipped the gate).
 
 **Free the WP branch once the elaboration merges (promoted from K1 + K2).** Your
 enclave elaborates on the `wp/<ID>` branch; after the Integrator merges it to

@@ -53,6 +53,16 @@ git only.
 - **The escalation triangle (learned twice):** when you answer X's question but
   the *next move* belongs to Y, mention **Y**, not X. Naming Y in prose without
   a real mention is the classic silent stall.
+- **Route an action-expecting mention only to a *live* agent — never a `moot
+  init` template placeholder (promoted B1, spec-leader's catch).** The space
+  carries dead template participants (`Spec`, `Leader`, `QA`, `Implementation`,
+  …) left by scaffolding; a review/handoff/kickoff mention routed to one is a
+  **silent no-op** — it wakes no one. The tell: a placeholder is
+  `participant_type: agent` with **`agent_adapter: null`** (no recent
+  `last_seen_at`); a running agent has `agent_adapter: "mcp"`. Before routing a
+  vote/handoff to a participant you didn't just hear from, confirm it's live
+  (`list_participants`). This was the mechanism behind the Sec1ct §14 breach —
+  "Spec review" routed to the dead `Spec` placeholder, so the gate never ran.
 - **Thread your reply — don't scatter to the space root** (operator 2026-06-29).
   Every event you receive carries a `thread_id`. When you respond to a message
   that belongs to a thread — a kickoff, assignment, query, handoff, review
@@ -186,6 +196,21 @@ when an algorithm has N guard/discard positions, **exercise each independently**
 algorithmic pseudocode **defensively** (every discarding position
 explicit-guarded, every guard backed by a rejection case). The obvious case
 passing ≠ the property holds.
+
+**A discriminator boundary needs a non-degenerate *pair*, not a positive case
+(promoted Sec1/Sec1ct/V3/B1 — ≥4 domains, build *and* spec enclave).** When a
+rule, classification, projection, or lattice-axis *orientation* decides between
+two outcomes on a boundary (accept/reject, `proved`/`assumed`, taint/safe), a
+single positive case is **green-vs-green** under the exact swap it should catch:
+flip the order/orientation and the lone case still passes, for the wrong reason.
+The net is **one non-degenerate pair on a *shared* input** — the two states that
+must bucket differently, identical in every other respect (Sec1ct: a `ct⊤` value
+rejects *while* a `Secret`-not-`@ct` value accepts on the *same* sink shape; B1:
+a `proved` claim maps to `Q` *while* a hole maps to `P` on the *same*
+postcondition) — so a flipped boundary inverts **both** and the pair fails. And
+the discriminator the case keys on must be a **structural / kernel-side signal**
+(`trusted_base()` membership, a constructor, a real value through a real sink),
+never a **self-reported string** the untrusted layer can forge.
 
 **Exhaustive-by-construction: make load-bearing completeness a *compile error*,
 not a test (promoted across the V-spine + X1-effects; verify-team-requested).**
@@ -462,9 +487,29 @@ trigger CI, reads the checks, merges, and fetches `main`
   so the chapter is correct at first landing (the coordinator can prevent the
   race the author cannot gate). The only reliable net remains **verify-on-main
   after**, never a declaration before.
-- **Review is a mootup Decision, not a GitHub action.** The Architect/Spec read
-  the diff from the shared local branch (`git diff origin/main...wp/<ID>`) and
-  vote the merge Decision in mootup. There is no GitHub PR approval to mirror.
+- **Review is a mootup Decision — and a *soundness vote is a frontier-class
+  responsibility* (promoted Sec1ct/B1 + operator).** The Architect/Spec read the
+  diff from the shared local branch (`git diff origin/main...wp/<ID>`) and vote
+  the merge Decision in mootup; there is no GitHub PR approval to mirror. **Two
+  load-bearing reviewers, both Opus-tier:** the **Architect** (external
+  soundness/design, always) and the **Spec** vote on `spec/`+`conformance/`
+  paths — cast by the **frontier-class (Opus) member of team Spec**, currently
+  the **conformance-validator** (the independent checker by role; spec-author
+  authors, so cannot self-review). The **DeepSeek coordinator (spec-leader, a
+  build leader) assembles the Decision but does NOT cast the soundness
+  vote** — soundness judgment needs the strongest model (MODELS.md tiering, made
+  explicit for review routing).
+- **The Integrator merges only on a *resolved* Decision, verified fresh — never
+  on a `merge_ready` post's prose (promoted Sec1ct breach; fixed + validated
+  2/2).** A `merge_ready` is a *request*; the **resolved Decision with recorded
+  approvals** is the authorization. Before `gh pr merge` the Integrator re-reads
+  `list_decisions` and confirms `status: resolved` (not `proposed`) with the
+  Architect's (and Spec's, on spec paths) votes in — it never infers approval
+  from a reviewer *named in prose* (the Sec1ct merge skipped the gate exactly
+  this way: "`(Architect + Spec)`" read as approval while the Architect never
+  voted). Symmetrically, whoever posts `merge_ready` states `Decision: dec_XXX —
+  status: resolved` (or `proposed — awaiting <reviewer>`) and fires **real
+  @mentions** to reviewers' actor_ids (§2 live-participant), not prose names.
 - **The Integrator mirrors each GitHub state change into mootup mentioning
   whoever moves next** — CI red → the implementer; merged → affected team
   leaders. A GitHub state change nobody mirrors is a silent stall.

@@ -54,7 +54,14 @@ too far: describe the *what*, not the *how* of any particular implementation.
     D2) — so on your Spec-vote review run the **cross-case consistency sweep**
     (group cases by shared metatheory class, assert verdict-agreement), not only
     per-case verdict-flip. Author-side mirror of `conformance-reconcile-inherits-
-    spec-metatheory-bugs`.
+    spec-metatheory-bugs`. **Generalizes past prover verdicts to *any*
+    projection / classification map (promoted B1): a status→field projection is
+    a verdict-mapping surface too — enumerate the FULL source-status domain and
+    pin each image, including the edge cases the happy-path table omits (an open
+    hole `unknown`→assumption-boundary, a refuted `disproved`→never-exported);
+    and key the discriminator on a *structural / kernel-side* signal
+    (`trusted_base()` membership, cert presence) the untrusted layer can't
+    forge — never a self-reported status string.**
 - **Divergences are already recorded** in the spec (e.g. `Int` from day one,
   checked universes, no hard slot ceiling) — these are Ken's own design, not
   gaps to close.

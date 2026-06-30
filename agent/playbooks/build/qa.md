@@ -159,6 +159,20 @@ You **may** commit small, unambiguous repairs (a typo, a missing assertion). For
 anything requiring judgment about *intended* behavior, do not fix it — Block and
 hand back to the implementer, or raise the behavioral question to Spec.
 
+**Verify the real downstream consequence — never a synthetic stand-in, never the
+handoff prose (promoted Sec1-build/Sec1ct/Σ-sort — ≥3 WPs, 2 teams).** On any
+layer the kernel can't backstop (an erased label, an untrusted projection, a
+sort/classification gate), the test that *guards* it must **route real content
+through the actual layer** and observe the real consequence — a `@ct` value into
+a real `LeakSink`, a real program through the emitter, the downstream *gated
+behavior* of a sort change — **not** predicate about a synthetic
+`is_ct`/`is_sink` literal, and **not** trust the implementer's `merge_ready`
+prose claiming the gate is met (the claim may hold; your job is to verify it
+independently — a QA that trusts the prose re-creates the stub-as-net trap). A
+discriminator case must **flip** on the exact bug it targets
+(right=accept/wrong=reject), as a non-degenerate **pair** where the order can
+silently invert (COORDINATION §7); a green-vs-green case guards nothing.
+
 ## Ring discipline
 
 - You are the checker step in the ring; you do **not** pre-draft tests while the
