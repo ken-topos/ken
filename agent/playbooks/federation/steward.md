@@ -80,6 +80,20 @@ continue from the frontier. Update the DAG itself (`05`) only when the *plan*
 changes (a new WP, a re-scoped dependency); the progress file tracks *execution*
 against it.
 
+**Local-vs-`main` cadence (operator 2026-06-30).** You commit the tracker to
+`steward/work` on **every** state change — that's high-churn working memory and
+your compaction-survival resume point. But **do not route every micro-update to
+`main`**: a merge cycle per update is noise (and the tracker drifts into
+cherry-pick conflicts). Instead push the tracker to `main` at the natural
+**epochs** — a **roadmap-gate closure** (G1, G2, …) or a **major-workstream
+milestone** (e.g. "kernel trust-root complete", "L5 fully delivered") — **bundled
+into the corpus routing you're already doing at that moment**, so it costs no
+extra merge cycle. That keeps `main` (the public, at-a-glance view) accurate at
+*program* granularity without per-transition noise. If `main`'s copy has drifted
+far (it will, between epochs), resync the **whole file** in one commit
+(`git checkout steward/work -- docs/program/IMPLEMENTATION-PROGRESS.md` onto a
+branch off `origin/main`) rather than cherry-picking individual updates.
+
 ### 2b. Run until complete, blocked, or told to stop
 
 The build is a **long-running effort across many sessions and compactions.**
