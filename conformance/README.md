@@ -64,8 +64,17 @@ claim with no conformance case is a claim no one can rely on
 - `verify/seed-verify.md` — a proved postcondition, a disproved one with a
   countermodel, an incomplete one with a hole, and the soundness regression (Z3
   cannot force a false `proved`).
-- `surface/seed-surface.md` — sum-type construct-then-eliminate computes;
-  `match` exhaustiveness failure; refinement obligation; elaboration invariants.
+- `surface/seed-surface.md` — elaboration invariants (well-typed output,
+  ambiguity-is-an-error); the `data`/`match`/refinement cases are homed in
+  `data-match/` (below).
+- `surface/data-match/seed-data-match.md` — L2 sum types + `match` + refinements
+  (`34`): real constructors + a computing `elim_D`, `match`→`elim_D` (nested),
+  the **required exhaustiveness** safety (non-exhaustive rejects naming the
+  unmatched pattern; kernel-backed totality, `34 §4.4`), reachability, indexed
+  (GADT-like) families (impossible-application rejects *while* the impossible
+  arm is omittable-by-absurdity), per-branch definitional refinement (`22 §3`
+  hypothesis), and refinement types (carrier + emitted obligation, free
+  forgetful coercion).
 - `surface/numbers/seed-numbers.md` — L1 numeric model (`35`): arbitrary-
   precision `Int` exactness above 2⁵³, literal defaulting (`2:Int`/`2.0:Float`/
   `2.0d:Decimal`), the fixed-width no-overflow obligation + no-silent-wrap seal,
