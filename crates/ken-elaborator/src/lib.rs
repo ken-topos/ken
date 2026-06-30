@@ -10,6 +10,7 @@ mod ast;
 pub mod elab;
 pub mod effects;
 pub mod error;
+pub mod extract;
 mod lexer;
 pub mod parser;
 pub mod resolve;
@@ -20,8 +21,11 @@ use ken_kernel::{
     check as kernel_check, declare_postulate, Context, GlobalEnv, GlobalId, Level, Term,
 };
 
-pub use elab::{elaborate_rdecl, elaborate_rexpr, ElabResult, Obligation};
+pub use elab::{elaborate_rdecl, elaborate_rexpr, ElabResult, Obligation, ObligationKind};
 pub use error::{ElabError, Span};
+pub use extract::{
+    v2_extract, ExtractionResult, ObligationId, ObligationTriple, ProvKind, Provenance,
+};
 pub use resolve::{RDecl, RDeclKind, RExpr, RType};
 
 /// The surface-level elaboration environment.
