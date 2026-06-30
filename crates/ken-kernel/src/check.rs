@@ -14,7 +14,7 @@
 use crate::conv::{convert, convert_type, whnf};
 use crate::env::{telescope_to_pi, Context, Decl, GlobalEnv, InductiveDecl};
 use crate::error::{KernelError, KernelResult};
-use crate::inductive::{check_no_pi_bound_recursive, check_positivity, method_type};
+use crate::inductive::{check_positivity, method_type};
 use crate::subst::{subst0, subst_levels, subst_outer, subst_tel, weaken};
 use crate::term::{GlobalId, Level, LevelVar, Term};
 
@@ -845,9 +845,11 @@ pub struct InductiveSpec {
 }
 
 /// `declare_inductive` — admit `data D (Δ_p) : (Δ_i) → Type ℓ where …` after
-/// re-checking signatures, strict positivity (`14 §8`), and the K1
-/// Π-bound-recursive boundary. Generates the type former, constructors, and
-/// (on use) the dependent eliminator. Returns the family's [`GlobalId`].
+/// re-checking signatures and strict positivity (`14 §8`, `14 §8.4`). W-style
+/// (Π-bound) recursive arguments are admitted (K1.5, `14 §2.1`) — the
+/// blanket `check_no_pi_bound_recursive` gate is retired. Generates the type
+/// former, constructors, and (on use) the dependent eliminator with
+/// Π-abstracted IH for W-style args. Returns the family's [`GlobalId`].
 ///
 /// `build` receives the freshly-allocated family id so the spec's constructor
 /// signatures can self-reference `D` (e.g. `suc : Nat → Nat`).
@@ -878,9 +880,8 @@ where
         former_type: Term::Type(Level::zero()), // placeholder; build_types fills it
     };
 
-    // Positivity (and the K1 Π-bound-recursive boundary) before any types.
+    // Strict-positivity is the sole structural admission gate (`14 §8`, `14 §8.4`).
     check_positivity(&ind)?;
-    check_no_pi_bound_recursive(&ind)?;
 
     // Generate former + constructor types (`Π Δ_p. Π Δ_i. Type ℓ`, etc.).
     ind.build_types();

@@ -10,22 +10,23 @@
 //!   reject what K1 cannot prove strictly positive (`14 §8.4`).
 //! - [`method_type`] — the dependent eliminator's per-constructor method type
 //!   `Π Δₖ. Π (IHs). M t̄ₖ (cₖ p̄ Δₖ)`, computed from the family declaration and
-//!   the concrete motive/params at a use site (`14 §3`).
+//!   the concrete motive/params at a use site (`14 §3`, `14 §3.1`). W-style
+//!   recursive args (`(b:B) → D Δ_p t̄[b]`) get a Π-abstracted IH
+//!   `(b:B) → M t̄[b] (k b)` (K1.5).
 //! - [`iota_reduct`] — the algorithmic ι-step `elim_D … (cₖ p̄ ā) ⇝ mₖ ā [IHs]`
-//!   (`14 §7.3`), capture-avoiding, with induction hypotheses on structurally
-//!   smaller recursive arguments.
+//!   (`14 §7.3`, `14 §7.7`), capture-avoiding, with induction hypotheses on
+//!   structurally smaller recursive arguments. W-style args produce a
+//!   λ-abstracted IH `λb. elim_D … (k b)` (K1.5).
 //!
-//! K1 scope: **direct** recursive arguments (`D Δ_p t̄` as a constructor arg
-//! type). Π-bound recursive arguments (W-style `(Nat → D) → D`) are
-//! strictly-positive (`14 §2`) but their eliminator's ι needs a Π-abstracted
-//! induction hypothesis; that is deferred to K1.5, so such declarations are
-//! rejected at admission with a precise reason (`14 §8.4`). This is a
-//! conservative, sound K1 boundary — it never admits an eliminator the kernel
-//! cannot reduce.
+//! **K1.5**: W-style (Π-bound) recursive arguments `(b:B) → D Δ_p t̄[b]` are
+//! now **admitted** (`14 §2.1`, `14 §8.4`). The separate blanket gate
+//! `check_no_pi_bound_recursive` is retired; strict positivity (`14 §8.2`) is
+//! the sole structural admission test. The eliminator and ι handle the
+//! Π-abstracted IH and the λ-threaded recursive call (`14 §3.1`, `14 §7.7`).
 
 use crate::env::{ConstructorDecl, InductiveDecl};
 use crate::error::{KernelError, KernelResult};
-use crate::subst::{apply_args, subst_levels, subst_outer, subst_tel, weaken};
+use crate::subst::{apply_args, shift, subst_levels, subst_outer, subst_tel, weaken};
 use crate::term::{GlobalId, Level, Term};
 
 /// Does the inductive former `d` occur anywhere in `t` (syntactic sub-term)?
@@ -161,42 +162,27 @@ pub fn check_positivity(ind: &InductiveDecl) -> KernelResult<()> {
     Ok(())
 }
 
-/// Reject Π-bound recursive arguments (W-style) in K1 — their ι needs a
-/// Π-abstracted induction hypothesis, deferred to K1.5 (`14 §8.4`). Direct
-/// recursive arguments (`D Δ_p t̄`) are admitted.
-pub fn check_no_pi_bound_recursive(ind: &InductiveDecl) -> KernelResult<()> {
-    let d = ind.id;
-    for c in &ind.constructors {
-        for (j, a) in c.args.iter().enumerate() {
-            let (pis, body) = peel_pi(a);
-            let (head, _args) = peel_app(&body);
-            if !pis.is_empty() && matches!(head, Term::IndFormer { id, .. } if id == d) {
-                return Err(KernelError::PositivityViolation(format!(
-                    "Π-bound recursive argument in constructor {:?} arg {j} (W-style) \
-                     is strictly positive but its eliminator ι is deferred to K1.5",
-                    c.id
-                )));
-            }
-        }
-    }
-    Ok(())
-}
-
-/// The direct recursive arguments of a constructor: `(arg_position,
-/// index_exprs)` for each arg whose type is `D Δ_p t̄` (no leading Π binders).
-/// `index_exprs` are in context `[Δ_p, Δₖ]` (reference params and earlier
-/// args), used to build induction hypotheses.
-pub fn recursive_args(c: &ConstructorDecl, d: GlobalId, m: usize) -> Vec<(usize, Vec<Term>)> {
+/// The recursive arguments of a constructor: `(arg_position, branching_tel,
+/// index_exprs)` for each arg whose type peels to `(b₁:B₁)...(b_{nb}:B_{nb})
+/// → D Δ_p t̄` (K1.5, `14 §2.1`).
+///
+/// - `branching_tel` — the leading Π-binder domains `[B₁, B₂[b₁], ...]`
+///   (empty for a direct `D Δ_p t̄`); each `B_k` is in context
+///   `[Δ_p, args_before_pos, b₁..b_{k-1}]`.
+/// - `index_exprs` — the index expressions after the family's `m` params, in
+///   context `[Δ_p, args_before_pos, b₁..b_{nb}]` (under the branching binders).
+pub fn recursive_args(
+    c: &ConstructorDecl,
+    d: GlobalId,
+    m: usize,
+) -> Vec<(usize, Vec<Term>, Vec<Term>)> {
     let mut out = Vec::new();
     for (j, a) in c.args.iter().enumerate() {
         let (pis, body) = peel_pi(a);
-        if !pis.is_empty() {
-            continue; // Π-bound recursive handled by check_no_pi_bound_recursive.
-        }
         let (head, args) = peel_app(&body);
         if let Term::IndFormer { id, .. } = head {
             if id == d && args.len() >= m {
-                out.push((j, args[m..].to_vec()));
+                out.push((j, pis, args[m..].to_vec()));
             }
         }
     }
@@ -204,7 +190,11 @@ pub fn recursive_args(c: &ConstructorDecl, d: GlobalId, m: usize) -> Vec<(usize,
 }
 
 /// The dependent eliminator's method type for constructor `k`:
-/// `Π Δₖ. Π (IH₁…IH_p). M t̄ₖ (cₖ p̄ ā)` (`14 §3`), in the caller's context Γ.
+/// `Π Δₖ. Π (IH₁…IH_p). M t̄ₖ (cₖ p̄ ā)` (`14 §3`, `14 §3.1`), in the
+/// caller's context Γ.
+///
+/// W-style recursive args `(b:B) → D Δ_p t̄[b]` get a Π-abstracted IH
+/// `(b:B) → M t̄[b] (k b)` (K1.5, `14 §3.1`).
 ///
 /// `motive` (`M`) and `params` (`p̄`) are the concrete motive and param
 /// instance at the use site (terms in Γ); `level_args` instantiate the
@@ -255,34 +245,67 @@ pub fn method_type(
     conclusion = Term::app(conclusion, capp);
 
     // Wrap IH binders innermost-first (ih_p … ih_1).
+    // Each IH may be:
+    //   - Direct (nb=0): `M idxs a_pos` — a plain type.
+    //   - W-style (nb≥1): `Π(b₁:B₁)...(b_{nb}:B_{nb}). M idxs (a_pos b₁..b_{nb})`
+    //     — a Π-type over the branching telescope (`14 §3.1`).
     let mut ty = conclusion;
     for j in (0..p).rev() {
-        let (pos, idxs) = &rec[j];
-        // IH_j type in context [Γ, args, ih₁..ih_{j-1}] (depth ctx_depth+n+j).
-        let m_w_ih = weaken(motive, (n + j) as i64);
-        // The recursive arg's index exprs live in `[Δ_p, args_before_pos]`
-        // (depth 1+pos): substitute the params (weakening by `pos`) then lift
-        // past the remaining args and the preceding IHs (n-pos+j binders).
-        let idxs_w: Vec<Term> = idxs
+        let (pos, branching_tel, idxs) = &rec[j];
+        let nb = branching_tel.len();
+        // Context when building IH_j: [Γ, args, ih₁..ih_{j-1}] (depth n+j from Γ).
+        // Inside the nb Π-binders of the IH: [Γ, args, ih₁..ih_{j-1}, b₁..b_{nb}].
+        let m_w_body = weaken(motive, (n + j + nb) as i64);
+        // Index exprs are in [Δ_p, args_before_pos, b₁..b_{nb}].
+        // subst_outer replaces m params (inner_depth = pos+nb).
+        // shift with cutoff=nb lifts args_before_pos and Γ vars past the n-pos
+        // remaining args and j preceding IHs, while PRESERVING the branch binders
+        // b₁..b_{nb} at indices 0..nb-1 (they are bound by the Π-wrap below).
+        let idxs_in_body: Vec<Term> = idxs
             .iter()
             .map(|t| {
-                weaken(
+                shift(
                     &subst_levels(
-                        &subst_outer(t, m, params, *pos),
+                        &subst_outer(t, m, params, *pos + nb),
                         &ind.level_params,
                         level_args,
                     ),
                     (n - pos + j) as i64,
+                    nb,
                 )
             })
             .collect();
-        // a_{pos}' at index (n - 1 - pos + j) in [Γ, args, ih₁..ih_{j-1}].
-        let a_var = Term::var(n - 1 - pos + j);
-        let mut ih_ty = m_w_ih;
-        for ix in &idxs_w {
-            ih_ty = Term::app(ih_ty, ix.clone());
+        // a_pos under nb extra binders: index n - 1 - pos + j + nb.
+        // Apply to b₁..b_{nb}: Var(nb-1)=b₁, ..., Var(0)=b_{nb}.
+        let mut scrut_body = Term::var(n - 1 - pos + j + nb);
+        for bk in 0..nb {
+            scrut_body = Term::app(scrut_body, Term::var(nb - 1 - bk));
         }
-        ih_ty = Term::app(ih_ty, a_var);
+        // Assemble IH body: M idxs (a_pos b₁..b_{nb}).
+        let mut ih_inner = m_w_body;
+        for ix in &idxs_in_body {
+            ih_inner = Term::app(ih_inner, ix.clone());
+        }
+        ih_inner = Term::app(ih_inner, scrut_body);
+        // Wrap in Π-binders from innermost (B_{nb}) to outermost (B₁).
+        // B_k is in [Δ_p, args_before_pos, b₁..b_{k-1}] (under bk extra binders;
+        // branching_tel[bk] has bk Pi-binders above it from peel_pi).
+        let mut ih_ty = ih_inner;
+        for bk in (0..nb).rev() {
+            // branching_tel[bk] is in context [Δ_p, args_before_pos, b₁..b_{bk}].
+            // shift with cutoff=bk lifts args_before_pos and Γ vars while PRESERVING
+            // b₁..b_{bk} at indices 0..bk-1 (bound by the Π-binders already added).
+            let b_dom = shift(
+                &subst_levels(
+                    &subst_outer(&branching_tel[bk], m, params, *pos + bk),
+                    &ind.level_params,
+                    level_args,
+                ),
+                (n - pos + j) as i64,
+                bk,
+            );
+            ih_ty = Term::pi(b_dom, ih_ty);
+        }
         ty = Term::pi(ih_ty, ty);
     }
 
@@ -352,32 +375,93 @@ pub fn iota_reduct(
     let method = &methods[k];
 
     let rec = recursive_args(c, ind.id, m);
-    // Induction hypotheses: `elim_D p̄ M m̄ idx(a_j) a_j` for each recursive arg.
+    // Induction hypotheses for each recursive arg (`14 §7.3`, `14 §7.7`):
+    //   - Direct (nb=0):    `elim_D p̄ M m̄ idx(a_j) a_j`
+    //   - W-style (nb≥1):  `λ(b₁:B₁)...(b_{nb}:B_{nb}). elim_D p̄ M m̄ idx(a_j b₁..b_{nb}) (a_j b₁..b_{nb})`
     let mut ihs: Vec<Term> = Vec::new();
-    for (pos, idxs) in &rec {
+    for (pos, branching_tel, idxs) in &rec {
         let a_j = &ctor_args[*pos];
-        // idx(a_j): the index exprs live in `[Δ_p, args_before_pos]` (depth
-        // 1+pos) — substitute the params (weakening by `pos`), then the actual
-        // args before `pos`, landing in the caller's context Γ.
-        let idx_vals: Vec<Term> = idxs
-            .iter()
-            .map(|t| {
-                subst_levels(
-                    &subst_tel(&subst_outer(t, m, params, *pos), &ctor_args[..*pos]),
+        let nb = branching_tel.len();
+        if nb == 0 {
+            // Direct case: elim applied to a_j itself.
+            let idx_vals: Vec<Term> = idxs
+                .iter()
+                .map(|t| {
+                    subst_levels(
+                        &subst_tel(&subst_outer(t, m, params, *pos), &ctor_args[..*pos]),
+                        &ind.level_params,
+                        level_args,
+                    )
+                })
+                .collect();
+            ihs.push(Term::Elim {
+                fam: ind.id,
+                level_args: level_args.to_vec(),
+                params: params.to_vec(),
+                motive: Box::new(motive.clone()),
+                methods: methods.to_vec(),
+                indices: idx_vals,
+                scrut: Box::new(a_j.clone()),
+            });
+        } else {
+            // W-style case: build λ(b₁:B₁)...(b_{nb}:B_{nb}). elim_D … (a_j b₁..b_{nb}).
+            // Inside nb lambda binders, context extends by b₁..b_{nb}.
+            // a_j weakened by nb to sit inside the binders.
+            let a_j_inner = weaken(a_j, nb as i64);
+            // a_j b₁ b₂ ... b_{nb}: b_k = Var(nb-1-k) under the lambdas.
+            let mut scrut_inner = a_j_inner;
+            for bk in 0..nb {
+                scrut_inner = Term::app(scrut_inner, Term::var(nb - 1 - bk));
+            }
+            // Index vals in [Γ, b₁..b_{nb}]:
+            // idxs[i] in [Δ_p, args_before_pos, b₁..b_{nb}]; subst_outer replaces
+            // m params (inner_depth=pos+nb), then subst_tel substitutes pos args
+            // (weakened by nb to sit inside the binders).
+            let ctor_args_inner: Vec<Term> =
+                ctor_args[..*pos].iter().map(|t| weaken(t, nb as i64)).collect();
+            let idx_vals_inner: Vec<Term> = idxs
+                .iter()
+                .map(|t| {
+                    subst_levels(
+                        &subst_tel(
+                            &subst_outer(t, m, params, *pos + nb),
+                            &ctor_args_inner,
+                        ),
+                        &ind.level_params,
+                        level_args,
+                    )
+                })
+                .collect();
+            // Build the elim call inside the lambdas (all Γ-terms weakened by nb).
+            let elim_inner = Term::Elim {
+                fam: ind.id,
+                level_args: level_args.to_vec(),
+                params: params.iter().map(|p| weaken(p, nb as i64)).collect(),
+                motive: Box::new(weaken(motive, nb as i64)),
+                methods: methods.iter().map(|mth| weaken(mth, nb as i64)).collect(),
+                indices: idx_vals_inner,
+                scrut: Box::new(scrut_inner),
+            };
+            // Wrap in λ-binders from innermost (B_{nb}) to outermost (B₁).
+            // B_k (branching_tel[bk]) in [Δ_p, args_before_pos, b₁..b_{bk}].
+            // subst_outer with inner_depth=pos+bk, then subst_tel with ctor_args
+            // weakened by bk → result in [Γ, b₁..b_{bk}].
+            let mut ih_term = elim_inner;
+            for bk in (0..nb).rev() {
+                let ctor_args_k: Vec<Term> =
+                    ctor_args[..*pos].iter().map(|t| weaken(t, bk as i64)).collect();
+                let b_dom = subst_levels(
+                    &subst_tel(
+                        &subst_outer(&branching_tel[bk], m, params, *pos + bk),
+                        &ctor_args_k,
+                    ),
                     &ind.level_params,
                     level_args,
-                )
-            })
-            .collect();
-        ihs.push(Term::Elim {
-            fam: ind.id,
-            level_args: level_args.to_vec(),
-            params: params.to_vec(),
-            motive: Box::new(motive.clone()),
-            methods: methods.to_vec(),
-            indices: idx_vals,
-            scrut: Box::new(a_j.clone()),
-        });
+                );
+                ih_term = Term::lam(b_dom, ih_term);
+            }
+            ihs.push(ih_term);
+        }
     }
 
     // `mₖ ā [IHs]` — method applied to the constructor args then the IHs.
@@ -433,7 +517,6 @@ mod tests {
         };
         ind.build_types();
         assert!(check_positivity(&ind).is_ok());
-        assert!(check_no_pi_bound_recursive(&ind).is_ok());
     }
 
     #[test]
@@ -517,9 +600,9 @@ mod tests {
     }
 
     #[test]
-    fn w_style_pi_bound_recursive_rejected_in_k1() {
-        // data W : Type 0 where mk : (Nat → W) → W   (strictly positive, but
-        // Π-bound recursive — deferred to K1.5).
+    fn w_style_pi_bound_admitted_in_k1p5() {
+        // data W : Type 0 where mk : (Nat → W) → W   (strictly positive W-style;
+        // K1.5 admits it, `14 §2.1`, `14 §8.4`).
         let nat = Term::indformer(d(5), vec![]);
         let w = Term::indformer(d(0), vec![]);
         let arg = Term::pi(nat, w); // Nat → W
@@ -539,10 +622,45 @@ mod tests {
             former_type: Term::Type(Level::zero()),
         };
         ind.build_types();
-        assert!(check_positivity(&ind).is_ok()); // strictly positive
+        assert!(check_positivity(&ind).is_ok(), "W-style is strictly positive");
+        // K1.5: recursive_args now includes the W-style arg.
+        let rec = recursive_args(&ind.constructors[0], d(0), 0);
+        assert_eq!(rec.len(), 1);
+        let (pos, branching_tel, _idxs) = &rec[0];
+        assert_eq!(*pos, 0);
+        assert_eq!(branching_tel.len(), 1, "one Π-binder (Nat)");
+    }
+
+    #[test]
+    fn w_style_branching_domain_not_d_free_rejected() {
+        // data Bad5 : Type 0 where mk : (Bad5 → Bad5) → Bad5
+        // The branching domain `Bad5` is not D-free: §8.2 checks the domain at
+        // flipped (−) polarity and finds D there, so it rejects.
+        // `14 §2.1` "B contains no occurrence of D"; conformance `wstyle-branching-
+        // domain-not-d-free-rejected`. Soundness guard: gate-removal must not
+        // relax the polarity check on the branching domain.
+        let bad5 = Term::indformer(d(0), vec![]);
+        // (Bad5 → Bad5) → Bad5: Pi(Pi(Bad5, Bad5), Bad5)
+        let neg_arg = Term::pi(Term::pi(bad5.clone(), bad5.clone()), bad5);
+        let mut ind = InductiveDecl {
+            id: d(0),
+            level_params: vec![],
+            params: vec![],
+            indices: vec![],
+            level: Level::zero(),
+            constructors: vec![ConstructorDecl {
+                id: d(1),
+                args: vec![neg_arg],
+                target_indices: vec![],
+                type_: Term::Type(Level::zero()),
+                recursive_positions: vec![],
+            }],
+            former_type: Term::Type(Level::zero()),
+        };
+        ind.build_types();
         assert!(
-            check_no_pi_bound_recursive(&ind).is_err(),
-            "W-style Π-bound recursive deferred to K1.5"
+            check_positivity(&ind).is_err(),
+            "branching domain not D-free must be rejected by §8.2 polarity check"
         );
     }
 
