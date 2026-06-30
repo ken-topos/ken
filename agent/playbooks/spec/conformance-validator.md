@@ -55,6 +55,19 @@ implementations across the whole federation. Read `../../COORDINATION.md`,
   rejected both paths) are the same class: a guard that looks right but fires
   identically on both branches. Prefer the structural assertion — it cannot go
   vacuous.
+  - **A case discriminating on *one* dimension can be vacuous on *another* — a
+    multi-dimensional guard needs a discriminating case per dimension (promoted
+    K2c-series-2).** The seam-3 `quotient_respect` test discriminated correctly on
+    **respect-validity** (valid `r` accepts / invalid rejects) but was **blind to
+    the `Cast` *direction*** (source vs target): it used a constant motive
+    `M = λ_. Nat`, so `m_x ≡ m_y` and **regularity collapsed both directions to
+    the same result** — a reversed-direction schema bug shipped green, Architect-
+    caught. The fix used a **non-degenerate endpoint** (a `Vec`-indexed motive,
+    `n ≢ m`) so `cast_at_inductive` fires structurally and the forced tail-index
+    (`m` vs `n`) reveals the direction. Rule: enumerate a guard's **dimensions**
+    (validity, direction, level, index) and give each its own discriminating
+    case; a **degenerate endpoint** (equal source/target, collapsed by regularity)
+    silently hides whichever dimension it flattens.
 - **Lock a structural-output assertion against the *landed* spec body, never a
   heading or a pre-landing draft (promoted V0+L5, 2 instances).** When you author
   in parallel with the spec-author, the **exact tokens** of a structural
