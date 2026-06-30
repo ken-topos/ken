@@ -1033,6 +1033,65 @@ where
     }
 }
 
+/// Instrumented variant of `drive_h` — emits a trace event at each `Vis` firing
+/// (`73 §2`, TC2). Pure steps (`Ret`, β, ι) emit nothing.
+///
+/// `on_event` is called with `(space_id, effect_val, response_val, sequence_pos)`
+/// **after** the handler responds (response is available) and **before** the
+/// continuation resumes (sequential ordering preserved). The caller interprets
+/// `effect_val` and `response_val` — no Ken-side decode.
+///
+/// **Instrumentation ONLY at the `Vis` site (TC2):** one callback per `Vis`
+/// firing; no calls on `Ret` or pure reduction steps. Bounded overhead is
+/// structural — the callback is at exactly the same location as `drive_h`'s
+/// Vis branch.
+///
+/// **One-way (TC5):** `on_event` is a write-only side-channel (`FnMut`).
+/// Its return type is `()` — there is no path from `on_event`'s output to the
+/// ITree result or to Ken's epistemic status. Emitted events are witnesses, not
+/// claims; a `delegated` T stays `delegated` regardless of what `on_event`
+/// records.
+pub fn drive_h_instrumented<H, S>(
+    mut tree: EvalVal,
+    handler: &mut H,
+    ids: &ITreeIds,
+    globals: &GlobalEnv,
+    store: &mut EvalStore,
+    space_id: &str,
+    seq: &mut u64,
+    on_event: &mut S,
+) -> EvalVal
+where
+    H: FnMut(EvalVal) -> EvalVal,
+    S: FnMut(String, EvalVal, EvalVal, u64), // (space_id, effect_val, resp_val, seq_pos)
+{
+    let m = ids.params_len;
+    loop {
+        let next = match tree {
+            EvalVal::Unknown => return EvalVal::Unknown,
+            EvalVal::Ctor { id, ref args, .. } => {
+                if id == ids.ret_id {
+                    return args.get(m).cloned().unwrap_or(EvalVal::Unknown);
+                } else if id == ids.vis_id {
+                    let e = args[m].clone();
+                    let k = args[m + 1].clone();
+                    let resp = handler(e.clone());
+                    // INSTRUMENTATION POINT: one event per Vis firing (TC2).
+                    // Emitted after handler responds (response is available).
+                    let pos = *seq;
+                    *seq += 1;
+                    on_event(space_id.to_string(), e, resp.clone(), pos);
+                    apply(k, resp, globals, store)
+                } else {
+                    return EvalVal::Neutral;
+                }
+            }
+            _ => return EvalVal::Neutral,
+        };
+        tree = next;
+    }
+}
+
 // ── utility helpers ───────────────────────────────────────────────────────────
 
 /// Total arity of a constructor (params + ctor-specific args).

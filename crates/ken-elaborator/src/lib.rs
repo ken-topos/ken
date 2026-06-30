@@ -13,6 +13,7 @@ pub mod elab;
 pub mod effects;
 pub mod export;
 pub mod ifc;
+pub mod trace;
 pub mod protocol;
 pub mod error;
 pub mod extract;
@@ -44,6 +45,10 @@ pub use prover::{
 pub use export::{
     emit_export, serialize_export, BehavioralExport, ExportError, GEntry, PEntry, PStatus, QEntry,
     TEntry,
+};
+pub use trace::{
+    emit_trace_contract, serialize_trace_contract,
+    AssertionPoint, MonitorProjection, TraceContract, TraceEvent,
 };
 pub use protocol::{
     hole_id_string, obligation_id_string, project_obligation_status, project_wire_verdict,
