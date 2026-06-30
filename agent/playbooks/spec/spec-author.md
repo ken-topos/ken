@@ -119,6 +119,22 @@ too far: describe the *what*, not the *how* of any particular implementation.
   direction is over-asserting equality/inertness.) And: if a decidability claim
   and a conformance case can both be read literally and **disagree on whether a
   redex fires**, one encodes a bug — reconcile before merge.
+- **At pickup of a kernel/spec-completion WP, reconstruct each deliverable's
+  *current* state from the **landed code**, not from any artifact — the WP frame
+  included (promoted K2c-series-2).** A sibling chapter, a conformance seed, a
+  paraphrase, **or the Steward's WP frame** is a **claim to re-verify against the
+  code**, never a citation to build on — and the gap is **largest where a recent
+  soundness fix predates the artifact**. K2c-s2: the frame described seam 1 as a
+  "keep-the-index-and-wrap" hole *to patch*, but an Architect fix
+  (`dec_7xpn5ywf4ebfw`) had already **removed that as unsound** — elaborating from
+  the frame would have instructed the build team to **rebuild the removed
+  unsoundness**. A stale *"what's broken"* is worse than a stale *"what's done"* —
+  it actively misdirects. Read the named functions (a quick parallel Explore
+  recon of the stubs is the cheap ground truth), diff the frame's "current state"
+  against the actual fallback, look for a superseding `dec_*`; if they disagree,
+  raise a **scope checkpoint** (corrected rule + the real fork) **before**
+  drafting. (Mirror of the L5 admittance-vs-staging carry: there a chapter ran
+  *ahead* of the kernel; here a frame ran *behind* it.)
 
 ## Answering build-team queries
 

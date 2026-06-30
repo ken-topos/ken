@@ -104,6 +104,20 @@ implementations across the whole federation. Read `../../COORDINATION.md`,
   constructor-producing `k` — a conflict visible **within the file**, without the
   Architect. A self-contradicting corpus encodes a bug by construction; this is a
   standing gate alongside verdict-flip and trust-root coverage.
+- **Absence assertions are the highest-risk cases — gate them, don't transcribe
+  them (promoted K2c-series-2; subsumes finiteness-not-stuckness + verdict-flip
+  for this family).** A **positive** reduction self-verifies (it computes the
+  value or it doesn't); a **negative/absence** case (`stays stuck`, `stays
+  neutral`, `rejected`) passes **vacuously** if the impl is *coincidentally*
+  stuck/rejecting for a **different** reason than the one you mean. So every
+  absence case must (a) **name the exact guard/gate condition** that makes it
+  stuck/rejected, and (b) pass the **disconfirming check**: *"would this case
+  **also** be stuck/rejected if the impl had the precise bug this seam targets?"*
+  If yes, it's **coincidental, not guard-gated** — rewrite it. (K2c-s2: C12's
+  open-index "stays stuck" is gated by the §3.2 canonical-decomposition guard
+  that *cannot fire* on a neutral index; that's why it's sound, not coincidence.)
+  This is one rule for the whole `stuck`/`neutral`/`rejected` family — the
+  3rd–5th instance of the class that gave K1.5 its false case.
 
 ## Discipline
 

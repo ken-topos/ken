@@ -115,6 +115,18 @@ brief** — the implementer should execute mostly mechanically, not design
    a concrete implementable choice, not a survey); list **testable acceptance
    criteria**; and state the **do-not-reopen guardrails**. This is the *frame* —
    scope, acceptance, sequencing, settled-decision pinning — not the full spec.
+   **Frame by *objective + acceptance*, and treat any "current implementation
+   state" you describe as *perishable* (promoted K2c-series-2).** A frame that
+   says "seam X currently keeps-and-wraps / raw-well-forms — patch this hole" can
+   go **stale between authoring and elaboration** if the kernel moves under it via
+   a later soundness fix — and a stale *"what's broken"* is worse than a stale
+   *"what's done"*: it misdirects the build team to **rebuild removed
+   unsoundness** (K2c-s2: the seam-1 keep-and-wrap the frame described as a hole
+   had already been removed as unsound by `dec_7xpn5ywf4ebfw`). So prefer
+   describing the **goal + acceptance**, not the current fallback; and **tag any
+   current-state claim "verify against the landed code, not this line."** The
+   elaboration re-verifies frames against the code at pickup (spec-author carry),
+   but don't author the hazard in the first place.
 2. **Hand the WP branch to the spec-leader for full elaboration** (operator,
    2026-06-29). **First compact the whole spec enclave** — `moot compact
    spec-leader`, `spec-author`, `conformance-validator` (quiescent before a
