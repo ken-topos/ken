@@ -90,7 +90,7 @@ This matches the level-polymorphic regime of `12-universes.md` §4.
 
 ### 1.3 Derived propositional connectives
 
-Omega carries the **Heyting** structure (`12-universes.md` par. 5.2). The
+Omega carries the **Heyting** structure (§1). The
 following are **derived operations** from K1 formers -- they do not need
 primitive kernel support beyond the Omega formation and PI rules above:
 

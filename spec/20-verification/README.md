@@ -65,7 +65,7 @@ proofs are small and numerous, not large and few.)
 
 ## 4. Why the topos logic and the SMT solver fit (the key insight)
 
-Ken's propositions live in Ω, a **Heyting** algebra (`12 §5.2`): intuitionistic,
+Ken's propositions live in Ω, a **Heyting** algebra (`16 §1`): intuitionistic,
 where `φ ∨ ¬φ` and `¬¬φ ⇒ φ` are **not** free. A classical solver (Z3, cvc5)
 will happily use those laws and "prove" things that are false in the topos — so
 you **cannot** naively encode Ω into Z3 (F\*'s direct-classical approach is

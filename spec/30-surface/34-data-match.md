@@ -93,8 +93,8 @@ view head {a} (xs : NonEmpty a) : a = match xs { Cons x _ => x }
 - Refinements **coerce to the underlying type** silently (`{x:A|φ} ≤ A`); using
   an `A` where `{x:A|φ}` is wanted **emits an obligation** `φ`
   (`../20-verification/22 §2`) the prover discharges or surfaces as a hole.
-- The proof component is a **mere proposition** (`12 §5.1`) → **no runtime
-  payload**; refinements are zero-cost at runtime and pure compile-time
+- The proof component is a **mere proposition** (`../10-kernel/16 §1.2`) → **no
+  runtime payload**; refinements are zero-cost at runtime and pure compile-time
   enforcement.
 - Refinements compose with `data`, records, and function arguments/results, and
   are how `requires`/`ensures` desugar (`21 §1`).

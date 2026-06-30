@@ -378,7 +378,7 @@ excluding the prelude (`Top`/`Bottom`) and excluding definitions/inductives,
 which are re-checked rather than trusted. So a reviewer or agent can see the
 complete set of unchecked assumptions a given program depends on. Idiomatic Ken
 adds **no** postulates; classical axioms, if used, appear here and are visible
-(`12 §5.2`).
+(`16 §1.3` — Ω is intuitionistic, excluded middle is not assumed).
 
 ## 6. Metatheory status (honest accounting)
 
