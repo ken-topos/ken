@@ -1,42 +1,46 @@
-//! L5 effect discipline — K1-buildable half (`36 §7.0`).
+//! L5 effect discipline — row lattice, escape check, ITree denotation, row-poly.
 //!
-//! Implements the static analyses over the surface AST that are independent of
-//! `ITree` admittance (the K1.5-gated part). Specifically:
+//! **L5-build** (`13fd2bf`): static row analysis, first-order.
+//! - **`row`**: effect-row lattice (`§1.1`); also `RowVar`/`RowType`/`RowSubst`
+//!   (row-polymorphism types, moved here as the foundation shared by all modules).
+//! - **`algebra`**: set-level `⊕` row algebra (`§2.3`), `CapParam` (`§2.5`).
+//! - **`infer`**: `infer_row` + `infer_all` (§1.2–1.3), `EffectDecl`.
+//! - **`check`**: §1.4 escape, §2.5 capability, §4.4 cross-space, §5.2
+//!   tail-resumptive, `check_higher_order_guard` (conservative guard).
 //!
-//! - **`row`**: the effect-row lattice (`§1.1`): `EffectRow` as a finite set of
-//!   named effects, with join (∪) and subset (⊆) operations.
-//! - **`algebra`**: the set-level `⊕` row algebra (`§2.3`) and `CapParam` (`§2.5`).
-//! - **`infer`**: `infer_row` (transitive inference, §1.2) and `infer_all`
-//!   (call-graph least-fixpoint, §1.3).
-//! - **`check`**: the `§1.4` escape gate (`ρ_inf ⊆ ρ_decl`), the `§2.5`
-//!   capability-presence gate, the `§4.4` cross-space-alias gate, the `§5.2`
-//!   tail-resumptive-handler gate, and the **higher-order row release guard**
-//!   (`check_higher_order_guard`).
+//! **L5-denotation** (this WP — K1.5 merged at `f037451`, gate lifted):
+//! - **`itree`**: `ITree` (Ret/Vis), `perform`, `bind`, `handler_fold` (§2.1,
+//!   §2.2, §5). K1.5 admitted ITree's W-style Vis + generated `elim_ITree`
+//!   (`spec/10-kernel/14 §3.1`, AC5 in `k1p5_wstyle.rs`).
+//! - **`row_poly`**: `infer_row_poly` + `check_row_poly_escape` (§1.2 row-poly).
+//!   Propagates row variables symbolically for higher-order parameters, replacing
+//!   the conservative `unknown_effectful_params` guard for new code.
 //!
-//! ## Scope boundary: first-order only
+//! ## The §3.1 cross-workstream contract (now finalized)
 //!
-//! This module is **first-order**: `infer_row` resolves callee rows by name
-//! (§1.2 `f a` clause where `f` is a named global). A higher-order parameter
-//! `f : A →[ρ] B` carries a latent **row variable** `ρ` that cannot be resolved
-//! without row-polymorphism (row unification + substitution). That machinery is
-//! deferred to the K1.5-denotation follow-on WP.
+//! Locked interface for Sec1/Sec2/B1 downstream WPs:
 //!
-//! **Conservative safety valve:** `EffectDecl::unknown_effectful_params` lets a
-//! caller declare the *candidate* effects a higher-order parameter might release.
-//! `check_higher_order_guard` conservatively rejects if the declared row does not
-//! cover them (§1.4 `⊆`). This prevents silent under-inference for higher-order
-//! code until full row-polymorphism lands.
+//! | Surface form | Kernel denotation | Read by |
+//! |---|---|---|
+//! | latent row `A →[ρ] B` | `Vis`-tags in `ITree ⟦ρ⟧ B` | escape check §1; B1 |
+//! | capability `Cap E` | a value parameter (Π, §2.5) | Sec2 authority |
+//! | IFC label `@ℓ` | label index on the `Vis` op/resp | Sec1 flow check |
 //!
-//! **K1.5-deferred (NOT in this module):** the `ITree` datatype, `bind`,
-//! `perform`, handlers/`runState`, the denotation `⟦·⟧`, the `§3.1` contract
-//! realization, and row-polymorphism (row variables + latent-row propagation
-//! across higher-order parameters). Those land after K1.5 admits Π-bound
-//! recursive inductives (`§7.0`).
+//! Three load-bearing guarantees (§3.1): manifest-in-the-type, every
+//! authority-relevant act is a `Vis` node, discharge is visible (handlers only).
+//!
+//! ## Spec prose reconciled
+//!
+//! `36-effects.md §2.1` ("gated on K1.5") and `§7.0` ("L5 is gated on K1.5")
+//! updated to "admitted as of K1.5 (`f037451`)". The `§6` deliverable note
+//! updated to remove the K1.5-gating qualifier on ITree/bind/handlers.
 
 pub mod algebra;
 pub mod check;
 pub mod infer;
+pub mod itree;
 pub mod row;
+pub mod row_poly;
 
 pub use algebra::{cap_set, row_join, CapParam};
 pub use check::{
@@ -45,4 +49,6 @@ pub use check::{
     CrossSpaceAccess, EffectError, ResumeKind, WitnessMap,
 };
 pub use infer::{infer_all, infer_row, EffectDecl};
-pub use row::{EffectName, EffectRow};
+pub use itree::{bind, handler_fold, perform, HandlerCase, ITree, Response, Value};
+pub use row::{EffectName, EffectRow, RowSubst, RowType, RowVar};
+pub use row_poly::{check_row_poly_escape, infer_row_poly};

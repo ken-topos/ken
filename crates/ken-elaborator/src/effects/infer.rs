@@ -12,7 +12,7 @@
 use std::collections::HashMap;
 
 use super::algebra::CapParam;
-use super::row::{EffectName, EffectRow};
+use super::row::{EffectName, EffectRow, RowType, RowVar};
 
 /// A declared surface function, as seen by the effect-row analysis.
 ///
@@ -43,13 +43,28 @@ pub struct EffectDecl {
     /// are unknown (§1.2 `f a` clause for `f : A →[ρ] B` where `ρ` is a
     /// row variable on a parameter, not a named callee in `callees`).
     ///
-    /// L5-build is first-order: row-polymorphism (row variables + latent-row
-    /// propagation across higher-order parameters) is deferred to the K1.5-
-    /// denotation follow-on (`§7.0`, row-polymorphism note in `effects/mod.rs`).
-    /// This field lets callers declare the *candidate* effects a higher-order
-    /// parameter might release; `check_higher_order_guard` (in `check.rs`)
-    /// conservatively rejects if the declared row doesn't cover them.
+    /// **L5-build (conservative):** `check_higher_order_guard` rejects if the
+    /// declared row doesn't cover all candidates. Still supported for backward
+    /// compatibility; prefer `param_rows` for new code.
     pub unknown_effectful_params: Vec<EffectName>,
+
+    // --- L5-denotation row-polymorphism fields (K1.5-gated, now buildable) ---
+
+    /// Row variables assigned to higher-order parameters (§1.2 `f a` clause,
+    /// row-poly). Each element is the `RowVar` for one higher-order parameter's
+    /// latent row. `infer_row_poly` propagates these symbolically (rather than
+    /// approximating them as ∅).
+    ///
+    /// Example: `apply_twice (f : A →[ρ₀] A)` assigns `RowVar(0)` for `f`.
+    pub param_rows: Vec<RowVar>,
+
+    /// The declared row type for row-polymorphic functions (may contain row
+    /// variables). When `Some`, overrides `declared_row` in the row-poly
+    /// escape check (`check_row_poly_escape`).
+    ///
+    /// Example: `apply_twice` declares row `RowType::Var(RowVar(0))` (same
+    /// variable as the parameter `f`'s latent row).
+    pub declared_row_type: Option<RowType>,
 }
 
 impl EffectDecl {
@@ -62,13 +77,33 @@ impl EffectDecl {
             callees: Vec::new(),
             performed_effects: Vec::new(),
             unknown_effectful_params: Vec::new(),
+            param_rows: Vec::new(),
+            declared_row_type: None,
         }
     }
 
     /// Declare that this function has a higher-order parameter whose latent
-    /// row may contain `effect`. Use once per candidate effect.
+    /// row may contain `effect` (conservative L5-build path).
     pub fn with_unknown_param_effect(mut self, e: impl Into<EffectName>) -> Self {
         self.unknown_effectful_params.push(e.into());
+        self
+    }
+
+    /// Assign a row variable to a higher-order parameter's latent row
+    /// (row-poly path, L5-denotation). `infer_row_poly` will propagate `rv`
+    /// symbolically rather than approximating it as ∅.
+    pub fn with_param_row(mut self, rv: RowVar) -> Self {
+        self.param_rows.push(rv);
+        self
+    }
+
+    /// Set the declared row as a `RowType` (may contain row variables).
+    ///
+    /// For row-polymorphic functions (e.g. `apply_twice : (A →[ρ₀] A) → A →[ρ₀]
+    /// A`), set this to `RowType::Var(RowVar(0))` so the escape check sees the
+    /// same row variable on both sides.
+    pub fn with_declared_row_type(mut self, rt: RowType) -> Self {
+        self.declared_row_type = Some(rt);
         self
     }
 
