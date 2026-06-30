@@ -141,6 +141,20 @@ brief** — the implementer should execute mostly mechanically, not design
    current-state claim "verify against the landed code, not this line."** The
    elaboration re-verifies frames against the code at pickup (spec-author carry),
    but don't author the hazard in the first place.
+   **Freeze-gate a contract/boundary WP's *merge* on the in-flight builds it
+   cites (promoted K-api, the WS-K capstone).** When a WP authors a *contract*,
+   *API*, or *audited boundary* (e.g. K-api = the kernel's TCB surface) that
+   **cites in-flight builds** which will land soon, the frame must make the merge
+   Decision a **hard gate on those builds being green-and-merged** — *cite the
+   gates* (point at the per-chapter sources, never restate their verdicts) and
+   **freeze-gate** the merge, so the audited contract equals the surface the code
+   actually exposes *the day it lands*. Never freeze a transient pre-build code
+   state. K-api's §4.6 freeze-gate (on K1.5-build + K2c-s2-build) "did its job
+   twice over": it held the contract open exactly long enough for the Architect's
+   end-to-end re-verify to catch a reversed quotient-respect `cast` direction —
+   the one moment the contract *led* the code — and released the instant they
+   converged. A contract that froze the pre-fix code would have hardened that
+   defect into the TCB.
 2. **Hand the WP branch to the spec-leader for full elaboration** (operator,
    2026-06-29). **First compact the whole spec enclave** — `moot compact
    spec-leader`, `spec-author`, `conformance-validator` (quiescent before a
