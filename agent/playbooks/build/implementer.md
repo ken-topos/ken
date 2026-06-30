@@ -122,6 +122,23 @@ lessons to the other teams.
 - **Build/test only via `scripts/ken-cargo`, scoped to your crate** (`-p`),
   never raw `cargo` or `--workspace` — the box is shared and OOMs under parallel
   builds. Lean on CI for full-workspace + conformance. See COORDINATION §12.
+  **Run it from YOUR worktree CWD — never `cd /workspaces/ken` first (promoted
+  L1-build + T2-repl, two instances).** `ken-cargo` from the main worktree
+  compiles against `main` with **zero of your changes**, so every check passes
+  *silently* against the wrong code (caught only when integration tests don't
+  appear). And **after any `Cargo.toml` dependency change, `git diff Cargo.lock`
+  and commit the lock (promoted L6-build)** — CI runs `--locked` and rejects lock
+  drift; local builds auto-update the lock *without committing it*, so the gap is
+  invisible locally and fatal on CI.
+- **Never `EnterPlanMode` or `schedule_call` (promoted T2-repl).** Both wedge your
+  session on an interactive modal that **mentions cannot reach** — recovery needs
+  a Steward `tmux send-keys` or an operator restart. You need the file/search/bash
+  tools to build and `post_response` to hand off; nothing else. If you're tempted
+  to "plan" or "schedule," just do the work and post.
+- **`git checkout <your-home-branch>` BEFORE posting `merge_ready`, never after
+  (promoted L1/L6/T2-repl, recurring both sides).** A `wp/<ID>` branch held in
+  your worktree can't be checked out by QA — the handoff **deadlocks** until you
+  free it. Free the branch *first*, then post the handoff.
 - **Local git only — you never touch GitHub.** No `gh`, no push, no token; the
   Integrator publishes and merges (COORDINATION §14). After you hand off, stop.
   Review feedback and CI-red arrive as a **mootup mention** (from the Architect
