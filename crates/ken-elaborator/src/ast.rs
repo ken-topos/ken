@@ -1,4 +1,5 @@
-//! Surface AST for the V0/V1 elaborator (`39 §5.2`, `21 §6.1`/§6.2).
+//! Surface AST for the V0/V1/L2 elaborator (`39 §5.2`, `21 §6.1`/§6.2`,
+//! `34` — data/match/refinements).
 
 use crate::error::Span;
 
@@ -10,7 +11,43 @@ pub struct Binder {
     pub span: Span,
 }
 
-/// A top-level V0/V1 declaration (`32 §8`, `21 §6.2`).
+/// A constructor in a `data` declaration (`34 §1`).
+#[derive(Clone, Debug)]
+pub struct CtorDecl {
+    /// Constructor name (uppercase-initial).
+    pub name: String,
+    /// Positional argument types (no binder names at the surface level).
+    pub args: Vec<Type>,
+    pub span: Span,
+}
+
+/// A single arm of a `match` expression.
+#[derive(Clone, Debug)]
+pub struct MatchArm {
+    pub pat: Pattern,
+    pub body: Expr,
+    pub span: Span,
+}
+
+/// A surface pattern (`34 §3`, `32 §4`).
+#[derive(Clone, Debug)]
+pub struct Pattern {
+    pub kind: PatKind,
+    pub span: Span,
+}
+
+/// The discriminant of a surface pattern.
+#[derive(Clone, Debug)]
+pub enum PatKind {
+    /// `_` — wildcard; binds nothing.
+    Wild,
+    /// `x` — variable binding.
+    Var(String),
+    /// `C p₁ … pₙ` — constructor pattern with sub-patterns.
+    Ctor(String, Vec<Pattern>),
+}
+
+/// A top-level V0/V1/L2 declaration (`32 §8`, `21 §6.2`, `34`).
 #[derive(Clone, Debug)]
 pub enum Decl {
     ViewDecl {
@@ -45,6 +82,22 @@ pub enum Decl {
         fields: Vec<(String, Expr)>,
         span: Span,
     },
+    /// `data D p₁…pₙ = C₁ τ… | C₂ τ…` — simple inductive sum type (`34 §1`).
+    DataDecl {
+        /// Type former name (uppercase-initial).
+        name: String,
+        /// Lowercase type-parameter names (each is implicitly `Type 0`).
+        type_params: Vec<String>,
+        /// Constructors in declaration order.
+        ctors: Vec<CtorDecl>,
+        span: Span,
+    },
+    /// `type T = A` — surface type alias.
+    TypeAlias {
+        name: String,
+        ty: Type,
+        span: Span,
+    },
 }
 
 impl Decl {
@@ -53,7 +106,9 @@ impl Decl {
             Decl::ViewDecl { name, .. }
             | Decl::LetDecl { name, .. }
             | Decl::ProveDecl { name, .. }
-            | Decl::LawDecl { name, .. } => name,
+            | Decl::LawDecl { name, .. }
+            | Decl::DataDecl { name, .. }
+            | Decl::TypeAlias { name, .. } => name,
         }
     }
     pub fn span(&self) -> &Span {
@@ -61,7 +116,9 @@ impl Decl {
             Decl::ViewDecl { span, .. }
             | Decl::LetDecl { span, .. }
             | Decl::ProveDecl { span, .. }
-            | Decl::LawDecl { span, .. } => span,
+            | Decl::LawDecl { span, .. }
+            | Decl::DataDecl { span, .. }
+            | Decl::TypeAlias { span, .. } => span,
         }
     }
 }
@@ -116,6 +173,12 @@ pub enum Expr {
     ENumLit(NumLit, Span),
     /// Infix binary operation (`35 §3`).
     EBinOp(BinOp, Box<Expr>, Box<Expr>, Span),
+    /// `match scrut { P₁ => body₁ ; … }` — pattern matching (`34 §3`).
+    EMatch {
+        scrut: Box<Expr>,
+        arms: Vec<MatchArm>,
+        span: Span,
+    },
 }
 
 impl Expr {
@@ -131,6 +194,7 @@ impl Expr {
             | Expr::EOld(_, s)
             | Expr::ENumLit(_, s)
             | Expr::EBinOp(_, _, _, s) => s,
+            Expr::EMatch { span, .. } => span,
         }
     }
 }
@@ -150,6 +214,8 @@ pub enum Type {
     TVar(String, Span),
     /// `{ x : A | φ }` — refinement type (`21 §6.1`).
     TRefine(String, Box<Type>, Box<Expr>, Span),
+    /// `T a b` — type application (e.g. `Option Int`, `Vec a`).
+    TApp(Box<Type>, Box<Type>, Span),
 }
 
 impl Type {
@@ -160,7 +226,8 @@ impl Type {
             | Type::TUniv(_, s)
             | Type::TCon(_, s)
             | Type::TVar(_, s)
-            | Type::TRefine(_, _, _, s) => s,
+            | Type::TRefine(_, _, _, s)
+            | Type::TApp(_, _, s) => s,
         }
     }
 }

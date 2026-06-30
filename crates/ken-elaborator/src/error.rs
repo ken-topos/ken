@@ -45,6 +45,10 @@ pub enum ElabError {
     LevelConflict { span: Span },
     /// The kernel rejected the emitted term (wrapped kernel error).
     KernelRejected { error: KernelError, span: Span },
+    /// A non-exhaustive match: `missing` names the first uncovered constructor (`34 §4`).
+    ExhaustivenessError { missing: String, span: Span },
+    /// A redundant match arm (`34 §5`): the arm's constructor was already covered.
+    ReachabilityError { span: Span },
     /// Catch-all for internal elaborator errors.
     Internal(String),
 }
@@ -82,6 +86,20 @@ impl fmt::Display for ElabError {
                     f,
                     "kernel rejected at {}-{}: {}",
                     span.start, span.end, error
+                )
+            }
+            ElabError::ExhaustivenessError { missing, span } => {
+                write!(
+                    f,
+                    "non-exhaustive match at {}-{}: missing constructor '{}'",
+                    span.start, span.end, missing
+                )
+            }
+            ElabError::ReachabilityError { span } => {
+                write!(
+                    f,
+                    "redundant match arm at {}-{}: constructor already covered",
+                    span.start, span.end
                 )
             }
             ElabError::Internal(s) => write!(f, "internal error: {}", s),

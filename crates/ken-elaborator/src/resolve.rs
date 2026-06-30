@@ -3,9 +3,41 @@
 //! V1 additions: resolves `requires`/`ensures` clause lists, scopes `result`
 //! only into `ensures`, scopes `old` only into `space`-op `ensures`, resolves
 //! `{x:A|φ}` refinement types, `prove`, and `law` declarations.
+//! L2 additions: `data` declarations, `type` aliases, `match` expressions,
+//! type application (`T a b`).
 
-use crate::ast::{BinOp, Decl, Expr, NumLit, Type};
+use crate::ast::{BinOp, Decl, Expr, NumLit, PatKind, Type};
 use crate::error::{ElabError, Span};
+
+/// A resolved constructor declaration (from `data` decl resolution).
+#[derive(Clone, Debug)]
+pub struct RCtorDecl {
+    pub name: String,
+    pub args: Vec<RType>,
+    pub span: Span,
+}
+
+/// A resolved pattern.
+#[derive(Clone, Debug)]
+pub struct RPattern {
+    pub kind: RPatKind,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug)]
+pub enum RPatKind {
+    Wild,
+    Var(String),
+    Ctor(String, Vec<RPattern>),
+}
+
+/// A resolved match arm.
+#[derive(Clone, Debug)]
+pub struct RMatchArm {
+    pub pat: RPattern,
+    pub body: RExpr,
+    pub span: Span,
+}
 
 /// A resolved declaration (`21 §6.2`).
 pub struct RDecl {
@@ -33,6 +65,13 @@ pub enum RDeclKind {
         param: String,
         fields: Vec<(String, RExpr)>,
     },
+    /// A `data D p₁…pₙ = C₁ τ… | …` inductive type (`34 §1`).
+    DataDecl {
+        type_params: Vec<String>,
+        ctors: Vec<RCtorDecl>,
+    },
+    /// A `type T = A` surface type alias.
+    TypeAlias { ty: RType },
 }
 
 /// A resolved expression — names replaced by de Bruijn indices.
@@ -51,6 +90,12 @@ pub enum RExpr {
     RNumLit(NumLit, Span),
     /// Infix binary op (`35 §3`); names resolved, operands still unelab'd.
     RBinOp(BinOp, Box<RExpr>, Box<RExpr>, Span),
+    /// `match scrut { P₁ => body₁ ; … }` — pattern match (`34 §3`).
+    RMatch {
+        scrut: Box<RExpr>,
+        arms: Vec<RMatchArm>,
+        span: Span,
+    },
 }
 
 impl RExpr {
@@ -66,6 +111,7 @@ impl RExpr {
             | RExpr::ROld(_, s)
             | RExpr::RNumLit(_, s)
             | RExpr::RBinOp(_, _, _, s) => s,
+            RExpr::RMatch { span, .. } => span,
         }
     }
 }
@@ -80,6 +126,8 @@ pub enum RType {
     RVarTy(usize, String, Span),
     /// `{ x : A | φ }` — carrier `A` + tracked predicate `φ` (`21 §6.1`).
     RRefine(String, Box<RType>, Box<RExpr>, Span),
+    /// `T a b` — type-level application (`34 §1`).
+    RApp(Box<RType>, Box<RType>, Span),
 }
 
 impl RType {
@@ -90,7 +138,8 @@ impl RType {
             | RType::RUniv(_, s)
             | RType::RCon(_, s)
             | RType::RVarTy(_, _, s)
-            | RType::RRefine(_, _, _, s) => s,
+            | RType::RRefine(_, _, _, s)
+            | RType::RApp(_, _, s) => s,
         }
     }
 }
@@ -207,12 +256,6 @@ pub fn resolve_decl(decl: &Decl) -> Result<RDecl, ElabError> {
                     RExpr::RLam(bname.clone(), Box::new(acc), s)
                 });
 
-            // Build Pi-type from binders + requires (as Π proof-args) + return type
-            // Requires propositions become additional Π-args after params.
-            // The body includes corresponding λ-binders for proof-args.
-            // NOTE: full_requires_body is built below during elaboration, not here.
-            // The resolver just passes the resolved clauses; elab does the Pi/Lam wrapping.
-
             let full_ty = match resolved_ret {
                 Some(ret) => Some(
                     single_binders
@@ -284,7 +327,7 @@ pub fn resolve_decl(decl: &Decl) -> Result<RDecl, ElabError> {
             Ok(RDecl {
                 name: name.clone(),
                 ty: None,
-                body: RExpr::RUniv(None, span.clone()), // placeholder
+                body: RExpr::RUniv(None, span.clone()),
                 requires: vec![],
                 ensures: vec![],
                 span: span.clone(),
@@ -292,6 +335,53 @@ pub fn resolve_decl(decl: &Decl) -> Result<RDecl, ElabError> {
                     param: param.clone(),
                     fields: resolved_fields,
                 },
+            })
+        }
+
+        Decl::DataDecl { name, type_params, ctors, span } => {
+            // Each type param is in scope (as a type variable) for the ctor args.
+            let mut scope = Scope::new();
+            for p in type_params {
+                scope.push(p);
+            }
+            let mut rctors = Vec::new();
+            for c in ctors {
+                let rargs = c
+                    .args
+                    .iter()
+                    .map(|t| resolve_type(&mut scope, t))
+                    .collect::<Result<Vec<_>, _>>()?;
+                rctors.push(RCtorDecl {
+                    name: c.name.clone(),
+                    args: rargs,
+                    span: c.span.clone(),
+                });
+            }
+            Ok(RDecl {
+                name: name.clone(),
+                ty: None,
+                body: RExpr::RUniv(None, span.clone()),
+                requires: vec![],
+                ensures: vec![],
+                span: span.clone(),
+                kind: RDeclKind::DataDecl {
+                    type_params: type_params.clone(),
+                    ctors: rctors,
+                },
+            })
+        }
+
+        Decl::TypeAlias { name, ty, span } => {
+            let mut scope = Scope::new();
+            let rty = resolve_type(&mut scope, ty)?;
+            Ok(RDecl {
+                name: name.clone(),
+                ty: None,
+                body: RExpr::RUniv(None, span.clone()),
+                requires: vec![],
+                ensures: vec![],
+                span: span.clone(),
+                kind: RDeclKind::TypeAlias { ty: rty },
             })
         }
     }
@@ -316,19 +406,18 @@ fn resolve_prop(scope: &mut Scope, expr: &Expr, ctx: PropCtx) -> Result<RExpr, E
 fn resolve_expr_ctx(scope: &mut Scope, expr: &Expr, ctx: PropCtx) -> Result<RExpr, ElabError> {
     match expr {
         Expr::EVar(name, span) => {
-            // `result` is only valid in ensures clauses
-            if name == "result" && !matches!(ctx, PropCtx::PureViewEnsures | PropCtx::SpaceOpEnsures) {
+            if name == "result"
+                && !matches!(ctx, PropCtx::PureViewEnsures | PropCtx::SpaceOpEnsures)
+            {
                 return Err(ElabError::UnboundName {
                     name: name.clone(),
                     span: span.clone(),
                 });
             }
-            let i = scope
-                .index_of(name)
-                .ok_or_else(|| ElabError::UnboundName {
-                    name: name.clone(),
-                    span: span.clone(),
-                })?;
+            let i = scope.index_of(name).ok_or_else(|| ElabError::UnboundName {
+                name: name.clone(),
+                span: span.clone(),
+            })?;
             Ok(RExpr::RVar(i, name.clone(), span.clone()))
         }
 
@@ -386,7 +475,6 @@ fn resolve_expr_ctx(scope: &mut Scope, expr: &Expr, ctx: PropCtx) -> Result<RExp
         }
 
         Expr::EOld(e, span) => {
-            // `old` is only valid in `space`-op `ensures` (`21 §6.4`)
             if ctx != PropCtx::SpaceOpEnsures {
                 return Err(ElabError::UnboundName {
                     name: "old".to_string(),
@@ -403,6 +491,60 @@ fn resolve_expr_ctx(scope: &mut Scope, expr: &Expr, ctx: PropCtx) -> Result<RExp
             let rl = resolve_expr_ctx(scope, l, ctx)?;
             let rr = resolve_expr_ctx(scope, r, ctx)?;
             Ok(RExpr::RBinOp(*op, Box::new(rl), Box::new(rr), span.clone()))
+        }
+
+        Expr::EMatch { scrut, arms, span } => {
+            let rscrut = resolve_expr_ctx(scope, scrut, ctx)?;
+            let mut rarms = Vec::new();
+            for arm in arms {
+                let (rpat, bound_names) = resolve_pattern(&arm.pat)?;
+                let depth_before = scope.depth();
+                for n in &bound_names {
+                    scope.push(n);
+                }
+                let rbody = resolve_expr_ctx(scope, &arm.body, ctx)?;
+                for _ in &bound_names {
+                    scope.pop();
+                }
+                assert_eq!(scope.depth(), depth_before);
+                rarms.push(RMatchArm {
+                    pat: rpat,
+                    body: rbody,
+                    span: arm.span.clone(),
+                });
+            }
+            Ok(RExpr::RMatch {
+                scrut: Box::new(rscrut),
+                arms: rarms,
+                span: span.clone(),
+            })
+        }
+    }
+}
+
+/// Resolve a pattern, returning the resolved pattern and the list of names
+/// bound by it in left-to-right order (for scope introduction).
+fn resolve_pattern(pat: &crate::ast::Pattern) -> Result<(RPattern, Vec<String>), ElabError> {
+    match &pat.kind {
+        // Wild patterns consume one de Bruijn slot so outer vars remain consistent
+        // with the method lambda structure (which binds ALL ctor args, not just named ones).
+        PatKind::Wild => Ok((RPattern { kind: RPatKind::Wild, span: pat.span.clone() }, vec!["_".to_string()])),
+        PatKind::Var(name) => Ok((
+            RPattern { kind: RPatKind::Var(name.clone()), span: pat.span.clone() },
+            vec![name.clone()],
+        )),
+        PatKind::Ctor(name, subs) => {
+            let mut rsubs = Vec::new();
+            let mut all_names = Vec::new();
+            for sub in subs {
+                let (rpat, names) = resolve_pattern(sub)?;
+                rsubs.push(rpat);
+                all_names.extend(names);
+            }
+            Ok((
+                RPattern { kind: RPatKind::Ctor(name.clone(), rsubs), span: pat.span.clone() },
+                all_names,
+            ))
         }
     }
 }
@@ -432,26 +574,21 @@ fn resolve_type(scope: &mut Scope, ty: &Type) -> Result<RType, ElabError> {
             scope.push(x);
             let rb = resolve_type(scope, b)?;
             scope.pop();
-            Ok(RType::RPi(
-                x.clone(),
-                Box::new(ra),
-                Box::new(rb),
-                span.clone(),
-            ))
+            Ok(RType::RPi(x.clone(), Box::new(ra), Box::new(rb), span.clone()))
         }
 
         Type::TRefine(x, a, phi, span) => {
             let ra = resolve_type(scope, a)?;
-            // `x` is in scope for the predicate `φ`
             scope.push(x);
             let rphi = resolve_expr_ctx(scope, phi, PropCtx::None)?;
             scope.pop();
-            Ok(RType::RRefine(
-                x.clone(),
-                Box::new(ra),
-                Box::new(rphi),
-                span.clone(),
-            ))
+            Ok(RType::RRefine(x.clone(), Box::new(ra), Box::new(rphi), span.clone()))
+        }
+
+        Type::TApp(f, a, span) => {
+            let rf = resolve_type(scope, f)?;
+            let ra = resolve_type(scope, a)?;
+            Ok(RType::RApp(Box::new(rf), Box::new(ra), span.clone()))
         }
     }
 }

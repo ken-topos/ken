@@ -9,14 +9,16 @@ use std::collections::HashMap;
 use ken_kernel::{
     check as kernel_check,
     declare_def, declare_postulate,
-    subst::{subst0, weaken},
+    inductive::{peel_app, recursive_args},
+    subst::{subst0, subst_outer, weaken},
     whnf, Context, GlobalEnv, GlobalId, Level, LevelVar, Term,
 };
 
 use crate::ast::{BinOp, NumLit};
+use crate::data;
 use crate::error::{ElabError, Span};
 use crate::numbers::{AddEntry, NumericEnv, NumericLitVal};
-use crate::resolve::{RDecl, RDeclKind, RExpr, RType};
+use crate::resolve::{RDecl, RDeclKind, RExpr, RMatchArm, RPatKind, RType};
 
 // ----- obligation model -----
 
@@ -229,7 +231,19 @@ fn elab_type(cx: &mut ElabCtx, ty: &RType) -> Result<Term, ElabError> {
                     name: name.clone(),
                     span: span.clone(),
                 })?;
-            Ok(Term::const_(id, vec![]))
+            // Inductive type formers must be Term::IndFormer so the kernel's
+            // eliminator / conversion rules treat them correctly.
+            if cx.env.inductive(id).is_some() {
+                Ok(Term::IndFormer { id, level_args: vec![] })
+            } else {
+                Ok(Term::const_(id, vec![]))
+            }
+        }
+
+        RType::RApp(f, a, _) => {
+            let f_k = elab_type(cx, f)?;
+            let a_k = elab_type(cx, a)?;
+            Ok(Term::app(f_k, a_k))
         }
 
         RType::RVarTy(i, _, _) => Ok(Term::var(*i)),
@@ -305,6 +319,19 @@ fn infer(cx: &mut ElabCtx, expr: &RExpr) -> Result<(Term, Term), ElabError> {
                     name: name.clone(),
                     span: span.clone(),
                 })?;
+            // Constructor: Term::Constructor with the ctor's declared type.
+            let ctor_ty = cx.env.constructor(id).map(|(ind, k)| {
+                ind.constructors[k].type_.clone()
+            });
+            if let Some(ty) = ctor_ty {
+                return Ok((Term::Constructor { id, level_args: vec![] }, ty));
+            }
+            // Inductive type former: Term::IndFormer.
+            let ind_ty = cx.env.inductive(id).map(|ind| ind.former_type.clone());
+            if let Some(ty) = ind_ty {
+                return Ok((Term::IndFormer { id, level_args: vec![] }, ty));
+            }
+            // Regular constant (postulate/def/primitive).
             let (_, decl_ty) = cx.env.const_type(id).ok_or_else(|| {
                 ElabError::Internal(format!("no type for global '{}'", name))
             })?;
@@ -382,6 +409,10 @@ fn infer(cx: &mut ElabCtx, expr: &RExpr) -> Result<(Term, Term), ElabError> {
 
         RExpr::RBinOp(op, lhs, rhs, span) => {
             elab_binop(cx, op, lhs, rhs, span)
+        }
+
+        RExpr::RMatch { scrut, arms, span } => {
+            infer_match(cx, scrut, arms, span)
         }
     }
 }
@@ -594,6 +625,33 @@ pub fn elaborate_rdecl_v1(
         RDeclKind::Prove => elaborate_prove(env, globals, num_values, numeric_env, rdecl),
         RDeclKind::Law { param, fields } => {
             elaborate_law(env, globals, num_values, numeric_env, rdecl, param.clone(), fields.clone())
+        }
+        RDeclKind::DataDecl { type_params, ctors } => {
+            let d_id = data::elab_data_decl(
+                env,
+                globals,
+                &rdecl.name,
+                type_params,
+                ctors,
+                &rdecl.span,
+            )?;
+            Ok(ElabResult { name: rdecl.name.clone(), def_id: d_id, obligations: vec![] })
+        }
+        RDeclKind::TypeAlias { ty } => {
+            // A type alias `type T = A` declares T as a transparent definition
+            // of type `Type 0` whose body is A (`34 §2`).
+            let (alias_body, alias_id) = {
+                let mut cx = ElabCtx::new(env, globals, num_values, numeric_env);
+                let body = elab_type(&mut cx, ty)?;
+                let body_z = cx.metas.zonk_term(&body);
+                (body_z, ())
+            };
+            let _ = alias_id;
+            let alias_ty = Term::ty(Level::Zero);
+            let id = declare_def(env, vec![], alias_ty, alias_body)
+                .map_err(|e| ElabError::KernelRejected { error: e, span: rdecl.span.clone() })?;
+            globals.insert(rdecl.name.clone(), id);
+            Ok(ElabResult { name: rdecl.name.clone(), def_id: id, obligations: vec![] })
         }
     }
 }
@@ -932,6 +990,261 @@ fn unwrap_lam(term: &Term, n: usize) -> Term {
         }
     }
     cur.clone()
+}
+
+// ----- match elaboration -----
+
+/// Elaborate `match scrut { C₁ x₁… => body₁ ; … }` (`34 §3`).
+///
+/// Compiles to `Term::Elim` with one method per constructor in declaration order.
+/// Constant-motive variant: return type inferred from the first arm, checked
+/// consistent across all arms by kernel type-checking the Elim.
+fn infer_match(
+    cx: &mut ElabCtx,
+    scrut: &RExpr,
+    arms: &[RMatchArm],
+    span: &Span,
+) -> Result<(Term, Term), ElabError> {
+    // 1. Infer scrutinee.
+    let (scrut_core, scrut_ty_raw) = infer(cx, scrut)?;
+    let scrut_ty = whnf(cx.env, &cx.ctx, &scrut_ty_raw);
+
+    // 2. Peel the type-former application: D p₀ … pₘ₋₁.
+    let (head, params_terms) = peel_app(&scrut_ty);
+    let d_id = match &head {
+        Term::IndFormer { id, .. } => *id,
+        _ => {
+            return Err(ElabError::TypeMismatch {
+                span: span.clone(),
+                reason: "match scrutinee must have an inductive type".into(),
+            })
+        }
+    };
+
+    // 3. Clone the InductiveDecl so we can release the &env borrow before
+    //    mutating cx.ctx inside the arm loop.
+    let ind = cx
+        .env
+        .inductive(d_id)
+        .ok_or_else(|| ElabError::Internal(format!("inductive {:?} not found", d_id)))?
+        .clone();
+    let m = ind.params.len();
+    let n_ctors = ind.constructors.len();
+
+    // 4. Build reverse-lookup tables (pre-snapshot to avoid borrow conflicts).
+    //    ctor_id → ctor_index (position in ind.constructors)
+    let ctor_id_to_idx: HashMap<GlobalId, usize> = ind
+        .constructors
+        .iter()
+        .enumerate()
+        .map(|(k, c)| (c.id, k))
+        .collect();
+    //    ctor_idx → name (for exhaustiveness error messages)
+    let ctor_idx_to_name: Vec<String> = ind
+        .constructors
+        .iter()
+        .map(|c| {
+            cx.globals
+                .iter()
+                .find(|(_, &id)| id == c.id)
+                .map(|(name, _)| name.clone())
+                .unwrap_or_else(|| format!("<ctor_{:?}>", c.id))
+        })
+        .collect();
+    //    ctor name → ctor_id (snapshot from globals for use inside arm loop)
+    let ctor_name_to_id: HashMap<String, GlobalId> = cx
+        .globals
+        .iter()
+        .filter(|(_, &id)| ctor_id_to_idx.contains_key(&id))
+        .map(|(name, &id)| (name.clone(), id))
+        .collect();
+
+    // 5. Process arms: reachability check + build one method per ctor.
+    let mut covered: Vec<bool> = vec![false; n_ctors];
+    let mut methods_by_idx: Vec<Option<Term>> = vec![None; n_ctors];
+    let mut return_ty: Option<Term> = None;
+
+    for arm in arms {
+        let ctor_name = match &arm.pat.kind {
+            RPatKind::Ctor(name, _) => name.clone(),
+            RPatKind::Wild | RPatKind::Var(_) => {
+                return Err(ElabError::Internal(
+                    "non-constructor pattern in match (wildcard/var not yet supported \
+                     at top level; use constructor patterns)"
+                        .into(),
+                ))
+            }
+        };
+
+        let ctor_id = ctor_name_to_id.get(&ctor_name).copied().ok_or_else(|| {
+            ElabError::TypeMismatch {
+                span: arm.span.clone(),
+                reason: format!("'{}' is not a constructor of this type", ctor_name),
+            }
+        })?;
+        let k = ctor_id_to_idx[&ctor_id];
+
+        // AC4: redundant arm detection.
+        if covered[k] {
+            return Err(ElabError::ReachabilityError { span: arm.span.clone() });
+        }
+        covered[k] = true;
+
+        // Ctor info.
+        let c = &ind.constructors[k];
+        let n_args = c.args.len();
+        let rec = recursive_args(c, d_id, m);
+        let p_ihs = rec.len();
+
+        // Compute pushed_types[j] = type of arg j with params substituted.
+        // `subst_outer(c.args[j], m, &params_terms, j)`:
+        //   - c.args[j] is in context [Δ_p, arg₀…argⱼ₋₁] with Δ_p at outermost m positions.
+        //   - inner_depth = j (j preceding arg binders inside the stored type).
+        //   - Result is in context [outer_Γ, arg₀…argⱼ₋₁] — correct for cx.ctx push.
+        let mut pushed_types: Vec<Term> = Vec::with_capacity(n_args);
+        for j in 0..n_args {
+            pushed_types.push(subst_outer(&c.args[j], m, &params_terms, j));
+        }
+
+        // Push ctor arg types into cx.ctx for arm body elaboration.
+        // After n_args pushes: Var(0)=last_arg_ty, …, Var(n-1)=first_arg_ty.
+        // The resolver bound names left-to-right, so first_name → Var(n-1), …, last_name → Var(0).
+        for pt in &pushed_types {
+            cx.ctx.push(pt.clone());
+        }
+
+        let (body_core, body_ty_ctx) = infer(cx, &arm.body)?;
+
+        for _ in 0..n_args {
+            cx.ctx.pop();
+        }
+
+        // Lower the body type from the arm context to the outer context.
+        // For closed return types (Int, Color, …) this is a no-op.
+        let body_ty_outer = lower_by(&cx.metas.zonk_term(&body_ty_ctx), n_args)
+            .unwrap_or_else(|| cx.metas.zonk_term(&body_ty_ctx));
+
+        if return_ty.is_none() {
+            return_ty = Some(body_ty_outer);
+        }
+        let ret_ty = return_ty.as_ref().unwrap();
+
+        // Build the method for constructor k:
+        //   λ(arg₀:T₀). … λ(argₙ₋₁:Tₙ₋₁). λ(IH₀:R). … λ(IHₚ₋₁:R). body_for_method
+        //
+        // Inside the n+p-lambda body: Var(0)=IHₚ₋₁, …, Var(p-1)=IH₀,
+        //                              Var(p)=argₙ₋₁, …, Var(n+p-1)=arg₀.
+        // Resolver gave body_core with: Var(0)=argₙ₋₁, …, Var(n-1)=arg₀.
+        // Weaken by p to shift arg vars past the IH slots.
+        let body_for_method = weaken(&body_core, p_ihs as i64);
+
+        // Wrap p IH lambdas (innermost first, type = return type R).
+        let mut method = body_for_method;
+        for _ in 0..p_ihs {
+            method = Term::lam(ret_ty.clone(), method);
+        }
+        // Wrap n arg lambdas (outermost arg last — iterate j=n-1 down to 0).
+        for j in (0..n_args).rev() {
+            method = Term::lam(pushed_types[j].clone(), method);
+        }
+
+        methods_by_idx[k] = Some(method);
+    }
+
+    // 6. AC3: exhaustiveness — name the first uncovered constructor.
+    for (idx, covered_flag) in covered.iter().enumerate() {
+        if !covered_flag {
+            return Err(ElabError::ExhaustivenessError {
+                missing: ctor_idx_to_name[idx].clone(),
+                span: span.clone(),
+            });
+        }
+    }
+
+    let methods: Vec<Term> = methods_by_idx
+        .into_iter()
+        .map(|m| m.unwrap())
+        .collect();
+
+    let ret_ty = return_ty.unwrap_or_else(|| Term::ty(Level::Zero));
+
+    // 7. Build the constant motive: Ascript(λ(x: D). R, D → Type ℓ)
+    //    The kernel can't infer the type of a bare lambda, so we annotate.
+    //    Determine ℓ from the return type's own type.
+    let ret_level = {
+        match ken_kernel::infer(cx.env, &cx.ctx, &ret_ty) {
+            Ok(Term::Type(l)) => l,
+            _ => Level::Zero, // fallback: level 0
+        }
+    };
+    let motive_ty = Term::pi(scrut_ty.clone(), Term::ty(ret_level));
+    let motive = Term::Ascript(
+        Box::new(Term::lam(scrut_ty.clone(), weaken(&ret_ty, 1))),
+        Box::new(motive_ty),
+    );
+
+    // 8. Build Term::Elim (non-indexed: indices = []).
+    let elim = Term::Elim {
+        fam: d_id,
+        level_args: vec![],
+        params: params_terms,
+        motive: Box::new(motive),
+        methods,
+        indices: vec![],
+        scrut: Box::new(scrut_core),
+    };
+
+    Ok((elim, ret_ty))
+}
+
+/// Shift a term's free variables DOWN by `k`, stopping with `None` if any
+/// variable at index `i` (outer context) satisfies `0 ≤ i < k` (it references
+/// a ctor-arg binder that doesn't exist in the outer scope).
+///
+/// Used to extract the return type from a match arm body type (which was
+/// inferred in a context extended by k ctor-arg binders) back into the outer
+/// context.  Closed types (Int, Bool, Color, …) pass through unchanged.
+fn lower_by(term: &Term, k: usize) -> Option<Term> {
+    if k == 0 {
+        return Some(term.clone());
+    }
+    lower_by_inner(term, k, 0)
+}
+
+fn lower_by_inner(term: &Term, k: usize, cutoff: usize) -> Option<Term> {
+    match term {
+        Term::Var(i) => {
+            if *i < cutoff {
+                Some(Term::var(*i)) // bound under a local binder — keep as is
+            } else if *i < cutoff + k {
+                None // refers to a ctor-arg var — can't project to outer scope
+            } else {
+                Some(Term::var(*i - k)) // outer context var — shift down
+            }
+        }
+        Term::Type(l) => Some(Term::ty(l.clone())),
+        Term::Omega(l) => Some(Term::omega(l.clone())),
+        Term::Pi(a, b) => Some(Term::pi(
+            lower_by_inner(a, k, cutoff)?,
+            lower_by_inner(b, k, cutoff + 1)?,
+        )),
+        Term::Lam(a, body) => Some(Term::lam(
+            lower_by_inner(a, k, cutoff)?,
+            lower_by_inner(body, k, cutoff + 1)?,
+        )),
+        Term::App(f, a) => Some(Term::app(
+            lower_by_inner(f, k, cutoff)?,
+            lower_by_inner(a, k, cutoff)?,
+        )),
+        Term::Const { id, level_args } => Some(Term::const_(*id, level_args.clone())),
+        Term::IndFormer { id, level_args } => {
+            Some(Term::IndFormer { id: *id, level_args: level_args.clone() })
+        }
+        Term::Constructor { id, level_args } => {
+            Some(Term::Constructor { id: *id, level_args: level_args.clone() })
+        }
+        other => Some(other.clone()),
+    }
 }
 
 // ----- standalone expression elaboration -----

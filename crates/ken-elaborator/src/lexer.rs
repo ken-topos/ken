@@ -1,9 +1,9 @@
-//! V0/V1/L1 lexer (`31 §8`, `21 §6.1`, `35 §4.1`).
+//! V0/V1/L1/L2 lexer (`31 §8`, `21 §6.1`, `35 §4.1`, `34`).
 //!
-//! Recognises the token subset for G1 (V0), V1 spec-annotation keywords, and
-//! L1 numeric literals (integer, float, decimal with `d`-suffix, float32 with
-//! `f32`-suffix) plus infix arithmetic operators `+`, `+%`, `*`, `==`.
-//! Whitespace and `-- …` line comments are skipped.
+//! Recognises the token subset for G1 (V0), V1 spec-annotation keywords, L1
+//! numeric literals (integer, float, decimal, float32) plus arithmetic
+//! operators, and L2 sum-type/pattern-match keywords (`data`, `match`, `type`,
+//! `=>` fat-arrow).  Whitespace and `-- …` line comments are skipped.
 
 use crate::error::{ElabError, Span};
 
@@ -22,6 +22,10 @@ pub enum Token {
     KwLaw,
     KwOld,
     KwSpace,
+    // L2 keywords
+    KwData,       // "data"  — inductive type declaration
+    KwMatch,      // "match" — pattern matching
+    KwTypeAlias,  // "type"  — surface type alias
     // V0 punctuation
     LParen,
     RParen,
@@ -40,6 +44,8 @@ pub enum Token {
     PlusPercent,  // `+%` — explicit wrapping add
     Star,         // `*`  — type-directed infix multiply
     EqEq,         // `==` — structural equality
+    // L2 punctuation
+    FatArrow,     // `=>` — match arm separator
     // L1 numeric literal tokens
     IntLit(i128),           // integer literal too large for u32
     FloatLit(f64),          // decimal-point float: `3.14`, `1e-9`
@@ -136,6 +142,10 @@ impl<'s> Lexer<'s> {
                     self.advance();
                     return Ok((Token::EqEq, Span::new(start, self.pos)));
                 }
+                if self.cur() == Some('>') {
+                    self.advance();
+                    return Ok((Token::FatArrow, Span::new(start, self.pos)));
+                }
                 return Ok((Token::Eq, Span::new(start, self.pos)));
             }
             '.' => {
@@ -198,6 +208,9 @@ impl<'s> Lexer<'s> {
                 "law"      => Token::KwLaw,
                 "old"      => Token::KwOld,
                 "space"    => Token::KwSpace,
+                "data"     => Token::KwData,
+                "match"    => Token::KwMatch,
+                "type"     => Token::KwTypeAlias,
                 _ => {
                     let first = s.chars().next().unwrap();
                     if first.is_uppercase() {
