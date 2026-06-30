@@ -440,11 +440,13 @@ fn resolve_expr_ctx(scope: &mut Scope, expr: &Expr, ctx: PropCtx) -> Result<RExp
                     span: span.clone(),
                 });
             }
-            let i = scope.index_of(name).ok_or_else(|| ElabError::UnboundName {
-                name: name.clone(),
-                span: span.clone(),
-            })?;
-            Ok(RExpr::RVar(i, name.clone(), span.clone()))
+            if let Some(i) = scope.index_of(name) {
+                Ok(RExpr::RVar(i, name.clone(), span.clone()))
+            } else {
+                // Local scope miss — fall through to global lookup (same as TVar).
+                // The elaborator's RCon handler resolves the name against globals.
+                Ok(RExpr::RCon(name.clone(), span.clone()))
+            }
         }
 
         Expr::ECon(name, span) => Ok(RExpr::RCon(name.clone(), span.clone())),

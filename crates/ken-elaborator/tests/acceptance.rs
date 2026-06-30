@@ -340,13 +340,21 @@ fn nested_app_each_binder() {
 }
 
 /// `surface/elaboration/unbound-name-rejected-at-resolution`
+///
+/// After L-resolver-globals, lowercase scope misses fall through to RCon and
+/// are caught at the elaboration stage as UnresolvedCon rather than the
+/// resolution-stage UnboundName.  Either error proves the name was rejected.
 #[test]
 fn unbound_name_rejected_at_resolution() {
     let mut env = mk_env();
     let result = env.elaborate_decl("view unbound (x : Nat) : Nat = y");
     assert!(
-        matches!(result, Err(ElabError::UnboundName { ref name, .. }) if name == "y"),
-        "unbound-name: expected UnboundName(y) at resolution stage, got {:?}",
+        matches!(
+            &result,
+            Err(ElabError::UnboundName { name, .. } | ElabError::UnresolvedCon { name, .. })
+                if name == "y"
+        ),
+        "unbound-name: expected UnboundName or UnresolvedCon for 'y', got {:?}",
         result.err()
     );
 }
@@ -426,13 +434,18 @@ fn pipeline_errors_at_correct_stage() {
             result.err()
         );
     }
-    // (b) name-resolution error: free `y`
+    // (b) name-resolution error: free `y` (UnboundName at resolution OR
+    //     UnresolvedCon at elaboration — both prove the name was rejected)
     {
         let mut env = mk_env();
         let result = env.elaborate_decl("view u (x : Nat) : Nat = y");
         assert!(
-            matches!(result, Err(ElabError::UnboundName { ref name, .. }) if name == "y"),
-            "(b) free 'y' should be UnboundName at resolution, got {:?}",
+            matches!(
+                &result,
+                Err(ElabError::UnboundName { name, .. } | ElabError::UnresolvedCon { name, .. })
+                    if name == "y"
+            ),
+            "(b) free 'y' should be UnboundName or UnresolvedCon, got {:?}",
             result.err()
         );
     }
