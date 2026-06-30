@@ -101,6 +101,21 @@ too far: describe the *what*, not the *how* of any particular implementation.
   happy-path tests** while violating the property — the operational twin of
   positivity≠admittance (a natural default silently breaks a property the
   obvious corpus won't catch).
+- **A proof obligation over a *structured* term must descend into the structure —
+  a single obligation over an eliminator carries no induction hypothesis
+  (promoted V2).** When specifying VC/obligation extraction (`22`/V-series), for a
+  `match`/`if`/recursion the postcondition **is the result-type motive** and must
+  be pushed **per-branch / per-constructor**: a **single** obligation `ψ[b/result]`
+  over the whole body is a **completeness bug** for any property needing
+  case-analysis or induction — with no IH it cannot verify a recursive function at
+  all (it isn't an optimization to split; the split is *required*). I nearly
+  shipped this in V2 — §2.2/§5 emitted one over-the-body obligation, contradicting
+  my own §3/§4, and it passed authoring **and** the Architect's substance review;
+  only my Spec-vote self-pass caught it. Ask, for every obligation over a
+  branching/recursive term: *"does discharging this need the branch's hypotheses
+  or the IH?"* — if yes, descend. The VC specialization of *verify the property,
+  not the representative case*; pairs with the conformance **mechanism-consistency**
+  check (straight-line vs branchy vs recursive cases must agree on the shape).
 - **A "this reduction terminates / conversion decides" argument must rest on a
   well-foundedness measure — never on a "stuck because a variable is in the way"
   story; stress-test it against an *abstract* scrutinee (promoted K1.5, ★★★
