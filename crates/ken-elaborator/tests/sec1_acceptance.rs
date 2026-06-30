@@ -18,7 +18,8 @@ use ken_elaborator::{
         check_declassify_in_delta, check_no_laundering,
         check_reduction_faithfulness, CtHook, CtLabel, DeclassifyCap, FlowCtx,
         LeakageSink, RelationalClaim, BOTTOM, INTERNAL, PUBLIC, SECRET,
-        TRIGGER_REL_DEFERRED, TRIGGER_SEC1CT, TRUSTED, UNTRUSTED,
+        TRIGGER_REL_DEFERRED, TRIGGER_SEC1CT, TRIGGER_SEC1_DUAL,
+        TRIGGER_SEC1_LAUNDER, TRIGGER_SEC1_REDUCE, TRUSTED, UNTRUSTED,
     },
     prover::{Countermodel, ProverResult, Verdict},
 };
@@ -97,25 +98,37 @@ fn secret_to_public_rejected() {
     assert!(accept_pub.is_accept(), "Public @ Public sink must accept");
 }
 
-/// A2. Integrity lattice (dual): Untrusted ⋢ Trusted sink.
+/// A2. Integrity lattice (dual): Untrusted ⋢ Trusted sink — scalar-correct.
 /// Flip: Trusted data into a Trusted sink accepts.
+///
+/// **`[Sec1-dual]` stub notice:** `UNTRUSTED=Label(2)` and `TRUSTED=Label(0)` are
+/// the same scalars as `SECRET` and `PUBLIC`. `l_sink(UNTRUSTED,TRUSTED)` is
+/// numerically byte-identical to `l_sink(SECRET,PUBLIC)` in A1 — the integrity
+/// order-dual is NOT a separate implementation path. A bug that applied the wrong
+/// order *specifically* to the IntegLabel carrier (leaving ConfLabel unaffected)
+/// cannot be caught here; A2 cannot flip while A1 stays green. The genuine
+/// `(Conf×Integ)` product + lattice-parametric rules are deferred to `[Sec1-dual]`.
 #[test]
 fn integrity_taint_rejected() {
     let ctx = FlowCtx::new();
-    // `exec (cmd : String @ Untrusted)` into Shell(Trusted): Untrusted=⊤ ⋢ ⊥=Trusted
+    // `exec (cmd : String @ Untrusted)` into Shell(Trusted): Untrusted=⊤ ⋢ ⊥=Trusted.
+    // Scalar-correct: flows_to(2, 0) = false → Reject.
     let reject = ctx.l_sink(UNTRUSTED, TRUSTED, "shell.exec");
-    assert!(reject.is_reject(), "Untrusted @ Trusted sink must reject");
+    assert!(reject.is_reject(), "Untrusted @ Trusted sink must reject (scalar-correct)");
     let err = reject.error().unwrap();
     assert_eq!(err.data_label, UNTRUSTED);
     assert_eq!(err.sink_clearance, TRUSTED);
 
-    // Flip: Trusted source → Trusted sink → Accept
+    // Flip: Trusted source → Trusted sink → Accept (flows_to(0,0)=true).
     let accept = ctx.l_sink(TRUSTED, TRUSTED, "shell.exec");
     assert!(accept.is_accept(), "Trusted @ Trusted sink must accept");
 
-    // Cross-check lattice duality: Trusted CAN flow to Untrusted context
+    // Cross-check: Trusted CAN flow to Untrusted context (flows_to(0,2)=true).
     let accept_down = ctx.l_sink(TRUSTED, UNTRUSTED, "log.any");
     assert!(accept_down.is_accept(), "Trusted flows to Untrusted context (downgrade OK)");
+
+    // [Sec1-dual] trigger — stub named, not silent.
+    assert_eq!(TRIGGER_SEC1_DUAL, "[Sec1-dual]");
 }
 
 /// A3. Implicit flow: `if (secret @ Secret) then send s 1 else send s 0`
@@ -239,18 +252,26 @@ fn declassify_absent_from_delta_is_infidelity() {
 
 // ─── C. No laundering through effects (AC2) — load-bearing guard ─────────────
 
-/// C1. A Secret label MUST survive `bind`/`incl` effect routing.
-/// Exact flip-bug: a label-dropping `bind`/`incl` at the Vis boundary.
-/// Doubly load-bearing under N1: the kernel is BLIND to a dropped label
-/// (labels erased before kernel), so C1 is the SOLE backstop.
+/// C1. Label-equality check for no-laundering — concept-correct, routing stub.
+///
+/// **`[Sec1-launder]` stub notice:** `check_no_laundering(a,b)=(a==b)` is a
+/// label-equality predicate over hand-assigned literals. No real `bind`/`incl`/
+/// `handler_fold` on `itree::ITree` is invoked — the actual trusted surface
+/// (`36 §2.2/§2.4`: `bind (Vis e f) k = Vis e (λr.…)` must preserve the label
+/// index) is untested. The test verifies the CONCEPT (label-equality is the right
+/// invariant) but not KEN'S ROUTING. A label-dropping `bind` in `itree.rs` would
+/// not be caught until `[Sec1-launder]` wires C1 through real effect routing.
+///
+/// Doubly load-bearing under N1: the kernel is blind to label drops (labels
+/// erased before kernel), so C1 — once wired to real routing — is the sole net.
 #[test]
 fn label_survives_effect_routing() {
-    // Correct impl: bind reconstructs the same `Vis e` node — label unchanged.
+    // Concept check: label-equality is the correct no-laundering invariant.
     let original_label = SECRET;
     let after_bind = original_label; // preserved (correct bind/incl)
     assert!(
         check_no_laundering(original_label, after_bind),
-        "correct bind: label preserved → no-laundering check passes"
+        "correct bind: label preserved → no-laundering invariant holds"
     );
 
     // With preserved label, the flow pass still sees Secret at the Public sink:
@@ -261,20 +282,24 @@ fn label_survives_effect_routing() {
         "preserved Secret label @ Public sink → rejects (correct behaviour)"
     );
 
-    // Flip-bug: a bind/incl/handler that DROPS the label index (→ PUBLIC).
-    let after_bind_bug = PUBLIC; // dropped to Public (the bug)
+    // Concept of the flip-bug: a bind/incl that DROPS the label index (→ PUBLIC).
+    let after_bind_bug = PUBLIC; // dropped to Public (the bug we target)
     assert!(
         !check_no_laundering(original_label, after_bind_bug),
-        "bug: label-dropping bind → no-laundering check FAILS (flip-bug detected)"
+        "bug: label-dropping bind → no-laundering invariant FAILS"
     );
 
     // Under the bug, the flow pass sees Public at the Public sink — wrongly accepts:
     let wrongly_accept = ctx.l_sink(after_bind_bug, PUBLIC, "chan.public");
     assert!(
         wrongly_accept.is_accept(),
-        "bug: dropped label → wrongly accepts (green-vs-red on label-dropping bug)"
+        "bug: dropped label → wrongly accepts (concept: green-vs-red on label equality)"
     );
-    // This wrong accept is INVISIBLE to the kernel (labels erased): N1 sole backstop.
+    // NOTE: the above is concept-level only. Real routing (itree::bind/incl) must
+    // be the discriminant — see [Sec1-launder].
+
+    // [Sec1-launder] trigger — stub named, not silent.
+    assert_eq!(TRIGGER_SEC1_LAUNDER, "[Sec1-launder]");
 }
 
 // ─── D. Non-interference by proof — relational verdict mapping (AC3) ──────────
@@ -404,42 +429,54 @@ fn progress_sensitive_divergence_is_a_leak() {
     );
 }
 
-/// D5. Known-interfering program must reduce to disproved.
-/// The reduction CANNOT be massaged (too-weak Φ_post, dropped coterminates_ζ)
-/// to make a known leak read proved. This is the N2 positive-soundness backstop.
-/// Distinct from D2 (faithful reduction + verdict tag) and E1 (cert fails typecheck).
+/// D5. Reduction-faithfulness verdict-shape check — structural stub over synthetic.
+///
+/// **`[Sec1-reduce]` stub notice:** `check_reduction_faithfulness(v) =
+/// matches!(v, Disproved)` is a verdict-SHAPE predicate; it asserts "Disproved
+/// is Disproved." The test feeds `synthetic_disproved(...)` — a hand-rigged
+/// `ProverResult::Disproved`. No `product(c,ζ)` construction (variable renaming,
+/// `lowEq_ζ`, `coterminates_ζ`) is implemented. A too-weak `Φ_post` — the
+/// N2 failure mode — cannot be detected because nothing builds `Φ_post`. This
+/// stub verifies the predicate SHAPE but not Ken's product-program reduction.
+/// When `[Sec1-reduce]` lands, D5 must use a real reduction from a known
+/// interfering program and show that a weakened `Φ_post` yields a `proved`
+/// verdict that D5 catches.
+///
+/// Distinct from D2 (faithful reduction, verdict tag) and E1 (cert typecheck).
 #[test]
 fn reduction_faithfulness_interfering_disproved() {
     let (mut env, _p, q) = make_env_pq();
 
-    // Known-interfering program: the product obligation has a distinguishing pair.
-    // The reduction must faithfully encode the 2-safety claim — not weaken Φ_post.
+    // Synthetic obligation: the CONCEPT of a known-interfering program's
+    // product-program obligation being disproved.
     let (result, triple) = synthetic_disproved(
         &mut env,
         "ob:ni:D5.0",
         q.clone(),
-        "known leak: direct Secret→Public assignment, not routed through declassify",
+        "synthetic: known leak (direct Secret→Public assignment, no declassify)",
     );
-    let claim = RelationalClaim::new("interfering_program", PUBLIC, triple, None);
+    let claim = RelationalClaim::new("interfering_program_stub", PUBLIC, triple, None);
 
     assert!(
         matches!(result.verdict, Verdict::Disproved { .. }),
-        "known-interfering program → disproved: {:?}", result.verdict
+        "synthetic disproved verdict is Disproved: {:?}", result.verdict
     );
 
-    // Positive-soundness backstop: check_reduction_faithfulness is TRUE (verdict IS Disproved).
-    // If a wrong reduction weakened Φ_post, the kernel would issue Proved for a non-NI claim.
+    // Structural check: check_reduction_faithfulness returns true for Disproved.
+    // This is a predicate-shape assertion, not N2 coverage.
     assert!(
         check_reduction_faithfulness(&result.verdict),
-        "D5: reduction-faithfulness verified — verdict IS Disproved (N2 sole net)"
+        "D5: Disproved verdict satisfies the faithfulness predicate (shape-correct)"
     );
 
-    // NEVER reads proved for a known-interfering program.
-    assert!(
-        !matches!(result.verdict, Verdict::Proved { .. }),
-        "D5: a known leak can NEVER read proved (N2 — reduction-faithfulness)"
-    );
-    assert!(!claim.has_deferred_trigger(), "D5: no deferred trigger");
+    // The predicate rejects Proved and Unknown verdicts:
+    assert!(!check_reduction_faithfulness(&Verdict::Unknown { hole_id: env.fresh_id() }),
+        "D5: Unknown does not satisfy faithfulness predicate");
+
+    assert!(!claim.has_deferred_trigger());
+
+    // [Sec1-reduce] trigger — stub named, not silent.
+    assert_eq!(TRIGGER_SEC1_REDUCE, "[Sec1-reduce]");
 }
 
 // ─── E. Kernel re-checkable, not trusted (AC3) ───────────────────────────────
@@ -623,6 +660,10 @@ fn by_typing_meta_theorem_is_trusted_scope() {
 
 /// Cross-case: by-proof verdict-trichotomy class {D1, D2, D3, D4, D5}.
 /// Glivenko-analog for IFC: asserts cross-case boundary invariants.
+///
+/// **Honest-limits note:** the D5 faithfulness check here is a verdict-shape
+/// predicate over synthetic verdicts. The N2 trusted surface (product-program
+/// reduction faithfulness) is stub-tested, not netted, pending `[Sec1-reduce]`.
 #[test]
 fn by_proof_trichotomy_cross_case_sweep() {
     let (mut env, p, q) = make_env_pq();
@@ -648,6 +689,40 @@ fn by_proof_trichotomy_cross_case_sweep() {
     // Boundary invariant 2: an undischargeable obligation is Unknown, NEVER Proved.
     assert!(!matches!(d3.verdict, Verdict::Proved { .. }), "D3 (unknown) is not Proved");
 
-    // N2 positive-soundness: D5 (interfering → Disproved) is true for D2 result
-    assert!(check_reduction_faithfulness(&d2_result.verdict), "D2/D5: disproved verdict passes faithfulness check");
+    // D5 shape: the faithfulness predicate correctly classifies verdict classes.
+    // (This is shape coverage, not N2 coverage — see [Sec1-reduce].)
+    assert!(check_reduction_faithfulness(&d2_result.verdict), "D2/D5: Disproved passes shape predicate");
+    assert!(!check_reduction_faithfulness(&d1.verdict), "D1: Proved does not pass faithfulness predicate");
+    assert!(!check_reduction_faithfulness(&d3.verdict), "D3: Unknown does not pass faithfulness predicate");
+}
+
+/// Honest limits: N1/N2 stub gaps carry named reify-triggers — never silent.
+///
+/// This WP delivers the scalar IFC discipline-library with correct flow-rule
+/// logic. Three N1/N2 surfaces are STUB-TESTED (the logic is right; the real
+/// Ken routing/reduction machinery is not yet wired):
+/// - `[Sec1-dual]`: A2 is scalar-identical to A1; the integrity order-dual is
+///   not independently discriminating. Genuine (Conf×Integ) product deferred.
+/// - `[Sec1-launder]`: C1 checks label-equality over literals; no real
+///   `bind`/`incl`/`Vis` routing is invoked. Real effect routing deferred.
+/// - `[Sec1-reduce]`: D5 checks verdict shape over synthetic obligations; no
+///   real `product(c,ζ)` reduction is implemented. Real reduction deferred.
+#[test]
+fn n1_n2_stub_gaps_carry_reify_triggers() {
+    // Each trigger is a named non-silent gap (LP-2 honest-limits discipline
+    // applies to BUILD claims exactly as it applies to spec claims).
+    assert_eq!(TRIGGER_SEC1_DUAL, "[Sec1-dual]");
+    assert_eq!(TRIGGER_SEC1_LAUNDER, "[Sec1-launder]");
+    assert_eq!(TRIGGER_SEC1_REDUCE, "[Sec1-reduce]");
+
+    // What IS delivered (real, not stubs):
+    // - Four flow rules correct: l_sink, l_observe, l_combine, l_pure
+    // - flows_to direction right; join/meet correct
+    // - Declassification capability-gated + strictly-lower + delta-audited
+    // - @ct hook parses, carries, rejects at leakage sinks
+    // - Deferred cases carry triggers: [rel-deferred], [Sec1ct], [Ward]
+    // What is NOT yet delivered (stub, pending the three triggers above):
+    // - Independent integrity dual (A2 ≡ A1 at scalar level)
+    // - Real Vis-routing for no-laundering (C1 is label-equality only)
+    // - Real product-program reduction for faithfulness (D5 is verdict-shape only)
 }

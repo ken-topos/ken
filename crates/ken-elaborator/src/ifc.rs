@@ -284,6 +284,28 @@ pub const TRIGGER_REL_DEFERRED: &str = "[rel-deferred]";
 pub const TRIGGER_SEC1CT: &str = "[Sec1ct]";
 pub const TRIGGER_WARD: &str = "[Ward]";
 
+/// `[Sec1-dual]`: genuine `(Conf×Integ)` product lattice + lattice-parametric
+/// flow rules, with an A2 that flips on the dual-order independently of A1.
+/// Currently `UNTRUSTED=Label(2)=SECRET` and `TRUSTED=Label(0)=PUBLIC` — one
+/// scalar; a bug specific to the IntegLabel ordering cannot be distinguished
+/// from a ConfLabel bug. The real integrity dual (separate carrier, dual `⊑`)
+/// must make A2 flip while A1 stays green.
+pub const TRIGGER_SEC1_DUAL: &str = "[Sec1-dual]";
+
+/// `[Sec1-launder]`: wire `check_no_laundering` to real `bind`/`incl`/
+/// `handler_fold` in `effects::itree`. The C1 test currently checks
+/// label-equality over hand-assigned literals — the actual trusted surface
+/// (`36 §2.2/§2.4`: `bind (Vis e f) k = Vis e (λr.…)` preserving the label
+/// index) is not exercised. A real `Vis`-routed tree must be the discriminant.
+pub const TRIGGER_SEC1_LAUNDER: &str = "[Sec1-launder]";
+
+/// `[Sec1-reduce]`: implement `product(c, ζ)` (variable renaming, `lowEq_ζ`,
+/// `coterminates_ζ` conjunct) and tie D5 to a genuine product-program
+/// reduction. Currently `check_reduction_faithfulness` is a verdict-shape
+/// predicate over a synthetic obligation — a too-weak `Φ_post` (the N2 failure
+/// mode) cannot be detected because nothing constructs `Φ_post`.
+pub const TRIGGER_SEC1_REDUCE: &str = "[Sec1-reduce]";
+
 /// A relational (non-interference) claim, post-reduction to a unary obligation.
 ///
 /// The **product-program construction** (variable renaming, `lowEq_ζ` /
