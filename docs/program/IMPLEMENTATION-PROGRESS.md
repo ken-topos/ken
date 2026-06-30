@@ -14,10 +14,14 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-- **Updated:** 2026-06-30 (~04:40 — **🏛️ WS-K COMPLETE** (K-api `2f1cdf8`, the
-  kernel/TCB closed); G1 closed; L5 + ITree-lowering delivered; **V1 released** —
-  verification spine begins. Overnight: 1 send-keys + 1 comms-relay intervention,
-  both logged; the rest deep-work false alarms.)
+- **Updated:** 2026-06-30 (~10:35 — **🎉 VERIFICATION SPINE COMPLETE** —
+  V0→V1→V2→V1-fix→V3→V4 all **built** (`3e6ed17`), 6 WPs zero rework, 6/6 QA gates;
+  the G2/G3/G4 thesis is demonstrated. Earlier: WS-K complete (K-api `2f1cdf8`),
+  G1 closed, L5 + X1-effects (`cf7d591`) delivered. **In flight:** T1/25-protocol
+  (agent contract). **Next checkpoint (operator):** broadening to the idle
+  WS-Sec/WS-B/language/foundation/ergo. Overnight: ~25 retro→corpus promotions;
+  §14 hardened to two-axis preventive; interventions = 1 send-keys + 2 comms-
+  relays + dropped-git_request re-sends, all logged.)
 - **Next action:** **DONE/merged:** K1, K2, K3, V0-spec (`65adf30`), K2c
   compose-erratum (`444f937`), and **K2c series-1** (`7d38b55`, 99/99 — Architect
   caught a Floyd-Warshall **union-masking** SCT bug at review, fixed `9e36918`;
@@ -67,22 +71,26 @@ against it*. Run until complete, blocked, or instructed (§2b).
   + contract converged. (Its merge had stalled on the Architect missing the
   series-2-build merge trigger — **Steward send-keys #1**, capture-pane-confirmed
   idle, woke it to flip the hold.) Retros → promoted *the freeze-gate pattern*.
-  **In flight: V1** → enclave (`wp/V1`, just released; enclave compacted) — the
-  verification spine's first WP (`21-spec-syntax`: `requires`/`ensures` + four-way
-  status; ★★ untrusted/kernel-re-checked); deps V0 + K-api (both done). Enclave
-  then flows **V1 → V2 → V3** (the prover spine) interleaved with **X1-effects-elab
-  (`42 §3`)** + **Sec1** (rides L5).
-  **HELD / IDLE — both dep-blocked on the serial enclave:** **Runtime** —
-  **X1-effects is NOT a clean release**; it needs a **`42 §3` effect-evaluation
-  elaboration** first (the X1-spec deferred effects as out-of-scope stuck forms),
-  *then* Runtime builds. **Verify** — V1 (frame primed `72fce4f`) awaits the
-  enclave. **Enclave queue after K-api:** **V1** (critical path → V2/V3) → then
-  **X1-effects-elab (`42 §3`)** + **Sec1** (rides L5) — author those frames as
-  the enclave nears V1. **Notification defect** (operator-confirmed, intermittent
-  — but all 3 kernel "stalls" tonight were deep-work / finishing / auto-compaction,
-  NOT wedges): diagnose via **`tmux capture-pane -t moot-<role>`** (working vs
-  idle-at-prompt) before any nudge; `send-keys` only on a confirmed wedge
-  (operator GO granted). Watchdogs private `CronCreate` (§13); convo §2a on `main`.
+  **🎉 VERIFICATION SPINE COMPLETE** (`3e6ed17`) — **V0→V1→V2→V1-fix→V3→V4 all
+  built** by Team Verify (6 WPs, **zero rework**, 6/6 QA gates). The full
+  differentiator: spec syntax (V1) → obligation extraction (V2) → IPC prover with
+  **kernel-re-checked certificates** (V3) → **agentic diagnostics** (V4: Kripke
+  countermodels w/ false-vs-unknown, typed holes, three-region Heyting). The
+  **G2/G3/G4 thesis is demonstrated.** **X1-effects built** (`cf7d591`, the
+  `drive_h` effect driver — Runtime reactivated). **Σ-sort trust-root erratum
+  closed** (`badc78d` + `5b16603`, 3-piece, freeze-gated).
+  **In flight:** **T1/25-protocol** → enclave — the **agent contract** (verdicts +
+  diagnostics → stable schema-valid JSON for the G7 write→verify→repair loop;
+  completes the agentic UX). Verify briefly idle awaiting T1's spec.
+  **Next checkpoint (operator):** **broadening** to the long-idle **WS-Sec / WS-B /
+  language / foundation / ergo** teams — dep-blocked on the single serial enclave,
+  which correctly prioritized the verification differentiator.
+  **Stall diagnosis (validated all session):** `tmux capture-pane -t moot-<role>`
+  (working vs idle-at-prompt) before any nudge; `send-keys` (text THEN a separate
+  Enter) only on a confirmed wedge (operator GO); `git`-verify + **relay** a
+  committed-but-unposted handoff; re-send a dropped git_request. §14 hardened to
+  the **two-axis assembly gate** (content all-commits + base-currency vs current
+  `main`). Watchdogs private `CronCreate` (§13). Watchdogs private `CronCreate` (§13); convo §2a on `main`.
 - **Watchdog/timer hygiene (this session):** promoted to COORDINATION §13 —
   record the `schedule_call` `timer_id` + `cancel_call` on WP close (`d795966`),
   and tick on `get_space_status`/`get_mentions`, never `get_recent_context` (it
