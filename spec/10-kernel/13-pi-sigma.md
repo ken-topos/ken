@@ -120,8 +120,29 @@ is the **record/Σ** knob; `data` declarations do not get it — `OQ-η-records`
 ## 4. Interaction with the rest of the kernel
 
 - **Universes.** Both formation rules use predicative `max` (`12 §2`); neither
-  drops a level. A `Π`/`Σ` whose codomain is a proposition lands in the strict-
-  prop universe Ω (`12 §5`); impredicative `Prop` is ruled out (`OQ-Prop`).
+  drops a level. The **strict-prop landing differs for Π and Σ** — this is a
+  soundness boundary, not a uniform codomain rule (`16 §1.1`):
+  - **Π** lands in Ω exactly when its **codomain** is a proposition: `(x:A) → P`
+    with `P : Ω` is in Ω *regardless of the domain `A`* — a function into a
+    proof-irrelevant type is itself proof-irrelevant. (`sort_pi(s1, s2) = Ω` iff
+    `s2 = Ω`; codomain-keyed.)
+  - **Σ** lands in Ω exactly when **both** components are propositions:
+    `(x:P) × Q` with `P, Q : Ω` is the conjunction `P ∧ Q` (`16 §1.3`),
+    proof-irrelevant because *both* halves are. A `Σ` with a **relevant**
+    (`Type`-sorted) first component and an Ω-sorted second — the
+    subset/refinement `{x:A|φ} = (x:A) × φ` — stays in **`Type (max ℓ_A ℓ_φ)`**,
+    because its witness `x : A` is *content*, not a proof. (`sort_sigma(s1, s2)
+    = Ω` iff `s1 = Ω ∧ s2 = Ω`; both-components-keyed.)
+
+  The distinction is load-bearing: sending a subset `Σ` to Ω is **unsound** — Ω
+  proof-irrelevance (`16 §1.2`) would then equate `(a, _) ≡ (a', _)` for
+  distinct `a, a' : A`, collapsing the carrier and (via a transport motive
+  `λz. Eq A z.1 a`) closing to a proof of `Empty`. The conjunction-vs-subset
+  framing is the
+  discriminant: `P ∧ Q` is proof-irrelevant because both halves are; `{x:A|φ}`
+  is not, because the witness is relevant. Both forms otherwise take the
+  predicative `Type (max ℓ₁ ℓ₂)`; impredicative `Prop` is ruled out
+  (`OQ-Prop`).
 - **Conversion.** β, the projection-β rules, and both η rules are part of
   definitional equality (`17`). η for Π and Σ is what makes conversion *typed*
   (η-expansion is driven by the type), so the conversion algorithm needs the
@@ -139,10 +160,17 @@ is the **record/Σ** knob; `data` declarations do not get it — `OQ-η-records`
 A conforming kernel MUST implement Π and Σ with: the predicative formation
 rules; β and projection-β as reductions; and **both η rules** in conversion. It
 MUST type `p.2` at `B[p.1/x]` (dependent second projection) and MUST reject a
-non-dependent shortcut that ignores the dependency. Conformance:
-`../../conformance/kernel/pi-sigma/` — includes dependent-`p.2` typing, Π-η (`f
-≡ λx.f x`), Σ-η (`p ≡ (p.1,p.2)`), and a regression that a genuinely dependent
-`B` (e.g. `(n : Nat) × Vec A n`) type-checks and projects correctly.
+non-dependent shortcut that ignores the dependency. It MUST key the strict-prop
+landing per §4: **`sort_sigma` is Ω iff *both* components are Ω** (Π stays
+codomain-keyed). Conformance: `../../conformance/kernel/pi-sigma/` — includes
+dependent-`p.2` typing, Π-η (`f ≡ λx.f x`), Σ-η (`p ≡ (p.1,p.2)`), a regression
+that a genuinely dependent `B` (e.g. `(n : Nat) × Vec A n`) type-checks and
+projects correctly, and the **Σ-sort discriminating pair** (both directions, so
+the rule is neither under- nor over-corrected): a subset `Σ(Bool, Top)`
+(relevant first component) is **`Type 0`**, *not* Ω — with the assertion that
+`(true, tt) ≢ (false, tt)` and no closed `Empty` follows; while a conjunction
+`Σ(p : Top). Top` (both components Ω) **stays Ω**, since `∧`-in-Ω
+proof-irrelevance is load-bearing for the propositional layer (`16`).
 
 ## 6. K1 conversion and subject reduction
 
