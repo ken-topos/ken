@@ -10,6 +10,7 @@ mod ast;
 pub mod diagnostics;
 pub mod elab;
 pub mod effects;
+pub mod ifc;
 pub mod protocol;
 pub mod error;
 pub mod extract;
