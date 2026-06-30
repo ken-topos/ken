@@ -293,6 +293,35 @@ off), and brief the operator. You, the team leaders, and the Integrator are the 
 the federation. Between passes you do not idle-stop — you persist until
 complete, blocked, or instructed (§2b).
 
+### 6a. Routing your own corpus edits + the sweep (the Steward's git)
+
+Your operational docs — the progress tracker and the `agent/` playbook +
+`COORDINATION.md` edits — skip the spec-leader step and go straight to `main`
+via a Steward-owned Integrator merge (§2c). The mechanism, exactly:
+
+1. Commit on `steward/work` (your durable working branch).
+2. **Route to a corpus branch off *current* `origin/main`:** `git fetch origin`;
+   `git branch -f wp/steward-<slug> origin/main`;
+   `git switch wp/steward-<slug>`; `git cherry-pick -x steward/work`;
+   `git switch steward/work`. The branch is now `origin/main` + your commit only
+   (never a stale base).
+3. **`post_response` typed `git_request`, mentioning the Integrator** (its
+   `actor_id`) with the branch + SHA + files + why; ask it to push +
+   squash-merge + sweep-confirm.
+4. **SWEEP only on the Integrator's "shipped `<sha>`":** `git fetch origin`;
+   **verify-on-main with a PLAIN-TEXT grep** — `git grep -c "<plain phrase>"
+   origin/main -- <file>` — and the phrase must **not** span `**bold**` or
+   `` `code` `` markers, or it false-negatives (hit twice); then `git branch -D
+   wp/steward-<slug>`. **NEVER a preemptive `-D`** — deleting before the
+   Integrator confirms on `main` loses an unmerged branch. The squash-merge
+   often removes the branch itself, so `-D` reporting "not found" = already
+   swept = fine.
+
+This is COORDINATION §14 landing-integrity applied to your *own* edits: a
+"shipped" notification proves nothing; only verify-on-main does. A multi-piece
+corpus change is **one branch** (§14); width-check markdown at 80 **display
+columns** (codepoints, not bytes) before routing.
+
 ## 7. Federation watchdog (the backstop)
 
 You run the **top** liveness layer (COORDINATION §13) — the watcher-of-watchers
@@ -305,3 +334,33 @@ roadmap gate. Diagnose before restarting; graduated recovery (nudge → re-nudge
 act); escalate to the operator what you cannot restart. You are the backstop
 when a watchdog itself stalls — the only thing above you is the operator, who
 reads the absence of your updates as the signal that the backstop fell over.
+
+### 7a. The watchdog + comms-drop backstop — the exact mechanism
+
+The patterns above are *what* to catch; this is *how*. State the mechanism,
+because a compacted (or a just-below-Opus successor) Steward will otherwise
+improvise it wrong.
+
+**Arm the watchdog as a private `CronCreate`, never the convo `schedule_call`.**
+`CronCreate(cron="11,31,51 * * * *", prompt="[Steward watchdog tick] …",
+recurring=true)` enqueues a tick into your *own* session and posts nothing; on
+each fire you run a private `get_recent_context` read and message the space
+**only** when there is a real stall to nudge — **post nothing on a clear tick.**
+The convo `schedule_call` broadcasts its read into the space as a System event
+everyone sees (noise + orphan risk) — never use it for the watchdog.
+`durable:false` dies on session exit, so re-arm at session start.
+(COORDINATION §13.)
+
+**The comms-drop backstop — `capture-pane` → `git`-verify → relay.** The
+federation's recurring defect is dropped notifications: a handoff / retro /
+git_request is correctly posted but never wakes the target. When a stall pattern
+fires, do **not** restart or re-mention blind. (1) **`tmux capture-pane -t
+moot-<role> -p | tail -N`** to diagnose: *working* indicators
+(Perusing/Crunched/Compacting/… + "esc to interrupt") → stand down, it's busy;
+*idle* (`❯` empty prompt, an unprocessed mention on screen) → it's wedged. (2)
+**`git`-verify the handed-off work actually exists** (the commit/branch the post
+claimed). (3) **Relay**: a real `mentions:` mention if the channel is flowing,
+or — for an idle-wedged session — **`send-keys`**: `tmux send-keys -t
+moot-<role> "<text>"` then a **separate** `tmux send-keys -t moot-<role> Enter`
+(text+Enter in one call does NOT submit). **Log every relay.** Never interrupt a
+working agent; capture-pane *first*, always.
