@@ -71,6 +71,13 @@ claim with no conformance case is a claim no one can rely on
   `2.0d:Decimal`), the fixed-width no-overflow obligation + no-silent-wrap seal,
   `Decimal`-exact-vs-`Float`-honest, explicit conversions, the kernel-primitive
   vs prelude-law boundary, `Char` surrogate exclusion.
+- `surface/bytes-io/seed-bytes-io.md` — L6 `Bytes` + binary I/O (`38 §1`):
+  `Bytes` as a `14 §5` primitive (`0x05`, immutable, `b"…"`/`0x[…]` literals),
+  registered reductions + no-silent-OOB partiality, effect-tracked I/O
+  (`read_bytes`/`send` carry their `[FS]`/`[Net]` rows — the L5 `36 §1.4` gate,
+  referenced not duplicated), explicit `encode`/`decode` (no hidden charset),
+  and the one-directional round-trip law (`decode (encode s) == Ok s` provable;
+  the reverse is **not** a law).
 - `runtime/seed-runtime.md` — dedup + O(1) equality; `Int` past 2⁵³ exact;
   `unknown` propagation.
 - `runtime/capacity/seed-capacity.md` — X2 store hardening (`44`): dedup-aware
