@@ -30,7 +30,7 @@ implementation has not started.
 | Area | Status | What |
 |---|---|---|
 | **Kernel trust-root** | **built (K1→K-api)** | Π, Σ, inductive families, predicative universes, observational `Eq`/`cast`/`Ω`/quotients, decidable conversion (NbE + SCT), the TCB API |
-| **Verification spine** | **built (V0→V4)** | V0 elaborator, V1 spec syntax (`requires`/`ensures`/four-way status), V2 obligation generation, V3 automated prover (IPC tactic, Z3 oracle w/ kernel-re-checked certificates), V4 diagnostics (countermodels, typed holes, three-region decomposition) |
+| **Verification spine** | **built (V0→V4)** | V0 elaborator, V1 spec syntax (`requires`/`ensures`/four-way status), V2 obligation generation, V3 automated prover (IPC tactic w/ kernel-re-checked certificates; Z3 oracle spec'd, not yet wired), V4 diagnostics (countermodels, typed holes, three-region decomposition) |
 | **Diagnostic protocol** | **built (T1)** | Machine-readable, round-trippable agent contract for diagnostics |
 | **Reference interpreter** | **built (X1)** | Strict CBV evaluation, content-addressed store, effect evaluation (`drive_h`) |
 | **IFC by typing** | **built (Sec1)** | Label lattice, declassification, non-interference — security tier-1 started |
@@ -43,10 +43,12 @@ implementation has not started.
 
 ## Origin
 
-Ken's design grew out of studying **Yon**, an AGPLv3 research prototype that
-showed the core ideas are buildable (content-addressed heap, dependent +
-cubical kernel). Ken reuses that *design*, never its source — it is a
-clean-room reimplementation and its own language from here on. See
+Ken was *inspired* by **Yon**, an AGPLv3 research prototype — but Yon is an
+**excluded inspiration**: not mounted in any worktree, not consulted in any
+environment, zero AGPLv3 source contact. Its core design (cubical paths/
+cofibrations) was deliberately **not adopted** — Ken chose **observational
+type theory** (OTT, ADR 0005) instead. Ken's design is its own; the MIT
+license rests on the absence of AGPLv3 source contact.
 [`CLEAN-ROOM.md`](CLEAN-ROOM.md).
 
 ## Map
