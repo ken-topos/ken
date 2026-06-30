@@ -85,8 +85,8 @@ by default, lazy only where required or annotated.**
   defers an expensive, possibly-unused computation, **forced** on demand and
   memoized (call-by-need *locally*). Laziness is **visible in the type**, never
   a pervasive default. Wire the force/memo primitive only if `41`/this chapter
-  pins it; for G1 it may be deferred with effects (`X1-interpreter` frame) —
-  note the seam (§6).
+  pins it; for G1 the force/memo primitive may be deferred (`X1-interpreter`
+  frame), tracked separately from effect evaluation (§6).
 - **Distinct from the kernel's conversion (`OQ-eval-strategy`).** The kernel
   decides definitional equality by **lazy WHNF** (`§1`, `17`); the *runtime*
   executes **CBV-with-sharing**. Different layers, allowed to differ — as Lean's
@@ -172,7 +172,7 @@ apply unknown           u = unknown                                -- strict (§
   listed escape hatch, not a default. Every transparent (total) definition runs
   to a value. A **bodyless** constant does **not** δ: a **primitive** reduces by
   **prim** (below), an unproven **postulate/hole** yields **`unknown`** (§4,
-  `18 §5`), and a `foreign` is **deferred** (§6).
+  `18 §5`), and a `foreign` is performed at the effect boundary (§6).
 - **prim.** `primReduce op v̄`: on literal values, the audited reduction yields
   a literal (`add 2 3 → 5`, `14 §5`); on an `unknown` operand, `unknown`
   (strict, §4); on a neutral operand (open), neutral. A **partial** primitive
