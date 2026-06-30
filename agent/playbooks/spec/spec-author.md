@@ -101,6 +101,24 @@ too far: describe the *what*, not the *how* of any particular implementation.
   happy-path tests** while violating the property — the operational twin of
   positivity≠admittance (a natural default silently breaks a property the
   obvious corpus won't catch).
+- **A "this reduction terminates / conversion decides" argument must rest on a
+  well-foundedness measure — never on a "stuck because a variable is in the way"
+  story; stress-test it against an *abstract* scrutinee (promoted K1.5, ★★★
+  soundness).** Name the **global measure** (finite structural descent on the
+  inductive value) as the load-bearing reason for termination, **then** check the
+  mechanics under an **open/abstract** scrutinee or branch variable (the
+  conversion/η setting). A constructor head that is **independent of** the bound
+  variable still **fires** there — so "stuck because `b` is abstract" usually
+  fails. K1.5: I justified W-ι decidability by claiming the inner `elim (k b)` is
+  "stuck under the binder — `k b` has no constructor head"; false, since a
+  constructor-producing `k = λx. cₖ …` gives `k b ⇝ cₖ …` for abstract `b`. Coded
+  literally that's a conversion defect (unfired redexes → valid programs
+  inconvertible). **Ask "does this redex fire when the branch var is abstract?"
+  before asserting stuck**, and ground decidability on finiteness, not inertness.
+  (This is the over-claiming reflex of the Ω-shortcut family — the unsound
+  direction is over-asserting equality/inertness.) And: if a decidability claim
+  and a conformance case can both be read literally and **disagree on whether a
+  redex fires**, one encodes a bug — reconcile before merge.
 
 ## Answering build-team queries
 

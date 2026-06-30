@@ -84,6 +84,26 @@ implementations across the whole federation. Read `../../COORDINATION.md`,
   to "correct≠buggy *observable*". (Tooling corollary: keep each backtick span on
   **one source line** — an 80-col reflow that joins-then-rewraps a span straddling
   the join injects a space mid-token, silently corrupting a path/identifier.)
+- **Content-reconcile is necessary but NOT sufficient — it inherits the spec's
+  metatheory bugs (promoted K1.5, ★★★ soundness).** Matching the landed §-body
+  makes your case *agree with the spec*; it does **not** make it *correct*. A
+  structural assertion lifted from the spec — a reduction outcome, a
+  `stuck`/`neutral`/`fires` claim, a termination basis — must be **independently
+  re-derived from first principles**, especially **absence** claims ("X is stuck"
+  = "no reduction fires"). Ask the **disconfirming** question: K1.5 shipped
+  `wstyle-inner-elim-stuck-under-binder` ("`k b` has no constructor head → stuck")
+  by faithfully reconciling against a §7.7 that carried the bug — but for a
+  constructor-producing `k`, `k b`'s head is **independent of `b`**, so it
+  **fires**; "is this head actually variable-dependent?" disconfirms it in one
+  step. Re-deriving is the independent-checker duty content-reconcile alone does
+  not discharge.
+- **Run an internal-consistency pass over the seed file before handoff (promoted
+  K1.5).** Do any two cases assert **contradictory behavior on overlapping
+  inputs**? K1.5's false case directly contradicted its own
+  `wstyle-iota-in-conversion` ("a constructor head always fires ι") on a
+  constructor-producing `k` — a conflict visible **within the file**, without the
+  Architect. A self-contradicting corpus encodes a bug by construction; this is a
+  standing gate alongside verdict-flip and trust-root coverage.
 
 ## Discipline
 
