@@ -97,6 +97,12 @@ fn show_val(v: &EvalVal) -> String {
         EvalVal::ReflVal { .. } => "<refl>".to_owned(),
         EvalVal::Unknown => "<unknown>".to_owned(),
         EvalVal::Neutral => "<neutral>".to_owned(),
+        EvalVal::Bytes(bs) => format!("{:?}", bs),
+        EvalVal::Str(s) => format!("{:?}", s),
+        EvalVal::BigInt(n) => format!("{}", n),
+        EvalVal::Float(f) => format!("{}", f),
+        EvalVal::Float32(f) => format!("{}", f),
+        EvalVal::DecimalVal { coeff, exp } => format!("{}e{}", coeff, exp),
     }
 }
 
