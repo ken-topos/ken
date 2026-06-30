@@ -94,8 +94,16 @@ mechanical, not just convention.
 After merging, **confirm it landed on `main` and CI is green, and fetch**,
 before you post anything. Then: resolve the mootup merge Decision (`resolve_decision`,
 marked merged); post a terse ship note (commit SHA, what landed, gate results —
-real content, not restated scope); **sweep the merged branch** (`git push origin
---delete wp/<ID>`); and **notify with discipline** — mention exactly the team
+real content, not restated scope); **sweep the merged branch on BOTH sides** —
+the **remote** (`git push origin --delete wp/<ID>`) **and the local shared-store
+ref** (`git branch -D wp/<ID>`). The local prune matters because a **squash-merge
+makes the branch's original commits NON-ancestors of `main`**, so the local
+`wp/<ID>` ref lingers forever in the shared clone and clutters every worktree's
+`git branch` (and falsely reads as "open" in a naive ancestor check). If
+`git branch -D` is refused (`checked out at .../.worktrees/<role>`), the owning
+team hasn't returned to its home branch yet — your rebase-guidance nudge frees
+it, and the watchdog stale-branch prune (below) retries next pass. And **notify
+with discipline** — mention exactly the team
 leader(s) whose next move this triggers
 (e.g. a kernel-API change → the verify and language leaders, with rebase
 guidance: *rebase onto the new `origin/main`*). A routine "merged, nothing
@@ -110,6 +118,21 @@ Decision-approved-but-CI-red, approved-and-green-but-unmerged. Per stall, mentio
 the one agent whose move it is (the reviewer who hasn't voted, the implementer
 whose CI is red); diagnose before restarting; escalate a stuck pipeline to the
 Steward.
+
+**Stale-branch prune (housekeeping, every pass).** Squash-merges leave the
+original `wp/<ID>` commits as **non-ancestors of `main`**, so the local ref
+lingers in the shared clone and accumulates — 20+ dead `wp/*` refs cluttered
+every worktree's `git branch` after one such build-out. Each watchdog pass,
+prune the **landed** ones: for each local `wp/*` ref **not an ancestor of
+`origin/main`** (`git merge-base --is-ancestor <ref> origin/main` is false),
+check its PR — **if the PR is merged or closed, the work landed via squash and
+the ref is stale → `git branch -D wp/<ID>`** (once `git worktree list` shows no
+worktree on it). **NEVER prune a ref whose PR is open, or that has no PR** — that
+is an **in-flight build** or a **Steward frame awaiting elaboration**, not stale;
+non-ancestor-of-`main` alone does **NOT** mean stale (a live WP branch is also a
+non-ancestor). PR-merged/closed is the discriminator. Remote stale branches are
+already gone from the per-merge sweep; this pass mops up the local refs (and any
+remote left by an out-of-band merge: `git push origin --delete` then `-D`).
 
 **This watchdog is a self-scheduled recurring TIMER — not a wait-for-mention
 (operator, 2026-06-29).** CI status (green/red) and a freshly-resolved review
