@@ -22,7 +22,8 @@ conformance/
   security/      — 60-security/ (information flow, constant-time discipline,
                    capabilities & authority)
   behavioral/    — 70-behavioral/ (assumption-boundary export emitter,
-                   trace/instrumentation contract)
+                   trace/instrumentation contract, Temporal datatype +
+                   delegated export flow)
 ```
 
 ## Case format
@@ -126,6 +127,13 @@ claim with no conformance case is a claim no one can rely on
   (the `Q`/`P`/`Σ`/`T`/`G` status→field projection: the no-over-claim pair,
   alphabet reuse, the no-measure seal, the one-way gate, content-hash
   reproducibility).
+- `behavioral/temporal/seed-temporal.md` — B2 `Temporal Σ` datatype + export
+  flow (`72`): temporal/behavioral logic as deeply-embedded LTL/μ **data** over
+  the B1 `Σ` (admitted by K1; first-order fixpoint binding load-bearing);
+  derived `◇`/`□`/`leadsto` are `until`/`not` syntax, not constructors; the
+  surface→`delegated`→`T` export flow is **total, constant, one-way** (never
+  `Q`/`P`); a buildable-now reason-*about* closedness metatheorem; and the
+  **structural absence** of any kernel modality (reason *about*, never *with*).
 - `behavioral/trace/seed-trace.md` — B3 trace/instrumentation contract
   (`73`): the runtime companion to the B1 export — the `Σ`-event schema at the
   effect boundary, correlation keys for multi-`space` traces, the runtime
