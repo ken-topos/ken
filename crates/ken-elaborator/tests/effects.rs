@@ -13,8 +13,9 @@ use std::collections::HashMap;
 
 use ken_elaborator::effects::{
     check_capabilities_no_handler, check_cross_space, check_escape,
-    check_tail_resumptive, CapParam, CrossSpaceAccess, EffectDecl,
-    EffectError, EffectName, EffectRow, ResumeKind, WitnessMap, infer_all,
+    check_higher_order_guard, check_tail_resumptive, CapParam, CrossSpaceAccess,
+    EffectDecl, EffectError, EffectName, EffectRow, ResumeKind, WitnessMap,
+    infer_all,
 };
 
 // ============================================================
@@ -569,6 +570,172 @@ fn impure_masquerading_as_pure_rejected() {
         }
         other => panic!("expected EffectEscapes, got {:?}", other),
     }
+}
+
+// ============================================================
+// Higher-order row release guard (Architect gap — §1.2 `f a` clause)
+// ============================================================
+
+/// `surface/effects/higher-order-param-undeclared-rejected` (oracle)
+///
+/// **The `apply_twice` gap.** A function `apply_twice (f : A →[ρ] A) (x : A) :
+/// A = f (f x)` has a higher-order parameter `f` with a latent row variable
+/// `ρ`. First-order `infer_row` cannot resolve `ρ` — it infers ∅, so the §1.4
+/// escape check would silently pass even if the caller observes effects.
+///
+/// **Guard:** `check_higher_order_guard` requires the declared row to cover any
+/// candidate effects from unknown higher-order parameters. Two cases:
+/// (a) undeclared → `EffectEscapes` naming the candidate (reject).
+/// (b) declared row covers the candidate → accept.
+/// Verdict **flips**: (a) rejects, (b) accepts.
+#[test]
+fn higher_order_param_undeclared_rejected() {
+    // (a) `apply_twice` with unknown param that may release `FS` —
+    //     no declared row → guard fires.
+    let apply_twice = EffectDecl::new("apply_twice")
+        .with_unknown_param_effect("FS"); // f : A →[FS] A
+
+    let err = check_higher_order_guard(&apply_twice)
+        .expect_err("(a) higher-order FS param undeclared — guard must reject");
+    match err {
+        EffectError::EffectEscapes { witnesses, .. } => {
+            assert!(
+                witnesses.iter().any(|(e, _)| e == "FS"),
+                "(a) EffectEscapes must name FS; got {:?}",
+                witnesses
+            );
+            // Witness must identify it came from a higher-order param
+            let site = witnesses
+                .iter()
+                .find(|(e, _)| e == "FS")
+                .map(|(_, s)| s.as_str());
+            assert_eq!(
+                site,
+                Some("<higher-order-param>"),
+                "(a) witness site must be <higher-order-param>"
+            );
+        }
+        other => panic!("(a) expected EffectEscapes, got {:?}", other),
+    }
+}
+
+/// `surface/effects/higher-order-param-declared-accepted` (oracle)
+///
+/// Same `apply_twice` but declares `visits [FS]` — the guard sees that the
+/// candidate `FS` is covered by `ρ_decl` and accepts.
+/// Verdict FLIPS against `higher-order-param-undeclared-rejected`.
+#[test]
+fn higher_order_param_declared_accepted() {
+    let apply_twice = EffectDecl::new("apply_twice")
+        .with_declared_row(EffectRow::singleton("FS"))
+        .with_unknown_param_effect("FS"); // f : A →[FS] A
+
+    check_higher_order_guard(&apply_twice)
+        .expect("(b) declared visits [FS] covers the FS param — guard must accept");
+}
+
+/// `surface/effects/higher-order-two-params-each-guarded` (oracle)
+///
+/// Two higher-order params with distinct candidate effects. Three variants:
+/// (a) both declared → accept; (b) only FS declared → guard fires on Net;
+/// (c) only Net declared → guard fires on FS.
+/// Each candidate is guarded independently.
+#[test]
+fn higher_order_two_params_each_guarded() {
+    // (a) both declared → accept
+    {
+        let f = EffectDecl::new("f")
+            .with_declared_row(EffectRow::from_effects([
+                "FS".to_string(),
+                "Net".to_string(),
+            ]))
+            .with_unknown_param_effect("FS")
+            .with_unknown_param_effect("Net");
+        check_higher_order_guard(&f)
+            .expect("(a) both declared — must accept");
+    }
+
+    // (b) only FS declared → rejects Net
+    {
+        let f = EffectDecl::new("f")
+            .with_declared_row(EffectRow::singleton("FS"))
+            .with_unknown_param_effect("FS")
+            .with_unknown_param_effect("Net");
+        let err = check_higher_order_guard(&f)
+            .expect_err("(b) missing Net declaration — must reject");
+        match err {
+            EffectError::EffectEscapes { witnesses, .. } => {
+                assert!(
+                    witnesses.iter().any(|(e, _)| e == "Net"),
+                    "(b) must name Net; got {:?}", witnesses
+                );
+                assert!(
+                    !witnesses.iter().any(|(e, _)| e == "FS"),
+                    "(b) FS is declared — must not appear in escaping set"
+                );
+            }
+            other => panic!("(b) expected EffectEscapes, got {:?}", other),
+        }
+    }
+
+    // (c) only Net declared → rejects FS
+    {
+        let f = EffectDecl::new("f")
+            .with_declared_row(EffectRow::singleton("Net"))
+            .with_unknown_param_effect("FS")
+            .with_unknown_param_effect("Net");
+        let err = check_higher_order_guard(&f)
+            .expect_err("(c) missing FS declaration — must reject");
+        match err {
+            EffectError::EffectEscapes { witnesses, .. } => {
+                assert!(
+                    witnesses.iter().any(|(e, _)| e == "FS"),
+                    "(c) must name FS; got {:?}", witnesses
+                );
+            }
+            other => panic!("(c) expected EffectEscapes, got {:?}", other),
+        }
+    }
+}
+
+/// First-order callee still inferred correctly alongside the higher-order guard.
+///
+/// A function with both a named callee (first-order, row known) and a
+/// higher-order param (row unknown): `infer_row` picks up the named callee's
+/// row; the guard then checks the param candidate against the declared row.
+#[test]
+fn higher_order_guard_coexists_with_first_order_callee() {
+    let seed: HashMap<String, EffectRow> = [(
+        "log".to_string(),
+        EffectRow::singleton("Console"),
+    )]
+    .into();
+
+    // `audit (f : A →[FS] A)` calls `log` (Console) and has an FS param.
+    // declares `visits [Console, FS]` — both covered.
+    let audit = EffectDecl::new("audit")
+        .with_declared_row(EffectRow::from_effects([
+            "Console".to_string(),
+            "FS".to_string(),
+        ]))
+        .with_callee("log")
+        .with_unknown_param_effect("FS");
+
+    let rows = infer_all(&seed, &[audit.clone()]);
+
+    // First-order: inferred row picks up Console from `log`
+    assert!(
+        rows["audit"].contains("Console"),
+        "inferred row must include Console from callee `log`"
+    );
+
+    // Guard: FS param is covered by declared row → accepts
+    check_higher_order_guard(&audit)
+        .expect("both named callee (Console) and FS param declared — must accept");
+
+    // Escape check passes too
+    check_escape(&audit, &rows["audit"], &WitnessMap::new())
+        .expect("Console inferred ⊆ [Console, FS] declared — must accept");
 }
 
 // ============================================================

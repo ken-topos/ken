@@ -212,11 +212,57 @@ pub fn check_tail_resumptive(
     }
 }
 
+// ----- higher-order row release guard -----
+
+/// Conservative guard for higher-order parameters whose latent rows are
+/// statically unknown (§1.2 `f a` clause for row-polymorphic `f`).
+///
+/// **Background.** `infer_row` handles named callees (first-order: look up
+/// `ρ_f` by name). But a higher-order parameter `f : A →[ρ] B` carries a
+/// latent row `ρ` that is a **row variable** — not resolvable by name. Full
+/// row-polymorphism (row unification, latent-row propagation) is deferred to
+/// the K1.5-denotation follow-on (`effects/mod.rs` note). Without it, a
+/// function like `apply_twice (f : A →[ρ] A) : A →[ρ] A` infers row ∅ for
+/// any concrete `ρ`, passes the §1.4 escape check while the caller may
+/// observe effects — a silent under-inference (the Architect's gap).
+///
+/// **This guard** is the conservative safety valve: if `decl` has any
+/// `unknown_effectful_params` and its declared row does not cover all of them,
+/// **reject** (`EffectEscapes` with witness `"<higher-order-param>"`). The
+/// caller must declare at least the candidate effects to acknowledge the
+/// latent-row dependency; over-declaration (§1.4 `⊆`, not `=`) is still fine.
+/// If the declared row covers all candidates, accept (over-approximation, sound).
+pub fn check_higher_order_guard(decl: &EffectDecl) -> Result<(), EffectError> {
+    if decl.unknown_effectful_params.is_empty() {
+        return Ok(());
+    }
+    let declared = decl
+        .declared_row
+        .as_ref()
+        .cloned()
+        .unwrap_or_else(EffectRow::empty);
+    let candidates =
+        EffectRow::from_effects(decl.unknown_effectful_params.iter().cloned());
+    if candidates.is_subset_of(&declared) {
+        return Ok(());
+    }
+    let uncovered = candidates.minus(&declared);
+    let ws: Vec<(EffectName, String)> = uncovered
+        .effects()
+        .map(|e| (e.clone(), "<higher-order-param>".to_string()))
+        .collect();
+    Err(EffectError::EffectEscapes {
+        decl_name: decl.name.clone(),
+        witnesses: ws,
+    })
+}
+
 // ----- combined check: full §1.4 + §2.5 pass -----
 
 /// Run the full effect-discipline check on one declaration:
-/// 1. Escape check (`ρ_inf ⊆ ρ_decl`).
-/// 2. Capability check (each performed effect has `Cap E` in scope).
+/// 1. Higher-order param guard (§1.2 `f a` clause, row-variable safety).
+/// 2. Escape check (`ρ_inf ⊆ ρ_decl`).
+/// 3. Capability check (each performed effect has `Cap E` in scope).
 ///
 /// Returns the first error found, or `Ok(())`.
 pub fn check_decl(
@@ -225,6 +271,7 @@ pub fn check_decl(
     witnesses: &WitnessMap,
     handler_caps: &EffectRow,
 ) -> Result<(), EffectError> {
+    check_higher_order_guard(decl)?;
     check_escape(decl, inferred, witnesses)?;
     let performed = EffectRow::from_effects(decl.performed_effects.iter().cloned());
     check_capabilities(decl, &performed, handler_caps)?;

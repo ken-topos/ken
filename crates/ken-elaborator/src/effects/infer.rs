@@ -39,6 +39,17 @@ pub struct EffectDecl {
     /// (require a `Cap E` in scope). Typically same as `direct_effects` but
     /// named separately for clarity.
     pub performed_effects: Vec<EffectName>,
+    /// Candidate effects from **higher-order parameters** whose latent rows
+    /// are unknown (§1.2 `f a` clause for `f : A →[ρ] B` where `ρ` is a
+    /// row variable on a parameter, not a named callee in `callees`).
+    ///
+    /// L5-build is first-order: row-polymorphism (row variables + latent-row
+    /// propagation across higher-order parameters) is deferred to the K1.5-
+    /// denotation follow-on (`§7.0`, row-polymorphism note in `effects/mod.rs`).
+    /// This field lets callers declare the *candidate* effects a higher-order
+    /// parameter might release; `check_higher_order_guard` (in `check.rs`)
+    /// conservatively rejects if the declared row doesn't cover them.
+    pub unknown_effectful_params: Vec<EffectName>,
 }
 
 impl EffectDecl {
@@ -50,7 +61,15 @@ impl EffectDecl {
             direct_effects: Vec::new(),
             callees: Vec::new(),
             performed_effects: Vec::new(),
+            unknown_effectful_params: Vec::new(),
         }
+    }
+
+    /// Declare that this function has a higher-order parameter whose latent
+    /// row may contain `effect`. Use once per candidate effect.
+    pub fn with_unknown_param_effect(mut self, e: impl Into<EffectName>) -> Self {
+        self.unknown_effectful_params.push(e.into());
+        self
     }
 
     pub fn with_declared_row(mut self, row: EffectRow) -> Self {
