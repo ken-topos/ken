@@ -257,9 +257,16 @@ slowing Z3 — so it is reserved for FO; D uses direct/decision (§3).
 
 - **Propositional skeleton.** The intuitionistic propositional structure of a
   goal is decided by a kernel-verified **IPC decision procedure** (an
-  `Itauto`/`intuit`- style reflective tactic): it returns a proof term or a
-  Kripke countermodel (`24`). This handles the connective scaffolding even when
-  atoms are abstract.
+  `Itauto`/`intuit`-style reflective tactic): it returns a **proof term** (→
+  `proved`) or a **Kripke counter-model**. The counter-model's verdict follows
+  §1.2 and `24 §1`/§3 — **not** "invalid ⇒ disproved": a model that **forces
+  `¬φ`** (the `S_{¬φ}` region, `24 §3`) is `disproved`; a model that merely
+  **fails to force `φ`** while `¬¬φ` still holds — the `¬¬φ ⇒ φ` gap, e.g. an
+  abstract-atom LEM instance `p ∨ ¬ p` (intuitionistically invalid but **not
+  refutable**, since `¬(p ∨ ¬ p)` is itself false) — is **`unknown`**, not
+  `disproved`. (The de Bruijn discipline still holds either way: `proved`
+  requires the returned proof term to `check`.) This handles the connective
+  scaffolding even when atoms are abstract.
 - **Induction / higher-order.** Goals needing induction over an inductive
   family, or quantifying over types/predicates, are out of SMT scope. The prover
   applies a small library of **tactics**
