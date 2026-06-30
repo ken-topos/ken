@@ -68,7 +68,8 @@ AGPL source kept out of their context. Math and ideas are reusable; code is not.
 
 ## Status
 
-Draft v2 — planning artifacts only; no Ken code written. The architecture (MIT,
-clean-room, Rust, interpreter-first, small permanent kernel, deferred
-self-hosting) and the name are locked; design ADRs (content store, syntax,
-effect/Space model) remain open.
+Draft v2 — early implementation underway. Skeleton crates exist (`ken-kernel`,
+`ken-elaborator`, `ken-interp`, `ken-cli`). Multiple work packages have shipped
+(kernel core, verification spine, diagnostics protocol, effects, IFC-by-typing).
+The architecture (MIT, clean-room, Rust, interpreter-first, small permanent
+kernel, deferred self-hosting) and the name are locked.

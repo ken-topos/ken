@@ -20,8 +20,10 @@ cubical kernel). Ken reuses that *design*, never its source — it is a clean-ro
 reimplementation and its own language from here on. See
 [`CLEAN-ROOM.md`](CLEAN-ROOM.md).
 
-> **Status: pre-implementation scaffold.** No language code exists yet. This repo
-> currently holds the program of work and the team workflow. Start at
+> **Status: early implementation.** Skeleton crates exist (`ken-kernel`,
+> `ken-elaborator`, `ken-interp`, `ken-cli`). The spec is drafted across all
+> major chapters. Multiple work packages have shipped (kernel core,
+> verification spine, diagnostics protocol, effects, IFC-by-typing). Start at
 > [`docs/program/`](docs/program/README.md).
 
 ## Map
