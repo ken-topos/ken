@@ -478,17 +478,28 @@ is `D` (the same syntactic test the admission gate uses, §2.1). `recursive_args
 collection (§7.3) extends to return, for each Π-bound recursive position, the
 branching telescope `(b:B…)` alongside the index expressions.
 
-**Why conversion still decides (the key point).** ι fires **once** on the
-outermost constructor and yields a method application whose W-style IH is a **λ
-whose body is a stuck `elim_D` on the neutral `a_j b`** (`b` is λ-bound, so `a_j
-b` has no constructor head until `a_j` is a concrete branching function applied
-to a concrete `b`). The inner `elim_D (a_j b)` does **not** re-fire during
-normalisation — it is neutral (§7.6) under the binder. So each ι strictly
-**consumes one constructor layer** of the scrutinee and produces no redex that
-reduces further without first being *applied* to a constructor-producing branch.
-On a finite W-tree this bottoms out; conversion terminates (§9.4). A
-function-typed IH therefore does **not** reintroduce non-termination into the
-decidable conversion of K2c.
+**Why conversion still decides.** Decidability rests on **finiteness of the
+value**, the same structural decrease as the direct eliminator (§9.2(3)) — *not*
+on the inner eliminator being stuck. ι fires on the outermost constructor and
+yields the IH `λ b. elim_D M m̄ … (a_j b)`. The inner `elim_D (a_j b)` **does
+fire** whenever `a_j` is a constructor-producing branching function — the
+typical case: `a_j = λx. cₖ' … ⇒ a_j b ⇝ cₖ' …` is **constructor-headed even
+for an abstract `b`** (the head does not depend on `b`), so ι re-fires and
+recurses on `a_j b`, a **structurally smaller child** of the scrutinee (reached
+*through* the branching function — one β-step on `a_j` — not directly). This
+firing happens during conversion too: comparing two IHs at their Π type applies
+a fresh
+branch variable `b*` (η, §7.6) and drives exactly this recursion. Because the
+scrutinee is a **finite** inductive W-tree and the branching functions are
+**finite** λ-terms, the descent peels finitely many constructors and bottoms out
+(§9.4) — finiteness, not stuckness, is what decides. A function-typed IH
+therefore introduces no non-termination into K2c conversion: it is the same
+finite structural descent, staged through `a_j`.
+
+The inner elim is genuinely **neutral** only in the special case where `a_j`
+*inspects* its branch argument — e.g. `a_j = λx. elim_Bool x … `, for which
+`a_j b*` is stuck on the abstract `b*`. That is a legitimate sub-case, not the
+general mechanism; decidability does not depend on it (§9.4).
 
 ## 8. Strict-positivity check algorithm
 
@@ -747,32 +758,36 @@ with the function-typed IH in place of the value IH). The reduct preserves type.
 The curried case adds one λ per branching binder and types the same way.
 
 **Termination of conversion.** A function-typed IH raises the question of
-whether normalisation can loop. It cannot, for a reason specific to the
-*inductive* (finite-tree) reading:
+whether normalisation can loop. It cannot — and the reason is **finiteness of
+the value**, the same structural decrease as the direct eliminator (§9.2(3)),
+*not* any stuckness of the inner elim:
 
-1. **Each ι strictly consumes a constructor.** `elim_D M m̄ ī (cₖ ā) ⇝ mₖ
-   ā[ih]` removes the head constructor `cₖ`. The W-style IH it introduces, `λ b.
-   elim_D M m̄ … (k b)`, places its only residual `elim_D` **under a binder,
-   applied to the neutral `k b`** (`b` is bound, so `k b` has no constructor
-   head). By §7.6 that inner eliminator is **stuck**; it fires no further redex
-   during normalisation. So one constructor is consumed and **no
-   constructor-free redex** is created.
-2. **Well-foundedness on application.** The inner `elim_D … (k b)` can only fire
-   again once `k b` reduces to a constructor form — which happens solely when
-   the eliminator's *result* is applied to a concrete branch `b₀` whose image
-   `k b₀` is a (structurally smaller) child node. Because the value is an
-   inductive — a **finite** W-tree (no coinduction; Scope OUT) — every branch
-   `k b₀` is a proper subtree and the descent bottoms out at a leaf: either a
+1. **The inner elim fires; it recurses on a child.** `elim_D M m̄ ī (cₖ ā) ⇝ mₖ
+   ā[ih]` removes the head constructor and introduces the IH `λ b. elim_D M m̄ …
+   (k b)`. When `k` is a constructor-producing branching function — the typical
+   case, `k = λx. Vis e' (k' x)` — `k b` whnf's to a constructor **even for an
+   abstract `b`** (the head `Vis` does not depend on `b`), so the inner `elim_D
+   (k b)` **fires** and recurses on `k b`, a **structurally smaller child** of
+   the scrutinee (reached through a β-step on `k`, not directly). This drives
+   during conversion too: comparing two IHs at their Π type applies a fresh `b*`
+   (η, §7.6) and fires exactly this recursion.
+2. **Finiteness bounds the descent.** The scrutinee is a **finite** inductive
+   W-tree (no coinduction; Scope OUT) and each branching function is a
+   **finite** λ-term, so the recursion peels finitely many constructors: each
+   step lands on a proper subtree, and the descent bottoms out at a leaf — a
    **base** constructor with no recursive argument (`Ret`, `zero`, `nil`) or a
-   W-branching with **empty** domain (`sup a k` with `B a` empty).
+   W-branching with **empty** domain (`sup a k` with `B a` empty). Finiteness,
+   not stuckness, is what decides.
 
-So W-style ι decides for the same structural-decrease reason as §9.2(3) — the
-recursion is on **children** of the scrutinee — but the children are reached
-*through a function*, so the eliminator is **staged under a binder and stuck
-until applied**, rather than recursing eagerly. The K2c SCT/decidability
+So W-style ι decides for the **same structural-decrease reason** as §9.2(3) —
+the recursion is on **children** of the scrutinee — with the children reached
+*through* the branching function (a β-step on `k`) rather than directly. The
+inner elim genuinely stalls only in the special case where `k` *inspects* its
+branch (`k = λx. elim_Bool x …`, so `k b*` is neutral on an abstract `b*`); that
+sub-case is incidental, not the basis of decidability. The K2c SCT/decidability
 guarantee is untouched: eliminator recursion remains total **without** SCT (§2),
 and W-style ι introduces no general recursive δ-definition. Large W-trees
-terminate by finiteness, not by a size budget.
+terminate by **finiteness**, not by a size budget.
 
 **Boundary check (the adversarial guard).** Soundness rests on rejecting the
 *negative* sibling. `(D → Bool) → D` is **not** admitted (§8.3: `D` in the
