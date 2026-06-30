@@ -11,3 +11,6 @@ rust-version.workspace = true
 [dependencies]
 ken-kernel = { path = "../ken-kernel" }
 serde_json = "1"
+
+[dev-dependencies]
+ken-interp = { path = "../ken-interp" }
