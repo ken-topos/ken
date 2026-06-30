@@ -8,7 +8,14 @@
 > δ-unfolding — and therefore type-checking — **decidable** (§5). The contract
 > for K2c. (The three K2 obs-completion seams — `cast`-at-inductive index
 > rewrite, non-constant-motive `J`, full quotient `respect` — are **series 2**,
-> not elaborated here; §3 consumes the K2 obs reductions, `16`, as they stand.)
+> elaborated in `16 §3.2`/`§4.1`/`§5.1`; §3 consumes the `16` obs reductions as
+> they stand. **Series 2 changes no rule in this chapter:** the seams compute
+> *inside* `whnfObs`/`whnfJ` (§3.2) and each terminates within a single `whnf`
+> by structural descent on the finite type (`16 §3.3`); the quotient-`respect`
+> completion is an **admission-time** check (`16 §5.1`), adding no reduction.
+> The **SCT gate (§4) is unchanged** — it already scores `cast` under recursion
+> as `?` (§4.2), the conservative measure that bounds these reductions without
+> needing to track them.)
 
 Two terms that are **definitionally equal** are interchangeable everywhere with
 no proof obligation; equalities that are *not* definitional are propositions to
