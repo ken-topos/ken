@@ -1,0 +1,411 @@
+//! L2 acceptance tests: `data` / `match` / exhaustiveness / refinements.
+//!
+//! Pins: `conformance/surface/data-match/seed-data-match.md` AC1–AC7.
+//! Spec: `spec/30-surface/34-data-match.md`.
+//!
+//! AC5 (indexed families) and AC6 (dependent motive) are deferred — they
+//! require `indices` support and dependent motives respectively.
+
+use ken_elaborator::{error::ElabError, ElabEnv};
+use ken_kernel::{whnf, Context, GlobalId, Level, Term};
+
+// ----- helpers -----
+
+fn mk_env() -> ElabEnv {
+    ElabEnv::new().expect("base env construction failed")
+}
+
+fn elab(env: &mut ElabEnv, src: &str) -> Result<GlobalId, ElabError> {
+    env.elaborate_decl(src)
+}
+
+fn elab_ok(env: &mut ElabEnv, src: &str) -> GlobalId {
+    elab(env, src).unwrap_or_else(|e| panic!("elab_ok failed: {}", e))
+}
+
+fn body_of(env: &ElabEnv, id: GlobalId) -> Term {
+    env.env.transparent_body(id).expect("not a transparent def").1
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AC1  construct-then-eliminate  (`34 §1`, `14 §3`)
+//
+// Property: `data` declares a real inductive + computing `elim_D`; `match`
+// ι-reduces on the constructor.
+//
+// Scrutinee given inline: `SomeInt 3` in the match expression.
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn ac1_data_decl_registers_former_and_ctors() {
+    let mut env = mk_env();
+    elab_ok(&mut env, "data MaybeInt = NoInt | SomeInt Int");
+
+    assert!(env.globals.contains_key("MaybeInt"), "type former registered");
+    assert!(env.globals.contains_key("NoInt"), "NoInt ctor registered");
+    assert!(env.globals.contains_key("SomeInt"), "SomeInt ctor registered");
+
+    let d_id = env.globals["MaybeInt"];
+    assert!(env.env.inductive(d_id).is_some(), "MaybeInt is an inductive family");
+
+    let c_id = env.globals["SomeInt"];
+    assert!(env.env.constructor(c_id).is_some(), "SomeInt is a constructor");
+}
+
+#[test]
+fn ac1_construct_then_eliminate_reduces() {
+    let mut env = mk_env();
+    elab_ok(&mut env, "data MaybeInt = NoInt | SomeInt Int");
+
+    // `SomeInt 3` is the scrutinee inline — no separate binding needed.
+    let id = elab_ok(
+        &mut env,
+        "let answer : Int = match SomeInt 3 { SomeInt x => x ; NoInt => 0 }",
+    );
+    let body = body_of(&env, id);
+    let ctx = Context::new();
+    let reduced = whnf(&env.env, &ctx, &body);
+
+    // ι-rule: elim_MaybeInt M [0; λx.x] (SomeInt v) ⇝ (λx.x) v ⇝ v
+    // The result should be the opaque literal (the SomeInt arg), not still an Elim.
+    assert!(
+        !matches!(reduced, Term::Elim { .. }),
+        "AC1: elim_MaybeInt did not ι-reduce; still got Elim node"
+    );
+}
+
+#[test]
+fn ac1_nil_arm_reduces_to_default() {
+    let mut env = mk_env();
+    elab_ok(&mut env, "data MaybeInt = NoInt | SomeInt Int");
+
+    let id = elab_ok(
+        &mut env,
+        "let answer : Int = match NoInt { SomeInt x => x ; NoInt => 0 }",
+    );
+    let body = body_of(&env, id);
+    let ctx = Context::new();
+    let reduced = whnf(&env.env, &ctx, &body);
+
+    // ι-rule: elim_MaybeInt M [0; λx.x] NoInt ⇝ 0 (the postulate for 0)
+    assert!(
+        !matches!(reduced, Term::Elim { .. }),
+        "AC1: elim_MaybeInt on NoInt did not ι-reduce"
+    );
+    // The result is a Const (the opaque literal 0).
+    assert!(
+        matches!(reduced, Term::Const { .. }),
+        "AC1: expected numeric literal Const after ι-reduction, got {:?}",
+        reduced
+    );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AC2  match-elaborates-to-elim  (`34 §3`, `39 §2.6`)
+//
+// Structural: body head is Term::Elim; nested match ⇒ nested Elim.
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn ac2_match_head_is_term_elim() {
+    let mut env = mk_env();
+    elab_ok(&mut env, "data Shape = Circle Int | Rect Int Int");
+
+    let id = elab_ok(
+        &mut env,
+        "let r : Int = match Circle 2 { Circle x => x ; Rect w h => w }",
+    );
+    let body = body_of(&env, id);
+
+    assert!(
+        matches!(body, Term::Elim { .. }),
+        "AC2: match did not compile to Term::Elim; got {:?}",
+        body
+    );
+}
+
+#[test]
+fn ac2_elim_computes_on_circle() {
+    let mut env = mk_env();
+    elab_ok(&mut env, "data Shape = Circle Int | Rect Int Int");
+
+    let id = elab_ok(
+        &mut env,
+        "let r : Int = match Circle 2 { Circle x => x ; Rect w h => w }",
+    );
+    let body = body_of(&env, id);
+    let ctx = Context::new();
+    let reduced = whnf(&env.env, &ctx, &body);
+
+    // elim_Shape M [λx.x; λw.λh.w] (Circle 2) ⇝ (λx.x) 2 ⇝ 2  (opaque literal)
+    assert!(
+        !matches!(reduced, Term::Elim { .. }),
+        "AC2: elim_Shape on Circle 2 did not ι-reduce"
+    );
+}
+
+#[test]
+fn ac2_nested_match_produces_nested_elim() {
+    let mut env = mk_env();
+    elab_ok(&mut env, "data AB = A | B");
+
+    let id = elab_ok(
+        &mut env,
+        "let v : Int = match A { A => match B { A => 1 ; B => 2 } ; B => 0 }",
+    );
+    let body = body_of(&env, id);
+
+    // Outer Elim: method for A should itself be an Elim (the nested match).
+    let a_method = match &body {
+        Term::Elim { methods, .. } => methods[0].clone(), // A is constructor 0
+        other => panic!("expected outer Elim, got {:?}", other),
+    };
+    assert!(
+        matches!(a_method, Term::Elim { .. }),
+        "AC2 nested: A-arm method is not an Elim (nested match not lowered); got {:?}",
+        a_method
+    );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AC3  exhaustiveness-required  (`34 §4.1`, `§4.4`)  (soundness — TR3)
+//
+// The discriminating signal is the NAMED witness (not just "rejects"):
+//  (a) missing Blue → rejects naming "Blue"
+//  (b) all three arms → accepts
+// ─────────────────────────────────────────────────────────────────────────────
+
+fn setup_color(env: &mut ElabEnv) {
+    elab_ok(env, "data Color = Red | Green | Blue");
+}
+
+#[test]
+fn ac3_missing_arm_names_blue() {
+    let mut env = mk_env();
+    setup_color(&mut env);
+
+    // Match on a constructor directly to avoid binding issues.
+    let result = elab(
+        &mut env,
+        "let bad : Int = match Red { Red => 0 ; Green => 1 }",
+    );
+
+    match result {
+        Err(ElabError::ExhaustivenessError { missing, .. }) => {
+            assert_eq!(
+                missing, "Blue",
+                "AC3: named witness should be 'Blue', got '{}'",
+                missing
+            );
+        }
+        Ok(_) => panic!("AC3: non-exhaustive match accepted (should have been rejected)"),
+        Err(other) => panic!("AC3: expected ExhaustivenessError naming 'Blue', got: {}", other),
+    }
+}
+
+#[test]
+fn ac3_exhaustive_match_accepts() {
+    let mut env = mk_env();
+    setup_color(&mut env);
+
+    let id = elab_ok(
+        &mut env,
+        "let result : Int = match Blue { Red => 0 ; Green => 1 ; Blue => 2 }",
+    );
+    let body = body_of(&env, id);
+    assert!(matches!(body, Term::Elim { .. }), "AC3: accepted match should produce Elim");
+}
+
+#[test]
+fn ac3_exhaustive_elim_reduces_on_blue() {
+    let mut env = mk_env();
+    setup_color(&mut env);
+
+    let id = elab_ok(
+        &mut env,
+        "let result : Int = match Blue { Red => 0 ; Green => 1 ; Blue => 2 }",
+    );
+    let body = body_of(&env, id);
+    let ctx = Context::new();
+    let reduced = whnf(&env.env, &ctx, &body);
+
+    // elim_Color M [0; 1; 2] Blue ⇝ 2 (ι on Blue ctor)
+    assert!(
+        matches!(reduced, Term::Const { .. }),
+        "AC3: elim_Color on Blue should reduce to Const(2), got {:?}",
+        reduced
+    );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AC4  reachability-redundant-arm  (`34 §4.2`)
+//
+//  (a) duplicate Red → ReachabilityError
+//  (b) three distinct arms → accepts
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn ac4_duplicate_arm_is_reachability_error() {
+    let mut env = mk_env();
+    setup_color(&mut env);
+
+    let result = elab(
+        &mut env,
+        "let bad : Int = match Red { Red => 0 ; Green => 1 ; Blue => 2 ; Red => 9 }",
+    );
+
+    match result {
+        Err(ElabError::ReachabilityError { .. }) => { /* ✓ AC4 */ }
+        Ok(_) => panic!("AC4: redundant arm should have been flagged"),
+        Err(other) => panic!("AC4: expected ReachabilityError, got: {}", other),
+    }
+}
+
+#[test]
+fn ac4_all_distinct_arms_accept() {
+    let mut env = mk_env();
+    setup_color(&mut env);
+
+    let id = elab_ok(
+        &mut env,
+        "let result : Int = match Green { Red => 0 ; Green => 1 ; Blue => 2 }",
+    );
+    let body = body_of(&env, id);
+    assert!(matches!(body, Term::Elim { .. }), "AC4: all-distinct match should produce Elim");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AC5  indexed-impossible-pair  — DEFERRED
+//
+// Requires indexed family support (non-empty `indices` in InductiveSpec) and
+// "absurdity fill" for index-impossible arms (`34 §4.3`).
+// Tracked as follow-on: L2-indexed.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AC6  branch-refinement-is-hypothesis  — DEFERRED
+//
+// Requires a *dependent* motive (motive mentioning the scrutinee/index).
+// Current `infer_match` emits only the constant motive `λx. R`.
+// Tracked as follow-on: L2-dep-motive.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AC7  refinement-obligation  (`34 §5`, `21 §2`, `22 §2.1`)  (soundness — TR7)
+//
+// Pre-declare a proposition `P : Int → Ω` so the refinement predicate has
+// type Ω (required by `elaborate_view_with_spec`).
+//
+//  (a) intro side: `{ n : Int | P n }` return type → obligation emitted
+//  (b) forget side: `{ n : Int | P n }` value used as Int → no obligation
+// ─────────────────────────────────────────────────────────────────────────────
+
+fn setup_prop(env: &mut ElabEnv) {
+    // Declare P : Int → Ω (a predicate postulate).
+    let int_id = env.globals["Int"];
+    let omega = Term::omega(Level::Zero);
+    let prop_ty = Term::pi(Term::const_(int_id, vec![]), omega);
+    env.declare_postulate_raw("P", prop_ty).expect("declare P");
+}
+
+#[test]
+fn ac7_refinement_intro_emits_obligation() {
+    let mut env = mk_env();
+    setup_prop(&mut env);
+
+    // The return type `{ n : Int | P n }` forces an obligation `P 3` at the
+    // introduction site.
+    let result = env.elaborate_decl_v1("view nonneg_val : { n : Int | P n } = 3");
+
+    let elab_result =
+        result.unwrap_or_else(|e| panic!("AC7a: expected success, got: {}", e));
+
+    // AC7 (soundness, TR7): at least one obligation is emitted.
+    assert!(
+        !elab_result.obligations.is_empty(),
+        "AC7a: no obligation emitted for refinement introduction (TR7 regression)"
+    );
+}
+
+#[test]
+fn ac7_plain_carrier_no_obligation() {
+    let mut env = mk_env();
+    setup_prop(&mut env);
+
+    // A plain Int annotation (no refinement predicate) must emit zero obligations —
+    // the obligation gate is the refinement *introduction*, not mere Int typing.
+    // This is the negative discriminant complementing AC7a's positive discriminant:
+    //   AC7a: `{ n : Int | P n }` annotation → obligation emitted
+    //   AC7b: `Int`               annotation → no obligation
+    let result = env.elaborate_decl_v1("view plain_val : Int = 5");
+    let elab_result = result.unwrap_or_else(|e| {
+        panic!("AC7b: plain-Int view should accept, got: {}", e)
+    });
+
+    assert!(
+        elab_result.obligations.is_empty(),
+        "AC7b: spurious obligation emitted for plain Int annotation (no refinement)"
+    );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Additional robustness tests
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn data_recursive_type_accepts() {
+    let mut env = mk_env();
+    elab_ok(&mut env, "data NatL = Zero | Succ NatL");
+
+    assert!(env.globals.contains_key("Zero"));
+    assert!(env.globals.contains_key("Succ"));
+
+    // Simple match on Zero inline.
+    let id = elab_ok(
+        &mut env,
+        "let is_zero : Int = match Zero { Zero => 1 ; Succ n => 0 }",
+    );
+    let body = body_of(&env, id);
+    assert!(matches!(body, Term::Elim { .. }));
+
+    // ι-reduces on Zero.
+    let ctx = Context::new();
+    let reduced = whnf(&env.env, &ctx, &body);
+    assert!(
+        matches!(reduced, Term::Const { .. }),
+        "recursive type match on Zero should ι-reduce to literal 1"
+    );
+}
+
+#[test]
+fn unknown_ctor_in_pattern_is_error() {
+    let mut env = mk_env();
+    setup_color(&mut env);
+
+    let result = elab(
+        &mut env,
+        "let bad : Int = match Red { Red => 0 ; Green => 1 ; Purple => 2 }",
+    );
+    assert!(result.is_err(), "unknown ctor 'Purple' should produce an error");
+}
+
+#[test]
+fn data_two_arg_ctor_match_accepted() {
+    let mut env = mk_env();
+    elab_ok(&mut env, "data Pair = P Int Int");
+
+    let id = elab_ok(
+        &mut env,
+        "let fst : Int = match P 1 2 { P x y => x }",
+    );
+    let body = body_of(&env, id);
+    assert!(matches!(body, Term::Elim { .. }));
+
+    // ι-reduces: elim_Pair M [λx.λy.x] (P 1 2) ⇝ (λx.λy.x) 1 2 ⇝ 1
+    let ctx = Context::new();
+    let reduced = whnf(&env.env, &ctx, &body);
+    assert!(
+        !matches!(reduced, Term::Elim { .. }),
+        "Pair match should ι-reduce"
+    );
+}

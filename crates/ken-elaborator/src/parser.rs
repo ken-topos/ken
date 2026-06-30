@@ -1,10 +1,13 @@
-//! V0/V1 parser: token stream → surface AST (`32 §8`, `39 §5.2`, `21 §6.1`).
+//! V0/V1/L2 parser: token stream → surface AST (`32 §8`, `39 §5.2`,
+//! `21 §6.1`, `34`).
 //!
 //! Recursive descent, no backtracking beyond the fixed Pi-lookahead.
 //! V1 additions: `space view`, `requires`/`ensures` contract clauses,
 //! `{ x : A | φ }` refinement types, `prove` and `law` declarations, `old`.
+//! L2 additions: `data D p₁…pₙ = C₁ τ… | C₂ τ…` sum types; `match e { … }`
+//! pattern matching; `type T = A` surface type aliases; `T a b` type app.
 
-use crate::ast::{Binder, Decl, Expr, Type};
+use crate::ast::{Binder, CtorDecl, Decl, Expr, MatchArm, PatKind, Pattern, Type};
 use crate::error::{ElabError, Span};
 use crate::lexer::Token;
 
@@ -64,6 +67,17 @@ impl Parser {
         }
     }
 
+    fn expect_con(&mut self) -> Result<(String, Span), ElabError> {
+        let (tok, span) = self.advance();
+        match tok {
+            Token::ConId(s) => Ok((s, span)),
+            other => Err(ElabError::ParseError {
+                msg: format!("expected uppercase constructor name, found {:?}", other),
+                span,
+            }),
+        }
+    }
+
     fn at_eof(&self) -> bool {
         matches!(self.peek(), Token::Eof)
     }
@@ -86,9 +100,12 @@ impl Parser {
             Token::KwLet => self.parse_let_decl(start),
             Token::KwProve => self.parse_prove_decl(start),
             Token::KwLaw => self.parse_law_decl(start),
+            Token::KwData => self.parse_data_decl(start),
+            Token::KwTypeAlias => self.parse_type_alias_decl(start),
             other => Err(ElabError::ParseError {
                 msg: format!(
-                    "expected 'view', 'let', 'prove', 'law', or 'space view', found {:?}",
+                    "expected 'view', 'let', 'prove', 'law', 'data', 'type', or 'space view', \
+                     found {:?}",
                     other
                 ),
                 span: self.peek_span().clone(),
@@ -241,7 +258,6 @@ impl Parser {
             self.expect(&Token::Colon)?;
             let prop = self.parse_prop_expr()?;
             fields.push((field_name, prop));
-            // optional semicolon separator
             if matches!(self.peek(), Token::Semicolon) {
                 self.advance();
             }
@@ -256,6 +272,79 @@ impl Parser {
         })
     }
 
+    /// `data D p₁…pₙ = C₁ τ₁₁… | C₂ τ₂₁… | …`
+    ///
+    /// Simple (non-indexed) inductive type declaration (`34 §1`). Type params
+    /// are lowercase idents; constructors are `ConId type_atom*`.
+    fn parse_data_decl(&mut self, start: usize) -> Result<Decl, ElabError> {
+        self.advance(); // consume 'data'
+        let (name, _) = self.expect_con()?;
+
+        // Collect type-parameter names (lowercase identifiers before `=`).
+        let mut type_params = Vec::new();
+        while matches!(self.peek(), Token::Ident(_)) {
+            let (p, _) = self.expect_ident()?;
+            type_params.push(p);
+        }
+
+        self.expect(&Token::Eq)?;
+
+        // Parse constructor list: `C₁ τ… | C₂ τ… | …`
+        let mut ctors = Vec::new();
+        loop {
+            let ctor = self.parse_ctor_decl()?;
+            ctors.push(ctor);
+            if matches!(self.peek(), Token::Pipe) {
+                self.advance(); // consume `|`
+            } else {
+                break;
+            }
+        }
+
+        let end = ctors.last().map(|c| c.span.end).unwrap_or(start);
+        Ok(Decl::DataDecl {
+            name,
+            type_params,
+            ctors,
+            span: Span::new(start, end),
+        })
+    }
+
+    /// `C τ₁ τ₂ …` — one constructor in a `data` declaration.
+    fn parse_ctor_decl(&mut self) -> Result<CtorDecl, ElabError> {
+        let start = self.peek_span().start;
+        let (name, _) = self.expect_con()?;
+        let mut args = Vec::new();
+        // Collect type atoms (stop at `|`, `=`, `\n`-equivalent token starts, EOF)
+        while self.can_start_atom_type() {
+            args.push(self.parse_atom_type_app()?);
+        }
+        let end = if args.is_empty() {
+            self.tokens[self.pos - 1].1.end
+        } else {
+            args.last().unwrap().span().end
+        };
+        Ok(CtorDecl {
+            name,
+            args,
+            span: Span::new(start, end),
+        })
+    }
+
+    /// `type T = A` — surface type alias.
+    fn parse_type_alias_decl(&mut self, start: usize) -> Result<Decl, ElabError> {
+        self.advance(); // consume 'type'
+        let (name, _) = self.expect_con()?;
+        self.expect(&Token::Eq)?;
+        let ty = self.parse_type()?;
+        let end = ty.span().end;
+        Ok(Decl::TypeAlias {
+            name,
+            ty,
+            span: Span::new(start, end),
+        })
+    }
+
     // ----- type parsing -----
 
     pub fn parse_type(&mut self) -> Result<Type, ElabError> {
@@ -266,7 +355,8 @@ impl Parser {
         if matches!(self.peek(), Token::LBrace) {
             return self.parse_refinement_type();
         }
-        let lhs = self.parse_atom_type()?;
+        // Parse the base type (possibly applied to type args)
+        let lhs = self.parse_type_app()?;
         if matches!(self.peek(), Token::Arrow) {
             self.advance();
             let rhs = self.parse_type()?;
@@ -274,6 +364,30 @@ impl Parser {
             return Ok(Type::TArr(Box::new(lhs), Box::new(rhs), span));
         }
         Ok(lhs)
+    }
+
+    /// Parse a (possibly applied) type: `T a b`.
+    fn parse_type_app(&mut self) -> Result<Type, ElabError> {
+        let mut ty = self.parse_atom_type()?;
+        while self.can_start_atom_type() {
+            let arg = self.parse_atom_type()?;
+            let span = Span::merge(ty.span(), arg.span());
+            ty = Type::TApp(Box::new(ty), Box::new(arg), span);
+        }
+        Ok(ty)
+    }
+
+    /// Parse a type atom followed by zero or more atom-type args (for ctor decl args).
+    fn parse_atom_type_app(&mut self) -> Result<Type, ElabError> {
+        // In ctor decl context, we parse ONE atom-level type (no arrow, no leading Pi).
+        self.parse_atom_type()
+    }
+
+    fn can_start_atom_type(&self) -> bool {
+        matches!(
+            self.peek(),
+            Token::ConId(_) | Token::Ident(_) | Token::KwType | Token::LParen
+        )
     }
 
     /// `{ x : A | φ }` — refinement type (`21 §6.1`).
@@ -382,7 +496,7 @@ impl Parser {
         Ok(lhs)
     }
 
-    /// `parse_additive_expr` — handles `+` and `+%`.
+    /// `parse_additive_expr` — handles `+`, `+%`, `*`.
     fn parse_additive_expr(&mut self) -> Result<Expr, ElabError> {
         use crate::ast::BinOp;
         let mut lhs = self.parse_app_expr()?;
@@ -405,6 +519,7 @@ impl Parser {
         match self.peek().clone() {
             Token::Lambda => self.parse_lambda(),
             Token::KwLet => self.parse_let_expr(),
+            Token::KwMatch => self.parse_match_expr(),
             _ => {
                 let mut f = self.parse_atom_expr()?;
                 loop {
@@ -491,6 +606,100 @@ impl Parser {
         ))
     }
 
+    /// `match scrut { P₁ => body₁ ; P₂ => body₂ }` — pattern match (`34 §3`).
+    fn parse_match_expr(&mut self) -> Result<Expr, ElabError> {
+        let start = self.peek_span().start;
+        self.advance(); // consume 'match'
+        let scrut = self.parse_app_expr()?;
+        self.expect(&Token::LBrace)?;
+        let mut arms = Vec::new();
+        while !matches!(self.peek(), Token::RBrace | Token::Eof) {
+            let arm_start = self.peek_span().start;
+            let pat = self.parse_pattern()?;
+            self.expect(&Token::FatArrow)?;
+            let body = self.parse_expr()?;
+            let arm_end = body.span().end;
+            arms.push(MatchArm { pat, body, span: Span::new(arm_start, arm_end) });
+            if matches!(self.peek(), Token::Semicolon) {
+                self.advance();
+            }
+        }
+        let end = self.peek_span().end;
+        self.expect(&Token::RBrace)?;
+        Ok(Expr::EMatch {
+            scrut: Box::new(scrut),
+            arms,
+            span: Span::new(start, end),
+        })
+    }
+
+    /// Parse a pattern: `C p₁…pₙ` | `_` | `x`.
+    fn parse_pattern(&mut self) -> Result<Pattern, ElabError> {
+        let start = self.peek_span().start;
+        match self.peek().clone() {
+            Token::ConId(name) => {
+                self.advance();
+                // Collect atom-level sub-patterns (stop at `=>`, `|`, `}`, `;`, EOF).
+                let mut sub = Vec::new();
+                while self.can_start_atom_pat() {
+                    sub.push(self.parse_atom_pattern()?);
+                }
+                let end = if sub.is_empty() {
+                    self.tokens[self.pos - 1].1.end
+                } else {
+                    sub.last().unwrap().span.end
+                };
+                Ok(Pattern { kind: PatKind::Ctor(name, sub), span: Span::new(start, end) })
+            }
+            Token::Ident(name) => {
+                let span = self.peek_span().clone();
+                self.advance();
+                let kind = if name == "_" { PatKind::Wild } else { PatKind::Var(name) };
+                Ok(Pattern { kind, span })
+            }
+            other => Err(ElabError::ParseError {
+                msg: format!("expected a pattern, found {:?}", other),
+                span: self.peek_span().clone(),
+            }),
+        }
+    }
+
+    fn can_start_atom_pat(&self) -> bool {
+        matches!(
+            self.peek(),
+            Token::Ident(_) | Token::ConId(_) | Token::LParen
+        ) && !matches!(self.peek(), Token::FatArrow)
+    }
+
+    fn parse_atom_pattern(&mut self) -> Result<Pattern, ElabError> {
+        let start = self.peek_span().start;
+        match self.peek().clone() {
+            Token::Ident(name) => {
+                let span = self.peek_span().clone();
+                self.advance();
+                let kind = if name == "_" { PatKind::Wild } else { PatKind::Var(name) };
+                Ok(Pattern { kind, span })
+            }
+            Token::ConId(name) => {
+                // Atom constructor (no sub-patterns at this level without parens)
+                let span = self.peek_span().clone();
+                self.advance();
+                Ok(Pattern { kind: PatKind::Ctor(name, vec![]), span })
+            }
+            Token::LParen => {
+                self.advance();
+                let inner = self.parse_pattern()?;
+                let end = self.peek_span().end;
+                self.expect(&Token::RParen)?;
+                Ok(Pattern { kind: inner.kind, span: Span::new(start, end) })
+            }
+            other => Err(ElabError::ParseError {
+                msg: format!("expected an atom pattern, found {:?}", other),
+                span: self.peek_span().clone(),
+            }),
+        }
+    }
+
     fn parse_atom_expr(&mut self) -> Result<Expr, ElabError> {
         use crate::ast::NumLit;
         let start = self.peek_span().start;
@@ -567,6 +776,9 @@ impl Parser {
                         Expr::EOld(e, _) => Expr::EOld(e, span),
                         Expr::ENumLit(lit, _) => Expr::ENumLit(lit, span),
                         Expr::EBinOp(op, l, r, _) => Expr::EBinOp(op, l, r, span),
+                        Expr::EMatch { scrut, arms, span: _ } => {
+                            Expr::EMatch { scrut, arms, span }
+                        }
                     },
                 })
             }
