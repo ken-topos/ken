@@ -59,6 +59,19 @@ the code, and that independence is the point. Read `../../COORDINATION.md` and
    terms / dependent telescopes, eliminator methods that **use** the IH (not
    discard it via β). A green suite that only explores single-variable/closed
    instances is **Blocked**, not Approved (COORDINATION §7).
+   - **For an elaborator / translator / codegen, assert the *emitted output*, not
+     just that it succeeds — elaborate-and-check ≠ elaborate-and-correct (promoted
+     V1-fix; a 2-WP-latency bug).** A test that asserts only "elaboration
+     succeeds / the result type-checks" passes even when the output is **wrong but
+     well-typed** — so a producer bug ships green and propagates. V1's de Bruijn
+     shift bug rode through **V1 *and* V2** because the test used **same-type
+     params** (both `Nat`), making the mis-shifted body coincidentally type-correct,
+     and the suite checked *success* not *the term*. Require **both**:
+     **non-degenerate inputs** (distinct types/indices so a wrong output can't be
+     coincidentally valid) **and** a **structural assertion on the emitted term**
+     (the core/AST, resolved de Bruijn indices, the obligation/cert shape) — the
+     same "assert the structural output, at non-degenerate endpoints" rule the
+     trust-root uses, here for any producer whose output a *later* checker accepts.
    - **A "by-construction" guarantee is only as strong as its weakest *input*
      boundary — trace it one layer out (promoted ITree-lowering).** When the
      implementer claims "omission is structurally impossible" / "this can't be
