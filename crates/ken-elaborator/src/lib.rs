@@ -7,6 +7,7 @@
 //! Clean-room: built from `/spec` and `/conformance` only.
 
 mod ast;
+pub mod diagnostics;
 pub mod elab;
 pub mod effects;
 pub mod error;
@@ -26,6 +27,11 @@ pub use elab::{elaborate_rdecl, elaborate_rexpr, ElabResult, Obligation, Obligat
 pub use error::{ElabError, Span};
 pub use extract::{
     v2_extract, ExtractionResult, ObligationId, ObligationTriple, ProvKind, Provenance,
+};
+pub use diagnostics::{
+    project_all, project_diagnostic, Diagnostic, DiagnosticTag, FailureWitness, FormRef, HoleId,
+    KripkeCountermodel, Region, SuggestedAction, ThirdValue, TypedHole, WorldId, tv_and, tv_not,
+    tv_or, tv_strict,
 };
 pub use prover::{
     attempt_obligation, attempt_with_cert, classify, Countermodel, ProverResult, Route, Verdict,
