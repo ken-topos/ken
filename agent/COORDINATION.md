@@ -403,6 +403,28 @@ trigger CI, reads the checks, merges, and fetches `main`
   Integrator confirms the Decision's branch carries every cited piece before
   merge** (validated on `s51-sigma-reland`: one branch, both `spec/`+`conformance/`
   pieces → the Decision correctly pulled a Spec vote → "§14 compliant").
+  **(5) Single-branch is necessary but NOT sufficient — verify an assembled tip on
+  TWO axes, against CURRENT `main`, right before the Decision (promoted X1-effects-
+  elab; both enclave authors + the Architect converged on it).** One branch
+  guarantees the pieces are *together in one diff*; it does **not** guarantee they
+  are **complete** or that the **base is current**. Two faults nearly merged a wrong
+  tree on X1-effects-elab: (a) the assembler took the author's *§6-body* commit but
+  **not their branch tip**, dropping a follow-up (`a3b887e`) that fixed an
+  **actively-wrong** stale pointer; (b) the re-fold sat on a **stale base** that, as
+  `main` advanced, would have **reverted V2-build + the V3 frame**. So before the
+  merge Decision, re-run (right then — *"rebased onto current main" is a perishable
+  claim*): **content** — `git diff <author-full-tip>:<file> <assembled>:<file>`
+  **EMPTY**, taking **all** the author's commits since merge-base (a dropped
+  follow-up is invisible if you only diff the section you read); **base/scope** —
+  `git diff --stat origin/main <assembled>` is **only** the WP's intended files and
+  **the WP's deps are ancestors of the tip** (a stale base silently reverts
+  unrelated landed siblings). A correct-content tip on a stale base is as
+  unmergeable as the reverse — the base axis is a distinct failure mode.
+  **Lane note:** the independent checker (conformance-validator) is *stronger
+  verifying the assembler's tip against these gates than performing the rebase
+  itself* — when grounding surfaces an assembly hazard, **flag it to the
+  assembler**, don't reach past your lane into the git (where the X1-effects-elab
+  drops happened).
 - **Review is a mootup Decision, not a GitHub action.** The Architect/Spec read
   the diff from the shared local branch (`git diff origin/main...wp/<ID>`) and
   vote the merge Decision in mootup. There is no GitHub PR approval to mirror.
