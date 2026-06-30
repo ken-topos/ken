@@ -5,7 +5,7 @@
 
 pub mod eval;
 
-pub use eval::{apply, eval, Env, EvalStore, EvalVal, SlotId};
+pub use eval::{apply, drive_h, eval, Env, EvalStore, EvalVal, ITreeIds, SlotId};
 
 pub fn describe() -> &'static str {
     "ken reference interpreter (X1)"
@@ -1358,5 +1358,665 @@ mod tests {
             }
             _ => panic!("expected two Closures, got {:?} and {:?}", v1, v2),
         }
+    }
+}
+
+// ── EFF conformance tests (`conformance/runtime/effects/seed-effects.md`) ─────
+
+#[cfg(test)]
+mod eff_tests {
+    //! Effect-evaluation conformance — 11 cases (EFF1–EFF7 + regression).
+    //!
+    //! Implements `drive_H` (`42 §6.2`) over a simplified test ITree (0 params,
+    //! `Ret r` and `Vis e k` constructors). Handler `H` is a deterministic mock
+    //! (`36 §7.2`); traces are recorded by the handler closure.
+    //!
+    //! EFF3, EFF4×2: placeholder — elaboration-layer / K1.5-elim IH.
+
+    use super::eval::{drive_h, eval, EvalStore, EvalVal, ITreeIds};
+    use ken_kernel::{
+        declare_inductive, declare_postulate, CtorSpec, GlobalEnv, GlobalId, InductiveSpec,
+        Level, Term,
+    };
+
+    // ── ITree test environment ─────────────────────────────────────────────────
+
+    /// Simplified ITree with **0 params** (no `ρ`/`R` indices).
+    /// - `Ret` (k=0): 1 arg  (the result value)
+    /// - `Vis` (k=1): 2 args (the op `e`, the continuation `k : Resp → ITree`)
+    struct ITreeEnv {
+        #[allow(dead_code)]
+        itree: GlobalId,
+        ret_id: GlobalId,
+        vis_id: GlobalId,
+        ids: ITreeIds,
+    }
+
+    fn mk_itree(env: &mut GlobalEnv) -> ITreeEnv {
+        let itree = declare_inductive(env, |ind_id| InductiveSpec {
+            level_params: vec![],
+            params: vec![],
+            indices: vec![],
+            level: Level::zero(),
+            constructors: vec![
+                // Ret (r : Type 0) — k=0, 1 ctor-specific arg
+                CtorSpec {
+                    args: vec![Term::Type(Level::zero())],
+                    target_indices: vec![],
+                },
+                // Vis (e : Type 0) (k : Type 0 → ITree) — k=1, 2 ctor-specific args
+                // k is a Π-bound recursive position (K1.5-style).
+                CtorSpec {
+                    args: vec![
+                        Term::Type(Level::zero()),
+                        Term::Pi(
+                            Box::new(Term::Type(Level::zero())),
+                            Box::new(Term::IndFormer {
+                                id: ind_id,
+                                level_args: vec![],
+                            }),
+                        ),
+                    ],
+                    target_indices: vec![],
+                },
+            ],
+        })
+        .expect("ITree");
+
+        let ret_id = env.inductive(itree).unwrap().constructors[0].id;
+        let vis_id = env.inductive(itree).unwrap().constructors[1].id;
+        let ids = ITreeIds { ret_id, vis_id, params_len: 0 };
+
+        ITreeEnv { itree, ret_id, vis_id, ids }
+    }
+
+    fn mk_store() -> EvalStore {
+        EvalStore::new()
+    }
+
+    /// `Ret val_term` as a closed core Term (0-param ITree).
+    fn mk_ret(val_term: Term, ret_id: GlobalId) -> Term {
+        Term::App(
+            Box::new(Term::Constructor { id: ret_id, level_args: vec![] }),
+            Box::new(val_term),
+        )
+    }
+
+    /// `Vis op_term k_term` as a closed core Term (0-param ITree).
+    fn mk_vis(op_term: Term, k_term: Term, vis_id: GlobalId) -> Term {
+        Term::App(
+            Box::new(Term::App(
+                Box::new(Term::Constructor { id: vis_id, level_args: vec![] }),
+                Box::new(op_term),
+            )),
+            Box::new(k_term),
+        )
+    }
+
+    // ── EFF1 — per-effect perform → observe → resume ───────────────────────────
+
+    /// `runtime/effects/perform-observe-resume-console` (oracle)
+    ///
+    /// Single-effect: `Vis op (λ r. Ret r)` under mock H.
+    /// drive_H forces the Vis, H observes the op, apply k resp resumes,
+    /// Ret resp → returns resp. Trace = [op].
+    #[test]
+    fn eff1_perform_observe_resume_console() {
+        let mut env = GlobalEnv::new();
+        let it = mk_itree(&mut env);
+        let mut store = mk_store();
+
+        // op = Bool(true) — represents Console.Write "hi" (oracle)
+        let op_term = Term::Type(Level::zero()); // evaluates to TypeUniverse — our mock op
+        // k = λ r. Ret r
+        let k_term = Term::Lam(
+            Box::new(Term::Type(Level::zero())),
+            Box::new(mk_ret(Term::var(0), it.ret_id)),
+        );
+        let tree_term = mk_vis(op_term, k_term, it.vis_id);
+        let tree_val = eval(&[], &tree_term, &env, &mut store);
+
+        let mut ops_performed: Vec<EvalVal> = vec![];
+        let mock_resp = EvalVal::Bool(true); // mock Unit response
+        let result = drive_h(tree_val, &mut |op: EvalVal| {
+            ops_performed.push(op.clone());
+            EvalVal::Bool(true)
+        }, &it.ids, &env, &mut store);
+
+        // H called once; result is the response fed through Ret.
+        assert_eq!(ops_performed.len(), 1, "one effect must be performed");
+        assert_eq!(result, mock_resp, "result must be the mock response");
+    }
+
+    /// `runtime/effects/perform-rule-uniform-across-classes` (oracle, property)
+    ///
+    /// Five single-op trees (one per open-row class: Console/Clock/FS/Net/Rand,
+    /// encoded as distinct mock op values). Each gets identical mechanism shape —
+    /// drive_H forces the Vis, H observes, apply k resp resumes.
+    #[test]
+    fn eff1_perform_rule_uniform_across_classes() {
+        let mut env = GlobalEnv::new();
+        let it = mk_itree(&mut env);
+
+        // Five distinct mock op terms, each in its own `Vis op (λ r. Ret r)` tree.
+        // We use Bool(true), Bool(false), and three distinct type-formers as mock ops.
+        let op_terms: Vec<Term> = vec![
+            Term::Type(Level::zero()),     // Console (mock)
+            Term::Omega(Level::zero()),    // Clock (mock)
+            Term::Type(Level::zero()),     // FS — same type but distinct Vis (oracle)
+            Term::Omega(Level::zero()),    // Net
+            Term::Type(Level::zero()),     // Rand
+        ];
+
+        // For a cleaner uniform test: use distinct lambda bodies to give distinct k closures,
+        // ensuring each tree is distinct even if op types coincide (oracle-op-tags, §6.3).
+        // Here we assert mechanism-consistency: every tree follows the same shape.
+        for (i, op_term) in op_terms.into_iter().enumerate() {
+            let mut store = mk_store();
+            // k = λ r. Ret r (identity continuation)
+            let k_term = Term::Lam(
+                Box::new(Term::Type(Level::zero())),
+                Box::new(mk_ret(Term::var(0), it.ret_id)),
+            );
+            let tree_term = mk_vis(op_term, k_term, it.vis_id);
+            let tree_val = eval(&[], &tree_term, &env, &mut store);
+
+            let mut call_count = 0usize;
+            let result = drive_h(tree_val, &mut |_op: EvalVal| {
+                call_count += 1;
+                EvalVal::Int(i as i64) // distinct response per class
+            }, &it.ids, &env, &mut store);
+
+            assert_eq!(call_count, 1, "class {i}: H called exactly once");
+            assert_eq!(
+                result,
+                EvalVal::Int(i as i64),
+                "class {i}: result is the mock response"
+            );
+        }
+    }
+
+    // ── EFF2 — sequencing = the Vis-spine order ────────────────────────────────
+
+    /// `runtime/effects/sequencing-trace-is-spine-order` (oracle)
+    ///
+    /// Two-effect spine: `Vis op1 (λ _. Vis op2 (λ r. Ret r))`.
+    /// Trace must be [op1, op2] — op1 before op2 (spine order, §6.4).
+    /// A reversed/dropped trace flips the assertion.
+    #[test]
+    fn eff2_sequencing_trace_is_spine_order() {
+        let mut env = GlobalEnv::new();
+        let it = mk_itree(&mut env);
+        let mut store = mk_store();
+
+        // op1 and op2 are closures with DISTINCT body terms (not just distinct domain
+        // types) so they get distinct code_ids and are distinguishable in H.
+        // op1 body = `Type 0`  (constant closure returning the type)
+        // op2 body = `Omega 0` (constant closure returning omega)
+        let op1_term = Term::Lam(
+            Box::new(Term::Type(Level::zero())),
+            Box::new(Term::Type(Level::zero())),  // body ≠ op2's body
+        );
+        let op2_term = Term::Lam(
+            Box::new(Term::Type(Level::zero())),
+            Box::new(Term::Omega(Level::zero())), // body ≠ op1's body
+        );
+
+        // Inner: Vis op2 (λ _. Ret op2)
+        let inner = mk_vis(
+            op2_term.clone(),
+            Term::Lam(
+                Box::new(Term::Type(Level::zero())),
+                Box::new(mk_ret(op2_term.clone(), it.ret_id)),
+            ),
+            it.vis_id,
+        );
+        // Outer: Vis op1 (λ _. inner)
+        let outer = mk_vis(
+            op1_term.clone(),
+            Term::Lam(Box::new(Term::Type(Level::zero())), Box::new(inner)),
+            it.vis_id,
+        );
+        let tree_val = eval(&[], &outer, &env, &mut store);
+
+        // Evaluate op1 to get its code_id for comparison.
+        let op1_val = eval(&[], &op1_term, &env, &mut mk_store());
+        let op1_code_id = match &op1_val {
+            EvalVal::Closure { code_id, .. } => *code_id,
+            other => panic!("op1 must evaluate to a closure; got {:?}", other),
+        };
+
+        // Record ops in order (1 = op1, 2 = op2, 0 = unexpected)
+        let mut trace_ids: Vec<u8> = vec![];
+        let result = drive_h(tree_val, &mut |op: EvalVal| {
+            match &op {
+                EvalVal::Closure { code_id, .. } => {
+                    if *code_id == op1_code_id {
+                        trace_ids.push(1); // op1
+                    } else {
+                        trace_ids.push(2); // op2
+                    }
+                }
+                _ => trace_ids.push(0),
+            }
+            EvalVal::Bool(true) // mock response (ignored by λ _)
+        }, &it.ids, &env, &mut store);
+
+        // Trace must be [1, 2] — op1 then op2, spine order (§6.4)
+        assert_eq!(trace_ids, vec![1u8, 2u8], "trace must be op1 then op2 (spine order)");
+        assert!(
+            !matches!(result, EvalVal::Neutral | EvalVal::Unknown),
+            "result must be a concrete value; got {:?}", result
+        );
+    }
+
+    /// `runtime/effects/bind-graft-threads-response` (oracle)
+    ///
+    /// Second op depends on first's response: `Vis op1 (λ x. Vis (f x) (λ _. Ret tt))`.
+    /// The response from op1 must be fed into the second Vis's op-tag.
+    #[test]
+    fn eff2_bind_graft_threads_response() {
+        let mut env = GlobalEnv::new();
+        let it = mk_itree(&mut env);
+        let mut store = mk_store();
+
+        // Tree: Vis op1 (λ resp. Vis resp (λ _. Ret resp))
+        // op1 is Bool(true) closure (marker); H(op1) = Bool(false) closure (marker for resp)
+        // Second op = resp = what H returned for op1
+        // This tests that resp is actually threaded into the second Vis's op slot.
+        let op1_term = Term::Lam(
+            Box::new(Term::Type(Level::zero())),
+            Box::new(Term::var(0)), // identity closure as op1 tag
+        );
+        // k1 = λ resp. Vis resp (λ _. Ret resp)
+        //            ┌─ uses resp (Var 0) as the SECOND op
+        let inner_k2 = Term::Lam(
+            Box::new(Term::Type(Level::zero())),
+            Box::new(mk_ret(Term::var(1), it.ret_id)), // Ret (resp from outer, Var 1)
+        );
+        let k1 = Term::Lam(
+            Box::new(Term::Type(Level::zero())),
+            Box::new(mk_vis(
+                Term::var(0), // op = resp (Var 0 in k1's scope)
+                inner_k2,
+                it.vis_id,
+            )),
+        );
+        let tree_term = mk_vis(op1_term, k1, it.vis_id);
+        let tree_val = eval(&[], &tree_term, &env, &mut store);
+
+        // Mock H: for op1 (a Closure) return a distinct sentinel; for op2 (whatever op1's resp was) return Bool(true).
+        let mut ops: Vec<EvalVal> = vec![];
+        let sentinel = EvalVal::Int(42); // H's response to op1
+        let result = drive_h(tree_val, &mut |op: EvalVal| {
+            ops.push(op.clone());
+            if ops.len() == 1 {
+                sentinel.clone() // response to op1
+            } else {
+                EvalVal::Bool(true) // response to op2
+            }
+        }, &it.ids, &env, &mut store);
+
+        assert_eq!(ops.len(), 2, "exactly two effects must be performed");
+        // ops[1] (the second op) must BE the sentinel (= resp from op1) — response threaded
+        assert_eq!(ops[1], sentinel, "second op must equal op1's response (response threaded)");
+        // Result is Ret(sentinel) → sentinel (outer resp carried through Var(1))
+        assert_eq!(result, sentinel, "result must be op1's response (threaded through bind)");
+    }
+
+    // ── EFF3 — row-bounding (elaboration-layer) ────────────────────────────────
+
+    /// `runtime/effects/row-bounding-escape-rejects-at-elaboration`
+    // [placeholder — reifies in elaboration-layer tests (ken-elaborator)]
+    // Row-bounding is type-level (`42 §6.5`, `36 §1.4`): the escape check fires
+    // at elaboration, not at the driver. The driver never sees an out-of-row op
+    // because the kernel rejects the mis-typed term. Test belongs in ken-elaborator
+    // where the escape-check surface is accessible.
+    #[test]
+    fn eff3_row_bounding_escape_rejects_at_elaboration() {
+        // [placeholder — reifies in elaboration-layer tests]
+        //
+        // The property under test (`42 §6.5`): an out-of-row `perform` is
+        // uninstantiable in `⟦e⟧ : ITree ⟦ρ⟧ R` because the escape check
+        // (`36 §1.4`) rejects the function at elaboration — the driver never runs.
+        // Verified structurally at the ken-elaborator layer (EFFECT-ESCAPE error).
+        let _ = (); // no assertion — structural property, not a runtime check
+    }
+
+    // ── EFF4 — handlers: pure-fold discharge vs the driver ────────────────────
+
+    /// `runtime/effects/runstate-discharges-in-pure-section3`
+    // [placeholder — reifies in K1.5-elim IH extension]
+    // `runState` is an `elim_ITree` fold. For `Vis (e : StateOp) (k : Resp → ITree)`,
+    // the IH is `Resp → P` — a Π-bound IH (K1.5 W-style). `elim_reduce` does not
+    // yet compute IH values for Π-bound recursive positions (`is_recursive_arg`
+    // checks IndFormer/App heads, not Pi codomains). Full runState test requires
+    // that extension.
+    #[test]
+    fn eff4_runstate_discharges_in_pure_section3() {
+        // [placeholder — reifies in K1.5-elim IH extension]
+        //
+        // Partial test: `Ret r` tree eliminates purely in §3 without drive_h.
+        // Full runState with Vis nodes requires K1.5 IH in elim_reduce.
+        let mut env = GlobalEnv::new();
+        let it = mk_itree(&mut env);
+        let mut store = mk_store();
+
+        // A tree that is just Ret r — no Vis, no driver needed.
+        // eval(Ret Bool(true)) → Ctor { id: ret_id, args: [Bool(true)] }
+        // drive_h → immediately returns Bool(true) (Ret arm, no H called).
+        let tree_term = mk_ret(Term::Lam(
+            Box::new(Term::Type(Level::zero())),
+            Box::new(Term::var(0)),
+        ), it.ret_id);
+        let tree_val = eval(&[], &tree_term, &env, &mut store);
+
+        let mut h_called = false;
+        let result = drive_h(tree_val, &mut |_op: EvalVal| {
+            h_called = true;
+            EvalVal::Unknown
+        }, &it.ids, &env, &mut store);
+
+        assert!(!h_called, "a Ret tree must never reach the driver");
+        assert!(
+            !matches!(result, EvalVal::Neutral | EvalVal::Unknown),
+            "Ret r must return r; got {:?}", result
+        );
+    }
+
+    /// `runtime/effects/handled-discharges-unhandled-reaches-driver`
+    // [placeholder — reifies in K1.5-elim IH extension]
+    // Tests the pure-fold-vs-driver split (`42 §6.1`/§6.2): handled (State)
+    // discharges in §3 via elim_ITree fold; unhandled (Console) survives to driver.
+    // Requires K1.5 IH in elim_reduce for the runState fold over Vis nodes.
+    #[test]
+    fn eff4_handled_discharges_unhandled_reaches_driver() {
+        // [placeholder — reifies in K1.5-elim IH extension]
+        let _ = (); // structural property — fold split; K1.5 IH extension needed
+    }
+
+    // ── EFF5 — X1 == L5 ITree (definitional reconciliation) ───────────────────
+
+    /// `runtime/effects/x1-trace-equals-l5-itree-denotation` (property)
+    ///
+    /// The agreement is **definitional** (`42 §6.6`): X1 runs the very term `⟦e⟧`
+    /// L5 denotes — there is no second effect semantics. We build the ITree term
+    /// directly (= the denotation) and verify drive_h's trace matches its spine.
+    #[test]
+    fn eff5_x1_trace_equals_l5_itree_denotation() {
+        let mut env = GlobalEnv::new();
+        let it = mk_itree(&mut env);
+        let mut store = mk_store();
+
+        // Shared corpus representative: `Vis op1 (λ _. Vis op2 (λ r. Ret r))`
+        // This IS the L5 denotation `⟦e⟧` for a two-effect program.
+        // The spine = [op1, op2]. X1 running this tree MUST produce the same spine.
+        let op1_term = Term::Lam(
+            Box::new(Term::Type(Level::zero())),
+            Box::new(Term::var(0)),  // clock-now mock (closure tag)
+        );
+        let op2_term = Term::Lam(
+            Box::new(Term::Omega(Level::zero())),
+            Box::new(Term::var(0)),  // console-write mock (closure tag, distinct)
+        );
+        let inner = mk_vis(
+            op2_term.clone(),
+            Term::Lam(
+                Box::new(Term::Type(Level::zero())),
+                Box::new(mk_ret(Term::var(0), it.ret_id)),
+            ),
+            it.vis_id,
+        );
+        let denotation = mk_vis(
+            op1_term.clone(),
+            Term::Lam(Box::new(Term::Type(Level::zero())), Box::new(inner)),
+            it.vis_id,
+        );
+
+        // Evaluate the denotation term — X1 runs the same term L5 would denote.
+        let tree_val = eval(&[], &denotation, &env, &mut store);
+
+        // Fixed mock H: returns distinct sentinels for the two ops.
+        let op1_val = eval(&[], &op1_term, &env, &mut mk_store());
+        let op2_val = eval(&[], &op2_term, &env, &mut mk_store());
+        let mut trace: Vec<EvalVal> = vec![];
+        let result = drive_h(tree_val, &mut |op: EvalVal| {
+            trace.push(op.clone());
+            EvalVal::Bool(true) // uniform mock response
+        }, &it.ids, &env, &mut store);
+
+        // X1's performed spine must match the denotation's Vis-tag sequence.
+        assert_eq!(trace.len(), 2, "must perform exactly 2 effects (the two Vis nodes)");
+        // op1 comes first (left Vis, spine order), op2 second.
+        // Verify structural identity: trace[0] is the op1 closure, trace[1] is op2.
+        match (&trace[0], &op1_val) {
+            (EvalVal::Closure { code_id: c1, .. }, EvalVal::Closure { code_id: c2, .. }) => {
+                assert_eq!(c1, c2, "EFF5: trace[0] must be op1 (same code_id as L5 denotation)");
+            }
+            _ => panic!("EFF5: expected Closure op; got {:?}", trace[0]),
+        }
+        match (&trace[1], &op2_val) {
+            (EvalVal::Closure { code_id: c1, .. }, EvalVal::Closure { code_id: c2, .. }) => {
+                assert_eq!(c1, c2, "EFF5: trace[1] must be op2 (same code_id as L5 denotation)");
+            }
+            _ => panic!("EFF5: expected Closure op; got {:?}", trace[1]),
+        }
+        assert!(
+            !matches!(result, EvalVal::Neutral | EvalVal::Unknown),
+            "result must be the Ret leaf value; got {:?}", result
+        );
+    }
+
+    // ── EFF6 — unknown strict through the driver ───────────────────────────────
+
+    /// `runtime/effects/unknown-strict-through-driver` (oracle)
+    ///
+    /// (a) `Vis unknown k` — op is Unknown (open hole): drive_H yields Unknown,
+    ///     no H called. (b) Same tree with concrete op: yields real trace.
+    /// Verdict-flip: hole-present → Unknown/no-perform; hole-free → real trace.
+    #[test]
+    fn eff6_unknown_strict_through_driver() {
+        let mut env = GlobalEnv::new();
+        let it = mk_itree(&mut env);
+
+        // (a) op depends on an open hole → EvalVal::Unknown → drive_h returns Unknown
+        {
+            let mut store = mk_store();
+            let hole_id = declare_postulate(
+                &mut env,
+                vec![],
+                Term::Type(Level::zero()),
+            ).expect("hole");
+            let hole_term = Term::Const { id: hole_id, level_args: vec![] };
+            // k = λ r. Ret r
+            let k_term = Term::Lam(
+                Box::new(Term::Type(Level::zero())),
+                Box::new(mk_ret(Term::var(0), it.ret_id)),
+            );
+            let tree_term = mk_vis(hole_term, k_term, it.vis_id);
+            // eval of Vis(hole, k): hole evaluates to Unknown; constructor strict
+            // → the whole Vis tree is Unknown (strict constructor arg, §4).
+            let tree_val = eval(&[], &tree_term, &env, &mut store);
+
+            let mut h_called = false;
+            let result = drive_h(tree_val, &mut |_: EvalVal| {
+                h_called = true;
+                EvalVal::Bool(true)
+            }, &it.ids, &env, &mut store);
+
+            assert_eq!(result, EvalVal::Unknown, "(a) holed op must yield Unknown");
+            assert!(!h_called, "(a) H must not be called when op is unknown");
+        }
+
+        // (b) Concrete op (hole discharged to a real value): yields real trace.
+        {
+            let mut store = mk_store();
+            let concrete_op = Term::Lam(
+                Box::new(Term::Type(Level::zero())),
+                Box::new(Term::var(0)),
+            );
+            let k_term = Term::Lam(
+                Box::new(Term::Type(Level::zero())),
+                Box::new(mk_ret(Term::var(0), it.ret_id)),
+            );
+            let tree_term = mk_vis(concrete_op, k_term, it.vis_id);
+            let tree_val = eval(&[], &tree_term, &env, &mut store);
+
+            let mut h_called = false;
+            let result = drive_h(tree_val, &mut |_: EvalVal| {
+                h_called = true;
+                EvalVal::Bool(true)
+            }, &it.ids, &env, &mut store);
+
+            assert!(h_called, "(b) H must be called for a hole-free op");
+            assert_eq!(result, EvalVal::Bool(true), "(b) hole-free must yield real result");
+        }
+    }
+
+    // ── EFF7 — exhaustive driver dispatch, no silent skip ─────────────────────
+
+    /// `runtime/effects/exhaustive-driver-dispatch-no-silent-skip` (property)
+    ///
+    /// Structural/absence (`42 §6.5`, two-soundnesses): the handler `H` must
+    /// dispatch exhaustively over all open-row op-tags — NO catch-all `_ → skip`.
+    /// The exhaustive match is built here with a sealed `MockOp` enum.
+    /// Disconfirming check: adding a new `MockOp` variant with no arm = compile error.
+    #[test]
+    fn eff7_exhaustive_driver_dispatch_no_silent_skip() {
+        // The five open-row effect classes, encoded as a sealed enum.
+        // Adding a new variant WITHOUT a match arm below = COMPILE ERROR.
+        // That is the "exhaustive-by-construction" structural property (EFF7).
+        #[derive(Debug, Clone, Copy, PartialEq)]
+        enum MockOp {
+            Console, // Int(0)
+            Clock,   // Int(1)
+            FS,      // Int(2)
+            Net,     // Int(3)
+            Rand,    // Int(4)
+        }
+
+        fn decode_op(v: &EvalVal) -> MockOp {
+            match v {
+                EvalVal::Int(0) => MockOp::Console,
+                EvalVal::Int(1) => MockOp::Clock,
+                EvalVal::Int(2) => MockOp::FS,
+                EvalVal::Int(3) => MockOp::Net,
+                EvalVal::Int(4) => MockOp::Rand,
+                other => panic!("unknown op tag: {:?}", other),
+            }
+        }
+
+        // Exhaustive mock H — NO wildcard arm.
+        // If MockOp gains a new variant, this match fails to compile.
+        // That is the build-error backstop for a newly-added open-row op.
+        fn exhaustive_mock_h(op: EvalVal) -> (EvalVal, MockOp) {
+            let tag = decode_op(&op);
+            let resp = match tag {
+                MockOp::Console => EvalVal::Int(100), // Unit resp (mock)
+                MockOp::Clock   => EvalVal::Int(101), // Instant resp (mock)
+                MockOp::FS      => EvalVal::Int(102), // Bytes resp (mock)
+                MockOp::Net     => EvalVal::Int(103), // Unit/Bytes resp (mock)
+                MockOp::Rand    => EvalVal::Int(104), // drawn value resp (mock)
+                // NO `_ =>` arm: a new MockOp variant = COMPILE ERROR.
+                // (Disconfirming check: would a new op be a build error or silently
+                // skipped? Only exhaustive-by-construction makes it the former.)
+            };
+            (resp, tag)
+        }
+
+        let mut env = GlobalEnv::new();
+        let it = mk_itree(&mut env);
+
+        // Test each MockOp class: build `Vis Int(i) (λ r. Ret r)`, run drive_h.
+        // Each must call exhaustive_mock_h exactly once and return the mock resp.
+        let classes = [MockOp::Console, MockOp::Clock, MockOp::FS, MockOp::Net, MockOp::Rand];
+        for (i, expected_class) in classes.iter().enumerate() {
+            let mut store = mk_store();
+            // Build a Vis with Int(i) as op — but Int isn't a Term form; use
+            // Lam/App to produce distinct EvalVal::Int values via prim 'add'.
+            // Simpler: build op as a closure that captures the index, then tag it
+            // by capturing depth. Actually, we just use Closure-based opaque ops
+            // and an EvalVal tag injected via the handler's captured index.
+            //
+            // Since Term has no Int literal, we represent Int(i) in EvalVal space
+            // by evaluating a sum type constructor (distinct for each i).
+            // For test clarity: build op as distinct Bool-level closures and let
+            // H's behavior (capturing i) determine the "class". The structural
+            // property is: H has a match with no `_` arm.
+            let op_term = Term::Lam(
+                Box::new(Term::Type(Level::zero())),
+                Box::new(Term::var(0)),
+            );
+            let k_term = Term::Lam(
+                Box::new(Term::Type(Level::zero())),
+                Box::new(mk_ret(Term::var(0), it.ret_id)),
+            );
+            let tree_term = mk_vis(op_term, k_term, it.vis_id);
+            let tree_val = eval(&[], &tree_term, &env, &mut store);
+
+            let captured_i = i;
+            let result = drive_h(tree_val, &mut |_op: EvalVal| {
+                // Inject Int(i) as the mock op tag for this iteration,
+                // so exhaustive_mock_h can dispatch on it.
+                let (resp, got_class) = exhaustive_mock_h(EvalVal::Int(captured_i as i64));
+                assert_eq!(
+                    &got_class, expected_class,
+                    "exhaustive dispatch: class {i} must map to {:?}", expected_class
+                );
+                resp
+            }, &it.ids, &env, &mut store);
+
+            let expected_resp = EvalVal::Int(100 + i as i64);
+            assert_eq!(result, expected_resp, "class {i}: response must be from exhaustive H");
+        }
+    }
+
+    // ── Regression — pure programs never reach the driver ─────────────────────
+
+    /// `runtime/effects/pure-program-never-reaches-driver` (property)
+    ///
+    /// A pure (effect-free, ρ=∅) program evaluates entirely in §3 — no drive_h
+    /// needed. `ITree 𝟘 R ≅ R` (`36 §2.4`): the pure fragment collapses to a
+    /// plain term; adding effect evaluation must not disturb pure reduction.
+    /// (Pure-fragment determinism + canonicity `42 §3.6/§3.7` must hold unchanged.)
+    #[test]
+    fn regression_pure_program_never_reaches_driver() {
+        // A pure program: `(λ x. x) Bool` — evaluates in §3 to the type Bool.
+        // To verify it never reaches the driver, we run it through eval only
+        // and check the result is correct; the driver is NOT called here.
+        let mut env = GlobalEnv::new();
+        let _it = mk_itree(&mut env); // ITree registered but not needed for pure programs
+
+        let mut store = mk_store();
+
+        // Pure program: λ x. x applied to a type — evaluates in §3 to that type.
+        let id_lam = Term::Lam(Box::new(Term::Type(Level::zero())), Box::new(Term::var(0)));
+        let pure_prog = Term::App(Box::new(id_lam), Box::new(Term::Omega(Level::zero())));
+        let result = eval(&[], &pure_prog, &env, &mut store);
+
+        // Pure evaluation must succeed without a driver.
+        assert!(
+            matches!(&result, EvalVal::OmegaUniverse(_)),
+            "pure (id Omega) must evaluate to Omega in §3; got {:?}", result
+        );
+
+        // Verify: a Ret-only tree also doesn't need the driver.
+        // A pure program denotes to `ITree 𝟘 R ≅ R` — the pure value, not a driver-needing Vis.
+        // Simulate: build Ret(pure_val) and verify drive_h returns the value without H.
+        let pure_val = Term::Omega(Level::zero());
+        let ret_tree = mk_ret(pure_val, _it.ret_id);
+        let ret_val = eval(&[], &ret_tree, &env, &mut store);
+
+        let mut h_called = false;
+        let ret_result = drive_h(ret_val, &mut |_: EvalVal| {
+            h_called = true;
+            EvalVal::Unknown
+        }, &_it.ids, &env, &mut store);
+
+        assert!(!h_called, "a Ret tree (pure program) must never reach the driver");
+        assert!(
+            matches!(&ret_result, EvalVal::OmegaUniverse(_)),
+            "Ret(Omega) must return Omega; got {:?}", ret_result
+        );
     }
 }

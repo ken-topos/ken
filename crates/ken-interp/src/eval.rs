@@ -711,6 +711,76 @@ pub fn apply(f: EvalVal, u: EvalVal, globals: &GlobalEnv, store: &mut EvalStore)
     }
 }
 
+// ── effect driver (`42 §6`) ───────────────────────────────────────────────────
+
+/// Constructor IDs for the `ITree` inductive, needed by `drive_h`.
+///
+/// Obtain these from the `GlobalEnv` after registering `ITree` via
+/// `declare_inductive`. `params_len` is the number of *inductive* params
+/// (type-level indices, e.g. `ρ` and `R`); ctor-specific args start at
+/// `args[params_len]` in the `EvalVal::Ctor`.
+pub struct ITreeIds {
+    /// `GlobalId` of the `Ret` constructor (k = 0).
+    pub ret_id: GlobalId,
+    /// `GlobalId` of the `Vis` constructor (k = 1).
+    pub vis_id: GlobalId,
+    /// Number of inductive params (`ITree ρ R` has 2; a simplified test ITree
+    /// may have 0). Ctor-specific args start at this offset in `EvalVal::Ctor.args`.
+    pub params_len: usize,
+}
+
+/// `drive_H t = case whnf t of Ret r → r | Vis e k → drive_H (apply k (H e)) | unknown → unknown`
+///
+/// The effect driver (`42 §6.2`): `tree` is a fully-evaluated `ITree` value
+/// (produced by `eval`; the denotation `⟦e⟧` from `36 §2.4` is a pure core
+/// term `eval` already handles). The loop terminates because the `ITree` is
+/// **finite** (K1.5 structural descent; no coinduction).
+///
+/// `handler` is the `36 §7.2` real-world-handler hook — **parametric** so
+/// conformance can supply a deterministic mock while production supplies real
+/// syscalls. It is `FnMut` because real I/O has side effects.
+///
+/// Exhaustiveness (`42 §6.5`, EFF7): the caller's `handler` must cover every
+/// op-tag the open row admits — no catch-all `_ → skip`. A missing rule is a
+/// build error in the handler, never a silent skip here.
+pub fn drive_h<H>(
+    mut tree: EvalVal,
+    handler: &mut H,
+    ids: &ITreeIds,
+    globals: &GlobalEnv,
+    store: &mut EvalStore,
+) -> EvalVal
+where
+    H: FnMut(EvalVal) -> EvalVal,
+{
+    let m = ids.params_len;
+    loop {
+        let next = match tree {
+            // §6.7: an open hole in the tree is strict — propagate unknown.
+            EvalVal::Unknown => return EvalVal::Unknown,
+            EvalVal::Ctor { id, args, .. } => {
+                if id == ids.ret_id {
+                    // Ret r → finished; return the result.
+                    return args.get(m).cloned().unwrap_or(EvalVal::Unknown);
+                } else if id == ids.vis_id {
+                    // Vis e k → perform+observe (H e), resume (apply k resp), loop.
+                    let e = args[m].clone();
+                    let k = args[m + 1].clone();
+                    let resp = handler(e);
+                    apply(k, resp, globals, store)
+                } else {
+                    // Unrecognised constructor — stuck (should not happen for
+                    // well-typed programs; closed ground ITree is either Ret or Vis).
+                    return EvalVal::Neutral;
+                }
+            }
+            // Any other value (closure, type-former, neutral) — stuck.
+            _ => return EvalVal::Neutral,
+        };
+        tree = next;
+    }
+}
+
 // ── utility helpers ───────────────────────────────────────────────────────────
 
 /// Total arity of a constructor (params + ctor-specific args).
