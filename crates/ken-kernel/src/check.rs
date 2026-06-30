@@ -814,11 +814,12 @@ fn infer_quot_elim(
         let m_y = Term::app(weaken(motive, 3), y_class);
         let f_x = Term::app(weaken(method, 3), Term::var(2));
         let f_y = Term::app(weaken(method, 3), Term::var(1));
-        // cast ignores its proof (§3.4); refl(M[x]) is a valid Ω witness.
+        // Transport f_y from M[y] (its type) to M[x] (the Eq's required RHS type).
+        // Source = M[y], target = M[x]; cast ignores the proof (§3.4).
         let cast_fy = Term::Cast(
+            Box::new(m_y.clone()),
             Box::new(m_x.clone()),
-            Box::new(m_y),
-            Box::new(Term::Refl(Box::new(m_x.clone()))),
+            Box::new(Term::Refl(Box::new(m_y.clone()))),
             Box::new(f_y),
         );
         let eq_body = Term::Eq(Box::new(m_x), Box::new(f_x), Box::new(cast_fy));

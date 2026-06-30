@@ -537,6 +537,135 @@ fn quotient_respect_type_target() {
     );
 }
 
+/// Direction discriminant for the seam-3 Cast: `Cast(M[y], M[x], _, f_y)` vs
+/// the pre-fix wrong direction `Cast(M[x], M[y], _, f_y)`.
+///
+/// Uses a Vec-indexed motive so `cast_at_inductive` fires for BOTH directions
+/// (no stuck case), making the wrong-direction observable as a different result
+/// value rather than an opaque neutral.
+///
+/// *   **Correct** `Cast(m_y, m_x, _, f_y)` → `vcons A m a (Cast … xs)` —
+///     forced index is **m** (the TARGET `m_x` index); xs gets a sub-cast.
+/// *   **Wrong**   `Cast(m_x, m_y, _, f_y)` → `vcons A n a xs` — forced
+///     index is **n** (the SOURCE `m_x` index); xs is unchanged. Result type
+///     is `m_y`, not `m_x` — exactly the type error the seam-3 bug introduced.
+///
+/// Verdict flip: correct→forced index = `suc_m`; wrong→forced index = `suc_n`.
+#[test]
+fn quotient_respect_direction_cast() {
+    let (mut env, s) = std_env();
+    let ctx = Context::new();
+
+    // A, a, n, m : neutral postulates.
+    let big_a_id = declare_postulate(&mut env, vec![], Term::Type(Level::zero())).unwrap();
+    let big_a = Term::Const { id: big_a_id, level_args: vec![] };
+    let a_id = declare_postulate(&mut env, vec![], big_a.clone()).unwrap();
+    let small_a = Term::Const { id: a_id, level_args: vec![] };
+    let n_id = declare_postulate(&mut env, vec![], nat_t(&s)).unwrap();
+    let n = Term::Const { id: n_id, level_args: vec![] };
+    let m_id = declare_postulate(&mut env, vec![], nat_t(&s)).unwrap();
+    let m = Term::Const { id: m_id, level_args: vec![] };
+
+    // xs : Vec A n (tail of f_y).
+    let xs_id =
+        declare_postulate(&mut env, vec![], vec_t(&s, big_a.clone(), n.clone())).unwrap();
+    let xs = Term::Const { id: xs_id, level_args: vec![] };
+
+    // f_y = vcons A n a xs : Vec A (suc n)  (method-at-y; its type is m_y).
+    let suc_n = suc_t(&s, n.clone());
+    let suc_m = suc_t(&s, m.clone());
+    let m_y = vec_t(&s, big_a.clone(), suc_n.clone()); // M[y] = Vec A (suc n)
+    let m_x = vec_t(&s, big_a.clone(), suc_m.clone()); // M[x] = Vec A (suc m)
+    let f_y = vcons_t(&s, big_a.clone(), n.clone(), small_a.clone(), xs.clone());
+
+    // Proof witnesses (postulates); cast ignores the proof (§3.4).
+    let e_correct_ty = Term::Eq(
+        Box::new(Term::Type(Level::zero())),
+        Box::new(m_y.clone()),
+        Box::new(m_x.clone()),
+    );
+    let e_correct = Term::Const {
+        id: declare_postulate(&mut env, vec![], e_correct_ty).unwrap(),
+        level_args: vec![],
+    };
+    let e_wrong_ty = Term::Eq(
+        Box::new(Term::Type(Level::zero())),
+        Box::new(m_x.clone()),
+        Box::new(m_y.clone()),
+    );
+    let e_wrong = Term::Const {
+        id: declare_postulate(&mut env, vec![], e_wrong_ty).unwrap(),
+        level_args: vec![],
+    };
+
+    // CORRECT direction: Cast(m_y, m_x, e, f_y) — transport f_y from M[y] to M[x].
+    let result_correct = whnf(
+        &env,
+        &ctx,
+        &Term::Cast(
+            Box::new(m_y.clone()),
+            Box::new(m_x.clone()),
+            Box::new(e_correct),
+            Box::new(f_y.clone()),
+        ),
+    );
+    let (head_c, args_c) = peel_app(&result_correct);
+    assert!(
+        matches!(head_c, Term::Constructor { id, .. } if id == s.vcons),
+        "correct-direction cast must fire to vcons; got {:?}",
+        result_correct
+    );
+    // args[1] = tail length n' such that result = vcons A n' a (Cast xs) : Vec A (suc n').
+    // Correct direction forces n' = m (from TARGET j_bar = suc m; inner arg = m).
+    assert!(
+        convert_type(&env, &ctx, &args_c[1], &m),
+        "correct direction: tail-length arg must be m (TARGET's inner); got {:?}",
+        args_c[1]
+    );
+    // xs position carries a Cast (not bare xs) — because a_ty_j = Vec A n ≢ b_ty_j = Vec A m.
+    assert!(
+        matches!(&args_c[3], Term::Cast(..)),
+        "correct direction: xs position must be Cast; got {:?}",
+        args_c[3]
+    );
+
+    // WRONG direction (pre-fix bug): Cast(m_x, m_y, e, f_y).
+    // cast_at_inductive still fires (both Vec), but forces index n (from SOURCE
+    // j_bar in the wrong direction = suc n; inner arg = n), so result type is
+    // Vec A (suc n) = m_y instead of m_x — the schema's RHS has the wrong type.
+    let result_wrong = whnf(
+        &env,
+        &ctx,
+        &Term::Cast(
+            Box::new(m_x.clone()),
+            Box::new(m_y.clone()),
+            Box::new(e_wrong),
+            Box::new(f_y.clone()),
+        ),
+    );
+    let (head_w, args_w) = peel_app(&result_wrong);
+    assert!(
+        matches!(head_w, Term::Constructor { id, .. } if id == s.vcons),
+        "wrong-direction cast fires (cast_at_inductive is structural)"
+    );
+    // Wrong direction forces tail-length n (from TARGET j_bar of wrong cast = suc n).
+    assert!(
+        convert_type(&env, &ctx, &args_w[1], &n),
+        "wrong direction: tail-length arg must be n (wrong-direction result); got {:?}",
+        args_w[1]
+    );
+    assert!(
+        !convert_type(&env, &ctx, &args_w[1], &m),
+        "wrong direction must NOT produce m (that would be the correct cast)"
+    );
+    // xs is bare (no sub-cast): b_ty_j for xs collapses to a_ty_j = Vec A n
+    // because the wrong direction targets its own SOURCE index, not the schema's target.
+    assert!(
+        !matches!(&args_w[3], Term::Cast(..)),
+        "wrong direction: xs must be bare (no sub-cast for wrong-direction transport)"
+    );
+}
+
 // =============================================================================
 // Regression — existing seams must be unaffected
 // =============================================================================
