@@ -121,6 +121,11 @@ pub enum EvalVal {
     // --- Scalar immediates (K3 stores these without interning) ---
     Bool(bool),
     Int(i64),
+    /// Immutable byte sequence (Bytes primitive, `38 §1.1`). Treated as a
+    /// pseudo-immediate at the eval layer for simplicity; K3 interns as compound.
+    Bytes(Vec<u8>),
+    /// NFC-normalized UTF-8 string (for encode/decode boundary, `38 §1.4`).
+    Str(String),
     BigInt(i128),                         // Int values > i64::MAX or < i64::MIN
     Float(f64),                           // IEEE 754 double
     Float32(f32),                         // IEEE 754 single
@@ -241,6 +246,8 @@ fn to_rt(val: &EvalVal) -> Option<RtValue> {
                 None
             }
         }
+        EvalVal::Bytes(b) => Some(RtValue::Bytes(b.clone())),
+        EvalVal::Str(s) => Some(RtValue::String(s.clone())),
         _ => None,
     }
 }
@@ -637,8 +644,10 @@ pub fn eval_vals_eq(a: &EvalVal, b: &EvalVal) -> bool {
 ///
 /// Covers `L1` numeric tower: Int (i128-exact), fixed-width, Decimal, Float,
 /// Float32, Bool, plus legacy `add`/`sub`/`mul` (wrapping i64).
+/// `L6` Bytes ops and encode/decode (`38 §1.2`, `38 §1.4`) are also grounded.
 /// Division and fault-triggering operations are out of scope (`43 §2.2`).
-fn prim_reduce(symbol: &str, args: &[EvalVal]) -> EvalVal {
+/// Exposed `pub` for conformance tests in `ken-elaborator`.
+pub fn prim_reduce(symbol: &str, args: &[EvalVal]) -> EvalVal {
     // Unknown operand: propagate strictly.
     if args.iter().any(|a| matches!(a, EvalVal::Unknown)) {
         return EvalVal::Unknown;
@@ -724,6 +733,52 @@ fn prim_reduce(symbol: &str, args: &[EvalVal]) -> EvalVal {
         ("add", [EvalVal::Int(a), EvalVal::Int(b)]) => EvalVal::Int(a.wrapping_add(*b)),
         ("sub", [EvalVal::Int(a), EvalVal::Int(b)]) => EvalVal::Int(a.wrapping_sub(*b)),
         ("mul", [EvalVal::Int(a), EvalVal::Int(b)]) => EvalVal::Int(a.wrapping_mul(*b)),
+
+        // ── Bytes primitive ops (`38 §1.2`) ──────────────────────────────────
+        ("bytes_length", [EvalVal::Bytes(b)]) => EvalVal::Int(b.len() as i64),
+
+        // `at b i` — in-bounds: byte as Int; OOB: Neutral (no silent OOB read).
+        ("bytes_at", [EvalVal::Bytes(b), EvalVal::Int(i)]) => {
+            let idx = *i;
+            if idx >= 0 && (idx as usize) < b.len() {
+                EvalVal::Int(b[idx as usize] as i64)
+            } else {
+                EvalVal::Neutral
+            }
+        }
+
+        // `slice b start len` — in-bounds: sub-slice as Bytes; OOB: Neutral.
+        ("bytes_slice", [EvalVal::Bytes(b), EvalVal::Int(start), EvalVal::Int(len)]) => {
+            let s = *start;
+            let l = *len;
+            if s >= 0 && l >= 0 {
+                let s = s as usize;
+                let l = l as usize;
+                if s <= b.len() && l <= b.len() - s {
+                    EvalVal::Bytes(b[s..s + l].to_vec())
+                } else {
+                    EvalVal::Neutral
+                }
+            } else {
+                EvalVal::Neutral
+            }
+        }
+
+        ("bytes_concat", [EvalVal::Bytes(a), EvalVal::Bytes(b)]) => {
+            let mut out = a.clone();
+            out.extend_from_slice(b);
+            EvalVal::Bytes(out)
+        }
+
+        // ── String ↔ Bytes encode/decode (`38 §1.4`) ─────────────────────────
+        // encode: total — String is always valid UTF-8 at construction.
+        ("bytes_encode", [EvalVal::Str(s)]) => EvalVal::Bytes(s.as_bytes().to_vec()),
+
+        // decode: partial — Neutral on invalid UTF-8 (represents Err(_)).
+        ("bytes_decode", [EvalVal::Bytes(b)]) => match std::str::from_utf8(b) {
+            Ok(s) => EvalVal::Str(s.to_string()),
+            Err(_) => EvalVal::Neutral,
+        },
 
         // Partial or unrecognised primitive: neutral (stuck on non-literals).
         _ => EvalVal::Neutral,
@@ -1115,6 +1170,10 @@ fn prim_arity(symbol: &str) -> usize {
         s if s.starts_with("add_int") || s.starts_with("sub_int") || s.starts_with("mul_int") => 2,
         s if s.starts_with("add_uint") || s.starts_with("sub_uint") || s.starts_with("mul_uint") => 2,
         s if s.starts_with("wrapping_") => 2,
+        // ── Bytes ops (`38 §1.2`, `38 §1.4`) ─────────────────────────────
+        "bytes_length" | "bytes_encode" | "bytes_decode" => 1,
+        "bytes_at" | "bytes_concat" => 2,
+        "bytes_slice" => 3,
         _ => 1,
     }
 }
