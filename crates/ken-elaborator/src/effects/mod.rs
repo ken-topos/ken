@@ -37,8 +37,10 @@
 
 pub mod algebra;
 pub mod check;
+pub mod extract;
 pub mod infer;
 pub mod itree;
+pub mod lower;
 pub mod row;
 pub mod row_poly;
 
@@ -51,4 +53,6 @@ pub use check::{
 pub use infer::{infer_all, infer_row, EffectDecl};
 pub use itree::{bind, handler_fold, perform, HandlerCase, ITree, Response, Value};
 pub use row::{EffectName, EffectRow, RowSubst, RowType, RowVar};
+pub use extract::{build_decl_with_extracted_params, extract_hof_params, RowVarAllocator};
+pub use lower::{lower_bind, lower_elim_itree, lower_handler_fold_uniform};
 pub use row_poly::{check_row_poly_escape, infer_row_poly};
