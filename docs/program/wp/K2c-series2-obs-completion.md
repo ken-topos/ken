@@ -35,24 +35,31 @@ structural assertion on the reduct) — no vacuous reject.
 
 ## The three seams (from K2's carry-forward, `K2c-conversion.md`)
 
-1. **`cast`-at-inductive index rewrite.** `cast_at_inductive` rebuilds the
-   constructor but keeps the family-index *value*, wrapping in `Cast` when the
-   index changes (the suc-injectivity / index-equality seam): casting
-   `Vec A n → Vec A m` of `vcons n a xs` currently leaves the index `n`. Complete
-   the index-rewrite so the cast computes through to the `m`-indexed form per the
-   observational `cast` rules (`16 §9`), wrapping sub-casts where the index proof
-   demands.
+1. **`cast`-at-inductive index rewrite.** *(Landed-kernel note, spec-leader
+   checkpoint 2026-06-30 — verify against the code, not this line.)* The earlier
+   "keep-the-index-and-wrap-in-`Cast`" behavior was **removed as unsound**
+   (Architect `dec_7xpn5ywf4ebfw`); the kernel is now **cleanly stuck** on the
+   index-change case — do **not** restore the naive keep-and-wrap. Complete it via
+   **suc-injectivity index decomposition + sub-cast**: casting `Vec A n → Vec A m`
+   of `vcons n a xs` (`n ≢ m`) computes through to the `m`-indexed form, the index
+   rewritten with sub-casts where the index proof demands, per the observational
+   `cast` rules (`16 §9`). Gate on a valid index `Eq`; an ill-justified index cast
+   stays neutral/`Err`.
 2. **Non-constant-motive `J`-on-non-`refl`** — *the hard OTT core.* `J` reduces
    for constant motives (the headline) and is left **neutral** otherwise; the
    `cong`/`sym` sub-equality construction for a non-constant motive is unfinished.
    Complete it: build the transported sub-equality so `J` computes on a non-`refl`
    `Eq` proof at a dependent motive, per the OTT `Eq`-by-type semantics.
-3. **Full quotient `respect`.** `check_respect` raw-well-forms the respect proof
-   for **non-Ω** targets (an inline "soundness TODO") rather than verifying the
-   full `cong`/`cast` schema. Complete the schema check. (Ω-target cases are
-   respect-free per `16 §5` and are already correct — **do not** regress them; and
-   recall the **Ω-element-vs-proof** discipline: proof-irrelevance fires on
-   `typeOf(A)=Ω_l`, never on `A=Ω_l`.)
+3. **Full quotient `respect`.** *(Landed-kernel note, spec-leader checkpoint —
+   the earlier raw-well-forms "soundness TODO" is gone.)* `check_respect` now
+   **hard-rejects** non-Ω quotient elims rather than raw-well-forming them, so the
+   deliverable is **not** "replace a TODO" but **"add the full `cong`/`cast`
+   respect schema so a non-Ω `elim_/` type-checks + computes *only* with a valid
+   respect proof"** — replacing the conservative hard-reject for the valid case,
+   while an **invalid** respect proof stays **rejected** (gate, don't raw-well-
+   form — the K2 closed-`Empty` lesson). (Ω-target cases are respect-free per
+   `16 §5` and correct — **do not** regress them; hold the **Ω-element-vs-proof**
+   line: proof-irrelevance fires on `typeOf(A)=Ω_l`, never on `A=Ω_l`.)
 
 ## The elaboration this needs (spec-leader → spec-author + Architect)
 
