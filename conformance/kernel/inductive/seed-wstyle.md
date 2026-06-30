@@ -15,7 +15,7 @@ grounded in the landed §-bodies + first principles; `yon` not consulted.
 
 Every discriminating case **flips** (correct accepts / the targeted bug rejects,
 or vice versa) or asserts a **verdict-independent structural output** (the ι
-reduct, the neutral form of a stuck inner eliminator). No free implementation
+reduct; whether the inner elim fires or stays neutral). No free implementation
 choices remain to tag `(oracle)` — admittance and ι are spec-settled.
 
 The two canonical admitted shapes used throughout:
@@ -191,23 +191,42 @@ Spec: `14 §7.7`, `§9.4`.
   under that
   bug.
 
-### kernel/inductive/wstyle-inner-elim-stuck-under-binder (soundness)
-- spec: `14 §7.7`, `§7.6`, `§9.4`
-- given: the reduct of one W-ι step, `… (λ b. elim_W M s (k b)) …`, where `b` is
-  λ-bound and `k b` therefore has no constructor head
-- expect: the inner `elim_W M s (k b)` is **neutral / stuck** — it does **not**
-  re-fire during normalization (no further ι until the IH is *applied* to a
-  concrete branch whose image is a constructor)
-- why: this is the exact mechanism that keeps conversion **decidable** with a
-  function-typed IH (`§7.7`, `§9.4`): each ι consumes **one** constructor layer
-  and the residual `elim_W` sits under a binder applied to the neutral `k b`
-  (`§7.6` stuck eliminator), producing **no constructor-free redex**.
-  Verdict-independent **structural** assertion (the dual of a value-flip, per
-  the non-observable-property rule): assert the inner eliminator's *form* is
-  neutral.
-  A bug that eagerly forced `k b` / re-fired the inner eliminator would either
-  diverge or mis-normalize — the structural check catches it where a value
-  comparison on a terminating example could not.
+### kernel/inductive/wstyle-inner-elim-fires-through-branching-fn (soundness)
+- spec: `14 §7.7`, `§9.4`
+- given: the reduct of one W-ι step, `… (λ b. elim_W M s (k b)) …`, for a
+  **constructor-producing** branching function `k = λ x. sup a' k'` (the
+  typical case — `ITree`'s `k = λ x. Vis e' (k' x)`)
+- expect: under a fresh abstract branch variable `b`, `k b` whnf's to a
+  **constructor** (`sup a' k'`, head independent of `b`), so the inner `elim_W M
+  s (k b)` **fires** and recurses on `k b` — a structurally-smaller child of the
+  scrutinee, reached through a β-step on `k`
+- why: the corrected mechanism (`§7.7` "Why conversion still decides", `§9.4`
+  point 1): the inner elim is **not** stuck for a constructor-producing `k` — ι
+  re-fires, and this drives during conversion too (η-comparing two IHs at their
+  Π type applies a fresh `b*`, firing exactly this recursion). Complements
+  `wstyle-iota-in-conversion` (a constructor head always fires ι) rather than
+  contradicting it. **Verdict-flip:** a checker that wrongly treats `elim_W (k
+  b)` as stuck (the corrected-away "stuck under the binder" reading) leaves the
+  redex unfired → valid programs become **inconvertible**; a correct checker
+  fires it → convertible. Termination is by finiteness
+  (`wstyle-iota-decides-halts`), not by stuckness.
+
+### kernel/inductive/wstyle-inner-elim-neutral-when-k-inspects-b
+- spec: `14 §7.7`, `§7.6`
+- given: the same reduct `… (λ b. elim_W M s (k b)) …`, but for a branching
+  function that **inspects** its argument, `k = λ x. elim_Bool x …`, so `k b` is
+  neutral on an abstract `b`
+- expect: in this **special** sub-case the inner `elim_W M s (k b)` is genuinely
+  **neutral / stuck** (its scrutinee `k b` has no constructor head until `b` is
+  a concrete branch); congruence compares it pointwise (`§7.6`)
+- why: `§7.7`/`§9.4` flag this as the **incidental** genuinely-neutral case — it
+  is **not** the basis of decidability (that is finiteness). Pinned explicitly
+  so the corpus separates it from the constructor-producing case above: a
+  checker
+  must **fire** the inner elim when `k` produces a constructor and treat it as
+  **neutral** only when `k` inspects `b`. Guards both the over-fire (forcing a
+  genuinely-neutral `k b`) and the under-fire (the corrected-away
+  general-stuckness bug).
 
 ### kernel/inductive/wstyle-iota-decides-halts (soundness)
 - spec: `14 §9.4`, `§7.7`
@@ -216,12 +235,13 @@ Spec: `14 §7.7`, `§9.4`.
 - expect: **terminates** with a normal form — no infinite loop, no regression to
   the K2c SCT/decidability guarantee
 - why: structural decrease on a **finite, inductive** (not coinductive) W-tree
-  (`§9.4`): the recursion lands on **children** `k b` reached through the
-  branching function, staged under a binder and stuck until applied, bottoming
-  out at a base constructor (`Ret`/`leaf`) or a W-branching with empty domain.
-  Eliminator recursion is total **without** SCT, and W-style ι introduces no
-  general recursive δ-definition — the K2c decidability argument is untouched
-  (`§9.4`).
+  (`§9.4`): the inner ι **fires** through the branching function (a β-step on
+  `k`) and recurses on **children** `k b`, each a structurally-smaller subtree;
+  the finite tree and finite λ-terms bound the descent, which bottoms out at a
+  base constructor (`Ret`/`leaf`) or a W-branching with empty domain —
+  **finiteness, not stuckness, is what decides**. Eliminator recursion is total
+  **without** SCT, and W-style ι introduces no general recursive δ-definition —
+  the K2c decidability argument is untouched (`§9.4`).
 
 ---
 
