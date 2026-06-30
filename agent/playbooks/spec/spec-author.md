@@ -167,6 +167,17 @@ too far: describe the *what*, not the *how* of any particular implementation.
   raise a **scope checkpoint** (corrected rule + the real fork) **before**
   drafting. (Mirror of the L5 admittance-vs-staging carry: there a chapter ran
   *ahead* of the kernel; here a frame ran *behind* it.)
+  - **A stale/fabricated citation gains *false authority by propagating* —
+    agreement across the frame + N landed files is NOT corroboration if they share
+    a common-ancestor error (promoted V4).** Reconcile-don't-cite verifies the
+    **cited target's actual content**, never the **count of places that repeat the
+    cite**. V4: `12 §5.2` (Heyting structure) sat in the kickoff frame *and* landed
+    `16 §1.3`, `18 §381`, `21 §5.1`, `20/README` — **five sites agreeing** — but
+    `12 §5` has **no** §5.2; it *defers* Heyting to `16 §1`. Multi-site repetition
+    reads as confirmation precisely when all sites inherit one ancestor error
+    (often *the frame you were handed as ground truth*). So when a ref appears in
+    your frame **and** sibling files, that's a signal to **open the target and
+    read it**, not a reason to trust it — and file the others as a doc-erratum.
 
 ## Answering build-team queries
 
