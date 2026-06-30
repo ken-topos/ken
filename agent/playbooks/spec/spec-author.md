@@ -38,6 +38,23 @@ too far: describe the *what*, not the *how* of any particular implementation.
 - **Resolve silences when structurally determined (§6);** record the resolution
   inline with a rationale. Escalate only genuine forks (→ Decision, → Steward
   for scope).
+  - **A silence at a *verdict / classification boundary* is the highest-risk kind
+    — pin which output maps to which verdict, at the source (promoted V3-prover).**
+    When you write a procedure "returns **X or Y**" (a proof term *or* a
+    countermodel; accepts *or* rejects; route A *or* route B), **do not leave the
+    verdict each output yields unstated** — that unpinned mapping is exactly where
+    you and the conformance author fill the silence **differently**, and the
+    silence you leave becomes the **bug they inherit** (V3: `23 §5`'s "returns a
+    proof term or a Kripke countermodel" was unpinned → the validator read
+    "countermodel ⇒ `disproved`," but a classically-valid goal is **never**
+    refutable (Glivenko) → it belongs in the `unknown` gap; D2 shipped a wrong
+    verdict into the seed). You resolve Ω-typing and level silences by reflex —
+    add **verdict-mapping** to that list. The tell that one slipped through is a
+    **cross-case contradiction in the corpus on overlapping metatheory** (A3 vs
+    D2) — so on your Spec-vote review run the **cross-case consistency sweep**
+    (group cases by shared metatheory class, assert verdict-agreement), not only
+    per-case verdict-flip. Author-side mirror of `conformance-reconcile-inherits-
+    spec-metatheory-bugs`.
 - **Divergences are already recorded** in the spec (e.g. `Int` from day one,
   checked universes, no hard slot ceiling) — these are Ken's own design, not
   gaps to close.
