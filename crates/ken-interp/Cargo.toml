@@ -10,3 +10,7 @@ rust-version.workspace = true
 
 [dependencies]
 ken-kernel = { path = "../ken-kernel" }
+ken-runtime = { path = "../ken-runtime" }
+
+[dev-dependencies]
+ken-elaborator = { path = "../ken-elaborator" }
