@@ -117,6 +117,16 @@ implementations across the whole federation. Read `../../COORDINATION.md`,
   constructor-producing `k` — a conflict visible **within the file**, without the
   Architect. A self-contradicting corpus encodes a bug by construction; this is a
   standing gate alongside verdict-flip and trust-root coverage.
+  - **Check *mechanism*-consistency, not just input/output-consistency (promoted
+    V2; 2nd recurrence in my lane).** A per-case input→output pass misses a
+    cross-case **mechanism** contradiction: when several cases exercise the **same**
+    extraction/reduction mechanism, verify they agree on its **shape** across the
+    parameter that varies. V2's case A2 (`abs`, straight-line body) expected a
+    **single** postcondition obligation while C/D1 (branchy/recursive) expected
+    **per-branch** — unsatisfiable *as a mechanism* (a single obligation over an
+    eliminator carries no IH), yet each case looked fine in isolation; spec-author
+    caught it. Ask: *"do my straight-line / branchy / recursive (or constant /
+    dependent-motive) cases agree on the shape of the shared mechanism?"*
 - **Absence assertions are the highest-risk cases — gate them, don't transcribe
   them (promoted K2c-series-2; subsumes finiteness-not-stuckness + verdict-flip
   for this family).** A **positive** reduction self-verifies (it computes the
@@ -131,6 +141,20 @@ implementations across the whole federation. Read `../../COORDINATION.md`,
   that *cannot fire* on a neutral index; that's why it's sound, not coincidence.)
   This is one rule for the whole `stuck`/`neutral`/`rejected` family — the
   3rd–5th instance of the class that gave K1.5 its false case.
+- **At an untrusted-producer WP (the V-series V2/V3/V4, X1, B-series), split "the
+  kernel backstops it" into *supplied* vs *omitted* (promoted V2, topology-
+  touching; Architect made it a review gate).** "★★ — everything it emits is
+  re-checked, so never unsoundness" is true only for what the layer **supplies**
+  (a bogus cert is kernel-rejected). It is **false for what the layer silently
+  *omits*:** a *never-generated* obligation supplies no cert, so `trusted_base()`
+  never sees it and it reads `proved`-by-default — a **verification-soundness**
+  gap the kernel does **not** catch. So at these WPs, **completeness/exhaustiveness
+  of extraction is the *sole* backstop**, and your conformance must assert it
+  **structurally** — the **absent-clause scan** ("which spec sub-case yields *no*
+  obligation/effect-rule?") + an **exhaustive-traversal / no-silent-`_⇒skip`**
+  assertion on the producer's *shape* (no value-flip; it asserts the absence of a
+  catch-all). Carry this split into every V2/V3/V4 seed; see memory
+  `untrusted-layer-backstop-hole-for-omissions`.
 
 ## Discipline
 
