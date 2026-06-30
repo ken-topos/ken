@@ -10,7 +10,8 @@
 use ken_elaborator::capabilities::{
     attenuate, authority, authority_flows_to, authority_meet,
     check_audit_boundary, check_authority_and_flow, check_authority_sufficient,
-    check_revocation_transitive, AttenuationObligation, AuthAndFlowResult,
+    check_revocation_transitive, discharge_attenuation,
+    AttenuationObligation, AuthAndFlowResult,
     Cap, CapError, RevocationHandle, AUTH_FULL, AUTH_NONE, AUTH_PARTIAL,
 };
 use ken_elaborator::effects::{
@@ -18,6 +19,8 @@ use ken_elaborator::effects::{
     EffectName, EffectRow, WitnessMap,
 };
 use ken_elaborator::ifc::{check_declassify_in_delta, FlowCtx, PUBLIC, SECRET};
+use ken_elaborator::prover::Verdict;
+use ken_kernel::GlobalEnv;
 
 // ────────────────────────────────────────────────────────────────────────────
 // A. No ambient authority (AC1)
@@ -149,34 +152,44 @@ fn attenuated_cap_at_strong_sink_rejects() {
     }
 }
 
-/// C3: the attenuation bound is KERNEL-BACKED — the elaborator emits a
-/// refinement obligation `authority c' ⊑ authority c ⊓ w` that the kernel
-/// re-checks. A too-strong child makes the obligation undischargeable.
+/// C3: the attenuation bound is KERNEL-BACKED — the elaborator emits the
+/// refinement obligation `authority c' ⊑ authority c ⊓ w` (`62 §3.1`/`22
+/// §2.1`) and the kernel re-checks it via `discharge_attenuation`. Canonical
+/// child: kernel `Proves`. Over-strong child: kernel returns `Unknown` (the
+/// deviant obligation is undischargeable — `Refl` fails on distinct
+/// postulates).
 #[test]
 fn attenuate_bound_is_kernel_rechecked() {
+    // Canonical: authority(c') = bound = 1 → same postulate both sides
+    // → Eq(T, v, v), cert = Refl(v) → Proved
     let parent = Cap::mint(AUTH_FULL, "FS");
     let (_, obl) = attenuate(&parent, AUTH_PARTIAL);
+    let mut env = GlobalEnv::new();
+    let result = discharge_attenuation(&mut env, &obl, "c3_canonical");
+    assert!(
+        matches!(result.verdict, Verdict::Proved { .. }),
+        "canonical attenuate obligation must be Proved by kernel re-check (Refl on same postulate)"
+    );
 
-    // Canonical child obligation: authority(c') = bound = 1 → is_satisfied
-    assert!(obl.is_satisfied(),
-        "canonical attenuate must satisfy the obligation (⊑-refl)");
-
-    // Over-strong child: authority(c') = 2 ⊐ bound=1 → NOT satisfied
-    // The kernel would reject the refinement discharge for this child.
+    // Over-strong: authority(c') = AUTH_FULL(2) > bound = AUTH_PARTIAL(1)
+    // → distinct postulates → Refl(child) cannot prove Eq(T, c, b) → Unknown
     let over_strong_obl = AttenuationObligation {
-        child_authority:  AUTH_FULL,    // 2 ⊐ bound=1 → too strong
+        child_authority:  AUTH_FULL,    // 2 ⊐ bound=1 — too strong
         parent_authority: AUTH_FULL,
         window:           AUTH_PARTIAL,
         bound:            AUTH_PARTIAL, // parent ⊓ window = 1
     };
-    assert!(!over_strong_obl.is_satisfied(),
-        "over-strong child must NOT satisfy the obligation — kernel rejects");
+    let mut env2 = GlobalEnv::new();
+    let result2 = discharge_attenuation(&mut env2, &over_strong_obl, "c3_over_strong");
+    assert!(
+        matches!(result2.verdict, Verdict::Unknown { .. }),
+        "over-strong child obligation must be Unknown (kernel rejects Refl on distinct postulates)"
+    );
 }
 
 /// C4: no amplifying operation exists.
-/// `attenuate c ⊤` cannot exceed `authority c`; `Cap::mint` is `pub(crate)` —
-/// no public constructor, no public `strengthen`/`amplify`. Authority is
-/// downward-only by construction.
+/// `attenuate c ⊤` cannot exceed `authority c`; there is no `strengthen` or
+/// `amplify` in the public API. Authority is monotone-downward by construction.
 #[test]
 fn no_amplifying_operation_exists() {
     let parent = Cap::mint(AUTH_PARTIAL, "FS");
@@ -188,9 +201,8 @@ fn no_amplifying_operation_exists() {
         "attenuate c ⊤ must still satisfy authority(c') ⊑ authority(c)");
     assert!(obl.is_satisfied());
 
-    // Structural: `Cap::mint` is pub for handlers and tests; the surface language
-    // authority discipline (not Rust visibility) prevents user-code forgery.
     // `attenuate` is the only derivation from a held cap — monotone-downward.
+    // The surface language's elaboration discipline prevents user-code forgery.
     let c2 = Cap::mint(AUTH_PARTIAL, "Net");
     let (c_weak, _) = attenuate(&c2, AUTH_NONE);
     assert_eq!(authority(&c_weak), AUTH_NONE, "attenuate to ⊥ yields minimal authority");

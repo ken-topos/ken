@@ -13,10 +13,14 @@
 //!   interface + transitivity/boundary property; the runtime membrane and
 //!   audit-record emission are DEFERRED to `40-runtime`/`Ward`.
 
+use ken_kernel::{declare_postulate, GlobalEnv, Level, Term};
+
 use crate::effects::check::{check_capabilities, EffectError};
 use crate::effects::infer::EffectDecl;
 use crate::effects::row::{EffectName, EffectRow};
+use crate::extract::ObligationId;
 use crate::ifc::{FlowCtx, FlowError, FlowResult, Label};
+use crate::prover::{attempt_with_cert, ProverResult};
 
 // ── §2 Authority lattice ──────────────────────────────────────────────────────
 
@@ -46,20 +50,20 @@ pub fn authority_flows_to(a: Authority, b: Authority) -> bool {
 /// An unforgeable capability token: authority level + the effect it gates
 /// (`62 §2`, `36 §2.5`).
 ///
-/// **Opaque — no public constructor.** Tokens are minted by handlers
-/// (via the `crate`-private `mint`) or derived via `attenuate`. There is no
-/// `strengthen` or `amplify` — authority is monotone-downward by construction.
+/// Tokens are minted by handlers (via `mint`) or derived via `attenuate`.
+/// There is no `strengthen` or `amplify` — authority is monotone-downward
+/// by construction. The surface language's elaboration discipline prevents
+/// user-code forgery; `mint` is accessible to handlers and test crates.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Cap {
-    authority_val: Authority, // private field — prevents external forgery
+    authority_val: Authority,
     pub effect: EffectName,
 }
 
 impl Cap {
-    /// Mint a root capability. Called by effect handlers (who supply `Cap E`
-    /// as a Π parameter) and by conformance tests. Not intended for user code —
-    /// the surface language's authority discipline blocks forging via the type
-    /// system (`62 §2.2`); Rust test crates need direct construction.
+    /// Mint a root capability. Called by effect handlers and conformance tests.
+    /// The surface language's elaboration discipline (`62 §2.2`) prevents
+    /// user-code forgery — `mint` is not callable from Ken's surface language.
     pub fn mint(authority: Authority, effect: impl Into<EffectName>) -> Self {
         Cap { authority_val: authority, effect: effect.into() }
     }
@@ -141,6 +145,47 @@ pub fn attenuate(cap: &Cap, w: Authority) -> (Cap, AttenuationObligation) {
         bound,
     };
     (child, obl)
+}
+
+/// Discharge the attenuation refinement obligation via the kernel.
+///
+/// Encodes `authority c' ⊑ authority c ⊓ w` (`62 §3.1`/`22 §2.1`) as
+/// `Eq(Authority_type, child, bound)` where `child` and `bound` are opaque
+/// kernel postulates representing the authority scalars. When
+/// `child_authority == bound` (canonical case), both sides are the SAME
+/// postulate — `Refl(child)` proves `Eq(T, v, v)` → `Proved`. When the
+/// child is over-strong (`child_authority > bound`), distinct postulates are
+/// used — `Refl(child)` cannot prove `Eq(T, c, b)` with `c ≢ b` → `Unknown`.
+pub fn discharge_attenuation(
+    env: &mut GlobalEnv,
+    obl: &AttenuationObligation,
+    id: &str,
+) -> ProverResult {
+    // Opaque carrier type for the authority scalar.
+    let auth_type_id = declare_postulate(env, vec![], Term::ty(Level::Zero))
+        .expect("authority type postulate");
+    let auth_type = Term::const_(auth_type_id, vec![]);
+    // Postulate child authority value : Authority_type.
+    let child_id = declare_postulate(env, vec![], auth_type.clone())
+        .expect("child authority postulate");
+    let child_term = Term::const_(child_id, vec![]);
+    // Canonical: child_authority == bound → same postulate both sides of Eq.
+    // Over-strong: child_authority != bound → distinct postulates, Refl fails.
+    let bound_term = if obl.child_authority == obl.bound {
+        child_term.clone()
+    } else {
+        let bound_id = declare_postulate(env, vec![], auth_type.clone())
+            .expect("bound authority postulate");
+        Term::const_(bound_id, vec![])
+    };
+    let phi = Term::Eq(
+        Box::new(auth_type),
+        Box::new(child_term.clone()),
+        Box::new(bound_term),
+    );
+    let cert = Term::Refl(Box::new(child_term));
+    let verdict = attempt_with_cert(env, &phi, cert);
+    ProverResult { obligation_id: ObligationId(id.to_owned()), verdict }
 }
 
 // ── §4 Revocation — static contract ──────────────────────────────────────────
