@@ -98,7 +98,17 @@ already-posted retro to an idle-waiting leader). Per detected stall, mention
 (a **real** `mentions:` mention, never prose — §2); if no action is needed, post
 nothing.
 Graduated recovery: detect → mention → re-mention next interval → escalate to
-Steward. **Diagnose before restarting** an agent.
+Steward. **Diagnose before restarting OR escalating — `tmux capture-pane -t
+moot-<role> -p | tail` first (promoted L6-build + T2-repl, two false
+escalations).** A **stale status line / silence is NOT evidence of a wedge.**
+`Spelunking…` / `esc to interrupt` / a **rising token count** = the agent is
+heads-down working (a substantial fix can run 20–30 min silent) — **do not nudge
+or escalate**, you risk discarding its in-progress work. Only an **empty `❯` with
+no activity / an unprocessed mention / an interactive modal / an API error** is a
+real wedge — and a **modal-wedged** session can't be reached by mention at all
+(`EnterPlanMode`/`schedule_call` prompts freeze it; recovery is a Steward `tmux
+send-keys` or an operator restart), so escalate **that** with the capture-pane
+evidence, not a guess from the status line.
 
 **You do not touch GitHub or CI** — that is the Integrator's (COORDINATION §14).
 After you hand a WP to the Integrator, CI status comes back as *its* mootup

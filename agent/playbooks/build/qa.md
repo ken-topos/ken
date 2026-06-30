@@ -87,6 +87,21 @@ the code, and that independence is the point. Read `../../COORDINATION.md` and
      to the same wrong value), so round-trip alone is vacuously self-satisfying.
      Pair **every** round-trip case with ≥1 **structural assertion on the
      serialized form** (the exact tag/field on the wire), or it guards nothing.
+   - **For a NEW-surface WP, grep the producer registration BEFORE counting green
+     — a HARD gate (promoted L6-build; the hand-feeds-the-deliverable trap).** A
+     test for a new capability passes **green-vs-green** if it **hand-feeds the
+     binding/value the WP is supposed to *produce*** and then exercises a
+     **pre-existing** downstream consumer — so the suite is green with **zero** of
+     the new wiring. (L6: AC2/AC3 hand-fed `EffectRow::singleton("FS")` to the
+     pre-existing L5 escape gate while the elaborator registration was entirely
+     absent — 15/15 green, the Architect bounced it.) The tell: *"would this pass
+     if I deleted the new registration?"* So for any WP adding a new primitive /
+     type / elaborator-module / effect-row, **`grep register_<feature>
+     <producer-crate>/src/` for the actual registration call-site BEFORE counting
+     tests green**, and derive the test seed **from** that registration (delete it
+     ⇒ the seed empties ⇒ the verdict flips). This is a **hard gate on
+     new-surface WPs, not a soft guideline** — it lived as a soft guideline (from
+     F4) and got missed at L6 precisely because the suite was run, not grepped.
    - **An untrusted layer's *positive verdict* must reach its constructor through
      exactly ONE grep-able kernel-check call — verify the single path (promoted
      V3-build; pairs with assert-output).** When a layer is believed only because
@@ -159,20 +174,6 @@ You **may** commit small, unambiguous repairs (a typo, a missing assertion). For
 anything requiring judgment about *intended* behavior, do not fix it — Block and
 hand back to the implementer, or raise the behavioral question to Spec.
 
-**Verify the real downstream consequence — never a synthetic stand-in, never the
-handoff prose (promoted Sec1-build/Sec1ct/Σ-sort — ≥3 WPs, 2 teams).** On any
-layer the kernel can't backstop (an erased label, an untrusted projection, a
-sort/classification gate), the test that *guards* it must **route real content
-through the actual layer** and observe the real consequence — a `@ct` value into
-a real `LeakSink`, a real program through the emitter, the downstream *gated
-behavior* of a sort change — **not** predicate about a synthetic
-`is_ct`/`is_sink` literal, and **not** trust the implementer's `merge_ready`
-prose claiming the gate is met (the claim may hold; your job is to verify it
-independently — a QA that trusts the prose re-creates the stub-as-net trap). A
-discriminator case must **flip** on the exact bug it targets
-(right=accept/wrong=reject), as a non-degenerate **pair** where the order can
-silently invert (COORDINATION §7); a green-vs-green case guards nothing.
-
 ## Ring discipline
 
 - You are the checker step in the ring; you do **not** pre-draft tests while the
@@ -182,6 +183,22 @@ silently invert (COORDINATION §7); a green-vs-green case guards nothing.
   origin/main`, and verify against the branch (not a stale worktree — the §1
   worktree/`main`-mismatch trap). Commit any small repairs to `wp/<ID>`, then
   return to your home branch.
+- **After `git rebase origin/main`, RECOMPILE before trusting any green
+  (promoted T2-repl).** The surface drifts under you — `main` may have added enum
+  variants / changed signatures since the implementer's pre-rebase run, so a
+  pre-rebase green is **stale**. Re-run the build + the suite on the rebased
+  branch; never trust the implementer's reported counts across a rebase.
+- **Never `EnterPlanMode` or `schedule_call` — they wedge your session
+  unreachable (promoted T2-repl).** Plan mode is read-only and **blocks you from
+  posting**; `schedule_call` broadcasts into the space and needs a permission
+  prompt. A model reaching for either (often a malformed-tool-call artifact)
+  **freezes on the resulting modal**, after which **mentions can't reach you** (an
+  interactive modal blocks mention processing) and only a Steward `tmux
+  send-keys` or an operator restart recovers it — a new stall class where the
+  agent *itself* is unreachable, not inattentive. You need exactly: the
+  file/search/bash tools to verify, and `post_response` to report. If you find
+  yourself wanting to "plan" or "schedule," **just run the verification and post
+  the verdict.**
 - **Branch-identity pre-flight before you trust any test run (promoted V0):** a
   test run reporting **0 tests is a false green, not a pass** — it usually means
   you're on a stale worktree/scaffold branch, not `wp/<ID>`. Before running the
