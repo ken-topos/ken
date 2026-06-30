@@ -10,26 +10,12 @@ prototype's gaps (the f64 defect; stubbed sum types; no exhaustiveness).
 > `surface/numbers/int-not-float` and `surface/numbers/int-exact-above-2^53` —
 > are **subsumed** there (one home per property); see that file for AC1–AC6.
 
-## surface/data-match/construct-then-eliminate
-- spec: `spec/30-surface/34-data-match.md §1,§3`
-- given: `data Option a = None | Some a`; `match (Some 3) { Some x => x; None =>
-  0 }`
-- expect: **reduces-to** `3` (real constructor + eliminator)
-- why: sum types are finished, not lowered to an opaque base with no eliminator
-  (the prototype's stub would fail this).
-
-## surface/data-match/exhaustiveness-required
-- spec: `spec/30-surface/34-data-match.md §4`
-- given: `match (c : Color) { Red => …; Green => … }` (missing `Blue`)
-- expect: **rejects** (non-exhaustive match) naming the unmatched pattern `Blue`
-- why: exhaustiveness checking the prototype lacks.
-
-## surface/data-match/refinement-obligation
-- spec: `spec/30-surface/34-data-match.md §5`, `20-verification/22`
-- given: passing a plain `Int` where `{ n : Int | n > 0 }` is expected
-- expect: an **obligation** `n > 0` is generated at that point (discharged or a
-  hole), not a silent coercion
-- why: refinements enforce; using `A` as `{x:A|φ}` costs a proof.
+> **The `surface/data-match/*` cases moved.** Sum types, `match`,
+> exhaustiveness + reachability, indexed families, and refinement types are now
+> pinned to L2 rigor in `data-match/seed-data-match.md`. The three bootstrap
+> cases that lived here — `construct-then-eliminate`, `exhaustiveness-required`,
+> and `refinement-obligation` — are **subsumed** there (one home per property)
+> as AC1, AC3, AC7; see that file for AC1–AC7.
 
 ## surface/elaboration/well-typed-output (invariant)
 - spec: `spec/30-surface/39-elaboration.md §3`
