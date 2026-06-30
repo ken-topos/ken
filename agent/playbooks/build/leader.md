@@ -119,6 +119,18 @@ read checks yourself.
   The Integrator pushes, gates, and merges. **Relay any change-request or CI-red
   back to your implementer as a mootup mention** — they never see GitHub
   (COORDINATION §14). You do **not** push or merge.
+  - **Sequence the mentions — one per distinct next-move; send the Integrator its
+    *own* publish request *after* the Architect votes (promoted L5/X1-build,
+    recurring).** A **combined** "Architect review + Integrator publish" ping gets
+    the publish instruction **shelved** until the vote lands, and the Integrator
+    does **not** re-read it afterward — so the merge **silently stalls** with all
+    gates green (L5, then X1-build, both hit this; the G1-closing X1-build sat
+    unpublished). When a review round changes the branch SHA (a should-fix lands),
+    the **prior approval does not auto-publish the new commit** — after the
+    Architect approves, post a **standalone `git_request` to the Integrator** with
+    the *current* SHA to publish for CI + merge. Architect-review and
+    Integrator-publish are two different actors' moves (COORDINATION §2); give
+    each its own post.
 - When the Integrator announces fresh `main` affecting your team, fan it in:
   have members rebase onto the new `origin/main` (no network — the ref is already
   fetched) and re-prioritize the queue.
