@@ -14,15 +14,228 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-- **Updated:** 2026-06-29 (Steward first live pass: Bug 12 cleared, frontier
-  released).
-- **Next action:** **F4 runs first** (operator call, 2026-06-29). Its Steward
-  frame is authored (`wp/F4-content-addr-design.md`) and is being **handed to the
-  spec-leader for full elaboration** before Foundation is released; Foundation is
-  **held** meanwhile (re-pinged off the premature pull). While F4 elaborates,
-  **frame K1's brief** (then it too goes spec-leader → team). **K1 stays held**
-  from any team until F4 reaches in-review. Run the watchdog + promotion-ladder
-  pass each cadence.
+- **Updated:** 2026-06-29 (late session — K2c series-1 merged, L5 released).
+- **Next action:** **DONE/merged:** K1, K2, K3, V0-spec (`65adf30`), K2c
+  compose-erratum (`444f937`), and **K2c series-1** (`7d38b55`, 99/99 — Architect
+  caught a Floyd-Warshall **union-masking** SCT bug at review, fixed `9e36918`;
+  retros in, 4th SCT over-collapsing instance recorded). **V0 build DONE**
+  (`158b58f`, Architect traced the shadow guard + confirmed both assertions;
+  retros in → promoted the **diff-scope check** + **branch-identity/0-test guard**
+  to build leader/qa playbooks). So **V0 is fully done, spec + build.**
+  **L5 DONE** (`c475d6c`, spec + 22 conformance; Architect surfaced **K1.5** as a
+  hard dep — `ITree.Vis` needs Π-bound/W-style recursion the kernel defers — the
+  enclave declared it via the **§7.0 gate split** + merged; retros in → promoted
+  **kernel-admittance-vs-staging** + **content-reconcile**).
+  **X1-spec DONE** (`387227d`, pure-core `42-evaluation`; retros in → promoted
+  *name-non-strict-positions* + *structural-assertion-for-non-observable-props*).
+  **K1.5 DONE** (`f5b19c2`, ★★★ trust root — the **load-bearing Architect review
+  caught a real metatheory defect**: the W-ι "stuck-under-binder" decidability
+  story was false, decidability is by **finiteness**; reground in 1 pass; retros
+  in → promoted *termination-by-well-foundedness-not-stuckness* +
+  *content-reconcile-inherits-spec-bugs / internal-consistency-pass*).
+  **L5-build DONE** (`13fd2bf`, 42/42; Architect caught a silent under-inference
+  gap on higher-order effectful params → conservative-reject fix; retros in →
+  promoted *reply_to-needs-a-thread* + *QA absent-clause-scan* +
+  *conservative-guard-fails-closed*).
+  **K2c series-2 DONE** (`3c6273e`, ★★★ — Architect "exemplary"; the **promotion
+  ladder validated itself**: K1.5 carries caught both would-be defects
+  *prophylactically at authoring*, 0 Architect conformance findings; retros in →
+  promoted *absence-assertion-gating* + *verify-frame-at-pickup* +
+  *perishable-frames*, the last a Steward self-lesson — my frame was a stale
+  do-not-restore hazard). **So the full kernel theory is SPEC'd** (K1/K2/K2c
+  s1+s2/K1.5).
+  **🎉 G1 VERTICAL SLICE CLOSED** (X1-build `f4a48e1` — V0 elaborates → X1 runs).
+  **Kernel trust-root COMPLETE** (K1.5-build `f037451`). **L5 FULLY DELIVERED**
+  (build `13fd2bf` + denotation `8c7941f`: row-poly + ITree/handlers + §3.1
+  contract + the `36 §2.1/§7.0` reconcile) → **Sec1/Sec2/B1 unblocked**.
+  **In flight (3 streams):** (1) **K2c-series-2-build** → Kernel
+  (`wp/K2c-series2-build`, ★★★ obs seams) — implementer in a long high-effort
+  pass (capture-pane-verified working, NOT stalled); ON MERGE clears K-api
+  freeze-gate #2. (2) **ITree-lowering** → Language (`wp/ITree-lowering`, just
+  released) — emit kernel `Term::Elim` over `ITree` (`itree.rs` was structure-only)
+  + make the `param_rows` extraction by-construction (the row-poly soundness
+  contract, Architect-flagged); ON MERGE unblocks X1-effects. (3) **K-api** →
+  enclave (`wp/K-api`) — Architect design **pre-APPROVED**; assembling; merge
+  Decision gated by §4.6 on K1.5-build(done) + series-2-build(pending).
+  **HELD:** **X1-effects** → Runtime (gated on ITree-lowering). **Enclave queue
+  after K-api:** V1 (author frame near K-api merge). **Notification defect**
+  (operator-confirmed, intermittent): diagnose via **`tmux capture-pane`**
+  (deep-thinking vs wedged) before any nudge; `send-keys` backup only on a
+  confirmed wedge. Watchdogs private `CronCreate` (§13); convo §2a on `main`.
+- **Watchdog/timer hygiene (this session):** promoted to COORDINATION §13 —
+  record the `schedule_call` `timer_id` + `cancel_call` on WP close (`d795966`),
+  and tick on `get_space_status`/`get_mentions`, never `get_recent_context` (it
+  self-nests its own fires — `e53e9c0`). Also promoted the V0 **verdict-flip
+  check** for discriminating conformance cases / worked examples (`2cf1fc6`).
+  Cancelled my own Steward watchdog (was the misbehaving `get_recent_context`
+  one); now fully event-driven. Orphan `tmr_37rn5qdv4c800` traced to **spec-leader**
+  (operator-identified) — asked it to `cancel_call`. [[orphan-watchdog-timer-record-id]]
+- **Anthropic peak-hours intermittent 503s (~19:28) — NOT a fleet outage;
+  K2c proceeding.** spec-leader hit a transient 503 engaging the enclave authors,
+  **over-diagnosed it as a fleet-wide Anthropic stall**, and proposed a DeepSeek-
+  author workaround. **Operator ground-truth: spec-author + conformance-validator
+  UP and HEALTHY, no errors — never down.** Corrected spec-leader → proceed with
+  K2c (retry transient 503s; held it off DeepSeek-authoring the trust-root spec
+  throughout). It used the false-alarm window to write the K2c elaboration plan
+  (`docs/program/wp/K2c-elaboration-plan.md`), so recovery is instant. **Lesson
+  (candidate promotion): a single 503 ≠ an outage — retry + confirm a sustained,
+  multi-agent failure before ever declaring the provider down or reaching for a
+  workaround.** DeepSeek tier unaffected throughout.
+- **FAN-OUT @ ~20:56.** K1+K2 DONE; all 6 implementers Sonnet. Tracks: **(1)
+  Kernel/K2c series-1** — spec elaboration merged (`97eefe0`, Architect caught 2
+  soundness bugs: SCT `↓=` too permissive, Ω-element-vs-proof PI); **Kernel team
+  building** (`wp/K2c-conversion`). Series-2 (3 obs seams) deferred → Kernel after
+  series-1; owe a level-discipline Ω-element-vs-proof promotion first. **(2)
+  Runtime/K3** — **DONE** (`b141744`, 36/36; Architect caught a >4MiB arena
+  underflow → fixed). Retros harvested → boundary-value promotion +
+  compaction-obligation gate (`dec_721ey23kfp4re`). (Stalled 3× on the
+  mention-mechanism — leader didn't kick off / QA prose-named / leader waited on a
+  dropped Spec vote — all nudge-cleared + now fixed in the playbooks.) **(3)
+  Verify/V0** — spec enclave compacted + **elaborating** (frame
+  `docs/program/wp/V0-elaborator.md`); → Verify build → G1. **(4) Language/L5** —
+  queued behind V0 in the spec chain.
+- **Corpus hardenings landed (the DeepSeek intent-without-mechanism pattern):**
+  delegation-by-mention (`66982c2`), QA-real-mention + yon-cleanup/excluded-
+  inspiration (`c05a658`), watchdog-scheduler=convo-cron + Integrator/leader
+  mechanisms (`e30c066`). Steward watchdog itself now on the convo cron
+  (`schedule_call`). [[playbooks-state-mechanism-not-intent]]
+  Follow-on as deps clear: L1/L2/L3/L4/L6, L-classes+
+  L-fmt (need V0), Sec1/2 (need L5).
+- **FAN-OUT CLEARED on K2 merge (operator, 2026-06-29).** After K1 (solo) +
+  K2 (in build) validated the gate (Architect review + QA + conformance caught
+  every soundness issue; coordination self-correcting), the operator cleared the
+  **fan-out**: on K2's build merge, release the parallel second wave (no further
+  ask needed). **First wave:** K2c (Kernel, spec 17 — continues the critical
+  path), V0 (Verify, spec 39 elaborator), L5 (Language, spec 36 effects — pull
+  forward as the WS-Sec/WS-B hub), K3 (Runtime, spec 41/44 — **already elaborated
+  by F4**, near-shovel-ready/fast-path). **Constraint:** the spec enclave is one
+  team → frames queue through it serially (priority K2c→V0→L5; K3 fast-paths);
+  build teams come online as their specs land (parallel builds, serialized prep).
+  Steward authoring the frames during K2's build (pipelining); handoffs held
+  until K2 merges. **Follow-on as deps allow:** L1/L2/L3/L4/L6, L-classes+L-fmt
+  (need V0), Sec1/Sec2 (need L5), B1 (needs V1+L5), X1 (needs K1+K3).
+- **(earlier) K2 solo (operator):** K1 merged (`fe1ead1`); operator chose
+  measured K2-only first (not fan-out) to validate the gate before parallelizing. **K1 build retros pending:**
+  kernel-implementer + kernel-qa posted (2 promotion candidates — *ground-truth-
+  check-before-building* now 3×/2-team per the implementer, meets the bar; and
+  *test-input-diversity* concretizing verify-the-property); awaiting kernel-leader's
+  coordination retro + "retros in" handoff to finalize + promote + compact Kernel
+  for K2 release.
+- **K1 STARTED (2026-06-29).** Operator cleared K1 to start once the build-lock
+  fix landed — it did (`4566211`), so K1 is moving. Steward frame authored
+  (`ad2983a` on `wp/K1-core-type-theory`) and **handed to spec-leader for
+  elaboration** (spec enclave compacted first; their F4 retro was in). On the
+  elaboration merging to `main` → compact Team Kernel → release K1 to them. K1 is
+  the critical path → K2 → K2c → K-api, feeding G1.
+  - **Architect found 2 MORE soundness bugs — in the kernel IMPLEMENTATION
+    (`dec_2hnhhdb7mrxze`, changes requested 14:42):** (1) universe-`max`
+    normalization conflates distinct level variables by offset → predicativity
+    break (AC-1); (2) dependent-telescope substitution doesn't weaken args →
+    ι-reduct mis-indexed → subject reduction breaks (AC-6). Plus a panic on arity
+    mismatch + a `shift` underflow + a W-style spec/impl divergence. The Architect
+    *extracted and empirically reproduced* both from the kernel's own code. **Both
+    invisible to the 45 green tests** (single level variable, closed indices) —
+    **3rd validation of "verify the property, not the obvious case"** (now in
+    COORDINATION §7). **3rd Architect catch overall** (F4, K1-spec-positivity,
+    K1-impl ×2) — the deep impl review is the real trust-root gate; green tests ≠
+    correct. kernel-implementer fixing the 2 blockers + 2 defects + 3 regression
+    tests, then QA re-verify → Architect re-review. W-style reconciled in spec
+    (`44bcd8b`, Architect pre-cleared).
+  - **Integrator watchdog gap (operator-caught):** two green+approved PRs (#13
+    typo, the W-style) sat unmerged ~25 min — the Integrator published then idled
+    instead of polling GH (CI-green pushes no notification). Prompted it to poll +
+    merge now; hardened its playbook (`dec_5d6jhm2vjw5tx`) — the merge-pipeline
+    watchdog is a self-scheduled recurring ~5-10 min GH-poll TIMER while PRs are
+    open, not wait-for-mention.
+  - **Build complete (`0720eae`) → was in merge review:** kernel-implementer built
+    `crates/ken-kernel` (~4.3k LOC: term/de Bruijn/grammar, env, subst, conv
+    whnf/normalize + K2c seam, inductive w/ §8 positivity occurs-guards + dep
+    eliminator + ι, bidirectional check), 45 tests across all 8 ACs; kernel-qa
+    independently APPROVED (no ignored/tautological tests). **The read→build
+    transition resolved my extended-spec-read flag** (it was deep audit, not a
+    stall). Nice validation: the implementer **caught a conformance-seed typo**
+    (AC-5 mislabeled a double-positive occurrence as negative) by cross-checking
+    the seed against the normative §8.2 — the verify-the-property/ground-truth
+    discipline applied by a GLM build agent; spec-leader fixed it (PR #13). K1
+    build merge: `dec_2hnhhdb7mrxze` (PR #14), awaiting Architect (the deep impl
+    review — green tests ≠ correct) + Spec + CI. On merge → compact Kernel,
+    harvest build retros, mark K1 DONE, surface next-WP options to operator.
+  - **Elaboration complete (`f65485f`):** spec-leader **delegated to spec-author +
+    conformance-validator** (role correction held) — gap audit (7), K2-former
+    tagging, K1 conversion algorithm + subject-reduction proof + strict-positivity
+    algorithm (`13 §6`, `14 §7–9`), 31 K1 conformance seeds across all 8 ACs. **In
+    merge review** — nudged spec-leader to open the merge Decision + the Architect
+    to review (K1/K2 boundary + the load-bearing algorithm/proof additions). On
+    Architect-approved + CI green + merge → compact Kernel → release K1.
+  - **Architect review CAUGHT A BLOCKING SOUNDNESS BUG (`dec_5s2yv3prw09f5`):** the
+    `14 §8.2` strict-positivity algorithm *dropped* subterms where a negative
+    occurrence can hide → would admit `data Bad3 = mk : Pair (Bad3→Empty) Unit →
+    Bad3` (inhabits `Empty`). Fix = occurs-check guards on the dropped positions +
+    a conformance rejection case (AC-5 cases missed this class). 3 non-blocking
+    refinements too (ι syntactic-index gate → incompleteness; dangling SCT ref;
+    "common reduct" looseness). **The review gate earned its keep on the trust
+    root — 2nd time (F4 closure-encoding, now K1 positivity).** Held lesson:
+    Architect review is load-bearing, validated ×2.
+  - **Notification caveat hit live:** spec-leader's status still said "awaiting
+    Architect vote" after the vote landed — it missed the changes-requested
+    notification (different thread). Re-pinged it (the §15 re-mention discipline,
+    applied the same session it was written).
+  - **K1-elaboration retros harvested + PROMOTED (`dec_24yhxp81eywr`):** all three
+    enclave retros (spec-author, conformance-validator, spec-leader) converged on
+    the lesson that already appeared in **F4-QA** — *a passing obvious-case test +
+    correct prose are false signals; verify the property for every guard/case.*
+    2 WPs / 3 roles → promoted to **COORDINATION §7** (verify-the-property,
+    defensive pseudocode) + **architect playbook** (review kernel algorithms at
+    pseudocode level). The F4 watch-list "encoder-sort / verify-property" candidate
+    is now **promoted** on this recurrence. Spec enclave's K1 retros are **in** —
+    can compact them for K2 when it's ready.
+  - **Build-lock-fix retro harvested (WP closed 12:56):** foundation-leader missed
+    the ken-cargo ship notification (compacted 11:20, ship-mentioned 11:28) — a
+    3rd live hit of the notification-delivery caveat, and it independently
+    re-derived the **§15 resume-mention-check** (already promoted; now validated by
+    a leader too). Watch candidate (1 occurrence): *tooling-only WPs (scripts/, no
+    spec crate) are a fast-path — Steward→build directly, no spec elaboration*
+    (which the Steward already did for this fix). Promote to §2c on a 2nd
+    occurrence/operator nod. Implementer/QA retros thin (one-line fix).
+  - *Incident (operator-caught):* kernel-leader acted on my **stale original K1
+    kickoff** (the pre-pipeline one) after re-onboarding — kicked the old too-broad
+    scope to its implementer. Not a mentions bug (actor_ids durable + correct); my
+    error was not standing Kernel down when I re-routed K1 to spec-leader. Stood
+    Kernel down; the `wp/K1` branch was untouched (spec-leader holds it, correctly
+    elaborating). Lesson encoded in steward §2c (a kickoff is live until retracted;
+    stand down a re-routed team).
+- **Build-lock fix merged (`4566211`)** — `ken-cargo` no longer wedges under
+  sccache (Architect-reviewed; exit-code propagation preserved). Foundation
+  collecting its retros (collect/review before any next Foundation WP). *Op
+  note:* a pre-fix wedged sccache daemon may still hold the lock until
+  killed/idle-respawns — kill the stale daemon once if a lingering wedge appears.
+- **Earlier this session:** revised compaction protocol (Steward compacts whole
+  teams, gated on retros; singletons self-compact) merged `38adb5e`; WP-branches-
+  from-origin/main merged `585dbc2`; F4 + build-lock fix merged.
+
+- **Retro harvest — F4 (reviewed 2026-06-29):**
+  - **Promoted → COORDINATION §15:** resume-after-compaction ground-truth
+    checklist (`orientation()` + `git reflog/status/branch -vv`) — F4 implementer
+    trap; promoted on the operator-protocol coupling (Steward-compacts-every-WP
+    makes post-compact resume constant fleet-wide).
+  - **Watching (1-run candidates, not promoted):** QA's "verify the encoder
+    *sorts*, not just that two BTreeMaps match" (build-qa testing-honesty rule —
+    re-check at K3); leader's "read artifacts to coordinate, don't run builds"
+    (reinforces build-leader coordinate-don't-implement; self-corrected); leader's
+    `isolation:worktree` Agent mode for ring members. All node-internal (no edge
+    change, §9 clean) — promote on a 2nd occurrence.
+- **Skills routing validated.** orientation()→role→skill confirmed by 5/6 pilot
+  agents (spec-leader/author, conformance-validator, foundation-implementer, +);
+  files on `main`, file-read load works. **Caveat:** the `Skill` *tool* registers
+  skills at **session start**, so mid-session rebase needs a restart for the tool
+  (file `Read` works meanwhile) — CLAUDE.md now carries a Read-fallback. A fleet
+  restart fully activates the Skill-tool path. Stray `origin/main` branch fixed
+  by the Integrator (was `git fetch origin main:origin/main`).
+- **Note on F4 authoring:** spec-leader (DeepSeek) authored the F4 elaboration
+  itself (committed before the role correction landed) — clean-room intact (only
+  `/spec` + the frame, no prototype). Accepted as-is on intrinsic merits; the
+  Architect's merge review is the quality gate. The author=coordinator fix
+  applies to *future* WPs (spec-author authors).
 
 - **WP release pipeline (operator, 2026-06-29):** **Steward (frame) →
   spec-leader (full elaboration) → build team (execute).** The Opus enclave
@@ -49,15 +262,55 @@ against it*. Run until complete, blocked, or instructed (§2b).
   map: kickoff→`feature`, merge_ready→`git_request`, blocked→`status_update`,
   decision→the Decision object (not a message type). Recorded as **Bug 13**
   (`local/moot-bugs.md`); flagged to the fleet in the steward cadence thread.
-- **Frontier released:** **K1**→kernel-leader (thread `evt_44k4934q2nfjz`),
-  **F4**→foundation-leader (thread `evt_3f87m6kcqgkg3`). Both now `active`.
+- **Frontier released, then re-routed:** initial kickoffs **K1**→kernel-leader
+  (thread `evt_44k4934q2nfjz`), **F4**→foundation-leader (thread
+  `evt_3f87m6kcqgkg3`). After the operator's pipeline refinements, F4 was
+  re-routed through spec-leader and Foundation paused (it had jumped ahead onto
+  `wp/F4-content-addr-design` with no commits — released cleanly). K1 held.
+- **F4 pipeline in flight (Steward frame → spec-leader → Foundation):**
+  - Planning bundle (playbooks §2c + compaction discipline, tracker, **F4 frame**)
+    **MERGED to `main` as `c9c3883`** (Decision `dec_6jtjaczn5ffxc`, all CI green;
+    branch swept). The F4 frame + corrected playbooks are now canonical on `main`.
+    spec-leader signalled to rebase and begin elaboration.
+  - **F4 elaboration** handed to **spec-leader** (compacted first) — elaborate
+    `spec/40-runtime/41,44` + `conformance/runtime/` to team-ready rigor on
+    `wp/F4-content-addr-design`, then merge_ready→Integrator; spec-leader pings me
+    on merge → I compact + release Foundation against the on-`main` elaborated
+    brief.
+  - Compaction discipline applied: Integrator + spec-leader compacted before their
+    handoffs (`moot compact <role>`).
+  - **Role correction (operator, 2026-06-29):** the spec-leader (DeepSeek) was
+    doing the F4 elaboration itself instead of delegating to spec-author (Opus).
+    Corrected live (told spec-leader to hand authoring to spec-author +
+    conformance-validator, compacting them first) and revised the spec-leader
+    playbook to make the boundary load-bearing (coordinator ≠ author; DeepSeek
+    leader must not read the prototype). Playbook routed to `main` via Decision
+    `dec_43bet0wq8ayy9`. So F4 authoring now sits with **spec-author** (Opus),
+    coordinated by spec-leader.
+
+> **F4 LANDED 2026-06-29 ~06:20 — `45b62b2` on `main`** (build merge
+> `dec_1darmky1az6gq`; Architect APPROVED, QA approved, CI green). **The first
+> build WP is done and the WP pipeline is VALIDATED end-to-end:** Steward frame
+> → spec-leader elaboration (`46b8aaf`) → Architect review (caught a real
+> closure-encoding unsoundness) → implementer build (`ca6c177`) → independent QA
+> → merge. Acceptance met (19/19 tests; dedup within tolerance; `CapacityExhausted`
+> loud-refusal; slot-id equality depth-independent ~346ps≈359ps). Retros being
+> collected by foundation-leader (COORDINATION §10). **Per operator: STOPPED here
+> — K1 held, no new work.**
+>
+> **A QA-branch "blocker" raised by foundation-implementer was a false alarm**
+> (post-compact misread; QA did verify `ca6c177` then returned home). A **real**
+> blocker was surfaced — see Blockers below.
 
 ## Active frontier
 
 | WP | State | Owner | Thread |
 |---|---|---|---|
-| **F4** content-addr / value-model design | **frame authored → spec-leader elaborating** (Foundation held) | Foundation (via Spec) | `evt_3f87m6kcqgkg3` |
-| **K1** Π/Σ/inductive/checked-universes | **ready — held until F4 in-review** | Kernel | `evt_44k4934q2nfjz` |
+| **F4** content-addr / value-model design | **MERGED `45b62b2`** — done | Foundation | `evt_3f87m6kcqgkg3` |
+| **ken-cargo build-lock fix** | **DONE** (`4566211`, retros in 12:56, Foundation quiesced) | Foundation | thread `thr_4h1a8yc4bzgqk` |
+| **K1** core type theory (11–14) | **DONE** — merged `fe1ead1`; retros harvested → 3 promotions (ground-truth-before-build, exercise-the-property, branch-free-on-merge; `dec_2wwhyt9zxcrx1`) | Kernel | `evt_44k4934q2nfjz` |
+| **K2** observational layer (15–16) | **DONE** — merged `832dab6`. **Architect deep-impl review caught a closed-`Empty` hole** (seam 3 `check_respect`: non-Ω quotient elim type-checked + computed without the respect proof) — implementer fixed (reject Type-codomain quotient elim; seams 1/1b made genuinely stuck; −173 lines unsound best-effort; +4 adversarial regressions), Architect re-derived the exploit dead, re-approved. 81 tests. Retros harvested → promotion `dec_46qe2bnz10fgw` (invoke every TCB guard; deferred check must gate reduction). **K2c carry-forward:** 2 `[K2c]`-tagged seeds (cast-computes-inductive, eq-inductive-dependent — now stuck, need NbE) + the 3 deferred obs seams | Kernel | `evt_63herhcztn5gw` |
+| **K2c** decidable conversion (17) | **frame drafted** (`docs/program/wp/K2c-conversion.md`) — first fan-out WP; SCT gate + complete conversion algorithm. **Carry-forward from K2** (3 deferred obs seams: cast-at-inductive index rewrite, non-constant-motive J, full quotient `respect` — sound stuck fallback today). Awaiting K2 merge → spec-leader elaboration | Kernel | — |
 
 Next to unlock: **K2/K2c** (kernel observational core — retire feasibility risk
 early) once K1's API is stable; **K3** once F4 lands; **L5**
@@ -130,6 +383,17 @@ forward once K1's API is stable.
 | **G7** agent loop | not-started | |
 
 ## Blockers / escalations
+
+- **⚠ ESCALATED TO OPERATOR (2026-06-29) — fleet build-lock wedge in
+  `scripts/ken-cargo`.** It holds a machine-wide `flock` on fd 9; with
+  `RUSTC_WRAPPER=sccache`, the sccache server daemonizes **inheriting fd 9** and
+  holds the lock forever, so every subsequent `ken-cargo` queues to the 1800s
+  timeout (foundation-implementer confirmed twice). **Fleet-wide; blocks all
+  future build work** (K1 onward). One-line fix proposed: close fd 9 to cargo
+  (`cargo "$@" 9>&-`) in `ken-cargo`; workaround `unset RUSTC_WRAPPER`.
+  foundation-implementer offered to author `wp/ken-cargo-build-lock-cloexec`.
+  **Recommend the operator authorize that fix before releasing K1.** Steward
+  stopped per the F4 instruction; did not route it (would be new work).
 
 - **Bug 13 (post-API drift, recorded `local/moot-bugs.md`).** COORDINATION §8's
   message-type taxonomy diverges from the live backend enum; mentions need
