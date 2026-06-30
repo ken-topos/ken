@@ -43,15 +43,27 @@ points, never silently:
    terminating definition as **opaque** (`../10-kernel/17 §4`), it never
    δ-reduces (so it cannot break conversion) but may diverge at *runtime*. This
    is an explicit, surfaced choice, not a default.
+5. **Resource-limit exhaustion** — a `space`'s interning store or arena hitting
+   its capacity bound raises `CapacityExhausted` (`44 §2`): a **loud,
+   catchable** fault surfaced at the `space` boundary, **never** a silent
+   drop/alias. **Distinct** from the partial-primitive class (case 2): the
+   program stays logically total — this is a runtime *resource* bound, so Ken
+   generates **no** static "never exhausts" obligation (the stance is
+   detect-and-fail-loud, `44 §2`). True OS memory exhaustion is the
+   loud-*fatal* variant (`44 §2`).
 
 ## 3. The honest statement
 
 > Ken's **verified** core is total and its logic consistent. **Runtime**
 > partiality is confined to: open holes (→`unknown`, listed), unguarded partial
 > primitives (→ obligation, then fault/`unknown`), the FFI/effect boundary (→
-> listed postulate), and opt-in opaque non-total definitions. Every one is
-> *marked* — in the type, the obligation set, or the trusted base — so a
-> reviewer or agent can see exactly where totality is not guaranteed.
+> listed postulate), and opt-in opaque non-total definitions — plus,
+> **distinct** from these, **resource-limit exhaustion** (`CapacityExhausted`,
+> `44 §2`), a **loud** runtime resource bound that halts at the `space` boundary
+> rather than returning a wrong or `unknown` value. Every one is *marked* — in
+> the type, the obligation set, the trusted base, or the loud `space`-boundary
+> fault — so a reviewer or agent can see exactly where totality is not
+> guaranteed.
 
 This is stronger than "tests pass" (L0) and honest about the boundary, which is
 the posture a *verified* language must take.

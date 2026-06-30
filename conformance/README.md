@@ -21,7 +21,8 @@ conformance/
   stdlib/        — 50-stdlib/ (lawful instances, verified building blocks)
   security/      — 60-security/ (information flow, constant-time discipline,
                    capabilities & authority)
-  behavioral/    — 70-behavioral/ (assumption-boundary export emitter)
+  behavioral/    — 70-behavioral/ (assumption-boundary export emitter,
+                   trace/instrumentation contract)
 ```
 
 ## Case format
@@ -125,3 +126,9 @@ claim with no conformance case is a claim no one can rely on
   (the `Q`/`P`/`Σ`/`T`/`G` status→field projection: the no-over-claim pair,
   alphabet reuse, the no-measure seal, the one-way gate, content-hash
   reproducibility).
+- `behavioral/trace/seed-trace.md` — B3 trace/instrumentation contract
+  (`73`): the runtime companion to the B1 export — the `Σ`-event schema at the
+  effect boundary, correlation keys for multi-`space` traces, the runtime
+  `Q`/`P` assertion points, and the monitor projected from `T`. An **untrusted
+  one-way projection** of already-verified content + instrumentation: adds
+  nothing to the trusted base, proves nothing new.

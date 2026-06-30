@@ -11,11 +11,11 @@
 > handlers only (§5). **`OQ-Space` DECIDED** (§4) — bounded per-space Hoare,
 > shared-nothing message-passing. The kernel gains **nothing**: every construct
 > below denotes to ordinary Π/Σ/inductive terms (`../10-kernel/`) — no effect
-> machinery enters the TCB. **L5's *implementation* is gated on `K1.5`** — the
-> `ITree` denotation's `Vis` constructor needs Π-bound (W-style)
-> recursive-inductive admission + its eliminator, which the current kernel
-> defers; the design is sound and adds no TCB primitive, it just lands after
-> K1.5 (§2.1, §7.0).
+> machinery enters the TCB. **L5's *implementation* was gated on `K1.5`, now
+> merged (`f037451`)** — the `ITree` denotation's `Vis` constructor needs
+> Π-bound (W-style) recursive-inductive admission + its eliminator; K1.5
+> **lifted** the `check_no_pi_bound_recursive` gate and generates `elim_ITree`,
+> so L5 is **unblocked** (the design adds no TCB primitive; §2.1, §7.0).
 
 ## 1. Effects as a static row
 
@@ -719,7 +719,7 @@ conformance corpus (§7.5) targets with discriminating cases.
 
 | Construct | Level | Rule |
 |---|---|---|
-| `Effect {ℓ_op, ℓ_resp}` | `Type (suc (max ℓ_op ℓ_resp))` | record / Σ-Form (`13 §1`) |
+| `Effect {ℓ_op, ℓ_resp}` | `Type (suc (max ℓ_op ℓ_resp))` | record / Σ-Form (`13 §2`) |
 | `E ⊕ F` | same shape (`max` of parts) | coproduct of `Op`s (`14`) |
 | `ITree E (R : Type ℓ_R)` | `Type (max ℓ_R ℓ_op ℓ_resp)` | inductive, predicative `max` (`12 §2`, `14 §1`; §2.1) |
 | `Cap E` | `Type ℓ_op` | a value type |

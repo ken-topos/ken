@@ -83,7 +83,7 @@ touches — `38 §3.4`). `(oracle)` = the literal `foreign`/`symbol`/`library`/
 
 ### ffi-io/relied-on-foreign-listed-in-P (AC2)
 - spec: `spec/30-surface/38-ffi-io.md §3.1`, `25 §3`, `18 §5`,
-  `spec/70-behavioral/71-assumption-boundary.md §2.1` (I2)
+  `spec/70-behavioral/71-assumption-boundary.md §3.1` (I2)
 - given: a verified `view useFFI ... = ... os_write ...` that **calls**
   `os_write`, run through the **real** B1 export
 - expect: `os_write`'s postulate is in `useFFI`'s `trusted_base_delta` (`25 §3`)
@@ -97,7 +97,7 @@ touches — `38 §3.4`). `(oracle)` = the literal `foreign`/`symbol`/`library`/
 
 ### ffi-io/not-relied-on-foreign-absent-from-P (AC2, soundness)
 - spec: `spec/30-surface/38-ffi-io.md §3.1`, `25 §3`,
-  `spec/70-behavioral/71-assumption-boundary.md §2.1` (I2), `§3.3`
+  `spec/70-behavioral/71-assumption-boundary.md §3.1` (I2), `§3.3`
 - given: the **same** module with `os_write` in scope, but a verified `view
   noFFI (x : Int) : Int = x + 1` that does **not** call it, run through the
   emitter
@@ -116,7 +116,7 @@ touches — `38 §3.4`). `(oracle)` = the literal `foreign`/`symbol`/`library`/
 
 ### ffi-io/pure-foreign-assumption-rides-P-not-Q (AC3, soundness)
 - spec: `spec/30-surface/38-ffi-io.md §3.2`, `21 §5.4`,
-  `spec/70-behavioral/71-assumption-boundary.md §2.1` (I1)
+  `spec/70-behavioral/71-assumption-boundary.md §3.1` (I1)
 - given: an artifact calling `foreign c_sqrt : Float → Float = symbol "sqrt"
   library "m" pure`, **and** a co-located `view wrap (x : Float) : Float ensures
   result == c_sqrt x = c_sqrt x` whose Ken-side `ensures` is provable by `refl`

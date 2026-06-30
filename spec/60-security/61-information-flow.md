@@ -797,7 +797,7 @@ existing formation (`36 §7.4`):
 
 | Construct | Level | Rule |
 |---|---|---|
-| `Lattice` (the carrier + ops record) | `Type (suc ℓ)` | record / Σ-Form (`13 §1`), laws at `Ω` |
+| `Lattice` (the carrier + ops record) | `Type (suc ℓ)` | record / Σ-Form (`13 §2`), laws at `Ω` |
 | `A @ ℓ` (labeled type) | same as `A` | `ℓ` is an **erasable index**; the kernel sees `A` |
 | label index on a `Vis` op/resp | `≤ ℓ_ITree` | rides the existing `Vis` container (`36 §2.1`); no new universe |
 | `CT` factor `{ct⊥, ct⊤}` (§5a.1) | level `0` | a finite two-point lattice — **another product factor** (§2.2), an *instance* of the `Lattice`/product rules above; **no new level rule** |

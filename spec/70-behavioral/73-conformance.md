@@ -166,8 +166,10 @@ conformance author) fills it differently.
 
 The delegated temporal obligations `T` (`72`) synthesize to **monitors**
 (LTL → Büchi, `README` L3) — **projected** from the export's `T`, never
-re-authored. This is B3's home for the **monitor direction** of the `compile`
-faithfulness lemma that B1 deferred to B2/B3 (`71 §5.2`):
+re-authored. This is B3's home for the **monitor-synthesis sibling** `compile :
+Temporal Σ → Monitor` — distinct from `71`'s `→ WardFormula` property
+translation (`72 §3`), **not** a second "direction" of one function — whose
+faithfulness lemma B1 deferred to B2/B3 (`71 §5.2`):
 
 ```
 compile : Temporal Σ → Monitor       -- the monitor projection (B3's home)

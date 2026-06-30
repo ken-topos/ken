@@ -64,7 +64,9 @@ values through the **actual** `Space`/`Store` API.
   dedup_hits` holds here (`1000 = 1 + 999`, `1000 = 1000 + 0`) — no exhaustion.
 
 ## runtime/capacity/loud-at-limit-raises-not-silent (soundness)
-- spec: `spec/40-runtime/44-capacity.md §2`, `43 §2` (AC2 — the headline)
+- spec: `spec/40-runtime/44-capacity.md §2`, `43 §2` (the 5th runtime-fault
+  class — loud resource-limit exhaustion, distinct from partial-primitive
+  case 2) (AC2 — the headline)
 - given: a `Space::with_capacity_limit(3)`; `intern` 3 **distinct** compounds
   (each a `New`); then `intern` a **4th, distinct** compound (a would-be `New`).
 - expect: the 4th `intern` **returns** `CapacityExhausted { limit: 3, current:
