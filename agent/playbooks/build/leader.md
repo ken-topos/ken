@@ -88,7 +88,13 @@ because a leader that wasn't watching let a QA-approved WP sit unmerged (operato
 caught). Each wake, check the stall patterns — the prompt **enumerates each
 explicitly**: handed-off-but-silent, merge-Decision-open-but-no-reviewer,
 blocked-without-a-blocker-mention, QA-approved-but-no-merge-request,
-idle-with-ready-work. Per detected stall, mention **only** the one blocked agent
+idle-with-ready-work, **stale-retro** (you are awaiting a member's retro whose
+notification **dropped though it was already posted** — the dropped-handoff
+wedge in the *retro* phase, undetectable without the backstop; this is *why* the
+watchdog stays armed til retros-in. Promoted T1-build, where two leaders
+independently hit the premature-kill; the Steward had to relay an
+already-posted retro to an idle-waiting leader). Per detected stall, mention
+**only** the one blocked agent
 (a **real** `mentions:` mention, never prose — §2); if no action is needed, post
 nothing.
 Graduated recovery: detect → mention → re-mention next interval → escalate to

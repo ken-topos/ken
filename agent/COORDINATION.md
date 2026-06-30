@@ -442,6 +442,26 @@ trigger CI, reads the checks, merges, and fetches `main`
   itself* — when grounding surfaces an assembly hazard, **flag it to the
   assembler**, don't reach past your lane into the git (where the X1-effects-elab
   drops happened).
+  **(6) TEMPORAL — a fold/erratum that races an in-flight merge must HOLD the
+  merge or be an erratum-on-current-`main` from the start (promoted Sec1; a
+  *race*, not an assembly fault).** Points (1)–(5) assume the pieces sit on
+  branches you control at Decision time; this one is about **timing**. On Sec1
+  the Architect approved `61` with an N1/N2 honesty fold flagged "fold before
+  build, not a merge-blocker." The author committed the fold declaring it
+  "supersedes `b3e7989`," the coordinator had already rebased the **pre-fold**
+  tip + posted merge_ready, and the Integrator squashed the pre-fold spec to
+  `main` **9 seconds before** the fold landed — so the honesty chapter hit `main`
+  carrying the exact §9 over-claim the fold fixed; netted only by verify-on-main,
+  re-landed in minutes. **A "supersedes X" line interlocks nothing, and
+  decision-time "hasn't merged yet" is perishable within seconds.** So: **author
+  side** — never "fold + declare supersede" against a WP whose votes/merge are in
+  flight; either mention the Integrator + leader to **HOLD the merge** *before*
+  committing the fold, or author it as a fresh erratum-on-current-`main`.
+  **Coordinator side** — "not a merge blocker" ≠ "merge *before* it lands"; when
+  a fold is in-flight and the merge is seconds away, **briefly HOLD** the merge
+  so the chapter is correct at first landing (the coordinator can prevent the
+  race the author cannot gate). The only reliable net remains **verify-on-main
+  after**, never a declaration before.
 - **Review is a mootup Decision, not a GitHub action.** The Architect/Spec read
   the diff from the shared local branch (`git diff origin/main...wp/<ID>`) and
   vote the merge Decision in mootup. There is no GitHub PR approval to mirror.
