@@ -71,9 +71,16 @@ Concretely, per WP:
 
 Merge only when **all** hold:
 
-1. **Review Decision approved** — the Architect approved (always), and the Spec
-   enclave approved if the change touches `/spec`, `/conformance`, or a
-   designated soundness path. The review *is* the mootup Decision; you do not
+1. **Review Decision *resolved* with approvals recorded — verify it FRESH, never
+   infer it from `merge_ready` prose (promoted Sec1ct breach).** Re-read
+   `list_decisions` at merge time and confirm `status: resolved` (not
+   `proposed`) with the **Architect** (always) and the **Spec** approval
+   if the change touches `/spec`, `/conformance`, or a designated soundness
+   path — the Spec vote comes from the **conformance-validator** (the
+   frontier-class Spec reviewer, COORDINATION §14), never the `Spec` template
+   placeholder. **A `merge_ready` naming "`(Architect + Spec)`" is a reviewer
+   *list*, not an approval** — reading it as approval is exactly how the Sec1ct
+   merge skipped the gate. The review *is* the mootup Decision; you do not
    perform the design review yourself. Domain correctness was gated pre-merge by
    the owning team's QA in the ring.
 2. **CI green** — build + conformance + clean-room + path-guard, on the branch
