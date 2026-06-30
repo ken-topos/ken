@@ -19,7 +19,8 @@ conformance/
                    numbers, effects, collections, ffi-io, elaboration)
   runtime/       — 40-runtime/ (values, evaluation, termination, capacity)
   stdlib/        — 50-stdlib/ (lawful instances, verified building blocks)
-  security/      — 60-security/ (information flow, constant-time discipline)
+  security/      — 60-security/ (information flow, constant-time discipline,
+                   capabilities & authority)
   behavioral/    — 70-behavioral/ (assumption-boundary export emitter)
 ```
 
@@ -100,6 +101,15 @@ claim with no conformance case is a claim no one can rely on
 - `security/ct/seed-ct.md` — Sec1ct `@ct` constant-time discipline (the taint-
   axis orientation pair, the sealed `LeakSink` set, declassify ends the span,
   the CT-in-parameter `Q` promise).
+- `security/capabilities/seed-capabilities.md` — Sec2 authority discipline
+  (`62`): no ambient authority (a no-cap/no-row `view` is inert), least by
+  default, **monotone-downward attenuation** (the order-dual non-degenerate pair
+  — weaker-accepts/stronger-rejects — over a **kernel-backed** refinement bound,
+  unlike Sec1's erased labels; plus the enumerated absence of any amplifying
+  operation), transitive revocation (static contract; runtime membrane
+  `(oracle)`-deferred), statically-known audit points + declassify-in-delta, and
+  authority+flow composition (a `Net` write needs the capability **and** the
+  clearance — dropping either rejects).
 - `behavioral/export/seed-export.md` — B1 assumption-boundary export emitter
   (the `Q`/`P`/`Σ`/`T`/`G` status→field projection: the no-over-claim pair,
   alphabet reuse, the no-measure seal, the one-way gate, content-hash

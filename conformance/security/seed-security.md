@@ -10,21 +10,15 @@ Format: `../README.md`. These pin the tier-1 security guarantees
 > `non-interference`, `integrity-taint-rejected` — are **superseded** there
 > (absorbed into the by-typing accept/reject groups + the by-proof verdict
 > mapping, with the no-laundering and reduction-faithfulness guards added).
-> The `authority/`, `supply-chain/`, and `trust/` cases below are Sec2+ and
-> remain here.
+> The `supply-chain/` and `trust/` cases below are Sec3+ and remain here.
 
-## security/authority/attenuation-cannot-amplify
-- spec: `spec/60-security/62-authority.md §3`
-- given: a child handed `attenuate c w`; the child attempts an authority beyond
-  `w`
-- expect: **rejects** — the child cannot exceed the attenuated capability
-- why: monotone-downward authority; PoLA by construction.
-
-## security/authority/no-ambient-authority
-- spec: `spec/60-security/62-authority.md §1`
-- given: a `view` with no effect row and no capability arguments attempting I/O
-- expect: **rejects** — inert by type
-- why: no ambient authority; effects/authority must be granted.
+> **The `authority/` cases have moved to `capabilities/seed-capabilities.md`**
+> (WP Sec2, the elaborated `62-authority.md`). The two placeholders that were
+> here — `attenuation-cannot-amplify`, `no-ambient-authority` — are
+> **superseded** there: `attenuation-cannot-amplify` → AC3 C4 (sharpened by the
+> C1↔C2 order-dual non-degenerate pair — weaker-accepts/stronger-rejects);
+> `no-ambient-authority` → AC1 A1 (+ A2 splitting capability and row halves).
+> Retired here in that WP to avoid a stale-sibling contradiction.
 
 ## security/supply-chain/tampered-proof-rejected (soundness)
 - spec: `spec/60-security/63-supply-chain.md §1,§3`
