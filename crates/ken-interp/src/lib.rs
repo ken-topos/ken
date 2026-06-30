@@ -5,7 +5,7 @@
 
 pub mod eval;
 
-pub use eval::{apply, eval, Env, EvalVal, SlotId};
+pub use eval::{apply, eval, Env, EvalStore, EvalVal, SlotId};
 
 pub fn describe() -> &'static str {
     "ken reference interpreter (X1)"
@@ -18,13 +18,11 @@ mod tests {
     //! Conformance test suite: all 18 cases from
     //! `conformance/runtime/evaluation/seed-evaluation.md`.
 
+    use super::eval::{eval, EvalStore, EvalVal};
     use ken_kernel::{
         declare_def, declare_inductive, declare_postulate, CtorSpec, GlobalEnv, GlobalId,
         InductiveSpec, Level, Term,
     };
-    use ken_runtime::Store;
-
-    use super::eval::{eval, EvalVal};
 
     // ── standard prelude ───────────────────────────────────────────────────────
 
@@ -161,8 +159,8 @@ mod tests {
         }
     }
 
-    fn mk_store() -> Store {
-        Store::new()
+    fn mk_store() -> EvalStore {
+        EvalStore::new()
     }
 
     // ── CAN1 — canonicity ──────────────────────────────────────────────────────
@@ -1308,7 +1306,7 @@ mod tests {
         assert_eq!(nat_val(&v, zero, suc), Some(2));
 
         // unknown-propagates: postulate → Unknown
-        let h = declare_postulate(&mut env, vec![], nat_ty).expect("h");
+        let h = declare_postulate(&mut env, vec![], nat_ty.clone()).expect("h");
         let r = eval(
             &[],
             &Term::Const {
@@ -1319,5 +1317,46 @@ mod tests {
             &mut store,
         );
         assert_eq!(r, EvalVal::Unknown);
+    }
+
+    /// `runtime/evaluation/det-distinct-bodies-get-distinct-slots` (regression)
+    ///
+    /// Two closures with **distinct body Terms** but identical captured envs must
+    /// intern to **different** K3 slots. Guards against hash-only `code_id`
+    /// collisions (the F4 lesson: closure equality is memcmp-exact, not a digest).
+    #[test]
+    fn det_distinct_bodies_get_distinct_slots() {
+        let (env, std) = std_env();
+        let Std { nat, zero, .. } = std;
+        let nat_ty = Term::IndFormer {
+            id: nat,
+            level_args: vec![],
+        };
+        let mut store = mk_store();
+
+        // Two lambdas with distinct bodies, both in the empty captured env.
+        // body1 = λ x. x   (identity)
+        let lam1 = Term::Lam(Box::new(nat_ty.clone()), Box::new(Term::var(0)));
+        // body2 = λ x. zero (constant)
+        let lam2 = Term::Lam(
+            Box::new(nat_ty.clone()),
+            Box::new(Term::Constructor {
+                id: zero,
+                level_args: vec![],
+            }),
+        );
+
+        let v1 = eval(&[], &lam1, &env, &mut store);
+        let v2 = eval(&[], &lam2, &env, &mut store);
+
+        match (&v1, &v2) {
+            (EvalVal::Closure { slot: s1, .. }, EvalVal::Closure { slot: s2, .. }) => {
+                assert_ne!(
+                    s1, s2,
+                    "distinct-body closures with same captured env must get distinct K3 slots"
+                );
+            }
+            _ => panic!("expected two Closures, got {:?} and {:?}", v1, v2),
+        }
     }
 }

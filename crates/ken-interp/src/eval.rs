@@ -15,15 +15,60 @@
 //! - `Neutral` — stuck on an opaque constant or open variable (closed ground
 //!   programs never reach this per canonicity).
 
+use std::collections::HashMap;
 use std::rc::Rc;
 
 use ken_kernel::env::{Decl, GlobalEnv, PrimReduction};
 use ken_kernel::term::{GlobalId, Level, Term};
-use ken_runtime::{fnv1a_64, InternResult, Store, Value as RtValue};
+use ken_runtime::{InternResult, Store, Value as RtValue};
 
 // Re-export the slot-id type used by the K3 store.
 pub type SlotId = u64;
 const NULL_SLOT: SlotId = 0;
+
+/// Evaluation-time store: wraps the K3 content-addressed heap with a
+/// `code_id` side table so distinct closure bodies get distinct, collision-free
+/// integer ids (the F4 lesson: closure equality is memcmp-exact, never a digest).
+pub struct EvalStore {
+    /// The underlying K3 content-addressed heap.
+    pub k3: Store,
+    /// Maps closure body Term (by content equality) to a sequential `code_id`.
+    /// Same body Term → same code_id; distinct bodies → distinct ids, no collisions.
+    code_ids: HashMap<Term, u64>,
+    next_code_id: u64,
+}
+
+impl EvalStore {
+    pub fn new() -> Self {
+        EvalStore {
+            k3: Store::new(),
+            code_ids: HashMap::new(),
+            next_code_id: 1,
+        }
+    }
+
+    /// Assign (or retrieve) a unique sequential `code_id` for a closure body.
+    /// Same body Term (by structural equality) always maps to the same id.
+    fn assign_code_id(&mut self, body: &Term) -> u64 {
+        if let Some(&id) = self.code_ids.get(body) {
+            return id;
+        }
+        let id = self.next_code_id;
+        self.next_code_id += 1;
+        self.code_ids.insert(body.clone(), id);
+        id
+    }
+
+    /// Forward to the K3 store for slot statistics.
+    pub fn stats(&self) -> ken_runtime::StoreStats {
+        self.k3.stats()
+    }
+
+    /// Forward to the K3 store for value interning (used by tests and helpers).
+    pub fn intern(&mut self, v: &RtValue) -> InternResult {
+        self.k3.intern(v)
+    }
+}
 
 /// An evaluation environment: values indexed by de Bruijn depth.
 /// `env[env.len() - 1 - i]` is the value of de Bruijn variable `i`.
@@ -66,9 +111,13 @@ pub enum EvalVal {
         slot: SlotId,
     },
     /// Closure `⟨λ(x:A).t ; ρ⟩`; K3-interned by `(code_id, captured_env_slots)`.
+    /// `code_id` is assigned by `EvalStore::assign_code_id` — a sequential integer
+    /// keyed on the body `Term` by structural equality, so distinct bodies always
+    /// produce distinct ids with no collision (not a digest/hash of Debug output).
     Closure {
         body: Rc<Term>,
         captured: Rc<Env>,
+        code_id: u64,
         slot: SlotId,
     },
 
@@ -114,10 +163,13 @@ pub enum EvalVal {
 
 // ── K3 interning helpers ─────────────────────────────────────────────────────
 
-/// The type_id used for Pair (Σ-intro) in the K3 store.
-/// Not a valid GlobalId (GlobalIds start at 0 from declarations); this
-/// sentinel sits past any reachable id space for the G1 corpus.
+/// Sentinel `type_id` for `Pair` (Σ-intro) K3 records — disjoint from any
+/// `GlobalId` produced by the kernel and from `QUOT_CLASS_TYPE_ID`.
 const PAIR_TYPE_ID: u32 = u32::MAX;
+/// Sentinel `type_id` for synthetic quotient-class K3 records.
+/// Chosen one below `PAIR_TYPE_ID` so a future 2-field synthetic can't collide
+/// with `Pair` (both use `Record` in the K3 store, distinguished by `type_id`).
+const QUOT_CLASS_TYPE_ID: u32 = u32::MAX - 1;
 
 /// Convert an `EvalVal` to a K3 `Value` for interning.
 /// Returns `None` if the value cannot be represented as a K3 compound
@@ -145,13 +197,14 @@ fn to_rt(val: &EvalVal) -> Option<RtValue> {
                 fields: vec![f, s],
             })
         }
-        EvalVal::Closure { body, captured, .. } => {
-            let code_id = fnv1a_64(format!("{:?}", body).as_bytes());
+        EvalVal::Closure {
+            code_id, captured, ..
+        } => {
             let cap_fields: Vec<RtValue> = captured.iter().filter_map(to_rt).collect();
             // Only intern if all captured values are representable.
             if cap_fields.len() == captured.len() {
                 Some(RtValue::Closure {
-                    code_id,
+                    code_id: *code_id,
                     captured: cap_fields,
                 })
             } else {
@@ -164,7 +217,7 @@ fn to_rt(val: &EvalVal) -> Option<RtValue> {
 
 /// Intern a K3-compatible `EvalVal` and return its slot id.
 /// Returns `NULL_SLOT` if the value is not internable (type values, etc.).
-fn intern(val: &EvalVal, store: &mut Store) -> SlotId {
+fn intern(val: &EvalVal, store: &mut EvalStore) -> SlotId {
     let rt = match to_rt(val) {
         Some(r) => r,
         None => return NULL_SLOT,
@@ -172,14 +225,14 @@ fn intern(val: &EvalVal, store: &mut Store) -> SlotId {
     if !rt.is_compound() {
         return NULL_SLOT;
     }
-    match store.intern(&rt) {
+    match store.k3.intern(&rt) {
         InternResult::New(s) | InternResult::Hit(s) => s,
         InternResult::CapacityExhausted { .. } => NULL_SLOT,
     }
 }
 
 /// Build a fully-applied `Ctor` value and intern it.
-fn make_ctor(id: GlobalId, args: Vec<EvalVal>, store: &mut Store) -> EvalVal {
+fn make_ctor(id: GlobalId, args: Vec<EvalVal>, store: &mut EvalStore) -> EvalVal {
     let slot = intern(
         &EvalVal::Ctor {
             id,
@@ -196,7 +249,7 @@ fn make_ctor(id: GlobalId, args: Vec<EvalVal>, store: &mut Store) -> EvalVal {
 }
 
 /// Build a `Pair` value and intern it.
-fn make_pair(fst: EvalVal, snd: EvalVal, store: &mut Store) -> EvalVal {
+fn make_pair(fst: EvalVal, snd: EvalVal, store: &mut EvalStore) -> EvalVal {
     let slot = intern(
         &EvalVal::Pair {
             fst: Rc::new(fst.clone()),
@@ -212,12 +265,15 @@ fn make_pair(fst: EvalVal, snd: EvalVal, store: &mut Store) -> EvalVal {
     }
 }
 
-/// Build a `Closure` value and intern it.
-fn make_closure(body: Rc<Term>, captured: Rc<Env>, store: &mut Store) -> EvalVal {
+/// Build a `Closure` value, assign a unique `code_id` for its body Term, and
+/// intern the result in the K3 store.
+fn make_closure(body: Rc<Term>, captured: Rc<Env>, store: &mut EvalStore) -> EvalVal {
+    let code_id = store.assign_code_id(&body);
     let slot = intern(
         &EvalVal::Closure {
             body: body.clone(),
             captured: captured.clone(),
+            code_id,
             slot: NULL_SLOT,
         },
         store,
@@ -225,6 +281,7 @@ fn make_closure(body: Rc<Term>, captured: Rc<Env>, store: &mut Store) -> EvalVal
     EvalVal::Closure {
         body,
         captured,
+        code_id,
         slot,
     }
 }
@@ -259,7 +316,7 @@ fn elim_reduce(
     methods: &[Term],
     scrut: EvalVal,
     globals: &GlobalEnv,
-    store: &mut Store,
+    store: &mut EvalStore,
 ) -> EvalVal {
     match scrut {
         EvalVal::Unknown => EvalVal::Unknown,
@@ -430,7 +487,7 @@ fn prim_reduce(symbol: &str, args: &[EvalVal]) -> EvalVal {
 // ── eval / apply ─────────────────────────────────────────────────────────────
 
 /// `eval ρ t` — evaluate a core term in environment `ρ` (`42 §3.2`).
-pub fn eval(env: &[EvalVal], term: &Term, globals: &GlobalEnv, store: &mut Store) -> EvalVal {
+pub fn eval(env: &[EvalVal], term: &Term, globals: &GlobalEnv, store: &mut EvalStore) -> EvalVal {
     match term {
         // --- Var: environment lookup ---
         Term::Var(i) => env_lookup(env, *i),
@@ -595,10 +652,11 @@ pub fn eval(env: &[EvalVal], term: &Term, globals: &GlobalEnv, store: &mut Store
         // --- QuotClass: wrap in a constructor-like value ---
         Term::QuotClass(t) => {
             let tv = eval(env, t, globals, store);
-            // Represent [a] as a 1-arg constructor with id=0 (synthetic).
-            // For the G1 scope, quotient classes are not interned.
+            // Represent [a] as a 1-arg constructor with a synthetic type_id.
+            // Uses QUOT_CLASS_TYPE_ID (u32::MAX - 1) which is disjoint from both
+            // real GlobalIds and PAIR_TYPE_ID (u32::MAX).
             EvalVal::Ctor {
-                id: GlobalId(u32::MAX), // synthetic quot-class id
+                id: GlobalId(QUOT_CLASS_TYPE_ID),
                 args: Rc::new(vec![tv]),
                 slot: NULL_SLOT,
             }
@@ -614,7 +672,7 @@ pub fn eval(env: &[EvalVal], term: &Term, globals: &GlobalEnv, store: &mut Store
 }
 
 /// `apply f u` — apply a value to an argument (`42 §3.2`).
-pub fn apply(f: EvalVal, u: EvalVal, globals: &GlobalEnv, store: &mut Store) -> EvalVal {
+pub fn apply(f: EvalVal, u: EvalVal, globals: &GlobalEnv, store: &mut EvalStore) -> EvalVal {
     match f {
         // --- β: closure application extends the captured env ---
         EvalVal::Closure { body, captured, .. } => {
