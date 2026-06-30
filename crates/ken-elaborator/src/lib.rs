@@ -8,6 +8,7 @@
 //! Clean-room: built from `/spec` and `/conformance` only.
 
 mod ast;
+pub mod bytes;
 pub mod diagnostics;
 pub mod elab;
 pub mod effects;
@@ -54,6 +55,7 @@ pub use protocol::{
 };
 pub use resolve::{RDecl, RDeclKind, RExpr, RType};
 pub use numbers::{NumericEnv, NumericLitVal};
+pub use bytes::BytesEnv;
 
 /// The surface-level elaboration environment.
 pub struct ElabEnv {
@@ -64,6 +66,8 @@ pub struct ElabEnv {
     pub num_values: HashMap<GlobalId, NumericLitVal>,
     /// The numeric tower (registered op ids, dispatch tables).
     pub numeric_env: NumericEnv,
+    /// The Bytes layer (L6): type ids, I/O effect row registry (`38 §1`, `41`).
+    pub bytes_env: BytesEnv,
 }
 
 impl ElabEnv {
@@ -81,11 +85,14 @@ impl ElabEnv {
         globals.insert("Bool".into(), bool_id);
         let numeric_env = numbers::register_numeric_env(&mut env, &mut globals)
             .map_err(|e| ElabError::Internal(format!("numeric tower init failed: {}", e)))?;
+        let bytes_env = bytes::register_bytes_env(&mut env, &mut globals)
+            .map_err(|e| ElabError::Internal(format!("bytes layer init failed: {}", e)))?;
         Ok(Self {
             env,
             globals,
             num_values: HashMap::new(),
             numeric_env,
+            bytes_env,
         })
     }
 
