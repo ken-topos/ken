@@ -1,41 +1,55 @@
-//! By-construction `param_rows` extraction for higher-order effectful params.
+//! Type-driven `param_rows` extraction — HOF-effectful params selected
+//! mechanically from the complete parameter telescope.
 //!
-//! ## The gap
+//! ## Why type-driven, not name-list-driven
 //!
-//! The row-poly soundness contract (§1.2) requires that EVERY higher-order
-//! effectful parameter gets a `RowVar` assigned in the `EffectDecl`, OR is
-//! routed through the conservative `unknown_effectful_params` path. A parameter
-//! that goes through NEITHER path silently infers ∅ for its latent row — the
-//! same gap as the L5-build `unknown_effectful_params` stand-in, re-introduced
-//! without this module.
+//! The row-poly soundness contract requires that EVERY higher-order effectful
+//! parameter gets a `RowVar` in the `EffectDecl`, or is routed through the
+//! conservative `unknown_effectful_params` path. A parameter that goes through
+//! NEITHER silently infers ∅ for its latent row — the escape check accepts
+//! spuriously.
 //!
-//! ## Solution: allocator + explicit extraction
+//! The previous API (`extract_hof_params(&[&str])`) accepted a caller-supplied
+//! name list. That relocated the gap: the identification step — which params are
+//! HOF-effectful — was still manual and unchecked. Omitting a name from the
+//! slice bypassed the RowVar assignment with no compile-time error.
 //!
-//! `RowVarAllocator` issues fresh `RowVar`s. `extract_hof_params` processes
-//! every higher-order effectful parameter name and returns a `(name, RowVar)`
-//! pair for each. Because ALL HOF params are enumerated in one call, no param
-//! can silently slip through.
+//! ## Solution: classify_telescope
 //!
-//! Callers use `build_decl_with_extracted_params` (or call `with_param_row`
-//! directly) to wire the vars into the `EffectDecl`. The allocator is shared
-//! across the function's parameter list so each var is unique.
+//! `classify_telescope` takes the **complete** parameter telescope — one
+//! `(name, ParamTy)` entry per parameter, in order — and assigns a fresh
+//! `RowVar` to each parameter whose `ParamTy` is `HofEffectful` or `Unknown`.
+//! Selection happens by type, not by caller-supplied membership. Omission is
+//! structurally impossible: to "drop" a param you must remove it from the
+//! telescope, which makes the telescope incomplete (a caller-side bug, not a
+//! silent miss at the row-poly layer).
 //!
-//! ## Fail-closed contract
+//! ## ParamTy classification
 //!
-//! If a caller omits a HOF param from the `params` slice passed to
-//! `extract_hof_params`, `infer_row_poly` will not propagate that param's
-//! latent effects — the inferred row will be too narrow and the escape check
-//! may accept spuriously. Tests in `tests/effects.rs` (`param_rows_*`)
-//! demonstrate the discriminating verdict: correct extraction catches the
-//! escape; omission misses it.
+//! The caller classifies each parameter's type into one of four kinds. This
+//! classification is the integration point where elaborator type information
+//! feeds the row-poly layer. Future wiring (surface-type traversal →
+//! `ParamTy`) makes classification automatic; for now callers supply it
+//! explicitly but exhaustively for every param.
+//!
+//! - `Base` — non-function type; no row needed.
+//! - `HofPure` — function type with a pure (concrete-∅) codomain.
+//! - `HofEffectful` — function type with an effectful codomain; gets a `RowVar`.
+//! - `Unknown` — type not yet resolved; conservative: treated as `HofEffectful`.
+//!
+//! The `Unknown` arm ensures the module is fail-closed even before full
+//! surface-type traversal is wired: an unresolved type gets a RowVar rather
+//! than silently inferring ∅.
 
 use super::infer::EffectDecl;
 use super::row::RowVar;
 
+// ── Allocator ───────────────────────────────────────────────────────────────
+
 /// Allocates fresh `RowVar`s in strictly-increasing order.
 ///
-/// Create one allocator per function being analysed; do NOT share across
-/// functions (that would conflate two functions' row vars).
+/// Create one allocator per function; do NOT share across functions (that
+/// would conflate distinct functions' row variables).
 pub struct RowVarAllocator {
     next: u32,
 }
@@ -59,30 +73,82 @@ impl Default for RowVarAllocator {
     }
 }
 
-/// Extract a `RowVar` for each higher-order effectful parameter name.
+// ── ParamTy ─────────────────────────────────────────────────────────────────
+
+/// Classification of a function parameter's type for row-variable assignment.
 ///
-/// Returns a `Vec<(String, RowVar)>` — one entry per param in the same
-/// order as `params`. Each entry's `RowVar` is fresh from `alloc`.
-///
-/// **By construction**: every HOF param in `params` gets a `RowVar`. There is
-/// no way to skip a param at the call site — the caller must enumerate all HOF
-/// params here.
-pub fn extract_hof_params(
-    params: &[&str],
-    alloc: &mut RowVarAllocator,
-) -> Vec<(String, RowVar)> {
-    params.iter().map(|&name| (name.to_string(), alloc.fresh())).collect()
+/// The caller must classify **every** parameter and supply the result as part
+/// of the complete telescope passed to `classify_telescope`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ParamTy {
+    /// Non-function base type (e.g., `Nat`, `Bool`, `String`, `ITree R` as a
+    /// first-order value). No latent row — no `RowVar` needed.
+    Base,
+    /// Function type with a **pure** (concrete-∅) codomain.
+    /// Example: `Nat → Nat`.  No latent effects — no `RowVar` needed.
+    HofPure,
+    /// Function type with an **effectful** codomain (carries a latent row).
+    /// Example: `Nat → ITree R`, `A → Eff [ρ] B`.
+    /// Must receive a fresh `RowVar` so the latent row is tracked.
+    HofEffectful,
+    /// Type not yet resolved by the elaborator.
+    /// Conservative: treated as `HofEffectful` (fail-closed — assigns a
+    /// `RowVar` rather than silently inferring ∅).
+    Unknown,
 }
 
-/// Build an `EffectDecl` from the result of `extract_hof_params`.
+impl ParamTy {
+    /// Returns `true` iff this parameter requires a fresh `RowVar`.
+    pub fn is_hof_effectful(&self) -> bool {
+        matches!(self, ParamTy::HofEffectful | ParamTy::Unknown)
+    }
+}
+
+// ── classify_telescope ───────────────────────────────────────────────────────
+
+/// Assign `RowVar`s to HOF-effectful parameters from the complete telescope.
 ///
-/// Registers every extracted `RowVar` into the decl's `param_rows` field so
-/// `infer_row_poly` can propagate them symbolically.
-pub fn build_decl_with_extracted_params(
-    name: &str,
-    extracted: &[(String, RowVar)],
-) -> EffectDecl {
-    extracted
+/// `telescope` must contain **one entry per parameter** of the function, in
+/// order. Each entry whose `ParamTy::is_hof_effectful()` returns `true` gets a
+/// fresh `RowVar` from `alloc`; all other params map to `None`.
+///
+/// The result is a parallel `Vec<(String, Option<RowVar>)>` with the same
+/// length and order as the input telescope.
+///
+/// By construction: every `HofEffectful` or `Unknown` param receives a
+/// `RowVar`. Omission is impossible — you would have to remove the param from
+/// the telescope, making the telescope incomplete (a structural error).
+pub fn classify_telescope(
+    telescope: &[(&str, ParamTy)],
+    alloc: &mut RowVarAllocator,
+) -> Vec<(String, Option<RowVar>)> {
+    telescope
         .iter()
-        .fold(EffectDecl::new(name), |decl, (_, rv)| decl.with_param_row(*rv))
+        .map(|(name, ty)| {
+            let rv = if ty.is_hof_effectful() {
+                Some(alloc.fresh())
+            } else {
+                None
+            };
+            (name.to_string(), rv)
+        })
+        .collect()
+}
+
+// ── build_decl_from_telescope ────────────────────────────────────────────────
+
+/// Build an `EffectDecl` from the output of `classify_telescope`.
+///
+/// Only entries with `Some(RowVar)` contribute a `with_param_row` call;
+/// first-order and HOF-pure params (mapped to `None`) are skipped.
+pub fn build_decl_from_telescope(
+    name: &str,
+    classified: &[(String, Option<RowVar>)],
+) -> EffectDecl {
+    classified.iter().fold(EffectDecl::new(name), |decl, (_, rv_opt)| {
+        match rv_opt {
+            Some(rv) => decl.with_param_row(*rv),
+            None => decl,
+        }
+    })
 }

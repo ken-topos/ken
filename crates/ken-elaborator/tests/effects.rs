@@ -1065,7 +1065,7 @@ fn row_poly_mixed_concrete_and_var() {
 
 use ken_elaborator::effects::{
     lower_bind, lower_elim_itree, lower_handler_fold_uniform,
-    build_decl_with_extracted_params, extract_hof_params, RowVarAllocator,
+    build_decl_from_telescope, classify_telescope, ParamTy, RowVarAllocator,
 };
 use ken_kernel::{
     declare_inductive, infer as kernel_infer, normalize, whnf,
@@ -1391,77 +1391,119 @@ fn lower_handler_fold_uniform_kernel_checks_and_reduces() {
 }
 
 // ============================================================
-// EFF-EXTRACT — by-construction param_rows extraction
+// EFF-EXTRACT — type-driven param_rows extraction (telescope API)
 // ============================================================
+//
+// All three tests exercise `classify_telescope` — the by-construction API
+// that takes the COMPLETE parameter telescope and selects HOF-effectful params
+// mechanically by type. No caller-filtered name list; omission is structurally
+// impossible (you must actively misclassify, not silently leave out).
 
-/// EFF-EXTRACT1: `extract_hof_params` assigns a fresh `RowVar` to each HOF
-/// parameter and the built `EffectDecl` has both in `param_rows`.
+/// EFF-EXTRACT1 (identification): a mixed telescope selects exactly the
+/// HOF-effectful params — Base and HofPure get `None`.
 ///
-/// Structural assertion: 2 params → 2 RowVars, distinct, in order.
+/// Telescope: (x: Base), (f: HofEffectful), (g: HofPure)
+/// Expected classification: [None, Some(RowVar(0)), None].
+/// Discriminating: the telescope is exhaustive — every param MUST appear.
+/// To "drop" f you would have to remove it from the slice, not leave it out
+/// of a separate filtered list.
 #[test]
-fn extract_hof_params_assigns_distinct_row_vars() {
+fn classify_telescope_identifies_hof_effectful_params() {
+    let telescope = vec![
+        ("x", ParamTy::Base),
+        ("f", ParamTy::HofEffectful),
+        ("g", ParamTy::HofPure),
+    ];
     let mut alloc = RowVarAllocator::new();
-    let extracted = extract_hof_params(&["f", "g"], &mut alloc);
+    let classified = classify_telescope(&telescope, &mut alloc);
 
-    assert_eq!(extracted.len(), 2, "2 params → 2 entries");
-    assert_ne!(extracted[0].1, extracted[1].1, "row vars must be distinct");
-    assert_eq!(extracted[0].0, "f");
-    assert_eq!(extracted[1].0, "g");
+    assert_eq!(classified.len(), 3, "one entry per param");
+    assert_eq!(classified[0], ("x".to_string(), None), "Base → no RowVar");
+    assert!(classified[1].1.is_some(), "HofEffectful → gets RowVar");
+    assert_eq!(classified[2], ("g".to_string(), None), "HofPure → no RowVar");
 
-    let decl = build_decl_with_extracted_params("apply_both", &extracted);
-    assert_eq!(decl.param_rows.len(), 2, "built decl must have 2 param_rows");
-    assert_eq!(decl.param_rows[0], extracted[0].1);
-    assert_eq!(decl.param_rows[1], extracted[1].1);
+    // Exactly one RowVar across the whole telescope.
+    let rv_count = classified.iter().filter(|(_, rv)| rv.is_some()).count();
+    assert_eq!(rv_count, 1, "exactly 1 HOF-effectful param → exactly 1 RowVar");
+
+    // EffectDecl gets exactly 1 param_row (for f).
+    let decl = build_decl_from_telescope("test_fn", &classified);
+    assert_eq!(decl.param_rows.len(), 1);
+    assert_eq!(decl.param_rows[0], classified[1].1.unwrap());
 }
 
-/// EFF-EXTRACT2: fail-closed — correct extraction catches an escaping row var
-/// that omission would miss.
+/// EFF-EXTRACT2 (unknown-conservative): an `Unknown`-typed param gets a
+/// `RowVar` (fail-closed — unknown type might be HOF-effectful).
 ///
-/// `apply_both (f: →[ρ₀]) (g: →[ρ₁])` with declared row `ρ₀` only:
-/// - Correct extraction (both f and g): inferred = Join(ρ₀, ρ₁) → `ρ₁` escapes
-///   → `check_row_poly_escape` returns `Err`.
-/// - Omitted g (only f extracted): inferred = ρ₀ → passes vacuously → `Ok`.
-///
-/// Verdict flip: correct extraction rejects (catches the gap); omission
-/// accepts (misses it). The by-construction guarantee prevents omission at
-/// the call site.
+/// This covers the pre-wiring gap: before full surface-type traversal is
+/// wired, params whose types are not yet resolved must not silently infer ∅.
 #[test]
-fn extract_hof_params_fail_closed_catches_escaping_var() {
+fn classify_telescope_unknown_is_conservative() {
+    let telescope = vec![
+        ("h", ParamTy::Unknown),
+    ];
+    let mut alloc = RowVarAllocator::new();
+    let classified = classify_telescope(&telescope, &mut alloc);
+    assert!(classified[0].1.is_some(),
+        "Unknown param must get a RowVar (fail-closed against unresolved types)");
+}
+
+/// EFF-EXTRACT3 (fail-closed, discriminating): correct classification catches
+/// an escaping row var; misclassification (active, not silent) misses it.
+///
+/// The "by-construction" guarantee: the only way to miss an HOF-effectful param
+/// is to classify it as `HofPure` or `Base` — an ACTIVE wrong answer, not a
+/// passive omission from a name list.
+///
+/// `fn_a (f: HofEffectful)` with declared pure row:
+/// - Correct (HofEffectful): RowVar ρ_f assigned → inferred row contains ρ_f
+///   → ρ_f escapes declared ∅ → `check_row_poly_escape` returns `Err`.
+/// - Misclassified (HofPure): no RowVar assigned → inferred row = ∅ →
+///   passes vacuously → `Ok`.
+///
+/// Verdict flip: correct=Err, misclassified=Ok. The telescope API makes the
+/// correct path the one that requires no extra work; the wrong path requires
+/// explicit misclassification.
+#[test]
+fn classify_telescope_hof_effectful_cannot_be_silently_dropped() {
     use ken_elaborator::effects::{check_row_poly_escape, infer_row_poly, RowType};
 
-    // Correct extraction: both f (ρ₀) and g (ρ₁) registered.
+    // Correct: f classified as HofEffectful.
+    let telescope_correct = vec![("f", ParamTy::HofEffectful)];
     let mut alloc = RowVarAllocator::new();
-    let extracted = extract_hof_params(&["f", "g"], &mut alloc);
-    let rv_f = extracted[0].1;
-    let rv_g = extracted[1].1;
+    let classified = classify_telescope(&telescope_correct, &mut alloc);
+    let rv_f = classified[0].1.expect("HofEffectful must get a RowVar");
 
-    let param_rows_correct = vec![rv_f, rv_g];
+    let param_rows_correct = vec![rv_f];
     let inferred_correct = infer_row_poly(
         &Default::default(), &[], &[], &param_rows_correct,
     );
-    // Declared: ρ₀ only (f's row; g's ρ₁ is not declared)
-    let declared_row_type = RowType::Var(rv_f);
-    let result_correct = check_row_poly_escape(
-        "apply_both", &inferred_correct, Some(&declared_row_type), None,
+    // Declared: ∅ (pure). ρ_f's latent effects escape declared-∅ → reject.
+    let declared_empty = RowType::Concrete(Default::default());
+    let r_correct = check_row_poly_escape(
+        "fn_a", &inferred_correct, Some(&declared_empty), None,
     );
-    assert!(result_correct.is_err(),
-        "correct extraction: ρ₁ (g's row) escapes → must reject");
+    assert!(r_correct.is_err(),
+        "correct: ρ_f escapes declared-∅ → rejects");
 
-    // Omitted g: only f's RowVar registered.
-    let param_rows_omit = vec![rv_f];
-    let inferred_omit = infer_row_poly(
-        &Default::default(), &[], &[], &param_rows_omit,
-    );
-    let result_omit = check_row_poly_escape(
-        "apply_both_omit", &inferred_omit, Some(&declared_row_type), None,
-    );
-    assert!(result_omit.is_ok(),
-        "omitted g: ρ₁ not in inferred row → spuriously accepts \
-         (by-construction extraction prevents this in real code)");
+    // Misclassified: f classified as HofPure (the only remaining escape path).
+    let telescope_wrong = vec![("f", ParamTy::HofPure)];
+    let mut alloc2 = RowVarAllocator::new();
+    let classified_wrong = classify_telescope(&telescope_wrong, &mut alloc2);
+    assert!(classified_wrong[0].1.is_none(), "HofPure → no RowVar assigned");
 
-    // Verdict flip confirmed: correct=Err, omit=Ok.
-    assert!(result_correct.is_err() && result_omit.is_ok(),
-        "verdict must flip: by-construction catches what omission misses");
+    let inferred_wrong = infer_row_poly(
+        &Default::default(), &[], &[], &[],
+    );
+    let r_wrong = check_row_poly_escape(
+        "fn_a", &inferred_wrong, Some(&declared_empty), None,
+    );
+    assert!(r_wrong.is_ok(),
+        "misclassified HofPure: no RowVar → inferred ∅ → accepts spuriously");
+
+    // Verdict flip confirmed: correct=Err (escape caught), wrong=Ok (missed).
+    assert!(r_correct.is_err() && r_wrong.is_ok(),
+        "verdict must flip: by-construction catches what misclassification misses");
 }
 
 // ============================================================
