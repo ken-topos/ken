@@ -19,6 +19,8 @@ conformance/
                    numbers, effects, collections, ffi-io, elaboration)
   runtime/       — 40-runtime/ (values, evaluation, termination, capacity)
   stdlib/        — 50-stdlib/ (lawful instances, verified building blocks)
+  security/      — 60-security/ (information flow, constant-time discipline)
+  behavioral/    — 70-behavioral/ (assumption-boundary export emitter)
 ```
 
 ## Case format
@@ -66,3 +68,13 @@ claim with no conformance case is a claim no one can rely on
   construct-then-eliminate computes; `match` exhaustiveness failure.
 - `runtime/seed-runtime.md` — dedup + O(1) equality; `Int` past 2⁵³ exact;
   `unknown` propagation.
+- `security/ifc/seed-ifc.md` — Sec1 information-flow-by-typing (the
+  implicit-flow discriminator, label joins, capability-gated declassify, the
+  relational by-proof mode).
+- `security/ct/seed-ct.md` — Sec1ct `@ct` constant-time discipline (the taint-
+  axis orientation pair, the sealed `LeakSink` set, declassify ends the span,
+  the CT-in-parameter `Q` promise).
+- `behavioral/export/seed-export.md` — B1 assumption-boundary export emitter
+  (the `Q`/`P`/`Σ`/`T`/`G` status→field projection: the no-over-claim pair,
+  alphabet reuse, the no-measure seal, the one-way gate, content-hash
+  reproducibility).
