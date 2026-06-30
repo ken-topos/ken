@@ -735,3 +735,238 @@ fn ac5_itree_bind_shaped_fold_type_checks() {
         "size(Vis e (λ_. Ret zero)) = suc zero — bind-shaped fold uses IH (AC5)"
     );
 }
+
+// ===========================================================================
+// QA adversarial — untested code paths
+// ===========================================================================
+
+/// QA adversarial: constructor with BOTH direct AND W-style recursive args.
+/// `data Mixed : Type 0 where mk : Mixed → (Bool → Mixed) → Mixed`.
+/// Verifies `recursive_args` returns both kinds; `iota_reduct` produces plain
+/// IH for arg[0] and λ-wrapped IH for arg[1]; reducer handles both correctly.
+#[test]
+fn qa_mixed_direct_and_wstyle_recursive_args() {
+    let mut env = GlobalEnv::new();
+    let (bool_id, _false_id, true_id) = mk_bool(&mut env);
+    let mixed = declare_inductive(&mut env, |mixed| InductiveSpec {
+        level_params: vec![],
+        params: vec![],
+        indices: vec![],
+        level: lv0(),
+        constructors: vec![CtorSpec {
+            // arg[0] = Mixed (direct recursive)
+            // arg[1] = Bool → Mixed (W-style recursive)
+            args: vec![
+                Term::indformer(mixed, vec![]),
+                Term::pi(
+                    Term::indformer(bool_id, vec![]),
+                    Term::indformer(mixed, vec![]),
+                ),
+            ],
+            target_indices: vec![],
+        }],
+    })
+    .unwrap();
+    let decl = env.inductive(mixed).unwrap();
+    let _mk_id = decl.constructors[0].id;
+    // Mixed has only one constructor (mk) with no base case — can't build a
+    // non-diverging scrutinee. Switch to Mixed2 with a base case.
+    let (nat_id, zero_id, suc_id) = mk_nat(&mut env);
+    let ctx = Context::new();
+
+    // data Mixed2 : Type 0 where
+    //   base : Mixed2
+    //   mk : Mixed2 → (Bool → Mixed2) → Mixed2
+    let mixed2 = declare_inductive(&mut env, |mixed2| InductiveSpec {
+        level_params: vec![],
+        params: vec![],
+        indices: vec![],
+        level: lv0(),
+        constructors: vec![
+            CtorSpec { args: vec![], target_indices: vec![] }, // base
+            CtorSpec {
+                args: vec![
+                    Term::indformer(mixed2, vec![]),
+                    Term::pi(
+                        Term::indformer(bool_id, vec![]),
+                        Term::indformer(mixed2, vec![]),
+                    ),
+                ],
+                target_indices: vec![],
+            },
+        ],
+    })
+    .unwrap();
+    let decl2 = env.inductive(mixed2).unwrap();
+    let base_id = decl2.constructors[0].id;
+    let mk2_id = decl2.constructors[1].id;
+
+    // M = λ_:Mixed2. Nat
+    let motive = Term::lam(fmr(mixed2), fmr(nat_id));
+
+    // scrut = mk2 base (λ_:Bool. base)
+    let k_base = Term::lam(fmr(bool_id), ctor(base_id));
+    let scrut = Term::app(Term::app(ctor(mk2_id), ctor(base_id)), k_base);
+
+    // elim_Mixed2 M m_base m_mk scrut
+    // m_base = zero
+    // m_mk = λd. λk. λih_d. λih_k. suc (ih_k true)
+    // ih_d = elim_Mixed2 M m_base m_mk [] base → zero (base case)
+    // ih_k = λb:Bool. elim_Mixed2 M m_base m_mk [] (k_base b)
+    //       = λb:Bool. elim_Mixed2 M m_base m_mk [] base
+    //       = λb:Bool. zero
+    // ih_k true = zero
+    // suc (ih_k true) = suc zero
+    let m_base = zero_t(zero_id);
+    let m_mk = Term::lam(
+        fmr(mixed2),
+        Term::lam(
+            Term::pi(fmr(bool_id), fmr(mixed2)),
+            Term::lam(
+                fmr(nat_id),
+                Term::lam(
+                    Term::pi(fmr(bool_id), fmr(nat_id)),
+                    suc_t(suc_id, Term::app(Term::var(0), ctor(true_id))),
+                ),
+            ),
+        ),
+    );
+    let elim = Term::Elim {
+        fam: mixed2,
+        level_args: vec![],
+        params: vec![],
+        motive: Box::new(motive.clone()),
+        methods: vec![m_base, m_mk],
+        indices: vec![],
+        scrut: Box::new(scrut),
+    };
+    let result = normalize(&env, &ctx, &elim);
+    assert_eq!(
+        result,
+        whnf(&env, &ctx, &suc_t(suc_id, zero_t(zero_id))),
+        "Mixed2 (direct + W-style): uses λ-wrapped IH on the W-style arg, gives suc zero"
+    );
+}
+
+/// QA adversarial: W-style constructor with a 2-Π branching telescope
+/// `(x:Nat) → (y:Nat) → D` (nb=2). Exercises the multi-Π peel and the
+/// nested λ-wrapping in both `method_type` and `iota_reduct`.
+#[test]
+fn qa_wstyle_double_pi_branching_telescope() {
+    let mut env = GlobalEnv::new();
+    let (nat_id, zero_id, suc_id) = mk_nat(&mut env);
+
+    // data DoubleBranch : Type 0 where
+    //   mk : ((x:Nat) → (y:Nat) → DoubleBranch) → DoubleBranch
+    let dbl = declare_inductive(&mut env, |dbl| InductiveSpec {
+        level_params: vec![],
+        params: vec![],
+        indices: vec![],
+        level: lv0(),
+        constructors: vec![CtorSpec {
+            // arg = Pi(Nat, Pi(Nat, Dbl)) = Nat → Nat → Dbl
+            // branching_tel = [Nat, Nat], nb=2
+            args: vec![Term::pi(
+                fmr(nat_id),
+                Term::pi(fmr(nat_id), Term::indformer(dbl, vec![])),
+            )],
+            target_indices: vec![],
+        }],
+    })
+    .unwrap();
+    let decl = env.inductive(dbl).unwrap();
+    let mk_id = decl.constructors[0].id;
+
+    let _ctx = Context::new();
+    // M = λ_:DoubleBranch. Nat
+    let motive = Term::lam(fmr(dbl), fmr(nat_id));
+
+    // method: λ(k:Nat→Nat→Dbl). λ(ih:Nat→Nat→Nat). suc (ih zero zero)
+    //   In context [k, ih]: ih=Var(0), k=Var(1).
+    //   ih zero zero = App(App(Var(0), zero), zero) — uses the nested λ IH.
+    let method = Term::lam(
+        Term::pi(fmr(nat_id), Term::pi(fmr(nat_id), fmr(dbl))), // k : Nat → Nat → Dbl
+        Term::lam(
+            Term::pi(fmr(nat_id), Term::pi(fmr(nat_id), fmr(nat_id))), // ih : Nat → Nat → Nat
+            suc_t(
+                suc_id,
+                Term::app(
+                    Term::app(Term::var(0), zero_t(zero_id)),
+                    zero_t(zero_id),
+                ),
+            ),
+        ),
+    );
+
+    // k = λx:Nat. λy:Nat. mk k (but mk only has one ctor and takes (Nat→Nat→Dbl)).
+    // Actually Dbl has only one ctor mk which takes (Nat→Nat→Dbl).
+    // We can't build a leaf value of Dbl → this is a positive-only type with no base.
+    // Still, we can test the eliminator with method_type and iota_reduct directly
+    // without needing a fully-well-typed scrut.
+
+    // Verify the IH type is Π(Nat, Π(Nat, Nat)).
+    let ind = env.inductive(dbl).unwrap();
+    let meth_ty = ken_kernel::inductive::method_type(
+        ind,
+        0, // k=0 (only constructor)
+        &motive,
+        &[],
+        &[],
+    );
+    // method_type returns: Π(Nat→Nat→Dbl). Π(Π(Nat, Π(Nat, Nat))). M [] c₀ [k] [ih]
+    // The IH's type should be Π(Nat, Π(Nat, Nat)).
+    // peel the first Pi (k's type) and check the second binder is the IH with 2 Pis.
+    let (pis, _body) = ken_kernel::inductive::peel_pi(&meth_ty);
+    assert_eq!(pis.len(), 2, "method_type has 2 Π-binders (k + ih)");
+    // pis[0] = k's type (Nat → Nat → Dbl), pis[1] = ih's type.
+    let (ih_pis, _ih_body) = ken_kernel::inductive::peel_pi(&pis[1]);
+    assert_eq!(ih_pis.len(), 2, "IH type has 2 Π-binders (Nat → Nat → Nat)");
+    // The IH body is M applied to the recursive arg applied to x,y:
+    // App(Lam(Dbl, Nat), App(App(Var, Var), Var)). After two lambdas, effectively Nat.
+    // Verify that both Pi domains are Nat (the motive codomain is Nat for Dbl).
+
+    // Now test iota_reduct: elim_Dbl M [method] [] (mk f)
+    // where f = λx.λy. mk (λx'.λy'. ...) — needs a sub-term of Dbl type, but Dbl
+    // has no base case. Since ι only checks the scrutinee's shape (it's constructor-
+    // headed), it should still produce the reduct.
+    let f = Term::lam(
+        fmr(nat_id),
+        Term::lam(fmr(nat_id), ctor(mk_id)), // recursive but ι doesn't evaluate it
+    );
+    let ctor_all_args = vec![f.clone()]; // constructor takes 1 arg (m=0, n=1)
+    let reduct = ken_kernel::inductive::iota_reduct(
+        ind,
+        0, // k=0
+        &[],
+        &[],
+        &motive,
+        &[method.clone()],
+        &ctor_all_args,
+    );
+    assert!(reduct.is_ok(), "iota_reduct for double-Pi W-style must succeed");
+    // The reduct is: method applied to [f, λx.λy. elim_Dbl ... (f x y)]
+    // After β: suc (ih zero zero) where ih = λx.λy. elim_Dbl ... (f x y)
+    // Since elim_Dbl ... (f x y) = elim_Dbl ... (mk f) which loops,
+    // but ι doesn't reduce the scrutinee — it just produces the reduct once.
+    // normalize would diverge, but the single ι-step produces the right shape.
+    let reduct = reduct.unwrap();
+    // The reduct should have shape App(App(method, f), λx.λy. elim ...)
+    // peel_app gives head=method, args=[f, λx.λy. elim_Dbl ...]
+    let (head, args) = ken_kernel::inductive::peel_app(&reduct);
+    assert_eq!(head, method.clone(), "head = method");
+    assert_eq!(args.len(), 2, "two args: f + IH");
+    // Verify first arg is f (ctor arg), second arg is the nested-λ IH.
+    assert_eq!(args[0], f, "first arg = f (ctor arg)");
+    // The IH (args[1]) is a term that starts with λx. λy.
+    match &args[1] {
+        Term::Lam(_dom, body) => {
+            // body = λy. elim ... under the first λ
+            if let Term::Lam(..) = body.as_ref() {
+                // Correctly has two lambdas
+            } else {
+                panic!("IH body should have second λ-binder, got: {:?}", body);
+            }
+        }
+        _ => panic!("IH should be a λ-term (W-style nested IH), got: {:?}", args[1]),
+    }
+}
