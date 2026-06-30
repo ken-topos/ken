@@ -13,7 +13,9 @@ use ken_kernel::{
     whnf, Context, GlobalEnv, GlobalId, Level, LevelVar, Term,
 };
 
+use crate::ast::{BinOp, NumLit};
 use crate::error::{ElabError, Span};
+use crate::numbers::{AddEntry, NumericEnv, NumericLitVal};
 use crate::resolve::{RDecl, RDeclKind, RExpr, RType};
 
 // ----- obligation model -----
@@ -27,6 +29,8 @@ pub enum ObligationKind {
     Prove,
     /// From a `law Name { field : φ }` field (`22 §2.4`).
     LawField(String),
+    /// From a bare fixed-width arithmetic op (`35 §3`, `43 §2`).
+    PartialPrim,
 }
 
 /// A single open obligation hole (`21 §6.5`).
@@ -180,15 +184,28 @@ struct ElabCtx<'e> {
     ctx: Context,
     metas: MetaCtx,
     globals: &'e HashMap<String, GlobalId>,
+    num_values: &'e mut HashMap<GlobalId, NumericLitVal>,
+    numeric_env: &'e NumericEnv,
+    obligations: Vec<Obligation>,
+    obl_counter: u32,
 }
 
 impl<'e> ElabCtx<'e> {
-    fn new(env: &'e mut GlobalEnv, globals: &'e HashMap<String, GlobalId>) -> Self {
+    fn new(
+        env: &'e mut GlobalEnv,
+        globals: &'e HashMap<String, GlobalId>,
+        num_values: &'e mut HashMap<GlobalId, NumericLitVal>,
+        numeric_env: &'e NumericEnv,
+    ) -> Self {
         Self {
             env,
             ctx: Context::new(),
             metas: MetaCtx::default(),
             globals,
+            num_values,
+            numeric_env,
+            obligations: Vec::new(),
+            obl_counter: 0,
         }
     }
 }
@@ -243,6 +260,9 @@ fn elab_type(cx: &mut ElabCtx, ty: &RType) -> Result<Term, ElabError> {
 
 fn check(cx: &mut ElabCtx, expr: &RExpr, expected: &Term, _span: &Span) -> Result<Term, ElabError> {
     match expr {
+        RExpr::RNumLit(lit, num_span) => {
+            elab_num_lit_checked(cx, lit, expected, num_span)
+        }
         RExpr::RLam(_, body, lam_span) => {
             let exp_wh = whnf(cx.env, &cx.ctx, expected);
             match exp_wh {
@@ -355,6 +375,171 @@ fn infer(cx: &mut ElabCtx, expr: &RExpr) -> Result<(Term, Term), ElabError> {
         RExpr::ROld(e, _) => {
             infer(cx, e)
         }
+
+        RExpr::RNumLit(lit, span) => {
+            elab_num_lit_infer(cx, lit, span)
+        }
+
+        RExpr::RBinOp(op, lhs, rhs, span) => {
+            elab_binop(cx, op, lhs, rhs, span)
+        }
+    }
+}
+
+// ----- numeric literal helpers -----
+
+/// Elaborate a numeric literal with its default type (no expected type).
+fn elab_num_lit_infer(
+    cx: &mut ElabCtx,
+    lit: &NumLit,
+    span: &Span,
+) -> Result<(Term, Term), ElabError> {
+    let (val, type_id) = num_lit_default_type(lit, cx.numeric_env);
+    let ty_term = Term::const_(type_id, vec![]);
+    let postulate_id = declare_postulate(cx.env, vec![], ty_term.clone())
+        .map_err(|e| ElabError::KernelRejected { error: e, span: span.clone() })?;
+    cx.num_values.insert(postulate_id, val);
+    Ok((Term::const_(postulate_id, vec![]), ty_term))
+}
+
+/// Elaborate a numeric literal with a known expected type.
+///
+/// If the expected type is a numeric type that accepts this literal form, use it.
+/// Otherwise infer the default type and unify (may yield a type error).
+fn elab_num_lit_checked(
+    cx: &mut ElabCtx,
+    lit: &NumLit,
+    expected: &Term,
+    span: &Span,
+) -> Result<Term, ElabError> {
+    let nenv = cx.numeric_env;
+    let exp_wh = whnf(cx.env, &cx.ctx, expected);
+
+    // Try type-directed dispatch: if expected type is a numeric Const, use it.
+    if let Term::Const { id, .. } = &exp_wh {
+        let ty_id = *id;
+        let val_opt: Option<NumericLitVal> = match lit {
+            NumLit::Int(n) => {
+                // Accept Int literals at any integer numeric type.
+                let is_int_type = [
+                    nenv.int_id, nenv.int8_id, nenv.int16_id, nenv.int32_id, nenv.int64_id,
+                    nenv.uint8_id, nenv.uint16_id, nenv.uint32_id, nenv.uint64_id,
+                ].contains(&ty_id);
+                if is_int_type {
+                    Some(crate::numbers::int_lit_val(*n, &exp_wh, nenv))
+                } else {
+                    None
+                }
+            }
+            NumLit::Float(f) if ty_id == nenv.float_id => Some(NumericLitVal::Float(*f)),
+            NumLit::Decimal(c, e) if ty_id == nenv.decimal_id => {
+                Some(NumericLitVal::Decimal { coeff: *c, exp: *e })
+            }
+            NumLit::Float32(f) if ty_id == nenv.float32_id => Some(NumericLitVal::Float32(*f)),
+            _ => None,
+        };
+        if let Some(val) = val_opt {
+            let postulate_id = declare_postulate(cx.env, vec![], exp_wh.clone())
+                .map_err(|e| ElabError::KernelRejected { error: e, span: span.clone() })?;
+            cx.num_values.insert(postulate_id, val);
+            return Ok(Term::const_(postulate_id, vec![]));
+        }
+    }
+
+    // Fall through: infer default type, then unify with expected.
+    let (core, inferred_ty) = elab_num_lit_infer(cx, lit, span)?;
+    unify_types(&mut cx.metas, expected, &inferred_ty);
+    Ok(core)
+}
+
+/// Returns the default (Val, TypeId) for a literal without an expected type.
+fn num_lit_default_type(lit: &NumLit, nenv: &NumericEnv) -> (NumericLitVal, GlobalId) {
+    match lit {
+        NumLit::Int(n)       => (NumericLitVal::Int(*n), nenv.int_id),
+        NumLit::Float(f)     => (NumericLitVal::Float(*f), nenv.float_id),
+        NumLit::Decimal(c,e) => (NumericLitVal::Decimal { coeff: *c, exp: *e }, nenv.decimal_id),
+        NumLit::Float32(f)   => (NumericLitVal::Float32(*f), nenv.float32_id),
+    }
+}
+
+/// Elaborate a type-directed binary operator.
+///
+/// Infers the LHS type, dispatches to the right op, and emits an obligation for
+/// fixed-width addition (`35 §3`, `43 §2`).
+fn elab_binop(
+    cx: &mut ElabCtx,
+    op: &BinOp,
+    lhs: &RExpr,
+    rhs: &RExpr,
+    span: &Span,
+) -> Result<(Term, Term), ElabError> {
+    let (lhs_core, lhs_ty) = infer(cx, lhs)?;
+    let lhs_ty_wh = whnf(cx.env, &cx.ctx, &lhs_ty);
+
+    match op {
+        BinOp::Add | BinOp::WrappingAdd => {
+            let entry: &AddEntry = cx.numeric_env.classify_add(&lhs_ty_wh).ok_or_else(|| {
+                ElabError::TypeMismatch {
+                    span: span.clone(),
+                    reason: format!("'+' / '+%' not supported on this type"),
+                }
+            })?;
+            let result_ty = Term::const_(entry.result_id, vec![]);
+            let rhs_core = check(cx, rhs, &result_ty, span)?;
+            let op_id = if matches!(op, BinOp::WrappingAdd) {
+                entry.wrapping_id.ok_or_else(|| ElabError::TypeMismatch {
+                    span: span.clone(),
+                    reason: format!("'+%' wrapping not available on this type"),
+                })?
+            } else {
+                entry.op_id
+            };
+            let op_term = Term::const_(op_id, vec![]);
+            let applied = Term::app(Term::app(op_term, lhs_core.clone()), rhs_core.clone());
+
+            // Emit no-overflow obligation for bare '+' on fixed-width types.
+            if matches!(op, BinOp::Add) {
+                if let Some(novf_id) = entry.no_ovf_id {
+                    // phi = NoOvf a b : Ω₀
+                    let phi = Term::app(
+                        Term::app(Term::const_(novf_id, vec![]), lhs_core.clone()),
+                        rhs_core.clone(),
+                    );
+                    let closed = close_goal(&cx.ctx, phi);
+                    let hole_id = declare_postulate(cx.env, vec![], closed.clone())
+                        .map_err(|e| ElabError::KernelRejected { error: e, span: span.clone() })?;
+                    let obl_id = cx.obl_counter;
+                    cx.obl_counter += 1;
+                    cx.obligations.push(Obligation {
+                        id: obl_id,
+                        hole_id,
+                        goal_closed: closed,
+                        span: span.clone(),
+                        kind: ObligationKind::PartialPrim,
+                    });
+                }
+            }
+
+            Ok((applied, result_ty))
+        }
+
+        BinOp::Mul => {
+            return Err(ElabError::Internal("'*' not yet supported".to_string()));
+        }
+
+        BinOp::EqEq => {
+            let eq_entry = cx.numeric_env.classify_eq(&lhs_ty_wh).ok_or_else(|| {
+                ElabError::TypeMismatch {
+                    span: span.clone(),
+                    reason: format!("'==' not supported on this type"),
+                }
+            })?;
+            let rhs_core = check(cx, rhs, &lhs_ty_wh, span)?;
+            let bool_ty = Term::const_(cx.numeric_env.bool_id, vec![]);
+            let op_term = Term::const_(eq_entry.op_id, vec![]);
+            let applied = Term::app(Term::app(op_term, lhs_core), rhs_core);
+            Ok((applied, bool_ty))
+        }
     }
 }
 
@@ -386,9 +571,11 @@ fn close_goal(ctx: &Context, goal: Term) -> Term {
 pub fn elaborate_rdecl(
     env: &mut GlobalEnv,
     globals: &mut HashMap<String, GlobalId>,
+    num_values: &mut HashMap<GlobalId, NumericLitVal>,
+    numeric_env: &NumericEnv,
     rdecl: &RDecl,
 ) -> Result<GlobalId, ElabError> {
-    let result = elaborate_rdecl_v1(env, globals, rdecl)?;
+    let result = elaborate_rdecl_v1(env, globals, num_values, numeric_env, rdecl)?;
     Ok(result.def_id)
 }
 
@@ -396,13 +583,17 @@ pub fn elaborate_rdecl(
 pub fn elaborate_rdecl_v1(
     env: &mut GlobalEnv,
     globals: &mut HashMap<String, GlobalId>,
+    num_values: &mut HashMap<GlobalId, NumericLitVal>,
+    numeric_env: &NumericEnv,
     rdecl: &RDecl,
 ) -> Result<ElabResult, ElabError> {
     match &rdecl.kind {
-        RDeclKind::View { .. } | RDeclKind::Let => elaborate_view_or_let(env, globals, rdecl),
-        RDeclKind::Prove => elaborate_prove(env, globals, rdecl),
+        RDeclKind::View { .. } | RDeclKind::Let => {
+            elaborate_view_or_let(env, globals, num_values, numeric_env, rdecl)
+        }
+        RDeclKind::Prove => elaborate_prove(env, globals, num_values, numeric_env, rdecl),
         RDeclKind::Law { param, fields } => {
-            elaborate_law(env, globals, rdecl, param.clone(), fields.clone())
+            elaborate_law(env, globals, num_values, numeric_env, rdecl, param.clone(), fields.clone())
         }
     }
 }
@@ -410,6 +601,8 @@ pub fn elaborate_rdecl_v1(
 fn elaborate_view_or_let(
     env: &mut GlobalEnv,
     globals: &mut HashMap<String, GlobalId>,
+    num_values: &mut HashMap<GlobalId, NumericLitVal>,
+    numeric_env: &NumericEnv,
     rdecl: &RDecl,
 ) -> Result<ElabResult, ElabError> {
     // Check for implicit ensures from a return-type refinement (`22 §2.1`).
@@ -418,10 +611,10 @@ fn elaborate_view_or_let(
         .is_some();
     if rdecl.requires.is_empty() && rdecl.ensures.is_empty() && !has_refine_return {
         // V0 path: no spec clauses and no return-type refinement
-        return elaborate_v0(env, globals, rdecl);
+        return elaborate_v0(env, globals, num_values, numeric_env, rdecl);
     }
     // V1 path: has requires/ensures or implicit return-type refinement obligation
-    elaborate_view_with_spec(env, globals, rdecl)
+    elaborate_view_with_spec(env, globals, num_values, numeric_env, rdecl)
 }
 
 /// Extract the predicate from the innermost refinement in a resolved type.
@@ -439,10 +632,12 @@ fn innermost_refine_pred(ty: &RType) -> Option<&RExpr> {
 fn elaborate_v0(
     env: &mut GlobalEnv,
     globals: &mut HashMap<String, GlobalId>,
+    num_values: &mut HashMap<GlobalId, NumericLitVal>,
+    numeric_env: &NumericEnv,
     rdecl: &RDecl,
 ) -> Result<ElabResult, ElabError> {
-    let (ty_core, body_core) = {
-        let mut cx = ElabCtx::new(env, globals);
+    let (ty_core, body_core, body_obligations) = {
+        let mut cx = ElabCtx::new(env, globals, num_values, numeric_env);
         let (body_raw, ty_raw) = if let Some(ty) = &rdecl.ty {
             let ty_c = elab_type(&mut cx, ty)?;
             let body_c = check(&mut cx, &rdecl.body, &ty_c, &rdecl.span)?;
@@ -451,26 +646,29 @@ fn elaborate_v0(
             let (body_c, ty_c) = infer(&mut cx, &rdecl.body)?;
             (body_c, ty_c)
         };
-        (cx.metas.zonk_term(&ty_raw), cx.metas.zonk_term(&body_raw))
+        let obligations = std::mem::take(&mut cx.obligations);
+        (cx.metas.zonk_term(&ty_raw), cx.metas.zonk_term(&body_raw), obligations)
     };
     let id = declare_def(env, vec![], ty_core, body_core).map_err(|e| {
         ElabError::KernelRejected { error: e, span: rdecl.span.clone() }
     })?;
     globals.insert(rdecl.name.clone(), id);
-    Ok(ElabResult { name: rdecl.name.clone(), def_id: id, obligations: vec![] })
+    Ok(ElabResult { name: rdecl.name.clone(), def_id: id, obligations: body_obligations })
 }
 
 /// Elaborate a `view` with `requires`/`ensures` clauses (`21 §6.3`).
 fn elaborate_view_with_spec(
     env: &mut GlobalEnv,
     globals: &mut HashMap<String, GlobalId>,
+    num_values: &mut HashMap<GlobalId, NumericLitVal>,
+    numeric_env: &NumericEnv,
     rdecl: &RDecl,
 ) -> Result<ElabResult, ElabError> {
     let omega = Term::omega(Level::Zero);
 
     // Phase 1: elaborate the declared type (carrier) and body — drop borrow first.
     let (body_raw, carrier_ty_raw) = {
-        let mut cx = ElabCtx::new(env, globals);
+        let mut cx = ElabCtx::new(env, globals, num_values, numeric_env);
         let result = if let Some(ty) = &rdecl.ty {
             let ty_c = elab_type(&mut cx, ty)?;
             let body_c = check(&mut cx, &rdecl.body, &ty_c, &rdecl.span)?;
@@ -494,7 +692,7 @@ fn elaborate_view_with_spec(
     let mut req_cores: Vec<Term> = Vec::new();
     for req in &rdecl.requires {
         let phi_core = elab_in_ctx_at_omega(
-            env, globals, &param_ctx, req, &omega, &rdecl.span,
+            env, globals, num_values, numeric_env, &param_ctx, req, &omega, &rdecl.span,
         )?;
         req_cores.push(phi_core);
     }
@@ -519,7 +717,7 @@ fn elaborate_view_with_spec(
     let mut obl_counter = 0u32;
     for ens in &all_ensures {
         let psi_core = elab_in_ctx_at_omega(
-            env, globals, &ens_ctx, ens, &omega, &rdecl.span,
+            env, globals, num_values, numeric_env, &ens_ctx, ens, &omega, &rdecl.span,
         )?;
         // goal = ψ[body_inner/result]: result = Var(0) in ens_ctx, substitute body
         let goal_open = subst0(&psi_core, &body_inner);
@@ -570,10 +768,12 @@ fn elaborate_view_with_spec(
 fn elaborate_prove(
     env: &mut GlobalEnv,
     globals: &mut HashMap<String, GlobalId>,
+    num_values: &mut HashMap<GlobalId, NumericLitVal>,
+    numeric_env: &NumericEnv,
     rdecl: &RDecl,
 ) -> Result<ElabResult, ElabError> {
     let phi_core = {
-        let mut cx = ElabCtx::new(env, globals);
+        let mut cx = ElabCtx::new(env, globals, num_values, numeric_env);
         let omega = Term::omega(Level::Zero);
         let (phi_raw, phi_ty_raw) = infer(&mut cx, &rdecl.body)?;
         // Check φ is Ω-typed
@@ -600,6 +800,8 @@ fn elaborate_prove(
 fn elaborate_law(
     env: &mut GlobalEnv,
     globals: &mut HashMap<String, GlobalId>,
+    num_values: &mut HashMap<GlobalId, NumericLitVal>,
+    numeric_env: &NumericEnv,
     rdecl: &RDecl,
     _param: String,
     fields: Vec<(String, RExpr)>,
@@ -611,7 +813,7 @@ fn elaborate_law(
     // and emit an obligation hole.
     for (i, (field_name, field_phi)) in fields.iter().enumerate() {
         let phi_core = {
-            let mut cx = ElabCtx::new(env, globals);
+            let mut cx = ElabCtx::new(env, globals, num_values, numeric_env);
             // param is the law's `param` argument — it's in scope (resolver pushed it)
             // For elaboration, we need the param in scope. Since the resolver resolved
             // field_phi with param in scope at Var(0), we replicate that:
@@ -654,12 +856,14 @@ fn elaborate_law(
 fn elab_in_ctx_at_omega(
     env: &mut GlobalEnv,
     globals: &HashMap<String, GlobalId>,
+    num_values: &mut HashMap<GlobalId, NumericLitVal>,
+    numeric_env: &NumericEnv,
     ctx: &Context,
     expr: &RExpr,
     omega: &Term,
     span: &Span,
 ) -> Result<Term, ElabError> {
-    let mut cx = ElabCtx::new(env, globals);
+    let mut cx = ElabCtx::new(env, globals, num_values, numeric_env);
     // Populate cx.ctx from the snapshot
     for ty in &ctx.types {
         cx.ctx.push(ty.clone());
@@ -735,10 +939,12 @@ fn unwrap_lam(term: &Term, n: usize) -> Term {
 pub fn elaborate_rexpr(
     env: &mut GlobalEnv,
     globals: &HashMap<String, GlobalId>,
+    num_values: &mut HashMap<GlobalId, NumericLitVal>,
+    numeric_env: &NumericEnv,
     rexpr: &RExpr,
 ) -> Result<(Term, Term), ElabError> {
     let (core, ty, expr_span) = {
-        let mut cx = ElabCtx::new(env, globals);
+        let mut cx = ElabCtx::new(env, globals, num_values, numeric_env);
         let (core_raw, ty_raw) = infer(&mut cx, rexpr)?;
         let c = cx.metas.zonk_term(&core_raw);
         let t = cx.metas.zonk_term(&ty_raw);

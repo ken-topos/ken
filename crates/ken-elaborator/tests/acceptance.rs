@@ -281,7 +281,7 @@ fn shadow_outer_not_captured() {
     };
 
     let mut env2 = mk_env();
-    let result = elaborate_rdecl(&mut env2.env, &mut env2.globals, &bug_rdecl);
+    let result = elaborate_rdecl(&mut env2.env, &mut env2.globals, &mut env2.num_values, &env2.numeric_env, &bug_rdecl);
     assert!(
         matches!(result, Err(ElabError::KernelRejected { .. })),
         "shadow guard: capture bug must be rejected by the kernel, got {:?}",

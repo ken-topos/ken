@@ -6,7 +6,8 @@
 //! selected method (ι) fires.
 //!
 //! # EvalVal variants
-//! - Scalar immediates (`Bool`, `Int`) — not K3-interned (they are K3 immediates).
+//! - Scalar immediates (`Bool`, `Int`, `BigInt`, `Float`, `Float32`,
+//!   `DecimalVal`) — not K3-interned (they are K3 immediates).
 //! - Compound data (`Ctor`, `Pair`, `Closure`) — K3-interned, carry a `SlotId`.
 //! - Type-former values (`TypeUniverse`, `OmegaUniverse`, `PiTy`, `SigmaTy`,
 //!   `IndFormerVal`) — not K3-interned; irreducible at the value layer (G1 scope).
@@ -36,6 +37,10 @@ pub struct EvalStore {
     /// Same body Term → same code_id; distinct bodies → distinct ids, no collisions.
     code_ids: HashMap<Term, u64>,
     next_code_id: u64,
+    /// Numeric literal values registered by the elaborator.
+    /// Maps opaque postulate GlobalId → the EvalVal it represents.
+    /// Filled by tests/driver that have access to ElabEnv.num_values.
+    pub num_values: HashMap<GlobalId, EvalVal>,
 }
 
 impl EvalStore {
@@ -44,6 +49,7 @@ impl EvalStore {
             k3: Store::new(),
             code_ids: HashMap::new(),
             next_code_id: 1,
+            num_values: HashMap::new(),
         }
     }
 
@@ -95,6 +101,10 @@ pub enum EvalVal {
     // --- Scalar immediates (K3 stores these without interning) ---
     Bool(bool),
     Int(i64),
+    BigInt(i128),                         // Int values > i64::MAX or < i64::MIN
+    Float(f64),                           // IEEE 754 double
+    Float32(f32),                         // IEEE 754 single
+    DecimalVal { coeff: i64, exp: i32 },  // exact base-10: coeff × 10^exp
 
     // --- Compound data values (K3-interned; slot_id uniquely identifies content) ---
     /// Fully-applied constructor: `cₖ v̄`.  `args` holds ALL applied arguments
@@ -460,10 +470,149 @@ fn eq_type_eq(a: &EvalVal, b: &EvalVal) -> bool {
 
 // ── prim reduction ────────────────────────────────────────────────────────────
 
+// ── numeric helpers ───────────────────────────────────────────────────────────
+
+fn i128_to_int_val(n: i128) -> EvalVal {
+    if n >= i64::MIN as i128 && n <= i64::MAX as i128 {
+        EvalVal::Int(n as i64)
+    } else {
+        EvalVal::BigInt(n)
+    }
+}
+
+fn eval_to_i128(v: &EvalVal) -> Option<i128> {
+    match v {
+        EvalVal::Int(n) => Some(*n as i128),
+        EvalVal::BigInt(n) => Some(*n),
+        _ => None,
+    }
+}
+
+fn exact_int_binop(a: &EvalVal, b: &EvalVal, op: impl Fn(i128, i128) -> i128) -> EvalVal {
+    match (eval_to_i128(a), eval_to_i128(b)) {
+        (Some(av), Some(bv)) => i128_to_int_val(op(av, bv)),
+        _ => EvalVal::Neutral,
+    }
+}
+
+fn fixed_binop_i8(a: &EvalVal, b: &EvalVal, op: fn(i8, i8) -> i8) -> EvalVal {
+    match (a, b) {
+        (EvalVal::Int(x), EvalVal::Int(y)) => EvalVal::Int(op(*x as i8, *y as i8) as i64),
+        _ => EvalVal::Neutral,
+    }
+}
+
+fn fixed_binop_i16(a: &EvalVal, b: &EvalVal, op: fn(i16, i16) -> i16) -> EvalVal {
+    match (a, b) {
+        (EvalVal::Int(x), EvalVal::Int(y)) => EvalVal::Int(op(*x as i16, *y as i16) as i64),
+        _ => EvalVal::Neutral,
+    }
+}
+
+fn fixed_binop_i32(a: &EvalVal, b: &EvalVal, op: fn(i32, i32) -> i32) -> EvalVal {
+    match (a, b) {
+        (EvalVal::Int(x), EvalVal::Int(y)) => EvalVal::Int(op(*x as i32, *y as i32) as i64),
+        _ => EvalVal::Neutral,
+    }
+}
+
+fn fixed_binop_i64(a: &EvalVal, b: &EvalVal, op: fn(i64, i64) -> i64) -> EvalVal {
+    match (a, b) {
+        (EvalVal::Int(x), EvalVal::Int(y)) => EvalVal::Int(op(*x, *y)),
+        _ => EvalVal::Neutral,
+    }
+}
+
+fn fixed_binop_u8(a: &EvalVal, b: &EvalVal, op: fn(u8, u8) -> u8) -> EvalVal {
+    match (a, b) {
+        (EvalVal::Int(x), EvalVal::Int(y)) => EvalVal::Int(op(*x as u8, *y as u8) as i64),
+        _ => EvalVal::Neutral,
+    }
+}
+
+fn fixed_binop_u16(a: &EvalVal, b: &EvalVal, op: fn(u16, u16) -> u16) -> EvalVal {
+    match (a, b) {
+        (EvalVal::Int(x), EvalVal::Int(y)) => EvalVal::Int(op(*x as u16, *y as u16) as i64),
+        _ => EvalVal::Neutral,
+    }
+}
+
+fn fixed_binop_u32(a: &EvalVal, b: &EvalVal, op: fn(u32, u32) -> u32) -> EvalVal {
+    match (a, b) {
+        (EvalVal::Int(x), EvalVal::Int(y)) => EvalVal::Int(op(*x as u32, *y as u32) as i64),
+        _ => EvalVal::Neutral,
+    }
+}
+
+fn fixed_binop_u64(a: &EvalVal, b: &EvalVal, op: fn(u64, u64) -> u64) -> EvalVal {
+    match (a, b) {
+        (EvalVal::Int(x), EvalVal::Int(y)) => {
+            let r = op(*x as u64, *y as u64) as i128;
+            i128_to_int_val(r)
+        }
+        _ => EvalVal::Neutral,
+    }
+}
+
+fn add_decimal(ca: i64, ea: i32, cb: i64, eb: i32) -> EvalVal {
+    if ea == eb {
+        EvalVal::DecimalVal {
+            coeff: ca.saturating_add(cb),
+            exp: ea,
+        }
+    } else if ea < eb {
+        let shift = (eb - ea).min(18) as u32;
+        let factor = 10i64.saturating_pow(shift);
+        EvalVal::DecimalVal {
+            coeff: ca.saturating_add(cb.saturating_mul(factor)),
+            exp: ea,
+        }
+    } else {
+        let shift = (ea - eb).min(18) as u32;
+        let factor = 10i64.saturating_pow(shift);
+        EvalVal::DecimalVal {
+            coeff: ca.saturating_mul(factor).saturating_add(cb),
+            exp: eb,
+        }
+    }
+}
+
+fn decimal_eq(ca: i64, ea: i32, cb: i64, eb: i32) -> bool {
+    if ea == eb {
+        ca == cb
+    } else if ea < eb {
+        let shift = (eb - ea).min(18) as u32;
+        let factor = 10i64.saturating_pow(shift);
+        ca == cb.saturating_mul(factor)
+    } else {
+        let shift = (ea - eb).min(18) as u32;
+        let factor = 10i64.saturating_pow(shift);
+        ca.saturating_mul(factor) == cb
+    }
+}
+
+/// Structural equality on `EvalVal` for equality-testing contexts (`L1 §4`).
+pub fn eval_vals_eq(a: &EvalVal, b: &EvalVal) -> bool {
+    match (a, b) {
+        (EvalVal::Bool(x), EvalVal::Bool(y)) => x == y,
+        (EvalVal::Int(x), EvalVal::Int(y)) => x == y,
+        (EvalVal::BigInt(x), EvalVal::BigInt(y)) => x == y,
+        (EvalVal::Int(x), EvalVal::BigInt(y)) => (*x as i128) == *y,
+        (EvalVal::BigInt(x), EvalVal::Int(y)) => *x == (*y as i128),
+        (EvalVal::Float(x), EvalVal::Float(y)) => x == y,
+        (EvalVal::Float32(x), EvalVal::Float32(y)) => x == y,
+        (EvalVal::DecimalVal { coeff: ca, exp: ea }, EvalVal::DecimalVal { coeff: cb, exp: eb }) => {
+            decimal_eq(*ca, *ea, *cb, *eb)
+        }
+        _ => false,
+    }
+}
+
 /// Primitive reduction for registered operations (`42 §3.3`, `14 §5`).
 ///
-/// Only `add`/`sub`/`mul` on `Int` literals are grounded for the G1 corpus.
-/// Division and other operations that may fault are out of scope (§6 / `43 §2.2`).
+/// Covers `L1` numeric tower: Int (i128-exact), fixed-width, Decimal, Float,
+/// Float32, Bool, plus legacy `add`/`sub`/`mul` (wrapping i64).
+/// Division and fault-triggering operations are out of scope (`43 §2.2`).
 fn prim_reduce(symbol: &str, args: &[EvalVal]) -> EvalVal {
     // Unknown operand: propagate strictly.
     if args.iter().any(|a| matches!(a, EvalVal::Unknown)) {
@@ -475,10 +624,82 @@ fn prim_reduce(symbol: &str, args: &[EvalVal]) -> EvalVal {
     }
 
     match (symbol, args) {
+        // ---- Int (arbitrary-precision, i128 exact) ----
+        ("add_int", [a, b]) => exact_int_binop(a, b, |x, y| x + y),
+        ("sub_int", [a, b]) => exact_int_binop(a, b, |x, y| x - y),
+        ("mul_int", [a, b]) => exact_int_binop(a, b, |x, y| x * y),
+        ("eq_int", [a, b]) => match (eval_to_i128(a), eval_to_i128(b)) {
+            (Some(av), Some(bv)) => EvalVal::Bool(av == bv),
+            _ => EvalVal::Neutral,
+        },
+
+        // ---- Fixed-width (wrapping, obligation-generating) ----
+        ("add_int8",  [a, b]) => fixed_binop_i8(a, b, i8::wrapping_add),
+        ("sub_int8",  [a, b]) => fixed_binop_i8(a, b, i8::wrapping_sub),
+        ("mul_int8",  [a, b]) => fixed_binop_i8(a, b, i8::wrapping_mul),
+        ("add_int16", [a, b]) => fixed_binop_i16(a, b, i16::wrapping_add),
+        ("sub_int16", [a, b]) => fixed_binop_i16(a, b, i16::wrapping_sub),
+        ("mul_int16", [a, b]) => fixed_binop_i16(a, b, i16::wrapping_mul),
+        ("add_int32", [a, b]) => fixed_binop_i32(a, b, i32::wrapping_add),
+        ("sub_int32", [a, b]) => fixed_binop_i32(a, b, i32::wrapping_sub),
+        ("mul_int32", [a, b]) => fixed_binop_i32(a, b, i32::wrapping_mul),
+        ("add_int64", [a, b]) => fixed_binop_i64(a, b, i64::wrapping_add),
+        ("sub_int64", [a, b]) => fixed_binop_i64(a, b, i64::wrapping_sub),
+        ("mul_int64", [a, b]) => fixed_binop_i64(a, b, i64::wrapping_mul),
+        ("add_uint8",  [a, b]) => fixed_binop_u8(a, b, u8::wrapping_add),
+        ("add_uint16", [a, b]) => fixed_binop_u16(a, b, u16::wrapping_add),
+        ("add_uint32", [a, b]) => fixed_binop_u32(a, b, u32::wrapping_add),
+        ("add_uint64", [a, b]) => fixed_binop_u64(a, b, u64::wrapping_add),
+
+        // ---- Wrapping variants (explicit `+%`) ----
+        ("wrapping_add_int8",  [a, b]) => fixed_binop_i8(a, b, i8::wrapping_add),
+        ("wrapping_sub_int8",  [a, b]) => fixed_binop_i8(a, b, i8::wrapping_sub),
+        ("wrapping_mul_int8",  [a, b]) => fixed_binop_i8(a, b, i8::wrapping_mul),
+        ("wrapping_add_int16", [a, b]) => fixed_binop_i16(a, b, i16::wrapping_add),
+        ("wrapping_add_int32", [a, b]) => fixed_binop_i32(a, b, i32::wrapping_add),
+        ("wrapping_sub_int32", [a, b]) => fixed_binop_i32(a, b, i32::wrapping_sub),
+        ("wrapping_mul_int32", [a, b]) => fixed_binop_i32(a, b, i32::wrapping_mul),
+        ("wrapping_add_int64", [a, b]) => fixed_binop_i64(a, b, i64::wrapping_add),
+        ("wrapping_add_uint8", [a, b]) => fixed_binop_u8(a, b, u8::wrapping_add),
+        ("wrapping_add_uint16", [a, b]) => fixed_binop_u16(a, b, u16::wrapping_add),
+        ("wrapping_add_uint32", [a, b]) => fixed_binop_u32(a, b, u32::wrapping_add),
+        ("wrapping_add_uint64", [a, b]) => fixed_binop_u64(a, b, u64::wrapping_add),
+
+        // ---- Decimal (exact base-10) ----
+        ("add_decimal", [EvalVal::DecimalVal { coeff: ca, exp: ea }, EvalVal::DecimalVal { coeff: cb, exp: eb }]) => {
+            add_decimal(*ca, *ea, *cb, *eb)
+        }
+        ("sub_decimal", [EvalVal::DecimalVal { coeff: ca, exp: ea }, EvalVal::DecimalVal { coeff: cb, exp: eb }]) => {
+            add_decimal(*ca, *ea, -*cb, *eb)
+        }
+        ("mul_decimal", [EvalVal::DecimalVal { coeff: ca, exp: ea }, EvalVal::DecimalVal { coeff: cb, exp: eb }]) => {
+            EvalVal::DecimalVal { coeff: ca.saturating_mul(*cb), exp: ea + eb }
+        }
+        ("eq_decimal", [EvalVal::DecimalVal { coeff: ca, exp: ea }, EvalVal::DecimalVal { coeff: cb, exp: eb }]) => {
+            EvalVal::Bool(decimal_eq(*ca, *ea, *cb, *eb))
+        }
+
+        // ---- Float (IEEE 754 f64) ----
+        ("add_float", [EvalVal::Float(a), EvalVal::Float(b)]) => EvalVal::Float(a + b),
+        ("sub_float", [EvalVal::Float(a), EvalVal::Float(b)]) => EvalVal::Float(a - b),
+        ("mul_float", [EvalVal::Float(a), EvalVal::Float(b)]) => EvalVal::Float(a * b),
+        ("div_float", [EvalVal::Float(a), EvalVal::Float(b)]) => EvalVal::Float(a / b),
+        ("eq_float",  [EvalVal::Float(a), EvalVal::Float(b)]) => EvalVal::Bool(a == b),
+
+        // ---- Float32 (IEEE 754 f32) ----
+        ("add_float32", [EvalVal::Float32(a), EvalVal::Float32(b)]) => EvalVal::Float32(a + b),
+        ("eq_float32",  [EvalVal::Float32(a), EvalVal::Float32(b)]) => EvalVal::Bool(a == b),
+
+        // ---- Bool ----
+        ("not_bool", [EvalVal::Bool(b)]) => EvalVal::Bool(!b),
+        ("and_bool", [EvalVal::Bool(a), EvalVal::Bool(b)]) => EvalVal::Bool(*a && *b),
+        ("or_bool",  [EvalVal::Bool(a), EvalVal::Bool(b)]) => EvalVal::Bool(*a || *b),
+
+        // ---- Legacy (existing, wrapping i64) ----
         ("add", [EvalVal::Int(a), EvalVal::Int(b)]) => EvalVal::Int(a.wrapping_add(*b)),
         ("sub", [EvalVal::Int(a), EvalVal::Int(b)]) => EvalVal::Int(a.wrapping_sub(*b)),
         ("mul", [EvalVal::Int(a), EvalVal::Int(b)]) => EvalVal::Int(a.wrapping_mul(*b)),
-        ("not_bool", [EvalVal::Bool(b)]) => EvalVal::Bool(!b),
+
         // Partial or unrecognised primitive: neutral (stuck on non-literals).
         _ => EvalVal::Neutral,
     }
@@ -561,20 +782,26 @@ pub fn eval(env: &[EvalVal], term: &Term, globals: &GlobalEnv, store: &mut EvalS
         Term::Ascript(t, _) => eval(env, t, globals, store),
 
         // --- Const: δ-unfold transparent; postulate → Unknown; prim → pending ---
-        Term::Const { id, .. } => match globals.lookup(*id) {
-            Some(Decl::Transparent { body, .. }) => eval(&Vec::new(), body, globals, store),
-            Some(Decl::Primitive { reduction, .. }) => match reduction {
-                PrimReduction::OpaqueType => EvalVal::Neutral,
-                PrimReduction::Op { symbol } => EvalVal::CtorPending {
-                    id: *id,
-                    args: vec![],
-                    need: prim_arity(symbol),
+        Term::Const { id, .. } => {
+            // Numeric literal side table: opaque postulates representing literal values.
+            if let Some(v) = store.num_values.get(id) {
+                return v.clone();
+            }
+            match globals.lookup(*id) {
+                Some(Decl::Transparent { body, .. }) => eval(&Vec::new(), body, globals, store),
+                Some(Decl::Primitive { reduction, .. }) => match reduction {
+                    PrimReduction::OpaqueType => EvalVal::Neutral,
+                    PrimReduction::Op { symbol } => EvalVal::CtorPending {
+                        id: *id,
+                        args: vec![],
+                        need: prim_arity(symbol),
+                    },
                 },
-            },
-            Some(Decl::Inductive(_)) => EvalVal::IndFormerVal { id: *id },
-            // Opaque constant / postulate: no body → unknown (`42 §3.3`, `§4`).
-            _ => EvalVal::Unknown,
-        },
+                Some(Decl::Inductive(_)) => EvalVal::IndFormerVal { id: *id },
+                // Opaque constant / postulate: no body → unknown (`42 §3.3`, `§4`).
+                _ => EvalVal::Unknown,
+            }
+        }
 
         // --- IndFormer: a type-former value ---
         Term::IndFormer { id, .. } => EvalVal::IndFormerVal { id: *id },
@@ -796,6 +1023,14 @@ fn prim_arity(symbol: &str) -> usize {
     match symbol {
         "add" | "sub" | "mul" => 2,
         "not_bool" => 1,
+        "and_bool" | "or_bool" => 2,
+        "add_int" | "sub_int" | "mul_int" | "eq_int" => 2,
+        "add_decimal" | "sub_decimal" | "mul_decimal" | "eq_decimal" => 2,
+        "add_float" | "sub_float" | "mul_float" | "div_float" | "eq_float" => 2,
+        "add_float32" | "eq_float32" => 2,
+        s if s.starts_with("add_int") || s.starts_with("sub_int") || s.starts_with("mul_int") => 2,
+        s if s.starts_with("add_uint") || s.starts_with("sub_uint") || s.starts_with("mul_uint") => 2,
+        s if s.starts_with("wrapping_") => 2,
         _ => 1,
     }
 }

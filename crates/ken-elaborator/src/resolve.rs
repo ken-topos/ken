@@ -4,7 +4,7 @@
 //! only into `ensures`, scopes `old` only into `space`-op `ensures`, resolves
 //! `{x:A|φ}` refinement types, `prove`, and `law` declarations.
 
-use crate::ast::{Decl, Expr, Type};
+use crate::ast::{BinOp, Decl, Expr, NumLit, Type};
 use crate::error::{ElabError, Span};
 
 /// A resolved declaration (`21 §6.2`).
@@ -47,6 +47,10 @@ pub enum RExpr {
     RAsc(Box<RExpr>, Box<RType>, Span),
     /// `old e` resolved in a `space`-op `ensures` (`21 §6.4`).
     ROld(Box<RExpr>, Span),
+    /// Numeric literal (`35 §4.1`).
+    RNumLit(NumLit, Span),
+    /// Infix binary op (`35 §3`); names resolved, operands still unelab'd.
+    RBinOp(BinOp, Box<RExpr>, Box<RExpr>, Span),
 }
 
 impl RExpr {
@@ -59,7 +63,9 @@ impl RExpr {
             | RExpr::RLam(_, _, s)
             | RExpr::RLet(_, _, _, _, s)
             | RExpr::RAsc(_, _, s)
-            | RExpr::ROld(_, s) => s,
+            | RExpr::ROld(_, s)
+            | RExpr::RNumLit(_, s)
+            | RExpr::RBinOp(_, _, _, s) => s,
         }
     }
 }
@@ -389,6 +395,14 @@ fn resolve_expr_ctx(scope: &mut Scope, expr: &Expr, ctx: PropCtx) -> Result<RExp
             }
             let re = resolve_expr_ctx(scope, e, ctx)?;
             Ok(RExpr::ROld(Box::new(re), span.clone()))
+        }
+
+        Expr::ENumLit(lit, span) => Ok(RExpr::RNumLit(lit.clone(), span.clone())),
+
+        Expr::EBinOp(op, l, r, span) => {
+            let rl = resolve_expr_ctx(scope, l, ctx)?;
+            let rr = resolve_expr_ctx(scope, r, ctx)?;
+            Ok(RExpr::RBinOp(*op, Box::new(rl), Box::new(rr), span.clone()))
         }
     }
 }

@@ -66,6 +66,33 @@ impl Decl {
     }
 }
 
+/// A numeric literal form (`35 §4.1`).
+#[derive(Clone, Debug, PartialEq)]
+pub enum NumLit {
+    /// Integer literal — defaults to `Int` unless an expected type is given.
+    Int(i128),
+    /// Decimal-point float — defaults to `Float`.
+    Float(f64),
+    /// `d`-suffix exact decimal — defaults to `Decimal`.
+    Decimal(i64, i32),
+    /// `f32`-suffix IEEE single — defaults to `Float32`.
+    Float32(f32),
+}
+
+/// Infix binary operator (`35 §3`, `35 §4.2`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BinOp {
+    /// `+` — type-directed: total for `Int`, obligation-generating for
+    /// fixed-width.
+    Add,
+    /// `+%` — always wrapping (explicit modular arithmetic).
+    WrappingAdd,
+    /// `*` — type-directed multiplication.
+    Mul,
+    /// `==` — structural equality.
+    EqEq,
+}
+
 /// A surface expression (`39 §5.2`, `21 §6.1`).
 #[derive(Clone, Debug)]
 pub enum Expr {
@@ -85,6 +112,10 @@ pub enum Expr {
     EAsc(Box<Expr>, Box<Type>, Span),
     /// `old e` — pre-state reference in `space`-op `ensures` (`21 §6.4`).
     EOld(Box<Expr>, Span),
+    /// Numeric literal (`35 §4.1`).
+    ENumLit(NumLit, Span),
+    /// Infix binary operation (`35 §3`).
+    EBinOp(BinOp, Box<Expr>, Box<Expr>, Span),
 }
 
 impl Expr {
@@ -97,7 +128,9 @@ impl Expr {
             | Expr::ELam(_, _, s)
             | Expr::ELet(_, _, _, _, s)
             | Expr::EAsc(_, _, s)
-            | Expr::EOld(_, s) => s,
+            | Expr::EOld(_, s)
+            | Expr::ENumLit(_, s)
+            | Expr::EBinOp(_, _, _, s) => s,
         }
     }
 }

@@ -1,9 +1,10 @@
-//! `ken-elaborator` — V0/V1 surface elaborator (`docs/program/wp/V0-elaborator.md`,
-//! `spec/20-verification/21-spec-syntax.md`).
+//! `ken-elaborator` — V0/V1/L1 surface elaborator (`docs/program/wp/V0-elaborator.md`,
+//! `spec/20-verification/21-spec-syntax.md`, `spec/30-surface/35-numbers.md`).
 //!
 //! Pipeline: `lex → parse → resolve → elaborate → kernel-check`.
 //!
 //! V1 extensions: requires/ensures, obligation holes, honesty guard.
+//! L1 extensions: numeric tower, literal defaulting, overflow obligations.
 //! Clean-room: built from `/spec` and `/conformance` only.
 
 mod ast;
@@ -16,6 +17,7 @@ pub mod protocol;
 pub mod error;
 pub mod extract;
 mod lexer;
+pub mod numbers;
 pub mod parser;
 pub mod prover;
 pub mod resolve;
@@ -51,31 +53,45 @@ pub use protocol::{
     WireVerdict,
 };
 pub use resolve::{RDecl, RDeclKind, RExpr, RType};
+pub use numbers::{NumericEnv, NumericLitVal};
 
 /// The surface-level elaboration environment.
 pub struct ElabEnv {
     pub env: GlobalEnv,
     pub globals: HashMap<String, GlobalId>,
+    /// Numeric literal values keyed by their opaque-postulate GlobalId.
+    /// Accumulated during elaboration; copied to `EvalStore.num_values` for eval.
+    pub num_values: HashMap<GlobalId, NumericLitVal>,
+    /// The numeric tower (registered op ids, dispatch tables).
+    pub numeric_env: NumericEnv,
 }
 
 impl ElabEnv {
-    pub fn empty() -> Self {
-        Self {
-            env: GlobalEnv::new(),
-            globals: HashMap::new(),
-        }
+    pub fn empty() -> Result<Self, ElabError> {
+        let mut env = GlobalEnv::new();
+        let mut globals = HashMap::new();
+        // `Nat` is used as a universe level notation type; not in the numeric tower.
+        let nat_id = declare_postulate(&mut env, vec![], Term::ty(Level::Zero))
+            .map_err(|e| ElabError::Internal(format!("Nat predeclaration failed: {}", e)))?;
+        globals.insert("Nat".into(), nat_id);
+        // `Bool` is pre-registered here so downstream code using `ElabEnv::empty`
+        // gets a consistent GlobalId; `register_numeric_env` reuses it.
+        let bool_id = declare_postulate(&mut env, vec![], Term::ty(Level::Zero))
+            .map_err(|e| ElabError::Internal(format!("Bool predeclaration failed: {}", e)))?;
+        globals.insert("Bool".into(), bool_id);
+        let numeric_env = numbers::register_numeric_env(&mut env, &mut globals)
+            .map_err(|e| ElabError::Internal(format!("numeric tower init failed: {}", e)))?;
+        Ok(Self {
+            env,
+            globals,
+            num_values: HashMap::new(),
+            numeric_env,
+        })
     }
 
-    /// Create an environment with `Nat : Type 0` and `Bool : Type 0`.
+    /// Create an environment with pre-declared `Nat`, `Bool`, and the full numeric tower.
     pub fn new() -> Result<Self, ElabError> {
-        let mut this = Self::empty();
-        let nat_id = declare_postulate(&mut this.env, vec![], Term::ty(Level::Zero))
-            .map_err(|e| ElabError::Internal(format!("Nat predeclaration failed: {}", e)))?;
-        this.globals.insert("Nat".into(), nat_id);
-        let bool_id = declare_postulate(&mut this.env, vec![], Term::ty(Level::Zero))
-            .map_err(|e| ElabError::Internal(format!("Bool predeclaration failed: {}", e)))?;
-        this.globals.insert("Bool".into(), bool_id);
-        Ok(this)
+        Self::empty()
     }
 
     /// Declare a postulate `name : ty_term` in the environment.
@@ -93,7 +109,7 @@ impl ElabEnv {
         Ok(id)
     }
 
-    /// Elaborate a single V0/V1 declaration from source.
+    /// Elaborate a single V0/V1/L1 declaration from source.
     ///
     /// On success the declaration is registered in `self.env`.
     pub fn elaborate_decl(&mut self, src: &str) -> Result<GlobalId, ElabError> {
@@ -105,10 +121,16 @@ impl ElabEnv {
             });
         }
         let rdecl = resolve::resolve_decl(&decls[0])?;
-        elaborate_rdecl(&mut self.env, &mut self.globals, &rdecl)
+        elaborate_rdecl(
+            &mut self.env,
+            &mut self.globals,
+            &mut self.num_values,
+            &self.numeric_env,
+            &rdecl,
+        )
     }
 
-    /// Elaborate a V1 declaration, returning obligations alongside the id.
+    /// Elaborate a V1/L1 declaration, returning obligations alongside the id.
     pub fn elaborate_decl_v1(&mut self, src: &str) -> Result<ElabResult, ElabError> {
         let decls = parser::parse_decls(src)?;
         if decls.len() != 1 {
@@ -118,7 +140,13 @@ impl ElabEnv {
             });
         }
         let rdecl = resolve::resolve_decl(&decls[0])?;
-        elab::elaborate_rdecl_v1(&mut self.env, &mut self.globals, &rdecl)
+        elab::elaborate_rdecl_v1(
+            &mut self.env,
+            &mut self.globals,
+            &mut self.num_values,
+            &self.numeric_env,
+            &rdecl,
+        )
     }
 
     /// Try to discharge an obligation hole with a certificate term.
@@ -145,7 +173,13 @@ impl ElabEnv {
     pub fn elaborate_expr(&mut self, src: &str) -> Result<(Term, Term), ElabError> {
         let expr = parser::parse_expr(src)?;
         let rexpr = resolve::resolve_expr_standalone(&expr)?;
-        elaborate_rexpr(&mut self.env, &self.globals, &rexpr)
+        elaborate_rexpr(
+            &mut self.env,
+            &self.globals,
+            &mut self.num_values,
+            &self.numeric_env,
+            &rexpr,
+        )
     }
 
     pub fn kernel_version(&self) -> &'static str {
