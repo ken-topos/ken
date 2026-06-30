@@ -41,6 +41,9 @@ pub struct EvalStore {
     /// Maps opaque postulate GlobalId → the EvalVal it represents.
     /// Filled by tests/driver that have access to ElabEnv.num_values.
     pub num_values: HashMap<GlobalId, EvalVal>,
+    /// Propagates a `CapacityExhausted` error from the intern helper (`44 §2`).
+    /// Set when the store's soft limit is hit; callers must not silently drop it.
+    pub capacity_error: Option<(u64, u64)>,
 }
 
 impl EvalStore {
@@ -50,7 +53,24 @@ impl EvalStore {
             code_ids: HashMap::new(),
             next_code_id: 1,
             num_values: HashMap::new(),
+            capacity_error: None,
         }
+    }
+
+    /// Create a store with a soft capacity limit (for AC2 testing).
+    pub fn with_capacity_limit(limit: u64) -> Self {
+        EvalStore {
+            k3: Store::with_capacity_limit(limit),
+            code_ids: HashMap::new(),
+            next_code_id: 1,
+            num_values: HashMap::new(),
+            capacity_error: None,
+        }
+    }
+
+    /// Consume and return any recorded capacity error (`44 §2` loud propagation).
+    pub fn take_capacity_error(&mut self) -> Option<(u64, u64)> {
+        self.capacity_error.take()
     }
 
     /// Assign (or retrieve) a unique sequential `code_id` for a closure body.
@@ -227,6 +247,8 @@ fn to_rt(val: &EvalVal) -> Option<RtValue> {
 
 /// Intern a K3-compatible `EvalVal` and return its slot id.
 /// Returns `NULL_SLOT` if the value is not internable (type values, etc.).
+/// On `CapacityExhausted`, records the error in `store.capacity_error` (44 §2
+/// loud-never-silent) instead of silently collapsing to `NULL_SLOT`.
 fn intern(val: &EvalVal, store: &mut EvalStore) -> SlotId {
     let rt = match to_rt(val) {
         Some(r) => r,
@@ -237,7 +259,10 @@ fn intern(val: &EvalVal, store: &mut EvalStore) -> SlotId {
     }
     match store.k3.intern(&rt) {
         InternResult::New(s) | InternResult::Hit(s) => s,
-        InternResult::CapacityExhausted { .. } => NULL_SLOT,
+        InternResult::CapacityExhausted { limit, current } => {
+            store.capacity_error = Some((limit, current));
+            NULL_SLOT
+        }
     }
 }
 
@@ -1032,5 +1057,80 @@ fn prim_arity(symbol: &str) -> usize {
         s if s.starts_with("add_uint") || s.starts_with("sub_uint") || s.starts_with("mul_uint") => 2,
         s if s.starts_with("wrapping_") => 2,
         _ => 1,
+    }
+}
+
+// ── capacity conformance tests ────────────────────────────────────────────────
+
+#[cfg(test)]
+mod capacity_tests {
+    use super::*;
+    use ken_kernel::term::GlobalId;
+
+    // conformance: runtime/capacity/loud-at-limit-raises-not-silent (interp layer)
+    // The store's CapacityExhausted must propagate via store.capacity_error —
+    // the silent NULL_SLOT collapse is the bug this guards against (44 §2).
+    #[test]
+    fn interp_loud_capacity_error_not_silent() {
+        let mut store = EvalStore::with_capacity_limit(2);
+        // Two distinct compound values fill the store.
+        let v1 = EvalVal::Ctor {
+            id: GlobalId(1),
+            args: Rc::new(vec![EvalVal::Int(1)]),
+            slot: NULL_SLOT,
+        };
+        let v2 = EvalVal::Ctor {
+            id: GlobalId(1),
+            args: Rc::new(vec![EvalVal::Int(2)]),
+            slot: NULL_SLOT,
+        };
+        intern(&v1, &mut store);
+        intern(&v2, &mut store);
+        assert!(
+            store.capacity_error.is_none(),
+            "no error expected before limit"
+        );
+
+        // Third distinct value hits the limit.
+        let v3 = EvalVal::Ctor {
+            id: GlobalId(1),
+            args: Rc::new(vec![EvalVal::Int(3)]),
+            slot: NULL_SLOT,
+        };
+        intern(&v3, &mut store);
+        let err = store.take_capacity_error();
+        assert!(
+            err.is_some(),
+            "CapacityExhausted must be recorded, not silently dropped (44 §2)"
+        );
+        let (limit, current) = err.unwrap();
+        assert_eq!(limit, 2);
+        assert_eq!(current, 2);
+    }
+
+    // conformance: runtime/capacity/at-limit-repeat-does-not-trip (interp layer)
+    // A repeat value must return Hit (not CapacityExhausted) even at the limit —
+    // the dedup path short-circuits before the limit check (44 §2, §6).
+    #[test]
+    fn interp_at_limit_repeat_does_not_trip() {
+        let mut store = EvalStore::with_capacity_limit(2);
+        let v1 = EvalVal::Ctor {
+            id: GlobalId(1),
+            args: Rc::new(vec![EvalVal::Int(1)]),
+            slot: NULL_SLOT,
+        };
+        let v2 = EvalVal::Ctor {
+            id: GlobalId(1),
+            args: Rc::new(vec![EvalVal::Int(2)]),
+            slot: NULL_SLOT,
+        };
+        intern(&v1, &mut store);
+        intern(&v2, &mut store);
+        // At limit: re-interning an existing value must NOT trigger capacity error.
+        intern(&v1, &mut store);
+        assert!(
+            store.capacity_error.is_none(),
+            "repeat must not trip CapacityExhausted (44 §6 fixed-point partner)"
+        );
     }
 }

@@ -587,6 +587,63 @@ mod tests {
         }
     }
 
+    // --- conformance: runtime/capacity/at-limit-repeat-does-not-trip ---
+    // Pins that the AC2 witness must be distinct: a repeat takes the Hit path
+    // before the limit check, so it is never refused (44 §2, §6 lock-point).
+    #[test]
+    fn at_limit_repeat_does_not_trip() {
+        let mut store = Store::with_capacity_limit(3);
+        for i in 0..3 {
+            let v = Value::String(format!("val{}", i));
+            assert!(matches!(store.intern(&v), InternResult::New(_)));
+        }
+        // At the limit: re-interning an existing value must return Hit, not Exhausted.
+        let existing = Value::String("val0".into());
+        match store.intern(&existing) {
+            InternResult::Hit(_) => {} // correct
+            InternResult::CapacityExhausted { .. } => {
+                panic!("repeat at limit must not trip CapacityExhausted (dedup short-circuits first)")
+            }
+            InternResult::New(_) => panic!("expected Hit for existing value"),
+        }
+        // total_slots must remain 3 (no new slot was allocated).
+        assert_eq!(store.stats().total_slots, 3);
+    }
+
+    // --- conformance: runtime/capacity/escape-survives-sender-reset ---
+    // An escaped value re-interned in the recipient survives the sender's reset.
+    // Escape = re-intern into the recipient (shared-nothing, 44 §3, 36 §4.4).
+    #[test]
+    fn escape_survives_sender_reset() {
+        let mut space_a = Space::new();
+        let mut space_b = Space::new();
+
+        let v = Value::String("escaped-value".into());
+
+        // Intern v into both spaces (simulating escape via re-intern).
+        let id_a = space_a.intern(&v).slot_id();
+        let id_b = space_b.intern(&v).slot_id();
+        assert_ne!(id_a, id_b); // distinct slot ids (per-space, process-global)
+
+        // Reset the sender (space_a).
+        space_a.reset();
+        assert_eq!(space_a.distinct_count(), 0);
+        assert_eq!(space_a.stats().arena_bytes, 0);
+
+        // The escaped value survives in space_b — re-intern returns the original id.
+        match space_b.intern(&v) {
+            InternResult::Hit(id) => assert_eq!(
+                id, id_b,
+                "escaped value must retain its slot id in the surviving space"
+            ),
+            other => panic!("expected Hit for escaped value, got {:?}", other),
+        }
+        assert!(
+            space_b.stats().arena_bytes > 0,
+            "surviving space arena must still hold the escaped value"
+        );
+    }
+
     // --- conformance: runtime/capacity/dedup-aware-accounting ---
     #[test]
     fn dedup_aware_accounting() {
