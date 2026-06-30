@@ -15,58 +15,113 @@ use crate::prover::{attempt_obligation, ProverResult, Verdict};
 
 // ─── §2 Label lattice (DLM instance) ─────────────────────────────────────────
 
-/// A security label — scalar `⊥=0 ≤ 1 ≤ ⊤=2`.
+/// A security label — a product of three factors (§2.2, §5a.1).
 ///
-/// Confidentiality: `Public(0) ⊑ Internal(1) ⊑ Secret(2)`.
-/// Integrity (dual): `Trusted(0) ⊑ Untrusted(2)` — `Trusted=⊥`, `Untrusted=⊤`.
+/// - `conf`: confidentiality — `Public(0) ⊑ Internal(1) ⊑ Secret(2)`.
+/// - `integ`: integrity (scalar; `[Sec1-dual]` defers the true order-dual carrier) —
+///   `Trusted(0) ⊑ Untrusted(2)`.
+/// - `ct`: constant-time taint (`§5a.1`) — `ct⊥=false` (safe), `ct⊤=true` (@ct,
+///   timing-sensitive). **Taint orientation**: sink demands `ct⊥`; `ct⊤ ⋢ ct⊥` → reject.
+///   Join (`⊔`) is logical-OR (any `@ct` input ⇒ `@ct` result).
+///
+/// Ordering is **componentwise** (§2.2 products and §5a.1 CT axis are independent).
 /// Labels are **erased** before the kernel (§3); no kernel primitive introduced.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Label(pub u8);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Label {
+    pub conf:  u8,   // confidentiality: 0=PUBLIC/⊥, 1=INTERNAL, 2=SECRET/⊤
+    pub integ: u8,   // integrity: 0=TRUSTED/⊥, 2=UNTRUSTED/⊤ ([Sec1-dual]: scalar only)
+    pub ct:    bool, // CT taint: false=ct⊥ (safe), true=ct⊤ (@ct, timing-sensitive)
+}
 
 // DLM standard lattice — named constants (§2.1).
-pub const PUBLIC: Label = Label(0);    // ⊥_conf (readable by all)
-pub const INTERNAL: Label = Label(1);  // intermediate confidentiality
-pub const SECRET: Label = Label(2);    // ⊤_conf (readable by few)
+pub const PUBLIC:   Label = Label { conf: 0, integ: 0, ct: false }; // ⊥_conf (readable by all)
+pub const INTERNAL: Label = Label { conf: 1, integ: 0, ct: false }; // intermediate confidentiality
+pub const SECRET:   Label = Label { conf: 2, integ: 0, ct: false }; // ⊤_conf (readable by few)
 
-pub const TRUSTED: Label = Label(0);   // ⊥_integ (most trustworthy source)
-pub const UNTRUSTED: Label = Label(2); // ⊤_integ (attacker-influenced)
+pub const TRUSTED:   Label = Label { conf: 0, integ: 0, ct: false }; // ⊥_integ (most trustworthy)
+pub const UNTRUSTED: Label = Label { conf: 0, integ: 2, ct: false }; // ⊤_integ (attacker-influenced)
 
-pub const BOTTOM: Label = Label(0);    // ⊥ (pure context, no taint)
-pub const TOP: Label = Label(2);       // ⊤
+pub const BOTTOM: Label = Label { conf: 0, integ: 0, ct: false }; // ⊥ (pure context, no taint)
+pub const TOP:    Label = Label { conf: 2, integ: 2, ct: true  }; // ⊤ (fully secret+untrusted+ct)
 
-/// `ℓ ⊔ κ` — join (least upper bound); raises to the more sensitive.
-/// Conf: `⊔ = ∩` (fewer readers); Integ: `⊔ = ∪` (any taint poisons).
-/// Both correspond to `max` on the scalar representation.
+/// `ct⊥` — the safe CT level; what a leakage sink demands as its clearance.
+pub const CT_BOT: Label = Label { conf: 0, integ: 0, ct: false };
+/// `ct⊤` — the `@ct` taint; a timing-sensitive value that must not steer a `LeakSink`.
+pub const CT_TOP: Label = Label { conf: 0, integ: 0, ct: true  };
+
+/// `ℓ ⊔ κ` — componentwise join (§2.2 product lattice + §5a.1 CT axis).
+/// - conf/integ: `max` (raises to the more sensitive).
+/// - ct: logical-OR (any `@ct` input ⇒ `@ct` result; cannot compute `@ct` away).
 pub fn join(a: Label, b: Label) -> Label {
-    Label(a.0.max(b.0))
+    Label {
+        conf:  a.conf.max(b.conf),
+        integ: a.integ.max(b.integ),
+        ct:    a.ct || b.ct,
+    }
 }
 
-/// `ℓ ⊓ κ` — meet (greatest lower bound).
+/// `ℓ ⊓ κ` — componentwise meet (§2.2).
 pub fn meet(a: Label, b: Label) -> Label {
-    Label(a.0.min(b.0))
+    Label {
+        conf:  a.conf.min(b.conf),
+        integ: a.integ.min(b.integ),
+        ct:    a.ct && b.ct,
+    }
 }
 
-/// `ℓ ⊑ κ` — "data at level ℓ may flow to a sink with clearance κ".
-/// True iff `ℓ ≤ κ` in the scalar order.
-/// - Conf: `Public ⊑ Secret` ✓, `Secret ⊑ Public` ✗.
-/// - Integ: `Trusted ⊑ Untrusted` ✓, `Untrusted ⊑ Trusted` ✗.
+/// `ℓ ⊑ κ` — componentwise "flows to" (§2.2 product order).
+/// True iff every component flows to the corresponding clearance component:
+/// - conf: `ℓ.conf ≤ κ.conf`  (`Public ⊑ Secret` ✓, `Secret ⊑ Public` ✗)
+/// - integ: `ℓ.integ ≤ κ.integ` (`Trusted ⊑ Untrusted` ✓, reverse ✗)
+/// - ct: `!ℓ.ct || κ.ct`  (`ct⊥ ⊑ ct⊥` ✓, `ct⊤ ⊑ ct⊥` ✗ — taint → safe is blocked)
 pub fn flows_to(label: Label, clearance: Label) -> bool {
-    label.0 <= clearance.0
+    label.conf  <= clearance.conf
+        && label.integ <= clearance.integ
+        && (!label.ct   || clearance.ct)
 }
 
 // ─── §5a @ct label — separate opt-in axis ─────────────────────────────────
 
-/// The constant-time label — a separate axis from confidentiality/integrity.
-/// A `@ct`-marked value must never steer a leakage-relevant effect sink.
+/// The constant-time label — a thin wrapper; the CT state now lives in `Label.ct`.
+/// Kept for backward-compat with `CtHook`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CtLabel(pub bool);
 
-/// Leakage-relevant effect sinks (§5a) — `@ct` values are barred from these.
+/// Leakage-relevant effect sinks (§5a.2) — a **sealed sum**, exactly three members.
+/// There is **no `_ => non-sink` catch-all** (COORDINATION §7): a new leaky op
+/// must be classified here before it compiles, never silently default to non-sink.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LeakageSink {
+    /// The scrutinee of a control-flow branch (if/match) lowered to a machine branch.
     BranchGuard,
+    /// A data-dependent memory/array index feeding an indexing `Vis` op.
     MemoryIndex,
+    /// A primitive whose run time depends on operand value (flagged `var-time` in effect sig).
     VarTimePrimitive,
+}
+
+/// A known `Vis`-op class for the exhaustive leakage-sink classifier.
+/// Every potentially-leaky op MUST appear here — adding one outside this set is a
+/// compile error, never a silent non-sink (§5a.2, COORDINATION §7).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VisOpClass {
+    ControlFlowBranch, // scrutinee of if/match → BranchGuard
+    ArrayIndex,        // data-dependent memory index → MemoryIndex
+    VarTimePrimitive,  // primitive flagged var-time in effect sig → VarTimePrimitive
+    PureOp,            // pure/constant-time — no timing leak
+    CtByteEq,          // CT-safe equality primitive — no timing leak
+}
+
+/// Classify a `Vis`-op site into its leakage-sink class (or `None` for safe ops).
+/// No `_ =>` catch-all: every `VisOpClass` variant is classified explicitly.
+pub fn classify_vis_op(op: VisOpClass) -> Option<LeakageSink> {
+    match op {
+        VisOpClass::ControlFlowBranch => Some(LeakageSink::BranchGuard),
+        VisOpClass::ArrayIndex        => Some(LeakageSink::MemoryIndex),
+        VisOpClass::VarTimePrimitive  => Some(LeakageSink::VarTimePrimitive),
+        VisOpClass::PureOp            => None,
+        VisOpClass::CtByteEq          => None,
+    }
 }
 
 /// A `@ct` hook — carries the label and the deferred reify-trigger for timing.
@@ -82,9 +137,11 @@ pub struct CtHook {
 
 impl CtHook {
     pub fn new(is_ct: bool) -> Self {
+        // Sec1ct now lands the @ct discipline; the remaining deferred aspect is
+        // the binary timing guarantee, delegated to [Ward] (61 §5a.6/§H).
         CtHook {
             ct_label: CtLabel(is_ct),
-            deferred_timing: if is_ct { Some(TRIGGER_SEC1CT) } else { None },
+            deferred_timing: if is_ct { Some(TRIGGER_WARD) } else { None },
         }
     }
     /// True iff the @ct label is set and the reify-trigger is present.
@@ -168,8 +225,11 @@ impl FlowCtx {
 
     /// **L-OBSERVE** (`61 §3.1`): branching on a value `@ ℓ` raises `pc` to
     /// `pc ⊔ ℓ`. Returns the new context (the caller enters the branch in it).
-    /// A bug that drops the `pc`-raise lets a Secret-keyed branch output to a
-    /// Public sink (A3 target — the implicit-flow discriminator).
+    ///
+    /// Projected onto **all components** (§5a.3): if `ℓ.ct = ct⊤` (`@ct` scrutinee),
+    /// `pc.ct` is raised to `ct⊤` in both branches, closing the implicit CT channel.
+    /// A bug that drops the `pc.ct`-raise lets a `@ct`-guarded inner op through
+    /// (CT-A4 target — the implicit-flow discriminator).
     pub fn l_observe(&self, value_label: Label) -> FlowCtx {
         FlowCtx { pc: join(self.pc, value_label) }
     }
@@ -185,13 +245,27 @@ impl FlowCtx {
         }
     }
 
-    /// **L-SINK(@ct)** (`61 §5a`): a `@ct`-marked value flowing to a
-    /// leakage-relevant sink is a type error — the source-level CT precondition `Q`.
-    /// Ken never proves the timing guarantee itself (that is `[Ward]`).
-    pub fn l_ct_sink(&self, ct: CtLabel, _sink: &LeakageSink, site: &str) -> FlowResult {
-        if ct.0 {
+    /// **L-CT-SINK** (`61 §5a.3`): a `@ct` value — or any value inside a `@ct`-guarded
+    /// branch (`pc.ct = ct⊤`) — reaching a leakage-relevant sink is a type error.
+    ///
+    /// Checks `(ℓ.ct ⊔ pc.ct) = ct⊥`, i.e. `!(value_label.ct || self.pc.ct)`.
+    /// On failure: names `ℓ.ct`, `pc.ct`, and the sink site (per `L-SINK`'s
+    /// diagnostic contract, §3.1).
+    ///
+    /// The `_sink` parameter is accepted (for caller exhaustiveness via `LeakageSink`)
+    /// but the rejection condition is purely label-based (`61 §5a.3`).
+    ///
+    /// The observable is elaboration accept/reject — **never** a V3 verdict (§5a.3).
+    /// Ken proves only the source-level precondition `Q`; timing is `[Ward]`'s (§5a.6).
+    pub fn l_ct_sink(
+        &self,
+        value_label: &Label,
+        _sink: &LeakageSink,
+        site: &str,
+    ) -> FlowResult {
+        if value_label.ct || self.pc.ct {
             FlowResult::Reject(FlowError::new(
-                "L-SINK(ct)", TOP, self.pc, BOTTOM, site,
+                "L-CT-SINK", *value_label, self.pc, CT_BOT, site,
             ))
         } else {
             FlowResult::Accept
@@ -305,6 +379,49 @@ pub const TRIGGER_SEC1_LAUNDER: &str = "[Sec1-launder]";
 /// predicate over a synthetic obligation — a too-weak `Φ_post` (the N2 failure
 /// mode) cannot be detected because nothing constructs `Φ_post`.
 pub const TRIGGER_SEC1_REDUCE: &str = "[Sec1-reduce]";
+
+// ─── §5a.4 CT-in-parameter promise + `Q` export ──────────────────────────────
+
+/// A CT-in-parameter signature promise. The concept is locked (§5a.4):
+/// constant-time-in-a-named-parameter, source-level, paired 1:1 with a
+/// `63 §5a` Ward discharge result. `(oracle)` — the literal field-token
+/// spelling is B1/`71`-deferred (defer-spelling-not-concept).
+#[derive(Debug, Clone)]
+pub struct CtPromise {
+    pub param_name:   String,
+    /// Always `true` — this is a source-level precondition, NOT a timing guarantee.
+    pub source_level: bool,
+}
+
+/// A source-level CT guarantee clause (`Q`) emitted by a checked CT promise.
+/// Rides the `71` `guarantees` (`Q`) channel (`71 §2`). Pairs 1:1 with a
+/// `63 §5a` Ward discharge result. `(oracle)` — field-token spelling is B1/`71`-deferred.
+#[derive(Debug, Clone)]
+pub struct CtGuaranteeQ {
+    /// The named parameter the promise covers.
+    pub param_name:   String,
+    /// Always `true` — source-level precondition, NOT a timing guarantee.
+    pub source_level: bool,
+}
+
+/// Check a CT-in-parameter promise and emit a `Q` clause if the body is clean.
+///
+/// The body is checked externally (with the named parameter bound at `ct⊤`) and
+/// the result passed here. If the body `Accept`s, the promise is discharged and
+/// a `Q` clause is emitted. If it `Reject`s (a `LeakSink` op's operand depended
+/// on the `@ct` parameter), the promise is broken and the error is returned.
+pub fn check_ct_promise(
+    promise: &CtPromise,
+    body_result: FlowResult,
+) -> Result<CtGuaranteeQ, FlowError> {
+    match body_result {
+        FlowResult::Accept => Ok(CtGuaranteeQ {
+            param_name:   promise.param_name.clone(),
+            source_level: true,
+        }),
+        FlowResult::Reject(e) => Err(e),
+    }
+}
 
 /// A relational (non-interference) claim, post-reduction to a unary obligation.
 ///

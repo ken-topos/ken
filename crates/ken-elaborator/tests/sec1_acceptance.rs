@@ -19,7 +19,8 @@ use ken_elaborator::{
         check_reduction_faithfulness, CtHook, CtLabel, DeclassifyCap, FlowCtx,
         LeakageSink, RelationalClaim, BOTTOM, INTERNAL, PUBLIC, SECRET,
         TRIGGER_REL_DEFERRED, TRIGGER_SEC1CT, TRIGGER_SEC1_DUAL,
-        TRIGGER_SEC1_LAUNDER, TRIGGER_SEC1_REDUCE, TRUSTED, UNTRUSTED,
+        TRIGGER_SEC1_LAUNDER, TRIGGER_SEC1_REDUCE, TRIGGER_WARD,
+        TRUSTED, UNTRUSTED,
     },
     prover::{Countermodel, ProverResult, Verdict},
 };
@@ -516,63 +517,45 @@ fn forged_label_or_cert_kernel_rejected() {
 // ─── F. The @ct hook — source precondition only (AC4) ────────────────────────
 
 /// F1. A @ct-marked value steering a leakage-relevant sink is a type error.
-/// Flip: the same value NOT steering a leakage op, or not @ct → accepts.
+/// Flip: the same value NOT @ct → accepts. Full coverage absorbed into sec1ct_acceptance.rs.
 #[test]
 fn ct_value_steers_leakage_sink_rejected() {
+    use ken_elaborator::ifc::{CT_TOP, CT_BOT};
     let ctx = FlowCtx::new();
-    let ct_key = CtLabel(true); // the key is marked @ct
 
-    // `branch_on (k[0] == g[0])` where k is @ct: steers a BranchGuard leakage sink
-    let reject = ctx.l_ct_sink(ct_key, &LeakageSink::BranchGuard, "branch_on");
+    // `branch_on k` where k is @ct (ct⊤): L-CT-SINK checks (k.ct ⊔ pc.ct) = ct⊤ ⋢ ct⊥.
+    let reject = ctx.l_ct_sink(&CT_TOP, &LeakageSink::BranchGuard, "branch_on");
     assert!(reject.is_reject(), "@ct value at BranchGuard sink → reject");
     let err = reject.error().unwrap();
-    assert_eq!(err.rule, "L-SINK(ct)");
+    assert_eq!(err.rule, "L-CT-SINK");
 
-    // Also covers MemoryIndex and VarTimePrimitive sinks.
-    let reject_idx = ctx.l_ct_sink(ct_key, &LeakageSink::MemoryIndex, "mem_at");
-    assert!(reject_idx.is_reject(), "@ct value at MemoryIndex sink → reject");
+    // Covers all three sealed-set members.
+    assert!(ctx.l_ct_sink(&CT_TOP, &LeakageSink::MemoryIndex,    "mem_at").is_reject());
+    assert!(ctx.l_ct_sink(&CT_TOP, &LeakageSink::VarTimePrimitive, "div_s").is_reject());
 
-    let reject_vt = ctx.l_ct_sink(ct_key, &LeakageSink::VarTimePrimitive, "div_secret");
-    assert!(reject_vt.is_reject(), "@ct value at VarTimePrimitive sink → reject");
+    // Flip: ct⊥ value at the same sink → accepts.
+    assert!(ctx.l_ct_sink(&CT_BOT, &LeakageSink::BranchGuard, "branch_on").is_accept());
 
-    // Flip: same value but NOT @ct → accepts
-    let not_ct = CtLabel(false);
-    let accept = ctx.l_ct_sink(not_ct, &LeakageSink::BranchGuard, "branch_on");
-    assert!(accept.is_accept(), "non-@ct value at BranchGuard → accepts");
-
-    // Flip: @ct value at a NON-leakage-sink (ordinary sink) → accepts via l_sink
-    let accept_ordinary = ctx.l_sink(PUBLIC, PUBLIC, "log.out");
-    assert!(accept_ordinary.is_accept(), "@ct value at ordinary PUBLIC sink → accepts via l_sink");
+    // Flip: @ct value at an ordinary (non-LeakSink) write → l_sink not triggered.
+    assert!(ctx.l_sink(PUBLIC, PUBLIC, "log.out").is_accept());
 }
 
 /// F2. The @ct label parses, attaches, carries through the denotation, and a
-/// [Sec1ct]/[Ward] reify-trigger is present. Timing guarantee NOT asserted here.
+/// [Ward] reify-trigger is present. Full coverage absorbed into sec1ct_acceptance.rs.
+/// Sec1ct has now landed; the remaining deferred aspect is binary timing → [Ward].
 #[test]
 fn ct_label_parses_carries_and_defers_timing() {
-    // The @ct label must be attached (parsed + carried).
-    let hook = CtHook::new(true); // @ct is set
+    let hook = CtHook::new(true);
     assert!(hook.label_carries(), "@ct label is attached and carried");
     assert_eq!(hook.ct_label, CtLabel(true));
 
-    // A reify-trigger MUST be present — never silent (LP-2 honest-limits).
-    assert!(
-        hook.has_reify_trigger(),
-        "[Sec1ct]/[Ward] reify-trigger must be present for @ct values"
-    );
-    assert_eq!(
-        hook.deferred_timing,
-        Some(TRIGGER_SEC1CT),
-        "deferred timing trigger is [Sec1ct]"
-    );
+    // Reify-trigger present — now [Ward] (Sec1ct landed; timing deferred to Ward).
+    assert!(hook.has_reify_trigger(), "[Ward] reify-trigger must be present for @ct values");
+    assert_eq!(hook.deferred_timing, Some(TRIGGER_WARD), "deferred trigger is [Ward]");
 
-    // The timing guarantee itself is NOT asserted here — delegated to [Ward].
-    // (Asserting "no timing leak" would over-claim past what Sec1 lands.)
-    // Only the source-level precondition Q (no @ct at leakage sinks) is enforced.
-
-    // A non-@ct value has no reify-trigger (no timing claim needed).
     let hook_nct = CtHook::new(false);
-    assert!(!hook_nct.label_carries(), "non-@ct value carries no ct label");
-    assert!(!hook_nct.has_reify_trigger(), "non-@ct value has no reify-trigger");
+    assert!(!hook_nct.label_carries());
+    assert!(!hook_nct.has_reify_trigger());
     assert_eq!(hook_nct.deferred_timing, None);
 }
 
