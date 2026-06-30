@@ -91,6 +91,16 @@ lessons to the other teams.
 
 - **Don't author outside your lane.** Something wrong in another crate → file a
   `bug`-typed note to that team (cap your own dig at ~5 min) and continue.
+- **When a complete feature needs a not-yet-landed capability, ship the sound
+  subset + a *conservative guard*, not a silent partial (promoted L5-build).**
+  *Subsume the common case, honest-boundary the residual:* implement what you can
+  do soundly (e.g. first-order row inference) and add a guard that **rejects /
+  stays-stuck** on the cases you can't yet handle, documented at the scope
+  boundary — never let the unhandled case **silently pass** (that's the
+  under-inference gap the Architect caught in L5: `apply_twice` inferred `∅` and
+  passed; the fix made the guard reject any under-declared higher-order effect).
+  A conservative reject over a silent accept is the right shape for a soundness
+  property with a deferred feature behind it; the gate must fail closed.
 - **Non-blocking bug never stops the ring.** File it, keep going.
 - Re-resolve thread IDs after a context reset before replying.
 - **Build/test only via `scripts/ken-cargo`, scoped to your crate** (`-p`),
