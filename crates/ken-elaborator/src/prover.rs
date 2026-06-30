@@ -195,13 +195,21 @@ pub fn attempt_with_cert(env: &mut GlobalEnv, phi_closed: &Term, cert: Term) -> 
 /// evaluates `dec a` to `inl proof` or `inr refutation` by canonicity
 /// (`16 §9`). The full decision procedure + Z3-backed search for open goals
 /// (`23 §3.2`) is `[placeholder — reifies in V4]` pending backend infra.
-/// Conservative fallback: honest `unknown` for atoms we cannot reduce.
+///
+/// IPC pre-pass: if the context directly provides the atom (an assumption that
+/// proves `φ` by lookup), the IPC tactic closes the goal before the backend is
+/// consulted — universally applicable regardless of fragment.
 fn attempt_d(
     env: &mut GlobalEnv,
-    _ctx: &Context,
-    _phi: &Term,
+    ctx: &Context,
+    phi: &Term,
     phi_closed: &Term,
 ) -> Verdict {
+    // IPC pre-pass: assumption lookup closes D-goals that follow from context.
+    let ipc = attempt_ipc(env, ctx, phi, phi_closed);
+    if matches!(ipc, Verdict::Proved { .. }) {
+        return ipc;
+    }
     // [placeholder — reifies in V4]: kernel whnf + decision procedure (23 §3.1)
     // + Z3-backed arithmetic search + Decidable constructor extraction (23 §3.2).
     // Conservative: honest unknown until backend is in place.
@@ -259,7 +267,10 @@ fn attempt_ipc(
     phi_closed: &Term,
 ) -> Verdict {
     match ipc_search(ctx, phi, 0) {
-        Some(cert) => {
+        Some(open_cert) => {
+            // Close the open cert: wrap with Lam for each context entry so the
+            // closed cert matches phi_closed in the empty context.
+            let cert = close_cert(open_cert, ctx);
             // Cardinal rule: check the cert before claiming proved (23 §1.5).
             match check(env, &Context::new(), &cert, phi_closed) {
                 Ok(()) => Verdict::Proved { cert },
@@ -268,6 +279,27 @@ fn attempt_ipc(
         }
         None => emit_unknown_hole(env, phi_closed),
     }
+}
+
+/// Close an open cert `t` (valid in context `ctx`) into a closed term by
+/// wrapping with Lam for each context entry.
+///
+/// For ctx = [T0, T1, ..., T_{n-1}] (T0 outermost, T_{n-1} innermost):
+/// `close_cert(t, ctx) = Lam(T0, Lam(T1, ..., Lam(T_{n-1}, t)...))`.
+///
+/// The loop builds from the innermost binder outward: wrapping with
+/// `ctx.lookup(0)` (= T_{n-1}, innermost) first, then `ctx.lookup(1)`, ...,
+/// then `ctx.lookup(n-1)` (= T0, outermost) last — exactly so that
+/// `Var(i)` in `t` remains valid under the same de Bruijn index in the body.
+///
+/// When `ctx` is empty, `t` is returned unchanged (no wrapping needed).
+fn close_cert(open_cert: Term, ctx: &Context) -> Term {
+    let mut closed = open_cert;
+    for i in 0..ctx.len() {
+        let ty = ctx.lookup(i).expect("valid context index").clone();
+        closed = Term::lam(ty, closed);
+    }
+    closed
 }
 
 /// Recursive IPC proof search in open context `ctx`.
