@@ -14,7 +14,10 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-- **Updated:** 2026-06-29 (late session — K2c series-1 merged, L5 released).
+- **Updated:** 2026-06-30 (~04:40 — **🏛️ WS-K COMPLETE** (K-api `2f1cdf8`, the
+  kernel/TCB closed); G1 closed; L5 + ITree-lowering delivered; **V1 released** —
+  verification spine begins. Overnight: 1 send-keys + 1 comms-relay intervention,
+  both logged; the rest deep-work false alarms.)
 - **Next action:** **DONE/merged:** K1, K2, K3, V0-spec (`65adf30`), K2c
   compose-erratum (`444f937`), and **K2c series-1** (`7d38b55`, 99/99 — Architect
   caught a Floyd-Warshall **union-masking** SCT bug at review, fixed `9e36918`;
@@ -48,20 +51,38 @@ against it*. Run until complete, blocked, or instructed (§2b).
   **Kernel trust-root COMPLETE** (K1.5-build `f037451`). **L5 FULLY DELIVERED**
   (build `13fd2bf` + denotation `8c7941f`: row-poly + ITree/handlers + §3.1
   contract + the `36 §2.1/§7.0` reconcile) → **Sec1/Sec2/B1 unblocked**.
-  **In flight (3 streams):** (1) **K2c-series-2-build** → Kernel
-  (`wp/K2c-series2-build`, ★★★ obs seams) — implementer in a long high-effort
-  pass (capture-pane-verified working, NOT stalled); ON MERGE clears K-api
-  freeze-gate #2. (2) **ITree-lowering** → Language (`wp/ITree-lowering`, just
-  released) — emit kernel `Term::Elim` over `ITree` (`itree.rs` was structure-only)
-  + make the `param_rows` extraction by-construction (the row-poly soundness
-  contract, Architect-flagged); ON MERGE unblocks X1-effects. (3) **K-api** →
-  enclave (`wp/K-api`) — Architect design **pre-APPROVED**; assembling; merge
-  Decision gated by §4.6 on K1.5-build(done) + series-2-build(pending).
-  **HELD:** **X1-effects** → Runtime (gated on ITree-lowering). **Enclave queue
-  after K-api:** V1 (author frame near K-api merge). **Notification defect**
-  (operator-confirmed, intermittent): diagnose via **`tmux capture-pane`**
-  (deep-thinking vs wedged) before any nudge; `send-keys` backup only on a
-  confirmed wedge. Watchdogs private `CronCreate` (§13); convo §2a on `main`.
+  **ITree-lowering DONE** (`4d6f332`, Language — kernel `Term::Elim` over `ITree`
+  + the `param_rows` fail-closed contract).
+  **K2c-series-2-build DONE** (`ecbb279` — ★★★ obs seams; Architect caught a
+  seam-3 Cast-direction bug, re-fixed `bb0b3ba`; retros → promoted *per-dimension
+  discriminating cases*. **Steward comms-relay:** the fix was committed but the
+  implementer's handoff *post* was failing — I verified it via tmux+git and
+  relayed to kernel/spec leaders → 4-min cascade to merge). **So the KERNEL
+  THEORY IS FULLY BUILT** (K1/K2/K2c-s1+s2/K1.5).
+  **🏛️ K-api DONE** (`2f1cdf8`) — **WS-K COMPLETE: the entire kernel workstream
+  (K1–K2c, K1.5, the TCB-boundary contract) is closed.** Its §4.6 freeze-gate
+  "did its job twice over" — held the contract open just long enough for the
+  Architect to catch a reversed quotient-respect `cast` direction (`16 §5.1`) in
+  end-to-end re-verify before it hardened into the TCB; released the instant code
+  + contract converged. (Its merge had stalled on the Architect missing the
+  series-2-build merge trigger — **Steward send-keys #1**, capture-pane-confirmed
+  idle, woke it to flip the hold.) Retros → promoted *the freeze-gate pattern*.
+  **In flight: V1** → enclave (`wp/V1`, just released; enclave compacted) — the
+  verification spine's first WP (`21-spec-syntax`: `requires`/`ensures` + four-way
+  status; ★★ untrusted/kernel-re-checked); deps V0 + K-api (both done). Enclave
+  then flows **V1 → V2 → V3** (the prover spine) interleaved with **X1-effects-elab
+  (`42 §3`)** + **Sec1** (rides L5).
+  **HELD / IDLE — both dep-blocked on the serial enclave:** **Runtime** —
+  **X1-effects is NOT a clean release**; it needs a **`42 §3` effect-evaluation
+  elaboration** first (the X1-spec deferred effects as out-of-scope stuck forms),
+  *then* Runtime builds. **Verify** — V1 (frame primed `72fce4f`) awaits the
+  enclave. **Enclave queue after K-api:** **V1** (critical path → V2/V3) → then
+  **X1-effects-elab (`42 §3`)** + **Sec1** (rides L5) — author those frames as
+  the enclave nears V1. **Notification defect** (operator-confirmed, intermittent
+  — but all 3 kernel "stalls" tonight were deep-work / finishing / auto-compaction,
+  NOT wedges): diagnose via **`tmux capture-pane -t moot-<role>`** (working vs
+  idle-at-prompt) before any nudge; `send-keys` only on a confirmed wedge
+  (operator GO granted). Watchdogs private `CronCreate` (§13); convo §2a on `main`.
 - **Watchdog/timer hygiene (this session):** promoted to COORDINATION §13 —
   record the `schedule_call` `timer_id` + `cancel_call` on WP close (`d795966`),
   and tick on `get_space_status`/`get_mentions`, never `get_recent_context` (it
