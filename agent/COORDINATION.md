@@ -187,6 +187,23 @@ algorithmic pseudocode **defensively** (every discarding position
 explicit-guarded, every guard backed by a rejection case). The obvious case
 passing ≠ the property holds.
 
+**Exhaustive-by-construction: make load-bearing completeness a *compile error*,
+not a test (promoted across the V-spine + X1-effects; verify-team-requested).**
+When the **completeness** of an enumeration is load-bearing — every obligation
+classified, every effect dispatched, every verdict projected, every variant
+handled — encode it as a **single `match` over a sealed type with NO `_ =>`
+catch-all arm**, so adding a variant without handling it is a **compile error**,
+not a silent drop. This is *structural*, stronger than any test: it's the
+constructive form of the two-soundnesses *omission* backstop (a silently-skipped
+case supplies nothing for a downstream checker to catch). Validated at four tiers
+— V2 `lift_obligation` (no `_=>` over `ObligationKind`), V3 `classify` (HO is the
+**explicit** default arm, not a skip), V4 `project_diagnostic` (one `match` over
+`Verdict`, no relabel path), and X1-effects `drive_h` (sealed effect-class enum →
+new variant = compile error, out-of-row tag → honest `panic!`). Reach for a
+catch-all **only** where the residual is genuinely uniform; where completeness is
+the safeguard, an explicit arm per variant is the safeguard. Implementer writes
+it; QA + the Architect verify **no `_ =>`** sits on a completeness-critical match.
+
 ## 8. Message-type taxonomy (routing metadata)
 
 Tag each message with a type; the **first line is the thread title** — no

@@ -86,6 +86,21 @@ the code, and that independence is the point. Read `../../COORDINATION.md` and
      V1's `trusted_base()` honesty guard generalized to **any** verdict-bearing
      layer (prover/elaborator/extractor); QA + the Architect verify the single
      kernel-gated path is the *sole* constructor of the positive verdict.
+   - **Test any term-in-a-context builder at a *non-empty* context — an
+     empty-context suite hides scope/de Bruijn assumptions (promoted V4-build; the
+     defining spine latency, twice).** A tactic/elaboration that builds a term *in
+     a context* `Γ` can be wrong about **shifts/scope** while passing every
+     **closed/empty-`Γ`** test — and the gap is invisible until the first
+     contextual input arrives. It bit the spine **twice with the same shape**: the
+     V1 de Bruijn bug (predicate on a non-final param) survived V1+V2 on
+     last-param-only tests; V3's `close_cert`/D-pre-pass passed V3's **empty-
+     context** IPC suite and broke at V4's first contextual goal (E1 slice). "A
+     suite that holds for a narrow range is indistinguishable from a correct one
+     until a non-accommodating case arrives." So for any context-builder, require
+     **non-empty `Γ`** (a hypothesis in scope, the binder not last) — the context
+     dimension of "open terms, not closed"; and **a fix for the consumption
+     interface ships with the producer, not one WP later** (V3's contextual tests
+     should have shipped with V3).
    - **A "by-construction" guarantee is only as strong as its weakest *input*
      boundary — trace it one layer out (promoted ITree-lowering).** When the
      implementer claims "omission is structurally impossible" / "this can't be
