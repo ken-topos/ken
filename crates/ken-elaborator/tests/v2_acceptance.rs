@@ -149,12 +149,10 @@ fn precondition_at_call_not_in_body_placeholder() {
     let mut env = mk_env();
     decl_nat_pred(&mut env, "Nonzero");
 
-    // Predicate on last param `d`: confirmed working form in V1 test suite.
-    // (Elaborator has a de Bruijn issue for requires referencing non-final params —
-    // tracked separately; semantics under test here is "requires = assumption".)
+    // Predicate on first param `n` — exercises the fixed de Bruijn shift path.
     let elab_res = env
         .elaborate_decl_v1(
-            "view safe_f (n : Nat) (d : Nat) : Nat requires Nonzero d = n",
+            "view safe_f (n : Nat) (d : Nat) : Nat requires Nonzero n = d",
         )
         .expect("view with requires should elaborate");
 
@@ -290,10 +288,10 @@ fn body_requires_assumed_not_reobligated() {
     let mut env = mk_env();
     decl_nat_pred(&mut env, "NonzeroP");
 
-    // Predicate on last param `d`: confirmed working form in V1 test suite.
+    // Predicate on first param `n` — exercises the fixed de Bruijn shift path.
     let elab_res = env
         .elaborate_decl_v1(
-            "view safe_f (n : Nat) (d : Nat) : Nat requires NonzeroP d = n",
+            "view safe_f (n : Nat) (d : Nat) : Nat requires NonzeroP n = d",
         )
         .expect("view with requires should elaborate");
 

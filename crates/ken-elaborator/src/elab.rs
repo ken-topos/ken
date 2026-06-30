@@ -546,7 +546,10 @@ fn elaborate_view_with_spec(
         full_ty = Term::pi(pt.clone(), full_ty);
     }
     // full_body = Lam(params..., Lam(req..., body_inner))
-    let mut full_body = body_inner;
+    // body_inner has free variables indexed relative to param_ctx (depth n_params).
+    // The req lambdas are inserted BETWEEN the param lambdas and the body, so each
+    // param variable in body_inner shifts up by req_cores.len() to skip the req binders.
+    let mut full_body = weaken(&body_inner, req_cores.len() as i64);
     for req in req_cores.iter().rev() {
         full_body = Term::lam(req.clone(), full_body);
     }

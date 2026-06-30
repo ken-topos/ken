@@ -497,3 +497,129 @@ fn v0_behavior_unchanged() {
         .expect("V0 const should elaborate via V1 path");
     assert!(res_v1.obligations.is_empty(), "no spec forms → no obligations");
 }
+
+// ======================================================================
+// H. de Bruijn fix — `requires` on non-final parameter (V1-fix)
+// ======================================================================
+//
+// V1-fix: the body was not weakened by req_cores.len() before inserting
+// the proof-arg lambdas between param lambdas and the body. This caused
+// body Var(i) to point at the proof argument instead of param i.
+// Fix: weaken(body_inner, req_cores.len()) in elaborate_view_with_spec Phase 4.
+
+/// verify/spec-syntax/requires-on-first-param-of-two  (verdict-flip: was TypeMismatch, now ok)
+///
+/// `view f (n : Nat) (d : Nat) : Nat requires Positive n = d` — `requires`
+/// clause references `n` (the FIRST param, not the last). Before the fix:
+/// kernel TypeMismatch. After: elaborates cleanly and the body is `d` (correct).
+#[test]
+fn requires_on_first_of_two_params() {
+    let mut env = mk_env();
+    decl_nat_pred(&mut env, "Positive");
+
+    let res = env
+        .elaborate_decl_v1("view f (n : Nat) (d : Nat) : Nat requires Positive n = d")
+        .expect("requires on non-final param must elaborate after fix");
+
+    // No ensures → no obligations
+    assert!(res.obligations.is_empty(), "requires-only → no obligations");
+
+    // Full type: Pi(n:Nat, Pi(d:Nat, Pi(Positive(n), Nat)))
+    // Full body: Lam(n, Lam(d, Lam(proof, d)))  where body=d=Var(1) in innermost ctx
+    let body = env.env.transparent_body(res.def_id).expect("transparent body").1;
+    // In Lam(n, Lam(d, Lam(proof, body))):
+    //   innermost ctx: Var(0)=proof, Var(1)=d, Var(2)=n
+    // body = d = Var(1) after fix (was Var(0)=proof before fix → TypeMismatch)
+    let positive_id = *env.globals.get("Positive").unwrap();
+    let nat_id = *env.globals.get("Nat").unwrap();
+    let nat = Term::const_(nat_id, vec![]);
+    // Expected body: λn:Nat. λd:Nat. λproof:Positive(n). d
+    let expected = Term::lam(
+        nat.clone(),
+        Term::lam(
+            nat.clone(),
+            Term::lam(
+                Term::app(Term::const_(positive_id, vec![]), Term::var(1)), // Positive(n) in d-ctx: n=Var(1)
+                Term::var(1), // d in proof-ctx: d=Var(1)
+            ),
+        ),
+    );
+    assert_eq!(body, expected, "body must be d (Var(1) in proof-ctx), not proof (Var(0))");
+}
+
+/// verify/spec-syntax/requires-on-middle-param-of-three
+///
+/// Three params: first, second (predicated on), third. `requires` references
+/// the middle param — tests that the shift is correct for both the body and
+/// the predicate domain across the param chain.
+#[test]
+fn requires_on_middle_param_of_three() {
+    let mut env = mk_env();
+    decl_nat_pred(&mut env, "MidPred");
+
+    // view g (a : Nat) (b : Nat) (c : Nat) : Nat requires MidPred b = a
+    let res = env
+        .elaborate_decl_v1("view g (a : Nat) (b : Nat) (c : Nat) : Nat requires MidPred b = a")
+        .expect("requires on middle param must elaborate after fix");
+
+    assert!(res.obligations.is_empty(), "requires-only → no obligations");
+    // Body should be `a` (the first param). In innermost ctx (a,b,c,proof):
+    // Var(0)=proof, Var(1)=c, Var(2)=b, Var(3)=a → body = Var(3)
+    let body = env.env.transparent_body(res.def_id).expect("transparent body").1;
+    let mid_pred_id = *env.globals.get("MidPred").unwrap();
+    let nat_id = *env.globals.get("Nat").unwrap();
+    let nat = Term::const_(nat_id, vec![]);
+    // λa:Nat. λb:Nat. λc:Nat. λproof:MidPred(b). a
+    // MidPred(b) in c-ctx: b=Var(1), so domain = App(MidPred, Var(1))
+    // a in proof-ctx: Var(3)
+    let expected = Term::lam(
+        nat.clone(),
+        Term::lam(
+            nat.clone(),
+            Term::lam(
+                nat.clone(),
+                Term::lam(
+                    Term::app(Term::const_(mid_pred_id, vec![]), Term::var(1)), // b in c-ctx
+                    Term::var(3), // a in proof-ctx
+                ),
+            ),
+        ),
+    );
+    assert_eq!(body, expected, "body must be a (Var(3) in proof-ctx)");
+}
+
+/// verify/spec-syntax/requires-on-final-param-unaffected
+///
+/// Regression: the existing working form (`requires` on the final/last param)
+/// must be unaffected by the fix. Same case as `requires_elaborates_to_pi_proof_arg`
+/// re-stated to pin the no-regression dimension explicitly.
+#[test]
+fn requires_on_final_param_unaffected() {
+    let mut env = mk_env();
+    decl_nat_pred(&mut env, "FinalPred");
+
+    let res = env
+        .elaborate_decl_v1("view h (n : Nat) (d : Nat) : Nat requires FinalPred d = n")
+        .expect("requires on final param must still elaborate (regression)");
+
+    assert!(res.obligations.is_empty());
+    // Body = n. In innermost ctx (n,d,proof): Var(0)=proof, Var(1)=d, Var(2)=n → body=Var(2)
+    let body = env.env.transparent_body(res.def_id).expect("transparent body").1;
+    let fin_pred_id = *env.globals.get("FinalPred").unwrap();
+    let nat_id = *env.globals.get("Nat").unwrap();
+    let nat = Term::const_(nat_id, vec![]);
+    // λn:Nat. λd:Nat. λproof:FinalPred(d). n
+    // FinalPred(d) in d-ctx: Var(0)=d, so domain = App(FinalPred, Var(0))
+    // n in proof-ctx: Var(2)
+    let expected = Term::lam(
+        nat.clone(),
+        Term::lam(
+            nat.clone(),
+            Term::lam(
+                Term::app(Term::const_(fin_pred_id, vec![]), Term::var(0)), // d in d-ctx
+                Term::var(2), // n in proof-ctx
+            ),
+        ),
+    );
+    assert_eq!(body, expected, "body must be n (Var(2) in proof-ctx)");
+}
