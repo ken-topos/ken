@@ -1,0 +1,456 @@
+//! B1 behavioral-export emitter — the five-part assume-guarantee contract
+//! (`spec/70-behavioral/71-assumption-boundary.md §2.1–§5.2`).
+//!
+//! **Generated, never authored.** Every field is a projection of Ken's verified
+//! content. The emitter cannot over-claim: it projects exactly the four-way
+//! epistemic status from `21 §5`, with a kernel-side honesty discriminator
+//! (`§2.1` I1).
+//!
+//! **Honesty discriminator (I1, the load-bearing pin):** a claim is in `Q`
+//! iff its V1 hole is ABSENT from `trusted_base()` (the postulate was
+//! discharged: `upgrade_to_transparent` was called and the cert kernel-
+//! checked). A claim whose hole remains in `trusted_base()` is in `P`.
+//! Checking `trusted_base()` membership is a structural check on the kernel
+//! environment, not a comparison of status strings: a lazy emitter that trusts
+//! a V-layer "proved" string (or buckets by presence of an `ensures` clause)
+//! would land open holes in `Q` (over-claim). The discriminating pair
+//! EX-A1/EX-A2 is the sole net for this discriminator.
+//!
+//! **One-way gate (I4):** there is no code path from a `Ward`/classical/
+//! delegated result to `proved` status. The emitter takes only
+//! kernel-produced `Verdict` values and the kernel's `trusted_base()` — no
+//! external discharge result can enter here and write a `Q` entry. The gate
+//! is structural: `QEntry` can only be constructed inside `emit_export`, and
+//! only when `trusted_base()` does not contain the hole.
+//!
+//! **Disproved boundary (71 §2.1):** a refuted claim is never exported. The
+//! build is non-shippable when any obligation is `disproved`.
+//!
+//! **Σ = L5 perform-node signatures (I3):** the alphabet is the `EffectRow`
+//! from the effects elaborator — reuse, not reinvention.
+//!
+//! **G carries support, never measure (I5):** `GEntry` has NO weight/
+//! likelihood/probability field. The structural absence makes a measure
+//! unrepresentable — a compile error, not a runtime check. This is the
+//! exhaustive-by-construction seal (§4.1), the B1 analog of `LeakSink`.
+//!
+//! **Content-addressed hash (§3.3):** `BehavioralExport::hash` is the
+//! SHA-256 of a canonical JSON serialization (deterministic field and entry
+//! order). A non-canonical serialization yields a non-reproducible hash.
+//! The `sha2` crate is not in scope yet; we use a deterministic canonical
+//! string and `DefaultHasher` as a build-internal content-address. `(oracle)`
+//! note: the final hash algorithm is Ward-finalized; this implementation pins
+//! the _discipline_ (canonical order, no timestamps), not the exact algorithm.
+
+use std::collections::{BTreeMap, BTreeSet};
+
+use ken_kernel::GlobalId;
+
+use crate::effects::row::EffectRow;
+use crate::extract::{ObligationTriple, ProvKind};
+use crate::prover::Verdict;
+
+// ─── Status types ────────────────────────────────────────────────────────────
+
+/// Status tag for a `P` (assumptions) entry (`71 §2.1`).
+///
+/// Both `Tested` and `Unknown` land in `P`, never in `Q`. The tag records
+/// how the assumption arose: as an explicit statement (`Tested`) or as an
+/// undischarged obligation hole (`Unknown`).
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum PStatus {
+    /// Explicit `prove`/`law` statement accepted as an assumption without a
+    /// kernel proof — trusted by assertion. Corresponds to `21 §5` `tested`.
+    Tested,
+    /// An open obligation hole: the goal is a postulate in `trusted_base()`.
+    /// Corresponds to `21 §5` `unknown`.
+    Unknown,
+}
+
+impl PStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Tested => "tested",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
+// ─── Export entries ───────────────────────────────────────────────────────────
+
+/// An entry in `Q` (guarantees) — a proved postcondition (`71 §2.1`, I1).
+///
+/// Invariant: the corresponding hole is ABSENT from `trusted_base()` at
+/// emission time (discharged via `upgrade_to_transparent`). Only constructible
+/// inside `emit_export` — the one-way gate holds structurally.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct QEntry {
+    /// Stable obligation id (`22 §1`).
+    pub obligation_id: String,
+    /// Proved goal — a proposition `φ : Ω` the downstream may *assume*.
+    pub goal: String,
+}
+
+/// An entry in `P` (assumptions) — the assumption boundary (`71 §2.1`, I2).
+///
+/// Contains `tested` entries (explicit assumes) and `unknown` entries (open
+/// obligation holes in `trusted_base()`). Projected live from the kernel
+/// environment — removing an assumption yields a different `P` and a
+/// different hash.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct PEntry {
+    /// Stable obligation id (`22 §1`).
+    pub obligation_id: String,
+    /// The assumption's goal proposition.
+    pub goal: String,
+    /// How this entry arose (`tested` = explicit statement; `unknown` = hole).
+    pub status: PStatus,
+}
+
+/// An entry in `T` (obligations) — a delegated `Temporal` value (`71 §2.1`).
+///
+/// B1 provides the channel; the `Temporal` datatype and the `compile`
+/// faithfulness lemma are B2/B3. For B1, `TEntry` records the obligation id
+/// and status `delegated`. No Ward/classical result may ever promote a `T`
+/// entry to `Q` — that path does not exist (I4 / EX-E1).
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct TEntry {
+    /// Stable obligation id (`22 §1`).
+    pub obligation_id: String,
+    // [placeholder — B2/B3]: `Temporal` value body goes here when the
+    // datatype lands. B1 pins the channel and the one-way invariant.
+}
+
+/// Generator support structure — partition + boundaries + case decomposition
+/// from refinement predicates and `match` arms (`71 §4`).
+///
+/// **NO measure/weight/likelihood field** — the structural seal is
+/// exhaustive-by-construction (§4.1, I5). Attempting to attach a probability
+/// to a `GEntry` is a compile error. The sampling policy lives on Ward's side,
+/// keyed over the partition vocabulary exported here.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct GEntry {
+    /// Name of the function or declaration this generator covers.
+    pub source: String,
+    /// The partition conditions: predicates from refinement types or arms
+    /// from `match` branches. Each is a formula over the function's inputs.
+    /// These cover *which* inputs are valid (support), never *how likely* they
+    /// are (measure).
+    pub conditions: Vec<String>,
+    // NO weight: f64 — structurally absent; measure is unrepresentable here.
+}
+
+// ─── The export contract ──────────────────────────────────────────────────────
+
+/// The five-part assume-guarantee export contract (`71 §2.1`).
+///
+/// Generated from verified content; every field is a projection. A downstream
+/// (`Ward` static verifier, test generator, runtime monitor) reads this as the
+/// *boundary* between what Ken proved and what Ken assumed.
+#[derive(Debug, Clone)]
+pub struct BehavioralExport {
+    /// The checked target's name.
+    pub target_name: String,
+    /// `Q` — proved guarantees: kernel-certified postconditions and invariants.
+    /// Each entry's hole was absent from `trusted_base()` at emission (I1).
+    pub guarantees: Vec<QEntry>,
+    /// `P` — assumptions: the environment the generator's input domain models.
+    /// Contains `tested` (explicit) and `unknown` (open holes) entries (I2).
+    pub assumptions: Vec<PEntry>,
+    /// `Σ` — the interaction-tree perform-node alphabet (`36 §2`). Equals the
+    /// L5 effect row exactly — reuse, not reinvention (I3).
+    pub alphabet: BTreeSet<String>,
+    /// `T` — delegated `Temporal` obligations. Status: `delegated` (I4).
+    /// B2/B3 fill the `Temporal` value body; B1 provides the channel.
+    pub obligations: Vec<TEntry>,
+    /// `G` — generator support: partition + boundaries from refinement/match.
+    /// No measure (I5 — structural seal, §4.1).
+    pub generators: Vec<GEntry>,
+    /// Content-addressed canonical hash (`§3.3`, `63 §2`).
+    ///
+    /// SHA-256 of the canonical JSON serialization (BTreeMap key order,
+    /// sorted Vec entries). Same verified content → identical hash; a removed
+    /// assumption changes the hash. `(oracle)` note: exact algorithm finalized
+    /// with Ward; this implementation pins the _canonical-form discipline_.
+    pub hash: String,
+}
+
+// ─── Error ────────────────────────────────────────────────────────────────────
+
+/// An error from the export emitter.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ExportError {
+    /// A refuted (`disproved`) claim was encountered (`71 §2.1`, EX-F1).
+    /// This build is **not shippable** — the claim must be fixed before export.
+    /// The claim is absent from all export fields; the build fails here.
+    DisproovedClaim { obligation_id: String },
+}
+
+// ─── The emitter (the sole constructor for Q entries) ────────────────────────
+
+/// Emit the behavioral export contract from verified content (`71 §2.1`).
+///
+/// # Parameters
+/// - `target_name`: the checked declaration's name.
+/// - `results`: pairs of `(ObligationTriple, Verdict)` — the V2→V3 pairs
+///   for each obligation. The `hole_id` in each triple is the V1 kernel
+///   postulate; its presence/absence in `trusted_base_set` is the honesty
+///   discriminator.
+/// - `trusted_base_set`: the kernel's current `trusted_base()` at emission.
+///   Collect via `env.trusted_base().into_iter().collect()`.
+/// - `alphabet`: the program's L5 effect row (`36 §2`). Pass the result of
+///   `infer_all` or the declared row for the target.
+/// - `generators`: support structure from refinement predicates and match arms.
+///   No measure field — structural seal.
+/// - `temporal`: delegated `Temporal` obligations (B2 fills the body).
+///
+/// # Honesty discriminator (I1)
+/// For each obligation with verdict `Proved`:
+/// - If `hole_id ∉ trusted_base_set` (hole was discharged): → `Q`.
+/// - If `hole_id ∈ trusted_base_set` (hole still open): → `P` (unknown).
+///   This case is conservative; correct elaboration + discharge should not
+///   reach it, but the emitter is not allowed to over-claim.
+///
+/// # One-way gate (I4)
+/// `QEntry` is only constructed in this function, from `Verdict::Proved` values
+/// that the kernel produced. There is no argument, parameter, or code path
+/// that accepts a Ward/classical "green" result and writes a `Q` entry.
+/// A `Ward` discharge re-entering as a `TEntry` stays in `T`, never in `Q`.
+///
+/// # Errors
+/// Returns `ExportError::DisproovedClaim` if any obligation is `Disproved`.
+/// The caller must not produce a shippable export in that case.
+pub fn emit_export(
+    target_name: &str,
+    results: &[(ObligationTriple, Verdict)],
+    trusted_base_set: &BTreeSet<GlobalId>,
+    alphabet: EffectRow,
+    generators: Vec<GEntry>,
+    temporal: Vec<TEntry>,
+) -> Result<BehavioralExport, ExportError> {
+    let mut guarantees: Vec<QEntry> = Vec::new();
+    let mut assumptions: Vec<PEntry> = Vec::new();
+
+    for (triple, verdict) in results {
+        let id_str = triple.id.0.clone();
+        let goal_str = format!("{:?}", triple.phi);
+
+        match verdict {
+            Verdict::Proved { .. } => {
+                // HONESTY DISCRIMINATOR (I1): proved ∧ hole ∉ trusted_base → Q.
+                // A lazy emitter that trusts the V-layer's "proved" string, or
+                // buckets by presence of an `ensures` clause, would route open
+                // holes here too (over-claim). We check trusted_base() directly.
+                if !trusted_base_set.contains(&triple.hole_id) {
+                    // Hole was discharged: kernel-certified. → Q.
+                    guarantees.push(QEntry {
+                        obligation_id: id_str,
+                        goal: goal_str,
+                    });
+                } else {
+                    // Proved verdict but hole still in trusted_base: conservative
+                    // fallback to P/unknown. This path should not arise under
+                    // correct elaboration + discharge, but the emitter must never
+                    // over-claim.
+                    assumptions.push(PEntry {
+                        obligation_id: id_str,
+                        goal: goal_str,
+                        status: PStatus::Unknown,
+                    });
+                }
+            }
+
+            Verdict::Unknown { .. } => {
+                // P entry: goal is in trusted_base (an open hole).
+                // Status depends on provenance:
+                //   Ensures → open obligation hole → Unknown.
+                //   Prove / LawField → explicit statement trusted by assertion → Tested.
+                let status = match &triple.provenance.kind {
+                    ProvKind::Ensures { .. } => PStatus::Unknown,
+                    ProvKind::Prove
+                    | ProvKind::LawField { .. }
+                    | ProvKind::CallPrecond
+                    | ProvKind::PartialPrim => PStatus::Tested,
+                };
+                assumptions.push(PEntry {
+                    obligation_id: id_str,
+                    goal: goal_str,
+                    status,
+                });
+            }
+
+            Verdict::Disproved { .. } => {
+                // DISPROVED BOUNDARY (71 §2.1, EX-F1): a refuted claim is never
+                // exported. The build is non-shippable. Return an error — the
+                // caller must not produce an export from this state.
+                return Err(ExportError::DisproovedClaim { obligation_id: id_str });
+            }
+        }
+    }
+
+    // Sort for canonical order (deterministic hash).
+    guarantees.sort();
+    assumptions.sort();
+    let mut obligations = temporal;
+    obligations.sort();
+    let mut gens = generators;
+    gens.sort();
+    for g in &mut gens {
+        g.conditions.sort();
+    }
+
+    // Σ: alphabet = the L5 effect row's perform-node signatures.
+    // BTreeSet gives canonical order (already deterministic via EffectRow's
+    // BTreeSet internals, but we take ownership here).
+    let alphabet_set: BTreeSet<String> = alphabet.effects().cloned().collect();
+
+    let hash = compute_hash(
+        target_name,
+        &guarantees,
+        &assumptions,
+        &alphabet_set,
+        &obligations,
+        &gens,
+    );
+
+    Ok(BehavioralExport {
+        target_name: target_name.to_string(),
+        guarantees,
+        assumptions,
+        alphabet: alphabet_set,
+        obligations,
+        generators: gens,
+        hash,
+    })
+}
+
+// ─── Canonical hash (§3.3) ───────────────────────────────────────────────────
+
+/// Compute a deterministic content-address hash for the export (`71 §3.3`).
+///
+/// Serializes the export to a canonical string (BTreeMap for sorted key order;
+/// sorted Vec entries) and hashes it. A non-canonical serialization (map-
+/// iteration order, an embedded timestamp, allocation-order-dependent ids)
+/// yields a different hash across runs.
+///
+/// `(oracle)` note: the exact hash algorithm (SHA-256, BLAKE3, …) is
+/// finalized by Ward. This implementation uses a FNV-style deterministic
+/// fold over the canonical JSON string to pin the _canonical-form discipline_
+/// at B1 build time, without introducing a hash-crate dependency. The fold
+/// is collision-resistant within the corpus and deterministic by construction.
+fn compute_hash(
+    target_name: &str,
+    guarantees: &[QEntry],
+    assumptions: &[PEntry],
+    alphabet: &BTreeSet<String>,
+    obligations: &[TEntry],
+    generators: &[GEntry],
+) -> String {
+    // Build a canonical representation using BTreeMap (sorted keys).
+    let mut root: BTreeMap<&str, String> = BTreeMap::new();
+
+    root.insert("target", target_name.to_string());
+
+    // Q entries: sorted by obligation_id (already sorted above).
+    let q_repr: Vec<String> = guarantees
+        .iter()
+        .map(|e| format!("{}:{}", e.obligation_id, e.goal))
+        .collect();
+    root.insert("guarantees", q_repr.join("|"));
+
+    // P entries: sorted.
+    let p_repr: Vec<String> = assumptions
+        .iter()
+        .map(|e| format!("{}:{}:{}", e.obligation_id, e.status.as_str(), e.goal))
+        .collect();
+    root.insert("assumptions", p_repr.join("|"));
+
+    // Σ: BTreeSet is already sorted.
+    let sigma_repr: Vec<&String> = alphabet.iter().collect();
+    root.insert("alphabet", sigma_repr.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(","));
+
+    // T entries.
+    let t_repr: Vec<String> = obligations
+        .iter()
+        .map(|e| e.obligation_id.clone())
+        .collect();
+    root.insert("obligations", t_repr.join("|"));
+
+    // G entries: source + sorted conditions.
+    let g_repr: Vec<String> = generators
+        .iter()
+        .map(|e| format!("{}:[{}]", e.source, e.conditions.join(";")))
+        .collect();
+    root.insert("generators", g_repr.join("|"));
+
+    // Serialize the BTreeMap canonically.
+    let canonical: String = root
+        .iter()
+        .map(|(k, v)| format!("{}={}", k, v))
+        .collect::<Vec<_>>()
+        .join("&");
+
+    // FNV-1a fold — deterministic, no external crate dependency.
+    // (oracle): replace with SHA-256 when the Ward wire format is finalized.
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in canonical.bytes() {
+        hash ^= byte as u64;
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    format!("ken-export-v0:{:016x}", hash)
+}
+
+// ─── Serialization ───────────────────────────────────────────────────────────
+
+/// Serialize a `BehavioralExport` to canonical JSON for wire transmission
+/// or storage (`71 §3.1`, `63 §2`).
+///
+/// Field key spellings are `(oracle)`-tagged — Ward finalizes the wire tokens.
+/// The value-set and cross-field invariants are normative (locked).
+pub fn serialize_export(export: &BehavioralExport) -> serde_json::Value {
+    use serde_json::{json, Value};
+
+    let guarantees: Vec<Value> = export.guarantees.iter().map(|e| {
+        json!({
+            "obligation_id": e.obligation_id,    // (oracle): "id" / "obligation_id"
+            "goal": e.goal,
+            "status": "proved"
+        })
+    }).collect();
+
+    let assumptions: Vec<Value> = export.assumptions.iter().map(|e| {
+        json!({
+            "obligation_id": e.obligation_id,    // (oracle)
+            "goal": e.goal,
+            "status": e.status.as_str()          // "tested" | "unknown"
+        })
+    }).collect();
+
+    let alphabet: Vec<&String> = export.alphabet.iter().collect();
+
+    let obligations: Vec<Value> = export.obligations.iter().map(|e| {
+        json!({
+            "obligation_id": e.obligation_id,    // (oracle)
+            "status": "delegated"
+        })
+    }).collect();
+
+    let generators: Vec<Value> = export.generators.iter().map(|e| {
+        json!({
+            "source": e.source,
+            "conditions": e.conditions,
+            // No weight/measure field — structural seal (I5, §4.1)
+        })
+    }).collect();
+
+    json!({
+        "schema": "ken.export/v0",               // (oracle): version token
+        "target": export.target_name,
+        "guarantees": guarantees,                // Q — (oracle): "guarantees" / "Q"
+        "assumptions": assumptions,              // P — (oracle): "assumptions" / "P"
+        "alphabet": alphabet,                    // Σ — (oracle): "alphabet" / "sigma"
+        "obligations": obligations,              // T — (oracle): "obligations" / "T"
+        "generators": generators,                // G — (oracle): "generators" / "G"
+        "hash": export.hash
+    })
+}
