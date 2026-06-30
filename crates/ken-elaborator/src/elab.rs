@@ -641,7 +641,7 @@ pub fn elaborate_rdecl_v1(
                 ctors,
                 &rdecl.span,
             )?;
-            Ok(ElabResult { name: rdecl.name.clone(), def_id: d_id, obligations: vec![] })
+            Ok(ElabResult { name: rdecl.name.clone(), def_id: d_id, obligations: vec![], foreign_binding: None })
         }
         RDeclKind::TypeAlias { ty } => {
             // A type alias `type T = A` declares T as a transparent definition
@@ -657,7 +657,7 @@ pub fn elaborate_rdecl_v1(
             let id = declare_def(env, vec![], alias_ty, alias_body)
                 .map_err(|e| ElabError::KernelRejected { error: e, span: rdecl.span.clone() })?;
             globals.insert(rdecl.name.clone(), id);
-            Ok(ElabResult { name: rdecl.name.clone(), def_id: id, obligations: vec![] })
+            Ok(ElabResult { name: rdecl.name.clone(), def_id: id, obligations: vec![], foreign_binding: None })
         }
         RDeclKind::Foreign { symbol, library, is_pure, visits } => {
             elaborate_foreign_decl(
