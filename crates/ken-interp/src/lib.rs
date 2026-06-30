@@ -5,7 +5,7 @@
 
 pub mod eval;
 
-pub use eval::{apply, drive_h, eval, Env, EvalStore, EvalVal, ITreeIds, SlotId};
+pub use eval::{apply, drive_h, drive_h_instrumented, eval, Env, EvalStore, EvalVal, ITreeIds, SlotId};
 
 pub fn describe() -> &'static str {
     "ken reference interpreter (X1)"
