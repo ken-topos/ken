@@ -58,10 +58,13 @@ considered important:
   status (`proved`/`tested`/`delegated`/`unknown`) is visible in source and
   exported — Ken never overstates what it has proved.
 - **A small, permanent, auditable trust root.** The de Bruijn criterion is a
-  design target, not a convenience (PRINCIPLES §5). Every untrusted tool
-  (elaborator, prover, codegen, the agent) produces certificates the kernel
-  re-checks. A bug anywhere else produces a rejected certificate, never a
-  false `proved`.
+  design target, not a convenience (PRINCIPLES §5). Every untrusted tool that
+  produces a *proof* — the elaborator, the prover, the agent — emits
+  certificates the kernel re-checks; a bug there yields a rejected
+  certificate, never a false `proved`. The execution backends are checked
+  differently: the interpreter is the reference oracle, and native codegen is
+  validated by differential agreement with it (it is deliberately outside the
+  trusted kernel).
 - **MIT license.** Ken is its own design; its programs are yours under any
   terms you choose.
 
