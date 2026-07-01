@@ -18,7 +18,8 @@ conformance/
   surface/       — 30-surface/ (lexical, grammar, declarations, classes,
                    data-match, numbers, effects, collections, ffi-io,
                    elaboration)
-  runtime/       — 40-runtime/ (values, evaluation, termination, capacity)
+  runtime/       — 40-runtime/ (values, evaluation, termination, capacity,
+                   native backend differential-equivalence)
   stdlib/        — 50-stdlib/ (lawful instances, verified building blocks)
   security/      — 60-security/ (information flow, constant-time discipline,
                    capabilities & authority, trust model & TCB, policy-as-code)
@@ -132,6 +133,18 @@ claim with no conformance case is a claim no one can rely on
   (`CapacityExhausted` raised, never the silent `NULL_SLOT` drop), reclamation
   page release (`arena_bytes → 0`), region-scoped lifetime + escape-survival,
   retired-ids-never-resurrected, and no-lattice-on-the-hot-path.
+- `runtime/backend/seed-backend.md` — X3a native backend **differential
+  equivalence** (`45`): the interpreter-is-oracle rule (same closed ground term
+  through both → **identical K3 values**; interpreter right by definition,
+  `42 §5`), the **observable/unobservable** discriminating pair (a divergence in
+  observable value **rejects** / an unobservable-internal strategy difference
+  **admits**, `42 §2` layers-may-differ), the **not-in-TCB** posture (a codegen
+  bug is a wrong value, **never a false `proved`** — the trust chain kernel `Q`
+  / interpreter-oracle `tested` / backend `tested`, **not** kernel-backed),
+  determinism-carries, and the `44` capacity cross-ref. A design/discipline
+  corpus: the interpreter half is landed (`crates/ken-interp`), the backend half
+  is `(oracle)`/X3-build-deferred; target-agnostic (`OQ-backend-target` stays
+  operator-open).
 - `security/ifc/seed-ifc.md` — Sec1 information-flow-by-typing (the
   implicit-flow discriminator, label joins, capability-gated declassify, the
   relational by-proof mode).
