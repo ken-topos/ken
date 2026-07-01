@@ -449,20 +449,22 @@ elaborator wiring of the collection ops to the landed resolver.
   the instance requirement.
 
 ### surface/collections/user-ord-instance-drives-verified-sort (deferred)
-- spec: `37 §6` (the deferred lawful-`Ord` class + `where Ord a` desugaring,
-  `33 §5.4`), `34 §5`, `33 §5`/`39 §6`
-- **deferred — the coupling this case tests does not exist on `main`.** The
+- spec: `51-lawful-classes.md` (the lawful `Ord` class + `where Ord a` supplying
+  `d.leq`, `33 §5.4`), `37 §6`, `34 §5`, `33 §5`/`39 §6`
+- **deferred — the coupling this case tests does not exist on `main` yet.** The
   ES2-remainder §6 pin makes `sort` take an **explicit comparator**
   `leq : a → a → Bool` (no `where Ord a`) and ordered `Map`/`Set` ops use
   built-in comparators, so **nothing** resolves a user `Ord` instance today;
   and the landed `Ord` class is an **empty stub** carrying **no** law fields.
   Asserting "the `Ord` dictionary carries the total-order law proofs the prover
   uses" against that stub is **green-vs-green** — it passes with zero
-  law-carrying content. This case is **gated on the future lawful-`Ord`-class
-  WP** that (a) builds `Ord` instances **actually carrying** the total-order law
-  proofs (reflexivity/antisymmetry/transitivity/totality — not stubs) and
-  (b) lands the `where Ord a` **desugaring** (`33 §5.4`) that threads the
-  instance's `leq` into `sort`'s explicit comparator slot.
+  law-carrying content. This case is **gated on the ES4-classes WP**
+  (`51-lawful-classes.md` — spec **pinned**; the Team-Language build follow-on
+  lands the `Ord`) that (a) builds `Ord` instances **actually carrying** the
+  total-order law proofs (`refl`/`antisym`/`trans`/`total`, `51 §5` — not stubs;
+  the `stdlib/classes/law-fields-real-proofs-not-postulates` net) and
+  (b) supplies the instance's `leq` (`d.leq`) to `sort` via `where Ord a`
+  (`51 §4`, `33 §5.4`). **Un-defers on that build**, not on this spec pin.
 - given (on that WP): a user type `K` with (a) a user `instance Ord K`
   (law-carrying), and (b) the **same** `K` with **no** `Ord K` — each used in a
   `where Ord a`-constrained `sort (xs : List K)` (and an ordered op, e.g.
@@ -481,13 +483,14 @@ elaborator wiring of the collection ops to the landed resolver.
   (deferred; do **not** count green against today's empty-stub `Ord`.)
 
 ### surface/collections/user-ord-sort-emits-both-conjuncts (soundness, deferred)
-- spec: `37 §6` (`where Ord a` desugaring, `33 §5.4`), `34 §5` (refinement
-  obligation), `22 §2.1`
-- **deferred — no user-instance `sort` path exists on `main`.** Post-pin `sort`
-  takes an explicit `leq` and has **no** `Ord`-resolved path (built-in or user),
-  so there is no user-`Ord` `sort` site whose emission could regress. This case
-  is **gated on the same lawful-`Ord`-class WP** (the `where Ord a` desugaring
-  that re-introduces a user-instance `sort` path).
+- spec: `51-lawful-classes.md` (`where Ord a` supplies `d.leq`, `§4`), `37 §6`,
+  `34 §5` (refinement obligation), `22 §2.1`
+- **deferred — no user-instance `sort` path exists on `main` yet.** Post-pin
+  `sort` takes an explicit `leq` and has **no** `Ord`-resolved path (built-in or
+  user), so there is no user-`Ord` `sort` site whose emission could regress.
+  This case is **gated on the same ES4-classes WP** (`51-lawful-classes.md`;
+  `where Ord a` supplying `d.leq` re-introduces the user-instance `sort` path) —
+  **un-defers on that build**, not on this spec pin.
 - given (on that WP): a `where Ord a`-constrained `sort (xs : List K)` where
   `Ord K` is a **user** `instance Ord K` resolved via
   `instance_search("Ord", "K")` and desugared to threading its `leq`

@@ -159,6 +159,18 @@ claim with no conformance case is a claim no one can rely on
   corpus: the interpreter half is landed (`crates/ken-interp`), the backend half
   is `(oracle)`/X3-build-deferred; target-agnostic (`OQ-backend-target` stays
   operator-open).
+- `stdlib/classes/seed-lawful-classes.md` — ES4 lawful structure classes
+  (`Eq`/`DecEq`/`Ord`, `50-stdlib/51`): the **laws-PROVED** discipline — an
+  instance's law fields are **real kernel proofs**, so "lawful ≡
+  zero-`trusted_base()`-delta" (AC3, the law-side of ES1's zero-delta): a
+  **law-less** dictionary (postulated/holed/stubbed law fields) is **rejected as
+  unlawful** (non-empty delta / re-check fail) while the real instance accepts —
+  the discriminating flip, grep the law fields for `declare_postulate`/holes;
+  the `Ord` **totality** law is `Ω`-clean as the Bool-equation
+  `IsTrue (leq x y || leq y x)` (no truncation); and `where Ord a` supplies the
+  **same** `sort` obligation as the explicit comparator (AC2,
+  reflect-don't-extend). Static face; the real law-carrying instances are the
+  Team-Language build follow-on.
 - `security/ifc/seed-ifc.md` — Sec1 information-flow-by-typing (the
   implicit-flow discriminator, label joins, capability-gated declassify, the
   relational by-proof mode).
