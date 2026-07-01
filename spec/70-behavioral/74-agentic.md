@@ -16,9 +16,12 @@
 > capability discipline (`62`, `crates/ken-elaborator/src/effects/`, `ifc.rs`),
 > the five-field export projection (`71`, `ken-elaborator/.../export.rs`),
 > the `Σ`/trace instrumentation (`73 §2`, the single `Vis` site in
-> `ken-interp`), and the `OQ-relational` product-program reduction (`61 §5.3`).
-> B4 **composes** these; it builds no new primitive. **If a build finds itself
-> writing a new mechanism, it has mis-scoped — stop and flag the Steward.**
+> `ken-interp`), and the `OQ-relational` *projection* channel (`61 §5.3` — the
+> 2-run product-program reduction *itself* is named-deferred, `[rel-deferred]`).
+> B4 **composes** these; it builds no new primitive, and it **drives the landed
+> projection, never a deferred discharge engine** (§2.1). **If a build finds
+> itself writing a new mechanism, it has mis-scoped — stop and flag the
+> Steward.**
 
 ## 1. The problem, and why it is not a new Ken mechanism
 
@@ -67,8 +70,8 @@ silence is the highest-risk kind; it is closed here at the source):
 | Assurance (mechanism) | Status | Field | Never | Grounded in |
 |---|---|---|---|---|
 | **Safety envelope** — invariant proved for *all* agent outputs | **`proved`** | **`Q`** | never `tested`/`unknown` | `62` caps + `22`/`23` obligation → `71` `Q` (§3) |
-| **Metamorphic relation** — oracle-free relational check across runs | **`tested`** | **`P`** | never `proved` (agent is `P`, not a pure fn) | `OQ-relational` `61 §5.3` + L2 test-gen (§4) |
-| **RV watchdog** — a temporal/behavioral obligation over agent actions | **`delegated`** | **`T`** | never `proved`/`tested`/`unknown` | `72`/`73`; `72 §5`: `Temporal`↦`delegated`↦`T`, total (§5) |
+| **Metamorphic relation** — oracle-free relational check across runs | **`tested`** | **`P`** | never `proved` (agent is `P`, not a pure fn) | projection landed (`export.rs`); reducer `[rel-deferred]` (`61 §5.3`) + test-gen deferred (§4) |
+| **RV watchdog** — a temporal/behavioral obligation over agent actions | **`delegated`** | **`T`** | never `proved`/`tested`/`unknown` | projection landed (`72 §5`: `Temporal`↦`delegated`↦`T`, total); live monitor `(oracle)`/B2 (§5) |
 | **Output quality** — "the summary is faithful / the plan is wise" | **`unknown`** | *(hole in `P`)* | never `proved`/`Q`; **not dischargeable** | no oracle; `21 §5.4` honesty guard (§6) |
 
 Two properties make this a *partition*, not a menu:
@@ -87,6 +90,23 @@ Two properties make this a *partition*, not a menu:
 "assure the agent" decomposes with no residue into {prove the envelope, relate
 the runs, watch the actions, and *honestly decline* quality}. §3–§6 pin one
 conformance obligation per row; §6 pins the fourth as the boundary.
+
+**Landed projection vs. deferred engine — the producer-grep honesty (read
+before §4/§5).** B4 is a **projection/partition-fidelity corpus** (like
+B1/B2/B3), *not* an engine-execution one. Each AC drives the **landed
+projection** — the status→field classification through the **real export
+emitter** (`71`, `export.rs`, the same producer AC1/AC5 drive). The **discharge
+engines** that would later *close* a `tested`/`delegated` obligation — the
+`OQ-relational` 2-run product-program reducer (`[rel-deferred]`, `61 §5.3`), L2
+test-gen (no landed producer), and the live Büchi monitor (`compile`
+faithfulness, `(oracle)`/B2, `73 §2.4`) — are **named-deferred runtime faces**
+that ride the landed channels. An AC that claimed to drive a *deferred* engine
+would be the hand-feeds-the-deliverable trap; so §4 (AC3) and §5 (AC4) each name
+precisely **which face is landed (the projection) and which is deferred (the
+engine)** — the static-vs-runtime-face split, mirroring `seed-ifc` D3/D4/G1 and
+`seed-trace` TR-E. AC1/AC2/AC5 are fully-landed (export projection, the real
+`Cap E`/no-ambient flip, the `trusted_base()` flip); AC3/AC4 pin the landed
+projection and carry their engines as named triggers.
 
 ### 2.2 The proof shape — invariant independent of the agent
 
@@ -169,30 +189,41 @@ key.
 **2-run / relational** property, decided as `OQ-relational` (`61 §5.3`): the two
 runs are renamed to disjoint copies and reduced, by a **product program**, to a
 **single unary obligation** the prover discharges and the kernel re-checks
-(`61 §5.3`). The events the runs range over are the interaction-tree `Vis`
-signatures — the same `Σ` substrate the effect discipline already fixes
-(`36 §3.1`, `71 §2`). L2 **test-gen** produces the input pairs/permutations that
-exercise the relation. *(The "metamorphic" framing and the named relations are
+(`61 §5.3`) — though that product-program construction is **`[rel-deferred]`**,
+named not yet built (`61 §5.3`; see AC3). The events the runs range over are the
+interaction-tree `Vis` signatures — the same `Σ` substrate the effect discipline
+already fixes (`36 §3.1`, `71 §2`). L2 **test-gen** *would* produce the input
+pairs/permutations that exercise the relation (also deferred — the runtime face,
+AC3). *(The "metamorphic" framing and the named relations are
 this chapter's; the underlying machinery is `OQ-relational` + test-gen — `36 §3`
 is the capability/`Vis` substrate the runs ride, **not** a metamorphic source.
 Do not cite `36 §3` as the metamorphic mechanism.)*
 
 **Verdict-mapping (pinned).** Over an **agent** producer the relation lands
 **`tested`**, never `proved`: the agent is maximal `P` (§2), not a pure Ken
-function, so no static certificate exists — the relation is *exercised* across
-sampled runs (test-gen), an honest `tested` obligation in `P` (`21 §5.2`). Only
+function, so no static certificate exists — the relation is carried as an honest
+`tested` obligation in `P` (`21 §5.2`), later exercised by test-gen (the
+deferred runtime face, AC3). Only
 when a relation is asserted of a **pure Ken function** does the `OQ-relational`
 *by-proof* mode apply and inherit the
 `proved`/`disproved`-with-witness/`unknown` trichotomy (`61 §5.3`) — but the
 agent's *output quality* stays `unknown` regardless (§6). B4's AC3 is the
 agentic case: `tested`.
 
-**AC3.** An oracle-free relational check (e.g. permutation-invariance)
-**passes** on a nondeterministic producer, driven by the **real**
-`OQ-relational` 2-run reduction + L2 test-gen over the real `Σ`/`Vis` events —
-not a synthetic assertion over a canned output. The case observes the relation
-holding across the generated run-pairs and the claim carried as `tested` (never
-`proved`).
+**AC3 (landed face = the projection; engine = named-deferred).** The **landed**
+producer AC3 drives is the metamorphic relation's **`tested`→`P` projection
+through the real export emitter** (`71`, `export.rs` — the same static face
+AC1/AC5 drive): an oracle-free relational property (e.g. permutation-invariance)
+stated over a nondeterministic producer is classified `tested`→`P`, **never**
+`proved`. The **2-run discharge + test-gen sampling is the named-deferred
+runtime face** — the `OQ-relational` product-program reduction is
+**`[rel-deferred]`**
+(`61 §5.3`, "named not faked"; landed `ifc.rs` `TRIGGER_REL_DEFERRED`,
+hand-simulated in `sec1_acceptance.rs`) and L2 test-gen has **no** landed
+producer yet — so AC3 **carries** those triggers, it does **not** assert a real
+reducer/engine (that would be the hand-feed trap). The Sec1 precedent is
+`seed-ifc` D3/D4/G1 (the by-proof verdict-mapping + the `[rel-deferred]`
+reify-trigger, driving no real reducer).
 
 ## 5. RV watchdogs — agent actions as `Σ`-events, `delegated`
 
@@ -212,7 +243,10 @@ is instrumented.
 - **Synthesize the monitor.** `T` projects to a runtime monitor via
   `compile : Temporal Σ → Monitor` (`73 §2.4`; a *projection* of the export's
   `T`, not a re-authored property — distinct from `71`'s `→ WardFormula`). The
-  monitor reads exactly the `73 §2.1` trace events (same alphabet).
+  monitor reads exactly the `73 §2.1` trace events (same alphabet). The
+  **projection** (monitor-is-image-of-`T`, over the landed `T` channel) is
+  landed; the `compile` **faithfulness lemma** + **Büchi acceptance** are
+  **B2-deferred/`(oracle)`** (`71 §5.2`, `73 §2.4`) — the deferred runtime face.
 - **Catch the violation.** A monitor that **rejects** a live trace signals a
   conformance violation (`73 §3`): the agent's actions left the model's allowed
   behaviors, or a boundary `P` it relied on was breached. Crucially this is
@@ -222,12 +256,17 @@ is instrumented.
   promotes**: a green monitor is evidence *for* a `delegated` `T`, never a
   `proved` (`72 §5` I4; `73 §2.6` TC5, the one-way gate).
 
-**AC4.** An agent-action `T` obligation is monitored **end-to-end** via the
-**real** B2 Temporal + B3 trace (source `temporal` → `T` → `compile` → monitor →
-trace), and a **violating action is caught** (the monitor rejects). The case
-drives the real `Σ`/trace instrumentation (the single `Vis` site in
-`ken-interp`, `73 §2`), not a hand-built event log; and it asserts the caught
-violation stays `delegated` (no promotion).
+**AC4 (landed face = the projection; engine = named-deferred).** The **landed**
+producer AC4 drives is the `delegated`→`T` **projection** through the real
+export emitter (`72 §5`, `export.rs`) + **monitor-is-image-of-`T`** (`73 §2.4`)
++ the **trace-event-is-a-witness / one-way gate** (a trace event carries no
+status; nothing promotes it to `proved` — `73 §2.6` TC5). The **live monitor
+*rejecting* a violating trace** (`compile` faithfulness / Büchi acceptance) is
+the **named-deferred runtime face** — **`(oracle)`/B2** (`71 §5.2`, mirroring
+`seed-trace` TR-E), **not** asserted as landed "end-to-end." The case drives the
+real `Σ`/trace instrumentation (the single `Vis` site in `ken-interp`, `73 §2`),
+not a hand-built event log, and asserts the `delegated` entry **never promotes**
+(the one-way gate) — carrying the live-catch as the deferred face.
 
 ## 6. The honesty boundary — safety, never quality
 
@@ -283,10 +322,13 @@ existing seam at maximal `P`). The implementable deliverables:
 2. **The safety envelope (§3).** Propose/act capability split (`62`), invariant
    `proved` for-all outputs → `Q`, with the honest kernel-backed-vs-trusted
    split stated.
-3. **The metamorphic face (§4).** Oracle-free relational check → `tested`, via
-   `OQ-relational` (`61 §5.3`) + L2 test-gen over the real `Σ`/`Vis` substrate.
+3. **The metamorphic face (§4).** Oracle-free relational check → `tested`/`P`
+   via the **landed projection** through the real emitter; the `OQ-relational`
+   2-run reducer (`[rel-deferred]`, `61 §5.3`) + L2 test-gen are the
+   named-deferred runtime face.
 4. **The RV face (§5).** Agent actions as `Σ`-events; a `T` obligation →
-   `delegated`, monitored via `72`/`73`; a violation caught, never promoted.
+   `delegated` via the **landed projection** (`72`/`73`), never promoted; the
+   live Büchi-monitor catch is `(oracle)`/B2 (the deferred runtime face).
 5. **The honesty boundary (§6).** Quality → `unknown`, not dischargeable, never
    `proved`/`Q` — the `21 §5.4` guard, the `64 §4` over-claim refusal.
 
@@ -301,12 +343,16 @@ existing seam at maximal `P`). The implementable deliverables:
   **verdict flips to reject** when the agent is handed `act` instead of
   `propose` (a world-effect reachable without the `safe` gate — privilege
   escalation). The flip is on the real `Cap E`/no-ambient check.
-- **AC3 (metamorphic).** An oracle-free relational check **passes** on a
-  nondeterministic producer via the **real** `OQ-relational` 2-run reduction +
-  L2 test-gen; carried as `tested`, never `proved`.
-- **AC4 (RV).** An agent-action `T` obligation is monitored end-to-end via the
-  **real** B2/B3 (source `temporal` → `T` → `compile → Monitor` → trace); a
-  **violating action is caught** (monitor rejects) and stays `delegated`.
+- **AC3 (metamorphic).** An oracle-free relational property is classified
+  `tested`→`P` (never `proved`) by the **real** `71` projection — the **landed**
+  face. The `OQ-relational` 2-run reducer (`[rel-deferred]`, `61 §5.3`) + L2
+  test-gen are **carried as named-deferred triggers**, not driven as real
+  engines (the `seed-ifc` D3/D4 precedent).
+- **AC4 (RV).** An agent-action `T` obligation is classified `delegated`→`T` by
+  the **real** projection (`72 §5`/`export.rs`), monitor-is-image-of-`T`
+  (`73 §2.4`), and asserted **never-promoted** (one-way gate) — the **landed**
+  face. The **live monitor catch** (Büchi acceptance / `compile` faithfulness)
+  is the named-deferred `(oracle)`/B2 runtime face (`seed-trace` TR-E).
 - **AC5 (honesty, soundness).** A **quality** obligation maps to `unknown`,
   **never** `proved`/`Q`, and is **not dischargeable** — a postulate in
   `trusted_base()` with no certificate, flipping against a real proved safety
@@ -314,16 +360,21 @@ existing seam at maximal `P`). The implementable deliverables:
 
 **Conformance (`../../conformance/behavioral/agentic/`).** AC1–AC5 as
 **discriminating** cases, each **routing a real checked program through the
-actual producers** (the `71` emitter, the `62` capability check, the
-`OQ-relational` reduction, the `72`/`73` monitor+trace) and observing the result
-— **not** a synthetic agentic literal that re-validates a pre-existing consumer.
-This is the **highest-risk producer-grep gate in the corpus**: because B4 is a
-doc/composition WP, the hand-feeds-the-deliverable trap is most dangerous here.
-The QA gate **greps the real producer src, not the test**: AC2 must reach the
-real `Cap E`/no-ambient path (not an `isAgent` boolean); AC3 the real 2-run
-product-program reduction (not an asserted relation over a canned pair); AC4 the
-real `Vis`/trace site (not a hand-built event list); AC5 the real
-`trusted_base()` membership (not a status string). The **cross-case sweep**
+actual *landed* producers** (the `71` export emitter/projection, the `62`
+capability check, the `72`/`73` `T`-projection + trace instrumentation) and
+observing the result — **not** a synthetic agentic literal that re-validates a
+pre-existing consumer, **and not a deferred discharge engine** (the
+`OQ-relational` reducer and the live Büchi monitor are `[rel-deferred]`/
+`(oracle)` — carried as named triggers, per §2.1). This is the **highest-risk
+producer-grep gate in the corpus**: because B4 is a doc/composition WP, the
+hand-feeds-the-deliverable trap is most dangerous here. The QA gate **greps the
+real producer src, not the test**: AC2 must reach the real `Cap E`/no-ambient
+path (not an `isAgent` boolean); **AC3 the real `tested`→`P` projection through
+the emitter** (the 2-run reducer is `[rel-deferred]` — carry the trigger, do not
+hand-simulate it as "real"); **AC4 the real `delegated`→`T` projection + trace
+site** (the live-monitor catch is `(oracle)`/B2 — carry the trigger, not a
+hand-built rejection); AC5 the real `trusted_base()` membership (not a status
+string). The **cross-case sweep**
 groups by the §2.1 status partition and asserts agreement — {envelope→`proved`/
 `Q`}, {metamorphic→`tested`/`P`}, {RV→`delegated`/`T`}, {quality→`unknown`} —
 with the two boundary invariants pinned: **no agent output ever lands in `Q`**
@@ -331,10 +382,13 @@ with the two boundary invariants pinned: **no agent output ever lands in `Q`**
 `proved`** (the one-way direction, AC4; `71 §5.1`).
 
 **No new mechanism — the reconciliation (WS-B capstone).** Every construct this
-chapter names is landed: the export projection (`71`), the capability discipline
-(`62`), the `Σ`/trace instrumentation (`73 §2`), the `Temporal`→`Monitor`
-projection (`73 §2.4`), the `OQ-relational` product-program reduction
-(`61 §5.3`). B4 introduces **no** formation rule, level rule, or kernel judgment
-(the level-discipline reconcile is N/A — editorial). WS-B **completes on
-merge**: the agentic case is the existing seam aimed at a
-maximally-nondeterministic component, and Ken adds zero agentic mechanism.
+chapter *drives* is landed: the export projection (`71`), the capability
+discipline (`62`), the `Σ`/trace instrumentation (`73 §2`), the
+`Temporal`→`Monitor` projection (`73 §2.4`). The discharge engines it *names but
+defers* — the `OQ-relational` product-program reduction (`[rel-deferred]`,
+`61 §5.3`), L2 test-gen, and the live Büchi monitor (`(oracle)`/B2) — ride those
+landed channels and are carried as named triggers, never faked (§2.1). B4
+introduces **no** formation rule, level rule, or kernel judgment (the
+level-discipline reconcile is N/A — editorial). WS-B **completes on merge**: the
+agentic case is the existing seam aimed at a maximally-nondeterministic
+component, and Ken adds zero agentic mechanism.
