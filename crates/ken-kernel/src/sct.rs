@@ -176,8 +176,10 @@ fn collect_calls(
     match term {
         Term::App(_, _) => {
             let (head, args) = peel_app(term);
+            let mut head_is_applied_group_call = false;
             if let Term::Const { id, .. } = &head {
                 if let Some(callee_idx) = group.iter().position(|(gid, _)| gid == id) {
+                    head_is_applied_group_call = true;
                     let n_callee = group[callee_idx].1;
                     let mut m = ScMatrix::zero(n_caller, n_callee);
                     for (j, arg) in args.iter().enumerate().take(n_callee) {
@@ -192,8 +194,15 @@ fn collect_calls(
                     });
                 }
             }
-            // Recurse into head and all args.
-            collect_calls(&head, caller_idx, n_caller, group, prov, env, out);
+            // Recurse into head — unless it's a group-member Const already
+            // handled above as the applied call above: re-collecting it would
+            // hit the bare-occurrence arm and push a second, spurious
+            // ?-everywhere self-loop edge alongside the real one just computed
+            // from `args`. Args always recurse (an argument position is never
+            // "the same application").
+            if !head_is_applied_group_call {
+                collect_calls(&head, caller_idx, n_caller, group, prov, env, out);
+            }
             for arg in &args {
                 collect_calls(arg, caller_idx, n_caller, group, prov, env, out);
             }
@@ -297,11 +306,25 @@ fn collect_calls(
             collect_calls(respect, caller_idx, n_caller, group, prov, env, out);
             collect_calls(scrut, caller_idx, n_caller, group, prov, env, out);
         }
+        Term::Const { id, .. } => {
+            // A bare (unapplied) group-member occurrence: model as a
+            // ?-everywhere self-loop. ScMatrix::zero = all SizeOrd::Unknown;
+            // that matrix is idempotent with no strict diagonal, so
+            // sct_check rejects. Bare self-references cannot be certified
+            // terminating — use an eliminator.
+            if let Some(callee_idx) = group.iter().position(|(gid, _)| gid == id) {
+                let n_callee = group[callee_idx].1;
+                out.push(CallEdge {
+                    caller: caller_idx,
+                    callee: callee_idx,
+                    matrix: ScMatrix::zero(n_caller, n_callee),
+                });
+            }
+        }
         // Leaves: no sub-terms with calls.
         Term::Var(_)
         | Term::Type(_)
         | Term::Omega(_)
-        | Term::Const { .. }
         | Term::IndFormer { .. }
         | Term::Constructor { .. } => {}
     }

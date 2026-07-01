@@ -781,3 +781,74 @@ fn sct_accept_plus() {
     .expect("plus must be admitted transparent by SCT");
     assert!(env.transparent_body(ids[0]).is_some());
 }
+
+// ---------------------------------------------------------------------------
+// SCT-reject: declare-def-nullary-self-loop-rejects (soundness — Architect
+// finding on wp/K2c-recursive-sct)
+//
+// bad := bad  (nullary: zero Lam binders, body is the bare unapplied
+// occurrence `bad`).
+//
+// Pre-fix: `collect_calls`'s leaf arm treated `Term::Const` as a no-op, so a
+// bare group-member occurrence produced NO call edge — `edges.is_empty()` =>
+// admitted transparent. That is a real δ-cycle `bad ⇝ bad ⇝ …` inhabiting
+// whatever type `bad` is declared at (an unsoundness, not merely
+// non-termination). Fix: a bare `Const` to a group member is now modeled as a
+// ?-everywhere self-loop edge (`17 §4.1`); `ScMatrix::zero(0, 0)` is
+// idempotent with no strict diagonal (vacuously, on 0 params) => rejected.
+// This flips Ok(transparent) -> Err(NotTerminating).
+// ---------------------------------------------------------------------------
+
+#[test]
+fn sct_reject_bare_self_reference() {
+    let (mut env, nb) = mk_env();
+    let nat_t = nat_t(&nb);
+    let result = declare_recursive_group(&mut env, vec![(vec![], nat_t)], |ids| {
+        vec![cref(ids[0])] // bad := bad, zero Lam binders
+    });
+    assert!(
+        result.is_err(),
+        "bare nullary self-reference must be rejected"
+    );
+    assert!(matches!(result.unwrap_err(), KernelError::NotTerminating(_)));
+}
+
+// ---------------------------------------------------------------------------
+// SCT-reject: declare-def-laundered-self-loop-rejects
+//
+// loop : Nat -> Nat := id loop  (loop occurs unapplied, as an argument to a
+// transparent passthrough `id : (Nat -> Nat) -> (Nat -> Nat)`; `loop`'s own
+// body has zero leading Lam binders, so `loop` appears as a bare `Const` in
+// **argument** position, not as an App head).
+//
+// Same gap as the bare case: pre-fix, the unapplied occurrence of `loop`
+// inside `id loop` produced no call edge (`edges.is_empty()` => admitted).
+// Pins that the applied-only precondition is on the OCCURRENCE, not the
+// syntactic head — laundering a self-reference through any transparent
+// passthrough (`id`, `map`, …) must still be caught by the same guard that
+// catches the bare case.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn sct_reject_combinator_laundered() {
+    let (mut env, nb) = mk_env();
+    let nat_t = nat_t(&nb);
+    let fn_t = Term::pi(nat_t.clone(), nat_t.clone()); // Nat -> Nat
+    let id_ty = Term::pi(fn_t.clone(), fn_t.clone()); // (Nat->Nat) -> (Nat->Nat)
+    let id_fn = declare_def(
+        &mut env,
+        vec![],
+        id_ty,
+        Term::lam(fn_t.clone(), Term::var(0)), // λf. f
+    )
+    .expect("id must be admitted (non-recursive)");
+
+    let result = declare_recursive_group(&mut env, vec![(vec![], fn_t)], |ids| {
+        vec![Term::app(cref(id_fn), cref(ids[0]))] // loop := id loop
+    });
+    assert!(
+        result.is_err(),
+        "loop laundered through id must be rejected"
+    );
+    assert!(matches!(result.unwrap_err(), KernelError::NotTerminating(_)));
+}

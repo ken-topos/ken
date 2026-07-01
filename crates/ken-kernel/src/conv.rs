@@ -10,7 +10,11 @@
 //!
 //! Termination on the K1 fragment (`14 §9.2`): β strictly decreases size; η
 //! descends on the (finite) type; ι descends on structurally smaller
-//! scrutinees; δ is acyclic (non-recursive transparent defs only, `11 §4`).
+//! scrutinees; δ is **cyclic** post-K2c (recursive transparent defs are the
+//! cycles) — its termination is **not** structural here but guaranteed by the
+//! SCT gate at admission time (`sct_check`, `17 §4`): every transparent def's
+//! δ-unfolding terminates because `whnf`'s δ step only ever unfolds a
+//! definition the gate has already certified.
 
 use crate::env::{Context, GlobalEnv};
 use crate::inductive::{iota_reduct, peel_app};
