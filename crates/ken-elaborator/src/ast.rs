@@ -110,6 +110,18 @@ pub enum Decl {
         visits: Vec<String>,
         span: Span,
     },
+    /// `temporal name { φ }` — a delegated temporal/behavioral obligation
+    /// (`72 §4`). The body is a `TemporalExpr` (the surface notation) that
+    /// elaborates to the §3 constructors and is tagged `delegated`. `source`
+    /// is the verbatim formula text (human-visible, not erased). Keyword
+    /// spellings are `(oracle)`/`OQ-syntax`; the elaboration target + the
+    /// `delegated` status are pinned.
+    TemporalDecl {
+        name: String,
+        formula: crate::temporal::TemporalExpr,
+        source: String,
+        span: Span,
+    },
 }
 
 impl Decl {
@@ -121,7 +133,8 @@ impl Decl {
             | Decl::LawDecl { name, .. }
             | Decl::DataDecl { name, .. }
             | Decl::TypeAlias { name, .. }
-            | Decl::ForeignDecl { name, .. } => name,
+            | Decl::ForeignDecl { name, .. }
+            | Decl::TemporalDecl { name, .. } => name,
         }
     }
     pub fn span(&self) -> &Span {
@@ -132,7 +145,8 @@ impl Decl {
             | Decl::LawDecl { span, .. }
             | Decl::DataDecl { span, .. }
             | Decl::TypeAlias { span, .. }
-            | Decl::ForeignDecl { span, .. } => span,
+            | Decl::ForeignDecl { span, .. }
+            | Decl::TemporalDecl { span, .. } => span,
         }
     }
 }

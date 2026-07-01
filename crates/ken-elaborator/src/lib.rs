@@ -26,6 +26,7 @@ pub mod numbers;
 pub mod parser;
 pub mod prover;
 pub mod resolve;
+pub mod temporal;
 
 use std::collections::HashMap;
 
@@ -49,6 +50,10 @@ pub use prover::{
 pub use export::{
     emit_export, serialize_export, BehavioralExport, ExportError, GEntry, PEntry, PStatus, QEntry,
     TEntry,
+};
+pub use temporal::{
+    closed, elaborate_temporal_expr, temporal_hoas_inductive_spec, temporal_inductive_spec,
+    Pred, Temporal, TemporalExpr, TemporalObligation, Var,
 };
 pub use trace::{
     emit_trace_contract, serialize_trace_contract,

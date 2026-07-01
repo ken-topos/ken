@@ -79,6 +79,15 @@ pub enum RDeclKind {
         is_pure: bool,
         visits: Vec<String>,
     },
+    /// `temporal name { φ }` — a delegated temporal obligation (`72 §4`).
+    /// The `TemporalExpr` is carried through: its atoms are event-predicate
+    /// names over `Σ` (not term variables), so it needs no de Bruijn
+    /// resolution. `source` is the verbatim formula text (human-visible).
+    /// Elaboration expands the derived operators to the §3 core.
+    Temporal {
+        formula: crate::temporal::TemporalExpr,
+        source: String,
+    },
 }
 
 /// A resolved expression — names replaced by de Bruijn indices.
@@ -407,6 +416,23 @@ pub fn resolve_decl(decl: &Decl) -> Result<RDecl, ElabError> {
                     library: library.clone(),
                     is_pure: *is_pure,
                     visits: visits.clone(),
+                },
+            })
+        }
+
+        Decl::TemporalDecl { name, formula, source, span } => {
+            // The temporal formula is carried as-is — its atoms are event
+            // names over `Σ`, not term variables, so no de Bruijn resolution.
+            Ok(RDecl {
+                name: name.clone(),
+                ty: None,
+                body: RExpr::RUniv(None, span.clone()), // placeholder — unused for Temporal
+                requires: vec![],
+                ensures: vec![],
+                span: span.clone(),
+                kind: RDeclKind::Temporal {
+                    formula: formula.clone(),
+                    source: source.clone(),
                 },
             })
         }

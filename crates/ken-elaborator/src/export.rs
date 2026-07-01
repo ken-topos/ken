@@ -109,16 +109,19 @@ pub struct PEntry {
 
 /// An entry in `T` (obligations) — a delegated `Temporal` value (`71 §2.1`).
 ///
-/// B1 provides the channel; the `Temporal` datatype and the `compile`
-/// faithfulness lemma are B2/B3. For B1, `TEntry` records the obligation id
-/// and status `delegated`. No Ward/classical result may ever promote a `T`
-/// entry to `Q` — that path does not exist (I4 / EX-E1).
+/// B1 provides the channel; B2 fills the `Temporal` value body (`72 §5`). The
+/// status is the constant `delegated` (pinned at source, `72 §5` — serialized
+/// in [`serialize_export`], never `proved`/`tested`/`unknown`). No Ward/classical
+/// result may ever promote a `T` entry to `Q` — that path does not exist
+/// (I4 / EX-E1): `QEntry` is built only in the `Verdict::Proved` arm of
+/// [`emit_export`]; the `temporal` parameter flows straight into `T`.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct TEntry {
     /// Stable obligation id (`22 §1`).
     pub obligation_id: String,
-    // [placeholder — B2/B3]: `Temporal` value body goes here when the
-    // datatype lands. B1 pins the channel and the one-way invariant.
+    /// The delegated `Temporal` value — the B2-filled body of the `T` channel
+    /// (`72 §5`). Ranges over the shared `Σ` alphabet.
+    pub formula: crate::temporal::Temporal,
 }
 
 /// Generator support structure — partition + boundaries + case decomposition
@@ -161,7 +164,8 @@ pub struct BehavioralExport {
     /// L5 effect row exactly — reuse, not reinvention (I3).
     pub alphabet: BTreeSet<String>,
     /// `T` — delegated `Temporal` obligations. Status: `delegated` (I4).
-    /// B2/B3 fill the `Temporal` value body; B1 provides the channel.
+    /// B2 fills the `Temporal` value body (`TEntry::formula`, `72 §5`); B1
+    /// provided the channel.
     pub obligations: Vec<TEntry>,
     /// `G` — generator support: partition + boundaries from refinement/match.
     /// No measure (I5 — structural seal, §4.1).
@@ -202,7 +206,8 @@ pub enum ExportError {
 ///   `infer_all` or the declared row for the target.
 /// - `generators`: support structure from refinement predicates and match arms.
 ///   No measure field — structural seal.
-/// - `temporal`: delegated `Temporal` obligations (B2 fills the body).
+/// - `temporal`: delegated `Temporal` obligations (B2 fills the body —
+///   `TEntry::formula`; status is the constant `delegated`, `72 §5`).
 ///
 /// # Honesty discriminator (I1)
 /// For each obligation with verdict `Proved`:
@@ -369,10 +374,11 @@ fn compute_hash(
     let sigma_repr: Vec<&String> = alphabet.iter().collect();
     root.insert("alphabet", sigma_repr.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(","));
 
-    // T entries.
+    // T entries: id + the delegated `Temporal` formula body (content-addressed
+    // — a different formula yields a different hash, `71 §3.3`).
     let t_repr: Vec<String> = obligations
         .iter()
-        .map(|e| e.obligation_id.clone())
+        .map(|e| format!("{}:{:?}", e.obligation_id, e.formula))
         .collect();
     root.insert("obligations", t_repr.join("|"));
 
@@ -431,7 +437,8 @@ pub fn serialize_export(export: &BehavioralExport) -> serde_json::Value {
     let obligations: Vec<Value> = export.obligations.iter().map(|e| {
         json!({
             "obligation_id": e.obligation_id,    // (oracle)
-            "status": "delegated"
+            "status": "delegated",              // constant (`72 §5`); never proved/tested/unknown
+            "formula": format!("{:?}", e.formula) // (oracle): Ward-facing spelling deferred
         })
     }).collect();
 

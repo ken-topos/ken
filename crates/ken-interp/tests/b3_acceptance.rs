@@ -9,7 +9,7 @@ use std::collections::BTreeSet;
 
 use ken_elaborator::{
     emit_export, emit_trace_contract,
-    AssertionPoint, TEntry, TraceEvent,
+    AssertionPoint, Pred, TEntry, Temporal, TraceEvent,
 };
 use ken_elaborator::effects::EffectRow;
 use ken_elaborator::error::Span;
@@ -489,7 +489,10 @@ fn monitor_changes_when_t_changes() {
     // Export1: one T obligation (delegated temporal)
     let export1 = emit_export(
         "prog", &[], &BTreeSet::new(), test_alphabet(), vec![],
-        vec![TEntry { obligation_id: "f.temporal.0".to_string() }],
+        vec![TEntry {
+            obligation_id: "f.temporal.0".to_string(),
+            formula: Temporal::Atom(Pred::Event("f0".into())),
+        }],
     ).expect("export1");
     assert_eq!(export1.obligations.len(), 1, "export1: one T entry");
 
@@ -542,7 +545,10 @@ fn monitor_verdict_never_promoted_to_proved() {
     // B1 export with one delegated T, no Q/P
     let export = emit_export(
         "prog", &[], &BTreeSet::new(), test_alphabet(), vec![],
-        vec![TEntry { obligation_id: "f.temporal.0".to_string() }],
+        vec![TEntry {
+            obligation_id: "f.temporal.0".to_string(),
+            formula: Temporal::Atom(Pred::Event("f0".into())),
+        }],
     ).expect("export");
 
     assert_eq!(export.obligations.len(), 1, "one delegated T");

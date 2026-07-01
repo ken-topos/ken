@@ -70,6 +70,27 @@ pub struct ElabResult {
     /// For `foreign` declarations: the full binding record (AC1/AC5 tests).
     /// `None` for all other declaration kinds.
     pub foreign_binding: Option<crate::foreign::ForeignBinding>,
+    /// Delegated `Temporal` obligations from `temporal{}` blocks (`72 §4`).
+    /// These are **not** kernel holes — a delegated property is exported, not
+    /// assumed (`21 §5.2`); they never enter `trusted_base()`. Their sole
+    /// projection is the B1 `T`/`delegated` channel (TE-E).
+    pub temporal_obligations: Vec<crate::temporal::TemporalObligation>,
+}
+
+impl ElabResult {
+    /// Build [`TEntry`]s from the delegated `Temporal` obligations — the B2
+    /// body of the B1 `T` channel (`72 §5`). Each entry carries the elaborated
+    /// `Temporal` value with status `delegated` (the constant, pinned at
+    /// source).
+    pub fn temporal_tentries(&self) -> Vec<crate::export::TEntry> {
+        self.temporal_obligations
+            .iter()
+            .map(|o| crate::export::TEntry {
+                obligation_id: o.id.clone(),
+                formula: o.formula.clone(),
+            })
+            .collect()
+    }
 }
 
 // ----- level meta context -----
@@ -641,7 +662,7 @@ pub fn elaborate_rdecl_v1(
                 ctors,
                 &rdecl.span,
             )?;
-            Ok(ElabResult { name: rdecl.name.clone(), def_id: d_id, obligations: vec![], foreign_binding: None })
+            Ok(ElabResult { name: rdecl.name.clone(), def_id: d_id, obligations: vec![], foreign_binding: None, temporal_obligations: vec![] })
         }
         RDeclKind::TypeAlias { ty } => {
             // A type alias `type T = A` declares T as a transparent definition
@@ -657,13 +678,16 @@ pub fn elaborate_rdecl_v1(
             let id = declare_def(env, vec![], alias_ty, alias_body)
                 .map_err(|e| ElabError::KernelRejected { error: e, span: rdecl.span.clone() })?;
             globals.insert(rdecl.name.clone(), id);
-            Ok(ElabResult { name: rdecl.name.clone(), def_id: id, obligations: vec![], foreign_binding: None })
+            Ok(ElabResult { name: rdecl.name.clone(), def_id: id, obligations: vec![], foreign_binding: None, temporal_obligations: vec![] })
         }
         RDeclKind::Foreign { symbol, library, is_pure, visits } => {
             elaborate_foreign_decl(
                 env, globals, num_values, numeric_env, rdecl,
                 symbol, library, *is_pure, visits,
             )
+        }
+        RDeclKind::Temporal { formula, source } => {
+            elaborate_temporal(env, globals, rdecl, formula, source)
         }
     }
 }
@@ -728,6 +752,7 @@ fn elaborate_foreign_decl(
         def_id,
         obligations,
         foreign_binding: Some(binding),
+        temporal_obligations: vec![],
     })
 }
 
@@ -786,7 +811,7 @@ fn elaborate_v0(
         ElabError::KernelRejected { error: e, span: rdecl.span.clone() }
     })?;
     globals.insert(rdecl.name.clone(), id);
-    Ok(ElabResult { name: rdecl.name.clone(), def_id: id, obligations: body_obligations, foreign_binding: None })
+    Ok(ElabResult { name: rdecl.name.clone(), def_id: id, obligations: body_obligations, foreign_binding: None, temporal_obligations: vec![] })
 }
 
 /// Elaborate a `view` with `requires`/`ensures` clauses (`21 §6.3`).
@@ -892,7 +917,7 @@ fn elaborate_view_with_spec(
         ElabError::KernelRejected { error: e, span: rdecl.span.clone() }
     })?;
     globals.insert(rdecl.name.clone(), id);
-    Ok(ElabResult { name: rdecl.name.clone(), def_id: id, obligations: ens_obligations, foreign_binding: None })
+    Ok(ElabResult { name: rdecl.name.clone(), def_id: id, obligations: ens_obligations, foreign_binding: None, temporal_obligations: vec![] })
 }
 
 /// Elaborate `prove name : φ` (`21 §6.3`, §3).
@@ -924,7 +949,50 @@ fn elaborate_prove(
         span: rdecl.span.clone(),
         kind: ObligationKind::Prove,
     };
-    Ok(ElabResult { name: rdecl.name.clone(), def_id: hole_id, obligations: vec![obl], foreign_binding: None })
+    Ok(ElabResult { name: rdecl.name.clone(), def_id: hole_id, obligations: vec![obl], foreign_binding: None, temporal_obligations: vec![] })
+}
+
+/// Elaborate `temporal name { φ }` — a delegated temporal/behavioral
+/// obligation (`72 §4`).
+///
+/// The surface formula elaborates to a [`Temporal`] value (the §3
+/// constructors, derived ops expanded) and is recorded as a **delegated**
+/// obligation — **not** a kernel hole. A delegated property is exported, not
+/// assumed (`21 §5.2`): it never enters `trusted_base()` (it is not
+/// `unknown`) and is never kernel-proved (not `proved`/`Q`). Its sole
+/// projection is the B1 `T`/`delegated` channel (TE-E). The verbatim `source`
+/// is carried for human-visibility (`72 §4`).
+fn elaborate_temporal(
+    env: &mut GlobalEnv,
+    globals: &mut HashMap<String, GlobalId>,
+    rdecl: &RDecl,
+    formula: &crate::temporal::TemporalExpr,
+    source: &str,
+) -> Result<ElabResult, ElabError> {
+    use crate::temporal::{elaborate_temporal_expr, TemporalObligation};
+
+    let temporal_value = elaborate_temporal_expr(formula);
+    // Stable obligation id (`22 §1`): one obligation per `temporal{}` block.
+    let id = format!("{}.temporal.0", rdecl.name);
+    let obl = TemporalObligation {
+        id,
+        formula: temporal_value,
+        source: source.to_string(),
+    };
+
+    // Delegated ≠ unknown: allocate a placeholder `def_id` that is NOT
+    // committed to the kernel env, so the obligation never enters
+    // `trusted_base()`. Reserve the name in `globals`.
+    let placeholder = env.fresh_id();
+    globals.insert(rdecl.name.clone(), placeholder);
+
+    Ok(ElabResult {
+        name: rdecl.name.clone(),
+        def_id: placeholder,
+        obligations: vec![],
+        foreign_binding: None,
+        temporal_obligations: vec![obl],
+    })
 }
 
 /// Elaborate `law Name (param) { f : φ ; … }` (`21 §3`).
@@ -978,7 +1046,7 @@ fn elaborate_law(
     globals.insert(rdecl.name.clone(), law_id);
 
     // Return: def_id = law_id (the law postulate), obligations = per-field holes
-    Ok(ElabResult { name: rdecl.name.clone(), def_id: law_id, obligations, foreign_binding: None })
+    Ok(ElabResult { name: rdecl.name.clone(), def_id: law_id, obligations, foreign_binding: None, temporal_obligations: vec![] })
 }
 
 // ----- helpers -----
