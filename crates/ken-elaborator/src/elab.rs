@@ -932,7 +932,22 @@ fn elab_instance_decl(
         Term::const_(class_type_id, vec![])
     };
 
-    // ---- check for self-referential cycle --------------------------------
+    // ---- direct-self-reference detection (`39 §6.4`, scope-limited) -------
+    //
+    // This check detects DIRECT self-reference: a constraint whose (class, head)
+    // is identical to the instance being declared. It does NOT detect mutual or
+    // indirect cycles (e.g. `instance C (F a) where C (G a)` +
+    // `instance C (G a) where C (F a)` — each admits as zero-edge, but resolution
+    // loops at runtime).
+    //
+    // [tracked follow-on: Lc-mutual-cycle-termination]
+    // Faithful reification (§6.4: one group node per sub-goal, one edge per
+    // dischargeSubConstraints call, head-type metric for descent) would require
+    // gathering ALL transitively-constrained instances into one
+    // declare_recursive_group and threading the head-type metric through the edges.
+    // This is deferred — the current slice covers direct-self-ref rejection only.
+    // There is NO search-side backstop (no resolution-depth bound or occurs-check);
+    // faithful reification is the sole net for mutual-cycle termination.
     let has_self_ref = constraints.iter().any(|(cn, ct)| {
         let chead = head_type_name(ct);
         (cn.as_str(), chead.as_str()) == (class_name, head_name.as_str())
@@ -940,8 +955,8 @@ fn elab_instance_decl(
 
     // ---- admit the instance ----------------------------------------------
     let instance_id = if has_self_ref {
-        // Cyclic constraint: encode as a fixpoint-arrow so sct_check sees the
-        // self-loop in App position and rejects (`39 §6.4`).
+        // Direct self-referential constraint: encode as a fixpoint-arrow so
+        // sct_check sees the self-loop in App position and rejects (`39 §6.4`).
         //
         // Type  = Pi(T, T)   where T = instance_ty.
         // Body  = Lam(T, App(Const(own_id), Var(0)))
@@ -965,10 +980,10 @@ fn elab_instance_decl(
         .map_err(|_| ElabError::NonTerminatingInstances { span: span.clone() })?;
         ids[0]
     } else if !constraints.is_empty() {
-        // Well-founded constrained instance: elaborate fields, then route through
-        // declare_recursive_group so sct_check actually runs on the group (`39 §6.4`).
-        // The pair-chain body has no App(Const(own_id), ...) → edges.is_empty()
-        // → sct_check returns Ok (accepts). This makes the accept verdict observable.
+        // Non-self-ref constrained instance: elaborate fields, then route through
+        // declare_recursive_group so sct_check runs on the group (`39 §6.4`).
+        // Body has no App(Const(own_id), ...) → edges.is_empty() → sct_check
+        // accepts. Mutual/indirect cycles are not detected here (see above).
         let field_vals: Vec<Term> = {
             let mut cx = ElabCtx::new(env, globals, num_values, numeric_env);
             let mut vals = Vec::new();

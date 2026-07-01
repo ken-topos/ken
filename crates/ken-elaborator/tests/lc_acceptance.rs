@@ -291,48 +291,57 @@ fn ac5_explicit_bypasses_implicit_canonical() {
 
 /// `classes/wellfounded-chain-resolves-cyclic-rejected-by-sct` (AC6, soundness)
 ///
-/// (a) Well-founded parameterised chain (`instance C Bool where C Int`) →
-///     admitted via real `declare_recursive_group`/`sct_check` (accept path).
-///     The constraint head (`Int`) differs from the instance head (`Bool`) →
-///     not self-referential. Reified body = pair-chain with no App(Const(own_id), ...)
-///     → `collect_calls` finds no edges → `edges.is_empty()` → `sct_check` accepts.
-/// (b) Self-referential constraint (`instance C Int where C Int`) →
-///     NonTerminatingInstances via `declare_recursive_group`/`sct_check` reject.
-///     Reified body = Lam(T, App(Const(own_id), Var(0))) → M=[[?]] self-loop → rejects.
+/// **Scope (this slice): direct self-reference detection via `sct_check`.**
 ///
-/// Structural discriminator: `sct_check` accept↔reject on the two reified groups.
-/// A broken always-reject `sct_check` is caught by (a); a broken always-accept
-/// is caught by (b). Both arms invoke the real `declare_recursive_group`/`sct_check`.
+/// (a) Non-self-ref constrained instance (`instance C Bool where C Int`) →
+///     admitted via real `declare_recursive_group`/`sct_check` (accept path).
+///     Constraint head (`Int`) ≠ instance head (`Bool`) → not direct-self-ref.
+///     Body = pair-chain, no `App(Const(own_id), ...)` → `edges.is_empty()` →
+///     `sct_check` accepts.
+/// (b) Direct self-referential constraint (`instance C Int where C Int`) →
+///     `NonTerminatingInstances` via `declare_recursive_group`/`sct_check`.
+///     Reified as `Lam(T, App(Const(own_id), Var(0)))` → M=[[?]] → rejects.
+///
+/// Structural discriminator: `sct_check` accept↔reject. Both arms invoke real
+/// `declare_recursive_group`/`sct_check`; broken always-reject fails (a),
+/// broken always-accept fails (b).
+///
+/// [placeholder — `Lc-mutual-cycle-termination` follow-on]
+/// Mutual/indirect cycles (`instance C (F a) where C (G a)` +
+/// `instance C (G a) where C (F a)`) are NOT detected — both take the zero-edge
+/// path, `sct_check` accepts, but resolution loops at runtime. Faithful
+/// reification (`39 §6.4`: one group node per sub-goal, one edge per constraint,
+/// head-type metric) requires gathering all transitively-constrained instances
+/// into one `declare_recursive_group`. There is NO search-side backstop;
+/// faithful reification is the sole termination net. This test gains a (c) case
+/// once that WP lands.
 #[test]
 fn ac6_sct_wellfounded_accepted_cyclic_rejected() {
-    // (a) Well-founded chain: constraint head ≠ instance head → real sct_check ACCEPTS.
+    // (a) Non-self-ref constrained chain → real sct_check ACCEPTS.
     //
-    // Scenario: instance SCTClass Bool where SCTClass Int { }
-    //   - instance head = Bool
-    //   - constraint head = Int (different → not has_self_ref)
-    //   - routes through declare_recursive_group with pair-chain body
-    //   - body has no call to own_id → edges.is_empty() → sct_check accepts
+    // instance SCTClass Bool where SCTClass Int { }
+    //   constraint head (Int) ≠ instance head (Bool) → not direct-self-ref
+    //   routes through declare_recursive_group (non-self-ref constrained path)
+    //   body = pair-chain, no App(Const(own_id),...) → edges.is_empty() → accepts
     let mut env_a = mk_env();
     elab(&mut env_a, "class SCTClass A { }").unwrap();
-    // Base instance (no constraint) via declare_def.
     elab(&mut env_a, "instance SCTClass Int { }").unwrap();
-    // Constrained instance with different head: routes through declare_recursive_group.
     let r_a = elab(&mut env_a, "instance SCTClass Bool where SCTClass Int { }");
     assert!(
         r_a.is_ok(),
-        "AC6(a): well-founded chain must be admitted via sct_check accept; got {:?}",
+        "AC6(a): non-self-ref constrained instance must be admitted via sct_check accept; got {:?}",
         r_a
     );
 
-    // (b) Cyclic: instance C Int where C Int — same (class, head) self-reference.
-    // Reified as fixpoint-arrow Pi(T,T); body = Lam(T, App(Const(own_id), Var(0))).
-    // collect_calls sees App(Const(own_id), Var(0)) → M=[[?]] self-loop → sct_check rejects.
+    // (b) Direct self-ref: instance C Int where C Int — same (class, head).
+    // Reified as Pi(T,T), body = Lam(T, App(Const(own_id), Var(0))).
+    // M=[[?]] self-loop → sct_check rejects.
     let mut env_b = mk_env();
     elab(&mut env_b, "class Recurse A { }").unwrap();
     let r_b = env_b.elaborate_decl("instance Recurse Int where Recurse Int { }");
     assert!(
         matches!(r_b, Err(ElabError::NonTerminatingInstances { .. })),
-        "AC6(b): self-referential instance must be rejected by sct_check; got {:?}",
+        "AC6(b): direct self-referential instance must be rejected by sct_check; got {:?}",
         r_b
     );
 }
