@@ -27,9 +27,10 @@ struct B {
     bool_: GlobalId,
     true_: GlobalId,
     false_: GlobalId,
-    p: GlobalId,       // P : Bool -> Ω_0
-    p_true: GlobalId,  // p_true : P true
-    p_false: GlobalId, // p_false : P false
+    p: GlobalId,          // P : Bool -> Ω_0
+    p_true: GlobalId,     // p_true : P true
+    p_true_alt: GlobalId, // p_true_alt : P true — a second, distinct proof
+    p_false: GlobalId,    // p_false : P false
 }
 
 fn mk_env() -> (GlobalEnv, B) {
@@ -62,7 +63,10 @@ fn mk_env() -> (GlobalEnv, B) {
     let p = declare_postulate(&mut env, vec![], Term::pi(bool_t.clone(), Term::Omega(Level::zero())))
         .expect("P : Bool -> Ω_0");
     let p_app = |x: Term| Term::app(Term::Const { id: p, level_args: vec![] }, x);
-    let p_true = declare_postulate(&mut env, vec![], p_app(true_c)).expect("p_true : P true");
+    let p_true = declare_postulate(&mut env, vec![], p_app(true_c.clone()))
+        .expect("p_true : P true");
+    let p_true_alt = declare_postulate(&mut env, vec![], p_app(true_c))
+        .expect("p_true_alt : P true (a second, distinct proof)");
     let p_false = declare_postulate(&mut env, vec![], p_app(false_c)).expect("p_false : P false");
 
     (
@@ -73,6 +77,7 @@ fn mk_env() -> (GlobalEnv, B) {
             false_,
             p,
             p_true,
+            p_true_alt,
             p_false,
         },
     )
@@ -96,6 +101,12 @@ fn p_const(b: &B) -> Term {
 fn p_true_const(b: &B) -> Term {
     Term::Const {
         id: b.p_true,
+        level_args: vec![],
+    }
+}
+fn p_true_alt_const(b: &B) -> Term {
+    Term::Const {
+        id: b.p_true_alt,
         level_args: vec![],
     }
 }
@@ -256,4 +267,85 @@ fn non_type_non_omega_motive_still_rejected() {
         "a Bool-codomain motive must still be rejected"
     );
     assert!(matches!(result.unwrap_err(), KernelError::BadEliminator(_)));
+}
+
+// ---------------------------------------------------------------------------
+// Architect ask #1 (fold-now, `dec_5epv27sdz8pnf` hold): mechanize the
+// Ω-PI-shortcut regression guard on *distinct* proofs — the load-bearing
+// axis for K4 (no which-proof leak out of Ω). The existing ι test only
+// exercises `convert` on syntactically-identical terms, so nothing in the
+// suite forced the `is_omega_type` shortcut itself to fire (`convert`
+// short-circuits on raw `a == b` *before* even checking `is_omega_type`, so
+// an accidentally-identical pair would prove nothing about the shortcut).
+//
+// Positive: two Ω-motive `Elim`s at the same motive/scrutinee but with a
+// genuinely distinct proof plugged into the selected branch (`p_true` vs
+// `p_true_alt`, two independently-postulated proofs of `P true`) — first
+// confirmed structurally distinct (`assert_ne!`, raw `PartialEq`, no
+// reduction), then `convert` at their common `P true : Ω_0` type must still
+// return `true`. That can only be the `is_omega_type` shortcut, not α.
+//
+// Foil: the identical shape at a **Type**-codomain (non-Ω) position, with
+// the branches swapped so the two elims reduce to genuinely different `Bool`
+// constructors — `convert` must return `false`. Without this, a `convert`
+// that degenerately always returned `true` would pass the positive case for
+// the wrong reason; the foil forces the positive assertion to be meaningful.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn omega_pi_shortcut_fires_on_distinct_proofs_not_alpha() {
+    let (env, b) = mk_env();
+    let ctx = Context::new();
+
+    let e1 = bool_elim(
+        &b,
+        p_const(&b),
+        p_true_const(&b),
+        p_false_const(&b),
+        true_c(&b),
+    );
+    let e2 = bool_elim(
+        &b,
+        p_const(&b),
+        p_true_alt_const(&b),
+        p_false_const(&b),
+        true_c(&b),
+    );
+    assert_ne!(
+        e1, e2,
+        "the two elims must be syntactically distinct (differ in the \
+         true-branch method) — otherwise `convert`'s `a == b` short-circuit \
+         would fire before `is_omega_type`, and the positive assertion below \
+         would prove nothing about the shortcut"
+    );
+
+    let ty = p_app(&b, true_c(&b)); // P true : Ω_0
+    assert!(
+        convert(&env, &ctx, &ty, &e1, &e2),
+        "two distinct proofs of the same Ω proposition must convert-equal \
+         via the is_omega_type shortcut — no which-proof leak out of Ω"
+    );
+}
+
+#[test]
+fn non_omega_foil_distinct_reducts_do_not_convert() {
+    let (env, b) = mk_env();
+    let ctx = Context::new();
+    let type_motive = Term::Ascript(
+        Box::new(Term::lam(bool_t(&b), bool_t(&b))), // λ_. Bool : Bool -> Type 0
+        Box::new(Term::pi(bool_t(&b), Term::Type(Level::zero()))),
+    );
+
+    // Same scrutinee (true), branches swapped between e1'/e2' so they select
+    // and reduce to genuinely different Bool constructors.
+    let e1 = bool_elim(&b, type_motive.clone(), true_c(&b), false_c(&b), true_c(&b));
+    let e2 = bool_elim(&b, type_motive, false_c(&b), true_c(&b), true_c(&b));
+    assert_ne!(e1, e2, "the two elims must be syntactically distinct");
+
+    assert!(
+        !convert(&env, &ctx, &bool_t(&b), &e1, &e2),
+        "at a non-Ω (Type) position, genuinely distinct reducts must NOT \
+         convert-equal — the foil that keeps the positive Ω assertion \
+         non-vacuous (rules out a degenerately always-true convert)"
+    );
 }
