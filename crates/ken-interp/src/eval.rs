@@ -780,6 +780,20 @@ pub fn prim_reduce(symbol: &str, args: &[EvalVal]) -> EvalVal {
             Err(_) => EvalVal::Neutral,
         },
 
+        // ── L3a String surface ops (`37 §2`) ───────────────────────────────
+        // `byte_length s` — the stored UTF-8 byte count (`37 §2.2`). Real now
+        // (NFC-independent: a CJK/non-combining witness differs from char count
+        // regardless of normalization).
+        ("byte_length", [EvalVal::Str(s)]) => EvalVal::Int(s.len() as i64),
+        // `char_length s` — the Unicode scalar-value count (`37 §2.2`).
+        ("char_length", [EvalVal::Str(s)]) => EvalVal::Int(s.chars().count() as i64),
+        // `string_to_list_char` / `list_char_to_string` are total-typed
+        // (`37 §2.3`) but do not reduce at the interp layer in L3a (building a
+        // `List Char` needs the ctor ids; the round-trip is L6's home). They
+        // stay Neutral (stuck) — totality is asserted at the type level.
+        ("string_to_list_char", [EvalVal::Str(_)]) => EvalVal::Neutral,
+        ("list_char_to_string", [EvalVal::Ctor { .. }]) => EvalVal::Neutral,
+
         // Partial or unrecognised primitive: neutral (stuck on non-literals).
         _ => EvalVal::Neutral,
     }
@@ -1174,6 +1188,8 @@ fn prim_arity(symbol: &str) -> usize {
         "bytes_length" | "bytes_encode" | "bytes_decode" => 1,
         "bytes_at" | "bytes_concat" => 2,
         "bytes_slice" => 3,
+        // ── L3a String surface ops (`37 §2`) ──────────────────────────────
+        "byte_length" | "char_length" | "string_to_list_char" | "list_char_to_string" => 1,
         _ => 1,
     }
 }

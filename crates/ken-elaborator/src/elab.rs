@@ -10,8 +10,9 @@ use ken_kernel::{
     check as kernel_check,
     declare_def, declare_postulate,
     inductive::{peel_app, recursive_args},
+    sct::sct_check,
     subst::{subst0, subst_outer, weaken},
-    whnf, Context, GlobalEnv, GlobalId, Level, LevelVar, Term,
+    whnf, Context, Decl, GlobalEnv, GlobalId, Level, LevelVar, Term,
 };
 
 use crate::ast::{BinOp, NumLit};
@@ -794,6 +795,13 @@ fn elaborate_v0(
     numeric_env: &NumericEnv,
     rdecl: &RDecl,
 ) -> Result<ElabResult, ElabError> {
+    // A self-recursive view/let (body mentions its own name) must be admitted
+    // through the SCT gate with the name pre-bound, so the body's self-call
+    // resolves — `declare_def` allocates the id only after the body is built,
+    // which is too late for a self-reference. Route to the recursive path.
+    if rexpr_mentions_name(&rdecl.body, &rdecl.name) {
+        return elaborate_recursive_view(env, globals, num_values, numeric_env, rdecl);
+    }
     let (ty_core, body_core, body_obligations) = {
         let mut cx = ElabCtx::new(env, globals, num_values, numeric_env);
         let (body_raw, ty_raw) = if let Some(ty) = &rdecl.ty {
@@ -814,6 +822,132 @@ fn elaborate_v0(
     Ok(ElabResult { name: rdecl.name.clone(), def_id: id, obligations: body_obligations, foreign_binding: None, temporal_obligations: vec![] })
 }
 
+/// Elaborate a self-recursive `view`/`let` through the SCT gate (Approach A).
+///
+/// The kernel's `declare_def` already pre-admits an opaque, kernel-checks the
+/// body, runs `sct_check`, and upgrades to transparent — but it allocates the
+/// id *after* the body is built. A recursive def's body references its own id
+/// during elaboration (the resolver emits `RCon(name)` on a scope miss,
+/// `c3a3f1d`; the elaborator resolves it against `globals`), so the id must be
+/// visible *before* the body is elaborated. This function splits the sequence
+/// the kernel performs atomically in `declare_def`:
+///
+///   1. Elaborate the declared type → `ty_core`.
+///   2. Pre-admit the name as `Opaque` with that type and insert it into
+///      `globals`, so the body's self-reference resolves to this id.
+///   3. Elaborate the body checked against `ty_core` (self-calls see the
+///      opaque's type; the kernel `check` sees the opaque too).
+///   4. Kernel-check the closed body against `ty_core`, then `sct_check` the
+///      singleton recursive group.
+///   5. On SCT acceptance, `upgrade_to_transparent` (δ-unfoldable, leaves
+///      `trusted_base`); on rejection, roll back the pre-admission — the opaque
+///      plus any literal postulates body elaboration added after it — and
+///      unbind the name from `globals`.
+///
+/// **Contained vs deferred (K2c).** This is a contained elaborator-side wiring
+/// of an *existing* kernel capability (`sct_check` + `upgrade_to_transparent`);
+/// the soundness-critical part — verifying structural descent — already lives
+/// in the kernel. The deferred sibling is **K2c general recursive δ** (`11
+/// §4`): arbitrary recursive δ-unfolding in conversion. Here the recursive call
+/// is to an *opaque* (δ blocks during checking); only after SCT acceptance does
+/// it become transparent, and termination is by structural descent on an
+/// inductive sub-term (SCT's `↓`) — not general δ. A recursive view carrying
+/// `requires` clauses (so the full type ≠ the carrier Pi-chain) is a tracked
+/// follow-on; L3a's recursive views (`map`/`filter`/`fold`/`zip`/`unfoldUpTo`/
+/// `sort`/`insert`) carry none.
+fn elaborate_recursive_view(
+    env: &mut GlobalEnv,
+    globals: &mut HashMap<String, GlobalId>,
+    num_values: &mut HashMap<GlobalId, NumericLitVal>,
+    numeric_env: &NumericEnv,
+    rdecl: &RDecl,
+) -> Result<ElabResult, ElabError> {
+    // 1. Elaborate the declared type (recursive views are annotated).
+    let ty_core = {
+        let mut cx = ElabCtx::new(env, globals, num_values, numeric_env);
+        let ty = rdecl.ty.as_ref().ok_or_else(|| ElabError::Internal(
+            "recursive view/let requires a type annotation".into(),
+        ))?;
+        let ty_c = elab_type(&mut cx, ty)?;
+        cx.metas.zonk_term(&ty_c)
+    };
+
+    // 2. Pre-admit as Opaque so the body can self-reference.
+    let id = env.fresh_id();
+    env.add_decl(Decl::Opaque {
+        id,
+        level_params: vec![],
+        ty: ty_core.clone(),
+    });
+    globals.insert(rdecl.name.clone(), id);
+
+    // 3. Elaborate the body (self-ref resolves to `id` via globals).
+    let (body_core, body_obligations) = {
+        let mut cx = ElabCtx::new(env, globals, num_values, numeric_env);
+        let body_c = check(&mut cx, &rdecl.body, &ty_core, &rdecl.span)?;
+        let obligations = std::mem::take(&mut cx.obligations);
+        (cx.metas.zonk_term(&body_c), obligations)
+    };
+
+    // 4. Kernel type-check + SCT gate (singleton recursive group).
+    let admit_result = kernel_check(env, &Context::new(), &body_core, &ty_core)
+        .and_then(|_| sct_check(env, &[(id, body_core.clone())]));
+
+    match admit_result {
+        Ok(()) => {
+            // 5. SCT accepted → upgrade opaque to transparent (δ-unfoldable).
+            env.upgrade_to_transparent(id, body_core);
+            Ok(ElabResult {
+                name: rdecl.name.clone(),
+                def_id: id,
+                obligations: body_obligations,
+                foreign_binding: None,
+                temporal_obligations: vec![],
+            })
+        }
+        Err(e) => {
+            // Roll back: remove the pre-admitted opaque and any literal
+            // postulates body elaboration added after it (remove_last until we
+            // hit our opaque), then unbind the name.
+            while let Some(d) = env.remove_last() {
+                if d.id() == id {
+                    break;
+                }
+            }
+            globals.remove(&rdecl.name);
+            Err(ElabError::KernelRejected { error: e, span: rdecl.span.clone() })
+        }
+    }
+}
+
+/// Does `expr` mention the global name `name` (as an `RCon`)? Used to detect
+/// whether a view/let definition is self-recursive — the body references its
+/// own name, which the resolver emits as `RCon(name)` on a scope miss. Pattern
+/// positions are not scanned: a def name is a view/function, never a
+/// constructor, so it cannot appear in a pattern.
+fn rexpr_mentions_name(expr: &RExpr, name: &str) -> bool {
+    match expr {
+        RExpr::RCon(n, _) => n == name,
+        RExpr::RVar(_, _, _) | RExpr::RUniv(_, _) | RExpr::RNumLit(_, _) => false,
+        RExpr::RApp(f, a, _) => {
+            rexpr_mentions_name(f, name) || rexpr_mentions_name(a, name)
+        }
+        RExpr::RLam(_, b, _) => rexpr_mentions_name(b, name),
+        RExpr::RLet(_, _, rhs, body, _) => {
+            rexpr_mentions_name(rhs, name) || rexpr_mentions_name(body, name)
+        }
+        RExpr::RAsc(e, _, _) => rexpr_mentions_name(e, name),
+        RExpr::ROld(e, _) => rexpr_mentions_name(e, name),
+        RExpr::RBinOp(_, l, r, _) => {
+            rexpr_mentions_name(l, name) || rexpr_mentions_name(r, name)
+        }
+        RExpr::RMatch { scrut, arms, .. } => {
+            rexpr_mentions_name(scrut, name)
+                || arms.iter().any(|a| rexpr_mentions_name(&a.body, name))
+        }
+    }
+}
+
 /// Elaborate a `view` with `requires`/`ensures` clauses (`21 §6.3`).
 fn elaborate_view_with_spec(
     env: &mut GlobalEnv,
@@ -824,19 +958,50 @@ fn elaborate_view_with_spec(
 ) -> Result<ElabResult, ElabError> {
     let omega = Term::omega(Level::Zero);
 
-    // Phase 1: elaborate the declared type (carrier) and body — drop borrow first.
-    let (body_raw, carrier_ty_raw) = {
-        let mut cx = ElabCtx::new(env, globals, num_values, numeric_env);
-        let result = if let Some(ty) = &rdecl.ty {
-            let ty_c = elab_type(&mut cx, ty)?;
-            let body_c = check(&mut cx, &rdecl.body, &ty_c, &rdecl.span)?;
-            (cx.metas.zonk_term(&body_c), cx.metas.zonk_term(&ty_c))
+    // Phase 1: elaborate the declared type (carrier) and body.
+    //
+    // A self-recursive spec'd view (e.g. `sort`) must have its name pre-admitted
+    // as Opaque before the body is elaborated, so the body's self-call resolves
+    // (Approach A; see `elaborate_recursive_view`). The non-recursive path keeps
+    // type+body in one context so their level metas unify.
+    let is_recursive = rexpr_mentions_name(&rdecl.body, &rdecl.name);
+
+    let (body_raw, carrier_ty_raw, pre_admit_id): (Term, Term, Option<GlobalId>) =
+        if is_recursive {
+            // Recursive: elab the carrier type, pre-admit, then elab the body.
+            let carrier_ty = {
+                let mut cx = ElabCtx::new(env, globals, num_values, numeric_env);
+                let ty = rdecl.ty.as_ref().ok_or_else(|| ElabError::Internal(
+                    "recursive view with spec clauses requires a type annotation".into(),
+                ))?;
+                let ty_c = elab_type(&mut cx, ty)?;
+                cx.metas.zonk_term(&ty_c)
+            };
+            let id = env.fresh_id();
+            env.add_decl(Decl::Opaque {
+                id,
+                level_params: vec![],
+                ty: carrier_ty.clone(),
+            });
+            globals.insert(rdecl.name.clone(), id);
+            let body = {
+                let mut cx = ElabCtx::new(env, globals, num_values, numeric_env);
+                let body_c = check(&mut cx, &rdecl.body, &carrier_ty, &rdecl.span)?;
+                cx.metas.zonk_term(&body_c)
+            };
+            (body, carrier_ty, Some(id))
         } else {
-            let (body_c, ty_c) = infer(&mut cx, &rdecl.body)?;
-            (cx.metas.zonk_term(&body_c), cx.metas.zonk_term(&ty_c))
+            // Non-recursive: original one-context flow.
+            let mut cx = ElabCtx::new(env, globals, num_values, numeric_env);
+            if let Some(ty) = &rdecl.ty {
+                let ty_c = elab_type(&mut cx, ty)?;
+                let body_c = check(&mut cx, &rdecl.body, &ty_c, &rdecl.span)?;
+                (cx.metas.zonk_term(&body_c), cx.metas.zonk_term(&ty_c), None)
+            } else {
+                let (body_c, ty_c) = infer(&mut cx, &rdecl.body)?;
+                (cx.metas.zonk_term(&body_c), cx.metas.zonk_term(&ty_c), None)
+            }
         };
-        result
-    };
 
     // Build the param context from the Pi-chain of the carrier type.
     let param_types = unwrap_pi_chain(&carrier_ty_raw);
@@ -913,10 +1078,42 @@ fn elaborate_view_with_spec(
         full_body = Term::lam(pt.clone(), full_body);
     }
 
-    let id = declare_def(env, vec![], full_ty, full_body).map_err(|e| {
-        ElabError::KernelRejected { error: e, span: rdecl.span.clone() }
-    })?;
-    globals.insert(rdecl.name.clone(), id);
+    let id = if let Some(pre_id) = pre_admit_id {
+        // Recursive: the opaque was pre-admitted with the carrier Pi-chain. For
+        // L3a's recursive views (no `requires`), `full_ty` == the carrier
+        // Pi-chain, so the opaque's type is already `full_ty`. Kernel-check +
+        // SCT-gate the singleton group, then upgrade. (A recursive view WITH
+        // `requires` — `full_ty` ≠ carrier — is a tracked follow-on; see
+        // `elaborate_recursive_view`'s K2c note.)
+        let result = kernel_check(env, &Context::new(), &full_body, &full_ty)
+            .and_then(|_| sct_check(env, &[(pre_id, full_body.clone())]));
+        match result {
+            Ok(()) => {
+                env.upgrade_to_transparent(pre_id, full_body);
+                pre_id
+            }
+            Err(e) => {
+                // Roll back the pre-admission + any obligation holes / literal
+                // postulates added after it (ensures holes from Phase 3, etc.).
+                while let Some(d) = env.remove_last() {
+                    if d.id() == pre_id {
+                        break;
+                    }
+                }
+                globals.remove(&rdecl.name);
+                return Err(ElabError::KernelRejected {
+                    error: e,
+                    span: rdecl.span.clone(),
+                });
+            }
+        }
+    } else {
+        let id = declare_def(env, vec![], full_ty, full_body).map_err(|e| {
+            ElabError::KernelRejected { error: e, span: rdecl.span.clone() }
+        })?;
+        globals.insert(rdecl.name.clone(), id);
+        id
+    };
     Ok(ElabResult { name: rdecl.name.clone(), def_id: id, obligations: ens_obligations, foreign_binding: None, temporal_obligations: vec![] })
 }
 
@@ -1281,10 +1478,17 @@ fn infer_match(
         // Weaken by p to shift arg vars past the IH slots.
         let body_for_method = weaken(&body_core, p_ihs as i64);
 
-        // Wrap p IH lambdas (innermost first, type = return type R).
+        // Wrap p IH lambdas (innermost first, type = return type R). The IH
+        // binder ends up *under* the `n_args` ctor-arg lambdas (wrapped next),
+        // so its domain `ret_ty` (valid in the outer match context) must be
+        // weakened by `n_args` to refer to the right variables at the IH
+        // binder. (For a monomorphic return — no free vars — this is a no-op,
+        // which is why the landed tests never caught it; a parameterized
+        // return like `List b` or `Option a` needs the shift.)
         let mut method = body_for_method;
+        let ih_ty = weaken(ret_ty, n_args as i64);
         for _ in 0..p_ihs {
-            method = Term::lam(ret_ty.clone(), method);
+            method = Term::lam(ih_ty.clone(), method);
         }
         // Wrap n arg lambdas (outermost arg last — iterate j=n-1 down to 0).
         for j in (0..n_args).rev() {
