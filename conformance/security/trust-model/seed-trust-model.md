@@ -117,8 +117,8 @@ is inexpressible at the API (§C-C3), so it cannot bypass the check.
 ### security/trust-model/verified-term-has-empty-trusted-base
 - spec: `64 §1.1` (Contract TB-Sound), `64 §5`, `18 §5`
 - given: a `GlobalEnv` built with only checked declarations — a `declare_def`
-  (`Decl::Transparent`) and/or inductives — and **no** postulate, `foreign`, or
-  hole
+  (`Decl::Transparent`) and/or inductives — and **no** postulate, `foreign`,
+  hole, or registered primitive
 - expect: `trusted_base()` returns **`[]`** (the empty delta)
 - why: (soundness) AC1. Empty delta = the "fully verified+confined" reading
   (`64 §5`). Producer: the landed `trusted_base()` (`env.rs:383`) — the empty
@@ -157,8 +157,9 @@ is inexpressible at the API (§C-C3), so it cannot bypass the check.
 > mechanically listable" claim fails **silently** if an assumption can hide. The
 > pair is **{B1, B2}** on the same `GlobalId` across the `Opaque`→`Transparent`
 > transition (present-as-assumption → absent-after-discharge); **B3** pins the
-> exclusion filter's narrowness (the no-silent-catch-all assertion). Every case
-> drives a **real** `foreign`/hole admission through the choke-point — never a
+> exclusion filter's narrowness (the no-silent-catch-all assertion); **B4**
+> exercises the filter's **second** arm (a registered `Primitive`, TCB item 2).
+> Every case drives a **real** admission through the choke-point — never a
 > hand-inserted decl.
 
 ### security/trust-model/foreign-signature-surfaces-in-delta
@@ -206,6 +207,22 @@ is inexpressible at the API (§C-C3), so it cannot bypass the check.
   producer with a broadened exclusion (dropping a category of user `Opaque`)
   fails this case while A1/A2 still pass. **Trust level: `[by construction]` —
   the admission-surface exhaustiveness invariant, trusted-as-code (`64 §1.2`).**
+
+### security/trust-model/registered-primitive-surfaces-in-delta
+- spec: `64 §1` (TCB item 2 — primitive reductions), `64 §1.2` (TB-Complete),
+  `14 §5`
+- given: a registered primitive type/operation admitted via `declare_primitive`
+  (`check.rs`, `14 §5`) as a `Decl::Primitive` — a fresh `GlobalId`, ≠ prelude
+- expect: it **surfaces** in `trusted_base()`, listed alongside postulates — the
+  filter's **second** arm (`Decl::Primitive`) enumerates item-2 of the TCB
+- why: (soundness ★) AC2, the second filter arm. The primitive reductions are
+  TCB item 2 (`64 §1`) — audited kernel-registered ops, trusted-and-*listed*,
+  not proven. Exercises the `Primitive` arm of `matches!(Opaque | Primitive)`
+  that B1–B3 (the `Opaque` arm) leave untouched: a producer that dropped the
+  `Primitive` arm passes B1–B3 but **fails** here, and A1's "empty" is exact
+  only when **no** primitive is registered either.
+  **Trust level: `[landed producer]` enumeration + `[by construction]`
+  completeness (both filter arms).**
 
 ## C. Authorship-independence (AC3 ★) — the de-Bruijn security reading
 
