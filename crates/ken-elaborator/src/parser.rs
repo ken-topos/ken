@@ -873,6 +873,7 @@ impl Parser {
                 | Token::FloatLit(_)
                 | Token::DecimalLit(_, _)
                 | Token::Float32Lit(_)
+                | Token::Str(_)
         )
     }
 

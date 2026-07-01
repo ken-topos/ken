@@ -110,6 +110,27 @@ fn string_literal_infer_path_elaborates() {
     );
 }
 
+// ── AC4: print_line type-check: String → IO Unit ─────────────────────────────
+
+/// `surface/io/print-line-type-checks` (VAL1-surface, `36 §2.1`)
+///
+/// `print_line "Hello, World!"` must elaborate and have type `IO Unit`.
+/// Prim reduction (`wp/VAL1-console-exec`) is held; this tests the type only.
+#[test]
+fn print_line_type_checks_as_io_unit() {
+    let mut env = ElabEnv::new().expect("base env");
+    let id = env
+        .elaborate_decl("view main : IO Unit = print_line \"Hello, World!\"")
+        .expect("print_line app elaborates");
+
+    let io_id = *env.globals.get("IO").expect("IO registered");
+    let unit_id = *env.globals.get("Unit").expect("Unit registered");
+    let (_, ty) = env.env.const_type(id).expect("main has type");
+    let unit_t = ken_kernel::Term::indformer(unit_id, vec![]);
+    let io_unit = ken_kernel::Term::app(ken_kernel::Term::const_(io_id, vec![]), unit_t);
+    assert_eq!(ty, io_unit, "main must have type IO Unit");
+}
+
 // ── FizzBuzz batch-1 QA blocker: semicolons in match arms ────────────────────
 
 /// Verifies mod3/mod5/classify elaborate using modular accumulator types.

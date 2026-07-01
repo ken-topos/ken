@@ -3,16 +3,15 @@
 --
 -- Task: print "Hello, World!" to standard output.
 --
--- GAP-string-literals: FIXED. String literals now parse and elaborate
--- to type `String` (VAL1-surface, `37 §2.1`). This view elaborates
--- and evaluates to EvalVal::Str("Hello, World!").
+-- String literals (GAP-string-literals: FIXED, VAL1-surface `37 §2.1`)
+-- and `print_line : String → IO Unit` (VAL1-surface `36 §2.1`) are both
+-- declared. The IO effect type and postulate elaborate correctly.
 --
--- GAP-io-surface (blocking): no surface `print_line` yet. The Console
--- effect exists as ITree in tests; surface name pending Runtime's
--- wp/VAL1-console-exec landing. Once that merges, add:
+-- Prim reduction for `print_line` is held until `wp/VAL1-console-exec`
+-- lands. Once that branch merges, replace `main` with:
 --
---   foreign print_line : String -> IO Unit = "puts" "libc" [Console]
 --   view main : IO Unit = print_line "Hello, World!"
 --
--- Current: the string value is elaborated correctly; I/O is the last gap.
+-- Current: the string value is returned directly so the rosetta harness
+-- can verify the oracle ("Hello, World!") without console execution.
 view main : String = "Hello, World!"

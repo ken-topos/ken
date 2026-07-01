@@ -63,6 +63,16 @@ pub fn empty_prelude_env() -> PreludeEnv {
         list_char_to_string_id: z,
         map_id: z,
         set_id: z,
+        // VAL1-surface Console/IO declarations (`36 §2.1`, VAL1-surface).
+        unit_id: z,
+        mkunit_id: z,
+        console_op_id: z,
+        write_id: z,
+        itree_id: z,
+        ret_id: z,
+        vis_id: z,
+        io_id: z,
+        print_line_id: z,
     }
 }
 
@@ -117,6 +127,23 @@ pub struct PreludeEnv {
     pub map_id: GlobalId,
     /// `Set : Type → Type` (abstract; `DecEq A` gate via `where`).
     pub set_id: GlobalId,
+    // VAL1-surface: Console/IO declarations (`36 §2.1`, VAL1-surface).
+    /// `Unit` — the one-element type (`data Unit = MkUnit`).
+    pub unit_id: GlobalId,
+    pub mkunit_id: GlobalId,
+    /// `ConsoleOp` — Console effect operations (`Write : String → ConsoleOp`).
+    pub console_op_id: GlobalId,
+    pub write_id: GlobalId,
+    /// `ITree R` — the simplified W-style interaction tree (`36 §2.1`, K1.5).
+    /// `Ret : R → ITree R ; Vis : (Nat → ITree R) → ITree R`.
+    pub itree_id: GlobalId,
+    pub ret_id: GlobalId,
+    pub vis_id: GlobalId,
+    /// `IO : Type → Type` — Console-effect IO type (postulate; prim reduction
+    /// held until `wp/VAL1-console-exec` lands).
+    pub io_id: GlobalId,
+    /// `print_line : String → IO Unit` — the surface Console print postulate.
+    pub print_line_id: GlobalId,
 }
 
 /// Register the L3 prelude in `elab` (called from `ElabEnv::empty`).
@@ -138,6 +165,16 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         .map_err(|e| ElabError::Internal(format!("prelude Prod failed: {}", e)))?;
     elab.elaborate_decl("data OrdResult = Lt | Eq | Gt")
         .map_err(|e| ElabError::Internal(format!("prelude OrdResult failed: {}", e)))?;
+
+    // VAL1-surface inductives — declared before `lookup` closure to avoid
+    // conflicting borrows (elaborate_decl needs &mut elab).
+    elab.elaborate_decl("data Unit = MkUnit")
+        .map_err(|e| ElabError::Internal(format!("prelude Unit failed: {}", e)))?;
+    elab.elaborate_decl("data ConsoleOp = Write String")
+        .map_err(|e| ElabError::Internal(format!("prelude ConsoleOp failed: {}", e)))?;
+    // Simplified W-style ITree with Nat response (`36 §2.1`, K1.5).
+    elab.elaborate_decl("data ITree r = Ret r | Vis (Nat -> ITree r)")
+        .map_err(|e| ElabError::Internal(format!("prelude ITree failed: {}", e)))?;
 
     let lookup = |name: &str| -> Result<GlobalId, ElabError> {
         elab.globals
@@ -164,6 +201,15 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     let lt_id = lookup("Lt")?;
     let eqr_id = lookup("Eq")?;
     let gt_id = lookup("Gt")?;
+    // VAL1-surface inductives (declared before lookup closure above).
+    let unit_id = lookup("Unit")?;
+    let mkunit_id = lookup("MkUnit")?;
+    let console_op_id = lookup("ConsoleOp")?;
+    let write_id = lookup("Write")?;
+    let itree_id = lookup("ITree")?;
+    let ret_id = lookup("Ret")?;
+    let vis_id = lookup("Vis")?;
+    // `lookup` is last used above; NLL ends its borrow here.
 
     // ── Ω constants (postulates with Pi types, applied form) ───────────────
     // `Equal : Π(A:Type). Π(x:A). Π(y:A). Ω`  (the `≡`).
@@ -278,6 +324,23 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         "list_char_to_string",
     )?;
 
+    // `IO : Type → Type` — the Console-effect IO type (postulate; prim
+    // reduction to `ITree ConsoleOp` held until `wp/VAL1-console-exec` lands).
+    let io_ty = Term::pi(type0.clone(), type0.clone());
+    let io_id = elab
+        .declare_postulate_raw("IO", io_ty)
+        .map_err(|e| ElabError::Internal(format!("prelude IO failed: {}", e)))?;
+
+    // `print_line : String → IO Unit` — the surface Console print postulate.
+    // Effect contract: Console effect; prim reduction held (see above).
+    // `string_t` and `unit_id` are available from above.
+    let unit_t = Term::indformer(unit_id, vec![]);
+    let io_unit = Term::app(Term::const_(io_id, vec![]), unit_t);
+    let print_line_ty = Term::pi(string_t.clone(), io_unit);
+    let print_line_id = elab
+        .declare_postulate_raw("print_line", print_line_ty)
+        .map_err(|e| ElabError::Internal(format!("prelude print_line failed: {}", e)))?;
+
     Ok(PreludeEnv {
         nat_id,
         zero_id,
@@ -307,5 +370,14 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         list_char_to_string_id,
         map_id,
         set_id,
+        unit_id,
+        mkunit_id,
+        console_op_id,
+        write_id,
+        itree_id,
+        ret_id,
+        vis_id,
+        io_id,
+        print_line_id,
     })
 }
