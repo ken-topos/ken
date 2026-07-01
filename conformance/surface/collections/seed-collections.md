@@ -8,7 +8,10 @@ the **core collection types** (`List`/`Option`/`Result` transparent inductive;
 `Array`/`Map`/`Set` abstract over the `41` heap), the **combinators with laws as
 propositions**, **infinitude without coinduction** (the fuel-bounded inductive
 unfold + the structural-absence net), and **structural equality +
-`DecEq`/`Ord`** with the verified `sort`. They extend — and must not regress —
+`DecEq`/`Ord`** with the verified `sort`. **L3b (AC7) adds the user-type
+instancing crossing** — a user `instance DecEq`/`Ord` resolved by Lc's landed
+`instance_search` now that the §37 §6 gate is open (Lc, `4aa36c7`). They extend
+— and must not regress —
 the on-`main` surface invariants (`../seed-surface.md`,
 `../data-match/seed-data-match.md`) and the `String` primitive already
 registered for L6 (`../bytes-io/seed-bytes-io.md`).
@@ -362,9 +365,10 @@ pinned split. A key type without `DecEq` is a compile error.
   would accept **both**); the reject arm is the guard. **Net-new producer:**
   class/constraint resolution does not exist in `ken-elaborator` today —
   producer-grep the real constraint check (built-in `DecEq` instances ship in
-  L3; **user-type** `instance DecEq` is **L-classes-gated**, `33 §5`/`39`,
-  `(oracle)` for that half — the L1-numerics precedent: built-in now,
-  user-instancing gated). The reject must be a **real** resolution failure, not
+  L3; **user-type** `instance DecEq` was **L-classes-gated** at L3, `33 §5`/`39`
+  — that gate is now **open** (Lc landed, `4aa36c7`) and **delivered in L3b**,
+  AC7 `user-deceq-instance-keys-map-via-real-search`). The reject must be a
+  **real** resolution failure, not
   a hand-fed "no instance" flag. (verdict-flip pair; hand-feed net; L-classes
   boundary pinned.)
 
@@ -401,6 +405,100 @@ the conjoined obligation**.
 
 ---
 
+## AC7 — user-type `DecEq`/`Ord` instancing (L3b — the §6 gate crossing)
+
+L3 pinned the `DecEq`/`Ord` boundary with **built-in** instances and tagged
+user-type instancing `(oracle)` L-classes-gated (AC5/AC6). **Lc landed**
+(`4aa36c7`) — the gate §37 §6 flagged is now **open**. These cases deliver the
+crossing: a user `instance DecEq K` / `instance Ord K` resolved by Lc's landed
+`instance_search(class, head) -> Option<GlobalId>` (`classes.rs:91`; `Some` =
+the canonical user instance, `None` = a no-instance error). They **extend**
+AC5 (membership/identity) and AC6 (the verified `sort` VC) into user types —
+they do **not** re-pin those base properties (one home per property,
+`subsume-don't- proliferate`). No new kernel rule (§37 banner): pure
+elaborator wiring of the collection ops to the landed resolver.
+
+### surface/collections/user-deceq-instance-keys-map-via-real-search
+- spec: `37 §3.3` (`DecEq`-keyed `Map`), `37 §6` (staging boundary now open),
+  `33 §5`/`39 §6` (Lc instance search)
+- given: a user `data K = …` with (a) a user `instance DecEq K`, and (b) the
+  **same** `data K` with **no** `DecEq K` instance — each used to key a
+  `Map K v` (construction + `lookup`)
+- expect: **the verdict flips on the user instance.** (a) **accepts** —
+  `instance_search("DecEq", "K")` returns `Some(id)`, the user dictionary keys
+  the map and `lookup`/`insert` work; (b) **rejects** at compile time —
+  `instance_search` returns `None`, a **no-instance error naming the missing
+  `DecEq K`**, **not** a silent built-in fallback and **not** a runtime
+  failure
+- why: (L3b-AC1 ★) the user-instancing crossing — extends AC5's built-in
+  `map-key-without-deceq-rejected` into **user** types. **Producer-grep the
+  real resolver:** the `Map` key op must call `instance_search`
+  (`classes.rs:91`) for the user type — **not** a built-in `DecEq`-only table
+  (which would pass a primitive-keyed test while a user-keyed map silently
+  falls back or fails: the built-in-fallback trap). The **reject arm is the
+  guard** — a single accept is green-vs-green under a resolver that ignores
+  the instance requirement.
+
+### surface/collections/user-ord-instance-drives-verified-sort
+- spec: `37 §6` (verified `sort`), `34 §5`, `33 §5`/`39 §6`
+- given: a user type `K` with (a) a user `instance Ord K`, and (b) the
+  **same** `K` with **no** `Ord K` — each used in `sort (xs : List K)` (and an
+  ordered `Map`/`Set` op, e.g. `minKey`)
+- expect: **the verdict flips.** (a) **accepts** —
+  `instance_search("Ord", "K")` returns `Some(id)`, `sort` type-checks and its
+  refinement obligation is discharged with the user `Ord`'s total-order law
+  proofs; (b) **rejects** — `instance_search` returns `None`, a **no-instance
+  error naming the missing `Ord K`**
+- why: (L3b-AC2) user `Ord` drives the verified `sort` + ordered `Map`/`Set`
+  ops — extends AC6 into user `Ord`. **Producer-grep:** `sort`/`minKey`
+  resolve `Ord K` via `instance_search` (`classes.rs:91`), **not** a built-in
+  `Ord`-only table. The `Ord` dictionary carries the **total-order law
+  proofs** (`37 §6`, reflexivity/antisymmetry/transitivity/totality) the
+  refinement's `isSorted` predicate and the prover use — a hand-fed `Ord` flag
+  is green-vs-green; the reject arm + the real **law-carrying** dictionary are
+  the guard.
+
+### surface/collections/user-ord-sort-emits-both-conjuncts (soundness)
+- spec: `37 §6`, `34 §5` (refinement obligation), `22 §2.1`
+- given: `sort (xs : List K)` where `Ord K` is a **user** `instance Ord K`
+  resolved via `instance_search("Ord", "K")` — the net-new L3b wiring
+- expect: the result-introduction **emits the conjoined obligation**
+  `isSorted (sort xs) ∧ Perm (sort xs) xs` — **both conjuncts, `Perm`
+  present** — identically to AC6's built-in-`Ord` case; the emission does
+  **not** depend on whether `Ord` is built-in or user-resolved
+- why: (L3b-AC3 ★) (soundness) the VC-emission must **not regress on the
+  net-new user-instance path**. Extends AC6 (`sort-emits-issorted-and-perm`) —
+  it does **not** re-pin the base completeness (both conjuncts, `Perm`
+  load-bearing, the `const Nil` degeneracy) but pins that **wiring `sort` to a
+  user `Ord` via `instance_search` preserves the conjoined emission**.
+  **Discriminating:** a build that emits the VC for built-in `Ord` but **drops
+  `Perm` (or the whole obligation) on the user-`Ord` path** passes AC6 yet
+  **fails here** — the untrusted-layer **omission** (a never-generated
+  conjunct supplies no proof obligation and reads `proved`-by-default; the
+  kernel does not catch it). Producer: grep the **emitted** obligation at the
+  `sort` result site **on the user-`Ord` path** (`34 §5`, `22 §2.1`) — not an
+  assumed/hand-fed proposition, not "it type-checks."
+
+### surface/collections/user-deceq-keyed-map-canonical-identity
+- spec: `37 §3.3` (byte-encoding canonical, **no `Ord` for identity**),
+  `41 §3a`, `33 §5` (user `DecEq`)
+- given: two `Map K v` keyed by a **user** type `K` (with `instance DecEq K`),
+  built by inserting the **same** (key, value) set in **different insertion
+  orders**; and (contrast) a pair differing in one entry
+- expect: the same-content pair **interns to the same slot** (O(1) slot-id) —
+  the canonical form is sorted by the **canonical byte encoding** of each key
+  (`41 §3a`), so identity is insertion-order-independent **for a user key type
+  too**, needing **no** user `Ord`; the differing-entry pair is **unequal**
+- why: (L3b-AC4) the user-key extension of AC5's
+  `structurally-equal-collections-o1-comparable`. **Identity is byte-order,
+  not `Ord`:** `Ord K` (AC2) gates only *ordered* ops (`minKey`/range),
+  **never** identity (`37 §3.3`, the pinned split) — a case requiring user
+  `Ord` for `Map` identity would contradict §3.3. The user `DecEq K` is the
+  **membership** constraint (AC1); the canonical byte encoding of the heap
+  value (`41 §3a`) gives identity for free. Producer: the real key-sorted
+  canonicalization over a **user** key (byte-order), **not** a list-compare
+  and **not** an `Ord`-keyed sort. Assert **same slot-id**, not just `==`.
+
 ## Coverage map (AC → cases)
 
 - **AC1** (`String` UTF-8 primitive, not `List Char`):
@@ -421,6 +519,11 @@ the conjoined obligation**.
   `map-key-without-deceq-rejected`.
 - **AC6** (verified `sort`, `Perm` present): `sort-emits-issorted-and-perm`
   (soundness).
+- **AC7** (user-type `DecEq`/`Ord` instancing, L3b — the §6 gate crossing):
+  `user-deceq-instance-keys-map-via-real-search`,
+  `user-ord-instance-drives-verified-sort`,
+  `user-ord-sort-emits-both-conjuncts` (soundness),
+  `user-deceq-keyed-map-canonical-identity`.
 
 ## Cross-case consistency sweep
 
@@ -449,6 +552,18 @@ the conjoined obligation**.
   **completeness** — both conjuncts). None may degrade to "it type-checks",
   which passes vacuously when no obligation is emitted (the untrusted-layer
   omission hole).
+- **The user-instance path (AC7) is one story with the built-in path
+  (AC5/AC6).** AC7's user `DecEq`/`Ord` cases resolve via the **same** landed
+  `instance_search` (`classes.rs:91`) — so the built-in and user paths must
+  **agree**: `Map` identity is **always** byte-order canonical (never `Ord`;
+  `user-deceq-keyed-map-canonical-identity` vs the frame's "via resolved Ord"),
+  the `sort` VC **always** carries both conjuncts
+  (`user-ord-sort-emits-both-conjuncts` = `sort-emits-issorted-and-perm`), and a
+  missing instance is
+  **always** a no-instance compile error, **never** a silent built-in fallback
+  or runtime failure. A case letting the user path diverge — `Ord`-keyed `Map`
+  identity, a dropped `Perm` on the user-`Ord` sort, or a runtime fallback —
+  would contradict this class.
 
 ## Subsumed / not-duplicated (one home per property)
 
@@ -500,4 +615,6 @@ synthetic literal or hand-fed obligation where a real elaboration is asserted
 (the `conformance-hand-feeds-the-deliverable` net). The **NFC-equality** case is
 `(oracle)`-staged until real NFC normalization lands
 (`content-addressing.md §1.4` K3 note); **user-type** `DecEq`/`Ord` instancing
-is **L-classes-gated** (`33 §5`/`39`) — both flagged, the rest is normative.
+is **delivered in L3b** (AC7, post-Lc `4aa36c7`) — the collection ops wire to
+the landed `instance_search` (`classes.rs:91`) for user types (net-new build).
+The NFC half stays `(oracle)`; the rest is normative.
