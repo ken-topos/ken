@@ -232,9 +232,12 @@ it; QA + the Architect verify **no `_ =>`** sits on a completeness-critical matc
 ## 8. Message-type taxonomy (routing metadata)
 
 Tag each message with a type; the **first line is the thread title** — no
-`[TYPE]` prefix in the body. Types: `kickoff`, `question`, `merge_ready` (a
-local `wp/<ID>` branch ready for the Integrator to publish + merge),
-`review_request`, `blocked`, `bug`, `status_update`, `retro`, `decision`.
+`[TYPE]` prefix in the body. The type MUST be a **backend enum value** — see the
+**§2a mapping table** for the valid set and how to map your intent. In
+particular, a local `wp/<ID>` branch ready for the Integrator to publish + merge
+is `git_request` (the old `merge_ready` is rejected), and a QA→leader
+merge-Decision request is `review_request`. When unsure, `question` is always
+accepted.
 
 ## 9. Topology is invariant — including the query edges
 

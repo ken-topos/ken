@@ -364,3 +364,29 @@ or — for an idle-wedged session — **`send-keys`**: `tmux send-keys -t
 moot-<role> "<text>"` then a **separate** `tmux send-keys -t moot-<role> Enter`
 (text+Enter in one call does NOT submit). **Log every relay.** Never interrupt a
 working agent; capture-pane *first*, always.
+
+### 7b. Watchdog refinements (read-the-truth, not the surface)
+
+Three traps that make a healthy federation look stalled — or a stall look
+healthy — learned the hard way:
+
+- **Scan the host, not just the convo.** The watchdog reads the space; it does
+  **not** see runaway processes. Agents' hand-rolled background bash loops (esp.
+  `python3 -` markdown-reflow heredocs) can infinite-loop + orphan, pegging a
+  core and leaking GBs of RAM all session on the shared OOM-prone box. Add a
+  **`ps --sort=-pcpu -eo pid,pcpu,rss,comm | head`** to every tick. Diagnose a
+  suspect `python3 -` via its parent bash (the full heredoc), cwd
+  (`.worktrees/<role>`), and fd1 → `tasks/*.output`; it's **orphan-safe to kill
+  once the artifact it was producing is on main**.
+- **The `❯` line is not agent state.** The gray text after a pane's `❯` prompt
+  is Claude Code's *next-prompt suggestion*, not buffered input — it won't fire
+  without Enter and can't be cleared with Escape/C-u. In `capture-pane`
+  diagnosis, **ignore the `❯` line**; read the real transcript *above* it plus
+  `list_participants` status/last-seen. (Don't burn calls trying to "clear" a
+  stray `❯ /compact`.)
+- **A `proposed` Decision can be fully voted but unresolved.** Decision *status*
+  is not vote *state*: read the **thread**, not just `list_decisions`. All gates
+  can have voted APPROVE (threaded) while the Decision sits `proposed` and the
+  branch stays unmerged — a real stall the merge gate silently swallows. When
+  every required gate has voted APPROVE, `resolve_decision` it (recording each
+  verdict + merge preconditions); don't wait for someone to "assemble" it.
