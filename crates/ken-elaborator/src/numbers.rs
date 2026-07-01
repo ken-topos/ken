@@ -225,7 +225,13 @@ pub fn register_numeric_env(
     let sub_int_id = reg_binop!("sub_int", int_id);
     let mul_int_id = reg_binop!("mul_int", int_id);
     let eq_int_id  = reg_cmpop!("eq_int", int_id, bool_id);
-    let _ = (sub_int_id, mul_int_id);
+    // `Int`'s ordering comparison (`30-taxonomy.md §4`'s "comparison
+    // primitives `Int → Int → Bool`" — plural, already assumed to justify
+    // `Bool`'s prelude membership — but only `eq_int` had actually been
+    // wired; `leq_int` completes it). ES4-classes needs it to wrap `Ord
+    // Int`'s `leq` operation field (`51-lawful-classes.md §6`).
+    let leq_int_id = reg_cmpop!("leq_int", int_id, bool_id);
+    let _ = (sub_int_id, mul_int_id, leq_int_id);
 
     // ---- Int8 ops ----
     let add_int8_id = reg_binop!("add_int8", int8_id);

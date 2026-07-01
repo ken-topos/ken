@@ -311,6 +311,12 @@ pub enum Expr {
         arms: Vec<MatchArm>,
         span: Span,
     },
+    /// `e.field` — Σ-record field projection (`33 §5.2` η) on a class
+    /// instance/dictionary value. Postfix, lowest-binding-atom precedence;
+    /// only fires on a non-`ConId`-headed base (a `ConId`-headed dotted
+    /// chain is a module-qualified reference, `33 §3.2`, joined at parse
+    /// time instead).
+    EProj(Box<Expr>, String, Span),
 }
 
 impl Expr {
@@ -326,7 +332,8 @@ impl Expr {
             | Expr::EOld(_, s)
             | Expr::ENumLit(_, s)
             | Expr::EStr(_, s)
-            | Expr::EBinOp(_, _, _, s) => s,
+            | Expr::EBinOp(_, _, _, s)
+            | Expr::EProj(_, _, s) => s,
             Expr::EMatch { span, .. } => span,
         }
     }

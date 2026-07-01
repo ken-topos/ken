@@ -321,6 +321,7 @@ fn rewrite_rexpr(scope: &Scope, exports: &HashMap<String, HashMap<String, String
                 .collect::<Result<Vec<_>, ElabError>>()?;
             RExpr::RMatch { scrut, arms, span }
         }
+        RExpr::RProj(e, field, s) => RExpr::RProj(Box::new(rewrite_rexpr(scope, exports, *e)?), field, s),
     })
 }
 

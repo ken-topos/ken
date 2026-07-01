@@ -8,6 +8,7 @@ use std::collections::HashMap;
 
 use ken_kernel::{
     check as kernel_check,
+    convert,
     declare_def, declare_postulate, declare_primitive, declare_recursive_group,
     env::PrimReduction,
     infer as kernel_infer,
@@ -221,6 +222,14 @@ struct ElabCtx<'e> {
     numeric_env: &'e NumericEnv,
     obligations: Vec<Obligation>,
     obl_counter: u32,
+    /// The typeclass registry, when available — needed only for `.field`
+    /// Σ-record projection (`RExpr::RProj`, `33 §5.2` η). `None` in every
+    /// elaboration path that predates class support and never projects
+    /// (prove/law/typealias/foreign/temporal/derive/data, recursive views,
+    /// the match compiler); wired via `.with_classes` in the view/let path
+    /// so a `where C a`-constrained body can project its resolved
+    /// dictionary's fields.
+    class_env: Option<&'e ClassEnv>,
 }
 
 impl<'e> ElabCtx<'e> {
@@ -239,7 +248,13 @@ impl<'e> ElabCtx<'e> {
             numeric_env,
             obligations: Vec::new(),
             obl_counter: 0,
+            class_env: None,
         }
+    }
+
+    fn with_classes(mut self, class_env: &'e ClassEnv) -> Self {
+        self.class_env = Some(class_env);
+        self
     }
 }
 
@@ -262,9 +277,19 @@ fn elab_type(cx: &mut ElabCtx, ty: &RType) -> Result<Term, ElabError> {
                     name: name.clone(),
                     span: span.clone(),
                 })?;
-            // Inductive type formers must be Term::IndFormer so the kernel's
-            // eliminator / conversion rules treat them correctly.
-            if cx.env.inductive(id).is_some() {
+            // Inductive type formers must be Term::IndFormer, and
+            // CONSTRUCTORS must be Term::Constructor, so the kernel's
+            // eliminator / conversion rules treat them correctly — a
+            // constructor value (e.g. `True`) embedded in a TYPE position
+            // (a law-field return-type annotation like
+            // `Equal Bool (bool_or True False) True`, ES4-classes) that
+            // silently became a bare `Term::Const` would never match
+            // `whnf`'s ι-reduction head check (`if let
+            // Term::Constructor{..} = head`), permanently stalling
+            // reduction on an otherwise-concrete scrutinee.
+            if let Some(_) = cx.env.constructor(id) {
+                Ok(Term::Constructor { id, level_args: vec![] })
+            } else if cx.env.inductive(id).is_some() {
                 Ok(Term::IndFormer { id, level_args: vec![] })
             } else {
                 Ok(Term::const_(id, vec![]))
@@ -310,6 +335,44 @@ fn check(cx: &mut ElabCtx, expr: &RExpr, expected: &Term, _span: &Span) -> Resul
         }
         RExpr::RStr(s, span) => {
             elab_str_lit(cx, s, Some(expected), span).map(|(t, _)| t)
+        }
+        // `Refl` — reflexivity, checked (never inferred): the expected goal
+        // must whnf to a kernel `Eq A t u` with `t`/`u` CONVERTIBLE (usually
+        // because both sides have already been reduced to the same
+        // constructor by an enclosing `match` — the standard way a
+        // structure-class law proof discharges, `33 §5.3`/ES4-classes).
+        // Surface sugar only: `Refl` is a bare `ConId` the resolver emits as
+        // an `RCon` on scope miss (never registered as a real global), so
+        // this must be checked BEFORE the generic `RCon` global lookup.
+        RExpr::RCon(name, rspan) if name == "Refl" => {
+            let exp_wh = whnf(cx.env, &cx.ctx, expected);
+            match exp_wh {
+                Term::Eq(a_ty, t, u) => {
+                    if convert(cx.env, &cx.ctx, &a_ty, &t, &u) {
+                        Ok(Term::Refl(t))
+                    } else {
+                        Err(ElabError::TypeMismatch {
+                            span: rspan.clone(),
+                            reason: "Refl: the two sides of the goal are not convertible".into(),
+                        })
+                    }
+                }
+                _ => Err(ElabError::TypeMismatch {
+                    span: rspan.clone(),
+                    reason: "Refl expects an `Eq`-shaped goal".into(),
+                }),
+            }
+        }
+        // `Axiom` — an EXPLICIT, visible postulate of the expected type
+        // (`declare_postulate`, `Decl::Opaque`). The honest surface spelling
+        // for an audited-delta law field (`51 §6` erratum's non-zero-delta
+        // posture): the resulting `trusted_base()` entry is a real,
+        // grep-able `Opaque` — never a silent/implicit assumption. Checked
+        // (not inferred), same discipline as `Refl`.
+        RExpr::RCon(name, rspan) if name == "Axiom" => {
+            let id = declare_postulate(cx.env, vec![], expected.clone())
+                .map_err(|e| ElabError::KernelRejected { error: e, span: rspan.clone() })?;
+            Ok(Term::const_(id, vec![]))
         }
         RExpr::RLam(_, body, lam_span) => {
             let exp_wh = whnf(cx.env, &cx.ctx, expected);
@@ -452,7 +515,85 @@ fn infer(cx: &mut ElabCtx, expr: &RExpr) -> Result<(Term, Term), ElabError> {
         RExpr::RMatch { scrut, arms, span } => {
             infer_match(cx, scrut, arms, span)
         }
+
+        RExpr::RProj(base, field, span) => infer_proj(cx, base, field, span),
     }
+}
+
+/// `e.field` — Σ-record field projection (`33 §5.2` η). Infers `e`'s type,
+/// identifies which registered class it's a dictionary of (matching the
+/// type's head `Const` against `ClassInfo::type_id`), finds `field`'s
+/// declared position, and builds `proj1(proj2^k(e))` — the field's
+/// expected type is `field_types[k]` with the class param (this
+/// dictionary's concrete head type) and every EARLIER field substituted by
+/// its own self-projection off the SAME base (works whether `base` is a
+/// concrete instance value or an opaque bound variable like a `where`-
+/// supplied dictionary).
+fn infer_proj(cx: &mut ElabCtx, base: &RExpr, field: &str, span: &Span) -> Result<(Term, Term), ElabError> {
+    let (base_core, base_ty) = infer(cx, base)?;
+    // Deliberately inspect `base_ty` AS ELABORATED (never `whnf`'d): a class
+    // type is itself `Decl::Transparent` (`elab_class_decl` admits it via
+    // `declare_def`, `33 §5.2`), so `whnf` would eagerly unfold `App(Const
+    // (class_id), head)` straight through into the raw Σ-chain — losing
+    // exactly the "which class is this" information this lookup needs.
+    // The surface-elaborated shape (`App(Const(class_id), head)` or bare
+    // `Const(class_id)` for an unparameterized class) is always already in
+    // this un-unfolded form immediately after `infer`/`env.const_type`.
+    let (class_type_id, head_arg) = match &base_ty {
+        Term::App(f, a) => match f.as_ref() {
+            Term::Const { id, .. } => (*id, Some((**a).clone())),
+            _ => return Err(ElabError::TypeMismatch {
+                span: span.clone(),
+                reason: "projection base's type is not a class dictionary".into(),
+            }),
+        },
+        Term::Const { id, .. } => (*id, None),
+        _ => return Err(ElabError::TypeMismatch {
+            span: span.clone(),
+            reason: "projection base's type is not a class dictionary".into(),
+        }),
+    };
+    let class_env = cx.class_env.ok_or_else(|| ElabError::TypeMismatch {
+        span: span.clone(),
+        reason: "`.field` projection is unavailable in this elaboration context".into(),
+    })?;
+    let (field_names, field_types) = class_env
+        .classes
+        .values()
+        .find(|ci| ci.type_id == class_type_id)
+        .map(|ci| (ci.field_names.clone(), ci.field_types.clone()))
+        .ok_or_else(|| ElabError::TypeMismatch {
+            span: span.clone(),
+            reason: "projection base's type is not a known class dictionary".into(),
+        })?;
+    let idx = field_names.iter().position(|n| n == field).ok_or_else(|| ElabError::UnresolvedCon {
+        name: field.to_string(),
+        span: span.clone(),
+    })?;
+
+    // Build proj1(proj2^idx(base_core)) — field `idx`'s value. Each
+    // earlier field's self-projection (proj1(proj2^j(base_core)), j<idx)
+    // is built off the SAME base, cloned before consuming it below.
+    let mut args: Vec<Term> = Vec::new();
+    if let Some(h) = head_arg {
+        args.push(h);
+    }
+    args.extend((0..idx).map(|j| {
+        let mut v = base_core.clone();
+        for _ in 0..j {
+            v = Term::proj2(v);
+        }
+        Term::proj1(v)
+    }));
+
+    let mut val = base_core;
+    for _ in 0..idx {
+        val = Term::proj2(val);
+    }
+    let val = Term::proj1(val);
+
+    let expected_ty = ken_kernel::subst::subst_tel(&field_types[idx], &args);
+    Ok((val, expected_ty))
 }
 
 // ----- numeric literal helpers -----
@@ -729,20 +870,40 @@ pub fn elaborate_rdecl_v1(
         RDeclKind::View { constraints, .. } => {
             // Check `where C T` constraints via `instance_search` (`37 §6`,
             // L3b). This is the producer the QA grep gate checks.
+            let mut dict_id: Option<GlobalId> = None;
             for (class_name, head_ty) in constraints {
                 let head_name = rtype_head_name(head_ty);
-                if class_env.instance_search(class_name, &head_name).is_none() {
-                    return Err(ElabError::NoInstance {
-                        class: class_name.clone(),
-                        ty: head_name,
-                        span: rdecl.span.clone(),
-                    });
+                match class_env.instance_search(class_name, &head_name) {
+                    Some(id) => dict_id = Some(id),
+                    None => {
+                        return Err(ElabError::NoInstance {
+                            class: class_name.clone(),
+                            ty: head_name,
+                            span: rdecl.span.clone(),
+                        });
+                    }
                 }
             }
-            elaborate_view_or_let(env, globals, num_values, numeric_env, rdecl)
+            // `where C a` supplies the resolved dictionary under the fixed
+            // surface name `d` (`51 §4` — the illustrative name the spec
+            // itself uses), so the body can project its fields (`d.leq`,
+            // `RExpr::RProj`) exactly as if it had been passed explicitly —
+            // ordinary implicit-dictionary insertion, no second mechanism
+            // (AC2, reflect-don't-extend). Scoped to THIS decl only:
+            // save/restore any prior `d` binding around the call so it
+            // never leaks to sibling decls.
+            let saved_d = dict_id.map(|id| globals.insert("d".to_string(), id));
+            let result = elaborate_view_or_let(env, globals, num_values, numeric_env, class_env, rdecl);
+            if dict_id.is_some() {
+                match saved_d.unwrap() {
+                    Some(prev) => { globals.insert("d".to_string(), prev); }
+                    None => { globals.remove("d"); }
+                }
+            }
+            result
         }
         RDeclKind::Let => {
-            elaborate_view_or_let(env, globals, num_values, numeric_env, rdecl)
+            elaborate_view_or_let(env, globals, num_values, numeric_env, class_env, rdecl)
         }
         RDeclKind::Prove => elaborate_prove(env, globals, num_values, numeric_env, rdecl),
         RDeclKind::Law { param, fields } => {
@@ -828,18 +989,20 @@ pub fn init_class_env(
 
 // ---- typeclass elaboration (`33 §5`, `39 §6`) --------------------------------
 
-/// Sigma chain type for field types `[T1, T2, …, Tn]` elaborated under a
-/// context where the class param is Var(0).
+/// Sigma chain type for field types `[T1, T2, …, Tn]`.
 ///
-/// Chain: `Sigma(T1, Sigma(T2_shifted, …Sigma(Tn_shifted, RecordNil)…))`.
-/// Ti is shifted by i positions (Ti is the first arg of the outer Sigma;
-/// the Sigma introduces one more binder above each subsequent Ti).
+/// Chain: `Sigma(T1, Sigma(T2, …Sigma(Tn, RecordNil)…))`. Each `Ti` MUST
+/// already be elaborated in the correct nested context — `T0` in `[a?]`,
+/// `T1` in `[a?, T0]`, …, `Ti` in `[a?, T0, …, T_{i-1}]` (a real Σ-telescope,
+/// `33 §5.2`: a later field's type may reference an earlier field's VALUE
+/// as `Var(0)`, e.g. `refl : (x:a) -> IsTrue (eq x x)`). No `weaken` is
+/// needed here — placing `Ti` as the head of `Sigma(Ti, rest)` is *exactly*
+/// what "one more binder than `rest`'s context" requires, and that's
+/// precisely the context `Ti` was elaborated in.
 fn build_sigma_chain(field_types: &[Term], record_nil_id: GlobalId) -> Term {
-    let n = field_types.len();
     let mut acc = Term::const_(record_nil_id, vec![]);
-    for i in (0..n).rev() {
-        let ti_shifted = weaken(&field_types[i], i as i64);
-        acc = Term::sigma(ti_shifted, acc);
+    for t in field_types.iter().rev() {
+        acc = Term::sigma(t.clone(), acc);
     }
     acc
 }
@@ -884,7 +1047,12 @@ fn elab_class_decl(
     let span = &rdecl.span;
     let has_param = param.is_some();
 
-    // Elaborate each field type in a context with the param (if any).
+    // Elaborate each field type incrementally: a real Σ-telescope (`33
+    // §5.2`) where a later field's type may reference an EARLIER field's
+    // value (a law like `refl : (x:a) -> IsTrue (eq x x)` refers to the
+    // `eq` op field). Push each field's OWN elaborated type onto `cx.ctx`
+    // before elaborating the next, so `resolve.rs`'s bound `RVarTy`
+    // reference for that field name lines up with the real kernel depth.
     let field_types: Vec<Term> = {
         let mut cx = ElabCtx::new(env, globals, num_values, numeric_env);
         if has_param {
@@ -893,7 +1061,9 @@ fn elab_class_decl(
         let mut tys = Vec::new();
         for (_, fty) in fields {
             let t = elab_type(&mut cx, fty)?;
-            tys.push(cx.metas.zonk_term(&t));
+            let t = cx.metas.zonk_term(&t);
+            cx.ctx.push(t.clone());
+            tys.push(t);
         }
         tys
     };
@@ -936,6 +1106,7 @@ fn elab_class_decl(
         ClassInfo {
             param: param.clone(),
             field_names: fields.iter().map(|(n, _)| n.clone()).collect(),
+            field_types: field_types.clone(),
             type_id: id,
             kind,
             module_id: class_env.current_module,
@@ -949,6 +1120,49 @@ fn elab_class_decl(
         foreign_binding: None,
         temporal_obligations: vec![],
     })
+}
+
+/// Compute an instance's field VALUES, in class-declaration order, each
+/// **checked** (not blindly inferred) against its properly-substituted
+/// expected type (`33 §5.3` Σ-Intro re-check) — the load-bearing mechanism
+/// for AC3 (`ES4-classes`): a law field's declared type (e.g.
+/// `refl : (x:a) -> IsTrue (eq x x)`) is a Σ-telescope term referencing the
+/// class param and every EARLIER field by position (`ClassInfo::field_types`,
+/// `elab_class_decl`). For THIS instance, substitute the concrete head type
+/// for the param and every ALREADY-COMPUTED field value for its slot
+/// (`ken_kernel::subst::subst_tel`, outermost-first) to get field `i`'s
+/// concrete expected type, then `check` the provided expression against it.
+/// A postulated/holed/wrong-shaped proof fails right here (kernel re-check),
+/// never silently accepted — the whole "laws PROVED, not postulated" gate.
+fn compute_ordered_field_values(
+    cx: &mut ElabCtx,
+    class_env: &ClassEnv,
+    class_name: &str,
+    head_core: &Term,
+    fields: &[(String, RExpr)],
+    span: &Span,
+) -> Result<Vec<Term>, ElabError> {
+    let (field_names, field_types, has_param) = {
+        let ci = class_env.classes.get(class_name).ok_or_else(|| {
+            ElabError::UnresolvedCon { name: class_name.to_string(), span: span.clone() }
+        })?;
+        (ci.field_names.clone(), ci.field_types.clone(), ci.param.is_some())
+    };
+    let mut values: Vec<Term> = Vec::new();
+    for (i, fname) in field_names.iter().enumerate() {
+        let pos = fields.iter().position(|(n, _)| n == fname).ok_or_else(|| {
+            ElabError::Internal(format!("instance missing field '{}'", fname))
+        })?;
+        let mut args: Vec<Term> = Vec::new();
+        if has_param {
+            args.push(head_core.clone());
+        }
+        args.extend(values.iter().cloned());
+        let expected = ken_kernel::subst::subst_tel(&field_types[i], &args);
+        let v = check(cx, &fields[pos].1, &expected, span)?;
+        values.push(cx.metas.zonk_term(&v));
+    }
+    Ok(values)
 }
 
 /// Elaborate `instance C HeadType [where C1 T1 ; …] { f1 = e1 ; … }`.
@@ -973,11 +1187,11 @@ fn elab_instance_decl(
     let span = &rdecl.span;
 
     // ---- look up class ---------------------------------------------------
-    let (class_module, class_type_id, class_kind, field_names) = {
+    let (class_module, class_type_id, class_kind) = {
         let ci = class_env.classes.get(class_name).ok_or_else(|| {
             ElabError::UnresolvedCon { name: class_name.to_string(), span: span.clone() }
         })?;
-        (ci.module_id, ci.type_id, ci.kind.clone(), ci.field_names.clone())
+        (ci.module_id, ci.type_id, ci.kind.clone())
     };
 
     let head_name = head_type_name(head_type);
@@ -1017,7 +1231,7 @@ fn elab_instance_decl(
     // ---- build instance type --------------------------------------------
     // App(class_type, head) if parameterized, else class_type directly.
     let instance_ty = if class_env.classes.get(class_name).map(|ci| ci.param.is_some()).unwrap_or(false) {
-        Term::app(Term::const_(class_type_id, vec![]), head_core)
+        Term::app(Term::const_(class_type_id, vec![]), head_core.clone())
     } else {
         Term::const_(class_type_id, vec![])
     };
@@ -1074,25 +1288,9 @@ fn elab_instance_decl(
         // declare_recursive_group so sct_check runs on the group (`39 §6.4`).
         // Body has no App(Const(own_id), ...) → edges.is_empty() → sct_check
         // accepts. Mutual/indirect cycles are not detected here (see above).
-        let field_vals: Vec<Term> = {
-            let mut cx = ElabCtx::new(env, globals, num_values, numeric_env);
-            let mut vals = Vec::new();
-            for (_, rexpr) in fields {
-                let (v, _ty) = infer(&mut cx, rexpr)?;
-                vals.push(cx.metas.zonk_term(&v));
-            }
-            vals
-        };
         let ordered_vals: Vec<Term> = {
-            let mut out = Vec::new();
-            for fname in &field_names {
-                let pos = fields.iter().position(|(n, _)| n == fname)
-                    .ok_or_else(|| ElabError::Internal(
-                        format!("instance missing field '{}'", fname)
-                    ))?;
-                out.push(field_vals[pos].clone());
-            }
-            out
+            let mut cx = ElabCtx::new(env, globals, num_values, numeric_env);
+            compute_ordered_field_values(&mut cx, class_env, class_name, &head_core, fields, span)?
         };
         let pair_chain = build_pair_chain(&ordered_vals, class_env.record_nil_val_id);
         let inst_ty = instance_ty.clone();
@@ -1105,25 +1303,9 @@ fn elab_instance_decl(
         ids[0]
     } else {
         // No constraints: declare_def path (no recursion possible, SCT not needed).
-        let field_vals: Vec<Term> = {
-            let mut cx = ElabCtx::new(env, globals, num_values, numeric_env);
-            let mut vals = Vec::new();
-            for (_, rexpr) in fields {
-                let (v, _ty) = infer(&mut cx, rexpr)?;
-                vals.push(cx.metas.zonk_term(&v));
-            }
-            vals
-        };
         let ordered_vals: Vec<Term> = {
-            let mut out = Vec::new();
-            for fname in &field_names {
-                let pos = fields.iter().position(|(n, _)| n == fname)
-                    .ok_or_else(|| ElabError::Internal(
-                        format!("instance missing field '{}'", fname)
-                    ))?;
-                out.push(field_vals[pos].clone());
-            }
-            out
+            let mut cx = ElabCtx::new(env, globals, num_values, numeric_env);
+            compute_ordered_field_values(&mut cx, class_env, class_name, &head_core, fields, span)?
         };
         let pair_chain = build_pair_chain(&ordered_vals, class_env.record_nil_val_id);
         declare_def(env, vec![], instance_ty, pair_chain)
@@ -1285,6 +1467,7 @@ fn elaborate_view_or_let(
     globals: &mut HashMap<String, GlobalId>,
     num_values: &mut HashMap<GlobalId, NumericLitVal>,
     numeric_env: &NumericEnv,
+    class_env: &ClassEnv,
     rdecl: &RDecl,
 ) -> Result<ElabResult, ElabError> {
     // Check for implicit ensures from a return-type refinement (`22 §2.1`).
@@ -1293,10 +1476,10 @@ fn elaborate_view_or_let(
         .is_some();
     if rdecl.requires.is_empty() && rdecl.ensures.is_empty() && !has_refine_return {
         // V0 path: no spec clauses and no return-type refinement
-        return elaborate_v0(env, globals, num_values, numeric_env, rdecl);
+        return elaborate_v0(env, globals, num_values, numeric_env, class_env, rdecl);
     }
     // V1 path: has requires/ensures or implicit return-type refinement obligation
-    elaborate_view_with_spec(env, globals, num_values, numeric_env, rdecl)
+    elaborate_view_with_spec(env, globals, num_values, numeric_env, class_env, rdecl)
 }
 
 /// Extract the predicate from the innermost refinement in a resolved type.
@@ -1316,6 +1499,7 @@ fn elaborate_v0(
     globals: &mut HashMap<String, GlobalId>,
     num_values: &mut HashMap<GlobalId, NumericLitVal>,
     numeric_env: &NumericEnv,
+    class_env: &ClassEnv,
     rdecl: &RDecl,
 ) -> Result<ElabResult, ElabError> {
     // A self-recursive view/let (body mentions its own name) must be admitted
@@ -1323,10 +1507,10 @@ fn elaborate_v0(
     // resolves — `declare_def` allocates the id only after the body is built,
     // which is too late for a self-reference. Route to the recursive path.
     if rexpr_mentions_name(&rdecl.body, &rdecl.name) {
-        return elaborate_recursive_view(env, globals, num_values, numeric_env, rdecl);
+        return elaborate_recursive_view(env, globals, num_values, numeric_env, class_env, rdecl);
     }
     let (ty_core, body_core, body_obligations) = {
-        let mut cx = ElabCtx::new(env, globals, num_values, numeric_env);
+        let mut cx = ElabCtx::new(env, globals, num_values, numeric_env).with_classes(class_env);
         let (body_raw, ty_raw) = if let Some(ty) = &rdecl.ty {
             let ty_c = elab_type(&mut cx, ty)?;
             let body_c = check(&mut cx, &rdecl.body, &ty_c, &rdecl.span)?;
@@ -1383,6 +1567,7 @@ fn elaborate_recursive_view(
     globals: &mut HashMap<String, GlobalId>,
     num_values: &mut HashMap<GlobalId, NumericLitVal>,
     numeric_env: &NumericEnv,
+    class_env: &ClassEnv,
     rdecl: &RDecl,
 ) -> Result<ElabResult, ElabError> {
     // 1. Elaborate the declared type (recursive views are annotated).
@@ -1406,7 +1591,7 @@ fn elaborate_recursive_view(
 
     // 3. Elaborate the body (self-ref resolves to `id` via globals).
     let (body_core, body_obligations) = {
-        let mut cx = ElabCtx::new(env, globals, num_values, numeric_env);
+        let mut cx = ElabCtx::new(env, globals, num_values, numeric_env).with_classes(class_env);
         let body_c = check(&mut cx, &rdecl.body, &ty_core, &rdecl.span)?;
         let obligations = std::mem::take(&mut cx.obligations);
         (cx.metas.zonk_term(&body_c), obligations)
@@ -1468,6 +1653,7 @@ fn rexpr_mentions_name(expr: &RExpr, name: &str) -> bool {
             rexpr_mentions_name(scrut, name)
                 || arms.iter().any(|a| rexpr_mentions_name(&a.body, name))
         }
+        RExpr::RProj(e, _, _) => rexpr_mentions_name(e, name),
     }
 }
 
@@ -1477,6 +1663,7 @@ fn elaborate_view_with_spec(
     globals: &mut HashMap<String, GlobalId>,
     num_values: &mut HashMap<GlobalId, NumericLitVal>,
     numeric_env: &NumericEnv,
+    class_env: &ClassEnv,
     rdecl: &RDecl,
 ) -> Result<ElabResult, ElabError> {
     let omega = Term::omega(Level::Zero);
@@ -1493,7 +1680,7 @@ fn elaborate_view_with_spec(
         if is_recursive {
             // Recursive: elab the carrier type, pre-admit, then elab the body.
             let carrier_ty = {
-                let mut cx = ElabCtx::new(env, globals, num_values, numeric_env);
+                let mut cx = ElabCtx::new(env, globals, num_values, numeric_env).with_classes(class_env);
                 let ty = rdecl.ty.as_ref().ok_or_else(|| ElabError::Internal(
                     "recursive view with spec clauses requires a type annotation".into(),
                 ))?;
@@ -1508,14 +1695,14 @@ fn elaborate_view_with_spec(
             });
             globals.insert(rdecl.name.clone(), id);
             let body = {
-                let mut cx = ElabCtx::new(env, globals, num_values, numeric_env);
+                let mut cx = ElabCtx::new(env, globals, num_values, numeric_env).with_classes(class_env);
                 let body_c = check(&mut cx, &rdecl.body, &carrier_ty, &rdecl.span)?;
                 cx.metas.zonk_term(&body_c)
             };
             (body, carrier_ty, Some(id))
         } else {
             // Non-recursive: original one-context flow.
-            let mut cx = ElabCtx::new(env, globals, num_values, numeric_env);
+            let mut cx = ElabCtx::new(env, globals, num_values, numeric_env).with_classes(class_env);
             if let Some(ty) = &rdecl.ty {
                 let ty_c = elab_type(&mut cx, ty)?;
                 let body_c = check(&mut cx, &rdecl.body, &ty_c, &rdecl.span)?;
@@ -1538,7 +1725,7 @@ fn elaborate_view_with_spec(
     let mut req_cores: Vec<Term> = Vec::new();
     for req in &rdecl.requires {
         let phi_core = elab_in_ctx_at_omega(
-            env, globals, num_values, numeric_env, &param_ctx, req, &omega, &rdecl.span,
+            env, globals, num_values, numeric_env, class_env, &param_ctx, req, &omega, &rdecl.span,
         )?;
         req_cores.push(phi_core);
     }
@@ -1563,7 +1750,7 @@ fn elaborate_view_with_spec(
     let mut obl_counter = 0u32;
     for ens in &all_ensures {
         let psi_core = elab_in_ctx_at_omega(
-            env, globals, num_values, numeric_env, &ens_ctx, ens, &omega, &rdecl.span,
+            env, globals, num_values, numeric_env, class_env, &ens_ctx, ens, &omega, &rdecl.span,
         )?;
         // goal = ψ[body_inner/result]: result = Var(0) in ens_ctx, substitute body
         let goal_open = subst0(&psi_core, &body_inner);
@@ -1779,12 +1966,13 @@ fn elab_in_ctx_at_omega(
     globals: &HashMap<String, GlobalId>,
     num_values: &mut HashMap<GlobalId, NumericLitVal>,
     numeric_env: &NumericEnv,
+    class_env: &ClassEnv,
     ctx: &Context,
     expr: &RExpr,
     omega: &Term,
     span: &Span,
 ) -> Result<Term, ElabError> {
-    let mut cx = ElabCtx::new(env, globals, num_values, numeric_env);
+    let mut cx = ElabCtx::new(env, globals, num_values, numeric_env).with_classes(class_env);
     // Populate cx.ctx from the snapshot
     for ty in &ctx.types {
         cx.ctx.push(ty.clone());

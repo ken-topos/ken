@@ -134,6 +134,8 @@ pub enum RExpr {
         arms: Vec<RMatchArm>,
         span: Span,
     },
+    /// `e.field` — Σ-record field projection (`33 §5.2` η).
+    RProj(Box<RExpr>, String, Span),
 }
 
 impl RExpr {
@@ -149,6 +151,7 @@ impl RExpr {
             | RExpr::ROld(_, s)
             | RExpr::RNumLit(_, s)
             | RExpr::RStr(_, s)
+            | RExpr::RProj(_, _, s)
             | RExpr::RBinOp(_, _, _, s) => s,
             RExpr::RMatch { span, .. } => span,
         }
@@ -485,17 +488,23 @@ pub fn resolve_decl(decl: &Decl) -> Result<RDecl, ElabError> {
         }
 
         Decl::ClassDecl { name, param, fields, span } => {
+            // Fields form a real Σ-telescope (`33 §5.2`): a later field's
+            // type may reference an EARLIER field by name (a law like
+            // `refl : (x:a) -> IsTrue (eq x x)` refers to the `eq` op
+            // field declared above it). Push each field name into scope
+            // right after resolving it, so it's a bound `RVarTy`/`RVar`
+            // reference (matching the Sigma-chain's own binder depth) for
+            // every subsequent field — never a stray global lookup.
             let mut scope = Scope::new();
             if let Some(p) = param {
                 scope.push(p);
             }
-            let resolved_fields = fields
-                .iter()
-                .map(|(fname, ty)| {
-                    let rty = resolve_type(&mut scope, ty)?;
-                    Ok((fname.clone(), rty))
-                })
-                .collect::<Result<Vec<_>, _>>()?;
+            let mut resolved_fields = Vec::new();
+            for (fname, ty) in fields {
+                let rty = resolve_type(&mut scope, ty)?;
+                resolved_fields.push((fname.clone(), rty));
+                scope.push(fname);
+            }
             Ok(RDecl {
                 name: name.clone(),
                 ty: None,
@@ -663,6 +672,11 @@ fn resolve_expr_ctx(scope: &mut Scope, expr: &Expr, ctx: PropCtx) -> Result<RExp
             let rl = resolve_expr_ctx(scope, l, ctx)?;
             let rr = resolve_expr_ctx(scope, r, ctx)?;
             Ok(RExpr::RBinOp(*op, Box::new(rl), Box::new(rr), span.clone()))
+        }
+
+        Expr::EProj(e, field, span) => {
+            let re = resolve_expr_ctx(scope, e, ctx)?;
+            Ok(RExpr::RProj(Box::new(re), field.clone(), span.clone()))
         }
 
         Expr::EMatch { scrut, arms, span } => {

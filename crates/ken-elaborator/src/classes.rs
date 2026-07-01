@@ -6,7 +6,7 @@
 //! populates and `ElabEnv` carries.
 
 use std::collections::HashMap;
-use ken_kernel::GlobalId;
+use ken_kernel::{GlobalId, Term};
 
 /// Whether a class is a property class (Ω-sorted Σ-chain, coherence-free via
 /// Ω-PI) or a structure class (Type-sorted, canonical-one-per-head rule).
@@ -29,6 +29,14 @@ pub struct ClassInfo {
     pub param: Option<String>,
     /// Field names in declaration order.
     pub field_names: Vec<String>,
+    /// Field types in declaration order — a real Σ-telescope (`33 §5.2`):
+    /// `field_types[i]` is a kernel `Term` valid in context
+    /// `[a?, field_types[0], …, field_types[i-1]]` (the class param, if
+    /// any, then every EARLIER field's type, outermost/highest-index
+    /// first). Used to compute each instance field's properly-substituted
+    /// expected type (`ken_kernel::subst::subst_tel`) and to drive `.field`
+    /// projection (`elab.rs`'s `RExpr::RProj`).
+    pub field_types: Vec<Term>,
     /// Kernel `GlobalId` of the class's Σ-record type (`C : Type → sort`).
     pub type_id: GlobalId,
     /// Whether this is a property or structure class (`33 §5.1`).

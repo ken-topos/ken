@@ -1129,7 +1129,31 @@ impl Parser {
         }
     }
 
+    /// Parse an atom, then zero or more postfix `.field` projections
+    /// (`33 §5.2` η — Σ-record field access on a class dictionary value).
+    /// A `ConId`-headed atom already greedily consumed any `.segment`
+    /// chain as part of a qualified module reference (`parse_dotted`,
+    /// inside the `ConId` arm below), so this loop finds nothing left to
+    /// consume there — it only fires for atoms that didn't already eat
+    /// their own dots (`d.leq`, `(sort xs).leq`, etc).
     fn parse_atom_expr(&mut self) -> Result<Expr, ElabError> {
+        let mut e = self.parse_atom_expr_base()?;
+        while matches!(self.peek(), Token::Dot) && matches!(self.lookahead(1), Token::Ident(_)) {
+            self.advance(); // consume '.'
+            let (field, field_span) = match self.peek().clone() {
+                Token::Ident(s) => {
+                    self.advance();
+                    (s, self.tokens[self.pos - 1].1.clone())
+                }
+                _ => unreachable!("guarded by lookahead above"),
+            };
+            let span = Span::new(e.span().start, field_span.end);
+            e = Expr::EProj(Box::new(e), field, span);
+        }
+        Ok(e)
+    }
+
+    fn parse_atom_expr_base(&mut self) -> Result<Expr, ElabError> {
         use crate::ast::NumLit;
         let start = self.peek_span().start;
         match self.peek().clone() {
@@ -1215,6 +1239,7 @@ impl Parser {
                         Expr::EMatch { scrut, arms, span: _ } => {
                             Expr::EMatch { scrut, arms, span }
                         }
+                        Expr::EProj(e, field, _) => Expr::EProj(e, field, span),
                     },
                 })
             }
