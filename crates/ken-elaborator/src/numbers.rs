@@ -176,7 +176,7 @@ pub fn register_numeric_env(
     macro_rules! reg_cmpop {
         ($name:expr, $ty_id:expr, $bool_id:expr) => {{
             let ty_const = Term::const_($ty_id, vec![]);
-            let bool_const = Term::const_($bool_id, vec![]);
+            let bool_const = Term::indformer($bool_id, vec![]);
             let op_ty = Term::pi(
                 ty_const.clone(),
                 Term::pi(ty_const.clone(), bool_const.clone()),
@@ -286,7 +286,7 @@ pub fn register_numeric_env(
 
     // ---- Bool ops ----
     {
-        let bool_ty = Term::const_(bool_id, vec![]);
+        let bool_ty = Term::indformer(bool_id, vec![]);
         let not_ty  = Term::pi(bool_ty.clone(), bool_ty.clone());
         let _not_id = declare_primitive(env, vec![], not_ty, PrimReduction::Op { symbol: "not_bool" })
             .map_err(|e| ElabError::Internal(format!("prim not_bool failed: {}", e)))?;

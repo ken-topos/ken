@@ -50,10 +50,13 @@ fn setup_combinators(env: &mut ElabEnv) {
          match n { Zero => Nil a ; Suc m => match step seed { None => Nil a ; Some p => match p { MkProd x y => Cons a x (unfoldUpTo a s step m y) } } }",
     )
     .expect("unfoldUpTo elaborates");
-    // `insert : (a → a → OrdResult) → a → List a → List a` — insertion helper.
+    // `insert : (a → a → Bool) → a → List a → List a` — insertion helper.
+    // `leq x h` decides whether `x` goes before `h` (ES2: `Bool` is real
+    // matchable data, `data Bool = True | False`; the former `OrdResult`
+    // 3-way branch workaround is retired, `30 §6`/ES2).
     env.elaborate_decl(
-        "view insert (a : Type) (cmp : a → a → OrdResult) (x : a) (xs : List a) : List a = \
-         match xs { Nil => Cons a x (Nil a) ; Cons h t => match cmp x h { Lt => Cons a x (Cons a h t) ; Eq => Cons a x (Cons a h t) ; Gt => Cons a h (insert a cmp x t) } }",
+        "view insert (a : Type) (leq : a → a → Bool) (x : a) (xs : List a) : List a = \
+         match xs { Nil => Cons a x (Nil a) ; Cons h t => match leq x h { True => Cons a x (Cons a h t) ; False => Cons a h (insert a leq x t) } }",
     )
     .expect("insert elaborates");
 }
@@ -405,14 +408,14 @@ fn structurally_equal_lists_share_slot() {
 fn sort_emits_issorted_and_perm() {
     let mut env = mk_env();
     setup_combinators(&mut env); // declares `insert` (the sort helper)
-                                 // `sort : (a → a → OrdResult) → List a → { ys | isSorted a ys ∧ Perm a ys xs }`.
-                                 // The `cmp` parameter is a buildable-now spelling of `Ord a` (the `where`
+                                 // `sort : (a → a → Bool) → List a → { ys | isSorted a ys ∧ Perm a ys xs }`.
+                                 // The `leq` parameter is a buildable-now spelling of `Ord a` (the `where
                                  // Ord a` constraint + constraint resolution is L3b-gated, `37 §6`).
     let res = env
         .elaborate_decl_v1(
-            "view sort (a : Type) (cmp : a → a → OrdResult) (xs : List a) : \
+            "view sort (a : Type) (leq : a → a → Bool) (xs : List a) : \
              { ys : List a | And (isSorted a ys) (Perm a ys xs) } = \
-             match xs { Nil => Nil a ; Cons h t => insert a cmp h (sort a cmp t) }",
+             match xs { Nil => Nil a ; Cons h t => insert a leq h (sort a leq t) }",
         )
         .expect("sort elaborates (recursive + refinement)");
     // SCT accepted: `sort` upgraded to transparent (recursion on `t`, a sub-term

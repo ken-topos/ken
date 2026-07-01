@@ -8,7 +8,8 @@ use std::collections::HashMap;
 
 use ken_kernel::{
     check as kernel_check,
-    declare_def, declare_postulate, declare_recursive_group,
+    declare_def, declare_postulate, declare_primitive, declare_recursive_group,
+    env::PrimReduction,
     infer as kernel_infer,
     inductive::{peel_app, recursive_args},
     sct::sct_check,
@@ -464,8 +465,19 @@ fn elab_num_lit_infer(
 ) -> Result<(Term, Term), ElabError> {
     let (val, type_id) = num_lit_default_type(lit, cx.numeric_env);
     let ty_term = Term::const_(type_id, vec![]);
-    let postulate_id = declare_postulate(cx.env, vec![], ty_term.clone())
-        .map_err(|e| ElabError::KernelRejected { error: e, span: span.clone() })?;
+    // ES2: RE-CLASS declare_postulate -> declare_primitive. A literal's value
+    // is an audited primitive constant (its content is the number itself),
+    // not an assumed axiom — `PrimReduction::Op` is reused as the id-kind
+    // marker only; `eval`'s `num_values` side-table lookup (`ken-interp`)
+    // intercepts before any symbol dispatch, so the symbol is never actually
+    // invoked.
+    let postulate_id = declare_primitive(
+        cx.env,
+        vec![],
+        ty_term.clone(),
+        PrimReduction::Op { symbol: "literal" },
+    )
+    .map_err(|e| ElabError::KernelRejected { error: e, span: span.clone() })?;
     cx.num_values.insert(postulate_id, val);
     Ok((Term::const_(postulate_id, vec![]), ty_term))
 }
@@ -507,8 +519,15 @@ fn elab_num_lit_checked(
             _ => None,
         };
         if let Some(val) = val_opt {
-            let postulate_id = declare_postulate(cx.env, vec![], exp_wh.clone())
-                .map_err(|e| ElabError::KernelRejected { error: e, span: span.clone() })?;
+            // ES2: RE-CLASS declare_postulate -> declare_primitive (see
+            // `elab_num_lit_infer`'s comment — same rationale).
+            let postulate_id = declare_primitive(
+                cx.env,
+                vec![],
+                exp_wh.clone(),
+                PrimReduction::Op { symbol: "literal" },
+            )
+            .map_err(|e| ElabError::KernelRejected { error: e, span: span.clone() })?;
             cx.num_values.insert(postulate_id, val);
             return Ok(Term::const_(postulate_id, vec![]));
         }
@@ -545,8 +564,15 @@ fn elab_str_lit(
     if let Some(exp) = expected {
         unify_types(&mut cx.metas, exp, &str_ty);
     }
-    let lit_id = declare_postulate(cx.env, vec![], str_ty.clone())
-        .map_err(|e| ElabError::KernelRejected { error: e, span: span.clone() })?;
+    // ES2: RE-CLASS declare_postulate -> declare_primitive (same rationale as
+    // `elab_num_lit_infer`).
+    let lit_id = declare_primitive(
+        cx.env,
+        vec![],
+        str_ty.clone(),
+        PrimReduction::Op { symbol: "literal" },
+    )
+    .map_err(|e| ElabError::KernelRejected { error: e, span: span.clone() })?;
     cx.num_values.insert(lit_id, NumericLitVal::Str(s.to_owned()));
     Ok((Term::const_(lit_id, vec![]), str_ty))
 }
@@ -634,7 +660,7 @@ fn elab_binop(
                 }
             })?;
             let rhs_core = check(cx, rhs, &lhs_ty_wh, span)?;
-            let bool_ty = Term::const_(cx.numeric_env.bool_id, vec![]);
+            let bool_ty = Term::indformer(cx.numeric_env.bool_id, vec![]);
             let op_term = Term::const_(eq_entry.op_id, vec![]);
             let applied = Term::app(Term::app(op_term, lhs_core), rhs_core);
             Ok((applied, bool_ty))
