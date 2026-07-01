@@ -23,6 +23,7 @@ pub mod protocol;
 pub mod error;
 pub mod extract;
 mod lexer;
+pub mod modules;
 pub mod numbers;
 pub mod parser;
 pub mod prelude;
@@ -95,6 +96,11 @@ pub struct ElabEnv {
     /// The Lc typeclass environment: class/instance registry + structural
     /// postulates (`RecordNil`, `record_nil_val`). Initialized in `empty()`.
     pub class_env: ClassEnv,
+    /// Module/import/visibility bookkeeping (`33 §3-4`, ES3-build) —
+    /// persists the file-level (root) import scope and every elaborated
+    /// module's `pub` export table across separate `elaborate_*` calls.
+    /// Purely a surface-layer concern: never touches `env`/`Σ`.
+    pub module_state: modules::ModuleState,
 }
 
 impl ElabEnv {
@@ -135,6 +141,7 @@ impl ElabEnv {
             prelude_env: prelude::empty_prelude_env(),
             // placeholder; replaced after prelude registration below.
             class_env: classes::ClassEnv::sentinel(),
+            module_state: modules::ModuleState::default(),
         };
         // L3 prelude: Peano `Nat` (replaces the placeholder postulate) + the
         // collection inductives + Ω constants (`37`). Registered via the landed
@@ -177,19 +184,12 @@ impl ElabEnv {
                 span: Span::zero(),
             });
         }
-        let rdecl = resolve::resolve_decl(&decls[0])?;
-        let result = elab::elaborate_rdecl_v1(
-            &mut self.env,
-            &mut self.globals,
-            &mut self.num_values,
-            &self.numeric_env,
-            &mut self.class_env,
-            &rdecl,
-        )?;
-        if let Some(fb) = &result.foreign_binding {
-            self.foreign_env.register(result.name.clone(), fb.clone());
-        }
-        Ok(result.def_id)
+        let results = modules::expand_and_elaborate(self, &decls)?;
+        results
+            .into_iter()
+            .last()
+            .map(|r| r.def_id)
+            .ok_or_else(|| ElabError::Internal("declaration produced no definition (bare import?)".into()))
     }
 
     /// Elaborate a V1/L1 declaration, returning obligations alongside the id.
@@ -201,46 +201,26 @@ impl ElabEnv {
                 span: Span::zero(),
             });
         }
-        let rdecl = resolve::resolve_decl(&decls[0])?;
-        let result = elab::elaborate_rdecl_v1(
-            &mut self.env,
-            &mut self.globals,
-            &mut self.num_values,
-            &self.numeric_env,
-            &mut self.class_env,
-            &rdecl,
-        )?;
-        // Register foreign bindings in the foreign env (AC1/AC5 tests).
-        if let Some(fb) = &result.foreign_binding {
-            self.foreign_env.register(result.name.clone(), fb.clone());
-        }
-        Ok(result)
+        let results = modules::expand_and_elaborate(self, &decls)?;
+        results
+            .into_iter()
+            .last()
+            .ok_or_else(|| ElabError::Internal("declaration produced no definition (bare import?)".into()))
     }
 
     /// Elaborate zero or more declarations from source, in order.
     ///
     /// Each declaration is elaborated and registered in `self.env` before the
     /// next is processed, so later declarations may refer to earlier ones.
-    /// Returns the `GlobalId` of every successfully elaborated declaration.
+    /// `module`/`import`/`use`/`pub` (`33 §3-4`) are resolved away here —
+    /// they contribute zero or more `GlobalId`s (a bare `import` contributes
+    /// none; a `module { … }` block contributes one per inner decl) but
+    /// never a kernel-visible module concept. Returns the `GlobalId` of
+    /// every successfully elaborated declaration.
     pub fn elaborate_file(&mut self, src: &str) -> Result<Vec<GlobalId>, ElabError> {
         let decls = parser::parse_decls(src)?;
-        let mut ids = Vec::with_capacity(decls.len());
-        for decl in &decls {
-            let rdecl = resolve::resolve_decl(decl)?;
-            let result = elab::elaborate_rdecl_v1(
-                &mut self.env,
-                &mut self.globals,
-                &mut self.num_values,
-                &self.numeric_env,
-                &mut self.class_env,
-                &rdecl,
-            )?;
-            if let Some(fb) = &result.foreign_binding {
-                self.foreign_env.register(result.name.clone(), fb.clone());
-            }
-            ids.push(result.def_id);
-        }
-        Ok(ids)
+        let results = modules::expand_and_elaborate(self, &decls)?;
+        Ok(results.into_iter().map(|r| r.def_id).collect())
     }
 
     /// Try to discharge an obligation hole with a certificate term.

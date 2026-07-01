@@ -65,6 +65,11 @@ pub enum ElabError {
     /// chain — i.e. search would not terminate (`39 §6.4`, `17 §4.2`).
     /// Detected at admission time; never a search-time hang.
     NonTerminatingInstances { span: Span },
+    /// A `use`-open ambiguity (`33 §3.3`, ES3-build): two opened modules
+    /// export the same unqualified name binding distinct declarations.
+    /// `sources` names every colliding qualified origin (the reject must
+    /// name both, never pick silently).
+    AmbiguousReference { name: String, sources: Vec<String>, span: Span },
     /// Catch-all for internal elaborator errors.
     Internal(String),
 }
@@ -147,6 +152,15 @@ impl fmt::Display for ElabError {
                  reified resolution group (cyclic or non-decreasing)",
                 span.start, span.end,
             ),
+            ElabError::AmbiguousReference { name, sources, span } => {
+                let mut sorted = sources.clone();
+                sorted.sort();
+                write!(
+                    f,
+                    "ambiguous reference to '{}' at {}-{}: resolves to both {} — qualify to disambiguate",
+                    name, span.start, span.end, sorted.join(" and "),
+                )
+            }
             ElabError::Internal(s) => write!(f, "internal error: {}", s),
         }
     }
