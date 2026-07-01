@@ -22,7 +22,7 @@ a property, get back a verdict an agent can act on without reading the kernel.
 
 ## What's built
 
-The implementation is underway (~37,800 lines of Rust across 6 crates,
+The implementation is underway (~42,400 lines of Rust across 6 crates,
 multi-agent federation). **Bold** marks are covered by landed kernel code;
 *draft* marks have a written spec whose implementation is in progress or
 not started; *deferred* marks are post-verification-loop.
@@ -31,12 +31,13 @@ not started; *deferred* marks are post-verification-loop.
 |---|---|---|
 | **Kernel trust-root (WS-K)** | **complete (K1→K-api)** | Π, Σ, inductive families, predicative universes, observational `Eq`/`cast`/`Ω`/quotients, W-style eliminators (K1.5), decidable conversion (NbE + SCT), the stable TCB API — the auditable trust boundary |
 | **Verification spine (WS-V)** | **complete (V0→V4, T1)** | V0 elaborator, V1 spec syntax (`requires`/`ensures`/four-way status), V2 obligation generation (body-as-motive extraction), V3 automated prover (IPC tactic w/ kernel-re-checked certificates; Z3 oracle spec'd, not yet wired), V4 diagnostics (countermodels, typed holes, three-region decomposition), T1 machine-readable agent protocol |
-| **Surface language (WS-L)** | **core landed (L1–L7, L3b)** | L1 numeric types (`Int`, `Decimal`, fixed-width), L2 sum types + `match` + exhaustiveness + refinements, L3 strings & collections, L3b user-type instance elaboration (DecEq/Ord), L5 effects (interaction-tree), L6 `Bytes` + binary I/O, L7 foreign FFI + trust boundary |
+| **Surface language (WS-L)** | **core landed (L1–L7, L3b)** | L1 numeric types (`Int`, `Decimal`, fixed-width), L2 sum types + `match` + exhaustiveness + refinements (nested constructor patterns via pattern-matrix compilation), L3 strings & collections, L3b user-type instance elaboration (DecEq/Ord), L5 effects (interaction-tree, Console I/O driver runs end-to-end), L6 `Bytes` + binary I/O, L7 foreign FFI + trust boundary |
 | **Typeclasses (Lc)** | **landed (ADR 0008)** | Classes-as-subobjects, coherence gate, one canonical instance per type |
+| **Everyday-surface taxonomy (ES1–ES2)** | **landed** | Built-in/prelude/package minimality proof, both directions (ES1); `trusted_base()` shrink — 7 of 9 assumed postulates resolved: 5 demoted to kernel-checked defs, 2 honestly relabeled audited rather than assumed; `isSorted`/`Perm` spec-pinned, demotion follow-on pending (ES2); minimal modules/import spec + conformance drafted (ES3, elaborator impl pending) |
 | **Security (WS-Sec)** | **G5 spine landed (Sec1, Sec1ct, Sec2, Sec4, Sec5)** | Sec1 IFC-by-typing (label lattice, declassification, non-interference), Sec1ct `@ct` constant-time discipline, Sec2 capabilities (PoLA, attenuation, revocation, audit), Sec4 trust-model & TCB/kernel audit, Sec5 policy-as-code |
 | **Behavioural seam (WS-B)** | **complete (B1–B4)** | B1 assumption-boundary export emitter, B2 Temporal-as-data (Temporal Σ datatype), B3 trace/instrumentation contract, B4 agentic boundary (agent-as-consumer model) |
 | **Runtime (WS-X)** | **core landed (X1, X2)** | X1 strict-CBV interpreter (content-addressed store, effect evaluation), X2 runtime hardening (capacity conformance, NULL_SLOT fix) |
-| Surface: L4 modules/pkg, L8 stdlib, L-fmt | draft | Spec drafted (§33, §39); L-stream remaining |
+| Surface: L4 package system (L4-pkg, ES4), L8 stdlib, L-fmt | draft | Minimal modules landed (ES3); the package *mechanism* (fork/registry) and standard-package catalog are still ahead, not yet spec'd; §39 stdlib drafted; L-stream remaining |
 | Native codegen (X3) | deferred | After the verification loop is proven; conformance seed landed (§45) |
 | Self-hosting (S1/S2) | deferred | After native codegen |
 
