@@ -40,6 +40,18 @@ fn is_opaque_const(env: &ken_kernel::GlobalEnv, t: &Term) -> bool {
     matches!(t, Term::Const { id, .. } if matches!(env.lookup(*id), Some(KernelDecl::Opaque { .. })))
 }
 
+/// Does `t` mention the global `id` anywhere (`Term::Const{id,..}`)? Used to
+/// confirm a law field's TYPE genuinely contains a specific sub-application
+/// (e.g. `or_bool`), not just that it type-checks.
+fn mentions_const(t: &Term, id: ken_kernel::GlobalId) -> bool {
+    match t {
+        Term::Const { id: i, .. } => *i == id,
+        Term::App(f, a) => mentions_const(f, id) || mentions_const(a, id),
+        Term::Pi(a, b) | Term::Lam(a, b) | Term::Sigma(a, b) => mentions_const(a, id) || mentions_const(b, id),
+        _ => false,
+    }
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 // The three classes are real, zero-delta record types (`33 §5.2`, `51 §2`)
 // ─────────────────────────────────────────────────────────────────────────
@@ -63,6 +75,35 @@ fn classes_are_transparent_structure_records_zero_delta() {
             name
         );
     }
+}
+
+/// Seed `stdlib/classes/ord-total-law-is-omega-bool-equation`: `Ord`'s
+/// `total` law field must be the Bool-EQUATION `IsTrue (or_bool (leq x y)
+/// (leq y x))`, never a bare/incomplete form — the disjunction is the
+/// entire point of `51 §3` (it's what keeps totality Ω-clean without
+/// truncation). Regression for a real authoring slip caught by
+/// language-qa (`evt_3asqqsehdsj0y`): the field originally shipped as a
+/// bare `IsTrue (leq x y)`, silently dropping `|| leq y x` — a materially
+/// different (and for any non-trivial order false) proposition, not
+/// totality. Discriminating: assert the field's TYPE structurally contains
+/// the `or_bool` application, not just that it type-checks (a class
+/// declaration with a defective law field still elaborates fine — that's
+/// exactly how the slip got through the first time).
+#[test]
+fn ord_total_law_is_the_or_bool_equation() {
+    let env = mk_env_with_package();
+    let or_bool_id = env.globals["or_bool"];
+    let ord_ci = &env.class_env.classes["Ord"];
+    let total_idx = ord_ci.field_names.iter().position(|n| n == "total").expect("Ord has a `total` field");
+    let total_ty = &ord_ci.field_types[total_idx];
+    assert!(
+        mentions_const(total_ty, or_bool_id),
+        "Ord's `total` law field must mention `or_bool` (the Bool-equation \
+         totality form, `51 §3`) — a bare `IsTrue (leq x y)` silently drops \
+         the disjunction and states a different, non-totality proposition. \
+         Got: {:?}",
+        total_ty
+    );
 }
 
 // ─────────────────────────────────────────────────────────────────────────

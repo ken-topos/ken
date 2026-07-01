@@ -30,14 +30,18 @@ class DecEq a {
 
 -- `Ord a` -- total order, supplies the comparator the verified `sort`/
 -- `isSorted` thread explicitly (51 SS2.3/SS4, ES2-remainder). `total`'s
--- Bool-equation form (`IsTrue (leq x y)` per side, never a bare
--- propositional `or`) keeps every law Omega-clean, no truncation (51 SS3).
+-- Bool-EQUATION form -- `IsTrue (or_bool (leq x y) (leq y x))`, the
+-- value-level `or_bool` lifted through `IsTrue` -- keeps the law
+-- Omega-clean with no truncation (51 SS3): a BARE propositional `x<=y or
+-- y<=x` would be proof-relevant (which side holds is content) and need
+-- `||.||` to reach Omega; the decidable `Bool` `or_bool` sidesteps that
+-- entirely.
 class Ord a {
   leq     : a -> a -> Bool ;
   refl    : (x : a) -> IsTrue (leq x x) ;
   antisym : (x : a) -> (y : a) -> IsTrue (leq x y) -> IsTrue (leq y x) -> Equal a x y ;
   trans   : (x : a) -> (y : a) -> (z : a) -> IsTrue (leq x y) -> IsTrue (leq y z) -> IsTrue (leq x z) ;
-  total   : (x : a) -> (y : a) -> IsTrue (leq x y)
+  total   : (x : a) -> (y : a) -> IsTrue (or_bool (leq x y) (leq y x))
 }
 
 -- Canonical `Int` instances -- AUDITED-DELTA, illustrative-only (51 SS6).
