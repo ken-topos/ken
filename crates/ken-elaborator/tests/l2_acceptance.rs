@@ -275,6 +275,106 @@ fn ac4_all_distinct_arms_accept() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Nested constructor patterns (`34 §3.1` pattern-matrix compilation).
+//
+// Regression for GAP-nested-patterns: `infer_match` used to track coverage
+// by top-level constructor only, so two arms sharing a head constructor
+// (`Succ Zero` / `Succ (Succ m)`) tripped a false ReachabilityError even
+// though the nested patterns are disjoint. The fix compiles the standard
+// column-by-column pattern matrix, splitting further on a field whose own
+// sub-pattern is itself a constructor.
+// ─────────────────────────────────────────────────────────────────────────────
+
+fn setup_natl(env: &mut ElabEnv) {
+    elab_ok(env, "data NatL = Zero | Succ NatL");
+}
+
+#[test]
+fn nested_ctor_pattern_accepted_and_reduces() {
+    let mut env = mk_env();
+    setup_natl(&mut env);
+
+    let id = elab_ok(
+        &mut env,
+        "let result : Int = match Succ (Succ Zero) { \
+         Zero => 0 ; Succ Zero => 1 ; Succ (Succ m) => 2 }",
+    );
+    let body = body_of(&env, id);
+    assert!(matches!(body, Term::Elim { .. }), "nested match should produce Elim");
+
+    let ctx = Context::new();
+    let reduced = whnf(&env.env, &ctx, &body);
+    assert!(
+        matches!(reduced, Term::Const { .. }),
+        "Succ (Succ Zero) should select the Succ (Succ m) arm and ι-reduce to Const(2), \
+         got {:?}",
+        reduced
+    );
+}
+
+#[test]
+fn nested_ctor_pattern_selects_the_right_arm_at_succ_zero() {
+    let mut env = mk_env();
+    setup_natl(&mut env);
+
+    // Discriminating: swap which literal each arm returns, and scrutinize
+    // `Succ Zero` — only reduces to the FIRST Const if the `Succ Zero`
+    // (not `Succ (Succ m)`) arm actually fired.
+    let id = elab_ok(
+        &mut env,
+        "let result : Int = match Succ Zero { \
+         Zero => 0 ; Succ Zero => 7 ; Succ (Succ m) => 9 }",
+    );
+    let body = body_of(&env, id);
+    let ctx = Context::new();
+    let reduced = whnf(&env.env, &ctx, &body);
+    match reduced {
+        Term::Const { .. } => {}
+        other => panic!("expected Succ Zero arm to ι-reduce to a literal, got {:?}", other),
+    }
+}
+
+#[test]
+fn nested_ctor_pattern_missing_case_is_exhaustiveness_error() {
+    let mut env = mk_env();
+    setup_natl(&mut env);
+
+    // `Succ Zero` is uncovered: the outer `Succ` bucket only handles the
+    // nested-`Succ` sub-case, leaving the nested-`Zero` sub-case missing.
+    let result = elab(
+        &mut env,
+        "let bad : Int = match Zero { Zero => 0 ; Succ (Succ m) => 2 }",
+    );
+
+    match result {
+        Err(ElabError::ExhaustivenessError { .. }) => { /* ✓ */ }
+        Ok(_) => panic!("non-exhaustive nested match accepted (should have been rejected)"),
+        Err(other) => panic!("expected ExhaustivenessError, got: {}", other),
+    }
+}
+
+#[test]
+fn nested_ctor_pattern_shadowed_by_earlier_flat_arm_is_reachability_error() {
+    let mut env = mk_env();
+    setup_natl(&mut env);
+
+    // `Succ n` (flat) already covers every Succ-headed value, so the later
+    // `Succ (Succ m)` arm is dead code — must still be caught even though it
+    // shares no top-level ambiguity with `Succ n` at the FIRST split.
+    let result = elab(
+        &mut env,
+        "let bad : Int = match Zero { \
+         Zero => 0 ; Succ n => 1 ; Succ (Succ m) => 2 }",
+    );
+
+    match result {
+        Err(ElabError::ReachabilityError { .. }) => { /* ✓ */ }
+        Ok(_) => panic!("arm shadowed by an earlier flat arm should have been flagged"),
+        Err(other) => panic!("expected ReachabilityError, got: {}", other),
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // AC5  indexed-impossible-pair  — DEFERRED
 //
 // Requires indexed family support (non-empty `indices` in InductiveSpec) and
