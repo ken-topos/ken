@@ -56,7 +56,7 @@ pub enum KernelError {
     Msg(String),
 
     /// SCT gate rejected the definition group as non-terminating (`17 §4`).
-    ScfFailed(String),
+    NotTerminating(String),
 }
 
 impl std::fmt::Display for KernelError {
@@ -97,7 +97,7 @@ impl std::fmt::Display for KernelError {
             KernelError::BadEliminator(s) => write!(f, "bad eliminator: {s}"),
             KernelError::Primitive(s) => write!(f, "primitive: {s}"),
             KernelError::Msg(s) => write!(f, "{s}"),
-            KernelError::ScfFailed(s) => write!(f, "SCT gate rejected: {s}"),
+            KernelError::NotTerminating(s) => write!(f, "SCT gate rejected: {s}"),
         }
     }
 }

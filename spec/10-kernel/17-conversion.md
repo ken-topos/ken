@@ -185,8 +185,10 @@ Notes.
   δ" and is detailed in §3.5.
 - **Termination.** Every branch except `Const`/`Let` strictly shrinks the term
   (β/Σ-β/ι/prim contract it; obs descends on the type, `16 §3.3`). `Let` is
-  acyclic (`11 §4`). The `Const` branch is the only source of unbounded
-  unfolding, and it is exactly what the **SCT gate (§4)** bounds — see §5.
+  non-recursive (a `let` binds a value, no self-reference). The `Const` branch
+  is the only source of unbounded unfolding — post-K2c δ **is** cyclic
+  (recursive transparent defs), and it is exactly what the **SCT gate (§4)**
+  bounds — see §5.
 
 ### 3.3 `conv` — type-directed conversion
 
@@ -449,14 +451,23 @@ one another (a single non-recursive definition trivially passes).
 ```
 function sct_check(env, group):
   // group = { f_1, ..., f_m }, each f_i with parameter telescope params(f_i)
-  // and body body(f_i). "Calls" are the applied occurrences of a group member.
+  // and body body(f_i). CALL-GRAPH COMPLETENESS: every occurrence of a group
+  // member contributes exactly one edge — an APPLIED occurrence its size-change
+  // matrix (§4.2), a BARE (unapplied) occurrence the all-? matrix — so the graph
+  // captures every δ-re-entry into the group (invariant below).
 
   // (1) Build the annotated call graph.
   let G = directed multigraph on nodes { f_1, ..., f_m }
   for each f in group:
-    for each call site `g ē` in body(f) where g ∈ group:
+    // (1a) Applied occurrences: a call `g ē` with g ∈ group in HEAD position.
+    for each `g ē` in body(f) where g ∈ group and ē non-empty:
       let M = size_change_matrix(env, params(f), ē, params(g))   // §4.2
       add edge f --M--> g to G
+    // (1b) Bare occurrences: g ∈ group UNAPPLIED (a `Const g` not in head
+    //      position — standalone, or passed unapplied as an argument). No
+    //      analysable descent, so the all-? matrix:
+    for each unapplied occurrence of g ∈ group in body(f):
+      add edge f --M?--> g to G      // M? : every entry ? (Unknown)
 
   // (2) Idempotent closure: all composite matrices around every cycle (§4.4).
   //     Restrict to each strongly-connected component — acyclic parts cannot loop.
@@ -468,6 +479,29 @@ function sct_check(env, group):
       return Reject(f, M)        // an infinite descent is possible — refuse
   return Accept
 ```
+
+**Call-graph completeness (soundness-critical).** The acceptance theorem —
+*every idempotent self-loop has a strict descent ⇒ the definition terminates*
+(§4, §5) — is sound **iff the call graph captures every δ-re-entry into the
+group.** Step (1) therefore edges **every** group-member occurrence, not only
+the applied ones (1a): a **bare** (unapplied) occurrence — a `Const g` not in
+head position (`bad : Bottom := bad`; `loop := id loop`, with `loop` passed
+unapplied) — contributes the **all-`?`** matrix (1b). Without (1b) a bare
+occurrence would add **no** edge, the group would *"trivially pass"*, and a
+non-terminating transparent def would be admitted (an unbounded δ-loop — e.g. a
+closed inhabitant of `Bottom`). The all-`?` edge classifies bare occurrences
+correctly under the idempotent closure (§4.4): a **self-reference** (`f = g`) is
+an all-`?` self-loop — idempotent, no strict diagonal ⇒ **reject**; a bare
+**cross-reference** (`f ≠ g`) makes any idempotent cycle it joins
+strict-diagonal-free (because `?` is **absorbing** under composition) ⇒ that
+cycle **rejects**, while a bare reference in **no** cycle adds an edge but no
+rejecting self-loop ⇒ **accepted** — correct, since with no δ-cycle back to `f`,
+unfolding terminates (`g` is separately SCT-certified). An **applied**
+occurrence is edged once, by (1a) only — the two arms are exclusive on head
+position, so an ordinary applied recursive call gets its real descent matrix,
+not a spurious `?`-loop. This is the safe direction (`§4.3`: recursion that
+cannot present a decreasing *applied* argument must go through an eliminator,
+which is already structural).
 
 ### 4.2 `size_change_matrix` — measuring one call
 
@@ -616,9 +650,11 @@ loop of §3.2:
    termination theorem** (Lee, Jones & Ben-Amram, *The Size-Change Principle for
    Program Termination*, POPL 2001): if every idempotent loop of the call graph
    has a strictly-decreasing thread, then there is no infinite call sequence —
-   so no infinite δ-unfolding chain. The environment is also append-only and
-   acyclic (`11 §4`), so the call graph is exactly the recursion the gate
-   analysed.
+   so no infinite δ-unfolding chain. The environment is append-only, but **not**
+   acyclic — recursive transparent defs (K2c) are exactly the δ-cycles the gate
+   exists to bound; the call graph captures **all** the group's recursion
+   because step (1) edges **every** group-member occurrence, applied and bare
+   (call-graph completeness, §4.1).
 
 Combining (1) and (2): the `whnf` loop makes finitely many δ steps (each bounded
 by SCT) interleaved with strongly-normalizing core reductions, so `whnf` halts;
