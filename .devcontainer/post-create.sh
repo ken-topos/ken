@@ -65,4 +65,23 @@ allowed-tools: Bash(bash:*)
 !bash -c 'SOCK=$(find /tmp /run -maxdepth 3 -name default -type s 2>/dev/null | head -1); if [ -n "$SOCK" ]; then tmux -S "$SOCK" detach-client; else echo "tmux socket not found"; fi'
 DETACH_MD
 
+# Context-awareness hooks (self-compact signal). Deploy the in-house scripts and
+# register them in the global Claude Code settings: the statusline extracts the
+# context-window %, and a PreToolUse hook nudges the self-compacting singletons
+# (steward/architect/integrator/librarian) to checkpoint + compact at a clean
+# seam. Role-scoped (teams get only the statusline) and fail-safe. Source of
+# truth is .devcontainer/hooks/; see its README.md.
+HOOKS_SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/hooks"
+mkdir -p /home/node/.claude/hooks
+cp "$HOOKS_SRC"/ctx-*.sh /home/node/.claude/hooks/
+chmod +x /home/node/.claude/hooks/ctx-*.sh
+if [ -f /home/node/.claude/settings.json ]; then
+  jq -s '.[0] * .[1]' /home/node/.claude/settings.json "$HOOKS_SRC/settings-fragment.json" \
+    > /home/node/.claude/settings.json.tmp \
+    && mv /home/node/.claude/settings.json.tmp /home/node/.claude/settings.json
+else
+  cp "$HOOKS_SRC/settings-fragment.json" /home/node/.claude/settings.json
+fi
+echo "[post-create] context-awareness hooks installed."
+
 echo "Container ready."
