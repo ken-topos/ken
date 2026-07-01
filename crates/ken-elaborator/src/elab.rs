@@ -641,6 +641,17 @@ pub fn elaborate_rdecl(
     Ok(result.def_id)
 }
 
+/// Extract the outermost constructor name from a resolved type for
+/// `instance_search` key lookup (`37 §6`, L3b).
+fn rtype_head_name(ty: &RType) -> String {
+    match ty {
+        RType::RCon(name, _) => name.clone(),
+        RType::RApp(f, _, _) => rtype_head_name(f),
+        RType::RVarTy(_, name, _) => name.clone(),
+        _ => String::new(),
+    }
+}
+
 /// V1 elaboration: returns the definition id plus any emitted obligation holes.
 pub fn elaborate_rdecl_v1(
     env: &mut GlobalEnv,
@@ -651,7 +662,22 @@ pub fn elaborate_rdecl_v1(
     rdecl: &RDecl,
 ) -> Result<ElabResult, ElabError> {
     match &rdecl.kind {
-        RDeclKind::View { .. } | RDeclKind::Let => {
+        RDeclKind::View { constraints, .. } => {
+            // Check `where C T` constraints via `instance_search` (`37 §6`,
+            // L3b). This is the producer the QA grep gate checks.
+            for (class_name, head_ty) in constraints {
+                let head_name = rtype_head_name(head_ty);
+                if class_env.instance_search(class_name, &head_name).is_none() {
+                    return Err(ElabError::NoInstance {
+                        class: class_name.clone(),
+                        ty: head_name,
+                        span: rdecl.span.clone(),
+                    });
+                }
+            }
+            elaborate_view_or_let(env, globals, num_values, numeric_env, rdecl)
+        }
+        RDeclKind::Let => {
             elaborate_view_or_let(env, globals, num_values, numeric_env, rdecl)
         }
         RDeclKind::Prove => elaborate_prove(env, globals, num_values, numeric_env, rdecl),

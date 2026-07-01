@@ -55,7 +55,9 @@ pub struct RDecl {
 /// Discriminates the declaration kind for elaboration dispatch.
 pub enum RDeclKind {
     /// A `view` (or `space view`) definition.
-    View { is_space_op: bool },
+    /// `constraints` = `where C T` list resolved from the surface `where`
+    /// clause; checked against `instance_search` in `elaborate_rdecl_v1`.
+    View { is_space_op: bool, constraints: Vec<(String, RType)> },
     /// A `let` binding.
     Let,
     /// A `prove name : φ` standalone obligation.
@@ -237,6 +239,7 @@ pub fn resolve_decl(decl: &Decl) -> Result<RDecl, ElabError> {
             ret_ty,
             requires,
             ensures,
+            constraints,
             body,
             is_space_op,
             span,
@@ -303,6 +306,18 @@ pub fn resolve_decl(decl: &Decl) -> Result<RDecl, ElabError> {
                 None => None,
             };
 
+            // Resolve `where C T` constraints — types resolved in param scope
+            // (so type vars from params are in scope, `39 §6`).
+            let resolved_constraints = constraints
+                .iter()
+                .map(|(cname, cty)| {
+                    // Use a fresh scope per constraint (each C T is standalone).
+                    let mut cscope = Scope::new();
+                    let rty = resolve_type(&mut cscope, cty)?;
+                    Ok((cname.clone(), rty))
+                })
+                .collect::<Result<Vec<_>, ElabError>>()?;
+
             Ok(RDecl {
                 name: name.clone(),
                 ty: full_ty,
@@ -310,7 +325,10 @@ pub fn resolve_decl(decl: &Decl) -> Result<RDecl, ElabError> {
                 requires: resolved_requires,
                 ensures: resolved_ensures,
                 span: span.clone(),
-                kind: RDeclKind::View { is_space_op: *is_space_op },
+                kind: RDeclKind::View {
+                    is_space_op: *is_space_op,
+                    constraints: resolved_constraints,
+                },
             })
         }
 

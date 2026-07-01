@@ -167,6 +167,22 @@ impl Parser {
             ensures.push(self.parse_prop_expr()?);
         }
 
+        // L3b: optional `where C₁ T₁ ; C₂ T₂` class constraints (`37 §6`).
+        // Parsed between the contract clauses and the `=` body.
+        let mut constraints = Vec::new();
+        if matches!(self.peek(), Token::KwWhere) {
+            self.advance(); // consume 'where'
+            loop {
+                let (cname, _) = self.expect_ident()?;
+                let cty = self.parse_type()?;
+                constraints.push((cname, cty));
+                if !matches!(self.peek(), Token::Semicolon) {
+                    break;
+                }
+                self.advance(); // consume ';' (Semicolon)
+            }
+        }
+
         self.expect(&Token::Eq)?;
         let body = self.parse_expr()?;
         let end = body.span().end;
@@ -177,6 +193,7 @@ impl Parser {
             ret_ty,
             requires,
             ensures,
+            constraints,
             body,
             is_space_op,
             span: Span::new(start, end),
