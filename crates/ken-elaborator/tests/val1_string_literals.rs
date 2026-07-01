@@ -297,6 +297,27 @@ fn fibonacci_iterative_elaborates() {
     env.elaborate_decl("view main : Int = natToInt (fib ten)").expect("main");
 }
 
+/// Regression for GAP-nested-patterns (`elab.rs::infer_match` pattern-matrix
+/// compilation, `34 §3.1`) — the reachability checker used to track coverage
+/// by top-level constructor only, so `Suc Zero` and `Suc (Suc m)` (sharing
+/// the `Suc` head) falsely tripped `ReachabilityError`. `isEven`, recursing
+/// on the literally-matched `m` (SCT-decreasing), elaborates directly with a
+/// `Suc (Suc m)` nested pattern and ι-reduces to the correct value.
+#[test]
+fn is_even_nested_pattern_elaborates_and_reduces() {
+    let mut env = ElabEnv::new().expect("base env");
+    env.elaborate_decl("data BoolL = TrueL | FalseL").expect("BoolL");
+    env.elaborate_decl(
+        "view isEven (n : Nat) : BoolL = \
+         match n { Zero => TrueL ; Suc Zero => FalseL ; Suc (Suc m) => isEven m }",
+    )
+    .expect("isEven");
+    for (name, pred) in [("one", "Zero"), ("two", "one"), ("three", "two"), ("four", "three")] {
+        env.elaborate_decl(&format!("view {} : Nat = Suc {}", name, pred)).expect(name);
+    }
+    env.elaborate_decl("view result : BoolL = isEven four").expect("result");
+}
+
 // ── Batch-2: GCD (subtraction-based with fuel) ───────────────────────────────
 
 /// Verifies natSub/natCmpZero/natCmp/natGcdFueled/natGcd elaborate.
@@ -364,7 +385,7 @@ fn ackermann_sct_gap_pinned() {
     );
     let err_str = format!("{:?}", result.unwrap_err());
     assert!(
-        err_str.contains("Scf") || err_str.contains("KernelRejected"),
-        "error should be an SCT/ScfFailed rejection, got: {}", err_str
+        err_str.contains("NotTerminating") || err_str.contains("KernelRejected"),
+        "error should be an SCT/NotTerminating rejection, got: {}", err_str
     );
 }

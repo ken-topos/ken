@@ -13,7 +13,7 @@ use ken_kernel::{
     inductive::{peel_app, recursive_args},
     sct::sct_check,
     subst::{subst0, subst_outer, weaken},
-    whnf, Context, Decl, GlobalEnv, GlobalId, Level, LevelVar, Term,
+    whnf, Context, Decl, GlobalEnv, GlobalId, InductiveDecl, Level, LevelVar, Term,
 };
 
 use crate::ast::{BinOp, NumLit};
@@ -21,7 +21,7 @@ use crate::classes::{ClassEnv, ClassInfo, ClassKind, InstanceInfo};
 use crate::data;
 use crate::error::{ElabError, Span};
 use crate::numbers::{AddEntry, NumericEnv, NumericLitVal};
-use crate::resolve::{RDecl, RDeclKind, RExpr, RMatchArm, RPatKind, RType};
+use crate::resolve::{RDecl, RDeclKind, RExpr, RMatchArm, RPatKind, RPattern, RType};
 
 // ----- obligation model -----
 
@@ -1836,6 +1836,335 @@ fn unwrap_lam(term: &Term, n: usize) -> Term {
 /// Compiles to `Term::Elim` with one method per constructor in declaration order.
 /// Constant-motive variant: return type inferred from the first arm, checked
 /// consistent across all arms by kernel type-checking the Elim.
+/// A pending column in the pattern-matrix compiler (`34-data-match.md §3.1`):
+/// either a genuine surface column (tracked per-row in `RowState::real_pats`)
+/// or a synthetic induction-hypothesis slot the eliminator's method type
+/// requires but no surface pattern ever names.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ColKind {
+    Real,
+    Ih,
+}
+
+/// One row of the pattern matrix: the still-unconsumed `Real` column
+/// patterns for one arm, plus which top-level arm it came from (for
+/// reachability bookkeeping across wildcard-row expansion, `§4.2`).
+struct RowState {
+    real_pats: Vec<RPattern>,
+    arm_idx: usize,
+}
+
+/// The type every raw method built from `col_types`/`col_kinds` (a suffix of
+/// still-pending columns) ultimately has, as a Pi-chain ending in `ret_ty`:
+/// each `Real` column contributes one arrow (regardless of whether it is
+/// later bound flatly or split further — that happens *inside* the arrow's
+/// codomain, never changing the arrow's own presence), each `Ih` column
+/// contributes an arrow of type `ret_ty` weakened to its own position. This
+/// is exactly what a split's motive must compute once applied to a
+/// scrutinee value — a nested `elim_D` still owes whatever the tail owes.
+fn tail_codomain(
+    tail_col_types: &[Term],
+    tail_col_kinds: &[ColKind],
+    ret_ty_base: &Term,
+    depth_before_tail: usize,
+) -> Term {
+    if tail_col_types.is_empty() {
+        return weaken(ret_ty_base, depth_before_tail as i64);
+    }
+    match tail_col_kinds[0] {
+        ColKind::Ih => {
+            let ih_ty = weaken(ret_ty_base, depth_before_tail as i64);
+            let rest =
+                tail_codomain(&tail_col_types[1..], &tail_col_kinds[1..], ret_ty_base, depth_before_tail);
+            Term::pi(ih_ty, weaken(&rest, 1))
+        }
+        ColKind::Real => {
+            let rest = tail_codomain(
+                &tail_col_types[1..],
+                &tail_col_kinds[1..],
+                ret_ty_base,
+                depth_before_tail + 1,
+            );
+            Term::pi(tail_col_types[0].clone(), rest)
+        }
+    }
+}
+
+/// Compile the pattern matrix `col_types`/`col_kinds` (aligned; `Real`
+/// columns are matched against `rows[_].real_pats`, `Ih` columns are
+/// synthetic and never touch row patterns) down to a nested-`elim_D` method
+/// term, per the standard column-by-column algorithm.
+///
+/// `real_depth_so_far` counts only genuine (`Real`, non-split) `cx.ctx`
+/// pushes made along the current path — it lines up with what `resolve.rs`
+/// counted when flattening pattern-bound names, so `infer`'s raw
+/// `Term::var(i)` passthrough resolves correctly. Columns that need
+/// splitting (a `Ctor` sub-pattern present) or `Ih` slots are *never* pushed
+/// onto `cx.ctx` — they are woven in afterward via `weaken`, exactly as the
+/// pre-existing single-level code already did for induction hypotheses.
+fn compile_match_matrix(
+    cx: &mut ElabCtx,
+    arms: &[RMatchArm],
+    col_types: &[Term],
+    col_kinds: &[ColKind],
+    rows: Vec<RowState>,
+    real_depth_so_far: usize,
+    top_span: &Span,
+    ret_ty_slot: &mut Option<Term>,
+    arm_used: &mut [bool],
+) -> Result<Term, ElabError> {
+    if col_types.is_empty() {
+        // Leaf: the first row in preserved (first-match-wins) order claims
+        // this path; any others are shadowed here (possibly still reachable
+        // via a different expansion elsewhere — checked globally by the
+        // caller via `arm_used`).
+        let winner = rows[0].arm_idx;
+        arm_used[winner] = true;
+        let arm = &arms[winner];
+        let (body_core, body_ty_ctx) = infer(cx, &arm.body)?;
+        if ret_ty_slot.is_none() {
+            let zonked = cx.metas.zonk_term(&body_ty_ctx);
+            let lowered = lower_by(&zonked, real_depth_so_far).unwrap_or(zonked);
+            *ret_ty_slot = Some(lowered);
+        }
+        return Ok(body_core);
+    }
+
+    match col_kinds[0] {
+        ColKind::Ih => {
+            // A synthetic induction-hypothesis slot: never resolver-counted,
+            // so it is woven in via weaken-then-wrap rather than a real push.
+            //
+            // The IH's type is `M(k)` for the enclosing elim's motive `M` —
+            // NOT necessarily the bare global return type: when a nested
+            // split still owes a pending tail (this Ih slot's own
+            // continuation, `col_types[1..]`/`col_kinds[1..]`), `M` is a
+            // constant motive equal to that tail's own codomain (the very
+            // value `tail_codomain` computes when building that split's
+            // motive) — so re-derive it identically from this slot's own
+            // position.
+            let ret_ty = ret_ty_slot
+                .as_ref()
+                .expect("IH column reached before return type known")
+                .clone();
+            let ih_ty =
+                tail_codomain(&col_types[1..], &col_kinds[1..], &ret_ty, real_depth_so_far);
+            let inner = compile_match_matrix(
+                cx,
+                arms,
+                &col_types[1..],
+                &col_kinds[1..],
+                rows,
+                real_depth_so_far,
+                top_span,
+                ret_ty_slot,
+                arm_used,
+            )?;
+            Ok(Term::lam(ih_ty, weaken(&inner, 1)))
+        }
+        ColKind::Real => {
+            let all_flat = rows
+                .iter()
+                .all(|r| matches!(r.real_pats[0].kind, RPatKind::Wild | RPatKind::Var(_)));
+            if all_flat {
+                // No constructor pattern in this column across any row: bind
+                // it flatly (a real `cx.ctx` push), matching the resolver's
+                // count exactly, and move on.
+                cx.ctx.push(col_types[0].clone());
+                let new_rows: Vec<RowState> = rows
+                    .into_iter()
+                    .map(|r| RowState {
+                        real_pats: r.real_pats[1..].to_vec(),
+                        arm_idx: r.arm_idx,
+                    })
+                    .collect();
+                let inner = compile_match_matrix(
+                    cx,
+                    arms,
+                    &col_types[1..],
+                    &col_kinds[1..],
+                    new_rows,
+                    real_depth_so_far + 1,
+                    top_span,
+                    ret_ty_slot,
+                    arm_used,
+                );
+                cx.ctx.pop();
+                return Ok(Term::lam(col_types[0].clone(), inner?));
+            }
+
+            // At least one row has a constructor pattern here: split.
+            let ty0 = whnf(cx.env, &cx.ctx, &col_types[0]);
+            let (head, params0) = peel_app(&ty0);
+            let d_id0 = match head {
+                Term::IndFormer { id, .. } => id,
+                _ => {
+                    return Err(ElabError::TypeMismatch {
+                        span: top_span.clone(),
+                        reason: "match scrutinee must have an inductive type".into(),
+                    })
+                }
+            };
+            let ind0 = cx
+                .env
+                .inductive(d_id0)
+                .ok_or_else(|| ElabError::Internal(format!("inductive {:?} not found", d_id0)))?
+                .clone();
+            let m0 = ind0.params.len();
+
+            let raw_methods = build_ctor_buckets(
+                cx,
+                arms,
+                &ind0,
+                d_id0,
+                m0,
+                &params0,
+                rows,
+                &col_types[1..],
+                &col_kinds[1..],
+                real_depth_so_far,
+                top_span,
+                ret_ty_slot,
+                arm_used,
+            )?;
+
+            // The split column itself is a fresh binder no surface pattern
+            // named — resolver never counted it, so (like the IH slots
+            // above) it is woven in via weaken-then-wrap, never a real push.
+            //
+            // The motive's codomain is NOT bare `ret_ty`: any columns still
+            // pending after this split (a sibling field, or an enclosing
+            // constructor's own IH slot carried in via `tail_col_kinds`)
+            // still owe a value, so each raw method's real type is
+            // `(tail columns) -> ret_ty`, and the motive must match.
+            let ret_ty_base = ret_ty_slot
+                .as_ref()
+                .expect("split column reached before return type known")
+                .clone();
+            let codomain = tail_codomain(
+                &col_types[1..],
+                &col_kinds[1..],
+                &ret_ty_base,
+                real_depth_so_far + 1,
+            );
+            let ret_level = match kernel_infer(cx.env, &cx.ctx, &codomain) {
+                Ok(Term::Type(l)) => l,
+                _ => Level::Zero,
+            };
+            let motive_ty = Term::pi(col_types[0].clone(), Term::ty(ret_level));
+            let motive = Term::Ascript(
+                Box::new(Term::lam(col_types[0].clone(), codomain)),
+                Box::new(motive_ty),
+            );
+            let methods: Vec<Term> = raw_methods.iter().map(|m| weaken(m, 1)).collect();
+            let elim = Term::Elim {
+                fam: d_id0,
+                level_args: vec![],
+                params: params0.iter().map(|p| weaken(p, 1)).collect(),
+                motive: Box::new(motive),
+                methods,
+                indices: vec![],
+                scrut: Box::new(Term::var(0)),
+            };
+            Ok(Term::lam(col_types[0].clone(), elim))
+        }
+    }
+}
+
+/// Group `rows` (whose `real_pats[0]` matches the inductive `ind0`) into one
+/// bucket per constructor — expanding a `Wild`/`Var` row into every
+/// constructor (it matches all of them) — and recurse to build each
+/// constructor's raw method term: `λ(fields). λ(IHs). <continuation>`,
+/// where `<continuation>` threads through `tail_col_types`/`tail_col_kinds`
+/// (the columns after this one). Each returned method is valid at
+/// `real_depth_so_far` — i.e. as if the split column's own binder does not
+/// yet exist; the caller (top-level `infer_match`, or a nested nested split
+/// in `compile_match_matrix`) wraps accordingly.
+#[allow(clippy::too_many_arguments)]
+fn build_ctor_buckets(
+    cx: &mut ElabCtx,
+    arms: &[RMatchArm],
+    ind0: &InductiveDecl,
+    d_id0: GlobalId,
+    m0: usize,
+    params0: &[Term],
+    rows: Vec<RowState>,
+    tail_col_types: &[Term],
+    tail_col_kinds: &[ColKind],
+    real_depth_so_far: usize,
+    top_span: &Span,
+    ret_ty_slot: &mut Option<Term>,
+    arm_used: &mut [bool],
+) -> Result<Vec<Term>, ElabError> {
+    let mut methods: Vec<Option<Term>> = vec![None; ind0.constructors.len()];
+
+    for (k0, c0) in ind0.constructors.iter().enumerate() {
+        let mut bucket: Vec<RowState> = Vec::new();
+        for r in &rows {
+            match &r.real_pats[0].kind {
+                RPatKind::Ctor(name, subs) => {
+                    if cx.globals.get(name).copied() == Some(c0.id) {
+                        let mut new_pats = subs.clone();
+                        new_pats.extend_from_slice(&r.real_pats[1..]);
+                        bucket.push(RowState { real_pats: new_pats, arm_idx: r.arm_idx });
+                    }
+                }
+                RPatKind::Wild | RPatKind::Var(_) => {
+                    let span = r.real_pats[0].span.clone();
+                    let mut new_pats: Vec<RPattern> = (0..c0.args.len())
+                        .map(|_| RPattern { kind: RPatKind::Wild, span: span.clone() })
+                        .collect();
+                    new_pats.extend_from_slice(&r.real_pats[1..]);
+                    bucket.push(RowState { real_pats: new_pats, arm_idx: r.arm_idx });
+                }
+            }
+        }
+
+        if bucket.is_empty() {
+            let name0 = cx
+                .globals
+                .iter()
+                .find(|(_, &id)| id == c0.id)
+                .map(|(n, _)| n.clone())
+                .unwrap_or_else(|| format!("<ctor_{:?}>", c0.id));
+            return Err(ElabError::ExhaustivenessError {
+                missing: name0,
+                span: top_span.clone(),
+            });
+        }
+
+        let n_args0 = c0.args.len();
+        let field_types0: Vec<Term> =
+            (0..n_args0).map(|j| subst_outer(&c0.args[j], m0, params0, j)).collect();
+        let p_ihs0 = recursive_args(c0, d_id0, m0).len();
+
+        // `col_types`/`col_kinds` stay index-aligned; an `Ih` slot's own type
+        // entry is never read (its lambda domain is computed from `ret_ty`
+        // instead) but must still occupy a position.
+        let mut new_col_types = field_types0;
+        new_col_types.extend(std::iter::repeat(Term::ty(Level::Zero)).take(p_ihs0));
+        new_col_types.extend_from_slice(tail_col_types);
+        let mut new_col_kinds: Vec<ColKind> = vec![ColKind::Real; n_args0];
+        new_col_kinds.extend(std::iter::repeat(ColKind::Ih).take(p_ihs0));
+        new_col_kinds.extend_from_slice(tail_col_kinds);
+
+        let inner = compile_match_matrix(
+            cx,
+            arms,
+            &new_col_types,
+            &new_col_kinds,
+            bucket,
+            real_depth_so_far,
+            top_span,
+            ret_ty_slot,
+            arm_used,
+        )?;
+        methods[k0] = Some(inner);
+    }
+
+    Ok(methods.into_iter().map(|m| m.unwrap()).collect())
+}
+
 fn infer_match(
     cx: &mut ElabCtx,
     scrut: &RExpr,
@@ -1859,164 +2188,71 @@ fn infer_match(
     };
 
     // 3. Clone the InductiveDecl so we can release the &env borrow before
-    //    mutating cx.ctx inside the arm loop.
+    //    mutating cx.ctx inside the recursive matrix compiler.
     let ind = cx
         .env
         .inductive(d_id)
         .ok_or_else(|| ElabError::Internal(format!("inductive {:?} not found", d_id)))?
         .clone();
     let m = ind.params.len();
-    let n_ctors = ind.constructors.len();
 
-    // 4. Build reverse-lookup tables (pre-snapshot to avoid borrow conflicts).
-    //    ctor_id → ctor_index (position in ind.constructors)
-    let ctor_id_to_idx: HashMap<GlobalId, usize> = ind
-        .constructors
+    // 4. Every arm must open with a constructor pattern (no top-level
+    //    wildcard/var scrutinee-binding yet); nested sub-patterns may be
+    //    arbitrary (`Ctor`, `Var`, `Wild`, recursively).
+    for arm in arms {
+        if let RPatKind::Wild | RPatKind::Var(_) = arm.pat.kind {
+            return Err(ElabError::Internal(
+                "non-constructor pattern in match (wildcard/var not yet supported \
+                 at top level; use constructor patterns)"
+                    .into(),
+            ));
+        }
+    }
+
+    // 5. Build the initial one-column matrix (the scrutinee itself) and
+    //    compile it via the pattern-matrix algorithm (`34-data-match.md
+    //    §3.1`): column-by-column, splitting on constructors, recursing on
+    //    the residual matrix under each constructor's freshly-bound fields.
+    let rows: Vec<RowState> = arms
         .iter()
         .enumerate()
-        .map(|(k, c)| (c.id, k))
-        .collect();
-    //    ctor_idx → name (for exhaustiveness error messages)
-    let ctor_idx_to_name: Vec<String> = ind
-        .constructors
-        .iter()
-        .map(|c| {
-            cx.globals
-                .iter()
-                .find(|(_, &id)| id == c.id)
-                .map(|(name, _)| name.clone())
-                .unwrap_or_else(|| format!("<ctor_{:?}>", c.id))
-        })
-        .collect();
-    //    ctor name → ctor_id (snapshot from globals for use inside arm loop)
-    let ctor_name_to_id: HashMap<String, GlobalId> = cx
-        .globals
-        .iter()
-        .filter(|(_, &id)| ctor_id_to_idx.contains_key(&id))
-        .map(|(name, &id)| (name.clone(), id))
+        .map(|(i, arm)| RowState { real_pats: vec![arm.pat.clone()], arm_idx: i })
         .collect();
 
-    // 5. Process arms: reachability check + build one method per ctor.
-    let mut covered: Vec<bool> = vec![false; n_ctors];
-    let mut methods_by_idx: Vec<Option<Term>> = vec![None; n_ctors];
-    let mut return_ty: Option<Term> = None;
+    let mut ret_ty_slot: Option<Term> = None;
+    let mut arm_used = vec![false; arms.len()];
 
-    for arm in arms {
-        let ctor_name = match &arm.pat.kind {
-            RPatKind::Ctor(name, _) => name.clone(),
-            RPatKind::Wild | RPatKind::Var(_) => {
-                return Err(ElabError::Internal(
-                    "non-constructor pattern in match (wildcard/var not yet supported \
-                     at top level; use constructor patterns)"
-                        .into(),
-                ))
-            }
-        };
+    let raw_methods = build_ctor_buckets(
+        cx,
+        arms,
+        &ind,
+        d_id,
+        m,
+        &params_terms,
+        rows,
+        &[],
+        &[],
+        0,
+        span,
+        &mut ret_ty_slot,
+        &mut arm_used,
+    )?;
 
-        let ctor_id = ctor_name_to_id.get(&ctor_name).copied().ok_or_else(|| {
-            ElabError::TypeMismatch {
-                span: arm.span.clone(),
-                reason: format!("'{}' is not a constructor of this type", ctor_name),
-            }
-        })?;
-        let k = ctor_id_to_idx[&ctor_id];
-
-        // AC4: redundant arm detection.
-        if covered[k] {
-            return Err(ElabError::ReachabilityError { span: arm.span.clone() });
-        }
-        covered[k] = true;
-
-        // Ctor info.
-        let c = &ind.constructors[k];
-        let n_args = c.args.len();
-        let rec = recursive_args(c, d_id, m);
-        let p_ihs = rec.len();
-
-        // Compute pushed_types[j] = type of arg j with params substituted.
-        // `subst_outer(c.args[j], m, &params_terms, j)`:
-        //   - c.args[j] is in context [Δ_p, arg₀…argⱼ₋₁] with Δ_p at outermost m positions.
-        //   - inner_depth = j (j preceding arg binders inside the stored type).
-        //   - Result is in context [outer_Γ, arg₀…argⱼ₋₁] — correct for cx.ctx push.
-        let mut pushed_types: Vec<Term> = Vec::with_capacity(n_args);
-        for j in 0..n_args {
-            pushed_types.push(subst_outer(&c.args[j], m, &params_terms, j));
-        }
-
-        // Push ctor arg types into cx.ctx for arm body elaboration.
-        // After n_args pushes: Var(0)=last_arg_ty, …, Var(n-1)=first_arg_ty.
-        // The resolver bound names left-to-right, so first_name → Var(n-1), …, last_name → Var(0).
-        for pt in &pushed_types {
-            cx.ctx.push(pt.clone());
-        }
-
-        let (body_core, body_ty_ctx) = infer(cx, &arm.body)?;
-
-        for _ in 0..n_args {
-            cx.ctx.pop();
-        }
-
-        // Lower the body type from the arm context to the outer context.
-        // For closed return types (Int, Color, …) this is a no-op.
-        let body_ty_outer = lower_by(&cx.metas.zonk_term(&body_ty_ctx), n_args)
-            .unwrap_or_else(|| cx.metas.zonk_term(&body_ty_ctx));
-
-        if return_ty.is_none() {
-            return_ty = Some(body_ty_outer);
-        }
-        let ret_ty = return_ty.as_ref().unwrap();
-
-        // Build the method for constructor k:
-        //   λ(arg₀:T₀). … λ(argₙ₋₁:Tₙ₋₁). λ(IH₀:R). … λ(IHₚ₋₁:R). body_for_method
-        //
-        // Inside the n+p-lambda body: Var(0)=IHₚ₋₁, …, Var(p-1)=IH₀,
-        //                              Var(p)=argₙ₋₁, …, Var(n+p-1)=arg₀.
-        // Resolver gave body_core with: Var(0)=argₙ₋₁, …, Var(n-1)=arg₀.
-        // Weaken by p to shift arg vars past the IH slots.
-        let body_for_method = weaken(&body_core, p_ihs as i64);
-
-        // Wrap p IH lambdas (innermost first, type = return type R). The IH
-        // binder ends up *under* the `n_args` ctor-arg lambdas (wrapped next),
-        // so its domain `ret_ty` (valid in the outer match context) must be
-        // weakened by `n_args` to refer to the right variables at the IH
-        // binder. (For a monomorphic return — no free vars — this is a no-op,
-        // which is why the landed tests never caught it; a parameterized
-        // return like `List b` or `Option a` needs the shift.)
-        let mut method = body_for_method;
-        let ih_ty = weaken(ret_ty, n_args as i64);
-        for _ in 0..p_ihs {
-            method = Term::lam(ih_ty.clone(), method);
-        }
-        // Wrap n arg lambdas (outermost arg last — iterate j=n-1 down to 0).
-        for j in (0..n_args).rev() {
-            method = Term::lam(pushed_types[j].clone(), method);
-        }
-
-        methods_by_idx[k] = Some(method);
-    }
-
-    // 6. AC3: exhaustiveness — name the first uncovered constructor.
-    for (idx, covered_flag) in covered.iter().enumerate() {
-        if !covered_flag {
-            return Err(ElabError::ExhaustivenessError {
-                missing: ctor_idx_to_name[idx].clone(),
-                span: span.clone(),
-            });
+    // 6. AC4: reachability — an arm that never won at any leaf (including any
+    //    it was expanded into via a wildcard row) is dead code.
+    for (i, used) in arm_used.iter().enumerate() {
+        if !used {
+            return Err(ElabError::ReachabilityError { span: arms[i].span.clone() });
         }
     }
 
-    let methods: Vec<Term> = methods_by_idx
-        .into_iter()
-        .map(|m| m.unwrap())
-        .collect();
-
-    let ret_ty = return_ty.unwrap_or_else(|| Term::ty(Level::Zero));
+    let ret_ty = ret_ty_slot.unwrap_or_else(|| Term::ty(Level::Zero));
 
     // 7. Build the constant motive: Ascript(λ(x: D). R, D → Type ℓ)
     //    The kernel can't infer the type of a bare lambda, so we annotate.
     //    Determine ℓ from the return type's own type.
     let ret_level = {
-        match ken_kernel::infer(cx.env, &cx.ctx, &ret_ty) {
+        match kernel_infer(cx.env, &cx.ctx, &ret_ty) {
             Ok(Term::Type(l)) => l,
             _ => Level::Zero, // fallback: level 0
         }
@@ -2027,13 +2263,15 @@ fn infer_match(
         Box::new(motive_ty),
     );
 
-    // 8. Build Term::Elim (non-indexed: indices = []).
+    // 8. Build Term::Elim (non-indexed: indices = []). The top-level
+    //    scrutinee is already a concrete elaborated value (`scrut_core`), so
+    //    — unlike a nested split — no extra binder/weaken is needed here.
     let elim = Term::Elim {
         fam: d_id,
         level_args: vec![],
         params: params_terms,
         motive: Box::new(motive),
-        methods,
+        methods: raw_methods,
         indices: vec![],
         scrut: Box::new(scrut_core),
     };
