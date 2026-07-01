@@ -150,14 +150,14 @@ fn base_type_app() {
 
     let nat_id = *env.globals.get("Nat").expect("Nat must be in globals");
     let expected_ty = Term::pi(
-        Term::const_(nat_id, vec![]),
-        Term::const_(nat_id, vec![]),
+        Term::indformer(nat_id, vec![]),
+        Term::indformer(nat_id, vec![]),
     );
     assert_eq!(last_type(&env, id), expected_ty, "idNat type mismatch");
 
     // Body: Lam(Con Nat, Var 0)
     let body = last_body(&env, id);
-    let expected_body = Term::lam(Term::const_(nat_id, vec![]), Term::var(0));
+    let expected_body = Term::lam(Term::indformer(nat_id, vec![]), Term::var(0));
     assert_eq!(body, expected_body, "idNat body mismatch");
 }
 

@@ -24,6 +24,7 @@ pub mod extract;
 mod lexer;
 pub mod numbers;
 pub mod parser;
+pub mod prelude;
 pub mod prover;
 pub mod resolve;
 pub mod temporal;
@@ -69,6 +70,7 @@ pub use protocol::{
 pub use resolve::{RDecl, RDeclKind, RExpr, RType};
 pub use numbers::{NumericEnv, NumericLitVal};
 pub use bytes::BytesEnv;
+pub use prelude::PreludeEnv;
 pub use foreign::{
     trusted_base_delta, FfiRuntimeCheck, ForeignBinding, ForeignEnv, MarshalKind, MarshalSig,
 };
@@ -86,16 +88,14 @@ pub struct ElabEnv {
     pub bytes_env: BytesEnv,
     /// The foreign FFI layer (L7): binding registry (`38 §2–§4`).
     pub foreign_env: ForeignEnv,
+    /// The L3 prelude: collection inductives + Ω constants (`37`).
+    pub prelude_env: PreludeEnv,
 }
 
 impl ElabEnv {
     pub fn empty() -> Result<Self, ElabError> {
         let mut env = GlobalEnv::new();
         let mut globals = HashMap::new();
-        // `Nat` is used as a universe level notation type; not in the numeric tower.
-        let nat_id = declare_postulate(&mut env, vec![], Term::ty(Level::Zero))
-            .map_err(|e| ElabError::Internal(format!("Nat predeclaration failed: {}", e)))?;
-        globals.insert("Nat".into(), nat_id);
         // `Bool` is pre-registered here so downstream code using `ElabEnv::empty`
         // gets a consistent GlobalId; `register_numeric_env` reuses it.
         let bool_id = declare_postulate(&mut env, vec![], Term::ty(Level::Zero))
@@ -105,14 +105,21 @@ impl ElabEnv {
             .map_err(|e| ElabError::Internal(format!("numeric tower init failed: {}", e)))?;
         let bytes_env = bytes::register_bytes_env(&mut env, &mut globals)
             .map_err(|e| ElabError::Internal(format!("bytes layer init failed: {}", e)))?;
-        Ok(Self {
+        let mut elab = Self {
             env,
             globals,
             num_values: HashMap::new(),
             numeric_env,
             bytes_env,
             foreign_env: foreign::ForeignEnv::empty(),
-        })
+            // placeholder; `register_prelude` fills it (and needs `&mut self`).
+            prelude_env: prelude::empty_prelude_env(),
+        };
+        // L3 prelude: Peano `Nat` (replaces the placeholder postulate) + the
+        // collection inductives + Ω constants (`37`). Registered via the landed
+        // `data` / postulate machinery — no new kernel rule.
+        elab.prelude_env = prelude::register_prelude(&mut elab)?;
+        Ok(elab)
     }
 
     /// Create an environment with pre-declared `Nat`, `Bool`, and the full numeric tower.

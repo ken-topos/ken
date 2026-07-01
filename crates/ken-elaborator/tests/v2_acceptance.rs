@@ -19,7 +19,7 @@ fn mk_env() -> ElabEnv {
 /// Declare `name : Pi(Nat, Omega 0)` — a unary Nat predicate.
 fn decl_nat_pred(env: &mut ElabEnv, name: &str) {
     let nat_id = *env.globals.get("Nat").expect("Nat");
-    let nat_ty = Term::const_(nat_id, vec![]);
+    let nat_ty = Term::indformer(nat_id, vec![]);
     let pred_ty = Term::pi(nat_ty, Term::omega(Level::Zero));
     env.declare_postulate_raw(name, pred_ty).expect("decl_nat_pred");
 }

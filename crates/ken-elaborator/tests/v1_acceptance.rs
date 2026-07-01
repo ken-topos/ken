@@ -26,14 +26,14 @@ fn lv(n: u32) -> Level {
 fn decl_nat_pred(env: &mut ElabEnv, name: &str) {
     let nat_id = *env.globals.get("Nat").unwrap();
     // Type: Pi(Nat, Omega 0) — a predicate
-    let ty = Term::pi(Term::const_(nat_id, vec![]), Term::omega(Level::Zero));
+    let ty = Term::pi(Term::indformer(nat_id, vec![]), Term::omega(Level::Zero));
     env.declare_postulate_raw(name, ty).unwrap();
 }
 
 /// Declare `name : Nat → Nat → Omega 0` — a binary relation on Nat.
 fn decl_nat_rel(env: &mut ElabEnv, name: &str) {
     let nat_id = *env.globals.get("Nat").unwrap();
-    let nat = Term::const_(nat_id, vec![]);
+    let nat = Term::indformer(nat_id, vec![]);
     // Pi(Nat, Pi(Nat, Omega 0))
     let ty = Term::pi(nat.clone(), Term::pi(weaken(&nat, 1), Term::omega(Level::Zero)));
     env.declare_postulate_raw(name, ty).unwrap();
@@ -114,7 +114,7 @@ fn ensures_emits_obligation_not_sigma() {
     // Core type: Pi(Nat, Nat) — NOT Pi(Nat, Sigma(Nat, NonNeg))
     let ty = env.env.const_type(id).expect("has type").1;
     let nat_id = *env.globals.get("Nat").unwrap();
-    let nat = Term::const_(nat_id, vec![]);
+    let nat = Term::indformer(nat_id, vec![]);
     let expected_ty = Term::pi(nat.clone(), weaken(&nat, 1));
     assert_eq!(ty, expected_ty, "ensures does not change the carrier type");
 
@@ -149,7 +149,7 @@ fn refinement_lowers_to_carrier() {
     // Core type: Pi(Nat, Nat) — carrier Nat, not Sigma(Nat, NonNeg)
     let ty = env.env.const_type(id).expect("has type").1;
     let nat_id = *env.globals.get("Nat").unwrap();
-    let nat = Term::const_(nat_id, vec![]);
+    let nat = Term::indformer(nat_id, vec![]);
     let expected_ty = Term::pi(nat.clone(), weaken(&nat, 1));
     assert_eq!(ty, expected_ty, "refinement lowers to carrier: Pi(Nat,Nat)");
 }
@@ -262,7 +262,7 @@ fn proved_status_cert_checks_not_in_trusted_base() {
     // of TrueProp, so we declare one as a postulate and use it.
     let trueprop_id = *env.globals.get("TrueProp").unwrap();
     let nat_id = *env.globals.get("Nat").unwrap();
-    let nat = Term::const_(nat_id, vec![]);
+    let nat = Term::indformer(nat_id, vec![]);
     // Declare a proof witness: `wit : Pi(Nat, TrueProp Var(0))`
     let proof_ty = obl.goal_closed.clone();
     let wit_id = env
@@ -532,7 +532,7 @@ fn requires_on_first_of_two_params() {
     // body = d = Var(1) after fix (was Var(0)=proof before fix → TypeMismatch)
     let positive_id = *env.globals.get("Positive").unwrap();
     let nat_id = *env.globals.get("Nat").unwrap();
-    let nat = Term::const_(nat_id, vec![]);
+    let nat = Term::indformer(nat_id, vec![]);
     // Expected body: λn:Nat. λd:Nat. λproof:Positive(n). d
     let expected = Term::lam(
         nat.clone(),
@@ -568,7 +568,7 @@ fn requires_on_middle_param_of_three() {
     let body = env.env.transparent_body(res.def_id).expect("transparent body").1;
     let mid_pred_id = *env.globals.get("MidPred").unwrap();
     let nat_id = *env.globals.get("Nat").unwrap();
-    let nat = Term::const_(nat_id, vec![]);
+    let nat = Term::indformer(nat_id, vec![]);
     // λa:Nat. λb:Nat. λc:Nat. λproof:MidPred(b). a
     // MidPred(b) in c-ctx: b=Var(1), so domain = App(MidPred, Var(1))
     // a in proof-ctx: Var(3)
@@ -607,7 +607,7 @@ fn requires_on_final_param_unaffected() {
     let body = env.env.transparent_body(res.def_id).expect("transparent body").1;
     let fin_pred_id = *env.globals.get("FinalPred").unwrap();
     let nat_id = *env.globals.get("Nat").unwrap();
-    let nat = Term::const_(nat_id, vec![]);
+    let nat = Term::indformer(nat_id, vec![]);
     // λn:Nat. λd:Nat. λproof:FinalPred(d). n
     // FinalPred(d) in d-ctx: Var(0)=d, so domain = App(FinalPred, Var(0))
     // n in proof-ctx: Var(2)
