@@ -322,14 +322,26 @@ defining shapes:
 - **`isSorted : Π{a}. Ord a => List a -> Ω`** — an `Ω`-valued structural
   recursion: `isSorted Nil = ⊤`, `isSorted (x :: Nil) = ⊤`, and
   `isSorted (x :: y :: r) = (x ≤ y) ∧ isSorted (y :: r)` (the connective is the
-  derived Ω-conjunction, `16 §1.3`; `≤` is `Ord`'s). It **must** land in `Ω`
-  (proof-irrelevant) — a `Type`-sorted "predicate" would leak content into the
+  derived Ω-conjunction, `16 §1.3`). **The order relation `x ≤ y` must be
+  `Ω`-valued:** `Ord`'s propositional `≤ : A → A → Ω` directly, or — if `Ord`
+  exposes only a decidable `leq : A → A → Bool` — the bridge
+  `IsTrue (leq x y) := Eq Bool (leq x y) True : Ω`. It **must** land in `Ω`
+  (proof-irrelevant); a `Type`-sorted "predicate" leaks content into the
   refinement carrier (`13 §4` / `16 §8.2`).
-- **`Perm : Π{a}. List a -> List a -> Ω`** — the **inductive relation**
-  `data Perm : List a -> List a -> Ω := perm_refl | perm_swap | perm_trans |
-  perm_cons`, preferred over the count-equality form
-  (`∀ x. count x xs = count x ys`) because it carries **no `DecEq a`
-  dependency**. Also in `Ω`.
+- **`Perm : Π{a}. List a -> List a -> Ω`** — a permutation **must** be
+  `Ω`-valued, and the bare inductive relation is **not**:
+  `data Perm := perm_refl | perm_swap | perm_trans | perm_cons` is
+  proof-**relevant** (a `Perm` proof records *which* permutation), so it lands in
+  `Type`. Two `Ω` forms (the spec picks one):
+  - **truncated** `∥Perm∥ : Ω` — propositional truncation of the inductive
+    relation (proof-irrelevant, **no `DecEq a` dependency**); or
+  - **count-equality**
+    `Perm xs ys := Π (x : a). Eq Nat (count x xs) (count x ys)` — natively `Ω`
+    (a `Π` of `Eq`s), but requires `DecEq a` for `count`.
+
+  Declaring the bare inductive `: Ω` is the relevance-leak the `sort_sigma`/Ω
+  discipline forbids (`13 §4`; CV's derivation-path table surfaced this fork,
+  Architect Ω-sort check).
 
 Neither is prelude — no primitive signature names them (`30 §4`); they are the
 verified-`sort` showcase's own definitions.
