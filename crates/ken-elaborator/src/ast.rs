@@ -242,6 +242,8 @@ pub enum Expr {
     EOld(Box<Expr>, Span),
     /// Numeric literal (`35 §4.1`).
     ENumLit(NumLit, Span),
+    /// String literal (`37 §2.1`, VAL1-surface).
+    EStr(String, Span),
     /// Infix binary operation (`35 §3`).
     EBinOp(BinOp, Box<Expr>, Box<Expr>, Span),
     /// `match scrut { P₁ => body₁ ; … }` — pattern matching (`34 §3`).
@@ -264,6 +266,7 @@ impl Expr {
             | Expr::EAsc(_, _, s)
             | Expr::EOld(_, s)
             | Expr::ENumLit(_, s)
+            | Expr::EStr(_, s)
             | Expr::EBinOp(_, _, _, s) => s,
             Expr::EMatch { span, .. } => span,
         }

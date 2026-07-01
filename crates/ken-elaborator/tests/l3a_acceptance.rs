@@ -512,6 +512,7 @@ fn lit_to_evalval(lit: &NumericLitVal) -> EvalVal {
             coeff: *coeff,
             exp: *exp,
         },
+        NumericLitVal::Str(s) => EvalVal::Str(s.clone()),
     }
 }
 

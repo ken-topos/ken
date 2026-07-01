@@ -1,0 +1,18 @@
+-- Rosetta Code: Hello world
+-- https://rosettacode.org/wiki/Hello_world/Text
+--
+-- Task: print "Hello, World!" to standard output.
+--
+-- GAP-string-literals: FIXED. String literals now parse and elaborate
+-- to type `String` (VAL1-surface, `37 §2.1`). This view elaborates
+-- and evaluates to EvalVal::Str("Hello, World!").
+--
+-- GAP-io-surface (blocking): no surface `print_line` yet. The Console
+-- effect exists as ITree in tests; surface name pending Runtime's
+-- wp/VAL1-console-exec landing. Once that merges, add:
+--
+--   foreign print_line : String -> IO Unit = "puts" "libc" [Console]
+--   view main : IO Unit = print_line "Hello, World!"
+--
+-- Current: the string value is elaborated correctly; I/O is the last gap.
+view main : String = "Hello, World!"

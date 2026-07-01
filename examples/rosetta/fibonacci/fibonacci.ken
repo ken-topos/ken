@@ -1,0 +1,49 @@
+-- Rosetta Code: Fibonacci sequence
+-- https://rosettacode.org/wiki/Fibonacci_sequence
+--
+-- Task: compute the n-th Fibonacci number.
+--
+-- Uses iterative linear Fibonacci with two Nat accumulators to avoid:
+--   GAP-nested-patterns: `Suc (Suc m)` as a match pattern triggers
+--     ReachabilityError. The naive 3-case match is not usable.
+--
+-- `fibStep n a b`: steps n times starting from (a, b) = (F(0), F(1)).
+-- Each step shifts: (a, b) -> (b, a+b). Returns a after n steps = F(n).
+-- SCT: `n` is structurally decreasing.
+--
+-- This is also O(n) instead of the naive exponential double-recursion.
+
+-- ── Nat helpers ──────────────────────────────────────────────────────────────
+
+view natAdd (a : Nat) (b : Nat) : Nat =
+  match a { Zero => b ; Suc m => Suc (natAdd m b) }
+
+view natToInt (n : Nat) : Int =
+  match n { Zero => (0 : Int) ; Suc m => (1 : Int) + natToInt m }
+
+-- ── Fibonacci (iterative accumulator) ────────────────────────────────────────
+
+-- fibStep n a b = F(n) when a = F(0), b = F(1).
+-- Shifts (a,b) -> (b, a+b) at each Suc step.
+view fibStep (n : Nat) (a : Nat) (b : Nat) : Nat =
+  match n { Zero => a ; Suc m => fibStep m b (natAdd a b) }
+
+view fib (n : Nat) : Nat = fibStep n Zero (Suc Zero)
+
+-- ── Readable Nat literals ────────────────────────────────────────────────────
+
+view one   : Nat = Suc Zero
+view two   : Nat = Suc one
+view three : Nat = Suc two
+view four  : Nat = Suc three
+view five  : Nat = Suc four
+view six   : Nat = Suc five
+view seven : Nat = Suc six
+view eight : Nat = Suc seven
+view nine  : Nat = Suc eight
+view ten   : Nat = Suc nine
+
+-- ── Oracle ───────────────────────────────────────────────────────────────────
+
+-- main: F(10) = 55
+view main : Int = natToInt (fib ten)

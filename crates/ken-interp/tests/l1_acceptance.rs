@@ -37,6 +37,7 @@ fn lit_to_eval(v: &NumericLitVal) -> EvalVal {
         NumericLitVal::Decimal { coeff, exp } => {
             EvalVal::DecimalVal { coeff: *coeff, exp: *exp }
         }
+        NumericLitVal::Str(s) => EvalVal::Str(s.clone()),
     }
 }
 

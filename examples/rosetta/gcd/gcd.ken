@@ -1,0 +1,85 @@
+-- Rosetta Code: Greatest common divisor
+-- https://rosettacode.org/wiki/Greatest_common_divisor
+--
+-- Task: compute gcd(a, b) for two non-negative integers.
+--
+-- Uses the subtraction-based GCD:
+--   gcd(a, b) = a         if a == b
+--   gcd(a, b) = gcd(a-b, b)  if a > b
+--   gcd(a, b) = gcd(a, b-a)  if a < b
+-- Implemented with explicit fuel (= a + b) for SCT termination.
+--
+-- GAP-nested-patterns: `Suc _` in `natCmp` (a nested constructor pattern)
+--   triggers ReachabilityError. Workaround: split into `natCmpZero` helper
+--   (non-recursive, declared before `natCmp`) with only flat `Zero | Suc n`
+--   patterns.
+
+-- ── Nat helpers ──────────────────────────────────────────────────────────────
+
+view natAdd (a : Nat) (b : Nat) : Nat =
+  match a { Zero => b ; Suc m => Suc (natAdd m b) }
+
+-- natSub: monus (a - b, floored at 0 if a < b).
+view natSub (a : Nat) (b : Nat) : Nat =
+  match b {
+    Zero  => a ;
+    Suc n => match a {
+               Zero  => Zero ;
+               Suc m => natSub m n
+             }
+  }
+
+-- natCmpZero: compare Zero against b. Used by natCmp to avoid nested
+-- patterns (`Suc _` triggers ReachabilityError).
+view natCmpZero (b : Nat) : OrdResult =
+  match b { Zero => Eq ; Suc n => Lt }
+
+-- natCmp: structural comparison, returns OrdResult (L3 prelude).
+-- SCT: both a and b decrease by one per step.
+view natCmp (a : Nat) (b : Nat) : OrdResult =
+  match a {
+    Zero  => natCmpZero b ;
+    Suc m => match b { Zero => Gt ; Suc n => natCmp m n }
+  }
+
+view natToInt (n : Nat) : Int =
+  match n { Zero => (0 : Int) ; Suc m => (1 : Int) + natToInt m }
+
+-- ── GCD (fuel-bounded) ───────────────────────────────────────────────────────
+
+-- natGcdFueled: subtraction-based GCD with explicit fuel.
+-- SCT: `f` is a strict structural sub-term of `Suc f`.
+view natGcdFueled (fuel : Nat) (a : Nat) (b : Nat) : Nat =
+  match fuel {
+    Zero  => a ;
+    Suc f => match natCmp a b {
+               Eq => a ;
+               Gt => natGcdFueled f (natSub a b) b ;
+               Lt => natGcdFueled f a (natSub b a)
+             }
+  }
+
+-- natGcd: uses a + b as fuel (always sufficient for subtraction-based GCD).
+view natGcd (a : Nat) (b : Nat) : Nat =
+  let fuel : Nat = natAdd a b in
+  natGcdFueled fuel a b
+
+-- ── Readable Nat literals ────────────────────────────────────────────────────
+
+view one    : Nat = Suc Zero
+view two    : Nat = Suc one
+view three  : Nat = Suc two
+view four   : Nat = Suc three
+view five   : Nat = Suc four
+view six    : Nat = Suc five
+view seven  : Nat = Suc six
+view eight  : Nat = Suc seven
+view nine   : Nat = Suc eight
+view ten    : Nat = Suc nine
+view eleven : Nat = Suc ten
+view twelve : Nat = Suc eleven
+
+-- ── Oracle ───────────────────────────────────────────────────────────────────
+
+-- main: gcd(12, 8) = 4
+view main : Int = natToInt (natGcd twelve eight)

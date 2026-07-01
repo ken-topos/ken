@@ -1,0 +1,50 @@
+-- Rosetta Code: Ackermann function
+-- https://rosettacode.org/wiki/Ackermann_function
+--
+-- Task: compute A(m, n) for small m, n.
+--
+-- Definition:
+--   A(0, n) = n + 1
+--   A(m, 0) = A(m-1, 1)          for m > 0
+--   A(m, n) = A(m-1, A(m, n-1))  for m > 0, n > 0
+--
+-- GAP-ackermann-sct (BLOCKING): Ken's SCT checker requires a SINGLE
+-- structurally-decreasing parameter. The Ackermann function terminates
+-- under the LEXICOGRAPHIC order on (m, n), but the current SCT cannot
+-- infer lexicographic termination automatically. Elaboration fails with:
+--   "SCT: idempotent self-loop has no strictly-decreasing parameter"
+--
+-- The function is total and well-founded; the gap is in the SCT's
+-- ordering detection. Fix: extend the SCT to accept lexicographic descent.
+--
+-- Once GAP-ackermann-sct is resolved, the definition and oracle below
+-- will elaborate. Scale note: A(3,4) = 125 requires many recursive calls
+-- at runtime; the feasible oracle is A(3,2) = 29.
+
+-- ── Nat helpers ──────────────────────────────────────────────────────────────
+
+view natToInt (n : Nat) : Int =
+  match n { Zero => (0 : Int) ; Suc m => (1 : Int) + natToInt m }
+
+-- ── Ackermann (blocked by GAP-ackermann-sct) ─────────────────────────────────
+--
+-- Uncomment once the SCT supports lexicographic termination:
+--
+-- view ack (m : Nat) (n : Nat) : Nat =
+--   match m {
+--     Zero  => Suc n ;
+--     Suc p => match n {
+--                Zero  => ack p (Suc Zero) ;
+--                Suc q => ack p (ack (Suc p) q)
+--              }
+--   }
+--
+-- view one   : Nat = Suc Zero
+-- view two   : Nat = Suc one
+-- view three : Nat = Suc two
+--
+-- main: A(3, 2) = 29
+-- view main : Int = natToInt (ack three two)
+
+-- Placeholder until GAP-ackermann-sct is resolved.
+view main : Nat = Zero

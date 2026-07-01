@@ -1,0 +1,43 @@
+-- Rosetta Code: Factorial
+-- https://rosettacode.org/wiki/Factorial
+--
+-- Task: compute n! for a given n.
+--
+-- Uses Nat structural recursion (the landed machinery from L2 + L3 prelude).
+-- Nat is the only type supporting structural pattern-match recursion on the
+-- predecessor; Int does not have a `Suc`/`Zero` decomposition.
+-- `natToInt` converts the result to a readable Int for the oracle.
+--
+-- No gaps blocking this task.
+
+-- ── Nat arithmetic helpers ───────────────────────────────────────────────────
+
+view natAdd (a : Nat) (b : Nat) : Nat =
+  match a { Zero => b ; Suc m => Suc (natAdd m b) }
+
+view natMul (a : Nat) (b : Nat) : Nat =
+  match a { Zero => Zero ; Suc m => natAdd b (natMul m b) }
+
+-- Convert a Nat to Int for human-readable output.
+view natToInt (n : Nat) : Int =
+  match n { Zero => (0 : Int) ; Suc m => (1 : Int) + natToInt m }
+
+-- ── Factorial ────────────────────────────────────────────────────────────────
+
+-- factorial n = n! via structural recursion.
+-- SCT: `factorial m` call is on `m`, a strict structural sub-term of `Suc m`.
+view factorial (n : Nat) : Nat =
+  match n { Zero => Suc Zero ; Suc m => natMul n (factorial m) }
+
+-- ── Readable Nat literals ────────────────────────────────────────────────────
+
+view one   : Nat = Suc Zero
+view two   : Nat = Suc one
+view three : Nat = Suc two
+view four  : Nat = Suc three
+view five  : Nat = Suc four
+
+-- ── Oracle ───────────────────────────────────────────────────────────────────
+
+-- main: 5! = 120
+view main : Int = natToInt (factorial five)

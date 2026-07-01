@@ -1,0 +1,70 @@
+-- Rosetta Code: FizzBuzz
+-- https://rosettacode.org/wiki/FizzBuzz
+--
+-- Task: for n = 1..20, print "FizzBuzz" if n is divisible by 15,
+-- "Fizz" if divisible by 3, "Buzz" if divisible by 5, else print n.
+--
+-- GAP-string-literals: FIXED (VAL1-surface, `37 §2.1`).
+-- GAP-io-surface (blocking): no surface print function.
+-- GAP-subtraction/modulo/comparison: not in surface BinOp.
+-- GAP-bool-match: Bool is opaque (not `data Bool = True | False`).
+-- GAP-nat-literals: integer literals elaborate at Int.
+-- GAP-nested-patterns: nested constructor patterns like `Suc (Suc Zero)`
+--   in match position trigger ReachabilityError. Workaround: modular
+--   accumulator types with flat patterns only.
+--
+-- All views below elaborate correctly.
+
+-- Classification result.
+data FizzTag = Plain | IsFizz | IsBuzz | IsFizzBuzz
+
+-- Helper: is a Nat zero?
+data IsZero = Zero_ | NonZero_
+
+view isZero (n : Nat) : IsZero =
+  match n { Zero => Zero_ ; Suc m => NonZero_ }
+
+-- ── mod3 ──────────────────────────────────────────────────────────────────────
+-- Modular accumulator for mod3: a 3-element cycle type avoids nested patterns
+-- and mutual recursion. `mod3Step n acc` steps n times from acc.
+
+data Mod3 = Zero3 | One3 | Two3
+
+view incMod3 (x : Mod3) : Mod3 =
+  match x { Zero3 => One3 ; One3 => Two3 ; Two3 => Zero3 }
+
+view isZeroMod3 (x : Mod3) : IsZero =
+  match x { Zero3 => Zero_ ; One3 => NonZero_ ; Two3 => NonZero_ }
+
+view mod3Step (n : Nat) (acc : Mod3) : Mod3 =
+  match n { Zero => acc ; Suc m => mod3Step m (incMod3 acc) }
+
+view mod3 (n : Nat) : Mod3 = mod3Step n Zero3
+
+-- ── mod5 ──────────────────────────────────────────────────────────────────────
+-- Same pattern with a 5-element cycle type.
+
+data Mod5 = Zero5 | One5 | Two5 | Three5 | Four5
+
+view incMod5 (x : Mod5) : Mod5 =
+  match x { Zero5 => One5 ; One5 => Two5 ; Two5 => Three5 ; Three5 => Four5 ; Four5 => Zero5 }
+
+view isZeroMod5 (x : Mod5) : IsZero =
+  match x { Zero5 => Zero_ ; One5 => NonZero_ ; Two5 => NonZero_ ; Three5 => NonZero_ ; Four5 => NonZero_ }
+
+view mod5Step (n : Nat) (acc : Mod5) : Mod5 =
+  match n { Zero => acc ; Suc m => mod5Step m (incMod5 acc) }
+
+view mod5 (n : Nat) : Mod5 = mod5Step n Zero5
+
+-- ── classify ─────────────────────────────────────────────────────────────────
+
+view classify (n : Nat) : FizzTag =
+  match isZeroMod3 (mod3 n) {
+    Zero_    => match isZeroMod5 (mod5 n) {
+                  Zero_    => IsFizzBuzz ;
+                  NonZero_ => IsFizz } ;
+    NonZero_ => match isZeroMod5 (mod5 n) {
+                  Zero_    => IsBuzz ;
+                  NonZero_ => Plain }
+  }
