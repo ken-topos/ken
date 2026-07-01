@@ -201,6 +201,18 @@ claim with no conformance case is a claim no one can rely on
   `[structural/by-construction]` and
   **trusted-by-typing → `P`/`tested`, never `Q`/"kernel-backed"** (the corpus is
   the net, not the kernel).
+- `security/supply-chain/seed-discharge-attestation.md` — Sec6 discharge-
+  attestation contract (`63 §5a`, `OQ-discharge-attestation` DECIDED, ward
+  `f33276b`): the Ken-visible field set (all B1-emitted), the **one-way gate**
+  over the outcome vocabulary (**no outcome — not even `discharged` — promotes a
+  `T` to `proved`**; extends B1's
+  `delegated-obligation-never-promoted-to-proved` over the four outcomes + the
+  `Q@ct` channel — the trusted-by-typing → `P`/`tested` never `Q` shape), the
+  **Ward-internal boundary** (a correctness
+  judgment reading `policy`/`bound`/`evidence`/`ct.method`/`regression` is
+  rejected), reject-missing-`ward.version` / accept-ignore-unknown, and
+  `id`-stable-across-`export.hash`-change. Static face; the three-check
+  deployment gate is the named Team-Verify build follow-on.
 - `behavioral/export/seed-export.md` — B1 assumption-boundary export emitter
   (the `Q`/`P`/`Σ`/`T`/`G` status→field projection: the no-over-claim pair,
   alphabet reuse, the no-measure seal, the one-way gate, content-hash

@@ -590,18 +590,35 @@ states what it cannot prove; the sibling models/tests/monitors it.
   Ward version in the discharge attestation** (`OQ-discharge-attestation`).
 - **Affects.** `70-behavioral/71 §5`, `20-verification/23 §7`. **Recorded.**
 
-### OQ-discharge-attestation — Post-build validation artifact — *deferred*
+### OQ-discharge-attestation — Post-build validation artifact — **DECIDED**
 - **Fork.** How to represent "the delegated obligations were discharged by Ward"
   as a first-class compliance artifact (vs. text logs + coverage XML).
 - **Decision (operator, 2026-06-27): a signed, runtime-checkable discharge
-  attestation** (`60-security/63 §5a`) carrying (1) the Ken export answered
-  (hash), (2) the Ward policy used (hash+version), (3) optional sampling
-  choices/ coverage, (4) the per-obligation four-way outcome, (5) a signature
-  incl. Ward version — so a **deployment gate** enforces that an artifact
-  carries the post-build validation its **target environment** requires. Same
-  governance ladder as the policy attestation (`65`). **Open (deferred):** the
-  concrete schema + gate semantics — needs Ward's runner.
-- **Affects.** `60-security/63 §5a`, `65`; `70-behavioral/`.
+  attestation** (`60-security/63 §5a`), governed on the policy-attestation
+  ladder (`65`), enabling a per-target-environment **deployment gate**.
+- **Ratified (Sec6, 2026-07-01) — `Ward` finalized its half (ward `f33276b`);
+  Ken's half pinned in `63 §5a`:**
+  - **Ken-visible field set** (the ratified contract surface, all already B1-
+    emitted, `70-behavioral/71 §2.1`): `export.hash`, `export.contractVersion`,
+    `ward.version` (the one trust edge), `obligations[].id`/`.field`/`.outcome`,
+    `signature`. Literal tokens + the `predicateType` URI are `Ward`'s wire
+    spelling, oracle-tagged under `OQ-export-wire`.
+  - **Narrowing from the 2026-06-27 sketch:** the `Ward` policy (hash+version)
+    and the sampling choices/coverage are **`Ward`-internal**, not Ken-visible —
+    Ken classifies **epistemic status**, never `Ward`'s **mechanism**. No Ken
+    correctness judgment may read a `Ward`-internal field (`policy`/`bound`/
+    `evidence`/`ct.method`/`regression`).
+  - **Outcome vocabulary:** four-way **total** `discharged / bounded / monitored
+    / failed` — `bounded-to-`k`` **widened to `bounded`** (covers model-check
+    depth **and** sampled coverage; the bound is `Ward`-internal).
+  - **Hard invariant (I4):** no `outcome` promotes a `T` to `proved`; a
+    discharge projects to `P`/`tested`, never `Q` (`70-behavioral/71 §5.1`). The
+    CT-
+    validation *method* stays `Ward`-side (ward §13); Ken carries the verdict.
+- **Build follow-on (named, sequenced-behind):** the three-check deployment gate
+  on Ken's provenance verifier (Team Verify, WS-Sec) — the runtime face of the
+  static invariants pinned in `63 §5a`.
+- **Affects.** `60-security/63 §5a`, `65`; `70-behavioral/71 §5`.
 
 ### OQ-conformance — Ken's observability contract — **DECIDED**
 - **Fork.** Is implementation-refines-model conformance a CI gate, a production
@@ -660,7 +677,7 @@ states what it cannot prove; the sibling models/tests/monitors it.
 | **OQ-sampling-policy** | 2026-06-27 — the test-sampling **measure** lives **outside Ken source, durably** (per-deployment; `Dockerfile`/Terraform class); a Ward-side **sampling policy** governed like the security policy; Ken's `G` partition is its vocabulary. Policy *language* deferred (needs Ward's sampler). | — (deferred; `70-behavioral/71 §4`) |
 | **OQ-temporal** | 2026-06-27 — **data-only, durably**: no kernel temporal modalities; `Temporal` is inert inductive data, stated + exported + delegated to Ward. Boundary: Ken reasons **about** formulas, **not with** modalities. Unbounded liveness → contained reflective model, never kernel modalities. | **ADR 0006** (recorded in `70-behavioral/72`) |
 | **OQ-classical-bridge** | 2026-06-27 — **strictly one-way (Ken → Ward)**; Ward results never promoted to `proved`; sound by **assume-guarantee** (`Q ⊣ P`); **translation faithfulness** Ken-checked **once at the compiler level** (analog of Kripke adequacy) + generated-model + conformance; trust edge pinned as Ward version in the discharge attestation. | **ADR 0006** (recorded in `70-behavioral/71 §5`, `20-verification/23`) |
-| **OQ-discharge-attestation** | 2026-06-27 — post-build validation = a **signed, runtime-checkable discharge attestation** (export hash + Ward policy + optional sampling + per-obligation four-way outcome + Ward-version signature); a **deployment gate** enforces per-target-environment validation; policy-attestation ladder. Schema deferred (needs Ward's runner). | — (deferred; `60-security/63 §5a`) |
+| **OQ-discharge-attestation** | 2026-06-27 — post-build validation = a **signed, runtime-checkable discharge attestation**; a **deployment gate** enforces per-target-environment validation; policy-attestation ladder. **DECIDED (Sec6, 2026-07-01, ward `f33276b`):** Ken-visible field set ratified (`export.hash`/`.contractVersion`, `ward.version`, `obligations[].id`/`.field`/`.outcome`, `signature` — all B1-emitted); `Ward` policy + sampling **reclassified `Ward`-internal** (Ken classifies epistemic status, not mechanism); outcome four-way `discharged/bounded/monitored/failed` (`bounded-to-`k`` widened to `bounded`); I4 hard (no `outcome` → `proved`). | **DECIDED** (`60-security/63 §5a`) |
 | **OQ-conformance** | 2026-06-27 — **reframed to Ken's half**: Ken emits a **trace/instrumentation contract** (concrete `Σ`-event schema at the effect boundary + correlation/identity for multi-space + runtime `Q`/`P`/`T` monitors), making the running system observable in the model's vocabulary. Export = **broadcast contract** to a family of engines; runtime monitor likely a **distinct sidecar**. Gate/monitor/both + response = downstream policy. | **ADR 0006** (recorded in `70-behavioral/73`) |
 | **OQ-relational** | 2026-06-27 — by-proof relational = **re-checked unary obligations** (product programs; reflective embedding if ever first-class), **progress-sensitive** default, heavy machinery **deferred**. **Constant-time split out**: a distinct **opt-in `@ct` label** enforced **by typing** (taint to leakage-effect sinks; sound 2-safety enforcement, no product programs); timing guarantee **delegated to Ward** under a leakage model; policy may require `@ct` per data class. | — (recorded in `60-security/61 §5a`, `30-surface/36`, `64`, `65`) |
 | **OQ-eval-order** | 2026-06-27 — **CBV (strict) with sharing, strict by default**; totality makes eval-order meaning-preserving so pick the predictable order (cost model, reading order, no space leaks; precondition for `@ct`/bounds). Laziness only where required (branches/short-circuit) or by explicit **`Lazy a`** thunk. Distinct from kernel lazy-WHNF conversion. | — (recorded in `40-runtime/42`) |
