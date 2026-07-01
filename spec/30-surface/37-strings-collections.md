@@ -331,10 +331,10 @@ defining shapes:
 - **`Perm : Π{a}. List a -> List a -> Ω`** — a permutation **must** be
   `Ω`-valued, and a bare inductive relation is **not**:
   `data Perm_rel := perm_refl | perm_swap | perm_trans | perm_cons` is
-  proof-**relevant** (a proof records *which* permutation) so it lands in `Type`,
-  and `16 §1.3` **forbids** a proof-relevant `Type → Ω` directly (it would admit
-  `Bool`, collapsing `true ≡ false` by Ω-PI). Two admissible `Ω` forms (the spec
-  picks one):
+  proof-**relevant** (a proof records *which* permutation) so it lands in
+  `Type`, and `16 §1.3` **forbids** a proof-relevant `Type → Ω` directly (it
+  would admit `Bool`, collapsing `true ≡ false` by Ω-PI). Two admissible `Ω`
+  forms (the spec picks one):
   - **truncated** `Perm xs ys := ∥ Perm_rel xs ys ∥ : Ω` — propositional
     truncation of the `Type`-level inductive (the `∨ := ∥+∥` / `∃ := ∥Σ∥`
     pattern, `16 §6`; proof-irrelevant, **no `DecEq a` dependency**); or
