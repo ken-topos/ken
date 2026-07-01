@@ -172,8 +172,8 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         .map_err(|e| ElabError::Internal(format!("prelude Unit failed: {}", e)))?;
     elab.elaborate_decl("data ConsoleOp = Write String")
         .map_err(|e| ElabError::Internal(format!("prelude ConsoleOp failed: {}", e)))?;
-    // Simplified W-style ITree with Nat response (`36 §2.1`, K1.5).
-    elab.elaborate_decl("data ITree r = Ret r | Vis (Nat -> ITree r)")
+    // Two-field Vis: effect op first, continuation second — matches run_io contract.
+    elab.elaborate_decl("data ITree r = Ret r | Vis ConsoleOp (Unit -> ITree r)")
         .map_err(|e| ElabError::Internal(format!("prelude ITree failed: {}", e)))?;
 
     let lookup = |name: &str| -> Result<GlobalId, ElabError> {
@@ -324,6 +324,11 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         "list_char_to_string",
     )?;
 
+    // Drop reg_prim before borrowing elab for IO/print_line declarations.
+    // NLL cannot end the reg_prim borrow while print_line = reg_prim(...) appears
+    // after the IO declaration; an explicit drop lets IO borrow elab cleanly.
+    drop(reg_prim);
+
     // `IO : Type → Type` — the Console-effect IO type (postulate; prim
     // reduction to `ITree ConsoleOp` held until `wp/VAL1-console-exec` lands).
     let io_ty = Term::pi(type0.clone(), type0.clone());
@@ -331,15 +336,21 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         .declare_postulate_raw("IO", io_ty)
         .map_err(|e| ElabError::Internal(format!("prelude IO failed: {}", e)))?;
 
-    // `print_line : String → IO Unit` — the surface Console print postulate.
-    // Effect contract: Console effect; prim reduction held (see above).
-    // `string_t` and `unit_id` are available from above.
+    // `print_line : String → IO Unit` — Console print primitive.
+    // Declared as a primitive (not a postulate) so eval produces CtorPending
+    // that is intercepted in `apply` once `store.print_line_id` is wired.
+    // Symbol "print_line" is handled in `eval.rs::apply` using `store.console_ids`.
     let unit_t = Term::indformer(unit_id, vec![]);
     let io_unit = Term::app(Term::const_(io_id, vec![]), unit_t);
     let print_line_ty = Term::pi(string_t.clone(), io_unit);
-    let print_line_id = elab
-        .declare_postulate_raw("print_line", print_line_ty)
-        .map_err(|e| ElabError::Internal(format!("prelude print_line failed: {}", e)))?;
+    let print_line_id = declare_primitive(
+        &mut elab.env,
+        vec![],
+        print_line_ty,
+        PrimReduction::Op { symbol: "print_line" },
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude print_line failed: {}", e)))?;
+    elab.globals.insert("print_line".to_string(), print_line_id);
 
     Ok(PreludeEnv {
         nat_id,

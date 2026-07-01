@@ -7,7 +7,7 @@
 //! Batch-2: verifies fibonacci/gcd/ackermann views elaborate (batch-2 fixes).
 
 use ken_elaborator::{ElabEnv, NumericLitVal};
-use ken_interp::eval::{EvalStore, EvalVal};
+use ken_interp::eval::{ConsoleIds, EvalStore, EvalVal};
 use ken_kernel::{Decl, GlobalId};
 
 fn make_store(env: &ElabEnv) -> EvalStore {
@@ -129,6 +129,57 @@ fn print_line_type_checks_as_io_unit() {
     let unit_t = ken_kernel::Term::indformer(unit_id, vec![]);
     let io_unit = ken_kernel::Term::app(ken_kernel::Term::const_(io_id, vec![]), unit_t);
     assert_eq!(ty, io_unit, "main must have type IO Unit");
+}
+
+// ── AC5: print_line prim reduction builds Vis (Write s) (\\_. Ret MkUnit) ─────
+
+/// `surface/io/print-line-prim-reduction` (VAL1-surface, `36 §2.1`)
+///
+/// When `store.print_line_id` + `store.console_ids` are wired, evaluating
+/// `print_line "Hello, World!"` produces a `Vis (Write s) k` ITree value.
+/// This pins the full prim-reduction path end-to-end.
+#[test]
+fn print_line_prim_reduction_builds_itree() {
+    let mut env = ElabEnv::new().expect("base env");
+    let id = env
+        .elaborate_decl("view main : IO Unit = print_line \"Hello, World!\"")
+        .expect("print_line app elaborates");
+
+    let p = &env.prelude_env;
+    let console_ids = ConsoleIds {
+        itree_id: p.itree_id,
+        ret_id: p.ret_id,
+        vis_id: p.vis_id,
+        write_id: p.write_id,
+        unit_id: p.mkunit_id,  // `unit_id` in ConsoleIds = MkUnit constructor
+        params_len: 1,          // `data ITree r` — one type param
+    };
+    let mut store = make_store(&env);
+    store.print_line_id = Some(p.print_line_id);
+    store.console_ids = Some(console_ids.clone());
+
+    let val = eval_def(&env, &mut store, id);
+
+    // The result must be a Vis node: Ctor { vis_id, args: [_, Write_s, k] }
+    match val {
+        EvalVal::Ctor { id: ctor_id, ref args, .. } => {
+            assert_eq!(ctor_id, p.vis_id, "outer ctor must be Vis");
+            // args[0] = type param (Unknown); args[1] = Write s; args[2] = continuation
+            assert!(args.len() >= 3, "Vis must have >= 3 args (type_param + op + k)");
+            match &args[1] {
+                EvalVal::Ctor { id: op_id, args: op_args, .. } => {
+                    assert_eq!(*op_id, p.write_id, "op must be Write");
+                    assert_eq!(
+                        op_args.as_ref(),
+                        &[EvalVal::Str("Hello, World!".to_owned())],
+                        "Write arg must be the string"
+                    );
+                }
+                other => panic!("expected Write ctor, got {:?}", other),
+            }
+        }
+        other => panic!("expected Vis ITree node, got {:?}", other),
+    }
 }
 
 // ── FizzBuzz batch-1 QA blocker: semicolons in match arms ────────────────────

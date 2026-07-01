@@ -44,6 +44,13 @@ pub struct EvalStore {
     /// Propagates a `CapacityExhausted` error from the intern helper (`44 §2`).
     /// Set when the store's soft limit is hit; callers must not silently drop it.
     pub capacity_error: Option<(u64, u64)>,
+    /// `print_line` prim reduction: GlobalId of the postulate, set by the Language
+    /// layer after `ElabEnv::new()` registers it. When `Some`, `apply` intercepts
+    /// `App(print_line_id, Str s)` and builds `Vis (Write s) (\\_. Ret MkUnit)`.
+    pub print_line_id: Option<GlobalId>,
+    /// Console IDs needed to build the ITree response to `print_line`.
+    /// Set alongside `print_line_id` by the Language driver / test setup.
+    pub console_ids: Option<ConsoleIds>,
 }
 
 impl EvalStore {
@@ -54,6 +61,8 @@ impl EvalStore {
             next_code_id: 1,
             num_values: HashMap::new(),
             capacity_error: None,
+            print_line_id: None,
+            console_ids: None,
         }
     }
 
@@ -65,6 +74,8 @@ impl EvalStore {
             next_code_id: 1,
             num_values: HashMap::new(),
             capacity_error: None,
+            print_line_id: None,
+            console_ids: None,
         }
     }
 
@@ -1012,6 +1023,19 @@ pub fn apply(f: EvalVal, u: EvalVal, globals: &GlobalEnv, store: &mut EvalStore)
             }
             args.push(u);
             if args.len() >= need {
+                // `print_line s` prim reduction: App(print_line_id, Str s)
+                // → Vis (Write s) (\\_. Ret MkUnit)  (`36 §2.1`, VAL1-surface).
+                // Intercepted here before the generic prim path so we have
+                // access to `store` (needed for make_ctor/make_closure) and
+                // `console_ids` (GlobalIds for ITree/ConsoleOp constructors).
+                if let (Some(pl_id), Some(_)) = (store.print_line_id, &store.console_ids) {
+                    if id == pl_id {
+                        if let [EvalVal::Str(s)] = args.as_slice() {
+                            let cids = store.console_ids.clone().unwrap();
+                            return build_print_line_tree(s.clone(), &cids, store);
+                        }
+                    }
+                }
                 // Saturated — check if this is a prim or a data constructor.
                 if let Some(Decl::Primitive { reduction, .. }) = globals.lookup(id) {
                     if let PrimReduction::Op { symbol } = reduction {
@@ -1030,6 +1054,35 @@ pub fn apply(f: EvalVal, u: EvalVal, globals: &GlobalEnv, store: &mut EvalStore)
         // --- Neutral: remain stuck ---
         _ => EvalVal::Neutral,
     }
+}
+
+/// Build `Vis (Write s) (\\_. Ret MkUnit)` — the ITree value produced by
+/// `print_line s`.  Called from `apply` when `print_line_id` is saturated.
+///
+/// Shape with `params_len = 1` (ITree r has one type param `r`):
+/// - `Write s` : ConsoleOp — `Ctor { write_id, args: [Str(s)] }`
+/// - `\\_. Ret MkUnit` — closure ignoring its arg; body is `App(App(Ret, Type₀), MkUnit)`
+/// - `Vis (Write s) k` — `Ctor { vis_id, args: [Unknown, Write_s, k] }` (args[0] = type param)
+fn build_print_line_tree(s: String, cids: &ConsoleIds, store: &mut EvalStore) -> EvalVal {
+    let m = cids.params_len;
+    // Write s : ConsoleOp (no type params on ConsoleOp itself).
+    let write_s = make_ctor(cids.write_id, vec![EvalVal::Str(s)], store);
+    // Continuation body: App(App(Constructor(ret_id), Type₀), Constructor(unit_id))
+    // Evaluates (in any env) to Ctor{ret_id, args:[Type0_val, MkUnit]}.
+    // The closure ignores its argument (body has no Var(0)); run_io reads args[m].
+    let body = Rc::new(Term::App(
+        Box::new(Term::App(
+            Box::new(Term::Constructor { id: cids.ret_id, level_args: vec![] }),
+            Box::new(Term::Type(Level::zero())),
+        )),
+        Box::new(Term::Constructor { id: cids.unit_id, level_args: vec![] }),
+    ));
+    let k = make_closure(body, Rc::new(vec![]), store);
+    // Vis node: type param(s) as Unknown, then op, then continuation.
+    let mut vis_args = vec![EvalVal::Unknown; m];
+    vis_args.push(write_s);
+    vis_args.push(k);
+    make_ctor(cids.vis_id, vis_args, store)
 }
 
 // ── effect driver (`42 §6`) ───────────────────────────────────────────────────
@@ -1108,6 +1161,7 @@ where
 /// after Language registers them in `ElabEnv::new()`.
 /// `params_len` is the number of ITree *type* params (2 for `ITree E R`;
 /// 0 for the simplified 0-param test ITree).
+#[derive(Clone)]
 pub struct ConsoleIds {
     /// `GlobalId` of the `ITree` inductive (for documentation; not used in the loop).
     pub itree_id: GlobalId,
@@ -1157,8 +1211,15 @@ pub fn run_io(
                     // Ret r → done
                     return Ok(args.get(m).cloned().unwrap_or(EvalVal::Unknown));
                 } else if id == ids.vis_id {
-                    let op = args[m].clone();
-                    let k = args[m + 1].clone();
+                    // Guard args access — a malformed Vis returns Err rather than panic.
+                    let op = match args.get(m).cloned() {
+                        Some(v) => v,
+                        None => return Err(RunIoError::NotAnIOTree(EvalVal::Ctor { id, args, slot: NULL_SLOT })),
+                    };
+                    let k = match args.get(m + 1).cloned() {
+                        Some(v) => v,
+                        None => return Err(RunIoError::NotAnIOTree(EvalVal::Ctor { id, args: Rc::new(vec![op]), slot: NULL_SLOT })),
+                    };
                     // Dispatch on the Console.Op — exhaustive, no catch-all (42 §6.5).
                     let resp = match op {
                         EvalVal::Ctor { id: op_id, args: op_args, .. }
