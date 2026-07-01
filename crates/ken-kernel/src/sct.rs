@@ -440,7 +440,7 @@ pub fn sct_check(
 
     for m in &self_loops {
         if m.is_idempotent() && !m.has_strict_diagonal() {
-            return Err(crate::error::KernelError::ScfFailed(
+            return Err(crate::error::KernelError::NotTerminating(
                 "SCT: idempotent self-loop has no strictly-decreasing parameter".into(),
             ));
         }

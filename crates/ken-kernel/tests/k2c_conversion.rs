@@ -508,7 +508,7 @@ fn sct_reject_self_loop() {
         vec![Term::lam(nat_t, Term::app(cref(loop_id), Term::var(0)))]
     });
     assert!(result.is_err(), "loop must be rejected");
-    assert!(matches!(result.unwrap_err(), KernelError::ScfFailed(_)));
+    assert!(matches!(result.unwrap_err(), KernelError::NotTerminating(_)));
 }
 
 // ---------------------------------------------------------------------------
@@ -690,7 +690,7 @@ fn sct_reject_union_masking() {
         result.is_err(),
         "f with a stationary self-call must be rejected"
     );
-    assert!(matches!(result.unwrap_err(), KernelError::ScfFailed(_)));
+    assert!(matches!(result.unwrap_err(), KernelError::NotTerminating(_)));
 }
 
 // ---------------------------------------------------------------------------
@@ -708,4 +708,76 @@ fn declare_def_sct_rejects_self_loop() {
         vec![Term::lam(nat_t, Term::app(cref(f), Term::var(0)))]
     });
     assert!(result.is_err());
+}
+
+// ---------------------------------------------------------------------------
+// AC4 (accept arm): sct-accept-plus
+//
+// plus : Nat → Nat → Nat
+//   plus zero    n = n
+//   plus (suc m) n = suc (plus m n)
+//
+// Edge: plus m' n where m' = field of suc m → ↓ on param0, n passed as-is →
+// M = [[↓,?],[?,↓=]].  M⊙M[0,0] = ↓ → ACCEPT.
+//
+// Paired with sct_reject_self_loop / sct_reject_growing (both AC4 reject arm).
+// Both arms are required: accept-only hides a gate that always accepts;
+// reject-only hides a gate that never accepts.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn sct_accept_plus() {
+    let (mut env, nb) = mk_env();
+    let nat = nb.nat;
+    let ty = Term::pi(nat_t(&nb), Term::pi(nat_t(&nb), nat_t(&nb)));
+    let ids = declare_recursive_group(&mut env, vec![(vec![], ty)], |ids| {
+        let plus = ids[0];
+        let nat_t = Term::indformer(nat, vec![]);
+        let suc_t = Term::constructor(nb.suc, vec![]);
+
+        // plus = λ m. λ n.
+        //   elim_Nat (λ_. Nat)
+        //     n                              -- zero: plus 0 n = n
+        //     (λ m'. λ _ih. suc (plus m' n)) -- suc: plus (suc m') n = suc (plus m' n)
+        //     m
+        //
+        // After λ m. λ n.: Var(0)=n, Var(1)=m.
+        // Suc method type: Π(m':Nat). Nat → Nat.
+        //   m' binder: nat_t  (n_fields=1)
+        //   _ih binder: nat_t (n_ihs=1; IH = M m' = Nat)
+        // In suc body after enter_method peels m' and _ih:
+        //   Var(0)=_ih (None), Var(1)=m' (0,↓), Var(2)=n (1,↓=), Var(3)=m (0,↓=).
+        // Call plus m' n:
+        //   arg0=Var(1): prov[1]=(0,↓)   → M[0,0]=↓,  M[1,0]=?
+        //   arg1=Var(2): prov[2]=(1,↓=)  → M[0,1]=?,  M[1,1]=↓=
+        // M = [[↓,?],[?,↓=]].  M⊙M = same → idempotent; M[0,0]=↓ → ACCEPT.
+        let suc_method = Term::lam(
+            nat_t.clone(), // m' : Nat (field)
+            Term::lam(
+                nat_t.clone(), // _ih : Nat (IH = M m' = Nat)
+                Term::app(
+                    suc_t,
+                    Term::app(
+                        Term::app(cref(plus), Term::var(1)), // plus m'
+                        Term::var(2),                        // n (outer)
+                    ),
+                ),
+            ),
+        );
+        vec![Term::lam(
+            nat_t.clone(), // m
+            Term::lam(
+                nat_t.clone(), // n: Var(0)=n, Var(1)=m
+                nat_elim(
+                    &nb,
+                    asc_motive(&nb, nat_t.clone()), // motive = λ_. Nat
+                    Term::var(0),                   // zero: n
+                    suc_method,
+                    Term::var(1), // scrut = m
+                ),
+            ),
+        )]
+    })
+    .expect("plus must be admitted transparent by SCT");
+    assert!(env.transparent_body(ids[0]).is_some());
 }
