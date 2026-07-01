@@ -261,8 +261,8 @@ entry may return.
 
 | Entry | Pre | Guarantee on success | Errors |
 |---|---|---|---|
-| `declare_def` | `ty`, `body` raw-well-formed over `·` | `· ⊢ ty type`; `· ⊢ body ⇐ ty`; the def's group passes **SCT** (`17 §4`); `id` admitted **transparent** (δ-unfoldable). Pre-admitted opaque during checking so `body` may self-reference `id` | `TypeMismatch`, `UniverseInconsistency`, `ScfFailed` (SCT reject ⇒ `id` removed, Σ unchanged) |
-| `declare_recursive_group` | one `(level_params, ty)` per member; `bodies_fn` returns one body per member, in order | each `ty` checked; all members pre-admitted opaque; each body checked; **SCT on the whole group**; accept ⇒ all transparent; **reject ⇒ the whole group rolled back** | as `declare_def`; `ScfFailed` rolls back every member |
+| `declare_def` | `ty`, `body` raw-well-formed over `·` | `· ⊢ ty type`; `· ⊢ body ⇐ ty`; the def's group passes **SCT** (`17 §4`); `id` admitted **transparent** (δ-unfoldable). Pre-admitted opaque during checking so `body` may self-reference `id` | `TypeMismatch`, `UniverseInconsistency`, `NotTerminating` (SCT reject ⇒ `id` removed, Σ unchanged) |
+| `declare_recursive_group` | one `(level_params, ty)` per member; `bodies_fn` returns one body per member, in order | each `ty` checked; all members pre-admitted opaque; each body checked; **SCT on the whole group**; accept ⇒ all transparent; **reject ⇒ the whole group rolled back** | as `declare_def`; `NotTerminating` rolls back every member |
 | `declare_inductive` | `build(id)` yields a well-formed `InductiveSpec` self-referencing `id` | signatures checked; **strict positivity** (`14 §8`) and the **W-style admission boundary** (`14 §8.4`: W-style admitted, negative / non-`D`-free-domain rejected) hold; type former + constructors admitted; the **dependent eliminator** (Π-abstracted IH + W-ι, `14 §3.1`/`§7.7`) generated on use | `PositivityViolation`, `IllFormedDecl`, `LevelArityMismatch` |
 | `declare_postulate` | `ty` raw-well-formed over `·` | `· ⊢ ty type`; `id` admitted **opaque**; **recorded in the trusted base** (appears in `trusted_base()`). A postulate of an empty type is admitted but **visible** as an assumption | `TypeMismatch`, `UniverseInconsistency` |
 | `declare_primitive` | `ty` raw-well-formed; `reduction` the registered computation | `· ⊢ ty type`; `id` admitted opaque + `reduction` **registered in the trusted base**. The reduction must be a correct partial function on literals (assumed; §5) | `TypeMismatch`, `UniverseInconsistency` |
@@ -296,7 +296,7 @@ admitted without passing.
 |---|---|---|---|---|
 | Strict positivity | `declare_inductive` | every recursive occurrence of `D` is strictly positive (`Pol::Plus`) | `14 §8` | `PositivityViolation` |
 | W-style admission (K1.5) | `declare_inductive` | a Π-bound recursive arg `(b:B) → D Δ_p t̄` has `D` only as **target**, `B` `D`-free; the **eliminator** generates the Π-abstracted IH + W-ι | `14 §2.1`/`§8.4` (gate) + `§3.1`/`§7.7` (elim/ι) | `PositivityViolation` |
-| SCT (δ-termination) | `declare_def`, `declare_recursive_group` | every idempotent self-loop has ≥1 strict descent (`↓`) on the diagonal | `17 §4` | `ScfFailed` |
+| SCT (δ-termination) | `declare_def`, `declare_recursive_group` | every idempotent self-loop has ≥1 strict descent (`↓`) on the diagonal | `17 §4` | `NotTerminating` |
 | Quotient respect (K2c-s2) | `infer`/`check` on `QuotElim` | Ω-target motive: respect-free; **Type-target motive: the respect proof checks against the `cong`/`cast` respect schema** | `16 §5.1` | `BadEliminator` |
 
 Positivity and W-style fire **inside** `declare_inductive`; SCT inside the
@@ -317,7 +317,7 @@ The error is a **typed enum**, not a single string blob — so the reason is
   mis-eliminated head).
 - `VarOutOfScope { index, depth }`, `UniverseInconsistency { expected, found }`,
   `LevelArityMismatch { expected, found }` — precise, structured.
-- `PositivityViolation(..)`, `ScfFailed(..)`, `BadEliminator(..)`,
+- `PositivityViolation(..)`, `NotTerminating(..)`, `BadEliminator(..)`,
   `IllFormedDecl(..)` — the admission-gate rejections.
 
 This is **minimal and precise** (the failing subterm and/or the two types), but
