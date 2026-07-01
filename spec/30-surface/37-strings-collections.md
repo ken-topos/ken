@@ -308,6 +308,32 @@ discharges it with a bundled proof (AC6 observes the **emitted VC** structurally
 — per the untrusted-layer lesson, the obligation must be *emitted*, not
 assumed).
 
+**The refinement predicates are definitions, not postulates (ES1).** The
+obligation `isSorted (sort xs) ∧ Perm (sort xs) xs` is dischargeable only if the
+prover can **unfold** `isSorted` and `Perm` — so both are **definitions**
+(`Ω`-valued, re-checked, **out** of `trusted_base()`), never opaque postulates.
+As `declare_postulate`s (their current `prelude.rs` form) the predicates are
+**undefined**: `isSorted (sort xs)` cannot reduce, so the obligation is either
+**undischargeable** or discharged **circularly** (the proof assuming the
+conclusion), and the flagship verified `sort` would prove **nothing**
+(`30 §6`, the surface-minimality invariant; ES2 lands the demotion). The
+defining shapes:
+
+- **`isSorted : Π{a}. Ord a => List a -> Ω`** — an `Ω`-valued structural
+  recursion: `isSorted Nil = ⊤`, `isSorted (x :: Nil) = ⊤`, and
+  `isSorted (x :: y :: r) = (x ≤ y) ∧ isSorted (y :: r)` (the connective is the
+  derived Ω-conjunction, `16 §1.3`; `≤` is `Ord`'s). It **must** land in `Ω`
+  (proof-irrelevant) — a `Type`-sorted "predicate" would leak content into the
+  refinement carrier (`13 §4` / `16 §8.2`).
+- **`Perm : Π{a}. List a -> List a -> Ω`** — the **inductive relation**
+  `data Perm : List a -> List a -> Ω := perm_refl | perm_swap | perm_trans |
+  perm_cons`, preferred over the count-equality form
+  (`∀ x. count x xs = count x ys`) because it carries **no `DecEq a`
+  dependency**. Also in `Ω`.
+
+Neither is prelude — no primitive signature names them (`30 §4`); they are the
+verified-`sort` showcase's own definitions.
+
 **L-classes staging boundary (flag, do not resolve).** The collection **types**
 and **structural equality** ship in L3 with **built-in** `DecEq`/`Ord` instances
 for the primitive and core types (the L1-numerics precedent: built-in now). Full
