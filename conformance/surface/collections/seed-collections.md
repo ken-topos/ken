@@ -8,9 +8,12 @@ the **core collection types** (`List`/`Option`/`Result` transparent inductive;
 `Array`/`Map`/`Set` abstract over the `41` heap), the **combinators with laws as
 propositions**, **infinitude without coinduction** (the fuel-bounded inductive
 unfold + the structural-absence net), and **structural equality +
-`DecEq`/`Ord`** with the verified `sort`. **L3b (AC7) adds the user-type
-instancing crossing** — a user `instance DecEq`/`Ord` resolved by Lc's landed
-`instance_search` now that the §37 §6 gate is open (Lc, `4aa36c7`). They extend
+`DecEq`/`Ord`** with the verified `sort` (which threads an **explicit
+comparator** since the ES2-remainder §6 pin — the lawful-`Ord` class is
+**deferred**). **L3b (AC7) adds the user-type instancing crossing** — a user
+`instance DecEq` resolved by Lc's landed `instance_search` now that the §37 §6
+gate is open (Lc, `4aa36c7`), with the user-`Ord`-drives-`sort` half deferred to
+the lawful-`Ord` class. They extend
 — and must not regress —
 the on-`main` surface invariants (`../seed-surface.md`,
 `../data-match/seed-data-match.md`) and the `String` primitive already
@@ -376,23 +379,25 @@ pinned split. A key type without `DecEq` is a compile error.
 
 ## AC6 — the verified `sort` (the `Perm` conjunct is load-bearing)
 
-`sort` requires `Ord a` and produces the refinement
-`{ ys : List a | isSorted ys ∧ Perm ys xs }` (`34 §5`); the elaboration **emits
-the conjoined obligation**.
+`sort` threads an **explicit comparator** `leq : a → a → Bool` (the pinned §6
+surface — the lawful-`Ord` class is **deferred**, `37 §6`) and produces the
+refinement `{ ys : List a | isSorted leq ys ∧ Perm ys xs }` (`34 §5`); the
+elaboration **emits the conjoined obligation**.
 
 ### surface/collections/sort-emits-issorted-and-perm (soundness)
 - spec: `37 §6`, `34 §5` (refinement obligation), `22 §2.1`
-- given: `view sort {a} (xs : List a) : R where Ord a = …`, where the refinement
-  `R = { ys : List a | isSorted ys ∧ Perm ys xs }` (`34 §5`).
+- given: `view sort {a} (leq : a → a → Bool) (xs : List a) : R = …`, where the
+  refinement `R = { ys : List a | isSorted leq ys ∧ Perm ys xs }` (`34 §5`) —
+  the **explicit-comparator** surface (ES2-remainder pin; no `where Ord a`).
 - expect: the result-introduction **emits the conjoined refinement obligation**
-  `isSorted (sort xs) ∧ Perm (sort xs) xs` (`34 §5`, `22 §2.1`), dischargeable
-  by a verified `sort` with a bundled proof. Assert the emitted obligation
-  carries **both** conjuncts — **specifically that the `Perm (sort xs) xs`
-  conjunct is present**, not `isSorted`-alone.
+  `isSorted leq (sort leq xs) ∧ Perm (sort leq xs) xs` (`34 §5`, `22 §2.1`),
+  dischargeable by a verified `sort` with a bundled proof. Assert the emitted
+  obligation carries **both** conjuncts — **specifically that the
+  `Perm (sort leq xs) xs` conjunct is present**, not `isSorted`-alone.
 - why: AC6 — the canonical verification example, **structural on the emitted
   obligation**, and the **refinement-must-not-be-vacuous** discriminator.
   `isSorted`-alone is **degenerate**: `sort _ = Nil` satisfies
-  `{ ys | isSorted ys }` (the empty list is vacuously sorted), so a
+  `{ ys | isSorted leq ys }` (the empty list is vacuously sorted), so a
   sortedness-only obligation is met by a **`const Nil`** implementation that
   discards the input — it guards nothing. The `Perm` conjunct forces `sort` to
   **be** a sort. **`(soundness)`** via the untrusted-layer **omission** lesson:
@@ -409,13 +414,17 @@ the conjoined obligation**.
 
 L3 pinned the `DecEq`/`Ord` boundary with **built-in** instances and tagged
 user-type instancing `(oracle)` L-classes-gated (AC5/AC6). **Lc landed**
-(`4aa36c7`) — the gate §37 §6 flagged is now **open**. These cases deliver the
-crossing: a user `instance DecEq K` / `instance Ord K` resolved by Lc's landed
+(`4aa36c7`) — the gate §37 §6 flagged is now **open for `DecEq`**: a user
+`instance DecEq K` resolved by Lc's landed
 `instance_search(class, head) -> Option<GlobalId>` (`classes.rs:91`; `Some` =
-the canonical user instance, `None` = a no-instance error). They **extend**
-AC5 (membership/identity) and AC6 (the verified `sort` VC) into user types —
-they do **not** re-pin those base properties (one home per property,
-`subsume-don't- proliferate`). No new kernel rule (§37 banner): pure
+the canonical user instance, `None` = a no-instance error), which **extends**
+AC5 (membership/identity) into user types. The **`Ord` half is deferred**:
+ES2-remainder's §6 pin gives `sort` an **explicit comparator** and defers the
+lawful-`Ord` class, so `sort` (and ordered `Map`/`Set` ops) resolve **no** user
+`Ord` today — the two user-`Ord`-drives-`sort` cases below are gated on the
+future lawful-`Ord`-class WP (they must **not** run green against today's
+empty-stub `Ord`). None of these re-pin the base properties (one home per
+property, `subsume-don't-proliferate`). No new kernel rule (§37 banner): pure
 elaborator wiring of the collection ops to the landed resolver.
 
 ### surface/collections/user-deceq-instance-keys-map-via-real-search
@@ -439,45 +448,66 @@ elaborator wiring of the collection ops to the landed resolver.
   guard** — a single accept is green-vs-green under a resolver that ignores
   the instance requirement.
 
-### surface/collections/user-ord-instance-drives-verified-sort
-- spec: `37 §6` (verified `sort`), `34 §5`, `33 §5`/`39 §6`
-- given: a user type `K` with (a) a user `instance Ord K`, and (b) the
-  **same** `K` with **no** `Ord K` — each used in `sort (xs : List K)` (and an
-  ordered `Map`/`Set` op, e.g. `minKey`)
-- expect: **the verdict flips.** (a) **accepts** —
-  `instance_search("Ord", "K")` returns `Some(id)`, `sort` type-checks and its
-  refinement obligation is discharged with the user `Ord`'s total-order law
-  proofs; (b) **rejects** — `instance_search` returns `None`, a **no-instance
-  error naming the missing `Ord K`**
-- why: (L3b-AC2) user `Ord` drives the verified `sort` + ordered `Map`/`Set`
-  ops — extends AC6 into user `Ord`. **Producer-grep:** `sort`/`minKey`
-  resolve `Ord K` via `instance_search` (`classes.rs:91`), **not** a built-in
-  `Ord`-only table. The `Ord` dictionary carries the **total-order law
-  proofs** (`37 §6`, reflexivity/antisymmetry/transitivity/totality) the
-  refinement's `isSorted` predicate and the prover use — a hand-fed `Ord` flag
-  is green-vs-green; the reject arm + the real **law-carrying** dictionary are
-  the guard.
+### surface/collections/user-ord-instance-drives-verified-sort (deferred)
+- spec: `37 §6` (the deferred lawful-`Ord` class + `where Ord a` desugaring,
+  `33 §5.4`), `34 §5`, `33 §5`/`39 §6`
+- **deferred — the coupling this case tests does not exist on `main`.** The
+  ES2-remainder §6 pin makes `sort` take an **explicit comparator**
+  `leq : a → a → Bool` (no `where Ord a`) and ordered `Map`/`Set` ops use
+  built-in comparators, so **nothing** resolves a user `Ord` instance today;
+  and the landed `Ord` class is an **empty stub** carrying **no** law fields.
+  Asserting "the `Ord` dictionary carries the total-order law proofs the prover
+  uses" against that stub is **green-vs-green** — it passes with zero
+  law-carrying content. This case is **gated on the future lawful-`Ord`-class
+  WP** that (a) builds `Ord` instances **actually carrying** the total-order law
+  proofs (reflexivity/antisymmetry/transitivity/totality — not stubs) and
+  (b) lands the `where Ord a` **desugaring** (`33 §5.4`) that threads the
+  instance's `leq` into `sort`'s explicit comparator slot.
+- given (on that WP): a user type `K` with (a) a user `instance Ord K`
+  (law-carrying), and (b) the **same** `K` with **no** `Ord K` — each used in a
+  `where Ord a`-constrained `sort (xs : List K)` (and an ordered op, e.g.
+  `minKey`)
+- expect (on that WP): **the verdict flips.** (a) **accepts** —
+  `instance_search("Ord", "K")` returns `Some(id)`, the desugaring threads its
+  `leq`, `sort` type-checks and its refinement obligation is discharged with the
+  instance's law proofs; (b) **rejects** — `instance_search` returns `None`, a
+  **no-instance error naming the missing `Ord K`**
+- why: (L3b-AC2, deferred) user `Ord` drives the verified `sort` **once the
+  lawful class + desugaring land**; the reject arm + the **law-carrying**
+  dictionary (not the empty stub) are the guard. Until then the **live**
+  user-instancing coverage is the `DecEq` path
+  (`user-deceq-instance-keys-map-via-real-search`); the explicit-comparator
+  `sort` emission is pinned comparator-side by `sort-emits-issorted-and-perm`.
+  (deferred; do **not** count green against today's empty-stub `Ord`.)
 
-### surface/collections/user-ord-sort-emits-both-conjuncts (soundness)
-- spec: `37 §6`, `34 §5` (refinement obligation), `22 §2.1`
-- given: `sort (xs : List K)` where `Ord K` is a **user** `instance Ord K`
-  resolved via `instance_search("Ord", "K")` — the net-new L3b wiring
-- expect: the result-introduction **emits the conjoined obligation**
-  `isSorted (sort xs) ∧ Perm (sort xs) xs` — **both conjuncts, `Perm`
-  present** — identically to AC6's built-in-`Ord` case; the emission does
-  **not** depend on whether `Ord` is built-in or user-resolved
-- why: (L3b-AC3 ★) (soundness) the VC-emission must **not regress on the
-  net-new user-instance path**. Extends AC6 (`sort-emits-issorted-and-perm`) —
-  it does **not** re-pin the base completeness (both conjuncts, `Perm`
-  load-bearing, the `const Nil` degeneracy) but pins that **wiring `sort` to a
-  user `Ord` via `instance_search` preserves the conjoined emission**.
-  **Discriminating:** a build that emits the VC for built-in `Ord` but **drops
-  `Perm` (or the whole obligation) on the user-`Ord` path** passes AC6 yet
-  **fails here** — the untrusted-layer **omission** (a never-generated
-  conjunct supplies no proof obligation and reads `proved`-by-default; the
-  kernel does not catch it). Producer: grep the **emitted** obligation at the
-  `sort` result site **on the user-`Ord` path** (`34 §5`, `22 §2.1`) — not an
-  assumed/hand-fed proposition, not "it type-checks."
+### surface/collections/user-ord-sort-emits-both-conjuncts (soundness, deferred)
+- spec: `37 §6` (`where Ord a` desugaring, `33 §5.4`), `34 §5` (refinement
+  obligation), `22 §2.1`
+- **deferred — no user-instance `sort` path exists on `main`.** Post-pin `sort`
+  takes an explicit `leq` and has **no** `Ord`-resolved path (built-in or user),
+  so there is no user-`Ord` `sort` site whose emission could regress. This case
+  is **gated on the same lawful-`Ord`-class WP** (the `where Ord a` desugaring
+  that re-introduces a user-instance `sort` path).
+- given (on that WP): a `where Ord a`-constrained `sort (xs : List K)` where
+  `Ord K` is a **user** `instance Ord K` resolved via
+  `instance_search("Ord", "K")` and desugared to threading its `leq`
+- expect (on that WP): the result-introduction **emits the conjoined
+  obligation** `isSorted leq (sort xs) ∧ Perm (sort xs) xs` — **both conjuncts,
+  `Perm` present** — identically to the explicit-comparator base; the emission
+  does **not** regress through the desugaring
+- why: (L3b-AC3 ★, deferred) (soundness) the VC-emission must **not regress
+  through the `where Ord a` desugaring** onto the user-instance path. Extends
+  the base completeness (`sort-emits-issorted-and-perm`, which is the **live**
+  home for both-conjuncts/`Perm`-load-bearing/`const Nil`-degeneracy) — it pins
+  that **desugaring `where Ord a` to the threaded `leq` preserves the conjoined
+  emission**. **Discriminating (on that WP):** a build whose desugaring emits
+  the VC for the explicit-comparator form but **drops `Perm` (or the whole
+  obligation) on the desugared user-`Ord` path** passes the base yet **fails
+  here** — the untrusted-layer **omission** (a never-generated conjunct reads
+  `proved`-by-default; the kernel does not catch it). Producer (on that WP):
+  grep the **emitted** obligation at the `sort` result site **on the desugared
+  path** — not "it type-checks." (deferred; the live emission net is the
+  explicit-comparator base.)
 
 ### surface/collections/user-deceq-keyed-map-canonical-identity
 - spec: `37 §3.3` (byte-encoding canonical, **no `Ord` for identity**),
@@ -517,13 +547,13 @@ elaborator wiring of the collection ops to the landed resolver.
 - **AC5** (structural equality + `DecEq` flip):
   `structurally-equal-collections-o1-comparable`,
   `map-key-without-deceq-rejected`.
-- **AC6** (verified `sort`, `Perm` present): `sort-emits-issorted-and-perm`
-  (soundness).
+- **AC6** (verified `sort`, explicit comparator, `Perm` present):
+  `sort-emits-issorted-and-perm` (soundness).
 - **AC7** (user-type `DecEq`/`Ord` instancing, L3b — the §6 gate crossing):
   `user-deceq-instance-keys-map-via-real-search`,
-  `user-ord-instance-drives-verified-sort`,
-  `user-ord-sort-emits-both-conjuncts` (soundness),
-  `user-deceq-keyed-map-canonical-identity`.
+  `user-deceq-keyed-map-canonical-identity`; **deferred (lawful-`Ord`-class
+  WP):** `user-ord-instance-drives-verified-sort`,
+  `user-ord-sort-emits-both-conjuncts` (soundness).
 
 ## Cross-case consistency sweep
 
@@ -553,17 +583,19 @@ elaborator wiring of the collection ops to the landed resolver.
   which passes vacuously when no obligation is emitted (the untrusted-layer
   omission hole).
 - **The user-instance path (AC7) is one story with the built-in path
-  (AC5/AC6).** AC7's user `DecEq`/`Ord` cases resolve via the **same** landed
-  `instance_search` (`classes.rs:91`) — so the built-in and user paths must
-  **agree**: `Map` identity is **always** byte-order canonical (never `Ord`;
-  `user-deceq-keyed-map-canonical-identity` vs the frame's "via resolved Ord"),
-  the `sort` VC **always** carries both conjuncts
-  (`user-ord-sort-emits-both-conjuncts` = `sort-emits-issorted-and-perm`), and a
-  missing instance is
-  **always** a no-instance compile error, **never** a silent built-in fallback
-  or runtime failure. A case letting the user path diverge — `Ord`-keyed `Map`
-  identity, a dropped `Perm` on the user-`Ord` sort, or a runtime fallback —
-  would contradict this class.
+  (AC5/AC6).** AC7's user `DecEq` cases resolve via the **same** landed
+  `instance_search` (`classes.rs:91`) — so the built-in and user `DecEq` paths
+  must **agree**: `Map` identity is **always** byte-order canonical (never
+  `Ord`; `user-deceq-keyed-map-canonical-identity` vs the frame's "via resolved
+  Ord"), and a missing `DecEq` instance is **always** a no-instance compile
+  error, **never** a silent built-in fallback or runtime failure. A case letting
+  the user `DecEq` path diverge — `Ord`-keyed `Map` identity or a runtime
+  fallback — would contradict this class. The **`Ord` sort-VC leg** of this
+  equivalence (`user-ord-sort-emits-both-conjuncts` ≡
+  `sort-emits-issorted-and-perm`, both conjuncts on the user path) is
+  **deferred** with the lawful-`Ord`-class WP — there is no user-`Ord` `sort`
+  path on `main` to agree with the base, so `sort-emits-issorted-and-perm` (the
+  explicit-comparator form) is the **sole live** emission-completeness home.
 
 ## Subsumed / not-duplicated (one home per property)
 
