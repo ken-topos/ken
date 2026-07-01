@@ -16,7 +16,7 @@ conformance/
   verify/        — 20-verification/ (spec-syntax, obligations, prover,
                    diagnostics, protocol)
   surface/       — 30-surface/ (lexical, grammar, declarations, classes,
-                   data-match, numbers, effects, collections, ffi-io,
+                   modules, data-match, numbers, effects, collections, ffi-io,
                    elaboration)
   runtime/       — 40-runtime/ (values, evaluation, termination, capacity,
                    native backend differential-equivalence)
@@ -126,6 +126,20 @@ claim with no conformance case is a claim no one can rely on
   cited by the prover. A **kernel-backed vs elaborator-convention** split:
   AC4/6/7/8 bottom out in landed producers; the coherence convention (AC1/2/3/5)
   is netted solely by conformance.
+- `surface/modules/seed-modules.md` — ES3 minimal modules/imports (`33 §3-4`,
+  the bounded L4 slice): `module`/`import`/`pub`/abstract-export **elaborate
+  away** to the kernel's single flat append-only `Σ` (`11 §4`) — **zero new
+  kernel feature, zero `trusted_base()` delta** (the ES1 minimality invariant
+  applied to modules; a module program and its fully-qualified equivalent
+  produce **identical** `Σ`/`trusted_base()`). Abstract export **IS** the
+  existing opaque constant (byte-identical kernel rep; a client `match` on a
+  hidden constructor is a **surface** name error). Visibility is
+  **private-by-default + `pub`** (settled), resolution is **surface-only** — the
+  private-name-access, `use`-open-ambiguity (must-qualify unless same decl), and
+  local-over-imported shadowing (lexical, never an error) rejects are all
+  surface diagnostics that **never reach the kernel**. Package manager /
+  cross-package imports are **out** (F3b, deferred). Design-discipline seed: the
+  import-resolution producer is the ES3-build ring's.
 - `runtime/seed-runtime.md` — dedup + O(1) equality; `Int` past 2⁵³ exact;
   `unknown` propagation.
 - `runtime/capacity/seed-capacity.md` — X2 store hardening (`44`): dedup-aware
