@@ -631,10 +631,12 @@ reifying that resolution:
 - **Reify the resolution as a dictionary-definition group.** Discharging a goal
   `C A` that needs sub-goals `C Gᵢ` emits one δ-definition per **distinct**
   `(class, type)` sub-goal reached — `d⟦C A⟧ := mkInst (d⟦C G₁⟧) …` — admitted
-  through the real `declare_def` / **`declare_def_group`** (`check.rs`). The
-  edges of this group are exactly the instance-dependency graph.
-- **Bound by the landed `sct_check`.** `declare_def_group` runs **`sct_check`**
-  on that group at **admission time**, under the **structural subterm order**
+  through the real `declare_def` / **`declare_recursive_group`**
+  (`check.rs:983`, `sct_check` at `:1033`). The edges of this group are exactly
+  the instance-dependency graph.
+- **Bound by the landed `sct_check`.** `declare_recursive_group` runs
+  **`sct_check`** on that group at **admission time**, under the **structural
+  subterm order**
   (`17 §4.2`) keyed on each node's **head-type**: a sub-goal's head-type (`a`,
   `Gᵢ`) is a **strict structural subterm** of its parent's (`List a`, `F ā`). A
   **well-founded** instance chain (`Ord a ⇒ Ord (List a)`: `a ⊏ List a`) yields
