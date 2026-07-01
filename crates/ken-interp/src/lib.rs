@@ -5,7 +5,10 @@
 
 pub mod eval;
 
-pub use eval::{apply, drive_h, drive_h_instrumented, eval, Env, EvalStore, EvalVal, ITreeIds, SlotId};
+pub use eval::{
+    apply, drive_h, drive_h_instrumented, eval, run_io, ConsoleIds, Env, EvalStore, EvalVal,
+    ITreeIds, RunIoError, SlotId,
+};
 
 pub fn describe() -> &'static str {
     "ken reference interpreter (X1)"
@@ -2017,6 +2020,235 @@ mod eff_tests {
         assert!(
             matches!(&ret_result, EvalVal::OmegaUniverse(_)),
             "Ret(Omega) must return Omega; got {:?}", ret_result
+        );
+    }
+}
+
+// ── Console IO conformance tests (`42 §6.2`, `36 §2.1`) ──────────────────────
+
+#[cfg(test)]
+mod console_io_tests {
+    //! Discriminating `run_io` tests — Console effect driver (`42 §6.2–§6.3`).
+    //!
+    //! Uses a 0-param ITree + a minimal Console.Op inductive (just `Write`).
+    //! Each test checks a distinct branch; the non-Write test in particular
+    //! ensures exhaustive dispatch (§6.5): no catch-all.
+
+    use super::eval::{eval, run_io, ConsoleIds, EvalStore, EvalVal, RunIoError};
+    use ken_kernel::{
+        declare_inductive, CtorSpec, GlobalEnv, GlobalId, InductiveSpec, Level, Term,
+    };
+
+    // ── test environment setup ─────────────────────────────────────────────────
+
+    struct ConsoleEnv {
+        #[allow(dead_code)]
+        itree_id: GlobalId,
+        ret_id:   GlobalId,
+        vis_id:   GlobalId,
+        write_id: GlobalId,
+        unit_id:  GlobalId,
+        ids:      ConsoleIds,
+    }
+
+    fn mk_env(env: &mut GlobalEnv) -> ConsoleEnv {
+        // Unit inductive: one nullary constructor `unit`.
+        let unit_ind = declare_inductive(env, |_| InductiveSpec {
+            level_params: vec![],
+            params: vec![],
+            indices: vec![],
+            level: Level::zero(),
+            constructors: vec![CtorSpec { args: vec![], target_indices: vec![] }],
+        })
+        .expect("Unit");
+        let unit_id = env.inductive(unit_ind).unwrap().constructors[0].id;
+
+        // Console.Op: one constructor `Write (s : String)`.
+        // We represent the String arg as a Type 0 placeholder in the kernel;
+        // at runtime it carries an `EvalVal::Str`.
+        let op_ind = declare_inductive(env, |_| InductiveSpec {
+            level_params: vec![],
+            params: vec![],
+            indices: vec![],
+            level: Level::zero(),
+            constructors: vec![
+                // Write (s : Type 0) — 1 ctor-specific arg (the string)
+                CtorSpec {
+                    args: vec![Term::Type(Level::zero())],
+                    target_indices: vec![],
+                },
+            ],
+        })
+        .expect("Console.Op");
+        let write_id = env.inductive(op_ind).unwrap().constructors[0].id;
+
+        // ITree (0 params): Ret (1 arg) | Vis (2 args: op + continuation)
+        let itree = declare_inductive(env, |ind_id| InductiveSpec {
+            level_params: vec![],
+            params: vec![],
+            indices: vec![],
+            level: Level::zero(),
+            constructors: vec![
+                CtorSpec {
+                    args: vec![Term::Type(Level::zero())],
+                    target_indices: vec![],
+                },
+                CtorSpec {
+                    args: vec![
+                        Term::Type(Level::zero()),
+                        Term::Pi(
+                            Box::new(Term::Type(Level::zero())),
+                            Box::new(Term::IndFormer {
+                                id: ind_id,
+                                level_args: vec![],
+                            }),
+                        ),
+                    ],
+                    target_indices: vec![],
+                },
+            ],
+        })
+        .expect("ITree");
+        let ret_id = env.inductive(itree).unwrap().constructors[0].id;
+        let vis_id = env.inductive(itree).unwrap().constructors[1].id;
+
+        let ids = ConsoleIds {
+            itree_id: itree,
+            ret_id,
+            vis_id,
+            write_id,
+            unit_id,
+            params_len: 0,
+        };
+
+        ConsoleEnv { itree_id: itree, ret_id, vis_id, write_id, unit_id, ids }
+    }
+
+    fn mk_store() -> EvalStore {
+        EvalStore::new()
+    }
+
+    // Helpers for building closed ITree terms (0-param).
+    fn mk_ret(val: Term, ret_id: GlobalId) -> Term {
+        Term::App(
+            Box::new(Term::Constructor { id: ret_id, level_args: vec![] }),
+            Box::new(val),
+        )
+    }
+
+    // ── VAL1-C1: Ret r → Ok(r) ────────────────────────────────────────────────
+
+    /// A `Ret r` tree returns `r` immediately; no Console dispatch needed.
+    #[test]
+    fn val1_c1_ret_returns_result() {
+        let mut env = GlobalEnv::new();
+        let ce = mk_env(&mut env);
+        let mut store = mk_store();
+
+        // Ret(unit) — the return value is `()`.
+        let tree_term = mk_ret(
+            Term::Constructor { id: ce.unit_id, level_args: vec![] },
+            ce.ret_id,
+        );
+        let tree = eval(&[], &tree_term, &env, &mut store);
+        let result = run_io(tree, &ce.ids, &env, &mut store);
+
+        assert!(
+            matches!(result, Ok(EvalVal::Ctor { id, .. }) if id == ce.unit_id),
+            "Ret(unit) must return Ok(unit); got {:?}", result
+        );
+    }
+
+    // ── VAL1-C2: Vis (Write s) k → println!(s), run_io(k unit) ──────────────
+
+    /// `Vis (Write "hello") (λ _. Ret unit)` must print and return Ok(unit).
+    ///
+    /// Discriminating: the test uses a real EvalVal::Str inside the Write Ctor,
+    /// and the k-continuation must be applied to unit and the resulting Ret
+    /// must be unwrapped correctly. A bug in params_len indexing or the
+    /// unit-response construction would produce a different EvalVal or Err.
+    #[test]
+    fn val1_c2_write_prints_and_resumes() {
+        let mut env = GlobalEnv::new();
+        let ce = mk_env(&mut env);
+        let mut store = mk_store();
+
+        // Build Write("hello") EvalVal directly (no kernel encoding of Str needed).
+        let write_op = EvalVal::Ctor {
+            id: ce.write_id,
+            args: std::rc::Rc::new(vec![EvalVal::Str("hello".to_string())]),
+            slot: 0,
+        };
+
+        // k = λ _. Ret unit — a Closure that ignores its arg and returns Ret(unit).
+        // Build it as an EvalVal::Closure wrapping a kernel term.
+        // Simpler: use a postulate for the continuation and override with a closure.
+        // Easiest: build the continuation EvalVal directly as a Closure.
+        let unit_ctor = Term::Constructor { id: ce.unit_id, level_args: vec![] };
+        let ret_unit = mk_ret(unit_ctor.clone(), ce.ret_id);
+        // k_term = λ(_ : Unit). Ret unit  (de Bruijn index 0 unused)
+        let k_term = Term::Lam(Box::new(Term::Type(Level::zero())), Box::new(ret_unit));
+        let k_val = eval(&[], &k_term, &env, &mut store);
+
+        // Build the Vis node directly as an EvalVal.
+        let vis_val = EvalVal::Ctor {
+            id: ce.vis_id,
+            args: std::rc::Rc::new(vec![write_op, k_val]),
+            slot: 0,
+        };
+
+        let result = run_io(vis_val, &ce.ids, &env, &mut store);
+
+        assert!(
+            matches!(result, Ok(EvalVal::Ctor { id, .. }) if id == ce.unit_id),
+            "Vis(Write \"hello\") must resume to Ok(unit); got {:?}", result
+        );
+    }
+
+    // ── VAL1-C3: unknown op → Err(UnknownEffect) ──────────────────────────────
+
+    /// `Vis (BadOp) k` must return `Err(UnknownEffect(_))` — exhaustive
+    /// dispatch with no catch-all (`42 §6.5`).
+    ///
+    /// Discriminating with C2: the same Vis shape but a different op-tag.
+    /// A catch-all (or a wrong id comparison) would produce Ok instead of Err.
+    #[test]
+    fn val1_c3_unknown_op_is_err() {
+        let mut env = GlobalEnv::new();
+        let ce = mk_env(&mut env);
+        let mut store = mk_store();
+
+        // A separate op inductive to represent an unsupported effect.
+        let other_ind = declare_inductive(&mut env, |_| InductiveSpec {
+            level_params: vec![],
+            params: vec![],
+            indices: vec![],
+            level: Level::zero(),
+            constructors: vec![CtorSpec { args: vec![], target_indices: vec![] }],
+        })
+        .expect("OtherOp");
+        let other_id = env.inductive(other_ind).unwrap().constructors[0].id;
+
+        let bad_op = EvalVal::Ctor {
+            id: other_id,
+            args: std::rc::Rc::new(vec![]),
+            slot: 0,
+        };
+
+        // k is irrelevant — the driver must reject before calling it.
+        let k_val = EvalVal::Unknown;
+
+        let vis_val = EvalVal::Ctor {
+            id: ce.vis_id,
+            args: std::rc::Rc::new(vec![bad_op, k_val]),
+            slot: 0,
+        };
+
+        let result = run_io(vis_val, &ce.ids, &env, &mut store);
+
+        assert!(
+            matches!(result, Err(RunIoError::UnknownEffect(_))),
+            "Vis(OtherOp) must return Err(UnknownEffect); got {:?}", result
         );
     }
 }
