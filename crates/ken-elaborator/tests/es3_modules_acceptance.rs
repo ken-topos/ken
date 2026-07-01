@@ -90,6 +90,33 @@ fn abstract_export_is_the_opaque_constant() {
     assert!(!env.globals.contains_key("MkT"));
 }
 
+/// Regression (language-qa, `evt_6pp9m18vp5bj6`): abstract export is a
+/// `module { … }`-only concept — there is no "outside" to hide from at the
+/// true file root. A top-level `pub data T = MkT` (no enclosing module)
+/// must NOT be silently reinterpreted as an opaque constant; `MkT` stays a
+/// real, constructible/matchable constructor, exactly as an unmarked
+/// top-level `data` would (matching `pub`'s already-inert behavior on
+/// top-level `View`/`Let`/`TypeAlias`).
+#[test]
+fn top_level_pub_data_is_not_abstract_exported() {
+    let mut env = mk_env();
+    env.elaborate_file("pub data T = MkT").expect("top-level pub data elaborates");
+
+    let t_id = env.globals["T"];
+    assert!(
+        env.env.inductive(t_id).is_some(),
+        "a top-level `pub data T` must stay a real inductive, not become an opaque constant"
+    );
+    assert!(env.globals.contains_key("MkT"), "the constructor must remain registered");
+
+    // The constructor must still be constructible AND matchable in the
+    // same compilation unit — the exact capability the defect silently
+    // destroyed.
+    env.elaborate_decl("view mk : T = MkT").expect("MkT must be constructible");
+    env.elaborate_decl("view unwrap (t : T) : Int = match t { MkT => 0 }")
+        .expect("MkT must be matchable");
+}
+
 /// `client-match-hidden-ctor-rejected-at-surface`: a client that `import`s
 /// `M` and attempts to `match` on the withheld constructor is rejected at
 /// the surface — the constructor was never registered, so this fails
