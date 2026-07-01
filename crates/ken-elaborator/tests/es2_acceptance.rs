@@ -1,18 +1,20 @@
 //! ES2 acceptance tests: prelude hygiene — the `trusted_base()` shrink.
 //!
-//! Pins `docs/program/wp/ES2-prelude-hygiene.md`'s AC1/AC3/AC4 against the
-//! **real** `prelude.rs`/`trusted_base()` (producer-grep, not a hand-fed
-//! test): after ES2, `Equal`/`And`/`Bool`/`IO`/`print_line` must not remain
-//! `declare_postulate`d assumed axioms, and `Map`/`Set` must be re-classed
-//! `declare_primitive` (still trusted, but audited, item-2) rather than
-//! removed. `isSorted`/`Perm` are NOT included here — see the WP thread for
-//! the escalated Ord/DecEq-class design gap blocking their demotion.
+//! Pins `docs/program/wp/ES2-prelude-hygiene.md`'s AC1/AC3/AC4 (+ the
+//! ES2-remainder AC1/AC2 for `isSorted`/`Perm`) against the **real**
+//! `prelude.rs`/`trusted_base()` (producer-grep, not a hand-fed test): after
+//! ES2, `Equal`/`And`/`Bool`/`IO`/`print_line`/`isSorted`/`Perm` must not
+//! remain `declare_postulate`d assumed axioms, and `Map`/`Set` must be
+//! re-classed `declare_primitive` (still trusted, but audited, item-2)
+//! rather than removed.
 //!
-//! Spec: `spec/30-surface/37-strings-collections.md`;
-//! `conformance/surface/taxonomy/minimality.md` (the derivation table).
+//! Spec: `spec/30-surface/37-strings-collections.md` §6 (`isSorted`/`Perm`
+//! defining shapes); `conformance/surface/taxonomy/minimality.md` (the
+//! derivation table).
 
 use ken_elaborator::ElabEnv;
 use ken_kernel::env::Decl;
+use ken_kernel::Term;
 
 fn mk_env() -> ElabEnv {
     ElabEnv::new().expect("base env construction failed")
@@ -29,7 +31,7 @@ fn mk_env() -> ElabEnv {
 #[test]
 fn demoted_predicates_are_transparent_not_opaque() {
     let env = mk_env();
-    for name in ["Equal", "And", "IO", "print_line"] {
+    for name in ["Equal", "And", "IO", "print_line", "isSorted", "Perm"] {
         let id = env.globals[name];
         match env.env.lookup(id) {
             Some(Decl::Transparent { .. }) => {}
@@ -64,7 +66,7 @@ fn bool_is_a_real_inductive() {
 fn demoted_predicates_absent_from_trusted_base() {
     let env = mk_env();
     let tb = env.env.trusted_base();
-    for name in ["Equal", "And", "Bool", "IO", "print_line"] {
+    for name in ["Equal", "And", "Bool", "IO", "print_line", "isSorted", "Perm"] {
         let id = env.globals[name];
         assert!(
             !tb.contains(&id),
@@ -72,6 +74,54 @@ fn demoted_predicates_absent_from_trusted_base() {
             name
         );
     }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ES2-remainder AC1/AC2 — isSorted/Perm are real, unfoldable definitions
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Discriminating (AC2): the flagship `sort` refinement
+/// `{ ys | isSorted leq ys ∧ Perm ys xs }` type-checks by UNFOLDING both real
+/// defs — this could not have type-checked against the old postulates
+/// (undischargeable/circular obligation, `37 §6`).
+#[test]
+fn sort_refinement_unfolds_issorted_and_perm() {
+    let mut env = mk_env();
+    env.elaborate_decl(
+        "view insert (a : Type) (leq : a -> a -> Bool) (x : a) (xs : List a) : List a = \
+         match xs { Nil => Cons a x (Nil a) ; \
+           Cons h t => match leq x h { True => Cons a x (Cons a h t) ; \
+                                        False => Cons a h (insert a leq x t) } }",
+    )
+    .expect("insert elaborates");
+    env.elaborate_decl_v1(
+        "view sort (a : Type) (leq : a -> a -> Bool) (xs : List a) : \
+         { ys : List a | And (isSorted a leq ys) (Perm a ys xs) } = \
+         match xs { Nil => Nil a ; Cons h t => insert a leq h (sort a leq t) }",
+    )
+    .expect("AC2: sort refinement must type-check, unfolding isSorted/Perm");
+}
+
+/// `Perm`'s underlying relation (`Perm_rel`) must be `Type`-level and
+/// truncated into `Ω` — never a bare proof-relevant inductive declared
+/// directly at `Ω` (the `16 §1.3` relevance leak `evt_3cn9v6em54yej` rules
+/// out). Structural check: `Perm`'s body is `Term::Trunc(...)`, not a raw
+/// `Term::IndFormer`/`Term::Const` application.
+#[test]
+fn perm_body_is_a_truncation() {
+    let env = mk_env();
+    let perm_id = env.globals["Perm"];
+    let (_, body) = env.env.transparent_body(perm_id).expect("Perm is transparent");
+    // Peel the 3 lambdas (a, xs, ys) to the truncation.
+    let mut inner = &body;
+    while let Term::Lam(_, b) = inner {
+        inner = b;
+    }
+    assert!(
+        matches!(inner, Term::Trunc(_)),
+        "Perm's body must be a Term::Trunc(Perm_rel a xs ys), got {:?}",
+        inner
+    );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

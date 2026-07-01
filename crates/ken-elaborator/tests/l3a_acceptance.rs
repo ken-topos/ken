@@ -408,13 +408,14 @@ fn structurally_equal_lists_share_slot() {
 fn sort_emits_issorted_and_perm() {
     let mut env = mk_env();
     setup_combinators(&mut env); // declares `insert` (the sort helper)
-                                 // `sort : (a → a → Bool) → List a → { ys | isSorted a ys ∧ Perm a ys xs }`.
-                                 // The `leq` parameter is a buildable-now spelling of `Ord a` (the `where
-                                 // Ord a` constraint + constraint resolution is L3b-gated, `37 §6`).
+                                 // `sort : (a → a → Bool) → List a → { ys | isSorted leq ys ∧ Perm ys xs }`.
+                                 // `leq` is the buildable-now spelling of `Ord a` (the `where Ord a`
+                                 // constraint + constraint resolution is L3b-gated, `37 §6`); ES2-remainder
+                                 // threads it through `isSorted` too (`isSorted a leq ys`, real def, `§6`).
     let res = env
         .elaborate_decl_v1(
             "view sort (a : Type) (leq : a → a → Bool) (xs : List a) : \
-             { ys : List a | And (isSorted a ys) (Perm a ys xs) } = \
+             { ys : List a | And (isSorted a leq ys) (Perm a ys xs) } = \
              match xs { Nil => Nil a ; Cons h t => insert a leq h (sort a leq t) }",
         )
         .expect("sort elaborates (recursive + refinement)");
