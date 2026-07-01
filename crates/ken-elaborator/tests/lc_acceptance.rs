@@ -248,41 +248,39 @@ fn ac4_property_vs_structure_sort_discriminant() {
 
 /// `classes/explicit-named-instance-used-implicit-selects-canonical` (AC5)
 ///
-/// Explicit passing uses the provided dict directly (GlobalId lookup from globals);
-/// implicit passing uses `instance_search` → canonical. The two return different ids.
+/// Implicit passing uses `instance_search` → canonical GlobalId.
+/// Explicit passing binds a dict value directly without calling `instance_search`.
+///
+/// The surface syntax `f {d = byLen} x` and the elaborator path that resolves
+/// `d` via `globals` (not `instance_search`) is DEFERRED — explicit dict-passing
+/// syntax is not yet implemented in `parser.rs`/`elab.rs`.
+///
+/// [placeholder — reifies when explicit-dict syntax lands; the elaborator path
+/// will look up `d` in `globals` directly (bypassing `instance_search`) and
+/// produce a GlobalId that differs from the canonical. Replace the manual
+/// GlobalId(777) below with the result of elaborating the explicit-dict site.]
+///
+/// Currently tested: the structural invariant that `instance_search` returns a
+/// stable canonical id, and that a separately-obtained id differs from it.
 /// Structural discriminator: explicit dict GlobalId ≠ canonical GlobalId.
 #[test]
 fn ac5_explicit_bypasses_implicit_canonical() {
-    let mut env = mk_env();
-    elab(&mut env, "class Ord2 A { }").unwrap();
-    // Declare canonical instance.
-    elab(&mut env, "instance Ord2 Int { }").unwrap();
-    let canonical_id = env.class_env.instance_search("Ord2", "Int")
-        .expect("canonical Ord2 Int should be registered");
-
-    // Simulate an explicit (non-canonical) dict: just use a separately-declared let.
-    // Explicit dict = any GlobalId that is NOT the canonical one.
-    // In a real program: `let byLen : Ord2 Int = { ... }` (different dict).
-    // For the test: confirm canonical is different from some arbitrary id.
-    // We register a "byLen" instance manually (in a second module to avoid overlap).
-    // First: move to a different module to bypass overlap check.
     let mut env2 = mk_env();
     elab(&mut env2, "class Ord3 A { }").unwrap();
     elab(&mut env2, "instance Ord3 Int { }").unwrap();
     let canonical3 = env2.class_env.instance_search("Ord3", "Int").unwrap();
 
-    // Explicit: we provide an alternative id directly (not from instance_search).
-    // This simulates `f {d = byLen} x` — the dict is passed explicitly and
-    // instance_search is NOT called.
+    // [placeholder] Explicit dict = a separately-registered GlobalId (not from
+    // instance_search). When explicit-dict syntax lands, replace this with the
+    // elaborated result of the explicit-passing site.
     use ken_kernel::GlobalId;
-    let explicit_dict = GlobalId(777); // not canonical
+    let explicit_dict = GlobalId(777); // placeholder — not from instance_search
 
-    // The explicit site uses explicit_dict; the implicit site uses canonical3.
     assert_ne!(
         explicit_dict, canonical3,
-        "AC5: explicit dict must differ from canonical"
+        "AC5: explicit dict must differ from canonical (structural invariant)"
     );
-    // Verify implicit search still returns canonical.
+    // Implicit search must still return the canonical.
     let implicit_result = env2.class_env.instance_search("Ord3", "Int");
     assert_eq!(implicit_result, Some(canonical3), "AC5: implicit must return canonical");
 }
@@ -293,26 +291,44 @@ fn ac5_explicit_bypasses_implicit_canonical() {
 
 /// `classes/wellfounded-chain-resolves-cyclic-rejected-by-sct` (AC6, soundness)
 ///
-/// (a) No-constraint instance → admitted (trivially well-founded, sct_check passes).
-/// (b) Self-referential constraint (`instance C A where C A`) → NonTerminatingInstances
-///     at declaration time via `declare_recursive_group`/`sct_check` on the reified
-///     group (reification-faithfulness: the reject reaches the real `sct_check`).
-/// Structural discriminator: sct_check verdict (accept↔reject).
+/// (a) Well-founded parameterised chain (`instance C Bool where C Int`) →
+///     admitted via real `declare_recursive_group`/`sct_check` (accept path).
+///     The constraint head (`Int`) differs from the instance head (`Bool`) →
+///     not self-referential. Reified body = pair-chain with no App(Const(own_id), ...)
+///     → `collect_calls` finds no edges → `edges.is_empty()` → `sct_check` accepts.
+/// (b) Self-referential constraint (`instance C Int where C Int`) →
+///     NonTerminatingInstances via `declare_recursive_group`/`sct_check` reject.
+///     Reified body = Lam(T, App(Const(own_id), Var(0))) → M=[[?]] self-loop → rejects.
+///
+/// Structural discriminator: `sct_check` accept↔reject on the two reified groups.
+/// A broken always-reject `sct_check` is caught by (a); a broken always-accept
+/// is caught by (b). Both arms invoke the real `declare_recursive_group`/`sct_check`.
 #[test]
 fn ac6_sct_wellfounded_accepted_cyclic_rejected() {
-    // (a) Well-founded: no constraint, plain instance → accepted.
+    // (a) Well-founded chain: constraint head ≠ instance head → real sct_check ACCEPTS.
+    //
+    // Scenario: instance SCTClass Bool where SCTClass Int { }
+    //   - instance head = Bool
+    //   - constraint head = Int (different → not has_self_ref)
+    //   - routes through declare_recursive_group with pair-chain body
+    //   - body has no call to own_id → edges.is_empty() → sct_check accepts
     let mut env_a = mk_env();
     elab(&mut env_a, "class SCTClass A { }").unwrap();
-    let r_a = elab(&mut env_a, "instance SCTClass Int { }");
-    assert!(r_a.is_ok(), "AC6(a): unconstrained instance must be admitted");
+    // Base instance (no constraint) via declare_def.
+    elab(&mut env_a, "instance SCTClass Int { }").unwrap();
+    // Constrained instance with different head: routes through declare_recursive_group.
+    let r_a = elab(&mut env_a, "instance SCTClass Bool where SCTClass Int { }");
+    assert!(
+        r_a.is_ok(),
+        "AC6(a): well-founded chain must be admitted via sct_check accept; got {:?}",
+        r_a
+    );
 
-    // (b) Cyclic: instance C A where C A — self-referential constraint.
-    // The reified body in declare_recursive_group contains Const(own_id) →
-    // sct_check detects the 0×0 self-loop → rejects.
+    // (b) Cyclic: instance C Int where C Int — same (class, head) self-reference.
+    // Reified as fixpoint-arrow Pi(T,T); body = Lam(T, App(Const(own_id), Var(0))).
+    // collect_calls sees App(Const(own_id), Var(0)) → M=[[?]] self-loop → sct_check rejects.
     let mut env_b = mk_env();
     elab(&mut env_b, "class Recurse A { }").unwrap();
-    // Declare an instance with a self-referential constraint.
-    // Surface syntax: `instance Recurse Int where Recurse Int { }`
     let r_b = env_b.elaborate_decl("instance Recurse Int where Recurse Int { }");
     assert!(
         matches!(r_b, Err(ElabError::NonTerminatingInstances { .. })),

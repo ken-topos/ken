@@ -964,9 +964,11 @@ fn elab_instance_decl(
         )
         .map_err(|_| ElabError::NonTerminatingInstances { span: span.clone() })?;
         ids[0]
-    } else {
-        // No self-referential cycle: elaborate field expressions and use declare_def.
-        // Non-self-ref constraints are already-resolved transparent consts.
+    } else if !constraints.is_empty() {
+        // Well-founded constrained instance: elaborate fields, then route through
+        // declare_recursive_group so sct_check actually runs on the group (`39 §6.4`).
+        // The pair-chain body has no App(Const(own_id), ...) → edges.is_empty()
+        // → sct_check returns Ok (accepts). This makes the accept verdict observable.
         let field_vals: Vec<Term> = {
             let mut cx = ElabCtx::new(env, globals, num_values, numeric_env);
             let mut vals = Vec::new();
@@ -976,7 +978,37 @@ fn elab_instance_decl(
             }
             vals
         };
-        // Re-order to match the class field declaration order.
+        let ordered_vals: Vec<Term> = {
+            let mut out = Vec::new();
+            for fname in &field_names {
+                let pos = fields.iter().position(|(n, _)| n == fname)
+                    .ok_or_else(|| ElabError::Internal(
+                        format!("instance missing field '{}'", fname)
+                    ))?;
+                out.push(field_vals[pos].clone());
+            }
+            out
+        };
+        let pair_chain = build_pair_chain(&ordered_vals, class_env.record_nil_val_id);
+        let inst_ty = instance_ty.clone();
+        let ids = declare_recursive_group(
+            env,
+            vec![(vec![], inst_ty)],
+            |_ids| vec![pair_chain],
+        )
+        .map_err(|e| ElabError::KernelRejected { error: e, span: span.clone() })?;
+        ids[0]
+    } else {
+        // No constraints: declare_def path (no recursion possible, SCT not needed).
+        let field_vals: Vec<Term> = {
+            let mut cx = ElabCtx::new(env, globals, num_values, numeric_env);
+            let mut vals = Vec::new();
+            for (_, rexpr) in fields {
+                let (v, _ty) = infer(&mut cx, rexpr)?;
+                vals.push(cx.metas.zonk_term(&v));
+            }
+            vals
+        };
         let ordered_vals: Vec<Term> = {
             let mut out = Vec::new();
             for fname in &field_names {
