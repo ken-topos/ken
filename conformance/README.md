@@ -15,8 +15,9 @@ conformance/
                    identity, observational, conversion, judgments)
   verify/        — 20-verification/ (spec-syntax, obligations, prover,
                    diagnostics, protocol)
-  surface/       — 30-surface/ (lexical, grammar, declarations, data-match,
-                   numbers, effects, collections, ffi-io, elaboration)
+  surface/       — 30-surface/ (lexical, grammar, declarations, classes,
+                   data-match, numbers, effects, collections, ffi-io,
+                   elaboration)
   runtime/       — 40-runtime/ (values, evaluation, termination, capacity)
   stdlib/        — 50-stdlib/ (lawful instances, verified building blocks)
   security/      — 60-security/ (information flow, constant-time discipline,
@@ -110,6 +111,20 @@ claim with no conformance case is a claim no one can rely on
   with the **`pure`-but-effectful** named residual, capability+effect
   composition (couples Sec2), and a G6 round-trip proof in an FFI-using verified
   component.
+- `surface/classes/seed-classes.md` — Lc typeclasses/constraints (classes-as-
+  subobjects, `33 §5` + `39 §6`, ADR 0008): a `class` → a Σ+η **record**, an
+  `instance` → a **record value** with real law proofs, and `where C A` → an
+  implicit instance argument discharged by **search**. Eight discriminating ACs:
+  coherence (same `(class, head-type)` → same canonical), the orphan / overlap /
+  ambiguity pairs (never a silent pick), **the sort *is* the discriminant**
+  (property Ω vs structure `Type` — the both-keyed `sort_sigma`; forcing
+  structure→Ω is the Σ-sort trap), named-instance explicit escape, **SCT-bounded
+  termination** on the reified dictionary group (the real
+  `declare_recursive_group` + `sct_check` + reification faithfulness), `derive`
+  as an untrusted kernel-re-checked candidate, and a lawful instance's law proof
+  cited by the prover. A **kernel-backed vs elaborator-convention** split:
+  AC4/6/7/8 bottom out in landed producers; the coherence convention (AC1/2/3/5)
+  is netted solely by conformance.
 - `runtime/seed-runtime.md` — dedup + O(1) equality; `Int` past 2⁵³ exact;
   `unknown` propagation.
 - `runtime/capacity/seed-capacity.md` — X2 store hardening (`44`): dedup-aware
