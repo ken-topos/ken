@@ -14,7 +14,7 @@
 
 use ken_elaborator::ElabEnv;
 use ken_kernel::env::Decl;
-use ken_kernel::Term;
+use ken_kernel::{whnf, Term};
 
 fn mk_env() -> ElabEnv {
     ElabEnv::new().expect("base env construction failed")
@@ -80,10 +80,16 @@ fn demoted_predicates_absent_from_trusted_base() {
 // ES2-remainder AC1/AC2 — isSorted/Perm are real, unfoldable definitions
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Discriminating (AC2): the flagship `sort` refinement
-/// `{ ys | isSorted leq ys ∧ Perm ys xs }` type-checks by UNFOLDING both real
-/// defs — this could not have type-checked against the old postulates
-/// (undischargeable/circular obligation, `37 §6`).
+/// **Necessary but NOT sufficient** on its own (QA's 3rd-occurrence
+/// finding, `dec_3xzdpjm4ecwps`): `elaborate_decl_v1` succeeding here does
+/// NOT by itself prove `isSorted`/`Perm` actually unfold — checked out
+/// against `e5ffbf2` (isSorted/Perm still postulates), this exact
+/// assertion passes identically, because emitting the `Ensures` obligation
+/// never required the predicates to be *defined*, only *declared* (arity +
+/// sort). The real discriminant is
+/// `issorted_and_perm_applications_reduce_past_their_own_head` below —
+/// this test stays only as the "the surface still parses/type-checks at
+/// all" smoke check.
 #[test]
 fn sort_refinement_unfolds_issorted_and_perm() {
     let mut env = mk_env();
@@ -99,7 +105,76 @@ fn sort_refinement_unfolds_issorted_and_perm() {
          { ys : List a | And (isSorted a leq ys) (Perm a ys xs) } = \
          match xs { Nil => Nil a ; Cons h t => insert a leq h (sort a leq t) }",
     )
-    .expect("AC2: sort refinement must type-check, unfolding isSorted/Perm");
+    .expect("smoke check: sort refinement must at least type-check");
+}
+
+/// **The real AC2 discriminant.** Build the exact `isSorted`/`Perm`
+/// applications `sort`'s own obligation contains (same registered
+/// `GlobalId`s, a concrete closed witness: `a = Bool`, `xs = ys = Nil`,
+/// `leq = \_ _. True`) and `whnf` them. A genuine definition unfolds PAST
+/// its own head (δ on the `Const`, then ι on the concrete `Nil` scrutinee);
+/// a postulate is permanently stuck at `Const(isSorted_id)`/`Const(perm_id)`
+/// applied to its arguments — `whnf` cannot make progress on an opaque
+/// constant. Verified to actually discriminate: checked out against
+/// `e5ffbf2` (pre-ES2-remainder, isSorted/Perm still postulates) this
+/// assertion FAILS there (stuck at `Const`, per QA's now-3×-validated
+/// checkout-and-rerun technique) and PASSES on this branch.
+#[test]
+fn issorted_and_perm_applications_reduce_past_their_own_head() {
+    use ken_kernel::{Context, GlobalId};
+
+    fn peel_app_head(t: &Term) -> &Term {
+        let mut cur = t;
+        while let Term::App(f, _) = cur {
+            cur = f;
+        }
+        cur
+    }
+    fn is_stuck_at(t: &Term, id: GlobalId) -> bool {
+        matches!(peel_app_head(t), Term::Const { id: i, .. } if *i == id)
+    }
+
+    let env = mk_env();
+    let issorted_id = env.globals["isSorted"];
+    let perm_id = env.globals["Perm"];
+    let bool_id = env.globals["Bool"];
+    let true_id = env.globals["True"];
+    let nil_id = env.globals["Nil"];
+
+    let bool_t = Term::indformer(bool_id, vec![]);
+    let nil_bool =
+        Term::app(Term::Constructor { id: nil_id, level_args: vec![] }, bool_t.clone());
+    let true_ctor = Term::Constructor { id: true_id, level_args: vec![] };
+    // `leq := \_ _. True` — a trivial but well-typed `Bool -> Bool -> Bool`.
+    let leq = Term::lam(bool_t.clone(), Term::lam(bool_t.clone(), true_ctor));
+
+    let issorted_app = Term::app(
+        Term::app(Term::app(Term::const_(issorted_id, vec![]), bool_t.clone()), leq),
+        nil_bool.clone(),
+    );
+    let perm_app = Term::app(
+        Term::app(Term::app(Term::const_(perm_id, vec![]), bool_t.clone()), nil_bool.clone()),
+        nil_bool,
+    );
+
+    let ctx = Context::new();
+    let issorted_reduced = whnf(&env.env, &ctx, &issorted_app);
+    let perm_reduced = whnf(&env.env, &ctx, &perm_app);
+
+    assert!(
+        !is_stuck_at(&issorted_reduced, issorted_id),
+        "AC2: `isSorted ...` must whnf past its own Const head (a real, \
+         unfoldable definition); stuck at Const(isSorted) means it's still \
+         an opaque postulate. Reduced to: {:?}",
+        issorted_reduced
+    );
+    assert!(
+        matches!(perm_reduced, Term::Trunc(_)),
+        "AC2: `Perm ...` must whnf to Term::Trunc(Perm_rel ...) (a real \
+         definition unfolding to the truncation), not stay stuck at \
+         Const(perm_id). Reduced to: {:?}",
+        perm_reduced
+    );
 }
 
 /// `Perm`'s underlying relation (`Perm_rel`) must be `Type`-level and
