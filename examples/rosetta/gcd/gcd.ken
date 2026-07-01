@@ -1,0 +1,88 @@
+-- Rosetta Code: Greatest common divisor
+-- https://rosettacode.org/wiki/Greatest_common_divisor
+--
+-- Task: compute gcd(a, b) for two non-negative integers.
+--
+-- Uses the subtraction-based GCD (binary GCD variant):
+--   gcd(a, b) = a         if a == b
+--   gcd(a, b) = gcd(a-b, b)  if a > b
+--   gcd(a, b) = gcd(a, b-a)  if a < b
+-- Implemented with explicit fuel (= a + b) so the SCT can verify
+-- termination on the fuel argument.
+--
+-- GAP-note: the Euclidean modulo approach (`gcd(b, a mod b)`) would be
+-- more idiomatic; deferred because `natMod` requires a non-trivial SCT
+-- argument (the remainder is bounded by the divisor, but the SCT checker
+-- may not verify this automatically).
+--
+-- Structural elements exercised:
+--   - `OrdResult` / comparison via Nat structural recursion
+--   - Nat subtraction (monus) via structural recursion
+--   - Fuel-bounded recursion pattern (same as `unfoldUpTo`)
+--   - `let … in` expression
+
+-- ── Nat helpers ──────────────────────────────────────────────────────────────
+
+view natAdd (a : Nat) (b : Nat) : Nat =
+  match a { Zero => b ; Suc m => Suc (natAdd m b) }
+
+-- natSub: monus (a - b, floored at 0 if a < b).
+-- SCT: both a and b decrease by one per step.
+view natSub (a : Nat) (b : Nat) : Nat =
+  match b {
+    Zero  => a
+    Suc n => match a {
+               Zero  => Zero
+               Suc m => natSub m n
+             }
+  }
+
+-- natCmp: structural comparison, returns OrdResult (from L3 prelude).
+-- SCT: both a and b decrease by one per step.
+view natCmp (a : Nat) (b : Nat) : OrdResult =
+  match a {
+    Zero  => match b { Zero => Eq ; Suc _ => Lt }
+    Suc m => match b { Zero => Gt ; Suc n => natCmp m n }
+  }
+
+view natToInt (n : Nat) : Int =
+  match n { Zero => (0 : Int) ; Suc m => (1 : Int) + natToInt m }
+
+-- ── GCD (fuel-bounded) ───────────────────────────────────────────────────────
+
+-- natGcdFueled: subtraction-based GCD with explicit fuel.
+-- SCT: `f` is a strict structural sub-term of `Suc f`.
+view natGcdFueled (fuel : Nat) (a : Nat) (b : Nat) : Nat =
+  match fuel {
+    Zero  => a
+    Suc f => match natCmp a b {
+               Eq => a
+               Gt => natGcdFueled f (natSub a b) b
+               Lt => natGcdFueled f a (natSub b a)
+             }
+  }
+
+-- natGcd: uses a + b as fuel (always sufficient for subtraction-based GCD).
+view natGcd (a : Nat) (b : Nat) : Nat =
+  let fuel : Nat = natAdd a b in
+  natGcdFueled fuel a b
+
+-- ── Readable Nat literals ────────────────────────────────────────────────────
+
+view one    : Nat = Suc Zero
+view two    : Nat = Suc one
+view three  : Nat = Suc two
+view four   : Nat = Suc three
+view five   : Nat = Suc four
+view six    : Nat = Suc five
+view seven  : Nat = Suc six
+view eight  : Nat = Suc seven
+view nine   : Nat = Suc eight
+view ten    : Nat = Suc nine
+view eleven : Nat = Suc ten
+view twelve : Nat = Suc eleven
+
+-- ── Oracle ───────────────────────────────────────────────────────────────────
+
+-- main: gcd(12, 8) = 4
+view main : Int = natToInt (natGcd twelve eight)

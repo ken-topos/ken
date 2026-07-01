@@ -1,0 +1,50 @@
+-- Rosetta Code: Fibonacci sequence
+-- https://rosettacode.org/wiki/Fibonacci_sequence
+--
+-- Task: compute the n-th Fibonacci number.
+--
+-- Uses Nat structural recursion.  The three-case match on n gives base cases
+-- for 0 and 1, and the recursive step `fib(n-1) + fib(n-2)` maps to
+-- `natAdd (fib (Suc m)) (fib m)` where `n = Suc (Suc m)`.
+-- SCT: both recursive calls are on structural sub-terms of `Suc (Suc m)`.
+--
+-- No gaps blocking this task.
+-- Note: naive double recursion is exponential; fast-Fibonacci (pair trick)
+-- would require a product type and is a follow-on exercise.
+
+-- ── Nat helpers ──────────────────────────────────────────────────────────────
+
+view natAdd (a : Nat) (b : Nat) : Nat =
+  match a { Zero => b ; Suc m => Suc (natAdd m b) }
+
+view natToInt (n : Nat) : Int =
+  match n { Zero => (0 : Int) ; Suc m => (1 : Int) + natToInt m }
+
+-- ── Fibonacci ────────────────────────────────────────────────────────────────
+
+-- fib n = F(n): 0, 1, 1, 2, 3, 5, 8, 13, 21, 34, 55, ...
+-- SCT: fib (Suc m) and fib m are both sub-terms of Suc (Suc m).
+view fib (n : Nat) : Nat =
+  match n {
+    Zero     => Zero
+    Suc Zero => Suc Zero
+    Suc (Suc m) => natAdd (fib (Suc m)) (fib m)
+  }
+
+-- ── Readable Nat literals ────────────────────────────────────────────────────
+
+view one   : Nat = Suc Zero
+view two   : Nat = Suc one
+view three : Nat = Suc two
+view four  : Nat = Suc three
+view five  : Nat = Suc four
+view six   : Nat = Suc five
+view seven : Nat = Suc six
+view eight : Nat = Suc seven
+view nine  : Nat = Suc eight
+view ten   : Nat = Suc nine
+
+-- ── Oracle ───────────────────────────────────────────────────────────────────
+
+-- main: F(10) = 55
+view main : Int = natToInt (fib ten)

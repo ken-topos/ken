@@ -1,0 +1,53 @@
+-- Rosetta Code: Ackermann function
+-- https://rosettacode.org/wiki/Ackermann_function
+--
+-- Task: compute A(m, n) for small m, n.
+--
+-- Definition:
+--   A(0, n) = n + 1
+--   A(m, 0) = A(m-1, 1)       for m > 0
+--   A(m, n) = A(m-1, A(m, n-1))  for m > 0, n > 0
+--
+-- This is the canonical non-primitive-recursive function; it is total but
+-- not primitive-recursive. The SCT verifier must accept it:
+--   - A(0, n): base case, no recursion.
+--   - A(Suc m, Zero): first arg decreases (m < Suc m).
+--   - A(Suc m, Suc n): inner call A(Suc m, n) has n < Suc n (second arg
+--     decreases), outer call A(m, ...) has m < Suc m (first arg decreases).
+-- The lexicographic (m, n) order is a valid well-founded relation; Ken's
+-- SCT must recognize it.
+--
+-- SCT NOTE: if Ken's current SCT checker rejects this because it cannot
+-- infer the lexicographic termination argument automatically, that is a
+-- finding (GAP-ackermann-sct). The function IS total; the gap would be
+-- in the SCT's lexicographic-order detection.
+--
+-- No other gaps blocking this task.
+
+-- ── Nat helpers ──────────────────────────────────────────────────────────────
+
+view natToInt (n : Nat) : Int =
+  match n { Zero => (0 : Int) ; Suc m => (1 : Int) + natToInt m }
+
+-- ── Ackermann ────────────────────────────────────────────────────────────────
+
+-- A(m, n) = Ackermann function.
+view ack (m : Nat) (n : Nat) : Nat =
+  match m {
+    Zero  => Suc n
+    Suc p => match n {
+               Zero  => ack p (Suc Zero)
+               Suc q => ack p (ack (Suc p) q)
+             }
+  }
+
+-- ── Readable Nat literals ────────────────────────────────────────────────────
+
+view one  : Nat = Suc Zero
+view two  : Nat = Suc one
+view three : Nat = Suc two
+
+-- ── Oracle ───────────────────────────────────────────────────────────────────
+
+-- main: A(3, 4) = 125
+view main : Int = natToInt (ack three (Suc (Suc (Suc (Suc Zero)))))
