@@ -22,7 +22,9 @@ class + its instances is Ken over the built-ins, and on an **inductive carrier**
 may *assume the laws hold* because the instance proved them, with a **zero
 `trusted_base()` delta**. (A *primitive* carrier like `Int` cannot prove its
 ∀-laws — no eliminator — so its lawful instance carries them as an **audited
-delta**, not zero-delta; `§6`.)
+delta**, not zero-delta; `§6`.) **Staging (`§6`):** the zero-delta *real-proofs*
+path is gated on a kernel capability (`Ω`-motive elimination, the **forward K4
+WP**); **audited-delta instances are buildable today**.
 
 ## 2. The three classes
 
@@ -209,6 +211,25 @@ re-checked, never
 on a user `data`, `33 §5.6`, is likewise untrusted-generated then
 kernel-re-checked over the type's constructors — zero delta, *because* the
 carrier is inductive.)
+
+**Staging — the zero-delta *real-proofs* path is gated on a kernel capability
+(K4).** Constructing those per-branch law proofs requires the kernel to
+**dependently eliminate a `Type`-inductive into an `Ω`-motive**
+(`λx. P x : Bool → Ω`) — to *prove* a per-branch `Ω`-proposition, not *select
+which* proposition. The general eliminator (`14 §3`) currently admits only a
+**`Type`-codomain** motive, so on **today's kernel these real proofs are
+unconstructable for *any* inductive carrier, `Bool` included** — not an
+`Int`-specific limit. The `Ω`-motive rule is a **forward kernel WP (K4)** under
+trust-root soundness review (Architect ruling `evt_68ppz77ysh5ne`; kernel scope
+`evt_45xy92sg5aqjk` — the `Type`-scrutinee → `Ω`-result direction only *narrows*
+into `Ω`, a very likely sound incompleteness-fix, but the kernel team owns
+confirming it against Ken's OTT + the `conv.rs` irrelevance shortcut). **So
+today:** the class *records*, the *op-field wrapping*, and the **audited-delta
+instances** (below — postulated laws need **no** `Ω`-elimination) are buildable;
+the **zero-delta *real-proofs* build — any inductive carrier — is gated on K4
+landing**. The design above is unchanged; only its **build-time availability**
+is staged (`14 §3` gains the `Ω`-motive rule when K4 lands; then `§16 §1.1`'s
+predicative-`Ω` Π-formation already admits the motive *type*).
 
 **Primitive carriers (`Int`/`Float`/`String`/`Char`) fail the carrier axis — so
 their lawful instances are NOT zero-delta.** A K1 primitive is **opaque to δ**
