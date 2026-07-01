@@ -183,16 +183,26 @@ coincide.
   **bloat vector**. It exists only as a workaround for the opaque `Bool` (not
   matchable); F1's `data Bool` obviates it. Remove it; where a 3-way result is
   wanted, the `Ord` package's `Ordering` (§4/§5) is it.
-- **`reg_novf` no-overflow props → definitions.** The fixed-width no-overflow
-  obligations (`A → A → Ω₀`, `numbers.rs`, `OQ-1a`) are `declare_postulate`s the
-  seed table missed. They are **derivable**: `NoOvf_w a b` is the decidable
-  bound `MIN_w ≤ (a +_ℤ b) ≤ MAX_w` over the **unbounded** `Int` primitive
-  (total, no overflow) plus the width bounds — a definition, not an axiom.
-  Demote to `declare_def` (out of `trusted_base()`); the prover / SMT bitvector
-  theory is the **discharge engine** for the *defined* predicate (re-checked,
-  oracle-not- authority, G3), **not** a trusted prover-theory atom. (Same shape
-  as `isSorted`/`Perm`: an overflow obligation over an *undefined* predicate is
-  undischargeable.)
+- **`reg_novf` — split the predicate from the per-operation obligations (only
+  one is bloat; Architect pre-flag).** Two distinct things live under the
+  `numbers.rs` no-overflow registration (`OQ-1a`), and they must not blur:
+  - The no-overflow **predicate** (`Fits`/`inBounds : Int → Ω`, the decidable
+    bound `MIN_w ≤ (a +_ℤ b) ≤ MAX_w` over the **unbounded** `Int` primitive) is
+    **derivable** → a **definition**, out of `trusted_base()`. The prover / SMT
+    bitvector theory is the **discharge engine** for the *defined* predicate
+    (re-checked, oracle-not-authority, G3), not a trusted prover-theory atom.
+  - The L1 **per-operation "no silent wrap" obligations** (the
+    `declare_postulate` goal each fixed-width op emits, awaiting prover
+    discharge) are **legitimate live obligation-holes**, **not**
+    derivable-postulate bloat: making *these* definitions would be circular or
+    **eliminate the overflow net**. An undischarged obligation is an honest
+    typed hole in `trusted_base_delta` (`21 §5.2`, the four-way `unknown`
+    status) — it **stays** until discharged.
+
+  So `trusted_base()` legitimately holds **genuine irreducibles + live
+  obligation-holes**; the demotion target is the **predicate only**, never the
+  per-op obligation — the one place "derivable bloat" and "live obligation" must
+  not be conflated.
 
 **The rulings above are worked examples; CV's derivation-path table
 (`../../conformance/surface/taxonomy/`) is the exhaustive net.** Every
@@ -208,9 +218,11 @@ built-in type (§3), computed, so it belongs **out** of `trusted_base()` entirel
 literal value). Whatever the table rules, ES2 lands it.
 
 **Net.** Of the surface soundness entries,
-`Equal`/`And`/`isSorted`/`Perm`/`Bool`/`OrdResult`/`reg_novf` become re-checked
-definitions or are removed (**out** of `trusted_base()`), literals become
-primitive-constant terms (out), and `Map`/`Set` re-class postulate→primitive
-(in, correctly, as audited). The **assumed-axiom** surface trusted base shrinks
-toward **zero** — leaving only the genuinely-audited primitives — and the
-verified-`sort` showcase (§37 §6) becomes a real proof.
+`Equal`/`And`/`isSorted`/`Perm`/`Bool`/`OrdResult` and the `reg_novf`
+**predicate** become re-checked definitions or are removed (**out** of
+`trusted_base()`), literals become primitive-constant terms (out), and
+`Map`/`Set` re-class postulate→primitive (in, correctly, as audited). The
+**assumed-axiom** surface trusted base shrinks toward **zero** — leaving only
+the genuinely-audited primitives **and the live proof obligations** (e.g. the
+per-op no-silent-wrap holes, honest until discharged) — and the verified-`sort`
+showcase (§37 §6) becomes a real proof.
