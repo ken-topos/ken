@@ -1044,6 +1044,11 @@ impl Parser {
                 self.advance();
                 Ok(Expr::ENumLit(NumLit::Float(f), span))
             }
+            Token::Str(s) => {
+                let span = self.peek_span().clone();
+                self.advance();
+                Ok(Expr::EStr(s, span))
+            }
             Token::DecimalLit(c, e) => {
                 let span = self.peek_span().clone();
                 self.advance();
@@ -1100,6 +1105,7 @@ impl Parser {
                         Expr::EAsc(e, t, _) => Expr::EAsc(e, t, span),
                         Expr::EOld(e, _) => Expr::EOld(e, span),
                         Expr::ENumLit(lit, _) => Expr::ENumLit(lit, span),
+                        Expr::EStr(s, _) => Expr::EStr(s, span),
                         Expr::EBinOp(op, l, r, _) => Expr::EBinOp(op, l, r, span),
                         Expr::EMatch { scrut, arms, span: _ } => {
                             Expr::EMatch { scrut, arms, span }

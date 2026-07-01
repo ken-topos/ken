@@ -6,36 +6,30 @@ Reference: <https://rosettacode.org/wiki/Hello_world/Text>
 
 ## Status
 
-**BLOCKED — two surface gaps.**
+**PARTIALLY implemented — string literal elaborates; I/O blocked by one gap.**
 
-## GAP: string literals not in expression grammar
+## GAP: string literals — FIXED (`37 §2.1`, VAL1-surface)
 
-`Token::Str` (double-quoted strings) is lexed but only parsed inside `foreign`
-declarations (for symbol/library names). The `parse_atom_expr` function in
-`parser.rs` has no `Token::Str` branch; `"Hello, World!"` as a surface
-expression produces a parse error.
+`Token::Str` (double-quoted strings) is now parsed in `parse_atom_expr`
+and wired through resolve/elab/eval. `"Hello, World!"` elaborates to type
+`String` and evaluates to `EvalVal::Str("Hello, World!")`. The current
+`hello-world.ken` uses the literal directly:
 
-Required fix: add `Token::Str(s) => Ok(Expr::EStr(s, span))` to
-`parse_atom_expr` and wire the resulting AST node through resolve and elab to
-`Term::Const` of a `String`-typed postulate or to `EvalVal::Str`.
+```ken
+view main : String = "Hello, World!"
+```
 
 ## GAP: no runtime print / I/O surface
 
-There is no `print`, `println`, or equivalent function accessible in a `.ken`
-program. The Console effect exists as an ITree mock in the elaborator/interp
-tests, but has no surface-visible name. Even once string literals land, there is
-no way to produce console output.
+There is no `print_line` or equivalent function accessible in a `.ken` program.
+The Console effect exists as an ITree construct in the elaborator/interp tests,
+but has no surface-visible name.
 
-Required fix: expose a `print_line : String -> IO Unit` (or equivalent) as
-either a `foreign` postulate wired to the ITree Console effect, or a named
-primitive registered in the prelude.
+Required fix: expose `print_line : String -> IO Unit` as a `foreign` postulate
+wired to the ITree Console effect. This is tracked as a separate gap and is
+pending `wp/VAL1-console-exec` (runtime-leader's work).
 
-## Current placeholder
-
-`view main : Nat = Zero` — elaborates and returns `Zero`; confirms the
-elaborator path is reachable. Replace when both gaps above are closed.
-
-## Intended program
+## Intended program (once GAP-io-surface is closed)
 
 ```ken
 foreign print_line : String -> IO Unit = "puts" "libc" [Console]

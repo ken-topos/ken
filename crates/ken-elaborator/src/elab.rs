@@ -307,6 +307,9 @@ fn check(cx: &mut ElabCtx, expr: &RExpr, expected: &Term, _span: &Span) -> Resul
         RExpr::RNumLit(lit, num_span) => {
             elab_num_lit_checked(cx, lit, expected, num_span)
         }
+        RExpr::RStr(s, span) => {
+            elab_str_lit(cx, s, Some(expected), span).map(|(t, _)| t)
+        }
         RExpr::RLam(_, body, lam_span) => {
             let exp_wh = whnf(cx.env, &cx.ctx, expected);
             match exp_wh {
@@ -437,6 +440,10 @@ fn infer(cx: &mut ElabCtx, expr: &RExpr) -> Result<(Term, Term), ElabError> {
             elab_num_lit_infer(cx, lit, span)
         }
 
+        RExpr::RStr(s, span) => {
+            elab_str_lit(cx, s, None, span)
+        }
+
         RExpr::RBinOp(op, lhs, rhs, span) => {
             elab_binop(cx, op, lhs, rhs, span)
         }
@@ -511,6 +518,37 @@ fn elab_num_lit_checked(
     let (core, inferred_ty) = elab_num_lit_infer(cx, lit, span)?;
     unify_types(&mut cx.metas, expected, &inferred_ty);
     Ok(core)
+}
+
+// ----- string literal helper -----
+
+/// Elaborate a string literal (`37 §2.1`, VAL1-surface).
+///
+/// `expected` is `Some(ty)` in the check path, `None` in the infer path.
+/// Always resolves to `String` type; if an expected type is provided the
+/// caller is responsible for unifying (or delegating to `check`).
+fn elab_str_lit(
+    cx: &mut ElabCtx,
+    s: &str,
+    expected: Option<&Term>,
+    span: &Span,
+) -> Result<(Term, Term), ElabError> {
+    let str_id = cx
+        .globals
+        .get("String")
+        .copied()
+        .ok_or_else(|| ElabError::UnresolvedCon {
+            name: "String".to_owned(),
+            span: span.clone(),
+        })?;
+    let str_ty = Term::const_(str_id, vec![]);
+    if let Some(exp) = expected {
+        unify_types(&mut cx.metas, exp, &str_ty);
+    }
+    let lit_id = declare_postulate(cx.env, vec![], str_ty.clone())
+        .map_err(|e| ElabError::KernelRejected { error: e, span: span.clone() })?;
+    cx.num_values.insert(lit_id, NumericLitVal::Str(s.to_owned()));
+    Ok((Term::const_(lit_id, vec![]), str_ty))
 }
 
 /// Returns the default (Val, TypeId) for a literal without an expected type.
@@ -1387,7 +1425,7 @@ fn elaborate_recursive_view(
 fn rexpr_mentions_name(expr: &RExpr, name: &str) -> bool {
     match expr {
         RExpr::RCon(n, _) => n == name,
-        RExpr::RVar(_, _, _) | RExpr::RUniv(_, _) | RExpr::RNumLit(_, _) => false,
+        RExpr::RVar(_, _, _) | RExpr::RUniv(_, _) | RExpr::RNumLit(_, _) | RExpr::RStr(_, _) => false,
         RExpr::RApp(f, a, _) => {
             rexpr_mentions_name(f, name) || rexpr_mentions_name(a, name)
         }

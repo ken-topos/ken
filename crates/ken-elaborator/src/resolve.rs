@@ -124,6 +124,8 @@ pub enum RExpr {
     ROld(Box<RExpr>, Span),
     /// Numeric literal (`35 §4.1`).
     RNumLit(NumLit, Span),
+    /// String literal (`37 §2.1`, VAL1-surface).
+    RStr(String, Span),
     /// Infix binary op (`35 §3`); names resolved, operands still unelab'd.
     RBinOp(BinOp, Box<RExpr>, Box<RExpr>, Span),
     /// `match scrut { P₁ => body₁ ; … }` — pattern match (`34 §3`).
@@ -146,6 +148,7 @@ impl RExpr {
             | RExpr::RAsc(_, _, s)
             | RExpr::ROld(_, s)
             | RExpr::RNumLit(_, s)
+            | RExpr::RStr(_, s)
             | RExpr::RBinOp(_, _, _, s) => s,
             RExpr::RMatch { span, .. } => span,
         }
@@ -646,6 +649,7 @@ fn resolve_expr_ctx(scope: &mut Scope, expr: &Expr, ctx: PropCtx) -> Result<RExp
         }
 
         Expr::ENumLit(lit, span) => Ok(RExpr::RNumLit(lit.clone(), span.clone())),
+        Expr::EStr(s, span) => Ok(RExpr::RStr(s.clone(), span.clone())),
 
         Expr::EBinOp(op, l, r, span) => {
             let rl = resolve_expr_ctx(scope, l, ctx)?;

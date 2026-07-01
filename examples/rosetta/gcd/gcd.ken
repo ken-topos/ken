@@ -3,23 +3,16 @@
 --
 -- Task: compute gcd(a, b) for two non-negative integers.
 --
--- Uses the subtraction-based GCD (binary GCD variant):
+-- Uses the subtraction-based GCD:
 --   gcd(a, b) = a         if a == b
 --   gcd(a, b) = gcd(a-b, b)  if a > b
 --   gcd(a, b) = gcd(a, b-a)  if a < b
--- Implemented with explicit fuel (= a + b) so the SCT can verify
--- termination on the fuel argument.
+-- Implemented with explicit fuel (= a + b) for SCT termination.
 --
--- GAP-note: the Euclidean modulo approach (`gcd(b, a mod b)`) would be
--- more idiomatic; deferred because `natMod` requires a non-trivial SCT
--- argument (the remainder is bounded by the divisor, but the SCT checker
--- may not verify this automatically).
---
--- Structural elements exercised:
---   - `OrdResult` / comparison via Nat structural recursion
---   - Nat subtraction (monus) via structural recursion
---   - Fuel-bounded recursion pattern (same as `unfoldUpTo`)
---   - `let … in` expression
+-- GAP-nested-patterns: `Suc _` in `natCmp` (a nested constructor pattern)
+--   triggers ReachabilityError. Workaround: split into `natCmpZero` helper
+--   (non-recursive, declared before `natCmp`) with only flat `Zero | Suc n`
+--   patterns.
 
 -- ── Nat helpers ──────────────────────────────────────────────────────────────
 
@@ -27,21 +20,25 @@ view natAdd (a : Nat) (b : Nat) : Nat =
   match a { Zero => b ; Suc m => Suc (natAdd m b) }
 
 -- natSub: monus (a - b, floored at 0 if a < b).
--- SCT: both a and b decrease by one per step.
 view natSub (a : Nat) (b : Nat) : Nat =
   match b {
-    Zero  => a
+    Zero  => a ;
     Suc n => match a {
-               Zero  => Zero
+               Zero  => Zero ;
                Suc m => natSub m n
              }
   }
 
--- natCmp: structural comparison, returns OrdResult (from L3 prelude).
+-- natCmpZero: compare Zero against b. Used by natCmp to avoid nested
+-- patterns (`Suc _` triggers ReachabilityError).
+view natCmpZero (b : Nat) : OrdResult =
+  match b { Zero => Eq ; Suc n => Lt }
+
+-- natCmp: structural comparison, returns OrdResult (L3 prelude).
 -- SCT: both a and b decrease by one per step.
 view natCmp (a : Nat) (b : Nat) : OrdResult =
   match a {
-    Zero  => match b { Zero => Eq ; Suc _ => Lt }
+    Zero  => natCmpZero b ;
     Suc m => match b { Zero => Gt ; Suc n => natCmp m n }
   }
 
@@ -54,10 +51,10 @@ view natToInt (n : Nat) : Int =
 -- SCT: `f` is a strict structural sub-term of `Suc f`.
 view natGcdFueled (fuel : Nat) (a : Nat) (b : Nat) : Nat =
   match fuel {
-    Zero  => a
+    Zero  => a ;
     Suc f => match natCmp a b {
-               Eq => a
-               Gt => natGcdFueled f (natSub a b) b
+               Eq => a ;
+               Gt => natGcdFueled f (natSub a b) b ;
                Lt => natGcdFueled f a (natSub b a)
              }
   }

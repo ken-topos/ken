@@ -14,17 +14,28 @@ Reference: <https://rosettacode.org/wiki/FizzBuzz>
 
 ## What works
 
-`mod3`, `mod5`, and `classify` elaborate correctly. The divisibility-by-3 and
-divisibility-by-5 classification via structural recursion on `Nat` is fully
-expressible in the landed surface (L2 `data`/`match`, L3 `List`/`Nat`). The
-`FizzTag` type encodes the four cases.
+All classification views (`Mod3`, `Mod5`, `incMod3`, `incMod5`, `mod3Step`,
+`mod5Step`, `mod3`, `mod5`, `classify`) elaborate correctly. The divisibility
+logic uses modular accumulator types (`Mod3`, `Mod5`) to work around two
+surface limitations (see GAP-nested-patterns below). `classify n` returns the
+correct `FizzTag` for any `Nat` input.
 
-`classify n` returns the correct `FizzTag` for any `Nat` input.
+## GAP: string literals — FIXED (`37 §2.1`, VAL1-surface)
 
-## GAP: string literals not in expression grammar
+String literals now parse and elaborate. The `"Fizz"` / `"Buzz"` / `"FizzBuzz"`
+literals can now appear in Ken expressions. Output is still blocked by
+GAP-io-surface.
 
-Cannot produce "Fizz", "Buzz", "FizzBuzz" strings. See `hello-world/README.md`
-for the full description. Same fix required.
+## GAP-nested-patterns: nested constructor patterns trigger ReachabilityError
+
+A match arm pattern like `Suc (Suc Zero)` (nested constructor) causes the
+elaborator's reachability checker to raise `ReachabilityError`, making
+structural mod3/mod5 with explicit depth patterns impossible.
+
+**Workaround**: define a `Mod3` (3-element) and `Mod5` (5-element) data type
+as a modular accumulator. `mod3Step n acc` steps `n` times from `acc` using
+`incMod3`, with only flat patterns (`Zero | Suc m` and `Zero3 | One3 | Two3`).
+Avoids nested patterns and mutual recursion entirely.
 
 ## GAP: no surface print / I/O
 
