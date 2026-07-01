@@ -279,18 +279,19 @@ kernel's `Eq`); `Eq` (observational equality, `15`/`16`) is the propositional
 version proofs use. `DecEq` is a **structure class** (`33 §5`): genuinely many
 can exist per carrier, so it follows the canonical-instance resolver convention.
 
-**Ordering — explicit comparator now, lawful `Ord` class deferred (ES2-remainder
-ruling `evt_3cn9v6em54yej`, COORDINATION §6).** The verified `sort` threads an
+**Ordering — explicit comparator, with the lawful `Ord` class supplying it
+(ES2-remainder pin `evt_3cn9v6em54yej`; class realized by ES4-classes,
+`../50-stdlib/51-lawful-classes.md`).** The verified `sort` threads an
 **explicit comparator** `leq : a → a → Bool` — the minimal mechanism that yields
-a real, prover-unfoldable specification with **zero** dependency on a
-not-yet-landed class. A **lawful `Ord a` structure class** (its total-order law
-fields — reflexivity of `≤`, antisymmetry, transitivity, totality — *proved* not
-postulated) is **deferred** to a later ergonomics WP; the class *mechanism* is
-already specced (`33 §5`), so `where Ord a` can then **subsume** the explicit
-comparator by desugaring (`33 §5.4`) to threading the instance's `leq` —
-reflect-don't-extend, no new mechanism required by this showcase. Ordered
-`Map`/`Set` operations (`§3.3`) likewise use built-in comparators now (the
-L-classes boundary below).
+a real, prover-unfoldable specification. The **lawful `Ord a` structure class**
+(its total-order law fields — reflexivity of `≤`, antisymmetry, transitivity,
+totality — *proved* not postulated) is defined in `51-lawful-classes.md`; per
+`33 §5.4`, `where Ord a` **subsumes** the explicit comparator by supplying the
+dictionary's `leq` (`d.leq`) to this **same** `sort` — no second `sort`, no new
+mechanism (reflect-don't-extend). It is `Ord`'s `total`/`antisym` laws that let
+a verified `sort` *discharge* the sortedness obligation this explicit-comparator
+form only *states*. Ordered `Map`/`Set` operations (`§3.3`) likewise use
+built-in comparators (the L-classes boundary below).
 
 **The verified `sort` (the canonical verification example).** `sort` takes an
 explicit comparator and produces a **refinement-typed** result (`34 §5`):
@@ -345,9 +346,10 @@ defining shapes:
   proof-irrelevant proposition (both `Bool` as real `data Bool = True | False`
   and `Eq _ : Ω` are landed by ES2). It **must** land in `Ω` (proof-irrelevant);
   a `Type`-sorted "predicate" leaks content into the refinement carrier
-  (`13 §4` / `16 §8.2`). (A future lawful-`Ord` version would take `Ord`'s
-  propositional `≤ : a → a → Ω` directly and drop the bridge — the deferred
-  ergonomics, `33 §5.4`.)
+  (`13 §4` / `16 §8.2`). (With the lawful `Ord a` class,
+  `../50-stdlib/51-lawful-classes.md`, `where Ord a` supplies this **same**
+  `leq : a → a → Bool` from the dictionary — the `IsTrue` bridge is
+  **unchanged**; the class changes only *where* `leq` comes from, `33 §5.4`.)
 - **`Perm : Π(a : Type). List a → List a → Ω`** — a permutation **must** be
   `Ω`-valued, and a bare inductive relation is **not**:
   `data Perm_rel := perm_refl | perm_swap | perm_trans | perm_cons` is

@@ -43,7 +43,10 @@ over the built-ins, not prelude (no primitive signature names them).
 
 A curated set of **classes with laws** (`../30-surface/33 §5`), each a package
 whose derivation bottoms out in the built-ins (the class + instances are Ken;
-the `Int` instance of `Num`/`Ord` wraps the audited primitive op, `30 §6` F2):
+the `Int` instance of `Num`/`Ord` wraps the audited primitive op, `30 §6` F2).
+The **first tranche** — `Eq`/`DecEq`/`Ord`, the pattern-setter — is pinned in
+**`51-lawful-classes.md`** (ES4-classes), with the `packages/` layout
+established at `../../packages/README.md`:
 
 | Class | Operations | Laws (propositions) |
 |---|---|---|
