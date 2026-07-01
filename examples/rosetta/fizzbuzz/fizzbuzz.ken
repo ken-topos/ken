@@ -1,0 +1,63 @@
+-- Rosetta Code: FizzBuzz
+-- https://rosettacode.org/wiki/FizzBuzz
+--
+-- Task: for n = 1..20, print "FizzBuzz" if n is divisible by 15,
+-- "Fizz" if divisible by 3, "Buzz" if divisible by 5, else print n.
+--
+-- GAP-string-literals (blocking): cannot produce "Fizz"/"Buzz" output.
+-- GAP-io-surface (blocking): no surface print function.
+-- GAP-subtraction: `-` is not a surface binary operator.
+-- GAP-modulo: `%` / `mod` is not a surface binary operator.
+-- GAP-comparison: `<`, `>`, `<=`, `>=` are not surface operators.
+-- GAP-bool-match: Bool is opaque (not `data Bool = True | False`);
+--   cannot branch on an Int comparison result.
+-- GAP-nat-literals: integer literals elaborate at Int; Nat requires
+--   structural `Suc (Suc ...)` spelling.
+--
+-- Despite the print/string gaps, the classification logic (divisibility
+-- by 3 and 5) CAN be expressed via structural recursion on Nat.
+-- The programs below define mod3, mod5, and a FizzTag classifier.
+-- They elaborate correctly and demonstrate the pattern-match machinery.
+
+-- Classification result (replaces the string output until GAP-string-literals
+-- and GAP-io-surface are resolved).
+data FizzTag = Plain | IsFizz | IsBuzz | IsFizzBuzz
+
+-- Helper: is a Nat equal to Zero?
+data IsZero = Zero_ | NonZero_
+
+view isZero (n : Nat) : IsZero =
+  match n { Zero => Zero_ ; Suc m => NonZero_ }
+
+-- mod3: remainder of n divided by 3, computed by repeatedly peeling 3.
+view mod3 (n : Nat) : Nat =
+  match n {
+    Zero => Zero
+    Suc Zero => Suc Zero
+    Suc (Suc Zero) => Suc (Suc Zero)
+    Suc (Suc (Suc m)) => mod3 m
+  }
+
+-- mod5: remainder of n divided by 5, computed by repeatedly peeling 5.
+view mod5 (n : Nat) : Nat =
+  match n {
+    Zero => Zero
+    Suc Zero => Suc Zero
+    Suc (Suc Zero) => Suc (Suc Zero)
+    Suc (Suc (Suc Zero)) => Suc (Suc (Suc Zero))
+    Suc (Suc (Suc (Suc Zero))) => Suc (Suc (Suc (Suc Zero)))
+    Suc (Suc (Suc (Suc (Suc m)))) => mod5 m
+  }
+
+-- classify: FizzTag for a given Nat.
+view classify (n : Nat) : FizzTag =
+  match isZero (mod3 n) {
+    Zero_ => match isZero (mod5 n) {
+               Zero_   => IsFizzBuzz
+               NonZero_ => IsFizz
+             }
+    NonZero_ => match isZero (mod5 n) {
+                  Zero_   => IsBuzz
+                  NonZero_ => Plain
+                }
+  }
