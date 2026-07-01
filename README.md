@@ -22,24 +22,22 @@ a property, get back a verdict an agent can act on without reading the kernel.
 
 ## What's built
 
-The implementation is underway (~28,000 lines of Rust across 4 crates,
+The implementation is underway (~28,300 lines of Rust across 4 crates,
 multi-agent federation). **Bold** marks are covered by landed kernel code;
-*draft* marks are in active development or have a written spec but whose
-implementation has not started.
+*draft* marks have a written spec whose implementation is in progress or
+not started; *deferred* marks are post-verification-loop.
 
-| Area | Status | What |
+| Workstream | Status | What |
 |---|---|---|
-| **Kernel trust-root** | **built (K1→K-api)** | Π, Σ, inductive families, predicative universes, observational `Eq`/`cast`/`Ω`/quotients, decidable conversion (NbE + SCT), the TCB API |
-| **Verification spine** | **built (V0→V4)** | V0 elaborator, V1 spec syntax (`requires`/`ensures`/four-way status), V2 obligation generation, V3 automated prover (IPC tactic w/ kernel-re-checked certificates; Z3 oracle spec'd, not yet wired), V4 diagnostics (countermodels, typed holes, three-region decomposition) |
-| **Diagnostic protocol** | **built (T1)** | Machine-readable, round-trippable agent contract for diagnostics |
-| **Reference interpreter** | **built (X1)** | Strict CBV evaluation, content-addressed store, effect evaluation (`drive_h`) |
-| **IFC by typing** | **built (Sec1)** | Label lattice, declassification, non-interference — security tier-1 started |
-| Surface language | draft | Spec drafted (§30–§39); L-stream implementation not started |
-| Effects (ITree) | draft | Spec drafted (§36); L5 interaction-tree denotation landed in X1 |
-| Constant-time | draft | Spec drafting (`@ct` discipline); Sec1ct WP |
-| Behavioural seam | draft | Ken → Ward export; spec drafted (§70–§74) |
-| Native codegen | deferred | After the verification loop is proven |
-| Self-hosting | deferred | After native codegen |
+| **Kernel trust-root (WS-K)** | **complete (K1→K-api)** | Π, Σ, inductive families, predicative universes, observational `Eq`/`cast`/`Ω`/quotients, W-style eliminators (K1.5), decidable conversion (NbE + SCT), the stable TCB API — the auditable trust boundary |
+| **Verification spine (WS-V)** | **complete (V0→V4, T1)** | V0 elaborator, V1 spec syntax (`requires`/`ensures`/four-way status), V2 obligation generation (body-as-motive extraction), V3 automated prover (IPC tactic w/ kernel-re-checked certificates; Z3 oracle spec'd, not yet wired), V4 diagnostics (countermodels, typed holes, three-region decomposition), T1 machine-readable agent protocol |
+| **Surface language (WS-L)** | **core landed (L1–L7)** | L1 numeric types (`Int`, `Decimal`, fixed-width), L2 sum types + `match` + exhaustiveness + refinements, L3 strings & collections, L5 effects (interaction-tree), L6 `Bytes` + binary I/O, L7 foreign FFI + trust boundary |
+| **Security (WS-Sec)** | **tier-1 landed (Sec1, Sec1ct, Sec2)** | Sec1 IFC-by-typing (label lattice, declassification, non-interference), Sec1ct `@ct` constant-time discipline, Sec2 capabilities (PoLA, attenuation, revocation, audit) |
+| **Behavioural seam (WS-B)** | **core landed (B1–B3)** | B1 assumption-boundary export emitter, B2 Temporal-as-data (Temporal Σ datatype), B3 trace/instrumentation contract; *B4 agentic boundary — in progress* |
+| **Runtime (WS-X)** | **core landed (X1, X2)** | X1 strict-CBV interpreter (content-addressed store, effect evaluation), X2 runtime hardening (capacity conformance, NULL_SLOT fix) |
+| Surface: L4 modules/pkg, L8 stdlib, L-fmt, typeclasses | draft | Spec drafted (§33, §39, ADR 0008); L-stream remaining |
+| Native codegen (X3) | deferred | After the verification loop is proven |
+| Self-hosting (S1/S2) | deferred | After native codegen |
 
 ## Origin
 
@@ -48,7 +46,7 @@ Ken was *inspired* by **Yon**, an AGPLv3 research prototype — but Yon is an
 environment, zero AGPLv3 source contact. Its core design (cubical paths/
 cofibrations) was deliberately **not adopted** — Ken chose **observational
 type theory** (OTT, ADR 0005) instead. Ken's design is its own; the MIT
-license rests on the absence of AGPLv3 source contact.
+license rests on the absence of AGPLv3 source contact. See
 [`CLEAN-ROOM.md`](CLEAN-ROOM.md).
 
 ## Map
@@ -57,7 +55,7 @@ license rests on the absence of AGPLv3 source contact.
   implementation teams build from. Status backbone:
   [`spec/SPEC-PROGRESS.md`](spec/SPEC-PROGRESS.md).
 - **Conformance:** [`conformance/`](conformance/) — black-box test seeds
-  (kernel, verification, runtime, security, surface).
+  (kernel, verification, runtime, security, surface, behavioral).
 - **Plan:** [`docs/program/`](docs/program/README.md) — strategy, roadmap,
   work-package DAG, and the git/integration model.
 - **Decisions:** [`docs/adr/`](docs/adr/) — architecture decision records.
