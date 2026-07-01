@@ -21,7 +21,7 @@ conformance/
   runtime/       — 40-runtime/ (values, evaluation, termination, capacity)
   stdlib/        — 50-stdlib/ (lawful instances, verified building blocks)
   security/      — 60-security/ (information flow, constant-time discipline,
-                   capabilities & authority, trust model & TCB)
+                   capabilities & authority, trust model & TCB, policy-as-code)
   behavioral/    — 70-behavioral/ (assumption-boundary export emitter,
                    trace/instrumentation contract, Temporal datatype +
                    delegated export flow, agentic boundary)
@@ -159,6 +159,21 @@ claim with no conformance case is a claim no one can rely on
   **honest limits** normative + first-class (spec ≠ intent the headline
   residual risk). Trust levels tagged per case — no "kernel-backed" over-claim
   on the by-construction / structural faces.
+- `security/policy/seed-policy.md` — Sec5 policy-as-code (`65`, ADR 0007):
+  *authored by compliance, enforced by the compiler*. The **binding guarantee**
+  (a policy-`Secret` value to a `Public`-cleared sink **fails to compile** via
+  the real `l_sink`/`flows_to` — `SECRET⊑PUBLIC` false; + the `pc`-join implicit
+  flow), **non-weakenability** as a property of the **landed** enforcement
+  (`flows_to` doesn't consult authorship; the policy-`binding` mechanism is
+  `[deferred: OQ-policy]`, oracle-tagged), declassification gated by the
+  policy-granted capability (real `check_declassify` + a downgrade-direction
+  guard), the **`@ct`** static face (the order-dual pair; runtime Ward face
+  `[deferred]`), and governance riding the `63` supply-chain
+  (`trusted_base_delta` payload). **Soundness anchor (AC4):** policy is
+  *data + binding* — **no new kernel, no new metatheory** (empty delta),
+  `[structural/by-construction]` and
+  **trusted-by-typing → `P`/`tested`, never `Q`/"kernel-backed"** (the corpus is
+  the net, not the kernel).
 - `behavioral/export/seed-export.md` — B1 assumption-boundary export emitter
   (the `Q`/`P`/`Σ`/`T`/`G` status→field projection: the no-over-claim pair,
   alphabet reuse, the no-measure seal, the one-way gate, content-hash
