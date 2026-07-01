@@ -3,9 +3,13 @@
 Format: `../../README.md`. These pin the **laws-PROVED discipline** of the first
 `packages/` catalog tranche (`spec/50-stdlib/51-lawful-classes.md`, ES4-classes)
 — the pattern every later ES4 package follows. The load-bearing property is
-**AC3**: a canonical instance's **law fields are real kernel proofs**, so
-"lawful instance ≡ zero-`trusted_base()`-delta instance"; a law-**less**
-dictionary must be **rejected as unlawful**, not silently accepted.
+**AC3**: on an **inductive carrier** an instance's **law fields are real
+kernel proofs**, so "lawful instance ≡ zero-`trusted_base()`-delta instance"; a
+law-**less** dictionary (postulated laws it *could* have proved) must be
+**rejected as unlawful**. A **primitive** carrier (`Int`/…) is the honest
+exception — its ∀-laws are **unprovable** (no eliminator), so its instance
+carries a **declared audited delta** (`§6`), not zero — the carrier axis is
+load-bearing.
 
 ## Grounding (content-verified against the landed targets)
 
@@ -13,7 +17,9 @@ dictionary must be **rejected as unlawful**, not silently accepted.
   (`33 §5.1`): op fields `Type`-valued, **law fields `Ω`-valued** (`§3`);
   totality is the **Bool-equation** `IsTrue (leq x y || leq y x)` (Ω-clean, no
   truncation, `§3`); an instance is a `declare_def` **record value carrying real
-  law proofs** (`§5`); zero `trusted_base()` delta (`§6`); `where Ord a`
+  law proofs** (`§5`); **zero `trusted_base()` delta on an inductive carrier**,
+  an **audited delta** on a primitive carrier (`§6`, the **two-axes rule**: law
+  *sort* Ω-clean **and** carrier *provability* via an eliminator); `where Ord a`
   supplies the same `leq` the explicit `sort` threads (`§4`).
 - `33 §5.1`/`§5.2`/`§5.3` — a class is a **record** (`13 §3` Σ+η); the sort is
   kernel-computed (both-components-keyed `sort_sigma`, `13 §4`); an instance is
@@ -32,7 +38,12 @@ delta** invariant read from the law side (`51 §5`). A law field inhabited by a
 the kernel re-check**. So the corpus reuses the ES1/Sec4 `trusted_base()` net
 (`../surface/taxonomy/minimality.md`, `../../security/trust-model/`) — it does
 **not** re-pin the delta mechanism, it pins that a **class instance's law fields
-are subject to it**. The verified-`sort` obligation itself is homed in
+are subject to it**. **The carrier axis (`51 §6`) qualifies the equivalence:**
+"lawful ≡ zero-delta" holds **on an inductive carrier** (whose ∀-laws are
+kernel-provable by case-split/induction); a **primitive** carrier's ∀-laws are
+**unprovable** (no eliminator), so its instance is separately an
+**audited-delta** one (a *declared*, visible delta — the honest primitive
+posture, not a defect). The verified-`sort` obligation itself is homed in
 `../surface/collections/` (`sort-emits-issorted-and-perm`); AC2 here references
 it, does not re-pin it.
 
@@ -60,12 +71,15 @@ law-less/postulated/holed instance is **rejected as unlawful** (non-empty
 ### stdlib/classes/law-fields-real-proofs-not-postulates (soundness)
 - spec: `51 §5` (laws PROVED = zero-delta), `33 §5.3` (instance = record value +
   law proofs), `25 §3` (`trusted_base_delta`), `13 §2` (Σ-Intro re-check)
-- given: two `Ord K`-shaped instances for a user carrier `K`, **identical in
-  their operation field** (`leq = k_leq`), differing **only** in the law fields:
-  (a) a **canonical** instance whose `refl`/`antisym`/`trans`/`total` fields are
-  inhabited by **real kernel proofs** (a `declare_def` record value,
-  re-checked); (b) a **law-less** instance whose law fields are
-  `declare_postulate`d (and, as further arms, holed / stubbed-absent)
+- given: two `Ord K`-shaped instances for a user carrier `K` (an **inductive**
+  `data K` — it has an eliminator, so its ∀-laws are kernel-provable by
+  case-split/induction; this is the precondition that makes a postulate a
+  *defect*), **identical in their operation field** (`leq = k_leq`), differing
+  **only** in the law fields: (a) a **canonical** instance whose
+  `refl`/`antisym`/`trans`/`total` fields are **real kernel proofs**
+  (a `declare_def` record value, re-checked); (b) a **law-less** instance whose
+  law fields are `declare_postulate`d (and, as further arms, holed /
+  stubbed-absent)
 - expect: **the verdict flips.** (a) **accepts as lawful** — every law prop is
   kernel-proved, so the instance's **`trusted_base_delta` is empty** (the law
   props ∉ `trusted_base()`); (b) **rejected as unlawful** — a **postulated** law
@@ -90,7 +104,47 @@ law-less/postulated/holed instance is **rejected as unlawful** (non-empty
   ([[lawful-class-instances-must-carry-law-proofs]]; the ES2 analog is
   `isSorted`/`Perm` **defined** not postulated). Does **not** re-pin the
   `trusted_base()` mechanism (ES1/Sec4) — pins that a class instance's law
-  fields are subject to it.
+  fields are subject to it. **Carrier precondition:** the postulate is a
+  **defect here because `K` is inductive** (the laws *were* provable) — the same
+  postulated field on a **primitive** carrier is the **honest audited-delta**
+  (`primitive-carrier-declared-audited-delta` below), so the reject arm is
+  conditioned on carrier provability, not on the postulate alone.
+
+### stdlib/classes/primitive-carrier-declared-audited-delta (soundness)
+- spec: `51 §6` (the carrier axis — a primitive carrier is **audited-delta**,
+  not zero-delta), `25 §3` (`trusted_base_delta`), `30 §6` F2 (audited primitive
+  ops), `../../security/trust-model/` (Sec4 TCB)
+- given: the **same** postulated `total` law field, on two carriers: (a) an
+  **inductive** carrier (`Bool` / user `data`) whose `total` is **postulated**
+  though it is **provable** by finite case-split; (b) a **primitive** carrier
+  (`Ord Int`: `int_leq` fires on literals, **opaque to δ on a variable**; `Int`
+  has **no induction principle**) whose `total` is **postulated because it is
+  unprovable**, and **declared** in `trusted_base_delta` (the package
+  manifest names it)
+- expect: **the verdict flips on carrier provability.** (a) **rejected as a
+  lawful (zero-delta) entry** — the law *was* provable, so the postulate is an
+  **avoidable hidden delta**, a defect; (b) **accepted as an audited-delta
+  lawful entry** — `Int` **cannot** prove the ∀-law (no eliminator), so a
+  **declared** postulate is the **honest** posture (the same trusted-by-audit
+  surface as the primitive op `int_leq` itself), the delta **visible** in
+  `trusted_base_delta`. **Sub-net:** a **hidden/undeclared** primitive delta (a
+  primitive instance **mislabeled zero-delta**) is **rejected** — the honesty is
+  in the **declaration**, not the mere presence of a delta
+- why: (soundness) the **carrier axis** the `§6` erratum makes load-bearing.
+  Zero-delta lawfulness needs **two orthogonal preconditions**: the law's
+  **sort** (Ω-clean — `ord-total-law-is-omega-bool-equation`) **and** the
+  carrier's **provability** (inductive / has an eliminator). So the **same**
+  postulated `total` is a **defect on `Bool`/user-`data`** (provable) yet the
+  **honest audited-delta on `Int`** (unprovable) — the reject is keyed on
+  *carrier provability*, not the postulate alone. Ken **ships** `Ord Int`/`Eq
+  Int` (you cannot simply lack them, `§6`), so this path is **real**, not
+  hypothetical; its trust posture is a primitive op's
+  ([[tested-not-trusted-posture-needs-reachability-precondition]]). **Ties to
+  Sec4 TCB accounting:** the law postulates are `Opaque`, the op `Primitive` —
+  **both** legitimately in `trusted_base()` (`../../security/trust-model/`); the
+  audited delta is honest iff **declared**, an over-claim iff **hidden**
+  ([[kernel-backed-claim-grep-the-emission-not-the-name]]). Static face; the
+  build lands the real instances + their manifest delta declarations.
 
 ### stdlib/classes/ord-total-law-is-omega-bool-equation (soundness)
 - spec: `51 §3` (law-field sorts; totality is the Bool-equation), `16 §1`/`§6`
@@ -156,6 +210,7 @@ law-less/postulated/holed instance is **rejected as unlawful** (non-empty
 
 - **AC3** (laws PROVED, soundness):
   `law-fields-real-proofs-not-postulates`,
+  `primitive-carrier-declared-audited-delta`,
   `ord-total-law-is-omega-bool-equation`.
 - **AC2** (`Ord` subsumes the comparator):
   `where-ord-same-sort-obligation`.
@@ -167,13 +222,21 @@ law-less/postulated/holed instance is **rejected as unlawful** (non-empty
 
 ## Cross-case consistency sweep
 
-- **Lawful ≡ zero-delta is one story.**
-  `law-fields-real-proofs-not-postulates` (a postulated law
-  → non-empty delta) and the ES1 `../surface/taxonomy/minimality.md` zero-delta
-  invariant must **agree**: nothing enters `trusted_base()` by the back door — a
-  derivable class costs the trust root **zero**, and a law proved-not-postulated
-  is exactly the law-side of that. A case admitting a postulated-law instance as
-  "lawful" would contradict both.
+- **Lawful ≡ zero-delta on an inductive carrier; audited-delta on a primitive
+  one.** `law-fields-real-proofs-not-postulates` (an inductive carrier's
+  postulated law → non-empty delta → **defect**) and the ES1
+  `../surface/taxonomy/minimality.md` zero-delta invariant **agree**: on a
+  **provable** (inductive) carrier nothing enters `trusted_base()` by the back
+  door — a law proved-not-postulated is the law-side of zero-delta.
+  `primitive-carrier-declared-audited-delta` completes it on the **carrier
+  axis**: a primitive carrier's ∀-laws are **unprovable**, so its instance
+  carries a **declared** audited delta (honest), not zero. The unifying rule: a
+  delta is a **defect iff avoidable** (the carrier could have proved it) and
+  an **honest audited-delta iff declared** (unprovable **and** visible). A case
+  treating a primitive audited-delta as a defect (over-strict — you cannot lack
+  `Ord Int`), an inductive-carrier postulate as lawful (under-strict — hides an
+  avoidable delta), or a **hidden** primitive delta as honest, contradicts this
+  class.
 - **A law field is `Ω` (proof-irrelevant).**
   `ord-total-law-is-omega-bool-equation` and the
   `51 §3` law-field-sort pin agree: every law field lands in `Ω` (the record is
