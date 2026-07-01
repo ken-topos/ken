@@ -155,8 +155,9 @@ while drafting. Resolved items move to an ADR (`../docs/adr/`).
 ## C. Surface language
 
 ### OQ-syntax — Concrete syntax — **DECIDED (principles); table iterates**
-- **Fork.** Keyword set, layout-vs-braces, operator set, Unicode extent,
-  visibility default — the whole concrete spelling.
+- **Fork.** Keyword set, layout-vs-braces, operator set, Unicode extent — the
+  whole concrete spelling (the **visibility default** sub-item is now settled,
+  see below).
 - **Decision (operator, 2026-06-27): the *principles* are decided; the concrete
   *token table* iterates with the team under them.** Because agents write and
   humans read, the canonical form is **optimized for reading** (the typability
@@ -171,8 +172,12 @@ while drafting. Resolved items move to an ADR (`../docs/adr/`).
   `60-security/64`). A starter glyph↔ASCII table is in `30-surface/31 §1b`.
 - **Still iterating (team, under the principles):** the exact glyph for each
   construct (notably `≡`-vs-`==` equality and the lattice-op/`ℓ` ASCII),
-  layout-vs-brace details, the keyword set, visibility default.
-- **Affects.** `30-surface/31 §1a/§1b` (updated), all of `30-surface/`.
+  layout-vs-brace details, the keyword set.
+- **Resolved sub-item (ES3, 2026-07-01):** the **visibility default =
+  module-private-by-default + `pub`** (`30-surface/33 §4`) — the least-surface /
+  information-hiding-forward choice that matches abstract export. Not iterating.
+- **Affects.** `30-surface/31 §1a/§1b` (updated), all of `30-surface/`;
+  `30-surface/33 §4` (visibility default resolved).
 
 ### OQ-classes — Typeclass/instance coherence — **DECIDED**
 - **Fork.** Instance-resolution ambiguity & coherence policy (global uniqueness?

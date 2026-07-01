@@ -1,9 +1,13 @@
 # Declarations, modules, and constraints
 
-> Status: **DRAFT v0**. Proposal-level for syntax; normative for the *features*.
-> Modules/imports, definitions, records, visibility, and Ken's constraint
-> mechanism — **typeclasses-as-subobjects-of-the-universe**, a from-scratch
-> design for open user typeclasses.
+> Status: **normative for the features**; the concrete syntax spelling is
+> `OQ-syntax` (proposal-level). §3 modules / imports / name-resolution and §4
+> visibility (**private-by-default, settled**) + abstract-export are
+> **normative** (ES3); §5 is the landed constraint mechanism —
+> **typeclasses-as-subobjects-of-the-universe** (Lc). The module system
+> **elaborates away** to the kernel's flat append-only `Σ`: **zero
+> `trusted_base()` delta** (`30-taxonomy.md §1.1`, the ES1 minimality
+> invariant).
 
 ## 1. Definitions
 
@@ -35,25 +39,103 @@ record User  { name : String, age : { n : Int | n ≥ 0 } }   -- refined field
 
 ## 3. Modules and imports
 
-- **`module M { … }`** groups declarations under a namespace; a file is an
-  implicit module named by its path.
-- **`import M`** brings `M` into scope qualified (`M.foo`); **`import M as N`**
-  aliases; **`import M (foo, Bar)`** selectively; **`use M`** opens `M`
-  unqualified (use sparingly).
-- **Cross-package imports** resolve through the package manager
-  (`38`/`../50-stdlib/`): a manifest (`ken.toml`) + lockfile (`ken.lock`) with
-  content-addressed, pinned dependencies; content-addressing makes builds
-  reproducible — a marketable feature.
-- A package/module is itself an environment fragment; the kernel sees a single
-  flattened, append-only `Σ` (`../10-kernel/11 §4`).
+A **module** is a pure surface namespacing + information-hiding device. It
+**elaborates away**: after name resolution the kernel sees the single flat,
+append-only global environment `Σ` (`../10-kernel/11 §4`) it would see for the
+same program written in one fully-qualified namespace. Modules, imports, and
+visibility are **surface + elaboration-time only** — they add **no** kernel
+feature and **nothing** to `trusted_base()`. The ES1 minimality invariant
+(`30-taxonomy.md §1.1`, surface built-in set ≡ `trusted_base()` delta) carries
+verbatim: a module program's trusted-base delta is **identical** to its
+flattened equivalent's.
 
-## 4. Visibility
+### 3.1 Declaring modules
 
-- Top-level names are **module-private by default**; `pub` exports. (Or the
-  inverse default — OQ-syntax.) Exported names form the module's interface.
-- A type may be exported **abstractly** (name only, constructors hidden) — the
-  surface form of an opaque constant / abstract interface (`../10-kernel/11
-  §4`), giving information hiding without a new kernel feature.
+**`module M { … }`** groups declarations under the namespace `M`. A file is an
+implicit module named by its path. Modules **nest**
+(`module M { module N { … } }` gives `M.N`). A module is an **environment
+fragment**: its declarations elaborate into `Σ` in dependency order under their
+qualified names, exactly as if written flat.
+
+### 3.2 Importing
+
+Within a module, an `import` brings another module's **exported** names (`§4`)
+into scope. Four forms:
+
+- **`import M`** — qualified: `M`'s exports are accessible as `M.foo`, `M.Bar`.
+- **`import M as N`** — aliased: the same, under `N.foo` (`M` itself unbound).
+- **`import M (foo, Bar)`** — selective: exactly `foo`, `Bar`, brought
+  **unqualified**; nothing else of `M`.
+- **`use M`** — open: **all** of `M`'s exports, unqualified. Use sparingly (it
+  maximizes the ambiguity surface, `§3.3`).
+
+**Cross-package imports are out of scope here.** The manifest / lockfile /
+registry mechanism that resolves imports **across** packages (content-addressed,
+pinned dependencies) is the **package manager**, deferred as **`F3b`**
+(operator-deferred, 2026-07-01; it couples to the supply-chain, `63`). ES3
+specifies **in-repo compilation units only**; a cross-package `import` is a
+forward reference to `F3b`, not part of this normative surface.
+
+### 3.3 Name resolution (surface-only; never reaches the kernel)
+
+Resolution is a **surface / elaboration** pass; a name still unresolved after it
+is a **surface error** (`24`) — it never reaches the kernel:
+
+- **Qualified / aliased / selective** references are **unambiguous by
+  construction**: `M.foo`, `N.foo`, and a selectively-imported `foo` each name
+  exactly one declaration.
+- **Local over imported.** A name bound in the current module (or a narrower
+  scope) **shadows** an imported one, resolved lexically (innermost wins) —
+  never an error.
+- **Open ambiguity.** If two `use`-opened modules export the **same**
+  unqualified name binding **different** declarations, an unqualified reference
+  to it is an **ambiguity error**: the programmer must qualify (`M.foo`). If
+  both opens resolve to the **same** declaration (a re-export), it is **not**
+  ambiguous. A qualified or selective import always disambiguates.
+- Every failure — unresolved name, ambiguous open, out-of-scope private name
+  (`§4`) — is a **surface diagnostic**; the flattened `Σ` the kernel receives
+  contains only resolved, in-scope references.
+
+## 4. Visibility and abstract export
+
+### 4.1 Visibility — private by default, `pub` to export
+
+Top-level names in a module are **module-private by default**; **`pub`** exports
+them. The `pub` names form the module's **interface**; a non-`pub` name is
+invisible outside its module, and accessing it from outside is a **surface
+error** (name not in scope), *not* a kernel error.
+
+**The default is private — settled (was `OQ-syntax`).** Rationale:
+private-by-default is the **least-surface, information-hiding-forward** choice —
+a module exposes only its intended interface, so the coupling surface a client
+depends on is exactly the `pub` set: small and auditable (the module-level echo
+of small-auditable-TCB). Accidental exposure requires an explicit `pub`, never
+an explicit hide; and it **matches abstract export** (`§4.2`), the same
+information-hiding default one tier down (hide the constructors). The inverse
+(public-by-default) is **not** taken. `../90-open-decisions.md` records the
+visibility default as resolved — no longer part of the `OQ-syntax` iterating
+set.
+
+### 4.2 Abstract export — the opaque constant, not a new mechanism
+
+A type may be exported **abstractly**: its name is `pub`, its **constructors are
+not**. Clients see the type but cannot `match` on or construct its hidden
+constructors. This is **exactly** the kernel's existing **opaque constant**
+(`../10-kernel/11 §4` — an opaque `c : A` is "how … abstract interfaces are
+represented") — information hiding with **no new kernel feature**:
+
+- It is enforced at **elaboration** (surface): the hidden constructors are
+  simply **not in scope** at the client, so a client `match` on one is a
+  **surface error** (name not in scope), never a kernel rejection.
+- The abstract type's **kernel representation is byte-identical** to a
+  hand-written opaque constant — there is **no** kernel "abstract" flag and no
+  visibility concept in `Σ`. A design that added a kernel-level
+  abstract/module/visibility primitive (a new `trusted_base()` entry) is
+  **rejected** by this spec; the elaborates-away form is the whole mechanism.
+
+This is the AC1/AC2 invariant made concrete: `module` / `import` / `pub` /
+abstract-export cost the trust root **nothing** — surface namespacing +
+information-hiding over the unchanged flat `Σ`.
 
 ## 5. Constraints — typeclasses as subobjects of the universe
 
