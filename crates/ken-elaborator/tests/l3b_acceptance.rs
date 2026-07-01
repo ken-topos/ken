@@ -159,13 +159,16 @@ fn user_ord_sort_emits_both_conjuncts() {
     // Declare a sort-shaped view with the full conjoined refinement and
     // `where Ord K`.  Body `Nil K` (the empty list) type-checks against
     // `List K` (the refinement carrier) and causes the elaborator to emit
-    // the Ensures obligation `And (isSorted K (Nil K)) (Perm K (Nil K) xs)`.
+    // the Ensures obligation
+    // `And (isSorted K (\_ _. True) (Nil K)) (Perm K (Nil K) xs)`.
     // The body does NOT need to be a correct sort — only the obligation
-    // emission is under test.
+    // emission is under test. `isSorted` (ES2-remainder, real def) now takes
+    // an explicit comparator; `K = MkK` has a single value, so a constant
+    // `True` comparator is a valid (if trivial) `K -> K -> Bool`.
     let res = env
         .elaborate_decl_v1(
             "view sortK (xs : List K) : \
-             { ys : List K | And (isSorted K ys) (Perm K ys xs) } \
+             { ys : List K | And (isSorted K (\\_ _. True) ys) (Perm K ys xs) } \
              where Ord K = Nil K",
         )
         .expect(

@@ -243,17 +243,67 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         .map_err(|e| ElabError::Internal(format!("prelude And failed: {}", e)))?;
     elab.globals.insert("And".to_string(), and_id);
 
-    // `isSorted : Π(A:Type). List A → Ω`.
-    let list_a = |a: Term| Term::app(Term::indformer(list_id, vec![]), a);
-    let issorted_ty = Term::pi(
-        type0.clone(),
-        Term::pi(list_a(Term::var(0)), omega0.clone()),
-    );
-    let issorted_id = elab
-        .declare_postulate_raw("isSorted", issorted_ty)
-        .map_err(|e| ElabError::Internal(format!("prelude isSorted failed: {}", e)))?;
+    // `Prop` — a surface-nameable alias for `Ω₀`, so a recursive `view` can
+    // carry an explicit return-type ANNOTATION landing on `Ω` (required: a
+    // self-recursive declaration needs a type annotation, `declare_def`
+    // can't infer one — but the surface parser has no `Ω` TOKEN at all).
+    // `Prop`'s own kernel type is `Type (suc 0)` (the `Ω-Form` rule,
+    // `Omega(l) : Type (suc l)`); its BODY is `Term::Omega(Zero)` literally,
+    // so kernel `check`/`convert` sees `Prop ≡ Ω₀` by ordinary δ-unfolding —
+    // used only as a type-position spelling, never as a value.
+    let prop_id = declare_def(&mut elab.env, vec![], Term::ty(Level::Zero.suc()), omega0.clone())
+        .map_err(|e| ElabError::Internal(format!("prelude Prop failed: {}", e)))?;
+    elab.globals.insert("Prop".to_string(), prop_id);
 
-    // `Perm : Π(A:Type). List A → List A → Ω`.
+    // `isSorted : Π(a:Type). (a → a → Bool) → List a → Ω` (ES2-remainder,
+    // `37 §6`: the explicit-comparator form, `Ord`-class deferred).
+    //
+    // `isSorted leq Nil = ⊤`, `isSorted leq (x::Nil) = ⊤`,
+    // `isSorted leq (x::y::r) = IsTrue (leq x y) ∧ isSorted leq (y::r)`, with
+    // `IsTrue (leq x y) := Eq Bool (leq x y) True` (the `Equal`/kernel-`Eq`
+    // alias already landed by ES2) and `∧` the already-demoted `And`. `⊤` is
+    // spelled `Equal Bool True True` (reflexively true, no dedicated Ω-truth
+    // constant exists in this prelude).
+    let list_a = |a: Term| Term::app(Term::indformer(list_id, vec![]), a);
+    let _ = &list_a; // still used below for Perm's raw-term construction
+    elab.elaborate_decl(
+        "view isSorted (a : Type) (leq : a -> a -> Bool) (xs : List a) : Prop = \
+         match xs { \
+           Nil => Equal Bool True True ; \
+           Cons x xs2 => match xs2 { \
+             Nil => Equal Bool True True ; \
+             Cons y r => And (Equal Bool (leq x y) True) (isSorted a leq xs2) \
+           } \
+         }",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude isSorted failed: {}", e)))?;
+    let issorted_id = elab
+        .globals
+        .get("isSorted")
+        .copied()
+        .ok_or_else(|| ElabError::Internal("prelude: 'isSorted' not registered".into()))?;
+
+    // `Perm : Π(A:Type). List A → List A → Ω`  (comparator-free, `37 §6`
+    // ES2-remainder ruling `evt_3cn9v6em54yej`, closing ES1's "spec picks
+    // one" fork in favor of truncation over count-equality — count-equality
+    // needs `DecEq a` to `count`, which this ruling explicitly defers).
+    //
+    // `Perm xs ys := ‖Perm_rel xs ys‖` — `Perm_rel` (`refl`/`swap`/`trans`/
+    // `cons`) is proof-RELEVANT (a proof records *which* permutation), so it
+    // lands in `Type`, not `Ω` directly (`16 §1.3` forbids a proof-relevant
+    // `Type → Ω`, the relevance leak that would admit `Bool` and collapse
+    // `true ≡ false`); propositional truncation (`Term::Trunc`) is the
+    // `Ω`-safe bridge. `Perm_rel` is a genuinely INDEXED family — the
+    // surface `data` declaration machinery (`data.rs::elab_data_decl`)
+    // always builds NON-indexed families (indices/target_indices hardcoded
+    // to `vec![]`, the AC5-deferred limitation noted in `l2_acceptance.rs`)
+    // — so `Perm_rel` is built directly against the kernel's own
+    // `declare_inductive`/`InductiveSpec` (which DOES support indices; only
+    // the elaborator's surface convenience wrapper doesn't expose them),
+    // exactly the technique `data.rs` itself uses internally, one level
+    // lower. `Perm_rel`'s constructors are pure internal plumbing (never
+    // pattern-matched by user code in this WP's scope) so they are not
+    // registered in `elab.globals`.
     let perm_ty = Term::pi(
         type0.clone(),
         Term::pi(
@@ -261,9 +311,104 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
             Term::pi(list_a(Term::var(1)), omega0.clone()),
         ),
     );
-    let perm_id = elab
-        .declare_postulate_raw("Perm", perm_ty)
+    let cons_app = |a: Term, h: Term, t: Term| -> Term {
+        Term::app(
+            Term::app(Term::app(Term::Constructor { id: cons_id, level_args: vec![] }, a), h),
+            t,
+        )
+    };
+    let perm_rel_id = ken_kernel::declare_inductive(&mut elab.env, |perm_rel_id| {
+        let perm_rel_at = |a: Term, xs: Term, ys: Term| -> Term {
+            Term::app(
+                Term::app(Term::app(Term::indformer(perm_rel_id, vec![]), a), xs),
+                ys,
+            )
+        };
+        ken_kernel::InductiveSpec {
+            level_params: vec![],
+            // `Δ_p = [a : Type 0]`.
+            params: vec![type0.clone()],
+            // `Δ_i = [List a, List a]` — indices telescope like args: the
+            // first is in context `[a]` (`a` = Var(0)); the second is in
+            // context `[a, idx0]`, so `a` has shifted to Var(1).
+            indices: vec![list_a(Term::var(0)), list_a(Term::var(1))],
+            level: Level::Zero,
+            constructors: vec![
+                // `perm_refl : (xs:List a) -> Perm_rel a xs xs`.
+                ken_kernel::CtorSpec {
+                    args: vec![list_a(Term::var(0))],
+                    // ctx [a, xs]: xs = Var(0).
+                    target_indices: vec![Term::var(0), Term::var(0)],
+                },
+                // `perm_swap : (x y:a)(r:List a) ->
+                //    Perm_rel a (x::y::r) (y::x::r)`.
+                ken_kernel::CtorSpec {
+                    args: vec![
+                        Term::var(0),           // x:a,        ctx [a]
+                        Term::var(1),           // y:a,        ctx [a,x]      (a=Var1)
+                        list_a(Term::var(2)),   // r:List a,   ctx [a,x,y]    (a=Var2)
+                    ],
+                    // ctx [a,x,y,r]: a=Var3, x=Var2, y=Var1, r=Var0.
+                    target_indices: vec![
+                        cons_app(Term::var(3), Term::var(2), cons_app(Term::var(3), Term::var(1), Term::var(0))),
+                        cons_app(Term::var(3), Term::var(1), cons_app(Term::var(3), Term::var(2), Term::var(0))),
+                    ],
+                },
+                // `perm_trans : (xs ys zs:List a) ->
+                //    Perm_rel a xs ys -> Perm_rel a ys zs -> Perm_rel a xs zs`.
+                ken_kernel::CtorSpec {
+                    args: vec![
+                        list_a(Term::var(0)), // xs, ctx [a]
+                        list_a(Term::var(1)), // ys, ctx [a,xs]        (a=Var1)
+                        list_a(Term::var(2)), // zs, ctx [a,xs,ys]     (a=Var2)
+                        // p1 : Perm_rel a xs ys, ctx [a,xs,ys,zs]: a=Var3,xs=Var2,ys=Var1.
+                        perm_rel_at(Term::var(3), Term::var(2), Term::var(1)),
+                        // p2 : Perm_rel a ys zs, ctx [a,xs,ys,zs,p1]: a=Var4,ys=Var2,zs=Var1.
+                        perm_rel_at(Term::var(4), Term::var(2), Term::var(1)),
+                    ],
+                    // ctx [a,xs,ys,zs,p1,p2]: a=Var5,xs=Var4,ys=Var3,zs=Var2.
+                    target_indices: vec![Term::var(4), Term::var(2)],
+                },
+                // `perm_cons : (x:a)(xs ys:List a) ->
+                //    Perm_rel a xs ys -> Perm_rel a (x::xs) (x::ys)`.
+                ken_kernel::CtorSpec {
+                    args: vec![
+                        Term::var(0),         // x:a, ctx [a]
+                        list_a(Term::var(1)), // xs, ctx [a,x]        (a=Var1)
+                        list_a(Term::var(2)), // ys, ctx [a,x,xs]     (a=Var2)
+                        // p : Perm_rel a xs ys, ctx [a,x,xs,ys]: a=Var3,xs=Var1,ys=Var0.
+                        perm_rel_at(Term::var(3), Term::var(1), Term::var(0)),
+                    ],
+                    // ctx [a,x,xs,ys,p]: a=Var4,x=Var3,xs=Var2,ys=Var1.
+                    target_indices: vec![
+                        cons_app(Term::var(4), Term::var(3), Term::var(2)),
+                        cons_app(Term::var(4), Term::var(3), Term::var(1)),
+                    ],
+                },
+            ],
+        }
+    })
+    .map_err(|e| ElabError::Internal(format!("prelude Perm_rel failed: {}", e)))?;
+
+    let perm_body = Term::lam(
+        type0.clone(),
+        Term::lam(
+            list_a(Term::var(0)),
+            Term::lam(
+                list_a(Term::var(1)),
+                Term::Trunc(Box::new(Term::app(
+                    Term::app(
+                        Term::app(Term::indformer(perm_rel_id, vec![]), Term::var(2)),
+                        Term::var(1),
+                    ),
+                    Term::var(0),
+                ))),
+            ),
+        ),
+    );
+    let perm_id = declare_def(&mut elab.env, vec![], perm_ty, perm_body)
         .map_err(|e| ElabError::Internal(format!("prelude Perm failed: {}", e)))?;
+    elab.globals.insert("Perm".to_string(), perm_id);
 
     // ── L3b: abstract collection types (`37 §6`) ───────────────────────────
     // `Map : Type → Type → Type` — abstract; `DecEq K` gate enforced via
