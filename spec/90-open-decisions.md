@@ -316,6 +316,28 @@ while drafting. Resolved items move to an ADR (`../docs/adr/`).
   if added (`OQ-coinduction`), brings its own local guarded laziness.
 - **Affects.** `40-runtime/42` (updated), `41` (sharing). **Recorded.**
 
+### OQ-backend-target — Native codegen target/toolchain — **OPEN (operator-ratifiable)**
+- **Fork.** Which native-code target/toolchain the backend (`X3`, `45`) lowers
+  core terms to. The **one irreversible** architectural decision in the backend
+  (long-term dependency + TCB-surface + toolchain implications), so it is
+  surfaced for operator ratification, not locked by the design ring.
+- **Options (tradeoffs in `45 §5`).** **Cranelift** (Rust-native, in-tree, small
+  surface, fast compile / younger codegen, fewer targets); **LLVM** (mature,
+  best codegen, many targets / large C++ toolchain, big surface); **C source**
+  (maximally portable / needs a C toolchain, UB surface); **WASM** (sandboxed,
+  portable / different execution model, not "native" per se).
+- **Design-ring lean (not a lock).** **Cranelift** — Rust-native keeps the
+  toolchain in-tree and the auditable surface small (small-auditable-TCB); and
+  because the backend is **not** in the soundness TCB (`45 §2`), codegen
+  maturity is a **quality/perf** concern the differential corpus catches,
+  **not** a trust concern. Weigh against the operator's perf/target-breadth
+  priorities.
+- **Status.** **OPEN** — an **operator-ratifiable Decision**. No target is
+  written into normative prose as decided; **`X3-build` (`ken-codegen`) does not
+  start until the operator ratifies** the target.
+- **Affects.** `40-runtime/45` (frames the model + tradeoffs, target-agnostic).
+  **Open.**
+
 ---
 
 ## E. Concurrency, wire, process
