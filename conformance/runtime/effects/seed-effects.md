@@ -289,7 +289,7 @@ denotation, with the world's responses substituted at the `Vis` nodes via `H`.
 since the driver's scrutinee **is** the tree (`42 §6.7`): an open hole in the
 tree, or an `unknown` **op**, yields `unknown` and performs **nothing**. A
 **hole-free** effectful program **never** yields an `unknown` tree (`42 §6.7`,
-`43 §2.1`). Extends `../evaluation/seed-evaluation.md`'s CAN4.
+`43 §2, case 1`). Extends `../evaluation/seed-evaluation.md`'s CAN4.
 
 ### runtime/effects/unknown-strict-through-driver (oracle)
 - spec: `42 §6.7` (`unknown` through effects); `§4` (strict propagation), `41
@@ -303,7 +303,7 @@ tree, or an `unknown` **op**, yields `unknown` and performs **nothing**. A
   **no** effect performed (no determinate interaction; the op is the scrutinee,
   strict, `42 §6.7`) → **empty** trace. (b) performs `Console.Write "ok"` →
   trace `[Console.Write "ok"]`, leaf `tt`. A hole-free effectful program
-  **never** yields an `unknown` tree (`42 §6.7`, `43 §2.1`).
+  **never** yields an `unknown` tree (`42 §6.7`, `43 §2, case 1`).
 - why: the operational face of partial verification, **through** effects (`42
   §6.7`) — the driver's scrutinee is the tree, so `unknown` propagates by the §4
   strict rule. **Verdict-flip** on hole-present → `unknown`/no-perform vs
