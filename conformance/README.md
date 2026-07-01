@@ -169,8 +169,11 @@ claim with no conformance case is a claim no one can rely on
   the `Ord` **totality** law is `Ω`-clean as the Bool-equation
   `IsTrue (leq x y || leq y x)` (no truncation); and `where Ord a` supplies the
   **same** `sort` obligation as the explicit comparator (AC2,
-  reflect-don't-extend). Static face; the real law-carrying instances are the
-  Team-Language build follow-on.
+  reflect-don't-extend). **Carrier axis (`§6`):** "lawful ≡ zero-delta" holds on
+  an **inductive** carrier; a **primitive** carrier is audited-delta (its
+  ∀-laws unprovable — no eliminator — so a *declared* delta, not zero) —
+  `primitive-carrier-declared-audited-delta`. Static face; the real law-carrying
+  instances are the Team-Language build follow-on.
 - `security/ifc/seed-ifc.md` — Sec1 information-flow-by-typing (the
   implicit-flow discriminator, label joins, capability-gated declassify, the
   relational by-proof mode).
