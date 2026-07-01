@@ -203,6 +203,32 @@ impl ElabEnv {
         Ok(result)
     }
 
+    /// Elaborate zero or more declarations from source, in order.
+    ///
+    /// Each declaration is elaborated and registered in `self.env` before the
+    /// next is processed, so later declarations may refer to earlier ones.
+    /// Returns the `GlobalId` of every successfully elaborated declaration.
+    pub fn elaborate_file(&mut self, src: &str) -> Result<Vec<GlobalId>, ElabError> {
+        let decls = parser::parse_decls(src)?;
+        let mut ids = Vec::with_capacity(decls.len());
+        for decl in &decls {
+            let rdecl = resolve::resolve_decl(decl)?;
+            let result = elab::elaborate_rdecl_v1(
+                &mut self.env,
+                &mut self.globals,
+                &mut self.num_values,
+                &self.numeric_env,
+                &mut self.class_env,
+                &rdecl,
+            )?;
+            if let Some(fb) = &result.foreign_binding {
+                self.foreign_env.register(result.name.clone(), fb.clone());
+            }
+            ids.push(result.def_id);
+        }
+        Ok(ids)
+    }
+
     /// Try to discharge an obligation hole with a certificate term.
     ///
     /// `cert` is a CLOSED term (no free variables) of type `closed_goal`.

@@ -1102,6 +1102,104 @@ where
     }
 }
 
+/// IDs for the `Console` effect driver (`42 §6.3`, `36 §2.1`).
+///
+/// Obtain by looking up the ITree/Console.Op inductives in the `GlobalEnv`
+/// after Language registers them in `ElabEnv::new()`.
+/// `params_len` is the number of ITree *type* params (2 for `ITree E R`;
+/// 0 for the simplified 0-param test ITree).
+pub struct ConsoleIds {
+    /// `GlobalId` of the `ITree` inductive (for documentation; not used in the loop).
+    pub itree_id: GlobalId,
+    /// `GlobalId` of the `Ret` constructor (k = 0).
+    pub ret_id: GlobalId,
+    /// `GlobalId` of the `Vis` constructor (k = 1).
+    pub vis_id: GlobalId,
+    /// `GlobalId` of `Console.Op::Write` (k = 0, carries a `String` arg).
+    pub write_id: GlobalId,
+    /// `GlobalId` of the `Unit` constructor (response to `Write`).
+    pub unit_id: GlobalId,
+    /// Number of ITree type-level params. Ctor-specific args start at this offset.
+    pub params_len: usize,
+}
+
+/// Error returned by `run_io` (`42 §6`).
+#[derive(Debug)]
+pub enum RunIoError {
+    /// A `Vis` node carried an op-tag that is not `Console.Write`.
+    UnknownEffect(EvalVal),
+    /// The tree evaluated to `Unknown` (open hole, `42 §6.7`).
+    UnknownTree,
+    /// The tree is not an ITree `Ret`/`Vis` value.
+    NotAnIOTree(EvalVal),
+}
+
+/// Console-effect driver (`42 §6.2`, `§6.3`): runs an `ITree Console Unit`
+/// value to completion, printing each `Write s` op to stdout.
+///
+/// Dispatches exhaustively over `Console.Op` — no catch-all (`42 §6.5`): the
+/// only op-tag is `Write`, and any other tag is `Err(UnknownEffect)`.
+///
+/// `ids.params_len` must equal the number of type-level params on `ITree`
+/// (2 for the production `ITree Console Unit`; 0 for the test ITree).
+pub fn run_io(
+    mut tree: EvalVal,
+    ids: &ConsoleIds,
+    globals: &GlobalEnv,
+    store: &mut EvalStore,
+) -> Result<EvalVal, RunIoError> {
+    let m = ids.params_len;
+    loop {
+        let next = match tree {
+            EvalVal::Unknown => return Err(RunIoError::UnknownTree),
+            EvalVal::Ctor { id, args, .. } => {
+                if id == ids.ret_id {
+                    // Ret r → done
+                    return Ok(args.get(m).cloned().unwrap_or(EvalVal::Unknown));
+                } else if id == ids.vis_id {
+                    let op = args[m].clone();
+                    let k = args[m + 1].clone();
+                    // Dispatch on the Console.Op — exhaustive, no catch-all (42 §6.5).
+                    let resp = match op {
+                        EvalVal::Ctor { id: op_id, args: op_args, .. }
+                            if op_id == ids.write_id =>
+                        {
+                            let maybe_s = match op_args.get(0) {
+                                Some(EvalVal::Str(s)) => Some(s.clone()),
+                                _ => None,
+                            };
+                            match maybe_s {
+                                Some(s) => {
+                                    println!("{}", s);
+                                    make_ctor(ids.unit_id, vec![], store)
+                                }
+                                None => {
+                                    return Err(RunIoError::UnknownEffect(EvalVal::Ctor {
+                                        id: op_id,
+                                        args: op_args,
+                                        slot: NULL_SLOT,
+                                    }))
+                                }
+                            }
+                        }
+                        other => return Err(RunIoError::UnknownEffect(other)),
+                    };
+                    apply(k, resp, globals, store)
+                } else {
+                    // Unrecognised ITree constructor
+                    return Err(RunIoError::NotAnIOTree(EvalVal::Ctor {
+                        id,
+                        args,
+                        slot: NULL_SLOT,
+                    }));
+                }
+            }
+            other => return Err(RunIoError::NotAnIOTree(other)),
+        };
+        tree = next;
+    }
+}
+
 /// Instrumented variant of `drive_h` — emits a trace event at each `Vis` firing
 /// (`73 §2`, TC2). Pure steps (`Ret`, β, ι) emit nothing.
 ///
