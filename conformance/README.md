@@ -66,6 +66,17 @@ claim with no conformance case is a claim no one can rely on
 - `kernel/observational/seed-observational.md` — K2-scoped seed cases (Omega-PI,
   funext, propext, Eq-by-type, cast regularity/computation, J-on-nonrefl,
   quotients, truncation, UIP).
+- `kernel/inductive/seed-k4-omega-motive-elim.md` — K4 **elimination into `Ω`**
+  (`14 §3`): the general eliminator's motive codomain is a **sort** (`Type ℓ' ∪
+  Ω_l`, not a wildcard), so an `Ω`-codomain motive **proves a per-branch-varying
+  proposition** by case-split on a relevant scrutinee — the **capability flip**
+  (`refl : (x:Bool) → IsTrue (bool_leq x x)` via `elim_Bool`; accepts post-K4,
+  rejected pre-K4) that un-gates the lawful-classes accept arm; the **non-sort
+  codomain reject** (sort, not wildcard); **sort-agnostic ι** (no new reduction
+  path); and the ★ **conv-embedding commutation** (into-`Ω` narrows — two elims
+  with the same motive but different proof methods are **conv-equal**, proof
+  irrelevance preserved through conversion with no new conv rule; a
+  proof-relevant-`Ω`-elim leak-out is the danger it rules out).
 - `verify/seed-verify.md` — a proved postcondition, a disproved one with a
   countermodel, an incomplete one with a hole, and the soundness regression (Z3
   cannot force a false `proved`).
