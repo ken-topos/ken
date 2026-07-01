@@ -7,7 +7,7 @@ elaboration-time only** device that **elaborates away** to the kernel's
 **single flat append-only `Σ`** (`../../spec/10-kernel/11 §4`), with
 **abstract export = the existing opaque constant** (`11 §4`: an opaque
 constant "is how axioms, FFI signatures, and **abstract interfaces** are
-introduced"). **Zero new kernel feature, zero `trusted_base()` delta** — the
+represented"). **Zero new kernel feature, zero `trusted_base()` delta** — the
 ES1 minimality invariant (surface built-in set ≡ `trusted_base()` delta,
 `../taxonomy/minimality.md`) carries verbatim. The **package manager /
 cross-package imports are OUT** (F3b, operator-deferred); ES3 is in-repo
@@ -102,7 +102,7 @@ rules**, and the `Σ`/`trusted_base()` identity against the **landed** kernel.
   (`11 §4`), δ-blocking, no constructors visible; **no** kernel "abstract"
   flag or new `Decl` variant
 - why: AC2, abstract export = the **existing** opaque-constant mechanism
-  (`11 §4` — "how … abstract interfaces are introduced"). **Discriminating:**
+  (`11 §4` — "how … abstract interfaces are represented"). **Discriminating:**
   a design that added a kernel-level "abstract" marker (a new `Decl`/`Σ` form)
   would make the rep **differ** from a plain opaque constant — this case pins
   them **identical**. Information hiding is surface/elaboration, not a kernel
