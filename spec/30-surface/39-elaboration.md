@@ -653,6 +653,17 @@ reifying that resolution:
   non-decreasing step for a faster diagnostic (the same `17 §4.2` metric), but
   the **authoritative** bound is the kernel SCT on the reified group — the two
   agree by construction.
+- **Reification faithfulness (NORMATIVE — the load-bearing requirement).** The
+  SCT bound is sound **only if** the reified group's δ-recursion **mirrors the
+  actual resolution recursion** — one node per distinct sub-goal, one edge per
+  `dischargeSubConstraints` call (§6.3), the head-type carried per node. A
+  reified group that dropped an edge (or keyed a node on anything but the
+  resolution sub-goal) would make `sct_check` bound the **wrong** recursion, so
+  a non-terminating search could slip an accepting SCT verdict. The build MUST
+  emit the group as the exact image of the resolution graph; **`AC6` is
+  discriminating on this** — the non-terminating case must reach reject **via
+  `sct_check` on the real reified group** (grep the producer), not via an
+  elaborator-side proxy that could diverge from what the kernel checks.
 
 ### 6.5 Named-instance explicit passing (bypasses search)
 
