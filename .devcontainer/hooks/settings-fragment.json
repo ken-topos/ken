@@ -1,0 +1,20 @@
+{
+  "statusLine": {
+    "type": "command",
+    "command": "/home/node/.claude/hooks/ctx-statusline.sh"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/node/.claude/hooks/ctx-nudge.sh",
+            "timeout": 5000
+          }
+        ]
+      }
+    ]
+  }
+}
