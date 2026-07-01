@@ -300,9 +300,9 @@ would *fail loudly* if the property broke.
 | Guarantee | Tier | What nets it |
 |---|---|---|
 | Functional correctness (`ensures`, refinements) | `Q` kernel-certified | kernel re-checks the certificate, goal ∉ `trusted_base()` |
-| No `Type:Type` / universe consistency | `Q` (kernel behavior) | `sort_pi`/`sort_sigma`, run on every input |
-| Proof-irrelevance at `Omega`, Sigma-sort discipline | `Q` (kernel behavior) | both-keyed `sort_sigma`, type-directed Ω-PI |
-| Subject reduction / meaning-preserving eval | `Q` (kernel behavior) | kernel reduction + typing, every input |
+| No `Type:Type` / universe consistency | `Q` (kernel behavior; metatheorem trusted-as-code) | `sort_pi`/`sort_sigma`, run on every input |
+| Proof-irrelevance at `Omega`, Sigma-sort discipline | `Q` (kernel behavior; metatheorem trusted-as-code) | both-keyed `sort_sigma`, type-directed Ω-PI |
+| Subject reduction / meaning-preserving eval | `Q` (kernel behavior; metatheorem trusted-as-code) | kernel reduction + typing, every input |
 | Never a false `proved`, any author | structural | `check` has no provenance channel (AI-Indep) |
 | The TCB (kernel + primitives + postulates) | trusted-as-code | audit (§64 §3) + this document's companion audit |
 | IFC / `@ct` / policy admission | `P` trusted-by-typing | elaborator flow rules; labels erased before kernel; conformance |

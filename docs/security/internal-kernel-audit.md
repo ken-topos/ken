@@ -66,7 +66,7 @@ per-program trust) and **trusted-assumption** (items 2/3):
 
 **Finding 2 (choke-point).** Only `declare_postulate` and `declare_primitive`
 introduce an unchecked assumption, and each lands **exactly one** `Decl::Opaque`
-or `Decl::Primitive` (`check.rs:1062`, `check.rs:1081`). The definitional entry
+or `Decl::Primitive` (`check.rs:1063`, `check.rs:1083`). The definitional entry
 points (`declare_def`, `declare_recursive_group`) gate on the type check **and**
 `sct::sct_check` before `upgrade_to_transparent` (`check.rs:962`,
 `check.rs:1033`) — they are re-checked, not trusted. This is TB-Complete's
