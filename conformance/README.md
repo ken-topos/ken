@@ -21,7 +21,7 @@ conformance/
   runtime/       — 40-runtime/ (values, evaluation, termination, capacity)
   stdlib/        — 50-stdlib/ (lawful instances, verified building blocks)
   security/      — 60-security/ (information flow, constant-time discipline,
-                   capabilities & authority)
+                   capabilities & authority, trust model & TCB)
   behavioral/    — 70-behavioral/ (assumption-boundary export emitter,
                    trace/instrumentation contract, Temporal datatype +
                    delegated export flow, agentic boundary)
@@ -147,6 +147,18 @@ claim with no conformance case is a claim no one can rely on
   `(oracle)`-deferred), statically-known audit points + declassify-in-delta, and
   authority+flow composition (a `Net` write needs the capability **and** the
   clearance — dropping either rejects).
+- `security/trust-model/seed-trust-model.md` — Sec4 trust model & TCB (`64`):
+  the **enumerable TCB** (empty ⟺ verified — the no-phantom `[landed producer]`
+  `trusted_base()` pair, plus the completeness omission-net `[by construction]`:
+  a real `foreign`/hole surfaces via the `declare_postulate`→`Opaque`
+  choke-point, a checked def never does), **authorship-independence** (the
+  de-Bruijn security reading `[structural]` — a false-proposition cert is
+  rejected regardless of any author framing; `check` exposes no provenance
+  channel), the **trusting-trust invariant** (`ken-kernel`'s dependency closure
+  carries no Ken-generated artifact — `[structural / architectural]`), and the
+  **honest limits** normative + first-class (spec ≠ intent the headline
+  residual risk). Trust levels tagged per case — no "kernel-backed" over-claim
+  on the by-construction / structural faces.
 - `behavioral/export/seed-export.md` — B1 assumption-boundary export emitter
   (the `Q`/`P`/`Σ`/`T`/`G` status→field projection: the no-over-claim pair,
   alphabet reuse, the no-measure seal, the one-way gate, content-hash
