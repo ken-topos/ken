@@ -142,6 +142,7 @@ fn lit_to_eval(v: &ken_elaborator::NumericLitVal) -> ken_interp::EvalVal {
         NumericLitVal::Decimal { coeff, exp } => {
             ken_interp::EvalVal::DecimalVal { coeff: *coeff, exp: *exp }
         }
+        NumericLitVal::Str(s) => ken_interp::EvalVal::Str(s.clone()),
     }
 }
 
