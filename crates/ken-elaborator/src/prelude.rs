@@ -15,13 +15,14 @@
 //! that built `Term::Const(nat_id)` for the placeholder postulate use
 //! `Term::indformer(nat_id)` for the inductive.
 //!
-//! **L-classes staging boundary (`37 §6`).** `DecEq` / `Ord` are *named* here
-//! (postulated predicates) so the refinement shapes elaborate, but **user-type
-//! instancing + constraint resolution** (`where Ord a`) is gated to L-classes
-//! (`33 §5` / `39`). L3a's `sort` takes an explicit `cmp : a → a → OrdResult`
-//! parameter — a buildable-now spelling of `Ord a` that rests on the pinned
-//! concept, not the deferred `where`-constraint spelling (the
-//! defer-spelling-not-concept / B2 carry).
+//! **L-classes staging boundary (`37 §6`, crossed by L3b).** `DecEq` / `Ord`
+//! are *named* here (postulated predicates) so the refinement shapes elaborate.
+//! L3b wires **user-type instancing + constraint resolution** (`where Ord a`,
+//! `where DecEq K`) via the Lc-landed `instance_search` (`classes.rs:91`):
+//! the `where` clause on a `view` declaration is checked against
+//! `instance_search` before the body elaborates, emitting `NoInstance` on
+//! failure. `Map`/`Set` are abstract postulates declared here; the `DecEq`
+//! gate is enforced at elaboration time (`37 §6`).
 
 use ken_kernel::{declare_primitive, env::PrimReduction, GlobalId, Level, Term};
 
@@ -60,6 +61,8 @@ pub fn empty_prelude_env() -> PreludeEnv {
         char_length_id: z,
         string_to_list_char_id: z,
         list_char_to_string_id: z,
+        map_id: z,
+        set_id: z,
     }
 }
 
@@ -109,6 +112,11 @@ pub struct PreludeEnv {
     pub string_to_list_char_id: GlobalId,
     /// `list_char_to_string : List Char → String` (total, `37 §2.3`).
     pub list_char_to_string_id: GlobalId,
+    // L3b: abstract collection types (`37 §6`).
+    /// `Map : Type → Type → Type` (abstract; `DecEq K` gate via `where`).
+    pub map_id: GlobalId,
+    /// `Set : Type → Type` (abstract; `DecEq A` gate via `where`).
+    pub set_id: GlobalId,
 }
 
 /// Register the L3 prelude in `elab` (called from `ElabEnv::empty`).
@@ -197,6 +205,21 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         .declare_postulate_raw("Perm", perm_ty)
         .map_err(|e| ElabError::Internal(format!("prelude Perm failed: {}", e)))?;
 
+    // ── L3b: abstract collection types (`37 §6`) ───────────────────────────
+    // `Map : Type → Type → Type` — abstract; `DecEq K` gate enforced via
+    // the `where` constraint mechanism in `elaborate_rdecl_v1` (L3b).
+    let map_ty =
+        Term::pi(type0.clone(), Term::pi(type0.clone(), type0.clone()));
+    let map_id = elab
+        .declare_postulate_raw("Map", map_ty)
+        .map_err(|e| ElabError::Internal(format!("prelude Map failed: {}", e)))?;
+
+    // `Set : Type → Type` — abstract; same `DecEq A` gate.
+    let set_ty = Term::pi(type0.clone(), type0.clone());
+    let set_id = elab
+        .declare_postulate_raw("Set", set_ty)
+        .map_err(|e| ElabError::Internal(format!("prelude Set failed: {}", e)))?;
+
     // ── L3a String surface ops (`37 §2`) ───────────────────────────────────
     // `String` (bytes layer) + `Int` (numeric tower) + `Char` (numeric) +
     // `List` (prelude) are all in globals now.
@@ -282,5 +305,7 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         char_length_id,
         string_to_list_char_id,
         list_char_to_string_id,
+        map_id,
+        set_id,
     })
 }

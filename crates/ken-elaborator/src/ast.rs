@@ -58,6 +58,10 @@ pub enum Decl {
         requires: Vec<Expr>,
         /// `ensures ψ` clauses (V1; empty in V0 programs).
         ensures: Vec<Expr>,
+        /// `where C₁ T₁ ; C₂ T₂` class constraints (`37 §6`, L3b).
+        /// Each pair is `(class_name, head_type)`. Checked by the
+        /// elaborator via `instance_search` (`classes.rs:91`).
+        constraints: Vec<(String, Type)>,
         body: Expr,
         /// Whether the `space` prefix was present (V1 §6.4).
         is_space_op: bool,
