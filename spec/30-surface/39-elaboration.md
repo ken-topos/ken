@@ -38,8 +38,9 @@ is a core term the kernel `check`s (`../10-kernel/18 §4`). Consequences:
 4. **Universe/level inference** — solve level metavariables (`../10-kernel/12
    §4`), emitting explicit levels to the kernel.
 5. **Instance resolution** — discharge `where C A` constraints (`33 §5`) by
-   instance search, inserting the found class-record (a proof of subobject
-   membership). **Canonical & coherent** (`OQ-classes`): for structure classes
+   instance search (the algorithm: **§6**), inserting the found class-record (a
+   proof of subobject membership). **Canonical & coherent** (`OQ-classes`): for
+   structure classes
    exactly one canonical instance per (class, head-type) is searchable (orphans
    are rejected at declaration, `33 §5`); search is deterministic and
    structurally bounded (`../10-kernel/17 §4`); two viable candidates is a
@@ -541,13 +542,208 @@ universes step by `suc`, function types take the predicative `max`, lifting is
 never implicit, unconstrained levels default to `0`, and every level reaching
 the kernel is explicit and decidably checked.
 
-## 6. What WS-L/WS-V must deliver here (V0, then L-stream)
+## 6. Instance resolution — the algorithm (Lc)
+
+> **impl-ready (Lc).** The algorithm-level elaboration of the `where C A`
+> discharge (step `§2.5`) and the coherence policy (`33 §5.5`, ADR 0008). The
+> *shapes* (class→record, instance→value, constraint→implicit) are `33 §5`; this
+> is the **resolution procedure**, its **termination metric**, and the
+> **diagnostics**. **No new kernel feature** — the search is proof search over
+> the landed record/Σ machinery, and its termination is the **landed SCT**
+> (`../10-kernel/17 §4`) on the reified dictionary group (§6.4).
+
+### 6.1 The instance environment (built from declarations)
+
+Resolution reads an **instance environment** the elaborator accumulates as it
+processes `instance` declarations (`33 §5.3`). Each accepted instance registers
+one entry:
+
+- **key** — `(class C, head-type h)`, where `h` is the **outermost type
+  constructor** of the instance's head (`head(List a) = List`, `head(Int) =
+  Int`); the arguments under `h` are matched at resolution.
+- **value** — the instance record value (or, for a **parameterised** instance
+  `instance C (F ā) where C Gᵢ ...`, the **dictionary-builder** — a function
+  from the sub-constraint dictionaries to the `C (F ā)` record, §6.4).
+- **registration is gated** by the **orphan check** (`33 §5.3`) and the
+  **overlap check**: registering a second entry under an existing
+  `(C, h)` key for a **structure** class is the overlap error (§6.7), caught at
+  declaration. Property (Ω) classes are never keyed for canonicity — they need
+  no registry beyond "an instance exists."
+
+### 6.2 The search procedure
+
+Discharging an inserted implicit `{d : C A}` (`33 §5.4`) runs `resolve`:
+
+```
+resolve(Γ, C, A) → Term:                       -- returns the dictionary for  C A
+  s := sortOf(Γ, recordType(C, A))             -- the class record's KERNEL sort (33 §5.1)
+  h := head(A)                                  -- outermost type constructor of A
+  case s of
+    Omega:                                       -- PROPERTY class — coherence is free
+      d := anyRegisteredInstance(C)              -- all instances defeq (16 §1); first found
+        or error NoInstance(C, A, span)
+      return d                                    -- never ambiguous: any instance does
+    Type:                                         -- STRUCTURE class — canonical convention
+      case lookupAll(instanceEnv, C, h) of
+        []        -> error NoInstance(C, A, span)             -- 33 §5.5 / §6.7
+        [inst]    -> dischargeSubConstraints(Γ, inst, A)       -- recurse (§6.4), then build
+        c₁,c₂,… -> error AmbiguousInstance(C, A, [span c₁, span c₂, …])
+                    -- names ALL viable candidates; NEVER a silent pick (AC3)
+```
+
+- **The sort is the switch (`AC4`).** `resolve` consults the **kernel-computed
+  sort** of the class record (`33 §5.1`), not a flag: `Ω` ⇒ property branch
+  (any instance), `Type` ⇒ structure branch (canonical). A single procedure
+  serves both kinds; the discriminant is structural.
+- **Determinism + no guessing (`§3`).** For a structure class the `(C, h)` key
+  admits **at most one** registered entry (overlap is rejected at declaration,
+  §6.1); the lookup is therefore a function. Two viable candidates surfacing at
+  search time (e.g. via a genuinely ambiguous head) is the **ambiguity error
+  naming both** — never a default. `resolve` inserts a `d.opᵢ` **projection**
+  (`13 §2`) for each class-operation use in the body.
+- **Coherence (`AC1`).** Because the key is `(C, head(A))` and the registry has
+  one canonical entry per key, the **same** `(class, head-type)` resolves to the
+  **same** instance at every site — "the `Ord A`" is a function of `A`,
+  program-wide, the property the law-carrying prover relies on (ADR 0008).
+
+### 6.3 Sub-constraints and the built dictionary
+
+A parameterised instance carries its own constraints:
+
+```
+instance Ord (List a) where Ord a { … }     -- needs an  Ord a  to build  Ord (List a)
+```
+
+`dischargeSubConstraints` resolves each sub-constraint (`Ord a`) **recursively**
+via `resolve`, then applies the instance's builder to the found
+sub-dictionaries, yielding the `Ord (List a)` record value. The recursion is
+what §6.4 must bound.
+
+### 6.4 Termination — the landed SCT on the reified dictionary group
+
+Instance search terminates by the **existing** size-change checker
+(`../10-kernel/17 §4`), **not** a second termination mechanism. A parameterised
+instance's builder (`mkOrdList : {a} → Ord a → Ord (List a)`) is *itself*
+non-recursive — it takes its sub-dictionary as a parameter — so the recursion
+that must be bounded is the **resolution's**, and the reuse is literal via
+reifying that resolution:
+
+- **Reify the resolution as a dictionary-definition group.** Discharging a goal
+  `C A` that needs sub-goals `C Gᵢ` emits one δ-definition per **distinct**
+  `(class, type)` sub-goal reached — `d⟦C A⟧ := mkInst (d⟦C G₁⟧) …` — admitted
+  through the real `declare_def` / **`declare_recursive_group`**
+  (`check.rs:983`, `sct_check` at `:1033`). The edges of this group are exactly
+  the instance-dependency graph.
+- **Bound by the landed `sct_check`.** `declare_recursive_group` runs
+  **`sct_check`** on that group at **admission time**, under the **structural
+  subterm order**
+  (`17 §4.2`) keyed on each node's **head-type**: a sub-goal's head-type (`a`,
+  `Gᵢ`) is a **strict structural subterm** of its parent's (`List a`, `F ā`). A
+  **well-founded** instance chain (`Ord a ⇒ Ord (List a)`: `a ⊏ List a`) yields
+  a group that either bottoms out or strictly descends — **`sct_check` accepts**
+  (`AC6`-accept). A **cyclic / non-decreasing** set (`instance C A where C A`,
+  or `C a ⇒ C (F a)` with `F` non-decreasing) yields a node that transitively
+  **references itself with no head-type decrease** — a recursive group
+  `sct_check` **rejects** (`AC6`-reject) — a **declaration/admission-time**
+  error with a non-termination diagnostic, *never a search-time hang*.
+- **Why this is not a second checker.** The reified resolution *is* a
+  δ-recursive definition group; the kernel already bounds those. Termination is
+  decided by
+  the **real landed `sct_check`** — the producer-grep target for `AC6` is that
+  path (`check.rs`), not a bespoke instance-graph traversal. The elaborator's
+  search additionally maintains the goal stack and can short-circuit a
+  non-decreasing step for a faster diagnostic (the same `17 §4.2` metric), but
+  the **authoritative** bound is the kernel SCT on the reified group — the two
+  agree by construction.
+- **Reification faithfulness (NORMATIVE — the load-bearing requirement).** The
+  SCT bound is sound **only if** the reified group's δ-recursion **mirrors the
+  actual resolution recursion** — one node per distinct sub-goal, one edge per
+  `dischargeSubConstraints` call (§6.3), the head-type carried per node. A
+  reified group that dropped an edge (or keyed a node on anything but the
+  resolution sub-goal) would make `sct_check` bound the **wrong** recursion, so
+  a non-terminating search could slip an accepting SCT verdict. The build MUST
+  emit the group as the exact image of the resolution graph; **`AC6` is
+  discriminating on this** — the non-terminating case must reach reject **via
+  `sct_check` on the real reified group** (grep the producer), not via an
+  elaborator-side proxy that could diverge from what the kernel checks.
+
+### 6.5 Named-instance explicit passing (bypasses search)
+
+A named instance value `byLength : Ord String` (an ordinary `let`/`view` of
+record type, `33 §5.5`) is passed by **making the implicit explicit** at the
+call site — the surface `f {d = byLength} x` / positional dictionary application
+(grammar `32`, the implicit-as-explicit form). Elaboration binds `d := byLength`
+**directly**, so `resolve` is **not called** for that argument. Explicit passing
+therefore **cannot perturb** implicit canonicity (§6.2): at the same type, an
+*implicit* `where Ord String` still runs `resolve` and selects the **canonical**
+`Ord String` (`AC5`). Explicit and implicit are distinct code paths — one is
+value application, the other is search.
+
+### 6.6 `derive` — generate a candidate, let the kernel re-check
+
+`derive (DecEq, Show)` (`33 §5.6`) runs a **generator** per derivable class:
+
+```
+deriveInstance(C, dataDecl D) → instance candidate:
+  build the operation bodies by structural recursion over D's constructors
+    (e.g. DecEq: eq (Cᵢ x̄) (Cⱼ ȳ) = i==j && ⋀ eq xₖ yₖ ; Show similarly)
+  build the law proofs (e.g. DecEq.ok) by the same structural recursion
+  assemble the record value  (op̄ , law̄) : C D
+  emit it through declare_def  ── the KERNEL re-checks ops AND proofs
+```
+
+Generation is **untrusted**: the candidate is admitted by the **real
+`declare_def`** (§6.4's path), so a malformed generated instance — a wrong
+op body, an unprovable law — **fails the kernel check**, not a soft elaborator
+gate (`AC7`, soundness). **Producer-grep:** the derive path MUST emit its
+candidate through `declare_def`/kernel-check; a test that *inserts a ready-made
+dictionary* and re-checks a downstream consumer is green-vs-green (it re-tests
+the consumer, not derivation). Derivable classes are a fixed structural list;
+a non-structural class is not derivable (`33 §5.6`).
+
+### 6.7 Diagnostics (T1-protocol, with spans)
+
+Each resolution failure is an **L1 surface error** (`§4`) carried on the
+**T1 agent protocol** (`../20-verification/25`) with source spans:
+
+| Diagnostic | Raised when | Carries |
+|---|---|---|
+| **`OrphanInstance`** | an `instance C T` names neither `C` nor `T` in its module (`33 §5.3`) | the instance decl span; the class + head-type |
+| **`OverlappingInstances`** | a second instance registers under an existing `(C, h)` structure key (§6.1) | **both** instance decl spans |
+| **`AmbiguousInstance`** | search finds ≥2 viable candidates for a structure goal (§6.2) | the use-site span; **all** candidate spans |
+| **`NoInstance`** | no registered instance for `(C, head(A))` | the use-site span; the wanted `C A` |
+| **`NonTerminatingInstances`** | the reified dictionary group fails `sct_check` (§6.4) | the offending instance span; the non-decreasing cycle |
+
+Never a silent pick and never a hang: ambiguity and non-termination are
+**reported**, per `§3` (no guessing past ambiguity) and ADR 0008.
+
+### 6.8 Landed vs. net-new (producer-grep honesty)
+
+All of `class`/`instance`/`where`/`derive` — surface, AST, parser, the instance
+environment, and the search — is **net-new** (no landed producer today; the
+conformance suite drives the code the Lc build creates, grepping it is the real
+elaborator path, not a synthetic "class" literal). The **soundness-critical**
+ACs bottom out in **landed** producers: `AC7` (`derive`) and every instance
+ride the real **`declare_def`** re-check (`check.rs`); `AC6` (termination) is
+the real
+**`sct_check`** on the reified dictionary group (§6.4); the record/Σ
+encoding targets the landed **`Term::Sigma`/`Pair`/`Proj`** (`13 §2`); and
+property-class coherence is the landed **Ω-PI** (`16 §1`). The net-new logic is
+the *desugaring, the orphan/overlap check, and the search*; the *trust root it
+rests on is landed and unchanged* — subsume-don't-proliferate.
+
+## 7. What WS-L/WS-V must deliver here (V0, then L-stream)
 
 The elaborator: scope resolution, implicit insertion, bidirectional HM+dependent
 inference with unification up to conversion, level inference, instance
 resolution, `match`→`elim_D` with exhaustiveness, full sugar expansion, and
 obligation emission — all producing kernel-checked core, with stable surface
 diagnostics. **V0** delivers the minimal slice (G1); the rest grows with the
-surface. Conformance: `../../conformance/surface/elaboration/` —
-well-typed-output invariant (every accepted program's core image checks),
-ambiguity-is-an-error cases, and `match`-exhaustiveness compilation.
+surface. **Instance resolution (§6)** is the **Lc** slice — the search
+algorithm, its landed-SCT termination, and the T1 diagnostics. Conformance:
+`../../conformance/surface/elaboration/` — well-typed-output invariant (every
+accepted program's core image checks), ambiguity-is-an-error cases, and
+`match`-exhaustiveness compilation; `../../conformance/surface/classes/` — the
+Lc suite (`33 §5` + §6): coherence, orphan/overlap, property-vs-structure by
+sort, named-explicit escape, SCT termination, `derive`-kernel-checked, and the
+prover-citable law field.
