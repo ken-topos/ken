@@ -86,6 +86,35 @@ impl Parser {
         matches!(self.peek(), Token::Eof)
     }
 
+    /// Extend `first` (a just-consumed `ConId`) with zero or more
+    /// `. ident-or-conid` segments — `M.foo`, `M.N.Bar` (`33 §3.2`
+    /// qualified reference syntax). Joins into a single dotted string;
+    /// name resolution (`modules.rs`) splits it back apart at the last
+    /// `.` to find the exporting module. Only triggered from a `ConId`
+    /// start since qualifying modules are conventionally capitalized and
+    /// a bare `.` is otherwise only a lambda-binder terminator (consumed
+    /// directly by `parse_lambda`, never reaching here).
+    fn parse_dotted(&mut self, first: String, first_span: Span) -> (String, Span) {
+        let mut joined = first;
+        let mut end = first_span.end;
+        while matches!(self.peek(), Token::Dot)
+            && matches!(self.lookahead(1), Token::Ident(_) | Token::ConId(_))
+        {
+            self.advance(); // consume '.'
+            let (seg, seg_span) = match self.peek().clone() {
+                Token::Ident(s) | Token::ConId(s) => {
+                    self.advance();
+                    (s, self.tokens[self.pos - 1].1.clone())
+                }
+                _ => unreachable!("guarded by lookahead above"),
+            };
+            joined.push('.');
+            joined.push_str(&seg);
+            end = seg_span.end;
+        }
+        (joined, Span::new(first_span.start, end))
+    }
+
     // ----- declaration parsing -----
 
     pub fn parse_decls(&mut self) -> Result<Vec<Decl>, ElabError> {
@@ -111,10 +140,15 @@ impl Parser {
             Token::KwClass => self.parse_class_decl(start),
             Token::KwInstance => self.parse_instance_decl(start),
             Token::KwDerive => self.parse_derive_decl(start),
+            Token::KwModule => self.parse_module_decl(start),
+            Token::KwImport => self.parse_import_decl(start),
+            Token::KwUse => self.parse_use_decl(start),
+            Token::KwPub => self.parse_pub_decl(start),
             other => Err(ElabError::ParseError {
                 msg: format!(
                     "expected 'view', 'let', 'prove', 'law', 'data', 'type', 'foreign', \
-                     'temporal', 'class', 'instance', 'derive', or 'space view', found {:?}",
+                     'temporal', 'class', 'instance', 'derive', 'module', 'import', 'use', \
+                     'pub', or 'space view', found {:?}",
                     other
                 ),
                 span: self.peek_span().clone(),
@@ -529,6 +563,66 @@ impl Parser {
         })
     }
 
+    /// `module M { decl₁ … declₙ }` (`33 §3.1`).
+    fn parse_module_decl(&mut self, start: usize) -> Result<Decl, ElabError> {
+        self.advance(); // consume 'module'
+        let (name, _) = self.expect_ident()?;
+        self.expect(&Token::LBrace)?;
+        let mut decls = Vec::new();
+        while !matches!(self.peek(), Token::RBrace | Token::Eof) {
+            decls.push(self.parse_decl()?);
+        }
+        let end = self.peek_span().end;
+        self.expect(&Token::RBrace)?;
+        Ok(Decl::ModuleDecl { name, decls, span: Span::new(start, end) })
+    }
+
+    /// `import M` | `import M as N` | `import M (foo, Bar)` (`33 §3.2`).
+    fn parse_import_decl(&mut self, start: usize) -> Result<Decl, ElabError> {
+        self.advance(); // consume 'import'
+        let (module, _) = self.expect_ident()?;
+        let kind = match self.peek().clone() {
+            Token::Ident(s) if s == "as" => {
+                self.advance();
+                let (alias, _) = self.expect_ident()?;
+                crate::ast::ImportKind::Aliased(alias)
+            }
+            Token::LParen => {
+                self.advance();
+                let mut names = Vec::new();
+                loop {
+                    let (n, _) = self.expect_ident()?;
+                    names.push(n);
+                    if matches!(self.peek(), Token::Comma) {
+                        self.advance();
+                        continue;
+                    }
+                    break;
+                }
+                self.expect(&Token::RParen)?;
+                crate::ast::ImportKind::Selective(names)
+            }
+            _ => crate::ast::ImportKind::Qualified,
+        };
+        let end = self.tokens[self.pos - 1].1.end;
+        Ok(Decl::ImportDecl { module, kind, span: Span::new(start, end) })
+    }
+
+    /// `use M` — unqualified open import (`33 §3.2`).
+    fn parse_use_decl(&mut self, start: usize) -> Result<Decl, ElabError> {
+        self.advance(); // consume 'use'
+        let (module, _) = self.expect_ident()?;
+        let end = self.tokens[self.pos - 1].1.end;
+        Ok(Decl::ImportDecl { module, kind: crate::ast::ImportKind::Open, span: Span::new(start, end) })
+    }
+
+    /// `pub <decl>` — export marker (`33 §4.1`).
+    fn parse_pub_decl(&mut self, _start: usize) -> Result<Decl, ElabError> {
+        self.advance(); // consume 'pub'
+        let inner = self.parse_decl()?;
+        Ok(Decl::Pub(Box::new(inner)))
+    }
+
     /// `data D p₁…pₙ = C₁ τ₁₁… | C₂ τ₂₁… | …`
     ///
     /// Simple (non-indexed) inductive type declaration (`34 §1`). Type params
@@ -765,7 +859,13 @@ impl Parser {
                 };
                 Ok(Type::TUniv(level, Span::new(start, self.tokens[self.pos - 1].1.end)))
             }
-            Token::ConId(s) | Token::Ident(s) => {
+            Token::ConId(s) => {
+                let span = self.peek_span().clone();
+                self.advance();
+                let (name, span) = self.parse_dotted(s, span);
+                Ok(Type::TVar(name, span))
+            }
+            Token::Ident(s) => {
                 let span = self.peek_span().clone();
                 self.advance();
                 Ok(Type::TVar(s, span))
@@ -964,7 +1064,9 @@ impl Parser {
         let start = self.peek_span().start;
         match self.peek().clone() {
             Token::ConId(name) => {
+                let con_span = self.peek_span().clone();
                 self.advance();
+                let (name, _) = self.parse_dotted(name, con_span);
                 // Collect atom-level sub-patterns (stop at `=>`, `|`, `}`, `;`, EOF).
                 let mut sub = Vec::new();
                 while self.can_start_atom_pat() {
@@ -1010,6 +1112,7 @@ impl Parser {
                 // Atom constructor (no sub-patterns at this level without parens)
                 let span = self.peek_span().clone();
                 self.advance();
+                let (name, span) = self.parse_dotted(name, span);
                 Ok(Pattern { kind: PatKind::Ctor(name, vec![]), span })
             }
             Token::LParen => {
@@ -1068,7 +1171,8 @@ impl Parser {
             Token::ConId(s) => {
                 let span = self.peek_span().clone();
                 self.advance();
-                Ok(Expr::ECon(s, span))
+                let (name, span) = self.parse_dotted(s, span);
+                Ok(Expr::ECon(name, span))
             }
             Token::KwType => {
                 self.advance();

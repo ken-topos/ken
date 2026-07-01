@@ -37,6 +37,11 @@ pub enum Token {
     KwWhere,     // "where"    — constraint list in class/instance/view
     // B2 keywords (`72 §4`, spellings are `(oracle)`/`OQ-syntax`)
     KwTemporal,  // "temporal" — a delegated temporal-obligation block
+    // ES3 keywords (`33 §3-4` — modules/imports/visibility)
+    KwModule,    // "module" — module namespace declaration
+    KwImport,    // "import" — qualified/aliased/selective import
+    KwUse,       // "use"    — unqualified open import
+    KwPub,       // "pub"    — visibility export marker
     // V0 punctuation
     LParen,
     RParen,
@@ -268,6 +273,10 @@ impl<'s> Lexer<'s> {
                 "instance" => Token::KwInstance,
                 "derive"   => Token::KwDerive,
                 "where"    => Token::KwWhere,
+                "module"   => Token::KwModule,
+                "import"   => Token::KwImport,
+                "use"      => Token::KwUse,
+                "pub"      => Token::KwPub,
                 _ => {
                     let first = s.chars().next().unwrap();
                     if first.is_uppercase() {

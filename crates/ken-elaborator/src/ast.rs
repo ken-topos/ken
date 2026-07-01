@@ -159,11 +159,54 @@ pub enum Decl {
         data_name: String,
         span: Span,
     },
+    /// `module M { … }` — a namespace/environment fragment (`33 §3.1`,
+    /// ES3-build). Purely surface: elaborates its inner decls into the
+    /// single flat `Σ` under qualified names; the kernel never sees a
+    /// module. Nested `module N { … }` inside give `M.N`.
+    ModuleDecl {
+        name: String,
+        decls: Vec<Decl>,
+        span: Span,
+    },
+    /// `import M` / `import M as N` / `import M (foo, Bar)` / `use M`
+    /// (`33 §3.2`) — brings another module's `pub` exports into scope.
+    /// Surface/elaboration-time only; resolved away before the kernel.
+    ImportDecl {
+        module: String,
+        kind: ImportKind,
+        span: Span,
+    },
+    /// `pub <decl>` — marks the wrapped top-level decl's name as exported
+    /// from its enclosing module (`33 §4.1`). Top-level (non-module) decls
+    /// may also be wrapped; the marker is simply inert there (nothing to
+    /// export from). Nested modules are unaffected by a `pub` on decls
+    /// inside them other than the module's own name marker (modules
+    /// themselves have no separate visibility — only their contents do).
+    Pub(Box<Decl>),
+}
+
+/// The four import forms (`33 §3.2`).
+#[derive(Clone, Debug)]
+pub enum ImportKind {
+    /// `import M` — qualified: `M`'s exports accessible as `M.foo`.
+    Qualified,
+    /// `import M as N` — aliased: exports accessible as `N.foo`.
+    Aliased(String),
+    /// `import M (foo, Bar)` — selective: exactly these names, unqualified.
+    Selective(Vec<String>),
+    /// `use M` — open: all of `M`'s exports, unqualified.
+    Open,
 }
 
 impl Decl {
     pub fn name(&self) -> &str {
         match self {
+            Decl::Pub(inner) => inner.name(),
+            Decl::ModuleDecl { name, .. } => name,
+            // `ImportDecl` has no declared name of its own; callers that
+            // need a per-decl name must special-case it (it's never
+            // registered as a global).
+            Decl::ImportDecl { module, .. } => module,
             Decl::ViewDecl { name, .. }
             | Decl::LetDecl { name, .. }
             | Decl::ProveDecl { name, .. }
@@ -179,6 +222,7 @@ impl Decl {
     }
     pub fn span(&self) -> &Span {
         match self {
+            Decl::Pub(inner) => inner.span(),
             Decl::ViewDecl { span, .. }
             | Decl::LetDecl { span, .. }
             | Decl::ProveDecl { span, .. }
@@ -189,7 +233,22 @@ impl Decl {
             | Decl::TemporalDecl { span, .. }
             | Decl::ClassDecl { span, .. }
             | Decl::InstanceDecl { span, .. }
-            | Decl::DeriveDecl { span, .. } => span,
+            | Decl::DeriveDecl { span, .. }
+            | Decl::ModuleDecl { span, .. }
+            | Decl::ImportDecl { span, .. } => span,
+        }
+    }
+
+    /// Is this decl (after unwrapping any `pub`) a `pub`-marked export?
+    pub fn is_pub(&self) -> bool {
+        matches!(self, Decl::Pub(_))
+    }
+
+    /// Unwrap a `Pub` wrapper, if present, to the inner decl.
+    pub fn unwrap_pub(&self) -> &Decl {
+        match self {
+            Decl::Pub(inner) => inner,
+            other => other,
         }
     }
 }
