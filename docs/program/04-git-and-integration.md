@@ -202,9 +202,20 @@ it is not a separate reviewer. **Teams do not merge.**
    clean-room · path-guard (on GitHub's CPU). concurrency:cancel-in-progress
    kills superseded runs on new pushes.
 3. Architect (+Spec on its paths) read the diff locally and vote the Decision.
-4. CI green AND Decision approved → INTEGRATOR squash-merges on GitHub (branch
-   protection: required checks + merge restricted to the publisher), one commit
-   with the WP ID in the subject, then fetches so origin/main updates for all.
+4. CI green AND Decision approved → **the Integrator rebases wp/<ID> onto the
+   CURRENT `origin/main` and confirms CI is green on that rebased tip** before
+   squash-merging (branch protection: required checks + merge restricted to the
+   publisher), one commit with the WP ID in the subject, then fetches so
+   origin/main updates for all. **The rebase-before-merge step is mandatory, not
+   optional** (operator-directed 2026-07-01): a branch whose CI ran against a
+   *stale* base can be green in isolation yet break `main` when combined with
+   another branch that landed meanwhile — e.g. one branch adds an enum variant
+   while a parallel branch adds a `match` over it; each PR is green against its
+   own base, the merged tree is non-exhaustive. Rebasing onto current `main` and
+   re-running the full-workspace CI tests the *actual* post-merge tree and
+   catches these parallel-branch collisions. (This is the fix for the red-main
+   incident of 2026-07-01: `NumericLitVal::Str` added by one VAL1 branch,
+   unhandled in `ken-cli lit_to_eval` — invisible until both landed.)
 5. Integrator verifies main green, resolves the merge Decision, posts the ship
    Event in ken-integration mentioning only affected team leaders with rebase
    guidance, and sweeps the merged wp/<ID> branch. Steward digests the log;
@@ -217,6 +228,10 @@ it is not a separate reviewer. **Teams do not merge.**
 
 `main` stays green at every step because CI gates the branch **before** the
 merge, and branch protection refuses a merge whose required checks aren't green.
+**But CI-on-the-branch is only sufficient if the branch is rebased onto current
+`origin/main` first** (step 4) — otherwise a green branch built on a stale base
+can still red `main` on merge (the parallel-collision failure above). Green CI +
+current base together are the guarantee; green CI alone is not.
 
 ---
 
