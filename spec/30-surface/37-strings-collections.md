@@ -329,19 +329,21 @@ defining shapes:
   (proof-irrelevant); a `Type`-sorted "predicate" leaks content into the
   refinement carrier (`13 §4` / `16 §8.2`).
 - **`Perm : Π{a}. List a -> List a -> Ω`** — a permutation **must** be
-  `Ω`-valued, and the bare inductive relation is **not**:
-  `data Perm := perm_refl | perm_swap | perm_trans | perm_cons` is
-  proof-**relevant** (a `Perm` proof records *which* permutation), so it lands in
-  `Type`. Two `Ω` forms (the spec picks one):
-  - **truncated** `∥Perm∥ : Ω` — propositional truncation of the inductive
-    relation (proof-irrelevant, **no `DecEq a` dependency**); or
+  `Ω`-valued, and a bare inductive relation is **not**:
+  `data Perm_rel := perm_refl | perm_swap | perm_trans | perm_cons` is
+  proof-**relevant** (a proof records *which* permutation) so it lands in `Type`,
+  and `16 §1.3` **forbids** a proof-relevant `Type → Ω` directly (it would admit
+  `Bool`, collapsing `true ≡ false` by Ω-PI). Two admissible `Ω` forms (the spec
+  picks one):
+  - **truncated** `Perm xs ys := ∥ Perm_rel xs ys ∥ : Ω` — propositional
+    truncation of the `Type`-level inductive (the `∨ := ∥+∥` / `∃ := ∥Σ∥`
+    pattern, `16 §6`; proof-irrelevant, **no `DecEq a` dependency**); or
   - **count-equality**
     `Perm xs ys := Π (x : a). Eq Nat (count x xs) (count x ys)` — natively `Ω`
     (a `Π` of `Eq`s), but requires `DecEq a` for `count`.
 
-  Declaring the bare inductive `: Ω` is the relevance-leak the `sort_sigma`/Ω
-  discipline forbids (`13 §4`; CV's derivation-path table surfaced this fork,
-  Architect Ω-sort check).
+  Declaring the bare inductive `: Ω` is the relevance leak `16 §1.3`/`13 §4`
+  forbid (CV's table surfaced this fork; CV-Spec blocked on it).
 
 Neither is prelude — no primitive signature names them (`30 §4`); they are the
 verified-`sort` showcase's own definitions.
