@@ -23,7 +23,7 @@ conformance/
                    capabilities & authority)
   behavioral/    — 70-behavioral/ (assumption-boundary export emitter,
                    trace/instrumentation contract, Temporal datatype +
-                   delegated export flow)
+                   delegated export flow, agentic boundary)
 ```
 
 ## Case format
@@ -149,3 +149,14 @@ claim with no conformance case is a claim no one can rely on
   `Q`/`P` assertion points, and the monitor projected from `T`. An **untrusted
   one-way projection** of already-verified content + instrumentation: adds
   nothing to the trusted base, proves nothing new.
+- `behavioral/agentic/seed-agentic.md` — B4 the agentic boundary (WS-B capstone,
+  `74`): assuring an embedded agent's outputs **reduces to the existing seam**
+  aimed at a maximally-nondeterministic component (agent = maximal `P`) — **no
+  new mechanism**. The four assurances **partition** the four-way status: safety
+  envelope→`proved`/`Q` (the propose/act capability split), metamorphic→
+  `tested`/`P`, RV watchdog→`delegated`/`T`, output quality→`unknown` (never
+  `proved` — safety, **never** quality). A **projection-fidelity** corpus:
+  AC1/AC2/AC5 drive landed producers (the export projection, the real
+  `Cap E`/no-ambient flip, the `trusted_base()` flip); AC3/AC4 pin the landed
+  projection and carry their deferred discharge engines (the `[rel-deferred]`
+  relational reducer, the `(oracle)`/B2 live monitor) as named triggers.
