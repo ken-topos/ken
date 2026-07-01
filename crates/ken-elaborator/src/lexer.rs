@@ -30,6 +30,8 @@ pub enum Token {
     KwTypeAlias,  // "type"  — surface type alias
     // L7 keywords (`38 §2.1`, spellings are `(oracle)`)
     KwForeign,
+    // B2 keywords (`72 §4`, spellings are `(oracle)`/`OQ-syntax`)
+    KwTemporal,  // "temporal" — a delegated temporal-obligation block
     // V0 punctuation
     LParen,
     RParen,
@@ -256,6 +258,7 @@ impl<'s> Lexer<'s> {
                 "match"    => Token::KwMatch,
                 "type"     => Token::KwTypeAlias,
                 "foreign"  => Token::KwForeign,
+                "temporal" => Token::KwTemporal,
                 _ => {
                     let first = s.chars().next().unwrap();
                     if first.is_uppercase() {

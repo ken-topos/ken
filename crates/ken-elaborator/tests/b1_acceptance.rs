@@ -20,7 +20,7 @@
 use std::collections::BTreeSet;
 
 use ken_elaborator::{
-    emit_export, serialize_export, ExportError, GEntry, PStatus, TEntry,
+    emit_export, serialize_export, ExportError, GEntry, Pred, PStatus, TEntry, Temporal,
     effects::row::EffectRow,
     extract::{ObligationId, ObligationTriple, ProvKind, Provenance},
     error::Span,
@@ -379,6 +379,7 @@ fn delegated_obligation_never_promoted_to_proved() {
     // A delegated Temporal obligation.
     let t_entry = TEntry {
         obligation_id: "f.temporal.ltl_safety".to_string(),
+        formula: Temporal::Atom(Pred::Event("ltl_safety".into())),
     };
 
     // Ward "discharges" it — but the result re-enters only as a TEntry

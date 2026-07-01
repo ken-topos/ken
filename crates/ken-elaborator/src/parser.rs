@@ -10,15 +10,19 @@
 use crate::ast::{Binder, CtorDecl, Decl, Expr, MatchArm, PatKind, Pattern, Type};
 use crate::error::{ElabError, Span};
 use crate::lexer::Token;
+use crate::temporal::TemporalExpr;
 
 pub struct Parser {
     tokens: Vec<(Token, Span)>,
     pos: usize,
+    /// The original source — retained so a `temporal{}` block can carry its
+    /// verbatim formula text (human-visible, not erased, `72 §4`).
+    src: String,
 }
 
 impl Parser {
-    pub fn new(tokens: Vec<(Token, Span)>) -> Self {
-        Self { tokens, pos: 0 }
+    pub fn new(tokens: Vec<(Token, Span)>, src: String) -> Self {
+        Self { tokens, pos: 0, src }
     }
 
     // ----- cursor helpers -----
@@ -103,10 +107,11 @@ impl Parser {
             Token::KwData => self.parse_data_decl(start),
             Token::KwTypeAlias => self.parse_type_alias_decl(start),
             Token::KwForeign => self.parse_foreign_decl(start),
+            Token::KwTemporal => self.parse_temporal_decl(start),
             other => Err(ElabError::ParseError {
                 msg: format!(
-                    "expected 'view', 'let', 'prove', 'law', 'data', 'type', 'foreign', or \
-                     'space view', found {:?}",
+                    "expected 'view', 'let', 'prove', 'law', 'data', 'type', 'foreign', \
+                     'temporal', or 'space view', found {:?}",
                     other
                 ),
                 span: self.peek_span().clone(),
@@ -243,6 +248,132 @@ impl Parser {
             prop,
             span: Span::new(start, end),
         })
+    }
+
+    /// `temporal name { φ }` — a delegated temporal obligation (`72 §4`).
+    ///
+    /// The body is a `temporal{}` formula (keywords `(oracle)`/`OQ-syntax`,
+    /// contextual operator words) that elaborates to the §3 constructors and
+    /// is tagged `delegated`.
+    fn parse_temporal_decl(&mut self, start: usize) -> Result<Decl, ElabError> {
+        self.advance(); // consume 'temporal'
+        let (name, _) = self.expect_ident()?;
+        let lb_span = self.expect(&Token::LBrace)?;
+        let formula = self.parse_temporal_formula()?;
+        let rb_span = self.expect(&Token::RBrace)?;
+        // Verbatim formula text between `{` and `}` — human-visible in source
+        // (the property appears verbatim, not erased, `72 §4`).
+        let source = self.src[lb_span.end..rb_span.start].trim().to_string();
+        Ok(Decl::TemporalDecl {
+            name,
+            formula,
+            source,
+            span: Span::new(start, rb_span.end),
+        })
+    }
+
+    /// A `temporal{}` formula — recursive descent with precedence
+    /// (loosest → tightest): `leadsto`, `until`, `or`, `and`, prefix
+    /// (`not`/`eventually`/`always`/`next`), atom. Operator words are
+    /// contextual: lowercase identifiers matched by name (only `temporal`
+    /// itself is a lexer keyword), so the grammar adds no global keywords.
+    fn parse_temporal_formula(&mut self) -> Result<TemporalExpr, ElabError> {
+        self.parse_t_leadsto()
+    }
+
+    fn parse_t_leadsto(&mut self) -> Result<TemporalExpr, ElabError> {
+        let mut lhs = self.parse_t_until()?;
+        while self.is_t_op("leadsto") {
+            self.advance();
+            let rhs = self.parse_t_until()?;
+            lhs = TemporalExpr::Leadsto(Box::new(lhs), Box::new(rhs));
+        }
+        Ok(lhs)
+    }
+
+    fn parse_t_until(&mut self) -> Result<TemporalExpr, ElabError> {
+        let mut lhs = self.parse_t_or()?;
+        while self.is_t_op("until") {
+            self.advance();
+            let rhs = self.parse_t_or()?;
+            lhs = TemporalExpr::Until(Box::new(lhs), Box::new(rhs));
+        }
+        Ok(lhs)
+    }
+
+    fn parse_t_or(&mut self) -> Result<TemporalExpr, ElabError> {
+        let mut lhs = self.parse_t_and()?;
+        while self.is_t_op("or") {
+            self.advance();
+            let rhs = self.parse_t_and()?;
+            lhs = TemporalExpr::Or(Box::new(lhs), Box::new(rhs));
+        }
+        Ok(lhs)
+    }
+
+    fn parse_t_and(&mut self) -> Result<TemporalExpr, ElabError> {
+        let mut lhs = self.parse_t_prefix()?;
+        while self.is_t_op("and") {
+            self.advance();
+            let rhs = self.parse_t_prefix()?;
+            lhs = TemporalExpr::And(Box::new(lhs), Box::new(rhs));
+        }
+        Ok(lhs)
+    }
+
+    fn parse_t_prefix(&mut self) -> Result<TemporalExpr, ElabError> {
+        // Prefix operators — right-associative (a prefix op wraps the next
+        // prefix-or-atom). `top`/`true` are NOT operators (they are atoms).
+        if self.is_t_op("not") {
+            self.advance();
+            return Ok(TemporalExpr::Not(Box::new(self.parse_t_prefix()?)));
+        }
+        if self.is_t_op("eventually") {
+            self.advance();
+            return Ok(TemporalExpr::Eventually(Box::new(self.parse_t_prefix()?)));
+        }
+        if self.is_t_op("always") {
+            self.advance();
+            return Ok(TemporalExpr::Always(Box::new(self.parse_t_prefix()?)));
+        }
+        if self.is_t_op("next") {
+            self.advance();
+            return Ok(TemporalExpr::Next(Box::new(self.parse_t_prefix()?)));
+        }
+        self.parse_t_atom()
+    }
+
+    fn parse_t_atom(&mut self) -> Result<TemporalExpr, ElabError> {
+        match self.peek().clone() {
+            Token::LParen => {
+                self.advance();
+                let e = self.parse_temporal_formula()?;
+                self.expect(&Token::RParen)?;
+                Ok(e)
+            }
+            Token::Ident(s) => {
+                if is_temporal_operator(&s) {
+                    return Err(ElabError::ParseError {
+                        msg: format!(
+                            "unexpected temporal operator '{}' in atom position",
+                            s
+                        ),
+                        span: self.peek_span().clone(),
+                    });
+                }
+                self.advance();
+                Ok(TemporalExpr::Atom(s))
+            }
+            other => Err(ElabError::ParseError {
+                msg: format!("expected a temporal formula atom, found {:?}", other),
+                span: self.peek_span().clone(),
+            }),
+        }
+    }
+
+    /// Is the current token the contextual temporal-operator word `op`?
+    fn is_t_op(&self, op: &str) -> bool {
+        matches!(self.peek(), Token::Ident(s) if s == op)
     }
 
     /// `law Name (param) { field : φ ; … }`
@@ -872,12 +1003,20 @@ impl Parser {
 
 // ---- public parse functions ----
 
+/// Is `s` a contextual `temporal{}` operator word? (Atoms are idents that are
+/// NOT one of these; `top`/`true` are atoms, not operators.) Pinning the
+/// operator set here keeps the temporal grammar lexeme-free — only `temporal`
+/// itself is a lexer keyword, so the grammar adds no global identifiers.
+fn is_temporal_operator(s: &str) -> bool {
+    matches!(s, "not" | "eventually" | "always" | "next" | "and" | "or" | "until" | "leadsto")
+}
+
 pub fn parse_decls(src: &str) -> Result<Vec<Decl>, ElabError> {
     let tokens = crate::lexer::Lexer::lex(src)?;
-    Parser::new(tokens).parse_decls()
+    Parser::new(tokens, src.to_string()).parse_decls()
 }
 
 pub fn parse_expr(src: &str) -> Result<Expr, ElabError> {
     let tokens = crate::lexer::Lexer::lex(src)?;
-    Parser::new(tokens).parse_expr_only()
+    Parser::new(tokens, src.to_string()).parse_expr_only()
 }
