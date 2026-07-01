@@ -108,10 +108,13 @@ impl Parser {
             Token::KwTypeAlias => self.parse_type_alias_decl(start),
             Token::KwForeign => self.parse_foreign_decl(start),
             Token::KwTemporal => self.parse_temporal_decl(start),
+            Token::KwClass => self.parse_class_decl(start),
+            Token::KwInstance => self.parse_instance_decl(start),
+            Token::KwDerive => self.parse_derive_decl(start),
             other => Err(ElabError::ParseError {
                 msg: format!(
                     "expected 'view', 'let', 'prove', 'law', 'data', 'type', 'foreign', \
-                     'temporal', or 'space view', found {:?}",
+                     'temporal', 'class', 'instance', 'derive', or 'space view', found {:?}",
                     other
                 ),
                 span: self.peek_span().clone(),
@@ -400,6 +403,111 @@ impl Parser {
             name,
             param,
             fields,
+            span: Span::new(start, end),
+        })
+    }
+
+    /// `class C (A : Type) { field : Type ; … }` — typeclass declaration
+    /// (`33 §5`).  The single type param is optional; fields are `name : Type`.
+    fn parse_class_decl(&mut self, start: usize) -> Result<Decl, ElabError> {
+        self.advance(); // consume 'class'
+        let (name, _) = self.expect_ident()?;
+        // Optional single type parameter `(A : Type)` or bare ident `A`
+        let param = if matches!(self.peek(), Token::Ident(_) | Token::ConId(_)) {
+            let (p, _) = self.expect_ident()?;
+            Some(p)
+        } else {
+            None
+        };
+        self.expect(&Token::LBrace)?;
+        let mut fields = Vec::new();
+        while !matches!(self.peek(), Token::RBrace | Token::Eof) {
+            let (field_name, _) = self.expect_ident()?;
+            self.expect(&Token::Colon)?;
+            let ty = self.parse_type()?;
+            fields.push((field_name, ty));
+            if matches!(self.peek(), Token::Semicolon) {
+                self.advance();
+            }
+        }
+        let end = self.peek_span().end;
+        self.expect(&Token::RBrace)?;
+        Ok(Decl::ClassDecl {
+            name,
+            param,
+            fields,
+            span: Span::new(start, end),
+        })
+    }
+
+    /// `instance C HeadType [where C1 T1 ; C2 T2] { field = expr ; … }`
+    /// (`33 §5`, `39 §6`).
+    fn parse_instance_decl(&mut self, start: usize) -> Result<Decl, ElabError> {
+        self.advance(); // consume 'instance'
+        let (class_name, _) = self.expect_ident()?;
+        let head_type = self.parse_atom_type_app()?;
+        // Optional `where C1 T1 ; C2 T2` constraint list
+        let mut constraints = Vec::new();
+        if matches!(self.peek(), Token::KwWhere) {
+            self.advance(); // consume 'where'
+            loop {
+                let (cname, _) = self.expect_ident()?;
+                let cty = self.parse_atom_type_app()?;
+                constraints.push((cname, cty));
+                if matches!(self.peek(), Token::Semicolon) {
+                    self.advance();
+                    // Continue if next is an ident (another constraint) not LBrace
+                    if !matches!(self.peek(), Token::Ident(_) | Token::ConId(_)) {
+                        break;
+                    }
+                } else {
+                    break;
+                }
+            }
+        }
+        self.expect(&Token::LBrace)?;
+        let mut fields = Vec::new();
+        while !matches!(self.peek(), Token::RBrace | Token::Eof) {
+            let (field_name, _) = self.expect_ident()?;
+            self.expect(&Token::Eq)?;
+            let expr = self.parse_expr()?;
+            fields.push((field_name, expr));
+            if matches!(self.peek(), Token::Semicolon) {
+                self.advance();
+            }
+        }
+        let end = self.peek_span().end;
+        self.expect(&Token::RBrace)?;
+        Ok(Decl::InstanceDecl {
+            class_name,
+            head_type,
+            constraints,
+            fields,
+            span: Span::new(start, end),
+        })
+    }
+
+    /// `derive ClassName for DataName` (`33 §5.6`, `39 §6.6`).
+    fn parse_derive_decl(&mut self, start: usize) -> Result<Decl, ElabError> {
+        self.advance(); // consume 'derive'
+        let (class_name, _) = self.expect_ident()?;
+        // consume 'for' as a contextual keyword (it's an Ident token)
+        match self.peek().clone() {
+            Token::Ident(s) if s == "for" => {
+                self.advance();
+            }
+            other => {
+                return Err(ElabError::ParseError {
+                    msg: format!("expected 'for' in derive declaration, found {:?}", other),
+                    span: self.peek_span().clone(),
+                });
+            }
+        }
+        let (data_name, _) = self.expect_con()?;
+        let end = self.tokens[self.pos - 1].1.end;
+        Ok(Decl::DeriveDecl {
+            class_name,
+            data_name,
             span: Span::new(start, end),
         })
     }

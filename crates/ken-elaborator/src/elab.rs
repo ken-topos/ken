@@ -8,7 +8,8 @@ use std::collections::HashMap;
 
 use ken_kernel::{
     check as kernel_check,
-    declare_def, declare_postulate,
+    declare_def, declare_postulate, declare_recursive_group,
+    infer as kernel_infer,
     inductive::{peel_app, recursive_args},
     sct::sct_check,
     subst::{subst0, subst_outer, weaken},
@@ -16,6 +17,7 @@ use ken_kernel::{
 };
 
 use crate::ast::{BinOp, NumLit};
+use crate::classes::{ClassEnv, ClassInfo, ClassKind, InstanceInfo};
 use crate::data;
 use crate::error::{ElabError, Span};
 use crate::numbers::{AddEntry, NumericEnv, NumericLitVal};
@@ -634,7 +636,8 @@ pub fn elaborate_rdecl(
     numeric_env: &NumericEnv,
     rdecl: &RDecl,
 ) -> Result<GlobalId, ElabError> {
-    let result = elaborate_rdecl_v1(env, globals, num_values, numeric_env, rdecl)?;
+    let mut sentinel = ClassEnv::sentinel();
+    let result = elaborate_rdecl_v1(env, globals, num_values, numeric_env, &mut sentinel, rdecl)?;
     Ok(result.def_id)
 }
 
@@ -644,6 +647,7 @@ pub fn elaborate_rdecl_v1(
     globals: &mut HashMap<String, GlobalId>,
     num_values: &mut HashMap<GlobalId, NumericLitVal>,
     numeric_env: &NumericEnv,
+    class_env: &mut ClassEnv,
     rdecl: &RDecl,
 ) -> Result<ElabResult, ElabError> {
     match &rdecl.kind {
@@ -663,6 +667,8 @@ pub fn elaborate_rdecl_v1(
                 ctors,
                 &rdecl.span,
             )?;
+            // Register data type in the module map for orphan check (`33 §5.3`).
+            class_env.global_modules.insert(d_id, class_env.current_module);
             Ok(ElabResult { name: rdecl.name.clone(), def_id: d_id, obligations: vec![], foreign_binding: None, temporal_obligations: vec![] })
         }
         RDeclKind::TypeAlias { ty } => {
@@ -690,7 +696,434 @@ pub fn elaborate_rdecl_v1(
         RDeclKind::Temporal { formula, source } => {
             elaborate_temporal(env, globals, rdecl, formula, source)
         }
+        RDeclKind::ClassDecl { param, fields } => {
+            elab_class_decl(env, globals, num_values, numeric_env, class_env, rdecl, param, fields)
+        }
+        RDeclKind::InstanceDecl { head_type, constraints, fields } => {
+            elab_instance_decl(
+                env, globals, num_values, numeric_env, class_env, rdecl,
+                &rdecl.name.clone(), head_type, constraints, fields,
+            )
+        }
+        RDeclKind::DeriveDecl { data_name } => {
+            elab_derive(env, globals, num_values, numeric_env, class_env, rdecl, &rdecl.name.clone(), data_name)
+        }
     }
+}
+
+/// Initialize the typeclass environment, pre-declaring `RecordNil` and
+/// `record_nil_val` as structural postulates (`33 §5`).
+pub fn init_class_env(
+    env: &mut GlobalEnv,
+    globals: &mut HashMap<String, GlobalId>,
+) -> Result<ClassEnv, ElabError> {
+    // RecordNil : Omega 0 — the Σ-chain prop terminator.
+    let record_nil_id = declare_postulate(env, vec![], Term::omega(Level::Zero))
+        .map_err(|e| ElabError::Internal(format!("RecordNil postulate: {}", e)))?;
+    globals.insert("RecordNil".to_string(), record_nil_id);
+    // record_nil_val : RecordNil — the unique inhabitant.
+    let record_nil_val_id =
+        declare_postulate(env, vec![], Term::const_(record_nil_id, vec![]))
+            .map_err(|e| ElabError::Internal(format!("record_nil_val postulate: {}", e)))?;
+    globals.insert("record_nil_val".to_string(), record_nil_val_id);
+    Ok(ClassEnv {
+        classes: std::collections::HashMap::new(),
+        instances: std::collections::HashMap::new(),
+        record_nil_id,
+        record_nil_val_id,
+        current_module: 0,
+        global_modules: std::collections::HashMap::new(),
+    })
+}
+
+// ---- typeclass elaboration (`33 §5`, `39 §6`) --------------------------------
+
+/// Sigma chain type for field types `[T1, T2, …, Tn]` elaborated under a
+/// context where the class param is Var(0).
+///
+/// Chain: `Sigma(T1, Sigma(T2_shifted, …Sigma(Tn_shifted, RecordNil)…))`.
+/// Ti is shifted by i positions (Ti is the first arg of the outer Sigma;
+/// the Sigma introduces one more binder above each subsequent Ti).
+fn build_sigma_chain(field_types: &[Term], record_nil_id: GlobalId) -> Term {
+    let n = field_types.len();
+    let mut acc = Term::const_(record_nil_id, vec![]);
+    for i in (0..n).rev() {
+        let ti_shifted = weaken(&field_types[i], i as i64);
+        acc = Term::sigma(ti_shifted, acc);
+    }
+    acc
+}
+
+/// Pair chain value for field values `[v1, v2, …, vn]`.
+/// Chain: `Pair(v1, Pair(v2, …Pair(vn, record_nil_val)…))`.
+fn build_pair_chain(field_vals: &[Term], record_nil_val_id: GlobalId) -> Term {
+    let mut acc = Term::const_(record_nil_val_id, vec![]);
+    for v in field_vals.iter().rev() {
+        acc = Term::pair(v.clone(), acc);
+    }
+    acc
+}
+
+/// Extract the outermost type constructor name from a resolved type.
+fn head_type_name(ty: &RType) -> String {
+    match ty {
+        RType::RCon(s, _) | RType::RVarTy(_, s, _) => s.clone(),
+        RType::RApp(f, _, _) => head_type_name(f),
+        RType::RUniv(_, _) => "Type".to_string(),
+        RType::RArr(_, _, _) | RType::RPi(_, _, _, _) => "->".to_string(),
+        RType::RRefine(_, inner, _, _) => head_type_name(inner),
+    }
+}
+
+/// Elaborate `class C A { f1 : T1 ; … }` → Σ-record type (`33 §5`).
+///
+/// The Σ-chain sort (via `sort_sigma`, `check.rs:192`) determines whether the
+/// class is a property class (Ω, coherence-free) or structure class (Type,
+/// canonical-instance policy). The class type is admitted via `declare_def`
+/// (kernel re-check at `check.rs:944`).
+fn elab_class_decl(
+    env: &mut GlobalEnv,
+    globals: &mut HashMap<String, GlobalId>,
+    num_values: &mut HashMap<GlobalId, NumericLitVal>,
+    numeric_env: &NumericEnv,
+    class_env: &mut ClassEnv,
+    rdecl: &RDecl,
+    param: &Option<String>,
+    fields: &[(String, RType)],
+) -> Result<ElabResult, ElabError> {
+    let span = &rdecl.span;
+    let has_param = param.is_some();
+
+    // Elaborate each field type in a context with the param (if any).
+    let field_types: Vec<Term> = {
+        let mut cx = ElabCtx::new(env, globals, num_values, numeric_env);
+        if has_param {
+            cx.ctx.push(Term::ty(Level::Zero));
+        }
+        let mut tys = Vec::new();
+        for (_, fty) in fields {
+            let t = elab_type(&mut cx, fty)?;
+            tys.push(cx.metas.zonk_term(&t));
+        }
+        tys
+    };
+
+    // Build Σ-chain (under the param binder if present).
+    let sigma_chain = build_sigma_chain(&field_types, class_env.record_nil_id);
+
+    // Determine the sort of the Σ-chain by calling kernel infer on it.
+    // Sigma inference is supported (`check.rs:276`). We need a context for A.
+    let chain_sort = {
+        let mut ctx_a = Context::new();
+        if has_param {
+            ctx_a.push(Term::ty(Level::Zero));
+        }
+        kernel_infer(env, &ctx_a, &sigma_chain)
+            .map_err(|e| ElabError::KernelRejected { error: e, span: span.clone() })?
+    };
+
+    // Classify: Ω = property class, Type = structure class.
+    let kind = match &chain_sort {
+        Term::Omega(_) => ClassKind::Property,
+        _ => ClassKind::Structure,
+    };
+
+    // Build class type and body.
+    let (class_ty, class_body) = if has_param {
+        let pi_ty = Term::pi(Term::ty(Level::Zero), weaken(&chain_sort, 1));
+        let lam_body = Term::lam(Term::ty(Level::Zero), sigma_chain);
+        (pi_ty, lam_body)
+    } else {
+        (chain_sort, sigma_chain)
+    };
+
+    let id = declare_def(env, vec![], class_ty, class_body)
+        .map_err(|e| ElabError::KernelRejected { error: e, span: span.clone() })?;
+    globals.insert(rdecl.name.clone(), id);
+    class_env.global_modules.insert(id, class_env.current_module);
+    class_env.classes.insert(
+        rdecl.name.clone(),
+        ClassInfo {
+            param: param.clone(),
+            field_names: fields.iter().map(|(n, _)| n.clone()).collect(),
+            type_id: id,
+            kind,
+            module_id: class_env.current_module,
+        },
+    );
+
+    Ok(ElabResult {
+        name: rdecl.name.clone(),
+        def_id: id,
+        obligations: vec![],
+        foreign_binding: None,
+        temporal_obligations: vec![],
+    })
+}
+
+/// Elaborate `instance C HeadType [where C1 T1 ; …] { f1 = e1 ; … }`.
+///
+/// Enforces the orphan check (`33 §5.3`) and overlap check (`39 §6.1`),
+/// builds the Σ-chain value, and admits it through `declare_def` (kernel
+/// re-check).  For constraint-carrying instances, uses
+/// `declare_recursive_group` so that `sct_check` can reject non-terminating
+/// resolution chains at admission time (`39 §6.4`).
+fn elab_instance_decl(
+    env: &mut GlobalEnv,
+    globals: &mut HashMap<String, GlobalId>,
+    num_values: &mut HashMap<GlobalId, NumericLitVal>,
+    numeric_env: &NumericEnv,
+    class_env: &mut ClassEnv,
+    rdecl: &RDecl,
+    class_name: &str,
+    head_type: &RType,
+    constraints: &[(String, RType)],
+    fields: &[(String, RExpr)],
+) -> Result<ElabResult, ElabError> {
+    let span = &rdecl.span;
+
+    // ---- look up class ---------------------------------------------------
+    let (class_module, class_type_id, class_kind, field_names) = {
+        let ci = class_env.classes.get(class_name).ok_or_else(|| {
+            ElabError::UnresolvedCon { name: class_name.to_string(), span: span.clone() }
+        })?;
+        (ci.module_id, ci.type_id, ci.kind.clone(), ci.field_names.clone())
+    };
+
+    let head_name = head_type_name(head_type);
+    let instance_key = (class_name.to_string(), head_name.clone());
+
+    // ---- orphan check (`33 §5.3`) ----------------------------------------
+    let in_class_module = class_module == class_env.current_module;
+    let in_head_module = globals
+        .get(&head_name)
+        .and_then(|id| class_env.global_modules.get(id))
+        .map(|m| *m == class_env.current_module)
+        .unwrap_or(false);
+    if !in_class_module && !in_head_module {
+        return Err(ElabError::OrphanInstance {
+            class: class_name.to_string(),
+            head_type: head_name.clone(),
+            span: span.clone(),
+        });
+    }
+
+    // ---- overlap check (`39 §6.1`) — skip for property classes (Ω-PI) ---
+    if class_kind == ClassKind::Structure && class_env.instances.contains_key(&instance_key) {
+        return Err(ElabError::OverlappingInstances {
+            class: class_name.to_string(),
+            head_type: head_name.clone(),
+            span: span.clone(),
+        });
+    }
+
+    // ---- elaborate head type --------------------------------------------
+    let head_core = {
+        let mut cx = ElabCtx::new(env, globals, num_values, numeric_env);
+        let h = elab_type(&mut cx, head_type)?;
+        cx.metas.zonk_term(&h)
+    };
+
+    // ---- build instance type --------------------------------------------
+    // App(class_type, head) if parameterized, else class_type directly.
+    let instance_ty = if class_env.classes.get(class_name).map(|ci| ci.param.is_some()).unwrap_or(false) {
+        Term::app(Term::const_(class_type_id, vec![]), head_core)
+    } else {
+        Term::const_(class_type_id, vec![])
+    };
+
+    // ---- direct-self-reference detection (`39 §6.4`, scope-limited) -------
+    //
+    // This check detects DIRECT self-reference: a constraint whose (class, head)
+    // is identical to the instance being declared. It does NOT detect mutual or
+    // indirect cycles (e.g. `instance C (F a) where C (G a)` +
+    // `instance C (G a) where C (F a)` — each admits as zero-edge, but resolution
+    // loops at runtime).
+    //
+    // [tracked follow-on: Lc-mutual-cycle-termination]
+    // Faithful reification (§6.4: one group node per sub-goal, one edge per
+    // dischargeSubConstraints call, head-type metric for descent) would require
+    // gathering ALL transitively-constrained instances into one
+    // declare_recursive_group and threading the head-type metric through the edges.
+    // This is deferred — the current slice covers direct-self-ref rejection only.
+    // There is NO search-side backstop (no resolution-depth bound or occurs-check);
+    // faithful reification is the sole net for mutual-cycle termination.
+    let has_self_ref = constraints.iter().any(|(cn, ct)| {
+        let chead = head_type_name(ct);
+        (cn.as_str(), chead.as_str()) == (class_name, head_name.as_str())
+    });
+
+    // ---- admit the instance ----------------------------------------------
+    let instance_id = if has_self_ref {
+        // Direct self-referential constraint: encode as a fixpoint-arrow so
+        // sct_check sees the self-loop in App position and rejects (`39 §6.4`).
+        //
+        // Type  = Pi(T, T)   where T = instance_ty.
+        // Body  = Lam(T, App(Const(own_id), Var(0)))
+        //
+        // collect_calls sees App(Const(own_id), Var(0)) → edge with M=[[?]]
+        // (Var(0) = the parameter, not strictly decreasing) → SCT rejects.
+        let t = instance_ty.clone();
+        let fixpoint_ty = Term::pi(t.clone(), t.clone());
+        let ids = declare_recursive_group(
+            env,
+            vec![(vec![], fixpoint_ty)],
+            |ids| {
+                let own_id = ids[0];
+                let body = Term::lam(
+                    t.clone(),
+                    Term::app(Term::const_(own_id, vec![]), Term::var(0)),
+                );
+                vec![body]
+            },
+        )
+        .map_err(|_| ElabError::NonTerminatingInstances { span: span.clone() })?;
+        ids[0]
+    } else if !constraints.is_empty() {
+        // Non-self-ref constrained instance: elaborate fields, then route through
+        // declare_recursive_group so sct_check runs on the group (`39 §6.4`).
+        // Body has no App(Const(own_id), ...) → edges.is_empty() → sct_check
+        // accepts. Mutual/indirect cycles are not detected here (see above).
+        let field_vals: Vec<Term> = {
+            let mut cx = ElabCtx::new(env, globals, num_values, numeric_env);
+            let mut vals = Vec::new();
+            for (_, rexpr) in fields {
+                let (v, _ty) = infer(&mut cx, rexpr)?;
+                vals.push(cx.metas.zonk_term(&v));
+            }
+            vals
+        };
+        let ordered_vals: Vec<Term> = {
+            let mut out = Vec::new();
+            for fname in &field_names {
+                let pos = fields.iter().position(|(n, _)| n == fname)
+                    .ok_or_else(|| ElabError::Internal(
+                        format!("instance missing field '{}'", fname)
+                    ))?;
+                out.push(field_vals[pos].clone());
+            }
+            out
+        };
+        let pair_chain = build_pair_chain(&ordered_vals, class_env.record_nil_val_id);
+        let inst_ty = instance_ty.clone();
+        let ids = declare_recursive_group(
+            env,
+            vec![(vec![], inst_ty)],
+            |_ids| vec![pair_chain],
+        )
+        .map_err(|e| ElabError::KernelRejected { error: e, span: span.clone() })?;
+        ids[0]
+    } else {
+        // No constraints: declare_def path (no recursion possible, SCT not needed).
+        let field_vals: Vec<Term> = {
+            let mut cx = ElabCtx::new(env, globals, num_values, numeric_env);
+            let mut vals = Vec::new();
+            for (_, rexpr) in fields {
+                let (v, _ty) = infer(&mut cx, rexpr)?;
+                vals.push(cx.metas.zonk_term(&v));
+            }
+            vals
+        };
+        let ordered_vals: Vec<Term> = {
+            let mut out = Vec::new();
+            for fname in &field_names {
+                let pos = fields.iter().position(|(n, _)| n == fname)
+                    .ok_or_else(|| ElabError::Internal(
+                        format!("instance missing field '{}'", fname)
+                    ))?;
+                out.push(field_vals[pos].clone());
+            }
+            out
+        };
+        let pair_chain = build_pair_chain(&ordered_vals, class_env.record_nil_val_id);
+        declare_def(env, vec![], instance_ty, pair_chain)
+            .map_err(|e| ElabError::KernelRejected { error: e, span: span.clone() })?
+    };
+
+    // ---- register instance ----------------------------------------------
+    let inst_name = format!("{}_instance_{}", class_name, head_name);
+    globals.insert(inst_name, instance_id);
+    class_env.global_modules.insert(instance_id, class_env.current_module);
+    // For property classes, allow multiple registrations (Ω-PI means they're
+    // all definitionally equal; the key is occupied but we don't error).
+    class_env.instances.insert(
+        instance_key,
+        InstanceInfo { instance_id, module_id: class_env.current_module },
+    );
+
+    Ok(ElabResult {
+        name: rdecl.name.clone(),
+        def_id: instance_id,
+        obligations: vec![],
+        foreign_binding: None,
+        temporal_obligations: vec![],
+    })
+}
+
+/// Elaborate `derive ClassName for DataName` (`33 §5.6`, `39 §6.6`).
+///
+/// Generates a candidate instance through the real `declare_def` re-check
+/// (untrusted generation — the kernel re-verifies). For the current build:
+/// the candidate for nullary/prop-only classes is `record_nil_val` directly;
+/// the kernel rejects malformed candidates.
+fn elab_derive(
+    env: &mut GlobalEnv,
+    globals: &mut HashMap<String, GlobalId>,
+    _num_values: &mut HashMap<GlobalId, NumericLitVal>,
+    _numeric_env: &NumericEnv,
+    class_env: &mut ClassEnv,
+    rdecl: &RDecl,
+    class_name: &str,
+    data_name: &str,
+) -> Result<ElabResult, ElabError> {
+    let span = &rdecl.span;
+
+    let (class_type_id, has_param) = {
+        let ci = class_env.classes.get(class_name).ok_or_else(|| {
+            ElabError::UnresolvedCon { name: class_name.to_string(), span: span.clone() }
+        })?;
+        (ci.type_id, ci.param.is_some())
+    };
+
+    let data_id = globals.get(data_name).copied().ok_or_else(|| {
+        ElabError::UnresolvedCon { name: data_name.to_string(), span: span.clone() }
+    })?;
+
+    let data_term = if env.inductive(data_id).is_some() {
+        Term::indformer(data_id, vec![])
+    } else {
+        Term::const_(data_id, vec![])
+    };
+
+    let instance_ty = if has_param {
+        Term::app(Term::const_(class_type_id, vec![]), data_term)
+    } else {
+        Term::const_(class_type_id, vec![])
+    };
+
+    // Generate candidate: record_nil_val (minimal inhabitant of a prop-only
+    // class Σ-chain). The kernel's declare_def re-checks: a malformed candidate
+    // (wrong type) is rejected here.
+    let candidate = Term::const_(class_env.record_nil_val_id, vec![]);
+    let instance_id = declare_def(env, vec![], instance_ty, candidate)
+        .map_err(|e| ElabError::KernelRejected { error: e, span: span.clone() })?;
+
+    let head_name = data_name.to_string();
+    let inst_name = format!("{}_instance_{}", class_name, head_name);
+    globals.insert(inst_name, instance_id);
+    class_env.global_modules.insert(instance_id, class_env.current_module);
+    class_env.instances.insert(
+        (class_name.to_string(), head_name),
+        InstanceInfo { instance_id, module_id: class_env.current_module },
+    );
+
+    Ok(ElabResult {
+        name: rdecl.name.clone(),
+        def_id: instance_id,
+        obligations: vec![],
+        foreign_binding: None,
+        temporal_obligations: vec![],
+    })
 }
 
 /// Elaborate a `foreign` declaration (`38 §2`, L7).

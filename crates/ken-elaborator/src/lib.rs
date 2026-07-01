@@ -9,6 +9,7 @@
 
 mod ast;
 pub mod bytes;
+pub mod classes;
 pub mod capabilities;
 pub mod data;
 pub mod diagnostics;
@@ -74,6 +75,7 @@ pub use prelude::PreludeEnv;
 pub use foreign::{
     trusted_base_delta, FfiRuntimeCheck, ForeignBinding, ForeignEnv, MarshalKind, MarshalSig,
 };
+pub use classes::{ClassEnv, ClassInfo, ClassKind, InstanceInfo};
 
 /// The surface-level elaboration environment.
 pub struct ElabEnv {
@@ -90,6 +92,9 @@ pub struct ElabEnv {
     pub foreign_env: ForeignEnv,
     /// The L3 prelude: collection inductives + Ω constants (`37`).
     pub prelude_env: PreludeEnv,
+    /// The Lc typeclass environment: class/instance registry + structural
+    /// postulates (`RecordNil`, `record_nil_val`). Initialized in `empty()`.
+    pub class_env: ClassEnv,
 }
 
 impl ElabEnv {
@@ -114,11 +119,16 @@ impl ElabEnv {
             foreign_env: foreign::ForeignEnv::empty(),
             // placeholder; `register_prelude` fills it (and needs `&mut self`).
             prelude_env: prelude::empty_prelude_env(),
+            // placeholder; replaced after prelude registration below.
+            class_env: classes::ClassEnv::sentinel(),
         };
         // L3 prelude: Peano `Nat` (replaces the placeholder postulate) + the
         // collection inductives + Ω constants (`37`). Registered via the landed
         // `data` / postulate machinery — no new kernel rule.
         elab.prelude_env = prelude::register_prelude(&mut elab)?;
+        // Lc typeclass env: pre-declare RecordNil + record_nil_val (`33 §5`).
+        elab.class_env =
+            elab::init_class_env(&mut elab.env, &mut elab.globals)?;
         Ok(elab)
     }
 
@@ -159,6 +169,7 @@ impl ElabEnv {
             &mut self.globals,
             &mut self.num_values,
             &self.numeric_env,
+            &mut self.class_env,
             &rdecl,
         )?;
         if let Some(fb) = &result.foreign_binding {
@@ -182,6 +193,7 @@ impl ElabEnv {
             &mut self.globals,
             &mut self.num_values,
             &self.numeric_env,
+            &mut self.class_env,
             &rdecl,
         )?;
         // Register foreign bindings in the foreign env (AC1/AC5 tests).

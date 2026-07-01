@@ -88,6 +88,24 @@ pub enum RDeclKind {
         formula: crate::temporal::TemporalExpr,
         source: String,
     },
+    /// `class C A { field : Type ; … }` (`33 §5`).
+    ClassDecl {
+        param: Option<String>,
+        /// Resolved field types (param in scope if present).
+        fields: Vec<(String, RType)>,
+    },
+    /// `instance C HeadType [where …] { field = expr ; … }` (`39 §6`).
+    InstanceDecl {
+        head_type: RType,
+        /// Resolved constraint list: (class_name, head_type).
+        constraints: Vec<(String, RType)>,
+        /// Resolved field implementations: (name, expr).
+        fields: Vec<(String, RExpr)>,
+    },
+    /// `derive ClassName for DataName` (`33 §5.6`, `39 §6.6`).
+    DeriveDecl {
+        data_name: String,
+    },
 }
 
 /// A resolved expression — names replaced by de Bruijn indices.
@@ -436,6 +454,76 @@ pub fn resolve_decl(decl: &Decl) -> Result<RDecl, ElabError> {
                 },
             })
         }
+
+        Decl::ClassDecl { name, param, fields, span } => {
+            let mut scope = Scope::new();
+            if let Some(p) = param {
+                scope.push(p);
+            }
+            let resolved_fields = fields
+                .iter()
+                .map(|(fname, ty)| {
+                    let rty = resolve_type(&mut scope, ty)?;
+                    Ok((fname.clone(), rty))
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(RDecl {
+                name: name.clone(),
+                ty: None,
+                body: RExpr::RUniv(None, span.clone()),
+                requires: vec![],
+                ensures: vec![],
+                span: span.clone(),
+                kind: RDeclKind::ClassDecl {
+                    param: param.clone(),
+                    fields: resolved_fields,
+                },
+            })
+        }
+
+        Decl::InstanceDecl { class_name, head_type, constraints, fields, span } => {
+            let mut scope = Scope::new();
+            let rhead = resolve_type(&mut scope, head_type)?;
+            let rconstraints = constraints
+                .iter()
+                .map(|(cname, cty)| {
+                    let rty = resolve_type(&mut scope, cty)?;
+                    Ok((cname.clone(), rty))
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            let rfields = fields
+                .iter()
+                .map(|(fname, expr)| {
+                    let rexpr = resolve_expr(&mut scope, expr)?;
+                    Ok((fname.clone(), rexpr))
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(RDecl {
+                name: class_name.clone(),
+                ty: None,
+                body: RExpr::RUniv(None, span.clone()),
+                requires: vec![],
+                ensures: vec![],
+                span: span.clone(),
+                kind: RDeclKind::InstanceDecl {
+                    head_type: rhead,
+                    constraints: rconstraints,
+                    fields: rfields,
+                },
+            })
+        }
+
+        Decl::DeriveDecl { class_name, data_name, span } => Ok(RDecl {
+            name: class_name.clone(),
+            ty: None,
+            body: RExpr::RUniv(None, span.clone()),
+            requires: vec![],
+            ensures: vec![],
+            span: span.clone(),
+            kind: RDeclKind::DeriveDecl {
+                data_name: data_name.clone(),
+            },
+        }),
     }
 }
 
