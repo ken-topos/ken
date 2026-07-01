@@ -66,18 +66,72 @@ it**.
 ### kernel/judgments/declare-def-sct-rejects (soundness)
 - spec: `18 §4.2`/`§4.3`; `17 §4`
 - given: `declare_def(env, "loop", Nat -> Nat, <loop x = loop x>)`
-- expect: **Err(`ScfFailed`)** — admission **refused**; `env` is **unchanged**
-  (the pre-admitted opaque `id` is removed, `18 §4.2` rollback); `loop` is not
-  δ-reducible (never admitted)
+- expect: **Err(`NotTerminating`)** — admission **refused**; `env` is
+  **unchanged** (the pre-admitted opaque `id` is removed, `18 §4.2` rollback);
+  `loop` is not δ-reducible (never admitted)
 - why: the kernel **never** admits uncertified transparent recursion (`17 §4`,
   `18 §4.2`). **Guard named:** the rejection is driven by `sct_check` returning
-  `ScfFailed` on the idempotent self-loop with no strict descent (`17 §4`), run
-  **after** type-checking the body — not by a type error. **Disconfirming
+  `NotTerminating` on the idempotent self-loop with no strict descent (`17 §4`),
+  run **after** type-checking the body — not by a type error. **Disconfirming
   check:** would `loop` also be refused if the SCT gate were *removed*? No — its
   body type-checks, so without SCT it would be wrongly admitted transparent and
   diverge under δ. The reject is **gate-gated**, not coincidental. Asserts the
-  specific `ScfFailed` variant + the env rollback (structural), not bare
+  specific `NotTerminating` variant + the env rollback (structural), not bare
   `is_err`.
+
+### kernel/judgments/declare-def-nullary-self-loop-rejects (soundness)
+- spec: `18 §4.2` (`declare_def` runs SCT + `remove_last` rollback); `17 §4.1`
+  (the **applied-only** precondition)
+- given: `declare_def(env, "c", Nat, <c := c>)` — a **nullary** group-member
+  self-reference (`c`'s body is the bare occurrence `c`, **unapplied**), from
+  an `env₀` with no `c`
+- expect: **`Err(KernelError::NotTerminating)`**, and **`env` identical to
+  `env₀`** — the pre-admitted `Opaque c` is `remove_last`'d on the
+  `.and_then(sct_check)` Err path (`18 §4.2`), so `c` is **fully absent** (not
+  "present but opaque," not merely "non-δ-reducible"). Assert the **variant +
+  env-unchanged**, **not** the message string.
+- why: (soundness) the **exact gap** the applied-only guard closes. An
+  **unapplied** group-member occurrence produces **no call edge**, so the old
+  `edges.is_empty ⇒ accept` shortcut **over-accepted** `c := c` — admitting a
+  transparent `c := c` whose δ-reduction is a non-terminating loop
+  (`c ⇝ c ⇝ …`), a definitional cycle **inhabiting `Bottom`** (the trust-root
+  hole). **Assert the observable, not the mechanism:** the guard is sound
+  whether it ships as the synthetic `?`-everywhere self-loop (`17 §4.1` (1b))
+  or an `occurs`-style early-reject in `collect_calls` — **both yield the
+  identical observable** `Err(NotTerminating)` + rollback — so the case pins
+  the **observable**, mechanism-agnostic (it drives whichever guard ships,
+  never a hand-fed verdict, and never couples to one internal form).
+  **Verified flip (anti-green-vs-green):** run against `wp/K2c-recursive-sct`
+  **pre-guard** — `c := c` is **admitted** (`edges.is_empty ⇒ accept`, the
+  bug) — and **post-guard** — rejected; the case genuinely **fails on the
+  un-fixed kernel**, not for an incidental reason. **Distinct from
+  `declare-def-sct-rejects`:** there the self-loop is **applied** (`loop x`,
+  an edge, no descent); here it is **unapplied** (no edge) — the two arms
+  cover both paths.
+
+### kernel/judgments/declare-def-laundered-self-loop-rejects (soundness)
+- spec: `18 §4.2`; `17 §4.1`
+- given: an `env₀` in which `id : (Nat→Nat)→(Nat→Nat) := λx. x` is **already
+  admitted transparent** (no group-member occurrence, admits with no edges;
+  **not in `loop`'s group**), then
+  `declare_def(env₀, "loop", Nat→Nat, <loop := id loop>)` — the group-member
+  `loop` in **argument** position (unapplied): a **laundered** self-reference
+  routed through the transparent passthrough `id`
+- expect: **`Err(KernelError::NotTerminating)`**, and **`env` identical to
+  `env₀`** (`loop` fully removed by `remove_last`; `id` untouched)
+- why: (soundness) the **laundering** arm — the unapplied occurrence hides
+  inside `id loop` (or any transparent passthrough / `map`), still **no call
+  edge**, so the old shortcut over-accepted it
+  (`id loop ⇝ loop ⇝ id loop ⇝ …`, a δ-loop inhabiting `Bottom`). Same guard,
+  same **observable** assertion (`Err(NotTerminating)` + rollback,
+  mechanism-agnostic), same **verified flip** (pre-guard admits
+  `loop := id loop`; post-guard rejects). Pins that the applied-only
+  precondition is on the **occurrence**, not the syntactic head — a group
+  member unapplied **anywhere** (argument position, under a passthrough)
+  forces the reject. The **recursion-through-transparent** case named in the
+  finding; the second arm of the unapplied-gap net. (Fixture: `id` must be a
+  genuine pre-admitted transparent identity **outside** `loop`'s group, else
+  the laundering isn't real.)
 
 ### kernel/judgments/declare-def-eliminator-no-sct (soundness)
 - spec: `17 §4` (SCT gates δ-recursion; eliminator recursion is already total);
