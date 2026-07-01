@@ -49,6 +49,22 @@ pub enum ElabError {
     ExhaustivenessError { missing: String, span: Span },
     /// A redundant match arm (`34 §5`): the arm's constructor was already covered.
     ReachabilityError { span: Span },
+    /// An instance declared outside the module of its class AND its head-type
+    /// (`33 §5.3`, `39 §6.1`). The orphan check is a syntactic, per-module
+    /// predicate that keeps canonicity per-module-decidable.
+    OrphanInstance { class: String, head_type: String, span: Span },
+    /// Two instances registered under the same `(class, head-type)` key
+    /// (`39 §6.1`). Reports both candidate spans.
+    OverlappingInstances { class: String, head_type: String, span: Span },
+    /// The instance resolver found multiple candidates and cannot pick
+    /// silently (`39 §6.2`, `39 §6.7`).
+    AmbiguousInstance { class: String, head_type: String, span: Span },
+    /// No instance found for the requested `(class, head-type)` (`39 §6.7`).
+    NoInstance { class: String, ty: String, span: Span },
+    /// The `sct_check` on the reified dictionary group rejected the resolution
+    /// chain — i.e. search would not terminate (`39 §6.4`, `17 §4.2`).
+    /// Detected at admission time; never a search-time hang.
+    NonTerminatingInstances { span: Span },
     /// Catch-all for internal elaborator errors.
     Internal(String),
 }
@@ -102,6 +118,35 @@ impl fmt::Display for ElabError {
                     span.start, span.end
                 )
             }
+            ElabError::OrphanInstance { class, head_type, span } => write!(
+                f,
+                "orphan instance at {}-{}: instance of '{}' for '{}' must be declared \
+                 in the module of the class or the head type",
+                span.start, span.end, class, head_type,
+            ),
+            ElabError::OverlappingInstances { class, head_type, span } => write!(
+                f,
+                "overlapping instances at {}-{}: a canonical instance of '{}' for '{}' \
+                 is already registered",
+                span.start, span.end, class, head_type,
+            ),
+            ElabError::AmbiguousInstance { class, head_type, span } => write!(
+                f,
+                "ambiguous instance at {}-{}: multiple candidates for '{}' at '{}'; \
+                 pass the dictionary explicitly",
+                span.start, span.end, class, head_type,
+            ),
+            ElabError::NoInstance { class, ty, span } => write!(
+                f,
+                "no instance at {}-{}: no instance of '{}' found for '{}'",
+                span.start, span.end, class, ty,
+            ),
+            ElabError::NonTerminatingInstances { span } => write!(
+                f,
+                "non-terminating instance chain at {}-{}: SCT rejected the \
+                 reified resolution group (cyclic or non-decreasing)",
+                span.start, span.end,
+            ),
             ElabError::Internal(s) => write!(f, "internal error: {}", s),
         }
     }

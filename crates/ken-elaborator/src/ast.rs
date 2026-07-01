@@ -122,6 +122,39 @@ pub enum Decl {
         source: String,
         span: Span,
     },
+    /// `class C (A : Type) { field : Type ; … }` — typeclass declaration
+    /// (`33 §5`). Elaborates to a record type (Σ-chain) whose kernel sort
+    /// determines property vs structure via `sort_sigma` (`check.rs:192`).
+    ClassDecl {
+        name: String,
+        /// Type parameter name (one param supported; `None` = no param).
+        param: Option<String>,
+        /// Field declarations: (name, type_expr).
+        fields: Vec<(String, Type)>,
+        span: Span,
+    },
+    /// `instance C HeadType [where C₁ T₁ ; …] { field = expr ; … }` —
+    /// instance declaration (`33 §5`, `39 §6`).  Elaborates to a record value
+    /// (Σ-chain of field terms) admitted through `declare_def` (kernel
+    /// re-check, `check.rs:944`).
+    InstanceDecl {
+        class_name: String,
+        /// Head type expression (may be a type constructor application).
+        head_type: Type,
+        /// Sub-constraints: [(class_name, head_type)] (`39 §6.4`).
+        constraints: Vec<(String, Type)>,
+        /// Field implementations: (name, expr).
+        fields: Vec<(String, Expr)>,
+        span: Span,
+    },
+    /// `derive ClassName for DataName` — auto-derive request (`33 §5.6`,
+    /// `39 §6.6`). The elaborator generates a candidate instance and passes
+    /// it through the real `declare_def` re-check (untrusted generation).
+    DeriveDecl {
+        class_name: String,
+        data_name: String,
+        span: Span,
+    },
 }
 
 impl Decl {
@@ -134,7 +167,10 @@ impl Decl {
             | Decl::DataDecl { name, .. }
             | Decl::TypeAlias { name, .. }
             | Decl::ForeignDecl { name, .. }
-            | Decl::TemporalDecl { name, .. } => name,
+            | Decl::TemporalDecl { name, .. }
+            | Decl::ClassDecl { name, .. } => name,
+            Decl::InstanceDecl { class_name, .. } => class_name,
+            Decl::DeriveDecl { class_name, .. } => class_name,
         }
     }
     pub fn span(&self) -> &Span {
@@ -146,7 +182,10 @@ impl Decl {
             | Decl::DataDecl { span, .. }
             | Decl::TypeAlias { span, .. }
             | Decl::ForeignDecl { span, .. }
-            | Decl::TemporalDecl { span, .. } => span,
+            | Decl::TemporalDecl { span, .. }
+            | Decl::ClassDecl { span, .. }
+            | Decl::InstanceDecl { span, .. }
+            | Decl::DeriveDecl { span, .. } => span,
         }
     }
 }

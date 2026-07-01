@@ -30,6 +30,11 @@ pub enum Token {
     KwTypeAlias,  // "type"  — surface type alias
     // L7 keywords (`38 §2.1`, spellings are `(oracle)`)
     KwForeign,
+    // Lc keywords (`33 §5`, `39 §6`)
+    KwClass,     // "class"    — typeclass declaration
+    KwInstance,  // "instance" — instance declaration
+    KwDerive,    // "derive"   — auto-derive request
+    KwWhere,     // "where"    — constraint list in class/instance/view
     // B2 keywords (`72 §4`, spellings are `(oracle)`/`OQ-syntax`)
     KwTemporal,  // "temporal" — a delegated temporal-obligation block
     // V0 punctuation
@@ -259,6 +264,10 @@ impl<'s> Lexer<'s> {
                 "type"     => Token::KwTypeAlias,
                 "foreign"  => Token::KwForeign,
                 "temporal" => Token::KwTemporal,
+                "class"    => Token::KwClass,
+                "instance" => Token::KwInstance,
+                "derive"   => Token::KwDerive,
+                "where"    => Token::KwWhere,
                 _ => {
                     let first = s.chars().next().unwrap();
                     if first.is_uppercase() {
