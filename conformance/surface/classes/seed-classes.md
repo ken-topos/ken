@@ -38,13 +38,20 @@ is the real `sort_sigma` (AC4), search termination is the real `sct_check` on
 the reified group (AC6), every instance + every `derive`d candidate rides the
 real `declare_def` re-check (AC7), a law field is a real Σ-Intro-checked proof
 (AC8). The coherence **convention** — canonicity, orphan, overlap, ambiguity,
-explicit-passing (AC1/AC2/AC3/AC5) — is an **elaborator** gate the **kernel does
-not backstop** (it constrains *where* a well-typed value may be declared, not
-well-typedness): so for those, **conformance is the sole net** (the
-erased-before-kernel posture, as with the security seams' N1) and the cases
-assert the convention **structurally**. Every case drives the **real** producer
-(the net-new elaborator path the Lc build creates, or the landed kernel
-producer) — never a synthetic "class" literal or a trusted `env`-insert.
+explicit-passing (AC1/AC2/AC3/AC5) — is enforced at the **elaborator** layer (it
+constrains *where* a well-typed value may be declared, not well-typedness).
+Coherence is **soundness-adjacent for *client reasoning*** (ADR 0008 — a client
+lemma about "the `Monoid A`" relies on canonicity); but because Ken's
+dictionaries are **typed values carrying law proofs**, an incoherent pick
+surfaces as a **type mismatch the kernel catches** (a lemma `P d1` meeting a
+use needing `P d2`) *or* resolves a **different but still-lawful** instance —
+**never a false proof** (unlike Haskell's erased dicts). So the kernel backstops
+type-correctness + the law proofs; it does **not** enforce the *convention*
+(canonicity/orphan/overlap) — that enforcement is elaborator-level, so
+**conformance is the sole net for it** and the cases assert the convention
+**structurally**. Every case drives the **real** producer (the net-new
+elaborator path the Lc build creates, or the landed kernel producer) — never a
+synthetic "class" literal or a trusted `env`-insert.
 
 **The sort IS the discriminant — never an author flag (`33 §5.1`, AC4,
 soundness).** A class elaborates to a right-nested Σ; the kernel's `sort_sigma`
@@ -97,7 +104,10 @@ spans — never a silent pick, never a hang.
 sort discriminant (AC4), the SCT-bounded termination + reification faithfulness
 (AC6), the derive-is-kernel-re-checked (AC7). `(verification)` = the lawful
 instance is a genuine prover-citable proof (AC8). Elaborator-convention cases
-(AC1/2/3/5) are netted **solely** by conformance (no kernel backstop).
+(AC1/2/3/5) — coherence is **soundness-adjacent for client reasoning**
+(ADR 0008), its *enforcement* elaborator-level (a mispick is kernel-caught or
+still-lawful, never a false proof) — are netted **solely** by conformance for
+that enforcement.
 
 ## CL-A. Coherence — same key, same canonical (AC1)
 
@@ -291,10 +301,13 @@ per-module-decidable), and AC3 (a second entry under the key = overlap). The
 **landed trust root** is consistent across the kernel-backed ACs: AC4 rests on
 `sort_sigma`, AC6 on `sct_check`, AC7 on `declare_def`, AC8 on `Term::Proj` +
 `declare_def` — none introduces a kernel rule (`33 §5.7`/`39 §6.8`). Two
-boundary facts pinned: the elaborator-convention ACs (AC1/2/3/5) have **no
-kernel backstop** (conformance is the sole net); the reification step (AC6) is
-**trusted** (faithfulness is the sole net for it, the kernel bounds only the
-group it is handed).
+boundary facts pinned: the coherence **convention** (AC1/2/3/5) is
+**soundness-adjacent for client reasoning** (ADR 0008), its enforcement
+elaborator-level — the kernel backstops type-correctness + law proofs (a mispick
+is kernel-caught or still-lawful, never a false proof), so conformance is the
+sole net for the convention; the reification step (AC6) is **trusted**
+(faithfulness is the sole net for it, the kernel bounds only the group it is
+handed).
 
 ## Subsumed, not duplicated
 
