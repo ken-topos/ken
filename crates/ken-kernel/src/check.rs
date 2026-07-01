@@ -136,7 +136,6 @@ impl Sort {
         }
     }
     /// Reify the sort as a term (`Type ℓ` or `Ω_ℓ`).
-    #[allow(dead_code)]
     fn to_term(&self) -> Term {
         match self {
             Sort::Type(l) => Term::Type(l.clone()),
@@ -522,10 +521,10 @@ fn infer_elim(
         check(env, ctx, pa, &pty)?;
     }
 
-    // 2. Verify the motive M : (Δ_i) → D p̄ Δ_i → Type ℓ' (extract ℓ', then
-    //    re-check against the fully-built expected motive type).
-    let motive_level = infer_motive_level(env, ctx, ind, level_args, params, motive)?;
-    let expected_motive = motive_expected_type(ind, level_args, params, &motive_level);
+    // 2. Verify the motive M : (Δ_i) → D p̄ Δ_i → Type ℓ' or Ω_ℓ' (extract the
+    //    sort, then re-check against the fully-built expected motive type).
+    let motive_sort = infer_motive_level(env, ctx, ind, level_args, params, motive)?;
+    let expected_motive = motive_expected_type(ind, level_args, params, &motive_sort);
     check(env, ctx, motive, &expected_motive)?;
 
     // 3. Check one method per constructor against its method type.
@@ -580,9 +579,11 @@ fn infer_elim(
     Ok(result)
 }
 
-/// Extract the motive's result level ℓ' by peeling `n_i + 1` Π binders from
-/// the motive's inferred type (the index binders, then the scrutinee binder),
-/// requiring the body to be `Type ℓ'`. Loosely verifies the motive's shape;
+/// Extract the motive's result sort by peeling `n_i + 1` Π binders from the
+/// motive's inferred type (the index binders, then the scrutinee binder),
+/// requiring the body to be `Type ℓ'` or `Ω_ℓ'` (`16 §1.1`) — a per-branch
+/// proposition may be proved by case-split on a relevant scrutinee, exactly
+/// as a per-branch type may be selected. Loosely verifies the motive's shape;
 /// [`infer_elim`] re-checks it fully against [`motive_expected_type`].
 fn infer_motive_level(
     env: &GlobalEnv,
@@ -591,7 +592,7 @@ fn infer_motive_level(
     _level_args: &[Level],
     _params: &[Term],
     motive: &Term,
-) -> KernelResult<Level> {
+) -> KernelResult<Sort> {
     let n_i = ind.indices.len();
     let mty = infer(env, ctx, motive)?;
     let mut cur = whnf(env, ctx, &mty);
@@ -613,9 +614,10 @@ fn infer_motive_level(
         Term::Pi(d_app, ret) => {
             mctx.push((*d_app).clone());
             match whnf(env, &mctx, &ret) {
-                Term::Type(l) => Ok(l.clone()),
+                Term::Type(l) => Ok(Sort::Type(l.clone())),
+                Term::Omega(l) => Ok(Sort::Omega(l.clone())),
                 _ => Err(KernelError::BadEliminator(
-                    "motive result is not a type (Type ℓ')".into(),
+                    "motive result is not a type or a proposition (Type ℓ' or Ω_ℓ')".into(),
                 )),
             }
         }
@@ -625,13 +627,13 @@ fn infer_motive_level(
     }
 }
 
-/// Build the expected motive type `(Δ_i) → D p̄ Δ_i → Type ℓ'` in the caller's
-/// context Γ (params p̄ fixed, indices abstracted).
+/// Build the expected motive type `(Δ_i) → D p̄ Δ_i → Type ℓ'` (or `Ω_ℓ'`) in
+/// the caller's context Γ (params p̄ fixed, indices abstracted).
 fn motive_expected_type(
     ind: &InductiveDecl,
     level_args: &[Level],
     params: &[Term],
-    motive_level: &Level,
+    motive_sort: &Sort,
 ) -> Term {
     let m = ind.params.len();
     let n_i = ind.indices.len();
@@ -655,7 +657,7 @@ fn motive_expected_type(
     for j in 0..n_i {
         d_app = Term::app(d_app, Term::var(n_i - 1 - j));
     }
-    let ret = Term::pi(d_app, Term::Type(motive_level.clone()));
+    let ret = Term::pi(d_app, motive_sort.to_term());
     telescope_to_pi(&idx_types, ret)
 }
 
