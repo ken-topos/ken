@@ -17,9 +17,12 @@
 builds on them. They are **structure classes** (`33 §5.1` — `Type`-valued
 dictionaries with computational content, genuinely many per carrier,
 coherence-gated), and they set the discipline every ES4 tranche follows: each
-class + its canonical instances is Ken over the built-ins, and **every law field
-is inhabited by a real kernel proof** — the verification layer may *assume the
-laws hold* precisely because an instance cannot exist without proving them.
+class + its instances is Ken over the built-ins, and on an **inductive carrier**
+**every law field is inhabited by a real kernel proof** — the verification layer
+may *assume the laws hold* because the instance proved them, with a **zero
+`trusted_base()` delta**. (A *primitive* carrier like `Int` cannot prove its
+∀-laws — no eliminator — so its lawful instance carries them as an **audited
+delta**, not zero-delta; `§6`.)
 
 ## 2. The three classes
 
@@ -139,9 +142,11 @@ of the operation implementations **and the law proofs** — admitted through the
 real `declare_def` path and **re-checked by the kernel**:
 
 ```
-inst_Ord_Int : Ord Int  ≡  (int_leq , refl_pf , antisym_pf , trans_pf , total_pf)
+inst_Ord_Bool : Ord Bool  ≡  (bool_leq , refl_pf , antisym_pf , trans_pf , total_pf)
 ```
 
+(The exemplar uses the **inductive** carrier `Bool`, whose law proofs are real —
+see `§6` on why a *primitive* carrier like `Int` cannot be zero-delta lawful.)
 Each law proof `pⱼ` is a **real kernel proof** of its `Ω`-proposition, checked
 at its Σ-Intro position (`33 §5.3`, `13 §2`) — **not** a `postulate`, **not** a
 hole (`sorry`), **not** an empty stub. A verified algorithm that assumes "the
@@ -152,8 +157,12 @@ proofs are real: a client cites `d.antisym`/`d.total` directly (`33 §5.2` η).
 side.** A law field inhabited by a `postulate` becomes an **`Opaque` entry in
 `trusted_base()`** — so the instance's `trusted_base_delta` (`25 §3`) is
 **non-empty**, violating AC1; a law field left as a hole **fails the kernel
-re-check** outright. So **"lawful instance" ≡ "zero-delta instance"**: the laws
-are proved iff nothing enters the trust root by the back door. A "the dictionary
+re-check** outright. So — **for a carrier whose laws are provable (an
+*inductive* carrier; `§6`)** — **"lawful instance" ≡ "zero-delta instance"**:
+the laws are proved iff nothing enters the trust root by the back door. (A
+*primitive* carrier can't prove its laws at all, so its lawful instance is
+separately an **audited-delta** one — `§6`; the discriminating case below is
+over an inductive carrier, where a postulate *is* a defect.) A "the dictionary
 carries the laws" claim that passes **green-vs-green against a law-less
 dictionary** is the predicate-definedness dual
 ([[lawful-class-instances-must-carry-law-proofs]]; the ES2 analog is
@@ -165,32 +174,67 @@ the real law-carrying instance **accepts** — the verdict must **flip**. The
 producer check is structural: **grep the instance's law fields for
 `declare_postulate`/holes — their *absence* is the guarantee**
 ([[kernel-backed-claim-grep-the-emission-not-the-name]]); a test that merely
-asserts "an `Ord Int` resolves" is vacuous
+asserts "an `Ord Bool` resolves" is vacuous
 ([[conformance-hand-feeds-the-deliverable]]).
 
 ## 6. Derivation paths and zero `trusted_base()` delta (AC1)
 
-Each entry bottoms out in the built-ins with **no new postulate and no new
-kernel former** — the surface-minimality invariant (`30 §6` / surface-TB-Sound):
+The **classes** bottom out in the built-ins with **no new former**:
+`Eq`/`DecEq`/`Ord` are `class` declarations = **record types** (`33 §5.2`,
+right-nested Σ over `13 §3`), built from `Bool` (prelude, `30 §4`) + the
+kernel's `Eq`/logic vocabulary (`15`/`16`, prelude) + the value-level `||`/`&&`
+on `Bool`
+(derived, `34`) + the Σ/record machinery. **No new former, zero delta.** The
+**instances** are the subtle part.
 
-- **The classes** `Eq`/`DecEq`/`Ord` are `class` declarations = **record types**
-  (`33 §5.2`, right-nested Σ over `13 §3`). Derivation: `Bool` (prelude,
-  `30 §4`) + the kernel's `Eq`/logic vocabulary (`15`/`16`, prelude) + the
-  value-level `||`/`&&` on `Bool` (derived, `34`) + the Σ/record machinery
-  (`13 §3`). **No new former.**
-- **The canonical instances** (`Eq Int`, `DecEq Int`, `Ord Int`, and the
-  built-in/prelude carriers) are `instance` declarations = **`declare_def`
-  record values** (`33 §5.3`). Operation fields **wrap the audited primitive
-  ops** (`Int` comparison, `30 §6` F2 — an **existing** `trusted_base()` entry,
-  **not a new** one); law fields are **real proofs**. `declare_def` is
-  re-checked, never `Opaque`/`Primitive`, so **nothing new enters
-  `trusted_base()`**.
+**Zero-delta lawfulness requires an INDUCTIVE carrier — the load-bearing
+precondition, two orthogonal axes.** An instance's law fields are
+**∀-quantified** props (`∀ x. IsTrue (leq x x)`, …); to inhabit them with **real
+kernel proofs** (zero axioms) an instance must satisfy **both**:
 
-Net: the whole tranche has a **zero `trusted_base()` delta**. The only
-trust-root touch is the pre-existing audited primitive comparisons the instances
-*wrap* — already in the base, not added by this package. (A `derive (DecEq)`
-request, `33 §5.6`, is likewise untrusted-generated then kernel-re-checked —
-same zero-delta guarantee.)
+1. **The law's *sort*** — each law lands in `Ω`. A **decidable** (`Bool`) op
+   keeps every law a Bool-equation → `Ω`-clean, no truncation (`§3`); a bare
+   propositional `∨`/`∃` would need `‖·‖`.
+2. **The carrier's *provability*** — the carrier has an **eliminator**. A ∀-law
+   is proved by **case-analysis / induction on the carrier**, so the carrier
+   must be **inductive**. `Bool` (real `data Bool = True | False`, `34`) proves
+   every law by **finite case-split** (`bool_leq x x` reduces on each
+   constructor) — zero axioms.
+
+So the **zero-delta guarantee holds for inductive-carrier instances**
+(`Ord Bool` — the exemplar — and any user `data`): `instance` = a
+**`declare_def` record value** (`33 §5.3`) of ops + **real** law proofs,
+re-checked, never
+`Opaque`/`Primitive` — nothing new enters `trusted_base()`. (A `derive (DecEq)`
+on a user `data`, `33 §5.6`, is likewise untrusted-generated then
+kernel-re-checked over the type's constructors — zero delta, *because* the
+carrier is inductive.)
+
+**Primitive carriers (`Int`/`Float`/`String`/`Char`) fail the carrier axis — so
+their lawful instances are NOT zero-delta.** A K1 primitive is **opaque to δ**
+(`int_leq x x` on a *variable* `x` does not reduce — primitive reductions fire
+on literals) and has **no induction principle**, so its total-order laws are
+**not
+kernel-provable**; the only inhabitant of a law field is a **`postulate`** → an
+`Opaque` entry → a **non-empty `trusted_base_delta`**. The **operation** half is
+still fine (wrapping the audited `Int` comparison, `30 §6` F2, adds no new
+entry); the **law** half cannot be zero-delta. Two honest options, and the
+instance must **declare which**:
+
+- **Audited-delta** (the pragmatic default for the arithmetic/ordering
+  primitives Ken ships — you cannot simply lack `Ord Int`): provide the instance
+  with the primitive's laws **postulated and transparent in
+  `trusted_base_delta`** — the same trusted-by-audit surface as the primitive op
+  itself (the honest FFI/primitive posture,
+  [[tested-not-trusted-posture-needs-reachability-precondition]]). Lawful and
+  *usable by the prover*, but **not zero-delta** — the assumption is
+  **visible**, never hidden.
+- **Deferred:** omit the instance until `Int` gains reduction rules + an
+  induction principle that make the laws provable (then it becomes zero-delta).
+
+`Int` is therefore **illustrative-only** in this catalog — a primitive carrier
+whose lawful instance carries an audited delta — **not** a zero-delta exemplar.
+The zero-delta exemplar is the **inductive** `Bool` (and user `data`).
 
 ## 7. Placement, `packages/` layout, and the un-defer (AC4/AC5)
 
@@ -198,8 +242,9 @@ same zero-delta guarantee.)
 row; the catalog index (`README`) points here, and the **realized Ken source**
 lives under the in-repo **`packages/`** tree (`../../packages/README.md`) — the
 layout established by this WP as the pattern for every later ES4 tranche: one
-package per module unit (`33 §3`), each carrying its **derivation-path + zero
-`trusted_base()` delta** declaration. This spec chapter is the **contract**; the
+package per module unit (`33 §3`), each carrying its **derivation-path +
+`trusted_base()` delta** declaration (zero on an inductive carrier; an audited
+delta for a primitive carrier, `§6`). This spec chapter is the **contract**; the
 Team-Language build follow-on lands the `.ken` source (classes + canonical
 law-carrying instances) + wires `where Ord a` to supply the comparator.
 
@@ -224,8 +269,9 @@ conformance edit names the target; the actual un-defer rides the build.)
 
 - **AC1 (signatures + zero-delta).** The three classes are structure classes
   (`33 §5.1`) with `Ω`-valued law fields (`§3`), each with a stated derivation
-  path and **zero `trusted_base()` delta** (`§6`) — no new postulate, no kernel
-  former.
+  path; **zero `trusted_base()` delta on an inductive carrier** (`§6`) — no new
+  postulate, no kernel former. (A primitive carrier fails the carrier axis and
+  carries an **audited delta**, `§6`.)
 - **AC2 (`Ord` subsumes the comparator).** `where Ord a` supplies the same
   `leq : a → a → Bool` the explicit `sort` threads (`§4`) — **same view, no
   second `sort`, no new mechanism**.
