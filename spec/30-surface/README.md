@@ -13,6 +13,14 @@ It elaborates (`39-elaboration.md`) to the kernel core (`../10-kernel/`); the
 surface adds ergonomics (implicit arguments, inference, sugar, modules), never
 new trusted semantics.
 
+The **built-in / prelude / standard-package taxonomy** — what must be
+primitively provided (the surface TCB) versus what is ordinary re-checked Ken —
+is fixed in **`30-taxonomy.md`**, with the minimality invariant *surface
+built-in set ≡ `trusted_base()` delta*. It is the organizing line for this
+section: `35`/`37` supply the built-in types + primitives, and
+`../50-stdlib/README.md` is the reframed standard-package catalog (the dissolved
+L8).
+
 ## 1. Design stance
 
 - **Vocabulary is Ken's own.** The effect and module forms follow

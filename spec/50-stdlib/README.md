@@ -1,69 +1,92 @@
-# The prelude and core standard library
+# The standard-package catalog
 
-> Status: **DRAFT v0**. Lowest-resolution section — fixes the *shape and
-> principles* of the stdlib, not every signature (those grow with WS-L).
-> Contract for **L8** (curated stdlib) + the prelude that the surface chapters
-> assume.
+> Status: **DRAFT v0**. Reframed by ES1 from "the stdlib (L8)" into the
+> **standard-package tier** of the surface taxonomy (`../30-surface/30 §5`).
+> This is the third tier: **ordinary Ken, optional, explicitly imported, out of
+> `trusted_base()`** — not the always-present prelude (`30 §4`) and not the
+> built-in surface TCB (`30 §3`). The monolithic **L8 dissolves** into this
+> catalog; `docs/program/wp/L8-stdlib-core.md` is superseded. Each entry is
+> ordinary Ken **with its derivation path from the built-ins stated** — a
+> catalog entry with no path is a **hidden built-in** (a spec bug caught with
+> CV's derivation-path table, `../../conformance/surface/taxonomy/`). ES4 builds
+> these as in-repo packages under `packages/`.
 
-The stdlib is **ordinary Ken** (it self-hosts atop the kernel), with one
-discipline that distinguishes it from a typical standard library: **its core
-abstractions carry their laws as propositions** (`../20-verification/`), so the
-verification layer can use them. A `Monoid` is not just `(append, empty)` — it
-is that plus *proofs* of associativity and the unit laws.
+The standard packages are **ordinary Ken** (they self-host atop the kernel and
+the built-ins), with one discipline that distinguishes them from a typical
+standard library: **their core abstractions carry their laws as propositions**
+(`../20-verification/`), **proved, not postulated**, so the verification layer
+can use them. A `Monoid` is not just `(append, empty)` — it is that plus
+*proofs* of associativity and the unit laws.
 
-## 1. The prelude (always in scope)
+## 1. What is NOT in this catalog (the line to `30`)
 
-The implicitly-imported core the surface chapters reference:
+The everyday minimum that is **always in scope** is not a package — it is the
+two lower tiers of the surface taxonomy (`../30-surface/30`):
 
-- **Primitive scalars & numerics** — `Int`, `Int64`/`UInt32`/…, `Decimal`,
-  `Float`/`Float32`, `Bool`, `Char` (`../30-surface/35`), with the numeric
-  classes for literal overloading.
-- **Core data** — `Unit`, `Empty`, `Bool`, `Nat`, `Option`, `Result`, `Either`,
-  `Pair`/tuples (`../30-surface/34`); `Ordering`.
-- **Text & bytes** — `String`, `Bytes` (`../30-surface/37`, `../30-surface/38`).
-- **Logic & equality** — `Ω`, `⊤`/`⊥`, the Heyting connectives, `Eq`/`Id`
-  (observational), `Decidable`, `DecEq` (`../10-kernel/12 §5`,
-  `../10-kernel/15`).
-- **Core functions** — `id`, `∘` (compose), `const`, `flip`, basic combinators.
+- **Built-in (the surface TCB, `30 §3`)** — primitive types + literals
+  (`Int`/`Float`/`Char`/`String`/`Bytes`, `../30-surface/35`, `37`), the audited
+  primitive ops (`../10-kernel/14 §5`), the effect/FFI boundary
+  (`../30-surface/38`), and the base elaborator syntax.
+- **Prelude (Ken-defined, always-present, `30 §4`)** — the **closed** set a
+  built-in primitive's signature names: `Bool`, `Char`, `List` (`Ordering` is
+  **not** prelude — no primitive returns it; it is a package, `30 §4`) — plus
+  the kernel's own logic vocabulary (`Ω`, `⊤`/`⊥`, the derived connectives,
+  `Eq`, `Decidable`/`DecEq`, `../10-kernel/15`/`16`), referenced, **not**
+  re-declared (`30 §6`: `Equal` is deleted for the kernel's `Eq`).
 
-## 2. Lawful classes (the verification-aware core)
+Everything below is a **package**: imported, derivable, re-checked. Core data
+(`Unit`/`Empty`/`Nat`/`Option`/`Result`/`Either`/`Pair`, `../30-surface/34`) and
+the core combinators (`id`, `∘`, `const`, `flip`) are packages — Ken `data`/defs
+over the built-ins, not prelude (no primitive signature names them).
 
-A curated set of **classes with laws** (`../30-surface/33 §5`):
+## 2. Lawful classes (the verification-aware core) — packages
+
+A curated set of **classes with laws** (`../30-surface/33 §5`), each a package
+whose derivation bottoms out in the built-ins (the class + instances are Ken;
+the `Int` instance of `Num`/`Ord` wraps the audited primitive op, `30 §6` F2):
 
 | Class | Operations | Laws (propositions) |
 |---|---|---|
-| `DecEq` | `eq` | reflexive, symmetric, transitive (decidable equality) |
+| `Eq`/`DecEq` | `eq` | reflexive, symmetric, transitive (decidable equality) |
 | `Ord` | `cmp`, `≤` | total order |
 | `Semigroup`/`Monoid` | `<>`, `empty` | associativity, unit |
 | `Functor`/`Applicative`/`Monad` | `map`, `pure`, `>>=` | functor/monad laws |
 | `Foldable`/`Traversable` | `fold`, `traverse` | the fold/naturality laws |
 | `Num`/`Integral`/`Fractional` | arithmetic | ring/field-ish laws (per type) |
 
-Instances for the prelude types are provided **with their law proofs**, so e.g.
-`fold` over a `Monoid` can be reasoned about, and a generic verified algorithm
-may *assume the laws hold* (they are proved, not postulated).
+Instances for the built-in/prelude types are provided **with their law proofs**,
+so `fold` over a `Monoid` can be reasoned about, and a generic verified
+algorithm may *assume the laws hold* (they are **proved, not postulated** — the
+discipline that carries into every package build).
 
-## 3. Collections
+## 3. Collections — packages over built-in/prelude carriers
 
-`List`, `Array`, `Map`, `Set` (`../30-surface/37`) with their combinators
-(`map`/`filter`/`fold`/…) and the relevant operation laws (e.g. `Map`
-lookup-after- insert). Verified building blocks: a `sort` returning `{ xs |
-isSorted xs ∧ isPermutationOf xs }`, a verified `Map`, etc. — the canonical
-demonstrations of the thesis.
+`List` is a **prelude** type (named by the `String ↔ List Char` conversion,
+`30 §4`); its combinators (`map`/`filter`/`fold`/`range`/…) are packages.
+`Array`/`Map`/`Set` are the **built-in audited runtime types**
+(`../30-surface/37`, and `30 §6`: `Map`/`Set` are `declare_primitive`
+OpaqueType, item-2 audited, **not** assumed axioms), and this catalog provides
+their combinators + operation laws (e.g. `Map` lookup-after- insert). The
+**verified building blocks** — a `sort` returning
+`{ ys | isSorted ys ∧ Perm ys xs }`, a verified `Map` — are the canonical
+demonstrations of the thesis; the sort's predicates `isSorted`/`Perm` are
+**definitions** the prover unfolds (`../30-surface/37 §6`, ES1), never
+postulates.
 
 ## 4. I/O, effects, serialization
 
 - Effect interfaces (`../30-surface/36`):
-  `IO`/`FS`/`Net`/`Clock`/`Console`/`Rand` as capability/effect types.
+  `IO`/`FS`/`Net`/`Clock`/`Console`/`Rand` — the **boundary primitive** is
+  built-in (`30 §3`); the typed effect surface over it is package Ken.
 - Serialization (`../30-surface/38 §1`): a derivable `Encode`/`Decode` with the
   **round-trip law** `decode ∘ encode = Ok` provable, plus Merkle hashing for
-  content verification.
+  content verification — a package.
 - A `Stream`/`Iterator` type for lazy iteration (productivity per
-  OQ-coinduction).
+  OQ-coinduction) — a package.
 
 ## 5. Tooling-facing (T-stream)
 
-The stdlib also seeds the tooling Ken needs to be usable (strategy WS-T): a
+The catalog also seeds the tooling Ken needs to be usable (strategy WS-T): a
 test/property framework (`../30-surface/` doc-tests + property tests, T3), and
 the pedagogy/reference corpus (T4) — important because a new language has
 near-zero training priors, so honest, runnable docs *are* the seed corpus.
@@ -76,12 +99,16 @@ facilities in their three separate roles (`../40-runtime/44 §4`, OQ-6); the
 — strategy WS-R); linear/affine types; delimited continuations. These are
 harvested back as ordinary packages only if they earn it.
 
-## 7. What WS-L must deliver here (L8)
+## 7. What WS-L must deliver here — the dissolved L8, as packages
 
-A curated prelude + core stdlib of **lawful** abstractions (classes with proved
-laws), the collection types with verified building blocks, the effect/IO/
-serialization interfaces, and the test/doc tooling seed. Acceptance contributes
-to **G6** (a realistic verified component uses the stdlib) and **G7** (the agent
-loop has enough library to work with). Conformance: `../../conformance/stdlib/`
-— law proofs for the prelude instances and the verified `sort`/`Map` building
-blocks.
+The standard-package catalog (this file) delivered as **in-repo packages under
+`packages/`** (ES4): the lawful classes (with **proved** laws), the collection
+combinators + verified building blocks, the effect/IO/serialization interfaces,
+and the test/doc tooling seed — **each with its built-in-derivation path
+stated** (the ES1 discipline; a missing path is a hidden-built-in spec bug).
+Acceptance contributes to **G6** (a realistic verified component uses the
+packages) and **G7** (the agent loop has enough library to work with).
+Conformance: `../../conformance/stdlib/` — law proofs for the instances and the
+verified `sort`/`Map` building blocks; and the derivation-path table
+(`../../conformance/surface/taxonomy/`, ES1) that proves each entry is genuinely
+package, not a hidden built-in.
