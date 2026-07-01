@@ -42,8 +42,8 @@ opaque constant, a primitive on non-literals, an `elim`/`cast`/quotient-elim on
 a neutral target — `17 §1`). For the **closed, ground** programs X1 runs,
 canonicity (§3.6) guarantees evaluation does not get stuck on a neutral: the
 only non-value residues are **`unknown`** (an open hole, §4) and, for an opt-in
-opaque non-total definition, **divergence** (§3.3, `43 §2.4`). The interpreter
-computes values; the kernel's **η** (`17 §2`, type-directed) and **Ω
+opaque non-total definition, **divergence** (§3.3, `43 §2, case 4`). The
+interpreter computes values; the kernel's **η** (`17 §2`, type-directed) and **Ω
 proof-irrelevance** are *conversion-time* equalities, not evaluation steps
 (§3.5) — agreement on functions is therefore "up to the kernel's η at compare
 time" (§3.5).
@@ -168,16 +168,17 @@ apply unknown           u = unknown                                -- strict (§
   property, not a runtime one:** an opaque (SCT-rejected) definition never
   δ-reduces *in the kernel's conversion* (`17 §4`), but the interpreter unfolds
   it to **run** the program; an opaque **non-total** definition is therefore the
-  one place a pure program may **diverge** at runtime (`43 §2.4`) — a marked,
-  listed escape hatch, not a default. Every transparent (total) definition runs
-  to a value. A **bodyless** constant does **not** δ: a **primitive** reduces by
-  **prim** (below), an unproven **postulate/hole** yields **`unknown`** (§4,
-  `18 §5`), and a `foreign` is performed at the effect boundary (§6).
-- **prim.** `primReduce op v̄`: on literal values, the audited reduction yields
-  a literal (`add 2 3 → 5`, `14 §5`); on an `unknown` operand, `unknown`
-  (strict, §4); on a neutral operand (open), neutral. A **partial** primitive
-  (division by zero, non-wrapping overflow, out-of-bounds index, `43 §2.2`) at
-  an unguarded use faults or yields `unknown` — the *obligation* to avoid it is
+  one place a pure program may **diverge** at runtime (`43 §2, case 4`) — a
+  marked, listed escape hatch, not a default. Every transparent (total)
+  definition runs to a value. A **bodyless** constant does **not** δ: a
+  **primitive** reduces by **prim** (below), an unproven **postulate/hole**
+  yields **`unknown`** (§4, `18 §5`), and a `foreign` is performed at the effect
+  boundary (§6).
+- **prim.** `primReduce op v̄`: on literal values, the audited reduction yields a
+  literal (`add 2 3 → 5`, `14 §5`); on an `unknown` operand, `unknown` (strict,
+  §4); on a neutral operand (open), neutral. A **partial** primitive (division
+  by zero, non-wrapping overflow, out-of-bounds index, `43 §2, case 2`) at an
+  unguarded use faults or yields `unknown` — the *obligation* to avoid it is
   generated statically (`../20-verification/22`), so it is a visible concern,
   never a silent trap.
 - **obs (observational, `16`).** Realize the kernel's observational computation:
@@ -283,7 +284,7 @@ Evaluating a term that depends on an **open verification hole** (`41 §6`,
 `../20-verification/24 §2`) yields **`unknown`** — the operational face of
 partial verification: the program runs, and `unknown` marks exactly where an
 unproven property bears on a result. A **hole-free** program **never** yields
-`unknown` (it has no holes — `43 §2.1`).
+`unknown` (it has no holes — `43 §2, case 1`).
 
 **Propagation (the Kleene/Heyting rules, `41 §6`).** `unknown` is the third
 truth value and the "result not determined" marker:
@@ -335,8 +336,8 @@ real-world handlers, performing each world-interaction and resuming with the
 response. The agreement with L5 is therefore **definitional, not parallel**: X1
 runs the *very term* L5 denotes — there is no second effect semantics to
 reconcile, only the pure tree, evaluated, with the world's responses substituted
-at the `Vis` nodes. (L5's `ITree` is admitted as of **K1.5**, `f037451`,
-`36 §7.0` — the dependency that gated this section is in.)
+at the `Vis` nodes. (L5's `ITree` is admitted as of **K1.5**, `f037451`, `36
+§7.0` — the dependency that gated this section is in.)
 
 ### 6.1 The denotation evaluates to a tree (pure, §3 unchanged)
 
@@ -427,18 +428,18 @@ observes** (`36 §2.1`'s `Op`/`Resp`). Schematically:
 | `Net` | send / recv | send / receive on a socket | `Unit` / `Bytes` |
 | `Rand` | draw | draw from the entropy source | the drawn value |
 
-The op-tag column is **illustrative**: the `Op`/`Resp` signatures per class
-are `38`/stdlib's to fix, and are tagged `(oracle)` here — §6 fixes the
+The op-tag column is **illustrative**: the `Op`/`Resp` signatures per class are
+`38`/stdlib's to fix, and are tagged `(oracle)` here — §6 fixes the
 **operational contract** (perform→observe→resume, uniform), the binding to
-concrete syscalls + signatures is L7's (`36 §7.2`). The dispatch is
-**exhaustive over `ρ_open`** — a rule for **every** op-tag the open row admits
-(§6.5), with **no** catch-all `_ → skip` (the two-soundnesses point, §6.5).
+concrete syscalls + signatures is L7's (`36 §7.2`). The dispatch is **exhaustive
+over `ρ_open`** — a rule for **every** op-tag the open row admits (§6.5), with
+**no** catch-all `_ → skip` (the two-soundnesses point, §6.5).
 
 ### 6.4 Effect sequencing and ordering
 
 Effects are performed in **exactly the order their `Vis` nodes appear along the
-tree's spine**, and that spine is fixed by `bind`'s grafting (`36 §2.2`):
-`bind (Vis e f) k = Vis e (λ r. bind (f r) k)` puts the left computation's first
+tree's spine**, and that spine is fixed by `bind`'s grafting (`36 §2.2`): `bind
+(Vis e f) k = Vis e (λ r. bind (f r) k)` puts the left computation's first
 effect at the head and its continuation (then `k`'s effects) underneath. So:
 
 - **CBV fixes the build order.** `⟦let x = e1 in e2⟧ = bind ⟦e1⟧ (λx. ⟦e2⟧)`
@@ -451,8 +452,8 @@ effect at the head and its continuation (then `k`'s effects) underneath. So:
 - **Discriminating (the trace).** The observable result of an effectful program
   is its **interaction trace** — the sequence of `Vis` op-tags performed and the
   `Ret` leaf. A **reordered**/**dropped** interaction is a **different trace**
-  (a different tree), so the case **flips**: the correct order is one
-  trace, any reordering or omission is a distinct, detectable one.
+  (a different tree), so the case **flips**: the correct order is one trace, any
+  reordering or omission is a distinct, detectable one.
 
 ### 6.5 Row-bounding at evaluation (normative property)
 
@@ -462,8 +463,8 @@ row exceeds its declaration; so the denotation `⟦e⟧ : ITree ⟦ρ⟧ R` is b
 **exactly** the signature `⟦ρ⟧` (`36 §2.3`) — an op outside `ρ` is **not
 constructible** in the term that reaches X1. Therefore:
 
-- **An out-of-row effect is a type-level impossibility, not a runtime one.**
-  The driver performs **no** runtime row-membership check — there is nothing to
+- **An out-of-row effect is a type-level impossibility, not a runtime one.** The
+  driver performs **no** runtime row-membership check — there is nothing to
   check; the kernel-checked type `ITree ⟦ρ⟧ R` already witnesses it.
 - **`H` is total over `ρ_open` — and that totality is load-bearing.** The driver
   must have a rule for **every** op-tag in `ρ_open`, and needs **none** outside
@@ -489,10 +490,10 @@ produces, by the *same reductions* the kernel uses for conversion (§1). So:
   at the `Vis` nodes via `H`.
 - **The agreement is the trace.** For a **fixed** handler `H` (the same
   responses), X1's performed sequence of `Vis` op-tags and its `Ret` result are
-  exactly the spine and leaf of L5's `⟦e⟧`. This is what conformance asserts:
-  on a corpus, **X1's trace == L5's ITree** (same `Vis`-tag sequence, same
-  `Ret` leaf) — not "it elaborates," but the structural identity of the *run*
-  with the *denotation*.
+  exactly the spine and leaf of L5's `⟦e⟧`. This is what conformance asserts: on
+  a corpus, **X1's trace == L5's ITree** (same `Vis`-tag sequence, same `Ret`
+  leaf) — not "it elaborates," but the structural identity of the *run* with the
+  *denotation*.
 
 ### 6.7 `unknown` through effects
 
@@ -502,25 +503,26 @@ since the driver's scrutinee is the tree:
 - `drive_H unknown = unknown` — a tree position that is an open hole (§4) is
   strict; the driver yields `unknown` rather than performing anything.
 - a `Vis e k` whose **op** `e` is `unknown` (the operation depends on an open
-  hole) gives `unknown` — there is no determinate interaction to perform; the
-  op is the driver's scrutinee for dispatch (strict, §4).
+  hole) gives `unknown` — there is no determinate interaction to perform; the op
+  is the driver's scrutinee for dispatch (strict, §4).
 - a response fed to `k` that produces `unknown` downstream propagates by §4.
 
 A **hole-free** effectful program never produces an `unknown` *tree* (§4,
-`43 §2.1`): its `Vis`/`Ret` structure is fully determinate and every operation
-performs — the world's responses are real values, not holes. The discriminating
+`43 §2, case 1`): its `Vis`/`Ret` structure is fully determinate and every
+operation performs — the world's responses are real values, not holes. The
+discriminating
 case (per §4) flips on hole-present → `unknown` vs hole-free → a real trace.
 
 ### 6.8 Determinism and the oracle role (effects)
 
-Pure evaluation is a function (§3.7); **effectful** runs are a function **of
-its world responses** — given the same `H`, X1 produces the same trace and
-result. So X1 is the **oracle for effectful programs relative to a fixed
-handler**: a native backend (X3) is judged by running the same corpus with the
-same mock `H` and requiring the **identical trace** (`44`/X4, §5). The pure
-fragment's determinism + canonicity (§3.6–3.7) are **unchanged** — effect
-evaluation wraps the driver *around* the pure core; it does not alter pure
-reduction (no regression, acceptance 5).
+Pure evaluation is a function (§3.7); **effectful** runs are a function **of its
+world responses** — given the same `H`, X1 produces the same trace and result.
+So X1 is the **oracle for effectful programs relative to a fixed handler**: a
+native backend (X3) is judged by running the same corpus with the same mock `H`
+and requiring the **identical trace** (`44`/X4, §5). The pure fragment's
+determinism + canonicity (§3.6–3.7) are **unchanged** — effect evaluation wraps
+the driver *around* the pure core; it does not alter pure reduction (no
+regression, acceptance 5).
 
 **Level discipline:** §6 forms **no new types** — the `ITree`/`Effect`/`State`
 types are `36 §2.1`/`§7.4`'s, already level-reconciled; evaluation carries their
