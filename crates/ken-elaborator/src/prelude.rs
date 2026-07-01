@@ -24,7 +24,9 @@
 //! failure. `Map`/`Set` are abstract postulates declared here; the `DecEq`
 //! gate is enforced at elaboration time (`37 §6`).
 
-use ken_kernel::{declare_primitive, env::PrimReduction, GlobalId, Level, Term};
+use ken_kernel::{
+    declare_def, declare_primitive, env::PrimReduction, subst::weaken, GlobalId, Level, Term,
+};
 
 use crate::error::ElabError;
 use crate::ElabEnv;
@@ -49,10 +51,6 @@ pub fn empty_prelude_env() -> PreludeEnv {
         ok_id: z,
         prod_id: z,
         mkprod_id: z,
-        ordresult_id: z,
-        lt_id: z,
-        eqr_id: z,
-        gt_id: z,
         equal_id: z,
         and_id: z,
         issorted_id: z,
@@ -97,13 +95,6 @@ pub struct PreludeEnv {
     // `Prod a b` — the `a × s` product (the `unfoldUpTo` step payload).
     pub prod_id: GlobalId,
     pub mkprod_id: GlobalId,
-    // `OrdResult` — a matchable comparison result (`Lt` / `Eq` / `Gt`). `Bool`
-    // is an opaque primitive (not `data Bool = True | False`), so it is not
-    // pattern-matchable; `sort` / `insert` branch on `OrdResult` instead.
-    pub ordresult_id: GlobalId,
-    pub lt_id: GlobalId,
-    pub eqr_id: GlobalId,
-    pub gt_id: GlobalId,
     // Ω connectives / predicates (postulates, applied form).
     /// `Equal : Π(A:Type). A → A → Ω` — propositional equality (the `≡`).
     pub equal_id: GlobalId,
@@ -163,8 +154,6 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         .map_err(|e| ElabError::Internal(format!("prelude Result failed: {}", e)))?;
     elab.elaborate_decl("data Prod a b = MkProd a b")
         .map_err(|e| ElabError::Internal(format!("prelude Prod failed: {}", e)))?;
-    elab.elaborate_decl("data OrdResult = Lt | Eq | Gt")
-        .map_err(|e| ElabError::Internal(format!("prelude OrdResult failed: {}", e)))?;
 
     // VAL1-surface inductives — declared before `lookup` closure to avoid
     // conflicting borrows (elaborate_decl needs &mut elab).
@@ -197,10 +186,6 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     let ok_id = lookup("Ok")?;
     let prod_id = lookup("Prod")?;
     let mkprod_id = lookup("MkProd")?;
-    let ordresult_id = lookup("OrdResult")?;
-    let lt_id = lookup("Lt")?;
-    let eqr_id = lookup("Eq")?;
-    let gt_id = lookup("Gt")?;
     // VAL1-surface inductives (declared before lookup closure above).
     let unit_id = lookup("Unit")?;
     let mkunit_id = lookup("MkUnit")?;
@@ -211,23 +196,52 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     let vis_id = lookup("Vis")?;
     // `lookup` is last used above; NLL ends its borrow here.
 
-    // ── Ω constants (postulates with Pi types, applied form) ───────────────
+    // ── Ω constants (ES2: real definitions, demoted out of `trusted_base()`) ─
     // `Equal : Π(A:Type). Π(x:A). Π(y:A). Ω`  (the `≡`).
     // de Bruijn: Pi(Type, Pi(Var 0, Pi(Var 1, Ω₀)))  — A=Var0, x=Var0, y=Var1
     // under their binders.
+    //
+    // ES2: DELETE the postulate — reference the kernel's native computing
+    // `Eq A t u : Ω` (`16 §2`, `term.rs::Term::Eq`) instead of assuming an
+    // opaque axiom. `Equal` becomes a transparent alias
+    // `λA.λx.λy. Eq A x y`, re-checked and out of `trusted_base()`, so it
+    // keeps `Eq`'s computation (`refl`/`J`) rather than forfeiting it.
     let equal_ty = Term::pi(
         type0.clone(),
         Term::pi(Term::var(0), Term::pi(Term::var(1), omega0.clone())),
     );
-    let equal_id = elab
-        .declare_postulate_raw("Equal", equal_ty)
+    let equal_body = Term::lam(
+        type0.clone(),
+        Term::lam(
+            Term::var(0),
+            Term::lam(
+                Term::var(1),
+                Term::Eq(
+                    Box::new(Term::var(2)),
+                    Box::new(Term::var(1)),
+                    Box::new(Term::var(0)),
+                ),
+            ),
+        ),
+    );
+    let equal_id = declare_def(&mut elab.env, vec![], equal_ty, equal_body)
         .map_err(|e| ElabError::Internal(format!("prelude Equal failed: {}", e)))?;
+    elab.globals.insert("Equal".to_string(), equal_id);
 
     // `And : Ω → Ω → Ω`  (the `∧`).
+    //
+    // ES2: derived Ω-connective (`16 §1.3`) — `And A B := Σ(_:A).B`, which
+    // `sort_sigma` (`check.rs`) classifies at `Ω` precisely because BOTH
+    // components are `Ω` (the both-Ω-keyed conjunction case; a relevant
+    // first component would stay in `Type`, per the same rule).
     let and_ty = Term::pi(omega0.clone(), Term::pi(omega0.clone(), omega0.clone()));
-    let and_id = elab
-        .declare_postulate_raw("And", and_ty)
+    let and_body = Term::lam(
+        omega0.clone(),
+        Term::lam(omega0.clone(), Term::sigma(Term::var(1), weaken(&Term::var(0), 1))),
+    );
+    let and_id = declare_def(&mut elab.env, vec![], and_ty, and_body)
         .map_err(|e| ElabError::Internal(format!("prelude And failed: {}", e)))?;
+    elab.globals.insert("And".to_string(), and_id);
 
     // `isSorted : Π(A:Type). List A → Ω`.
     let list_a = |a: Term| Term::app(Term::indformer(list_id, vec![]), a);
@@ -254,17 +268,23 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     // ── L3b: abstract collection types (`37 §6`) ───────────────────────────
     // `Map : Type → Type → Type` — abstract; `DecEq K` gate enforced via
     // the `where` constraint mechanism in `elaborate_rdecl_v1` (L3b).
+    //
+    // ES2: RE-CLASS `declare_postulate` → `declare_primitive` OpaqueType.
+    // `Map`/`Set` are genuinely runtime (O(1) content-addressed canonical
+    // form, `41 §3a`) — not derivable — but are *audited primitives* (item-2,
+    // like `String`/`Bytes`), not *assumed axioms* (item-3). They stay in
+    // `trusted_base()`, correctly re-classed (no trust regression).
     let map_ty =
         Term::pi(type0.clone(), Term::pi(type0.clone(), type0.clone()));
-    let map_id = elab
-        .declare_postulate_raw("Map", map_ty)
+    let map_id = declare_primitive(&mut elab.env, vec![], map_ty, PrimReduction::OpaqueType)
         .map_err(|e| ElabError::Internal(format!("prelude Map failed: {}", e)))?;
+    elab.globals.insert("Map".to_string(), map_id);
 
     // `Set : Type → Type` — abstract; same `DecEq A` gate.
     let set_ty = Term::pi(type0.clone(), type0.clone());
-    let set_id = elab
-        .declare_postulate_raw("Set", set_ty)
+    let set_id = declare_primitive(&mut elab.env, vec![], set_ty, PrimReduction::OpaqueType)
         .map_err(|e| ElabError::Internal(format!("prelude Set failed: {}", e)))?;
+    elab.globals.insert("Set".to_string(), set_id);
 
     // ── L3a String surface ops (`37 §2`) ───────────────────────────────────
     // `String` (bytes layer) + `Int` (numeric tower) + `Char` (numeric) +
@@ -329,28 +349,37 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     // after the IO declaration; an explicit drop lets IO borrow elab cleanly.
     drop(reg_prim);
 
-    // `IO : Type → Type` — the Console-effect IO type (postulate; prim
-    // reduction to `ITree ConsoleOp` held until `wp/VAL1-console-exec` lands).
+    // `IO : Type → Type` — the Console-effect IO type.
+    //
+    // ES2: DERIVABLE — `IO` is a definition, not an assumed axiom: it is
+    // exactly `ITree` (`36`), the simplified W-style interaction tree already
+    // specialized to the Console effect (`data ITree r = Ret r | Vis
+    // ConsoleOp (Unit -> ITree r)`). `IO A := ITree A`.
     let io_ty = Term::pi(type0.clone(), type0.clone());
-    let io_id = elab
-        .declare_postulate_raw("IO", io_ty)
+    let io_body =
+        Term::lam(type0.clone(), Term::app(Term::indformer(itree_id, vec![]), Term::var(0)));
+    let io_id = declare_def(&mut elab.env, vec![], io_ty, io_body)
         .map_err(|e| ElabError::Internal(format!("prelude IO failed: {}", e)))?;
+    elab.globals.insert("IO".to_string(), io_id);
 
-    // `print_line : String → IO Unit` — Console print primitive.
-    // Declared as a primitive (not a postulate) so eval produces CtorPending
-    // that is intercepted in `apply` once `store.print_line_id` is wired.
-    // Symbol "print_line" is handled in `eval.rs::apply` using `store.console_ids`.
-    let unit_t = Term::indformer(unit_id, vec![]);
-    let io_unit = Term::app(Term::const_(io_id, vec![]), unit_t);
-    let print_line_ty = Term::pi(string_t.clone(), io_unit);
-    let print_line_id = declare_primitive(
-        &mut elab.env,
-        vec![],
-        print_line_ty,
-        PrimReduction::Op { symbol: "print_line" },
+    // `print_line : String → IO Unit` — Console print, per the VAL1-step2
+    // wiring (`6789e42`).
+    //
+    // ES2: DERIVABLE — a definition in terms of the `ITree` constructors
+    // (`Vis`/`Ret`) + the `Console.Op` payload (`Write`), not an irreducible
+    // primitive: `print_line s := Vis (Write s) (\_. Ret MkUnit)`. Declared
+    // via surface syntax (not a hand-built raw `Term`) so ordinary δ/ι
+    // reduction produces the `Vis` node directly — no bespoke `apply`
+    // interception needed.
+    elab.elaborate_decl(
+        "view print_line (s : String) : IO Unit = Vis Unit (Write s) (\\_. Ret Unit MkUnit)",
     )
     .map_err(|e| ElabError::Internal(format!("prelude print_line failed: {}", e)))?;
-    elab.globals.insert("print_line".to_string(), print_line_id);
+    let print_line_id = elab
+        .globals
+        .get("print_line")
+        .copied()
+        .ok_or_else(|| ElabError::Internal("prelude: 'print_line' not registered".into()))?;
 
     Ok(PreludeEnv {
         nat_id,
@@ -367,10 +396,6 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         ok_id,
         prod_id,
         mkprod_id,
-        ordresult_id,
-        lt_id,
-        eqr_id,
-        gt_id,
         equal_id,
         and_id,
         issorted_id,

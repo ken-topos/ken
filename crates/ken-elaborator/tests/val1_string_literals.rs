@@ -334,6 +334,10 @@ fn gcd_views_elaborate() {
          match b { Zero => a ; Suc n => match a { Zero => Zero ; Suc m => natSub m n } }",
     )
     .expect("natSub");
+    // ES2 retired the prelude's `OrdResult` (bloat — no primitive signature
+    // named it, `30-taxonomy §6`); a genuine 3-way comparison (gcd needs
+    // Lt/Eq/Gt, not just Bool) still gets one, declared locally here.
+    env.elaborate_decl("data OrdResult = Lt | Eq | Gt").expect("OrdResult");
     env.elaborate_decl(
         "view natCmpZero (b : Nat) : OrdResult = \
          match b { Zero => Eq ; Suc n => Lt }",

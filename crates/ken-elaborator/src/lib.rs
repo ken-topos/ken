@@ -33,7 +33,7 @@ pub mod temporal;
 use std::collections::HashMap;
 
 use ken_kernel::{
-    check as kernel_check, declare_postulate, Context, GlobalEnv, GlobalId, Level, Term,
+    check as kernel_check, declare_postulate, Context, GlobalEnv, GlobalId, Term,
 };
 
 pub use elab::{elaborate_rdecl, elaborate_rexpr, ElabResult, Obligation, ObligationKind};
@@ -101,11 +101,25 @@ impl ElabEnv {
     pub fn empty() -> Result<Self, ElabError> {
         let mut env = GlobalEnv::new();
         let mut globals = HashMap::new();
-        // `Bool` is pre-registered here so downstream code using `ElabEnv::empty`
-        // gets a consistent GlobalId; `register_numeric_env` reuses it.
-        let bool_id = declare_postulate(&mut env, vec![], Term::ty(Level::Zero))
-            .map_err(|e| ElabError::Internal(format!("Bool predeclaration failed: {}", e)))?;
-        globals.insert("Bool".into(), bool_id);
+        // `Bool` is pre-registered here (real `data Bool = True | False`, ES2 —
+        // demotes the former opaque `declare_postulate` so `Bool` is
+        // matchable data; `reg_ty!("Bool")` in `register_numeric_env` reuses
+        // this GlobalId) so downstream code using `ElabEnv::empty` gets a
+        // consistent GlobalId. Declared via the raw inductive machinery
+        // (`data.rs::elab_data_decl`, not `elaborate_decl`) since the full
+        // `ElabEnv` doesn't exist yet at this point in construction.
+        let true_ctor =
+            resolve::RCtorDecl { name: "True".into(), args: vec![], span: Span::zero() };
+        let false_ctor =
+            resolve::RCtorDecl { name: "False".into(), args: vec![], span: Span::zero() };
+        data::elab_data_decl(
+            &mut env,
+            &mut globals,
+            "Bool",
+            &[],
+            &[true_ctor, false_ctor],
+            &Span::zero(),
+        )?;
         let numeric_env = numbers::register_numeric_env(&mut env, &mut globals)
             .map_err(|e| ElabError::Internal(format!("numeric tower init failed: {}", e)))?;
         let bytes_env = bytes::register_bytes_env(&mut env, &mut globals)
