@@ -140,31 +140,110 @@ third artifact attests **post-build validation** — that the behavioral
 obligations Ken *delegated* (`../70-behavioral/71`) were actually discharged by
 the sibling (`Ward`). In enterprise compliance "the tests ran and passed" is
 already a required artifact; Ken/`Ward` replace text logs + coverage XML with a
-**signed, runtime-checkable discharge attestation** carrying:
+**signed, runtime-checkable discharge attestation**.
+`OQ-discharge-attestation` is **DECIDED** — `Ward` has finalized and merged its
+half (ward `f33276b`), and this section **ratifies Ken's half**: the Ken-visible
+contract surface, the outcome vocabulary, and the hard trust-boundary
+invariants. The three-check **deployment gate** on Ken's provenance verifier is
+the sequenced-behind build follow-on (Team Verify, WS-Sec); it delivers the
+*runtime* face of the invariants this section pins *statically*.
 
-1. **The Ken export answered** — content-hash of the `71` assume-guarantee
-   contract (`Q`/`P`/`Σ`/`T`/`G`). Binds the attestation to exactly what was
-   asked.
-2. **The `Ward` policy used** — the sampling policy (`OQ-sampling-policy`) and
-   model/monitor config, by hash + version.
-3. **(optional) sampling choices** — seeds, coverage achieved, equivalence
-   classes exercised (the reproducibility/coverage record).
-4. **The discharge result** — per obligation (Ken-delegated `T` *and*
-   policy-inferred/explicit), the honest four-way outcome: discharged /
-   bounded-to-`k` / monitored / failed.
-5. **A signature** — `Ward` version + the above, keyless-signed (§5), so a
-   **deployment gate** can enforce that an artifact carries the post-build
-   validation its **target environment requires** (an external endpoint may
-   demand a stricter discharge than the same binary going internal —
-   `OQ-sampling-policy`'s per-deployment measure realized at the gate).
+**The Ken-visible field set (the ratified contract surface).** The attestation
+is a `Ward` artifact; Ken emits, enforces, or depends on **exactly** the subset
+below — each already produced by the **B1 export** (`../70-behavioral/71 §2.1`),
+so ratifying it adds **no new transport and no new trust edge** beyond the
+already-pinned `ward.version`:
 
-The pinned `Ward` version (5) is load-bearing, not bureaucratic: Ken's
-translation-faithfulness proof (`../70-behavioral/71 §5`) holds *relative to* an
-axiomatized `Ward` semantics, and this pin is the one explicit, version-bounded
-assumption that `Ward` implements it. The attestation is governed on the same
-ladder as the policy attestation (`65 §5`): same keyless signing, same
-provenance transport, runtime-enforceable. Concrete schema is
-**`OQ-discharge-attestation`** (deferred — needs `Ward`'s runner).
+| Field | Ken source | Role |
+|---|---|---|
+| `export.hash` | B1 content-hash of `Q`/`P`/`Σ`/`T`/`G` | binds the attestation to exactly the contract asked; also the **revocation mechanism** (a stale hash fails the gate, fail-closed — no revocation list) |
+| `export.contractVersion` | the `71` contract version | the export schema version |
+| `ward.version` | `Ward` runner version | **the one load-bearing trust edge** (below) |
+| `obligations[].id` | obligation identity over `Σ` | stable key **across `export.hash` changes** (the regression key) |
+| `obligations[].field` | the export channel — `T` / `P` / `Q@ct` | which channel the obligation came from |
+| `obligations[].outcome` | the four-way outcome (below) | the discharge result |
+| `signature` | keyless sigstore, incl. `ward.version` | the §5 governance ladder |
+
+Everything else in the attestation is **`Ward`-internal**, and Ken **must not**
+depend on it (the boundary below). The **literal field tokens** and the
+`predicateType` URI (`ward.dev/attestation/discharge/v1`, `(oracle)`) are
+`Ward`'s **wire spelling**, finalized with `Ward` under the `OQ-export-wire`
+token-coordination discipline: Ken locks the **concept, value-set, and
+cross-field invariants** here; the tokens are oracle-tagged and
+reference-spelled in conformance, so the test logic (reject-missing-required,
+accept-ignore-unknown, `id`-stable-across-`export.hash`-change) is
+spelling-agnostic.
+
+**The four-way outcome — total, and classifies *epistemic status*, not
+*mechanism*.** `obligations[].outcome` is a **total** classification:
+
+- **`discharged`** — decided (a decision procedure / exhaustive check settled
+  it).
+- **`bounded`** — **partial evidence under a stated bound**: model-check depth
+  **or** sampled test coverage (L2). The specific bound (depth-`k`, sample size)
+  is recorded **`Ward`-internally**; Ken reads only *that* the status is
+  `bounded`.
+- **`monitored`** — established over observed windows (a runtime monitor, `73`).
+- **`failed`** — the obligation was not met.
+
+This **widens** the prior `bounded-to-`k`` to a single **`bounded`** label: the
+category must cover sampled coverage as well as depth, and both mean the same
+thing — partial evidence under a stated bound. Ken classifies the **epistemic
+status**; the **source** (depth-`k` vs. sample) is exactly the `Ward`-internal
+mechanism Ken must not couple to, so it stays one label with the bound recorded
+`Ward`-side. The four-way is **total** — there is **no fifth outcome**.
+
+**The one-way gate — no `outcome` promotes a `T` to `proved` (hard soundness,
+I4).** **No `outcome` value — not even `discharged` — promotes a delegated
+obligation to `proved`.** A discharge re-enters Ken **only as an attestation
+record**, never as a kernel certificate: the obligation stays
+`delegated`/`tested` in the four-way verification status (`../20-verification/21
+§5`) and rides in `trusted_base_delta`. This is **invariant I4**
+(`../70-behavioral/71 §5.1`/`§2.1`), realized in the B1 emitter as the
+**absence of a code path** — there is **no function** from a `Ward` outcome to a
+`proved` status — not a runtime check that could be bypassed. A discharge is a
+lower-trust, **classically-discharged** artifact: it projects to
+**`P`/`tested`**, **never `Q`** (a discharge is not kernel certification). The
+**live home** of this net is B1's export gate (`71 §2.1` I4); this section
+**reaffirms** it over the discharge outcomes and introduces **no new**
+promotion-prevention mechanism (subsume-don't-proliferate).
+
+**The `Ward`-internal boundary — Ken must not depend on it.** The attestation
+also carries `Ward`-internal fields — the **`policy`** used (sampling / model /
+monitor config), the **`bound`** (depth-`k`, sample size), the **`evidence`**
+(seeds, coverage, equivalence classes), the **`ct.method`**, and the
+**`regression`** record. These are `Ward`'s mechanism; **no Ken correctness
+judgment — no gate, no consumer — may read or branch on any of them.** Ken
+depends only on the Ken-visible set above: the binding (`export.hash`), the
+trust edge (`ward.version`), the stable keys (`obligations[].id`), and the
+epistemic outcomes. A consumer that branches on a `Ward`-internal field is
+**rejected** — keeping the abstraction boundary exactly where I4 draws it: Ken
+never couples to *how* `Ward` discharged, only *that* it did, under a pinned
+version.
+
+**Constant-time validation — carried, not implemented.** A `Q@ct`-channel
+obligation (`OQ-relational`: the `@ct` timing guarantee is delegated to `Ward`
+under a leakage model, `61 §5a`) carries its verdict as an ordinary
+`obligations[].outcome`. The **CT-validation *method*** (`Ward`'s leakage
+model / measurement, ward §13) is **`Ward`-internal and open** — Ken neither
+implements nor depends on the method, only **carries and enforces the verdict**
+through the same field set and the same one-way gate (a `@ct` discharge is
+still `delegated`, never `proved`).
+
+**The pinned `Ward` version — the one trust edge.** `ward.version` is
+load-bearing, not bureaucratic: the translation-faithfulness proof
+(`../70-behavioral/71 §5`) holds **relative to an axiomatized `Ward`
+semantics**, and this pin is the one explicit, version-bounded assumption that
+`Ward` implements it. Because both `export.hash ↔ build` (provenance) and
+`export.hash ↔ discharge` (this attestation) are reproducible, a **stale
+discharge** is caught by the gate's hash-match (fail-closed). The attestation is
+governed on the same ladder as the policy attestation (`65 §5`): same keyless
+signing, same provenance transport, runtime-enforceable. The **deployment gate**
+(the build follow-on) then enforces that an artifact carries the validation its
+**target environment requires** — e.g. "external endpoints: no `bounded` on a
+`Q@ct` obligation."
+**That requirement is Ken governance policy (`64`/`65`) — Ken owns it**; `Ward`
+specifies the gate's *check*, not what each environment demands.
 
 ## 6. The registry (ecosystem governance — above the language)
 
