@@ -1,0 +1,81 @@
+-- Lawful structure classes: Eq, DecEq, Ord (spec/50-stdlib/51-lawful-classes.md).
+--
+-- No new kernel feature: a class is a record (33 SS5.2, right-nested Sigma
+-- over 13 SS3); a law is an Omega proposition (16 SS1). Bridging notation
+-- (51 SS2): `IsTrue b := Equal Bool b True : Prop` (Bool real data since ES2;
+-- `Prop` is the prelude's surface-nameable alias for Omega_0).
+
+view IsTrue (b : Bool) : Prop = Equal Bool b True
+
+-- `Eq a` -- decidable Boolean equality, an equivalence (51 SS2.1). `eq` is
+-- the everyday `==`; `refl`/`sym`/`trans` say it is an equivalence relation.
+-- Does NOT tie `eq` to the kernel's propositional Equal -- that is DecEq's
+-- stronger promise.
+class Eq a {
+  eq    : a -> a -> Bool ;
+  refl  : (x : a) -> IsTrue (eq x x) ;
+  sym   : (x : a) -> (y : a) -> IsTrue (eq x y) -> IsTrue (eq y x) ;
+  trans : (x : a) -> (y : a) -> (z : a) -> IsTrue (eq x y) -> IsTrue (eq y z) -> IsTrue (eq x z)
+}
+
+-- `DecEq a` -- decides the kernel's propositional equality (51 SS2.2):
+-- `sound`+`complete` together make `eq` a decision procedure for `Equal a`.
+-- Semantically subsumes `Eq a` (recorded as a fact here, not wired as a
+-- superclass constraint, 51 SS2.2/33 SS5.4).
+class DecEq a {
+  eq       : a -> a -> Bool ;
+  sound    : (x : a) -> (y : a) -> IsTrue (eq x y) -> Equal a x y ;
+  complete : (x : a) -> (y : a) -> Equal a x y -> IsTrue (eq x y)
+}
+
+-- `Ord a` -- total order, supplies the comparator the verified `sort`/
+-- `isSorted` thread explicitly (51 SS2.3/SS4, ES2-remainder). `total`'s
+-- Bool-equation form (`IsTrue (leq x y)` per side, never a bare
+-- propositional `or`) keeps every law Omega-clean, no truncation (51 SS3).
+class Ord a {
+  leq     : a -> a -> Bool ;
+  refl    : (x : a) -> IsTrue (leq x x) ;
+  antisym : (x : a) -> (y : a) -> IsTrue (leq x y) -> IsTrue (leq y x) -> Equal a x y ;
+  trans   : (x : a) -> (y : a) -> (z : a) -> IsTrue (leq x y) -> IsTrue (leq y z) -> IsTrue (leq x z) ;
+  total   : (x : a) -> (y : a) -> IsTrue (leq x y)
+}
+
+-- Canonical `Int` instances -- AUDITED-DELTA, illustrative-only (51 SS6).
+--
+-- `Int` is a K1 primitive: opaque to delta (`leq_int x x` on a variable `x`
+-- does not reduce -- primitive reductions fire on literals only, ken-kernel
+-- conv.rs's `whnf` only unfolds `Decl::Transparent`, never `Decl::Primitive`)
+-- and has no induction principle, so its universally-quantified laws are NOT
+-- kernel-provable -- proving them would need a `declare_postulate` regardless
+-- of how the law is phrased. The operation fields wrap the audited
+-- `leq_int`/`eq_int` primitives (existing `trusted_base()` entries, not new
+-- ones); the law fields are honest, VISIBLE postulates (`Axiom` -- a real,
+-- grep-able `Decl::Opaque`, never a silent/hidden assumption). `Int` is
+-- illustrative-only here -- NOT the zero-delta exemplar, and NOT claimed
+-- lawful under AC3's zero-delta bar (that bar applies to an INDUCTIVE
+-- carrier's law-carrying instance, e.g. a future `Ord Bool`/`Ord <user data>`
+-- once the kernel gains Omega-motive elimination -- 51 SS6, forward WP).
+
+view int_leq (x : Int) (y : Int) : Bool = leq_int x y
+view int_eq (x : Int) (y : Int) : Bool = eq_int x y
+
+instance Eq Int {
+  eq    = int_eq ;
+  refl  = Axiom ;
+  sym   = Axiom ;
+  trans = Axiom
+}
+
+instance DecEq Int {
+  eq       = int_eq ;
+  sound    = Axiom ;
+  complete = Axiom
+}
+
+instance Ord Int {
+  leq     = int_leq ;
+  refl    = Axiom ;
+  antisym = Axiom ;
+  trans   = Axiom ;
+  total   = Axiom
+}

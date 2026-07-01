@@ -46,7 +46,7 @@ delta**, transparently declared, `51 §6`.)
 
 | Package | Spec catalog entry | Status |
 |---|---|---|
-| lawful classes (`Eq`/`DecEq`/`Ord`) | `../spec/50-stdlib/51-lawful-classes.md` | spec pinned (ES4-classes); build follow-on (Team Language) |
+| lawful classes (`Eq`/`DecEq`/`Ord`) | `../spec/50-stdlib/51-lawful-classes.md` | **built** (`lawful-classes/`) — classes + audited-delta `Int` instances landed; the zero-delta inductive-carrier exemplar (e.g. `Ord Bool`) is a forward WP gated on the kernel gaining Ω-motive `Elim` support (Architect ruling) |
 
 Subsequent ES4 tranches (collection combinators, formatting, …) follow as their
 own WPs against this layout + the laws-PROVED discipline — comprehensive but
@@ -54,8 +54,9 @@ non-redundant and lawful. The **systems track** (OS-kernel interface, the Ward
 CT-codegen obligation) is a **distinct track**, framed separately — not an ES4
 tranche.
 
-> **This WP (ES4-classes) is spec+conformance-only.** It establishes this layout
-> and the lawful-classes contract; the **`.ken` source** (classes + canonical
-> law-carrying instances) is the named **Team-Language build follow-on**, which
-> populates `packages/lawful-classes/` against
-> `../spec/50-stdlib/51-lawful-classes.md`.
+> **`wp/ES4-classes-build` (Team Language) landed this layout's `.ken` source**
+> for the buildable subset: the three class records + the audited-delta `Int`
+> instances (`lawful-classes/lawful_classes.ken`). The zero-delta,
+> law-carrying instance over an inductive carrier (`Ord Bool`/a user `data`) —
+> AC3's positive arm — is a **named forward WP**, gated on the kernel gaining
+> Ω-motive `Elim` support; see `lawful-classes/MANIFEST.md`.
