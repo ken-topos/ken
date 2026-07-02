@@ -304,3 +304,62 @@ instance DecEq Bool {
       }
     }
 }
+
+-- `Ord Char` -- by TRANSPORT from `Ord Int` (re-homed from the Decimal/Char
+-- DEMOTE, `docs/program/wp/lawful-classes-lane.md`). Under refinement
+-- erasure `Char = { c : Int | isScalar c }` (`decimal_char.rs`), `Char.toInt`
+-- (`charToInt`) is the IDENTITY projection and `leqChar a b = leq_int a b`
+-- (same file) -- so `Char`'s order IS `Int`'s order, verbatim, not a fresh
+-- structure. The law fields do NOT re-postulate (that would mint a NEW
+-- `Decl::Opaque`, growing `trusted_base()`); they TRANSPORT -- reference
+-- `Ord Int`'s own existing, already-visible fields via `.`-projection
+-- (`(Ord_instance_Int).refl` etc, `33 §5.2` eta-projection, parenthesized so
+-- the parser takes it as a projection and not a `M.foo` qualified-name
+-- token -- `Ord_instance_Int` alone is a `ConId` and `parse_dotted` would
+-- otherwise swallow the whole `Ord_instance_Int.refl` as one qualified
+-- reference). So this instance's own `trusted_base_delta` mints nothing new:
+-- zero-NEW-delta by transport, NOT zero-delta (the referenced `Axiom`s are
+-- still there, honestly, on `Ord Int`), and explicitly NOT "Axiom-free via
+-- proj-injectivity" (that framing was corrected in the demote erratum).
+--
+-- `leq` is ALSO transported as `(Ord_instance_Int).leq` -- not the
+-- separately-defined `leqChar` view, though both reduce to the identical
+-- `leq_int a b` (confirmed: `leqChar`/`int_leq` are both `Decl::Transparent`
+-- wrappers over the same `leq_int` primitive, so both fully whnf to the
+-- same normal form). This is a REAL correction, not cosmetic: using
+-- `leqChar` here made every later field's kernel re-check FAIL, even though
+-- each field's OWN transported proof is individually real and each
+-- ingredient (Char~Int by refinement erasure; `leqChar`~`int_leq` by
+-- shared unfolding) converts in isolation. Root cause (isolated by a
+-- patch-and-revert scratch repro, `ken-kernel/src/conv.rs` untouched):
+-- `refl`'s expected codomain `IsTrue (leqChar x x)` and the transported
+-- term's own inferred codomain `IsTrue ((Ord_instance_Int).leq x x)` both
+-- whnf to a STUCK `Term::Eq(Bool, <leq-app-on-a-free-var>, True)` --
+-- `leq_int` only fires on literals, so a free-variable `x` leaves it
+-- neutral -- and `conv_struct` (`ken-kernel/src/conv.rs`) has NO congruence
+-- arm comparing two `Term::Eq(...)` nodes component-wise, so it falls to
+-- its structural-equality-only path and rejects two operands that are
+-- SYNTACTICALLY different (`leqChar x x` vs `(Ord_instance_Int).leq x x`)
+-- even though both fully reduce to the identical `leq_int x x`. This is the
+-- SAME missing-arm shape as the `Eq Bool` `sym`/`trans` K6 gap (`33 §5.2`
+-- doc above) -- but here a SOUND, POSITIONAL congruence arm (comparing
+-- type/lhs/rhs pairwise, each recursively convertible) WOULD have closed
+-- it, unlike K6's swap case (which needed the unsound cross-wise arm).
+-- Flagged to the Architect as K6's first real customer -- forward kernel
+-- work, not blocking. The fix used here needs NO kernel change: transport
+-- `leq` itself via the SAME `.`-projection as every other field, so every
+-- later field's expected type and the transported proof's own inferred
+-- type share the LITERALLY IDENTICAL projection term
+-- (`(Ord_instance_Int).leq`, not two different names that happen to
+-- co-reduce) -- the two sides become syntactically equal after whnf
+-- (`a == b` fires directly, `conv.rs`'s first structural-equality check),
+-- never reaching the missing Eq-congruence arm at all. Still zero-NEW-delta
+-- transport, still reduces via `leq_int` (through one more projection
+-- layer) -- not a new proof technique, a more literal transport.
+instance Ord Char {
+  leq     = (Ord_instance_Int).leq ;
+  refl    = (Ord_instance_Int).refl ;
+  antisym = (Ord_instance_Int).antisym ;
+  trans   = (Ord_instance_Int).trans ;
+  total   = (Ord_instance_Int).total
+}

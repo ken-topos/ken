@@ -45,6 +45,39 @@
 //! grounded-and-parked as a genuine but currently CUSTOMERLESS
 //! kernel-completeness gap — no proof obligation in this codebase needs a
 //! sound positional arm.
+//!
+//! **`Ord Char` (WP lawful-classes-lane, re-homed from the Decimal/Char
+//! DEMOTE): by TRANSPORT from `Ord Int`, not a fresh proof.** `Char =
+//! {c:Int | isScalar c}` erases to `Int` (`21 §6.3`) — a canonical,
+//! one-value-per-codepoint carrier — so `Ord Char`'s laws ARE `Ord Int`'s
+//! laws; every field (`leq`/`refl`/`antisym`/`trans`/`total`) is a direct
+//! `.`-projection off `Ord_instance_Int` (`33 §5.2` eta), zero-NEW-delta,
+//! never a fresh postulate. This gave K6 its first REAL customer: writing
+//! `leq = leqChar` (a separately-defined view that also reduces to
+//! `leq_int`, just via a different name) made the kernel re-check FAIL —
+//! `refl`'s expected codomain `IsTrue (leqChar x x)` and the transported
+//! term's own inferred codomain `IsTrue ((Ord_instance_Int).leq x x)` both
+//! whnf to a STUCK `Term::Eq(Bool, <neutral leq-app>, True)` (the operand is
+//! neutral on a free variable — `leq_int` only fires on literals), and
+//! `conv_struct` has no Eq×Eq congruence arm at all, so two
+//! syntactically-different-but-fully-reducible-to-identical stuck operands
+//! are rejected. Unlike the `Eq Bool` `sym`/`trans` case (which needed the
+//! UNSOUND cross-wise arm and was never closable via K6), THIS pair would
+//! have been closed by a SOUND, POSITIONAL congruence arm — K6's
+//! previously-customerless sound fix now has a real use. No kernel change
+//! was needed to ship, though: transporting `leq` itself via the SAME
+//! `.`-projection (`leq = (Ord_instance_Int).leq`, not `leqChar`) makes
+//! every later field's expected type and the transported proof's own
+//! inferred type share the LITERALLY IDENTICAL term, so the two sides are
+//! syntactically equal after whnf and the missing congruence arm is never
+//! reached. See the `.ken` source's own comment for the full mechanism
+//! grounding. `Num`/`DecEq Decimal` (the other two re-homed obligations)
+//! do NOT get this same transport treatment — Decimal's non-canonical
+//! `(coeff, exp)` carrier makes it genuinely unsound (`decimalEq` is an
+//! `Eq`, not a `DecEq`, on that carrier: it reduces `True` on structurally
+//! distinct pairs denoting the same value, so postulating `sound`/
+//! `complete` would inhabit `Bottom`) — caught and re-deferred before
+//! landing, not covered by this file.
 
 use ken_elaborator::ElabEnv;
 use ken_kernel::env::Decl as KernelDecl;
@@ -67,6 +100,48 @@ fn field_value(env: &ken_kernel::GlobalEnv, whole: &Term, idx: usize) -> Term {
         cur = Term::proj2(cur);
     }
     ken_kernel::whnf(env, &ken_kernel::Context::new(), &Term::proj1(cur))
+}
+
+/// Like `field_value`, but returning the field's own SOURCE term exactly as
+/// elaborated — no `whnf` at all. `whole` (an instance's transparent body)
+/// is itself a literal `Term::Pair` chain (`build_pair_chain`,
+/// `ken-elaborator/src/elab.rs`), one `Pair` per field in order, so this
+/// destructures it directly rather than building an unreduced
+/// `Proj1(Proj2^idx(whole))` (which would need its OWN reduction step to
+/// reach the field). Used to confirm a field's own SOURCE shape (e.g. "this
+/// is a `.`-projection referencing another instance") rather than what it
+/// reduces to — whnf-ing a transported law field runs straight through to
+/// the referenced instance's OWN stored value (honestly reaching its
+/// `Axiom`, if any), which is the wrong thing to inspect when the question
+/// is "did THIS decl mint a fresh postulate," not "what does this field's
+/// value bottom out at."
+fn field_raw(whole: &Term, idx: usize) -> Term {
+    let mut cur = whole.clone();
+    for _ in 0..idx {
+        cur = match cur {
+            Term::Pair(_, b) => *b,
+            other => panic!("expected a Pair chain at depth {}, got {:?}", idx, other),
+        };
+    }
+    match cur {
+        Term::Pair(a, _) => *a,
+        other => panic!("expected a Pair at depth {}, got {:?}", idx, other),
+    }
+}
+
+/// Builds `proj1(proj2^idx(Const(id)))` — the exact shape `.field`
+/// projection (`infer_proj`, `ken-elaborator/src/elab.rs`) produces for
+/// field `idx` of a class instance named `id`. Comparing a raw field term
+/// against this (structural `==`) confirms it is a direct, un-applied
+/// `.`-projection off `id` — sourced from another instance's field (a
+/// transport), not some other construction that merely happens to reduce
+/// to the same thing.
+fn expected_field_proj(id: ken_kernel::GlobalId, idx: usize) -> Term {
+    let mut cur = Term::const_(id, vec![]);
+    for _ in 0..idx {
+        cur = Term::proj2(cur);
+    }
+    Term::proj1(cur)
 }
 
 fn is_opaque_const(env: &ken_kernel::GlobalEnv, t: &Term) -> bool {
@@ -345,6 +420,92 @@ fn eq_and_deceq_int_instances_are_also_audited_delta() {
             );
         }
     }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// AC-transport — `Ord Char` by TRANSPORT from `Ord Int` (re-homed from the
+// Decimal/Char DEMOTE, WP lawful-classes-lane). `Char = {c:Int|isScalar c}`
+// is a canonical, refinement-erased carrier (`21 §6.3`), so the sound
+// realization is honest transport of `Ord Int`'s own fields via
+// `.`-projection, not a fresh proof and not a fresh postulate. The
+// discriminator is HONESTY (every field present and real), not zero-delta
+// outright (`Ord Int`'s pre-existing `Axiom`s are still honestly there, one
+// projection-hop away) — `stdlib/classes/char-ord-laws-carried-not-stubbed`.
+// `Num`/`DecEq Decimal` do NOT get this same treatment — Decimal's
+// non-canonical `(coeff, exp)` carrier makes that transport genuinely
+// unsound (`decimalEq` is an `Eq`, not a `DecEq`, on that carrier) — caught
+// and re-deferred before landing, not covered by this file.
+// ─────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn char_ord_laws_carried_not_stubbed_transport_accepts() {
+    let env = mk_env_with_package();
+    let id = env.globals["Ord_instance_Char"];
+    let ord_int_id = env.globals["Ord_instance_Int"];
+    assert!(matches!(env.env.lookup(id), Some(KernelDecl::Transparent { .. })));
+    let (_, body) = env.env.transparent_body(id).expect("Ord Char instance is transparent");
+
+    // Every field is PRESENT and its own SOURCE shape is a direct
+    // `.`-projection off `Ord_instance_Int` — an honest transport, never a
+    // fresh postulate minted by `Ord_instance_Char`'s own decl. (whnf-ing
+    // these would run straight through to whatever `Ord Int`'s own field
+    // bottoms out at — honestly reaching its `Axiom` for the law fields —
+    // which is the transport working as intended, not what this assertion
+    // is checking; see `field_raw`'s doc comment.)
+    for (name, idx) in [("leq", 0), ("refl", 1), ("antisym", 2), ("trans", 3), ("total", 4)] {
+        let raw = field_raw(&body, idx);
+        let expected = expected_field_proj(ord_int_id, idx);
+        assert!(
+            raw == expected,
+            "Ord Char's '{}' must be a direct `.`-projection off Ord_instance_Int's \
+             own field {} (honest transport) — not a fresh construction of its own. \
+             Got {:?}, expected {:?}",
+            name, idx, raw, expected
+        );
+    }
+
+    // `leq` itself, once reduced, must NOT be opaque — it bottoms out at
+    // the real `int_leq`/`leq_int` reduction path, not a postulate.
+    let leq_val = field_value(&env.env, &body, 0);
+    assert!(!is_opaque_const(&env.env, &leq_val), "Ord Char's 'leq' must reduce to a real op, not a postulate");
+
+    // Zero-NEW-delta by transport (NOT a claim of zero-delta outright — Ord
+    // Int's own Axioms are still honestly there, reachable one projection
+    // hop away, just not minted fresh by Ord_instance_Char's own decl).
+    let mut delta = ken_elaborator::trusted_base_delta(&env.env, id);
+    delta.remove(&env.class_env.record_nil_val_id);
+    assert!(
+        delta.is_empty(),
+        "Ord Char must be zero-NEW-delta by transport — got a non-empty \
+         trusted_base_delta beyond the structural record_nil_val sentinel: {:?}",
+        delta
+    );
+}
+
+#[test]
+fn char_ord_laws_reject_missing_law_field() {
+    // Isolate the package's prefix — everything BEFORE the `instance Ord
+    // Char` block this WP adds (classes + Int/Bool instances) — then attempt
+    // a deceptive/incomplete instance that OMITS `total` entirely. The
+    // discriminating flip: the honest transport instance (above) elaborates
+    // with every field present; an instance silently missing a law field
+    // must be REJECTED (uninhabited record), never accepted as lawful.
+    let prefix_end = LAWFUL_CLASSES_KEN
+        .find("instance Ord Char")
+        .expect("`instance Ord Char` marker must be present in the real package source");
+    let prefix = &LAWFUL_CLASSES_KEN[..prefix_end];
+    let mut env = ElabEnv::new().expect("base env construction failed");
+    env.elaborate_file(prefix).expect("package prefix (classes + Int/Bool instances) must elaborate");
+
+    let r = env.elaborate_decl(
+        "instance Ord Char { leq = (Ord_instance_Int).leq ; refl = (Ord_instance_Int).refl ; \
+         antisym = (Ord_instance_Int).antisym ; trans = (Ord_instance_Int).trans }",
+    );
+    assert!(
+        r.is_err(),
+        "an Ord Char instance omitting the `total` law field must be rejected as \
+         unlawful (an uninhabited record), not silently accepted"
+    );
 }
 
 // ─────────────────────────────────────────────────────────────────────────
