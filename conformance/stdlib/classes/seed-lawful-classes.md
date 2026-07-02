@@ -9,9 +9,12 @@ law-**less** dictionary (postulated laws it *could* have proved) must be
 **rejected as unlawful**. A **primitive** carrier (`Int`/…) is the honest
 exception — its ∀-laws are **unprovable** (no eliminator), so its instance
 carries a **declared audited delta** (`§6`), not zero — the carrier axis is
-load-bearing. (The zero-delta *real-proofs* path needs kernel Ω-motive
-elimination — **landed** (K4, `3be0e30`); real law-carrying instances ride the
-ES4-lawproofs build.)
+load-bearing. (The zero-delta *real-proofs* path is only **partially**
+realizable on K4 (`3be0e30`): the **live-`Eq`-conclusion** laws now; a
+**complete** instance's **concrete-equality-conclusion** laws —
+`antisym`/`sound`/`complete`, which reduce per-branch to `Top`/`Bottom` — are
+**`(gated: K5)`** (`§6`). Real law-carrying instances ride the ES4-lawproofs
+build.)
 
 ## Grounding (content-verified against the landed targets)
 
@@ -62,19 +65,28 @@ real proof terms, producer-grepped for `declare_postulate`/holes on the law
 fields — is the named **Team-Language build follow-on** (`51 §8`), not this WP
 (`soundness-ac-static-vs-runtime-face`).
 
-**K4 landed — the *zero-delta real-proofs* path is now realizable (`3be0e30`).**
-Proving a per-branch law (`∀x. IsTrue (leq x x)`) needs to eliminate a
-`Type`-inductive into an **Ω-motive** (`λx. P x : Bool → Ω`) — the **K4** rule
-(`14 §3` "Elimination into `Ω`"), **now on main**. So an **inductive** carrier
-(`Bool` / user `data`) **can** prove its ∀-laws by case-split → **zero-delta**;
-a **primitive** carrier still cannot (no eliminator) → **audited-delta**. The
-carrier axis and the postulate-is-a-defect verdict below are therefore **live**
-(no longer K4-gated). The **real law-carrying instances** ride the
-**ES4-lawproofs build** (Team Language, `packages/lawful-classes/`); this seed's
-discriminating shapes are realized against them
-(`soundness-ac-static-vs-runtime-face`). The K4 rule's own conformance is
-`../../kernel/inductive/seed-k4-omega-motive-elim.md` (the capability flip + the
-conv-embedding foil).
+**K4 landed — the *zero-delta real-proofs* path is *partially* realizable
+(`3be0e30`); a *complete* instance also needs K5.** Proving a per-branch law
+needs to eliminate a `Type`-inductive into an **Ω-motive** (`λx. P x : Bool →
+Ω`) — the **K4** rule (`14 §3`), **now on main**. So an **inductive** carrier
+proves — by finite case-split — the laws whose per-branch obligation stays a
+**live `Eq`** (`refl`/`trans`/`total`, `Eq`'s equivalence laws): **zero-delta
+now**. But the **concrete-equality-conclusion** laws — `Ord`'s **`antisym`** and
+`DecEq`'s **`sound`**/**`complete`**, concluding the kernel `Eq a x y` — have
+per-branch obligations that reduce to a concrete **`Top`** (the trivially-equal
+case → needs `Top`-**intro**) or **`Bottom`** (the contradictory-hyp case →
+needs `Bottom`-**elim** / ex-falso), which the kernel does not yet admit → the
+**forward WP K5** (observational-fragment completion, `16 §1`). So a
+**complete** zero-delta `Ord Bool`/`DecEq Bool` (`antisym` mandatory for a total
+order, `sound`/`complete` for decidable equality) is **`(gated: K5)`**; K4 alone
+realizes the **live-`Eq`-conclusion** fragment. A **primitive** carrier still
+proves **no** ∀-law (no eliminator) → **audited-delta**. **Live today**
+(K5-independent): the live-`Eq`-conclusion laws (zero-delta now) + the
+declared-vs-hidden + holed/missing arms. The **real law-carrying instances**
+ride the **ES4-lawproofs build** (the provable fragment now; the complete arm
+reopens on K5). K4's rule conformance is
+`../../kernel/inductive/seed-k4-omega-motive-elim.md` (+ the K5 seed when it
+lands).
 
 ---
 
@@ -91,11 +103,13 @@ law-less/postulated/holed instance is **rejected as unlawful** (non-empty
   `data K` — it has an eliminator, so its ∀-laws are kernel-provable by
   case-split/induction; this is the precondition that makes a postulate a
   *defect*), **identical in their operation field** (`leq = k_leq`), differing
-  **only** in the law fields: (a) a **canonical** instance whose
-  `refl`/`antisym`/`trans`/`total` fields are **real kernel proofs**
-  (a `declare_def` record value, re-checked); (b) a **law-less** instance whose
-  law fields are `declare_postulate`d (and, as further arms, holed /
-  stubbed-absent)
+  **only** in the law fields: (a) a **canonical** instance whose law fields are
+  **real kernel proofs** (a `declare_def` record value, re-checked) — the
+  **live-`Eq`-conclusion** laws `refl`/`trans`/`total` provable on K4 **now**,
+  and (for a *complete* total order) **`antisym`** **`(gated: K5)`** (its
+  per-branch obligation reduces to a concrete `Top`/`Bottom`); (b) a
+  **law-less** instance whose law fields are `declare_postulate`d (and, as
+  further arms, holed / stubbed-absent)
 - expect: **the verdict flips.** (a) **accepts as lawful** — every law prop is
   kernel-proved, so the instance's **`trusted_base_delta` is empty** (the law
   props ∉ `trusted_base()`); (b) **rejected as unlawful** — a **postulated** law
@@ -125,12 +139,17 @@ law-less/postulated/holed instance is **rejected as unlawful** (non-empty
   postulated field on a **primitive** carrier is the **honest audited-delta**
   (`primitive-carrier-declared-audited-delta` below), so the reject arm is
   conditioned on carrier provability, not on the postulate alone. **K4 landed
-  (`3be0e30`):** the **accept** arm (a, real proofs → zero-delta) and this
-  **postulate-is-a-defect** verdict are **realizable** now — an inductive
-  carrier's ∀-laws are provable via Ω-motive elimination (`14 §3`), so a
-  postulate on `K` *is* an avoidable delta. The real proof-carrying instances
-  ride the **ES4-lawproofs build**; the **holed** / **missing** / declared-vs-
-  hidden arms were always live.
+  (`3be0e30`), K5 forward:** the accept arm's **live-`Eq`-conclusion** laws
+  (`refl`/`trans`/`total`) and the **postulate-is-a-defect** verdict over them
+  are **realizable** now — an inductive carrier proves those ∀-laws by finite
+  case-split via Ω-motive elimination (`14 §3`), so a postulate on `K` *is* an
+  avoidable delta **today**. The **complete** accept arm — the
+  **concrete-equality-conclusion** laws **`antisym`** (and `DecEq`'s
+  `sound`/`complete`), whose per-branch obligation reduces to a concrete
+  `Top`/`Bottom` — is **`(gated: K5)`** (`§6`, `16 §1`). The real proof-carrying
+  instances ride the **ES4-lawproofs build** (the provable fragment now, the
+  complete arm reopens on K5); the **holed** / **missing** / declared-vs-hidden
+  arms were always live.
 
 ### stdlib/classes/primitive-carrier-declared-audited-delta (soundness)
 - spec: `51 §6` (the carrier axis — a primitive carrier is **audited-delta**,
@@ -168,11 +187,14 @@ law-less/postulated/holed instance is **rejected as unlawful** (non-empty
   ([[kernel-backed-claim-grep-the-emission-not-the-name]]). Static face; the
   build lands the real instances + their manifest delta declarations. **K4
   landed (`3be0e30`):** arm (a)'s reject (an inductive postulate = defect) is
-  **realizable** now — `Bool`/user `data` prove their laws via Ω-motive
-  elimination, so the axis **separates** (inductive zero-delta vs primitive
-  audited-delta). The **declared-vs-hidden** sub-net was always
-  K4-independent — it is what keeps the primitive audited-delta posture
-  enforceable regardless.
+  **realizable** now — this case is keyed on **`total`**, a
+  **live-`Eq`-conclusion** law (the Bool-equation `IsTrue (leq x y || leq y x)`)
+  provable on K4 with **no K5 needed**, so `Bool`/user `data` prove it via
+  Ω-motive elimination and the axis **separates** (inductive zero-delta vs
+  primitive audited-delta) **today** — this is the live adjacent net while the
+  `antisym`/`sound`/`complete` arms are `(gated: K5)`. The
+  **declared-vs-hidden** sub-net was always capability-independent — it is
+  what keeps the primitive audited-delta posture enforceable regardless.
 
 ### stdlib/classes/ord-total-law-is-omega-bool-equation (soundness)
 - spec: `51 §3` (law-field sorts; totality is the Bool-equation), `16 §1`/`§6`
@@ -237,10 +259,12 @@ law-less/postulated/holed instance is **rejected as unlawful** (non-empty
 ## Coverage map
 
 - **AC3** (laws PROVED, soundness):
-  `law-fields-real-proofs-not-postulates` (accept arm + postulate-defect
-  **realizable** since K4 landed; real instances = ES4-lawproofs build),
-  `primitive-carrier-declared-audited-delta` (carrier separation live;
-  declared-vs-hidden always K4-independent),
+  `law-fields-real-proofs-not-postulates` (live-`Eq`-conclusion accept arm +
+  postulate-defect **realizable** since K4; the **complete** accept arm —
+  `antisym`/`sound`/`complete` → `Top`/`Bottom` — **`(gated: K5)`**; real
+  instances = ES4-lawproofs build),
+  `primitive-carrier-declared-audited-delta` (carrier separation live on the
+  live-`Eq` law `total`; declared-vs-hidden always capability-independent),
   `ord-total-law-is-omega-bool-equation`.
 - **AC2** (`Ord` subsumes the comparator):
   `where-ord-same-sort-obligation`.
@@ -266,12 +290,16 @@ law-less/postulated/holed instance is **rejected as unlawful** (non-empty
   treating a primitive audited-delta as a defect (over-strict — you cannot lack
   `Ord Int`), an inductive-carrier postulate as lawful (under-strict — hides an
   avoidable delta), or a **hidden** primitive delta as honest, contradicts this
-  class. **K4 landed (`3be0e30`):** the **avoidability** half (hence the carrier
-  *separation* and inductive-postulate-defect verdict) is **realizable** — an
-  inductive carrier proves its laws via Ω-motive elimination, so the axis
-  **separates**; the **declaredness** half (honest iff declared) always was
-  K4-independent. The proof-carrying instances land with the **ES4-lawproofs
-  build** (Team Language).
+  class. **K4 landed (`3be0e30`), K5 forward:** the **avoidability** half (hence
+  the carrier *separation* and inductive-postulate-defect verdict) is
+  **realizable** now for the **live-`Eq`-conclusion** laws (`refl`/`trans`/
+  `total`) — an inductive carrier proves those via Ω-motive elimination, so the
+  axis **separates today**; the **concrete-equality-conclusion** laws
+  (`antisym`/`sound`/`complete` → `Top`/`Bottom`) are **`(gated: K5)`** for a
+  *complete* instance. The **declaredness** half (honest iff declared) always
+  was capability-independent. The proof-carrying instances land with the
+  **ES4-lawproofs build** (Team Language; the provable fragment now, the
+  complete arm on K5).
 - **A law field is `Ω` (proof-irrelevant).**
   `ord-total-law-is-omega-bool-equation` and the
   `51 §3` law-field-sort pin agree: every law field lands in `Ω` (the record is
