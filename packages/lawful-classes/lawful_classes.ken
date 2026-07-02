@@ -28,20 +28,30 @@ class DecEq a {
   complete : (x : a) -> (y : a) -> Equal a x y -> IsTrue (eq x y)
 }
 
+-- `bool_or` -- a REAL (transparent, match-based) Bool "or", used ONLY for
+-- `total`'s law-field TYPE (never for an operation field of any instance).
+-- Deliberately NOT the `or_bool` PRIMITIVE (`numbers.rs`): a primitive never
+-- reduces regardless of argument concreteness (K1's `whnf` only unfolds
+-- `Decl::Transparent`), which would make `total` permanently unprovable for
+-- EVERY carrier, inductive or not. A transparent `bool_or` lets an
+-- inductive carrier's `total` instance be proved by case-split while
+-- costing nothing extra (it's ordinary Ken, not a new kernel feature).
+view bool_or (a : Bool) (b : Bool) : Bool = match a { True => True ; False => b }
+
 -- `Ord a` -- total order, supplies the comparator the verified `sort`/
 -- `isSorted` thread explicitly (51 SS2.3/SS4, ES2-remainder). `total`'s
--- Bool-EQUATION form -- `IsTrue (or_bool (leq x y) (leq y x))`, the
--- value-level `or_bool` lifted through `IsTrue` -- keeps the law
+-- Bool-EQUATION form -- `IsTrue (bool_or (leq x y) (leq y x))`, the
+-- value-level `bool_or` lifted through `IsTrue` -- keeps the law
 -- Omega-clean with no truncation (51 SS3): a BARE propositional `x<=y or
 -- y<=x` would be proof-relevant (which side holds is content) and need
--- `||.||` to reach Omega; the decidable `Bool` `or_bool` sidesteps that
+-- `||.||` to reach Omega; the decidable `Bool` `bool_or` sidesteps that
 -- entirely.
 class Ord a {
   leq     : a -> a -> Bool ;
   refl    : (x : a) -> IsTrue (leq x x) ;
   antisym : (x : a) -> (y : a) -> IsTrue (leq x y) -> IsTrue (leq y x) -> Equal a x y ;
   trans   : (x : a) -> (y : a) -> (z : a) -> IsTrue (leq x y) -> IsTrue (leq y z) -> IsTrue (leq x z) ;
-  total   : (x : a) -> (y : a) -> IsTrue (or_bool (leq x y) (leq y x))
+  total   : (x : a) -> (y : a) -> IsTrue (bool_or (leq x y) (leq y x))
 }
 
 -- Canonical `Int` instances -- AUDITED-DELTA, illustrative-only (51 SS6).
@@ -55,10 +65,7 @@ class Ord a {
 -- `leq_int`/`eq_int` primitives (existing `trusted_base()` entries, not new
 -- ones); the law fields are honest, VISIBLE postulates (`Axiom` -- a real,
 -- grep-able `Decl::Opaque`, never a silent/hidden assumption). `Int` is
--- illustrative-only here -- NOT the zero-delta exemplar, and NOT claimed
--- lawful under AC3's zero-delta bar (that bar applies to an INDUCTIVE
--- carrier's law-carrying instance, e.g. a future `Ord Bool`/`Ord <user data>`
--- once the kernel gains Omega-motive elimination -- 51 SS6, forward WP).
+-- illustrative-only here -- NOT the zero-delta exemplar.
 
 view int_leq (x : Int) (y : Int) : Bool = leq_int x y
 view int_eq (x : Int) (y : Int) : Bool = eq_int x y
@@ -82,4 +89,103 @@ instance Ord Int {
   antisym = Axiom ;
   trans   = Axiom ;
   total   = Axiom
+}
+
+-- Canonical `Bool` instances -- the ZERO-DELTA exemplar (51 SS6): `Bool` is
+-- a real inductive (`data Bool = True | False`, ES2), so its laws ARE
+-- kernel-provable by finite case-split (`elim_Bool` into an `Omega`-motive,
+-- K4 `3be0e30`). Every law field below is a REAL, kernel-checked proof
+-- (`Refl`/direct hypothesis reuse under the RESTRUCTURED signature form
+-- described below) -- NOT `Axiom` -- except where noted.
+--
+-- The restructuring discipline (why these signatures look unusual). A
+-- law field bound as `(x:a)(y:a)(p:P x y)(q:Q x y) -> Concl` would check p/q
+-- against their DECLARED (unnarrowed) types even while case-splitting x/y
+-- inside the body -- `match x {...}` only narrows the GOAL (via the
+-- Elim's motive), never a SIBLING hypothesis bound before it, so p/q stay
+-- symbolic in x/y and can't be reused where the branch needs them
+-- concretely. Binding each variable-under-case-split as its OWN Pi layer
+-- (`(x:a) : (y:a) -> P x y -> Concl`, case-splitting x FIRST via a `match`
+-- whose ARMS are themselves further `\y. match y {...}`-nested functions,
+-- and only introducing p/q's LAMBDA *after* the relevant match) makes each
+-- hypothesis's binder-time type ALREADY concrete in the case-split
+-- variables -- so a hypothesis that becomes exactly the (also-concrete)
+-- goal in an "impossible" branch (e.g. both reduce to `Eq Bool False True`)
+-- can be reused directly, no ex-falso needed. This is *why* `refl`/`trans`/
+-- `total` are provable today without any further kernel capability.
+--
+-- `antisym`'s "same-value" branches (`x = y`) reduce the GOAL itself
+-- (`Equal a x x`) past a live application into a BARE `Equal Bool True
+-- True`/`Equal Bool False False` -- which observationally collapses
+-- straight to the kernel's `Top` proposition (`obs.rs::eq_at_inductive`,
+-- same-ctor nullary ⇒ `Top`) BEFORE `Refl` ever sees an `Eq` shape to
+-- check, and `Top` has no introduction rule anywhere in the kernel (nor
+-- does `Bottom` have an elimination rule, for the swapped/contradictory
+-- arm). This is the SAME gap flagged during the K4 build itself
+-- (`k4_omega_motive.rs`'s own doc comment) -- a forward WP ("K5":
+-- `Top`-intro + `Bottom`-elim), NOT specific to this instance. `antisym`
+-- (here) and `DecEq Bool`'s `sound`/`complete` (both conclude/hypothesize a
+-- BARE `Equal a x y`, the same collapsing shape) stay honest `Axiom`s
+-- pending K5.
+--
+-- `Eq Bool`'s `sym`/`trans` stay `Axiom` too, but for a DIFFERENT reason --
+-- NOT the K5/Top-Bottom wall (their conclusions are `IsTrue (eq _ _)`,
+-- never a bare `Equal a x y`, so `eq_at_inductive`'s collapse never even
+-- applies here). Reusing a hypothesis `p : IsTrue (eq x y)` where the goal
+-- is the swapped `IsTrue (eq y x)` needs the kernel to see
+-- `Equal Bool (bool_eq x y) True` and `Equal Bool (bool_eq y x) True` as
+-- the same type (`bool_eq` is genuinely commutative in value) -- but
+-- `ken-kernel/src/conv.rs`'s `conv_struct` has no congruence case for
+-- comparing two `Term::Eq(...)` nodes component-wise, so two stuck
+-- (not-yet-collapsed) `Eq` propositions that are semantically equal but
+-- not syntactically identical fail to convert. This is a narrow, distinct
+-- kernel gap ("K6" -- Architect-ruled, `conv.rs`-only, independent of K5:
+-- no `Top`/`Bottom`, `eq_reduce` untouched). The only admissible fix is a
+-- POSITIONAL congruence arm (`conv_struct(ty1,ty2) && conv_struct(x1,x2)
+-- && conv_struct(y1,y2)`) -- a cross-wise arm would smuggle propositional
+-- symmetry into definitional equality (unsound: collapses directed `Eq`,
+-- enables unproven-symmetry transport via `cast`) and is a hard NO.
+-- Mechanism-grounded (not just structurally confirmed): the arm is the
+-- necessary trigger that lets `conv_struct`'s recursion reach each
+-- already-case-split leaf's concrete literals, where ordinary
+-- pre-existing iota-reduction (not a new commutativity rule) closes it --
+-- confirmed by a local patch-and-revert experiment with full term dumps,
+-- not something Team Language can fix from the surface. K6 is its own
+-- reviewed kernel WP (not yet merged); this instance re-derives its
+-- `sym`/`trans` obligation-shape against K6 once it lands, same
+-- capability-gate-reopen discipline as the K5/`antisym` un-stage.
+
+view bool_leq (a : Bool) (b : Bool) : Bool = match a { False => True ; True => b }
+view bool_eq (a : Bool) (b : Bool) : Bool = match a { True => b ; False => match b { True => False ; False => True } }
+
+instance Ord Bool {
+  leq = bool_leq ;
+  refl = \x. match x { True => Refl ; False => Refl } ;
+  antisym = Axiom ;
+  trans =
+    \x. match x {
+      True => \y. match y {
+        True => \z. match z { True => \p.\q. Refl ; False => \p.\q. q } ;
+        False => \z. match z { True => \p.\q. Refl ; False => \p.\q. p }
+      } ;
+      False => \y.\z.\p.\q. Refl
+    } ;
+  total =
+    \x.\y. match x {
+      True => match y { True => Refl ; False => Refl } ;
+      False => match y { True => Refl ; False => Refl }
+    }
+}
+
+instance Eq Bool {
+  eq = bool_eq ;
+  refl = \x. match x { True => Refl ; False => Refl } ;
+  sym = Axiom ;
+  trans = Axiom
+}
+
+instance DecEq Bool {
+  eq = bool_eq ;
+  sound = Axiom ;
+  complete = Axiom
 }

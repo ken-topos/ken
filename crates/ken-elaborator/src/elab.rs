@@ -14,7 +14,7 @@ use ken_kernel::{
     infer as kernel_infer,
     inductive::{peel_app, recursive_args},
     sct::sct_check,
-    subst::{subst0, subst_outer, weaken},
+    subst::{subst0, subst_outer, subst_var, weaken},
     whnf, Context, Decl, GlobalEnv, GlobalId, InductiveDecl, Level, LevelVar, Term,
 };
 
@@ -388,12 +388,209 @@ fn check(cx: &mut ElabCtx, expr: &RExpr, expected: &Term, _span: &Span) -> Resul
                 }),
             }
         }
+        // `match` against a KNOWN expected type: build the motive from the
+        // ascribed goal (`λd. expected[d/scrut]`), not inferred from the
+        // first arm's body (ES4-lawproofs AC4). This is what lets a
+        // per-branch-varying `Ω`-goal (a structure-class law, `refl :
+        // (x:a)->IsTrue (leq x x)`) be proved by case-split at all — the
+        // pre-existing `infer_match`/`compile_match_matrix` path (used by
+        // `isSorted`/`Perm`, untouched by this) only ever built a CONSTANT
+        // motive derived from arm0's inferred type, which cannot express a
+        // goal that differs per constructor.
+        RExpr::RMatch { scrut, arms, span } => {
+            // Gate on PATTERN SHAPE, not goal-dependence: `check_match_
+            // dependent` is correct whenever every arm's pattern is FLAT
+            // (a constructor with only `Var`/`Wild` sub-patterns) —
+            // whether or not `expected` actually mentions the scrutinee.
+            // A goal that doesn't mention it (`isSorted`/`Perm`/`sort`'s
+            // `Prop`/carrier-typed returns) just yields a genuinely
+            // constant motive (still correctly built and checked — no
+            // special-casing needed, verified against `isSorted`). A goal
+            // that mentions a DIFFERENT bound variable than the immediate
+            // scrutinee (a hypothesis-driven case-split, e.g. `trans`'s
+            // `match y {...}` where the CONCLUSION mentions `x`/`z` but
+            // not `y`) is exactly why goal-dependence was the wrong test
+            // — the per-arm substitution still correctly threads `x`/`z`
+            // through regardless of whether `y` itself appears. Nested
+            // constructor sub-patterns (`Suc (Suc m)`) are NOT supported
+            // by the flat-pattern builder, so those keep using the
+            // existing general `infer_match`/`compile_match_matrix`
+            // nested-pattern compiler unchanged.
+            let flat = arms.iter().all(|a| match &a.pat.kind {
+                RPatKind::Ctor(_, subs) => subs.iter().all(|s| matches!(s.kind, RPatKind::Var(_) | RPatKind::Wild)),
+                _ => false,
+            });
+            // Further restrict to NULLARY-constructor families (`Bool`,
+            // every carrier this WP's law proofs actually case-split on).
+            // A parameterized/non-nullary family (`List a`'s `Cons`, what
+            // `isSorted`/`Perm` match on) is left entirely to the existing
+            // `infer_match` path — untouched, not just by preference but
+            // because this narrower builder hasn't been validated against
+            // ctor-argument telescopes yet (a real, contained follow-on,
+            // not something to risk on a live prelude decl).
+            let nullary = flat
+                && {
+                    let (probe_core, probe_ty) = infer(cx, scrut)?;
+                    match probe_core {
+                        Term::Var(_) => {
+                            let probe_ty_wh = whnf(cx.env, &cx.ctx, &probe_ty);
+                            let (head, _) = peel_app(&probe_ty_wh);
+                            match head {
+                                Term::IndFormer { id, .. } => cx
+                                    .env
+                                    .inductive(id)
+                                    .map(|ind| ind.constructors.iter().all(|c| c.args.is_empty()))
+                                    .unwrap_or(false),
+                                _ => false,
+                            }
+                        }
+                        _ => false,
+                    }
+                };
+            if nullary {
+                check_match_dependent(cx, scrut, arms, expected, span)
+            } else {
+                let (core, inferred_ty) = infer_match(cx, scrut, arms, span)?;
+                unify_types(&mut cx.metas, expected, &inferred_ty);
+                Ok(core)
+            }
+        }
         _ => {
             let (core, inferred_ty) = infer(cx, expr)?;
             unify_types(&mut cx.metas, expected, &inferred_ty);
             Ok(core)
         }
     }
+}
+
+/// Check `match scrut { C₁ p… => e₁ ; … }` against a KNOWN `expected` goal
+/// that may reference the scrutinee (a per-branch-varying `Ω`- or `Type`-
+/// motive) — the K4/AC4 dependent-elimination path. `scrut` must elaborate
+/// to a bound variable (`Term::Var`); only FLAT constructor patterns are
+/// supported (no nested constructor sub-patterns) — both are sufficient for
+/// a structure-class law proof (`ES4-lawproofs`) and deliberately narrower
+/// than `infer_match`'s general nested-pattern compiler, which this does
+/// not touch or replace.
+fn check_match_dependent(
+    cx: &mut ElabCtx,
+    scrut: &RExpr,
+    arms: &[RMatchArm],
+    expected: &Term,
+    span: &Span,
+) -> Result<Term, ElabError> {
+    let (scrut_core, scrut_ty_raw) = infer(cx, scrut)?;
+    let scrut_ty = whnf(cx.env, &cx.ctx, &scrut_ty_raw);
+    let scrut_idx = match &scrut_core {
+        Term::Var(k) => *k,
+        _ => {
+            return Err(ElabError::Internal(
+                "dependent match (AC4): scrutinee must be a bound variable so the \
+                 goal can be generalized over it"
+                    .into(),
+            ))
+        }
+    };
+
+    let (head, params_terms) = peel_app(&scrut_ty);
+    let d_id = match &head {
+        Term::IndFormer { id, .. } => *id,
+        _ => {
+            return Err(ElabError::TypeMismatch {
+                span: span.clone(),
+                reason: "match scrutinee must have an inductive type".into(),
+            })
+        }
+    };
+    let ind = cx
+        .env
+        .inductive(d_id)
+        .ok_or_else(|| ElabError::Internal(format!("inductive {:?} not found", d_id)))?
+        .clone();
+    let m = ind.params.len();
+
+    // The motive: `expected` with `Var(scrut_idx)` abstracted to a fresh
+    // outer binder — `weaken` shifts every free var (scrut_idx included) up
+    // by 1 first, then `subst_var` replaces the shifted scrut_idx with the
+    // new Var(0); every OTHER free var is left as-is by `subst_var`'s
+    // `i < j` branch, exactly matching its new (one-deeper) home.
+    let motive_body = subst_var(&weaken(expected, 1), scrut_idx + 1, &Term::var(0));
+    let motive_sort = kernel_infer(cx.env, &cx.ctx, expected)
+        .map_err(|e| ElabError::KernelRejected { error: e, span: span.clone() })?;
+    let motive_ty = Term::pi(scrut_ty.clone(), weaken(&motive_sort, 1));
+    let motive = Term::Ascript(
+        Box::new(Term::lam(scrut_ty.clone(), motive_body)),
+        Box::new(motive_ty),
+    );
+
+    let mut methods: Vec<Option<Term>> = vec![None; ind.constructors.len()];
+    let mut arm_used = vec![false; arms.len()];
+    for (k, ctor) in ind.constructors.iter().enumerate() {
+        let arm_idx = arms
+            .iter()
+            .position(|a| matches!(&a.pat.kind, RPatKind::Ctor(name, _) if cx.globals.get(name).copied() == Some(ctor.id)))
+            .ok_or_else(|| ElabError::ExhaustivenessError {
+                missing: cx.globals.iter().find(|(_, &id)| id == ctor.id).map(|(n, _)| n.clone()).unwrap_or_default(),
+                span: span.clone(),
+            })?;
+        arm_used[arm_idx] = true;
+        let arm = &arms[arm_idx];
+        let sub_pats = match &arm.pat.kind {
+            RPatKind::Ctor(_, subs) => subs.clone(),
+            _ => unreachable!("guarded by the position() match above"),
+        };
+        if sub_pats.len() != ctor.args.len() {
+            return Err(ElabError::Internal(
+                "dependent match (AC4): constructor arity mismatch".into(),
+            ));
+        }
+        let n = sub_pats.len();
+        for (j, sp) in sub_pats.iter().enumerate() {
+            if !matches!(sp.kind, RPatKind::Var(_) | RPatKind::Wild) {
+                return Err(ElabError::Internal(
+                    "dependent match (AC4): nested constructor sub-patterns are not \
+                     yet supported here"
+                        .into(),
+                ));
+            }
+            let raw_ty = subst_outer(&ctor.args[j], m, &params_terms, j);
+            cx.ctx.push(raw_ty);
+        }
+        // Reconstruct the concrete scrutinee `Cₖ p̄ (Var(n-1)) … (Var(0))`
+        // in the (now n-deeper) context.
+        let mut concrete = Term::Constructor { id: ctor.id, level_args: vec![] };
+        for p in &params_terms {
+            concrete = Term::app(concrete, weaken(p, n as i64));
+        }
+        for j in (0..n).rev() {
+            concrete = Term::app(concrete, Term::var(j));
+        }
+        let expected_here = subst_var(&weaken(expected, n as i64), scrut_idx + n, &concrete);
+        let body_core = check(cx, &arm.body, &expected_here, &arm.span)?;
+        for _ in 0..n {
+            cx.ctx.pop();
+        }
+        let mut method = body_core;
+        for j in (0..n).rev() {
+            method = Term::lam(subst_outer(&ctor.args[j], m, &params_terms, j), method);
+        }
+        methods[k] = Some(method);
+    }
+    for (i, used) in arm_used.iter().enumerate() {
+        if !used {
+            return Err(ElabError::ReachabilityError { span: arms[i].span.clone() });
+        }
+    }
+    let methods: Vec<Term> = methods.into_iter().map(|m| m.expect("every ctor bucket filled above")).collect();
+
+    Ok(Term::Elim {
+        fam: d_id,
+        level_args: vec![],
+        params: params_terms,
+        motive: Box::new(motive),
+        methods,
+        indices: vec![],
+        scrut: Box::new(scrut_core),
+    })
 }
 
 fn infer(cx: &mut ElabCtx, expr: &RExpr) -> Result<(Term, Term), ElabError> {

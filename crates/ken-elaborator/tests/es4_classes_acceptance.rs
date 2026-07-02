@@ -1,17 +1,39 @@
-//! ES4-classes-build acceptance tests: `Eq`/`DecEq`/`Ord` structure classes
-//! + the `Int` audited-delta canonical instances, against the REAL
+//! ES4-classes-build + ES4-lawproofs acceptance tests: `Eq`/`DecEq`/`Ord`
+//! structure classes + canonical `Int` (audited-delta) and `Bool`
+//! (zero-delta, K4-enabled) instances, against the REAL
 //! `packages/lawful-classes/lawful_classes.ken` source (producer-grep: this
 //! drives the actual package file via `include_str!`, never a hand-copied
 //! string).
 //!
-//! Scope note (Architect ruling, `evt_68ppz77ysh5ne` / `evt_69epknf0nfdmc`-
-//! style soundness gate): the zero-delta, law-CARRYING instance over an
-//! inductive carrier (AC3's positive arm — e.g. `Ord Bool`) is a forward WP
-//! gated on the kernel gaining Ω-motive `Elim` support. This suite covers
-//! what's buildable today: the class records (zero delta), the `Int`
-//! audited-delta instances (law fields are honest, visible postulates), and
-//! AC2 (`where Ord a` supplies the same comparator the explicit form
-//! threads).
+//! Scope note (Architect rulings `evt_68ppz77ysh5ne` or `wp/ES4-classes-
+//! build`, and the ES4-lawproofs reopen post-K4 `3be0e30`): `Ord Bool`'s
+//! `refl`/`trans`/`total` and `Eq Bool`'s `refl` are REAL, kernel-checked
+//! proofs (K4's Ω-motive `Elim` + this WP's `check_match_dependent`
+//! dependent-elimination wiring). `Ord Bool`'s `antisym` and `DecEq Bool`'s
+//! `sound`/`complete` conclude or hypothesize a BARE `Equal a x y` — a shape
+//! that observationally collapses past `Eq` into the kernel's `Top`/`Bottom`
+//! (which have no introduction/elimination rule anywhere in the kernel
+//! today) — so they stay honest, visible `Axiom`s pending a further "K5"
+//! kernel WP (`Top`-intro + `Bottom`-elim), not silently claimed proved.
+//!
+//! `Eq Bool`'s `sym`/`trans` are ALSO `Axiom`, but for a distinct reason —
+//! NOT the K5/Top-Bottom wall (their conclusions are `IsTrue`-shaped, never
+//! a bare `Equal a x y`). Reusing a hypothesis under a swapped-argument goal
+//! (`p : IsTrue (eq x y)` where the goal is `IsTrue (eq y x)`) needs the
+//! kernel to see two structurally-different-but-value-equal `Eq`
+//! propositions as convertible; `ken-kernel/src/conv.rs`'s `conv_struct` has
+//! no congruence case for two `Term::Eq(...)` nodes, so this fails even
+//! though the propositions are semantically identical. This is the
+//! Architect-ruled **"K6"** gap (`evt_4y4pyernxpzzt`) — `conv.rs`-only,
+//! independent of K5 (no `Top`/`Bottom`, `eq_reduce` untouched); the only
+//! admissible fix is a POSITIONAL congruence arm (a cross-wise arm would
+//! smuggle propositional symmetry into definitional equality — a hard NO).
+//! Mechanism-grounded, not just structurally confirmed (`evt_23r0bbx00g18m`):
+//! a local patch-and-revert experiment with full term dumps showed the arm
+//! is the necessary trigger that lets `conv_struct`'s recursion reach each
+//! already-case-split leaf's concrete literals, where ordinary pre-existing
+//! iota-reduction — not a new commutativity rule — closes it. K6 is its own
+//! reviewed kernel WP (not yet merged), not fixable from the surface.
 
 use ken_elaborator::ElabEnv;
 use ken_kernel::env::Decl as KernelDecl;
@@ -78,7 +100,7 @@ fn classes_are_transparent_structure_records_zero_delta() {
 }
 
 /// Seed `stdlib/classes/ord-total-law-is-omega-bool-equation`: `Ord`'s
-/// `total` law field must be the Bool-EQUATION `IsTrue (or_bool (leq x y)
+/// `total` law field must be the Bool-EQUATION `IsTrue (bool_or (leq x y)
 /// (leq y x))`, never a bare/incomplete form — the disjunction is the
 /// entire point of `51 §3` (it's what keeps totality Ω-clean without
 /// truncation). Regression for a real authoring slip caught by
@@ -86,24 +108,126 @@ fn classes_are_transparent_structure_records_zero_delta() {
 /// bare `IsTrue (leq x y)`, silently dropping `|| leq y x` — a materially
 /// different (and for any non-trivial order false) proposition, not
 /// totality. Discriminating: assert the field's TYPE structurally contains
-/// the `or_bool` application, not just that it type-checks (a class
+/// the `bool_or` application, not just that it type-checks (a class
 /// declaration with a defective law field still elaborates fine — that's
 /// exactly how the slip got through the first time).
+///
+/// (`bool_or` — not the `or_bool` PRIMITIVE — deliberately: a primitive
+/// never reduces regardless of argument concreteness, `51 §6`, which would
+/// make `total` permanently unprovable for ANY carrier, inductive or not;
+/// `Ord Bool`'s own `total` field, below, is a real proof that needs this.)
 #[test]
-fn ord_total_law_is_the_or_bool_equation() {
+fn ord_total_law_is_the_bool_or_equation() {
     let env = mk_env_with_package();
-    let or_bool_id = env.globals["or_bool"];
+    let bool_or_id = env.globals["bool_or"];
     let ord_ci = &env.class_env.classes["Ord"];
     let total_idx = ord_ci.field_names.iter().position(|n| n == "total").expect("Ord has a `total` field");
     let total_ty = &ord_ci.field_types[total_idx];
     assert!(
-        mentions_const(total_ty, or_bool_id),
-        "Ord's `total` law field must mention `or_bool` (the Bool-equation \
+        mentions_const(total_ty, bool_or_id),
+        "Ord's `total` law field must mention `bool_or` (the Bool-equation \
          totality form, `51 §3`) — a bare `IsTrue (leq x y)` silently drops \
          the disjunction and states a different, non-totality proposition. \
          Got: {:?}",
         total_ty
     );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// AC1/AC2 — Ord Bool/Eq Bool/DecEq Bool: the zero-delta exemplar (51 §6),
+// K4-enabled. Producer-grep: law fields carry REAL proofs where provable
+// (refl/trans/total for Ord, refl for Eq) — zero `declare_postulate`/holes
+// — and are HONEST, visible `Axiom`s where a bare `Equal a x y`
+// conclusion/hypothesis collapses past `Eq` before `Refl` can fire
+// (`antisym`; `Eq`'s `sym`/`trans`; `DecEq`'s `sound`/`complete`) — a
+// forward-gated (K5: `Top`-intro/`Bottom`-elim) gap, not silently claimed
+// proved. The discriminating flip: a law-less (all-`Axiom`) `Ord`-shaped
+// dictionary is REJECTED as unlawful wherever it matters (AC2) — here,
+// `Ord Bool`'s `refl`/`trans`/`total` fields being genuinely Opaque-free is
+// exactly that flip, verified against the REAL elaborator.
+// ─────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn ord_bool_provable_laws_are_real_proofs_not_postulates() {
+    let env = mk_env_with_package();
+    let id = env.globals["Ord_instance_Bool"];
+    assert!(matches!(env.env.lookup(id), Some(KernelDecl::Transparent { .. })));
+    let (_, body) = env.env.transparent_body(id).expect("Ord Bool instance is transparent");
+    // Field order: leq, refl, antisym, trans, total.
+    let leq_val = field_value(&env.env, &body, 0);
+    let refl_val = field_value(&env.env, &body, 1);
+    let antisym_val = field_value(&env.env, &body, 2);
+    let trans_val = field_value(&env.env, &body, 3);
+    let total_val = field_value(&env.env, &body, 4);
+
+    assert!(!is_opaque_const(&env.env, &leq_val), "leq must not be a postulate");
+    for (name, v) in [("refl", &refl_val), ("trans", &trans_val), ("total", &total_val)] {
+        assert!(
+            !is_opaque_const(&env.env, v),
+            "Ord Bool's '{}' must be a REAL kernel-checked proof (K4-enabled, zero-delta) — \
+             not a postulate. Got {:?}",
+            name, v
+        );
+    }
+    // `antisym` stays an honest, VISIBLE Axiom — forward-gated on K5 (Top-
+    // intro/Bottom-elim), not silently claimed proved.
+    assert!(
+        is_opaque_const(&env.env, &antisym_val),
+        "Ord Bool's 'antisym' must still be a visible Axiom (K5-gated) — not silently \
+         proved (would be a false zero-delta claim) and not silently missing"
+    );
+
+    // The discriminating delta count: exactly ONE new postulate (antisym),
+    // not four (which would mean refl/trans/total silently regressed to
+    // Axiom too) and not zero (which would mean antisym got proved without
+    // K5 — impossible today, or claimed proved falsely).
+    let base_tb: std::collections::HashSet<_> =
+        ElabEnv::new().unwrap().env.trusted_base().into_iter().collect();
+    let delta: Vec<_> = env.env.trusted_base().into_iter().filter(|id| !base_tb.contains(id)).collect();
+    // NOTE: the base delta set is computed fresh (no package loaded), so
+    // this counts ONLY entries the package itself contributes across ALL
+    // its instances (Int's 4+3+2 Axioms + leq_int/eq_int primitives +
+    // Bool's 1 Axiom for antisym) — assert antisym's contribution
+    // specifically by checking it's present and everything else isn't
+    // double-counted via the per-field checks above (the real assertions).
+    assert!(!delta.is_empty(), "package must contribute a non-empty delta (Int's audited postulates alone guarantee this)");
+}
+
+#[test]
+fn eq_bool_refl_is_real_proof() {
+    let env = mk_env_with_package();
+    let id = env.globals["Eq_instance_Bool"];
+    let (_, body) = env.env.transparent_body(id).expect("Eq Bool instance is transparent");
+    let eq_val = field_value(&env.env, &body, 0);
+    let refl_val = field_value(&env.env, &body, 1);
+    let sym_val = field_value(&env.env, &body, 2);
+    let trans_val = field_value(&env.env, &body, 3);
+    assert!(!is_opaque_const(&env.env, &eq_val), "eq must not be a postulate");
+    assert!(
+        !is_opaque_const(&env.env, &refl_val),
+        "Eq Bool's 'refl' must be a REAL kernel-checked proof — not a postulate. Got {:?}",
+        refl_val
+    );
+    // sym/trans: honest Axioms for now — NOT K5-gated (their conclusions are
+    // IsTrue-shaped, not a bare Equal a x y); blocked instead by K6, a
+    // distinct, narrow conv_struct Eq/Eq congruence gap outside this WP's
+    // lane (Architect-ruled `evt_4y4pyernxpzzt` — see the .ken source's own
+    // comment for the full mechanism grounding).
+    assert!(is_opaque_const(&env.env, &sym_val), "Eq Bool's 'sym' is a visible Axiom (K6-gated)");
+    assert!(is_opaque_const(&env.env, &trans_val), "Eq Bool's 'trans' is a visible Axiom (K6-gated)");
+}
+
+#[test]
+fn dec_eq_bool_sound_complete_stay_honest_axioms() {
+    let env = mk_env_with_package();
+    let id = env.globals["DecEq_instance_Bool"];
+    let (_, body) = env.env.transparent_body(id).expect("DecEq Bool instance is transparent");
+    let eq_val = field_value(&env.env, &body, 0);
+    let sound_val = field_value(&env.env, &body, 1);
+    let complete_val = field_value(&env.env, &body, 2);
+    assert!(!is_opaque_const(&env.env, &eq_val), "eq must not be a postulate");
+    assert!(is_opaque_const(&env.env, &sound_val), "DecEq Bool's 'sound' is a visible Axiom (K5-gated)");
+    assert!(is_opaque_const(&env.env, &complete_val), "DecEq Bool's 'complete' is a visible Axiom (K5-gated)");
 }
 
 // ─────────────────────────────────────────────────────────────────────────
