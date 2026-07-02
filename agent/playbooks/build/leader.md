@@ -124,6 +124,16 @@ read checks yourself.
 - **Inbound queries** to your team come to you; triage to protect your active
   agent's focus — answer what you can, batch the rest, interrupt only for
   blockers.
+- **Spillover work attaches to the WP-owner — assign it, don't negotiate it
+  (COORDINATION §9a).** When a sound change forces a companion fixup in another
+  team's file that must land in the *same PR*, whoever owns the WP branch assigns
+  it **unilaterally, in one message** — never offer-form ("you take it" / "no,
+  you"), which cross-wires between two leaders and ping-pongs (a companion
+  migration once flipped four times in one minute). Another team's
+  file-familiarity is an *input* to the owner's call, never a competing claim: if
+  the work is yours to assign, name who does it and go; if it's another owner's,
+  feed your input **once** and defer. **Silence = assent** — the assignee acks
+  once, no re-confirm fan-in; retract-and-defer in one message if you're stale.
 - **Merge hand-off (you never touch GitHub):** when QA approves, package the WP
   and **open the merge Decision via `propose_decision`** — in the space
   (`ken-topos`; there is **no** separate "integration space", §4) — with a **real
