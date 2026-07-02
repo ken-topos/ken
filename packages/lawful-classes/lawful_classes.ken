@@ -157,11 +157,21 @@ instance Ord Int {
 -- written.) This is DISTINCT from K6 (which is about `conv_struct` lacking
 -- an `Eq`x`Eq` congruence arm for comparing two STUCK propositions) -- this
 -- is about `eq_at_inductive` not WHNF-ing its OWN operands before checking
--- constructor-headedness, a narrower defect one level upstream. `Ord Bool`'s
--- `antisym` and `DecEq Bool`'s `sound`/`complete` stay honest `Axiom`s on
--- their contradictory branches' hypothesis-collapse pending this being
--- grounded with the Architect (flagged, not routed around -- `ken-kernel`
--- stays untouched by Team Language per this WP's gate).
+-- constructor-headedness, a narrower defect one level upstream.
+-- Architect-confirmed and named ("K7", `evt_1w8r8qey52qvt`): a genuine
+-- kernel INCOMPLETENESS, not murky -- `eq_at_inductive`'s sibling
+-- `eq_at_type` (same file) already whnfs its two value operands before
+-- head-matching; `eq_at_inductive` is simply missing that same step. The
+-- fix is a safe, airtight-sound two-line whnf mirroring `eq_at_type`
+-- verbatim (cannot over-accept: whnf is the kernel's own sound reduction,
+-- so a newly-recognized constructor head was always definitionally true;
+-- no regression on genuinely-neutral operands, which whnf to themselves).
+-- Routed as a small trust-root kernel WP (`obs.rs`-only, `conv.rs`
+-- untouched) to `kernel-leader`/Architect co-review -- explicitly NOT an
+-- elaborator-side transport/`cast` workaround (rejected: that would grow
+-- the TCB to route around a kernel-completeness gap that belongs in the
+-- kernel). `Ord Bool`'s `antisym` and `DecEq Bool`'s `sound`/`complete`
+-- stay honest `Axiom`s, parked on the **K7** wall, until that WP lands.
 --
 -- `Eq Bool`'s `sym`/`trans` stay `Axiom` too, but for a DIFFERENT reason --
 -- NOT the K5/Top-Bottom wall (their conclusions are `IsTrue (eq _ _)`,
