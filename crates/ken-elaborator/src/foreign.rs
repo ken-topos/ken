@@ -323,5 +323,9 @@ fn collect_consts_in_tb(
             collect_consts_in_tb(respect, tb, out);
             collect_consts_in_tb(scrut, tb, out);
         }
+        Term::Absurd(motive, proof) => {
+            collect_consts_in_tb(motive, tb, out);
+            collect_consts_in_tb(proof, tb, out);
+        }
     }
 }

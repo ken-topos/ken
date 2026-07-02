@@ -2,7 +2,9 @@
 
 > Status: **K2 elaborated; K2c series-2 completes the three obs-reduction
 > seams** (§3.2 inductive index rewrite, §4.1 non-constant-motive `J`, §5.1
-> full quotient `respect`). Normative for the interface, computation rules,
+> full quotient `respect`); **K5 completes the observational fragment** —
+> `Top`-intro (`tt`) and `Bottom`-elim (`absurd`, Ω-only) as direct prelude
+> rules (§1.4). Normative for the interface, computation rules,
 > and algorithmic reduction behavior. This is the machinery `15-identity.md`
 > reuses: the strict proposition universe Omega, observational equality `Eq`
 > computed by recursion on type structure, the `cast` coercion, quotient
@@ -103,25 +105,23 @@ free.
 
 ### 1.3 Derived propositional connectives
 
-Omega carries the **Heyting** structure (§1). The
-following are **derived operations** from K1 formers -- they do not need
-primitive kernel support beyond the Omega formation and PI rules above:
+Omega carries the **Heyting** structure (§1). Falsity `Bottom` and truth
+`Top` are **primitive `Omega_0` prelude constants** with their own
+introduction/elimination rules (§1.4) — they are *not* derived from K1
+formers. The remaining connectives **are** derived operations from K1
+formers and need no primitive kernel support beyond the Omega formation and
+PI rules above:
 
 | Connective | Definition | K1 former used |
 |------------|------------|----------------|
-| Top        | `Unit`     | Unit : Type 0 (unit type, `14-inductive.md`) |
-| Bottom     | `Empty`    | Empty : Type 0 (empty inductive, `14-inductive.md`) |
 | P and Q    | `(x : P) x Q` | Sigma-type (`13-pi-sigma.md` par. 2) |
 | P => Q     | `(x : P) -> Q`  | Pi-type (`13-pi-sigma.md` par. 1) |
-| not P      | `P -> Empty`    | Pi-type + Bottom |
+| not P      | `P -> Bottom`   | Pi-type + Bottom (§1.4) |
 
-`Unit` and `Empty` as defined in K1 live in `Type 0`. When used as
-propositions in `Omega_0`, the kernel provides them as **Omega-typed
-prelude constants** — `Top : Omega_0` (wrapping `Unit`) and `Bottom :
-Omega_0` (wrapping `Empty`). These are direct declarations, not a
-general `Type → Omega` coercion (only genuine sub-singleton types may
-enter the strict-prop universe; an unrestricted `Type 0 → Omega_0` would
-admit `Bool`, making `true ≡ false` by Ω-PI and breaking consistency).
+Negation `not P := P -> Bottom` lands in `Omega` because `Bottom : Omega_0`
+(a Π into Omega is itself in Omega, §1.1) — earlier drafts wrote
+`P -> Empty` with the `Type 0` inductive, which lands in `Type 0`, not
+Omega; `Bottom` is the correct proposition-level falsity.
 
 `P or Q` and `exists x. P` are provided via truncation (par. 6):
 `P or Q := || P + Q ||` and `exists x:A. P x := || (x:A) x P x ||`. These
@@ -132,6 +132,92 @@ assumed (it holds for *decidable* props as data, via `14-inductive.md`).
 
 - **`Eq` (below) lands in `Omega_l`** (for the appropriate level `l`),
   so equality is a proof-irrelevant proposition.
+
+### 1.4 Top and Bottom: the observational fragment
+
+`Top` and `Bottom` are the truth and falsity propositions of Omega. They are
+**bare `Omega_0` prelude constants** — declared directly in the strict-prop
+universe, **not** obtained by coercing the K1 `Unit`/`Empty` inductives
+(`Type 0`) into Omega. There is no general `Type → Omega` coercion: only
+genuine sub-singleton types may enter the strict-prop universe (an
+unrestricted `Type 0 → Omega_0` would admit `Bool`, making `true ≡ false` by
+Ω-PI and breaking consistency, §1.1). `Top` (one inhabitant) and `Bottom`
+(no inhabitants) are exactly the two genuine sub-singletons, so they are
+admitted directly. Their unit/empty *structure* — what makes `Top` a
+singleton and `Bottom` empty — is given by the two rules below **directly**,
+not by reduction to `Unit`/`Empty`: behaviourally they match the `Unit`/
+`Empty` inductives, but the mechanism is a pair of prelude rules on the
+already-declared Omega constants.
+
+**Top-introduction.** `Top` has a canonical proof:
+
+```
+  ──────────────────  (Top-Intro)
+  Gamma |- tt : Top
+```
+
+`tt : Top` is a prelude constant (a new symbol, not a widened admission of
+an existing former). Combined with Ω-PI (§1.2) — which makes any two proofs
+of `Top` definitionally equal — `tt` is the *unique* inhabitant of `Top` up
+to definitional equality, so `Top` is a genuine singleton. No elimination
+rule is needed or provided: a proof of `Top` carries no information (Ω-PI),
+so nothing can be learned by casing on it.
+
+**Bottom-elimination (ex falso).** From a proof of `Bottom`, any
+*proposition* follows:
+
+```
+  Gamma |- C : Omega_l     Gamma |- p : Bottom
+  ─────────────────────────────────────────────  (Bottom-Elim)
+  Gamma |- absurd C p : C
+```
+
+- **Scope: the motive `C` must be a proposition (`C : Omega_l`)**, not an
+  arbitrary type. This is the minimal-safe scope, and it is exactly what the
+  observational fragment needs — every proof obligation whose discharge
+  routes through a contradictory hypothesis concludes an equality
+  `Eq … : Omega`. Eliminating `Bottom` into `Type` (the general
+  `False_rect`) is *also* sound — the elimination is vacuous regardless of
+  codomain — but is **not** admitted here; it is a cheap, independently
+  justified reopen with its own discriminating rule if a concrete need
+  surfaces. The kernel enforces `C : Omega_l` (a *sort* check, not a
+  wildcard): an `absurd` whose motive classifies as `Type` is rejected.
+- **`absurd C p` never reduces.** `Bottom` has no constructor, so there is
+  no canonical proof for the eliminator to match on; an `absurd` term is
+  **neutral forever**. It only ever appears under a hypothesis that is
+  itself unreachable — a variable of type `Bottom` bound in a branch that
+  cannot be entered — so it is never actually evaluated.
+
+**Why these two complete the observational fragment.** Equality on inductive
+data reduces (§2.2) by cases on the constructors: a *same-constructor*
+equality reduces to the conjunction of the argument equalities — which for a
+**nullary** constructor is the empty conjunction, i.e. `Top` (e.g.
+`Eq Bool true true ⇝ Top`) — and a *distinct-constructor* equality reduces
+to `Bottom` (e.g. `Eq Bool true false ⇝ Bottom`). `Top`-intro and
+`Bottom`-elim are precisely what *close* those two outcomes: `tt` proves the
+trivially-true equality, and `absurd` discharges the impossible one from a
+contradictory hypothesis. This is the two-branch shape of a decidable-order
+law such as `Ord.antisym` (the equal branch closes by `tt`; the
+contradictory branch closes by `absurd`), and it is why a *complete*
+proof-carrying instance over a decidable carrier needs this fragment (see
+`../50-stdlib/51-lawful-classes.md` §6) — `Eq`-motive elimination (`14 §3`)
+alone discharges only the laws whose obligation stays a *live* `Eq`.
+
+**Soundness.** Both rules are sound by the sub-singleton discipline, and
+neither touches `Eq`-reduction (`eq_reduce` is unchanged): (i) `Top`-intro
+inhabits a genuine sub-singleton, so Ω-PI gives it its full singleton
+structure — every reduct of a `Top` obligation is a *true* equality, so a
+canonical proof is exactly right; (ii) `Bottom`-elim is **vacuous** —
+because `Bottom` is empty, `absurd` never fires, so it cannot manufacture a
+proof that breaks proof irrelevance, regardless of the motive. Soundness is
+therefore entirely a matter of **typing admission**: no new reduction rule
+and no new conversion rule are introduced — an `absurd` term's type is
+always its motive `C : Omega_l`, so any two `absurd` terms are compared at
+an Omega-classified ambient type and the §1.2 proof-irrelevance shortcut
+settles them. This completes the observational fragment and is **distinct
+from** — and does not reopen — the forbidden direction of projecting a
+non-empty Omega inhabitant *out* into `Type` (the general
+`Type → Omega`/large-elimination-out-of-Omega danger, §1.1).
 
 ## 2. Observational equality `Eq`
 

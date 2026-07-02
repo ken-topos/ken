@@ -77,6 +77,23 @@ claim with no conformance case is a claim no one can rely on
   with the same motive but different proof methods are **conv-equal**, proof
   irrelevance preserved through conversion with no new conv rule; a
   proof-relevant-`Ω`-elim leak-out is the danger it rules out).
+- `kernel/observational/seed-k5-omega-fragment.md` — K5 **the observational
+  fragment** (`16 §1.4`): the two prelude rules that **close** the two `Eq`
+  reducts — `(Top-Intro)` `tt : Top` (same-nullary-ctor ⇝ `Top`) and
+  `(Bottom-Elim)` `absurd C p : C` **with `C : Omega_l` only** (distinct-ctor ⇝
+  `Bottom`, ex-falso). `Top`/`Bottom` are **bare `Omega_0` sub-singleton prelude
+  constants**, not the K1 `Unit`/`Empty` coerced in (`§1.3` correction). Seven
+  discriminating cases: the two **capability flips** (`tt` closes a `Top`-goal,
+  `tt ∉ trusted_base()`; `absurd` discharges from a `Bottom`-hyp) with
+  pre/post-K5 verdict flips; the **motive-is-a-sort** boundary (`Omega`-only,
+  not a wildcard — `Type`-motive rejected); the **proof-is-`Bottom`** premise (a
+  non-`Bottom` proof rejected — the consistency-critical net); the ★★ **AC6
+  SCT-launder** reject (a recursion hidden in an `absurd` subterm must be
+  rejected — flips to admit against a `collect_calls` that skips `absurd`; the
+  K2c hole one position over); the **no-new-rule** posture (`absurd` neutral,
+  `eq_reduce` unchanged, Ω-PI conversion); and the **antisym two-branch**
+  integration (`tt`/`absurd` close a decidable-order law — the `51 §6`
+  complete-instance un-gate).
 - `verify/seed-verify.md` — a proved postcondition, a disproved one with a
   countermodel, an incomplete one with a hole, and the soundness regression (Z3
   cannot force a false `proved`).

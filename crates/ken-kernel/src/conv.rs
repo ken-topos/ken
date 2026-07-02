@@ -304,6 +304,10 @@ pub fn normalize(env: &GlobalEnv, ctx: &Context, t: &Term) -> Term {
             normalize(env, ctx, &subst0(body, val))
         }
         Term::Ascript(t, _) => normalize(env, ctx, t),
+        Term::Absurd(motive, proof) => Term::Absurd(
+            Box::new(normalize(env, ctx, motive)),
+            Box::new(normalize(env, ctx, proof)),
+        ),
         // Leaves and closed-ish nodes: no sub-terms to normalize (levels aside).
         Term::Type(_)
         | Term::Omega(_)
@@ -517,6 +521,14 @@ fn conv_struct(env: &GlobalEnv, ctx: &Context, a: &Term, b: &Term) -> bool {
         }
         (Term::Ascript(t1, _), x) => conv_struct(env, ctx, t1, x),
         (x, Term::Ascript(t2, _)) => conv_struct(env, ctx, x, t2),
+        // `absurd` congruence — not load-bearing (any two `Absurd` terms are
+        // compared at their shared `motive : Omega_l`, so `convert`'s
+        // `is_omega_type` shortcut always fires before `conv_struct` is
+        // reached for them), added only for parity with `Elim`/`QuotElim`'s
+        // dedicated congruence arms.
+        (Term::Absurd(m1, p1), Term::Absurd(m2, p2)) => {
+            conv_struct(env, ctx, m1, m2) && conv_struct(env, ctx, p1, p2)
+        }
         _ => false,
     }
 }
