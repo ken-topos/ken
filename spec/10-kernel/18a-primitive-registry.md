@@ -470,8 +470,10 @@ does coeff arithmetic); **no perf cliff** (unlike `mul_int`, there is no
 derived- Decimal blow-up). So verdict **`BUILT × DEMOTE→derived`** — a **TCB
 removal**, and the *better* soundness posture: (1) `Num Decimal` laws become
 **zero-delta provable** over `(coeff, exp)` instead of postulate-only; (2) the
-F4 false-`Eq`-proof hole **vanishes** — structural kernel-re-checked `Eq`, no
-trusted `eq_decimal`. Gated on F1's bignum `Int`; oracle **N/A** (derived).
+F4 **wrong-value** `eq_decimal` hazard **vanishes** — structural
+kernel-re-checked `Eq`, no trusted `eq_decimal` (§4 F4: a wrong `Bool` value in
+the tested-not-trusted ring, never a false proof). Gated on F1's bignum `Int`;
+oracle **N/A** (derived).
 
 ### 5.6.1 `Decimal` delivery contract — derived exact base-10 over F1 bignum
 
@@ -505,8 +507,9 @@ Discriminating closure (AC-D2): a coefficient product that overflowed i64 and
 **saturated** under the old `mul_decimal`/`decimal_eq` (a false `True` on
 distinct decimals — the F4 hole) now reduces to the exact value / correct
 `False`. **Both** halves of F4 close this tranche — the `mul`-saturation *and*
-the sharp `eq` false-`True` that could inhabit `refl` on distinct decimals — now
-that `leq_int` reduces.
+the sharp `eq` false-`True` on distinct decimals — a **wrong `Bool` value** in
+the tested-not-trusted ring, **not** a false proof (`Eq Decimal` is
+kernel-neutral, no `eq → Eq` bridge; §4 F4) — now that `leq_int` reduces.
 
 **(3) User-facing surface preserved; only the MECHANISM moves.** The `Decimal`
 type, its `Num`/`DecEq` instances, and the `+`/`-`/`*`/`=` surface at `Decimal`
@@ -516,9 +519,11 @@ where the old value was F4-wrong, which now reduces to the correct value.
 
 **(4) Zero-delta laws — structural, kernel-re-checked.** `DecEq Decimal`
 equality is **structural** over `(coeff, exp)` (kernel-re-checked), with **no**
-trusted `eq_decimal` in `trusted_base()`: the F4 false-`Eq`-proof path is
-removed *by construction*, not patched. `Num`/`DecEq Decimal` laws that were
-**postulate-only** pre-demote become **zero-delta** provable over the derived
+trusted `eq_decimal` in `trusted_base()`: the F4 **wrong-value** `eq_decimal`
+path is removed *by construction*, not patched (§4 F4: the hazard was a wrong
+`Bool` value in the tested-not-trusted ring, never a false kernel proof).
+`Num`/`DecEq Decimal` laws that were **postulate-only** pre-demote become
+**zero-delta** provable over the derived
 rep — pin at least one (e.g. `+`-commutativity, or normalize-then-`eq`
 reflexivity, AC-D3). The derived defs sit in the interpreter's
 tested-not-trusted ring over F1's tier-b arithmetic (§5.2.1 (5)) and §5.2.2; the
