@@ -249,10 +249,16 @@ The §5.2 verdicts read **NATIVE iff bignum**: `add_int` / `sub_int` / `mul_int`
 reduction is genuine arbitrary-precision — a fixed-width intermediate that wraps
 or panics is the F1 wrong value, and a wrong value forecloses the eventual K3
 promotion (a reduction that can produce a wrong value cannot be promoted to
-kernel-executed). WP F1 (`docs/program/wp/F1-bignum-int.md`) delivers that half.
-This subsection is the **normative contract** the delivery satisfies; it fixes
-*what the reduction must guarantee*, not the Rust that guarantees it (the
-interpreter line anchors are perishable build detail, carried in the WP brief).
+kernel-executed). **F1's reducing scope is the built floor ops** — `add_int` /
+`sub_int` / `mul_int` (arithmetic) and `eq_int` (comparison, reduced today).
+**`leq_int` is out of F1's reducing scope**: it is *registered-but-unreduced*
+today (§5.2 row: GAP, "NATIVE iff arm added"; §4 F5), and adding its reduce arm
+is **F5**, a separate WP. F1 delivers only the arbitrary-precision
+*representation* `leq_int` will later compare over — never its reduction. WP F1
+(`docs/program/wp/F1-bignum-int.md`) delivers that half. This subsection is the
+**normative contract** the delivery satisfies; it fixes *what the reduction must
+guarantee*, not the Rust that guarantees it (the interpreter line anchors are
+perishable build detail, carried in the WP brief).
 
 **(1) Totality — no fixed-width intermediate on the arithmetic path.** For
 `add_int` / `sub_int` / `mul_int` the reduction computes the **exact**
@@ -261,11 +267,16 @@ fixed-width) value anywhere on the arithmetic path — not as an accumulator, no
 as an intermediate, not as a fast-path result that later overflows. A
 small-integer fast path is permitted **only** as a representation optimisation
 that widens to the arbitrary-precision type *before* any operation that could
-exceed its range, so it is never the path that wraps. `eq_int` / `leq_int`
-compare over the **true** integers, never over truncated fixed-width images: two
-distinct integers that share a fixed-width residue must **not** compare equal.
-This is the `18 §5` clause-(2) "correct partial function on literals" made total
-for the floor ops.
+exceed its range, so it is never the path that wraps. **`eq_int` (in F1)**
+compares over the **true** integers, never over truncated fixed-width images:
+two distinct integers that share a fixed-width residue must **not** compare
+equal.
+**`leq_int` inherits this same arbitrary-precision representation but its reduce
+arm is F5-scoped** — F1 guarantees only that when F5 adds the arm the comparison
+is over true integers (never fixed-width residues), *not* that F1 reduces
+`leq_int` at all. This is the `18 §5` clause-(2) "correct partial function on
+literals" made total for the F1 floor ops (`add_int` / `sub_int` / `mul_int` /
+`eq_int`).
 
 **(2) The reduction interface is FROZEN.** The symbol-keyed primitive
 registrations — the `add_int` / `sub_int` / `mul_int` / `eq_int` / `leq_int`
