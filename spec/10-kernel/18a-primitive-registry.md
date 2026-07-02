@@ -179,7 +179,9 @@ gap).**
 - **F5 — `leq_int` registered but unreduced (safe GAP).** `numbers.rs:233`
   registers it; `eval.rs:661-811` has **no comparison-order arm** → stuck on
   literals, `Ord Int` cannot compute. Stuck is *safe* (incomplete, not wrong).
-  **AC: add the reduce arm, bignum-correct across the F1 boundary.**
+  **AC: add the reduce arm, bignum-correct across the F1 boundary — delivered by
+  the `Decimal`/`Char` demote tranche (§5.2.2) as a derived-def prerequisite,
+  per the (A) ruling, not a later successor.**
 
 **Structural closing net** (conformance, P1-precise): a whole-class
 producer-grep of `prim_reduce`, not per-op sampling. Since
@@ -208,6 +210,17 @@ exact-for-finite (needs the derived-exact `Decimal`). F1-first is therefore a
 **dependency fact, not a preference** — these cannot land before it (fixing the
 Steward's post-ratification tranche order: **F1 → Decimal/`Char` demote → F2/F3
 → F5 → conversions**).
+
+**Ordering-reduction placement (corrected).** The Bool-valued `Int` ordering
+reduction (`leq_int`'s `prim_reduce` arm, §5.2.2) is a **prerequisite of the
+Decimal/`Char` demote**, not a later successor: the derived `Decimal` exponent
+alignment (§5.6.1) and the `Char` scalar-range check (§5.9.1) are inherently
+ordering tests, so the arm lands **with** that tranche. Scheduling it later
+rested on the premise that `Decimal` alignment needs only `mul`; the landed
+`ea<eb` alignment branches disprove it. Pulling the arm up **resolves finding
+F5** (§4, `leq_int` unreduced) within this tranche; the separate **conversions**
+tranche (`checked_*`/`saturating_*`/`neg_int`, the `IntN↔Int` floor) is
+unaffected — none of it the comparison arm needs.
 
 ## 5. The registry
 
@@ -251,11 +264,15 @@ or panics is the F1 wrong value, and a wrong value forecloses the eventual K3
 promotion (a reduction that can produce a wrong value cannot be promoted to
 kernel-executed). **F1's reducing scope is the built floor ops** — `add_int` /
 `sub_int` / `mul_int` (arithmetic) and `eq_int` (comparison, reduced today).
-**`leq_int` is out of F1's reducing scope**: it is *registered-but-unreduced*
-today (§5.2 row: GAP, "NATIVE iff arm added"; §4 F5), and adding its reduce arm
-is **F5**, a separate WP. F1 delivers only the arbitrary-precision
-*representation* `leq_int` will later compare over — never its reduction. WP F1
-(`docs/program/wp/F1-bignum-int.md`) delivers that half. This subsection is the
+**`leq_int` is out of F1's reducing scope**: F1 delivers only the
+arbitrary-precision *representation* `leq_int` compares over — never its
+reduction. Its `prim_reduce` arm is delivered by the **`Decimal`/`Char` demote
+tranche** (§5.2.2), as a *prerequisite* of the derived `Decimal` exponent
+alignment (§5.6.1) and the `Char` scalar-range check (§5.9.1) — **not** a later
+successor tranche (finding F5's earlier scheduling rested on a premise the
+landed `ea<eb` alignment branches disproved; §4.1, §5.2.2). WP F1
+(`docs/program/wp/F1-bignum-int.md`) delivers the representation half; the §5.4
+row records the arm. This subsection is the
 **normative contract** the delivery satisfies; it fixes *what the reduction must
 guarantee*, not the Rust that guarantees it (the interpreter line anchors are
 perishable build detail, carried in the WP brief).
@@ -271,10 +288,11 @@ exceed its range, so it is never the path that wraps. **`eq_int` (in F1)**
 compares over the **true** integers, never over truncated fixed-width images:
 two distinct integers that share a fixed-width residue must **not** compare
 equal.
-**`leq_int` inherits this same arbitrary-precision representation but its reduce
-arm is F5-scoped** — F1 guarantees only that when F5 adds the arm the comparison
-is over true integers (never fixed-width residues), *not* that F1 reduces
-`leq_int` at all. This is the `18 §5` clause-(2) "correct partial function on
+**`leq_int` inherits this same arbitrary-precision representation; its reduce
+arm is delivered by the `Decimal`/`Char` demote tranche (§5.2.2)** — F1
+guarantees only that the comparison, once its arm lands, is over true integers
+(never fixed-width residues), *not* that F1 reduces `leq_int` at all. This is
+the `18 §5` clause-(2) "correct partial function on
 literals" made total for the F1 floor ops (`add_int` / `sub_int` / `mul_int` /
 `eq_int`).
 
@@ -356,6 +374,59 @@ reduction-**value** change, so its no-regression gate is **workspace-green**
 fixed-width behaviour migrate in the *same* green landing unit — never a
 crate-only diff.
 
+### 5.2.2 `Int` ordering (`leq_int`) — `Decimal`/`Char` prerequisite
+
+The `Decimal`/`Char` demote (§5.6/§5.9) derives its arithmetic and its
+refinement over F1's bignum `Int`, but two of those derived defs are inherently
+**ordering** tests, not just `add`/`sub`/`mul`/`eq`: `Decimal` exponent
+alignment (§5.6.1) picks the common exponent `min(ea, eb)`, and the `Char`
+scalar-range check (§5.9.1) is a `≤`-bounded interval. So this tranche delivers
+the `leq_int` `prim_reduce` arm as a **genuine prerequisite** of those defs —
+resolving finding F5 (§4) here rather than as a later successor, where it was
+scheduled on the premise (§4.1) that `Decimal` alignment needs only `mul` (the
+landed `ea<eb` alignment branches disprove it). This subsection is the
+**normative contract** that delivery satisfies; it fixes *what the reduction
+must guarantee*, not the
+Rust that guarantees it (the interpreter line anchors are perishable build
+detail, carried in the WP brief).
+
+**(1) Bignum-correct total order.** The reduction computes `a ≤ b` over the
+**true** integers for every operand pair — never over fixed-width residues: two
+integers whose fixed-width images misorder must still compare by true magnitude
+(the boundary cases are mixed sign and operands beyond 2⁶³/2¹²⁷). It reduces to
+a `Bool` **value**, total on all `Int × Int`, sharing F1's `Value::BigInt`
+representation and the `eq_int` arm's arbitrary-precision discipline
+(§5.2.1 (1),(3)).
+
+**(2) Registration FROZEN; `<` DERIVED, not registered.** `leq_int` is
+**already registered** (`Int → Int → Bool`, §5.4); this tranche adds **only**
+its `prim_reduce` arm — no new symbol, no re-arity, no re-registration. Strict
+ordering is **derived at the definition level** — `lt a b := not (leq_int b a)`
+(pure `leq`, `¬(b ≤ a)`) — introducing **no** new registered primitive and
+**no** new reduce arm (`<` reduces through the built `leq_int` + `not_bool`). A
+direct `lt_int` primitive is a soundness-neutral ergonomics option, **out of
+scope** here (keeps the primitive set flat).
+
+**(3) Trust level — tier-b tested-not-trusted, zero `trusted_base()` delta.**
+The arm is an interpreter `prim_reduce` reduction (`ken-interp/eval.rs`) —
+**not** a kernel change and **not** a `declare_primitive`/`declare_postulate`:
+it emits a `Bool` value and never touches definitional equality — the
+kernel's
+neutral-`Eq`-at-primitive and `conv.rs` stay **byte-untouched** (`git diff
+--stat ken-kernel/` empty). Same outer, tested-not-trusted ring as `eq_int`,
+structurally gated out of every proof-relevant position, so a bug is a **wrong
+value, never a false proof**. Because `leq_int` is already registered, adding
+the arm is **`trusted_base()`-neutral**.
+
+**(4) Independent-oracle net (OF2, non-circular).** The single external net is
+the §3 differential oracle: golden comparison vectors across the sign / 2⁶³ /
+2¹²⁷ boundaries with mixed sign, or the order-defining law (`a ≤ b ⟺ ¬(b < a)`;
+`a ≤ b ⟺ (a < b) ∨ (a = b)`) — **never** the production `num-bigint` crate's own
+`Ord` on both sides (green-vs-green against the very bug). The exact
+non-circularity discipline that nets `eq_int` (§5.2.1). This arm is what makes
+`Ord Int` reduce (§5.4, previously postulate-only) and what the downstream
+`Ord Char` (§5.9.1) and `Decimal` alignment (§5.6.1) reduce over.
+
 ### 5.3 Fixed-width arithmetic — the four op-classes (`35 §3.2`)
 
 | symbol | signature | current-state | reduction / partiality | oracle-ref | burden | provability | verdict |
@@ -376,7 +447,7 @@ crate-only diff.
 | symbol | signature | current-state | reduction / partiality | oracle-ref | burden | provability | verdict |
 |---|---|---|---|---|---|---|---|
 | `eq_int` | `Int → Int → Bool` | BUILT | bignum `=`, total (AC: bignum, not i128-truncated) | indep. bignum-compare, across-2¹²⁷ | opaque `Int` → no case-split → `DecEq` underivable | `DecEq Int` postulate-only; `Nat` zero-delta | **NATIVE** |
-| `leq_int` | `Int → Int → Bool` | **GAP** (F5, registered/unreduced) | bignum `≤`, total | boundary/sign-edge pair flips | opaque `Int` → `Ord` underivable | `Ord Int` postulate-only (audited-delta) | **NATIVE** iff arm added |
+| `leq_int` | `Int → Int → Bool` | **BUILT** (reduce arm delivered by the `Decimal`/`Char` demote, §5.2.2 — derived-def prerequisite; registered `numbers.rs:233`) | bignum `≤`, total | boundary/sign-edge pair flips (indep. oracle, never `num-bigint` `Ord` both-sides) | opaque `Int` → `Ord` underivable | `Ord Int` postulate-only (audited-delta) | **NATIVE** |
 | `not_bool` `and_bool` `or_bool` | `Bool[→Bool]→Bool` | BUILT | the `Bool` **eliminator** (`and a b = match a {True⇒b; False⇒False}`, short-circuit inherent — the non-scrutinee arm isn't forced) | N/A (derived) | **`Bool` inductive → the ops ARE the eliminator**; strict-prim vs `match` observationally identical (`Bool` pure), constant-factor, no cliff; a native op must not shadow the eliminator (subsume-don't-proliferate) | derived → zero-delta `Bool`-algebra laws | **DEMOTE→derived** (R1, ruled) |
 | `eq_float` `eq_float32` | `FloatT → FloatT → Bool` | BUILT | IEEE `==`, total | IEEE `==` incl. NaN (`NaN ≠ NaN`), ±0 | opaque `Float` | **not a proof equality** (`35 §2.4`) — carries no `DecEq`/`Eq` law | **NATIVE** (honest IEEE, non-proof) |
 
@@ -401,6 +472,58 @@ removal**, and the *better* soundness posture: (1) `Num Decimal` laws become
 **zero-delta provable** over `(coeff, exp)` instead of postulate-only; (2) the
 F4 false-`Eq`-proof hole **vanishes** — structural kernel-re-checked `Eq`, no
 trusted `eq_decimal`. Gated on F1's bignum `Int`; oracle **N/A** (derived).
+
+### 5.6.1 `Decimal` delivery contract — derived exact base-10 over F1 bignum
+
+This subsection is the **normative contract** the §5.6 DEMOTE satisfies — what
+the derived reduction must guarantee (representation-independent); the
+interpreter line anchors are perishable build detail in the WP brief.
+
+**(1) Removal-not-shadowing — the TCB shrink is REAL.** The native
+`add_decimal`/`sub_decimal`/`mul_decimal`/`eq_decimal` `prim_reduce` arms and
+their `reg_binop!`/`reg_cmpop!` registrations, plus the primitive `DecimalVal`
+representation path, are **deleted**. `Decimal` becomes the derived pair
+`(coeff : Int, exp : Int)` over F1's landed bignum `Int` — **no** surviving
+primitive `Decimal` op or type, **no** new kernel flag / `Decl` variant. A
+registration that survives *alongside* a derived def **grows** the surface —
+that is the failure; the removal, not a shadow, is the mechanism (AC-G).
+
+**(2) Exact arithmetic over bignum — F4 killed by construction.** Every op
+computes over F1's exact `Int`: **no** `saturating_*`, **no** `.min(18)` clamp,
+**no** i64/fixed-width coeff anywhere on the arithmetic path.
+
+- `mul` = (`mul_int` coeffs, `add_int` exps) — **ordering-free**, reduces
+  directly.
+- `add`/`sub` = align to the common exponent `min(ea, eb)`; the shift magnitude
+  `|ea − eb|` and the direction (which coeff scales) are decided by `leq_int`
+  (§5.2.2), the scale is `coeff × 10^|Δ|` via `mul_int`, then
+  `add_int`/`sub_int` the aligned coeffs.
+- `eq` = align (via `leq_int` + `mul_int`) then `eq_int` the aligned coeffs —
+  reduces to a `Bool` value, **never** a saturating false `True`.
+
+Discriminating closure (AC-D2): a coefficient product that overflowed i64 and
+**saturated** under the old `mul_decimal`/`decimal_eq` (a false `True` on
+distinct decimals — the F4 hole) now reduces to the exact value / correct
+`False`. **Both** halves of F4 close this tranche — the `mul`-saturation *and*
+the sharp `eq` false-`True` that could inhabit `refl` on distinct decimals — now
+that `leq_int` reduces.
+
+**(3) User-facing surface preserved; only the MECHANISM moves.** The `Decimal`
+type, its `Num`/`DecEq` instances, and the `+`/`-`/`*`/`=` surface at `Decimal`
+are unchanged for terms; only the reduction moves from trusted native primitive
+to **derived-over-bignum**. A term reduces to the **same** value after — except
+where the old value was F4-wrong, which now reduces to the correct value.
+
+**(4) Zero-delta laws — structural, kernel-re-checked.** `DecEq Decimal`
+equality is **structural** over `(coeff, exp)` (kernel-re-checked), with **no**
+trusted `eq_decimal` in `trusted_base()`: the F4 false-`Eq`-proof path is
+removed *by construction*, not patched. `Num`/`DecEq Decimal` laws that were
+**postulate-only** pre-demote become **zero-delta** provable over the derived
+rep — pin at least one (e.g. `+`-commutativity, or normalize-then-`eq`
+reflexivity, AC-D3). The derived defs sit in the interpreter's
+tested-not-trusted ring over F1's tier-b arithmetic (§5.2.1 (5)) and §5.2.2; the
+demote adds **nothing** to `trusted_base()` and touches **no** kernel file — a
+net shrink (the four `*_decimal` primitives leave).
 
 ### 5.7 Conversions (`35 §5` — closed named set, no implicit coercion)
 
@@ -499,6 +622,70 @@ type stays in the TCB). Given bignum `Int` (F1):
    canonical inhabitant. **No primitive can fabricate a non-scalar `Char`.**
 
 `Char` literals (`'a' ↝ 97` + the scalar proof) are an elaborator concern.
+
+### 5.9.1 `Char` delivery contract — refinement + derived ops (incl. `Ord Char`)
+
+This subsection is the **normative contract** the §5.9 DEMOTE satisfies
+(representation-independent); perishable anchors live in the WP brief.
+
+**(1) Removal-not-shadowing — a double TCB removal.** The primitive `Char`
+**type** registration (`reg_ty!("Char")`) is **deleted**; `Char` becomes the
+refinement `{ c : Int | isScalar c }` over `Int`. `Char` has **no** native
+computing ops on main today (no `eq_char`/`leq_char`/`Char.toInt`/`Int.toChar`
+arm — `string_to_list_char` is a `Neutral` stub), so this is a type-conversion +
+**net-new derived ops**, not the removal of working native ops. **No** surviving
+primitive `Char` type; **no** new kernel flag / `Decl` variant (AC-G).
+
+**(2) The refinement + `isScalar` Ω-encoding — soundness pin 1 (load-bearing).**
+`isScalar c := IsTrue (inRangeBool c)`, with `inRangeBool c : Bool` computed by
+**value-level** `Bool` `&&`/`||` over the decidable `Int` comparisons (`leq_int`
+/ derived `<`, §5.2.2), then bridged to Ω by the **sub-singleton**
+`IsTrue : Bool → Ω` (`IsTrue true ≡ Top`, `IsTrue false ≡ Bottom`). It is
+**never** a naive `(…) ∨ (…) : Ω` — a raw disjunction is the proof-relevant sum
+`A + B` (the `Bool → Ω` trap, `16 §1.3`); range-disjointness does **not** rescue
+it (the injection tag stays). The build producer-greps that the definition is
+`IsTrue(<computed Bool>)`, **not** a `∨`/`∃`/multi-constructor form at Ω.
+**Payoff (load-bearing):** Ω-PI makes `Char` equality reduce to **codepoint**
+equality (same codepoint, distinct scalar proofs → equal by Ω-PI → zero-delta
+`DecEq Char`) — holds **only** because `isScalar` is genuinely proof-irrelevant,
+which the naive `∨` is not.
+
+**(3) Derived ops over the projection — all reduce this tranche.** With
+`proj : Char → Int` the free projection:
+
+- `eq_char := eq_int` on the projections — reduces (built `eq_int`); zero-delta
+  `DecEq Char` (the collapse routes through `eq_int`, per pin 1).
+- `Char.toInt := proj` — reduces.
+- `Int.toChar : Int → Option Char` = refinement-intro guarded by the decidable
+  check (**face-(c)**): `isScalar c` reduces (via `leq_int`, §5.2.2) to
+  `Top`/`Bottom`, so `Int.toChar` reduces to `Some ⟨c, proof⟩` on a scalar and
+  `None` on a surrogate/out-of-range `Int`, **never** a silent `Some`.
+  Discriminating (AC-C3): `Int.toChar 0xD800` (surrogate) and
+  `Int.toChar 0x110000` (out-of-range) **reduce to `None`**; a valid scalar
+  reduces to `Some` — and this **fails against a stub `isScalar := true`** (the
+  obligation actually reduces, not name-matches).
+- `Ord Char`: `leq_char a b := leq_int (proj a) (proj b)` — reduces (via
+  `leq_int`, §5.2.2). Its `Ord` laws (reflexivity / antisymmetry / transitivity
+  / totality) are **carried via the projection** from `Int`'s total order, not
+  stubbed: antisymmetry rides `proj` **injectivity** (distinct scalars →
+  distinct codepoints, which holds), so the instance carries **derivable** law
+  proofs, never `Axiom` — a law-less stub instance must fail the discriminating
+  case. `leq_char` completeness rides `leq_int` reducing, which lands this
+  tranche, so **no F5 dependency remains for `Char`**.
+
+**(4) String→`Char` extraction COMPUTES the canonical scalar proof — the runtime
+face (soundness pin 2).** `char_at` / `string_to_list_char` construct
+`(c, canonical_proof)` where the `isScalar c` witness is **reduced** from the
+`String`'s UTF-8 validity invariant — a valid `String` yields only scalars, so
+`inRangeBool c` reduces to `true` and the proof is the canonical inhabitant
+`tt : Top`. The witness is **computed**, never `declare_postulate` / `Axiom` /
+`sorry` / hand-fed: an extraction path that *asserts* the scalar proof instead
+of reducing it is the **trusted-not-proved hole** this pin exists to catch (the
+static-vs-runtime-face discipline — grep the producer for obligation discharge,
+not the type signature). **No primitive may fabricate a non-scalar `Char`.** The
+refinement + derived ops sit in the tested-not-trusted ring over F1 + §5.2.2;
+the demote removes the `Char` primitive type and adds **no** `trusted_base()`
+line and **no** kernel touch — a double net shrink (type + would-be native ops).
 
 ### 5.10 Basic data structures — no primitive reductions
 
