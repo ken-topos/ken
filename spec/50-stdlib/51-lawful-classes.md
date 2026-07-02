@@ -23,8 +23,10 @@ may *assume the laws hold* because the instance proved them, with a **zero
 `trusted_base()` delta**. (A *primitive* carrier like `Int` cannot prove its
 ∀-laws — no eliminator — so its lawful instance carries them as an **audited
 delta**, not zero-delta; `§6`.) **K4 landed (`§6`):** the zero-delta
-*real-proofs* path is now realizable (`Ω`-motive elimination is on main,
-`3be0e30`); the real law-carrying instances ride the **ES4-lawproofs build**.
+*real-proofs* path is *partially* realizable (`Ω`-motive elimination on main,
+`3be0e30`) — the live-`Eq`-conclusion laws now; a *complete* instance
+(`antisym`/`sound`/`complete`) also needs **K5** (`Top`-intro/`Bottom`-elim,
+forward). Real law-carrying instances ride the **ES4-lawproofs build**.
 
 ## 2. The three classes
 
@@ -212,15 +214,34 @@ on a user `data`, `33 §5.6`, is likewise untrusted-generated then
 kernel-re-checked over the type's constructors — zero delta, *because* the
 carrier is inductive.)
 
-**K4 landed — the zero-delta *real-proofs* path is now realizable (`3be0e30`).**
+**K4 landed — the zero-delta *real-proofs* path is *partially* realizable
+(`3be0e30`); a *complete* instance also needs K5 (below).**
 Constructing those per-branch law proofs requires the kernel to **dependently
 eliminate a `Type`-inductive into an `Ω`-motive** (`λx. P x : Bool → Ω`) — to
 *prove* a per-branch `Ω`-proposition, not *select which*. That is the **K4**
 capability, **now on main** (`14 §3` "Elimination into `Ω`"): an **inductive**
-carrier (`Bool` / user `data`) **can** prove its ∀-laws by finite case-split →
-**zero-delta**. (A *primitive* carrier still cannot — no eliminator — so it
-stays **audited-delta**, below; the carrier axis is unchanged, only the K4 gate
-is lifted.) What remains is the **runtime face**: the **real law-carrying
+carrier (`Bool` / user `data`) can prove — by finite case-split — the laws whose
+per-branch obligation stays a **live `Eq`** (`refl`/`trans`/`total`, `Eq`'s
+equivalence laws), which are **zero-delta now**. (A *primitive* carrier still
+cannot — no eliminator — so it stays **audited-delta**, below; the carrier axis
+is unchanged, only the K4 gate is lifted.)
+
+**A *complete* instance needs one further kernel capability (K5, forward).** The
+**concrete-equality-conclusion** laws — `Ord`'s **`antisym`** and `DecEq`'s
+**`sound`**/**`complete`**, which conclude or hypothesize the kernel `Eq a x y`
+— have per-branch obligations that reduce to a concrete **`Top`** (the
+trivially-equal case, needing `Top`-**introduction** to witness) or **`Bottom`**
+(the contradictory-hypothesis case, needing `Bottom`-**elimination** / ex-falso
+to discharge). Ken's kernel does not yet admit `Top`-intro/`Bottom`-elim — the
+**observational-fragment completion, the forward kernel WP K5**
+(`../10-kernel/16 §1`; Architect ruling `evt_2ke4y023edywm`; the textbook
+unit/empty propositional pair, sound because `Bottom` is *empty*, distinct from
+the K4-forbidden singleton-elim-*out*). So a **complete** zero-delta
+`Ord Bool`/`DecEq Bool` (`antisym` mandatory for a total order;
+`sound`/`complete` for decidable equality) is **gated on K5**; K4 alone realizes
+the
+live-`Eq`-conclusion fragment. What remains is the **runtime face**: the **real
+law-carrying
 instances** are the **ES4-lawproofs build** (Team Language,
 `packages/lawful-classes/`). The discriminating shape — a law-less *inductive*
 instance is now an **avoidable** delta, hence a defect — is **live**; its
