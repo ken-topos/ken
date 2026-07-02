@@ -70,7 +70,11 @@ not depend on the spelling.
   non-reproduction. The `+ 1` is load-bearing: 10²⁰ alone is f64-exact, so a
   bare-literal value assertion would not flip under an f64-carrier bug; 10²⁰+1
   rounds to 10²⁰ under f64 (ULP 2¹⁴), so the exact result `…001` is the
-  discriminator. Structural value assertion, not a type check (`35 §7` AC1).
+  discriminator. Structural value assertion, not a type check (`35 §7` AC1). The
+  **i128-ceiling** corpus (crossing 2¹²⁷/2¹²⁸, where this f64 witness — at
+  2⁶⁶ — cannot reach) is a **distinct** non-reproduction, homed in
+  `seed-f1-bignum-int.md` (WP F1, `18a §5.2.1`); this case stays authoritative
+  for the f64-carrier property.
 
 ## AC2 — literal types are distinct (no universal f64)
 
