@@ -201,13 +201,18 @@ claim with no conformance case is a claim no one can rely on
   an **inductive** carrier; a **primitive** carrier is audited-delta (its
   ∀-laws unprovable — no eliminator — so a *declared* delta, not zero) —
   `primitive-carrier-declared-audited-delta`. The zero-delta real-proofs path is
-  **partially** realizable on **K4** (`14 §3`, `3be0e30`,
-  `kernel/inductive/seed-k4-omega-motive-elim.md`): the **live-`Eq`-conclusion**
-  laws (`refl`/`trans`/`total`) now — the carrier axis **separates** today; a
-  **complete** instance's **concrete-equality-conclusion** laws
-  (`antisym`/`sound`/`complete` → `Top`/`Bottom`) are **`(gated: K5)`**. The
-  real law-carrying instances land with the **ES4-lawproofs** build (Team
-  Language). Static face; declared-vs-hidden honesty enforceable throughout.
+  realizable now (**K4 + K5 landed**, `3be0e30`/`1c84a30`): the
+  **live-`Eq`-conclusion** laws (`refl`/`trans`/`total`, `Eq`'s `refl`) via K4
+  and the **concrete-equality-conclusion** laws
+  (`antisym`/`sound`/`complete` → `Top`/`Bottom`) via K5's `tt`/`absurd`; `Eq`'s
+  `sym`/`trans` need **K6** (forward, the `conv_struct` `Eq`-congruence gap —
+  shipped as declared `Axiom`s). The first real instances (`Ord Bool`
+  `refl`/`trans`/`total`, `Eq Bool` `refl`) are on main (**ES4-lawproofs**,
+  `72e38a5`, Team Language); the complete arm rides the remainder. The K5
+  `absurd` subterm is traversed by the `trusted_base_delta` cone walk
+  (`absurd-subterm-postulate-counted-in-delta`, the elaborator-accounting
+  sibling of the K5 seed's SCT launder net). Static face; declared-vs-hidden
+  honesty enforceable throughout.
 - `security/ifc/seed-ifc.md` — Sec1 information-flow-by-typing (the
   implicit-flow discriminator, label joins, capability-gated declassify, the
   relational by-proof mode).
