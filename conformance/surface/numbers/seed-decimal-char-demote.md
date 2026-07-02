@@ -288,16 +288,21 @@ computed-proof grep) rather than a value the interpreter emits.
 ## AC-D3 — `Num`/`DecEq Decimal` laws  (RE-HOMED → lawful-classes lane)
 
 The `Num`/`DecEq Decimal` **law-carrying instance** is **not** delivered by this
-DEMOTE — it re-homes to the lawful-classes lane next to its `Ord Int`/`Num Int`
-twin (Architect + Steward ruling; carrier-axis correction). The demote's Decimal
-deliverable is the **computational** side (derived ops + trusted-primitive
-removal — AC-G, AC-D1/D2), which is genuinely zero-delta. The **laws** are
-**zero-NEW-delta**, not zero-delta: `Decimal = Prod Int Int` is inductive, so
-`DecEq`/`Num Decimal` reflexivity/comm are a **real structural proof over the
-pair** that bottoms out at the `DecEq Int`/`Num Int` audited-delta `Axiom`
-**leaves** (`18a §5.2`/`§5.4`) — adding no NEW postulate, but not `Axiom`-free.
-The corrected law case (honesty discriminator, below) is a forward conformance
-obligation on that lawful-classes-lane WP — see the deferred section.
+DEMOTE — it re-homes to the lawful-classes lane next to its **landed**
+`DecEq Int`/`Ord Int` instances (Architect + Steward ruling; carrier-axis
+correction). The demote's Decimal deliverable is the **computational** side
+(derived ops + trusted-primitive removal — AC-G, AC-D1/D2), which is genuinely
+zero-delta. The **laws** are **zero-NEW-delta**, not zero-delta:
+`Decimal = Prod Int Int` is inductive, so `DecEq Decimal` reflexivity is a
+**real structural proof over the pair** bottoming at the **landed** `DecEq Int`
+audited-delta `Axiom` leaf (`instance DecEq Int`; `18a §5.4`) — adding no NEW
+postulate, but not `Axiom`-free. `Num Decimal` comm is the same *shape*, but its
+`Num Int` leaf is **specified-but-not-built** (no `class Num`/`instance Num Int`
+on main — only `Eq`/`DecEq`/`Ord` are landed classes), so the `Num Decimal`
+re-home is a **deeper** forward obligation: blocked on a future `class Num` WP
+landing `instance Num Int` first. The corrected law case (honesty discriminator,
+below) is a forward conformance obligation on that lawful-classes-lane WP — see
+the deferred section.
 
 ## AC-C1/C2/C3 — Char refinement + derived ops (eq + Ord) + the surrogate flip
 
@@ -517,10 +522,12 @@ distinct future WP; flagged so none is silently dropped):
   **honest-visible** law — for `Char`, `antisym` is **zero-NEW-delta by
   transport** (references `Ord Int`'s visible `Axiom`, no new `Decl::Opaque`,
   since `Char ≡ Int` under erasure); for `Decimal`, a **real structural proof
-  over `Prod Int Int`** bottoming out at the `DecEq Int`/`Num Int` audited-delta
-  `Axiom` leaves — and **flips against a deceptive empty/false stub** (claims
-  proved, is empty), **never** against an honest visible `Axiom`. Homed next to
-  their `Int` twins (subsume-don't-proliferate); the demote here ships only the
+  over `Prod Int Int`** bottoming at the **landed** `DecEq Int` audited-delta
+  `Axiom` leaf (the `Num Decimal` half is deeper — its `Num Int` leaf is **not
+  yet built**, behind a future `class Num` WP) — and **flips against a deceptive
+  empty/false stub** (claims proved, is empty), **never** against an honest
+  visible `Axiom`. Homed next to their landed `Int` twins (`DecEq Int`/`Ord
+  Int`; subsume-don't-proliferate); the demote here ships only the
   computational ops + primitive removal.
 - **pin-2 `String → Char` extraction computes-the-witness (runtime face) → the
   extraction-feature WP.** `char_at`/`string_to_list_char` are unbuilt (a

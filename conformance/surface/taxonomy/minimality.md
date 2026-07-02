@@ -81,7 +81,7 @@ load-bearing observation).
 
 | Package feature | Derivation path from built-ins | Built-in floor |
 |---|---|---|
-| **operators** (`+ - * % == < >`) | `Num`/`Ord`/`Eq` **class methods** (Lc, landed); `instance Num Int` method **is** the audited `int_add` prim; user types get operators by writing instances | the audited prim op (`reg_binop`/`reg_cmpop`) + operator-infix syntax (base) + Lc |
+| **operators** (`+ - * % == < >`) | `Ord`/`Eq` **class methods** (Lc, landed — `lawful_classes.ken`) back `== < >`; `+ - * %` bind directly to the audited prim ops (`int_add` etc. via `reg_binop`) + operator-infix syntax — **`class Num`/`instance Num Int` are specified-but-not-built** (named forward obligation, a future `class Num` WP), so `+`/`*` are not yet class-abstracted; user types get `== < >` by writing `Eq`/`Ord` instances | the audited prim op (`reg_binop`/`reg_cmpop`) + operator-infix syntax (base) + Lc |
 | **`show`/formatting** (`Int.show`, …) | `Int` `div`/`mod` prims → digit `Char`s (literals) → `List Char` → **`list_char_to_string`** (landed) → concat via **`append`** (landed) | `div`/`mod` prims, Char literals, `list_char_to_string`, `append` (**all landed** `bytes.rs`/`numbers.rs`) |
 | **collection combinators** (`map`/`filter`/`fold`/`range`) | total structural recursion over `List`/`elim_List` (L2/L3); `range` = fuel-bounded unfold (`37 §5`, no coinduction) | `data List` + `elim_List` (L2), recursion + SCT |
 | **lawful classes** (`Monoid`/`Functor`/`Monad`/`Foldable`) | `class`/`instance` records (Lc, landed) carrying law propositions | Lc (`33 §5`, landed) + Ω (laws) |
