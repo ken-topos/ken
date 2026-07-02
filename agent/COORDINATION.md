@@ -258,6 +258,25 @@ carry-forward that would add/move an edge — and do not soften the rejection to
 "candidate, watch one more run." That softening is how coordination entropy
 creeps in.
 
+**The invariant is traffic, not just edges — trust the simple flow.** The base
+flow is deliberately thin, and it *works*: **spec** — Steward frames →
+spec-leader assembles → spec-author writes → CV (Spec vote) + Architect
+(soundness vote), one pass each → Integrator merges. **build** — Steward frames
+→ leader frames the team WP → implementer builds → QA verifies → Architect
+(soundness) + CV (conformance) → Integrator merges. Two reviewers per WP, one
+pass each; a mid-WP fork goes to the **one** owner of its lane
+(soundness → Architect, conformance → CV, scope/process → Steward) who rules —
+others do **not** pile onto the thread. Coordination entropy creeps in *below*
+the edge level: **more parties cc'd on a thread, verbatim relays, "flagging in
+parallel," "cross-checking with," a committee where one decider suffices,
+pre-confirming what a gate will already check.** None of these adds a new
+*edge*, so the edge-filter above misses them — but each multiplies tokens on
+**every future WP**, and the enclave is serial, so the cost compounds. Treat
+added *traffic* exactly like an added edge: it is **very expensive** (paid
+per-WP, forever) and it is the **operator's to sanction** — never a retro's to
+add. Default: **route to one, trust the gate, don't convene the room.** When in
+doubt, the thinner flow is the right one.
+
 ### 9a. Assign spillover work; never negotiate it (operator-directed)
 
 A sound change often forces **spillover** work in another team's file — a
@@ -307,6 +326,17 @@ whole negotiation cluster) rather than adding one.
   correction promotes on a single data point. On promotion, retire the source
   note atomically. Cross-team replication is a *stronger* generalization signal
   than single-team repetition — use it.
+- **(d) The ratchet guard — retros only ever *add*.** No retro proposes
+  *removing* a hop; each says "also loop in X," "relay verbatim so nothing's
+  lost," "cross-check Y in parallel." Every one is locally sensible and
+  collectively ruinous — absent a hard default the communication topology
+  monotonically complexifies. So any carry that adds a communication **party,
+  relay, gate, or confirm-hop** is **topology-touching (§9)**: it does **not**
+  promote on validation alone — it needs **explicit operator consent**, exactly
+  like a new edge. Prefer the node-internal form every time: sharpen *what* an
+  existing reviewer checks, never *who else* gets looped in. The bias is toward
+  the **thinner** flow; simplifying it back is the Steward's standing mandate,
+  complicating it is the operator's call alone.
 
 ## 11. Cross-team query protocol
 
