@@ -181,11 +181,14 @@ gap).**
   literals, `Ord Int` cannot compute. Stuck is *safe* (incomplete, not wrong).
   **AC: add the reduce arm, bignum-correct across the F1 boundary.**
 
-**Structural closing net** (conformance): after F2's degrade-not-wrap and F3's
-retirement, `wrapping_*`/`saturating_*` appear in `prim_reduce` **only** inside
-the sanctioned `+%`/`wrapping_*` class — their **absence** elsewhere is the
-structural guarantee that no bare or legacy op silently wraps (a whole-class
-producer-grep, not per-op sampling).
+**Structural closing net** (conformance, P1-precise): a whole-class
+producer-grep of `prim_reduce`, not per-op sampling. Since
+`checked`/`saturating` DEMOTE (§5.3, F-new), the sanctioned classes reduce to
+one — **`wrapping_*` may appear only inside the explicit `+%` class, and
+`saturating_*` may appear NOWHERE at all.** Any `wrapping_*` outside `+%` (a
+bare op, the legacy path) or **any** `saturating_*` (the F4 `add_decimal` path)
+is the violation; their absence elsewhere is the structural guarantee that no
+bare/legacy/`Decimal` op silently wraps or saturates.
 
 ### 4.1 Cross-AC derivability (burden judged against the *fixed* language)
 
@@ -215,12 +218,14 @@ admission: `declare_primitive` (`check.rs`), tag
 
 ### 5.1 Opaque primitive types
 
-`Int`, `Int8/16/32/64`, `UInt8/16/32/64`, `Float`, `Float32`, `Char`, `Bytes`,
-`String` — opaque `Type 0` constants (`14 §5`), inhabited by literals + op
-results, in `trusted_base()`. `Bool` is an **inductive** (`34`), *not* a
-primitive (its GlobalId is reused, not re-declared). `Decimal` is currently a
-primitive type but **demotes** with its ops (§5.6). `Map`/`Set` are abstract
-types (`37 §3.3`), consumed through a library interface, no primitive ops.
+`Int`, `Int8/16/32/64`, `UInt8/16/32/64`, `Float`, `Float32`, `Bytes`, `String`
+— opaque `Type 0` constants (`14 §5`), inhabited by literals + op results, in
+`trusted_base()`. `Bool` is an **inductive** (`34`), *not* a primitive (its
+GlobalId is reused, not re-declared). **`Decimal` and `Char` currently register
+as primitive types but DEMOTE at the type level** (each a TCB removal):
+`Decimal` → `(coeff : Int, exp : Int)` (§5.6), `Char` → the refinement
+`{ c : Int | isScalar c }` (§5.9). `Map`/`Set` are abstract types (`37 §3.3`),
+consumed through a library interface, no primitive ops (§5.10).
 
 ### 5.2 `Int` arithmetic — floor + bignum cliff
 
@@ -243,8 +248,8 @@ types (`37 §3.3`), consumed through a library interface, no primitive ops.
 |---|---|---|---|---|---|---|---|
 | `add_intN` `sub_intN` `mul_intN` (bare, N∈8/16/32/64; signed+unsigned) | `T → T → T` | BUILT (F2-broken) | **obligation class**: emits `φ_no_ovf` (ℤ-domain, `35 §3.2`); **reduce via CHECKED arith — overflow → panic/`Unknown`, never `wrapping_*`** | bare op at overflow boundary, obligation **undischarged** ⇒ degrades **and ≠ wrapped value** | opaque fixed-width type; obligation-class op is the verification differentiator, underivable | fixed-width `Num` laws postulate-only | **NATIVE** (obligation) iff checked-not-wrap |
 | `wrapping_add/sub/mul_*` `+%` | `T → T → T` | BUILT | **modular `mod 2ᴺ`, total** (no obligation — sanctioned by `35 §3.2` for hashing/crypto) | modular-boundary operands vs indep. `mod 2ᴺ` ref | explicit modular semantics, opaque type | modular-ring **(ℤ/2ᴺ) laws postulate-only**; zero-delta only on inductive `Fin 2ᴺ` | **NATIVE** (modular) |
-| `checked_add/…` | `T → T → Option T` | GAP (spec `35 §3.2`) | **total-into-`Option`** — `None` on overflow | range-edge → `None` (never silent-`Some`) | opaque type | — | **NATIVE** |
-| `saturating_add/…` | `T → T → T` | GAP (spec `35 §3.2`) | total by clamp to `T_MIN`/`T_MAX` | range-edge clamp vs indep. ref | opaque type | — | **NATIVE** |
+| `checked_add/…` | `T → T → Option T` | GAP | **total-into-`Option`** — `None` on overflow | N/A (derived) | **DERIVABLE** (F-new, both-sides-confirmed): `checked_add_intN a b = Int.toIntN (add_int (IntN.toInt a) (IntN.toInt b))` — the narrowing `Int.toIntN`'s `None` **IS** the overflow semantics; one `add` + two conversions, constant-factor, no cliff | — (derived → zero-delta) | **DEMOTE→derived** (F1 + the complete conversion floor §5.7) |
+| `saturating_add/…` | `T → T → T` | GAP | total by clamp | N/A (derived) | **DERIVABLE** (F-new): widen → clamp-compare (`leq_int` vs `T_MIN`/`T_MAX`) → narrow, over bignum `Int` + conversions; constant-factor | — (derived) | **DEMOTE→derived** (F1 + conversions) |
 | `add`/`sub`/`mul` (legacy i64) | — | **LEGACY** (F3) | wrapping, no obligation, unregistered | N/A | zero-benefit latent hazard | N/A | **RETIRE** |
 
 > Registration skew (reconcile): only bare `add_*` per width is registered
@@ -258,7 +263,7 @@ types (`37 §3.3`), consumed through a library interface, no primitive ops.
 |---|---|---|---|---|---|---|---|
 | `eq_int` | `Int → Int → Bool` | BUILT | bignum `=`, total (AC: bignum, not i128-truncated) | indep. bignum-compare, across-2¹²⁷ | opaque `Int` → no case-split → `DecEq` underivable | `DecEq Int` postulate-only; `Nat` zero-delta | **NATIVE** |
 | `leq_int` | `Int → Int → Bool` | **GAP** (F5, registered/unreduced) | bignum `≤`, total | boundary/sign-edge pair flips | opaque `Int` → `Ord` underivable | `Ord Int` postulate-only (audited-delta) | **NATIVE** iff arm added |
-| `not_bool` `and_bool` `or_bool` | `Bool[→Bool]→Bool` | BUILT | `Bool` logic, total | truth-table (small, exhaustive) | **`Bool` is inductive** → these **are derivable** by `match` | derived → zero-delta | **DEMOTE→derived** (candidate — `Bool` non-opaque; Architect to rule vs a short-circuit-eval cliff) |
+| `not_bool` `and_bool` `or_bool` | `Bool[→Bool]→Bool` | BUILT | the `Bool` **eliminator** (`and a b = match a {True⇒b; False⇒False}`, short-circuit inherent — the non-scrutinee arm isn't forced) | N/A (derived) | **`Bool` inductive → the ops ARE the eliminator**; strict-prim vs `match` observationally identical (`Bool` pure), constant-factor, no cliff; a native op must not shadow the eliminator (subsume-don't-proliferate) | derived → zero-delta `Bool`-algebra laws | **DEMOTE→derived** (R1, ruled) |
 | `eq_float` `eq_float32` | `FloatT → FloatT → Bool` | BUILT | IEEE `==`, total | IEEE `==` incl. NaN (`NaN ≠ NaN`), ±0 | opaque `Float` | **not a proof equality** (`35 §2.4`) — carries no `DecEq`/`Eq` law | **NATIVE** (honest IEEE, non-proof) |
 
 ### 5.5 `Float`/`Float32` arithmetic
@@ -286,12 +291,17 @@ trusted `eq_decimal`. Gated on F1's bignum `Int`; oracle **N/A** (derived).
 ### 5.7 Conversions (`35 §5` — closed named set, no implicit coercion)
 
 All `GAP` (none built). Between opaque primitive types there is no shared
-structure to recurse on → each is **NATIVE**. Faces per §2.
+structure to recurse on → each is **NATIVE**. Faces per §2. **★ The COMPLETE
+`IntN↔Int` set** (every width `N∈{8,16,32,64}×{signed,unsigned}`) **is the
+NATIVE floor** under `checked`/`saturating` (§5.3): those DEMOTE *given* the
+full set, so completing it (beyond §5.5's `Int64`/`Int32` representatives) is a
+spec-mandated GAP→NATIVE entry, and this floor does **not** itself demote
+(Architect-ruled — nothing lower to derive it from).
 
 | symbol | signature | face | current-state | oracle boundary | verdict |
 |---|---|---|---|---|---|
-| `Int64.toInt` `Int32.toInt64` | `T → wider` | total (widening) | GAP | round-trip on `T_MAX` = identity | **NATIVE** |
-| `Int.toInt64` `Int64.toInt32` | `T → Option narrower` | **Option** | GAP | just-above-`MAX` ⇒ `None`, **never silent `Some`** | **NATIVE** |
+| `IntN.toInt` (all N, widening) | `IntN → Int` | total | GAP | `Int.toIntN ∘ IntN.toInt = Some` on `T_MAX` (defining round-trip law) | **NATIVE** (floor) |
+| `Int.toIntN` (all N, narrowing) | `Int → Option IntN` | **Option** | GAP | just-above-`MAX` ⇒ `None`, **never silent `Some`** | **NATIVE** (floor) |
 | `Int.toFloat` `Decimal.toFloat` | `T → Float` | total, **documented-lossy** | GAP | rounding-sensitive value = **defined IEEE r-t-n-e** (not arbitrary); row states "lossy" | **NATIVE** |
 | `Float.toDecimal` | `Float → Option Decimal` | **Option** | GAP | `NaN`/`∞` ⇒ `None`; finite ⇒ `Some exact` | **NATIVE** |
 
@@ -306,34 +316,81 @@ derived-exact `Decimal`**, so the chain **F1 bignum `Int` → derived-exact
 §4.1). `Int + Int64` without an explicit conversion is a **type error**
 (`35 §5`, no implicit coercion arm).
 
-### 5.8 `String`/`Char` and `Bytes` (`37 §2.4`, `38 §1.2`) — tranche PENDING
+### 5.8 `String` and `Bytes` — NATIVE opaque buffers (`37 §2.4`, `38 §1.2`)
 
-> **This tranche + basic data structures are not yet adjudicated** — grounded
-> here, but the **cross-AC derivability pass (§4.1) must run first**, then
-> Architect native-vs-derived + CV oracle/face. **`Char` demote-candidate:** if
-> `Char` is representable as `(codepoint : Int)` (a bignum-`Int`-backed scalar),
-> its comparison/ordering ops **DEMOTE→derived** over the codepoint `Int` — the
-> same un-gating as `Decimal` (do not reflexively file `Char` ops native). The
-> `invalid-Char`/surrogate boundary is a face-(c)-vs-(b) fork.
+`String` (immutable UTF-8, content-addressed, NFC-normalized at construction)
+and `Bytes` (immutable byte buffer) are **opaque primitive types**: their ops
+act on the buffer with no case-split, and `String` earns native over a derived
+`List Char` on a **real cliff** — **O(1) content-addressed equality** (slot-id
+vs O(n) structural), **NFC-at-construction**, compact UTF-8 (`mul_int`-shaped,
+not convenience). So
+`byteLength`/`charLength`/`++`/`slice`/`index`/`encode`/`decode` (String) and
+`length`/`at`/`slice`/`concat`/`empty` (Bytes) are **NATIVE**, partiality
+already face-(c)-compliant:
 
-Primitive registered reductions (compute over literals, neutral on stuck args):
-`byteLength`/`charLength`/`++`/slice/index on `String`; `length`/`at`/`slice`/
-`concat`/`empty` on `Bytes`; `bytes_encode`/`bytes_decode` at the text boundary.
-`Char` is a **refined** carrier (Unicode scalar, surrogates excluded,
-`35 §2.4`). The `String`/`Bytes` ops are `BUILT` and the partial ones are
-already face-compliant (**total-into-neutral/`Option`**):
+- index/slice/`at` out-of-range ⇒ **neutral** (no silent OOB read), `Option` at
+  the surface (`38 §1.2`).
+- `decode` invalid UTF-8 ⇒ **neutral** / `Result … DecodeError`; round-trip
+  `decode ∘ encode ≡ Ok` provable (`38 §1.5`).
 
-- `bytes_at`/`bytes_slice` — out-of-range ⇒ **neutral** (no silent OOB read),
-  `Option` at the surface (`38 §1.2`); **compliant**.
-- `bytes_decode`/`decode` — invalid UTF-8 ⇒ **neutral** / `Result … DecodeError`
-  at the surface; **compliant** (the round-trip `decode ∘ encode ≡ Ok` is a
-  provable law, `38 §1.5`).
-- `string_to_list_char`/`list_char_to_string` — typed total, currently **stuck**
-  (`eval.rs:805-806`, no arm) → `GAP` (add arms; safe-stuck today).
+**★ Pin: `String` equality is NFC-equality, not byte-equality** — the row must
+state it (`"é"`-composed `≡` `"é"`-decomposed), the semantic-pin discipline of
+truncated-`mod`. `DecEq String` is **postulate-only** (opaque buffer, like
+`DecEq Int`) — but it **is** a real decidable equality (content-addressed ⇒
+slot-id compare is structural, *unlike* the non-proof `eq_float`), so it can
+back `DecEq String`, just audited-delta. Non-definitional `String`/`Bytes` laws
+(`byteLength (s ++ t) ≡ …`) are prelude propositions (derived), adding nothing
+to `trusted_base()`.
 
-Non-definitional `String`/`Bytes` laws (`byteLength (s ++ t) ≡ …`,
-`length (concat a b) ≡ …`) are **prelude propositions** (derivable), not kernel
-reductions — they add nothing to `trusted_base()`.
+### 5.9 `Char` — DEMOTE→derived (refinement `{ c : Int | isScalar c }`)
+
+**RULED refinement; TYPE + ops both demote (double TCB removal) — the fork was
+forced.** An *opaque* `Char` has no projection to `Int` and no case-split, so
+`eq_char`/`leq_char` could not derive (nothing to project) and would be NATIVE
+by the *exact* argument that keeps `eq_int` native. The ops demote **iff**
+`Char` is the refinement (which supplies the projection + the decidable intro) —
+so {refinement-`Char` + demoted ops} (zero-delta `DecEq`/`Ord Char`) is the
+coherent, strictly-better option over {opaque + native ops} (postulate-only,
+type stays in the TCB). Given bignum `Int` (F1):
+
+- `eq_char`/`leq_char`/ordering ⇒ `eq_int`/`leq_int` on the free projection
+  `proj : Char → Int` (CV-confirmed constant-factor) → **DEMOTE**, zero-delta
+  `DecEq`/`Ord Char`.
+- `Char.toInt` = `proj` (derived); `Int.toChar : Int → Option Char` =
+  refinement-intro with the decidable check → **face-(c)** (`None` on
+  surrogate/out-of-range) → derived.
+
+**Two load-bearing soundness pins** (the refinement is sound only with these):
+
+1. **`isScalar : Int → Ω`** —
+   `isScalar c := (0 ≤ c ≤ 0xD7FF) ∨ (0xE000 ≤ c ≤ 0x10FFFF)` must land in **Ω**
+   (decidable, proof-irrelevant), *not* `Type`. That is what makes `Char`
+   equality reduce to **codepoint** equality by Ω-PI: two `Char`s with the same
+   codepoint but distinct scalar proofs are equal (Ω-PI) → zero-delta
+   `DecEq Char`. In `Type` the proofs would be relevant and equality would leak
+   the proof. (The `16 §1.3` Ω-sort discipline used the *right* way — a
+   sub-singleton predicate belongs in Ω.)
+2. **String→`Char` extraction emits the canonical scalar proof** — `char_at` /
+   `string_to_list_char` construct `(c, canonical_proof)`; sound because a
+   valid-UTF-8 `String` only yields scalars, so `isScalar c` reduces to its
+   canonical inhabitant. **No primitive can fabricate a non-scalar `Char`.**
+
+`Char` literals (`'a' ↝ 97` + the scalar proof) are an elaborator concern.
+
+### 5.10 Basic data structures — no primitive reductions
+
+`List`/`Option`/`Result` are transparent inductive `data` (`34`) → **derived**,
+consumed by `elim` — no primitive ops. `Array`/`Map`/`Set` are **abstract
+types** (`33 §4`, `37 §3`) with **library-level** ops (`get`/`lookup`/`insert`
+over the interface), **not `PrimReduction`s**. The audit adds **nothing to the
+primitive-reduction axis** here.
+
+**Precision (so the TCB claim is exact):** "no primitive ops" ≠ "no trust." The
+operation-trust of `Map`/`Set` — whether `lookup`/`insert` are `foreign`
+postulates in `trusted_base()` or derived Ken over a representation — lives on
+the **FFI / library axis (§6)**, adjudicated there, not in this
+primitive-reduction registry. "Confirms the TCB" here means *adds no primitive
+reduction*, not *trust-free*.
 
 ## 6. Out of scope (noted, not re-adjudicated)
 
@@ -357,10 +414,12 @@ tranche** post-ratification, ordered by the F1 dependency root (§4.1): **F1 →
 `Decimal`/`Char` demote → F2 + F3 → F5 → conversions**, each gated on the
 independent-reference + boundary-operands oracle (§3). No drop-everything hotfix
 (kernel intact); pulling F1+F3 into a pre-ratification correctness patch is the
-Steward's call. The **TCB delta** Pat ratifies: `Decimal` + `neg_int` +
-(candidate) `Char`-ordering + the `Bool` logic ops **leave** the trusted base
-(DEMOTE — gaining **zero-delta-provable** laws in place of postulate-only);
-`div`/`mod` + the conversion set + `checked`/`saturating` **enter** it (GAP →
-NATIVE, spec-mandated); the legacy wrapping path is **deleted** (RETIRE); every
-surviving native arithmetic op is ratified **iff** it reduces correctly (bignum
-/ checked-not-wrap / exact).
+Steward's call. The **TCB delta** Pat ratifies — the audit **net-shrinks** the
+trusted base. **Leave** (DEMOTE→derived, gaining zero-delta-provable laws in
+place of postulate-only): `Decimal` (type + ops), **`Char`** (type + ops, a
+*double* removal), `neg_int`, the `Bool` logic ops, and `checked`/`saturating`
+(all fixed-width). **Enter** (GAP→NATIVE, spec-mandated): `div`/`mod` and the
+**completed `IntN↔Int` conversion floor** (plus the `Int`/`Float`/`Decimal`
+conversions). **Deleted** (RETIRE): the legacy wrapping path. Every surviving
+native op is ratified **iff** it reduces correctly (bignum / checked-not-wrap /
+exact / NFC / Ω-scalar-proof).
