@@ -121,6 +121,19 @@ claim with no conformance case is a claim no one can rely on
   both sides), the eval↔`Value::BigInt` store round-trip F1 **establishes**
   (byte-identity + `minimal_limbs`; no `to_rt` `BigInt` arm today), and the
   workspace-green + §63/ADR-0009 crate-vetting hard-ACs.
+- `surface/numbers/seed-decimal-char-demote.md` — WP Decimal/Char DEMOTE
+  (`18a §5.6.1`/`§5.9.1`/`§5.2.2`, second Phase-2 BUILTINS tranche): a **TCB
+  removal by removal-not-shadowing** — native `*_decimal` ops + the `Char`
+  primitive **type** deleted, replaced by derived `(coeff:Int, exp:Int)` +
+  refinement `{c:Int | isScalar c}` over F1 bignum. Pulls up the **`leq_int`
+  ordering arm** (ruling (A), the derived-def prerequisite) with its
+  **independent** differential oracle (never `num-bigint`'s `Ord` both-sides);
+  closes **both F4 halves** (saturating-`mul` *and* the sharp false-`True` `eq`
+  — a wrong value in the tested-not-trusted ring, not a false proof); pins
+  zero-delta `Num`/`DecEq Decimal` laws; and the two **Char soundness pins** —
+  the `isScalar := IsTrue(inRangeBool)` Ω-encoding (**sort-not-token**) and
+  extraction **computing** the scalar proof — plus `Ord Char` laws via the
+  injective projection.
 - `surface/collections/seed-collections.md` — L3 strings & collections (`37`):
   `String` as a content-addressed **NFC UTF-8 primitive** (byte-length ≠
   char-length, **not** `List Char`); `List`/`Option`/`Result` transparent
