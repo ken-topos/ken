@@ -200,6 +200,11 @@ not depend on the spelling.
   an `f64` alias (`35 §2.3`) and `Float ==` is the IEEE minefield Ken does not
   paper over (`35 §3.3`). A `Decimal`-as-f64 bug collapses both to the same
   rounded result and **flips** the `Decimal` side.
+- note: the **DEMOTE mechanism** behind this exactness — derived
+  `(coeff : Int, exp : Int)` over F1 bignum, the F4 saturating-`mul`/`eq`
+  closure, and the zero-delta `Num`/`DecEq Decimal` laws — is pinned in
+  `seed-decimal-char-demote.md` (`18a §5.6.1`). This case owns the *observable*;
+  that seed owns the *TCB-removal mechanism*.
 
 ## §3.1 — `Int` division by zero is an obligation, not a trap
 
@@ -259,6 +264,12 @@ not depend on the spelling.
 - why: `Char` is a **refinement** on the `u32` carrier (`35 §2.4`, `41 §5`): not
   all `u32` are `Char`. Verdict flips: valid scalar accepts, surrogate rejects —
   the non-reproduction of the "char = any 16/32-bit code unit" model.
+- note: post-**DEMOTE** the carrier is realized as `{ c : Int | isScalar c }`
+  (`18a §5.9`) — the Int-refinement, superseding the `u32`-carrier framing for
+  the *mechanism*; the observable surrogate-exclusion above is unchanged. The
+  `isScalar := IsTrue(inRangeBool)` Ω-encoding, the *reducing* surrogate/OOR
+  rejection (`Int.toChar 0xD800 ⇒ None`), and `Ord Char` are pinned in
+  `seed-decimal-char-demote.md` (`18a §5.9.1`).
 
 ## Coverage map (AC → cases)
 
