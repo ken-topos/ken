@@ -208,11 +208,13 @@ claim with no conformance case is a claim no one can rely on
   operand-`whnf` fix `4ae2baf`, `16 §8.1`) — both now landed, so they are **real
   zero-delta proofs on main** (ES4-lawproofs-remainder `9a82745`: `Ord Bool`'s
   `antisym`, `DecEq Bool`'s `sound`/`complete`, no `Axiom` remaining); `Eq`'s
-  `sym`/`trans` still need **K6** (forward, the `conv_struct` `Eq`-congruence
-  gap) and stay declared `Axiom`s. The first real instances (`Ord Bool`
-  `refl`/`trans`/`total`, `Eq Bool` `refl`) are on main (**ES4-lawproofs**,
-  `72e38a5`, Team Language); `Ord Bool`/`DecEq Bool` are now **complete**
-  zero-delta lawful instances (`9a82745`). The `absurd`
+  `sym`/`trans` are likewise **real zero-delta** via **case-split** (not K6 —
+  each branch computes concretely, so the `conv_struct` `Eq`-congruence is never
+  exercised; K6 stays a sound-but-customerless forward gap). The first real
+  instances (`Ord Bool` `refl`/`trans`/`total`, `Eq Bool` `refl`) are on main
+  (**ES4-lawproofs**, `72e38a5`, Team Language); `Ord Bool`, `Eq Bool`, and
+  `DecEq Bool` are now **complete** zero-delta lawful instances (`9a82745` + the
+  `Eq Bool` `sym`/`trans` WP). The `absurd`
   subterm is traversed by the
   `trusted_base_delta` cone walk
   (`absurd-subterm-postulate-counted-in-delta`, the elaborator-accounting

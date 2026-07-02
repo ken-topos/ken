@@ -16,9 +16,9 @@ load-bearing. (The zero-delta *real-proofs* path is realizable now for the
 kernel capability (K5's `tt`/`absurd` terms, `1c84a30`; K7's `eq_at_inductive`
 operand-`whnf`, `4ae2baf`, `16 §8.1`) — both now landed, so they are **real
 zero-delta proofs on main** (ES4-lawproofs-remainder, `9a82745`); `Eq`'s
-`sym`/`trans` still need **K6** (forward) and stay visible `Axiom`s. The first
-real instances (`Ord Bool` `refl`/`trans`/`total`, `Eq Bool` `refl`) are on main
-(ES4-lawproofs, `72e38a5`); `Ord Bool`'s `antisym` + `DecEq Bool`'s
+`sym`/`trans` are likewise real zero-delta via **case-split** (not K6). The
+first real instances (`Ord Bool` `refl`/`trans`/`total`, `Eq Bool` `refl`) are
+on main (ES4-lawproofs, `72e38a5`); `Ord Bool`'s `antisym` + `DecEq Bool`'s
 `sound`/`complete` landed with the remainder (`9a82745`) —
 `Ord Bool`/`DecEq Bool` now **complete** zero-delta lawful instances.)
 
@@ -101,22 +101,32 @@ zero-delta proofs on main** (ES4-lawproofs-remainder `9a82745`: `antisym` closes
 via `tt`/`absurd`, `sound`/`complete` via `absurd`; **no `Axiom` remains** in
 either instance); **none needed K6** (no swapped-`Eq` hypothesis-reuse across a
 stuck congruence). The ES4-lawproofs build surfaced the K7 gap by pushing the
-real proofs to a wall (Architect-ruled). **`Eq`'s `sym`/`trans` need one
-further, distinct capability (K6, forward)** — they reuse a hypothesis across a
-`conv_struct` `Eq`-congruence arm the kernel does not yet close (the
-ES4-lawproofs-surfaced gap, distinct from K4's live-`Eq`, K5's `Top`/`Bottom`,
-and K7's operand-whnf), so they ship as **visible `Axiom`s** pending K6 —
-declared, never hidden; only `Eq`'s `refl` is zero-delta now (its goal routes
-through an unresolved `bool_eq x x`, keeping the `Eq` live). A **primitive**
+real proofs to a wall (Architect-ruled). **`Eq`'s `sym`/`trans` realize by
+case-split — K6 is grounded-but-customerless.** A **full case-split** on the
+carrier (`Bool`: `sym` splits `(x,y)`, `trans` splits `(x,y,z)`) closes every
+branch concretely — `tt` on a reflexive-conclusion branch, `absurd` where the
+hypothesis reduces to `Bottom` (`bool_eq` of mixed literals ⇝ `False` via K7
+before the head-check) — so **no hypothesis is reused across a swap** and the
+`conv_struct` `Eq`-congruence (**K6**) is **never exercised**; these are **real
+zero-delta proofs**, no `Axiom` (the `Eq Bool` case-split WP, Architect-ruled
+`evt_78ntsfnyjdtq6`). **K6 stands grounded-but-customerless:** a sound *forward
+general-completeness* capability (comparing two genuinely-stuck `Eq` props) that
+nothing here consumes — a **sound positional** K6 would **not** have closed this
+pair (only an **unsound cross-wise** arm could, a hard **NO**), so K6 is
+decoupled from `Eq`'s realization, not a blocker. Only `Eq`'s `refl` routes
+through an unresolved `bool_eq x x` (a live `Eq`, `Refl` fires). A **primitive**
 carrier still proves **no** ∀-law (no eliminator) → **audited-delta**.
 **Realization status:** the real, kernel-checked, zero-delta instances are on
 main (Team Language, `packages/lawful-classes/`): `Ord Bool`
 `refl`/`trans`/`total` + `Eq Bool` `refl` (`72e38a5`), and now `Ord Bool`'s
 `antisym` + `DecEq Bool`'s `sound`/`complete` (`9a82745`,
 ES4-lawproofs-remainder) — so `Ord Bool`/`DecEq Bool` are **complete**
-zero-delta lawful instances, **no `Axiom` remaining**. Only the **K6** fragment
-(`Eq`'s `sym`/`trans`) stays a visible `Axiom` pending K6. K4's rule conformance
-is `../../kernel/inductive/seed-k4-omega-motive-elim.md`; K5's is
+zero-delta lawful instances, **no `Axiom` remaining**. `Eq Bool`'s `sym`/`trans`
+are likewise **real zero-delta** via case-split (the `Eq Bool` WP), not K6 — so
+**all three `Bool` instances (`Ord`/`Eq`/`DecEq`) are complete zero-delta
+lawful, no `Axiom` anywhere**; K6 remains a sound-but-**customerless** forward
+capability. K4's rule conformance is
+`../../kernel/inductive/seed-k4-omega-motive-elim.md`; K5's is
 `../../kernel/observational/seed-k5-omega-fragment.md` (both on main).
 
 ---

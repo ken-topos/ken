@@ -29,7 +29,8 @@ delta**, not zero-delta; `§6`.) **K4 landed (`§6`):** the zero-delta
 **K5 + K7** kernel capability (`Top`-intro/`Bottom`-elim `1c84a30`;
 `eq_at_inductive` operand-`whnf` `4ae2baf`, `../10-kernel/16 §8.1`) — both now
 landed, so they are **real zero-delta proofs on main** (ES4-lawproofs-remainder,
-`9a82745`). `Eq`'s `sym`/`trans` need **K6** (forward). The
+`9a82745`). `Eq`'s `sym`/`trans` are likewise real zero-delta via
+**case-split** (not K6; `§6`). The
 first real zero-delta instances (`Ord Bool` `refl`/`trans`/`total`, `Eq Bool`
 `refl`) are on main (**ES4-lawproofs**, `72e38a5`).
 
@@ -74,9 +75,11 @@ procedure for kernel `Eq` (itself an equivalence, `16`) is
 reflexive/symmetric/transitive, so the `Eq` laws are derivable — recorded as a
 fact, **not** wired as a superclass constraint (`§4`). This is the *abstract*
 subsumption (kernel `Eq` is provably an equivalence, `16`); *constructing* a
-concrete instance's `Eq.sym`/`Eq.trans` as real zero-delta proofs is separately
-gated on **K6** (`§6`) — `Eq.refl` is provable now, `sym`/`trans` ride the
-forward `conv_struct` `Eq`-congruence WP.
+concrete instance's `Eq.sym`/`Eq.trans` as real zero-delta proofs is done by
+**case-split** (`§6`), **not** the `conv_struct` `Eq`-congruence (**K6**): each
+branch computes its concrete answer, so the swap-congruence K6 would supply is
+never exercised. `Eq.refl` was always provable; `sym`/`trans` are now real
+zero-delta proofs via the `Eq Bool` case-split WP.
 
 ### 2.3 `Ord a` — total order (supplies the verified-`sort` comparator)
 
@@ -273,26 +276,38 @@ lifecycle: the K5 un-stage `0feb2c8` over-claimed these "realizable now via K5"
 — corrected to a K5+K7 park by `4466807`, then realized here once K7 `4ae2baf`
 + the wiring `9a82745` landed.)*
 
-**`Eq`'s `sym`/`trans` need one further, distinct capability (K6, forward).**
-Proving `Eq`'s **symmetry**/**transitivity** (from `Eq a x y` derive `Eq a y x`,
-and compose) reuses a hypothesis across a **`conv_struct` `Eq`-congruence** arm
-the kernel does not yet close — a gap the ES4-lawproofs build surfaced
-(Architect-ruled `evt_4y4pyernxpzzt`; **distinct** from both K4's live-`Eq`
-elimination and K5's `Top`/`Bottom`). They ship as **visible `Axiom`s** in the
-instance pending the forward kernel WP **K6** — declared, never hidden (the
-audited-delta honesty applied to a *capability-pending* field). Only
-`sym`/`trans` are K6-gated; `Eq`'s `refl` is zero-delta now (its goal routes
-through an unresolved `bool_eq x x`, keeping the `Eq` live so `Refl` fires).
+**`Eq`'s `sym`/`trans` realize by case-split — and K6 is grounded-but-
+customerless.** Proving `Eq`'s **symmetry**/**transitivity** (from `Eq a x y`
+derive `Eq a y x`, and compose) was first thought to need a **`conv_struct`
+`Eq`-congruence** arm — call it **K6** — to reuse a hypothesis across a swap. It
+does **not**: a **full case-split** on the carrier (for `Bool`, `sym` splits
+`(x, y)`, `trans` splits `(x, y, z)`) closes every branch concretely — `tt` on a
+reflexive-conclusion branch, `absurd` on a branch whose hypothesis reduces to
+`Bottom` (`bool_eq` of mixed literals ⇝ `False` via K7 before the head-check) —
+so **no hypothesis is ever reused across a swap** and the K6 congruence is
+**never exercised** (the `Eq Bool` `sym`/`trans` case-split WP; Architect-ruled
+`evt_78ntsfnyjdtq6`). These are **real, kernel-checked, zero-delta proofs**, no
+`Axiom`. **K6 accordingly stands grounded-but-customerless:** a sound *forward
+general-completeness* capability (comparing two genuinely-stuck `Eq`
+propositions) that nothing in the lawful-classes corpus consumes — a *sound
+positional* K6 fix would **not** have closed this pair; only an **unsound
+cross-wise** arm could, which is a hard **NO**, never taken. So K6 is decoupled
+from `Eq`'s realization: parked as a sound-but-unconsumed forward gap, **not** a
+blocker on any instance. (`Eq`'s `refl` was always zero-delta — its goal routes
+through an unresolved `bool_eq x x`, keeping the `Eq` live so `Refl` fires.)
 
 **Realization status.** The **real, kernel-checked, zero-delta** law-carrying
 instances are **on main** (Team Language, `packages/lawful-classes/`):
 `Ord Bool` `refl`/`trans`/`total` + `Eq Bool` `refl` (`72e38a5`), and now
 `Ord Bool`'s `antisym` + `DecEq Bool`'s `sound`/`complete` (`9a82745`,
 ES4-lawproofs-remainder) — so `Ord Bool` and `DecEq Bool` are **complete
-zero-delta lawful instances**, **no `Axiom` remaining**. Only the **K6**
-fragment (`Eq`'s `sym`/`trans`) stays a visible `Axiom` pending K6. The
-discriminating shape — a law-less *inductive* instance is an **avoidable**
-delta, hence a
+zero-delta lawful instances**, **no `Axiom` remaining**. `Eq Bool`'s
+`sym`/`trans` are likewise **real zero-delta proofs** now — via case-split (the
+`Eq Bool` `sym`/`trans` WP), not K6 — so **all three `Bool` instances
+(`Ord`/`Eq`/`DecEq`) are complete
+zero-delta lawful, no `Axiom` anywhere**. K6 remains a
+sound-but-**customerless** forward capability. The discriminating shape — a
+law-less *inductive* instance is an **avoidable** delta, hence a
 defect — is **live**
 ([[soundness-ac-static-vs-runtime-face]]). The design is unchanged throughout;
 only the gate states and build-time availability move.
