@@ -507,7 +507,17 @@ computes over F1's exact `Int`: **no** `saturating_*`, **no** `.min(18)` clamp,
   (§5.2.2), the scale is `coeff × 10^|Δ|` via `mul_int`, then
   `add_int`/`sub_int` the aligned coeffs.
 - `eq` = align (via `leq_int` + `mul_int`) then `eq_int` the aligned coeffs —
-  reduces to a `Bool` value, **never** a saturating false `True`.
+  reduces to a `Bool` value on the bounded-align path, **never** a saturating
+  false `True`.
+
+The exact scale `10^|Δ|` is delivered by a **bounded** unroll (a general
+`Int`-recursive `pow10` fails size-change termination over opaque `Int`; the
+fixed unroll is SCT-clean). Beyond that depth the scale is a **stuck-marker** —
+the internal `decimalPow10Unbounded : Int → Int` postulate (function-typed ⇒
+soundness-inert; never reduces) — so a large-`|Δexp|` `add`/`sub`/`eq` goes
+**stuck: exact-or-stuck, never clamped** (§4 F4 discipline — a missing value,
+never a wrong one). The unbounded-`Δexp` completion is a **named forward
+obligation**, tracked in the conformance seed's deferred set.
 
 Discriminating closure (AC-D2): a coefficient product that overflowed i64 and
 **saturated** under the old `mul_decimal`/`decimal_eq` (a false `True` on
@@ -537,8 +547,13 @@ instance + its pin (`+`-comm / eq-reflexivity) home in the **lawful-classes
 lane** (next to `Ord Int`), **not** this demote — which ships the derived ops +
 primitive removal. The derived defs sit in the interpreter's
 tested-not-trusted ring over F1's tier-b arithmetic (§5.2.1 (5)) and §5.2.2; the
-demote adds **nothing** to `trusted_base()` and touches **no** kernel file — a
-net shrink (the four `*_decimal` primitives leave).
+demote touches **no** kernel file and **net-shrinks** `trusted_base()` — the
+four `*_decimal` primitives + the `Decimal` type registration leave against
+**one** honest-visible addition, the internal deferred-align postulate
+`decimalPow10Unbounded : Int → Int` (§5.6.1(2)'s large-`|Δexp|` stuck-marker;
+function-typed ⇒ soundness-inert). A **net shrink (−5** over the combined
+`Decimal`/`Char` tranche**)**, **not** a zero-addition — the same
+absolute-vs-net precision as the zero-NEW-delta laws.
 
 ### 5.7 Conversions (`35 §5` — closed named set, no implicit coercion)
 
@@ -714,7 +729,10 @@ static-vs-runtime-face discipline — grep the producer for obligation discharge
 not the type signature). **No primitive may fabricate a non-scalar `Char`.** The
 refinement + derived ops sit in the tested-not-trusted ring over F1 + §5.2.2;
 the demote removes the `Char` primitive type and adds **no** `trusted_base()`
-line and **no** kernel touch — a double net shrink (type + would-be native ops).
+line **of its own** and **no** kernel touch — a double net shrink (type +
+would-be native ops). The one postulate the combined `Decimal`/`Char` tranche
+adds is `Decimal`'s deferred-align `decimalPow10Unbounded` (§5.6.1), **not** a
+`Char` line — so the tranche net is **−5**, a shrink, not a zero-addition.
 
 ### 5.10 Basic data structures — no primitive reductions
 
@@ -754,7 +772,10 @@ tranche** post-ratification, ordered by the F1 dependency root (§4.1): **F1 →
 independent-reference + boundary-operands oracle (§3). No drop-everything hotfix
 (kernel intact); pulling F1+F3 into a pre-ratification correctness patch is the
 Steward's call. The **TCB delta** Pat ratifies — the audit **net-shrinks** the
-trusted base. **Leave** (DEMOTE→derived — the trusted op removed and its class
+trusted base (the `Decimal`/`Char` demote is a **net −5**: six primitive/type
+registrations leave against one honest-visible deferred-align postulate
+`decimalPow10Unbounded` — a net shrink, **not** a zero-addition). **Leave**
+(DEMOTE→derived — the trusted op removed and its class
 laws gained: **zero-delta** on an inductive carrier like the `Bool` logic ops,
 **zero-NEW-delta** over an opaque floor like `Int`/fixed-width for the rest — in
 place of type-specific postulates): `Decimal` (type + ops), **`Char`** (type +
