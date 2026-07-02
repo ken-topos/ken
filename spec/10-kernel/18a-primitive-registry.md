@@ -602,13 +602,16 @@ forced.** An *opaque* `Char` has no projection to `Int` and no case-split, so
 `eq_char`/`leq_char` could not derive (nothing to project) and would be NATIVE
 by the *exact* argument that keeps `eq_int` native. The ops demote **iff**
 `Char` is the refinement (which supplies the projection + the decidable intro) —
-so {refinement-`Char` + demoted ops} (zero-delta `DecEq`/`Ord Char`) is the
-coherent, strictly-better option over {opaque + native ops} (postulate-only,
-type stays in the TCB). Given bignum `Int` (F1):
+so {refinement-`Char` + demoted ops} (**zero-delta** computational ops,
+**zero-NEW-delta** `DecEq`/`Ord Char` laws — no *new* postulate beyond `Int`'s)
+is the coherent, strictly-better option over {opaque + native ops}
+(Char-specific postulate-only, type stays in the TCB). Given bignum `Int` (F1):
 
 - `eq_char`/`leq_char`/ordering ⇒ `eq_int`/`leq_int` on the free projection
-  `proj : Char → Int` (CV-confirmed constant-factor) → **DEMOTE**, zero-delta
-  `DecEq`/`Ord Char`.
+  `proj : Char → Int` (CV-confirmed constant-factor) → **DEMOTE** — the **ops**
+  reduce (zero-delta computational); the `DecEq`/`Ord Char` **law instances**
+  are **zero-NEW-delta** over `Int` (re-home to the lawful-classes lane,
+  §5.9.1(3)).
 - `Char.toInt` = `proj` (derived); `Int.toChar : Int → Option Char` =
   refinement-intro with the decidable check → **face-(c)** (`None` on
   surrogate/out-of-range) → derived.
@@ -627,8 +630,9 @@ type stays in the TCB). Given bignum `Int` (F1):
    carries the injection tag, so it stays relevant. Ω-admissible only via the
    `IsTrue` form (pinned) or explicit truncation `‖A + B‖`. **Load-bearing:**
    pin 1's payoff — Ω-PI making `Char` equality reduce to **codepoint** equality
-   (two `Char`s, same codepoint, distinct scalar proofs, equal by Ω-PI →
-   zero-delta `DecEq Char`) — holds only if `isScalar` is *actually*
+   (two `Char`s, same codepoint, distinct scalar proofs, equal by Ω-PI — a
+   **zero-delta** kernel fact; the `DecEq Char` lawful instance itself is
+   zero-NEW-delta) — holds only if `isScalar` is *actually*
    proof-irrelevant, which the naive-`∨` is not (and forcing an `A + B` into Ω
    would re-open the `Bool → Ω` inconsistency).
 2. **String→`Char` extraction emits the canonical scalar proof** — `char_at` /
@@ -661,15 +665,19 @@ primitive `Char` type; **no** new kernel flag / `Decl` variant (AC-G).
 it (the injection tag stays). The build producer-greps that the definition is
 `IsTrue(<computed Bool>)`, **not** a `∨`/`∃`/multi-constructor form at Ω.
 **Payoff (load-bearing):** Ω-PI makes `Char` equality reduce to **codepoint**
-equality (same codepoint, distinct scalar proofs → equal by Ω-PI → zero-delta
-`DecEq Char`) — holds **only** because `isScalar` is genuinely proof-irrelevant,
-which the naive `∨` is not.
+equality (same codepoint, distinct scalar proofs → equal by Ω-PI — a
+**zero-delta** kernel fact) — holds **only** because `isScalar` is genuinely
+proof-irrelevant, which the naive `∨` is not. (The Ω-PI *collapse* is
+zero-delta; the full `DecEq Char` **lawful instance** is **zero-NEW-delta**,
+bottoming out at `DecEq Int`, and re-homes to the lawful-classes lane per (3).)
 
 **(3) Derived ops over the projection — all reduce this tranche.** With
 `proj : Char → Int` the free projection:
 
-- `eq_char := eq_int` on the projections — reduces (built `eq_int`); zero-delta
-  `DecEq Char` (the collapse routes through `eq_int`, per pin 1).
+- `eq_char := eq_int` on the projections — the **op** reduces (built `eq_int`),
+  zero-delta computational; the `DecEq Char` **lawful instance** is
+  **zero-NEW-delta** (bottoms out at `DecEq Int`; re-homes to the lawful-classes
+  lane, like `Ord Char`).
 - `Char.toInt := proj` — reduces.
 - `Int.toChar : Int → Option Char` = refinement-intro guarded by the decidable
   check (**face-(c)**): `isScalar c` reduces (via `leq_int`, §5.2.2) to
