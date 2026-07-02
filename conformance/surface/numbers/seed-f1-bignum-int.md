@@ -330,8 +330,8 @@ Structural / trace assertions on the canonical encoding — never a value.
 - **AC2** (independent differential oracle) — `f1-oracle-independent-reference`
   (hard-AC)
 - **AC3** (store round-trip byte-identity + `minimal_limbs`) —
-  `f1-store-roundtrip-above-i128-byte-identical`, `f1-minimal-limbs-canonical`,
-  `f1-zero-and-sign-canonical`
+  `f1-store-roundtrip-above-i128-byte-identical`,
+  `f1-dedup-content-address-stable-across-paths`, `f1-zero-and-sign-canonical`
 - **AC4** (workspace-green landing discipline) — landing-discipline AC (hard-AC)
 - **AC5** (dependency-delta / crate-vetting) — checklist AC (hard-AC)
 
