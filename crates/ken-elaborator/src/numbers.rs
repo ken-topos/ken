@@ -5,8 +5,14 @@
 //! type-directed dispatch table used by the elaborator.
 //!
 //! Types: `Int` (arbitrary-precision), `Int8`…`Int64`, `UInt8`…`UInt64`,
-//! `Decimal`, `Float`, `Float32`, `Bool`, `Char`.
+//! `Float`, `Float32`, `Bool`.
 //! All are primitive opaque types (`PrimReduction::OpaqueType`).
+//!
+//! `Decimal`/`Char` are **derived** (`18a §5.6`/`§5.9`, Phase-2 tranche #2
+//! DEMOTE) — registered by `crate::decimal_char::register_decimal_char`
+//! after this module, reusing `Prod`/`Int` rather than a primitive type.
+//! `NumericEnv::decimal_id`/`char_id` are filled in by the caller once that
+//! registration runs (see `lib.rs`).
 //!
 //! Ops: registered as `PrimReduction::Op { symbol }` with matching entries
 //! in `ken-interp`'s `prim_reduce`. The symbol names are the stable interface.
@@ -71,10 +77,20 @@ pub struct NumericEnv {
     pub uint16_id:  GlobalId,
     pub uint32_id:  GlobalId,
     pub uint64_id:  GlobalId,
+    /// Derived (`18a §5.6`) — filled in by `decimal_char::register_decimal_char`
+    /// after `register_numeric_env` returns; not a primitive registration here.
+    /// `Term::Const`-shaped (the transparent `Decimal := DecimalPair` alias).
     pub decimal_id: GlobalId,
+    /// The alias's underlying inductive (`DecimalPair`) — `whnf` unfolds the
+    /// `Decimal` alias all the way through, so any WHNF'd-type dispatch
+    /// (`classify_add`/`classify_eq`) sees `Term::IndFormer{id:
+    /// decimalpair_id}`, never `Term::Const{id: decimal_id}`. Also filled in
+    /// by `decimal_char::register_decimal_char`.
+    pub decimalpair_id: GlobalId,
     pub float_id:   GlobalId,
     pub float32_id: GlobalId,
     pub bool_id:    GlobalId,
+    /// Derived (`18a §5.9`) — filled in by `decimal_char::register_decimal_char`.
     pub char_id:    GlobalId,
 
     // --- `+` dispatch table (keyed by the type's GlobalId) ---
@@ -85,18 +101,38 @@ pub struct NumericEnv {
 }
 
 impl NumericEnv {
+    /// Register (or replace) the `+` dispatch entry for `ty_id` — used by
+    /// `decimal_char::register_decimal_char` to wire `Decimal` to the derived
+    /// `decimal_add`, since `add_table` itself is private to this module.
+    pub(crate) fn set_add_entry(&mut self, ty_id: GlobalId, entry: AddEntry) {
+        self.add_table.insert(ty_id, entry);
+    }
+
+    /// Register (or replace) the `==` dispatch entry for `ty_id`.
+    pub(crate) fn set_eq_entry(&mut self, ty_id: GlobalId, entry: EqEntry) {
+        self.eq_table.insert(ty_id, entry);
+    }
+
     /// Look up the dispatch entry for a type-directed `+` on the given type.
+    ///
+    /// Checks `Term::IndFormer` as well as `Term::Const`: `whnf` fully
+    /// unfolds a transparent alias like `Decimal := DecimalPair` (`18a
+    /// §5.6.1`), so a WHNF'd `Decimal`-typed term arrives here as
+    /// `IndFormer{id: decimalpair_id}`, never `Const{id: decimal_id}`.
     pub fn classify_add(&self, ty: &Term) -> Option<&AddEntry> {
         match ty {
             Term::Const { id, .. } => self.add_table.get(id),
+            Term::IndFormer { id, .. } => self.add_table.get(id),
             _ => None,
         }
     }
 
-    /// Look up the dispatch entry for a type-directed `==` on the given type.
+    /// Look up the dispatch entry for a type-directed `==` on the given type
+    /// (see `classify_add`'s doc comment on the `IndFormer` case).
     pub fn classify_eq(&self, ty: &Term) -> Option<&EqEntry> {
         match ty {
             Term::Const { id, .. } => self.eq_table.get(id),
+            Term::IndFormer { id, .. } => self.eq_table.get(id),
             _ => None,
         }
     }
@@ -214,11 +250,16 @@ pub fn register_numeric_env(
     let uint16_id  = reg_ty!("UInt16");
     let uint32_id  = reg_ty!("UInt32");
     let uint64_id  = reg_ty!("UInt64");
-    let decimal_id = reg_ty!("Decimal");
     let float_id   = reg_ty!("Float");
     let float32_id = reg_ty!("Float32");
     let bool_id    = reg_ty!("Bool");
-    let char_id    = reg_ty!("Char");
+    // `decimal_id`/`decimalpair_id`/`char_id` are derived (`18a §5.6`/`§5.9`)
+    // — placeholder zeroed here, filled in by
+    // `decimal_char::register_decimal_char` once it runs (needs
+    // `Int`/`Bool`/`leq_int`/etc. from this function first).
+    let decimal_id = GlobalId(0);
+    let decimalpair_id = GlobalId(0);
+    let char_id    = GlobalId(0);
 
     // ---- Int ops (total, no obligation) ----
     let add_int_id = reg_binop!("add_int", int_id);
@@ -273,11 +314,9 @@ pub fn register_numeric_env(
     let wrap_add_uint64_id = reg_binop!("wrapping_add_uint64", uint64_id);
     let novf_add_uint64_id = reg_novf!("NoOvfAddUInt64", uint64_id);
 
-    // ---- Decimal ops (exact) ----
-    let add_decimal_id = reg_binop!("add_decimal", decimal_id);
-    let _ = reg_binop!("sub_decimal", decimal_id);
-    let _ = reg_binop!("mul_decimal", decimal_id);
-    let eq_decimal_id = reg_cmpop!("eq_decimal", decimal_id, bool_id);
+    // ---- Decimal ops: DEMOTE→derived (`18a §5.6.1`) — no reg_binop!/reg_cmpop!
+    // here; `decimal_char::register_decimal_char` wires `add_table`/`eq_table`
+    // entries directly to the derived `decimal_add`/`decimal_eq` GlobalIds.
 
     // ---- Float ops (IEEE 754 f64) ----
     let add_float_id = reg_binop!("add_float", float_id);
@@ -349,13 +388,8 @@ pub fn register_numeric_env(
         });
     }
 
-    // Decimal: total (exact base-10)
-    add_table.insert(decimal_id, AddEntry {
-        op_id: add_decimal_id,
-        wrapping_id: None,
-        no_ovf_id: None,
-        result_id: decimal_id,
-    });
+    // Decimal: DEMOTE→derived — `decimal_char::register_decimal_char` inserts
+    // the `add_table`/`eq_table` entries once `decimal_id` is a real id.
 
     // Float: total (IEEE, may lose precision)
     add_table.insert(float_id, AddEntry {
@@ -373,16 +407,15 @@ pub fn register_numeric_env(
         result_id: float32_id,
     });
 
-    // == dispatch
+    // == dispatch (Decimal's entry is inserted by `register_decimal_char`)
     eq_table.insert(int_id,     EqEntry { op_id: eq_int_id });
-    eq_table.insert(decimal_id, EqEntry { op_id: eq_decimal_id });
     eq_table.insert(float_id,   EqEntry { op_id: eq_float_id });
     eq_table.insert(float32_id, EqEntry { op_id: eq_float32_id });
 
     Ok(NumericEnv {
         int_id, int8_id, int16_id, int32_id, int64_id,
         uint8_id, uint16_id, uint32_id, uint64_id,
-        decimal_id, float_id, float32_id, bool_id, char_id,
+        decimal_id, decimalpair_id, float_id, float32_id, bool_id, char_id,
         add_table,
         eq_table,
     })

@@ -6,8 +6,10 @@
 //! selected method (ι) fires.
 //!
 //! # EvalVal variants
-//! - Scalar immediates (`Bool`, `Int`, `Float`, `Float32`, `DecimalVal`) — not
-//!   K3-interned (they are K3 immediates: `RtValue::Bool`/`SmallInt`/…).
+//! - Scalar immediates (`Bool`, `Int`, `Float`, `Float32`) — not K3-interned
+//!   (they are K3 immediates: `RtValue::Bool`/`SmallInt`/…). `Decimal` is
+//!   DEMOTE→derived (`18a §5.6.1`) — a `Ctor` over two `Int` fields, not a
+//!   scalar immediate of its own.
 //! - `BigInt` — an eval-level immediate (arbitrary-precision, `18a §5.2.1`),
 //!   but its store image (`Value::BigInt { sign, limbs }`) is a K3-interned
 //!   compound (content-addressed like `Ctor`/`Pair`), not an immediate; `to_rt`
@@ -146,7 +148,9 @@ pub enum EvalVal {
     BigInt(BigInt),                        // Int values > i64::MAX or < i64::MIN (arbitrary-precision, `18a §5.2.1`)
     Float(f64),                           // IEEE 754 double
     Float32(f32),                         // IEEE 754 single
-    DecimalVal { coeff: i64, exp: i32 },  // exact base-10: coeff × 10^exp
+    // `Decimal` is DEMOTE→derived (`18a §5.6.1`): a `Ctor{id:mkdecimalpair_id}`
+    // value over two `Int`/`BigInt` fields, not a scalar immediate — no
+    // `DecimalVal` case here anymore (the native primitive was removed).
 
     // --- Compound data values (K3-interned; slot_id uniquely identifies content) ---
     /// Fully-applied constructor: `cₖ v̄`.  `args` holds ALL applied arguments
@@ -381,6 +385,23 @@ fn elim_reduce(
     match scrut {
         EvalVal::Unknown => EvalVal::Unknown,
         EvalVal::Neutral => EvalVal::Neutral,
+        // `eq_int`/`leq_int`/`not_bool`/`and_bool`/`or_bool`/`eq_float(32)`
+        // return the interpreter's native `EvalVal::Bool` immediate, but
+        // `Bool` is a REAL inductive (`data Bool = True | False`) and
+        // `Term::Elim` dispatches by constructor INDEX — a bare `True`/
+        // `False` literal instead reduces to `EvalVal::Ctor{id:true/false_id}`
+        // (`make_ctor`), which the arm below already handles. `True`/`False`
+        // are declared in that exact index order (0/1) with arity 0 (no
+        // constructor-specific args), so the selected method needs no
+        // argument application — this is the zero-arg `Ctor` case, just
+        // reached from the other value representation of the same `Bool`.
+        // Without this arm, any `match` scrutinizing a *computed* `Bool`
+        // (as opposed to a literal `True`/`False`) falls through to the
+        // catch-all below and gets stuck at `Neutral` — the bug this fixes.
+        EvalVal::Bool(b) => {
+            let k = if b { 0 } else { 1 };
+            eval(env, &methods[k], globals, store)
+        }
         EvalVal::Ctor {
             id: ctor_id,
             ref args,
@@ -539,6 +560,19 @@ impl From<i128> for EvalVal {
     }
 }
 
+/// Build a `Decimal` value — `Ctor{id:mkdecimalpair_id, args:[coeff, exp]}`
+/// (`18a §5.6.1`) — from a `(coeff, exp)` pair. Used by literal-conversion
+/// call sites outside this crate (`ken-cli`, elaborator test drivers) that
+/// turn an elaborated `NumericLitVal::Decimal` into its `EvalVal`; not
+/// interned here (callers intern via the store when needed).
+pub fn decimal_value(mkdecimalpair_id: GlobalId, coeff: i64, exp: i32) -> EvalVal {
+    EvalVal::Ctor {
+        id: mkdecimalpair_id,
+        args: Rc::new(vec![EvalVal::Int(coeff), EvalVal::Int(exp as i64)]),
+        slot: NULL_SLOT,
+    }
+}
+
 fn eval_to_bigint(v: &EvalVal) -> Option<BigInt> {
     match v {
         EvalVal::Int(n) => Some(BigInt::from(*n)),
@@ -654,43 +688,6 @@ fn fixed_binop_u64(a: &EvalVal, b: &EvalVal, op: fn(u64, u64) -> u64) -> EvalVal
     }
 }
 
-fn add_decimal(ca: i64, ea: i32, cb: i64, eb: i32) -> EvalVal {
-    if ea == eb {
-        EvalVal::DecimalVal {
-            coeff: ca.saturating_add(cb),
-            exp: ea,
-        }
-    } else if ea < eb {
-        let shift = (eb - ea).min(18) as u32;
-        let factor = 10i64.saturating_pow(shift);
-        EvalVal::DecimalVal {
-            coeff: ca.saturating_add(cb.saturating_mul(factor)),
-            exp: ea,
-        }
-    } else {
-        let shift = (ea - eb).min(18) as u32;
-        let factor = 10i64.saturating_pow(shift);
-        EvalVal::DecimalVal {
-            coeff: ca.saturating_mul(factor).saturating_add(cb),
-            exp: eb,
-        }
-    }
-}
-
-fn decimal_eq(ca: i64, ea: i32, cb: i64, eb: i32) -> bool {
-    if ea == eb {
-        ca == cb
-    } else if ea < eb {
-        let shift = (eb - ea).min(18) as u32;
-        let factor = 10i64.saturating_pow(shift);
-        ca == cb.saturating_mul(factor)
-    } else {
-        let shift = (ea - eb).min(18) as u32;
-        let factor = 10i64.saturating_pow(shift);
-        ca.saturating_mul(factor) == cb
-    }
-}
-
 /// Structural equality on `EvalVal` for equality-testing contexts (`L1 §4`).
 pub fn eval_vals_eq(a: &EvalVal, b: &EvalVal) -> bool {
     match (a, b) {
@@ -701,9 +698,10 @@ pub fn eval_vals_eq(a: &EvalVal, b: &EvalVal) -> bool {
         (EvalVal::BigInt(x), EvalVal::Int(y)) => *x == BigInt::from(*y),
         (EvalVal::Float(x), EvalVal::Float(y)) => x == y,
         (EvalVal::Float32(x), EvalVal::Float32(y)) => x == y,
-        (EvalVal::DecimalVal { coeff: ca, exp: ea }, EvalVal::DecimalVal { coeff: cb, exp: eb }) => {
-            decimal_eq(*ca, *ea, *cb, *eb)
-        }
+        // `Decimal` is now `Ctor{id:mkdecimalpair_id, args:[Int/BigInt,Int/BigInt]}`
+        // (`18a §5.6.1`) — not handled by this scalar-immediate helper; the
+        // `Ctor` derived `PartialEq` (or the derived `decimalEq` reduction)
+        // covers it elsewhere.
         _ => false,
     }
 }
@@ -733,6 +731,13 @@ pub fn prim_reduce(symbol: &str, args: &[EvalVal]) -> EvalVal {
         ("mul_int", [a, b]) => exact_int_binop(a, b, |x, y| x * y),
         ("eq_int", [a, b]) => match (eval_to_bigint(a), eval_to_bigint(b)) {
             (Some(av), Some(bv)) => EvalVal::Bool(av == bv),
+            _ => EvalVal::Neutral,
+        },
+        // `leq_int` (`18a §5.2.2`) — bignum-correct total order, mirroring
+        // `eq_int`'s non-circularity discipline. Already-registered symbol
+        // (`numbers.rs:233`); this arm only wires its reduction.
+        ("leq_int", [a, b]) => match (eval_to_bigint(a), eval_to_bigint(b)) {
+            (Some(av), Some(bv)) => EvalVal::Bool(av <= bv),
             _ => EvalVal::Neutral,
         },
 
@@ -768,19 +773,11 @@ pub fn prim_reduce(symbol: &str, args: &[EvalVal]) -> EvalVal {
         ("wrapping_add_uint32", [a, b]) => fixed_binop_u32(a, b, u32::wrapping_add),
         ("wrapping_add_uint64", [a, b]) => fixed_binop_u64(a, b, u64::wrapping_add),
 
-        // ---- Decimal (exact base-10) ----
-        ("add_decimal", [EvalVal::DecimalVal { coeff: ca, exp: ea }, EvalVal::DecimalVal { coeff: cb, exp: eb }]) => {
-            add_decimal(*ca, *ea, *cb, *eb)
-        }
-        ("sub_decimal", [EvalVal::DecimalVal { coeff: ca, exp: ea }, EvalVal::DecimalVal { coeff: cb, exp: eb }]) => {
-            add_decimal(*ca, *ea, -*cb, *eb)
-        }
-        ("mul_decimal", [EvalVal::DecimalVal { coeff: ca, exp: ea }, EvalVal::DecimalVal { coeff: cb, exp: eb }]) => {
-            EvalVal::DecimalVal { coeff: ca.saturating_mul(*cb), exp: ea + eb }
-        }
-        ("eq_decimal", [EvalVal::DecimalVal { coeff: ca, exp: ea }, EvalVal::DecimalVal { coeff: cb, exp: eb }]) => {
-            EvalVal::Bool(decimal_eq(*ca, *ea, *cb, *eb))
-        }
+        // Decimal (`add_decimal`/`sub_decimal`/`mul_decimal`/`eq_decimal`) is
+        // DEMOTE→derived (`18a §5.6.1`): no native `prim_reduce` arm here —
+        // the elaborated `decimalAdd`/`decimalSub`/`decimalMul`/`decimalEq`
+        // definitions (`ken-elaborator/src/decimal_char.rs`) reduce via
+        // ordinary β/ι/δ evaluation over `add_int`/`mul_int`/`leq_int`.
 
         // ---- Float (IEEE 754 f64) ----
         ("add_float", [EvalVal::Float(a), EvalVal::Float(b)]) => EvalVal::Float(a + b),
@@ -866,6 +863,16 @@ pub fn prim_reduce(symbol: &str, args: &[EvalVal]) -> EvalVal {
         // Partial or unrecognised primitive: neutral (stuck on non-literals).
         _ => EvalVal::Neutral,
     }
+}
+
+/// Derived strict order (`18a §5.2.2(2)`): `lt a b := ¬(leq_int b a)` —
+/// Steward's locked minimal form (pure `leq`, no `eq`). No `lt_int` primitive
+/// is registered; this composes the two already-reducing prims via
+/// `prim_reduce` itself, so the composition is exercised end-to-end rather
+/// than shortcut with a raw Rust `!`.
+pub fn derived_lt_int(a: &EvalVal, b: &EvalVal) -> EvalVal {
+    let leq_b_a = prim_reduce("leq_int", &[b.clone(), a.clone()]);
+    prim_reduce("not_bool", std::slice::from_ref(&leq_b_a))
 }
 
 // ── eval / apply ─────────────────────────────────────────────────────────────
@@ -1394,8 +1401,7 @@ fn prim_arity(symbol: &str) -> usize {
         "add" | "sub" | "mul" => 2,
         "not_bool" => 1,
         "and_bool" | "or_bool" => 2,
-        "add_int" | "sub_int" | "mul_int" | "eq_int" => 2,
-        "add_decimal" | "sub_decimal" | "mul_decimal" | "eq_decimal" => 2,
+        "add_int" | "sub_int" | "mul_int" | "eq_int" | "leq_int" => 2,
         "add_float" | "sub_float" | "mul_float" | "div_float" | "eq_float" => 2,
         "add_float32" | "eq_float32" => 2,
         s if s.starts_with("add_int") || s.starts_with("sub_int") || s.starts_with("mul_int") => 2,

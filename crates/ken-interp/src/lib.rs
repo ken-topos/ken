@@ -6,8 +6,8 @@
 pub mod eval;
 
 pub use eval::{
-    apply, drive_h, drive_h_instrumented, eval, run_io, ConsoleIds, Env, EvalStore, EvalVal,
-    ITreeIds, RunIoError, SlotId,
+    apply, decimal_value, drive_h, drive_h_instrumented, eval, run_io, ConsoleIds, Env, EvalStore,
+    EvalVal, ITreeIds, RunIoError, SlotId,
 };
 
 pub fn describe() -> &'static str {

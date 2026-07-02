@@ -71,6 +71,7 @@ pub fn empty_prelude_env() -> PreludeEnv {
         vis_id: z,
         io_id: z,
         print_line_id: z,
+        mkdecimalpair_id: z,
     }
 }
 
@@ -135,6 +136,10 @@ pub struct PreludeEnv {
     pub io_id: GlobalId,
     /// `print_line : String → IO Unit` — the surface Console print postulate.
     pub print_line_id: GlobalId,
+    /// `MkDecimalPair` — the derived `Decimal`'s constructor (`18a §5.6.1`),
+    /// surfaced so literal-conversion call sites outside this crate can
+    /// build a `Decimal` `EvalVal` from a `(coeff, exp)` pair.
+    pub mkdecimalpair_id: GlobalId,
 }
 
 /// Register the L3 prelude in `elab` (called from `ElabEnv::empty`).
@@ -264,6 +269,13 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     // needs no dedicated check-mode arm; the `check()` fallback (infer,
     // then unify against `expected`) handles it like any other constant.
     elab.globals.insert("tt".to_string(), elab.env.tt_id());
+
+    // `Decimal`/`Char` DEMOTE→derived (`18a §5.6`/`§5.9`, Phase-2 tranche #2).
+    // Must run here: after `Equal`/`And`/`Prop`/`tt` (needed by `IsTrue`),
+    // before the L3a String-ops registration below (needs `Char` in
+    // `elab.globals`).
+    let decimal_char_env = crate::decimal_char::register_decimal_char(elab)
+        .map_err(|e| ElabError::Internal(format!("Decimal/Char demote failed: {}", e)))?;
 
     // `isSorted : Π(a:Type). (a → a → Bool) → List a → Ω` (ES2-remainder,
     // `37 §6`: the explicit-comparator form, `Ord`-class deferred).
@@ -570,5 +582,6 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         vis_id,
         io_id,
         print_line_id,
+        mkdecimalpair_id: decimal_char_env.mkdecimalpair_id,
     })
 }
