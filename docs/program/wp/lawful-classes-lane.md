@@ -57,13 +57,20 @@ twins (orphan instances are a hard error — `33 §5`):
   **zero-NEW-delta by transport**, NOT a fresh proof, and explicitly **NOT**
   `Axiom`-free-via-`proj`-injectivity (that earlier characterization was
   corrected in the erratum).
-- **`Num Decimal`** and **`DecEq Decimal`** — by **real structural proof**.
+- ~~**`Num Decimal`** and **`DecEq Decimal`** — by **real structural proof**.
   `Decimal = MkDecimalPair Int Int` is a genuine inductive carrier
   (`decimal_char.rs` ~L93–95), so the laws (reflexivity/comm/`sound`/`complete`)
   are a structural proof case-splitting `MkDecimalPair` that **bottoms out at
   `DecEq Int`/`Num Int`'s audited-delta `Axiom` leaves** (`lawful_classes.ken`
   `DecEq Int` ~L80–84). **Zero-NEW-delta** (no NEW postulate beyond `Int`'s
-  existing visible ones) — but **not** `Axiom`-free.
+  existing visible ones) — but **not** `Axiom`-free.~~ **CORRECTED (build-time,
+  see SCOPE UPDATE above): this was an over-claim.** `decimalEq` is an `Eq`
+  (equivalence via alignment on the non-canonical `(coeff, exp)` carrier),
+  not a `DecEq` (decision procedure for the kernel's structural `Equal`) —
+  the "structural proof bottoming at `Int`'s `Axiom` leaves" does not exist;
+  postulating `sound`/`complete` would inhabit `Bottom`. Neither `Num
+  Decimal` nor `DecEq Decimal` is delivered by this WP; both re-defer behind
+  the decide-once carrier design gate (`90-open-decisions.md`).
 
 ## The discriminator is HONESTY, not zero-delta
 
@@ -84,8 +91,11 @@ instances are honestly not zero-delta.
 
 1. **`Ord Char`** instance — `leq = leqChar`; law fields transport-reference
    `Ord Int`'s visible `Axiom`s (no new `Decl::Opaque`).
-2. **`DecEq Decimal`** + **`Num Decimal`** instances — structural proofs over
-   `MkDecimalPair`, bottoming at `DecEq Int`/`Num Int` `Axiom` leaves.
+2. ~~**`DecEq Decimal`** + **`Num Decimal`** instances — structural proofs over
+   `MkDecimalPair`, bottoming at `DecEq Int`/`Num Int` `Axiom` leaves.~~
+   **DROPPED (build-time)** — not deliverable on `Decimal`'s non-canonical
+   carrier (soundness hole, see SCOPE UPDATE above); re-defers to a future
+   WP behind the decide-once carrier design gate.
 3. **Conformance cases** under `conformance/stdlib/classes/` (home:
    `seed-lawful-classes.md`; §5 flip-discipline `law-fields-real-proofs-not-
    postulates`). Author the honesty discriminators the demote seed named as
