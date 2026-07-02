@@ -25,11 +25,11 @@ may *assume the laws hold* because the instance proved them, with a **zero
 delta**, not zero-delta; `§6`.) **K4 landed (`§6`):** the zero-delta
 *real-proofs* path is realizable for the **live-`Eq`-conclusion** laws —
 `Ω`-motive elimination (`3be0e30`) proves `refl`/`trans`/`total` + `Eq`'s
-`refl`. The **concrete-equality** laws (`antisym`/`sound`/`complete`) need the
-**K5 + K7** kernel capability (`Top`-intro/`Bottom`-elim, landed `1c84a30`;
-`eq_at_inductive` operand-`whnf`, `../10-kernel/16 §8.1`) — they park as visible
-`Axiom`s pending the **ES4-lawproofs-remainder** real-proof wiring. `Eq`'s
-`sym`/`trans` need **K6** (forward). The
+`refl`. The **concrete-equality** laws (`antisym`/`sound`/`complete`) needed the
+**K5 + K7** kernel capability (`Top`-intro/`Bottom`-elim `1c84a30`;
+`eq_at_inductive` operand-`whnf` `4ae2baf`, `../10-kernel/16 §8.1`) — both now
+landed, so they are **real zero-delta proofs on main** (ES4-lawproofs-remainder,
+`9a82745`). `Eq`'s `sym`/`trans` need **K6** (forward). The
 first real zero-delta instances (`Ord Bool` `refl`/`trans`/`total`, `Eq Bool`
 `refl`) are on main (**ES4-lawproofs**, `72e38a5`).
 
@@ -259,19 +259,19 @@ contradictory-hypothesis case → `Bottom`-**elimination** / ex-falso with
    reduce under K5 alone.
 
 So a **complete** zero-delta `Ord Bool` / `DecEq Bool` (`antisym` mandatory for
-a total order; `sound`/`complete` for decidable equality) needs the **K5 + K7**
-kernel capability (K5 `1c84a30`; K7's operand-`whnf` fix, `16 §8.1`) — the three
-laws **park as visible `Axiom`s pending the ES4-lawproofs-remainder real-proof
-wiring**, structurally parallel to how `Eq`'s `sym`/`trans` park pending K6.
-**None needs
-K6** (no swapped-`Eq` hypothesis-reuse across a stuck congruence); K4 alone
-realized only the live-`Eq`-conclusion fragment. The ES4-lawproofs build
-surfaced the K7 gap by pushing the real proofs to a wall (Architect-ruled).
-*(This corrects the K5 un-stage's `0feb2c8` over-claim that these "reduce
-entirely within K5's `tt`/`absurd`, realizable now" — that silently assumed the
-operation-wrapped operands reduce, which is the K7 step. The `.ken` instances
-were always honest `Axiom`s — `72e38a5` never made these three real — so this is
-a prose/attribution erratum only.)*
+a total order; `sound`/`complete` for decidable equality) needed the **K5 + K7**
+kernel capability (K5 `1c84a30`; K7's operand-`whnf` fix `4ae2baf`, `16 §8.1`) —
+both now landed, and the three laws are **real, kernel-checked, zero-delta
+proofs on main** (ES4-lawproofs-remainder `9a82745`: `antisym` closes via
+`tt`/`absurd`, `sound`/`complete` via `absurd`; **no `Axiom` remains** in either
+instance). **None needed K6** (no swapped-`Eq` hypothesis-reuse across a stuck
+congruence); K4 alone realized only the live-`Eq`-conclusion fragment, and the
+ES4-lawproofs build surfaced the K7 gap by pushing the real proofs to a wall
+(Architect-ruled) before it landed. *(The staging ran the full three-state
+lifecycle: the K5 un-stage `0feb2c8` over-claimed these "realizable now via K5"
+— silently assuming the operation-wrapped operands reduce, the separate K7 step
+— corrected to a K5+K7 park by `4466807`, then realized here once K7 `4ae2baf`
++ the wiring `9a82745` landed.)*
 
 **`Eq`'s `sym`/`trans` need one further, distinct capability (K6, forward).**
 Proving `Eq`'s **symmetry**/**transitivity** (from `Eq a x y` derive `Eq a y x`,
@@ -284,15 +284,15 @@ audited-delta honesty applied to a *capability-pending* field). Only
 `sym`/`trans` are K6-gated; `Eq`'s `refl` is zero-delta now (its goal routes
 through an unresolved `bool_eq x x`, keeping the `Eq` live so `Refl` fires).
 
-**Realization status.** The first **real, kernel-checked, zero-delta**
-law-carrying instances are **on main** (`72e38a5`, ES4-lawproofs, Team Language,
-`packages/lawful-classes/`): `Ord Bool` `refl`/`trans`/`total` + `Eq Bool`
-`refl`. The **K5 + K7** fragment (`antisym`/`sound`/`complete` → a *complete*
-`Ord Bool`/`DecEq Bool`) stays a **visible `Axiom`**; the real proofs land with
-the **ES4-lawproofs remainder** (Team Language) once K7's operand-`whnf`
-capability (`16 §8.1`) is on main and the laws are wired; the **K6** fragment
-(`Eq`'s `sym`/`trans`) stays a visible `Axiom` pending K6. The discriminating
-shape — a law-less *inductive* instance is an **avoidable** delta, hence a
+**Realization status.** The **real, kernel-checked, zero-delta** law-carrying
+instances are **on main** (Team Language, `packages/lawful-classes/`):
+`Ord Bool` `refl`/`trans`/`total` + `Eq Bool` `refl` (`72e38a5`), and now
+`Ord Bool`'s `antisym` + `DecEq Bool`'s `sound`/`complete` (`9a82745`,
+ES4-lawproofs-remainder) — so `Ord Bool` and `DecEq Bool` are **complete
+zero-delta lawful instances**, **no `Axiom` remaining**. Only the **K6**
+fragment (`Eq`'s `sym`/`trans`) stays a visible `Axiom` pending K6. The
+discriminating shape — a law-less *inductive* instance is an **avoidable**
+delta, hence a
 defect — is **live**
 ([[soundness-ac-static-vs-runtime-face]]). The design is unchanged throughout;
 only the gate states and build-time availability move.
