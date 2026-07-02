@@ -138,40 +138,44 @@ instance Ord Int {
 -- The swapped/contradictory branches were EXPECTED (per the Architect's
 -- per-obligation re-derivation) to reduce a HYPOTHESIS to a bare `Equal
 -- Bool True False`/`Equal Bool False True`, collapsing to `Bottom` and
--- closed by `absurd`. THIS DOES NOT HOLD, mechanism-grounded (not just
--- structurally observed): `antisym`/`sound`/`complete`'s hypotheses are
--- `IsTrue (leq x y)`/`IsTrue (eq x y)` = `Equal Bool (bool_leq x y) True` --
--- the CARRIER value is wrapped through the instance's OWN operation
--- (`bool_leq`/`bool_eq`), not a bare case-split variable. Even after BOTH
--- `x`/`y` are substituted to literal constructors by the case-split,
--- `bool_leq True False` stays a SYNTACTIC application (`App(Const,lit,lit)`)
--- until something forces its OWN iota-reduction -- and
--- `ken-kernel/src/obs.rs::eq_at_inductive` (reached via `conv.rs::whnf`'s
--- `Term::Eq` case / `obs::eq_reduce`) calls `peel_app` on its two VALUE
--- operands WITHOUT first WHNF-ing them, so a wrapped-but-literal operand
--- (`bool_leq True False`) is never recognized as constructor-headed and the
--- `Eq` stays neutral -- it does NOT collapse to `Bottom`, so `absurd`
--- cannot discharge it. (Confirmed empirically: a DIRECT, unwrapped literal
--- hypothesis like `p : Equal Bool True False` DOES collapse and `absurd`
--- DOES close it -- isolated in a scratch repro before this doc was
--- written.) This is DISTINCT from K6 (which is about `conv_struct` lacking
--- an `Eq`x`Eq` congruence arm for comparing two STUCK propositions) -- this
--- is about `eq_at_inductive` not WHNF-ing its OWN operands before checking
--- constructor-headedness, a narrower defect one level upstream.
+-- closed by `absurd`. THIS DID NOT HOLD ON THE KERNEL AS IT STOOD THEN,
+-- mechanism-grounded (not just structurally observed): `antisym`/`sound`/
+-- `complete`'s hypotheses are `IsTrue (leq x y)`/`IsTrue (eq x y)` =
+-- `Equal Bool (bool_leq x y) True` -- the CARRIER value is wrapped through
+-- the instance's OWN operation (`bool_leq`/`bool_eq`), not a bare
+-- case-split variable. Even after BOTH `x`/`y` are substituted to literal
+-- constructors by the case-split, `bool_leq True False` stays a SYNTACTIC
+-- application (`App(Const,lit,lit)`) until something forces its OWN
+-- iota-reduction -- and `ken-kernel/src/obs.rs::eq_at_inductive` (reached
+-- via `conv.rs::whnf`'s `Term::Eq` case / `obs::eq_reduce`) used to call
+-- `peel_app` on its two VALUE operands WITHOUT first WHNF-ing them, so a
+-- wrapped-but-literal operand (`bool_leq True False`) was never recognized
+-- as constructor-headed and the `Eq` stayed neutral -- it did NOT collapse
+-- to `Bottom`, so `absurd` could not discharge it. (Confirmed empirically:
+-- a DIRECT, unwrapped literal hypothesis like `p : Equal Bool True False`
+-- DID collapse and `absurd` DID close it -- isolated in a scratch repro
+-- before this doc was written.) This was DISTINCT from K6 (which is about
+-- `conv_struct` lacking an `Eq`x`Eq` congruence arm for comparing two
+-- STUCK propositions) -- this was about `eq_at_inductive` not WHNF-ing its
+-- OWN operands before checking constructor-headedness, a narrower defect
+-- one level upstream.
 -- Architect-confirmed and named ("K7", `evt_1w8r8qey52qvt`): a genuine
 -- kernel INCOMPLETENESS, not murky -- `eq_at_inductive`'s sibling
 -- `eq_at_type` (same file) already whnfs its two value operands before
--- head-matching; `eq_at_inductive` is simply missing that same step. The
--- fix is a safe, airtight-sound two-line whnf mirroring `eq_at_type`
+-- head-matching; `eq_at_inductive` was simply missing that same step. The
+-- fix was a safe, airtight-sound two-line whnf mirroring `eq_at_type`
 -- verbatim (cannot over-accept: whnf is the kernel's own sound reduction,
 -- so a newly-recognized constructor head was always definitionally true;
 -- no regression on genuinely-neutral operands, which whnf to themselves).
--- Routed as a small trust-root kernel WP (`obs.rs`-only, `conv.rs`
--- untouched) to `kernel-leader`/Architect co-review -- explicitly NOT an
--- elaborator-side transport/`cast` workaround (rejected: that would grow
--- the TCB to route around a kernel-completeness gap that belongs in the
--- kernel). `Ord Bool`'s `antisym` and `DecEq Bool`'s `sound`/`complete`
--- stay honest `Axiom`s, parked on the **K7** wall, until that WP lands.
+-- Landed as a small trust-root kernel WP (`obs.rs`-only, `conv.rs`
+-- untouched, `4ae2baf`) -- explicitly NOT an elaborator-side transport/
+-- `cast` workaround (rejected: that would have grown the TCB to route
+-- around a kernel-completeness gap that belongs in the kernel). **K7 is now
+-- on `main`**, and this WP wires `Ord Bool`'s `antisym` and `DecEq Bool`'s
+-- `sound`/`complete` (below) as REAL, kernel-checked, zero-delta proofs --
+-- `tt` on the equal-value branches, `absurd` on the contradictory branches
+-- (whose hypothesis now genuinely collapses to `Bottom` under K7). No
+-- `Axiom` remains in either instance.
 --
 -- `Eq Bool`'s `sym`/`trans` stay `Axiom` too, but for a DIFFERENT reason --
 -- NOT the K5/Top-Bottom wall (their conclusions are `IsTrue (eq _ _)`,
