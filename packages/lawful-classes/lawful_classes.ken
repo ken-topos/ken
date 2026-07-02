@@ -95,7 +95,7 @@ instance Ord Int {
 -- a real inductive (`data Bool = True | False`, ES2), so its laws ARE
 -- kernel-provable by finite case-split (`elim_Bool` into an `Omega`-motive,
 -- K4 `3be0e30`). Every law field below is a REAL, kernel-checked proof
--- (`Refl`/direct hypothesis reuse under the RESTRUCTURED signature form
+-- (`tt`/`Refl`/direct hypothesis reuse under the RESTRUCTURED signature form
 -- described below) -- NOT `Axiom` -- except where noted.
 --
 -- The restructuring discipline (why these signatures look unusual). A
@@ -113,6 +113,19 @@ instance Ord Int {
 -- goal in an "impossible" branch (e.g. both reduce to `Eq Bool False True`)
 -- can be reused directly, no ex-falso needed. This is *why* `refl`/`trans`/
 -- `total` are provable today without any further kernel capability.
+--
+-- Every branch whose goal reduces to a TRUE `IsTrue`/`Equal` equation
+-- (e.g. `IsTrue (bool_leq True True)`) is closed with `tt` (K5 `Top`-intro),
+-- not `Refl`: the goal is `Equal Bool (op x y) True` for an OPERATION
+-- (`bool_leq`/`bool_eq`/`bool_or`), a redex -- `eq_at_inductive` must
+-- `whnf` it to the literal `True` before the same-nullary-constructor
+-- collapse to `Top` fires (K7, `obs.rs`). `Refl` checks against a goal
+-- whose whnf is *still* `Eq`-shaped (`ken-elaborator/src/elab.rs`); once
+-- the operand is reduced the goal is `Top`, not `Eq`, so `Refl` no longer
+-- applies there -- `tt` is the textbook-correct introduction for a
+-- `Top`-classified goal. Only genuine hypothesis-reuse branches (the goal
+-- is syntactically a bound hypothesis's own type, e.g. `q`/`p` in `trans`
+-- below) stay untouched by K7; they never went through `Refl` at all.
 --
 -- `antisym`'s "same-value" branches (`x = y`) reduce the GOAL itself
 -- (`Equal a x x`) past a live application into a BARE `Equal Bool True
@@ -160,26 +173,26 @@ view bool_eq (a : Bool) (b : Bool) : Bool = match a { True => b ; False => match
 
 instance Ord Bool {
   leq = bool_leq ;
-  refl = \x. match x { True => Refl ; False => Refl } ;
+  refl = \x. match x { True => tt ; False => tt } ;
   antisym = Axiom ;
   trans =
     \x. match x {
       True => \y. match y {
-        True => \z. match z { True => \p.\q. Refl ; False => \p.\q. q } ;
-        False => \z. match z { True => \p.\q. Refl ; False => \p.\q. p }
+        True => \z. match z { True => \p.\q. tt ; False => \p.\q. q } ;
+        False => \z. match z { True => \p.\q. tt ; False => \p.\q. p }
       } ;
-      False => \y.\z.\p.\q. Refl
+      False => \y.\z.\p.\q. tt
     } ;
   total =
     \x.\y. match x {
-      True => match y { True => Refl ; False => Refl } ;
-      False => match y { True => Refl ; False => Refl }
+      True => match y { True => tt ; False => tt } ;
+      False => match y { True => tt ; False => tt }
     }
 }
 
 instance Eq Bool {
   eq = bool_eq ;
-  refl = \x. match x { True => Refl ; False => Refl } ;
+  refl = \x. match x { True => tt ; False => tt } ;
   sym = Axiom ;
   trans = Axiom
 }

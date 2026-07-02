@@ -255,6 +255,16 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         .map_err(|e| ElabError::Internal(format!("prelude Prop failed: {}", e)))?;
     elab.globals.insert("Prop".to_string(), prop_id);
 
+    // `tt : Top` — the kernel's prelude `Top`-introduction constant (K5,
+    // `16 §1.3`), already unconditionally declared by `GlobalEnv::new()`.
+    // Surfaced here so a structure-class law proof can close a goal that
+    // whnf's to `Top` (K7: an operation-wrapped `IsTrue`/`Equal` goal, the
+    // same slot `Refl` occupied before the operand-whnf completeness fix,
+    // `51 §6`). Ordinary global reference — `tt` infers to `Top`, so it
+    // needs no dedicated check-mode arm; the `check()` fallback (infer,
+    // then unify against `expected`) handles it like any other constant.
+    elab.globals.insert("tt".to_string(), elab.env.tt_id());
+
     // `isSorted : Π(a:Type). (a → a → Bool) → List a → Ω` (ES2-remainder,
     // `37 §6`: the explicit-comparator form, `Ord`-class deferred).
     //
