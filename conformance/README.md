@@ -183,11 +183,12 @@ claim with no conformance case is a claim no one can rely on
   reflect-don't-extend). **Carrier axis (`§6`):** "lawful ≡ zero-delta" holds on
   an **inductive** carrier; a **primitive** carrier is audited-delta (its
   ∀-laws unprovable — no eliminator — so a *declared* delta, not zero) —
-  `primitive-carrier-declared-audited-delta`. **K4-staged:** the zero-delta
-  real-proofs path needs kernel Ω-motive elimination (forward WP), so **pre-K4
-  all instances are audited-delta** and the carrier axis collapses — the
-  declared-vs-hidden honesty stays live. Static face; the real law-carrying
-  instances are the Team-Language build follow-on.
+  `primitive-carrier-declared-audited-delta`. The zero-delta real-proofs path
+  needed kernel Ω-motive elimination (**K4**, `14 §3`) — **now landed**
+  (`3be0e30`, `kernel/inductive/seed-k4-omega-motive-elim.md`) — so the carrier
+  axis is live; the real law-carrying instances land with the **ES4-lawproofs**
+  build (Team Language). Static face; declared-vs-hidden honesty enforceable
+  throughout.
 - `security/ifc/seed-ifc.md` — Sec1 information-flow-by-typing (the
   implicit-flow discriminator, label joins, capability-gated declassify, the
   relational by-proof mode).
