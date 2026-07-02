@@ -688,6 +688,92 @@ fn fixed_binop_u64(a: &EvalVal, b: &EvalVal, op: fn(u64, u64) -> u64) -> EvalVal
     }
 }
 
+/// Checked fixed-width `iN`/`uN` binop (`18a §5 F2`, `35 §3`
+/// degrade-not-wrap) — the bare arithmetic op's runtime face. On overflow
+/// `op` returns `None` and the arm degrades to a stuck `EvalVal::Neutral`
+/// (never the wrapped value, mirroring `bytes_at` OOB and Decimal's
+/// align-beyond-`MAX_SHIFT`) — `Unknown` is reserved for open-hole residue
+/// and must not be conflated with a runtime arithmetic fault.
+fn checked_binop_i8(a: &EvalVal, b: &EvalVal, op: fn(i8, i8) -> Option<i8>) -> EvalVal {
+    match (a, b) {
+        (EvalVal::Int(x), EvalVal::Int(y)) => match op(*x as i8, *y as i8) {
+            Some(r) => EvalVal::Int(r as i64),
+            None => EvalVal::Neutral,
+        },
+        _ => EvalVal::Neutral,
+    }
+}
+
+fn checked_binop_i16(a: &EvalVal, b: &EvalVal, op: fn(i16, i16) -> Option<i16>) -> EvalVal {
+    match (a, b) {
+        (EvalVal::Int(x), EvalVal::Int(y)) => match op(*x as i16, *y as i16) {
+            Some(r) => EvalVal::Int(r as i64),
+            None => EvalVal::Neutral,
+        },
+        _ => EvalVal::Neutral,
+    }
+}
+
+fn checked_binop_i32(a: &EvalVal, b: &EvalVal, op: fn(i32, i32) -> Option<i32>) -> EvalVal {
+    match (a, b) {
+        (EvalVal::Int(x), EvalVal::Int(y)) => match op(*x as i32, *y as i32) {
+            Some(r) => EvalVal::Int(r as i64),
+            None => EvalVal::Neutral,
+        },
+        _ => EvalVal::Neutral,
+    }
+}
+
+fn checked_binop_i64(a: &EvalVal, b: &EvalVal, op: fn(i64, i64) -> Option<i64>) -> EvalVal {
+    match (a, b) {
+        (EvalVal::Int(x), EvalVal::Int(y)) => match op(*x, *y) {
+            Some(r) => EvalVal::Int(r),
+            None => EvalVal::Neutral,
+        },
+        _ => EvalVal::Neutral,
+    }
+}
+
+fn checked_binop_u8(a: &EvalVal, b: &EvalVal, op: fn(u8, u8) -> Option<u8>) -> EvalVal {
+    match (a, b) {
+        (EvalVal::Int(x), EvalVal::Int(y)) => match op(*x as u8, *y as u8) {
+            Some(r) => EvalVal::Int(r as i64),
+            None => EvalVal::Neutral,
+        },
+        _ => EvalVal::Neutral,
+    }
+}
+
+fn checked_binop_u16(a: &EvalVal, b: &EvalVal, op: fn(u16, u16) -> Option<u16>) -> EvalVal {
+    match (a, b) {
+        (EvalVal::Int(x), EvalVal::Int(y)) => match op(*x as u16, *y as u16) {
+            Some(r) => EvalVal::Int(r as i64),
+            None => EvalVal::Neutral,
+        },
+        _ => EvalVal::Neutral,
+    }
+}
+
+fn checked_binop_u32(a: &EvalVal, b: &EvalVal, op: fn(u32, u32) -> Option<u32>) -> EvalVal {
+    match (a, b) {
+        (EvalVal::Int(x), EvalVal::Int(y)) => match op(*x as u32, *y as u32) {
+            Some(r) => EvalVal::Int(r as i64),
+            None => EvalVal::Neutral,
+        },
+        _ => EvalVal::Neutral,
+    }
+}
+
+fn checked_binop_u64(a: &EvalVal, b: &EvalVal, op: fn(u64, u64) -> Option<u64>) -> EvalVal {
+    match (a, b) {
+        (EvalVal::Int(x), EvalVal::Int(y)) => match op(*x as u64, *y as u64) {
+            Some(r) => EvalVal::from(r as i128),
+            None => EvalVal::Neutral,
+        },
+        _ => EvalVal::Neutral,
+    }
+}
+
 /// Structural equality on `EvalVal` for equality-testing contexts (`L1 §4`).
 pub fn eval_vals_eq(a: &EvalVal, b: &EvalVal) -> bool {
     match (a, b) {
@@ -709,8 +795,10 @@ pub fn eval_vals_eq(a: &EvalVal, b: &EvalVal) -> bool {
 /// Primitive reduction for registered operations (`42 §3.3`, `14 §5`).
 ///
 /// Covers `L1` numeric tower: Int (arbitrary-precision, `18a §5.2.1`),
-/// fixed-width, Decimal, Float, Float32, Bool, plus legacy `add`/`sub`/`mul`
-/// (wrapping i64).
+/// fixed-width (checked, degrade-not-wrap), Decimal, Float, Float32, Bool.
+/// The legacy unregistered `add`/`sub`/`mul` (wrapping i64) arms were
+/// retired (`18a §5 F3`); those symbols now fall through to the catch-all
+/// stuck arm.
 /// `L6` Bytes ops and encode/decode (`38 §1.2`, `38 §1.4`) are also grounded.
 /// Division and fault-triggering operations are out of scope (`43 §2.2`).
 /// Exposed `pub` for conformance tests in `ken-elaborator`.
@@ -741,23 +829,27 @@ pub fn prim_reduce(symbol: &str, args: &[EvalVal]) -> EvalVal {
             _ => EvalVal::Neutral,
         },
 
-        // ---- Fixed-width (wrapping, obligation-generating) ----
-        ("add_int8",  [a, b]) => fixed_binop_i8(a, b, i8::wrapping_add),
-        ("sub_int8",  [a, b]) => fixed_binop_i8(a, b, i8::wrapping_sub),
-        ("mul_int8",  [a, b]) => fixed_binop_i8(a, b, i8::wrapping_mul),
-        ("add_int16", [a, b]) => fixed_binop_i16(a, b, i16::wrapping_add),
-        ("sub_int16", [a, b]) => fixed_binop_i16(a, b, i16::wrapping_sub),
-        ("mul_int16", [a, b]) => fixed_binop_i16(a, b, i16::wrapping_mul),
-        ("add_int32", [a, b]) => fixed_binop_i32(a, b, i32::wrapping_add),
-        ("sub_int32", [a, b]) => fixed_binop_i32(a, b, i32::wrapping_sub),
-        ("mul_int32", [a, b]) => fixed_binop_i32(a, b, i32::wrapping_mul),
-        ("add_int64", [a, b]) => fixed_binop_i64(a, b, i64::wrapping_add),
-        ("sub_int64", [a, b]) => fixed_binop_i64(a, b, i64::wrapping_sub),
-        ("mul_int64", [a, b]) => fixed_binop_i64(a, b, i64::wrapping_mul),
-        ("add_uint8",  [a, b]) => fixed_binop_u8(a, b, u8::wrapping_add),
-        ("add_uint16", [a, b]) => fixed_binop_u16(a, b, u16::wrapping_add),
-        ("add_uint32", [a, b]) => fixed_binop_u32(a, b, u32::wrapping_add),
-        ("add_uint64", [a, b]) => fixed_binop_u64(a, b, u64::wrapping_add),
+        // ---- Fixed-width (checked, degrade-not-wrap: `18a §5 F2`, `35 §3`) ----
+        // Bare arms are the no-overflow obligation's RUNTIME face: on overflow
+        // they degrade to stuck `Neutral`, never the wrapped value. The
+        // sanctioned modular class (`wrapping_*_intN`/`+%`, below) is the
+        // only path permitted to wrap — left untouched.
+        ("add_int8",  [a, b]) => checked_binop_i8(a, b, i8::checked_add),
+        ("sub_int8",  [a, b]) => checked_binop_i8(a, b, i8::checked_sub),
+        ("mul_int8",  [a, b]) => checked_binop_i8(a, b, i8::checked_mul),
+        ("add_int16", [a, b]) => checked_binop_i16(a, b, i16::checked_add),
+        ("sub_int16", [a, b]) => checked_binop_i16(a, b, i16::checked_sub),
+        ("mul_int16", [a, b]) => checked_binop_i16(a, b, i16::checked_mul),
+        ("add_int32", [a, b]) => checked_binop_i32(a, b, i32::checked_add),
+        ("sub_int32", [a, b]) => checked_binop_i32(a, b, i32::checked_sub),
+        ("mul_int32", [a, b]) => checked_binop_i32(a, b, i32::checked_mul),
+        ("add_int64", [a, b]) => checked_binop_i64(a, b, i64::checked_add),
+        ("sub_int64", [a, b]) => checked_binop_i64(a, b, i64::checked_sub),
+        ("mul_int64", [a, b]) => checked_binop_i64(a, b, i64::checked_mul),
+        ("add_uint8",  [a, b]) => checked_binop_u8(a, b, u8::checked_add),
+        ("add_uint16", [a, b]) => checked_binop_u16(a, b, u16::checked_add),
+        ("add_uint32", [a, b]) => checked_binop_u32(a, b, u32::checked_add),
+        ("add_uint64", [a, b]) => checked_binop_u64(a, b, u64::checked_add),
 
         // ---- Wrapping variants (explicit `+%`) ----
         ("wrapping_add_int8",  [a, b]) => fixed_binop_i8(a, b, i8::wrapping_add),
@@ -795,10 +887,12 @@ pub fn prim_reduce(symbol: &str, args: &[EvalVal]) -> EvalVal {
         ("and_bool", [EvalVal::Bool(a), EvalVal::Bool(b)]) => EvalVal::Bool(*a && *b),
         ("or_bool",  [EvalVal::Bool(a), EvalVal::Bool(b)]) => EvalVal::Bool(*a || *b),
 
-        // ---- Legacy (existing, wrapping i64) ----
-        ("add", [EvalVal::Int(a), EvalVal::Int(b)]) => EvalVal::Int(a.wrapping_add(*b)),
-        ("sub", [EvalVal::Int(a), EvalVal::Int(b)]) => EvalVal::Int(a.wrapping_sub(*b)),
-        ("mul", [EvalVal::Int(a), EvalVal::Int(b)]) => EvalVal::Int(a.wrapping_mul(*b)),
+        // Legacy `add`/`sub`/`mul` (wrapping i64) retired (`18a §5 F3`):
+        // unregistered (no `reg_binop!`/`declare_primitive` in
+        // `ken-elaborator/src/numbers.rs`) dead-but-live wrap arms — no
+        // surface program could reach them, and the arity entry below is
+        // gone too, so `prim_reduce("add"/"sub"/"mul", ..)` now falls
+        // through to the catch-all `_ => EvalVal::Neutral` at the bottom.
 
         // ── Bytes primitive ops (`38 §1.2`) ──────────────────────────────────
         ("bytes_length", [EvalVal::Bytes(b)]) => EvalVal::Int(b.len() as i64),
@@ -1398,7 +1492,6 @@ fn ctor_arity(id: GlobalId, globals: &GlobalEnv) -> usize {
 /// Arity of a known primitive operation.
 fn prim_arity(symbol: &str) -> usize {
     match symbol {
-        "add" | "sub" | "mul" => 2,
         "not_bool" => 1,
         "and_bool" | "or_bool" => 2,
         "add_int" | "sub_int" | "mul_int" | "eq_int" | "leq_int" => 2,
