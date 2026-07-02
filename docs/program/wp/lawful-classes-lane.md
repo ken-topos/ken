@@ -6,6 +6,41 @@ DEMOTE (`4eea2072`) + erratum (`fcfff1c6`) explicitly deferred and re-homed here
 (seed `conformance/surface/numbers/seed-decimal-char-demote.md`, the RE-HOMED
 sections). Runs **parallel** to the F2/F3 tranche (independent lanes).
 
+**SCOPE UPDATE (build-time, both rulings independent of each other):**
+- **`Num Decimal` re-defers** — `class Num`/`instance Num Int` were never
+  actually built (only `Eq`/`DecEq`/`Ord` landed); the `Num Int` floor this
+  deliverable was framed to bottom out at doesn't exist. Steward ruling
+  (b): dropped from this WP, re-homed onto a future `class Num` WP.
+- **`DecEq Decimal` re-defers too** — found to be a genuine soundness hole,
+  not a proof-difficulty gap: `Decimal`'s non-canonical `(coeff, exp)`
+  carrier means `decimalEq` is an `Eq` (equivalence via alignment), not a
+  `DecEq` (decision procedure for the kernel's structural `Equal`) —
+  `decimalEq (MkDecimalPair 10 (-1)) (MkDecimalPair 1 0)` reduces `True`
+  (both denote 1.0) but the pairs are structurally distinct, so `sound`
+  would inhabit `Bottom`. Caught before landing (never shipped unsound).
+  Both Decimal instances now sit behind a single decide-once design gate
+  (canonicalize the carrier, or a setoid/quotient `Eq Decimal`), tracked in
+  `90-open-decisions.md` — not this WP's to resolve.
+- **`Ord Char` shipped** (`packages/lawful-classes/lawful_classes.ken`,
+  conformance in `conformance/stdlib/classes/seed-lawful-classes.md`'s
+  `char-ord-laws-carried-not-stubbed`). Along the way: transporting via the
+  separately-defined `leqChar` view (rather than a direct `.`-projection off
+  `Ord Int`'s own `leq`) hit a real kernel gap — `conv_struct`
+  (`ken-kernel/src/conv.rs`) has no Eq×Eq congruence arm, so two
+  syntactically-different-but-fully-reducible-to-identical stuck `Eq`
+  propositions don't converge. This is K6's first REAL customer (a SOUND,
+  positional fix would have closed it, unlike the `Eq Bool` case). Shipped
+  without a kernel change: transporting `leq` itself via the SAME
+  `.`-projection makes every later field's comparison use the literally
+  identical term, sidestepping the gap. See the `.ken` source's comment and
+  `es4_classes_acceptance.rs`'s module doc for the full mechanism grounding.
+  A small, in-scope elaborator fix also landed alongside: `elab_instance_decl`
+  (`ken-elaborator/src/elab.rs`) never threaded `class_env` into the two
+  `ElabCtx::new(...)` call sites that elaborate instance field bodies, so
+  `.field` projection (needed for any transport-style instance) was
+  unusable inside an `instance { ... }` body — a one-line `.with_classes`
+  fix at each site, mirroring every other elaboration path.
+
 ## Objective
 
 Deliver three law-carrying typeclass instances in

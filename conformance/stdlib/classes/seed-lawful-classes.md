@@ -314,6 +314,67 @@ law-less/postulated/holed instance is **rejected as unlawful** (non-empty
 
 ---
 
+## AC-transport — `Ord Char` carries its laws via transport, not a stub
+(re-homed from the Decimal/Char DEMOTE, `docs/program/wp/lawful-classes-lane.md`)
+
+`51 §6`'s carrier axis, read for a **derived/refinement** carrier: `Char = {c :
+Int | isScalar c}` erases to `Int` (`21 §6.3`), a canonical one-value-per-
+codepoint carrier, so `Ord Char`'s laws **are** `Ord Int`'s laws — the sound
+realization is **honest transport** (referencing `Ord Int`'s existing fields),
+not a fresh proof and not a fresh postulate. **The discriminator here is
+HONESTY, not zero-delta**: a transported instance is real and complete: no
+field is fabricated or silently absent.
+
+### stdlib/classes/char-ord-laws-carried-not-stubbed (soundness)
+- spec: `51 §6` (the carrier axis, refinement/derived reading), `21 §6.3`
+  (refinement erasure), `33 §5.2`/`§5.3` (instance = record value, `.`-field
+  projection eta), `docs/program/wp/lawful-classes-lane.md`
+- given: two `Ord Char`-shaped instances, identical in their `leq` field
+  (both transport/wrap the same landed `leq_int` reduction path): (a) the
+  **canonical, honest-transport** instance — `leq`/`refl`/`antisym`/`trans`/
+  `total` all reference `Ord Int`'s own existing fields via `.`-projection
+  (`(Ord_instance_Int).refl` etc, `packages/lawful-classes/lawful_classes.ken`)
+  — every field is present and is a real, kernel-checked term (a projection
+  chain that reduces, exactly as honest as `Ord Int`'s own visible `Axiom`s);
+  (b) a **deceptive/incomplete** instance attempt with a law field **omitted**
+  from the `instance { … }` body entirely (not even an honest `Axiom` written)
+- expect: **the verdict flips.** (a) **accepts** — the instance elaborates,
+  every field position is filled by a real term (grep-confirm: no
+  `declare_postulate`/hole introduced by `Ord_instance_Char`'s OWN decl —
+  `trusted_base_delta` on `Ord_instance_Char` is empty, i.e. zero-**NEW**-delta;
+  it correctly does **not** assert zero-delta outright, since `Ord Int`'s
+  pre-existing `Axiom`s are still honestly there, one projection-hop away);
+  (b) **rejected** — the record value is **uninhabited**: the class
+  machinery requires every declared field present
+  (`compute_ordered_field_values`, `ken-elaborator/src/elab.rs`) and errors
+  rather than silently defaulting a missing field to some placeholder.
+  Assert the **observable**: (a) elaborates + empty `Ord_instance_Char`-own
+  `trusted_base_delta`; (b) elaboration fails (an `Internal`/missing-field
+  error), not a message string
+- why: (soundness) the **honesty-not-zero-delta** discriminator (`51 §6`
+  erratum) applied to a **derived/refinement** carrier for the first time:
+  Char is neither a bare inductive (case-split provable, the `Bool`
+  exemplar) nor an unprovable primitive floor in its own right (the
+  `Int` exemplar) — it is a **canonical alias** of one, so the sound
+  realization is transport, and the discriminator is simply "is every field
+  a real, present term" (never "is the whole instance zero-delta outright").
+  A build that silently substitutes a hole, a fabricated proof of a false
+  statement (the `DecEq Decimal` shape this WP's own build ruled out —
+  `decimalEq`'s cross-representation equality is **not** `Decimal`'s
+  structural `Equal`, so postulating `sound`/`complete` there would inhabit
+  `Bottom` — that carrier is **not** canonical, hence **not** eligible for
+  this same transport move; not delivered here) or an omitted field would
+  either fail to kernel-check or fail to construct — this case pins that the
+  **omitted-field** rejection path is real and enforced, alongside the
+  accept arm's zero-NEW-delta observable. Complements
+  [[lawful-class-instances-must-carry-law-proofs]] (predicate-definedness
+  dual) for the transport case specifically, and records why `Ord Char`
+  is sound where a same-shaped `DecEq`/`Num Decimal` transport is **not**
+  (carrier canonicity is the load-bearing precondition, not the class
+  mechanism).
+
+---
+
 ## AC2 — `Ord` subsumes the explicit comparator (reflect-don't-extend)
 
 `51 §4`: `where Ord a` supplies the **same** `leq` the explicit `sort` threads
@@ -358,6 +419,18 @@ law-less/postulated/holed instance is **rejected as unlawful** (non-empty
   `primitive-carrier-declared-audited-delta` (carrier separation live on the
   live-`Eq` law `total`; declared-vs-hidden always capability-independent),
   `ord-total-law-is-omega-bool-equation`.
+- **AC-transport** (honesty-not-zero-delta, a derived/refinement carrier):
+  `char-ord-laws-carried-not-stubbed` — `Ord Char` by transport from
+  `Ord Int` (Char's canonical, refinement-erased carrier), landed
+  (`packages/lawful-classes/lawful_classes.ken`, WP lawful-classes-lane).
+  **`Num`/`DecEq Decimal` re-defer** (Steward ruling): `Decimal`'s
+  non-canonical `(coeff, exp)` carrier makes `decimalEq` an `Eq`
+  (equivalence), not a `DecEq` (decision procedure for the kernel's
+  structural `Equal`) — postulating `sound`/`complete` there would inhabit
+  `Bottom` (caught before landing, not a proof-difficulty gap); both sit
+  behind a single decide-once design gate (canonicalize the carrier, or a
+  setoid/quotient `Eq Decimal`), tracked in `90-open-decisions.md`, not
+  delivered by this WP.
 - **AC2** (`Ord` subsumes the comparator): `where-ord-same-sort-obligation`.
 - **AC5** (un-defer): the two `../surface/collections/` cases
   (`user-ord-instance-drives-verified-sort`,

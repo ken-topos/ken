@@ -1506,7 +1506,7 @@ fn elab_instance_decl(
         // Body has no App(Const(own_id), ...) → edges.is_empty() → sct_check
         // accepts. Mutual/indirect cycles are not detected here (see above).
         let ordered_vals: Vec<Term> = {
-            let mut cx = ElabCtx::new(env, globals, num_values, numeric_env);
+            let mut cx = ElabCtx::new(env, globals, num_values, numeric_env).with_classes(&*class_env);
             compute_ordered_field_values(&mut cx, class_env, class_name, &head_core, fields, span)?
         };
         let pair_chain = build_pair_chain(&ordered_vals, class_env.record_nil_val_id);
@@ -1521,7 +1521,7 @@ fn elab_instance_decl(
     } else {
         // No constraints: declare_def path (no recursion possible, SCT not needed).
         let ordered_vals: Vec<Term> = {
-            let mut cx = ElabCtx::new(env, globals, num_values, numeric_env);
+            let mut cx = ElabCtx::new(env, globals, num_values, numeric_env).with_classes(&*class_env);
             compute_ordered_field_values(&mut cx, class_env, class_name, &head_core, fields, span)?
         };
         let pair_chain = build_pair_chain(&ordered_vals, class_env.record_nil_val_id);

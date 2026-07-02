@@ -18,6 +18,16 @@ package.
   dictionary's `d.leq` projection (`33 §5.4` implicit-instance desugaring).
 - `instance Eq Int`, `instance DecEq Int`, `instance Ord Int` — canonical
   instances over the `Int` primitive.
+- `instance Ord Char` — by **transport** from `Ord Int` (WP
+  lawful-classes-lane, re-homed from the Decimal/Char DEMOTE): `Char =
+  {c:Int | isScalar c}` erases to `Int` (`21 §6.3`), a canonical,
+  one-value-per-codepoint carrier, so every field is a direct
+  `.`-projection off `Ord_instance_Int`'s own field — zero-NEW-delta, never
+  a fresh postulate. The sibling `Num`/`DecEq Decimal` obligations do
+  **not** get this same treatment: `Decimal`'s non-canonical `(coeff, exp)`
+  carrier makes `decimalEq` an `Eq` (equivalence), not a `DecEq` (decision
+  procedure for the kernel's structural `Equal`) — re-deferred behind a
+  decide-once design gate, not delivered here.
 
 ## Derivation path + `trusted_base()` delta
 
