@@ -1009,6 +1009,17 @@ rule selection is:
    - Compute `whnf(A)`.
    - If `A` is canonical (reduces to a type former), apply the
      corresponding reduction from par. 2.2.
+   - For a rule that compares the **operands'** head constructors (the
+     inductive case, par. 2.2), first compute `whnf(a)` and `whnf(b)` and
+     match on the **weak-head forms**: equal / distinct constructor heads fire
+     the `Top` / `Bottom` (or argument-conjunction) reduct; only a genuinely
+     **neutral** operand — one that does *not* whnf to a constructor — leaves
+     `Eq` neutral. An operand that is a *redex* reducing to a constructor
+     (e.g. an operation-wrapped literal `f True False ⇝ False`) **fires** the
+     rule, exactly as the sibling `cast` rule (par. 8.1(2)) whnf's the terms
+     it head-matches. (Peeling the operands *raw*, without this whnf, is a
+     completeness bug: an operation-wrapped `Eq` stays neutral and never
+     reaches `Top`/`Bottom`.)
    - If `A` is neutral, `Eq` is neutral -- no further reduction.
    - The recursive `Eq` reductions inside the result (e.g. the `Eq A_j a_j
      b_j` conjuncts from inductive case) are reduced lazily by subsequent
