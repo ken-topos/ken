@@ -36,6 +36,10 @@ Integrator owns `main` mechanics and the Architect owns design judgment. Read
   across the space root, where the next reader (and the Steward harvesting your
   retros) can't follow it — the readability analog of the silent-stall. If your
   own kickoff was unthreaded, open a WP thread on pickup and keep the ring in it.
+  **Never run the ring in a *prior* WP's still-open thread** — the Steward's
+  kickoff event for *this* WP is your thread; replying in the last WP's thread
+  (by reflex or post-compaction) scatters the WP (F2/F3 ran its whole ring in
+  the closed decimal-char thread — COORDINATION §4, failure mode 2).
 - **Pipeline-ready predicate:** when a WP finishes, auto-start the next *ready*
   WP without waiting on the operator. Ready = scope/spec exists, open questions
   resolved, dependencies merged to `main`, no operator pause.

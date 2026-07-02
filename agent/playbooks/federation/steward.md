@@ -195,6 +195,15 @@ until I re-release"). Never leave a stale kickoff live. Mention discipline (§2)
 says mention whoever's next move it is — when re-routing, the *stand-down* is
 the old team's "next move," so they must be mentioned too.
 
+**Name the thread anchor at kickoff, and keep your *own* forks in it (2026-07-02
+self-miss).** Your WP kickoff opens the thread — state it explicitly ("thread
+all `<WP>` activity under this event") so a post-compaction leader has an
+unambiguous anchor and can't drift into a prior WP's thread. And when a mid-WP
+fork routes back to *you* (a scope ruling), post it **in the WP thread**, not a
+fresh root: I opened side-threads for the Num-Decimal / DecEq-Decimal
+rulings and fragmented the lawful-lane WP across four threads (COORDINATION §4,
+failure mode 1). The Steward guards the topology *and* the threading.
+
 **Notification delivery is best-effort — a stored mention may not wake the
 target (operator-observed, K1).** A mention can be correctly recorded (right
 actor_id) yet **never notify** the agent's session — e.g. if it lands while that
