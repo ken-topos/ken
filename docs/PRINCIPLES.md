@@ -176,6 +176,32 @@ leakage-relevant operations (`61 §5a`); even *syntax* carries a security
 property — a confusable-resistant character set so a reviewer reads exactly what
 the kernel checks (`31 §1a`, no homoglyph backdoor).
 
+### 12. Bound the untrusted at its boundary; make the trust level a typed choice
+
+An untrusted component (a foreign engine, a fast unproved algorithm) embedded in
+Ken is **strictly better than the same component in an unverified language** —
+not because its internals are verified, but because Ken verifies the two things
+*bracketing* it: the **provenance** of its inputs (what may reach it — IFC
+labels, capabilities, `@ct`) and the **use** of its results (where they may flow
+— gated out of proof-relevant positions, carrying their inputs' taint). Safety
+comes from bounding the boundary, not proving the picture. And where a capability
+admits both a provable core and an unprovable-but-expressive extension, that is a
+**feature, not a defect**: expose the two as distinct types that carry the
+tradeoff on their face, default to the provable core, and let policy govern which
+tier a trust-domain may use.
+
+*In practice:* keep foreign code **opaque and proof-gated** — never assert a spec
+axiom to make its result proof-usable (that voids the bracket and is usually
+false); **earn** proof-relevance by certification or proof, never assert it
+(`ADR 0009`). A wrong value from the tested-not-trusted evaluator is a wrong
+*value*, never a false proof, because the kernel cannot consume it as one (`18a`,
+the reachability precondition). Supply a capability at the lowest tier that
+unblocks it, behind a stable interface, and migrate upward —
+opaque-foreign → tested/certified → proved-native — as the value justifies;
+native compilation (`45`, the X-series) is what lets the proved tier *also* be
+fast. `Float` equality is `NATIVE`-but-non-proof while `Int`'s is provable — the
+type tells you which tradeoff you accepted (`18a §5.4`).
+
 ---
 
 ## Working constraints (process, not philosophy)
