@@ -210,6 +210,10 @@ pub struct GlobalEnv {
     /// proposition, produced by Eq-by-type's different-constructor case
     /// (`Eq (D …) (c_k …) (c_l …) ⇝ Bottom`). Set by [`GlobalEnv::new`].
     bottom_id: Option<GlobalId>,
+    /// The prelude `tt : Top` constant (`16 §1.3`, K5) — `Top`'s sole
+    /// introduction, the canonical proof of a goal that reduced to `Top`.
+    /// Set by [`GlobalEnv::new`].
+    tt_id: Option<GlobalId>,
 }
 
 impl GlobalEnv {
@@ -219,21 +223,30 @@ impl GlobalEnv {
         // constants (`16 §1.3`; the unsound general `Up : Type → Ω` coercion is
         // dropped, so these are standalone declarations, not wrappings). They
         // are kernel vocabulary (like `Type`/`Ω`), kept out of `trusted_base`.
-        env.bottom_id = Some(env.declare_prelude_prop());
-        env.top_id = Some(env.declare_prelude_prop());
+        env.bottom_id = Some(env.declare_prelude_const(Term::Omega(Level::zero())));
+        env.top_id = Some(env.declare_prelude_const(Term::Omega(Level::zero())));
+        // K5: `tt : Top` — `Top`'s sole inhabitant, a genuine sub-singleton
+        // admissible in Ω (`16 §1.1`). Typed at `Top` itself (not `Ω_0`), so
+        // this must come after `top_id` is set.
+        let top = Term::Const {
+            id: env.top_id.expect("top_id just set"),
+            level_args: Vec::new(),
+        };
+        env.tt_id = Some(env.declare_prelude_const(top));
         env
     }
 
-    /// Declare a prelude proposition constant `c : Ω_0` (opaque, no δ). Used
-    /// only by [`new`] for `Top`/`Bottom`. The type `Ω_0 : Type 1` is well-formed
-    /// by the `Omega` formation rule (`16 §1.1`), so this is admitted directly
-    /// without re-running the check pipeline.
-    fn declare_prelude_prop(&mut self) -> GlobalId {
+    /// Declare a prelude constant `c : ty` (opaque, no δ). Used only by
+    /// [`new`] for `Top`/`Bottom` (`ty = Ω_0`) and `tt` (`ty = Top`). The
+    /// caller is responsible for `ty` being well-formed without running the
+    /// check pipeline (both uses here are, by the `Omega`-formation and
+    /// sub-singleton-in-Ω rules, `16 §1.1`).
+    fn declare_prelude_const(&mut self, ty: Term) -> GlobalId {
         let id = self.fresh_id();
         self.add_decl(Decl::Opaque {
             id,
             level_params: Vec::new(),
-            ty: Term::Omega(Level::zero()),
+            ty,
         });
         id
     }
@@ -252,9 +265,15 @@ impl GlobalEnv {
             .expect("prelude Bottom is declared in GlobalEnv::new")
     }
 
-    /// Is `id` one of the prelude `Top`/`Bottom` constants?
+    /// The prelude `tt : Top` constant id (`16 §1.3`, K5); always present
+    /// after [`GlobalEnv::new`].
+    pub fn tt_id(&self) -> GlobalId {
+        self.tt_id.expect("prelude tt is declared in GlobalEnv::new")
+    }
+
+    /// Is `id` one of the prelude `Top`/`Bottom`/`tt` constants?
     fn is_prelude(&self, id: GlobalId) -> bool {
-        self.top_id == Some(id) || self.bottom_id == Some(id)
+        self.top_id == Some(id) || self.bottom_id == Some(id) || self.tt_id == Some(id)
     }
 
     /// Allocate a fresh, unused [`GlobalId`]. Used during admission so a

@@ -104,6 +104,10 @@ fn raw_wf(ctx: &Context, t: &Term, offset: usize) -> KernelResult<()> {
             raw_wf(ctx, respect, offset)?;
             raw_wf(ctx, scrut, offset)
         }
+        Term::Absurd(motive, proof) => {
+            raw_wf(ctx, motive, offset)?;
+            raw_wf(ctx, proof, offset)
+        }
         // Closed in Σ: no free term variables (levels are not de Bruijn).
         Term::Type(_)
         | Term::Omega(_)
@@ -341,6 +345,7 @@ pub fn infer(env: &GlobalEnv, ctx: &Context, t: &Term) -> KernelResult<Term> {
             respect,
             scrut,
         } => infer_quot_elim(env, ctx, motive, method, respect, scrut),
+        Term::Absurd(motive, proof) => infer_absurd(env, ctx, motive, proof),
         Term::Lam { .. }
         | Term::Pair { .. }
         | Term::Refl(_)
@@ -849,6 +854,23 @@ fn infer_quot_elim(
     }
     // Result: M scrut.
     Ok(Term::app(motive.clone(), scrut.clone()))
+}
+
+/// `absurd C p : C` — ex-falso (`16 §1.3`, K5). Sound because `Bottom` is
+/// empty: `p` proves the impossible, so `Absurd` never has a canonical
+/// scrutinee to compute on and stays neutral forever — it cannot break
+/// proof-irrelevance regardless of codomain. Scoped to `C : Ω` (minimal-safe;
+/// `p.proj: Bottom → Type` is a sound but out-of-scope generalization,
+/// `16 §1.3`). Non-dependent: `Bottom` has no indices to abstract over, so
+/// the result is `motive` itself, never substituted.
+fn infer_absurd(env: &GlobalEnv, ctx: &Context, motive: &Term, proof: &Term) -> KernelResult<Term> {
+    check(env, ctx, proof, &crate::obs::bottom_term(env))?;
+    match classify(env, ctx, motive)? {
+        Sort::Omega(_) => Ok(motive.clone()),
+        Sort::Type(_) => Err(KernelError::BadEliminator(
+            "absurd's motive must be a proposition (Ω_l), not a type (Type ℓ)".into(),
+        )),
+    }
 }
 
 // --- declaration admission (`18 §4`) ---------------------------------------

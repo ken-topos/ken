@@ -38,6 +38,15 @@ pub fn bottom_term(env: &GlobalEnv) -> Term {
     }
 }
 
+/// `tt : Top` — `Top`'s sole introduction (the prelude constant, `16 §1.3`,
+/// K5).
+pub fn tt_term(env: &GlobalEnv) -> Term {
+    Term::Const {
+        id: env.tt_id(),
+        level_args: Vec::new(),
+    }
+}
+
 /// Is `t` a `refl` proof?
 fn is_refl(t: &Term) -> bool {
     matches!(t, Term::Refl(_))

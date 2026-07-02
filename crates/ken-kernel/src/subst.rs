@@ -98,6 +98,10 @@ pub fn shift(term: &Term, d: i64, cutoff: usize) -> Term {
             indices: indices.iter().map(|i| shift(i, d, cutoff)).collect(),
             scrut: Box::new(shift(scrut, d, cutoff)),
         },
+        Term::Absurd(motive, proof) => Term::Absurd(
+            Box::new(shift(motive, d, cutoff)),
+            Box::new(shift(proof, d, cutoff)),
+        ),
         // Closed-ish nodes: no free variables to shift (levels are not de Bruijn).
         Term::Type(_)
         | Term::Omega(_)
@@ -194,6 +198,10 @@ pub fn subst_var(term: &Term, j: usize, u: &Term) -> Term {
             indices: indices.iter().map(|i| subst_var(i, j, u)).collect(),
             scrut: Box::new(subst_var(scrut, j, u)),
         },
+        Term::Absurd(motive, proof) => Term::Absurd(
+            Box::new(subst_var(motive, j, u)),
+            Box::new(subst_var(proof, j, u)),
+        ),
         Term::Type(_)
         | Term::Omega(_)
         | Term::Const { .. }
@@ -327,6 +335,10 @@ pub fn subst_outer(term: &Term, m: usize, params: &[Term], inner_depth: usize) -
                 .collect(),
             scrut: Box::new(subst_outer(scrut, m, params, inner_depth)),
         },
+        Term::Absurd(motive, proof) => Term::Absurd(
+            Box::new(subst_outer(motive, m, params, inner_depth)),
+            Box::new(subst_outer(proof, m, params, inner_depth)),
+        ),
         // No free term variables; levels are untouched (term-var subst only).
         Term::Type(_)
         | Term::Omega(_)
@@ -513,6 +525,10 @@ pub fn subst_levels(term: &Term, params: &[LevelVar], args: &[Level]) -> Term {
             respect: Box::new(subst_levels(respect, params, args)),
             scrut: Box::new(subst_levels(scrut, params, args)),
         },
+        Term::Absurd(motive, proof) => Term::Absurd(
+            Box::new(subst_levels(motive, params, args)),
+            Box::new(subst_levels(proof, params, args)),
+        ),
         // `Ω_ℓ` carries a level that may mention level params (`12 §4`); the
         // other leaves have no level fields. `Var` is not de Bruijn-shifted by
         // level instantiation.

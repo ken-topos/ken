@@ -306,6 +306,10 @@ fn collect_calls(
             collect_calls(respect, caller_idx, n_caller, group, prov, env, out);
             collect_calls(scrut, caller_idx, n_caller, group, prov, env, out);
         }
+        Term::Absurd(motive, proof) => {
+            collect_calls(motive, caller_idx, n_caller, group, prov, env, out);
+            collect_calls(proof, caller_idx, n_caller, group, prov, env, out);
+        }
         Term::Const { id, .. } => {
             // A bare (unapplied) group-member occurrence: model as a
             // ?-everywhere self-loop. ScMatrix::zero = all SizeOrd::Unknown;
