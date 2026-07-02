@@ -12,6 +12,7 @@ pub mod bytes;
 pub mod classes;
 pub mod capabilities;
 pub mod data;
+pub mod decimal_char;
 pub mod diagnostics;
 pub mod elab;
 pub mod effects;

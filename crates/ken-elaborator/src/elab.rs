@@ -846,9 +846,16 @@ fn elab_num_lit_checked(
     let nenv = cx.numeric_env;
     let exp_wh = whnf(cx.env, &cx.ctx, expected);
 
-    // Try type-directed dispatch: if expected type is a numeric Const, use it.
-    if let Term::Const { id, .. } = &exp_wh {
-        let ty_id = *id;
+    // Try type-directed dispatch: if expected type is a numeric Const (or,
+    // for `Decimal := DecimalPair`, the `IndFormer` `whnf` unfolds the
+    // transparent alias to — `18a §5.6.1`), use it.
+    let const_or_indformer_id = match &exp_wh {
+        Term::Const { id, .. } => Some(*id),
+        Term::IndFormer { id, .. } => Some(*id),
+        _ => None,
+    };
+    if let Some(id) = const_or_indformer_id {
+        let ty_id = id;
         let val_opt: Option<NumericLitVal> = match lit {
             NumLit::Int(n) => {
                 // Accept Int literals at any integer numeric type.
@@ -863,7 +870,7 @@ fn elab_num_lit_checked(
                 }
             }
             NumLit::Float(f) if ty_id == nenv.float_id => Some(NumericLitVal::Float(*f)),
-            NumLit::Decimal(c, e) if ty_id == nenv.decimal_id => {
+            NumLit::Decimal(c, e) if ty_id == nenv.decimal_id || ty_id == nenv.decimalpair_id => {
                 Some(NumericLitVal::Decimal { coeff: *c, exp: *e })
             }
             NumLit::Float32(f) if ty_id == nenv.float32_id => Some(NumericLitVal::Float32(*f)),

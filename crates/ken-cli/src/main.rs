@@ -101,8 +101,9 @@ fn run_file(path: Option<&str>) {
 
     // Build the numeric-literal map from the elaborator.
     let mut store = ken_interp::EvalStore::new();
+    let mkdecimalpair_id = elab_env.prelude_env.mkdecimalpair_id;
     for (id, lit) in &elab_env.num_values {
-        let val = lit_to_eval(lit);
+        let val = lit_to_eval(lit, mkdecimalpair_id);
         store.num_values.insert(*id, val);
     }
 
@@ -126,14 +127,17 @@ fn run_file(path: Option<&str>) {
     }
 }
 
-fn lit_to_eval(v: &ken_elaborator::NumericLitVal) -> ken_interp::EvalVal {
+fn lit_to_eval(
+    v: &ken_elaborator::NumericLitVal,
+    mkdecimalpair_id: ken_kernel::GlobalId,
+) -> ken_interp::EvalVal {
     use ken_elaborator::NumericLitVal;
     match v {
         NumericLitVal::Int(n) => ken_interp::EvalVal::from(*n),
         NumericLitVal::Float(f) => ken_interp::EvalVal::Float(*f),
         NumericLitVal::Float32(f) => ken_interp::EvalVal::Float32(*f),
         NumericLitVal::Decimal { coeff, exp } => {
-            ken_interp::EvalVal::DecimalVal { coeff: *coeff, exp: *exp }
+            ken_interp::decimal_value(mkdecimalpair_id, *coeff, *exp)
         }
         NumericLitVal::Str(s) => ken_interp::EvalVal::Str(s.clone()),
     }

@@ -12,19 +12,20 @@ use ken_kernel::{Decl, GlobalId};
 
 fn make_store(env: &ElabEnv) -> EvalStore {
     let mut store = EvalStore::new();
+    let mkdecimalpair_id = env.prelude_env.mkdecimalpair_id;
     for (id, v) in &env.num_values {
-        store.num_values.insert(*id, lit_to_eval(v));
+        store.num_values.insert(*id, lit_to_eval(v, mkdecimalpair_id));
     }
     store
 }
 
-fn lit_to_eval(v: &NumericLitVal) -> EvalVal {
+fn lit_to_eval(v: &NumericLitVal, mkdecimalpair_id: GlobalId) -> EvalVal {
     match v {
         NumericLitVal::Int(n) => EvalVal::from(*n),
         NumericLitVal::Float(f) => EvalVal::Float(*f),
         NumericLitVal::Float32(f) => EvalVal::Float32(*f),
         NumericLitVal::Decimal { coeff, exp } => {
-            EvalVal::DecimalVal { coeff: *coeff, exp: *exp }
+            ken_interp::decimal_value(mkdecimalpair_id, *coeff, *exp)
         }
         NumericLitVal::Str(s) => EvalVal::Str(s.clone()),
     }
