@@ -206,7 +206,17 @@ view bool_eq (a : Bool) (b : Bool) : Bool = match a { True => b ; False => match
 instance Ord Bool {
   leq = bool_leq ;
   refl = \x. match x { True => tt ; False => tt } ;
-  antisym = Axiom ;
+  antisym =
+    \x. match x {
+      True => \y. match y {
+        True => \p.\q. tt ;
+        False => \p.\q. absurd p
+      } ;
+      False => \y. match y {
+        True => \p.\q. absurd q ;
+        False => \p.\q. tt
+      }
+    } ;
   trans =
     \x. match x {
       True => \y. match y {
@@ -231,6 +241,26 @@ instance Eq Bool {
 
 instance DecEq Bool {
   eq = bool_eq ;
-  sound = Axiom ;
-  complete = Axiom
+  sound =
+    \x. match x {
+      True => \y. match y {
+        True => \p. tt ;
+        False => \p. absurd p
+      } ;
+      False => \y. match y {
+        True => \p. absurd p ;
+        False => \p. tt
+      }
+    } ;
+  complete =
+    \x. match x {
+      True => \y. match y {
+        True => \p. tt ;
+        False => \p. absurd p
+      } ;
+      False => \y. match y {
+        True => \p. absurd p ;
+        False => \p. tt
+      }
+    }
 }

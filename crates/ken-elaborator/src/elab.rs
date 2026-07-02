@@ -8,7 +8,7 @@ use std::collections::HashMap;
 
 use ken_kernel::{
     check as kernel_check,
-    convert, convert_type,
+    convert,
     declare_def, declare_postulate, declare_primitive, declare_recursive_group,
     env::PrimReduction,
     infer as kernel_infer,
@@ -373,25 +373,6 @@ fn check(cx: &mut ElabCtx, expr: &RExpr, expected: &Term, _span: &Span) -> Resul
             let id = declare_postulate(cx.env, vec![], expected.clone())
                 .map_err(|e| ElabError::KernelRejected { error: e, span: rspan.clone() })?;
             Ok(Term::const_(id, vec![]))
-        }
-        // `tt` — Top-introduction (K5, `16 §1.4`): the canonical proof of a
-        // goal that has observationally collapsed to `Top` (e.g. `Equal D c
-        // c` for a same-constructor nullary pair, `obs.rs::eq_at_inductive`).
-        // Surface sugar only: `tt` is a bare lowercase identifier the
-        // resolver emits as an `RCon` on scope miss (never registered as a
-        // real global). Checked against the WHNF'd expected goal, same
-        // discipline as `Refl`/`Axiom`.
-        RExpr::RCon(name, rspan) if name == "tt" => {
-            let exp_wh = whnf(cx.env, &cx.ctx, expected);
-            let top = Term::const_(cx.env.top_id(), vec![]);
-            if convert_type(cx.env, &cx.ctx, &exp_wh, &top) {
-                Ok(Term::const_(cx.env.tt_id(), vec![]))
-            } else {
-                Err(ElabError::TypeMismatch {
-                    span: rspan.clone(),
-                    reason: "tt expects a `Top`-reduced goal".into(),
-                })
-            }
         }
         // `absurd h` — Bottom-elimination (K5, `16 §1.4`): from `h : Bottom`
         // (a hypothesis that has observationally collapsed to `Bottom`, e.g.
