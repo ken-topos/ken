@@ -162,6 +162,21 @@ the code, and that independence is the point. Read `../../COORDINATION.md` and
      value was 8 KiB, the same edge-avoidance class as K1/K2). For any
      capacity/size/limit, require **at-limit, limit±1, empty, and oversized**
      cases; **Block** a suite that only exercises mid-range magnitudes.
+   - **An enumerated-completeness claim is a *countable* assertion, not
+     narrative — count the enumerated items against the literal in-scope
+     list (promoted F2/F3-build; 2nd occurrence, code-correct both times).**
+     When a test docstring or a handoff claims it covers a *set* — "sweeps all
+     N width/op combos," "the two deferred items," "every bare arm" — treat the
+     count as a checkable fact: enumerate the actual in-scope members (the
+     literal arm list; the thread's *final* deferral ruling) and match the
+     claim member-for-member. Twice a prose count outran reality while the code
+     was correct — decimal-char's handoff said "two deferred" when a later
+     ruling made it three; F2/F3's sweep docstring said "the whole arm set" but
+     enumerated 15 of 16 (`add_uint64` omitted). Neither was a soundness hole
+     (non-blocking) — **but correct the claim, don't let it ride:** a downstream
+     reviewer reads "covers all N" as coverage, so a later bug in the
+     un-enumerated member ships green under a false signal. Count the list;
+     don't read the adjective.
 4. **No gate regression:** a passed roadmap gate (G0–G8) still holds.
 
 ## Verdict discipline
