@@ -200,8 +200,10 @@ fn eq_at_inductive(env: &GlobalEnv, ctx: &Context, ty: &Term, a: &Term, b: &Term
     };
     let ind = env.inductive(d_id)?;
     let m = ind.params.len();
-    let (a_head, a_args) = peel_app(a);
-    let (b_head, b_args) = peel_app(b);
+    let a_w = whnf(env, ctx, a);
+    let b_w = whnf(env, ctx, b);
+    let (a_head, a_args) = peel_app(&a_w);
+    let (b_head, b_args) = peel_app(&b_w);
     let (a_ctor, a_level_args, a_ctor_args) = match a_head {
         Term::Constructor { id, level_args, .. } => (id, level_args, a_args),
         _ => return None, // neutral scrutinee ⇒ neutral Eq

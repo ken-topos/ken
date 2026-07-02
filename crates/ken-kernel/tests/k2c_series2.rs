@@ -10,6 +10,7 @@
 
 use ken_kernel::env::Context;
 use ken_kernel::inductive::peel_app;
+use ken_kernel::obs::tt_term;
 use ken_kernel::term::{Level, LevelVar, Term};
 use ken_kernel::{
     convert_type, declare_def, declare_inductive, declare_postulate, infer, whnf, CtorSpec,
@@ -488,18 +489,25 @@ fn quotient_respect_type_target() {
     // h_ty = R x y at depth 2 (x=Var(1), y=Var(0)).
     let h_ty = Term::app(Term::app(rel.clone(), Term::var(1)), Term::var(0));
 
-    // r_valid = λx. λy. λh. refl(zero)
+    // r_valid = λx. λy. λh. tt
     // At depth 3, expected body = Eq(Nat, zero, Cast(Nat, Nat, Refl(Nat), zero))
-    //                           = Eq(Nat, zero, zero)  [Cast reduces by regularity]
-    // so refl(zero) is a valid proof.
+    //                           = Eq(Nat, zero, zero)  [Cast regularity]
+    //                           ⇝ Top  [K7: eq_at_inductive now whnf's the
+    //                             Cast operand, so same-nullary-ctor collapse
+    //                             fires and the goal fully reduces past `Eq`]
+    // — `tt`, not `refl`, is the goal's actual canonical proof post-K7 (the
+    // same Eq/Refl-vs-tt distinction as K5's antisym-shaped tests: a goal
+    // whose whnf is `Top` is proved by `tt`, not by `refl` on a still-Eq-
+    // shaped goal). Pre-K7, `eq_at_inductive` peeled the Cast operand raw
+    // (head `Term::Cast`, not `Constructor`), so the Eq stayed neutral and
+    // `refl(zero)`'s check-mode succeeded by comparing `zero` against the
+    // *unreduced* Eq's endpoints directly — an artifact of the very
+    // incompleteness K7 fixes, not evidence the goal was `Eq`-shaped.
     let r_valid = Term::Lam(
         Box::new(unit_t.clone()),
         Box::new(Term::Lam(
             Box::new(unit_t.clone()),
-            Box::new(Term::Lam(
-                Box::new(h_ty.clone()),
-                Box::new(Term::Refl(Box::new(zero_c.clone()))),
-            )),
+            Box::new(Term::Lam(Box::new(h_ty.clone()), Box::new(tt_term(&env)))),
         )),
     );
 
