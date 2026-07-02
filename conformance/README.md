@@ -201,15 +201,19 @@ claim with no conformance case is a claim no one can rely on
   an **inductive** carrier; a **primitive** carrier is audited-delta (its
   ∀-laws unprovable — no eliminator — so a *declared* delta, not zero) —
   `primitive-carrier-declared-audited-delta`. The zero-delta real-proofs path is
-  realizable now (**K4 + K5 landed**, `3be0e30`/`1c84a30`): the
-  **live-`Eq`-conclusion** laws (`refl`/`trans`/`total`, `Eq`'s `refl`) via K4
-  and the **concrete-equality-conclusion** laws
-  (`antisym`/`sound`/`complete` → `Top`/`Bottom`) via K5's `tt`/`absurd`; `Eq`'s
-  `sym`/`trans` need **K6** (forward, the `conv_struct` `Eq`-congruence gap —
-  shipped as declared `Axiom`s). The first real instances (`Ord Bool`
+  realizable now for the **live-`Eq`-conclusion** laws (`refl`/`trans`/`total`,
+  `Eq`'s `refl`) via **K4** (`3be0e30`); the **concrete-equality-conclusion**
+  laws (`antisym`/`sound`/`complete` → `Top`/`Bottom`) need the **K5 + K7**
+  kernel capability (K5's `tt`/`absurd` terms, landed `1c84a30`; K7's
+  `eq_at_inductive` operand-`whnf` fix, `16 §8.1`) and **park as visible
+  `Axiom`s pending the ES4-lawproofs-remainder real-proof wiring**; `Eq`'s
+  `sym`/`trans` need **K6** (forward, the `conv_struct` `Eq`-congruence gap) —
+  both shipped as declared `Axiom`s. The first real instances (`Ord Bool`
   `refl`/`trans`/`total`, `Eq Bool` `refl`) are on main (**ES4-lawproofs**,
-  `72e38a5`, Team Language); the complete arm rides the remainder. The K5
-  `absurd` subterm is traversed by the `trusted_base_delta` cone walk
+  `72e38a5`, Team Language); the complete arm flips to real proofs on that
+  remainder once K7's capability is on main and the laws are wired. The `absurd`
+  subterm is traversed by the
+  `trusted_base_delta` cone walk
   (`absurd-subterm-postulate-counted-in-delta`, the elaborator-accounting
   sibling of the K5 seed's SCT launder net). Static face; declared-vs-hidden
   honesty enforceable throughout.

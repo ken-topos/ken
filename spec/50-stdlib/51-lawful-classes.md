@@ -22,14 +22,16 @@ class + its instances is Ken over the built-ins, and on an **inductive carrier**
 may *assume the laws hold* because the instance proved them, with a **zero
 `trusted_base()` delta**. (A *primitive* carrier like `Int` cannot prove its
 ∀-laws — no eliminator — so its lawful instance carries them as an **audited
-delta**, not zero-delta; `§6`.) **K4 + K5 landed (`§6`):** the zero-delta
-*real-proofs* path is realizable — `Ω`-motive elimination (`3be0e30`) proves the
-live-`Eq`-conclusion laws (`refl`/`trans`/`total`, `Eq`'s `refl`), and the
-observational-fragment completion (`Top`-intro/`Bottom`-elim, `1c84a30`) the
-concrete-equality laws (`antisym`/`sound`/`complete`). `Eq`'s `sym`/`trans` need
-one further capability (**K6**, forward). The first real zero-delta instances
-(`Ord Bool` `refl`/`trans`/`total`, `Eq Bool` `refl`) are on main
-(**ES4-lawproofs**, `72e38a5`).
+delta**, not zero-delta; `§6`.) **K4 landed (`§6`):** the zero-delta
+*real-proofs* path is realizable for the **live-`Eq`-conclusion** laws —
+`Ω`-motive elimination (`3be0e30`) proves `refl`/`trans`/`total` + `Eq`'s
+`refl`. The **concrete-equality** laws (`antisym`/`sound`/`complete`) need the
+**K5 + K7** kernel capability (`Top`-intro/`Bottom`-elim, landed `1c84a30`;
+`eq_at_inductive` operand-`whnf`, `../10-kernel/16 §8.1`) — they park as visible
+`Axiom`s pending the **ES4-lawproofs-remainder** real-proof wiring. `Eq`'s
+`sym`/`trans` need **K6** (forward). The
+first real zero-delta instances (`Ord Bool` `refl`/`trans`/`total`, `Eq Bool`
+`refl`) are on main (**ES4-lawproofs**, `72e38a5`).
 
 ## 2. The three classes
 
@@ -221,31 +223,55 @@ on a user `data`, `33 §5.6`, is likewise untrusted-generated then
 kernel-re-checked over the type's constructors — zero delta, *because* the
 carrier is inductive.)
 
-**K4 + K5 landed — the observational fragment is complete; the zero-delta
-*real-proofs* path is realizable, with the first real instances on main.**
-Constructing those per-branch law proofs requires the kernel to **dependently
-eliminate a `Type`-inductive into an `Ω`-motive** (`λx. P x : Bool → Ω`) — to
-*prove* a per-branch `Ω`-proposition, not *select which*. That is the **K4**
-capability (`14 §3` "Elimination into `Ω`", landed `3be0e30`): an **inductive**
-carrier (`Bool` / user `data`) proves — by finite case-split — the laws whose
-per-branch obligation stays a **live `Eq`** (`Ord`'s `refl`/`trans`/`total`,
-`Eq`'s `refl`), which are **zero-delta now**. (A *primitive* carrier still
-cannot — no eliminator — so it stays **audited-delta**, below; the carrier axis
-is unchanged.)
+**K4 landed — the live-`Eq` fragment is zero-delta; the concrete-equality laws
+need more.** Constructing per-branch law proofs requires the kernel to
+**dependently eliminate a `Type`-inductive into an `Ω`-motive**
+(`λx. P x : Bool → Ω`) — to *prove* a per-branch `Ω`-proposition, not *select
+which*. That is the **K4** capability (`14 §3` "Elimination into `Ω`", landed
+`3be0e30`): an **inductive** carrier (`Bool` / user `data`) proves — by finite
+case-split — the laws whose per-branch obligation stays a **live `Eq`** (`Ord`'s
+`refl`/`trans`/`total`, `Eq`'s `refl`), which are **zero-delta now**. (A
+*primitive* carrier still cannot — no eliminator — so it stays
+**audited-delta**, below; the carrier axis is unchanged.)
 
 The **concrete-equality-conclusion** laws — `Ord`'s **`antisym`** and `DecEq`'s
 **`sound`**/**`complete`**, which conclude or hypothesize the kernel `Eq a x y`
 — have per-branch obligations that reduce to a concrete **`Top`** (the
-trivially-equal case → `Top`-**introduction**) or **`Bottom`** (the
-contradictory-hypothesis case → `Bottom`-**elimination** / ex-falso). These
-needed **K5** — the **observational-fragment completion** (`../10-kernel/16
-§1.4`; `tt`-intro / `absurd`-elim, the textbook unit/empty pair, sound because
-`Bottom` is *empty*, distinct from the K4-forbidden singleton-elim-*out*) —
-**now landed** (`1c84a30`). So a **complete** zero-delta `Ord Bool`/`DecEq Bool`
-(`antisym` mandatory for a total order; `sound`/`complete` for decidable
-equality) is **realizable now**; K4 alone realized only the
-live-`Eq`-conclusion fragment. (Re-derived per-obligation: `antisym`/`sound`/
-`complete` reduce entirely within K5's `tt`/`absurd` — none also needs K6.)
+trivially-equal case → `Top`-**introduction** with `tt`) or **`Bottom`** (the
+contradictory-hypothesis case → `Bottom`-**elimination** / ex-falso with
+`absurd`). Closing them needs **two** kernel capabilities, not one:
+
+1. **K5** — the **observational-fragment completion** (`../10-kernel/16 §1.4`;
+   `tt`-intro / `absurd`-elim, the textbook unit/empty pair, sound because
+   `Bottom` is *empty*, distinct from the K4-forbidden singleton-elim-*out*) —
+   **landed** (`1c84a30`). K5 supplies the `tt` / `absurd` *terms*.
+2. **K7** — the `eq_at_inductive` **operand-`whnf`** completeness fix
+   (`../10-kernel/16 §8.1`: whnf the two `Eq` operands before the
+   constructor-head compare, mirroring `eq_at_type`). K5's
+   `tt` / `absurd` fire only once the goal / hypothesis `Eq` has actually
+   **reduced** to `Top` / `Bottom`, and these three laws wrap the carrier
+   through the instance's **own operation** (`bool_leq` / `bool_eq`), so their
+   operands are **redexes**, not bare constructors: `antisym`/`sound`'s
+   contradictory hypothesis `IsTrue (bool_leq/eq True False)` and `complete`'s
+   **equal**-branch goal `IsTrue (bool_eq True True)` both stay a **neutral
+   `Eq`** until the operand is whnf'd — exactly the K7 gap. Only the
+   bare-constructor equal branches (`antisym`/`sound`'s `Equal Bool True True`)
+   reduce under K5 alone.
+
+So a **complete** zero-delta `Ord Bool` / `DecEq Bool` (`antisym` mandatory for
+a total order; `sound`/`complete` for decidable equality) needs the **K5 + K7**
+kernel capability (K5 `1c84a30`; K7's operand-`whnf` fix, `16 §8.1`) — the three
+laws **park as visible `Axiom`s pending the ES4-lawproofs-remainder real-proof
+wiring**, structurally parallel to how `Eq`'s `sym`/`trans` park pending K6.
+**None needs
+K6** (no swapped-`Eq` hypothesis-reuse across a stuck congruence); K4 alone
+realized only the live-`Eq`-conclusion fragment. The ES4-lawproofs build
+surfaced the K7 gap by pushing the real proofs to a wall (Architect-ruled).
+*(This corrects the K5 un-stage's `0feb2c8` over-claim that these "reduce
+entirely within K5's `tt`/`absurd`, realizable now" — that silently assumed the
+operation-wrapped operands reduce, which is the K7 step. The `.ken` instances
+were always honest `Axiom`s — `72e38a5` never made these three real — so this is
+a prose/attribution erratum only.)*
 
 **`Eq`'s `sym`/`trans` need one further, distinct capability (K6, forward).**
 Proving `Eq`'s **symmetry**/**transitivity** (from `Eq a x y` derive `Eq a y x`,
@@ -261,11 +287,13 @@ through an unresolved `bool_eq x x`, keeping the `Eq` live so `Refl` fires).
 **Realization status.** The first **real, kernel-checked, zero-delta**
 law-carrying instances are **on main** (`72e38a5`, ES4-lawproofs, Team Language,
 `packages/lawful-classes/`): `Ord Bool` `refl`/`trans`/`total` + `Eq Bool`
-`refl`. The **K5** fragment (`antisym`/`sound`/`complete` → a *complete*
-`Ord Bool`/`DecEq Bool`) is realizable now and rides the **ES4-lawproofs
-remainder**; the **K6** fragment (`Eq`'s `sym`/`trans`) stays a visible `Axiom`
-pending K6. The discriminating shape — a law-less *inductive* instance is an
-**avoidable** delta, hence a defect — is **live**
+`refl`. The **K5 + K7** fragment (`antisym`/`sound`/`complete` → a *complete*
+`Ord Bool`/`DecEq Bool`) stays a **visible `Axiom`**; the real proofs land with
+the **ES4-lawproofs remainder** (Team Language) once K7's operand-`whnf`
+capability (`16 §8.1`) is on main and the laws are wired; the **K6** fragment
+(`Eq`'s `sym`/`trans`) stays a visible `Axiom` pending K6. The discriminating
+shape — a law-less *inductive* instance is an **avoidable** delta, hence a
+defect — is **live**
 ([[soundness-ac-static-vs-runtime-face]]). The design is unchanged throughout;
 only the gate states and build-time availability move.
 
