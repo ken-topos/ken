@@ -61,6 +61,19 @@ This matches the level-polymorphic regime of `12-universes.md` §4.
   `Omega_l` does not automatically inhabit `Omega_(suc l)`. Lifting is
   explicit when needed.
 
+**Formation vs. elimination into `Ω` — do not conflate (K4).** This section
+governs **formation**: which types *enter* `Ω` (the level discipline; and only
+genuine sub-singletons may be *declared* at `Ω`, §1.3 — a proof-relevant
+inductive at `Ω` is inadmissible). The **converse direction** —
+**eliminating a `Type`-inductive scrutinee into an `Ω`-motive**
+(`M : (Δ_i) → D Δ_p Δ_i → Ω_l`, to *prove* a per-branch-varying proposition by
+case-split) — is the general eliminator's **`Ω`-codomain** rule
+(`14 §3`, "Elimination into `Ω`"). It is admissible and sound: it only ever
+**narrows *into*** `Ω` (a relevant value → a proof-irrelevant proposition),
+never projects proof content *out* of `Ω`; the predicative Π-formation above
+already admits the motive type, and proof irrelevance (§1.2) preserves it for
+free.
+
 ### 1.2 Proof irrelevance (definitional)
 
 ```

@@ -151,8 +151,10 @@ M : (Δ_i) → D Δ_p Δ_i → Type ℓ'
 ```
 
 (the result type, allowed to depend on the indices and the scrutinee — this
-dependency is what makes it an *induction* principle, not just a recursor), and
-one **method** `mₖ` per constructor giving the result for that constructor —
+dependency is what makes it an *induction* principle, not just a recursor; the
+codomain is a **sort** — `Type ℓ'`, shown here, or a proposition `Ω_l` (the
+"Elimination into Ω" case, below)), and one **method** `mₖ` per constructor
+giving the result for that constructor —
 including, for each recursive argument, the **induction hypothesis** (the motive
 already applied to that sub-value; §3.1 generalises this to W-style arguments,
 whose IH is itself a *function*) — the eliminator has type:
@@ -197,6 +199,45 @@ elim_Nat M z s (suc n)   ≡  s n (elim_Nat M z s n)
 universe — so one may compute *types* by recursion on data (e.g. `if b then A
 else B`, `elim_Bool`-style). Predicativity (`12`) keeps this sound; there is no
 special restriction beyond the universe-level checks.
+
+**Elimination into `Ω` (the `Ω`-motive — K4).** The motive's codomain is a
+**sort**, and besides a `Type ℓ'` (type-*selecting*, above) it may be a
+proposition `Ω_l`. An **`Ω`-codomain motive** `M : (Δ_i) → D Δ_p Δ_i → Ω_l` lets
+the eliminator **prove a per-branch-varying proposition** by case-split on a
+relevant inductive scrutinee — the induction principle landing *at* `Ω`, rather
+than computing which type. This is what makes a **universally-quantified law
+over an inductive carrier provable**: e.g.
+`refl : (x : Bool) → IsTrue (bool_leq x x)` is `elim_Bool` at the motive
+`λx. IsTrue (bool_leq x x) : Bool → Ω_0` with a per-constructor proof method
+(the lawful-structure-classes law fields, `../50-stdlib/51 §5`/`§6`). The
+admissible
+codomain is exactly `Type ℓ' ∪ Ω_l` — a **sort**, not a wildcard: a non-sort
+codomain is still rejected.
+
+- **ι-reduction is sort-agnostic.** The eliminator's computation (`D-ι` above)
+  is the **same** constructor-selects-method rule regardless of the motive's
+  codomain sort — an `Ω`-motive `elim_D` reduces to the selected branch's method
+  exactly as a `Type`-motive one does. **No new reduction path** is added; the
+  ι-rule never inspects the motive's sort.
+- **Soundness — into-`Ω` is the safe direction.** (i) The motive *type* is
+  already well-formed with no restriction: `Ω`'s **predicative** Π-formation
+  (`16 §1.1`) admits `(Δ_i) → D Δ_p Δ_i → Ω_l` (a `Type`-domain, `Ω`-codomain
+  Π); the restriction was only ever an incompleteness in the eliminator's
+  codomain check, **not** a Π-formation boundary. (ii) The classic
+  large-elimination danger requires an **impredicative** proposition universe;
+  Ken's `Ω` is predicative (`16 §1.1`, `12`, ADR 0005), so the precondition is
+  **absent**. (iii) The direction **narrows *into* `Ω`** (a `Type` scrutinee →
+  an `Ω` result) — **distinct from the two shapes that *are* restricted**:
+  *declaring* a proof-relevant inductive **at** `Ω` (`16 §1.1`, only
+  sub-singletons enter `Ω` — the *formation* axis) and *singleton-eliminating*
+  an `Ω`-inhabitant **out into** a relevant `Type` (which would leak
+  which-proof information); this is neither. (iv) **Proof irrelevance is
+  preserved for free**:
+  an `Ω`-motive result is typed `M i̅ s : Ω_l`, and conversion at an `Ω`-type is
+  definitionally irrelevant (`16 §1.2`) — the irrelevance short-circuit fires on
+  the *type*, upstream of the term, so no which-branch distinction leaks back
+  through conversion. The soundness obligation is **entirely about typing
+  admission**, not conversion (no new conversion rule).
 
 ### 3.1 W-style arguments and the Π-abstracted induction hypothesis (K1.5)
 
