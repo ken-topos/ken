@@ -374,17 +374,6 @@ fn check(cx: &mut ElabCtx, expr: &RExpr, expected: &Term, _span: &Span) -> Resul
                 .map_err(|e| ElabError::KernelRejected { error: e, span: rspan.clone() })?;
             Ok(Term::const_(id, vec![]))
         }
-        // `Absurd h` — discharge ANY goal from a hypothesis `h : Eq D c₁ c₂`
-        // whose two sides are DISTINCT constructors of the same inductive
-        // `D` (a genuinely impossible equality — e.g. `Eq Bool False True`,
-        // the "wrong branch" of a total-order law's antisymmetry/soundness
-        // proof, ES4-lawproofs AC1). Real, kernel-checked, no postulate:
-        // built via the standard discriminate-by-transport technique
-        // (Martin-Löf `J`), not a special "ex falso" primitive this kernel
-        // doesn't have. Checked (not inferred), same discipline as `Refl`.
-        RExpr::RApp(f, arg, rspan) if matches!(f.as_ref(), RExpr::RCon(n, _) if n == "Absurd") => {
-            check_absurd(cx, arg, expected, rspan)
-        }
         RExpr::RLam(_, body, lam_span) => {
             let exp_wh = whnf(cx.env, &cx.ctx, expected);
             match exp_wh {
@@ -472,114 +461,6 @@ fn check(cx: &mut ElabCtx, expr: &RExpr, expected: &Term, _span: &Span) -> Resul
             Ok(core)
         }
     }
-}
-
-/// `Absurd h`: discharge `expected` from `h : Eq D c₁ c₂` where `c₁ ≠ c₂`
-/// are constructors of the SAME (currently: nullary-constructors-only)
-/// inductive `D`. Built via the standard discriminate-by-transport
-/// technique: a type-selecting motive `M : (b:D) -> Eq D c₁ b -> Ω_0` with
-/// `M(c₁,_) = ⊤` (a trivial, always-true placeholder — `Equal Type0 Type0
-/// Type0`, proved by `Refl`) and `M(c₂,_) = expected`; then
-/// `J(M, Refl, h) : M(c₂, h) ≡ expected`.
-fn check_absurd(cx: &mut ElabCtx, hyp: &RExpr, expected: &Term, span: &Span) -> Result<Term, ElabError> {
-    let (h_core, h_ty) = infer(cx, hyp)?;
-    let h_ty_wh = whnf(cx.env, &cx.ctx, &h_ty);
-    let (d_ty, c1, c2) = match h_ty_wh {
-        Term::Eq(a, x, y) => (*a, *x, *y),
-        _ => {
-            return Err(ElabError::TypeMismatch {
-                span: span.clone(),
-                reason: "Absurd expects a hypothesis of kernel `Eq` type".into(),
-            })
-        }
-    };
-    let d_ty_wh = whnf(cx.env, &cx.ctx, &d_ty);
-    let (head, params_terms) = peel_app(&d_ty_wh);
-    let d_id = match head {
-        Term::IndFormer { id, .. } => id,
-        _ => {
-            return Err(ElabError::TypeMismatch {
-                span: span.clone(),
-                reason: "Absurd's hypothesis must equate values of an inductive type".into(),
-            })
-        }
-    };
-    let ind = cx
-        .env
-        .inductive(d_id)
-        .ok_or_else(|| ElabError::Internal(format!("inductive {:?} not found", d_id)))?
-        .clone();
-    if ind.constructors.iter().any(|c| !c.args.is_empty()) {
-        return Err(ElabError::Internal(
-            "Absurd currently only supports nullary-constructor inductives (e.g. Bool)".into(),
-        ));
-    }
-    let c1_id = match whnf(cx.env, &cx.ctx, &c1) {
-        Term::Constructor { id, .. } => id,
-        _ => {
-            return Err(ElabError::TypeMismatch {
-                span: span.clone(),
-                reason: "Absurd's hypothesis LHS must be a concrete constructor".into(),
-            })
-        }
-    };
-    let c2_id = match whnf(cx.env, &cx.ctx, &c2) {
-        Term::Constructor { id, .. } => id,
-        _ => {
-            return Err(ElabError::TypeMismatch {
-                span: span.clone(),
-                reason: "Absurd's hypothesis RHS must be a concrete constructor".into(),
-            })
-        }
-    };
-    if c1_id == c2_id {
-        return Err(ElabError::TypeMismatch {
-            span: span.clone(),
-            reason: "Absurd: the hypothesis's two sides are the SAME constructor — not a contradiction".into(),
-        });
-    }
-
-    let trivial_ty = Term::Eq(Box::new(Term::ty(Level::Zero)), Box::new(Term::ty(Level::Zero)), Box::new(Term::ty(Level::Zero)));
-    let trivial_proof = Term::Refl(Box::new(Term::ty(Level::Zero)));
-
-    // Inner elim (type-selecting, `D -> Ω_0`, the SAME shape `isSorted`
-    // already uses): `d`'s method is `expected` (weakened under the 2 new
-    // binders below) iff `d`'s constructor is `c2`, else the trivial prop.
-    let expected_w2 = weaken(expected, 2);
-    let params_w2: Vec<Term> = params_terms.iter().map(|p| weaken(p, 2)).collect();
-    let inner_methods: Vec<Term> = ind
-        .constructors
-        .iter()
-        .map(|c| if c.id == c2_id { expected_w2.clone() } else { trivial_ty.clone() })
-        .collect();
-    // Type-selecting (not proof-producing): the inner elim picks WHICH
-    // Ω_0 proposition applies, exactly `isSorted`'s pattern — its motive
-    // targets `Type(1)` (the universe `Ω_0` classified one level up), a
-    // CONSTANT value (`Ω_0` itself), same for every constructor.
-    let inner_motive_ty = Term::pi(weaken(&d_ty_wh, 2), Term::ty(Level::Suc(Box::new(Level::Zero))));
-    let inner_motive = Term::Ascript(
-        Box::new(Term::lam(weaken(&d_ty_wh, 2), Term::omega(Level::Zero))),
-        Box::new(inner_motive_ty),
-    );
-    let inner_elim = Term::Elim {
-        fam: d_id,
-        level_args: vec![],
-        params: params_w2,
-        motive: Box::new(inner_motive),
-        methods: inner_methods,
-        indices: vec![],
-        scrut: Box::new(Term::var(1)), // `b`, the outer J-motive's D-parameter
-    };
-
-    // Outer (J) motive: `λ(b:D). λ(_:Eq D c₁ b). inner_elim`.
-    let outer_motive = Term::lam(
-        d_ty_wh.clone(),
-        Term::lam(
-            Term::Eq(Box::new(weaken(&d_ty_wh, 1)), Box::new(weaken(&c1, 1)), Box::new(Term::var(0))),
-            inner_elim,
-        ),
-    );
-    Ok(Term::J(Box::new(outer_motive), Box::new(trivial_proof), Box::new(h_core)))
 }
 
 /// Check `match scrut { C₁ p… => e₁ ; … }` against a KNOWN `expected` goal
