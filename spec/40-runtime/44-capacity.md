@@ -10,9 +10,9 @@
 > implementation detail** (manual+region now, automatic GC addable later without
 > touching surface or semantics — deferred). Contract for WS-X **X2/X4** and
 > Foundation's **K3**. Central stance: capacity and reclamation are
-> **engineering** choices for a **systems-adjacent** language (§3); the
-> Leech-lattice numbers are *aesthetic*, not load-bearing, and out of the core
-> (§4).
+> **engineering** choices at Ken's **systems-adjacent** lower bound
+> (`OQ-domain`, §3); the Leech-lattice numbers are *aesthetic*, not
+> load-bearing, and out of the core (§4).
 >
 > **X2 grounding (perishable-frame, K2c-s2 rule).** This elaboration is pinned
 > against the **landed** K3 store on `main` (`ken-runtime/src/store.rs`,
@@ -253,21 +253,27 @@ plus a `distinct_count()`:
 
 ## 3. Reclamation and the memory model
 
-**Systems-adjacent positioning (operator ruling, 2026-07-02).** Ken is
-**systems-*adjacent***, not a bare-metal systems language: it keeps the
-software-engineering / verified aspiration and **yields the true-systems space**
-— freestanding, manual memory against the OS kernel — **to Rust**. The
-content-addressed managed heap with optional, semantics-invisible reclamation is
-the **correct** model for that positioning, not a compromise to apologise for.
-The **default is manual + region** reclamation (a `space` reset, below) — a
-**systems-native, deterministic** technique (arenas/regions, no mandatory
-collector). **Automatic GC is optional, semantics-invisible, and droppable:**
-because values are immutable and identity is content (`41 §4`), reclaiming an
-unreachable slot changes **nothing observable**, so a collector can be added
-later without a language fork and Ken is **not** "a GC language." The model does
-**not** chase bare-metal — that space is Rust's. This is settled positioning
-(`OQ-systems-target` closed in favour of systems-adjacent), stated here as the
-memory-model rationale, not a new fork.
+**Domain and the memory model — records a settled decision (`OQ-domain`
+DECIDED, operator 2026-07-02; `../90-open-decisions.md`; `PRINCIPLES §I.1`).**
+This paragraph **records the settled domain ruling**, not a presentation trim.
+Ken's intended domain is **broad but bounded**, and asymmetric between the
+bounds. Its **lower bound is systems-*adjacent*** — one notch above true systems
+programming — and is **settled and substantiated**: for the memory model the
+settling fact is that a **content-addressed managed heap** with **optional,
+semantics-invisible reclamation** is the **correct** substrate at that lower
+bound, not a compromise. Its **upper bound — reaching application, edge, web,
+and mobile targets — is directional, not delivered**: an aspirational reach
+realized via **native codegen**, itself as-yet-unexplored design space (`45`,
+the X-series; the target choice is `OQ-backend-target`, **OPEN**), not a claimed
+capability. Across that range Ken is a **verified software-engineering
+language**, **not** a bare-metal systems language. The reclamation model below
+is the memory-model half of the settled lower bound: the **default is manual +
+region** reclamation (a `space` reset, below) — a **systems-native,
+deterministic** technique (arenas/regions, no mandatory collector). **Automatic
+GC is optional, semantics-invisible, and droppable:** because values are
+immutable and identity is content (`41 §4`), reclaiming an unreachable slot
+changes **nothing observable**, so a collector can be added later without a
+language fork, and Ken is **not** "a GC language."
 
 - **No automatic GC / compaction** (`OQ-gc`): the append-mostly store keeps
   slots **stable** for fast ids and O(1) equality. Slots never move; ids are

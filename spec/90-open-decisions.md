@@ -321,6 +321,29 @@ while drafting. Resolved items move to an ADR (`../docs/adr/`).
   if added (`OQ-coinduction`), brings its own local guarded laziness.
 - **Affects.** `40-runtime/42` (updated), `41` (sharing). **Recorded.**
 
+### OQ-domain — Ken's intended domain / positioning — **DECIDED**
+- **Fork.** How broad — and how bounded — is Ken's intended domain: a bare-metal
+  systems language, or a verified software-engineering language over a wider
+  application range?
+- **Decision (operator, 2026-07-02, in-session ruling).** **Broad but bounded,
+  and asymmetric between the two bounds.** The **lower bound is
+  systems-*adjacent*** — one notch above true systems programming — and is
+  **settled and substantiated**: the content-addressed managed heap with
+  optional, semantics-invisible reclamation is the *right* substrate for it, not
+  a compromise (`40-runtime/44 §3`). The **upper bound — reaching application,
+  edge, web, and mobile targets — is directional, not delivered**: an
+  aspirational reach realized via **native codegen**, itself **as-yet-unexplored
+  design space** (`40-runtime/45`, the X-series; the target choice is
+  `OQ-backend-target`, **OPEN**), so it is **not** a claimed capability. Across
+  that range Ken is a **verified software-engineering language**, not a
+  bare-metal systems language. `OQ-domain` fixes the *domain*; it does not
+  settle the *toolchain* (`OQ-backend-target`), nor claim the upper-bound
+  targets as built.
+- **Affects.** `40-runtime/44 §3` (memory-model rationale, the settled lower
+  bound), `40-runtime/45` + `OQ-backend-target` (the forthcoming upper-bound
+  reach), `docs/PRINCIPLES.md` §I.1 (mission domain-qualification).
+  **Recorded.**
+
 ### OQ-backend-target — Native codegen target/toolchain — **OPEN (operator-ratifiable)**
 - **Fork.** Which native-code target/toolchain the backend (`X3`, `45`) lowers
   core terms to. The **one irreversible** architectural decision in the backend
@@ -687,6 +710,7 @@ states what it cannot prove; the sibling models/tests/monitors it.
 | **OQ-5** | 2026-06-27 — **engineering-chosen capacity, no practical ceiling** (wide handles), **loud refusal** permanent; Leech number aesthetic. | — (recorded in `40-runtime/44`) |
 | **OQ-6** | 2026-06-27 — Leech/Golay/Co₀ machinery **out of the core**, optional research packages only, never the hot path — the lattice math kept out of the load-bearing runtime. | — (recorded in `40-runtime/44`) |
 | **OQ-gc** | 2026-06-27 — manual + region-scoped now; **automatic GC a deferred implementation detail** (semantics-invisible — addable later with no language fork). | — (recorded in `40-runtime/44`) |
+| **OQ-domain** | 2026-07-02 — **broad but bounded (asymmetric)**: lower bound systems-adjacent, *settled & substantiated* (managed content-heap is the right substrate, `44 §3`); upper bound application/edge/web/mobile *directional, not delivered* — an aspirational reach via native codegen, itself unexplored (`45`, `OQ-backend-target` OPEN). Verified software-engineering across the range, not bare-metal systems. | — (recorded in `40-runtime/44 §3`, `PRINCIPLES §I.1`) |
 | **OQ-witness** | 2026-06-27 — **process-level stats only** (extensional-safe `witness`); **never** per-value identity/provenance (referential transparency). | — (recorded in `40-runtime/41`) |
 | **OQ-9** | 2026-06-27 — **tail-resumptive only; multishot excluded** (positive choice). Expressiveness subsumed (generators / search-as-data / seam / interaction-tree denotation); `call/cc` uniquely adds unpredictability + breaks single-consumption WP (single-shot *simplifies* proofs). Footnote only if an unsubsumable need appears. | — (recorded in `30-surface/36 §5`) |
 | **OQ-1a** | 2026-06-27 — fixed-width overflow **obligation-generating by default** (proven ⇒ total; unproven ⇒ runtime check, so "checked" subsumed); **wrapping explicit** (`+%`/`Wrapping[T]`) for intended-modular domains, never silent. | — (recorded in `30-surface/35 §3`, `40-runtime/43`) |
