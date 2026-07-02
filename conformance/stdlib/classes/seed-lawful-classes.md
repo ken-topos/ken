@@ -9,13 +9,16 @@ law-**less** dictionary (postulated laws it *could* have proved) must be
 **rejected as unlawful**. A **primitive** carrier (`Int`/…) is the honest
 exception — its ∀-laws are **unprovable** (no eliminator), so its instance
 carries a **declared audited delta** (`§6`), not zero — the carrier axis is
-load-bearing. (The zero-delta *real-proofs* path is realizable now (**K4 + K5
-landed**): the **live-`Eq`-conclusion** laws via K4 (`3be0e30`) and the
-**concrete-equality-conclusion** laws `antisym`/`sound`/`complete` (per-branch
-`Top`/`Bottom`) via K5's `tt`/`absurd` (`1c84a30`). `Eq`'s `sym`/`trans` need a
-further capability (**K6**, forward). The first real instances (`Ord Bool`
-`refl`/`trans`/`total`, `Eq Bool` `refl`) are on main (ES4-lawproofs,
-`72e38a5`); the complete arm rides the ES4-lawproofs remainder.)
+load-bearing. (The zero-delta *real-proofs* path is realizable now for the
+**live-`Eq`-conclusion** laws via **K4** (`3be0e30`): `refl`/`trans`/`total` +
+`Eq`'s `refl`. The **concrete-equality-conclusion** laws
+`antisym`/`sound`/`complete` (per-branch `Top`/`Bottom`) need **K5** (the
+`tt`/`absurd` terms, landed `1c84a30`) **and** **K7** (the `eq_at_inductive`
+operand-`whnf` completeness fix, forward) — they **park as visible `Axiom`s
+pending K7**, parallel to how `Eq`'s `sym`/`trans` park pending **K6**
+(forward). The first real instances (`Ord Bool` `refl`/`trans`/`total`,
+`Eq Bool` `refl`) are on main (ES4-lawproofs, `72e38a5`); the complete arm
+flips to real proofs on the ES4-lawproofs remainder once K7 lands.)
 
 ## Grounding (content-verified against the landed targets)
 
@@ -66,33 +69,47 @@ real proof terms, producer-grepped for `declare_postulate`/holes on the law
 fields — is the named **Team-Language build follow-on** (`51 §8`), not this WP
 (`soundness-ac-static-vs-runtime-face`).
 
-**K4 + K5 landed — the *zero-delta real-proofs* path is realizable, first real
-instances on main.** Proving a per-branch law needs to eliminate a
-`Type`-inductive into an **Ω-motive** (`λx. P x : Bool → Ω`) — the **K4** rule
-(`14 §3`), on main (`3be0e30`). So an **inductive** carrier proves — by finite
-case-split — the laws whose per-branch obligation stays a **live `Eq`** (`Ord`'s
+**K4 landed — the live-`Eq` fragment is zero-delta; the concrete-equality laws
+need K5 + K7.** Proving a per-branch law needs to eliminate a `Type`-inductive
+into an **Ω-motive** (`λx. P x : Bool → Ω`) — the **K4** rule (`14 §3`), on main
+(`3be0e30`). So an **inductive** carrier proves — by finite case-split — the
+laws whose per-branch obligation stays a **live `Eq`** (`Ord`'s
 `refl`/`trans`/`total`, `Eq`'s `refl`): **zero-delta now**. The
 **concrete-equality-conclusion** laws — `Ord`'s **`antisym`** and `DecEq`'s
-**`sound`**/**`complete`**, concluding the kernel `Eq a x y` — have per-branch
-obligations that reduce to a concrete **`Top`** (the trivially-equal case →
-`Top`-**intro**) or **`Bottom`** (the contradictory-hyp case → `Bottom`-**elim**
-/ ex-falso): these needed **K5** (observational-fragment completion, `16 §1.4`,
-`tt`/`absurd`), **now landed** (`1c84a30`) — so a **complete** zero-delta
-`Ord Bool`/`DecEq Bool` (`antisym` mandatory for a total order,
-`sound`/`complete` for decidable equality) is **realizable now** (re-derived
-per-obligation: `antisym`/`sound`/`complete` reduce entirely within K5's
-`tt`/`absurd` — none also needs K6). **`Eq`'s `sym`/`trans` need one further,
-distinct capability (K6, forward)** — they reuse a hypothesis across a
-`conv_struct` `Eq`-congruence arm the kernel does not yet close (the
-ES4-lawproofs-surfaced gap, distinct from K4's live-`Eq` and K5's
-`Top`/`Bottom`), so they ship as **visible `Axiom`s** pending K6 — declared,
-never hidden; only `Eq`'s `refl` is zero-delta now (its goal routes through an
-unresolved `bool_eq x x`, keeping the `Eq` live). A **primitive** carrier still
-proves **no** ∀-law (no eliminator) → **audited-delta**. **Realization status:**
-the first real, kernel-checked, zero-delta instances (`Ord Bool`
-`refl`/`trans`/`total`, `Eq Bool` `refl`) are on main (ES4-lawproofs,
-`72e38a5`); the **K5** fragment (`antisym`/`sound`/`complete` → a *complete*
-instance) rides the **ES4-lawproofs remainder**; the **K6** fragment (`Eq`'s
+**`sound`**/**`complete`**, concluding or hypothesizing the kernel `Eq a x y` —
+have per-branch obligations that reduce to a concrete **`Top`** (the
+trivially-equal case → `Top`-**intro** with `tt`) or **`Bottom`** (the
+contradictory-hyp case → `Bottom`-**elim** / ex-falso with `absurd`). Closing
+them needs **two** kernel capabilities, not one: **K5** (observational-fragment
+completion, `16 §1.4`, the `tt`/`absurd` *terms*, **landed** `1c84a30`) **and**
+**K7** (the `eq_at_inductive` **operand-`whnf`** completeness fix, `16 §8.1`,
+**forward**). K5's `tt`/`absurd` fire only once the goal/hypothesis `Eq` has
+actually **reduced** to `Top`/`Bottom`, and these three laws wrap the carrier
+through the instance's **own operation** (`bool_leq`/`bool_eq`), so their
+operands are **redexes**, not bare constructors: `antisym`/`sound`'s
+contradictory hypothesis `IsTrue (bool_leq/eq True False)` **and** `complete`'s
+**equal**-branch goal `IsTrue (bool_eq True True)` both stay a **neutral `Eq`**
+until the operand is whnf'd — exactly the K7 gap; only the bare-constructor
+equal branches (`antisym`/`sound`'s `Equal Bool True True`) reduce under K5
+alone. So a **complete** zero-delta `Ord Bool`/`DecEq Bool` (`antisym` mandatory
+for a total order, `sound`/`complete` for decidable equality) needs **K5
+(landed) + K7 (forward)** — the three laws **park as visible `Axiom`s pending
+K7**, structurally parallel to how `Eq`'s `sym`/`trans` park pending K6; **none
+needs K6** (no swapped-`Eq` hypothesis-reuse across a stuck congruence). The
+ES4-lawproofs build surfaced the K7 gap by pushing the real proofs to a wall
+(Architect-ruled). **`Eq`'s `sym`/`trans` need one further, distinct capability
+(K6, forward)** — they reuse a hypothesis across a `conv_struct` `Eq`-congruence
+arm the kernel does not yet close (the ES4-lawproofs-surfaced gap, distinct from
+K4's live-`Eq`, K5's `Top`/`Bottom`, and K7's operand-whnf), so they ship as
+**visible `Axiom`s** pending K6 — declared, never hidden; only `Eq`'s `refl` is
+zero-delta now (its goal routes through an unresolved `bool_eq x x`, keeping the
+`Eq` live). A **primitive** carrier still proves **no** ∀-law (no eliminator) →
+**audited-delta**. **Realization status:** the first real, kernel-checked,
+zero-delta instances (`Ord Bool` `refl`/`trans`/`total`, `Eq Bool` `refl`) are
+on main (ES4-lawproofs, `72e38a5`); the **K5 + K7** fragment
+(`antisym`/`sound`/`complete` → a *complete* instance) stays a **visible
+`Axiom` pending K7** (K5 landed, K7 forward), flipping to real proofs on the
+**ES4-lawproofs remainder** once K7 lands; the **K6** fragment (`Eq`'s
 `sym`/`trans`) stays a visible `Axiom`. K4's rule conformance is
 `../../kernel/inductive/seed-k4-omega-motive-elim.md`; K5's is
 `../../kernel/observational/seed-k5-omega-fragment.md` (both on main).
@@ -116,7 +133,8 @@ law-less/postulated/holed instance is **rejected as unlawful** (non-empty
   **real kernel proofs** (a `declare_def` record value, re-checked) — the
   **live-`Eq`-conclusion** laws `refl`/`trans`/`total` provable on K4 **now**,
   and (for a *complete* total order) **`antisym`** — its per-branch obligation
-  reduces to a concrete `Top`/`Bottom`, **realizable now via K5** (`1c84a30`);
+  reduces to a concrete `Top`/`Bottom`, needing **K5 (landed `1c84a30`) + K7
+  (forward)** — parks as a visible `Axiom` pending K7;
   (b) a **law-less** instance whose law fields are `declare_postulate`d (and, as
   further arms, holed / stubbed-absent)
 - expect: **the verdict flips.** (a) **accepts as lawful** — every law prop is
@@ -148,14 +166,16 @@ law-less/postulated/holed instance is **rejected as unlawful** (non-empty
   postulated field on a **primitive** carrier is the **honest audited-delta**
   (`primitive-carrier-declared-audited-delta` below), so the reject arm is
   conditioned on carrier provability, not on the postulate alone. **K4 landed
-  (`3be0e30`), K5 forward:** the accept arm's **live-`Eq`-conclusion** laws
+  (`3be0e30`):** the accept arm's **live-`Eq`-conclusion** laws
   (`refl`/`trans`/`total`) and the **postulate-is-a-defect** verdict over them
   are **realizable** now — an inductive carrier proves those ∀-laws by finite
   case-split via Ω-motive elimination (`14 §3`), so a postulate on `K` *is* an
   avoidable delta **today**. The **complete** accept arm — the
   **concrete-equality-conclusion** laws **`antisym`** (and `DecEq`'s
   `sound`/`complete`), whose per-branch obligation reduces to a concrete
-  `Top`/`Bottom` — is **realizable now via K5** (`1c84a30`, `§6`, `16 §1.4`).
+  `Top`/`Bottom` — needs **K5 (landed `1c84a30`) + K7 (forward, the
+  `eq_at_inductive` operand-`whnf` fix, `16 §8.1`)** and **parks as a visible
+  `Axiom` pending K7** (`§6`, `16 §1.4`).
   The real proof-carrying instances ride the **ES4-lawproofs build** (the
   provable fragment on main, the complete arm on the ES4-lawproofs remainder);
   the **holed** / **missing** / declared-vs-hidden arms were always live.
@@ -165,12 +185,15 @@ law-less/postulated/holed instance is **rejected as unlawful** (non-empty
   dependency-cone walk), `16 §1.4` (`absurd` / `Bottom`-elim), K5 seed
   `../../kernel/observational/seed-k5-omega-fragment.md`
   (`sct-rejects-recursion-through-absurd`, the SCT sibling)
-- given: two **complete** `Ord`/`DecEq`-shaped instances on an inductive carrier
-  whose `antisym`/`sound`/`complete` proofs carry `absurd` terms (K5, the
-  contradictory branch), **identical** except one law proof's `absurd` subterm
-  (motive **or** proof position) references a `declare_postulate`d constant `q`
-  reachable **only** through that `absurd` subterm: (a) `q` referenced inside
-  the `absurd`; (b) a clean `absurd` referencing no postulate
+- given: a **structural** pair — two definitions **identical** except one's
+  `Absurd` subterm (motive **or** proof position) references a
+  `declare_postulate`d constant `q` reachable **only** through that `absurd`:
+  (a) `q` referenced inside the `absurd`; (b) a clean `absurd` referencing no
+  postulate. The vehicle is the `absurd`-carrying **term** as walked by the
+  delta accounting — **not** a full `antisym`/`sound`/`complete` instance:
+  `trusted_base_delta` does **not** type-check the body (`25 §3`), so the
+  injected `Absurd` need not be well-typed, and the net is **independent of the
+  K7 operand-`whnf` gate** a real operation-wrapped law proof waits on
 - expect: **the `trusted_base_delta` flips.** (a) **non-empty delta** — `q` is
   **counted** (the cone walk recurses into **both** `absurd` subterms), so the
   instance is **not** zero-delta (its lawfulness rides a hidden trusted const);
@@ -188,9 +211,15 @@ law-less/postulated/holed instance is **rejected as unlawful** (non-empty
   one; [[untrusted-layer-backstop-hole-for-omissions]]). **Structural,
   non-degenerate pair** on delta membership (`q ∈`/`∉`), keyed on the
   postulate's reachability-through-`absurd`, not a self-reported string.
-  **Reachable now:** the un-gated `antisym`/`sound`/`complete` complete
-  instances carry `absurd` terms, so this is a **live** net, not forward
-  hygiene. Producer: `collect_consts_in_tb`; reference tests
+  **Live now (K7-independent):** the `Absurd` traversal is exercised at the
+  **structural** level — `collect_consts_in_tb` walks `Term::Absurd`'s motive
+  and proof subterms over a term the delta accounting never type-checks
+  (`25 §3`), so the net fires on the landed kernel (`63f3050`) regardless of
+  whether the operation-wrapped `Eq` collapses (K7). It does **not** wait on
+  the K7-gated complete `antisym`/`sound`/`complete` instances; once K7 lands
+  and those proofs are wired, the **same** net additionally covers their real
+  `absurd` terms (forward strengthening, not a gate). Producer:
+  `collect_consts_in_tb`; reference tests
   `ken-elaborator/tests/k5_absurd_trusted_base.rs` (`63f3050`, producer
   flip-verified). Does **not** re-pin the `trusted_base_delta` mechanism
   (ES1/Sec4) — pins that its cone walk **traverses the `Absurd` variant**.
@@ -236,7 +265,8 @@ law-less/postulated/holed instance is **rejected as unlawful** (non-empty
   provable on K4 with **no K5 needed**, so `Bool`/user `data` prove it via
   Ω-motive elimination and the axis **separates** (inductive zero-delta vs
   primitive audited-delta) **today** — this is the live adjacent net; the
-  `antisym`/`sound`/`complete` arms are now **realizable via K5** (`1c84a30`).
+  `antisym`/`sound`/`complete` arms need **K5 (landed `1c84a30`) + K7
+  (forward)** and park as visible `Axiom`s pending K7.
   The **declared-vs-hidden** sub-net was always capability-independent — it is
   what keeps the primitive audited-delta posture enforceable regardless.
 
@@ -305,8 +335,8 @@ law-less/postulated/holed instance is **rejected as unlawful** (non-empty
 - **AC3** (laws PROVED, soundness): `law-fields-real-proofs-not-postulates`
   (live-`Eq`-conclusion accept arm + postulate-defect **realizable** since K4;
   the **complete** accept arm — `antisym`/`sound`/`complete` → `Top`/`Bottom` —
-  **realizable via K5** (`1c84a30`); real instances = ES4-lawproofs build +
-  remainder), `absurd-subterm-postulate-counted-in-delta` (the K5 `absurd`
+  needs **K5 + K7**, parks as `Axiom` pending K7; real instances = ES4-lawproofs
+  build + remainder), `absurd-subterm-postulate-counted-in-delta` (the `absurd`
   subterm is traversed by the `trusted_base_delta` cone walk — the
   elaborator-accounting sibling of the kernel-SCT launder net),
   `primitive-carrier-declared-audited-delta` (carrier separation live on the
@@ -340,8 +370,9 @@ law-less/postulated/holed instance is **rejected as unlawful** (non-empty
   **realizable** now for the **live-`Eq`-conclusion** laws (`refl`/`trans`/
   `total`) — an inductive carrier proves those via Ω-motive elimination, so the
   axis **separates today**; the **concrete-equality-conclusion** laws
-  (`antisym`/`sound`/`complete` → `Top`/`Bottom`) are now **realizable via K5's
-  `tt`/`absurd`** for a *complete* instance. The **declaredness** half (honest
+  (`antisym`/`sound`/`complete` → `Top`/`Bottom`) need **K5 (landed) + K7
+  (forward)** and **park as visible `Axiom`s pending K7** for a *complete*
+  instance. The **declaredness** half (honest
   iff declared) always was capability-independent. The proof-carrying instances
   land with the **ES4-lawproofs build** (Team Language; the provable fragment on
   main, the complete arm on the remainder).
