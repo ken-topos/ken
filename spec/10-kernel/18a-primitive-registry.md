@@ -34,7 +34,9 @@ One row per operation:
 - `BUILT × NATIVE` — stays trusted (ratified, conditional on its AC).
 - `BUILT × DEMOTE→derived` — **removed from the TCB** (a trusted op becomes
   checked-Ken stdlib; the class laws gain provability — **zero-delta** on an
-  inductive carrier, **zero-NEW-delta** over an opaque floor like `Int`).
+  inductive carrier, **zero-NEW-delta** over an opaque floor like `Int` — but a
+  **non-canonical** DEMOTE carrier can leave an `Equal`-tying class law
+  **undeliverable**, e.g. `DecEq Decimal`, §5.6.1(4)).
 - `GAP × NATIVE` — a **new trusted addition** (spec-mandated, currently
   missing).
 - `LEGACY × RETIRE` — a latent-hazard reduction deleted.
@@ -470,14 +472,14 @@ bignum-`mul` coeffs + `add` exps; `eq` = normalize + bignum compare. Every op is
 does coeff arithmetic); **no perf cliff** (unlike `mul_int`, there is no
 derived- Decimal blow-up). So verdict **`BUILT × DEMOTE→derived`** — a **TCB
 removal**, and the *better* soundness posture: (1) the derived ops are
-**structural / zero-delta computational** (no trusted `*_decimal`), and the
-`Num`/`DecEq Decimal` **laws** become **zero-NEW-delta** — real structural
-proofs bottoming out only at `Int`'s audited-delta `Axiom` leaves
-(`§5.2`/`§5.4`), no
-*new* postulate — in place of the pre-demote `Decimal`-specific postulates (the
-law-carrying instances home in the lawful-classes lane); (2) the
-F4 **wrong-value** `eq_decimal` hazard **vanishes** — structural
-kernel-re-checked `Eq`, no trusted `eq_decimal` (§4 F4: a wrong `Bool` value in
+**structural / zero-delta computational** (no trusted `*_decimal`). The
+**`Num`/`DecEq Decimal` law-carrying instances are re-deferred, not delivered
+here** — and, on the non-canonical `(coeff, exp)` carrier, are **not
+structurally deliverable at all** (§5.6.1(4)): the value-equality `decimalEq` is
+an `Eq`, not a `DecEq` for definitional `Equal`, so a `DecEq.sound` `Axiom`
+would inhabit `Bottom`. The decide-once carrier call is `90 §OQ-decimal-eq`;
+(2) the F4 **wrong-value** `eq_decimal` hazard **vanishes** — the derived,
+checked value-equality, no trusted `eq_decimal` (§4 F4: a wrong `Bool` value in
 the tested-not-trusted ring, never a false proof). Gated on F1's bignum `Int`;
 oracle **N/A** (derived).
 
@@ -533,19 +535,29 @@ are unchanged for terms; only the reduction moves from trusted native primitive
 to **derived-over-bignum**. A term reduces to the **same** value after — except
 where the old value was F4-wrong, which now reduces to the correct value.
 
-**(4) Structural equality; zero-NEW-delta laws.** `DecEq Decimal`
-equality is **structural** over `(coeff, exp)` (kernel-re-checked), with **no**
-trusted `eq_decimal` in `trusted_base()`: the F4 **wrong-value** `eq_decimal`
-path is removed *by construction*, not patched (§4 F4: the hazard was a wrong
-`Bool` value in the tested-not-trusted ring, never a false kernel proof).
-`Num`/`DecEq Decimal` **laws** become **zero-NEW-delta**: because `Decimal` is
-`Prod Int Int` (inductive, has an eliminator), the law is a **real structural
-proof** (case-split the pair → per-component) bottoming out only at the
-`DecEq Int`/`Num Int` audited-delta `Axiom` **leaves** (`§5.2`/`§5.4`) — no
-*new* postulate beyond `Int`'s, **not** absolute-`Axiom`-free. The law-carrying
-instance + its pin (`+`-comm / eq-reflexivity) home in the **lawful-classes
-lane** (next to `Ord Int`), **not** this demote — which ships the derived ops +
-primitive removal. The derived defs sit in the interpreter's
+**(4) Value-equality op ships; `DecEq`/`Num Decimal` law instances re-deferred,
+NOT structurally deliverable.** The `decimalEq` **op** is **value-equality via
+exponent alignment** (align then `eq_int`), reduces to a `Bool`, and removes the
+F4 **wrong-value** trusted `eq_decimal` from `trusted_base()` *by construction*
+(§4 F4: the hazard was a wrong `Bool` value in the tested-not-trusted ring,
+never a false kernel proof) — the computational win, unchanged. But **because**
+it is value-equality on the **non-canonical** `(coeff, exp)` carrier (many pairs
+per value — `(10, -1)` and `(1, 0)` both denote `1.0`), it is an **`Eq`**
+(equivalence), **not** a **`DecEq`** (a decision procedure for definitional
+`Equal`, `51 §2.2`): `DecEq.sound : IsTrue(decimalEq x y) → Equal Decimal x y`
+is **not a theorem** — `decimalEq (MkDecimalPair 10 (-1)) (MkDecimalPair 1 0)`
+reduces `True`, so a postulated `sound` `Axiom` yields `Equal Decimal`, and
+`MkDecimalPair` injectivity gives `Equal Int 10 1 → Bottom` (a **false proof**,
+not a wrong value). So `DecEq`/`Num Decimal` as specified are **not**
+zero-NEW-delta structural proofs — they are **not deliverable at all** on this
+carrier (the landedness of `DecEq Int`'s `Axiom` is irrelevant: `DecEq Decimal`
+is not a transport of it — `Int` is canonical, `Decimal` is not). The honest
+target is `Eq Decimal` (no `Equal`-tie), which itself bottoms on missing `Int`
+arithmetic lemmas — so the lawful-`Decimal` deliverable is **re-deferred**
+pending the decide-once carrier/quotient call (`90 §OQ-decimal-eq`); `Ord Char`/
+`DecEq Char` are **unaffected** (canonical carrier: one value per codepoint).
+
+The derived defs sit in the interpreter's
 tested-not-trusted ring over F1's tier-b arithmetic (§5.2.1 (5)) and §5.2.2; the
 demote touches **no** kernel file and **net-shrinks** `trusted_base()` — the
 four `*_decimal` primitives + the `Decimal` type registration leave against
@@ -553,7 +565,7 @@ four `*_decimal` primitives + the `Decimal` type registration leave against
 `decimalPow10Unbounded : Int → Int` (§5.6.1(2)'s large-`|Δexp|` stuck-marker;
 function-typed ⇒ soundness-inert). A **net shrink (−5** over the combined
 `Decimal`/`Char` tranche**)**, **not** a zero-addition — the same
-absolute-vs-net precision as the zero-NEW-delta laws.
+absolute-vs-net precision as the zero-NEW-delta `Char` laws (§5.9.1).
 
 ### 5.7 Conversions (`35 §5` — closed named set, no implicit coercion)
 
@@ -777,7 +789,9 @@ registrations leave against one honest-visible deferred-align postulate
 `decimalPow10Unbounded` — a net shrink, **not** a zero-addition). **Leave**
 (DEMOTE→derived — the trusted op removed and its class
 laws gained: **zero-delta** on an inductive carrier like the `Bool` logic ops,
-**zero-NEW-delta** over an opaque floor like `Int`/fixed-width for the rest — in
+**zero-NEW-delta** over an opaque floor like `Int`/fixed-width for the rest —
+except where a **non-canonical** carrier leaves an `Equal`-tying class law
+undeliverable (`DecEq`/`Num Decimal`, §5.6.1(4)) — in
 place of type-specific postulates): `Decimal` (type + ops), **`Char`** (type +
 ops, a *double* removal), `neg_int`, the `Bool` logic ops, and
 `checked`/`saturating`

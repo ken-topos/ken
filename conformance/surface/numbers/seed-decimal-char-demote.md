@@ -40,11 +40,16 @@ move the ordering reduction up), ADR 0009 (the adversarial-burden migration —
 "native is the exception that must be earned"), `16 §1.3` (the `Bool → Ω` trap),
 PRINCIPLES §5/§8/§12. The demote makes the soundness posture **strictly
 better**: the derived **ops** are **zero-delta computational** (no trusted
-`*_decimal`, F4 removed) and the class **laws** become **zero-NEW-delta** —
-provable adding no postulate beyond `Int`'s existing audited-delta `Axiom`s (the
-law-carrying instances re-home to the lawful-classes lane, `18a §5.6.1(4)`/
-`§5.9.1(3)`; see the deferred section); and the F4 wrong-value hole (the
-saturating false-`True` `eq_decimal`) **vanishes by construction**. Trust-level
+`*_decimal`, F4 removed). The class **laws** split by **carrier canonicity**:
+the **`Ord Char`**/**`DecEq Char`** lawful instances are **zero-NEW-delta by
+transport** (Char's carrier is *canonical* — one value per codepoint — so
+`Equal Char ≡ Equal Int` and Int's `Axiom`s transport soundly, adding no new
+postulate), while the **`DecEq`/`Num Decimal`** lawful instances are **NOT
+deliverable as specified** on the demote's *non-canonical* carrier (`decimalEq`
+is an `Eq`, never a `DecEq` — `DecEq.sound` would inhabit `Bottom`; AC-D3,
+corrected) and re-defer to the Steward-owned Decimal-equality-basis design call,
+not a landed floor. And the F4 wrong-value hole (the saturating false-`True`
+`eq_decimal`) **vanishes by construction**. Trust-level
 precision (§4 F4): that false-`True` is a **wrong Bool value in the
 tested-not-trusted `ken-interp` ring**, **not** an inhabitable false kernel
 proof — `Eq Decimal` is kernel-neutral and `eq_decimal : … → Bool` has no
@@ -60,8 +65,10 @@ wrong-value path because no trusted `eq_decimal` exists to be wrong.
 authoritative for the *observable numeric model*. **This seed** pins the
 **DEMOTE mechanism** — that the derivation genuinely computes (the F4 flip), the
 TCB actually shrinks (removal, not shadowing), the derived ops are zero-delta
-computational (the laws are zero-NEW-delta over `Int`; the law-carrying
-instances re-home to the lawful-classes lane), and the `Char` refinement is
+computational (the **Char** laws are zero-NEW-delta by transport; the
+**Decimal** `DecEq`/`Num` laws are **not deliverable** on the non-canonical
+carrier — AC-D3;
+both re-home/re-defer to the lawful-classes lane), and the `Char` refinement is
 sound (Ω-encoding + computed extraction proof). The `leq_int` reduce-arm oracle
 (**AC-L**) homes here (this WP delivers it), extending F1's `eq_int` oracle
 family (`seed-f1-bignum-int.md` AC2) to comparison. Distinct properties, one
@@ -166,9 +173,11 @@ home each; a one-line cross-reference is added to `seed-numbers.md` AC6 +
 **Tags.** **(soundness)** = a TCB/correctness commitment that must never
 regress: the F4 flip (AC-D2), the TCB removal (AC-G), the `leq_int` independent
 oracle (AC-L), the `isScalar` Ω-encoding + computed extraction proof (Char pins
-1/2), the surrogate/OOR rejection (AC-C3). The zero-NEW-delta **law** cases
-(`Ord Char` + `Num`/`DecEq Decimal`) re-home to the lawful-classes lane
-(deferred section); Char pin 2's runtime face rides the extraction feature.
+1/2), the surrogate/OOR rejection (AC-C3). The `Ord Char`/`DecEq Char` **law**
+cases (zero-NEW-delta by transport, canonical carrier) re-home, and the
+`Num`/`DecEq Decimal` **law** cases (**not deliverable** on the non-canonical
+carrier — AC-D3) re-defer to the design call — both in the deferred section;
+Char pin 2's runtime face rides the extraction feature.
 **(oracle)** = a value confirmed against the reference interpreter once
 available; grounded meanwhile against `18a` + `35` + first principles.
 **(hard-AC)** = a build-gate obligation the merge Decision verifies structurally
@@ -285,19 +294,44 @@ computed-proof grep) rather than a value the interpreter emits.
   not the name). Reduces **only** under ruling (A) — the alignment path is
   inherently ordering (different exponents).
 
-## AC-D3 — `Num`/`DecEq Decimal` laws  (RE-HOMED → lawful-classes lane)
+## AC-D3 — `Num`/`DecEq Decimal` laws  (NOT DELIVERABLE as specified → the
+Decimal-equality-basis design call)
 
 The `Num`/`DecEq Decimal` **law-carrying instance** is **not** delivered by this
-DEMOTE — it re-homes to the lawful-classes lane next to its `Ord Int`/`Num Int`
-twin (Architect + Steward ruling; carrier-axis correction). The demote's Decimal
-deliverable is the **computational** side (derived ops + trusted-primitive
-removal — AC-G, AC-D1/D2), which is genuinely zero-delta. The **laws** are
-**zero-NEW-delta**, not zero-delta: `Decimal = Prod Int Int` is inductive, so
-`DecEq`/`Num Decimal` reflexivity/comm are a **real structural proof over the
-pair** that bottoms out at the `DecEq Int`/`Num Int` audited-delta `Axiom`
-**leaves** (`18a §5.2`/`§5.4`) — adding no NEW postulate, but not `Axiom`-free.
-The corrected law case (honesty discriminator, below) is a forward conformance
-obligation on that lawful-classes-lane WP — see the deferred section.
+DEMOTE — and, corrected here, is **not deliverable as specified at all** on the
+demote's carrier (the earlier "re-homes as a zero-NEW-delta structural proof
+bottoming at `DecEq Int`'s `Axiom`" was itself an over-claim; Architect,
+`evt_23v7mtvqrv39z`). The demote's Decimal deliverable is the **computational**
+side (derived ops + trusted-primitive removal — AC-G, AC-D1/D2), which is
+genuinely zero-delta. What is **not** deliverable is a lawful class tying
+`decimalEq`/ops to the kernel's propositional `Equal`:
+
+- **`DecEq Decimal` is unsound as framed.** `DecEq.sound : IsTrue(eq x y) →
+  Equal a x y` (`lawful_classes.ken` L18) demands value-equality ⊆ definitional
+  `Equal`. But `Decimal`'s carrier is **non-canonical** (many `(coeff,exp)` per
+  value): `decimalEq (MkDecimalPair 10 (-1)) (MkDecimalPair 1 0)` reduces to
+  `True` (both denote `1`) on **structurally-distinct** pairs, while
+  `MkDecimalPair` injectivity (K7 no-confusion) refutes `Equal Decimal`
+  (→ `Equal Int 10 1` → `Bottom`). So `sound = Axiom` would inhabit `Bottom` — a
+  **false-proof hole**, not a wrong value. There is **no honest `Axiom`** here
+  (the "never reject an honest visible `Axiom`" discriminator presumes a *true*
+  meta-theorem; this one is false). So `decimalEq` is an **`Eq`** (an
+  equivalence — refl/sym/trans as Bool-equations, **no** `Equal`-tie;
+  `lawful_classes.ken` L14 comment), **never a `DecEq`**, on the unnormalized
+  carrier.
+- **The honest near-target is `Eq Decimal`** (no `sound`/`Equal`-tie) — but not
+  a free swap-in either: `refl`/`sym`/`trans` bottom on missing `Int`
+  arithmetic lemmas (`sub_int e e = 0`, `mul_int c 1 = c`) not yet built.
+- **`Num Decimal` hits the same wall** (commutativity-as-`Equal` fails on the
+  non-canonical pairs) **and** is additionally blocked on `class Num`/`instance
+  Num Int` not being built (the operators forward obligation).
+
+Root cause is a **decide-once design call** (Steward-owned open decision,
+Architect point 5): no lawful class over `Decimal` tying `eq`/ops to `Equal` is
+deliverable without either **canonicalizing** the carrier (a representation WP)
+or a **quotient/setoid `Eq`** (a change to the shared `DecEq` contract). The
+corrected forward obligation re-defers *there*, **not** to a
+"bottoms-at-a-landed-floor" structural proof — see the deferred section.
 
 ## AC-C1/C2/C3 — Char refinement + derived ops (eq + Ord) + the surrogate flip
 
@@ -460,10 +494,16 @@ lawful-classes-lane WP — see the deferred section.
   `char-deceq-collapses-on-codepoint` (hard-AC)
 - **Char pin 2** (extraction computes the proof) —
   `char-extraction-computes-scalar-proof` (hard-AC, **runtime face deferred**)
-- **RE-HOMED (lawful-classes lane, forward obligations):** the `Ord Char` +
-  `Num`/`DecEq Decimal` **law-carrying instance** cases (were AC-D3 +
-  `char-ord-laws-carried-not-stubbed`) — corrected to the honesty discriminator
-  (zero-NEW-delta, not zero-delta); see the deferred section.
+- **RE-HOMED (lawful-classes lane, forward obligations):** the `Ord
+  Char`/`DecEq Char` **law-carrying instance** cases (were
+  `char-ord-laws-carried-not-stubbed`) — **zero-NEW-delta by transport** on
+  Char's canonical carrier, honesty discriminator (not zero-delta); see the
+  deferred section.
+- **RE-DEFERRED (not deliverable as specified → design call):** the
+  `Num`/`DecEq Decimal` **law-carrying instance** cases (were AC-D3) —
+  `decimalEq` is an `Eq`, never a `DecEq`, on the **non-canonical** carrier
+  (`DecEq.sound` would inhabit `Bottom`); re-defer to the Steward-owned
+  Decimal-equality-basis design call. See AC-D3 + the deferred section.
 
 ## Cross-case sweep (`18a §4`)
 
@@ -511,17 +551,27 @@ over-reaches:
 **Re-homed / deferred forward conformance obligations** (each gated on a
 distinct future WP; flagged so none is silently dropped):
 
-- **`Ord Char` + `Num`/`DecEq Decimal` law-carrying instances → the
-  lawful-classes lane WP** (Steward frames post-merge). The corrected law cases
-  pin the **HONESTY** discriminator (not zero-delta): the instance carries an
-  **honest-visible** law — for `Char`, `antisym` is **zero-NEW-delta by
-  transport** (references `Ord Int`'s visible `Axiom`, no new `Decl::Opaque`,
-  since `Char ≡ Int` under erasure); for `Decimal`, a **real structural proof
-  over `Prod Int Int`** bottoming out at the `DecEq Int`/`Num Int` audited-delta
-  `Axiom` leaves — and **flips against a deceptive empty/false stub** (claims
+- **`Ord Char` + `DecEq Char` law-carrying instances → the lawful-classes lane
+  WP** (Steward frames post-merge). Both are **sound by transport** — Char's
+  carrier is **canonical** (one value per codepoint; `Char ≡ Int` under erasure,
+  so `Equal Char ≡ Equal Int` definitionally), so `Ord Int.antisym` /
+  `DecEq Int.sound` (true meta-theorems) transport soundly. The corrected law
+  cases pin the **HONESTY** discriminator (not zero-delta): the law field is
+  **zero-NEW-delta by transport** (references Int's visible `Axiom`, no new
+  `Decl::Opaque`), and **flips against a deceptive empty/false stub** (claims
   proved, is empty), **never** against an honest visible `Axiom`. Homed next to
-  their `Int` twins (subsume-don't-proliferate); the demote here ships only the
-  computational ops + primitive removal.
+  `Ord Int`/`DecEq Int` (subsume-don't-proliferate).
+- **`Num`/`DecEq Decimal` lawful instances → NOT deliverable as specified; the
+  Decimal-equality-basis design call** (AC-D3, corrected). Unlike `Ord Char`,
+  `Decimal`'s carrier is **non-canonical**, so `DecEq.sound` (value-eq ⊆
+  `Equal`) is a **false** meta-theorem — there is no honest `Axiom`; the `sound`
+  postulate would inhabit `Bottom` (`decimalEq` reduces `True` on
+  structurally-distinct value-equal pairs). `decimalEq` is an `Eq`, **never** a
+  `DecEq`; the honest near-target `Eq Decimal` still bottoms on unbuilt `Int`
+  arithmetic lemmas, and `Num Decimal` additionally needs `class Num`.
+  Re-deferred to the Steward-owned decide-once decision (canonical carrier vs
+  quotient/setoid `Eq`), **not** a landed-floor structural proof. The demote
+  here ships only the computational ops + primitive removal.
 - **pin-2 `String → Char` extraction computes-the-witness (runtime face) → the
   extraction-feature WP.** `char_at`/`string_to_list_char` are unbuilt (a
   `Neutral` stub — no `Char` from a `String` ⇒ no hole); when real UTF-8
