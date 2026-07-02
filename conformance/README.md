@@ -129,11 +129,12 @@ claim with no conformance case is a claim no one can rely on
   ordering arm** (ruling (A), the derived-def prerequisite) with its
   **independent** differential oracle (never `num-bigint`'s `Ord` both-sides);
   closes **both F4 halves** (saturating-`mul` *and* the sharp false-`True` `eq`
-  — a wrong value in the tested-not-trusted ring, not a false proof); pins
-  zero-delta `Num`/`DecEq Decimal` laws; and the two **Char soundness pins** —
-  the `isScalar := IsTrue(inRangeBool)` Ω-encoding (**sort-not-token**) and
-  extraction **computing** the scalar proof — plus `Ord Char` laws via the
-  injective projection.
+  — a wrong value in the tested-not-trusted ring, not a false proof); the
+  derived `Decimal`/`Char` **ops** (the `Num`/`DecEq`/`Ord` **law**-carrying
+  instances re-home to the lawful-classes lane — zero-NEW-delta over `Int`, not
+  zero-delta); and the two **Char soundness pins** — the
+  `isScalar := IsTrue(inRangeBool)` Ω-encoding (**sort-not-token**) and
+  extraction **computing** the scalar proof (runtime face deferred).
 - `surface/collections/seed-collections.md` — L3 strings & collections (`37`):
   `String` as a content-addressed **NFC UTF-8 primitive** (byte-length ≠
   char-length, **not** `List Char`); `List`/`Option`/`Result` transparent

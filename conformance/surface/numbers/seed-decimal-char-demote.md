@@ -39,9 +39,13 @@ structural closing net), `18a §4.1` (the tranche order — corrected by this WP
 move the ordering reduction up), ADR 0009 (the adversarial-burden migration —
 "native is the exception that must be earned"), `16 §1.3` (the `Bool → Ω` trap),
 PRINCIPLES §5/§8/§12. The demote makes the soundness posture **strictly
-better**: the laws become **zero-delta provable** and the F4 wrong-value hole
-(the saturating false-`True` `eq_decimal`) **vanishes by construction**.
-Trust-level precision (§4 F4): that false-`True` is a **wrong Bool value in the
+better**: the derived **ops** are **zero-delta computational** (no trusted
+`*_decimal`, F4 removed) and the class **laws** become **zero-NEW-delta** —
+provable adding no postulate beyond `Int`'s existing audited-delta `Axiom`s (the
+law-carrying instances re-home to the lawful-classes lane, `18a §5.6.1(4)`/
+`§5.9.1(3)`; see the deferred section); and the F4 wrong-value hole (the
+saturating false-`True` `eq_decimal`) **vanishes by construction**. Trust-level
+precision (§4 F4): that false-`True` is a **wrong Bool value in the
 tested-not-trusted `ken-interp` ring**, **not** an inhabitable false kernel
 proof — `Eq Decimal` is kernel-neutral and `eq_decimal : … → Bool` has no
 `eq → Eq` bridge, so no `refl : Eq Decimal a b` for `a ≠ b` is inhabitable (the
@@ -55,12 +59,14 @@ wrong-value path because no trusted `eq_decimal` exists to be wrong.
 `char-excludes-surrogates` (the surrogate block is not a `Char`). Those stay
 authoritative for the *observable numeric model*. **This seed** pins the
 **DEMOTE mechanism** — that the derivation genuinely computes (the F4 flip), the
-TCB actually shrinks (removal, not shadowing), the laws are zero-delta, and the
-`Char` refinement is sound (Ω-encoding + computed extraction proof). The
-`leq_int` reduce-arm oracle (**AC-L**) homes here (this WP delivers it),
-extending F1's `eq_int` oracle family (`seed-f1-bignum-int.md` AC2) to
-comparison. Distinct properties, one home each; a one-line cross-reference is
-added to `seed-numbers.md` AC6 + `char-excludes-surrogates`.
+TCB actually shrinks (removal, not shadowing), the derived ops are zero-delta
+computational (the laws are zero-NEW-delta over `Int`; the law-carrying
+instances re-home to the lawful-classes lane), and the `Char` refinement is
+sound (Ω-encoding + computed extraction proof). The `leq_int` reduce-arm oracle
+(**AC-L**) homes here (this WP delivers it), extending F1's `eq_int` oracle
+family (`seed-f1-bignum-int.md` AC2) to comparison. Distinct properties, one
+home each; a one-line cross-reference is added to `seed-numbers.md` AC6 +
+`char-excludes-surrogates`.
 
 ## Reading disciplines (what these cases pin, and how they flip)
 
@@ -112,8 +118,12 @@ added to `seed-numbers.md` AC6 + `char-excludes-surrogates`.
   `isScalar` def head is `IsTrue (<computed Bool>)`, **never** a `∨`/`∃`/
   multi-ctor form at Ω. **Payoff (load-bearing):** Ω-PI makes `Char` equality
   reduce to **codepoint** equality — two `Char`s with the same codepoint but
-  *distinct* scalar proofs are **equal by Ω-PI → zero-delta `DecEq Char`** —
-  which holds **only** if `isScalar` is actually proof-irrelevant. See
+  *distinct* scalar proofs are **equal by Ω-PI** (a **zero-delta** kernel fact)
+  — which holds **only** if `isScalar` is actually proof-irrelevant. (The
+  `eq_char` **op** reduces via `eq_int`, zero-delta computational; the
+  `DecEq Char` **law-carrying instance** — decidability sound/complete over the
+  opaque `Int` projection — is **zero-NEW-delta**, re-homing to the
+  lawful-classes lane, like `Ord Char`.) See
   [[proof-relevant-inductive-cannot-be-declared-at-omega]].
 - **Char pin 2 is the RUNTIME face — extraction must COMPUTE the scalar proof,
   not postulate it.** `String → Char` extraction (`char_at` /
@@ -136,9 +146,13 @@ added to `seed-numbers.md` AC6 + `char-excludes-surrogates`.
   `Decl` variant** (reuse F1's exact-`Int`). The pulled-up `leq_int` reduce arm
   is **`trusted_base`-neutral** — `leq_int` is *already registered*
   (`numbers.rs:233`), so wiring its outer-ring reduction adds **no** primitive/
-  postulate; the net is still a **pure shrink** (four op removals + two type
-  removals). A demote that leaves a primitive registered **and** adds a derived
-  def **grows** the surface — that is the failure
+  postulate. The demote does add **one** honest-visible postulate —
+  `decimalPow10Unbounded : Int→Int`, the deferred-align stuck-marker at
+  |Δexp|>30 (`18a §5.6.1(2)`; a soundness-inert function, never reduces, never a
+  wrong value) — so the net is a **shrink of −5** (six removals − one addition),
+  **not** a zero-addition "pure shrink." A demote that leaves a primitive
+  registered **and** adds a derived def **grows** the surface — that is the
+  failure
   ([[abstraction-visibility-feature-soundness-gate]], "reuse the constant, never
   a new flag").
 - **Honesty about the boundary (§8).** `DecEq Char` (via `eq_int`) **and**
@@ -150,9 +164,11 @@ added to `seed-numbers.md` AC6 + `char-excludes-surrogates`.
   tranche (`18a §5.3`/`§5.7`); the `leq_int` comparison arm needs none of them.
 
 **Tags.** **(soundness)** = a TCB/correctness commitment that must never
-regress: the F4 flip (AC-D2), the zero-delta laws (AC-D3), the TCB removal
-(AC-G), the `leq_int` independent oracle (AC-L), the `isScalar` Ω-encoding +
-computed extraction proof (Char pins 1/2), the surrogate/OOR rejection (AC-C3).
+regress: the F4 flip (AC-D2), the TCB removal (AC-G), the `leq_int` independent
+oracle (AC-L), the `isScalar` Ω-encoding + computed extraction proof (Char pins
+1/2), the surrogate/OOR rejection (AC-C3). The zero-NEW-delta **law** cases
+(`Ord Char` + `Num`/`DecEq Decimal`) re-home to the lawful-classes lane
+(deferred section); Char pin 2's runtime face rides the extraction feature.
 **(oracle)** = a value confirmed against the reference interpreter once
 available; grounded meanwhile against `18a` + `35` + first principles.
 **(hard-AC)** = a build-gate obligation the merge Decision verifies structurally
@@ -175,7 +191,15 @@ computed-proof grep) rather than a value the interpreter emits.
   F1's exact-`Int` (`num_bigint`-backed) reduction. **`trusted_base`-neutral** —
   the newly-wired `leq_int` `prim_reduce` arm adds **no** `reg_*`/`declare_*`
   (already registered at `numbers.rs:233`). **No** new kernel flag / `Decl`
-  variant (`git diff --stat crates/ken-kernel/` empty).
+  variant (`git diff --stat crates/ken-kernel/` empty). **One** honest-visible
+  `declare_postulate` **is** present — `decimalPow10Unbounded : Int→Int`
+  (`decimal_char.rs`), the deferred-align stuck-marker at |Δexp|>30 (an existing
+  `Decl::Opaque`, *not* a new `Decl` variant; a soundness-inert function that
+  never reduces) — so `trusted_base()` counts it and the net is a **shrink of
+  −5** (six removals − one addition), **not** a zero-addition one (Architect
+  ruling (a), `evt_5k40dabw333xy`: internal-marker exception accepted, the
+  demote's Q1 "zero new `declare_postulate` for the Decimal/Char **surface**"
+  holds since the marker is not surface).
 - why: a demote is a **TCB removal** only if the primitive is *deleted*, not
   shadowed by a derived def while the registration lingers. The failure mode is
   **surface growth**: a still-registered `Decimal` primitive **plus** a derived
@@ -261,27 +285,19 @@ computed-proof grep) rather than a value the interpreter emits.
   not the name). Reduces **only** under ruling (A) — the alignment path is
   inherently ordering (different exponents).
 
-## AC-D3 — `Num`/`DecEq Decimal` laws are zero-delta  (soundness)
+## AC-D3 — `Num`/`DecEq Decimal` laws  (RE-HOMED → lawful-classes lane)
 
-### surface/numbers/decimal-eq-law-zero-delta-not-postulate  (soundness)
-- spec: `18a §5.6.1(4)` (zero-delta structural laws),
-  `docs/program/wp/decimal-char-demote.md` AC-D3
-- given: a `DecEq Decimal` law — e.g. `eq`-reflexivity
-  `(d : Decimal) → eq d d ≡ true` (same exponent ⇒ `ca == ca`, no alignment), or
-  `+`-comm — established over the derived `(coeff:Int, exp:Int)` rep.
-- expect: the law is a **real, kernel-re-checked, zero-delta proof** (the
-  discriminating instance's `trusted_base()` delta is **empty** — no trusted
-  `eq_decimal`, no `declare_postulate`), **not** postulate-only. The case
-  **fails against a postulate stub** (a law asserted as an `Axiom` over an
-  opaque `Decimal` — the pre-demote posture — has a non-empty delta and is not a
-  real proof).
-- why: the demote's payoff — equality is **structural** over the derived rep, so
-  `Num`/`DecEq Decimal` laws that were postulate-only (opaque `Decimal` +
-  trusted `eq_decimal`) become zero-delta provable. The discriminating flip is
-  real-proof (empty delta) vs postulate (non-empty delta) —
-  [[lawful-class-instances-must-carry-law-proofs]] (the discriminating test must
-  FAIL against a law-less/postulated instance). The net is the delta, so this
-  case held regardless of the ordering fork.
+The `Num`/`DecEq Decimal` **law-carrying instance** is **not** delivered by this
+DEMOTE — it re-homes to the lawful-classes lane next to its `Ord Int`/`Num Int`
+twin (Architect + Steward ruling; carrier-axis correction). The demote's Decimal
+deliverable is the **computational** side (derived ops + trusted-primitive
+removal — AC-G, AC-D1/D2), which is genuinely zero-delta. The **laws** are
+**zero-NEW-delta**, not zero-delta: `Decimal = Prod Int Int` is inductive, so
+`DecEq`/`Num Decimal` reflexivity/comm are a **real structural proof over the
+pair** that bottoms out at the `DecEq Int`/`Num Int` audited-delta `Axiom`
+**leaves** (`18a §5.2`/`§5.4`) — adding no NEW postulate, but not `Axiom`-free.
+The corrected law case (honesty discriminator, below) is a forward conformance
+obligation on that lawful-classes-lane WP — see the deferred section.
 
 ## AC-C1/C2/C3 — Char refinement + derived ops (eq + Ord) + the surrogate flip
 
@@ -329,34 +345,33 @@ computed-proof grep) rather than a value the interpreter emits.
   (`Ord Char` on the projection, reducing under ruling (A));
   `Char.toInt = proj`. `eq_char 'a' 'a' ⇒ true`, `eq_char 'a' 'b' ⇒ false`;
   `leq_char 'a' 'b' ⇒ true`, `leq_char 'b' 'a' ⇒ false` (the order pair).
-- why: AC-C2 — the derived ops route through the projection to F1's `eq_int` and
-  the pulled-up `leq_int`, giving zero-delta `DecEq Char` **and** `Ord Char`
-  this tranche. `Char.toInt` is the projection itself (no runtime cost). The
-  order **pair** (accept `'a' ≤ 'b'` *while* reject `'b' ≤ 'a'`) is the net — a
-  single `≤`-accept is green-vs-green under an orientation-flip
-  ([[taint-axis-orientation-needs-distinguishing-pair]]).
+- why: AC-C2 — the derived `eq_char`/`leq_char` **ops** route through the
+  projection to F1's `eq_int` and the pulled-up `leq_int`, **reducing this
+  tranche** (zero-delta computational). `Char.toInt` is the projection itself
+  (no runtime cost). The order **pair** (accept `'a' ≤ 'b'` *while* reject
+  `'b' ≤ 'a'`) is the net — a single `≤`-accept is green-vs-green under an
+  orientation-flip ([[taint-axis-orientation-needs-distinguishing-pair]]). This
+  case pins the **ops**; the `DecEq`/`Ord Char` **law-carrying instances** (laws
+  zero-NEW-delta over the opaque `Int` projection) re-home to the lawful-classes
+  lane — see the deferred section.
 
-### surface/numbers/char-ord-laws-carried-not-stubbed  (soundness)
-- spec: `18a §5.9.1(3)` (`Ord Char` laws carried via `proj` injectivity),
-  `51 §6` (lawful `Ord`), `docs/program/wp/decimal-char-demote.md` AC-C2 (Ord
-  Char, ruling (A))
-- given: the `Ord Char` instance and its **antisymmetry** law
-  `(a b : Char) → leq_char a b → leq_char b a → eq_char a b`.
-- expect: the instance **carries a real, derivable law proof** — antisymmetry
-  **reduces** from `Int`'s total order **plus `proj` injectivity** (distinct
-  scalars ⇒ distinct codepoints, so `leq_int (proj a) (proj b)` +
-  `leq_int (proj b) (proj a)` ⇒ `proj a = proj b` ⇒ `a = b`). The
-  `trusted_base()` delta is **empty** (no `Axiom`/`declare_postulate`). The case
-  **fails against a law-less stub** (an `Ord Char` whose antisymmetry is
-  postulated over an opaque carrier — non-empty delta, not a real proof).
-- why: Architect's forward pin 1 for the now-in-scope `Ord Char`. Antisymmetry
-  is the non-trivial law — it is the one that **needs `proj` injective**, so a
-  stub that merely wraps `leq_int` without carrying the injectivity witness
-  passes the operation cases (AC-C2) yet cannot discharge antisymmetry. The
-  discriminating flip is real-proof (empty delta) vs postulate (non-empty delta)
-  — [[lawful-class-instances-must-carry-law-proofs]] (the test must FAIL against
-  a law-less instance). Reflexivity/transitivity/totality inherit directly from
-  Int's order; antisymmetry is the carried net.
+### `Ord Char` laws  (RE-HOMED → lawful-classes lane)
+
+The `Ord Char` **law-carrying instance** is **not** delivered by this DEMOTE —
+it re-homes to the lawful-classes lane next to `Ord Int` (Architect + Steward
+ruling). **Correction (carrier-axis):** the original "antisymmetry is a real
+zero-delta proof via `proj` injectivity, never `Axiom`" was **wrong** —
+`Char ≡ Int` under refinement erasure (`21 §6.3`), so `proj` is the identity and
+`Ord Char`'s laws **are** `Ord Int`'s laws, which are honest visible `Axiom`s
+(`Int` is opaque, no induction principle to case-split — `lawful_classes.ken`).
+Antisymmetry is **zero-NEW-delta by transport** (the instance's `antisym` field
+references `Ord Int`'s existing `Axiom`, adding no new `Decl::Opaque`), NOT a
+fresh proof. The corrected discriminator is **HONESTY, not zero-delta**: the
+instance carries an **honest-visible** law (a `declare_def` that reduces on an
+inductive carrier, OR a visible `Axiom`/transport on an opaque one) and flips
+against a **deceptive empty/false stub** (claims proved, is empty) — **never**
+against an honest visible `Axiom`. Forward conformance obligation on the
+lawful-classes-lane WP — see the deferred section.
 
 ### surface/numbers/char-deceq-collapses-on-codepoint  (soundness, hard-AC)
 - spec: `18a §5.9.1(2)` (pin 1, Ω-encoding), `18a §5.9` pin 1, `16 §1.3`,
@@ -387,15 +402,26 @@ computed-proof grep) rather than a value the interpreter emits.
   (distinct injection tags), the codepoint-collapse **fails**, and forcing
   `A + B` into Ω re-opens the `Bool → Ω` inconsistency — the case **flips**.
 - why: Char pin 1 — the load-bearing `DecEq Char` soundness check. The
-  zero-delta `DecEq Char` (Ω-PI codepoint-collapse) holds **only** if `isScalar`
-  is actually proof-irrelevant, which the `IsTrue`-reflection guarantees and the
-  naive `∨` does not ([[proof-relevant-inductive-cannot-be-declared-at-omega]]).
-  The structural grep (`IsTrue`, not `∨`) is the primary net; the value
-  assertion is its observable consequence.
+  **codepoint-collapse** (`Char` equality reduces to codepoint equality — a
+  **zero-delta** Ω-PI fact) holds **only** if `isScalar` is actually
+  proof-irrelevant, which the `IsTrue`-reflection guarantees and the naive `∨`
+  does not ([[proof-relevant-inductive-cannot-be-declared-at-omega]]). The
+  structural grep (`IsTrue`, not `∨`) is the primary net; the collapse is its
+  observable consequence. (This pins the collapse fact + the `isScalar` shape,
+  **not** the `DecEq Char` law-instance, whose decidability laws over the opaque
+  `Int` projection are zero-NEW-delta and re-home to the lawful-classes lane.)
 
-### surface/numbers/char-extraction-computes-scalar-proof  (soundness, hard-AC)
+### surface/numbers/char-extraction-computes-scalar-proof  (soundness, deferred)
 - spec: `18a §5.9.1(4)` (pin 2, runtime face), `18a §5.9` pin 2, `37 §2`
   (`String` is NFC UTF-8), `docs/program/wp/decimal-char-demote.md` (Char pin 2)
+- status: **RUNTIME FACE DEFERRED** — `char_at` doesn't exist and
+  `string_to_list_char` is a pre-existing `Neutral` stub (`eval.rs:870`); real
+  UTF-8 `String → Char` extraction is a **new feature**, not a wire-up, out of
+  this demote's scope. **Safe to defer:** while the stub is stuck, **no `Char`
+  is ever constructed from a `String`** → no un-witnessed `Char` → **no hole**
+  (Architect-ruled). The **static face** (the requirement below + no-postulate)
+  stands now; the runtime face (extraction *computes* the `tt`) rides the
+  extraction-feature WP as a forward obligation (deferred section), gated then.
 - given: `String → Char` extraction (`char_at` / `string_to_list_char`) on a
   valid `String`.
 - expect (producer-grep, structural): extraction constructs `(c, w)` where the
@@ -425,17 +451,19 @@ computed-proof grep) rather than a value the interpreter emits.
 - **AC-D1/D2** (exact derivation; F4 flip) —
   `decimal-mul-exact-flips-vs-saturating`,
   `decimal-eq-distinct-flips-vs-false-true` (F4 closure)
-- **AC-D3** (zero-delta laws) — `decimal-eq-law-zero-delta-not-postulate`
 - **AC-C1** (`Char` refinement) — `char-is-isscalar-refinement`
-- **AC-C2** (derived Char eq + Ord over projection) —
-  `char-eq-and-ord-on-projection`; `char-ord-laws-carried-not-stubbed` (Ord Char
-  laws, Architect forward-pin 1)
+- **AC-C2** (derived Char eq + Ord **ops** over projection) —
+  `char-eq-and-ord-on-projection`
 - **AC-C3** (surrogate/OOR reject, flips vs `isScalar:=true`) —
   `int-to-char-rejects-surrogate-and-oor`
-- **Char pin 1** (Ω-encoding → `DecEq Char` codepoint-collapse) —
+- **Char pin 1** (Ω-encoding → codepoint-collapse) —
   `char-deceq-collapses-on-codepoint` (hard-AC)
 - **Char pin 2** (extraction computes the proof) —
-  `char-extraction-computes-scalar-proof` (hard-AC)
+  `char-extraction-computes-scalar-proof` (hard-AC, **runtime face deferred**)
+- **RE-HOMED (lawful-classes lane, forward obligations):** the `Ord Char` +
+  `Num`/`DecEq Decimal` **law-carrying instance** cases (were AC-D3 +
+  `char-ord-laws-carried-not-stubbed`) — corrected to the honesty discriminator
+  (zero-NEW-delta, not zero-delta); see the deferred section.
 
 ## Cross-case sweep (`18a §4`)
 
@@ -457,11 +485,17 @@ computed-proof grep) rather than a value the interpreter emits.
   witness is a **computed** `IsTrue` inhabitant — never a postulated/fabricated
   scalar proof; `isScalar` is `IsTrue (<computed Bool>)` uniformly, never a `∨`
   at Ω. No path admits a non-scalar `Char`.
-- **TCB strictly shrinks.** Two type-level removals (`Decimal` + `Char`) + four
-  op removals (`add/sub/mul/eq_decimal`); the `leq_int` arm is neutral
-  (already-registered); zero additions to `trusted_base()`, zero new kernel
-  flags/`Decl` variants. The net delta is **negative** (a real TCB removal), the
-  ADR 0009 adversarial-burden migration.
+- **TCB net-shrinks (−5), not zero-addition.** Two type-level removals
+  (`Decimal` + `Char`) + four op removals (`add/sub/mul/eq_decimal`) = **six**
+  removals; the `leq_int` arm is neutral (already-registered); **one** honest-
+  visible addition — `decimalPow10Unbounded : Int→Int`, the deferred-align
+  stuck-marker (`18a §5.6.1(2)`; a soundness-inert `Decl::Opaque` function,
+  never reduces). No new kernel flags / `Decl` variants. The net delta is a
+  **shrink of −5** (six − one), **negative** (a real TCB removal), the ADR 0009
+  adversarial-burden migration — but **not** the "zero additions to
+  `trusted_base()`" a *pure* shrink would claim (Architect ruling (a): the
+  internal-marker exception is accepted, so this is the honest-visible
+  characterization the demote lands on, not a hole).
 
 ## Deferred to later tranches (not covered here — honesty about the boundary)
 
@@ -474,6 +508,31 @@ over-reaches:
 - **`Float.toDecimal` / `Decimal.toFloat`** — conversions tranche;
   `Decimal.toFloat` stays NATIVE (the correct-rounding cliff, `18a §5.7`).
 
-Note: `Ord Char` / `leq_char` is **no longer deferred** — ruling (A)'s `leq_int`
-arm makes `leq_char ⇒ leq_int ∘ proj` reduce this tranche (AC-C2). The brief's
-earlier "Ord Char rides F5" line is superseded.
+**Re-homed / deferred forward conformance obligations** (each gated on a
+distinct future WP; flagged so none is silently dropped):
+
+- **`Ord Char` + `Num`/`DecEq Decimal` law-carrying instances → the
+  lawful-classes lane WP** (Steward frames post-merge). The corrected law cases
+  pin the **HONESTY** discriminator (not zero-delta): the instance carries an
+  **honest-visible** law — for `Char`, `antisym` is **zero-NEW-delta by
+  transport** (references `Ord Int`'s visible `Axiom`, no new `Decl::Opaque`,
+  since `Char ≡ Int` under erasure); for `Decimal`, a **real structural proof
+  over `Prod Int Int`** bottoming out at the `DecEq Int`/`Num Int` audited-delta
+  `Axiom` leaves — and **flips against a deceptive empty/false stub** (claims
+  proved, is empty), **never** against an honest visible `Axiom`. Homed next to
+  their `Int` twins (subsume-don't-proliferate); the demote here ships only the
+  computational ops + primitive removal.
+- **pin-2 `String → Char` extraction computes-the-witness (runtime face) → the
+  extraction-feature WP.** `char_at`/`string_to_list_char` are unbuilt (a
+  `Neutral` stub — no `Char` from a `String` ⇒ no hole); when real UTF-8
+  extraction lands, verify it **reduces** the canonical `tt` scalar witness,
+  never postulates it.
+- **Unbounded-Δexp general Decimal `align` → the Int-recursion WP.** The demote
+  ships a fixed-unrolled **exact-or-stuck** `align` (a general `10^|Δexp|`
+  recursion over `Int` fails SCT — no structural descent on opaque `Int`); a
+  large-Δexp case (exact reduction, no clamp/saturate) rides that WP.
+
+Note: `Ord Char` / `leq_char` — the **op** is **no longer deferred** (ruling
+(A)'s `leq_int` arm makes `leq_char ⇒ leq_int ∘ proj` reduce this tranche,
+AC-C2; the brief's earlier "Ord Char rides F5" line is superseded); the
+**law-carrying instance** re-homes to the lawful-classes lane (above).

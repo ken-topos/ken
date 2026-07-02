@@ -268,8 +268,10 @@ not depend on the spelling.
   (`18a §5.9`) — the Int-refinement, superseding the `u32`-carrier framing for
   the *mechanism*; the observable surrogate-exclusion above is unchanged. The
   `isScalar := IsTrue(inRangeBool)` Ω-encoding, the *reducing* surrogate/OOR
-  rejection (`Int.toChar 0xD800 ⇒ None`), and `Ord Char` are pinned in
-  `seed-decimal-char-demote.md` (`18a §5.9.1`).
+  rejection (`Int.toChar 0xD800 ⇒ None`), and the derived
+  `Ord Char`/`DecEq Char` **ops** are pinned in `seed-decimal-char-demote.md`
+  (`18a §5.9.1`); their **law-carrying instances** re-home to the lawful-classes
+  lane (zero-NEW-delta over the opaque `Int` projection).
 
 ## Coverage map (AC → cases)
 
