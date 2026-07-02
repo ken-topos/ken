@@ -9,13 +9,24 @@
 //! build`, and the ES4-lawproofs reopen post-K4 `3be0e30`): `Ord Bool`'s
 //! `refl`/`trans`/`total` and `Eq Bool`'s `refl` are REAL, kernel-checked
 //! proofs (K4's Ω-motive `Elim` + this WP's `check_match_dependent`
-//! dependent-elimination wiring). `Ord Bool`'s `antisym`, `Eq Bool`'s
-//! `sym`/`trans`, and `DecEq Bool`'s `sound`/`complete` all conclude or
-//! hypothesize a BARE `Equal a x y` — a shape that observationally
-//! collapses past `Eq` into the kernel's `Top`/`Bottom` (which have no
-//! introduction/elimination rule anywhere in the kernel today) — so they
-//! stay honest, visible `Axiom`s pending a further "K5" kernel WP
-//! (`Top`-intro + `Bottom`-elim), not silently claimed proved.
+//! dependent-elimination wiring). `Ord Bool`'s `antisym` and `DecEq Bool`'s
+//! `sound`/`complete` conclude or hypothesize a BARE `Equal a x y` — a shape
+//! that observationally collapses past `Eq` into the kernel's `Top`/`Bottom`
+//! (which have no introduction/elimination rule anywhere in the kernel
+//! today) — so they stay honest, visible `Axiom`s pending a further "K5"
+//! kernel WP (`Top`-intro + `Bottom`-elim), not silently claimed proved.
+//!
+//! `Eq Bool`'s `sym`/`trans` are ALSO `Axiom`, but for a distinct reason —
+//! NOT the K5/Top-Bottom wall (their conclusions are `IsTrue`-shaped, never
+//! a bare `Equal a x y`). Reusing a hypothesis under a swapped-argument goal
+//! (`p : IsTrue (eq x y)` where the goal is `IsTrue (eq y x)`) needs the
+//! kernel to see two structurally-different-but-value-equal `Eq`
+//! propositions as convertible; `ken-kernel/src/conv.rs`'s `conv_struct` has
+//! no congruence case for two `Term::Eq(...)` nodes, so this fails even
+//! though the propositions are semantically identical. Confirmed via a
+//! local patch-and-revert experiment (adding the missing congruence arm
+//! makes both directions typecheck); this is a narrow, independent kernel
+//! gap, not fixable from the surface, and not the same fix as K5.
 
 use ken_elaborator::ElabEnv;
 use ken_kernel::env::Decl as KernelDecl;
@@ -190,9 +201,10 @@ fn eq_bool_refl_is_real_proof() {
         "Eq Bool's 'refl' must be a REAL kernel-checked proof — not a postulate. Got {:?}",
         refl_val
     );
-    // sym/trans: honest Axioms for now (K5-gated bare-Equal-shaped cases in
-    // the general proof; not re-derived here to keep this WP's scope
-    // bounded to the verified subset — see the .ken source's own comment).
+    // sym/trans: honest Axioms for now — NOT K5-gated (their conclusions are
+    // IsTrue-shaped, not a bare Equal a x y); blocked instead by a missing
+    // Term::Eq/Term::Eq congruence case in conv_struct (a distinct, narrow
+    // kernel gap outside this WP's lane — see the .ken source's own comment).
     assert!(is_opaque_const(&env.env, &sym_val), "Eq Bool's 'sym' is a visible Axiom (documented scope)");
     assert!(is_opaque_const(&env.env, &trans_val), "Eq Bool's 'trans' is a visible Axiom (documented scope)");
 }

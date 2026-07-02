@@ -127,6 +127,21 @@ instance Ord Int {
 -- (here) and `DecEq Bool`'s `sound`/`complete` (both conclude/hypothesize a
 -- BARE `Equal a x y`, the same collapsing shape) stay honest `Axiom`s
 -- pending K5.
+--
+-- `Eq Bool`'s `sym`/`trans` stay `Axiom` too, but for a DIFFERENT reason --
+-- NOT the K5/Top-Bottom wall (their conclusions are `IsTrue (eq _ _)`,
+-- never a bare `Equal a x y`, so `eq_at_inductive`'s collapse never even
+-- applies here). Reusing a hypothesis `p : IsTrue (eq x y)` where the goal
+-- is the swapped `IsTrue (eq y x)` needs the kernel to see
+-- `Equal Bool (bool_eq x y) True` and `Equal Bool (bool_eq y x) True` as
+-- the same type (`bool_eq` is genuinely commutative in value) -- but
+-- `ken-kernel/src/conv.rs`'s `conv_struct` has no congruence case for
+-- comparing two `Term::Eq(...)` nodes component-wise, so two stuck
+-- (not-yet-collapsed) `Eq` propositions that are semantically equal but
+-- not syntactically identical fail to convert. This is a narrow, distinct
+-- kernel gap (a missing structural-congruence arm, no new reduction
+-- semantics) -- confirmed by a local patch-and-revert experiment, not
+-- something Team Language can fix from the surface. Independent of K5.
 
 view bool_leq (a : Bool) (b : Bool) : Bool = match a { False => True ; True => b }
 view bool_eq (a : Bool) (b : Bool) : Bool = match a { True => b ; False => match b { True => False ; False => True } }
