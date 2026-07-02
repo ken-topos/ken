@@ -131,15 +131,37 @@ instance Ord Int {
 -- (`Equal a x x`) past a live application into a BARE `Equal Bool True
 -- True`/`Equal Bool False False` -- which observationally collapses
 -- straight to the kernel's `Top` proposition (`obs.rs::eq_at_inductive`,
--- same-ctor nullary ⇒ `Top`) BEFORE `Refl` ever sees an `Eq` shape to
--- check, and `Top` has no introduction rule anywhere in the kernel (nor
--- does `Bottom` have an elimination rule, for the swapped/contradictory
--- arm). This is the SAME gap flagged during the K4 build itself
--- (`k4_omega_motive.rs`'s own doc comment) -- a forward WP ("K5":
--- `Top`-intro + `Bottom`-elim), NOT specific to this instance. `antisym`
--- (here) and `DecEq Bool`'s `sound`/`complete` (both conclude/hypothesize a
--- BARE `Equal a x y`, the same collapsing shape) stay honest `Axiom`s
--- pending K5.
+-- same-ctor nullary => `Top`), closed by `tt` (K5 Top-introduction, now
+-- surface-exposed by this WP). `sound`/`complete`'s "consistent" branches
+-- close identically.
+--
+-- The swapped/contradictory branches were EXPECTED (per the Architect's
+-- per-obligation re-derivation) to reduce a HYPOTHESIS to a bare `Equal
+-- Bool True False`/`Equal Bool False True`, collapsing to `Bottom` and
+-- closed by `absurd`. THIS DOES NOT HOLD, mechanism-grounded (not just
+-- structurally observed): `antisym`/`sound`/`complete`'s hypotheses are
+-- `IsTrue (leq x y)`/`IsTrue (eq x y)` = `Equal Bool (bool_leq x y) True` --
+-- the CARRIER value is wrapped through the instance's OWN operation
+-- (`bool_leq`/`bool_eq`), not a bare case-split variable. Even after BOTH
+-- `x`/`y` are substituted to literal constructors by the case-split,
+-- `bool_leq True False` stays a SYNTACTIC application (`App(Const,lit,lit)`)
+-- until something forces its OWN iota-reduction -- and
+-- `ken-kernel/src/obs.rs::eq_at_inductive` (reached via `conv.rs::whnf`'s
+-- `Term::Eq` case / `obs::eq_reduce`) calls `peel_app` on its two VALUE
+-- operands WITHOUT first WHNF-ing them, so a wrapped-but-literal operand
+-- (`bool_leq True False`) is never recognized as constructor-headed and the
+-- `Eq` stays neutral -- it does NOT collapse to `Bottom`, so `absurd`
+-- cannot discharge it. (Confirmed empirically: a DIRECT, unwrapped literal
+-- hypothesis like `p : Equal Bool True False` DOES collapse and `absurd`
+-- DOES close it -- isolated in a scratch repro before this doc was
+-- written.) This is DISTINCT from K6 (which is about `conv_struct` lacking
+-- an `Eq`x`Eq` congruence arm for comparing two STUCK propositions) -- this
+-- is about `eq_at_inductive` not WHNF-ing its OWN operands before checking
+-- constructor-headedness, a narrower defect one level upstream. `Ord Bool`'s
+-- `antisym` and `DecEq Bool`'s `sound`/`complete` stay honest `Axiom`s on
+-- their contradictory branches' hypothesis-collapse pending this being
+-- grounded with the Architect (flagged, not routed around -- `ken-kernel`
+-- stays untouched by Team Language per this WP's gate).
 --
 -- `Eq Bool`'s `sym`/`trans` stay `Axiom` too, but for a DIFFERENT reason --
 -- NOT the K5/Top-Bottom wall (their conclusions are `IsTrue (eq _ _)`,
