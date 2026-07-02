@@ -774,6 +774,50 @@ fn checked_binop_u64(a: &EvalVal, b: &EvalVal, op: fn(u64, u64) -> Option<u64>) 
     }
 }
 
+/// Checked fixed-width negation (`18a §5 neg_intN`, ~L256) — signed only.
+/// `neg(MIN_intN)` has no representable positive counterpart in two's
+/// complement, so `checked_neg` returns `None` and the arm degrades to a
+/// stuck `Neutral`, never the wrapped value (F2-consistent).
+fn checked_neg_i8(a: &EvalVal) -> EvalVal {
+    match a {
+        EvalVal::Int(x) => match (*x as i8).checked_neg() {
+            Some(r) => EvalVal::Int(r as i64),
+            None => EvalVal::Neutral,
+        },
+        _ => EvalVal::Neutral,
+    }
+}
+
+fn checked_neg_i16(a: &EvalVal) -> EvalVal {
+    match a {
+        EvalVal::Int(x) => match (*x as i16).checked_neg() {
+            Some(r) => EvalVal::Int(r as i64),
+            None => EvalVal::Neutral,
+        },
+        _ => EvalVal::Neutral,
+    }
+}
+
+fn checked_neg_i32(a: &EvalVal) -> EvalVal {
+    match a {
+        EvalVal::Int(x) => match (*x as i32).checked_neg() {
+            Some(r) => EvalVal::Int(r as i64),
+            None => EvalVal::Neutral,
+        },
+        _ => EvalVal::Neutral,
+    }
+}
+
+fn checked_neg_i64(a: &EvalVal) -> EvalVal {
+    match a {
+        EvalVal::Int(x) => match x.checked_neg() {
+            Some(r) => EvalVal::Int(r),
+            None => EvalVal::Neutral,
+        },
+        _ => EvalVal::Neutral,
+    }
+}
+
 /// Structural equality on `EvalVal` for equality-testing contexts (`L1 §4`).
 pub fn eval_vals_eq(a: &EvalVal, b: &EvalVal) -> bool {
     match (a, b) {
@@ -864,6 +908,35 @@ pub fn prim_reduce(symbol: &str, args: &[EvalVal]) -> EvalVal {
         ("wrapping_add_uint16", [a, b]) => fixed_binop_u16(a, b, u16::wrapping_add),
         ("wrapping_add_uint32", [a, b]) => fixed_binop_u32(a, b, u32::wrapping_add),
         ("wrapping_add_uint64", [a, b]) => fixed_binop_u64(a, b, u64::wrapping_add),
+
+        // ---- `IntN<->Int` conversion floor (`18a §5.7`, NATIVE) ----
+        // Widening `IntN.toInt` (total): every fixed-width value already
+        // shares `Int`'s own value representation (`EvalVal::Int`/`BigInt`),
+        // so the reduction is identity — only the KERNEL type changes
+        // (`IntN -> Int`), never the value.
+        ("int8_to_int" | "int16_to_int" | "int32_to_int" | "int64_to_int"
+         | "uint8_to_int" | "uint16_to_int" | "uint32_to_int" | "uint64_to_int",
+         [a]) => a.clone(),
+        // Narrowing raw cast `Int -> IntN` (UNCHECKED — identity at the value
+        // level, same representation-sharing as widening). Not part of the
+        // public surface: only called internally by the derived `intToIntN`
+        // (Ken view, `conversions.rs`) AFTER its own range check, and by the
+        // `saturating*` family after clamping — never exposed un-guarded.
+        ("int_to_int8_raw" | "int_to_int16_raw" | "int_to_int32_raw" | "int_to_int64_raw"
+         | "int_to_uint8_raw" | "int_to_uint16_raw" | "int_to_uint32_raw" | "int_to_uint64_raw",
+         [a]) => a.clone(),
+
+        // `neg_intN` (`18a §5`, ~L256) — fixed-width negation stays NATIVE
+        // and checked (does NOT demote to `sub_int 0 x`, unlike bignum
+        // `neg_int`): `neg(MIN_intN)` overflows the asymmetric two's-
+        // complement range, degrading to stuck `Neutral` (F2-consistent),
+        // never a wrapped value. Signed widths only — unsigned negation of
+        // any nonzero value is out of range by construction and out of
+        // scope (`18a` names no `neg_uintN`).
+        ("neg_int8",  [a]) => checked_neg_i8(a),
+        ("neg_int16", [a]) => checked_neg_i16(a),
+        ("neg_int32", [a]) => checked_neg_i32(a),
+        ("neg_int64", [a]) => checked_neg_i64(a),
 
         // Decimal (`add_decimal`/`sub_decimal`/`mul_decimal`/`eq_decimal`) is
         // DEMOTE→derived (`18a §5.6.1`): no native `prim_reduce` arm here —
