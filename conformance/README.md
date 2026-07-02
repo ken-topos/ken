@@ -113,6 +113,14 @@ claim with no conformance case is a claim no one can rely on
   `2.0d:Decimal`), the fixed-width no-overflow obligation + no-silent-wrap seal,
   `Decimal`-exact-vs-`Float`-honest, explicit conversions, the kernel-primitive
   vs prelude-law boundary, `Char` surrogate exclusion.
+- `surface/numbers/seed-f1-bignum-int.md` — WP F1 genuine arbitrary-precision
+  `Int` (`18a §5.2.1`, first Phase-2 BUILTINS tranche WP): no-wrap totality
+  across the **i128 ceiling** (the distinct non-reproduction from
+  `seed-numbers.md` AC1's f64 carrier — closes the OF1 2⁶⁶ blind-spot), the
+  `18a §3` **independent** differential oracle (never the production crate on
+  both sides), the eval↔`Value::BigInt` store round-trip F1 **establishes**
+  (byte-identity + `minimal_limbs`; no `to_rt` `BigInt` arm today), and the
+  workspace-green + §63/ADR-0009 crate-vetting hard-ACs.
 - `surface/collections/seed-collections.md` — L3 strings & collections (`37`):
   `String` as a content-addressed **NFC UTF-8 primitive** (byte-length ≠
   char-length, **not** `List Char`); `List`/`Option`/`Result` transparent
