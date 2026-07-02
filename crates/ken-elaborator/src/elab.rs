@@ -374,6 +374,19 @@ fn check(cx: &mut ElabCtx, expr: &RExpr, expected: &Term, _span: &Span) -> Resul
                 .map_err(|e| ElabError::KernelRejected { error: e, span: rspan.clone() })?;
             Ok(Term::const_(id, vec![]))
         }
+        // `absurd h` — Bottom-elimination (K5, `16 §1.4`): from `h : Bottom`
+        // (a hypothesis that has observationally collapsed to `Bottom`, e.g.
+        // `Equal D c₁ c₂` for a different-constructor pair), discharge ANY
+        // Ω-classified goal — the ascribed `expected` type becomes the
+        // eliminator's explicit motive. Surface sugar only: `absurd` is a
+        // bare lowercase identifier the resolver emits as an `RCon` on scope
+        // miss. Checked (not inferred) so the motive comes from the goal,
+        // mirroring `Refl`/`Axiom`/`tt`.
+        RExpr::RApp(f, arg, rspan) if matches!(f.as_ref(), RExpr::RCon(n, _) if n == "absurd") => {
+            let bottom = Term::const_(cx.env.bottom_id(), vec![]);
+            let proof_core = check(cx, arg, &bottom, rspan)?;
+            Ok(Term::Absurd(Box::new(expected.clone()), Box::new(proof_core)))
+        }
         RExpr::RLam(_, body, lam_span) => {
             let exp_wh = whnf(cx.env, &cx.ctx, expected);
             match exp_wh {

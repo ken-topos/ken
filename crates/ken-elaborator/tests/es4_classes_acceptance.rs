@@ -5,16 +5,20 @@
 //! drives the actual package file via `include_str!`, never a hand-copied
 //! string).
 //!
-//! Scope note (Architect rulings `evt_68ppz77ysh5ne` or `wp/ES4-classes-
-//! build`, and the ES4-lawproofs reopen post-K4 `3be0e30`): `Ord Bool`'s
-//! `refl`/`trans`/`total` and `Eq Bool`'s `refl` are REAL, kernel-checked
-//! proofs (K4's Ω-motive `Elim` + this WP's `check_match_dependent`
-//! dependent-elimination wiring). `Ord Bool`'s `antisym` and `DecEq Bool`'s
-//! `sound`/`complete` conclude or hypothesize a BARE `Equal a x y` — a shape
-//! that observationally collapses past `Eq` into the kernel's `Top`/`Bottom`
-//! (which have no introduction/elimination rule anywhere in the kernel
-//! today) — so they stay honest, visible `Axiom`s pending a further "K5"
-//! kernel WP (`Top`-intro + `Bottom`-elim), not silently claimed proved.
+//! Scope note (Architect rulings `evt_68ppz77ysh5ne` / `wp/ES4-classes-
+//! build`, the ES4-lawproofs reopen post-K4 `3be0e30`, and the
+//! ES4-lawproofs-remainder reopen post-K5+K7): `Ord Bool`'s
+//! `refl`/`antisym`/`trans`/`total` and `DecEq Bool`'s `eq`/`sound`/
+//! `complete` are ALL REAL, kernel-checked proofs — `Ord Bool`/`DecEq Bool`
+//! are now COMPLETE zero-delta lawful instances. `refl`/`trans`/`total` use
+//! K4's Ω-motive `Elim` (`check_match_dependent`); `antisym`/`sound`/
+//! `complete` additionally need K5's `tt`/`absurd` (Top-intro/Bottom-elim)
+//! AND K7 (`eq_at_inductive` operand-whnf) — their branches conclude or
+//! hypothesize an OPERATION-WRAPPED `Equal a x y` (`IsTrue (leq x y)` etc.),
+//! a redex that only observationally collapses to `Top`/`Bottom` once the
+//! operand itself is whnf'd (K7), not just the bare-constructor case K5
+//! alone covers. Both K5 and K7 are landed on `main`; nothing here is
+//! silently claimed proved — every field is genuinely kernel-re-checked.
 //!
 //! `Eq Bool`'s `sym`/`trans` are ALSO `Axiom`, but for a distinct reason —
 //! NOT the K5/Top-Bottom wall (their conclusions are `IsTrue`-shaped, never
@@ -161,36 +165,36 @@ fn ord_bool_provable_laws_are_real_proofs_not_postulates() {
     let total_val = field_value(&env.env, &body, 4);
 
     assert!(!is_opaque_const(&env.env, &leq_val), "leq must not be a postulate");
-    for (name, v) in [("refl", &refl_val), ("trans", &trans_val), ("total", &total_val)] {
+    // K7 (`eq_at_inductive` operand-whnf, landed) + K5 (`tt`/`absurd`)
+    // together close every law field, including `antisym` — the discriminating
+    // `law-fields-real-proofs-not-postulates` flip: every field here is a
+    // REAL kernel-checked proof (empty delta), not a postulate.
+    for (name, v) in [("refl", &refl_val), ("antisym", &antisym_val), ("trans", &trans_val), ("total", &total_val)] {
         assert!(
             !is_opaque_const(&env.env, v),
-            "Ord Bool's '{}' must be a REAL kernel-checked proof (K4-enabled, zero-delta) — \
+            "Ord Bool's '{}' must be a REAL kernel-checked proof (K4+K5+K7-enabled, zero-delta) — \
              not a postulate. Got {:?}",
             name, v
         );
     }
-    // `antisym` stays an honest, VISIBLE Axiom — forward-gated on K5 (Top-
-    // intro/Bottom-elim), not silently claimed proved.
-    assert!(
-        is_opaque_const(&env.env, &antisym_val),
-        "Ord Bool's 'antisym' must still be a visible Axiom (K5-gated) — not silently \
-         proved (would be a false zero-delta claim) and not silently missing"
-    );
 
-    // The discriminating delta count: exactly ONE new postulate (antisym),
-    // not four (which would mean refl/trans/total silently regressed to
-    // Axiom too) and not zero (which would mean antisym got proved without
-    // K5 — impossible today, or claimed proved falsely).
-    let base_tb: std::collections::HashSet<_> =
-        ElabEnv::new().unwrap().env.trusted_base().into_iter().collect();
-    let delta: Vec<_> = env.env.trusted_base().into_iter().filter(|id| !base_tb.contains(id)).collect();
-    // NOTE: the base delta set is computed fresh (no package loaded), so
-    // this counts ONLY entries the package itself contributes across ALL
-    // its instances (Int's 4+3+2 Axioms + leq_int/eq_int primitives +
-    // Bool's 1 Axiom for antisym) — assert antisym's contribution
-    // specifically by checking it's present and everything else isn't
-    // double-counted via the per-field checks above (the real assertions).
-    assert!(!delta.is_empty(), "package must contribute a non-empty delta (Int's audited postulates alone guarantee this)");
+    // Discriminating flip, verified against the REAL elaborator (not
+    // hand-constructed): `Ord Bool`'s own `trusted_base_delta` (the real
+    // producer, `foreign.rs::collect_consts_in_tb` walked from THIS decl,
+    // not the whole-package set) is EMPTY — every law field is proved, none
+    // postulated laundered anywhere in the term (deep, not just top-level).
+    let mut delta = ken_elaborator::trusted_base_delta(&env.env, id);
+    // `record_nil_val` is the structural Sigma-chain terminator EVERY class
+    // instance carries (`33 §5` — `classes.rs::record_nil_val_id`), not a
+    // law-field postulate; exclude it to isolate the zero-delta claim about
+    // the LAW fields specifically.
+    delta.remove(&env.class_env.record_nil_val_id);
+    assert!(
+        delta.is_empty(),
+        "Ord Bool must be a zero-delta lawful instance (K4+K5+K7) — got a non-empty \
+         trusted_base_delta beyond the structural record_nil_val sentinel: {:?}",
+        delta
+    );
 }
 
 #[test]
@@ -218,7 +222,7 @@ fn eq_bool_refl_is_real_proof() {
 }
 
 #[test]
-fn dec_eq_bool_sound_complete_stay_honest_axioms() {
+fn dec_eq_bool_sound_complete_are_real_proofs_not_postulates() {
     let env = mk_env_with_package();
     let id = env.globals["DecEq_instance_Bool"];
     let (_, body) = env.env.transparent_body(id).expect("DecEq Bool instance is transparent");
@@ -226,8 +230,25 @@ fn dec_eq_bool_sound_complete_stay_honest_axioms() {
     let sound_val = field_value(&env.env, &body, 1);
     let complete_val = field_value(&env.env, &body, 2);
     assert!(!is_opaque_const(&env.env, &eq_val), "eq must not be a postulate");
-    assert!(is_opaque_const(&env.env, &sound_val), "DecEq Bool's 'sound' is a visible Axiom (K5-gated)");
-    assert!(is_opaque_const(&env.env, &complete_val), "DecEq Bool's 'complete' is a visible Axiom (K5-gated)");
+    // K7 (`eq_at_inductive` operand-whnf, landed) + K5 (`tt`/`absurd`)
+    // together close both fields — the discriminating
+    // `law-fields-real-proofs-not-postulates` flip.
+    for (name, v) in [("sound", &sound_val), ("complete", &complete_val)] {
+        assert!(
+            !is_opaque_const(&env.env, v),
+            "DecEq Bool's '{}' must be a REAL kernel-checked proof (K4+K5+K7-enabled, \
+             zero-delta) — not a postulate. Got {:?}",
+            name, v
+        );
+    }
+    let mut delta = ken_elaborator::trusted_base_delta(&env.env, id);
+    delta.remove(&env.class_env.record_nil_val_id);
+    assert!(
+        delta.is_empty(),
+        "DecEq Bool must be a zero-delta lawful instance (K4+K5+K7) — got a non-empty \
+         trusted_base_delta beyond the structural record_nil_val sentinel: {:?}",
+        delta
+    );
 }
 
 // ─────────────────────────────────────────────────────────────────────────
