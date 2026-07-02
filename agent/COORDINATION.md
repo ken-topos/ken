@@ -130,6 +130,22 @@ thread** — a top-level post fragments the work. After any context
 reset/compaction, resolve the live thread from fresh context; do **not** reuse a
 thread/event ID from a summarized memory (it may be stale).
 
+**Threading drifts in exactly two ways (operator 2026-07-02) — guard both.**
+(1) **A fork spawns a side-thread.** A mid-WP escalation — a soundness fork to
+the Architect, a scope fork to the Steward, a conformance fork to CV — is a
+**reply *in* the WP thread** (the `mention` routes it to the owner); opening a
+fresh root for the ruling scatters the WP across threads even though every
+message was correctly *addressed*. The ruling and its answer belong under the
+kickoff. (2) **A new WP reuses the *previous* WP's thread.** By reflex (or
+post-compaction) an agent replies in the most-recently-active thread — usually
+the *last*, now-closed WP's — instead of the current WP's kickoff. "Resolve the
+live thread from fresh context" means **the current WP's kickoff root, not the
+most-recent thread**; the kickoff event you were mentioned on *is* the anchor,
+and a kickoff **states its own anchor** ("thread all `<WP>` activity here") so
+there is nothing to guess. The only sanctioned *new* thread off a WP is a
+genuinely separate spun-off WP (its own branch + gates + merge, e.g. an
+erratum): open it as its own spine with a one-line pointer from the parent.
+
 **Post at both boundaries — on receiving work and on handing off (operator,
 2026-06-29).** When you **pick up** a task, post a brief *taking-this* ack in its
 WP thread and set your semantic status to it (§3); when you **finish or hand
