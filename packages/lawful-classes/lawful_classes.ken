@@ -95,8 +95,9 @@ instance Ord Int {
 -- a real inductive (`data Bool = True | False`, ES2), so its laws ARE
 -- kernel-provable by finite case-split (`elim_Bool` into an `Omega`-motive,
 -- K4 `3be0e30`). Every law field below is a REAL, kernel-checked proof
--- (`tt`/`Refl`/direct hypothesis reuse under the RESTRUCTURED signature form
--- described below) -- NOT `Axiom` -- except where noted.
+-- (`tt`/`Refl`/`absurd`/direct hypothesis reuse under the RESTRUCTURED
+-- signature form described below) -- NOT `Axiom`, anywhere in any of the
+-- three `Bool` instances.
 --
 -- The restructuring discipline (why these signatures look unusual). A
 -- law field bound as `(x:a)(y:a)(p:P x y)(q:Q x y) -> Concl` would check p/q
@@ -177,32 +178,47 @@ instance Ord Int {
 -- (whose hypothesis now genuinely collapses to `Bottom` under K7). No
 -- `Axiom` remains in either instance.
 --
--- `Eq Bool`'s `sym`/`trans` stay `Axiom` too, but for a DIFFERENT reason --
--- NOT the K5/Top-Bottom wall (their conclusions are `IsTrue (eq _ _)`,
--- never a bare `Equal a x y`, so `eq_at_inductive`'s collapse never even
--- applies here). Reusing a hypothesis `p : IsTrue (eq x y)` where the goal
--- is the swapped `IsTrue (eq y x)` needs the kernel to see
--- `Equal Bool (bool_eq x y) True` and `Equal Bool (bool_eq y x) True` as
--- the same type (`bool_eq` is genuinely commutative in value) -- but
--- `ken-kernel/src/conv.rs`'s `conv_struct` has no congruence case for
--- comparing two `Term::Eq(...)` nodes component-wise, so two stuck
--- (not-yet-collapsed) `Eq` propositions that are semantically equal but
--- not syntactically identical fail to convert. This is a narrow, distinct
--- kernel gap ("K6" -- Architect-ruled, `conv.rs`-only, independent of K5:
--- no `Top`/`Bottom`, `eq_reduce` untouched). The only admissible fix is a
--- POSITIONAL congruence arm (`conv_struct(ty1,ty2) && conv_struct(x1,x2)
--- && conv_struct(y1,y2)`) -- a cross-wise arm would smuggle propositional
--- symmetry into definitional equality (unsound: collapses directed `Eq`,
--- enables unproven-symmetry transport via `cast`) and is a hard NO.
--- Mechanism-grounded (not just structurally confirmed): the arm is the
--- necessary trigger that lets `conv_struct`'s recursion reach each
--- already-case-split leaf's concrete literals, where ordinary
--- pre-existing iota-reduction (not a new commutativity rule) closes it --
--- confirmed by a local patch-and-revert experiment with full term dumps,
--- not something Team Language can fix from the surface. K6 is its own
--- reviewed kernel WP (not yet merged); this instance re-derives its
--- `sym`/`trans` obligation-shape against K6 once it lands, same
--- capability-gate-reopen discipline as the K5/`antisym` un-stage.
+-- `Eq Bool`'s `sym`/`trans` (below) are ALSO now real, kernel-checked,
+-- zero-delta proofs -- via the SAME full case-split technique as
+-- `antisym`/`sound`/`complete` above, no further kernel capability needed.
+-- Getting here took a real correction, worth recording.
+--
+-- The ORIGINAL (never-shipped) proof attempt tried to REUSE a hypothesis
+-- `p : IsTrue (eq x y)` directly for the swapped goal `IsTrue (eq y x)`,
+-- WITHOUT case-splitting `x`/`y` -- i.e. `p` itself, unchanged, as the
+-- answer. With `x`/`y` left as free (symbolic) variables, this needs the
+-- kernel to see `Equal Bool (bool_eq x y) True` and
+-- `Equal Bool (bool_eq y x) True` as the SAME type; `bool_eq x y` and
+-- `bool_eq y x` don't reduce (both args symbolic), so both stay stuck
+-- `Term::Eq` propositions, and `ken-kernel/src/conv.rs`'s `conv_struct` has
+-- no congruence case comparing two `Term::Eq(...)` nodes component-wise --
+-- this is a real, confirmed kernel gap ("K6", Architect-ruled).
+--
+-- But K6 -- even a SOUND, POSITIONAL fix to it -- would NOT have closed
+-- this pair anyway (Architect's sharpening, `evt_78ntsfnyjdtq6`): positional
+-- congruence compares `bool_eq x y` and `bool_eq y x` argument-by-argument
+-- in place -- `x` vs `y` -- and for genuinely distinct free variables that
+-- is FALSE, not true. The two applications are only PROPOSITIONALLY equal
+-- (via `bool_eq`'s commutativity, a fact about its VALUE), never
+-- DEFINITIONALLY equal -- closing this specific swap-reuse needs a
+-- cross-wise congruence arm, which is the unsound one (smuggles
+-- propositional symmetry into definitional equality, collapses directed
+-- `Eq`, enables unproven-symmetry transport via `cast`) and stays a hard
+-- NO. So the hypothesis-reuse-without-case-split TECHNIQUE was simply the
+-- wrong tool here, independent of whether K6 ever lands.
+--
+-- The FIX: apply the SAME full case-split `antisym`/`sound`/`complete`
+-- already use. Case-splitting `x` then `y` down to concrete constructors
+-- makes `bool_eq`'s application a REDEX that K7 whnfs before the
+-- constructor-head check -- each of the 4 (`sym`)/8 (`trans`) branches then
+-- independently closes with `tt` (both sides reduce to the same literal) or
+-- `absurd` (a hypothesis reduces to `Bottom`). The swap-congruence K6 would
+-- have supplied is never exercised -- no branch reuses a hypothesis across
+-- a swap; each computes its own concrete answer. Zero `conv.rs` diff, zero
+-- new capability, K6-independent. K6 itself stays grounded-and-parked as a
+-- genuine but currently CUSTOMERLESS kernel-completeness gap (no proof
+-- obligation in this codebase needs a sound positional arm) -- forward
+-- priority, not blocking.
 
 view bool_leq (a : Bool) (b : Bool) : Bool = match a { False => True ; True => b }
 view bool_eq (a : Bool) (b : Bool) : Bool = match a { True => b ; False => match b { True => False ; False => True } }
@@ -239,8 +255,28 @@ instance Ord Bool {
 instance Eq Bool {
   eq = bool_eq ;
   refl = \x. match x { True => tt ; False => tt } ;
-  sym = Axiom ;
-  trans = Axiom
+  sym =
+    \x. match x {
+      True => \y. match y {
+        True => \p. tt ;
+        False => \p. absurd p
+      } ;
+      False => \y. match y {
+        True => \p. absurd p ;
+        False => \p. tt
+      }
+    } ;
+  trans =
+    \x. match x {
+      True => \y. match y {
+        True => \z. match z { True => \p.\q. tt ; False => \p.\q. absurd q } ;
+        False => \z. match z { True => \p.\q. absurd p ; False => \p.\q. absurd p }
+      } ;
+      False => \y. match y {
+        True => \z. match z { True => \p.\q. absurd p ; False => \p.\q. absurd p } ;
+        False => \z. match z { True => \p.\q. absurd q ; False => \p.\q. tt }
+      }
+    }
 }
 
 instance DecEq Bool {
