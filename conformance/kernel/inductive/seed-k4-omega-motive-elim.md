@@ -132,13 +132,22 @@ sort-agnostic ι, the irrelevance-through-conversion, and every verdict** are
   **different** proof methods — `e₁ := elim_Bool M m_True m_False x` and
   `e₂ := elim_Bool M m_True' m_False' x`, where `m_True, m_True' : M True` and
   `m_False, m_False' : M False` are **distinct proof terms** of the same `Ω`
-  propositions
+  propositions; and — the **foil** — (c) the **same shape at a `Type`-codomain**
+  motive `M_T : Bool → Type 0` with **genuinely distinct reducts**
+  `e_T1 := elim_Bool M_T a b x` and `e_T2 := elim_Bool M_T a' b' x`, where the
+  branch methods reduce to **distinct values** (`a ≠ a'` as `Type 0` inhabitants
+  — proof-**relevant**, not proof-irrelevant)
 - expect: **`e₁` and `e₂` convert** (`e₁ ≡ e₂` definitionally) — both are typed
   `M x : Ω_0`, and conversion at an `Ω`-type is **definitionally irrelevant**
   (`16 §1.2`), so the **which-method / which-proof distinction does not leak
   back through conversion**. Assert the **observable**: conversion **succeeds**
   (the irrelevance short-circuit fires on the **`Ω`-type**, upstream of the
-  term), **not** a term-structural comparison of the methods
+  term), **not** a term-structural comparison of the methods. **Foil (c):**
+  `e_T1`, `e_T2` do **not** convert (`convert == false`) — at a `Type`-codomain
+  the reducts are proof-**relevant**, so distinct values are distinguished. The
+  foil proves conversion is **discriminating**, so the Ω-side equality
+  (`e₁ ≡ e₂`) is a **real proof-irrelevance property**, not a degenerate
+  always-true `convert`
 - why: (soundness ★) the load-bearing property of into-`Ω` elimination — it
   **narrows into `Ω`** (a relevant scrutinee → a proof-irrelevant result), so no
   which-proof content leaks **out** through conversion. **The commutation:** the
@@ -151,10 +160,17 @@ sort-agnostic ι, the irrelevance-through-conversion, and every verdict** are
   `Ω`-elim results **structurally** (proof-relevantly — distinguishing `e₁` from
   `e₂` by their methods) would make them **conv-distinct**, **leaking
   which-proof info out of `Ω`** — the classic large-elimination danger. Correct
-  impl → **conv- equal**; the proof-relevant-`Ω`-elim bug → **conv-distinct**:
+  impl → **conv-equal**; the proof-relevant-`Ω`-elim bug → **conv-distinct**:
   opposite observables. Pins that the elim result is **typed at `Ω`** (so the
   shortcut applies) — the "no leak out" half that distinguishes safe into-`Ω`
   elimination from the restricted singleton-elimination-**out**-of-`Ω`.
+  **Non-degenerate pair (the foil makes the positive non-vacuous):** Ω-side
+  distinct-methods → **convert** paired with the `Type`-side foil
+  distinct-reducts → **do not convert** — without the foil a broken always-true
+  `convert` would pass the Ω-positive for the wrong reason; the pair keys the
+  irrelevance on the codomain sort (`Ω` irrelevant / `Type` relevant), mirroring
+  the kernel's fold-now foil test
+  (`omega_pi_shortcut_fires_on_distinct_proofs_not_alpha`).
 
 ---
 
