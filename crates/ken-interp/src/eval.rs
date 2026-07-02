@@ -6,8 +6,12 @@
 //! selected method (ι) fires.
 //!
 //! # EvalVal variants
-//! - Scalar immediates (`Bool`, `Int`, `BigInt`, `Float`, `Float32`,
-//!   `DecimalVal`) — not K3-interned (they are K3 immediates).
+//! - Scalar immediates (`Bool`, `Int`, `Float`, `Float32`, `DecimalVal`) — not
+//!   K3-interned (they are K3 immediates: `RtValue::Bool`/`SmallInt`/…).
+//! - `BigInt` — an eval-level immediate (arbitrary-precision, `18a §5.2.1`),
+//!   but its store image (`Value::BigInt { sign, limbs }`) is a K3-interned
+//!   compound (content-addressed like `Ctor`/`Pair`), not an immediate; `to_rt`
+//!   bridges the two representations.
 //! - Compound data (`Ctor`, `Pair`, `Closure`) — K3-interned, carry a `SlotId`.
 //! - Type-former values (`TypeUniverse`, `OmegaUniverse`, `PiTy`, `SigmaTy`,
 //!   `IndFormerVal`) — not K3-interned; irreducible at the value layer (G1 scope).
@@ -21,7 +25,9 @@ use std::rc::Rc;
 
 use ken_kernel::env::{Decl, GlobalEnv, PrimReduction};
 use ken_kernel::term::{GlobalId, Level, Term};
-use ken_runtime::{InternResult, Store, Value as RtValue};
+use ken_runtime::{InternResult, Sign as RtSign, Store, Value as RtValue};
+use num_bigint::{BigInt, BigUint, Sign as NumSign};
+use num_traits::ToPrimitive;
 
 // Re-export the slot-id type used by the K3 store.
 pub type SlotId = u64;
@@ -137,7 +143,7 @@ pub enum EvalVal {
     Bytes(Vec<u8>),
     /// NFC-normalized UTF-8 string (for encode/decode boundary, `38 §1.4`).
     Str(String),
-    BigInt(i128),                         // Int values > i64::MAX or < i64::MIN
+    BigInt(BigInt),                        // Int values > i64::MAX or < i64::MIN (arbitrary-precision, `18a §5.2.1`)
     Float(f64),                           // IEEE 754 double
     Float32(f32),                         // IEEE 754 single
     DecimalVal { coeff: i64, exp: i32 },  // exact base-10: coeff × 10^exp
@@ -224,6 +230,7 @@ fn to_rt(val: &EvalVal) -> Option<RtValue> {
     match val {
         EvalVal::Bool(b) => Some(RtValue::Bool(*b)),
         EvalVal::Int(n) => Some(RtValue::SmallInt(*n)),
+        EvalVal::BigInt(n) => Some(bigint_to_rt(n)),
         EvalVal::Ctor { id, args, .. } => {
             let fields: Vec<RtValue> = args.iter().filter_map(to_rt).collect();
             if fields.len() == args.len() {
@@ -515,27 +522,77 @@ fn eq_type_eq(a: &EvalVal, b: &EvalVal) -> bool {
 
 // ── numeric helpers ───────────────────────────────────────────────────────────
 
-fn i128_to_int_val(n: i128) -> EvalVal {
-    if n >= i64::MIN as i128 && n <= i64::MAX as i128 {
-        EvalVal::Int(n as i64)
-    } else {
-        EvalVal::BigInt(n)
+/// Narrow a `BigInt` arithmetic result to the `Int` fast-path representation
+/// when it fits in `i64`; otherwise keep it as `BigInt`. Purely a
+/// representation choice — the value entering here is already the exact
+/// arbitrary-precision result, so this narrowing never wraps (`18a §5.2.1(1)`).
+fn bigint_to_int_val(n: BigInt) -> EvalVal {
+    match n.to_i64() {
+        Some(i) => EvalVal::Int(i),
+        None => EvalVal::BigInt(n),
     }
 }
 
-fn eval_to_i128(v: &EvalVal) -> Option<i128> {
+impl From<i128> for EvalVal {
+    fn from(n: i128) -> Self {
+        bigint_to_int_val(BigInt::from(n))
+    }
+}
+
+fn eval_to_bigint(v: &EvalVal) -> Option<BigInt> {
     match v {
-        EvalVal::Int(n) => Some(*n as i128),
-        EvalVal::BigInt(n) => Some(*n),
+        EvalVal::Int(n) => Some(BigInt::from(*n)),
+        EvalVal::BigInt(n) => Some(n.clone()),
         _ => None,
     }
 }
 
-fn exact_int_binop(a: &EvalVal, b: &EvalVal, op: impl Fn(i128, i128) -> i128) -> EvalVal {
-    match (eval_to_i128(a), eval_to_i128(b)) {
-        (Some(av), Some(bv)) => i128_to_int_val(op(av, bv)),
+/// Total, arbitrary-precision binary `Int` op (`add_int`/`sub_int`/`mul_int`,
+/// `18a §5.2.1(1)`) — no fixed-width intermediate anywhere on this path; `op`
+/// runs entirely over `BigInt`, and the result only narrows to `Int` (never
+/// widens/wraps) after being computed exactly.
+fn exact_int_binop(a: &EvalVal, b: &EvalVal, op: impl Fn(BigInt, BigInt) -> BigInt) -> EvalVal {
+    match (eval_to_bigint(a), eval_to_bigint(b)) {
+        (Some(av), Some(bv)) => bigint_to_int_val(op(av, bv)),
         _ => EvalVal::Neutral,
     }
+}
+
+/// Convert an evaluator `BigInt` to its store representation
+/// (`Value::BigInt { sign, limbs }`) — the forward half of the F1 store
+/// round-trip (`18a §5.2.1(3)`). `to_u64_digits` is minimal by construction
+/// (no leading-zero limb), and zero's empty digit vector maps to the single
+/// canonical zero limb `canonical.rs` expects.
+fn bigint_to_rt(n: &BigInt) -> RtValue {
+    let (sign, digits) = n.to_u64_digits();
+    let limbs = if digits.is_empty() { vec![0] } else { digits };
+    let rt_sign = match sign {
+        NumSign::Minus => RtSign::Negative,
+        NumSign::NoSign | NumSign::Plus => RtSign::NonNegative,
+    };
+    RtValue::BigInt {
+        sign: rt_sign,
+        limbs,
+    }
+}
+
+/// Convert a stored `Value::BigInt { sign, limbs }` back to an evaluator
+/// value — the reverse half of the F1 store round-trip (`18a §5.2.1(3)`).
+/// No production call site reads a slot back today (the K3 store is
+/// currently write/dedup-only, `store.rs`); this establishes the conversion
+/// F1's contract requires and is exercised by the round-trip test below.
+#[allow(dead_code)]
+fn bigint_from_rt(sign: RtSign, limbs: &[u64]) -> EvalVal {
+    let u32_digits: Vec<u32> = limbs
+        .iter()
+        .flat_map(|&limb| [(limb & 0xFFFF_FFFF) as u32, (limb >> 32) as u32])
+        .collect();
+    let magnitude = BigUint::from_slice(&u32_digits);
+    let nb_sign = match sign {
+        RtSign::Negative => NumSign::Minus,
+        RtSign::NonNegative => NumSign::Plus,
+    };
+    bigint_to_int_val(BigInt::from_biguint(nb_sign, magnitude))
 }
 
 fn fixed_binop_i8(a: &EvalVal, b: &EvalVal, op: fn(i8, i8) -> i8) -> EvalVal {
@@ -591,7 +648,7 @@ fn fixed_binop_u64(a: &EvalVal, b: &EvalVal, op: fn(u64, u64) -> u64) -> EvalVal
     match (a, b) {
         (EvalVal::Int(x), EvalVal::Int(y)) => {
             let r = op(*x as u64, *y as u64) as i128;
-            i128_to_int_val(r)
+            EvalVal::from(r)
         }
         _ => EvalVal::Neutral,
     }
@@ -640,8 +697,8 @@ pub fn eval_vals_eq(a: &EvalVal, b: &EvalVal) -> bool {
         (EvalVal::Bool(x), EvalVal::Bool(y)) => x == y,
         (EvalVal::Int(x), EvalVal::Int(y)) => x == y,
         (EvalVal::BigInt(x), EvalVal::BigInt(y)) => x == y,
-        (EvalVal::Int(x), EvalVal::BigInt(y)) => (*x as i128) == *y,
-        (EvalVal::BigInt(x), EvalVal::Int(y)) => *x == (*y as i128),
+        (EvalVal::Int(x), EvalVal::BigInt(y)) => BigInt::from(*x) == *y,
+        (EvalVal::BigInt(x), EvalVal::Int(y)) => *x == BigInt::from(*y),
         (EvalVal::Float(x), EvalVal::Float(y)) => x == y,
         (EvalVal::Float32(x), EvalVal::Float32(y)) => x == y,
         (EvalVal::DecimalVal { coeff: ca, exp: ea }, EvalVal::DecimalVal { coeff: cb, exp: eb }) => {
@@ -653,8 +710,9 @@ pub fn eval_vals_eq(a: &EvalVal, b: &EvalVal) -> bool {
 
 /// Primitive reduction for registered operations (`42 §3.3`, `14 §5`).
 ///
-/// Covers `L1` numeric tower: Int (i128-exact), fixed-width, Decimal, Float,
-/// Float32, Bool, plus legacy `add`/`sub`/`mul` (wrapping i64).
+/// Covers `L1` numeric tower: Int (arbitrary-precision, `18a §5.2.1`),
+/// fixed-width, Decimal, Float, Float32, Bool, plus legacy `add`/`sub`/`mul`
+/// (wrapping i64).
 /// `L6` Bytes ops and encode/decode (`38 §1.2`, `38 §1.4`) are also grounded.
 /// Division and fault-triggering operations are out of scope (`43 §2.2`).
 /// Exposed `pub` for conformance tests in `ken-elaborator`.
@@ -669,11 +727,11 @@ pub fn prim_reduce(symbol: &str, args: &[EvalVal]) -> EvalVal {
     }
 
     match (symbol, args) {
-        // ---- Int (arbitrary-precision, i128 exact) ----
+        // ---- Int (arbitrary-precision, `18a §5.2.1`) ----
         ("add_int", [a, b]) => exact_int_binop(a, b, |x, y| x + y),
         ("sub_int", [a, b]) => exact_int_binop(a, b, |x, y| x - y),
         ("mul_int", [a, b]) => exact_int_binop(a, b, |x, y| x * y),
-        ("eq_int", [a, b]) => match (eval_to_i128(a), eval_to_i128(b)) {
+        ("eq_int", [a, b]) => match (eval_to_bigint(a), eval_to_bigint(b)) {
             (Some(av), Some(bv)) => EvalVal::Bool(av == bv),
             _ => EvalVal::Neutral,
         },
@@ -1424,6 +1482,141 @@ mod capacity_tests {
         assert!(
             store.capacity_error.is_none(),
             "repeat must not trip CapacityExhausted (44 §6 fixed-point partner)"
+        );
+    }
+}
+
+// ── F1 bignum conformance tests (`conformance/surface/numbers/seed-f1-bignum-int.md`) ──
+//
+// AC3 (store round-trip) needs the private `to_rt`/`intern` producer, so these
+// live here rather than in an external `tests/` file (which can only see the
+// `pub` surface). AC1/AC2 (no-wrap totality / independent oracle) are covered
+// externally in `tests/f1_bignum_acceptance.rs` against `prim_reduce`.
+#[cfg(test)]
+mod f1_bignum_tests {
+    use super::*;
+    use ken_runtime::Canonical;
+
+    /// Construct `2^n` as an `EvalVal` via `Shl` — a test-input constructor,
+    /// never the `add_int`/`sub_int`/`mul_int` reduction under audit.
+    fn pow2(n: u32) -> EvalVal {
+        bigint_to_int_val(BigInt::from(1u8) << n)
+    }
+
+    fn as_bigint_rt(rt: &RtValue) -> (RtSign, Vec<u64>) {
+        match rt {
+            RtValue::BigInt { sign, limbs } => (*sign, limbs.clone()),
+            other => panic!("expected Value::BigInt, got {:?}", other),
+        }
+    }
+
+    // surface/numbers/f1-store-roundtrip-above-i128-byte-identical (soundness)
+    #[test]
+    fn f1_store_roundtrip_above_i128_byte_identical() {
+        // given: mul_int(2^127, 4) = 2^129, produced by the real arithmetic
+        // path (not a hand-fed Value::BigInt).
+        let result = prim_reduce("mul_int", &[pow2(127), EvalVal::Int(4)]);
+        let rt = to_rt(&result).expect("F1 establishes the BigInt to_rt arm");
+        let (sign, limbs) = as_bigint_rt(&rt);
+        assert!(limbs.len() >= 3, "2^129 requires >= 3 u64 limbs");
+
+        // "and back": reconstruct the evaluator value from the stored
+        // representation, then re-derive its store image.
+        let reconstructed = bigint_from_rt(sign, &limbs);
+        let rt_again = to_rt(&reconstructed).expect("reconstructed value must also intern");
+
+        let mut bytes1 = Vec::new();
+        let mut bytes2 = Vec::new();
+        rt.encode_canonical(&mut bytes1);
+        rt_again.encode_canonical(&mut bytes2);
+        assert_eq!(bytes1, bytes2, "round-trip must be byte-identical (18a §5.2.1(3))");
+
+        let mut store = EvalStore::new();
+        let (InternResult::New(slot1) | InternResult::Hit(slot1)) = store.k3.intern(&rt) else {
+            panic!("expected successful intern, not capacity exhaustion");
+        };
+        let (InternResult::New(slot2) | InternResult::Hit(slot2)) = store.k3.intern(&rt_again)
+        else {
+            panic!("expected successful intern, not capacity exhaustion");
+        };
+        assert_eq!(slot1, slot2, "round-tripped value must content-address identically");
+
+        // "reduces identically": the reconstructed value behaves like the
+        // original under further reduction.
+        assert!(eval_vals_eq(&result, &reconstructed));
+        assert_eq!(
+            prim_reduce("eq_int", &[result, reconstructed]),
+            EvalVal::Bool(true)
+        );
+    }
+
+    // surface/numbers/f1-dedup-content-address-stable-across-paths (soundness)
+    #[test]
+    fn f1_dedup_content_address_stable_across_paths() {
+        // given: the same 2^128 reached by two distinct arithmetic paths.
+        let path1 = prim_reduce("mul_int", &[pow2(64), pow2(64)]);
+        let path2 = prim_reduce("mul_int", &[pow2(127), EvalVal::Int(2)]);
+        let rt1 = to_rt(&path1).expect("path1 must intern");
+        let rt2 = to_rt(&path2).expect("path2 must intern");
+
+        let mut store = EvalStore::new();
+        let (InternResult::New(slot1) | InternResult::Hit(slot1)) = store.k3.intern(&rt1) else {
+            panic!("expected successful intern, not capacity exhaustion");
+        };
+        let (InternResult::New(slot2) | InternResult::Hit(slot2)) = store.k3.intern(&rt2) else {
+            panic!("expected successful intern, not capacity exhaustion");
+        };
+        assert_eq!(
+            slot1, slot2,
+            "two eval paths to one integer must dedup to one store slot (44)"
+        );
+    }
+
+    // surface/numbers/f1-zero-and-sign-canonical (soundness)
+    #[test]
+    fn f1_zero_and_sign_canonical() {
+        let n = pow2(128);
+
+        // given: 0 via sub_int n n. This always narrows to the `Int` fast
+        // path (`bigint_to_int_val`, `18a §5.2.1(1)`) — a `BigInt`-tagged
+        // zero never reaches `to_rt` through real arithmetic. The canonical
+        // zero-limb rule is therefore pinned directly against `to_rt`'s
+        // `BigInt` arm (the real producer, just not gated behind narrowing),
+        // and the arithmetic narrowing itself is asserted as a precondition.
+        let zero = prim_reduce("sub_int", &[n.clone(), n.clone()]);
+        assert_eq!(
+            zero,
+            EvalVal::Int(0),
+            "zero must narrow to the Int fast path, never a BigInt tag"
+        );
+        let rt_zero = to_rt(&EvalVal::BigInt(BigInt::from(0))).expect("zero must intern");
+        let (zero_sign, zero_limbs) = as_bigint_rt(&rt_zero);
+        assert_eq!(
+            zero_limbs,
+            vec![0u64],
+            "zero must canonicalize to exactly one zero limb"
+        );
+        assert_eq!(zero_sign, RtSign::NonNegative, "zero must have canonical sign");
+
+        // given: -(2^128) via sub_int 0 (2^128).
+        let neg = prim_reduce("sub_int", &[EvalVal::Int(0), n.clone()]);
+        let rt_neg = to_rt(&neg).expect("negative must intern");
+        let rt_pos = to_rt(&n).expect("positive must intern");
+        let (neg_sign, _) = as_bigint_rt(&rt_neg);
+        assert_eq!(neg_sign, RtSign::Negative, "sign must be preserved");
+
+        let mut store = EvalStore::new();
+        let (InternResult::New(slot_neg) | InternResult::Hit(slot_neg)) = store.k3.intern(&rt_neg)
+        else {
+            panic!("expected successful intern, not capacity exhaustion");
+        };
+        let (InternResult::New(slot_pos) | InternResult::Hit(slot_pos)) = store.k3.intern(&rt_pos)
+        else {
+            panic!("expected successful intern, not capacity exhaustion");
+        };
+        assert_ne!(
+            slot_neg, slot_pos,
+            "+n and -n must have distinct content-addresses"
         );
     }
 }

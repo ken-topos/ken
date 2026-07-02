@@ -129,14 +129,7 @@ fn run_file(path: Option<&str>) {
 fn lit_to_eval(v: &ken_elaborator::NumericLitVal) -> ken_interp::EvalVal {
     use ken_elaborator::NumericLitVal;
     match v {
-        NumericLitVal::Int(n) => {
-            let n = *n;
-            if n >= i64::MIN as i128 && n <= i64::MAX as i128 {
-                ken_interp::EvalVal::Int(n as i64)
-            } else {
-                ken_interp::EvalVal::BigInt(n)
-            }
-        }
+        NumericLitVal::Int(n) => ken_interp::EvalVal::from(*n),
         NumericLitVal::Float(f) => ken_interp::EvalVal::Float(*f),
         NumericLitVal::Float32(f) => ken_interp::EvalVal::Float32(*f),
         NumericLitVal::Decimal { coeff, exp } => {

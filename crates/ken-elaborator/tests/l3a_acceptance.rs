@@ -503,13 +503,7 @@ fn term_mentions_type(term: &Term, id: GlobalId) -> bool {
 /// side-table the eval store consumes).
 fn lit_to_evalval(lit: &NumericLitVal) -> EvalVal {
     match lit {
-        NumericLitVal::Int(n) => {
-            if *n >= i64::MIN as i128 && *n <= i64::MAX as i128 {
-                EvalVal::Int(*n as i64)
-            } else {
-                EvalVal::BigInt(*n)
-            }
-        }
+        NumericLitVal::Int(n) => EvalVal::from(*n),
         NumericLitVal::Float(f) => EvalVal::Float(*f),
         NumericLitVal::Float32(f) => EvalVal::Float32(*f),
         NumericLitVal::Decimal { coeff, exp } => EvalVal::DecimalVal {

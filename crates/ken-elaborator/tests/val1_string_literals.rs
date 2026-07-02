@@ -20,14 +20,7 @@ fn make_store(env: &ElabEnv) -> EvalStore {
 
 fn lit_to_eval(v: &NumericLitVal) -> EvalVal {
     match v {
-        NumericLitVal::Int(n) => {
-            let n = *n;
-            if n >= i64::MIN as i128 && n <= i64::MAX as i128 {
-                EvalVal::Int(n as i64)
-            } else {
-                EvalVal::BigInt(n)
-            }
-        }
+        NumericLitVal::Int(n) => EvalVal::from(*n),
         NumericLitVal::Float(f) => EvalVal::Float(*f),
         NumericLitVal::Float32(f) => EvalVal::Float32(*f),
         NumericLitVal::Decimal { coeff, exp } => {
