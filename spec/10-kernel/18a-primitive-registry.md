@@ -33,7 +33,8 @@ One row per operation:
 
 - `BUILT × NATIVE` — stays trusted (ratified, conditional on its AC).
 - `BUILT × DEMOTE→derived` — **removed from the TCB** (a trusted op becomes
-  checked-Ken stdlib; also gains zero-delta provable laws).
+  checked-Ken stdlib; the class laws gain provability — **zero-delta** on an
+  inductive carrier, **zero-NEW-delta** over an opaque floor like `Int`).
 - `GAP × NATIVE` — a **new trusted addition** (spec-mandated, currently
   missing).
 - `LEGACY × RETIRE` — a latent-hazard reduction deleted.
@@ -468,8 +469,13 @@ bignum-`mul` coeffs + `add` exps; `eq` = normalize + bignum compare. Every op is
 **O(bignum-arithmetic) — the same cost as the native reduction** (which only
 does coeff arithmetic); **no perf cliff** (unlike `mul_int`, there is no
 derived- Decimal blow-up). So verdict **`BUILT × DEMOTE→derived`** — a **TCB
-removal**, and the *better* soundness posture: (1) `Num Decimal` laws become
-**zero-delta provable** over `(coeff, exp)` instead of postulate-only; (2) the
+removal**, and the *better* soundness posture: (1) the derived ops are
+**structural / zero-delta computational** (no trusted `*_decimal`), and the
+`Num`/`DecEq Decimal` **laws** become **zero-NEW-delta** — real structural
+proofs bottoming out only at `Int`'s audited-delta `Axiom` leaves
+(`§5.2`/`§5.4`), no
+*new* postulate — in place of the pre-demote `Decimal`-specific postulates (the
+law-carrying instances home in the lawful-classes lane); (2) the
 F4 **wrong-value** `eq_decimal` hazard **vanishes** — structural
 kernel-re-checked `Eq`, no trusted `eq_decimal` (§4 F4: a wrong `Bool` value in
 the tested-not-trusted ring, never a false proof). Gated on F1's bignum `Int`;
@@ -517,15 +523,19 @@ are unchanged for terms; only the reduction moves from trusted native primitive
 to **derived-over-bignum**. A term reduces to the **same** value after — except
 where the old value was F4-wrong, which now reduces to the correct value.
 
-**(4) Zero-delta laws — structural, kernel-re-checked.** `DecEq Decimal`
+**(4) Structural equality; zero-NEW-delta laws.** `DecEq Decimal`
 equality is **structural** over `(coeff, exp)` (kernel-re-checked), with **no**
 trusted `eq_decimal` in `trusted_base()`: the F4 **wrong-value** `eq_decimal`
 path is removed *by construction*, not patched (§4 F4: the hazard was a wrong
 `Bool` value in the tested-not-trusted ring, never a false kernel proof).
-`Num`/`DecEq Decimal` laws that were **postulate-only** pre-demote become
-**zero-delta** provable over the derived
-rep — pin at least one (e.g. `+`-commutativity, or normalize-then-`eq`
-reflexivity, AC-D3). The derived defs sit in the interpreter's
+`Num`/`DecEq Decimal` **laws** become **zero-NEW-delta**: because `Decimal` is
+`Prod Int Int` (inductive, has an eliminator), the law is a **real structural
+proof** (case-split the pair → per-component) bottoming out only at the
+`DecEq Int`/`Num Int` audited-delta `Axiom` **leaves** (`§5.2`/`§5.4`) — no
+*new* postulate beyond `Int`'s, **not** absolute-`Axiom`-free. The law-carrying
+instance + its pin (`+`-comm / eq-reflexivity) home in the **lawful-classes
+lane** (next to `Ord Int`), **not** this demote — which ships the derived ops +
+primitive removal. The derived defs sit in the interpreter's
 tested-not-trusted ring over F1's tier-b arithmetic (§5.2.1 (5)) and §5.2.2; the
 demote adds **nothing** to `trusted_base()` and touches **no** kernel file — a
 net shrink (the four `*_decimal` primitives leave).
@@ -669,14 +679,20 @@ which the naive `∨` is not.
   `Int.toChar 0x110000` (out-of-range) **reduce to `None`**; a valid scalar
   reduces to `Some` — and this **fails against a stub `isScalar := true`** (the
   obligation actually reduces, not name-matches).
-- `Ord Char`: `leq_char a b := leq_int (proj a) (proj b)` — reduces (via
-  `leq_int`, §5.2.2). Its `Ord` laws (reflexivity / antisymmetry / transitivity
-  / totality) are **carried via the projection** from `Int`'s total order, not
-  stubbed: antisymmetry rides `proj` **injectivity** (distinct scalars →
-  distinct codepoints, which holds), so the instance carries **derivable** law
-  proofs, never `Axiom` — a law-less stub instance must fail the discriminating
-  case. `leq_char` completeness rides `leq_int` reducing, which lands this
-  tranche, so **no F5 dependency remains for `Char`**.
+- `Ord Char`: `leq_char a b := leq_int (proj a) (proj b)` — the **op** reduces
+  (via `leq_int`, §5.2.2), computational and unaffected; its completeness rides
+  `leq_int` reducing (lands this tranche → **no F5 dependency remains for
+  `Char`**). The `Ord Char` **law-carrying instance** homes in the
+  **lawful-classes lane** (next to `Ord Int`), **not** this demote: after
+  refinement erasure `Char ≡ Int` (`21 §6.3`, `proj` the identity), so its `Ord`
+  laws (reflexivity / antisymmetry / transitivity / totality) **are**
+  `Ord Int`'s laws — established by **transporting** `Ord Int`'s visible
+  audited-delta
+  `Axiom`, **zero-NEW-delta** (no *new* postulate beyond `Int`'s; `§5.4`
+  `Ord Int` postulate-only), **not** independently `Axiom`-free via `proj`
+  injectivity. The honesty discriminator is a **declared-visible** law (the
+  transported `Ord Int` `Axiom`) vs a **deceptive empty/false stub**, not
+  zero-delta-vs-postulate.
 
 **(4) String→`Char` extraction COMPUTES the canonical scalar proof — the runtime
 face (soundness pin 2).** `char_at` / `string_to_list_char` construct
@@ -730,9 +746,12 @@ tranche** post-ratification, ordered by the F1 dependency root (§4.1): **F1 →
 independent-reference + boundary-operands oracle (§3). No drop-everything hotfix
 (kernel intact); pulling F1+F3 into a pre-ratification correctness patch is the
 Steward's call. The **TCB delta** Pat ratifies — the audit **net-shrinks** the
-trusted base. **Leave** (DEMOTE→derived, gaining zero-delta-provable laws in
-place of postulate-only): `Decimal` (type + ops), **`Char`** (type + ops, a
-*double* removal), `neg_int`, the `Bool` logic ops, and `checked`/`saturating`
+trusted base. **Leave** (DEMOTE→derived — the trusted op removed and its class
+laws gained: **zero-delta** on an inductive carrier like the `Bool` logic ops,
+**zero-NEW-delta** over an opaque floor like `Int`/fixed-width for the rest — in
+place of type-specific postulates): `Decimal` (type + ops), **`Char`** (type +
+ops, a *double* removal), `neg_int`, the `Bool` logic ops, and
+`checked`/`saturating`
 (all fixed-width). **Enter** (GAP→NATIVE, spec-mandated): `div`/`mod` and the
 **completed `IntN↔Int` conversion floor** (plus the `Int`/`Float`/`Decimal`
 conversions). **Deleted** (RETIRE): the legacy wrapping path. Every surviving
