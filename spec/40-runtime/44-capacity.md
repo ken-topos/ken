@@ -1,4 +1,4 @@
-# The content store: capacity, reclamation, and the lattice
+# The content store: capacity and reclamation
 
 > Status: **impl-ready (X2)**. Normative for the *principles* (loud refusal,
 > dedup accounting, no-lattice-on-the-hot-path) and the *concrete store design*
@@ -9,8 +9,10 @@
 > core** (optional research packages only); **reclamation a semantics-invisible
 > implementation detail** (manual+region now, automatic GC addable later without
 > touching surface or semantics — deferred). Contract for WS-X **X2/X4** and
-> Foundation's **K3**. Its central stance: the Leech-lattice numbers are
-> *aesthetic*, not load-bearing.
+> Foundation's **K3**. Central stance: capacity and reclamation are
+> **engineering** choices for a **systems-adjacent** language (§3); the
+> Leech-lattice numbers are *aesthetic*, not load-bearing, and out of the core
+> (§4).
 >
 > **X2 grounding (perishable-frame, K2c-s2 rule).** This elaboration is pinned
 > against the **landed** K3 store on `main` (`ken-runtime/src/store.rs`,
@@ -143,14 +145,19 @@ borrows the bytes for `memcmp`.
 
 ## 2. Capacity is an engineering choice, not numerology (OQ-5)
 
-A capacity scheme tied to the Leech lattice would fix **196,560 slots/heap** —
-the kissing number of Λ₂₄ — and 256 heaps/chain (an 8-bit heap id + 24-bit
-slot), giving ~50.3M distinct contents and ~17–18 GB/process. But the **196,560
-is aesthetic**: a 24-bit slot field holds ~16M; nothing in addressing needs the
-Leech kissing number.
+**Ken's stance:** the capacity bound is chosen on **engineering grounds**
+(encoding width, arena sizing, target scale) — **wide handles** so there is no
+practical ceiling, **loud refusal** over silent degradation at any bound, and
+**dedup-aware accounting** (capacity is measured in *distinct* values). No
+lattice numerology enters.
 
-**Ken's stance:** choose any capacity bound on **engineering grounds** (encoding
-width, arena sizing, target scale), *not* lattice numerology.
+> A Leech-lattice capacity scheme was **considered and rejected as aesthetic**.
+> It would fix **196,560 slots/heap** — the kissing number of Λ₂₄ — and 256
+> heaps/chain (an 8-bit heap id + 24-bit slot), giving ~50.3M distinct contents
+> and ~17–18 GB/process. But that 196,560 is a flourish: a 24-bit slot field
+> already holds ~16M, and nothing in addressing needs the kissing number. The
+> number is not load-bearing — this note records the rejection so it is not
+> re-proposed.
 
 - **`OQ-5` DECIDED:** keep the **"loud refusal over silent degradation"**
   philosophy — at a limit, fail loudly with a clear error; never silently drop,
@@ -244,7 +251,23 @@ plus a `distinct_count()`:
 - This accounting is **extensional-safe** (`41 §7`): it reports about the
   *store*, never about individual values' identity or provenance.
 
-## 3. Reclamation
+## 3. Reclamation and the memory model
+
+**Systems-adjacent positioning (operator ruling, 2026-07-02).** Ken is
+**systems-*adjacent***, not a bare-metal systems language: it keeps the
+software-engineering / verified aspiration and **yields the true-systems space**
+— freestanding, manual memory against the OS kernel — **to Rust**. The
+content-addressed managed heap with optional, semantics-invisible reclamation is
+the **correct** model for that positioning, not a compromise to apologise for.
+The **default is manual + region** reclamation (a `space` reset, below) — a
+**systems-native, deterministic** technique (arenas/regions, no mandatory
+collector). **Automatic GC is optional, semantics-invisible, and droppable:**
+because values are immutable and identity is content (`41 §4`), reclaiming an
+unreachable slot changes **nothing observable**, so a collector can be added
+later without a language fork and Ken is **not** "a GC language." The model does
+**not** chase bare-metal — that space is Rust's. This is settled positioning
+(`OQ-systems-target` closed in favour of systems-adjacent), stated here as the
+memory-model rationale, not a new fork.
 
 - **No automatic GC / compaction** (`OQ-gc`): the append-mostly store keeps
   slots **stable** for fast ids and O(1) equality. Slots never move; ids are
@@ -302,11 +325,13 @@ id; the global monotonic, never-reused counter guarantees a retired id is
   unreachable slot changes nothing observable; it is addable later **without a
   language fork**. **Do not build it.**
 
-## 4. The lattice machinery — three separate optional roles (OQ-6)
+## 4. The lattice machinery — considered, rejected as core (OQ-6)
 
-The Leech/Golay/Co₀ math is **not** the allocator and decomposes into **three
-distinct, code-separate** roles. If Ken includes any of it, it is scoped to
-these and **never** the hot path:
+The Leech/Golay/Co₀ math is **not** the allocator and is **out of the core**
+(`OQ-6` DECIDED) — recorded here only as an **optional forward-pointer**, not a
+core mechanism. If Ken ever includes any of it, it decomposes into three
+**distinct, code-separate** roles, each an opt-in **WS-R** package (`../50-`),
+**never** on the allocation hot path:
 
 | Role | What it is | Where it'd live |
 |---|---|---|
@@ -315,9 +340,8 @@ these and **never** the hot path:
 | **Co₀/M24 orbit canonicalization** | canonicalizing representatives under symmetry | an optional, separate utility |
 
 - **None is required** for the core language; all are opt-in libraries
-  (`../50-`).
-- The claim of specific Co₀ orbit cardinalities (98280/8386560/8292375) is
-  **not** carried as fact; if such a facility is built, those are to be
+  (`../50-`). The specific Co₀ orbit cardinalities (98280/8386560/8292375) are
+  **not** carried as fact — if such a facility is built they are to be
   computed/verified, not assumed.
 - **`OQ-6` DECIDED:** the lattice machinery is **not in the core** — available
   only as research/optional packages (strategy WS-R), **never on the allocation
