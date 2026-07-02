@@ -302,7 +302,8 @@ spec-mandated GAP→NATIVE entry, and this floor does **not** itself demote
 |---|---|---|---|---|---|
 | `IntN.toInt` (all N, widening) | `IntN → Int` | total | GAP | `Int.toIntN ∘ IntN.toInt = Some` on `T_MAX` (defining round-trip law) | **NATIVE** (floor) |
 | `Int.toIntN` (all N, narrowing) | `Int → Option IntN` | **Option** | GAP | just-above-`MAX` ⇒ `None`, **never silent `Some`** | **NATIVE** (floor) |
-| `Int.toFloat` `Decimal.toFloat` | `T → Float` | total, **documented-lossy** | GAP | rounding-sensitive value = **defined IEEE r-t-n-e** (not arbitrary); row states "lossy" | **NATIVE** |
+| `Int.toFloat` | `Int → Float` | total, **documented-lossy** | GAP | rounding-sensitive value = **defined IEEE r-t-n-e**; opaque `Int`, direct contract | **NATIVE** |
+| `Decimal.toFloat` | `Decimal → Float` | total, **documented-lossy** | GAP | **burden (re-run post-Decimal-DEMOTE):** naive `coeff.toFloat *. 10^exp` over derived `Decimal` **double-rounds** (two roundings compound → wrong last bit); **correctly-rounded decimal→binary is a real algorithm cliff** (David-Gay / Ryū-shaped, not a one-liner) → earns **NATIVE** | **NATIVE** (correct-rounding cliff) |
 | `Float.toDecimal` | `Float → Option Decimal` | **Option** | GAP | `NaN`/`∞` ⇒ `None`; finite ⇒ `Some exact` | **NATIVE** |
 
 Round-trip / conversion laws are postulate-only (opaque→opaque). **`toFloat`
@@ -362,14 +363,22 @@ type stays in the TCB). Given bignum `Int` (F1):
 
 **Two load-bearing soundness pins** (the refinement is sound only with these):
 
-1. **`isScalar : Int → Ω`** —
-   `isScalar c := (0 ≤ c ≤ 0xD7FF) ∨ (0xE000 ≤ c ≤ 0x10FFFF)` must land in **Ω**
-   (decidable, proof-irrelevant), *not* `Type`. That is what makes `Char`
-   equality reduce to **codepoint** equality by Ω-PI: two `Char`s with the same
-   codepoint but distinct scalar proofs are equal (Ω-PI) → zero-delta
-   `DecEq Char`. In `Type` the proofs would be relevant and equality would leak
-   the proof. (The `16 §1.3` Ω-sort discipline used the *right* way — a
-   sub-singleton predicate belongs in Ω.)
+1. **`isScalar : Int → Ω` via the Bool-decidable reflection** — pin the
+   *encoding*, not just the sort: `isScalar c := IsTrue (inRangeBool c)`, with
+   `inRangeBool c : Bool` =
+   `(0 ≤? c && c ≤? 0xD7FF) || (0xE000 ≤? c && c ≤? 0x10FFFF)`.
+   **`IsTrue b` is a genuine sub-singleton → proof-irrelevant → Ω.** A *naive*
+   `(…) ∨ (…) : Ω` is the **forbidden direction**: a raw disjunction is the sum
+   `A + B`, a two-constructor **proof-relevant** type that cannot sit at Ω
+   directly (`16 §1.3`, the `Bool → Ω` trap). Range-disjointness does **not**
+   rescue it — at most one summand is inhabited, but the *type* `A + B` still
+   carries the injection tag, so it stays relevant. Ω-admissible only via the
+   `IsTrue` form (pinned) or explicit truncation `‖A + B‖`. **Load-bearing:**
+   pin 1's payoff — Ω-PI making `Char` equality reduce to **codepoint** equality
+   (two `Char`s, same codepoint, distinct scalar proofs, equal by Ω-PI →
+   zero-delta `DecEq Char`) — holds only if `isScalar` is *actually*
+   proof-irrelevant, which the naive-`∨` is not (and forcing an `A + B` into Ω
+   would re-open the `Bool → Ω` inconsistency).
 2. **String→`Char` extraction emits the canonical scalar proof** — `char_at` /
    `string_to_list_char` construct `(c, canonical_proof)`; sound because a
    valid-UTF-8 `String` only yields scalars, so `isScalar c` reduces to its
