@@ -380,6 +380,19 @@ complete set of unchecked assumptions a given program depends on. Idiomatic Ken
 adds **no** postulates; classical axioms, if used, appear here and are visible
 (`16 §1.3` — Ω is intuitionistic, excluded middle is not assumed).
 
+The concrete enumeration of clause (2) — every native (`declare_primitive`)
+operation, **adversarially** re-adjudicated against the surface chapters
+(`35`/`37`/`38`), each with its verdict (`NATIVE` / `DEMOTE→derived` /
+`RETIRE`), its correctness-AC, the class laws it forecloses to
+**postulate-only**, and its
+differential-oracle net — is the **primitive-operation registry**
+(`18a-primitive-registry.md`, BUILTINS Phase 1). It is the auditable surface
+behind clause (2)'s "correct partial functions on literals": `trusted_base()`
+enumerates exactly the ops it ratifies `NATIVE`, plus the admitted postulates.
+Where a native op met an input outside its total domain the registry pins an
+**obligation-emitting / error-surfacing** reduction — never a silent wrong value
+(the partiality discipline, `18a §2`).
+
 ## 6. Metatheory status (honest accounting)
 
 The kernel's soundness commitments (`README.md §5`) and their current status:
