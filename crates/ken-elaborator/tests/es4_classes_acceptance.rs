@@ -6,38 +6,45 @@
 //! string).
 //!
 //! Scope note (Architect rulings `evt_68ppz77ysh5ne` / `wp/ES4-classes-
-//! build`, the ES4-lawproofs reopen post-K4 `3be0e30`, and the
-//! ES4-lawproofs-remainder reopen post-K5+K7): `Ord Bool`'s
-//! `refl`/`antisym`/`trans`/`total` and `DecEq Bool`'s `eq`/`sound`/
-//! `complete` are ALL REAL, kernel-checked proofs — `Ord Bool`/`DecEq Bool`
-//! are now COMPLETE zero-delta lawful instances. `refl`/`trans`/`total` use
-//! K4's Ω-motive `Elim` (`check_match_dependent`); `antisym`/`sound`/
-//! `complete` additionally need K5's `tt`/`absurd` (Top-intro/Bottom-elim)
-//! AND K7 (`eq_at_inductive` operand-whnf) — their branches conclude or
-//! hypothesize an OPERATION-WRAPPED `Equal a x y` (`IsTrue (leq x y)` etc.),
-//! a redex that only observationally collapses to `Top`/`Bottom` once the
-//! operand itself is whnf'd (K7), not just the bare-constructor case K5
-//! alone covers. Both K5 and K7 are landed on `main`; nothing here is
-//! silently claimed proved — every field is genuinely kernel-re-checked.
+//! build`, the ES4-lawproofs reopen post-K4 `3be0e30`, the
+//! ES4-lawproofs-remainder reopen post-K5+K7, and the `wp/eq-bool-sym-trans`
+//! closure post-K5+K7): every law field in `Ord Bool`, `DecEq Bool`, and
+//! `Eq Bool` is now a REAL, kernel-checked proof — all three `Bool`
+//! instances are COMPLETE zero-delta lawful instances, no `Axiom` anywhere.
+//! `refl`/`trans`/`total` use K4's Ω-motive `Elim` (`check_match_dependent`)
+//! alone; `antisym`/`sound`/`complete`/`sym`/`trans` additionally need K5's
+//! `tt`/`absurd` (Top-intro/Bottom-elim) AND K7 (`eq_at_inductive`
+//! operand-whnf) — their branches conclude or hypothesize an
+//! OPERATION-WRAPPED `Equal a x y` (`IsTrue (leq x y)`/`IsTrue (eq x y)`
+//! etc.), a redex that only observationally collapses to `Top`/`Bottom`
+//! once the operand itself is whnf'd (K7), not just the bare-constructor
+//! case K5 alone covers. K5 and K7 are both landed on `main`; nothing here
+//! is silently claimed proved — every field is genuinely kernel-re-checked.
 //!
-//! `Eq Bool`'s `sym`/`trans` are ALSO `Axiom`, but for a distinct reason —
-//! NOT the K5/Top-Bottom wall (their conclusions are `IsTrue`-shaped, never
-//! a bare `Equal a x y`). Reusing a hypothesis under a swapped-argument goal
-//! (`p : IsTrue (eq x y)` where the goal is `IsTrue (eq y x)`) needs the
-//! kernel to see two structurally-different-but-value-equal `Eq`
-//! propositions as convertible; `ken-kernel/src/conv.rs`'s `conv_struct` has
-//! no congruence case for two `Term::Eq(...)` nodes, so this fails even
-//! though the propositions are semantically identical. This is the
-//! Architect-ruled **"K6"** gap (`evt_4y4pyernxpzzt`) — `conv.rs`-only,
-//! independent of K5 (no `Top`/`Bottom`, `eq_reduce` untouched); the only
-//! admissible fix is a POSITIONAL congruence arm (a cross-wise arm would
-//! smuggle propositional symmetry into definitional equality — a hard NO).
-//! Mechanism-grounded, not just structurally confirmed (`evt_23r0bbx00g18m`):
-//! a local patch-and-revert experiment with full term dumps showed the arm
-//! is the necessary trigger that lets `conv_struct`'s recursion reach each
-//! already-case-split leaf's concrete literals, where ordinary pre-existing
-//! iota-reduction — not a new commutativity rule — closes it. K6 is its own
-//! reviewed kernel WP (not yet merged), not fixable from the surface.
+//! `Eq Bool`'s `sym`/`trans` specifically took a real correction to close
+//! (Architect ruling `evt_78ntsfnyjdtq6`, superseding the earlier K6
+//! framing at `evt_4y4pyernxpzzt`). An ORIGINAL (never-shipped) proof
+//! attempt tried reusing a hypothesis `p : IsTrue (eq x y)` directly for the
+//! swapped goal `IsTrue (eq y x)` WITHOUT case-splitting `x`/`y` — with both
+//! symbolic, `bool_eq x y`/`bool_eq y x` stay stuck `Term::Eq` nodes, and
+//! `ken-kernel/src/conv.rs`'s `conv_struct` has no congruence case
+//! comparing two `Term::Eq(...)` nodes component-wise (this stuck-pair gap
+//! is real and confirmed — "K6"). **But the Architect's sharpening: even a
+//! SOUND, POSITIONAL K6 fix would not have closed this pair** — positional
+//! congruence compares `bool_eq x y` vs `bool_eq y x` argument-by-argument
+//! (`x` vs `y`), which is FALSE for genuinely distinct free variables; the
+//! two applications are only PROPOSITIONALLY equal (via `bool_eq`'s
+//! commutativity), never definitionally equal. Closing the swap-reuse would
+//! need the UNSOUND cross-wise arm (smuggles propositional symmetry into
+//! definitional equality, collapses directed `Eq`) — a hard NO. So the
+//! hypothesis-reuse-without-case-split TECHNIQUE was the wrong tool,
+//! independent of K6's fate. The fix: the SAME full case-split
+//! `antisym`/`sound`/`complete` already use — each of the 4 (`sym`)/8
+//! (`trans`) branches independently closes with `tt`/`absurd` once `x`/`y`
+//! are concrete, never exercising any swap-congruence. K6 itself stays
+//! grounded-and-parked as a genuine but currently CUSTOMERLESS
+//! kernel-completeness gap — no proof obligation in this codebase needs a
+//! sound positional arm.
 
 use ken_elaborator::ElabEnv;
 use ken_kernel::env::Decl as KernelDecl;
@@ -198,7 +205,7 @@ fn ord_bool_provable_laws_are_real_proofs_not_postulates() {
 }
 
 #[test]
-fn eq_bool_refl_is_real_proof() {
+fn eq_bool_is_a_complete_zero_delta_instance() {
     let env = mk_env_with_package();
     let id = env.globals["Eq_instance_Bool"];
     let (_, body) = env.env.transparent_body(id).expect("Eq Bool instance is transparent");
@@ -207,18 +214,29 @@ fn eq_bool_refl_is_real_proof() {
     let sym_val = field_value(&env.env, &body, 2);
     let trans_val = field_value(&env.env, &body, 3);
     assert!(!is_opaque_const(&env.env, &eq_val), "eq must not be a postulate");
+    // `sym`/`trans`: the full case-split (`antisym`-style) closes both with
+    // `tt`/`absurd` alone — a swap-congruence K6 fix was never actually
+    // exercisable here (Architect-ruled `evt_78ntsfnyjdtq6`: positional
+    // congruence can't equate `bool_eq x y`/`bool_eq y x` for FREE x/y
+    // either — only the unsound cross-wise arm could, which stays a hard
+    // NO). K6 is independent, parked, customerless. See the `.ken` source's
+    // own comment for the full mechanism grounding.
+    for (name, v) in [("refl", &refl_val), ("sym", &sym_val), ("trans", &trans_val)] {
+        assert!(
+            !is_opaque_const(&env.env, v),
+            "Eq Bool's '{}' must be a REAL kernel-checked proof (K4+K5+K7-enabled, \
+             zero-delta) — not a postulate. Got {:?}",
+            name, v
+        );
+    }
+    let mut delta = ken_elaborator::trusted_base_delta(&env.env, id);
+    delta.remove(&env.class_env.record_nil_val_id);
     assert!(
-        !is_opaque_const(&env.env, &refl_val),
-        "Eq Bool's 'refl' must be a REAL kernel-checked proof — not a postulate. Got {:?}",
-        refl_val
+        delta.is_empty(),
+        "Eq Bool must be a zero-delta lawful instance (K4+K5+K7) — got a non-empty \
+         trusted_base_delta beyond the structural record_nil_val sentinel: {:?}",
+        delta
     );
-    // sym/trans: honest Axioms for now — NOT K5-gated (their conclusions are
-    // IsTrue-shaped, not a bare Equal a x y); blocked instead by K6, a
-    // distinct, narrow conv_struct Eq/Eq congruence gap outside this WP's
-    // lane (Architect-ruled `evt_4y4pyernxpzzt` — see the .ken source's own
-    // comment for the full mechanism grounding).
-    assert!(is_opaque_const(&env.env, &sym_val), "Eq Bool's 'sym' is a visible Axiom (K6-gated)");
-    assert!(is_opaque_const(&env.env, &trans_val), "Eq Bool's 'trans' is a visible Axiom (K6-gated)");
 }
 
 #[test]
