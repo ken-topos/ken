@@ -267,13 +267,50 @@ promote on one data point. Retire the source note atomically on promotion.
 Cross-team replication is your strongest generalization signal — two teams
 rediscovering the same lesson beats one team repeating it.
 
-## 4. Guard topology invariance
+**★ Apply the ratchet guard (§10d / §4) at every harvest.** Retros only ever
+*add* communication — "also loop in X," "relay verbatim," "cross-check Y in
+parallel" — never remove it, so the topology monotonically thickens unless you
+hold a hard line. A carry that adds a **party, relay, gate, or confirm-hop** is
+topology-touching: it does **not** promote on validation alone — it needs
+explicit operator consent. Default-reject and prefer the node-internal
+rewrite: promote the *content* the lesson wants checked (sharpen what an
+existing reviewer verifies), never the *traffic* (who else gets looped in). When
+you catch yourself thinking "more review would have caught this," that is the
+exact instinct to distrust — the fix is a sharper single check, not a new party.
+
+## 4. Guard topology invariance — and the traffic on it
 
 You own `agent/` (the workflow corpus) — its merge Decisions route to you.
 Reject any retro carry-forward or skill change that would add or move an
 inter-team communication edge or a review cycle (§9). Do not soften a rejection
 to "candidate / one more run." Node-internal improvements are welcome; the
 inter-team graph is the operator's to change.
+
+**★ The invariant is *traffic*, not just edges (operator, 2026-07-02).** The
+federation began with a thin straight-through flow (spec: leader → author → CV +
+Architect → merge; build: leader → implementer → QA → Architect + CV → merge)
+and it *works*. But retros quietly thickened it *below* the edge level — more
+parties cc'd per thread, verbatim relays, "flagging in parallel,"
+"cross-checking with," multi-party ruling committees where one decider suffices,
+pre-confirming what a gate will already check. **None adds a new edge, so the
+edge-filter above misses every one** — yet each multiplies tokens on *every
+future WP*, and the enclave is serial so the cost compounds. (The Decimal/Char
+spec WP ran 17:59→19:23 largely on this thickening.) So:
+
+- **Treat added traffic exactly like an added edge:** operator-consent-only,
+  default-reject, no "one more run" softening. A retro that loops in a party,
+  relays verbatim, adds a confirm-hop, or convenes a committee is
+  **topology-touching** — it does not promote without the operator.
+- **Complicating the flow is *very expensive* and rarely worth its local win.**
+  More eyes catch more misses — locally true, systemically ruinous. The
+  straight-through flow is the default; **trust it.** Your charter is to keep
+  the flow *thin* and *simplify it back* when it drifts; only the operator
+  widens it.
+- **Route a fork to the ONE owner of its lane** (soundness → Architect,
+  conformance → CV, scope/process → Steward) who rules — don't broadcast it to
+  the room. This is the §2-scope-checkpoint shape (Steward ruling + *one*
+  confirming gate), applied to every fork. When you frame a WP, frame the thin
+  flow; don't invite a committee.
 
 ## 5. Research dispatch (ad hoc)
 
