@@ -23,6 +23,14 @@ than engineering. Ken is **written by agents and read by humans**, and its job
 is to **prove what can be proven and state what must be tested**, legibly for a
 sufficiently-educated human. Every other principle is downstream of this one.
 
+**Ken's intended domain is broad but bounded.** Its **lower bound is
+systems-*adjacent*** — one notch above true systems programming; the
+content-addressed managed heap with optional, semantics-invisible reclamation is
+the *right* substrate for that, not a compromise (`44 §3`). Its **upper bound
+reaches application, edge, web, and mobile** compilation targets. Across that
+range Ken is a verified software-engineering language — not a bare-metal systems
+language, and not tied to one runtime or target.
+
 *In practice:* the human's scarce attention goes to **reviewing the
 specification** (the `requires`/`ensures`/refinements), not re-reading generated
 code; the code's correctness is the kernel's job (`64`). The four-way epistemic
