@@ -146,9 +146,13 @@ home each; a one-line cross-reference is added to `seed-numbers.md` AC6 +
   `Decl` variant** (reuse F1's exact-`Int`). The pulled-up `leq_int` reduce arm
   is **`trusted_base`-neutral** — `leq_int` is *already registered*
   (`numbers.rs:233`), so wiring its outer-ring reduction adds **no** primitive/
-  postulate; the net is still a **pure shrink** (four op removals + two type
-  removals). A demote that leaves a primitive registered **and** adds a derived
-  def **grows** the surface — that is the failure
+  postulate. The demote does add **one** honest-visible postulate —
+  `decimalPow10Unbounded : Int→Int`, the deferred-align stuck-marker at
+  |Δexp|>30 (`18a §5.6.1(2)`; a soundness-inert function, never reduces, never a
+  wrong value) — so the net is a **shrink of −5** (six removals − one addition),
+  **not** a zero-addition "pure shrink." A demote that leaves a primitive
+  registered **and** adds a derived def **grows** the surface — that is the
+  failure
   ([[abstraction-visibility-feature-soundness-gate]], "reuse the constant, never
   a new flag").
 - **Honesty about the boundary (§8).** `DecEq Char` (via `eq_int`) **and**
@@ -187,7 +191,15 @@ computed-proof grep) rather than a value the interpreter emits.
   F1's exact-`Int` (`num_bigint`-backed) reduction. **`trusted_base`-neutral** —
   the newly-wired `leq_int` `prim_reduce` arm adds **no** `reg_*`/`declare_*`
   (already registered at `numbers.rs:233`). **No** new kernel flag / `Decl`
-  variant (`git diff --stat crates/ken-kernel/` empty).
+  variant (`git diff --stat crates/ken-kernel/` empty). **One** honest-visible
+  `declare_postulate` **is** present — `decimalPow10Unbounded : Int→Int`
+  (`decimal_char.rs`), the deferred-align stuck-marker at |Δexp|>30 (an existing
+  `Decl::Opaque`, *not* a new `Decl` variant; a soundness-inert function that
+  never reduces) — so `trusted_base()` counts it and the net is a **shrink of
+  −5** (six removals − one addition), **not** a zero-addition one (Architect
+  ruling (a), `evt_5k40dabw333xy`: internal-marker exception accepted, the
+  demote's Q1 "zero new `declare_postulate` for the Decimal/Char **surface**"
+  holds since the marker is not surface).
 - why: a demote is a **TCB removal** only if the primitive is *deleted*, not
   shadowed by a derived def while the registration lingers. The failure mode is
   **surface growth**: a still-registered `Decimal` primitive **plus** a derived
@@ -473,11 +485,17 @@ lawful-classes-lane WP — see the deferred section.
   witness is a **computed** `IsTrue` inhabitant — never a postulated/fabricated
   scalar proof; `isScalar` is `IsTrue (<computed Bool>)` uniformly, never a `∨`
   at Ω. No path admits a non-scalar `Char`.
-- **TCB strictly shrinks.** Two type-level removals (`Decimal` + `Char`) + four
-  op removals (`add/sub/mul/eq_decimal`); the `leq_int` arm is neutral
-  (already-registered); zero additions to `trusted_base()`, zero new kernel
-  flags/`Decl` variants. The net delta is **negative** (a real TCB removal), the
-  ADR 0009 adversarial-burden migration.
+- **TCB net-shrinks (−5), not zero-addition.** Two type-level removals
+  (`Decimal` + `Char`) + four op removals (`add/sub/mul/eq_decimal`) = **six**
+  removals; the `leq_int` arm is neutral (already-registered); **one** honest-
+  visible addition — `decimalPow10Unbounded : Int→Int`, the deferred-align
+  stuck-marker (`18a §5.6.1(2)`; a soundness-inert `Decl::Opaque` function,
+  never reduces). No new kernel flags / `Decl` variants. The net delta is a
+  **shrink of −5** (six − one), **negative** (a real TCB removal), the ADR 0009
+  adversarial-burden migration — but **not** the "zero additions to
+  `trusted_base()`" a *pure* shrink would claim (Architect ruling (a): the
+  internal-marker exception is accepted, so this is the honest-visible
+  characterization the demote lands on, not a hole).
 
 ## Deferred to later tranches (not covered here — honesty about the boundary)
 
