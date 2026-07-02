@@ -108,6 +108,42 @@ while drafting. Resolved items move to an ADR (`../docs/adr/`).
   `record`-vs-`data` and Lean structure-η.
 - **Affects.** `10-kernel/14 §4` (updated), `13 §3`.
 
+### OQ-decimal-eq — Lawful equality over `Decimal`'s non-canonical carrier — **OPEN**
+- **Fork.** `Decimal`'s DEMOTE carrier is `Prod Int Int`
+  (`MkDecimalPair coeff exp`) — **non-canonical**: many representations per
+  numeric value (`(10, -1)` and `(1, 0)` both denote `1.0`). The lawful
+  `DecEq`/`Num` contracts tie `eq`/ops to the kernel's **definitional `Equal`**
+  (`DecEq.sound : IsTrue (eq x y) → Equal a x y`, `51 §2.2`). Value-equality
+  `decimalEq` (align-then-compare) reduces `True` on structurally-distinct
+  pairs, so a `sound` `Axiom` would inhabit `Bottom` (`MkDecimalPair`
+  injectivity → `Equal Int 10 1 → Bottom`). So **no lawful class over `Decimal`
+  that ties `eq`/ops to `Equal` is deliverable** on the current carrier — a
+  decide-once basis call, not a per-instance rediscovery (`DecEq Decimal`,
+  `Num Decimal` both hit the identical wall).
+- **Options.** **(a) Canonicalize the carrier** — a normalized representation
+  (one `(coeff, exp)` per value), so `decimalEq` **is** structural `Equal` and
+  `DecEq`/`Num` transport soundly (a representation-semantics WP that changes
+  the already-shipped carrier). **(b) Setoid / quotient `Eq Decimal`** — target
+  `Eq` (an equivalence, no `Equal`-tie) or a quotient carrier, retargeting the
+  shared `DecEq`/`Num` `sound`/`complete` contract to setoid equality (blast
+  radius across every `DecEq`/`Num` instance — a shared-contract design change).
+  Neither is free: even honest `Eq Decimal` bottoms on missing `Int` arithmetic
+  lemmas
+  (`refl` needs `sub_int e e = 0`, `mul_int c 1 = c`).
+- **Contrast — `Char` is unaffected.** `Char = { c : Int | isScalar c }` is
+  **canonical** (one carrier value per codepoint, `proj` identity, `isScalar`
+  Ω-irrelevant), so `Equal Char x y ≡ Equal Int (proj x) (proj y)`
+  definitionally and `Ord Char`/`DecEq Char` transport `Int`'s **true**
+  meta-theorem `Axiom` soundly. Canonical-vs-non-canonical is the whole
+  discriminator.
+- **Status.** **OPEN** — the single gate for the future `class Num` +
+  `Decimal`-equality lane. The `Decimal` DEMOTE ships only its **computational**
+  ops (exact base-10 arithmetic + primitive removal, `18a §5.6`), which are
+  unaffected; no lawful-`Decimal` deliverable is in flight, so this is not
+  urgent.
+- **Affects.** `10-kernel/18a §5.6`/`§5.6.1` (the `Eq`-not-`DecEq` boundary),
+  `50-stdlib/51` (the shared `DecEq`/`Num` contract), a future `class Num` WP.
+
 ---
 
 ## B. Verification
