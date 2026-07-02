@@ -20,6 +20,12 @@ for `add_int`/`sub_int`/`mul_int`/`eq_int`.
 and are the de-facto standard, widely-adopted Rust bignum/numeric-trait crates**
 (the ADR 0009 "earned industry trust" criterion).
 
+**Mechanism: exact-pinned + checksum-locked, not a physical vendor tree.**
+This repo has no `vendor/` directory; the addition is reproducible and
+re-checkable via the exact-version pins above (`=0.4.6`/`=0.2.19`, never a
+range) plus `Cargo.lock`'s SHA-256 content hash for each crate, which
+`cargo build --locked` (CI) verifies on every build.
+
 ### `unsafe`-status audit
 
 **`num-bigint` 0.4.6** (12 blocks):
