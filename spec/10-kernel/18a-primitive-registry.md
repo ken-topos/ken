@@ -242,6 +242,109 @@ consumed through a library interface, no primitive ops (§5.10).
 > obligation), NATIVE. Only bignum `neg_int` (symmetric range, no overflow)
 > demotes to the `sub_int 0 x` one-liner.
 
+### 5.2.1 F1 delivery contract — the "iff bignum" half
+
+The §5.2 verdicts read **NATIVE iff bignum**: `add_int` / `sub_int` / `mul_int`
+/ `eq_int` / `leq_int` are trusted native reductions **only once** their
+reduction is genuine arbitrary-precision — a fixed-width intermediate that wraps
+or panics is the F1 wrong value, and a wrong value forecloses the eventual K3
+promotion (a reduction that can produce a wrong value cannot be promoted to
+kernel-executed). WP F1 (`docs/program/wp/F1-bignum-int.md`) delivers that half.
+This subsection is the **normative contract** the delivery satisfies; it fixes
+*what the reduction must guarantee*, not the Rust that guarantees it (the
+interpreter line anchors are perishable build detail, carried in the WP brief).
+
+**(1) Totality — no fixed-width intermediate on the arithmetic path.** For
+`add_int` / `sub_int` / `mul_int` the reduction computes the **exact**
+mathematical integer for every operand pair, with **no** `i64` / `i128` (or any
+fixed-width) value anywhere on the arithmetic path — not as an accumulator, not
+as an intermediate, not as a fast-path result that later overflows. A
+small-integer fast path is permitted **only** as a representation optimisation
+that widens to the arbitrary-precision type *before* any operation that could
+exceed its range, so it is never the path that wraps. `eq_int` / `leq_int`
+compare over the **true** integers, never over truncated fixed-width images: two
+distinct integers that share a fixed-width residue must **not** compare equal.
+This is the `18 §5` clause-(2) "correct partial function on literals" made total
+for the floor ops.
+
+**(2) The reduction interface is FROZEN.** The symbol-keyed primitive
+registrations — the `add_int` / `sub_int` / `mul_int` / `eq_int` / `leq_int`
+symbols, their arity, and their `PrimReduction::Op` entries in the elaborator's
+number-primitive registry — are **unchanged** by F1. F1 replaces the
+*representation and the arithmetic behind* the symbols, never the surface a term
+elaborates against: a term that reduced through these symbols before F1 reduces
+through the identical symbols after, and only the value it reaches changes (from
+a wrapped/panicking one to the exact one). Renaming, re-arity-ing, or
+re-registering any of them is out of scope and a break.
+
+**(3) Store round-trip — a contract F1 ESTABLISHES, not merely preserves.** The
+run-time store already carries the arbitrary-precision representation:
+`Value::BigInt { sign, limbs }` — sign-magnitude, little-endian `limbs`, under
+the `minimal_limbs` canonical invariant (no trailing zero limbs; a single zero
+limb for `0`), content-addressed. The interpreter's evaluator value does **not**
+currently populate it — there is no big-integer arm on the eval→store
+conversion today, so a value beyond the fixed-width ceiling cannot intern at all
+— so this is a bijection F1 **establishes**, not one it preserves. F1 fixes the
+lossless conversion at the store boundary in **both** directions: every
+evaluator arbitrary-precision integer converts to
+`Value::BigInt { sign, limbs }` and back **byte-identically**, the
+`minimal_limbs` invariant is preserved by
+construction (a freshly reduced value is canonicalised, never emitted with a
+non-minimal limb vector), and content-addressing (`canonical.rs`) stays stable —
+equal integers intern to the same content hash regardless of the arithmetic
+route that produced them. This is a **testable obligation**: round-trip
+byte-identity + minimal-limb canonicity + cross-boundary hash stability.
+
+**(4) Crate-vetting — the ADR 0009 rubric-step-1 gate, made concrete.** F1 is
+the first Phase-2 dogfood of ADR 0009's **curate-before-construct** rubric: the
+arbitrary-precision arithmetic is **sourced from a battle-tested external crate,
+not constructed in-tree** (in-tree / proved construction is the deferred K3 —
+ADR 0009 tier-c — question, not this WP). The concrete vetting gate the curated
+crate must clear — the `63` re-check discipline applied to a tool-chain build
+dependency:
+
+- **Pure safe Rust.** No `unsafe` on the arithmetic path — either the crate is
+  `#![forbid(unsafe_code)]`, or every `unsafe` block is audited and the audit is
+  recorded. (Default candidate `num-bigint`; fall back to a forbid-unsafe
+  equivalent — `ibig` / `dashu` — if the default carries un-audited `unsafe`.)
+- **Permissive, non-copyleft licence.** MIT / Apache-2.0 / BSD class —
+  clean-room-compatible; **no** GPL / AGPL / CeCILL (a copyleft dependency is a
+  clean-room violation, not merely a licence preference).
+- **Actively maintained, widely adopted.** The "earned industry trust" that is
+  the ADR 0009 selection criterion (rubric step 1) — a maintained,
+  broadly-depended-on crate, not an abandoned or niche one.
+- **Vendored + version-pinned + dependency-delta recorded.** The exact version
+  is pinned, the crate (and its transitive additions) vendored, and the
+  dependency delta documented per `63` + ADR 0009 — licence, `unsafe`-status,
+  version, and transitive-crate additions all recorded, so this addition to the
+  tool-chain's own trusted computing base is legible and re-checkable on update.
+
+**(5) Trust level — tier-b tested-not-trusted, NOT a `trusted_base()` line.**
+The curation move (rubric step 1) sources the crate, but the resulting trust
+posture is **tier-b (tested-not-trusted)**, not tier-a: F1 adds **nothing** to
+`trusted_base()` and touches **no** `ken-kernel` file. The whole `prim_reduce`
+path is the interpreter's outer, tested-not-trusted ring — structurally gated
+out of every proof-relevant position (the kernel keeps `Eq` at a primitive type
+**neutral**; there is no `eq → Eq` reflection bridge and no evaluator dependency
+in the kernel), so a curated-crate bug is a **wrong value, never a false
+proof**. The single external net for these floor reductions is the **§3
+differential oracle** against an *independent* arbitrary-precision reference —
+never the production crate on both sides (that is green-vs-green against the
+very bug). The **tier-c proved-native promotion** (K3, kernel-executed
+reductions) is a **separate, later** WP that re-decides the *trusted*
+representation behind this same frozen interface; F1 neither performs nor
+presumes it.
+
+**Guardrails (do-not-reopen, spec-level).** Interp-local; no `trusted_base()`
+promotion (`declare_primitive` / `declare_postulate` untouched); no kernel file
+changed (the neutral-`Eq`-at-primitive reduction stays neutral); the §2
+partiality discipline and the numeric-tower surface (`§5.6`–`§5.9`) unchanged. A
+kernel-touch is a **scope error → STOP and escalate**, not an F1 task. F1 is a
+reduction-**value** change, so its no-regression gate is **workspace-green**
+(the `18a` / K7 lesson): golden vectors and `.ken` artifacts riding the old
+fixed-width behaviour migrate in the *same* green landing unit — never a
+crate-only diff.
+
 ### 5.3 Fixed-width arithmetic — the four op-classes (`35 §3.2`)
 
 | symbol | signature | current-state | reduction / partiality | oracle-ref | burden | provability | verdict |
