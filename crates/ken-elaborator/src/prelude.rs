@@ -277,6 +277,13 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     let decimal_char_env = crate::decimal_char::register_decimal_char(elab)
         .map_err(|e| ElabError::Internal(format!("Decimal/Char demote failed: {}", e)))?;
 
+    // `IntN<->Int` conversion floor + `checked_*`/`saturating_*` DEMOTE
+    // (`18a §5.7`, Phase-2 tranche #4). Needs the 8 `IntN`/`UIntN` type ids
+    // (from `register_numeric_env`, already run) and `Option`/`Some`/`None`
+    // (declared above, before this function's `lookup` closure).
+    crate::conversions::register_conversions(elab)
+        .map_err(|e| ElabError::Internal(format!("IntN<->Int conversions failed: {}", e)))?;
+
     // `isSorted : Π(a:Type). (a → a → Bool) → List a → Ω` (ES2-remainder,
     // `37 §6`: the explicit-comparator form, `Ord`-class deferred).
     //

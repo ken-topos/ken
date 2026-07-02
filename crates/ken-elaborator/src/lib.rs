@@ -11,6 +11,7 @@ mod ast;
 pub mod bytes;
 pub mod classes;
 pub mod capabilities;
+pub mod conversions;
 pub mod data;
 pub mod decimal_char;
 pub mod diagnostics;
