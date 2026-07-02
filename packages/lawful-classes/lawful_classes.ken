@@ -139,9 +139,21 @@ instance Ord Int {
 -- comparing two `Term::Eq(...)` nodes component-wise, so two stuck
 -- (not-yet-collapsed) `Eq` propositions that are semantically equal but
 -- not syntactically identical fail to convert. This is a narrow, distinct
--- kernel gap (a missing structural-congruence arm, no new reduction
--- semantics) -- confirmed by a local patch-and-revert experiment, not
--- something Team Language can fix from the surface. Independent of K5.
+-- kernel gap ("K6" -- Architect-ruled, `conv.rs`-only, independent of K5:
+-- no `Top`/`Bottom`, `eq_reduce` untouched). The only admissible fix is a
+-- POSITIONAL congruence arm (`conv_struct(ty1,ty2) && conv_struct(x1,x2)
+-- && conv_struct(y1,y2)`) -- a cross-wise arm would smuggle propositional
+-- symmetry into definitional equality (unsound: collapses directed `Eq`,
+-- enables unproven-symmetry transport via `cast`) and is a hard NO.
+-- Mechanism-grounded (not just structurally confirmed): the arm is the
+-- necessary trigger that lets `conv_struct`'s recursion reach each
+-- already-case-split leaf's concrete literals, where ordinary
+-- pre-existing iota-reduction (not a new commutativity rule) closes it --
+-- confirmed by a local patch-and-revert experiment with full term dumps,
+-- not something Team Language can fix from the surface. K6 is its own
+-- reviewed kernel WP (not yet merged); this instance re-derives its
+-- `sym`/`trans` obligation-shape against K6 once it lands, same
+-- capability-gate-reopen discipline as the K5/`antisym` un-stage.
 
 view bool_leq (a : Bool) (b : Bool) : Bool = match a { False => True ; True => b }
 view bool_eq (a : Bool) (b : Bool) : Bool = match a { True => b ; False => match b { True => False ; False => True } }

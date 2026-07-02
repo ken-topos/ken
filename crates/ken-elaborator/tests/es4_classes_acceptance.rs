@@ -23,10 +23,17 @@
 //! kernel to see two structurally-different-but-value-equal `Eq`
 //! propositions as convertible; `ken-kernel/src/conv.rs`'s `conv_struct` has
 //! no congruence case for two `Term::Eq(...)` nodes, so this fails even
-//! though the propositions are semantically identical. Confirmed via a
-//! local patch-and-revert experiment (adding the missing congruence arm
-//! makes both directions typecheck); this is a narrow, independent kernel
-//! gap, not fixable from the surface, and not the same fix as K5.
+//! though the propositions are semantically identical. This is the
+//! Architect-ruled **"K6"** gap (`evt_4y4pyernxpzzt`) — `conv.rs`-only,
+//! independent of K5 (no `Top`/`Bottom`, `eq_reduce` untouched); the only
+//! admissible fix is a POSITIONAL congruence arm (a cross-wise arm would
+//! smuggle propositional symmetry into definitional equality — a hard NO).
+//! Mechanism-grounded, not just structurally confirmed (`evt_23r0bbx00g18m`):
+//! a local patch-and-revert experiment with full term dumps showed the arm
+//! is the necessary trigger that lets `conv_struct`'s recursion reach each
+//! already-case-split leaf's concrete literals, where ordinary pre-existing
+//! iota-reduction — not a new commutativity rule — closes it. K6 is its own
+//! reviewed kernel WP (not yet merged), not fixable from the surface.
 
 use ken_elaborator::ElabEnv;
 use ken_kernel::env::Decl as KernelDecl;
@@ -202,11 +209,12 @@ fn eq_bool_refl_is_real_proof() {
         refl_val
     );
     // sym/trans: honest Axioms for now — NOT K5-gated (their conclusions are
-    // IsTrue-shaped, not a bare Equal a x y); blocked instead by a missing
-    // Term::Eq/Term::Eq congruence case in conv_struct (a distinct, narrow
-    // kernel gap outside this WP's lane — see the .ken source's own comment).
-    assert!(is_opaque_const(&env.env, &sym_val), "Eq Bool's 'sym' is a visible Axiom (documented scope)");
-    assert!(is_opaque_const(&env.env, &trans_val), "Eq Bool's 'trans' is a visible Axiom (documented scope)");
+    // IsTrue-shaped, not a bare Equal a x y); blocked instead by K6, a
+    // distinct, narrow conv_struct Eq/Eq congruence gap outside this WP's
+    // lane (Architect-ruled `evt_4y4pyernxpzzt` — see the .ken source's own
+    // comment for the full mechanism grounding).
+    assert!(is_opaque_const(&env.env, &sym_val), "Eq Bool's 'sym' is a visible Axiom (K6-gated)");
+    assert!(is_opaque_const(&env.env, &trans_val), "Eq Bool's 'trans' is a visible Axiom (K6-gated)");
 }
 
 #[test]
