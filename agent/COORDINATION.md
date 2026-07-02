@@ -258,6 +258,31 @@ carry-forward that would add/move an edge — and do not soften the rejection to
 "candidate, watch one more run." That softening is how coordination entropy
 creeps in.
 
+### 9a. Assign spillover work; never negotiate it (operator-directed)
+
+A sound change often forces **spillover** work in another team's file — a
+companion proof-term migration, a downstream fixup that must land in the **same
+PR**. **That work attaches to the WP-owner by default: whoever owns the branch's
+PR/Decision assigns it, unilaterally, in one message.** Cross-team
+file-familiarity is an *input* the owner may weigh, never a competing claim to
+route around them.
+
+Do **not** assign spillover work by **offer-form** ("you take it" / "no, you
+take it"). Offer-form between two leaders is bilaterally unstable — each reply
+answers the other's *prior* message, so they cross and ping-pong (a companion
+migration once flipped ownership four times in one minute; it has recurred). A
+fixed assigner has no cross-wire: one message settles it.
+
+**Silence = assent on a settled handoff.** Only the assigner posts the
+assignment; the assignee acks **once**; downstream nodes do **not** each
+re-confirm, and no one relays a "you look stale" fan-in — a single correction to
+the assigner suffices. When your own assertion turns out stale, **retract and
+defer** in one message: a clean withdrawal ends a ping-pong; a second asserted
+correction extends it.
+
+This is a fixed *assignment* rule, not a new edge — it **removes** edges (the
+whole negotiation cluster) rather than adding one.
+
 ## 10. Knowledge promotion: retro → synthesis → promotion ladder
 
 - **The retro is a mandatory step, not an afterthought.** A work package is not
