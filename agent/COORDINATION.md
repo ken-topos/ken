@@ -34,8 +34,17 @@ team leaders, the Integrator, and the Steward run schedulers.
 
 ## 2. Mention discipline
 
-**Mention an agent iff the next move in the workflow is theirs.** Every mention
-costs the recipient tokens and fires a notification.
+**Mention an agent iff you are (a) asking them a question or (b) expecting a
+specific action/move from them — nothing else.** Every mention costs the
+recipient tokens and fires a notification. Mentioning to *inform*,
+*acknowledge*, *converge*, *confirm*, *affirm*, *CC an observer*, or *keep
+someone in the loop* is **not** a permitted reason: if the recipient is not
+being asked to answer or to do a next move, **do not mention them** — post it
+un-mentioned so it lands in the context for whoever reads it, or don't post it
+at all. (Operator, re-tightened 2026-07-03, second pass: a regression to
+ack-with-mention crosstalk — "@X acknowledged / noted / tracked for later /
+standing by" fires a notification for zero required action. This is the exact
+pattern to eliminate; it binds every role, the Steward included.)
 
 **A mootup mention is the *only* way you reach a teammate.** Every agent in the
 federation is an **already-running, persistent peer** with its own always-on
@@ -229,6 +238,19 @@ ack is therefore a mention-free *reply* inside an existing thread). Together the
 let an agent broadcast "I'm alive and moving" through cheap, non-interrupting
 channels — status + threaded mention-free ack — reserving mentions for genuine
 handoffs.
+
+**A mention is never an acknowledgment (operator, 2026-07-03, second pass).**
+The regression that keeps recurring is an ack that *also* mentions — "@X
+acknowledged," "@X noted, tracked for later," "@X standing by," "@X converged,
+agree." Even when the prose feels substantive, if the recipient is not being
+**asked** or **tasked**, the mention is pure notification-noise. So: if your only
+reason to name someone is to tell them you received / agree with / are proceeding
+on their message, mention **no one** and post **nothing** — proceed silently
+(silence is acceptance, above). Reserve every mention for a question or an
+expected next move (§2 opening). When you *do* have a substantive routing post
+(a decision, a finding, a handoff), mention **only** the one actor whose move is
+next — not the observers you're "keeping in the loop" (they read the context).
+This applies to the Steward's own posts as much as anyone's.
 
 **Title convention (the single-space articulation tag).** The whole federation
 runs in one space (`ken-topos`), so a thread's **title is its team tag** — there
