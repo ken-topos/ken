@@ -5,9 +5,13 @@
 > operations**. Operator-locked shape (OQ-A, 2026-07-03): a **proved, pure,
 > `Ord k`-keyed** associative map, **shipped as ordinary package Ken — out of
 > `trusted_base()`, not a kernel builtin**. It is the container companion to
-> the lawful classes (`51`): its structure is an ordinary inductive and **every
-> correctness law is a real kernel proof, not a postulate** (`README §2`,
-> `../20-verification/21 §3`). **No new kernel feature:** the carrier is a
+> the lawful classes (`51`): its structure is an ordinary inductive and its
+> correctness laws are **real kernel proofs, not postulates — no `Axiom`
+> stubs** (`README §2`, `../20-verification/21 §3`), with the **five inductive**
+> law proofs deferred to a **named** follow-on (`map-verified-laws`, §7d)
+> pending two build-completeness capabilities (dependent-motive recovery +
+> transport) the elaborator does not yet expose (§5) — a **buildability**
+> boundary, not soundness. **No new kernel feature:** the carrier is a
 > `data` type (`../30-surface/34 §1`), the operations are `view` defs, the laws
 > are `Ω` propositions (`../10-kernel/16 §1`); if the build adds a kernel
 > rule/former or a `declare_primitive`, it has over-built.
@@ -132,7 +136,9 @@ three core `lookup` laws (§5.2) instead lean on **`refl`** (`IsTrue (leq k k)`,
 the found key equals itself) and **`total`**/`leq`-determinism, which need **no
 `Equal` promotion**. Confining `antisym → Equal` to the overwrite law keeps the
 canonical-carrier dependency **localized and auditable** — the found-after-
-insert and locality laws hold over the induced order alone.
+insert and locality laws hold over the induced order alone. (This is the
+**canonicity** axis; their *buildability* is separate — both are deferred
+Branch-B proofs hitting Gap A + Gap B, §5/§7d — the axes are orthogonal.)
 
 ## 3. Representation — a bare ordered binary search tree
 
@@ -221,12 +227,53 @@ the opaque `Set` primitive alongside `Map` (§1.1).
 
 ## 5. Invariant + correctness — real proof terms
 
-All laws below are carried as **real kernel proofs**, parametric in the `Ord k`
-dictionary (§5.4). The proof idiom is the landed one (`51 §6`, `Ord Bool` /
-`DecEq Bool.sound`): case-split on the tree constructor with the `Ω`-motive
-eliminator (`14 §3`, K4), reduce the operation redex so an equation goal
-`Equal … (Some v)` / `Equal … True` whnf-collapses and closes with `refl`/`tt`;
-an impossible ordering branch closes with `absurd`.
+The `§5` laws split by **whether the proof inducts over the (non-nullary)
+`Tree`/`List` carrier at all**, and then by which construction capability that
+induction needs. There are **two distinct capability walls** — both
+**build-completeness shortfalls against already-specified behavior**, not spec
+gaps (the elaborator lags the spec):
+
+- **Gap B — dependent-motive recovery over non-nullary families.** Any proof
+  that **inducts** over `Tree`/`List` and must **narrow a hypothesis about the
+  scrutinee** through the `match` is blocked: `check_match_dependent` — the only
+  per-branch type-narrowing path — is gated to **nullary constructors only**
+  (`elab.rs:455`, `ind.constructors.iter().all(|c| c.args.is_empty())`), so a
+  `Cons`/`Node` scrutinee falls to `infer_match`'s **constant** motive (no
+  narrowing). The spec already commits to the general mechanism
+  (`../30-surface/34-data-match.md §Dependent-motive-recovery`, `:145-166`); the
+  elaborator under-implements it (same shape as `sct-completeness (a)`).
+- **Gap A — transport over a stuck comparison.** A proof that *additionally*
+  must **reduce/align an abstract, irreducibly *stuck* `leq k k'`** (keys are
+  variables, not the concrete constructors `Ord Bool` case-splits on) needs a
+  **propositional-rewrite / transport (`J`/`cast`) step** to fire the internal
+  `if`. No `.ken`-reachable transport former exists (`elab.rs` constructs no
+  `Term::J`/`Term::Cast`; `Refl` only checks pre-existing convertibility) — it
+  would surface the kernel's **existing** `Term::J`/`Cast` (Steward's
+  `surface-transport` WP).
+
+**In this WP (Branch A) — the two *non-inductive* laws.** Only proofs that never
+induct clear both walls, discharging by the landed idiom (`51 §6`, `Ord Bool` /
+`DecEq Bool.sound`): `Ordered empty` (`Ordered Leaf = ⊤`, closed by `tt`) and
+`lookup k empty = None` (`lookup k Leaf = None`). Neither case-splits a
+`Node`/`Cons`, so neither needs hypothesis-narrowing or transport.
+
+**Deferred (Branch B) — the five inductive laws**, each tagged with the wall(s)
+it hits (§7d `map-verified-laws`, gated on **both** capability WPs):
+
+- **Gap B only:** the **`toList` ordered law** + its two list lemmas (§5.3) — it
+  inducts over `Tree`/`List` (needs dependent-motive recovery) but is
+  **comparison-free** (`toList` never calls `leq`), so it clears Gap A.
+- **Gap A + Gap B:** `Ordered`-preservation (§5.1), found-after-insert and
+  locality (§5.2 laws 2–3), and the `toList`↔`lookup` agreement (§5.3) — each
+  both inducts over the carrier **and** must align a stuck `leq k k'`.
+
+**Buildability, not soundness.** All five laws are **true**, their proofs exist
+mathematically **and are spec-consistent** (they use the dependent-match `34`
+already specifies); the elaborator cannot yet *construct* them. **No `Axiom`
+stubs** — deferred proofs are simply **not built** (a named follow-on, §7d),
+never postulated; "proved, not tested" holds. And **no shipped code leans on a
+deferred law** — the operations are plain functions, not `Ordered`-indexed /
+proof-carrying types (the AC3 guardrail, §9).
 
 ### 5.1 The ordering invariant `Ordered` (naturally `Ω`)
 
@@ -246,38 +293,49 @@ of `trusted_base()`**, never a postulate (the `37 §6` surface-minimality
 discipline: an opaque invariant makes the obligation undischargeable or
 circular). It models `37 §6`'s `isSorted` exactly, lifted from lists to trees.
 
-**Preservation (load-bearing, this WP):** `Ordered empty` and `Ordered m ⇒
-Ordered (insert k v m)`. This is what makes `lookup` correct — proved by
-induction on the tree, using `trans`/`total` to thread the key bounds through
-the recursive `insert`.
+**Preservation.** `Ordered empty` is immediate (`Ordered Leaf = ⊤`, closed by
+`tt` — **Branch A, built**; no induction). `Ordered m ⇒ Ordered (insert k v m)`
+is **Branch B, deferred** (`map-verified-laws`, §7d — **Gap A + Gap B**): it
+inducts over `m : Tree` narrowing the `Ordered` hypothesis (Gap B) **and** must
+align the stuck `leq k k'` at each `Node` to thread key bounds (Gap A). It is
+what will make `lookup` provably correct once both capabilities land.
 
-### 5.2 The core `lookup` laws (this WP; `refl`/`total`, no `Equal` promotion)
+### 5.2 The core `lookup` laws (`refl`/`total`, no `Equal` promotion)
 
-1. **`lookup k empty = None`** — immediate (`empty = Leaf`).
+1. **`lookup k empty = None`** — immediate, no induction. **Branch A, built.**
 2. **`lookup k (insert k v m) = Some v`** (found-after-insert) — induction on
-   `m`. `lookup` retraces `insert`'s path under the *same* key and comparisons;
-   at the node where `insert` placed/overwrote `k`, `leq k k` holds by
-   **`refl`** so the found branch fires and returns `v`. Leans on `refl` +
-   `leq`-determinism; the returned value is `v` whichever key label the node
-   carries, so **no `antisym → Equal` step is needed.**
+   `m`; `lookup` retraces `insert`'s path under the *same* key, and at the node
+   where `insert` placed/overwrote `k`, `leq k k` holds by **`refl`** so the
+   found branch returns `v` (no `antisym → Equal` — the value is `v` whichever
+   key label the node carries). **Branch B, deferred (§7d — Gap A + Gap B):** it
+   inducts over `m` (Gap B) and must align the stuck `leq k k'` at each interior
+   `Node` to prove the `insert` and `lookup` paths coincide (Gap A).
 3. **locality** — `distinct k k' ⇒ lookup k' (insert k v m) = lookup k' m`,
    where `distinct k k' := ¬ (IsTrue (leq k k') ∧ IsTrue (leq k' k))`
-   (order-distinct). Inserting `k` does not perturb the lookup of an
-   order-distinct `k'`. Proved by induction using `Ordered m` + `trans`/`total`
-   to show `k`'s insertion path and `k'`'s lookup path diverge. Uses the order
-   laws, **not** `Equal`.
+   (order-distinct); inserting `k` does not perturb an order-distinct `k'`'s
+   lookup, by induction with `Ordered m` + `trans`/`total` (order laws, **not**
+   `Equal`). **Branch B, deferred (§7d — Gap A + Gap B):** carrier induction +
+   stuck-`leq` alignment.
 
-### 5.3 `toList` ordered law + agreement (this WP)
+### 5.3 `toList` ordered law + agreement (both deferred)
 
-- **Ordered law (load-bearing):** `Ordered m ⇒ isSorted (λ a b. leq (fst a)
-  (fst b)) (toList m)` — the in-order traversal is **ascending by key**, reusing
-  `37 §6`'s `isSorted` predicate. This delivers the frame's "ordered iteration"
-  conformance and `letter-frequency`'s deterministic output **without touching
-  permutation** (§7c). Naturally `Ω`.
-- **Agreement (naturally `Ω`, included):** `lookup k m = assoc k (toList m)` — a
-  key's map lookup agrees with a linear scan of its ordered entry list (`assoc`
-  the landed list-lookup shape). Naturally structural/`Ω`; ties the tree and its
-  list view together.
+- **Ordered law (load-bearing) — Branch B, deferred (§7d — Gap B only).**
+  `Ordered m ⇒ isSorted (λ a b. leq (fst a) (fst b)) (toList m)` — the in-order
+  traversal is **ascending by key**, reusing `37 §6`'s `isSorted` predicate. It
+  is **comparison-free** (`toList` never calls `leq`; the proof feeds `IsTrue`
+  witnesses from `Ordered`'s `allKeys` into `isSorted`'s `Ω`-conjuncts via two
+  list lemmas — `isSorted`-over-`++` and `allKeys`↔`allInList (toList)` — never
+  reducing a stuck boolean), so it **clears Gap A**. But it **inducts over
+  `Tree`/`List`** narrowing an `Ordered`/`allKeys` hypothesis, so it hits **Gap
+  B** (the nullary dependent-match gate). Consequence: `letter-frequency`'s
+  deterministic ordered output is honest **by the conformance test**
+  (red-until-built) **in this WP**, and **by proof** once Gap B lands — **not**
+  by proof today (§8). Still **without touching permutation** (§7c).
+- **Agreement — Branch B, deferred (§7d — Gap A + Gap B).** `lookup k m = assoc
+  k (toList m)` — a key's map lookup agrees with a linear scan of its ordered
+  entry list (`assoc` the landed list-lookup shape). Its proof **inducts** (Gap
+  B) **and** must **align `lookup`'s comparison descent with the ordered list**,
+  matching a **stuck** `leq k k'` (Gap A).
 
 **The overwrite/uniqueness face** — where two distinct-looking keys with
 `leq k k' ∧ leq k' k` are identified so `insert` overwrites rather than
@@ -288,19 +346,23 @@ design.
 
 ### 5.4 The proofs are parametric in the dictionary
 
-The map's proofs take `d : Ord k` and use
+The map's proofs — the two Branch-A laws built now, and the five Branch-B laws
+once their Gap-A/Gap-B capabilities land (§5, §7d) — take `d : Ord k` and use
 `d.antisym`/`d.trans`/`d.total`/`d.refl` as **hypotheses**. They are therefore
 **real proof terms independent of whether a given `Ord k` instance's own laws
 are `Axiom` (Int/Char) or real (Bool)** — the proof does not care *how* the
-order laws were established, only that the dictionary provides them. Two
+order laws were established, only that the dictionary provides them (so a
+Branch-B proof, when built, is real regardless of the key's instance). Two
 consequences pin the conformance (§8):
 
 - **AC3's "fails against a stub" net is at the *map-proof* level**, not the
-  `Ord k`-instance level: replace the map's invariant/correctness term with
+  `Ord k`-instance level: replace a **shipped (Branch-A)** proof term with
   `Axiom` and the discriminating case must **fail** — and **for the right
   reason** (it must *exercise* the swapped-to-`Axiom` proof via a downstream
   consumer or kernel obligation that needs the real term, not merely detect its
-  textual absence). ([[lawful-class-instances-must-carry-law-proofs]].)
+  textual absence). The **Branch-B** laws (§7d) are **absent, not `Axiom`** —
+  named-deferred, so nothing stubs them and no client leans on them (§9 AC3
+  guardrail). ([[lawful-class-instances-must-carry-law-proofs]].)
 - **Operations run over `Char` keys** end-to-end through the real interpreter:
   `Ord Char`'s `leq = int_leq` **computes**, so `insert`/`lookup`/`toList`
   evaluate on real Char-keyed maps (the `letter-frequency` shape) even though
@@ -327,12 +389,13 @@ persistent-tree parking, `37 §3.2`).
 
 Confirmed by Architect (structure/scope) + spec-leader + Steward.
 
-**In this WP** (all naturally-`Ω`, real proof terms, no truncation, unblocked):
+**In this WP** (Branch A — the two *non-inductive* laws; neither case-splits a
+`Node`/`Cons`, so both clear Gap A **and** Gap B; §5):
 
-- `Ordered` invariant + **its preservation by `insert`** (§5.1) — load-bearing.
-- The three core `lookup` laws (§5.2): `lookup k empty = None`; `lookup k
-  (insert k v m) = Some v`; the order-distinct locality law.
-- The **`toList` ordered law** + the `lookup`↔`toList` agreement (§5.3).
+- `Ordered`'s / `allKeys`' **definitions** (§5.1) — the `Ω`-predicates
+  themselves (`declare_def` recursions), not any proof about them.
+- `Ordered empty` (`Leaf` → `tt`) and `lookup k empty = None` (`Leaf` → `None`)
+  — the two shipped **law proofs**.
 
 **Deferred to a tracked follow-on** (each a *named* follow-on, never a silent
 gap — AC3):
@@ -348,8 +411,24 @@ gap — AC3):
   distinct derivations), so it cannot be `data Perm : Ω` directly; it needs
   `∥Perm_rel∥` or a count-equality form (`37 §6`,
   [[proof-relevant-inductive-cannot-be-declared-at-omega]]), **and** Perm
-  discharge is the known `C5` prover gap. The **ordered** `toList` law (§5.3) is
-  its naturally-`Ω` substitute that ships now.
+  discharge is the known `C5` prover gap. The **ordered** `toList` law (§5.3, in
+  (d) below) is its naturally-`Ω` substitute — it sidesteps permutation
+  entirely, and delivers ordered iteration by the conformance test in-WP (it too
+  awaits Gap B for a *proof*, §5.3/§8).
+- **(d) `map-verified-laws` — the five inductive laws** (§5.1 preservation, §5.2
+  found-after-insert + locality, §5.3 `toList` ordered law + agreement). Each
+  **inducts over the non-nullary `Tree`/`List` carrier** narrowing a hypothesis
+  → **Gap B** (dependent-motive recovery, which the elaborator under-implements
+  vs. the already-specified `../30-surface/34-data-match.md
+  §Dependent-motive-recovery`, `:145-166`; `check_match_dependent`'s nullary
+  gate, `elab.rs:455`). Four of the five *additionally* must **align a stuck
+  `leq k k'`** → **Gap A** (a `.ken` `subst`/`cast`/`transport` former surfacing
+  the kernel's *existing* `Term::J`/`Cast`, Steward's `surface-transport` WP —
+  the same frontier `lawful_classes.ken`'s relational laws need).
+  `toList`-ordered is **Gap-B-only**. **Gated on both** capability WPs — each a
+  build-completeness fix against already-specified behavior, **zero
+  `trusted_base` delta**; `map-verified-laws` lands on top. **Not `Axiom`-
+  stubbed** — deferred and named, never postulated (§5).
 
 ## 8. Conformance pointer
 
@@ -359,8 +438,13 @@ keys: count occurrences, emit in ascending key order) — **not** a hand-fed
 harness ([[conformance-hand-feeds-the-deliverable]]). Cases pin the value
 **and** the ascending-key order (the `toList` law is what makes output
 deterministic), tagging any deferred surface spelling `(oracle)`. The
-proved-not-stubbed discriminator (AC3) flips at the **map-proof** level and
-must fail **for the right reason** (§5.4).
+proved-not-stubbed discriminator (AC3) flips at the **map-proof** level and must
+fail **for the right reason** (§5.4) — applied to the **two shipped Branch-A
+proofs** (`Ordered empty`, `lookup k empty = None`). **Ordered iteration is
+honest by the conformance test in-WP** (the `toList`-ordered law is
+red-until-built, Gap B — §5.3), and **by proof** once Gap B lands; the **five
+Branch-B** proofs (§7d) are AC3's acceptance target, named-not-stubbed until
+their gaps close.
 
 ## 9. Acceptance
 
@@ -374,9 +458,16 @@ must fail **for the right reason** (§5.4).
   is **gone** from `trusted_base()`.
 - **AC2 — operations correct end-to-end** through the real interpreter (the §8
   round-trips + ordered iteration + `letter-frequency` shape).
-- **AC3 — proved, not stubbed.** The §5 invariant + laws are real proof terms; a
+- **AC3 — proved, not stubbed.** The **two Branch-A** §5 proofs (`Ordered
+  empty`, `lookup k empty = None`) + the `Ordered`/`allKeys` **definitions** are
+  **real proof terms** (no induction, so both capability walls are cleared); a
   discriminating test **fails against a stub/`Axiom` map-proof, for the right
-  reason** (§5.4). Deferred laws (§7) are named follow-ons, not silent gaps.
+  reason** (§5.4). The **five Branch-B** inductive laws (§7d
+  `map-verified-laws`) are a **named follow-on gated on the Gap-A/Gap-B
+  capability WPs, never `Axiom`-stubbed** — and the guardrail is a **hard build
+  condition:** no shipped code may lean on a deferred law (operations are plain
+  functions, not
+  `Ordered`-indexed / proof-carrying types). Named follow-on, not a silent gap.
 - **AC4 — no regression.** `cargo test --workspace` green; lawful `Ord` and the
   rest of `packages/` behave identically pre/post.
 - **AC5 — build-lane retirement is real (hard Foundation build AC).** The
