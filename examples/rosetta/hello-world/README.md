@@ -6,32 +6,21 @@ Reference: <https://rosettacode.org/wiki/Hello_world/Text>
 
 ## Status
 
-**PARTIALLY implemented — string literal elaborates; I/O blocked by one gap.**
+**Working, end to end.** `ken run examples/rosetta/hello-world/hello-world.ken`
+prints `Hello, World!` and exits 0 — confirmed after
+`wp/console-harvest-fix` (`6701b29`) landed the Console-ID harvest fix in
+`ken-cli` (the two gaps below are both closed).
 
-## GAP: string literals — FIXED (`37 §2.1`, VAL1-surface)
+## History (both gaps now closed)
 
-`Token::Str` (double-quoted strings) is now parsed in `parse_atom_expr`
-and wired through resolve/elab/eval. `"Hello, World!"` elaborates to type
-`String` and evaluates to `EvalVal::Str("Hello, World!")`. The current
-`hello-world.ken` uses the literal directly:
-
-```ken
-view main : String = "Hello, World!"
-```
-
-## GAP: no runtime print / I/O surface
-
-There is no `print_line` or equivalent function accessible in a `.ken` program.
-The Console effect exists as an ITree construct in the elaborator/interp tests,
-but has no surface-visible name.
-
-Required fix: expose `print_line : String -> IO Unit` as a `foreign` postulate
-wired to the ITree Console effect. This is tracked as a separate gap and is
-pending `wp/VAL1-console-exec` (runtime-leader's work).
-
-## Intended program (once GAP-io-surface is closed)
+- **String literals** (`37 §2.1`, VAL1-surface): `Token::Str` parses and
+  elaborates to `String`/`EvalVal::Str`.
+- **`print_line : String -> IO Unit`**: exposed as a derived prelude `view`
+  (`ken-elaborator/src/prelude.rs`), reducing to
+  `Vis Unit (Write s) (\_. Ret Unit MkUnit)`. `ken run` now correctly
+  harvests the Console IDs (`wp/console-harvest-fix`) and drives the
+  resulting `ITree` through `run_io`, printing to real stdout.
 
 ```ken
-foreign print_line : String -> IO Unit = "puts" "libc" [Console]
 view main : IO Unit = print_line "Hello, World!"
 ```

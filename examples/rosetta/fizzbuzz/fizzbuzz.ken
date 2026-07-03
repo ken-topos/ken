@@ -4,16 +4,20 @@
 -- Task: for n = 1..20, print "FizzBuzz" if n is divisible by 15,
 -- "Fizz" if divisible by 3, "Buzz" if divisible by 5, else print n.
 --
--- GAP-string-literals: FIXED (VAL1-surface, `37 §2.1`).
--- GAP-io-surface (blocking): no surface print function.
--- GAP-subtraction/modulo/comparison: not in surface BinOp.
--- GAP-bool-match: Bool is opaque (not `data Bool = True | False`).
--- GAP-nat-literals: integer literals elaborate at Int.
--- GAP-nested-patterns: nested constructor patterns like `Suc (Suc Zero)`
---   in match position trigger ReachabilityError. Workaround: modular
---   accumulator types with flat patterns only.
---
--- All views below elaborate correctly.
+-- VAL2 status update -- most of the gaps this file originally documented
+-- are CLOSED (`GAP-io-surface`: `print_line`/`ken run` Console execution
+-- landed; `GAP-bool-match`: `Bool` is directly `match`able now, see
+-- `packages/collections/collections.ken`'s `compareChar`; `GAP-string-
+-- literals`: FIXED, VAL1-surface). `GAP-nested-patterns` still holds (the
+-- reason for the `Mod3`/`Mod5` modular-accumulator workaround below, kept
+-- as-is). See `KNOWN-GAP.md` for the ONE gap that still blocks a real
+-- `main`: printing the bare `n` in the `Plain` (non-Fizz/Buzz) case needs
+-- decimal `Nat`->`String` conversion, which is a real, tracked, currently
+-- EXPONENTIAL-cost operation in `ken-interp` (the `natToDecimal` finding,
+-- `wp/RTP1-interp-sharing` in flight) -- infeasible at the range this task
+-- needs (1..20), unlike `gcd`'s single-digit result. The classification
+-- logic below (`Mod3`/`Mod5`/`classify`) is unaffected and elaborates
+-- correctly on its own.
 
 -- Classification result.
 data FizzTag = Plain | IsFizz | IsBuzz | IsFizzBuzz
@@ -68,3 +72,10 @@ view classify (n : Nat) : FizzTag =
                   Zero_    => IsBuzz ;
                   NonZero_ => Plain }
   }
+
+-- GAP-natToDecimal-range (BLOCKING, see KNOWN-GAP.md): the `Plain` case
+-- needs to print the bare decimal `n` (e.g. "1", "2", "4", "7", ...) --
+-- infeasible at this range with the current exponential-cost
+-- `natToDecimal`. Placeholder until that's resolved (or the range is
+-- small enough to be safe, per the tracked finding's growth curve).
+view main : Nat = Zero

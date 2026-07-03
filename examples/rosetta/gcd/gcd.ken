@@ -13,6 +13,26 @@
 --   triggers ReachabilityError. Workaround: split into `natCmpZero` helper
 --   (non-recursive, declared before `natCmp`) with only flat `Zero | Suc n`
 --   patterns.
+--
+-- GAP-natToDecimal-wholeprogram (BLOCKING, see KNOWN-GAP.md): printing
+-- this file's result via decimal `Nat`->`String` conversion is NOT
+-- feasible today, even though the result itself (`4`) is small. Confirmed
+-- empirically: the exact same `natToDecimal(4)` computation that takes
+-- ~55ms when totally isolated (11 declarations) takes upwards of 60s+ the
+-- moment ~7 MORE declarations are added to the same program -- even
+-- gcd.ken's own PRE-EXISTING helpers (`natAdd`/`natSub`/`natCmp`/
+-- `natGcdFueled`/`natGcd`/`OrdResult`), nothing borrowed from any
+-- package. This is a broader, more severe version of the already-tracked
+-- `natToDecimal`/`merge-sort` exponential family: it's sensitive to TOTAL
+-- PROGRAM SIZE (declaration count), not just the printed value's depth --
+-- routed to language-leader/Steward/Architect, bears on the in-flight
+-- `wp/RTP1-interp-sharing` fix.
+
+-- Local `OrdResult` (matches the `natCmp`-adjacent precedent,
+-- `val1_string_literals.rs:334`) -- needed by `natCmp` for the GCD
+-- algorithm itself, independent of the (now-removed) decimal-printing
+-- attempt above.
+data OrdResult = Lt | Eq | Gt
 
 -- ── Nat helpers ──────────────────────────────────────────────────────────────
 
@@ -79,7 +99,45 @@ view ten    : Nat = Suc nine
 view eleven : Nat = Suc ten
 view twelve : Nat = Suc eleven
 
+-- ── Decimal printing (BLOCKED, see KNOWN-GAP.md) ─────────────────────────────
+--
+-- `ken-interp` has no `div_int`/`mod_int` primitive, so decimal conversion
+-- would need to go via structural `Nat` peeling (`sub10`: ten chained flat
+-- `Zero|Suc` matches) + a `Nat`-fuel loop -- the same shape as this file's
+-- own `natGcdFueled`. GAP-natToDecimal-wholeprogram (see the file header)
+-- makes this genuinely infeasible even for this file's small result (`4`)
+-- once the machinery is added to a program this file's own size --
+-- confirmed empirically, not attempted here. Once resolved
+-- (`wp/RTP1-interp-sharing`), the intended `main` is:
+--
+-- view sub10 (n : Nat) : Option Nat =
+--   match n { Zero => None Nat ; Suc n1 =>
+--   match n1 { Zero => None Nat ; Suc n2 => ... (10 levels) ... } }
+--
+-- view mod10Fueled (fuel : Nat) (n : Nat) : Nat =
+--   match fuel { Zero => n ; Suc f => match sub10 n { None => n ; Some n2 => mod10Fueled f n2 } }
+-- view mod10 (n : Nat) : Nat = mod10Fueled n n
+--
+-- view div10Fueled (fuel : Nat) (n : Nat) (q : Nat) : Nat =
+--   match fuel { Zero => q ; Suc f => match sub10 n { None => q ; Some n2 => div10Fueled f n2 (Suc q) } }
+-- view div10 (n : Nat) : Nat = div10Fueled n n Zero
+--
+-- view digitChar (d : Nat) : String =
+--   list_char_to_string (Cons Char ((48 : Int) + natToInt d) (Nil Char))
+--
+-- view natToDecimalFueled (fuel : Nat) (n : Nat) : String =
+--   match fuel { Zero => digitChar n ; Suc f =>
+--     match div10 n { Zero => digitChar (mod10 n) ;
+--                     Suc q => concat (natToDecimalFueled f (Suc q)) (digitChar (mod10 n)) } }
+--
+-- view natToDecimal (n : Nat) : String =
+--   match n { Zero => "0" ; Suc m => natToDecimalFueled (Suc m) (Suc m) }
+--
+-- view main : IO Unit = print_line (natToDecimal (natGcd twelve eight))
+
 -- ── Oracle ───────────────────────────────────────────────────────────────────
 
--- main: gcd(12, 8) = 4
+-- main: gcd(12, 8) = 4 (not printed via IO -- see GAP-natToDecimal-
+-- wholeprogram above; this evaluates the real GCD algorithm correctly,
+-- just returns the value rather than driving Console output).
 view main : Int = natToInt (natGcd twelve eight)

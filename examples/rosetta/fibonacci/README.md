@@ -6,7 +6,11 @@ Reference: <https://rosettacode.org/wiki/Fibonacci_sequence>
 
 ## Status
 
-**Working.** All declarations elaborate. `main` evaluates to `55` (= F(10)).
+**Algorithm correct; printing blocked, see `KNOWN-GAP.md`.** All
+declarations elaborate; `main` evaluates to `55` (= F(10)) in-process, but
+does not print it via `ken run` — decimal `Nat`->`String` conversion is
+confirmed infeasible at this size (the `natToDecimal` family, tracked
+separately, fix in flight on `wp/RTP1-interp-sharing`).
 
 ## Implementation notes
 
