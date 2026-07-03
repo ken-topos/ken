@@ -49,15 +49,36 @@ example (using only `List`/`Nat`) never tripped this.
 
 ## Fix needed (capability, not a Language-lane workaround)
 
-Root cause is in the elaborator's dependent-match motive computation for
-user-declared inductives (`crates/ken-elaborator/src/elab.rs`) — likely a
-context-extension or de-Bruijn-indexing defect when a constructor's field
-list contains the recursive type more than once. Root-cause detail
-dispatched to a research agent and routed to language-leader/Steward
-separately from this dir's finding. This is squarely the VAL2 frame's "gap
-whose fix needs a new capability" boundary — not something to route around
-inside this light-gated mini-WP (there's no Ken-surface workaround: the
-motive computation itself is defective, not a missing library feature).
+Root cause pinned precisely (research dispatched, confirmed): in
+`crates/ken-elaborator/src/elab.rs`, `compile_match_matrix`'s `ColKind::Ih`
+branch (2364-2394), via the `tail_codomain` helper (2296-2322). A
+constructor with 2+ recursive fields produces one "Ih" (induction-
+hypothesis) column per recursive field, laid out as flat siblings in the
+pattern-matrix (`build_ctor_buckets`, 2515-2597 — e.g. `[Real, Real, Ih,
+Ih]` for `N10 x y`). The bug: each Ih slot's type is computed by folding
+*everything still pending after that column* via `tail_codomain` — which,
+with 2+ Ih columns, wrongly includes the *next sibling* Ih column as if it
+were an outer split's genuine continuation. `tail_codomain`'s fold-every-
+remaining-column behavior is correct for that outer-continuation case
+(its actual intended use, at the split-column call site, 2475-2480) but
+wrong here: it over-builds the first Ih's type as an extra Pi/arrow layer
+around what should be the plain, non-arrow `ret_ty`. That's exactly the
+kernel `TypeMismatch` above (`expected` a bare lambda, `found` a Pi). A
+scope-confusion bug, not de-Bruijn shifting or type-deduplication: the
+code has no way to distinguish "my own constructor's next Ih sibling"
+from "the enclosing match's real pending tail," and always folds them
+together. With 0-1 recursive fields there's no sibling Ih to wrongly
+sweep up, which is why `List`/`MyList`-shaped types are unaffected.
+
+Candidate fix (not attempted — outside this light-gated mini-WP's scope):
+the `ColKind::Ih` branch should compute `ih_ty` as plain
+`weaken(ret_ty, real_depth_so_far)` when the pending tail is itself
+sibling Ih columns from the same constructor, reserving `tail_codomain`'s
+full-fold behavior for a genuinely-outer pending split. Routed to
+language-leader/Steward as its own capability WP (VAL2 frame's "gap whose
+fix needs a new capability" boundary) — there's no Ken-surface workaround,
+the motive computation itself is defective, not a missing library
+feature.
 
 ## Intended program (once resolved)
 
