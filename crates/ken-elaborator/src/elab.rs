@@ -14,7 +14,7 @@ use ken_kernel::{
     infer as kernel_infer,
     inductive::{peel_app, recursive_args},
     sct::sct_check,
-    subst::{subst0, subst_outer, subst_var, weaken},
+    subst::{subst0, subst_outer, weaken},
     whnf, Context, Decl, GlobalEnv, GlobalId, InductiveDecl, Level, LevelVar, Term,
 };
 
@@ -433,15 +433,24 @@ fn check(cx: &mut ElabCtx, expr: &RExpr, expected: &Term, _span: &Span) -> Resul
                 RPatKind::Ctor(_, subs) => subs.iter().all(|s| matches!(s.kind, RPatKind::Var(_) | RPatKind::Wild)),
                 _ => false,
             });
-            // Further restrict to NULLARY-constructor families (`Bool`,
-            // every carrier this WP's law proofs actually case-split on).
-            // A parameterized/non-nullary family (`List a`'s `Cons`, what
-            // `isSorted`/`Perm` match on) is left entirely to the existing
-            // `infer_match` path — untouched, not just by preference but
-            // because this narrower builder hasn't been validated against
-            // ctor-argument telescopes yet (a real, contained follow-on,
-            // not something to risk on a live prelude decl).
-            let nullary = flat
+            // Further restrict to NON-INDEXED families (`Bool`, `List a`,
+            // `Tree`, every carrier a proof case-splits on). `check_match_
+            // dependent` generalizes the motive over the scrutinee only
+            // (`Term::Elim{indices: vec![]}`, always) — correct exactly when
+            // the family has zero result-indices (`34 §3.2`'s general case
+            // degenerates to this for a non-GADT family). Every family
+            // reachable via ordinary surface `data` syntax has zero indices
+            // (`elab_data_decl`/`data.rs` hardcodes `indices: vec![]` /
+            // `target_indices: vec![]` unconditionally — there is no surface
+            // GADT/index syntax today), so this is not a scope restriction in
+            // practice, only a defensive guard against ever mis-handling a
+            // hand-built indexed family (e.g. `Perm`) this way. Indexed
+            // families are a distinct, harder later WP (index
+            // generalization + higher-order pattern unification, `39 §2.3`).
+            // Nested constructor sub-patterns (`Suc (Suc m)`) stay on the
+            // existing general `infer_match`/`compile_match_matrix` compiler
+            // regardless (`flat` already excludes those).
+            let dependent_eligible = flat
                 && {
                     let (probe_core, probe_ty) = infer(cx, scrut)?;
                     match probe_core {
@@ -452,7 +461,7 @@ fn check(cx: &mut ElabCtx, expr: &RExpr, expected: &Term, _span: &Span) -> Resul
                                 Term::IndFormer { id, .. } => cx
                                     .env
                                     .inductive(id)
-                                    .map(|ind| ind.constructors.iter().all(|c| c.args.is_empty()))
+                                    .map(|ind| ind.indices.is_empty())
                                     .unwrap_or(false),
                                 _ => false,
                             }
@@ -460,7 +469,7 @@ fn check(cx: &mut ElabCtx, expr: &RExpr, expected: &Term, _span: &Span) -> Resul
                         _ => false,
                     }
                 };
-            if nullary {
+            if dependent_eligible {
                 check_match_dependent(cx, scrut, arms, expected, span)
             } else {
                 let (core, inferred_ty) = infer_match(cx, scrut, arms, span)?;
@@ -473,6 +482,108 @@ fn check(cx: &mut ElabCtx, expr: &RExpr, expected: &Term, _span: &Span) -> Resul
             unify_types(&mut cx.metas, expected, &inferred_ty);
             Ok(core)
         }
+    }
+}
+
+/// Replace `Var(j)` with `u` (weakened under binders as usual), leaving
+/// EVERY OTHER free variable's index completely UNCHANGED — no decrement.
+///
+/// Unlike `subst_var` (built for β-reduction: substituting into a binder's
+/// body while that binder is REMOVED, so indices above the target must shift
+/// down to close the gap), this is for goal-GENERALIZATION over one
+/// particular value while the surrounding context does NOT shrink: the
+/// generalized variable (e.g. a `match` scrutinee) stays a real entry in Γ —
+/// only this NEW term (the motive body) stops referencing it directly, in
+/// favor of a fresh outer binder. Any OTHER free variable in `term` — in
+/// particular one declared BEFORE the generalized variable (e.g. a generic
+/// `(a : Type)` parameter closed over by the goal) — keeps its ORIGINAL
+/// index; `subst_var`'s decrement would silently misindex it onto whatever
+/// happens to sit one slot over, a `TypeMismatch`-producing bug invisible on
+/// every prior nullary-family case only because none of those goals happened
+/// to reference a variable positioned above the scrutinee.
+fn subst_var_generalize(term: &Term, j: usize, u: &Term) -> Term {
+    let u_under = |binder: usize| -> Term { ken_kernel::subst::shift(u, binder as i64, 0) };
+    match term {
+        Term::Var(i) => {
+            if *i == j {
+                u_under(0)
+            } else {
+                Term::Var(*i)
+            }
+        }
+        Term::Pi(a, b) => Term::pi(
+            subst_var_generalize(a, j, u),
+            subst_var_generalize(b, j + 1, &u_under(1)),
+        ),
+        Term::Lam(a, t) => Term::lam(
+            subst_var_generalize(a, j, u),
+            subst_var_generalize(t, j + 1, &u_under(1)),
+        ),
+        Term::Sigma(a, b) => Term::sigma(
+            subst_var_generalize(a, j, u),
+            subst_var_generalize(b, j + 1, &u_under(1)),
+        ),
+        Term::Let { ty, val, body } => Term::Let {
+            ty: Box::new(subst_var_generalize(ty, j, u)),
+            val: Box::new(subst_var_generalize(val, j, u)),
+            body: Box::new(subst_var_generalize(body, j + 1, &u_under(1))),
+        },
+        Term::App(f, a) => Term::app(subst_var_generalize(f, j, u), subst_var_generalize(a, j, u)),
+        Term::Pair(a, b) => Term::pair(subst_var_generalize(a, j, u), subst_var_generalize(b, j, u)),
+        Term::Proj1(p) => Term::proj1(subst_var_generalize(p, j, u)),
+        Term::Proj2(p) => Term::proj2(subst_var_generalize(p, j, u)),
+        Term::Ascript(t, a) => Term::Ascript(
+            Box::new(subst_var_generalize(t, j, u)),
+            Box::new(subst_var_generalize(a, j, u)),
+        ),
+        Term::Eq(a, t, u2) => Term::Eq(
+            Box::new(subst_var_generalize(a, j, u)),
+            Box::new(subst_var_generalize(t, j, u)),
+            Box::new(subst_var_generalize(u2, j, u)),
+        ),
+        Term::Cast(a, b, e, t) => Term::Cast(
+            Box::new(subst_var_generalize(a, j, u)),
+            Box::new(subst_var_generalize(b, j, u)),
+            Box::new(subst_var_generalize(e, j, u)),
+            Box::new(subst_var_generalize(t, j, u)),
+        ),
+        Term::J(ml, d2, e) => Term::J(
+            Box::new(subst_var_generalize(ml, j, u)),
+            Box::new(subst_var_generalize(d2, j, u)),
+            Box::new(subst_var_generalize(e, j, u)),
+        ),
+        Term::Quot(a, r) => Term::Quot(
+            Box::new(subst_var_generalize(a, j, u)),
+            Box::new(subst_var_generalize(r, j, u)),
+        ),
+        Term::QuotClass(t) => Term::QuotClass(Box::new(subst_var_generalize(t, j, u))),
+        Term::Trunc(a) => Term::Trunc(Box::new(subst_var_generalize(a, j, u))),
+        Term::TruncProj(t) => Term::TruncProj(Box::new(subst_var_generalize(t, j, u))),
+        Term::Refl(t) => Term::Refl(Box::new(subst_var_generalize(t, j, u))),
+        Term::QuotElim { motive, method, respect, scrut } => Term::QuotElim {
+            motive: Box::new(subst_var_generalize(motive, j, u)),
+            method: Box::new(subst_var_generalize(method, j, u)),
+            respect: Box::new(subst_var_generalize(respect, j, u)),
+            scrut: Box::new(subst_var_generalize(scrut, j, u)),
+        },
+        Term::Elim { fam, level_args, params, motive, methods, indices, scrut } => Term::Elim {
+            fam: *fam,
+            level_args: level_args.clone(),
+            params: params.iter().map(|p| subst_var_generalize(p, j, u)).collect(),
+            motive: Box::new(subst_var_generalize(motive, j, u)),
+            methods: methods.iter().map(|m| subst_var_generalize(m, j, u)).collect(),
+            indices: indices.iter().map(|i| subst_var_generalize(i, j, u)).collect(),
+            scrut: Box::new(subst_var_generalize(scrut, j, u)),
+        },
+        Term::Absurd(motive, proof) => Term::Absurd(
+            Box::new(subst_var_generalize(motive, j, u)),
+            Box::new(subst_var_generalize(proof, j, u)),
+        ),
+        Term::Type(_)
+        | Term::Omega(_)
+        | Term::Const { .. }
+        | Term::IndFormer { .. }
+        | Term::Constructor { .. } => term.clone(),
     }
 }
 
@@ -491,6 +602,21 @@ fn check_match_dependent(
     expected: &Term,
     span: &Span,
 ) -> Result<Term, ElabError> {
+    // Zonk `expected` up front: a bare surface `(a : Type)` parameter's own
+    // TYPE may still carry an unresolved universe metavariable at this point
+    // (pinned to `Type 0` only once something concrete unifies against it,
+    // which can happen LATER in the body than this function runs) — the
+    // kernel has no notion of elaborator metavariables (`Level::Var` is just
+    // an opaque, non-zero level to it), so an unzonked `expected` applying
+    // that parameter to a family whose own param is concretely `Type 0`
+    // (every surface `data`, `data.rs`) surfaces as a spurious `TypeMismatch
+    // {expected: Type 0, found: Type <meta>}` the moment `kernel_infer` (or
+    // any downstream kernel check) looks at it or its shape shows up inside
+    // a reconstructed method/motive. This was always latent here — masked
+    // before because only NULLARY families reached `check_match_dependent`,
+    // and none of those goals closed over a still-unresolved generic type
+    // parameter this early.
+    let expected = &cx.metas.zonk_term(expected);
     let (scrut_core, scrut_ty_raw) = infer(cx, scrut)?;
     let scrut_ty = whnf(cx.env, &cx.ctx, &scrut_ty_raw);
     let scrut_idx = match &scrut_core {
@@ -523,11 +649,23 @@ fn check_match_dependent(
 
     // The motive: `expected` with `Var(scrut_idx)` abstracted to a fresh
     // outer binder — `weaken` shifts every free var (scrut_idx included) up
-    // by 1 first, then `subst_var` replaces the shifted scrut_idx with the
-    // new Var(0); every OTHER free var is left as-is by `subst_var`'s
-    // `i < j` branch, exactly matching its new (one-deeper) home.
-    let motive_body = subst_var(&weaken(expected, 1), scrut_idx + 1, &Term::var(0));
-    let motive_sort = kernel_infer(cx.env, &cx.ctx, expected)
+    // by 1 first, then `subst_var_generalize` replaces the shifted scrut_idx
+    // with the new Var(0); every OTHER free var (in particular one declared
+    // BEFORE the scrutinee, e.g. a generic `(a : Type)` param the goal
+    // closes over) keeps its shifted-by-1 index UNCHANGED — the scrutinee's
+    // own binder is not actually leaving Γ, so nothing above it should be
+    // renumbered (plain `subst_var` would wrongly decrement it onto
+    // whatever sits one slot over; see `subst_var_generalize`'s doc).
+    let motive_body = subst_var_generalize(&weaken(expected, 1), scrut_idx + 1, &Term::var(0));
+    // `expected` is already zonked (above); the CONTEXT itself may still
+    // hold an unresolved metavariable for some other in-scope parameter
+    // (e.g. `a`'s own `(a : Type)` binding) that `kernel_infer` would need
+    // to look up — zonk a throwaway copy of `cx.ctx` for this one raw-kernel
+    // call rather than mutating the live elaborator context.
+    let zonked_ctx = Context {
+        types: cx.ctx.types.iter().map(|t| cx.metas.zonk_term(t)).collect(),
+    };
+    let motive_sort = kernel_infer(cx.env, &zonked_ctx, expected)
         .map_err(|e| ElabError::KernelRejected { error: e, span: span.clone() })?;
     let motive_ty = Term::pi(scrut_ty.clone(), weaken(&motive_sort, 1));
     let motive = Term::Ascript(
@@ -577,12 +715,52 @@ fn check_match_dependent(
         for j in (0..n).rev() {
             concrete = Term::app(concrete, Term::var(j));
         }
-        let expected_here = subst_var(&weaken(expected, n as i64), scrut_idx + n, &concrete);
+        let expected_here = subst_var_generalize(&weaken(expected, n as i64), scrut_idx + n, &concrete);
         let body_core = check(cx, &arm.body, &expected_here, &arm.span)?;
         for _ in 0..n {
             cx.ctx.pop();
         }
+
+        // IH-slot emission (`dependent-match-nonnullary`, Map Gap B): the
+        // kernel's `method_type` requires `Π(fields) Π(ih₁…ih_p). M(Cₖ …)` —
+        // `p = recursive_args(ctor).len()` dead (never surface-referenced)
+        // binders between the `n` field lambdas and the body. REUSE the
+        // kernel's own producer (`ken_kernel::inductive::recursive_args`,
+        // the exact function `method_type` uses) rather than re-deriving
+        // recursive-field detection locally.
+        //
+        // Scope: non-indexed `List`/`Tree` families only (this WP) — every
+        // in-scope recursive field is DIRECT (`branching_tel` empty, `idxs`
+        // empty, since the family itself has zero indices, guarded by the
+        // `dependent_eligible` gate above). W-style (Π-bound) recursive
+        // fields would need the fuller `method_type`-style Π-wrapped IH
+        // construction; reject rather than silently mis-build one.
+        let rec = recursive_args(ctor, d_id, m);
+        for (_, branching_tel, idxs) in &rec {
+            if !branching_tel.is_empty() || !idxs.is_empty() {
+                return Err(ElabError::Internal(
+                    "dependent match (Gap B): W-style or indexed recursive \
+                     fields are out of scope for this WP"
+                        .into(),
+                ));
+            }
+        }
+        // Each IH's type is simply the goal `expected` specialized to that
+        // recursive field (`P xs2` for the tail of `Cons x xs2`) — the same
+        // substitution pattern as `expected_here`, but substituting the
+        // field's own variable rather than the reconstructed constructor
+        // application. IHs are wrapped in `rec` order (rec[0] = first
+        // recursive field = outermost/ih₁, matching `method_type`); built in
+        // REVERSE (innermost/last field first) so each `weaken(_, 1)` — the
+        // same technique `compile_match_matrix`'s `ColKind::Ih` uses —
+        // naturally accumulates the correct additional shift for every
+        // already-wrapped inner IH, without hand-deriving a per-slot offset.
         let mut method = body_core;
+        for (pos, _, _) in rec.iter().rev() {
+            let field_var = Term::var(n - 1 - pos);
+            let ih_ty = subst_var_generalize(&weaken(expected, n as i64), scrut_idx + n, &field_var);
+            method = Term::lam(ih_ty, weaken(&method, 1));
+        }
         for j in (0..n).rev() {
             method = Term::lam(subst_outer(&ctor.args[j], m, &params_terms, j), method);
         }
