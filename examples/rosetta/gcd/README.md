@@ -6,13 +6,10 @@ Reference: <https://rosettacode.org/wiki/Greatest_common_divisor>
 
 ## Status
 
-**GCD algorithm is correct; blocked pending `wp/RTP1-interp-sharing`, see
-`KNOWN-GAP.md`.** Not a Language-lane gap — a `ken-interp` evaluation-cost
-characteristic (Architect-ruled root cause: `elim_reduce`'s eager,
-unconditional IH computation) currently makes even this file's plain
-`natGcd` computation (no printing at all) fail to complete in reasonable
-time once combined with the file's own ~20 declarations. Fix is in
-flight; this file's algorithm needs no changes once it lands.
+**Working, end to end.** `ken run examples/rosetta/gcd/gcd.ken` prints
+`4` and exits 0. Decimal printing was blocked pending
+`wp/RTP1-interp-sharing` (eager-IH-computation cost in `ken-interp`'s
+`elim_reduce`) — resolved (`e88ffa8`), confirmed fast.
 
 ## Implementation notes
 
@@ -21,11 +18,10 @@ flight; this file's algorithm needs no changes once it lands.
 - `GAP-nested-patterns`: `Suc _` in `natCmp` (a nested constructor
   pattern) triggers a reachability error — worked around via a
   non-recursive `natCmpZero` helper with only flat patterns.
-- A decimal-printing attempt (`natToDecimal`) was built, found infeasible,
-  and kept as commented-out reference code — see `KNOWN-GAP.md` for the
-  full history (it surfaced the broader finding above, not just a
-  printing-specific one).
+- Decimal `Nat`->`String` conversion (`natToDecimal`) — `ken-interp` has
+  no `div_int`/`mod_int` primitive, so it goes via structural `Nat`
+  peeling (`sub10`, ten chained flat matches) + a `Nat`-fuel loop.
 
 ## Oracle
 
-None (`KNOWN-GAP.md`) — blocked on verification, not on correctness.
+`main` prints `4`.

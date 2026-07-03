@@ -10,20 +10,25 @@ Reference: <https://rosettacode.org/wiki/FizzBuzz>
 
 ## Status
 
-**Classification logic works; output blocked by one remaining gap, see
-`KNOWN-GAP.md`.** Most of this dir's originally-documented gaps are now
-closed (string literals, `print_line`/Console execution, `Bool`
-pattern-matching all landed since this file was first written) — the sole
-remaining blocker is printing the bare decimal `n` in the non-Fizz/Buzz
-case, which needs a `Nat`->`String` conversion that's currently
-exponential-cost in `ken-interp` (tracked separately, fix in flight,
-`wp/RTP1-interp-sharing`) and infeasible across the 1..20 range.
+**Working, end to end.** `ken run` prints the correct 20-line sequence
+and exits 0. All originally-documented gaps are now closed: string
+literals, `print_line`/Console execution, `Bool` pattern-matching, and
+(most recently) decimal printing for the `Plain` case — that last one was
+blocked pending `wp/RTP1-interp-sharing`, resolved (`e88ffa8`).
 
-## What works
+## Implementation notes
 
-All classification views (`Mod3`, `Mod5`, `incMod3`, `incMod5`, `mod3Step`,
-`mod5Step`, `mod3`, `mod5`, `classify`) elaborate correctly, using modular
-accumulator types to work around `GAP-nested-patterns` (nested constructor
-patterns like `Suc (Suc Zero)` still trigger a reachability error in match
-position — unrelated to, and unaffected by, the decimal-printing gap
-above). `classify n` returns the correct `FizzTag` for any `Nat` input.
+- Classification (`Mod3`/`Mod5`/`classify`) uses modular accumulator
+  types to work around `GAP-nested-patterns` (nested constructor patterns
+  like `Suc (Suc Zero)` still trigger a reachability error in match
+  position) — unaffected by, and independent of, the printing gap.
+- `fizzBuzzLoop` is a `Vis`-under-closure recursive IO combinator — the
+  same shape VAL2's own `printLoop` probe confirmed SCT-acceptable
+  (the recursive call sits inside `\_. fizzBuzzLoop r (Suc current)`,
+  itself a constructor argument to `Vis`).
+- Decimal `Nat`->`String` conversion (`natToDecimal`), same machinery as
+  `examples/rosetta/gcd/gcd.ken`.
+
+## Oracle
+
+`main` prints the 20-line FizzBuzz sequence for 1..20.
