@@ -233,8 +233,8 @@ Three normative points (Architect ruling `evt_1stp9sspm6ag8`):
 |---|---|---|---|
 | `List a` | transparent inductive `data` (L2) | `data List a = Nil \| Cons a (List a)` (`34 §1`) | structural, O(1) (`41 §4`) |
 | `Array a` | abstract (persistent index tree) | content-addressed, kind `0x06` (`41 §3a`) | structural, O(1) |
-| `Map k v` | abstract (`DecEq`-keyed) | content-addressed, kind `0x07`, key-sorted canonical form | structural, O(1) |
-| `Set a` | abstract (`DecEq`-keyed) | content-addressed, kind `0x08`, element-sorted canonical form | structural, O(1) |
+| `Map k v` | proved package (`Ord k`-keyed) | ordered BST `data Tree k v` over `Ord k` (`50-stdlib/52`) | extensional, via ordered `toList` |
+| `Set a` | proved package (`Ord a`-keyed) | `Map a Unit` (`50-stdlib/52`) | extensional, via ordered `toList` |
 | `Option a` | transparent inductive `data` (L2) | `data Option a = None \| Some a` (`34 §1`) | structural, O(1) |
 | `Result e a` | transparent inductive `data` (L2) | `data Result e a = Err e \| Ok a` (`34 §1`) | structural, O(1) |
 
@@ -276,30 +276,35 @@ for a flat buffer:
 (RRB-tree, HAMT-vector, chunk size) is an `(oracle)`/X2 tuning (`§8`), invisible
 to the laws.
 
-### 3.3 `Map` and `Set` — `DecEq`-keyed, canonically ordered
+### 3.3 `Map` and `Set` — proved package trees over `Ord k` (`50-stdlib/52`)
 
-`Map k v` and `Set a` are abstract types (`33 §4`) over the content-addressed
-heap (kinds `0x07`/`0x08`). Their **canonical form is sorted by the
-lexicographic order of the canonical byte encoding of each key/element** (`41
-§3a`), so:
+`Map k v` and `Set a` are **proved, pure `packages/` modules** keyed on a lawful
+**`Ord k`**, specified in `../50-stdlib/52-map.md`. **This supersedes an earlier
+DRAFT** that made them abstract `DecEq`-keyed content-addressed heap primitives
+(kinds `0x07`/`0x08`) — operator decision **OQ-A** (2026-07-03) chose *proved +
+pure + zero-TCB* over the runtime-O(1) heap form:
 
-- **Insertion-order-independent identity.** A `Map`/`Set` built in two different
-  insertion orders **interns to the same slot** (`41 §3a`: "built in two
-  different insertion orders encodes identically") ⇒ structural O(1) equality
-  for free, no user `Ord` required for *identity*.
-- **`DecEq k` is the membership constraint.** `lookup`/`member`/`insert` need
-  **decidable key equality** — `Map k v` and `Set a` carry a `where DecEq k`
-  (resp. `DecEq a`) constraint (`33 §5`). A key type **without** `DecEq` is a
-  **compile error** (the constraint is unsatisfiable), naming the missing
-  instance — the AC5 verdict flip.
-- **`Ord k` enables ordered operations.** `Ord k` (`§6`) is **not** required for
-  the core map (the canonical byte order already totally orders stored keys); it
-  is the constraint for *ordered* operations — `minKey`, `maxKey`, range
-  queries, ordered fold. Pin the split: `DecEq` for membership, `Ord` for order.
+- **Proved, out of `trusted_base()`.** The carrier is an ordinary inductive
+  `data Tree k v = Leaf | Node …` and every correctness law (`Ordered`
+  invariant, `lookup`-after-`insert`, ordered `toList`) is a **real kernel
+  proof** — so `Map` is derived Ken, **not** the `declare_primitive` audited
+  primitive it was (retired, `30 §6`). "Proved" *requires* this: an opaque
+  primitive has no eliminator, so its laws could only be `Axiom` (`50-stdlib/52
+  §1.1`).
+- **`Ord k` is the single keying constraint**, throughout — a search tree needs
+  the order for its *core* operations (`lookup`/`insert` descend by `leq`). This
+  replaces the earlier "`DecEq` for membership, `Ord` for ordered ops" split;
+  key identity is derived from the order (`leq k k' ∧ leq k' k`), and the
+  `Ord.antisym → Equal` step used for overwrite carries **ADR 0010's
+  canonical-carrier requirement** (sound for `Int`/`Char`/`Bool`, `50-stdlib/52
+  §2.1`).
+- **Identity is extensional, not insertion-order-canonical.** A program-level
+  tree is not interned by byte-order, so two maps are equal via their ordered
+  `toList`, not by O(1) slot-id (`50-stdlib/52 §5.3`). The insertion-order-
+  independent content-addressed heap form is **parked** as a possible later
+  fast-map (the "HAMT-later" analog, `§3.2`), also proved if it lands.
 
-`Set a` is **`Map a Unit`** semantically (the DRAFT's framing); whether it is
-literally that or a distinct kind-`0x08` value is an `(oracle)` representation
-choice — the laws (`§4`) and equality are identical either way.
+`Set a` is **`Map a Unit`** (`50-stdlib/52 §4.4`).
 
 ### 3.4 Persistence and sharing (the runtime contract)
 
@@ -430,7 +435,7 @@ list_compare cmp (Cons x xs) (Cons y ys) = match cmp x y {
   strict subterm — the `Cons` tail (`list_append` / `nth` / `take` / `drop` /
   `list_eq` / `list_compare`) or the `Suc` predecessor (`nth` / `take` / `drop`
   / `natSub`). The floor does **not** lean on the SCT to bless *unapplied*
-  self-reference or recursion-through-an-opaque-`Map`, where the SCT
+  self-reference or recursion-through-an-opaque type, where the SCT
   over-accepts (a bare self-`Const` is modelled all-`Unknown` and **rejected**;
   certification requires an applied call carrying a `Down` argument,
   `ken-kernel/src/sct.rs`).
@@ -668,8 +673,8 @@ choices the laws and equality are invariant under.
 
 Deliver in the surface/elaborator + prelude (lowering to the landed `41`): UTF-8
 `String` (byte/char views, the four conversions, `Char`); `List` (L2 `data`),
-`Array` (persistent index tree), `Map`/`Set` (`DecEq`-keyed), `Option`/`Result`
-(L2); the `map`/`filter`/`fold`/`zip` combinators with their laws as
+`Array` (persistent index tree), `Option`/`Result` (L2); the
+`map`/`filter`/`fold`/`zip` combinators with their laws as
 propositions; the fuel-bounded-unfold infinitude idiom; structural equality +
 `DecEq`/`Ord` (built-in instances now); and the verified `sort`. L8 extends this
 to the full lawful stdlib; L3 **unblocks T3** (the test/property framework).

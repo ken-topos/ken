@@ -138,12 +138,14 @@ claim with no conformance case is a claim no one can rely on
 - `surface/collections/seed-collections.md` — L3 strings & collections (`37`):
   `String` as a content-addressed **NFC UTF-8 primitive** (byte-length ≠
   char-length, **not** `List Char`); `List`/`Option`/`Result` transparent
-  inductive (L2) and `Array`/`Map`/`Set` abstract over the `41` heap (kinds
-  `0x06`–`0x08`) with **persistence observable as slot-id**; the combinator laws
-  as **emitted propositions**; **infinitude without coinduction** (the
-  fuel-bounded inductive `unfoldUpTo` + the no-coinductive-**construct** absence
-  net); the `DecEq`-key **verdict flip**; and the verified `sort` whose
-  `isSorted ∧ Perm` obligation is asserted **with the `Perm` conjunct present**.
+  inductive (L2) and `Array` abstract over the `41` heap (kind `0x06`) with
+  **persistence observable as slot-id** (the heap `Map`/`Set` `0x07`/`0x08`
+  model is **superseded** by the proved BST, `stdlib/map/seed-map.md`); the
+  combinator laws as **emitted propositions**; **infinitude without
+  coinduction** (the fuel-bounded inductive `unfoldUpTo` + the
+  no-coinductive-**construct** absence net); the `DecEq`-key **verdict flip**;
+  and the verified `sort` whose `isSorted ∧ Perm` obligation is asserted **with
+  the `Perm` conjunct present**.
 - `surface/bytes-io/seed-bytes-io.md` — L6 `Bytes` + binary I/O (`38 §1`):
   `Bytes` as a `14 §5` primitive (`0x05`, immutable, `b"…"`/`0x[…]` literals),
   registered reductions + no-silent-OOB partiality, effect-tracked I/O
@@ -242,6 +244,23 @@ claim with no conformance case is a claim no one can rely on
   (`absurd-subterm-postulate-counted-in-delta`, the elaborator-accounting
   sibling of the K5 seed's SCT launder net). Static face; declared-vs-hidden
   honesty enforceable throughout.
+- `stdlib/map/seed-map.md` — Map-container proved `Map k v` over `Ord k`
+  (`50-stdlib/52`, VAL2 #8 / OQ-A): a **proved, pure, `Ord k`-keyed**
+  associative map shipped as **package Ken out of `trusted_base()`** — a bare
+  unbalanced BST (`data Tree k v = Leaf | Node …`) whose operations are `view`
+  defs and whose every correctness law is a **real kernel proof, not a
+  postulate**; it **retires** the opaque `Map`/`Set` primitive (net-negative
+  TCB). AC1 (inductive-not-primitive + `trusted_base()` shrinks), AC2
+  (real-interpreter `insert`/`lookup` round-trips, ordered `toList`, the
+  `letter-frequency` shape — value-flips, `Char`/`Bool` keys), AC3
+  (**proved-not-stubbed** via the real `trusted_base_delta` cone walk — a
+  stubbed `Axiom` map-proof grows the delta and is rejected **for the right
+  reason**, exercised not textual; the load- bearing net, with the X1
+  not-a-value-flip flag), the `§2.1` canonical-carrier `antisym → Equal`
+  localization pair (`Int`/`Char`/`Bool` sound vs `Decimal` `Bottom`), and the
+  named `§7` deferrals (`delete`, balance, the proof-relevant permutation law).
+  **Red-until-built** — the build's acceptance target; companion supersession
+  reconcile in `surface/collections/seed-collections.md`.
 - `security/ifc/seed-ifc.md` — Sec1 information-flow-by-typing (the
   implicit-flow discriminator, label joins, capability-gated declassify, the
   relational by-proof mode).

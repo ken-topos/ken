@@ -5,19 +5,36 @@ Format: `../../README.md`. These pin the **L3 deliverable**
 `spec/30-surface/37-strings-collections.md`): the **`String` UTF-8 primitive**
 (content-addressed, NFC-normalized, byte-length ≠ char-length, not `List Char`),
 the **core collection types** (`List`/`Option`/`Result` transparent inductive;
-`Array`/`Map`/`Set` abstract over the `41` heap), the **combinators with laws as
-propositions**, **infinitude without coinduction** (the fuel-bounded inductive
-unfold + the structural-absence net), and **structural equality +
-`DecEq`/`Ord`** with the verified `sort` (which threads an **explicit
-comparator** since the ES2-remainder §6 pin — the lawful-`Ord` class is
-**deferred**). **L3b (AC7) adds the user-type instancing crossing** — a user
-`instance DecEq` resolved by Lc's landed `instance_search` now that the §37 §6
-gate is open (Lc, `4aa36c7`), with the user-`Ord`-drives-`sort` half deferred to
-the lawful-`Ord` class. They extend
-— and must not regress —
-the on-`main` surface invariants (`../seed-surface.md`,
+`Array` abstract over the `41` heap — `Map`/`Set` are now the **proved BST** of
+`../../stdlib/map/seed-map.md`, superseding the heap model, see the supersession
+note below), the **combinators with laws as propositions**, **infinitude without
+coinduction** (the fuel-bounded inductive unfold + the structural-absence net),
+and **structural equality + `DecEq`/`Ord`** with the verified `sort` (which
+threads an **explicit comparator** since the ES2-remainder §6 pin — the
+lawful-`Ord` class is **deferred**). **L3b (AC7) adds the user-type instancing
+crossing** — a user `instance DecEq` resolved by Lc's landed `instance_search`
+now that the §37 §6 gate is open (Lc, `4aa36c7`), with the
+user-`Ord`-drives-`sort` half deferred to the lawful-`Ord` class. They extend —
+and must not regress — the on-`main` surface invariants (`../seed-surface.md`,
 `../data-match/seed-data-match.md`) and the `String` primitive already
 registered for L6 (`../bytes-io/seed-bytes-io.md`).
+
+**Supersession — `Map`/`Set` are now a proved BST
+(`../../stdlib/map/seed-map.md`), not a heap primitive (OQ-A, 2026-07-03).** The
+Map-container WP retires the opaque `DecEq`-keyed content-addressed heap
+`Map`/`Set` this file originally pinned (kinds `0x07`/`0x08`,
+insertion-order-independent canonical identity, O(1) slot-id equality). Under
+the landed `52-map.md` + the `37 §3.3` flip, `Map k v` and `Set a` are **proved,
+pure `packages/` trees keyed on `Ord k`**, with **extensional** identity via
+ordered `toList` (not O(1)-slot), **out of `trusted_base()`** (net-negative
+TCB), and **no separate `DecEq k` keying constraint** — `Ord` is the single
+keying faculty, key equality is the derived `leq k k' ∧ leq k' k` (`52 §2`). The
+`Map`/`Set` behavioral corpus now lives in `../../stdlib/map/seed-map.md`
+(subsume-don't-proliferate); the cases below tagged **(superseded →
+seed-map.md)** retain only their non-`Map` content (e.g. the `List` half of the
+O(1)-equality case) — their heap-`Map`/`Set` assertions are **void, do not code
+to them**. `Array` is unaffected (still `41`-heap, kind `0x06`). Companion to
+the `/spec` supersession in `37 §3.3` this WP lands.
 
 **Grounded (content-verified against the landed targets, not heading numbers —
 the `conformance-oracle-grounding-fallback` discipline):** `14 §5` (`String` is
@@ -25,9 +42,11 @@ a primitive type — opaque constant, registered reductions compute over literal
 trusted/audited `18 §5`); `41 §2`/`§4` (content-addressed append-mostly heap;
 O(1) structural equality = slot-id comparison); `41 §3a` +
 `docs/design/content-addressing.md §1.1` (kind tags **`String 0x04`,
-`Array 0x06`, `Map 0x07`, `Set 0x08`** — verified against the enumerated table;
-`String` = NFC-normalized UTF-8 **at construction**, `Map`/`Set` sorted by
-canonical byte encoding ⇒ insertion-order-independent identity); `34 §1`/`§3`
+`Array 0x06`** — verified against the enumerated table; `String` =
+NFC-normalized UTF-8 **at construction**. The heap `Map 0x07`/`Set 0x08`
+kinds + their canonical-byte-encoding insertion-order-independent identity are
+**retired** by OQ-A — `Map`/`Set` are proved `Ord k`-keyed trees with
+extensional identity, `../../stdlib/map/seed-map.md`); `34 §1`/`§3`
 (`List`/`Option`/`Result` inductive `data` + `elim_List`, **landed L2**);
 `34 §5` (refinement types — the `sort` carrier); `33 §4` (a type exported
 **abstractly** — name only, constructors hidden — the `Array`/`Map`/`Set`
@@ -246,7 +265,11 @@ reference resolves via the landed `L-resolver-globals` fallback (`c3a3f1d`).
   + resolver.)
 
 ### surface/collections/map-lookup-insert-law-emits-obligation
-- spec: `37 §4`, `37 §3.3` (`Map` `DecEq`-keyed), `22`
+**(SUPERSEDED → `../../stdlib/map/seed-map.md`.** These are now the **proved**
+`52 §5.2` `lookup` laws — real proof terms, `Ord k`-keyed, not `DecEq`; live
+home `stdlib/map/laws-real-proofs-zero-new-delta`. The obligation-emission shape
+below is retained as generic combinator-law coverage.**)**
+- spec: `37 §4`, `52 §5.2` (proved `lookup` laws, `Ord k`-keyed), `22`
 - given: the canonical algebraic `Map` spec —
   `lookup_insert_eq : lookup k (insert k v m) ≡ Some v` and
   `lookup_insert_neq : k ≠ k' → lookup k (insert k' v m) ≡ lookup k m`.
@@ -336,20 +359,24 @@ pinned split. A key type without `DecEq` is a compile error.
   equal**; and (richer) two `Map` values built in **different insertion orders**
   with the same key→value content.
 - expect: the two `List`s **share one slot** (content-addressed) and compare
-  **O(1)-equal** (`41 §4`) — real now (landed heap). The two `Map`s **intern to
-  the same slot** regardless of insertion order (canonical form sorted by the
-  byte encoding of each key, `41 §3a`), so identity needs **no** user `Ord` —
-  structural O(1) equality for free. Assert **same slot-id**, not just `==`.
-- why: AC5's equality face — content-addressed identity as **slot-id**,
-  including the insertion-order-independence that makes `Map`/`Set` identity
-  canonical. The `List` half is real-now; the `Map` half is **net-new**
-  (producer-grep the real `Map` registration / canonical form). A bug that makes
-  equality structure-walk (not slot-id) or that lets insertion order leak into
-  `Map` identity is caught. (structural slot-id.)
+  **O(1)-equal** (`41 §4`) — real now (landed heap). The `Map` half is
+  **superseded** — a proved BST is **not** interned by byte-order, so two
+  same-content `Map`s are equal **extensionally via ordered `toList`**, not
+  O(1)-slot (`52 §5.3`; `../../stdlib/map/seed-map.md`). Only the `List` half
+  (content-addressed O(1) slot-id) is asserted here now.
+- why: AC5's equality face — content-addressed identity as **slot-id**, for the
+  **`List`** half (real-now). The former insertion-order-independent O(1) `Map`
+  identity is **retired** (OQ-A); `Map` equality is now extensional via ordered
+  `toList` (`../../stdlib/map/seed-map.md`). A bug that makes `List` equality
+  structure-walk (not slot-id) is caught. (structural slot-id, `List`.)
 
 ### surface/collections/map-key-without-deceq-rejected
-- spec: `37 §3.3`, `33 §5` (`DecEq` membership constraint; unsatisfiable ⇒
-  compile error)
+**(SUPERSEDED → `../../stdlib/map/seed-map.md`.** The keying constraint is now
+`where Ord k` (`52 §2`), **not** `DecEq k` — a key type without a lawful `Ord`
+is rejected, and a non-canonical `Ord` key (e.g. `Decimal`) is unlawful
+(`52 §2.1`). Live home `stdlib/map/noncanonical-key-not-a-lawful-map-key`.**)**
+- spec: `52 §2`/`§2.1` (`Ord k` keying + canonical carrier), `33 §5`
+  (constraint resolution; unsatisfiable ⇒ compile error)
 - given: `Map k v` (and `Set a`) instantiated with (a) a key type that **has**
   `DecEq` (a core type, built-in instance — `Int`); (b) a key type that
   **lacks** `DecEq` (e.g. a function type `A → B`, for which decidable equality
@@ -428,8 +455,13 @@ property, `subsume-don't-proliferate`). No new kernel rule (§37 banner): pure
 elaborator wiring of the collection ops to the landed resolver.
 
 ### surface/collections/user-deceq-instance-keys-map-via-real-search
-- spec: `37 §3.3` (`DecEq`-keyed `Map`), `37 §6` (staging boundary now open),
-  `33 §5`/`39 §6` (Lc instance search)
+**(SUPERSEDED framing → `../../stdlib/map/seed-map.md`.** The **resolver**
+coverage (`instance_search` returns `Some`/`None` for a user instance — Lc
+`4aa36c7`, `classes.rs:91`) survives as general class-resolution coverage, but a
+`Map` is now keyed by `Ord k` (`52 §2`), so the user-`Map`-keying vehicle
+re-points to a user `instance Ord K`.**)**
+- spec: `52 §2` (`Ord k` keying), `37 §6` (staging boundary open),
+  `33 §5`/`39 §6` (Lc instance search — the resolver under test)
 - given: a user `data K = …` with (a) a user `instance DecEq K`, and (b) the
   **same** `data K` with **no** `DecEq K` instance — each used to key a
   `Map K v` (construction + `lookup`)
@@ -513,8 +545,14 @@ elaborator wiring of the collection ops to the landed resolver.
   explicit-comparator base.)
 
 ### surface/collections/user-deceq-keyed-map-canonical-identity
-- spec: `37 §3.3` (byte-encoding canonical, **no `Ord` for identity**),
-  `41 §3a`, `33 §5` (user `DecEq`)
+**(SUPERSEDED → `../../stdlib/map/seed-map.md`.** This case's entire premise —
+insertion-order-independent O(1)-slot `Map` identity via canonical byte-encoding
+— is **retired** by OQ-A. A proved BST has **extensional** identity via ordered
+`toList` (`52 §5.3`); it is **not** byte-order-interned and **not**
+insertion-order-canonical. No replacement O(1)-slot `Map`-identity case exists —
+the property is gone; the live ordering home is
+`stdlib/map/tolist-ascending-by-key`.**)**
+- spec: **retired** — see `52 §5.3` + `../../stdlib/map/seed-map.md`
 - given: two `Map K v` keyed by a **user** type `K` (with `instance DecEq K`),
   built by inserting the **same** (key, value) set in **different insertion
   orders**; and (contrast) a pair differing in one entry
