@@ -1,0 +1,16 @@
+-- Rosetta Code: Letter frequency
+-- https://rosettacode.org/wiki/Letter_frequency
+--
+-- Task: count how many times each letter occurs in a string.
+--
+-- GAP-map-no-ops (BLOCKING, see KNOWN-GAP.md): `Map : Type -> Type ->
+-- Type` is declared (`crates/ken-elaborator/src/prelude.rs`, an audited
+-- opaque primitive -- correctly not derivable, per its own doc comment)
+-- but has ZERO operations registered anywhere: no `empty`/`insert`/
+-- `lookup`/`toList`. A bare type with no way to construct or query a
+-- value of it is unusable. Confirmed by inspection: no
+-- `map_insert`/`map_lookup`/`map_empty` (or any naming variant) exists in
+-- `ken-elaborator` or either landed package.
+--
+-- Placeholder until GAP-map-no-ops is resolved.
+view main : Nat = Zero

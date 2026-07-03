@@ -1,0 +1,111 @@
+-- Rosetta Code: Parsing/RPN calculator
+-- https://rosettacode.org/wiki/Parsing/RPN_calculator_algorithm
+--
+-- Task: evaluate a reverse-Polish-notation expression.
+--
+-- Probes: `Option` composition without exceptions (stack-underflow), a
+-- fixed pre-tokenized `List RpnOp` (no string tokenizer/split-on-
+-- whitespace exists yet in `packages/collections` -- not this example's
+-- axis to probe, so hardcoded rather than rediscovered here).
+--
+-- Division is OMITTED: `ken-interp` has no `div_int`/`mod_int` primitive
+-- at all (only `add_int`/`sub_int`/`mul_int` -- the same gap already
+-- documented in `packages/collections/collections.ken`'s header comment
+-- and the VAL2 `natToDecimal` finding). Not re-filing a second
+-- `KNOWN-GAP.md` for the same already-known gap; this example
+-- demonstrates the Option-composition axis over `+`/`-`/`*`, which is
+-- unaffected by it.
+
+data RpnOp = Push Int | Add | Sub | Mul
+
+-- rpnStep: applies one op to a stack. `Add`/`Sub`/`Mul` need two flat
+-- `Cons` peels (nested constructor PATTERNS still trigger
+-- ReachabilityError -- GAP-nested-patterns, unrelated to this example's
+-- axis -- so peeled via nested match EXPRESSIONS, same idiom as `gcd`'s
+-- own `natCmp`).
+view rpnStep (stack : List Int) (op : RpnOp) : Option (List Int) =
+  match op {
+    Push n => Some (List Int) (Cons Int n stack) ;
+    Add => match stack {
+      Nil => None (List Int) ;
+      Cons a rest1 => match rest1 {
+        Nil => None (List Int) ;
+        Cons b rest2 => Some (List Int) (Cons Int (a + b) rest2)
+      }
+    } ;
+    Sub => match stack {
+      Nil => None (List Int) ;
+      Cons a rest1 => match rest1 {
+        Nil => None (List Int) ;
+        -- RPN order: second-from-top minus top (`b - a` for stack
+        -- `a::b::rest`). No `-` infix operator exists (`GAP-subtraction`
+        -- -- only `+`/`*`/`==` are recognized infix; `sub_int` is called
+        -- prefix, same as `natGcdFueled`'s `natSub` precedent style).
+        Cons b rest2 => Some (List Int) (Cons Int (sub_int b a) rest2)
+      }
+    } ;
+    Mul => match stack {
+      Nil => None (List Int) ;
+      Cons a rest1 => match rest1 {
+        Nil => None (List Int) ;
+        -- `*` (BinOp::Mul) parses but is "not yet supported" at
+        -- elaboration time -- called prefix via `mul_int` instead, same
+        -- idiom as `sub_int` above.
+        Cons b rest2 => Some (List Int) (Cons Int (mul_int a b) rest2)
+      }
+    }
+  }
+
+-- rpnEvalList: folds `rpnStep` over a `List RpnOp`, short-circuiting on
+-- the first `None` (stack underflow) -- the Option-composition-without-
+-- exceptions axis. SCT: recursive call on `ops2`, a strict `Cons`
+-- sub-term.
+view rpnEvalList (stack : List Int) (ops : List RpnOp) : Option (List Int) =
+  match ops {
+    Nil => Some (List Int) stack ;
+    Cons op ops2 => match rpnStep stack op {
+      None => None (List Int) ;
+      Some stack2 => rpnEvalList stack2 ops2
+    }
+  }
+
+-- top: the final single-element stack's value, or None if it isn't
+-- exactly one value (empty or leftover operands -- also an error case).
+view top (stack : List Int) : Option Int =
+  match stack {
+    Nil => None Int ;
+    Cons v rest => match rest { Nil => Some Int v ; Cons w rest2 => None Int }
+  }
+
+view rpnEval (ops : List RpnOp) : Option Int =
+  match rpnEvalList (Nil Int) ops { None => None Int ; Some stack => top stack }
+
+-- ── Oracle ───────────────────────────────────────────────────────────────────
+--
+-- "3 4 + 2 *" = (3 + 4) * 2 = 14  -- the success case.
+view exprOk : List RpnOp =
+  Cons RpnOp (Push (3 : Int))
+    (Cons RpnOp (Push (4 : Int))
+      (Cons RpnOp Add
+        (Cons RpnOp (Push (2 : Int))
+          (Cons RpnOp Mul (Nil RpnOp)))))
+
+-- "3 +" = stack-underflow (only one operand for a binary op) -- the
+-- discriminating failure case (Option-composition must actually reject
+-- this, not silently produce a wrong number).
+view exprUnderflow : List RpnOp =
+  Cons RpnOp (Push (3 : Int)) (Cons RpnOp Add (Nil RpnOp))
+
+view finalCheck : String =
+  match rpnEval exprOk {
+    Some fourteen => match eq_int fourteen (14 : Int) {
+      True => match rpnEval exprUnderflow {
+        None => "PASS" ;
+        Some n => "FAIL"
+      } ;
+      False => "FAIL"
+    } ;
+    None => "FAIL"
+  }
+
+view main : IO Unit = print_line finalCheck

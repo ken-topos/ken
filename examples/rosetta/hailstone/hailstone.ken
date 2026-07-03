@@ -1,0 +1,108 @@
+-- Rosetta Code: Hailstone sequence
+-- https://rosettacode.org/wiki/Hailstone_sequence
+--
+-- Task: generate the hailstone (Collatz) sequence from n down to 1.
+--
+-- Probes: SCT vs a CONJECTURED-not-proved-terminating function -- the
+-- Collatz conjecture (every n eventually reaches 1) is an open
+-- mathematical problem, so no termination proof (structural or
+-- otherwise) can exist for an unbounded `hailstone`. The honest,
+-- standard idiom in a total language (same as Coq/Agda/Lean face for
+-- Collatz) is an explicit FUEL bound -- identical in spirit to this
+-- corpus's own `natGcdFueled`/`mergeSortFueled`: a real function, total
+-- by construction, that computes the true sequence for any input whose
+-- real trajectory fits within the fuel, and is honest (not silently
+-- wrong) about not attempting a full unbounded proof.
+
+view natAdd (a : Nat) (b : Nat) : Nat =
+  match a { Zero => b ; Suc m => Suc (natAdd m b) }
+
+-- half n = n/2 (only meaningful when n is even; caller checks first).
+-- SCT: `m2` is a strict sub-term of `n` (two Suc-peels deep, same
+-- double-nested-match-then-recurse shape as this corpus's own `natSub`).
+view half (n : Nat) : Nat =
+  match n {
+    Zero => Zero ;
+    Suc m => match m {
+      Zero => Zero ;
+      Suc m2 => Suc (half m2)
+    }
+  }
+
+view isEven (n : Nat) : Bool =
+  match n {
+    Zero => True ;
+    Suc m => match m {
+      Zero => False ;
+      Suc m2 => isEven m2
+    }
+  }
+
+view isOne (n : Nat) : Bool =
+  match n {
+    Zero => False ;
+    Suc m => match m { Zero => True ; Suc w => False }
+  }
+
+view natEq (a : Nat) (b : Nat) : Bool =
+  match a {
+    Zero => match b { Zero => True ; Suc n => False } ;
+    Suc m => match b { Zero => False ; Suc n => natEq m n }
+  }
+
+-- 3n + 1 = n + n + n + 1, via `natAdd` only (no multiplication needed).
+view tripleplus1 (n : Nat) : Nat =
+  Suc (natAdd n (natAdd n n))
+
+-- hailstoneFueled: total by construction (fuel-bounded), computes the
+-- REAL sequence (in reverse, consed onto `acc`) for any input whose true
+-- trajectory fits within `fuel`. SCT: recursive call on `f`, a strict
+-- `Suc`-sub-term of `fuel`; `n`/`acc` are arbitrary computed values riding
+-- along (same shape as `natGcdFueled`).
+view hailstoneFueled (fuel : Nat) (n : Nat) (acc : List Nat) : List Nat =
+  match fuel {
+    Zero => acc ;
+    Suc f => match isOne n {
+      True  => Cons Nat n acc ;
+      False => match isEven n {
+        True  => hailstoneFueled f (half n) (Cons Nat n acc) ;
+        False => hailstoneFueled f (tripleplus1 n) (Cons Nat n acc)
+      }
+    }
+  }
+
+-- listEqNat: local (a one-off, `Nat`-specialized `list_eq` -- not
+-- reusing `packages/collections`' generic `list_eq` to avoid its whole
+-- floor's declarations for this one check).
+view listEqNat (xs : List Nat) (ys : List Nat) : Bool =
+  match xs {
+    Nil => match ys { Nil => True ; Cons y ys2 => False } ;
+    Cons x xs2 => match ys {
+      Nil => False ;
+      Cons y ys2 => match natEq x y {
+        True => listEqNat xs2 ys2 ;
+        False => False
+      }
+    }
+  }
+
+-- ── Oracle ───────────────────────────────────────────────────────────────────
+--
+-- hailstone(6) = 6,3,10,5,16,8,4,2,1 (9 steps) -- a small, fast, fully
+-- concrete trajectory. `hailstoneFueled` builds it in REVERSE (consing),
+-- so the expected list here is reversed to match.
+view six : Nat = Suc (Suc (Suc (Suc (Suc (Suc Zero)))))
+
+-- Sequence forward: 6,3,10,5,16,8,4,2,1 -- `hailstoneFueled` conses each
+-- step onto `acc`, so the built list is that sequence REVERSED:
+-- 1,2,4,8,16,5,10,3,6.
+view expectedReversed : List Nat =
+  Cons Nat (Suc (Zero)) (Cons Nat (Suc (Suc (Zero))) (Cons Nat (Suc (Suc (Suc (Suc (Zero))))) (Cons Nat (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Zero))))))))) (Cons Nat (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Zero))))))))))))))))) (Cons Nat (Suc (Suc (Suc (Suc (Suc (Zero)))))) (Cons Nat (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Zero))))))))))) (Cons Nat (Suc (Suc (Suc (Zero)))) (Cons Nat (Suc (Suc (Suc (Suc (Suc (Suc (Zero))))))) (Nil Nat)))))))))
+
+view finalCheck : String =
+  match listEqNat (hailstoneFueled (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc Zero)))))))))) six (Nil Nat)) expectedReversed {
+    True => "PASS" ;
+    False => "FAIL"
+  }
+
+view main : IO Unit = print_line finalCheck
