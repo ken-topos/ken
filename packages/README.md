@@ -48,6 +48,7 @@ delta**, transparently declared, `51 §6`.)
 |---|---|---|
 | lawful classes (`Eq`/`DecEq`/`Ord`) | `../spec/50-stdlib/51-lawful-classes.md` | **built** (`lawful-classes/`) — classes + audited-delta `Int` instances landed; the zero-delta inductive-carrier exemplar (e.g. `Ord Bool`) is a forward WP gated on the kernel gaining Ω-motive `Elim` support (Architect ruling) |
 | collections (derived `List`/`Nat` floor + string surface) | `../spec/30-surface/37-strings-collections.md` | **built** (`collections/`) — the 7-combinator `List`/`Nat` floor + `concat`/`slice`/`charAt`/`eq`/`compare` over `String`, zero-`trusted_base()`-delta; `eq`/`compare` ship as functions, not lawful `DecEq String`/`Ord String` instances (needs a not-yet-landed lawful `DecEq Char`) |
+| transport (`subst`/`cong`/`cast`/`sym`/`trans` over the `J` former) | `../spec/50-stdlib/53-transport.md` | **built** (`transport/`) — the `J` surface former (`elab.rs::infer_j`) + five non-recursive `view` combinators, zero-`trusted_base()`-delta (Map Gap A) |
 
 Subsequent ES4 tranches (collection combinators, formatting, …) follow as their
 own WPs against this layout + the laws-PROVED discipline — comprehensive but

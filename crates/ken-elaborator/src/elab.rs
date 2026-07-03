@@ -150,7 +150,66 @@ impl MetaCtx {
                 *id,
                 level_args.iter().map(|l| self.zonk_level(l)).collect(),
             ),
-            other => other.clone(),
+            Term::IndFormer { id, level_args } => Term::indformer(
+                *id,
+                level_args.iter().map(|l| self.zonk_level(l)).collect(),
+            ),
+            Term::Constructor { id, level_args } => Term::constructor(
+                *id,
+                level_args.iter().map(|l| self.zonk_level(l)).collect(),
+            ),
+            Term::Sigma(a, b) => Term::sigma(self.zonk_term(a), self.zonk_term(b)),
+            Term::Pair(a, b) => Term::pair(self.zonk_term(a), self.zonk_term(b)),
+            Term::Proj1(p) => Term::proj1(self.zonk_term(p)),
+            Term::Proj2(p) => Term::proj2(self.zonk_term(p)),
+            Term::Ascript(t, a) => Term::Ascript(Box::new(self.zonk_term(t)), Box::new(self.zonk_term(a))),
+            // `[K2]`-reserved formers — `J`/`Eq`/`Cast`/`Ascript` are exactly
+            // the new surface-transport constructs; recursing here closes a
+            // pre-existing `zonk_term` completeness gap that nothing built
+            // before now exercised (the same "gate-widening exposes latent
+            // bugs" shape as `check_match_dependent`'s
+            // `subst_var`/unzonked-metavariable fixes —
+            // [[gate-widening-exposes-latent-bugs-in-newly-reachable-code]]):
+            // any elaborator-built term embedding a level metavariable
+            // reaches the raw kernel unresolved unless EVERY structural
+            // variant that can carry one recurses.
+            Term::Eq(a, x, y) => Term::Eq(
+                Box::new(self.zonk_term(a)),
+                Box::new(self.zonk_term(x)),
+                Box::new(self.zonk_term(y)),
+            ),
+            Term::Refl(t) => Term::Refl(Box::new(self.zonk_term(t))),
+            Term::Cast(a, b, e, t) => Term::Cast(
+                Box::new(self.zonk_term(a)),
+                Box::new(self.zonk_term(b)),
+                Box::new(self.zonk_term(e)),
+                Box::new(self.zonk_term(t)),
+            ),
+            Term::J(m, d, e) => Term::J(
+                Box::new(self.zonk_term(m)),
+                Box::new(self.zonk_term(d)),
+                Box::new(self.zonk_term(e)),
+            ),
+            Term::Quot(a, r) => Term::Quot(Box::new(self.zonk_term(a)), Box::new(self.zonk_term(r))),
+            Term::QuotClass(t) => Term::QuotClass(Box::new(self.zonk_term(t))),
+            Term::QuotElim { motive, method, respect, scrut } => Term::QuotElim {
+                motive: Box::new(self.zonk_term(motive)),
+                method: Box::new(self.zonk_term(method)),
+                respect: Box::new(self.zonk_term(respect)),
+                scrut: Box::new(self.zonk_term(scrut)),
+            },
+            Term::Trunc(t) => Term::Trunc(Box::new(self.zonk_term(t))),
+            Term::TruncProj(t) => Term::TruncProj(Box::new(self.zonk_term(t))),
+            Term::Absurd(c, p) => Term::Absurd(Box::new(self.zonk_term(c)), Box::new(self.zonk_term(p))),
+            Term::Elim { fam, level_args, params, motive, methods, indices, scrut } => Term::Elim {
+                fam: *fam,
+                level_args: level_args.iter().map(|l| self.zonk_level(l)).collect(),
+                params: params.iter().map(|p| self.zonk_term(p)).collect(),
+                motive: Box::new(self.zonk_term(motive)),
+                methods: methods.iter().map(|m| self.zonk_term(m)).collect(),
+                indices: indices.iter().map(|i| self.zonk_term(i)).collect(),
+                scrut: Box::new(self.zonk_term(scrut)),
+            },
         }
     }
 }
@@ -294,6 +353,29 @@ fn elab_type(cx: &mut ElabCtx, ty: &RType) -> Result<Term, ElabError> {
             } else {
                 Ok(Term::const_(id, vec![]))
             }
+        }
+
+        // `Eq A a b` — the kernel's native equality TYPE, spelled directly
+        // (`34 §3.4`, `50-stdlib/53-transport.md §2`, whose combinator
+        // listing writes every signature over `Eq`, not the level-fixed
+        // `Equal` alias). This is surface PLUMBING for the `J` former's own
+        // argument types, not a new eliminator: `Term::Eq` already exists and
+        // is already in `trusted_base()` (`term.rs`); `Equal := λA x y. Eq A
+        // x y` (`prelude.rs`) is a `declare_def` MONOMORPHIC at `Type0`
+        // (`level_params: vec![]`), which cannot spell `cast`'s `Eq Type A
+        // B` (an equality of TWO TYPES — the carrier is `Type` itself, one
+        // level up). `elab_type` is a raw, UNCHECKED structural builder (the
+        // whole declaration is type/kernel-checked later), so building
+        // `Term::Eq` directly here — instead of an applied `Const` alias —
+        // needs no level parameter at all: the level is read off `A`'s own
+        // classification when the surrounding declaration is later checked,
+        // exactly as `check.rs`'s own `Term::Eq` inference arm already does.
+        RType::RApp(..) if peel_named_rtype_app(ty, "Eq", 3).is_some() => {
+            let args = peel_named_rtype_app(ty, "Eq", 3).expect("checked by guard");
+            let a_ty_k = elab_type(cx, args[0])?;
+            let a_k = elab_type(cx, args[1])?;
+            let b_k = elab_type(cx, args[2])?;
+            Ok(Term::Eq(Box::new(a_ty_k), Box::new(a_k), Box::new(b_k)))
         }
 
         RType::RApp(f, a, _) => {
@@ -834,6 +916,29 @@ fn infer(cx: &mut ElabCtx, expr: &RExpr) -> Result<(Term, Term), ElabError> {
             Ok((Term::ty(l), ty))
         }
 
+        // `J motive base eq` — the identity eliminator (`34 §3.4`), surfaced
+        // as an INFER-mode former mirroring the existing checked-sugar idiom
+        // (`Refl`/`absurd`/`Axiom` above are `RCon`/`RApp` special forms over
+        // a resolver-emitted `RCon` on scope miss; `J` is the 3-argument,
+        // infer-mode sibling — its motive is user-written, not recovered
+        // from a checked goal). Detected BEFORE the generic application arm
+        // below via a full application-spine peel (`absurd` only needed one
+        // level; `J` needs three).
+        RExpr::RApp(..) if peel_named_app(expr, "J", 3).is_some() => {
+            let args = peel_named_app(expr, "J", 3).expect("checked by guard");
+            infer_j(cx, args[0], args[1], args[2], expr.span())
+        }
+
+        // `Eq A a b` at EXPRESSION position (e.g. inside a `J` motive's body,
+        // `\b' _. Eq B (P a) (P b')` — `cong`'s motive, `50-stdlib/53-
+        // transport.md §2`). Same plumbing as the `elab_type` arm above
+        // (`peel_named_rtype_app`), needed because a motive body is
+        // elaborated via `infer`/`check`, not `elab_type`.
+        RExpr::RApp(..) if peel_named_app(expr, "Eq", 3).is_some() => {
+            let args = peel_named_app(expr, "Eq", 3).expect("checked by guard");
+            infer_eq(cx, args[0], args[1], args[2], expr.span())
+        }
+
         RExpr::RApp(f, a, span) => {
             let (f_core, f_ty) = infer(cx, f)?;
             let f_ty_wh = whnf(cx.env, &cx.ctx, &f_ty);
@@ -906,6 +1011,161 @@ fn infer(cx: &mut ElabCtx, expr: &RExpr) -> Result<(Term, Term), ElabError> {
 
         RExpr::RProj(base, field, span) => infer_proj(cx, base, field, span),
     }
+}
+
+/// Peel a left-nested application spine, returning its arguments in surface
+/// (left-to-right) order iff the spine is headed by `RCon(name)` applied to
+/// EXACTLY `arity` arguments (generalizes the single-arg `absurd` match in
+/// `check` above to `J`'s 3 arguments: motive, base, eq).
+fn peel_named_app<'a>(expr: &'a RExpr, name: &str, arity: usize) -> Option<Vec<&'a RExpr>> {
+    let mut args: Vec<&RExpr> = Vec::new();
+    let mut cur = expr;
+    loop {
+        match cur {
+            RExpr::RApp(f, a, _) => {
+                args.push(a.as_ref());
+                cur = f.as_ref();
+            }
+            RExpr::RCon(n, _) if n == name && args.len() == arity => {
+                args.reverse();
+                return Some(args);
+            }
+            _ => return None,
+        }
+    }
+}
+
+/// `Eq A a b` at expression position — elaborates directly to the kernel's
+/// existing `Term::Eq` (see the `elab_type` companion arm above for the
+/// type-position spelling and the full rationale). `A` is inferred (so a
+/// bare `Type` argument, needed for `cast`'s `Eq Type A B`, gets its own
+/// fresh level via the ordinary `RUniv(None)` path), then `a`/`b` are
+/// CHECKED against it — mirroring `check.rs`'s own `Term::Eq` inference arm
+/// (`synth_type(a_ty)`; `check(x,a_ty)`; `check(y,a_ty)`) exactly, with a
+/// final `kernel_infer` re-derivation as the soundness net (never trusting
+/// this function's own bookkeeping, same discipline as `infer_j`).
+fn infer_eq(
+    cx: &mut ElabCtx,
+    a_ty_expr: &RExpr,
+    a_expr: &RExpr,
+    b_expr: &RExpr,
+    span: &Span,
+) -> Result<(Term, Term), ElabError> {
+    let (a_ty_core, _a_ty_ty) = infer(cx, a_ty_expr)?;
+    let a_ty_core = cx.metas.zonk_term(&a_ty_core);
+    let a_core = check(cx, a_expr, &a_ty_core, span)?;
+    let b_core = check(cx, b_expr, &a_ty_core, span)?;
+    let eq_term = Term::Eq(Box::new(a_ty_core), Box::new(a_core), Box::new(b_core));
+
+    let zonked_ctx = Context {
+        types: cx.ctx.types.iter().map(|t| cx.metas.zonk_term(t)).collect(),
+    };
+    let zonked_eq = cx.metas.zonk_term(&eq_term);
+    let ty = kernel_infer(cx.env, &zonked_ctx, &zonked_eq)
+        .map_err(|e| ElabError::KernelRejected { error: e, span: span.clone() })?;
+    Ok((eq_term, ty))
+}
+
+/// `J motive base eq` — elaborates directly to the kernel's existing
+/// `Term::J` (`34 §3.4`; kernel target `check.rs::infer_j`, already in
+/// `trusted_base()`). Unlike `Refl`/`absurd`/`tt` (checked-mode, the motive
+/// comes from the ascribed goal), `J`'s motive is USER-WRITTEN and cannot be
+/// `infer`'d as a bare lambda (`RExpr::RLam` has no domain annotation — see
+/// the unconditional error in `infer`'s own `RLam` arm above). So the motive
+/// is elaborated BIDIRECTIONALLY here: recover `A`/`a`/`b` from `eq`'s
+/// inferred type, peel the motive's own two binders, bind them at their
+/// rule-mandated types (`A` and `Eq A a b'`), and `infer` (not `check`) the
+/// motive's BODY — its inferred type IS the codomain sort `s` the kernel's
+/// rule leaves unconstrained (`Type ℓ` or `Ω`; e.g. an `Eq`-valued body
+/// naturally infers to `Omega(l)`, licensing `cong`'s `Ω`-motive). `base` is
+/// checked against `motive a (refl a)` built the same UNREDUCED-application
+/// way `check.rs::infer_j` itself does (`Term::app` twice, no manual
+/// substitution — `check`'s own whnf handles the redex).
+fn infer_j(
+    cx: &mut ElabCtx,
+    motive_expr: &RExpr,
+    base_expr: &RExpr,
+    eq_expr: &RExpr,
+    span: &Span,
+) -> Result<(Term, Term), ElabError> {
+    // eq : Eq A a b — recover A, a, b. Zonked before the whnf match: a bare
+    // surface `(a:Type)` parameter can still carry an unresolved universe
+    // metavariable this far into elaboration (the same latent trap fixed for
+    // `check_match_dependent` — [[gate-widening-exposes-latent-bugs-in-newly-reachable-code]]).
+    let (eq_core, eq_ty) = infer(cx, eq_expr)?;
+    let eq_ty = cx.metas.zonk_term(&eq_ty);
+    let eq_ty_wh = whnf(cx.env, &cx.ctx, &eq_ty);
+    let (a_ty, a, b) = match eq_ty_wh {
+        Term::Eq(at, x, y) => (*at, *x, *y),
+        _ => {
+            return Err(ElabError::TypeMismatch {
+                span: span.clone(),
+                reason: "J's third argument must have an `Eq` type".into(),
+            })
+        }
+    };
+
+    let motive_body_expr = match motive_expr {
+        RExpr::RLam(_, inner, _) => match inner.as_ref() {
+            RExpr::RLam(_, body, _) => body.as_ref(),
+            _ => {
+                return Err(ElabError::TypeMismatch {
+                    span: span.clone(),
+                    reason: "J's motive must be a 2-argument lambda `\\b' e'. G[b']`".into(),
+                })
+            }
+        },
+        _ => {
+            return Err(ElabError::TypeMismatch {
+                span: span.clone(),
+                reason: "J's motive must be a 2-argument lambda `\\b' e'. G[b']`".into(),
+            })
+        }
+    };
+
+    // Bind b':A, e':Eq A a b' and INFER the motive's body — its type is
+    // whatever sort `s` the body computes.
+    let eq_dom_ty = Term::Eq(
+        Box::new(weaken(&a_ty, 1)),
+        Box::new(weaken(&a, 1)),
+        Box::new(Term::var(0)),
+    );
+    cx.ctx.push(a_ty.clone());
+    cx.ctx.push(eq_dom_ty.clone());
+    let body_result = infer(cx, motive_body_expr);
+    cx.ctx.pop();
+    cx.ctx.pop();
+    let (body_core, body_ty) = body_result?;
+
+    let motive_lam = Term::lam(a_ty.clone(), Term::lam(eq_dom_ty.clone(), body_core));
+    let motive_ty = Term::pi(a_ty, Term::pi(eq_dom_ty, body_ty));
+    let motive_core = Term::Ascript(Box::new(motive_lam.clone()), Box::new(motive_ty));
+
+    let base_expected_ty = Term::app(
+        Term::app(motive_lam.clone(), a.clone()),
+        Term::Refl(Box::new(a)),
+    );
+    let base_core = check(cx, base_expr, &base_expected_ty, span)?;
+
+    let result_ty = Term::app(Term::app(motive_lam, b), eq_core.clone());
+    let term_j = Term::J(
+        Box::new(motive_core),
+        Box::new(base_core),
+        Box::new(eq_core),
+    );
+
+    // Kernel-check the emitted `J` directly at construction time (AC1: the
+    // sole soundness net is the raw kernel re-deriving everything from
+    // scratch — motive shape, base's type, the whole term's well-formedness
+    // — never trusting this function's own bookkeeping).
+    let zonked_ctx = Context {
+        types: cx.ctx.types.iter().map(|t| cx.metas.zonk_term(t)).collect(),
+    };
+    let zonked_term_j = cx.metas.zonk_term(&term_j);
+    kernel_infer(cx.env, &zonked_ctx, &zonked_term_j)
+        .map_err(|e| ElabError::KernelRejected { error: e, span: span.clone() })?;
+
+    Ok((term_j, result_ty))
 }
 
 /// `e.field` — Σ-record field projection (`33 §5.2` η). Infers `e`'s type,
@@ -1239,6 +1499,27 @@ pub fn elaborate_rdecl(
     let mut sentinel = ClassEnv::sentinel();
     let result = elaborate_rdecl_v1(env, globals, num_values, numeric_env, &mut sentinel, rdecl)?;
     Ok(result.def_id)
+}
+
+/// Peel a left-nested `RType` application spine headed by `RCon(name)`
+/// applied to exactly `arity` arguments (the `RType`-side sibling of
+/// `peel_named_app`, used for the `Eq A a b` type-position spelling).
+fn peel_named_rtype_app<'a>(ty: &'a RType, name: &str, arity: usize) -> Option<Vec<&'a RType>> {
+    let mut args: Vec<&RType> = Vec::new();
+    let mut cur = ty;
+    loop {
+        match cur {
+            RType::RApp(f, a, _) => {
+                args.push(a.as_ref());
+                cur = f.as_ref();
+            }
+            RType::RCon(n, _) if n == name && args.len() == arity => {
+                args.reverse();
+                return Some(args);
+            }
+            _ => return None,
+        }
+    }
 }
 
 /// Extract the outermost constructor name from a resolved type for
