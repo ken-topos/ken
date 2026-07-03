@@ -1,0 +1,23 @@
+-- Rosetta Code: Accumulator factory
+-- https://rosettacode.org/wiki/Accumulator_factory
+--
+-- Task: a function that returns a closure holding a running total, where
+-- each call to the closure adds its argument and returns the new total
+-- -- the total persists as HIDDEN mutable state across calls, with no
+-- explicit threading by the caller.
+--
+-- GAP-no-mutable-state (BLOCKING, see KNOWN-GAP.md): Ken has no
+-- mutable-reference primitive and no `[State]` effect anywhere in the
+-- elaborator (confirmed by inspection: no `Ref`/`StateOp`/`"State"`
+-- effect-row entry exists). A pure function returning a fresh closure
+-- each call, with no way to persist and mutate a cell across
+-- INDEPENDENT calls, cannot express "hidden mutable state" at all --
+-- this is not an encoding-awkwardness problem, it's a genuinely absent
+-- capability. (An explicitly-THREADED accumulator -- `next : Nat -> Acc
+-- -> (Nat, Acc)`, the caller passing the updated `Acc` back each time --
+-- is expressible, but is a DIFFERENT program: it requires the caller to
+-- thread the state explicitly, which is exactly what this task's "hidden
+-- state" behavior rules out.)
+--
+-- Placeholder until GAP-no-mutable-state is resolved.
+view main : Nat = Zero

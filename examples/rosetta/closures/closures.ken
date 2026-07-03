@@ -1,0 +1,77 @@
+-- Rosetta Code: Closures/Value capture
+-- https://rosettacode.org/wiki/Closures/Value_capture
+--
+-- Task: build several closures that each capture a distinct value, and
+-- show the captured value survives independently in each closure.
+--
+-- `mkPrefixer p` returns a `String -> String` closure that captures `p` and
+-- prepends it to its argument. Three closures (capturing "Hello, "/"Bye, "/
+-- "Hey, ") are built into a list of functions -- functions as first-class
+-- list elements -- and applied to a common name via a local `map` (not in
+-- the landed `packages/collections` floor; a one-off, same precedent as
+-- `crates/ken-elaborator/tests/l3a_acceptance.rs`'s own local `map`).
+--
+-- GAP-arrow-type-as-type-arg (non-blocking, worked around): `A -> B`
+-- (`Expr::EPi`/arrow) has no term-level expression form in the parser --
+-- `Expr` (`crates/ken-elaborator/src/parser.rs:1156-1246`) has no arrow/Pi
+-- variant at all; arrow types parse only via the separate type-annotation
+-- grammar (after `:`), never as a value-level expression. Confirmed
+-- empirically: `Nil (String -> String)` (an explicit TYPE ARGUMENT that
+-- happens to be a function type) fails to parse
+-- (`ParseError: expected RParen, found Arrow`) -- both bare and under `(_ :
+-- Type)` ascription. So `List (String -> String)` cannot be built directly:
+-- a generic (`List a`, `Option a`, ...) can never be explicitly instantiated
+-- at a function type. Worked around by wrapping the function type in a
+-- single-constructor `data StrFn = MkStrFn (String -> String)` -- `StrFn` is
+-- an ordinary named `Type`, so `List StrFn` instantiates fine. This is a
+-- standard closure-boxing idiom, not a hack that hides broken behavior, but
+-- it IS forced by a real gap (not a design choice) -- flagged to
+-- language-leader, not silently absorbed.
+--
+-- Output steers around the tracked `natToDecimal` exponential-blowup gap
+-- (VAL2 finding): the oracle is a PASS/FAIL `String`, never a printed
+-- `Nat`/`Int`.
+
+-- `map` -- a functor over `List`, structural recursion on the `Cons` tail
+-- (SCT sound zone, same shape as the landed floor combinators).
+view map (a b : Type) (f : a -> b) (xs : List a) : List b =
+  match xs {
+    Nil => Nil b ;
+    Cons h t => Cons b (f h) (map a b f t)
+  }
+
+-- Boxes a `String -> String` so it can be a `List` element (GAP-arrow-
+-- type-as-type-arg workaround, see above).
+data StrFn = MkStrFn (String -> String)
+
+view applyStrFn (box : StrFn) (s : String) : String =
+  match box { MkStrFn f => f s }
+
+-- Each closure captures its own `p` independently -- the defining property
+-- Closures/Value_capture probes (a naive shared-mutable-capture bug would
+-- make all three prepend the SAME, last-bound prefix).
+view mkPrefixer (p : String) : StrFn = MkStrFn (\s . concat p s)
+
+view greeters : List StrFn =
+  Cons StrFn (mkPrefixer "Hello, ")
+    (Cons StrFn (mkPrefixer "Bye, ")
+      (Cons StrFn (mkPrefixer "Hey, ")
+        (Nil StrFn)))
+
+view greetings : List String = map StrFn String (\box . applyStrFn box "World") greeters
+
+view expected : List String =
+  Cons String "Hello, World"
+    (Cons String "Bye, World"
+      (Cons String "Hey, World"
+        (Nil String)))
+
+-- ── Oracle ───────────────────────────────────────────────────────────────────
+
+view finalCheck : String =
+  match list_eq String eq greetings expected {
+    True => "PASS" ;
+    False => "FAIL"
+  }
+
+view main : IO Unit = print_line finalCheck

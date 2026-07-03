@@ -6,7 +6,9 @@ Reference: <https://rosettacode.org/wiki/Factorial>
 
 ## Status
 
-**Working.** All declarations elaborate. `main` evaluates to `120` (= 5!).
+**Working, end to end.** `ken run` prints `120` (= 5!) and exits 0.
+Decimal printing (a 3-digit result) was blocked pending
+`wp/RTP1-interp-sharing` — resolved (`e88ffa8`), confirmed fast.
 
 ## Implementation notes
 
@@ -14,11 +16,11 @@ Reference: <https://rosettacode.org/wiki/Factorial>
   machinery). `Int` is not pattern-matchable, so Nat is the natural carrier.
 - `natAdd` and `natMul` are defined from first principles (no arithmetic
   primitives on `Nat`; those live on `Int`).
-- `natToInt` converts the Nat result to `Int` for human-readable output.
-- Readable Nat literals (`one` through `five`) are defined incrementally.
 - SCT termination: the recursive call `factorial m` is on `m`, a structural
   sub-term of `Suc m`.
+- Decimal `Nat`->`String` conversion (`natToDecimal`), same machinery as
+  `examples/rosetta/gcd/gcd.ken`.
 
 ## Oracle
 
-`main` evaluates to `120`.
+`main` prints `120`.

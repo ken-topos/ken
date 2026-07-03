@@ -1,0 +1,16 @@
+-- Rosetta Code: Read a file line by line
+-- https://rosettacode.org/wiki/Read_a_file_line_by_line
+--
+-- Task: read a text file and process it line by line.
+--
+-- GAP-fs-read-unwired (BLOCKING, see KNOWN-GAP.md): `read_bytes` is
+-- declared (`crates/ken-elaborator/src/bytes.rs`, `[FS]` effect row) but
+-- has no real runtime reduction in `ken-interp` -- it falls through to
+-- the generic prim-reduce catch-all and stays `Neutral` (stuck) forever,
+-- never actually reading a file. Confirmed by inspection: only
+-- `print_line`/`string_to_list_char`/`list_char_to_string` are
+-- special-cased with real reductions in `ken-interp/src/eval.rs`'s
+-- `apply` (~1275-1309); `read_bytes`/`write_bytes` are not.
+--
+-- Placeholder until GAP-fs-read-unwired is resolved.
+view main : Nat = Zero

@@ -8,7 +8,9 @@
 -- predecessor; Int does not have a `Suc`/`Zero` decomposition.
 -- `natToInt` converts the result to a readable Int for the oracle.
 --
--- No gaps blocking this task.
+-- No gaps blocking this task. Decimal printing was blocked pending
+-- `wp/RTP1-interp-sharing` (eager-IH-computation cost, `natToDecimal`
+-- family) -- resolved (`e88ffa8`), now prints correctly and fast.
 
 -- ── Nat arithmetic helpers ───────────────────────────────────────────────────
 
@@ -37,7 +39,64 @@ view three : Nat = Suc two
 view four  : Nat = Suc three
 view five  : Nat = Suc four
 
+-- ── Decimal printing ─────────────────────────────────────────────────────────
+--
+-- `ken-interp` has no `div_int`/`mod_int` primitive, so decimal conversion
+-- goes via structural `Nat` peeling (`sub10`) + a `Nat`-fuel loop, same
+-- shape as `examples/rosetta/gcd/gcd.ken`'s own machinery.
+
+data OrdResult = Lt | Eq | Gt
+
+view list_append (a : Type) (xs : List a) (ys : List a) : List a =
+  match xs { Nil => ys ; Cons x xs2 => Cons a x (list_append a xs2 ys) }
+
+view concat (a : String) (b : String) : String =
+  list_char_to_string (list_append Char (string_to_list_char a) (string_to_list_char b))
+
+view sub10 (n : Nat) : Option Nat =
+  match n { Zero => None Nat ; Suc n1 =>
+  match n1 { Zero => None Nat ; Suc n2 =>
+  match n2 { Zero => None Nat ; Suc n3 =>
+  match n3 { Zero => None Nat ; Suc n4 =>
+  match n4 { Zero => None Nat ; Suc n5 =>
+  match n5 { Zero => None Nat ; Suc n6 =>
+  match n6 { Zero => None Nat ; Suc n7 =>
+  match n7 { Zero => None Nat ; Suc n8 =>
+  match n8 { Zero => None Nat ; Suc n9 =>
+  match n9 { Zero => None Nat ; Suc n10 => Some Nat n10 } } } } } } } } } }
+
+view mod10Fueled (fuel : Nat) (n : Nat) : Nat =
+  match fuel {
+    Zero => n ;
+    Suc f => match sub10 n { None => n ; Some n2 => mod10Fueled f n2 }
+  }
+
+view mod10 (n : Nat) : Nat = mod10Fueled n n
+
+view div10Fueled (fuel : Nat) (n : Nat) (q : Nat) : Nat =
+  match fuel {
+    Zero => q ;
+    Suc f => match sub10 n { None => q ; Some n2 => div10Fueled f n2 (Suc q) }
+  }
+
+view div10 (n : Nat) : Nat = div10Fueled n n Zero
+
+view digitChar (d : Nat) : String =
+  list_char_to_string (Cons Char ((48 : Int) + natToInt d) (Nil Char))
+
+view natToDecimalFueled (fuel : Nat) (n : Nat) : String =
+  match fuel {
+    Zero => digitChar n ;
+    Suc f => match div10 n {
+      Zero  => digitChar (mod10 n) ;
+      Suc q => concat (natToDecimalFueled f (Suc q)) (digitChar (mod10 n))
+    }
+  }
+
+view natToDecimal (n : Nat) : String =
+  match n { Zero => "0" ; Suc m => natToDecimalFueled (Suc m) (Suc m) }
+
 -- ── Oracle ───────────────────────────────────────────────────────────────────
 
 -- main: 5! = 120
-view main : Int = natToInt (factorial five)
+view main : IO Unit = print_line (natToDecimal (factorial five))
