@@ -146,7 +146,7 @@ fn print_line_prim_reduction_builds_itree() {
         vis_id: p.vis_id,
         write_id: p.write_id,
         unit_id: p.mkunit_id,  // `unit_id` in ConsoleIds = MkUnit constructor
-        params_len: 1,          // `data ITree r` — one type param
+        params_len: 3,          // lifted `ITree (E:Type)(Resp:E->Type)(R:Type)` — 3 type params (State-effect-build)
     };
     let mut store = make_store(&env);
     store.print_line_id = Some(p.print_line_id);
@@ -154,13 +154,13 @@ fn print_line_prim_reduction_builds_itree() {
 
     let val = eval_def(&env, &mut store, id);
 
-    // The result must be a Vis node: Ctor { vis_id, args: [_, Write_s, k] }
+    // The result must be a Vis node: Ctor { vis_id, args: [E, Resp, R, Write_s, k] }
     match val {
         EvalVal::Ctor { id: ctor_id, ref args, .. } => {
             assert_eq!(ctor_id, p.vis_id, "outer ctor must be Vis");
-            // args[0] = type param (Unknown); args[1] = Write s; args[2] = continuation
-            assert!(args.len() >= 3, "Vis must have >= 3 args (type_param + op + k)");
-            match &args[1] {
+            // args[0..2] = the 3 type params (E,Resp,R); args[3] = Write s; args[4] = continuation
+            assert!(args.len() >= 5, "Vis must have >= 5 args (3 type params + op + k)");
+            match &args[3] {
                 EvalVal::Ctor { id: op_id, args: op_args, .. } => {
                     assert_eq!(*op_id, p.write_id, "op must be Write");
                     assert_eq!(

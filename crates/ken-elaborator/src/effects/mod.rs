@@ -43,6 +43,7 @@ pub mod itree;
 pub mod lower;
 pub mod row;
 pub mod row_poly;
+pub mod state;
 
 pub use algebra::{cap_set, row_join, CapParam};
 pub use check::{

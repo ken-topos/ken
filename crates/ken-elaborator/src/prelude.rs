@@ -72,6 +72,18 @@ pub fn empty_prelude_env() -> PreludeEnv {
         io_id: z,
         print_line_id: z,
         mkdecimalpair_id: z,
+        state_op_id: z,
+        get_id: z,
+        put_id: z,
+        sum_id: z,
+        inl_id: z,
+        inr_id: z,
+        resp_state_id: z,
+        resp_sum_id: z,
+        bind_id: z,
+        run_state_id: z,
+        get_fn_id: z,
+        put_fn_id: z,
     }
 }
 
@@ -140,6 +152,28 @@ pub struct PreludeEnv {
     /// surfaced so literal-conversion call sites outside this crate can
     /// build a `Decimal` `EvalVal` from a `(coeff, exp)` pair.
     pub mkdecimalpair_id: GlobalId,
+    // `[State s]` direct effect surface (VAL2 #10 / OQ-C·C2, `36 §4.5`) —
+    // built directly via `effects::state` (see that module's doc comment).
+    /// `StateOp s = Get | Put s` (`36 §2.1`).
+    pub state_op_id: GlobalId,
+    pub get_id: GlobalId,
+    pub put_id: GlobalId,
+    /// `Sum a b = InL a | InR b` — the effect-op container coproduct (`⊕`).
+    pub sum_id: GlobalId,
+    pub inl_id: GlobalId,
+    pub inr_id: GlobalId,
+    /// `resp_state : (s:Type) -> StateOp s -> Type`.
+    pub resp_state_id: GlobalId,
+    /// `resp_sum : (s f:Type) -> (RespF:f->Type) -> Sum (StateOp s) f -> Type`.
+    pub resp_sum_id: GlobalId,
+    /// `bind` over the lifted `ITree`.
+    pub bind_id: GlobalId,
+    /// `runState` — the `§4.2` `elim_ITree` fold at `F` (`36 §4.5.3`).
+    pub run_state_id: GlobalId,
+    /// `get : Unit -> ITree (Sum (StateOp s) f) (resp_sum s f RespF) s`.
+    pub get_fn_id: GlobalId,
+    /// `put : s -> ITree (Sum (StateOp s) f) (resp_sum s f RespF) Unit`.
+    pub put_fn_id: GlobalId,
 }
 
 /// Register the L3 prelude in `elab` (called from `ElabEnv::empty`).
@@ -166,9 +200,26 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         .map_err(|e| ElabError::Internal(format!("prelude Unit failed: {}", e)))?;
     elab.elaborate_decl("data ConsoleOp = Write String")
         .map_err(|e| ElabError::Internal(format!("prelude ConsoleOp failed: {}", e)))?;
-    // Two-field Vis: effect op first, continuation second — matches run_io contract.
-    elab.elaborate_decl("data ITree r = Ret r | Vis ConsoleOp (Unit -> ITree r)")
-        .map_err(|e| ElabError::Internal(format!("prelude ITree failed: {}", e)))?;
+
+    // `ITree (E:Type) (Resp:E->Type) (R:Type)` — the LIFTED, effect-generic
+    // interaction tree (State-effect-build, VAL2 #10 / OQ-C·C2, `36 §4.5.6`).
+    // Dependent-response `Vis` (`Resp op`, non-`Unit` for `State.Get`) can't be
+    // expressed by the surface `data` parser (no ctor arg may depend on an
+    // earlier arg's VALUE) — built directly via `declare_inductive`
+    // (`effects::state::declare_itree`), a real kernel inductive re-checked
+    // exactly like any surface `data` (AC1: `ken-kernel` untouched, no new
+    // `Term`/`Decl` variant — `crate::effects::state`'s module doc explains
+    // why hand-building here is SAFER than reopening `compile_match_matrix`).
+    // Replaces the earlier Console-hardwired 1-param `ITree r = Ret r | Vis
+    // ConsoleOp (Unit -> ITree r)` — Console's own `print_line` prim
+    // reduction is untyped/erased at eval time (its STATIC type is the
+    // separate `IO Unit` postulate below, unaffected by this arity change)
+    // and only needs its `ConsoleIds.params_len` bumped at call sites.
+    let (itree_id, ret_id, vis_id) =
+        crate::effects::state::declare_itree(&mut elab.env).map_err(ElabError::Internal)?;
+    elab.globals.insert("ITree".to_string(), itree_id);
+    elab.globals.insert("Ret".to_string(), ret_id);
+    elab.globals.insert("Vis".to_string(), vis_id);
 
     let lookup = |name: &str| -> Result<GlobalId, ElabError> {
         elab.globals
@@ -200,6 +251,67 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     let ret_id = lookup("Ret")?;
     let vis_id = lookup("Vis")?;
     // `lookup` is last used above; NLL ends its borrow here.
+
+    // ── `[State s]` direct effect surface (VAL2 #10 / OQ-C·C2, `36 §4.5`) ──
+    // Every definition below is a real kernel `Decl::Inductive`/`Decl::Def`
+    // (`declare_inductive`/`declare_def`, kernel-rechecked) — never a
+    // `declare_primitive`/`declare_postulate` — hand-built in
+    // `effects::state` for the same reason `ITree` itself is (dependent
+    // ctor-arg/motive shapes the surface `data`/`match` machinery can't
+    // express yet). See that module's doc comment for the full rationale.
+    use crate::effects::state as state_eff;
+    let (state_op_id, get_id, put_id) =
+        state_eff::declare_state_op(&mut elab.env).map_err(ElabError::Internal)?;
+    elab.globals.insert("StateOp".to_string(), state_op_id);
+    elab.globals.insert("Get".to_string(), get_id);
+    elab.globals.insert("Put".to_string(), put_id);
+
+    let (sum_id, inl_id, inr_id) = state_eff::declare_sum(&mut elab.env).map_err(ElabError::Internal)?;
+    elab.globals.insert("Sum".to_string(), sum_id);
+    elab.globals.insert("InL".to_string(), inl_id);
+    elab.globals.insert("InR".to_string(), inr_id);
+
+    let resp_state_id = state_eff::declare_resp_state(&mut elab.env, state_op_id, unit_id)
+        .map_err(ElabError::Internal)?;
+    elab.globals.insert("resp_state".to_string(), resp_state_id);
+
+    let resp_sum_id = state_eff::declare_resp_sum(&mut elab.env, state_op_id, sum_id, resp_state_id)
+        .map_err(ElabError::Internal)?;
+    elab.globals.insert("resp_sum".to_string(), resp_sum_id);
+
+    let bind_id = state_eff::declare_bind(&mut elab.env, itree_id, vis_id).map_err(ElabError::Internal)?;
+    elab.globals.insert("bind".to_string(), bind_id);
+
+    let run_state_id = state_eff::declare_run_state(
+        &mut elab.env,
+        itree_id,
+        ret_id,
+        vis_id,
+        state_op_id,
+        get_id,
+        put_id,
+        sum_id,
+        inl_id,
+        inr_id,
+        resp_state_id,
+        resp_sum_id,
+        unit_id,
+        mkunit_id,
+    )
+    .map_err(ElabError::Internal)?;
+    elab.globals.insert("runState".to_string(), run_state_id);
+
+    let get_fn_id = state_eff::declare_get(
+        &mut elab.env, itree_id, ret_id, vis_id, state_op_id, get_id, sum_id, inl_id, resp_sum_id, unit_id,
+    )
+    .map_err(ElabError::Internal)?;
+    elab.globals.insert("get".to_string(), get_fn_id);
+
+    let put_fn_id = state_eff::declare_put(
+        &mut elab.env, itree_id, ret_id, vis_id, state_op_id, put_id, sum_id, inl_id, resp_sum_id, unit_id, mkunit_id,
+    )
+    .map_err(ElabError::Internal)?;
+    elab.globals.insert("put".to_string(), put_fn_id);
 
     // ── Ω constants (ES2: real definitions, demoted out of `trusted_base()`) ─
     // `Equal : Π(A:Type). Π(x:A). Π(y:A). Ω`  (the `≡`).
@@ -526,12 +638,22 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     // `IO : Type → Type` — the Console-effect IO type.
     //
     // ES2: DERIVABLE — `IO` is a definition, not an assumed axiom: it is
-    // exactly `ITree` (`36`), the simplified W-style interaction tree already
-    // specialized to the Console effect (`data ITree r = Ret r | Vis
-    // ConsoleOp (Unit -> ITree r)`). `IO A := ITree A`.
+    // `ITree` (`36`) specialized to the Console effect. `IO A := ITree
+    // ConsoleOp (\_:ConsoleOp. Unit) A` — Console's every op has a `Unit`
+    // response (matches the pre-lift hardwired `Unit -> ITree r` shape),
+    // now expressed as a CONSTANT `Resp` function over the lifted, 3-param
+    // `ITree` (State-effect-build) rather than baked into the family itself.
     let io_ty = Term::pi(type0.clone(), type0.clone());
-    let io_body =
-        Term::lam(type0.clone(), Term::app(Term::indformer(itree_id, vec![]), Term::var(0)));
+    let const_unit_resp = Term::lam(Term::indformer(console_op_id, vec![]), Term::indformer(unit_id, vec![]));
+    let io_body = Term::lam(
+        type0.clone(),
+        crate::effects::state::itree3_standalone(
+            itree_id,
+            Term::indformer(console_op_id, vec![]),
+            weaken(&const_unit_resp, 1),
+            Term::var(0),
+        ),
+    );
     let io_id = declare_def(&mut elab.env, vec![], io_ty, io_body)
         .map_err(|e| ElabError::Internal(format!("prelude IO failed: {}", e)))?;
     elab.globals.insert("IO".to_string(), io_id);
@@ -539,14 +661,24 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     // `print_line : String → IO Unit` — Console print, per the VAL1-step2
     // wiring (`6789e42`).
     //
+    // `console_resp : ConsoleOp -> Type = \_. Unit` — every Console op has a
+    // `Unit` response; NAMED (not an inline argument-position lambda) so
+    // `Vis`/`Ret`'s `Resp` param is always a plain `Const` reference,
+    // matching the shape the ORIGINAL 1-param `print_line` body already used
+    // successfully (a single continuation lambda, nothing else).
+    elab.elaborate_decl("view console_resp (op : ConsoleOp) : Type = Unit")
+        .map_err(|e| ElabError::Internal(format!("prelude console_resp failed: {}", e)))?;
+
     // ES2: DERIVABLE — a definition in terms of the `ITree` constructors
     // (`Vis`/`Ret`) + the `Console.Op` payload (`Write`), not an irreducible
     // primitive: `print_line s := Vis (Write s) (\_. Ret MkUnit)`. Declared
     // via surface syntax (not a hand-built raw `Term`) so ordinary δ/ι
     // reduction produces the `Vis` node directly — no bespoke `apply`
-    // interception needed.
+    // interception needed. `ITree`'s 3 explicit params (State-effect-build
+    // lift) are supplied explicitly: `E=ConsoleOp`, `Resp=console_resp`, `R=Unit`.
     elab.elaborate_decl(
-        "view print_line (s : String) : IO Unit = Vis Unit (Write s) (\\_. Ret Unit MkUnit)",
+        "view print_line (s : String) : IO Unit = \
+         Vis ConsoleOp console_resp Unit (Write s) (\\_. Ret ConsoleOp console_resp Unit MkUnit)",
     )
     .map_err(|e| ElabError::Internal(format!("prelude print_line failed: {}", e)))?;
     let print_line_id = elab
@@ -590,5 +722,17 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         io_id,
         print_line_id,
         mkdecimalpair_id: decimal_char_env.mkdecimalpair_id,
+        state_op_id,
+        get_id,
+        put_id,
+        sum_id,
+        inl_id,
+        inr_id,
+        resp_state_id,
+        resp_sum_id,
+        bind_id,
+        run_state_id,
+        get_fn_id,
+        put_fn_id,
     })
 }
