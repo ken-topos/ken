@@ -2271,10 +2271,18 @@ fn unwrap_lam(term: &Term, n: usize) -> Term {
 /// either a genuine surface column (tracked per-row in `RowState::real_pats`)
 /// or a synthetic induction-hypothesis slot the eliminator's method type
 /// requires but no surface pattern ever names.
+/// `Ih(remaining)`: `remaining` is how many MORE `Ih` columns immediately
+/// following this one belong to the *same* constructor bucket (the same
+/// `build_ctor_buckets` call that produced this one) — 0 for the last (or
+/// only) `Ih` in its own batch. This lets `compile_match_matrix` tell "my
+/// own sibling Ih, from the ctor I was just built for" (skip over — its own
+/// type is flat, computed independently) apart from "a genuinely enclosing
+/// split's pending tail" (fold via `tail_codomain`, as that tail's owed
+/// type is not flat).
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum ColKind {
     Real,
-    Ih,
+    Ih(usize),
 }
 
 /// One row of the pattern matrix: the still-unconsumed `Real` column
@@ -2303,7 +2311,7 @@ fn tail_codomain(
         return weaken(ret_ty_base, depth_before_tail as i64);
     }
     match tail_col_kinds[0] {
-        ColKind::Ih => {
+        ColKind::Ih(_) => {
             let ih_ty = weaken(ret_ty_base, depth_before_tail as i64);
             let rest =
                 tail_codomain(&tail_col_types[1..], &tail_col_kinds[1..], ret_ty_base, depth_before_tail);
@@ -2362,24 +2370,37 @@ fn compile_match_matrix(
     }
 
     match col_kinds[0] {
-        ColKind::Ih => {
+        ColKind::Ih(remaining) => {
             // A synthetic induction-hypothesis slot: never resolver-counted,
             // so it is woven in via weaken-then-wrap rather than a real push.
             //
-            // The IH's type is `M(k)` for the enclosing elim's motive `M` —
-            // NOT necessarily the bare global return type: when a nested
-            // split still owes a pending tail (this Ih slot's own
-            // continuation, `col_types[1..]`/`col_kinds[1..]`), `M` is a
-            // constant motive equal to that tail's own codomain (the very
-            // value `tail_codomain` computes when building that split's
-            // motive) — so re-derive it identically from this slot's own
-            // position.
+            // The IH's own type is `M` applied to its field, where `M` is
+            // the motive of the elim THIS Ih belongs to (constant, so `M x`
+            // is just some fixed type) — but that fixed type is not always
+            // the bare `ret_ty`: it is `ret_ty` only when there is no
+            // genuinely-enclosing split still owed beyond this Ih's own
+            // ctor batch. `remaining` siblings immediately follow from the
+            // SAME `build_ctor_buckets` call (the same ctor's own other
+            // recursive fields) — those are invisible to THIS Ih's type,
+            // since each sibling gets its own independent binder via the
+            // recursive call below. Skip past them, then fold whatever
+            // comes after via `tail_codomain` — if that's empty (no
+            // enclosing split), the fold degenerates to flat `ret_ty`
+            // exactly like the sibling case; if non-empty (this Ih sits
+            // inside a nested split's method, e.g. matching a sub-pattern
+            // one recursive field deep), the enclosing split's own pending
+            // continuation (its constant motive's codomain) is genuinely
+            // owed and must be folded in.
             let ret_ty = ret_ty_slot
                 .as_ref()
                 .expect("IH column reached before return type known")
                 .clone();
-            let ih_ty =
-                tail_codomain(&col_types[1..], &col_kinds[1..], &ret_ty, real_depth_so_far);
+            let ih_ty = tail_codomain(
+                &col_types[remaining + 1..],
+                &col_kinds[remaining + 1..],
+                &ret_ty,
+                real_depth_so_far,
+            );
             let inner = compile_match_matrix(
                 cx,
                 arms,
@@ -2576,7 +2597,7 @@ fn build_ctor_buckets(
         new_col_types.extend(std::iter::repeat(Term::ty(Level::Zero)).take(p_ihs0));
         new_col_types.extend_from_slice(tail_col_types);
         let mut new_col_kinds: Vec<ColKind> = vec![ColKind::Real; n_args0];
-        new_col_kinds.extend(std::iter::repeat(ColKind::Ih).take(p_ihs0));
+        new_col_kinds.extend((0..p_ihs0).map(|i| ColKind::Ih(p_ihs0 - 1 - i)));
         new_col_kinds.extend_from_slice(tail_col_kinds);
 
         let inner = compile_match_matrix(
