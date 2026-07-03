@@ -61,7 +61,12 @@ depends entirely on which equality `String` carries.
    respect to `List Char` — the round-trip is the identity on scalar sequences —
    so `DecEq String` / `Ord String` are genuinely **deliverable**, by transport
    from the canonical `DecEq Char` / `Ord Char` (`Char = {c : Int | isScalar c}`
-   is itself canonical: one carrier value per codepoint under erasure).
+   is itself canonical: one carrier value per codepoint under erasure). The
+   value-level `compare`/`leq`/`eq` on `String` are available now (derived over
+   `List Char`); the lawful *instances* are both **pending** follow-ons — a
+   lawful `Ord String` is the **nearer** one (its element order `Ord Char` is
+   landed; it still needs the lexicographic law proofs), while a lawful `DecEq
+   String` is **farther** (a lawful `DecEq Char` is not yet on `main`).
 
 3. **Normalization-insensitive equality is `Eq`, never `DecEq`.** Any
    NFC/NFD-aware string equality (`nfc_eq = eq ∘ normalize`, treating a
@@ -83,10 +88,15 @@ depends entirely on which equality `String` carries.
 ## Consequences
 
 - **Rosetta strings** use codepoint-wise `eq`/`compare` — the simplest, most
-  portable, Unicode-correct default — and the `Ord Char` / `DecEq Char`
-  instances landed on `main` transport straight up to `Ord String` /
-  `DecEq String`. Codepoint-indexed `slice`/`charAt` (via `List Char`) are also
-  the correct default, since a byte-indexed slice can split a multi-byte scalar.
+  portable, Unicode-correct default. The **value-level** `compare`/`leq`/`eq` on
+  `String` are available now (derived over `List Char`, this WP); the lawful
+  **instances** are **pending** follow-ons. A lawful `Ord String` is the
+  **nearer** follow-on — its element order (`Ord Char`, leq-only) is landed on
+  `main`, so it needs only the lexicographic law proofs; a lawful `DecEq String`
+  is **farther**, gated on a lawful `DecEq Char` that is **not** yet on `main`
+  (only the `eqChar` *view* + `Ord Char`-by-transport are). Codepoint-indexed
+  `slice`/`charAt` (via `List Char`) are also the correct default, since a
+  byte-indexed slice can split a multi-byte scalar.
 - **The derive-over-`List Char` strategy has a hard prerequisite** the frame
   must sequence first: `string_to_list_char` and `list_char_to_string` are
   currently `EvalVal::Neutral` stubs (`eval.rs`; "totality asserted at the type
