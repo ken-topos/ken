@@ -1,0 +1,38 @@
+-- C7 SOUND arm — a quotient lift with a valid `respect` proof — should-PASS.
+--
+-- Run against the prelude + the K2 quotient fragment (Term::Quot/QuotElim;
+-- reserved surface `A / R`, `[t]`, `elim_/`, 11-syntax.md). Decimal-as-quotient:
+-- the principled fix to C1's non-canonical carrier.
+
+data DPair = MkDPair Int Int
+
+-- denoteEq: two pairs denote the same value. Ω-valued (a proposition), the
+-- relation we quotient by. (Witness-exact form as in C1's decimalEq; the full
+-- relation is the landed decimal value-equality.)
+view denoteEq (x : DPair) (y : DPair) : Prop =
+  match x { MkDPair cx ex =>
+    match y { MkDPair cy ey =>
+      Equal Bool (and_bool (eq_int (add_int ex 1) ey) (eq_int cx (mul_int cy 10))) True } }
+
+-- The quotient carrier: canonical by construction (one class per denoted value).
+view Decimal : Type = DPair / denoteEq
+
+-- isZeroPair RESPECTS denoteEq: equal-value pairs are both zero or both non-zero.
+view isZeroPair (p : DPair) : Bool =
+  match p { MkDPair c e => eq_int c 0 }
+
+-- The respect proof obligation: (x y : DPair) -> denoteEq x y ->
+--   Equal Bool (isZeroPair x) (isZeroPair y). Provable (a value's zeroness is a
+-- property of the value, not the representation). Marked Axiom-as-placeholder
+-- ONLY for the proof term; the point is that the obligation is TRUE and the
+-- slot is DEMANDED.
+view isZeroRespect (x : DPair) (y : DPair) (h : denoteEq x y)
+  : Equal Bool (isZeroPair x) (isZeroPair y) = Axiom
+
+-- Lift to the quotient: elim_/ motive method respect scrut.
+view isZeroDecimal (d : Decimal) : Bool =
+  elim_/ (\ _ . Bool) isZeroPair isZeroRespect d
+
+-- Expected: elaborates — the respect obligation is discharged, so the lift is
+-- sound. (If `A / R` / `elim_/` are not surface-reachable, record the gap.)
+-- Contrast the unsound arm, where the respect obligation is UNPROVABLE.

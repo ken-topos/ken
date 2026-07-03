@@ -1,0 +1,23 @@
+-- C1 SOUND arm — DecEq Char over the canonical carrier — should-PASS.
+--
+-- Run against the prelude + packages/lawful-classes (class DecEq, eqChar,
+-- Char, Bool, Equal, Prop, IsTrue, Axiom in scope).
+--
+-- Char = {c : Int | isScalar c} is canonical: one Int per codepoint under
+-- erasure, so Equal Char coincides with Equal Int and `eqChar` (= eq_int)
+-- really does decide it. `sound`/`complete = Axiom` here are HONEST, TRUE
+-- postulates — identical in shape to the landed `DecEq Int` (Int is primitive,
+-- its true laws are honest visible Axioms). This is the sound baseline: the
+-- pair's PASS arm.
+
+instance DecEq Char {
+  eq       = eqChar ;
+  sound    = Axiom ;
+  complete = Axiom
+}
+
+-- Expected: elaborates cleanly. `sound = Axiom` is admissible because the
+-- postulated statement is TRUE over the canonical carrier (ADR 0010 §2). The
+-- machinery does not (and need not) prove it — Char has the same honest-Axiom
+-- status as Int. Contrast the unsound arm, where the identical `Axiom` shape
+-- postulates a FALSE statement.

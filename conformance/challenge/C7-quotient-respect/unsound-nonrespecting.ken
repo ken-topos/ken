@@ -1,0 +1,38 @@
+-- C7 UNSOUND arm — a non-respecting quotient lift — should-REJECT.
+--
+-- Run against the prelude + the K2 quotient fragment. Same Decimal quotient as
+-- the sound arm; here we try to lift the first projection `coeff`, which does
+-- NOT respect denoteEq.
+
+data DPair = MkDPair Int Int
+
+view denoteEq (x : DPair) (y : DPair) : Prop =
+  match x { MkDPair cx ex =>
+    match y { MkDPair cy ey =>
+      Equal Bool (and_bool (eq_int (add_int ex 1) ey) (eq_int cx (mul_int cy 10))) True } }
+
+view Decimal : Type = DPair / denoteEq
+
+-- coeffPair does NOT respect denoteEq: MkDPair 10 (-1) and MkDPair 1 0 satisfy
+-- denoteEq (both denote 1) but coeffPair gives 10 vs 1.
+view coeffPair (p : DPair) : Int = match p { MkDPair c e => c }
+
+-- The respect obligation `(x y) -> denoteEq x y -> Equal Int (coeffPair x)
+-- (coeffPair y)` is UNPROVABLE: at x=(10,-1), y=(1,0) it demands Equal Int 10 1
+-- (the same Bottom C1 reaches). There is no proof term to supply.
+view coeffRespect (x : DPair) (y : DPair) (h : denoteEq x y)
+  : Equal Int (coeffPair x) (coeffPair y) = Axiom   -- FALSE — no honest inhabitant
+
+view coeffDecimal (d : Decimal) : Int =
+  elim_/ (\ _ . Int) coeffPair coeffRespect d
+
+-- Expected correct behavior: REJECTED — the `respect` obligation for `coeff` is
+-- unprovable, so `elim_/` cannot be given a valid respect argument; the lift
+-- must be refused. (The `coeffRespect = Axiom` above is the tell: it postulates
+-- a FALSE respect law — the same move C1's `sound = Axiom` makes.)
+--
+-- If ACCEPTED (elim_/ takes the non-respecting lift, or the respect slot is
+-- skippable / Axiom-able without challenge): the finding — the quotient's
+-- soundness IS the respect gate, and it has the same hole as C1. This is why
+-- C1 and C7 are one story: the quotient is the sound construction ONLY if
+-- `respect` is genuinely enforced.

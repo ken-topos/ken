@@ -1,0 +1,25 @@
+-- C5 SOUND arm — verified insertion sort with the conjoined refinement.
+-- should-PASS on emission (both conjuncts). (Landed shape: es2_acceptance.rs.)
+--
+-- Run against the prelude (List, Bool, And, isSorted, Perm — the C2 Ω-clean
+-- Perm: ‖Perm_rel‖ / count-equality, NOT a proof-relevant Ω inductive).
+
+view insert (a : Type) (leq : a -> a -> Bool) (x : a) (xs : List a) : List a =
+  match xs {
+    Nil      => Cons a x (Nil a) ;
+    Cons h t => match leq x h {
+                  True  => Cons a x (Cons a h t) ;
+                  False => Cons a h (insert a leq x t) } }
+
+-- Result type is the refinement carrying BOTH conjuncts. The result-intro
+-- emits `And (isSorted a leq (sort ...)) (Perm a (sort ...) xs)`.
+view sort (a : Type) (leq : a -> a -> Bool) (xs : List a)
+  : { ys : List a | And (isSorted a leq ys) (Perm a ys xs) } =
+  match xs {
+    Nil      => Nil a ;
+    Cons h t => insert a leq h (sort a leq t) }
+
+-- Expected: elaborates and emits the conjoined obligation with BOTH conjuncts
+-- (isSorted AND Perm) present. Full proof discharge (prover closing the Perm
+-- goal) may be a known-gap; emission-with-both-conjuncts is the checkable
+-- property. Contrast the unsound arm, whose Perm conjunct is unprovable.

@@ -1,0 +1,25 @@
+-- C3 UNSOUND arm — a codata stream + cofix — should-REJECT (no such former).
+--
+-- Run against the prelude. This attempts a coinductive type former and a
+-- productive-non-terminating (guarded-corecursive) definition. Ken has NO
+-- codata/cofix former — the only admission gates are strict positivity
+-- (inductives) and the SCT termination measure (recursion), 37 §7.
+
+-- Attempted coinductive former (greatest fixpoint): an infinite stream.
+codata Stream (a : Type) = SCons : a -> Stream a -> Stream a
+
+-- Attempted productive corecursion: an infinite value with no fuel / no
+-- inductive measure. "Guarded" by the SCons head, but there is no guardedness
+-- checker in Ken to admit it.
+cofix nats : Stream Nat = SCons Nat Zero (mapStream Nat Nat Suc nats)
+
+-- Expected correct behavior: REJECTED — most likely at PARSE ("unknown
+-- construct `codata` / `cofix`"), since no coinductive former exists in the
+-- grammar; at latest at elaboration (no greatest-fixpoint / no productivity
+-- pass). Rejection-by-absence is the correct enforcement of infinitude-
+-- without-coinduction.
+--
+-- If ACCEPTED (a codata former + cofix admitted without a guardedness/fuel
+-- gate): a totality hole — `nats` is a non-terminating value the total core is
+-- not supposed to contain. The sound arm (fuel-bounded unfold) is how Ken
+-- expresses the same intent totally.
