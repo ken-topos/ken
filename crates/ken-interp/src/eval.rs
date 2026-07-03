@@ -1458,13 +1458,16 @@ pub struct ListCharIds {
 /// invariant — every value is a Unicode Scalar Value, structurally excluding
 /// the surrogate range `[0xD800,0xDFFF]` and bounded by `0x10FFFF` — exactly
 /// Ken's own `isScalar`/`inRangeBool` range (`decimal_char.rs:225`:
-/// `[0,55295]∪[57344,1114111]`). Rather than relying on that coincidence by
-/// convention alone, `debug_assert!` restates Ken's own numeric predicate
-/// against every decoded codepoint, pinning the two definitions to agree
-/// structurally. This does not re-enter the elaborated `intToChar`/
-/// `inRangeBool` Ken-level reduction per codepoint (no precedent for a native
-/// prim re-invoking `eval` on elaborated terms mid-reduction) — native +
-/// checked, the `neg_intN` posture, not demoted and not bare-trusted.
+/// `[0,55295]∪[57344,1114111]`). The `debug_assert` is a hardcoded copy of
+/// `inRangeBool`'s range, checked against every decoded codepoint: it catches
+/// decode-path drift (a future change sourcing codepoints from anything other
+/// than scalar-guaranteed Rust `char`). It does NOT auto-detect a change to
+/// `inRangeBool` itself (that would need re-entering the Ken reduction,
+/// avoided here) — that agreement is a trusted bridge maintained by audit; if
+/// `inRangeBool` is ever narrowed, this range must be updated in lockstep.
+/// No precedent exists for a native prim re-invoking `eval` on elaborated
+/// terms mid-reduction — native + checked, the `neg_intN` posture, not
+/// demoted and not bare-trusted.
 fn build_list_char(s: &str, ids: &ListCharIds, store: &mut EvalStore) -> EvalVal {
     let mut acc = make_ctor(ids.nil_id, vec![EvalVal::Unknown], store);
     for c in s.chars().rev() {
