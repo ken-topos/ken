@@ -401,6 +401,35 @@ pub fn convert_type(env: &GlobalEnv, ctx: &Context, a: &Term, b: &Term) -> bool 
 /// structurally, recursing. Used when the type is not Π/Σ (`13 §6.2` step 4
 /// and the congruence closure).
 fn conv_struct(env: &GlobalEnv, ctx: &Context, a: &Term, b: &Term) -> bool {
+    // Congruence-first / lazy-δ fast path (`obs-eq-termination`): `whnf`
+    // below unconditionally δ-unfolds a transparent head `Const` before any
+    // congruence dispatch runs. When both sides are ALREADY (pre-whnf) an
+    // application of the SAME constant to the SAME number of arguments,
+    // try congruence on the argument spine FIRST, without ever unfolding
+    // the head — application congruence for a deterministic function is
+    // always sound regardless of whether its body would normalize, and
+    // this avoids manufacturing an ever-deeper unfolded form when the
+    // constant is itself recursive and its scrutinee is neutral (so ι never
+    // fires to bottom out the δ-unfold). Falls through to the existing
+    // whnf-based path, completely unchanged, whenever this doesn't apply or
+    // any argument fails to convert (fallback preserves completeness: a
+    // constant that ignores an argument, or two constants that only agree
+    // after unfolding, still get the full treatment below).
+    if let (Term::Const { id: id1, level_args: la1 }, args1) = peel_app(a) {
+        if let (Term::Const { id: id2, level_args: la2 }, args2) = peel_app(b) {
+            if id1 == id2
+                && level_args_eq(&la1, &la2)
+                && args1.len() == args2.len()
+                && args1
+                    .iter()
+                    .zip(args2.iter())
+                    .all(|(x, y)| conv_struct(env, ctx, x, y))
+            {
+                return true;
+            }
+        }
+    }
+
     let a = whnf(env, ctx, a);
     let b = whnf(env, ctx, b);
     if a == b {
@@ -528,6 +557,17 @@ fn conv_struct(env: &GlobalEnv, ctx: &Context, a: &Term, b: &Term) -> bool {
         // dedicated congruence arms.
         (Term::Absurd(m1, p1), Term::Absurd(m2, p2)) => {
             conv_struct(env, ctx, m1, m2) && conv_struct(env, ctx, p1, p2)
+        }
+        // `Eq` congruence (Gap-conv, `conv-eq-congruence`, re-landing here per
+        // `obs-eq-termination`) — the missing congruence closure for the `Eq`
+        // type-former: two `Eq` *types* convert iff their three components do,
+        // recursively. Restores the invariant every other former above
+        // already carries; not a loosening (fail-closed direction only —
+        // recognises strictly more true equalities, never a false one).
+        (Term::Eq(ty1, a1, b1), Term::Eq(ty2, a2, b2)) => {
+            conv_struct(env, ctx, ty1, ty2)
+                && conv_struct(env, ctx, a1, a2)
+                && conv_struct(env, ctx, b1, b2)
         }
         _ => false,
     }
