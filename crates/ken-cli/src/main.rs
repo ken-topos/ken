@@ -102,13 +102,7 @@ fn run_file(path: Option<&str>) {
         params_len: 1, // ITree r — one type param, per the landed prelude
     };
 
-    // Build the numeric-literal map from the elaborator.
-    let mut store = ken_interp::EvalStore::new();
-    let mkdecimalpair_id = elab_env.prelude_env.mkdecimalpair_id;
-    for (id, lit) in &elab_env.num_values {
-        let val = lit_to_eval(lit, mkdecimalpair_id);
-        store.num_values.insert(*id, val);
-    }
+    let mut store = build_eval_store(&elab_env);
 
     let main_term = ken_kernel::Term::const_(main_id, vec![]);
     let tree = ken_interp::eval(&[], &main_term, &elab_env.env, &mut store);
@@ -144,6 +138,34 @@ fn lit_to_eval(
         }
         NumericLitVal::Str(s) => ken_interp::EvalVal::Str(s.clone()),
     }
+}
+
+/// Build an `EvalStore` pre-wired with everything `ken-interp` needs beyond
+/// the eliminator/reduction machinery itself: the elaborator's numeric-
+/// literal map and the prelude's List-constructor ids
+/// (`string_to_list_char`/`list_char_to_string`). Every acceptance test wires
+/// these fields by hand; a production entry point (`run_file`, the REPL's
+/// `Session`) that forgets one doesn't crash — the affected op just degrades
+/// to `Neutral` (`ken-interp`'s "never silently wrong" default) — so the gap
+/// is easy to miss. This is the second such gap VAL2 surfaced (`console_ids`
+/// → console-harvest-fix; now `list_char_ids` → this WP); one shared builder
+/// for every production call site means a third forgotten field can't recur
+/// (subsume-don't-proliferate, `docs/PRINCIPLES.md`). Console IDs are
+/// deliberately NOT included here — they're `run_file`-specific harvested
+/// state with their own "Language layer pending" failure mode, not a plain
+/// store field every caller needs.
+fn build_eval_store(elab_env: &ken_elaborator::ElabEnv) -> ken_interp::EvalStore {
+    let mut store = ken_interp::EvalStore::new();
+    let mkdecimalpair_id = elab_env.prelude_env.mkdecimalpair_id;
+    for (id, lit) in &elab_env.num_values {
+        let val = lit_to_eval(lit, mkdecimalpair_id);
+        store.num_values.insert(*id, val);
+    }
+    store.list_char_ids = Some(ken_interp::eval::ListCharIds {
+        nil_id: elab_env.prelude_env.nil_id,
+        cons_id: elab_env.prelude_env.cons_id,
+    });
+    store
 }
 
 fn print_help() {
