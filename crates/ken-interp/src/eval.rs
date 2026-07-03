@@ -59,6 +59,13 @@ pub struct EvalStore {
     /// Console IDs needed to build the ITree response to `print_line`.
     /// Set alongside `print_line_id` by the Language driver / test setup.
     pub console_ids: Option<ConsoleIds>,
+    /// `List Char` constructor IDs needed by `string_to_list_char`/
+    /// `list_char_to_string` (`37 §2.3`, wp/L3-strings-roundtrip) — same
+    /// wiring shape as `console_ids` (`apply` needs `store`/GlobalIds to
+    /// build/inspect `Ctor` values, which the pure `prim_reduce(symbol,args)`
+    /// fn cannot access). Set by the Language driver / test setup from
+    /// `ElabEnv.prelude_env.{nil_id,cons_id}`.
+    pub list_char_ids: Option<ListCharIds>,
 }
 
 impl EvalStore {
@@ -71,6 +78,7 @@ impl EvalStore {
             capacity_error: None,
             print_line_id: None,
             console_ids: None,
+            list_char_ids: None,
         }
     }
 
@@ -84,6 +92,7 @@ impl EvalStore {
             capacity_error: None,
             print_line_id: None,
             console_ids: None,
+            list_char_ids: None,
         }
     }
 
@@ -1020,10 +1029,13 @@ pub fn prim_reduce(symbol: &str, args: &[EvalVal]) -> EvalVal {
         ("byte_length", [EvalVal::Str(s)]) => EvalVal::Int(s.len() as i64),
         // `char_length s` — the Unicode scalar-value count (`37 §2.2`).
         ("char_length", [EvalVal::Str(s)]) => EvalVal::Int(s.chars().count() as i64),
-        // `string_to_list_char` / `list_char_to_string` are total-typed
-        // (`37 §2.3`) but do not reduce at the interp layer in L3a (building a
-        // `List Char` needs the ctor ids; the round-trip is L6's home). They
-        // stay Neutral (stuck) — totality is asserted at the type level.
+        // `string_to_list_char` / `list_char_to_string` (`37 §2.3`,
+        // wp/L3-strings-roundtrip): the real reduction needs `store` + the
+        // `List Char` ctor ids (`Nil`/`Cons`), unavailable to this pure fn —
+        // intercepted in `apply` before this generic path fires (see
+        // `store.list_char_ids` there). These arms are only reached when
+        // `list_char_ids` is unwired (or via a direct `prim_reduce` call,
+        // bypassing `apply`) — stay Neutral (stuck), never silently wrong.
         ("string_to_list_char", [EvalVal::Str(_)]) => EvalVal::Neutral,
         ("list_char_to_string", [EvalVal::Ctor { .. }]) => EvalVal::Neutral,
 
@@ -1271,6 +1283,26 @@ pub fn apply(f: EvalVal, u: EvalVal, globals: &GlobalEnv, store: &mut EvalStore)
                 // Saturated — check if this is a prim or a data constructor.
                 if let Some(Decl::Primitive { reduction, .. }) = globals.lookup(id) {
                     if let PrimReduction::Op { symbol } = reduction {
+                        // `string_to_list_char`/`list_char_to_string` (`37 §2.3`,
+                        // wp/L3-strings-roundtrip): intercepted here before the
+                        // generic prim path for the same reason as `print_line`
+                        // above — need `store` (make_ctor) and `list_char_ids`
+                        // (Nil/Cons GlobalIds), neither available to the pure
+                        // `prim_reduce(symbol, args)` fn. Falls through to the
+                        // generic path's `Neutral` catch-all when unwired.
+                        if let Some(ids) = store.list_char_ids.clone() {
+                            if *symbol == "string_to_list_char" {
+                                if let [EvalVal::Str(s)] = args.as_slice() {
+                                    return build_list_char(s, &ids, store);
+                                }
+                            } else if *symbol == "list_char_to_string" {
+                                if let [v] = args.as_slice() {
+                                    return list_char_to_evalval_string(v, &ids)
+                                        .map(EvalVal::Str)
+                                        .unwrap_or(EvalVal::Neutral);
+                                }
+                            }
+                        }
                         return prim_reduce(symbol, &args);
                     }
                 }
@@ -1407,6 +1439,82 @@ pub struct ConsoleIds {
     pub unit_id: GlobalId,
     /// Number of ITree type-level params. Ctor-specific args start at this offset.
     pub params_len: usize,
+}
+
+/// `List Char` constructor IDs needed by `string_to_list_char`/
+/// `list_char_to_string` (`37 §2.3`). `List` has one type param, so `Nil`'s
+/// `Ctor.args = [type_param]` and `Cons`'s `Ctor.args = [type_param, head,
+/// tail]` (`prelude.rs`'s `cons_app` helper — `Cons` is always applied to the
+/// element type first). The type-param slot carries no runtime information
+/// (mirrors `build_print_line_tree`'s `EvalVal::Unknown` type-param filler).
+#[derive(Clone)]
+pub struct ListCharIds {
+    pub nil_id: GlobalId,
+    pub cons_id: GlobalId,
+}
+
+/// Decode a Rust `&str` into a `List Char` value (`string_to_list_char`,
+/// `37 §2.3`). Witness mechanism (AC1): Rust's `char` is a hard language
+/// invariant — every value is a Unicode Scalar Value, structurally excluding
+/// the surrogate range `[0xD800,0xDFFF]` and bounded by `0x10FFFF` — exactly
+/// Ken's own `isScalar`/`inRangeBool` range (`decimal_char.rs:225`:
+/// `[0,55295]∪[57344,1114111]`). The `debug_assert` is a hardcoded copy of
+/// `inRangeBool`'s range, checked against every decoded codepoint: it catches
+/// decode-path drift (a future change sourcing codepoints from anything other
+/// than scalar-guaranteed Rust `char`). It does NOT auto-detect a change to
+/// `inRangeBool` itself (that would need re-entering the Ken reduction,
+/// avoided here) — that agreement is a trusted bridge maintained by audit; if
+/// `inRangeBool` is ever narrowed, this range must be updated in lockstep.
+/// No precedent exists for a native prim re-invoking `eval` on elaborated
+/// terms mid-reduction — native + checked, the `neg_intN` posture, not
+/// demoted and not bare-trusted.
+fn build_list_char(s: &str, ids: &ListCharIds, store: &mut EvalStore) -> EvalVal {
+    let mut acc = make_ctor(ids.nil_id, vec![EvalVal::Unknown], store);
+    for c in s.chars().rev() {
+        let cp = c as u32;
+        debug_assert!(
+            cp <= 0xD7FF || (0xE000..=0x0010_FFFF).contains(&cp),
+            "Rust char {:#x} outside Ken's isScalar range — invariant violated",
+            cp
+        );
+        let elem = EvalVal::Int(cp as i64);
+        acc = make_ctor(ids.cons_id, vec![EvalVal::Unknown, elem, acc], store);
+    }
+    acc
+}
+
+/// Walk a `List Char` value, decoding each element back to a `char` and
+/// appending to a `String` (`list_char_to_string`, `37 §2.3`). Total (AC4):
+/// relies on kernel soundness of `Char`'s refinement — only a valid-scalar
+/// `Int` can be well-typed as `Char` — the same trust boundary already
+/// accepted for `int_to_intN_raw` (conversions floor). `char::from_u32`'s
+/// fallback is defensive dead code under that soundness guarantee, never
+/// `Neutral`/panic, so totality holds even if it were ever reached. Returns
+/// `None` only if `v` is not a well-formed `List Char` `Ctor` chain (neither
+/// `Nil` nor `Cons` — the caller degrades to `Neutral`, never silently wrong).
+///
+/// The fallback value is `char::REPLACEMENT_CHARACTER` (U+FFFD) via safe
+/// `char::from_u32` (never `_unchecked`/UB) — pinned and named here so AC4's
+/// totality claim rests on a concrete value, not a bare "fallback." It is
+/// unreachable under `Char`'s refinement soundness (only a valid-scalar `Int`
+/// is ever well-typed `Char`); if that invariant were ever violated elsewhere,
+/// `String` is bare-typed, so surfacing U+FFFD is soundness-inert regardless.
+fn list_char_to_evalval_string(v: &EvalVal, ids: &ListCharIds) -> Option<String> {
+    let mut out = String::new();
+    let mut cur = v.clone();
+    loop {
+        match &cur {
+            EvalVal::Ctor { id, .. } if *id == ids.nil_id => return Some(out),
+            EvalVal::Ctor { id, args, .. } if *id == ids.cons_id => {
+                let head = args.get(1)?;
+                let cp = eval_to_bigint(head)?.to_u32()?;
+                out.push(char::from_u32(cp).unwrap_or(char::REPLACEMENT_CHARACTER));
+                let tail = args.get(2)?.clone();
+                cur = tail;
+            }
+            _ => return None,
+        }
+    }
 }
 
 /// Error returned by `run_io` (`42 §6`).
