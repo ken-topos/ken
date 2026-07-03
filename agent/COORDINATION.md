@@ -284,6 +284,21 @@ edges exist** is operator-owned and fixed. The sanctioned edges are exactly:
   workflow/process, and research requests.
 - any team → **Integrator** — merge status (usually via the team's own leader).
 
+**There is NO enclave → build-team edge — the enclave elaborates autonomously
+(operator, 2026-07-03).** The clean-room enclave (spec-leader / spec-author / CV)
+is the authority for `/spec` + `/conformance` elaboration; it does **not** pull a
+build-team member (a team's leader / implementer / QA) into an elaboration
+thread. When elaboration needs a **fact about landed code** — "is this heap tag /
+symbol / primitive referenced anywhere?" — the enclave **greps the code itself**
+(grounding against landed code is standard enclave practice, §7), never asks a
+build lead. When it needs a cross-cutting **judgment** call, it routes to
+**Architect** (the `any → Architect` edge — soundness/means span lanes), never to
+a build-team leader. *Live catch (Map elaboration): spec-author @mentioned
+runtime-leader to confirm a heap-tag (`0x07`/`0x08`) retirement was inert — a
+grep-able fact (`canonical.rs:23-24`, zero refs), and the coupled soundness call
+was Architect's. Self-ground or route-to-Architect; don't cross into the build
+lane.*
+
 Agents may improve *what they do inside a node*, never *add a communication edge
 or a review cycle* between nodes. When integrating a retro lesson, reject any
 carry-forward that would add/move an edge — and do not soften the rejection to
