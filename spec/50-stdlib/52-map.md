@@ -10,10 +10,13 @@
 > stubs** (`README §2`, `../20-verification/21 §3`), with the **five inductive**
 > law proofs deferred to a **named** follow-on (`map-verified-laws`, §7d)
 > pending two build-completeness capabilities (dependent-motive recovery +
-> transport) the elaborator does not yet expose (§5) — a **buildability**
-> boundary, not soundness. **No new kernel feature:** the carrier is a
-> `data` type (`../30-surface/34 §1`), the operations are `view` defs, the laws
-> are `Ω` propositions (`../10-kernel/16 §1`); if the build adds a kernel
+> transport) the elaborator did not expose at Map-build time (§5) — a
+> **buildability** boundary, not soundness. **Both have since landed** (Gap A
+> `19955d8`, Gap B `282856c`); the five proofs' strategy is in
+> `54-map-verified-laws.md`, built by Foundation. **No new kernel feature:** the
+> carrier is a `data` type (`../30-surface/34 §1`), the operations are `view`
+> defs, the laws are `Ω` propositions (`../10-kernel/16 §1`); if the build adds
+> a kernel
 > rule/former or a `declare_primitive`, it has over-built.
 
 ## 1. What this module is — and why it is *derived*, not a primitive
@@ -229,27 +232,31 @@ the opaque `Set` primitive alongside `Map` (§1.1).
 
 The `§5` laws split by **whether the proof inducts over the (non-nullary)
 `Tree`/`List` carrier at all**, and then by which construction capability that
-induction needs. There are **two distinct capability walls** — both
+induction needs. There were **two distinct capability walls** — both
 **build-completeness shortfalls against already-specified behavior**, not spec
-gaps (the elaborator lags the spec):
+gaps (the elaborator lagged the spec). **Both have since landed** (Gap A
+`19955d8`, Gap B `282856c`), so the five inductive laws are now **buildable**;
+their per-law proof strategy is elaborated in `54-map-verified-laws.md`
+(`map-verified-laws` WP), and Foundation builds the proof terms.
 
-- **Gap B — dependent-motive recovery over non-nullary families.** Any proof
-  that **inducts** over `Tree`/`List` and must **narrow a hypothesis about the
-  scrutinee** through the `match` is blocked: `check_match_dependent` — the only
-  per-branch type-narrowing path — is gated to **nullary constructors only**
-  (`elab.rs:455`, `ind.constructors.iter().all(|c| c.args.is_empty())`), so a
-  `Cons`/`Node` scrutinee falls to `infer_match`'s **constant** motive (no
-  narrowing). The spec already commits to the general mechanism
-  (`../30-surface/34-data-match.md §Dependent-motive-recovery`, `:145-166`); the
-  elaborator under-implements it (same shape as `sct-completeness (a)`).
+- **Gap B — dependent-motive recovery over non-nullary families.** A proof that
+  **inducts** over `Tree`/`List` and must **narrow a hypothesis about the
+  scrutinee** through the `match` was blocked: the per-branch type-narrowing
+  path was gated to **nullary constructors only**, so a `Cons`/`Node` scrutinee
+  fell to `infer_match`'s **constant** motive (no narrowing). `dependent-match-
+  nonnullary` (`282856c`) **widened the gate** to any **flat, non-indexed**
+  family (`List`/`Tree`): `elab.rs` `dependent_eligible` at **`:535-553`**
+  (`ind.indices.is_empty()` over a bare-`Var` scrutinee). This realizes the
+  general mechanism the spec already committed to (`../30-surface/34-data-
+  match.md §3.2`).
 - **Gap A — transport over a stuck comparison.** A proof that *additionally*
   must **reduce/align an abstract, irreducibly *stuck* `leq k k'`** (keys are
   variables, not the concrete constructors `Ord Bool` case-splits on) needs a
   **propositional-rewrite / transport (`J`/`cast`) step** to fire the internal
-  `if`. No `.ken`-reachable transport former exists (`elab.rs` constructs no
-  `Term::J`/`Term::Cast`; `Refl` only checks pre-existing convertibility) — it
-  would surface the kernel's **existing** `Term::J`/`Cast` (Steward's
-  `surface-transport` WP).
+  `if`. `surface-transport` (`19955d8`) **surfaced** the `J` former + the
+  derived `packages/transport/transport.ken` combinators (`53-transport.md`),
+  reducing to the kernel's **existing** `Term::J`/`Cast` (`Refl` still checks
+  only pre-existing convertibility; `J` is the reachable transport).
 
 **In this WP (Branch A) — the two *non-inductive* laws.** Only proofs that never
 induct clear both walls, discharging by the landed idiom (`51 §6`, `Ord Bool` /
@@ -329,8 +336,9 @@ what will make `lookup` provably correct once both capabilities land.
   `Tree`/`List`** narrowing an `Ordered`/`allKeys` hypothesis, so it hits **Gap
   B** (the nullary dependent-match gate). Consequence: `letter-frequency`'s
   deterministic ordered output is honest **by the conformance test**
-  (red-until-built) **in this WP**, and **by proof** once Gap B lands — **not**
-  by proof today (§8). Still **without touching permutation** (§7c).
+  (red-until-built) **in Map-build**, and **by proof** once `map-verified-laws`
+  builds it (Gap B has landed, `282856c`; §8). Still **without touching
+  permutation** (§7c).
 - **Agreement — Branch B, deferred (§7d — Gap A + Gap B).** `lookup k m = assoc
   k (toList m)` — a key's map lookup agrees with a linear scan of its ordered
   entry list (`assoc` the landed list-lookup shape). Its proof **inducts** (Gap
@@ -413,22 +421,22 @@ gap — AC3):
   [[proof-relevant-inductive-cannot-be-declared-at-omega]]), **and** Perm
   discharge is the known `C5` prover gap. The **ordered** `toList` law (§5.3, in
   (d) below) is its naturally-`Ω` substitute — it sidesteps permutation
-  entirely, and delivers ordered iteration by the conformance test in-WP (it too
-  awaits Gap B for a *proof*, §5.3/§8).
+  entirely, and delivers ordered iteration by the conformance test in Map-build
+  (its *proof* lands with `map-verified-laws`, Gap B now landed, §5.3/§8).
 - **(d) `map-verified-laws` — the five inductive laws** (§5.1 preservation, §5.2
   found-after-insert + locality, §5.3 `toList` ordered law + agreement). Each
   **inducts over the non-nullary `Tree`/`List` carrier** narrowing a hypothesis
-  → **Gap B** (dependent-motive recovery, which the elaborator under-implements
-  vs. the already-specified `../30-surface/34-data-match.md
-  §Dependent-motive-recovery`, `:145-166`; `check_match_dependent`'s nullary
-  gate, `elab.rs:455`). Four of the five *additionally* must **align a stuck
-  `leq k k'`** → **Gap A** (a `.ken` `subst`/`cast`/`transport` former surfacing
-  the kernel's *existing* `Term::J`/`Cast`, Steward's `surface-transport` WP —
-  the same frontier `lawful_classes.ken`'s relational laws need).
-  `toList`-ordered is **Gap-B-only**. **Gated on both** capability WPs — each a
-  build-completeness fix against already-specified behavior, **zero
-  `trusted_base` delta**; `map-verified-laws` lands on top. **Not `Axiom`-
-  stubbed** — deferred and named, never postulated (§5).
+  → **Gap B** (dependent-motive recovery, the widened non-indexed gate `elab.rs`
+  `dependent_eligible` at `:535-553`, realizing `../30-surface/34-data-match.md
+  §3.2`). Four of the five *additionally* must **align a stuck `leq k k'`** →
+  **Gap A** (the `J` former + `packages/transport/transport.ken`, surfacing the
+  kernel's *existing* `Term::J`/`Cast`, `53-transport.md` — the same frontier
+  `lawful_classes.ken`'s relational laws need). `toList`-ordered is
+  **Gap-B-only**. **Both capability WPs are now landed** (Gap A `19955d8`, Gap B
+  `282856c`) — each a build-completeness fix against already-specified behavior,
+  **zero `trusted_base` delta**; the five proofs' **per-law strategy is
+  elaborated in `54-map-verified-laws.md`**, and Foundation builds the terms on
+  top. **Not `Axiom`-stubbed** — deferred and named, never postulated (§5).
 
 ## 8. Conformance pointer
 
@@ -441,10 +449,11 @@ deterministic), tagging any deferred surface spelling `(oracle)`. The
 proved-not-stubbed discriminator (AC3) flips at the **map-proof** level and must
 fail **for the right reason** (§5.4) — applied to the **two shipped Branch-A
 proofs** (`Ordered empty`, `lookup k empty = None`). **Ordered iteration is
-honest by the conformance test in-WP** (the `toList`-ordered law is
-red-until-built, Gap B — §5.3), and **by proof** once Gap B lands; the **five
+honest by the conformance test from Map-build** (the `toList`-ordered law is
+red-until-built, Gap B — §5.3), and **by proof** once `map-verified-laws` builds
+it (both capability gaps now landed, `54-map-verified-laws.md`); the **five
 Branch-B** proofs (§7d) are AC3's acceptance target, named-not-stubbed until
-their gaps close.
+their proof terms land.
 
 ## 9. Acceptance
 
