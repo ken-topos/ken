@@ -529,6 +529,17 @@ fn conv_struct(env: &GlobalEnv, ctx: &Context, a: &Term, b: &Term) -> bool {
         (Term::Absurd(m1, p1), Term::Absurd(m2, p2)) => {
             conv_struct(env, ctx, m1, m2) && conv_struct(env, ctx, p1, p2)
         }
+        // `Eq` congruence (Gap-conv, `conv-eq-congruence`) — the missing
+        // congruence closure for the `Eq` type-former: two `Eq` *types*
+        // convert iff their three components do, recursively. Restores the
+        // invariant every other former above already carries; not a
+        // loosening (fail-closed direction only — recognises strictly more
+        // true equalities, never a false one).
+        (Term::Eq(ty1, a1, b1), Term::Eq(ty2, a2, b2)) => {
+            conv_struct(env, ctx, ty1, ty2)
+                && conv_struct(env, ctx, a1, a2)
+                && conv_struct(env, ctx, b1, b2)
+        }
         _ => false,
     }
 }
