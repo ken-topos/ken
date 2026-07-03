@@ -167,3 +167,120 @@ view orderedEmpty (k : Type) (v : Type) (leq : k -> k -> Bool) :
 -- `52 §5.2` law 1 -- `lookup k empty = None`, immediate (`empty = Leaf`).
 view lookupEmptyIsNone (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k) :
   Equal (Option v) (lookup k v leq key (empty k v)) (None v) = tt
+
+-- ─────────────────────────────────────────────────────────────────────────
+-- `map-verified-laws` (Map-arc CAPSTONE, `spec/50-stdlib/54-map-verified-
+-- laws.md`) -- the 5 deferred inductive laws, built on the two now-landed
+-- enabling capabilities: Gap A (`packages/transport/transport.ken`, the `J`
+-- former) and Gap B (the non-indexed dependent-match gate,
+-- `elab.rs::check_match_dependent`). Zero `trusted_base` delta throughout --
+-- every proof reduces through the existing `Term::J`/`Term::Cast`/
+-- `Term::Elim`; no `Axiom` appears anywhere below (a law that cannot be
+-- honestly built is re-deferred to Steward, never postulated, `52 §7d`).
+--
+-- Induction idiom (`54 §2.1`, confirmed against the landed elaborator by a
+-- throwaway probe before this file was built): Ken's dependent match wraps
+-- each recursive-field method in a kernel-required IH-slot Pi layer, but
+-- that layer is a DEAD, surface-unreferenceable binder
+-- (`dependent-match-nonnullary.md` SS"IHs are DEAD binders" -- confirmed
+-- empirically, not merely read off the doc). The IH is instead obtained the
+-- SAME way `toList`/`insert`/`lookup` already recurse: an ORDINARY
+-- self-recursive call on the subtree (`preservation ... l`, SCT-checked
+-- structural descent), whose RESULT is the actual induction hypothesis,
+-- consumed directly by name -- not a synthesized `ih_l`/`ih_r` binder.
+
+-- `Or` / `Inl` / `Inr` -- `ken-elaborator/src/prelude.rs`, a Rust-registered
+-- kernel `declare_inductive` (the surface `data` sugar hardcodes every
+-- parameter to `Type 0`, so `Or`'s two `Ω`-sorted parameters need the same
+-- "kernel API directly, one level below the surface convenience wrapper"
+-- technique this file's own `Pair`/`andIntro` already used, mirroring the
+-- existing `Perm_rel` precedent) -- flagged transparently, zero
+-- `trusted_base` delta (an ordinary kernel-rechecked inductive admission).
+
+-- `boolDichotomy b` (`54 §2.2`/`§3`) -- reflects a stuck `Bool` VARIABLE
+-- into its two equation-carrying cases. The Gap-B gate needs a bare
+-- variable scrutinee (`match b {...}`, not `match (leq k k') {...}`) --
+-- this is the reusable combinator every stuck `leq k k'` comparison below
+-- reflects THROUGH first (`boolDichotomy (leq k k')`, a non-dependent match
+-- on the resulting `Or`, landed `infer_match` path).
+view boolDichotomy (b : Bool) : Or (Equal Bool b True) (Equal Bool b False) =
+  match b {
+    True  => Inl (Equal Bool True True) (Equal Bool True False) tt ;
+    False => Inr (Equal Bool False True) (Equal Bool False False) tt
+  }
+
+-- `assoc leq key xs` (`54 §3`, law 5) -- the ordered-list lookup: a plain
+-- structural `List` recursion (Gap-B-free, no dependent motive), scanning
+-- entries by `leq key (pairFst entry) /\ leq (pairFst entry) key` the same
+-- coincidence test `lookup`/`insert` use.
+view assoc (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k) (xs : List (Pair k v)) : Option v =
+  match xs {
+    Nil => None v ;
+    Cons p xs2 =>
+      match leq key (pairFst k v p) {
+        True =>
+          match leq (pairFst k v p) key {
+            True  => Some v (pairSnd k v p) ;
+            False => assoc k v leq key xs2
+          } ;
+        False => assoc k v leq key xs2
+      }
+  }
+
+-- `allInList p xs` (`54 §3`, laws 4/5) -- the list analogue of `allKeys`:
+-- "every entry's key satisfies `p`", mirrored structurally over
+-- `List (Pair k v)`.
+view allInList (k : Type) (v : Type) (p : k -> Prop) (xs : List (Pair k v)) : Prop =
+  match xs {
+    Nil => Equal Bool True True ;
+    Cons e xs2 => And (p (pairFst k v e)) (allInList k v p xs2)
+  }
+
+-- `insertCaseTransport` -- BLOCKED, reverted (`54 §4.1-4.3/§4.5`, laws
+-- 1/2/3/5 all depend on this). A minimal, Map-independent probe
+-- (`scratch_nested_j_match_base_probe.rs`, escalated to foundation-leader/
+-- Language) confirmed a genuine elaborator capability wall: nesting a
+-- second `J` inside an outer `J`'s `base` argument -- needed here because
+-- `insert`'s stuck match has TWO sequential levels (`leq key k2` then, in
+-- its True branch, `leq k2 key`) -- fails to typecheck even when the inner
+-- term is itself a `J`-application (no raw `match` anywhere near a `J`
+-- base). Two independent failure modes were confirmed, varying only
+-- whether the transported goal predicate is a bound abstract parameter
+-- (`KernelRejected("cannot infer an introduction form...")`) or a concrete
+-- named predicate (`KernelRejected(TypeMismatch{...})`, comparing the
+-- outer `J`'s unreduced base-expected-type against the inner `J`'s
+-- inferred type -- defeq by delta/iota through a named step function, but
+-- not recognized as such). Per this WP's guardrail (`54 §6`): don't force
+-- it, don't postulate, revert cleanly, escalate with exact empirical
+-- evidence -- done. Laws 1/2/3/5 stay deferred pending the elaborator fix;
+-- law 4 (below) needs no transport at all and proceeds.
+
+-- `pairLeq` -- lift a key comparator to a `Pair k v` comparator by
+-- comparing first components, the comparator `isSorted`
+-- (`ken-elaborator/src/prelude.rs`) needs to be instantiated at `Pair k v`.
+view pairLeq (k : Type) (v : Type) (leq : k -> k -> Bool) (p1 : Pair k v) (p2 : Pair k v) : Bool =
+  leq (pairFst k v p1) (pairFst k v p2)
+
+
+-- `leAbove`/`leBelow`/L2/L4/law-4 (`toListOrdered` and its supporting
+-- lemmas `allInListAppendIntro`/`allKeysToAllInList`/`consSorted`/
+-- `isSortedAppend`) were built and then REVERTED here. All five hit the
+-- SAME confirmed elaborator capability wall as `insertCaseTransport`
+-- above, but in an even more fundamental form: `check_match_dependent`
+-- (`elab.rs`, Gap B) does not normalize a branch's substituted expected
+-- type before checking the arm body against it, so ANY dependent match
+-- whose declared return type applies a self-recursive `Prop`-valued
+-- `view` to the scrutinee (requiring even ONE delta+iota unfold through
+-- that view's own definition to reach the arm's inferred type) is
+-- rejected with `KernelRejected(TypeMismatch{...})`. Confirmed with three
+-- independent, Map-free minimal probes of increasing simplicity --
+-- including a SINGLE-unfold case with no J, no transport, no Tree, just
+-- `List Bool` and a two-line self-recursive `Prop` predicate
+-- (`scratch_dep_match_single_delta_probe.rs`). This blocks not just laws
+-- 1/2/3/5 (which additionally need the nested-`J` composition, also a
+-- confirmed separate wall) but LAW 4 as well, since its supporting lemmas
+-- (L2, L4) are themselves exactly this shape. Escalated to
+-- foundation-leader with both probes' exact repro code and error output;
+-- per this WP's guardrail (`54 §6`), not forced, not postulated, reverted
+-- cleanly. All 5 laws stay deferred pending an elaborator-side fix to
+-- `check_match_dependent`'s per-branch expected-type normalization.

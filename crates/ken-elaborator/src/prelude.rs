@@ -353,6 +353,70 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         .map_err(|e| ElabError::Internal(format!("prelude And failed: {}", e)))?;
     elab.globals.insert("And".to_string(), and_id);
 
+    // `andIntro`/`andFst`/`andSnd` -- the Sigma intro/elim helpers for `And`,
+    // built EXACTLY like `Pair`/`mkPair`/`pairFst`/`pairSnd` below (Map-
+    // build), but Omega-sorted (`omega0`, not `type0`) since `And`'s two
+    // arguments are themselves PROPOSITIONS, not types. `And A B := Sigma
+    // (_:A).B` is a Sigma at Omega (`sort_sigma` classifies it there because
+    // both components are Omega, `16 SS1.3`) -- the surface has no pair-
+    // literal/`.1`/`.2` syntax for a bare Sigma (that's reserved for class-
+    // dictionary records, `elab.rs::infer_proj`), so a multi-conjunct `And`
+    // proof (e.g. `map-verified-laws`' `Ordered`-preservation goal, a nested
+    // `And` of `allKeys` bounds) needs a named intro/elim, not a re-
+    // application of `And` itself as if it were its own constructor. Zero
+    // trusted_base delta: both reduce through the already-trusted
+    // `Term::Pair`/`Term::Proj1`/`Term::Proj2` (Sigma is already in
+    // `trusted_base()` via `And`/`Pair` themselves).
+    let and_app_at_len2 =
+        Term::app(Term::app(Term::const_(and_id, vec![]), Term::var(1)), Term::var(0));
+    let and_app_at_len4 =
+        Term::app(Term::app(Term::const_(and_id, vec![]), Term::var(3)), Term::var(2));
+
+    // `andIntro : (a:Prop) -> (b:Prop) -> a -> b -> And a b`.
+    let and_intro_ty = Term::pi(
+        omega0.clone(),
+        Term::pi(
+            omega0.clone(),
+            Term::pi(Term::var(1), Term::pi(Term::var(1), and_app_at_len4)),
+        ),
+    );
+    let and_intro_body = Term::lam(
+        omega0.clone(),
+        Term::lam(
+            omega0.clone(),
+            Term::lam(Term::var(1), Term::lam(Term::var(1), Term::pair(Term::var(1), Term::var(0)))),
+        ),
+    );
+    let and_intro_id = declare_def(&mut elab.env, vec![], and_intro_ty, and_intro_body)
+        .map_err(|e| ElabError::Internal(format!("prelude andIntro failed: {}", e)))?;
+    elab.globals.insert("andIntro".to_string(), and_intro_id);
+
+    // `andFst : (a:Prop) -> (b:Prop) -> And a b -> a`.
+    let and_fst_ty = Term::pi(
+        omega0.clone(),
+        Term::pi(omega0.clone(), Term::pi(and_app_at_len2.clone(), Term::var(2))),
+    );
+    let and_fst_body = Term::lam(
+        omega0.clone(),
+        Term::lam(omega0.clone(), Term::lam(and_app_at_len2.clone(), Term::proj1(Term::var(0)))),
+    );
+    let and_fst_id = declare_def(&mut elab.env, vec![], and_fst_ty, and_fst_body)
+        .map_err(|e| ElabError::Internal(format!("prelude andFst failed: {}", e)))?;
+    elab.globals.insert("andFst".to_string(), and_fst_id);
+
+    // `andSnd : (a:Prop) -> (b:Prop) -> And a b -> b`.
+    let and_snd_ty = Term::pi(
+        omega0.clone(),
+        Term::pi(omega0.clone(), Term::pi(and_app_at_len2.clone(), Term::var(1))),
+    );
+    let and_snd_body = Term::lam(
+        omega0.clone(),
+        Term::lam(omega0.clone(), Term::lam(and_app_at_len2, Term::proj2(Term::var(0)))),
+    );
+    let and_snd_id = declare_def(&mut elab.env, vec![], and_snd_ty, and_snd_body)
+        .map_err(|e| ElabError::Internal(format!("prelude andSnd failed: {}", e)))?;
+    elab.globals.insert("andSnd".to_string(), and_snd_id);
+
     // `Prop` — a surface-nameable alias for `Ω₀`, so a recursive `view` can
     // carry an explicit return-type ANNOTATION landing on `Ω` (required: a
     // self-recursive declaration needs a type annotation, `declare_def`
@@ -374,6 +438,18 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     // needs no dedicated check-mode arm; the `check()` fallback (infer,
     // then unify against `expected`) handles it like any other constant.
     elab.globals.insert("tt".to_string(), elab.env.tt_id());
+
+    // `Bottom : Ω₀` — the kernel's prelude falsity proposition (K5, `16
+    // §1.3`), already unconditionally declared by `GlobalEnv::new()`, same
+    // status as `tt`/`Top` above. Surfaced here (not previously nameable —
+    // only the checked-mode `absurd h` sugar could reach it) so a law's TYPE
+    // ANNOTATION can spell an order-distinctness negation `P -> Bottom`
+    // directly (`map-verified-laws`' `distinct key key' := And (...) (...)
+    // -> Bottom`, `52-map.md §5.2` locality law) — `absurd` alone lets you
+    // *eliminate* a `Bottom`-typed hypothesis but never lets a `view`
+    // signature *name* the type. Zero trusted_base delta: same existing
+    // prelude constant, no new declaration.
+    elab.globals.insert("Bottom".to_string(), elab.env.bottom_id());
 
     // `Pair : Type -> Type -> Type` — the non-dependent Sigma pair,
     // `k × v` (`52-map.md §4`, `13 §3`): "the Σ-pair... distinct from the
@@ -593,6 +669,54 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         }
     })
     .map_err(|e| ElabError::Internal(format!("prelude Perm_rel failed: {}", e)))?;
+
+    // `Or : Ω → Ω → Type` — the two-constructor sum over PROPOSITIONS
+    // (`map-verified-laws`' `boolDichotomy` reflect-combinator envelope,
+    // `54-map-verified-laws.md §3`). Must be `Type`-valued (proof-relevant:
+    // case-splitting on WHICH disjunct holds must be informative, unlike an
+    // `Ω`-valued disjunction which would make `Inl`/`Inr` proof-irrelevantly
+    // equal — `[[proof-relevant-inductive-cannot-be-declared-at-omega]]`),
+    // but its two PAYLOADS are themselves `Ω`-classified propositions (e.g.
+    // `Equal Bool (leq k k') True`) — a strictly different shape from every
+    // other sum in this catalog (`Option`/`Result`, whose payloads are
+    // `Type`-classified). The surface `data` sugar (`data.rs::elab_data_decl`)
+    // hardcodes every parameter to `Type 0` (no way to spell an `Ω`-sorted
+    // parameter there), so — mirroring `Perm_rel` immediately above, the
+    // SAME "kernel `declare_inductive` directly, one level below the
+    // elaborator's surface convenience wrapper" technique — `Or` is built
+    // against the kernel API, which DOES support arbitrary parameter sorts.
+    // Zero trusted_base delta: an ordinary `declare_inductive` admission,
+    // kernel-rechecked, identical trust category to every other `data`.
+    // Unlike `Perm_rel`'s ctors (internal plumbing, never surface-matched),
+    // `Or`/`Inl`/`Inr` ARE surface-referenced (pattern-matched by
+    // `boolDichotomy`'s callers), so all three are registered in
+    // `elab.globals` below.
+    let or_id = ken_kernel::declare_inductive(&mut elab.env, |_or_id| {
+        ken_kernel::InductiveSpec {
+            level_params: vec![],
+            // `Δ_p = [a : Ω₀, b : Ω₀]` — params innermost-first: ctor-arg
+            // context has `b` at `Var(0)` (last param), `a` at `Var(1)`
+            // (first param), per `data.rs`'s own documented convention.
+            params: vec![omega0.clone(), omega0.clone()],
+            indices: vec![],
+            level: Level::Zero,
+            constructors: vec![
+                // `Inl : a -> Or a b`, ctx `[a,b]`: `a` = Var(1).
+                ken_kernel::CtorSpec { args: vec![Term::var(1)], target_indices: vec![] },
+                // `Inr : b -> Or a b`, ctx `[a,b]`: `b` = Var(0).
+                ken_kernel::CtorSpec { args: vec![Term::var(0)], target_indices: vec![] },
+            ],
+        }
+    })
+    .map_err(|e| ElabError::Internal(format!("prelude Or failed: {}", e)))?;
+    elab.globals.insert("Or".to_string(), or_id);
+    let or_ind = elab
+        .env
+        .inductive(or_id)
+        .ok_or_else(|| ElabError::Internal("prelude: 'Or' inductive not found after declare".into()))?
+        .clone();
+    elab.globals.insert("Inl".to_string(), or_ind.constructors[0].id);
+    elab.globals.insert("Inr".to_string(), or_ind.constructors[1].id);
 
     let perm_body = Term::lam(
         type0.clone(),
