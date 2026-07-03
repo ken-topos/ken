@@ -240,8 +240,9 @@ admission: `declare_primitive` (`check.rs`), tag
 GlobalId is reused, not re-declared). **`Decimal` and `Char` currently register
 as primitive types but DEMOTE at the type level** (each a TCB removal):
 `Decimal` → `(coeff : Int, exp : Int)` (§5.6), `Char` → the refinement
-`{ c : Int | isScalar c }` (§5.9). `Map`/`Set` are abstract types (`37 §3.3`),
-consumed through a library interface, no primitive ops (§5.10).
+`{ c : Int | isScalar c }` (§5.9). `Map`/`Set` **retire to proved `data` trees**
+over `Ord k` (`37 §3.3`, `../50-stdlib/52-map.md`) — derived, out of
+`trusted_base()`, no primitive ops (§5.10).
 
 ### 5.2 `Int` arithmetic — floor + bignum cliff
 
@@ -749,17 +750,21 @@ adds is `Decimal`'s deferred-align `decimalPow10Unbounded` (§5.6.1), **not** a
 ### 5.10 Basic data structures — no primitive reductions
 
 `List`/`Option`/`Result` are transparent inductive `data` (`34`) → **derived**,
-consumed by `elim` — no primitive ops. `Array`/`Map`/`Set` are **abstract
-types** (`33 §4`, `37 §3`) with **library-level** ops (`get`/`lookup`/`insert`
-over the interface), **not `PrimReduction`s**. The audit adds **nothing to the
-primitive-reduction axis** here.
+consumed by `elim` — no primitive ops. **`Map`/`Set` join them** under OQ-A
+(`../50-stdlib/52-map.md`): proved `data` trees over `Ord k`, consumed by
+`elim`, **derived and out of `trusted_base()`** (the opaque `Map`/`Set`
+primitive is retired, `../30-surface/30 §6`). `Array` **remains** an **abstract
+type** (`33 §4`, `37 §3.2`) with **library-level** ops over the interface,
+**not a `PrimReduction`**. The audit adds **nothing to the primitive-reduction
+axis** here.
 
-**Precision (so the TCB claim is exact):** "no primitive ops" ≠ "no trust." The
-operation-trust of `Map`/`Set` — whether `lookup`/`insert` are `foreign`
-postulates in `trusted_base()` or derived Ken over a representation — lives on
-the **FFI / library axis (§6)**, adjudicated there, not in this
-primitive-reduction registry. "Confirms the TCB" here means *adds no primitive
-reduction*, not *trust-free*.
+**Precision (so the TCB claim is exact):** "no primitive ops" ≠ "no trust." For
+`Array` the operation-trust — whether `get`/`set` are `foreign` postulates in
+`trusted_base()` or derived Ken over a representation — lives on the **FFI /
+library axis (§6)**, adjudicated there. **`Map`/`Set` are now settled on that
+axis: derived Ken with real proofs (`../50-stdlib/52-map.md §5`), not `foreign`
+postulates.** "Confirms the TCB" here means *adds no primitive reduction*, not
+*trust-free*.
 
 ## 6. Out of scope (noted, not re-adjudicated)
 

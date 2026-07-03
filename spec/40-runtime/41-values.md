@@ -74,8 +74,12 @@ The encoding is specified in full in `docs/design/content-addressing.md
 **Kind tags.** Each encoding is prefixed by a 1-byte kind tag from a single
 namespace (see the design doc §1.1 for the full table). Currently assigned:
 `data` (`0x02`), record/Σ (`0x03`), `String` (`0x04`), `Bytes` (`0x05`),
-`Array` (`0x06`), `Map` (`0x07`), `Set` (`0x08`), closure (`0x09`), bignum
-`Int` (`0x01`), big `Decimal` (`0x0A`).
+`Array` (`0x06`), closure (`0x09`), bignum `Int` (`0x01`), big `Decimal`
+(`0x0A`). **Kinds `0x07`/`0x08` (formerly `Map`/`Set` heap primitives) are
+retired** under OQ-A: `Map`/`Set` are now proved `data` trees
+(`../50-stdlib/52-map.md`) encoding as ordinary `data` (`0x02`); the tags are
+held reserved (a later content-addressed fast-map, `52-map §6`, would reclaim
+them).
 
 **Determinism rules (the correctness bar):**
 

@@ -165,17 +165,23 @@ coincide.
   workaround (`prelude.rs`); as a 2-constructor inductive it is derivable,
   matchable, and `if` is `match` sugar (`34`, `42 §2`). Removes a built-in and
   the workaround.
-- **`Map` / `Set` → audited primitives, not assumed axioms.** They are
-  **genuinely runtime** (the O(1) content-addressed, insertion-order-independent
-  canonical form is heap-backed, `41 §3a`, `37 §3.3`) — so they stay in
-  `trusted_base()`. But they are declared `declare_postulate` (`Decl::Opaque`,
-  **item-3 assumed axiom**) when they are **audited runtime primitives**
-  (`declare_primitive` OpaqueType, **item-2**, exactly like `String`/`Bytes`).
-  The `trusted_base()` filter takes `Opaque | Primitive` (`64 §1`), so both
-  categories list — **no trust regression** — but the current filing
-  **mis-describes their basis as "assumed" when it is "audited."** The ruling is
-  the item-2/item-3 correction: `trusted_base()` accounting must distinguish the
-  audited primitive from the assumed axiom, per entry.
+- **`Map` / `Set` → proved inductives, out of `trusted_base()` (OQ-A
+  supersession).** These were originally slated to *stay* in `trusted_base()` as
+  **audited runtime primitives** (`declare_primitive` OpaqueType, item-2, like
+  `String`/`Bytes`) — correct *given* the premise that they must be the O(1)
+  content-addressed, insertion-order-independent heap form (`41 §3a`). Operator
+  decision **OQ-A** (2026-07-03) **changes that premise**: it chooses a
+  **proved, pure, `Ord k`-keyed program-level tree** (`../50-stdlib/52-map.md`)
+  over the runtime-O(1) heap form — accepting O(log n) and extensional identity
+  to gain real proofs and zero trust. So `Map`/`Set` become **ordinary inductive
+  `data` + `view` defs, re-checked, out of `trusted_base()`** — the opaque
+  `Map`/`Set` primitive is **retired**, shrinking `trusted_base()` (a
+  net-negative delta; "proved" *requires* a transparent carrier, since an opaque
+  primitive has no eliminator and its laws could only be `Axiom`). The
+  content-addressed heap form is **parked** as a possible later fast-map
+  (the "HAMT-later" analog, `37 §3.2`), proved if it lands. (The item-2/item-3
+  audited-vs-assumed accounting distinction below still governs the entries that
+  genuinely *stay* runtime, e.g. `Array`/`String`/`Bytes`.)
 
 - **`OrdResult` → remove (bloat).** `data OrdResult = Lt | Eq | Gt`
   (`prelude.rs`) sits in the prelude but **no primitive signature names it**
@@ -221,8 +227,9 @@ literal value). Whatever the table rules, ES2 lands it.
 `Equal`/`And`/`isSorted`/`Perm`/`Bool`/`OrdResult` and the `reg_novf`
 **predicate** become re-checked definitions or are removed (**out** of
 `trusted_base()`), literals become primitive-constant terms (out), and
-`Map`/`Set` re-class postulate→primitive (in, correctly, as audited). The
-**assumed-axiom** surface trusted base shrinks toward **zero** — leaving only
-the genuinely-audited primitives **and the live proof obligations** (e.g. the
-per-op no-silent-wrap holes, honest until discharged) — and the verified-`sort`
-showcase (§37 §6) becomes a real proof.
+`Map`/`Set` — under OQ-A — become **proved package inductives, retired from
+`trusted_base()`** (out; `../50-stdlib/52-map.md`), the opaque primitive gone.
+The **assumed-axiom** surface trusted base shrinks toward **zero** — leaving
+only the genuinely-audited primitives (`Array`/`String`/`Bytes`) **and the live
+proof obligations** (e.g. the per-op no-silent-wrap holes, honest until
+discharged) — and the verified-`sort` showcase (§37 §6) becomes a real proof.
