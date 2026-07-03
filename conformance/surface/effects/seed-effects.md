@@ -530,11 +530,11 @@ build it.
   `State`/`Console` commute), `§4.2` (the `Vis (inr o)` pass-through clause)
 - given: a `[State Int, Console]` program that threads state **and** logs —
   `logged_next () = bind (get ()) (λ n. bind (put (n + 1)) (λ _. bind (perform
-  Console (Write (show n))) (λ _. Ret n)))` — discharged two ways: `runState 0
+  Console (Write "log")) (λ _. Ret n)))` — discharged two ways: `runState 0
   (handleConsole m)` (Console peeled first) and `handleConsole (runState 0 m)`
   (State peeled first).
 - expect: **both type-check and thread state identically** — result pair
-  `(0, 1)` and one `Console.Write "0"`, whichever handler peels first.
+  `(0, 1)` and one `Console.Write "log"`, whichever handler peels first.
   `runState` discharges the `State` summand by its `inl` clauses and **passes
   every Console op through untouched** by `§4.2`'s `Vis (inr o) k` clause;
   `handleConsole` never reads `State` ops — so the two handlers **commute**.
