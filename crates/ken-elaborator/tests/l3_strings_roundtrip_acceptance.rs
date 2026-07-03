@@ -254,12 +254,17 @@ fn ac3_mixed_multiscalar_and_empty_string() {
 }
 
 /// `surface/strings/surrogate-guard` — `string_to_list_char` never emits a
-/// codepoint in the surrogate range `[0xD800,0xDFFF]`. Structurally
-/// impossible to construct a Rust `&str` containing a lone surrogate (Rust's
-/// own `char`/`str` invariants forbid it at the type level — the same
-/// invariant AC1's witness mechanism relies on) — so this test asserts the
-/// guard holds across the whole corpus rather than feeding in a surrogate
-/// directly (which cannot be expressed as valid UTF-8 input at all).
+/// codepoint in the surrogate range `[0xD800,0xDFFF]`.
+///
+/// **Transported, not flipped:** under a validated `String` input, Rust's own
+/// `char`/`str` invariants structurally prevent a non-scalar from ever
+/// reaching the `Char` constructor — there is no fabrication path this
+/// assertion could catch. It proves the invariant *transports* through decode
+/// (the corpus never violates it); it cannot demonstrate what a violation
+/// would look like, because none is constructible (a lone surrogate is not
+/// valid UTF-8, so no Rust `&str` can carry one). The genuinely discriminating
+/// witness test — one that can actually reject an out-of-range `Int` — lives
+/// at `intToChar` in `decimal_char.rs`, not here.
 #[test]
 fn ac3_surrogate_guard_across_corpus() {
     let mut env = ElabEnv::new().expect("base env");

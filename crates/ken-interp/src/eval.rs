@@ -1489,6 +1489,13 @@ fn build_list_char(s: &str, ids: &ListCharIds, store: &mut EvalStore) -> EvalVal
 /// `Neutral`/panic, so totality holds even if it were ever reached. Returns
 /// `None` only if `v` is not a well-formed `List Char` `Ctor` chain (neither
 /// `Nil` nor `Cons` — the caller degrades to `Neutral`, never silently wrong).
+///
+/// The fallback value is `char::REPLACEMENT_CHARACTER` (U+FFFD) via safe
+/// `char::from_u32` (never `_unchecked`/UB) — pinned and named here so AC4's
+/// totality claim rests on a concrete value, not a bare "fallback." It is
+/// unreachable under `Char`'s refinement soundness (only a valid-scalar `Int`
+/// is ever well-typed `Char`); if that invariant were ever violated elsewhere,
+/// `String` is bare-typed, so surfacing U+FFFD is soundness-inert regardless.
 fn list_char_to_evalval_string(v: &EvalVal, ids: &ListCharIds) -> Option<String> {
     let mut out = String::new();
     let mut cur = v.clone();
