@@ -1,0 +1,165 @@
+-- Derived string surface: the `List`/`Nat` combinator floor + 5 string ops
+-- (spec/30-surface/37-strings-collections.md SS2.4/SS2.5/SS2.5.1/SS4.1, WP
+-- L3-strings-surface -- slice 2/2 of the string surface; slice 1,
+-- `L3-strings-roundtrip`, landed the real `string_to_list_char`/
+-- `list_char_to_string` round-trip this rides).
+--
+-- Zero new kernel feature, zero `trusted_base()` delta: every combinator here
+-- is a termination-checked recursive DERIVED def (`declare_recursive_group` +
+-- `sct_check` + `declare_def`, upgrading opaque -> transparent on SCT
+-- success) over the REAL generic eliminator (a `match` on `List`/`Nat`
+-- lowers to `Term::Elim{fam}`, 34 SS3) -- there is no `elim_List`/`elim_Nat`
+-- constant, and no native interp primitive is added for any of these
+-- (Approach A, Architect ruling `evt_4k1yqah3yvpds`: a native prim would grow
+-- the tested-not-trusted reduction surface for a trivially structural fold,
+-- a subsume-don't-proliferate violation). `OrdResult` is a checked `data`
+-- inductive (kernel-admitted by positivity), not a postulate/primitive --
+-- also zero delta.
+--
+-- The floor is 7 combinators, not 6: the frame this WP started from assumed
+-- a landed saturating `Nat` subtraction (`sub`) that does not exist (only
+-- signed non-saturating `sub_int` is a primitive) -- `natSub` is the 7th,
+-- derived here. `natSub`'s shape and the local `OrdResult` declaration both
+-- mirror the landed precedent in
+-- `crates/ken-elaborator/tests/val1_string_literals.rs:327`/`:334`
+-- (`natCmp`'s own local `OrdResult`, with the ES2 sanction-comment "a
+-- genuine 3-way comparison still gets one, declared locally").
+
+-- `OrdResult` -- the 3-way comparison result (SS2.5.1). The landed `Ord Char`
+-- (`packages/lawful-classes/lawful_classes.ken`) is `leq`-only -- no
+-- `compare` method, and no `Ordering`/`OrdResult` type exists anywhere else
+-- on `main` (ES2 retired the prelude's `OrdResult` as un-referenced bloat,
+-- but explicitly sanctions a LOCAL declaration where genuinely needed --
+-- Architect ruling `evt_1stp9sspm6ag8`). Named `OrdResult`, matching the
+-- `natCmp` precedent -- never a second name (`Ordering`) for the same
+-- concept. Exported from this module (the string surface's `compare` needs
+-- it bindable); NOT re-promoted to the prelude (that would reopen ES2's
+-- retirement -- YAGNI until a second consumer, e.g. verified `sort`, is
+-- real, per the Architect's forward note).
+data OrdResult = Lt | Eq | Gt
+
+-- The `List`/`Nat` combinator floor (SS4.1). Every recursive call below is an
+-- APPLIED call whose decreasing argument is a strict subterm of a matched
+-- argument (the `Cons` tail and/or the `Suc` predecessor) -- squarely in the
+-- SCT's sound zone, never leaning on the SCT's unapplied-self-reference /
+-- recursion-through-opaque-map over-accept hole
+-- (`sct-unapplied-self-reference-over-accepts`).
+
+-- `list_append` -- a DISTINCT name from the landed `Bytes`-domain `append`
+-- (FS-effect, `crates/ken-elaborator/src/bytes.rs`, symbol `"append"`); this
+-- is the pure `List a -> List a -> List a` op and must not shadow or be
+-- shadowed by it (AC6 / Architect brief-condition 2).
+view list_append (a : Type) (xs : List a) (ys : List a) : List a =
+  match xs {
+    Nil => ys ;
+    Cons x xs2 => Cons a x (list_append a xs2 ys)
+  }
+
+view nth (a : Type) (n : Nat) (xs : List a) : Option a =
+  match xs {
+    Nil => None a ;
+    Cons h t => match n {
+      Zero => Some a h ;
+      Suc m => nth a m t
+    }
+  }
+
+view take (a : Type) (n : Nat) (xs : List a) : List a =
+  match n {
+    Zero => Nil a ;
+    Suc m => match xs {
+      Nil => Nil a ;
+      Cons h t => Cons a h (take a m t)
+    }
+  }
+
+view drop (a : Type) (n : Nat) (xs : List a) : List a =
+  match n {
+    Zero => xs ;
+    Suc m => match xs {
+      Nil => Nil a ;
+      Cons h t => drop a m t
+    }
+  }
+
+-- Saturating `Nat` monus (never underflows) -- `slice`'s length. Identical
+-- shape to the landed `val1_string_literals.rs:327` `natSub`.
+view natSub (a : Nat) (b : Nat) : Nat =
+  match b {
+    Zero => a ;
+    Suc n => match a {
+      Zero => Zero ;
+      Suc m => natSub m n
+    }
+  }
+
+view list_eq (a : Type) (eqf : a -> a -> Bool) (xs : List a) (ys : List a) : Bool =
+  match xs {
+    Nil => match ys { Nil => True ; Cons h t => False } ;
+    Cons x xs2 => match ys {
+      Nil => False ;
+      Cons y ys2 => match eqf x y {
+        True => list_eq a eqf xs2 ys2 ;
+        False => False
+      }
+    }
+  }
+
+view list_compare (a : Type) (cmp : a -> a -> OrdResult) (xs : List a) (ys : List a) : OrdResult =
+  match xs {
+    Nil => match ys { Nil => Eq ; Cons h t => Lt } ;
+    Cons x xs2 => match ys {
+      Nil => Gt ;
+      Cons y ys2 => match cmp x y {
+        Eq => list_compare a cmp xs2 ys2 ;
+        Lt => Lt ;
+        Gt => Gt
+      }
+    }
+  }
+
+-- `compareChar` -- a faithful 3-way REPACKAGING of the landed `leqChar`/
+-- `eqChar` (`crates/ken-elaborator/src/decimal_char.rs`), NOT a re-derivation
+-- of Char comparison (settled input #4, `docs/program/wp/L3-strings-surface.md`
+-- SS2): `Eq` on `eqChar`; else `Lt`/`Gt` by `leqChar`'s antisymmetry +
+-- totality (both landed `Ord Char` laws, by transport from `Ord Int`).
+view compareChar (a : Char) (b : Char) : OrdResult =
+  match eqChar a b {
+    True => Eq ;
+    False => match leqChar a b { True => Lt ; False => Gt }
+  }
+
+-- The 5 derived string ops (SS2.5), routed through the real
+-- `string_to_list_char` / `list_char_to_string` round-trip (slice 1). These
+-- ship as plain FUNCTIONS -- `eq`/`compare` are tested-not-trusted
+-- Boolean/decision ops, not lawful `DecEq String`/`Ord String` instances
+-- (that transport needs a lawful `DecEq Char`, not yet landed -- a tracked
+-- follow-on; filing these as proof-carrying instances would over-claim the
+-- trust level).
+
+view concat (a : String) (b : String) : String =
+  list_char_to_string (list_append Char (string_to_list_char a) (string_to_list_char b))
+
+-- `slice` clamps by construction: `drop` past the end yields `Nil`, `take`
+-- past the end stops at the end, and the length `natSub j i` saturates at
+-- `0` when `j < i` -- never an underflow, never stuck.
+view slice (i : Nat) (j : Nat) (s : String) : String =
+  list_char_to_string (take Char (natSub j i) (drop Char i (string_to_list_char s)))
+
+-- `charAt` is total and honest about absence -- `Option Char`, never a
+-- sentinel or a partial index.
+view charAt (i : Nat) (s : String) : Option Char =
+  nth Char i (string_to_list_char s)
+
+-- Codepoint-wise equality over the scalar sequence -- rides the landed
+-- `eqChar`. This is NEVER NFC-normalization equality (ADR 0010 SS3: that
+-- identifies distinct scalar sequences, so over the codepoint carrier it is
+-- non-canonical -- a lawful `DecEq` for it would inhabit `Bottom`).
+view eq (a : String) (b : String) : Bool =
+  list_eq Char eqChar (string_to_list_char a) (string_to_list_char b)
+
+-- 3-way, codepoint-wise lexicographic order -- the more fundamental op,
+-- subsuming `<=`/`<`/`==` (a `leq`-only interface cannot cheaply recover
+-- 3-way).
+view compare (a : String) (b : String) : OrdResult =
+  list_compare Char compareChar (string_to_list_char a) (string_to_list_char b)

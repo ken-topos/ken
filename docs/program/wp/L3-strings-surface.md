@@ -15,6 +15,25 @@ precedent)
 > the landed code at pickup**, not trust this line. The *objective + acceptance*
 > below is the durable contract.
 
+**BUILD-TIME UPDATE (`origin/main@8f08e6ed`):** the `/spec` + `/conformance`
+this frame requested were elaborated and merged (`8f08e6ed`, PR #228) before
+Team Language build kickoff — **this frame's "6 combinators"/`Ordering`
+prose is superseded**, exactly as the perishability note above anticipated.
+The build followed the merged spec
+(`spec/30-surface/37-strings-collections.md` §2.4/§2.5/§2.5.1/§4.1) and
+conformance seed (`conformance/surface/collections/seed-collections.md`
+DS-AC1-7), not this file's §3/§4: the floor is **7** combinators (`natSub` is
+the 7th — no landed `sub`), and `compare` is 3-way over a **local, exported
+`data OrdResult = Lt | Eq | Gt`** (no `Ordering` type exists; `Ord Char` is
+`leq`-only). Delivered in `packages/collections/collections.ken` +
+`crates/ken-elaborator/tests/l3_strings_surface_acceptance.rs`; see
+`packages/collections/MANIFEST.md` for the full derivation-path + delta
+declaration. One additional, non-blocking finding: evaluating the pinned
+`slice 0 99 "abc"` conformance case (DS-AC3) surfaced a real
+`ken-interp`-side performance characteristic (near-quartic cost in the
+unary-`Nat` recursion depth, correct value, just slow) — flagged forward in
+the MANIFEST, not a soundness or scope issue.
+
 ## 1. Objective (one line)
 
 Deliver Ken's derived **string surface** — `concat`, `slice`, `charAt`, `eq`,
