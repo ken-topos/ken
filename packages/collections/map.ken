@@ -167,3 +167,298 @@ view orderedEmpty (k : Type) (v : Type) (leq : k -> k -> Bool) :
 -- `52 §5.2` law 1 -- `lookup k empty = None`, immediate (`empty = Leaf`).
 view lookupEmptyIsNone (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k) :
   Equal (Option v) (lookup k v leq key (empty k v)) (None v) = tt
+
+-- ─────────────────────────────────────────────────────────────────────────
+-- `map-verified-laws` (Map-arc CAPSTONE, `spec/50-stdlib/54-map-verified-
+-- laws.md`) -- the 5 deferred inductive laws, built on the two now-landed
+-- enabling capabilities: Gap A (`packages/transport/transport.ken`, the `J`
+-- former) and Gap B (the non-indexed dependent-match gate,
+-- `elab.rs::check_match_dependent`). Zero `trusted_base` delta throughout --
+-- every proof reduces through the existing `Term::J`/`Term::Cast`/
+-- `Term::Elim`; no `Axiom` appears anywhere below (a law that cannot be
+-- honestly built is re-deferred to Steward, never postulated, `52 §7d`).
+--
+-- Induction idiom (`54 §2.1`, confirmed against the landed elaborator by a
+-- throwaway probe before this file was built): Ken's dependent match wraps
+-- each recursive-field method in a kernel-required IH-slot Pi layer, but
+-- that layer is a DEAD, surface-unreferenceable binder
+-- (`dependent-match-nonnullary.md` SS"IHs are DEAD binders" -- confirmed
+-- empirically, not merely read off the doc). The IH is instead obtained the
+-- SAME way `toList`/`insert`/`lookup` already recurse: an ORDINARY
+-- self-recursive call on the subtree (`preservation ... l`, SCT-checked
+-- structural descent), whose RESULT is the actual induction hypothesis,
+-- consumed directly by name -- not a synthesized `ih_l`/`ih_r` binder.
+
+-- `Or` / `Inl` / `Inr` -- `ken-elaborator/src/prelude.rs`, a Rust-registered
+-- kernel `declare_inductive` (the surface `data` sugar hardcodes every
+-- parameter to `Type 0`, so `Or`'s two `Ω`-sorted parameters need the same
+-- "kernel API directly, one level below the surface convenience wrapper"
+-- technique this file's own `Pair`/`andIntro` already used, mirroring the
+-- existing `Perm_rel` precedent) -- flagged transparently, zero
+-- `trusted_base` delta (an ordinary kernel-rechecked inductive admission).
+
+-- `boolDichotomy b` (`54 §2.2`/`§3`) -- reflects a stuck `Bool` VARIABLE
+-- into its two equation-carrying cases. The Gap-B gate needs a bare
+-- variable scrutinee (`match b {...}`, not `match (leq k k') {...}`) --
+-- this is the reusable combinator every stuck `leq k k'` comparison below
+-- reflects THROUGH first (`boolDichotomy (leq k k')`, a non-dependent match
+-- on the resulting `Or`, landed `infer_match` path).
+view boolDichotomy (b : Bool) : Or (Equal Bool b True) (Equal Bool b False) =
+  match b {
+    True  => Inl (Equal Bool True True) (Equal Bool True False) tt ;
+    False => Inr (Equal Bool False True) (Equal Bool False False) tt
+  }
+
+-- `assoc leq key xs` (`54 §3`, law 5) -- the ordered-list lookup: a plain
+-- structural `List` recursion (Gap-B-free, no dependent motive), scanning
+-- entries by `leq key (pairFst entry) /\ leq (pairFst entry) key` the same
+-- coincidence test `lookup`/`insert` use.
+view assoc (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k) (xs : List (Pair k v)) : Option v =
+  match xs {
+    Nil => None v ;
+    Cons p xs2 =>
+      match leq key (pairFst k v p) {
+        True =>
+          match leq (pairFst k v p) key {
+            True  => Some v (pairSnd k v p) ;
+            False => assoc k v leq key xs2
+          } ;
+        False => assoc k v leq key xs2
+      }
+  }
+
+-- `allInList p xs` (`54 §3`, laws 4/5) -- the list analogue of `allKeys`:
+-- "every entry's key satisfies `p`", mirrored structurally over
+-- `List (Pair k v)`.
+view allInList (k : Type) (v : Type) (p : k -> Prop) (xs : List (Pair k v)) : Prop =
+  match xs {
+    Nil => Equal Bool True True ;
+    Cons e xs2 => And (p (pairFst k v e)) (allInList k v p xs2)
+  }
+
+-- `insertCaseTransport` -- laws 1/2/3/5's shared base-case transport.
+-- STATUS: the originally-escalated "Wall 2" (`check_match_dependent`
+-- allegedly not normalizing a branch's substituted expected type) was
+-- GROUND-TRUTHED and REFUTED this session -- it was proof-structuring bugs
+-- (uncurried convoy hypotheses left as early Pi-params instead of curried
+-- via `->` after the match's own return type), not an elaborator gap; see
+-- `spec/50-stdlib/54-map-verified-laws.md`'s convoy idiom (landed
+-- `wp/map-convoy-idiom`). The real, narrower obstruction ("Wall 1": nested
+-- `J`) DISSOLVES via a `trans`/`cong` single-combined-equation composition
+-- idiom -- confirmed on a Bool proxy and, for the real Tree-shaped
+-- application, via a "stop-one-step-short" technique (compose the Eq-proof
+-- chain to stop at the LAST stuck-match redex rather than the fully
+-- iota-reduced `Node(...)`, so the final delta+iota step happens through
+-- ORDINARY conversion during `J`'s own base-argument check, never needing
+-- to construct a raw `Eq (Tree k v) (Node ...) (Node ...)` witness between
+-- two syntactically-different-but-equal constructor applications). This
+-- v2 route-around is confirmed passing and, independently, confirmed
+-- STRUCTURALLY EXEMPT from the `eq_at_inductive`/Tree divergence fixed by
+-- `wp/obs-eq-termination` (`9cf468a`) -- it never constructs the
+-- Ctor-vs-Ctor Tree equality that machinery decomposes. Laws 1/2/3/5's
+-- full end-to-end assembly (this base case plus the recursive-case
+-- induction) is the next unit of this WP, tracked separately from law 4
+-- below, which needs no transport at all.
+
+-- `pairLeq` -- lift a key comparator to a `Pair k v` comparator by
+-- comparing first components, the comparator `isSorted`
+-- (`ken-elaborator/src/prelude.rs`) needs to be instantiated at `Pair k v`.
+view pairLeq (k : Type) (v : Type) (leq : k -> k -> Bool) (p1 : Pair k v) (p2 : Pair k v) : Bool =
+  leq (pairFst k v p1) (pairFst k v p2)
+
+-- Law 4 (`54 §3`, "toList ordered"): `Ordered leq m -> isSorted (toList m)`.
+-- Built via the convoy idiom (`54 §2.1`/`wp/map-convoy-idiom`): every
+-- match's own return type stays scrutinee-independent; any hypothesis
+-- whose type mentions the match's scrutinee is curried in via `->` after
+-- the return type and bound per-arm with `\h.`, letting the kernel narrow
+-- it automatically instead of requiring a dependent motive. `toListOrdered`
+-- and its full supporting chain were confirmed correct and fast in
+-- isolation across this session's bisection of a separate kernel
+-- conversion-machinery OOM (`wp/obs-eq-termination`, fixed `9cf468a`); this
+-- is the real, non-stubbed assembly re-verified against the fixed kernel.
+
+view leAbove (k : Type) (v : Type) (leq : k -> k -> Bool) (bound : k) (k2 : k) : Prop =
+  Equal Bool (leq bound k2) True
+
+view leBelow (k : Type) (v : Type) (leq : k -> k -> Bool) (bound : k) (k2 : k) : Prop =
+  Equal Bool (leq k2 bound) True
+
+-- L2 (`54 §3`): `allKeys p m -> allInList p (toList m)` -- bridges the
+-- Tree-shaped Ordered witness to the List-shaped isSorted goal.
+view allInListAppendIntro
+  (k : Type) (v : Type) (p : k -> Prop) (xs : List (Pair k v)) (ys : List (Pair k v))
+  (hys : allInList k v p ys)
+  : allInList k v p xs -> allInList k v p (list_append (Pair k v) xs ys) =
+  match xs {
+    Nil => \hxs. hys ;
+    Cons e xs2 =>
+      \hxs.
+        andIntro (p (pairFst k v e)) (allInList k v p (list_append (Pair k v) xs2 ys))
+          (andFst (p (pairFst k v e)) (allInList k v p xs2) hxs)
+          (allInListAppendIntro k v p xs2 ys hys
+             (andSnd (p (pairFst k v e)) (allInList k v p xs2) hxs))
+  }
+
+view allKeysToAllInList
+  (k : Type) (v : Type) (p : k -> Prop) (m : Tree k v)
+  : allKeys k v p m -> allInList k v p (toList k v m) =
+  match m {
+    Leaf => \h. h ;
+    Node l key val r =>
+      \h.
+        allInListAppendIntro k v p (toList k v l)
+          (Cons (Pair k v) (mkPair k v key val) (toList k v r))
+          (andIntro (p key) (allInList k v p (toList k v r))
+            (andFst (p key) (And (allKeys k v p l) (allKeys k v p r)) h)
+            (allKeysToAllInList k v p r (andSnd (allKeys k v p l) (allKeys k v p r)
+               (andSnd (p key) (And (allKeys k v p l) (allKeys k v p r)) h))))
+          (allKeysToAllInList k v p l (andFst (allKeys k v p l) (allKeys k v p r)
+             (andSnd (p key) (And (allKeys k v p l) (allKeys k v p r)) h)))
+  }
+
+view headBoundGoalP (k : Type) (v : Type) (leq : k -> k -> Bool) (bound : Pair k v) (xs : List (Pair k v)) : Prop =
+  match xs {
+    Nil => Equal Bool True True ;
+    Cons y r => Equal Bool (pairLeq k v leq bound y) True
+  }
+
+-- Bridge: allInList's full-list bound implies headBoundGoalP's head-only
+-- bound, via a single match (feeds L2's output into consSortedHead).
+view allInListToHeadBound
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (bound : k) (bval : v) (xs : List (Pair k v))
+  : allInList k v (leAbove k v leq bound) xs ->
+    headBoundGoalP k v leq (mkPair k v bound bval) xs =
+  match xs {
+    Nil => \h. tt ;
+    Cons e xs2 =>
+      \h.
+        andFst (Equal Bool (leq bound (pairFst k v e)) True) (allInList k v (leAbove k v leq bound) xs2) h
+  }
+
+-- isSortedAppend (`54 §3`), route-around: avoids a second-level nested
+-- dependent match entirely by factoring every "peek at xs2's own shape"
+-- need into its OWN separate, single-match, top-level helper view.
+view consSortedHead
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (m : Pair k v) (ys : List (Pair k v))
+  : isSorted (Pair k v) (pairLeq k v leq) ys ->
+    headBoundGoalP k v leq m ys -> isSorted (Pair k v) (pairLeq k v leq) (Cons (Pair k v) m ys) =
+  match ys {
+    Nil => \hys. \hb. tt ;
+    Cons y r =>
+      \hys. \hb.
+        andIntro (Equal Bool (pairLeq k v leq m y) True) (isSorted (Pair k v) (pairLeq k v leq) (Cons (Pair k v) y r))
+          hb hys
+  }
+
+view sortedTail
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (e : Pair k v) (xs2 : List (Pair k v))
+  : isSorted (Pair k v) (pairLeq k v leq) (Cons (Pair k v) e xs2) ->
+    isSorted (Pair k v) (pairLeq k v leq) xs2 =
+  match xs2 {
+    Nil => \hCons. tt ;
+    Cons y r =>
+      \hCons.
+        andSnd (Equal Bool (pairLeq k v leq e y) True) (isSorted (Pair k v) (pairLeq k v leq) (Cons (Pair k v) y r)) hCons
+  }
+
+view sortedTailHeadBound
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (e : Pair k v) (xs2 : List (Pair k v))
+  : isSorted (Pair k v) (pairLeq k v leq) (Cons (Pair k v) e xs2) ->
+    headBoundGoalP k v leq e xs2 =
+  match xs2 {
+    Nil => \hCons. tt ;
+    Cons y r =>
+      \hCons.
+        andFst (Equal Bool (pairLeq k v leq e y) True) (isSorted (Pair k v) (pairLeq k v leq) (Cons (Pair k v) y r)) hCons
+  }
+
+view appendHeadBound
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (e : Pair k v) (xs2 : List (Pair k v)) (m : Pair k v) (ys : List (Pair k v))
+  (eLeqM : Equal Bool (pairLeq k v leq e m) True)
+  : headBoundGoalP k v leq e xs2 ->
+    headBoundGoalP k v leq e (list_append (Pair k v) xs2 (Cons (Pair k v) m ys)) =
+  match xs2 {
+    Nil => \xs2HeadBound. eLeqM ;
+    Cons e2 xs3 => \xs2HeadBound. xs2HeadBound
+  }
+
+view isSortedAppend
+  (k : Type) (v : Type) (leq : k -> k -> Bool)
+  (xs : List (Pair k v)) (m : Pair k v) (ys : List (Pair k v))
+  (hcons : isSorted (Pair k v) (pairLeq k v leq) (Cons (Pair k v) m ys))
+  : isSorted (Pair k v) (pairLeq k v leq) xs ->
+    allInList k v (leBelow k v leq (pairFst k v m)) xs ->
+    isSorted (Pair k v) (pairLeq k v leq) (list_append (Pair k v) xs (Cons (Pair k v) m ys)) =
+  match xs {
+    Nil => \hxs. \hbound. hcons ;
+    Cons e xs2 =>
+      \hxs. \hbound.
+        consSortedHead k v leq e (list_append (Pair k v) xs2 (Cons (Pair k v) m ys))
+          (isSortedAppend k v leq xs2 m ys hcons
+             (sortedTail k v leq e xs2 hxs)
+             (andSnd (Equal Bool (leq (pairFst k v e) (pairFst k v m)) True)
+                     (allInList k v (leBelow k v leq (pairFst k v m)) xs2)
+                     hbound))
+          (appendHeadBound k v leq e xs2 m ys
+             (andFst (Equal Bool (leq (pairFst k v e) (pairFst k v m)) True)
+                     (allInList k v (leBelow k v leq (pairFst k v m)) xs2)
+                     hbound)
+             (sortedTailHeadBound k v leq e xs2 hxs))
+  }
+
+-- Named extractors for Ordered's 4-way conjunction (Node case) -- each
+-- source-text chain appears ONCE instead of duplicated at every use site,
+-- keeping the assembled toListOrdered term small enough to elaborate.
+view ordBelowL
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (l : Tree k v) (key : k) (val : v) (r : Tree k v)
+  (h : Ordered k v leq (Node k v l key val r))
+  : allKeys k v (leBelow k v leq key) l =
+  andFst (allKeys k v (leBelow k v leq key) l)
+         (And (allKeys k v (leAbove k v leq key) r) (And (Ordered k v leq l) (Ordered k v leq r)))
+    h
+
+view ordAboveR
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (l : Tree k v) (key : k) (val : v) (r : Tree k v)
+  (h : Ordered k v leq (Node k v l key val r))
+  : allKeys k v (leAbove k v leq key) r =
+  andFst (allKeys k v (leAbove k v leq key) r) (And (Ordered k v leq l) (Ordered k v leq r))
+    (andSnd (allKeys k v (leBelow k v leq key) l)
+            (And (allKeys k v (leAbove k v leq key) r) (And (Ordered k v leq l) (Ordered k v leq r)))
+      h)
+
+view ordL
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (l : Tree k v) (key : k) (val : v) (r : Tree k v)
+  (h : Ordered k v leq (Node k v l key val r))
+  : Ordered k v leq l =
+  andFst (Ordered k v leq l) (Ordered k v leq r)
+    (andSnd (allKeys k v (leAbove k v leq key) r) (And (Ordered k v leq l) (Ordered k v leq r))
+      (andSnd (allKeys k v (leBelow k v leq key) l)
+              (And (allKeys k v (leAbove k v leq key) r) (And (Ordered k v leq l) (Ordered k v leq r)))
+        h))
+
+view ordR
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (l : Tree k v) (key : k) (val : v) (r : Tree k v)
+  (h : Ordered k v leq (Node k v l key val r))
+  : Ordered k v leq r =
+  andSnd (Ordered k v leq l) (Ordered k v leq r)
+    (andSnd (allKeys k v (leAbove k v leq key) r) (And (Ordered k v leq l) (Ordered k v leq r))
+      (andSnd (allKeys k v (leBelow k v leq key) l)
+              (And (allKeys k v (leAbove k v leq key) r) (And (Ordered k v leq l) (Ordered k v leq r)))
+        h))
+
+-- Law 4's conclusion, convoy form, assembled from all pieces above.
+view toListOrdered
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (m : Tree k v)
+  : Ordered k v leq m -> isSorted (Pair k v) (pairLeq k v leq) (toList k v m) =
+  match m {
+    Leaf => \h. tt ;
+    Node l key val r =>
+      \h.
+        isSortedAppend k v leq (toList k v l) (mkPair k v key val) (toList k v r)
+          (consSortedHead k v leq (mkPair k v key val) (toList k v r)
+             (toListOrdered k v leq r (ordR k v leq l key val r h))
+             (allInListToHeadBound k v leq key val (toList k v r)
+                (allKeysToAllInList k v (leAbove k v leq key) r (ordAboveR k v leq l key val r h))))
+          (toListOrdered k v leq l (ordL k v leq l key val r h))
+          (allKeysToAllInList k v (leBelow k v leq key) l (ordBelowL k v leq l key val r h))
+  }
