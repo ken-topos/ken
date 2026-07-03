@@ -178,6 +178,83 @@ guard `g` may fail, the arm does **not** by itself discharge the `cₖ`
 constructor for exhaustiveness (`§4.2`). Guards are an arm-selection refinement,
 not a coverage contribution.
 
+### 3.4 Transport by a propositional equality — the `J` former
+
+Per-branch refinement (`§3.3`) rewrites the goal by an equality that holds
+**definitionally** — the scrutinee equation `s ≡ cₖ field̄` that the `elim_D`
+split makes true by the ι-rule. It does **nothing** for an equality that holds
+only **propositionally**: a proved `p : Eq A a b` that is *not* a definitional
+convertibility (e.g. an order hypothesis `IsTrue (leq k k') = Eq Bool (leq k k')
+True` over an **abstract** key `k`, where `leq k k'` is a *stuck* redex no match
+can fire). To rewrite a goal mentioning `a` into one mentioning `b` along such a
+`p`, the surface provides one term-former, the identity eliminator **`J`** — the
+explicit, proof-carrying transport every dependent theory supplies (Agda
+`subst`, Lean `▸`, Coq `eq_rect`).
+
+`J` is **not** a new kernel construct. It elaborates directly to the kernel's
+existing `Term::J` (`../10-kernel/15 §4`), which the kernel derives to `cast`
+and **reduces on any equality** (`../10-kernel/16 §3`); both `J` and `cast` are
+already in `trusted_base()`, so this former adds **nothing** to the trust
+surface — it only makes an already-trusted eliminator reachable from `.ken`.
+
+**Surface syntax and typing rule (the pin).** `J` is written applied to three
+arguments, `J motive base eq`, and is elaborated in **infer mode** (like the
+kernel eliminators, unlike the checked-mode `Refl`/`absurd`/`tt` sugar whose
+motive comes from the goal): the equality's type `A` and endpoints `a`, `b` are
+recovered from `eq`'s inferred type, and the result type is synthesized. The
+rule is verbatim the kernel's `J`-formation (`../10-kernel/15 §4`):
+
+```
+  Γ ⊢ eq : Eq A a b
+  Γ ⊢ motive : (b' : A) → Eq A a b' → s     (first domain ≡ A;  s any sort)
+  Γ ⊢ base : motive a (refl a)
+  ─────────────────────────────────────────────────────────────  (J)
+  Γ ⊢ J motive base eq  :  motive b eq
+```
+
+The motive's codomain **sort `s` is unconstrained** — it may be `Type ℓ`
+**or `Ω`**. This is load-bearing, not incidental: an `Ω`-valued motive is what
+lets `cong` conclude a proof-irrelevant type-equality and what lets a Branch-B
+proof obligation living in `Ω` (`../50-stdlib/52 §5`) be discharged by transport
+at all. `J` derives its computation from `cast`, whose rule deliberately does
+**not** require the endpoints to be convertible (that non-requirement *is*
+transport):
+
+```
+  Γ ⊢ e : Eq Type A B      Γ ⊢ t : A
+  ─────────────────────────────────────  (cast)   -- ../10-kernel/15 §3, 16 §3.1
+  Γ ⊢ cast A B e t  :  B
+```
+
+Because the motive's binder types are fixed by `eq`, the user writes the motive
+as an unannotated lambda `\b' _. G[b']` — its domains need no ascription.
+
+**The motive is user-written (the Agda-`subst` posture).** The user abstracts
+the rewritten occurrence explicitly, naming `G[·]` in the motive. Inferring
+*which* occurrences of `a` to generalize — `rewrite` / with-abstraction /
+auto-motive spelling — is a **separate, non-soundness ergonomic sugar, out of
+scope here**; it is deferred to a later surface-syntax WP.
+
+**Why this is sound (and what it is not).** `J` **asserts nothing**: the motive,
+the base, and the user-supplied witness `eq` are all kernel obligations on the
+emitted `Term::J`, kernel-re-checked in full — an ill-typed transport (wrong
+motive, wrong endpoints, or a proof of the *wrong* equation) is **rejected by
+the kernel**, never silently accepted. Every rewrite is witnessed by a proof the
+user supplied; the elaborator never manufactures an equality. This is
+deliberately **not** an implicit congruence: the unsound cross-wise
+`Eq`-congruence that would identify `bool_eq x y` with `bool_eq y x` (smuggling
+propositional symmetry into definitional equality) stays a hard **NO**
+(`../10-kernel/16`; `../50-stdlib/51` K6), and if a realistic transport goal
+fails to *compute*, the remedy is a sound kernel completeness fix, never an
+elaborator that routes around the kernel. There is **no conversion change**
+here — transport discharges through the `J`/`cast`
+*typing* rule (the equation obligation lands on the user's `eq`), so this former
+implies **no `../10-kernel` conversion-completeness note**.
+
+The five everyday combinators built on `J` — `subst`, `cong`, `cast`, `sym`,
+`trans` — are ordinary non-recursive library `view`s, **not** formers; they are
+listed in `../50-stdlib/53-transport.md`.
+
 ## 4. Exhaustiveness and reachability (required — the headline safety)
 
 Ken requires this from day one. The checker is a **surface algorithm** (not a
