@@ -91,6 +91,7 @@ fn show_val(v: &EvalVal) -> String {
         }
         EvalVal::Pair { fst, snd, .. } => format!("({}, {})", show_val(fst), show_val(snd)),
         EvalVal::Closure { .. } => "<closure>".to_owned(),
+        EvalVal::IhClosure { .. } => "<closure>".to_owned(),
         EvalVal::CtorPending { id, args, need } => {
             format!("<ctor({}) — {} args, need {}>", id, args.len(), need)
         }

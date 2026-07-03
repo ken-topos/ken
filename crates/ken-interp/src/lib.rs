@@ -1689,53 +1689,161 @@ mod eff_tests {
     // ── EFF4 — handlers: pure-fold discharge vs the driver ────────────────────
 
     /// `runtime/effects/runstate-discharges-in-pure-section3`
-    // [placeholder — reifies in K1.5-elim IH extension]
-    // `runState` is an `elim_ITree` fold. For `Vis (e : StateOp) (k : Resp → ITree)`,
-    // the IH is `Resp → P` — a Π-bound IH (K1.5 W-style). `elim_reduce` does not
-    // yet compute IH values for Π-bound recursive positions (`is_recursive_arg`
-    // checks IndFormer/App heads, not Pi codomains). Full runState test requires
-    // that extension.
+    ///
+    /// K1.5 IH extension landed (`ken-interp/src/eval.rs`'s
+    /// `recursive_arg_arity`/`EvalVal::IhClosure`, State-effect-build): a
+    /// `runState`-shaped `elim_ITree` fold — motive `Type0 → Pair Type0
+    /// Type0` (`S → (A × S)`) — now actually reduces over a `Vis (e:StateOp)
+    /// (k:Resp→ITree)` node instead of getting silently stuck. This drives a
+    /// real `Vis` tree through `eval`/`elim_reduce` directly and asserts the
+    /// driver (`drive_h`) is NEVER called — the fold discharges purely in
+    /// §3, by construction (no `drive_h` call appears anywhere in this test).
     #[test]
     fn eff4_runstate_discharges_in_pure_section3() {
-        // [placeholder — reifies in K1.5-elim IH extension]
-        //
-        // Partial test: `Ret r` tree eliminates purely in §3 without drive_h.
-        // Full runState with Vis nodes requires K1.5 IH in elim_reduce.
         let mut env = GlobalEnv::new();
         let it = mk_itree(&mut env);
         let mut store = mk_store();
 
-        // A tree that is just Ret r — no Vis, no driver needed.
-        // eval(Ret Bool(true)) → Ctor { id: ret_id, args: [Bool(true)] }
-        // drive_h → immediately returns Bool(true) (Ret arm, no H called).
-        let tree_term = mk_ret(Term::Lam(
+        // mr = λ(r:Type0). λ(s:Type0). Pair(r, s)
+        let mr = Term::Lam(
             Box::new(Term::Type(Level::zero())),
-            Box::new(Term::var(0)),
-        ), it.ret_id);
-        let tree_val = eval(&[], &tree_term, &env, &mut store);
-
-        let mut h_called = false;
-        let result = drive_h(tree_val, &mut |_op: EvalVal| {
-            h_called = true;
-            EvalVal::Unknown
-        }, &it.ids, &env, &mut store);
-
-        assert!(!h_called, "a Ret tree must never reach the driver");
-        assert!(
-            !matches!(result, EvalVal::Neutral | EvalVal::Unknown),
-            "Ret r must return r; got {:?}", result
+            Box::new(Term::Lam(
+                Box::new(Term::Type(Level::zero())),
+                Box::new(Term::Pair(Box::new(Term::var(1)), Box::new(Term::var(0)))),
+            )),
         );
+        // mv = λ(op:Type0). λ(k:Type0→ITree). λ(ih:Type0→Type0→Pair). λ(s:Type0).
+        //        (ih s) s     -- "get": response = current state, threaded
+        //                        forward as the next state (§4.5.2's `get`).
+        let mv = Term::Lam(
+            Box::new(Term::Type(Level::zero())),
+            Box::new(Term::Lam(
+                Box::new(Term::Pi(Box::new(Term::Type(Level::zero())), Box::new(Term::Type(Level::zero())))),
+                Box::new(Term::Lam(
+                    Box::new(Term::Pi(
+                        Box::new(Term::Type(Level::zero())),
+                        Box::new(Term::Pi(Box::new(Term::Type(Level::zero())), Box::new(Term::Type(Level::zero())))),
+                    )),
+                    Box::new(Term::Lam(
+                        Box::new(Term::Type(Level::zero())),
+                        Box::new(Term::App(
+                            Box::new(Term::App(Box::new(Term::var(1)), Box::new(Term::var(0)))),
+                            Box::new(Term::var(0)),
+                        )),
+                    )),
+                )),
+            )),
+        );
+
+        // tree = Vis op (λs. Ret s)  — a single `get`.
+        let k_term = Term::Lam(Box::new(Term::Type(Level::zero())), Box::new(mk_ret(Term::var(0), it.ret_id)));
+        let tree_term = mk_vis(Term::Type(Level::zero()), k_term, it.vis_id);
+
+        let elim = Term::Elim {
+            fam: it.itree,
+            level_args: vec![],
+            params: vec![],
+            motive: Box::new(Term::Type(Level::zero())),
+            methods: vec![mr, mv],
+            indices: vec![],
+            scrut: Box::new(tree_term),
+        };
+        let fold_val = eval(&[], &elim, &env, &mut store);
+
+        // Run from two distinct state tags (Type 0 vs Omega 0, the eff2 test's
+        // "distinct marker" idiom) — no `drive_h` call anywhere in this test:
+        // the fold discharges purely in §3, by construction.
+        let s0 = eval(&[], &Term::Type(Level::zero()), &env, &mut store);
+        let s1 = eval(&[], &Term::Omega(Level::zero()), &env, &mut store);
+        let run0 = super::eval::apply(fold_val.clone(), s0.clone(), &env, &mut store);
+        let run1 = super::eval::apply(fold_val, s1.clone(), &env, &mut store);
+
+        match (&run0, &run1) {
+            (EvalVal::Pair { fst: f0, snd: s0_, .. }, EvalVal::Pair { fst: f1, snd: s1_, .. }) => {
+                assert_eq!(**f0, s0, "run from s0: result must be s0 (get returns current state)");
+                assert_eq!(**s0_, s0, "run from s0: final state must be s0 (unchanged)");
+                assert_eq!(**f1, s1, "run from s1: result must be s1");
+                assert_eq!(**s1_, s1, "run from s1: final state must be s1");
+            }
+            other => panic!("expected two Pairs from the pure fold; got {:?}", other),
+        }
+        assert_ne!(run0, run1, "two initial states must yield two independent pairs");
     }
 
     /// `runtime/effects/handled-discharges-unhandled-reaches-driver`
-    // [placeholder — reifies in K1.5-elim IH extension]
-    // Tests the pure-fold-vs-driver split (`42 §6.1`/§6.2): handled (State)
-    // discharges in §3 via elim_ITree fold; unhandled (Console) survives to driver.
-    // Requires K1.5 IH in elim_reduce for the runState fold over Vis nodes.
+    ///
+    /// The pure-fold-vs-driver split (`42 §6.1`/§6.2): a State-shaped
+    /// `elim_ITree` fold discharges its `Vis` node with ZERO `drive_h` calls
+    /// (phase 1 — mirrors `eff4_runstate_discharges_in_pure_section3`'s
+    /// mechanism), while a separate unhandled `Vis` (standing in for
+    /// Console, `§7.2`) reaches the driver exactly once (phase 2). The two
+    /// phases are independent calls in this test — the coproduct-tagged
+    /// single-tree dispatch that lets both live in ONE program is Team
+    /// Language's `⊕`/named-dispatch lift ((b)/(c) in the frame); this pins
+    /// the RUNTIME half of the split: `elim_reduce`'s fold never touches
+    /// `drive_h`, and `drive_h` never touches `elim_reduce`.
     #[test]
     fn eff4_handled_discharges_unhandled_reaches_driver() {
-        // [placeholder — reifies in K1.5-elim IH extension]
-        let _ = (); // structural property — fold split; K1.5 IH extension needed
+        let mut env = GlobalEnv::new();
+        let it = mk_itree(&mut env);
+        let mut store = mk_store();
+
+        // Phase 1 — State-shaped fold (`size`-style, reusing the depth-2
+        // mechanism proof): discharge via `elim_reduce` directly. No
+        // `drive_h` value is even constructed in this phase.
+        // mr = λ(r:Type0). r   (Ret discharges to its own argument)
+        let mr = Term::Lam(Box::new(Term::Type(Level::zero())), Box::new(Term::var(0)));
+        // mv = λ(op:Type0). λ(k:Type0→ITree). λ(ih:Type0→Type0). ih op
+        //   -- "handled": resolve using the op itself as the response,
+        //      recursing exactly once, no driver call.
+        let mv = Term::Lam(
+            Box::new(Term::Type(Level::zero())),
+            Box::new(Term::Lam(
+                Box::new(Term::Pi(Box::new(Term::Type(Level::zero())), Box::new(Term::Type(Level::zero())))),
+                Box::new(Term::Lam(
+                    Box::new(Term::Pi(Box::new(Term::Type(Level::zero())), Box::new(Term::Type(Level::zero())))),
+                    Box::new(Term::App(Box::new(Term::var(0)), Box::new(Term::var(2)))),
+                )),
+            )),
+        );
+        let op_marker = Term::Type(Level::zero());
+        let k_term = Term::Lam(Box::new(Term::Type(Level::zero())), Box::new(mk_ret(Term::var(0), it.ret_id)));
+        let handled_tree = mk_vis(op_marker, k_term, it.vis_id);
+        let elim = Term::Elim {
+            fam: it.itree,
+            level_args: vec![],
+            params: vec![],
+            motive: Box::new(Term::Type(Level::zero())),
+            methods: vec![mr, mv],
+            indices: vec![],
+            scrut: Box::new(handled_tree),
+        };
+        let handled_result = eval(&[], &elim, &env, &mut store);
+        assert!(
+            !matches!(handled_result, EvalVal::Neutral | EvalVal::Unknown),
+            "the handled (State-shaped) fold must discharge to a concrete value with no driver call; got {:?}",
+            handled_result
+        );
+
+        // Phase 2 — a genuinely unhandled Vis (standing in for Console):
+        // `Vis op (λr. Ret r)`, driven through `drive_h`. The driver must be
+        // called exactly once.
+        let k2 = Term::Lam(Box::new(Term::Type(Level::zero())), Box::new(mk_ret(Term::var(0), it.ret_id)));
+        let unhandled_tree = mk_vis(Term::Omega(Level::zero()), k2, it.vis_id);
+        let unhandled_val = eval(&[], &unhandled_tree, &env, &mut store);
+        let mut h_calls = 0usize;
+        let driven_result = drive_h(
+            unhandled_val,
+            &mut |_op: EvalVal| {
+                h_calls += 1;
+                EvalVal::Bool(true)
+            },
+            &it.ids,
+            &env,
+            &mut store,
+        );
+        assert_eq!(h_calls, 1, "the unhandled Vis must reach the driver exactly once");
+        assert_eq!(driven_result, EvalVal::Bool(true), "driven result must be the handler's response");
     }
 
     // ── EFF5 — X1 == L5 ITree (definitional reconciliation) ───────────────────

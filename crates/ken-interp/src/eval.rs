@@ -185,6 +185,24 @@ pub enum EvalVal {
         code_id: u64,
         slot: SlotId,
     },
+    /// K1.5 W-style (Π-bound) recursive-position IH, deferred until applied to
+    /// its `nb` branch arguments. The kernel's term-level IH for such a
+    /// position is `λb̄. elim_D … (a_j b̄)` (`ken-kernel/src/inductive.rs`
+    /// `recursive_args`/`iota_reduct`) — a curried function of arity `nb`
+    /// with no source `Term` at the value layer (`a_j` is already an
+    /// `EvalVal`, e.g. a `Vis` continuation `Closure`), so it can't be built
+    /// as an ordinary `Term`-bodied `Closure`. Applying all `nb` branch args
+    /// threads them into `rec_field`, then folds the result through
+    /// `elim_reduce` — the State-effect-build `runState`/`elim_ITree` fold
+    /// over `Vis` nodes (`36 §4.2`).
+    IhClosure {
+        rec_field: Rc<EvalVal>,
+        fam: GlobalId,
+        methods: Rc<[Term]>,
+        ih_env: Rc<Env>,
+        nb: usize,
+        applied: Rc<Vec<EvalVal>>,
+    },
 
     // --- Constructor pending (arity not yet reached) ---
     /// A constructor partially applied — accumulates args until it saturates.
@@ -383,6 +401,30 @@ fn is_recursive_arg(arg_ty: &Term, fam: GlobalId) -> bool {
     }
 }
 
+/// Is constructor arg type `arg_ty` a recursive position for family `fam`,
+/// direct **or** Π-bound (K1.5 W-style, `ken-kernel/src/inductive.rs`
+/// `recursive_args`)? Peels leading `Term::Pi` domains (the branching
+/// telescope `B₁ → … → B_nb → …`) and checks whether the remaining codomain
+/// is headed by `fam`. Returns the branching arity `nb` (`0` = direct
+/// occurrence, unchanged from pre-K1.5; `≥1` = W-style, e.g. `ITree`'s
+/// `Vis : E → (Resp e → ITree r) → ITree r`, `nb = 1`).
+fn recursive_arg_arity(arg_ty: &Term, fam: GlobalId) -> Option<usize> {
+    let mut nb = 0;
+    let mut t = arg_ty;
+    loop {
+        if is_recursive_arg(t, fam) {
+            return Some(nb);
+        }
+        match t {
+            Term::Pi(_, cod) => {
+                t = cod;
+                nb += 1;
+            }
+            _ => return None,
+        }
+    }
+}
+
 /// Peel `n` outer `Term::Lam` binders, returning the remaining inner term.
 /// Returns `t` unchanged if fewer than `n` `Lam`s are found (should not
 /// happen for elaborator-produced eliminator methods — the pattern-matrix
@@ -508,12 +550,13 @@ fn elim_reduce(
 
             // Compute recursive positions from arg types (kernel never populates
             // ConstructorDecl.recursive_positions for G1-scope inductives).
-            let rec_positions: Vec<usize> = ctor_decl
+            // Each entry pairs the field index with its branching arity `nb`
+            // (`0` = direct, `≥1` = K1.5 W-style/Π-bound — `recursive_arg_arity`).
+            let rec_positions: Vec<(usize, usize)> = ctor_decl
                 .args
                 .iter()
                 .enumerate()
-                .filter(|(_, ty)| is_recursive_arg(ty, fam))
-                .map(|(i, _)| i)
+                .filter_map(|(i, ty)| recursive_arg_arity(ty, fam).map(|nb| (i, nb)))
                 .collect();
 
             // Evaluate ONLY the selected method (the others are never touched).
@@ -553,15 +596,31 @@ fn elim_reduce(
             let ih_region = peel_lams(&methods[k], ctor_specific.len());
             let body_only = peel_lams(ih_region, rec_positions.len());
             let p = rec_positions.len();
-            for (j, rec_pos) in rec_positions.iter().enumerate() {
+            for (j, (rec_pos, nb)) in rec_positions.iter().enumerate() {
                 let used = term_var_free(body_only, p - 1 - j);
-                let ih = if used {
-                    let rec_arg = ctor_specific[*rec_pos].clone();
-                    elim_reduce(env, fam, methods, rec_arg, globals, store)
-                } else {
+                let ih = if !used {
                     // Provably dead — any value is behaviorally inert here;
-                    // skip the recursive walk entirely (this is the fix).
+                    // skip the recursive walk entirely (RTP1 (B') fix).
                     EvalVal::Unknown
+                } else {
+                    let rec_arg = ctor_specific[*rec_pos].clone();
+                    if *nb == 0 {
+                        // Direct recursive position — unchanged from before.
+                        elim_reduce(env, fam, methods, rec_arg, globals, store)
+                    } else {
+                        // K1.5 W-style: the IH is `λb̄. elim_D … (a_j b̄)`
+                        // (`iota_reduct`) — cannot be computed until the `nb`
+                        // branch args are known, so defer as an `IhClosure`
+                        // rather than eagerly folding here.
+                        EvalVal::IhClosure {
+                            rec_field: Rc::new(rec_arg),
+                            fam,
+                            methods: Rc::from(methods.to_vec().into_boxed_slice()),
+                            ih_env: Rc::new(env.to_vec()),
+                            nb: *nb,
+                            applied: Rc::new(Vec::new()),
+                        }
+                    }
                 };
                 mval = apply(mval, ih, globals, store);
             }
@@ -1426,6 +1485,28 @@ pub fn apply(f: EvalVal, u: EvalVal, globals: &GlobalEnv, store: &mut EvalStore)
                 make_ctor(id, args, store)
             } else {
                 EvalVal::CtorPending { id, args, need }
+            }
+        }
+
+        // --- K1.5 W-style IH: accumulate branch args, fold when saturated ---
+        EvalVal::IhClosure { rec_field, fam, methods, ih_env, nb, applied } => {
+            let mut applied2 = (*applied).clone();
+            applied2.push(u);
+            if applied2.len() >= nb {
+                let mut branch_val = (*rec_field).clone();
+                for a in applied2 {
+                    branch_val = apply(branch_val, a, globals, store);
+                }
+                elim_reduce(&ih_env, fam, &methods, branch_val, globals, store)
+            } else {
+                EvalVal::IhClosure {
+                    rec_field,
+                    fam,
+                    methods,
+                    ih_env,
+                    nb,
+                    applied: Rc::new(applied2),
+                }
             }
         }
 
