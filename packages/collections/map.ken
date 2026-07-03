@@ -1,0 +1,55 @@
+-- `Map`/`Set` -- a proved, pure ordered BST (spec/50-stdlib/52-map.md,
+-- VAL2 #8 / OQ-A). Retires the opaque `declare_primitive` `Map`/`Set`
+-- (`ken-elaborator/src/prelude.rs`) -- the carrier is a transparent
+-- inductive, every op is a `declare_def` (kernel-rechecked, `52 §1.1`).
+--
+-- Carrier: bare unbalanced ordered BST, no balance metadata (`52 §3`).
+-- `k × v` is spelled `Pair k v` here -- the SIGMA pair (`13 §3`, `52 §4`:
+-- "distinct from the inductive `Prod`"), never `Prod`. The concrete `×`
+-- infix token is `(oracle)` per `52 §4`'s own hedge ("any still-open
+-- surface-syntax token is tagged `(oracle)`") -- the MECHANISM is landed
+-- (`Pair`/`mkPair`/`pairFst`/`pairSnd`, `ken-elaborator/src/prelude.rs`,
+-- built the same way `And A B := Sigma(_:A).B` already is), only the infix
+-- spelling is open.
+--
+-- SCOPE, this file (see `evt_64j01esqw86pf` / `evt_1wd56hecqhm06` in the
+-- Map-build thread): `insert`/`lookup`/`member`/`fromList` and the `52 §5`
+-- proof obligations need a key comparator threaded GENERICALLY over an
+-- abstract `k : Type` -- the landed elaborator's `where`/`instance_search`
+-- only resolves a CONCRETE, already-registered head type at declaration
+-- time (confirmed empirically: neither the `where Ord k` sugar nor a
+-- hand-written explicit `(d : Ord k)` parameter has a landed path for an
+-- abstract `k`). Those ops + proofs are held pending foundation-leader's
+-- escalation to the Architect -- this file ships only the ops that do NOT
+-- need a key comparator: the carrier, `empty`, `toList`, `fold`.
+
+data Tree k v = Leaf | Node (Tree k v) k v (Tree k v)
+
+-- `empty = Leaf` (`52 §4.1`).
+view empty (k : Type) (v : Type) : Tree k v = Leaf k v
+
+-- `toList` -- the in-order traversal (`52 §4.2`): `toList Leaf = Nil`,
+-- `toList (Node l k v r) = append (toList l) (Cons (k,v) (toList r))`,
+-- reusing the landed `list_append` (`packages/collections/collections.ken`).
+-- Over an `Ordered` tree the output keys are ascending (`52 §5.3`) -- the
+-- `Ordered`-preservation half of that claim needs `insert`, deferred above;
+-- `toList` itself is a plain flat two-sided structural recursion (the same
+-- shape kernel's `sct-completeness` control tests confirmed already passes
+-- SCT today).
+view toList (k : Type) (v : Type) (m : Tree k v) : List (Pair k v) =
+  match m {
+    Leaf => Nil (Pair k v) ;
+    Node l key val r =>
+      list_append (Pair k v) (toList k v l) (Cons (Pair k v) (mkPair k v key val) (toList k v r))
+  }
+
+-- `fold f z m` folds `f` over the entries in ascending key order (`52 §4.3`)
+-- -- the same order `toList` fixes: left subtree first, then the current
+-- node, then the right subtree, so `fold f z m` agrees with the left fold of
+-- `f` over `toList m` by construction (not merely by coincidence of a
+-- particular recursion, per `52 §4.3`'s order-contract framing).
+view fold (k : Type) (v : Type) (b : Type) (f : k -> v -> b -> b) (z : b) (m : Tree k v) : b =
+  match m {
+    Leaf => z ;
+    Node l key val r => fold k v b f (f key val (fold k v b f z l)) r
+  }

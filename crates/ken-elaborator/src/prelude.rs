@@ -382,6 +382,76 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     // then unify against `expected`) handles it like any other constant.
     elab.globals.insert("tt".to_string(), elab.env.tt_id());
 
+    // `Pair : Type -> Type -> Type` — the non-dependent Sigma pair,
+    // `k × v` (`52-map.md §4`, `13 §3`): "the Σ-pair... distinct from the
+    // inductive `Prod`". Built exactly like `And`'s `Σ(_:A).B` above — the
+    // kernel Sigma/Pair/Proj1/Proj2 formers are already landed
+    // (`ken-kernel/src/term.rs`); only the concrete `×` INFIX surface
+    // spelling is missing, which `52-map.md §4`'s own hedge tags `(oracle)`
+    // ("any still-open surface-syntax token is tagged `(oracle)`") — the
+    // mechanism (Sigma) is landed, so this is a named-application spelling
+    // of it, not a new kernel feature or a workaround. `mkPair`/`pairFst`/
+    // `pairSnd` are the corresponding intro/elim helpers (no surface `.1`/
+    // `.2` projection exists for a bare Sigma — that syntax is reserved for
+    // class-dictionary records only, `elab.rs::infer_proj`).
+    let pair_ty_ty = Term::pi(type0.clone(), Term::pi(type0.clone(), type0.clone()));
+    let pair_ty_body = Term::lam(
+        type0.clone(),
+        Term::lam(type0.clone(), Term::sigma(Term::var(1), weaken(&Term::var(0), 1))),
+    );
+    let pair_ty_id = declare_def(&mut elab.env, vec![], pair_ty_ty, pair_ty_body)
+        .map_err(|e| ElabError::Internal(format!("prelude Pair failed: {}", e)))?;
+    elab.globals.insert("Pair".to_string(), pair_ty_id);
+
+    // `mkPair : (a:Type) -> (b:Type) -> a -> b -> Pair a b`.
+    let pair_app_at_len2 =
+        Term::app(Term::app(Term::const_(pair_ty_id, vec![]), Term::var(1)), Term::var(0));
+    let pair_app_at_len4 =
+        Term::app(Term::app(Term::const_(pair_ty_id, vec![]), Term::var(3)), Term::var(2));
+    let mkpair_ty = Term::pi(
+        type0.clone(),
+        Term::pi(
+            type0.clone(),
+            Term::pi(Term::var(1), Term::pi(Term::var(1), pair_app_at_len4)),
+        ),
+    );
+    let mkpair_body = Term::lam(
+        type0.clone(),
+        Term::lam(
+            type0.clone(),
+            Term::lam(Term::var(1), Term::lam(Term::var(1), Term::pair(Term::var(1), Term::var(0)))),
+        ),
+    );
+    let mkpair_id = declare_def(&mut elab.env, vec![], mkpair_ty, mkpair_body)
+        .map_err(|e| ElabError::Internal(format!("prelude mkPair failed: {}", e)))?;
+    elab.globals.insert("mkPair".to_string(), mkpair_id);
+
+    // `pairFst : (a:Type) -> (b:Type) -> Pair a b -> a`.
+    let fst_ty = Term::pi(
+        type0.clone(),
+        Term::pi(type0.clone(), Term::pi(pair_app_at_len2.clone(), Term::var(2))),
+    );
+    let fst_body = Term::lam(
+        type0.clone(),
+        Term::lam(type0.clone(), Term::lam(pair_app_at_len2.clone(), Term::proj1(Term::var(0)))),
+    );
+    let fst_id = declare_def(&mut elab.env, vec![], fst_ty, fst_body)
+        .map_err(|e| ElabError::Internal(format!("prelude pairFst failed: {}", e)))?;
+    elab.globals.insert("pairFst".to_string(), fst_id);
+
+    // `pairSnd : (a:Type) -> (b:Type) -> Pair a b -> b`.
+    let snd_ty = Term::pi(
+        type0.clone(),
+        Term::pi(type0.clone(), Term::pi(pair_app_at_len2.clone(), Term::var(1))),
+    );
+    let snd_body = Term::lam(
+        type0.clone(),
+        Term::lam(type0.clone(), Term::lam(pair_app_at_len2, Term::proj2(Term::var(0)))),
+    );
+    let snd_id = declare_def(&mut elab.env, vec![], snd_ty, snd_body)
+        .map_err(|e| ElabError::Internal(format!("prelude pairSnd failed: {}", e)))?;
+    elab.globals.insert("pairSnd".to_string(), snd_id);
+
     // `Decimal`/`Char` DEMOTE→derived (`18a §5.6`/`§5.9`, Phase-2 tranche #2).
     // Must run here: after `Equal`/`And`/`Prop`/`tt` (needed by `IsTrue`),
     // before the L3a String-ops registration below (needs `Char` in
