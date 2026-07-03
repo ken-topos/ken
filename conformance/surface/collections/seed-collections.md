@@ -532,6 +532,255 @@ elaborator wiring of the collection ops to the landed resolver.
   canonicalization over a **user** key (byte-order), **not** a list-compare
   and **not** an `Ord`-keyed sort. Assert **same slot-id**, not just `==`.
 
+## Derived string surface (slice 2) — the `List Char` floor + 5 string ops
+
+**Slice 2/2 of the string surface** (WP `L3-strings-surface`, `191b023`;
+`spec/30-surface/37-strings-collections.md` §2.4/§2.5/§2.5.1/§4.1, DS-AC1–7 in
+§9). Delivers the derived string operations — `concat`/`slice`/`charAt`/
+`eq`/`compare` over `String` — as (a) a minimal **7-combinator `List Char`
+floor** (`list_append`/`nth`/`take`/`drop`/`natSub`/`list_eq`/`list_compare`)
+built as termination-checked recursive derived defs over the **real** generic
+`Term::Elim` (`34 §3`), and (b) the 5 string ops derived on top, routed through
+the now-real `string_to_list_char` (`s2l`) / `list_char_to_string` (`l2s`)
+(slice 1, `f50be22`). **Zero new native prims, zero `trusted_base()` delta**
+(Approach A, Architect ruling `evt_4k1yqah3yvpds`).
+
+**Grounded (content-verified against the landed code at `191b023`, not the frame
+prose — the frame's "landed" premises are perishable, and two were stale):**
+`s2l`/`l2s` real (`crates/ken-interp/src/eval.rs` — the `Neutral` fallback arms
+are reached only when `store.list_char_ids` is unwired; the real reduction fires
+when it is, as slice 1); the `natSub` saturating-monus shape + the local
+`data OrdResult = Lt | Eq | Gt` + `natCmp` 3-way **precedents** elaborate + SCT-
+pass today (`crates/ken-elaborator/tests/val1_string_literals.rs:327`/`:334`,
+with the ES2 sanction-comment "a genuine 3-way comparison still gets one,
+declared locally"); `Ord Char` is **`leq`-only**
+(`instance Ord Char { leq refl antisym trans total }`, no `compare` method,
+`packages/lawful-classes/lawful_classes.ken:359`); `eqChar`/`leqChar` landed
+(`= eq_int`/`= leq_int` under `Char`'s `Int` erasure,
+`crates/ken-elaborator/src/decimal_char.rs:242`); the
+`map`/`zip`/`unfoldUpTo`/`insert` recursion precedents landed
+(`l3a_acceptance.rs`).
+
+**Two stale frame-premise corrections (do NOT inherit the frame's prose — spec
+reconciled them, `§4.1`/`§2.5.1`, Architect `evt_1stp9sspm6ag8`):**
+- **The floor is 7 combinators, not 6.** The frame's `sub` (for `slice`'s
+  length) is **not landed** — no `Nat` subtraction exists (only signed
+  non-saturating `sub_int`), so `natSub` (saturating monus) is a 7th derived
+  combinator.
+- **`compare` is 3-way over a local `OrdResult`, not `Ordering`.** The frame's
+  `compare = list_compare (Ord Char).compare : Ordering` names a **type and a
+  method that do not exist** on `main` (`Ord Char` is `leq`-only; no `Ordering`/
+  `OrdResult` type). It is delivered 3-way over a **locally-declared, string-
+  surface-exported checked inductive** `data OrdResult = Lt | Eq | Gt`, with
+  `compareChar` **repackaging** the landed `leqChar`/`eqChar` (`Eq` on `eqChar`;
+  else `Lt`/`Gt` by `leqChar`). So `compare` cases assert `OrdResult` values
+  (`Lt`/`Eq`/`Gt`), **never** an `Ordering` or a `Bool`.
+
+**Deliverability honesty — this WP ships the value-level FUNCTIONS, not lawful
+instances (the trust level, `§2.5`).** `eq : String → String → Bool` and
+`compare : String → String → OrdResult` are Boolean/decision operations in the
+**tested-not-trusted** interpreter ring ("a wrong value, never a false proof").
+`String` **is** canonical w.r.t. `List Char` (the `s2l`/`l2s` round-trip is a
+bijection on scalar sequences, ADR 0010 §2), so `DecEq String`/`Ord String`
+**instances** are *soundly deliverable* later — unlike `Decimal`, whose non-
+canonical carrier makes `DecEq Decimal` inhabit `Bottom`
+(`../numbers/seed-numbers.md`, `../10-kernel/18a §5.6.1(4)`,
+`deceq-on-noncanonical-carrier-inhabits-bottom`). But that transport
+additionally needs a **lawful `DecEq Char`**, which is **not yet landed** (only
+the `eqChar` *view* + `Ord Char`-by-transport are on `main`); so the proof-
+carrying `DecEq String`/`Ord String` instances are a **tracked follow-on** (the
+lawful-`Ord`/`DecEq`-class WP, AC7 above; `48`), **not** delivered here. Filing
+these *functions* as proof-carrying instances would over-claim the trust level
+(`trusted-by-typing-guarantee-is-not-kernel-proved-Q`).
+
+**Reading disciplines specific to this slice:** producer-grep the **real**
+7-combinator registration (net-new on `main` — grep-verified absent at
+`f50be22`: `list_append`/`list_eq`/`list_compare` have **zero** hits;
+`nth`/`take`/`drop` only lexical false-positives like `std::mem::take` — so a
+green must drive the real producer, the `conformance-hand-feeds-the-deliverable`
+net); DS-AC4 is a **non-degenerate accept+reject pair** (COORDINATION §7) plus
+the **NFC-blindness** pin at the `list_eq` layer (unconditional there); assert
+result **values** (`Lt`/`Eq`/`Gt`, not `Ordering`); the SCT check stays in its
+**sound zone** (applied call on a strict subterm), not the over-accept zone
+(`sct-unapplied-self-reference-over-accepts`).
+
+### surface/collections/list-combinator-floor-derived-over-real-elim
+- spec: `37 §4.1` (the 7-combinator floor), `34 §3` (real `Term::Elim`),
+  `18a §5` (small audited core)
+- given: the 7 floor combinators (`list_append`/`nth`/`take`/`drop`/`natSub`/
+  `list_eq`/`list_compare`) + `compareChar`, as elaborated on
+  `wp/L3-strings-surface`.
+- expect: each **producer-greps** in `crates/ken-elaborator/src` as a
+  `declare_recursive_group` / `declare_def` member whose `match` on the
+  recursive argument lowers to the **real generic `Term::Elim { fam }`** over
+  the `List`/`Nat` family (`34 §3`) — **not** a bespoke reducer, and **not** a
+  registered `elim_List`/`elim_Nat` **constant** (there is none; `§4.1`).
+  `OrdResult` greps as a **checked inductive** (`data OrdResult = Lt | Eq | Gt`,
+  kernel-admitted by positivity) — **not** a
+  `declare_primitive`/`declare_postulate`/`declare_opaque`.
+  `git diff origin/main -- crates/ken-kernel/` is **empty**; `trusted_base()`
+  unchanged.
+- why: DS-AC1/AC5 — the floor is real derived surface at **zero-TCB-delta**.
+  **Producer-grep, not hand-fed:** the combinators are **net-new**
+  (grep-verified absent at `f50be22`), so a green must observe the **real**
+  registration, not a synthetic def (the
+  `conformance-hand-feeds-the-deliverable` net). A bug adding a native prim for
+  a combinator (growing `trusted_base()`) or declaring `OrdResult` as a
+  postulate is caught by the empty-kernel-diff + no-new-trusted-decl grep.
+  (structural; producer-grep; zero-delta.)
+
+### surface/collections/list-floor-recursion-in-sct-sound-zone (soundness)
+- spec: `37 §4.1` (mandated defining equations), `17 §4` (SCT),
+  `ken-kernel/src/sct.rs`
+- given: the 7 floor combinators' mandated defining equations (`37 §4.1`).
+- expect: for **each**, the recursive call is an **applied** call whose
+  decreasing argument is a **strict subterm** of a matched argument — the `Cons`
+  tail (`list_append`/`nth`/`take`/`drop`/`list_eq`/`list_compare`) or the `Suc`
+  predecessor (`nth`/`take`/`drop`/`natSub`) — so the SCT **accepts** (real-now:
+  every shape SCT-passes via the landed `map`/`zip`/`unfoldUpTo`/`insert`/
+  `natSub` precedents, `l3a_acceptance.rs` + `val1_string_literals.rs`).
+  **Discriminator:** a sibling recursing on a **non-subterm** — the whole
+  matched argument reconstructed, `bad (Cons x xs) = bad (Cons x xs)`, an
+  **applied** call carrying **no** `Down` argument — is **rejected** (SCT
+  requires an applied call with a `Down` argument; `§4.1`, `sct.rs`).
+- why: DS-AC2 (Architect brief-condition 1). **(soundness)** — a disguised
+  non-terminator admitted by SCT inhabits `Bottom` via a δ-loop. The floor stays
+  in the SCT **sound zone** and does **not** lean on the SCT **over-accept**
+  zone (`sct-unapplied-self-reference-over-accepts`: a bare *unapplied*
+  self-`Const` / recursion-through-an-opaque-`Map` — `c := c`, `loop := id loop`
+  — is transparently edge-free and mis-admitted; none of the 7 need that shape).
+  The accept/reject **verdict-flip** on the applied-subterm vs
+  reconstructed-non-subterm pair is the guard; the SCT accept/reject
+  **mechanism** is kernel-homed (`../../kernel/seed-kernel.md`), referenced not
+  re-pinned. (soundness; sound-zone; applied-subterm verdict-flip.)
+
+### surface/strings/derived-string-ops-reduce-over-real-roundtrip
+- spec: `37 §2.5` (mandated bodies), `37 §2.3` (real `s2l`/`l2s`)
+- given: `concat`/`slice`/`charAt` applied to a multi-byte corpus through the
+  real `s2l`/`l2s` (reuse slice-1's boundary corpus: ASCII + `é`/CJK/emoji, plus
+  empty).
+- expect: reduce to the **correct value** — `concat "ab" "cd" ≡ "abcd"`, and
+  `concat` over a multi-byte pair preserves every scalar;
+  `slice 1 3 "abcde" ≡ "bc"`; `slice` **clamps** — `slice 0 99 "abc" ≡ "abc"`
+  (over-range `take` stops at the end) and `slice 2 1 "abc" ≡ ""`
+  (`natSub 1 2 ≡ 0` → `take 0 ≡ Nil`, no underflow); `charAt` is `Option Char` —
+  `charAt 1 "abc" ≡ Some 'b'`, `charAt 5 "abc" ≡ None`, `charAt 0 "" ≡ None`.
+  Indices are **code-point** positions (over the `List Char` view), never byte
+  offsets. Assert the reduced **values**.
+- why: DS-AC3 — the 5 ops compute correctly through the real round-trip.
+  **Reduces-to on real producers:** the ops run through the landed `s2l`/`l2s`
+  (wired via `store.list_char_ids` in test setup, as slice 1), not a hand-fed
+  `List Char`. `charAt`'s `Option` (honest absence, `34 §1`, not a sentinel) and
+  `slice`'s saturating clamp (`natSub`, never underflow) are the totality faces;
+  a byte-offset `slice` (splitting a multi-byte scalar) or a partial `charAt`
+  (stuck/sentinel out of range) is caught by the multi-byte + out-of-range
+  witnesses. (reduces-to; totality; real round-trip.)
+
+### surface/strings/string-eq-codepoint-wise-accept-reject-pair
+- spec: `37 §2.5` (`eq` codepoint-wise), ADR 0010 §2, COORDINATION §7
+- given: `eq : String → String → Bool` on (a) two **equal** scalar sequences,
+  (b) a **same-length, single-codepoint-differing** pair, (c) a **length-
+  differing** pair.
+- expect: **the verdict flips** — (a) `eq "abc" "abc" ≡ True`; (b)
+  `eq "abc" "abd" ≡ False` (same length, one codepoint differs — `list_eq`
+  short-circuits on the first mismatch); (c) `eq "ab" "abc" ≡ False` (`Nil` vs
+  `Cons` at position 2). Assert the **result value** (`True`/`False`), not "it
+  type-checks".
+- why: DS-AC4 accept+reject face — a **non-degenerate pair** (COORDINATION §7),
+  not a single accept. A single `eq _ _ ≡ True` case is green-vs-green under an
+  `eq` that ignores its second argument (or always returns `True`); the same-
+  length single-differ reject (b) is the tightest guard — a length-only equality
+  would pass (a)+(c) yet **fail** (b). `eq` rides the landed `eqChar`
+  (`= eq_int` under `Char`'s `Int` erasure). (verdict-flip pair; result-value.)
+
+### surface/strings/string-compare-3way-lexicographic-triple
+- spec: `37 §2.5.1` (`compare` 3-way over `OrdResult`), ADR 0010
+- given: `compare : String → String → OrdResult` on the ordered triple `"a"`,
+  `"ab"`, `"b"`, and a reflexive input.
+- expect: `compare "a" "ab" ≡ Lt` (`'a' ≡ 'a'`, then `Nil` vs `Cons` → shorter-
+  prefix `Lt`); `compare "ab" "b" ≡ Lt` (`compareChar 'a' 'b' ≡ Lt`, since
+  `leqChar 97 98` and `'a' ≠ 'b'`); `compare "b" "a" ≡ Gt`;
+  `compare "ab" "ab" ≡ Eq`. Assert the **`OrdResult`** value `Lt`/`Eq`/`Gt` —
+  **not** an `Ordering` (no such type on `main`) and **not** a `Bool`.
+- why: DS-AC4 order face — the 3-way lexicographic order `"a" < "ab" < "b"` at
+  the spec's **locked granularity** (`OrdResult`, not the frame's non-existent
+  `Ordering`; `Ord Char` is `leq`-only, `lawful_classes.ken:359`). `compareChar`
+  **repackages** the landed `leqChar`/`eqChar` (a faithful 3-way of the landed
+  total order; a `declare_def`, so a bug is a wrong value, never a false proof).
+  The prefix rule (`Nil` vs `Cons` → `Lt`) is what orders `"a" < "ab"`; a
+  `compare` returning `Bool` or dropping the prefix rule is caught.
+  (verdict-flip triple; `OrdResult` granularity.)
+
+### surface/strings/list-eq-is-codepoint-wise-not-nfc-folding (property)
+- spec: `37 §2.5` (codepoint-wise; NFC-normalization equality OUT), ADR 0010 §3
+- given: `list_eq eqChar` on two **canonically-equivalent but
+  codepoint-distinct** scalar sequences, constructed **directly** as `List Char`
+  literals — `cs_nfc = [Char U+00E9]` (precomposed "é", one scalar) and
+  `cs_nfd = [Char U+0065, Char U+0301]` ("e" + combining acute, two scalars).
+- expect: `list_eq eqChar cs_nfc cs_nfd ≡ False` — the two scalar **sequences**
+  differ (length 1 vs 2), so codepoint-wise equality is **False**, regardless of
+  their NFC canonical equivalence. `list_eq`/`eq` **never** folds NFC-
+  normalization into the comparison.
+- why: DS-AC4 NFC-absence face (ADR 0010 §3) — pins that NFC-normalization
+  equality was **not smuggled** into `eq`. **Constructed at the `List Char`
+  layer on purpose:** the pin is **unconditional** there (two distinct scalar
+  sequences are always codepoint-unequal), whereas at the `String`-literal layer
+  it would depend on whether NFC-at-construction is real vs stubbed — pinning
+  `eq "é" "e◌́" ≡ False` on **literals** would falsely fail once real NFC lands
+  and merges them at construction (the over-pinning-a-deferred-behavior trap). A
+  `list_eq` that NFC-normalized before comparing would return `True` here — the
+  discriminating flip. **This is why an NFC equality is not deliverable as a
+  lawful `DecEq`** (it identifies distinct sequences → non-canonical → would
+  inhabit `Bottom`, ADR 0010 §3); the codepoint-wise `eq` is canonical over the
+  `List Char` carrier and sound. **Reconciliation with
+  `string-nfc-canonically-equal-shares-slot` (oracle):** that is a **different
+  operation at a different layer** — the `String` content-addressed `==`
+  (slot-id, O(1)) on two NFC-equivalent **literals** that NFC-at-construction
+  **merges** to one slot (→ `==` `True`, when real NFC lands); **this** case is
+  the derived codepoint-wise `list_eq`/`eq` on two genuinely-distinct **scalar
+  sequences** (which `String` construction never yields as distinct values). No
+  overlapping-input contradiction: `==` decides content-addressed **identity**
+  (post-normalization); `eq`/`list_eq` decides **scalar-sequence** equality
+  (NFC-blind); under real NFC they **agree** on `String` values. (property;
+  NFC-blind; layer reconciliation.)
+
+### surface/collections/list-append-does-not-shadow-bytes-append
+- spec: `37 §4.1` (name hygiene, Architect brief-condition 2)
+- given: `list_append : {a} → List a → List a → List a` and the landed
+  `Bytes`-domain `append : Bytes → Bytes → Bytes` (FS-effect, `bytes.rs`).
+- expect: `list_append` resolves to the **List** op (pure,
+  `List a → List a → List a`) and **not** the `Bytes` `append` (`visits [FS]`,
+  `bytes.rs:144`); both names resolve to their **intended** op, and a
+  `list_append` application on `List a` does **not** pick up the `[FS]` effect
+  row.
+- why: DS-AC6 (Architect brief-condition 2). The `Bytes` `append` is **landed**
+  (grep-verified: `bytes.rs:144`, `declare_primitive`
+  `PrimReduction::Op{symbol:"append"}`, `[FS]` row) — a `list_append` that
+  **shadowed** it would mis-resolve the `List` op to the `Bytes` primitive (type
+  error / wrong reduction) or leak an `[FS]` effect onto pure list
+  concatenation. Producer-grep the **distinct** registration. The other floor
+  names (`nth`/`take`/`drop`/`natSub`/`list_eq`/`list_compare`) are free
+  (grep-verified — only lexical false-positives). (name hygiene;
+  distinct-registration.)
+
+### surface/strings/concat-slice-compose-and-floor-totality
+- spec: `37 §4.1` (totality), `37 §2.5` (`concat`/`slice` compose), `18a §3`
+  (defining-law oracle)
+- given: `concat`/`slice`/`list_append` on a small scalar-clean corpus.
+- expect: `slice 0 (charLength a) (concat a b) ≡ a` for scalar-clean `a` (the
+  length-`charLength a` prefix of `concat a b` is `a`); `list_append` is
+  **associative** on a small corpus
+  (`list_append (list_append xs ys) zs ≡ list_append xs (list_append ys zs)`);
+  every combinator is **total** — `natSub` saturates at `0`, `nth`/`take`/`drop`
+  totalize out-of-range to `None`/`Nil`, and **no** well-typed application
+  reduces to `Neutral`/stuck. Assert the reduced values + non-`Neutral`.
+- why: DS-AC7 — compositional sanity + totality. The `concat`/`slice` round-trip
+  is a **defining-law oracle** (`18a §3`-style — non-circular, cannot alias the
+  reduction it audits), exercising the ops end-to-end; `list_append`
+  associativity is the canonical structural law; totality closes the "no stuck
+  on well-typed input" face. A `slice`/`natSub` underflow (partial) or a
+  `Neutral`-producing combinator is caught. (reduces-to; law; totality.)
+
 ## Coverage map (AC → cases)
 
 - **AC1** (`String` UTF-8 primitive, not `List Char`):
@@ -557,6 +806,16 @@ elaborator wiring of the collection ops to the landed resolver.
   `user-deceq-keyed-map-canonical-identity`; **deferred (lawful-`Ord`-class
   WP):** `user-ord-instance-drives-verified-sort`,
   `user-ord-sort-emits-both-conjuncts` (soundness).
+- **DS-AC1–7** (derived string surface, slice 2 — the `List Char` floor + 5
+  string ops):
+  `list-combinator-floor-derived-over-real-elim` (DS-AC1/AC5),
+  `list-floor-recursion-in-sct-sound-zone` (DS-AC2, soundness),
+  `derived-string-ops-reduce-over-real-roundtrip` (DS-AC3),
+  `string-eq-codepoint-wise-accept-reject-pair` +
+  `string-compare-3way-lexicographic-triple` +
+  `list-eq-is-codepoint-wise-not-nfc-folding` (DS-AC4),
+  `list-append-does-not-shadow-bytes-append` (DS-AC6),
+  `concat-slice-compose-and-floor-totality` (DS-AC7).
 
 ## Cross-case consistency sweep
 
@@ -566,7 +825,26 @@ elaborator wiring of the collection ops to the landed resolver.
   **always** a slot-id comparison (O(1)), and "sharing/identity" is **always**
   observed as slot-id — never a structural re-walk, never insertion-order- or
   construction-history-dependent. A case asserting an O(n) structural equality
-  or an order-dependent `Map` identity would contradict this class.
+  or an order-dependent `Map` identity would contradict this class. This is the
+  content-addressed **identity** `==`; the derived slice-2 `eq`/`compare`
+  (`string-eq-…`/`string-compare-…`) are a **different, coexisting** story
+  (next bullet).
+- **Derived string `eq`/`compare` are codepoint-wise functions, distinct from
+  content-addressed `==` but agreeing in result.** The slice-2
+  `eq`/`compare`/`list_eq` (`string-eq-codepoint-wise-accept-reject-pair`,
+  `string-compare-3way-lexicographic-triple`,
+  `list-eq-is-codepoint-wise-not-nfc-folding`) decide **scalar-sequence**
+  equality/order over the `List Char` view — an explicit codepoint walk, **not**
+  the O(1) slot-id `==` (so they do **not** violate the "identity is always
+  slot-id" invariant above; they are derived decision *functions*, not the
+  content-addressed identity). On well-formed `String` values they **agree** in
+  result with `==` (both decide the NFC-normalized scalar sequence). The
+  NFC-vs-NFD pin (`list-eq-…-not-nfc-folding`) lives at the `List Char` layer,
+  where distinct scalar sequences are **unconditionally** unequal — it does
+  **not** contradict `string-nfc-canonically-equal-shares-slot` (oracle), which
+  is `==` on NFC-equivalent **literals** that construction merges to one slot.
+  A case asserting the derived `eq` folds NFC-equivalence (or that `==`
+  structure-walks) would contradict this split.
 - **`DecEq`-membership vs `Ord`-order split is consistent across `Map` and
   `Set`.** `map-key-without-deceq-rejected` pins that the **core** `Map`/`Set`
   require **`DecEq`** (membership) and **not** `Ord` (`Ord` gates only ordered

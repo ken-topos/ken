@@ -97,17 +97,135 @@ sentinel). `Char` is a Unicode scalar value (`35 §2.4`: `u32`, range
 `U+0000–U+10FFFF` excluding the surrogate block `U+D800–U+DFFF` — a refinement
 on the carrier, so `List Char → String` cannot encode an invalid scalar).
 
-### 2.4 No new kernel rule
+### 2.4 No new kernel rule — small primitive core, derived surface
 
 `String` attaches as a kernel **primitive** (`14 §5`): an opaque type constant
-whose inhabitants are literals and the results of registered primitive ops
-(concat, slice, `byteLength`, code-point indexing). A primitive op carries a
-**registered reduction** (`41`), so e.g. `byteLength "abc" ≡ 3` holds
-definitionally and proofs can compute over string literals. Non-definitional
-string laws (e.g. `byteLength (s ++ t) ≡ byteLength s + byteLength t`) are
-**prelude propositions** (`14 §5`, `35 §6.2`), not kernel reductions. The
-primitive set stays small and audited (`18 §5`); `String` adds **no** inductive
-declaration and **no** conversion rule.
+whose inhabitants are **string literals** and the results of a **small,
+audited** set of registered primitive ops. That primitive core is deliberately
+minimal — the type constant, literals, the native `String ↔ List Char`
+round-trip (`string_to_list_char` / `list_char_to_string`, landed in slice 1
+`L3-strings-roundtrip`, `§2.3`), and the byte-buffer reads (`byteLength` over
+the packed NFC buffer). A primitive op carries a **registered reduction**
+(`41`), so e.g. `byteLength "abc" ≡ 3` holds definitionally and proofs can
+compute over string literals.
+
+**The string *surface* — `concat` / `slice` / `charAt` / `eq` / the ordering op
+— is `derived`, not primitive (`§2.5`).** These lower to ordinary prelude
+`view`s over the `List Char` view (`§2.3`), routed through the native round-trip
+— **not** registered native primitives. This is the settled slice-2 approach
+(Approach A, Architect ruling `evt_4k1yqah3yvpds`): deriving
+trivially-structural ops adds **zero** `trusted_base()` delta, where a native
+prim would grow the audited reduction surface for no benefit
+(subsume-don't-proliferate). So the
+primitive set stays small and audited (`18 §5`), and `String` adds **no**
+inductive declaration and **no** conversion rule.
+
+Non-definitional string laws (e.g. `byteLength (s ++ t) ≡ byteLength s +
+byteLength t`) are **prelude propositions** (`14 §5`, `35 §6.2`), not kernel
+reductions.
+
+### 2.5 The derived string surface (`concat` / `slice` / `charAt` / `eq` / …)
+
+The everyday string operations are **derived** — ordinary prelude `view`s over
+the `List Char` view (`§2.3`), routed through the native `string_to_list_char`
+(`s2l`) / `list_char_to_string` (`l2s`) round-trip (slice 1, landed). They add
+**zero** native primitives and **zero** `trusted_base()` delta; each reduces by
+unfolding to the `§4.1` `List Char` combinator floor over the real `elim_List` /
+`elim_Nat` (`34 §3`). The mandated bodies (Approach A, `evt_4k1yqah3yvpds` — do
+**not** native-ize):
+
+```
+concat a b   =  l2s (list_append (s2l a) (s2l b))
+slice  i j s =  l2s (take (natSub j i) (drop i (s2l s)))
+charAt i s   =  nth i (s2l s)                        -- : Option Char
+eq     a b   =  list_eq eqChar (s2l a) (s2l b)       -- : Bool
+```
+
+- **`charAt` is total and honest about absence.** `nth` returns `None` on an
+  out-of-range index and on the empty string — `charAt i "" ≡ None` and
+  `charAt 5 "abc" ≡ None` — so the result type is `Option Char`, never a partial
+  index (`34 §1` honest sum, not a sentinel).
+- **`slice` clamps by construction.** `drop i` past the end yields `Nil` and
+  `take n` past the end stops at the end, so an out-of-range `slice` returns the
+  available sub-view, never stuck. The length is `natSub j i` — **saturating**
+  `Nat` monus (`§4.1`): when `j < i` it is `0`, so `take 0 _ ≡ Nil` and
+  `slice j i s ≡ ""` (an empty slice, never an underflow). Indices are
+  **code-point** positions (over the `List Char` view), never byte offsets — a
+  byte-offset slice could split a multi-byte scalar (`§2.2`, ADR 0010).
+- **`eq` is codepoint-wise and rides the landed `eqChar`.** `eq a b` decides
+  equality of the two scalar sequences via `list_eq` threading the landed
+  `eqChar : Char → Char → Bool` (`= eq_int` under `Char`'s `Int` erasure,
+  `decimal_char.rs`). This is the **normative default** (ADR 0010 §2): because
+  `s2l`/`l2s` are a round-trip bijection on scalar sequences, `String` is
+  **canonical** w.r.t. `List Char`, so codepoint-wise `eq` is sound. **NFC-
+  normalization equality is OUT** (`§6`, ADR 0010 §3): it identifies distinct
+  scalar sequences, so over the codepoint carrier it is *non-canonical* — a
+  lawful `DecEq` for it would inhabit `Bottom`; if ever wanted it is a
+  separately-named `Eq`/setoid in a later WP, **never** a `DecEq`/`Ord` here.
+- **`compare` is 3-way, codepoint-wise (`§2.5.1`).** `compare a b : OrdResult`
+  (`Lt` / `Eq` / `Gt`) is the lexicographic order of the two scalar sequences
+  via `list_compare` threading `compareChar`. The landed `Ord Char` is
+  `leq`-only (no `compare` method, no `Ordering`/`OrdResult` type on `main`), so
+  `compareChar` **repackages** the landed `leqChar`/`eqChar` into 3-way and
+  `OrdResult` is a locally-declared, string-surface-**exported** checked
+  inductive — zero-TCB-delta (Architect ruling `evt_1stp9sspm6ag8`).
+
+**Deliverability honesty (trust level).** This WP delivers the value-level
+*functions* `eq : String → String → Bool` (and the `§2.5.1` ordering op) —
+Boolean/decision operations in the tested-not-trusted interpreter ring ("a
+wrong value, never a false proof"). Because `String` is **canonical** w.r.t.
+`List Char` (ADR 0010 §2), these are *soundly transportable* to lawful `DecEq
+String` / `Ord String` **instances** — the canonicity precondition holds here,
+unlike `Decimal` (`../10-kernel/18a §5.6.1(4)`). But that transport
+additionally needs a lawful **`DecEq Char`**, which is **not yet landed** (only
+the `eqChar` *view* +
+`Ord Char`-by-transport are on `main`); so the proof-carrying `DecEq String` /
+`Ord String` instances are a **tracked follow-on**, not delivered here. This WP
+delivers the *functions*; it does **not** ship the lawful instances — filing the
+functions as proof-carrying instances would over-claim the trust level.
+
+#### 2.5.1 String ordering — the 3-way `compare` and `OrdResult`
+
+`compare` is a **3-way** codepoint-wise comparison — the more fundamental
+ordering op, subsuming `≤` / `<` / `==` (a `leq`-only interface cannot cheaply
+recover 3-way). The landed `Ord Char` is `leq`-valued only (`= leq_int`, no
+`compare` method), so the surface declares a **local** result type and
+**repackages** the landed Char ops:
+
+```
+data OrdResult = Lt | Eq | Gt              -- exported from the string surface
+
+compareChar a b =                          -- 3-way from landed leqChar / eqChar
+  match eqChar a b {
+    True  => Eq
+    False => match leqChar a b { True => Lt ; False => Gt }
+  }
+
+compare a b = list_compare compareChar (s2l a) (s2l b)   -- : OrdResult
+```
+
+Three normative points (Architect ruling `evt_1stp9sspm6ag8`):
+
+- **Named `OrdResult`, not `Ordering`** — matching the landed `natCmp` precedent
+  (`val1_string_literals.rs:334`) and ES2's retired-from-prelude name; do not
+  introduce a second name for the concept.
+- **Local to the string surface and exported.** ES2 retired `OrdResult` from the
+  *prelude* as un-referenced bloat, and explicitly sanctions a *local*
+  declaration where genuinely needed (the sanction-comment sits on the `val1`
+  precedent); a string `compare` is a genuine 3-way need. It is **not**
+  re-promoted to the prelude here — that would reopen ES2's retirement, and one
+  consumer does not justify prelude-global (YAGNI). **Forward note (not this
+  WP):** when a *second* consumer lands (verified `sort` / `Map`/`Set` ordering
+  will want the same type), that WP raises "≥2 consumers → promote `OrdResult`
+  to a shared location" as a subsume decision to the Steward.
+- **`compareChar` repackages, it does not re-derive.** Settled input #4 forbids
+  re-*deriving* a Char comparison; `compareChar` reuses the landed `leqChar` /
+  `eqChar` verbatim and only wraps their results 3-way. It is a faithful 3-way
+  of the landed total order (`Eq` on `eqChar`; else `Lt` / `Gt` by `Ord Char`'s
+  antisymmetry + totality) and a `declare_def` — a bug is a wrong value, never a
+  false proof. **Zero-TCB-delta:** `OrdResult` is a **checked inductive**
+  (kernel-admitted by positivity, not a postulate/primitive), and `compareChar`
+  / `list_compare` are `declare_def`s.
 
 ## 3. The core collection types
 
@@ -226,6 +344,109 @@ defined in **another** declaration (`map_id` references `map`): this
 a global `RCon` lookup, locals still shadowing globals) — the L2-build resolver
 limitation the frame flagged is **resolved**, verified against the on-`main`
 elaborator. No resolver sub-WP is required for L3.
+
+### 4.1 The `List Char` combinator floor (derived, zero-TCB-delta)
+
+The `§2.5` string surface bottoms out in a small floor of **generic** `List a` /
+`Nat` combinators. Each is a **termination-checked recursive derived def** — a
+member of a `declare_recursive_group`, kernel-checked, `sct_check`-certified,
+and `declare_def`-registered (upgrading opaque → transparent on SCT success).
+They lower to the **real** eliminators: a `match` on the recursive argument
+elaborates to a `Term::Elim` over the `List` / `Nat` family (`34 §3`) — **not**
+a bespoke reducer, and **not** a registered `elim_List` / `elim_Nat` constant
+(there is no such constant; the eliminator is the generic `Term::Elim { fam }`).
+Because they are `declare_def`s (checked), the floor adds **zero**
+`trusted_base()` delta.
+
+Every recursion shape here already elaborates + SCT-passes on `main` — the
+de-risking precedent is in `crates/ken-elaborator/tests/l3a_acceptance.rs` (and,
+for `natSub`, `crates/ken-elaborator/tests/val1_string_literals.rs`), per the
+Architect capability confirm (`evt_4k1yqah3yvpds`):
+
+| Combinator | Signature | Recursion (decreasing arg) | Landed precedent |
+|---|---|---|---|
+| `list_append` | `{a} → List a → List a → List a` | 1st list, `Cons` tail | `map` (simpler than) |
+| `nth` | `{a} → Nat → List a → Option a` | `Cons` tail + `Suc` pred | `map` |
+| `take` | `{a} → Nat → List a → List a` | `Suc` pred (`Nat` fuel) | `unfoldUpTo` |
+| `drop` | `{a} → Nat → List a → List a` | `Suc` pred (`Nat` fuel) | `unfoldUpTo` |
+| `natSub` | `Nat → Nat → Nat` | `Suc` preds (saturating) | `natSub` (val1) |
+| `list_eq` | `{a} → (a→a→Bool) → List a → List a → Bool` | both `Cons` tails | `zip` |
+| `list_compare` | `{a} → (a→a→OrdResult) → List a → List a → OrdResult` | both `Cons` tails | `zip` / `insert` |
+
+The frame named **6** combinators; this is **7** — `natSub` (the saturating
+`Nat` monus `slice` needs, `§2.5`; the frame assumed a landed `sub` that does
+not exist) and `list_compare` over the locally-declared `OrdResult` (`§2.5.1`;
+`list_compare` replaces the frame's `list_compare : … → Ordering`, which named a
+type that does not exist — Architect ruling `evt_1stp9sspm6ag8`). Both are the
+same Approach-A derived-def shape; the delta is a count-note, not a soundness
+change.
+
+**Mandated defining equations** (structural — every recursive call is an
+**applied** call whose decreasing argument is a **strict subterm** of a matched
+argument, `elim`-driven, `34 §3`). Shown with implicit `{a}` and pattern
+clauses; the build follows the landed explicit-type-argument, nested-`match`
+style (`l3a_acceptance.rs`). `OrdResult`'s `Lt`/`Eq`/`Gt` are from `§2.5.1`:
+
+```
+list_append Nil          ys = ys
+list_append (Cons x xs)  ys = Cons x (list_append xs ys)
+
+nth _        Nil          = None
+nth Zero     (Cons x _)   = Some x
+nth (Suc n)  (Cons _ xs)  = nth n xs
+
+take Zero    _            = Nil
+take _       Nil          = Nil
+take (Suc n) (Cons x xs)  = Cons x (take n xs)
+
+drop Zero    xs           = xs
+drop _       Nil          = Nil
+drop (Suc n) (Cons _ xs)  = drop n xs
+
+natSub a        Zero      = a
+natSub Zero     (Suc _)   = Zero
+natSub (Suc m)  (Suc n)   = natSub m n
+
+list_eq eq Nil         Nil         = True
+list_eq eq Nil         (Cons _ _)  = False
+list_eq eq (Cons _ _)  Nil         = False
+list_eq eq (Cons x xs) (Cons y ys) = match eq x y {
+  True  => list_eq eq xs ys        -- short-circuits, first mismatch decides
+  False => False
+}
+
+list_compare cmp Nil         Nil         = Eq
+list_compare cmp Nil         (Cons _ _)  = Lt      -- shorter prefix < longer
+list_compare cmp (Cons _ _)  Nil         = Gt
+list_compare cmp (Cons x xs) (Cons y ys) = match cmp x y {
+  Eq => list_compare cmp xs ys     -- first difference decides; else recurse
+  Lt => Lt
+  Gt => Gt
+}
+```
+
+- **AC2 — SCT sound-zone (soundness, Architect brief-condition 1).** Confirm
+  per-combinator that the recursive call is an **applied** call decreasing on a
+  strict subterm — the `Cons` tail (`list_append` / `nth` / `take` / `drop` /
+  `list_eq` / `list_compare`) or the `Suc` predecessor (`nth` / `take` / `drop`
+  / `natSub`). The floor does **not** lean on the SCT to bless *unapplied*
+  self-reference or recursion-through-an-opaque-`Map`, where the SCT
+  over-accepts (a bare self-`Const` is modelled all-`Unknown` and **rejected**;
+  certification requires an applied call carrying a `Down` argument,
+  `ken-kernel/src/sct.rs`).
+  None of these combinators need that shape — the check is a cheap, concrete
+  per-combinator confirmation, squarely in the SCT's sound zone.
+- **AC6 — name hygiene (Architect brief-condition 2).** `list_append` is a
+  **distinct** name; it must **not** shadow the `Bytes`-domain `append`
+  (FS-effect — `append : Bytes → Bytes → Bytes visits [FS]`,
+  `crates/ken-elaborator/src/bytes.rs`). Module-qualify if the surface would
+  otherwise resolve the wrong op. The other floor names are currently free —
+  `nth` / `take` / `drop` / `natSub` / `list_eq` / `list_compare` do not collide
+  with landed globals (grep-verified at authoring; re-verify at build).
+- **Totality (AC7).** Each combinator is total on well-typed input — `natSub`
+  **saturates** at `0` (never underflows), `nth` totalizes out-of-range to
+  `None`, `take` / `drop` totalize out-of-range to `Nil` / the remainder. No
+  well-typed application reduces to `Neutral` / stuck.
 
 ## 5. Infinitude without coinduction
 
@@ -484,6 +705,34 @@ to the full lawful stdlib; L3 **unblocks T3** (the test/property framework).
   — `const Nil` satisfies it). `isSorted`/`Perm` are the pinned **definitions**
   (`§6`: explicit-comparator `isSorted`, `Perm := ∥Perm_rel∥`), unfoldable — not
   postulates (the demotion is the ES2-remainder follow-on).
+
+**Derived string surface — slice-2 acceptance (`§2.5` / `§2.5.1` / `§4.1`,
+impl-ready).** The floor + 5 string ops, mapping the WP frame's AC1–AC7:
+
+- **DS-AC1/AC5 (floor registered, zero-TCB-delta).** All **7** floor combinators
+  (`§4.1`) and `compareChar` **producer-grep** as `declare_recursive_group` /
+  `declare_def` members over the real `Term::Elim` (not hand-fed, not a bespoke
+  reducer); `OrdResult` grep as a **checked inductive** (`data`, not a
+  `declare_primitive` / `declare_postulate` / `declare_opaque`). `git diff
+  origin/main -- crates/ken-kernel/` is **empty**; `trusted_base()` unchanged.
+- **DS-AC2 (SCT sound-zone).** Each combinator's recursive call is an applied
+  call on a strict subterm (`§4.1`) — not leaning on the SCT's over-accept zone.
+- **DS-AC3 (5 ops reduce correct).** `concat` / `slice` / `charAt` / `eq` /
+  `compare` reduce to the **correct value** on a multi-byte corpus (reuse slice
+  1's boundary corpus, through the real `s2l`/`l2s`): `charAt` → `None` on
+  out-of-range **and** empty; `slice` clamps, incl. `j < i → ""`.
+- **DS-AC4 (`eq`/`compare` codepoint-wise, discriminating PAIR).** A
+  **non-degenerate pair**: `eq` **accepts** two equal scalar sequences **and
+  rejects** a differing pair (incl. a same-length, single-codepoint-differing
+  pair); `compare` gives `Lt` / `Eq` / `Gt` correctly on the ordered triple
+  `"a" < "ab" < "b"`. Assert the **result value**. A canonically-equivalent but
+  codepoint-**distinct** pair (NFC vs NFD of one grapheme) must compare
+  **unequal** — pins that NFC-eq was **not** smuggled in (ADR 0010 §3).
+- **DS-AC6 (name hygiene).** `list_append` does not shadow the `Bytes` `append`
+  (`§4.1`); both resolve to their intended op.
+- **DS-AC7 (round-trip / totality).** `concat`+`slice` compose sanely (e.g.
+  `slice 0 (charLength a) (concat a b) ≡ a` on scalar-clean `a`); `list_append`
+  associativity on a small corpus; every combinator total (no `Neutral`/stuck).
 
 **Conformance:** `../../conformance/surface/collections/` — UTF-8
 byte/char-length edge cases + the `Bytes → String` partial decode;
