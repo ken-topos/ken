@@ -27,24 +27,32 @@ non-canonical-carrier `Bottom` exploit),
 proof-relevant-`Ω` / verified-sort coupling that the deferred permutation law
 inherits).
 
-**Status — the Branch-A ceiling is BUILT on `main`; five inductive-law proofs
-deferred.** `Map-build` (`a592f0b`, #248) landed the proved package: the `Tree`
-carrier + full ops API (`insert`/`lookup`/`member`/`toList`/`fromList`/`fold` +
-`Set` ops), the `Ordered`/`allKeys` **definitions**, the two **non-inductive**
-law proofs (`Ordered empty`, `lookup k empty = None`), and the opaque
-`Map`/`Set` primitive **retirement** — so the **AC1 / AC2 / AC5** cases + the
-two Branch-A **AC3** proofs are **realized on `main`** (they drive the real ops
-through `ken_interp` and the real `trusted_base_delta` cone walk, not a hand-fed
-harness — [[conformance-hand-feeds-the-deliverable]]). The **five inductive
-laws** (preservation, found-after-insert, locality, agreement, `toList`-ordered)
-are **deferred** to `map-verified-laws` (`52 §7d`), gated on **two
-build-completeness capability WPs** — **Gap B** (dependent-motive recovery over
-non-nullary `Tree`/`List`, the `elab.rs:455` nullary gate) and **Gap A**
-(transport over a stuck `leq`, the kernel's existing `J`/`Cast`) — a
-**buildability** boundary, not soundness
-([[buildability-classify-every-capability-axis]]). Those cases stay
-**red-until-built** pending `map-verified-laws`; **no `Axiom` stubs**
-(absent-not-postulated), **no shipped code leans on a deferred law** (§9 AC3
+**Status — one Branch-A proof is BUILT on `main`; the capstone
+`map-verified-laws` raises the ceiling to the full seven (red-until-built).**
+`Map-build` (`a592f0b`, #248) landed the proved package: the `Tree` carrier +
+full ops API (`insert`/`lookup`/`member`/`toList`/`fromList`/`fold` + `Set`
+ops), the `Ordered`/`allKeys` **definitions**, **one** non-inductive law proof
+(`lookup k empty = None`, `map.ken:161`), and the opaque `Map`/`Set` primitive
+**retirement** — so the **AC1 / AC2 / AC5** cases + that one shipped Branch-A
+**AC3** proof are **realized on `main`** (they drive the real ops through
+`ken_interp` and the real `trusted_base_delta` cone walk, not a hand-fed harness
+— [[conformance-hand-feeds-the-deliverable]]). The capstone
+**`map-verified-laws` (`52 §7d`)** now builds the remainder on the two
+**now-landed** enabling capabilities — **Gap B** (dependent-motive recovery over
+non-nullary `Tree`/`List`, the non-indexed `elab.rs:535-553` gate,
+`dependent-match-nonnullary` `282856c`) + **Gap A** (transport over a stuck
+`leq`, the `J` former + `packages/transport/`, `surface-transport` `19955d8`).
+`Ordered empty = tt` — the **second** Branch-A proof (Disc 1) — is added +
+verified by the elaboration commit `df81689`, so it lands **realized on `main`**
+at this merge, sibling of `lookup empty`. The **five inductive laws**
+(preservation, found-after-insert, locality, agreement, `toList`-ordered) are
+the Foundation build's target: a **buildability** boundary, not soundness
+([[buildability-classify-every-capability-axis]]). They stay
+**red-until-built** — this seed **flips them to present + proven +
+zero-`trusted_base`-delta as the conformance-first target now**, and CV flips
+status → realized-on-`main` at the Foundation-build gate;
+**no `Axiom` stubs** (a law that cannot be honestly built re-defers to Steward,
+never postulated), **no shipped code leans on a deferred law** (§9 AC3
 guardrail). The `(oracle)` tag marks the still-open surface spellings — the
 build's Architect-ruled **unbundled explicit-`leq`** encoding realizes the
 pinned **concept + value + order**, with `where Ord k` deferred to a Language
@@ -195,11 +203,12 @@ correct op and a broken op land on **different observable values**. `Ord Char`'s
   **distinct** from inductive `Prod`;
   [[composition-wp-real-producer-may-be-deferred-engine]] carry from
   State-effect); pin the pair as Σ, not `Prod`. **This is the `52 §8` "ordered
-  iteration honest by the conformance TEST in-WP" net** — the `toList`-ordered
-  *proof* is Branch-B deferred (**Gap B**, `map-verified-laws`), so this
-  ascending-value test is what makes `letter-frequency`'s ordered output honest
-  **now** (by proof once Gap B lands). (reduces-to value-flip on list order;
-  realized on `main`.)
+  iteration honest by the conformance TEST in-WP" net** — and with the capstone
+  `map-verified-laws` now building the `toList`-ordered *proof* (law 4,
+  **Gap-B-only**, red-until-built), that output becomes honest **by proof**, not
+  only by this in-WP value test; this value-net remains the standing
+  reduces-to-level check regardless. (reduces-to value-flip on list order;
+  realized on `main`; proof un-defers with law 4.)
 
 ### stdlib/map/letter-frequency-shape (the mandated demo)
 - spec: `52 §8`/`§9` (AC2), `§4.1`/`§4.2`/`§4.3`
@@ -279,27 +288,30 @@ territory).
 ### stdlib/map/laws-real-proofs-zero-new-delta (soundness)
 - spec: `52 §5`/`§5.4`/`§9` (AC3), `../classes/seed-lawful-classes.md`
   (`law-fields-real-proofs-not-postulates`), `30 §6`
-- given: the **two shipped Branch-A** proof terms — `Ordered empty` and
-  `lookup k empty = None` — plus the `Ordered`/`allKeys` **definitions**, as
-  admitted on `main` (`a592f0b`, `map.ken`). Both close **without induction**
-  (`Ordered Leaf ⇝ ⊤` by `tt`; `lookup … Leaf ⇝ None` by refl), citing **no**
-  dictionary law, so they are real regardless of the key instance. (The five
-  **inductive** laws are Branch-B deferred, `52 §7d` — see
-  `map-verified-laws-deferred`; the stub-net below is scoped to the shipped
-  Branch-A proofs, `52 §5.4`/`§9`.)
+- given: the shipped Branch-A proof `lookup k empty = None` (`map.ken:161`,
+  realized on `main` `a592f0b`) — plus its Branch-A sibling
+  `Ordered empty = tt`, added + verified by spec-author's elaboration `df81689`
+  and so **co-realized at this merge** (Disc 1 resolved by option (a)), and the
+  `Ordered`/`allKeys` **definitions**. Each closes **without induction**
+  (`lookup … Leaf ⇝ None` by refl; `Ordered Leaf ⇝ ⊤` by `tt`), citing **no**
+  dictionary law, so it is real regardless of the key instance. (This
+  delta-net's mechanism is the cone walk itself; the **five inductive** capstone
+  laws carry the **same** zero-delta property, pinned by
+  `map-verified-laws-deferred`, `52 §5.4`/`§9`.)
 - expect: the map package's **incremental** `trusted_base_delta` over the
   `Ord Bool` dictionary is **∅** (zero-NEW-delta): the proofs discharge by
   case-split on the tree constructor + redex reduction, closing with
   `refl`/`tt`/`absurd`, citing the dictionary's `refl`/`antisym`/`trans`/`total`
   only as **hypotheses** (the trivial Branch-A pair postulates **nothing**, not
-  even a dictionary law). **The flip:** replace either shipped Branch-A proof
-  (`Ordered empty` / `lookup k empty = None`) with `Axiom` (a
+  even a dictionary law). **The flip:** replace the shipped Branch-A proof
+  `lookup k empty = None` (and its now-co-realized sibling `Ordered empty`) with
+  `Axiom` (a
   `declare_postulate`) and the elaborator's `collect_consts_in_tb` cone walk
   **counts** it → the incremental delta is **non-empty** → **rejected as
   unlawful** (the exact `law-fields-real-proofs-not-postulates` mechanism, one
   layer up from `Ord` to `Map`). Real proof: empty delta, accepts. Stub:
-  non-empty delta, rejects. The five **Branch-B** laws are **absent, not
-  `Axiom`** (`52 §7d`) — `map-verified-laws-deferred` pins that absence.
+  non-empty delta, rejects. The five **inductive** laws carry the identical
+  present + proven + zero-delta pin — `map-verified-laws-deferred`.
 - why: AC3's headline, at the **map-proof level**
   ([[lawful-class-instances-must-carry-law-proofs]]). **Exercised, not textual**
   — the cone walk traverses the **actual** proof term (including `absurd`
@@ -333,11 +345,48 @@ territory).
   nothing depends on the deferred proofs, so their absence is a completeness
   gap, never a soundness one ([[untrusted-layer-backstop-hole-for-omissions]]).
   **`(soundness)`.** The **consumer-delta-flip variant** (a client leaning on a
-  real correctness law like found-after-insert, the `Axiom` postulate
-  propagating into the client's trust cone) **un-defers with
-  `map-verified-laws`** — once a correctness law is built, a consumer can lean
-  on it and the delta-flip becomes testable; until then this guardrail is the
-  net. (soundness; structural op-signature; realized on `main`.)
+  real correctness law like found-after-insert, the `Axiom` propagating into the
+  client's trust cone) is **now realized as
+  `consumer-leans-on-correctness-law-delta-flip`** (red-until-built with the
+  capstone) — the genuine proved-vs-`Axiom` verdict-flip. This
+  signature-level guardrail remains the **static** net (no shipped op is
+  `Ordered`-indexed, so deferring/building the laws breaks no shipped code
+  either way). (soundness; structural op-signature; realized on `main`.)
+
+### stdlib/map/consumer-leans-on-correctness-law-delta-flip (soundness)
+- spec: `52 §9` AC3 guardrail, `§5.2` (found-after-insert), `§5.3` (agreement),
+  `53 §2`/`§3` (transport)
+- given: red-until-built by the capstone — a small **consumer** term `c` (a
+  conformance fixture, not a shipped op) that **type-checks by leaning on a real
+  correctness law** over an **abstract** map `m`: e.g. it transports a value
+  along `foundAfterInsert k v m : Eq (Option v) (lookup k (insert k v m))
+  (Some v)` (via `J`/`subst`), so `c`'s well-typedness **requires** that law's
+  proof. Over an *abstract* `m`, `lookup k (insert k v m)` is **stuck** — only
+  the law, not computation, closes the goal; that is what makes the consumer the
+  discriminator.
+- expect: **a verdict-flip on the package-load, keyed on the consumer's trust
+  cone.** With the **real** `foundAfterInsert` (zero-delta), `c`'s incremental
+  `trusted_base_delta` is **∅** → package + consumer load, **accepted**. Swap
+  that law for `Axiom` (`declare_postulate`) and `c`, by depending on it,
+  **pulls the `Axiom` into its own cone** → `c`'s `trusted_base_delta` is
+  **non-empty** → the load is **rejected** by the same `collect_consts_in_tb`
+  cone walk — the `laws-real-proofs-zero-new-delta` mechanism, now exercised
+  **transitively through a consumer**, not just at the law's own declaration.
+  Real proof: accept. `Axiom`: reject. Opposite verdicts.
+- why: the **genuine proved-vs-`Axiom` discriminator the AC2 behavioral cases
+  cannot deliver** — the ops **compute the same value** whether the correctness
+  laws are proved or stubbed, so proved-ness is **not observable in the result
+  value**. **Honest note — this is a *structural* delta/verdict-flip, NOT a
+  value-flip on the transported result:** propositional equality is
+  proof-irrelevant, so transport along a *real* vs an *`Axiom`* proof yields the
+  **same** value; the flip lives in the **trust cone** (delta membership →
+  accept-vs-reject), which the value cannot witness (the X1 structural-output
+  discipline: assert the trace/cone, never a vacuous value). It **un-defers with
+  `map-verified-laws`**: before a real correctness law existed no consumer could
+  lean on one, so `no-shipped-code-leans-on-a-deferred-law` was the only net;
+  now the consumer makes the `Axiom` propagation **testable** end-to-end.
+  **`(soundness)`** — verdict-independent structural (cone membership).
+  (soundness; structural cone-delta verdict-flip; red-until-built.)
 
 ### stdlib/map/ordered-invariant-derived-not-opaque (soundness)
 - spec: `52 §5.1`/`§9`, `37 §6` (`isSorted`-style `Ω` recursion), `16 §1.3`
@@ -480,29 +529,43 @@ coverage), per the absurd-nothing-silently-dropped discipline.
   (boundary; named deferral.)
 
 ### stdlib/map/map-verified-laws-deferred (soundness)
-- spec: `52 §7d` (`map-verified-laws`), `§5.1`/`§5.2`/`§5.3`, `elab.rs:455`,
-  `34 §3.2` (dependent-motive recovery)
+- spec: `52 §7d` (`map-verified-laws`), `§5.1`/`§5.2`/`§5.3`,
+  `elab.rs:535-553` (the non-indexed dependent-match gate,
+  `ind.indices.is_empty()`), `34 §3.2` (dependent-motive recovery)
 - given: the **five inductive** `§5` law proofs — preservation, found-after-
-  insert, locality, agreement, `toList`-ordered — as of `main` (`a592f0b`).
-- expect: **all five are ABSENT from the shipped `map.ken`** — **not** defined,
-  **not** `Axiom`-stubbed (grep: zero `Axiom`/`declare_postulate` for any map
-  law). Each is a **named** follow-on (`map-verified-laws`, `52 §7d`), **per-law
-  gap-tagged**: **`toList`-ordered = Gap B only** (inducts over non-nullary
-  `Tree`/`List` but comparison-free); **preservation / found-after-insert /
-  locality / agreement = Gap A + Gap B** (induct **and** align a stuck `leq`).
-  Gated on two build-completeness capability WPs — **Gap B** (dependent-motive
-  recovery, `elab.rs:455` nullary gate vs the already-specified `34 §3.2`) +
-  **Gap A** (transport, the kernel's existing `J`/`Cast`) — **zero
-  `trusted_base` delta** each.
-- why: the honest-deferral net — a build that **stubbed** any of the five with
-  `Axiom` (to fake completeness) would grow `trusted_base` (caught by
-  `laws-real-proofs-zero-new-delta`'s cone walk) and, if any op leaned on it,
-  risk `Bottom` (caught by `no-shipped-code-leans-on-a-deferred-law`).
-  Absent-not-stubbed is the sound posture
+  insert, locality, agreement, `toList`-ordered — now **built by the capstone
+  `map-verified-laws`** on the two landed enabling capabilities (Gap A
+  `19955d8`, Gap B `282856c`). **Red-until-built:** at the *elaboration* merge
+  `map.ken` still has them absent; this case pins the **target** the Foundation
+  build must meet, and CV flips it → realized-on-`main` at the Foundation-build
+  gate (the 2nd CV touch, where the actual proof terms are verified).
+- expect: **all five are PRESENT as real, kernel-checked proof terms** in
+  `map.ken` (whole-declaration `check`, `check.rs:984`, the true soundness net)
+  — **not** `Axiom`-stubbed — each with **zero `trusted_base` delta** (reduces
+  through the existing `Term::J`/`Term::Cast` + dependent-match `Term::Elim`;
+  grep: zero `Axiom`/`declare_postulate` for any map law, zero new
+  `declare_primitive`, zero `crates/ken-kernel/` touched). **Per-law
+  gap-tagged** (which enabling capability each exercises): **`toList`-ordered =
+  Gap B only** (inducts over non-nullary `Tree`/`List` but comparison-free —
+  needs the `:535-553` dependent-match, no transport); **preservation /
+  found-after-insert / locality / agreement = Gap A + Gap B** (induct **and**
+  transport a stuck `leq` via `J (\x _. G[x]) tt (sym q)` over
+  `q : Eq Bool (leq k k') True`). **The flip:** stubbing any of the five with
+  `Axiom` (to fake completeness) grows the incremental `trusted_base_delta`
+  (caught by `laws-real-proofs-zero-new-delta`'s cone walk) → **rejected**; the
+  real zero-delta proof → **accepted**. `toList`-ordered's proof also un-defers
+  the `tolist-ascending-by-key` value-net (now honest **by proof**, `52 §5.3`).
+- why: the capstone that raises the honest ceiling from the Branch-A pair to the
+  full seven, **on buildability, never soundness**
   ([[buildability-classify-every-capability-axis]]). **`(soundness)`** —
-  [[untrusted-layer-backstop-hole-for-omissions]]: a never-generated law reads
-  `proved`-by-default; the corpus pins the **absence** as named, not silent.
-  (soundness; structural absence; per-law gap-tagged.)
+  [[untrusted-layer-backstop-hole-for-omissions]]: a law faked by `Axiom` reads
+  `proved`-by-default and the kernel does not catch the *omission*; the
+  `trusted_base`-delta cone walk is the sole backstop, so the presence-pin
+  asserts **present + real + zero-delta**, verdict-independent structural (delta
+  membership). The permutation law **stays deferred**
+  (`tolist-permutation-law-deferred`, proof-relevant C5 gap — do not conflate).
+  (soundness; structural present-proven zero-delta; per-law gap-tagged;
+  red-until-built.)
 
 ### stdlib/map/tolist-permutation-law-deferred
 - spec: `52 §5.3`/`§7c`, `../../challenge/C2-proof-relevant-omega`,
@@ -534,17 +597,20 @@ coverage), per the absurd-nothing-silently-dropped discipline.
   `tolist-ascending-by-key`, `letter-frequency-shape`,
   `fold-agrees-with-tolist-ascending`, `fromList-last-writer-and-ordered`,
   `set-is-map-unit`.
-- **AC3 (proved, not stubbed):** `laws-real-proofs-zero-new-delta` (scoped to
-  the two shipped Branch-A proofs), `no-shipped-code-leans-on-a-deferred-law`
-  (the §9 guardrail), `ordered-invariant-derived-not-opaque`.
+- **AC3 (proved, not stubbed):** `laws-real-proofs-zero-new-delta` (the
+  zero-NEW-delta cone-walk net over map-own proofs — Branch-A now, all seven
+  once built), `no-shipped-code-leans-on-a-deferred-law` (the §9 static
+  guardrail), `consumer-leans-on-correctness-law-delta-flip` (the consumer
+  verdict-flip, red-until-built), `map-verified-laws-deferred` (the five
+  inductive laws present + proven + zero-delta, red-until-built, per-law
+  Gap-A/Gap-B tagged), `ordered-invariant-derived-not-opaque`.
 - **§2.1 (canonical carrier):** `antisym-equal-sound-over-canonical-key`,
   `noncanonical-key-not-a-lawful-map-key`,
   `lookup-laws-need-no-equal-promotion`.
 - **AC4 (no regression):** `workspace-green-siblings-unchanged`.
 - **Deferred (§7), named:** `no-delete-this-wp`,
-  `balance-deferred-perf-not-correctness`, `map-verified-laws-deferred` (the
-  five inductive laws, per-law Gap-A/Gap-B tagged),
-  `tolist-permutation-law-deferred`.
+  `balance-deferred-perf-not-correctness`, `tolist-permutation-law-deferred`
+  (proof-relevant, C5 gap — the ONLY map law still deferred after the capstone).
 - **AC5 (build-lane retirement real):** the Foundation-owned `prelude.rs`
   primitive removal + `es2_acceptance.rs` "Map/Set are primitives" **flip** is
   pinned structurally by `opaque-primitive-retired-trusted-base-shrinks`
