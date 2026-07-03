@@ -228,6 +228,315 @@ fn fold_agrees_with_left_fold_over_tolist() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// AC1/AC5 (partial) — insert/lookup/member/fromList admitted, non-primitive
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn map_ops_full_api_not_primitive() {
+    let env = mk_env();
+    for name in ["insert", "lookup", "member", "fromList", "fromListAcc", "setInsert", "setMember", "setToList", "Ordered", "allKeys", "lookupEmptyIsNone"] {
+        let id = env.globals[name];
+        assert!(
+            matches!(env.env.lookup(id), Some(Decl::Transparent { .. })),
+            "{name} must be Decl::Transparent (declare_def), not a primitive/postulate"
+        );
+        let delta = trusted_base_delta(&env.env, id);
+        assert!(delta.is_empty(), "{name} must add zero trusted_base delta, got {delta:?}");
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AC2 — insert/lookup/member/fromList correct end-to-end (Char keys, `leqChar`
+// computes — `52 §5.4` — never hand-fed: constructed via real `insert`, read
+// via real `lookup`/`toList`)
+// ─────────────────────────────────────────────────────────────────────────────
+
+fn char_lit(c: char) -> String {
+    (c as u32).to_string()
+}
+
+#[test]
+fn insert_lookup_roundtrip_some() {
+    let mut env = mk_env();
+    let mut store = make_store(&env);
+    let some_id = env.globals["Some"];
+    let expr = format!(
+        "lookup Char Char leqChar ({k}) (insert Char Char leqChar ({k}) ({v}) (empty Char Char))",
+        k = char_lit('k'),
+        v = char_lit('v')
+    );
+    let v = eval_view(&mut env, &mut store, "t_roundtrip", "Option Char", &expr);
+    match v {
+        EvalVal::Ctor { id, ref args, .. } if id == some_id => {
+            assert_eq!(args[1], EvalVal::Int('v' as i64), "lookup after insert must return Some 'v', got {args:?}");
+        }
+        other => panic!("insert-then-lookup must be Some 'v'; got {other:?}"),
+    }
+}
+
+#[test]
+fn lookup_order_distinct_key_is_none() {
+    let mut env = mk_env();
+    let mut store = make_store(&env);
+    let none_id = env.globals["None"];
+    // Insert 'k', query the order-distinct 'z' — a "return whatever was
+    // last inserted regardless of key" bug would yield Some, not None.
+    let expr = format!(
+        "lookup Char Char leqChar ({z}) (insert Char Char leqChar ({k}) ({v}) (empty Char Char))",
+        z = char_lit('z'),
+        k = char_lit('k'),
+        v = char_lit('v')
+    );
+    let v = eval_view(&mut env, &mut store, "t_distinct", "Option Char", &expr);
+    assert!(matches!(v, EvalVal::Ctor { id, .. } if id == none_id), "distinct-key lookup must be None, got {v:?}");
+
+    let expr_empty = format!("lookup Char Char leqChar ({z}) (empty Char Char)", z = char_lit('z'));
+    let v = eval_view(&mut env, &mut store, "t_lookup_empty", "Option Char", &expr_empty);
+    assert!(matches!(v, EvalVal::Ctor { id, .. } if id == none_id), "lookup on empty must be None, got {v:?}");
+}
+
+#[test]
+fn overwrite_last_writer_wins() {
+    let mut env = mk_env();
+    let mut store = make_store(&env);
+    let some_id = env.globals["Some"];
+    let expr = format!(
+        "lookup Char Char leqChar ({k}) (insert Char Char leqChar ({k}) ({v2}) (insert Char Char leqChar ({k}) ({v1}) (empty Char Char)))",
+        k = char_lit('k'),
+        v1 = char_lit('1'),
+        v2 = char_lit('2')
+    );
+    let v = eval_view(&mut env, &mut store, "t_overwrite_lookup", "Option Char", &expr);
+    match v {
+        EvalVal::Ctor { id, ref args, .. } if id == some_id => {
+            assert_eq!(args[1], EvalVal::Int('2' as i64), "re-insert must overwrite to the LAST writer's value, got {args:?}");
+        }
+        other => panic!("overwrite lookup must be Some '2'; got {other:?}"),
+    }
+    let tolist_expr = format!(
+        "toList Char Char (insert Char Char leqChar ({k}) ({v2}) (insert Char Char leqChar ({k}) ({v1}) (empty Char Char)))",
+        k = char_lit('k'),
+        v1 = char_lit('1'),
+        v2 = char_lit('2')
+    );
+    let v = eval_view(&mut env, &mut store, "t_overwrite_tolist", "List (Pair Char Char)", &tolist_expr);
+    let out = list_pair_char_char(&env, &v);
+    assert_eq!(out, vec![('k' as i64, '2' as i64)], "re-insert must NOT duplicate the node, got {out:?}");
+}
+
+#[test]
+fn tolist_ascending_via_real_insert() {
+    // Insert in deliberately non-ascending order — the real AC2 driver,
+    // superseding the hand-built-tree probe now that `insert` is landed.
+    let mut env = mk_env();
+    let mut store = make_store(&env);
+    let expr = format!(
+        "toList Char Char (insert Char Char leqChar ({a}) ({a}) (insert Char Char leqChar ({c}) ({c}) (insert Char Char leqChar ({b}) ({b}) (empty Char Char))))",
+        a = char_lit('a'),
+        b = char_lit('b'),
+        c = char_lit('c')
+    );
+    let v = eval_view(&mut env, &mut store, "t_tolist_real_insert", "List (Pair Char Char)", &expr);
+    let out = list_pair_char_char(&env, &v);
+    assert_eq!(
+        out,
+        vec![('a' as i64, 'a' as i64), ('b' as i64, 'b' as i64), ('c' as i64, 'c' as i64)],
+        "toList over a real b,c,a-order insert sequence must be ascending by key, got {out:?}"
+    );
+}
+
+#[test]
+fn fromlist_last_writer_and_ordered() {
+    let mut env = mk_env();
+    let mut store = make_store(&env);
+    // [(2,'b'),(1,'a'),(2,'c')] -> toList must be [(1,'a'),(2,'c')]: ascending
+    // AND the LAST list entry ('c') wins on the duplicate key 2.
+    let list_expr = format!(
+        "Cons (Pair Char Char) (mkPair Char Char ({two}) ({b})) \
+           (Cons (Pair Char Char) (mkPair Char Char ({one}) ({a})) \
+             (Cons (Pair Char Char) (mkPair Char Char ({two}) ({c})) (Nil (Pair Char Char))))",
+        two = char_lit('2'),
+        one = char_lit('1'),
+        a = char_lit('a'),
+        b = char_lit('b'),
+        c = char_lit('c')
+    );
+    let expr = format!("toList Char Char (fromList Char Char leqChar ({list_expr}))");
+    let v = eval_view(&mut env, &mut store, "t_fromlist", "List (Pair Char Char)", &expr);
+    let out = list_pair_char_char(&env, &v);
+    assert_eq!(
+        out,
+        vec![('1' as i64, 'a' as i64), ('2' as i64, 'c' as i64)],
+        "fromList must be ascending AND last-writer-wins ('c' beats 'b' on key '2'), got {out:?}"
+    );
+}
+
+#[test]
+fn set_is_map_unit() {
+    let mut env = mk_env();
+    let mut store = make_store(&env);
+    let true_id = env.globals["True"];
+    let false_id = env.globals["False"];
+    let expr = format!(
+        "setMember Char leqChar ({a}) (setInsert Char leqChar ({a}) (setInsert Char leqChar ({b}) (Leaf Char Unit)))",
+        a = char_lit('a'),
+        b = char_lit('b')
+    );
+    let v = eval_view(&mut env, &mut store, "t_set_member_hit", "Bool", &expr);
+    assert!(matches!(v, EvalVal::Ctor { id, .. } if id == true_id), "member of an inserted element must be True, got {v:?}");
+
+    let expr_absent = format!(
+        "setMember Char leqChar ({z}) (setInsert Char leqChar ({a}) (Leaf Char Unit))",
+        z = char_lit('z'),
+        a = char_lit('a')
+    );
+    let v = eval_view(&mut env, &mut store, "t_set_member_miss", "Bool", &expr_absent);
+    assert!(matches!(v, EvalVal::Ctor { id, .. } if id == false_id), "member of an absent element must be False, got {v:?}");
+
+    let tolist_expr = format!(
+        "setToList Char (setInsert Char leqChar ({a}) (setInsert Char leqChar ({c}) (setInsert Char leqChar ({b}) (Leaf Char Unit))))",
+        a = char_lit('a'),
+        b = char_lit('b'),
+        c = char_lit('c')
+    );
+    let v = eval_view(&mut env, &mut store, "t_set_tolist", "List Char", &tolist_expr);
+    let nil_id = env.globals["Nil"];
+    let cons_id = env.globals["Cons"];
+    let mut out = Vec::new();
+    let mut cur = v;
+    loop {
+        match &cur {
+            EvalVal::Ctor { id, .. } if *id == nil_id => break,
+            EvalVal::Ctor { id, args, .. } if *id == cons_id => {
+                match &args[1] {
+                    EvalVal::Int(n) => out.push(*n),
+                    other => panic!("setToList head must be Char-as-Int, got {other:?}"),
+                }
+                cur = args[2].clone();
+            }
+            other => panic!("not a well-formed List chain: {other:?}"),
+        }
+    }
+    assert_eq!(out, vec!['a' as i64, 'b' as i64, 'c' as i64], "setToList must be ascending, got {out:?}");
+}
+
+#[test]
+fn letter_frequency_shape() {
+    let mut env = mk_env();
+    let mut store = make_store(&env);
+    // "banana": b,a,n,a,n,a -> {'a':3,'b':1,'n':2}, ascending by key.
+    env.elaborate_decl(
+        "view bumpCount (leq : Char -> Char -> Bool) (key : Char) (m : Tree Char Nat) : Tree Char Nat = \
+         match lookup Char Nat leq key m { \
+           None => insert Char Nat leq key (Suc Zero) m ; \
+           Some n => insert Char Nat leq key (Suc n) m \
+         }",
+    )
+    .expect("bumpCount should elaborate");
+    env.elaborate_decl(
+        "view countChars (leq : Char -> Char -> Bool) (cs : List Char) (m : Tree Char Nat) : Tree Char Nat = \
+         match cs { \
+           Nil => m ; \
+           Cons c cs2 => countChars leq cs2 (bumpCount leq c m) \
+         }",
+    )
+    .expect("countChars should elaborate");
+    let banana = format!(
+        "Cons Char ({b}) (Cons Char ({a}) (Cons Char ({n}) (Cons Char ({a}) (Cons Char ({n}) (Cons Char ({a}) (Nil Char))))))",
+        b = char_lit('b'),
+        a = char_lit('a'),
+        n = char_lit('n')
+    );
+    let expr = format!("toList Char Nat (countChars leqChar ({banana}) (empty Char Nat))");
+    let v = eval_view(&mut env, &mut store, "t_letter_freq", "List (Pair Char Nat)", &expr);
+    let nil_id = env.globals["Nil"];
+    let cons_id = env.globals["Cons"];
+    let mut out = Vec::new();
+    let mut cur = v;
+    loop {
+        match &cur {
+            EvalVal::Ctor { id, .. } if *id == nil_id => break,
+            EvalVal::Ctor { id, args, .. } if *id == cons_id => {
+                match &args[1] {
+                    EvalVal::Pair { fst, snd, .. } => {
+                        let key = match fst.as_ref() {
+                            EvalVal::Int(n) => *n,
+                            other => panic!("pair fst must be Char-as-Int, got {other:?}"),
+                        };
+                        out.push((key, nat_count(&env, snd)));
+                    }
+                    other => panic!("Cons head must be an EvalVal::Pair, got {other:?}"),
+                }
+                cur = args[2].clone();
+            }
+            other => panic!("not a well-formed List chain: {other:?}"),
+        }
+    }
+    assert_eq!(
+        out,
+        vec![('a' as i64, 3), ('b' as i64, 1), ('n' as i64, 2)],
+        "letter-frequency('banana') must be ascending-by-key [('a',3),('b',1),('n',2)], got {out:?}"
+    );
+}
+
+fn list_pair_char_char(env: &ElabEnv, v: &EvalVal) -> Vec<(i64, i64)> {
+    let nil_id = env.prelude_env.nil_id;
+    let cons_id = env.prelude_env.cons_id;
+    let mut out = Vec::new();
+    let mut cur = v.clone();
+    loop {
+        match &cur {
+            EvalVal::Ctor { id, .. } if *id == nil_id => return out,
+            EvalVal::Ctor { id, args, .. } if *id == cons_id => {
+                match &args[1] {
+                    EvalVal::Pair { fst, snd, .. } => {
+                        let k = match fst.as_ref() {
+                            EvalVal::Int(n) => *n,
+                            other => panic!("pair fst must be Char-as-Int, got {other:?}"),
+                        };
+                        let vv = match snd.as_ref() {
+                            EvalVal::Int(n) => *n,
+                            other => panic!("pair snd must be Char-as-Int, got {other:?}"),
+                        };
+                        out.push((k, vv));
+                    }
+                    other => panic!("Cons head must be an EvalVal::Pair, got {other:?}"),
+                }
+                cur = args[2].clone();
+            }
+            other => panic!("not a well-formed List Ctor chain: {other:?}"),
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AC3 (partial) — the ordered-invariant law's own base case (trivial),
+// Ordered/allKeys admitted as declare_def (never a postulate)
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn lookup_empty_law_is_a_real_reducing_proof() {
+    let mut env = mk_env();
+    // The stated law itself (`lookupEmptyIsNone`) must be admitted as a
+    // real Decl::Transparent proof term (never Decl::Opaque/Axiom).
+    let id = env.globals["lookupEmptyIsNone"];
+    assert!(
+        matches!(env.env.lookup(id), Some(Decl::Transparent { .. })),
+        "lookupEmptyIsNone must be a real proof term, not a postulate"
+    );
+    // `Ordered` on an empty map is provable by `tt` — the invariant reduces
+    // to a trivially-true Prop (Equal Bool True True) at Leaf, closable the
+    // same way `lookupEmptyIsNone` closes (K5 same-nullary-ctor collapse).
+    // This is a kernel CHECK (is the type inhabited), not an `eval` — the
+    // Prop itself is a type, not a runtime data value.
+    env.elaborate_decl(
+        "view orderedEmptyProof (k : Type) (v : Type) (leq : k -> k -> Bool) : \
+         Ordered k v leq (empty k v) = tt",
+    )
+    .expect("Ordered on an empty map must be provable by tt");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Pair (Σ-pair, `52 §4`) plumbing sanity — `mkPair`/`pairFst`/`pairSnd`
 // ─────────────────────────────────────────────────────────────────────────────
 
