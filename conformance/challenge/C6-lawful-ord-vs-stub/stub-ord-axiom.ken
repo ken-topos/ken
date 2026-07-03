@@ -1,0 +1,25 @@
+-- C6 STUB arm — a law-less Ord (Axiom fields) — elaborates, grows trusted_base.
+--
+-- Run against the prelude + packages/lawful-classes (class Ord, IsTrue, Equal,
+-- bool_or, Axiom). Carrier: a tiny real inductive `Two = Lo | Hi`.
+
+data Two = Lo | Hi
+
+view leqTwo (x : Two) (y : Two) : Bool =
+  match x { Lo => True ; Hi => match y { Lo => False ; Hi => True } }
+
+-- Every law is a postulate. This TYPE-CHECKS (an Axiom inhabits each law type),
+-- but each Axiom is a visible Decl::Opaque entry in trusted_base().
+instance Ord Two {
+  leq     = leqTwo ;
+  refl    = Axiom ;
+  antisym = Axiom ;
+  trans   = Axiom ;
+  total   = Axiom
+}
+
+-- Expected: elaborates; grep shows 4 new Axiom (Decl::Opaque) law fields in
+-- trusted_base(). Since `Two` is a FINITE inductive, these laws are PROVABLE by
+-- case-split (see the sound arm), so postulating them is the "laws-postulated-
+-- not-proved" gap (§51 §5). Discriminator vs the sound arm: the trusted_base
+-- delta (4 postulates here, 0 there).

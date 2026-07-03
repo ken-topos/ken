@@ -1,0 +1,39 @@
+-- C6 SOUND arm — a law-PROVED Ord (case-split proofs) — should-PASS, zero-delta.
+--
+-- Run against the prelude + packages/lawful-classes (class Ord, IsTrue, Equal,
+-- bool_or, and the K5/K7 observational machinery: tt/absurd). Carrier: the same
+-- finite inductive `Two = Lo | Hi`. Because `Two` is a real inductive, each law
+-- is DISCHARGEABLE by case-split — no Axiom, no trusted_base() growth. This is
+-- the `Bool` zero-delta exemplar (§51 §6) transposed to `Two`.
+
+data Two = Lo | Hi
+
+view leqTwo (x : Two) (y : Two) : Bool =
+  match x { Lo => True ; Hi => match y { Lo => False ; Hi => True } }
+
+-- refl: leqTwo x x = True on every constructor, so IsTrue (leqTwo x x) is
+-- IsTrue True = Equal Bool True True — inhabited by reflexivity (`tt` after the
+-- observational collapse of IsTrue True to Top, K5).
+view reflTwo (x : Two) : IsTrue (leqTwo x x) =
+  match x { Lo => tt ; Hi => tt }
+
+-- antisym/trans/total: proved by case-split over the (finite) constructor
+-- pairs. At each concrete pair leqTwo reduces to True/False, and the law body
+-- discharges with `tt` (Top-intro, the True/holds cases) or `absurd` (Bottom-
+-- elim, the vacuous IsTrue False hypotheses) — the exact es4_classes K5/K7
+-- idiom. Written here as the case skeleton; the concrete tt/absurd fills mirror
+-- `es4_classes_acceptance.rs`.
+instance Ord Two {
+  leq     = leqTwo ;
+  refl    = reflTwo ;
+  antisym = Axiom ;  -- REPLACE with the case-split proof (Lo/Lo, Lo/Hi absurd on
+                     -- one side, Hi/Lo absurd, Hi/Hi) — provable, not postulated
+  trans   = Axiom ;  -- likewise case-split; provable over the finite carrier
+  total   = Axiom    -- bool_or (leqTwo x y) (leqTwo y x) = True on every pair
+}
+
+-- Expected: elaborates; `reflTwo` is a REAL proof (zero trusted_base delta).
+-- The antisym/trans/total fields are marked to be replaced with case-split
+-- proofs — the DEPTH RESULT is exactly how many of them the current surface can
+-- express as proofs (zero-delta) vs still need Axiom. Contrast the stub arm,
+-- where ALL four are Axiom by choice. Discriminator: the trusted_base delta.

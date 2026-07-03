@@ -1,0 +1,22 @@
+-- C5 UNSOUND/STUB arm — `const Nil` claiming the verified-sort refinement.
+-- should-REJECT (the Perm conjunct is unprovable). Run against the prelude.
+--
+-- `sortBad` discards its input and returns Nil, but claims the SAME refinement
+-- as the real sort. `isSorted leq Nil` holds vacuously (the empty list is
+-- sorted) — so an isSorted-ONLY obligation would pass. `Perm Nil xs` is FALSE
+-- for non-empty xs — this is the conjunct that makes it a real sort.
+
+view sortBad (a : Type) (leq : a -> a -> Bool) (xs : List a)
+  : { ys : List a | And (isSorted a leq ys) (Perm a ys xs) } =
+  Nil a
+
+-- Expected correct behavior: REJECTED — the emitted obligation includes
+-- `Perm a (Nil a) xs`, which cannot be discharged for non-empty `xs` (the
+-- multiset counts differ; no permutation witness). The isSorted conjunct is
+-- satisfiable, but the conjunction is not.
+--
+-- If ACCEPTED: the finding — either `Perm` was dropped from the emitted
+-- obligation (a never-generated conjunct reads `proved`-by-default, the
+-- untrusted-layer omission the kernel does not catch) or the refinement
+-- obligation is not enforced. This is the discriminator: a sort verified only
+-- on `isSorted` is green-vs-green — `sortBad` passes it.

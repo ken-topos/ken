@@ -1,0 +1,27 @@
+-- C2 UNSOUND arm — a proof-relevant permutation relation at Ω — should-REJECT.
+--
+-- Run against the prelude (List, Nat, Omega/Prop sort). The permutation
+-- relation with FOUR constructors — distinct derivations are distinct data
+-- (perm_swap at position i ≠ perm_swap at position j) — declared DIRECTLY at Ω.
+-- This is the construction 16 §1.3 forbids: an unrestricted Type → Ω admits a
+-- 2-inhabitant type into a proof-irrelevant universe, forcing True ≡ False.
+
+data Perm (a : Type) (xs : List a) (ys : List a) : Omega =
+    perm_nil   : Perm a (Nil a) (Nil a)
+  | perm_skip  : (x : a) -> (xs : List a) -> (ys : List a)
+                 -> Perm a xs ys -> Perm a (Cons a x xs) (Cons a x ys)
+  | perm_swap  : (x : a) -> (y : a) -> (xs : List a)
+                 -> Perm a (Cons a x (Cons a y xs)) (Cons a y (Cons a x xs))
+  | perm_trans : (xs : List a) -> (ys : List a) -> (zs : List a)
+                 -> Perm a xs ys -> Perm a ys zs -> Perm a xs zs
+
+-- Expected correct behavior: REJECTED at this `data … : Omega` admission — the
+-- kernel's Ω sort-check must refuse a proof-relevant multi-constructor
+-- inductive (it is not a sub-singleton). The error should name the Ω/SProp
+-- admission gate (16 §1.3), NOT fail downstream.
+--
+-- If ACCEPTED: consistency hole. Distinct derivations (e.g. perm_swap vs a
+-- perm_skip/perm_trans path proving the same endpoints) are now forced equal by
+-- Ω-proof-irrelevance; the same door admits Bool into Ω and yields True ≡ False
+-- → Bottom. This was a live CV-Spec BLOCKING finding on ES1's verified-sort
+-- Perm; the sound route is the truncation / count-equality arms.

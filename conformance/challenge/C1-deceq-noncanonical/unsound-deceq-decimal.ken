@@ -1,0 +1,50 @@
+-- C1 UNSOUND arm — DecEq Decimal over a non-canonical carrier — should-REJECT.
+--
+-- Run against the prelude + packages/lawful-classes (class DecEq, Bool, Equal,
+-- Prop, IsTrue, Axiom, and the Int primitives eq_int/add_int/mul_int/sub_int/
+-- and_bool in scope).
+--
+-- Decimal is NON-canonical: MkDecimalPair 10 (-1) and MkDecimalPair 1 0 both
+-- denote 1, yet are structurally distinct. A lawful DecEq over it postulates a
+-- FALSE `sound` and inhabits Bottom (ADR 0010; §90 OQ-decimal-eq).
+
+data Decimal = MkDecimalPair Int Int
+
+-- Value-equality (ILLUSTRATIVE — the landed decimal value-equality op is the
+-- reference). Load-bearing property, exact on the witness below: aligns the two
+-- coefficients to a common exponent and compares. For x=(10,-1), y=(1,0):
+-- exponents differ by 1, so scale y's coefficient by 10 → compare 10 vs 10.
+view decimalEq (x : Decimal) (y : Decimal) : Bool =
+  match x { MkDecimalPair cx ex =>
+    match y { MkDecimalPair cy ey =>
+      and_bool (eq_int (add_int ex 1) ey) (eq_int cx (mul_int cy 10)) } }
+
+-- The lawful instance. `eq` is a fine Bool operation; `sound`/`complete` are
+-- the FALSE step — `decimalEq` is COARSER than `Equal Decimal`.
+instance DecEq Decimal {
+  eq       = decimalEq ;
+  sound    = Axiom ;   -- FALSE: decimalEq x y = True does NOT imply Equal Decimal x y
+  complete = Axiom
+}
+
+-- ---- the exploit (makes the hole concrete) ------------------------------
+view w1 : Decimal = MkDecimalPair 10 (sub_int 0 1)   -- 10 x 10^-1 = 1
+view w2 : Decimal = MkDecimalPair 1 0                 --  1 x 10^0  = 1
+
+-- decimalEq w1 w2 reduces to True (and_bool (eq_int 0 0) (eq_int 10 10)), so a
+-- reflexivity proof of IsTrue (decimalEq w1 w2) type-checks:
+view eqWitness : IsTrue (decimalEq w1 w2) = Refl Bool True
+
+-- SMOKING GUN: `sound` hands us Equal between two STRUCTURALLY DISTINCT
+-- constructor forms. (Instance-field projection follows the landed
+-- `(Class_instance_T).field` style; confirm the exact surface at run.)
+view falseEqDecimal : Equal Decimal w1 w2 =
+  (DecEq_instance_Decimal).sound w1 w2 eqWitness
+
+-- Completion: MkDecimalPair injectivity (K7 no-confusion) projects
+-- falseEqDecimal to `Equal Int 10 1`, and `absurd` (K5 Bottom-elim) turns that
+-- into Bottom. If the injectivity projection is not yet surface-expressible,
+-- `falseEqDecimal` is ALREADY the hole (a proof of Equal between provably
+-- distinct forms). Expected correct behavior: the instance is REJECTED
+-- (not deliverable, ADR 0010 pt1). Predicted first-run result: ACCEPTED
+-- (machinery guards deception, not falsehood, §51 §5) — the headline finding.

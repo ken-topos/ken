@@ -1,0 +1,26 @@
+-- C2 SOUND arm (count-equality) — Perm as a natively-Ω proposition — should-PASS.
+--
+-- Run against the prelude (List, Nat, Bool, Equal, elim_List/elim_Nat, the
+-- landed DecEq for the element type). A permutation-as-multiset-equality:
+-- xs and ys are permutations iff every element occurs the same number of
+-- times. Stated as a Nat equation, it is natively Ω-valued (Equal Nat _ _ : Ω)
+-- — no truncation needed, no proof-relevance.
+
+-- count x xs : how many times x occurs in xs (element eq via a supplied `eq`).
+view count (a : Type) (eq : a -> a -> Bool) (x : a) (xs : List a) : Nat =
+  match xs {
+    Nil       => Zero ;
+    Cons h t  => match eq x h {
+                   True  => Suc (count a eq x t) ;
+                   False => count a eq x t } }
+
+-- Perm as: for the witness element x, the counts agree. (The full relation
+-- quantifies over all x; shown here at a witness to stay Ω-clean and concrete.)
+-- Equal Nat (count …) (count …) : Ω — a sub-singleton by construction.
+view PermAt (a : Type) (eq : a -> a -> Bool) (x : a) (xs : List a) (ys : List a) : Prop =
+  Equal Nat (count a eq x xs) (count a eq x ys)
+
+-- Expected: elaborates. `PermAt … : Prop` (= Omega_0) is a legal Ω proposition
+-- — a Nat equation carries no proof-relevant content, so nothing is smuggled
+-- into Ω. This is how a permutation obligation reaches Ω soundly; contrast the
+-- unsound arm's direct proof-relevant `data Perm : Omega`.
