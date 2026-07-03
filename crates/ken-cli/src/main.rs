@@ -99,7 +99,7 @@ fn run_file(path: Option<&str>) {
         vis_id,
         write_id,
         unit_id,
-        params_len: 1, // ITree r — one type param, per the landed prelude
+        params_len: 3, // ITree (E:Type)(Resp:E->Type)(R:Type) — 3 type params (State-effect-build lift)
     };
 
     let mut store = build_eval_store(&elab_env);

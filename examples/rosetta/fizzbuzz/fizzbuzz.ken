@@ -143,10 +143,13 @@ view fizzBuzzLine (n : Nat) : String =
 -- on `r`, a strict `Suc`-sub-term of `remaining` -- same `Vis`-under-
 -- closure recursive shape VAL2's own `printLoop` probe confirmed
 -- SCT-acceptable.
+--
+-- `Vis`/`Ret` now take `ITree`'s 3 explicit params (State-effect-build lift,
+-- VAL2 #10 / OQ-C.C2): `E=ConsoleOp`, `Resp=console_resp`, `R=Unit`.
 view fizzBuzzLoop (remaining : Nat) (current : Nat) : IO Unit =
   match remaining {
-    Zero  => Ret Unit MkUnit ;
-    Suc r => Vis Unit (Write (fizzBuzzLine current)) (\_. fizzBuzzLoop r (Suc current))
+    Zero  => Ret ConsoleOp console_resp Unit MkUnit ;
+    Suc r => Vis ConsoleOp console_resp Unit (Write (fizzBuzzLine current)) (\_. fizzBuzzLoop r (Suc current))
   }
 
 -- ── Oracle ───────────────────────────────────────────────────────────────────
