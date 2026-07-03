@@ -50,6 +50,10 @@ git only.
 
 - Handoff that passes work to B → mention **B only**.
 - "Your request is done," nothing pending → mention **nobody**.
+- **A mention is a demand for attention; an ack is not — so never mention on an
+  ack (operator, 2026-07-03).** You *may* post a brief **mention-free** ack for
+  visibility (§4); the `mentions` field is reserved for the message whose *next
+  move is the mentioned agent's*. Spend mentions only on real next-moves.
 - **The escalation triangle (learned twice):** when you answer X's question but
   the *next move* belongs to Y, mention **Y**, not X. Naming Y in prose without
   a real mention is the classic silent stall.
@@ -63,10 +67,11 @@ git only.
   vote/handoff to a participant you didn't just hear from, confirm it's live
   (`list_participants`). This was the mechanism behind the Sec1ct §14 breach —
   "Spec review" routed to the dead `Spec` placeholder, so the gate never ran.
-- **Thread your reply — don't scatter to the space root** (operator 2026-06-29).
-  Every event you receive carries a `thread_id`. When you respond to a message
-  that belongs to a thread — a kickoff, assignment, query, handoff, review
-  request, or retro call — **reply *into that thread*** (`post_response` with
+- **Thread your reply — don't scatter to the space root** (operator 2026-06-29;
+  hardened 2026-07-03: **only the Steward posts top-level, every other role always
+  threads — §4**). Every event you receive carries a `thread_id`. When you respond
+  to a message that belongs to a thread — a kickoff, assignment, query, handoff,
+  review request, or retro call — **reply *into that thread*** (`post_response` with
   `thread_id` set to that message's thread; or `parent_event_id` on the first
   reply, which opens the thread). A bare `post_response` with no thread drops
   your message at the space root, **scattering one WP's conversation across the
@@ -119,8 +124,19 @@ Three liveness signals exist; only the third is yours to post:
 1. connection (automatic — never post "I'm online");
 2. activity (file/transcript mtime — automatic);
 3. **semantic status** — "drafting K2 conversion", "blocked-on-spec: OQ-17".
-   Agent-composed, never auto-classified. Update it on: receiving a handoff,
-   completing one, changing focus, and becoming idle or blocked.
+   Agent-composed, never auto-classified.
+
+**Update your status on _every_ change in your activity (operator, 2026-07-03).**
+Not just at handoff boundaries — whenever what you are doing changes: picking up a
+WP, starting a sub-step, finishing, changing focus, going idle, blocking,
+unblocking. Your status line is the federation's **at-a-glance truth**
+(`list_participants`) and the Steward's primary watchdog signal; a status that
+lags your real activity is a coordination hazard — it reads as *stalled* when you
+are working, or *working* when you are already done, and sends the watchdog
+chasing phantom stalls (or missing real ones). Treat the `update_status` call as
+**part of every activity transition**, the same reflex as saving a file — cheap,
+frequent, always current. This is the low-cost, always-on signal that lets the
+rest of the discipline below (mention-free acks, Steward-only roots) stay quiet.
 
 ## 4. Threads are the spine
 
@@ -129,6 +145,35 @@ handoffs, questions, status, and retros for that item are **replies in that
 thread** — a top-level post fragments the work. After any context
 reset/compaction, resolve the live thread from fresh context; do **not** reuse a
 thread/event ID from a summarized memory (it may be stale).
+
+**Top-level (root) posts are the Steward's alone — every other agent always
+threads (operator, 2026-07-03).** A non-Steward post *always* carries a
+`thread_id` or `parent_event_id` and lands **inside an existing thread**; no other
+role ever creates a root-level message. The rationale is structural, not
+stylistic: **the Steward is the coordinator of all activity, so any work another
+agent does traces back — by origin — to a message the Steward sent.** That message
+is therefore the natural root your reply threads under. Enforcing it makes the
+whole space a clean tree rooted at the Steward's coordination posts and ends the
+fragmentation where parallel root posts scatter one WP's exchange (the exact
+threading-discipline failure this fixes). Consequences:
+- **Reply, never root.** Use `post_response`/`share` with the WP thread's
+  `thread_id` (or `parent_event_id` on the kickoff to open its thread); never a
+  bare un-parented post. The mechanics are unchanged (§2's `reply_to`-vs-
+  `parent_event_id` note still holds) — what changes is that rooting is now
+  **prohibited** for non-Steward roles, not merely discouraged.
+- **No home thread? Route to the Steward, don't root it.** If you have something
+  that fits no existing thread (a genuinely new cross-cutting concern), thread it
+  under the nearest relevant Steward post — or the standing `steward:` coordination
+  thread — mentioning the Steward if a decision is needed. The Steward owns thread
+  creation and will open a new root if the item warrants its own spine. A spun-off
+  WP (its own branch + gates + merge, e.g. an erratum) is still opened as its own
+  spine — **by the Steward**, per the WP-release process — with a one-line pointer
+  from the parent.
+- **Decisions, questions, reviews still thread.** `propose_decision`,
+  `question`, `review_request`, `git_request`, and `retro` all attach to the
+  relevant WP thread (their `thread_id`/`parent_event_id`, §2a); the Steward-only
+  rule governs *root chat posts*, and these governance objects are never a reason
+  to open a new root.
 
 **Threading drifts in exactly two ways (operator 2026-07-02) — guard both.**
 (1) **A fork spawns a side-thread.** A mid-WP escalation — a soundness fork to
@@ -155,21 +200,35 @@ ends, not just at handoff.** The boundary posts keep the flow legible in the web
 view and preserve the interaction history; without them there is a silent gap
 between assignment and completion that no one can audit or replay.
 
-**But every post must be *actionable* — no bare acknowledgments (operator,
-2026-07-03).** A message earns its place only if the recipient must **act**,
-**decide**, or **learn something they cannot derive** from the artifacts. A bare
-"received / thanks / good catch / ack / confirmed / will do" carries nothing and
-is **noise** — do not post it. This refines (does not weaken) the boundary rule:
-a **pickup** post is worth posting because it carries *content* — what you're
-taking + your approach, first step, ETA, or an opening question — **not** a
-contentless "ack." If your only signal is "I'm on it," that lives in your
-**status** (§3), not a channel post. **Silence is acceptance:** when a reviewer
-approves, a ruling lands, or a handoff arrives and you need nothing back and
-diverge on nothing, **don't reply** — just proceed; the next substantive post
-(candidate-ready, a finding, a handoff) is your acknowledgment. Reply to an
-approval/ruling **only** to (a) diverge, (b) ask a blocking question, or (c)
-convey un-derivable information. The audit trail is carried by the *substantive*
-boundary posts + status, never by receipt-acks.
+**Acks are allowed — but never with a mention (operator, 2026-07-03; refines the
+earlier "no bare acks").** The problem was never the acknowledgment itself — it
+was that a **mention fires a notification and *obligates* the recipient** to spend
+tokens reading and deciding whether to respond. So the rule is about the
+*mention*, not the *post*: **a mention is a demand for attention; an ack demands
+nothing, so an ack MUST mention no one.** Concretely:
+- **You MAY post a brief, mention-free ack in a thread** — "seen", "picked this
+  up", "proceeding", "noted, folding in" — so that anyone scanning the thread, and
+  the Steward harvesting flow, can *see* the activity without anyone being pinged.
+  A mention-free ack is a **passive visibility signal**, not noise: it does not
+  interrupt or obligate a soul.
+- **Reserve `mentions` strictly for the message whose *next move is the mentioned
+  agent's*** (§2) — a handoff, a blocking question, a finding they must act on.
+  **Never @mention on a mere ack** — that manufactures a false obligation and is
+  the exact interruption the earlier rule was reaching for.
+- **Silence is still fine.** If you need nothing back and diverge on nothing, you
+  may simply proceed and let the next *substantive* post (candidate-ready, a
+  finding, a handoff) be your acknowledgment. Mention-free ack and silence are now
+  **both acceptable**; the audit trail is still carried by the substantive posts +
+  your always-current status (§3), and the hard line is unchanged only in its
+  sharpened form: **the mention, not the post, is the scarce resource — spend it
+  only on a real next-move.**
+
+Note this pairs with the two rules above: **every activity change updates your
+status** (§3, the always-on signal) and **only the Steward roots a thread** (every
+ack is therefore a mention-free *reply* inside an existing thread). Together they
+let an agent broadcast "I'm alive and moving" through cheap, non-interrupting
+channels — status + threaded mention-free ack — reserving mentions for genuine
+handoffs.
 
 **Title convention (the single-space articulation tag).** The whole federation
 runs in one space (`ken-topos`), so a thread's **title is its team tag** — there
