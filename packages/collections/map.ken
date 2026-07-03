@@ -157,6 +157,13 @@ view Ordered (k : Type) (v : Type) (leq : k -> k -> Bool) (m : Tree k v) : Prop 
       (And (Ordered k v leq l) (Ordered k v leq r)))
   }
 
+-- `52 §5.1` -- `Ordered empty`, immediate: `Ordered Leaf` unfolds to `Equal
+-- Bool True True`, which K7-collapses to `Top`, closed by `tt` (the same
+-- non-inductive Branch-A shape as `lookupEmptyIsNone`, no induction/comparison
+-- -- one of the two shipped Branch-A law proofs, `52 §5`/`§7`/`§9` AC3).
+view orderedEmpty (k : Type) (v : Type) (leq : k -> k -> Bool) :
+  Ordered k v leq (empty k v) = tt
+
 -- `52 §5.2` law 1 -- `lookup k empty = None`, immediate (`empty = Leaf`).
 view lookupEmptyIsNone (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k) :
   Equal (Option v) (lookup k v leq key (empty k v)) (None v) = tt

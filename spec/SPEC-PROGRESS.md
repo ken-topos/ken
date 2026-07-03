@@ -77,6 +77,7 @@ Status: TODO · DRAFT (first pass written) · REVISED (refined) · DONE
 | `50-stdlib/README.md` | Prelude + core stdlib shape | DRAFT |
 | `50-stdlib/52-map.md` | Proved pure `Map k v` over `Ord k` (VAL2 #8/OQ-A) | DRAFT |
 | `50-stdlib/53-transport.md` | Derived `subst`/`cong`/`cast`/`sym`/`trans` over the `J` former | DRAFT |
+| `50-stdlib/54-map-verified-laws.md` | Proof skeletons for the 5 deferred inductive `Map` laws (Gap-A/Gap-B) | DRAFT |
 | `60-security/README.md` | Security (tier-1): frame, threat model, taxonomy | DRAFT |
 | `60-security/61-information-flow.md` | IFC: label lattice, declassification, non-interference | DRAFT |
 | `60-security/62-authority.md` | Capabilities, PoLA, attenuation, revocation, audit | DRAFT |
