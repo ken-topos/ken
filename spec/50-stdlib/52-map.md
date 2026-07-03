@@ -13,7 +13,12 @@
 > transport) the elaborator did not expose at Map-build time (§5) — a
 > **buildability** boundary, not soundness. **Both have since landed** (Gap A
 > `19955d8`, Gap B `282856c`); the five proofs' strategy is in
-> `54-map-verified-laws.md`, built by Foundation. **No new kernel feature:** the
+> `54-map-verified-laws.md`, and Foundation builds the terms in **two staged
+> units** (the capstone was re-scoped along the elaborator fault-line): **Unit
+> 1** — the convoy dependent-induction idiom + the `toList`-ordered law's
+> structure — builds today; **Unit 2** — laws 1/2/3/5's stuck-comparison
+> **transport composition** — is pending a residual `infer_j` nested-motive
+> scoping gap (`54 §3`, §7). **No new kernel feature:** the
 > carrier is a `data` type (`../30-surface/34 §1`), the operations are `view`
 > defs, the laws are `Ω` propositions (`../10-kernel/16 §1`); if the build adds
 > a kernel
@@ -235,9 +240,15 @@ The `§5` laws split by **whether the proof inducts over the (non-nullary)
 induction needs. There were **two distinct capability walls** — both
 **build-completeness shortfalls against already-specified behavior**, not spec
 gaps (the elaborator lagged the spec). **Both have since landed** (Gap A
-`19955d8`, Gap B `282856c`), so the five inductive laws are now **buildable**;
-their per-law proof strategy is elaborated in `54-map-verified-laws.md`
-(`map-verified-laws` WP), and Foundation builds the proof terms.
+`19955d8`, Gap B `282856c`), and their per-law proof strategy is elaborated in
+`54-map-verified-laws.md` (`map-verified-laws` WP). Foundation builds the proof
+terms in **two staged units**: the **convoy idiom** (Gap-B dependent induction)
++ the `toList`-ordered law's structure + the non-inductive laws are
+**buildable today** (Unit 1); laws 1/2/3/5's **stuck-comparison transport
+composition** (Gap A) additionally needs a **nested-`J`** step that hits a
+residual `infer_j` nested-motive scoping gap, so those are **Unit 2, pending**
+(`54 §3`, §7). Honesty about the boundary: `52` does not claim laws 1/2/3/5
+build today.
 
 - **Gap B — dependent-motive recovery over non-nullary families.** A proof that
   **inducts** over `Tree`/`List` and must **narrow a hypothesis about the
