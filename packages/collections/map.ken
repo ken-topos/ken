@@ -462,3 +462,506 @@ view toListOrdered
           (toListOrdered k v leq l (ordL k v leq l key val r h))
           (allKeysToAllInList k v (leBelow k v leq key) l (ordBelowL k v leq l key val r h))
   }
+
+-- Law 1 (`54 §5.1`, Map capstone unit 2) -- Ordered-preservation:
+-- `Ordered m -> Ordered (insert key val m)`.
+--
+-- Dictionary laws threaded as SEPARATE bare parameters (Architect-ruled
+-- unbundled encoding, same convention as the rest of this file): `transLeq`
+-- (transitivity) and `total` (totality, as a bare `Or` of the two `IsTrue`
+-- facts -- no `bool_or` primitive needed). No `antisym` (matches `54 §5.2`'s
+-- law-1 dictionary-law list).
+--
+-- Mechanism, in order of discovery this session:
+-- - `insertStep`/`insertStepInner` mirror `insert`'s own two-level stuck
+--   match structurally (`(Bool) -> Tree k v`, matched on a BOUND parameter,
+--   not the real `leq` expression) -- `insertCaseTransportOverwrite`/
+--   `IntoL`/`IntoR` are goal-generic "stop-one-step-short" `trans`/`cong`
+--   bridges from a real `insert key val (Node l k2 v2 r)` application to
+--   each of `insert`'s three real branches, letting the FINAL delta+iota
+--   step land via ordinary conversion inside `J`'s own base-argument check
+--   rather than needing an explicit reflected-Eq witness for both stuck
+--   comparisons composed (the confirmed-broken nested-`J` shape, `54 §3`).
+-- - `insertPreservesAllKeys` (L1): a COMPARISON-INDEPENDENT predicate `p`
+--   doesn't care which value `leq` returns, so its Node-case helper
+--   (`insertStepPreservesAllKeys`/`insertStepInnerPreservesAllKeys`) is
+--   proven generically over an ABSTRACT `Bool` parameter (ordinary Gap-B
+--   convoy on a bound var) and simply APPLIED at the real `leq key k2`
+--   expression -- no stuck-boolean reflection, no transport, at all.
+-- - `allKeysTransBelow`/`allKeysTransAbove` (L3): move an `allKeys`
+--   bound from one key to another via `transLeq`, ordinary Gap-B
+--   structural induction, comparison-free.
+-- - `deriveFromFalse` (totality-derived reflection, the `insert`-into-R
+--   branch's bound update): `insert`'s `False` branch doesn't consult
+--   `leq k2 key` at all, but `Ordered`'s bound update for that branch needs
+--   it as a witness -- derived from `leq key k2 = False` + `total` via one
+--   more (non-dependent) `Or`-elimination. Uses the abstract-parameter
+--   workaround for a narrow, separately-reported elaborator gap: `absurd`
+--   (a check-only form) fails when its enclosing match's scrutinee is an
+--   applied expression rather than a literal bound variable
+--   (`check_match_dependent`'s `Term::Var` gate; falls to the general
+--   `infer_match` path otherwise, which does not propagate check mode).
+-- - The top-level dispatch (`insertCaseTransportDispatch`/`dispatchOnQ1`/
+--   `dispatchOnQ2`) is TWO non-dependent `Or`-eliminations
+--   (`boolDichotomy(leq key k2)`, then inside the `True` sub-case,
+--   `boolDichotomy(leq k2 key)`) -- the overall goal `Ordered (insert key
+--   val m)` is the SAME type regardless of which branch fired, so this does
+--   NOT hit the dependent-match-nesting restriction (only a goal that
+--   DEPENDS on which arm fired needs `check_match_dependent`'s
+--   single-bound-var scrutinee gate).
+--
+-- Confirmed on the fixed kernel (`wp/obs-eq-termination`, `9cf468a`):
+-- builds clean in well under a second, no OOM/divergence.
+
+view insertStepInner
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k) (val : v)
+  (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v) (y : Bool) : Tree k v =
+  match y {
+    True  => Node k v l key val r ;
+    False => Node k v (insert k v leq key val l) k2 v2 r
+  }
+
+view insertStep
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k) (val : v)
+  (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v) (x : Bool) : Tree k v =
+  match x {
+    True  => insertStepInner k v leq key val l k2 v2 r (leq k2 key) ;
+    False => Node k v l k2 v2 (insert k v leq key val r)
+  }
+
+view mkInnerFalseEq
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k) (val : v)
+  (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (q2 : Equal Bool (leq k2 key) False)
+  : Equal (Tree k v) (insertStepInner k v leq key val l k2 v2 r (leq k2 key))
+                      (insertStepInner k v leq key val l k2 v2 r False) =
+  cong Bool (Tree k v) (leq k2 key) False (insertStepInner k v leq key val l k2 v2 r) q2
+
+view mkInnerTrueEq
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k) (val : v)
+  (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (q2 : Equal Bool (leq k2 key) True)
+  : Equal (Tree k v) (insertStepInner k v leq key val l k2 v2 r (leq k2 key))
+                      (insertStepInner k v leq key val l k2 v2 r True) =
+  cong Bool (Tree k v) (leq k2 key) True (insertStepInner k v leq key val l k2 v2 r) q2
+
+view mkStepTrueEq
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k) (val : v)
+  (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (q1 : Equal Bool (leq key k2) True)
+  : Equal (Tree k v) (insertStep k v leq key val l k2 v2 r (leq key k2))
+                      (insertStep k v leq key val l k2 v2 r True) =
+  cong Bool (Tree k v) (leq key k2) True (insertStep k v leq key val l k2 v2 r) q1
+
+view mkStepFalseEq
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k) (val : v)
+  (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (q1 : Equal Bool (leq key k2) False)
+  : Equal (Tree k v) (insertStep k v leq key val l k2 v2 r (leq key k2))
+                      (insertStep k v leq key val l k2 v2 r False) =
+  cong Bool (Tree k v) (leq key k2) False (insertStep k v leq key val l k2 v2 r) q1
+
+view mkFinalBridge
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k) (val : v)
+  (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  : Equal (Tree k v) (insert k v leq key val (Node k v l k2 v2 r))
+                      (insertStep k v leq key val l k2 v2 r (leq key k2)) = Refl
+
+view mkStepTrueReduces
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k) (val : v)
+  (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  : Equal (Tree k v) (insertStep k v leq key val l k2 v2 r True)
+                      (insertStepInner k v leq key val l k2 v2 r (leq k2 key)) = Refl
+
+view stepA_combined1
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k) (val : v)
+  (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (q1 : Equal Bool (leq key k2) True)
+  : Equal (Tree k v) (insertStep k v leq key val l k2 v2 r (leq key k2))
+                      (insertStepInner k v leq key val l k2 v2 r (leq k2 key)) =
+  trans (Tree k v) (insertStep k v leq key val l k2 v2 r (leq key k2))
+                    (insertStep k v leq key val l k2 v2 r True)
+                    (insertStepInner k v leq key val l k2 v2 r (leq k2 key))
+    (mkStepTrueEq k v leq key val l k2 v2 r q1) (mkStepTrueReduces k v leq key val l k2 v2 r)
+
+view stepB_combined2
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k) (val : v)
+  (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (q1 : Equal Bool (leq key k2) True)
+  : Equal (Tree k v) (insert k v leq key val (Node k v l k2 v2 r))
+                      (insertStepInner k v leq key val l k2 v2 r (leq k2 key)) =
+  trans (Tree k v) (insert k v leq key val (Node k v l k2 v2 r))
+                    (insertStep k v leq key val l k2 v2 r (leq key k2))
+                    (insertStepInner k v leq key val l k2 v2 r (leq k2 key))
+    (mkFinalBridge k v leq key val l k2 v2 r) (stepA_combined1 k v leq key val l k2 v2 r q1)
+
+view stepC_combined3
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k) (val : v)
+  (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (q1 : Equal Bool (leq key k2) True) (q2 : Equal Bool (leq k2 key) False)
+  : Equal (Tree k v) (insert k v leq key val (Node k v l k2 v2 r))
+                      (insertStepInner k v leq key val l k2 v2 r False) =
+  trans (Tree k v) (insert k v leq key val (Node k v l k2 v2 r))
+                    (insertStepInner k v leq key val l k2 v2 r (leq k2 key))
+                    (insertStepInner k v leq key val l k2 v2 r False)
+    (stepB_combined2 k v leq key val l k2 v2 r q1) (mkInnerFalseEq k v leq key val l k2 v2 r q2)
+
+view stepE_combinedOverwrite
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k) (val : v)
+  (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (q1 : Equal Bool (leq key k2) True) (q2 : Equal Bool (leq k2 key) True)
+  : Equal (Tree k v) (insert k v leq key val (Node k v l k2 v2 r))
+                      (insertStepInner k v leq key val l k2 v2 r True) =
+  trans (Tree k v) (insert k v leq key val (Node k v l k2 v2 r))
+                    (insertStepInner k v leq key val l k2 v2 r (leq k2 key))
+                    (insertStepInner k v leq key val l k2 v2 r True)
+    (stepB_combined2 k v leq key val l k2 v2 r q1) (mkInnerTrueEq k v leq key val l k2 v2 r q2)
+
+view insertCaseTransportOverwrite
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k) (val : v)
+  (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (goal : Tree k v -> Prop)
+  (q1 : Equal Bool (leq key k2) True) (q2 : Equal Bool (leq k2 key) True)
+  (overwrite : goal (Node k v l key val r))
+  : goal (insert k v leq key val (Node k v l k2 v2 r)) =
+  J (\x _. goal x) overwrite
+    (sym (Tree k v) (insert k v leq key val (Node k v l k2 v2 r))
+                     (insertStepInner k v leq key val l k2 v2 r True)
+       (stepE_combinedOverwrite k v leq key val l k2 v2 r q1 q2))
+
+view insertCaseTransportIntoL
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k) (val : v)
+  (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (goal : Tree k v -> Prop)
+  (q1 : Equal Bool (leq key k2) True) (q2 : Equal Bool (leq k2 key) False)
+  (intoL : goal (Node k v (insert k v leq key val l) k2 v2 r))
+  : goal (insert k v leq key val (Node k v l k2 v2 r)) =
+  J (\x _. goal x) intoL
+    (sym (Tree k v) (insert k v leq key val (Node k v l k2 v2 r))
+                     (insertStepInner k v leq key val l k2 v2 r False)
+       (stepC_combined3 k v leq key val l k2 v2 r q1 q2))
+
+view stepD_combined2
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k) (val : v)
+  (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (q1 : Equal Bool (leq key k2) False)
+  : Equal (Tree k v) (insert k v leq key val (Node k v l k2 v2 r))
+                      (insertStep k v leq key val l k2 v2 r False) =
+  trans (Tree k v) (insert k v leq key val (Node k v l k2 v2 r))
+                    (insertStep k v leq key val l k2 v2 r (leq key k2))
+                    (insertStep k v leq key val l k2 v2 r False)
+    (mkFinalBridge k v leq key val l k2 v2 r) (mkStepFalseEq k v leq key val l k2 v2 r q1)
+
+view insertCaseTransportIntoR
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k) (val : v)
+  (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (goal : Tree k v -> Prop)
+  (q1 : Equal Bool (leq key k2) False)
+  (intoR : goal (Node k v l k2 v2 (insert k v leq key val r)))
+  : goal (insert k v leq key val (Node k v l k2 v2 r)) =
+  J (\x _. goal x) intoR
+    (sym (Tree k v) (insert k v leq key val (Node k v l k2 v2 r))
+                     (insertStep k v leq key val l k2 v2 r False)
+       (stepD_combined2 k v leq key val l k2 v2 r q1))
+
+view allKeysTransBelow
+  (k : Type) (v : Type) (leq : k -> k -> Bool)
+  (transLeq : (x : k) -> (y : k) -> (z : k) -> Equal Bool (leq x y) True -> Equal Bool (leq y z) True -> Equal Bool (leq x z) True)
+  (a : k) (b : k) (m : Tree k v)
+  (hab : Equal Bool (leq a b) True)
+  : allKeys k v (leBelow k v leq a) m -> allKeys k v (leBelow k v leq b) m =
+  match m {
+    Leaf => \h. tt ;
+    Node l key val r =>
+      \h.
+        andIntro (Equal Bool (leq key b) True) (And (allKeys k v (leBelow k v leq b) l) (allKeys k v (leBelow k v leq b) r))
+          (transLeq key a b (andFst (Equal Bool (leq key a) True) (And (allKeys k v (leBelow k v leq a) l) (allKeys k v (leBelow k v leq a) r)) h) hab)
+          (andIntro (allKeys k v (leBelow k v leq b) l) (allKeys k v (leBelow k v leq b) r)
+             (allKeysTransBelow k v leq transLeq a b l hab
+                (andFst (allKeys k v (leBelow k v leq a) l) (allKeys k v (leBelow k v leq a) r)
+                        (andSnd (Equal Bool (leq key a) True) (And (allKeys k v (leBelow k v leq a) l) (allKeys k v (leBelow k v leq a) r)) h)))
+             (allKeysTransBelow k v leq transLeq a b r hab
+                (andSnd (allKeys k v (leBelow k v leq a) l) (allKeys k v (leBelow k v leq a) r)
+                        (andSnd (Equal Bool (leq key a) True) (And (allKeys k v (leBelow k v leq a) l) (allKeys k v (leBelow k v leq a) r)) h))))
+  }
+
+view allKeysTransAbove
+  (k : Type) (v : Type) (leq : k -> k -> Bool)
+  (transLeq : (x : k) -> (y : k) -> (z : k) -> Equal Bool (leq x y) True -> Equal Bool (leq y z) True -> Equal Bool (leq x z) True)
+  (a : k) (b : k) (m : Tree k v)
+  (hba : Equal Bool (leq b a) True)
+  : allKeys k v (leAbove k v leq a) m -> allKeys k v (leAbove k v leq b) m =
+  match m {
+    Leaf => \h. tt ;
+    Node l key val r =>
+      \h.
+        andIntro (Equal Bool (leq b key) True) (And (allKeys k v (leAbove k v leq b) l) (allKeys k v (leAbove k v leq b) r))
+          (transLeq b a key hba (andFst (Equal Bool (leq a key) True) (And (allKeys k v (leAbove k v leq a) l) (allKeys k v (leAbove k v leq a) r)) h))
+          (andIntro (allKeys k v (leAbove k v leq b) l) (allKeys k v (leAbove k v leq b) r)
+             (allKeysTransAbove k v leq transLeq a b l hba
+                (andFst (allKeys k v (leAbove k v leq a) l) (allKeys k v (leAbove k v leq a) r)
+                        (andSnd (Equal Bool (leq a key) True) (And (allKeys k v (leAbove k v leq a) l) (allKeys k v (leAbove k v leq a) r)) h)))
+             (allKeysTransAbove k v leq transLeq a b r hba
+                (andSnd (allKeys k v (leAbove k v leq a) l) (allKeys k v (leAbove k v leq a) r)
+                        (andSnd (Equal Bool (leq a key) True) (And (allKeys k v (leAbove k v leq a) l) (allKeys k v (leAbove k v leq a) r)) h))))
+  }
+
+view insertStepInnerPreservesAllKeys
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (p : k -> Prop)
+  (key : k) (val : v) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (insL : allKeys k v p (insert k v leq key val l))
+  (hl : allKeys k v p l) (hr : allKeys k v p r) (hkey : p key) (hk2 : p k2)
+  (y : Bool)
+  : allKeys k v p (insertStepInner k v leq key val l k2 v2 r y) =
+  match y {
+    True  => andIntro (p key) (And (allKeys k v p l) (allKeys k v p r)) hkey (andIntro (allKeys k v p l) (allKeys k v p r) hl hr) ;
+    False => andIntro (p k2) (And (allKeys k v p (insert k v leq key val l)) (allKeys k v p r)) hk2 (andIntro (allKeys k v p (insert k v leq key val l)) (allKeys k v p r) insL hr)
+  }
+
+view insertStepPreservesAllKeys
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (p : k -> Prop)
+  (key : k) (val : v) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (insL : allKeys k v p (insert k v leq key val l))
+  (insR : allKeys k v p (insert k v leq key val r))
+  (hl : allKeys k v p l) (hr : allKeys k v p r) (hkey : p key) (hk2 : p k2)
+  (x : Bool)
+  : allKeys k v p (insertStep k v leq key val l k2 v2 r x) =
+  match x {
+    True  => insertStepInnerPreservesAllKeys k v leq p key val l k2 v2 r insL hl hr hkey hk2 (leq k2 key) ;
+    False => andIntro (p k2) (And (allKeys k v p l) (allKeys k v p (insert k v leq key val r))) hk2 (andIntro (allKeys k v p l) (allKeys k v p (insert k v leq key val r)) hl insR)
+  }
+
+view insertPreservesAllKeysNode
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (p : k -> Prop)
+  (key : k) (val : v) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (insL : allKeys k v p (insert k v leq key val l))
+  (insR : allKeys k v p (insert k v leq key val r))
+  (hl : allKeys k v p l) (hr : allKeys k v p r) (hkey : p key) (hk2 : p k2)
+  : allKeys k v p (insert k v leq key val (Node k v l k2 v2 r)) =
+  insertStepPreservesAllKeys k v leq p key val l k2 v2 r insL insR hl hr hkey hk2 (leq key k2)
+
+view insertPreservesAllKeys
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (p : k -> Prop)
+  (key : k) (val : v) (m : Tree k v)
+  : allKeys k v p m -> p key -> allKeys k v p (insert k v leq key val m) =
+  match m {
+    Leaf => \h. \hkey.
+      andIntro (p key) (And (allKeys k v p (Leaf k v)) (allKeys k v p (Leaf k v))) hkey
+        (andIntro (allKeys k v p (Leaf k v)) (allKeys k v p (Leaf k v)) tt tt) ;
+    Node l k2 v2 r => \h. \hkey.
+      insertPreservesAllKeysNode k v leq p key val l k2 v2 r
+        (insertPreservesAllKeys k v leq p key val l
+           (andFst (allKeys k v p l) (allKeys k v p r) (andSnd (p k2) (And (allKeys k v p l) (allKeys k v p r)) h)) hkey)
+        (insertPreservesAllKeys k v leq p key val r
+           (andSnd (allKeys k v p l) (allKeys k v p r) (andSnd (p k2) (And (allKeys k v p l) (allKeys k v p r)) h)) hkey)
+        (andFst (allKeys k v p l) (allKeys k v p r) (andSnd (p k2) (And (allKeys k v p l) (allKeys k v p r)) h))
+        (andSnd (allKeys k v p l) (allKeys k v p r) (andSnd (p k2) (And (allKeys k v p l) (allKeys k v p r)) h))
+        hkey
+        (andFst (p k2) (And (allKeys k v p l) (allKeys k v p r)) h)
+  }
+
+view deriveFromFalseCore
+  (k : Type) (leq : k -> k -> Bool) (a : k) (b : k)
+  (qFalse : Equal Bool (leq a b) False)
+  (o : Or (Equal Bool (leq a b) True) (Equal Bool (leq b a) True))
+  : Equal Bool (leq b a) True =
+  match o {
+    Inl hA => absurd (trans Bool False (leq a b) True (sym Bool (leq a b) False qFalse) hA) ;
+    Inr hB => hB
+  }
+
+view deriveFromFalse
+  (k : Type) (leq : k -> k -> Bool) (a : k) (b : k)
+  (qFalse : Equal Bool (leq a b) False)
+  (total : (x : k) -> (y : k) -> Or (Equal Bool (leq x y) True) (Equal Bool (leq y x) True))
+  : Equal Bool (leq b a) True =
+  deriveFromFalseCore k leq a b qFalse (total a b)
+
+view owWitnessBelow
+  (k : Type) (v : Type) (leq : k -> k -> Bool)
+  (transLeq : (x : k) -> (y : k) -> (z : k) -> Equal Bool (leq x y) True -> Equal Bool (leq y z) True -> Equal Bool (leq x z) True)
+  (key : k) (val : v) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (h : Ordered k v leq (Node k v l k2 v2 r))
+  (q2 : Equal Bool (leq k2 key) True)
+  : allKeys k v (leBelow k v leq key) l =
+  allKeysTransBelow k v leq transLeq k2 key l q2
+    (andFst (allKeys k v (leBelow k v leq k2) l) (And (allKeys k v (leAbove k v leq k2) r) (And (Ordered k v leq l) (Ordered k v leq r))) h)
+
+view owWitnessAbove
+  (k : Type) (v : Type) (leq : k -> k -> Bool)
+  (transLeq : (x : k) -> (y : k) -> (z : k) -> Equal Bool (leq x y) True -> Equal Bool (leq y z) True -> Equal Bool (leq x z) True)
+  (key : k) (val : v) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (h : Ordered k v leq (Node k v l k2 v2 r))
+  (q1 : Equal Bool (leq key k2) True)
+  : allKeys k v (leAbove k v leq key) r =
+  allKeysTransAbove k v leq transLeq k2 key r q1
+    (andFst (allKeys k v (leAbove k v leq k2) r) (And (Ordered k v leq l) (Ordered k v leq r))
+       (andSnd (allKeys k v (leBelow k v leq k2) l) (And (allKeys k v (leAbove k v leq k2) r) (And (Ordered k v leq l) (Ordered k v leq r))) h))
+
+view owWitnessOrderedL
+  (k : Type) (v : Type) (leq : k -> k -> Bool)
+  (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (h : Ordered k v leq (Node k v l k2 v2 r))
+  : Ordered k v leq l =
+  andFst (Ordered k v leq l) (Ordered k v leq r)
+     (andSnd (allKeys k v (leAbove k v leq k2) r) (And (Ordered k v leq l) (Ordered k v leq r))
+        (andSnd (allKeys k v (leBelow k v leq k2) l) (And (allKeys k v (leAbove k v leq k2) r) (And (Ordered k v leq l) (Ordered k v leq r))) h))
+
+view owWitnessOrderedR
+  (k : Type) (v : Type) (leq : k -> k -> Bool)
+  (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (h : Ordered k v leq (Node k v l k2 v2 r))
+  : Ordered k v leq r =
+  andSnd (Ordered k v leq l) (Ordered k v leq r)
+     (andSnd (allKeys k v (leAbove k v leq k2) r) (And (Ordered k v leq l) (Ordered k v leq r))
+        (andSnd (allKeys k v (leBelow k v leq k2) l) (And (allKeys k v (leAbove k v leq k2) r) (And (Ordered k v leq l) (Ordered k v leq r))) h))
+
+view preservesOrderedOverwriteWitness
+  (k : Type) (v : Type) (leq : k -> k -> Bool)
+  (transLeq : (x : k) -> (y : k) -> (z : k) -> Equal Bool (leq x y) True -> Equal Bool (leq y z) True -> Equal Bool (leq x z) True)
+  (key : k) (val : v) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (h : Ordered k v leq (Node k v l k2 v2 r))
+  (q1 : Equal Bool (leq key k2) True) (q2 : Equal Bool (leq k2 key) True)
+  : Ordered k v leq (Node k v l key val r) =
+  andIntro (allKeys k v (leBelow k v leq key) l) (And (allKeys k v (leAbove k v leq key) r) (And (Ordered k v leq l) (Ordered k v leq r)))
+    (owWitnessBelow k v leq transLeq key val l k2 v2 r h q2)
+    (andIntro (allKeys k v (leAbove k v leq key) r) (And (Ordered k v leq l) (Ordered k v leq r))
+       (owWitnessAbove k v leq transLeq key val l k2 v2 r h q1)
+       (andIntro (Ordered k v leq l) (Ordered k v leq r)
+          (owWitnessOrderedL k v leq l k2 v2 r h)
+          (owWitnessOrderedR k v leq l k2 v2 r h)))
+
+view getOrderedL
+  (k : Type) (v : Type) (leq : k -> k -> Bool)
+  (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (h : Ordered k v leq (Node k v l k2 v2 r))
+  : Ordered k v leq l =
+  andFst (Ordered k v leq l) (Ordered k v leq r)
+    (andSnd (allKeys k v (leAbove k v leq k2) r) (And (Ordered k v leq l) (Ordered k v leq r))
+       (andSnd (allKeys k v (leBelow k v leq k2) l) (And (allKeys k v (leAbove k v leq k2) r) (And (Ordered k v leq l) (Ordered k v leq r))) h))
+
+view getOrderedR
+  (k : Type) (v : Type) (leq : k -> k -> Bool)
+  (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (h : Ordered k v leq (Node k v l k2 v2 r))
+  : Ordered k v leq r =
+  andSnd (Ordered k v leq l) (Ordered k v leq r)
+    (andSnd (allKeys k v (leAbove k v leq k2) r) (And (Ordered k v leq l) (Ordered k v leq r))
+       (andSnd (allKeys k v (leBelow k v leq k2) l) (And (allKeys k v (leAbove k v leq k2) r) (And (Ordered k v leq l) (Ordered k v leq r))) h))
+
+view getBelowL
+  (k : Type) (v : Type) (leq : k -> k -> Bool)
+  (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (h : Ordered k v leq (Node k v l k2 v2 r))
+  : allKeys k v (leBelow k v leq k2) l =
+  andFst (allKeys k v (leBelow k v leq k2) l) (And (allKeys k v (leAbove k v leq k2) r) (And (Ordered k v leq l) (Ordered k v leq r))) h
+
+view getAboveR
+  (k : Type) (v : Type) (leq : k -> k -> Bool)
+  (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (h : Ordered k v leq (Node k v l k2 v2 r))
+  : allKeys k v (leAbove k v leq k2) r =
+  andFst (allKeys k v (leAbove k v leq k2) r) (And (Ordered k v leq l) (Ordered k v leq r))
+    (andSnd (allKeys k v (leBelow k v leq k2) l) (And (allKeys k v (leAbove k v leq k2) r) (And (Ordered k v leq l) (Ordered k v leq r))) h)
+
+view preservesOrderedIntoLWitness
+  (k : Type) (v : Type) (leq : k -> k -> Bool)
+  (key : k) (val : v) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (h : Ordered k v leq (Node k v l k2 v2 r))
+  (insL : Ordered k v leq (insert k v leq key val l))
+  (insLBelow : allKeys k v (leBelow k v leq k2) (insert k v leq key val l))
+  : Ordered k v leq (Node k v (insert k v leq key val l) k2 v2 r) =
+  andIntro (allKeys k v (leBelow k v leq k2) (insert k v leq key val l))
+           (And (allKeys k v (leAbove k v leq k2) r) (And (Ordered k v leq (insert k v leq key val l)) (Ordered k v leq r)))
+    insLBelow
+    (andIntro (allKeys k v (leAbove k v leq k2) r) (And (Ordered k v leq (insert k v leq key val l)) (Ordered k v leq r))
+       (getAboveR k v leq l k2 v2 r h)
+       (andIntro (Ordered k v leq (insert k v leq key val l)) (Ordered k v leq r)
+          insL
+          (getOrderedR k v leq l k2 v2 r h)))
+
+view preservesOrderedIntoRWitness
+  (k : Type) (v : Type) (leq : k -> k -> Bool)
+  (key : k) (val : v) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (h : Ordered k v leq (Node k v l k2 v2 r))
+  (insR : Ordered k v leq (insert k v leq key val r))
+  (insRAbove : allKeys k v (leAbove k v leq k2) (insert k v leq key val r))
+  : Ordered k v leq (Node k v l k2 v2 (insert k v leq key val r)) =
+  andIntro (allKeys k v (leBelow k v leq k2) l)
+           (And (allKeys k v (leAbove k v leq k2) (insert k v leq key val r)) (And (Ordered k v leq l) (Ordered k v leq (insert k v leq key val r))))
+    (getBelowL k v leq l k2 v2 r h)
+    (andIntro (allKeys k v (leAbove k v leq k2) (insert k v leq key val r)) (And (Ordered k v leq l) (Ordered k v leq (insert k v leq key val r)))
+       insRAbove
+       (andIntro (Ordered k v leq l) (Ordered k v leq (insert k v leq key val r))
+          (getOrderedL k v leq l k2 v2 r h)
+          insR))
+
+view dispatchOnQ2
+  (k : Type) (v : Type) (leq : k -> k -> Bool)
+  (transLeq : (x : k) -> (y : k) -> (z : k) -> Equal Bool (leq x y) True -> Equal Bool (leq y z) True -> Equal Bool (leq x z) True)
+  (total : (x : k) -> (y : k) -> Or (Equal Bool (leq x y) True) (Equal Bool (leq y x) True))
+  (key : k) (val : v) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (h : Ordered k v leq (Node k v l k2 v2 r))
+  (insL : Ordered k v leq (insert k v leq key val l))
+  (insR : Ordered k v leq (insert k v leq key val r))
+  (q1 : Equal Bool (leq key k2) True)
+  (o2 : Or (Equal Bool (leq k2 key) True) (Equal Bool (leq k2 key) False))
+  : Ordered k v leq (insert k v leq key val (Node k v l k2 v2 r)) =
+  match o2 {
+    Inl q2 =>
+      insertCaseTransportOverwrite k v leq key val l k2 v2 r (\x. Ordered k v leq x) q1 q2
+        (preservesOrderedOverwriteWitness k v leq transLeq key val l k2 v2 r h q1 q2) ;
+    Inr q2' =>
+      insertCaseTransportIntoL k v leq key val l k2 v2 r (\x. Ordered k v leq x) q1 q2'
+        (preservesOrderedIntoLWitness k v leq key val l k2 v2 r h insL
+           (insertPreservesAllKeys k v leq (leBelow k v leq k2) key val l (getBelowL k v leq l k2 v2 r h) q1))
+  }
+
+view dispatchOnQ1
+  (k : Type) (v : Type) (leq : k -> k -> Bool)
+  (transLeq : (x : k) -> (y : k) -> (z : k) -> Equal Bool (leq x y) True -> Equal Bool (leq y z) True -> Equal Bool (leq x z) True)
+  (total : (x : k) -> (y : k) -> Or (Equal Bool (leq x y) True) (Equal Bool (leq y x) True))
+  (key : k) (val : v) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (h : Ordered k v leq (Node k v l k2 v2 r))
+  (insL : Ordered k v leq (insert k v leq key val l))
+  (insR : Ordered k v leq (insert k v leq key val r))
+  (o1 : Or (Equal Bool (leq key k2) True) (Equal Bool (leq key k2) False))
+  : Ordered k v leq (insert k v leq key val (Node k v l k2 v2 r)) =
+  match o1 {
+    Inl q1 => dispatchOnQ2 k v leq transLeq total key val l k2 v2 r h insL insR q1 (boolDichotomy (leq k2 key)) ;
+    Inr q1' =>
+      insertCaseTransportIntoR k v leq key val l k2 v2 r (\x. Ordered k v leq x) q1'
+        (preservesOrderedIntoRWitness k v leq key val l k2 v2 r h insR
+           (insertPreservesAllKeys k v leq (leAbove k v leq k2) key val r (getAboveR k v leq l k2 v2 r h)
+              (deriveFromFalse k leq key k2 q1' total)))
+  }
+
+view insertCaseTransportDispatch
+  (k : Type) (v : Type) (leq : k -> k -> Bool)
+  (transLeq : (x : k) -> (y : k) -> (z : k) -> Equal Bool (leq x y) True -> Equal Bool (leq y z) True -> Equal Bool (leq x z) True)
+  (total : (x : k) -> (y : k) -> Or (Equal Bool (leq x y) True) (Equal Bool (leq y x) True))
+  (key : k) (val : v) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (h : Ordered k v leq (Node k v l k2 v2 r))
+  (insL : Ordered k v leq (insert k v leq key val l))
+  (insR : Ordered k v leq (insert k v leq key val r))
+  : Ordered k v leq (insert k v leq key val (Node k v l k2 v2 r)) =
+  dispatchOnQ1 k v leq transLeq total key val l k2 v2 r h insL insR (boolDichotomy (leq key k2))
+
+view preservesOrdered
+  (k : Type) (v : Type) (leq : k -> k -> Bool)
+  (transLeq : (x : k) -> (y : k) -> (z : k) -> Equal Bool (leq x y) True -> Equal Bool (leq y z) True -> Equal Bool (leq x z) True)
+  (total : (x : k) -> (y : k) -> Or (Equal Bool (leq x y) True) (Equal Bool (leq y x) True))
+  (key : k) (val : v) (m : Tree k v)
+  : Ordered k v leq m -> Ordered k v leq (insert k v leq key val m) =
+  match m {
+    Leaf => \h.
+      andIntro (allKeys k v (leBelow k v leq key) (Leaf k v))
+               (And (allKeys k v (leAbove k v leq key) (Leaf k v)) (And (Ordered k v leq (Leaf k v)) (Ordered k v leq (Leaf k v))))
+        tt (andIntro (allKeys k v (leAbove k v leq key) (Leaf k v)) (And (Ordered k v leq (Leaf k v)) (Ordered k v leq (Leaf k v)))
+             tt (andIntro (Ordered k v leq (Leaf k v)) (Ordered k v leq (Leaf k v)) tt tt)) ;
+    Node l k2 v2 r =>
+      \h.
+        insertCaseTransportDispatch k v leq transLeq total key val l k2 v2 r h
+          (preservesOrdered k v leq transLeq total key val l (getOrderedL k v leq l k2 v2 r h))
+          (preservesOrdered k v leq transLeq total key val r (getOrderedR k v leq l k2 v2 r h))
+  }

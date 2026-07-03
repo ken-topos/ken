@@ -23,6 +23,7 @@ use ken_kernel::env::Decl;
 use ken_kernel::{whnf, Term};
 
 const COLLECTIONS_KEN: &str = include_str!("../../../packages/collections/collections.ken");
+const TRANSPORT_KEN: &str = include_str!("../../../packages/transport/transport.ken");
 const MAP_KEN: &str = include_str!("../../../packages/collections/map.ken");
 
 fn mk_env() -> ElabEnv {
@@ -32,6 +33,7 @@ fn mk_env() -> ElabEnv {
 fn mk_env_with_map() -> ElabEnv {
     let mut env = ElabEnv::new().expect("base env construction failed");
     env.elaborate_file(COLLECTIONS_KEN).expect("collections.ken must elaborate");
+    env.elaborate_file(TRANSPORT_KEN).expect("transport.ken must elaborate");
     env.elaborate_file(MAP_KEN).expect("map.ken must elaborate");
     env
 }

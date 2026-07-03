@@ -17,12 +17,15 @@ use ken_interp::eval::{eval, EvalStore, EvalVal, ListCharIds};
 use ken_kernel::{Decl, GlobalId};
 
 const COLLECTIONS_KEN: &str = include_str!("../../../packages/collections/collections.ken");
+const TRANSPORT_KEN: &str = include_str!("../../../packages/transport/transport.ken");
 const MAP_KEN: &str = include_str!("../../../packages/collections/map.ken");
 
 fn mk_env() -> ElabEnv {
     let mut env = ElabEnv::new().expect("base env");
     env.elaborate_file(COLLECTIONS_KEN)
         .expect("packages/collections/collections.ken must elaborate");
+    env.elaborate_file(TRANSPORT_KEN)
+        .expect("packages/transport/transport.ken must elaborate");
     env.elaborate_file(MAP_KEN)
         .expect("packages/collections/map.ken must elaborate");
     env
@@ -557,6 +560,39 @@ fn tolistordered_law4_is_a_real_general_proof_term() {
         "consSortedHead",
         "allKeysToAllInList",
         "allInListAppendIntro",
+    ] {
+        let id = env.globals[name];
+        assert!(
+            matches!(env.env.lookup(id), Some(Decl::Transparent { .. })),
+            "{name} must be a real proof term, not a postulate"
+        );
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Law 1 (`54 §5.1`, Map capstone unit 2) — `preservesOrdered`
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn preservesordered_law1_is_a_real_general_proof_term() {
+    let env = mk_env();
+    // `preservesOrdered : ... -> Ordered m -> Ordered (insert key val m)`
+    // must be a real Decl::Transparent proof term (never a postulate) —
+    // the whole-body `declare_def` kernel recheck for the top-level
+    // induction plus every supporting transport bridge / comparison-
+    // independent lemma / totality-derived reflection it composes.
+    for name in [
+        "preservesOrdered",
+        "insertCaseTransportDispatch",
+        "dispatchOnQ1",
+        "dispatchOnQ2",
+        "insertCaseTransportOverwrite",
+        "insertCaseTransportIntoL",
+        "insertCaseTransportIntoR",
+        "insertPreservesAllKeys",
+        "allKeysTransBelow",
+        "allKeysTransAbove",
+        "deriveFromFalse",
     ] {
         let id = env.globals[name];
         assert!(
