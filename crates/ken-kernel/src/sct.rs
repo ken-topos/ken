@@ -134,13 +134,69 @@ struct CallEdge {
     matrix: ScMatrix,
 }
 
-/// Peel exactly `n` leading `Lam` binders, assigning provenances.
-/// Fields (first `n_fields` binders) get `field_prov`; IHs get `None`.
-fn enter_method<'a>(
-    mut term: &'a Term,
+/// Is constructor field type `arg_ty` a (direct or W-style Π-bound)
+/// recursive position for family `fam`? Peels leading `Term::Pi` domains
+/// and checks whether the remaining codomain is headed by `fam`.
+///
+/// `ConstructorDecl.recursive_positions` (`env.rs`) is **not** populated by
+/// `declare_inductive` (`check.rs`) for any user-declared inductive —
+/// always `Vec::new()`. This mirrors `ken-interp::eval::is_recursive_arg`,
+/// which independently re-derives the same information from each field's
+/// declared type for the identical reason (see its doc comment). SCT needs
+/// this to know how many trailing IH `Lam` binders a constructor's
+/// compiled method carries (one per recursive field, `sct-completeness`
+/// #12) — trusting `recursive_positions` directly would silently under-
+/// count every constructor's IH slots as zero.
+fn is_recursive_field(arg_ty: &Term, fam: GlobalId) -> bool {
+    match arg_ty {
+        Term::IndFormer { id, .. } => *id == fam,
+        Term::App(f, _) => is_recursive_field(f, fam),
+        Term::Pi(_, cod) => is_recursive_field(cod, fam),
+        _ => false,
+    }
+}
+
+/// Ordered provenance queue for one constructor's own arity: `n_fields`
+/// field slots (get `field_prov`) followed by `n_ihs` IH slots (always
+/// `None`) — the order the match-compiler binds them in.
+fn ctor_pending(
     n_fields: usize,
     n_ihs: usize,
     field_prov: Option<(usize, SizeOrd)>,
+) -> Vec<Option<(usize, SizeOrd)>> {
+    let mut v = Vec::with_capacity(n_fields + n_ihs);
+    v.extend(std::iter::repeat(field_prov).take(n_fields));
+    v.extend(std::iter::repeat(None).take(n_ihs));
+    v
+}
+
+/// Peel a method body's leading `Lam` binders against `pending` (front =
+/// next binder's provenance).
+///
+/// `pending` is *not* assumed to be a flat run of exactly `pending.len()`
+/// leading lambdas: the match-compiler can interleave a **nested**
+/// sub-pattern-split `Elim` before all of the current constructor's own
+/// fields/IHs are bound (`sct-completeness` #12 — e.g. `Node (Node ll lc
+/// lr) c r`, whose `Node` method binds only `l` before splitting on it,
+/// deferring `c, r` and both IH slots into each branch of that split).
+/// When that happens, `dispatch_elim_methods` recurses into the nested
+/// split with the *remaining* `pending` threaded through as a
+/// continuation, so every branch still binds the deferred slots — with
+/// their true `field_prov`/`None` — after its own fresh arity, regardless
+/// of nesting depth.
+///
+/// Only a bare `Term::Var` scrutinee is recognized as a genuine nested
+/// split of the fields currently being bound (the match-compiler only
+/// ever splits on an already-bound variable this way); anything else
+/// falls back to the original flat-peel behavior — stop and hand off to
+/// `collect_calls` generically, which pushes `None` for any further
+/// binders. That fallback is the pre-existing, already-sound
+/// under-assignment (over-rejection is the safe direction) — this
+/// function only ever *adds* correctly-scoped `Down`/`None` assignments
+/// it can positively justify, never guesses.
+fn enter_method<'a>(
+    mut term: &'a Term,
+    mut pending: &[Option<(usize, SizeOrd)>],
     prov: &Provenances,
     caller_idx: usize,
     n_caller: usize,
@@ -149,18 +205,91 @@ fn enter_method<'a>(
     out: &mut Vec<CallEdge>,
 ) {
     let mut cur_prov = prov.clone();
-    let n_total = n_fields + n_ihs;
-    for i in 0..n_total {
+    loop {
+        if pending.is_empty() {
+            collect_calls(term, caller_idx, n_caller, group, &cur_prov, env, out);
+            return;
+        }
         match term {
             Term::Lam(_, body) => {
-                let entry = if i < n_fields { field_prov } else { None };
-                cur_prov = prov_push(&cur_prov, entry);
+                cur_prov = prov_push(&cur_prov, pending[0]);
+                pending = &pending[1..];
                 term = body;
+            }
+            Term::Elim { scrut, .. } if matches!(scrut.as_ref(), Term::Var(_)) => {
+                dispatch_elim_methods(
+                    term, caller_idx, n_caller, group, &cur_prov, env, out, pending,
+                );
+                return;
             }
             _ => break,
         }
     }
     collect_calls(term, caller_idx, n_caller, group, &cur_prov, env, out);
+}
+
+/// Shared `Term::Elim` dispatch: scan `params`/`motive`/`indices`/`scrut`
+/// for calls, compute the scrutinee's field provenance, then recurse into
+/// each constructor method with its own fresh arity queue followed by
+/// `continuation` (the enclosing constructor's still-unbound fields/IHs —
+/// empty at the top level, from `collect_calls`'s own `Elim` arm; nonempty
+/// only when `enter_method` threads a nested split's remainder through).
+fn dispatch_elim_methods(
+    term: &Term,
+    caller_idx: usize,
+    n_caller: usize,
+    group: &[(GlobalId, usize)],
+    prov: &Provenances,
+    env: &GlobalEnv,
+    out: &mut Vec<CallEdge>,
+    continuation: &[Option<(usize, SizeOrd)>],
+) {
+    let Term::Elim {
+        fam,
+        params,
+        motive,
+        methods,
+        indices,
+        scrut,
+        ..
+    } = term
+    else {
+        return;
+    };
+    for p in params {
+        collect_calls(p, caller_idx, n_caller, group, prov, env, out);
+    }
+    collect_calls(motive, caller_idx, n_caller, group, prov, env, out);
+    for ix in indices {
+        collect_calls(ix, caller_idx, n_caller, group, prov, env, out);
+    }
+    collect_calls(scrut, caller_idx, n_caller, group, prov, env, out);
+
+    let scrut_prov = match scrut.as_ref() {
+        Term::Var(i) => prov_get(prov, *i),
+        _ => None,
+    };
+    let field_prov = scrut_prov.map(|(pi, _)| (pi, SizeOrd::Down));
+
+    if let Some(ind) = env.inductive(*fam) {
+        for (k, method) in methods.iter().enumerate() {
+            if k >= ind.constructors.len() {
+                break;
+            }
+            let c = &ind.constructors[k];
+            let n_fields = c.args.len();
+            let n_ihs = c.args.iter().filter(|a| is_recursive_field(a, *fam)).count();
+            let mut own_pending = ctor_pending(n_fields, n_ihs, field_prov);
+            own_pending.extend_from_slice(continuation);
+            enter_method(
+                method, &own_pending, prov, caller_idx, n_caller, group, env, out,
+            );
+        }
+    } else {
+        for method in methods {
+            collect_calls(method, caller_idx, n_caller, group, prov, env, out);
+        }
+    }
 }
 
 /// Traverse `term` collecting edges for all `Const` calls to group members.
@@ -223,48 +352,8 @@ fn collect_calls(
             let p2 = prov_push(prov, None);
             collect_calls(body, caller_idx, n_caller, group, &p2, env, out);
         }
-        Term::Elim {
-            fam,
-            params,
-            motive,
-            methods,
-            indices,
-            scrut,
-            ..
-        } => {
-            for p in params {
-                collect_calls(p, caller_idx, n_caller, group, prov, env, out);
-            }
-            collect_calls(motive, caller_idx, n_caller, group, prov, env, out);
-            for ix in indices {
-                collect_calls(ix, caller_idx, n_caller, group, prov, env, out);
-            }
-            collect_calls(scrut, caller_idx, n_caller, group, prov, env, out);
-
-            let scrut_prov = match scrut.as_ref() {
-                Term::Var(i) => prov_get(prov, *i),
-                _ => None,
-            };
-            let field_prov = scrut_prov.map(|(pi, _)| (pi, SizeOrd::Down));
-
-            if let Some(ind) = env.inductive(*fam) {
-                for (k, method) in methods.iter().enumerate() {
-                    if k >= ind.constructors.len() {
-                        break;
-                    }
-                    let c = &ind.constructors[k];
-                    let n_fields = c.args.len();
-                    let n_ihs = c.recursive_positions.len();
-                    enter_method(
-                        method, n_fields, n_ihs, field_prov, prov, caller_idx, n_caller, group,
-                        env, out,
-                    );
-                }
-            } else {
-                for method in methods {
-                    collect_calls(method, caller_idx, n_caller, group, prov, env, out);
-                }
-            }
+        Term::Elim { .. } => {
+            dispatch_elim_methods(term, caller_idx, n_caller, group, prov, env, out, &[]);
         }
         // Terms with no binders: recurse uniformly.
         Term::Pair(a, b) | Term::Ascript(a, b) | Term::Quot(a, b) => {
