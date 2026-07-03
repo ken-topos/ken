@@ -12,9 +12,9 @@
 >   `lookup-empty`, already shipped in `map.ken`). **Law 4** (`toList`-ordered)
 >   is a Unit-1 law by structure (Gap-B only, comparison-free); its **conclusion
 >   `toListOrdered`** (via `consSorted`/`isSortedAppend`) is **PENDING** a
->   residual `TypeMismatch` grounding (§7) — undetermined proof-bug-vs-gap, so
->   this doc documents law 4's *structure* but does **not** claim its conclusion
->   builds today.
+>   **confirmed kernel conv-completeness gap** (Gap-conv, §7) — *not* a
+>   proof-construction bug — so this doc documents law 4's *structure* but does
+>   **not** claim its conclusion builds today.
 > - **Unit 2 — not yet buildable.** Laws **1/2/3/5**'s **Gap-A nested-`J`
 >   transport composition**. "Wall 1" is a **real** `infer_j` nested-motive
 >   scoping bug (Architect `evt_3vd9w6c779sm6`); its lane (a combinator
@@ -328,15 +328,18 @@ keyLeq (toList m'))`.
 
   > **Conclusion `toListOrdered` is PENDING (§7).** The bridge **L2** builds
   > today (§2.2). The **conclusion** — `consSorted`/`isSortedAppend` assembling
-  > the `Node` step — currently fails with a residual `TypeMismatch`, isolated
-  > to a Map-free minimal repro (a named non-recursive comparator wrapper not
-  > delta-unfolding at a `check_match_dependent` check site, though the same
-  > wrapper unfolds fine outside dependent-match). It is **undetermined**
-  > whether this is a real elaborator gap or a further proof-construction bug —
-  > Architect is grounding it. Per honesty-about-the-boundary this doc does
-  > **not** claim `toListOrdered` builds today; it folds in as buildable if the
-  > gap resolves to a proof bug, or is deferred (like Unit 2) if it is a real
-  > wall.
+  > the `Node` step — fails with a residual `TypeMismatch` that is now a
+  > **confirmed kernel conv-completeness gap** (Steward `evt_100wzkpg4qr5v`),
+  > **not** a proof-construction bug: `conv_struct` (`conv.rs`) has no
+  > `(Eq, Eq)` congruence arm, so two `Eq` types that differ only by a reducible
+  > sub-term — here `isSorted`'s pair-indexed comparator vs. the bound chain's
+  > key-indexed predicate — fall through to `false` instead of converting by a
+  > delta/iota step inside the `Eq` argument. The fix is a small congruence arm,
+  > tracked as a separate **Kernel WP** (Gap-conv; Architect confirmed the
+  > vector, `evt_2s3brvnr2cta2`); `toListOrdered` builds once it lands. Per
+  > honesty-about-the-boundary this doc does **not** claim `toListOrdered`
+  > builds today, and it does **not** fold in as a proof-bug fix — that door is
+  > closed.
 
 ### 5.2 Laws 1/2/3/5 — Gap-B convoy skeleton (Gap-A transport → Unit 2)
 
@@ -441,12 +444,15 @@ clean on `4d4aaad` in convoy form (Steward `evt_jb3nbm008xq0`), and
 ceiling holds:
 
 - **Law 4's conclusion `toListOrdered` (via `consSorted`/`isSortedAppend`, L4)
-  is PENDING** — a residual `TypeMismatch` (a named comparator wrapper not
-  delta-unfolding at a `check_match_dependent` check site) that Architect is
-  grounding. If it resolves to a proof-construction bug, `toListOrdered` folds
-  in as buildable; if it is a genuine elaborator gap, it is deferred like
-  Unit 2.
-  This doc does **not** claim it builds today.
+  is PENDING** — a **confirmed kernel conv-completeness gap** (`conv_struct` has
+  no `(Eq, Eq)` congruence arm, so an `Eq` type whose argument needs a
+  delta/iota step — the pair-indexed comparator vs. the key-indexed bound
+  predicate — is
+  rejected). This is **not** a proof-construction bug; the fix is a small
+  congruence arm tracked as a separate **Kernel WP** (Gap-conv, joins the
+  staged/gated lane; Architect confirmed the vector `evt_2s3brvnr2cta2`), and
+  `toListOrdered` builds once it lands. This doc does **not** claim it builds
+  today, and it does **not** fold in as a proof-bug fix.
 - **Laws 1/2/3/5 are Unit-2, transport-blocked** — their Gap-A nested-`J`
   composition hits the real `infer_j` scoping bug (§3). Their Gap-B convoy
   skeleton (§5.2) is buildable structure; the transport step is not, and the
