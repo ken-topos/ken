@@ -725,9 +725,16 @@ impl-ready).** The floor + 5 string ops, mapping the WP frame's AC1–AC7:
   **non-degenerate pair**: `eq` **accepts** two equal scalar sequences **and
   rejects** a differing pair (incl. a same-length, single-codepoint-differing
   pair); `compare` gives `Lt` / `Eq` / `Gt` correctly on the ordered triple
-  `"a" < "ab" < "b"`. Assert the **result value**. A canonically-equivalent but
-  codepoint-**distinct** pair (NFC vs NFD of one grapheme) must compare
-  **unequal** — pins that NFC-eq was **not** smuggled in (ADR 0010 §3).
+  `"a" < "ab" < "b"`. Assert the **result value**. **NFC-blindness is pinned at
+  the `List Char` layer** — `list_eq eqChar` on a precomposed vs decomposed
+  scalar sequence (NFC vs NFD of one grapheme, built directly as `List Char`)
+  reduces **unequal** *unconditionally*, pinning that NFC-eq was **not**
+  smuggled in (ADR 0010 §3). Do **not** pin this on `String` *literals*:
+  `String` is NFC-normalized at construction (`§2.1`, a deferred behavior —
+  currently stubbed), so once real NFC lands the two literals merge to one value
+  and `eq` on them is **`True`**; a literal-level pin would falsely fail then
+  (the over-pin-a-deferred-behavior trap). Under real NFC the content-addressed
+  `==` and codepoint-wise `eq` **agree** on `String` values.
 - **DS-AC6 (name hygiene).** `list_append` does not shadow the `Bytes` `append`
   (`§4.1`); both resolve to their intended op.
 - **DS-AC7 (round-trip / totality).** `concat`+`slice` compose sanely (e.g.
