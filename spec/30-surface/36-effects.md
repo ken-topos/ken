@@ -628,9 +628,12 @@ runState : s → ITree (State s ⊕ F) a → ITree F (a × s)      -- §4.2, ver
 runState s₀ m  :  a × s        when F = ∅   -- pure collapse: ITree 𝟘 (a × s) ≅ a × s (§2.4)
 ```
 
-- The result pair `a × s` is `(result, final-state)`. Its landed prelude type is
-  **`Prod a s`** / `MkProd` (`crates/ken-elaborator/src/prelude.rs`), the Σ-pair
-  §4.2 writes `R × S`; the frame's illustrative `Pair a s` is this `Prod`.
+- The result pair `a × s` is `(result, final-state)` — the **Σ-pair** `R × S`
+  that §4.2 returns (`(r, s)`, a right-nested Σ / record with η, `13 §3`),
+  realized at runtime by the interpreter's `EvalVal::Pair` (`ken-interp`). The
+  frame's illustrative `Pair a s` is this Σ-pair. (A named inductive
+  `data Prod a b = MkProd a b` is also landed in the prelude, but the denotation
+  uses the Σ-pair, not that inductive.)
 - **`runState` is an ordinary *total Ken definition*** — the §4.2 fold,
   structural on the sub-tree via `elim_ITree`, kernel-re-checked — **not** a
   trusted Rust primitive. This is what makes `[State s]`
