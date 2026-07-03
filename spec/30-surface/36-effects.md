@@ -926,7 +926,7 @@ on the bug it targets, not pass vacuously):
 6. **Direct `[State s]` surface** — drive the **real** producer, not a hand-fed
    harness (`conformance-hand-feeds-the-deliverable`): a `get`/`put` program run
    under `runState s₀` through the **actual interpreter** returns the correct
-   `(result, final-state)` `Prod` — the post-increment `next`
+   `(result, final-state)` Σ-pair (`R × S`, §4.2) — the post-increment `next`
    (`runState 0 next = (0,1)`, `runState 41 next = (41,42)`, §4.5.3). Assert the
    **paired value**, plus (a) **composition** — a `[State s, Console]` program
    threads state identically whether `runState` or the Console handler is peeled
