@@ -4,20 +4,36 @@
 //! ES2-remainder AC1/AC2 for `isSorted`/`Perm`) against the **real**
 //! `prelude.rs`/`trusted_base()` (producer-grep, not a hand-fed test): after
 //! ES2, `Equal`/`And`/`Bool`/`IO`/`print_line`/`isSorted`/`Perm` must not
-//! remain `declare_postulate`d assumed axioms, and `Map`/`Set` must be
-//! re-classed `declare_primitive` (still trusted, but audited, item-2)
-//! rather than removed.
+//! remain `declare_postulate`d assumed axioms. `Map`/`Set` were originally
+//! re-classed `declare_primitive` here (still trusted, audited, item-2) —
+//! **superseded by Map-build** (`spec/50-stdlib/52-map.md`, VAL2 #8/OQ-A):
+//! the audited primitive is now **retired outright**, replaced by a proved,
+//! pure `Tree k v` (`packages/collections/map.ken`) that is derived Ken —
+//! `declare_inductive`/`declare_def`, never `declare_primitive`/
+//! `declare_postulate` — a **net-negative** `trusted_base()` delta (AC4
+//! below now pins the retirement, not the re-class).
 //!
 //! Spec: `spec/30-surface/37-strings-collections.md` §6 (`isSorted`/`Perm`
 //! defining shapes); `conformance/surface/taxonomy/minimality.md` (the
-//! derivation table).
+//! derivation table); `spec/50-stdlib/52-map.md` §1.1/§9 (Map-build's
+//! supersession + AC1 net-negative TCB).
 
-use ken_elaborator::ElabEnv;
+use ken_elaborator::{foreign::trusted_base_delta, ElabEnv};
 use ken_kernel::env::Decl;
 use ken_kernel::{whnf, Term};
 
+const COLLECTIONS_KEN: &str = include_str!("../../../packages/collections/collections.ken");
+const MAP_KEN: &str = include_str!("../../../packages/collections/map.ken");
+
 fn mk_env() -> ElabEnv {
     ElabEnv::new().expect("base env construction failed")
+}
+
+fn mk_env_with_map() -> ElabEnv {
+    let mut env = ElabEnv::new().expect("base env construction failed");
+    env.elaborate_file(COLLECTIONS_KEN).expect("collections.ken must elaborate");
+    env.elaborate_file(MAP_KEN).expect("map.ken must elaborate");
+    env
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -218,47 +234,53 @@ fn match_on_comparison_result_elaborates() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// AC4 — Map/Set re-class preserves trust (still audited, not regressed)
+// AC4 — Map/Set are RETIRED (net-negative TCB), superseded by the proved,
+// derived `Tree k v` (`52-map.md` AC1/AC5) — flipped from the original
+// "stays audited" assertion this WP superseded.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// `Map`/`Set` stay in `trusted_base()` (no trust regression) but as
-/// `Decl::Primitive` (audited, item-2) — never `Decl::Opaque` (assumed
-/// axiom, item-3).
+/// `Map`/`Set` no longer exist as prelude-primitive globals at all — the
+/// opaque `declare_primitive` entries are GONE (`52 §9` AC1(b)/AC5), not
+/// merely re-classed. This is the net-negative half: two `trusted_base()`
+/// entries removed, verified structurally (absence from `env.globals`), not
+/// asserted from the spec.
 #[test]
-fn map_set_reclassed_primitive_stay_in_trusted_base() {
+fn map_set_retired_not_prelude_primitives() {
     let env = mk_env();
-    let tb = env.env.trusted_base();
-    for name in ["Map", "Set"] {
-        let id = env.globals[name];
-        assert!(
-            tb.contains(&id),
-            "AC4: '{}' must remain in trusted_base() (audited primitive, not removed)",
-            name
-        );
-        match env.env.lookup(id) {
-            Some(Decl::Primitive { .. }) => {}
-            other => panic!(
-                "AC4: '{}' must be Decl::Primitive (re-classed, not Decl::Opaque); got {:?}",
-                name, other
-            ),
-        }
-    }
+    assert!(
+        !env.globals.contains_key("Map"),
+        "AC1/AC5: 'Map' must no longer exist as a prelude-primitive global — retired by Map-build"
+    );
+    assert!(
+        !env.globals.contains_key("Set"),
+        "AC1/AC5: 'Set' must no longer exist as a prelude-primitive global — retired by Map-build"
+    );
 }
 
-/// Discriminating pair: a demotion that leaves the postulate in place fails
-/// AC1's `Opaque` check above; a re-class that instead REMOVES `Map`/`Set`
-/// from `trusted_base()` entirely (rather than correctly re-classing) would
-/// fail here — the verdict must flip on the specific fate (stays-audited vs
-/// removed vs stays-assumed), not just "some change happened."
+/// The replacement — `Tree k v` + its ops (`packages/collections/map.ken`)
+/// — is derived, kernel-rechecked Ken: `Tree` is `Decl::Inductive`
+/// (`declare_inductive`), every op is `Decl::Transparent` (`declare_def`).
+/// Discriminating pair with the retirement test above: a build that adds the
+/// proved map WITHOUT retiring the primitive (two `Map`s) passes this test
+/// but fails the retirement test; a build that retires the primitive but
+/// ships the replacement as a NEW `declare_primitive`/`declare_postulate`
+/// (re-growing `trusted_base()`) fails THIS test. Both halves of AC1(b)'s
+/// "net delta is a shrink by exactly two, zero new" must hold together.
 #[test]
-fn map_set_are_not_opaque_postulates() {
-    let env = mk_env();
-    for name in ["Map", "Set"] {
+fn map_replacement_is_derived_not_primitive() {
+    let env = mk_env_with_map();
+    let tree_id = env.globals["Tree"];
+    assert!(
+        matches!(env.env.lookup(tree_id), Some(Decl::Inductive { .. })),
+        "AC1(b): the replacement carrier 'Tree' must be Decl::Inductive (declare_inductive), never a primitive"
+    );
+    for name in ["insert", "lookup", "member", "toList", "fromList", "setInsert", "setMember", "setToList"] {
         let id = env.globals[name];
         assert!(
-            !matches!(env.env.lookup(id), Some(Decl::Opaque { .. })),
-            "AC4: '{}' must not remain Decl::Opaque (assumed axiom)",
-            name
+            matches!(env.env.lookup(id), Some(Decl::Transparent { .. })),
+            "AC1(b): '{name}' must be Decl::Transparent (declare_def), never declare_primitive/declare_postulate"
         );
+        let delta = trusted_base_delta(&env.env, id);
+        assert!(delta.is_empty(), "AC1(b): '{name}' must add ZERO new trusted_base() entries, got {delta:?}");
     }
 }

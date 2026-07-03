@@ -59,8 +59,6 @@ pub fn empty_prelude_env() -> PreludeEnv {
         char_length_id: z,
         string_to_list_char_id: z,
         list_char_to_string_id: z,
-        map_id: z,
-        set_id: z,
         // VAL1-surface Console/IO declarations (`36 §2.1`, VAL1-surface).
         unit_id: z,
         mkunit_id: z,
@@ -126,11 +124,6 @@ pub struct PreludeEnv {
     pub string_to_list_char_id: GlobalId,
     /// `list_char_to_string : List Char → String` (total, `37 §2.3`).
     pub list_char_to_string_id: GlobalId,
-    // L3b: abstract collection types (`37 §6`).
-    /// `Map : Type → Type → Type` (abstract; `DecEq K` gate via `where`).
-    pub map_id: GlobalId,
-    /// `Set : Type → Type` (abstract; `DecEq A` gate via `where`).
-    pub set_id: GlobalId,
     // VAL1-surface: Console/IO declarations (`36 §2.1`, VAL1-surface).
     /// `Unit` — the one-element type (`data Unit = MkUnit`).
     pub unit_id: GlobalId,
@@ -382,6 +375,76 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     // then unify against `expected`) handles it like any other constant.
     elab.globals.insert("tt".to_string(), elab.env.tt_id());
 
+    // `Pair : Type -> Type -> Type` — the non-dependent Sigma pair,
+    // `k × v` (`52-map.md §4`, `13 §3`): "the Σ-pair... distinct from the
+    // inductive `Prod`". Built exactly like `And`'s `Σ(_:A).B` above — the
+    // kernel Sigma/Pair/Proj1/Proj2 formers are already landed
+    // (`ken-kernel/src/term.rs`); only the concrete `×` INFIX surface
+    // spelling is missing, which `52-map.md §4`'s own hedge tags `(oracle)`
+    // ("any still-open surface-syntax token is tagged `(oracle)`") — the
+    // mechanism (Sigma) is landed, so this is a named-application spelling
+    // of it, not a new kernel feature or a workaround. `mkPair`/`pairFst`/
+    // `pairSnd` are the corresponding intro/elim helpers (no surface `.1`/
+    // `.2` projection exists for a bare Sigma — that syntax is reserved for
+    // class-dictionary records only, `elab.rs::infer_proj`).
+    let pair_ty_ty = Term::pi(type0.clone(), Term::pi(type0.clone(), type0.clone()));
+    let pair_ty_body = Term::lam(
+        type0.clone(),
+        Term::lam(type0.clone(), Term::sigma(Term::var(1), weaken(&Term::var(0), 1))),
+    );
+    let pair_ty_id = declare_def(&mut elab.env, vec![], pair_ty_ty, pair_ty_body)
+        .map_err(|e| ElabError::Internal(format!("prelude Pair failed: {}", e)))?;
+    elab.globals.insert("Pair".to_string(), pair_ty_id);
+
+    // `mkPair : (a:Type) -> (b:Type) -> a -> b -> Pair a b`.
+    let pair_app_at_len2 =
+        Term::app(Term::app(Term::const_(pair_ty_id, vec![]), Term::var(1)), Term::var(0));
+    let pair_app_at_len4 =
+        Term::app(Term::app(Term::const_(pair_ty_id, vec![]), Term::var(3)), Term::var(2));
+    let mkpair_ty = Term::pi(
+        type0.clone(),
+        Term::pi(
+            type0.clone(),
+            Term::pi(Term::var(1), Term::pi(Term::var(1), pair_app_at_len4)),
+        ),
+    );
+    let mkpair_body = Term::lam(
+        type0.clone(),
+        Term::lam(
+            type0.clone(),
+            Term::lam(Term::var(1), Term::lam(Term::var(1), Term::pair(Term::var(1), Term::var(0)))),
+        ),
+    );
+    let mkpair_id = declare_def(&mut elab.env, vec![], mkpair_ty, mkpair_body)
+        .map_err(|e| ElabError::Internal(format!("prelude mkPair failed: {}", e)))?;
+    elab.globals.insert("mkPair".to_string(), mkpair_id);
+
+    // `pairFst : (a:Type) -> (b:Type) -> Pair a b -> a`.
+    let fst_ty = Term::pi(
+        type0.clone(),
+        Term::pi(type0.clone(), Term::pi(pair_app_at_len2.clone(), Term::var(2))),
+    );
+    let fst_body = Term::lam(
+        type0.clone(),
+        Term::lam(type0.clone(), Term::lam(pair_app_at_len2.clone(), Term::proj1(Term::var(0)))),
+    );
+    let fst_id = declare_def(&mut elab.env, vec![], fst_ty, fst_body)
+        .map_err(|e| ElabError::Internal(format!("prelude pairFst failed: {}", e)))?;
+    elab.globals.insert("pairFst".to_string(), fst_id);
+
+    // `pairSnd : (a:Type) -> (b:Type) -> Pair a b -> b`.
+    let snd_ty = Term::pi(
+        type0.clone(),
+        Term::pi(type0.clone(), Term::pi(pair_app_at_len2.clone(), Term::var(1))),
+    );
+    let snd_body = Term::lam(
+        type0.clone(),
+        Term::lam(type0.clone(), Term::lam(pair_app_at_len2, Term::proj2(Term::var(0)))),
+    );
+    let snd_id = declare_def(&mut elab.env, vec![], snd_ty, snd_body)
+        .map_err(|e| ElabError::Internal(format!("prelude pairSnd failed: {}", e)))?;
+    elab.globals.insert("pairSnd".to_string(), snd_id);
+
     // `Decimal`/`Char` DEMOTE→derived (`18a §5.6`/`§5.9`, Phase-2 tranche #2).
     // Must run here: after `Equal`/`And`/`Prop`/`tt` (needed by `IsTrue`),
     // before the L3a String-ops registration below (needs `Char` in
@@ -551,26 +614,18 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         .map_err(|e| ElabError::Internal(format!("prelude Perm failed: {}", e)))?;
     elab.globals.insert("Perm".to_string(), perm_id);
 
-    // ── L3b: abstract collection types (`37 §6`) ───────────────────────────
-    // `Map : Type → Type → Type` — abstract; `DecEq K` gate enforced via
-    // the `where` constraint mechanism in `elaborate_rdecl_v1` (L3b).
-    //
-    // ES2: RE-CLASS `declare_postulate` → `declare_primitive` OpaqueType.
-    // `Map`/`Set` are genuinely runtime (O(1) content-addressed canonical
-    // form, `41 §3a`) — not derivable — but are *audited primitives* (item-2,
-    // like `String`/`Bytes`), not *assumed axioms* (item-3). They stay in
-    // `trusted_base()`, correctly re-classed (no trust regression).
-    let map_ty =
-        Term::pi(type0.clone(), Term::pi(type0.clone(), type0.clone()));
-    let map_id = declare_primitive(&mut elab.env, vec![], map_ty, PrimReduction::OpaqueType)
-        .map_err(|e| ElabError::Internal(format!("prelude Map failed: {}", e)))?;
-    elab.globals.insert("Map".to_string(), map_id);
-
-    // `Set : Type → Type` — abstract; same `DecEq A` gate.
-    let set_ty = Term::pi(type0.clone(), type0.clone());
-    let set_id = declare_primitive(&mut elab.env, vec![], set_ty, PrimReduction::OpaqueType)
-        .map_err(|e| ElabError::Internal(format!("prelude Set failed: {}", e)))?;
-    elab.globals.insert("Set".to_string(), set_id);
+    // `Map`/`Set` (`37 §6`) were RETIRED here (ES2's audited
+    // `declare_primitive` OpaqueType re-class) — Map-build (`52-map.md`,
+    // VAL2 #8 / OQ-A) supersedes that placeholder with a **proved, pure**
+    // ordered BST (`packages/collections/map.ken`'s `Tree k v` + `insert`/
+    // `lookup`/`member`/`toList`/`fromList`/`fold`/`Set*`), a transparent
+    // inductive admitted via `declare_inductive`/`declare_def` — kernel-
+    // rechecked, not audited-opaque. Net-negative `trusted_base()` delta
+    // (`52 §1.1`/`§9` AC1): the two entries below are GONE, nothing new is
+    // added here (the map's carrier/ops/laws are package Ken, not prelude
+    // primitives). `Map`/`Set` are no longer prelude-global names; a
+    // program spells the carrier `Tree k v` (`52 §3`), matching the spec's
+    // own naming — there are not two `Map`s (`52 §1.1`).
 
     // ── L3a String surface ops (`37 §2`) ───────────────────────────────────
     // `String` (bytes layer) + `Int` (numeric tower) + `Char` (numeric) +
@@ -710,8 +765,6 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         char_length_id,
         string_to_list_char_id,
         list_char_to_string_id,
-        map_id,
-        set_id,
         unit_id,
         mkunit_id,
         console_op_id,

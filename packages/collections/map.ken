@@ -1,0 +1,162 @@
+-- `Map`/`Set` -- a proved, pure ordered BST (spec/50-stdlib/52-map.md,
+-- VAL2 #8 / OQ-A). Retires the opaque `declare_primitive` `Map`/`Set`
+-- (`ken-elaborator/src/prelude.rs`) -- the carrier is a transparent
+-- inductive, every op is a `declare_def` (kernel-rechecked, `52 §1.1`).
+--
+-- Carrier: bare unbalanced ordered BST, no balance metadata (`52 §3`).
+-- `k × v` is spelled `Pair k v` here -- the SIGMA pair (`13 §3`, `52 §4`:
+-- "distinct from the inductive `Prod`"), never `Prod`. The concrete `×`
+-- infix token is `(oracle)` per `52 §4`'s own hedge ("any still-open
+-- surface-syntax token is tagged `(oracle)`") -- the MECHANISM is landed
+-- (`Pair`/`mkPair`/`pairFst`/`pairSnd`, `ken-elaborator/src/prelude.rs`,
+-- built the same way `And A B := Sigma(_:A).B` already is), only the infix
+-- spelling is open.
+--
+-- Key-comparator threading (`52 §2`, `§5.4` "parametric in `Ord k`"):
+-- Architect-ruled UNBUNDLED explicit-dictionary encoding
+-- (`evt_38nvzzdwb8ewn`) -- `where Ord k` and a bundled `(d : Ord k)` record
+-- parameter both hit landed elaborator gaps (`instance_search` needs a
+-- concrete head; `(d).field` doesn't parse in TYPE position). The bundled
+-- `Ord` class/`where` spelling is `(oracle)`-tagged pending a Language
+-- surface-syntax follow-on; the SUBSTANCE here is real and `k`-parametric --
+-- every op/law below takes the comparator (`leq`) and, where needed, its
+-- laws (`reflLeq`/`antisymLeq`/`transLeq`/`totalLeq`) as SEPARATE bare
+-- parameters, matching the landed `conformance/challenge/C5-verified-sort/
+-- sound-verified-sort.ken` idiom (bare `leq : a -> a -> Bool` threaded over
+-- an abstract carrier). At a concrete call site the caller supplies these by
+-- projecting a landed `Ord` instance in TERM position (e.g.
+-- `(Ord_instance_Char).leq`), the same monomorphic-transport idiom already
+-- in `packages/lawful-classes/lawful_classes.ken` -- ordinary projection,
+-- not `where`-resolution.
+
+data Tree k v = Leaf | Node (Tree k v) k v (Tree k v)
+
+-- `empty = Leaf` (`52 §4.1`).
+view empty (k : Type) (v : Type) : Tree k v = Leaf k v
+
+-- `toList` -- the in-order traversal (`52 §4.2`): `toList Leaf = Nil`,
+-- `toList (Node l k v r) = append (toList l) (Cons (k,v) (toList r))`,
+-- reusing the landed `list_append` (`packages/collections/collections.ken`).
+-- Over an `Ordered` tree the output keys are ascending (`52 §5.3`) -- the
+-- `Ordered`-preservation half of that claim needs `insert`, deferred above;
+-- `toList` itself is a plain flat two-sided structural recursion (the same
+-- shape kernel's `sct-completeness` control tests confirmed already passes
+-- SCT today).
+view toList (k : Type) (v : Type) (m : Tree k v) : List (Pair k v) =
+  match m {
+    Leaf => Nil (Pair k v) ;
+    Node l key val r =>
+      list_append (Pair k v) (toList k v l) (Cons (Pair k v) (mkPair k v key val) (toList k v r))
+  }
+
+-- `fold f z m` folds `f` over the entries in ascending key order (`52 §4.3`)
+-- -- the same order `toList` fixes: left subtree first, then the current
+-- node, then the right subtree, so `fold f z m` agrees with the left fold of
+-- `f` over `toList m` by construction (not merely by coincidence of a
+-- particular recursion, per `52 §4.3`'s order-contract framing).
+view fold (k : Type) (v : Type) (b : Type) (f : k -> v -> b -> b) (z : b) (m : Tree k v) : b =
+  match m {
+    Leaf => z ;
+    Node l key val r => fold k v b f (f key val (fold k v b f z l)) r
+  }
+
+-- `insert key val m` (`52 §4.1`) -- descends by `leq`: at `Node l k2 v2 r`,
+-- if `leq key k2 /\ leq k2 key` the keys coincide -> overwrite the value at
+-- that node; else recurse left (`leq key k2`, key < k2) or right (key > k2);
+-- at `Leaf`, place a new `Node`.
+view insert (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k) (val : v) (m : Tree k v) : Tree k v =
+  match m {
+    Leaf => Node k v (Leaf k v) key val (Leaf k v) ;
+    Node l k2 v2 r =>
+      match leq key k2 {
+        True =>
+          match leq k2 key {
+            True  => Node k v l key val r ;
+            False => Node k v (insert k v leq key val l) k2 v2 r
+          } ;
+        False => Node k v l k2 v2 (insert k v leq key val r)
+      }
+  }
+
+-- `lookup key m` (`52 §4.1`) -- retraces `insert`'s SAME `leq` decisions;
+-- returns `Some v` at the coinciding node, `None` at `Leaf`.
+view lookup (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k) (m : Tree k v) : Option v =
+  match m {
+    Leaf => None v ;
+    Node l k2 v2 r =>
+      match leq key k2 {
+        True =>
+          match leq k2 key {
+            True  => Some v v2 ;
+            False => lookup k v leq key l
+          } ;
+        False => lookup k v leq key r
+      }
+  }
+
+-- `member key m = isSome (lookup key m)` (`52 §4.1`).
+view member (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k) (m : Tree k v) : Bool =
+  match lookup k v leq key m {
+    None    => False ;
+    Some x  => True
+  }
+
+-- `fromList` folds `insert` over the list (`52 §4.2`): `fromList = foldr (\
+-- (k,v) m. insert k v m) empty`. Threaded via an accumulator so EARLIER list
+-- entries are inserted FIRST and LATER entries insert last (and so overwrite
+-- on a duplicate key) -- matching `52 §4.2`'s last-writer-wins semantics
+-- (`fromList [(2,b),(1,a),(2,c)] -> toList = [(1,a),(2,c)]`, `c` the LAST
+-- list entry, wins). A naive `insert head (fromList tail)` would insert the
+-- HEAD last instead (wrong direction) -- `fromListAcc` avoids that by
+-- inserting `p` into `acc` BEFORE recursing on the tail, so the tail's own
+-- inserts land strictly after `p`'s in evaluation order.
+view fromListAcc (k : Type) (v : Type) (leq : k -> k -> Bool) (xs : List (Pair k v)) (acc : Tree k v) : Tree k v =
+  match xs {
+    Nil => acc ;
+    Cons p xs2 => fromListAcc k v leq xs2 (insert k v leq (pairFst k v p) (pairSnd k v p) acc)
+  }
+
+view fromList (k : Type) (v : Type) (leq : k -> k -> Bool) (xs : List (Pair k v)) : Tree k v =
+  fromListAcc k v leq xs (Leaf k v)
+
+-- `Set a := Map a Unit` (`52 §4.4`) -- values carry no information;
+-- `setInsert`/`setMember` are the map's own `insert`/`member` at `v:=Unit`,
+-- `setToList` projects the keys out of `toList`'s `Pair a Unit` entries.
+view pairKeys (k : Type) (v : Type) (xs : List (Pair k v)) : List k =
+  match xs {
+    Nil => Nil k ;
+    Cons p xs2 => Cons k (pairFst k v p) (pairKeys k v xs2)
+  }
+
+view setInsert (a : Type) (leq : a -> a -> Bool) (x : a) (s : Tree a Unit) : Tree a Unit =
+  insert a Unit leq x (MkUnit) s
+
+view setMember (a : Type) (leq : a -> a -> Bool) (x : a) (s : Tree a Unit) : Bool =
+  member a Unit leq x s
+
+view setToList (a : Type) (s : Tree a Unit) : List a =
+  pairKeys a Unit (toList a Unit s)
+
+-- `Ordered` -- the ordering invariant (`52 §5.1`), naturally `Ω`: built from
+-- the `IsTrue b := Equal Bool b True` bridge + the derived `Ω`-conjunction
+-- `And` (`16 §1.3`) -- a `declare_def` the prover unfolds, never a postulate
+-- (mirrors `isSorted`'s shape, `ken-elaborator/src/prelude.rs`, lifted from
+-- lists to trees). `allKeys p m` = "every key in `m` satisfies `p`".
+view allKeys (k : Type) (v : Type) (p : k -> Prop) (m : Tree k v) : Prop =
+  match m {
+    Leaf => Equal Bool True True ;
+    Node l key val r => And (p key) (And (allKeys k v p l) (allKeys k v p r))
+  }
+
+view Ordered (k : Type) (v : Type) (leq : k -> k -> Bool) (m : Tree k v) : Prop =
+  match m {
+    Leaf => Equal Bool True True ;
+    Node l key val r =>
+      And (allKeys k v (\k2. Equal Bool (leq k2 key) True) l)
+      (And (allKeys k v (\k2. Equal Bool (leq key k2) True) r)
+      (And (Ordered k v leq l) (Ordered k v leq r)))
+  }
+
+-- `52 §5.2` law 1 -- `lookup k empty = None`, immediate (`empty = Leaf`).
+view lookupEmptyIsNone (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k) :
+  Equal (Option v) (lookup k v leq key (empty k v)) (None v) = tt
