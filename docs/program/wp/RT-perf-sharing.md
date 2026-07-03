@@ -1,127 +1,128 @@
-# RTP1 — `ken-interp` call-by-need substitution sharing (perf)
+# RTP1 — `ken-interp`: eliminate redundant per-reduction recomputation (perf)
 
 **Steward frame → Team Runtime.** A Runtime/interp **performance** WP. Fixes an
 exponential evaluation blowup surfaced by VAL2. **Design is settled** — the
-Architect resolved the fix-approach fork from `docs/PRINCIPLES.md`
-(`evt_6cq5whrbkw1hs`, ruling **(B)**); this frame pins that as a fixed input, it
-is **not** to be reopened. Owner: **runtime-leader → runtime-implementer →
-runtime-qa.** Gate: **Architect soundness (value-preservation on the corpus) +
-Runtime QA + CI.** No spec/CV vote (no `/spec` touch, no primitive). Findings →
-**Steward**.
+Architect resolved the fix approach from `docs/PRINCIPLES.md` and **re-ruled it on
+instrumented data** (`evt_7tgn3jz0z0kr4` + env-size amendment `evt_4snaecww34mnz`);
+this frame pins that, it is **not** to be reopened. Owner: **runtime-leader →
+runtime-implementer → runtime-qa.** Gate: **Architect soundness (value-preservation
+on the corpus + kernel-untouched) + Runtime QA + CI.** No spec/CV (no `/spec` touch,
+no primitive). Findings → **Steward**.
+
+> **⚠ THIS FRAME SUPERSEDES the original "call-by-need substitution sharing"
+> approach.** RTP1's D1 confirm (`evt_4egrcrt5srd7v`) **falsified** the no-sharing
+> premise with instrumented `elim_reduce` call-counts. The corrected root cause and
+> fix direction (B') are below. `single` (nothing to share) is *already* 2×
+> exponential and `doubleLet` (the call-by-need target) is the *same* rate — so
+> substitution sharing already works; call-by-need has no purchase. **Do not
+> implement memoised substitution.**
 
 ## Why
-VAL2's `natToDecimalFueled` (Nat→decimal-String) is **exponential in the printed
-value** — `natToDecimal 10` = 28.5s, ~2.4–3.2× per +1 — so `factorial`=120 /
-`fibonacci`=55 are unreachable (infeasible, not merely slow). The algorithmic
-depth is only ~log10(n); the cost is in the **evaluator**, not the Ken source.
-The discriminating evidence (already gathered, VAL2):
+VAL2's numeric-printing (`natToDecimalFueled`) and `mergeSort` are catastrophically
+slow, and D1 instrumentation pinned the cause. Two observables, most plausibly **one
+bug**:
+- **Value-depth / redundant-walk (confirmed).** `elim_reduce` call-counts:
+  `single` (`Suc m => Suc (single m)`, one self-ref) = **2.00×/+depth**; `doubleLet`
+  (`let r = … in natAdd r r`) = **same 2.00×**; `double` (two explicit self-refs) =
+  **3.00×**. `single` has zero reference-multiplicity yet is already exponential →
+  the cost is a **structurally-duplicated recursive walk the mechanism always
+  performs**, not a shared redex.
+- **Environment-size amplification (VAL2 finding #6).** Prepending **3 small,
+  semantically-unrelated** decls (`data OrdResult = Lt|Eq|Gt`, a `list_append`, a
+  `concat`) to `gcd.ken` turns an otherwise-**55ms** `natToDecimal(4)` into a
+  **60s+ timeout** (1000×+). The per-reduction redundant work also scales with
+  **environment size** (weakening / GlobalId indexing / term-size-under-weakening
+  over *all* globals).
 
-| shape | case | cost |
-|---|---|---|
-| bound `n` referenced **once** per body | `printLoop` @ n=20 | **3.6ms** |
-| bound `n` referenced **twice** per body (`div10 n`, `mod10 n`) | `natToDecimalFueled` @ n=10 | **28.5s** |
-
-~8000× apart at comparable recursion depth, the *only* structural difference
-being reference-multiplicity of a bound value. That is the textbook signature of
-**call-by-name without sharing**: each reference independently re-walks the bound
-value; ≥2 references compound through the recursion → exponential. This is the
-same "no-sharing" family as the parked L3-strings `O(n^3.5–4)` item — (B) should
-subsume both.
+## Corrected root cause (Architect-confirmed)
+`elim_reduce`'s **eager IH computation** (`eval.rs` ~445-450) computes the
+induction-hypothesis value for **every** recursive constructor position
+**unconditionally** — on every reduction, whether or not the selected method body
+consumes that IH binder. For surface recursion compiled as a self-call (not via the
+IH binder), the eager IH is a **redundant walk whose result is discarded**
+(`apply`'s `_ => Neutral`), while the body does its own recursion → the 2× baseline,
+compounding with each additional explicit self-reference. The env-size amplification
+is most plausibly the **same** bug's per-step cost scaling with env size
+(`redundant-walk-count × O(env)/step`); eliminating the redundant walks collapses
+the exponential multiplier and leaves the O(env) cost applying only to the *actual*
+(linear) reductions — so **both dimensions collapse together**. *If* D-instrumentation
+shows per-reduction work scales with env size **independently** of the IH redundancy,
+that's a **second sub-fix within this same WP** (avoid re-weakening/re-walking over
+the full env per step — still `ken-interp`-only, still value-preserving), **not** a
+strategy change.
 
 ## Settled inputs — DO NOT REOPEN
-- **Approach = (B): call-by-need / memoised-thunk substitution sharing in
-  `ken-interp`.** Ruled by the Architect from PRINCIPLES.md
-  (`evt_6cq5whrbkw1hs`). **Not (A)** div/mod primitives — `div`/`mod` are already
-  derivable (`div10Fueled`/`mod10Fueled` elaborate + SCT-pass today); their sole
-  blocker is the perf (B) fixes. (A) grows `trusted_base()` and imports the
-  div-by-0-under-totality question — both avoided by (B). **Do not relitigate the
-  primitive path.**
-- **Soundness posture: (B) is soundness-inert.** Call-by-need ≡ call-by-name on
-  *values* in a pure, total, strongly-normalising language — sharing changes
-  **cost, never result**. So no conformance value may change. This is *why* the
-  gate is "verify value-preservation on the corpus," not a trust-root check.
-- **Scope = `ken-interp` ONLY.** The kernel's conversion-checker reducer *may*
-  share the same characteristic — that is a **separate tracked candidate**
-  (kernel-perf, soundness-inert), explicitly **out of scope here** per the
-  Architect's steer. Do not touch `ken-kernel`. Zero `trusted_base` delta.
-- **No `/spec` touch, no new primitive, no new `data`.** Pure evaluator change.
+- **Fix DIRECTION = (B'): eliminate the redundant per-reduction recomputation** —
+  the eager `elim_reduce` IH walk (make it **lazy and/or conditional on the method
+  body actually consuming the IH binder** — unconsumed IH costs nothing; a consumed
+  one is computed once) **and** whatever env-scaled per-step work it multiplies. The
+  Architect ruled the **direction + properties**, not the exact mechanism
+  (conditional-skip vs lazy-thunk vs both, and the env-scaling sub-fix if any, are
+  the WP's **engineering call** — same don't-over-specify discipline as the
+  L3-strings floor).
+- **NOT (A) `div_int`/`mod_int` primitives.** Ruled out and re-affirmed: growing the
+  trust root to paper over an outer-ring evaluator inefficiency is backwards; `div`/
+  `mod` are already derivable and their sole blocker is this perf.
+- **Soundness posture — value-preserving, soundness-inert.** Not computing a
+  discarded IH cannot be observed; computing a used IH lazily gives the identical
+  value; in a pure total SN language eval-order/laziness never changes a value or
+  termination. **Zero conformance-value change** — the regression net is corpus
+  byte-identity.
+- **Scope = `ken-interp` ONLY.** Kernel `Elim`/conversion checker **untouched**
+  (load-bearing). Zero `trusted_base` delta. (Kernel conversion-checker perhaps
+  shares the trait — a **separate** tracked candidate, out of scope here.)
+- **Calibration — don't over-expect the fix.** (B') removes the *interpreter's*
+  mechanism overhead, **not** algorithmic complexity. A source-level-exponential
+  algorithm (naive `fib(n-1)+fib(n-2)`) correctly stays exponential. Expect the
+  interp-strangled cheap algorithms (`natToDecimal` ~log₁₀n, `mergeSort` n log n) to
+  **collapse dramatically**; measure how far, and label any residual as
+  **algorithmic**, not a mechanism miss.
 
-## Deliverable 1 — CONFIRM the root cause FIRST (confirm-then-fix)
-The no-sharing diagnosis is *plausible-not-confirmed at the interp level* (the
-build teams read it from behavior, not internals). **Before implementing**,
-confirm it inside `ken-interp`:
-- Instrument the evaluator on the **doubly-referenced-`n`** case the VAL2
-  implementer isolated (reconstruct `natToDecimalFueled` from
-  `crates/ken-elaborator/tests/zzdebug.rs`-style scratch, or a minimal
-  `f n = g n + h n` over `Suc`-peeling). Show the bound value is **re-walked once
-  per reference**, and that the re-walk count compounds through the recursion
-  (i.e. it *is* the exponential source).
-- The single-ref `printLoop` (n=20, 3.6ms) vs double-ref (n=10, 28.5s) pair **is
-  the discriminating probe** — it already points unambiguously at sharing; the
-  confirm step is to *see it in the evaluator*, not re-derive it behaviorally.
-- **If confirmation surfaces a DIFFERENT root cause** (not substitution
-  re-walking) → **STOP, route back to Steward → Architect** with the evidence.
-  Do **not** implement call-by-need blind against a mis-diagnosed cause.
+## Deliverable 1 — CONFIRM/pin the amplifier(s) FIRST (D1 gates D2)
+The value-depth cause is confirmed (the call-count table). **Before implementing,
+instrument to pin the env-size amplifier:** is it the **same** redundant-walk bug
+paying `O(env)` per step, or an **independent** per-reduction env-scaling (e.g.
+every reduction re-weakens terms over the full global env regardless of IH
+redundancy)? Use the discriminating probe — the exact **3-line-prelude + `gcd.ken`**
+repro (`OrdResult` + `list_append` + `concat` prepended). This tells you whether
+(B') is one sub-fix or two. **If instrumentation surfaces a *third* surprise
+(neither redundant-IH nor env-scaled-per-step) → STOP, route back to Steward.**
 
-## Deliverable 2 — implement call-by-need substitution sharing
-Give the evaluator's substitution/environment **memoised thunks**: a bound value
-is forced **at most once**, and the forced result is **shared** across every
-reference. Standard lazy evaluation (call-by-need). Target the substitution/
-closure-application path in `ken-interp`'s evaluator (`eval.rs` — **verify the
-exact mechanism against the landed code at pickup; this line is perishable**).
-The change must be **semantics-preserving by construction** (memoise the result
-of forcing, do not change *what* is forced or *whether* a value is forced in a
-total language where all bindings are used-or-erased identically).
+## Deliverable 2 — implement (B')
+Eliminate the redundant per-reduction recomputation: lazy/conditional `elim_reduce`
+IH computation, plus the env-scaling sub-fix **if D1 shows it's independent**.
+Mechanism is your engineering call; the properties (value-preserving, ken-interp-
+only) are fixed. Also sweep the stale `eval.rs` `ConsoleIds` doc comment
+(`~1538`: "2 for the production `ITree E R`" → one-param `ITree r`) — Runtime carry,
+one line, zero-behavior, same file.
 
-## Deliverable 3 — the regression proof (the soundness net writes itself)
-1. **Perf collapse.** The previously-exponential double-ref case now tracks the
-   single-ref cost curve: `natToDecimalFueled` at n=10, 20, and a stretch value
-   (e.g. 55 / 120 — the VAL2 oracle values) completes in well-under-1s.
-2. **Value-preservation (the gate).** `cargo test --workspace` **fully green**,
-   and every conformance-corpus value is **byte-identical** pre/post. Call-by-
-   need changes cost, not results — any value that changes is a **memoisation
-   bug**, not an acceptable outcome. Spell this out in the merge Decision so the
-   Architect can gate on it directly.
-3. **Pinned perf-regression test.** A test that exercises the previously-
-   exponential shape and asserts it completes within a generous bound, so the
-   blowup **cannot silently return**.
-4. **Bonus check (report, don't gate):** the L3-strings `O(n^3.5–4)` deep-Nat
-   `slice 0 99` case should also improve (same family). Note the before/after;
-   it's confirmation (B) subsumed the family, not an acceptance gate.
-
-## Minor in-scope cleanup (fold-in — Runtime carry from console-harvest-fix)
-While in `ken-interp`'s `eval.rs`, sweep the stale `ConsoleIds`/`build_print_line_tree` doc comment
-(`eval.rs:~1538`: "2 for the production `ITree E R`" / "`ITree Console Unit`") → it should read the
-landed **one-param `ITree r`** (`params_len = 1`). Cosmetic, zero behavior/trust impact — both
-runtime-implementer and runtime-qa flagged it in the console-harvest-fix retros. In-scope only because
-it's the same crate/file and zero-behavior; it keeps the diff `ken-interp`-only. Do **not** let it
-expand the WP beyond that one doc-comment line.
-
-## Acceptance criteria
-- **AC1** Root cause **confirmed** as substitution no-sharing with interp-level
-  evidence (or routed back to Steward if the cause differs). Confirm precedes
-  fix.
-- **AC2** `natToDecimalFueled` (VAL2 oracle values, incl. `factorial`=120 /
-  `fibonacci`=55) evaluates in well-under-1s — the wall is gone.
-- **AC3** `cargo test --workspace` green; **conformance values byte-identical
-  pre/post** (value-preservation — the soundness gate).
-- **AC4** Diff-scope: `ken-interp` only. **Zero** `ken-kernel` touch, **zero**
-  `trusted_base` delta (grep-confirmed, not asserted).
-- **AC5** A pinned perf-regression test guards the previously-exponential shape.
+## Acceptance criteria — the Architect's soundness gate + the two perf probes
+- **AC1 — Kernel untouched (LOAD-BEARING).** `git diff origin/main --
+  crates/ken-kernel/` **empty**; `trusted_base()` unchanged; `ken-interp` only. *If
+  the fix would touch the kernel checker — STOP, escalate.*
+- **AC2 — Value-preservation (the soundness gate).** `cargo test --workspace` green;
+  the conformance corpus produces **byte-identical values pre/post** (a changed
+  value = a bug, never an accepted delta).
+- **AC3 — Perf probe #1 (value-depth).** The previously-exponential mechanism cases
+  (`single`/`doubleLet`, `natToDecimalFueled`) **collapse to linear/near** — measure
+  and report the before/after growth curve.
+- **AC4 — Perf probe #2 (env-size).** The exact **3-line-prelude + `gcd.ken`** repro
+  goes **timeout → fast**. *If (B') collapses AC3 but NOT AC4, that's the route-back
+  signal (a second dimension to instrument) — not a merge.*
+- **AC5 — Pinned regression tests** guard both previously-pathological shapes so the
+  blowup can't silently return.
 
 ## Guardrails (do-not-reopen)
-- Approach is **(B)**; do not reopen the div/mod-primitive path.
-- Do **not** expand to the kernel reducer (separate tracked candidate).
-- Do **not** change any observable value. A changed corpus value ⇒ a bug to fix,
-  never an accepted delta. The whole point is *same values, faster*.
+- Direction is **(B')** — do not reopen call-by-need substitution sharing (falsified)
+  or div/mod primitives (ruled out).
+- Kernel checker off-limits; fix the evaluator.
+- Don't over-correct into an algorithmic-complexity claim — (B') is a mechanism fix.
 
 ## Gate & sequencing
-- **Gate:** Architect **soundness** (value-preservation on the corpus; trust root
-  untouched by construction) **+ Runtime QA + CI**. No spec/CV (no `/spec` touch).
-  The **confirm** step (D1) gates the **implement** step (D2) — a mis-diagnosis
-  routes back before any evaluator change lands.
-- **Lane:** Team Runtime (owns `ken-interp`).
-- **Sequencing:** Team Runtime is mid-WP (`wp/console-harvest-fix`, in QA).
-  **Released at that WP's close seam** (retros in → Handoff-Gate compaction →
-  kickoff), one-WP-per-team. Branch cut off the `origin/main` that includes the
-  merged console-fix. Staged now; fires when the console fix closes.
+- **Gate:** Architect soundness (AC1 kernel-untouched + AC2 value-preservation +
+  AC3/AC4 both probes collapsing) + Runtime QA + CI. No spec/CV. **D1 confirm gates
+  D2** — pin the env amplifier before implementing.
+- **Lane:** Team Runtime (owns `ken-interp`). Branch `wp/RTP1-interp-sharing` (held
+  at D1, zero diff). **First step on resume:** refresh this frame doc onto the branch
+  (`git checkout steward/work -- docs/program/wp/RT-perf-sharing.md`) so the branch
+  carries the corrected (B') contract, then proceed to D1's env-instrumentation.
