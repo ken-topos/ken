@@ -1,20 +1,21 @@
 # Proof skeletons for the inductive `Map` laws (`map-verified-laws`)
 
-> Status: **DRAFT v1 — Unit 1 (convoy idiom canonicalized).** The proof-strategy
-> elaboration for the inductive correctness laws that `52-map.md §7d` deferred.
-> The capstone was **re-scoped into two landing units** along the elaborator
-> fault-line (Steward `evt_40y1s0wpysa53`):
+> Status: **DRAFT v2 — Unit 1 landed (law 4 built); Unit 2 pending.** The
+> proof-strategy elaboration for the inductive correctness laws that `52-map.md
+> §7d` deferred. The capstone was **re-scoped into two landing units** along the
+> elaborator fault-line (Steward `evt_40y1s0wpysa53`):
 >
-> - **Unit 1 — buildable today, no elaborator change.** The **convoy idiom**
+> - **Unit 1 — LANDED (real, kernel-rechecked proofs).** The **convoy idiom**
 >   (Gap-B dependent induction, §2) + the **`allKeys`→`allInList` bridge** (L2,
->   §2.2, **confirmed** building + kernel-checking clean on the held base
->   `4d4aaad` in convoy form) + the two **non-inductive** laws (`Ordered empty`,
->   `lookup-empty`, already shipped in `map.ken`). **Law 4** (`toList`-ordered)
->   is a Unit-1 law by structure (Gap-B only, comparison-free); its **conclusion
->   `toListOrdered`** (via `consSorted`/`isSortedAppend`) is **PENDING** a
->   **confirmed kernel conv-completeness gap** (Gap-conv, §7) — *not* a
->   proof-construction bug — so this doc documents law 4's *structure* but does
->   **not** claim its conclusion builds today.
+>   §2.2) + the two **non-inductive** laws (`Ordered empty`, `lookup-empty`) +
+>   **law 4** (`toList`-ordered) all build as **real, non-stubbed** proof terms
+>   in `map.ken`. Law 4's conclusion `toListOrdered` (via the
+>   `consSorted`/`isSortedAppend` append lemmas) is **no longer pending** — the
+>   enabling kernel conversion fix **landed** as `obs-eq-termination`
+>   (`9cf468a`,
+>   PR #262 — the `(Eq,Eq)` `conv_struct` congruence arm plus a
+>   congruence-first/lazy-δ fast path, §7). No `trusted_base` change was needed
+>   in Unit 1's proof terms.
 > - **Unit 2 — not yet buildable.** Laws **1/2/3/5**'s **Gap-A nested-`J`
 >   transport composition**. "Wall 1" is a **real** `infer_j` nested-motive
 >   scoping bug (Architect `evt_3vd9w6c779sm6`); its lane (a combinator
@@ -47,7 +48,7 @@ parts build today and which are deferred.
 | 1 | preservation (`§5.1`) | `Ordered m → Ordered (insert leq key val m)` | A + B | Unit 2 (transport-blocked) |
 | 2 | found-after-insert (`§5.2`) | `lookup leq key (insert leq key val m) = Some val` | A + B | Unit 2 (transport-blocked) |
 | 3 | locality (`§5.2`) | `distinct key key' → lookup leq key' (insert leq key val m) = lookup leq key' m` | A + B | Unit 2 (transport-blocked) |
-| 4 | `toList`-ordered (`§5.3`) | `Ordered m → isSorted keyLeq (toList m)` — **comparison-free** | **B only** | Unit 1 (structure); **conclusion PENDING** (§7) |
+| 4 | `toList`-ordered (`§5.3`) | `Ordered m → isSorted keyLeq (toList m)` — **comparison-free** | **B only** | Unit 1 — **LANDED** (`toListOrdered` built, kernel-rechecked) |
 | 5 | agreement (`§5.3`) | `lookup leq key m = assoc leq key (toList m)` | A + B | Unit 2 (transport-blocked) |
 
 **None of the five uses `antisym → Equal`.** The core laws lean on
@@ -299,8 +300,9 @@ abstracted to `x`; `keyLeq := pairLeq leq` is law 4/5's element comparator over
 
 ### 5.1 Law 4 — `toList`-ordered (`Ordered m → isSorted keyLeq (toList m)`)
 
-**Unit 1 by structure (Gap-B, comparison-free); conclusion `toListOrdered`
-PENDING (§7).** `toList` never calls `leq`; every `leq` fact is a stored
+**Unit 1 — LANDED (Gap-B, comparison-free): law 4 builds end-to-end** as a
+real, non-stubbed, kernel-rechecked `toListOrdered` (`map.ken`, §7). `toList`
+never calls `leq`; every `leq` fact is a stored
 `IsTrue` witness threaded from `Ordered`'s `allKeys` conjuncts (themselves
 `Equal Bool (leq …) True`, the exact shape `isSorted`'s conjuncts want — they
 thread **directly**, no transport). So this law clears Gap A and needs **only**
@@ -326,20 +328,20 @@ keyLeq (toList m'))`.
   the load-bearing ordered-iteration law — proved as the naturally-`Ω`
   `isSorted` form, **never** permutation (§6).
 
-  > **Conclusion `toListOrdered` is PENDING (§7).** The bridge **L2** builds
-  > today (§2.2). The **conclusion** — `consSorted`/`isSortedAppend` assembling
-  > the `Node` step — fails with a residual `TypeMismatch` that is now a
-  > **confirmed kernel conv-completeness gap** (Steward `evt_100wzkpg4qr5v`),
-  > **not** a proof-construction bug: `conv_struct` (`conv.rs`) has no
-  > `(Eq, Eq)` congruence arm, so two `Eq` types that differ only by a reducible
-  > sub-term — here `isSorted`'s pair-indexed comparator vs. the bound chain's
-  > key-indexed predicate — fall through to `false` instead of converting by a
-  > delta/iota step inside the `Eq` argument. The fix is a small congruence arm,
-  > tracked as a separate **Kernel WP** (Gap-conv; Architect confirmed the
-  > vector, `evt_2s3brvnr2cta2`); `toListOrdered` builds once it lands. Per
-  > honesty-about-the-boundary this doc does **not** claim `toListOrdered`
-  > builds today, and it does **not** fold in as a proof-bug fix — that door is
-  > closed.
+  > **Conclusion `toListOrdered` is LANDED (§7).** The bridge **L2** and the
+  > `consSorted`/`isSortedAppend` append lemmas assemble the `Node` step into a
+  > real, kernel-rechecked `toListOrdered`. The residual `TypeMismatch` that
+  > earlier blocked it — `isSorted`'s pair-indexed comparator vs. the bound
+  > chain's key-indexed predicate not converging by a delta/iota step **inside
+  > an `Eq` argument** — was a kernel conversion shortfall, now **fixed** by the
+  > `(Eq, Eq)` `conv_struct` congruence arm shipped with a
+  > congruence-first/lazy-δ fast path (`obs-eq-termination`, `9cf468a`, PR
+  > #262). (The arm's first, naive form triggered an eager-δ non-termination on
+  > the *assembled* proof — the deeper root — which the fast-path re-land
+  > resolved; the completeness arm alone was not enough.) The landed proof
+  > factors `isSorted`'s two-element lookahead into single-match helper `view`s
+  > (the **nested-match-avoidance idiom**), to be canonicalized with the full
+  > idiom set in a follow-on pass.
 
 ### 5.2 Laws 1/2/3/5 — Gap-B convoy skeleton (Gap-A transport → Unit 2)
 
@@ -405,8 +407,10 @@ split. Foundation proves them alongside the laws.
   assembling law 4's `Node` step: `isSorted xs → isSorted (Cons m ys) →
   allInList (keyLeq · m) xs → isSorted (list_append xs (Cons m ys))`. Induction
   on `xs`, comparison-free (the `keyLeq` facts are supplied as `IsTrue`
-  witnesses). This is the site of law 4's **PENDING** residual `TypeMismatch`
-  (§5.1, §7).
+  witnesses). **Landed** (the earlier residual `TypeMismatch` here was fixed by
+  `obs-eq-termination` `9cf468a`; §5.1, §7); the landed proof routes the
+  two-element lookahead through single-match helper `view`s (nested-match
+  avoidance).
 - **L5 `assoc`-over-`append`** (law 5) — relate `assoc key (append xs ys)` to
   `assoc key xs` / `assoc key ys` under the sortedness bounds. Induction on
   `xs`;
@@ -437,22 +441,20 @@ split. Foundation proves them alongside the laws.
 
 ## 7. Buildability honesty + trust surface
 
-The convoy idiom (§2) and the L2 bridge (§2.2) + the non-inductive laws are
-**confirmed** on the real held-branch scaffolding — L2 builds and kernel-checks
-clean on `4d4aaad` in convoy form (Steward `evt_jb3nbm008xq0`), and
-`orderedEmpty`/`lookupEmptyIsNone` ship in `map.ken`. Beyond that, the honest
-ceiling holds:
+**Unit 1 is landed** as real, kernel-rechecked proofs in `map.ken` — the convoy
+idiom (§2), the L2 bridge (§2.2), the non-inductive laws
+(`orderedEmpty`/`lookupEmptyIsNone`), and law 4's `toListOrdered`. Beyond that,
+the honest ceiling holds:
 
 - **Law 4's conclusion `toListOrdered` (via `consSorted`/`isSortedAppend`, L4)
-  is PENDING** — a **confirmed kernel conv-completeness gap** (`conv_struct` has
-  no `(Eq, Eq)` congruence arm, so an `Eq` type whose argument needs a
+  is LANDED** — real, non-stubbed, kernel-rechecked. The kernel conversion
+  shortfall that earlier blocked it (an `Eq` type whose argument needed a
   delta/iota step — the pair-indexed comparator vs. the key-indexed bound
-  predicate — is
-  rejected). This is **not** a proof-construction bug; the fix is a small
-  congruence arm tracked as a separate **Kernel WP** (Gap-conv, joins the
-  staged/gated lane; Architect confirmed the vector `evt_2s3brvnr2cta2`), and
-  `toListOrdered` builds once it lands. This doc does **not** claim it builds
-  today, and it does **not** fold in as a proof-bug fix.
+  predicate — was over-rejected, and the naive `(Eq, Eq)` congruence arm then
+  triggered eager-δ non-termination on the *assembled* proof) is **fixed** by
+  `obs-eq-termination` (`9cf468a`, PR #262 — the congruence arm plus a
+  congruence-first/lazy-δ fast path). Zero `trusted_base` delta (kernel
+  completeness + termination only).
 - **Laws 1/2/3/5 are Unit-2, transport-blocked** — their Gap-A nested-`J`
   composition hits the real `infer_j` scoping bug (§3). Their Gap-B convoy
   skeleton (§5.2) is buildable structure; the transport step is not, and the
