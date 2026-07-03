@@ -17,10 +17,16 @@ the kernel derivations already sketched in `../10-kernel/15 §3`/`§4`. Each is 
 **non-recursive** `view` — SCT-trivial (no self-edge, so termination is
 immediate); none is a kernel primitive, and none needs its own surface support.
 
-The equality used throughout is the **kernel's native, computing `Eq`**
-(`../10-kernel/16 §2`) — the one carrying `refl`/`J` — **not** the postulated
-`Equal` slated for removal (`../30-surface/30 §6`, the taxonomy prune): only the
-computing `Eq` can be transported, since `J`/`cast` reduce on it.
+The equality transported throughout is the **kernel's native, computing `Eq`**
+(`../10-kernel/16 §2`) — the one carrying `refl`/`J`, on which `J`/`cast`
+reduce. The prelude's `Equal` is a **transparent `declare_def` alias**
+`λA x y. Eq A x y` (landed, out of `trusted_base()`), so it **unfolds to `Eq`
+and is equally transportable** — a Map order-hypothesis `Equal Bool (leq …)
+True` (`52 §5`) reduces to the computing `Eq` and needs no `Equal → Eq`
+migration to be rewritten by `J`. Only a genuinely *postulated*, non-computing
+equality would be untransportable; Ken has none on this path. (`30 §6`'s
+"`Equal` → delete, postulated" prose predates that alias and reads stale — a
+cross-ref tidy for a future `30-taxonomy` pass, out of this WP.)
 
 ## 2. The five combinators
 
