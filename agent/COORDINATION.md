@@ -147,13 +147,29 @@ genuinely separate spun-off WP (its own branch + gates + merge, e.g. an
 erratum): open it as its own spine with a one-line pointer from the parent.
 
 **Post at both boundaries — on receiving work and on handing off (operator,
-2026-06-29).** When you **pick up** a task, post a brief *taking-this* ack in its
+2026-06-29).** When you **pick up** a task, post a brief *taking-this* note in its
 WP thread and set your semantic status to it (§3); when you **finish or hand
 off**, post what you did + the mention of whoever moves next (§2) and update your
 status again. **Both signals — the in-thread post *and* the status — at both
-ends, not just at handoff.** The pickup ack is what keeps the flow legible in the
-web view and preserves the full interaction history; without it there is a silent
-gap between assignment and completion that no one can audit or replay.
+ends, not just at handoff.** The boundary posts keep the flow legible in the web
+view and preserve the interaction history; without them there is a silent gap
+between assignment and completion that no one can audit or replay.
+
+**But every post must be *actionable* — no bare acknowledgments (operator,
+2026-07-03).** A message earns its place only if the recipient must **act**,
+**decide**, or **learn something they cannot derive** from the artifacts. A bare
+"received / thanks / good catch / ack / confirmed / will do" carries nothing and
+is **noise** — do not post it. This refines (does not weaken) the boundary rule:
+a **pickup** post is worth posting because it carries *content* — what you're
+taking + your approach, first step, ETA, or an opening question — **not** a
+contentless "ack." If your only signal is "I'm on it," that lives in your
+**status** (§3), not a channel post. **Silence is acceptance:** when a reviewer
+approves, a ruling lands, or a handoff arrives and you need nothing back and
+diverge on nothing, **don't reply** — just proceed; the next substantive post
+(candidate-ready, a finding, a handoff) is your acknowledgment. Reply to an
+approval/ruling **only** to (a) diverge, (b) ask a blocking question, or (c)
+convey un-derivable information. The audit trail is carried by the *substantive*
+boundary posts + status, never by receipt-acks.
 
 **Title convention (the single-space articulation tag).** The whole federation
 runs in one space (`ken-topos`), so a thread's **title is its team tag** — there
