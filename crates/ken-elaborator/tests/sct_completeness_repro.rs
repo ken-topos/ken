@@ -3,9 +3,10 @@
 //!
 //! Scope per `docs/program/wp/sct-completeness.md` and Steward's
 //! decomposition (`evt_2m39w8j7xd296`): this WP ships shape (a) only.
-//! Shape (b) (Ackermann/lexicographic reconstruction-descent) is tracked
-//! separately as `sct-reconstruction-descent`, sequenced after (a) — its
-//! repro + near-miss stay pinned here as still-rejected (unbuilt).
+//! Shape (b) (Ackermann/lexicographic reconstruction-descent) landed
+//! separately as `sct-reconstruction-descent` — its repro and near-misses
+//! now live in `sct_reconstruction_descent.rs` (`shape_b_ackermann_accepts`,
+//! `shape_b_bad_ack_still_rejected`, etc.), not here.
 //!
 //! Fix (grounded, Architect-approved `evt_51fjq30yftax4`): `enter_method`
 //! (`crates/ken-kernel/src/sct.rs`) now threads a remaining-arity
@@ -184,43 +185,8 @@ fn shape_a_near_miss_recurses_on_unchanged_scrutinee_stays_rejected() {
     );
 }
 
-/// **(b) Ackermann/lexicographic — still rejected (out of scope).** Tracked
-/// separately as `sct-reconstruction-descent`. Pinned here so a future
-/// regression in shape-(a)'s fix accidentally widening this is caught, and
-/// so this doesn't silently start passing without a deliberate (b) build.
-#[test]
-fn shape_b_ackermann_lexicographic_still_rejected_out_of_scope() {
-    let mut env = fresh_env();
-    let res = env.elaborate_decl(
-        "view ack (m : Nat) (n : Nat) : Nat = \
-         match m { \
-           Zero => Suc n ; \
-           Suc m2 => match n { \
-             Zero => ack m2 (Suc Zero) ; \
-             Suc n2 => ack m2 (ack (Suc m2) n2) \
-           } \
-         }",
-    );
-    assert!(
-        res.is_err(),
-        "Ackermann/lexicographic is shape (b), tracked separately as \
-         sct-reconstruction-descent — must stay rejected until that WP \
-         lands its own (larger, new-mechanism) fix"
-    );
-}
-
-/// **(b) discriminating near-miss — still rejected.** Banked for
-/// `sct-reconstruction-descent` per Steward's decomposition note.
-#[test]
-fn shape_b_near_miss_reconstruction_with_unchanged_second_arg_still_rejected() {
-    let mut env = fresh_env();
-    let res = env.elaborate_decl(
-        "view badAck (m : Nat) (n : Nat) : Nat = \
-         match m { Zero => n ; Suc m2 => badAck (Suc m2) n }",
-    );
-    assert!(
-        res.is_err(),
-        "genuinely non-terminating (m reconstructed unchanged, n never \
-         decreases) — must stay rejected"
-    );
-}
+// Shape (b) (Ackermann/lexicographic reconstruction-descent) and its
+// discriminating near-miss (`badAck`) moved to `sct_reconstruction_descent.rs`
+// (`shape_b_ackermann_accepts`, `shape_b_bad_ack_still_rejected`) now that
+// `sct-reconstruction-descent` has landed its own fix — Ackermann now
+// correctly ACCEPTS, so pinning it here as still-rejected would be stale.
