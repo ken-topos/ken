@@ -75,11 +75,14 @@ fn run_file(path: Option<&str>) {
     let g = &elab_env.globals;
     let get = |name: &str| -> Option<ken_kernel::GlobalId> { g.get(name).copied() };
 
+    // Bare names, matching the landed prelude's registration (`prelude.rs`:
+    // `data ITree r = Ret r | Vis ConsoleOp (Unit -> ITree r)` — one type
+    // param, constructors registered under their bare (not dotted) names).
     let (itree_id, ret_id, vis_id, write_id, unit_id) = match (
         get("ITree"),
-        get("ITree.Ret"),
-        get("ITree.Vis"),
-        get("Console.Op.Write"),
+        get("Ret"),
+        get("Vis"),
+        get("Write"),
         get("Unit"),
     ) {
         (Some(a), Some(b), Some(c), Some(d), Some(e)) => (a, b, c, d, e),
@@ -96,7 +99,7 @@ fn run_file(path: Option<&str>) {
         vis_id,
         write_id,
         unit_id,
-        params_len: 2, // ITree E R — two type params in the production inductive
+        params_len: 1, // ITree r — one type param, per the landed prelude
     };
 
     // Build the numeric-literal map from the elaborator.

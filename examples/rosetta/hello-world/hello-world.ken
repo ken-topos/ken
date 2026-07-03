@@ -3,15 +3,7 @@
 --
 -- Task: print "Hello, World!" to standard output.
 --
--- String literals (GAP-string-literals: FIXED, VAL1-surface `37 §2.1`)
--- and `print_line : String → IO Unit` (VAL1-surface `36 §2.1`) are both
--- declared. The IO effect type and postulate elaborate correctly.
---
--- Prim reduction for `print_line` is held until `wp/VAL1-console-exec`
--- lands. Once that branch merges, replace `main` with:
---
---   view main : IO Unit = print_line "Hello, World!"
---
--- Current: the string value is returned directly so the rosetta harness
--- can verify the oracle ("Hello, World!") without console execution.
-view main : String = "Hello, World!"
+-- String literals (`37 §2.1`) and `print_line : String → IO Unit`
+-- (`36 §2.1`) are both declared; `ken run` drives the Console effect
+-- end-to-end (`42 §6`, wp/console-harvest-fix).
+view main : IO Unit = print_line "Hello, World!"
