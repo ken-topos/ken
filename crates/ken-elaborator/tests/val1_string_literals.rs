@@ -361,13 +361,20 @@ fn gcd_views_elaborate() {
 
 // ── Batch-2: Ackermann ───────────────────────────────────────────────────────
 
-/// GAP-ackermann-sct: Ken's SCT does not (yet) accept lexicographic
-/// termination arguments. `ack` is total, but SCT requires a single
-/// structurally-decreasing parameter; it rejects the lexicographic (m,n)
-/// ordering and fails with "idempotent self-loop has no strictly-decreasing
-/// parameter". This test pins that the gap is present and the error is SCT.
+/// GAP-ackermann-sct: **closed** by `sct-reconstruction-descent`. Ken's SCT
+/// previously did not accept lexicographic termination arguments — `ack` is
+/// total, but the pre-fix SCT required a single structurally-decreasing
+/// parameter and rejected the lexicographic (m,n) ordering with "idempotent
+/// self-loop has no strictly-decreasing parameter". `size_rel`
+/// (`crates/ken-kernel/src/sct.rs`) now recognizes an argument that exactly
+/// reconstructs a matched parameter's destructured value (`Suc p` here) as
+/// `DownEq`, which lets the lexicographic thread compose correctly. See
+/// `crates/ken-elaborator/tests/sct_reconstruction_descent.rs` for the full
+/// AC1–AC5 net (near-misses, accept-and-evaluate, monotonicity); this test
+/// keeps the original VAL2 gap-catalog entry as a local regression pin, now
+/// asserting the gap is closed rather than present.
 #[test]
-fn ackermann_sct_gap_pinned() {
+fn ackermann_sct_gap_closed() {
     let mut env = ElabEnv::new().expect("base env");
     let result = env.elaborate_decl(
         "view ack (m : Nat) (n : Nat) : Nat = \
@@ -378,12 +385,9 @@ fn ackermann_sct_gap_pinned() {
              Suc q => ack p (ack (Suc p) q) } }",
     );
     assert!(
-        result.is_err(),
-        "GAP-ackermann-sct: expected SCT to reject ack, but it elaborated"
-    );
-    let err_str = format!("{:?}", result.unwrap_err());
-    assert!(
-        err_str.contains("NotTerminating") || err_str.contains("KernelRejected"),
-        "error should be an SCT/NotTerminating rejection, got: {}", err_str
+        result.is_ok(),
+        "GAP-ackermann-sct: expected SCT to now accept ack (closed by \
+         sct-reconstruction-descent), but it was rejected: {:?}",
+        result.err()
     );
 }
