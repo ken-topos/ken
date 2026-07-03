@@ -383,6 +383,88 @@ fn is_recursive_arg(arg_ty: &Term, fam: GlobalId) -> bool {
     }
 }
 
+/// Peel `n` outer `Term::Lam` binders, returning the remaining inner term.
+/// Returns `t` unchanged if fewer than `n` `Lam`s are found (should not
+/// happen for elaborator-produced eliminator methods — the pattern-matrix
+/// compiler always wraps ctor-field + IH columns as a fixed run of `Lam`s,
+/// `build_ctor_buckets`/`compile_match_matrix`); the caller treats an
+/// unexpected shape by falling back to always-compute, never a soundness gap.
+fn peel_lams(mut t: &Term, mut n: usize) -> &Term {
+    while n > 0 {
+        match t {
+            Term::Lam(_, body) => {
+                t = body;
+                n -= 1;
+            }
+            _ => break,
+        }
+    }
+    t
+}
+
+/// Is `Var(target)` free in `t` (de Bruijn, `target` counted from `t`'s own
+/// root)? Mirrors `ken_kernel::subst::shift`'s binder bookkeeping exactly —
+/// same one-per-binder cutoff increments — but checks instead of rewriting.
+/// Used only to decide whether a recursive-position IH is dead in the
+/// selected method's body (`elim_reduce`'s eager-IH fix, RTP1 (B')); a
+/// false-negative here would be a soundness/perf-regression risk, so every
+/// binder-introducing variant increments `target`, matching `shift` variant
+/// for variant.
+fn term_var_free(t: &Term, target: usize) -> bool {
+    match t {
+        Term::Var(i) => *i == target,
+        Term::Pi(a, b) | Term::Sigma(a, b) => {
+            term_var_free(a, target) || term_var_free(b, target + 1)
+        }
+        Term::Lam(a, body) => term_var_free(a, target) || term_var_free(body, target + 1),
+        Term::Let { ty, val, body } => {
+            term_var_free(ty, target) || term_var_free(val, target) || term_var_free(body, target + 1)
+        }
+        Term::App(f, a) => term_var_free(f, target) || term_var_free(a, target),
+        Term::Pair(a, b) => term_var_free(a, target) || term_var_free(b, target),
+        Term::Proj1(p) | Term::Proj2(p) => term_var_free(p, target),
+        Term::Ascript(t2, a) => term_var_free(t2, target) || term_var_free(a, target),
+        Term::Eq(a, l, r) => {
+            term_var_free(a, target) || term_var_free(l, target) || term_var_free(r, target)
+        }
+        Term::Refl(t2) => term_var_free(t2, target),
+        Term::Cast(a, b, e, t2) => {
+            term_var_free(a, target)
+                || term_var_free(b, target)
+                || term_var_free(e, target)
+                || term_var_free(t2, target)
+        }
+        Term::J(m, d, e) => {
+            term_var_free(m, target) || term_var_free(d, target) || term_var_free(e, target)
+        }
+        Term::Quot(a, r) => term_var_free(a, target) || term_var_free(r, target),
+        Term::QuotClass(t2) => term_var_free(t2, target),
+        Term::Trunc(a) => term_var_free(a, target),
+        Term::TruncProj(t2) => term_var_free(t2, target),
+        Term::QuotElim { motive, method, respect, scrut } => {
+            term_var_free(motive, target)
+                || term_var_free(method, target)
+                || term_var_free(respect, target)
+                || term_var_free(scrut, target)
+        }
+        Term::Elim { params, motive, methods, indices, scrut, .. } => {
+            params.iter().any(|p| term_var_free(p, target))
+                || term_var_free(motive, target)
+                || methods.iter().any(|m| term_var_free(m, target))
+                || indices.iter().any(|i| term_var_free(i, target))
+                || term_var_free(scrut, target)
+        }
+        Term::Absurd(motive, proof) => {
+            term_var_free(motive, target) || term_var_free(proof, target)
+        }
+        Term::Type(_)
+        | Term::Omega(_)
+        | Term::Const { .. }
+        | Term::IndFormer { .. }
+        | Term::Constructor { .. } => false,
+    }
+}
+
 fn elim_reduce(
     env: &[EvalVal],
     fam: GlobalId,
@@ -442,10 +524,45 @@ fn elim_reduce(
                 mval = apply(mval, arg.clone(), globals, store);
             }
 
-            // Apply IH values for recursive positions (in order).
-            for rec_pos in &rec_positions {
-                let rec_arg = ctor_specific[*rec_pos].clone();
-                let ih = elim_reduce(env, fam, methods, rec_arg, globals, store);
+            // Apply IH values for recursive positions (in order). RTP1 (B'):
+            // the pattern-matrix compiler (`build_ctor_buckets`) always wraps
+            // one `Lam` per recursive position, whether or not the arm body
+            // actually references it (`ColKind::Ih` columns are unconditional
+            // per constructor, not per-use) — a plain self-recursive `view`
+            // compiles its own recursion as an ordinary `Term::Const`
+            // δ-unfold, so this IH binder is very often DEAD. Eagerly
+            // computing it here was a redundant full recursive `elim_reduce`
+            // walk whose result `apply`'s catch-all silently drops when
+            // unused — the confirmed root cause of the exponential blowup
+            // (D1: `single`/`doubleLet` both 2.00×/+depth with nothing to
+            // share; `natGcd`'s own large-fuel recursion pays the same tax
+            // independent of any downstream consumer).
+            //
+            // Fix: a pure static free-variable check on the UNEVALUATED
+            // method term — dead-code elimination, not laziness/memoisation.
+            // `ih_region` is what remains of `methods[k]` after peeling the
+            // `ctor_specific.len()` field-lambdas already applied above;
+            // `body_only` is what remains after further peeling all
+            // `rec_positions.len()` IH-lambdas. Bound-variable index for the
+            // `j`-th IH (0 = outermost) inside `body_only` is
+            // `rec_positions.len() - 1 - j` (standard de Bruijn: the
+            // innermost binder is `Var(0)`). A used slot still costs exactly
+            // one `elim_reduce` call, applied once — unchanged from before
+            // (this is dead-code skip, not memoisation; nothing here needed
+            // sharing, per D1's `doubleLet` finding).
+            let ih_region = peel_lams(&methods[k], ctor_specific.len());
+            let body_only = peel_lams(ih_region, rec_positions.len());
+            let p = rec_positions.len();
+            for (j, rec_pos) in rec_positions.iter().enumerate() {
+                let used = term_var_free(body_only, p - 1 - j);
+                let ih = if used {
+                    let rec_arg = ctor_specific[*rec_pos].clone();
+                    elim_reduce(env, fam, methods, rec_arg, globals, store)
+                } else {
+                    // Provably dead — any value is behaviorally inert here;
+                    // skip the recursive walk entirely (this is the fix).
+                    EvalVal::Unknown
+                };
                 mval = apply(mval, ih, globals, store);
             }
 
@@ -1423,8 +1540,8 @@ where
 ///
 /// Obtain by looking up the ITree/Console.Op inductives in the `GlobalEnv`
 /// after Language registers them in `ElabEnv::new()`.
-/// `params_len` is the number of ITree *type* params (2 for `ITree E R`;
-/// 0 for the simplified 0-param test ITree).
+/// `params_len` is the number of ITree *type* params (1 for the landed
+/// `ITree r`; 0 for the simplified 0-param test ITree).
 #[derive(Clone)]
 pub struct ConsoleIds {
     /// `GlobalId` of the `ITree` inductive (for documentation; not used in the loop).
