@@ -446,6 +446,163 @@ node); **L7 supplies the interpreters** (`§7.2`).
 
 ---
 
+## EFF6 — the direct `[State s]` effect surface (`OQ-C`·C2, frame AC-State)
+
+A **second door** to the same `State S` denotation (`§2.1`): writing
+`get`/`put`/`runState` **directly** as a first-class monadic effect — the
+`accumulator-factory` shape (VAL2 #10) — instead of through the imperative
+`space` sugar EFF4 pins. It introduces **no new denotation**: `runState` on the
+direct surface is **exactly** `§4.2`'s state-passing `elim_ITree` fold at
+`F = 𝟘` (`§4.5.3`), and `get`/`put` are `§2.1`'s `Get`/`Put` under `§2.2`'s
+`perform` (`§4.5.2`). So EFF6 shares EFF4's trust posture — a bug here is a
+**wrong value in a pure tree**, never a kernel unsoundness (the emitted core is
+the same well-typed `elim_ITree` term); **no case here is `(soundness)`** in the
+kernel-trust-root sense (seed preamble). `runState` is a **derived total
+definition**, not a trusted primitive, so `[State s]` is **zero-`trusted_base`
+delta** (frame AC1) — see `direct-state-kernel-untouched` below.
+
+**Build-FORCING — these cases are the acceptance *target*, RED on `main` until
+built (do NOT hand-feed them green).** Grounding (`origin/main`, verified at
+authoring, git-object-store): the landed **runnable** `ITree` a program
+executes is **Console-hardwired** — `data ITree r = Ret r | Vis ConsoleOp
+(Unit -> ITree r)` (`crates/ken-elaborator/src/prelude.rs:170`, `IO A := ITree
+A`): a **fixed `Unit` response**, not `E`-parameterized, so it cannot yet
+express `get`/`put` with the non-`Unit` `Resp Get = s` (`§4.5.2`). (The
+elaborator's `effects/itree.rs` is a static-analysis stand-in with a fixed
+`u64` response; the full dependent-`Resp` `ops` version is deferred there too.)
+The interpreter's `runState`-over-`Vis` fold is a **K1.5-IH-deferred
+placeholder** (`crates/ken-interp/src/lib.rs`
+`eff4_runstate_discharges_in_pure_section3` /
+`eff4_handled_discharges_unhandled_reaches_driver`). So driving `next` through
+the **real interpreter** (frame AC2) **cannot pass today** — it flips green only
+when the build lands the three `§36`-sanctioned **outer-ring** lifts
+(`§4.5.6`): **(a)** the **dependent response** `E.Resp e` (`State s` is the
+first effect whose `Resp Get = s` is non-`Unit`), **(b)** the container
+coproduct `⊕` for `State s ⊕ F`, **(c)** **named-effect dispatch** so `runState`
+peels `State` and passes other ops through. All three are `§36`-normative and
+admitted by K1.5's generic `elim_ITree` (`kernel/tests/k1p5_wstyle.rs`) — **the
+kernel is untouched** (frame AC1). These cases are authored as the deliverable's
+acceptance target — like EFF4's own deferred `eff4_runstate` interp test — **not
+green against a pre-supplied `(result, state)`**, which is exactly the
+[[conformance-hand-feeds-the-deliverable]] green-vs-green the frame warns
+against. The case **defines "done"**; it is correctly red until Runtime/Language
+build it.
+
+### surface/effects/direct-state-next-post-increment (oracle, build-forcing)
+- spec: `36 §4.5.3` (`runState` = `§4.2` fold at `F = 𝟘`; worked `next`),
+  `§4.5.2` (`get`/`put` = `§2.1` `Get`/`Put` under `perform`), `§2.4` (`𝟘`
+  collapse)
+- given: the direct-surface post-increment `next` — returns the current value,
+  bumps the state:
+
+  ```
+  next () = bind (get ()) (λ n. bind (put (n + 1)) (λ _. Ret n))
+  ```
+
+  driven through the **real interpreter** under `runState 0` and `runState 41`
+  (not a hand-fed harness — per the build-forcing note above).
+- expect: `runState 0 next` reduces to the pair **`(0, 1)`** and `runState 41
+  next` to **`(41, 42)`** — `(result, final-state)`: the result is the **old**
+  value (`get` observes the pre-increment state), the second component is the
+  **final** state after `put (n+1)`. Re-derive (`§4.2` clauses): `runState 0
+  (Vis Get k) = runState 0 (k 0)` (answer with current `0`) → `k 0 = Vis (Put 1)
+  (λ_. Ret 0)` → `runState 0 (Vis (Put 1) k') = runState 1 (k' tt) = runState 1
+  (Ret 0) = Ret (0, 1)`; at `F = 𝟘` collapses (`§2.4`) to `(0, 1)`.
+- why: **verdict-independent structural value** — the pair **flips** on the two
+  bugs the direct surface must exclude, and (by `result 0 ≠ state 1`, chosen so)
+  pins the pair **order** the equal-valued EFF4 `(2,2)` cannot: **(a)** a
+  state-threading bug (`Put` not adopted — `runState s (Vis (Put s') k) =
+  runState s (k tt)`) yields **`(0, 0)`**; **(b)** a pair-order swap
+  (`runState s (Ret r) = Ret (s, r)`) yields **`(1, 0)`**. Both differ from
+  `(0, 1)` regardless of downstream type-checking. Promoted from EFF4's
+  `space-becomes-threads-state` to the **direct monadic door**; the order pin is
+  new. (structural/value assertion; build-forcing.)
+- oracle: the denotation returns the **Σ-pair `R × S`** (`§4.2`; interp
+  `EvalVal::Pair`), *not* the also-landed inductive `data Prod a b = MkProd a b`
+  (`prelude.rs:160`) — a distinct construct (`§4.5.3`). Assert the pair's
+  **components and order** and its Σ-pair denotation; the **surface constructor
+  spelling** is deferred `OQ-syntax` (`§4.5.2`), so do **not** freeze a
+  constructor name (over-freezing a deferred spelling would falsely fail a valid
+  build once the stdlib pair name finalizes).
+
+### surface/effects/direct-state-console-commute (oracle, build-forcing)
+- spec: `36 §4.5.4` (composition via `⊕`; handler nesting = discharge order;
+  `State`/`Console` commute), `§4.2` (the `Vis (inr o)` pass-through clause)
+- given: a `[State Int, Console]` program that threads state **and** logs —
+  `logged_next () = bind (get ()) (λ n. bind (put (n + 1)) (λ _. bind (perform
+  Console (Write "log")) (λ _. Ret n)))` — discharged two ways: `runState 0
+  (handleConsole m)` (Console peeled first) and `handleConsole (runState 0 m)`
+  (State peeled first).
+- expect: **both type-check and thread state identically** — result pair
+  `(0, 1)` and one `Console.Write "log"`, whichever handler peels first.
+  `runState` discharges the `State` summand by its `inl` clauses and **passes
+  every Console op through untouched** by `§4.2`'s `Vis (inr o) k` clause;
+  `handleConsole` never reads `State` ops — so the two handlers **commute**.
+- why: composition (frame AC4) — a bug where `runState`'s pass-through clause
+  **consumes/drops/reorders** the `Console` op (or mis-threads state across an
+  interleaved foreign `Vis`) makes the two discharge orders **diverge** (a
+  different final state, or a dropped/duplicated `Write`) — the commutation
+  **flips**. A single one-order case would be green-vs-green under a
+  pass-through bug; the two orders are the net. (discriminating on
+  discharge-order; build-forcing.)
+
+### surface/effects/direct-state-no-cross-run (oracle, build-forcing)
+- spec: `36 §4.5.5` (purity/totality; result = function of `s₀` + pure tree;
+  the C3-forbidden face), `§4.5.6`/`OQ-C` (C3 mutable refs forbidden)
+- given: the **same** pure tree `next` (above) run twice from two initial
+  states in one computation — `runState 0 next` then `runState 41 next` — with
+  **no** `runState` nesting between them (two independent top-level discharges).
+- expect: **two independent results `(0, 1)` and `(41, 42)`** with **no
+  cross-run state** — the second run re-threads from `41`, *not* from the first
+  run's final state `1`. The result is determined **entirely by `s₀` and the
+  pure tree** (`§4.5.5`); `runState s₀ m` is re-runnable and idempotent in `m`.
+- why: the **C2/C3 boundary** the WP must preserve (frame AC3) — state is
+  `runState`'s **parameter**, threaded functionally, never a cell. A bug that
+  introduced a **shared mutable cell** (the forbidden C3 shape) would leak
+  run-1's final state into run-2, yielding **`(1, 2)`** for the second run
+  instead of `(41, 42)` — the re-runnability **flips**. The pure fold
+  structurally cannot leak; this case is the executable witness that no in-place
+  mutation entered on the value path (grep-face: no `RefCell`/`Cell`/interior
+  mutability, `§4.5.5`). (discriminating on cross-run isolation; build-forcing.)
+
+### surface/effects/direct-state-kernel-untouched (property)
+- spec: `36 §4.5.3` (`runState` is a derived total def, kernel-re-checked, not a
+  trusted Rust primitive), `§4.5.6` (no new `Term`/`Decl` variant; outer-ring
+  lift only), frame AC1
+- given: the delivered `[State s]` surface — its `get`/`put` denotations, the
+  `runState` handler, and the effect-row machinery for `State s ⊕ F`.
+- expect: **`git diff origin/main -- crates/ken-kernel/` stays empty** and
+  `trusted_base()` is unchanged — no `State`/`Get`/`Put`/`runState` kernel
+  `Term` or `Decl` variant, no new `declare_primitive`/`declare_postulate`.
+  `runState` is an **ordinary total Ken definition** (the `§4.2` `elim_ITree`
+  fold) the kernel re-checks like any term; the runtime merely *evaluates* it
+  (it is **not** an I/O driver like Console's `run_io`, `§7.2` — pure state
+  threading performs no I/O).
+- why: frame AC1 is **load-bearing and structural** — `[State s]`'s
+  zero-`trusted_base`-delta is grounded in the **kernel being untouched**
+  (grep: no `State` effect machinery in `ken-kernel`; K1.5's generic
+  `elim_ITree` already admits the `Vis`-tree), **not** a runtime assertion. If a
+  build path ever needs a kernel `Term`/`Decl` variant for state, **that is the
+  finding** (C2 → C3 boundary breach). The `runState`-derived-not-postulated
+  split is what keeps the direct surface as cheap as EFF4's `space` door.
+  (`property`: TCB-surface invariant, no value-flip — asserts the *absence* of a
+  kernel delta.)
+
+**Cross-case reconcile (EFF6 ↔ EFF4 — same fold, two doors).**
+EFF4's `space-becomes-threads-state` (`runState 0 {inc;inc;get} = (2,2)`) and
+EFF6's `direct-state-next-post-increment` (`runState 0 next = (0,1)`) exercise
+the **same** `§4.2` `runState` fold through **different surfaces** — the
+imperative `space` sugar (`§4.1`) vs the direct monadic `get`/`put` (`§4.5`).
+They are **not** contradictory: different programs, same handler. EFF6
+**strengthens** the shared mechanism on the **pair-order** dimension EFF4 leaves
+unpinned — EFF4's `(2,2)` has `result == state`, so a pair-order swap is
+invisible to it; EFF6's `result 0 ≠ state 1` makes the swap flip. Mechanism
+check (per V2): both assert `runState s₀ ⟦m⟧ = (result, final-state)` with the
+result the observed value and the second component the final state — the direct
+and space doors **agree on the fold's shape**.
+
+---
+
 ## Regression — L5 is additive over surface/V0
 
 ### surface/effects/existing-surface-invariants-still-green (property)
