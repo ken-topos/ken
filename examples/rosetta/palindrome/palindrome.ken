@@ -1,0 +1,53 @@
+-- Rosetta Code: Palindrome detection
+-- https://rosettacode.org/wiki/Palindrome_detection
+--
+-- Task: determine whether a string reads the same forwards and backwards.
+--
+-- Reuses the landed `packages/collections` string surface (`eq`,
+-- `string_to_list_char`/`list_char_to_string`) -- no re-derivation of a
+-- string op. `reverse` over `List Char` is NOT in the landed 7-combinator
+-- floor (`list_append`/`nth`/`take`/`drop`/`natSub`/`list_eq`/`list_compare`),
+-- so it's defined locally here (a one-off, not promoted to the shared
+-- package per the frame's YAGNI/no-speculative-helper rule -- nothing else
+-- in this wave needs `reverse` yet).
+--
+-- Output steers around the tracked `natToDecimal` exponential-blowup gap
+-- (VAL2 finding, `evt_4pdzxech177bp`): the oracle is a `String` ("PASS"/
+-- "FAIL"), never a printed `Nat`/`Int`.
+
+-- reverseListChar: structural recursion on `xs`, SCT decreasing on the
+-- `Cons` tail (`xs2`) -- same sound-zone shape as the landed floor.
+view reverseListChar (a : Type) (xs : List a) : List a =
+  match xs {
+    Nil => Nil a ;
+    Cons x xs2 => list_append a (reverseListChar a xs2) (Cons a x (Nil a))
+  }
+
+view reverseString (s : String) : String =
+  list_char_to_string (reverseListChar Char (string_to_list_char s))
+
+view palindrome (s : String) : Bool = eq s (reverseString s)
+
+-- ── Oracle ───────────────────────────────────────────────────────────────────
+--
+-- A discriminating corpus, folded to a single PASS/FAIL string (no IO
+-- sequencing needed for a one-line oracle): a true palindrome ("racecar"),
+-- a non-palindrome same-length pair ("hello"), the empty string (vacuously
+-- a palindrome), and a single character (trivially a palindrome). Any one
+-- wrong flips the result to "FAIL".
+view finalCheck : String =
+  match palindrome "racecar" {
+    True => match palindrome "hello" {
+      False => match palindrome "" {
+        True => match palindrome "a" {
+          True => "PASS" ;
+          False => "FAIL"
+        } ;
+        False => "FAIL"
+      } ;
+      True => "FAIL"
+    } ;
+    False => "FAIL"
+  }
+
+view main : IO Unit = print_line finalCheck

@@ -1,0 +1,38 @@
+-- Rosetta Code: Tree traversal
+-- https://rosettacode.org/wiki/Tree_traversal
+--
+-- Task: in-order traversal of a binary tree.
+--
+-- GAP-multi-recursive-field-match (BLOCKING, capability gap): see
+-- KNOWN-GAP.md. A `data` type with a constructor holding TWO OR MORE
+-- fields of the type being declared itself (the ordinary shape of any
+-- binary tree) cannot be `match`ed -- confirmed via a minimal repro
+-- isolated from this file's own traversal logic (single-recursive-field
+-- and zero-recursive-field constructors both work fine; two or more fail
+-- identically regardless of payload type or match-arm body).
+--
+-- Once GAP-multi-recursive-field-match is resolved, the intended program is:
+--
+-- data Tree = Leaf | Node Tree Char Tree
+--
+-- view inorder (t : Tree) : List Char =
+--   match t {
+--     Leaf => Nil Char ;
+--     Node l c r => list_append Char (inorder l) (Cons Char c (inorder r))
+--   }
+--
+-- view sampleTree : Tree =
+--   Node
+--     (Node (Node Leaf 97 Leaf) 98 (Node Leaf 99 Leaf))
+--     100
+--     (Node (Node Leaf 101 Leaf) 102 (Node Leaf 103 Leaf))
+--
+-- view traversalResult : String = list_char_to_string (inorder sampleTree)
+--
+-- view finalCheck : String =
+--   match eq traversalResult "abcdefg" { True => "PASS" ; False => "FAIL" }
+--
+-- view main : IO Unit = print_line finalCheck
+
+-- Placeholder until GAP-multi-recursive-field-match is resolved.
+view main : Nat = Zero

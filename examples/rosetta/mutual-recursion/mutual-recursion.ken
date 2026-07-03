@@ -1,0 +1,37 @@
+-- Rosetta Code: Mutual recursion
+-- https://rosettacode.org/wiki/Mutual_recursion
+--
+-- Task: classic even/odd via two mutually-recursive functions.
+--
+-- GAP-mutual-recursion-surface (BLOCKING, capability gap): see
+-- KNOWN-GAP.md. `elaborate_file` processes `view` declarations strictly in
+-- source order with no forward-declaration / `mutual` grouping construct;
+-- there is no surface syntax that gathers two (or more) separately-named
+-- `view`s into one `declare_recursive_group` call. Confirmed empirically:
+-- declaring `isEven` (which calls `isOdd`) before `isOdd` exists fails with
+-- `UnresolvedCon { name: "isOdd" }` -- and the symmetric ordering fails the
+-- same way on the other name. There is no order that elaborates both.
+--
+-- Once GAP-mutual-recursion-surface is resolved (a `mutual`/forward-decl
+-- surface construct wired through `declare_recursive_group` for the whole
+-- group), the definitions below are the intended program:
+--
+-- view isEven (n : Nat) : Bool = match n { Zero => True  ; Suc m => isOdd m }
+-- view isOdd  (n : Nat) : Bool = match n { Zero => False ; Suc m => isEven m }
+--
+-- view five : Nat = Suc (Suc (Suc (Suc (Suc Zero))))
+--
+-- main: isEven 5 = False, isOdd 5 = True -- folded to one PASS/FAIL string
+-- (steers around the tracked natToDecimal gap, matching palindrome's oracle
+-- style):
+--
+-- view finalCheck : String =
+--   match isEven five {
+--     False => match isOdd five { True => "PASS" ; False => "FAIL" } ;
+--     True  => "FAIL"
+--   }
+--
+-- view main : IO Unit = print_line finalCheck
+
+-- Placeholder until GAP-mutual-recursion-surface is resolved.
+view main : Nat = Zero

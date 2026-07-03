@@ -1,0 +1,100 @@
+-- Rosetta Code: Sorting algorithms/Merge sort
+-- https://rosettacode.org/wiki/Sorting_algorithms/Merge_sort
+--
+-- Task: sort a sequence via merge sort.
+--
+-- Structural recursion + SCT, `Ord` typeclass (`leqChar`), parametric
+-- polymorphism over the list-element type. Sorts `List Char` (the
+-- characters of a scrambled string) -- steers around the tracked
+-- `natToDecimal` gap: the oracle is a `String`, never a printed `Int`/`Nat`.
+--
+-- `mergeSort` is NOT directly structurally recursive (its two recursive
+-- calls operate on `splitAlt`'s computed halves, not literal `Cons`-tail
+-- sub-terms of the input) -- the same well-founded-recursion situation as
+-- the landed `gcd.ken`'s `natGcdFueled`. Fixed the same way: an explicit
+-- `Nat` fuel parameter (the list's own length -- always generously
+-- sufficient, since real recursion depth is O(log n) via halving) that
+-- decreases structurally (`Suc f -> f`) while the actual list arguments
+-- ride along as arbitrary computed values. SCT-verified empirically
+-- (scratch probe) before writing this for real.
+
+view listLength (a : Type) (xs : List a) : Nat =
+  match xs {
+    Nil => Zero ;
+    Cons x xs2 => Suc (listLength a xs2)
+  }
+
+-- Splits `xs` into two roughly-equal halves by alternating elements
+-- (no `Nat` division needed -- avoids the tracked `natToDecimal`-family
+-- arithmetic gap entirely). SCT: recursive call on `xs2`, a strict `Cons`
+-- sub-term.
+view splitAlt (a : Type) (xs : List a) : Prod (List a) (List a) =
+  match xs {
+    Nil => MkProd (List a) (List a) (Nil a) (Nil a) ;
+    Cons x xs2 => match splitAlt a xs2 {
+      MkProd rest1 rest2 => MkProd (List a) (List a) (Cons a x rest2) rest1
+    }
+  }
+
+-- Merges two already-sorted lists. Each recursive call decreases exactly
+-- one of `xs`/`ys` (an "alternating decrease" -- confirmed SCT-acceptable
+-- empirically; distinct from -- and simpler than -- Ackermann's blocked
+-- lexicographic-descent shape, since each individual call site here has
+-- one literal strict-subterm argument).
+view merge (a : Type) (leqf : a -> a -> Bool) (xs : List a) (ys : List a) : List a =
+  match xs {
+    Nil => ys ;
+    Cons x xs2 => match ys {
+      Nil => xs ;
+      Cons y ys2 => match leqf x y {
+        True  => Cons a x (merge a leqf xs2 ys) ;
+        False => Cons a y (merge a leqf xs ys2)
+      }
+    }
+  }
+
+view mergeSortFueled (a : Type) (leqf : a -> a -> Bool) (fuel : Nat) (xs : List a) : List a =
+  match fuel {
+    Zero => xs ;
+    Suc f => match xs {
+      Nil => Nil a ;
+      Cons x xs2 => match xs2 {
+        Nil => xs ;
+        Cons y xs3 => match splitAlt a xs {
+          MkProd left right =>
+            merge a leqf (mergeSortFueled a leqf f left) (mergeSortFueled a leqf f right)
+        }
+      }
+    }
+  }
+
+view mergeSort (a : Type) (leqf : a -> a -> Bool) (xs : List a) : List a =
+  mergeSortFueled a leqf (listLength a xs) xs
+
+-- ── Oracle ───────────────────────────────────────────────────────────────────
+
+-- Corpus size note: `mergeSortFueled`'s fuel parameter `f` is referenced
+-- twice per level (once per recursive child call) -- the same "bound value
+-- referenced twice in one body" shape as the tracked `natToDecimal`
+-- exponential-blowup finding (VAL2). Confirmed empirically (scratch probe,
+-- growth-rate scan): 4 chars = 221ms, 5 = 1.7s, 6 = 10.5s, 7 = 58s (~8x per
+-- +1 element) -- same family, same root cause (no term-sharing in
+-- `ken-interp` substitution), already scoped for a Runtime fix. Sized this
+-- oracle at 6 chars (10.5s, confirmed-correct) -- same judgment call as
+-- `gcd` (4, fast) vs `factorial`/`fibonacci` (120/55, infeasible): pick the
+-- largest size that's still comfortably within a generous test timeout,
+-- don't force the un-shrunk "natural" example size through an infeasible
+-- cost.
+view scrambled : List Char =
+  Cons Char 100 (Cons Char 99 (Cons Char 98 (Cons Char 97
+    (Cons Char 102 (Cons Char 101 (Nil Char))))))  -- "dcbafe"
+
+view sortedResult : String = list_char_to_string (mergeSort Char leqChar scrambled)
+
+view finalCheck : String =
+  match eq sortedResult "abcdef" {
+    True => "PASS" ;
+    False => "FAIL"
+  }
+
+view main : IO Unit = print_line finalCheck
