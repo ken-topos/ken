@@ -59,8 +59,6 @@ pub fn empty_prelude_env() -> PreludeEnv {
         char_length_id: z,
         string_to_list_char_id: z,
         list_char_to_string_id: z,
-        map_id: z,
-        set_id: z,
         // VAL1-surface Console/IO declarations (`36 §2.1`, VAL1-surface).
         unit_id: z,
         mkunit_id: z,
@@ -126,11 +124,6 @@ pub struct PreludeEnv {
     pub string_to_list_char_id: GlobalId,
     /// `list_char_to_string : List Char → String` (total, `37 §2.3`).
     pub list_char_to_string_id: GlobalId,
-    // L3b: abstract collection types (`37 §6`).
-    /// `Map : Type → Type → Type` (abstract; `DecEq K` gate via `where`).
-    pub map_id: GlobalId,
-    /// `Set : Type → Type` (abstract; `DecEq A` gate via `where`).
-    pub set_id: GlobalId,
     // VAL1-surface: Console/IO declarations (`36 §2.1`, VAL1-surface).
     /// `Unit` — the one-element type (`data Unit = MkUnit`).
     pub unit_id: GlobalId,
@@ -621,26 +614,18 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         .map_err(|e| ElabError::Internal(format!("prelude Perm failed: {}", e)))?;
     elab.globals.insert("Perm".to_string(), perm_id);
 
-    // ── L3b: abstract collection types (`37 §6`) ───────────────────────────
-    // `Map : Type → Type → Type` — abstract; `DecEq K` gate enforced via
-    // the `where` constraint mechanism in `elaborate_rdecl_v1` (L3b).
-    //
-    // ES2: RE-CLASS `declare_postulate` → `declare_primitive` OpaqueType.
-    // `Map`/`Set` are genuinely runtime (O(1) content-addressed canonical
-    // form, `41 §3a`) — not derivable — but are *audited primitives* (item-2,
-    // like `String`/`Bytes`), not *assumed axioms* (item-3). They stay in
-    // `trusted_base()`, correctly re-classed (no trust regression).
-    let map_ty =
-        Term::pi(type0.clone(), Term::pi(type0.clone(), type0.clone()));
-    let map_id = declare_primitive(&mut elab.env, vec![], map_ty, PrimReduction::OpaqueType)
-        .map_err(|e| ElabError::Internal(format!("prelude Map failed: {}", e)))?;
-    elab.globals.insert("Map".to_string(), map_id);
-
-    // `Set : Type → Type` — abstract; same `DecEq A` gate.
-    let set_ty = Term::pi(type0.clone(), type0.clone());
-    let set_id = declare_primitive(&mut elab.env, vec![], set_ty, PrimReduction::OpaqueType)
-        .map_err(|e| ElabError::Internal(format!("prelude Set failed: {}", e)))?;
-    elab.globals.insert("Set".to_string(), set_id);
+    // `Map`/`Set` (`37 §6`) were RETIRED here (ES2's audited
+    // `declare_primitive` OpaqueType re-class) — Map-build (`52-map.md`,
+    // VAL2 #8 / OQ-A) supersedes that placeholder with a **proved, pure**
+    // ordered BST (`packages/collections/map.ken`'s `Tree k v` + `insert`/
+    // `lookup`/`member`/`toList`/`fromList`/`fold`/`Set*`), a transparent
+    // inductive admitted via `declare_inductive`/`declare_def` — kernel-
+    // rechecked, not audited-opaque. Net-negative `trusted_base()` delta
+    // (`52 §1.1`/`§9` AC1): the two entries below are GONE, nothing new is
+    // added here (the map's carrier/ops/laws are package Ken, not prelude
+    // primitives). `Map`/`Set` are no longer prelude-global names; a
+    // program spells the carrier `Tree k v` (`52 §3`), matching the spec's
+    // own naming — there are not two `Map`s (`52 §1.1`).
 
     // ── L3a String surface ops (`37 §2`) ───────────────────────────────────
     // `String` (bytes layer) + `Int` (numeric tower) + `Char` (numeric) +
@@ -780,8 +765,6 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         char_length_id,
         string_to_list_char_id,
         list_char_to_string_id,
-        map_id,
-        set_id,
         unit_id,
         mkunit_id,
         console_op_id,
