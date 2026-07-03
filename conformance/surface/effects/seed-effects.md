@@ -533,6 +533,20 @@ build it.
   Console (Write "log")) (λ _. Ret n)))` — discharged two ways: `runState 0
   (handleConsole m)` (Console peeled first) and `handleConsole (runState 0 m)`
   (State peeled first).
+- **[deferred dependency — Console lift, beyond `State-effect-build` #242]:**
+  `logged_next` is **not constructible on the build as shipped** —
+  `print_line`/`Console`'s type is fixed to standalone
+  `ITree ConsoleOp console_resp Unit`, **not** generic over an arbitrary `F`
+  combined via `⊕`, and there is no bare-effect→`⊕` lift combinator, so
+  `perform Console …` cannot be `bind`-ed into a `State`-threaded
+  (`Sum`-combined) computation (language-qa's `wp/State-effect-build` finding).
+  This is a **named follow-on** (generalize `Console`/`print_line` over `F`, or
+  a bare-effect→`⊕` lift) **outside State-effect-build's scope** ((a)/(b)/(c) +
+  get/put/bind/runState). The composition *mechanism* is proven sound
+  (language-qa's pass-through probe on a fresh inhabited second effect; the
+  companion `direct-state-no-cross-run` exercises the `State` thread). So this
+  case stays **red pending the Console-lift follow-on**, not flippable by #242 —
+  fail-closed (the program isn't expressible yet), **not** a soundness gap.
 - expect: **both type-check and thread state identically** — result pair
   `(0, 1)` and one `Console.Write "log"`, whichever handler peels first.
   `runState` discharges the `State` summand by its `inl` clauses and **passes
