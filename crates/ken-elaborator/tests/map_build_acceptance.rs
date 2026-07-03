@@ -537,6 +537,49 @@ fn lookup_empty_law_is_a_real_reducing_proof() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Law 4 (`54 §3`, "toList ordered") — `toListOrdered`
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn tolistordered_law4_is_a_real_general_proof_term() {
+    let env = mk_env();
+    // `toListOrdered : (k v : Type) -> (leq : k -> k -> Bool) -> (m : Tree k v)
+    //   -> Ordered k v leq m -> isSorted (Pair k v) (pairLeq k v leq) (toList k v m)`
+    // must be admitted as a real Decl::Transparent proof term (never a
+    // postulate/axiom) — this IS the whole-body `declare_def` kernel recheck
+    // that used to OOM (~12 GB) before `wp/obs-eq-termination` (`9cf468a`)
+    // fixed the underlying conv/obs termination bug; `mk_env()` above
+    // elaborating `map.ken` at all is itself the completion proof, this just
+    // pins the trust-level assertion on the specific declaration.
+    for name in [
+        "toListOrdered",
+        "isSortedAppend",
+        "consSortedHead",
+        "allKeysToAllInList",
+        "allInListAppendIntro",
+    ] {
+        let id = env.globals[name];
+        assert!(
+            matches!(env.env.lookup(id), Some(Decl::Transparent { .. })),
+            "{name} must be a real proof term, not a postulate"
+        );
+    }
+}
+
+// A hand-built concrete-instance application (`tree_2_1_3` under a trivial
+// always-true comparator) was tried here as a second smoke test, but
+// `Ordered`'s real Node case (`And (allKeys (\k2. ...) l) (And (allKeys
+// (\k2. ...) r) (And (Ordered l) (Ordered r)))`) needs an exactly-nested
+// `andIntro` witness matching that inline-lambda predicate spelling
+// precisely, not a re-derivation via `leBelow`/`leAbove` or a bare `tt` —
+// getting the by-hand nesting exactly right is its own small proof exercise
+// and not necessary evidence: `tolistordered_law4_is_a_real_general_proof_
+// term` above is the load-bearing check (the fully general, quantified
+// theorem already IS the whole-body kernel recheck that used to OOM).
+// Left as a natural follow-on if a concrete instance-level regression test
+// is wanted later.
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Pair (Σ-pair, `52 §4`) plumbing sanity — `mkPair`/`pairFst`/`pairSnd`
 // ─────────────────────────────────────────────────────────────────────────────
 
