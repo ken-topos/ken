@@ -107,13 +107,20 @@ site). Proof shapes, all `Nat`-structural, comparison-driven only through
   `Suc m` step `leqNat (Suc m)(Suc m) ⇝ leqNat m m`, closed by the self-call IH
   `reflLeq m` (**neutral** result → the equality is carried, not collapsed).
 - **`transLeq : (x y z:Nat) → IsTrue (leqNat x y) → IsTrue (leqNat y z) →
-  IsTrue (leqNat x z)`** — induction on all three; the only live arm is
-  `Suc/Suc/Suc → leqNat m m' m''` via the IH; every `Zero`/`Suc` mismatch arm
-  discharges from a `False` hypothesis by `absurd` (`prelude.rs`, `Bottom`).
+  IsTrue (leqNat x z)`** — induction on all three; the `x = Zero` base is
+  **live** and closes by `tt` (`leqNat Zero z ⇝ True → IsTrue True → Top`, no
+  false
+  hypothesis); the `Suc/Suc/Suc → leqNat m m' m''` arm lifts the IH; every
+  remaining `Zero`/`Suc` mismatch arm discharges from a `False` hypothesis by
+  `absurd` (`prelude.rs`, `Bottom`).
 - **`antisymLeq : (x y:Nat) → IsTrue (leqNat x y) → IsTrue (leqNat y x) →
-  Equal Nat x y`** — the load-bearing one; induction on both, `Zero/Zero → Refl`
-  (identical `Zero`, **neutral** — not a collapsing operation), `Suc/Suc → cong
-  Suc` of the IH, the two mixed arms `absurd` from a `False` premise.
+  Equal Nat x y`** — the load-bearing one; induction on both, `Zero/Zero → tt`
+  (goal `Equal Nat Zero Zero` — two occurrences of the **nullary** ctor `Zero`,
+  K7-collapses to `Top`, exactly like `orderedEmpty`/`lookupEmptyIsNone`; `Refl`
+  fails on the collapsed goal), `Suc/Suc → cong Suc` of the IH (non-nullary
+  head, neutral components → stays `Eq`-shaped), the two mixed arms `absurd`
+  from a
+  `False` premise.
 - **`totalLeq : (x y:Nat) → Or (IsTrue (leqNat x y)) (IsTrue (leqNat y x))`** —
   induction on both; `Zero` on either side gives the corresponding `Inl`/`Inr`
   with `tt`; `Suc/Suc` lifts the IH's `Or` unchanged.
@@ -121,6 +128,13 @@ site). Proof shapes, all `Nat`-structural, comparison-driven only through
 `antisymLeq` is needed only for the `Distinct`-discharge boundary (`54 §4`, ADR
 0010-gated, **out of scope**); `delete`/`union` invariant-preservation uses only
 `transLeq`/`total`, matching the landed law-1 dictionary.
+
+Two trivial net-new `Bool` combinators ride alongside `leqNat` as **D0
+prerequisites** (needed from D1 onward — `dropKey`'s decision (`§3`) and the set
+membership algebra (`§5`) — so they must be in scope before D1 in the build
+order), transparent and match-based like the landed `bool_or`
+(`lawful_classes.ken:39`): `bool_and a b := match a { True => b ; False => False
+}` and `bool_not b := match b { True => False ; False => True }`.
 
 ## 3. D1 — `delete` (rebuild-via-`fromList`, Fork D)
 
@@ -147,9 +161,15 @@ view delete (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k) (m : Tree k v
 ```
 
 - **`dropKey` is FILTER (remove **all** order-equivalent entries), not
-  drop-first** (Fork D build-pin). `orderEquivKey leq a b := And (IsTrue (leq a
-  b)) (IsTrue (leq b a))` reuses the landed `orderEquiv` shape (`map.ken:1600`).
-  `dropKey` is a plain `List` recursion (Gap-B-free, like `pairKeys`/`assoc`).
+  drop-first** (Fork D build-pin). The order-equivalence **decision** is
+  **Bool-valued** —
+  `orderEquivKey leq a b : Bool = bool_and (leq a b) (leq b a)`
+  (§2's `bool_and`) — so `dropKey`'s `match … { True => … ; False => … }` has a
+  `Bool` scrutinee, exactly as `insert`/`lookup` branch on `leq key k2 : Bool`.
+  (This is the *decision*; the landed **Prop**-valued `orderEquiv`,
+  `map.ken:1600`, is its `Ω` counterpart — used in the *laws*, never as an
+  executable-`match` scrutinee.) `dropKey` is a plain `List` recursion
+  (Gap-B-free, like `pairKeys`/`assoc`).
 - **`delete` is NON-recursive** — a pipeline of landed structural ops
   (`toList → dropKey → fromList`), so it carries **zero SCT obligation of its
   own** (one less thing to check than a self-recursive `glue`-`delete`).
@@ -244,12 +264,9 @@ view difference … (a : Tree k v) (b : Tree k v) : Tree k v =
 
 Set ops are the map ops at `v := Unit` (`setUnion s t := union … (\_ _. MkUnit)
 s t`, etc. — at `Unit` every combining policy coincides, so Fork A's choice is a
-**no-op** here). Two trivial net-new `Bool` combinators are needed alongside the
-landed `bool_or` (`lawful_classes.ken:39`): `bool_and a b := match a { True => b
-; False => False }` and
-`bool_not b := match b { True => False ; False => True }`
-— transparent, match-based, usable at every carrier (exactly `bool_or`'s
-rationale).
+**no-op** here). The set membership algebra uses the landed `bool_or`
+(`lawful_classes.ken:39`) together with the `bool_and`/`bool_not` introduced as
+D0 prerequisites (`§2`).
 
 **The set laws are stated MEMBERSHIP-EXTENSIONALLY** (enclave sub-ruling —
 load-bearing soundness):
