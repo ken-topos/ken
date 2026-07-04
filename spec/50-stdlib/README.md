@@ -62,6 +62,12 @@ so `fold` over a `Monoid` can be reasoned about, and a generic verified
 algorithm may *assume the laws hold* (they are **proved, not postulated** — the
 discipline that carries into every package build).
 
+The **constructor-class tranche** — `Semigroup`/`Monoid` (value-level algebra)
+and `Functor`/`Foldable` (the first classes over a type constructor
+`f : Type → Type`) — is pinned in **`55-lawful-functors.md`** (CAT-1,
+`packages/lawful-functors/`), the reusable template `Applicative`/`Monad`/
+`Traversable` (CAT-2) extend.
+
 ## 3. Collections — packages over built-in/prelude carriers
 
 `List` is a **prelude** type (named by the `String ↔ List Char` conversion,
