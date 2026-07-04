@@ -18,10 +18,11 @@ use std::path::PathBuf;
 
 use ken_elaborator::capabilities::{Cap, AUTH_FULL};
 
-/// Encode a minted `Cap`'s authority as the runtime carries it — a bare
-/// `EvalVal::Int(level)` (`eval.rs`'s `authorizes`, D3's chosen representation).
+/// Encode a minted `Cap`'s authority as the runtime carries it — a real
+/// opaque `EvalVal::Cap` (fs-read-file-lines-flip D3, Architect ruling: NOT
+/// the earlier `EvalVal::Int(level)` positional-scalar).
 fn cap_evalval(cap: &Cap) -> ken_interp::EvalVal {
-    ken_interp::EvalVal::Int(ken_elaborator::capabilities::authority(cap).0 as i64)
+    ken_interp::EvalVal::Cap(cap.clone())
 }
 
 fn repo_root() -> PathBuf {
@@ -35,6 +36,7 @@ fn fixture_path(name: &str) -> PathBuf {
 struct FsEnv {
     elab_env: ken_elaborator::ElabEnv,
     read_bytes_id: ken_kernel::GlobalId,
+    afull_id: ken_kernel::GlobalId,
     vis_id: ken_kernel::GlobalId,
     ret_id: ken_kernel::GlobalId,
     ok_id: ken_kernel::GlobalId,
@@ -69,6 +71,7 @@ fn mk_env() -> FsEnv {
     };
     FsEnv {
         read_bytes_id: get("read_bytes"),
+        afull_id: get("AFull"),
         vis_id: console_ids.vis_id,
         ret_id: console_ids.ret_id,
         ok_id: fs_ids.ok_id,
@@ -80,8 +83,11 @@ fn mk_env() -> FsEnv {
     }
 }
 
-/// Evaluate `read_bytes cap path` (real D1 reduction) and drive the result
-/// through the real D2 `run_io` FS arm.
+/// Evaluate `read_bytes a cap path` (real D1 reduction; `a` is `read_bytes`'s
+/// fs-read-file-lines-flip D2 authority-level parameter, erased at runtime —
+/// any well-formed `Auth` `EvalVal` here is equivalent, `AFull` chosen to
+/// match the minted `Cap`'s own level) and drive the result through the
+/// real D2 `run_io` FS arm.
 fn read_via_real_driver(
     env: &mut FsEnv,
     path: &str,
@@ -89,8 +95,11 @@ fn read_via_real_driver(
     let mut store = ken_interp::EvalStore::new();
     let term = ken_kernel::Term::const_(env.read_bytes_id, vec![]);
     let f = ken_interp::eval(&[], &term, &env.elab_env.env, &mut store);
+    let a_term = ken_kernel::Term::Constructor { id: env.afull_id, level_args: vec![] };
+    let a_val = ken_interp::eval(&[], &a_term, &env.elab_env.env, &mut store);
+    let step0 = ken_interp::apply(f, a_val, &env.elab_env.env, &mut store);
     let cap = Cap::mint(AUTH_FULL, "FS");
-    let step1 = ken_interp::apply(f, cap_evalval(&cap), &env.elab_env.env, &mut store);
+    let step1 = ken_interp::apply(step0, cap_evalval(&cap), &env.elab_env.env, &mut store);
     let path_val = ken_interp::EvalVal::Bytes(path.as_bytes().to_vec());
     let tree = ken_interp::apply(step1, path_val, &env.elab_env.env, &mut store);
     ken_interp::run_io(
@@ -161,8 +170,11 @@ fn pure_reduction_builds_vis_before_any_syscall() {
     let mut store = ken_interp::EvalStore::new();
     let term = ken_kernel::Term::const_(env.read_bytes_id, vec![]);
     let f = ken_interp::eval(&[], &term, &env.elab_env.env, &mut store);
-    let cap_val = ken_interp::EvalVal::Int(0);
-    let step1 = ken_interp::apply(f, cap_val, &env.elab_env.env, &mut store);
+    let a_term = ken_kernel::Term::Constructor { id: env.afull_id, level_args: vec![] };
+    let a_val = ken_interp::eval(&[], &a_term, &env.elab_env.env, &mut store);
+    let step0 = ken_interp::apply(f, a_val, &env.elab_env.env, &mut store);
+    let cap_val = ken_interp::EvalVal::Cap(Cap::mint(AUTH_FULL, "FS"));
+    let step1 = ken_interp::apply(step0, cap_val, &env.elab_env.env, &mut store);
     // A path that would fail loudly if the pure reduction ever touched
     // `std::fs` (an invalid path with embedded NUL, rejected by every OS
     // filesystem call) — the pure `eval`/`apply` steps below must still

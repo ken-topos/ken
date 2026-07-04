@@ -416,9 +416,30 @@ data Auth = ANone | APartial | AFull  -- finite Type0 enum: the authority level
 -- Cap enriched from bare `Cap : Type0` to authority-indexed:
 Cap : Auth -> Type0                    -- opaque former; `Cap APartial` is a type
 
-main       : (cap : Cap APartial) -> FS (Result Unit IOError) -- declares partial FS
-read_bytes : (a : Auth) -> Cap a -> Bytes -> FS (Result Bytes IOError)
+main       : (cap : Cap APartial) -> FS APartial (Result IOError Unit) -- declares partial FS
+read_bytes : (a : Auth) -> Cap a -> Bytes -> FS a (Result IOError Bytes)
 ```
+
+> **BUILD RECONCILE (runtime build, Architect re-affirm `evt_2aj8ybb5b44pf`,
+> soundness-inert, APPROVED — do not rebuild over this).** Two mechanical
+> corrections to this illustration, made at build time:
+> 1. **`FS`/`FSOp`/`fs_resp` are `Auth`-parameterized too** (`FS : Auth ->
+>    Type -> Type`), not just `Cap`. This is *forced*, not chosen: `Vis`'s
+>    own signature demands an already-concrete `Type` in its `E`/`Resp`
+>    slots, and an `Auth`-indexed `FSOp : Auth -> Type0` can't sit there
+>    unapplied — `FS` must carry `a` to supply it. Every locked property
+>    survives (AC1 kernel-untouched; α; `Cap : Auth -> Type0` untouched;
+>    the sole runtime net unchanged — the type-level `Auth` on `FS` is
+>    phantom w.r.t. `authorizes`, which reads the real `EvalVal::Cap`).
+> 2. **`Result IOError Bytes`, not `Result Bytes IOError`.** `data Result e
+>    a = Err e | Ok a` (`prelude.rs`) means the FIRST type argument is
+>    `Err`'s field, the SECOND is `Ok`'s — so success/failure need `Result
+>    IOError Bytes` (`Err : IOError`, `Ok : Bytes`), not the inverted form.
+>    The inversion was harmless while nothing surface-side pattern-matched
+>    this codomain (the driver's `make_result` is untyped either way); the
+>    first real surface consumer (`read-file-lines.ken`) needed it fixed.
+
+
 
 **Why authority-only `Cap a`, not `Cap FS a` (grounded spelling decision).** The
 operator's reasoning was: *the effect is already explicit via the effect row, so
@@ -463,10 +484,12 @@ postulate).
 (forced by locked AC4 + SEAM-A; settled by citation, NOT a fork).**
 
 ```
-read_bytes : (a : Auth) -> Cap a -> Bytes -> FS (Result Bytes IOError)
+read_bytes : (a : Auth) -> Cap a -> Bytes -> FS a (Result IOError Bytes)
 FSOp       : Auth -> Type0          -- ReadFile : (a) -> Cap a -> Bytes -> FSOp a
-fs_resp    : (a : Auth) -> FSOp a -> Type   -- = Result Bytes IOError
+fs_resp    : (a : Auth) -> FSOp a -> Type   -- = Result IOError Bytes
 ```
+(See the BUILD RECONCILE note above D2's `Cap`/`Auth` block — same two
+mechanical corrections apply here: `FS a`, and `Result IOError Bytes`.)
 
 `read_bytes` is polymorphic in `a` — it accepts a cap at **any** declared level
 and does **no** static sufficiency check. Sufficiency (`a ⊒ APartial`) is

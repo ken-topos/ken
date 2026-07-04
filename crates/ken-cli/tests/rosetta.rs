@@ -102,6 +102,13 @@ fn run_example(slug: &str, ken_src_path: &Path, tmp_dir: &Path) -> Option<(Strin
     let mut child = Command::new(ken_bin())
         .arg("run")
         .arg(&concat_path)
+        // fs-read-file-lines-flip: `read-file-lines.ken` names its fixture
+        // as a workspace-root-relative path (`conformance/fs/fixtures/...`).
+        // Cargo runs a test binary with CWD = the crate's own manifest dir
+        // (`crates/ken-cli`), not the workspace root, so the spawned `ken`
+        // binary must be pinned to the workspace root explicitly — every
+        // other example does no filesystem access and is unaffected.
+        .current_dir(workspace_root())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
