@@ -3,14 +3,95 @@
 --
 -- Task: count how many times each letter occurs in a string.
 --
--- GAP-map-no-ops (BLOCKING, see KNOWN-GAP.md): `Map : Type -> Type ->
--- Type` is declared (`crates/ken-elaborator/src/prelude.rs`, an audited
--- opaque primitive -- correctly not derivable, per its own doc comment)
--- but has ZERO operations registered anywhere: no `empty`/`insert`/
--- `lookup`/`toList`. A bare type with no way to construct or query a
--- value of it is unusable. Confirmed by inspection: no
--- `map_insert`/`map_lookup`/`map_empty` (or any naming variant) exists in
--- `ken-elaborator` or either landed package.
+-- Folds the input's `List Char` (via `string_to_list_char`) into a
+-- `Tree`-backed `Map Char Nat` -- the same carrier + `empty`/`insert`/
+-- `lookup` ops as the landed `packages/collections/map.ken` (Ken has no
+-- working cross-file import, `crates/ken-cli/tests/rosetta.rs`'s own doc
+-- comment; duplicated here verbatim, the same convention `factorial.ken`/
+-- `gcd.ken` already use for shared helpers), insert-or-incrementing each
+-- character's count. `leq_int` (an existing `trusted_base()` primitive) is
+-- the key comparator -- `Char` is Int-backed by refinement erasure, so it
+-- compares directly, no separate `Ord Char` dictionary needed (matches
+-- `map.ken`'s own bare-`leq`-parameter idiom).
 --
--- Placeholder until GAP-map-no-ops is resolved.
-view main : Nat = Zero
+-- Output steers around the tracked `natToDecimal` exponential-blowup gap:
+-- rather than print a full multi-line table (the surface has no string
+-- escape for embedding a literal newline), the report is verified via
+-- `lookup` against the known frequency counts for a classic input
+-- ("mississippi"), folded to a single PASS/FAIL string (matching
+-- `palindrome`'s oracle style).
+
+data Tree k v = Leaf | Node (Tree k v) k v (Tree k v)
+
+view empty (k : Type) (v : Type) : Tree k v = Leaf k v
+
+view insert (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k) (val : v) (m : Tree k v) : Tree k v =
+  match m {
+    Leaf => Node k v (Leaf k v) key val (Leaf k v) ;
+    Node l k2 v2 r =>
+      match leq key k2 {
+        True =>
+          match leq k2 key {
+            True  => Node k v l key val r ;
+            False => Node k v (insert k v leq key val l) k2 v2 r
+          } ;
+        False => Node k v l k2 v2 (insert k v leq key val r)
+      }
+  }
+
+view lookup (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k) (m : Tree k v) : Option v =
+  match m {
+    Leaf => None v ;
+    Node l k2 v2 r =>
+      match leq key k2 {
+        True =>
+          match leq k2 key {
+            True  => Some v v2 ;
+            False => lookup k v leq key l
+          } ;
+        False => lookup k v leq key r
+      }
+  }
+
+view countLetters (xs : List Char) (m : Tree Char Nat) : Tree Char Nat =
+  match xs {
+    Nil => m ;
+    Cons c cs =>
+      match lookup Char Nat leq_int c m {
+        None => countLetters cs (insert Char Nat leq_int c (Suc Zero) m) ;
+        Some n => countLetters cs (insert Char Nat leq_int c (Suc n) m)
+      }
+  }
+
+view frequencies : Tree Char Nat =
+  countLetters (string_to_list_char "mississippi") (empty Char Nat)
+
+view countOf (c : Char) : Nat =
+  match lookup Char Nat leq_int c frequencies { None => Zero ; Some n => n }
+
+view two   : Nat = Suc (Suc Zero)
+view four  : Nat = Suc (Suc two)
+
+view eq_nat (a : Nat) (b : Nat) : Bool =
+  match a {
+    Zero => match b { Zero => True ; Suc _ => False } ;
+    Suc a2 => match b { Zero => False ; Suc b2 => eq_nat a2 b2 }
+  }
+
+-- "mississippi": m=1, i=4, s=4, p=2 (11 letters total).
+view finalCheck : String =
+  match eq_nat (countOf 109) (Suc Zero) {
+    True => match eq_nat (countOf 105) four {
+      True => match eq_nat (countOf 115) four {
+        True => match eq_nat (countOf 112) two {
+          True => "PASS" ;
+          False => "FAIL"
+        } ;
+        False => "FAIL"
+      } ;
+      False => "FAIL"
+    } ;
+    False => "FAIL"
+  }
+
+view main : IO Unit = print_line finalCheck
