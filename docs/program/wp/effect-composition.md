@@ -192,3 +192,271 @@ to the enclave. Contained by: kernel-clean by construction (outer-ring, like
 FS/State), a landed template to generalize (`state.rs`), and a concrete first
 consumer (FS+Console). **This retires VAL2 16/0's one honesty asterisk — Ken
 programs that compose effects become expressible and runnable.**
+
+## Enclave elaboration — D2 (surface injection / lift)
+
+> Author: **spec-author**. Grounded against the landed effect substrate
+> (`origin/main@43e97d02`: `effects/state.rs`, `prelude.rs`) and the
+> **normative** effect-row model (`spec/30-surface/36-effects.md` §2.3, §2.4,
+> §4.5) — the morphism below is **already in the spec** (§2.4 `incl`); D2 gives
+> its landed realization + the surface decision. **No new surface syntax → the
+> frame's STOP condition is *not* triggered** (§D2.3). Couplings flagged to
+> **Architect** (D1↔D2, D2↔D3) in §D2.6.
+
+### D2.0 Grounding — what the landed system has, and the exact gap
+
+The lifted interaction tree is **shared and effect-generic** —
+`prelude.rs` registers `effects::state::declare_itree`'s 3-parameter
+`ITree (E : Type) (Resp : E -> Type) (R : Type)` as the *one* `ITree`, so FS,
+Console, and State all denote over it, differing **only** in the `E`/`Resp`
+arguments (`36 §2.1`, §4.5.6). That is what makes composition *type-possible*.
+
+But the two base effects we must compose produce **bare, single-effect** trees —
+neither is injected into a coproduct (verified in `prelude.rs`):
+
+```
+print_line s  =  Vis ConsoleOp console_resp Unit (Write s) (\_. Ret … MkUnit)
+              :  ITree ConsoleOp  console_resp        Unit        -- E = ConsoleOp
+read_bytes a cap path
+              =  Vis (FSOp a) (fs_resp a) … (ReadFile cap path) (\r. Ret … r)
+              :  ITree (FSOp a) (fs_resp a) (Result IOError Bytes) -- E = FSOp a
+```
+
+They live over **different** `E`, so `bind` cannot sequence them: `bind` is
+homogeneous in `(E, Resp)` (`ITree e resp a -> (a -> ITree e resp b) -> ITree e
+resp b`, `state.rs::declare_bind`). To sequence FS-read then Console-print in
+**one** tree, both must first be **re-tagged** into the shared signature
+`Sum (FSOp a) ConsoleOp` — and **no such re-tagging morphism exists** (grep of
+`ken-elaborator`/`ken-interp` for `inject`/`lift`/`incl`: none). The *only*
+`Sum`-tagging in the tree today is `get`/`put` **hand-baking `InL`** directly
+(`state.rs::declare_get`/`declare_put`: `Vis (InL Get) …`), with State pinned as
+the left summand. **D2 supplies the general morphism that hand-baking is a
+special case of.**
+
+### D2.1 The morphism — `injectL` / `injectR` (the spec's §2.4 `incl`)
+
+Two **general** (effect-agnostic) tree re-taggings, parametric in both summands
+and their response families — the two inclusions `g ↪ Sum g h` and
+`h ↪ Sum g h` of `36 §2.3`'s `⊕`, realized as the `elim_ITree` map `36 §2.4`
+already names `incl_{ρ_g ↪ ρ}` ("*itself an `elim_ITree` map over the `Vis`
+tags — pure*"). Signatures (illustrative names — *decide against the landed
+system*; denotation is normative):
+
+```
+injectL : (g h : Type) -> (rg : g -> Type) -> (rh : h -> Type) -> (a : Type)
+        -> ITree g rg a
+        -> ITree (Sum g h) (resp_sum g h rg rh) a
+
+injectR : (g h : Type) -> (rg : g -> Type) -> (rh : h -> Type) -> (a : Type)
+        -> ITree h rh a
+        -> ITree (Sum g h) (resp_sum g h rg rh) a
+```
+
+Denotation — a structural `elim_ITree` fold that rewrites every `Vis` tag
+through `InL` (resp. `InR`) and leaves `Ret` leaves and the branching shape
+untouched:
+
+```
+injectL g h rg rh a t =
+  elim_ITree                                             -- fold on t : ITree g rg a
+    (M _ = ITree (Sum g h) (resp_sum g h rg rh) a)       -- constant motive → SMALL elim
+    (\ (x : a).                             Ret  … x)    -- Ret leaf ↦ Ret leaf (re-typed)
+    (\ (op : g) (k  : rg op -> ITree g rg a)             -- Δ_k : Vis's own continuation
+                (ih : rg op -> ITree (Sum g h) (resp_sum g h rg rh) a).
+       Vis … (InL g h op) ih)                            -- Vis op k ↦ Vis (InL op) (fold∘k)
+    t
+```
+
+- `injectR` is the exact mirror: scrutinee `ITree h rh a`, tag `InR g h op`.
+- **`ih` is the kernel-supplied W-style induction hypothesis** — it already *is*
+  `injectL … ∘ k` at the sub-tree (`state.rs::declare_bind`'s "`ih r` ≡ the fold
+  on `k r`" pattern); there is **no self-recursive `Const`**, so no SCT
+  interaction, total by structural descent (`14 §3`). The `Δ_k` binder (`k`,
+  Vis's own continuation) must still be bound though unused — omitting it shifts
+  every de Bruijn index (the exact completeness bug `state.rs::declare_bind`'s
+  comment documents).
+- **The motive is constant** (the target `ITree` type does not depend on the
+  scrutinee) → an ordinary **small** elimination like `bind`'s, *not* the
+  large-elim motives `resp_state`/`resp_sum` use.
+
+### D2.2 Well-typedness — the response-reconciliation (D1↔D2 contract)
+
+`Vis (InL op) ih` demands `ih : resp_sum g h rg rh (InL op) -> ITree (Sum g h)
+(resp_sum …) a`. The kernel supplies `ih : rg op -> ITree (Sum g h) (resp_sum
+…) a`. These agree **iff**
+
+```
+resp_sum g h rg rh (InL o)  ≡  rg o          (definitionally, by ι)
+resp_sum g h rg rh (InR o)  ≡  rh o
+```
+
+so the injection is well-typed **exactly when D1's general `resp_sum` reduces to
+the injected summand's own response** on each tag. The landed **State-first**
+`resp_sum` already has this shape — its `InL` method is `\a. resp_state s a`
+(the left summand's response) and its `InR` method is `\o. RespF o`
+(`state.rs::declare_resp_sum`); the **generalization must preserve it**,
+replacing the `resp_state`-specialization with the abstract `rg` and the
+`RespF`-parameter with `rh`. **This is the load-bearing D1↔D2 coupling: if D1
+picks a `resp_sum` that wraps or reorders the response instead of reducing to
+`rg o`/`rh o`, `injectL`/`injectR` do not type-check.** (Flagged to Architect,
+§D2.6.)
+
+### D2.3 Surface form — the decision, and why STOP is *not* triggered
+
+**How does a program author write a computation that performs both effects?**
+The frame's three candidates:
+
+| | surface form | verdict |
+|---|---|---|
+| (a) | explicit named `injectL`/`injectR` applied per single-effect sub-computation, sequenced with `bind` | **chosen — the direct / monadic door** |
+| (b) | a combined-effect `view` | subsumed by (c) |
+| (c) | effect-row-directed elaboration: author writes ordinary calls under `visits [FS, Console]`, the elaborator inserts `incl` per `36 §2.4` | **eventual sugar — deferred** |
+
+**Decision: (a).** `injectL`/`injectR` are exposed as **first-class named
+operations**, and the author sequences injected sub-computations with the
+existing `bind`. This is **exactly parallel to `36 §4.5`** exposing
+`get`/`put`/`runState` as named ops — the *direct/monadic door* that is the
+**floor** under the full row-directed model (as C1 explicit state-threading is
+the floor under `[State s]`, §4.5.6). It introduces **no new denotation**: it is
+`36 §2.3`'s `inj` / §2.4's `incl` made program-callable, the same move §4.5 made
+for the State handler.
+
+**STOP condition — NOT triggered, and precisely why.** The frame mandates: *if
+D2 needs new surface syntax that itself forks the design, route to Steward →
+operator.* Form (a) adds **no grammar, no keyword, no notation** — `injectL c`,
+`injectR c`, `bind` are **ordinary function applications**, identical in surface
+shape to the already-landed `get`/`put`/`bind`/`read_bytes`/`print_line`. The
+injection morphism is *already normative* (§2.4 `incl`); D2 exposes landed
+machinery, it does not invent surface language. Therefore the surface-form
+decision is **in-bounds for the enclave to settle** (the STOP is scoped to a
+*forking new syntax*, which this is not) and I settle it here rather than
+routing. **Form (c)** — the elaborator auto-inserting `incl` from a `visits`
+row — is the whole §1–§2.4 row-inference→denotation pipeline, which is **not
+landed** (the substrate today is named ops + `bind`, the direct door); it is
+named here as the deferred sugar, the honest floor, **not** in D2's scope.
+
+### D2.4 Worked composed program (AC2 / AC7)
+
+A `main` that genuinely composes an FS read with a Console print — the tree is
+built **by the surface program** via `injectL`/`injectR`, so nothing hand-feeds
+`Sum`/`InL`/`InR` at the interpreter (AC7):
+
+```
+-- path : Bytes (the file to read), render : Result IOError Bytes -> String
+main : (cap : Cap APartial)
+     -> ITree (Sum (FSOp APartial) ConsoleOp)
+              (resp_sum (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp)
+              Unit
+main cap =
+  bind …                                          -- sequence in the composed tree
+    (injectL … (read_bytes APartial cap path))    -- FS-read, re-tagged into the LEFT summand
+    (\ (r : Result IOError Bytes).
+       injectR … (print_line (render r)))         -- Console-print, re-tagged into the RIGHT summand
+```
+
+Both `injectL (read_bytes …)` and `injectR (print_line …)` inhabit the *same*
+`ITree (Sum (FSOp APartial) ConsoleOp) (resp_sum …) _`, so the homogeneous
+`bind` sequences them into one composed tree. D3's general `run` (Architect)
+then executes **both** base effects; the CLI's manifest-read → mint-exactly →
+bind path (the fs-flip D2b, unchanged) supplies the `Cap APartial`. **D2's
+deliverable is precisely what makes `main`'s *body* constructible at the
+surface** — the enabling morphism; the `run`/CLI wiring is D3/D4.
+
+```mermaid
+flowchart TB
+  rb["read_bytes …<br/>ITree (FSOp a) (fs_resp a) R"] -->|injectL| L["Vis (InL ·) …"]
+  pl["print_line …<br/>ITree ConsoleOp console_resp Unit"] -->|injectR| R["Vis (InR ·) …"]
+  L --> B["bind : one ITree (Sum (FSOp a) ConsoleOp) (resp_sum …)"]
+  R --> B
+  B --> run["D3 general run — dispatch InL to FS handler,<br/>InR to Console handler, resume, loop"]
+```
+
+### D2.5 Generality (AC3) and State subsumption (AC5)
+
+- **The parametric combinator is the AC3 witness (option a).** `injectL`/
+  `injectR` are parametric in `(g, h, rg, rh, a)` — **one** pair of definitions
+  composes *any* two base effects. Instantiated at `(FSOp a, ConsoleOp)` for the
+  first consumer (§D2.4); a **second distinct pairing** (e.g. `(StateOp s,
+  ConsoleOp)` or the swapped `(ConsoleOp, FSOp a)`) runs through the **same**
+  `injectL`/`injectR` — the option-(b) belt-and-suspenders. The concrete second
+  pairing is CV's D5 to pin; D2 guarantees the machinery is pairing-agnostic.
+- **State is an *instance*, not a fork (AC5).** `get`/`put`'s hand-baked
+  `Vis (InL Get) …` / `Vis (InL (Put s')) …` (`state.rs::declare_get`/
+  `declare_put`) **is** `injectL` specialized to `g = StateOp s` and inlined at
+  the leaf. The general `injectL` is the un-specialized form of that exact
+  pattern, so State's existing tagging is *subsumed* by the mechanism. **The
+  landed `get`/`put` need not be rewritten** — they already emit the correct
+  `Sum`-tagged tree and stay green; generality is demonstrated by the parametric
+  combinator subsuming their shape, not by touching them. *(Optional follow-on,
+  explicitly NOT required by D2 and NOT to be done if it risks AC5: re-express
+  `get`/`put` as `injectL get_raw` / `injectL put_raw` over bare `StateOp s`
+  producers, literally routing State through the combinator. Flagged as optional
+  hygiene, deferred.)*
+
+### D2.6 Couplings to Architect (D1, D3) + the `data` Type0 question
+
+- **D1↔D2 (hard).** `injectL`/`injectR` type-check **only if** D1's general
+  `resp_sum g h rg rh` reduces `resp_sum (InL o) ≡ rg o` and `resp_sum (InR o) ≡
+  rh o` **definitionally** (§D2.2). D1 must preserve the landed reduction shape
+  (per-tag: return the injected summand's own response), not merely produce
+  *some* response family.
+- **D2↔D3 (shape agreement).** `injectL` emits `Vis (InL op) …`, `injectR` emits
+  `Vis (InR op) …`. D3's general `run` must dispatch **both** summands
+  symmetrically (unlike `runState`, which is State-first: `InL`→handle,
+  `InR`→pass-through). The **shared substrate** D2 and D3 both read off is
+  exactly two things: (i) `Sum`'s constructor order (`InL` = first summand,
+  `InR` = second — fixed by the landed `data Sum a b = InL a | InR b`); (ii)
+  D1's `resp_sum` reduction (above), which D3's own `Vis`-passthrough also needs
+  to type. Beyond agreeing which tag carries which effect, `injectL`/`injectR`
+  place **no** constraint on *how* D3 handles each op — only that it handles
+  both tags. So the coupling is a **convention hand-off**, not a design lock:
+  pick the summand order once (D3's dispatch = D2's injection), symmetric.
+- **`data`'s `Type0`-param limit (frame-asked): does it force a hand-built
+  inductive here too?** **No new inductive.** `injectL`/`injectR` are derived
+  **functions**; `Sum`/`ITree` already exist. But the morphism itself **must be
+  hand-built via `declare_def` + `Term::Elim`** (an `elim_ITree` map), **not**
+  surface `match` — the *same* reason `bind`/`runState` are (`effects/state.rs`
+  module doc): the surface `data`/`match` machinery (`parse_ctor_decl`,
+  `compile_match_matrix`'s flat `ColKind::Ih`) cannot express the W-style
+  dependent-`Vis` continuation / Π-nested IH. So: no new inductive, but the
+  morphism is a hand-built eliminator, same technique and same file as `bind`.
+  **Kernel-clean (AC1):** a real `Decl::Def`, kernel-re-checked, zero
+  `ken-kernel` diff, no new `Term`/`Decl`, `trusted_base` delta zero.
+
+### D2.7 Level reconciliation (§7.4 — the pass owed before Architect handoff)
+
+Every level is the **predicative `max`** of its parts (`12 §2`, non-cumulative);
+the row machinery adds **no new level rule**, only instances of Π / inductive /
+elim formation (`36 §7.4`):
+
+| Construct | Level | Rule |
+|---|---|---|
+| `Sum g h`  (`g, h : Type ℓ`) | `Type ℓ` | coproduct of `Op`s (`14`), `36 §7.4` `E ⊕ F` |
+| `resp_sum g h rg rh : Sum g h -> Type ℓ` | codomain `Type ℓ` | `elim_Sum` into `Type ℓ` (large-elim motive at `Type (suc ℓ)`) |
+| `ITree (Sum g h) (resp_sum …) a` | `Type (max a-lvl ℓ ℓ)` | `36 §2.1`/§7.4; first-order `ℓ = 0` ⇒ `Type 0` |
+| `injectL`/`injectR` | Π-telescope over the above | ordinary Π-Form (`13 §1`) |
+
+For the concrete first-order consumer (`FSOp a`, `ConsoleOp`, responses and `R`
+at level 0) every type sits at `Type 0` — a small type, same universe as the
+values it sequences. **No impredicativity, no implicit lift, no `Type : Type`;
+clears §7.4.**
+
+### D2.8 Conformance hooks for D5 (CV)
+
+D2's surface face for CV's acceptance plan (CV owns D5; these are the
+D2-specific discriminators):
+
+- **AC2/AC7 — real composed surface program.** The §D2.4 `main` drives the
+  actual interpreter; assert the **byte-exact** Console output *and* that the FS
+  read genuinely happened (the printed bytes are the file's). No hand-fed
+  `Sum`/`InL`/`InR` at the interpreter — the `.ken` program builds the tree via
+  `injectL`/`injectR` ([[conformance-hand-feeds-the-deliverable]]).
+- **AC3 generality — structural, not by one example.** Assert the *same*
+  `injectL`/`injectR` type-check and run at **two** distinct `(g, h)`
+  instantiations (the parametric-combinator witness), not a single FS+Console
+  path.
+- **Injection is a faithful re-tag (discriminating).** `injectL c` must produce
+  a tree whose `Vis` tags are *exactly* `c`'s tags under `InL`, same branching,
+  same `Ret` leaves — a structural assertion on the tag sequence (`36 §7.5`
+  case 2 shape), which **flips** if injection drops/reorders a node or mis-tags
+  (`InL` vs `InR`).
