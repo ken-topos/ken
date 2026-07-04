@@ -25,6 +25,7 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
+use ken_elaborator::capabilities;
 use ken_kernel::env::{Decl, GlobalEnv, PrimReduction};
 use ken_kernel::term::{GlobalId, Level, Term};
 use ken_runtime::{InternResult, Sign as RtSign, Store, Value as RtValue};
@@ -1744,14 +1745,43 @@ pub struct FSIds {
     pub other_id: GlobalId,
 }
 
-/// PROVISIONAL runtime capability gate — verify-impl's D3 replaces this with
-/// the real `Cap_FS` path-scope check (`capabilities.rs::authorizes`/
-/// `authority_flows_to`). Always-true here so the D1/D2 spine is
-/// independently testable ahead of the capability thread landing; this is
-/// NOT the load-bearing AC3 check (a no-op always-true `authorizes` is
-/// ambient authority and fails AC3 — D3 owns making it real).
-fn authorizes(_cap: &EvalVal, _path: &str) -> bool {
-    true
+/// The authority a `read_bytes` sink demands (`62 §3.1`'s sink-sufficiency
+/// check). `AUTH_PARTIAL` ("restricted, e.g. read-only, single dir") is the
+/// least authority that authorizes a read; `AUTH_NONE` never suffices.
+const READ_BYTES_REQUIRED_AUTHORITY: capabilities::Authority = capabilities::AUTH_PARTIAL;
+
+/// Runtime capability gate (FS-driver-build D3, `FS-driver.md` D3, AC3's
+/// runtime arm). Load-bearing — R2 flips on this returning `false`; a
+/// no-op always-true `authorizes` is ambient authority and fails AC3.
+///
+/// **Representation (the one open choice, delegated to this build):** a
+/// `Cap`-typed value is opaque at the surface language (`prelude.rs`'s
+/// `Cap` is a zero-structure `OpaqueType` postulate — no surface ctor, so no
+/// Ken program can ever synthesize one; every `Cap` value entering evaluation
+/// is injected by the trusted driver/harness, matching "unforgeable"). Its
+/// runtime shape here is the carried `Authority` scalar, `EvalVal::Int(level)`
+/// — no new `EvalVal` variant needed. Path-scope (R2′, excluding `dir2` under
+/// a `dir1` cap) stays Phase-2-deferred per `FS-driver-conformance.md` §2b;
+/// `path` is accepted for that future extension but not yet consulted.
+///
+/// **Trust level (AC8): trusted Rust, conformance-netted, NOT kernel-backed**
+/// — this calls `capabilities::check_authority_sufficient`, a plain Rust
+/// `bool`-returning check, zero `declare_postulate`/`Obligation` emission.
+/// Distinct from `attenuate`'s *static* refinement obligation (kernel-
+/// re-checked via `discharge_attenuation`) — do not conflate the two.
+fn authorizes(cap: &EvalVal, _path: &str) -> bool {
+    let level = match cap {
+        EvalVal::Int(n) if (0..=u8::MAX as i64).contains(n) => capabilities::Authority(*n as u8),
+        // Malformed/non-Int cap carries no recognizable authority — fail closed.
+        _ => return false,
+    };
+    let cap = capabilities::Cap::mint(level, "FS");
+    capabilities::check_authority_sufficient(
+        &cap,
+        READ_BYTES_REQUIRED_AUTHORITY,
+        "fs_driver::read_bytes",
+    )
+    .is_ok()
 }
 
 /// Map a `std::io::ErrorKind` to Ken's in-language `IOError` sum (D2, D5:

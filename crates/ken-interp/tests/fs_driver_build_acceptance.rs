@@ -6,11 +6,23 @@
 //! `std::fs::read` syscall) against a checked-in, version-controlled fixture —
 //! no mock/virtual FS anywhere in this file (AC4, grep-verifiable).
 //!
-//! `authorizes` is D2's PROVISIONAL always-true stub (verify-impl's D3 owns
-//! the real `Cap_FS` check); these fixtures exercise the reduction + I/O
-//! failure-surfacing shape, not capability enforcement (AC3 is D3's gate).
+//! `authorizes` (D3, `eval.rs`) is now the real runtime capability gate:
+//! it decodes the carried `Cap`'s `Authority` and calls
+//! `capabilities::check_authority_sufficient`. These fixtures thread a real
+//! minted `Cap` end to end (mint -> `read_bytes cap path` -> `ReadFile cap
+//! path` `Vis` node -> driver decode) to exercise the reduction + I/O
+//! failure-surfacing shape; `fs_driver_build_capability_acceptance.rs` pins
+//! AC3's runtime arm (R1/R2).
 
 use std::path::PathBuf;
+
+use ken_elaborator::capabilities::{Cap, AUTH_FULL};
+
+/// Encode a minted `Cap`'s authority as the runtime carries it — a bare
+/// `EvalVal::Int(level)` (`eval.rs`'s `authorizes`, D3's chosen representation).
+fn cap_evalval(cap: &Cap) -> ken_interp::EvalVal {
+    ken_interp::EvalVal::Int(ken_elaborator::capabilities::authority(cap).0 as i64)
+}
 
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -77,8 +89,8 @@ fn read_via_real_driver(
     let mut store = ken_interp::EvalStore::new();
     let term = ken_kernel::Term::const_(env.read_bytes_id, vec![]);
     let f = ken_interp::eval(&[], &term, &env.elab_env.env, &mut store);
-    let cap_val = ken_interp::EvalVal::Int(0); // Cap is opaque; D2's stub authorizes ignores it.
-    let step1 = ken_interp::apply(f, cap_val, &env.elab_env.env, &mut store);
+    let cap = Cap::mint(AUTH_FULL, "FS");
+    let step1 = ken_interp::apply(f, cap_evalval(&cap), &env.elab_env.env, &mut store);
     let path_val = ken_interp::EvalVal::Bytes(path.as_bytes().to_vec());
     let tree = ken_interp::apply(step1, path_val, &env.elab_env.env, &mut store);
     ken_interp::run_io(
