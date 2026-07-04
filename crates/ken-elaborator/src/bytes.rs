@@ -122,13 +122,14 @@ pub fn register_bytes_env(
     //    Real argument types (Path, Socket) are L7 (FFI surface) concerns.
     //    The EFFECT ROW is what matters for AC2/AC3; stored in io_effect_rows. --
 
-    // read_bytes : Bytes → Bytes  visits [FS]
-    {
-        let ty = Term::pi(bytes_t.clone(), bytes_t.clone());
-        let id = declare_primitive(env, vec![], ty, PrimReduction::Op { symbol: "read_bytes" })
-            .map_err(|e| ElabError::Internal(format!("prim read_bytes failed: {}", e)))?;
-        globals.insert("read_bytes".to_string(), id);
-    }
+    // `read_bytes` is declared for REAL in `prelude.rs` (FS-driver-build D1:
+    // `Cap -> Bytes -> FS (Result Bytes IOError)`, a genuine kernel-rechecked
+    // `view` reducing to a `Vis` node — `run_io`'s FS arm is the real driver,
+    // `36 §2.1`). It can't be declared HERE: `register_bytes_env` runs before
+    // `register_prelude`, so `ITree`/`Result`/`Cap`/`FSOp` don't exist yet.
+    // The `io_effect_rows` seed below is a name-keyed static-analysis table
+    // (`effects/infer.rs`), independent of the kernel `GlobalId` — it stays
+    // valid regardless of where/how `read_bytes` is actually declared.
 
     // write_bytes : Bytes → Bytes → Bytes  visits [FS]
     {

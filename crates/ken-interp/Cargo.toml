@@ -11,10 +11,11 @@ rust-version.workspace = true
 [dependencies]
 ken-kernel = { path = "../ken-kernel" }
 ken-runtime = { path = "../ken-runtime" }
+# fs-driver-build D3: reuse capabilities.rs's authority arithmetic in the
+# runtime FS gate (authorizes) rather than reimplementing it here. elaborator's
+# own ken-interp dependency is dev-only (tests), so this is not circular.
+ken-elaborator = { path = "../ken-elaborator" }
 # WP F1 (ADR 0009 curate-not-construct): arbitrary-precision Int arithmetic.
 # Dependency-delta record: docs/program/dependency-deltas.md.
 num-bigint = "=0.4.6"
 num-traits = "=0.2.19"
-
-[dev-dependencies]
-ken-elaborator = { path = "../ken-elaborator" }

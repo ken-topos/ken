@@ -25,6 +25,7 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
+use ken_elaborator::capabilities;
 use ken_kernel::env::{Decl, GlobalEnv, PrimReduction};
 use ken_kernel::term::{GlobalId, Level, Term};
 use ken_runtime::{InternResult, Sign as RtSign, Store, Value as RtValue};
@@ -1726,17 +1727,99 @@ pub enum RunIoError {
     NotAnIOTree(EvalVal),
 }
 
-/// Console-effect driver (`42 §6.2`, `§6.3`): runs an `ITree Console Unit`
-/// value to completion, printing each `Write s` op to stdout.
+/// IDs for the `[FS]` effect driver arm (FS-driver-build D1/D2). Shares
+/// `ConsoleIds`'s `itree_id`/`ret_id`/`vis_id`/`params_len` (one `ITree`,
+/// reused — not a second effect system); this struct carries only the
+/// FS-specific ctor ids the driver needs to decode the op and build the
+/// `Result`/`IOError` response.
+#[derive(Clone)]
+pub struct FSIds {
+    /// `GlobalId` of `FSOp::ReadFile` (carries `[Cap, Bytes]` — the
+    /// capability + path, capability-*carrying*, not ambient authority).
+    pub readfile_id: GlobalId,
+    pub ok_id: GlobalId,
+    pub err_id: GlobalId,
+    pub notfound_id: GlobalId,
+    pub permissiondenied_id: GlobalId,
+    pub capabilitydenied_id: GlobalId,
+    pub other_id: GlobalId,
+}
+
+/// The authority a `read_bytes` sink demands (`62 §3.1`'s sink-sufficiency
+/// check). `AUTH_PARTIAL` ("restricted, e.g. read-only, single dir") is the
+/// least authority that authorizes a read; `AUTH_NONE` never suffices.
+const READ_BYTES_REQUIRED_AUTHORITY: capabilities::Authority = capabilities::AUTH_PARTIAL;
+
+/// Runtime capability gate (FS-driver-build D3, `FS-driver.md` D3, AC3's
+/// runtime arm). Load-bearing — R2 flips on this returning `false`; a
+/// no-op always-true `authorizes` is ambient authority and fails AC3.
 ///
-/// Dispatches exhaustively over `Console.Op` — no catch-all (`42 §6.5`): the
-/// only op-tag is `Write`, and any other tag is `Err(UnknownEffect)`.
+/// **Representation (the one open choice, delegated to this build):** a
+/// `Cap`-typed value is opaque at the surface language (`prelude.rs`'s
+/// `Cap` is a zero-structure `OpaqueType` postulate — no surface ctor, so no
+/// Ken program can ever synthesize one; every `Cap` value entering evaluation
+/// is injected by the trusted driver/harness, matching "unforgeable"). Its
+/// runtime shape here is the carried `Authority` scalar, `EvalVal::Int(level)`
+/// — no new `EvalVal` variant needed. Path-scope (R2′, excluding `dir2` under
+/// a `dir1` cap) stays Phase-2-deferred per `FS-driver-conformance.md` §2b;
+/// `path` is accepted for that future extension but not yet consulted.
+///
+/// **Trust level (AC8): trusted Rust, conformance-netted, NOT kernel-backed**
+/// — this calls `capabilities::check_authority_sufficient`, a plain Rust
+/// `bool`-returning check, zero `declare_postulate`/`Obligation` emission.
+/// Distinct from `attenuate`'s *static* refinement obligation (kernel-
+/// re-checked via `discharge_attenuation`) — do not conflate the two.
+fn authorizes(cap: &EvalVal, _path: &str) -> bool {
+    let level = match cap {
+        EvalVal::Int(n) if (0..=u8::MAX as i64).contains(n) => capabilities::Authority(*n as u8),
+        // Malformed/non-Int cap carries no recognizable authority — fail closed.
+        _ => return false,
+    };
+    let cap = capabilities::Cap::mint(level, "FS");
+    capabilities::check_authority_sufficient(
+        &cap,
+        READ_BYTES_REQUIRED_AUTHORITY,
+        "fs_driver::read_bytes",
+    )
+    .is_ok()
+}
+
+/// Map a `std::io::ErrorKind` to Ken's in-language `IOError` sum (D2, D5:
+/// failure surfaces as a total `Result`, never a panic).
+fn io_error_kind_to_ctor(kind: std::io::ErrorKind, ids: &FSIds) -> GlobalId {
+    match kind {
+        std::io::ErrorKind::NotFound => ids.notfound_id,
+        std::io::ErrorKind::PermissionDenied => ids.permissiondenied_id,
+        _ => ids.other_id,
+    }
+}
+
+/// Build the `Result Bytes IOError` response `EvalVal` (`Result`'s 2 type
+/// params fill `args[0..2]` as `Unknown`, mirroring every other landed
+/// prelude ctor's type-param-then-payload shape — `ctor_arity` = params.len()
+/// + args.len()).
+fn make_result(ok: bool, payload: EvalVal, ids: &FSIds, store: &mut EvalStore) -> EvalVal {
+    let ctor_id = if ok { ids.ok_id } else { ids.err_id };
+    make_ctor(ctor_id, vec![EvalVal::Unknown, EvalVal::Unknown, payload], store)
+}
+
+/// Console-effect driver (`42 §6.2`, `§6.3`): runs an `ITree` value to
+/// completion, dispatching `Vis` nodes to the Console `Write` arm and,
+/// when `fs_ids` is supplied, the FS `ReadFile` arm (FS-driver-build D2) —
+/// one driver, two arms, not a second dispatcher (shares `ids`'s
+/// `ret_id`/`vis_id`/`params_len`, the same `ITree`).
+///
+/// Dispatches exhaustively — no catch-all (`42 §6.5`): any op-tag that
+/// matches neither `Write` nor (if `fs_ids` is `Some`) `ReadFile` is
+/// `Err(UnknownEffect)`, never silently skipped.
 ///
 /// `ids.params_len` must equal the number of type-level params on `ITree`
-/// (2 for the production `ITree Console Unit`; 0 for the test ITree).
+/// (3 for the lifted `ITree (E:Type)(Resp:E->Type)(R:Type)`; 0 for the
+/// simplified 0-param test ITree).
 pub fn run_io(
     mut tree: EvalVal,
     ids: &ConsoleIds,
+    fs_ids: Option<&FSIds>,
     globals: &GlobalEnv,
     store: &mut EvalStore,
 ) -> Result<EvalVal, RunIoError> {
@@ -1758,10 +1841,10 @@ pub fn run_io(
                         Some(v) => v,
                         None => return Err(RunIoError::NotAnIOTree(EvalVal::Ctor { id, args: Rc::new(vec![op]), slot: NULL_SLOT })),
                     };
-                    // Dispatch on the Console.Op — exhaustive, no catch-all (42 §6.5).
-                    let resp = match op {
+                    // Dispatch on the op — exhaustive, no catch-all (42 §6.5).
+                    let resp = match &op {
                         EvalVal::Ctor { id: op_id, args: op_args, .. }
-                            if op_id == ids.write_id =>
+                            if *op_id == ids.write_id =>
                         {
                             let maybe_s = match op_args.get(0) {
                                 Some(EvalVal::Str(s)) => Some(s.clone()),
@@ -1772,16 +1855,55 @@ pub fn run_io(
                                     println!("{}", s);
                                     make_ctor(ids.unit_id, vec![], store)
                                 }
-                                None => {
-                                    return Err(RunIoError::UnknownEffect(EvalVal::Ctor {
-                                        id: op_id,
-                                        args: op_args,
-                                        slot: NULL_SLOT,
-                                    }))
+                                None => return Err(RunIoError::UnknownEffect(op)),
+                            }
+                        }
+                        EvalVal::Ctor { id: op_id, args: op_args, .. }
+                            if fs_ids.is_some_and(|fs| *op_id == fs.readfile_id) =>
+                        {
+                            let fs = fs_ids.unwrap();
+                            let cap = op_args.get(0).cloned().unwrap_or(EvalVal::Unknown);
+                            let path_bytes = match op_args.get(1) {
+                                Some(EvalVal::Bytes(b)) => Some(b.clone()),
+                                _ => None,
+                            };
+                            match path_bytes {
+                                None => return Err(RunIoError::UnknownEffect(op)),
+                                Some(path_bytes) => {
+                                    let resp = match std::str::from_utf8(&path_bytes) {
+                                        Err(_) => make_result(
+                                            false,
+                                            make_ctor(fs.other_id, vec![], store),
+                                            fs,
+                                            store,
+                                        ),
+                                        Ok(path) if !authorizes(&cap, path) => make_result(
+                                            false,
+                                            make_ctor(fs.capabilitydenied_id, vec![], store),
+                                            fs,
+                                            store,
+                                        ),
+                                        Ok(path) => match std::fs::read(path) {
+                                            Ok(bytes) => {
+                                                make_result(true, EvalVal::Bytes(bytes), fs, store)
+                                            }
+                                            Err(e) => {
+                                                let err_ctor_id =
+                                                    io_error_kind_to_ctor(e.kind(), fs);
+                                                make_result(
+                                                    false,
+                                                    make_ctor(err_ctor_id, vec![], store),
+                                                    fs,
+                                                    store,
+                                                )
+                                            }
+                                        },
+                                    };
+                                    resp
                                 }
                             }
                         }
-                        other => return Err(RunIoError::UnknownEffect(other)),
+                        _ => return Err(RunIoError::UnknownEffect(op)),
                     };
                     apply(k, resp, globals, store)
                 } else {

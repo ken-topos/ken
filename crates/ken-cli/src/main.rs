@@ -102,12 +102,38 @@ fn run_file(path: Option<&str>) {
         params_len: 3, // ITree (E:Type)(Resp:E->Type)(R:Type) — 3 type params (State-effect-build lift)
     };
 
+    // Harvest FS IDs (FS-driver-build D1/D2); absent on a program that never
+    // registers `[FS]` (can't happen post-prelude, but degrade gracefully
+    // rather than assume, matching the Console harvest's own style above).
+    let fs_ids = match (
+        get("ReadFile"),
+        get("Ok"),
+        get("Err"),
+        get("NotFound"),
+        get("PermissionDenied"),
+        get("CapabilityDenied"),
+        get("Other"),
+    ) {
+        (Some(readfile_id), Some(ok_id), Some(err_id), Some(notfound_id), Some(permissiondenied_id), Some(capabilitydenied_id), Some(other_id)) => {
+            Some(ken_interp::FSIds {
+                readfile_id,
+                ok_id,
+                err_id,
+                notfound_id,
+                permissiondenied_id,
+                capabilitydenied_id,
+                other_id,
+            })
+        }
+        _ => None,
+    };
+
     let mut store = build_eval_store(&elab_env);
 
     let main_term = ken_kernel::Term::const_(main_id, vec![]);
     let tree = ken_interp::eval(&[], &main_term, &elab_env.env, &mut store);
 
-    match ken_interp::run_io(tree, &console_ids, &elab_env.env, &mut store) {
+    match ken_interp::run_io(tree, &console_ids, fs_ids.as_ref(), &elab_env.env, &mut store) {
         Ok(_) => {}
         Err(ken_interp::RunIoError::UnknownTree) => {
             eprintln!("ken run: program evaluated to an open hole (Unknown)");
