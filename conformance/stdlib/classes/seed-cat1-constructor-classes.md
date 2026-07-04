@@ -84,14 +84,21 @@ flip (AC4) and the **induction-vs-`Refl` proof asymmetry** (AC3).
 broken or law-less instance admitted as lawful is a verification-soundness hole:
 downstream `fold`/generic algorithms *assume the laws*, and a false unit law
 **inhabits `Bottom`**, [[deceq-on-noncanonical-carrier-inhabits-bottom]]).
-`(oracle)` — the literal field spellings (`<>`/`mappend`/`mempty`/`empty`/
-`assoc`/`unit_l`/`left_unit`/`right_unit`), whether `Monoid` **extends**
-`Semigroup` or restates `<>`+`assoc`, and the concrete second/broken carrier
-(`List Bool` vs `List Unit` vs `Nat`) — spec-author finalizes these on the
-package; this seed pins the **concept + verdict + reason** and tags the
-spellings, per the granularity discipline (pin the locked granularity, not
-tighter — the T1 dual). The **law-field `Ω`-sorts, the false-witness rejection,
-the induction requirement, the zero-delta lawfulness, and every verdict** are
+`(oracle)` — the literal field spellings and layering, **now resolved by the
+landed package** (`packages/lawful-functors/lawful_functors.ken`, spec `55 §2`):
+the operation field is **`op`** (`<>`/`mappend` is deferred surface sugar,
+OQ-syntax); the identity is **`mempty`**; the laws are **`assoc`/`left_unit`/
+`right_unit`** with `assoc` oriented `Equal a (op (op x y) z) (op x (op y z))`;
+**`Monoid` RESTATES `Semigroup`'s `op`+`assoc`** (subsumption-as-fact, the
+`DecEq`-subsumes-`Eq` precedent, *not* a `where`-superclass); canonical
+instances are the **`List` append monoid bundled at `List Nat`** (proofs generic
+in the element type; the parametric head `instance Monoid (List a)` is spec's
+`§6.1` open elaboration gap) **+ the `Bool` conjunction monoid** (`bool_and`,
+finite case-split). The case bodies below use `<>` illustratively; read it as
+the landed `op`. This seed pins the **concept + verdict + reason**; the resolved
+spellings match the pinned concepts. The **law-field `Ω`-sorts, the
+false-witness rejection, the induction requirement, the zero-delta lawfulness,
+and every verdict** are
 **normative**.
 
 **Static vs runtime face.** These pin the **static face** — the spec discipline
@@ -196,19 +203,30 @@ definitional, or postulating the inductive one when `Refl` "doesn't work").
   **variable** is **stuck** (`list_append` matches on its first arg; a neutral
   `x` blocks ι), so the goal `Equal (List a) (list_append a x Nil) x` does
   **not** reduce to reflexivity and `Refl` fails to check. The **correct**
-  `right_unit` is a **real `elim_List` induction on `x`** (base `x = Nil`:
-  `list_append a Nil Nil ≡ Nil`, `Refl`; step: IH + `Cons` congruence) — a
-  proof term, **never** `Axiom` (it is *provable*, so a postulate here is an
+  `right_unit` is a **real induction on `x`** (`match xs { Nil => tt ; Cons h t
+  => cong … (right_unit t) }`): the `Nil` base closes by **`tt`, not `Refl`** —
+  both sides reduce to the **constructor** `Nil a`, and two occurrences of the
+  same nullary constructor observationally collapse to **`Top`** (`16 §8.1`, K7;
+  spec `55 §3.2`), so the goal is no longer `Eq`-shaped and `Refl` does not
+  apply; the step lifts the IH under `Cons a h` with `cong`
+  (`packages/transport`). A proof term, **never** `Axiom` (it is *provable*, so
+  a postulate here is an
   **avoidable delta = defect**, `51 §6`). Assert the **observable**: `Refl`
   accepts at `left_unit`, `Refl` rejects (conversion failure) at `right_unit`;
   and the accepted canonical `right_unit`/`assoc` fields grep as **real proof
-  terms** (`elim_List`), **not** `declare_postulate`
+  terms** (a `match`-recursion with `cong`), **not** `declare_postulate`
   ([[kernel-backed-claim-grep-the-emission-not-the-name]]).
 - why: (soundness) AC3 — pins the **structural** proof shape single-argument
-  recursion forces. `assoc : (x y z) -> Equal (List a) (list_append a x
-  (list_append a y z)) (list_append a (list_append a x y) z)` is likewise a
-  genuine `elim_List` induction on `x` (base closes by `Refl`; step: IH + `Cons`
-  congruence), **not** definitional. A build that (i) assumes `right_unit`
+  recursion forces. `assoc : (x y z) -> Equal (List a) (list_append a
+  (list_append a x y) z) (list_append a x (list_append a y z))` is likewise a
+  genuine induction on `x`, but its `Nil` base closes by **`Refl`, not `tt`** —
+  both sides reduce to the **neutral** `list_append a ys zs` (stuck on free
+  `ys`/`zs`), an `Eq`-shaped goal. This **endpoint discrimination** (`55 §3.2`,
+  the load-bearing K7 subtlety) is itself a two-way net: constructor endpoints →
+  `Top` → **`tt`** (`right_unit`'s base; `tt` closes, `Refl` fails), neutral
+  endpoints → stuck `Eq` → **`Refl`** (`assoc`'s base; `Refl` closes, `tt`
+  fails) — the exact `tt`-vs-`Refl` discipline `lawful_classes.ken`'s `Bool`
+  proofs document. A build that (i) assumes `right_unit`
   closes by `Refl` **fails to elaborate** (this case), or (ii) "gives up" and
   postulates `right_unit`/`assoc` because `Refl` stuck — an **avoidable hidden
   delta**, a defect on an inductive carrier (the induction *is* the deliverable,
@@ -302,15 +320,17 @@ here is that the **`assoc` law is the same proposition** in both, so a
 ### stdlib/classes/semigroup-assoc-shared-with-monoid (oracle)
 - spec: `51 §5` (laws PROVED), `33 §5.4` (superclass constraint / `where C a`
   desugaring), `50-stdlib/README §2` (the taxonomy row `Semigroup`/`Monoid`)
-- given: the `assoc` law as it appears on `Semigroup a` and on `Monoid a` —
-  whether `Monoid` carries `where Semigroup a` (inheriting `<>`/`assoc`) or
-  restates them
+- given: the `assoc` law as it appears on `Semigroup a` and on `Monoid a`. The
+  landed package **RESTATES** `op`+`assoc` on `Monoid` (subsumption-as-fact, the
+  `DecEq`-subsumes-`Eq` precedent, `55 §2.2`), *not* a `where Semigroup a`
+  superclass field
 - expect: the `assoc` proposition is **structurally identical** in both — `(x y
-  z) -> Equal a (x <> (y <> z)) ((x <> y) <> z)` — and a canonical `Monoid (List
-  a)` reuses the **same** `list_append` associativity proof a `Semigroup (List
-  a)` would carry (no second, distinct associativity obligation). Assert the
-  **observable**: the two `assoc` field types are the **same structural shape**
-  (modulo the shared `<>`), not "both type-check"
+  z) -> Equal a (op (op x y) z) (op x (op y z))` — and the canonical
+  `Monoid (List Nat)` reuses the **same** `list_assoc` proof `Semigroup
+  (List Nat)` carries (`assoc = list_assoc Nat` in both — no second, distinct
+  associativity obligation). Assert the **observable**: the two `assoc` field
+  types are the **same structural shape** and share one proof, not "both
+  type-check"
 - why: (oracle) reflect-don't-extend for the layering — `Monoid` is `Semigroup`
   **plus** identity, not a re-derivation of associativity. This is the
   `where-ord-same-sort-obligation` analog for the algebra layering: one `assoc`
@@ -337,19 +357,20 @@ zero-delta). `idf`/`comp` are ordinary Ken views. The false-`map` flip below is
 the AC4 analog over `f a` — the same discipline as
 `monoid-unit-law-false-witness-rejected`, lifted to the higher-kinded carrier.
 
-**Reconcile-at-transcription.** The pointwise form is Architect-ruled but the
-durable **`spec/51 §4` (constructor-class template)** transcription is
-spec-author's (Architect fidelity-gates) — not yet landed. These cases cite the
-**ruling + `obs.rs` funext fact** (independently verified), not a `§4` anchor
-that does not yet carry the claim
-([[grounding-a-fabricated-citation-two-failure-modes]]); the `§4` cite is added
-when the transcription lands, which the fidelity gate confirms.
+**Reconcile — anchor LANDED.** The pointwise form's durable transcription is
+now on the branch: **`spec/50-stdlib/55-lawful-functors.md §5.2`** (spec-author,
+Architect-fidelity-gated). Reconciled character-for-character: the id law
+`(a) -> (x : f a) -> Equal (f a) (map a a (idf a) x) x` and the applied-fusion
+`Equal (f c) (map a c (comp a b c g h) x) (map b c g (map a b h x))` match
+`§5.2` exactly, as does "one canonical pointwise field per law." The cases below
+now cite the normative **`§55 §5.2`** (admission `§5.1`, the bounded four-piece
+extension `§6`, the `tt`-vs-`Refl` K7 subtlety `§3.2`) alongside the verified
+`obs.rs` funext fact.
 
 ### stdlib/classes/functor-id-law-false-map-rejected (soundness)
 - spec: the Architect law-form ruling (`evt_2h347mddbxwfb`, pointwise id-law),
-  `obs.rs:90` (funext definitional, `16 §2.2`), `51 §5` (laws PROVED = real
-  proofs), `14 §3` (K4 `elim_List` into an `Equal`-motive); reconciled to
-  `51 §4` at transcription
+  `obs.rs:90` (funext definitional, `16 §2.2`), `55 §5.2` (the landed pointwise
+  anchor), `55 §3.2` (the `tt`-vs-`Refl` K7 subtlety), `51 §5` (laws PROVED)
 - given: two `Functor List`-shaped instances, identical in every field
   **except** `map`, with the **same** proof term attempted for the id-law:
   (a) the **canonical** `map` (`map a b fn (Cons x xs) = Cons (fn x)
@@ -359,8 +380,10 @@ when the transcription lands, which the fidelity gate confirms.
   at `(a -> b) -> f a -> f b`, so nothing rejects it *as an operation*), whose
   id-law is offered at the concrete carrier value `x = Cons True Nil`
 - expect: **the verdict flips on the `map`, witnessed at a concrete carrier.**
-  (a) **accepts** — `map_id`'s inductive proof closes (base `Nil`: `map (idf)
-  Nil ≡ Nil`, `Refl`; step: IH + `Cons` congruence), law fields re-check.
+  (a) **accepts** — `map_id`'s inductive proof closes (`match xs { Nil => tt ;
+  Cons h t => cong … (map_id t) }`): the `Nil` base is **`tt`, not `Refl`** —
+  both sides reduce to the constructor `Nil a` → `Top` (K7, `55 §3.2`); the step
+  lifts the IH under `Cons a h` with `cong`; law fields re-check.
   (b) **rejected — conversion failure at the id-law field**: at `x =
   Cons True Nil` the goal is `Equal (List Bool) (bad … (Cons True Nil))
   (Cons True Nil)` = `Equal (List Bool) Nil (Cons True Nil)`, a **false**
@@ -383,8 +406,8 @@ when the transcription lands, which the fidelity gate confirms.
   rejected right-reason"). **Verdict-flip**, keyed solely on the `map`.
 
 ### stdlib/classes/functor-fusion-law-pointwise-direct-induction (soundness)
-- spec: the ruling (`evt_2h347mddbxwfb`, applied-pointwise fusion),
-  `obs.rs:90` (funext definitional), `51 §5`, `14 §3`; reconciled to `51 §4`
+- spec: `55 §5.2` (the landed applied-pointwise fusion, ruling
+  `evt_2h347mddbxwfb`), `obs.rs:90` (funext definitional), `55 §3.2`, `51 §5`
 - given: the fusion law on the canonical `Functor List` in **applied-pointwise**
   form (`map (comp g h) x = map g (map h x)`), and a **bogus** `map` (e.g. one
   that reverses or duplicates) whose fusion equation is false at a concrete `x`
@@ -611,8 +634,8 @@ build gate confirms AC1 (`ken-kernel` diff empty) on the built diff.
   is **`33 §5`'s / `../surface/classes/`'s**. This seed pins the **lawful
   content** (the law proofs are real and, when the witness is wrong, fail for
   the right reason), not the resolution machinery nor the Axis-A admission flip.
-- **`Functor`/`Foldable` law conformance is now authored** (the Architect
-  law-form ruling landed, `evt_2h347mddbxwfb`); the pointwise form's durable
-  `spec/51 §4` anchor is **reconciled at spec-author's transcription** (which
-  the CV fidelity gate confirms), and the cases are **red-until-built** against
-  the Axis-A extension + instances.
+- **`Functor`/`Foldable` law conformance is authored** (the Architect law-form
+  ruling landed, `evt_2h347mddbxwfb`); the pointwise form's durable anchor is
+  **`spec/50-stdlib/55-lawful-functors.md §5.2`** (landed + Architect-fidelity-
+  gated), reconciled character-for-character here, and the cases are
+  **red-until-built** against the Axis-A extension + instances.
