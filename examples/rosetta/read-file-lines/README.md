@@ -14,17 +14,22 @@ computation, gated by the runtime `authorizes` check
 (`ken-interp/src/eval.rs`) before any syscall. Reads the checked-in
 hermetic fixture `conformance/fs/fixtures/three-lines.txt`, splits it into
 lines (`str::lines()` terminator semantics — a trailing `\n` yields no
-trailing empty line), and returns the line list as a total
-`Result IOError (List String)`.
+trailing empty line), and prints each line via `[Console]` from *inside*
+the program.
 
-**Honesty boundary.** This example demonstrates **FS-read + pure-parse,
-NOT effect composition.** `main`'s `[FS]` computation contains no `[Console]`
-printing — the returned line list is rendered by the CLI (`ken-cli`'s
-`run_file`) *after* the program's `ITree` finishes running, not from
-within the Ken program itself. A single Ken program driving BOTH an `[FS]`
-effect and `[Console]` printing in one type-checked `ITree` needs a
-coproduct (`Sum`) that `run_io` does not support today — that is a
-separate, deferred effect-composition frontier (Steward-tracked), not
-demonstrated here. Failure (a denied/insufficient capability, or a missing
-file) surfaces as a non-zero exit with the exact `IOError` variant named on
-stderr — never a false success.
+**Genuine effect composition (`effect-composition` D1–D4 — retires the
+prior honesty asterisk).** `main` performs the `[FS]` read *and* the
+`[Console]` printing in **one** type-checked
+`ITree (Sum (FSOp APartial) ConsoleOp) (resp_sum ...) (Result IOError Unit)`,
+built at the surface via `injectL`/`injectR` (the general `g ↪ Sum g h` /
+`h ↪ Sum g h` inclusions) sequenced with the ordinary homogeneous `bind` —
+no hand-fed coproduct anywhere. `run_io`'s coproduct-aware terminal driver
+strips the `InL`/`InR` tags and dispatches both effects through the same
+loop. What remains deferred (the honest residual, not a gap in this
+example): the row-directed auto-injection sugar (`visits [FS, Console]`
+inserting `injectL`/`injectR` automatically) is not yet landed — this
+example uses the explicit, `injectL`/`injectR`-named door, the floor under
+that future sugar. On a denied/insufficient capability or a missing file,
+`main` does **not** print (fail-closed) and returns `Err e`, which
+`ken-cli` still surfaces as a non-zero exit with the exact `IOError`
+variant named on stderr — never a false success.

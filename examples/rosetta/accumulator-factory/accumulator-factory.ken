@@ -28,7 +28,10 @@ view Eff : Type = Unit
 view RespEff (u : Eff) : Type = Unit
 
 view Op : Type = Sum (StateOp Nat) Eff
-view Resp : Op -> Type = resp_sum Nat Eff RespEff
+-- `resp_sum` is now the GENERAL `(g h:Type)->(rg:g->Type)->(rh:h->Type)->
+-- Sum g h -> Type` (`effect-composition` D1) -- State is the literal
+-- instance `resp_sum (StateOp Nat) Eff (resp_state Nat) RespEff`.
+view Resp : Op -> Type = resp_sum (StateOp Nat) Eff (resp_state Nat) RespEff
 
 view addNat (a : Nat) (b : Nat) : Nat =
   match a { Zero => b ; Suc a2 => Suc (addNat a2 b) }

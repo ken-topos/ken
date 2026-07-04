@@ -45,7 +45,7 @@ fn full_state_prelude_declares_and_typechecks() {
     let (state_op_id, get_id, put_id) = declare_state_op(&mut env).expect("StateOp");
     let (sum_id, inl_id, inr_id) = declare_sum(&mut env).expect("Sum");
     let resp_state_id = declare_resp_state(&mut env, state_op_id, unit_id).expect("resp_state");
-    let resp_sum_id = declare_resp_sum(&mut env, state_op_id, sum_id, resp_state_id).expect("resp_sum");
+    let resp_sum_id = declare_resp_sum(&mut env, sum_id).expect("resp_sum");
     let bind_id = declare_bind(&mut env, itree_id, vis_id).expect("bind");
     let run_state_id = declare_run_state(
         &mut env, itree_id, ret_id, vis_id, state_op_id, get_id, put_id, sum_id, inl_id, inr_id,
@@ -65,12 +65,17 @@ fn full_state_prelude_declares_and_typechecks() {
     let ty = infer(&env, &ctx, &resp_state_app).expect("resp_state application should typecheck");
     assert_eq!(normalize(&env, &ctx, &ty), Term::ty(lv0()));
 
+    // resp_sum is now the GENERAL `(g h:Type)->(rg:g->Type)->(rh:h->Type)->
+    // Sum g h -> Type` (`effect-composition` D1) — 4 explicit args before the
+    // still-curried `Sum g h -> Type` result.
+    let const_unit_fn = Term::lam(Term::indformer(unit_id, vec![]), Term::indformer(unit_id, vec![]));
     let resp_sum_app = apply(
         Term::const_(resp_sum_id, vec![]),
         &[
             Term::indformer(unit_id, vec![]),
             Term::indformer(unit_id, vec![]),
-            Term::lam(Term::indformer(unit_id, vec![]), Term::indformer(unit_id, vec![])),
+            const_unit_fn.clone(),
+            const_unit_fn,
         ],
     );
     let ty2 = infer(&env, &ctx, &resp_sum_app).expect("resp_sum (partially applied) should typecheck");
@@ -79,10 +84,15 @@ fn full_state_prelude_declares_and_typechecks() {
         other => panic!("expected a Pi type, got {other:?}"),
     }
 
-    let get_fn_id = declare_get(&mut env, itree_id, ret_id, vis_id, state_op_id, get_id, sum_id, inl_id, resp_sum_id, unit_id)
-        .expect("get");
-    let put_fn_id = declare_put(&mut env, itree_id, ret_id, vis_id, state_op_id, put_id, sum_id, inl_id, resp_sum_id, unit_id, mkunit_id)
-        .expect("put");
+    let get_fn_id = declare_get(
+        &mut env, itree_id, ret_id, vis_id, state_op_id, get_id, sum_id, inl_id, resp_sum_id, resp_state_id, unit_id,
+    )
+    .expect("get");
+    let put_fn_id = declare_put(
+        &mut env, itree_id, ret_id, vis_id, state_op_id, put_id, sum_id, inl_id, resp_sum_id, resp_state_id, unit_id,
+        mkunit_id,
+    )
+    .expect("put");
 
     assert!(env.lookup(bind_id).is_some(), "bind should be registered as a real decl");
     assert!(env.lookup(run_state_id).is_some(), "runState should be registered as a real decl");

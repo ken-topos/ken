@@ -240,50 +240,233 @@ pub fn declare_resp_state(env: &mut GlobalEnv, state_op_id: GlobalId, unit_id: G
     declare_def(env, vec![], ty, body).map_err(|e| format!("resp_state declaration failed: {e:?}"))
 }
 
-/// `resp_sum : (s f:Type) -> (RespF:f->Type) -> Sum (StateOp s) f -> Type`
-/// `  = \s f RespF op. match op { InL a => resp_state s a ; InR o => RespF o }`.
-pub fn declare_resp_sum(
-    env: &mut GlobalEnv,
-    state_op_id: GlobalId,
-    sum_id: GlobalId,
-    resp_state_id: GlobalId,
-) -> Result<GlobalId, String> {
-    // Elim node ctx [s,f,RespF,op] (len=4): s=v(4,0), f=v(4,1), RespF=v(4,2), op=v(4,3).
-    let state_op_s = Term::app(Term::indformer(state_op_id, vec![]), v(4, 0));
-    let sum_ty = apply_all(Term::indformer(sum_id, vec![]), &[state_op_s.clone(), v(4, 1)]);
+/// `resp_sum : (g h:Type) -> (rg:g->Type) -> (rh:h->Type) -> Sum g h -> Type`
+/// `  = \g h rg rh op. match op { InL x => rg x ; InR y => rh y }`.
+///
+/// Generalizes the former State-first-pinned response combinator (`Sum
+/// (StateOp s) f`) to an arbitrary coproduct `Sum g h`, given each summand's
+/// own response family as an explicit parameter (`effect-composition` D1,
+/// `evt_241dchcb5y6j8` / doc §D1.1). **Reducing `declare_def`, NEVER a
+/// postulate — the hinge D2's `injectL`/`injectR` need**: `resp_sum g h rg rh
+/// (InL x)` ι-reduces to `rg x`, `(InR y)` to `rh y`, definitionally, with no
+/// wrap/reorder — the injected summand's OWN response, verbatim. One
+/// **non-recursive** `Term::Elim` over `Sum` (`Sum` has no recursive field ⇒
+/// trivially total, no SCT). State becomes the literal instance `resp_sum
+/// (StateOp s) f (resp_state s) RespF` (§D1.3) — `get`/`put`/`runState` below
+/// apply the 4-arg form.
+pub fn declare_resp_sum(env: &mut GlobalEnv, sum_id: GlobalId) -> Result<GlobalId, String> {
+    // Elim node ctx [g,h,rg,rh,op] (len=5): g=v(5,0), h=v(5,1), rg=v(5,2), rh=v(5,3), op=v(5,4).
+    let sum_ty = apply_all(Term::indformer(sum_id, vec![]), &[v(5, 0), v(5, 1)]);
     let motive = ascribed(Term::lam(sum_ty.clone(), ty0()), Term::pi(sum_ty, ty1()));
-    // method_inl = \(a:StateOp s). resp_state s a.
-    //   Domain, ctx [s,f,RespF,op] (len=4): StateOp s = App(StateOp,v(4,0)).
-    //   Body, ctx [s,f,RespF,op,a] (len=5): s=v(5,0), a=v(5,4).
-    let method_inl = Term::lam(
-        Term::app(Term::indformer(state_op_id, vec![]), v(4, 0)),
-        apply_all(Term::const_(resp_state_id, vec![]), &[v(5, 0), v(5, 4)]),
-    );
-    // method_inr = \(o:f). RespF o.
-    //   Domain, ctx [s,f,RespF,op] (len=4): f = v(4,1).
-    //   Body, ctx [s,f,RespF,op,o] (len=5): RespF=v(5,2), o=v(5,4).
-    let method_inr = Term::lam(v(4, 1), Term::app(v(5, 2), v(5, 4)));
+    // method_inl = \(x:g). rg x.
+    //   Domain, ctx len5: g=v(5,0). Body, ctx len6 [g,h,rg,rh,op,x]: rg=v(6,2), x=v(6,5).
+    let method_inl = Term::lam(v(5, 0), Term::app(v(6, 2), v(6, 5)));
+    // method_inr = \(y:h). rh y.
+    //   Domain, ctx len5: h=v(5,1). Body, ctx len6: rh=v(6,3), y=v(6,5).
+    let method_inr = Term::lam(v(5, 1), Term::app(v(6, 3), v(6, 5)));
     let elim = Term::Elim {
         fam: sum_id,
         level_args: vec![],
-        params: vec![state_op_s, v(4, 1)], // [StateOp s, f]
+        params: vec![v(5, 0), v(5, 1)], // [g, h]
         motive: Box::new(motive),
         methods: vec![method_inl, method_inr],
         indices: vec![],
-        scrut: Box::new(v(4, 3)), // op
+        scrut: Box::new(v(5, 4)), // op
     };
     let domains = [
-        ty0(),                                                                   // s
-        ty0(),                                                                   // f
-        Term::pi(Term::var(0), ty0()),                                          // RespF : f -> Type, ctx [s,f]: f=v(2,1)
-        apply_all(
-            Term::indformer(sum_id, vec![]),
-            &[Term::app(Term::indformer(state_op_id, vec![]), Term::var(2)), Term::var(1)],
-        ), // op : Sum (StateOp s) f, ctx [s,f,RespF]: s=v(3,0),f=v(3,1)
+        ty0(),                          // g, ctx []
+        ty0(),                          // h, ctx [g]
+        Term::pi(Term::var(1), ty0()),  // rg : g -> Type, ctx [g,h] (len2): g=Var(1)
+        Term::pi(Term::var(1), ty0()),  // rh : h -> Type, ctx [g,h,rg] (len3): h=Var(1)
+        apply_all(Term::indformer(sum_id, vec![]), &[Term::var(3), Term::var(2)]), // op:Sum g h, ctx [g,h,rg,rh] (len4): g=Var(3),h=Var(2)
     ];
     let body = lam_chain(&domains, elim);
     let ty = pi_chain(&domains, ty0());
     declare_def(env, vec![], ty, body).map_err(|e| format!("resp_sum declaration failed: {e:?}"))
+}
+
+/// `injectL : (g h:Type) -> (rg:g->Type) -> (rh:h->Type) -> (a:Type) ->
+///   ITree g rg a -> ITree (Sum g h) (resp_sum g h rg rh) a`.
+///
+/// The left inclusion `g ↪ Sum g h` (`36 §2.4`'s `incl`, `effect-composition`
+/// D2, doc §D2.1) — a structural `elim_ITree` re-tag: `Ret x ↦ Ret x`
+/// (re-typed into the coproduct tree); `Vis op k ↦ Vis (InL op) ih`, where the
+/// kernel-supplied IH `ih` already computes `injectL … ∘ k` on the sub-tree
+/// (no self-recursive `Const`, total by structural descent — the same
+/// IH-reuse shape `bind` uses). **Coercion-free by D1's reduction (§D1.1,
+/// §D2.2):** `ih`'s domain `rg op` is definitionally equal to `Vis (InL
+/// op)`'s required continuation domain `resp_sum g h rg rh (InL op)`
+/// (ι-reduces to `rg op`), so `ih` is used directly, no transport term.
+///
+/// Constant motive (the target type doesn't depend on the scrutinee) →
+/// ordinary SMALL elimination, like `bind`'s — not the large-elim motives
+/// `resp_state`/`resp_sum` use.
+pub fn declare_inject_l(
+    env: &mut GlobalEnv,
+    itree_id: GlobalId,
+    ret_id: GlobalId,
+    vis_id: GlobalId,
+    sum_id: GlobalId,
+    resp_sum_id: GlobalId,
+    inl_id: GlobalId,
+) -> Result<GlobalId, String> {
+    let itree_app = |len: usize, e_i: usize, resp_i: usize, r: Term| {
+        apply_all(Term::indformer(itree_id, vec![]), &[v(len, e_i), v(len, resp_i), r])
+    };
+    let sum_gh = |len: usize| apply_all(Term::indformer(sum_id, vec![]), &[v(len, 0), v(len, 1)]);
+    let resp_sum_ghrgrh = |len: usize| {
+        apply_all(Term::const_(resp_sum_id, vec![]), &[v(len, 0), v(len, 1), v(len, 2), v(len, 3)])
+    };
+
+    // Outer ctx (declaration order): g, h, rg, rh, a, t (len=6). t : ITree g rg a.
+    let motive_dom = itree_app(6, 0, 2, v(6, 4));
+    let target_at6 = apply_all(Term::indformer(itree_id, vec![]), &[sum_gh(6), resp_sum_ghrgrh(6), v(6, 4)]);
+    let motive = ascribed(
+        Term::lam(motive_dom.clone(), weaken(&target_at6, 1)),
+        Term::pi(motive_dom, ty0()),
+    );
+
+    // method_ret, ctx len6: \(x:a). Ret[Sum g h, resp_sum…, a] x.
+    let method_ret = {
+        let x_dom = v(6, 4);
+        // Body, ctx len7 (x bound): local order g,h,rg,rh,a,t,x -> x=idx6=v(7,6).
+        let ret_applied = apply_all(Term::constructor(ret_id, vec![]), &[sum_gh(7), resp_sum_ghrgrh(7), v(7, 4)]);
+        Term::lam(x_dom, Term::app(ret_applied, v(7, 6)))
+    };
+
+    // method_vis, ctx len6: \(op:g). \(cont:rg op -> ITree g rg a).
+    //   \(ih: rg op -> ITree (Sum g h)(resp_sum…) a). Vis … (InL g h op) ih.
+    let method_vis = {
+        let op_dom = v(6, 0); // g
+        // cont domain, ctx len7 (op bound): rg=v(7,2), op=v(7,6).
+        let cont_dom = Term::pi(Term::app(v(7, 2), v(7, 6)), itree_app(8, 0, 2, v(8, 4)));
+        // ih domain, ctx len8 (op,cont bound): rg=v(8,2), op=v(8,6).
+        let ih_dom = Term::pi(
+            Term::app(v(8, 2), v(8, 6)),
+            apply_all(Term::indformer(itree_id, vec![]), &[sum_gh(9), resp_sum_ghrgrh(9), v(9, 4)]),
+        );
+        // body, ctx len9 (op,cont,ih bound): op=v(9,6), ih=v(9,8).
+        let inl_applied = apply_all(Term::constructor(inl_id, vec![]), &[v(9, 0), v(9, 1), v(9, 6)]);
+        let vis_body = apply_all(
+            Term::constructor(vis_id, vec![]),
+            &[sum_gh(9), resp_sum_ghrgrh(9), v(9, 4), inl_applied, v(9, 8)],
+        );
+        Term::lam(op_dom, Term::lam(cont_dom, Term::lam(ih_dom, vis_body)))
+    };
+
+    let elim = Term::Elim {
+        fam: itree_id,
+        level_args: vec![],
+        params: vec![v(6, 0), v(6, 2), v(6, 4)], // [g, rg, a]
+        motive: Box::new(motive),
+        methods: vec![method_ret, method_vis],
+        indices: vec![],
+        scrut: Box::new(v(6, 5)), // t
+    };
+
+    let d_g = ty0();
+    let d_h = ty0();
+    let d_rg = Term::pi(Term::var(1), ty0()); // ctx [g,h] (len2): g=Var(1)
+    let d_rh = Term::pi(Term::var(1), ty0()); // ctx [g,h,rg] (len3): h=Var(1)
+    let d_a = ty0();
+    // d_t: ITree g rg a, ctx [g,h,rg,rh,a] (len5): g=Var(4), rg=Var(2), a=Var(0).
+    let d_t = apply_all(Term::indformer(itree_id, vec![]), &[Term::var(4), Term::var(2), Term::var(0)]);
+    let final_domains = [d_g, d_h, d_rg, d_rh, d_a, d_t];
+    let body = lam_chain(&final_domains, elim);
+    // ret_ty: ITree (Sum g h) (resp_sum g h rg rh) a, ctx len6: g=Var(5),h=Var(4),rg=Var(3),rh=Var(2),a=Var(1).
+    let ret_sum = apply_all(Term::indformer(sum_id, vec![]), &[Term::var(5), Term::var(4)]);
+    let ret_resp = apply_all(
+        Term::const_(resp_sum_id, vec![]),
+        &[Term::var(5), Term::var(4), Term::var(3), Term::var(2)],
+    );
+    let ret_ty = apply_all(Term::indformer(itree_id, vec![]), &[ret_sum, ret_resp, Term::var(1)]);
+    let ty = pi_chain(&final_domains, ret_ty);
+    declare_def(env, vec![], ty, body).map_err(|e| format!("injectL declaration failed: {e:?}"))
+}
+
+/// `injectR : (g h:Type) -> (rg:g->Type) -> (rh:h->Type) -> (a:Type) ->
+///   ITree h rh a -> ITree (Sum g h) (resp_sum g h rg rh) a`.
+///
+/// The right inclusion `h ↪ Sum g h` — the exact mirror of [`declare_inject_l`]
+/// (scrutinee `ITree h rh a`, tag `InR`); see that function's doc for the
+/// full rationale (coercion-free by D1's reduction, small/constant-motive
+/// elim, total by structural descent).
+pub fn declare_inject_r(
+    env: &mut GlobalEnv,
+    itree_id: GlobalId,
+    ret_id: GlobalId,
+    vis_id: GlobalId,
+    sum_id: GlobalId,
+    resp_sum_id: GlobalId,
+    inr_id: GlobalId,
+) -> Result<GlobalId, String> {
+    let itree_app = |len: usize, e_i: usize, resp_i: usize, r: Term| {
+        apply_all(Term::indformer(itree_id, vec![]), &[v(len, e_i), v(len, resp_i), r])
+    };
+    let sum_gh = |len: usize| apply_all(Term::indformer(sum_id, vec![]), &[v(len, 0), v(len, 1)]);
+    let resp_sum_ghrgrh = |len: usize| {
+        apply_all(Term::const_(resp_sum_id, vec![]), &[v(len, 0), v(len, 1), v(len, 2), v(len, 3)])
+    };
+
+    // Outer ctx (declaration order): g, h, rg, rh, a, t (len=6). t : ITree h rh a.
+    let motive_dom = itree_app(6, 1, 3, v(6, 4));
+    let target_at6 = apply_all(Term::indformer(itree_id, vec![]), &[sum_gh(6), resp_sum_ghrgrh(6), v(6, 4)]);
+    let motive = ascribed(
+        Term::lam(motive_dom.clone(), weaken(&target_at6, 1)),
+        Term::pi(motive_dom, ty0()),
+    );
+
+    let method_ret = {
+        let x_dom = v(6, 4);
+        let ret_applied = apply_all(Term::constructor(ret_id, vec![]), &[sum_gh(7), resp_sum_ghrgrh(7), v(7, 4)]);
+        Term::lam(x_dom, Term::app(ret_applied, v(7, 6)))
+    };
+
+    let method_vis = {
+        let op_dom = v(6, 1); // h
+        // cont domain, ctx len7 (op bound): rh=v(7,3), op=v(7,6).
+        let cont_dom = Term::pi(Term::app(v(7, 3), v(7, 6)), itree_app(8, 1, 3, v(8, 4)));
+        // ih domain, ctx len8 (op,cont bound): rh=v(8,3), op=v(8,6).
+        let ih_dom = Term::pi(
+            Term::app(v(8, 3), v(8, 6)),
+            apply_all(Term::indformer(itree_id, vec![]), &[sum_gh(9), resp_sum_ghrgrh(9), v(9, 4)]),
+        );
+        // body, ctx len9 (op,cont,ih bound): op=v(9,6), ih=v(9,8).
+        let inr_applied = apply_all(Term::constructor(inr_id, vec![]), &[v(9, 0), v(9, 1), v(9, 6)]);
+        let vis_body = apply_all(
+            Term::constructor(vis_id, vec![]),
+            &[sum_gh(9), resp_sum_ghrgrh(9), v(9, 4), inr_applied, v(9, 8)],
+        );
+        Term::lam(op_dom, Term::lam(cont_dom, Term::lam(ih_dom, vis_body)))
+    };
+
+    let elim = Term::Elim {
+        fam: itree_id,
+        level_args: vec![],
+        params: vec![v(6, 1), v(6, 3), v(6, 4)], // [h, rh, a]
+        motive: Box::new(motive),
+        methods: vec![method_ret, method_vis],
+        indices: vec![],
+        scrut: Box::new(v(6, 5)), // t
+    };
+
+    let d_g = ty0();
+    let d_h = ty0();
+    let d_rg = Term::pi(Term::var(1), ty0());
+    let d_rh = Term::pi(Term::var(1), ty0());
+    let d_a = ty0();
+    // d_t: ITree h rh a, ctx [g,h,rg,rh,a] (len5): h=Var(3), rh=Var(1), a=Var(0).
+    let d_t = apply_all(Term::indformer(itree_id, vec![]), &[Term::var(3), Term::var(1), Term::var(0)]);
+    let final_domains = [d_g, d_h, d_rg, d_rh, d_a, d_t];
+    let body = lam_chain(&final_domains, elim);
+    let ret_sum = apply_all(Term::indformer(sum_id, vec![]), &[Term::var(5), Term::var(4)]);
+    let ret_resp = apply_all(
+        Term::const_(resp_sum_id, vec![]),
+        &[Term::var(5), Term::var(4), Term::var(3), Term::var(2)],
+    );
+    let ret_ty = apply_all(Term::indformer(itree_id, vec![]), &[ret_sum, ret_resp, Term::var(1)]);
+    let ty = pi_chain(&final_domains, ret_ty);
+    declare_def(env, vec![], ty, body).map_err(|e| format!("injectR declaration failed: {e:?}"))
 }
 
 /// `bind : (e:Type)(resp:e->Type)(a b:Type) -> ITree e resp a -> (a -> ITree e resp b) -> ITree e resp b`.
@@ -429,10 +612,16 @@ pub fn declare_run_state(
         let len = 6 + extra;
         apply_all(Term::indformer(sum_id, vec![]), &[Term::app(Term::indformer(state_op_id, vec![]), v(len, 0)), v(len, 1)])
     };
-    // `resp_sum s f RespF`, at a `(6+extra)`-length context.
+    // `resp_sum (StateOp s) f (resp_state s) RespF`, at a `(6+extra)`-length
+    // context — the general `resp_sum`'s 4-arg form (`effect-composition`
+    // D1, §D1.3: State is the literal instance `resp_sum (StateOp s) f
+    // (resp_state s) RespF`), still curried awaiting `op` like the old 3-arg
+    // form was.
     let resp_sum_app = |extra: usize| -> Term {
         let len = 6 + extra;
-        apply_all(Term::const_(resp_sum_id, vec![]), &[v(len, 0), v(len, 1), v(len, 2)])
+        let state_op_s = Term::app(Term::indformer(state_op_id, vec![]), v(len, 0));
+        let resp_state_s = Term::app(Term::const_(resp_state_id, vec![]), v(len, 0));
+        apply_all(Term::const_(resp_sum_id, vec![]), &[state_op_s, v(len, 1), resp_state_s, v(len, 2)])
     };
 
     // ---- elim_ITree (outermost fold) --------------------------------------
@@ -619,12 +808,22 @@ pub fn declare_run_state(
     let d_a = ty0(); // ctx [s,f,RespF]
     let d_s0 = Term::var(3); // s, ctx [s,f,RespF,a] (len=4): s=Var(3)
     // d_t: ITree Op Resp a, ctx [s,f,RespF,a,s0] (len=5): s=Var(4),f=Var(3),RespF=Var(2),a=Var(1).
+    // `Resp = resp_sum (StateOp s) f (resp_state s) RespF` — the general
+    // `resp_sum`'s 4-arg form (State as the literal instance, §D1.3).
     let d_t = itree3(
         apply_all(
             Term::indformer(sum_id, vec![]),
             &[Term::app(Term::indformer(state_op_id, vec![]), Term::var(4)), Term::var(3)],
         ),
-        apply_all(Term::const_(resp_sum_id, vec![]), &[Term::var(4), Term::var(3), Term::var(2)]),
+        apply_all(
+            Term::const_(resp_sum_id, vec![]),
+            &[
+                Term::app(Term::indformer(state_op_id, vec![]), Term::var(4)),
+                Term::var(3),
+                Term::app(Term::const_(resp_state_id, vec![]), Term::var(4)),
+                Term::var(2),
+            ],
+        ),
         Term::var(1),
     );
     let final_domains = [d_s, d_f, d_respf, d_a, d_s0, d_t];
@@ -654,11 +853,19 @@ pub fn declare_get(
     sum_id: GlobalId,
     inl_id: GlobalId,
     resp_sum_id: GlobalId,
+    resp_state_id: GlobalId,
     unit_id: GlobalId,
 ) -> Result<GlobalId, String> {
     // Base ctx (declaration order): s, f, RespF, _:Unit (len=4).
     let op_ty = |len: usize| apply_all(Term::indformer(sum_id, vec![]), &[Term::app(Term::indformer(state_op_id, vec![]), v(len, 0)), v(len, 1)]);
-    let resp_ty = |len: usize| apply_all(Term::const_(resp_sum_id, vec![]), &[v(len, 0), v(len, 1), v(len, 2)]);
+    // `resp_sum (StateOp s) f (resp_state s) RespF` — the general `resp_sum`'s
+    // 4-arg form (State as the literal instance, §D1.3), still curried
+    // awaiting `op`.
+    let resp_ty = |len: usize| {
+        let state_op_s = Term::app(Term::indformer(state_op_id, vec![]), v(len, 0));
+        let resp_state_s = Term::app(Term::const_(resp_state_id, vec![]), v(len, 0));
+        apply_all(Term::const_(resp_sum_id, vec![]), &[state_op_s, v(len, 1), resp_state_s, v(len, 2)])
+    };
 
     // ctx4 (s,f,RespF,_ all bound): Op=op_ty(4), Resp=resp_ty(4), R=s=v(4,0).
     let get_at_s = apply_all(Term::constructor(get_id, vec![]), &[v(4, 0)]);
@@ -697,12 +904,19 @@ pub fn declare_put(
     sum_id: GlobalId,
     inl_id: GlobalId,
     resp_sum_id: GlobalId,
+    resp_state_id: GlobalId,
     unit_id: GlobalId,
     mkunit_id: GlobalId,
 ) -> Result<GlobalId, String> {
     // Base ctx (declaration order): s, f, RespF, s':s (len=4).
     let op_ty = |len: usize| apply_all(Term::indformer(sum_id, vec![]), &[Term::app(Term::indformer(state_op_id, vec![]), v(len, 0)), v(len, 1)]);
-    let resp_ty = |len: usize| apply_all(Term::const_(resp_sum_id, vec![]), &[v(len, 0), v(len, 1), v(len, 2)]);
+    // `resp_sum (StateOp s) f (resp_state s) RespF` — see `declare_get`'s
+    // identical closure for the rationale.
+    let resp_ty = |len: usize| {
+        let state_op_s = Term::app(Term::indformer(state_op_id, vec![]), v(len, 0));
+        let resp_state_s = Term::app(Term::const_(resp_state_id, vec![]), v(len, 0));
+        apply_all(Term::const_(resp_sum_id, vec![]), &[state_op_s, v(len, 1), resp_state_s, v(len, 2)])
+    };
 
     // ctx4 (s,f,RespF,s' all bound): s'=newest=v(4,3).
     let put_applied = apply_all(Term::constructor(put_id, vec![]), &[v(4, 0), v(4, 3)]);

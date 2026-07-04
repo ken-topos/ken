@@ -3,22 +3,28 @@
 --
 -- Task: read a text file and process it line by line.
 --
--- fs-read-file-lines-flip (VAL2 #9/OQ-B closure, rosetta corpus -> 16/0).
--- `main` declares EXACTLY the FS authority it needs on its own type
--- (`Cap APartial` -- the manifest IS the signature, operator-locked); the
--- CLI reads that declaration, mints precisely that authority, and binds it
--- -- never full, never ambient. `read_bytes` carries the cap into a real
--- `[FS]` effect computation, gated by the runtime `authorizes` check
--- (`ken-interp/src/eval.rs`) before any syscall.
+-- fs-read-file-lines-flip (VAL2 #9/OQ-B closure) + effect-composition
+-- (retires the flip's Option-3 honesty asterisk). `main` declares EXACTLY
+-- the FS authority it needs on its own type (`Cap APartial` -- the manifest
+-- IS the signature, operator-locked); the CLI reads that declaration, mints
+-- precisely that authority, and binds it -- never full, never ambient.
+-- `read_bytes` carries the cap into a real `[FS]` effect computation, gated
+-- by the runtime `authorizes` check (`ken-interp/src/eval.rs`) before any
+-- syscall.
 --
--- HONESTY BOUNDARY (Steward/Architect ruling, 2026-07-04): this demonstrates
--- FS-read + pure-parse, NOT effect composition. `main` reads the fixture and
--- returns the parsed line list as a total `Result`; the CLI (`ken-cli`'s
--- `run_file`) prints each returned line (success) or renders the failure
--- (never silently as success). A single Ken program driving BOTH an `[FS]`
--- effect AND `[Console]` printing in one type-checked `ITree` needs a
--- coproduct (`Sum`) `run_io` doesn't support today -- a separate, deferred
--- effect-composition WP (Steward-tracked), not this build's concern.
+-- GENUINE COMPOSITION (effect-composition D1-D4, retires the prior "FS-read
+-- + pure-parse, NOT effect composition" asterisk): `main` performs the
+-- `[FS]` read AND the `[Console]` printing in ONE type-checked `ITree (Sum
+-- (FSOp APartial) ConsoleOp) (resp_sum ...) (Result IOError Unit)`, built at
+-- the surface via `injectL`/`injectR` (the general `g ↪ Sum g h` / `h ↪ Sum
+-- g h` inclusions, `36 §2.4`'s `incl`) sequenced with the homogeneous
+-- `bind`. `run_io`'s coproduct-aware terminal driver (D3) strips the
+-- `InL`/`InR` tags down to each real base op and dispatches both effects
+-- through the SAME loop -- no hand-fed `Sum` anywhere in this file. On a
+-- denied/insufficient capability or a missing file, `main` does NOT print
+-- (fail-closed) and instead returns `Err e`, which `ken-cli`'s post-run
+-- render still surfaces as a non-zero exit with the exact `IOError` variant
+-- (`ken-cli/src/main.rs::render_fs_result`, unchanged from the flip).
 
 -- D1: `lines : String -> List String`, terminator semantics (`str::lines()`)
 -- -- a trailing '\n' yields NO trailing empty segment. Pure, total,
@@ -71,16 +77,46 @@ view mapListCharToString (segs : List (List Char)) : List String =
 view lines (s : String) : List String =
   mapListCharToString (dropTrailingEmpty (splitNL (string_to_list_char s)))
 
--- D2/D4: `main` declares `Cap APartial` (partial/read-level FS authority)
--- on its OWN signature -- the manifest. Reads the fixture, decodes it, and
--- returns the parsed lines as a total `Result IOError (List String)`.
-view main (cap : Cap APartial) : FS APartial (Result IOError (List String)) =
-  bind (FSOp APartial) (fs_resp APartial) (Result IOError Bytes) (Result IOError (List String))
-    (read_bytes APartial cap (bytes_encode "conformance/fs/fixtures/three-lines.txt"))
+-- `Compose r` -- the composed FS+Console tree, abbreviating the coproduct
+-- `ITree (Sum (FSOp APartial) ConsoleOp) (resp_sum ...) r` for readability
+-- (a plain `view` alias, reduces transparently -- same pattern `FS`/`IO`
+-- already use).
+view Compose (r : Type) : Type =
+  ITree (Sum (FSOp APartial) ConsoleOp)
+        (resp_sum (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp)
+        r
+
+-- prints each line via `[Console]`, sequenced through the continuation one
+-- line at a time (the AC4 totality-face multi-step case: read once, then
+-- resume N times through `print_line`'s continuation).
+view printLines (xs : List String) : Compose (Result IOError Unit) =
+  match xs {
+    Nil =>
+      Ret (Sum (FSOp APartial) ConsoleOp)
+          (resp_sum (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp)
+          (Result IOError Unit) (Ok IOError Unit MkUnit) ;
+    Cons x xs' =>
+      bind (Sum (FSOp APartial) ConsoleOp)
+           (resp_sum (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp)
+           Unit (Result IOError Unit)
+        (injectR (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp Unit (print_line x))
+        (\_ . printLines xs')
+  }
+
+-- D2/D4: `main` declares `Cap APartial` (partial/read-level FS authority) on
+-- its OWN signature -- the manifest. Reads the fixture via `injectL
+-- (read_bytes ...)`, and on success prints each parsed line via `injectR
+-- (print_line ...)` -- both effects composed in ONE `bind`-sequenced tree.
+view main (cap : Cap APartial) : Compose (Result IOError Unit) =
+  bind (Sum (FSOp APartial) ConsoleOp)
+       (resp_sum (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp)
+       (Result IOError Bytes) (Result IOError Unit)
+    (injectL (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp (Result IOError Bytes)
+      (read_bytes APartial cap (bytes_encode "conformance/fs/fixtures/three-lines.txt")))
     (\r .
       match r {
-        Err e    => Ret (FSOp APartial) (fs_resp APartial) (Result IOError (List String))
-                        (Err IOError (List String) e) ;
-        Ok bytes => Ret (FSOp APartial) (fs_resp APartial) (Result IOError (List String))
-                        (Ok IOError (List String) (lines (bytes_decode bytes)))
+        Err e    => Ret (Sum (FSOp APartial) ConsoleOp)
+                        (resp_sum (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp)
+                        (Result IOError Unit) (Err IOError Unit e) ;
+        Ok bytes => printLines (lines (bytes_decode bytes))
       })

@@ -7,7 +7,7 @@ pub mod eval;
 
 pub use eval::{
     apply, decimal_value, drive_h, drive_h_instrumented, eval, run_io, ConsoleIds, Env, EvalStore,
-    EvalVal, FSIds, ITreeIds, RunIoError, SlotId,
+    EvalVal, FSIds, ITreeIds, RunIoError, SlotId, SumIds,
 };
 
 pub fn describe() -> &'static str {
@@ -2259,7 +2259,7 @@ mod console_io_tests {
             ce.ret_id,
         );
         let tree = eval(&[], &tree_term, &env, &mut store);
-        let result = run_io(tree, &ce.ids, None, &env, &mut store);
+        let result = run_io(tree, &ce.ids, None, None, &env, &mut store);
 
         assert!(
             matches!(result, Ok(EvalVal::Ctor { id, .. }) if id == ce.unit_id),
@@ -2305,7 +2305,7 @@ mod console_io_tests {
             slot: 0,
         };
 
-        let result = run_io(vis_val, &ce.ids, None, &env, &mut store);
+        let result = run_io(vis_val, &ce.ids, None, None, &env, &mut store);
 
         assert!(
             matches!(result, Ok(EvalVal::Ctor { id, .. }) if id == ce.unit_id),
@@ -2352,7 +2352,7 @@ mod console_io_tests {
             slot: 0,
         };
 
-        let result = run_io(vis_val, &ce.ids, None, &env, &mut store);
+        let result = run_io(vis_val, &ce.ids, None, None, &env, &mut store);
 
         assert!(
             matches!(result, Err(RunIoError::UnknownEffect(_))),
