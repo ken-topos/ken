@@ -35,10 +35,12 @@ agents. Five principles (decided; the §2–§6 spellings are a starter under th
    normalizes ASCII → canonical Unicode and fixes layout on save. Because humans
    read and agents write, **one canonical format** means the reader always sees
    consistent notation — no style variance to parse. (No formatting latitude.)
-4. **Keywords stay ASCII words.** `view data record match space visits requires
-   ensures` are *names* — word-legibility beats symbol density, and they are
-   already typeable. Notation is reserved for *operators*, where a symbol
-   carries established meaning; Unicode-ifying keywords would be decoration.
+4. **Keywords stay ASCII words.** `const fn proc data record match space visits
+   requires ensures` are *names* — legibility beats symbol density, and they
+   are already typeable. Notation is reserved for *operators*, where a symbol
+   carries established meaning; Unicode-ifying keywords would be decoration. (So
+   the purity keywords `const`/`fn`/`proc`, `36 §1.6`, are ASCII words, not
+   glyphs.)
 5. **Curated and confusable-resistant (a security property, not only
    legibility).** The blessed set is **bounded** (a fixed table, not "any
    Unicode"), and the lexer **normalizes/rejects Unicode confusables** (the TR39
@@ -57,7 +59,7 @@ digraph where one is unambiguous, else the spelled-out name.
 | Glyph | ASCII | Role |
 |---|---|---|
 | `→` | `->` | function type / arrow |
-| `λ` | `\` | anonymous function (named is `view`) |
+| `λ` | `\` | anonymous function (named is `fn`/`proc`) |
 | `∀` | `forall` | universal quantifier (propositions) |
 | `∃` | `exists` | existential quantifier |
 | `Σ` `Π` | `Sigma` `Pi` | dependent sum / product (binders) |
@@ -76,6 +78,43 @@ boolean `DecEq` (`33 §5`) must stay distinct (Lean/Agda convention); `=` is
 call. ‡ The lattice-op ASCII (`⊑`/`⊔`/`⊓`) and the `ℓ` overload (level vs.
 label) are the other genuinely-contested cells — flagged for the team, not fixed
 here.
+
+## 1c. BL3 — the canonical Unicode surface is lexer *and* formatter (SURF-1 D3)
+
+> Status: **resolved** — a **direct consequence of §1a**, made explicit here for
+> the BL3 build. The question "is the Unicode surface a lexer change or a
+> formatting convention?" is answered **both**, exactly as §1a principles 2–4
+> already decide; SURF-1 D3 does not add a new decision, only pins the division
+> of labour and confirms **ASCII stays accepted**.
+
+- **The lexer accepts both spellings as the *same token* (principle 2).** A
+  curated Unicode glyph and its ASCII transliteration (`→`/`->`, `λ`/`\`, `∀`/
+  `forall`, `Σ`/`Sigma`, `Ω`/`Omega`, `⊑`/`<:`, …, §1b) lex to the **identical**
+  token — the §1b/§8 "the two are the same token" rule generalized across the
+  blessed table. So the glyph carries **zero** extra information and **ASCII
+  spellings remain accepted forever** (no program ever *requires* a special
+  keyboard). This is genuinely a **lexer** capability, not only a convention.
+- **The formatter emits canonical Unicode on save (principle 3).** The single
+  mandated formatter normalizes accepted ASCII input to canonical Unicode
+  glyph (and fixes layout), so the reader always sees consistent notation. This
+  is the **convention** half — but it is *downstream* of the lexer, applied to
+  already-accepted source, never a parse gate.
+- **Keywords are exempt — they stay ASCII words (principle 4).** The Unicode
+  surface is for **operators/symbols** only; `const`/`fn`/`proc` and every other
+  keyword (`31 §4`) stay ASCII words. BL3 Unicode-ifies the *operator* surface,
+  not the keyword surface.
+- **Confusable-resistance is a hard lexer gate (principle 5).** The blessed set
+  is bounded; the lexer normalizes/rejects TR39 confusables (`⊔`/`U`, `∨`/`v`,
+  `×`/`x`, `ℓ`/`l`, Cyrillic look-alikes) so a reviewer reads exactly what the
+  kernel checks (`../60-security/64`).
+
+**Build scope (BL3 / D4).** The build realizes the lexer's accept-both +
+same-token behaviour and the formatter's Unicode normalization, then **runs the
+formatter over the corpus** (prelude, `packages/*`, `examples/rosetta/*`) to
+convert ASCII digraphs to canonical Unicode — landed together with the `view →
+const`/`fn`/`proc` migration (D4) as one workspace-green unit. A Unicode-surface
+`.ken` and its ASCII twin **elaborate identically** (acceptance 7), because they
+lex to the same tokens.
 
 ## 2. Tokens
 
@@ -121,14 +160,17 @@ determine the numeric story (`35`):
 ## 4. Keywords (proposal)
 
 ```
-view let type data record module import use space
+const fn proc let type data record module import use space
 match if then else where requires ensures prove law
 visits foreign forall exists in as mut class instance
 becomes declassify policy temporal assume test
 ```
 
-Reserved but spelling-revisable (OQ-syntax). Contextual keywords (`infixl`,
-`derive`, …) are not globally reserved. The decided post-freeze surface tokens
+Reserved but spelling-revisable (OQ-syntax), **except** the purity keywords
+`const`/`fn`/`proc` (`36 §1.6`), whose spellings are **fixed** by the operator
+ruling (SURF-1); `view` is **retired**. `let` remains reserved for the local
+`let … in …` expression (`32 §3`). Contextual keywords (`infixl`, `derive`, …)
+are not globally reserved. The decided post-freeze surface tokens
 are also lexed here (all spellings OQ-syntax):
 
 - the wrapping-arithmetic operator `+%` (and `wrapping_add`, …) in the operator
@@ -171,8 +213,11 @@ the token subset below — just enough to write a trivial dependently-typed
 program. The full token set (§2–§4) is for the complete surface; V0 recognises
 none of the rest (no literals, no operators, no layout, no annotations).
 
-- **Keywords:** `view`, `let`, `in`, `Type`. (`Type` lexes as a keyword in V0,
-  not a `conid` — it is the universe former, `../10-kernel/12`.)
+- **Keywords:** `fn`, `const`, `let`, `in`, `Type`. (V0 is pure-only, needing
+  `fn`/`const` and never `proc`; `36`. `Type` lexes as a keyword in V0, not a
+  `conid` — it is the universe former, `../10-kernel/12`. The landed V0 lexer
+  still spells `view`/`let` until the D4 migration; the surface here is the
+  target.)
 - **Punctuation:** `(`, `)`, `:`, `=`, `.`, and the arrow `->` (canonical `→`;
   the two are the same token, §1b).
 - **Lambda:** ASCII `\` (canonical `λ`; same token, §1b).

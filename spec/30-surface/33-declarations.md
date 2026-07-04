@@ -11,17 +11,35 @@
 
 ## 1. Definitions
 
-- **`view f … = e`** — a (pure) function; elaborates to a global Π/λ definition,
-  gated by SCT (`../10-kernel/17 §4`). Effectful variants carry an effect row
-  (`36`).
-- **`let x : A = e`** — a value definition (a nullary `view`).
+A definition's keyword **declares its static purity** — a checked signal, not a
+convention (`36 §1.6`; operator ruling, SURF-1). Three keywords, split at purity
+and arity:
+
+- **`const c … = e`** — a **pure value** (zero explicit value parameters);
+  elaborates to a global definition. Subsumes the former value definition (the
+  old nullary `let`). A `const` may still take **implicit** type/level/instance
+  parameters — it is a constant *family* (`36 §1.6.3`), e.g. `const nil {A :
+  Type} : List A = Nil A`.
+- **`fn f … = e`** — a **pure function** (≥1 explicit value parameter);
+  elaborates to a global Π/λ definition, gated by SCT (`../10-kernel/17 §4`).
+  The verification layer may treat an `fn` as a mathematical function (`36 §1`).
+- **`proc p … visits ρ = e`** — a **potentially impure/imperative** definition
+  at any arity: it carries an effect row `ρ` (concrete, or a row variable, `36
+  §1.5`), or is a `space` operation (`36 §4`). A `proc` is the *only* keyword a
+  `visits` row (non-empty, or a variable) may sit on.
 - **`type T … = …`** — a type alias or a refinement/`Σ`/Π type abbreviation
   (transparent; unfolds by δ).
 - All top-level definitions are **mutually recursive within a module** if the
   SCT check accepts the group; otherwise the offending recursion is reported
   (`17`).
-- Definitions may be **generic** (implicit type/level parameters, `39`): `view
-  id {A : Type} (x : A) : A = x`.
+- Definitions may be **generic** (implicit type/level parameters, `39`): `fn id
+  {A : Type} (x : A) : A = x`.
+
+The keyword is **checked bidirectionally** against the signature and the body's
+inferred effects (`36 §1.6.2`); a mismatch — an `fn` that performs an effect, a
+`proc` that is provably pure, a `const`/`fn` at the wrong arity — is a **hard
+error** (`36 §1.6.3`). The single definition keyword `view` is **retired**
+(`36 §1.6.4`); the local `let … in …` **expression** (`32 §3`) is unchanged.
 
 ## 2. Records (products)
 
@@ -163,7 +181,7 @@ class DecEq (A : Type) {              -- a record of operations + their laws
 }
 instance DecEq Int { eq = int_eq, ok = … }
 
-view nub {A : Type} (xs : List A) : List A  where DecEq A = …   -- a constraint
+fn nub {A : Type} (xs : List A) : List A  where DecEq A = …   -- a constraint
 ```
 
 ### 5.1 The two kinds — and the sort *is* the discriminant
@@ -254,12 +272,12 @@ be declared), not a kernel rule.
 
 ### 5.4 Constraint `where C A` → an implicit instance argument
 
-A constraint `where C A` on a `view`/`let` (grammar `32 §1`) elaborates to an
-**implicit instance argument** — an implicit `Π` over the class record inserted
-ahead of the explicit parameters:
+A constraint `where C A` on a definition (`fn`/`proc`/`const`, grammar `32 §1`)
+elaborates to an **implicit instance argument** — an implicit `Π` over the class
+record inserted ahead of the explicit parameters:
 
 ```
-view nub {A : Type} (xs : List A) : List A  where DecEq A = …
+fn nub {A : Type} (xs : List A) : List A  where DecEq A = …
       ⟶  nub : {A : Type} → {d : DecEq A} → List A → List A
 ```
 
@@ -331,8 +349,8 @@ subsume-don't-proliferate.
 ## 6. Fixity and operators
 
 `infixl N op` / `infixr N op` / `infix N op` declare operator fixity (`32 §6`).
-Operators are ordinary `view`s with symbolic names; there is nothing special
-about them semantically.
+Operators are ordinary `fn`/`proc`/`const` definitions with symbolic names;
+there is nothing special about them semantically.
 
 ## 7. What WS-L must deliver here
 
