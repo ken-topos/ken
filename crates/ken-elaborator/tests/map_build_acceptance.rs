@@ -661,6 +661,44 @@ fn lookuplocality_law3_is_a_real_general_proof_term() {
     }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Law 5 (`54 §5.3`, Map capstone unit 2 — the final law) — `lookupAssocAgree`
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn lookupassocagree_law5_is_a_real_general_proof_term() {
+    let env = mk_env();
+    // `lookupAssocAgree : Ordered m -> Distinct leq m -> lookup key m =
+    // assoc key (toList m)` must be a real Decl::Transparent proof term —
+    // the restated statement (Distinct precondition added after the
+    // original false statement was caught and escalated), reusing Law 1's
+    // goal-generic transport bridges and Law 2's lookup-side bridges.
+    for name in [
+        "lookupAssocAgree",
+        "law5NodeDispatch",
+        "law5NodeQ2Dispatch",
+        "law5DistinctL",
+        "law5DistinctR",
+        "orderEquiv",
+        "NoDup",
+        "Distinct",
+        "assocSkipPrefix",
+        "assocPrefixWins",
+        "assocNoMatchIsNone",
+        "noDupAppendHeadExcl",
+        "noDupAppendLeft",
+        "noDupAppendRight",
+        "notMatchTransferViaEquiv",
+        "lookupStopBridge",
+    ] {
+        let id = env.globals[name];
+        assert!(
+            matches!(env.env.lookup(id), Some(Decl::Transparent { .. })),
+            "{name} must be a real proof term, not a postulate"
+        );
+    }
+}
+
 // A hand-built concrete-instance application (`tree_2_1_3` under a trivial
 // always-true comparator) was tried here as a second smoke test, but
 // `Ordered`'s real Node case (`And (allKeys (\k2. ...) l) (And (allKeys

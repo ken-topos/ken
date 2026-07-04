@@ -451,6 +451,22 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     // prelude constant, no new declaration.
     elab.globals.insert("Bottom".to_string(), elab.env.bottom_id());
 
+    // `Not : Ω → Ω` (`¬A := A → Bottom`) — the surface has no EXPRESSION-
+    // position `->` (only a `view`'s TYPE-annotation position parses the
+    // Pi-sugar; `parse_expr` lacks it entirely, confirmed empirically), so
+    // a Prop-returning `view` BODY cannot spell `A -> Bottom` directly as a
+    // VALUE (e.g. `NoDup`'s per-entry negation predicate passed to
+    // `allInList`, `map-verified-laws` law 5, `54 §4`). Built exactly like
+    // `And`'s `Σ(_:A).B` above, using the already-trusted `Term::Pi` and
+    // the existing `Bottom` constant. Zero `trusted_base` delta: ordinary
+    // Pi-formation + the pre-existing `Bottom`, no new kernel primitive.
+    let bottom_const = Term::const_(elab.env.bottom_id(), vec![]);
+    let not_ty = Term::pi(omega0.clone(), omega0.clone());
+    let not_body = Term::lam(omega0.clone(), Term::pi(Term::var(0), weaken(&bottom_const, 1)));
+    let not_id = declare_def(&mut elab.env, vec![], not_ty, not_body)
+        .map_err(|e| ElabError::Internal(format!("prelude Not failed: {}", e)))?;
+    elab.globals.insert("Not".to_string(), not_id);
+
     // `Pair : Type -> Type -> Type` — the non-dependent Sigma pair,
     // `k × v` (`52-map.md §4`, `13 §3`): "the Σ-pair... distinct from the
     // inductive `Prod`". Built exactly like `And`'s `Σ(_:A).B` above — the

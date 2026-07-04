@@ -1549,3 +1549,677 @@ view lookupLocality
         (lookupLocality k v leq transLeq key key' val r hdist)
         (boolDichotomy (leq key k2))
   }
+
+-- Law 5 (`54 §5.3`, Map capstone unit 2 -- the final law) -- agreement:
+-- `Ordered m -> Distinct leq m -> lookup key m = assoc key (toList m)`.
+--
+-- Dictionary law: `transLeq` only (matches `54 §5.2`'s restated law-5
+-- list; `antisym` belongs only to the separate `Distinct`-discharge lemma,
+-- NOT this statement -- Architect's ruling, `52-map.md §5.3`).
+--
+-- `Distinct leq m := NoDup leq (toList m)` -- no two entries in the
+-- in-order traversal carry order-equivalent keys. Without this hypothesis
+-- the law is FALSE: `Node (Node Leaf key v1 Leaf) key v2 Leaf` is a
+-- legitimate weak-bounds `Ordered` witness (confirmed empirically via
+-- ken-interp evaluation, escalated and resolved as a spec restate) with
+-- `lookup key = Some v2` (root, first BST match) but
+-- `assoc key (toList) = Some v1` (list-first).
+--
+-- Mechanism:
+-- - `orderEquiv`/`NoDup`/`Distinct`: `Ω`-valued, comparison-free
+--   structural predicates (`54 §4`). `Not` (a new prelude registration,
+--   `¬A := A -> Bottom`) is needed here because the surface has no
+--   EXPRESSION-position `->` -- only a `view`'s TYPE-annotation position
+--   parses the Pi-sugar (confirmed empirically); `NoDup`'s per-entry
+--   negation predicate is a Prop-returning VALUE, not a type annotation.
+-- - `assocStep`/`assocStepInner` mirror `assoc`'s own two-level stuck
+--   match (same technique as `lookupStep`/`insertStep`), with the usual
+--   stop-one-step-short bridges.
+-- - `assocSkipPrefix`: if no entry in a list prefix order-matches `key`,
+--   `assoc` skips it entirely and continues into the suffix.
+-- - `assocPrefixWins`/`assocNoMatchIsNone`: the mirror-image lemmas for
+--   when the SUFFIX (not the prefix) is guaranteed match-free.
+-- - `noDupAppendHeadExcl`/`noDupAppendLeft`/`noDupAppendRight`: structural
+--   decompositions of `NoDup` over `list_append`, extracting "this entry
+--   excludes every earlier entry" and the two tail-`Distinct` facts the
+--   outer induction's IH needs.
+-- - `notMatchFromBoundBelow`/`Above` + `allInListMapNotMatchBelow`/`Above`:
+--   convert an `Ordered`-derived `leBelow`/`leAbove` bound plus a single
+--   `leq key k2 = False` fact into "no bounded entry order-matches key",
+--   via `transLeq` + `absurd` on the resulting `Equal Bool True False`.
+-- - `notMatchTransferViaEquiv`: at the order-equivalent (`key`~`k2`)
+--   branch, transfers a "not order-equiv to `k2`" fact (directly available
+--   from `Distinct`) to "not order-equiv to `key`" -- the matched-node
+--   VALUE agreement itself is then `refl`: both traversals return the
+--   value at the unique order-equivalent entry, no `Equal key k2` step
+--   needed (Architect's analysis, confirmed at proof time exactly as
+--   anticipated).
+--
+-- Confirmed on the fixed kernel: builds clean, ~1.7s for the whole file.
+
+view orderEquiv (k : Type) (leq : k -> k -> Bool) (a : k) (b : k) : Prop =
+  And (Equal Bool (leq a b) True) (Equal Bool (leq b a) True)
+
+view notOrderEquivToKey (k : Type) (leq : k -> k -> Bool) (key : k) (k2 : k) : Prop =
+  Not (orderEquiv k leq key k2)
+
+view NoDup (k : Type) (v : Type) (leq : k -> k -> Bool) (xs : List (Pair k v)) : Prop =
+  match xs {
+    Nil => Equal Bool True True ;
+    Cons e xs2 => And (allInList k v (notOrderEquivToKey k leq (pairFst k v e)) xs2) (NoDup k v leq xs2)
+  }
+
+view Distinct (k : Type) (v : Type) (leq : k -> k -> Bool) (m : Tree k v) : Prop =
+  NoDup k v leq (toList k v m)
+
+view assocStepInner
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k)
+  (e : Pair k v) (xs2 : List (Pair k v)) (y : Bool) : Option v =
+  match y {
+    True  => Some v (pairSnd k v e) ;
+    False => assoc k v leq key xs2
+  }
+
+view assocStep
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k)
+  (e : Pair k v) (xs2 : List (Pair k v)) (x : Bool) : Option v =
+  match x {
+    True  => assocStepInner k v leq key e xs2 (leq (pairFst k v e) key) ;
+    False => assoc k v leq key xs2
+  }
+
+view assocFinalBridge
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k)
+  (e : Pair k v) (xs2 : List (Pair k v))
+  : Equal (Option v) (assoc k v leq key (Cons (Pair k v) e xs2))
+                      (assocStep k v leq key e xs2 (leq key (pairFst k v e))) = Refl
+
+view assocMkStepTrueEq
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k)
+  (e : Pair k v) (xs2 : List (Pair k v))
+  (q1 : Equal Bool (leq key (pairFst k v e)) True)
+  : Equal (Option v) (assocStep k v leq key e xs2 (leq key (pairFst k v e)))
+                      (assocStep k v leq key e xs2 True) =
+  cong Bool (Option v) (leq key (pairFst k v e)) True (assocStep k v leq key e xs2) q1
+
+view assocMkStepFalseEq
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k)
+  (e : Pair k v) (xs2 : List (Pair k v))
+  (q1 : Equal Bool (leq key (pairFst k v e)) False)
+  : Equal (Option v) (assocStep k v leq key e xs2 (leq key (pairFst k v e)))
+                      (assocStep k v leq key e xs2 False) =
+  cong Bool (Option v) (leq key (pairFst k v e)) False (assocStep k v leq key e xs2) q1
+
+view assocMkInnerFalseEq
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k)
+  (e : Pair k v) (xs2 : List (Pair k v))
+  (q2 : Equal Bool (leq (pairFst k v e) key) False)
+  : Equal (Option v) (assocStepInner k v leq key e xs2 (leq (pairFst k v e) key))
+                      (assocStepInner k v leq key e xs2 False) =
+  cong Bool (Option v) (leq (pairFst k v e) key) False (assocStepInner k v leq key e xs2) q2
+
+view assocStepTrueReduces
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k)
+  (e : Pair k v) (xs2 : List (Pair k v))
+  : Equal (Option v) (assocStep k v leq key e xs2 True)
+                      (assocStepInner k v leq key e xs2 (leq (pairFst k v e) key)) = Refl
+
+-- given q1 (outer=True), q2 (inner=False): assoc key(Cons e xs2)=assoc key xs2.
+view assocSkipHeadBridge
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k)
+  (e : Pair k v) (xs2 : List (Pair k v))
+  (q1 : Equal Bool (leq key (pairFst k v e)) True) (q2 : Equal Bool (leq (pairFst k v e) key) False)
+  : Equal (Option v) (assoc k v leq key (Cons (Pair k v) e xs2)) (assoc k v leq key xs2) =
+  trans (Option v) (assoc k v leq key (Cons (Pair k v) e xs2))
+                    (assocStepInner k v leq key e xs2 (leq (pairFst k v e) key))
+                    (assoc k v leq key xs2)
+    (trans (Option v) (assoc k v leq key (Cons (Pair k v) e xs2))
+                       (assocStep k v leq key e xs2 (leq key (pairFst k v e)))
+                       (assocStepInner k v leq key e xs2 (leq (pairFst k v e) key))
+      (assocFinalBridge k v leq key e xs2)
+      (trans (Option v) (assocStep k v leq key e xs2 (leq key (pairFst k v e)))
+                         (assocStep k v leq key e xs2 True)
+                         (assocStepInner k v leq key e xs2 (leq (pairFst k v e) key))
+        (assocMkStepTrueEq k v leq key e xs2 q1) (assocStepTrueReduces k v leq key e xs2)))
+    (assocMkInnerFalseEq k v leq key e xs2 q2)
+
+-- given q1 (outer=False): assoc key(Cons e xs2)=assoc key xs2 directly.
+view assocSkipHeadBridgeFalse
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k)
+  (e : Pair k v) (xs2 : List (Pair k v))
+  (q1 : Equal Bool (leq key (pairFst k v e)) False)
+  : Equal (Option v) (assoc k v leq key (Cons (Pair k v) e xs2)) (assoc k v leq key xs2) =
+  trans (Option v) (assoc k v leq key (Cons (Pair k v) e xs2))
+                    (assocStep k v leq key e xs2 (leq key (pairFst k v e)))
+                    (assoc k v leq key xs2)
+    (assocFinalBridge k v leq key e xs2)
+    (assocMkStepFalseEq k v leq key e xs2 q1)
+
+view assocSkipPrefixInner
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k)
+  (e : Pair k v) (xs2 : List (Pair k v)) (ys : List (Pair k v))
+  (hnot : Not (orderEquiv k leq key (pairFst k v e)))
+  (ihTail : Equal (Option v) (assoc k v leq key (list_append (Pair k v) xs2 ys)) (assoc k v leq key ys))
+  (hOuter : Equal Bool (leq key (pairFst k v e)) True)
+  (oInner : Or (Equal Bool (leq (pairFst k v e) key) True) (Equal Bool (leq (pairFst k v e) key) False))
+  : Equal (Option v) (assoc k v leq key (Cons (Pair k v) e (list_append (Pair k v) xs2 ys))) (assoc k v leq key ys) =
+  match oInner {
+    Inl hInner =>
+      absurd (hnot (andIntro (Equal Bool (leq key (pairFst k v e)) True) (Equal Bool (leq (pairFst k v e) key) True) hOuter hInner)) ;
+    Inr hInnerFalse =>
+      trans (Option v) (assoc k v leq key (Cons (Pair k v) e (list_append (Pair k v) xs2 ys)))
+                        (assoc k v leq key (list_append (Pair k v) xs2 ys))
+                        (assoc k v leq key ys)
+        (assocSkipHeadBridge k v leq key e (list_append (Pair k v) xs2 ys) hOuter hInnerFalse)
+        ihTail
+  }
+
+view assocSkipPrefixDispatch
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k)
+  (e : Pair k v) (xs2 : List (Pair k v)) (ys : List (Pair k v))
+  (hnot : Not (orderEquiv k leq key (pairFst k v e)))
+  (ihTail : Equal (Option v) (assoc k v leq key (list_append (Pair k v) xs2 ys)) (assoc k v leq key ys))
+  (oOuter : Or (Equal Bool (leq key (pairFst k v e)) True) (Equal Bool (leq key (pairFst k v e)) False))
+  : Equal (Option v) (assoc k v leq key (Cons (Pair k v) e (list_append (Pair k v) xs2 ys))) (assoc k v leq key ys) =
+  match oOuter {
+    Inl hOuter =>
+      assocSkipPrefixInner k v leq key e xs2 ys hnot ihTail hOuter (boolDichotomy (leq (pairFst k v e) key)) ;
+    Inr hOuterFalse =>
+      trans (Option v) (assoc k v leq key (Cons (Pair k v) e (list_append (Pair k v) xs2 ys)))
+                        (assoc k v leq key (list_append (Pair k v) xs2 ys))
+                        (assoc k v leq key ys)
+        (assocSkipHeadBridgeFalse k v leq key e (list_append (Pair k v) xs2 ys) hOuterFalse)
+        ihTail
+  }
+
+view assocSkipPrefix
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k)
+  (xs : List (Pair k v)) (ys : List (Pair k v))
+  : allInList k v (notOrderEquivToKey k leq key) xs ->
+    Equal (Option v) (assoc k v leq key (list_append (Pair k v) xs ys)) (assoc k v leq key ys) =
+  match xs {
+    Nil => \hskip. Refl ;
+    Cons e xs2 =>
+      \hskip.
+        assocSkipPrefixDispatch k v leq key e xs2 ys
+          (andFst (notOrderEquivToKey k leq key (pairFst k v e)) (allInList k v (notOrderEquivToKey k leq key) xs2) hskip)
+          (assocSkipPrefix k v leq key xs2 ys
+             (andSnd (notOrderEquivToKey k leq key (pairFst k v e)) (allInList k v (notOrderEquivToKey k leq key) xs2) hskip))
+          (boolDichotomy (leq key (pairFst k v e)))
+  }
+
+view orderEquivSym
+  (k : Type) (leq : k -> k -> Bool) (a : k) (b : k) (h : orderEquiv k leq a b)
+  : orderEquiv k leq b a =
+  andIntro (Equal Bool (leq b a) True) (Equal Bool (leq a b) True)
+    (andSnd (Equal Bool (leq a b) True) (Equal Bool (leq b a) True) h)
+    (andFst (Equal Bool (leq a b) True) (Equal Bool (leq b a) True) h)
+
+view notOrderEquivSwap
+  (k : Type) (leq : k -> k -> Bool) (a : k) (b : k)
+  (hnot : Not (orderEquiv k leq a b))
+  : Not (orderEquiv k leq b a) =
+  \h. hnot (orderEquivSym k leq b a h)
+
+view allInListAppendElimRight
+  (k : Type) (v : Type) (p : k -> Prop) (xs : List (Pair k v)) (ys : List (Pair k v))
+  : allInList k v p (list_append (Pair k v) xs ys) -> allInList k v p ys =
+  match xs {
+    Nil => \h. h ;
+    Cons e xs2 =>
+      \h.
+        allInListAppendElimRight k v p xs2 ys
+          (andSnd (p (pairFst k v e)) (allInList k v p (list_append (Pair k v) xs2 ys)) h)
+  }
+
+view noDupAppendHeadExclHeadFact
+  (k : Type) (v : Type) (leq : k -> k -> Bool)
+  (e2 : Pair k v) (e : Pair k v) (xs2 : List (Pair k v)) (ys : List (Pair k v))
+  (h : And (allInList k v (notOrderEquivToKey k leq (pairFst k v e2)) (list_append (Pair k v) xs2 (Cons (Pair k v) e ys)))
+           (NoDup k v leq (list_append (Pair k v) xs2 (Cons (Pair k v) e ys))))
+  : notOrderEquivToKey k leq (pairFst k v e) (pairFst k v e2) =
+  notOrderEquivSwap k leq (pairFst k v e2) (pairFst k v e)
+    (andFst (notOrderEquivToKey k leq (pairFst k v e2) (pairFst k v e))
+            (allInList k v (notOrderEquivToKey k leq (pairFst k v e2)) ys)
+       (allInListAppendElimRight k v (notOrderEquivToKey k leq (pairFst k v e2)) xs2 (Cons (Pair k v) e ys)
+          (andFst (allInList k v (notOrderEquivToKey k leq (pairFst k v e2)) (list_append (Pair k v) xs2 (Cons (Pair k v) e ys)))
+                  (NoDup k v leq (list_append (Pair k v) xs2 (Cons (Pair k v) e ys)))
+             h)))
+
+view noDupAppendHeadExclConsArm
+  (k : Type) (v : Type) (leq : k -> k -> Bool)
+  (e2 : Pair k v) (e : Pair k v) (xs2 : List (Pair k v)) (ys : List (Pair k v))
+  (h : And (allInList k v (notOrderEquivToKey k leq (pairFst k v e2)) (list_append (Pair k v) xs2 (Cons (Pair k v) e ys)))
+           (NoDup k v leq (list_append (Pair k v) xs2 (Cons (Pair k v) e ys))))
+  (rec : NoDup k v leq (list_append (Pair k v) xs2 (Cons (Pair k v) e ys)) ->
+         allInList k v (notOrderEquivToKey k leq (pairFst k v e)) xs2)
+  : And (notOrderEquivToKey k leq (pairFst k v e) (pairFst k v e2))
+        (allInList k v (notOrderEquivToKey k leq (pairFst k v e)) xs2) =
+  andIntro (notOrderEquivToKey k leq (pairFst k v e) (pairFst k v e2))
+            (allInList k v (notOrderEquivToKey k leq (pairFst k v e)) xs2)
+    (noDupAppendHeadExclHeadFact k v leq e2 e xs2 ys h)
+    (rec (andSnd (allInList k v (notOrderEquivToKey k leq (pairFst k v e2)) (list_append (Pair k v) xs2 (Cons (Pair k v) e ys)))
+                 (NoDup k v leq (list_append (Pair k v) xs2 (Cons (Pair k v) e ys)))
+            h))
+
+view noDupAppendHeadExcl
+  (k : Type) (v : Type) (leq : k -> k -> Bool)
+  (xs : List (Pair k v)) (e : Pair k v) (ys : List (Pair k v))
+  : NoDup k v leq (list_append (Pair k v) xs (Cons (Pair k v) e ys)) ->
+    allInList k v (notOrderEquivToKey k leq (pairFst k v e)) xs =
+  match xs {
+    Nil => \h. tt ;
+    Cons e2 xs2 =>
+      \h. noDupAppendHeadExclConsArm k v leq e2 e xs2 ys h (noDupAppendHeadExcl k v leq xs2 e ys)
+  }
+
+view assocNoMatchInnerDispatch
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k)
+  (e : Pair k v) (xs2 : List (Pair k v))
+  (hnot : Not (orderEquiv k leq key (pairFst k v e)))
+  (ihTail : Equal (Option v) (assoc k v leq key xs2) (None v))
+  (hOuter : Equal Bool (leq key (pairFst k v e)) True)
+  (oInner : Or (Equal Bool (leq (pairFst k v e) key) True) (Equal Bool (leq (pairFst k v e) key) False))
+  : Equal (Option v) (assoc k v leq key (Cons (Pair k v) e xs2)) (None v) =
+  match oInner {
+    Inl hInner =>
+      absurd (hnot (andIntro (Equal Bool (leq key (pairFst k v e)) True) (Equal Bool (leq (pairFst k v e) key) True) hOuter hInner)) ;
+    Inr hInnerFalse =>
+      trans (Option v) (assoc k v leq key (Cons (Pair k v) e xs2))
+                        (assoc k v leq key xs2)
+                        (None v)
+        (assocSkipHeadBridge k v leq key e xs2 hOuter hInnerFalse)
+        ihTail
+  }
+
+view assocNoMatchDispatch
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k)
+  (e : Pair k v) (xs2 : List (Pair k v))
+  (hnot : Not (orderEquiv k leq key (pairFst k v e)))
+  (ihTail : Equal (Option v) (assoc k v leq key xs2) (None v))
+  (oOuter : Or (Equal Bool (leq key (pairFst k v e)) True) (Equal Bool (leq key (pairFst k v e)) False))
+  : Equal (Option v) (assoc k v leq key (Cons (Pair k v) e xs2)) (None v) =
+  match oOuter {
+    Inl hOuter => assocNoMatchInnerDispatch k v leq key e xs2 hnot ihTail hOuter (boolDichotomy (leq (pairFst k v e) key)) ;
+    Inr hOuterFalse =>
+      trans (Option v) (assoc k v leq key (Cons (Pair k v) e xs2))
+                        (assoc k v leq key xs2)
+                        (None v)
+        (assocSkipHeadBridgeFalse k v leq key e xs2 hOuterFalse)
+        ihTail
+  }
+
+view assocNoMatchIsNone
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k) (xs : List (Pair k v))
+  : allInList k v (notOrderEquivToKey k leq key) xs -> Equal (Option v) (assoc k v leq key xs) (None v) =
+  match xs {
+    Nil => \hskip. tt ;
+    Cons e xs2 =>
+      \hskip.
+        assocNoMatchDispatch k v leq key e xs2
+          (andFst (notOrderEquivToKey k leq key (pairFst k v e)) (allInList k v (notOrderEquivToKey k leq key) xs2) hskip)
+          (assocNoMatchIsNone k v leq key xs2
+             (andSnd (notOrderEquivToKey k leq key (pairFst k v e)) (allInList k v (notOrderEquivToKey k leq key) xs2) hskip))
+          (boolDichotomy (leq key (pairFst k v e)))
+  }
+
+-- assocPrefixWins: if NO entry in ys order-matches key, assoc key(append xs
+-- ys) = assoc key xs.
+view assocMkInnerTrueEq
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k)
+  (e : Pair k v) (xs2 : List (Pair k v))
+  (q2 : Equal Bool (leq (pairFst k v e) key) True)
+  : Equal (Option v) (assocStepInner k v leq key e xs2 (leq (pairFst k v e) key))
+                      (assocStepInner k v leq key e xs2 True) =
+  cong Bool (Option v) (leq (pairFst k v e) key) True (assocStepInner k v leq key e xs2) q2
+
+view assocSkipHeadStopBridge
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k)
+  (e : Pair k v) (xs2 : List (Pair k v))
+  (q1 : Equal Bool (leq key (pairFst k v e)) True) (q2 : Equal Bool (leq (pairFst k v e) key) True)
+  : Equal (Option v) (assoc k v leq key (Cons (Pair k v) e xs2)) (Some v (pairSnd k v e)) =
+  trans (Option v) (assoc k v leq key (Cons (Pair k v) e xs2))
+                    (assocStepInner k v leq key e xs2 (leq (pairFst k v e) key))
+                    (Some v (pairSnd k v e))
+    (trans (Option v) (assoc k v leq key (Cons (Pair k v) e xs2))
+                       (assocStep k v leq key e xs2 (leq key (pairFst k v e)))
+                       (assocStepInner k v leq key e xs2 (leq (pairFst k v e) key))
+      (assocFinalBridge k v leq key e xs2)
+      (trans (Option v) (assocStep k v leq key e xs2 (leq key (pairFst k v e)))
+                         (assocStep k v leq key e xs2 True)
+                         (assocStepInner k v leq key e xs2 (leq (pairFst k v e) key))
+        (assocMkStepTrueEq k v leq key e xs2 q1) (assocStepTrueReduces k v leq key e xs2)))
+    (assocMkInnerTrueEq k v leq key e xs2 q2)
+
+view assocPrefixWinsInnerDispatch
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k)
+  (e : Pair k v) (xs2 : List (Pair k v)) (ys : List (Pair k v))
+  (ihTail : Equal (Option v) (assoc k v leq key (list_append (Pair k v) xs2 ys)) (assoc k v leq key xs2))
+  (hOuter : Equal Bool (leq key (pairFst k v e)) True)
+  (oInner : Or (Equal Bool (leq (pairFst k v e) key) True) (Equal Bool (leq (pairFst k v e) key) False))
+  : Equal (Option v) (assoc k v leq key (Cons (Pair k v) e (list_append (Pair k v) xs2 ys)))
+                      (assoc k v leq key (Cons (Pair k v) e xs2)) =
+  match oInner {
+    Inl hInner =>
+      trans (Option v) (assoc k v leq key (Cons (Pair k v) e (list_append (Pair k v) xs2 ys)))
+                        (Some v (pairSnd k v e))
+                        (assoc k v leq key (Cons (Pair k v) e xs2))
+        (assocSkipHeadStopBridge k v leq key e (list_append (Pair k v) xs2 ys) hOuter hInner)
+        (sym (Option v) (assoc k v leq key (Cons (Pair k v) e xs2)) (Some v (pairSnd k v e))
+           (assocSkipHeadStopBridge k v leq key e xs2 hOuter hInner)) ;
+    Inr hInnerFalse =>
+      trans (Option v) (assoc k v leq key (Cons (Pair k v) e (list_append (Pair k v) xs2 ys)))
+                        (assoc k v leq key (list_append (Pair k v) xs2 ys))
+                        (assoc k v leq key (Cons (Pair k v) e xs2))
+        (assocSkipHeadBridge k v leq key e (list_append (Pair k v) xs2 ys) hOuter hInnerFalse)
+        (trans (Option v) (assoc k v leq key (list_append (Pair k v) xs2 ys))
+                           (assoc k v leq key xs2)
+                           (assoc k v leq key (Cons (Pair k v) e xs2))
+          ihTail
+          (sym (Option v) (assoc k v leq key (Cons (Pair k v) e xs2)) (assoc k v leq key xs2)
+             (assocSkipHeadBridge k v leq key e xs2 hOuter hInnerFalse)))
+  }
+
+view assocPrefixWinsDispatch
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k)
+  (e : Pair k v) (xs2 : List (Pair k v)) (ys : List (Pair k v))
+  (ihTail : Equal (Option v) (assoc k v leq key (list_append (Pair k v) xs2 ys)) (assoc k v leq key xs2))
+  (oOuter : Or (Equal Bool (leq key (pairFst k v e)) True) (Equal Bool (leq key (pairFst k v e)) False))
+  : Equal (Option v) (assoc k v leq key (Cons (Pair k v) e (list_append (Pair k v) xs2 ys)))
+                      (assoc k v leq key (Cons (Pair k v) e xs2)) =
+  match oOuter {
+    Inl hOuter =>
+      assocPrefixWinsInnerDispatch k v leq key e xs2 ys ihTail hOuter (boolDichotomy (leq (pairFst k v e) key)) ;
+    Inr hOuterFalse =>
+      trans (Option v) (assoc k v leq key (Cons (Pair k v) e (list_append (Pair k v) xs2 ys)))
+                        (assoc k v leq key (list_append (Pair k v) xs2 ys))
+                        (assoc k v leq key (Cons (Pair k v) e xs2))
+        (assocSkipHeadBridgeFalse k v leq key e (list_append (Pair k v) xs2 ys) hOuterFalse)
+        (trans (Option v) (assoc k v leq key (list_append (Pair k v) xs2 ys))
+                           (assoc k v leq key xs2)
+                           (assoc k v leq key (Cons (Pair k v) e xs2))
+          ihTail
+          (sym (Option v) (assoc k v leq key (Cons (Pair k v) e xs2)) (assoc k v leq key xs2)
+             (assocSkipHeadBridgeFalse k v leq key e xs2 hOuterFalse)))
+  }
+
+view assocPrefixWins
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k)
+  (xs : List (Pair k v)) (ys : List (Pair k v))
+  : allInList k v (notOrderEquivToKey k leq key) ys ->
+    Equal (Option v) (assoc k v leq key (list_append (Pair k v) xs ys)) (assoc k v leq key xs) =
+  match xs {
+    Nil => \hskip. assocNoMatchIsNone k v leq key ys hskip ;
+    Cons e xs2 =>
+      \hskip. assocPrefixWinsDispatch k v leq key e xs2 ys (assocPrefixWins k v leq key xs2 ys hskip) (boolDichotomy (leq key (pairFst k v e)))
+  }
+
+-- Given `leq key k2 = False` (key strictly not-below k2) and a bound
+-- `leq e_key k2 = True` (e_key IS below k2, from Ordered's allKeys), key
+-- cannot order-match e_key -- else transitivity would force `leq key k2 =
+-- True`, contradicting the hypothesis.
+view notMatchFromBoundBelow
+  (k : Type) (leq : k -> k -> Bool)
+  (transLeq : (x : k) -> (y : k) -> (z : k) -> Equal Bool (leq x y) True -> Equal Bool (leq y z) True -> Equal Bool (leq x z) True)
+  (key : k) (k2 : k) (hFalse : Equal Bool (leq key k2) False)
+  (ekey : k) (hBound : Equal Bool (leq ekey k2) True)
+  : notOrderEquivToKey k leq key ekey =
+  \horderEq.
+    absurd (trans Bool True (leq key k2) False
+              (sym Bool (leq key k2) True (transLeq key ekey k2 (andFst (Equal Bool (leq key ekey) True) (Equal Bool (leq ekey key) True) horderEq) hBound))
+              hFalse)
+
+view allInListMapNotMatchBelow
+  (k : Type) (v : Type) (leq : k -> k -> Bool)
+  (transLeq : (x : k) -> (y : k) -> (z : k) -> Equal Bool (leq x y) True -> Equal Bool (leq y z) True -> Equal Bool (leq x z) True)
+  (key : k) (k2 : k) (hFalse : Equal Bool (leq key k2) False) (xs : List (Pair k v))
+  : allInList k v (leBelow k v leq k2) xs -> allInList k v (notOrderEquivToKey k leq key) xs =
+  match xs {
+    Nil => \h. tt ;
+    Cons e xs2 =>
+      \h.
+        andIntro (notOrderEquivToKey k leq key (pairFst k v e))
+                  (allInList k v (notOrderEquivToKey k leq key) xs2)
+          (notMatchFromBoundBelow k leq transLeq key k2 hFalse (pairFst k v e)
+             (andFst (Equal Bool (leq (pairFst k v e) k2) True) (allInList k v (leBelow k v leq k2) xs2) h))
+          (allInListMapNotMatchBelow k v leq transLeq key k2 hFalse xs2
+             (andSnd (Equal Bool (leq (pairFst k v e) k2) True) (allInList k v (leBelow k v leq k2) xs2) h))
+  }
+
+-- Given `leq k2 key = False` (key strictly not-above k2) and a bound
+-- `leq k2 e_key = True` (e_key IS above k2, from Ordered's allKeys), key
+-- cannot order-match e_key.
+view notMatchFromBoundAbove
+  (k : Type) (leq : k -> k -> Bool)
+  (transLeq : (x : k) -> (y : k) -> (z : k) -> Equal Bool (leq x y) True -> Equal Bool (leq y z) True -> Equal Bool (leq x z) True)
+  (key : k) (k2 : k) (hFalse : Equal Bool (leq k2 key) False)
+  (ekey : k) (hBound : Equal Bool (leq k2 ekey) True)
+  : notOrderEquivToKey k leq key ekey =
+  \horderEq.
+    absurd (trans Bool True (leq k2 key) False
+              (sym Bool (leq k2 key) True (transLeq k2 ekey key hBound (andSnd (Equal Bool (leq key ekey) True) (Equal Bool (leq ekey key) True) horderEq)))
+              hFalse)
+
+view allInListMapNotMatchAbove
+  (k : Type) (v : Type) (leq : k -> k -> Bool)
+  (transLeq : (x : k) -> (y : k) -> (z : k) -> Equal Bool (leq x y) True -> Equal Bool (leq y z) True -> Equal Bool (leq x z) True)
+  (key : k) (k2 : k) (hFalse : Equal Bool (leq k2 key) False) (xs : List (Pair k v))
+  : allInList k v (leAbove k v leq k2) xs -> allInList k v (notOrderEquivToKey k leq key) xs =
+  match xs {
+    Nil => \h. tt ;
+    Cons e xs2 =>
+      \h.
+        andIntro (notOrderEquivToKey k leq key (pairFst k v e))
+                  (allInList k v (notOrderEquivToKey k leq key) xs2)
+          (notMatchFromBoundAbove k leq transLeq key k2 hFalse (pairFst k v e)
+             (andFst (Equal Bool (leq k2 (pairFst k v e)) True) (allInList k v (leAbove k v leq k2) xs2) h))
+          (allInListMapNotMatchAbove k v leq transLeq key k2 hFalse xs2
+             (andSnd (Equal Bool (leq k2 (pairFst k v e)) True) (allInList k v (leAbove k v leq k2) xs2) h))
+  }
+
+-- NoDup(append xs ys) implies NoDup xs (structural, no comparison).
+view allInListAppendElimLeft
+  (k : Type) (v : Type) (p : k -> Prop) (xs : List (Pair k v)) (ys : List (Pair k v))
+  : allInList k v p (list_append (Pair k v) xs ys) -> allInList k v p xs =
+  match xs {
+    Nil => \h. tt ;
+    Cons e xs2 =>
+      \h.
+        andIntro (p (pairFst k v e)) (allInList k v p xs2)
+          (andFst (p (pairFst k v e)) (allInList k v p (list_append (Pair k v) xs2 ys)) h)
+          (allInListAppendElimLeft k v p xs2 ys
+             (andSnd (p (pairFst k v e)) (allInList k v p (list_append (Pair k v) xs2 ys)) h))
+  }
+
+view noDupAppendLeft
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (xs : List (Pair k v)) (ys : List (Pair k v))
+  : NoDup k v leq (list_append (Pair k v) xs ys) -> NoDup k v leq xs =
+  match xs {
+    Nil => \h. tt ;
+    Cons e xs2 =>
+      \h.
+        andIntro (allInList k v (notOrderEquivToKey k leq (pairFst k v e)) xs2)
+                  (NoDup k v leq xs2)
+          (allInListAppendElimLeft k v (notOrderEquivToKey k leq (pairFst k v e)) xs2 ys
+             (andFst (allInList k v (notOrderEquivToKey k leq (pairFst k v e)) (list_append (Pair k v) xs2 ys))
+                     (NoDup k v leq (list_append (Pair k v) xs2 ys))
+                h))
+          (noDupAppendLeft k v leq xs2 ys
+             (andSnd (allInList k v (notOrderEquivToKey k leq (pairFst k v e)) (list_append (Pair k v) xs2 ys))
+                     (NoDup k v leq (list_append (Pair k v) xs2 ys))
+                h))
+  }
+
+-- NoDup(append xs ys) implies NoDup ys (via allInListAppendElimRight,
+-- already built).
+view noDupAppendRight
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (xs : List (Pair k v)) (ys : List (Pair k v))
+  : NoDup k v leq (list_append (Pair k v) xs ys) -> NoDup k v leq ys =
+  match xs {
+    Nil => \h. h ;
+    Cons e xs2 =>
+      \h.
+        noDupAppendRight k v leq xs2 ys
+          (andSnd (allInList k v (notOrderEquivToKey k leq (pairFst k v e)) (list_append (Pair k v) xs2 ys))
+                  (NoDup k v leq (list_append (Pair k v) xs2 ys))
+             h)
+  }
+
+-- lookup key (Node l k2 v2 r) = Some v2, given both q1/q2 (key~k2). Reuses
+-- lookupStep/lookupStepInner + the already-landed bridges from map.ken
+-- (Law 2/3): lookupFinalBridge, lookupMkStepTrueEq, lookupStepTrueReduces,
+-- lookupMkInnerTrueEq.
+view lookupStopBridge
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k)
+  (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (q1 : Equal Bool (leq key k2) True) (q2 : Equal Bool (leq k2 key) True)
+  : Equal (Option v) (lookup k v leq key (Node k v l k2 v2 r)) (Some v v2) =
+  trans (Option v) (lookup k v leq key (Node k v l k2 v2 r))
+                    (lookupStepInner k v leq key l k2 v2 r (leq k2 key))
+                    (Some v v2)
+    (trans (Option v) (lookup k v leq key (Node k v l k2 v2 r))
+                       (lookupStep k v leq key l k2 v2 r (leq key k2))
+                       (lookupStepInner k v leq key l k2 v2 r (leq k2 key))
+      (lookupFinalBridge k v leq key l k2 v2 r)
+      (trans (Option v) (lookupStep k v leq key l k2 v2 r (leq key k2))
+                         (lookupStep k v leq key l k2 v2 r True)
+                         (lookupStepInner k v leq key l k2 v2 r (leq k2 key))
+        (lookupMkStepTrueEq k v leq key l k2 v2 r q1) (lookupStepTrueReduces k v leq key l k2 v2 r)))
+    (lookupMkInnerTrueEq k v leq key l k2 v2 r q2)
+
+-- Transfer a "not order-equiv to k2" fact to "not order-equiv to key" when
+-- key~k2 (order-equivalent) -- used for the overwrite/stop branch, where
+-- Distinct only directly hands us the k2-relative fact.
+view notMatchTransferViaEquiv
+  (k : Type) (leq : k -> k -> Bool)
+  (transLeq : (x : k) -> (y : k) -> (z : k) -> Equal Bool (leq x y) True -> Equal Bool (leq y z) True -> Equal Bool (leq x z) True)
+  (key : k) (k2 : k) (q1 : Equal Bool (leq key k2) True) (q2 : Equal Bool (leq k2 key) True)
+  (ekey : k) (hnot : notOrderEquivToKey k leq k2 ekey)
+  : notOrderEquivToKey k leq key ekey =
+  \horderEq.
+    hnot (andIntro (Equal Bool (leq k2 ekey) True) (Equal Bool (leq ekey k2) True)
+            (transLeq k2 key ekey q2 (andFst (Equal Bool (leq key ekey) True) (Equal Bool (leq ekey key) True) horderEq))
+            (transLeq ekey key k2 (andSnd (Equal Bool (leq key ekey) True) (Equal Bool (leq ekey key) True) horderEq) q1))
+
+view allInListMapNotMatchTransfer
+  (k : Type) (v : Type) (leq : k -> k -> Bool)
+  (transLeq : (x : k) -> (y : k) -> (z : k) -> Equal Bool (leq x y) True -> Equal Bool (leq y z) True -> Equal Bool (leq x z) True)
+  (key : k) (k2 : k) (q1 : Equal Bool (leq key k2) True) (q2 : Equal Bool (leq k2 key) True)
+  (xs : List (Pair k v))
+  : allInList k v (notOrderEquivToKey k leq k2) xs -> allInList k v (notOrderEquivToKey k leq key) xs =
+  match xs {
+    Nil => \h. tt ;
+    Cons e xs2 =>
+      \h.
+        andIntro (notOrderEquivToKey k leq key (pairFst k v e))
+                  (allInList k v (notOrderEquivToKey k leq key) xs2)
+          (notMatchTransferViaEquiv k leq transLeq key k2 q1 q2 (pairFst k v e)
+             (andFst (notOrderEquivToKey k leq k2 (pairFst k v e)) (allInList k v (notOrderEquivToKey k leq k2) xs2) h))
+          (allInListMapNotMatchTransfer k v leq transLeq key k2 q1 q2 xs2
+             (andSnd (notOrderEquivToKey k leq k2 (pairFst k v e)) (allInList k v (notOrderEquivToKey k leq k2) xs2) h))
+  }
+
+view law5NodeQ2Dispatch
+  (k : Type) (v : Type) (leq : k -> k -> Bool)
+  (transLeq : (x : k) -> (y : k) -> (z : k) -> Equal Bool (leq x y) True -> Equal Bool (leq y z) True -> Equal Bool (leq x z) True)
+  (key : k) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (h : Ordered k v leq (Node k v l k2 v2 r)) (hd : Distinct k v leq (Node k v l k2 v2 r))
+  (ihL : Equal (Option v) (lookup k v leq key l) (assoc k v leq key (toList k v l)))
+  (q1 : Equal Bool (leq key k2) True)
+  (o2 : Or (Equal Bool (leq k2 key) True) (Equal Bool (leq k2 key) False))
+  : Equal (Option v) (lookup k v leq key (Node k v l k2 v2 r)) (assoc k v leq key (toList k v (Node k v l k2 v2 r))) =
+  match o2 {
+    Inl q2 =>
+      sym (Option v) (assoc k v leq key (toList k v (Node k v l k2 v2 r))) (lookup k v leq key (Node k v l k2 v2 r))
+        (trans (Option v) (assoc k v leq key (toList k v (Node k v l k2 v2 r)))
+                           (assoc k v leq key (Cons (Pair k v) (mkPair k v k2 v2) (toList k v r)))
+                           (lookup k v leq key (Node k v l k2 v2 r))
+          (assocSkipPrefix k v leq key (toList k v l) (Cons (Pair k v) (mkPair k v k2 v2) (toList k v r))
+             (allInListMapNotMatchTransfer k v leq transLeq key k2 q1 q2 (toList k v l)
+                (noDupAppendHeadExcl k v leq (toList k v l) (mkPair k v k2 v2) (toList k v r) hd)))
+          (trans (Option v) (assoc k v leq key (Cons (Pair k v) (mkPair k v k2 v2) (toList k v r)))
+                             (Some v v2)
+                             (lookup k v leq key (Node k v l k2 v2 r))
+            (assocSkipHeadStopBridge k v leq key (mkPair k v k2 v2) (toList k v r) q1 q2)
+            (sym (Option v) (lookup k v leq key (Node k v l k2 v2 r)) (Some v v2)
+               (lookupStopBridge k v leq key l k2 v2 r q1 q2)))) ;
+    Inr q2' =>
+      sym (Option v) (assoc k v leq key (toList k v (Node k v l k2 v2 r))) (lookup k v leq key (Node k v l k2 v2 r))
+        (trans (Option v) (assoc k v leq key (toList k v (Node k v l k2 v2 r)))
+                           (assoc k v leq key (toList k v l))
+                           (lookup k v leq key (Node k v l k2 v2 r))
+          (assocPrefixWins k v leq key (toList k v l) (Cons (Pair k v) (mkPair k v k2 v2) (toList k v r))
+             (andIntro (notOrderEquivToKey k leq key k2) (allInList k v (notOrderEquivToKey k leq key) (toList k v r))
+                (\horderEq. absurd (trans Bool True (leq k2 key) False
+                                       (sym Bool (leq k2 key) True (andSnd (Equal Bool (leq key k2) True) (Equal Bool (leq k2 key) True) horderEq))
+                                       q2'))
+                (allInListMapNotMatchAbove k v leq transLeq key k2 q2' (toList k v r)
+                   (allKeysToAllInList k v (leAbove k v leq k2) r (getAboveR k v leq l k2 v2 r h)))))
+          (trans (Option v) (assoc k v leq key (toList k v l))
+                             (lookup k v leq key l)
+                             (lookup k v leq key (Node k v l k2 v2 r))
+            (sym (Option v) (lookup k v leq key l) (assoc k v leq key (toList k v l)) ihL)
+            (sym (Option v) (lookup k v leq key (Node k v l k2 v2 r)) (lookup k v leq key l)
+               (lookupIntoLBridge k v leq key l k2 v2 r q1 q2'))))
+  }
+
+view law5NodeDispatch
+  (k : Type) (v : Type) (leq : k -> k -> Bool)
+  (transLeq : (x : k) -> (y : k) -> (z : k) -> Equal Bool (leq x y) True -> Equal Bool (leq y z) True -> Equal Bool (leq x z) True)
+  (key : k) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (h : Ordered k v leq (Node k v l k2 v2 r)) (hd : Distinct k v leq (Node k v l k2 v2 r))
+  (ihL : Equal (Option v) (lookup k v leq key l) (assoc k v leq key (toList k v l)))
+  (ihR : Equal (Option v) (lookup k v leq key r) (assoc k v leq key (toList k v r)))
+  (o1 : Or (Equal Bool (leq key k2) True) (Equal Bool (leq key k2) False))
+  : Equal (Option v) (lookup k v leq key (Node k v l k2 v2 r)) (assoc k v leq key (toList k v (Node k v l k2 v2 r))) =
+  match o1 {
+    Inl q1 => law5NodeQ2Dispatch k v leq transLeq key l k2 v2 r h hd ihL q1 (boolDichotomy (leq k2 key)) ;
+    Inr q1' =>
+      sym (Option v) (assoc k v leq key (toList k v (Node k v l k2 v2 r))) (lookup k v leq key (Node k v l k2 v2 r))
+        (trans (Option v) (assoc k v leq key (toList k v (Node k v l k2 v2 r)))
+                           (assoc k v leq key (toList k v r))
+                           (lookup k v leq key (Node k v l k2 v2 r))
+          (trans (Option v) (assoc k v leq key (toList k v (Node k v l k2 v2 r)))
+                             (assoc k v leq key (Cons (Pair k v) (mkPair k v k2 v2) (toList k v r)))
+                             (assoc k v leq key (toList k v r))
+            (assocSkipPrefix k v leq key (toList k v l) (Cons (Pair k v) (mkPair k v k2 v2) (toList k v r))
+               (allInListMapNotMatchBelow k v leq transLeq key k2 q1' (toList k v l)
+                  (allKeysToAllInList k v (leBelow k v leq k2) l (getBelowL k v leq l k2 v2 r h))))
+            (assocSkipHeadBridgeFalse k v leq key (mkPair k v k2 v2) (toList k v r) q1'))
+          (trans (Option v) (assoc k v leq key (toList k v r))
+                             (lookup k v leq key r)
+                             (lookup k v leq key (Node k v l k2 v2 r))
+            (sym (Option v) (lookup k v leq key r) (assoc k v leq key (toList k v r)) ihR)
+            (sym (Option v) (lookup k v leq key (Node k v l k2 v2 r)) (lookup k v leq key r)
+               (lookupIntoRBridge k v leq key l k2 v2 r q1'))))
+  }
+
+view law5DistinctL
+  (k : Type) (v : Type) (leq : k -> k -> Bool)
+  (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (hd : Distinct k v leq (Node k v l k2 v2 r))
+  : Distinct k v leq l =
+  noDupAppendLeft k v leq (toList k v l) (Cons (Pair k v) (mkPair k v k2 v2) (toList k v r)) hd
+
+view law5DistinctR
+  (k : Type) (v : Type) (leq : k -> k -> Bool)
+  (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (hd : Distinct k v leq (Node k v l k2 v2 r))
+  : Distinct k v leq r =
+  andSnd (allInList k v (notOrderEquivToKey k leq k2) (toList k v r)) (Distinct k v leq r)
+    (noDupAppendRight k v leq (toList k v l) (Cons (Pair k v) (mkPair k v k2 v2) (toList k v r)) hd)
+
+view lookupAssocAgree
+  (k : Type) (v : Type) (leq : k -> k -> Bool)
+  (transLeq : (x : k) -> (y : k) -> (z : k) -> Equal Bool (leq x y) True -> Equal Bool (leq y z) True -> Equal Bool (leq x z) True)
+  (key : k) (m : Tree k v)
+  : Ordered k v leq m -> Distinct k v leq m -> Equal (Option v) (lookup k v leq key m) (assoc k v leq key (toList k v m)) =
+  match m {
+    Leaf => \h. \hd. tt ;
+    Node l k2 v2 r =>
+      \h. \hd.
+        law5NodeDispatch k v leq transLeq key l k2 v2 r h hd
+          (lookupAssocAgree k v leq transLeq key l (getOrderedL k v leq l k2 v2 r h) (law5DistinctL k v leq l k2 v2 r hd))
+          (lookupAssocAgree k v leq transLeq key r (getOrderedR k v leq l k2 v2 r h) (law5DistinctR k v leq l k2 v2 r hd))
+          (boolDichotomy (leq key k2))
+  }
