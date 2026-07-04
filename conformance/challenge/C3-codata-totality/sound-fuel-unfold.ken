@@ -16,7 +16,7 @@ view unfoldUpTo (a : Type) (s : Type) (step : s -> Option (Prod a s))
 
 -- A concrete stream-like producer, fuel-bounded: the naturals up to fuel n.
 view natsStep (seed : Nat) : Option (Prod Nat Nat) =
-  Some (MkProd Nat Nat seed (Suc seed))
+  Some (Prod Nat Nat) (MkProd Nat Nat seed (Suc seed))
 
 view natsUpTo (n : Nat) : List Nat = unfoldUpTo Nat Nat natsStep n Zero
 

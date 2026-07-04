@@ -1,0 +1,33 @@
+-- C8 SOUND arm — funext by computation: the `Eq`-at-Pi reduction makes two
+-- pointwise-CONVERTIBLE functions equal via a bare `\x. Refl` — should-PASS.
+--
+-- Run against the prelude. `Equal`/`Refl` are observational equality + its
+-- reflexivity intro (`Refl A x : Equal A x x`). funext is definitional in the
+-- kernel: `Equal ((x:A)→B) f g` reduces to `(x:A) → Equal (B x) (f x) (g x)`
+-- (`obs.rs::eq_at_pi`, `16 §2.2`) — and the run CONFIRMS the surface consumes it.
+--
+-- SCOPE (honesty, per the run): this arm demonstrates funext for pointwise-
+-- *convertible* functions only — `g x = idb x` β-reduces to `x`, so the
+-- funext-produced pointwise goal `Equal Bool x (idb x)` reduces to `Equal Bool
+-- x x` and a bare `\x. Refl` discharges it (no case-split). This is NOT the full
+-- OTT funext face: the harder *pointwise-equal-but-not-convertible* case (e.g.
+-- `g x = and_bool x True`, which is STUCK on abstract `x` and needs a case-split
+-- to refine the goal) is a documented RESIDUAL — blocked by the dependent-
+-- `match`-into-`Equal`/Ω-goal gap (README §Known-frontier residuals), NOT by
+-- funext (funext itself works). "Equality that computes" is reachable here;
+-- "equality that computes *for non-convertible witnesses*" is the frontier.
+
+view idb (y : Bool) : Bool = y
+view f (x : Bool) : Bool = x
+view g (x : Bool) : Bool = idb x
+
+-- f and g are pointwise-CONVERTIBLE (idb x β-reduces to x). funext reduces the
+-- function-`Equal` to `(x:Bool) → Equal Bool x (idb x)` ≡ `(x:Bool) → Equal Bool
+-- x x`, discharged by a bare reflexivity lambda — no `match` needed.
+view funextGood : Equal (Bool -> Bool) f g = \x. Refl
+
+-- Expected: ELABORATES (PASS) — CONFIRMED at run. `eq_at_pi` reduces the
+-- function-`Equal` to the pointwise Π on the surface checking path, and `\x.
+-- Refl` type-checks because each pointwise goal is reflexive after `idb`
+-- reduces. Contrast the unsound arm (functions that genuinely differ) — same
+-- `\x. Refl`, rejected because the pointwise goal is not reflexive.
