@@ -251,17 +251,28 @@ can't settle — it reuses the landed attenuate/mint skeleton; if Architect want
 it decided up front, it routes to Steward per the defer rule, but I read it as
 delegated.)
 
-**AC3 discriminating pair (both faces; CV pins the concrete fixtures in D4 —
-`FS-driver-conformance.md`):**
+**AC3 discriminating pair (both faces; CV pins the concrete fixtures in D4,
+`FS-driver-conformance.md` §2a/§2b — S1/S2 static, R1/R2/R2′ runtime):**
 
-- *static arm* — `read_bytes … path` in a decl with **no** `using cap : Cap FS`
-  ⇒ `MissingCapability` (elaboration rejects). With the param ⇒ elaborates.
-- *runtime arm* — with `using cap : Cap FS` minted/attenuated to the fixture's
-  directory ⇒ the driver reads it; the **same op** with a `cap` attenuated to
-  **exclude** that path ⇒ `CapabilityDenied` at the driver, **no read**. Same
-  op, outcome flips on the capability ⇒ the check is **load-bearing, not
-  decorative** (AC3). A no-op `authorizes` (always-true) = ambient authority =
-  fails AC3 — the discriminating negative must actually reach the refusal.
+- *static arm (S1/S2)* — `read_bytes … path` in a decl with **no**
+  `using cap : Cap FS` ⇒ `MissingCapability` (elaboration rejects); with the
+  param ⇒ elaborates.
+- *runtime arm (R1/R2)* — **same op**, `using cap : Cap FS` present (so it
+  clears the static gate and actually *reaches* the driver): a **sufficient**
+  cap ⇒ the driver reads the fixture; an **insufficient** cap ⇒
+  `CapabilityDenied` at the driver, **no read**. Outcome flips on the capability
+  ⇒ the check is
+  **load-bearing, not decorative** (AC3); a no-op `authorizes` (always-true) =
+  ambient authority = fails AC3, so the negative must **reach** the refusal —
+  not be a static reject in disguise (R2 declares `using cap`).
+- *Phase-1 vs Phase-2 form (honest, matches CV §2b).* The R1/R2 discriminator
+  Phase 1 can express is **authority-level** (attenuate to an insufficient
+  `Authority` ⇒ `CapabilityDenied`, via the scalar `Authority(u8)`). The
+  **path-exclusion** form (a `dir1`-cap refusing `dir2`) is **R2′**, deferred
+  with the path-scope realization above — CV pins it as a Phase-2
+  known-gap-with-reason. The *contract* (`authorizes` gates, `attenuate`
+  narrows, unauthorized ⇒ `CapabilityDenied`) is fixed now; only the path-scope
+  *spelling* `(oracle)`-defers.
 
 **Console-lift / EFF6 dependency (the frame asks).** The FS-only path (AC2,
 `read-file-lines`) is **independent** of the deferred EFF6 console-commute
@@ -290,6 +301,20 @@ path); only a program that needs the specific commute *law* would need EFF6.
 - **Capability enforced, not decorative.** The driver's `authorizes(cap, path)`
   is load-bearing — AC3's runtime arm flips on it. Its absence (always-admit) is
   ambient authority and fails AC3 by construction.
+- **Trust level — honest, not "kernel-backed" (matches CV §2c).** The FS
+  driver's **runtime** capability gate (`authorizes(cap, path)`, and the
+  `authority_flows_to`/`is_satisfied()` it rests on — a plain Rust `bool`) is
+  **trusted Rust-level** logic in the outer ring, **conformance-netted, not
+  kernel-backed** — so AC3 is a *tested-not-trusted* posture
+  ([[kernel-backed-claim-grep-the-emission-not-the-name]],
+  [[tested-not-trusted-posture-needs-reachability-precondition]]). This is
+  **distinct from** `attenuate`'s *static* refinement obligation, which **is**
+  kernel-re-checked (`discharge_attenuation` → `declare_postulate`, `62 §3`) —
+  that governs monotone-downward attenuation soundness at elaboration, **not**
+  the runtime path gate; do not conflate them or let the runtime gate borrow the
+  static obligation's kernel-backing. Honest for an outer-ring effect
+  (Sec1-level trust); the doc must not label the FS runtime capability
+  "kernel-backed."
 
 ### What Phase 2 builds (maps to the proposed bundled build branch)
 
