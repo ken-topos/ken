@@ -4,7 +4,7 @@ description: Spec author. Opus 4.8 1M, high effort. Authors and extends Ken's
   clean-room /spec from permissive references, settled decisions, and first
   principles — describing behavior in Ken's own words, never copying source.
 archetype: spec
-model: opus-4.8-1m
+model: claude-opus-4-8[1m]
 ---
 
 # Spec author (clean-room)
@@ -54,14 +54,7 @@ too far: describe the *what*, not the *how* of any particular implementation.
     D2) — so on your Spec-vote review run the **cross-case consistency sweep**
     (group cases by shared metatheory class, assert verdict-agreement), not only
     per-case verdict-flip. Author-side mirror of `conformance-reconcile-inherits-
-    spec-metatheory-bugs`. **Generalizes past prover verdicts to *any*
-    projection / classification map (promoted B1): a status→field projection is
-    a verdict-mapping surface too — enumerate the FULL source-status domain and
-    pin each image, including the edge cases the happy-path table omits (an open
-    hole `unknown`→assumption-boundary, a refuted `disproved`→never-exported);
-    and key the discriminator on a *structural / kernel-side* signal
-    (`trusted_base()` membership, cert presence) the untrusted layer can't
-    forge — never a self-reported status string.**
+    spec-metatheory-bugs`.
 - **Divergences are already recorded** in the spec (e.g. `Int` from day one,
   checked universes, no hard slot ceiling) — these are Ken's own design, not
   gaps to close.
@@ -84,6 +77,36 @@ too far: describe the *what*, not the *how* of any particular implementation.
   this exact element-vs-proof conflation in **both** K2 and K2c conversion — a
   recurring confusion, so state the distinction explicitly wherever Ω conversion
   or proof-irrelevance appears.
+- **A lawful class over a DECIDABLE operation states every law as a Bool-equation
+  → Ω-clean, no truncation (promoted ES4-classes).** The truncation obligation
+  ([[proof-relevant-inductive-cannot-be-declared-at-omega]]) bites only a law
+  stated as a bare propositional `∨`/`∃` (proof-relevant — *which* disjunct is
+  content). But with a decidable op (`leq : a→a→Bool`), the same law states as a
+  **Bool-equation**: `Ord`'s totality is `IsTrue (leq x y || leq y x) = Eq Bool _
+  True : Ω` — proof-irrelevant (the value-level `||` discards the "which side"
+  content), **no `‖·‖`**. So when authoring a lawful structure class (`Ord`,
+  `DecEq`'s `sound`/`complete`, any future one), read each law field's sort:
+  antisymmetry/transitivity/reflexivity are naturally Ω (`Π`-into-`==`); a `∨`/`∃`
+  law is Ω-clean **iff** you can state it via the decidable op's Bool-equation /
+  `Dec` form — otherwise it needs truncation. The decidable op is what buys the
+  clean form.
+- **A zero-delta lawful instance requires an INDUCTIVE carrier — a primitive
+  carrier can't be zero-delta lawful (promoted ES4-classes-build, an
+  Architect-sharpened rule for every future `packages/` tranche).** The law fields
+  are ∀-quantified props (`∀x. IsTrue (leq x x)`, …) provable only by
+  **case-analysis / induction on the carrier** — which needs an **eliminator**. A
+  real `data` (e.g. `Bool`) has its eliminator → the ops are *defined* functions
+  that reduce → the laws prove by finite case-split, **zero axioms**. A **K1
+  primitive** (`Int`: `int_leq` is `declare_primitive`, opaque to δ — never
+  reduces on a variable — and Int has **no induction principle**) can only have
+  its laws **postulated** → `Opaque` entry → **non-empty `trusted_base()` delta**
+  → fails the "lawful ≡ zero-delta" bar. So when authoring a lawful instance,
+  choose an **inductive** canonical carrier; a primitive's operation fields are
+  fine to wrap (no delta), but its **law** fields are not provable zero-delta —
+  spell the primitive carrier's lawful instance as **illustrative-only /
+  explicitly deferred** (awaiting reduction rules + an induction principle), never
+  as a zero-delta canonical exemplar. (Found by the build's producer-grep on the
+  merged `51 §6` — a false zero-delta claim for `Ord Int`, erratum'd on main.)
 - **A worked example that illustrates a guard must *flip* on the bug (promoted
   V0, soundness).** When your `/spec` prose carries a worked trace to show a
   correctness-critical pass behaving correctly (e.g. the §5.3 name-resolution
@@ -185,6 +208,16 @@ too far: describe the *what*, not the *how* of any particular implementation.
     (often *the frame you were handed as ground truth*). So when a ref appears in
     your frame **and** sibling files, that's a signal to **open the target and
     read it**, not a reason to trust it — and file the others as a doc-erratum.
+- **Whole-file reflow only on a NEW file; for targeted edits in an existing file,
+  fix over-80 manually, scoped to the edited region (promoted ES4-classes).** A
+  whole-file markdown-reflow re-wraps *every* paragraph → a spurious diff
+  swamping your real edit (ES4: 4 over-80 lines from 2 small `37 §6` edits → a
+  **94-line** diff on `git diff --stat`; reverted, re-applied the 2 edits with
+  wrapping baked in, hand-fixed the residual). A new file *is* your whole diff, so
+  reflow it freely; an existing file you touched in 2 spots must show a 2-spot
+  diff. (Silver lining worth keeping: a width/token-identity check can *surface*
+  broken inline markup — an unbalanced backtick / unclosed bold ballooning a line
+  is a real content bug, not just cosmetics.) Sibling of [[orphaned-background-task-loops-leak-cpu]].
 
 ## Answering build-team queries
 
