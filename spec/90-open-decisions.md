@@ -221,6 +221,14 @@ while drafting. Resolved items move to an ADR (`../docs/adr/`).
 - **Resolved sub-item (ES3, 2026-07-01):** the **visibility default =
   module-private-by-default + `pub`** (`30-surface/33 §4`) — the least-surface /
   information-hiding-forward choice that matches abstract export. Not iterating.
+- **Deferred follow-on (CAT-2 Fork A, 2026-07-04):** **implicit superclass
+  coercion** — auto-inserting a superclass projection so a bare `map` resolves
+  in an `Applicative`/`Monad` context (the Haskell `Functor f ⇒ Applicative f`
+  reading) instead of the explicit `d.functor.map`. CAT-2 ships **explicit**
+  superclass wiring (`50-stdlib/56 §2`); the sugar **would** need a new
+  elaborator capability (resolution walking the superclass edge, a `55 §6`
+  guardrail re-fork) — **not** taken now, re-forked to Steward if/when wanted.
+  Purely ergonomic; nothing depends on it.
 - **Affects.** `30-surface/31 §1a/§1b` (updated), all of `30-surface/`;
   `30-surface/33 §4` (visibility default resolved).
 

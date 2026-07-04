@@ -65,8 +65,11 @@ discipline that carries into every package build).
 The **constructor-class tranche** — `Semigroup`/`Monoid` (value-level algebra)
 and `Functor`/`Foldable` (the first classes over a type constructor
 `f : Type → Type`) — is pinned in **`55-lawful-functors.md`** (CAT-1,
-`packages/lawful-functors/`), the reusable template `Applicative`/`Monad`/
-`Traversable` (CAT-2) extend.
+`packages/lawful-functors/`), the reusable template the **effectful tranche** —
+`Applicative`/`Monad`/`Traversable` — extends in **`56-effectful-classes.md`**
+(CAT-2, same package): the deep chain **wires** superclass fields (`56 §2`), and
+`Traversable.traverse` is the first effect-row-polymorphic `proc` (SURF-1,
+`../30-surface/36 §1.5`).
 
 ## 3. Collections — packages over built-in/prelude carriers
 
