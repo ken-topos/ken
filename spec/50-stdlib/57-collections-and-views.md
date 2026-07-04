@@ -31,9 +31,12 @@ re-litigated:
    directly, and lifts the self-call **IH** under the constructor with `cong`
    (`packages/transport`, `53 §2`).
 3. **Per-branch `tt`-vs-`Refl`**, never uniform (`55 §3.2`): a branch closes
-   with `tt` when both endpoints reduce to the **same constructor head** (they
-   collapse to `Top`, K7, so the goal is no longer `Eq`-shaped) and with `Refl`
-   when they reduce to a **neutral** (the goal stays `Eq`-shaped). The three
+   with `tt` when both endpoints reduce to the **same fully-collapsing
+   constructor head** — a **nullary** ctor, or one whose components all collapse
+   — which goes to `Top` (K7), so the goal is no longer `Eq`-shaped; and with
+   `Refl` when they reduce to a **neutral**, *including a non-nullary head with
+   a neutral component* (it stays `Eq`-shaped, and `tt : Top` would be ill-typed
+   there). The three
    landed list proofs exhibit all three cases and are the working template:
    `list_left_unit → Refl` (definitional, neutral `x`), `list_assoc`'s `Nil`
    base `→ Refl` (neutral `list_append a ys zs`), `list_right_unit`'s `Nil` base
@@ -242,9 +245,12 @@ Each correctness law flips at its **named field**, specific variant, on `List
 Bool`:
 
 - **Non-permuting "sort" (a dedup) fails `Perm`.** For `xs = [True, True,
-  False]`, the honest `sort` preserves `count True = 2` (a **neutral** endpoint
-  → `Refl`, per `§1 pt 3`); a dedup drops it to `1`, so the goal is `Equal Nat 2
-  1`, uninhabited → **rejected at `perm`**.
+  False]`, the honest `sort` preserves `count True = 2` and its `Perm` proof
+  discharges by induction (the per-branch endpoints — base `count _ Nil = Zero`
+  on both sides → `tt`, inductive steps → `Refl`/`cong` — are pinned at build
+  with CV, `§1 pt 3`, since `sort`/`count` are red-until-built); a dedup drops
+  the count to `1`, so the goal is `Equal Nat 2 1`, uninhabited → **rejected at
+  `perm`**.
 - **Non-ordering "sort" (identity on a descending list) fails `isSorted`.** A
   descending pair leaves `IsTrue (le h g)` at `IsTrue False`, which is
   uninhabited → **rejected at `isSorted`**; the honest sort reorders so the pair
@@ -275,8 +281,12 @@ and law forms and the operator picked the token.)
 family/record type (`View`, like `Functor`/`Lens`) is collision-free and builds
 independently; only a **lowercase** `view` identifier would require CAT-3-build
 to **sequence after** SURF-1's keyword-retirement build. The concrete records
-here take capitalized type names, so the chapter is build-order-independent; the
-Steward tracks the dependency regardless.
+here take **capitalized type names** (`View`/`Lens`/…) and **no lowercase `view`
+field** — the setoid-morphism form's projection field is named `project`, not
+`view` (`§4.2`) — so the chapter introduces no `view` identifier at all and is
+**build-order-independent**; the Steward tracks the dependency regardless. (The
+ops in `§2` are written with the still-live `view` *keyword*, `§1` — that is the
+intended use of the keyword on `main`, not a colliding identifier.)
 
 ### 4.2 Fork B — the mechanism, per-flavor
 
@@ -291,7 +301,7 @@ against landed machinery, not hand-waved:
 | **representation (iso)** | `Σ`-record `{ to; from; to_from; from_to }`, concrete | now (fast-follow) |
 | **refinement** | rides landed refinement types `{x:A|φ}` (`ast.rs TRefine`, parser `parse_refinement_type`, `21 §6.1`; lowers to carrier + kernel-re-checked obligation, `21 §6.3`/`22`). A refinement view is a projection whose focus is `{x:A|P x}` | now |
 | **indexed** | a key/position view `Key → Option A` / a lens family; plain Ken (full maps are CAT-4) | now |
-| **quotient-respecting** | **setoid-morphism form** `{ view : A→B; respects : (x y : A) → R x y → Equal B (view x) (view y) }` — a plain `Σ`-record, **no quotient type needed**; **quotient-carrier form** (a view *out of* `A/R`) needs a surface path the parser lacks (`§4.3`) | setoid now; carrier later |
+| **quotient-respecting** | **setoid-morphism form** `{ project : A→B; respects : (x y : A) → R x y → Equal B (project x) (project y) }` — a plain `Σ`-record, **no quotient type needed** (the field is `project`, not a lowercase `view`, so it never collides with the live `KwView` keyword — `§4.1`); **quotient-carrier form** (a view *out of* `A/R`) needs a surface path the parser lacks (`§4.3`) | setoid now; carrier later |
 | **obligation-producing** | the Ward / L12 / L14 seam — rides landed refinement-obligation machinery (`capabilities.rs attenuate` already emits a kernel-re-checked refinement obligation). **Boundary only** per frame — state the seam, coordinate Lane B / L12 / L14, do not fully specify | seam stated, deferred |
 
 ### 4.3 Concrete now, polymorphic later — the one shared surface wall
@@ -347,12 +357,16 @@ grammar:
   Equal (Pair Bool Bool) (set (set s b) c) (set s c)
 ```
 
-All three close **definitionally**, per-branch `tt`-vs-`Refl` (`§1 pt 3`):
-`get-set` computes by Σ-β (`pairFst (mkPair b _) ⇝ b`) to neutral `b` both sides
-→ `Refl`; `set-set` computes by Σ-β to a shared `mkPair c (pairSnd s)` head →
-`tt`; `set-get` holds by **definitional Σ-η** (`mkPair (pairFst s) (pairSnd s) ≡
-s`, `13 §6`), so the goal reduces to `Equal _ s s` → `Refl` — no `match` on the
-Σ-pair. No `DecEq`/`Ord` instance is needed (the lens laws are structural over
+All three close **definitionally** — and all three are `Refl`, **none `tt`**,
+precisely because the `Pair` head is **non-nullary with a neutral component**
+(`§1 pt 3`): `get-set` computes by Σ-β (`pairFst (mkPair b _) ⇝ b`) to the
+neutral `b` on both sides → `Refl`; `set-set` computes by Σ-β to the *identical*
+term `mkPair c (pairSnd s)` on both sides → `Refl` (the `mkPair` head does
+**not** collapse to `Top` — its component `pairSnd s` is neutral — so `tt : Top`
+would be ill-typed); `set-get` holds by **definitional Σ-η** (`mkPair (pairFst
+s) (pairSnd s) ≡ s`, `13 §6`), so the goal reduces to `Equal _ s s` → `Refl` —
+no `match` on the Σ-pair. No `DecEq`/`Ord` instance is needed (the lens laws are
+structural over
 `Pair`), so the `§3.4` carrier caveat does not bind here. The polymorphic
 `Lens s a` states the same three laws with `s`/`a` abstract, gated on `§4.3`'s
 multi-param `class`.
