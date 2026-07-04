@@ -253,6 +253,34 @@ while drafting. Resolved items move to an ADR (`../docs/adr/`).
   type is collision-free with the still-lexed lowercase `view` keyword; a
   lowercase `view` identifier sequences CAT-3-build after SURF-1's
   keyword-retirement build (Steward tracks it).
+- **Resolved (CAT-4 Forks A/B/C/D + two enclave sub-rulings, 2026-07-04,
+  Architect):** `50-stdlib/58`'s maps/sets/relations design. **A** — `union`
+  takes a **combining function** `(V→V→V)` (subsumes left/right bias; map union
+  is **not** commutative, so maps get only the lookup characterization +
+  `Ordered`-preservation, never a commutativity law). **B** — the transitive
+  closure is **bounded-reachability `IsTrue`** (`R⁺ x y := IsTrue
+  (reachableWithin N x y)`, `N = size (dom R)`), `Ω`-native, **never** a raw
+  multi-ctor `data … : Ω` (the `Perm` inadmissibility,
+  `10-kernel/16 §1.4`+§1.1).
+  **C** — a relation is `Map K (Set K)` adjacency (`Tree K (Tree K Unit)`), not
+  `Set (Pair K K)` (the landed `pairLeq` is first-component-only, non-total).
+  **D** — `delete` is **rebuild-via-`fromList`** (`delete key m := fromList
+  (dropKey key (toList m))`, `dropKey` = filter so the None-law is
+  unconditional), reusing the landed `preservesOrdered` wholesale. Enclave
+  sub-rulings: set laws are **membership-extensional** (never `Equal (Set K)`);
+  the discriminator carrier is **`Nat`** with a net-new `Axiom`-free `leqNat`+4
+  laws (the `Axiom`-holed `Ord Int`/`Ord Char` would make the accept-arm
+  vacuous). Kernel-untouched, outer-ring, zero `trusted_base()` delta.
+- **Deferred follow-on (CAT-4 Fork B / C-scope, 2026-07-04) —
+  transitive-closure faithfulness, design-now/build-later.** `58 §7` **pins the
+  closure representation** (bounded-reachability `IsTrue`) and lands the cheap
+  `Ω`-provable half (compose/converse/property-predicates + the non-transitive
+  discriminator); the **faithfulness/saturation laws** (bounded = full closure
+  via simple-path shortening + `N`-round fixpoint) + a net-new
+  `size : Tree k v → Nat` are the **fast-follow build**, per the frame's
+  heavy-encoding latitude —
+  the design is pinned, the proof deferred (no silent truncation). Feeds L14
+  model-check + Lane B.
 - **Affects.** `30-surface/31 §1a/§1b` (updated), all of `30-surface/`;
   `30-surface/33 §4` (visibility default resolved).
 
