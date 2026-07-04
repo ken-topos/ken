@@ -70,6 +70,8 @@ expr ::=
     "λ" binder+ "." expr | "\\" binder+ "->" expr  -- lambda
   | expr expr  -- application (left assoc)
   | expr binop expr  -- operators (declared fixity)
+  | "(" ident ":" type ")" "->" expr  -- dependent function type Π (a term; §2, 11 §1)
+  | expr "->" expr  -- non-dependent function type (arrow); elaborates to kernel Pi
   | "let" ident (":" type)? "=" expr "in" expr  -- local binding
   | "if" expr "then" expr "else" expr  -- = match on Bool
   | "match" expr ("," expr)* "{" arm+ "}"  -- pattern match (34)
@@ -94,6 +96,27 @@ ordinary terms over stdlib/library values (spelling still `OQ-syntax`):
 - **`@ct`** is an IFC label, carried on the *type* via `A @ label` (§2), not an
   expression prefix.
 - **Wrapping arithmetic** (`+%`/`-%`/`*%`, `35 §3`) are ordinary `binop`s.
+
+**Arrow types in expression position.** Because **types are terms**
+(`../10-kernel/11 §1`), a function type is a perfectly good *term* — of type
+`Type ℓ` — and may stand **wherever an expression is expected**, not only in a
+type annotation. The two `expr`-position arrow forms above (`(x : A) -> B` and
+`A -> B`) are the **same construct** as the `type`-position arrows of §2 and
+**elaborate identically to the kernel `Pi`** (`39`); no kernel variant is added.
+This closes the gap where an arrow type could be *written* in an annotation but
+not, e.g., passed as an argument, bound by `let`, or returned (`view f : Type =
+Int -> Int`). Two disambiguations, both by existing lookahead:
+
+- The lambda form `\ binder+ -> expr` (and `λ binder+ . expr`) is unambiguous
+  with the arrow **type**: a leading `\`/`λ` commits to the lambda, so a `->`
+  reached without one is always the function-type constructor.
+- `(x : A) -> …` vs. the ascription `(x : A)`: after parsing the parenthesized
+  `(ident : type)`, a following `->` selects the dependent arrow; its absence
+  leaves an ascription — the same one-token lookahead §2 already uses in type
+  position.
+
+The V0 minimal slice (§8) deliberately keeps `->` **type-position only**; that
+restriction is V0-local and is lifted here for the full surface.
 
 ## 4. Patterns
 
@@ -124,10 +147,29 @@ contract is part of `view` (§1); refinements `{x:A|φ}` are types (§2).
 
 ## 6. Precedence and associativity (defaults)
 
-`->` and `×` right-associative; application binds tightest; `@` (label /
-annotation prefix) tight; user operators take declared fixity
-(`infixl`/`infixr`/`infix N`, default `infixl 9`). `:` (ascription) loosest. The
-exact table is OQ-syntax; the *existence* of declared fixity is not.
+Application binds tightest; `@` (label / annotation prefix) tight; `->` and `×`
+are right-associative and looser than the arithmetic operators; user operators
+take declared fixity (`infixl`/`infixr`/`infix N`, default `infixl 9`); `:`
+(ascription) loosest.
+
+**Arithmetic precedence — resolved (conventional default).** The core arithmetic
+operators bind by the conventional levels, so `a + b * c` parses as `a + (b *
+c)` and `a - b - c` as `(a - b) - c`:
+
+| Level | Operators | Assoc | Notes |
+|---|---|---|---|
+| `7` | `*` (and any future `/`) | `infixl` | multiplicative — binds **tighter** |
+| `6` | `+`, `-` | `infixl` | additive |
+
+The wrapping variants (`+%`/`-%`/`*%`, `35 §3`) share their base operator's
+level (`*%` at 7; `+%`/`-%` at 6). `->` sits **below** all arithmetic (a
+function type built from arithmetic operands, e.g. `Vec (n + 1) -> Vec n`,
+groups the operands first) and **above** ascription.
+
+This pins the split VAL2 needs (multiplicative tighter than additive, both
+left-associative) as Ken's default. The remaining spellings and the levels of
+*non-arithmetic* user operators stay `OQ-syntax`; the *existence* of declared
+fixity, and this arithmetic ordering, are not.
 
 ## 7. What WS-L must deliver here
 
@@ -167,8 +209,9 @@ level  ::= NAT                                          -- 0, 1, 2, …
 
 The `ConId` and `Type` atoms in `expr` reflect that **types are terms**
 (`../10-kernel/11 §1`): a base type and a universe may stand in expression
-position (e.g. `let x : Type = Type in x`). `->`/Π is type-position only, so a
-bare function type is not a V0 expression.
+position (e.g. `let x : Type = Type in x`). In V0, `->`/Π is type-position only,
+so a bare function type is not a V0 expression — a deliberate V0-local
+restriction the full surface lifts (§3, arrow types in expression position).
 
 `->` is right-associative; application binds tightest; ascription `:` is loosest
 (§6). A type-position `ident` (lowercase) is a bound type variable (e.g. the `A`
