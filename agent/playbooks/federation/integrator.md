@@ -167,12 +167,20 @@ makes the branch's original commits NON-ancestors of `main`**, so the local
 `git branch` (and falsely reads as "open" in a naive ancestor check). If
 `git branch -D` is refused (`checked out at .../.worktrees/<role>`), the owning
 team hasn't returned to its home branch yet — your rebase-guidance nudge frees
-it, and the watchdog stale-branch prune (below) retries next pass. And **notify
-with discipline** — mention exactly the team
-leader(s) whose next move this triggers
-(e.g. a kernel-API change → the verify and language leaders, with rebase
-guidance: *rebase onto the new `origin/main`*). A routine "merged, nothing
-pending" mentions nobody.
+it, and the watchdog stale-branch prune (below) retries next pass. And **notify the Steward — and only the
+Steward — on a merge (operator, 2026-07-04).** The merge is the Steward's cue: it
+owns the WP catalog, the progress tracker, and post-merge sequencing (releasing
+the next WP, a spec-reconcile or other fast-follow, closing the WP + chasing
+retros), and no CI/merge event notifies it otherwise — without this it has to
+poll or be told a merge landed before it can route the sequenced follow-on. That
+is a real Steward next-move (**not** a pure FYI), so it is within §2 mention
+discipline. **Do NOT notify team leaders on a merge — they have no action to take
+on a raw merge event (operator, 2026-07-04).** A team rebases onto the new
+`origin/main` when it picks up its next WP (its implementer already runs `git
+rebase origin/main` first), and the **Steward** — not you — routes any downstream
+work (including a cross-team rebase, if a merge actually affects an in-flight WP)
+to the relevant team via that next release/kickoff. So the merge ship-note
+mentions **the Steward, and no one else.**
 
 ## Keep the pipeline moving (watchdog)
 
@@ -236,9 +244,10 @@ PRs are open (`CronList` shows your jobs). Reading CI is *yours alone* — nobod
 
 Agents get **no** GitHub notifications, and only you see GitHub. Every
 actionable GitHub state change reaches the fleet because **you mirror it into
-mootup** mentioning whoever moves next — CI red → the implementer; merged →
-affected leaders — per the §5 event map in
-`../../../docs/program/04-git-and-integration.md`. The optional `ken-ci` bridge
+mootup** mentioning whoever moves next — CI red → the implementer; **merged →
+the Steward only** (not leaders; they have no action on a raw merge — the Steward
+routes any downstream work, per "Verify, then announce" above) — per the §5 event
+map in `../../../docs/program/04-git-and-integration.md`. The optional `ken-ci` bridge
 automates the CI mirror; until it exists you post it. A GitHub state change
 nobody mirrors is a silent stall.
 

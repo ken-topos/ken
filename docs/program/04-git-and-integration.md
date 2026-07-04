@@ -162,7 +162,7 @@ it is not a separate reviewer. **Teams do not merge.**
   | Integrator published branch; CI running | `status_update` | team | — | Integrator |
   | CI red | `blocked` | team | implementer | Integrator |
   | CI green + Decision approved | `decision` (merge) | integration | Integrator | Integrator |
-  | Merged to `main` | `status_update` (ship) | integration | affected team leaders | Integrator |
+  | Merged to `main` | `status_update` (ship) | integration | Steward only | Integrator |
 
   The branch/commit rides each message as an artifact reference; the *detail*
   (the diff, the CI log) is fetched on demand — by the reviewer locally, or by
@@ -177,10 +177,13 @@ it is not a separate reviewer. **Teams do not merge.**
   `docs/adr/`. The mootup Decision is the discussion+ratification record; the
   committed ADR is the durable artifact.
 - **Notification of fresh `main`:** on merge, the Integrator posts a ship Event
-  in `ken-integration` and **mentions** the leaders of impacted team spaces,
-  with the merged WP, the commit, and rebase guidance. Team leaders have members
-  rebase onto the already-fetched `origin/main` (no network) and fan the update
-  in.
+  in `ken-integration` and **mentions the Steward only** (operator, 2026-07-04),
+  with the merged WP and the commit. Team leaders are **not** notified on a raw
+  merge — they have no action to take on it. A team rebases onto the
+  already-fetched `origin/main` (no network) when it picks up its next WP; the
+  **Steward** owns post-merge sequencing and routes any downstream work —
+  including a cross-team rebase, if a merge affects an in-flight WP — to the
+  relevant team via that next release/kickoff.
 - **Cross-team dependencies** (the graph in `02-roadmap.md`/`03`) are
   coordinated via the linked spaces and mentions: when WP-B depends on WP-A
   landing, the B-team leader watches A's merge Decision and is mentioned on its
@@ -202,20 +205,9 @@ it is not a separate reviewer. **Teams do not merge.**
    clean-room · path-guard (on GitHub's CPU). concurrency:cancel-in-progress
    kills superseded runs on new pushes.
 3. Architect (+Spec on its paths) read the diff locally and vote the Decision.
-4. CI green AND Decision approved → **the Integrator rebases wp/<ID> onto the
-   CURRENT `origin/main` and confirms CI is green on that rebased tip** before
-   squash-merging (branch protection: required checks + merge restricted to the
-   publisher), one commit with the WP ID in the subject, then fetches so
-   origin/main updates for all. **The rebase-before-merge step is mandatory, not
-   optional** (operator-directed 2026-07-01): a branch whose CI ran against a
-   *stale* base can be green in isolation yet break `main` when combined with
-   another branch that landed meanwhile — e.g. one branch adds an enum variant
-   while a parallel branch adds a `match` over it; each PR is green against its
-   own base, the merged tree is non-exhaustive. Rebasing onto current `main` and
-   re-running the full-workspace CI tests the *actual* post-merge tree and
-   catches these parallel-branch collisions. (This is the fix for the red-main
-   incident of 2026-07-01: `NumericLitVal::Str` added by one VAL1 branch,
-   unhandled in `ken-cli lit_to_eval` — invisible until both landed.)
+4. CI green AND Decision approved → INTEGRATOR squash-merges on GitHub (branch
+   protection: required checks + merge restricted to the publisher), one commit
+   with the WP ID in the subject, then fetches so origin/main updates for all.
 5. Integrator verifies main green, resolves the merge Decision, posts the ship
    Event in ken-integration mentioning only affected team leaders with rebase
    guidance, and sweeps the merged wp/<ID> branch. Steward digests the log;
@@ -228,10 +220,6 @@ it is not a separate reviewer. **Teams do not merge.**
 
 `main` stays green at every step because CI gates the branch **before** the
 merge, and branch protection refuses a merge whose required checks aren't green.
-**But CI-on-the-branch is only sufficient if the branch is rebased onto current
-`origin/main` first** (step 4) — otherwise a green branch built on a stale base
-can still red `main` on merge (the parallel-collision failure above). Green CI +
-current base together are the guarantee; green CI alone is not.
 
 ---
 
