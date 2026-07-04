@@ -602,6 +602,34 @@ fn preservesordered_law1_is_a_real_general_proof_term() {
     }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Law 2 (`54 §5.2`, Map capstone unit 2) — `lookupFoundAfterInsert`
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn lookupfoundafterinsert_law2_is_a_real_general_proof_term() {
+    let env = mk_env();
+    // `lookupFoundAfterInsert : ... -> lookup key (insert key val m) =
+    // Some val` must be a real Decl::Transparent proof term (never a
+    // postulate) — reuses Law 1's goal-generic transport bridges directly
+    // (asserted there), plus its own lookup-side step mirrors/bridges.
+    for name in [
+        "lookupFoundAfterInsert",
+        "lookupFoundDispatch",
+        "lookupFoundDispatchQ1",
+        "lookupFoundDispatchQ2",
+        "lookupOverwriteResult",
+        "lookupIntoLBridge",
+        "lookupIntoRBridge",
+    ] {
+        let id = env.globals[name];
+        assert!(
+            matches!(env.env.lookup(id), Some(Decl::Transparent { .. })),
+            "{name} must be a real proof term, not a postulate"
+        );
+    }
+}
+
 // A hand-built concrete-instance application (`tree_2_1_3` under a trivial
 // always-true comparator) was tried here as a second smoke test, but
 // `Ordered`'s real Node case (`And (allKeys (\k2. ...) l) (And (allKeys
