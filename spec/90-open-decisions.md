@@ -230,7 +230,7 @@ while drafting. Resolved items move to an ADR (`../docs/adr/`).
   guardrail re-fork) — **not** taken now, re-forked to Steward if/when wanted.
   Purely ergonomic; nothing depends on it.
 - **Deferred follow-on (CAT-3 Fork B, 2026-07-04) — two elaborator (not syntax)
-  walls, design-now/build-later.** `50-stdlib/57`'s optic abstraction ships
+  walls, design-now/build-later.** `50-stdlib/57`'s view abstraction ships
   every flavor **concrete**; two general forms need bounded outer-ring
   (`ken-elaborator`-only, kernel-untouched) extensions, each re-forking to
   Steward **when built** (AC1): **(a) multi-param `class`** — a parameter
@@ -243,13 +243,16 @@ while drafting. Resolved items move to an ADR (`../docs/adr/`).
   only refinement `{x:A|φ}`, not quotient-intro. Concrete
   lens/iso/refinement/indexed/setoid-morphism flavors build now with **no**
   extension.
-- **Routed (CAT-3 Fork C, 2026-07-04):** the **optic family naming token** — the
-  Layer-1 projection abstraction's family name — routed to the **Steward**
-  (operator ergonomics, the same axis SURF-1's `view`-retirement was routed on).
-  Architect recommends family **`optic`**, flagship **`lens`** (alternates
-  `focus`/`projection`); the structure + law forms are pinned (`50-stdlib/57
-  §4`), only the human-facing name is open. Non-blocking veto window; must not
-  be `view`.
+- **Resolved (CAT-3 Fork C, 2026-07-04, operator):** the Layer-1 projection
+  abstraction's **family name is `view`** — operator Pat's veto-window call
+  (`optic` rejected). SURF-1's retirement of the `view` *keyword* **frees the
+  word**, and `view` is the software-standard term for a read projection, so it
+  is the family umbrella (not a collision). Flagship flavor **`lens`** and the
+  six-flavor structure (Architect's Fork B table) are unchanged; structure + law
+  forms pinned (`50-stdlib/57 §4`). **Build-order:** a **capitalized** `View`
+  type is collision-free with the still-lexed lowercase `view` keyword; a
+  lowercase `view` identifier sequences CAT-3-build after SURF-1's
+  keyword-retirement build (Steward tracks it).
 - **Affects.** `30-surface/31 §1a/§1b` (updated), all of `30-surface/`;
   `30-surface/33 §4` (visibility default resolved).
 

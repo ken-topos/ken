@@ -88,14 +88,15 @@ the canonical demonstrations of the thesis; the sort's predicates
 ES1), never postulates.
 
 The **collection laws** (length/membership/decomposition + the verified `sort`
-above) and the agent-facing **optic** abstraction — the Layer-1 "view" unit for
+above) and the agent-facing **view** abstraction — the Layer-1 unit for
 looking at data a different way (projection/lens, refinement, representation,
 indexed, quotient-respecting, obligation-producing) — are pinned in
-**`57-collections-and-optics.md`** (CAT-3). `Perm` is `Ω`-native
+**`57-collections-and-views.md`** (CAT-3). `Perm` is `Ω`-native
 **count/multiset-equality**, not a raw inductive (the `Ord.total` soundness
-move, `57 §3.1`); the optic is a plain `Σ`-record (concrete flavors ship now,
+move, `57 §3.1`); the view is a plain `Σ`-record (concrete flavors ship now,
 the polymorphic family gated on a bounded multi-param-`class` extension). The
-optic family is named to avoid the retired `view` keyword (SURF-1).
+family is named **`view`** (operator's call) — SURF-1's retirement of the `view`
+keyword frees the word, and `view` is the standard term for a read projection.
 
 ## 4. I/O, effects, serialization
 

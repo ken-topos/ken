@@ -244,7 +244,7 @@ graph LR
 
 ## 8. Enclave elaboration (spec-author, `main@9fe9617`)
 
-The contract is `spec/50-stdlib/57-collections-and-optics.md`; this section is
+The contract is `spec/50-stdlib/57-collections-and-views.md`; this section is
 the durable elaboration record for the Language build — the three fork rulings
 (Architect), transcribed with verified code anchors. Every anchor was
 re-grounded against `main@9fe9617` at pickup (the frame's lines are perishable).
@@ -288,7 +288,7 @@ recursion into `Ω` via `∧` of pairwise `le` (`16 §1.3`). Two laws: `isSorted
 `Equal`; `DecEq.sound`/ `complete` at `lawful_classes.ken:25–28` tie `eq` to
 kernel `Equal`).
 
-**E5 — Fork B: optic mechanism, per-flavor (concrete now / polymorphic later).**
+**E5 — Fork B: view mechanism, per-flavor (concrete now / polymorphic later).**
 Ordinary Ken `Σ`-records. Grounded anchors: refinement rides landed `{x:A|φ}` —
 `ast.rs:369 TRefine`, `parser.rs:813 parse_refinement_type` (`21 §6.1`),
 `elab.rs` `RRefine` lowers to the carrier + obligation (`21 §6.3`/`22`).
@@ -305,15 +305,19 @@ param-telescope-on-`class` extension (cousin of CAT-1 `§6`) unlocks the whole
 family, kernel-untouched, no new `Term`/`Decl`. Shipped concrete lens: `Pair
 Bool Bool` fst-lens with get-set/set-get/set-set proved.
 
-**E6 — Fork C: the name.** Family `optic`, flagship `lens` (alternates
-`focus`/`projection`). `view` is barred (SURF-1 retires the keyword). Structure
-+ law forms pinned in `57 §4`; **final naming token routed to the Steward**
-(operator ergonomics, the SURF-1-`view` axis).
+**E6 — Fork C: the name.** Family **`view`** (operator's veto-window call),
+flagship `lens`, six-flavor structure unchanged. SURF-1 retires the `view`
+*keyword* (→ `const`/`fn`/`proc`), which **frees the word** — and `view` is the
+industry-standard term for a read projection, so it is the family umbrella, not
+a collision. Structure + law forms pinned in `57 §4`. Build-order: a
+**capitalized** `View` type is collision-free with the still-lexed lowercase
+`view` keyword; a lowercase `view` identifier would sequence CAT-3-build after
+SURF-1's keyword-retirement build (Steward tracks it).
 
 **E7 — scope register (no new immediate Steward re-fork).** Two design-now,
 build-later elaborator walls, each re-forks to the Steward **when its general
 form is built** (AC1), recorded as `90` deferred follow-ons: (a) **multi-param
-`class`** (polymorphic-optic vehicle), (b) **surface quotient-intro**
+`class`** (polymorphic-view vehicle), (b) **surface quotient-intro**
 (quotient-carrier flavor). Plus one **naming token** routed to the Steward (Fork
 C). All existing open items — no new fork opened.
 
@@ -321,6 +325,6 @@ C). All existing open items — no new fork opened.
 Bool`** (the only `Axiom`-free `DecEq`+`Ord` on `main`; `Int`/`Char` are
 `Axiom`-holed — CV's caveat, Architect-verified). D1's
 `map`/`filter`/`length`/`min` laws + decomposition #2 are red until their ops
-land; D2 sort + D1 decomposition #1 + D3 concrete optics build now. Architect
+land; D2 sort + D1 decomposition #1 + D3 concrete views build now. Architect
 re-certs AC1 (kernel-untouched) + AC3 (`Perm`-`Ω`-soundness) on the built diff
 in the Phase-3 Opus re-review.

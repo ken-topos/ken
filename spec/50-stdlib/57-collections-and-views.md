@@ -1,7 +1,7 @@
-# Collection laws and the optic abstraction (CAT-3, Layer 1)
+# Collection laws and the view abstraction (CAT-3, Layer 1)
 
 > Status: **DRAFT v0** (CAT-3). This chapter is the **contract** for Layer-1
-> collections' laws-as-propositions and the agent-facing **optic** abstraction
+> collections' laws-as-propositions and the agent-facing **view** abstraction
 > (the catalog's "view" unit). It **inherits `55`'s lawful-class template
 > unchanged** (`55 §3.1`/`§3.2`/`§4`/`§5.2`): laws are `Ω` propositions **proved
 > over inductive carriers, zero `Axiom`, zero `trusted_base()` delta**, by the
@@ -9,9 +9,9 @@
 > discrimination. **CAT-2-independent** — collection laws are value-level, no
 > `Monad` needed. **Kernel-untouched, outer-ring.** Three design forks are
 > resolved here (Architect, `main@9fe9617`): **A** `Perm` = count/multiset-
-> equality (`Ω`-native), **B** the optic is a plain `Σ`-record for the concrete
-> flavors that ship now, **C** the family is named `optic` (flagship `lens`),
-> final token routed to the operator. The `.ken` proofs + any polymorphic-optic
+> equality (`Ω`-native), **B** the view is a plain `Σ`-record for the concrete
+> flavors that ship now, **C** the family is named `view` (flagship `lens`),
+> the operator's call. The `.ken` proofs + any polymorphic-view
 > elaborator support are the **Language build**, held for the GPT window; this
 > chapter is the elaboration.
 
@@ -255,25 +255,34 @@ A masked postulate (closing a sort law with `Axiom`) is a non-empty
 `trusted_base_delta` (AC2), rejected by the delta gate — the CAT-1/CAT-2 two-arm
 net (honest → conversion / masked-`Axiom` → delta-gate → `Bottom`).
 
-## 4. D3 — The optic abstraction
+## 4. D3 — The view abstraction
 
-### 4.1 Fork C — the name: `optic` (family), `lens` (flagship)
+### 4.1 Fork C — the name: family `view`, flagship `lens`
 
-The six flavors are the **optics** family; the projection flavor is a classic
-**lens**. The name **must not be `view`**: SURF-1 retires the `view` *keyword*
-(→ `const`/`fn`/`proc`), and shipping a Layer-1 unit literally called `view` the
-same cycle the keyword dies is exactly the reader-collision SURF-1 acted on.
-Recommended: family `optic`, flagship `lens`; plainer alternates `focus` /
-`projection` if `optic` reads too jargon-heavy on the human-read axis. This is
-**operator-facing ergonomics** — the same axis SURF-1 routed to the operator —
-so the structure and law forms are pinned here and the **final naming token is
-routed to the Steward** (`§90`), not decided by the enclave.
+The six flavors are the **view** family; the projection flavor is a classic
+**lens**. The family name is **`view`** — the operator's veto-window call
+(`§90`). It is **not** a collision: SURF-1 **retires the `view` *keyword***
+(definitions become `const`/`fn`/`proc`), which **frees the word `view`**, and
+`view` is the software-industry-standard term for a read projection — so it is
+the best umbrella for the family. Flagship flavor `lens` and the six-flavor
+structure (`§4.2`) are unchanged. (This was operator-facing ergonomics — the
+same axis SURF-1 routed to the operator — so the enclave pinned the structure
+and law forms and the operator picked the token.)
+
+**Build-order note (keyword still lexed on `main`).** The `view` keyword is
+**spec-retired** but still recognized by the lexer today (`KwView`; SURF-1's
+`.ken` migration is a deferred GPT-window build). So a **capitalized**
+family/record type (`View`, like `Functor`/`Lens`) is collision-free and builds
+independently; only a **lowercase** `view` identifier would require CAT-3-build
+to **sequence after** SURF-1's keyword-retirement build. The concrete records
+here take capitalized type names, so the chapter is build-order-independent; the
+Steward tracks the dependency regardless.
 
 ### 4.2 Fork B — the mechanism, per-flavor
 
-The optic is **ordinary Ken** — a `Σ`-record bundling operations with their
+The view is **ordinary Ken** — a `Σ`-record bundling operations with their
 coherence proofs (the lawful-class *shape*, but a first-class *value*: a type
-has many optics, so an optic is not a resolved instance). Grounded per-flavor
+has many views, so a view is not a resolved instance). Grounded per-flavor
 against landed machinery, not hand-waved:
 
 | Flavor | Mechanism (grounded on `main`) | Ships |
@@ -355,7 +364,7 @@ is the **Ward / L12 / L14 boundary**. It rides the landed refinement-obligation
 machinery (`capabilities.rs attenuate` already emits a kernel-re-checked
 refinement obligation at attenuation), so the mechanism exists; but its full
 specification belongs to Lane B / L12 / L14, not here. This chapter **states the
-seam and stops** (frame §6): an obligation-producing optic is a projection whose
+seam and stops** (frame §6): an obligation-producing view is a projection whose
 `set`/`view` carries a refinement precondition discharged at the use site.
 
 ## 5. Derivation paths and `trusted_base()` delta (AC1/AC2)
@@ -369,7 +378,7 @@ path stated (the catalog discipline, `README §intro`):
   **reuses** CAT-1's proofs. **Zero `trusted_base()` delta; zero `Axiom`** in
   any shipped law (the `List Bool` carrier is what makes this achievable —
   `§3.4`).
-- **D3** — the optic records and their coherence proofs are Ken `Σ`-records +
+- **D3** — the view records and their coherence proofs are Ken `Σ`-records +
   Ken proofs; refinement rides landed `{x:A|φ}`. **Zero kernel diff, no new
   `Term`/`Decl`.** The two design-now/build-later extensions (multi-param
   `class`, surface quotient-intro) are outer-ring (`ken-elaborator`-only) and
@@ -390,7 +399,7 @@ path stated (the catalog discipline, `README §intro`):
   fails `isSorted`; each at the named field, specific variant (`§3.7`).
 - **AC5 — laws `Ω`, pointwise, one field.** All laws are `Ω`, stated pointwise,
   one canonical field (`§2.2`, `§3.4`, `§4.4`; `55 §4`/`§5.2`).
-- **AC6 — optic mechanism grounded.** Enumerated per-flavor against landed
+- **AC6 — view mechanism grounded.** Enumerated per-flavor against landed
   machinery (`§4.2`); the shipped lens has its coherence laws proved (`§4.4`);
   the name does not collide with the retired `view` keyword (`§4.1`, token to
   Steward).
