@@ -22,7 +22,7 @@ use crate::ast::{BinOp, NumLit};
 use crate::classes::{ClassEnv, ClassInfo, ClassKind, InstanceInfo};
 use crate::data;
 use crate::error::{ElabError, Span};
-use crate::numbers::{AddEntry, NumericEnv, NumericLitVal};
+use crate::numbers::{AddEntry, BinOpEntry, NumericEnv, NumericLitVal};
 use crate::resolve::{RDecl, RDeclKind, RExpr, RMatchArm, RPatKind, RPattern, RType};
 
 // ----- obligation model -----
@@ -1010,6 +1010,10 @@ fn infer(cx: &mut ElabCtx, expr: &RExpr) -> Result<(Term, Term), ElabError> {
         }
 
         RExpr::RProj(base, field, span) => infer_proj(cx, base, field, span),
+
+        RExpr::RPi(_, a, b, span) => infer_pi(cx, a, b, span),
+
+        RExpr::RArrow(a, b, span) => infer_arrow(cx, a, b, span),
     }
 }
 
@@ -1064,6 +1068,59 @@ fn infer_eq(
     let ty = kernel_infer(cx.env, &zonked_ctx, &zonked_eq)
         .map_err(|e| ElabError::KernelRejected { error: e, span: span.clone() })?;
     Ok((eq_term, ty))
+}
+
+/// `(x : A) -> B` — dependent function type in expr position (VAL2 #4,
+/// `32 §3`). Domain `A` is a `type` (mirrors the type-position `Pi`,
+/// `elab_type`'s `RType::RPi` arm); codomain `B` is an expr, elaborated in
+/// a context extended by `A` so `x`'s references resolve. Elaborates to
+/// the existing kernel `Term::Pi` — no new kernel variant (types are
+/// terms, `11 §1`); the kernel's own `kernel_infer` classifies the result
+/// (`Type ℓ` or `Ω`, whichever the domain/codomain sorts license) rather
+/// than this function guessing a sort.
+fn infer_pi(cx: &mut ElabCtx, a: &RType, b: &RExpr, span: &Span) -> Result<(Term, Term), ElabError> {
+    let a_core = elab_type(cx, a)?;
+    let a_core = cx.metas.zonk_term(&a_core);
+    cx.ctx.push(a_core.clone());
+    let b_result = infer(cx, b);
+    cx.ctx.pop();
+    let (b_core, _b_ty) = b_result?;
+    let b_core = cx.metas.zonk_term(&b_core);
+    let pi = Term::pi(a_core, b_core);
+
+    let zonked_ctx = Context {
+        types: cx.ctx.types.iter().map(|t| cx.metas.zonk_term(t)).collect(),
+    };
+    let zonked_pi = cx.metas.zonk_term(&pi);
+    let sort = kernel_infer(cx.env, &zonked_ctx, &zonked_pi)
+        .map_err(|e| ElabError::KernelRejected { error: e, span: span.clone() })?;
+    Ok((pi, sort))
+}
+
+/// `A -> B` — non-dependent function type in expr position (VAL2 #4,
+/// `32 §3`). BOTH `A` and `B` are exprs (types are terms, `11 §1` — the
+/// same "`ConId`/`Type` already stand in expr position" precedent this
+/// closes the gap for), each elaborated via ordinary `infer` — a plain
+/// `Int`/`List Int`-style type-valued expression infers fine today, no new
+/// machinery needed. `B` doesn't reference the (unused, non-dependent)
+/// bound variable, so it's `weaken`ed by 1 to sit correctly under the
+/// implicit `Pi` binder (the exact same construction `elab_type`'s
+/// `RType::RArr` arm already uses for the type-position non-dependent
+/// arrow). Elaborates to the existing kernel `Term::Pi` — no new variant.
+fn infer_arrow(cx: &mut ElabCtx, a: &RExpr, b: &RExpr, span: &Span) -> Result<(Term, Term), ElabError> {
+    let (a_core, _a_ty) = infer(cx, a)?;
+    let (b_core, _b_ty) = infer(cx, b)?;
+    let a_core = cx.metas.zonk_term(&a_core);
+    let b_core = cx.metas.zonk_term(&b_core);
+    let pi = Term::pi(a_core, weaken(&b_core, 1));
+
+    let zonked_ctx = Context {
+        types: cx.ctx.types.iter().map(|t| cx.metas.zonk_term(t)).collect(),
+    };
+    let zonked_pi = cx.metas.zonk_term(&pi);
+    let sort = kernel_infer(cx.env, &zonked_ctx, &zonked_pi)
+        .map_err(|e| ElabError::KernelRejected { error: e, span: span.clone() })?;
+    Ok((pi, sort))
 }
 
 /// `J motive base eq` — elaborates directly to the kernel's existing
@@ -1444,8 +1501,32 @@ fn elab_binop(
             Ok((applied, result_ty))
         }
 
+        BinOp::Sub => {
+            let entry: &BinOpEntry = cx.numeric_env.classify_sub(&lhs_ty_wh).ok_or_else(|| {
+                ElabError::TypeMismatch {
+                    span: span.clone(),
+                    reason: format!("'-' not supported on this type"),
+                }
+            })?;
+            let result_ty = Term::const_(entry.result_id, vec![]);
+            let rhs_core = check(cx, rhs, &result_ty, span)?;
+            let op_term = Term::const_(entry.op_id, vec![]);
+            let applied = Term::app(Term::app(op_term, lhs_core), rhs_core);
+            Ok((applied, result_ty))
+        }
+
         BinOp::Mul => {
-            return Err(ElabError::Internal("'*' not yet supported".to_string()));
+            let entry: &BinOpEntry = cx.numeric_env.classify_mul(&lhs_ty_wh).ok_or_else(|| {
+                ElabError::TypeMismatch {
+                    span: span.clone(),
+                    reason: format!("'*' not supported on this type"),
+                }
+            })?;
+            let result_ty = Term::const_(entry.result_id, vec![]);
+            let rhs_core = check(cx, rhs, &result_ty, span)?;
+            let op_term = Term::const_(entry.op_id, vec![]);
+            let applied = Term::app(Term::app(op_term, lhs_core), rhs_core);
+            Ok((applied, result_ty))
         }
 
         BinOp::EqEq => {
@@ -2162,7 +2243,7 @@ fn elaborate_view_or_let(
 ///
 /// `{ k : A | φ }` at the end of a Pi-chain → `Some(φ)`. Used by V2 to
 /// emit a refinement-introduction obligation for the return type (`22 §2.1`).
-fn innermost_refine_pred(ty: &RType) -> Option<&RExpr> {
+pub(crate) fn innermost_refine_pred(ty: &RType) -> Option<&RExpr> {
     match ty {
         RType::RPi(_, _, cod, _) | RType::RArr(_, cod, _) => innermost_refine_pred(cod),
         RType::RRefine(_, _, phi, _) => Some(phi),
@@ -2304,12 +2385,140 @@ fn elaborate_recursive_view(
     }
 }
 
+/// Elaborate a genuinely mutually-recursive group of `view`/`let` decls
+/// (VAL2 #3) — `members.len() >= 2`, already confirmed to form one strongly-
+/// connected call-graph component (`modules.rs`'s SCC pre-pass). Generalizes
+/// `elaborate_recursive_view`'s singleton pattern (pre-admit as `Opaque`,
+/// elaborate the body against that name-in-scope, kernel-check, `sct_check`,
+/// upgrade-or-rollback) to the whole group at once, so the WHOLE GROUP is one
+/// `sct_check` call — no member escapes the termination check
+/// (`[[sct-unapplied-self-reference-over-accepts]]`).
+///
+/// Each member requires an explicit type annotation (mirrors the existing
+/// singleton recursive-view rule — a mutual group's forward references need
+/// every member's *type* resolvable before any body is elaborated).
+pub fn elaborate_mutual_group(
+    env: &mut GlobalEnv,
+    globals: &mut HashMap<String, GlobalId>,
+    num_values: &mut HashMap<GlobalId, NumericLitVal>,
+    numeric_env: &NumericEnv,
+    class_env: &ClassEnv,
+    members: &[RDecl],
+) -> Result<Vec<ElabResult>, ElabError> {
+    // 1. Elaborate every member's declared type FIRST (the signature
+    // pre-pass) — none of these need a sibling's id, only their own params.
+    let mut ty_cores: Vec<Term> = Vec::with_capacity(members.len());
+    for rdecl in members {
+        let mut cx = ElabCtx::new(env, globals, num_values, numeric_env);
+        let ty = rdecl.ty.as_ref().ok_or_else(|| ElabError::Internal(format!(
+            "mutually-recursive '{}' requires a type annotation",
+            rdecl.name
+        )))?;
+        let ty_c = elab_type(&mut cx, ty)?;
+        ty_cores.push(cx.metas.zonk_term(&ty_c));
+    }
+
+    // 2. Pre-admit ALL members as Opaque, binding every name in `globals`
+    // BEFORE any body is elaborated — this is what lets a forward/mutual
+    // reference to any sibling resolve, exactly as the singleton case
+    // pre-admits its own single name.
+    let mut ids: Vec<GlobalId> = Vec::with_capacity(members.len());
+    for (rdecl, ty_core) in members.iter().zip(&ty_cores) {
+        let id = env.fresh_id();
+        env.add_decl(Decl::Opaque { id, level_params: vec![], ty: ty_core.clone() });
+        globals.insert(rdecl.name.clone(), id);
+        ids.push(id);
+    }
+
+    // 3. Elaborate each body checked against its own type (every sibling
+    // name, including self, already resolves via `globals` from step 2).
+    let mut bodies: Vec<Term> = Vec::with_capacity(members.len());
+    let mut all_obligations: Vec<Vec<Obligation>> = Vec::with_capacity(members.len());
+    let elab_err = (|| -> Result<(), ElabError> {
+        for (rdecl, ty_core) in members.iter().zip(&ty_cores) {
+            let mut cx = ElabCtx::new(env, globals, num_values, numeric_env).with_classes(class_env);
+            let body_c = check(&mut cx, &rdecl.body, ty_core, &rdecl.span)?;
+            let obligations = std::mem::take(&mut cx.obligations);
+            bodies.push(cx.metas.zonk_term(&body_c));
+            all_obligations.push(obligations);
+        }
+        Ok(())
+    })();
+
+    // Roll back ALL pre-admitted members on ANY elaboration failure (not
+    // just the SCT gate below) — a partially-elaborated group must leave no
+    // trace, same discipline as the singleton path's rollback.
+    if let Err(e) = elab_err {
+        for id in ids.iter().rev() {
+            while let Some(d) = env.remove_last() {
+                if d.id() == *id {
+                    break;
+                }
+            }
+        }
+        for rdecl in members {
+            globals.remove(&rdecl.name);
+        }
+        return Err(e);
+    }
+
+    // 4. Kernel-check every body against its own declared type, THEN run
+    // `sct_check` on the WHOLE GROUP as ONE termination problem — the whole
+    // point of a mutual group is that no member's descent is checked in
+    // isolation (a member could look non-terminating alone but be fine via
+    // the group's cross-cycle measure, or vice versa look terminating alone
+    // while the CYCLE diverges).
+    let group_bodies: Vec<(GlobalId, Term)> = ids.iter().cloned().zip(bodies.iter().cloned()).collect();
+    let admit_result: Result<(), ken_kernel::KernelError> = (|| {
+        for (body, ty_core) in bodies.iter().zip(&ty_cores) {
+            kernel_check(env, &Context::new(), body, ty_core)?;
+        }
+        sct_check(env, &group_bodies)
+    })();
+
+    match admit_result {
+        Ok(()) => {
+            for (id, body) in ids.iter().zip(bodies) {
+                env.upgrade_to_transparent(*id, body);
+            }
+            Ok(members
+                .iter()
+                .zip(ids)
+                .zip(all_obligations)
+                .map(|((rdecl, id), obligations)| ElabResult {
+                    name: rdecl.name.clone(),
+                    def_id: id,
+                    obligations,
+                    foreign_binding: None,
+                    temporal_obligations: vec![],
+                })
+                .collect())
+        }
+        Err(e) => {
+            // Roll back every pre-admitted member (reverse order) — a
+            // rejected group leaves zero trace, exactly like the singleton
+            // rollback, just for every member instead of one.
+            for id in ids.iter().rev() {
+                while let Some(d) = env.remove_last() {
+                    if d.id() == *id {
+                        break;
+                    }
+                }
+            }
+            for rdecl in members {
+                globals.remove(&rdecl.name);
+            }
+            Err(ElabError::KernelRejected { error: e, span: members[0].span.clone() })
+        }
+    }
+}
+
 /// Does `expr` mention the global name `name` (as an `RCon`)? Used to detect
 /// whether a view/let definition is self-recursive — the body references its
 /// own name, which the resolver emits as `RCon(name)` on a scope miss. Pattern
 /// positions are not scanned: a def name is a view/function, never a
 /// constructor, so it cannot appear in a pattern.
-fn rexpr_mentions_name(expr: &RExpr, name: &str) -> bool {
+pub(crate) fn rexpr_mentions_name(expr: &RExpr, name: &str) -> bool {
     match expr {
         RExpr::RCon(n, _) => n == name,
         RExpr::RVar(_, _, _) | RExpr::RUniv(_, _) | RExpr::RNumLit(_, _) | RExpr::RStr(_, _) => false,
@@ -2330,6 +2539,11 @@ fn rexpr_mentions_name(expr: &RExpr, name: &str) -> bool {
                 || arms.iter().any(|a| rexpr_mentions_name(&a.body, name))
         }
         RExpr::RProj(e, _, _) => rexpr_mentions_name(e, name),
+        // The domain is a `type`, not an `RExpr` — a mutual-recursion call
+        // graph only cares about VALUE-level (expr) references, so only
+        // the codomain (an `RExpr`) is scanned.
+        RExpr::RPi(_, _, b, _) => rexpr_mentions_name(b, name),
+        RExpr::RArrow(a, b, _) => rexpr_mentions_name(a, name) || rexpr_mentions_name(b, name),
     }
 }
 

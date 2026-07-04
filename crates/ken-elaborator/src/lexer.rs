@@ -63,6 +63,7 @@ pub enum Token {
     // L1 arithmetic operators
     Plus,         // `+`  — type-directed infix addition
     PlusPercent,  // `+%` — explicit wrapping add
+    Minus,        // `-`  — type-directed infix subtraction (VAL2 #11)
     Star,         // `*`  — type-directed infix multiply
     EqEq,         // `==` — structural equality
     // L2 punctuation
@@ -234,10 +235,7 @@ impl<'s> Lexer<'s> {
                     self.advance();
                     return Ok((Token::Arrow, Span::new(start, self.pos)));
                 }
-                return Err(ElabError::ParseError {
-                    msg: "unexpected '-' (did you mean '->'?)".to_string(),
-                    span: Span::new(start, self.pos),
-                });
+                return Ok((Token::Minus, Span::new(start, self.pos)));
             }
             _ => {}
         }
