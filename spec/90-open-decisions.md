@@ -229,6 +229,30 @@ while drafting. Resolved items move to an ADR (`../docs/adr/`).
   elaborator capability (resolution walking the superclass edge, a `55 §6`
   guardrail re-fork) — **not** taken now, re-forked to Steward if/when wanted.
   Purely ergonomic; nothing depends on it.
+- **Deferred follow-on (CAT-3 Fork B, 2026-07-04) — two elaborator (not syntax)
+  walls, design-now/build-later.** `50-stdlib/57`'s view abstraction ships
+  every flavor **concrete**; two general forms need bounded outer-ring
+  (`ken-elaborator`-only, kernel-untouched) extensions, each re-forking to
+  Steward **when built** (AC1): **(a) multi-param `class`** — a parameter
+  telescope on `class` (cousin of CAT-1 `55 §6`'s higher-kinded piece) so a
+  two-parameter dependent record can carry law fields depending on `get`/`set`,
+  unlocking the polymorphic `Lens s a`/`Iso a b`/`Repr a b` family at once;
+  **(b) surface quotient-intro** — a parser path for a quotient-carrier view
+  (`view` out of `A/R`); the kernel already has
+  `Term::Quot`/`QuotClass`/`QuotElim` (`10-kernel/16 §5`) but the parser exposes
+  only refinement `{x:A|φ}`, not quotient-intro. Concrete
+  lens/iso/refinement/indexed/setoid-morphism flavors build now with **no**
+  extension.
+- **Resolved (CAT-3 Fork C, 2026-07-04, operator):** the Layer-1 projection
+  abstraction's **family name is `view`** — operator Pat's veto-window call
+  (`optic` rejected). SURF-1's retirement of the `view` *keyword* **frees the
+  word**, and `view` is the software-standard term for a read projection, so it
+  is the family umbrella (not a collision). Flagship flavor **`lens`** and the
+  six-flavor structure (Architect's Fork B table) are unchanged; structure + law
+  forms pinned (`50-stdlib/57 §4`). **Build-order:** a **capitalized** `View`
+  type is collision-free with the still-lexed lowercase `view` keyword; a
+  lowercase `view` identifier sequences CAT-3-build after SURF-1's
+  keyword-retirement build (Steward tracks it).
 - **Affects.** `30-surface/31 §1a/§1b` (updated), all of `30-surface/`;
   `30-surface/33 §4` (visibility default resolved).
 
