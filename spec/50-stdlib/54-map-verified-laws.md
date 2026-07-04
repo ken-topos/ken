@@ -1,35 +1,35 @@
 # Proof skeletons for the inductive `Map` laws (`map-verified-laws`)
 
-> Status: **DRAFT v2 — Unit 1 landed (law 4 built); Unit 2 pending.** The
+> Status: **DRAFT v3 — CAPSTONE COMPLETE: all five inductive laws landed.** The
 > proof-strategy elaboration for the inductive correctness laws that `52-map.md
-> §7d` deferred. The capstone was **re-scoped into two landing units** along the
-> elaborator fault-line (Steward `evt_40y1s0wpysa53`):
+> §7d` deferred. All five now build as **real, non-stubbed, kernel-checked**
+> `view` proofs in `map.ken` (alongside the two non-inductive laws, already
+> shipped):
 >
-> - **Unit 1 — LANDED (real, kernel-rechecked proofs).** The **convoy idiom**
->   (Gap-B dependent induction, §2) + the **`allKeys`→`allInList` bridge** (L2,
->   §2.2) + the two **non-inductive** laws (`Ordered empty`, `lookup-empty`) +
->   **law 4** (`toList`-ordered) all build as **real, non-stubbed** proof terms
->   in `map.ken`. Law 4's conclusion `toListOrdered` (via the
->   `consSorted`/`isSortedAppend` append lemmas) is **no longer pending** — the
->   enabling kernel conversion fix **landed** as `obs-eq-termination`
->   (`9cf468a`,
->   PR #262 — the `(Eq,Eq)` `conv_struct` congruence arm plus a
->   congruence-first/lazy-δ fast path, §7). No `trusted_base` change was needed
->   in Unit 1's proof terms.
-> - **Unit 2 — not yet buildable.** Laws **1/2/3/5**'s **Gap-A nested-`J`
->   transport composition**. "Wall 1" is a **real** `infer_j` nested-motive
->   scoping bug (Architect `evt_3vd9w6c779sm6`); its lane (a combinator
->   restructuring that dodges nested-`J`, vs. a fresh Language elaborator fix)
->   is pending. This doc gives laws 1/2/3/5's **Gap-B convoy skeleton only** and
->   marks their transport composition **Unit-2-pending** — it does **not**
->   specify the nested-`J` recipe (it does not build; §3).
+> - **The convoy idiom** (Gap-B dependent induction, §2) carries every law's
+>   carrier induction. **Law 4** (`toList`-ordered) + the `allKeys`→`allInList`
+>   bridge (L2) landed first — via the `obs-eq-termination` conversion fix
+>   (`9cf468a`, PR #262, §7). **Laws 1/2/3/5** (preservation,
+>   found-after-insert, locality, agreement) then landed via the
+>   **`trans`/`cong` route-around** for their stuck-comparison transport (§3).
+> - **No elaborator or kernel change was needed for laws 1/2/3/5.** The
+>   originally-feared nested-`J` `infer_j` wall ("Wall 1") and the
+>   `eq_at_inductive` `Tree`-congruence obstruction were **dissolved by the
+>   route-around, not fixed** — goal-generic `trans`/`cong` transport bridges
+>   avoid nesting `J` entirely (§3). The one new prelude admission is `Not : Ω →
+>   Ω := λA. A → Bottom` (§4, for `NoDup`'s per-entry negation) — an ordinary
+>   `declare_def`.
+> - **Permutation is the only remaining `Map` correctness law**, and it stays
+>   **permanently out of scope** — proof-relevant, needing `‖Perm_rel‖`/
+>   count-equality (the C5 prover gap; §6, `52 §7c`). "All five *inductive* laws
+>   landed" is the exact claim — **not** "all Map laws done."
 >
 > Adds **nothing** to `trusted_base()`: every proof reduces through the existing
-> `Term::J`/`Term::Cast` (transport) and `Term::Elim` (dependent match) — no
-> `declare_primitive`, no `declare_postulate`, **no `Axiom`**. A law (or lemma)
-> that turns out not to be honestly buildable **re-defers to Steward** (§7),
-> never postulated. Foundation fills these skeletons in as real proof terms in
-> `packages/collections/map.ken`.
+> `Term::J`/`Term::Cast` (transport) and `Term::Elim` (dependent match); the
+> helper defs (`Or`/`boolDichotomy`/`Not`/`assoc`/`allInList`/L1–L5) are
+> ordinary `declare_def`/`declare_inductive` admissions — no
+> `declare_primitive`, no `declare_postulate`, **no `Axiom`** anywhere
+> (`packages/collections/map.ken`).
 
 ## 1. What this module is
 
@@ -38,18 +38,18 @@
 None` — are **non-inductive** (Branch A) and ship in `map.ken` already
 (`orderedEmpty = tt`, `lookupEmptyIsNone = tt`). The remaining **five inductive
 laws** (Branch B) each **induct over the non-nullary `Tree` carrier** via the
-**convoy idiom** (§2); four of them additionally must **align a stuck `leq k
-k'`** by transport (§3). This doc elaborates the proof strategy so a build model
-does not reinvent it — and, per the two-unit re-scope, states precisely which
-parts build today and which are deferred.
+**convoy idiom** (§2); four of them additionally **align a stuck `leq k k'`** by
+transport (§3). This doc elaborates the proof strategy behind those landed
+proofs — **all five inductive laws are now real terms** in `map.ken`;
+permutation is the sole `Map` correctness law still deferred (§6).
 
 | # | Law (`52` ref) | Statement | Gap | Unit / status |
 |---|---|---|---|---|
-| 1 | preservation (`§5.1`) | `Ordered m → Ordered (insert leq key val m)` | A + B | Unit 2 (transport-blocked) |
-| 2 | found-after-insert (`§5.2`) | `lookup leq key (insert leq key val m) = Some val` | A + B | Unit 2 (transport-blocked) |
-| 3 | locality (`§5.2`) | `distinct key key' → lookup leq key' (insert leq key val m) = lookup leq key' m` | A + B | Unit 2 (transport-blocked) |
+| 1 | preservation (`§5.1`) | `Ordered m → Ordered (insert leq key val m)` | A + B | **LANDED** (`preservesOrdered`) |
+| 2 | found-after-insert (`§5.2`) | `lookup leq key (insert leq key val m) = Some val` | A + B | **LANDED** (`lookupFoundAfterInsert`) |
+| 3 | locality (`§5.2`) | `distinct key key' → lookup leq key' (insert leq key val m) = lookup leq key' m` | A + B | **LANDED** (`lookupLocality`) |
 | 4 | `toList`-ordered (`§5.3`) | `Ordered m → isSorted keyLeq (toList m)` — **comparison-free** | **B only** | Unit 1 — **LANDED** (`toListOrdered` built, kernel-rechecked) |
-| 5 | agreement (`§5.3`) | `Ordered m → Distinct leq m → lookup leq key m = assoc leq key (toList m)` | A + B | Unit 2 (transport-blocked) |
+| 5 | agreement (`§5.3`) | `Ordered m → Distinct leq m → lookup leq key m = assoc leq key (toList m)` | A + B | **LANDED** (`lookupAssocAgree`) |
 
 **Every law's own proof uses `refl`/`trans`/`total` only** — no `antisym →
 Equal` in any of the five statements (`52 §5.2`/`§2.1`). Law 5 (agreement) takes
@@ -62,8 +62,8 @@ Foundation's, *not* part of law 5's statement); *that* lemma, alongside the
 overwrite/uniqueness identity law, is what **inherits ADR 0010's
 canonical-carrier obligation** (`52 §2.1`/`§5.3`). Law 5 itself does not — it
 holds given `Distinct` even where `antisym` is false. (Architect's analysis
-`evt_9q7hkxnrt3fm`; the law-5 proof is Unit-2/unwritten — confirm antisym-free
-at proof time, else it tightens back.) The overwrite/uniqueness identity law
+`evt_9q7hkxnrt3fm`, **confirmed at proof time**: the built `lookupAssocAgree`
+takes only `transLeq`, antisym-free.) The overwrite/uniqueness identity law
 stays the separate, canonicity-gated law under ADR 0010 (`52 §5.3`), out of
 this WP.
 
@@ -215,20 +215,18 @@ Choosing `Refl` where the goal K7-collapses gives a confusing `TypeMismatch`
 (the goal is already `Top`, not `Eq`) — prefer `tt` whenever an operation
 reduced into the equality; reach for `Refl` only for a bare reflexive `Eq`.
 
-## 3. The Gap-A transport primitive — and why laws 1/2/3/5 are Unit-2-blocked
+## 3. The Gap-A transport — the `trans`/`cong` route-around (laws 1/2/3/5)
 
 Laws 1/2/3/5 must additionally **align a stuck `leq k k'`** (both keys are
 variables, so `insert`/`lookup`'s inner `match leq k k'` is irreducibly stuck).
-The **single-comparison** transport primitive for this is **landed**
-(`surface-transport`, `19955d8`; `53-transport.md §3`), and this doc records it
-so the Unit-2 boundary is precise:
+The **single-comparison** transport primitive is landed (`surface-transport`,
+`19955d8`; `53-transport.md §3`):
 
 **Reflect the stuck Boolean, then transport once.** The Gap-B gate needs a
 *variable* scrutinee, so `match (leq k k') { … }` does not narrow; reflect
 through `boolDichotomy` (§4) — a dependent match on a Bool **variable** — to get
 `q : Equal Bool (leq k k') True` (resp. `False`) in each arm of a
-**non-dependent**
-`Or`-match, then fire one `J`:
+**non-dependent** `Or`-match, then fire one `J`:
 
 ```
 J (\x _. G[x]) (baseTrue : G[True]) (sym Bool (leq k k') True q) : G[leq k k']
@@ -237,27 +235,51 @@ J (\x _. G[x]) (baseTrue : G[True]) (sym Bool (leq k k') True q) : G[leq k k']
 where `G[x]` is the goal with the stuck `leq k k'` abstracted to `x`, and
 `G[True]` is the **reduced** branch goal. Because the motive is user-written it
 abstracts exactly the intended occurrences (`53 §2`, the Agda-`subst` posture).
-A **single** such transport builds today.
 
-**Why laws 1/2/3/5 are blocked (Unit 2).** At an interior `Node`, `insert`
-branches on **two sequential** comparisons (`leq key k2`, then — in its `True`
-branch — `leq k2 key`), so discharging the goal requires **composing two**
-transports: the `base` of the outer `J` is itself an inner `J`-application. This
-**nested-`J`** shape hits the **Wall-1 `infer_j` nested-motive scoping bug**
-(Architect `evt_3vd9w6c779sm6`): `infer_j` checks the inner `J` against an
-**unreduced** `base_expected_ty` whose motive closes over the
-outer context variable, producing a `TypeMismatch` (de Bruijn `@5`/`@7`).
-Ascription does **not** dodge it — `RExpr::RAsc` is infer-only and never reaches
-`infer_j`'s internal `base_expected_ty` recomputation (Foundation ground-truth
-`evt_2srmersyfaeer`). Whether a `trans`/`cong` combinator restructuring can
-avoid the nesting entirely, or a fresh Language elaborator fix is required, is
-the pending Unit-2 lane question.
+**The two-comparison composition — via `trans`/`cong`, not nested `J`.** At an
+interior `Node`, `insert` branches on **two sequential** comparisons (`leq key
+k2`, then — in its `True` branch — `leq k2 key`). The *naive* composition nests
+one `J` inside another `J`'s `base`; that hit an `infer_j` nested-motive scoping
+wall ("Wall 1") and did **not** build. **That wall was dissolved, not fixed**
+(no
+elaborator change) by the **`trans`/`cong` route-around** — the same "avoid
+nested/multi-level constructs, route around via helper lemmas" discipline
+`lawful_classes.ken` documents. The as-built mechanism:
 
-**The nested-`J` transport recipe is therefore *deliberately not specified
-here*** — it does not build, and a `54` that documented it would be the
-stale-frame hazard this WP forbids (per the Unit-1 scope: laws 1/2/3/5 get their
-Gap-B convoy skeleton in §5.2, and their Gap-A transport composition is tracked
-as Unit 2).
+- **Goal-generic transport bridges** — `insertCaseTransportOverwrite` /
+  `…IntoL` / `…IntoR` compose the two `Eq` witnesses into **one** combined
+  equation (a "stop-one-step-short" `trans`/`cong`), then fire a **single** `J`
+  — never a `J` inside a `J`'s `base`. They are **goal-generic** (quantified
+  over
+  the goal predicate), so laws 1/2/3 reuse them unchanged, each instantiating at
+  its own goal (preservation's `Ordered`; found-after-insert's `Equal … (Some
+  val)`; locality's `Equal … (lookup …)`).
+- **Comparison-independent predicates need no Gap-A transport at all.** A
+  predicate like `allKeys p` over an *abstract* `p` (and `Ordered`'s subtree
+  conjuncts) is proven **generically** and applied by β — there is no stuck
+  `leq`
+  to transport. Only the per-node comparisons hit the bridges; the bulk of each
+  proof is comparison-free convoy induction (§2).
+- **`deriveFromFalse`** — totality-derived reflection: `total`'s `IsTrue
+  (bool_or (leq a b) (leq b a))` feeds a **non-dependent `Or`-elimination** that
+  supplies the branch equation without a stuck match.
+- Law 3 additionally uses **`boolValueEqFromBiimpl`** (a two-way `Bool`
+  implication forces *value*-equality — `Bool` has exactly two constructors);
+  law
+  5 threads `NoDup`-over-`append` decompositions + `assoc`-side step mirrors
+  (§4, §5.2).
+
+Both the nested-`J` `infer_j` wall **and** the `eq_at_inductive`
+`Tree`-constructor congruence obstruction were **dissolved by this
+route-around**
+— neither needed an elaborator or kernel fix. The **only** new prelude admission
+the capstone required is `Not : Ω → Ω := λA. A → Bottom` (§4), for `NoDup`'s
+per-entry negation — an ordinary `declare_def`, zero `trusted_base` delta.
+(Naming the surface gap it works around: Ken's surface has **no
+expression-position `->`** — only a `view`'s type-annotation position parses the
+`Π`-sugar — so `NoDup`'s per-entry negation predicate cannot be spelled inline
+and needs the `Not` combinator; a first-class expression-level `->` / `Not` is a
+**named Language-lane follow-on**, not a blocker.)
 
 ## 4. Reusable helpers to define (Foundation)
 
@@ -265,8 +287,11 @@ Already **landed** on the held base: `list_append`, `isSorted` (`prelude.rs` —
 `isSorted a leq (Cons x (Cons y r)) = And (Equal Bool (leq x y) True) (isSorted
 a leq (Cons y r))`), `Pair`/`mkPair`/`pairFst`/`pairSnd`, `And`/`andIntro`/
 `andFst`/`andSnd` (`prelude.rs`, `And A B := Sigma(_:A).B`), `absurd`/`Bottom`,
-`Equal`/`Refl`/`tt`, `allKeys`, `allInList`, `toList`, `pairLeq`, and the two
-reflect helpers below.
+`Equal`/`Refl`/`tt`, `allKeys`, `allInList`, `toList`, `pairLeq`, and — added by
+the capstone build — **`Not : Ω → Ω := λA. A → Bottom`** (`prelude.rs`, an
+ordinary `declare_def` over `Π` + the existing `Bottom`, built like `And`/`Or`;
+needed because the surface has no expression-position `->`, §3). The helpers
+below are the remaining landed defs.
 
 - **`Or` / `Inl` / `Inr`** — the two-constructor sum. Registered directly as a
   kernel `declare_inductive` in `prelude.rs` (the surface `data` sugar hardcodes
@@ -297,12 +322,12 @@ reflect helpers below.
   allInList p (list_append xs ys)`. A plain structural induction on `xs`
   (Gap-B-free — no dependent motive; `list_append`'s own recursion drives it).
   Comparison-free.
-- **`assoc`** (Unit 2, law 5) — the ordered-list lookup: `assoc leq key : List
+- **`assoc`** (law 5, landed) — the ordered-list lookup: `assoc leq key : List
   (Pair k v) → Option v`, scanning by the same `leq key (pairFst e) / leq
   (pairFst e) key` coincidence test `lookup` uses. A plain structural `List`
   recursion (Gap-B-free).
-- **`orderEquiv` / `NoDup` / `Distinct`** (Unit 2, law 5's uniqueness
-  precondition) — all `Ω`-valued, all comparison-free structural recursions:
+- **`orderEquiv` / `NoDup` / `Distinct`** (law 5's uniqueness precondition,
+  landed) — all `Ω`-valued, all comparison-free structural recursions:
   - `orderEquiv leq a b := And (IsTrue (leq a b)) (IsTrue (leq b a))` — two keys
     are order-equivalent (each `≤` the other).
   - `NoDup leq (xs : List (Pair k v))` — no two entries carry order-equivalent
@@ -368,15 +393,15 @@ keyLeq (toList m'))`.
   > (the **nested-match-avoidance idiom**), to be canonicalized with the full
   > idiom set in a follow-on pass.
 
-### 5.2 Laws 1/2/3/5 — Gap-B convoy skeleton (Gap-A transport → Unit 2)
+### 5.2 Laws 1/2/3/5 — landed (convoy + `trans`/`cong` route-around)
 
-Each of laws 1/2/3/5 is proved by the **same convoy induction** (§2) over `m`,
-generalizing its hypothesis into the motive and self-recursing for the IH. Their
-`Leaf` bases and subtree-descent structure are Gap-B and follow §2 directly.
-Their **interior-`Node` steps additionally require Gap-A transport** to align
-the stuck `leq key k2` / `leq k2 key` comparisons — the **nested-`J`
-composition** that is **Unit-2-pending and not specified here** (§3). Below is
-each law's Gap-B skeleton and the dictionary laws its Unit-2 step will need.
+All four are **landed** as real `view` proofs in `map.ken`. Each is proved by
+the **same convoy induction** (§2) over `m`, generalizing its hypothesis into
+the motive and self-recursing for the IH; the `Leaf` bases and subtree descent
+are comparison-free (Gap-B, §2). The interior-`Node` steps align the stuck `leq
+key k2` / `leq k2 key` comparisons via the **`trans`/`cong` route-around** (§3)
+— the goal-generic transport bridges, **not** a nested `J`. Below is each law's
+structure and the dictionary laws it uses.
 
 - **Law 1 — preservation** (`Ordered m → Ordered (insert key val m)`). Motive
   `\m'. (Ordered … m' -> Ordered … (insert … m'))`. `Leaf`: `insert Leaf = Node
@@ -384,7 +409,8 @@ each law's Gap-B skeleton and the dictionary laws its Unit-2 step will need.
   `Ordered Leaf ⇝ Top`, base `\h.` the `andIntro` tree of `tt`s (comparison-
   free). `Node`: subtrees by the IH (self-recursive calls); rebuilding the two
   `allKeys` bounds against the new label needs **L1** + **L3** and the reflected
-  `leq` equations — **Gap-A transport, Unit 2.** Dictionary laws: `trans`,
+  `leq` equations — aligned by the goal-generic transport bridges (§3).
+  Dictionary laws: `trans`,
   `total`; **no `antisym`.**
 - **Law 2 — found-after-insert** (`lookup key (insert key val m) = Some val`).
   No `Ordered` hypothesis. Motive `\m'. Equal (Option v) (lookup … key (insert …
@@ -392,17 +418,17 @@ each law's Gap-B skeleton and the dictionary laws its Unit-2 step will need.
   `lookup key` there compares `leq key key` twice — the equations are **free**
   (`refl key`), but reducing both stuck comparisons is still the two-transport
   composition (`insert`/`lookup` each branch on the pair `leq key k2`, `leq k2
-  key`), which is the **Gap-A transport step — Unit 2** (whether a same-term
-  single-`J` form dodges the nesting for the free-equation sub-cases is part of
-  the pending combinator probe, §3). `Node`: `insert`/`lookup` branch on the
+  key`), reduced by the route-around's combined-equation transport (§3).
+  `Node`: `insert`/`lookup` branch on the
   identical scrutinee; subtrees by the IH. Dictionary laws: `refl` only.
 - **Law 3 — locality** (`distinct key key' → lookup key' (insert key val m) =
   lookup key' m`). `distinct key key' := (And (IsTrue (leq key key')) (IsTrue
   (leq key' key))) -> Bottom`; `absurd` eliminates the `Bottom`. Motive folds in
   both hypotheses. `Leaf`/`Node`: reflect the relevant comparisons; a spurious
   `True`/`True` contradicts `distinct` (discharged by `absurd`); the aligning
-  transport is the **nested-`J` composition — Unit 2.** Dictionary laws:
-  `trans`, `total`; **no `antisym`.**
+  transport uses the route-around bridges + `boolValueEqFromBiimpl` (a two-way
+  `Bool` implication forces value-equality, §3). Dictionary laws: `trans`,
+  `total`; **no `antisym`.**
 - **Law 5 — agreement** (`Ordered m → Distinct leq m → lookup key m = assoc key
   (toList m)`). **Requires the key-uniqueness precondition `Distinct leq m`**
   (§4): `lookup`'s BST descent and `assoc`'s in-order scan of `toList` are two
@@ -423,9 +449,11 @@ each law's Gap-B skeleton and the dictionary laws its Unit-2 step will need.
   **`assoc`-over-`append`** lemma (**L5**); `Distinct` supplies the *unique*
   order-equivalent entry both traversals select, so the matched-node value
   agreement is **`refl`** — both return the value at that entry, no `Equal key
-  k2` step needed. Reflecting/transporting `lookup`'s stuck match is the
-  **nested-`J` composition — Unit 2.** Dictionary laws: **`trans`, `total`**
-  (antisym-free, matching laws 1–4). `antisym` enters only the separate
+  k2` step needed. `lookup`'s stuck match is aligned by the `trans`/`cong`
+  route-around bridges (§3) — plus `NoDup`-over-`append` decompositions and
+  `assoc`-side step mirrors for the list scan. Dictionary laws: **`trans`,
+  `total`** (antisym-free, matching laws 1–4). `antisym` enters only the
+  separate
   **`Distinct`-discharge lemma** (`insert`/`fromList`-reachable ⟹ `Distinct`,
   Foundation's — not part of this statement), so **law 5's statement is
   carrier-general**: it holds given `Distinct` even where `antisym` is false
@@ -433,23 +461,22 @@ each law's Gap-B skeleton and the dictionary laws its Unit-2 step will need.
   `antisym`, but `Distinct` forbids two order-equivalent entries, so lookup and
   assoc still agree). Only the discharge lemma inherits ADR 0010's
   canonical-carrier obligation (`52 §2.1`). (Architect's analysis
-  `evt_9q7hkxnrt3fm`; proof Unit-2/unwritten — confirm at proof time.)
+  `evt_9q7hkxnrt3fm`, **confirmed at proof time**: the built `lookupAssocAgree`
+  takes only `transLeq` — antisym-free, agreement is `refl` — Architect
+  `evt_5rgg2g2wtg75b`, foundation-qa.)
 
 ### 5.3 The supporting lemmas
 
-Each is a small structural induction; unit tags follow the same Gap-A/Gap-B
-split. Foundation proves them alongside the laws.
+Each is a small structural induction; all landed alongside the laws.
 
 - **L1 `allKeys`-preserved-by-insert** (law 1) — `allKeys p m → p key' → allKeys
   p (insert … key' … m)`. Induction on `m`; reflects `insert`'s stuck `leq`
-  (Gap A) — **Unit 2.**
+  (Gap A, via the route-around bridges §3). **Landed.**
 - **L2 `allKeys → allInList (toList)`** (laws 4, 5) — worked in §2.2
-  (`allKeysToAllInList`). Comparison-free (Gap-B only). **Unit 1 — builds
-  today.**
+  (`allKeysToAllInList`). Comparison-free (Gap-B only). **Landed.**
 - **L3 `allKeys`-under-a-transitive-step** (law 1 overwrite) — move an `allKeys
   (≤a)` bound to `allKeys (≤b)` given `IsTrue (leq a b)`, mapping `trans` over
-  the subtree. Comparison-free (Gap-B); buildable in isolation, but only
-  *consumed* by law 1 (Unit 2).
+  the subtree. Comparison-free (Gap-B), consumed by law 1. **Landed.**
 - **L4 `isSorted`-over-`++`** (law 4) — the `isSortedAppend`/`consSorted` pair
   assembling law 4's `Node` step: `isSorted xs → isSorted (Cons m ys) →
   allInList (keyLeq · m) xs → isSorted (list_append xs (Cons m ys))`. Induction
@@ -461,7 +488,8 @@ split. Foundation proves them alongside the laws.
 - **L5 `assoc`-over-`append`** (law 5) — relate `assoc key (append xs ys)` to
   `assoc key xs` / `assoc key ys` under the sortedness bounds, threading law 5's
   `Distinct`/`NoDup` so the first-match scan hits the *unique* order-equivalent
-  entry. Induction on `xs`; reflects `assoc`'s stuck `leq` (Gap A) — **Unit 2.**
+  entry. Induction on `xs`; reflects `assoc`'s stuck `leq` (Gap A, via the
+  route-around §3). **Landed.**
 
 ## 6. Ω-discipline (the load-bearing guardrail)
 
@@ -483,18 +511,18 @@ split. Foundation proves them alongside the laws.
 - **All goals live in `Ω`.** `Ordered`/`allKeys`/`allInList`/`isSorted`/`Equal`/
   `And` — and law 5's `orderEquiv`/`NoDup`/`Distinct` (built from
   `IsTrue`/`And`/`allInList`/`->Bottom`) — are `Ω`-valued (`52 §5.1`, `16 §1`);
-  the `J` motives
-  that transport them
-  (Unit 2) are `Ω`-valued, which the landed `infer_j` admits (its codomain sort
+  the `J` motives that transport them (laws 1/2/3/5, §3) are `Ω`-valued, which
+  the landed `infer_j` admits (its codomain sort
   is unconstrained — `../30-surface/34 §3.4`). No sort-polymorphic `subst` is
   needed; the `Ω` motive of `J` suffices (`53 §3`).
 
 ## 7. Buildability honesty + trust surface
 
-**Unit 1 is landed** as real, kernel-rechecked proofs in `map.ken` — the convoy
-idiom (§2), the L2 bridge (§2.2), the non-inductive laws
-(`orderedEmpty`/`lookupEmptyIsNone`), and law 4's `toListOrdered`. Beyond that,
-the honest ceiling holds:
+**All five inductive laws are landed** as real, kernel-rechecked `view` proofs
+in `map.ken`, alongside the non-inductive laws
+(`orderedEmpty`/`lookupEmptyIsNone`) — via the convoy idiom (§2) + the
+`trans`/`cong` route-around (§3), zero elaborator/kernel change beyond the `Not`
+prelude def. The honest boundary:
 
 - **Law 4's conclusion `toListOrdered` (via `consSorted`/`isSortedAppend`, L4)
   is LANDED** — real, non-stubbed, kernel-rechecked. The kernel conversion
@@ -505,10 +533,12 @@ the honest ceiling holds:
   `obs-eq-termination` (`9cf468a`, PR #262 — the congruence arm plus a
   congruence-first/lazy-δ fast path). Zero `trusted_base` delta (kernel
   completeness + termination only).
-- **Laws 1/2/3/5 are Unit-2, transport-blocked** — their Gap-A nested-`J`
-  composition hits the real `infer_j` scoping bug (§3). Their Gap-B convoy
-  skeleton (§5.2) is buildable structure; the transport step is not, and the
-  nested-`J` recipe is deliberately **not** specified here.
+- **Laws 1/2/3/5 are LANDED** — their Gap-A stuck-comparison alignment uses the
+  `trans`/`cong` route-around (§3, the goal-generic bridges), which
+  **dissolved**
+  the nested-`J` `infer_j` wall and the `eq_at_inductive` `Tree`-congruence
+  obstruction **without** any elaborator or kernel change. Real `view` proofs in
+  `map.ken`.
 - **A transport goal that will not compute without a conversion change** (a
   motive that will not reduce, a stuck comparison no reflected equation
   fires) is

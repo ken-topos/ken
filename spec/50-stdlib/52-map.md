@@ -18,8 +18,9 @@
 > 1** — the convoy dependent-induction idiom + **law 4** (`toList`-ordered) +
 > the non-inductive laws — is **landed** as real proofs in `map.ken` (law 4's
 > conclusion built once the enabling kernel conversion fix landed,
-> `obs-eq-termination` `9cf468a`); **Unit 2** — laws 1/2/3/5's stuck-comparison
-> **transport composition** — is still **pending** (`54 §3`, §7). **No new
+> `obs-eq-termination` `9cf468a`); **laws 1/2/3/5** then landed via the
+> **`trans`/`cong` route-around** for their stuck-comparison transport (`54 §3`,
+> §7). **No new
 > kernel feature:** the
 > carrier is a `data` type (`../30-surface/34 §1`), the operations are `view`
 > defs, the laws are `Ω` propositions (`../10-kernel/16 §1`); if the build adds
@@ -252,9 +253,9 @@ terms in **two staged units**: the **convoy idiom** (Gap-B dependent induction)
 + **law 4** (`toList`-ordered) + the non-inductive laws are **landed** as real
 proofs in `map.ken` (Unit 1 — law 4's conclusion built once the enabling kernel
 conversion fix landed, `obs-eq-termination` `9cf468a`); laws 1/2/3/5's
-**stuck-comparison transport composition** (Gap A) is **Unit 2, pending** (`54
-§3`, §7). Honesty about the boundary: `52` does not claim laws 1/2/3/5 build
-today.
+**stuck-comparison transport** (Gap A) then landed via the **`trans`/`cong`
+route-around** (`54 §3`, §7). Honesty about the boundary: **permutation** is the
+one `Map` correctness law that stays deferred (§7c).
 
 - **Gap B — dependent-motive recovery over non-nullary families.** A proof that
   **inducts** over `Tree`/`List` and must **narrow a hypothesis about the
@@ -281,26 +282,26 @@ induct clear both walls, discharging by the landed idiom (`51 §6`, `Ord Bool` /
 `lookup k empty = None` (`lookup k Leaf = None`). Neither case-splits a
 `Node`/`Cons`, so neither needs hypothesis-narrowing or transport.
 
-**Branch B — the five inductive laws** (§7d `map-verified-laws`). **Law 4
-(`toList`-ordered) has since landed** as a real proof (Unit 1, `54`); the other
-four stay **deferred**, each tagged with the wall(s) it hits:
+**Branch B — the five inductive laws** (§7d `map-verified-laws`). **All five
+have since landed** as real proofs (`54`); each is tagged with the wall(s) it
+cleared:
 
-- **Gap B only — now LANDED (Unit 1):** the **`toList` ordered law** + its two
-  list lemmas (§5.3) — inducts over `Tree`/`List` (dependent-motive recovery)
-  but is **comparison-free** (`toList` never calls `leq`), so it cleared Gap A;
-  built as `toListOrdered` (`map.ken`).
-- **Gap A + Gap B:** `Ordered`-preservation (§5.1), found-after-insert and
-  locality (§5.2 laws 2–3), and the `toList`↔`lookup` agreement (§5.3) — each
-  both inducts over the carrier **and** must align a stuck `leq k k'`.
+- **Gap B only — LANDED:** the **`toList` ordered law** + its two list lemmas
+  (§5.3) — inducts over `Tree`/`List` (dependent-motive recovery) but is
+  **comparison-free** (`toList` never calls `leq`), so it cleared Gap A; built
+  as `toListOrdered` (`map.ken`).
+- **Gap A + Gap B — LANDED:** `Ordered`-preservation (§5.1), found-after-insert
+  and locality (§5.2 laws 2–3), and the `toList`↔`lookup` agreement (§5.3) —
+  each both inducts over the carrier **and** aligns a stuck `leq k k'`, via the
+  convoy idiom + the `trans`/`cong` route-around (`54 §3`).
 
 **Buildability, not soundness.** All five laws are **true** and spec-consistent
-(they use the dependent-match `34` already specifies). Law 4 + the non-inductive
-laws are now **built** (Unit 1); the other four's proofs exist mathematically
-but the elaborator does not yet *construct* them. **No `Axiom`
-stubs** — deferred proofs are simply **not built** (a named follow-on, §7d),
-never postulated; "proved, not tested" holds. And **no shipped code leans on a
-deferred law** — the operations are plain functions, not `Ordered`-indexed /
-proof-carrying types (the AC3 guardrail, §9).
+(they use the dependent-match `34` already specifies), and **all five are now
+built** as real proof terms (`54`) — permutation is the one `Map` law that stays
+deferred (§7c). **No `Axiom` stubs** — no proof was ever postulated; "proved,
+not tested" holds. And **no shipped code leans on a deferred law** — the
+operations are plain functions, not `Ordered`-indexed / proof-carrying types
+(the AC3 guardrail, §9).
 
 ### 5.1 The ordering invariant `Ordered` (naturally `Ω`)
 
@@ -322,10 +323,11 @@ circular). It models `37 §6`'s `isSorted` exactly, lifted from lists to trees.
 
 **Preservation.** `Ordered empty` is immediate (`Ordered Leaf = ⊤`, closed by
 `tt` — **Branch A, built**; no induction). `Ordered m ⇒ Ordered (insert k v m)`
-is **Branch B, deferred** (`map-verified-laws`, §7d — **Gap A + Gap B**): it
-inducts over `m : Tree` narrowing the `Ordered` hypothesis (Gap B) **and** must
-align the stuck `leq k k'` at each `Node` to thread key bounds (Gap A). It is
-what will make `lookup` provably correct once both capabilities land.
+is **Branch B, LANDED** (`map-verified-laws`, §7d — Gap A via the `trans`/`cong`
+route-around + Gap B): it inducts over `m : Tree` narrowing the `Ordered`
+hypothesis (Gap B) **and** aligns the stuck `leq k k'` at each `Node` to thread
+key bounds (Gap A). It makes `lookup` provably correct — both capabilities
+landed (`preservesOrdered`).
 
 ### 5.2 The core `lookup` laws (`refl`/`total`, no `Equal` promotion)
 
@@ -334,17 +336,20 @@ what will make `lookup` provably correct once both capabilities land.
    `m`; `lookup` retraces `insert`'s path under the *same* key, and at the node
    where `insert` placed/overwrote `k`, `leq k k` holds by **`refl`** so the
    found branch returns `v` (no `antisym → Equal` — the value is `v` whichever
-   key label the node carries). **Branch B, deferred (§7d — Gap A + Gap B):** it
-   inducts over `m` (Gap B) and must align the stuck `leq k k'` at each interior
-   `Node` to prove the `insert` and `lookup` paths coincide (Gap A).
+   key label the node carries). **Branch B, LANDED (§7d):** inducts over `m`
+   (Gap
+   B) and aligns the stuck `leq k k'` at each interior `Node` via the
+   route-around to prove the `insert` and `lookup` paths coincide
+   (`lookupFoundAfterInsert`).
 3. **locality** — `distinct k k' ⇒ lookup k' (insert k v m) = lookup k' m`,
    where `distinct k k' := ¬ (IsTrue (leq k k') ∧ IsTrue (leq k' k))`
    (order-distinct); inserting `k` does not perturb an order-distinct `k'`'s
    lookup, by induction with `Ordered m` + `trans`/`total` (order laws, **not**
-   `Equal`). **Branch B, deferred (§7d — Gap A + Gap B):** carrier induction +
-   stuck-`leq` alignment.
+   `Equal`). **Branch B, LANDED (§7d):** carrier induction + stuck-`leq`
+   alignment
+   via the route-around (`lookupLocality`).
 
-### 5.3 `toList` ordered law (landed) + agreement (deferred)
+### 5.3 `toList` ordered law + agreement (both landed)
 
 - **Ordered law (load-bearing) — Branch B, LANDED (`map-verified-laws` Unit 1,
   `54`; was §7d-deferred — Gap B only).**
@@ -360,7 +365,7 @@ what will make `lookup` provably correct once both capabilities land.
   (red-until-built) **in Map-build**, and is now honest **by proof** —
   `map-verified-laws` Unit 1 built it (`toListOrdered`; §8). Still **without
   touching permutation** (§7c).
-- **Agreement — Branch B, deferred (§7d — Gap A + Gap B).** `Ordered m →
+- **Agreement — Branch B, LANDED (§7d).** `Ordered m →
   Distinct leq m → lookup k m = assoc k (toList m)` — a key's map lookup agrees
   with a linear scan of its ordered entry list (`assoc` the landed list-lookup
   shape). **The key-uniqueness precondition `Distinct leq m` is required** (no
@@ -390,9 +395,8 @@ discharge lemma by design.
 
 ### 5.4 The proofs are parametric in the dictionary
 
-The map's proofs — the two Branch-A laws and law 4 built now, the other four
-Branch-B laws once their Gap-A capability lands (§5, §7d) — take `d : Ord k`
-and use
+The map's proofs — the two Branch-A laws and all five Branch-B inductive laws,
+all built (§5, §7d) — take `d : Ord k` and use
 `d.antisym`/`d.trans`/`d.total`/`d.refl` as **hypotheses**. They are therefore
 **real proof terms independent of whether a given `Ord k` instance's own laws
 are `Axiom` (Int/Char) or real (Bool)** — the proof does not care *how* the
@@ -473,8 +477,10 @@ gap — AC3):
   `282856c`) — each a build-completeness fix against already-specified behavior,
   **zero `trusted_base` delta**; the five proofs' **per-law strategy is
   elaborated in `54-map-verified-laws.md`**, and Foundation builds the terms on
-  top. **Not `Axiom`-stubbed** — named, never postulated (§5); **law 4 + the
-  non-inductive laws have since landed** (Unit 1), the other four still
+  top. **Not `Axiom`-stubbed** — named, never postulated (§5); **all five
+  inductive
+  laws have since landed** (laws 1/2/3/5 via the `trans`/`cong` route-around,
+  law 4 via `obs-eq-termination`). Permutation is the only `Map` law still
   deferred.
 
 ## 8. Conformance pointer
@@ -490,10 +496,9 @@ fail **for the right reason** (§5.4) — applied to the **two shipped Branch-A
 proofs** (`Ordered empty`, `lookup k empty = None`). **Ordered iteration is
 honest by the conformance test from Map-build** (the `toList`-ordered law was
 red-until-built, Gap B — §5.3), and is now honest **by proof** —
-`map-verified-laws` Unit 1 built it (`54-map-verified-laws.md`); the **four
-still-deferred Branch-B** proofs (§7d, laws 1/2/3/5) are AC3's acceptance
-target,
-named-not-stubbed until their proof terms land.
+`map-verified-laws` built it (`54-map-verified-laws.md`); **all five Branch-B**
+proofs (§7d, laws 1/2/3/4/5) are now landed — AC3's discriminating target is
+met.
 
 ## 9. Acceptance
 
@@ -512,11 +517,11 @@ named-not-stubbed until their proof terms land.
   **real proof terms** (no induction, so both capability walls are cleared); a
   discriminating test **fails against a stub/`Axiom` map-proof, for the right
   reason** (§5.4). The **five Branch-B** inductive laws (§7d
-  `map-verified-laws`) are a **named follow-on, never `Axiom`-stubbed** — **law
-  4 has now landed** (Unit 1); the other four remain **gated on their capability
-  WPs** — and the guardrail is a **hard build condition:** no shipped code may
-  lean on a still-deferred law (operations are plain functions, not
-  `Ordered`-indexed / proof-carrying types). Named follow-on, not a silent gap.
+  `map-verified-laws`) are now **all landed** as real proof terms, **never
+  `Axiom`-stubbed**; permutation stays the one deferred `Map` law. The guardrail
+  held throughout — no shipped code ever leaned on a deferred law (operations
+  are plain functions, not `Ordered`-indexed / proof-carrying types). Named
+  follow-on, not a silent gap.
 - **AC4 — no regression.** `cargo test --workspace` green; lawful `Ord` and the
   rest of `packages/` behave identically pre/post.
 - **AC5 — build-lane retirement is real (hard Foundation build AC).** The
