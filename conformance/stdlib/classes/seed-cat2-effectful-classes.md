@@ -8,7 +8,10 @@ the CAT-1 mould (a class is a record, each law an `Ω` value-equation **proved
 not postulated** over an inductive carrier, zero `trusted_base()` delta,
 kernel-untouched). This seed pins the **discriminating conformance** for D1–D3,
 authored against the Architect's five fork rulings (`evt_p39qvcmh4gy2`) and
-reconciled against spec-author's landed `55 §7`/D1/D2/D3 body at the merge gate.
+reconciled against spec-author's landed **`56-effectful-classes.md`** (D1/D2/D3)
+body at `eb2d835` — the CAT-2 contract is a new chapter `56`, not `55 §7` (which
+carries only the *template-resolution record*: value classes restate, the deep
+constructor chain wires).
 
 The five rulings this seed encodes (Architect, `evt_p39qvcmh4gy2`):
 
@@ -111,31 +114,43 @@ lands with the SURF-1 Language build) — the exact CAT-1-Functor posture. The
 cases are build-forcing (not hand-fed): a green result requires the real
 elaborator + instances, not a stubbed verdict.
 
-**Reconcile-at-the-landed-body.** This seed is authored **in parallel with**
-spec-author's `55 §7`/D1/D2/D3 transcription of the rulings. The exact field
-spellings, the wired-field names, and the law statements are **reconciled
-against the landed `55` body** at the merge gate — a ruling-thread reading is
-not ground until the section lands
-([[reconcile-binds-a-co-reviewers-plausible-reading-too]]). The
-**proof-structure claims** (left-id definitional on `Ret`/`Some`, the per-law
-`tt`-vs-`Refl` map, cartesian-forced-by-coherence, `proc`-via-RowVar) are
-re-derived from the landed `bind`/`list_append`/`classify_telescope` and hold
-**regardless** of package naming.
+**Reconcile-at-the-landed-body.** This seed was authored **in parallel with**
+spec-author's `56` (D1/D2/D3) transcription of the rulings, then **reconciled
+against the landed `56` body** at `eb2d835` — the law-field names (`ap_id`/
+`ap_hom`/`ap_ich`/`ap_cmp`/`map_coh` §3.2, `bind_lid`/`bind_rid`/`bind_asc`
+§4.2), the wired-field names (`functor`/`applicative`/`foldable`), and the §5.3
+coherence set are the landed spellings, not the ruling-thread reading (which is
+not ground until the section lands,
+[[reconcile-binds-a-co-reviewers-plausible-reading-too]]). Two landed additions
+Architect gated in are folded here: **`map_coh`** (the applicative-functor
+coherence that keeps the wired `functor` non-vacuous, `56 §3.2`) and the
+**naturality-must-be-PROVED** guard (`56 §5.3`; Ken has no parametricity axiom,
+so an `Axiom` naturality field is a zero-delta violation). The **proof-structure
+claims** (left-id definitional on `Ret`/`Some`, the per-law `tt`-vs-`Refl` map,
+cartesian-forced-by-coherence, `proc`-via-RowVar) are re-derived from the landed
+`bind`/`list_append`/`classify_telescope` and hold **regardless** of package
+naming.
 
 ---
 
 ## AC7 — Fork A: the superclass chain WIRES, and the wired sub-dict is reused
 
-`55 §7` pt 5's deferred template hole is resolved to **WIRE**: each class
-carries its superclass as an explicit dictionary **field**, not a restatement of
-the superclass ops+laws. The load-bearing consequence — and the discriminator —
-is **proof reuse**: a wired `applicative` field supplies the already-built
-`Applicative` proofs, so a deeper instance re-proves **only** its own new laws.
+`55 §7` pt 5's deferred template hole is resolved to **WIRE** and the wired
+chain lands in `56 §2` (`Applicative` carries `functor`, `Monad` carries
+`applicative`, `Traversable` carries `functor`+`foldable`): each class carries
+its superclass as an explicit dictionary **field**, not a restatement of the
+superclass ops+laws. Two load-bearing consequences are the discriminators:
+**proof reuse** — a wired `applicative` field supplies the already-built
+`Applicative` proofs, so a deeper instance re-proves **only** its own new laws —
+and **`map_coh`** (`56 §3.2`) — the coherence that keeps the wired `functor`
+field from being vacuous (`map g x = ap (pure g) x`).
 
 ### stdlib/classes/monad-wires-applicative-subdict-reused (soundness)
-- spec: Fork A ruling (`evt_p39qvcmh4gy2`), `55 §7` pt 5 (WIRE), `55 §5.1`/`§6`
-  (record fields elaborate in the param context; `infer_proj` nested
-  projection), `33 §5.3` (instance = record value), `13 §2` (Σ-Intro re-check)
+- spec: `56 §2` (WIRE + proof-reuse mechanism) + `56 §4.4` (cartesian coherence
+  `ap = ap-from-bind`), `55 §7` pt 5 (the template-resolution record), `55 §6`
+  (record fields elaborate in the param context; `infer_proj` nested projection;
+  `compute_ordered_field_values` checks each field value), `33 §5.3` (instance =
+  record value), `13 §2` (Σ-Intro re-check)
 - given: two `Monad List`-shaped instances, **identical** in `bind` and the
   three monad-law proofs, differing **only** in the wired `applicative` field:
   (a) the **already-built cartesian `Applicative List`** dict (Fork D), whose
@@ -170,8 +185,9 @@ is **proof reuse**: a wired `applicative` field supplies the already-built
   keyed solely on the wired sub-dict.
 
 ### stdlib/classes/superclass-chain-wired-consistently (property)
-- spec: Fork A ruling (`evt_p39qvcmh4gy2`), `55 §7` pt 5 (WIRE, applied up the
-  whole chain — AC7), `33 §5.4` (superclass field vs `where`-desugaring)
+- spec: `56 §2` (the wired chain, applied consistently) + `56 §7` AC7, `55 §7`
+  pt 5 + `55 §2.2` (the swept template-resolution record: value classes restate,
+  the deep chain wires), `33 §5.4` (superclass field vs `where`-desugaring)
 - given: the three class records as authored (field types elided; each
   superclass field is typed by its class):
 
@@ -191,8 +207,8 @@ is **proof reuse**: a wired `applicative` field supplies the already-built
 - why: (property) AC7 — the template must be resolved **once** and applied
   consistently ([[correcting-scope-must-sweep-whole-doc]] dual: pin the choice
   at every link, not just where first forced). Reconciled against the landed
-  `55 §7` pt 5 at the merge gate — the field **spellings**
-  (`functor`/`applicative`/ `foldable`) are spec-author's to finalize; the
+  `56 §2` — the field spellings (`functor`/`applicative`/`foldable`) are the
+  landed ones, and the whole-doc sweep hit **both** `55 §2.2` and `§7` pt 5; the
   **wire-consistently** invariant is normative. **Ergonomics flag (bounded,
   non-blocking):** explicit wiring makes use sites verbose (`d.functor.map`, not
   `map`); the implicit-coercion sugar Architect deferred (auto-`map` in an
@@ -200,6 +216,40 @@ is **proof reuse**: a wired `applicative` field supplies the already-built
   walking the superclass edge) = an `OQ-syntax`/`§6`-guardrail re-fork, **not**
   in CAT-2. A case asserting `map` resolves implicitly in an `Applicative` body
   is **red** (correctly — that sugar is not shipped).
+
+### stdlib/classes/applicative-map-coheres-with-wired-functor (soundness)
+- spec: `56 §3.2`
+  (`map_coh : Equal (f b) (functor.map a b g x) (ap a b (pure (a → b) g) x)`),
+  `56 §2` (wiring must be non-vacuous), `51 §5` (laws PROVED)
+- given: two `Applicative List`-shaped instances **identical** in `pure`/`ap` +
+  the four applicative laws, differing **only** in the wired `functor` field's
+  `map` and the `map_coh` proof it must satisfy: (a) the canonical `functor`
+  whose `map g x` maps `g` over the structure, with `map_coh` a real proof; (b)
+  a **non-cohering** wired `functor` whose `map' g x = x` (drops `g` —
+  well-typed at `(a → b) → f a → f b`), whose `map_coh` is then false
+- expect: **verdict flips on the coherence of `functor.map` with `ap ∘ pure`.**
+  (a) **accepts** — `map_coh` closes by induction (`functor.map g x` and
+  `ap (pure g) x` reduce to the same structure); (b) **rejected — conversion
+  failure at the `map_coh` field**: at `List Bool`, `g = not`,
+  `x = Cons True Nil`, `map' not (Cons True Nil) = Cons True Nil` while
+  `ap (pure not) (Cons True Nil) = Cons False Nil` (cartesian `ap`, `§3.3`), a
+  false `Equal (List Bool) (Cons True Nil) (Cons False Nil)`. Assert the
+  **specific observable**: (a) `map_coh` re-checks; (b) elaboration fails **at
+  the `map_coh` field** with a `Cons True`-vs-`Cons False` constructor-argument
+  clash — **not** `is_err()`, not a missing-field error
+  ([[assert-specific-error-variant-not-is-err]])
+- why: (soundness) AC7 — **`map_coh` is what makes the wired `functor` field
+  non-vacuous** (Architect: without it the wired `functor` is unconstrained =
+  vacuous wiring; it is the standard coherence that must accompany wiring so
+  `map` is not a second, divergent operation). It **completes Fork A**: wiring
+  `Functor` into `Applicative` is sound only if `map` agrees with `ap ∘ pure` —
+  the exact **one-denotation-no-second-op** discipline as the Monad ⇔ ITree
+  bridge (no second `bind`). **Two-arm net**: a masked `map_coh = Axiom` on a
+  non-cohering `map` fails the delta gate and inhabits `Bottom`
+  (`Axiom : Equal (List Bool) (Cons True Nil) (Cons False Nil)` is a false
+  postulate). This is a spec-author addition Architect gated in (`§3.2`),
+  reconciled here — my original Fork A slice omitted it. **Verdict-flip**, keyed
+  on `functor.map`'s coherence with `ap ∘ pure`.
 
 ---
 
@@ -210,14 +260,15 @@ an **attested correspondence**, not a surface instance. The load-bearing pin:
 **one denotation, no second `bind`**.
 
 ### stdlib/classes/monad-left-id-definitional-bind-primary (soundness)
-- spec: Fork B ruling (`evt_p39qvcmh4gy2`, `bind`-primary), `36 §2.2` (landed
-  grafting `bind`, `bind (Ret a) f = f a`), `55 §5.2` (pointwise laws),
-  `55 §3.2` (`tt`-vs-`Refl`), `51 §5` (laws PROVED)
-- given: the `Monad` left-identity law `bind (pure a) k = k a` on two carriers
-  with `bind`-primary + `pure := Ret`/`Some`, and a **bogus** `bind` that does
-  not graft onto the leaf (e.g. `bad_bind m k = m` — well-typed, drops `k`): (a)
-  `Option` — `bind (Some a) k` ι-reduces to `k a`; (b) `ITree` —
-  `bind (Ret a) k` ι-reduces to `k a`
+- spec: `56 §4.1` (`bind`-primary signature) + `56 §4.2` (`bind_lid` law) +
+  `56 §4.3`/`§4.4` (left-id definitional on `Ret`/`Some`), `36 §2.2` (landed
+  grafting `bind`, `bind (Ret a) f = f a`), `55 §5.2` (inherited pointwise
+  form), `55 §3.2` (`tt`-vs-`Refl`), `51 §5` (laws PROVED)
+- given: the `Monad` left-identity law `bind_lid` (`bind (pure a) k = k a`) on
+  two carriers with `bind`-primary + `pure := Ret`/`Some`, and a **bogus**
+  `bind` that does not graft onto the leaf (e.g. `bad_bind m k = m` —
+  well-typed, drops `k`): (a) `Option` — `bind (Some a) k` ι-reduces to `k a`;
+  (b) `ITree` — `bind (Ret a) k` ι-reduces to `k a`
 - expect: **left-id closes by the definitional ι with the honest `bind`, and
   flips under the bogus one.** honest arm: goal
   `Equal (f b) (bind (pure a) k) (k a)` reduces to `Equal (f b) (k a) (k a)` —
@@ -240,7 +291,9 @@ an **attested correspondence**, not a surface instance. The load-bearing pin:
   a false postulate, [[deceq-on-noncanonical-carrier-inhabits-bottom]]).
 
 ### stdlib/classes/monad-law-endpoints-tt-vs-refl (soundness)
-- spec: `55 §3.2` (the `tt`-vs-`Refl` discrimination), Fork B ruling
+- spec: `55 §3.2` (the `tt`-vs-`Refl` discrimination), `56 §4.4` (the landed
+  per-carrier endpoint map — List `bind_lid` NOT definitional; Option `bind_lid`
+  neutral → `Refl`, `bind_rid`/`bind_asc` bases → `tt`), `56 §4.1`
   (`bind`-primary fixes the reductions), `14 §3` (`elim_List`/`elim_Option`),
   `51 §5`
 - given: the three monad laws on `List`/`Option`, each closed at its base/branch
@@ -274,9 +327,9 @@ an **attested correspondence**, not a surface instance. The load-bearing pin:
   fails, because `append (k a) Nil` is stuck on the neutral `k a`.
 
 ### stdlib/classes/itree-bridge-attested-no-second-bind (soundness)
-- spec: Fork E ruling (`evt_p39qvcmh4gy2`, attested correspondence), `36 §2.2`
-  (landed grafting `bind`), `55 §7` (template), AC5 (`§2` pin 6 — one
-  denotation), effect-composition `ed34129d`
+- spec: `56 §4.3` (attested correspondence — `pure := Ret`, `bind :=` the landed
+  bind, no second `bind`) + `56 §7` AC5, `36 §2.2` (landed grafting `bind`),
+  effect-composition `ed34129d`
 - given: the Monad⇔ITree reconciliation as authored — `pure := Ret`, `bind :=`
   the landed `Term::Elim` grafting bind (`effects/state.rs`), the three laws
   attested (left-id definitional, right-id/assoc by ITree induction) —
@@ -307,8 +360,9 @@ an **attested correspondence**, not a surface instance. The load-bearing pin:
   concrete input.
 
 ### stdlib/classes/itree-monad-general-instance-gated (property)
-- spec: Fork E ruling (`evt_p39qvcmh4gy2`), `55 §6.1` (the parametric-instance-
-  head gap, **still open** with Steward), `33 §5.3` (instance head elaboration)
+- spec: `56 §4.3` (the general instance is a generality upgrade, not the CAT-2
+  deliverable), `55 §6.1` (the parametric-instance-head gap, **still open** with
+  Steward), `33 §5.3` (instance head elaboration)
 - given: two forms of the ITree monad reconciliation — (a) the **attested
   correspondence** CAT-2 ships (the bridge, no surface `instance`); (b) a
   general surface `instance Monad (ITree e resp)` with a **parametric head**
@@ -337,8 +391,10 @@ an **attested correspondence**, not a surface instance. The load-bearing pin:
 ## AC4 — Applicative laws + Fork D: cartesian `List`, false-witness rejected
 
 ### stdlib/classes/applicative-list-cartesian-forced (soundness)
-- spec: Fork D ruling (`evt_p39qvcmh4gy2`, cartesian), Fork A (wired chain →
-  coherence obligation), `55 §5.2` (pointwise laws), `51 §5` (laws PROVED)
+- spec: `56 §4.4` (cartesian forced by `ap = ap-from-bind`; ziplist not
+  `bind`-coherent, not proliferated) + `56 §3.3` (the cartesian
+  `Applicative List` instance), `55 §5.2` (inherited pointwise form), `51 §5`
+  (laws PROVED)
 - given: two candidate `Applicative List` instances offered as the `applicative`
   field wired into `Monad List`: (a) **cartesian** `ap`
   (`ap fs xs = concatMap (λ f. map f xs) fs`); (b) **ziplist** `ap` (`zipWith`
@@ -366,30 +422,29 @@ an **attested correspondence**, not a surface instance. The load-bearing pin:
   effect-composition verdict-flip discipline made concrete.
 
 ### stdlib/classes/applicative-law-false-witness-rejected (soundness)
-- spec: `55 §5.2` (pointwise applicative laws), `51 §5` (laws PROVED), `13 §2`
-  (Σ-Intro re-check); the four laws
-  identity/homomorphism/interchange/composition
+- spec: `56 §3.2` (the four laws `ap_id`/`ap_hom`/`ap_ich`/`ap_cmp`), `55 §5.2`
+  (inherited pointwise form), `51 §5` (laws PROVED), `13 §2` (Σ-Intro re-check)
 - given: two `Applicative Option`-shaped instances identical except in
-  `pure`/`ap` with the **same** proof term attempted for a named applicative
-  law: (a) the canonical `pure a = Some a` / `ap`; (b) a **bogus**
-  `pure' a = None` (well-typed at `pure : a → f a`), whose **homomorphism** law
-  `ap (pure f) (pure x) = pure (f x)` is offered at a concrete `f`/`x`
-- expect: **the verdict flips on the witness at the named law field.** (a)
-  **accepts** — the homomorphism goal
-  `Equal (Option b) (ap (Some f) (Some x)) (Some (f x))` reduces to
-  `Equal (Option b) (Some (f x)) (Some (f x))`, constructor-headed both sides →
+  `pure`/`ap` with the **same** proof term attempted for the **`ap_hom`**
+  (homomorphism) field: (a) the canonical `pure a = Some a` / `ap`; (b) a
+  **bogus** `pure' a = None` (well-typed at `pure : a → f a`), whose `ap_hom`
+  law `ap (pure g) (pure x) = pure (g x)` is offered at a concrete `g`/`x`
+- expect: **the verdict flips on the witness at the named `ap_hom` field.** (a)
+  **accepts** — the `ap_hom` goal
+  `Equal (Option b) (ap (Some g) (Some x)) (Some (g x))` reduces to
+  `Equal (Option b) (Some (g x)) (Some (g x))`, constructor-headed both sides →
   closed (`tt`/`Refl` per the endpoint); (b) **rejected — conversion failure at
-  the homomorphism field**: `ap (pure' f) (pure' x) = ap None None = None`, so
-  the goal is `Equal (Option b) None (Some (f x))`, a **false** equation (`None`
-  vs `Some`-headed). Assert the **specific observable**: (a) law re-checks; (b)
-  elaboration fails **at the homomorphism law field** with a `None`-vs-`Some`
+  the `ap_hom` field**: `ap (pure' g) (pure' x) = ap None None = None`, so the
+  goal is `Equal (Option b) None (Some (g x))`, a **false** equation (`None` vs
+  `Some`-headed). Assert the **specific observable**: (a) `ap_hom` re-checks;
+  (b) elaboration fails **at the `ap_hom` law field** with a `None`-vs-`Some`
   constructor clash — not `is_err()`, not a missing-field/kind error
 - why: (soundness) AC4 for `Applicative` — the false-witness flip lifted from
   `Monoid`/`Functor` to the applicative laws (the exact
   `monoid-unit-law-false-witness-rejected` discipline). **Two-arm net**: honest
-  proof fails **conversion** (this case); a masked `homomorphism = Axiom` fails
-  the **delta gate** and inhabits `Bottom`
-  (`Axiom : Equal (Option b) None (Some (f x))` is a false postulate).
+  proof fails **conversion** (this case); a masked `ap_hom = Axiom` fails the
+  **delta gate** and inhabits `Bottom`
+  (`Axiom : Equal (Option b) None (Some (g x))` is a false postulate).
   **Verdict-flip**, keyed solely on `pure`/`ap`.
 
 ---
@@ -409,8 +464,9 @@ fresh `RowVar`. The RowVar **co-varies** with the dict. The `Applicative g`
 constraint is an **explicit (unbundled) dict parameter**.
 
 ### stdlib/classes/traverse-classifies-proc-via-rowvar (soundness)
-- spec: Fork C ruling (`evt_p39qvcmh4gy2`), SURF-1 `36 §1.5` (row variable) +
-  `§1.6.1` (effect-polymorphic ⇒ `proc`, classify on `ρ_decl`), the landed
+- spec: `56 §5.1` (`proc traverse` signature) + `56 §5.2` (abstract-`g` head ⇒
+  `RowVar` ⇒ `proc`), SURF-1 `36 §1.5` (row variable) + `§1.6.1`
+  (effect-polymorphic ⇒ `proc`, classify on `ρ_decl`), the landed
   `classify_telescope` (`extract.rs`); ties to SURF-1 PK8
   `poly-def-is-proc-not-fn`
 - given: the `traverse` definition with its abstract codomain head `g`, offered
@@ -436,9 +492,10 @@ constraint is an **explicit (unbundled) dict parameter**.
   `traverse` land.
 
 ### stdlib/classes/traverse-rowvar-covaries-with-applicative-g (soundness)
-- spec: Fork C ruling (`evt_p39qvcmh4gy2`, RowVar co-varies), SURF-1 `36 §1.5.1`
-  (the `g := Eff e` exemplar) + PK8 `proc-stays-proc-at-pure-instantiation`,
-  `36 §2.2` (the ITree denotation reifies the same effects as `g`-data)
+- spec: `56 §5.2` (the RowVar co-varies with the dict; `g:=Option→∅` stays
+  `proc`, `g:=Eff e→e`; no double-count), SURF-1 `36 §1.5.1` (the `g := Eff e`
+  exemplar) + PK8 `proc-stays-proc-at-pure-instantiation`, `36 §2.2` (the ITree
+  denotation reifies the same effects as `g`-data)
 - given: the **one** `traverse` definition instantiated at two applicatives: (a)
   `g := Option` (a pure applicative) ⇒ the RowVar substitutes to `∅`; (b)
   `g := Eff e` (an effect monad) ⇒ the RowVar substitutes to `e`
@@ -464,9 +521,10 @@ constraint is an **explicit (unbundled) dict parameter**.
   normative. Red-until the SURF-1 fixpoint-lift seam + CAT-2 `traverse` land.
 
 ### stdlib/classes/traverse-applicative-g-explicit-dict-not-implicit (property)
-- spec: Fork C ruling (`evt_p39qvcmh4gy2`, explicit unbundled dict), `55 §5.1`
-  (`infer_proj` projects off an opaque bound-var dict), `33 §5.4` (implicit
-  `where` needs a concrete head for instance search)
+- spec: `56 §5.1` (explicit unbundled `Applicative g` dict — implicit `where`
+  has no concrete head to search), `55 §5.1` (`infer_proj` projects off an
+  opaque bound-var dict), `33 §5.4` (implicit `where` needs a concrete head for
+  instance search)
 - given: two forms of the `Applicative g` constraint on `traverse`: (a)
   **explicit** unbundled dict parameter `(ap_g : Applicative g)`, projected as
   `ap_g.ap`/`ap_g.pure`; (b) **implicit** `where Applicative g`
@@ -486,43 +544,62 @@ constraint is an **explicit (unbundled) dict parameter**.
   head-agnostic (a Σ-record projected by `type_id`), so the explicit form is
   **buildable today** with zero new mechanism. This is why Fork C rides existing
   machinery (explicit dict + SURF-1 RowVar, both landed) — **no re-fork**.
-  Reconciled against the landed `55` D3 body; the mechanism home is
+  Reconciled against the landed `56 §5.1`; the mechanism home is
   `../surface/classes/` (referenced, not re-pinned).
 
 ### stdlib/classes/traverse-coherence-false-witness-rejected (soundness)
-- spec: Fork C ruling, `55 §5.2` (pointwise), `51 §5` (laws PROVED), `14 §3`
-  (`elim_List`); the traversal coherence laws (naturality, identity,
-  composition)
-- given: two `Traversable List`-shaped instances differing only in `traverse`,
-  with the **identity** coherence law (`traverse (Identity) pure ≡ pure` under
-  the identity applicative) offered at a concrete carrier: (a) the canonical
-  `traverse`; (b) a **bogus** `traverse` that **drops** an element (skips the
-  head), so the identity law is false at a concrete `xs`
-- expect: **verdict flips at a concrete carrier** — (a) the identity law closes
-  by `elim_List` induction (base `Nil`→`Nil` constructor → `tt`; step lifts the
-  IH under `Cons` with `cong` through the applicative); (b) the element-dropping
-  `traverse`'s identity law is a **false** `Equal` at (e.g.)
+- spec: `56 §5.3` (the three coherence laws — **identity** the base,
+  **naturality** the parametricity face, **composition** load-bearing), `51 §5`
+  (laws PROVED), `14 §3` (`elim_List`); `55 §3.1`/`§3.2` (proof grammar,
+  endpoints)
+- given: two arms over `Traversable List`: **(A)** two instances differing only
+  in `traverse`, with the **identity** coherence law
+  (`traverse Identity pure ≡ pure` at the identity applicative) offered at a
+  concrete carrier — the canonical `traverse` vs a **bogus** one that **drops**
+  the head; **(B)** the canonical `traverse` whose **naturality** field
+  (`η (traverse t x) ≡ traverse (η ∘ t) x`) is offered two ways — a **real
+  induction** (using `g`'s applicative-morphism laws) vs an
+  **`Axiom`/postulate** justified only by "it follows from parametricity over
+  `g`"
+- expect: **both arms flip.** **(A)** identity: (a) closes by `elim_List`
+  induction (base `Nil`→`Nil` constructor → `tt`; step lifts the IH under `Cons`
+  with `cong` through the applicative); (b) the element-dropping `traverse`'s
+  identity law is a **false** `Equal` at (e.g.)
   `xs = Cons True (Cons False Nil)` (LHS drops `True`, RHS preserves) →
-  **conversion failure**, right-reason (not a missing-field/kind error). Assert
-  the concrete-carrier conversion-failure observable at the **named coherence
-  field**
-- why: (soundness) AC6 — the AC4 false-witness flip for `Traversable`: a
-  `traverse` that drops/reorders elements is the traversal family's "wrong
-  witness," caught by the identity coherence law at a concrete carrier, the same
-  discipline as the Functor id-law and Monad left-id flips
-  ([[two-arm-producer-needs-a-case-per-arm]]: masked-postulate arm → delta gate
-  + `Bottom`). The **exact set** of stated-vs-derivable coherence laws
-  (naturality, identity, composition) is spec-author's `55` D3 call; the
-  **element-preservation discriminator** is normative regardless.
+  **conversion failure** at the named identity field. **(B)** naturality: (a)
+  the induction proof re-checks and the field is a **real proof term** (grep: a
+  `match`-recursion, not `declare_postulate`); (b) the **`Axiom` naturality is
+  rejected as a zero-delta violation** — a postulated law field is an `Opaque`
+  entry ⇒ **non-empty `trusted_base_delta`** (AC4), *even though the statement
+  is true*, because on an inductive carrier it is **provable** (the postulate is
+  an avoidable defect, `55 §8`). Assert the **observables**: (A)
+  concrete-carrier conversion failure at the identity field; (B) the honest
+  naturality field greps as a real proof / empty delta, the `Axiom` naturality
+  field yields a **non-empty delta** — not `is_err()`, not a message string
+- why: (soundness) AC6/AC4 — arm (A) is the AC4 false-witness flip for
+  `Traversable` (a `traverse` that drops/reorders is caught by the identity law
+  at a concrete carrier, the Functor-id / Monad-left-id discipline). **Arm (B)
+  is Architect's explicit build-carry guard** (`evt_6392d1a2v2zs6`): `56 §5.3`
+  motivates naturality as *"a consequence of parametricity over `g`"* — but
+  **Ken has no free-theorem / parametricity axiom**, so that phrasing is
+  **motivation only**; the actual discharge is the per-instance induction (+
+  `g`'s applicative-morphism laws). A build that `Axiom`s naturality on the
+  parametricity intuition is a **zero-delta violation** — the
+  [[two-arm-producer-needs-a-case-per-arm]] masked-postulate arm made explicit
+  for the law whose *motivation* invites a postulate. The **exact pointwise
+  statement** of the identity law (`traverse Identity pure ≡ pure`) is informal
+  in `56 §5.3` and pins at build; the **element-preservation + naturality-proved
+  discriminators** are normative regardless.
 
 ---
 
 ## AC2 / AC3 — laws are `Ω`-clean, pointwise, one canonical field
 
 ### stdlib/classes/cat2-laws-omega-clean-pointwise-one-field (soundness)
-- spec: `51 §3` (law-field sorts — every law `Ω`), `55 §5.2` (pointwise,
-  funext-definitional, one field), `obs.rs:90` (`Eq (Π..) f g ⇝` pointwise),
-  `16 §1`/`§6` (`Ω`/truncation), `13 §4` (`sort_sigma`)
+- spec: `56 §3.2`/`§4.2`/`§5.3` + `§7` AC2/AC3 (the CAT-2 law fields, all `Ω`
+  value-equations, one canonical field), `51 §3` (law-field sorts), `55 §5.2`
+  (pointwise, funext-definitional, one field), `obs.rs:90` (`Eq (Π..) f g ⇝`
+  pointwise), `16 §1`/`§6` (`Ω`/truncation), `13 §4` (`sort_sigma`)
 - given: the Applicative/Monad/Traversable law fields as authored (each a `Π`
   into `Equal (f _) u v`), contrasted with (i) a **proof-relevant**
   `Type`-valued "law" and (ii) a **second, point-free** restatement of a law
@@ -554,12 +631,12 @@ constraint is an **explicit (unbundled) dict parameter**.
 ## AC1 — kernel-untouched, extension-reused (build-verify, home in surface)
 
 Fork A wiring + Fork C explicit dicts + Fork E's attested bridge all ride
-**CAT-1 `§6`'s 4-piece higher-kinded extension + existing record/projection
-machinery** — **zero new elaborator capability** (Architect,
-`evt_p39qvcmh4gy2`). No new kernel `Term`/`Decl`; no `trusted_base()` delta. The
-**capability-boundary** property (no fifth piece; nested projection
-`d.applicative.functor.map` rides `infer_proj`; the wired field elaborates like
-any record field) is a **class-mechanism** property whose home is
+**CAT-1 `55 §6`'s 4-piece higher-kinded extension + existing record/projection
+machinery** (`56 §6`/`§7` AC1) — **zero new elaborator capability**. No new
+kernel `Term`/`Decl`; no `trusted_base()` delta. The **capability-boundary**
+property (no fifth piece; nested projection `d.applicative.functor.map` rides
+`infer_proj`; the wired field elaborates like any record field) is a
+**class-mechanism** property whose home is
 **`../surface/classes/seed-classes.md`** (`33 §5`), not this lawful-content seed
 (one home per property). Noted here as the **build-verify dependency** the
 instance-law cases sit on: they are **red-until-built** against the CAT-2 build,
@@ -577,7 +654,9 @@ re-forks.
 - **AC7** (Fork A WIRE): `monad-wires-applicative-subdict-reused` (wired
   sub-dict is load-bearing + proofs reused, verdict-flip),
   `superclass-chain-wired-consistently` (property: wire consistently up the
-  chain; implicit-coercion sugar deferred).
+  chain; implicit-coercion sugar deferred),
+  `applicative-map-coheres-with-wired-functor` (`map_coh` keeps the wired
+  `functor` non-vacuous — a non-cohering `map` flips at `map_coh`).
 - **AC5** (Fork B + Fork E, Monad ⇔ ITree):
   `monad-left-id-definitional-bind-primary` (left-id ι on `Ret`/`Some`, `Refl`
   at neutral), `monad-law-endpoints-tt-vs-refl` (the per-law-per-carrier
@@ -589,14 +668,16 @@ re-forks.
 - **AC4** (Applicative + Fork D): `applicative-list-cartesian-forced` (cartesian
   forced by `ap = ap-from-bind`; ziplist fails coherence at a concrete list, not
   proliferated), `applicative-law-false-witness-rejected` (bogus `pure`/`ap` →
-  false homomorphism law, verdict-flip).
+  false `ap_hom` law, verdict-flip).
 - **AC6** (Fork C, Traversable ⇔ SURF-1): `traverse-classifies-proc-via-rowvar`
   (`proc` accepts / `fn` rejects — PK8 lifted),
   `traverse-rowvar-covaries-with-applicative-g` (RowVar tracks `g`; collapses at
   pure `g`, `visits [e]` at `Eff e`),
   `traverse-applicative-g-explicit-dict-not-implicit` (property: explicit dict
-  buildable, implicit not), `traverse-coherence-false-witness-rejected`
-  (element-dropping `traverse` → false identity law at a concrete carrier).
+  buildable, implicit not), `traverse-coherence-false-witness-rejected` (arm A:
+  element-dropping `traverse` → false identity law at a concrete carrier; arm B:
+  **`Axiom` naturality → zero-delta violation** — Architect's build-carry guard,
+  Ken has no parametricity axiom).
 - **AC2/AC3** (Ω-clean, pointwise): `cat2-laws-omega-clean-pointwise-one-field`
   (laws are `Equal (f _) u v : Ω`, proof-irrelevant, no truncation; one
   canonical pointwise field per law, funext-definitional ⇒ no second point-free
@@ -643,15 +724,34 @@ re-forks.
   contradicts this pair + SURF-1 `§1.6.1`.
 - **The false-witness discipline is one rule across all classes.**
   `monad-left-id-definitional-bind-primary`,
-  `applicative-law-false-witness-rejected`, and
+  `applicative-law-false-witness-rejected`,
+  `applicative-map-coheres-with-wired-functor`, and
   `traverse-coherence-false-witness-rejected` agree with CAT-1's
   `monoid-unit-law-false-witness-rejected` /
   `functor-id-law-false-map-rejected`: a wrong operation witness (a non-grafting
-  `bind`, a bogus `pure`, an element-dropping `traverse`) makes a law a **false
-  `Equal`**, caught at a **concrete carrier** by a conversion failure on the
-  honest proof and by the delta gate (+ `Bottom`) on a masked postulate. A case
-  rejecting a false-witness instance for an *unrelated* reason (missing field /
-  kind error) contradicts the right-reason discipline.
+  `bind`, a bogus `pure`, a non-cohering wired `map`, an element-dropping
+  `traverse`) makes a law a **false `Equal`**, caught at a **concrete carrier**
+  by a conversion failure on the honest proof and by the delta gate (+ `Bottom`)
+  on a masked postulate. A case rejecting a false-witness instance for an
+  *unrelated* reason (missing field / kind error) contradicts the right-reason
+  discipline.
+- **"One denotation, no second op" is one discipline across wiring and the ITree
+  bridge.** `applicative-map-coheres-with-wired-functor` (`map_coh` forces the
+  wired `functor.map = ap ∘ pure`, no second `map`) and
+  `itree-bridge-attested-no-second-bind` (the bridge reuses the landed `bind`,
+  no second `bind`) agree: whenever CAT-2 layers an operation over an existing
+  one (a wired superclass `map`, the effect denotation's `bind`), a coherence
+  law pins them to **one** denotation — a build minting a second, divergent op
+  (a non-cohering `map`, a fresh `bind'`) is caught. A case treating the wired
+  `functor.map` as unconstrained (vacuous wiring) contradicts this pair.
+- **Naturality is PROVED, not postulated on parametricity.**
+  `traverse-coherence-false-witness-rejected` arm B and the AC4 zero-delta pin
+  agree with the landed `56 §5.3` + Architect's guard: `56 §5.3` *motivates*
+  naturality as a parametricity consequence, but Ken has **no** parametricity
+  axiom, so the discharge is per-instance induction — an `Axiom` naturality
+  field is a non-empty `trusted_base_delta` (a defect on an inductive carrier),
+  never an honest audited delta. A case admitting a postulated naturality field
+  as lawful contradicts this + AC4.
 - **Every law field is `Ω`; one canonical pointwise field.**
   `cat2-laws-omega-clean-pointwise-one-field` agrees with the `51 §3`
   law-field-sort pin and `55 §5.2`: the record is `Type`-sorted because of its
