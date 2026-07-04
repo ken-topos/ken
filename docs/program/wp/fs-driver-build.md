@@ -129,5 +129,13 @@ Phase-1 soundness review** (they gate this build; do not treat as prose):
   not self-reviewed) + **Runtime-QA** + **Verify-QA** + **CI**. Findings →
   **Steward**.
 - **Single merge:** Runtime-leader opens the merge Decision → **Integrator** (only
-  the Integrator touches `main`). Closes **VAL2's last gap end-to-end**
-  (`read-file-lines` → 16 PASS / 0 KNOWN-GAP).
+  the Integrator touches `main`). Closes VAL2's `read_bytes` reduction gap — the
+  **runtime substrate** (real reduction + driver + capability enforcement +
+  fixtures, D1–D4) — not the `read-file-lines` example end-to-end. The example
+  itself (`examples/rosetta/read-file-lines/`) is untouched by this WP: it
+  still uses the pre-re-type `read_bytes : Bytes -> Bytes` signature and its
+  `KNOWN-GAP.md` still describes the "no runtime reduction" gap this WP fixes
+  (now stale prose, not this WP's file to touch). Re-authoring the example to
+  `Cap -> Bytes -> FS (Result Bytes IOError)` plus a `splitOn`/`lines` helper
+  (not yet built) is a **named follow-on**, not silently closed here and not
+  silently folded into this WP's scope (CV's gate HOLD, `dec_5kw3frs1sqf9s`).
