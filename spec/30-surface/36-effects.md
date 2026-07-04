@@ -720,6 +720,37 @@ The purity/totality argument is §4.2's, applied to the direct surface:
   **derived** stdlib `runState`; no new `Term`/`Decl` variant, no
   `trusted_base()` delta.
 
+#### 4.5.7 Injection into a coproduct — the surface morphism (`incl`, named)
+
+§4.5.4 discharges a composed tree by **peeling** one summand (`runState`) and
+passing the rest through; it presumes a tree *already* over `State s ⊕ F`. The
+dual — **getting a single-effect computation's ops *into* the coproduct** — is
+§2.3's `inj` / §2.4's `incl` (`ITree ⟦ρ_g⟧ X → ITree ⟦ρ⟧ X`, an `elim_ITree`
+map over the `Vis` tags), which the **direct surface exposes as named
+injection operations** for the binary signature `Sum g h`, exactly as §4.5.2
+exposes `get`/`put` and §4.5.3 exposes `runState`:
+
+```
+injectL : ITree g rg a -> ITree (Sum g h) (resp_sum g h rg rh) a   -- re-tag via InL
+injectR : ITree h rh a -> ITree (Sum g h) (resp_sum g h rg rh) a   -- re-tag via InR
+```
+
+- **Denotation (normative):** the `elim_ITree` fold sending `Ret x ↦ Ret x` and
+  `Vis op k ↦ Vis (InL op) (injectL ∘ k)` (resp. `InR`), structural on the
+  sub-tree — total (`14 §3`), no SCT, adds no kernel primitive. It is `§2.4`'s
+  `incl` specialized to the two inclusions `g ↪ Sum g h`, `h ↪ Sum g h`.
+- **Well-typed iff** the response family reduces per-tag: `resp_sum g h rg rh
+  (InL o) ≡ rg o`, `(InR o) ≡ rh o` (§2.3 `Resp (inl o) = E.Resp o`) — so the
+  re-tagged continuation keeps its response type.
+- **Surface *spelling* (`injectL`/`injectR`) is proposal-level (`OQ-syntax`);
+  the operation and its denotation are normative.** A program composes two base
+  effects by injecting each single-effect sub-computation, then sequencing with
+  `bind` (`ITree (Sum g h) …` is homogeneous). This is the **direct/monadic
+  door**; the eventual sugar is the row-directed elaboration inserting `incl`
+  automatically from a `visits [E, F]` row (§2.4), of which this is the floor —
+  as C1 threading (§4.5.6) is the floor under `[State s]`. Realization + the
+  D1/D3 couplings: `docs/program/wp/effect-composition.md` (D2).
+
 ## 5. Handlers — tail-resumptive only (`OQ-8`/`OQ-9` DECIDED)
 
 A **handler** interprets an effect — operationally, a **fold over the
