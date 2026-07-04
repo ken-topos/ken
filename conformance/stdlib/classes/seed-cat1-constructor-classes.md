@@ -7,12 +7,27 @@ CAT-1 extends the landed `packages/lawful-classes` pattern (`Eq`/`DecEq`/`Ord`,
 over a **value type** `a : Type`) to the workhorse **constructor classes** and
 their value-level algebra companions. This seed pins the **discriminating
 conformance for the value-level algebra classes — `Semigroup`/`Monoid`** (the
-warm-up: same shape as `Eq`/`Ord`, over `a : Type`, no new kind machinery). The
-higher-kinded classes **`Functor`/`Foldable`** (over `f : Type -> Type`) are
-**held** (see the HELD section) pending the Architect's two design rulings
-(higher-kinded admission + the Functor-law statement form) — their conformance
-is not authored until the law form is pinned, so this seed does not over-freeze
-it ([[layer-dependent-pin-at-unconditional-layer]]).
+warm-up: same shape as `Eq`/`Ord`, over `a : Type`, no new kind machinery) —
+**and the higher-kinded classes `Functor`/`Foldable`** (over `f : Type ->
+Type`). The Functor/Foldable cases were **held** until the Architect's two CAT-1
+design rulings landed (`evt_2h347mddbxwfb`); both are now in, and the
+Functor/Foldable discriminators (below) are authored against them:
+- **Higher-kinded admission (Axis A): NO today** — the landed `elab_class_decl`
+  hard-codes the class param to `Type0` (three `Term::ty(Level::Zero)` sites,
+  `crates/ken-elaborator/src/elab.rs` ~L1862-1902; `parse_class_decl` takes a
+  bare ident, no kind binder), so a `class Functor f` over `f : Type -> Type`
+  needs a **pinned outer-ring elaborator extension** (kernel-untouched, no new
+  `Term`/`Decl`) — a CAT-1 sub-deliverable, not pure package Ken. The
+  Functor/Foldable conformance is **red-until-built** against that extension +
+  the instances (the static-vs-runtime split below).
+- **Functor law form: POINTWISE is canonical** — funext is **definitional** in
+  Ken's OTT (independently verified: `obs.rs:77` routes `Eq (Π..) f g` to
+  `eq_at_pi`, `obs.rs:90` reduces `Eq ((x:A1)→B1) f g ⇝ (x:A1) → Eq (B1 x)
+  (f x) (g x)`, cited `16 §2.2`), so the function-level law whnf-reduces to the
+  pointwise law — **the same proposition, one reduction apart**, both Ω-clean,
+  no truncation. Pointwise is the normal form (the prover's goal *is* the stated
+  law), so one canonical pointwise field per law; a point-free restatement is
+  definitionally equal and must **not** proliferate a second field.
 
 The load-bearing property is **AC4**: a **broken-unit-law "Monoid"** — an
 instance whose `mempty` witness is **wrong**, so a unit law is a **false
@@ -305,53 +320,227 @@ here is that the **`assoc` law is the same proposition** in both, so a
 
 ---
 
-## HELD — `Functor`/`Foldable` conformance (pending the law-form ruling)
+## AC4/AC3 — Functor: the pointwise laws discriminate a bogus `map`
 
-Per the CAT-1 kickoff (spec-leader, `evt_2y7c7w7c3p3wb`) and the frame's design
-question §2, the higher-kinded classes' conformance is **not authored yet**. Two
-inputs must land first, both routed to the Architect:
+`Functor f` (over `f : Type -> Type`, needing the Axis-A extension) has
+`map : (a b : Type) -> (a -> b) -> f a -> f b` and two laws in the
+**Architect-ruled pointwise form** (`evt_2h347mddbxwfb`, grounded on the
+funext-definitional fact verified above):
 
-1. **Higher-kinded admission** — whether the landed `class`/instance machinery
-   admits an `f : Type -> Type` record parameter today, or needs a pinned
-   outer-ring elaborator extension (`buildability, every axis` —
-   [[buildability-ruling-must-ground-every-axis]]). The discriminating
-   conformance shape depends on how a higher-kinded instance elaborates.
-2. **Functor-law statement form** — pointwise `(x : f a) -> Equal (f a)
-   (map idf x) x` vs a function-level `Equal (f a -> f a) (map idf) idf` needing
-   funext, and how OTT's observational equality discharges the fusion law
-   `map (g ∘ f) = map g ∘ map f`. This is the form **CAT-2's Monad laws
-   inherit**, so the conformance must pin the **ruled** form, not a guess —
-   authoring it now would over-freeze a deferred degree of freedom (the T1 dual;
-   [[layer-dependent-pin-at-unconditional-layer]]).
+- **id:** `(a : Type) -> (x : f a) -> Equal (f a) (map a a (idf a) x) x`
+- **fusion (applied-pointwise):** `(a b c : Type) -> (g : b -> c) -> (h : a ->
+  b) -> (x : f a) -> Equal (f c) (map a c (comp a b c g h) x) (map b c g
+  (map a b h x))`
 
-**When the rulings land**, the Functor/Foldable discriminators to author (noted
-here as a placeholder, not pinned): the **identity-law false-`map` flip** (a
-bogus `Functor` whose `map` is not identity-preserving is rejected — the AC4
-analog over `f a`); the **fusion/composition law** in the ruled form; the
-`Foldable`/`Monoid` coherence (`foldMap` via the `Monoid` this seed pins). These
-inherit the false-witness + laws-proved-not-postulated discipline above, lifted
-to the higher-kinded carrier.
+Canonical instances `List`/`Option` (both inductive ⇒ proved by induction,
+zero-delta). `idf`/`comp` are ordinary Ken views. The false-`map` flip below is
+the AC4 analog over `f a` — the same discipline as
+`monoid-unit-law-false-witness-rejected`, lifted to the higher-kinded carrier.
+
+**Reconcile-at-transcription.** The pointwise form is Architect-ruled but the
+durable **`spec/51 §4` (constructor-class template)** transcription is
+spec-author's (Architect fidelity-gates) — not yet landed. These cases cite the
+**ruling + `obs.rs` funext fact** (independently verified), not a `§4` anchor
+that does not yet carry the claim
+([[grounding-a-fabricated-citation-two-failure-modes]]); the `§4` cite is added
+when the transcription lands, which the fidelity gate confirms.
+
+### stdlib/classes/functor-id-law-false-map-rejected (soundness)
+- spec: the Architect law-form ruling (`evt_2h347mddbxwfb`, pointwise id-law),
+  `obs.rs:90` (funext definitional, `16 §2.2`), `51 §5` (laws PROVED = real
+  proofs), `14 §3` (K4 `elim_List` into an `Equal`-motive); reconciled to
+  `51 §4` at transcription
+- given: two `Functor List`-shaped instances, identical in every field
+  **except** `map`, with the **same** proof term attempted for the id-law:
+  (a) the **canonical** `map` (`map a b fn (Cons x xs) = Cons (fn x)
+  (map a b fn xs)`, `map a b fn Nil = Nil`) with `map_id` a real `elim_List`
+  induction on `x`;
+  (b) a **bogus** structure-dropping `map` (`bad a b fn xs = Nil` — well-typed
+  at `(a -> b) -> f a -> f b`, so nothing rejects it *as an operation*), whose
+  id-law is offered at the concrete carrier value `x = Cons True Nil`
+- expect: **the verdict flips on the `map`, witnessed at a concrete carrier.**
+  (a) **accepts** — `map_id`'s inductive proof closes (base `Nil`: `map (idf)
+  Nil ≡ Nil`, `Refl`; step: IH + `Cons` congruence), law fields re-check.
+  (b) **rejected — conversion failure at the id-law field**: at `x =
+  Cons True Nil` the goal is `Equal (List Bool) (bad … (Cons True Nil))
+  (Cons True Nil)` = `Equal (List Bool) Nil (Cons True Nil)`, a **false**
+  equation (`Nil` vs `Cons`-headed), which **no** honest proof term can close
+  (`Refl` fails: `Nil ≢ Cons True Nil`). Assert the **specific observable**:
+  (a) elaborates + law re-checks; (b) elaboration fails **at the id-law field**
+  with a conversion/constructor-clash on `Nil` vs `Cons True Nil` — **not**
+  `is_err()`, not a missing-field/kind error
+  ([[assert-specific-error-variant-not-is-err]])
+- why: (soundness) AC4 over the higher-kinded carrier — the Functor id law is
+  the identity-preservation guarantee downstream generic code assumes; a `map`
+  that is not identity-on-values makes it a **false** `Equal (f a)`, unprovable.
+  **Two-arm net** ([[two-arm-producer-needs-a-case-per-arm]]): the honest proof
+  fails **conversion** (this case); a **masked** proof (`map_id = Axiom`) fails
+  the **delta gate** (`functor-law-fields-real-proofs-not-postulates` below) and
+  **inhabits `Bottom`** (`Axiom : Equal (List Bool) Nil (Cons True Nil)` is a
+  false postulate — [[deceq-on-noncanonical-carrier-inhabits-bottom]]). The
+  concrete carrier value `x = Cons True Nil` is the discriminating input
+  Architect named ("breaks the pointwise id-law at a concrete carrier →
+  rejected right-reason"). **Verdict-flip**, keyed solely on the `map`.
+
+### stdlib/classes/functor-fusion-law-pointwise-direct-induction (soundness)
+- spec: the ruling (`evt_2h347mddbxwfb`, applied-pointwise fusion),
+  `obs.rs:90` (funext definitional), `51 §5`, `14 §3`; reconciled to `51 §4`
+- given: the fusion law on the canonical `Functor List` in **applied-pointwise**
+  form (`map (comp g h) x = map g (map h x)`), and a **bogus** `map` (e.g. one
+  that reverses or duplicates) whose fusion equation is false at a concrete `x`
+- expect: (a) the canonical fusion closes by **direct `elim_List` induction on
+  `x`** — **no funext layer to strip first**, because pointwise **is** the
+  normal form (the function-level `Equal (f a -> f c) (map (comp g h)) (comp
+  (map g) (map h))` whnf-reduces to exactly this pointwise goal by `obs.rs:90`);
+  (b) the bogus `map`'s fusion is a false `Equal (f c)` at a concrete carrier →
+  **conversion failure**, right-reason. Assert: the stated goal **is** the
+  prover's goal (no funext strip), and the bogus arm rejects at the fusion field
+- why: (soundness/AC3) pins that fusion is discharged by direct induction in the
+  pointwise form — the property CAT-2's Monad laws inherit. Grounds the
+  "pointwise is the normal form" ruling on the verified `obs.rs:90` reduction:
+  were the law stated function-level, it would reduce to this same goal, so the
+  induction is identical — which is *why* one canonical field suffices
+  (`functor-one-canonical-pointwise-field` below).
+
+### stdlib/classes/functor-one-canonical-pointwise-field (soundness)
+- spec: the ruling (`evt_2h347mddbxwfb`, "do not proliferate a second law
+  field"), `obs.rs:77`/`:90` (funext definitional), `51 §3` (law-field `Ω`
+  sorts), `16 §2.2`
+- given: the Functor id/fusion laws stated **pointwise** (one field each) vs a
+  build that **additionally** carries the **function-level/point-free**
+  restatement (`Equal (f a -> f a) (map (idf a)) (idf (f a))`) as a **second**
+  law field
+- expect: (a) the pointwise fields are `Ω`-clean (`Equal (f a) _ _ : Ω`,
+  proof-irrelevant, **no truncation** — direct value equations, the `§3`
+  truncation catch does **not** fire); (b) the point-free restatement is
+  **definitionally equal** to the pointwise one (funext, `obs.rs:90`), so a
+  **second** law field carrying it is **redundant proliferation** — the record
+  must carry **one** canonical pointwise field per law, not two. Assert: each
+  law is a single pointwise `Ω`-field; a duplicated point-free field is flagged
+  as reflect-don't-extend proliferation, not a distinct obligation
+- why: (soundness) the no-proliferation / `Ω`-cleanliness pin for the
+  higher-kinded laws, the `functor` analog of
+  `semigroup-assoc-shared-with-monoid` and
+  `monoid-laws-omega-clean-carrier-equality`. Because funext is
+  **definitional** (verified: `obs.rs:90` reduces the function-level `Eq` to the
+  pointwise one), the two forms are the same proposition — so the point-free
+  equation is available **for free** and a second field is content-free
+  duplication. Guards a build that "adds the categorical law too."
+
+### stdlib/classes/functor-law-fields-real-proofs-not-postulates (soundness)
+- spec: `51 §5` (laws PROVED = zero-delta), `33 §5.3` (instance = record value +
+  law proofs), `25 §3` (`trusted_base_delta`)
+- given: two `Functor List`-shaped instances identical in `map` (the canonical
+  `map`), differing only in the law fields: (a) real `elim_List` id/fusion
+  proofs; (b) postulated / holed / stubbed-absent law fields
+- expect: **verdict flips** — (a) accepts, empty `trusted_base_delta`; (b)
+  rejected (postulate → non-empty delta; hole → re-check failure; missing →
+  uninhabited record). Assert the delta/re-check observable, not a message
+- why: (soundness) AC3 for the higher-kinded carrier — the exact provenance flip
+  `monoid-law-fields-real-proofs-not-postulates` pins for `Monoid`, lifted to
+  `Functor`. **References** the shared `trusted_base()` mechanism (ES1/Sec4),
+  does not re-pin it. Carrier precondition: `List`/`Option` are inductive, so a
+  postulated Functor law is an avoidable **defect** (the laws *were* provable by
+  `elim_List`), the second arm of the false-`map` two-arm net.
+
+---
+
+## Foldable — element-preservation + `Monoid` coherence
+
+`Foldable f` has `foldr` (and/or `foldMap` via `Monoid`) + the fold laws + the
+`Monoid` coherence; instances `List`/`Option`. **The fold interface — `foldr`-
+primary vs `foldMap`-primary — is spec-author's `(oracle)` choice** (frame
+deliverable §3), so these pin the discriminating **shape** and the coherence
+**tie**, tagging the interface + exact-law spellings oracle, not over-freezing
+them.
+
+### stdlib/classes/foldable-element-dropping-fold-rejected (soundness)
+- spec: `51 §5` (laws PROVED), `14 §3` (`elim_List`), the frame's Foldable
+  deliverable §3; reconciled to the landed `51`/package
+- given: two `Foldable List`-shaped instances differing in the fold operation,
+  with a **fold law** that pins **element preservation** (e.g. the
+  reconstruction law `foldr Cons Nil xs = xs`, or a `toList`/length-agreement
+  law — the exact law is `(oracle)`, spec-author's interface choice):
+  (a) the canonical fold; (b) a **bogus** fold that **drops** an element
+  (e.g. skips the head), so the preservation law is false at a concrete `xs`
+- expect: **verdict flips at a concrete carrier** — (a) the preservation law
+  closes by `elim_List` induction; (b) the bogus fold's law is a false `Equal`
+  at (e.g.) `xs = Cons True (Cons False Nil)` → **conversion failure**,
+  right-reason (not a missing-field/kind error). Assert the concrete-carrier
+  conversion-failure observable
+- why: (soundness) the AC4 analog for `Foldable` — a fold that silently drops or
+  reorders elements is the fold-family's "wrong witness," caught by a
+  preservation law at a concrete carrier, the same discipline as the Functor
+  id-law and Monoid unit-law flips. The **exact preservation law** and the
+  **`foldr`-vs-`foldMap` interface** are `(oracle)` (spec-author finalizes); the
+  **element-preservation discriminator** is normative regardless
+  ([[two-arm-producer-needs-a-case-per-arm]]: masked-postulate arm → delta gate)
+
+### stdlib/classes/foldable-monoid-coherence (oracle)
+- spec: the frame's Foldable §3 (`foldMap` via `Monoid`), `51 §5`, this seed's
+  `Monoid` cases; reconciled to the landed interface choice
+- given: `foldMap g` and its factorization through the pinned `Monoid`
+  (`foldMap g xs ≡ foldr (\x acc. g x <> acc) mempty xs`) on `Foldable List`
+- expect: the coherence equation **holds** (proved by `elim_List` induction over
+  `xs`, leaning on the `Monoid` `assoc`/`unit` laws this seed pins), and a fold
+  that does **not** factor through the `Monoid` (uses a non-`mempty` seed or a
+  non-`<>` combine) **fails** the coherence law. Assert the coherence obligation
+  is emitted and discharged via the `Monoid`, not re-derived
+- why: (oracle) the `Foldable`↔`Monoid` seam — `foldMap` is *defined* through
+  the `Monoid`, so `Foldable`'s correctness **leans on** this seed's `Monoid`
+  laws (the CAT-3 collection-laws hook). Tagged `(oracle)` because the interface
+  primary (`foldr` vs `foldMap`) is spec-author's; the
+  **coherence-leans-on-Monoid** invariant is normative. This is where CAT-1's
+  value-level algebra (`Monoid`) and its first constructor class (`Foldable`)
+  compose — the pattern CAT-3 reuses.
+
+---
+
+## Higher-kinded admission — the mechanism flip (surface's home)
+
+The **capability flip** for the Axis-A extension — a `class C (f : Type ->
+Type) { … }` binder is **admitted** post-extension (the `(f : K)` binder parses,
+`f a` type-checks with `f : Type0 -> Type0`) and **rejected** pre-extension
+(the landed `Type0`-pinned param makes `f a` a non-Π application) — is the
+observable of the pinned sub-deliverable. It is a **class-mechanism** property,
+so its home is **`../surface/classes/seed-classes.md`** (`33 §5`), not this
+lawful-content seed (one home per property). Noted here as the **build-verify
+dependency** the Functor/Foldable law cases above sit on: they are
+**red-until-built** against that extension + the higher-kinded instances (the
+static-vs-runtime split). The extension is Architect-sized, kernel-untouched
+(zero `ken-kernel` diff, no new `Term`/`Decl`); the CV producer-grep at the
+build gate confirms AC1 (`ken-kernel` diff empty) on the built diff.
 
 ---
 
 ## Coverage map
 
 - **AC4** (false-witness rejected, soundness):
-  `monoid-unit-law-false-witness-rejected` — wrong `mempty` makes a unit law a
-  false equation; honest proof fails **conversion at the law field**, masked
-  proof fails the **delta gate** (and inhabits `Bottom`). Two-arm net.
+  `monoid-unit-law-false-witness-rejected` (wrong `mempty` → false unit law;
+  honest proof fails **conversion**, masked proof fails the **delta gate** and
+  inhabits `Bottom`), `functor-id-law-false-map-rejected` (bogus `map` → false
+  pointwise id-law at a concrete carrier),
+  `foldable-element-dropping-fold-rejected` (element-dropping fold → false
+  preservation law). Two-arm nets.
 - **AC3** (laws PROVED, soundness):
   `monoid-unit-asymmetry-left-defn-right-inductive` (left unit definitional /
-  right unit + assoc genuine `elim_List` induction — the Monoid-first
-  structural-induction content),
-  `monoid-law-fields-real-proofs-not-postulates` (provenance flip; references
-  the shared `trusted_base()` mechanism, does not re-pin it).
-- **AC2** (Ω-clean laws): `monoid-laws-omega-clean-carrier-equality` — the
-  algebra laws are `Equal (carrier) _ _ : Ω`, proof-irrelevant, no truncation.
-- **Layering** (oracle): `semigroup-assoc-shared-with-monoid` — one `assoc`
-  view across `Semigroup`/`Monoid`.
-- **HELD**: `Functor`/`Foldable` conformance — pending the Architect's
-  higher-kinded-admission + Functor-law-form rulings.
+  right unit + assoc genuine `elim_List` induction),
+  `monoid-law-fields-real-proofs-not-postulates` +
+  `functor-law-fields-real-proofs-not-postulates` (provenance flips; reference
+  the shared `trusted_base()` mechanism, do not re-pin it),
+  `functor-fusion-law-pointwise-direct-induction` (fusion by direct induction in
+  the normal-form pointwise shape, no funext strip).
+- **AC2** (Ω-clean laws): `monoid-laws-omega-clean-carrier-equality`,
+  `functor-one-canonical-pointwise-field` — laws are `Equal (carrier/f a) _ _ :
+  Ω`, proof-irrelevant, no truncation; one canonical pointwise field per law
+  (funext-definitional ⇒ no second point-free field).
+- **Layering / coherence** (oracle): `semigroup-assoc-shared-with-monoid` (one
+  `assoc` view across `Semigroup`/`Monoid`), `foldable-monoid-coherence`
+  (`foldMap` factors through the pinned `Monoid`).
+- **Mechanism (surface's home)**: the higher-kinded-admission capability flip is
+  `../surface/classes/`'s; the Functor/Foldable law cases are
+  **red-until-built** against the Axis-A elaborator extension (pinned CAT-1
+  sub-deliverable).
 
 ## Cross-case consistency sweep
 
@@ -381,22 +570,49 @@ to the higher-kinded carrier.
   agrees with reflect-don't-extend (`where-ord-same-sort-obligation` analog):
   `Monoid` is `Semigroup` plus identity, so associativity is one proposition,
   inherited or restated, never a second distinct obligation.
+- **The false-witness discipline is one rule across all three classes.**
+  `monoid-unit-law-false-witness-rejected`, `functor-id-law-false-map-rejected`,
+  and `foldable-element-dropping-fold-rejected` agree: a wrong operation witness
+  (a non-identity `mempty`, a structure-dropping `map`, an element-dropping
+  fold) makes a law a **false `Equal`**, caught at a **concrete carrier** by a
+  **conversion failure** on the honest proof and by the **delta gate** (+
+  `Bottom`-inhabitation) on a masked postulate. A case rejecting a false-witness
+  instance for an *unrelated* reason (missing field / kind error) contradicts
+  the right-reason discipline this class enforces.
+- **Pointwise is the normal form; one canonical field per higher-kinded law.**
+  `functor-fusion-law-pointwise-direct-induction` and
+  `functor-one-canonical-pointwise-field` agree with the verified `obs.rs:90`
+  funext reduction: the function-level law whnf-reduces to the pointwise one, so
+  the pointwise field **is** the prover's goal (direct induction, no strip) and
+  a second point-free field is content-free proliferation. A case stating a
+  Functor law function-level-**only** (needing a funext strip before induction),
+  or carrying both forms as distinct obligations, contradicts this pair.
 
 ## Subsumed / not-duplicated (one home per property)
 
 - **The `trusted_base()` / zero-delta mechanism** is **ES1/Sec4's**
   (`../surface/taxonomy/minimality.md`, `../../security/trust-model/`) and its
   law-side reading is pinned once in **`seed-lawful-classes.md`** (the
-  `Eq`/`Ord` seed). This seed pins only the **Monoid-specific** content (false
-  witness, induction asymmetry) and **references** the shared provenance flip;
-  it does not re-pin the delta computation.
+  `Eq`/`Ord` seed). This seed pins the **CAT-1-specific** content (false witness
+  across all three classes, the induction asymmetry, the pointwise-normal-form
+  fact) and **references** the shared provenance flip; it does not re-pin the
+  delta computation.
 - **The K4 Ω-motive elimination** capability (`14 §3`) is
-  **`../../kernel/inductive/seed-k4-omega-motive-elim.md`'s**. The Monoid
-  inductions consume it (`elim_List` into an `Equal`-motive); this seed does not
-  re-pin the elimination rule.
+  **`../../kernel/inductive/seed-k4-omega-motive-elim.md`'s**. The Monoid and
+  Functor/Foldable inductions consume it (`elim_List` into an `Equal`-motive);
+  this seed does not re-pin the elimination rule.
+- **The funext-definitional reduction** (`Eq (Pi..) f g ⇝` pointwise,
+  `obs.rs:90`, `16 §2.2`) is the **observational kernel's**
+  (`../../kernel/observational/`).
+  The Functor pointwise-normal-form cases **consume** it as a ground fact; they
+  do not re-pin the funext rule.
 - **The class mechanism** (record elaboration, `sort_sigma`, `instance_search`,
-  `where`-desugaring) is **`33 §5`'s** (surface). This seed pins the **lawful
-  content** (the algebra law proofs are real and, when the witness is wrong,
-  fail for the right reason), not the resolution machinery.
-- **`Functor`/`Foldable`** conformance is **HELD** (not authored) pending the
-  Architect's law-form ruling — it is not homed anywhere yet, by design.
+  `where`-desugaring, **and the higher-kinded param binder** `class C (f : K)`)
+  is **`33 §5`'s / `../surface/classes/`'s**. This seed pins the **lawful
+  content** (the law proofs are real and, when the witness is wrong, fail for
+  the right reason), not the resolution machinery nor the Axis-A admission flip.
+- **`Functor`/`Foldable` law conformance is now authored** (the Architect
+  law-form ruling landed, `evt_2h347mddbxwfb`); the pointwise form's durable
+  `spec/51 §4` anchor is **reconciled at spec-author's transcription** (which
+  the CV fidelity gate confirms), and the cases are **red-until-built** against
+  the Axis-A extension + instances.
