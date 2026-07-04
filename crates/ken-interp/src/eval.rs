@@ -158,6 +158,14 @@ pub enum EvalVal {
     BigInt(BigInt),                        // Int values > i64::MAX or < i64::MIN (arbitrary-precision, `18a §5.2.1`)
     Float(f64),                           // IEEE 754 double
     Float32(f32),                         // IEEE 754 single
+    /// A real, opaque capability token (fs-read-file-lines-flip D3,
+    /// Architect ruling `evt_35knjqv2k941h` §D3 — structural self-evidence
+    /// over a positional-scalar `EvalVal::Int(level)`). The *sole* producer
+    /// reaching the driver is the CLI mint (`ken-cli/src/main.rs::run_file`);
+    /// `Cap` is a surface-unconstructible `OpaqueType` postulate, so no
+    /// surface term ever synthesizes one. `authorizes` (below) fail-closes
+    /// on any other `EvalVal` shape.
+    Cap(capabilities::Cap),
     // `Decimal` is DEMOTE→derived (`18a §5.6.1`): a `Ctor{id:mkdecimalpair_id}`
     // value over two `Int`/`BigInt` fields, not a scalar immediate — no
     // `DecimalVal` case here anymore (the native primitive was removed).
@@ -1754,15 +1762,15 @@ const READ_BYTES_REQUIRED_AUTHORITY: capabilities::Authority = capabilities::AUT
 /// runtime arm). Load-bearing — R2 flips on this returning `false`; a
 /// no-op always-true `authorizes` is ambient authority and fails AC3.
 ///
-/// **Representation (the one open choice, delegated to this build):** a
-/// `Cap`-typed value is opaque at the surface language (`prelude.rs`'s
-/// `Cap` is a zero-structure `OpaqueType` postulate — no surface ctor, so no
-/// Ken program can ever synthesize one; every `Cap` value entering evaluation
-/// is injected by the trusted driver/harness, matching "unforgeable"). Its
-/// runtime shape here is the carried `Authority` scalar, `EvalVal::Int(level)`
-/// — no new `EvalVal` variant needed. Path-scope (R2′, excluding `dir2` under
-/// a `dir1` cap) stays Phase-2-deferred per `FS-driver-conformance.md` §2b;
-/// `path` is accepted for that future extension but not yet consulted.
+/// **Representation (fs-read-file-lines-flip D3, Architect ruling
+/// `evt_35knjqv2k941h`): a real opaque `EvalVal::Cap(capabilities::Cap)`,
+/// NOT the earlier `EvalVal::Int(level)` positional-scalar projection.**
+/// Structural self-evidence over a non-local type-gate+reachability
+/// argument for the sole runtime net — reads the `Authority` off the REAL
+/// minted struct, no re-mint from a bare scalar. Path-scope (R2′, excluding
+/// `dir2` under a `dir1` cap) stays Phase-2-deferred per
+/// `FS-driver-conformance.md` §2b; `path` is accepted for that future
+/// extension but not yet consulted.
 ///
 /// **Trust level (AC8): trusted Rust, conformance-netted, NOT kernel-backed**
 /// — this calls `capabilities::check_authority_sufficient`, a plain Rust
@@ -1770,14 +1778,15 @@ const READ_BYTES_REQUIRED_AUTHORITY: capabilities::Authority = capabilities::AUT
 /// Distinct from `attenuate`'s *static* refinement obligation (kernel-
 /// re-checked via `discharge_attenuation`) — do not conflate the two.
 fn authorizes(cap: &EvalVal, _path: &str) -> bool {
-    let level = match cap {
-        EvalVal::Int(n) if (0..=u8::MAX as i64).contains(n) => capabilities::Authority(*n as u8),
-        // Malformed/non-Int cap carries no recognizable authority — fail closed.
+    let cap = match cap {
+        EvalVal::Cap(cap) => cap,
+        // Malformed/non-Cap value carries no recognizable authority — fail
+        // closed (BV3: a wrong `op_args` index lands here, over-rejects,
+        // never a soundness hole).
         _ => return false,
     };
-    let cap = capabilities::Cap::mint(level, "FS");
     capabilities::check_authority_sufficient(
-        &cap,
+        cap,
         READ_BYTES_REQUIRED_AUTHORITY,
         "fs_driver::read_bytes",
     )
@@ -1794,10 +1803,12 @@ fn io_error_kind_to_ctor(kind: std::io::ErrorKind, ids: &FSIds) -> GlobalId {
     }
 }
 
-/// Build the `Result Bytes IOError` response `EvalVal` (`Result`'s 2 type
+/// Build the `Result IOError Bytes` response `EvalVal` (`Result`'s 2 type
 /// params fill `args[0..2]` as `Unknown`, mirroring every other landed
 /// prelude ctor's type-param-then-payload shape — `ctor_arity` = params.len()
-/// + args.len()).
+/// + args.len()). Untyped at this layer regardless — `make_result` puts
+/// `payload` at position 2 for both `Ok`/`Err` ctors, unaffected by which
+/// static field type the surface ascription assigns.
 fn make_result(ok: bool, payload: EvalVal, ids: &FSIds, store: &mut EvalStore) -> EvalVal {
     let ctor_id = if ok { ids.ok_id } else { ids.err_id };
     make_ctor(ctor_id, vec![EvalVal::Unknown, EvalVal::Unknown, payload], store)
@@ -1862,8 +1873,17 @@ pub fn run_io(
                             if fs_ids.is_some_and(|fs| *op_id == fs.readfile_id) =>
                         {
                             let fs = fs_ids.unwrap();
-                            let cap = op_args.get(0).cloned().unwrap_or(EvalVal::Unknown);
-                            let path_bytes = match op_args.get(1) {
+                            // BV3: `ReadFile`'s ctor args are now
+                            // `[Auth-value, Cap, Bytes]` (`ctor_arity =
+                            // params.len() + args.len()`; the enriched
+                            // `FSOp`'s Auth parameter is `op_args[0]`, an
+                            // erased-at-runtime tag) — cap shifted to
+                            // `op_args[1]`, path to `op_args[2]`. A
+                            // malformed/shifted shape fails closed via
+                            // `authorizes`'s `_ => false` / the `None` path
+                            // arm below, never a panic.
+                            let cap = op_args.get(1).cloned().unwrap_or(EvalVal::Unknown);
+                            let path_bytes = match op_args.get(2) {
                                 Some(EvalVal::Bytes(b)) => Some(b.clone()),
                                 _ => None,
                             };

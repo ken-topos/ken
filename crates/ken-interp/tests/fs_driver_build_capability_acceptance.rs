@@ -25,6 +25,9 @@ fn fixture_path(name: &str) -> PathBuf {
 struct FsEnv {
     elab_env: ken_elaborator::ElabEnv,
     read_bytes_id: ken_kernel::GlobalId,
+    anone_id: ken_kernel::GlobalId,
+    apartial_id: ken_kernel::GlobalId,
+    afull_id: ken_kernel::GlobalId,
     ok_id: ken_kernel::GlobalId,
     err_id: ken_kernel::GlobalId,
     capabilitydenied_id: ken_kernel::GlobalId,
@@ -57,6 +60,9 @@ fn mk_env() -> FsEnv {
     };
     FsEnv {
         read_bytes_id: get("read_bytes"),
+        anone_id: get("ANone"),
+        apartial_id: get("APartial"),
+        afull_id: get("AFull"),
         ok_id: fs_ids.ok_id,
         err_id: fs_ids.err_id,
         capabilitydenied_id: fs_ids.capabilitydenied_id,
@@ -67,11 +73,26 @@ fn mk_env() -> FsEnv {
 }
 
 /// Encode a `Cap`'s carried authority the way `eval.rs`'s `authorizes` decodes
-/// it: a bare `EvalVal::Int(level)` (D3's chosen representation — `Cap` is a
-/// zero-structure surface `OpaqueType`, so this Rust-side encoding is the only
-/// way a concrete authority ever reaches the driver).
+/// it: a real opaque `EvalVal::Cap` (fs-read-file-lines-flip D3, Architect
+/// ruling — NOT the earlier `EvalVal::Int(level)` positional-scalar).
 fn cap_evalval(cap: &Cap) -> ken_interp::EvalVal {
-    ken_interp::EvalVal::Int(ken_elaborator::capabilities::authority(cap).0 as i64)
+    ken_interp::EvalVal::Cap(cap.clone())
+}
+
+/// The `Auth` ctor `GlobalId` matching a `capabilities::Authority` level
+/// (the D2↔D3 shared contract, `capabilities.rs:33-35`). Erased at runtime
+/// (`read_bytes`'s `a` parameter is never inspected past elaboration — the
+/// REAL enforcement reads `Authority` off the carried `EvalVal::Cap`), but
+/// `read_bytes` is authority-polymorphic in `a`, so SOME `Auth` value must be
+/// supplied to reach the `Cap`/`Bytes` arguments.
+fn auth_ctor_id(env: &FsEnv, authority: ken_elaborator::capabilities::Authority) -> ken_kernel::GlobalId {
+    use ken_elaborator::capabilities::{AUTH_FULL, AUTH_NONE, AUTH_PARTIAL};
+    match authority {
+        AUTH_NONE => env.anone_id,
+        AUTH_PARTIAL => env.apartial_id,
+        AUTH_FULL => env.afull_id,
+        other => panic!("no Auth ctor for authority level {:?}", other),
+    }
 }
 
 fn read_via_real_driver(
@@ -82,7 +103,11 @@ fn read_via_real_driver(
     let mut store = ken_interp::EvalStore::new();
     let term = ken_kernel::Term::const_(env.read_bytes_id, vec![]);
     let f = ken_interp::eval(&[], &term, &env.elab_env.env, &mut store);
-    let step1 = ken_interp::apply(f, cap_evalval(cap), &env.elab_env.env, &mut store);
+    let a_id = auth_ctor_id(env, ken_elaborator::capabilities::authority(cap));
+    let a_term = ken_kernel::Term::Constructor { id: a_id, level_args: vec![] };
+    let a_val = ken_interp::eval(&[], &a_term, &env.elab_env.env, &mut store);
+    let step0 = ken_interp::apply(f, a_val, &env.elab_env.env, &mut store);
+    let step1 = ken_interp::apply(step0, cap_evalval(cap), &env.elab_env.env, &mut store);
     let path_val = ken_interp::EvalVal::Bytes(path.as_bytes().to_vec());
     let tree = ken_interp::apply(step1, path_val, &env.elab_env.env, &mut store);
     ken_interp::run_io(

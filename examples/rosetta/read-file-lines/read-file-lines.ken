@@ -3,14 +3,84 @@
 --
 -- Task: read a text file and process it line by line.
 --
--- GAP-fs-read-unwired (BLOCKING, see KNOWN-GAP.md): `read_bytes` is
--- declared (`crates/ken-elaborator/src/bytes.rs`, `[FS]` effect row) but
--- has no real runtime reduction in `ken-interp` -- it falls through to
--- the generic prim-reduce catch-all and stays `Neutral` (stuck) forever,
--- never actually reading a file. Confirmed by inspection: only
--- `print_line`/`string_to_list_char`/`list_char_to_string` are
--- special-cased with real reductions in `ken-interp/src/eval.rs`'s
--- `apply` (~1275-1309); `read_bytes`/`write_bytes` are not.
+-- fs-read-file-lines-flip (VAL2 #9/OQ-B closure, rosetta corpus -> 16/0).
+-- `main` declares EXACTLY the FS authority it needs on its own type
+-- (`Cap APartial` -- the manifest IS the signature, operator-locked); the
+-- CLI reads that declaration, mints precisely that authority, and binds it
+-- -- never full, never ambient. `read_bytes` carries the cap into a real
+-- `[FS]` effect computation, gated by the runtime `authorizes` check
+-- (`ken-interp/src/eval.rs`) before any syscall.
 --
--- Placeholder until GAP-fs-read-unwired is resolved.
-view main : Nat = Zero
+-- HONESTY BOUNDARY (Steward/Architect ruling, 2026-07-04): this demonstrates
+-- FS-read + pure-parse, NOT effect composition. `main` reads the fixture and
+-- returns the parsed line list as a total `Result`; the CLI (`ken-cli`'s
+-- `run_file`) prints each returned line (success) or renders the failure
+-- (never silently as success). A single Ken program driving BOTH an `[FS]`
+-- effect AND `[Console]` printing in one type-checked `ITree` needs a
+-- coproduct (`Sum`) `run_io` doesn't support today -- a separate, deferred
+-- effect-composition WP (Steward-tracked), not this build's concern.
+
+-- D1: `lines : String -> List String`, terminator semantics (`str::lines()`)
+-- -- a trailing '\n' yields NO trailing empty segment. Pure, total,
+-- structural recursion on the `Cons` tail (SCT-safe, no `Bottom`). Lives
+-- here (not the prelude) per the no-speculative-helper rule -- only this
+-- example needs it.
+
+view isNewline (c : Char) : Bool = eq_int (charToInt c) 10
+
+-- prepend `c` onto the CURRENT (first) segment being accumulated.
+view consFirst (c : Char) (acc : List (List Char)) : List (List Char) =
+  match acc {
+    Nil           => Cons (List Char) (Cons Char c (Nil Char)) (Nil (List Char)) ;
+    Cons seg rest => Cons (List Char) (Cons Char c seg) rest
+  }
+
+-- split on '\n' as a SEPARATOR (a trailing '\n' yields a trailing "").
+view splitNL (xs : List Char) : List (List Char) =
+  match xs {
+    Nil       => Cons (List Char) (Nil Char) (Nil (List Char)) ;
+    Cons c cs =>
+      match isNewline c {
+        True  => Cons (List Char) (Nil Char) (splitNL cs) ;
+        False => consFirst c (splitNL cs)
+      }
+  }
+
+-- drop the SINGLE trailing empty segment (terminator semantics). Recurses
+-- on `rest`, a strict structural sub-term of the outer scrutinee `segs`.
+view dropTrailingEmpty (segs : List (List Char)) : List (List Char) =
+  match segs {
+    Nil => Nil (List Char) ;
+    Cons seg rest =>
+      match rest {
+        Nil =>
+          match seg {
+            Nil      => Nil (List Char) ;
+            Cons _ _ => Cons (List Char) seg (Nil (List Char))
+          } ;
+        Cons _ _ => Cons (List Char) seg (dropTrailingEmpty rest)
+      }
+  }
+
+view mapListCharToString (segs : List (List Char)) : List String =
+  match segs {
+    Nil           => Nil String ;
+    Cons seg rest => Cons String (list_char_to_string seg) (mapListCharToString rest)
+  }
+
+view lines (s : String) : List String =
+  mapListCharToString (dropTrailingEmpty (splitNL (string_to_list_char s)))
+
+-- D2/D4: `main` declares `Cap APartial` (partial/read-level FS authority)
+-- on its OWN signature -- the manifest. Reads the fixture, decodes it, and
+-- returns the parsed lines as a total `Result IOError (List String)`.
+view main (cap : Cap APartial) : FS APartial (Result IOError (List String)) =
+  bind (FSOp APartial) (fs_resp APartial) (Result IOError Bytes) (Result IOError (List String))
+    (read_bytes APartial cap (bytes_encode "conformance/fs/fixtures/three-lines.txt"))
+    (\r .
+      match r {
+        Err e    => Ret (FSOp APartial) (fs_resp APartial) (Result IOError (List String))
+                        (Err IOError (List String) e) ;
+        Ok bytes => Ret (FSOp APartial) (fs_resp APartial) (Result IOError (List String))
+                        (Ok IOError (List String) (lines (bytes_decode bytes)))
+      })

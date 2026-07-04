@@ -108,6 +108,7 @@ fn show_val(v: &EvalVal) -> String {
         EvalVal::BigInt(n) => format!("{}", n),
         EvalVal::Float(f) => format!("{}", f),
         EvalVal::Float32(f) => format!("{}", f),
+        EvalVal::Cap(_) => "<cap>".to_owned(),
         // `Decimal` is DEMOTE→derived (`18a §5.6.1`) — a `Ctor` over two
         // `Int` fields, formatted by the generic `Ctor` arm above.
     }
