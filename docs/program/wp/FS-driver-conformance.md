@@ -121,6 +121,17 @@ and I/O-failure are different modes** and the plan pins them distinctly:
   (which is refused **before** the syscall by `authorizes`) — the plan keeps the
   two modes separate so a run distinguishes "denied by capability" from "read
   attempted, I/O failed."
+- **EFF6-independence witness (`D3`'s Console-lift note).** The AC2 fixture
+  (`read-file-lines`) is authored **FS-only and sequential** — it performs
+  `read_bytes` then processes the lines, and its expected behavior asserts **no
+  console-commute *equation***. So the fixture is a **conformance witness** of
+  `D3`'s claim that the FS path is independent of the deferred EFF6 console-
+  commute (`#245`): AC2 passes without the Console-lift. The plan therefore
+  **does not** author any FS-`⊗`-Console commute fixture in Phase 1 (that would
+  ride the landed `[State]` `Vis (inr o)` pass-through, and only a program
+  needing the specific commute *law* would touch EFF6 — out of Phase-1 scope).
+  If a future mixed FS+Console fixture is wanted, it rides the pass-through, not
+  EFF6 — flagged, not silently assumed.
 
 ## 4. Coverage map — every AC has a fixture home
 
