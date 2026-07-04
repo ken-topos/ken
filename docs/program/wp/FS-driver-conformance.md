@@ -90,15 +90,24 @@ flips on the carried authority:
 
 ### 2c. Trust-level honesty (do not over-claim "kernel-backed")
 
-The runtime `authorizes`/`attenuate` checks are **trusted Rust-level** logic in
-`capabilities.rs` (`check_authority_sufficient`, `AttenuationObligation::
-is_satisfied()` are Rust booleans — **no** `declare_postulate`/`Obligation`
-emission, [[kernel-backed-claim-grep-the-emission-not-the-name]]). So AC3 is a
+The **runtime path gate** — `authorizes(cap, path)` and the
+`check_authority_sufficient`/`authority_flows_to`/`AttenuationObligation::
+is_satisfied()` it rests on (a plain Rust `bool`) — is **trusted Rust-level**
+logic in `capabilities.rs`, **no** `declare_postulate`/`Obligation` emission
+([[kernel-backed-claim-grep-the-emission-not-the-name]]). **Erratum (my prior
+draft over-claimed): this is distinct from `attenuate`'s *static* refinement
+obligation, which IS kernel-re-checked** (`discharge_attenuation` →
+`declare_postulate`, `capabilities.rs:107,159`; `62 §3`) — that governs
+monotone-downward attenuation soundness at **elaboration**, not the runtime
+path gate. Do **not** conflate them or let the runtime gate borrow the static
+obligation's kernel-backing (grep the emission, not the name — a flat "the cap
+checks are trusted" is itself wrong). So AC3's **runtime** enforcement is a
 **tested-not-trusted** posture: the discriminating pairs (S1/S2, R1/R2) are the
 net; the reachability precondition is that FS ops run only on kernel-admitted
 core ([[tested-not-trusted-posture-needs-reachability-precondition]]). Enforced
 and conformance-netted — **not** kernel-proved. (Not a soundness hole; the
-framing must be precise, matching the Sec-lane trust level.)
+framing must be precise, matching the Sec-lane trust level, and consistent with
+`FS-driver.md` D5.)
 
 ## 3. AC2 (end-to-end) + AC5 (failure-surfacing) — two distinct failure modes
 
