@@ -5,34 +5,42 @@ Format: `../../README.md`. Third WP of the **catalog campaign**
 `docs/program/wp/CAT-3-collection-laws.md`). CAT-3 = **Layer 1**: the landed
 `packages/collections` ops get their **laws as propositions, proved not
 postulated** (the CAT-1 lawful-class discipline over a **value carrier**), the
-capstone **verified `sort`** (`isSorted` and `Perm`), and the agent-facing
-**projection abstraction** (the catalog's "view" unit, renamed to avoid the
-SURF-1-retired `view` keyword). This seed pins the discriminating conformance
-for all three deliverables.
+capstone **verified `sort`** (`isSorted` and `Perm` as two laws), and the
+agent-facing **`view` abstraction** (the catalog's projection unit — the six
+optic flavors). This seed pins the discriminating conformance for all three
+deliverables, **content-reconciled against the landed spec chapter**
+`spec/50-stdlib/57-collections-and-views.md` (spec-author `ec94c62`, the
+`optic → view` rename of `9a79e24`).
 
-The **Architect's three fork rulings** (`evt_4c3q1e611va69`) are folded in:
+The **Architect's three fork rulings** (`evt_4c3q1e611va69`), as transcribed in
+`57`:
 
-- **Fork A — `Perm` = count/multiset-equality, Ω-native, NOT `‖Perm_rel‖`.** A Π
-  into `Ω` of `Nat`-value equations is a proposition by the predicative max
-  (`16 §1.1`), needing **zero truncation machinery** — and it sidesteps the hard
-  unsoundness pin the **same way the landed `Ord.total` law does** (push
-  proof-relevant content into a decidable `Bool`/`Nat`, keep the law a
-  value-equation). A raw multi-ctor `data Perm … : Ω` is **inadmissible**
-  (proof-relevant, so `Ω`-PI collapse, so `Type → Ω` admits `true ≡ false`).
-- **Fork B — plain `Σ`-record (lawful-class shape) per concrete flavor.** The
-  concrete `lens`/`iso`/`refinement`/`indexed`/`setoid-quotient` flavors are
-  ordinary Ken records shipping now; `obligation-producing` is a stated seam
-  (Lane B / L12 / L14, deferred); the **polymorphic** family (`Lens s a` etc.)
-  is design-now / build-later, gated on a bounded multi-param-`class` wall.
-- **Fork C — family `optic`, flagship flavor `lens`.** The exact surface token
-  is **routed to Steward** (operator-facing ergonomics, the same axis SURF-1
-  routed) — so this seed pins the **concept** (a non-colliding name for the
-  Layer-1 unit) and `(oracle)`-tags the literal spelling, per the
-  don't-over-freeze-a-deferred-token rule.
+- **Fork A — `Perm` = count/multiset-equality, Ω-native, NOT `‖Perm_rel‖`**
+  (`57 §3.1`). A Π into `Ω` of `Nat`-value equations is a proposition by the
+  predicative max (`16 §1.1`), needing **zero truncation machinery** — the
+  **same move as the landed `Ord.total` law** (`57 §3.2`; push proof-relevant
+  content into a decidable `Bool`/`Nat`, keep the law a value-equation). A raw
+  multi-ctor `data Perm … : Ω` is **inadmissible** (proof-relevant, `Ω`-PI
+  collapse, `Type → Ω` admits `true ≡ false`, `16 §1.4`).
+- **Fork B — plain `Σ`-record (lawful-class *shape*, first-class *value*) per
+  concrete flavor** (`57 §4.2`). Five flavors ship concrete now; the
+  polymorphic family + the quotient-carrier form are the two design-now /
+  build-later walls (`57 §4.3`, `90`).
+- **Fork C — family `view`, flagship flavor `lens`** (operator override, Pat
+  2026-07-04, Steward `evt_4wsa1txzrx9nc`). Architect recommended `optic`; the
+  operator ruled **`view`** — SURF-1's retirement of the `view` *keyword* frees
+  the word, and `view` is the standard term for a read projection, so the
+  keyword-collision concern does not bind. **RESOLVED at `ec94c62`** — the
+  chapter is renamed `57-collections-and-views.md`, `§4.1`/`§90` rewritten
+  open→resolved to `view` (Architect verified the prose is faithful, not drift).
+  Two chapter items remain for final byte-align at assembly, both flagged below:
+  Architect FOLD-IN 1 (lens set-set `tt`→`Refl`, **applied in this seed**,
+  pending in the chapter) and the setoid-record's lowercase `view` field
+  (KwView collision, rename is spec-author's call).
 
 **Red-until-built posture (CAT-1-Functor precedent).** `map`, `filter`, `sort`,
-`isSorted`, `count`, `mem`, `length`, `min`, and the `optic`/`lens` records are
-**absent from `packages/` on `origin/main`** (self-grepped — see Grounding).
+`isSorted`, `count`, `mem`, `length`, `min`, and the `view`/`lens` records are
+**absent from `packages/` on `origin/main`** (self-grepped; `57 §2.1`/`§2.3`).
 Every case whose subject is one of these is **red-until-built** against the
 CAT-3 Language build (held for the GPT window); it flips green when the build
 lands the op + its law. Cases over **only** landed ops (`list_append`, `take`,
@@ -41,414 +49,424 @@ are tagged distinctly from the deeper **blocked-on-missing-op** reds.
 
 ## Grounding (content-verified against the landed targets)
 
+- `spec/50-stdlib/57-collections-and-views.md` (`ec94c62`) — the CAT-3
+  contract: §2 D1 structural laws, §3 verified `sort`, §4 the `view`
+  abstraction, §5 derivation paths / `trusted_base()` delta, §6 AC mapping. Law
+  anchors: `57 §2.2` (D1), `57 §3.4`/`§3.7` (sort), `57 §4.4` (lens).
 - `packages/collections/collections.ken` — **landed**: `list_append`
-  (`view list_append (a) (xs ys : List a) : List a`, recursing on its **first**
-  argument, so **left unit is definitional**, right unit + assoc inductive — the
-  CAT-1 monoid proofs this reuses are grounded on exactly this recursion),
-  `nth`, `take`, `drop`, `natSub`, `list_eq (eqf : a -> a -> Bool)`,
-  `list_compare (cmp : a -> a -> OrdResult)`, `data OrdResult = Lt | Eq | Gt`.
-  **NOT landed anywhere in `packages/`** (via `git grep`): `count`, `map`,
+  (recursing on its **first** argument, so **left unit is definitional**, right
+  unit + assoc inductive), `nth`, `take`, `drop`, `natSub`,
+  `list_eq (eqf : a -> a -> Bool)`, `list_compare`,
+  `data OrdResult = Lt | Eq | Gt`. **NOT landed** (`57 §2.1`): `count`, `map`,
   `filter`, `sort`, `isSorted`, `mem`, `length`, `min` — hence the
-  red-until-built split above.
-- `packages/lawful-classes/lawful_classes.ken` — the lawful-class pattern
-  (`class` = `Σ`-record, op fields `Type`-valued, law fields `Ω`-valued;
-  instance = `declare_def` record value re-checked by the kernel). **The Fork-A
-  precedent is landed here:** `Ord.total` is stated
-  `total : (x)(y) → IsTrue (bool_or (leq x y) (leq y x))` — a **decidable Bool
-  equation**, chosen (verbatim comment) *because* a bare propositional
-  disjunction "would be proof-relevant (which side holds is content) and need
-  `||.||` to reach Omega." Count-equality is that identical move for `Perm`.
-  `class DecEq a { eq : a -> a -> Bool ; sound ; complete }` (`:25`), whose
-  `sound`/`complete` tie `eq` to kernel `Equal` — so a `count` deciding
-  element-equality via `DecEq a` counts up to the **same** equality the `Perm`
-  law is about (no equality-mismatch hole).
-- **Carrier soundness (CV caveat, Architect-bound):** `instance DecEq Int`,
-  `instance Ord Int` are **all-`Axiom`** (`Int` is a K1 primitive: its
-  universally-quantified laws are not kernel-provable, honest visible
-  postulates); `Ord Char` is **zero-NEW-delta by transport** — it references
-  `Ord Int`'s `Axiom`s, not Axiom-free. **Only `Bool` is the zero-delta
-  exemplar** — `DecEq Bool` and `Ord Bool` are real, kernel-checked, Axiom-free
-  proofs (finite case-split). ⇒ the **proved** arms carry on `List Bool`.
-- `16 §1.1` — predicative universe max (a Π into `Ω` is in `Ω`); `16 §1.2` —
-  `Ω` proof-irrelevance (SProp); `16 §1.4` — the `Type → Ω` unsoundness pin
-  (`Bool` gives `true ≡ false`), the **actual** home of the raw-`Perm` argument
-  (spec-author's correction — the frame's `§1.3` is the derived-connectives /
-  truncation route, adjacent-but-not-the-pin); `16 §5` — quotients (kernel has
-  `Term::Quot`/`QuotClass`/`QuotElim`, **no surface intro path**); `16 §6` —
-  `‖·‖` truncation (the route Fork A did **not** take).
-- `55 §3.1` — the two-line induction+`cong` proof grammar; `55 §3.2` — the
+  red-until-built split.
+- `packages/lawful-classes/lawful_classes.ken` — the lawful-class pattern and
+  **the Fork-A precedent**: `Ord.total` is stated
+  `total : (x)(y) → IsTrue (bool_or (leq x y) (leq y x))` — a decidable Bool
+  equation, chosen *because* a bare propositional disjunction would be
+  proof-relevant (`57 §3.2` cites this verbatim). `DecEq a`'s `sound`/`complete`
+  fields (`:25`) tie its `eq` to kernel `Equal`.
+- **Carrier soundness (`57 §3.4`, CV caveat folded in):** `DecEq Int`/`Ord Int`
+  are **all-`Axiom`** (`Int` primitive), `Ord Char` **transports** those same
+  `Axiom`s; **only `Bool` has a real, Axiom-free `DecEq`+`Ord`**.
+  So the proved arms carry on `List Bool`; on `List Int` the honest-sort
+  discharge cannot be Axiom-free and the flip degenerates to reject-vs-reject
+  (green-vs-green vacuity).
+- `16 §1.1` (Π into `Ω`), `16 §1.2` (`Ω`-PI), `16 §1.4` (the `Type → Ω`
+  unsoundness pin — NOT `§1.3`, the derived-connectives/truncation home),
+  `16 §5` (quotients: kernel `Term::Quot`/`QuotClass`/`QuotElim`, **no surface
+  intro path**), `16 §6` (`‖·‖` truncation — the route Fork A did **not** take).
+- `55 §3.1`/`§3.2` — the two-line induction+`cong` grammar and the
   `tt`-vs-`Refl` endpoint discrimination, **per-branch not uniform**
   (constructor-headed gives `Top` gives `tt`; neutral gives stuck `Eq` gives
-  `Refl`).
-- `22 §2` / `ast.rs` `TRefine` / `elab.rs` refinement lowering — refinement
-  types `{ x : A | P x }` lower to the carrier + a kernel-re-checked obligation
-  (the `refinement` optic flavor + the verified-`sort` result type ride this).
-- `conformance/challenge/C5-verified-sort/` — **corroborates D2**: the landed
-  ES2 `sort` result refinement type-checks in `es2_acceptance.rs`; the
-  `const Nil` unsound arm is the canonical Perm-load-bearing discriminator.
-  **Known-gap** carried from C5: full **Perm proof discharge** (the prover
-  closing `Perm (insert …) …`) is not landed — *emission of both conjoined
-  obligations* is the checkable property today; the ACCEPT arm's full discharge
-  is red-until-built.
+  `Refl`) — inherited by `57 §1` and used at `57 §2.2`/`§3.7`/`§4.4`.
+- `21 §6.1`/`§6.3` + `22` — refinement types `{ x : A | φ }` lower to the
+  carrier + a kernel-re-checked obligation (`57 §4.2` refinement flavor).
+  `13 §6` — the negative `Σ` and **definitional Σ-η** (`57 §4.4` lens set-get).
+- `conformance/challenge/C5-verified-sort/` — corroborates the sort
+  discriminator (the `const Nil` unsound arm is a *stronger* non-permuting sort
+  than `57 §3.7`'s dedup — both fail `Perm`; §3.7's dedup is the canonical one).
 
-## Scope — canonical shapes, and the provable-now / red split
+## Scope — canonical shapes (from `57`), and the provable-now / red split
 
-The verified-`sort` cases reference these shapes (spelled once here; the exact
-field/signature spellings reconcile against the landed CAT-3 chapter body):
+The verified-`sort` cases reference these landed shapes (`57 §3.1`–`§3.5`):
 
 ```
-sort    (a) (leq) (xs) : { ys : List a | And (isSorted a leq ys) (Perm a ys xs) }
-sortBad (a) (leq) (xs) : <same refinement> = Nil a     -- non-permuting stub
-sortId  (a) (leq) (xs) : <same refinement> = xs        -- non-ordering (identity)
-Perm      a xs ys := (x : a) -> Equal Nat (count x xs) (count x ys)   -- Fork A
-eqFromOrd x y    := bool_and (leq x y) (leq y x)   -- count-eq from Ord alone
+sort      (a) (le : a -> a -> Bool) (xs : List a) : List a   -- plain, SCT-total
+Perm      (a) (eqf : a -> a -> Bool) (xs ys : List a) : Prop
+            = (x : a) -> Equal Nat (count eqf x xs) (count eqf x ys)   -- Fork A
+eqFromOrd (a) (le)  (x y : a) : Bool = bool_and (le x y) (le y x)
+-- the TWO correctness laws (separate fields, NOT a conjoined refinement):
+isSorted a le (sort a le xs)                        -- ordering law
+Perm a (eqFromOrd a le) xs (sort a le xs)           -- permutation law
+sortBad (a) (le) (xs) : List a = Nil a   -- dedup/drop stub (fails Perm)
+sortId  (a) (le) (xs) : List a = xs      -- identity (fails isSorted)
 ```
 
-- **D1 structural laws** (AC5): `take`/`drop` decomposition #1 **provable-now**
-  (landed ops); the `length`/`min` decomposition #2, `map` length-preservation,
-  `filter` membership are **red-until-built** (op unlanded).
-- **D2 verified `sort`** (AC3/AC4): the count-equality `Perm`, `isSorted`, and
-  the two dual flips (`sortBad` fails `Perm`; `sortId` fails `isSorted`), on
-  `List Bool`. Full ACCEPT-arm discharge red-until-built (C5 known-gap).
-- **D3 `optic`** (AC6): the concrete `lens` coherence flip, the per-flavor
-  mechanism enumeration, the name reconcile.
+- **D1 structural laws** (AC5, `57 §2.2`/`§2.3`): `take`/`drop` decomposition #1
+  **provable-now** (landed ops); `length`/`min` decomposition #2, `map`
+  length-preservation, `filter` membership are **red-until-built**.
+- **D2 verified `sort`** (AC3/AC4, `57 §3`): the count-equality `Perm` and
+  `isSorted` as **two separate law fields**, and the two dual flips (`sortBad`
+  fails `Perm`; `sortId` fails `isSorted`), on `List Bool`.
+- **D3 `view`** (AC6, `57 §4`): the concrete `lens` coherence flip over
+  `Pair Bool Bool`, the per-flavor mechanism enumeration, the name reconcile.
 - **Carrier:** `List Bool` for every proved obligation; `List a` /
   comparator-parametric only where no concrete lawful instance is needed.
-- **The Fork-C literal token is `(oracle)`** pending Steward; this seed uses
-  `optic`/`lens` (Architect's recommendation) as the working spelling.
 
 ---
 
 ## AC4 / AC3 — verified `sort`: count-equality `Perm` and the two dual flips
 
-### stdlib/collections/verified-sort-emits-both-conjuncts (soundness)
-- spec: CAT-3 §D2 (verified `sort`), `22 §2` (refinement obligation),
-  `55 §3.1` (induction+`cong`), Fork-A ruling (`Perm` = count-equality); C5
-  `sound-verified-sort.ken` (corroborating shape, `es2_acceptance.rs`)
-- given: the landed explicit-comparator insertion `sort` over `List Bool` with
-  the conjoined refinement result type (Scope), `leq` the real `Ord Bool`
-  comparator; input a concrete `List Bool` (e.g.
-  `Cons True (Cons False (Cons True Nil))`)
-- expect: **elaborates and emits the conjoined obligation with BOTH conjuncts
-  present** — the `And` head over `isSorted a leq (sort …)` and
-  `Perm a (sort …) xs`. Assert the **specific observable**: the emitted
-  obligation carries *both* conjuncts (grep the emitted core term for the `And`
-  head over the two named predicates), and the carrier is `List Bool` (real
-  `Ord`/`DecEq`, so the discharge is Axiom-free). **RED-UNTIL-BUILT** on two
-  axes: `sort`/`isSorted` unlanded (op), and full **Perm discharge** is the C5
-  known-gap — the checkable property today is *emission of both conjuncts*, not
-  closed proof
+### stdlib/collections/verified-sort-both-laws-hold (soundness)
+- spec: `57 §3.4` (the two laws; `sort : List a → List a` plain), `57 §3.6`
+  (insertion sort, SCT-structural), `55 §3.1` (induction+`cong`), Fork-A ruling
+- given: the landed explicit-comparator insertion `sort` over `List Bool`, with
+  the two **separate** correctness laws (Scope) — the ordering law
+  `isSorted a le (sort a le xs)` and the permutation law
+  `Perm a (eqFromOrd a le) xs (sort a le xs)` — each an `Ω` field proved by
+  induction; input a concrete `List Bool`
+- expect: **both law fields hold for the honest sort.** Assert the observable:
+  the ordering law and the permutation law are **two independently-stated `Ω`
+  fields** (not conjuncts of one refinement obligation), both discharged
+  Axiom-free on `List Bool`. **RED-UNTIL-BUILT** on two axes: `sort`/`isSorted`
+  unlanded (op), and full **Perm discharge** is the C5 known-gap
 - why: (soundness) the ACCEPT arm of AC4. It anchors the two REJECT flips below
-  — each holds `sort`'s type fixed and breaks exactly one conjunct. Emission of
-  **both** conjuncts is load-bearing: an `isSorted`-only obligation is
-  green-vs-green (`sortBad` passes it). The carrier is `List Bool` per the
-  caveat: on `List Int` the honest discharge cannot be Axiom-free and the flip
-  degenerates ([[green-vs-green-does-not-confirm-a-fix]]: the ACCEPT arm must be
-  genuinely dischargeable, not vacuously red)
+  — each holds `sort`'s type fixed and breaks exactly one law. The **permutation
+  law is independently load-bearing**: an `isSorted`-only contract is
+  green-vs-green (`sortBad` passes it — see the next case). The carrier is
+  `List Bool` per `57 §3.4`: on `List Int` the honest discharge cannot be
+  Axiom-free and the flip degenerates
+  ([[green-vs-green-does-not-confirm-a-fix]]: the ACCEPT arm must be genuinely
+  dischargeable, not vacuously red)
 
-### stdlib/collections/nonpermuting-sort-const-nil-fails-perm (soundness)
-- spec: CAT-3 §D2 (a non-permuting "sort" must fail `Perm`), Fork-A ruling
-  (count-equality), `16 §1.1`; C5 `unsound-const-nil.ken`
-- given: `sortBad` (Scope) — discards its input, returns `Nil a`, claims the
-  **same** refinement as the real `sort`; input a **non-empty** `List Bool`
-  (e.g. `Cons True (Cons False Nil)`)
-- expect: **verdict flips vs the honest `sort`, keyed on the `Perm` conjunct.**
-  **Rejected — at the `Perm` conjunct**: `Perm a (Nil a) xs` unfolds to
-  `(x : Bool) → Equal Nat (count x Nil) (count x xs)`; at `x = True`,
-  `count True Nil = 0` but `count True xs = 1`, a false `Equal Nat 0 1` — no
-  witness (multiset counts differ). The `isSorted` conjunct is **vacuously
-  satisfiable** (`isSorted leq Nil` holds), so the rejection is **solely** the
-  `Perm` conjunct. Assert the **specific observable**: elaboration fails at the
-  **`Perm` conjunct** of the emitted `And` with a conversion / unprovable
-  obligation on `Equal Nat 0 1` — **not** `is_err()`, not at `isSorted`, not a
-  missing-field error ([[assert-specific-error-variant-not-is-err]])
-- why: (soundness) AC4 — this is the discriminator that forces `sort` to *be* a
-  sort. `isSorted`-alone is vacuous; the `Perm` conjunct (as count-equality) is
-  what `const Nil` cannot satisfy. **Two-arm net**: a masked `Perm = Axiom` on
-  `sortBad` postulates `Equal Nat 0 1` — a false equation on a concrete `Nat` —
-  which fails the delta gate and inhabits `Bottom`. Verdict-flip vs
-  `verified-sort-emits-both-conjuncts`, keyed on the `Perm` conjunct. Reuses the
-  C5 `const Nil` shape
+### stdlib/collections/nonpermuting-sort-dedup-fails-perm (soundness)
+- spec: `57 §3.7` (the `Perm` flip, dedup example), Fork-A ruling
+  (count-equality), `16 §1.1`; C5 `unsound-const-nil.ken` (a stronger variant)
+- given: a **dedup** "sort" `sortBad` (Scope) that drops duplicate elements
+  (`57 §3.7`'s example), claiming the same `sort : List a → List a` type but not
+  permuting; input `xs = [True, True, False]` on `List Bool`
+- expect: **verdict flips vs the honest `sort`, keyed on the permutation law.**
+  **Rejected — at the `perm` law**: `Perm a (eqFromOrd a le) xs (sort a le xs)`
+  unfolds to `(x) → Equal Nat (count eqf x xs) (count eqf x (sort xs))`; the
+  honest sort preserves the count (the abstract permutation law closes
+  per-branch — base `Nil` gives `Eq Nat Zero Zero` → `Top` → **`tt`** (nullary),
+  inductive steps → `Refl`/`cong`; `55 §3.2` + Architect §3.7 note, exact tokens
+  build-pinned); a dedup drops `count True [T,T,F]` from `2` to `1`, so the
+  goal is `Equal Nat 2 1`, uninhabited. Assert the **specific observable**:
+  elaboration fails at the
+  **`perm` law field** with a conversion / unprovable obligation on
+  `Equal Nat 2 1` — **not** `is_err()`, not at `isSorted`, not a missing-field
+  error ([[assert-specific-error-variant-not-is-err]])
+- why: (soundness) AC4 — the discriminator that forces `sort` to *be* a sort;
+  the `perm` law (count-equality) is what a dedup cannot satisfy. **Two-arm
+  net**: a masked `perm = Axiom` postulates `Equal Nat 2 1` — a false equation
+  on a concrete `Nat` — failing the delta gate into `Bottom` (`57 §3.7`).
+  Verdict-flip vs `verified-sort-both-laws-hold`, keyed on the `perm` law. (C5's
+  `const Nil` is an even stronger non-permuting sort — `count True Nil = 0` — a
+  corroborating variant, not the primary)
 
 ### stdlib/collections/nonordering-sort-identity-fails-issorted (soundness)
-- spec: CAT-3 §D2 (a non-ordering "sort" must fail `isSorted`), `55 §3.2`
+- spec: `57 §3.7` (the `isSorted` flip, identity-on-descending), `55 §3.2`
   (`tt`/`Refl` endpoints), Fork-A ruling
 - given: `sortId` (Scope) — the identity "sort" (a genuine permutation, but does
-  not order); input a **descending** `List Bool` under the `Ord Bool` order —
-  the pair `[hi, lo]` (higher then lower per landed `Ord Bool.leq`; direction
-  reconciled against the landed instance at authoring)
-- expect: **verdict flips, keyed on the `isSorted` conjunct — the dual of the
-  previous case.** The `Perm` conjunct **holds** — `Perm a xs xs` is
-  `(x) → Equal Nat (count x xs) (count x xs)`, a **neutral** endpoint closing
-  **`Refl`** (§3.2 neutral, not `tt`). The `isSorted` conjunct **fails**:
-  `isSorted leq [hi, lo]` reduces to a conjunct requiring `IsTrue (leq hi lo)`
-  = `IsTrue False`, uninhabited. Assert the **specific observable**: elaboration
-  fails at the **`isSorted` conjunct** on `IsTrue False` — **not** at `Perm`,
-  **not** `is_err()`
-- why: (soundness) AC4 — the **dual** flip: it isolates the *other* conjunct, so
-  the pair (this + `sortBad`) proves **each** conjunct is independently
-  load-bearing (the multi-dimensional-guard rule: `Perm` and `isSorted` are two
-  dimensions; each needs its own discriminating case — a sort broken on only one
-  must fail at that one). `Perm`-holds-here vs `Perm`-fails-there, and
-  `isSorted`-fails-here vs `isSorted`-holds-there, is the crossed pair. Endpoint
-  `Refl`-vs-`tt` re-derived per §3.2, not transcribed
+  not order); input a **descending** `List Bool` pair `[hi, lo]` under the
+  `Ord Bool` order (direction reconciled against the landed instance)
+- expect: **verdict flips, keyed on the ordering law — the dual of the previous
+  case.** The permutation law **holds** — `Perm a eqf xs xs` is
+  `(x) → Equal Nat (count eqf x xs) (count eqf x xs)`, a **neutral** endpoint
+  closing **`Refl`** (`55 §3.2`, not `tt`). The ordering law **fails**:
+  `isSorted le [hi, lo]` requires `IsTrue (le hi lo)` = `IsTrue False`,
+  uninhabited. Assert the **specific observable**: elaboration fails at the
+  **`isSorted` law** on `IsTrue False` — **not** at `perm`, **not** `is_err()`
+- why: (soundness) AC4 — the **dual** flip: it isolates the *other* law, so the
+  pair (this + `sortBad`) proves **each** law is independently load-bearing (the
+  multi-dimensional-guard rule: `perm` and `isSorted` are two dimensions; a sort
+  broken on only one must fail at that one). `perm`-holds-here vs
+  `perm`-fails-there, and `isSorted`-fails-here vs `isSorted`-holds-there, is
+  the crossed pair. Endpoint `Refl`-vs-`tt` re-derived per `55 §3.2` (honest
+  reorder
+  → `IsTrue True` = `Top` → `tt`), not transcribed
 
 ### stdlib/collections/perm-is-count-equality-not-raw-omega-inductive (property)
-- spec: Fork-A ruling, `16 §1.1` (Π into `Ω`), `16 §1.2` (`Ω`-PI), `16 §1.4`
-  (`Type → Ω` unsoundness pin — NOT `§1.3`), `lawful_classes.ken` `Ord.total`
-  (the landed precedent)
+- spec: `57 §3.1` (Fork A), `16 §1.1` (Π into `Ω`), `16 §1.2` (`Ω`-PI),
+  `16 §1.4` (`Type → Ω` unsoundness pin — NOT `§1.3`), `57 §3.2`
+  (`Ord.total` precedent)
 - given: two candidate `Perm` representations: (a) the ruled count/multiset
-  `Perm a xs ys` (Scope); (b) a raw multi-constructor `data Perm : … : Ω` (a
-  `perm_nil`/`perm_skip`/`perm_swap`/`perm_trans`-style inductive relation
-  declared directly at `Ω`)
+  `Perm a eqf xs ys` (Scope); (b) a raw multi-constructor `data Perm : … : Ω` (a
+  `perm_nil`/`perm_skip`/`perm_swap`/`perm_trans`-style inductive relation at
+  `Ω`)
 - expect: **(a) is admissible and Ω-native; (b) is inadmissible.** Assert the
   **structural** observable: (a) `Perm` is a `Π`-type into `Ω` (`Equal Nat _ _`
   is `Ω`; the `Π` stays `Ω` by the predicative max `16 §1.1`), needs **no**
-  `‖·‖` intro/elim, and is provable by the landed two-line grammar; (b) a
+  `‖·‖` intro/elim, provable by the landed two-line grammar; (b) a
   proof-relevant multi-ctor inductive **cannot** be declared at `Ω` — distinct
   re-orderings are distinct derivations, `Ω`-PI (`16 §1.2`) collapses them, and
   unrestricted `Type → Ω` admits `Bool ⇒ true ≡ false` (`16 §1.4`). **Not** a
   verdict-flip: a `(property)` case pinning the ruling's representation —
   the AC3 soundness pin
 - why: (property) AC3 — the load-bearing soundness call. Count-equality is the
-  **same move as the landed `Ord.total`** (`bool_or` Bool-equation over a bare
-  proof-relevant disjunction): push proof-relevant content into a decidable
-  `Nat` count, keep the law a value-equation (subsume-don't-proliferate on a
-  soundness pattern the stdlib already chose,
+  **same move as the landed `Ord.total`** (`57 §3.2`): push proof-relevant
+  content into a decidable `Nat` count, keep the law a value-equation
+  (subsume-don't-proliferate on a soundness pattern the stdlib already chose,
   [[proof-relevant-inductive-cannot-be-declared-at-omega]]). Stated as a
   **property** because the discriminator is the *representation choice*, not a
   witness — a build that declared `data Perm : Ω` would be blocked here
 
 ### stdlib/collections/perm-eq-derives-from-ord-no-separate-deceq (property)
-- spec: Fork-A ruling pt 4, `lawful_classes.ken` (`Ord`/`DecEq`), `51`
+- spec: `57 §3.5` (`eqFromOrd`), Fork-A ruling pt 3, `lawful_classes.ken`
+  (`Ord`/`DecEq`), `51`
 - given: two ways `count` obtains its element-equality for the **sort capstone**
-  (which already carries `Ord a` via `leq`): (a) `eqFromOrd` (Scope) — derived
-  from `Ord a` alone (antisym gives `Equal` from `IsTrue`; refl + `Ord` gives
-  the converse); (b) a **separate** `DecEq a` dict threaded alongside `Ord a`
+  (which already carries `le`): (a) `eqFromOrd` (Scope, `57 §3.5`) — derived
+  from the sort's own `le` (antisym gives `Equal` from `IsTrue`; refl gives the
+  converse); (b) a **separate** `DecEq a` dict threaded alongside
 - expect: **(a) suffices for `sort`'s `Perm`; (b) is redundant for the
   capstone.** Assert the structural observable: `sort`'s `Perm` law needs
-  **no** extra `DecEq` dict beyond the `Ord a` it already has — `eqFromOrd`
-  decides the same `Equal` (via `antisym`/`refl`). A **standalone** generic
-  `Perm` (no ambient `Ord`) does take a `DecEq a` param. **Not** a verdict-flip:
-  a `(property)` case grounding Architect pt 4 (no extra dict beyond the
-  capstone's)
+  **no** extra `DecEq` dict — `eqFromOrd` decides the same `Equal` the law is
+  about (`DecEq`'s `sound`/`complete` tie, `57 §3.5`). A **standalone** generic
+  `Perm` (no ambient order) does take a `DecEq a` param. **Not** a verdict-flip:
+  a `(property)` case grounding the dict economy
 - why: (property) AC3/AC4 — pins the dict economy so the build does **not**
   proliferate a `DecEq` requirement onto `sort` that the order already
-  discharges. Reconcile point: the exact `count`-eq threading (`eqFromOrd` vs a
-  `DecEq` field) is a spec spelling — bind against the landed CAT-3 chapter
+  discharges. The `count`-eq threading via `eqFromOrd` is the landed `57 §3.5`
+  form ([[class-dict-explicit-vs-implicit-abstract-tyvar]]: the ambient-order
+  path avoids an extra dict)
 
 ### stdlib/collections/verified-sort-proved-carrier-is-lawful-bool (property)
-- spec: CV carrier caveat (Architect-bound, `evt_4c3q1e611va69`), CAT-3 §5
-  (carrier breadth), `lawful_classes.ken` (`DecEq`/`Ord` Bool vs Int)
+- spec: `57 §3.4` (the carrier caveat, CV-sourced, Architect-bound),
+  `lawful_classes.ken` (`DecEq`/`Ord` Bool vs Int)
 - given: the proved ACCEPT arm of the verified `sort` instantiated at (a)
   `List Bool` vs (b) `List Int`
 - expect: **the proved arm must carry on `List Bool`.** Assert the structural
   observable: on (a) `List Bool` the honest `Perm`/`isSorted` discharge is
-  **Axiom-free** (`DecEq Bool`/`Ord Bool` are real proofs); on (b) `List Int`
-  the discharge **cannot** be Axiom-free (`Ord Int`/`DecEq Int` are all-`Axiom`)
-  so the `sortBad` / `sortId` flips degenerate to **reject-vs-reject**
-  (green-vs-green vacuity — both arms fail, the flip guards nothing). **Not** a
-  verdict-flip: a `(property)` case that **guards the ACCEPT arm from vacuity**
+  **Axiom-free** (`DecEq Bool`/`Ord Bool` real); on (b) `List Int` it **cannot**
+  be (`Ord Int`/`DecEq Int` all-`Axiom`) so the `sortBad`/`sortId` flips
+  degenerate to **reject-vs-reject** (green-vs-green vacuity — both arms fail,
+  the flip guards nothing). **Not** a verdict-flip: a `(property)` case that
+  **guards the ACCEPT arm from vacuity**
 - why: (property) AC4 — a discriminating flip is only real if the ACCEPT arm is
-  genuinely dischargeable ([[green-vs-green-does-not-confirm-a-fix]]). Pinning
-  `List Bool` as the proved carrier is what keeps the two sort flips above
-  non-vacuous; `List Int`/generic is admissible only where the law is
-  comparator-parametric and needs no concrete lawful instance. This is my
-  grounding caveat, promoted to a standing case so the build cannot silently
-  pick `List Int` and ship a vacuous green
+  genuinely dischargeable ([[green-vs-green-does-not-confirm-a-fix]]). `57 §3.4`
+  folds this in verbatim: `List Bool` for D2's proof obligations, `List Int`/
+  generic only where a law is comparator-parametric and needs no concrete lawful
+  instance. Promoted to a standing case so the build cannot silently pick
+  `List Int` and ship a vacuous green
 
 ---
 
 ## AC5 — D1 structural laws: `Ω`, pointwise, one canonical field
 
 ### stdlib/collections/take-drop-decomposition-holds (soundness)
-- spec: CAT-3 §D1 (decomposition), `55 §3.1`/`§3.2`, `collections.ken`
-  (`take`/`drop`/`list_append` landed)
-- given: the law `list_append (take n xs) (drop n xs) ≡ xs` as a single `Ω`
-  field, stated pointwise; proved by induction (on `n` then `xs`, matching the
-  landed `take`/`drop` recursion); carrier `List Bool` (or generic `List a` —
-  the law is element-agnostic)
+- spec: `57 §2.2` (decomposition #1, GREEN), `57 §2.3` (provable-now),
+  `55 §3.1`/`§3.2`, `collections.ken` (`take`/`drop`/`list_append` landed)
+- given: the law
+  `Equal (List a) (list_append a (take a n xs) (drop a n xs)) xs` as a single
+  `Ω` field, stated pointwise; proved by induction on `n`/`xs`; carrier
+  `List Bool` (or generic `List a` — element-agnostic)
 - expect: **accepts — provable-NOW** (all three ops landed; needs only the proof
-  authored + the CAT-3 package built). Endpoints per §3.2: the `Zero`/`Nil` base
-  reduces both sides to `xs`/`Nil` — **constructor-headed gives `Top` gives
-  `tt`**; the `Suc`/`Cons` step is inductive (IH + `cong` under `Cons`). Assert
-  the observable: one canonical `Ω` field, the pointwise equation closes.
-  **Tagged provable-now**, distinct from the blocked reds below
-- why: (soundness) AC5 — the one D1 law statable+provable on landed ops today.
-  Left-unit-definitional grounding (append recurses first arg) carries from
-  CAT-1. Serves as the "provable-now" anchor against which the missing-op reds
-  are contrasted
+  authored + the CAT-3 package built). Endpoints per `55 §3.2`: the `Zero`/`Nil`
+  base reduces both sides to `xs`/`Nil` — **constructor-headed gives `Top` gives
+  `tt`**; the `Suc`/`Cons` step is inductive. Assert: one canonical `Ω` field,
+  the pointwise equation closes. **Tagged provable-now**, distinct from the reds
+  below
+- why: (soundness) AC5 — the one D1 law statable+provable on landed ops today
+  (`57 §2.3`). Serves as the "provable-now" anchor against which the missing-op
+  reds are contrasted
 
 ### stdlib/collections/take-length-law-red-until-built (property)
-- spec: CAT-3 §D1 (`length (take n xs) ≡ min n (length xs)`), spec-leader
-  sharpening (`length` AND `min` both unlanded)
-- given: the length-of-take law `length (take n xs) ≡ min n (length xs)`
-- expect: **RED-UNTIL-BUILT — blocked on missing ops** (`length` and `min` are
-  both absent from `packages/`). The law cannot even be *stated* without them.
-  Flips green when the CAT-3 build lands `length` + `min` + the proof. Assert
-  the observable: the case is red for a **deeper** reason than the `take`/`drop`
-  decomposition #1 — not "proof unwritten" but "operator unlanded"
-- why: (property) AC5 — the provable-now / blocked-red distinction spec-leader
-  surfaced (decomposition #1 provable, #2 blocked). Tagging **which** reds are
+- spec: `57 §2.2` (decomposition #2, RED), `57 §2.3` (`length` AND `min` both
+  unlanded)
+- given: the length-of-take law
+  `Equal Nat (length a (take a n xs)) (min n (length a xs))`
+- expect: **RED-UNTIL-BUILT — blocked on missing ops** (`length` and `min` both
+  absent; only `natSub` is landed, per `57 §2.3`). The law cannot be *stated*
+  without them. Flips green when the build lands `length` + `min` + the proof.
+  Assert: the case is red for a **deeper** reason than decomposition #1 — not
+  "proof unwritten" but "operator unlanded"
+- why: (property) AC5 — the provable-now / blocked-red distinction `57 §2.3`
+  sharpens (decomposition #1 provable, #2 blocked). Tagging **which** reds are
   op-blocked vs proof-pending is the elaboration-time deferred-seam tag
-  ([[layer-dependent-pin-at-unconditional-layer]] discipline: name where the
-  behavior is unconditional vs blocked)
+  ([[layer-dependent-pin-at-unconditional-layer]])
 
 ### stdlib/collections/map-length-preservation-red-until-built (property)
-- spec: CAT-3 §D1 (`length (map f xs) ≡ length xs`), CAT-1-Functor red posture
-- given: the `map` length-preservation law `length (map f xs) ≡ length xs` (if
-  `map` arrives via a `Functor List` instance, this is a law *about* the
-  instance)
+- spec: `57 §2.2` (`Equal Nat (length b (map a b f xs)) (length a xs)`, RED),
+  CAT-1-Functor red posture
+- given: the `map` length-preservation law (if `map` arrives via `Functor List`,
+  a law *about* the instance)
 - expect: **RED-UNTIL-BUILT — blocked** (`map` and `length` both unlanded; no
-  `Functor List` / standalone `map` on `List` exists in `packages/`). Flips
-  green when the build lands `map` + `length` + the proof
+  `Functor List` / standalone `map` on `List` in `packages/`). Flips green when
+  the build lands `map` + `length` + the proof
 - why: (property) AC5 — CAT-1-Functor posture verbatim; the `map` provenance
-  (`Functor List` instance vs standalone) is an open CAT-3 §5 sub-decision the
-  build pins
+  (`Functor List` vs standalone) is an open build sub-decision
 
 ### stdlib/collections/filter-membership-red-until-built (property)
-- spec: CAT-3 §D1 (`mem x (filter p xs) ⇔ (mem x xs ∧ IsTrue (p x))`)
-- given: the `filter` membership law with `mem`/`⇔` as `Ω`-predicates
+- spec: `57 §2.2` (the `filter` membership `Iff`, RED)
+- given: the `filter` membership law with `mem`/`Iff` as `Ω`-predicates
 - expect: **RED-UNTIL-BUILT — blocked** (`filter` and `mem` both unlanded). The
-  `⇔` is a two-sided `Ω`-implication (a pair of `Π`s into `Ω`, no truncation).
+  `Iff` is a two-sided `Ω`-implication (`16 §1.3` mutual `→`, no truncation).
   Flips green when the build lands `filter` + `mem` + the proof
-- why: (property) AC5 — the membership law is the D1 law whose statement is a
-  bi-implication rather than an equation; pinning it as `⇔`-of-`Ω`-predicates
-  (not a `Bool`-equation) keeps it in the value/`Ω` fragment (`55 §4`)
+- why: (property) AC5 — the one D1 law whose statement is a bi-implication
+  rather than an equation; pinning it as `Iff`-of-`Ω`-predicates (`16 §1.3`, not
+  a `Bool`-equation) keeps it in the value/`Ω` fragment (`57 §2.2`)
 
 ---
 
 ## AC2 — proved, zero `Axiom`; the append monoid REUSES CAT-1
 
 ### stdlib/collections/append-monoid-reuses-cat1-proofs (property)
-- spec: CAT-3 §2 pin 2 / §6 (do-not-re-prove), `lawful_functors.ken`
+- spec: `57 §2.4` (reuse, not re-proof), `lawful_functors.ken`
   (`list_assoc`/`list_left_unit`/`list_right_unit`, landed CAT-1), CAT-1-build
   §6.1 (parametric-instance-head gate)
-- given: the `Monoid (List a)` instance in two forms: (a) its associativity +
-  unit law fields **reference** the landed generic `list_assoc`/
-  `list_left_unit`/`list_right_unit` (CAT-1); (b) a variant that **re-proves**
+- given: the `Monoid (List a)` instance in two forms: (a) its law fields
+  **cite** the landed generic CAT-1 proofs; (b) a variant that **re-proves**
   associativity/unit inline in the `collections` package
 - expect: **(a) is the mandated form; (b) a proliferation defect.** Assert the
   structural observable: the `Monoid (List a)` law fields are **citations** to
-  the CAT-1 proofs (grep: no duplicated `list_assoc`/`list_*_unit` proof terms
-  in the CAT-3 package), zero `Axiom`. **The instance *form* is gated** on
-  CAT-1-build's parametric-instance-head piece (`Monoid (List a)` is a
-  parametric instance head, the `55 §6.1` gap), so the **instance** is
-  red-until-that-lands while the **generic append proofs** are reusable today.
-  **Not** a verdict-flip: a `(property)` case pinning reuse-don't-proliferate
+  the CAT-1 proofs (grep: no duplicated `list_assoc`/`list_*_unit` proof terms),
+  zero `Axiom`. **The parametric instance *form*** `instance Monoid (List a)` is
+  gated on CAT-1-build's parametric-instance-head piece (`55 §6.1`, free `a` →
+  `UnresolvedCon`; the landed instance bundles monomorphically) — so the
+  instance is red-until-that-lands while the **generic append proofs** are
+  reusable today (`57 §2.4`). **Not** a verdict-flip: a `(property)` case
+  pinning reuse-don't-proliferate
 - why: (property) AC2 — subsume-don't-proliferate: re-deriving the monoid laws
   would duplicate proof terms (a divergence surface) that CAT-1 already
   discharges once, generically. The gate on the parametric-instance-head keeps
-  the honest split — proofs reusable now, instance-wiring pending the elaborator
-  piece ([[class-dict-explicit-vs-implicit-abstract-tyvar]]: the explicit/landed
-  path is available; the implicit/parametric-head path is the gated one)
+  the honest split ([[class-dict-explicit-vs-implicit-abstract-tyvar]]: the
+  monomorphic/landed path is available; the parametric-head path is the gated
+  one)
 
 ---
 
-## AC6 — D3: the `optic` abstraction
+## AC6 — D3: the `view` abstraction
 
 ### stdlib/collections/lens-coherence-laws-hold (soundness)
-- spec: CAT-3 §D3 (projection/lens flavor), Fork-B ruling (plain `Σ`-record over
-  a concrete carrier), `33 §5.2` (record = `Σ`+η), `51 §5` (laws PROVED)
-- given: a concrete `lens` as a lawful-class `Σ`-record
-  `{ get : S -> A ; set : S -> A -> S ; get_set ; set_get ; set_set }` over a
-  **concrete** carrier `S`/`A` (single/zero type param, the `Monoid`/`Ord`
-  shape), with the three coherence laws (`get (set s a) ≡ a`;
-  `set s (get s) ≡ s`; `set (set s a) b ≡ set s b`) as real proofs — e.g. the
-  first-projection lens on a concrete pair record
-- expect: **accepts** — the three coherence law fields re-check against the
-  concrete `get`/`set`. Assert the observable: the record elaborates, all three
-  coherence proofs close, zero `Axiom`. **RED-UNTIL-BUILT** (the `optic`/`lens`
-  record is not in `packages/`; ships at the CAT-3 build)
+- spec: `57 §4.4` (the concrete lens over `Pair Bool Bool`), `57 §4.2` (Fork B:
+  plain `Σ`-record), `13 §6` (negative `Σ` + definitional Σ-η), `55 §3.2`
+  (endpoints)
+- given: the shipped concrete `lens` (`57 §4.4`) — a `Σ`-record of `get`/`set`
+  + the three coherence proofs — onto the first component of `Pair Bool Bool`,
+  with `get := pairFst` and `set s b := mkPair b (pairSnd s)` over the landed
+  prelude Σ-pair, and the three coherence laws proved
+- expect: **accepts** — the three coherence laws close **definitionally**, with
+  the per-branch endpoint discipline (`55 §3.2`): **get-set**
+  `Equal Bool (get (set s b)) b` computes by Σ-β to neutral `b` both sides →
+  **`Refl`**; **set-set**
+  `Equal (Pair Bool Bool) (set (set s b) c) (set s c)` computes by Σ-β so both
+  sides are the identical `mkPair c (pairSnd s)` → **`Refl`** (a **non-nullary**
+  head with a **neutral** component `pairSnd s`, so the `Eq Bool` on the second
+  components stays stuck and does NOT collapse to `Top` — `tt : Top` is
+  ill-typed;
+  Architect FOLD-IN 1); **set-get**
+  `Equal (Pair Bool Bool) (set s (get s)) s` holds by **definitional Σ-η**
+  (`mkPair (pairFst s) (pairSnd s) ≡ s`, `13 §6`) → `Refl`. Assert: the record
+  elaborates, all three proofs close by `Refl`, zero `Axiom`, **no `match` on
+  the Σ-pair**
+  (Σ-η, not a case-split). **RED-UNTIL-BUILT** (the `view`/`lens` record is not
+  in `packages/`)
 - why: (soundness) AC6 — the ACCEPT arm for the shipped concrete flavor. It is
-  ordinary Ken (Fork B: plain `Σ`-record, kernel-untouched), the exact
-  lawful-class shape CAT-1 established. Anchors the broken-lens flip below
+  ordinary Ken (Fork B: plain `Σ`-record, kernel-untouched). **All three laws
+  close by `Refl`** — none by `tt`: the `55 §3.2` "same head → `Top` → `tt`"
+  rule fires only for a **nullary** head that collapses fully; `Pair`'s `mkPair`
+  is non-nullary with a neutral component, so every endpoint is a stuck `Eq` on
+  equal terms ([[tt-vs-refl-endpoint-rule-for-inductive-equal-law-bases]],
+  Architect FOLD-IN 1 — the same non-nullary-head subtlety §3.2 pins). No
+  `DecEq`/`Ord` needed (structural over `Pair`), so the `57 §3.4` carrier caveat
+  does not bind here. Anchors the broken-lens flip below
 
-### stdlib/collections/broken-lens-setget-false-witness-rejected (soundness)
-- spec: CAT-3 §D3, Fork-B ruling, `55 §3.2`; sibling of CAT-2's
-  `applicative-map-coheres-with-wired-functor` (the coherence-flip shape)
-- given: two `lens`-shaped records **identical** in type, differing only in
-  `set` and the coherence proof it must satisfy: (a) the canonical lens (real
+### stdlib/collections/broken-lens-getset-false-witness-rejected (soundness)
+- spec: `57 §4.4` (the get-set law), Fork-B ruling, `55 §3.2`; sibling of
+  CAT-2's `applicative-map-coheres-with-wired-functor` (coherence-flip shape)
+- given: two `lens`-shaped records **identical** in type over `Pair Bool Bool`,
+  differing only in `set` and the coherence proof: (a) the canonical lens (real
   proofs); (b) a **broken** lens whose `set s _ = s` (drops its value arg —
-  well-typed at `S -> A -> S`), whose `get_set`/`set_get` proof is then false
-- expect: **verdict flips on the coherence of `set`.** (a) **accepts**; (b)
-  **rejected — conversion failure at the `get_set` (or `set_get`) field**: at a
-  concrete carrier, `get (set s a) = get s` (the dropped `a`) while the law
-  demands `≡ a`, a false `Equal A (get s) a` for `get s ≢ a`. Assert the
-  **specific observable**: (b) fails **at the named coherence field** with a
-  constructor/value clash — **not** `is_err()`, not a missing-field error
-  ([[assert-specific-error-variant-not-is-err]])
+  well-typed at `Pair Bool Bool → Bool → Pair Bool Bool`), whose `get_set` proof
+  is then false
+- expect: **verdict flips on the coherence of `set`, at the get-set law.** (a)
+  **accepts**; (b) **rejected — conversion failure at the `get_set` field**:
+  `get (set s b) = pairFst s` (the dropped `b`) while the law demands `≡ b`, a
+  false `Equal Bool (pairFst s) b` (two distinct neutrals — not `Refl`). Assert
+  the **specific observable**: (b) fails **at the `get_set` field** with a
+  neutral/value clash — **not** `is_err()`, not a missing-field error, and
+  **not** at `set_get` (which the broken `set s _ = s` still satisfies:
+  `set s (get s) = s`) ([[assert-specific-error-variant-not-is-err]])
 - why: (soundness) AC6 — proves the coherence laws are **load-bearing** (a lens
-  is `(get, set)` **plus proofs**, the verified-substrate discipline). **Two-arm
-  net**: a masked `get_set = Axiom` on the broken `set` postulates a false
-  `Equal` and inhabits `Bottom` via the delta gate. Verdict-flip, keyed solely
-  on `set`'s coherence — the D3 analog of the D2 `Perm`/`isSorted` flips and the
-  CAT-2 `map_coh` flip
+  is `(get, set)` **plus proofs**). The get-set law is precisely what forces
+  `set` to *store* its argument; a value-dropping `set` fails it while still
+  passing set-get/set-set — so the discriminator must target **get-set**
+  specifically (multi-dimensional-guard: naming the wrong law would be
+  green-vs-green). **Two-arm net**: `get_set = Axiom` postulates a false
+  `Equal` into `Bottom`. Verdict-flip, keyed solely on `set`'s get-set coherence
 
-### stdlib/collections/optic-flavors-mechanism-per-flavor-grounded (property)
-- spec: Fork-B ruling (the per-flavor table), `22 §2` (refinement), `16 §5`
-  (quotients, no surface intro), CAT-1 §6 (higher-kinded / multi-param `class`
-  wall), Lane B / L12 / L14 (obligation seam)
-- given: the six optic flavors — `projection (lens)`, `representation (iso)`,
+### stdlib/collections/view-flavors-mechanism-per-flavor-grounded (property)
+- spec: `57 §4.2` (the per-flavor table), `57 §4.3` (the two walls), `21 §6.1`
+  (refinement), `16 §5` (quotients, no surface intro), CAT-1 §6 (multi-param
+  `class`), Lane B / L12 / L14 (obligation seam)
+- given: the six `view` flavors — `projection (lens)`, `representation (iso)`,
   `refinement`, `indexed`, `quotient-respecting`, `obligation-producing` — each
   claimed against **landed** machinery
 - expect: **each flavor's mechanism is grounded, not hand-waved "views are
-  records".** Assert the structural observable, per flavor: `lens`/`iso`/
+  records".** Assert the structural observable, per `57 §4.2`: `lens`/`iso`/
   `refinement`/`indexed` = plain `Σ`-record (concrete) → **ship now**;
-  `quotient-respecting` has **two** forms — the **setoid-morphism** form
-  `{ view : A -> B ; respects : (x y) -> R x y -> Equal B (view x) (view y) }`
-  is a plain `Σ`-record → **now**, but the **quotient-carrier** form (a view
-  *out of* `A/R`) needs a surface **quotient-intro** path the parser lacks
-  (`16 §5` kernel formers exist, no surface) → **deferred**;
-  `obligation-producing` is the **Lane B / L12 / L14 seam** → **boundary stated,
-  deferred**; and the **polymorphic** forms (`Lens s a`, `Iso a b`) need a
-  **multi-param `class`** (landed `class` takes one type param) → **design now,
-  build fast-follow** (a bounded outer-ring extension, re-forks to Steward WHEN
-  built). **Not** a verdict-flip: a `(property)` case pinning the per-flavor
-  mechanism + what-ships-now
+  `quotient-respecting` **setoid-morphism** form
+  `{ view ; respects }` is a plain `Σ`-record → **now**, but the
+  **quotient-carrier** form (a view *out of* `A/R`) needs a surface
+  **quotient-intro** path the parser lacks (`16 §5` kernel formers exist, no
+  surface) → **deferred**; `obligation-producing` = the **Lane B / L12 / L14
+  seam** → **boundary stated, deferred**; and the **polymorphic** forms
+  (`Lens s a`, `Iso a b`) need a **multi-param `class`** (`57 §4.3`) → **design
+  now, build fast-follow**. **Not** a verdict-flip: a `(property)` case pinning
+  the per-flavor mechanism + what-ships-now
 - why: (property) AC6 — Fork B mandates enumerating the mechanism per flavor
-  against landed code, not asserting a single construct
-  ([[sizing-a-subsume-fix-enumerate-every-piece]]: list each flavor's distinct
-  vehicle and grep it). Surfacing the two design-now/build-later walls
-  (surface-quotient-intro, multi-param-`class`) as a standing case keeps AC1
-  honest — they re-fork to Steward at build time, not now
+  against landed code ([[sizing-a-subsume-fix-enumerate-every-piece]]: list each
+  flavor's distinct vehicle and grep it). Surfacing the two design-now/
+  build-later walls (surface-quotient-intro, multi-param-`class`) as a standing
+  case keeps AC1 honest — they re-fork to Steward (`57 §4.3`/`90`), not now
 
-### stdlib/collections/optic-name-not-retired-view-keyword (property)
-- spec: Fork-C ruling (family `optic`, flagship `lens`; token → Steward),
-  SURF-1 (`view` keyword retired), CAT-3 §5 fork C
-- given: the Layer-1 abstraction's name, against the SURF-1 decision that
-  **retires the `view` keyword** (→ `fn`/`proc`/`const`)
-- expect: **the abstraction's name does NOT collide with the retired `view`
-  keyword.** Assert the observable: the shipped name is a non-colliding noun
-  (`optic` family / `lens` flavor per Architect's recommendation), **not**
-  `view`. The **exact surface token is `(oracle)`** — routed to Steward
-  (operator-facing ergonomics); this case pins the **concept** (non-collision)
-  and does **not** freeze the literal spelling. **Not** a verdict-flip
-- why: (property) AC6 / fork C — pin the value-set + invariant (a non-`view`
-  name), `(oracle)`-tag the deferred token, per the don't-over-freeze rule: a
-  case that hard-froze `optic` would **falsely fail** a valid build if Steward
-  rules `focus`/`projection` instead. Reconcile the final token against the
-  landed CAT-3 chapter + Steward's ruling at the merge gate
-  ([[reconcile-binds-a-co-reviewers-plausible-reading-too]])
+### stdlib/collections/view-family-name-reuses-freed-keyword (property)
+- spec: `57 §4.1` (Fork C, resolved to family `view` at `ec94c62`), Steward
+  `evt_4wsa1txzrx9nc` (operator override), SURF-1 (`view` keyword retired), `90`
+  (naming token routed)
+- given: the Layer-1 abstraction's family name, after the operator ruled it
+  **`view`** (over Architect's recommended `optic`)
+- expect: **the family name is `view` (the freed noun), flagship flavor
+  `lens`.** Assert the observable: the shipped name is `view` — the operator
+  ruled the `view`-*keyword* collision concern **does not bind** (no extant
+  users of the keyword outside this repo; `view` is the standard term for a read
+  projection). **Build-order nuance** (Steward, not a blocker): a
+  **capitalized** `View` type/class is collision-free on `main` today; a
+  **lowercase** `view` identifier collides with the still-live `KwView` lexer
+  token until SURF-1's keyword-retirement build lands, so CAT-3-build then
+  sequences after it. **Not** a verdict-flip
+- why: (property) AC6 / Fork C — **this case's premise inverted at the operator
+  gate**: I originally pinned "name must NOT be `view`" and `(oracle)`-tagged
+  the token; the operator resolved it to **`view`**, so the `(oracle)`-tag
+  is discharged to the ruled value
+  ([[reconcile-binds-a-co-reviewers-plausible-reading-too]]: re-derive against
+  the ruling, do not carry the stale hypothesis). Not
+  hard-freezing `optic` is exactly what let this reconcile cleanly instead of
+  shipping a case contradicting the ruling. **`§4.1`/`§90` are RESOLVED to
+  `view` at `ec94c62`** (Architect-verified faithful, not drift); final
+  byte-align is against spec-author's post-FOLD-IN-1 SHA at the assembly gate
 
 ---
 
 ## AC1 — kernel-untouched, outer-ring
 
 ### stdlib/collections/cat3-kernel-untouched-outer-ring (property)
-- spec: CAT-3 §2 pin 5 / AC1, Fork-A/B rulings (no new capability)
+- spec: `57 §5`/`§6` (AC1), `57 §4.3` (the two build-later walls), Fork-A/B
+  rulings (no new capability)
 - given: the full CAT-3 deliverable set — `count`/`map`/`filter`/`sort`/
-  `isSorted`/`mem`/`length`/`min`, the count-equality `Perm`, the `optic`/`lens`
+  `isSorted`/`mem`/`length`/`min`, the count-equality `Perm`, the `view`/`lens`
   records
 - expect: **kernel-untouched.** Assert the structural observable:
-  `git diff origin/main -- crates/ken-kernel/` is empty on the CAT-3 build; zero
+  `git diff origin/main -- crates/ken-kernel/` empty on the CAT-3 build; zero
   `trusted_base()` delta; no new `Term`/`Decl`. `count`/`sort`/`lens` are
   ordinary Ken over the built-ins; `Perm`-as-count-equality **adds no
   capability** (`count` is ordinary recursion, the law is `Π`-into-`Ω`). The two
   surfaced elaborator walls (surface **quotient-intro**; **multi-param `class`**
-  for polymorphic optics) **re-fork to Steward WHEN their general forms are
-  built** — they are *not* in CAT-3's concrete scope. **Not** a verdict-flip
-- why: (property) AC1 — the outer-ring guarantee. Fork A deliberately chose
+  for polymorphic views) **re-fork to Steward WHEN their general forms are
+  built** (`57 §4.3`) — not in CAT-3's concrete scope. **Not** a verdict-flip
+- why: (property) AC1 — the outer-ring guarantee (`57 §5`). Fork A chose
   count-equality partly *because* it adds no capability (vs `‖Perm_rel‖`'s
   truncation intro/elim); Fork B ships every concrete flavor as plain records.
   Any elaborator need re-forks to Steward, per the frame's do-not-reopen §6
@@ -462,53 +480,60 @@ eqFromOrd x y    := bool_and (leq x y) (leq y x)   -- count-eq from Ord alone
   `append-monoid-reuses-cat1-proofs`
 - **AC3** (`Perm` Ω-sound) — `perm-is-count-equality-not-raw-omega-inductive`,
   `perm-eq-derives-from-ord-no-separate-deceq`
-- **AC4** (sort flips) — `verified-sort-emits-both-conjuncts`,
-  `nonpermuting-sort-const-nil-fails-perm`,
+- **AC4** (sort flips) — `verified-sort-both-laws-hold`,
+  `nonpermuting-sort-dedup-fails-perm`,
   `nonordering-sort-identity-fails-issorted`,
   `verified-sort-proved-carrier-is-lawful-bool`
 - **AC5** (laws Ω pointwise) — `take-drop-decomposition-holds`,
   `take-length-law-red-until-built`, `map-length-preservation-red-until-built`,
   `filter-membership-red-until-built`
-- **AC6** (projection mechanism + name) — `lens-coherence-laws-hold`,
-  `broken-lens-setget-false-witness-rejected`,
-  `optic-flavors-mechanism-per-flavor-grounded`,
-  `optic-name-not-retired-view-keyword`
+- **AC6** (view mechanism + name) — `lens-coherence-laws-hold`,
+  `broken-lens-getset-false-witness-rejected`,
+  `view-flavors-mechanism-per-flavor-grounded`,
+  `view-family-name-reuses-freed-keyword`
 - **AC7** (green) — the red-until-built posture (cases flip green as the CAT-3
   build lands each op + law; CI gate)
 
 ## Cross-case consistency sweep
 
 - **`Perm` = count-equality everywhere.** Every case that names `Perm` uses the
-  Fork-A count-equality form (Scope) — the sort flips, the AC3 pin, the
-  dict-economy case agree on the representation (mechanism-consistency, not just
-  I/O-consistency).
-- **Two dual sort flips, one shared obligation mechanism.** `sortBad` fails
-  **`Perm`** (isSorted vacuous); `sortId` fails **`isSorted`** (Perm holds via
-  `Refl`). They agree on the emitted conjoined `And` obligation and each breaks
-  exactly one conjunct — the two dimensions are independently guarded, no case
-  is green-vs-green.
-- **Endpoint discipline per §3.2, per-branch.** Honest `Perm` self-equality is a
-  **neutral** endpoint → `Refl`; the `take`/`drop` base + honest `isSorted` leaf
-  are **constructor-headed** → `Top` → `tt`. Not uniform; re-derived, not
-  transcribed.
-- **Carrier `List Bool` for proved arms.** No proved-arm case carries on
-  `List Int` (Axiom-holed) — the carrier case pins this so no flip degenerates
-  to reject-vs-reject.
+  Fork-A `Perm a eqf xs ys` count-equality form (Scope, `57 §3.1`) — the sort
+  flips, the AC3 pin, the dict-economy case agree on the representation
+  (mechanism-consistency, not just I/O-consistency).
+- **Two dual sort flips, two separate law fields.** `sortBad` (dedup) fails
+  **`perm`** (`isSorted` vacuous); `sortId` (identity) fails **`isSorted`**
+  (`perm` holds via `Refl`). The laws are **independent `Ω` fields** (`57 §3.4`,
+  not a conjoined refinement) and each breaks exactly one — no case is
+  green-vs-green.
+- **Endpoint discipline per `55 §3.2`, per-branch (NOT uniform).** Identity-sort
+  `Perm a xs xs` self-equality (abstract `xs`) → **neutral** → `Refl`; the
+  abstract sort-`Perm` law is a **mix** — base `count x Nil = Zero` gives
+  `Eq Nat Zero Zero` → `Top` → **`tt`** (nullary), inductive steps → `Refl`/
+  `cong` (Architect §3.7 note). `take`/`drop` base + honest `isSorted` leaf are
+  **nullary constructor-headed** → `Top` → `tt`. **All three lens laws →
+  `Refl`** — set-set's shared `mkPair c (pairSnd s)` is non-nullary with a
+  neutral component, so `tt : Top` is ill-typed (Architect FOLD-IN 1). Exact
+  sort/lens tokens reconciled at build.
+- **Carrier `List Bool` for proved *sort* arms; `Pair Bool Bool` for the lens.**
+  No proved sort-arm carries on `List Int` (Axiom-holed); the lens is structural
+  over `Pair` (needs no `DecEq`/`Ord`, `57 §4.4`).
 - **Red-until-built vs provable-now is tagged, not blurred.**
-  `take-drop-decomposition-holds` is provable-now (landed ops);
-  `take-length`/`map`/`filter` are op-blocked reds; the verified-sort ACCEPT
-  arm is discharge-gap red (C5 known-gap). Three distinct red reasons, each
-  named.
+  `take-drop-decomposition-holds` is provable-now (`57 §2.3`);
+  `take-length`/`map`/`filter` are op-blocked reds; the verified-sort ACCEPT arm
+  is discharge-gap red. Distinct red reasons, each named.
+- **Fork-C name reconcile pending.** `view-family-name-reuses-freed-keyword` is
+  authored on the ruled `view`, RESOLVED at `ec94c62` (`§4.1`/`§90`); final
+  byte-align (incl. FOLD-IN 1 set-set `tt`→`Refl` and setoid-field rename) is
+  against spec-author's next SHA at the assembly gate.
 
 ## Subsumed / not-duplicated (one home per property)
 
 - **The `Ord.total` `bool_or` precedent** is cited as *grounding* for the
-  count-equality choice; it is **not** re-tested here (its own conformance lives
-  in `seed-lawful-classes.md`). CAT-3 tests only that `Perm` **follows** the
-  same move.
-- **Refinement-obligation emission/enforcement** is exercised by the verified
-  `sort` cases (and canonically by C5); the general refinement machinery's
-  conformance is not re-authored here.
-- **`DecEq`/`Ord` law provability by carrier** (Bool real vs Int Axiom-holed)
-  is owned by `seed-lawful-classes.md`; CAT-3's carrier case cites it only to
-  justify `List Bool` for the proved arms.
+  count-equality choice (`57 §3.2`); its own conformance lives in
+  `seed-lawful-classes.md`. CAT-3 tests only that `Perm` **follows** the move.
+- **Refinement-obligation emission/enforcement** is exercised by C5 and the
+  `refinement` view flavor; the general refinement machinery's conformance is
+  not re-authored here.
+- **`DecEq`/`Ord` law provability by carrier** (Bool real vs Int Axiom-holed) is
+  owned by `seed-lawful-classes.md`; CAT-3's carrier case cites it only to
+  justify `List Bool` for the proved sort arms.
