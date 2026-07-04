@@ -83,6 +83,8 @@ pub fn empty_prelude_env() -> PreludeEnv {
         run_state_id: z,
         get_fn_id: z,
         put_fn_id: z,
+        inject_l_id: z,
+        inject_r_id: z,
     }
 }
 
@@ -168,6 +170,11 @@ pub struct PreludeEnv {
     pub get_fn_id: GlobalId,
     /// `put : s -> ITree (Sum (StateOp s) f) (resp_sum s f RespF) Unit`.
     pub put_fn_id: GlobalId,
+    /// `injectL : (g h:Type)(rg:g->Type)(rh:h->Type)(a:Type) -> ITree g rg a
+    ///   -> ITree (Sum g h) (resp_sum g h rg rh) a` (`effect-composition` D2).
+    pub inject_l_id: GlobalId,
+    /// `injectR` — the mirror inclusion, `h ↪ Sum g h`.
+    pub inject_r_id: GlobalId,
 }
 
 /// Register the L3 prelude in `elab` (called from `ElabEnv::empty`).
@@ -269,8 +276,7 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         .map_err(ElabError::Internal)?;
     elab.globals.insert("resp_state".to_string(), resp_state_id);
 
-    let resp_sum_id = state_eff::declare_resp_sum(&mut elab.env, state_op_id, sum_id, resp_state_id)
-        .map_err(ElabError::Internal)?;
+    let resp_sum_id = state_eff::declare_resp_sum(&mut elab.env, sum_id).map_err(ElabError::Internal)?;
     elab.globals.insert("resp_sum".to_string(), resp_sum_id);
 
     let bind_id = state_eff::declare_bind(&mut elab.env, itree_id, vis_id).map_err(ElabError::Internal)?;
@@ -296,16 +302,32 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     elab.globals.insert("runState".to_string(), run_state_id);
 
     let get_fn_id = state_eff::declare_get(
-        &mut elab.env, itree_id, ret_id, vis_id, state_op_id, get_id, sum_id, inl_id, resp_sum_id, unit_id,
+        &mut elab.env, itree_id, ret_id, vis_id, state_op_id, get_id, sum_id, inl_id, resp_sum_id, resp_state_id, unit_id,
     )
     .map_err(ElabError::Internal)?;
     elab.globals.insert("get".to_string(), get_fn_id);
 
     let put_fn_id = state_eff::declare_put(
-        &mut elab.env, itree_id, ret_id, vis_id, state_op_id, put_id, sum_id, inl_id, resp_sum_id, unit_id, mkunit_id,
+        &mut elab.env, itree_id, ret_id, vis_id, state_op_id, put_id, sum_id, inl_id, resp_sum_id, resp_state_id, unit_id, mkunit_id,
     )
     .map_err(ElabError::Internal)?;
     elab.globals.insert("put".to_string(), put_fn_id);
+
+    // `injectL`/`injectR` — the general coproduct injection morphism
+    // (`effect-composition` D2, doc §D2.1): the un-specialized form of
+    // `get`/`put`'s hand-baked `InL` (`state.rs::declare_get`/`declare_put`
+    // stay unchanged — State's tagging is *subsumed*, not forked, §D2.5).
+    let inject_l_id = state_eff::declare_inject_l(
+        &mut elab.env, itree_id, ret_id, vis_id, sum_id, resp_sum_id, inl_id,
+    )
+    .map_err(ElabError::Internal)?;
+    elab.globals.insert("injectL".to_string(), inject_l_id);
+
+    let inject_r_id = state_eff::declare_inject_r(
+        &mut elab.env, itree_id, ret_id, vis_id, sum_id, resp_sum_id, inr_id,
+    )
+    .map_err(ElabError::Internal)?;
+    elab.globals.insert("injectR".to_string(), inject_r_id);
 
     // ── Ω constants (ES2: real definitions, demoted out of `trusted_base()`) ─
     // `Equal : Π(A:Type). Π(x:A). Π(y:A). Ω`  (the `≡`).
@@ -1070,5 +1092,7 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         run_state_id,
         get_fn_id,
         put_fn_id,
+        inject_l_id,
+        inject_r_id,
     })
 }

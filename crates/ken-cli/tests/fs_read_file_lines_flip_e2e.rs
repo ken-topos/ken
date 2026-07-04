@@ -9,6 +9,22 @@
 //! AC4's discriminating pair: two `main`s, identical except the declared
 //! `Auth` index on the cap param. AC6: a missing-file arm surfaces a total
 //! `Err(NotFound)`, never a panic.
+//!
+//! **effect-composition update (AC6 asterisk retirement):** `main` now
+//! genuinely composes `[FS]` and `[Console]` in ONE `bind`-sequenced,
+//! `injectL`/`injectR`-tagged `ITree (Sum (FSOp a) ConsoleOp) …` — the
+//! program itself prints each line via `[Console]` (`printLines`), not a
+//! CLI-side post-render. Also no test in this file hand-constructs a `Sum`/
+//! `InL`/`InR` value (AC7's producer-grep, `effect-composition-conformance.md`
+//! §2) — `injectL`/`injectR` are elaborated from the surface `.ken` source
+//! above. On a denied/insufficient cap or a missing file, `main` does NOT
+//! print (fail-closed) and returns `Err e`; `ken-cli`'s unchanged
+//! `render_fs_result` still surfaces the exact `IOError` variant on stderr
+//! with a non-zero exit — so the M-insuff/missing-file assertions below are
+//! unchanged even though the mechanism (in-program vs. post-hoc printing)
+//! flipped. M-suff's stdout assertion is also unchanged: the composed
+//! program's own `println!`-per-line `[Console]` output is byte-identical
+//! to the old CLI-side render.
 
 use std::path::PathBuf;
 use std::process::Command;
@@ -68,15 +84,37 @@ view mapListCharToString (segs : List (List Char)) : List String =
 view lines (s : String) : List String =
   mapListCharToString (dropTrailingEmpty (splitNL (string_to_list_char s)))
 
-view main (cap : Cap {auth}) : FS {auth} (Result IOError (List String)) =
-  bind (FSOp {auth}) (fs_resp {auth}) (Result IOError Bytes) (Result IOError (List String))
-    (read_bytes {auth} cap (bytes_encode "{path}"))
+view Compose (r : Type) : Type =
+  ITree (Sum (FSOp {auth}) ConsoleOp)
+        (resp_sum (FSOp {auth}) ConsoleOp (fs_resp {auth}) console_resp)
+        r
+
+view printLines (xs : List String) : Compose (Result IOError Unit) =
+  match xs {{
+    Nil =>
+      Ret (Sum (FSOp {auth}) ConsoleOp)
+          (resp_sum (FSOp {auth}) ConsoleOp (fs_resp {auth}) console_resp)
+          (Result IOError Unit) (Ok IOError Unit MkUnit) ;
+    Cons x xs' =>
+      bind (Sum (FSOp {auth}) ConsoleOp)
+           (resp_sum (FSOp {auth}) ConsoleOp (fs_resp {auth}) console_resp)
+           Unit (Result IOError Unit)
+        (injectR (FSOp {auth}) ConsoleOp (fs_resp {auth}) console_resp Unit (print_line x))
+        (\_ . printLines xs')
+  }}
+
+view main (cap : Cap {auth}) : Compose (Result IOError Unit) =
+  bind (Sum (FSOp {auth}) ConsoleOp)
+       (resp_sum (FSOp {auth}) ConsoleOp (fs_resp {auth}) console_resp)
+       (Result IOError Bytes) (Result IOError Unit)
+    (injectL (FSOp {auth}) ConsoleOp (fs_resp {auth}) console_resp (Result IOError Bytes)
+      (read_bytes {auth} cap (bytes_encode "{path}")))
     (\r .
       match r {{
-        Err e    => Ret (FSOp {auth}) (fs_resp {auth}) (Result IOError (List String))
-                        (Err IOError (List String) e) ;
-        Ok bytes => Ret (FSOp {auth}) (fs_resp {auth}) (Result IOError (List String))
-                        (Ok IOError (List String) (lines (bytes_decode bytes)))
+        Err e    => Ret (Sum (FSOp {auth}) ConsoleOp)
+                        (resp_sum (FSOp {auth}) ConsoleOp (fs_resp {auth}) console_resp)
+                        (Result IOError Unit) (Err IOError Unit e) ;
+        Ok bytes => printLines (lines (bytes_decode bytes))
       }})
 "#,
         auth = auth,

@@ -1724,6 +1724,41 @@ fn list_char_to_evalval_string(v: &EvalVal, ids: &ListCharIds) -> Option<String>
     }
 }
 
+/// IDs for the D3 coproduct peel (`effect-composition` D3, doc §D3.2/§D3.4).
+/// Effect-blind: the peel matches ONLY on ctor identity (`inl_id`/`inr_id`),
+/// never on which base effect the payload carries — no `ConsoleOp`/`FSOp`
+/// literal anywhere in the peel (BV5).
+#[derive(Clone)]
+pub struct SumIds {
+    pub inl_id: GlobalId,
+    pub inr_id: GlobalId,
+}
+
+/// Recursively strip `InL`/`InR` wrappers off an op value, returning the
+/// innermost non-`Sum` base tag (`effect-composition` D3.2). `InL`/`InR`'s
+/// `ctor_arity` = 2 params (`g,h`) + 1 arg (the payload) = 3, so the payload
+/// sits at `op_args[2]` (this Sum-peel index is distinct from the FS arm's
+/// own shifted `op_args[1]`/`[2]` — those index into the ALREADY-peeled base
+/// op, not the `Sum` wrapper). Zero-wrapper trees (State/FS/Console alone)
+/// pass through unchanged — a total no-op descent; `sum_ids = None` disables
+/// peeling entirely (pre-composition callers, BV6).
+fn peel_sum(mut op: EvalVal, sum_ids: Option<&SumIds>) -> EvalVal {
+    let Some(sum_ids) = sum_ids else { return op };
+    loop {
+        match &op {
+            EvalVal::Ctor { id, args, .. } if *id == sum_ids.inl_id || *id == sum_ids.inr_id => {
+                match args.get(2) {
+                    Some(payload) => op = payload.clone(),
+                    // Malformed arity — leave as-is; the base-tag match below
+                    // fails closed (UnknownEffect), never a panic.
+                    None => return op,
+                }
+            }
+            _ => return op,
+        }
+    }
+}
+
 /// Error returned by `run_io` (`42 §6`).
 #[derive(Debug)]
 pub enum RunIoError {
@@ -1831,6 +1866,7 @@ pub fn run_io(
     mut tree: EvalVal,
     ids: &ConsoleIds,
     fs_ids: Option<&FSIds>,
+    sum_ids: Option<&SumIds>,
     globals: &GlobalEnv,
     store: &mut EvalStore,
 ) -> Result<EvalVal, RunIoError> {
@@ -1852,6 +1888,10 @@ pub fn run_io(
                         Some(v) => v,
                         None => return Err(RunIoError::NotAnIOTree(EvalVal::Ctor { id, args: Rc::new(vec![op]), slot: NULL_SLOT })),
                     };
+                    // D3 coproduct peel: strip InL/InR down to the innermost
+                    // base tag BEFORE dispatch — effect-blind, a no-op when
+                    // `sum_ids` is absent or the op carries no wrapper.
+                    let op = peel_sum(op, sum_ids);
                     // Dispatch on the op — exhaustive, no catch-all (42 §6.5).
                     let resp = match &op {
                         EvalVal::Ctor { id: op_id, args: op_args, .. }

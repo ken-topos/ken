@@ -106,6 +106,7 @@ fn read_via_real_driver(
         tree,
         &env.console_ids,
         Some(&env.fs_ids),
+        None,
         &env.elab_env.env,
         &mut store,
     )
