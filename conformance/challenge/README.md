@@ -1,13 +1,20 @@
 # Ken challenge suite — the distinctive-depth conformance instrument
 
-> ⛔ **STAGED — DO NOT RUN until the operator is present.** This is a prepared
+> ✅ **FIRST RUN COMPLETE — 2026-07-04 (operator present).** This is a prepared
 > instrument, **not** wired into CI and **not** part of the pass/fail
-> conformance corpus. The exercises probe soundness/consistency/totality
-> boundaries; a *surprising* result (a soundness-boundary probe that **passes**)
-> is a design-level finding that is the operator's call. Author + expected
-> behavior + staged = done. First execution waits for the operator.
-> (Owner: conformance-validator. Frame:
+> conformance corpus. It probes soundness/consistency/totality boundaries; the
+> first run + attribution drills are characterized in **§Post-run results**
+> below. **Headline: no kernel soundness hole surfaced; Ken's distinctive depth
+> is kernel-real but surface-thin** — most exercises hit a *surface* frontier
+> (parser / name-resolution / motive-refinement) before their intended semantic
+> gate. (Owner: conformance-validator. Frame:
 > `docs/program/wp/CV-challenge-prep.md`. Findings/questions → Steward.)
+>
+> **Harness note:** C1/C6 reference the lawful classes (`class DecEq`/`Ord`),
+> which live in `packages/lawful-classes/lawful_classes.ken` and are **not** in
+> the CLI's default `ElabEnv`; surface `import` does not resolve a package path
+> in `ken run`. Run C1/C6 with that package **prepended** (`cat
+> lawful_classes.ken arm.ken | ken run`).
 
 ## What this is (and is not)
 
@@ -21,6 +28,47 @@ surprising result is **unambiguous** rather than green-vs-green.
 It does **not** re-probe VAL2's five documented capability gaps (`Map`, `[FS]`,
 `[State]`, mutual-recursion, ≥2-recursive-field-`match`). It stresses the
 **adjacent depth** and the axes VAL2 skipped entirely.
+
+## Post-run results (2026-07-04, first run + attribution drills)
+
+Per-exercise actual against the predicted expected-behavior. **No kernel
+soundness hole surfaced** (no should-REJECT that inhabits `Bottom` slipped
+through — the load-bearing negative).
+
+| # | Actual | vs predicted |
+|---|---|---|
+| **C1** `deceq-noncanonical` | sound `DecEq Char` **PASS**; unsound `DecEq Decimal` **instance ADMITTED** (false `sound = Axiom` accepted) | as predicted — the machinery **guards deception, not falsehood** (`§51 §5`); canonical-carrier soundness is a *user* obligation, not machine-checked. Not a kernel hole (honest `Axiom`). The Bottom-*exploit* tail is blocked by a surface-expressibility wall (explicit `Refl A x` / injectivity projection). Run with `lawful_classes.ken` prepended. |
+| **C2** `proof-relevant-omega` | sound `‖Perm‖`/count **PASS**; unsound `data Perm : Ω` **REJECT — parser gap** (Ω-data ctor doesn't parse), not the Ω-PI sort gate | sound ✓; unsound rejects *coincidentally* (residual #3) |
+| **C3** `codata-totality` | sound fuel-unfold **PASS** *(after fixing an arm typo — missing `Some`'s type arg; capability was always present)*; unsound `codata` **REJECT** (`codata` not a keyword) | both ✓ (right reasons) |
+| **C4** `indexed-vec-head` | **KNOWN-GAP at the *declaration* step** — `data Vec a : Nat → Type` doesn't parse (residual #1) | ✓✓ confirms the flagged refinement (decl-step, earlier than head-absurdity) |
+| **C5** `verified-sort` | sound **PASS**; unsound `const Nil` **ELABORATES** (not rejected at elab) | **SPECIFIED, not a gap** — obligations are emit-at-elaboration (V1) / discharge-later (V3); elaboration never rejects on an undischarged obligation (`21 §5`, `22-obligations.md`). The bogus sort is caught at the *verify* stage, not elab. |
+| **C6** `lawful-ord-vs-stub` | law-proved `Ord` **PASS**; `Axiom`-stub `Ord` **also ELABORATES** (admitted) | as predicted — the "a provable law must not be postulated" enforcement is a **documented known-gap** (deferred lawful-classes work). Run with `lawful_classes.ken` prepended. |
+| **C7** `quotient-respect` | sound & unsound both **REJECT — parser gap** (`A / R` surface unparseable, `'/'` unexpected) (residual #2) | the README's flagged caveat, confirmed |
+| **C8** `funext-definitional` | sound (convertible-pointwise) **PASS**; unsound (differ) **REJECT** | funext **IS** surface-reachable (`eq_at_pi` reduces function-`Equal`) — corrected from the first pass. Reachable for *convertible*-pointwise fns; the *non-convertible* case (needs a case-split) is residual #4. |
+
+### Known-frontier residuals (documented, NOT open WPs)
+
+Each: **kernel-capability present, surface can't reach it.** These are the real
+frontier-map — logged here, not opened as work, per the operator (Option A).
+
+1. **Indexed families** — `data _ : Nat → Type` (+ index-refining `match`) does
+   not parse (`ParseError "expected Eq, found LParen"`). Kernel has indexed
+   families; the surface grammar + `data.rs` (hardcodes `indices: vec![]`) do
+   not. *(C4.)*
+2. **Quotients** — `A / R`, `[t]`, `elim_/` do not parse (`unexpected character
+   '/'`). Kernel has `Term::Quot`/`QuotClass`/`QuotElim` (K2); surface reserved,
+   unimplemented. *(C7.)*
+3. **Ω-data constructors** — `data P : Ω where … : … P (…)` does not parse
+   (`ParseError`). The Ω proof-irrelevance *sort* gate is never reached — a
+   parser gap masks it. *(C2-unsound.)*
+4. **Dependent-`match`-into-`Equal`/Ω goal doesn't refine** *(NEW — distinct
+   from the parser gaps; an elaboration / motive-refinement **completeness**
+   gap, not grammar)*. A dependent `match x` whose goal is `Equal`/Ω-typed does
+   not refine the scrutinee in the goal — even `(x:Bool) → Equal Bool x x =
+   match x { True => Refl ; False => Refl }` rejects (`Refl expects an Eq-shaped
+   goal`), while `\x. Refl` (no match) proves it. This blocks a case-split proof
+   of a pointwise-equal-but-*non-convertible* function equality — the residual
+   of C8's OTT funext face. *(C8.)*
 
 ## The two flavors (read this first — it calibrates every result)
 
