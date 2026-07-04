@@ -33,8 +33,24 @@ the cap can only appear the way Phase-2's tests inject it — hand-fed as a bare
 > the root. Least-privilege at the entry point: `main` cannot receive more
 > authority than it declared.
 
+**Manifest FORM — the type IS the manifest (operator, 2026-07-04, second ruling).**
+The authority declaration lives **on `main`'s signature**, not in a separate
+construct: enrich the bare surface `Cap` (`prelude.rs:894`, today a zero-structure
+opaque `Cap : Type0`, flagged "NOT the real Cap_FS") into an **effect-and-authority
+-indexed type** (e.g. `Cap FS` at a declared authority *level* — none/partial/full
+per `Authority`, `capabilities.rs:31`; **not** path-scope, which stays deferred).
+So `main`'s type states *both* which effect **and** how much authority it uses —
+capability use is explicit and auditable *where it is used*. The CLI reads that
+authority off `main`'s type and mints exactly it. Rationale: the effect is already
+explicit via the effect row, so the authority belongs on the **same signature**,
+not bolted on elsewhere. The rejected alternative (a separate manifest declaration
+/ annotation carrying authority away from the signature) is **do-not-reopen**.
+D2 realizes this; D3's runtime rep must carry the type-declared authority
+(D2↔D3 coupled).
+
 This is an **extension of the OQ-B capability model**, decided by the operator
-via AskUserQuestion. **Do not relitigate** to the rejected alternative ("CLI
+via AskUserQuestion (twice: the declared-authority contract, then this
+type-is-the-manifest form). **Do not relitigate** to the rejected alternative ("CLI
 mints a *full-authority* root cap and binds it to `main`") — that was explicitly
 **not** chosen; ambient/full grant at the root is out of bounds. The contrasting
 option the operator rejected is recorded so no build model re-opens it as "the
@@ -140,9 +156,18 @@ effect, no capability. Lives in the prelude (or the example, enclave's call).
 The re-authored example uses it to turn the read bytes/string into the
 line list. **Smallest, most mechanical piece — pin its signature and totality.**
 
-### D2 — Manifest entry-point contract (the operator's ruling, realized)
+### D2 — Manifest = enriched signature + entry-point mint (operator's ruling)
 
-The CLI (`ken-cli/src/main.rs::run_file`, the gap site) must, before `run_io`:
+**The manifest lives on `main`'s type (operator, 2026-07-04): enrich the bare
+`Cap` into an effect-and-authority-indexed type** so `main`'s signature declares
+its exact FS authority *level*. `read_bytes` re-types to take the enriched cap;
+the authority ordering (none ⊑ partial ⊑ full) governs whether `main`'s declared
+cap satisfies `read_bytes`'s requirement. The **representation** of the authority
+index (type-level `Authority` value / refinement / index), how the ordering
+flows, and keeping the enriched `Cap` a **prelude/elaborator** construct (AC1: no
+new kernel `Term`/`Decl`) are the enclave's elaboration — route back to Steward →
+operator **only if the representation itself forks**. Then the CLI
+(`ken-cli/src/main.rs::run_file`, the gap site) must, before `run_io`:
 1. **Read `main`'s declared authority** — the manifest. Inspect `main`'s type for
    its `using cap : Cap E` parameter(s) **and the exact authority each declares**.
 2. **Mint precisely that authority** — `Cap::mint(declared_authority, effect)`
@@ -278,10 +303,14 @@ entry-point path** (manifest → minted-exactly cap → `apply` → `run_io` →
 
 ## Size / risk
 
-**S–M.** The Rust plumbing (mint-exactly, `apply`, `run_io`) is small and the
-primitives all exist; the `lines` helper is trivial. The **design content is
-front-loaded into the enclave**: the manifest mechanism (D2) and the Cap runtime
-representation (D3) are the two judgment calls a build model should not invent.
+**M** (grew from S–M on the operator's type-is-the-manifest ruling). The CLI
+plumbing (mint-exactly, `apply`, `run_io`) is small and the `lines` helper is
+trivial — but D2 now includes a **cap-type enrichment** (bare `Cap` →
+effect-and-authority-indexed), a type-level design step, not just plumbing, with
+D3 coupled to it. The **design content is front-loaded into the enclave**: the
+enriched-cap representation (D2) and its runtime rep (D3) are the coupled judgment
+calls a build model should not invent. Still outer-ring — **kernel untouched**
+(AC1): the enriched `Cap` is a prelude/elaborator construct.
 Risk is contained: kernel-clean by construction, path-scope deferred, and the
 one fork (entry-point contract) is already operator-settled. **This is what
 closes VAL2 to zero gaps (16/0).**
