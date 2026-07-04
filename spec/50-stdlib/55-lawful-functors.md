@@ -69,11 +69,14 @@ yields a `Semigroup` by forgetting `mempty`/`left_unit`/`right_unit`, keeping
 `op`/`assoc`") is **recorded as a fact, not a `where`-constraint**. This keeps
 the value classes exactly `Eq`/`Ord`-shaped, with no new kind machinery.
 
-> **Superclass wiring is a *template* question deferred to `§5`/CAT-2.** For the
-> value-level pair, restating is the grounded precedent. Whether the
-> **constructor-class chain** (`Functor → Applicative → Monad`, CAT-2) should
-> instead **wire** superclass fields — where the chain is deep and restatement
-> costly — is pinned as a template decision (`§5`), not settled by these two.
+> **Superclass wiring is a *template* question, resolved in CAT-2 (`56 §2`).**
+> For the **value-level pair**, restating is the grounded precedent and
+> **stays** — a `Monoid` restates `Semigroup`'s `op`/`assoc` (this section). The
+> **constructor-class chain** (`Functor → Applicative → Monad`, CAT-2) is deep
+> enough that restatement is costly (six duplicated law proofs per deep
+> instance), so CAT-2 **wires** superclass fields there (`56 §2`, Architect's
+> ruling). Split by depth: **value classes restate, the deep constructor chain
+> wires.**
 
 ## 3. Canonical instances — proved, zero-delta
 
@@ -257,8 +260,11 @@ CAT-3 (collection laws) extend mechanically:
    inductive carrier is a **defect** (`51 §5`), never an honest delta.
 5. **The stronger class restates** the weaker's operation + law and **records**
    the subsumption as a fact (`§2.2`) — *unless* the chain is deep enough
-   (CAT-2's `Functor → Applicative → Monad`) that wiring a superclass field
-   wins; that is the one open template decision, deferred to CAT-2.
+   (CAT-2's `Functor → Applicative → Monad`) that **wiring** a superclass field
+   wins. **Resolved in CAT-2 (`56 §2`):** value classes **restate** (this
+   chapter); the deep constructor chain **wires** an explicit superclass-dict
+   field (proof reuse, no re-proved superclass laws), applied consistently up
+   the chain.
 
 ## 8. Derivation paths and `trusted_base()` delta (AC1)
 
