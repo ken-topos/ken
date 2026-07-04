@@ -2186,7 +2186,7 @@ fn elaborate_view_or_let(
 ///
 /// `{ k : A | φ }` at the end of a Pi-chain → `Some(φ)`. Used by V2 to
 /// emit a refinement-introduction obligation for the return type (`22 §2.1`).
-fn innermost_refine_pred(ty: &RType) -> Option<&RExpr> {
+pub(crate) fn innermost_refine_pred(ty: &RType) -> Option<&RExpr> {
     match ty {
         RType::RPi(_, _, cod, _) | RType::RArr(_, cod, _) => innermost_refine_pred(cod),
         RType::RRefine(_, _, phi, _) => Some(phi),
@@ -2328,12 +2328,140 @@ fn elaborate_recursive_view(
     }
 }
 
+/// Elaborate a genuinely mutually-recursive group of `view`/`let` decls
+/// (VAL2 #3) — `members.len() >= 2`, already confirmed to form one strongly-
+/// connected call-graph component (`modules.rs`'s SCC pre-pass). Generalizes
+/// `elaborate_recursive_view`'s singleton pattern (pre-admit as `Opaque`,
+/// elaborate the body against that name-in-scope, kernel-check, `sct_check`,
+/// upgrade-or-rollback) to the whole group at once, so the WHOLE GROUP is one
+/// `sct_check` call — no member escapes the termination check
+/// (`[[sct-unapplied-self-reference-over-accepts]]`).
+///
+/// Each member requires an explicit type annotation (mirrors the existing
+/// singleton recursive-view rule — a mutual group's forward references need
+/// every member's *type* resolvable before any body is elaborated).
+pub fn elaborate_mutual_group(
+    env: &mut GlobalEnv,
+    globals: &mut HashMap<String, GlobalId>,
+    num_values: &mut HashMap<GlobalId, NumericLitVal>,
+    numeric_env: &NumericEnv,
+    class_env: &ClassEnv,
+    members: &[RDecl],
+) -> Result<Vec<ElabResult>, ElabError> {
+    // 1. Elaborate every member's declared type FIRST (the signature
+    // pre-pass) — none of these need a sibling's id, only their own params.
+    let mut ty_cores: Vec<Term> = Vec::with_capacity(members.len());
+    for rdecl in members {
+        let mut cx = ElabCtx::new(env, globals, num_values, numeric_env);
+        let ty = rdecl.ty.as_ref().ok_or_else(|| ElabError::Internal(format!(
+            "mutually-recursive '{}' requires a type annotation",
+            rdecl.name
+        )))?;
+        let ty_c = elab_type(&mut cx, ty)?;
+        ty_cores.push(cx.metas.zonk_term(&ty_c));
+    }
+
+    // 2. Pre-admit ALL members as Opaque, binding every name in `globals`
+    // BEFORE any body is elaborated — this is what lets a forward/mutual
+    // reference to any sibling resolve, exactly as the singleton case
+    // pre-admits its own single name.
+    let mut ids: Vec<GlobalId> = Vec::with_capacity(members.len());
+    for (rdecl, ty_core) in members.iter().zip(&ty_cores) {
+        let id = env.fresh_id();
+        env.add_decl(Decl::Opaque { id, level_params: vec![], ty: ty_core.clone() });
+        globals.insert(rdecl.name.clone(), id);
+        ids.push(id);
+    }
+
+    // 3. Elaborate each body checked against its own type (every sibling
+    // name, including self, already resolves via `globals` from step 2).
+    let mut bodies: Vec<Term> = Vec::with_capacity(members.len());
+    let mut all_obligations: Vec<Vec<Obligation>> = Vec::with_capacity(members.len());
+    let elab_err = (|| -> Result<(), ElabError> {
+        for (rdecl, ty_core) in members.iter().zip(&ty_cores) {
+            let mut cx = ElabCtx::new(env, globals, num_values, numeric_env).with_classes(class_env);
+            let body_c = check(&mut cx, &rdecl.body, ty_core, &rdecl.span)?;
+            let obligations = std::mem::take(&mut cx.obligations);
+            bodies.push(cx.metas.zonk_term(&body_c));
+            all_obligations.push(obligations);
+        }
+        Ok(())
+    })();
+
+    // Roll back ALL pre-admitted members on ANY elaboration failure (not
+    // just the SCT gate below) — a partially-elaborated group must leave no
+    // trace, same discipline as the singleton path's rollback.
+    if let Err(e) = elab_err {
+        for id in ids.iter().rev() {
+            while let Some(d) = env.remove_last() {
+                if d.id() == *id {
+                    break;
+                }
+            }
+        }
+        for rdecl in members {
+            globals.remove(&rdecl.name);
+        }
+        return Err(e);
+    }
+
+    // 4. Kernel-check every body against its own declared type, THEN run
+    // `sct_check` on the WHOLE GROUP as ONE termination problem — the whole
+    // point of a mutual group is that no member's descent is checked in
+    // isolation (a member could look non-terminating alone but be fine via
+    // the group's cross-cycle measure, or vice versa look terminating alone
+    // while the CYCLE diverges).
+    let group_bodies: Vec<(GlobalId, Term)> = ids.iter().cloned().zip(bodies.iter().cloned()).collect();
+    let admit_result: Result<(), ken_kernel::KernelError> = (|| {
+        for (body, ty_core) in bodies.iter().zip(&ty_cores) {
+            kernel_check(env, &Context::new(), body, ty_core)?;
+        }
+        sct_check(env, &group_bodies)
+    })();
+
+    match admit_result {
+        Ok(()) => {
+            for (id, body) in ids.iter().zip(bodies) {
+                env.upgrade_to_transparent(*id, body);
+            }
+            Ok(members
+                .iter()
+                .zip(ids)
+                .zip(all_obligations)
+                .map(|((rdecl, id), obligations)| ElabResult {
+                    name: rdecl.name.clone(),
+                    def_id: id,
+                    obligations,
+                    foreign_binding: None,
+                    temporal_obligations: vec![],
+                })
+                .collect())
+        }
+        Err(e) => {
+            // Roll back every pre-admitted member (reverse order) — a
+            // rejected group leaves zero trace, exactly like the singleton
+            // rollback, just for every member instead of one.
+            for id in ids.iter().rev() {
+                while let Some(d) = env.remove_last() {
+                    if d.id() == *id {
+                        break;
+                    }
+                }
+            }
+            for rdecl in members {
+                globals.remove(&rdecl.name);
+            }
+            Err(ElabError::KernelRejected { error: e, span: members[0].span.clone() })
+        }
+    }
+}
+
 /// Does `expr` mention the global name `name` (as an `RCon`)? Used to detect
 /// whether a view/let definition is self-recursive — the body references its
 /// own name, which the resolver emits as `RCon(name)` on a scope miss. Pattern
 /// positions are not scanned: a def name is a view/function, never a
 /// constructor, so it cannot appear in a pattern.
-fn rexpr_mentions_name(expr: &RExpr, name: &str) -> bool {
+pub(crate) fn rexpr_mentions_name(expr: &RExpr, name: &str) -> bool {
     match expr {
         RExpr::RCon(n, _) => n == name,
         RExpr::RVar(_, _, _) | RExpr::RUniv(_, _) | RExpr::RNumLit(_, _) | RExpr::RStr(_, _) => false,

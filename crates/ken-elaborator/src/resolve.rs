@@ -40,6 +40,7 @@ pub struct RMatchArm {
 }
 
 /// A resolved declaration (`21 §6.2`).
+#[derive(Clone, Debug)]
 pub struct RDecl {
     pub name: String,
     pub ty: Option<RType>,
@@ -53,6 +54,7 @@ pub struct RDecl {
 }
 
 /// Discriminates the declaration kind for elaboration dispatch.
+#[derive(Clone, Debug)]
 pub enum RDeclKind {
     /// A `view` (or `space view`) definition.
     /// `constraints` = `where C T` list resolved from the surface `where`

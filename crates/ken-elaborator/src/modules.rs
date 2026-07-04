@@ -452,7 +452,9 @@ fn expand_scope(
 
     let mut ids = Vec::new();
     let mut exports_here: HashMap<String, String> = HashMap::new();
-    for decl in decls {
+    let mut i = 0;
+    while i < decls.len() {
+        let decl = &decls[i];
         match decl {
             // Imports are applied HERE, in textual order, so `import M`
             // sees `M`'s export table only once `module M { … }` has
@@ -461,6 +463,7 @@ fn expand_scope(
             // case; a module must be declared before it's imported).
             Decl::ImportDecl { module, kind, span } => {
                 apply_import(scope, &elab.module_state.exports, module, kind, span)?;
+                i += 1;
             }
             Decl::ModuleDecl { name, decls: inner, span: _ } => {
                 let child_prefix = qualify(prefix, name);
@@ -469,6 +472,135 @@ fn expand_scope(
                     expand_scope(elab, inner, &child_prefix, &mut child_scope)?;
                 ids.extend(child_ids);
                 elab.module_state.exports.insert(child_prefix, child_exports);
+                i += 1;
+            }
+            // A maximal run of non-`pub` `view`/`let` decls (VAL2 #3, mutual
+            // recursion) — auto-grouped by call-graph SCC (`33 §1`: "All
+            // top-level definitions are mutually recursive within a module
+            // if the SCT check accepts the group"). A run with no actual
+            // cycle degenerates to today's one-decl-at-a-time path, member
+            // by member, byte-identical (AC3).
+            Decl::ViewDecl { .. } | Decl::LetDecl { .. } if !decl.is_pub() => {
+                let run_end = {
+                    let mut e = i;
+                    while e < decls.len()
+                        && !decls[e].is_pub()
+                        && matches!(decls[e], Decl::ViewDecl { .. } | Decl::LetDecl { .. })
+                    {
+                        e += 1;
+                    }
+                    e
+                };
+                let run = &decls[i..run_end];
+
+                // Resolve + rewrite every run member up front — safe because
+                // a run contains no import/module, so `scope`/`exports`
+                // don't change across it; each member sees exactly the
+                // state it would have seen processed alone at its position.
+                let mut bare_names: Vec<String> = Vec::with_capacity(run.len());
+                let mut rdecls: Vec<crate::resolve::RDecl> = Vec::with_capacity(run.len());
+                for d in run {
+                    let bare = d.name().to_string();
+                    let renamed = qualify_decl_name(d, prefix);
+                    let rdecl = resolve::resolve_decl(&renamed)?;
+                    let rdecl = rewrite_rdecl(scope, &elab.module_state.exports, rdecl)?;
+                    bare_names.push(bare);
+                    rdecls.push(rdecl);
+                }
+
+                // Call graph: edge a -> b iff a's body mentions b's bare
+                // name (over-approximates on shadowing — safe, only ever
+                // makes an SCC too LARGE, never misses a real cycle).
+                let n = rdecls.len();
+                let adj: Vec<Vec<usize>> = (0..n)
+                    .map(|a| {
+                        (0..n)
+                            .filter(|&b| {
+                                a != b && crate::elab::rexpr_mentions_name(&rdecls[a].body, &bare_names[b])
+                            })
+                            .collect()
+                    })
+                    .collect();
+                let sccs = scc_membership(&adj);
+
+                // Walk the run in original order; on first encounter of an
+                // unconsumed SCC, process the WHOLE SCC together (size 1:
+                // the existing per-decl path; size > 1: the new group path,
+                // one `sct_check` over the whole cycle).
+                let mut consumed = vec![false; n];
+                for k in 0..n {
+                    if consumed[k] {
+                        continue;
+                    }
+                    let scc = &sccs[k];
+                    for &m in scc {
+                        consumed[m] = true;
+                    }
+                    if scc.len() == 1 {
+                        let rdecl = &rdecls[k];
+                        let result = crate::elab::elaborate_rdecl_v1(
+                            &mut elab.env,
+                            &mut elab.globals,
+                            &mut elab.num_values,
+                            &elab.numeric_env,
+                            &mut elab.class_env,
+                            rdecl,
+                        )?;
+                        if let Some(fb) = &result.foreign_binding {
+                            elab.foreign_env.register(result.name.clone(), fb.clone());
+                        }
+                        ids.push(result);
+                    } else {
+                        let members: Vec<crate::resolve::RDecl> =
+                            scc.iter().map(|&m| rdecls[m].clone()).collect();
+                        // Eligibility guard: the new group path only covers
+                        // the plain V0 view/let shape (matches the existing
+                        // singleton recursive-view rule) — a mutual member
+                        // needing requires/ensures/where/refinement-return
+                        // is out of this WP's scope; fail clearly rather
+                        // than silently dropping its obligation.
+                        for rdecl in &members {
+                            let simple_kind = matches!(&rdecl.kind, RDeclKind::Let)
+                                || matches!(
+                                    &rdecl.kind,
+                                    RDeclKind::View { constraints, is_space_op }
+                                        if constraints.is_empty() && !is_space_op
+                                );
+                            let has_refine_return = rdecl
+                                .ty
+                                .as_ref()
+                                .and_then(|ty| crate::elab::innermost_refine_pred(ty))
+                                .is_some();
+                            if !simple_kind
+                                || !rdecl.requires.is_empty()
+                                || !rdecl.ensures.is_empty()
+                                || has_refine_return
+                            {
+                                return Err(ElabError::Internal(format!(
+                                    "mutual recursion is only supported for plain view/let \
+                                     definitions (no requires/ensures/where-constraints/\
+                                     refinement-return); '{}' does not qualify",
+                                    rdecl.name
+                                )));
+                            }
+                        }
+                        let results = crate::elab::elaborate_mutual_group(
+                            &mut elab.env,
+                            &mut elab.globals,
+                            &mut elab.num_values,
+                            &elab.numeric_env,
+                            &elab.class_env,
+                            &members,
+                        )?;
+                        for result in results {
+                            if let Some(fb) = &result.foreign_binding {
+                                elab.foreign_env.register(result.name.clone(), fb.clone());
+                            }
+                            ids.push(result);
+                        }
+                    }
+                }
+                i = run_end;
             }
             other => {
                 let is_pub = other.is_pub();
@@ -515,6 +647,7 @@ fn expand_scope(
                             foreign_binding: None,
                             temporal_obligations: vec![],
                         });
+                        i += 1;
                         continue;
                     }
                 }
@@ -560,10 +693,45 @@ fn expand_scope(
                     }
                     ids.push(result);
                 }
+                i += 1;
             }
         }
     }
     Ok((ids, exports_here))
+}
+
+/// Strongly-connected-component membership for a small directed call graph
+/// (`adj[i]` = out-edges from `i`, i.e. "`i`'s body mentions `j`"). Returns,
+/// per node, the sorted list of node indices in its SCC (always includes the
+/// node itself). O(n^3) — fine for a same-scope call graph (one source
+/// file's mutually-recursive group), not sized for a whole-program graph.
+fn scc_membership(adj: &[Vec<usize>]) -> Vec<Vec<usize>> {
+    let n = adj.len();
+    let mut reach: Vec<Vec<bool>> = vec![vec![false; n]; n];
+    for (i, reach_i) in reach.iter_mut().enumerate() {
+        let mut stack = adj[i].clone();
+        let mut seen = vec![false; n];
+        while let Some(j) = stack.pop() {
+            if seen[j] {
+                continue;
+            }
+            seen[j] = true;
+            reach_i[j] = true;
+            for &k in &adj[j] {
+                if !seen[k] {
+                    stack.push(k);
+                }
+            }
+        }
+    }
+    (0..n)
+        .map(|i| {
+            let mut members: Vec<usize> =
+                (0..n).filter(|&j| j == i || (reach[i][j] && reach[j][i])).collect();
+            members.sort_unstable();
+            members
+        })
+        .collect()
 }
 
 /// Entry point: expand + elaborate one `elaborate_*` call's raw decls
