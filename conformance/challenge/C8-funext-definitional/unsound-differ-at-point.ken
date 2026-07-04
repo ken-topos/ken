@@ -1,0 +1,28 @@
+-- C8 UNSOUND arm — a funext proof between functions that DIFFER at a point —
+-- should-REJECT. Accepting it inhabits `Bottom`.
+--
+-- Same proof SHAPE as the sound arm (`\x. match x { True => Refl ; False => Refl }`);
+-- the ONLY change is the two functions being equated. That is the discriminator.
+
+-- f and g DIFFER at a point:
+--   f x = True   (constant True)      f False = True
+--   g x = x      (identity)           g False = False   -- disagree at False
+view fBad (x : Bool) : Bool = True
+view gBad (x : Bool) : Bool = x
+
+-- The (false) claim: fBad and gBad are equal as functions. funext reduces
+-- `Equal (Bool -> Bool) fBad gBad` to  (x : Bool) -> Equal Bool True x.
+-- The True case closes (`Equal Bool True True`), but the FALSE case demands
+--   Equal Bool True False
+-- which NO `Refl` inhabits (True is not False). So the `False` arm is ill-typed
+-- and the whole definition must be REJECTED (a TypeMismatch on that arm).
+view funextBad : Equal (Bool -> Bool) fBad gBad =
+  \x. match x { True => Refl ; False => Refl }
+
+-- Expected: REJECTED (the False arm's goal `Equal Bool True False` is
+-- uninhabited). This must be a GENUINE proof attempt failing — NOT an `Axiom`
+-- (an honest Axiom of a false type is a visible postulate, the C6 story, not a
+-- funext failure). If the elaborator ACCEPTS this, that is the headline finding:
+-- `Equal Bool True False` transports (`J`/`cast`) to `Bottom`, so admitting a
+-- funext proof between pointwise-UNEQUAL functions is a consistency hole — the
+-- soundness dual of the sound arm (funext must reduce pointwise AND stay honest).

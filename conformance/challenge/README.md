@@ -15,7 +15,7 @@ VAL2 (the Rosetta pangram, 10 PASS / 6 KNOWN-GAP) validated the surface
 **breadth** — output, loops, recursion, strings, ADTs+`match`, higher-order
 functions, effects. It deliberately did **not** reach the **depth** of Ken's
 *distinctive* value. This suite is the **blind-spot instrument** for that depth:
-seven exercises on the axes VAL2's breadth pangram didn't touch, chosen so a
+eight exercises on the axes VAL2's breadth pangram didn't touch, chosen so a
 surprising result is **unambiguous** rather than green-vs-green.
 
 It does **not** re-probe VAL2's five documented capability gaps (`Map`, `[FS]`,
@@ -38,7 +38,7 @@ keeps a surprising result from being green-vs-green.
   **PASS** (if the capability is landed) or a **documented known-gap** (if it is
   not yet built). These reach past VAL2's surface for dependent elimination,
   verified programs, and law-carrying instances. A known-gap here is a valid
-  prepared result, not a failure. (C4, C5, C6, C7.)
+  prepared result, not a failure. (C4, C5, C6, C7, C8.)
 
 ## Expected-behavior legend
 
@@ -70,11 +70,18 @@ Format per entry — **`slug` · axis · flavor** — sound arm → / unsound ar
   `Ord` (zero-delta) / `Axiom`-stub `Ord` (grows trust base).
 - **C7 · `quotient-respect` · observational / quotient · B** — quotient elim
   with valid `respect` PASS / non-respecting elim **REJECT**.
+- **C8 · `funext-definitional` · observational / funext · B** — pointwise-equal
+  functions equal via `Eq`-at-Pi (`\x.x` ≡ `\x. and_bool x True`) PASS /
+  same proof shape over functions that **differ at a point** (`\x.True` vs
+  `\x.x`) **REJECT**.
 
 C1 and C7 tell **one story**: the naive `DecEq` over a non-canonical carrier
 (C1) is unsound; the quotient with a `respect` obligation (C7) is *how you do it
 soundly*. C2 and C5 are coupled: C5's `Perm` must sit at the universe C2
-establishes (`‖Perm‖`/count-equality, never a proof-relevant Ω inductive).
+establishes (`‖Perm‖`/count-equality, never a proof-relevant Ω inductive). C7
+and C8 are the **two OTT faces** — C7 the *quotient* fragment (equality you
+*impose*, gated by `respect`), C8 the *funext* fragment (equality that
+*computes* pointwise) — Ken's signature observational equality from both sides.
 
 ## Grounding
 

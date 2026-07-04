@@ -1,0 +1,30 @@
+-- C8 SOUND arm — funext by computation: pointwise-equal functions are equal
+-- via the definitional `Eq`-at-Pi reduction — should-PASS (if reachable).
+--
+-- Run against the prelude. `Equal`/`Refl` are the observational equality and
+-- its reflexivity intro (`Refl A x : Equal A x x`); `and_bool` and Bool `match`
+-- are landed surface (C1/C6/C7, map.ken). funext is definitional in the kernel:
+-- `Equal ((x:A)→B) f g` reduces to `(x:A) → Equal (B x) (f x) (g x)`
+-- (`obs.rs::eq_at_pi`, `16 §2.2`).
+
+-- f and g agree POINTWISE but are NOT convertible as raw terms:
+--   f x = x                (identity)
+--   g x = and_bool x True  (= x on each Bool, but a STUCK match on abstract x,
+--                           so `\x. and_bool x True` does NOT reduce to `\x. x`)
+view f (x : Bool) : Bool = x
+view g (x : Bool) : Bool = and_bool x True
+
+-- The claim: f and g are equal AS FUNCTIONS. This is provable ONLY through the
+-- funext reduction — `Equal (Bool -> Bool) f g` reduces to
+--   (x : Bool) -> Equal Bool (f x) (g x)  =  (x : Bool) -> Equal Bool x (and_bool x True)
+-- which is discharged pointwise by a case-split (`Refl` at each constructor:
+-- and_bool True True = True, and_bool False True = False). Without eq_at_pi the
+-- goal is opaque and this proof cannot even be stated — funext is load-bearing.
+view funextGood : Equal (Bool -> Bool) f g =
+  \x. match x { True => Refl ; False => Refl }
+
+-- Expected: ELABORATES (PASS). eq_at_pi reduces the function-`Equal` to the
+-- pointwise Pi, and the case-split proof type-checks. If the elaborator does not
+-- reduce `Equal` at a function type to the pointwise Pi on this checking path,
+-- record it as a prepared gap (funext landed in the kernel, not surface-consumed)
+-- — the contrast with the unsound arm still stands.
