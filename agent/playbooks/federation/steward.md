@@ -148,21 +148,31 @@ brief** — the implementer should execute mostly mechanically, not design
 >    time**. Do **not** trust `moot compact`'s "sent" line (no-op-prone). *A
 >    post-kickoff compaction eats the just-delivered kickoff and forces a costly
 >    re-kick — the exact 2026-07-02 miss.*
->    **EACH means EACH — never rationalize leaving a high-ctx member uncompacted
->    (operator, 2026-07-03).** Any member carrying **meaningful ctx** into the new
->    WP gets compacted — *including* a reviewer that "only votes at the merge gate
->    later," and *regardless* of a prior-WP parallel where you left them running.
->    Carrying ~60% ctx into a new WP is **too much** — token-credit conservation
->    is a **hard rule**, and every subsequent turn re-bills that stale context.
->    The "it reviews later / same as last time" reasoning is the exact
->    **rationalization to refuse**: compaction is **not lossy for what matters** —
->    the compaction summary preserves the recent details, **and** the agent
->    **re-fetches any source it needs from the filesystem** at pickup. So there is
->    never a reason to carry high ctx forward. (My 2026-07-03 miss: left CV at 60%
->    at a WP seam, rationalizing "reviews `/conformance` at merge, mirror
->    surface-transport" — the operator compacted CV and corrected me.) Sibling of
->    [[playbooks-state-mechanism-not-intent]]: compact on the **ctx level at the
->    seam**, not on a story about when the agent will engage.
+>    **⛔ BUILD TEAMS: ALWAYS COMPACT BEFORE A WP. NO EXCEPTIONS. (operator,
+>    2026-07-04.)** For a build-team kickoff (leader + implementer + QA), you
+>    compact **every** member **unconditionally** — you do **not** check the ctx
+>    level first, you do **not** weigh whether the context is "warm/relevant," you
+>    do **not** exempt a member because a prior-WP parallel left them running. The
+>    ctx% is **irrelevant** for the build-team decision: the answer is always
+>    compact. **Do not even look at the number to decide** — the number cannot
+>    produce a "skip." This closes the exact hole below: the moment you find
+>    yourself reasoning *"they're only at N%"* or *"that context is an asset,"* you
+>    have already violated the rule — **stop and compact.**
+>    **EACH means EACH — never rationalize leaving any member uncompacted.** The
+>    **high-ctx threshold is 33% (operator, 2026-07-04)** — but that threshold is
+>    the *general* backstop (enclave / any role); it is **not** a gate the build
+>    team gets to sit under, because the build-team rule is *unconditional* (above).
+>    Token-credit conservation is a **hard rule** and every subsequent turn
+>    re-bills stale context. Compaction is **not lossy for what matters** — the
+>    summary preserves recent detail **and** the agent **re-fetches any source from
+>    the filesystem** at pickup — so there is *never* a reason to carry ctx forward.
+>    Two operator corrections drove this: **2026-07-03** — left CV at 60% at a seam,
+>    rationalizing "reviews at merge"; **2026-07-04** — released Phase-2 VAL2 to
+>    Team Language at impl 47–49% / qa 34% **without compacting**, rationalizing
+>    "under threshold + warm relevant context" — the operator's reply: *"Always
+>    compact the build teams before a WP. No exceptions."* Sibling of
+>    [[playbooks-state-mechanism-not-intent]]: compact **mechanically at the seam**,
+>    never on a story about ctx level or when/whether the agent will engage.
 > 5. **VERIFY THE DROP.** `capture-pane` each: ctx **actually fell**
 >    (→ ~0–low %) or a `Compacting…` / queued `❯ /compact`. A "sent" report
 >    is **not** proof. Unchanged ctx ⇒ resend.
