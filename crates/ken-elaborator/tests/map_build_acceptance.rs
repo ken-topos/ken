@@ -630,6 +630,37 @@ fn lookupfoundafterinsert_law2_is_a_real_general_proof_term() {
     }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Law 3 (`54 §5.2`, Map capstone unit 2) — `lookupLocality`
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn lookuplocality_law3_is_a_real_general_proof_term() {
+    let env = mk_env();
+    // `lookupLocality : distinct key key' -> lookup key' (insert key val m)
+    // = lookup key' m` must be a real Decl::Transparent proof term — reuses
+    // Law 1's goal-generic transport bridges directly (asserted there) and
+    // Law 2's lookupIntoLBridge/IntoRBridge, plus its own agreement lemmas.
+    for name in [
+        "lookupLocality",
+        "lookupLocalityNodeDispatch",
+        "lookupLocalityQ2Dispatch",
+        "lookupLeafLocalityWitness",
+        "lookupOverwriteLocalityWitness",
+        "lookupIntoLLocalityWitness",
+        "lookupIntoRLocalityWitness",
+        "boolValueEqFromBiimpl",
+        "lookupOverwriteAgreesOuter",
+        "lookupOverwriteAgreesInner",
+    ] {
+        let id = env.globals[name];
+        assert!(
+            matches!(env.env.lookup(id), Some(Decl::Transparent { .. })),
+            "{name} must be a real proof term, not a postulate"
+        );
+    }
+}
+
 // A hand-built concrete-instance application (`tree_2_1_3` under a trivial
 // always-true comparator) was tried here as a second smoke test, but
 // `Ordered`'s real Node case (`And (allKeys (\k2. ...) l) (And (allKeys

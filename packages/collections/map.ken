@@ -1179,3 +1179,373 @@ view lookupFoundAfterInsert
         (lookupFoundAfterInsert k v leq reflLeq key val l)
         (lookupFoundAfterInsert k v leq reflLeq key val r)
   }
+
+-- Law 3 (`54 §5.2`, Map capstone unit 2) -- locality:
+-- `distinct key key' -> lookup key' (insert key val m) = lookup key' m`,
+-- where `distinct key key' := And (leq key key' = True) (leq key' key = True)
+-- -> Bottom` (order-distinctness, `52 §5.2`).
+--
+-- Dictionary laws: `transLeq` only (matches `54 §5.2`'s law-3 list; no
+-- `antisym`, no `total`).
+--
+-- Reuses Law 1's goal-generic transport bridges directly (same pattern as
+-- Law 2), instantiated at
+-- `goal := \x. Equal (Option v) (lookup key' x) (lookup key' (Node l k2 v2 r))`.
+--
+-- New machinery, in order of discovery:
+-- - `boolValueEqFromBiimpl`: from a two-directional Bool-value implication
+--   (`b1=True -> b2=True` and back), concludes `b1 = b2` as VALUES (not just
+--   an iff) -- Bool has exactly two constructors, so a value mismatch with
+--   agreeing truth at `True` forces agreement at `False` too (the disagreeing
+--   case collapses to `Equal Bool True False`, absurd via K7).
+-- - `lookupOverwriteAgreesOuter`/`Inner`: at the overwrite branch (`key`~`k2`
+--   via `q1`,`q2`), `leq key' key` and `leq key' k2` (resp. `leq key key'`
+--   and `leq k2 key'`) are PROVABLY THE SAME VALUE via `transLeq` composed
+--   both directions with `boolValueEqFromBiimpl` -- so `lookup key'` takes
+--   the IDENTICAL branch decision whether the node is labeled `key` or `k2`.
+--   The only case that can actually DIFFER (both directions agreeing True,
+--   i.e. `key'`~`key`) is exactly what `distinct` forbids -- `absurd`-closed.
+-- - `lookupIntoLLocalityWitness`/`IntoR`: the node LABEL is unchanged for
+--   these two branches (only one subtree is replaced by its own recursive
+--   insert), so `lookup key'` takes the IDENTICAL branch decision in both
+--   pre- and post-insert forms; the only non-Refl-trivial sub-case (the
+--   replaced subtree's own recursion) is exactly the outer induction's IH.
+-- - `lookupLeafLocalityWitness`: `insert` at `Leaf` produces a single node
+--   labeled `key`; same True/True-contradiction / False-either-way dispatch
+--   as the overwrite case, but simpler (no `k2`/`v2` to relate, target is
+--   the empty-lookup `None v` directly via the same `lookupIntoLBridge`/
+--   `IntoR` bridges Law 2 already built).
+--
+-- Confirmed on the fixed kernel: builds clean, well under a second.
+
+view boolValueEqFromBiimpl
+  (b1 : Bool) (b2 : Bool)
+  (hAB : Equal Bool b1 True -> Equal Bool b2 True)
+  (hBA : Equal Bool b2 True -> Equal Bool b1 True)
+  (o1 : Or (Equal Bool b1 True) (Equal Bool b1 False))
+  (o2 : Or (Equal Bool b2 True) (Equal Bool b2 False))
+  : Equal Bool b1 b2 =
+  match o1 {
+    Inl q1 => trans Bool b1 True b2 q1 (sym Bool b2 True (hAB q1)) ;
+    Inr q1' =>
+      match o2 {
+        Inl q2 => absurd (trans Bool True b1 False (sym Bool b1 True (hBA q2)) q1') ;
+        Inr q2' => trans Bool b1 False b2 q1' (sym Bool b2 False q2')
+      }
+  }
+
+view lookupOverwriteAgreesOuter
+  (k : Type) (leq : k -> k -> Bool)
+  (transLeq : (x : k) -> (y : k) -> (z : k) -> Equal Bool (leq x y) True -> Equal Bool (leq y z) True -> Equal Bool (leq x z) True)
+  (key : k) (key' : k) (k2 : k)
+  (q1 : Equal Bool (leq key k2) True) (q2 : Equal Bool (leq k2 key) True)
+  : Equal Bool (leq key' key) (leq key' k2) =
+  boolValueEqFromBiimpl (leq key' key) (leq key' k2)
+    (\h. transLeq key' key k2 h q1)
+    (\h. transLeq key' k2 key h q2)
+    (boolDichotomy (leq key' key))
+    (boolDichotomy (leq key' k2))
+
+view lookupOverwriteAgreesInner
+  (k : Type) (leq : k -> k -> Bool)
+  (transLeq : (x : k) -> (y : k) -> (z : k) -> Equal Bool (leq x y) True -> Equal Bool (leq y z) True -> Equal Bool (leq x z) True)
+  (key : k) (key' : k) (k2 : k)
+  (q1 : Equal Bool (leq key k2) True) (q2 : Equal Bool (leq k2 key) True)
+  : Equal Bool (leq key key') (leq k2 key') =
+  boolValueEqFromBiimpl (leq key key') (leq k2 key')
+    (\h. transLeq k2 key key' q2 h)
+    (\h. transLeq key k2 key' q1 h)
+    (boolDichotomy (leq key key'))
+    (boolDichotomy (leq k2 key'))
+
+view lookupOverwriteBothFalse
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k) (key' : k) (val : v)
+  (k2 : k) (v2 : v) (l : Tree k v) (r : Tree k v)
+  (hKey : Equal Bool (leq key' key) False) (hK2 : Equal Bool (leq key' k2) False)
+  : Equal (Option v) (lookup k v leq key' (Node k v l key val r))
+                      (lookup k v leq key' (Node k v l k2 v2 r)) =
+  trans (Option v) (lookup k v leq key' (Node k v l key val r))
+                    (lookup k v leq key' r)
+                    (lookup k v leq key' (Node k v l k2 v2 r))
+    (lookupIntoRBridge k v leq key' l key val r hKey)
+    (sym (Option v) (lookup k v leq key' (Node k v l k2 v2 r)) (lookup k v leq key' r)
+       (lookupIntoRBridge k v leq key' l k2 v2 r hK2))
+
+view lookupOverwriteBothInnerFalse
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k) (key' : k) (val : v)
+  (k2 : k) (v2 : v) (l : Tree k v) (r : Tree k v)
+  (hOuterKey : Equal Bool (leq key' key) True) (hInnerKey : Equal Bool (leq key key') False)
+  (hOuterK2 : Equal Bool (leq key' k2) True) (hInnerK2 : Equal Bool (leq k2 key') False)
+  : Equal (Option v) (lookup k v leq key' (Node k v l key val r))
+                      (lookup k v leq key' (Node k v l k2 v2 r)) =
+  trans (Option v) (lookup k v leq key' (Node k v l key val r))
+                    (lookup k v leq key' l)
+                    (lookup k v leq key' (Node k v l k2 v2 r))
+    (lookupIntoLBridge k v leq key' l key val r hOuterKey hInnerKey)
+    (sym (Option v) (lookup k v leq key' (Node k v l k2 v2 r)) (lookup k v leq key' l)
+       (lookupIntoLBridge k v leq key' l k2 v2 r hOuterK2 hInnerK2))
+
+view lookupOverwriteContradiction
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k) (key' : k) (val : v)
+  (k2 : k) (v2 : v) (l : Tree k v) (r : Tree k v)
+  (hdist : And (Equal Bool (leq key key') True) (Equal Bool (leq key' key) True) -> Bottom)
+  (hOuterKey : Equal Bool (leq key' key) True) (hInnerKey : Equal Bool (leq key key') True)
+  : Equal (Option v) (lookup k v leq key' (Node k v l key val r))
+                      (lookup k v leq key' (Node k v l k2 v2 r)) =
+  absurd (hdist (andIntro (Equal Bool (leq key key') True) (Equal Bool (leq key' key) True) hInnerKey hOuterKey))
+
+view lookupOverwriteInnerDispatch
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k) (key' : k) (val : v)
+  (k2 : k) (v2 : v) (l : Tree k v) (r : Tree k v)
+  (hdist : And (Equal Bool (leq key key') True) (Equal Bool (leq key' key) True) -> Bottom)
+  (hOuterKey : Equal Bool (leq key' key) True) (hOuterK2 : Equal Bool (leq key' k2) True)
+  (innerAgree : Equal Bool (leq key key') (leq k2 key'))
+  (oInner : Or (Equal Bool (leq key key') True) (Equal Bool (leq key key') False))
+  : Equal (Option v) (lookup k v leq key' (Node k v l key val r))
+                      (lookup k v leq key' (Node k v l k2 v2 r)) =
+  match oInner {
+    Inl hInnerKey => lookupOverwriteContradiction k v leq key key' val k2 v2 l r hdist hOuterKey hInnerKey ;
+    Inr hInnerFalse =>
+      lookupOverwriteBothInnerFalse k v leq key key' val k2 v2 l r hOuterKey hInnerFalse hOuterK2
+        (trans Bool (leq k2 key') (leq key key') False (sym Bool (leq key key') (leq k2 key') innerAgree) hInnerFalse)
+  }
+
+view lookupOverwriteOuterDispatch
+  (k : Type) (v : Type) (leq : k -> k -> Bool)
+  (transLeq : (x : k) -> (y : k) -> (z : k) -> Equal Bool (leq x y) True -> Equal Bool (leq y z) True -> Equal Bool (leq x z) True)
+  (key : k) (key' : k) (val : v) (k2 : k) (v2 : v) (l : Tree k v) (r : Tree k v)
+  (q1 : Equal Bool (leq key k2) True) (q2 : Equal Bool (leq k2 key) True)
+  (hdist : And (Equal Bool (leq key key') True) (Equal Bool (leq key' key) True) -> Bottom)
+  (outerAgree : Equal Bool (leq key' key) (leq key' k2))
+  (innerAgree : Equal Bool (leq key key') (leq k2 key'))
+  (oOuter : Or (Equal Bool (leq key' key) True) (Equal Bool (leq key' key) False))
+  : Equal (Option v) (lookup k v leq key' (Node k v l key val r))
+                      (lookup k v leq key' (Node k v l k2 v2 r)) =
+  match oOuter {
+    Inl hOuterKey =>
+      lookupOverwriteInnerDispatch k v leq key key' val k2 v2 l r hdist
+        hOuterKey (trans Bool (leq key' k2) (leq key' key) True (sym Bool (leq key' key) (leq key' k2) outerAgree) hOuterKey)
+        innerAgree
+        (boolDichotomy (leq key key')) ;
+    Inr hOuterFalse =>
+      lookupOverwriteBothFalse k v leq key key' val k2 v2 l r hOuterFalse
+        (trans Bool (leq key' k2) (leq key' key) False (sym Bool (leq key' key) (leq key' k2) outerAgree) hOuterFalse)
+  }
+
+view lookupOverwriteLocalityWitness
+  (k : Type) (v : Type) (leq : k -> k -> Bool)
+  (transLeq : (x : k) -> (y : k) -> (z : k) -> Equal Bool (leq x y) True -> Equal Bool (leq y z) True -> Equal Bool (leq x z) True)
+  (key : k) (key' : k) (val : v) (k2 : k) (v2 : v) (l : Tree k v) (r : Tree k v)
+  (q1 : Equal Bool (leq key k2) True) (q2 : Equal Bool (leq k2 key) True)
+  (hdist : And (Equal Bool (leq key key') True) (Equal Bool (leq key' key) True) -> Bottom)
+  : Equal (Option v) (lookup k v leq key' (Node k v l key val r))
+                      (lookup k v leq key' (Node k v l k2 v2 r)) =
+  lookupOverwriteOuterDispatch k v leq transLeq key key' val k2 v2 l r q1 q2 hdist
+    (lookupOverwriteAgreesOuter k leq transLeq key key' k2 q1 q2)
+    (lookupOverwriteAgreesInner k leq transLeq key key' k2 q1 q2)
+    (boolDichotomy (leq key' key))
+
+view lookupStopResult
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (key' : k)
+  (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (hOuter : Equal Bool (leq key' k2) True) (hInner : Equal Bool (leq k2 key') True)
+  : Equal (Option v) (lookup k v leq key' (Node k v l k2 v2 r)) (Some v v2) =
+  trans (Option v) (lookup k v leq key' (Node k v l k2 v2 r))
+                    (lookupStepInner k v leq key' l k2 v2 r (leq k2 key'))
+                    (Some v v2)
+    (trans (Option v) (lookup k v leq key' (Node k v l k2 v2 r))
+                       (lookupStep k v leq key' l k2 v2 r (leq key' k2))
+                       (lookupStepInner k v leq key' l k2 v2 r (leq k2 key'))
+      (lookupFinalBridge k v leq key' l k2 v2 r)
+      (trans (Option v) (lookupStep k v leq key' l k2 v2 r (leq key' k2))
+                         (lookupStep k v leq key' l k2 v2 r True)
+                         (lookupStepInner k v leq key' l k2 v2 r (leq k2 key'))
+        (lookupMkStepTrueEq k v leq key' l k2 v2 r hOuter) (lookupStepTrueReduces k v leq key' l k2 v2 r)))
+    (lookupMkInnerTrueEq k v leq key' l k2 v2 r hInner)
+
+view lookupIntoLInnerDispatch
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k) (key' : k) (val : v)
+  (k2 : k) (v2 : v) (l : Tree k v) (r : Tree k v)
+  (ih : Equal (Option v) (lookup k v leq key' (insert k v leq key val l)) (lookup k v leq key' l))
+  (hOuter : Equal Bool (leq key' k2) True)
+  (oInner : Or (Equal Bool (leq k2 key') True) (Equal Bool (leq k2 key') False))
+  : Equal (Option v) (lookup k v leq key' (Node k v (insert k v leq key val l) k2 v2 r))
+                      (lookup k v leq key' (Node k v l k2 v2 r)) =
+  match oInner {
+    Inl hInner =>
+      trans (Option v) (lookup k v leq key' (Node k v (insert k v leq key val l) k2 v2 r)) (Some v v2) (lookup k v leq key' (Node k v l k2 v2 r))
+        (lookupStopResult k v leq key' (insert k v leq key val l) k2 v2 r hOuter hInner)
+        (sym (Option v) (lookup k v leq key' (Node k v l k2 v2 r)) (Some v v2) (lookupStopResult k v leq key' l k2 v2 r hOuter hInner)) ;
+    Inr hInnerFalse =>
+      trans (Option v) (lookup k v leq key' (Node k v (insert k v leq key val l) k2 v2 r))
+                        (lookup k v leq key' (insert k v leq key val l))
+                        (lookup k v leq key' (Node k v l k2 v2 r))
+        (lookupIntoLBridge k v leq key' (insert k v leq key val l) k2 v2 r hOuter hInnerFalse)
+        (trans (Option v) (lookup k v leq key' (insert k v leq key val l))
+                           (lookup k v leq key' l)
+                           (lookup k v leq key' (Node k v l k2 v2 r))
+          ih
+          (sym (Option v) (lookup k v leq key' (Node k v l k2 v2 r)) (lookup k v leq key' l)
+             (lookupIntoLBridge k v leq key' l k2 v2 r hOuter hInnerFalse)))
+  }
+
+view lookupIntoLDispatch
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k) (key' : k) (val : v)
+  (k2 : k) (v2 : v) (l : Tree k v) (r : Tree k v)
+  (ih : Equal (Option v) (lookup k v leq key' (insert k v leq key val l)) (lookup k v leq key' l))
+  (oOuter : Or (Equal Bool (leq key' k2) True) (Equal Bool (leq key' k2) False))
+  : Equal (Option v) (lookup k v leq key' (Node k v (insert k v leq key val l) k2 v2 r))
+                      (lookup k v leq key' (Node k v l k2 v2 r)) =
+  match oOuter {
+    Inl hOuter => lookupIntoLInnerDispatch k v leq key key' val k2 v2 l r ih hOuter (boolDichotomy (leq k2 key')) ;
+    Inr hOuterFalse =>
+      trans (Option v) (lookup k v leq key' (Node k v (insert k v leq key val l) k2 v2 r))
+                        (lookup k v leq key' r)
+                        (lookup k v leq key' (Node k v l k2 v2 r))
+        (lookupIntoRBridge k v leq key' (insert k v leq key val l) k2 v2 r hOuterFalse)
+        (sym (Option v) (lookup k v leq key' (Node k v l k2 v2 r)) (lookup k v leq key' r)
+           (lookupIntoRBridge k v leq key' l k2 v2 r hOuterFalse))
+  }
+
+view lookupIntoLLocalityWitness
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k) (key' : k) (val : v)
+  (k2 : k) (v2 : v) (l : Tree k v) (r : Tree k v)
+  (ih : Equal (Option v) (lookup k v leq key' (insert k v leq key val l)) (lookup k v leq key' l))
+  : Equal (Option v) (lookup k v leq key' (Node k v (insert k v leq key val l) k2 v2 r))
+                      (lookup k v leq key' (Node k v l k2 v2 r)) =
+  lookupIntoLDispatch k v leq key key' val k2 v2 l r ih (boolDichotomy (leq key' k2))
+
+view lookupIntoRInnerDispatch
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k) (key' : k) (val : v)
+  (k2 : k) (v2 : v) (l : Tree k v) (r : Tree k v)
+  (ih : Equal (Option v) (lookup k v leq key' (insert k v leq key val r)) (lookup k v leq key' r))
+  (hOuter : Equal Bool (leq key' k2) True)
+  (oInner : Or (Equal Bool (leq k2 key') True) (Equal Bool (leq k2 key') False))
+  : Equal (Option v) (lookup k v leq key' (Node k v l k2 v2 (insert k v leq key val r)))
+                      (lookup k v leq key' (Node k v l k2 v2 r)) =
+  match oInner {
+    Inl hInner =>
+      trans (Option v) (lookup k v leq key' (Node k v l k2 v2 (insert k v leq key val r))) (Some v v2) (lookup k v leq key' (Node k v l k2 v2 r))
+        (lookupStopResult k v leq key' l k2 v2 (insert k v leq key val r) hOuter hInner)
+        (sym (Option v) (lookup k v leq key' (Node k v l k2 v2 r)) (Some v v2) (lookupStopResult k v leq key' l k2 v2 r hOuter hInner)) ;
+    Inr hInnerFalse =>
+      -- outer=True, inner=False routes to the LEFT subtree in BOTH forms
+      -- (unchanged `l`) -- trivial, no IH needed here at all.
+      trans (Option v) (lookup k v leq key' (Node k v l k2 v2 (insert k v leq key val r)))
+                        (lookup k v leq key' l)
+                        (lookup k v leq key' (Node k v l k2 v2 r))
+        (lookupIntoLBridge k v leq key' l k2 v2 (insert k v leq key val r) hOuter hInnerFalse)
+        (sym (Option v) (lookup k v leq key' (Node k v l k2 v2 r)) (lookup k v leq key' l)
+           (lookupIntoLBridge k v leq key' l k2 v2 r hOuter hInnerFalse))
+  }
+
+view lookupIntoRDispatch
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k) (key' : k) (val : v)
+  (k2 : k) (v2 : v) (l : Tree k v) (r : Tree k v)
+  (ih : Equal (Option v) (lookup k v leq key' (insert k v leq key val r)) (lookup k v leq key' r))
+  (oOuter : Or (Equal Bool (leq key' k2) True) (Equal Bool (leq key' k2) False))
+  : Equal (Option v) (lookup k v leq key' (Node k v l k2 v2 (insert k v leq key val r)))
+                      (lookup k v leq key' (Node k v l k2 v2 r)) =
+  match oOuter {
+    Inl hOuter => lookupIntoRInnerDispatch k v leq key key' val k2 v2 l r ih hOuter (boolDichotomy (leq k2 key')) ;
+    Inr hOuterFalse =>
+      trans (Option v) (lookup k v leq key' (Node k v l k2 v2 (insert k v leq key val r)))
+                        (lookup k v leq key' (insert k v leq key val r))
+                        (lookup k v leq key' (Node k v l k2 v2 r))
+        (lookupIntoRBridge k v leq key' l k2 v2 (insert k v leq key val r) hOuterFalse)
+        (trans (Option v) (lookup k v leq key' (insert k v leq key val r))
+                           (lookup k v leq key' r)
+                           (lookup k v leq key' (Node k v l k2 v2 r))
+          ih
+          (sym (Option v) (lookup k v leq key' (Node k v l k2 v2 r)) (lookup k v leq key' r)
+             (lookupIntoRBridge k v leq key' l k2 v2 r hOuterFalse)))
+  }
+
+view lookupIntoRLocalityWitness
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k) (key' : k) (val : v)
+  (k2 : k) (v2 : v) (l : Tree k v) (r : Tree k v)
+  (ih : Equal (Option v) (lookup k v leq key' (insert k v leq key val r)) (lookup k v leq key' r))
+  : Equal (Option v) (lookup k v leq key' (Node k v l k2 v2 (insert k v leq key val r)))
+                      (lookup k v leq key' (Node k v l k2 v2 r)) =
+  lookupIntoRDispatch k v leq key key' val k2 v2 l r ih (boolDichotomy (leq key' k2))
+
+view lookupLeafLocalityDispatchInner
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k) (key' : k) (val : v)
+  (hdist : And (Equal Bool (leq key key') True) (Equal Bool (leq key' key) True) -> Bottom)
+  (hOuter : Equal Bool (leq key' key) True)
+  (oInner : Or (Equal Bool (leq key key') True) (Equal Bool (leq key key') False))
+  : Equal (Option v) (lookup k v leq key' (Node k v (Leaf k v) key val (Leaf k v))) (None v) =
+  match oInner {
+    Inl hInner =>
+      absurd (hdist (andIntro (Equal Bool (leq key key') True) (Equal Bool (leq key' key) True) hInner hOuter)) ;
+    Inr hInnerFalse =>
+      lookupIntoLBridge k v leq key' (Leaf k v) key val (Leaf k v) hOuter hInnerFalse
+  }
+
+view lookupLeafLocalityDispatch
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k) (key' : k) (val : v)
+  (hdist : And (Equal Bool (leq key key') True) (Equal Bool (leq key' key) True) -> Bottom)
+  (oOuter : Or (Equal Bool (leq key' key) True) (Equal Bool (leq key' key) False))
+  : Equal (Option v) (lookup k v leq key' (Node k v (Leaf k v) key val (Leaf k v))) (None v) =
+  match oOuter {
+    Inl hOuter => lookupLeafLocalityDispatchInner k v leq key key' val hdist hOuter (boolDichotomy (leq key key')) ;
+    Inr hOuterFalse => lookupIntoRBridge k v leq key' (Leaf k v) key val (Leaf k v) hOuterFalse
+  }
+
+view lookupLeafLocalityWitness
+  (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k) (key' : k) (val : v)
+  (hdist : And (Equal Bool (leq key key') True) (Equal Bool (leq key' key) True) -> Bottom)
+  : Equal (Option v) (lookup k v leq key' (Node k v (Leaf k v) key val (Leaf k v))) (None v) =
+  lookupLeafLocalityDispatch k v leq key key' val hdist (boolDichotomy (leq key' key))
+
+view lookupLocalityQ2Dispatch
+  (k : Type) (v : Type) (leq : k -> k -> Bool)
+  (transLeq : (x : k) -> (y : k) -> (z : k) -> Equal Bool (leq x y) True -> Equal Bool (leq y z) True -> Equal Bool (leq x z) True)
+  (key : k) (key' : k) (val : v) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (hdist : And (Equal Bool (leq key key') True) (Equal Bool (leq key' key) True) -> Bottom)
+  (insL : Equal (Option v) (lookup k v leq key' (insert k v leq key val l)) (lookup k v leq key' l))
+  (insR : Equal (Option v) (lookup k v leq key' (insert k v leq key val r)) (lookup k v leq key' r))
+  (q1 : Equal Bool (leq key k2) True)
+  (o2 : Or (Equal Bool (leq k2 key) True) (Equal Bool (leq k2 key) False))
+  : Equal (Option v) (lookup k v leq key' (insert k v leq key val (Node k v l k2 v2 r)))
+                      (lookup k v leq key' (Node k v l k2 v2 r)) =
+  match o2 {
+    Inl q2 =>
+      insertCaseTransportOverwrite k v leq key val l k2 v2 r (\x. Equal (Option v) (lookup k v leq key' x) (lookup k v leq key' (Node k v l k2 v2 r))) q1 q2
+        (lookupOverwriteLocalityWitness k v leq transLeq key key' val k2 v2 l r q1 q2 hdist) ;
+    Inr q2' =>
+      insertCaseTransportIntoL k v leq key val l k2 v2 r (\x. Equal (Option v) (lookup k v leq key' x) (lookup k v leq key' (Node k v l k2 v2 r))) q1 q2'
+        (lookupIntoLLocalityWitness k v leq key key' val k2 v2 l r insL)
+  }
+
+view lookupLocalityNodeDispatch
+  (k : Type) (v : Type) (leq : k -> k -> Bool)
+  (transLeq : (x : k) -> (y : k) -> (z : k) -> Equal Bool (leq x y) True -> Equal Bool (leq y z) True -> Equal Bool (leq x z) True)
+  (key : k) (key' : k) (val : v) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (hdist : And (Equal Bool (leq key key') True) (Equal Bool (leq key' key) True) -> Bottom)
+  (insL : Equal (Option v) (lookup k v leq key' (insert k v leq key val l)) (lookup k v leq key' l))
+  (insR : Equal (Option v) (lookup k v leq key' (insert k v leq key val r)) (lookup k v leq key' r))
+  (o1 : Or (Equal Bool (leq key k2) True) (Equal Bool (leq key k2) False))
+  : Equal (Option v) (lookup k v leq key' (insert k v leq key val (Node k v l k2 v2 r)))
+                      (lookup k v leq key' (Node k v l k2 v2 r)) =
+  match o1 {
+    Inl q1 => lookupLocalityQ2Dispatch k v leq transLeq key key' val l k2 v2 r hdist insL insR q1 (boolDichotomy (leq k2 key)) ;
+    Inr q1' =>
+      insertCaseTransportIntoR k v leq key val l k2 v2 r (\x. Equal (Option v) (lookup k v leq key' x) (lookup k v leq key' (Node k v l k2 v2 r))) q1'
+        (lookupIntoRLocalityWitness k v leq key key' val k2 v2 l r insR)
+  }
+
+view lookupLocality
+  (k : Type) (v : Type) (leq : k -> k -> Bool)
+  (transLeq : (x : k) -> (y : k) -> (z : k) -> Equal Bool (leq x y) True -> Equal Bool (leq y z) True -> Equal Bool (leq x z) True)
+  (key : k) (key' : k) (val : v) (m : Tree k v)
+  (hdist : And (Equal Bool (leq key key') True) (Equal Bool (leq key' key) True) -> Bottom)
+  : Equal (Option v) (lookup k v leq key' (insert k v leq key val m)) (lookup k v leq key' m) =
+  match m {
+    Leaf => lookupLeafLocalityWitness k v leq key key' val hdist ;
+    Node l k2 v2 r =>
+      lookupLocalityNodeDispatch k v leq transLeq key key' val l k2 v2 r hdist
+        (lookupLocality k v leq transLeq key key' val l hdist)
+        (lookupLocality k v leq transLeq key key' val r hdist)
+        (boolDichotomy (leq key k2))
+  }
