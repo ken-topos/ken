@@ -193,6 +193,66 @@ FS/State), a landed template to generalize (`state.rs`), and a concrete first
 consumer (FS+Console). **This retires VAL2 16/0's one honesty asterisk — Ken
 programs that compose effects become expressible and runnable.**
 
+## Enclave elaboration — D1 (general coproduct response family)
+
+> Author: **spec-author**, transcribing **Architect's** pinned D1 ruling
+> (`evt_241dchcb5y6j8`) into durable prose per the frame's team-ready-rigor
+> mandate — the design + soundness owner is **Architect** (COORD §9); the build
+> transcribes prose → code. The AC1/AC4 certifications are **his** (verbatim,
+> §"AC1 / AC4 certifications"), verified by him at the gate.
+
+### D1.1 Signature + the per-tag reduction (the hinge)
+
+Generalize the landed State-first `resp_sum` (`state.rs::declare_resp_sum`,
+hardcoded to `Sum (StateOp s) f`) to a response combinator over an **arbitrary**
+`Sum g h`, given each summand's response family:
+
+```
+resp_sum : (g h : Type) -> (rg : g -> Type) -> (rh : h -> Type) -> Sum g h -> Type
+resp_sum g h rg rh (InL x)  ≡  rg x          -- definitionally (per-tag ι)
+resp_sum g h rg rh (InR y)  ≡  rh y
+```
+
+It is the literal realization of `36 §2.3`'s signature-coproduct response
+`Resp (inl o) = E.Resp o ; Resp (inr o) = F.Resp o`.
+
+**The reduction is the hinge the whole WP hangs on — not decoration.**
+`resp_sum` MUST be a **reducing `declare_def`, never a postulate**; each tag
+must reduce to the injected summand's **own** response, with **no wrap or
+reorder**. Why it is load-bearing:
+
+- it lets **D2's `inject` be a coercion-free re-wrap** — rewriting `Vis op k`
+  (`k : rg op -> …`) to `Vis (InL op) k'` needs `k'`'s domain `resp_sum … (InL
+  op)`, which ι-reduces to `rg op`, definitionally equal to `k`'s domain, so no
+  transport term is inserted (§D2.2); and
+- it lets **D3 feed the base handler's response back untyped** — the driver
+  supplies `apply(k, resp)` without a coercion because the response type already
+  agrees by reduction.
+
+**If `resp_sum` were opaque (a postulate), both break** — `inject` would need an
+explicit transport and D3 would need response types threaded. Hence the pin:
+reducing `declare_def`, per-tag, summand's-own-response. Spec anchor **§2.3**.
+
+### D1.2 Mechanism
+
+One **non-recursive** `Term::Elim` over `Sum` — motive `λ_ : Sum g h. Type0`
+ascribed `Π_ : Sum g h. Type1` (a large-elim motive); `method_inl = λx. rg x`,
+`method_inr = λy. rh y`. Structurally it **is** the landed `declare_resp_sum`
+with State's hardcoded first summand (`resp_state s`) abstracted to the
+parameter `rg` and the `RespF` parameter kept as `rh`. **Total / structural:**
+`Sum` has no recursive field ⇒ non-recursive elim ⇒ trivially terminating, no
+SCT.
+
+### D1.3 State subsumed as an instance (AC5 — at the data/signature level)
+
+State becomes a **literal instantiation** of the general family, not a fork: the
+landed `resp_sum s f RespF` is exactly `resp_sum (StateOp s) f (resp_state s)
+RespF`. `runState`/`get`/`put`'s `resp_sum`-applications update to the 4-arg
+form (mechanical — the `resp_sum_app` helper); State's structure is unchanged.
+**AC5's "State becomes an instance of the general mechanism" is satisfied here,
+at the data/signature level — see the COEXIST ruling (§D3.1) for why it is
+*not* satisfied by running State through `run_io`.**
+
 ## Enclave elaboration — D2 (surface injection / lift)
 
 > Author: **spec-author**. Grounded against the landed effect substrate
@@ -460,3 +520,100 @@ D2-specific discriminators):
   same `Ret` leaves — a structural assertion on the tag sequence (`36 §7.5`
   case 2 shape), which **flips** if injection drops/reorders a node or mis-tags
   (`InL` vs `InR`).
+
+## Enclave elaboration — D3 (coproduct-aware terminal driver)
+
+> Author: **spec-author**, transcribing **Architect's** pinned D3 ruling
+> (`evt_241dchcb5y6j8` + the D2↔D3 seam `evt_mgdfthndwx3w` + the COEXIST ruling
+> `evt_1hcxrhjresr74`). Design + soundness owner: **Architect**; the AC1/AC4
+> certs (below) are his, verbatim, verified at the gate.
+
+### D3.1 Two handler roles at two trust levels — the COEXIST ruling
+
+`36 §4.5.4` gives **two** handler roles at **different trust levels**, and
+keeping them distinct is a **design decision (COEXIST), not an omission**:
+
+| role | realization | trust level | does |
+|---|---|---|---|
+| *intermediate pure handler* (`runState`, `36 §5.1` fold) | kernel-re-checked `declare_def` | pure kernel term | peels ITS summand via `inl`, re-emits others via `Vis (inr o)`, returns a residual **tree** |
+| *terminal base driver* (`run_io`) | trusted Rust in `ken-interp` | trusted driver | executes real-world I/O, returns the final **value** — nothing to re-emit |
+
+**COEXIST ruling (Architect, `evt_1hcxrhjresr74` — MUST be in the doc): `run_io`
+does NOT subsume `run_state`.** Folding State's discharge into `run_io` would
+move a **currently-kernel-verified fold into the trusted Rust driver** — a
+**TCB / trust-level regression** against `36 §2`'s layering (effect *semantics*
+stay in the pure kernel; only real-world *I/O* lives in the trusted driver) and
+against PRINCIPLES' small-auditable-TCB. The two roles stay distinct **by
+design**. AC5's "State becomes an instance" is satisfied at the **data /
+signature** level (§D1.3: `resp_sum (StateOp s) f (resp_state s) RespF`),
+**not** by running State through `run_io`. *(Carry this rationale verbatim so a
+build model does not "clean up" by fusing the two — that fusion is exactly the
+regression.)* Two-role anchor **§4.5.4 / §5.1**.
+
+### D3.2 Mechanism — the effect-blind Sum-peel
+
+D3 is the **terminal driver**. At each `Vis op k`:
+
+1. **recursively strip `Sum` ctors** — `InL`/`InR` → their payload (at
+   `op_args[2]`: the 2 `Sum` params + slot 0) — down to the **innermost
+   non-`Sum` op**;
+2. **match that base tag** against the **existing** base table (`Write` →
+   `println`, `ReadFile` → cap-gated `fs::read`, …);
+3. feed `apply(k, resp)`; **loop**.
+
+- **General by construction (the AC3 parametric-combinator route):** the peel is
+  **blind to `Sum` structure** — **no `ConsoleOp`/`FSOp` literal**; it
+  dispatches only on the innermost base tag. Any order / depth / arity of base
+  effects discharges through **one** loop, **zero per-pairing code** — a direct
+  reflection of `36 §2.3`'s `⊕` associativity / commutativity / unitality.
+  Subsumes single-effect trees (zero wrappers ⇒ the peel is a no-op; FS-alone /
+  Console-alone unchanged, AC5).
+- **Fail-closed / exhaustive (`36 §6.5` EFF7):** the peel bottoming out at an
+  unknown tag, an `InL`/`InR` of the wrong arity, or `Unknown` ⇒ `UnknownEffect`
+  — never a catch-all skip.
+
+### D3.3 The hard soundness constraint — composition cannot launder authority
+
+**Architect's certified build constraint (transcribe verbatim into code
+review).** `authorizes` — the **sole** runtime FS net (the fs-flip
+`EvalVal::Cap` gate, `evt_35knjqv2k941h` ruling) — sits **unconditionally inside
+the `ReadFile` arm**, reached **only after** the peel lands on `readfile_id`.
+Peeling changes only **how** the tag is reached; it adds **no** path to
+`std::fs::read` that skips the gate. **The peel must NOT hoist, cache, or
+short-circuit the `ReadFile` arm's `authorizes` gate — it stays downstream of
+the peel. Composition cannot launder authority.** Spec anchors **§4.5.4**,
+`../40-runtime/42`.
+
+CV's D5 pins the **executable** discriminator (`evt_5h67v19rtjx4s` §5): a
+composed program with a **sufficient** cap reads + prints; the **same** program
+with `Cap ANone` is denied at `authorizes` with `CapabilityDenied`
+(right-reason, **not** `NotFound`). The peel changes only *how* `readfile_id` is
+reached, never
+*whether* the gate fires.
+
+### D3.4 Wiring (build, not a fork)
+
+The driver gains `SumIds { inl_id, inr_id }` from `GlobalEnv`, exactly like the
+existing `ConsoleIds` / `FSIds`.
+
+## AC1 / AC4 certifications (Architect)
+
+> **Architect's** soundness certifications, transcribed verbatim; the soundness
+> judgment is his (verified at the gate). Grep-confirmed at build.
+
+**AC1 — kernel untouched (certified on design).** D1 = `declare_def` (a real
+kernel term, re-checked; `Sum` + `Elim` already exist ⇒ **no new
+`Term`/`Decl`**; a def is **not** a postulate ⇒ **`trusted_base` delta zero**).
+D3 = pure Rust in `ken-interp` (zero kernel term). `Sum` already exists
+(`declare_sum`). ⇒ **zero `ken-kernel/` diff, no new `Term`/`Decl`,
+`trusted_base` unchanged**, by construction; the build grep-confirms.
+
+**AC4 — totality (certified).** D1: non-recursive elim ⇒ total. D3: the loop
+terminates because (a) the `ITree` value is **finite** (K1.5 structural descent,
+no coinduction — the landed argument, unchanged) and (b) the added Sum-peel is a
+**bounded descent on a finite op value**; the outer loop still strictly descends
+the finite tree via `apply(k, resp)`. No unbounded recursion is added. The
+composed **program** stays total: built from total `bind` / `get` / `put` /
+`read_bytes` / `print_line` / `inject` — finite `Vis`-node builders or `36 §5.1`
+folds, tail-resumptive (`36 §5.2`, single-shot, no reified continuation,
+§4.5.5); no mutable cell on the value path.
