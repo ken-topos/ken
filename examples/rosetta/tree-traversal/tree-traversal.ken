@@ -3,36 +3,32 @@
 --
 -- Task: in-order traversal of a binary tree.
 --
--- GAP-multi-recursive-field-match (BLOCKING, capability gap): see
--- KNOWN-GAP.md. A `data` type with a constructor holding TWO OR MORE
--- fields of the type being declared itself (the ordinary shape of any
--- binary tree) cannot be `match`ed -- confirmed via a minimal repro
--- isolated from this file's own traversal logic (single-recursive-field
--- and zero-recursive-field constructors both work fine; two or more fail
--- identically regardless of payload type or match-arm body).
+-- Reuses the landed `packages/collections` string surface (`eq`,
+-- `list_append`, `list_char_to_string`) -- no re-derivation of a string op.
+-- A binary tree's `Node` constructor has TWO recursive `Tree` fields
+-- (GAP-multi-recursive-field-match, VAL2 #5) -- fixed by `L-match-ih-fix`
+-- (`07d167f`), which is exactly what unblocks this example.
 --
--- Once GAP-multi-recursive-field-match is resolved, the intended program is:
---
--- data Tree = Leaf | Node Tree Char Tree
---
--- view inorder (t : Tree) : List Char =
---   match t {
---     Leaf => Nil Char ;
---     Node l c r => list_append Char (inorder l) (Cons Char c (inorder r))
---   }
---
--- view sampleTree : Tree =
---   Node
---     (Node (Node Leaf 97 Leaf) 98 (Node Leaf 99 Leaf))
---     100
---     (Node (Node Leaf 101 Leaf) 102 (Node Leaf 103 Leaf))
---
--- view traversalResult : String = list_char_to_string (inorder sampleTree)
---
--- view finalCheck : String =
---   match eq traversalResult "abcdefg" { True => "PASS" ; False => "FAIL" }
---
--- view main : IO Unit = print_line finalCheck
+-- Output steers around the tracked `natToDecimal` exponential-blowup gap:
+-- the oracle is a `String` ("PASS"/"FAIL"), never a printed `Nat`/`Int`.
 
--- Placeholder until GAP-multi-recursive-field-match is resolved.
-view main : Nat = Zero
+data Tree = Leaf | Node Tree Char Tree
+
+view inorder (t : Tree) : List Char =
+  match t {
+    Leaf => Nil Char ;
+    Node l c r => list_append Char (inorder l) (Cons Char c (inorder r))
+  }
+
+view sampleTree : Tree =
+  Node
+    (Node (Node Leaf 97 Leaf) 98 (Node Leaf 99 Leaf))
+    100
+    (Node (Node Leaf 101 Leaf) 102 (Node Leaf 103 Leaf))
+
+view traversalResult : String = list_char_to_string (inorder sampleTree)
+
+view finalCheck : String =
+  match eq traversalResult "abcdefg" { True => "PASS" ; False => "FAIL" }
+
+view main : IO Unit = print_line finalCheck

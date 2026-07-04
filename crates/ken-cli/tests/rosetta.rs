@@ -50,7 +50,7 @@ fn rosetta_dir() -> PathBuf {
 /// `packages/collections` concatenated ahead of their own source, and to
 /// stay within the per-example timeout with it prepended. Do not add a
 /// slug here without measuring it first (see the module doc).
-const NEEDS_COLLECTIONS: &[&str] = &["palindrome", "closures", "merge-sort"];
+const NEEDS_COLLECTIONS: &[&str] = &["palindrome", "closures", "merge-sort", "tree-traversal"];
 
 fn collections_prelude() -> String {
     fs::read_to_string(workspace_root().join("packages/collections/collections.ken"))
