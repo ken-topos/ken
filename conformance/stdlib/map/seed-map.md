@@ -577,7 +577,25 @@ coverage), per the absurd-nothing-silently-dropped discipline.
   buildable now); **preservation / found-after-insert / locality / agreement =
   Gap A + Gap B** (induct **and** transport a stuck `leq`; their nested-`J`
   composition + the `Tree`-ctor `eq_at_inductive` congruence are the Unit-2
-  blockers). **The flip:** stubbing any law with `Axiom` (to fake completeness)
+  blockers). **Law 5 (agreement) additionally carries a key-uniqueness
+  precondition** (`map-law5-restate`, `54 §5.2`/`§4`). The corrected statement
+  adds a `Distinct leq m` premise — shape
+  `Ordered m -> Distinct leq m -> lookup ... = assoc ... (toList m)` — with
+  `Distinct leq m := NoDup leq (toList m)` (Ω-valued, comparison-free). It is
+  **false without `Distinct`**: `Ordered`'s weak bounds admit duplicates where
+  `lookup`'s BST descent and `assoc`'s in-order scan disagree
+  (`Node (Node Leaf k v1 Leaf) k v2 Leaf`); `Ordered` stays **byte-unchanged**,
+  the precondition is added not folded in. `antisym` rejoins law 5's dict list
+  only to **discharge** `Distinct` (order-equivalent ⟹ `Equal`, insert-reachable
+  ⟹ no dup) — so law 5 joins the overwrite law's ADR-0010 canonical-carrier
+  obligation (`§2.1`, `antisym-equal-sound-over-canonical-key`).
+  **Discriminating build-time acceptance:** the eventual proof's `Distinct` must
+  be **non-vacuous** — a real `fromList`/insert map discharges it
+  (`NoDup Nil = Top`; empty / singleton / distinct-key maps satisfy it); an
+  always-false `Unique` nothing satisfies = law 5 true-but-vacuous
+  (green-vs-green), the failure shape to reject. Statement corrected now;
+  **proof still red-until-built** (Unit 2). **The flip:** stubbing
+  any law with `Axiom` (to fake completeness)
   grows the incremental `trusted_base_delta` (caught by
   `laws-real-proofs-zero-new-delta`'s cone walk) → **rejected**; the real
   zero-delta proof → **accepted**. `toList`-ordered's realized proof also
