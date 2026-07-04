@@ -882,6 +882,68 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         .copied()
         .ok_or_else(|| ElabError::Internal("prelude: 'print_line' not registered".into()))?;
 
+    // ── `[FS]` real file I/O (VAL2 #9 / OQ-B, FS-driver-build D1) ──────────
+    //
+    // Mirrors `print_line`'s own real-`view` pattern above (`ITree`/`Vis`/
+    // `Ret` applied at their 3 explicit type params) — a genuine kernel-
+    // rechecked reduction, no `apply()` interception needed (unlike the now-
+    // dead-code `build_print_line_tree`/`store.print_line_id` path in
+    // `ken-interp`, which nothing sets anymore: `print_line` reduces by
+    // ordinary δ/ι through its real `view` body, and `read_bytes` does too).
+    //
+    // `Cap` — minimal opaque placeholder (zero structure, exactly `Bytes`/
+    // `String`'s own registration below). NOT the real unforgeable `Cap_FS`
+    // — verify-impl's D3 owns that representation and may extend/replace
+    // this placeholder; this WP only needs the correct *shape* for
+    // `read_bytes`'s signature + the driver's dispatch.
+    let cap_id = declare_primitive(&mut elab.env, vec![], type0.clone(), PrimReduction::OpaqueType)
+        .map_err(|e| ElabError::Internal(format!("prelude Cap failed: {}", e)))?;
+    elab.globals.insert("Cap".to_string(), cap_id);
+
+    // `FSOp = ReadFile Cap Bytes` — non-dependent single-ctor FS effect op.
+    // The capability is carried IN the op node (`ReadFile cap path`) per D3's
+    // capability-carrying (not ambient authority) design — the driver's FS
+    // arm reads both fields off the `Vis` node before any syscall.
+    elab.elaborate_decl("data FSOp = ReadFile Cap Bytes")
+        .map_err(|e| ElabError::Internal(format!("prelude FSOp failed: {}", e)))?;
+
+    // `IOError = NotFound | PermissionDenied | CapabilityDenied | Other` — a
+    // small in-language sum the driver maps `std::io::ErrorKind`/capability
+    // refusal onto (D2, D5: failure surfaces as a total `Result`, never a panic).
+    elab.elaborate_decl("data IOError = NotFound | PermissionDenied | CapabilityDenied | Other")
+        .map_err(|e| ElabError::Internal(format!("prelude IOError failed: {}", e)))?;
+
+    // `fs_resp : FSOp -> Type = Result Bytes IOError` — every FS op (today,
+    // just `ReadFile`) responds with a `Result`; constant, ignoring `op`,
+    // exactly like `console_resp`'s constant-`Unit` shape above.
+    elab.elaborate_decl("view fs_resp (op : FSOp) : Type = Result Bytes IOError")
+        .map_err(|e| ElabError::Internal(format!("prelude fs_resp failed: {}", e)))?;
+
+    // `FS : Type -> Type = \a. ITree FSOp fs_resp a` — the file-I/O analog of
+    // `IO`, reusing the lifted, effect-generic `ITree` (no second effect system).
+    elab.elaborate_decl("view FS (a : Type) : Type = ITree FSOp fs_resp a")
+        .map_err(|e| ElabError::Internal(format!("prelude FS failed: {}", e)))?;
+
+    // `read_bytes : Cap -> Bytes -> FS (Result Bytes IOError)`
+    //   = \cap path. Vis FSOp fs_resp (Result Bytes IOError) (ReadFile cap path)
+    //                  (\r. Ret FSOp fs_resp (Result Bytes IOError) r)
+    //
+    // A **pure, total** constructor-application definition (D5/AC5): reduces
+    // in the pure core to a `Vis (ReadFile cap path) (λr. Ret r)` `ITree`
+    // value — no syscall, no partiality. `read_bytes` was previously a
+    // `Decl::Primitive` placeholder in `bytes.rs` (removed there, this is its
+    // real replacement); the static `[FS]` escape/capability check
+    // (`check.rs::check_capabilities`, `bytes.rs::io_effect_rows`) is a
+    // name-keyed analysis independent of the kernel `Decl` kind, so it stays
+    // green through this re-type (verified: `l6_acceptance.rs`'s tests never
+    // elaborate a real `read_bytes` call term, only hand-built `EffectDecl`s).
+    elab.elaborate_decl(
+        "view read_bytes (cap : Cap) (path : Bytes) : FS (Result Bytes IOError) = \
+         Vis FSOp fs_resp (Result Bytes IOError) (ReadFile cap path) \
+           (\\r. Ret FSOp fs_resp (Result Bytes IOError) r)",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude read_bytes failed: {}", e)))?;
+
     Ok(PreludeEnv {
         nat_id,
         zero_id,
