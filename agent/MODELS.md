@@ -1,74 +1,66 @@
 # Model tiers
 
-Ken runs a heterogeneous fleet to concentrate spend on the highest-judgment and
-clean-room-critical work while using cheaper models for high-volume code
-generation and coordination. Three tiers:
+Ken runs a two-tier fleet to concentrate the most expensive model on the
+highest-judgment and clean-room-critical work, using a capable
+high-throughput model for high-volume code generation and coordination. Every
+agent runs an **Anthropic model directly** on the subscription (OAuth); there is
+no open-weight tier and no provider proxy.
 
 | Tier | Model | Roles | Why |
 |---|---|---|---|
-| **T1** | **Opus 4.8 (1M, high effort, extended thinking)** | Spec-author, Conformance-validator, **Steward**, **Architect** | Highest judgment; the clean-room enclave; design + workflow authority. These calls are worth the most. |
-| **T2** | **GLM 5.2** (Fireworks) | Implementers | High-volume code generation. |
-| **T3** | **DeepSeek V4 Pro** | Build-team Leaders, Build-team QA, Spec-team Leader, Integrator, Librarian | Coordination, mechanical gates, verification runs, doc observation. |
+| **Enclave** | **Opus 4.8 (1M, high effort, extended thinking)** | Spec-author, Conformance-validator, **Steward**, **Architect** | Highest judgment; the clean-room enclave; design + workflow authority. These calls are worth the most. |
+| **Build & coordination** | **Sonnet 5** | Build-team Leaders, Implementers, QA; Spec-team Leader; Integrator; Librarian | High-volume code generation, coordination, mechanical gates, verification runs, doc observation. |
 
 The operator is the human product owner; Steward is the primary proxy into the
 federation.
 
 ## Knobs (tune by observed quality, not up front)
 
-- **Kernel and Verify QA** are the likeliest T3→T2 upgrades — soundness-adjacent
-  testing may warrant a stronger model. Start T3; upgrade if quality lags.
-- **Integrator stays T3.** It enforces gates and merges; the deep correctness
-  and architectural review is the **Architect's** (T1) job on the merge
-  Decision, so the Integrator does not need a strong model.
+The model split is fixed (enclave = Opus, everyone else = Sonnet 5); the tunable
+knob is **effort**, set per role in `moot.toml`.
 
-## Clean-room × models (load-bearing)
+- **Kernel and Verify QA** are soundness-adjacent — they are the likeliest
+  candidates for a higher effort setting if verification quality lags. Start at
+  the team-default effort; raise it on observed misses, not up front.
+- **Integrator effort stays low.** It enforces gates and merges; the deep
+  correctness and architectural review is the **Architect's** (Opus) job on the
+  merge Decision, so the Integrator does not need a high-effort budget.
 
-The tiering *reinforces* the clean-room boundary:
+## Clean-room × roles (load-bearing)
 
-- Only the **T1 Opus Spec enclave** (Anthropic-hosted) may consult copyleft
-  references. The build teams (GLM/DeepSeek) see only `/spec` and
-  `/conformance`, which are clean by construction. The AGPLv3 prototype
+The clean-room boundary is a **role** discipline, not a property of the model in
+the seat (`CLEAN-ROOM.md`; the enclave↔reference-access mapping is incidental —
+any model in an enclave seat reads references under the same discipline, any
+model in a build/coordination seat reads none):
+
+- Only the **enclave** (Spec-author, Conformance-validator, Architect) may
+  consult copyleft references. The build and coordination roles see only `/spec`
+  and `/conformance`, which are clean by construction. The AGPLv3 prototype
   (`yon`) is **not mounted** and is not consulted by anyone — there is zero
   AGPLv3 contact, which is strictly cleaner than the alternative.
-- **Never send copyleft material to Fireworks or DeepSeek.** Only the
-  behavioral description in Ken's own words (the spec/conformance artifacts)
-  may pass to the build tier; never copyleft source text itself. Ken's own
-  MIT source is fine to send anywhere.
+- **Never send copyleft material to a build or coordination role.** Only the
+  behavioral description in Ken's own words (the spec/conformance artifacts) may
+  pass to the build tier; never copyleft source text itself. Ken's own MIT
+  source is fine to send anywhere.
 - **Copyleft references (⚠ GPL/AGPL/CeCILL — `smtcoq`, `spot`, `jif`) are
-  enclave-only too.** Only the T1 Opus Spec enclave (Architect / Spec) reads
-  them, for *approach and behavior* only, under the leakage recheck
-  (`CLEAN-ROOM.md`); they are never sent to build-team providers and never
-  vendored. Permissive refs (Lean, Z3, Quint, …) may be read by the enclave but,
-  like all refs, are not a source for implementer agents — those build from
-  `/spec`.
+  enclave-only too.** Only the enclave (Architect / Spec) reads them, for
+  *approach and behavior* only, under the leakage recheck (`CLEAN-ROOM.md`); they
+  are never sent to a non-enclave seat and never vendored. Permissive refs (Lean,
+  Z3, Quint, …) may be read by the enclave but, like all refs, are not a source
+  for implementer agents — those build from `/spec`.
 
 ## Portability
 
 Playbooks and `COORDINATION.md` are written **model-agnostic** — no reliance on
-Claude-specific behaviors — because the same coordination law must hold across
-Anthropic, Fireworks, and DeepSeek.
+any single model's idiosyncratic behaviors — because the same coordination law
+must hold regardless of which model sits in each seat.
 
-**Routing mechanism (hybrid).** Each agent is a normal Claude Code process
-launched by `moot up`, which reads its `model` + `effort` per role from
-`moot.toml` (`[agents.<role>]`) and passes `--model`/`--effort`. Provider
-routing is **hybrid**:
-
-- **Opus enclave** (4 roles) runs **direct on the Anthropic subscription**
-  (OAuth) — never through the proxy (the convo guardrail rejects subscription
-  tokens at the proxy).
-- **Build tiers** (GLM/DeepSeek) route through a **local LLM proxy**
-  (`mootup_harness_sdk.llm_proxy`, `127.0.0.1:8090`) that dispatches by model
-  prefix (`accounts/fireworks/*`→Fireworks, `deepseek-*`→DeepSeek); the proxy
-  holds the upstream keys from `/home/node/.secrets/`.
-
-Per-role selection is declared in `moot.toml`: each build role's
-`[agents.<role>].env` sets `ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN`
-(`${secret:llm-proxy-secret}`, resolved from `/home/node/.secrets/` at launch;
-requires mootup ≥ 0.5.4), and moot injects it into the agent's launch env;
-enclave roles set no `env`, so they use the default Anthropic endpoint + OAuth.
-It must be **`ANTHROPIC_AUTH_TOKEN`** (a Bearer), not `ANTHROPIC_API_KEY`: the
-proxy reads `Authorization: Bearer`, and AUTH_TOKEN also overrides the shared
-claude.ai OAuth login (from the enclave's `/login`) that build agents would
-otherwise send — which the proxy rejects as a subscription token. The proxy is
-started by `run-llm-proxy.sh`. Operator runbook:
+**Routing mechanism.** Each agent is a normal Claude Code process launched by
+`moot up`, which reads its `model` + `effort` per role from `moot.toml`
+(`[agents.<role>]`) and passes `--model`/`--effort`. Every role — enclave and
+build/coordination alike — runs **direct on the Anthropic subscription** (OAuth),
+with **no `env` block** and **no proxy**. (A retired `run-llm-proxy.sh` /
+`127.0.0.1:8090` once dispatched a non-Anthropic build tier by model prefix; it
+is vestigial now that the whole fleet is Anthropic-direct — a stray `env` block
+pointing a role at it would break that role's launch.) Operator runbook:
 `local/mootup-agent-backends-setup.md`.
