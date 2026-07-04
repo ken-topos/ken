@@ -811,36 +811,87 @@ fn check_match_dependent(
         // the exact function `method_type` uses) rather than re-deriving
         // recursive-field detection locally.
         //
-        // Scope: non-indexed `List`/`Tree` families only (this WP) — every
-        // in-scope recursive field is DIRECT (`branching_tel` empty, `idxs`
-        // empty, since the family itself has zero indices, guarded by the
-        // `dependent_eligible` gate above). W-style (Π-bound) recursive
-        // fields would need the fuller `method_type`-style Π-wrapped IH
-        // construction; reject rather than silently mis-build one.
+        // Non-indexed `List`/`Tree`/`ITree`-style families (this WP): a
+        // recursive field is either DIRECT (`branching_tel` empty — `Cons x
+        // xs2`, IH `M xs2`) or W-STYLE (`branching_tel` non-empty — `Vis op
+        // k` with `k : Resp op -> ITree …`, IH `Π(b̄:B̄). M (k b̄)`, mirroring
+        // `ken_kernel::inductive::method_type`'s W-style branch, `dep-match-
+        // wstyle`). `idxs` is always empty here (guarded by the
+        // `dependent_eligible` gate above, which restricts to non-indexed
+        // families) — a genuinely INDEXED family is a finding -> Steward,
+        // never a silent build.
         let rec = recursive_args(ctor, d_id, m);
-        for (_, branching_tel, idxs) in &rec {
-            if !branching_tel.is_empty() || !idxs.is_empty() {
+        for (_, _, idxs) in &rec {
+            if !idxs.is_empty() {
                 return Err(ElabError::Internal(
-                    "dependent match (Gap B): W-style or indexed recursive \
-                     fields are out of scope for this WP"
+                    "dependent match: indexed-family recursive field is out of scope \
+                     (W-style fields of a non-indexed family only) — finding -> Steward"
                         .into(),
                 ));
             }
         }
-        // Each IH's type is simply the goal `expected` specialized to that
-        // recursive field (`P xs2` for the tail of `Cons x xs2`) — the same
-        // substitution pattern as `expected_here`, but substituting the
-        // field's own variable rather than the reconstructed constructor
-        // application. IHs are wrapped in `rec` order (rec[0] = first
-        // recursive field = outermost/ih₁, matching `method_type`); built in
-        // REVERSE (innermost/last field first) so each `weaken(_, 1)` — the
-        // same technique `compile_match_matrix`'s `ColKind::Ih` uses —
-        // naturally accumulates the correct additional shift for every
-        // already-wrapped inner IH, without hand-deriving a per-slot offset.
+        // Each IH's type is the goal `expected` specialized to that
+        // recursive field — `M xs2` for the direct tail of `Cons x xs2`, or
+        // `Π(b̄:B̄). M (k b̄)` for the W-style continuation of `Vis op k`. IHs
+        // are wrapped in `rec` order (rec[0] = first recursive field =
+        // outermost/ih₁, matching `method_type`); built in REVERSE
+        // (innermost/last field first) so each `weaken(_, 1)` — the same
+        // technique `compile_match_matrix`'s `ColKind::Ih` uses — naturally
+        // accumulates the correct additional shift for every already-wrapped
+        // inner IH, without hand-deriving a per-slot offset. This outer wrap
+        // is `weaken(&method, 1)` — ONE shift per IH slot, REGARDLESS of the
+        // slot's own `nb` (its branch binders live inside its own domain
+        // type, never in the method telescope) — the load-bearing
+        // correction pinned in `dependent-match-wstyle.md`.
         let mut method = body_core;
-        for (pos, _, _) in rec.iter().rev() {
-            let field_var = Term::var(n - 1 - pos);
-            let ih_ty = subst_var_generalize(&weaken(expected, n as i64), scrut_idx + n, &field_var);
+        for (pos, branching_tel, _) in rec.iter().rev() {
+            let nb = branching_tel.len();
+            let ih_ty = if nb == 0 {
+                // DIRECT case — byte-identical to before this WP.
+                let field_var = Term::var(n - 1 - pos);
+                subst_var_generalize(&weaken(expected, n as i64), scrut_idx + n, &field_var)
+            } else {
+                // W-STYLE case: Π(b1:B1)...(b_nb:B_nb). expected[scrut := field_var b1..b_nb].
+                // Built in the bare [fields] frame (j = 0); the outer
+                // weaken(&method, 1) per IH slot below accumulates the +j
+                // exactly as for the direct case.
+
+                // Scrutinee body under the nb branch binders: `field_var`
+                // sits at (n-1-pos) shifted past the nb binders ->
+                // var(n-1-pos+nb); applied to b1 = var(nb-1), ..., b_nb = var(0).
+                let mut scrut_body = Term::var(n - 1 - pos + nb);
+                for bk in 0..nb {
+                    scrut_body = Term::app(scrut_body, Term::var(nb - 1 - bk));
+                }
+
+                // Specialized goal under the nb binders: weaken past n
+                // fields + nb branch binders, then rewrite the scrutinee
+                // occurrence to (field_var b_bar). (idxs empty -> this IS
+                // method_type's `M idxs (a_pos b_bar)`, in the elaborator's
+                // already-applied `expected = M scrut` representation.)
+                let mut ih_ty = subst_var_generalize(
+                    &weaken(expected, (n + nb) as i64),
+                    scrut_idx + n + nb,
+                    &scrut_body,
+                );
+
+                // Wrap the branching-domain Pi-binders, innermost (B_nb) to
+                // outermost (B1). B_k mirrors method_type's b_dom with j = 0:
+                //   shift(subst_outer(branching_tel[bk], m, params_terms, pos+bk), n-pos, bk)
+                // cutoff = bk preserves b1..b_{bk-1}; amount (n-pos) lifts
+                // args-after-pos and Γ. NO subst_levels — mirrors the
+                // direct-case field-domain convention (`level_args: vec![]`);
+                // the kernel recheck covers any residual.
+                for bk in (0..nb).rev() {
+                    let b_dom = ken_kernel::subst::shift(
+                        &subst_outer(&branching_tel[bk], m, &params_terms, pos + bk),
+                        (n - pos) as i64,
+                        bk,
+                    );
+                    ih_ty = Term::pi(b_dom, ih_ty);
+                }
+                ih_ty
+            };
             method = Term::lam(ih_ty, weaken(&method, 1));
         }
         for j in (0..n).rev() {
