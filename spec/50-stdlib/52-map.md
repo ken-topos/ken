@@ -139,16 +139,20 @@ over a **canonical** carrier (exactly one representation per semantic key):
 The map **inherits** ADR 0010's canonicity obligation on its key type — it does
 not create a new one.
 
-**Blast-radius localization (Architect ruling).** Only the reasoning that must
-identify two *distinct-looking* keys as propositionally equal needs the
-`antisym → Equal` step — namely the **overwrite/uniqueness** face (§5.3). The
-three core `lookup` laws (§5.2) instead lean on **`refl`** (`IsTrue (leq k k)`,
-the found key equals itself) and **`total`**/`leq`-determinism, which need **no
-`Equal` promotion**. Confining `antisym → Equal` to the overwrite law keeps the
-canonical-carrier dependency **localized and auditable** — the found-after-
-insert and locality laws hold over the induced order alone. (This is the
-**canonicity** axis; their *buildability* is separate — both are deferred
-Branch-B proofs hitting Gap A + Gap B, §5/§7d — the axes are orthogonal.)
+**Blast-radius localization (Architect ruling).** Only reasoning that must
+identify two *order-equivalent* keys as propositionally equal needs the
+`antisym → Equal` step — the **overwrite/uniqueness** face (§5.3, where `insert`
+overwrites) **and the `Distinct`-discharge lemma** (§5.3 — `insert`/`fromList`-
+reachable ⟹ no order-equivalent duplicates). Every law's *own* proof —
+including agreement (law 5), whose matched-node agreement reduces to **`refl`**
+given its `Distinct` precondition — leans on **`refl`**/**`trans`**/**`total`**
+and needs **no `Equal` promotion**. Confining `antisym → Equal` to the overwrite
+law and the discharge lemma keeps the canonical-carrier dependency **localized
+and auditable** — every law holds over the induced order alone (law 5 given
+`Distinct`; the antisym-using *discharge* of `Distinct` is where the
+canonical-carrier obligation attaches, `54 §5.2`). (This is the **canonicity**
+axis, orthogonal to *buildability*: laws 1/2/3/5 are Branch-B proofs hitting
+Gap A + Gap B, §5/§7d; law 4 and the non-inductive laws have landed.)
 
 ## 3. Representation — a bare ordered binary search tree
 
@@ -356,18 +360,33 @@ what will make `lookup` provably correct once both capabilities land.
   (red-until-built) **in Map-build**, and is now honest **by proof** —
   `map-verified-laws` Unit 1 built it (`toListOrdered`; §8). Still **without
   touching permutation** (§7c).
-- **Agreement — Branch B, deferred (§7d — Gap A + Gap B).** `lookup k m = assoc
-  k (toList m)` — a key's map lookup agrees with a linear scan of its ordered
-  entry list (`assoc` the landed list-lookup shape). Its proof **inducts** (Gap
-  B) **and** must **align `lookup`'s comparison descent with the ordered list**,
-  matching a **stuck** `leq k k'` (Gap A).
+- **Agreement — Branch B, deferred (§7d — Gap A + Gap B).** `Ordered m →
+  Distinct leq m → lookup k m = assoc k (toList m)` — a key's map lookup agrees
+  with a linear scan of its ordered entry list (`assoc` the landed list-lookup
+  shape). **The key-uniqueness precondition `Distinct leq m` is required** (no
+  two nodes carry order-equivalent keys): `lookup`'s BST descent and `assoc`'s
+  in-order scan are different traversal orders that agree **iff** keys are
+  unique — `Ordered`'s weak `≤`/`≥` bounds alone admit duplicates (e.g. `Node
+  (Node Leaf k v1 Leaf) k v2 Leaf`, where `lookup k = Some v2` but `assoc k
+  (toList) = Some v1`). `Distinct` is the no-duplicate invariant `insert`/
+  `fromList` maintain by construction (discharged via `antisym` in a separate
+  lemma, Foundation's). Law 5's *own* proof is **antisym-free** — given
+  `Distinct`, the matched-node agreement is `refl` (`54 §5.2`), so the law is
+  carrier-general. `Ordered` is **unchanged** — the precondition is added, not
+  folded in. Its
+  proof **inducts** (Gap B) **and** must **align `lookup`'s comparison descent
+  with the ordered list**, matching a **stuck** `leq k k'` (Gap A).
 
-**The overwrite/uniqueness face** — where two distinct-looking keys with
+**The overwrite/uniqueness face** — where two order-equivalent keys with
 `leq k k' ∧ leq k' k` are identified so `insert` overwrites rather than
 duplicates (keeping `Ordered` and making the map a genuine partial *function*) —
-is the **one** place `Ord.antisym : … → Equal k k'` is invoked, and thus the one
-place the §2.1 canonical-carrier constraint bites. It is localized here by
-design.
+invokes `Ord.antisym : … → Equal k k'`. So does the **`Distinct`-discharge
+lemma** (`insert`/`fromList`-reachable ⟹ no order-equivalent duplicates). These
+two are where the §2.1 canonical-carrier constraint bites. **Law 5's own
+statement does not** — its matched-node agreement is `refl` given `Distinct`
+(carrier-general, holding even where `antisym` is false); the antisym dependency
+sits in the discharge lemma, not the law. Localized to the overwrite face +
+discharge lemma by design.
 
 ### 5.4 The proofs are parametric in the dictionary
 

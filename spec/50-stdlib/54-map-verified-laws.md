@@ -49,12 +49,22 @@ parts build today and which are deferred.
 | 2 | found-after-insert (`§5.2`) | `lookup leq key (insert leq key val m) = Some val` | A + B | Unit 2 (transport-blocked) |
 | 3 | locality (`§5.2`) | `distinct key key' → lookup leq key' (insert leq key val m) = lookup leq key' m` | A + B | Unit 2 (transport-blocked) |
 | 4 | `toList`-ordered (`§5.3`) | `Ordered m → isSorted keyLeq (toList m)` — **comparison-free** | **B only** | Unit 1 — **LANDED** (`toListOrdered` built, kernel-rechecked) |
-| 5 | agreement (`§5.3`) | `lookup leq key m = assoc leq key (toList m)` | A + B | Unit 2 (transport-blocked) |
+| 5 | agreement (`§5.3`) | `Ordered m → Distinct leq m → lookup leq key m = assoc leq key (toList m)` | A + B | Unit 2 (transport-blocked) |
 
-**None of the five uses `antisym → Equal`.** The core laws lean on
-`refl`/`trans`/`total` only (`52 §5.2`/`§2.1` blast-radius localization); the
-one `antisym`-dependent face — overwrite/uniqueness — is the separate,
-**canonicity-gated** law that stays deferred under ADR 0010 (`52 §5.3`), out of
+**Every law's own proof uses `refl`/`trans`/`total` only** — no `antisym →
+Equal` in any of the five statements (`52 §5.2`/`§2.1`). Law 5 (agreement) takes
+the extra hypothesis `Distinct leq m`, but its *proof* is **antisym-free and
+carrier-general**: given `Distinct`, the matched-node value agreement reduces to
+`refl` (both traversals return the value at the unique order-equivalent node —
+no `Equal key k2` step). `antisym` is load-bearing **only** in the separate
+**`Distinct`-discharge lemma** (`insert`/`fromList`-reachable ⟹ `Distinct`,
+Foundation's, *not* part of law 5's statement); *that* lemma, alongside the
+overwrite/uniqueness identity law, is what **inherits ADR 0010's
+canonical-carrier obligation** (`52 §2.1`/`§5.3`). Law 5 itself does not — it
+holds given `Distinct` even where `antisym` is false. (Architect's analysis
+`evt_9q7hkxnrt3fm`; the law-5 proof is Unit-2/unwritten — confirm antisym-free
+at proof time, else it tightens back.) The overwrite/uniqueness identity law
+stays the separate, canonicity-gated law under ADR 0010 (`52 §5.3`), out of
 this WP.
 
 All spellings below are the **landed** `map.ken` idiom (`52 §2`, the
@@ -291,6 +301,21 @@ reflect helpers below.
   (Pair k v) → Option v`, scanning by the same `leq key (pairFst e) / leq
   (pairFst e) key` coincidence test `lookup` uses. A plain structural `List`
   recursion (Gap-B-free).
+- **`orderEquiv` / `NoDup` / `Distinct`** (Unit 2, law 5's uniqueness
+  precondition) — all `Ω`-valued, all comparison-free structural recursions:
+  - `orderEquiv leq a b := And (IsTrue (leq a b)) (IsTrue (leq b a))` — two keys
+    are order-equivalent (each `≤` the other).
+  - `NoDup leq (xs : List (Pair k v))` — no two entries carry order-equivalent
+    keys: `NoDup leq Nil = ⊤`; `NoDup leq (Cons e xs) = And (allInList (\k'.
+    orderEquiv leq k' (pairFst e) -> Bottom) xs) (NoDup leq xs)` (each head's
+    key is order-distinct from every tail key).
+  - `Distinct leq m := NoDup leq (toList m)` — **law 5's key-uniqueness
+    precondition**, encoded over `toList m`'s keys so it aligns with `assoc`'s
+    first-match scan (Architect's recommended encoding). It is the no-duplicate
+    invariant `insert`/`fromList` maintain by construction; a real
+    `fromList`/insert-built map **provably discharges** `Distinct` via `antisym`
+    (order-equivalent ⟹ `Equal` ⟹ the overwrite branch never duplicates) — that
+    discharge lemma is Foundation's, **not** part of law 5's statement.
 
 ## 5. Per-law skeletons
 
@@ -378,15 +403,37 @@ each law's Gap-B skeleton and the dictionary laws its Unit-2 step will need.
   `True`/`True` contradicts `distinct` (discharged by `absurd`); the aligning
   transport is the **nested-`J` composition — Unit 2.** Dictionary laws:
   `trans`, `total`; **no `antisym`.**
-- **Law 5 — agreement** (`lookup key m = assoc key (toList m)`). Needs `Ordered
-  m`. Motive `\m'. (Ordered … m' -> Equal (Option v) (lookup … key m')
-  (assoc leq
-  key (toList m')))`. `Leaf`: both `None`, base `\h. tt`. `Node`: `lookup`'s
-  tree descent must be aligned with `assoc`'s scan of `list_append (toList l)
-  (Cons (k2,v2) (toList r))` via `Ordered`'s bounds + `trans` and an
-  **`assoc`-over-`append`** lemma (**L5**) — reflecting/transporting `lookup`'s
-  stuck match is the **nested-`J` composition — Unit 2.** Dictionary laws:
-  `trans`, `total`; **no `antisym`.**
+- **Law 5 — agreement** (`Ordered m → Distinct leq m → lookup key m = assoc key
+  (toList m)`). **Requires the key-uniqueness precondition `Distinct leq m`**
+  (§4): `lookup`'s BST descent and `assoc`'s in-order scan of `toList` are two
+  *different* traversal orders that agree **iff** keys are unique. Without
+  `Distinct` the law is **false** — `Ordered`'s weak `≤`/`≥` bounds admit
+  duplicates, and `Node (Node Leaf key v1 Leaf) key v2 Leaf` (a legitimate
+  `Ordered` witness) has `lookup key = Some v2` (root, first BST match) but
+  `assoc key (toList) = Some v1` (list-first). This holds even at a **fully
+  lawful `≤`** (e.g. `Int`: `0 ≤ 0` makes the tree `Ordered`) — which is exactly
+  why adding `antisym` as a *hypothesis* cannot rescue it (the duplicate is the
+  same key value, so `antisym` yields the vacuous `Equal key key`). The fix is a
+  uniqueness *precondition*, not a stronger dictionary. `Ordered` is
+  **unchanged** and `Distinct` is added, not folded into it.
+  Motive `\m'. (Ordered … m' -> Distinct … m' -> Equal (Option v) (lookup … key
+  m') (assoc leq key (toList m')))`. `Leaf`: both `None`, base `tt`. `Node`:
+  align `lookup`'s descent with `assoc`'s scan of `list_append (toList l) (Cons
+  (k2,v2) (toList r))` via `Ordered`'s bounds + `trans` and an
+  **`assoc`-over-`append`** lemma (**L5**); `Distinct` supplies the *unique*
+  order-equivalent entry both traversals select, so the matched-node value
+  agreement is **`refl`** — both return the value at that entry, no `Equal key
+  k2` step needed. Reflecting/transporting `lookup`'s stuck match is the
+  **nested-`J` composition — Unit 2.** Dictionary laws: **`trans`, `total`**
+  (antisym-free, matching laws 1–4). `antisym` enters only the separate
+  **`Distinct`-discharge lemma** (`insert`/`fromList`-reachable ⟹ `Distinct`,
+  Foundation's — not part of this statement), so **law 5's statement is
+  carrier-general**: it holds given `Distinct` even where `antisym` is false
+  (a non-canonical carrier — `Decimal`, many reps per value — has a false
+  `antisym`, but `Distinct` forbids two order-equivalent entries, so lookup and
+  assoc still agree). Only the discharge lemma inherits ADR 0010's
+  canonical-carrier obligation (`52 §2.1`). (Architect's analysis
+  `evt_9q7hkxnrt3fm`; proof Unit-2/unwritten — confirm at proof time.)
 
 ### 5.3 The supporting lemmas
 
@@ -412,9 +459,9 @@ split. Foundation proves them alongside the laws.
   two-element lookahead through single-match helper `view`s (nested-match
   avoidance).
 - **L5 `assoc`-over-`append`** (law 5) — relate `assoc key (append xs ys)` to
-  `assoc key xs` / `assoc key ys` under the sortedness bounds. Induction on
-  `xs`;
-  reflects `assoc`'s stuck `leq` (Gap A) — **Unit 2.**
+  `assoc key xs` / `assoc key ys` under the sortedness bounds, threading law 5's
+  `Distinct`/`NoDup` so the first-match scan hits the *unique* order-equivalent
+  entry. Induction on `xs`; reflects `assoc`'s stuck `leq` (Gap A) — **Unit 2.**
 
 ## 6. Ω-discipline (the load-bearing guardrail)
 
@@ -434,7 +481,10 @@ split. Foundation proves them alongside the laws.
   comparison-free: its `leq` facts are `Ordered`'s stored witnesses, not stuck
   reductions.
 - **All goals live in `Ω`.** `Ordered`/`allKeys`/`allInList`/`isSorted`/`Equal`/
-  `And` are `Ω`-valued (`52 §5.1`, `16 §1`); the `J` motives that transport them
+  `And` — and law 5's `orderEquiv`/`NoDup`/`Distinct` (built from
+  `IsTrue`/`And`/`allInList`/`->Bottom`) — are `Ω`-valued (`52 §5.1`, `16 §1`);
+  the `J` motives
+  that transport them
   (Unit 2) are `Ω`-valued, which the landed `infer_j` admits (its codomain sort
   is unconstrained — `../30-surface/34 §3.4`). No sort-polymorphic `subst` is
   needed; the `Ω` motive of `J` suffices (`53 §3`).
