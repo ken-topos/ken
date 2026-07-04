@@ -314,3 +314,232 @@ calls a build model should not invent. Still outer-ring — **kernel untouched**
 Risk is contained: kernel-clean by construction, path-scope deferred, and the
 one fork (entry-point contract) is already operator-settled. **This is what
 closes VAL2 to zero gaps (16/0).**
+
+## Enclave elaboration — D1 (`lines`) + D2 (enriched-signature manifest)
+
+> Authored by **spec-author** (D1 + D2), grounded against `origin/main@e391d843`
+> via `git show` (not the stale worktree). D3 (Cap runtime rep) is Architect's
+> and is coupled to D2 below; D4/D5 (conformance) are CV's sibling doc
+> `fs-read-file-lines-flip-conformance.md`. Line numbers are perishable — verify
+> against the landed code, not this doc.
+
+### D1 — `lines : String -> List String` (pure, total, structural)
+
+**Signature (locked).**
+
+```
+lines   : String -> List String        -- split on '\n', terminator semantics
+splitNL : List Char -> List (List Char) -- the structural worker
+```
+
+**Landed basis (all on `origin/main`; the split needs no new primitive):**
+
+- `type Char = { c : Int | isScalar c }` and `charToInt : Char -> Int = c`
+  (`decimal_char.rs`) — `Char` is `Int`-backed by refinement erasure.
+- `string_to_list_char : String -> List Char`, `list_char_to_string :
+  List Char -> String` (`prelude.rs`, `37 §2.3`).
+- `eq_int : Int -> Int -> Bool` (`numbers.rs`).
+- `data List a = Nil | Cons a (List a)` (`prelude.rs`).
+- `bytes_decode : Bytes -> String` (`bytes.rs`, **partial** — `Neutral` on
+  invalid UTF-8) — the `Bytes -> String` bridge the example needs, since
+  `read_bytes` yields `Bytes`, not `String`. The fixture is valid UTF-8 so it
+  reduces; `bytes_decode`'s partiality is orthogonal to `lines`' totality.
+
+**Newline without a Char literal (the key D1 finding).** The surface has **no
+string-escape / Char-literal syntax** — `letter-frequency.ken` states this
+verbatim ("the surface has no string escape for embedding a literal newline").
+So `lines` cannot obtain `'\n'` as a literal, and it doesn't need to: the
+newline test compares each char's **scalar** to the plain `Int` literal `10`
+(U+000A) — no Char literal, no new prelude constant:
+
+```
+view isNewline (c : Char) : Bool = eq_int (charToInt c) 10
+```
+
+**Terminator semantics (SEAM-B, locked with CV).** `lines` uses **`str::lines()`
+terminator semantics**: `\n` *terminates* a line; a trailing `\n` does **not**
+yield a trailing empty line, but a non-newline-terminated final segment **is** a
+line. So `lines "alpha\nbeta\ngamma\n"` = `["alpha", "beta", "gamma"]` (exactly
+3, matching the fixture and CV's AC2 oracle), **not** `[..., ""]`. Load-bearing:
+CV pins her exact-stdout oracle to this. A naive separator-split would leave the
+trailing blank — `lines` must drop it.
+
+**Totality.** `splitNL` recurses structurally on the `Cons` tail — the landed
+sound-zone shape (SCT-decreasing, identical to `palindrome.ken`'s
+`reverseListChar`). `lines` is a non-recursive composition over `splitNL` + a
+structural `map` + a `dropTrailingEmpty` pass. All pass SCT; no `Bottom`.
+Illustrative worker (verify spelling at build — explicit type args elided for
+readability):
+
+```
+-- prepend c onto the first (current) segment
+view consFirst (c : Char) (acc : List (List Char)) : List (List Char) =
+  match acc {
+    Nil           => Cons (Cons c Nil) Nil ;
+    Cons seg rest => Cons (Cons c seg) rest
+  }
+
+-- split on '\n' as a SEPARATOR (a trailing '\n' yields a trailing "")
+view splitNL (xs : List Char) : List (List Char) =
+  match xs {
+    Nil       => Cons Nil Nil ;
+    Cons c cs =>
+      match isNewline c {
+        True  => Cons Nil (splitNL cs) ;
+        False => consFirst c (splitNL cs)
+      }
+  }
+
+-- lines = terminator semantics: separator-split, then drop the single trailing
+-- empty segment iff the input ended in '\n'
+view lines (s : String) : List String =
+  map list_char_to_string (dropTrailingEmpty (splitNL (string_to_list_char s)))
+```
+
+**Placement.** `lines`/`splitNL`/`isNewline`/`consFirst`/`dropTrailingEmpty` are
+pure/total/no-cap — prelude **or** the example (build's call; the example is
+fine since only `read-file-lines.ken` needs them, per the
+no-speculative-helper rule `palindrome.ken` cites).
+
+### D2 — enriched-signature manifest (operator ruling realized)
+
+**The decided shape (operator `evt_6wc3sxtv96cfv`, Architect
+`evt_fgkd29xbf35q`): the type IS the manifest.** `main`'s signature carries its
+authority; the CLI
+reads the authority off the type and mints exactly it — never full, never
+ambient.
+
+**Enriched `Cap` former — authority-indexed (`Cap a`, not `Cap FS a`).**
+
+```
+data Auth = ANone | APartial | AFull  -- finite Type0 enum: the authority level
+-- Cap enriched from bare `Cap : Type0` to authority-indexed:
+Cap : Auth -> Type0                    -- opaque former; `Cap APartial` is a type
+
+main       : (cap : Cap APartial) -> FS (Result Unit IOError) -- declares partial FS
+read_bytes : (a : Auth) -> Cap a -> Bytes -> FS (Result Bytes IOError)
+```
+
+**Why authority-only `Cap a`, not `Cap FS a` (grounded spelling decision).** The
+operator's reasoning was: *the effect is already explicit via the effect row, so
+the **authority** belongs on the same signature.* Two grounded facts make
+authority-only the faithful realization:
+
+1. **`FS` is already bound to the effect *monad*** — `view FS (a : Type) : Type
+   = ITree FSOp fs_resp a` (`prelude.rs:924`). A `Cap FS a` form would either
+   collide on the name `FS` or need a *second* effect-tag type distinct from the
+   monad.
+2. **The effect is already manifest twice** — via the `FS (...)` codomain monad
+   **and** `CapParam { name, effect: "FS" }` (`algebra.rs:16`). Adding an `Eff`
+   index would duplicate it. So `Cap a` adds exactly the missing dimension
+   (authority) and nothing else; the effect stays where it already is.
+
+A first-class `Eff` index (`Cap E a`, spec `62 §2.1`'s effect-indexed `Cap E`)
+is an **additive** later enrichment — it needs an effect-tag type separate from
+the `FS` monad name, and is **not** required for AC4. Deferred, flagged, not
+built here.
+
+- `Auth` is an ordinary `data` enum (`elaborate_decl`, like `IOError`) — **data,
+  not a proposition**: no Ω / proof-relevance concern (the ordering lives in
+  Rust at the CLI + driver; no type-level order proof is needed under α, below).
+- **The D2↔D3 shared contract (agreed with Architect):** the `Auth` ctor ↔
+  `capabilities::Authority` map — `ANone ↔ AUTH_NONE(0)`, `APartial ↔
+  AUTH_PARTIAL(1)`, `AFull ↔ AUTH_FULL(2)` (`capabilities.rs:33-35`).
+
+**AC1 — kernel untouched, CONFIRMED (Architect's flagged verify item,
+`evt_fgkd29xbf35q` §AC1).** The enriched former registers via the **same**
+`declare_primitive(env, vec![], pi_type, OpaqueType)` path with `pi_type = Auth
+-> Type0`. `declare_primitive` (`check.rs:1098`) only requires `classify(&ty)`
+to succeed; a Π former type classifies fine (a well-formed type at `Type1`), and
+`OpaqueType` imposes **no** kind restriction. So the higher-kinded opaque former
+is registrable with **zero `ken-kernel` delta, no new `Term`/`Decl` variant** —
+`Cap a` is application of an opaque former to an argument. **No STOP
+condition.**
+`Cap` stays one opaque postulate (its *type* changes bare `Type0` → `Auth ->
+Type0`; **no new `trusted_base` member**; `Auth` is a checked inductive, not a
+postulate).
+
+**α — `read_bytes` stays authority-POLYMORPHIC; sufficiency is a RUNTIME check
+(forced by locked AC4 + SEAM-A; settled by citation, NOT a fork).**
+
+```
+read_bytes : (a : Auth) -> Cap a -> Bytes -> FS (Result Bytes IOError)
+FSOp       : Auth -> Type0          -- ReadFile : (a) -> Cap a -> Bytes -> FSOp a
+fs_resp    : (a : Auth) -> FSOp a -> Type   -- = Result Bytes IOError
+```
+
+`read_bytes` is polymorphic in `a` — it accepts a cap at **any** declared level
+and does **no** static sufficiency check. Sufficiency (`a ⊒ APartial`) is
+enforced **only** at the landed driver `authorizes` gate (`eval.rs:1772`) — the
+sole net Architect's Phase-2 isolation-flip proved. This is **α**, and it is
+**forced**:
+
+- **SEAM-A (CV, load-bearing).** AC4's insufficient arm is a `main` declaring
+  `Cap ANone` that **keeps its cap param** (so it clears `check_capabilities` —
+  the FS effect is still declared), gets a **level-0 cap minted + bound**,
+  reaches the driver, and is denied at `authorizes` with `CapabilityDenied`.
+  *"Declares `ANone`" is NOT "provide no cap"* — the cap is minted and bound; it
+  is simply insufficient at the runtime gate. (Distinct from a `main` with
+  **no** cap param → `MissingCapability` at *elaboration* — a different,
+  wrong-reason arm.) **So D2 admits a bound sub-`PARTIAL` declaration reaching
+  the driver —
+  SEAM-A confirmed, no fork.**
+- A **static** minimum-gate (β: index-subtyping, or an ordering-obligation
+  `Sufficient APartial a`) would reject the `ANone` main at **elaboration**, so
+  it never reaches the driver — contradicting locked **AC4** ("refused **at the
+  driver** with `CapabilityDenied`") and deadening the sole runtime net. AC4
+  settles it: **α**. The ordering `ANone ⊑ APartial ⊑ AFull` is consulted by the
+  **CLI** (mint-exactly) and the **driver** (permit/deny), never as a
+  compile-time gate on `read_bytes`.
+
+**The CLI manifest → mint-exactly → bind sequence (`ken-cli/src/main.rs::
+run_file`, the gap site `:133`).** Before `run_io`:
+
+1. **Read the declared authority off `main`'s type.** `elab_env.env.lookup
+   (main_id)` → the decl's type (a Π-telescope). Walk to the `using cap`
+   Π-domain (head `Cap`), read its `Auth` index argument off the `Cap a`
+   application (`a` is a `Term::const_(auth_ctor_id)`), and map the ctor id to a
+   `capabilities::Authority` via the shared contract. If `main` has **no** FS
+   cap param → mint/bind **no** FS cap.
+2. **Mint exactly that.** `capabilities::Cap::mint(authority, "FS")` — never
+   `AUTH_FULL`, never ambient (the locked ruling). The level is a **structural
+   read of the type**, not a computed value → Architect's non-widenable
+   constraint is met by construction: a surface program cannot inflate its own
+   type index without rewriting the visible declaration (the audit point).
+3. **Bind + run.** `apply(main_term, EvalVal::Cap(minted))` (D3's opaque
+   `EvalVal::Cap(capabilities::Cap)`), then `run_io` the resulting `ITree`.
+
+**D2↔D3 join (agreed with Architect, `evt_fgkd29xbf35q` §3).** The runtime cap
+value is D3's opaque `EvalVal::Cap(capabilities::Cap)` — the struct carrying
+`authority_val` + `effect` — produced by the **sole** CLI mint site, carrying
+**exactly** the `Authority` the type index declared; `authorizes` matches the
+opaque variant (`_ => false`
+fail-closed on anything else). "Granted == declared" (AC4) is thus a *structural
+read* of `main`'s type — strictly tighter than the frame's vaguer "declared."
+
+**Build-verification points (grep the producer, don't assume):**
+
+- **Cap-param detection must recognize a `Cap a`-headed param**, not only bare
+  `Cap` — the enrichment changes the domain from `Const(Cap)` to `App(Cap, a)`.
+  Confirm whatever populates `CapParam` from surface binders keys on the `Cap`
+  **head** through the application spine, else `using cap : Cap APartial` stops
+  being seen as a cap param and `check_capabilities` regresses.
+- `check_capabilities` keys on `CapParam.effect` (the string) — **unaffected**
+  by the type-index enrichment; verify it still passes for the re-authored
+  example and that `read_bytes_untracked_is_type_error` stays green (the example
+  keeps its `using cap` param).
+- `FSOp`/`fs_resp`/`ReadFile` thread the `Auth` index (`FSOp a`) — mechanical,
+  but re-check the `ReadFile` ctor field type is `Cap a` for the specific `a`.
+
+**Considered + rejected:** (a) a separate manifest *value* declaration —
+rejected by Architect's non-widenable constraint (a runtime value, not a
+signature property) and superseded by the operator's type-is-the-manifest
+ruling; (b) β static sufficiency gate on `read_bytes` — rejected by AC4 +
+SEAM-A (see α); (c) `Cap FS a` with a first-class `Eff` index — deferred (the
+`FS` name collides with the effect monad, and the effect is already manifest via
+the codomain + `CapParam`; additive later, not needed for AC4).
+
+**Scope:** M (per Steward). D1 is trivial and independent. D2 is a cap-type
+enrichment coupled to D3, but AC1-clean end-to-end and settled by citation on
+every axis (α by AC4; non-widenable by construction; higher-kinded former by
+`declare_primitive`) — **no residual fork.**
