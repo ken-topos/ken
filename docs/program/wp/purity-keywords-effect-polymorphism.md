@@ -32,14 +32,20 @@ site*, not a convention.
 These are operator rulings (Pat, 2026-07-04). The enclave elaborates *how*, not
 *whether*.
 
-1. **The split is at STATIC PURITY.**
-   - **`fn`** ⟺ the definition is **statically, unconditionally pure**: its
-     effect row is the **closed empty set**, with **no row variable**. The
-     verification layer may treat it as a mathematical function (`36 §1`).
+1. **The split is at STATIC PURITY, across three keywords.**
+   - **`const`** ⟺ a **zero-parameter pure** definition — a pure value. By
+     referential transparency a nullary pure "function" always yields the same
+     value, so it *is* a constant; naming it `const` is the honest signal.
+     (Subsumes the pure `let`/value definition — `33 §1`.)
+   - **`fn`** ⟺ a **pure function with ≥1 parameter**: statically,
+     unconditionally pure — effect row is the **closed empty set**, **no row
+     variable**. The verification layer may treat it as a mathematical function
+     (`36 §1`).
    - **`proc`** ⟺ **everything else that is at least potentially impure /
-     imperative**: a concrete non-empty row (`[FS]`), an **effect-polymorphic**
-     row (contains a variable, e.g. `[e]`), or a `space`/imperative op
-     (`becomes`, `36 §4`).
+     imperative**, at **any arity** (incl. nullary effectful like `now () :
+     Instant visits [Clock]`): a concrete non-empty row (`[FS]`), an
+     **effect-polymorphic** row (contains a variable, e.g. `[e]`), or a
+     `space`/imperative op (`becomes`, `36 §4`).
 2. **Effect-polymorphic ≠ pure.** A `proc` that *may* instantiate to the empty
    effect at some call site is **not** thereby an `fn`. The keyword classifies
    the **abstraction's guarantee**, never its best-case instantiation. (This is
@@ -54,12 +60,12 @@ These are operator rulings (Pat, 2026-07-04). The enclave elaborates *how*, not
    - A definition whose effects are provably the closed-empty row **must** be
      `fn` (a `proc` there is a mismatch — see §5 for whether hard error vs lint).
    - No silent disagreement: the signal is only reliable if it cannot lie.
-4. **Keyword spellings are `fn` and `proc`.** (`fn` for pure, `proc` for
-   potentially-impure — chosen over `func`/`proc` for visual distinctness.) These
-   spellings are fixed; do not propose alternates.
-5. **`view` is retired.** Its roles carry over: a value/`let` is a nullary `fn`
-   (if pure) or `proc` (if it performs effects at init); an operator is an `fn`
-   or `proc` with a symbolic name (`33 §6`).
+4. **Keyword spellings are `const`, `fn`, `proc`.** (`fn` over `func` for visual
+   distinctness from `proc` — they share no shape; `const` for the zero-param pure
+   value.) These spellings are fixed; do not propose alternates.
+5. **`view` is retired.** Its roles carry over: a **zero-param pure** value is a
+   `const`; a nullary def that performs effects at init is a `proc`; an operator
+   is an `fn`/`proc` (or `const` if nullary-pure) with a symbolic name (`33 §6`).
 6. **Kernel-untouched.** No `ken-kernel` diff, no new `Term`/`Decl`. Effects and
    rows are outer-ring (`36 §2`, `OQ-8` DECIDED); this is surface grammar +
    elaborator + effect-checker only. `OQ-8`/`OQ-8a`/`OQ-9`/`OQ-Space` decisions
@@ -101,12 +107,14 @@ elaborator effect-inference path) before it is written; spec-author pins it into
 
 ### D2 — `fn`/`proc` grammar + the bidirectional purity check
 
-- **Grammar** (`32`, `33 §1`): `fn`/`proc` replace `view`; the `visits [row]`
-  clause is legal on `proc` and (vacuously) illegal-non-empty on `fn`. Nullary
-  forms subsume `let`/values per §2.5.
+- **Grammar** (`32`, `33 §1`): `const`/`fn`/`proc` replace `view`; the
+  `visits [row]` clause is legal on `proc` and (vacuously) illegal-non-empty on
+  `fn`/`const`. `const` is the **zero-param pure** form (subsumes pure
+  `let`/values, §2.5); a nullary *pure* def is `const`, not `fn`.
 - **Checker:** implement §2.3 both directions on top of D1's row inference —
-  `fn` requires a provably-closed-empty inferred row (no variable); `proc`
-  requires the row be non-empty **or** contain a variable **or** be a space op.
+  `const` requires **zero params + provably-closed-empty** row; `fn` requires
+  **≥1 param + provably-closed-empty** row (no variable); `proc` requires the row
+  be non-empty **or** contain a variable **or** be a space op (any arity).
 - **Error surface:** a distinct, legible diagnostic for each direction
   (`fn`-declares-pure-but-performs-`E`; and the `proc`-should-be-`fn` mismatch
   per §5). These are the discriminating conformance cases.
@@ -133,6 +141,10 @@ workspace-green unit.
    performs a declared or **transitively-inferred** effect is a compile error
    (discriminating test per effect source: direct `perform`, a called `proc`, a
    space op). A provably-pure body under `proc` is flagged per §5.
+1a. **`const` vs `fn` by arity.** A zero-param pure definition **must** be
+   `const` (an `fn` there is flagged per §5); a ≥1-param pure definition **must**
+   be `fn`. Include the implicit-param edge chosen in §5 (e.g. `const nil {A} :
+   List A`).
 2. **`proc` covers the polymorphic case.** An effect-polymorphic definition
    (`traverse`-shape) **must** be `proc` and is rejected as `fn`, even though it
    type-checks and runs **pure** when instantiated at the empty row — include
@@ -153,10 +165,15 @@ workspace-green unit.
 
 ## 5. Open sub-decisions for the enclave (bounded)
 
-- **`proc`-should-be-`fn` severity:** hard error vs. lint/warning. Recommend
-  **hard error** for a reliable bidirectional signal (matches §2.3), but the
-  enclave may argue a warning if a pure-by-inference `proc` is ever legitimately
-  intended (it should not be). Decide and pin.
+- **Mismatch severity:** a `proc` whose row is provably closed-empty (should be
+  `fn`/`const`), or an `fn` that is actually zero-param (should be `const`) —
+  hard error vs. lint. Recommend **hard error** for a reliable bidirectional
+  signal (matches §2.3). Decide and pin.
+- **Does "zero parameter" count implicit type/level params?** A polymorphic
+  constant like `nil {A : Type} : List A` has an implicit param but is morally a
+  constant *family*. Decide whether `const` = zero **explicit value** params
+  (implicit type/level params allowed — recommended, `nil` is a `const`) or truly
+  zero binders. Ground on the `39` implicit-param machinery.
 - **Row-variable spelling and open-row tails** (D1) — Architect's call, grounded.
 - **Unicode as lexer vs. convention; ASCII aliases retained?** (D3.)
 
