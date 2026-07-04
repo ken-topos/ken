@@ -921,14 +921,34 @@ impl Parser {
         Ok(lhs)
     }
 
-    /// `parse_additive_expr` — handles `+`, `+%`, `*`.
+    /// `parse_additive_expr` — handles `+`, `+%`, `-` (left-associative,
+    /// binds looser than `*`, VAL2 #11's conventional-precedence pin).
     fn parse_additive_expr(&mut self) -> Result<Expr, ElabError> {
         use crate::ast::BinOp;
-        let mut lhs = self.parse_app_expr()?;
+        let mut lhs = self.parse_multiplicative_expr()?;
         loop {
             let op = match self.peek() {
                 Token::Plus => BinOp::Add,
                 Token::PlusPercent => BinOp::WrappingAdd,
+                Token::Minus => BinOp::Sub,
+                _ => break,
+            };
+            self.advance();
+            let rhs = self.parse_multiplicative_expr()?;
+            let span = Span::merge(lhs.span(), rhs.span());
+            lhs = Expr::EBinOp(op, Box::new(lhs), Box::new(rhs), span);
+        }
+        Ok(lhs)
+    }
+
+    /// `parse_multiplicative_expr` — handles `*` (binds tighter than `+`/`-`,
+    /// left-associative; VAL2 #11's conventional-precedence pin — fixes the
+    /// latent bug where `+`/`*` shared one flat precedence level).
+    fn parse_multiplicative_expr(&mut self) -> Result<Expr, ElabError> {
+        use crate::ast::BinOp;
+        let mut lhs = self.parse_app_expr()?;
+        loop {
+            let op = match self.peek() {
                 Token::Star => BinOp::Mul,
                 _ => break,
             };

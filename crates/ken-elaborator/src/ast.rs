@@ -274,6 +274,8 @@ pub enum BinOp {
     Add,
     /// `+%` — always wrapping (explicit modular arithmetic).
     WrappingAdd,
+    /// `-` — type-directed subtraction (VAL2 #11).
+    Sub,
     /// `*` — type-directed multiplication.
     Mul,
     /// `==` — structural equality.

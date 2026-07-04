@@ -22,7 +22,7 @@ use crate::ast::{BinOp, NumLit};
 use crate::classes::{ClassEnv, ClassInfo, ClassKind, InstanceInfo};
 use crate::data;
 use crate::error::{ElabError, Span};
-use crate::numbers::{AddEntry, NumericEnv, NumericLitVal};
+use crate::numbers::{AddEntry, BinOpEntry, NumericEnv, NumericLitVal};
 use crate::resolve::{RDecl, RDeclKind, RExpr, RMatchArm, RPatKind, RPattern, RType};
 
 // ----- obligation model -----
@@ -1444,8 +1444,32 @@ fn elab_binop(
             Ok((applied, result_ty))
         }
 
+        BinOp::Sub => {
+            let entry: &BinOpEntry = cx.numeric_env.classify_sub(&lhs_ty_wh).ok_or_else(|| {
+                ElabError::TypeMismatch {
+                    span: span.clone(),
+                    reason: format!("'-' not supported on this type"),
+                }
+            })?;
+            let result_ty = Term::const_(entry.result_id, vec![]);
+            let rhs_core = check(cx, rhs, &result_ty, span)?;
+            let op_term = Term::const_(entry.op_id, vec![]);
+            let applied = Term::app(Term::app(op_term, lhs_core), rhs_core);
+            Ok((applied, result_ty))
+        }
+
         BinOp::Mul => {
-            return Err(ElabError::Internal("'*' not yet supported".to_string()));
+            let entry: &BinOpEntry = cx.numeric_env.classify_mul(&lhs_ty_wh).ok_or_else(|| {
+                ElabError::TypeMismatch {
+                    span: span.clone(),
+                    reason: format!("'*' not supported on this type"),
+                }
+            })?;
+            let result_ty = Term::const_(entry.result_id, vec![]);
+            let rhs_core = check(cx, rhs, &result_ty, span)?;
+            let op_term = Term::const_(entry.op_id, vec![]);
+            let applied = Term::app(Term::app(op_term, lhs_core), rhs_core);
+            Ok((applied, result_ty))
         }
 
         BinOp::EqEq => {

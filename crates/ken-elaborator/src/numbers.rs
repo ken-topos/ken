@@ -63,6 +63,18 @@ pub struct EqEntry {
     pub op_id: GlobalId,
 }
 
+/// Dispatch record for a type-directed `-` / `*` operation (VAL2 #11) — a
+/// total op, no overflow obligation (scoped to `Int`/`Float`, the types that
+/// already carry a `sub_*`/`mul_*` primitive; unlike `+`, fixed-width `-`/`*`
+/// obligation-generation is out of scope here).
+#[derive(Clone, Debug)]
+pub struct BinOpEntry {
+    /// GlobalId of the op.
+    pub op_id: GlobalId,
+    /// GlobalId of the result type.
+    pub result_id: GlobalId,
+}
+
 // ── NumericEnv ─────────────────────────────────────────────────────────────
 
 /// All GlobalIds and dispatch tables for the numeric tower (`35 §2`).
@@ -98,6 +110,12 @@ pub struct NumericEnv {
 
     // --- `==` dispatch table (keyed by the type's GlobalId) ---
     eq_table: HashMap<GlobalId, EqEntry>,
+
+    // --- `-` dispatch table (keyed by the type's GlobalId, VAL2 #11) ---
+    sub_table: HashMap<GlobalId, BinOpEntry>,
+
+    // --- `*` dispatch table (keyed by the type's GlobalId, VAL2 #11) ---
+    mul_table: HashMap<GlobalId, BinOpEntry>,
 }
 
 impl NumericEnv {
@@ -133,6 +151,26 @@ impl NumericEnv {
         match ty {
             Term::Const { id, .. } => self.eq_table.get(id),
             Term::IndFormer { id, .. } => self.eq_table.get(id),
+            _ => None,
+        }
+    }
+
+    /// Look up the dispatch entry for a type-directed `-` on the given type
+    /// (VAL2 #11; see `classify_add`'s doc comment on the `IndFormer` case).
+    pub fn classify_sub(&self, ty: &Term) -> Option<&BinOpEntry> {
+        match ty {
+            Term::Const { id, .. } => self.sub_table.get(id),
+            Term::IndFormer { id, .. } => self.sub_table.get(id),
+            _ => None,
+        }
+    }
+
+    /// Look up the dispatch entry for a type-directed `*` on the given type
+    /// (VAL2 #11; see `classify_add`'s doc comment on the `IndFormer` case).
+    pub fn classify_mul(&self, ty: &Term) -> Option<&BinOpEntry> {
+        match ty {
+            Term::Const { id, .. } => self.mul_table.get(id),
+            Term::IndFormer { id, .. } => self.mul_table.get(id),
             _ => None,
         }
     }
@@ -272,7 +310,7 @@ pub fn register_numeric_env(
     // wired; `leq_int` completes it). ES4-classes needs it to wrap `Ord
     // Int`'s `leq` operation field (`51-lawful-classes.md §6`).
     let leq_int_id = reg_cmpop!("leq_int", int_id, bool_id);
-    let _ = (sub_int_id, mul_int_id, leq_int_id);
+    let _ = leq_int_id;
 
     // ---- Int8 ops ----
     let add_int8_id = reg_binop!("add_int8", int8_id);
@@ -320,9 +358,9 @@ pub fn register_numeric_env(
 
     // ---- Float ops (IEEE 754 f64) ----
     let add_float_id = reg_binop!("add_float", float_id);
-    let _ = reg_binop!("sub_float", float_id);
-    let _ = reg_binop!("mul_float", float_id);
-    let _ = reg_binop!("div_float", float_id);
+    let sub_float_id = reg_binop!("sub_float", float_id);
+    let mul_float_id = reg_binop!("mul_float", float_id);
+    let _ = reg_binop!("div_float", float_id); // `div` out of scope (VAL2 #11)
     let eq_float_id = reg_cmpop!("eq_float", float_id, bool_id);
 
     // ---- Float32 ops (IEEE 754 f32) ----
@@ -412,12 +450,24 @@ pub fn register_numeric_env(
     eq_table.insert(float_id,   EqEntry { op_id: eq_float_id });
     eq_table.insert(float32_id, EqEntry { op_id: eq_float32_id });
 
+    // -/* dispatch (VAL2 #11) — scoped to the types that already carry a
+    // total `sub_*`/`mul_*` primitive (`Int`, `Float`); fixed-width and
+    // `Decimal` are out of scope (no obligation-generating variant here).
+    let mut sub_table = HashMap::new();
+    let mut mul_table = HashMap::new();
+    sub_table.insert(int_id,   BinOpEntry { op_id: sub_int_id,   result_id: int_id });
+    mul_table.insert(int_id,   BinOpEntry { op_id: mul_int_id,   result_id: int_id });
+    sub_table.insert(float_id, BinOpEntry { op_id: sub_float_id, result_id: float_id });
+    mul_table.insert(float_id, BinOpEntry { op_id: mul_float_id, result_id: float_id });
+
     Ok(NumericEnv {
         int_id, int8_id, int16_id, int32_id, int64_id,
         uint8_id, uint16_id, uint32_id, uint64_id,
         decimal_id, decimalpair_id, float_id, float32_id, bool_id, char_id,
         add_table,
         eq_table,
+        sub_table,
+        mul_table,
     })
 }
 
