@@ -18,9 +18,11 @@ arity** —
 The keyword is a **reliable signal**: reading `fn` guarantees "unconditionally
 pure mathematical function"; `proc` warns "at least potentially impure." Purity
 is a **checked declaration at the definition site**, not a convention. These
-cases pin the **non-row-polymorphic** slice (frame AC1/AC1a/AC4/AC5/AC6/AC7);
-the **row-polymorphic** slice (frame AC2/AC3) is **held for Architect's D1
-row-variable ruling** — flagged below, authored on the ruling.
+cases pin the **non-row-polymorphic** slice (frame AC1/AC1a/AC4/AC5/AC6/AC7,
+PK1–PK7) **and** the **row-polymorphic** slice (frame AC2/AC3, PK8–PK9) authored
+against **Architect's D1 row-variable ruling** (`evt_53ybqtzjfv7yx`) — the
+`[e]`/`[E | e]` surface is reconciled against spec-author's landed §36 `§1.5`
+transcription at the merge gate.
 
 **Trust posture.** The keyword split is a **surface grammar + elaborator +
 effect-checker** discipline; effects are **outer-ring** (`36 §2`, `OQ-8`
@@ -65,33 +67,38 @@ migration) assertion, not a single trace. **Every case here is also
 build-forcing** (red until D2 lands) per the note above; not repeated per
 header.
 
-**HELD for Architect's D1 ruling (not authored here — frame AC2/AC3).** The
-**effect-polymorphic** cases — `proc` covers the row-*variable* case incl. the
-pure-instantiation round-trip (AC2), and static closure at every concrete
-instantiation (AC3) — need the **row-variable surface + type syntax** (`[e]` vs
-`[FS | e]`, where it binds) D1 pins. Writing them now would over-freeze a
-deferred spelling. They are **flagged, not omitted** (§ *Held for D1* below) —
-authored against the concrete grammar once D1 lands. This seed covers the pieces
-well-defined **without** the row variable.
+**Row-polymorphic slice — authored against D1 (frame AC2/AC3, PK8–PK9).**
+Architect's D1 ruling (`evt_53ybqtzjfv7yx`) pins the **row variable** as a bare
+row `[e]` (`e` an implicit param, `39`) with an optional open-row tail `[E | e]`
+(`RowType::Join(Concrete, Var)`), **required in the declared type** (§3.1:
+effects recoverable from the type). PK8 (`proc` covers the polymorphic case +
+the pure-instantiation round-trip) and PK9 (static closure at instantiation +
+the fail-closed single-arm residual) are written against that ruling — the
+`[e]`/`[E | e]` **surface spelling stays `(oracle)`** (reconciled against
+spec-author's landed §36 `§1.5` transcription at the merge gate, the CAT-1
+parallel-author-then-reconcile posture), but the **structure**
+(variable-in-the-type, keyword `proc`, static closure via `apply_subst`) is
+normative from the ruling. `traverse` is the first surface consumer and **gates
+CAT-2/Traversable**.
 
 **Flag to spec-author (independent-checker; not silently resolved).**
 
 1. **`const` keyword collides with a landed def name.** `32-grammar` L224 uses
-   **`const`** as an example view name (the K combinator `view const (A) (B) (x)
-   (y) : A = x`). Making `const` a reserved keyword (`31-lexical §4`) makes that
-   name un-spellable — a **D4 migration hazard**: the combinator must be
-   renamed (e.g. `konst`/`always`) wherever it is a *definition*, distinct from
-   the keyword. Grep `\bconst\b` as a def head across
-   `packages/*`/`prelude`/`examples` in D4.
-2. **The proc-must-earn-impurity vs over-declaration seam (frame §2.3 ↔ `36
-   §1.4`).** `36 §1.4` **allows over-declaration** (`ρ_inf ⊆ ρ_decl`; declaring
-   an unused effect is a legal interface upper bound). Frame §2.3 says a def
-   whose effects are **provably closed-empty must be `fn`**. This bites a `proc`
-   that **declares** a non-empty row as headroom but whose **body infers `∅`**
-   (PK2b): does the declared-row headroom legitimize `proc`, or does provable
-   purity force `fn` regardless? The clean case (`proc`, **no** declared row,
-   pure body → should-be-`fn`) is unambiguous and pinned (PK2a); the
-   over-declared edge is `(oracle)`, flagged for the §5 pin.
+   **`const`** as an example view name — the K combinator
+   `view const (A) (B) (x) (y) : A = x`. Making `const` a reserved keyword
+   (`31-lexical §4`) makes that name un-spellable — a **D4 migration hazard**:
+   the combinator must be renamed (e.g. `konst`/`always`) wherever it is a
+   *definition*, distinct from the keyword. Grep `\bconst\b` as a def head
+   across `packages/*`/`prelude`/`examples` in D4.
+2. **The proc-must-earn-impurity vs over-declaration seam (frame §2.3 ↔
+   `36 §1.4`).** `36 §1.4` **allows over-declaration** (`ρ_inf ⊆ ρ_decl`;
+   declaring an unused effect is a legal interface upper bound). Frame §2.3 says
+   a def whose effects are **provably closed-empty must be `fn`**. This bites a
+   `proc` that **declares** a non-empty row as headroom but whose **body infers
+   `∅`** (PK2b): does the declared-row headroom legitimize `proc`, or does
+   provable purity force `fn` regardless? The clean case (`proc`, **no**
+   declared row, pure body → should-be-`fn`) is unambiguous and pinned (PK2a);
+   the over-declared edge is `(oracle)`, flagged for the §5 pin.
 
 **Citations.** `33-declarations.md §1` (`view`/`let` → Π/λ; generic implicit
 params; `let` = nullary view), `§6` (operators = ordinary defs, symbolic names);
@@ -141,9 +148,8 @@ the `fn` rejection is attributable to the keyword, not the body.
   a checker that skips the body-direction purity obligation for `fn` (treats
   `fn` like the old row-agnostic `view`) — **accepts (b)** ⇒ no flip ⇒ guards
   nothing; the pair pins it. Disconfirming: `greet` is well-formed in **both**
-  arms, so
-  (b) cannot reject for an unrelated (out-of-scope) reason — the reject is
-      attributable to the purity claim.
+  arms, so arm (b) cannot reject for an unrelated (out-of-scope) reason — the
+  reject is attributable to the purity claim.
 
 ### surface/declarations/fn-calls-proc-rejected (oracle)
 - spec: `33 §1`, `36 §1.2` (`g → row(g)`, transitive closure), `§1.4`, frame
@@ -407,31 +413,127 @@ The keyword thus determines the verification treatment.
 
 ---
 
-## Held for D1 — the row-polymorphic slice (frame AC2/AC3)
+## PK8 — `proc` covers the polymorphic case, on D1 (frame AC2)
 
-**Not authored in this seed.** These need Architect's D1 row-variable ruling +
-spec-author's row-variable grammar (the concrete spelling of a row variable /
-open-row tail and where it binds). Authored against that grammar once it lands:
+**Authored against Architect's D1 ruling** (`evt_53ybqtzjfv7yx`): the row
+variable is a **bare row `[e]`** (`e` a lowercase ident bound as an **implicit
+parameter**, like a type/level param, `39`), optionally an **open-row tail
+`[E | e]`** (concrete head + poly tail → `RowType::Join(Concrete, Var)`); the
+variable **must appear in the declared type** (§3.1 guarantee 1: effects
+recoverable from the *type*, so D2's keyword check reads the poly row off the
+signature). The `[e]`/`[E | e]` **surface spelling is `(oracle)`**
+(proposal-level `OQ-syntax`, reconciled against spec-author's landed §36 `§1.5`
+transcription at the merge gate — the same parallel-author-then-reconcile
+posture as CAT-1); the **structure** (variable-in-the-type, keyword `proc`,
+static closure via `apply_subst`) is **normative** from the ruling.
 
-- **AC2 — `proc` covers the polymorphic case, incl. the pure-instantiation
-  round-trip.** An effect-polymorphic definition (`traverse`-shape, a row
-  *variable* `[e]`) **must** be `proc` and is **rejected as `fn`**, *even
-  though* it type-checks and runs **pure** when the variable is instantiated at
-  the empty row. The exact round-trip — `proc traverse` + a *pure* callback ⇒ a
-  statically **pure, effect-free call**, yet the **definition** stays `proc`
-  (frame §2.2: the keyword classifies the abstraction's **guarantee**, not its
-  best-case instantiation). This is the **crux** that makes the split total; it
-  is the first consumer of D1 and gates CAT-2/Traversable.
-- **AC3 — static closure at every instantiation.** Every concrete instantiation
-  of a row-polymorphic `proc` has a **statically-resolved closed** effect set
-  (no runtime effect discovery) — a mis-declared caller row is rejected
-  **statically** (frame §2.3, lifting `36 §1`'s transitive-closure rule to a row
-  *variable*).
+### surface/declarations/poly-def-is-proc-not-fn (oracle)
+- spec: `33 §1`, `36 §1.1`/`§1.2` (latent arrow, `infer_row`), D1 ruling
+  (`evt_53ybqtzjfv7yx`; `RowType::Var`), frame §2.1/§2.2/AC2
+- given: an effect-polymorphic definition whose declared type carries a **row
+  variable** `e`. Two arms, **identical signature**, keyword varied:
 
-Both are **verdict-flip** cases (polymorphic-def-as-`proc` accepts / as-`fn`
-rejects; correct instantiation resolves closed / mis-declared rejects) — written
-once the row-variable surface is concrete, so the discriminators key on the real
-spelling, not a guessed one.
+  ```
+  (a) proc traverse {a b} {e} (f : a -> Eff [e] b) (xs : List a)
+        : Eff [e] (List b)  visits [e]
+  (b) fn   traverse {a b} {e} (f : a -> Eff [e] b) (xs : List a)
+        : Eff [e] (List b)  visits [e]
+  ```
+- expect: (a) **accepts** — the declared row **contains a variable** `e`
+  (`RowType::Var`, D1), which is **decisively `proc`** (frame §2.1: `proc` ⟺ "an
+  effect-polymorphic row, contains a variable"). (b) **rejects** — `fn` asserts
+  the **closed empty row, no row variable** (frame §2.1); a row *variable* in
+  the signature is not `∅`, a false-closure claim (`FnHasRowVariable` /
+  false-purity, kind `(oracle)`).
+- why: AC2's **core** — the polymorphic case lives **decisively on the `proc`
+  side**, the crux that makes the binary split **total**. Verdict **flips** on
+  the keyword with the signature held fixed. The targeted bug — a checker that
+  reads a row-variable signature as pure (`Var(e)` mistaken for `∅`) — **accepts
+  (b)** ⇒ no flip. Disconfirming: the signature is well-formed in both arms
+  (same `traverse`), so (b) rejects for the keyword, not a signature error.
+  **Gates CAT-2/Traversable** (`traverse` is the first surface consumer of D1).
+
+### surface/declarations/proc-stays-proc-at-pure-instantiation (oracle)
+- spec: D1 ruling (`apply_subst(e := ρ)`, `RowType`), `36 §1.2` (λ builds a
+  closure, performs nothing; `traverse` never `perform`s `e` itself — splices
+  the callback via `bind`), `§2.4`, frame §2.2/§6/AC2
+- given: the accepted `proc traverse` (PK8a) **instantiated at a pure callback**
+  `pure_f : a -> Eff [] b` — i.e. `e := ∅` by `apply_subst` (D1) — in the call
+  `traverse pure_f xs`.
+- expect: **dual assertion.** (i) the **call**
+  `traverse pure_f xs : Eff [] (List b)` is **statically pure** —
+  `apply_subst(e := ∅)` resolves the instantiated row to the **closed-empty**
+  set; assert the instantiated call's row **= `∅`** (structural), effect-free,
+  runs pure. (ii) **YET** the **definition** `traverse` stays **`proc`** — the
+  keyword classifies the abstraction's **guarantee** (frame §2.2), not this
+  best-case instantiation; `fn traverse` is **still rejected** (PK8a) even
+  though *this* instantiation is pure.
+- why: the **exact pure-instantiation round-trip** frame §2.2/AC2 demands + the
+  do-not-reopen §6 guard ("do **not** 'optimize' a polymorphic definition into
+  `fn` because it *can* be pure"). Two discriminating faces: (i) a checker that
+  fails to `apply_subst(e := ∅)` leaves the call's row polymorphic/non-`∅` —
+  caught by the asserted `∅`; (ii) a checker that "optimizes" the
+  pure-instantiable poly def to `fn` **accepts `fn traverse`** — the exact bug
+  §6 forbids, caught by the definition staying `proc`. Effect-polymorphic **≠**
+  pure: the guarantee, not the instantiation, sets the keyword.
+
+---
+
+## PK9 — static closure at every instantiation, on D1 (frame AC3)
+
+Every concrete instantiation of a row-polymorphic `proc` resolves to a
+**statically-closed** effect set — the D1 ruling makes this **structural**: a
+`RowVar` is eliminated only by `apply_subst(e := concrete)` at a call, and "you
+cannot run a variable" (a boundary/handler sees a concrete row), so no effect is
+discovered at runtime.
+
+### surface/declarations/mis-declared-caller-row-rejected (oracle)
+- spec: D1 ruling (`apply_subst` then the `§1.4` escape check on the resolved
+  row), `36 §1.4` (escape), frame §2.3/AC3
+- given: a caller of `traverse` (PK8a) supplying an **effectful** callback
+  `log_f : a -> Eff [Console] b` — so `e := [Console]` by `apply_subst`. Two
+  caller declarations, **identical body** `= traverse log_f xs`:
+  (a) `proc run_all (xs : List a) : ... visits [Console] = traverse log_f xs`;
+  (b) `proc run_all (xs : List a) : ... visits []       = traverse log_f xs`.
+- expect: (a) **accepts** — the instantiated
+  `traverse log_f xs : Eff [Console] (List b)`; the caller's declared
+  `[Console]` contains it (`[Console] ⊆ [Console]`, `§1.4` after `apply_subst`).
+  (b) **rejects statically** — the instantiated `[Console]` escapes the caller's
+  declared `∅`; a **static** `EffectEscapes(Console)` (kind `(oracle)`), **not**
+  a runtime discovery.
+- why: AC3 — every concrete instantiation is **statically closed** (frame
+  §2.3/AC3, D1: `apply_subst` resolves `e` to a concrete row at the call, then
+  the ordinary `§1.4` escape check fires). Verdict **flips** on the caller's
+  declared row, body fixed. The targeted bug — a checker that fails to propagate
+  `e := [Console]` into the caller's escape check — **admits (b)** ⇒ runtime
+  effect discovery ⇒ no flip; the pair pins "no runtime effect discovery."
+
+### surface/declarations/open-row-straddle-rejects-valid (property, oracle)
+- spec: D1 ruling + verified myself — `RowType::is_subset_of`'s single-arm
+  rule `x ⊆ Join(l,r) = (x⊆l) || (x⊆r)`
+  (`crates/ken-elaborator/src/effects/row.rs`, `is_subset_of` impl L200–202, doc
+  L183–187; re-derived at authoring, not transcribed), `36 §1.4`
+- given: an open-row tail `[E | e]` (`Join(Concrete({E}), Var(e))`) and a
+  **concrete** row that **straddles both arms** — part in the concrete head `E`,
+  part that must be absorbed by the variable tail: checking `{E, F} ⊆ [E | e]`
+  (semantically valid with `e := {F}`).
+- expect: **rejected** — the landed single-arm rule needs **all** of `{E, F}` in
+  **one** arm: `{E,F} ⊆ {E}` is false and `{E,F} ⊆ Var(e)` is false, so the
+  straddle is rejected. This is a **known-completeness marker**: it **rejects a
+  VALID program** (fail-closed), and is **NOT a soundness flip** — the
+  single-arm rule **never over-accepts** (no effect silently escapes); the
+  residual is **rejected-valid**, never accepted-invalid (Architect's D1 note).
+- why: pins the fail-closed residual as a **documented completeness limit**, not
+  a soundness hole
+  ([[kernel-rejects-is-completeness-fix-is-where-soundness-converts]]:
+  over-rejection is fail-closed/safe; the soundness risk is only if a *fix*
+  loosens `is_subset_of` to over-accept). A future build that **tightens** the
+  rule to accept the straddle is a **completeness improvement** (must still
+  never over-accept); a regression that makes it **over-accept** is the real
+  bug. Not a verdict-flip discriminator — a **one-directional** structural
+  marker asserting the rejection **and** its completeness-not-soundness
+  classification, so the fix-vector is unambiguous. (`property`; the `row.rs`
+  line anchors are perishable — reconcile against the landed impl at the build.)
 
 ---
 
