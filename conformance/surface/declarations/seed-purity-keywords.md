@@ -18,11 +18,11 @@ arity** —
 The keyword is a **reliable signal**: reading `fn` guarantees "unconditionally
 pure mathematical function"; `proc` warns "at least potentially impure." Purity
 is a **checked declaration at the definition site**, not a convention. These
-cases pin the **non-row-polymorphic** slice (frame AC1/AC1a/AC4/AC5/AC6/AC7,
-PK1–PK7) **and** the **row-polymorphic** slice (frame AC2/AC3, PK8–PK9) authored
-against **Architect's D1 row-variable ruling** (`evt_53ybqtzjfv7yx`) — the
-`[e]`/`[E | e]` surface is reconciled against spec-author's landed §36 `§1.5`
-transcription at the merge gate.
+cases pin the **non-row-polymorphic** slice (AC1/AC1a/AC4/AC5/AC6/AC7, PK1–PK7)
+**and** the **row-polymorphic** slice (AC2/AC3, PK8–PK9), **reconciled against
+spec-author's landed spec** (`36 §1.5`/`§1.6`, `31 §1c`/`§4`, `32 §1`/`§8`, `33
+§1` @ `c74a469`) — the reconcile un-oracled the two §5 sub-decisions and
+resolved both flags (see below).
 
 **Trust posture.** The keyword split is a **surface grammar + elaborator +
 effect-checker** discipline; effects are **outer-ring** (`36 §2`, `OQ-8`
@@ -34,71 +34,80 @@ kernel-trust-root sense. What the discipline *does* guarantee is a **static
 reliable-signal property** the verification core (`../../20-verification/`) and
 downstream readers rest on: a **`fn`/`const` cannot silently perform an
 effect**, and its dual, a **`proc` cannot silently over-claim impurity**. Both
-directions are load-bearing (`33 §1`, frame §2.3 "no silent disagreement"), so
+directions are load-bearing (`33 §1`, `36 §1.6.2` "the keyword cannot lie"), so
 each is pinned by a **discriminating** case whose verdict **flips** on the
 targeted bug (right keyword accepts, wrong keyword rejects), holding the **body
 fixed** so the flip is attributable to the keyword alone — never green-vs-green
 (`discriminating-conformance-verdict-must-flip`, COORDINATION §7).
 
 **Build-FORCING — the whole split is RED on `main` until built (do NOT hand-feed
-green).** Grounding (`origin/main @ 24a414b`, verified at authoring): the
-surface keyword today is **`view`** (`32-grammar` L16–17
-`decl ::= "view" ident …`; `31-lexical §4` reserved-keyword list has `view`, not
-`const`/`fn`/`proc`); the `const`/`fn`/`proc` grammar and the bidirectional
-purity check are the SURF-1 deliverable (D2), not landed. So **every keyword
-case below flips green only when the build lands the split** — authored as the
-acceptance *target*, like `../effects/seed-effects.md`'s EFF6 direct-state
-cases, **not** green against a pre-supplied verdict
-([[conformance-hand-feeds-the-deliverable]]). The case **defines "done."**
+green).** The **spec** for the split is now landed (spec-author's
+`36 §1.5`/`§1.6`,
+`32 §1`/`§8`, `33 §1`, `31 §1c`/`§4` @ `c74a469`, reconciled below); what is
+**not** built is the **D2 elaborator + bidirectional purity checker** and the D4
+migration. At `origin/main @ 24a414b` the surface keyword is still `view` and no
+parser/checker enforces `const`/`fn`/`proc`. So **every keyword case flips green
+only when the D2 build lands** — authored as the acceptance *target*, like
+`../effects/seed-effects.md`'s EFF6 direct-state cases, **not** green against a
+pre-supplied verdict ([[conformance-hand-feeds-the-deliverable]]). The case
+**defines "done."**
 
 **Tags.** `(oracle)` — confirmed at build time by the Spec enclave (safe: not in
 the kernel TCB). The **keyword spellings `const`/`fn`/`proc` are FIXED**
-(operator ruling, frame §2.4 — do **not** oracle-tag or propose alternates) and
-the **classification rule** (static purity + arity, frame §2.1–2.3) is
+(operator
+ruling, `36 §1.6` — do **not** oracle-tag or propose alternates) and the
+**classification rule** (static purity + arity, `36 §1.6.1`–`§1.6.3`) is
 **normative**; what stays `(oracle)` is the surrounding **effect surface
 *spelling*** (`visits ρ`, `perform`, effect names `FS`/`Console`/`Clock`,
-`becomes`, `old`/`ensures` — `36` is normative-for-model, `OQ-syntax` for
-spelling), plus the enclave's own **bounded sub-decisions** (frame §5), tagged
-at their case: **mismatch severity** (hard error vs lint — spec-author owns,
-frame recommends hard error) and the **implicit-param arity edge** (does `const`
-count implicit `{A}` — spec-author owns, frame recommends implicit-allowed).
-`(property)` — an invariant over many inputs / a structural (TCB-surface,
-migration) assertion, not a single trace. **Every case here is also
-build-forcing** (red until D2 lands) per the note above; not repeated per
-header.
+`becomes`, `old`/`ensures`, the `[e]`/`[E | e]` glyphs — `36` is
+normative-for-model, `OQ-syntax` for spelling). **The two enclave sub-decisions
+are now un-oracled at the `c74a469` reconcile:** mismatch severity =
+**hard error** (`§1.6.3(a)`) and `const` counts **explicit value params only**
+(`§1.6.3(b)`, so `const nil {A}` is a `const`). `(property)` — an invariant over
+many inputs / a structural (TCB-surface, migration) assertion, not a single
+trace. **Every case here is also build-forcing** (red until D2 lands); not
+repeated per header.
 
-**Row-polymorphic slice — authored against D1 (frame AC2/AC3, PK8–PK9).**
-Architect's D1 ruling (`evt_53ybqtzjfv7yx`) pins the **row variable** as a bare
-row `[e]` (`e` an implicit param, `39`) with an optional open-row tail `[E | e]`
-(`RowType::Join(Concrete, Var)`), **required in the declared type** (§3.1:
-effects recoverable from the type). PK8 (`proc` covers the polymorphic case +
-the pure-instantiation round-trip) and PK9 (static closure at instantiation +
-the fail-closed single-arm residual) are written against that ruling — the
-`[e]`/`[E | e]` **surface spelling stays `(oracle)`** (reconciled against
-spec-author's landed §36 `§1.5` transcription at the merge gate, the CAT-1
-parallel-author-then-reconcile posture), but the **structure**
-(variable-in-the-type, keyword `proc`, static closure via `apply_subst`) is
-normative from the ruling. `traverse` is the first surface consumer and **gates
-CAT-2/Traversable**.
+**Row-polymorphic slice — reconciled against the landed `36 §1.5` (AC2/AC3,
+PK8–PK9).** Architect's D1 ruling (`evt_53ybqtzjfv7yx`) and spec-author's
+transcription (`36 §1.5` @ `c74a469`) pin the **row variable** as a bare row
+`[e]` (`e` an implicit param, `39 §2.2`) with an optional open-row tail
+`[E | e]`
+(the row join `⟦E⟧ ∪ ⟦e⟧`, `§1.5.1`), **required in the declared type**
+(`§1.5.2`,
+§3.1: effects recoverable from the type). PK8/PK9 are reconciled against `§1.5`
+character-for-substance — the `[e]`/`[E | e]` **glyph stays `(oracle)`** (both
+the
+latent-arrow `→[e]` and monadic `Eff [e] b` spellings are co-equal, `§1.5.1`),
+but the **structure** (variable-in-the-type `§1.5.2`, static closure `§1.5.3`,
+no
+`Cap e` `§1.5.4`, the fixpoint-lift + fail-closed residual `§1.5.5`) is
+normative.
+`traverse` is the first surface consumer and **gates CAT-2/Traversable**.
 
-**Flag to spec-author (independent-checker; not silently resolved).**
+**Flags to spec-author — both RESOLVED at the `c74a469` reconcile** (kept for
+the
+audit trail; independent-checker catches, not silently resolved).
 
-1. **`const` keyword collides with a landed def name.** `32-grammar` L224 uses
-   **`const`** as an example view name — the K combinator
-   `view const (A) (B) (x) (y) : A = x`. Making `const` a reserved keyword
-   (`31-lexical §4`) makes that name un-spellable — a **D4 migration hazard**:
-   the combinator must be renamed (e.g. `konst`/`always`) wherever it is a
-   *definition*, distinct from the keyword. Grep `\bconst\b` as a def head
-   across `packages/*`/`prelude`/`examples` in D4.
-2. **The proc-must-earn-impurity vs over-declaration seam (frame §2.3 ↔
-   `36 §1.4`).** `36 §1.4` **allows over-declaration** (`ρ_inf ⊆ ρ_decl`;
-   declaring an unused effect is a legal interface upper bound). Frame §2.3 says
-   a def whose effects are **provably closed-empty must be `fn`**. This bites a
-   `proc` that **declares** a non-empty row as headroom but whose **body infers
-   `∅`** (PK2b): does the declared-row headroom legitimize `proc`, or does
-   provable purity force `fn` regardless? The clean case (`proc`, **no**
-   declared row, pure body → should-be-`fn`) is unambiguous and pinned (PK2a);
-   the over-declared edge is `(oracle)`, flagged for the §5 pin.
+1. **`const` keyword ↔ def-name collision — RESOLVED (renamed `konst`).** The V0
+   K combinator `view const (A) (B) (x) (y) : A = x` (`32-grammar`) is renamed
+   **`konst`** by spec-author (`32 §8`, `33 §1`: "'const' is now a keyword"),
+   and
+   the spec asserts "no `.ken` in the corpus names a def `const`/`fn`/`proc`."
+   PK6 keeps the grep guard (no `const`-named def survives migration).
+2. **proc-must-earn-impurity vs over-declaration seam — RESOLVED (`36 §1.6.2`,
+   accept).** I flagged a `proc` that **declares** a non-empty row as headroom
+   but
+   whose **body infers `∅`** (PK2b) as `(oracle)` — legit `proc` or
+   should-be-`fn`?
+   `§1.6.2` rules it a **legitimate `proc`** (accept): classification keys on
+   the
+   **declared** row `ρ_decl` (`§1.6.1`), and declaring more than you use is the
+   `§1.4` headroom rule. Only the **empty-declared** case (PK2a) is the
+   hard-error
+   mismatch. This **corrects** the assembly-thread hypothesis that `§1.6.3(a)`'s
+   hard-error covers PK2b — the `§1.6.2` carve-out makes the over-declared case
+   honest (see PK2b for the reconciled reading).
 
 **Citations.** `33-declarations.md §1` (`view`/`let` → Π/λ; generic implicit
 params; `let` = nullary view), `§6` (operators = ordinary defs, symbolic names);
@@ -123,7 +132,7 @@ the **keyword↔(arity, purity)** contract on top.
 ## PK1 — `fn` is a reliable purity signal, forward direction (frame AC1)
 
 A `fn` asserts the **closed-empty row `∅`** (`33 §1`: unconditionally pure). The
-check runs the **body direction** (frame §2.3): if `infer_row(body) ⊄ ∅` — the
+check runs the **body direction** (`36 §1.6.2`): if `infer_row(body) ⊄ ∅` — the
 body performs or transitively infers **any** effect — the purity claim is false
 and it is a **compile error**. Pinned **per effect source** (frame AC1: direct
 `perform`, a called `proc`, a `space` op), each as a **two-arm** net: the
@@ -132,7 +141,7 @@ the `fn` rejection is attributable to the keyword, not the body.
 
 ### surface/declarations/fn-direct-perform-rejected (oracle)
 - spec: `33 §1` (`fn` = closed-empty row), `36 §1.2` (`perform_E → {E}`), `§1.4`
-  (escape), frame §2.3/AC1
+  (escape), `36 §1.6.2`/AC1
 - given: an effect producer `greet` where `greet s ⤳ perform (Write s)`
   (`Console`, `36 §2.2`). Two arms, **identical body** `= greet x`:
   (a) `proc announce (x : String) : Unit visits [Console] = greet x`;
@@ -172,7 +181,7 @@ the `fn` rejection is attributable to the keyword, not the body.
 
 ### surface/declarations/fn-space-op-rejected (oracle)
 - spec: `33 §1`, `36 §4.1` (`space`/`becomes` → `State S`, one label per space),
-  `§1.4`, frame §2.1 (a `space` op is `proc`), AC1
+  `§1.4`, `36 §1.6.1` (a `space` op is `proc`), AC1
 - given: a `space Counter { mut n : Int = 0 ; … }`; the increment op with
   **identical body** `= n becomes n + 1`:
   (a) `proc inc () : Unit visits [Counter] = n becomes n + 1`;
@@ -180,7 +189,7 @@ the `fn` rejection is attributable to the keyword, not the body.
 - expect: (a) **accepts** — `becomes` desugars to `Get`-then-`Put` on the
   space's `State S` (`36 §4.1`), contributing the space label `[Counter]`,
   matched by the declared row. (b) **rejects** — a `space` op is impure by
-  construction (frame §2.1: a `space`/imperative op is decisively `proc`); `fn`
+  construction (`36 §1.6.1`: a `space`/imperative op is decisively `proc`); `fn`
   cannot carry `[Counter]`. (`becomes` outside a `space` is a separate `§7.3.4`
   error — here both arms are **inside** `Counter`, isolating the keyword.)
 - why: the **`space`-op source** — the third distinct way impurity enters, and
@@ -194,52 +203,66 @@ the `fn` rejection is attributable to the keyword, not the body.
 ## PK2 — `fn`/`proc` reliable signal, reverse direction (frame AC1, §2.3)
 
 The signal is reliable only if it **cannot lie in either direction**: a `proc`
-must **earn** its "potentially impure" claim. A definition whose effects are
-**provably the closed-empty row** must be `fn` (≥1 param) or `const` (zero
-param) — a `proc` there is a **mismatch** (frame §2.3/§5). This is the piece
-EFF1 does **not** cover: EFF1's `⊆` check allows over-declaration but never keys
-on the *keyword*.
+must **earn** its "potentially impure" claim. A definition with an **empty
+declared row** that is **not** a `space` op is **provably pure** — it must be
+`fn` (≥1 param) or `const` (zero param); a `proc` there is a **hard-error
+mismatch** (`36 §1.6.2`, `§1.6.3(a)`). Classification keys on the **declared**
+row `ρ_decl` (`§1.6.1`), so an **over-declared** `proc` (non-empty `ρ_decl`,
+pure body) is **honest** — the `§1.4` headroom rule, not a mismatch (PK2b). This
+is the piece EFF1 does **not** cover: EFF1's `⊆` check allows over-declaration
+but never keys on the *keyword*.
 
 ### surface/declarations/proc-pure-should-be-fn (oracle)
-- spec: `33 §1`, `36 §1.4` ("no `visits` ⇒ `ρ_decl = ∅`"; `infer_row` of a pure
-  body = `∅`), frame §2.3/§5/AC1
+- spec: `36 §1.6.2` (the reverse direction: a `proc` with empty declared row,
+  not
+  a `space` op, is provably pure ⇒ should-be-`fn`/`const`), `§1.6.3(a)`
+  (mismatch = **hard error**, pinned), `§1.4`, `33 §1`
 - given: a **pure** body, **no declared row**, ≥1 param, under two keywords:
   (a) `fn   add (x y : Int) : Int = x + y`;
   (b) `proc add (x y : Int) : Int = x + y`.
-- expect: (a) **accepts** — `fn` + `infer_row = ∅` + ≥1 param (the required
-  keyword for a pure ≥1-param def). (b) **flagged** — `proc` claims potential
-  impurity, but the body is **provably pure** (`ρ_inf = ∅`, no row variable, no
-  `space` op), so the claim is false: a `proc`-should-be-`fn` mismatch.
-  **Severity `(oracle)`** — hard error vs lint is spec-author's §5 pin (frame
-  **recommends hard error**). Pin the **concept** (flagged, not silently
-  accepted); do **not** freeze error-vs-lint until §5 lands.
-- why: the **reverse-direction** guard — the bidirectionality (frame §2.3 "no
-  silent disagreement"). The targeted bug — a checker that runs **only** the
+- expect: (a) **accepts** — `fn` + `ρ_decl = ∅` (whence `§1.4` forces `ρ_inf =
+  ∅`) + ≥1 param (the required keyword for a pure ≥1-param def). (b) **rejects —
+  hard error** (`§1.6.3(a)` pinned): `proc` claims potential impurity, but the
+  declared row is **empty** and it is **not** a `space` op, so it is **provably
+  pure** — a `proc`-should-be-`fn` mismatch. (Severity un-oracled: `§1.6.3(a)`
+  pins hard error, not lint — a lint would leave the signal advisory.)
+- why: the **reverse-direction** guard — the bidirectionality (`§1.6.2` "the
+  keyword cannot lie"). The targeted bug — a checker that runs **only** the
   forward direction (PK1: `fn`-cannot-perform) but **not** the reverse
   (`proc`-must-earn-impurity) — **accepts (b) silently** ⇒ no flip ⇒ the reverse
   guard is vacuous. The pair pins that **both** directions are enforced. Verdict
-  flips on the keyword, body held fixed.
+  flips on the keyword, body held fixed. Distinct from the **over-declared**
+  headroom case (PK2b) — there `ρ_decl` is non-empty, so `proc` is honest.
 
-### surface/declarations/proc-overdeclared-headroom-oracle (oracle)
-- spec: `36 §1.4` (over-declaration `ρ_inf ⊆ ρ_decl` **allowed**), frame §2.3/§5
+### surface/declarations/proc-overdeclared-headroom-accepted (oracle)
+- spec: `36 §1.6.1` (classify on the **declared** row `ρ_decl`), `§1.6.2` (the
+  explicit carve-out: a `proc` declaring a non-empty row whose body is now pure
+  is **honest**, not a mismatch), `§1.4` (over-declaration `ρ_inf ⊆ ρ_decl`
+  **allowed** — the headroom rule)
 - given: a `proc` that **declares** a non-empty row as interface headroom but
   whose **body infers `∅`**:
   `proc stable (x : Int) : Int visits [Console] = x + 1` — never performs
   `Console`.
-- expect: **`(oracle)` — verdict deferred to spec-author's §5 pin.** Two
-  coherent readings, unsettled: (i) **legit `proc`** — the **declared** row is
-  non-empty and `36 §1.4` blesses declaring more than used (a stable interface
-  reserving `Console` headroom); or (ii) **mismatch** — the keyword classifies
-  on **provable static purity** (`ρ_inf = ∅`), so purity forces `fn`
-  **regardless** of the headroom. Do **not** pin a verdict; this case **holds
-  the seam open** until §5 resolves it (flag 2).
-- why: an **independent-checker catch** — a genuine interaction between the
-  frame's reverse check and `36 §1.4`'s over-declaration allowance, surfaced
-  (not silently resolved) to the author via the leader
-  ([[surface-the-seam-need-not-your-preferred-mechanism]]: state the seam, leave
-  the resolution to the owner). Pins the **granularity** — PK2a locks the
-  unambiguous no-declared-row case; this marks the deferred degree of freedom
-  rather than over-freezing it.
+- expect: **accepts** (verdict now **settled by `§1.6.2`**, was `(oracle)`). The
+  classification keys on the **declared** row (`§1.6.1`): `ρ_decl = [Console]` is
+  **non-empty** ⇒ **Impure** ⇒ a **legitimate `proc`**. `§1.6.2` states it
+  verbatim: a `proc` declaring `visits [FS]` with a now-pure body is honest —
+  its
+  declared row is non-empty, so declaring more than you use is the `§1.4`
+  headroom rule (a stable interface). It is **not** the PK2a mismatch: that one
+  has an **empty** declared row.
+- why: **the flagged seam (flag 2), resolved by the reconcile.** I surfaced two
+  coherent readings (legit-`proc` vs should-be-`fn`) as a `(oracle)` to
+  spec-author rather than resolving it myself
+  ([[surface-the-seam-need-not-your-preferred-mechanism]]); `§1.6.2` picked
+  reading (i) **accept**, because classification is on `ρ_decl` not `ρ_inf`.
+  Note:
+  this **corrects** the assembly-thread hypothesis that `§1.6.3(a)`'s hard-error
+  would make it a mismatch — the `§1.6.2` carve-out makes the **over-declared**
+  case honest; only the **empty-declared** case (PK2a) is the hard error. The
+  discriminating pair PK2a-vs-PK2b now pins `ρ_decl`-not-`ρ_inf` as the
+  keyword's
+  classification axis.
 
 ---
 
@@ -250,23 +273,23 @@ pure def **must** be `const` (referential transparency ⇒ it *is* a constant); 
 **≥1-param** pure def **must** be `fn`. The wrong keyword is flagged.
 
 ### surface/declarations/const-zero-param-required (oracle)
-- spec: `33 §1` (`const` = pure zero-param value, subsumes `let`), frame
-  §2.1/§2.5/AC1a
+- spec: `36 §1.6.1` (`const` = pure zero explicit-value-param; subsumes `let`),
+  `§1.6.2` (arity mismatch), `§1.6.3(a)` (**hard error**, pinned), `33 §1`
 - given: a **pure zero-param** value under two keywords:
   (a) `const answer : Int = 40 + 2`;
   (b) `fn    answer : Int = 40 + 2`.
 - expect: (a) **accepts** — zero explicit value params + provably-`∅` row ⇒
-  `const` (the required keyword). (b) **flagged** — a zero-param `fn` should be
-  `const` (frame §2.5: the honest signal for a nullary pure def; by referential
-  transparency it always yields the same value). **Severity `(oracle)`** (§5, as
-  PK2a). Pin the concept.
+  `const` (the required keyword). (b) **rejects — hard error** (`§1.6.3(a)`
+  pinned, un-oracled): a zero-param `fn` is a should-be-`const` mismatch
+  (`§1.6.2`; by referential transparency a nullary pure def always yields the
+  same value, so it *is* a constant).
 - why: the **zero-param end** of the arity split. Verdict flips on the keyword,
   body held fixed. The targeted bug — an arity-blind checker accepting any pure
   keyword — accepts **both** ⇒ no flip. Companion to PK3b (the ≥1-param end):
   the two ends make the `const`/`fn` boundary discriminating on arity both ways.
 
 ### surface/declarations/fn-one-param-required (oracle)
-- spec: `33 §1` (`fn` = pure ≥1-param), frame §2.1/AC1a
+- spec: `36 §1.6.1` (`fn` = pure ≥1-param), `33 §1`, AC1a
 - given: a **pure ≥1-param** function under two keywords:
   (a) `fn    triple (n : Int) : Int = n + n + n`;
   (b) `const triple (n : Int) : Int = n + n + n`.
@@ -281,21 +304,26 @@ pure def **must** be `const` (referential transparency ⇒ it *is* a constant); 
   caught.
 
 ### surface/declarations/const-implicit-param-edge (oracle)
-- spec: `33 §1` (generic implicit params `view id {A : Type} …`), frame §5
-  (bounded sub-decision: does "zero parameter" count implicit type/level params)
+- spec: `36 §1.6.3(b)` (pinned: `const` counts **explicit value** params only;
+  implicit `{…}` — type/level/instance/row — do **not** count), `39 §2.2`
+  (implicits inserted+solved+erased at each use site), `33 §1`
 - given: a polymorphic constant with an **implicit** type param and **no
   explicit value param**: `const nil {A : Type} : List A = Nil A`.
-- expect: **`(oracle)` — verdict deferred to spec-author's §5 pin.** The bounded
-  sub-decision: is `const` **zero explicit *value* params** (implicit type/level
-  allowed ⇒ `nil` **is** a `const` — frame **recommends** this, a constant
-  *family*), or truly **zero binders** (⇒ `nil` must be `fn`/other)? Ground on
-  `39`'s implicit-param machinery. Pin the **shape** (a polymorphic constant
-  family is the case at issue); do **not** freeze the count rule until §5 lands.
-- why: the **implicit-param edge** the frame routes to spec-author (§5).
-  Authoring it `(oracle)` on the concept — rather than guessing `const` or `fn`
-  — matches the granularity discipline: pin the shape, tag the deferred degree
-  of freedom, so the case cannot **falsely fail** a valid build once §5
-  finalizes the count rule ([[spec-exact-granularity]] T1 half).
+- expect: **accepts as a `const`** (verdict now **settled by `§1.6.3(b)`**, was
+  `(oracle)`). `nil {A}` has **zero explicit value parameters**; the implicit
+  `{A}` is inserted/solved/erased by the elaborator and never written by a
+  caller
+  (`39 §2.2`), so `nil` is used **exactly as a constant** — a polymorphic
+  *constant family*, not a function. Forcing `fn` would misread "you apply this
+  to a value" onto something no caller applies. The discriminating flip: a
+  `fn nil {A : Type} : List A` (zero explicit value params) is the **rejected**
+  arm (should-be-`const`, `§1.6.2`/`§1.6.3(a)`).
+- why: the **implicit-param edge** the frame routed to spec-author (§5), now
+  pinned. I authored it `(oracle)` on the concept rather than guessing
+  ([[spec-exact-granularity]] T1 half); `§1.6.3(b)` resolved it to
+  **implicit-params-don't-count** (`const` begins at the first explicit value
+  param). Un-oracled to the settled verdict; the case now flips
+  `const nil {A}` accept vs `fn nil {A}` reject.
 
 ---
 
@@ -380,8 +408,10 @@ The keyword thus determines the verification treatment.
   empty; every def carries `const`/`fn`/`proc` **as classified by the checker's
   own purity inference** (mechanical + checked, not hand-judged — frame D4). (b)
   `cargo test --workspace` **green**. (c) the **rosetta** corpus still passes
-  **16/0** (frame AC6). (d) the `const`-combinator collision (flag 1) is
-  resolved — no def named `const` survives.
+  **16/0** (frame AC6). (d) the `const`-combinator collision (flag 1) stays
+  resolved — the V0 K combinator is `konst` (`32 §8`, `33 §1`); **no `.ken`
+  names
+  a def `const`/`fn`/`proc`**.
 - why: AC6 — migration completeness as a **structural** check, not a per-file
   trace ([[two-arm-producer-needs-a-case-per-arm]]: the grep asserts the absence
   of a catch-all `view` remnant). Build-forcing: red until D4 lands; a
@@ -394,42 +424,46 @@ The keyword thus determines the verification treatment.
 ## PK7 — Unicode surface parses identically (frame AC7, D3)
 
 ### surface/declarations/unicode-twin-identical (oracle)
-- spec: frame D3/AC7 (Unicode surface, BL3), `31-lexical §4` (**keywords stay
-  ASCII words**; Unicode is for **operators**/symbols — `→`, `λ`, `∀`, `Σ`, `Ω`,
-  `⊑`), `36 §2.4` (elaboration target)
+- spec: `31 §1c` (BL3: lexer **accept-both** same-token + formatter emits
+  canonical Unicode; ASCII stays accepted; **keywords stay ASCII**, principle
+  4),
+  `31 §4` (keyword table), `36 §2.4` (elaboration target), frame AC7
 - given: a `.ken` module in **Unicode operator/symbol surface** and its
-  **ASCII-digraph twin** (`->`, `\`, `forall`, …) — **identical keywords**
-  `const`/`fn`/`proc` in both (keywords are not Unicode-ified, `31-lexical §4`).
-- expect: the Unicode twin **elaborates to the byte-identical core term** as the
-  ASCII twin (assert **term identity**, not merely "both elaborate"). Whether
-  **both** spellings stay accepted (lexer accepts Unicode + ASCII alias, emits
-  Unicode — frame **recommends**) **or** the corpus is **converted** to Unicode
-  and only that is green is spec-author's **D3 `(oracle)`** decision — pin the
-  **equivalence** (same core term), tag the accept-both-vs-convert policy.
+  **ASCII-digraph twin** (`->`/`→`, `\`/`λ`, `∀`, `Σ`, `Ω`, `⊑`) — **identical
+  keywords** `const`/`fn`/`proc` in both (keywords are not Unicode-ified,
+  `31 §1c`
+  principle 4 / `31 §4`).
+- expect: the Unicode twin and its ASCII twin **lex to the same token stream and
+  elaborate to the byte-identical core term** (assert **term identity**, not
+  merely "both elaborate"). The **accept-both policy is now pinned** (`31 §1c`,
+  un-oracled): the lexer accepts **both** spellings as the same token (ASCII
+  stays accepted), and the single formatter **normalizes to canonical Unicode on
+  save** — not convert-only. The `(oracle)` residual is only the specific glyph
+  table (proposal-level `OQ-syntax`), not the accept-both/formatter policy.
 - why: AC7 — the Unicode surface is **notation over the same grammar**, so it
   must not change what elaborates. Asserting **core-term identity** (not a
-  verdict) makes it a structural check the D3 policy choice cannot make vacuous.
-  Grounds BL3 against `31-lexical` (keywords ASCII, operators Unicode).
+  verdict) makes it a structural check no glyph choice can make vacuous. Grounds
+  BL3 against `31 §1c` (keywords ASCII, operators Unicode, accept-both + emit).
 
 ---
 
 ## PK8 — `proc` covers the polymorphic case, on D1 (frame AC2)
 
-**Authored against Architect's D1 ruling** (`evt_53ybqtzjfv7yx`): the row
-variable is a **bare row `[e]`** (`e` a lowercase ident bound as an **implicit
-parameter**, like a type/level param, `39`), optionally an **open-row tail
-`[E | e]`** (concrete head + poly tail → `RowType::Join(Concrete, Var)`); the
-variable **must appear in the declared type** (§3.1 guarantee 1: effects
-recoverable from the *type*, so D2's keyword check reads the poly row off the
-signature). The `[e]`/`[E | e]` **surface spelling is `(oracle)`**
-(proposal-level `OQ-syntax`, reconciled against spec-author's landed §36 `§1.5`
-transcription at the merge gate — the same parallel-author-then-reconcile
-posture as CAT-1); the **structure** (variable-in-the-type, keyword `proc`,
-static closure via `apply_subst`) is **normative** from the ruling.
+**Reconciled against the landed `36 §1.5`** (spec-author's D1 transcription @
+`c74a469`, from Architect's ruling `evt_53ybqtzjfv7yx`): the row variable is a
+**bare row `[e]`** (`e` bound as an **implicit parameter**, like a type/level
+param, `39 §2.2`; `§1.5.2`), optionally an **open-row tail `[E | e]`** (concrete
+head + polymorphic tail = the row join `⟦E⟧ ∪ ⟦e⟧`, `§1.5.1`); the variable
+**must appear in the declared type** (`§1.5.2`, §3.1 guarantee 1: effects
+recoverable from the *type*). Both the latent-arrow `→[e]` and the monadic
+`Eff [e] b` spellings are **co-equal** (`§1.5.1`). The `[e]`/`[E | e]` **glyph
+stays `(oracle)`** (`OQ-syntax`); the **structure** (variable-in-the-type,
+keyword `proc`, static closure) is **normative** from `§1.5`.
 
 ### surface/declarations/poly-def-is-proc-not-fn (oracle)
-- spec: `33 §1`, `36 §1.1`/`§1.2` (latent arrow, `infer_row`), D1 ruling
-  (`evt_53ybqtzjfv7yx`; `RowType::Var`), frame §2.1/§2.2/AC2
+- spec: `36 §1.6.1` (`proc` ⟺ declared row contains a variable),
+  `§1.5.1`/`§1.5.2`
+  (row-variable surface + binding), `§1.6.2` (crux: effect-polymorphic ≠ pure)
 - given: an effect-polymorphic definition whose declared type carries a **row
   variable** `e`. Two arms, **identical signature**, keyword varied:
 
@@ -439,12 +473,17 @@ static closure via `apply_subst`) is **normative** from the ruling.
   (b) fn   traverse {a b} {e} (f : a -> Eff [e] b) (xs : List a)
         : Eff [e] (List b)  visits [e]
   ```
-- expect: (a) **accepts** — the declared row **contains a variable** `e`
-  (`RowType::Var`, D1), which is **decisively `proc`** (frame §2.1: `proc` ⟺ "an
-  effect-polymorphic row, contains a variable"). (b) **rejects** — `fn` asserts
-  the **closed empty row, no row variable** (frame §2.1); a row *variable* in
-  the signature is not `∅`, a false-closure claim (`FnHasRowVariable` /
-  false-purity, kind `(oracle)`).
+- expect: (a) **accepts** — the declared row **contains a variable** `e`, which
+  is
+  **decisively `proc`** (`§1.6.1`: Impure ⟺ `ρ_decl` non-empty **or contains a
+  row variable** or is a `space` op). (b) **rejects** — `fn` asserts the
+  **closed
+  empty row, no row variable** (`§1.6.1` pure class); a row *variable* in the
+  signature is not `∅`, a should-be-`proc` mismatch (hard error, `§1.6.3(a)`).
+  Companion (`§1.5.2`): a body that **is** effect-polymorphic but whose
+  signature
+  **omits** the `[e]` is a **manifest-in-the-type violation**, reported like a
+  `§1.4` escape — the surface variable is required, not optional.
 - why: AC2's **core** — the polymorphic case lives **decisively on the `proc`
   side**, the crux that makes the binary split **total**. Verdict **flips** on
   the keyword with the signature held fixed. The targeted bug — a checker that
@@ -456,7 +495,7 @@ static closure via `apply_subst`) is **normative** from the ruling.
 ### surface/declarations/proc-stays-proc-at-pure-instantiation (oracle)
 - spec: D1 ruling (`apply_subst(e := ρ)`, `RowType`), `36 §1.2` (λ builds a
   closure, performs nothing; `traverse` never `perform`s `e` itself — splices
-  the callback via `bind`), `§2.4`, frame §2.2/§6/AC2
+  the callback via `bind`), `§2.4`, `36 §1.6.2` (crux + do-not-optimize), AC2
 - given: the accepted `proc traverse` (PK8a) **instantiated at a pure callback**
   `pure_f : a -> Eff [] b` — i.e. `e := ∅` by `apply_subst` (D1) — in the call
   `traverse pure_f xs`.
@@ -465,10 +504,10 @@ static closure via `apply_subst`) is **normative** from the ruling.
   `apply_subst(e := ∅)` resolves the instantiated row to the **closed-empty**
   set; assert the instantiated call's row **= `∅`** (structural), effect-free,
   runs pure. (ii) **YET** the **definition** `traverse` stays **`proc`** — the
-  keyword classifies the abstraction's **guarantee** (frame §2.2), not this
+  keyword classifies the abstraction's **guarantee** (`36 §1.6.2`), not this
   best-case instantiation; `fn traverse` is **still rejected** (PK8a) even
   though *this* instantiation is pure.
-- why: the **exact pure-instantiation round-trip** frame §2.2/AC2 demands + the
+- why: the **exact pure-instantiation round-trip** `36 §1.6.2`/AC2 demands + the
   do-not-reopen §6 guard ("do **not** 'optimize' a polymorphic definition into
   `fn` because it *can* be pure"). Two discriminating faces: (i) a checker that
   fails to `apply_subst(e := ∅)` leaves the call's row polymorphic/non-`∅` —
@@ -489,7 +528,7 @@ discovered at runtime.
 
 ### surface/declarations/mis-declared-caller-row-rejected (oracle)
 - spec: D1 ruling (`apply_subst` then the `§1.4` escape check on the resolved
-  row), `36 §1.4` (escape), frame §2.3/AC3
+  row), `36 §1.4` (escape), `36 §1.5.3`/AC3
 - given: a caller of `traverse` (PK8a) supplying an **effectful** callback
   `log_f : a -> Eff [Console] b` — so `e := [Console]` by `apply_subst`. Two
   caller declarations, **identical body** `= traverse log_f xs`:
@@ -541,7 +580,7 @@ discovered at runtime.
 
 ### surface/declarations/additive-over-effects-seed (property)
 - spec: `../effects/seed-effects.md` (EFF1 keyword-agnostic row
-  inference/escape), `36 §2.4` (pure collapse), frame §2.5 (`view` roles carry
+  inference/escape), `36 §2.4` (pure collapse), `36 §1.6.4` (`view` roles carry
   over)
 - given: the EFF1 row-inference/escape invariants and the on-`main` surface
   corpus, after the `view` → `const`/`fn`/`proc` migration.
