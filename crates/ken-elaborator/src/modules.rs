@@ -322,6 +322,17 @@ fn rewrite_rexpr(scope: &Scope, exports: &HashMap<String, HashMap<String, String
             RExpr::RMatch { scrut, arms, span }
         }
         RExpr::RProj(e, field, s) => RExpr::RProj(Box::new(rewrite_rexpr(scope, exports, *e)?), field, s),
+        RExpr::RPi(x, a, b, s) => RExpr::RPi(
+            x,
+            Box::new(rewrite_rtype(scope, exports, *a)?),
+            Box::new(rewrite_rexpr(scope, exports, *b)?),
+            s,
+        ),
+        RExpr::RArrow(a, b, s) => RExpr::RArrow(
+            Box::new(rewrite_rexpr(scope, exports, *a)?),
+            Box::new(rewrite_rexpr(scope, exports, *b)?),
+            s,
+        ),
     })
 }
 

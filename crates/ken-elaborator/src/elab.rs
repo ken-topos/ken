@@ -1010,6 +1010,10 @@ fn infer(cx: &mut ElabCtx, expr: &RExpr) -> Result<(Term, Term), ElabError> {
         }
 
         RExpr::RProj(base, field, span) => infer_proj(cx, base, field, span),
+
+        RExpr::RPi(_, a, b, span) => infer_pi(cx, a, b, span),
+
+        RExpr::RArrow(a, b, span) => infer_arrow(cx, a, b, span),
     }
 }
 
@@ -1064,6 +1068,59 @@ fn infer_eq(
     let ty = kernel_infer(cx.env, &zonked_ctx, &zonked_eq)
         .map_err(|e| ElabError::KernelRejected { error: e, span: span.clone() })?;
     Ok((eq_term, ty))
+}
+
+/// `(x : A) -> B` — dependent function type in expr position (VAL2 #4,
+/// `32 §3`). Domain `A` is a `type` (mirrors the type-position `Pi`,
+/// `elab_type`'s `RType::RPi` arm); codomain `B` is an expr, elaborated in
+/// a context extended by `A` so `x`'s references resolve. Elaborates to
+/// the existing kernel `Term::Pi` — no new kernel variant (types are
+/// terms, `11 §1`); the kernel's own `kernel_infer` classifies the result
+/// (`Type ℓ` or `Ω`, whichever the domain/codomain sorts license) rather
+/// than this function guessing a sort.
+fn infer_pi(cx: &mut ElabCtx, a: &RType, b: &RExpr, span: &Span) -> Result<(Term, Term), ElabError> {
+    let a_core = elab_type(cx, a)?;
+    let a_core = cx.metas.zonk_term(&a_core);
+    cx.ctx.push(a_core.clone());
+    let b_result = infer(cx, b);
+    cx.ctx.pop();
+    let (b_core, _b_ty) = b_result?;
+    let b_core = cx.metas.zonk_term(&b_core);
+    let pi = Term::pi(a_core, b_core);
+
+    let zonked_ctx = Context {
+        types: cx.ctx.types.iter().map(|t| cx.metas.zonk_term(t)).collect(),
+    };
+    let zonked_pi = cx.metas.zonk_term(&pi);
+    let sort = kernel_infer(cx.env, &zonked_ctx, &zonked_pi)
+        .map_err(|e| ElabError::KernelRejected { error: e, span: span.clone() })?;
+    Ok((pi, sort))
+}
+
+/// `A -> B` — non-dependent function type in expr position (VAL2 #4,
+/// `32 §3`). BOTH `A` and `B` are exprs (types are terms, `11 §1` — the
+/// same "`ConId`/`Type` already stand in expr position" precedent this
+/// closes the gap for), each elaborated via ordinary `infer` — a plain
+/// `Int`/`List Int`-style type-valued expression infers fine today, no new
+/// machinery needed. `B` doesn't reference the (unused, non-dependent)
+/// bound variable, so it's `weaken`ed by 1 to sit correctly under the
+/// implicit `Pi` binder (the exact same construction `elab_type`'s
+/// `RType::RArr` arm already uses for the type-position non-dependent
+/// arrow). Elaborates to the existing kernel `Term::Pi` — no new variant.
+fn infer_arrow(cx: &mut ElabCtx, a: &RExpr, b: &RExpr, span: &Span) -> Result<(Term, Term), ElabError> {
+    let (a_core, _a_ty) = infer(cx, a)?;
+    let (b_core, _b_ty) = infer(cx, b)?;
+    let a_core = cx.metas.zonk_term(&a_core);
+    let b_core = cx.metas.zonk_term(&b_core);
+    let pi = Term::pi(a_core, weaken(&b_core, 1));
+
+    let zonked_ctx = Context {
+        types: cx.ctx.types.iter().map(|t| cx.metas.zonk_term(t)).collect(),
+    };
+    let zonked_pi = cx.metas.zonk_term(&pi);
+    let sort = kernel_infer(cx.env, &zonked_ctx, &zonked_pi)
+        .map_err(|e| ElabError::KernelRejected { error: e, span: span.clone() })?;
+    Ok((pi, sort))
 }
 
 /// `J motive base eq` — elaborates directly to the kernel's existing
@@ -2482,6 +2539,11 @@ pub(crate) fn rexpr_mentions_name(expr: &RExpr, name: &str) -> bool {
                 || arms.iter().any(|a| rexpr_mentions_name(&a.body, name))
         }
         RExpr::RProj(e, _, _) => rexpr_mentions_name(e, name),
+        // The domain is a `type`, not an `RExpr` — a mutual-recursion call
+        // graph only cares about VALUE-level (expr) references, so only
+        // the codomain (an `RExpr`) is scanned.
+        RExpr::RPi(_, _, b, _) => rexpr_mentions_name(b, name),
+        RExpr::RArrow(a, b, _) => rexpr_mentions_name(a, name) || rexpr_mentions_name(b, name),
     }
 }
 

@@ -892,7 +892,7 @@ impl Parser {
     }
 
     pub fn parse_expr(&mut self) -> Result<Expr, ElabError> {
-        let lhs = self.parse_infix_expr()?;
+        let lhs = self.parse_arrow_expr()?;
         if matches!(self.peek(), Token::Colon) {
             let colon_span = self.peek_span().clone();
             self.advance();
@@ -900,6 +900,49 @@ impl Parser {
             let span = Span::merge(lhs.span(), ty.span());
             let _ = colon_span;
             return Ok(Expr::EAsc(Box::new(lhs), Box::new(ty), span));
+        }
+        Ok(lhs)
+    }
+
+    /// `parse_arrow_expr` — expr-position `->` (VAL2 #4, `32 §3`): the
+    /// dependent `(x:A) -> B` and non-dependent `A -> B` forms, both
+    /// elaborating to the existing kernel `Pi`. Binds looser than `==`/all
+    /// arithmetic, tighter than ascription (`32 §6`); right-associative.
+    ///
+    /// The dependent form needs a speculative parse: `(ident : type)` is
+    /// ALSO an ordinary parenthesized ascription (no trailing `->`), so
+    /// `is_dep_pi_ahead()`'s cheap token-shape check isn't sufficient by
+    /// itself (unlike type position, where `(ident:A)` is unambiguously a
+    /// Pi and never a bare ascription) — attempt it, and if the type
+    /// domain isn't followed by `RParen` then `Arrow`, rewind and fall
+    /// through to the ordinary ascription/grouping parse.
+    fn parse_arrow_expr(&mut self) -> Result<Expr, ElabError> {
+        if matches!(self.peek(), Token::LParen) && self.is_dep_pi_ahead() {
+            let save = self.pos;
+            let start = self.peek_span().start;
+            self.advance(); // '('
+            let (x, _) = self.expect_ident()?;
+            self.expect(&Token::Colon)?;
+            let a = self.parse_type()?;
+            if matches!(self.peek(), Token::RParen) && matches!(self.lookahead(1), Token::Arrow) {
+                self.advance(); // ')'
+                self.advance(); // '->'
+                let b = self.parse_arrow_expr()?; // right-assoc
+                let end = b.span().end;
+                return Ok(Expr::EPi(x, Box::new(a), Box::new(b), Span::new(start, end)));
+            }
+            // Not actually a dependent arrow (no trailing `->`) — this was
+            // a plain parenthesized ascription/expr; rewind and re-parse
+            // through the ordinary path (pure backtrack: only `self.pos`
+            // changed above).
+            self.pos = save;
+        }
+        let lhs = self.parse_infix_expr()?;
+        if matches!(self.peek(), Token::Arrow) {
+            self.advance();
+            let rhs = self.parse_arrow_expr()?; // right-assoc
+            let span = Span::merge(lhs.span(), rhs.span());
+            return Ok(Expr::EArrow(Box::new(lhs), Box::new(rhs), span));
         }
         Ok(lhs)
     }
@@ -1039,7 +1082,10 @@ impl Parser {
             None
         };
         self.expect(&Token::Eq)?;
-        let rhs = self.parse_infix_expr()?;
+        // VAL2 #4: an arrow-type value must be reachable in `let`-bound
+        // position too, not just annotations — `parse_arrow_expr`, not the
+        // narrower `parse_infix_expr` this called before.
+        let rhs = self.parse_arrow_expr()?;
         self.expect(&Token::KwIn)?;
         let body = self.parse_expr()?;
         let end = body.span().end;
@@ -1260,6 +1306,8 @@ impl Parser {
                             Expr::EMatch { scrut, arms, span }
                         }
                         Expr::EProj(e, field, _) => Expr::EProj(e, field, span),
+                        Expr::EPi(x, a, b, _) => Expr::EPi(x, a, b, span),
+                        Expr::EArrow(a, b, _) => Expr::EArrow(a, b, span),
                     },
                 })
             }

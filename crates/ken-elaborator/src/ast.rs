@@ -319,6 +319,15 @@ pub enum Expr {
     /// chain is a module-qualified reference, `33 §3.2`, joined at parse
     /// time instead).
     EProj(Box<Expr>, String, Span),
+    /// `(x : A) -> B` — dependent function type, expr position (VAL2 #4,
+    /// `32 §3`). Domain is a `type` (mirrors the type-position `Pi`);
+    /// codomain is an expr binding `x`. Elaborates to the existing kernel
+    /// `Pi` — no new kernel variant (types are terms, `11 §1`).
+    EPi(String, Box<Type>, Box<Expr>, Span),
+    /// `A -> B` — non-dependent function type, expr position (VAL2 #4,
+    /// `32 §3`). BOTH sides are exprs (elaborate to `Type`-classified
+    /// terms); right-associative. Elaborates to the existing kernel `Pi`.
+    EArrow(Box<Expr>, Box<Expr>, Span),
 }
 
 impl Expr {
@@ -334,6 +343,8 @@ impl Expr {
             | Expr::EOld(_, s)
             | Expr::ENumLit(_, s)
             | Expr::EStr(_, s)
+            | Expr::EPi(_, _, _, s)
+            | Expr::EArrow(_, _, s)
             | Expr::EBinOp(_, _, _, s)
             | Expr::EProj(_, _, s) => s,
             Expr::EMatch { span, .. } => span,

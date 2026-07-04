@@ -138,6 +138,13 @@ pub enum RExpr {
     },
     /// `e.field` — Σ-record field projection (`33 §5.2` η).
     RProj(Box<RExpr>, String, Span),
+    /// `(x : A) -> B` — dependent function type, expr position (VAL2 #4).
+    /// Domain resolved as a `type` (mirrors type-position `Pi`); codomain
+    /// resolved as an expr with `x` bound.
+    RPi(String, Box<RType>, Box<RExpr>, Span),
+    /// `A -> B` — non-dependent function type, expr position (VAL2 #4).
+    /// Both sides resolved as exprs; right-associative.
+    RArrow(Box<RExpr>, Box<RExpr>, Span),
 }
 
 impl RExpr {
@@ -154,6 +161,8 @@ impl RExpr {
             | RExpr::RNumLit(_, s)
             | RExpr::RStr(_, s)
             | RExpr::RProj(_, _, s)
+            | RExpr::RPi(_, _, _, s)
+            | RExpr::RArrow(_, _, s)
             | RExpr::RBinOp(_, _, _, s) => s,
             RExpr::RMatch { span, .. } => span,
         }
@@ -679,6 +688,20 @@ fn resolve_expr_ctx(scope: &mut Scope, expr: &Expr, ctx: PropCtx) -> Result<RExp
         Expr::EProj(e, field, span) => {
             let re = resolve_expr_ctx(scope, e, ctx)?;
             Ok(RExpr::RProj(Box::new(re), field.clone(), span.clone()))
+        }
+
+        Expr::EPi(x, a, b, span) => {
+            let ra = resolve_type(scope, a)?;
+            scope.push(x);
+            let rb = resolve_expr_ctx(scope, b, ctx)?;
+            scope.pop();
+            Ok(RExpr::RPi(x.clone(), Box::new(ra), Box::new(rb), span.clone()))
+        }
+
+        Expr::EArrow(a, b, span) => {
+            let ra = resolve_expr_ctx(scope, a, ctx)?;
+            let rb = resolve_expr_ctx(scope, b, ctx)?;
+            Ok(RExpr::RArrow(Box::new(ra), Box::new(rb), span.clone()))
         }
 
         Expr::EMatch { scrut, arms, span } => {
