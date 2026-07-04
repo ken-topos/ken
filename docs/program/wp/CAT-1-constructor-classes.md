@@ -137,3 +137,98 @@ pickup, do not trust this line):
   which need `Foldable`/`Monoid`).
 - Base is `origin/main`; re-verify all current-state claims against the landed
   elaborator at pickup (frame is perishable).
+
+## Enclave elaboration
+
+Design front-loaded by the enclave (spec-author holds the pen; Architect
+fidelity-gates the soundness pins; CV authors the discriminating conformance).
+The durable contract is `spec/50-stdlib/55-lawful-functors.md`; the value-level
+source + MANIFEST are `packages/lawful-functors/`. This section is the design
+record + the load-bearing pins the build transcribes from.
+
+### E1. Value-level algebra (`Semigroup`/`Monoid`) — spec-author, build-verified
+
+`class Semigroup a { op; assoc }`, `class Monoid a { op; mempty; assoc;
+left_unit; right_unit }` — bare-ident param, exactly `Eq`/`Ord`-shaped, no kind
+machinery (`55 §2`). The op is `a`-valued, so the laws are the kernel's own
+`Equal a u v : Ω` directly (not the `IsTrue`/`Bool` bridge) — Ω-clean, no
+truncation. `Monoid` **restates** `op`/`assoc` and records the `Semigroup`
+subsumption as a fact (the `DecEq`⊃`Eq` precedent), not a wired superclass
+field.
+
+**Instances proved, zero `Axiom`/zero delta** (`55 §3`): the `List` append
+monoid by induction + transport `cong` (`list_assoc`/`list_left_unit`/
+`list_right_unit`, generic in the element type); the `Bool` conjunction monoid
+by finite case-split. **Grounded** — the full design and the real package file
+both elaborate through `elaborate_file`. The `tt`-vs-`Refl` K7 discrimination
+(`55 §3.2`) is the one subtlety: a base whose endpoints reduce to the **same
+constructor** (`Nil a`) collapses to `Top` (`tt`), not a stuck `Eq` (`Refl`);
+verified, not assumed.
+
+**No dependency on the higher-kinded extension** — Semigroup/Monoid build in
+parallel with it; only `Functor`/`Foldable` gate on it.
+
+### E2. Higher-kinded class parameter — Architect's ruling (transcribed)
+
+**Grounded verdict (Architect, on the landed elaborator).** Two axes diverge:
+- **Axis A — a class over `f : Type → Type` is blocked today.** The class param
+  is hard-coded to `Type0` at three unconditional `Term::ty(Level::Zero)` sites
+  in `elab_class_decl` (~`elab.rs:1862–1902`); `parse_class_decl` (`parser.rs`)
+  takes a bare ident only, no `(f : K)` binder. So `class Functor f` binds
+  `f : Type0` and `map`'s `f a` applies a non-Π → kernel-rejected.
+- **Axis B — the universe is fine, not the blocker.** `sort_sigma` is
+  level-generic; a `Type1` structure record is admitted. Checking only B would
+  have wrongly cleared it — the block is entirely in A.
+
+**PIN (a) — verbatim, carry into the build brief.** *The fix is outer-ring
+(`ken-elaborator`-only, zero `ken-kernel` diff, no new `Term`/`Decl`), bounded
+to exactly four pieces: (1) AST param-kind field (absent ⇒ `Type0`); (2) parser
+`class C (f : K) { … }` binder; (3) the ~10-line 3-site elab fix replacing
+`Term::ty(Level::Zero)` at ~L1862–1902; (4) the instance-side head-resolution
+build-verify (`instance Functor List` resolves to the bare `List` indformer).*
+
+**PIN (c) — hard scope-guardrail AC (Steward, verbatim).** *The outer-ring
+extension is bounded to exactly these four pieces (AST param-kind field; parser
+`class C (f : K) { … }` binder; the ~10-line 3-site elab fix replacing
+`Term::ty(Level::Zero)` at ~L1862–1902; the instance-side head-resolution
+build-verify point) — any kernel touch, new `Term`/`Decl`, non-trivial
+instance-resolution change, or second elaborator axis re-forks to Steward
+before proceeding.*
+
+### E3. Functor law form — Architect's ruling (transcribed)
+
+**PIN (b) — verbatim, carry into the build brief.** *funext is definitional in
+Ken's OTT (`obs.rs`: `Eq ((x:A)→B) f g ⇝ (x:A) → Eq (B x) (f x) (g x)`), so the
+function-level Functor law reduces to the pointwise form — the same proposition
+up to one reduction step. Pointwise is the normal form, so the prover's goal IS
+the stated law and every instance discharges by direct induction on the carrier.
+State one canonical pointwise field per law; the point-free equation is
+available for free as a definitionally-equal restatement — do NOT proliferate a
+second law field. This is the form CAT-2's Monad laws inherit.* Statements at
+`55 §5.2`.
+
+### E4. Fork — parametric instance head (open, non-blocking)
+
+A **parametric instance head** `instance Monoid (List a)` does not elaborate:
+the parser accepts it, but elaboration has no binder path for the free `a` and
+does not generalize the instance over it (`UnresolvedCon "a"`, grounded by
+probe). **Distinct from E2's Axis A** (that is the class *param*'s kind;
+`instance Functor List` uses a closed bare head, unaffected) — this is
+elaboration-side instance-head generalization. **Non-blocking:** the value
+monoids bundle at closed carriers (`Bool`, `List Nat`) and their proofs are
+already generic (`E1`), so the WP's ACs are met; the parametric `instance` is a
+generality upgrade (same shape as `map-verified-laws`' `(oracle)`-deferred
+parametric bundling). **Steward's scope call:** fold into E2's extension or
+defer as its own follow-on. If elaboration/build touches it, it re-forks per
+PIN (c).
+
+### E5. Build sequencing (for the Language build frame)
+
+- **Deliverable 1 — the E2 extension** on its own commit, gated on
+  AC1-kernel-untouched + `cargo test --workspace` green.
+- **Semigroup/Monoid** (value-level, `E1`) build **in parallel** — no dependency
+  on the extension.
+- **Functor/Foldable** gate on the extension; `Foldable`'s `foldr`-vs-`foldMap`
+  primary + the exact fold laws pin with the build once the extension lands.
+- Gate: Architect re-certifies AC1 (kernel-untouched, the four-piece boundary) +
+  the pointwise-law form on the built diff; Language-QA + Verify-QA + CI.
