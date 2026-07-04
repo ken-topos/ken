@@ -107,17 +107,26 @@ enclave sharpens the de Bruijn detail against `spec/14 §3.1` and
    `idxs` are `subst_outer`'d into the match's param context exactly as
    `method_type` does. **Mandate:** derive the domains/indices via
    `subst_outer(&branching_tel[bk], …)` / the `idxs` terms from `recursive_args`,
-   not by re-parsing the constructor.
+   not by re-parsing the constructor. **Exact construction, grounded
+   line-by-line against `method_type`: see the [§ Enclave elaboration][ee]
+   section below** —
+   the enclave has front-loaded it, the implementer transcribes it.
+
+[ee]: #enclave-elaboration--the-exact-w-style-ih-slot-construction
 2. **Method-lambda wrapping / de Bruijn shifting.** The method body already
    wraps `n` field lambdas then `p = rec.len()` IH lambdas (built innermost-first
    so each `weaken(_, 1)` accumulates the shift — `elab.rs:826-836`). Extend so a
    W-style IH lambda's **domain is the Π-type from step 1** (not the direct
-   `subst_var_generalize` form), and the **`nb` inner binders `b₁…b_{nb}` are
-   accounted for in the shift** of any later IH slot. **Mandate:** keep the
-   existing reverse-build + `weaken` technique; the only change is the per-slot
-   domain and the `+nb` it contributes. The spec enclave supplies the exact shift
-   arithmetic (this is the fiddly part — front-loaded by the enclave, not left to
-   the build model to derive).
+   `subst_var_generalize` form). **The `nb` branch binders are *intra-domain*:**
+   the outer reverse-loop wrap stays **`weaken(&method, 1)` — one shift per IH
+   slot, NOT `+nb`** (each IH is a single top-level method binder; its `nb`
+   branch binders live *inside* its domain type, bound by the `Term::pi`s, and
+   never enter the method telescope). The `+nb` enters **only** the domain's own
+   construction (weaken the goal by `n+nb`, place `field_var` at `+nb`). The
+   enclave supplies and *proves* the exact arithmetic in the [§ Enclave
+   elaboration][ee] section — the "later slot's shift accounts for `+nb`"
+   reading is **wrong** and would emit a term the kernel rejects; the
+   correction is pinned there.
 3. **Reachability / dead-IH handling stays as-is.** The IH binders are
    dead (never surface-referenced) — the surface arm body cannot name them, same
    as the direct case today. **Mandate:** do not add surface syntax for binding
@@ -132,6 +141,212 @@ enclave sharpens the de Bruijn detail against `spec/14 §3.1` and
    non-indexed family) is needed by any in-scope example, that is a **finding →
    Steward** (its own WP), not silently in scope — `accumulator-factory`'s
    `ITree` is a non-indexed family with a W-style field, which is the target.
+
+## Enclave elaboration — the exact W-style IH-slot construction
+
+*Front-loaded by the spec enclave (the fiddly de Bruijn arithmetic), grounded
+line-by-line against `ken_kernel::inductive::method_type` and `spec/14 §3.1`.
+The implementer transcribes the loop below; the kernel recheck (AC4) is the
+fail-closed backstop for any transcription slip. Kernel line numbers are
+perishable — verify the shapes against landed code, the arithmetic is the
+invariant.*
+
+### The normative IH (spec `14 §3.1`, kernel `method_type`)
+
+For a recursive field of `cₖ` at position `pos`, `method_type` inserts one IH
+binder, whose type depends on the field's branching telescope
+`branching_tel = [B₁, …, B_{nb}]` (from `recursive_args`):
+
+- **direct** (`nb = 0`, `r : D Δ_p t̄`) → IH `M t̄ r` — a plain type;
+- **W-style** (`nb ≥ 1`, `k : (b₁:B₁)…(b_{nb}:B_{nb}) → D Δ_p t̄[b̄]`) → IH
+  `Π(b₁:B₁)…(b_{nb}:B_{nb}). M t̄[b̄] (k b₁ … b_{nb})`.
+
+In scope this WP: the family is **non-indexed** (guaranteed by the
+`dependent_eligible` gate, `elab.rs` ~535-553), so every `idxs` is **empty** and
+`M t̄[b̄]` collapses to `M`. The elaborator holds the goal as `expected = M scrut`
+(motive already applied to the scrutinee), so "`M (k b̄)`" is `expected` with its
+scrutinee occurrence rewritten to `(k b̄)` — the same `subst_var_generalize`
+move the direct case already uses, extended past the `nb` branch binders.
+
+### Why the elaborator's `weaken`-accumulate idiom reproduces `method_type`
+
+The two producers use **opposite idioms** that compute the **same** term — this
+is the equivalence the whole extension rests on:
+
+- **`method_type`** computes each IH domain in its *final* context with an
+  explicit offset `(n − pos + j)`, where `j` = the number of *preceding* (outer)
+  IH binders, and wraps with `Term::pi(ih_ty, ty)` **without re-shifting `ty`**.
+- **`check_match_dependent`** computes each domain in the **bare `[fields]`
+  frame** (the `j = 0` slice: offset `n − pos`, goal weakened by `n` direct /
+  `n + nb` W-style) and relies on the reverse-build's `weaken(&method, 1)` —
+  applied once per *outer* IH lambda — to float the already-built inner domains
+  into place.
+
+Applying `weaken(_, 1)` a total of `j` times is `shift(_, j, 0)`: it bumps every
+free field/Γ reference by `j` while **preserving** each domain's own `nb`
+internal branch binders (their `Term::pi` cutoffs rise under the shift). That is
+*exactly* the `+j` the kernel adds explicitly. The **direct** case — landed,
+kernel-rechecked (`dependent-match-nonnullary`, #254) — already depends on this
+equivalence for its `p ≥ 2` slots (binary `Tree`). The W-style extension changes
+**only the per-slot domain shape**, never the accumulation.
+
+### The load-bearing correction (do not get this wrong)
+
+> The outer reverse-loop wrap stays **`weaken(&method, 1)` — one shift per IH
+> slot, regardless of `nb`.** The `+nb` is **intra-domain only**.
+
+Each IH is a **single** top-level method binder (`Term::lam(ih_ty, …)`); its
+`nb` branch binders live **inside** `ih_ty`, bound by the `Term::pi`s, and never
+enter the method telescope. The kernel confirms this directly: its per-slot
+offset `(n − pos + j)` counts *preceding IH binders* (`j`, each contributing 1),
+**never their `nb`** (`inductive.rs`, the `for j in (0..p).rev()` block). An
+inner W-style slot with `nb = 2` still advances the next outer slot's `j` by
+exactly **1**.
+
+Reading the frame's Deliverable-2 phrase "later slot's shift accounts for `+nb`"
+literally — e.g. changing the wrap to `weaken(&method, 1 + nb)` — over-shifts
+every already-built inner domain's field/Γ reference by `nb − 1` per slot,
+emitting an `Elim` whose methods no longer match `method_type`. The kernel
+recheck rejects it (fail-closed — no unsoundness), but **AC1 would not flip to
+PASS**. The `+nb` belongs to the goal-weaken *inside* the domain (`n + nb`) and
+the `field_var` position (`+nb`), nowhere else.
+
+### The construction (drop-in replacement for the Gap-B rejection)
+
+Delete the Gap-B **pre-rejection** loop (`elab.rs:819-825`,
+`for (_, branching_tel, idxs) in &rec { … return Err("Gap B") … }`) and replace
+the direct-only emission loop with this unified loop. Only the `ih_ty`
+computation is new; the surrounding `method = Term::lam(ih_ty, weaken(&method,
+1))` and the field-lambda wrap that follows are **unchanged**.
+
+```rust
+let mut method = body_core;
+for (pos, branching_tel, idxs) in rec.iter().rev() {
+    let nb = branching_tel.len();
+
+    // Indexed FAMILIES are out of scope (Deliverable 4). The `dependent_eligible`
+    // gate restricts to flat non-indexed families, so `idxs` is always empty
+    // here; a non-empty `idxs` is a genuinely indexed family — a finding →
+    // Steward, never a silent build.
+    if !idxs.is_empty() {
+        return Err(ElabError::Internal(
+            "dependent match: indexed-family recursive field is out of scope \
+             (W-style fields of a non-indexed family only) — finding -> Steward"
+                .into(),
+        ));
+    }
+
+    let ih_ty = if nb == 0 {
+        // DIRECT case — byte-identical to today.
+        let field_var = Term::var(n - 1 - pos);
+        subst_var_generalize(&weaken(expected, n as i64), scrut_idx + n, &field_var)
+    } else {
+        // W-STYLE case: Pi(b1:B1)...(b_nb:B_nb). expected[scrut := field_var b1..b_nb].
+        // Built in the bare [fields] frame (j = 0); the outer weaken(&method, 1)
+        // per IH slot below accumulates the +j exactly as for the direct case.
+
+        // Scrutinee body under the nb branch binders: `field_var` sits at
+        // (n-1-pos) shifted past the nb binders -> var(n-1-pos+nb); applied to
+        // b1 = var(nb-1), ..., b_nb = var(0).
+        let mut scrut_body = Term::var(n - 1 - pos + nb);
+        for bk in 0..nb {
+            scrut_body = Term::app(scrut_body, Term::var(nb - 1 - bk));
+        }
+
+        // Specialized goal under the nb binders: weaken past n fields + nb branch
+        // binders, then rewrite the scrutinee occurrence to (field_var b_bar).
+        // (idxs empty -> this IS method_type's `M idxs (a_pos b_bar)`, in the
+        // elaborator's already-applied `expected = M scrut` representation.)
+        let mut ih_ty = subst_var_generalize(
+            &weaken(expected, (n + nb) as i64),
+            scrut_idx + n + nb,
+            &scrut_body,
+        );
+
+        // Wrap the branching-domain Pi-binders, innermost (B_nb) to outermost (B1).
+        // B_k mirrors method_type's b_dom with j = 0:
+        //   shift(subst_outer(branching_tel[bk], m, params_terms, pos+bk), n-pos, bk)
+        // cutoff = bk preserves b1..b_{bk-1}; amount (n-pos) lifts args-after-pos
+        // and Γ. NO subst_levels — mirror the direct-case field-domain convention
+        // (`level_args: vec![]`); the kernel recheck covers any residual.
+        for bk in (0..nb).rev() {
+            let b_dom = ken_kernel::subst::shift(
+                &subst_outer(&branching_tel[bk], m, &params_terms, pos + bk),
+                (n - pos) as i64,
+                bk,
+            );
+            ih_ty = Term::pi(b_dom, ih_ty);
+        }
+        ih_ty
+    };
+
+    method = Term::lam(ih_ty, weaken(&method, 1)); // UNCHANGED: +1 per IH slot.
+}
+```
+
+Notes for the transcriber:
+
+- `pos` destructures as `&usize`; the arithmetic (`n - 1 - pos`, `pos + bk`,
+  `n - pos`) uses the same std ref-forwarding `Sub`/`Add` the existing
+  `n - 1 - pos` line already relies on — no new deref needed.
+- `ken_kernel::subst::shift(term, amount: i64, cutoff: usize)` is the same
+  function `subst_var_generalize` calls internally (`elab.rs:587`); `elab.rs`
+  imports only `subst::{subst0, subst_outer, weaken}`, so reference `shift`
+  fully-qualified (as shown) or add it to the `use`.
+- `params_terms`, `m`, `scrut_idx`, `expected`, `n` are the already-bound
+  locals from the match setup (`elab.rs` ~715-760); reuse them.
+
+### Worked example (concrete indices)
+
+A minimal 2-constructor W-style inductive isolates the arithmetic (this is also
+the shape AC3's positive test should use, alongside `ITree`):
+
+```
+data WTree : Type where
+  Leaf : WTree
+  Node : (b : Bool) -> (Bool -> WTree) -> WTree
+```
+
+`Node` has `n = 2` fields (`b`, then `k : Bool -> WTree`). `recursive_args`
+returns `[(pos = 1, branching_tel = [Bool], idxs = [])]`, so `p = 1`, `nb = 1`.
+In the field context `[Γ, b, k]`: `k = var(0)`, `b = var(1)`. For
+`match t { Leaf => …; Node b k => body }` with goal `expected = M t`:
+
+- `field_var` (k) sits at `n-1-pos = 0`; under the `nb = 1` branch binder it is
+  `var(n-1-pos+nb) = var(1)`.
+- `scrut_body = (k b')` = `App(var(1), var(0))` (the branch binder `b'` is
+  `var(0)`).
+- goal under the binder: `subst_var_generalize(weaken(expected, 3),
+  scrut_idx+3, k b')` = `M (k b')`.
+- `B₁ = shift(subst_outer(Bool, m, params_terms, 1), n-pos = 1, 0) = Bool` (Bool
+  is closed — shift is a no-op).
+- `ih_ty = Π(Bool). M (k b')` = `(b' : Bool) -> M (k b')` — exactly `14 §3.1`'s
+  `(b:B) → M (k b)`. ✔
+
+The full `Node` method is then
+`λ(b:Bool). λ(k:Bool→WTree). λ(ih:(b':Bool)→M (k b')). body` — byte-identical to
+`method_type ind Node M [] []`, which is what the kernel checks the emitted
+`Elim` against.
+
+For the real target, `ITree`'s `Vis op k` with `k : Resp op -> ITree E Resp R`
+is the same shape with `nb = 1` and a branch domain `B₁ = Resp op` that
+**depends on the earlier field** `op` — handled automatically:
+`subst_outer(&branching_tel[0], m, &params_terms, pos+0)` keeps `op`'s reference
+at its correct index (`branching_tel[0]` is already in context
+`[Δ_p, args_before_pos]`), and `shift(_, n-pos, 0)` lifts it past the remaining
+args. No special-casing.
+
+### Soundness posture (why front-loading is safe)
+
+This is a **completeness** fix emitted into the outer ring: the `Term::Elim` the
+match compiler produces flows through the normal declaration path and is
+**independently rechecked by the kernel** against `method_type` (AC4 pins the
+exact recheck site). A mis-built IH slot therefore yields an `Elim` whose
+methods do not match `method_type` and the kernel **rejects** it —
+over-rejection (completeness), never an admitted unsound term. The enclave
+front-loads the
+arithmetic so *correct* programs are *admitted* (AC1); the kernel recheck is the
+backstop that keeps any residual slip **fail-closed**.
 
 ## Acceptance criteria (all testable)
 
