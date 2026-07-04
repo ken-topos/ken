@@ -98,6 +98,20 @@ the polymorphic family gated on a bounded multi-param-`class` extension). The
 family is named **`view`** (operator's call) — SURF-1's retirement of the `view`
 keyword frees the word, and `view` is the standard term for a read projection.
 
+The **Layer-2 keyed-collection laws** — `delete`,
+`union`/`intersection`/`difference` (a **combining-function** `union`, subsuming
+both biases), `keys`/`values` coherence — plus the **set algebra** (`∪`/`∩`/`∖`,
+stated **membership-extensionally**, never `Equal (Set K)`: same-key-set trees
+differ in shape) and the **relations frontier** (composition, converse, the
+reflexive/symmetric/transitive predicates, transitive closure) are pinned in
+**`58-maps-sets-relations.md`** (CAT-4). `delete` is **rebuild-via-`fromList`**
+(reusing the landed `preservesOrdered`); a relation is `Map K (Set K)`
+adjacency; and the transitive closure is **bounded-reachability `IsTrue`** —
+`Ω`-native, the `Perm` move again, never a raw proof-relevant inductive
+(`58 §7`), its faithfulness proof + `size` a designed-and-deferred fast-follow.
+The `Nat` carrier (a net-new `Axiom`-free `leqNat`) is the discriminator floor,
+not the `Axiom`-holed `Ord Int`/`Ord Char`.
+
 ## 4. I/O, effects, serialization
 
 - Effect interfaces (`../30-surface/36`):
