@@ -17,12 +17,15 @@ use ken_interp::eval::{eval, EvalStore, EvalVal, ListCharIds};
 use ken_kernel::{Decl, GlobalId};
 
 const COLLECTIONS_KEN: &str = include_str!("../../../packages/collections/collections.ken");
+const TRANSPORT_KEN: &str = include_str!("../../../packages/transport/transport.ken");
 const MAP_KEN: &str = include_str!("../../../packages/collections/map.ken");
 
 fn mk_env() -> ElabEnv {
     let mut env = ElabEnv::new().expect("base env");
     env.elaborate_file(COLLECTIONS_KEN)
         .expect("packages/collections/collections.ken must elaborate");
+    env.elaborate_file(TRANSPORT_KEN)
+        .expect("packages/transport/transport.ken must elaborate");
     env.elaborate_file(MAP_KEN)
         .expect("packages/collections/map.ken must elaborate");
     env
@@ -557,6 +560,136 @@ fn tolistordered_law4_is_a_real_general_proof_term() {
         "consSortedHead",
         "allKeysToAllInList",
         "allInListAppendIntro",
+    ] {
+        let id = env.globals[name];
+        assert!(
+            matches!(env.env.lookup(id), Some(Decl::Transparent { .. })),
+            "{name} must be a real proof term, not a postulate"
+        );
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Law 1 (`54 §5.1`, Map capstone unit 2) — `preservesOrdered`
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn preservesordered_law1_is_a_real_general_proof_term() {
+    let env = mk_env();
+    // `preservesOrdered : ... -> Ordered m -> Ordered (insert key val m)`
+    // must be a real Decl::Transparent proof term (never a postulate) —
+    // the whole-body `declare_def` kernel recheck for the top-level
+    // induction plus every supporting transport bridge / comparison-
+    // independent lemma / totality-derived reflection it composes.
+    for name in [
+        "preservesOrdered",
+        "insertCaseTransportDispatch",
+        "dispatchOnQ1",
+        "dispatchOnQ2",
+        "insertCaseTransportOverwrite",
+        "insertCaseTransportIntoL",
+        "insertCaseTransportIntoR",
+        "insertPreservesAllKeys",
+        "allKeysTransBelow",
+        "allKeysTransAbove",
+        "deriveFromFalse",
+    ] {
+        let id = env.globals[name];
+        assert!(
+            matches!(env.env.lookup(id), Some(Decl::Transparent { .. })),
+            "{name} must be a real proof term, not a postulate"
+        );
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Law 2 (`54 §5.2`, Map capstone unit 2) — `lookupFoundAfterInsert`
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn lookupfoundafterinsert_law2_is_a_real_general_proof_term() {
+    let env = mk_env();
+    // `lookupFoundAfterInsert : ... -> lookup key (insert key val m) =
+    // Some val` must be a real Decl::Transparent proof term (never a
+    // postulate) — reuses Law 1's goal-generic transport bridges directly
+    // (asserted there), plus its own lookup-side step mirrors/bridges.
+    for name in [
+        "lookupFoundAfterInsert",
+        "lookupFoundDispatch",
+        "lookupFoundDispatchQ1",
+        "lookupFoundDispatchQ2",
+        "lookupOverwriteResult",
+        "lookupIntoLBridge",
+        "lookupIntoRBridge",
+    ] {
+        let id = env.globals[name];
+        assert!(
+            matches!(env.env.lookup(id), Some(Decl::Transparent { .. })),
+            "{name} must be a real proof term, not a postulate"
+        );
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Law 3 (`54 §5.2`, Map capstone unit 2) — `lookupLocality`
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn lookuplocality_law3_is_a_real_general_proof_term() {
+    let env = mk_env();
+    // `lookupLocality : distinct key key' -> lookup key' (insert key val m)
+    // = lookup key' m` must be a real Decl::Transparent proof term — reuses
+    // Law 1's goal-generic transport bridges directly (asserted there) and
+    // Law 2's lookupIntoLBridge/IntoRBridge, plus its own agreement lemmas.
+    for name in [
+        "lookupLocality",
+        "lookupLocalityNodeDispatch",
+        "lookupLocalityQ2Dispatch",
+        "lookupLeafLocalityWitness",
+        "lookupOverwriteLocalityWitness",
+        "lookupIntoLLocalityWitness",
+        "lookupIntoRLocalityWitness",
+        "boolValueEqFromBiimpl",
+        "lookupOverwriteAgreesOuter",
+        "lookupOverwriteAgreesInner",
+    ] {
+        let id = env.globals[name];
+        assert!(
+            matches!(env.env.lookup(id), Some(Decl::Transparent { .. })),
+            "{name} must be a real proof term, not a postulate"
+        );
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Law 5 (`54 §5.3`, Map capstone unit 2 — the final law) — `lookupAssocAgree`
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn lookupassocagree_law5_is_a_real_general_proof_term() {
+    let env = mk_env();
+    // `lookupAssocAgree : Ordered m -> Distinct leq m -> lookup key m =
+    // assoc key (toList m)` must be a real Decl::Transparent proof term —
+    // the restated statement (Distinct precondition added after the
+    // original false statement was caught and escalated), reusing Law 1's
+    // goal-generic transport bridges and Law 2's lookup-side bridges.
+    for name in [
+        "lookupAssocAgree",
+        "law5NodeDispatch",
+        "law5NodeQ2Dispatch",
+        "law5DistinctL",
+        "law5DistinctR",
+        "orderEquiv",
+        "NoDup",
+        "Distinct",
+        "assocSkipPrefix",
+        "assocPrefixWins",
+        "assocNoMatchIsNone",
+        "noDupAppendHeadExcl",
+        "noDupAppendLeft",
+        "noDupAppendRight",
+        "notMatchTransferViaEquiv",
+        "lookupStopBridge",
     ] {
         let id = env.globals[name];
         assert!(
