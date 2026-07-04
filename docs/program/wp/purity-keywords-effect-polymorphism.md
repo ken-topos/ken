@@ -200,3 +200,131 @@ Anything **beyond** this scope — a kernel touch, a new `Term`/`Decl`, reopenin
   first. CAT-1 (in flight) is unaffected and is migrated by D4.
 - **Conformance:** `spec/conformance/surface/` (declarations + effects) — the
   discriminating `fn`/`proc` and row-polymorphism cases above.
+
+## Enclave elaboration (T1, `origin/main @ 24a414b`; frame `@ cb90bcf`)
+
+The frame elaborated to team-ready rigor. Division of labour mirrored CAT-1:
+Architect owned the starred mechanism (D1); spec-author transcribed all pins
+into `/spec` (Architect fidelity-gates the D1 prose); conformance-validator
+authored the discriminating seed. **Kernel-untouched throughout** — every pin is
+surface grammar + elaborator + checker over the DECIDED `OQ-8` model; `git
+diff origin/main -- crates/ken-kernel/` stays empty, no new `Term`/`Decl` (AC5).
+
+### E1 — Purity split `const`/`fn`/`proc` (D2, spec-author) → `36 §1.6`
+
+The classification is defined over a definition's **declared** purity class
+(`36 §1.6.1`): impure (`ρ_decl` non-empty, or contains a row variable, or a
+`space` op) ⇒ `proc` at any arity; pure ⇒ `const` (0 explicit value params) or
+`fn` (≥1). The split is **total** and **decidable** (all inputs are syntactic or
+the terminating row fixpoint). Grammar: `32 §1` (the `decl` production; only
+`proc` carries a `visits` clause) + `33 §1`; keywords: `31 §4` (`const`/`fn`/
+`proc` **fixed**, not `OQ-syntax`; `view` retired).
+
+- **The bidirectional check reuses the landed escape gate for the hard half**
+  (`36 §1.6.2`). Because `fn`/`const` carry **no `visits` clause** (`ρ_decl =
+  ∅`), the existing `§1.4` escape check *is* the "`fn` that performs/infers an
+  effect is a compile error" direction (AC1) — SURF-1 only re-labels the
+  pure-default gate as the purity-signal guarantee. The genuinely **new**
+  direction is the reverse: a `proc` provably pure (empty declared row, no
+  `space` op) is a should-be-`fn`/`const` mismatch.
+- **§5(a) mismatch severity — HARD ERROR** (pinned, `36 §1.6.3`). A lint leaves
+  the signal advisory, so a reader could not trust the keyword without
+  re-deriving effects — defeating the point. Both directions hard = the
+  *consistent* choice, since the `fn`-false-purity direction was already hard.
+- **§5(b) "zero parameter" = zero *explicit value* parameters** (pinned, `36
+  §1.6.3`). Implicit `{…}` binders — type, level, instance, or row (§1.5) — do
+  **not** count: grounded on `39 §2.2`, an implicit is inserted/solved at each
+  use site and erased, so a def whose only parameters are implicit is used
+  exactly as a constant (`const nil {A} : List A` is written `nil`). `fn` begins
+  at the first explicit value parameter.
+
+### E2 — Row-variable surface (D1 ★, Architect-grounded) → `36 §1.5`
+
+Architect's D1 ruling (`evt_53ybqtzjfv7yx`), transcribed by spec-author into a
+new `36 §1.5` (normative extension of `§1.2`/`§1.3`); Architect fidelity-gates
+the committed prose. **Headline: the internal row-variable machinery is already
+landed; D1's gap is purely surface-writability + one bounded fixpoint lift.**
+
+- **Landed ground truth (grep, `crates/ken-elaborator/src/effects/`):**
+  `RowVar(u32)` + `RowType = Concrete | Var | Join` (`row.rs`), symbolic
+  `infer_row_poly` (`row_poly.rs`), `check_row_poly_escape` with the `Var(x) ⊆
+  Var(x)` rule, `apply_subst` for instantiation. But `RowVar` is constructed at
+  **exactly one site** (`extract.rs`, fired only by a HOF-effectful parameter) —
+  **no surface path from a written `visits [e]` to a `RowType::Var`** — `§1.3`
+  "no surface row-variable binder" verbatim. D1 adds that surface path. (These
+  code anchors are perishable build-facing detail — kept out of the normative
+  spec, which states only the model.)
+- **Load-bearing pins carried into `36 §1.5`** (Architect's fidelity-gate list):
+  - **Surface variable required, not optional** — `§3.1` guarantee 1
+    (manifest-in-the-type); the purity check must read the poly row off the
+    signature. `[e]` (bare) and `[E | e]` (open tail) both accepted; a row
+    variable **binds as an implicit parameter**, one variable, two occurrences
+    (HOF-arg latent row + the declared row), same `RowVar`.
+  - **Static closure is structural** (AC3) — a `RowVar` is eliminated only by
+    instantiation at a concrete call or by deferral; at any boundary the row is
+    concrete. No runtime effect discovery.
+  - **No `Cap e`** — a row-poly `proc` performs its polymorphic effects only
+    through its HOF argument (a closure the caller built with its own caps); its
+    own direct-perform row is `∅`. Authority rides the argument.
+  - **Recursive-fixpoint lift = the one build seam** — `§1.3`'s fixpoint is
+    concrete-only; a recursive row-poly def (`traverse` folds a `List`, so it
+    self-calls) needs it lifted to range over `RowType`. Monotone, idempotent
+    (`e ∪ e = e`), terminating — the row-poly analog of CAT-1's bounded
+    extension, outer-ring/kernel-untouched. **Flagged so the build won't hit it
+    cold.**
+  - **Fail-closed completeness residual** (for CV) — the `x ⊆ [E | e]` subset
+    test is conservative single-arm; it *under-accepts* a straddling row
+    (rejects-valid), never over-accepts. A known-completeness marker, not a
+    soundness flip.
+- **Register:** pure spec addition, **not** a fresh operator OQ — recorded as an
+  `OQ-8` child pin (`spec/90-open-decisions.md`).
+
+### E3 — Unicode surface (D3) → `31 §1c`
+
+**Answer: both lexer and formatter**, a direct consequence of the DECIDED
+`OQ-syntax` principles (`31 §1a`), not a new fork. The lexer accepts a curated
+Unicode glyph and its ASCII transliteration as the **same token** (principle 2 —
+**ASCII stays accepted forever**); the mandated formatter **emits canonical
+Unicode** on save (principle 3); **keywords stay ASCII words** (principle 4, so
+`const`/`fn`/`proc` are ASCII); confusable-rejection is a hard lexer gate
+(principle 5, TR39). BL3 realizes the lexer + formatter and converts the corpus
+(with D4).
+
+### E4 — Migration (D4) — rule + worked classification
+
+- **The rule:** every existing `.ken` and doc snippet migrates `view`/top-level
+  `let` → `const`/`fn`/`proc` **classified by the checker's own purity
+  inference** — mechanical and checked, not hand-judged. Land with the
+  Unicode conversion (D3) as **one workspace-green unit**; rosetta 16/0; no
+  `.ken` retains `view` (AC6).
+- **Worked classification of the landed corpus** (grounding grep — ~444 `view` +
+  ~18 top-level `let`):
+  - **`const`** ← a pure value, 0 explicit value params (a bare `let x = …`).
+  - **`fn`** ← a pure function, ≥1 explicit value param — e.g. `decimalAdd`,
+    `eqChar`, `isSorted`, `list_append`, CAT-1's `list_assoc`/`bool_and`.
+  - **`proc`** ← performs a concrete effect or uses a `Cap` — e.g. `read_bytes`
+    (`FS a`, `Cap a`), `print_line` (`IO Unit`); **or** a `space`/`becomes` op.
+  - **`proc`** ← effect-polymorphic (declares `[e]`) — **none yet** (CAT-2
+    `traverse`).
+
+  The corpus has **no** surface row-variable today, so migration needs no `[e]`
+  spelling — every existing def is pure (`→ fn`/`const`) or concrete-effectful
+  (`→ proc`). Landed `map`-style HOFs keep **pure** arrows, so they stay `fn`
+  (only an *effect-polymorphic* arrow makes a HOF a `proc`).
+- **Keyword-collision hazard (grounded):** **no** `.ken` in the corpus names an
+  identifier `const`/`fn`/`proc` (grep-verified), so the migration is collision-
+  free there. The **only** collision is the spec's V0 K-combinator example `view
+  const` → renamed `fn konst` (`32 §8`).
+
+### E5 — Build sequencing (held for the GPT window)
+
+1. **D1 recursive-fixpoint lift** (the one bounded seam, E2) — lands first; it
+   **gates `traverse` and CAT-2** (the first surface effect-polymorphic def).
+2. **D2 checker** — the bidirectional purity check over the existing row
+   inference; the `fn`-false-purity half is the landed `§1.4` gate.
+3. **D3 + D4** — the Unicode lexer/formatter and the `view →`
+   `const`/`fn`/`proc` + ASCII→Unicode corpus migration, landed together as one
+   workspace-green unit.
+
+Nothing is held on the enclave side (D1 landed, so the row-variable-dependent
+pieces are folded); all of the above is **outer-ring, kernel-untouched**.

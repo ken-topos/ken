@@ -14,8 +14,9 @@ import ::= "import" ModPath ("as" ConId)? ("(" name ("," name)* ")")?
         |  "use" ModPath  -- bring names into scope unqualified
 
 decl ::=
-    "view" ident binder* (":" type)? effects? contract* constraints? "=" expr  -- function
-  | "let"  ident (":" type)? "=" expr  -- value
+    "const" ident binder* (":" type)? contract* constraints? "=" expr  -- pure value (36 §1.6)
+  | "fn"    ident binder* (":" type)? contract* constraints? "=" expr  -- pure function
+  | "proc"  ident binder* (":" type)? effects? contract* constraints? "=" expr  -- effectful / imperative
   | "type" ConId tyvar* "=" type  -- alias / refinement
   | "record" ConId tyvar* "{" field ("," field)* "}" derive?  -- product
   | "data" ConId tyvar* "=" ctor ("|" ctor)* derive?  -- sum / inductive
@@ -35,10 +36,21 @@ binder  ::= "(" ident+ ":" type ")" | "{" ident+ ":" type "}"   -- {…} implici
 field   ::= ident ":" type
 ctor    ::= ConId arg_types?                       -- e.g.  Cons a (List a)
 arg_types ::= type+ | "{" field ("," field)* "}"   -- positional or named
-effects ::= "visits" "[" ConId ("," ConId)* "]"    -- effect row (36)
+effects ::= "visits" "[" row "]"                   -- effect row (36 §1), proc only
+row     ::= ConId ("," ConId)*                      -- concrete row  [FS, Console]
+          | ident                                   -- a row variable  [e]  (36 §1.5)
+          | ConId ("," ConId)* "|" ident            -- open row  [FS | e]  (concrete head + poly tail)
 contract::= "requires" expr | "ensures" expr       -- (20)
 derive  ::= "derive" "(" ConId ("," ConId)* ")"    -- DecEq, Show, … (33)
 ```
+
+**Definition keywords are purity-checked (`33 §1`, `36 §1.6`).** `const`/`fn`/
+`proc` replace the retired `view`; the grammar admits `binder*` on all, but
+the **bidirectional purity check** (`36 §1.6.2`) constrains which is legal:
+`const` requires **zero explicit value parameters**, `fn` requires **≥1**, and
+only `proc` may carry a `visits` row (or a row variable). A `const`/`fn`
+with an effect, or the wrong arity, is a **hard error** — a grammar-accepted but
+purity-rejected program, caught at elaboration (`36 §1.6.3`), not by the parser.
 
 ## 2. Types
 
@@ -104,7 +116,7 @@ type annotation. The two `expr`-position arrow forms above (`(x : A) -> B` and
 `A -> B`) are the **same construct** as the `type`-position arrows of §2 and
 **elaborate identically to the kernel `Pi`** (`39`); no kernel variant is added.
 This closes the gap where an arrow type could be *written* in an annotation but
-not, e.g., passed as an argument, bound by `let`, or returned (`view f : Type =
+not, e.g., passed as an argument, bound by `let`, or returned (`const f : Type =
 Int -> Int`). Two disambiguations, both by existing lookahead:
 
 - The lambda form `\ binder+ -> expr` (and `λ binder+ . expr`) is unambiguous
@@ -142,7 +154,7 @@ Spec forms (`../20-verification/21-spec-syntax.md`) are grammar too:
 ```
 spec_decl ::= "prove" ident ":" type
             | "law" ConId "(" tyvar ")" "{" field ("," field)* "}"
-contract is part of `view` (§1); refinements `{x:A|φ}` are types (§2).
+contract is part of `fn`/`proc` (§1); refinements `{x:A|φ}` are types (§2).
 ```
 
 ## 6. Precedence and associativity (defaults)
@@ -190,8 +202,8 @@ operators or fixity, no implicit binders `{…}`, no effects/contracts, no
 literals. Every V0 argument is explicit.
 
 ```
-decl   ::= "view" ident binder+ (":" type)? "=" expr   -- named function
-         | "let"  ident (":" type)?         "=" expr   -- value definition
+decl   ::= "fn"    ident binder+ (":" type)? "=" expr   -- pure function (≥1 param)
+         | "const" ident          (":" type)? "=" expr   -- pure value (0 params)
 binder ::= "(" ident+ ":" type ")"                     -- explicit telescope
 type   ::= "(" ident ":" type ")" "->" type            -- dependent Π
          | type "->" type                               -- non-dependent arrow
@@ -220,10 +232,17 @@ kernel environment (`31 §2`, `39 §5.2`). This is genuinely minimal: enough to
 write
 
 ```
-view id (A : Type) (x : A) : A = x
-view const (A : Type) (B : Type) (x : A) (y : B) : A = x
-view apply (A : Type) (B : Type) (f : (x : A) -> B) (x : A) : B = f x
+fn id (A : Type) (x : A) : A = x
+fn konst (A : Type) (B : Type) (x : A) (y : B) : A = x   -- 'const' is now a keyword
+fn apply (A : Type) (B : Type) (f : (x : A) -> B) (x : A) : B = f x
 ```
+
+V0 is pure-only (no effects, `§8`), so it needs `fn`/`const` and never `proc`.
+The K combinator is renamed `konst` because `const` is now a reserved keyword
+(`31 §4`) — the one keyword-collision the migration (D4) must rewrite; no `.ken`
+in the corpus names a def `const`/`fn`/`proc`. The landed V0 parser still
+spells `view`/`let` until D4 migrates it (perishable; the surface above is the
+target).
 
 and have each parse → elaborate (`39 §5`) → kernel-check (`18 §3`). Everything
 else in §1–§5 is out of V0 and owned by a later WP (the full surface, Team

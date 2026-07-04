@@ -22,13 +22,13 @@
 
 ## 1. Effects as a static row
 
-A `view` is **pure** by default. A function that performs an effect declares an
-**effect row**:
+A definition is **pure** by default (a `const` or `fn`, §1.6); a `proc` that
+performs an effect declares an **effect row**:
 
 ```
-view read_config (path : String) : Config  visits [FS] = …
-view now () : Instant                       visits [Clock] = …
-view greet (name : String) : Unit           visits [Console] = …
+proc read_config (path : String) : Config  visits [FS] = …
+proc now () : Instant                       visits [Clock] = …
+proc greet (name : String) : Unit           visits [Console] = …
 ```
 
 - An **effect** (`FS`, `Clock`, `Console`, `Net`, `Rand`, …) is a named
@@ -39,8 +39,8 @@ view greet (name : String) : Unit           visits [Console] = …
   function's effects from its body (transitive closure of what it calls), and
   reports a mismatch where a declared row omits an effect actually used. So
   effects cannot be silently performed — a pure-typed function is pure (the
-  verification layer relies on this: a `view` with no row is a mathematical
-  function and its `ensures` are about values, not world-state).
+  verification layer relies on this: a `fn`/`const` with no row is a
+  mathematical function and its `ensures` are about values, not world-state).
 - **Purity is the default and the common case;** only boundary functions carry
   rows, which keeps the verification core (`../20-verification/`) reasoning over
   pure terms.
@@ -153,7 +153,7 @@ elsewhere. Let `ρ_inf = infer_row(body)`. The check is:
 - **Pure by default = the headline case.** No `visits` ⇒ `ρ_decl = ∅` ⇒ any
   non-empty `ρ_inf` escapes ⇒ **performing an undeclared effect is a compile
   error** (acceptance criterion 1). This is the guarantee the verification core
-  rests on: a row-`∅` `view` is *provably* effect-free and may be treated as a
+  rests on: a row-`∅` `fn`/`const` is *provably* effect-free and treated as a
   mathematical function (`../20-verification/`).
 
 The escape check is the **single soundness-relevant gate** of the row system, so
@@ -161,6 +161,256 @@ its conformance must *discriminate* (§7.5, COORDINATION §7): the same body
 **accepts** under a correct `visits` and **rejects** when one effect is dropped
 — a verdict flip, not a single happy path — exercised with **≥2 distinct
 effects**.
+
+## 1.5 Row variables — the surface for effect polymorphism (`OQ-8` child)
+
+> Status: **normative extension of §1.2/§1.3** (Architect-grounded on the landed
+> effect checker, D1). `OQ-8` DECIDED the model — interaction trees, latent
+> arrows, capability-passing, Koka rows the cited precedent; the row variable is
+> *implied by that denotation* and here made **surface-writable**. This is a
+> pure spec addition (surface syntax + a bounded inference lift), **not** a new
+> operator fork and **kernel-untouched**; recorded in the OQ register as an
+> `OQ-8` child pin.
+
+Row polymorphism is **already in the model** — §1.1's latent arrow makes `map`'s
+row depend on its argument's row, and §1.3 solves higher-order calls by
+*substituting the actual argument's latent row*. But that polymorphism is
+**inferred-from-the-argument only**: §1.3 states plainly *"there is no surface
+row-variable binder."* A higher-order function that is *declared* to be
+effect-polymorphic — `traverse`, whose signature must **name** the effect its
+callback may perform — has no way to write that variable. §1.5 adds it.
+
+### 1.5.1 Syntax — a bare row variable and the open-row tail
+
+A **row variable** is a lowercase identifier standing for an unknown row,
+written in brackets exactly where a concrete row goes:
+
+```
+proc traverse (f : a →[e] b) (xs : List a) : List b  visits [e]
+```
+
+- **`[e]`** — a **fully polymorphic** row: the definition performs *exactly*
+  whatever its higher-order argument performs, nothing more.
+- **`[E | e]`** — an **open row**: a concrete head `E` the definition performs
+  *itself*, joined with a polymorphic tail `e` it inherits from an argument
+  (e.g. a `proc` that logs to `Console` **and** runs a caller-supplied callback
+  is `visits [Console | e]`). This denotes to the row join `⟦E⟧ ∪ ⟦e⟧` (§1.1)
+  and is the bullet the row lattice's `∪` already provides.
+
+Both forms are accepted; a bare `[e]` is the `E = ∅` special case of `[E | e]`.
+The `→[e]` latent-arrow spelling (§1.1) and the monadic `Eff [e] b` spelling
+denote to the same latent row on the argument's arrow; surface *spelling* stays
+`OQ-syntax`; the **construct** — a row variable in a declared row — normative.
+
+### 1.5.2 Binding — an implicit parameter, one variable, two occurrences
+
+A row variable **binds as an implicit parameter**, exactly like an implicit
+type or level parameter (`39 §2.2`) — **not a new binder kind**. (Precedent:
+`State s` already threads an implicit *type* parameter into an effect label,
+§4.5.1; a row variable threads an implicit *row*.) It is **bound once**
+and **referenced twice** — in the higher-order argument's latent row and in the
+definition's own declared row — and the surface resolver maps **both occurrences
+to the same variable**. So `traverse` above elaborates with a leading implicit
+`{e}`; its escape obligation (§1.4) is the reflexive `e ⊆ e`, which holds by
+construction.
+
+**The surface variable is required, not optional (§3.1 guarantee 1).** A
+function's effects must be recoverable from its **type**, never only from its
+body (manifest-in-the-type). A purely-inferred, never-written row variable would
+violate that for the polymorphic case, and the purity check (§1.6) must read the
+polymorphic row **off the signature**. So a row-polymorphic definition **must**
+write its variable in the declared row; an effect-polymorphic body with no
+declared variable is a manifest-in-the-type violation, reported like an escape
+(§1.4).
+
+### 1.5.3 Static closure at every instantiation (AC3 — structural)
+
+A row variable is eliminated in exactly one of two ways, and **neither discovers
+an effect at runtime**:
+
+- **Instantiation.** A call that supplies a *concrete* higher-order argument
+  substitutes the variable with that argument's concrete latent row (§1.3's
+  substitution, lifted to the named variable). The result row is concrete.
+- **Deferral.** A caller that is *itself* row-polymorphic passes the variable
+  through unchanged — nothing is performed *here*; the obligation rides onward
+  on the caller's own declared variable.
+
+At any **program boundary** — a handler (§5) or the runtime driver (§7.2) — the
+row must be **concrete**: you cannot *run* a variable. Every `Vis` node is a
+static `perform` or comes from a statically-typed higher-order closure. So every
+concrete instantiation of a row-polymorphic definition has a **statically-closed
+effect set** — AC3 is a **structural property of elaboration**, not a runtime
+check.
+
+### 1.5.4 Interaction with capabilities and handlers (no break)
+
+- **No `Cap e` for the variable part — and that is correct (§2.5/§3).** A
+  row-polymorphic `proc` performs its polymorphic effects **only through its
+  higher-order argument** — a closure the *caller* built with its own
+  capabilities in scope. `traverse` never `perform`s `e` itself; it splices the
+  callback's sub-trees with `bind` (§2.4). So the capability-passing translation
+  needs **no capability parameter for `e`**: the definition's own open row of
+  *direct* performs is `∅` (consistent with §1.2's λ rule — building a closure
+  performs nothing). Authority rides the function argument, exactly where the
+  effect does.
+- **Row-polymorphic handling (§5).** A handler `ITree (E ⊕ F) R → ITree F R'`
+  discharges `E` and leaves `F`; if the residual `F` is a variable, the residual
+  tree `ITree (Var e) R'` stays polymorphic — a handler may fold a *subset* of a
+  polymorphic row and leave the rest polymorphic. Totality + single-consumption
+  (§5.2) are properties of the **fold** (`elim_ITree`) and the handler clauses,
+  **invariant** under whether the residual row is concrete or a variable (the
+  variable is a type-level artifact; the tree the fold walks is unchanged). No
+  break to the `OQ-9` totality story.
+
+### 1.5.5 Recursion over a row variable — the fixpoint lift (build seam)
+
+§1.3's least-fixpoint infers a **recursive** definition's row by iterating to a
+fixed point over the call graph. Today it ranges over **concrete** rows. A
+recursive *row-polymorphic* definition — and `traverse` is one the moment it is
+written, since it folds a `List` recursively — needs that fixpoint **lifted
+to range over row-variable rows**. The lift is mechanically stable: the
+join over a variable is idempotent (`e ∪ e = e`), the update stays monotone, and
+the iteration still terminates (a variable adds no new lattice height). This is
+the row-polymorphism analog of CAT-1's bounded elaborator extension —
+**outer-ring, kernel-untouched, no new `Term`/`Decl`** — flagged here so
+the build does not meet it cold (the non-recursive symbolic path already exists;
+only the recursive fixpoint needs the lift).
+
+**Fail-closed completeness residual (a note for conformance, not a soundness
+hole).** The subset test for an open row — is a concrete row `⊆ [E | e]`? —
+is **conservative**: it may *under-accept* a concrete row straddling both the
+concrete head and the polymorphic tail. That is a **completeness** gap (it
+rejects a valid program), **never** an over-acceptance (no effect can silently
+escape), so it is sound for the escape gate; the residual is a *rejected-valid*,
+which conformance pins as a known-completeness marker (§7.5), never a verdict
+flip on soundness.
+
+## 1.6 Purity as a checked keyword — `const` / `fn` / `proc` (SURF-1)
+
+> Status: **normative.** Operator ruling (Pat, 2026-07-04): the single
+> definition keyword `view` is **retired** and split into three keywords that
+> **agree, by a checked bidirectional rule, with a definition's static purity**.
+> The keyword becomes a **reliable signal** — reading `fn` guarantees "an
+> unconditionally pure function"; `proc` warns "at least potentially
+> impure/imperative." Purity is **checked at the definition site**, not a
+> convention. Grammar: `32 §1`, `33 §1`. Kernel-untouched (this is a
+> surface keyword + an elaborator check over the §1.2–§1.5 row inference; no new
+> kernel rule, `Term`, or `Decl`). Recorded in the OQ register as an `OQ-8`
+> child pin. Spellings `const`/`fn`/`proc` are **fixed** (not `OQ-syntax`).
+
+### 1.6.1 The classification — static purity, three keywords
+
+Classify a definition by its **declared purity class** — a syntactic function of
+its declared row `ρ_decl` (§1.4; `∅` when no `visits` is written), whether
+it is a `space`/`becomes` operation (§4), and its count of **explicit value
+parameters** `p`:
+
+- **Impure** ⟺ `ρ_decl` is **non-empty**, **or** `ρ_decl` **contains a row
+  variable** (§1.5), **or** the definition is a `space` operation. An impure
+  definition is a **`proc`**, at **any** arity (including a nullary-effectful
+  `proc now () : Instant visits [Clock]` and a row-polymorphic
+  `proc traverse … visits [e]`).
+- **Pure** ⟺ `ρ_decl = ∅` **and** not a `space` operation (whence the escape
+  check, §1.4, forces the inferred row `ρ_inf = ∅` too — pure on *both* faces).
+  A pure definition is:
+  - a **`const`** if it has **zero explicit value parameters** — a pure value.
+    By referential transparency a nullary pure "function" always yields the same
+    value, so it *is* a constant (subsumes the pure top-level `let`/value, `33
+    §1`).
+  - an **`fn`** if it has **≥1 explicit value parameter** — a pure function the
+    verification layer may treat as a mathematical function (§1, `../20-
+    verification/`).
+
+The split is **total**: every well-formed definition is exactly one of
+`{const, fn, proc}`, because `{pure-nullary, pure-with-arguments, impure}`
+partition every definition. And it is **decidable**: `ρ_decl` and the
+`space`-op and arity facts are syntactic, and `ρ_inf` is the terminating
+fixpoint of §1.3/§1.5.
+
+**Effect-polymorphic ≠ pure (the crux that makes the split total).** A `proc`
+whose row is a *variable* `[e]` is impure **even though** it type-checks + runs
+**pure** when its callback is instantiated at the empty row: `traverse`
+instantiated with a pure callback denotes to an effect-free tree, yet `traverse`
+itself is a `proc`. It classifies the **abstraction's guarantee**, never
+its best-case instantiation — `fn` promises purity *unconditionally*, which a
+row-polymorphic definition cannot honour. This is why the polymorphic case lives
+decisively on the `proc` side (§1.5, §2.2 crux).
+
+### 1.6.2 The bidirectional check — the keyword cannot lie
+
+The keyword is verified against **both** the signature and the body /
+transitively-inferred effects; a disagreement in **either** direction is a
+**hard error** (§1.6.3). Two directions, one already-landed gate underneath:
+
+- **`fn`/`const` claims purity — the body must be pure.** Because `fn`/`const`
+  carry **no `visits` clause** (`ρ_decl = ∅`), the existing escape check (§1.4)
+  *is* this direction: any non-empty `ρ_inf` escapes `∅` and is rejected, naming
+  the offending `perform`/call. So **"an `fn` that performs or transitively
+  infers an effect is a compile error"** (AC1) is §1.4's pure-default gate — no
+  new machinery; SURF-1 only *re-labels* it as the purity-signal guarantee.
+- **`proc` claims impurity — the signature must earn it.** A `proc` whose
+  declared row is empty and which is not a `space` op (so it is *provably pure*)
+  is a **should-be-`fn`/`const`** mismatch. This is the genuinely new
+  reverse-direction check: `proc` must carry a non-empty row, a row variable, or
+  a `space` op. (A `proc` that declares `visits [FS]` yet whose body is now
+  pure is **not** this — its declared row is non-empty, so `proc` is honest;
+  declaring more than you use is the §1.4 headroom rule, a legitimate stable
+  interface.)
+- **Arity within the pure class.** A pure `fn` with **zero** explicit value
+  parameters is a **should-be-`const`** mismatch; a `const` with **≥1** is a
+  **should-be-`fn`** mismatch (`const` is the zero-parameter form).
+
+The signal is reliable **only if it cannot lie** — so no direction is a silent
+default; each mismatch is reported at the definition site.
+
+### 1.6.3 Pinned sub-decisions (SURF-1 §5)
+
+- **(a) Mismatch severity — HARD ERROR (pinned).** Every mismatch above — the
+  `proc`-should-be-`fn`/`const` reverse direction and both arity mismatches — is
+  a **compile error**, not a lint. Rationale, grounded in the reliable-signal
+  requirement: a lint leaves the signal *advisory*, so a reader could not trust
+  `fn`/`const`/`proc` to mean what it says without re-deriving the effect set —
+  which defeats the entire point of moving purity from convention to a checked
+  declaration. A reliable bidirectional signal requires the keyword and the
+  static purity **cannot disagree in the accepted program**. (The `fn`-false-
+  purity direction was already hard — the §1.4 escape error — so hard-error in
+  both directions is the *consistent* choice, not a new severity.)
+- **(b) "Zero parameter" counts explicit value parameters only (pinned).**
+  `const` requires zero **explicit value** parameters; **implicit `{…}` binders
+  do not count** — whether type (`{A : Type}`), level, instance (`{d : C A}`,
+  `33 §5.4`), or row (`{e}`, §1.5). Grounded on `39 §2.2`: an implicit
+  argument is **inserted and solved by the elaborator at each use site** (never
+  written by the caller) and erased, so a definition whose only parameters are
+  implicit is **used exactly as a constant** — `nil {A} : List A` is written
+  `nil` at every occurrence, a polymorphic *constant family*, not a function one
+  applies to a value. Forcing it to `fn` would misread "you apply this to an
+  argument" onto something no caller ever applies. So `const nil {A : Type} :
+  List A` is a `const`; `fn` begins at the first **explicit** value parameter.
+
+### 1.6.4 `view` retired — role carry-over and kernel invariance
+
+`view` and the top-level `let` value are **removed**; every role maps onto
+the three keywords by the §1.6.1 rule:
+
+| former `view`/`let` | becomes |
+|---|---|
+| pure value, 0 explicit value params (incl. top-level `let`) | `const` |
+| pure function, ≥1 explicit value param | `fn` |
+| concrete effect at any arity (incl. nullary, `space` op) | `proc` |
+| effect-polymorphic (declares a row variable, §1.5) | `proc` |
+| operator (symbolic name, `33 §6`) | `fn`/`proc` (or `const` if nullary-pure) |
+
+The local `let … in …` **expression** (`32 §3`) is unchanged — only the
+*definition* keyword splits.
+
+**Kernel-untouched (AC5).** The classification is a surface keyword plus an
+elaborator check layered over the existing row inference (§1.2–§1.5); it emits
+the *same* core terms the kernel already checks (a pure definition still denotes
+to a plain term via the §2.4 collapse; an effectful one to an `ITree`). No new
+kernel rule, judgment, `Term`, or `Decl`; `trusted_base()` is byte-unchanged. A
+misclassification is caught as a **surface error** — a rejected valid program or
+a compile error — **never** an unsound acceptance (`39 §1`), the same
+untrusted-elaborator posture as the rest of `36`.
 
 ## 2. The encoding — three layers, one pure kernel (`OQ-8` DECIDED)
 
@@ -324,7 +574,7 @@ kernel term `⟦e⟧ : ITree ⟦ρ⟧ ⟦B⟧`:
   guarantees `ρ_g ⊆ ρ`, §1.4). It is itself an `elim_ITree` map over the `Vis`
   tags — pure. `g↓ caps …` is the callee's elaborated kernel term, taking its
   capability parameters (§2.5).
-- A **pure** `view` (`ρ = ∅`) denotes to `ITree 𝟘 ⟦B⟧`. No `Vis` node is
+- A **pure** `fn`/`const` (`ρ = ∅`) denotes to `ITree 𝟘 ⟦B⟧`. No `Vis` node is
   constructible (`𝟘.Op = Empty` is uninhabited), so `ITree 𝟘 ⟦B⟧ ≅ ⟦B⟧` and the
   elaborator **collapses** it to the plain term `⟦B⟧`: pure code pays nothing
   for the encoding and the kernel sees an ordinary term. This is the formal
@@ -347,7 +597,7 @@ function of row `ρ` takes one capability per **un-handled** effect of `ρ` as a
 extra leading parameter —
 
 ```
-view f (x:A) : B visits ρ
+proc f (x:A) : B visits ρ
   ⤳  f↓ : (caps : Π_{E ∈ ρ_open} Cap E) → ⟦A⟧ → ITree ⟦ρ⟧ ⟦B⟧
 ```
 
@@ -461,8 +711,8 @@ OS-level implementation:
 ```
 space Counter {
   mut n : Int = 0
-  view inc () : Unit  visits [Counter] = n becomes n + 1
-  view get () : Int   visits [Counter] = n
+  proc inc () : Unit  visits [Counter] = n becomes n + 1
+  proc get () : Int   visits [Counter] = n
 }
 ```
 
@@ -862,7 +1112,7 @@ always sound; it simply required a kernel feature (`K1.5`) that is now in.
 
 ```mermaid
 flowchart LR
-  src["surface decl<br/>view … visits ρ"] --> parse["parse + resolve<br/>(31, 32, 39 §5)"]
+  src["surface decl<br/>proc … visits ρ"] --> parse["parse + resolve<br/>(31, 32, 39 §5)"]
   parse --> rows["row inference §1.2<br/>+ escape check §1.4"]
   rows --> caps["capability-passing §2.5"]
   caps --> den["denotation ⟦·⟧ → ITree §2.4"]
@@ -925,7 +1175,7 @@ conformance corpus (§7.5) targets with discriminating cases.
 | `ITree E (R : Type ℓ_R)` | `Type (max ℓ_R ℓ_op ℓ_resp)` | inductive, predicative `max` (`12 §2`, `14 §1`; §2.1) |
 | `Cap E` | `Type ℓ_op` | a value type |
 | `State S` over `S : Type ℓ_S` | `ITree (State S) R : Type (max ℓ_R ℓ_S)` | `Op`,`Resp : Type ℓ_S` (§4.1) |
-| pure `view` (`ρ = ∅`) | `ITree 𝟘 R ≅ R : Type ℓ_R` | `𝟘.Op = Empty` collapses (§2.4) |
+| pure `fn`/`const` (`ρ = ∅`) | `ITree 𝟘 R ≅ R : Type ℓ_R` | `𝟘.Op = Empty` collapses (§2.4) |
 
 Every level is the **predicative `max`** of its parts: nothing drops a universe
 (`12 §2`), nothing lifts implicitly (`12 §3`); the elaborator emits explicit

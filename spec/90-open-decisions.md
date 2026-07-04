@@ -208,7 +208,16 @@ while drafting. Resolved items move to an ADR (`../docs/adr/`).
   `60-security/64`). A starter glyph↔ASCII table is in `30-surface/31 §1b`.
 - **Still iterating (team, under the principles):** the exact glyph for each
   construct (notably `≡`-vs-`==` equality and the lattice-op/`ℓ` ASCII),
-  layout-vs-brace details, the keyword set.
+  layout-vs-brace details, the keyword set — **except** the **definition
+  keywords**, now fixed: `view` is **retired**, split into `const`/`fn`/`proc`
+  (operator, SURF-1; `30-surface/36 §1.6`, `31 §4`), whose spellings are **not**
+  iterating.
+- **Resolved sub-item (SURF-1 D3, 2026-07-04):** the **Unicode surface = lexer
+  *and* formatter** — the lexer accepts a curated Unicode glyph and its ASCII
+  transliteration as the **same token** (ASCII stays accepted forever), the
+  formatter **emits canonical Unicode** on save, and keywords stay ASCII words
+  (`30-surface/31 §1c`). A direct consequence of principles 2–4, pinned for the
+  BL3 build; not a new fork.
 - **Resolved sub-item (ES3, 2026-07-01):** the **visibility default =
   module-private-by-default + `pub`** (`30-surface/33 §4`) — the least-surface /
   information-hiding-forward choice that matches abstract export. Not iterating.
@@ -249,9 +258,27 @@ while drafting. Resolved items move to an ADR (`../docs/adr/`).
 - **Stateful-effect verification methodology → `OQ-Space`.** Decided here:
   effect *shape/encoding*; deferred there: how stateful effects' pre/post is
   reasoned.
+- **`SURF-1` child pins — DECIDED, no reopened fork** (consistent with the
+  DECIDED model, kernel-untouched, `ken-elaborator`-only, no new `Term`/`Decl`):
+  - **(1) Row-variable surface** (`30-surface/36 §1.5`, Architect-grounded, D1).
+    The effect-polymorphic **row variable** `[e]` (and open-row tail `[E | e]`),
+    bound as an **implicit parameter**, made *surface-writable* — the row
+    variable was already *implied by* the tree denotation (Koka rows,
+    the cited precedent) and its internal machinery already landed; D1 adds the
+    surface + a bounded recursive-fixpoint lift (`36 §1.3`/`§1.5`). Every
+    concrete instantiation is **statically closed** (AC3, structural).
+  - **(2) Purity keywords `const`/`fn`/`proc`** (`30-surface/36 §1.6`, operator
+    ruling Pat 2026-07-04). `view` **retired**; the definition keyword is a
+    **checked static-purity signal** — `const` = pure value (0 explicit value
+    params), `fn` = pure function (≥1), `proc` = at-least-potentially-impure
+    (concrete row, a **row variable**, or a `space` op) at any arity;
+    **effect-polymorphic ≠ pure**. Verified **bidirectionally** (keyword vs.
+    signature + inferred effects); a mismatch is a **hard error** (`§1.6.3`).
 - **Unblocks.** `OQ-export-ir` (event alphabet = interaction-tree nodes),
-  `OQ-ifc` (labels ride the row).
-- **Affects.** `30-surface/36` (updated), `60-security/61`, `60-security/62`,
+  `OQ-ifc` (labels ride the row); **`SURF-1` pin (1) unblocks `CAT-2`**
+  (Traversable's `traverse` is the first surface effect-polymorphic definition).
+- **Affects.** `30-surface/36` (updated), `30-surface/32`/`33`/`31`
+  (SURF-1 grammar/keywords/lexer), `60-security/61`, `60-security/62`,
   `70-behavioral/`.
 
 ### OQ-9 — Continuations / handlers — **DECIDED (excluded)**
@@ -727,6 +754,7 @@ states what it cannot prove; the sibling models/tests/monitors it.
 | **OQ-spec** | 2026-06-27 — proof interface = **both, as one gradient**; **four-way epistemic status** (proved/tested/delegated/unknown) visible + exportable. `old`/state deferred → `OQ-Space` (lean explicit-state). | — (recorded in `20-verification/21`) |
 | **OQ-behavioral** | 2026-06-27 — downstream complement is a **sibling** (`Ward`) fed by an assumption-boundary export; temporal obligations as **data, not kernel modalities**; one logic, two engines. | **ADR 0006** |
 | **OQ-8 / OQ-8a** | 2026-06-27 — static effect **rows** (`visits`), pure by default; **layered encoding** authority(tokens)/denotation(interaction-tree)/spec(WP) into a pure kernel; handlers tail-resumptive only; capabilities = static value tokens (attenuable/revocable/audited). Stateful verification → `OQ-Space`. | — (recorded in `30-surface/36`) |
+| **`OQ-8` child · SURF-1** | 2026-07-04 — **row-variable surface** `[e]`/`[E | e]` as an implicit param (effect polymorphism made surface-writable, statically closed at every instantiation; unblocks CAT-2) + **purity keywords** `const`/`fn`/`proc` (`view` retired; checked static-purity signal, bidirectional, mismatch a hard error; effect-polymorphic ≠ pure) + **Unicode surface** = lexer(both spellings, same token)+formatter(emits Unicode), keywords stay ASCII. Kernel-untouched. | — (recorded in `30-surface/36 §1.5`/`§1.6`, `31 §1c`/`§4`, `32`/`33 §1`) |
 | **OQ-Space** | 2026-06-27 — encapsulated non-aliased `space` cells → **bounded per-space Hoare, no separation logic**; **`old` scoped to space ops** (resolves `OQ-spec` deferral); **shared-nothing message-passing** (in-Ken), content-addressed transport; runtime realization → `40-runtime`; concurrent/temporal correctness **delegated to Ward**; FFI shared memory is the (unsafe) exception. | — (recorded in `30-surface/36 §4`); ADR when `40-runtime` settles |
 | **OQ-ifc** | 2026-06-27 — **lattice-parametric** non-interference (proved once, any lattice); **DLM** standard; static type-index labels + first-class **boundary** labels for data-derived classification (per-tenant), no full dynamic IFC; by-typing default; lattice supplied by policy. | — (recorded in `60-security/61`) |
 | **OQ-policy** | 2026-06-27 — **policy as code**: a mandatory, static, separately-authored security-policy surface **in Ken** (role separation, not a sibling); the lattice-parametric *instantiation*; non-weakenable; governance via supply-chain. | **ADR 0007** (recorded in `60-security/65`) |
