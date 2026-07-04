@@ -117,6 +117,192 @@ system, not this line.*
    erasable to its description, the pure core stays total, and the capability is
    enforced (not decorative).
 
+## Phase 1 — enclave elaboration (deliverables 1/2/3/5)
+
+*Front-loaded semantics for the Phase-2 build. The design **mirrors the landed
+Console effect** (`print_line` → `build_print_line_tree` → `Vis (Write s) k` →
+`run_io`) at every step — the FS driver is the file-I/O analog. Grounded against
+`origin/main@7b5eb3c` (line numbers perishable — verify shapes at pickup).
+Deliverable 4 (conformance fixtures + AC3 fixture pair) is
+`conformance-validator`'s companion, gated together. Illustrative Ken signatures
+are tagged **[verify against the landed effect + capability system]** per the
+frame's "means are the enclave's call".*
+
+### Scope of the op set (this WP)
+
+`read-file-lines` (VAL2 #9) needs exactly **one op driven end-to-end: read**.
+This WP wires **`read_bytes`** (read) through reduction + driver + capability +
+fixtures. `write_bytes`/`append` (`[FS]`) and `send`/`recv` (`[Net]`) stay
+**registered at the type level but undriven** (a named follow-on, not silently
+in scope, not silently dropped) — the driver's op dispatch is written so adding
+their arms later is additive, no re-architecture.
+
+### D1 — Effect ops + real reduction (the *pure description*)
+
+The Console prelude is the exact template (`prelude.rs` ~`:194-213`,
+`ConsoleOp`/`ITree`/`IO`). Mirror it for FS, **reusing the generalized
+`ITree ρ Resp R`** (already lifted off the Console-hardwired form — *do not fork
+a second effect system*):
+
+```
+data FSOp = ReadFile Path                       -- Path = the bytes.rs placeholder
+fs_resp : FSOp -> Type                           -- the driver's response type…
+fs_resp (ReadFile _) = Result Bytes IOError      -- …carries failure (see D2)
+FS A := ITree FSOp fs_resp A                      -- reuse the generalized ITree
+read_bytes : Cap FS -> Path -> FS (Result Bytes IOError)   -- [verify …]
+```
+
+**Re-type `read_bytes` (deliverable-1 decision — flag the interaction).** Today
+`read_bytes : Bytes -> Bytes` with the `[FS]` effect tracked in a **side table**
+(`bytes.rs::io_effect_rows`, `read_bytes -> EffectRow::singleton("FS")`). A
+`Bytes -> Bytes` prim **cannot reduce to an `ITree Vis` node** without a type
+mismatch, so a driver-interpretable op **must** carry the effect **in its return
+type** — the `FS (…)` monad — exactly as `print_line : String -> IO Unit` does.
+So Phase 1 re-types `read_bytes` to the `FS`-monad form above. **Interaction to
+preserve:** the landed static escape/row check
+(`tests/l6_acceptance.rs::read_bytes_untracked_is_type_error`,
+`io_effect_rows` + `check_capabilities`) is the **static capability face** (D3)
+and must **stay green** — the return-type effect is *added* for driver
+interpretability, it does not replace the row tracking. If the re-type would
+regress that test, reconciling the two faces (row table vs. `FS`-in-return-type)
+is a pinned Phase-2 step, **not** a silent drop of the static check.
+
+**Real reduction (the gap).** `read_bytes` is intercepted in the saturated-prim
+path (`eval.rs` ~`:1461`, *exactly* where `print_line` /
+`string_to_list_char` are — they are intercepted before the generic
+`prim_reduce` because they need `store` + ctor `GlobalId`s) → a new
+`build_read_file_tree(cap, path, fs_ids, store)` that mirrors
+`build_print_line_tree` (`eval.rs:1528`) and returns
+
+```
+Vis (ReadFile cap path) (λ r. Ret r)   -- a pure ITree value; NO syscall here
+```
+
+This reduction is **pure and total** — it constructs an `ITree` description, it
+performs no I/O (AC5). An `FSIds` struct (like `ConsoleIds`/`ITreeIds`) carries
+the `ret_id`/`vis_id`/`readfile_id`/`params_len` plus the `Result`/`IOError`
+ctor ids the driver needs to *build the response*; obtain them from the
+`GlobalEnv` after prelude registration.
+
+### D2 — Runtime driver + failure-surfacing
+
+The top-level driver is `run_io` (`eval.rs:1737`), invoked from the CLI
+(`ken-cli/src/main.rs:110`, `run_io(tree, &console_ids, …)`). It loops the
+`ITree`: `Ret r` → return `args[m]`; `Vis op k` → dispatch on `op` **exhaustive,
+no catch-all** (`42 §6.5`), compute `resp`, `apply(k, resp)`, loop. Extend the
+dispatch with an **FS arm** alongside the existing Console `Write` arm:
+
+```
+Vis (ReadFile cap path) k ->
+    if !authorizes(cap, path) { resp = Err(CapabilityDenied) }      -- D3, runtime face
+    else match std::fs::read(path) {                                -- the ONLY new syscall
+        Ok(bytes) => resp = Ok(Bytes(bytes)),
+        Err(e)    => resp = Err(io_error_kind_to_IOError(e)),       -- NotFound / Permission / Other
+    }
+    apply(k, resp) ; loop                                            -- resp is a total Result value
+```
+
+- **Where it lives:** `ken-interp` (mirroring `run_io`) — **there is no
+  `ken-runtime` crate** (AC1). The `std::fs` syscall is the sole new host-effect
+  surface, **confined to the driver** (outer ring), never in `eval`/the pure
+  core.
+- **Failure-surfacing (deliverable 2):** file-not-found / permission /
+  capability denial become a **total in-language `Result` value** handed back
+  through `k` — **never a panic** — so the program matches the failure and
+  the pure core stays total (AC5). `IOError` is a small in-language sum
+  (`data IOError = NotFound | PermissionDenied | CapabilityDenied | Other`); the
+  driver maps `std::io::ErrorKind → IOError`.
+- **Multi-effect programs** (FS + Console): route each op through the landed
+  `[State]` `Vis (inr o)` pass-through dispatch — **one driver, two arms**,
+  not a second dispatcher. See the Console-lift note in D3.
+
+### D3 — Capability model (static face + runtime face)
+
+The capability has **two faces** — deliver both, and state which each AC3 arm
+pins (the static-vs-runtime split is the recurring effect-AC shape):
+
+- **Static face (LANDED — keep it).** `check.rs::check_capabilities`
+  (~`:127-155`): a decl performing `[FS]` must have `using cap : Cap FS` (a
+  `CapParam`, `algebra.rs`, `§2.5`) or an enclosing handler, else
+  `EffectError::MissingCapability` at **elaboration**. This is the "is `[FS]`
+  authority *declared*" gate — already tested. Nothing to build; preserve it
+  through the D1 re-type.
+- **Runtime face (NEW — the load-bearing thread this WP adds).** The `Cap_FS`
+  token is **carried in the effect** (capability-*carrying*, per the operator
+  lock): the op node encodes the capability, `ReadFile cap path`, so
+  `read_bytes` takes the `Cap FS` (supplied by the `using cap : Cap FS` param).
+  The driver's FS arm, **before any syscall**, checks `authorizes(cap, path)`
+  and refuses otherwise — this makes access **non-ambient** at runtime. Reuse
+  `capabilities.rs` (`Cap`, `attenuate`, `authority`); the token is
+  **unforgeable** — `mint` is handler/runtime-only, not surface-callable
+  (`capabilities.rs:66`, `spec 62 §2.2`) — so a program can only **narrow**
+  (`attenuate`, "one directory not the filesystem"), never widen.
+
+**Path-scope representation — flag for Architect / Phase 2.** `spec 62 §2.1`
+says `Cap_FS`'s authority *is* "a set of paths"; the landed
+`capabilities.rs::Authority(u8)` is a **coarse stand-in** with no path field.
+The runtime `authorizes(cap, path)` check needs a concrete path-scope (an
+authorized directory prefix, narrowed by `attenuate`). Realizing it — extend
+`Authority`/`Cap` with a path-scope vs. an FS-specific scope carried alongside —
+is the **one open representation choice**, Architect's + Phase-2's call. The
+**contract is fixed**: `authorizes(cap, path)` gates the syscall, `attenuate`
+only narrows, unauthorized ⇒ `CapabilityDenied`. (This is not a fork PRINCIPLES
+can't settle — it reuses the landed attenuate/mint skeleton; if Architect wants
+it decided up front, it routes to Steward per the defer rule, but I read it as
+delegated.)
+
+**AC3 discriminating pair (both faces; CV pins the concrete fixtures in D4 —
+`FS-driver-conformance.md`):**
+
+- *static arm* — `read_bytes … path` in a decl with **no** `using cap : Cap FS`
+  ⇒ `MissingCapability` (elaboration rejects). With the param ⇒ elaborates.
+- *runtime arm* — with `using cap : Cap FS` minted/attenuated to the fixture's
+  directory ⇒ the driver reads it; the **same op** with a `cap` attenuated to
+  **exclude** that path ⇒ `CapabilityDenied` at the driver, **no read**. Same
+  op, outcome flips on the capability ⇒ the check is **load-bearing, not
+  decorative** (AC3). A no-op `authorizes` (always-true) = ambient authority =
+  fails AC3 — the discriminating negative must actually reach the refusal.
+
+**Console-lift / EFF6 dependency (the frame asks).** The FS-only path (AC2,
+`read-file-lines`) is **independent** of the deferred EFF6 console-commute
+(`#245`): `read-file-lines` *sequences* FS then processes lines; it asserts no
+console-commute *equation*. A program mixing FS **and** Console rides the landed
+`[State]` `Vis (inr o)` pass-through (its `direct-state-console-commute` AC3
+path); only a program that needs the specific commute *law* would need EFF6.
+**So this WP is not blocked on the Console-lift.**
+
+### D5 — Totality / capability statement (AC5, checkable)
+
+- **Pure description.** `read_bytes cap path` reduces *in the pure core*
+  (`eval`) to a total `Vis (ReadFile cap path) (λ r. Ret r)` `ITree` value — no
+  syscall, no partiality. **Checkable by grep:** the `eval.rs` FS interception
+  builds an `ITree` and calls **no** `std::fs`.
+- **Erasability.** The effect is erasable to its `ITree` denotation (`36 §2.4`),
+  a pure core term `eval` already handles. All nondeterminism/partiality
+  (file-not-found, I/O error, capability denial) is **confined to the driver**
+  (outer ring) and surfaced as a **total `Result`** the program matches — the
+  pure core stays **total** (AC5).
+- **Kernel untouched (AC1).** The whole delta is outer-ring: prelude decls
+  (`ken-elaborator`), prim reduction + driver (`ken-interp`), capability thread
+  (`ken-elaborator`/`ken-interp`), fixtures (`conformance/`). **Zero
+  `ken-kernel/`, zero `trusted_base` delta, no new `Term`/`Decl` variant** —
+  grep-verified, not a test.
+- **Capability enforced, not decorative.** The driver's `authorizes(cap, path)`
+  is load-bearing — AC3's runtime arm flips on it. Its absence (always-admit) is
+  ambient authority and fails AC3 by construction.
+
+### What Phase 2 builds (maps to the proposed bundled build branch)
+
+| Lane | Deliverable | Files (perishable) |
+|---|---|---|
+| Runtime | D1 reduction + D2 driver arm + `IOError`/`FSOp` prelude | `ken-interp/{eval,lib}.rs`, `ken-elaborator/src/prelude.rs`, `bytes.rs` re-type |
+| Sec (Verify) | D3 runtime `authorizes` thread + path-scope on `Cap_FS` | `ken-elaborator/src/capabilities.rs`, effect capability thread |
+| Conformance | D4 hermetic fixtures + AC3 pair (CV) | `conformance/fs/…` (CV's companion doc) |
+
+Bundled into **one** Phase-2 branch (spec-leader's decomposition): the runtime
+driver must never land on `main` **without** its capability gate live, else an
+ambient file-read sits on `main` transiently between merges.
+
 ## Acceptance criteria
 
 - **AC1 — Kernel untouched (load-bearing).** `git diff origin/main --
