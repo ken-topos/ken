@@ -15,6 +15,10 @@
 -- `KNOWN-GAP.md` for the same already-known gap; this example
 -- demonstrates the Option-composition axis over `+`/`-`/`*`, which is
 -- unaffected by it.
+--
+-- `-`/`*` are now idiomatic infix (VAL2 #11, `83f728a`) -- rewritten
+-- below from the earlier prefix `sub_int`/`mul_int` workaround; same
+-- primitives underneath, value unchanged.
 
 data RpnOp = Push Int | Add | Sub | Mul
 
@@ -38,20 +42,15 @@ view rpnStep (stack : List Int) (op : RpnOp) : Option (List Int) =
       Cons a rest1 => match rest1 {
         Nil => None (List Int) ;
         -- RPN order: second-from-top minus top (`b - a` for stack
-        -- `a::b::rest`). No `-` infix operator exists (`GAP-subtraction`
-        -- -- only `+`/`*`/`==` are recognized infix; `sub_int` is called
-        -- prefix, same as `natGcdFueled`'s `natSub` precedent style).
-        Cons b rest2 => Some (List Int) (Cons Int (sub_int b a) rest2)
+        -- `a::b::rest`).
+        Cons b rest2 => Some (List Int) (Cons Int (b - a) rest2)
       }
     } ;
     Mul => match stack {
       Nil => None (List Int) ;
       Cons a rest1 => match rest1 {
         Nil => None (List Int) ;
-        -- `*` (BinOp::Mul) parses but is "not yet supported" at
-        -- elaboration time -- called prefix via `mul_int` instead, same
-        -- idiom as `sub_int` above.
-        Cons b rest2 => Some (List Int) (Cons Int (mul_int a b) rest2)
+        Cons b rest2 => Some (List Int) (Cons Int (a * b) rest2)
       }
     }
   }

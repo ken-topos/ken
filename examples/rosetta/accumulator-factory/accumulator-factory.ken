@@ -1,23 +1,104 @@
 -- Rosetta Code: Accumulator factory
 -- https://rosettacode.org/wiki/Accumulator_factory
 --
--- Task: a function that returns a closure holding a running total, where
--- each call to the closure adds its argument and returns the new total
--- -- the total persists as HIDDEN mutable state across calls, with no
--- explicit threading by the caller.
+-- Task: a function that takes a number and returns a closure that adds its
+-- argument to a running total (hidden from the caller) and returns the new
+-- total each time it is called.
 --
--- GAP-no-mutable-state (BLOCKING, see KNOWN-GAP.md): Ken has no
--- mutable-reference primitive and no `[State]` effect anywhere in the
--- elaborator (confirmed by inspection: no `Ref`/`StateOp`/`"State"`
--- effect-row entry exists). A pure function returning a fresh closure
--- each call, with no way to persist and mutate a cell across
--- INDEPENDENT calls, cannot express "hidden mutable state" at all --
--- this is not an encoding-awkwardness problem, it's a genuinely absent
--- capability. (An explicitly-THREADED accumulator -- `next : Nat -> Acc
--- -> (Nat, Acc)`, the caller passing the updated `Acc` back each time --
--- is expressible, but is a DIFFERENT program: it requires the caller to
--- thread the state explicitly, which is exactly what this task's "hidden
--- state" behavior rules out.)
+-- Genuine hidden state, not a threaded parameter: built on the landed
+-- `[State]` effect surface (VAL2 #10) -- `get`/`put`/`bind`/`runState` over
+-- an `ITree`. Each "call" (`addTo n`) is one `get`-then-`put`-then-`Ret`
+-- step; the accumulator's running total is never a caller-visible
+-- parameter anywhere in this program -- `runState` threads it internally,
+-- exactly the point of using an algebraic effect instead of explicit
+-- parameter-passing (an explicitly-threaded `Acc` param would misrepresent
+-- the task, per this example's own retired KNOWN-GAP.md).
 --
--- Placeholder until GAP-no-mutable-state is resolved.
-view main : Nat = Zero
+-- `f`/`RespF` (the "other effects" row) is instantiated to `Unit` as a
+-- placeholder for "no other effects are ever performed" -- Ken's surface
+-- `data` parser requires at least one constructor (`parse_ctor_decl` always
+-- consumes one `ConId` before checking for `|`), so a literal 0-constructor
+-- `Empty` type (used by the hand-built Rust test suite) isn't reachable
+-- from surface syntax. Using `Unit` is safe here because this program never
+-- constructs an `InR` variant, so the `Vis`-over-`f` branch is never
+-- actually taken -- `f`'s inhabitedness is irrelevant to a program that
+-- never uses it.
+
+view Eff : Type = Unit
+view RespEff (u : Eff) : Type = Unit
+
+view Op : Type = Sum (StateOp Nat) Eff
+view Resp : Op -> Type = resp_sum Nat Eff RespEff
+
+view addNat (a : Nat) (b : Nat) : Nat =
+  match a { Zero => b ; Suc a2 => Suc (addNat a2 b) }
+
+-- one "call": read the running total, add `n`, store it back, return the
+-- NEW total (the task's own semantics: "returns the current total").
+view addTo (n : Nat) : ITree Op Resp Nat =
+  bind Op Resp Nat Nat
+    (get Nat Eff RespEff MkUnit)
+    (\prev.
+      bind Op Resp Unit Nat
+        (put Nat Eff RespEff (addNat prev n))
+        (\_. Ret Op Resp Nat (addNat prev n)))
+
+view eq_nat (a : Nat) (b : Nat) : Bool =
+  match a {
+    Zero => match b { Zero => True ; Suc _ => False } ;
+    Suc a2 => match b { Zero => False ; Suc b2 => eq_nat a2 b2 }
+  }
+
+view and_bool (a : Bool) (b : Bool) : Bool =
+  match a { True => b ; False => False }
+
+view two   : Nat = Suc (Suc Zero)
+view three : Nat = Suc (Suc (Suc Zero))
+view five  : Nat = addNat two three
+view ten   : Nat = addNat five five
+
+-- Two independently-driven "calls" against the SAME hidden accumulator,
+-- discriminating: each returns the NEW running total (2, then 5), and the
+-- state persists/accumulates across calls (not just constant per-call).
+view program : ITree Op Resp Bool =
+  bind Op Resp Nat Bool
+    (addTo two)
+    (\r1.
+      bind Op Resp Nat Bool
+        (addTo three)
+        (\r2. Ret Op Resp Bool (and_bool (eq_nat r1 two) (eq_nat r2 five))))
+
+view finalResult : ITree Eff RespEff (Pair Bool Nat) =
+  runState Nat Eff RespEff Bool Zero program
+
+-- STOPS HERE -- see KNOWN-GAP.md. Everything above this line elaborates and
+-- type-checks (construction of a genuine hidden-state ITree program over
+-- `get`/`put`/`bind`/`runState` works end-to-end); there is no surface way
+-- to OBSERVE `finalResult`'s value from a `.ken` program. The only surface
+-- mechanism for destructuring a value is `match`, and `match` on `ITree`
+-- (any instantiation) is unconditionally rejected: `ITree`'s `Vis`
+-- constructor's continuation field `k : Resp op -> ITree E Resp R` is a
+-- W-style (Pi-bound) recursive occurrence, and `elab.rs`'s match-compiler
+-- explicitly rejects building an IH slot for any W-style/indexed recursive
+-- field ("Gap B", `elab.rs:824`) -- regardless of whether the match's
+-- motive is dependent, and regardless of whether the `Vis` arm is actually
+-- reachable at runtime. This is a capability gap in the match compiler,
+-- not something an example rewrite can route around.
+
+view main : IO Unit = print_line "accumulator-factory: see KNOWN-GAP.md"
+
+-- The intended completion (kept here, commented out, as evidence of
+-- exactly where it's blocked -- confirmed to fail with the Gap B error
+-- above if uncommented):
+--
+-- view unwrapRet (r : ITree Eff RespEff (Pair Bool Nat)) : Pair Bool Nat =
+--   match r {
+--     Ret v => v ;
+--     Vis op k => mkPair Bool Nat False Zero
+--   }
+--
+-- view finalBool : Bool = pairFst Bool Nat (unwrapRet finalResult)
+--
+-- view finalCheck : String = match finalBool { True => "PASS" ; False => "FAIL" }
+--
+-- view main : IO Unit = print_line finalCheck
