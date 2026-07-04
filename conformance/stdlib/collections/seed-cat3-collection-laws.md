@@ -9,8 +9,8 @@ capstone **verified `sort`** (`isSorted` and `Perm` as two laws), and the
 agent-facing **`view` abstraction** (the catalog's projection unit — the six
 optic flavors). This seed pins the discriminating conformance for all three
 deliverables, **content-reconciled against the landed spec chapter**
-`spec/50-stdlib/57-collections-and-views.md` (spec-author `ec94c62`, the
-`optic → view` rename of `9a79e24`).
+`spec/50-stdlib/57-collections-and-views.md` (spec-author chapter tip
+`829c999`, the `optic → view` rename + Fork-C/FOLD-IN-1 resolution).
 
 The **Architect's three fork rulings** (`evt_4c3q1e611va69`), as transcribed in
 `57`:
@@ -30,13 +30,12 @@ The **Architect's three fork rulings** (`evt_4c3q1e611va69`), as transcribed in
   2026-07-04, Steward `evt_4wsa1txzrx9nc`). Architect recommended `optic`; the
   operator ruled **`view`** — SURF-1's retirement of the `view` *keyword* frees
   the word, and `view` is the standard term for a read projection, so the
-  keyword-collision concern does not bind. **RESOLVED at `ec94c62`** — the
-  chapter is renamed `57-collections-and-views.md`, `§4.1`/`§90` rewritten
-  open→resolved to `view` (Architect verified the prose is faithful, not drift).
-  Two chapter items remain for final byte-align at assembly, both flagged below:
-  Architect FOLD-IN 1 (lens set-set `tt`→`Refl`, **applied in this seed**,
-  pending in the chapter) and the setoid-record's lowercase `view` field
-  (KwView collision, rename is spec-author's call).
+  keyword-collision concern does not bind. **RESOLVED at chapter tip `829c999`**
+  (Architect fidelity gate green there): renamed `57-collections-and-views.md`,
+  `§4.1`/`§90` rewritten open→resolved to `view`, Architect FOLD-IN 1 landed
+  (§4.4 lens set-set `tt`→`Refl` — this seed already carried the fix), and the
+  setoid-record field renamed lowercase `view` → `project` (KwView collision).
+  This seed is byte-aligned to `829c999`.
 
 **Red-until-built posture (CAT-1-Functor precedent).** `map`, `filter`, `sort`,
 `isSorted`, `count`, `mem`, `length`, `min`, and the `view`/`lens` records are
@@ -49,7 +48,7 @@ are tagged distinctly from the deeper **blocked-on-missing-op** reds.
 
 ## Grounding (content-verified against the landed targets)
 
-- `spec/50-stdlib/57-collections-and-views.md` (`ec94c62`) — the CAT-3
+- `spec/50-stdlib/57-collections-and-views.md` (`829c999`) — the CAT-3
   contract: §2 D1 structural laws, §3 verified `sort`, §4 the `view`
   abstraction, §5 derivation paths / `trusted_base()` delta, §6 AC mapping. Law
   anchors: `57 §2.2` (D1), `57 §3.4`/`§3.7` (sort), `57 §4.4` (lens).
@@ -408,7 +407,9 @@ sortId  (a) (le) (xs) : List a = xs      -- identity (fails isSorted)
   records".** Assert the structural observable, per `57 §4.2`: `lens`/`iso`/
   `refinement`/`indexed` = plain `Σ`-record (concrete) → **ship now**;
   `quotient-respecting` **setoid-morphism** form
-  `{ view ; respects }` is a plain `Σ`-record → **now**, but the
+  `{ project ; respects }` is a plain `Σ`-record → **now** (the field is
+  `project`, not a lowercase `view`, so it never collides with the live
+  `KwView` keyword — `57 §4.2`), but the
   **quotient-carrier** form (a view *out of* `A/R`) needs a surface
   **quotient-intro** path the parser lacks (`16 §5` kernel formers exist, no
   surface) → **deferred**; `obligation-producing` = the **Lane B / L12 / L14
@@ -423,7 +424,7 @@ sortId  (a) (le) (xs) : List a = xs      -- identity (fails isSorted)
   case keeps AC1 honest — they re-fork to Steward (`57 §4.3`/`90`), not now
 
 ### stdlib/collections/view-family-name-reuses-freed-keyword (property)
-- spec: `57 §4.1` (Fork C, resolved to family `view` at `ec94c62`), Steward
+- spec: `57 §4.1` (Fork C, resolved to family `view` at `829c999`), Steward
   `evt_4wsa1txzrx9nc` (operator override), SURF-1 (`view` keyword retired), `90`
   (naming token routed)
 - given: the Layer-1 abstraction's family name, after the operator ruled it
@@ -445,8 +446,8 @@ sortId  (a) (le) (xs) : List a = xs      -- identity (fails isSorted)
   the ruling, do not carry the stale hypothesis). Not
   hard-freezing `optic` is exactly what let this reconcile cleanly instead of
   shipping a case contradicting the ruling. **`§4.1`/`§90` are RESOLVED to
-  `view` at `ec94c62`** (Architect-verified faithful, not drift); final
-  byte-align is against spec-author's post-FOLD-IN-1 SHA at the assembly gate
+  `view` at `ec94c62`, chapter tip `829c999`** (Architect-verified faithful);
+  this seed is byte-aligned to `829c999`
 
 ---
 
@@ -522,9 +523,8 @@ sortId  (a) (le) (xs) : List a = xs      -- identity (fails isSorted)
   `take-length`/`map`/`filter` are op-blocked reds; the verified-sort ACCEPT arm
   is discharge-gap red. Distinct red reasons, each named.
 - **Fork-C name reconcile pending.** `view-family-name-reuses-freed-keyword` is
-  authored on the ruled `view`, RESOLVED at `ec94c62` (`§4.1`/`§90`); final
-  byte-align (incl. FOLD-IN 1 set-set `tt`→`Refl` and setoid-field rename) is
-  against spec-author's next SHA at the assembly gate.
+  authored on the ruled `view`, RESOLVED at chapter tip `829c999` (`§4.1`/`§90`,
+  FOLD-IN 1 in `§4.4`, setoid field → `project`); this seed is byte-aligned.
 
 ## Subsumed / not-duplicated (one home per property)
 
