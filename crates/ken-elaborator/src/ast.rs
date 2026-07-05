@@ -155,6 +155,8 @@ pub enum Decl {
         name: String,
         /// Type parameter name (one param supported; `None` = no param).
         param: Option<String>,
+        /// Optional kind annotation for the parameter. Absent means `Type0`.
+        param_kind: Option<Type>,
         /// Field declarations: (name, type_expr).
         fields: Vec<(String, Type)>,
         span: Span,

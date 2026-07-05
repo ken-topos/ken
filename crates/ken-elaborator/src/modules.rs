@@ -420,14 +420,18 @@ fn rewrite_rdecl(scope: &Scope, exports: &HashMap<String, HashMap<String, String
             RDeclKind::Foreign { symbol, library, is_pure, visits }
         }
         RDeclKind::Temporal { formula, source } => RDeclKind::Temporal { formula, source },
-        RDeclKind::ClassDecl { param, fields } => RDeclKind::ClassDecl {
+        RDeclKind::ClassDecl { param, param_kind, fields } => RDeclKind::ClassDecl {
             param,
+            param_kind: param_kind
+                .map(|t| rewrite_rtype(scope, exports, t))
+                .transpose()?,
             fields: fields
                 .into_iter()
                 .map(|(n, t)| Ok((n, rewrite_rtype(scope, exports, t)?)))
                 .collect::<Result<Vec<_>, ElabError>>()?,
         },
-        RDeclKind::InstanceDecl { head_type, constraints, fields } => RDeclKind::InstanceDecl {
+        RDeclKind::InstanceDecl { head_params, head_type, constraints, fields } => RDeclKind::InstanceDecl {
+            head_params,
             head_type: rewrite_rtype(scope, exports, head_type)?,
             constraints: constraints
                 .into_iter()

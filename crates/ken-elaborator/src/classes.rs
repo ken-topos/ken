@@ -27,6 +27,8 @@ pub enum ClassKind {
 pub struct ClassInfo {
     /// The optional single type-parameter name (e.g. `A` in `class Eq A`).
     pub param: Option<String>,
+    /// Elaborated class-parameter kind. Absent means the class is nullary.
+    pub param_kind: Option<Term>,
     /// Field names in declaration order.
     pub field_names: Vec<String>,
     /// Field types in declaration order — a real Σ-telescope (`33 §5.2`):
