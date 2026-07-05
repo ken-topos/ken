@@ -75,6 +75,7 @@ pub enum Token {
     Ne,           // `/=` / `≠`
     And,          // `/\` / `∧`
     Or,           // `\/` / `∨`
+    Member,       // `∈` — membership notation; distinct from keyword `in`
     FlowsTo,      // `<:` / `⊑`
     Join,         // `⊔`
     Meet,         // `⊓`
@@ -312,7 +313,7 @@ impl<'s> Lexer<'s> {
             }
             '∈' => {
                 self.advance();
-                return Ok((Token::KwIn, Span::new(start, self.pos)));
+                return Ok((Token::Member, Span::new(start, self.pos)));
             }
             'ℓ' => {
                 self.advance();

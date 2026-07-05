@@ -26,7 +26,6 @@ fn canonical_ident(ident: &str) -> Option<&'static str> {
         "forall" => Some("∀"),
         "exists" => Some("∃"),
         "not" => Some("¬"),
-        "in" => Some("∈"),
         "level" | "l" => Some("ℓ"),
         _ => None,
     }
