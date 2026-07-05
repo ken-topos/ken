@@ -29,6 +29,18 @@ pub struct MatchArm {
     pub span: Span,
 }
 
+/// Surface effect-row syntax inside `visits [...]` (`36 §1.5`).
+///
+/// `heads` are concrete effect labels. `tail` is the optional row variable in
+/// an open row: `[Console | e]`. A bare `[e]` is represented by no heads and
+/// `tail = Some("e")`; a concrete row `[Console, FS]` has no tail.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EffectRowSyntax {
+    pub heads: Vec<String>,
+    pub tail: Option<String>,
+    pub span: Span,
+}
+
 /// A surface pattern (`34 §3`, `32 §4`).
 #[derive(Clone, Debug)]
 pub struct Pattern {
@@ -62,6 +74,9 @@ pub enum Decl {
         /// Each pair is `(class_name, head_type)`. Checked by the
         /// elaborator via `instance_search` (`classes.rs:91`).
         constraints: Vec<(String, Type)>,
+        /// Optional `visits [...]` row annotation. D1 wires the row-variable
+        /// surface (`[e]`, `[E | e]`) without changing the `view` keyword yet.
+        visits: Option<EffectRowSyntax>,
         body: Expr,
         /// Whether the `space` prefix was present (V1 §6.4).
         is_space_op: bool,
@@ -97,11 +112,7 @@ pub enum Decl {
         span: Span,
     },
     /// `type T = A` — surface type alias.
-    TypeAlias {
-        name: String,
-        ty: Type,
-        span: Span,
-    },
+    TypeAlias { name: String, ty: Type, span: Span },
     /// `foreign f : T = "symbol" "library" [pure] [E1, …]` — a C-ABI binding
     /// (`38 §2.1`, L7). Keyword spellings are `(oracle)`.
     ForeignDecl {

@@ -141,11 +141,20 @@ impl RowType {
     ///
     /// Identity simplification: `∅ ⊕ x = x` and `x ⊕ ∅ = x` — avoids
     /// accumulating `Join(Concrete(∅), ...)` noise in the normal form.
+    /// Idempotence/subsumption simplification keeps recursive row-polymorphic
+    /// fixpoints finite: `e ∪ e = e`, and `e ∪ (E ∪ e) = E ∪ e`.
     pub fn join(self, other: Self) -> Self {
+        if self == other {
+            return self;
+        }
+        if self.is_subset_of(&other) {
+            return other;
+        }
+        if other.is_subset_of(&self) {
+            return self;
+        }
         match (self, other) {
-            (Self::Concrete(r1), Self::Concrete(r2)) => {
-                Self::Concrete(r1.join(&r2))
-            }
+            (Self::Concrete(r1), Self::Concrete(r2)) => Self::Concrete(r1.join(&r2)),
             (Self::Concrete(r), other) if r.is_empty() => other,
             (this, Self::Concrete(r)) if r.is_empty() => this,
             (l, r) => Self::Join(Box::new(l), Box::new(r)),
@@ -192,14 +201,10 @@ impl RowType {
         match (self, other) {
             (Self::Concrete(s1), Self::Concrete(s2)) => s1.is_subset_of(s2),
             (Self::Var(x), Self::Var(y)) => x == y,
-            (Self::Join(l, r), other) => {
-                l.is_subset_of(other) && r.is_subset_of(other)
-            }
+            (Self::Join(l, r), other) => l.is_subset_of(other) && r.is_subset_of(other),
             (Self::Concrete(s), _) if s.is_empty() => true,
             // x ⊆ Join(l, r): check if x is entirely covered by one arm.
-            (lhs, Self::Join(l, r)) => {
-                lhs.is_subset_of(l) || lhs.is_subset_of(r)
-            }
+            (lhs, Self::Join(l, r)) => lhs.is_subset_of(l) || lhs.is_subset_of(r),
             _ => false,
         }
     }

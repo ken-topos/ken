@@ -49,7 +49,6 @@ pub struct EffectDecl {
     pub unknown_effectful_params: Vec<EffectName>,
 
     // --- L5-denotation row-polymorphism fields (K1.5-gated, now buildable) ---
-
     /// Row variables assigned to higher-order parameters (§1.2 `f a` clause,
     /// row-poly). Each element is the `RowVar` for one higher-order parameter's
     /// latent row. `infer_row_poly` propagates these symbolically (rather than
@@ -161,6 +160,28 @@ pub fn infer_row(env: &HashMap<String, EffectRow>, decl: &EffectDecl) -> EffectR
     row
 }
 
+/// Infer the symbolic effect row for a single declaration from an environment
+/// whose callee rows may themselves contain row variables (`36 §1.5.5`).
+pub fn infer_row_type(env: &HashMap<String, RowType>, decl: &EffectDecl) -> RowType {
+    let mut row = RowType::empty();
+
+    for e in &decl.direct_effects {
+        row = row.join(RowType::singleton(e.clone()));
+    }
+
+    for callee in &decl.callees {
+        if let Some(callee_row) = env.get(callee.as_str()) {
+            row = row.join(callee_row.clone());
+        }
+    }
+
+    for rv in &decl.param_rows {
+        row = row.join(RowType::Var(*rv));
+    }
+
+    row
+}
+
 /// Least-fixpoint effect-row inference over a call graph (`36 §1.3`).
 ///
 /// Handles mutual recursion: starts with ∅ for every function, then iterates
@@ -198,5 +219,39 @@ pub fn infer_all(
             break;
         }
     }
+    rows
+}
+
+/// Least-fixpoint row inference over `RowType` (`36 §1.5.5`).
+///
+/// This is the row-polymorphic lift of [`infer_all`]. The update operator is
+/// still monotone and uses only joins; `RowType::join` is idempotent, so a
+/// recursive declaration that releases the same row variable through its own
+/// call reaches a stable point instead of building an ever-deeper join tree.
+pub fn infer_all_poly(
+    seed: &HashMap<String, RowType>,
+    decls: &[EffectDecl],
+) -> HashMap<String, RowType> {
+    let mut rows: HashMap<String, RowType> = seed.clone();
+
+    for d in decls {
+        rows.entry(d.name.clone()).or_insert_with(RowType::empty);
+    }
+
+    loop {
+        let mut changed = false;
+        for decl in decls {
+            let new_row = infer_row_type(&rows, decl);
+            let old_row = rows.get(&decl.name).cloned().unwrap_or_else(RowType::empty);
+            if new_row != old_row {
+                rows.insert(decl.name.clone(), new_row);
+                changed = true;
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+
     rows
 }

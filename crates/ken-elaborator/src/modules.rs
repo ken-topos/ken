@@ -202,7 +202,7 @@ fn apply_import(
 /// exercises them nested).
 fn qualify_decl_name(decl: &Decl, prefix: &str) -> Decl {
     match decl {
-        Decl::ViewDecl { name, params, ret_ty, requires, ensures, constraints, body, is_space_op, span } => {
+        Decl::ViewDecl { name, params, ret_ty, requires, ensures, constraints, visits, body, is_space_op, span } => {
             Decl::ViewDecl {
                 name: qualify(prefix, name),
                 params: params.clone(),
@@ -210,6 +210,7 @@ fn qualify_decl_name(decl: &Decl, prefix: &str) -> Decl {
                 requires: requires.clone(),
                 ensures: ensures.clone(),
                 constraints: constraints.clone(),
+                visits: visits.clone(),
                 body: body.clone(),
                 is_space_op: *is_space_op,
                 span: span.clone(),
@@ -366,12 +367,13 @@ fn rewrite_rdecl(scope: &Scope, exports: &HashMap<String, HashMap<String, String
         .map(|e| rewrite_rexpr(scope, exports, e))
         .collect::<Result<Vec<_>, ElabError>>()?;
     let kind = match rdecl.kind {
-        RDeclKind::View { is_space_op, constraints } => RDeclKind::View {
+        RDeclKind::View { is_space_op, constraints, visits } => RDeclKind::View {
             is_space_op,
             constraints: constraints
                 .into_iter()
                 .map(|(c, t)| Ok((c, rewrite_rtype(scope, exports, t)?)))
                 .collect::<Result<Vec<_>, ElabError>>()?,
+            visits,
         },
         RDeclKind::Let => RDeclKind::Let,
         RDeclKind::Prove => RDeclKind::Prove,
@@ -574,8 +576,8 @@ fn expand_scope(
                             let simple_kind = matches!(&rdecl.kind, RDeclKind::Let)
                                 || matches!(
                                     &rdecl.kind,
-                                    RDeclKind::View { constraints, is_space_op }
-                                        if constraints.is_empty() && !is_space_op
+                                    RDeclKind::View { constraints, is_space_op, visits }
+                                        if constraints.is_empty() && !is_space_op && visits.is_none()
                                 );
                             let has_refine_return = rdecl
                                 .ty

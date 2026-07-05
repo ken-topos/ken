@@ -41,8 +41,12 @@
 //! surface-type traversal is wired: an unresolved type gets a RowVar rather
 //! than silently inferring ∅.
 
+use std::collections::HashMap;
+
+use crate::ast::EffectRowSyntax;
+
 use super::infer::EffectDecl;
-use super::row::RowVar;
+use super::row::{EffectRow, RowType, RowVar};
 
 // ── Allocator ───────────────────────────────────────────────────────────────
 
@@ -145,10 +149,47 @@ pub fn build_decl_from_telescope(
     name: &str,
     classified: &[(String, Option<RowVar>)],
 ) -> EffectDecl {
-    classified.iter().fold(EffectDecl::new(name), |decl, (_, rv_opt)| {
-        match rv_opt {
+    classified
+        .iter()
+        .fold(EffectDecl::new(name), |decl, (_, rv_opt)| match rv_opt {
             Some(rv) => decl.with_param_row(*rv),
             None => decl,
-        }
-    })
+        })
+}
+
+/// Build a name → row-variable map from `classify_telescope` output.
+///
+/// The same map is used for the HOF argument's latent row and for the written
+/// declared row (`36 §1.5.2`: one variable, two occurrences).
+pub fn row_var_map(classified: &[(String, Option<RowVar>)]) -> HashMap<String, RowVar> {
+    classified
+        .iter()
+        .filter_map(|(name, rv)| rv.map(|v| (name.clone(), v)))
+        .collect()
+}
+
+/// Translate parsed `visits [...]` syntax to the symbolic row type consumed by
+/// the row-polymorphic escape checker (`36 §1.5.1`).
+///
+/// Unknown row variables reject fail-closed: a written `[e]` must correspond to
+/// an allocated HOF latent-row variable from the telescope.
+pub fn surface_row_to_row_type(
+    row: &EffectRowSyntax,
+    row_vars: &HashMap<String, RowVar>,
+) -> Result<RowType, String> {
+    let mut rt = if row.heads.is_empty() {
+        RowType::empty()
+    } else {
+        RowType::concrete(EffectRow::from_effects(row.heads.iter().cloned()))
+    };
+
+    if let Some(tail) = &row.tail {
+        let rv = row_vars
+            .get(tail)
+            .copied()
+            .ok_or_else(|| format!("unknown row variable `{}` in visits row", tail))?;
+        rt = rt.join(RowType::Var(rv));
+    }
+
+    Ok(rt)
 }

@@ -3,7 +3,8 @@
 
 use super::algebra::cap_set;
 use super::infer::EffectDecl;
-use super::row::{EffectName, EffectRow};
+use super::row::{EffectName, EffectRow, RowType};
+use super::row_poly::check_row_poly_escape;
 
 // ----- error type -----
 
@@ -32,15 +33,16 @@ pub enum EffectError {
         target_space: String,
     },
     /// A handler resumes more than once or not in tail position (§5.2, OQ-9).
-    NonTailResumptive {
-        decl_name: String,
-    },
+    NonTailResumptive { decl_name: String },
 }
 
 impl std::fmt::Display for EffectError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::EffectEscapes { decl_name, witnesses } => {
+            Self::EffectEscapes {
+                decl_name,
+                witnesses,
+            } => {
                 write!(f, "EffectEscapes in '{}': ", decl_name)?;
                 for (i, (eff, site)) in witnesses.iter().enumerate() {
                     if i > 0 {
@@ -57,7 +59,10 @@ impl std::fmt::Display for EffectError {
                     decl_name, effect
                 )
             }
-            Self::CrossSpaceAlias { decl_name, target_space } => {
+            Self::CrossSpaceAlias {
+                decl_name,
+                target_space,
+            } => {
                 write!(
                     f,
                     "CrossSpaceAlias in '{}': direct access to space '{}'",
@@ -168,9 +173,7 @@ pub struct CrossSpaceAccess {
 /// Check that no space directly aliases another space's mutable cells (§4.4).
 ///
 /// Returns the first `CrossSpaceAlias` error found, or `Ok(())`.
-pub fn check_cross_space(
-    accesses: &[CrossSpaceAccess],
-) -> Result<(), EffectError> {
+pub fn check_cross_space(accesses: &[CrossSpaceAccess]) -> Result<(), EffectError> {
     for a in accesses {
         if a.from_space != a.to_space {
             return Err(EffectError::CrossSpaceAlias {
@@ -198,17 +201,12 @@ pub enum ResumeKind {
 }
 
 /// Check that a handler is tail-resumptive (§5.2, OQ-9).
-pub fn check_tail_resumptive(
-    decl_name: &str,
-    resume_kind: ResumeKind,
-) -> Result<(), EffectError> {
+pub fn check_tail_resumptive(decl_name: &str, resume_kind: ResumeKind) -> Result<(), EffectError> {
     match resume_kind {
         ResumeKind::TailOnce | ResumeKind::Stop => Ok(()),
-        ResumeKind::MultiShot | ResumeKind::NonTail => {
-            Err(EffectError::NonTailResumptive {
-                decl_name: decl_name.to_string(),
-            })
-        }
+        ResumeKind::MultiShot | ResumeKind::NonTail => Err(EffectError::NonTailResumptive {
+            decl_name: decl_name.to_string(),
+        }),
     }
 }
 
@@ -241,8 +239,7 @@ pub fn check_higher_order_guard(decl: &EffectDecl) -> Result<(), EffectError> {
         .as_ref()
         .cloned()
         .unwrap_or_else(EffectRow::empty);
-    let candidates =
-        EffectRow::from_effects(decl.unknown_effectful_params.iter().cloned());
+    let candidates = EffectRow::from_effects(decl.unknown_effectful_params.iter().cloned());
     if candidates.is_subset_of(&declared) {
         return Ok(());
     }
@@ -273,6 +270,29 @@ pub fn check_decl(
 ) -> Result<(), EffectError> {
     check_higher_order_guard(decl)?;
     check_escape(decl, inferred, witnesses)?;
+    let performed = EffectRow::from_effects(decl.performed_effects.iter().cloned());
+    check_capabilities(decl, &performed, handler_caps)?;
+    Ok(())
+}
+
+/// Row-polymorphic variant of [`check_decl`] (`36 §1.5`).
+///
+/// This keeps the existing capability gate concrete (a definition directly
+/// performs only named effects) while routing the escape check through
+/// `RowType`, so `[e]` and `[E | e]` declarations can cover inferred row
+/// variables.
+pub fn check_decl_poly(
+    decl: &EffectDecl,
+    inferred: &RowType,
+    handler_caps: &EffectRow,
+) -> Result<(), EffectError> {
+    check_higher_order_guard(decl)?;
+    check_row_poly_escape(
+        &decl.name,
+        inferred,
+        decl.declared_row_type.as_ref(),
+        decl.declared_row.as_ref(),
+    )?;
     let performed = EffectRow::from_effects(decl.performed_effects.iter().cloned());
     check_capabilities(decl, &performed, handler_caps)?;
     Ok(())
