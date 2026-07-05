@@ -18,7 +18,7 @@ use ken_kernel::{
     whnf, Context, Decl, GlobalEnv, GlobalId, InductiveDecl, Level, LevelVar, Term,
 };
 
-use crate::ast::{BinOp, NumLit};
+use crate::ast::{BinOp, DefKeyword, NumLit};
 use crate::classes::{ClassEnv, ClassInfo, ClassKind, InstanceInfo};
 use crate::data;
 use crate::error::{ElabError, Span};
@@ -1700,6 +1700,184 @@ fn check_view_visits_row(rdecl: &RDecl) -> Result<Option<crate::effects::RowType
         })?;
 
     Ok(Some(declared))
+}
+
+fn lower_view_visits_row(rdecl: &RDecl) -> Result<Option<crate::effects::RowType>, ElabError> {
+    let visits = match &rdecl.kind {
+        RDeclKind::View { visits: Some(row), .. } => row,
+        _ => return Ok(None),
+    };
+    let row_vars = crate::effects::row_var_map(&[]);
+    crate::effects::surface_row_to_row_type(visits, &row_vars)
+        .map(Some)
+        .map_err(|reason| ElabError::TypeMismatch {
+            span: visits.span.clone(),
+            reason,
+        })
+}
+
+fn is_empty_closed_row(row: &crate::effects::RowType) -> bool {
+    row.concrete_effects().is_empty() && row.row_vars().is_empty()
+}
+
+fn explicit_value_param_count_from_type(ty: &RType) -> usize {
+    match ty {
+        RType::RPi(_, domain, codomain, _) => {
+            let domain_is_type_param = matches!(&**domain, RType::RUniv(_, _));
+            usize::from(!domain_is_type_param) + explicit_value_param_count_from_type(codomain)
+        }
+        _ => 0,
+    }
+}
+
+fn leading_lambda_count(expr: &RExpr) -> usize {
+    match expr {
+        RExpr::RLam(_, body, _) => 1 + leading_lambda_count(body),
+        _ => 0,
+    }
+}
+
+fn explicit_value_param_count(rdecl: &RDecl) -> usize {
+    rdecl
+        .ty
+        .as_ref()
+        .map(explicit_value_param_count_from_type)
+        .unwrap_or_else(|| leading_lambda_count(&rdecl.body))
+}
+
+fn decl_eval_body(expr: &RExpr) -> &RExpr {
+    match expr {
+        RExpr::RLam(_, body, _) => decl_eval_body(body),
+        _ => expr,
+    }
+}
+
+fn infer_expr_row_type(
+    expr: &RExpr,
+    effect_rows: &HashMap<String, crate::effects::RowType>,
+) -> crate::effects::RowType {
+    match expr {
+        RExpr::RCon(name, _) => effect_rows
+            .get(name)
+            .cloned()
+            .unwrap_or_else(crate::effects::RowType::empty),
+        RExpr::RVar(_, _, _)
+        | RExpr::RUniv(_, _)
+        | RExpr::RNumLit(_, _)
+        | RExpr::RStr(_, _) => crate::effects::RowType::empty(),
+        RExpr::RApp(f, a, _) => infer_expr_row_type(f, effect_rows)
+            .join(infer_expr_row_type(a, effect_rows)),
+        RExpr::RLam(_, _, _) | RExpr::RPi(_, _, _, _) | RExpr::RArrow(_, _, _) => {
+            crate::effects::RowType::empty()
+        }
+        RExpr::RLet(_, _, val, body, _) => infer_expr_row_type(val, effect_rows)
+            .join(infer_expr_row_type(body, effect_rows)),
+        RExpr::RAsc(e, _, _) | RExpr::ROld(e, _) | RExpr::RProj(e, _, _) => {
+            infer_expr_row_type(e, effect_rows)
+        }
+        RExpr::RBinOp(_, l, r, _) => infer_expr_row_type(l, effect_rows)
+            .join(infer_expr_row_type(r, effect_rows)),
+        RExpr::RMatch { scrut, arms, .. } => {
+            let mut row = infer_expr_row_type(scrut, effect_rows);
+            for arm in arms {
+                row = row.join(infer_expr_row_type(&arm.body, effect_rows));
+            }
+            row
+        }
+    }
+}
+
+/// SURF-1 D2 purity-keyword check (`36 §1.6`) over the current production
+/// declaration path. Legacy `view` stays unchecked until the D3/D4 migration.
+pub fn check_surface_purity(
+    rdecl: &RDecl,
+    effect_rows: &HashMap<String, crate::effects::RowType>,
+) -> Result<(), ElabError> {
+    let (keyword, is_space_op, visits) = match &rdecl.kind {
+        RDeclKind::View { keyword, is_space_op, visits, .. } => (*keyword, *is_space_op, visits),
+        _ => return Ok(()),
+    };
+    if keyword == DefKeyword::View {
+        return Ok(());
+    }
+
+    let declared = lower_view_visits_row(rdecl)?.unwrap_or_else(crate::effects::RowType::empty);
+    let inferred = infer_expr_row_type(decl_eval_body(&rdecl.body), effect_rows);
+    let decl = crate::effects::EffectDecl::new(&rdecl.name)
+        .with_declared_row_type(declared.clone());
+    crate::effects::check_decl_poly(&decl, &inferred, &crate::effects::EffectRow::empty())
+        .map_err(|err| ElabError::TypeMismatch {
+            span: rdecl.span.clone(),
+            reason: format!("false purity or effect escape in `{}`: {}", rdecl.name, err),
+        })?;
+
+    let has_impure_decl = !is_empty_closed_row(&declared) || is_space_op;
+    let explicit_value_params = explicit_value_param_count(rdecl);
+
+    match keyword {
+        DefKeyword::Const => {
+            if explicit_value_params > 0 {
+                return Err(ElabError::TypeMismatch {
+                    span: rdecl.span.clone(),
+                    reason: format!(
+                        "`const {}` has {} explicit value parameter(s); use `fn` for a pure function",
+                        rdecl.name, explicit_value_params
+                    ),
+                });
+            }
+            if has_impure_decl {
+                return Err(ElabError::TypeMismatch {
+                    span: rdecl.span.clone(),
+                    reason: format!(
+                        "`const {}` declares an effect row or space operation; use `proc`",
+                        rdecl.name
+                    ),
+                });
+            }
+        }
+        DefKeyword::Fn => {
+            if explicit_value_params == 0 {
+                return Err(ElabError::TypeMismatch {
+                    span: rdecl.span.clone(),
+                    reason: format!(
+                        "`fn {}` has zero explicit value parameters; use `const`",
+                        rdecl.name
+                    ),
+                });
+            }
+            if has_impure_decl {
+                return Err(ElabError::TypeMismatch {
+                    span: rdecl.span.clone(),
+                    reason: format!(
+                        "`fn {}` declares an effect row or space operation; use `proc`",
+                        rdecl.name
+                    ),
+                });
+            }
+        }
+        DefKeyword::Proc => {
+            if !has_impure_decl {
+                let expected = if explicit_value_params == 0 { "const" } else { "fn" };
+                return Err(ElabError::TypeMismatch {
+                    span: rdecl.span.clone(),
+                    reason: format!(
+                        "`proc {}` is provably pure with an empty declared row; use `{}`",
+                        rdecl.name, expected
+                    ),
+                });
+            }
+        }
+        DefKeyword::View => {}
+    }
+
+    if !matches!(keyword, DefKeyword::Proc) && visits.is_some() {
+        return Err(ElabError::TypeMismatch {
+            span: rdecl.span.clone(),
+            reason: "`visits` is only valid on `proc` definitions".to_string(),
+        });
+    }
+
+    Ok(())
 }
 
 /// V1 elaboration: returns the definition id plus any emitted obligation holes.

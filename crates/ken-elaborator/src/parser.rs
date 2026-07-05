@@ -7,7 +7,9 @@
 //! L2 additions: `data D p₁…pₙ = C₁ τ… | C₂ τ…` sum types; `match e { … }`
 //! pattern matching; `type T = A` surface type aliases; `T a b` type app.
 
-use crate::ast::{Binder, CtorDecl, Decl, EffectRowSyntax, Expr, MatchArm, PatKind, Pattern, Type};
+use crate::ast::{
+    Binder, CtorDecl, Decl, DefKeyword, EffectRowSyntax, Expr, MatchArm, PatKind, Pattern, Type,
+};
 use crate::error::{ElabError, Span};
 use crate::lexer::Token;
 use crate::temporal::TemporalExpr;
@@ -64,6 +66,20 @@ impl Parser {
         let (tok, span) = self.advance();
         match tok {
             Token::Ident(s) | Token::ConId(s) => Ok((s, span)),
+            other => Err(ElabError::ParseError {
+                msg: format!("expected identifier, found {:?}", other),
+                span,
+            }),
+        }
+    }
+
+    fn expect_legacy_view_name(&mut self) -> Result<(String, Span), ElabError> {
+        let (tok, span) = self.advance();
+        match tok {
+            Token::Ident(s) | Token::ConId(s) => Ok((s, span)),
+            Token::KwConst => Ok(("const".to_string(), span)),
+            Token::KwFn => Ok(("fn".to_string(), span)),
+            Token::KwProc => Ok(("proc".to_string(), span)),
             other => Err(ElabError::ParseError {
                 msg: format!("expected identifier, found {:?}", other),
                 span,
@@ -129,7 +145,10 @@ impl Parser {
         let start = self.peek_span().start;
         match self.peek().clone() {
             Token::KwSpace => self.parse_space_view_decl(start),
-            Token::KwView => self.parse_view_decl(start, false),
+            Token::KwView => self.parse_view_decl(start, false, DefKeyword::View),
+            Token::KwConst => self.parse_view_decl(start, false, DefKeyword::Const),
+            Token::KwFn => self.parse_view_decl(start, false, DefKeyword::Fn),
+            Token::KwProc => self.parse_view_decl(start, false, DefKeyword::Proc),
             Token::KwLet => self.parse_let_decl(start),
             Token::KwProve => self.parse_prove_decl(start),
             Token::KwLaw => self.parse_law_decl(start),
@@ -146,9 +165,9 @@ impl Parser {
             Token::KwPub => self.parse_pub_decl(start),
             other => Err(ElabError::ParseError {
                 msg: format!(
-                    "expected 'view', 'let', 'prove', 'law', 'data', 'type', 'foreign', \
+                    "expected 'view', 'const', 'fn', 'proc', 'let', 'prove', 'law', 'data', 'type', 'foreign', \
                      'temporal', 'class', 'instance', 'derive', 'module', 'import', 'use', \
-                     'pub', or 'space view', found {:?}",
+                     'pub', or 'space view'/'space proc', found {:?}",
                     other
                 ),
                 span: self.peek_span().clone(),
@@ -159,17 +178,27 @@ impl Parser {
     fn parse_space_view_decl(&mut self, start: usize) -> Result<Decl, ElabError> {
         self.advance(); // consume 'space'
         match self.peek().clone() {
-            Token::KwView => self.parse_view_decl(start, true),
+            Token::KwView => self.parse_view_decl(start, true, DefKeyword::View),
+            Token::KwProc => self.parse_view_decl(start, true, DefKeyword::Proc),
             other => Err(ElabError::ParseError {
-                msg: format!("expected 'view' after 'space', found {:?}", other),
+                msg: format!("expected 'view' or 'proc' after 'space', found {:?}", other),
                 span: self.peek_span().clone(),
             }),
         }
     }
 
-    fn parse_view_decl(&mut self, start: usize, is_space_op: bool) -> Result<Decl, ElabError> {
-        self.advance(); // consume 'view'
-        let (name, _) = self.expect_ident()?;
+    fn parse_view_decl(
+        &mut self,
+        start: usize,
+        is_space_op: bool,
+        keyword: DefKeyword,
+    ) -> Result<Decl, ElabError> {
+        self.advance(); // consume definition keyword
+        let (name, _) = if keyword == DefKeyword::View {
+            self.expect_legacy_view_name()?
+        } else {
+            self.expect_ident()?
+        };
 
         let mut params = Vec::new();
         while matches!(self.peek(), Token::LParen)
@@ -229,6 +258,7 @@ impl Parser {
         let end = body.span().end;
 
         Ok(Decl::ViewDecl {
+            keyword,
             name,
             params,
             ret_ty,

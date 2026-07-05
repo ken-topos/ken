@@ -41,6 +41,16 @@ pub struct EffectRowSyntax {
     pub span: Span,
 }
 
+/// Definition keyword for SURF-1 purity checking (`36 §1.6`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DefKeyword {
+    /// Legacy spelling kept until the D3/D4 corpus migration.
+    View,
+    Const,
+    Fn,
+    Proc,
+}
+
 /// A surface pattern (`34 §3`, `32 §4`).
 #[derive(Clone, Debug)]
 pub struct Pattern {
@@ -63,6 +73,7 @@ pub enum PatKind {
 #[derive(Clone, Debug)]
 pub enum Decl {
     ViewDecl {
+        keyword: DefKeyword,
         name: String,
         params: Vec<Binder>,
         ret_ty: Option<Type>,

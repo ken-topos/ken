@@ -93,6 +93,9 @@ pub struct ElabEnv {
     pub bytes_env: BytesEnv,
     /// The foreign FFI layer (L7): binding registry (`38 §2–§4`).
     pub foreign_env: ForeignEnv,
+    /// Surface effect rows for already-elaborated definitions. SURF-1 D2 uses
+    /// this to release a callee's declared row at a resolved call site.
+    pub effect_rows: HashMap<String, effects::RowType>,
     /// The L3 prelude: collection inductives + Ω constants (`37`).
     pub prelude_env: PreludeEnv,
     /// The Lc typeclass environment: class/instance registry + structural
@@ -132,6 +135,11 @@ impl ElabEnv {
             .map_err(|e| ElabError::Internal(format!("numeric tower init failed: {}", e)))?;
         let bytes_env = bytes::register_bytes_env(&mut env, &mut globals)
             .map_err(|e| ElabError::Internal(format!("bytes layer init failed: {}", e)))?;
+        let effect_rows = bytes_env
+            .io_effect_rows
+            .iter()
+            .map(|(name, row)| (name.clone(), effects::RowType::Concrete(row.clone())))
+            .collect();
         let mut elab = Self {
             env,
             globals,
@@ -139,6 +147,7 @@ impl ElabEnv {
             numeric_env,
             bytes_env,
             foreign_env: foreign::ForeignEnv::empty(),
+            effect_rows,
             // placeholder; `register_prelude` fills it (and needs `&mut self`).
             prelude_env: prelude::empty_prelude_env(),
             // placeholder; replaced after prelude registration below.

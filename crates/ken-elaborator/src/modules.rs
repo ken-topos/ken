@@ -202,8 +202,21 @@ fn apply_import(
 /// exercises them nested).
 fn qualify_decl_name(decl: &Decl, prefix: &str) -> Decl {
     match decl {
-        Decl::ViewDecl { name, params, ret_ty, requires, ensures, constraints, visits, body, is_space_op, span } => {
+        Decl::ViewDecl {
+            keyword,
+            name,
+            params,
+            ret_ty,
+            requires,
+            ensures,
+            constraints,
+            visits,
+            body,
+            is_space_op,
+            span,
+        } => {
             Decl::ViewDecl {
+                keyword: *keyword,
                 name: qualify(prefix, name),
                 params: params.clone(),
                 ret_ty: ret_ty.clone(),
@@ -367,7 +380,8 @@ fn rewrite_rdecl(scope: &Scope, exports: &HashMap<String, HashMap<String, String
         .map(|e| rewrite_rexpr(scope, exports, e))
         .collect::<Result<Vec<_>, ElabError>>()?;
     let kind = match rdecl.kind {
-        RDeclKind::View { is_space_op, constraints, visits } => RDeclKind::View {
+        RDeclKind::View { keyword, is_space_op, constraints, visits } => RDeclKind::View {
+            keyword,
             is_space_op,
             constraints: constraints
                 .into_iter()
@@ -439,6 +453,38 @@ fn is_qualifiable(decl: &Decl) -> bool {
         decl,
         Decl::ViewDecl { .. } | Decl::LetDecl { .. } | Decl::DataDecl { .. } | Decl::TypeAlias { .. }
     )
+}
+
+fn register_effect_row(elab: &mut ElabEnv, result: &crate::elab::ElabResult) {
+    if let Some(row) = &result.effect_row_type {
+        elab.effect_rows.insert(result.name.clone(), row.clone());
+    }
+    if let Some(fb) = &result.foreign_binding {
+        elab.foreign_env.register(result.name.clone(), fb.clone());
+        if !fb.effect_row.is_empty() {
+            elab.effect_rows.insert(
+                result.name.clone(),
+                crate::effects::RowType::Concrete(fb.effect_row.clone()),
+            );
+        }
+    }
+}
+
+fn elaborate_checked(
+    elab: &mut ElabEnv,
+    rdecl: &crate::resolve::RDecl,
+) -> Result<crate::elab::ElabResult, ElabError> {
+    crate::elab::check_surface_purity(rdecl, &elab.effect_rows)?;
+    let result = crate::elab::elaborate_rdecl_v1(
+        &mut elab.env,
+        &mut elab.globals,
+        &mut elab.num_values,
+        &elab.numeric_env,
+        &mut elab.class_env,
+        rdecl,
+    )?;
+    register_effect_row(elab, &result);
+    Ok(result)
 }
 
 /// Expand and elaborate a compilation unit's raw decls (one `elaborate_*`
@@ -551,17 +597,7 @@ fn expand_scope(
                     }
                     if scc.len() == 1 {
                         let rdecl = &rdecls[k];
-                        let result = crate::elab::elaborate_rdecl_v1(
-                            &mut elab.env,
-                            &mut elab.globals,
-                            &mut elab.num_values,
-                            &elab.numeric_env,
-                            &mut elab.class_env,
-                            rdecl,
-                        )?;
-                        if let Some(fb) = &result.foreign_binding {
-                            elab.foreign_env.register(result.name.clone(), fb.clone());
-                        }
+                        let result = elaborate_checked(elab, rdecl)?;
                         ids.push(result);
                     } else {
                         let members: Vec<crate::resolve::RDecl> =
@@ -576,7 +612,7 @@ fn expand_scope(
                             let simple_kind = matches!(&rdecl.kind, RDeclKind::Let)
                                 || matches!(
                                     &rdecl.kind,
-                                    RDeclKind::View { constraints, is_space_op, visits }
+                                    RDeclKind::View { constraints, is_space_op, visits, .. }
                                         if constraints.is_empty() && !is_space_op && visits.is_none()
                                 );
                             let has_refine_return = rdecl
@@ -596,6 +632,7 @@ fn expand_scope(
                                     rdecl.name
                                 )));
                             }
+                            crate::elab::check_surface_purity(rdecl, &elab.effect_rows)?;
                         }
                         let results = crate::elab::elaborate_mutual_group(
                             &mut elab.env,
@@ -606,9 +643,7 @@ fn expand_scope(
                             &members,
                         )?;
                         for result in results {
-                            if let Some(fb) = &result.foreign_binding {
-                                elab.foreign_env.register(result.name.clone(), fb.clone());
-                            }
+                            register_effect_row(elab, &result);
                             ids.push(result);
                         }
                     }
@@ -670,17 +705,7 @@ fn expand_scope(
                     let renamed = qualify_decl_name(inner, prefix);
                     let rdecl = resolve::resolve_decl(&renamed)?;
                     let rdecl = rewrite_rdecl(scope, &elab.module_state.exports, rdecl)?;
-                    let result = crate::elab::elaborate_rdecl_v1(
-                        &mut elab.env,
-                        &mut elab.globals,
-                        &mut elab.num_values,
-                        &elab.numeric_env,
-                        &mut elab.class_env,
-                        &rdecl,
-                    )?;
-                    if let Some(fb) = &result.foreign_binding {
-                        elab.foreign_env.register(result.name.clone(), fb.clone());
-                    }
+                    let result = elaborate_checked(elab, &rdecl)?;
                     if is_pub {
                         // Only the decl's own qualified name is exported —
                         // never a `DataDecl`'s constructors (`33 §4.2`,
@@ -694,17 +719,7 @@ fn expand_scope(
                     // Not module-qualifiable (class/instance/law/foreign/
                     // temporal/prove) — elaborate unchanged, unqualified.
                     let rdecl = resolve::resolve_decl(inner)?;
-                    let result = crate::elab::elaborate_rdecl_v1(
-                        &mut elab.env,
-                        &mut elab.globals,
-                        &mut elab.num_values,
-                        &elab.numeric_env,
-                        &mut elab.class_env,
-                        &rdecl,
-                    )?;
-                    if let Some(fb) = &result.foreign_binding {
-                        elab.foreign_env.register(result.name.clone(), fb.clone());
-                    }
+                    let result = elaborate_checked(elab, &rdecl)?;
                     ids.push(result);
                 }
                 i += 1;

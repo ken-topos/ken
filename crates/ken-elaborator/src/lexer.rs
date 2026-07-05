@@ -14,6 +14,9 @@ use crate::error::{ElabError, Span};
 pub enum Token {
     // V0 keywords
     KwView,
+    KwConst,
+    KwFn,
+    KwProc,
     KwLet,
     KwIn,
     KwType,
@@ -253,6 +256,9 @@ impl<'s> Lexer<'s> {
             }
             let tok = match s.as_str() {
                 "view"     => Token::KwView,
+                "const"    => Token::KwConst,
+                "fn"       => Token::KwFn,
+                "proc"     => Token::KwProc,
                 "let"      => Token::KwLet,
                 "in"       => Token::KwIn,
                 "Type"     => Token::KwType,
