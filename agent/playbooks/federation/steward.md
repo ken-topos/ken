@@ -442,6 +442,37 @@ work flow, so you own the clean context boundary that flows with it. The rules:
   turn-to-turn), so a queued `/compact` is the normal, desired outcome: it fires
   at the next turn boundary. Watch for **idle→busy drift** between capture and
   send ([[fleet-model-rollout]]) — re-checking live state before/after is cheap.
+- **★★★ CODEX HARNESS (2026-07 fleet migration) — the send-keys/compact mechanics
+  above are Claude-Code-era and partly INVERT on Codex. Verified 2026-07-05.**
+  The whole fleet (and the Steward itself) now runs the Codex TUI in `moot-<role>`
+  panes. Corrections, all confirmed the hard way in one session:
+  - **`send-keys` needs the `-l` (literal) flag for text/slash-commands** —
+    `tmux send-keys -t moot-<role> -l "/compact"`. Without `-l` the string does
+    **not** land (the bare `tmux send-keys "/compact"` shown above silently
+    fails on Codex).
+  - **Autocomplete eats Enter.** Typing `/compact` opens Codex's slash-command
+    palette; a following `Enter` **accepts the completion** (garbles to
+    `/compactcompact`) — it does **not** submit. So the "type text → wait →
+    separate Enter" recipe above mis-fires for **slash-commands** on Codex.
+  - **For `/compact`, `moot compact <role>` is the RELIABLE path on Codex** — it
+    lands the command cleanly (pane shows `• Context compacted`). This **inverts**
+    the ★★★ "distrust `moot compact`, prefer send-keys" note above (that note is
+    correct for Claude Code, wrong for Codex). Still **verify the drop** by
+    `capture-pane` (`• Context compacted` / a ctx-left number falling).
+  - **ctx% reads as `N% context left`** (e.g. `37% context left`), not `ctx N%`
+    — the `grep -oE 'ctx [0-9]+%'` below won't match; grep `context left` (and it
+    is often absent from the tail entirely — accept you may get no number and
+    fall back to the boundary rule).
+  - **Post-compaction MENTION ROUSE.** A Codex agent that was just compacted does
+    **not** auto-pick-up a convo mention posted *after* its compaction — it sits
+    idle at an empty composer. Rouse it: `tmux send-keys -t moot-<role> -l "<one
+    line: run get_recent_context and pick up event <evt_id> — WP <x> assigned to
+    you; re-orient per CLAUDE.md, then proceed>"` then a **separate** `Enter`.
+    (2026-07-05: spec-leader would not take the SURF-2 handoff until roused this
+    way.) This is the post-compaction variant of the mention-wedge.
+  - **Clearing a garbled composer:** `C-u` clears some panes; stubborn ones need
+    `C-a` then `C-k` then repeated `BSpace`. **Never `Escape`** — it aborts an
+    in-flight compaction.
 - **★ Watch context %, compact proactively — never let an agent approach full
   (operator 2026-07-01).** High context is **expensive per turn for very little
   gain**: an agent at ~90% reprocesses ~900K tokens *every turn*, and the working
