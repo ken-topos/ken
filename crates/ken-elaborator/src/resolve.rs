@@ -100,11 +100,16 @@ pub enum RDeclKind {
     /// `class C A { field : Type ; … }` (`33 §5`).
     ClassDecl {
         param: Option<String>,
+        /// Optional resolved kind for the class parameter. Absent means `Type0`.
+        param_kind: Option<RType>,
         /// Resolved field types (param in scope if present).
         fields: Vec<(String, RType)>,
     },
     /// `instance C HeadType [where …] { field = expr ; … }` (`39 §6`).
     InstanceDecl {
+        /// Free lowercase type variables generalized from the instance head.
+        /// Each is implicitly bound at `Type0`.
+        head_params: Vec<String>,
         head_type: RType,
         /// Resolved constraint list: (class_name, head_type).
         constraints: Vec<(String, RType)>,
@@ -225,6 +230,29 @@ impl Scope {
 
     fn depth(&self) -> usize {
         self.0.len()
+    }
+}
+
+fn is_instance_head_param(name: &str) -> bool {
+    name.chars()
+        .next()
+        .map(|c| c == '_' || c.is_ascii_lowercase())
+        .unwrap_or(false)
+}
+
+fn collect_instance_head_params(ty: &Type, out: &mut Vec<String>) {
+    match ty {
+        Type::TVar(name, _) if is_instance_head_param(name) => {
+            if !out.iter().any(|p| p == name) {
+                out.push(name.clone());
+            }
+        }
+        Type::TPi(_, a, b, _) | Type::TArr(a, b, _) | Type::TApp(a, b, _) => {
+            collect_instance_head_params(a, out);
+            collect_instance_head_params(b, out);
+        }
+        Type::TRefine(_, carrier, _, _) => collect_instance_head_params(carrier, out),
+        Type::TUniv(_, _) | Type::TCon(_, _) | Type::TVar(_, _) => {}
     }
 }
 
@@ -507,7 +535,7 @@ pub fn resolve_decl(decl: &Decl) -> Result<RDecl, ElabError> {
             })
         }
 
-        Decl::ClassDecl { name, param, fields, span } => {
+        Decl::ClassDecl { name, param, param_kind, fields, span } => {
             // Fields form a real Σ-telescope (`33 §5.2`): a later field's
             // type may reference an EARLIER field by name (a law like
             // `refl : (x:a) -> IsTrue (eq x x)` refers to the `eq` op
@@ -516,6 +544,10 @@ pub fn resolve_decl(decl: &Decl) -> Result<RDecl, ElabError> {
             // reference (matching the Sigma-chain's own binder depth) for
             // every subsequent field — never a stray global lookup.
             let mut scope = Scope::new();
+            let resolved_param_kind = param_kind
+                .as_ref()
+                .map(|k| resolve_type(&mut scope, k))
+                .transpose()?;
             if let Some(p) = param {
                 scope.push(p);
             }
@@ -534,6 +566,7 @@ pub fn resolve_decl(decl: &Decl) -> Result<RDecl, ElabError> {
                 span: span.clone(),
                 kind: RDeclKind::ClassDecl {
                     param: param.clone(),
+                    param_kind: resolved_param_kind,
                     fields: resolved_fields,
                 },
             })
@@ -541,6 +574,11 @@ pub fn resolve_decl(decl: &Decl) -> Result<RDecl, ElabError> {
 
         Decl::InstanceDecl { class_name, head_type, constraints, fields, span } => {
             let mut scope = Scope::new();
+            let mut head_params = Vec::new();
+            collect_instance_head_params(head_type, &mut head_params);
+            for param in &head_params {
+                scope.push(param);
+            }
             let rhead = resolve_type(&mut scope, head_type)?;
             let rconstraints = constraints
                 .iter()
@@ -564,6 +602,7 @@ pub fn resolve_decl(decl: &Decl) -> Result<RDecl, ElabError> {
                 ensures: vec![],
                 span: span.clone(),
                 kind: RDeclKind::InstanceDecl {
+                    head_params,
                     head_type: rhead,
                     constraints: rconstraints,
                     fields: rfields,

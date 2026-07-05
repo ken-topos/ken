@@ -1974,13 +1974,23 @@ pub fn elaborate_rdecl_v1(
         RDeclKind::Temporal { formula, source } => {
             elaborate_temporal(env, globals, rdecl, formula, source)
         }
-        RDeclKind::ClassDecl { param, fields } => {
-            elab_class_decl(env, globals, num_values, numeric_env, class_env, rdecl, param, fields)
+        RDeclKind::ClassDecl { param, param_kind, fields } => {
+            elab_class_decl(
+                env,
+                globals,
+                num_values,
+                numeric_env,
+                class_env,
+                rdecl,
+                param,
+                param_kind.as_ref(),
+                fields,
+            )
         }
-        RDeclKind::InstanceDecl { head_type, constraints, fields } => {
+        RDeclKind::InstanceDecl { head_params, head_type, constraints, fields } => {
             elab_instance_decl(
                 env, globals, num_values, numeric_env, class_env, rdecl,
-                &rdecl.name.clone(), head_type, constraints, fields,
+                &rdecl.name.clone(), head_params, head_type, constraints, fields,
             )
         }
         RDeclKind::DeriveDecl { data_name } => {
@@ -2069,10 +2079,22 @@ fn elab_class_decl(
     class_env: &mut ClassEnv,
     rdecl: &RDecl,
     param: &Option<String>,
+    param_kind: Option<&RType>,
     fields: &[(String, RType)],
 ) -> Result<ElabResult, ElabError> {
     let span = &rdecl.span;
     let has_param = param.is_some();
+    let param_kind_core = if has_param {
+        if let Some(kind) = param_kind {
+            let mut cx = ElabCtx::new(env, globals, num_values, numeric_env);
+            let kind_core = elab_type(&mut cx, kind)?;
+            cx.metas.zonk_term(&kind_core)
+        } else {
+            Term::ty(Level::Zero)
+        }
+    } else {
+        Term::ty(Level::Zero)
+    };
 
     // Elaborate each field type incrementally: a real Σ-telescope (`33
     // §5.2`) where a later field's type may reference an EARLIER field's
@@ -2083,7 +2105,7 @@ fn elab_class_decl(
     let field_types: Vec<Term> = {
         let mut cx = ElabCtx::new(env, globals, num_values, numeric_env);
         if has_param {
-            cx.ctx.push(Term::ty(Level::Zero));
+            cx.ctx.push(param_kind_core.clone());
         }
         let mut tys = Vec::new();
         for (_, fty) in fields {
@@ -2103,7 +2125,7 @@ fn elab_class_decl(
     let chain_sort = {
         let mut ctx_a = Context::new();
         if has_param {
-            ctx_a.push(Term::ty(Level::Zero));
+            ctx_a.push(param_kind_core.clone());
         }
         kernel_infer(env, &ctx_a, &sigma_chain)
             .map_err(|e| ElabError::KernelRejected { error: e, span: span.clone() })?
@@ -2117,8 +2139,8 @@ fn elab_class_decl(
 
     // Build class type and body.
     let (class_ty, class_body) = if has_param {
-        let pi_ty = Term::pi(Term::ty(Level::Zero), weaken(&chain_sort, 1));
-        let lam_body = Term::lam(Term::ty(Level::Zero), sigma_chain);
+        let pi_ty = Term::pi(param_kind_core.clone(), weaken(&chain_sort, 1));
+        let lam_body = Term::lam(param_kind_core.clone(), sigma_chain);
         (pi_ty, lam_body)
     } else {
         (chain_sort, sigma_chain)
@@ -2132,6 +2154,7 @@ fn elab_class_decl(
         rdecl.name.clone(),
         ClassInfo {
             param: param.clone(),
+            param_kind: has_param.then_some(param_kind_core),
             field_names: fields.iter().map(|(n, _)| n.clone()).collect(),
             field_types: field_types.clone(),
             type_id: id,
@@ -2193,6 +2216,26 @@ fn compute_ordered_field_values(
     Ok(values)
 }
 
+fn push_type0_params(cx: &mut ElabCtx, count: usize) {
+    for _ in 0..count {
+        cx.ctx.push(Term::ty(Level::Zero));
+    }
+}
+
+fn close_type0_pis(mut ty: Term, count: usize) -> Term {
+    for _ in 0..count {
+        ty = Term::pi(Term::ty(Level::Zero), ty);
+    }
+    ty
+}
+
+fn close_type0_lams(mut body: Term, count: usize) -> Term {
+    for _ in 0..count {
+        body = Term::lam(Term::ty(Level::Zero), body);
+    }
+    body
+}
+
 /// Elaborate `instance C HeadType [where C1 T1 ; …] { f1 = e1 ; … }`.
 ///
 /// Enforces the orphan check (`33 §5.3`) and overlap check (`39 §6.1`),
@@ -2208,6 +2251,7 @@ fn elab_instance_decl(
     class_env: &mut ClassEnv,
     rdecl: &RDecl,
     class_name: &str,
+    head_params: &[String],
     head_type: &RType,
     constraints: &[(String, RType)],
     fields: &[(String, RExpr)],
@@ -2252,6 +2296,7 @@ fn elab_instance_decl(
     // ---- elaborate head type --------------------------------------------
     let head_core = {
         let mut cx = ElabCtx::new(env, globals, num_values, numeric_env);
+        push_type0_params(&mut cx, head_params.len());
         let h = elab_type(&mut cx, head_type)?;
         cx.metas.zonk_term(&h)
     };
@@ -2263,6 +2308,7 @@ fn elab_instance_decl(
     } else {
         Term::const_(class_type_id, vec![])
     };
+    let closed_instance_ty = close_type0_pis(instance_ty.clone(), head_params.len());
 
     // ---- direct-self-reference detection (`39 §6.4`, scope-limited) -------
     //
@@ -2295,7 +2341,7 @@ fn elab_instance_decl(
         //
         // collect_calls sees App(Const(own_id), Var(0)) → edge with M=[[?]]
         // (Var(0) = the parameter, not strictly decreasing) → SCT rejects.
-        let t = instance_ty.clone();
+        let t = closed_instance_ty.clone();
         let fixpoint_ty = Term::pi(t.clone(), t.clone());
         let ids = declare_recursive_group(
             env,
@@ -2318,10 +2364,14 @@ fn elab_instance_decl(
         // accepts. Mutual/indirect cycles are not detected here (see above).
         let ordered_vals: Vec<Term> = {
             let mut cx = ElabCtx::new(env, globals, num_values, numeric_env).with_classes(&*class_env);
+            push_type0_params(&mut cx, head_params.len());
             compute_ordered_field_values(&mut cx, class_env, class_name, &head_core, fields, span)?
         };
-        let pair_chain = build_pair_chain(&ordered_vals, class_env.record_nil_val_id);
-        let inst_ty = instance_ty.clone();
+        let pair_chain = close_type0_lams(
+            build_pair_chain(&ordered_vals, class_env.record_nil_val_id),
+            head_params.len(),
+        );
+        let inst_ty = closed_instance_ty.clone();
         let ids = declare_recursive_group(
             env,
             vec![(vec![], inst_ty)],
@@ -2333,10 +2383,14 @@ fn elab_instance_decl(
         // No constraints: declare_def path (no recursion possible, SCT not needed).
         let ordered_vals: Vec<Term> = {
             let mut cx = ElabCtx::new(env, globals, num_values, numeric_env).with_classes(&*class_env);
+            push_type0_params(&mut cx, head_params.len());
             compute_ordered_field_values(&mut cx, class_env, class_name, &head_core, fields, span)?
         };
-        let pair_chain = build_pair_chain(&ordered_vals, class_env.record_nil_val_id);
-        declare_def(env, vec![], instance_ty, pair_chain)
+        let pair_chain = close_type0_lams(
+            build_pair_chain(&ordered_vals, class_env.record_nil_val_id),
+            head_params.len(),
+        );
+        declare_def(env, vec![], closed_instance_ty, pair_chain)
             .map_err(|e| ElabError::KernelRejected { error: e, span: span.clone() })?
     };
 

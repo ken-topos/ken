@@ -499,12 +499,21 @@ impl Parser {
     }
 
     /// `class C (A : Type) { field : Type ; … }` — typeclass declaration
-    /// (`33 §5`).  The single type param is optional; fields are `name : Type`.
+    /// (`33 §5`). The single type param is optional; bare `A` defaults to
+    /// `Type0`, while `(A : K)` carries an explicit kind.
     fn parse_class_decl(&mut self, start: usize) -> Result<Decl, ElabError> {
         self.advance(); // consume 'class'
         let (name, _) = self.expect_ident()?;
-        // Optional single type parameter `(A : Type)` or bare ident `A`
-        let param = if matches!(self.peek(), Token::Ident(_) | Token::ConId(_)) {
+        let mut param_kind = None;
+        // Optional single type parameter `(A : K)` or bare ident `A`.
+        let param = if matches!(self.peek(), Token::LParen) {
+            self.advance();
+            let (p, _) = self.expect_ident()?;
+            self.expect(&Token::Colon)?;
+            param_kind = Some(self.parse_type()?);
+            self.expect(&Token::RParen)?;
+            Some(p)
+        } else if matches!(self.peek(), Token::Ident(_) | Token::ConId(_)) {
             let (p, _) = self.expect_ident()?;
             Some(p)
         } else {
@@ -526,6 +535,7 @@ impl Parser {
         Ok(Decl::ClassDecl {
             name,
             param,
+            param_kind,
             fields,
             span: Span::new(start, end),
         })
