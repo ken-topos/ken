@@ -210,6 +210,29 @@ native compilation (`45`, the X-series) is what lets the proved tier *also* be
 fast. `Float` equality is `NATIVE`-but-non-proof while `Int`'s is provable — the
 type tells you which tradeoff you accepted (`18a §5.4`).
 
+### 13. Fix the defect at its layer — never compensate upward
+
+Ken is a stack of layers, each trusting the one beneath it: kernel ⊂ elaborator
+⊂ prover ⊂ standard library ⊂ surface program. **A defect in a lower layer is
+fixed in that layer.** Compensating for it higher up — a library workaround, a
+surface-syntax dance, a special case that routes around the broken path — leaves
+the defect live for every other client, silently corrupts the lower layer's
+contract, and grows incidental complexity that outlives the bug. The
+higher-layer patch is the *expedient* (principle 4); worse, a masked lower defect
+is a hidden lie about what the layer guarantees — over-claiming (principle 8) one
+level down. The layered TCB (principle 5) exists precisely so a fix has an
+unambiguous home; put it there.
+
+*In practice:* when the kernel's `check` of a `let`-expression verified the body
+against the wrong type, the fix belonged in the kernel's checker arm — not in a
+parenthesization ritual in the library that happened to trip over it. A higher
+layer may *route around* a lower defect only as a **disclosed, temporary** hedge,
+with the root fix filed and tracked — never as the permanent answer, and never in
+a way that hides the defect. The tell that you are about to violate this: a
+workaround starts to feel permanent, or you reach for "just handle it here
+instead." That feeling is the signal the root fix was skipped — stop and push the
+fix down to where the defect lives.
+
 ---
 
 ## Working constraints (process, not philosophy)
