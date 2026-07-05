@@ -121,6 +121,43 @@ fn list_pair_nat_nat(env: &ElabEnv, v: &EvalVal) -> Vec<(u64, u64)> {
     }
 }
 
+fn list_nat(env: &ElabEnv, v: &EvalVal) -> Vec<u64> {
+    let nil_id = env.prelude_env.nil_id;
+    let cons_id = env.prelude_env.cons_id;
+    let mut out = Vec::new();
+    let mut cur = v.clone();
+    loop {
+        match &cur {
+            EvalVal::Ctor { id, .. } if *id == nil_id => return out,
+            EvalVal::Ctor { id, args, .. } if *id == cons_id => {
+                out.push(nat_count(env, &args[1]));
+                cur = args[2].clone();
+            }
+            other => panic!("not a well-formed List Nat chain: {other:?}"),
+        }
+    }
+}
+
+fn option_nat(env: &ElabEnv, v: &EvalVal) -> Option<u64> {
+    let none_id = env.globals["None"];
+    let some_id = env.globals["Some"];
+    match v {
+        EvalVal::Ctor { id, .. } if *id == none_id => None,
+        EvalVal::Ctor { id, args, .. } if *id == some_id => Some(nat_count(env, &args[1])),
+        other => panic!("not an Option Nat value: {other:?}"),
+    }
+}
+
+fn bool_value(env: &ElabEnv, v: &EvalVal) -> bool {
+    let true_id = env.globals["True"];
+    let false_id = env.globals["False"];
+    match v {
+        EvalVal::Ctor { id, .. } if *id == true_id => true,
+        EvalVal::Ctor { id, .. } if *id == false_id => false,
+        other => panic!("not a Bool value: {other:?}"),
+    }
+}
+
 /// A hand-built 3-node `Tree Nat Nat`, deliberately inserted (constructed) in
 /// NON-ascending key order — `2`, then `1` under it, then `3` under it — so
 /// `toList`'s ascending-order claim is actually exercised (an
@@ -697,6 +734,226 @@ fn lookupassocagree_law5_is_a_real_general_proof_term() {
             "{name} must be a real proof term, not a postulate"
         );
     }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CAT-4 (`58`) — Layer-2 keyed collections / sets / relations
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn cat4_new_api_is_derived_and_axiom_free() {
+    let env = mk_env();
+    for name in [
+        "bool_and",
+        "bool_not",
+        "leqNat",
+        "reflLeqNat",
+        "transLeqNat",
+        "antisymLeqNat",
+        "totalLeqNat",
+        "orderEquivKey",
+        "dropKey",
+        "delete",
+        "fromListAccPreservesOrdered",
+        "fromListPreservesOrdered",
+        "deletePreservesOrdered",
+        "insertWith",
+        "insertWithFoldStep",
+        "union",
+        "intersection",
+        "difference",
+        "insertFoldStep",
+        "foldInsertPreservesOrdered",
+        "insertWithPreservesOrdered",
+        "foldInsertWithPreservesOrdered",
+        "unionPreservesOrdered",
+        "setUnion",
+        "setIntersection",
+        "setDifference",
+        "pairVals",
+        "keys",
+        "values",
+        "succ",
+        "relMember",
+        "addEdge",
+        "composeSuccStep",
+        "composeSucc",
+        "compose",
+        "converseTargets",
+        "converse",
+        "isReflexive",
+        "isSymmetric",
+        "isTransitive",
+        "isEquivalence",
+    ] {
+        let id = env.globals[name];
+        assert!(
+            matches!(env.env.lookup(id), Some(Decl::Transparent { .. })),
+            "{name} must be transparent derived Ken, not a primitive/postulate"
+        );
+        let delta = trusted_base_delta(&env.env, id);
+        assert!(delta.is_empty(), "{name} must add zero trusted_base delta, got {delta:?}");
+    }
+}
+
+#[test]
+fn cat4_delete_dropkey_filters_all_equivalent_keys() {
+    let mut env = mk_env();
+    let mut store = make_store(&env);
+    let list_expr = format!(
+        "Cons (Pair Nat Nat) (mkPair Nat Nat ({one}) ({ten})) \
+           (Cons (Pair Nat Nat) (mkPair Nat Nat ({two}) ({twenty})) \
+             (Cons (Pair Nat Nat) (mkPair Nat Nat ({one}) ({thirty})) (Nil (Pair Nat Nat))))",
+        one = nat(1),
+        two = nat(2),
+        ten = nat(10),
+        twenty = nat(20),
+        thirty = nat(30)
+    );
+    let v = eval_view(
+        &mut env,
+        &mut store,
+        "t_cat4_dropkey_filter",
+        "List (Pair Nat Nat)",
+        &format!("dropKey Nat Nat leqNat ({}) ({list_expr})", nat(1)),
+    );
+    assert_eq!(
+        list_pair_nat_nat(&env, &v),
+        vec![(2, 20)],
+        "dropKey must filter every order-equivalent key, not just the first match"
+    );
+
+    let m = format!(
+        "insert Nat Nat leqNat ({one}) ({ten}) \
+           (insert Nat Nat leqNat ({two}) ({twenty}) (empty Nat Nat))",
+        one = nat(1),
+        two = nat(2),
+        ten = nat(10),
+        twenty = nat(20)
+    );
+    let v = eval_view(
+        &mut env,
+        &mut store,
+        "t_cat4_delete_lookup",
+        "Option Nat",
+        &format!("lookup Nat Nat leqNat ({}) (delete Nat Nat leqNat ({}) ({m}))", nat(1), nat(1)),
+    );
+    assert_eq!(option_nat(&env, &v), None, "deleted key must look up as None");
+}
+
+#[test]
+fn cat4_union_intersection_difference_execute_over_nat() {
+    let mut env = mk_env();
+    let mut store = make_store(&env);
+    let a = format!(
+        "insert Nat Nat leqNat ({one}) ({ten}) \
+           (insert Nat Nat leqNat ({two}) ({twenty}) (empty Nat Nat))",
+        one = nat(1),
+        two = nat(2),
+        ten = nat(10),
+        twenty = nat(20)
+    );
+    let b = format!(
+        "insert Nat Nat leqNat ({one}) ({thirty}) \
+           (insert Nat Nat leqNat ({three}) ({forty}) (empty Nat Nat))",
+        one = nat(1),
+        three = nat(3),
+        thirty = nat(30),
+        forty = nat(40)
+    );
+
+    let v = eval_view(
+        &mut env,
+        &mut store,
+        "t_cat4_union_orientation",
+        "Option Nat",
+        &format!("lookup Nat Nat leqNat ({}) (union Nat Nat leqNat (λx.λy. x) ({a}) ({b}))", nat(1)),
+    );
+    assert_eq!(
+        option_nat(&env, &v),
+        Some(10),
+        "union collision must call f (from-a) (from-b); reversed orientation would return 30"
+    );
+
+    let v = eval_view(
+        &mut env,
+        &mut store,
+        "t_cat4_intersection",
+        "List (Pair Nat Nat)",
+        &format!("toList Nat Nat (intersection Nat Nat leqNat ({a}) ({b}))"),
+    );
+    assert_eq!(list_pair_nat_nat(&env, &v), vec![(1, 10)], "intersection keeps only shared keys with values from the left map");
+
+    let v = eval_view(
+        &mut env,
+        &mut store,
+        "t_cat4_difference",
+        "List (Pair Nat Nat)",
+        &format!("toList Nat Nat (difference Nat Nat leqNat ({a}) ({b}))"),
+    );
+    assert_eq!(list_pair_nat_nat(&env, &v), vec![(2, 20)], "difference keeps left-only keys");
+}
+
+#[test]
+fn cat4_keys_values_are_aligned_tolist_projections() {
+    let mut env = mk_env();
+    let mut store = make_store(&env);
+    let m = format!(
+        "insert Nat Nat leqNat ({two}) ({twenty}) \
+           (insert Nat Nat leqNat ({one}) ({ten}) \
+             (insert Nat Nat leqNat ({three}) ({thirty}) (empty Nat Nat)))",
+        one = nat(1),
+        two = nat(2),
+        three = nat(3),
+        ten = nat(10),
+        twenty = nat(20),
+        thirty = nat(30)
+    );
+    let ks = eval_view(&mut env, &mut store, "t_cat4_keys", "List Nat", &format!("keys Nat Nat ({m})"));
+    let vs = eval_view(&mut env, &mut store, "t_cat4_values", "List Nat", &format!("values Nat Nat ({m})"));
+    assert_eq!(list_nat(&env, &ks), vec![1, 2, 3], "keys must follow toList ascending key order");
+    assert_eq!(list_nat(&env, &vs), vec![10, 20, 30], "values must stay positionally aligned with keys");
+}
+
+#[test]
+fn cat4_relations_compose_and_converse_over_adjacency_maps() {
+    let mut env = mk_env();
+    let mut store = make_store(&env);
+    let r = format!(
+        "addEdge Nat leqNat ({one}) ({two}) (empty Nat (Tree Nat Unit))",
+        one = nat(1),
+        two = nat(2)
+    );
+    let s = format!(
+        "addEdge Nat leqNat ({two}) ({three}) (empty Nat (Tree Nat Unit))",
+        two = nat(2),
+        three = nat(3)
+    );
+    let v = eval_view(
+        &mut env,
+        &mut store,
+        "t_cat4_compose_member",
+        "Bool",
+        &format!(
+            "setMember Nat leqNat ({three}) (succ Nat leqNat ({one}) (compose Nat leqNat ({r}) ({s})))",
+            one = nat(1),
+            three = nat(3)
+        ),
+    );
+    assert!(bool_value(&env, &v), "compose must include 1 -> 3 when R has 1 -> 2 and S has 2 -> 3");
+
+    let v = eval_view(
+        &mut env,
+        &mut store,
+        "t_cat4_converse_member",
+        "Bool",
+        &format!(
+            "setMember Nat leqNat ({one}) (succ Nat leqNat ({two}) (converse Nat leqNat ({r})))",
+            one = nat(1),
+            two = nat(2)
+        ),
+    );
+    assert!(bool_value(&env, &v), "converse must reverse the adjacency edge 1 -> 2 into 2 -> 1");
 }
 
 // A hand-built concrete-instance application (`tree_2_1_3` under a trivial

@@ -2223,3 +2223,570 @@ fn lookupAssocAgree
           (lookupAssocAgree k v leq transLeq key r (getOrderedR k v leq l k2 v2 r h) (law5DistinctR k v leq l k2 v2 r hd))
           (boolDichotomy (leq key k2))
   }
+
+-- CAT-4 (`58`) -- Layer-2 keyed-collection operations. These definitions sit
+-- on top of the landed Map capstone: no new kernel primitive, no postulate,
+-- and no proof-relevant `Ω` inductive. The SURF-1 spelling is deliberate:
+-- every new operation here is pure, so every declaration is `fn`.
+
+fn bool_and (a : Bool) (b : Bool) : Bool =
+  match a { True ⇒ b ; False ⇒ False }
+
+fn bool_not (b : Bool) : Bool =
+  match b { True ⇒ False ; False ⇒ True }
+
+fn leqNat (m : Nat) (n : Nat) : Bool =
+  match m {
+    Zero ⇒ True ;
+    Suc m2 ⇒ match n { Zero ⇒ False ; Suc n2 ⇒ leqNat m2 n2 }
+  }
+
+fn reflLeqNat (x : Nat) : Equal Bool (leqNat x x) True =
+  match x { Zero ⇒ tt ; Suc x2 ⇒ reflLeqNat x2 }
+
+fn transLeqNat
+  (x : Nat)
+  : (y : Nat) → (z : Nat) → Equal Bool (leqNat x y) True → Equal Bool (leqNat y z) True → Equal Bool (leqNat x z) True =
+  match x {
+    Zero ⇒ λy.λz.λp.λq. tt ;
+    Suc x2 ⇒
+      λy. match y {
+        Zero ⇒ λz.λp.λq. absurd p ;
+        Suc y2 ⇒
+          λz. match z {
+            Zero ⇒ λp.λq. absurd q ;
+            Suc z2 ⇒ λp.λq. transLeqNat x2 y2 z2 p q
+          }
+      }
+  }
+
+fn antisymLeqNat
+  (x : Nat)
+  : (y : Nat) → Equal Bool (leqNat x y) True → Equal Bool (leqNat y x) True → Equal Nat x y =
+  match x {
+    Zero ⇒
+      λy. match y {
+        Zero ⇒ λp.λq. tt ;
+        Suc y2 ⇒ λp.λq. absurd q
+      } ;
+    Suc x2 ⇒
+      λy. match y {
+        Zero ⇒ λp.λq. absurd p ;
+        Suc y2 ⇒ λp.λq. cong Nat Nat x2 y2 Suc (antisymLeqNat x2 y2 p q)
+      }
+  }
+
+fn totalLeqNat (x : Nat) (y : Nat) : Or (Equal Bool (leqNat x y) True) (Equal Bool (leqNat y x) True) =
+  match x {
+    Zero ⇒ Inl (Equal Bool (leqNat Zero y) True) (Equal Bool (leqNat y Zero) True) tt ;
+    Suc x2 ⇒
+      match y {
+        Zero ⇒ Inr (Equal Bool (leqNat (Suc x2) Zero) True) (Equal Bool (leqNat Zero (Suc x2)) True) tt ;
+        Suc y2 ⇒
+          match totalLeqNat x2 y2 {
+            Inl h ⇒ Inl (Equal Bool (leqNat (Suc x2) (Suc y2)) True) (Equal Bool (leqNat (Suc y2) (Suc x2)) True) h ;
+            Inr h ⇒ Inr (Equal Bool (leqNat (Suc x2) (Suc y2)) True) (Equal Bool (leqNat (Suc y2) (Suc x2)) True) h
+          }
+      }
+  }
+
+fn orderEquivKey (k : Type) (leq : k → k → Bool) (a : k) (b : k) : Bool =
+  bool_and (leq a b) (leq b a)
+
+fn dropKey (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (xs : List (Pair k v)) : List (Pair k v) =
+  match xs {
+    Nil ⇒ Nil (Pair k v) ;
+    Cons e xs2 ⇒
+      match orderEquivKey k leq key (pairFst k v e) {
+        True ⇒ dropKey k v leq key xs2 ;
+        False ⇒ Cons (Pair k v) e (dropKey k v leq key xs2)
+      }
+  }
+
+fn delete (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (m : Tree k v) : Tree k v =
+  fromList k v leq (dropKey k v leq key (toList k v m))
+
+fn fromListAccPreservesOrdered
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (total : (x : k) → (y : k) → Or (Equal Bool (leq x y) True) (Equal Bool (leq y x) True))
+  (xs : List (Pair k v)) (acc : Tree k v)
+  : Ordered k v leq acc → Ordered k v leq (fromListAcc k v leq xs acc) =
+  match xs {
+    Nil ⇒ λh. h ;
+    Cons p xs2 ⇒
+      λh.
+        fromListAccPreservesOrdered k v leq transLeq total xs2
+          (insert k v leq (pairFst k v p) (pairSnd k v p) acc)
+          (preservesOrdered k v leq transLeq total (pairFst k v p) (pairSnd k v p) acc h)
+  }
+
+fn fromListPreservesOrdered
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (total : (x : k) → (y : k) → Or (Equal Bool (leq x y) True) (Equal Bool (leq y x) True))
+  (xs : List (Pair k v))
+  : Ordered k v leq (fromList k v leq xs) =
+  fromListAccPreservesOrdered k v leq transLeq total xs (Leaf k v) (orderedEmpty k v leq)
+
+fn deletePreservesOrdered
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (total : (x : k) → (y : k) → Or (Equal Bool (leq x y) True) (Equal Bool (leq y x) True))
+  (key : k) (m : Tree k v)
+  : Ordered k v leq (delete k v leq key m) =
+  fromListPreservesOrdered k v leq transLeq total (dropKey k v leq key (toList k v m))
+
+fn insertWith (k : Type) (v : Type) (leq : k → k → Bool) (f : v → v → v) (key : k) (val : v) (m : Tree k v) : Tree k v =
+  match m {
+    Leaf ⇒ Node k v (Leaf k v) key val (Leaf k v) ;
+    Node l k2 v2 r ⇒
+      match leq key k2 {
+        True ⇒
+          match leq k2 key {
+            True ⇒ Node k v l key (f val v2) r ;
+            False ⇒ Node k v (insertWith k v leq f key val l) k2 v2 r
+          } ;
+        False ⇒ Node k v l k2 v2 (insertWith k v leq f key val r)
+      }
+  }
+
+fn insertWithFoldStep (k : Type) (v : Type) (leq : k → k → Bool) (f : v → v → v) (key : k) (val : v) (acc : Tree k v) : Tree k v =
+  insertWith k v leq f key val acc
+
+fn union (k : Type) (v : Type) (leq : k → k → Bool) (f : v → v → v) (a : Tree k v) (b : Tree k v) : Tree k v =
+  fold k v (Tree k v) (insertWithFoldStep k v leq f) b a
+
+fn intersection (k : Type) (v : Type) (leq : k → k → Bool) (a : Tree k v) (b : Tree k v) : Tree k v =
+  fold k v (Tree k v)
+    (λkey.λval.λacc.
+      match member k v leq key b {
+        True ⇒ insert k v leq key val acc ;
+        False ⇒ acc
+      })
+    (empty k v) a
+
+fn difference (k : Type) (v : Type) (leq : k → k → Bool) (a : Tree k v) (b : Tree k v) : Tree k v =
+  fold k v (Tree k v)
+    (λkey.λval.λacc.
+      match member k v leq key b {
+        True ⇒ acc ;
+        False ⇒ insert k v leq key val acc
+      })
+    (empty k v) a
+
+fn insertFoldStep (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (val : v) (acc : Tree k v) : Tree k v =
+  insert k v leq key val acc
+
+fn foldInsertPreservesOrdered
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (total : (x : k) → (y : k) → Or (Equal Bool (leq x y) True) (Equal Bool (leq y x) True))
+  (src : Tree k v) (acc : Tree k v)
+  : Ordered k v leq acc → Ordered k v leq (fold k v (Tree k v) (insertFoldStep k v leq) acc src) =
+  match src {
+    Leaf ⇒ λh. h ;
+    Node l key val r ⇒
+      λh.
+        foldInsertPreservesOrdered k v leq transLeq total r
+          (insert k v leq key val (fold k v (Tree k v) (insertFoldStep k v leq) acc l))
+          (preservesOrdered k v leq transLeq total key val
+            (fold k v (Tree k v) (insertFoldStep k v leq) acc l)
+            (foldInsertPreservesOrdered k v leq transLeq total l acc h))
+  }
+
+fn insertWithStepInner
+  (k : Type) (v : Type) (leq : k → k → Bool) (f : v → v → v) (key : k) (val : v)
+  (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v) (y : Bool) : Tree k v =
+  match y {
+    True ⇒ Node k v l key (f val v2) r ;
+    False ⇒ Node k v (insertWith k v leq f key val l) k2 v2 r
+  }
+
+fn insertWithStep
+  (k : Type) (v : Type) (leq : k → k → Bool) (f : v → v → v) (key : k) (val : v)
+  (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v) (x : Bool) : Tree k v =
+  match x {
+    True ⇒ insertWithStepInner k v leq f key val l k2 v2 r (leq k2 key) ;
+    False ⇒ Node k v l k2 v2 (insertWith k v leq f key val r)
+  }
+
+fn insertWithInnerFalseEq
+  (k : Type) (v : Type) (leq : k → k → Bool) (f : v → v → v) (key : k) (val : v)
+  (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (q2 : Equal Bool (leq k2 key) False)
+  : Equal (Tree k v) (insertWithStepInner k v leq f key val l k2 v2 r (leq k2 key))
+                      (insertWithStepInner k v leq f key val l k2 v2 r False) =
+  cong Bool (Tree k v) (leq k2 key) False (insertWithStepInner k v leq f key val l k2 v2 r) q2
+
+fn insertWithInnerTrueEq
+  (k : Type) (v : Type) (leq : k → k → Bool) (f : v → v → v) (key : k) (val : v)
+  (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (q2 : Equal Bool (leq k2 key) True)
+  : Equal (Tree k v) (insertWithStepInner k v leq f key val l k2 v2 r (leq k2 key))
+                      (insertWithStepInner k v leq f key val l k2 v2 r True) =
+  cong Bool (Tree k v) (leq k2 key) True (insertWithStepInner k v leq f key val l k2 v2 r) q2
+
+fn insertWithStepTrueEq
+  (k : Type) (v : Type) (leq : k → k → Bool) (f : v → v → v) (key : k) (val : v)
+  (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (q1 : Equal Bool (leq key k2) True)
+  : Equal (Tree k v) (insertWithStep k v leq f key val l k2 v2 r (leq key k2))
+                      (insertWithStep k v leq f key val l k2 v2 r True) =
+  cong Bool (Tree k v) (leq key k2) True (insertWithStep k v leq f key val l k2 v2 r) q1
+
+fn insertWithStepFalseEq
+  (k : Type) (v : Type) (leq : k → k → Bool) (f : v → v → v) (key : k) (val : v)
+  (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (q1 : Equal Bool (leq key k2) False)
+  : Equal (Tree k v) (insertWithStep k v leq f key val l k2 v2 r (leq key k2))
+                      (insertWithStep k v leq f key val l k2 v2 r False) =
+  cong Bool (Tree k v) (leq key k2) False (insertWithStep k v leq f key val l k2 v2 r) q1
+
+fn insertWithFinalBridge
+  (k : Type) (v : Type) (leq : k → k → Bool) (f : v → v → v) (key : k) (val : v)
+  (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  : Equal (Tree k v) (insertWith k v leq f key val (Node k v l k2 v2 r))
+                      (insertWithStep k v leq f key val l k2 v2 r (leq key k2)) = Refl
+
+fn insertWithStepTrueReduces
+  (k : Type) (v : Type) (leq : k → k → Bool) (f : v → v → v) (key : k) (val : v)
+  (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  : Equal (Tree k v) (insertWithStep k v leq f key val l k2 v2 r True)
+                      (insertWithStepInner k v leq f key val l k2 v2 r (leq k2 key)) = Refl
+
+fn insertWithStepA
+  (k : Type) (v : Type) (leq : k → k → Bool) (f : v → v → v) (key : k) (val : v)
+  (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (q1 : Equal Bool (leq key k2) True)
+  : Equal (Tree k v) (insertWithStep k v leq f key val l k2 v2 r (leq key k2))
+                      (insertWithStepInner k v leq f key val l k2 v2 r (leq k2 key)) =
+  trans (Tree k v) (insertWithStep k v leq f key val l k2 v2 r (leq key k2))
+                    (insertWithStep k v leq f key val l k2 v2 r True)
+                    (insertWithStepInner k v leq f key val l k2 v2 r (leq k2 key))
+    (insertWithStepTrueEq k v leq f key val l k2 v2 r q1)
+    (insertWithStepTrueReduces k v leq f key val l k2 v2 r)
+
+fn insertWithStepB
+  (k : Type) (v : Type) (leq : k → k → Bool) (f : v → v → v) (key : k) (val : v)
+  (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (q1 : Equal Bool (leq key k2) True)
+  : Equal (Tree k v) (insertWith k v leq f key val (Node k v l k2 v2 r))
+                      (insertWithStepInner k v leq f key val l k2 v2 r (leq k2 key)) =
+  trans (Tree k v) (insertWith k v leq f key val (Node k v l k2 v2 r))
+                    (insertWithStep k v leq f key val l k2 v2 r (leq key k2))
+                    (insertWithStepInner k v leq f key val l k2 v2 r (leq k2 key))
+    (insertWithFinalBridge k v leq f key val l k2 v2 r)
+    (insertWithStepA k v leq f key val l k2 v2 r q1)
+
+fn insertWithStepC
+  (k : Type) (v : Type) (leq : k → k → Bool) (f : v → v → v) (key : k) (val : v)
+  (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (q1 : Equal Bool (leq key k2) True) (q2 : Equal Bool (leq k2 key) False)
+  : Equal (Tree k v) (insertWith k v leq f key val (Node k v l k2 v2 r))
+                      (insertWithStepInner k v leq f key val l k2 v2 r False) =
+  trans (Tree k v) (insertWith k v leq f key val (Node k v l k2 v2 r))
+                    (insertWithStepInner k v leq f key val l k2 v2 r (leq k2 key))
+                    (insertWithStepInner k v leq f key val l k2 v2 r False)
+    (insertWithStepB k v leq f key val l k2 v2 r q1)
+    (insertWithInnerFalseEq k v leq f key val l k2 v2 r q2)
+
+fn insertWithStepOverwrite
+  (k : Type) (v : Type) (leq : k → k → Bool) (f : v → v → v) (key : k) (val : v)
+  (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (q1 : Equal Bool (leq key k2) True) (q2 : Equal Bool (leq k2 key) True)
+  : Equal (Tree k v) (insertWith k v leq f key val (Node k v l k2 v2 r))
+                      (insertWithStepInner k v leq f key val l k2 v2 r True) =
+  trans (Tree k v) (insertWith k v leq f key val (Node k v l k2 v2 r))
+                    (insertWithStepInner k v leq f key val l k2 v2 r (leq k2 key))
+                    (insertWithStepInner k v leq f key val l k2 v2 r True)
+    (insertWithStepB k v leq f key val l k2 v2 r q1)
+    (insertWithInnerTrueEq k v leq f key val l k2 v2 r q2)
+
+fn insertWithTransportOverwrite
+  (k : Type) (v : Type) (leq : k → k → Bool) (f : v → v → v) (key : k) (val : v)
+  (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (goal : Tree k v → Prop)
+  (q1 : Equal Bool (leq key k2) True) (q2 : Equal Bool (leq k2 key) True)
+  (overwrite : goal (Node k v l key (f val v2) r))
+  : goal (insertWith k v leq f key val (Node k v l k2 v2 r)) =
+  J (λx _. goal x) overwrite
+    (sym (Tree k v) (insertWith k v leq f key val (Node k v l k2 v2 r))
+                     (insertWithStepInner k v leq f key val l k2 v2 r True)
+       (insertWithStepOverwrite k v leq f key val l k2 v2 r q1 q2))
+
+fn insertWithTransportIntoL
+  (k : Type) (v : Type) (leq : k → k → Bool) (f : v → v → v) (key : k) (val : v)
+  (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (goal : Tree k v → Prop)
+  (q1 : Equal Bool (leq key k2) True) (q2 : Equal Bool (leq k2 key) False)
+  (intoL : goal (Node k v (insertWith k v leq f key val l) k2 v2 r))
+  : goal (insertWith k v leq f key val (Node k v l k2 v2 r)) =
+  J (λx _. goal x) intoL
+    (sym (Tree k v) (insertWith k v leq f key val (Node k v l k2 v2 r))
+                     (insertWithStepInner k v leq f key val l k2 v2 r False)
+       (insertWithStepC k v leq f key val l k2 v2 r q1 q2))
+
+fn insertWithStepD
+  (k : Type) (v : Type) (leq : k → k → Bool) (f : v → v → v) (key : k) (val : v)
+  (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (q1 : Equal Bool (leq key k2) False)
+  : Equal (Tree k v) (insertWith k v leq f key val (Node k v l k2 v2 r))
+                      (insertWithStep k v leq f key val l k2 v2 r False) =
+  trans (Tree k v) (insertWith k v leq f key val (Node k v l k2 v2 r))
+                    (insertWithStep k v leq f key val l k2 v2 r (leq key k2))
+                    (insertWithStep k v leq f key val l k2 v2 r False)
+    (insertWithFinalBridge k v leq f key val l k2 v2 r)
+    (insertWithStepFalseEq k v leq f key val l k2 v2 r q1)
+
+fn insertWithTransportIntoR
+  (k : Type) (v : Type) (leq : k → k → Bool) (f : v → v → v) (key : k) (val : v)
+  (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (goal : Tree k v → Prop)
+  (q1 : Equal Bool (leq key k2) False)
+  (intoR : goal (Node k v l k2 v2 (insertWith k v leq f key val r)))
+  : goal (insertWith k v leq f key val (Node k v l k2 v2 r)) =
+  J (λx _. goal x) intoR
+    (sym (Tree k v) (insertWith k v leq f key val (Node k v l k2 v2 r))
+                     (insertWithStep k v leq f key val l k2 v2 r False)
+       (insertWithStepD k v leq f key val l k2 v2 r q1))
+
+fn replaceLeftOrderedWitness
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (newL : Tree k v) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (h : Ordered k v leq (Node k v l k2 v2 r))
+  (ordNewL : Ordered k v leq newL)
+  (belowNewL : allKeys k v (leBelow k v leq k2) newL)
+  : Ordered k v leq (Node k v newL k2 v2 r) =
+  andIntro (allKeys k v (leBelow k v leq k2) newL)
+           (And (allKeys k v (leAbove k v leq k2) r) (And (Ordered k v leq newL) (Ordered k v leq r)))
+    belowNewL
+    (andIntro (allKeys k v (leAbove k v leq k2) r) (And (Ordered k v leq newL) (Ordered k v leq r))
+       (getAboveR k v leq l k2 v2 r h)
+       (andIntro (Ordered k v leq newL) (Ordered k v leq r)
+          ordNewL
+          (getOrderedR k v leq l k2 v2 r h)))
+
+fn replaceRightOrderedWitness
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (newR : Tree k v) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (h : Ordered k v leq (Node k v l k2 v2 r))
+  (ordNewR : Ordered k v leq newR)
+  (aboveNewR : allKeys k v (leAbove k v leq k2) newR)
+  : Ordered k v leq (Node k v l k2 v2 newR) =
+  andIntro (allKeys k v (leBelow k v leq k2) l)
+           (And (allKeys k v (leAbove k v leq k2) newR) (And (Ordered k v leq l) (Ordered k v leq newR)))
+    (getBelowL k v leq l k2 v2 r h)
+    (andIntro (allKeys k v (leAbove k v leq k2) newR) (And (Ordered k v leq l) (Ordered k v leq newR))
+       aboveNewR
+       (andIntro (Ordered k v leq l) (Ordered k v leq newR)
+          (getOrderedL k v leq l k2 v2 r h)
+          ordNewR))
+
+fn insertWithStepInnerPreservesAllKeys
+  (k : Type) (v : Type) (leq : k → k → Bool) (p : k → Prop)
+  (f : v → v → v) (key : k) (val : v) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (insL : allKeys k v p (insertWith k v leq f key val l))
+  (hl : allKeys k v p l) (hr : allKeys k v p r) (hkey : p key) (hk2 : p k2)
+  (y : Bool)
+  : allKeys k v p (insertWithStepInner k v leq f key val l k2 v2 r y) =
+  match y {
+    True ⇒ andIntro (p key) (And (allKeys k v p l) (allKeys k v p r)) hkey (andIntro (allKeys k v p l) (allKeys k v p r) hl hr) ;
+    False ⇒ andIntro (p k2) (And (allKeys k v p (insertWith k v leq f key val l)) (allKeys k v p r)) hk2 (andIntro (allKeys k v p (insertWith k v leq f key val l)) (allKeys k v p r) insL hr)
+  }
+
+fn insertWithStepPreservesAllKeys
+  (k : Type) (v : Type) (leq : k → k → Bool) (p : k → Prop)
+  (f : v → v → v) (key : k) (val : v) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (insL : allKeys k v p (insertWith k v leq f key val l))
+  (insR : allKeys k v p (insertWith k v leq f key val r))
+  (hl : allKeys k v p l) (hr : allKeys k v p r) (hkey : p key) (hk2 : p k2)
+  (x : Bool)
+  : allKeys k v p (insertWithStep k v leq f key val l k2 v2 r x) =
+  match x {
+	    True ⇒ insertWithStepInnerPreservesAllKeys k v leq p f key val l k2 v2 r insL hl hr hkey hk2 (leq k2 key) ;
+	    False ⇒ andIntro (p k2) (And (allKeys k v p l) (allKeys k v p (insertWith k v leq f key val r))) hk2 (andIntro (allKeys k v p l) (allKeys k v p (insertWith k v leq f key val r)) hl insR)
+	  }
+
+fn insertWithPreservesAllKeysNode
+  (k : Type) (v : Type) (leq : k → k → Bool) (p : k → Prop)
+  (f : v → v → v) (key : k) (val : v) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (insL : allKeys k v p (insertWith k v leq f key val l))
+  (insR : allKeys k v p (insertWith k v leq f key val r))
+  (hl : allKeys k v p l) (hr : allKeys k v p r) (hkey : p key) (hk2 : p k2)
+  : allKeys k v p (insertWith k v leq f key val (Node k v l k2 v2 r)) =
+  insertWithStepPreservesAllKeys k v leq p f key val l k2 v2 r insL insR hl hr hkey hk2 (leq key k2)
+
+fn insertWithPreservesAllKeys
+  (k : Type) (v : Type) (leq : k → k → Bool) (p : k → Prop)
+  (f : v → v → v) (key : k) (val : v) (m : Tree k v)
+  : allKeys k v p m → p key → allKeys k v p (insertWith k v leq f key val m) =
+  match m {
+	    Leaf ⇒ λh. λhkey.
+	      andIntro (p key) (And (allKeys k v p (Leaf k v)) (allKeys k v p (Leaf k v))) hkey
+	        (andIntro (allKeys k v p (Leaf k v)) (allKeys k v p (Leaf k v)) tt tt) ;
+	    Node l k2 v2 r ⇒ λh. λhkey.
+	      insertWithPreservesAllKeysNode k v leq p f key val l k2 v2 r
+	        (insertWithPreservesAllKeys k v leq p f key val l
+	           (andFst (allKeys k v p l) (allKeys k v p r) (andSnd (p k2) (And (allKeys k v p l) (allKeys k v p r)) h)) hkey)
+	        (insertWithPreservesAllKeys k v leq p f key val r
+           (andSnd (allKeys k v p l) (allKeys k v p r) (andSnd (p k2) (And (allKeys k v p l) (allKeys k v p r)) h)) hkey)
+        (andFst (allKeys k v p l) (allKeys k v p r) (andSnd (p k2) (And (allKeys k v p l) (allKeys k v p r)) h))
+        (andSnd (allKeys k v p l) (allKeys k v p r) (andSnd (p k2) (And (allKeys k v p l) (allKeys k v p r)) h))
+        hkey
+        (andFst (p k2) (And (allKeys k v p l) (allKeys k v p r)) h)
+  }
+
+fn insertWithDispatchOnQ2
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (total : (x : k) → (y : k) → Or (Equal Bool (leq x y) True) (Equal Bool (leq y x) True))
+  (f : v → v → v) (key : k) (val : v) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (h : Ordered k v leq (Node k v l k2 v2 r))
+  (insL : Ordered k v leq (insertWith k v leq f key val l))
+  (insR : Ordered k v leq (insertWith k v leq f key val r))
+  (q1 : Equal Bool (leq key k2) True)
+  (o2 : Or (Equal Bool (leq k2 key) True) (Equal Bool (leq k2 key) False))
+  : Ordered k v leq (insertWith k v leq f key val (Node k v l k2 v2 r)) =
+  match o2 {
+    Inl q2 ⇒
+      insertWithTransportOverwrite k v leq f key val l k2 v2 r (λx. Ordered k v leq x) q1 q2
+        (preservesOrderedOverwriteWitness k v leq transLeq key (f val v2) l k2 v2 r h q1 q2) ;
+    Inr q2' ⇒
+      insertWithTransportIntoL k v leq f key val l k2 v2 r (λx. Ordered k v leq x) q1 q2'
+        (replaceLeftOrderedWitness k v leq (insertWith k v leq f key val l) l k2 v2 r h insL
+           (insertWithPreservesAllKeys k v leq (leBelow k v leq k2) f key val l (getBelowL k v leq l k2 v2 r h) q1))
+  }
+
+fn insertWithDispatchOnQ1
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (total : (x : k) → (y : k) → Or (Equal Bool (leq x y) True) (Equal Bool (leq y x) True))
+  (f : v → v → v) (key : k) (val : v) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (h : Ordered k v leq (Node k v l k2 v2 r))
+  (insL : Ordered k v leq (insertWith k v leq f key val l))
+  (insR : Ordered k v leq (insertWith k v leq f key val r))
+  (o1 : Or (Equal Bool (leq key k2) True) (Equal Bool (leq key k2) False))
+  : Ordered k v leq (insertWith k v leq f key val (Node k v l k2 v2 r)) =
+  match o1 {
+    Inl q1 ⇒ insertWithDispatchOnQ2 k v leq transLeq total f key val l k2 v2 r h insL insR q1 (boolDichotomy (leq k2 key)) ;
+    Inr q1' ⇒
+      insertWithTransportIntoR k v leq f key val l k2 v2 r (λx. Ordered k v leq x) q1'
+        (replaceRightOrderedWitness k v leq (insertWith k v leq f key val r) l k2 v2 r h insR
+           (insertWithPreservesAllKeys k v leq (leAbove k v leq k2) f key val r (getAboveR k v leq l k2 v2 r h)
+              (deriveFromFalse k leq key k2 q1' total)))
+  }
+
+fn insertWithPreservesOrdered
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (total : (x : k) → (y : k) → Or (Equal Bool (leq x y) True) (Equal Bool (leq y x) True))
+  (f : v → v → v) (key : k) (val : v) (m : Tree k v)
+  : Ordered k v leq m → Ordered k v leq (insertWith k v leq f key val m) =
+  match m {
+    Leaf ⇒ λh.
+      andIntro (allKeys k v (leBelow k v leq key) (Leaf k v))
+               (And (allKeys k v (leAbove k v leq key) (Leaf k v)) (And (Ordered k v leq (Leaf k v)) (Ordered k v leq (Leaf k v))))
+        tt (andIntro (allKeys k v (leAbove k v leq key) (Leaf k v)) (And (Ordered k v leq (Leaf k v)) (Ordered k v leq (Leaf k v)))
+             tt (andIntro (Ordered k v leq (Leaf k v)) (Ordered k v leq (Leaf k v)) tt tt)) ;
+    Node l k2 v2 r ⇒
+      λh.
+        insertWithDispatchOnQ1 k v leq transLeq total f key val l k2 v2 r h
+          (insertWithPreservesOrdered k v leq transLeq total f key val l (getOrderedL k v leq l k2 v2 r h))
+          (insertWithPreservesOrdered k v leq transLeq total f key val r (getOrderedR k v leq l k2 v2 r h))
+	          (boolDichotomy (leq key k2))
+	  }
+
+fn foldInsertWithPreservesOrdered
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (total : (x : k) → (y : k) → Or (Equal Bool (leq x y) True) (Equal Bool (leq y x) True))
+  (f : v → v → v) (src : Tree k v) (acc : Tree k v)
+  : Ordered k v leq acc → Ordered k v leq (fold k v (Tree k v) (insertWithFoldStep k v leq f) acc src) =
+  match src {
+    Leaf ⇒ λh. h ;
+    Node l key val r ⇒
+      λh.
+        foldInsertWithPreservesOrdered k v leq transLeq total f r
+          (insertWithFoldStep k v leq f key val (fold k v (Tree k v) (insertWithFoldStep k v leq f) acc l))
+          (insertWithPreservesOrdered k v leq transLeq total f key val
+            (fold k v (Tree k v) (insertWithFoldStep k v leq f) acc l)
+            (foldInsertWithPreservesOrdered k v leq transLeq total f l acc h))
+  }
+
+fn unionPreservesOrdered
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (total : (x : k) → (y : k) → Or (Equal Bool (leq x y) True) (Equal Bool (leq y x) True))
+  (f : v → v → v) (a : Tree k v) (b : Tree k v)
+  : Ordered k v leq b → Ordered k v leq (union k v leq f a b) =
+  foldInsertWithPreservesOrdered k v leq transLeq total f a b
+
+fn setUnion (k : Type) (leq : k → k → Bool) (s : Tree k Unit) (t : Tree k Unit) : Tree k Unit =
+  union k Unit leq (λx.λy. MkUnit) s t
+
+fn setIntersection (k : Type) (leq : k → k → Bool) (s : Tree k Unit) (t : Tree k Unit) : Tree k Unit =
+  intersection k Unit leq s t
+
+fn setDifference (k : Type) (leq : k → k → Bool) (s : Tree k Unit) (t : Tree k Unit) : Tree k Unit =
+  difference k Unit leq s t
+
+fn pairVals (k : Type) (v : Type) (xs : List (Pair k v)) : List v =
+  match xs {
+    Nil ⇒ Nil v ;
+    Cons p xs2 ⇒ Cons v (pairSnd k v p) (pairVals k v xs2)
+  }
+
+fn keys (k : Type) (v : Type) (m : Tree k v) : List k =
+  pairKeys k v (toList k v m)
+
+fn values (k : Type) (v : Type) (m : Tree k v) : List v =
+  pairVals k v (toList k v m)
+
+fn succ (k : Type) (leq : k → k → Bool) (x : k) (r : Tree k (Tree k Unit)) : Tree k Unit =
+  match lookup k (Tree k Unit) leq x r {
+    None ⇒ empty k Unit ;
+    Some s ⇒ s
+  }
+
+fn relMember (k : Type) (leq : k → k → Bool) (x : k) (y : k) (r : Tree k (Tree k Unit)) : Prop =
+  Equal Bool (setMember k leq y (succ k leq x r)) True
+
+fn addEdge (k : Type) (leq : k → k → Bool) (x : k) (y : k) (r : Tree k (Tree k Unit)) : Tree k (Tree k Unit) =
+  insert k (Tree k Unit) leq x (setInsert k leq y (succ k leq x r)) r
+
+fn composeSuccStep
+  (k : Type) (leq : k → k → Bool) (s : Tree k (Tree k Unit)) (y : k) (u : Unit) (acc : Tree k Unit) : Tree k Unit =
+  setUnion k leq acc (succ k leq y s)
+
+fn composeSucc (k : Type) (leq : k → k → Bool) (rSucc : Tree k Unit) (s : Tree k (Tree k Unit)) : Tree k Unit =
+  fold k Unit (Tree k Unit) (composeSuccStep k leq s) (empty k Unit) rSucc
+
+fn compose (k : Type) (leq : k → k → Bool) (r : Tree k (Tree k Unit)) (s : Tree k (Tree k Unit)) : Tree k (Tree k Unit) =
+  fold k (Tree k Unit) (Tree k (Tree k Unit))
+    (λx.λtargets.λacc. insert k (Tree k Unit) leq x (composeSucc k leq targets s) acc)
+    (empty k (Tree k Unit)) r
+
+fn converseTargets
+  (k : Type) (leq : k → k → Bool) (x : k) (targets : Tree k Unit) (acc : Tree k (Tree k Unit)) : Tree k (Tree k Unit) =
+  fold k Unit (Tree k (Tree k Unit)) (λy.λu.λacc2. addEdge k leq y x acc2) acc targets
+
+fn converse (k : Type) (leq : k → k → Bool) (r : Tree k (Tree k Unit)) : Tree k (Tree k Unit) =
+  fold k (Tree k Unit) (Tree k (Tree k Unit)) (λx.λtargets.λacc. converseTargets k leq x targets acc) (empty k (Tree k Unit)) r
+
+fn isReflexive (k : Type) (leq : k → k → Bool) (r : Tree k (Tree k Unit)) : Prop =
+  (x : k) → relMember k leq x x r
+
+fn isSymmetric (k : Type) (leq : k → k → Bool) (r : Tree k (Tree k Unit)) : Prop =
+  (x : k) → (y : k) → relMember k leq x y r → relMember k leq y x r
+
+fn isTransitive (k : Type) (leq : k → k → Bool) (r : Tree k (Tree k Unit)) : Prop =
+  (x : k) → (y : k) → (z : k) → relMember k leq x y r → relMember k leq y z r → relMember k leq x z r
+
+fn isEquivalence (k : Type) (leq : k → k → Bool) (r : Tree k (Tree k Unit)) : Prop =
+  And (isReflexive k leq r) (And (isSymmetric k leq r) (isTransitive k leq r))
+
+-- CAT-4 Fork B is intentionally design-now/defer-build: transitive closure is
+-- to be represented as bounded reachability (`IsTrue (reachableWithin N x y)`)
+-- once `size` and bounded iteration land. This package deliberately does not
+-- define a raw proof-relevant `data ... : Ω` closure.
