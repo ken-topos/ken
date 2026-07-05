@@ -2792,6 +2792,12 @@ fn insertWith (k : Type) (v : Type) (leq : k → k → Bool) (f : v → v → v)
 fn insertWithFoldStep (k : Type) (v : Type) (leq : k → k → Bool) (f : v → v → v) (key : k) (val : v) (acc : Tree k v) : Tree k v =
   insertWith k v leq f key val acc
 
+fn insertWithFoldStepReduces
+  (k : Type) (v : Type) (leq : k → k → Bool) (f : v → v → v) (key : k) (val : v) (acc : Tree k v)
+  : Equal (Tree k v)
+      (insertWithFoldStep k v leq f key val acc)
+      (insertWith k v leq f key val acc) = Refl
+
 fn union (k : Type) (v : Type) (leq : k → k → Bool) (f : v → v → v) (a : Tree k v) (b : Tree k v) : Tree k v =
   fold k v (Tree k v) (insertWithFoldStep k v leq f) b a
 
@@ -2846,6 +2852,70 @@ fn unionLookupBothSomeLaw
   Equal (Option v) (lookup k v leq key a) (Some v x) →
   Equal (Option v) (lookup k v leq key b) (Some v y) →
   Equal (Option v) (lookup k v leq key (union k v leq f a b)) (Some v (f x y))
+
+fn allKeysMapNotMatchBelow
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (key : k) (k2 : k) (hFalse : Equal Bool (leq key k2) False) (m : Tree k v)
+  : allKeys k v (leBelow k v leq k2) m → allKeys k v (notOrderEquivToKey k leq key) m =
+  match m {
+    Leaf ⇒ λh. tt ;
+    Node l ekey eval r ⇒
+      λh.
+        andIntro (notOrderEquivToKey k leq key ekey)
+                  (And (allKeys k v (notOrderEquivToKey k leq key) l)
+                       (allKeys k v (notOrderEquivToKey k leq key) r))
+          (notMatchFromBoundBelow k leq transLeq key k2 hFalse ekey
+            (andFst (Equal Bool (leq ekey k2) True)
+                    (And (allKeys k v (leBelow k v leq k2) l)
+                         (allKeys k v (leBelow k v leq k2) r)) h))
+          (andIntro (allKeys k v (notOrderEquivToKey k leq key) l)
+                    (allKeys k v (notOrderEquivToKey k leq key) r)
+            (allKeysMapNotMatchBelow k v leq transLeq key k2 hFalse l
+              (andFst (allKeys k v (leBelow k v leq k2) l)
+                      (allKeys k v (leBelow k v leq k2) r)
+                (andSnd (Equal Bool (leq ekey k2) True)
+                        (And (allKeys k v (leBelow k v leq k2) l)
+                             (allKeys k v (leBelow k v leq k2) r)) h)))
+            (allKeysMapNotMatchBelow k v leq transLeq key k2 hFalse r
+              (andSnd (allKeys k v (leBelow k v leq k2) l)
+                      (allKeys k v (leBelow k v leq k2) r)
+                (andSnd (Equal Bool (leq ekey k2) True)
+                        (And (allKeys k v (leBelow k v leq k2) l)
+                             (allKeys k v (leBelow k v leq k2) r)) h))))
+  }
+
+fn allKeysMapNotMatchAbove
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (key : k) (k2 : k) (hFalse : Equal Bool (leq k2 key) False) (m : Tree k v)
+  : allKeys k v (leAbove k v leq k2) m → allKeys k v (notOrderEquivToKey k leq key) m =
+  match m {
+    Leaf ⇒ λh. tt ;
+    Node l ekey eval r ⇒
+      λh.
+        andIntro (notOrderEquivToKey k leq key ekey)
+                  (And (allKeys k v (notOrderEquivToKey k leq key) l)
+                       (allKeys k v (notOrderEquivToKey k leq key) r))
+          (notMatchFromBoundAbove k leq transLeq key k2 hFalse ekey
+            (andFst (Equal Bool (leq k2 ekey) True)
+                    (And (allKeys k v (leAbove k v leq k2) l)
+                         (allKeys k v (leAbove k v leq k2) r)) h))
+          (andIntro (allKeys k v (notOrderEquivToKey k leq key) l)
+                    (allKeys k v (notOrderEquivToKey k leq key) r)
+            (allKeysMapNotMatchAbove k v leq transLeq key k2 hFalse l
+              (andFst (allKeys k v (leAbove k v leq k2) l)
+                      (allKeys k v (leAbove k v leq k2) r)
+                (andSnd (Equal Bool (leq k2 ekey) True)
+                        (And (allKeys k v (leAbove k v leq k2) l)
+                             (allKeys k v (leAbove k v leq k2) r)) h)))
+            (allKeysMapNotMatchAbove k v leq transLeq key k2 hFalse r
+              (andSnd (allKeys k v (leAbove k v leq k2) l)
+                      (allKeys k v (leAbove k v leq k2) r)
+                (andSnd (Equal Bool (leq k2 ekey) True)
+                        (And (allKeys k v (leAbove k v leq k2) l)
+                             (allKeys k v (leAbove k v leq k2) r)) h))))
+  }
 
 fn intersection (k : Type) (v : Type) (leq : k → k → Bool) (a : Tree k v) (b : Tree k v) : Tree k v =
   fold k v (Tree k v)
@@ -3517,6 +3587,21 @@ fn insertWithLookupLocality
         (insertWithLookupLocality k v leq transLeq f key key' val r hdist)
         (boolDichotomy (leq key k2))
   }
+
+fn insertWithFoldStepLookupLocality
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (f : v → v → v) (inserted : k) (key : k) (val : v) (acc : Tree k v)
+  (hdist : notOrderEquivToKey k leq inserted key)
+  : Equal (Option v)
+      (lookup k v leq key (insertWithFoldStep k v leq f inserted val acc))
+      (lookup k v leq key acc) =
+  J (λt _. Equal (Option v) (lookup k v leq key t) (lookup k v leq key acc))
+    (insertWithLookupLocality k v leq transLeq f inserted key val acc hdist)
+    (sym (Tree k v)
+      (insertWithFoldStep k v leq f inserted val acc)
+      (insertWith k v leq f inserted val acc)
+      (insertWithFoldStepReduces k v leq f inserted val acc))
 
 fn foldInsertWithPreservesOrdered
   (k : Type) (v : Type) (leq : k → k → Bool)
