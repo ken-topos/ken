@@ -552,6 +552,79 @@ the kernel is explicit and decidably checked.
 > the landed record/Σ machinery, and its termination is the **landed SCT**
 > (`../10-kernel/17 §4`) on the reified dictionary group (§6.4).
 
+### 6.0 Class-field purity metadata (SURF-2)
+
+Class-field purity is an additive surface/elaboration check over the `33 §5.2`
+class-record shape. It is not a second class system and not a kernel feature.
+
+**Parse/store.** The class field grammar is:
+
+```
+class_field ::= field_purity? field_name ":" type
+field_purity ::= "const" | "fn" | "proc"
+```
+
+The parser stores the optional keyword with the field declaration, e.g.
+`Decl::ClassDecl.fields` becomes declaration-order triples
+`(Option<DefKeyword>, field_name, field_type)` or an equivalent field record.
+`None` means the field is unmarked and keeps the pre-SURF-2 behaviour.
+
+During `elab_class_decl`, the elaborator registers the keyword as class metadata
+parallel to the existing field vectors:
+
+```
+ClassInfo {
+  field_names    : Vec<String>,
+  field_types    : Vec<Term>,
+  field_purities : Vec<Option<DefKeyword>>,
+  ...
+}
+```
+
+`field_types` remains the only input to the emitted right-nested Σ telescope and
+to the kernel-computed class sort (`33 §5.1`). `field_purities` is erased before
+kernel emission: it must not affect the class type, the Σ chain, `sort_sigma`,
+property-vs-structure classification, orphan/overlap policy, or
+`trusted_base()`.
+
+**Instance-field enforcement.** Instance elaboration still computes field values
+in class-declaration order and checks each implementation against its
+properly-substituted expected type (`compute_ordered_field_values`, `33 §5.3`).
+For a marked field, the same step also runs the existing SURF-1 static-purity
+classifier/check (`36 §1.6`) against the field implementation under that
+expected type:
+
+- `None` — status quo: no purity check beyond the existing type check.
+- `Some(Const)` / `Some(Fn)` — the implementation must classify as pure with
+  the corresponding explicit-value-arity rule; false-purity/effect escape is a
+  hard L1 error.
+- `Some(Proc)` — the implementation must classify as `proc` by the existing
+  SURF-1 criteria, including the row-variable/effect-polymorphic case. A
+  best-case pure instantiation does not downgrade the field; the declared field
+  signature is what is checked.
+
+This check is a factorization/reuse of the definition-level
+`check_surface_purity` path, not a parallel classifier. A mismatch is reported
+at the instance field span with the declared class field and expected keyword in
+the diagnostic; it is not deferred to the kernel.
+
+**Projection classification.** `.field` projection continues to elaborate to
+the same Σ projection term (`proj1(proj2^i(d))`) with the same substituted field
+type. In addition, when the base is a known class dictionary, `infer_proj`
+consults `ClassInfo::field_purities[i]` and attaches that static-purity
+classification to the projected expression. Therefore, if
+`Traversable.traverse` is declared `proc`, a use such as `d.traverse` classifies
+as `proc` at the call site and routes through the ordinary effect/purity checks.
+Unmarked projections remain unclassified.
+
+**Build extension points.** The minimal implementation surface is exactly the
+existing class path: the parser's class-field loop accepts an optional
+`DefKeyword`; the class AST carries it; `ClassInfo` stores it parallel to
+`field_names`; the instance Σ-Intro field check enforces it through the SURF-1
+purity path; and `RExpr::RProj`/`infer_proj` returns the projection's stored
+field purity to downstream classification. No `crates/ken-kernel` or
+`Cargo.lock` change is in scope.
+
 ### 6.1 The instance environment (built from declarations)
 
 Resolution reads an **instance environment** the elaborator accumulates as it

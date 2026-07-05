@@ -10,8 +10,9 @@
 > It makes **one** template change CAT-1 pre-registered: the deep constructor
 > chain **wires** superclass fields rather than restating them (`55 §7` pt 5,
 > resolved here — `§2`). **Traversable is gated on SURF-1's row-variable
-> surface** (`../30-surface/36 §1.5`, landed `main@ef791a3`); Applicative and
-> Monad are not.
+> surface** (`../30-surface/36 §1.5`, landed `main@ef791a3`) and **SURF-2's
+> class-field purity marker** (`../30-surface/33 §5.2`, `../30-surface/39
+> §6.0`); Applicative and Monad are not.
 
 ## 1. What CAT-2 inherits from CAT-1 (the template, unchanged)
 
@@ -251,7 +252,7 @@ parametric-instance-head gap**, still open with Steward. A *general* surface
   `bind_lid` neutral `k x` → `Refl`; `bind_rid` both branches constructor-headed
   → `tt`; `bind_asc` `None` → `tt`, `Some x` neutral → `Refl`.
 
-## 5. D3 — `Traversable f` (wires `Functor f` + `Foldable f`; **SURF-1-gated**)
+## 5. D3 — `Traversable f` (wires `Functor f` + `Foldable f`; **SURF-1/SURF-2-gated**)
 
 ### 5.1 Signature — `traverse` a `proc`; explicit `Applicative g` dict (Fork C)
 
@@ -266,6 +267,13 @@ class Traversable (f : Type → Type) {
   -- laws: §5.3
 }
 ```
+
+`proc traverse` is a class-field purity marker, made grammatical by SURF-2
+(`33 §5.2`, `39 §6.0`). The marker is the checked SURF-1 static-purity signal
+for the field and its projections; it is erased before the kernel and does not
+affect the class record's AC4 Type/Ω sort discriminant, which remains computed
+from the field types alone. This note reconciles the surface spelling here; it
+does not weaken the Traversable contract or move `proc` to instance bodies.
 
 **`Applicative g` is an EXPLICIT (unbundled) dictionary parameter** (Architect,
 Fork C), **not** an implicit `where` constraint. Forced by the landed
@@ -307,9 +315,11 @@ is the normative pin. Zero new mechanism (explicit dict + SURF-1's `RowVar`,
 both landed).
 
 > **Gate (frame D3, guardrail).** SURF-1's row-variable surface is on
-> `main@ef791a3`, so D3 is **clear**. Had it not been, D1+D2 land first and D3
-> holds — **never** hand-roll a monomorphic `traverse` to dodge the gate (a wart
-> CAT-2 would itself reopen).
+> `main@ef791a3`, and SURF-2 supplies the class-field `proc` marker (§5.1). D3
+> is clear only with both pins: had SURF-1 not landed, D1+D2 land first and D3
+> holds; had SURF-2 not landed, keep the `proc traverse` contract and hold D3
+> rather than moving `proc` to instance bodies or hand-rolling a monomorphic
+> `traverse` to dodge the gate.
 
 ### 5.3 The traversal coherence laws (pointwise)
 
@@ -385,9 +395,10 @@ by induction on the carrier (`55 §3.1`).
 - **AC5 (Monad ⇔ ITree reconciliation).** `Monad`'s fields/laws are satisfied by
   the landed interaction-tree `bind` (`ed34129d`) — attested correspondence
   (`§4.3`), no second divergent `bind`; discriminated in the seed.
-- **AC6 (Traversable ⇔ SURF-1).** `traverse`'s `Applicative g` constraint uses
-  SURF-1's row-variable mechanism verbatim (`§5.2`); `traverse` classifies
-  `proc`. D3 gated on SURF-1 on `main` (satisfied).
+- **AC6 (Traversable ⇔ SURF-1/SURF-2).** `traverse`'s explicit
+  `Applicative g` dictionary uses SURF-1's row-variable mechanism verbatim
+  (`§5.2`), and its class field uses SURF-2's checked `proc` marker (`§5.1`);
+  `d.traverse` classifies `proc` at projection/use sites.
 - **AC7 (superclass template pinned).** Fork A resolved once — **WIRE** — and
   applied consistently across `Functor → Applicative → Monad → Traversable`
   (`§2`); `55 §7` pt 5 + `§2.2` updated to record the resolution.
