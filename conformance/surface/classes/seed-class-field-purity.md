@@ -10,7 +10,7 @@ The new surface is exactly an optional leading keyword on a class field:
 
 ```ken
 class C A {
-  proc op : A -> A
+  fn op : A -> A
   plain  : A -> A
 }
 ```
@@ -117,7 +117,7 @@ projection), and `50-stdlib/56-effectful-classes.md §5.1`/`§5.2`
 
   ```ken
   class Effectful A {
-    proc step : A -> A
+    proc step : A ->[FS] A
   }
 
   proc step_int (x : Int) : Int visits [FS] = x
@@ -173,7 +173,7 @@ projection), and `50-stdlib/56-effectful-classes.md §5.1`/`§5.2`
 
   ```ken
   class Effectful A {
-    proc step : A -> A
+    proc step : A ->[FS] A
   }
 
   proc step_int (x : Int) : Int visits [FS] = x
@@ -187,32 +187,45 @@ projection), and `50-stdlib/56-effectful-classes.md §5.1`/`§5.2`
   instance **rejects** with a specific purity/classification error saying the
   class field `step` requires `proc` (or equivalent SURF-1 false-purity wording).
   The reject must not be asserted as a bare `is_err()`, and must not be caused
-  by overlap, orphan, missing field, or kernel type mismatch.
+  by overlap, orphan, or a missing field.
 - why: G3. This proves the class-field keyword is enforced, not decorative. The
   structural discriminator is the stored marker on the class field combined with
   the implementation's existing SURF-1 classification.
 
-### surface/classes/fn-and-const-field-instance-purity-mismatches-reject
-- spec: `36 §1.6.3` (arity and purity mismatch errors), `39 §6`
-- given: a class with marked pure fields and instance implementations that
-  intentionally choose the wrong definition-level classification:
+### surface/classes/fn-and-const-field-signatures-follow-declared-type
+- spec: `33 §5.2` (class-field marker reads the field type/telescope),
+  `36 §1.6.3` (arity and purity mismatch errors), `39 §6`
+- given: a class with marked pure fields whose declared field types determine
+  the `const`/`fn` split, plus the two malformed marker/type flips:
 
   ```ken
   class PureFields {
-    const const_fn_value : Int -> Int
+    const seed : Int
     fn unary_fn : Int -> Int
   }
 
-  fn wrong_const_fn_value (x : Int) : Int = x
-  const wrong_unary_fn : Int -> Int = \x . x
+  const seed_ok : Int = 0
+  fn unary_fn_ok (x : Int) : Int = x
+  instance PureFields { seed = seed_ok ; unary_fn = unary_fn_ok }
+
+  class BadConstField {
+    const not_const : Int -> Int
+  }
+
+  class BadFnField {
+    fn not_fn : Int
+  }
   ```
 
-- expect: wiring `const_fn_value = wrong_const_fn_value` rejects as
-  should-be-`fn` versus `const`, and wiring `unary_fn = wrong_unary_fn` rejects
-  as should-be-`const` versus `fn`, using the same SURF-1 arity/purity
-  diagnostics as top-level definitions. Both bad implementations have the
-  expected field type `Int -> Int`; correctly classified `const`/`fn`
-  implementations accept.
+- expect: `PureFields` and its instance **accept**: `seed : Int` is
+  zero-explicit-value-argument and therefore `const`-shaped, while
+  `unary_fn : Int -> Int` is one-explicit-value-argument and therefore
+  `fn`-shaped. `BadConstField` **rejects** as should-be-`fn` because
+  `Int -> Int` is not a `const` field signature; `BadFnField` **rejects** as
+  should-be-`const` because `Int` has zero explicit value arguments. The
+  diagnostic is the same SURF-1 arity/purity family, but the arity is read from
+  the declared class-field type/telescope, not from a separate field binder list
+  and not from instance-body convention.
 - why: G3 for the whole marker set, not just `proc`. SURF-2 reuses the
   existing purity path; it must not special-case only the CAT-2 `proc traverse`
   spelling.
@@ -233,7 +246,7 @@ projection), and `50-stdlib/56-effectful-classes.md §5.1`/`§5.2`
   }
 
   class MarkedStruct A {
-    proc op : A -> A
+    fn op : A -> A
   }
 
   class PlainProp {
@@ -241,7 +254,7 @@ projection), and `50-stdlib/56-effectful-classes.md §5.1`/`§5.2`
   }
 
   class MarkedProp {
-    proc witness : Equal Bool True True
+    const witness : Equal Bool True True
   }
   ```
 
@@ -251,9 +264,10 @@ projection), and `50-stdlib/56-effectful-classes.md §5.1`/`§5.2`
   because the field type is Omega-valued. The emitted Sigma field types are
   byte-for-byte the same within each pair; only the surface metadata differs.
 - why: G5 and the AC4 guard. The marker must never be a hidden third input to
-  the Type/Omega discriminant. A build that treats `proc` as "computational" for
-  class-kind purposes would incorrectly turn an Omega field into a structure
-  field and change coherence behavior.
+  the Type/Omega discriminant. The marked examples deliberately use
+  arity-compatible pure markers so this case isolates sort non-interference; a
+  build that lets the marker influence class-kind selection would change
+  coherence behavior even though the field types are unchanged.
 
 ### surface/classes/class-field-purity-zero-kernel-delta
 - spec: `33 §5.2` (classes as Sigma records), `39 §1` (elaborator untrusted),
