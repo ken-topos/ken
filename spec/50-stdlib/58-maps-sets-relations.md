@@ -136,33 +136,48 @@ order), transparent and match-based like the landed `bool_or`
 (`lawful_classes.ken:39`): `bool_and a b := match a { True => b ; False => False
 }` and `bool_not b := match b { True => False ; False => True }`.
 
-## 3. D1 — `delete` (rebuild-via-`fromList`, Fork D)
+## 3. D1 — `delete` (semantic filter-delete rebuild, Fork D)
 
 `delete`'s equal-key case has **no analog in `insert`**: `insert` overwrites in
-place (one path, structure-preserving), but `delete` must **remove** the node
-and merge its two subtrees. Fork D rules the **rebuild** route (reuse the
-capstone wholesale; the structural-`glue` alternative re-derives a whole new
-invariant apparatus — `glue`/`deleteMin` + a cross-subtree-bound transport with
-no analog in the landed corpus):
+place (one path, structure-preserving), but `delete` must **remove** every
+order-equivalent entry and rebuild from the survivors. Fork D rules the
+**semantic filter-delete rebuild** route: the canonical built form is a
+transparent fused worker that factors `fromListAcc (dropKey key xs) acc`. It
+streams `toList`, skips every order-equivalent entry, and inserts every
+survivor into the accumulator. The structural-`glue` alternative re-derives a
+whole new invariant apparatus — `glue`/`deleteMin` + a cross-subtree-bound
+transport with no analog in the landed corpus.
 
 ```
-view dropKey (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k) (xs : List (Pair k v)) : List (Pair k v) =
+fn dropKey (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k) (xs : List (Pair k v)) : List (Pair k v) =
   match xs {
     Nil => Nil (Pair k v) ;
     Cons e xs2 =>
-      match orderEquivKey k v leq key (pairFst k v e) {
+      match orderEquivKey k leq key (pairFst k v e) {
         True  => dropKey k v leq key xs2 ;                       -- drop ALL matches (filter)
         False => Cons (Pair k v) e (dropKey k v leq key xs2)
       }
   }
 
-view delete (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k) (m : Tree k v) : Tree k v =
-  fromList k v leq (dropKey k v leq key (toList k v m))
+fn deleteFromListAcc (k : Type) (v : Type) (leq : k -> k -> Bool)
+  (key : k) (xs : List (Pair k v)) (acc : Tree k v) : Tree k v =
+  match xs {
+    Nil => acc ;
+    Cons e xs2 =>
+      match orderEquivKey k leq key (pairFst k v e) {
+        True  => deleteFromListAcc k v leq key xs2 acc ;
+        False => deleteFromListAcc k v leq key xs2
+          (insert k v leq (pairFst k v e) (pairSnd k v e) acc)
+      }
+  }
+
+fn delete (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k) (m : Tree k v) : Tree k v =
+  deleteFromListAcc k v leq key (toList k v m) (Leaf k v)
 ```
 
 - **`dropKey` is FILTER (remove **all** order-equivalent entries), not
-  drop-first** (Fork D build-pin). The order-equivalence **decision** is
-  **Bool-valued** —
+  drop-first** (Fork D build-pin). It remains the semantic reference for the
+  fused worker. The order-equivalence **decision** is **Bool-valued** —
   `orderEquivKey leq a b : Bool = bool_and (leq a b) (leq b a)`
   (§2's `bool_and`) — so `dropKey`'s `match … { True => … ; False => … }` has a
   `Bool` scrutinee, exactly as `insert`/`lookup` branch on `leq key k2 : Bool`.
@@ -170,44 +185,42 @@ view delete (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k) (m : Tree k v
   `map.ken:1600`, is its `Ω` counterpart — used in the *laws*, never as an
   executable-`match` scrutinee.) `dropKey` is a plain `List` recursion
   (Gap-B-free, like `pairKeys`/`assoc`).
-- **`delete` is NON-recursive** — a pipeline of landed structural ops
-  (`toList → dropKey → fromList`), so it carries **zero SCT obligation of its
-  own** (one less thing to check than a self-recursive `glue`-`delete`).
+- **`delete` is rebuild-only tree-wise** — it routes `toList` through the fused
+  `deleteFromListAcc` worker and reuses landed `insert` for survivor entries.
+  There is still no structural `glue`/`deleteMin` delete on trees.
 
 ### 3.1 `Ordered`-preservation
 
-`delete` produces `fromList … (…)`, and `fromList` of **any** list is `Ordered`
-by construction, so preservation needs one new lemma and no `delete`-specific
-induction:
+The fused worker preserves `Ordered` by list induction: each step either skips
+an order-equivalent entry or inserts one survivor into the accumulator using
+the landed `preservesOrdered` proof.
 
 ```
-view fromListPreservesOrdered
+fn deleteFromListAccPreservesOrdered
   (k : Type) (v : Type) (leq : k -> k -> Bool)
   (transLeq : …) (total : …)
-  (xs : List (Pair k v))
-  : Ordered k v leq (fromList k v leq xs) = …          -- List-induction; each step = landed preservesOrdered
+  (key : k) (xs : List (Pair k v)) (acc : Tree k v)
+  : Ordered k v leq acc -> Ordered k v leq (deleteFromListAcc k v leq key xs acc) = …
 ```
 
-- **List-induction over `xs`** (the `fromListAcc` accumulator): base `Nil` is a
-  **passthrough** to the accumulator's `Ordered` (the initial `Leaf`, i.e.
-  `orderedEmpty → tt`); step inserts one entry, closed by the **landed**
-  `preservesOrdered` (law 1) applied to the accumulator's `Ordered`. Nothing
-  new about `insert` is proved — it is reused wholesale.
-- `deletePreservesOrdered` is then `fromListPreservesOrdered … (dropKey …
-  (toList
-  … m))` — immediate, `dropKey`/`toList` are irrelevant to the conclusion (any
-  list input suffices).
+- **List-induction over `xs`** (the fused accumulator): base `Nil` is a
+  **passthrough** to the accumulator's `Ordered`; the `True` branch skips; the
+  `False` branch is closed by the **landed** `preservesOrdered` (law 1) applied
+  to the accumulator's `Ordered`. Nothing new about `insert` is proved — it is
+  reused wholesale.
+- `deletePreservesOrdered` is the `deleteFromListAccPreservesOrdered`
+  specialization at `toList m` and `Leaf`, closed by `orderedEmpty`.
 
 ### 3.2 The two lookup laws
 
-- **None-law (UNCONDITIONAL):** `lookup key (delete key m) ≡ None`. Because
-  `dropKey` is **filter**, no entry order-equivalent to `key` survives into the
-  rebuilt tree, so `lookup` finds nothing — **no `Ordered`/`Distinct`
-  hypothesis** (a drop-first `dropKey` would let a duplicate survive if the
-  input weren't distinct; filter closes that off structurally). Routes through
-  the `fromList`/`assoc` dual: `lookup key (fromList xs) ≡ assoc key xs`, and
-  `assoc key (dropKey key ys) ≡ None` (a `List`-level lemma: filtering out
-  `key` leaves nothing for `assoc` to match).
+- **None-law (UNCONDITIONAL):** `lookup key (delete key m) ≡ None`. Because the
+  fused worker is the `dropKey` filter-delete factoring, no entry
+  order-equivalent to `key` is inserted into the rebuilt tree, so `lookup`
+  finds nothing — **no `Ordered`/`Distinct` hypothesis** (a drop-first filter
+  would let a duplicate survive if the input weren't distinct; filter closes
+  that off structurally). The proof is a direct worker induction: the `True`
+  branch skips, and the `False` branch uses landed `lookupLocality` to preserve
+  the accumulator's `None`.
 - **Other-key law:** `Not (orderEquivKey leq k key) → lookup k (delete key m) ≡
   lookup k m`. This one **threads `Ordered`+`Distinct`** through the landed
   **law 5** (`lookupAssocAgree`, `map.ken:2212` — `lookup k m ≡ assoc k (toList

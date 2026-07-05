@@ -70,10 +70,13 @@ predicates over the `Map K (Set K)` adjacency rep). All laws are `Ω` props
    defer-build** — see §5.
 3. **Fork C — a relation is `Map K (Set K)` = `Tree K (Tree K Unit)`**
    (adjacency), rides `Ord K` only, zero new machinery. NOT `Set (Pair K K)`.
-4. **Fork D — `delete` is rebuild-via-`fromList`** (`delete key m := fromList (dropKey key (toList m))`),
-   and **`dropKey` is FILTER** (removes ALL order-equivalent entries, not
+4. **Fork D — `delete` is semantic filter-delete rebuild**: the canonical built
+   form is the fused `deleteFromListAcc` worker over `toList`, skipping every
+   order-equivalent entry and inserting every survivor into a fresh accumulator.
+   This is the approved factoring of `fromList (dropKey key (toList m))`.
+   **`dropKey` is FILTER** (removes ALL order-equivalent entries, not
    drop-first) ⇒ the None-law is **unconditional** (no `Ordered`/`Distinct`
-   hypothesis). `delete` is non-recursive ⇒ zero SCT obligation of its own.
+   hypothesis). Rebuild uses landed `insert`, never structural `glue`/`deleteMin`.
 5. **Set laws are stated MEMBERSHIP-EXTENSIONALLY** (`∀x. setMember x lhs ≡
    setMember x rhs`), **NEVER `Equal (Set K) …`** — Tree-`Equal` set laws are
    **FALSE** (`union a b` / `union b a` are shape-different trees, same key-set).
@@ -103,8 +106,9 @@ on it): **D0 → D1 → D2 → D3 → D4-land-half.**
   landed `fn bool_or`). `antisymLeq` is only for the out-of-scope `Distinct`
   boundary — build it (cheap, `Nat`-structural) but nothing downstream here
   requires it.
-- **D1 — `delete` (Fork D, §3):** `fn dropKey` (filter) + `fn delete` +
-  `fromListPreservesOrdered` + None-law (unconditional) + other-key law (via
+- **D1 — `delete` (Fork D, §3):** `fn dropKey` (filter reference) +
+  transparent fused rebuild worker `fn deleteFromListAcc` + `fn delete` +
+  worker `Ordered` preservation + None-law (unconditional) + other-key law (via
   landed law 5 roundtrip). `orderEquivKey leq a b := bool_and (leq a b) (leq b a)`
   is the **Bool decision**; the landed Prop-valued `orderEquiv` is for laws only.
 - **D2 — `union`/`intersection`/`difference` (Fork A, §4):** `fn insertWith` +

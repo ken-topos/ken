@@ -2494,6 +2494,31 @@ fn totalLeqNat (x : Nat) (y : Nat) : Or (Equal Bool (leqNat x y) True) (Equal Bo
 fn orderEquivKey (k : Type) (leq : k → k → Bool) (a : k) (b : k) : Bool =
   bool_and (leq a b) (leq b a)
 
+fn boolAndTrueIntro
+  (a : Bool) (b : Bool)
+  (ha : Equal Bool a True) (hb : Equal Bool b True)
+  : Equal Bool (bool_and a b) True =
+  trans Bool (bool_and a b) (bool_and True b) True
+    (cong Bool Bool a True (λx. bool_and x b) ha)
+    hb
+
+fn orderEquivKeyTrueFromOrderEquiv
+  (k : Type) (leq : k → k → Bool) (a : k) (b : k)
+  : orderEquiv k leq a b → Equal Bool (orderEquivKey k leq a b) True =
+  λh.
+    boolAndTrueIntro (leq a b) (leq b a)
+      (andFst (Equal Bool (leq a b) True) (Equal Bool (leq b a) True) h)
+      (andSnd (Equal Bool (leq a b) True) (Equal Bool (leq b a) True) h)
+
+fn orderEquivKeyFalseToNot
+  (k : Type) (leq : k → k → Bool) (a : k) (b : k)
+  (hfalse : Equal Bool (orderEquivKey k leq a b) False)
+  : notOrderEquivToKey k leq a b =
+  λh.
+    absurd (trans Bool True (orderEquivKey k leq a b) False
+              (sym Bool (orderEquivKey k leq a b) True (orderEquivKeyTrueFromOrderEquiv k leq a b h))
+              hfalse)
+
 fn dropKey (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (xs : List (Pair k v)) : List (Pair k v) =
   match xs {
     Nil ⇒ Nil (Pair k v) ;
@@ -2504,11 +2529,164 @@ fn dropKey (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (xs : List (
       }
   }
 
-fn delete (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (m : Tree k v) : Tree k v =
-  fromList k v leq (dropKey k v leq key (toList k v m))
+fn deleteFromListAcc (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (xs : List (Pair k v)) (acc : Tree k v) : Tree k v =
+  match xs {
+    Nil ⇒ acc ;
+    Cons e xs2 ⇒
+      match orderEquivKey k leq key (pairFst k v e) {
+        True ⇒ deleteFromListAcc k v leq key xs2 acc ;
+        False ⇒ deleteFromListAcc k v leq key xs2 (insert k v leq (pairFst k v e) (pairSnd k v e) acc)
+      }
+  }
 
-fn deleteLookupNoneLaw (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (m : Tree k v) : Prop =
-  Equal (Option v) (lookup k v leq key (delete k v leq key m)) (None v)
+fn deleteFromListAccStep
+  (k : Type) (v : Type) (leq : k → k → Bool) (key : k)
+  (e : Pair k v) (xs2 : List (Pair k v)) (acc : Tree k v) (b : Bool) : Tree k v =
+  match b {
+    True ⇒ deleteFromListAcc k v leq key xs2 acc ;
+    False ⇒ deleteFromListAcc k v leq key xs2 (insert k v leq (pairFst k v e) (pairSnd k v e) acc)
+  }
+
+fn deleteFromListAccFinalBridge
+  (k : Type) (v : Type) (leq : k → k → Bool) (key : k)
+  (e : Pair k v) (xs2 : List (Pair k v)) (acc : Tree k v)
+  : Equal (Tree k v)
+      (deleteFromListAcc k v leq key (Cons (Pair k v) e xs2) acc)
+      (deleteFromListAccStep k v leq key e xs2 acc (orderEquivKey k leq key (pairFst k v e))) = Refl
+
+fn deleteFromListAccStepTrueEq
+  (k : Type) (v : Type) (leq : k → k → Bool) (key : k)
+  (e : Pair k v) (xs2 : List (Pair k v)) (acc : Tree k v)
+  (q : Equal Bool (orderEquivKey k leq key (pairFst k v e)) True)
+  : Equal (Tree k v)
+      (deleteFromListAccStep k v leq key e xs2 acc (orderEquivKey k leq key (pairFst k v e)))
+      (deleteFromListAccStep k v leq key e xs2 acc True) =
+  cong Bool (Tree k v) (orderEquivKey k leq key (pairFst k v e)) True (deleteFromListAccStep k v leq key e xs2 acc) q
+
+fn deleteFromListAccStepFalseEq
+  (k : Type) (v : Type) (leq : k → k → Bool) (key : k)
+  (e : Pair k v) (xs2 : List (Pair k v)) (acc : Tree k v)
+  (q : Equal Bool (orderEquivKey k leq key (pairFst k v e)) False)
+  : Equal (Tree k v)
+      (deleteFromListAccStep k v leq key e xs2 acc (orderEquivKey k leq key (pairFst k v e)))
+      (deleteFromListAccStep k v leq key e xs2 acc False) =
+  cong Bool (Tree k v) (orderEquivKey k leq key (pairFst k v e)) False (deleteFromListAccStep k v leq key e xs2 acc) q
+
+fn deleteFromListAccStepTrueReduces
+  (k : Type) (v : Type) (leq : k → k → Bool) (key : k)
+  (e : Pair k v) (xs2 : List (Pair k v)) (acc : Tree k v)
+  : Equal (Tree k v)
+      (deleteFromListAccStep k v leq key e xs2 acc True)
+      (deleteFromListAcc k v leq key xs2 acc) = Refl
+
+fn deleteFromListAccStepFalseReduces
+  (k : Type) (v : Type) (leq : k → k → Bool) (key : k)
+  (e : Pair k v) (xs2 : List (Pair k v)) (acc : Tree k v)
+  : Equal (Tree k v)
+      (deleteFromListAccStep k v leq key e xs2 acc False)
+      (deleteFromListAcc k v leq key xs2 (insert k v leq (pairFst k v e) (pairSnd k v e) acc)) = Refl
+
+fn deleteFromListAccTrueBridge
+  (k : Type) (v : Type) (leq : k → k → Bool) (key : k)
+  (e : Pair k v) (xs2 : List (Pair k v)) (acc : Tree k v)
+  (q : Equal Bool (orderEquivKey k leq key (pairFst k v e)) True)
+  : Equal (Tree k v)
+      (deleteFromListAcc k v leq key (Cons (Pair k v) e xs2) acc)
+      (deleteFromListAcc k v leq key xs2 acc) =
+  trans (Tree k v)
+    (deleteFromListAcc k v leq key (Cons (Pair k v) e xs2) acc)
+    (deleteFromListAccStep k v leq key e xs2 acc (orderEquivKey k leq key (pairFst k v e)))
+    (deleteFromListAcc k v leq key xs2 acc)
+    (deleteFromListAccFinalBridge k v leq key e xs2 acc)
+    (trans (Tree k v)
+      (deleteFromListAccStep k v leq key e xs2 acc (orderEquivKey k leq key (pairFst k v e)))
+      (deleteFromListAccStep k v leq key e xs2 acc True)
+      (deleteFromListAcc k v leq key xs2 acc)
+      (deleteFromListAccStepTrueEq k v leq key e xs2 acc q)
+      (deleteFromListAccStepTrueReduces k v leq key e xs2 acc))
+
+fn deleteFromListAccFalseBridge
+  (k : Type) (v : Type) (leq : k → k → Bool) (key : k)
+  (e : Pair k v) (xs2 : List (Pair k v)) (acc : Tree k v)
+  (q : Equal Bool (orderEquivKey k leq key (pairFst k v e)) False)
+  : Equal (Tree k v)
+      (deleteFromListAcc k v leq key (Cons (Pair k v) e xs2) acc)
+      (deleteFromListAcc k v leq key xs2 (insert k v leq (pairFst k v e) (pairSnd k v e) acc)) =
+  trans (Tree k v)
+    (deleteFromListAcc k v leq key (Cons (Pair k v) e xs2) acc)
+    (deleteFromListAccStep k v leq key e xs2 acc (orderEquivKey k leq key (pairFst k v e)))
+    (deleteFromListAcc k v leq key xs2 (insert k v leq (pairFst k v e) (pairSnd k v e) acc))
+    (deleteFromListAccFinalBridge k v leq key e xs2 acc)
+    (trans (Tree k v)
+      (deleteFromListAccStep k v leq key e xs2 acc (orderEquivKey k leq key (pairFst k v e)))
+      (deleteFromListAccStep k v leq key e xs2 acc False)
+      (deleteFromListAcc k v leq key xs2 (insert k v leq (pairFst k v e) (pairSnd k v e) acc))
+      (deleteFromListAccStepFalseEq k v leq key e xs2 acc q)
+      (deleteFromListAccStepFalseReduces k v leq key e xs2 acc))
+
+fn deleteFromList (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (xs : List (Pair k v)) : Tree k v =
+  deleteFromListAcc k v leq key xs (Leaf k v)
+
+fn delete (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (m : Tree k v) : Tree k v =
+  deleteFromList k v leq key (toList k v m)
+
+fn deleteFromListAccLookupNoneDispatch
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (key : k) (e : Pair k v) (xs2 : List (Pair k v)) (acc : Tree k v)
+  (hacc : Equal (Option v) (lookup k v leq key acc) (None v))
+  (o : Or (Equal Bool (orderEquivKey k leq key (pairFst k v e)) True)
+          (Equal Bool (orderEquivKey k leq key (pairFst k v e)) False))
+  : Equal (Option v)
+      (lookup k v leq key (deleteFromListAcc k v leq key (Cons (Pair k v) e xs2) acc))
+      (None v) =
+  match o {
+    Inl q ⇒
+      J (λt _. Equal (Option v) (lookup k v leq key t) (None v))
+        (deleteFromListAccLookupNone k v leq transLeq key xs2 acc hacc)
+        (sym (Tree k v)
+          (deleteFromListAcc k v leq key (Cons (Pair k v) e xs2) acc)
+          (deleteFromListAcc k v leq key xs2 acc)
+          (deleteFromListAccTrueBridge k v leq key e xs2 acc q)) ;
+    Inr q ⇒
+      J (λt _. Equal (Option v) (lookup k v leq key t) (None v))
+        (deleteFromListAccLookupNone k v leq transLeq key xs2
+          (insert k v leq (pairFst k v e) (pairSnd k v e) acc)
+          (trans (Option v)
+            (lookup k v leq key (insert k v leq (pairFst k v e) (pairSnd k v e) acc))
+            (lookup k v leq key acc)
+            (None v)
+            (lookupLocality k v leq transLeq (pairFst k v e) key (pairSnd k v e) acc
+              (notOrderEquivSwap k leq key (pairFst k v e)
+                (orderEquivKeyFalseToNot k leq key (pairFst k v e) q)))
+            hacc))
+        (sym (Tree k v)
+          (deleteFromListAcc k v leq key (Cons (Pair k v) e xs2) acc)
+          (deleteFromListAcc k v leq key xs2 (insert k v leq (pairFst k v e) (pairSnd k v e) acc))
+          (deleteFromListAccFalseBridge k v leq key e xs2 acc q))
+  }
+
+fn deleteFromListAccLookupNone
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (key : k) (xs : List (Pair k v)) (acc : Tree k v)
+  : Equal (Option v) (lookup k v leq key acc) (None v) →
+    Equal (Option v) (lookup k v leq key (deleteFromListAcc k v leq key xs acc)) (None v) =
+  match xs {
+    Nil ⇒ λhacc. hacc ;
+    Cons e xs2 ⇒
+      λhacc.
+        deleteFromListAccLookupNoneDispatch k v leq transLeq key e xs2 acc hacc
+          (boolDichotomy (orderEquivKey k leq key (pairFst k v e)))
+  }
+
+fn deleteLookupNoneLaw
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (key : k) (m : Tree k v)
+  : Equal (Option v) (lookup k v leq key (delete k v leq key m)) (None v) =
+  deleteFromListAccLookupNone k v leq transLeq key (toList k v m) (Leaf k v)
+    (lookupEmptyIsNone k v leq key)
 
 fn deleteLookupOtherKeyLaw
   (k : Type) (v : Type) (leq : k → k → Bool) (deleted : k) (key : k) (m : Tree k v)
@@ -2539,13 +2717,63 @@ fn fromListPreservesOrdered
   : Ordered k v leq (fromList k v leq xs) =
   fromListAccPreservesOrdered k v leq transLeq total xs (Leaf k v) (orderedEmpty k v leq)
 
+fn deleteFromListAccPreservesOrderedDispatch
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (total : (x : k) → (y : k) → Or (Equal Bool (leq x y) True) (Equal Bool (leq y x) True))
+  (key : k) (e : Pair k v) (xs2 : List (Pair k v)) (acc : Tree k v)
+  (h : Ordered k v leq acc)
+  (o : Or (Equal Bool (orderEquivKey k leq key (pairFst k v e)) True)
+          (Equal Bool (orderEquivKey k leq key (pairFst k v e)) False))
+  : Ordered k v leq (deleteFromListAcc k v leq key (Cons (Pair k v) e xs2) acc) =
+  match o {
+    Inl q ⇒
+      J (λt _. Ordered k v leq t)
+        (deleteFromListAccPreservesOrdered k v leq transLeq total key xs2 acc h)
+        (sym (Tree k v)
+          (deleteFromListAcc k v leq key (Cons (Pair k v) e xs2) acc)
+          (deleteFromListAcc k v leq key xs2 acc)
+          (deleteFromListAccTrueBridge k v leq key e xs2 acc q)) ;
+    Inr q ⇒
+      J (λt _. Ordered k v leq t)
+        (deleteFromListAccPreservesOrdered k v leq transLeq total key xs2
+          (insert k v leq (pairFst k v e) (pairSnd k v e) acc)
+          (preservesOrdered k v leq transLeq total (pairFst k v e) (pairSnd k v e) acc h))
+        (sym (Tree k v)
+          (deleteFromListAcc k v leq key (Cons (Pair k v) e xs2) acc)
+          (deleteFromListAcc k v leq key xs2 (insert k v leq (pairFst k v e) (pairSnd k v e) acc))
+          (deleteFromListAccFalseBridge k v leq key e xs2 acc q))
+  }
+
+fn deleteFromListAccPreservesOrdered
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (total : (x : k) → (y : k) → Or (Equal Bool (leq x y) True) (Equal Bool (leq y x) True))
+  (key : k) (xs : List (Pair k v)) (acc : Tree k v)
+  : Ordered k v leq acc → Ordered k v leq (deleteFromListAcc k v leq key xs acc) =
+  match xs {
+    Nil ⇒ λh. h ;
+    Cons e xs2 ⇒
+      λh.
+        deleteFromListAccPreservesOrderedDispatch k v leq transLeq total key e xs2 acc h
+          (boolDichotomy (orderEquivKey k leq key (pairFst k v e)))
+  }
+
+fn deleteFromListPreservesOrdered
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (total : (x : k) → (y : k) → Or (Equal Bool (leq x y) True) (Equal Bool (leq y x) True))
+  (key : k) (xs : List (Pair k v))
+  : Ordered k v leq (deleteFromList k v leq key xs) =
+  deleteFromListAccPreservesOrdered k v leq transLeq total key xs (Leaf k v) (orderedEmpty k v leq)
+
 fn deletePreservesOrdered
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (total : (x : k) → (y : k) → Or (Equal Bool (leq x y) True) (Equal Bool (leq y x) True))
   (key : k) (m : Tree k v)
   : Ordered k v leq (delete k v leq key m) =
-  fromListPreservesOrdered k v leq transLeq total (dropKey k v leq key (toList k v m))
+  deleteFromListPreservesOrdered k v leq transLeq total key (toList k v m)
 
 fn insertWith (k : Type) (v : Type) (leq : k → k → Bool) (f : v → v → v) (key : k) (val : v) (m : Tree k v) : Tree k v =
   match m {
