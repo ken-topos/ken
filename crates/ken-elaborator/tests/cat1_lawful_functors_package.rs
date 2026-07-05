@@ -1,4 +1,4 @@
-//! CAT-1 D2 package checks for the landed `Semigroup`/`Monoid` source.
+//! CAT-1 package checks for the landed lawful-functors source.
 //! This loads the real package files through the production elaborator path.
 
 use ken_elaborator::ElabEnv;
@@ -42,10 +42,30 @@ fn lawful_functors_package_elaborates_with_parametric_list_monoid() {
         env.class_env.instance_search("Monoid", "List").is_some(),
         "coherence key should be Monoid/List, not a closed element type"
     );
+
+    for (class, head, global) in [
+        ("Functor", "List", "Functor_instance_List"),
+        ("Functor", "Option", "Functor_instance_Option"),
+        ("Foldable", "List", "Foldable_instance_List"),
+        ("Foldable", "Option", "Foldable_instance_Option"),
+    ] {
+        let instance_id = env
+            .globals
+            .get(global)
+            .copied()
+            .unwrap_or_else(|| panic!("{global} should be registered"));
+        env.env
+            .const_type(instance_id)
+            .unwrap_or_else(|| panic!("{global} should have a kernel type"));
+        assert!(
+            env.class_env.instance_search(class, head).is_some(),
+            "coherence key should include {class}/{head}"
+        );
+    }
 }
 
 #[test]
-fn lawful_functors_source_cites_generic_list_proofs_without_axiom() {
+fn lawful_functors_source_cites_landed_laws_without_axiom() {
     assert!(
         LAWFUL_FUNCTORS_KEN.contains("instance Monoid (List a)"),
         "package must use the parametric List Monoid instance head"
@@ -63,5 +83,31 @@ fn lawful_functors_source_cites_generic_list_proofs_without_axiom() {
     assert!(
         !LAWFUL_FUNCTORS_KEN.contains("= Axiom"),
         "lawful-functors package must not fill laws with Axiom"
+    );
+    assert!(
+        LAWFUL_FUNCTORS_KEN.contains("class Functor (f : Type → Type)")
+            && LAWFUL_FUNCTORS_KEN.contains("id_law     : (a : Type) → (x : f a)")
+            && LAWFUL_FUNCTORS_KEN.contains("fusion_law : (a : Type) → (b : Type) → (c : Type)")
+            && LAWFUL_FUNCTORS_KEN.contains("(g : b → c) → (h : a → b) → (x : f a)"),
+        "Functor should use the settled single pointwise law fields"
+    );
+    assert!(
+        !LAWFUL_FUNCTORS_KEN.contains("map_id")
+            && !LAWFUL_FUNCTORS_KEN.contains("map_comp")
+            && !LAWFUL_FUNCTORS_KEN.contains("pointfree"),
+        "Functor should not add a point-free duplicate law surface"
+    );
+    assert!(
+        LAWFUL_FUNCTORS_KEN.contains("instance Functor List")
+            && LAWFUL_FUNCTORS_KEN.contains("instance Functor Option")
+            && LAWFUL_FUNCTORS_KEN.contains("instance Foldable List")
+            && LAWFUL_FUNCTORS_KEN.contains("instance Foldable Option"),
+        "D3 should provide List and Option Functor/Foldable instances"
+    );
+    assert!(
+        LAWFUL_FUNCTORS_KEN.contains("foldMap_coherence")
+            && LAWFUL_FUNCTORS_KEN.contains("foldMap_step")
+            && LAWFUL_FUNCTORS_KEN.contains("foldr_toList"),
+        "Foldable should pin foldMap through the selected Monoid and toList reconstruction laws"
     );
 }

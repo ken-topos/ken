@@ -1,9 +1,9 @@
 -- Lawful constructor-class tranche (CAT-1): the VALUE-LEVEL algebra half --
--- `Semigroup` and `Monoid` (spec/50-stdlib/55-lawful-functors.md). The
--- constructor classes `Functor`/`Foldable` (over `f : Type -> Type`) land in
--- this same package once the higher-kinded class-parameter extension does
--- (Architect's CAT-1 core ruling: `class C (f : Type -> Type)` needs a small
--- outer-ring elaborator extension) -- held here, not yet present.
+-- `Semigroup`, `Monoid`, `Functor`, and `Foldable`
+-- (spec/50-stdlib/55-lawful-functors.md). The constructor classes use the
+-- CAT-1 higher-kinded class-parameter extension (`class C (f : Type -> Type)`)
+-- and stay entirely in the elaborator/package layer: no kernel feature, no
+-- new `Term`/`Decl`.
 --
 -- No new kernel feature (AC1): a class is a record (33 SS5.2, right-nested
 -- Sigma over 13 SS3); a law is an `Omega` proposition (16 SS1). Unlike
@@ -15,8 +15,9 @@
 -- these are value equations, not a bare `\/`/`exists`).
 --
 -- Laws PROVED over inductive carriers, never postulated (AC3): the `List a`
--- append monoid by induction + `cong` (packages/transport), `Bool`'s
--- conjunction monoid by finite case-split. Zero `Axiom`, zero
+-- append monoid and `List` Functor/Foldable laws by induction + `cong`
+-- (packages/transport), `Bool`'s conjunction monoid and `Option`
+-- Functor/Foldable laws by finite case-split/definitional equality. Zero `Axiom`, zero
 -- `trusted_base()` delta -- every instance is a real `declare_def` record
 -- value, kernel-re-checked.
 --
@@ -173,4 +174,199 @@ instance Monoid Bool {
   assoc      = band_assoc ;
   left_unit  = band_left_unit ;
   right_unit = band_right_unit
+}
+
+-- ========================================================================
+-- Functor -- structure-preserving map over a type constructor.
+-- ========================================================================
+
+fn idf (a : Type) (x : a) : a = x
+
+fn comp (a : Type) (b : Type) (c : Type) (g : b → c) (h : a → b) (x : a) : c =
+  g (h x)
+
+class Functor (f : Type → Type) {
+  map        : (a : Type) → (b : Type) → (a → b) → f a → f b ;
+  id_law     : (a : Type) → (x : f a) →
+                 Equal (f a) (map a a (idf a) x) x ;
+  fusion_law : (a : Type) → (b : Type) → (c : Type) →
+                 (g : b → c) → (h : a → b) → (x : f a) →
+                 Equal (f c)
+                   (map a c (comp a b c g h) x)
+                   (map b c g (map a b h x))
+}
+
+fn list_map (a : Type) (b : Type) (g : a → b) (xs : List a) : List b =
+  match xs {
+    Nil ⇒ Nil b ;
+    Cons h t ⇒ Cons b (g h) (list_map a b g t)
+  }
+
+fn list_functor_id (a : Type) (xs : List a)
+  : Equal (List a) (list_map a a (idf a) xs) xs =
+  match xs {
+    Nil ⇒ tt ;
+    Cons h t ⇒
+      cong (List a) (List a)
+        (list_map a a (idf a) t)
+        t
+        (Cons a h)
+        (list_functor_id a t)
+  }
+
+fn list_functor_fusion (a : Type) (b : Type) (c : Type)
+  (g : b → c) (h : a → b) (xs : List a)
+  : Equal (List c)
+      (list_map a c (comp a b c g h) xs)
+      (list_map b c g (list_map a b h xs)) =
+  match xs {
+    Nil ⇒ tt ;
+    Cons x rest ⇒
+      cong (List c) (List c)
+        (list_map a c (comp a b c g h) rest)
+        (list_map b c g (list_map a b h rest))
+        (Cons c (g (h x)))
+        (list_functor_fusion a b c g h rest)
+  }
+
+fn option_map (a : Type) (b : Type) (g : a → b) (x : Option a) : Option b =
+  match x {
+    None ⇒ None b ;
+    Some v ⇒ Some b (g v)
+  }
+
+fn option_functor_id (a : Type) (x : Option a)
+  : Equal (Option a) (option_map a a (idf a) x) x =
+  match x {
+    None ⇒ tt ;
+    Some v ⇒ Refl
+  }
+
+fn option_functor_fusion (a : Type) (b : Type) (c : Type)
+  (g : b → c) (h : a → b) (x : Option a)
+  : Equal (Option c)
+      (option_map a c (comp a b c g h) x)
+      (option_map b c g (option_map a b h x)) =
+  match x { None ⇒ tt ; Some v ⇒ Refl }
+
+instance Functor List {
+  map        = list_map ;
+  id_law     = list_functor_id ;
+  fusion_law = list_functor_fusion
+}
+
+instance Functor Option {
+  map        = option_map ;
+  id_law     = option_functor_id ;
+  fusion_law = option_functor_fusion
+}
+
+-- ========================================================================
+-- Foldable -- foldr-primary folds, with foldMap coherent through Monoid.
+-- ========================================================================
+
+fn monoid_mempty (m : Type) (mon : Monoid m) : m = mon.mempty
+
+fn foldMap_step (a : Type) (m : Type) (mon : Monoid m) (g : a → m)
+  (y : a) (acc : m) : m =
+  (mon.op) (g y) acc
+
+class Foldable (f : Type → Type) {
+  foldr             : (a : Type) → (b : Type) → (a → b → b) → b → f a → b ;
+  foldMap           : (a : Type) → (m : Type) → Monoid m → (a → m) → f a → m ;
+  toList            : (a : Type) → f a → List a ;
+  foldr_toList      : (a : Type) → (x : f a) →
+                        Equal (List a)
+                          (foldr a (List a) (Cons a) (Nil a) x)
+                          (toList a x) ;
+  foldMap_coherence : (a : Type) → (m : Type) → (mon : Monoid m) →
+                        (g : a → m) → (x : f a) →
+                        Equal m
+                          (foldMap a m mon g x)
+                          (foldr a m (foldMap_step a m mon g) (monoid_mempty m mon) x)
+}
+
+fn list_foldr (a : Type) (b : Type) (k : a → b → b) (z : b) (xs : List a) : b =
+  match xs {
+    Nil ⇒ z ;
+    Cons h t ⇒ k h (list_foldr a b k z t)
+  }
+
+fn list_foldMap (a : Type) (m : Type) (mon : Monoid m) (g : a → m)
+  (xs : List a) : m =
+  match xs {
+    Nil ⇒ mon.mempty ;
+    Cons h t ⇒ (mon.op) (g h) (list_foldMap a m mon g t)
+  }
+
+fn list_toList (a : Type) (xs : List a) : List a = xs
+
+fn list_foldr_toList (a : Type) (xs : List a)
+  : Equal (List a) (list_foldr a (List a) (Cons a) (Nil a) xs) (list_toList a xs) =
+  match xs {
+    Nil ⇒ tt ;
+    Cons h t ⇒
+      cong (List a) (List a)
+        (list_foldr a (List a) (Cons a) (Nil a) t)
+        (list_toList a t)
+        (Cons a h)
+        (list_foldr_toList a t)
+  }
+
+fn list_foldMap_coherence (a : Type) (m : Type) (mon : Monoid m)
+  (g : a → m) (xs : List a)
+  : Equal m
+      (list_foldMap a m mon g xs)
+      (list_foldr a m (foldMap_step a m mon g) (monoid_mempty m mon) xs) =
+  match xs {
+    Nil ⇒ Refl ;
+    Cons h t ⇒
+      cong m m
+        (list_foldMap a m mon g t)
+        (list_foldr a m (foldMap_step a m mon g) (monoid_mempty m mon) t)
+        ((mon.op) (g h))
+        (list_foldMap_coherence a m mon g t)
+  }
+
+fn option_foldr (a : Type) (b : Type) (k : a → b → b) (z : b) (x : Option a) : b =
+  match x {
+    None ⇒ z ;
+    Some v ⇒ k v z
+  }
+
+fn option_foldMap (a : Type) (m : Type) (mon : Monoid m) (g : a → m)
+  (x : Option a) : m =
+  match x {
+    None ⇒ mon.mempty ;
+    Some v ⇒ (mon.op) (g v) (mon.mempty)
+  }
+
+fn option_toList (a : Type) (x : Option a) : List a =
+  option_foldr a (List a) (Cons a) (Nil a) x
+
+fn option_foldr_toList (a : Type) (x : Option a)
+  : Equal (List a) (option_foldr a (List a) (Cons a) (Nil a) x) (option_toList a x) =
+  Refl
+
+fn option_foldMap_coherence (a : Type) (m : Type) (mon : Monoid m)
+  (g : a → m) (x : Option a)
+  : Equal m
+      (option_foldMap a m mon g x)
+      (option_foldr a m (foldMap_step a m mon g) (monoid_mempty m mon) x) =
+  match x { None ⇒ Refl ; Some v ⇒ Refl }
+
+instance Foldable List {
+  foldr             = list_foldr ;
+  foldMap           = list_foldMap ;
+  toList            = list_toList ;
+  foldr_toList      = list_foldr_toList ;
+  foldMap_coherence = list_foldMap_coherence
+}
+
+instance Foldable Option {
+  foldr             = option_foldr ;
+  foldMap           = option_foldMap ;
+  toList            = option_toList ;
+  foldr_toList      = option_foldr_toList ;
+  foldMap_coherence = option_foldMap_coherence
 }

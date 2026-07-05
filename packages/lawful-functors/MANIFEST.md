@@ -1,13 +1,11 @@
-# `lawful-functors` — `Semigroup`, `Monoid` (+ held `Functor`, `Foldable`)
+# `lawful-functors` — `Semigroup`, `Monoid`, `Functor`, `Foldable`
 
 **Spec catalog entry:** `spec/50-stdlib/55-lawful-functors.md`. The first WP
 of the **catalog campaign** (`docs/program/06-catalog-campaign.md`, CAT-1) and
 the pattern-setter for the constructor classes every later catalog layer
-leans on. This slice delivers the **value-level algebra** half — `Semigroup`
-and `Monoid`. The **constructor classes** `Functor`/`Foldable` (over
-`f : Type -> Type`) land in this same package once the higher-kinded
-class-parameter extension does (see *Pinned sub-deliverables* below); they are
-**held**, not yet present.
+leans on. This package now carries the **value-level algebra** classes
+`Semigroup`/`Monoid` and the **constructor classes** `Functor`/`Foldable`
+over `f : Type -> Type`.
 
 > **Naming.** Despite the package name, this tranche carries the value-level
 > algebra companions (`Semigroup`/`Monoid`) alongside the functor classes,
@@ -32,10 +30,25 @@ class-parameter extension does (see *Pinned sub-deliverables* below); they are
   **induction + `cong`**, zero `Axiom`. The `Monoid` dictionary is genuinely
   generic in the element type and cites the generic `list_assoc`,
   `list_left_unit`, and `list_right_unit` proofs.
+- `class Functor (f : Type -> Type) { map; id_law; fusion_law }` — the
+  constructor-class map interface (`55 §5.2`). The laws use the settled
+  **single pointwise field** form only: identity quantifies over `(x : f a)`,
+  and fusion quantifies over `(x : f a)`; there is no point-free duplicate.
+- `instance Functor List`, `instance Functor Option` — map implementations
+  over the inductive carriers; laws are proved by list induction and option
+  case-split/definitional equality, zero `Axiom`.
+- `class Foldable (f : Type -> Type) { foldr; foldMap; toList;
+  foldr_toList; foldMap_coherence }` — `foldr` is primary, `toList` has a
+  reconstruction law, and `foldMap` is pinned to the selected `Monoid`
+  dictionary by the coherence law
+  `foldMap g x = foldr (foldMap_step mon g) mempty x`.
+- `instance Foldable List`, `instance Foldable Option` — folds over the same
+  inductive carriers. List laws use induction + `cong`; Option laws close by
+  case split or definitional equality, zero `Axiom`.
 
 ## Derivation path + `trusted_base()` delta
 
-- **Both classes** are `class` declarations = record types (`33 §5.2`,
+- **All four classes** are `class` declarations = record types (`33 §5.2`,
   right-nested Σ over `13 §3`), built from the kernel's `Equal`/`Omega`
   vocabulary (`15`/`16`, prelude) + the Σ/record machinery. **No new kernel
   former, zero delta.**
@@ -44,10 +57,11 @@ class-parameter extension does (see *Pinned sub-deliverables* below); they are
   *not* the `IsTrue`/`Bool` bridge `Eq`/`Ord` use. A value equation is
   proof-irrelevant (`Omega`), and the `51 §3` truncation catch does **not**
   fire (no bare `\/`/`exists`) — every law is `Omega`-clean, no `‖·‖`.
-- **Both instances are ZERO-DELTA — the inductive-carrier exemplar** (`51 §6`;
-  the path the `Int` instances of `lawful-classes` could *not* take). `List`
-  and `Bool` are real inductives with eliminators, so every ∀-law is a real
-  kernel proof by induction / finite case-split (Ω-motive `Elim`, K4
+- **All instances are ZERO-DELTA — the inductive-carrier exemplar** (`51 §6`;
+  the path the `Int` instances of `lawful-classes` could *not* take). `List`,
+  `Option`, and `Bool` are real inductives with eliminators, so every ∀-law
+  is a real kernel proof by induction / finite case-split / definitional
+  equality (Ω-motive `Elim`, K4
   `3be0e30`; `Top`-intro `tt` / `Bottom`-elim, K5 `1c84a30`; operand-`whnf`,
   K7 `4ae2baf`). **No `Axiom` anywhere; nothing enters `trusted_base()`.**
 - **`tt`-vs-`Refl` discrimination** (the K7 subtlety, documented inline): a
@@ -71,15 +85,15 @@ class-parameter extension does (see *Pinned sub-deliverables* below); they are
 
 ## Pinned sub-deliverables (outer-ring elaborator extensions, kernel-untouched)
 
-Two surface gaps block the *fully general* forms of this tranche. Both are
-`ken-elaborator`-only, **zero `ken-kernel` diff, no new `Term`/`Decl`** —
-flagged to Steward (`findings/forks → Steward`, per the CAT-1 frame).
+Two surface gaps were needed for the fully general forms in this package. Both
+landed as `ken-elaborator`-only work, **zero `ken-kernel` diff, no new
+`Term`/`Decl`**.
 
 1. **Higher-kinded class parameter** — `class Functor (f : Type -> Type)`.
    CAT-1 D1 landed the bounded elaborator extension (AST param-kind field,
    parser binder form, the `elab_class_decl` kind substitution, and
-   bare-indformer instance-head verification). `Functor`/`Foldable` source is
-   still held for the D3 package slice.
+   bare-indformer instance-head verification). CAT-1 D3 uses it for
+   `Functor`/`Foldable`.
 2. **Parametric instance head** — `instance Monoid (List a)` (a value class
    over a *parametric* carrier). CAT-1 D1 landed the free-head-variable
    generalizer, and CAT-1 D2 uses it here: the dictionary is elaborated as
