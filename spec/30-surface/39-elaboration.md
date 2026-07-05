@@ -587,12 +587,23 @@ kernel emission: it must not affect the class type, the Σ chain, `sort_sigma`,
 property-vs-structure classification, orphan/overlap policy, or
 `trusted_base()`.
 
+**Class-field marker validation.** A marked class field is validated at class
+declaration time against the field's declared type/telescope, before any
+instance exists. The classifier input is the field signature read from
+`field_types[i]`, not an implementation expression and not a hidden field-binder
+list. Thus `const seed : Int` and `fn unary : Int -> Int` are well-shaped pure
+fields; `const bad : Int -> Int`, `fn bad : Int`, and `proc bad : A -> A`
+reject unless the declared type itself carries the effect/row-polymorphic shape
+that earns `proc`. The `proc traverse` field in `56 §5.1` is the intended
+positive case: its declared telescope is row-polymorphic through the abstract
+applicative argument, so the stored marker is earned by the field signature.
+
 **Instance-field enforcement.** Instance elaboration still computes field values
 in class-declaration order and checks each implementation against its
 properly-substituted expected type (`compute_ordered_field_values`, `33 §5.3`).
-For a marked field, the same step also runs the existing SURF-1 static-purity
-classifier/check (`36 §1.6`) against the field implementation under that
-expected type:
+For a marked field, the same step also checks that the field implementation is
+compatible with the already-stored field classification, reusing the existing
+SURF-1 static-purity classifier/check (`36 §1.6`):
 
 - `None` — status quo: no purity check beyond the existing type check.
 - `Some(Const)` / `Some(Fn)` — the implementation must classify as pure with

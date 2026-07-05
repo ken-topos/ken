@@ -245,13 +245,15 @@ class_field ::= field_name : type
 An unmarked field is **unclassified** and keeps the pre-SURF-2 behaviour: the
 instance field is checked only against its declared type, and projection carries
 no extra static-purity signal. A marked field's keyword is a **checked
-signature** over the field value, reusing the definition-level SURF-1 purity
-discipline (`§1`, `36 §1.6`): `const`/`fn` fields must be pure with the
-corresponding explicit-value-arity classification, and `proc` fields must be
-potentially effectful/effect-row-polymorphic under that same classifier. Because
-class fields have no separate value-binder list, the arity/effect telescope is
-read from the field's declared type; implicit parameters still do not count
-(`36 §1.6.3(b)`). The marker is surface/elaboration metadata attached to the
+signature** over the field declaration itself, reusing the definition-level
+SURF-1 purity discipline (`§1`, `36 §1.6`): `const`/`fn` fields must be pure
+with the corresponding explicit-value-arity classification, and `proc` fields
+must be potentially effectful/effect-row-polymorphic under that same
+classifier. Because class fields have no separate value-binder list, the
+arity/effect telescope is read from the field's **declared type**; implicit
+parameters still do not count (`36 §1.6.3(b)`). A later instance expression must
+match the stored field classification, but it cannot redefine what the class
+field marker meant. The marker is surface/elaboration metadata attached to the
 field declaration, not a field of the class record.
 
 **AC4 non-interference.** A class-field purity marker does **not** enter the
