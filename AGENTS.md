@@ -30,8 +30,9 @@ again **after every context compaction** — orient yourself:
 
 Build-team roles share the `ken-build-*` archetype skills — your team is the
 prefix on your role name (`kernel-leader` → `ken-build-leader`). The skills are
-the `agent/playbooks/` corpus, surfaced as skills via `.claude/skills/`
-(symlinks); editing a playbook edits its skill. If a team-specific overlay
+the `agent/playbooks/` corpus, surfaced as skills via `.claude/skills/` (Claude
+Code) and `.agents/skills/` (Codex) — both symlink into `agent/playbooks/`;
+editing a playbook edits its skill. If a team-specific overlay
 exists (`agent/teams/<team>/<role>.md`), load it after the archetype skill. The
 Steward owns this corpus and its routing.
 
@@ -43,6 +44,32 @@ tool until your next restart. Don't block on it — **`Read` the file directly a
 it; it is the identical playbook. A fresh session start registers every skill
 for the `Skill` tool. This makes playbook updates self-heal on rebase without a
 forced restart.
+
+## Load your memory scopes (every agent, every session)
+
+The federation's hard-won operational lessons live in **`agent/memory/`** — a
+curated, scoped corpus (see `agent/memory/README.md`). After loading your
+playbook, **read the memory scopes for your role**: your `fleet` scope plus the
+narrower scopes on your path (its path + ancestors).
+
+| Your role | Memory scopes to read (the dir's files + its `README.md`) |
+|---|---|
+| _any role_ | `agent/memory/fleet/` |
+| `steward` | `fleet` + `agent/memory/enclave/` + `agent/memory/roles/steward/` |
+| `architect` | `fleet` + `enclave` + `agent/memory/roles/architect/` |
+| `spec-leader` / `spec-author` / `conformance-validator` | `fleet` + `enclave` + `agent/memory/roles/<role>/` |
+| `integrator` | `fleet` + `agent/memory/roles/integrator/` |
+| `librarian` | `fleet` + `agent/memory/roles/librarian/` |
+| `<team>-leader` | `fleet` + `agent/memory/build/` + `agent/memory/build/leaders/` + `agent/memory/teams/<team>/` |
+| `<team>-implementer` | `fleet` + `build/` + `build/implementers/` + `teams/<team>/` |
+| `<team>-qa` | `fleet` + `build/` + `build/qa/` + `teams/<team>/` |
+
+These are **lessons, not law** — recall aids that reflect what was true when
+written; verify a named file/flag/function still exists before acting on one.
+Record a new lesson at the broadest scope where every reader must apply it; a
+genuinely cross-cutting one gets a `scope:` frontmatter tag rather than a copy.
+This corpus is the source of truth — Codex's generated `~/.codex/memories/` (if
+ever enabled) is supplemental only, never canonical.
 
 ## Reference material is off-limits to code authors
 
