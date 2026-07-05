@@ -19,29 +19,29 @@
 
 -- `subst` -- transport a `Type`-valued family along a propositional
 -- equality (`53 SS2`).
-view subst (ty : Type) (x : ty) (y : ty) (fam : ty -> Type)
+fn subst (ty : Type) (x : ty) (y : ty) (fam : ty → Type)
            (p : Eq ty x y) (px : fam x) : fam y =
-  J (\y' _. fam y') px p
+  J (λy' _. fam y') px p
 
 -- `cong` -- lift an equality of endpoints to an equality of images under any
 -- function; the motive lands in `Omega` (proof-irrelevant), relying on `J`'s
 -- unconstrained codomain sort (`34 SS3.4`).
-view cong (ty : Type) (ty2 : Type) (x : ty) (y : ty) (f : ty -> ty2)
+fn cong (ty : Type) (ty2 : Type) (x : ty) (y : ty) (f : ty → ty2)
           (p : Eq ty x y) : Eq ty2 (f x) (f y) =
-  J (\y' _. Eq ty2 (f x) (f y')) Refl p
+  J (λy' _. Eq ty2 (f x) (f y')) Refl p
 
 -- `cast` -- raw type-transport: given a proof two TYPES are equal, coerce a
 -- value from one to the other. `e : Eq Type ty ty2` is a large elimination
 -- (the carrier of the equality is `Type` itself) -- `J`'s motive here
 -- computes a value of the ambient universe, not a `Type`-valued family.
-view cast (ty : Type) (ty2 : Type) (e : Eq Type ty ty2) (t : ty) : ty2 =
-  J (\x _. x) t e
+fn cast (ty : Type) (ty2 : Type) (e : Eq Type ty ty2) (t : ty) : ty2 =
+  J (λx _. x) t e
 
 -- `sym` -- flip the direction of a propositional equality.
-view sym (ty : Type) (x : ty) (y : ty) (p : Eq ty x y) : Eq ty y x =
-  J (\y' _. Eq ty y' x) Refl p
+fn sym (ty : Type) (x : ty) (y : ty) (p : Eq ty x y) : Eq ty y x =
+  J (λy' _. Eq ty y' x) Refl p
 
 -- `trans` -- compose two propositional equalities.
-view trans (ty : Type) (x : ty) (y : ty) (z : ty)
+fn trans (ty : Type) (x : ty) (y : ty) (z : ty)
            (p : Eq ty x y) (q : Eq ty y z) : Eq ty x z =
-  J (\z' _. Eq ty x z') p q
+  J (λz' _. Eq ty x z') p q

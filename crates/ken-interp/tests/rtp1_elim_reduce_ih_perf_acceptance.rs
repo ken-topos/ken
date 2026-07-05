@@ -89,7 +89,7 @@ fn run(src: &str) -> (Duration, EvalVal, ElabEnv) {
 #[test]
 fn single_self_reference_stays_linear_at_depth_40() {
     let src = format!(
-        "view single (n : Nat) : Nat = match n {{ Zero => Zero ; Suc m => Suc (single m) }}\nview main : Nat = single ({})\n",
+        "fn single (n : Nat) : Nat = match n {{ Zero => Zero ; Suc m => Suc (single m) }}\nconst main : Nat = single ({})\n",
         nat_lit(40)
     );
     let (dt, v, env) = run(&src);
@@ -110,16 +110,16 @@ fn natgcd_plus_nattodecimal_stays_fast() {
     let src = r#"
 data OrdResult = Lt | Eq | Gt
 
-view list_append (a : Type) (xs : List a) (ys : List a) : List a =
+fn list_append (a : Type) (xs : List a) (ys : List a) : List a =
   match xs { Nil => ys ; Cons x xs2 => Cons a x (list_append a xs2 ys) }
 
-view concat (a : String) (b : String) : String =
+fn concat (a : String) (b : String) : String =
   list_char_to_string (list_append Char (string_to_list_char a) (string_to_list_char b))
 
-view natAdd (a : Nat) (b : Nat) : Nat =
+fn natAdd (a : Nat) (b : Nat) : Nat =
   match a { Zero => b ; Suc m => Suc (natAdd m b) }
 
-view natSub (a : Nat) (b : Nat) : Nat =
+fn natSub (a : Nat) (b : Nat) : Nat =
   match b {
     Zero  => a ;
     Suc n => match a {
@@ -128,19 +128,19 @@ view natSub (a : Nat) (b : Nat) : Nat =
              }
   }
 
-view natCmpZero (b : Nat) : OrdResult =
+fn natCmpZero (b : Nat) : OrdResult =
   match b { Zero => Eq ; Suc n => Lt }
 
-view natCmp (a : Nat) (b : Nat) : OrdResult =
+fn natCmp (a : Nat) (b : Nat) : OrdResult =
   match a {
     Zero  => natCmpZero b ;
     Suc m => match b { Zero => Gt ; Suc n => natCmp m n }
   }
 
-view natToInt (n : Nat) : Int =
+fn natToInt (n : Nat) : Int =
   match n { Zero => (0 : Int) ; Suc m => (1 : Int) + natToInt m }
 
-view natGcdFueled (fuel : Nat) (a : Nat) (b : Nat) : Nat =
+fn natGcdFueled (fuel : Nat) (a : Nat) (b : Nat) : Nat =
   match fuel {
     Zero  => a ;
     Suc f => match natCmp a b {
@@ -150,24 +150,24 @@ view natGcdFueled (fuel : Nat) (a : Nat) (b : Nat) : Nat =
              }
   }
 
-view natGcd (a : Nat) (b : Nat) : Nat =
+fn natGcd (a : Nat) (b : Nat) : Nat =
   let fuel : Nat = natAdd a b in
   natGcdFueled fuel a b
 
-view one    : Nat = Suc Zero
-view two    : Nat = Suc one
-view three  : Nat = Suc two
-view four   : Nat = Suc three
-view five   : Nat = Suc four
-view six    : Nat = Suc five
-view seven  : Nat = Suc six
-view eight  : Nat = Suc seven
-view nine   : Nat = Suc eight
-view ten    : Nat = Suc nine
-view eleven : Nat = Suc ten
-view twelve : Nat = Suc eleven
+const one    : Nat = Suc Zero
+const two    : Nat = Suc one
+const three  : Nat = Suc two
+const four   : Nat = Suc three
+const five   : Nat = Suc four
+const six    : Nat = Suc five
+const seven  : Nat = Suc six
+const eight  : Nat = Suc seven
+const nine   : Nat = Suc eight
+const ten    : Nat = Suc nine
+const eleven : Nat = Suc ten
+const twelve : Nat = Suc eleven
 
-view sub10 (n : Nat) : Option Nat =
+fn sub10 (n : Nat) : Option Nat =
   match n { Zero => None Nat ; Suc n1 =>
   match n1 { Zero => None Nat ; Suc n2 =>
   match n2 { Zero => None Nat ; Suc n3 =>
@@ -179,26 +179,26 @@ view sub10 (n : Nat) : Option Nat =
   match n8 { Zero => None Nat ; Suc n9 =>
   match n9 { Zero => None Nat ; Suc n10 => Some Nat n10 } } } } } } } } } }
 
-view mod10Fueled (fuel : Nat) (n : Nat) : Nat =
+fn mod10Fueled (fuel : Nat) (n : Nat) : Nat =
   match fuel {
     Zero => n ;
     Suc f => match sub10 n { None => n ; Some n2 => mod10Fueled f n2 }
   }
 
-view mod10 (n : Nat) : Nat = mod10Fueled n n
+fn mod10 (n : Nat) : Nat = mod10Fueled n n
 
-view div10Fueled (fuel : Nat) (n : Nat) (q : Nat) : Nat =
+fn div10Fueled (fuel : Nat) (n : Nat) (q : Nat) : Nat =
   match fuel {
     Zero => q ;
     Suc f => match sub10 n { None => q ; Some n2 => div10Fueled f n2 (Suc q) }
   }
 
-view div10 (n : Nat) : Nat = div10Fueled n n Zero
+fn div10 (n : Nat) : Nat = div10Fueled n n Zero
 
-view digitChar (d : Nat) : String =
+fn digitChar (d : Nat) : String =
   list_char_to_string (Cons Char ((48 : Int) + natToInt d) (Nil Char))
 
-view natToDecimalFueled (fuel : Nat) (n : Nat) : String =
+fn natToDecimalFueled (fuel : Nat) (n : Nat) : String =
   match fuel {
     Zero => digitChar n ;
     Suc f => match div10 n {
@@ -207,10 +207,10 @@ view natToDecimalFueled (fuel : Nat) (n : Nat) : String =
     }
   }
 
-view natToDecimal (n : Nat) : String =
+fn natToDecimal (n : Nat) : String =
   match n { Zero => "0" ; Suc m => natToDecimalFueled (Suc m) (Suc m) }
 
-view main : String = natToDecimal (natGcd twelve eight)
+const main : String = natToDecimal (natGcd twelve eight)
 "#;
     let (dt, v, _env) = run(src);
     assert_eq!(v, EvalVal::Str("4".to_string()), "natToDecimal(natGcd 12 8) must be \"4\"");

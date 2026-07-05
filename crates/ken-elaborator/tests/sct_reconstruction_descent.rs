@@ -76,7 +76,7 @@ fn eval_nat_decl(env: &ElabEnv, name: &str) -> u64 {
 fn shape_b_ackermann_accepts() {
     let mut env = fresh_env();
     env.elaborate_decl(
-        "view ack (m : Nat) (n : Nat) : Nat = \
+        "fn ack (m : Nat) (n : Nat) : Nat = \
          match m { \
            Zero => Suc n ; \
            Suc m2 => match n { \
@@ -94,7 +94,7 @@ fn shape_b_ackermann_accepts() {
 fn shape_b_ackermann_accepts_and_evaluates_correctly() {
     let mut env = fresh_env();
     env.elaborate_decl(
-        "view ack (m : Nat) (n : Nat) : Nat = \
+        "fn ack (m : Nat) (n : Nat) : Nat = \
          match m { \
            Zero => Suc n ; \
            Suc m2 => match n { \
@@ -104,9 +104,9 @@ fn shape_b_ackermann_accepts_and_evaluates_correctly() {
          }",
     )
     .expect("must accept (AC2)");
-    env.elaborate_decl("view two : Nat = Suc (Suc Zero)")
+    env.elaborate_decl("const two : Nat = Suc (Suc Zero)")
         .expect("two should declare");
-    env.elaborate_decl("view result : Nat = ack two two")
+    env.elaborate_decl("const result : Nat = ack two two")
         .expect("ack two two should elaborate");
     assert_eq!(
         eval_nat_decl(&env, "result"),
@@ -124,7 +124,7 @@ fn shape_b_ackermann_accepts_and_evaluates_correctly() {
 fn shape_b_second_lexicographic_shape_accepts() {
     let mut env = fresh_env();
     env.elaborate_decl(
-        "view walkDown (m : Nat) (n : Nat) : Nat = \
+        "fn walkDown (m : Nat) (n : Nat) : Nat = \
          match m { \
            Zero => n ; \
            Suc m2 => match n { \
@@ -144,7 +144,7 @@ fn shape_b_second_lexicographic_shape_accepts() {
 fn shape_b_second_lexicographic_shape_evaluates_correctly() {
     let mut env = fresh_env();
     env.elaborate_decl(
-        "view walkDown (m : Nat) (n : Nat) : Nat = \
+        "fn walkDown (m : Nat) (n : Nat) : Nat = \
          match m { \
            Zero => n ; \
            Suc m2 => match n { \
@@ -154,15 +154,15 @@ fn shape_b_second_lexicographic_shape_evaluates_correctly() {
          }",
     )
     .expect("must accept (AC2)");
-    env.elaborate_decl("view three : Nat = Suc (Suc (Suc Zero))")
+    env.elaborate_decl("const three : Nat = Suc (Suc (Suc Zero))")
         .expect("three should declare");
-    env.elaborate_decl("view two : Nat = Suc (Suc Zero)")
+    env.elaborate_decl("const two : Nat = Suc (Suc Zero)")
         .expect("two should declare");
-    env.elaborate_decl("view five : Nat = Suc (Suc (Suc (Suc (Suc Zero))))")
+    env.elaborate_decl("const five : Nat = Suc (Suc (Suc (Suc (Suc Zero))))")
         .expect("five should declare");
-    env.elaborate_decl("view r1 : Nat = walkDown three two")
+    env.elaborate_decl("const r1 : Nat = walkDown three two")
         .expect("walkDown three two should elaborate");
-    env.elaborate_decl("view r2 : Nat = walkDown Zero five")
+    env.elaborate_decl("const r2 : Nat = walkDown Zero five")
         .expect("walkDown Zero five should elaborate");
     assert_eq!(eval_nat_decl(&env, "r1"), 0, "walkDown(3,2) must be 0");
     assert_eq!(eval_nat_decl(&env, "r2"), 5, "walkDown(0,5) must be 5");
@@ -177,7 +177,7 @@ fn shape_b_second_lexicographic_shape_evaluates_correctly() {
 fn shape_b_bad_ack_still_rejected() {
     let mut env = fresh_env();
     let res = env.elaborate_decl(
-        "view badAck (m : Nat) (n : Nat) : Nat = \
+        "fn badAck (m : Nat) (n : Nat) : Nat = \
          match m { Zero => n ; Suc m2 => badAck (Suc m2) n }",
     );
     assert!(
@@ -196,7 +196,7 @@ fn shape_b_bad_ack_still_rejected() {
 fn shape_b_bad_ack2_still_rejected() {
     let mut env = fresh_env();
     let res = env.elaborate_decl(
-        "view badAck2 (m : Nat) (n : Nat) : Nat = \
+        "fn badAck2 (m : Nat) (n : Nat) : Nat = \
          match m { Zero => n ; Suc m2 => badAck2 (Suc (Suc m2)) n }",
     );
     assert!(
@@ -217,7 +217,7 @@ fn control_shape_a_nested_split_still_accepts() {
     env.elaborate_decl("data Tree = Leaf | Node Tree Int Tree")
         .expect("Tree should declare");
     env.elaborate_decl(
-        "view countR (t : Tree) : Nat = \
+        "fn countR (t : Tree) : Nat = \
          match t { \
            Leaf => Zero ; \
            Node (Node ll lc lr) c r => countR r ; \
@@ -235,7 +235,7 @@ fn control_shape_a_near_miss_still_rejected() {
     env.elaborate_decl("data Tree = Leaf | Node Tree Int Tree")
         .expect("Tree should declare");
     let res = env.elaborate_decl(
-        "view bad (t : Tree) : Nat = \
+        "fn bad (t : Tree) : Nat = \
          match t { \
            Leaf => Zero ; \
            Node (Node ll lc lr) c r => bad t ; \

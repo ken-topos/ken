@@ -37,7 +37,7 @@ pub enum Token {
     KwClass,     // "class"    — typeclass declaration
     KwInstance,  // "instance" — instance declaration
     KwDerive,    // "derive"   — auto-derive request
-    KwWhere,     // "where"    — constraint list in class/instance/view
+    KwWhere,     // "where"    — constraint list in class/instance/declaration
     // B2 keywords (`72 §4`, spellings are `(oracle)`/`OQ-syntax`)
     KwTemporal,  // "temporal" — a delegated temporal-obligation block
     // ES3 keywords (`33 §3-4` — modules/imports/visibility)
@@ -69,6 +69,16 @@ pub enum Token {
     Minus,        // `-`  — type-directed infix subtraction (VAL2 #11)
     Star,         // `*`  — type-directed infix multiply
     EqEq,         // `==` — structural equality
+    PropEq,       // `===` / `≡` — propositional equality notation
+    Le,           // `<=` / `≤`
+    Ge,           // `>=` / `≥`
+    Ne,           // `/=` / `≠`
+    And,          // `/\` / `∧`
+    Or,           // `\/` / `∨`
+    FlowsTo,      // `<:` / `⊑`
+    Join,         // `⊔`
+    Meet,         // `⊓`
+    Times,        // `><` / `×`
     // L2 punctuation
     FatArrow,     // `=>` — match arm separator
     // L1 numeric literal tokens
@@ -200,6 +210,10 @@ impl<'s> Lexer<'s> {
                 self.advance();
                 if self.cur() == Some('=') {
                     self.advance();
+                    if self.cur() == Some('=') {
+                        self.advance();
+                        return Ok((Token::PropEq, Span::new(start, self.pos)));
+                    }
                     return Ok((Token::EqEq, Span::new(start, self.pos)));
                 }
                 if self.cur() == Some('>') {
@@ -212,13 +226,97 @@ impl<'s> Lexer<'s> {
                 self.advance();
                 return Ok((Token::Dot, Span::new(start, self.pos)));
             }
-            '\\' | 'λ' => {
+            '\\' => {
+                self.advance();
+                if self.cur() == Some('/') {
+                    self.advance();
+                    return Ok((Token::Or, Span::new(start, self.pos)));
+                }
+                return Ok((Token::Lambda, Span::new(start, self.pos)));
+            }
+            'λ' => {
                 self.advance();
                 return Ok((Token::Lambda, Span::new(start, self.pos)));
             }
             '→' => {
                 self.advance();
                 return Ok((Token::Arrow, Span::new(start, self.pos)));
+            }
+            '⇒' => {
+                self.advance();
+                return Ok((Token::FatArrow, Span::new(start, self.pos)));
+            }
+            '≡' => {
+                self.advance();
+                return Ok((Token::PropEq, Span::new(start, self.pos)));
+            }
+            '≤' => {
+                self.advance();
+                return Ok((Token::Le, Span::new(start, self.pos)));
+            }
+            '≥' => {
+                self.advance();
+                return Ok((Token::Ge, Span::new(start, self.pos)));
+            }
+            '≠' => {
+                self.advance();
+                return Ok((Token::Ne, Span::new(start, self.pos)));
+            }
+            '∧' => {
+                self.advance();
+                return Ok((Token::And, Span::new(start, self.pos)));
+            }
+            '∨' => {
+                self.advance();
+                return Ok((Token::Or, Span::new(start, self.pos)));
+            }
+            '⊑' => {
+                self.advance();
+                return Ok((Token::FlowsTo, Span::new(start, self.pos)));
+            }
+            '⊔' => {
+                self.advance();
+                return Ok((Token::Join, Span::new(start, self.pos)));
+            }
+            '⊓' => {
+                self.advance();
+                return Ok((Token::Meet, Span::new(start, self.pos)));
+            }
+            '×' => {
+                self.advance();
+                return Ok((Token::Times, Span::new(start, self.pos)));
+            }
+            'Ω' => {
+                self.advance();
+                return Ok((Token::ConId("Omega".to_string()), Span::new(start, self.pos)));
+            }
+            'Σ' => {
+                self.advance();
+                return Ok((Token::ConId("Sigma".to_string()), Span::new(start, self.pos)));
+            }
+            'Π' => {
+                self.advance();
+                return Ok((Token::ConId("Pi".to_string()), Span::new(start, self.pos)));
+            }
+            '∀' => {
+                self.advance();
+                return Ok((Token::Ident("forall".to_string()), Span::new(start, self.pos)));
+            }
+            '∃' => {
+                self.advance();
+                return Ok((Token::Ident("exists".to_string()), Span::new(start, self.pos)));
+            }
+            '¬' => {
+                self.advance();
+                return Ok((Token::Ident("not".to_string()), Span::new(start, self.pos)));
+            }
+            '∈' => {
+                self.advance();
+                return Ok((Token::KwIn, Span::new(start, self.pos)));
+            }
+            'ℓ' => {
+                self.advance();
+                return Ok((Token::Ident("level".to_string()), Span::new(start, self.pos)));
             }
             '+' => {
                 self.advance();
@@ -240,6 +338,39 @@ impl<'s> Lexer<'s> {
                 }
                 return Ok((Token::Minus, Span::new(start, self.pos)));
             }
+            '<' => {
+                self.advance();
+                if self.cur() == Some('=') {
+                    self.advance();
+                    return Ok((Token::Le, Span::new(start, self.pos)));
+                }
+                if self.cur() == Some(':') {
+                    self.advance();
+                    return Ok((Token::FlowsTo, Span::new(start, self.pos)));
+                }
+            }
+            '>' => {
+                self.advance();
+                if self.cur() == Some('=') {
+                    self.advance();
+                    return Ok((Token::Ge, Span::new(start, self.pos)));
+                }
+                if self.cur() == Some('<') {
+                    self.advance();
+                    return Ok((Token::Times, Span::new(start, self.pos)));
+                }
+            }
+            '/' => {
+                self.advance();
+                if self.cur() == Some('=') {
+                    self.advance();
+                    return Ok((Token::Ne, Span::new(start, self.pos)));
+                }
+                if self.cur() == Some('\\') {
+                    self.advance();
+                    return Ok((Token::And, Span::new(start, self.pos)));
+                }
+            }
             _ => {}
         }
 
@@ -255,7 +386,6 @@ impl<'s> Lexer<'s> {
                 s.push(self.advance().unwrap());
             }
             let tok = match s.as_str() {
-                "view"     => Token::KwView,
                 "const"    => Token::KwConst,
                 "fn"       => Token::KwFn,
                 "proc"     => Token::KwProc,

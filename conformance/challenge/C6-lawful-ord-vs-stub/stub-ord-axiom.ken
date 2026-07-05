@@ -5,8 +5,8 @@
 
 data Two = Lo | Hi
 
-view leqTwo (x : Two) (y : Two) : Bool =
-  match x { Lo => True ; Hi => match y { Lo => False ; Hi => True } }
+fn leqTwo (x : Two) (y : Two) : Bool =
+  match x { Lo ⇒ True ; Hi ⇒ match y { Lo ⇒ False ; Hi ⇒ True } }
 
 -- Every law is a postulate. This TYPE-CHECKS (an Axiom inhabits each law type),
 -- but each Axiom is a visible Decl::Opaque entry in trusted_base().

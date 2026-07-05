@@ -8,14 +8,14 @@
 
 data Two = Lo | Hi
 
-view leqTwo (x : Two) (y : Two) : Bool =
-  match x { Lo => True ; Hi => match y { Lo => False ; Hi => True } }
+fn leqTwo (x : Two) (y : Two) : Bool =
+  match x { Lo ⇒ True ; Hi ⇒ match y { Lo ⇒ False ; Hi ⇒ True } }
 
 -- refl: leqTwo x x = True on every constructor, so IsTrue (leqTwo x x) is
 -- IsTrue True = Equal Bool True True — inhabited by reflexivity (`tt` after the
 -- observational collapse of IsTrue True to Top, K5).
-view reflTwo (x : Two) : IsTrue (leqTwo x x) =
-  match x { Lo => tt ; Hi => tt }
+fn reflTwo (x : Two) : IsTrue (leqTwo x x) =
+  match x { Lo ⇒ tt ; Hi ⇒ tt }
 
 -- antisym/trans/total: proved by case-split over the (finite) constructor
 -- pairs. At each concrete pair leqTwo reduces to True/False, and the law body

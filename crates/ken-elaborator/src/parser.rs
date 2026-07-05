@@ -145,7 +145,6 @@ impl Parser {
         let start = self.peek_span().start;
         match self.peek().clone() {
             Token::KwSpace => self.parse_space_view_decl(start),
-            Token::KwView => self.parse_view_decl(start, false, DefKeyword::View),
             Token::KwConst => self.parse_view_decl(start, false, DefKeyword::Const),
             Token::KwFn => self.parse_view_decl(start, false, DefKeyword::Fn),
             Token::KwProc => self.parse_view_decl(start, false, DefKeyword::Proc),
@@ -165,9 +164,9 @@ impl Parser {
             Token::KwPub => self.parse_pub_decl(start),
             other => Err(ElabError::ParseError {
                 msg: format!(
-                    "expected 'view', 'const', 'fn', 'proc', 'let', 'prove', 'law', 'data', 'type', 'foreign', \
+                    "expected 'const', 'fn', 'proc', 'let', 'prove', 'law', 'data', 'type', 'foreign', \
                      'temporal', 'class', 'instance', 'derive', 'module', 'import', 'use', \
-                     'pub', or 'space view'/'space proc', found {:?}",
+                     'pub', or 'space proc', found {:?}",
                     other
                 ),
                 span: self.peek_span().clone(),
@@ -178,10 +177,9 @@ impl Parser {
     fn parse_space_view_decl(&mut self, start: usize) -> Result<Decl, ElabError> {
         self.advance(); // consume 'space'
         match self.peek().clone() {
-            Token::KwView => self.parse_view_decl(start, true, DefKeyword::View),
             Token::KwProc => self.parse_view_decl(start, true, DefKeyword::Proc),
             other => Err(ElabError::ParseError {
-                msg: format!("expected 'view' or 'proc' after 'space', found {:?}", other),
+                msg: format!("expected 'proc' after 'space', found {:?}", other),
                 span: self.peek_span().clone(),
             }),
         }

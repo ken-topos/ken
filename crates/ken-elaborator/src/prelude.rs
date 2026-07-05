@@ -586,7 +586,7 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     let list_a = |a: Term| Term::app(Term::indformer(list_id, vec![]), a);
     let _ = &list_a; // still used below for Perm's raw-term construction
     elab.elaborate_decl(
-        "view isSorted (a : Type) (leq : a -> a -> Bool) (xs : List a) : Prop = \
+        "fn isSorted (a : Type) (leq : a -> a -> Bool) (xs : List a) : Prop = \
          match xs { \
            Nil => Equal Bool True True ; \
            Cons x xs2 => match xs2 { \
@@ -884,7 +884,7 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     // `Vis`/`Ret`'s `Resp` param is always a plain `Const` reference,
     // matching the shape the ORIGINAL 1-param `print_line` body already used
     // successfully (a single continuation lambda, nothing else).
-    elab.elaborate_decl("view console_resp (op : ConsoleOp) : Type = Unit")
+    elab.elaborate_decl("fn console_resp (op : ConsoleOp) : Type = Unit")
         .map_err(|e| ElabError::Internal(format!("prelude console_resp failed: {}", e)))?;
 
     // ES2: DERIVABLE — a definition in terms of the `ITree` constructors
@@ -895,7 +895,7 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     // interception needed. `ITree`'s 3 explicit params (State-effect-build
     // lift) are supplied explicitly: `E=ConsoleOp`, `Resp=console_resp`, `R=Unit`.
     elab.elaborate_decl(
-        "view print_line (s : String) : IO Unit = \
+        "proc print_line (s : String) : IO Unit visits [Console] = \
          Vis ConsoleOp console_resp Unit (Write s) (\\_. Ret ConsoleOp console_resp Unit MkUnit)",
     )
     .map_err(|e| ElabError::Internal(format!("prelude print_line failed: {}", e)))?;
@@ -1007,7 +1007,7 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     // `make_result` is untyped, unaffected either way) — but the first
     // surface program to `match` a real `read_bytes` response needs the
     // field types to actually agree with the runtime payload.
-    elab.elaborate_decl("view fs_resp (a : Auth) (op : FSOp a) : Type = Result IOError Bytes")
+    elab.elaborate_decl("fn fs_resp (a : Auth) (op : FSOp a) : Type = Result IOError Bytes")
         .map_err(|e| ElabError::Internal(format!("prelude fs_resp failed: {}", e)))?;
 
     // `FS : Auth -> Type -> Type = \a r. ITree (FSOp a) (fs_resp a) r` — the
@@ -1021,7 +1021,7 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     // enforced only at the runtime `authorizes` gate; `FS`'s extra Auth
     // parameter is purely outer-ring plumbing, invisible to the driver
     // (fully erased at the `EvalVal` layer) and to every AC/BV.
-    elab.elaborate_decl("view FS (a : Auth) (r : Type) : Type = ITree (FSOp a) (fs_resp a) r")
+    elab.elaborate_decl("fn FS (a : Auth) (r : Type) : Type = ITree (FSOp a) (fs_resp a) r")
         .map_err(|e| ElabError::Internal(format!("prelude FS failed: {}", e)))?;
 
     // `read_bytes : (a : Auth) -> Cap a -> Bytes -> FS a (Result IOError Bytes)`
@@ -1041,7 +1041,7 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     // re-type (verified: `l6_acceptance.rs`'s tests never elaborate a real
     // `read_bytes` call term, only hand-built `EffectDecl`s).
     elab.elaborate_decl(
-        "view read_bytes (a : Auth) (cap : Cap a) (path : Bytes) : FS a (Result IOError Bytes) = \
+        "proc read_bytes (a : Auth) (cap : Cap a) (path : Bytes) : FS a (Result IOError Bytes) visits [FS] = \
          Vis (FSOp a) (fs_resp a) (Result IOError Bytes) (ReadFile a cap path) \
            (\\r. Ret (FSOp a) (fs_resp a) (Result IOError Bytes) r)",
     )

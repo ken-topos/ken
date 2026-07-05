@@ -60,7 +60,7 @@ fn ac1_int_exact_above_2_53() {
     // 10^20 in Int: 100000000000000000000
     // 10^20 + 1:    100000000000000000001
     let result = env.elaborate_decl_v1(
-        "view big_sum = (100000000000000000000 : Int) + (1 : Int)"
+        "const big_sum = (100000000000000000000 : Int) + (1 : Int)"
     ).unwrap();
     let mut store = make_store(&env);
     let val = eval_def(&env, &mut store, result.def_id);
@@ -84,22 +84,22 @@ fn ac2_literal_types_distinct() {
     let mut env = ElabEnv::new().unwrap();
 
     // `2` defaults to Int
-    let int_result = env.elaborate_decl_v1("view n = 2").unwrap();
+    let int_result = env.elaborate_decl_v1("const n = 2").unwrap();
     let int_ty = Term::const_(env.numeric_env.int_id, vec![]);
     assert_def_type(&env, int_result.def_id, &int_ty);
 
     // `2.0` defaults to Float
-    let float_result = env.elaborate_decl_v1("view f = 2.0").unwrap();
+    let float_result = env.elaborate_decl_v1("const f = 2.0").unwrap();
     let float_ty = Term::const_(env.numeric_env.float_id, vec![]);
     assert_def_type(&env, float_result.def_id, &float_ty);
 
     // `2.0d` defaults to Decimal
-    let dec_result = env.elaborate_decl_v1("view d = 2.0d").unwrap();
+    let dec_result = env.elaborate_decl_v1("const d = 2.0d").unwrap();
     let dec_ty = Term::const_(env.numeric_env.decimal_id, vec![]);
     assert_def_type(&env, dec_result.def_id, &dec_ty);
 
     // `1.5f32` defaults to Float32
-    let f32_result = env.elaborate_decl_v1("view g = 1.5f32").unwrap();
+    let f32_result = env.elaborate_decl_v1("const g = 1.5f32").unwrap();
     let f32_ty = Term::const_(env.numeric_env.float32_id, vec![]);
     assert_def_type(&env, f32_result.def_id, &f32_ty);
 }
@@ -111,7 +111,7 @@ fn ac2_expected_type_overrides_default() {
     let mut env = ElabEnv::new().unwrap();
     // The literal `1` should elaborate at Int64 because that's the expected type.
     let result = env.elaborate_decl_v1(
-        "view f (x : Int64) : Int64 = x + 1"
+        "fn f (x : Int64) : Int64 = x + 1"
     ).unwrap();
     // If this compiles, `1` was correctly elaborated at `Int64`.
     // Type of `f` should be `Int64 → Int64`.
@@ -126,7 +126,7 @@ fn ac2_expected_type_overrides_default() {
 fn ac3_overflow_obligation_emitted_int32() {
     let mut env = ElabEnv::new().unwrap();
     let result = env.elaborate_decl_v1(
-        "view f (a : Int32) (b : Int32) : Int32 = a + b"
+        "fn f (a : Int32) (b : Int32) : Int32 = a + b"
     ).unwrap();
 
     // Structural obligation observation (AC3 requirement: NOT "it compiles").
@@ -155,7 +155,7 @@ fn ac3_overflow_obligation_emitted_int32() {
 fn ac3_overflow_obligation_dischargeable_structure() {
     let mut env = ElabEnv::new().unwrap();
     let result = env.elaborate_decl_v1(
-        "view g (a : Int32) (b : Int32) : Int32 = a + b"
+        "fn g (a : Int32) (b : Int32) : Int32 = a + b"
     ).unwrap();
 
     // The obligation is emitted — the V3 prover would discharge it for in-range operands.
@@ -179,7 +179,7 @@ fn ac3_overflow_obligation_dischargeable_structure() {
 fn ac4_bare_overflow_never_wraps_silently() {
     let mut env = ElabEnv::new().unwrap();
     let result = env.elaborate_decl_v1(
-        "view ovf = (100 : Int8) + (100 : Int8)"
+        "const ovf = (100 : Int8) + (100 : Int8)"
     ).unwrap();
 
     // Must emit an obligation (the overflowing obligation is unsatisfiable here,
@@ -204,7 +204,7 @@ fn ac4_bare_overflow_never_wraps_silently() {
 fn ac4_explicit_wrapping_is_modular() {
     let mut env = ElabEnv::new().unwrap();
     let result = env.elaborate_decl_v1(
-        "view wrap_ovf = (100 : Int8) +% (100 : Int8)"
+        "const wrap_ovf = (100 : Int8) +% (100 : Int8)"
     ).unwrap();
 
     // No obligation for explicit wrapping.
@@ -227,7 +227,7 @@ fn ac4_explicit_wrapping_is_modular() {
 fn ac5_no_implicit_cross_type_coercion() {
     let mut env = ElabEnv::new().unwrap();
     let result = env.elaborate_decl_v1(
-        "view f (x : Int) (y : Int64) = x + y"
+        "fn f (x : Int) (y : Int64) = x + y"
     );
     assert!(
         result.is_err(),
@@ -244,7 +244,7 @@ fn ac5_explicit_conversion_is_partial_option() {
     let mut env = ElabEnv::new().unwrap();
     // Int.toInt64 : Int → Option Int64  (total, may fail if out of range)
     let _result = env.elaborate_decl_v1(
-        "view f (x : Int) = Int.toInt64 x"
+        "fn f (x : Int) = Int.toInt64 x"
     ).unwrap();
 }
 
@@ -256,7 +256,7 @@ fn ac5_explicit_conversion_is_partial_option() {
 fn ac6_decimal_exact() {
     let mut env = ElabEnv::new().unwrap();
     let dec_eq = env.elaborate_decl_v1(
-        "view decimal_ok = (0.1d + 0.2d) == 0.3d"
+        "const decimal_ok = (0.1d + 0.2d) == 0.3d"
     ).unwrap();
     let mut store = make_store(&env);
     let val = eval_def(&env, &mut store, dec_eq.def_id);
@@ -267,7 +267,7 @@ fn ac6_decimal_exact() {
 fn ac6_float_not_exact() {
     let mut env = ElabEnv::new().unwrap();
     let float_eq = env.elaborate_decl_v1(
-        "view float_not_ok = (0.1 + 0.2) == 0.3"
+        "const float_not_ok = (0.1 + 0.2) == 0.3"
     ).unwrap();
     let mut store = make_store(&env);
     let val = eval_def(&env, &mut store, float_eq.def_id);
@@ -285,7 +285,7 @@ fn ac6_float_not_exact() {
 fn sec31_int_div_zero_emits_obligation() {
     let mut env = ElabEnv::new().unwrap();
     let _result = env.elaborate_decl_v1(
-        "view f (a : Int) (b : Int) = a / b"
+        "fn f (a : Int) (b : Int) = a / b"
     ).unwrap();
 }
 
@@ -297,7 +297,7 @@ fn sec31_int_div_zero_emits_obligation() {
 fn sec61_literal_reduces_in_kernel() {
     let mut env = ElabEnv::new().unwrap();
     let result = env.elaborate_decl_v1(
-        "view five = (2 : Int) + (3 : Int)"
+        "const five = (2 : Int) + (3 : Int)"
     ).unwrap();
     let mut store = make_store(&env);
     let val = eval_def(&env, &mut store, result.def_id);
@@ -319,10 +319,10 @@ fn sec62_abstract_add_is_neutral() {
     // verify that a concrete non-commutative-looking case doesn't silently commute.
     // For now: verify the elaborator accepts the terms without kernel-inserting commutativity.
     let result_ab = env.elaborate_decl_v1(
-        "view add_ab (a : Int) (b : Int) : Int = a + b"
+        "fn add_ab (a : Int) (b : Int) : Int = a + b"
     ).unwrap();
     let result_ba = env.elaborate_decl_v1(
-        "view add_ba (a : Int) (b : Int) : Int = b + a"
+        "fn add_ba (a : Int) (b : Int) : Int = b + a"
     ).unwrap();
     // Both elaborate without error; they are NOT the same term by construction.
     assert_ne!(result_ab.def_id, result_ba.def_id, "a+b and b+a are distinct definitions");
@@ -344,7 +344,7 @@ fn sec24_char_excludes_surrogates() {
 fn sweep_int8_overflow_emits_obligation() {
     let mut env = ElabEnv::new().unwrap();
     let result = env.elaborate_decl_v1(
-        "view h (a : Int8) (b : Int8) : Int8 = a + b"
+        "fn h (a : Int8) (b : Int8) : Int8 = a + b"
     ).unwrap();
     assert_eq!(result.obligations.len(), 1);
     assert!(matches!(result.obligations[0].kind, ObligationKind::PartialPrim));
@@ -355,7 +355,7 @@ fn sweep_int8_overflow_emits_obligation() {
 fn sweep_int_total_no_obligation() {
     let mut env = ElabEnv::new().unwrap();
     let result = env.elaborate_decl_v1(
-        "view total_add (a : Int) (b : Int) : Int = a + b"
+        "fn total_add (a : Int) (b : Int) : Int = a + b"
     ).unwrap();
     assert_eq!(
         result.obligations.len(), 0,

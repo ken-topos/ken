@@ -620,7 +620,7 @@ fn expand_scope(
                         }
                         // Eligibility guard: the new group path only covers
                         // the plain V0 view/let shape (matches the existing
-                        // singleton recursive-view rule) — a mutual member
+                        // singleton recursive-const rule) — a mutual member
                         // needing requires/ensures/where/refinement-return
                         // is out of this WP's scope; fail clearly rather
                         // than silently dropping its obligation.
@@ -642,7 +642,7 @@ fn expand_scope(
                                 || has_refine_return
                             {
                                 return Err(ElabError::Internal(format!(
-                                    "mutual recursion is only supported for plain view/let \
+                                    "mutual recursion is only supported for plain recursive \
                                      definitions (no requires/ensures/where-constraints/\
                                      refinement-return); '{}' does not qualify",
                                     rdecl.name

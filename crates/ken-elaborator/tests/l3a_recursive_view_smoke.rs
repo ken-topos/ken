@@ -31,17 +31,17 @@ fn recursive_view_self_ref_resolves_and_sct_accepts() {
     // Structural descent on `m` (sub-term of `S m`). SCT must accept.
     let id = elab_ok(
         &mut env,
-        "view double (n : Peano) : Peano = match n { Z => Z ; S m => S (S (double m)) }",
+        "fn double (n : Peano) : Peano = match n { Z => Z ; S m => S (S (double m)) }",
     );
 
     // The def must be transparent (upgraded after SCT), not an open hole.
     assert!(
         !env.env.trusted_base().contains(&id),
-        "recursive view must upgrade to transparent after SCT (not in trusted_base)"
+        "recursive const must upgrade to transparent after SCT (not in trusted_base)"
     );
     assert!(
         env.env.transparent_body(id).is_some(),
-        "recursive view must have a δ-unfoldable body after SCT upgrade"
+        "recursive const must have a δ-unfoldable body after SCT upgrade"
     );
 }
 
@@ -52,12 +52,12 @@ fn recursive_view_reduces_on_constructor() {
     // `pred n = match n { Z => Z ; S m => m }` — non-recursive baseline (sanity).
     elab_ok(
         &mut env,
-        "view pred (n : Peano) : Peano = match n { Z => Z ; S m => m }",
+        "fn pred (n : Peano) : Peano = match n { Z => Z ; S m => m }",
     );
     // `count n = match n { Z => Z ; S m => S (count m) }` — recursive.
     let id = elab_ok(
         &mut env,
-        "view count (n : Peano) : Peano = match n { Z => Z ; S m => S (count m) }",
+        "fn count (n : Peano) : Peano = match n { Z => Z ; S m => S (count m) }",
     );
     // Apply count to (S Z) and whnf: count (S Z) ⇝ S (count Z) ⇝ S Z.
     let body = env.env.transparent_body(id).expect("count body").1;
@@ -85,20 +85,20 @@ fn recursive_view_reduces_on_constructor() {
 
 #[test]
 fn non_terminating_recursive_view_rejected_by_sct() {
-    // A recursive view with NO structural descent must be SCT-rejected.
+    // A recursive const with NO structural descent must be SCT-rejected.
     // `loop (n : Peano) : Peano = loop n` — self-call on the SAME arg (no ↓).
     let mut env = mk_env();
     elab_ok(&mut env, "data Peano = Z | S Peano");
-    let result = env.elaborate_decl("view loopn (n : Peano) : Peano = loopn n");
+    let result = env.elaborate_decl("fn loopn (n : Peano) : Peano = loopn n");
     assert!(
         matches!(result, Err(ElabError::KernelRejected { .. })),
-        "non-terminating recursive view must be SCT-rejected, got {:?}",
+        "non-terminating recursive const must be SCT-rejected, got {:?}",
         result.err()
     );
     // The failed admission must roll back: name not in globals, no orphan opaque.
     assert!(
         !env.globals.contains_key("loopn"),
-        "failed recursive view must unbind its name from globals"
+        "failed recursive const must unbind its name from globals"
     );
 }
 
@@ -109,7 +109,7 @@ fn non_terminating_recursive_view_rejected_by_sct() {
 #[test]
 fn poly_id_elaborates() {
     let mut env = mk_env();
-    let r = env.elaborate_decl("view id (a : Type) (x : a) : a = x");
+    let r = env.elaborate_decl("fn id (a : Type) (x : a) : a = x");
     assert!(
         r.is_ok(),
         "polymorphic id (a : Type) (x : a) : a should elaborate; got {:?}",
@@ -120,7 +120,7 @@ fn poly_id_elaborates() {
 #[test]
 fn poly_id_list_elaborates() {
     let mut env = mk_env();
-    let r = env.elaborate_decl("view idl (a : Type) (xs : List a) : List a = xs");
+    let r = env.elaborate_decl("fn idl (a : Type) (xs : List a) : List a = xs");
     assert!(
         r.is_ok(),
         "polymorphic idl (a : Type) (xs : List a) : List a should elaborate; got {:?}",
@@ -134,7 +134,7 @@ fn poly_match_return_elaborates() {
     // exposed the IH-domain weakening bug.
     let mut env = mk_env();
     let r = env.elaborate_decl(
-        "view head (a : Type) (xs : List a) : Option a = match xs { Nil => None a ; Cons h t => Some a h }",
+        "fn head (a : Type) (xs : List a) : Option a = match xs { Nil => None a ; Cons h t => Some a h }",
     );
     assert!(
         r.is_ok(),

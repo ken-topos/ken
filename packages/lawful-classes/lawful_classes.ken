@@ -5,17 +5,17 @@
 -- (51 SS2): `IsTrue b := Equal Bool b True : Prop` (Bool real data since ES2;
 -- `Prop` is the prelude's surface-nameable alias for Omega_0).
 
-view IsTrue (b : Bool) : Prop = Equal Bool b True
+fn IsTrue (b : Bool) : Prop = Equal Bool b True
 
 -- `Eq a` -- decidable Boolean equality, an equivalence (51 SS2.1). `eq` is
 -- the everyday `==`; `refl`/`sym`/`trans` say it is an equivalence relation.
 -- Does NOT tie `eq` to the kernel's propositional Equal -- that is DecEq's
 -- stronger promise.
 class Eq a {
-  eq    : a -> a -> Bool ;
-  refl  : (x : a) -> IsTrue (eq x x) ;
-  sym   : (x : a) -> (y : a) -> IsTrue (eq x y) -> IsTrue (eq y x) ;
-  trans : (x : a) -> (y : a) -> (z : a) -> IsTrue (eq x y) -> IsTrue (eq y z) -> IsTrue (eq x z)
+  eq    : a → a → Bool ;
+  refl  : (x : a) → IsTrue (eq x x) ;
+  sym   : (x : a) → (y : a) → IsTrue (eq x y) → IsTrue (eq y x) ;
+  trans : (x : a) → (y : a) → (z : a) → IsTrue (eq x y) → IsTrue (eq y z) → IsTrue (eq x z)
 }
 
 -- `DecEq a` -- decides the kernel's propositional equality (51 SS2.2):
@@ -23,9 +23,9 @@ class Eq a {
 -- Semantically subsumes `Eq a` (recorded as a fact here, not wired as a
 -- superclass constraint, 51 SS2.2/33 SS5.4).
 class DecEq a {
-  eq       : a -> a -> Bool ;
-  sound    : (x : a) -> (y : a) -> IsTrue (eq x y) -> Equal a x y ;
-  complete : (x : a) -> (y : a) -> Equal a x y -> IsTrue (eq x y)
+  eq       : a → a → Bool ;
+  sound    : (x : a) → (y : a) → IsTrue (eq x y) → Equal a x y ;
+  complete : (x : a) → (y : a) → Equal a x y → IsTrue (eq x y)
 }
 
 -- `bool_or` -- a REAL (transparent, match-based) Bool "or", used ONLY for
@@ -36,7 +36,7 @@ class DecEq a {
 -- EVERY carrier, inductive or not. A transparent `bool_or` lets an
 -- inductive carrier's `total` instance be proved by case-split while
 -- costing nothing extra (it's ordinary Ken, not a new kernel feature).
-view bool_or (a : Bool) (b : Bool) : Bool = match a { True => True ; False => b }
+fn bool_or (a : Bool) (b : Bool) : Bool = match a { True ⇒ True ; False ⇒ b }
 
 -- `Ord a` -- total order, supplies the comparator the verified `sort`/
 -- `isSorted` thread explicitly (51 SS2.3/SS4, ES2-remainder). `total`'s
@@ -47,11 +47,11 @@ view bool_or (a : Bool) (b : Bool) : Bool = match a { True => True ; False => b 
 -- `||.||` to reach Omega; the decidable `Bool` `bool_or` sidesteps that
 -- entirely.
 class Ord a {
-  leq     : a -> a -> Bool ;
-  refl    : (x : a) -> IsTrue (leq x x) ;
-  antisym : (x : a) -> (y : a) -> IsTrue (leq x y) -> IsTrue (leq y x) -> Equal a x y ;
-  trans   : (x : a) -> (y : a) -> (z : a) -> IsTrue (leq x y) -> IsTrue (leq y z) -> IsTrue (leq x z) ;
-  total   : (x : a) -> (y : a) -> IsTrue (bool_or (leq x y) (leq y x))
+  leq     : a → a → Bool ;
+  refl    : (x : a) → IsTrue (leq x x) ;
+  antisym : (x : a) → (y : a) → IsTrue (leq x y) → IsTrue (leq y x) → Equal a x y ;
+  trans   : (x : a) → (y : a) → (z : a) → IsTrue (leq x y) → IsTrue (leq y z) → IsTrue (leq x z) ;
+  total   : (x : a) → (y : a) → IsTrue (bool_or (leq x y) (leq y x))
 }
 
 -- Canonical `Int` instances -- AUDITED-DELTA, illustrative-only (51 SS6).
@@ -67,8 +67,8 @@ class Ord a {
 -- grep-able `Decl::Opaque`, never a silent/hidden assumption). `Int` is
 -- illustrative-only here -- NOT the zero-delta exemplar.
 
-view int_leq (x : Int) (y : Int) : Bool = leq_int x y
-view int_eq (x : Int) (y : Int) : Bool = eq_int x y
+fn int_leq (x : Int) (y : Int) : Bool = leq_int x y
+fn int_eq (x : Int) (y : Int) : Bool = eq_int x y
 
 instance Eq Int {
   eq    = int_eq ;
@@ -220,61 +220,61 @@ instance Ord Int {
 -- obligation in this codebase needs a sound positional arm) -- forward
 -- priority, not blocking.
 
-view bool_leq (a : Bool) (b : Bool) : Bool = match a { False => True ; True => b }
-view bool_eq (a : Bool) (b : Bool) : Bool = match a { True => b ; False => match b { True => False ; False => True } }
+fn bool_leq (a : Bool) (b : Bool) : Bool = match a { False ⇒ True ; True ⇒ b }
+fn bool_eq (a : Bool) (b : Bool) : Bool = match a { True ⇒ b ; False ⇒ match b { True ⇒ False ; False ⇒ True } }
 
 instance Ord Bool {
   leq = bool_leq ;
-  refl = \x. match x { True => tt ; False => tt } ;
+  refl = λx. match x { True ⇒ tt ; False ⇒ tt } ;
   antisym =
-    \x. match x {
-      True => \y. match y {
-        True => \p.\q. tt ;
-        False => \p.\q. absurd p
+    λx. match x {
+      True ⇒ λy. match y {
+        True ⇒ λp.λq. tt ;
+        False ⇒ λp.λq. absurd p
       } ;
-      False => \y. match y {
-        True => \p.\q. absurd q ;
-        False => \p.\q. tt
+      False ⇒ λy. match y {
+        True ⇒ λp.λq. absurd q ;
+        False ⇒ λp.λq. tt
       }
     } ;
   trans =
-    \x. match x {
-      True => \y. match y {
-        True => \z. match z { True => \p.\q. tt ; False => \p.\q. q } ;
-        False => \z. match z { True => \p.\q. tt ; False => \p.\q. p }
+    λx. match x {
+      True ⇒ λy. match y {
+        True ⇒ λz. match z { True ⇒ λp.λq. tt ; False ⇒ λp.λq. q } ;
+        False ⇒ λz. match z { True ⇒ λp.λq. tt ; False ⇒ λp.λq. p }
       } ;
-      False => \y.\z.\p.\q. tt
+      False ⇒ λy.λz.λp.λq. tt
     } ;
   total =
-    \x.\y. match x {
-      True => match y { True => tt ; False => tt } ;
-      False => match y { True => tt ; False => tt }
+    λx.λy. match x {
+      True ⇒ match y { True ⇒ tt ; False ⇒ tt } ;
+      False ⇒ match y { True ⇒ tt ; False ⇒ tt }
     }
 }
 
 instance Eq Bool {
   eq = bool_eq ;
-  refl = \x. match x { True => tt ; False => tt } ;
+  refl = λx. match x { True ⇒ tt ; False ⇒ tt } ;
   sym =
-    \x. match x {
-      True => \y. match y {
-        True => \p. tt ;
-        False => \p. absurd p
+    λx. match x {
+      True ⇒ λy. match y {
+        True ⇒ λp. tt ;
+        False ⇒ λp. absurd p
       } ;
-      False => \y. match y {
-        True => \p. absurd p ;
-        False => \p. tt
+      False ⇒ λy. match y {
+        True ⇒ λp. absurd p ;
+        False ⇒ λp. tt
       }
     } ;
   trans =
-    \x. match x {
-      True => \y. match y {
-        True => \z. match z { True => \p.\q. tt ; False => \p.\q. absurd q } ;
-        False => \z. match z { True => \p.\q. absurd p ; False => \p.\q. absurd p }
+    λx. match x {
+      True ⇒ λy. match y {
+        True ⇒ λz. match z { True ⇒ λp.λq. tt ; False ⇒ λp.λq. absurd q } ;
+        False ⇒ λz. match z { True ⇒ λp.λq. absurd p ; False ⇒ λp.λq. absurd p }
       } ;
-      False => \y. match y {
-        True => \z. match z { True => \p.\q. absurd p ; False => \p.\q. absurd p } ;
-        False => \z. match z { True => \p.\q. absurd q ; False => \p.\q. tt }
+      False ⇒ λy. match y {
+        True ⇒ λz. match z { True ⇒ λp.λq. absurd p ; False ⇒ λp.λq. absurd p } ;
+        False ⇒ λz. match z { True ⇒ λp.λq. absurd q ; False ⇒ λp.λq. tt }
       }
     }
 }
@@ -282,25 +282,25 @@ instance Eq Bool {
 instance DecEq Bool {
   eq = bool_eq ;
   sound =
-    \x. match x {
-      True => \y. match y {
-        True => \p. tt ;
-        False => \p. absurd p
+    λx. match x {
+      True ⇒ λy. match y {
+        True ⇒ λp. tt ;
+        False ⇒ λp. absurd p
       } ;
-      False => \y. match y {
-        True => \p. absurd p ;
-        False => \p. tt
+      False ⇒ λy. match y {
+        True ⇒ λp. absurd p ;
+        False ⇒ λp. tt
       }
     } ;
   complete =
-    \x. match x {
-      True => \y. match y {
-        True => \p. tt ;
-        False => \p. absurd p
+    λx. match x {
+      True ⇒ λy. match y {
+        True ⇒ λp. tt ;
+        False ⇒ λp. absurd p
       } ;
-      False => \y. match y {
-        True => \p. absurd p ;
-        False => \p. tt
+      False ⇒ λy. match y {
+        True ⇒ λp. absurd p ;
+        False ⇒ λp. tt
       }
     }
 }

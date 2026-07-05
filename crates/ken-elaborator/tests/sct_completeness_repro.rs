@@ -46,7 +46,7 @@ fn control_flat_single_sibling_recurses() {
     env.elaborate_decl("data Tree = Leaf | Node Tree Int Tree")
         .expect("Tree should declare");
     env.elaborate_decl(
-        "view countR (t : Tree) : Nat = \
+        "fn countR (t : Tree) : Nat = \
          match t { Leaf => Zero ; Node l c r => countR r }",
     )
     .expect("flat single-sibling recursion must be accepted (control)");
@@ -61,12 +61,12 @@ fn control_flat_both_siblings_recurse() {
     env.elaborate_decl("data Tree = Leaf | Node Tree Int Tree")
         .expect("Tree should declare");
     env.elaborate_decl(
-        "view natAdd (a : Nat) (b : Nat) : Nat = \
+        "fn natAdd (a : Nat) (b : Nat) : Nat = \
          match a { Zero => b ; Suc m => Suc (natAdd m b) }",
     )
     .expect("natAdd should declare");
     env.elaborate_decl(
-        "view countBoth (t : Tree) : Nat = \
+        "fn countBoth (t : Tree) : Nat = \
          match t { \
            Leaf => Zero ; \
            Node l c r => Suc (natAdd (countBoth l) (countBoth r)) \
@@ -85,7 +85,7 @@ fn shape_a_val2_12_nested_split_flat_sibling_recursion_accepts() {
     env.elaborate_decl("data Tree = Leaf | Node Tree Int Tree")
         .expect("Tree should declare");
     env.elaborate_decl(
-        "view countR (t : Tree) : Nat = \
+        "fn countR (t : Tree) : Nat = \
          match t { \
            Leaf => Zero ; \
            Node (Node ll lc lr) c r => countR r ; \
@@ -111,7 +111,7 @@ fn shape_a_accepts_and_evaluates_correctly() {
     // (the bug), this wouldn't even accept; if it accepted but the
     // recursion were mis-wired, the count would be wrong.
     env.elaborate_decl(
-        "view rightDepth (t : Tree) : Nat = \
+        "fn rightDepth (t : Tree) : Nat = \
          match t { \
            Leaf => Zero ; \
            Node (Node ll lc lr) c r => Suc (rightDepth r) ; \
@@ -120,11 +120,11 @@ fn shape_a_accepts_and_evaluates_correctly() {
     )
     .expect("must accept (AC2)");
     env.elaborate_decl(
-        "view t3 : Tree = \
+        "const t3 : Tree = \
          Node (Node Leaf 1 Leaf) 2 (Node (Node Leaf 3 Leaf) 4 Leaf)",
     )
     .expect("t3 should declare");
-    env.elaborate_decl("view result : Nat = rightDepth t3")
+    env.elaborate_decl("const result : Nat = rightDepth t3")
         .expect("rightDepth t3 should elaborate");
 
     let mut store = ken_interp::eval::EvalStore::new();
@@ -171,7 +171,7 @@ fn shape_a_near_miss_recurses_on_unchanged_scrutinee_stays_rejected() {
     env.elaborate_decl("data Tree = Leaf | Node Tree Int Tree")
         .expect("Tree should declare");
     let res = env.elaborate_decl(
-        "view bad (t : Tree) : Nat = \
+        "fn bad (t : Tree) : Nat = \
          match t { \
            Leaf => Zero ; \
            Node (Node ll lc lr) c r => bad t ; \

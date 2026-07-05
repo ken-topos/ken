@@ -14,9 +14,9 @@ data Decimal = MkDecimalPair Int Int
 -- reference). Load-bearing property, exact on the witness below: aligns the two
 -- coefficients to a common exponent and compares. For x=(10,-1), y=(1,0):
 -- exponents differ by 1, so scale y's coefficient by 10 → compare 10 vs 10.
-view decimalEq (x : Decimal) (y : Decimal) : Bool =
-  match x { MkDecimalPair cx ex =>
-    match y { MkDecimalPair cy ey =>
+fn decimalEq (x : Decimal) (y : Decimal) : Bool =
+  match x { MkDecimalPair cx ex ⇒
+    match y { MkDecimalPair cy ey ⇒
       and_bool (eq_int (add_int ex 1) ey) (eq_int cx (mul_int cy 10)) } }
 
 -- The lawful instance. `eq` is a fine Bool operation; `sound`/`complete` are
@@ -28,17 +28,17 @@ instance DecEq Decimal {
 }
 
 -- ---- the exploit (makes the hole concrete) ------------------------------
-view w1 : Decimal = MkDecimalPair 10 (sub_int 0 1)   -- 10 x 10^-1 = 1
-view w2 : Decimal = MkDecimalPair 1 0                 --  1 x 10^0  = 1
+const w1 : Decimal = MkDecimalPair 10 (sub_int 0 1)   -- 10 x 10^-1 = 1
+const w2 : Decimal = MkDecimalPair 1 0                 --  1 x 10^0  = 1
 
 -- decimalEq w1 w2 reduces to True (and_bool (eq_int 0 0) (eq_int 10 10)), so a
 -- reflexivity proof of IsTrue (decimalEq w1 w2) type-checks:
-view eqWitness : IsTrue (decimalEq w1 w2) = Refl Bool True
+const eqWitness : IsTrue (decimalEq w1 w2) = Refl Bool True
 
 -- SMOKING GUN: `sound` hands us Equal between two STRUCTURALLY DISTINCT
 -- constructor forms. (Instance-field projection follows the landed
 -- `(Class_instance_T).field` style; confirm the exact surface at run.)
-view falseEqDecimal : Equal Decimal w1 w2 =
+const falseEqDecimal : Equal Decimal w1 w2 =
   (DecEq_instance_Decimal).sound w1 w2 eqWitness
 
 -- Completion: MkDecimalPair injectivity (K7 no-confusion) projects

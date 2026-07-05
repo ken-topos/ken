@@ -13,11 +13,11 @@ use ken_elaborator::ElabEnv;
 #[test]
 fn resp_sum_inl_reduces_to_rg_applied_to_payload() {
     let mut env = ElabEnv::new().expect("env");
-    env.elaborate_decl("view idNat (n : Nat) : Type = Nat")
+    env.elaborate_decl("fn idNat (n : Nat) : Type = Nat")
         .expect("idNat elaborates");
     let main_id = env
         .elaborate_decl(
-            "view probe : Type = resp_sum Nat Nat idNat idNat (InL Nat Nat Zero)",
+            "const probe : Type = resp_sum Nat Nat idNat idNat (InL Nat Nat Zero)",
         )
         .expect("probe elaborates");
     // `probe`'s BODY (a `Type`-classified term) must normalize to `Nat`
@@ -45,11 +45,11 @@ fn resp_sum_inl_reduces_to_rg_applied_to_payload() {
 #[test]
 fn resp_sum_inr_reduces_to_rh_applied_to_payload() {
     let mut env = ElabEnv::new().expect("env");
-    env.elaborate_decl("view idNat (n : Nat) : Type = Nat")
+    env.elaborate_decl("fn idNat (n : Nat) : Type = Nat")
         .expect("idNat elaborates");
     let main_id = env
         .elaborate_decl(
-            "view probe : Type = resp_sum Nat Nat idNat idNat (InR Nat Nat Zero)",
+            "const probe : Type = resp_sum Nat Nat idNat idNat (InR Nat Nat Zero)",
         )
         .expect("probe elaborates");
     let ken_kernel::env::Decl::Transparent { body, .. } =

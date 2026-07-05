@@ -4,7 +4,7 @@
 //! prover), and `ken-interp` (X1) as a front-end. Never reimplements them.
 //!
 //! # Multi-line rule
-//! A declaration (`let`/`view`/`prove`/`law`/`space`-started input) spans
+//! A declaration (`let`/`const`/`fn`/`proc`/`prove`/`law`/`space`-started input) spans
 //! until an empty line. A `:command` or bare expression is always single-line.
 //!
 //! # Redefinition policy
@@ -55,12 +55,16 @@ impl Session {
 fn is_decl_start(s: &str) -> bool {
     let t = s.trim_start();
     t.starts_with("let ")
-        || t.starts_with("view ")
+        || t.starts_with("const ")
+        || t.starts_with("fn ")
+        || t.starts_with("proc ")
         || t.starts_with("prove ")
         || t.starts_with("law ")
         || t.starts_with("space ")
         || t == "let"
-        || t == "view"
+        || t == "const"
+        || t == "fn"
+        || t == "proc"
         || t == "prove"
         || t == "law"
 }
@@ -122,7 +126,7 @@ fn show_term(t: &Term) -> String {
 
 // ── REPL actions ─────────────────────────────────────────────────────────────
 
-/// Elaborate and register a declaration (`let`, `view`, `prove`, `law`).
+/// Elaborate and register a declaration (`let`, `const`, `fn`, `proc`, `prove`, `law`).
 /// On success: print the registered name. On error: print diagnostic, no registration.
 fn do_def(session: &mut Session, src: &str) {
     match session.env.elaborate_decl(src.trim()) {
@@ -188,7 +192,7 @@ fn do_type(session: &mut Session, expr_src: &str) {
 
 fn print_help() {
     println!("  Commands:");
-    println!("    :def <decl>         elaborate+check a declaration (let/view/prove/law)");
+    println!("    :def <decl>         elaborate+check a declaration (let/const/fn/proc/prove/law)");
     println!("    :check <prop>       verify a proposition via the prover (alias: :prove)");
     println!("    :eval <expr>        evaluate an expression via ken-interp");
     println!("    :type <expr>        infer and print the type of an expression");
@@ -198,7 +202,7 @@ fn print_help() {
     println!("    :quit               exit the REPL (alias: :q)");
     println!();
     println!("  Bare input:");
-    println!("    let/view/prove/law/space …   treated as a declaration");
+    println!("    let/const/fn/proc/prove/law/space …   treated as a declaration");
     println!("    anything else                evaluated as an expression");
     println!("    Multi-line: blank line ends a declaration block.");
 }
@@ -296,7 +300,7 @@ pub fn run() {
 
                 "def" => {
                     if args.is_empty() {
-                        println!("  usage: :def <let/view/prove/law declaration>");
+                        println!("  usage: :def <let/const/fn/proc/prove/law declaration>");
                     } else {
                         do_def(&mut session, args);
                     }

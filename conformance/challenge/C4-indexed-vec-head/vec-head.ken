@@ -4,16 +4,16 @@
 -- impossible-branch-by-absurdity (the deferred `34 §4.3` piece, l2 AC5).
 
 -- Indexed family: the length lives in the type.
-data Vec (a : Type) : Nat -> Type =
+data Vec (a : Type) : Nat → Type =
     VNil  : Vec a Zero
-  | VCons : (n : Nat) -> a -> Vec a n -> Vec a (Suc n)
+  | VCons : (n : Nat) → a → Vec a n → Vec a (Suc n)
 
 -- Total head: the argument is statically non-empty (Vec a (Suc n)), so the
 -- VNil case is IMPOSSIBLE by the index (VNil : Vec a Zero, Zero ≢ Suc n) and is
 -- omitted by absurdity — no default, no sentinel, no Option.
-view head (a : Type) (n : Nat) (v : Vec a (Suc n)) : a =
+fn head (a : Type) (n : Nat) (v : Vec a (Suc n)) : a =
   match v {
-    VCons m x xs => x
+    VCons m x xs ⇒ x
     -- VNil arm intentionally OMITTED: impossible by index (needs `34 §4.3`
     -- absurdity fill — DEFERRED per l2 AC5). Expected today: rejected as
     -- non-exhaustive / cannot-discharge-VNil. If it elaborates, absurdity fill
@@ -21,11 +21,11 @@ view head (a : Type) (n : Nat) (v : Vec a (Suc n)) : a =
   }
 
 -- PASS witness: head of a concrete non-empty vector.
-view v3 : Vec Nat (Suc (Suc Zero)) =
+const v3 : Vec Nat (Suc (Suc Zero)) =
   VCons Nat (Suc Zero) Zero (VCons Nat Zero (Suc Zero) (VNil Nat))
-view headV3 : Nat = head Nat (Suc Zero) v3   -- expected: reduces to Zero
+const headV3 : Nat = head Nat (Suc Zero) v3   -- expected: reduces to Zero
 
 -- REJECT witness (type error): head demands Vec a (Suc n); VNil : Vec a Zero.
 -- `Zero` cannot unify with `Suc n` — a plain typing error, must fire regardless
 -- of the absurdity-fill machinery.
-view headEmpty : Nat = head Nat Zero (VNil Nat)   -- expected: TYPE ERROR
+const headEmpty : Nat = head Nat Zero (VNil Nat)   -- expected: TYPE ERROR

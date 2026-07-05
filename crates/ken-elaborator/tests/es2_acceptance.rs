@@ -112,14 +112,14 @@ fn demoted_predicates_absent_from_trusted_base() {
 fn sort_refinement_unfolds_issorted_and_perm() {
     let mut env = mk_env();
     env.elaborate_decl(
-        "view insert (a : Type) (leq : a -> a -> Bool) (x : a) (xs : List a) : List a = \
+        "fn insert (a : Type) (leq : a -> a -> Bool) (x : a) (xs : List a) : List a = \
          match xs { Nil => Cons a x (Nil a) ; \
            Cons h t => match leq x h { True => Cons a x (Cons a h t) ; \
                                         False => Cons a h (insert a leq x t) } }",
     )
     .expect("insert elaborates");
     env.elaborate_decl_v1(
-        "view sort (a : Type) (leq : a -> a -> Bool) (xs : List a) : \
+        "fn sort (a : Type) (leq : a -> a -> Bool) (xs : List a) : \
          { ys : List a | And (isSorted a leq ys) (Perm a ys xs) } = \
          match xs { Nil => Nil a ; Cons h t => insert a leq h (sort a leq t) }",
     )
@@ -228,7 +228,7 @@ fn match_on_comparison_result_elaborates() {
     let mut env = mk_env();
     let id = env
         .elaborate_decl(
-            "view isZero (a : Int) (b : Int) : Int = \
+            "fn isZero (a : Int) (b : Int) : Int = \
              match eq_int a b { True => 1 ; False => 0 }",
         )
         .expect("AC3: match on eq_int's Bool result must elaborate");

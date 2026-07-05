@@ -36,8 +36,8 @@ fn decl_nat_pred(env: &mut ElabEnv, name: &str) {
 fn non_spec_program_empty_obligation_set() {
     let mut env = mk_env();
     let elab_res = env
-        .elaborate_decl_v1("view id_nat (n : Nat) : Nat = n")
-        .expect("plain view must elaborate");
+        .elaborate_decl_v1("fn id_nat (n : Nat) : Nat = n")
+        .expect("plain const must elaborate");
     let ex = v2_extract(&elab_res);
     assert!(
         ex.obligations.is_empty(),
@@ -51,7 +51,7 @@ fn non_spec_program_empty_obligation_set() {
 
 /// verify/obligations/postcondition-emits-substituted-goal
 ///
-/// A straight-line body `view f (n : Nat) : Nat ensures SomeProp result = n`
+/// A straight-line body `fn f (n : Nat) : Nat ensures SomeProp result = n`
 /// emits one obligation `⟨id, (n:Nat) ⊢ SomeProp n, prov⟩` — `result`
 /// replaced by the body `n` (`22 §2.2`).
 #[test]
@@ -60,8 +60,8 @@ fn postcondition_emits_substituted_goal() {
     decl_nat_pred(&mut env, "SomeProp");
 
     let elab_res = env
-        .elaborate_decl_v1("view f (n : Nat) : Nat ensures SomeProp result = n")
-        .expect("view with ensures should elaborate");
+        .elaborate_decl_v1("fn f (n : Nat) : Nat ensures SomeProp result = n")
+        .expect("const with ensures should elaborate");
 
     let ex = v2_extract(&elab_res);
     assert_eq!(ex.obligations.len(), 1, "one ensures → one obligation");
@@ -97,7 +97,7 @@ fn postcondition_emits_substituted_goal() {
 
 /// verify/obligations/refinement-introduction-emits-phi  (partial — return-type case)
 ///
-/// `view mkPos (n : Nat) : { k : Nat | NonNeg k } = n` emits one obligation
+/// `fn mkPos (n : Nat) : { k : Nat | NonNeg k } = n` emits one obligation
 /// `⟨id, (n:Nat) ⊢ NonNeg n, prov⟩` — the return-type refinement predicate
 /// with the body substituted (`22 §2.1`).
 ///
@@ -109,7 +109,7 @@ fn refinement_return_type_emits_phi() {
     decl_nat_pred(&mut env, "NonNeg");
 
     let elab_res = env
-        .elaborate_decl_v1("view mkPos (n : Nat) : { k : Nat | NonNeg k } = n")
+        .elaborate_decl_v1("fn mkPos (n : Nat) : { k : Nat | NonNeg k } = n")
         .expect("refinement return type should elaborate");
 
     let ex = v2_extract(&elab_res);
@@ -152,9 +152,9 @@ fn precondition_at_call_not_in_body_placeholder() {
     // Predicate on first param `n` — exercises the fixed de Bruijn shift path.
     let elab_res = env
         .elaborate_decl_v1(
-            "view safe_f (n : Nat) (d : Nat) : Nat requires Nonzero n = d",
+            "fn safe_f (n : Nat) (d : Nat) : Nat requires Nonzero n = d",
         )
-        .expect("view with requires should elaborate");
+        .expect("const with requires should elaborate");
 
     let ex = v2_extract(&elab_res);
     assert!(
@@ -179,8 +179,8 @@ fn partial_primitive_nonzero_placeholder() {
     // Structural: verify that existing operations do NOT emit spurious obligations.
     let mut env = mk_env();
     let elab_res = env
-        .elaborate_decl_v1("view f (n : Nat) : Nat = n")
-        .expect("plain view elaborates");
+        .elaborate_decl_v1("fn f (n : Nat) : Nat = n")
+        .expect("plain fn elaborates");
     let ex = v2_extract(&elab_res);
     assert!(
         ex.obligations.is_empty(),
@@ -263,8 +263,8 @@ fn refined_param_is_hypothesis_not_obligation() {
 
     // The refined parameter: lowers to carrier at the def site, no obligation.
     let elab_res = env
-        .elaborate_decl_v1("view f (n : { k : Nat | IsNonNeg k }) : Nat = n")
-        .expect("refined param view should elaborate");
+        .elaborate_decl_v1("fn f (n : { k : Nat | IsNonNeg k }) : Nat = n")
+        .expect("refined param const should elaborate");
 
     let ex = v2_extract(&elab_res);
     assert!(
@@ -291,9 +291,9 @@ fn body_requires_assumed_not_reobligated() {
     // Predicate on first param `n` — exercises the fixed de Bruijn shift path.
     let elab_res = env
         .elaborate_decl_v1(
-            "view safe_f (n : Nat) (d : Nat) : Nat requires NonzeroP n = d",
+            "fn safe_f (n : Nat) (d : Nat) : Nat requires NonzeroP n = d",
         )
-        .expect("view with requires should elaborate");
+        .expect("const with requires should elaborate");
 
     let ex = v2_extract(&elab_res);
     assert!(
@@ -361,9 +361,9 @@ fn present_cert_yields_zero_new_obligations() {
 #[test]
 fn forgetful_coercion_emits_nothing() {
     let mut env = mk_env();
-    // A spec-free view whose body is used at a carrier type emits no obligation.
+    // A spec-free const whose body is used at a carrier type emits no obligation.
     let elab_res = env
-        .elaborate_decl_v1("view id_nat2 (n : Nat) : Nat = n")
+        .elaborate_decl_v1("fn id_nat2 (n : Nat) : Nat = n")
         .expect("elaborates");
     let ex = v2_extract(&elab_res);
     assert!(
@@ -390,14 +390,14 @@ fn trivial_clause_still_emits_obligation() {
 
     // Trivial clause: still emits an obligation (provable by refl / trivial proof)
     let elab1 = env
-        .elaborate_decl_v1("view f_triv (n : Nat) : Nat ensures TrivProp result = n")
+        .elaborate_decl_v1("fn f_triv (n : Nat) : Nat ensures TrivProp result = n")
         .expect("elaborates");
     let ex1 = v2_extract(&elab1);
     assert_eq!(ex1.obligations.len(), 1, "trivial clause emits 1 obligation");
 
     // Real-burden clause: emits an obligation
     let elab2 = env
-        .elaborate_decl_v1("view f_real (n : Nat) : Nat ensures RealProp result = n")
+        .elaborate_decl_v1("fn f_real (n : Nat) : Nat ensures RealProp result = n")
         .expect("elaborates");
     let ex2 = v2_extract(&elab2);
     assert_eq!(ex2.obligations.len(), 1, "real-burden clause emits 1 obligation");
@@ -429,7 +429,7 @@ fn exhaustive_traversal_no_silent_skip() {
 
     // Ensures → ProvKind::Ensures (arm 1)
     let r1 = env
-        .elaborate_decl_v1("view ef (n : Nat) : Nat ensures EProp result = n")
+        .elaborate_decl_v1("fn ef (n : Nat) : Nat ensures EProp result = n")
         .unwrap();
     assert!(v2_extract(&r1)
         .obligations
@@ -472,7 +472,7 @@ fn match_branch_gamma_scrutinee_equation_placeholder() {
     decl_nat_pred(&mut env, "MatchProp");
     // A straight-line view (no match) as a baseline — no Elim to walk.
     let elab_res = env
-        .elaborate_decl_v1("view f_match (n : Nat) : Nat ensures MatchProp result = n")
+        .elaborate_decl_v1("fn f_match (n : Nat) : Nat ensures MatchProp result = n")
         .unwrap();
     let ex = v2_extract(&elab_res);
     assert_eq!(ex.obligations.len(), 1, "straight-line body: 1 obligation");
@@ -495,7 +495,7 @@ fn let_binding_adds_equation_to_gamma_placeholder() {
     let mut env = mk_env();
     decl_nat_pred(&mut env, "LetProp");
     let elab_res = env
-        .elaborate_decl_v1("view f_let (n : Nat) : Nat ensures LetProp result = n")
+        .elaborate_decl_v1("fn f_let (n : Nat) : Nat ensures LetProp result = n")
         .unwrap();
     let ex = v2_extract(&elab_res);
     // With a straight-line body the context is just [Nat] — no let-equation yet.
@@ -573,7 +573,7 @@ fn provenance_and_stable_ids() {
     // Two ensures clauses → two obligations with consecutive stable ids
     let elab_res = env
         .elaborate_decl_v1(
-            "view f2 (n : Nat) : Nat ensures PropA result ensures PropB result = n",
+            "fn f2 (n : Nat) : Nat ensures PropA result ensures PropB result = n",
         )
         .expect("two ensures should elaborate");
 
@@ -614,7 +614,7 @@ fn decoupled_from_sigma_sort() {
     decl_nat_pred(&mut env, "PostCond");
 
     let elab_res = env
-        .elaborate_decl_v1("view f_sigma (n : Nat) : Nat ensures PostCond result = n")
+        .elaborate_decl_v1("fn f_sigma (n : Nat) : Nat ensures PostCond result = n")
         .expect("elaborates");
 
     let ex = v2_extract(&elab_res);
@@ -639,7 +639,7 @@ fn decoupled_from_sigma_sort() {
 
 /// V2 enriches V1's closed obligations with open context Γ and phi.
 ///
-/// For a straight-line view with one ensures, the context is the parameter
+/// For a straight-line const with one ensures, the context is the parameter
 /// telescope and phi is the substituted predicate.
 #[test]
 fn v2_enriches_v1_obligations_with_context() {
@@ -647,7 +647,7 @@ fn v2_enriches_v1_obligations_with_context() {
     decl_nat_pred(&mut env, "QProp");
 
     let elab_res = env
-        .elaborate_decl_v1("view g (n : Nat) : Nat ensures QProp result = n")
+        .elaborate_decl_v1("fn g (n : Nat) : Nat ensures QProp result = n")
         .expect("elaborates");
     let ex = v2_extract(&elab_res);
     assert_eq!(ex.obligations.len(), 1);

@@ -28,16 +28,16 @@ fn mk_env() -> ElabEnv {
 fn module_elaborates_to_identical_flat_sigma() {
     let mut a = mk_env();
     a.elaborate_file(
-        "module M { pub view foo : Int = 0 } \
+        "module M { pub const foo : Int = 0 } \
          import M \
-         view bar : Int = M.foo",
+         const bar : Int = M.foo",
     )
     .expect("module program elaborates");
 
     let mut b = mk_env();
     b.elaborate_file(
-        "view M_foo : Int = 0 \
-         view bar : Int = M_foo",
+        "const M_foo : Int = 0 \
+         const bar : Int = M_foo",
     )
     .expect("flat equivalent elaborates");
 
@@ -112,8 +112,8 @@ fn top_level_pub_data_is_not_abstract_exported() {
     // The constructor must still be constructible AND matchable in the
     // same compilation unit — the exact capability the defect silently
     // destroyed.
-    env.elaborate_decl("view mk : T = MkT").expect("MkT must be constructible");
-    env.elaborate_decl("view unwrap (t : T) : Int = match t { MkT => 0 }")
+    env.elaborate_decl("const mk : T = MkT").expect("MkT must be constructible");
+    env.elaborate_decl("fn unwrap (t : T) : Int = match t { MkT => 0 }")
         .expect("MkT must be matchable");
 }
 
@@ -127,7 +127,7 @@ fn client_match_hidden_ctor_rejected_at_surface() {
     env.elaborate_file("module M { pub data T = MkT }").expect("module M elaborates");
 
     let result = env.elaborate_decl(
-        "view bad (t : M.T) : Int = match t { MkT => 0 }",
+        "fn bad (t : M.T) : Int = match t { MkT => 0 }",
     );
     assert!(result.is_err(), "AC2: matching a hidden constructor must be rejected");
     // Surface, not kernel: never a KernelRejected/TypeMismatch — the ctor
@@ -151,15 +151,15 @@ fn client_match_hidden_ctor_rejected_at_surface() {
 fn private_name_access_rejected_at_surface() {
     let mut env = mk_env();
     env.elaborate_file(
-        "module M { view secret : Int = 0 pub view api : Int = 1 } \
+        "module M { const secret : Int = 0 pub const api : Int = 1 } \
          import M",
     )
     .expect("module M elaborates");
 
-    let ok = env.elaborate_decl("view getApi : Int = M.api");
+    let ok = env.elaborate_decl("const getApi : Int = M.api");
     assert!(ok.is_ok(), "AC3/AC4: M.api (pub) must resolve");
 
-    let bad = env.elaborate_decl("view getSecret : Int = M.secret");
+    let bad = env.elaborate_decl("const getSecret : Int = M.secret");
     assert!(bad.is_err(), "AC3/AC4: M.secret (private) must be rejected");
     match bad.unwrap_err() {
         ElabError::KernelRejected { .. } => {
@@ -176,19 +176,19 @@ fn private_name_access_rejected_at_surface() {
 fn use_open_ambiguity_rejected_naming_both() {
     let mut env = mk_env();
     env.elaborate_file(
-        "module M { pub view foo : Int = 0 } \
-         module N { pub view foo : Int = 1 } \
+        "module M { pub const foo : Int = 0 } \
+         module N { pub const foo : Int = 1 } \
          use M \
          use N",
     )
     .expect("both modules + opens elaborate");
 
     // Qualified references disambiguate regardless of the open-collision.
-    assert!(env.elaborate_decl("view viaM : Int = M.foo").is_ok());
-    assert!(env.elaborate_decl("view viaN : Int = N.foo").is_ok());
+    assert!(env.elaborate_decl("const viaM : Int = M.foo").is_ok());
+    assert!(env.elaborate_decl("const viaN : Int = N.foo").is_ok());
 
     // The bare, unqualified reference is ambiguous — must name both sources.
-    let bad = env.elaborate_decl("view bad : Int = foo");
+    let bad = env.elaborate_decl("const bad : Int = foo");
     match bad {
         Err(ElabError::AmbiguousReference { name, sources, .. }) => {
             assert_eq!(name, "foo");
@@ -207,10 +207,10 @@ fn use_open_ambiguity_rejected_naming_both() {
 fn local_shadows_imported_lexically() {
     let mut env = mk_env();
     env.elaborate_file(
-        "module M { pub view foo : Int = 0 } \
+        "module M { pub const foo : Int = 0 } \
          use M \
-         view foo : Int = 9 \
-         view getFoo : Int = foo",
+         const foo : Int = 9 \
+         const getFoo : Int = foo",
     )
     .expect("local-over-import must elaborate without any ambiguity error");
 
@@ -234,27 +234,27 @@ fn local_shadows_imported_lexically() {
 #[test]
 fn four_import_forms_resolve_to_one_binding() {
     let mut env = mk_env();
-    env.elaborate_file("module M { pub view foo : Int = 0 }").expect("module M elaborates");
+    env.elaborate_file("module M { pub const foo : Int = 0 }").expect("module M elaborates");
     let m_foo = env.globals["M.foo"];
 
     let via_qualified = env
-        .elaborate_decl("view c1 : Int = M.foo")
+        .elaborate_decl("const c1 : Int = M.foo")
         .expect("import M / qualified M.foo");
     let (_, b1) = env.env.transparent_body(via_qualified).unwrap();
 
     env.elaborate_file("import M as N").unwrap();
-    let via_aliased = env.elaborate_decl("view c2 : Int = N.foo").expect("import M as N");
+    let via_aliased = env.elaborate_decl("const c2 : Int = N.foo").expect("import M as N");
     let (_, b2) = env.env.transparent_body(via_aliased).unwrap();
 
     env.elaborate_file("import M (foo)").unwrap();
-    let via_selective = env.elaborate_decl("view c3 : Int = foo").expect("import M (foo)");
+    let via_selective = env.elaborate_decl("const c3 : Int = foo").expect("import M (foo)");
     let (_, b3) = env.env.transparent_body(via_selective).unwrap();
 
     // `use M` (open) brings the SAME `M.foo` binding under bare `foo` — since
     // it's the identical qualified origin as the prior selective import, this
     // merges (not an ambiguity: `33 §3.3`'s "same declaration" exception).
     env.elaborate_file("use M").unwrap();
-    let via_open = env.elaborate_decl("view c4 : Int = foo").expect("use M");
+    let via_open = env.elaborate_decl("const c4 : Int = foo").expect("use M");
     let (_, b4) = env.env.transparent_body(via_open).unwrap();
 
     for (label, body) in [("qualified", &b1), ("aliased", &b2), ("selective", &b3), ("open", &b4)] {

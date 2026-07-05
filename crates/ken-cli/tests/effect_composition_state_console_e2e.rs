@@ -30,7 +30,7 @@ fn workspace_root() -> PathBuf {
 /// `Pair Unit Nat` is a surface-nameable alias for `runState`'s real return
 /// type `Sigma Unit Nat` (`prelude.rs`'s `Pair := \a b. Sigma a b`).
 const PROG: &str = r#"
-view prog : ITree ConsoleOp console_resp (Pair Unit Nat) =
+const prog : ITree ConsoleOp console_resp (Pair Unit Nat) =
   runState Nat ConsoleOp console_resp Unit Zero
     (bind (Sum (StateOp Nat) ConsoleOp) (resp_sum (StateOp Nat) ConsoleOp (resp_state Nat) console_resp) Nat Unit
       (get Nat ConsoleOp console_resp MkUnit)

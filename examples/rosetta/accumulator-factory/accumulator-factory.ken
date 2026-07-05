@@ -24,54 +24,54 @@
 -- actually taken -- `f`'s inhabitedness is irrelevant to a program that
 -- never uses it.
 
-view Eff : Type = Unit
-view RespEff (u : Eff) : Type = Unit
+const Eff : Type = Unit
+fn RespEff (u : Eff) : Type = Unit
 
-view Op : Type = Sum (StateOp Nat) Eff
+const Op : Type = Sum (StateOp Nat) Eff
 -- `resp_sum` is now the GENERAL `(g h:Type)->(rg:g->Type)->(rh:h->Type)->
 -- Sum g h -> Type` (`effect-composition` D1) -- State is the literal
 -- instance `resp_sum (StateOp Nat) Eff (resp_state Nat) RespEff`.
-view Resp : Op -> Type = resp_sum (StateOp Nat) Eff (resp_state Nat) RespEff
+const Resp : Op → Type = resp_sum (StateOp Nat) Eff (resp_state Nat) RespEff
 
-view addNat (a : Nat) (b : Nat) : Nat =
-  match a { Zero => b ; Suc a2 => Suc (addNat a2 b) }
+fn addNat (a : Nat) (b : Nat) : Nat =
+  match a { Zero ⇒ b ; Suc a2 ⇒ Suc (addNat a2 b) }
 
 -- one "call": read the running total, add `n`, store it back, return the
 -- NEW total (the task's own semantics: "returns the current total").
-view addTo (n : Nat) : ITree Op Resp Nat =
+fn addTo (n : Nat) : ITree Op Resp Nat =
   bind Op Resp Nat Nat
     (get Nat Eff RespEff MkUnit)
-    (\prev.
+    (λprev.
       bind Op Resp Unit Nat
         (put Nat Eff RespEff (addNat prev n))
-        (\_. Ret Op Resp Nat (addNat prev n)))
+        (λ_. Ret Op Resp Nat (addNat prev n)))
 
-view eq_nat (a : Nat) (b : Nat) : Bool =
+fn eq_nat (a : Nat) (b : Nat) : Bool =
   match a {
-    Zero => match b { Zero => True ; Suc _ => False } ;
-    Suc a2 => match b { Zero => False ; Suc b2 => eq_nat a2 b2 }
+    Zero ⇒ match b { Zero ⇒ True ; Suc _ ⇒ False } ;
+    Suc a2 ⇒ match b { Zero ⇒ False ; Suc b2 ⇒ eq_nat a2 b2 }
   }
 
-view and_bool (a : Bool) (b : Bool) : Bool =
-  match a { True => b ; False => False }
+fn and_bool (a : Bool) (b : Bool) : Bool =
+  match a { True ⇒ b ; False ⇒ False }
 
-view two   : Nat = Suc (Suc Zero)
-view three : Nat = Suc (Suc (Suc Zero))
-view five  : Nat = addNat two three
-view ten   : Nat = addNat five five
+const two   : Nat = Suc (Suc Zero)
+const three : Nat = Suc (Suc (Suc Zero))
+const five  : Nat = addNat two three
+const ten   : Nat = addNat five five
 
 -- Two independently-driven "calls" against the SAME hidden accumulator,
 -- discriminating: each returns the NEW running total (2, then 5), and the
 -- state persists/accumulates across calls (not just constant per-call).
-view program : ITree Op Resp Bool =
+const program : ITree Op Resp Bool =
   bind Op Resp Nat Bool
     (addTo two)
-    (\r1.
+    (λr1.
       bind Op Resp Nat Bool
         (addTo three)
-        (\r2. Ret Op Resp Bool (and_bool (eq_nat r1 two) (eq_nat r2 five))))
+        (λr2. Ret Op Resp Bool (and_bool (eq_nat r1 two) (eq_nat r2 five))))
 
-view finalResult : ITree Eff RespEff (Pair Bool Nat) =
+const finalResult : ITree Eff RespEff (Pair Bool Nat) =
   runState Nat Eff RespEff Bool Zero program
 
 -- Observing `finalResult`: match-compiler W-style IH-slot support landed
@@ -81,14 +81,14 @@ view finalResult : ITree Eff RespEff (Pair Bool Nat) =
 -- `Unit`, so the `Vis` arm is unreachable at runtime for this instantiation)
 -- -- the dummy result below is dead code, matching the `Ret`-only reachable
 -- path.
-view unwrapRet (r : ITree Eff RespEff (Pair Bool Nat)) : Pair Bool Nat =
+fn unwrapRet (r : ITree Eff RespEff (Pair Bool Nat)) : Pair Bool Nat =
   match r {
-    Ret v => v ;
-    Vis op k => mkPair Bool Nat False Zero
+    Ret v ⇒ v ;
+    Vis op k ⇒ mkPair Bool Nat False Zero
   }
 
-view finalBool : Bool = pairFst Bool Nat (unwrapRet finalResult)
+const finalBool : Bool = pairFst Bool Nat (unwrapRet finalResult)
 
-view finalCheck : String = match finalBool { True => "PASS" ; False => "FAIL" }
+const finalCheck : String = match finalBool { True ⇒ "PASS" ; False ⇒ "FAIL" }
 
-view main : IO Unit = print_line finalCheck
+proc main : IO Unit visits [Console] = print_line finalCheck

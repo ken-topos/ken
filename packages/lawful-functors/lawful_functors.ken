@@ -34,8 +34,8 @@
 -- `36 SS4.5`'s `get`/`put` name the effect ops rather than minting operators).
 -- `assoc` is a propositional equation in `Omega`.
 class Semigroup a {
-  op    : a -> a -> a ;
-  assoc : (x : a) -> (y : a) -> (z : a) -> Equal a (op (op x y) z) (op x (op y z))
+  op    : a → a → a ;
+  assoc : (x : a) → (y : a) → (z : a) → Equal a (op (op x y) z) (op x (op y z))
 }
 
 -- ========================================================================
@@ -51,11 +51,11 @@ class Semigroup a {
 -- a template question for the Architect's higher-kinded lane -- flagged
 -- there, not decided here.)
 class Monoid a {
-  op         : a -> a -> a ;
+  op         : a → a → a ;
   mempty     : a ;
-  assoc      : (x : a) -> (y : a) -> (z : a) -> Equal a (op (op x y) z) (op x (op y z)) ;
-  left_unit  : (x : a) -> Equal a (op mempty x) x ;
-  right_unit : (x : a) -> Equal a (op x mempty) x
+  assoc      : (x : a) → (y : a) → (z : a) → Equal a (op (op x y) z) (op x (op y z)) ;
+  left_unit  : (x : a) → Equal a (op mempty x) x ;
+  right_unit : (x : a) → Equal a (op x mempty) x
 }
 
 -- ========================================================================
@@ -78,19 +78,19 @@ class Monoid a {
 -- Left unit is DEFINITIONAL: `list_append Nil x` iota-reduces to `x` by
 -- append's first match arm, so the goal `Equal (List a) x x` stays
 -- `Eq`-shaped over the neutral `x` -- closed by `Refl`.
-view list_left_unit (a : Type) (xs : List a)
+fn list_left_unit (a : Type) (xs : List a)
   : Equal (List a) (list_append a (Nil a) xs) xs =
   Refl
 
 -- Assoc is proved by induction on the first list. Base (`Nil`): both sides
 -- reduce to the NEUTRAL `list_append a ys zs` -- still `Eq`-shaped, `Refl`.
 -- Step (`Cons h t`): lift the tail IH under `Cons a h` with `cong`.
-view list_assoc (a : Type) (xs : List a) (ys : List a) (zs : List a)
+fn list_assoc (a : Type) (xs : List a) (ys : List a) (zs : List a)
   : Equal (List a) (list_append a (list_append a xs ys) zs)
                    (list_append a xs (list_append a ys zs)) =
   match xs {
-    Nil => Refl ;
-    Cons h t =>
+    Nil ⇒ Refl ;
+    Cons h t ⇒
       cong (List a) (List a)
         (list_append a (list_append a t ys) zs)
         (list_append a t (list_append a ys zs))
@@ -106,11 +106,11 @@ view list_assoc (a : Type) (xs : List a) (ys : List a) (zs : List a)
 -- `lawful_classes.ken` document: constructor-headed endpoints -> `Top` ->
 -- `tt`; neutral endpoints -> stuck `Eq` -> `Refl`.) Step (`Cons h t`): `cong`
 -- under `Cons a h` on the tail IH.
-view list_right_unit (a : Type) (xs : List a)
+fn list_right_unit (a : Type) (xs : List a)
   : Equal (List a) (list_append a xs (Nil a)) xs =
   match xs {
-    Nil => tt ;
-    Cons h t =>
+    Nil ⇒ tt ;
+    Cons h t ⇒
       cong (List a) (List a)
         (list_append a t (Nil a))
         t
@@ -144,33 +144,33 @@ instance Monoid (List Nat) {
 -- symbolic argument (K1 `whnf` only unfolds `Decl::Transparent`), which would
 -- make the laws unprovable; a transparent `bool_and` reduces on each concrete
 -- constructor at zero kernel cost.
-view bool_and (p : Bool) (q : Bool) : Bool =
-  match p { True => q ; False => False }
+fn bool_and (p : Bool) (q : Bool) : Bool =
+  match p { True ⇒ q ; False ⇒ False }
 
 -- Associativity: full 2x2x2 case-split; each concrete branch reduces both
 -- sides to the same literal, collapsing to `Top` -> `tt`.
-view band_assoc (x : Bool) (y : Bool) (z : Bool)
+fn band_assoc (x : Bool) (y : Bool) (z : Bool)
   : Equal Bool (bool_and (bool_and x y) z) (bool_and x (bool_and y z)) =
   match x {
-    True => match y {
-      True  => match z { True => tt ; False => tt } ;
-      False => match z { True => tt ; False => tt }
+    True ⇒ match y {
+      True  ⇒ match z { True ⇒ tt ; False ⇒ tt } ;
+      False ⇒ match z { True ⇒ tt ; False ⇒ tt }
     } ;
-    False => match y {
-      True  => match z { True => tt ; False => tt } ;
-      False => match z { True => tt ; False => tt }
+    False ⇒ match y {
+      True  ⇒ match z { True ⇒ tt ; False ⇒ tt } ;
+      False ⇒ match z { True ⇒ tt ; False ⇒ tt }
     }
   }
 
 -- Left unit is DEFINITIONAL: `bool_and True x` reduces to `x` (first match
 -- arm), goal `Equal Bool x x` neutral -> `Refl`.
-view band_left_unit (x : Bool) : Equal Bool (bool_and True x) x =
+fn band_left_unit (x : Bool) : Equal Bool (bool_and True x) x =
   Refl
 
 -- Right unit needs the case-split (`bool_and x True` is stuck on symbolic
 -- `x`): each branch reduces to a literal equal to itself -> `Top` -> `tt`.
-view band_right_unit (x : Bool) : Equal Bool (bool_and x True) x =
-  match x { True => tt ; False => tt }
+fn band_right_unit (x : Bool) : Equal Bool (bool_and x True) x =
+  match x { True ⇒ tt ; False ⇒ tt }
 
 instance Semigroup Bool {
   op    = bool_and ;

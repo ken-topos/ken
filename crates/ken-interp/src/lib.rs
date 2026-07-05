@@ -1249,7 +1249,7 @@ mod tests {
 
     /// `runtime/evaluation/g1-end-to-end` (property)
     ///
-    /// Elaborate `view id (A : Type) (x : A) : A = x` with V0, then run
+    /// Elaborate `fn id (A : Type) (x : A) : A = x` with V0, then run
     /// `id (Type 0) (Type 0)` through X1 → `Type 0`.
     #[test]
     fn g1_end_to_end() {
@@ -1259,7 +1259,7 @@ mod tests {
         let mut store = mk_store();
 
         let id_decl = elab
-            .elaborate_decl("view id (A : Type) (x : A) : A = x")
+            .elaborate_decl("fn id (A : Type) (x : A) : A = x")
             .expect("id elaboration");
 
         let type0 = Term::Type(Level::zero());

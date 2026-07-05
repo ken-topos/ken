@@ -382,7 +382,7 @@ mod declared_fs_authority_tests {
     fn cap_apartial_detected_with_correct_authority() {
         let mut env = ken_elaborator::ElabEnv::new().expect("env");
         let main_id = env
-            .elaborate_decl("view main (cap : Cap APartial) : Cap APartial = cap")
+            .elaborate_decl("fn main (cap : Cap APartial) : Cap APartial = cap")
             .expect("elaborates");
         assert_eq!(
             declared_fs_authority(&env, main_id),
@@ -397,7 +397,7 @@ mod declared_fs_authority_tests {
     fn cap_anone_detected_with_correct_authority() {
         let mut env = ken_elaborator::ElabEnv::new().expect("env");
         let main_id = env
-            .elaborate_decl("view main (cap : Cap ANone) : Cap ANone = cap")
+            .elaborate_decl("fn main (cap : Cap ANone) : Cap ANone = cap")
             .expect("elaborates");
         assert_eq!(
             declared_fs_authority(&env, main_id),
@@ -410,7 +410,7 @@ mod declared_fs_authority_tests {
     #[test]
     fn no_cap_param_detects_nothing() {
         let mut env = ken_elaborator::ElabEnv::new().expect("env");
-        let main_id = env.elaborate_decl("view main : Nat = Zero").expect("elaborates");
+        let main_id = env.elaborate_decl("const main : Nat = Zero").expect("elaborates");
         assert_eq!(declared_fs_authority(&env, main_id), None);
     }
 }

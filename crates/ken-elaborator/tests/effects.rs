@@ -214,7 +214,7 @@ fn eff_pure_default_is_effect_free() {
 
     assert!(
         rows["double"].is_empty(),
-        "pure view with no calls must have inferred row ∅"
+        "pure const with no calls must have inferred row ∅"
     );
 
     // Escape check with ρ_decl = ∅ (no annotation) also passes
@@ -1057,14 +1057,14 @@ fn row_poly_mixed_concrete_and_var() {
 #[test]
 fn surf1_surface_visits_bare_row_var_reaches_row_type() {
     let src = r#"
-        view traverse (f : A -> B) (xs : ListA) : ListB visits [e] = xs
+        proc traverse (f : A -> B) (xs : ListA) : ListB visits [e] = xs
     "#;
-    let decls = parse_decls(src).expect("view with visits [e] must parse");
-    let rdecl = resolve_decl(&decls[0]).expect("view with visits [e] must resolve");
+    let decls = parse_decls(src).expect("proc with visits [e] must parse");
+    let rdecl = resolve_decl(&decls[0]).expect("proc with visits [e] must resolve");
 
     let visits = match &rdecl.kind {
         RDeclKind::View { visits: Some(row), .. } => row,
-        other => panic!("expected resolved view visits row, got {:?}", other),
+        other => panic!("expected resolved const visits row, got {:?}", other),
     };
 
     let telescope = vec![("e", ParamTy::HofEffectful)];
@@ -1089,10 +1089,10 @@ fn surf1_surface_visits_bare_row_var_reaches_row_type() {
 #[test]
 fn surf1_surface_visits_open_row_reaches_join_and_stays_conservative() {
     let src = r#"
-        view logged (f : A -> B) (x : A) : B visits [Console | e] = x
+        proc logged (f : A -> B) (x : A) : B visits [Console | e] = x
     "#;
-    let decls = parse_decls(src).expect("view with visits [Console | e] must parse");
-    let rdecl = resolve_decl(&decls[0]).expect("open row view must resolve");
+    let decls = parse_decls(src).expect("proc with visits [Console | e] must parse");
+    let rdecl = resolve_decl(&decls[0]).expect("open row const must resolve");
 
     let visits = match &rdecl.kind {
         RDeclKind::View { visits: Some(row), .. } => row,
@@ -1121,9 +1121,9 @@ fn surf1_surface_visits_open_row_reaches_join_and_stays_conservative() {
 /// `elaborate_rdecl_v1` hook is removed, this fails with `None`.
 #[test]
 fn surf1_view_elaboration_consumes_visits_row() {
-    let src = "view surf1_visits (x : Nat) : Nat visits [Console] = x";
-    let decls = parse_decls(src).expect("view with concrete visits row must parse");
-    let rdecl = resolve_decl(&decls[0]).expect("view with concrete visits row must resolve");
+    let src = "proc surf1_visits (x : Nat) : Nat visits [Console] = x";
+    let decls = parse_decls(src).expect("const with concrete visits row must parse");
+    let rdecl = resolve_decl(&decls[0]).expect("const with concrete visits row must resolve");
     let mut env = ken_elaborator::ElabEnv::new().expect("base env");
 
     let result = ken_elaborator::elab::elaborate_rdecl_v1(
@@ -1134,11 +1134,11 @@ fn surf1_view_elaboration_consumes_visits_row() {
         &mut env.class_env,
         &rdecl,
     )
-    .expect("view with concrete D1 visits row must elaborate");
+    .expect("const with concrete D1 visits row must elaborate");
 
     let row = result
         .effect_row_type
-        .expect("production view elaboration must expose checked visits row");
+        .expect("production const elaboration must expose checked visits row");
     assert_eq!(
         row,
         RowType::singleton("Console"),
@@ -1148,12 +1148,12 @@ fn surf1_view_elaboration_consumes_visits_row() {
 
 /// SURF-1 D1 production path: row variables fail closed unless the same
 /// variable was allocated from a HOF latent-row binding in the declaration
-/// type. A plain first-order view must not synthesize `e` from `visits`.
+/// type. A plain first-order const must not synthesize `e` from `visits`.
 #[test]
 fn surf1_view_elaboration_rejects_unbound_visits_row_var() {
-    let src = "view surf1_bad_visits (x : Nat) : Nat visits [Console | e] = x";
-    let decls = parse_decls(src).expect("view with open visits row must parse");
-    let rdecl = resolve_decl(&decls[0]).expect("view with open visits row must resolve");
+    let src = "proc surf1_bad_visits (x : Nat) : Nat visits [Console | e] = x";
+    let decls = parse_decls(src).expect("const with open visits row must parse");
+    let rdecl = resolve_decl(&decls[0]).expect("const with open visits row must resolve");
     let mut env = ken_elaborator::ElabEnv::new().expect("base env");
 
     let err = ken_elaborator::elab::elaborate_rdecl_v1(
@@ -1665,6 +1665,6 @@ fn classify_telescope_hof_effectful_cannot_be_silently_dropped() {
 fn existing_surface_invariants_still_green() {
     use ken_elaborator::ElabEnv;
     let mut env = ElabEnv::new().expect("base env failed");
-    env.elaborate_decl("view id (A : Type) (x : A) : A = x")
+    env.elaborate_decl("fn id (A : Type) (x : A) : A = x")
         .expect("id elaboration must still pass after adding effects module");
 }

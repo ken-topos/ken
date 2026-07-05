@@ -32,56 +32,56 @@
 -- here (not the prelude) per the no-speculative-helper rule -- only this
 -- example needs it.
 
-view isNewline (c : Char) : Bool = eq_int (charToInt c) 10
+fn isNewline (c : Char) : Bool = eq_int (charToInt c) 10
 
 -- prepend `c` onto the CURRENT (first) segment being accumulated.
-view consFirst (c : Char) (acc : List (List Char)) : List (List Char) =
+fn consFirst (c : Char) (acc : List (List Char)) : List (List Char) =
   match acc {
-    Nil           => Cons (List Char) (Cons Char c (Nil Char)) (Nil (List Char)) ;
-    Cons seg rest => Cons (List Char) (Cons Char c seg) rest
+    Nil           ⇒ Cons (List Char) (Cons Char c (Nil Char)) (Nil (List Char)) ;
+    Cons seg rest ⇒ Cons (List Char) (Cons Char c seg) rest
   }
 
 -- split on '\n' as a SEPARATOR (a trailing '\n' yields a trailing "").
-view splitNL (xs : List Char) : List (List Char) =
+fn splitNL (xs : List Char) : List (List Char) =
   match xs {
-    Nil       => Cons (List Char) (Nil Char) (Nil (List Char)) ;
-    Cons c cs =>
+    Nil       ⇒ Cons (List Char) (Nil Char) (Nil (List Char)) ;
+    Cons c cs ⇒
       match isNewline c {
-        True  => Cons (List Char) (Nil Char) (splitNL cs) ;
-        False => consFirst c (splitNL cs)
+        True  ⇒ Cons (List Char) (Nil Char) (splitNL cs) ;
+        False ⇒ consFirst c (splitNL cs)
       }
   }
 
 -- drop the SINGLE trailing empty segment (terminator semantics). Recurses
 -- on `rest`, a strict structural sub-term of the outer scrutinee `segs`.
-view dropTrailingEmpty (segs : List (List Char)) : List (List Char) =
+fn dropTrailingEmpty (segs : List (List Char)) : List (List Char) =
   match segs {
-    Nil => Nil (List Char) ;
-    Cons seg rest =>
+    Nil ⇒ Nil (List Char) ;
+    Cons seg rest ⇒
       match rest {
-        Nil =>
+        Nil ⇒
           match seg {
-            Nil      => Nil (List Char) ;
-            Cons _ _ => Cons (List Char) seg (Nil (List Char))
+            Nil      ⇒ Nil (List Char) ;
+            Cons _ _ ⇒ Cons (List Char) seg (Nil (List Char))
           } ;
-        Cons _ _ => Cons (List Char) seg (dropTrailingEmpty rest)
+        Cons _ _ ⇒ Cons (List Char) seg (dropTrailingEmpty rest)
       }
   }
 
-view mapListCharToString (segs : List (List Char)) : List String =
+fn mapListCharToString (segs : List (List Char)) : List String =
   match segs {
-    Nil           => Nil String ;
-    Cons seg rest => Cons String (list_char_to_string seg) (mapListCharToString rest)
+    Nil           ⇒ Nil String ;
+    Cons seg rest ⇒ Cons String (list_char_to_string seg) (mapListCharToString rest)
   }
 
-view lines (s : String) : List String =
+fn lines (s : String) : List String =
   mapListCharToString (dropTrailingEmpty (splitNL (string_to_list_char s)))
 
 -- `Compose r` -- the composed FS+Console tree, abbreviating the coproduct
 -- `ITree (Sum (FSOp APartial) ConsoleOp) (resp_sum ...) r` for readability
 -- (a plain `view` alias, reduces transparently -- same pattern `FS`/`IO`
 -- already use).
-view Compose (r : Type) : Type =
+const Compose (r : Type) : Type =
   ITree (Sum (FSOp APartial) ConsoleOp)
         (resp_sum (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp)
         r
@@ -89,34 +89,34 @@ view Compose (r : Type) : Type =
 -- prints each line via `[Console]`, sequenced through the continuation one
 -- line at a time (the AC4 totality-face multi-step case: read once, then
 -- resume N times through `print_line`'s continuation).
-view printLines (xs : List String) : Compose (Result IOError Unit) =
+proc printLines (xs : List String) : Compose (Result IOError Unit) visits [Console] =
   match xs {
-    Nil =>
+    Nil ⇒
       Ret (Sum (FSOp APartial) ConsoleOp)
           (resp_sum (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp)
           (Result IOError Unit) (Ok IOError Unit MkUnit) ;
-    Cons x xs' =>
+    Cons x xs' ⇒
       bind (Sum (FSOp APartial) ConsoleOp)
            (resp_sum (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp)
            Unit (Result IOError Unit)
         (injectR (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp Unit (print_line x))
-        (\_ . printLines xs')
+        (λ_ . printLines xs')
   }
 
 -- D2/D4: `main` declares `Cap APartial` (partial/read-level FS authority) on
 -- its OWN signature -- the manifest. Reads the fixture via `injectL
 -- (read_bytes ...)`, and on success prints each parsed line via `injectR
 -- (print_line ...)` -- both effects composed in ONE `bind`-sequenced tree.
-view main (cap : Cap APartial) : Compose (Result IOError Unit) =
+proc main (cap : Cap APartial) : Compose (Result IOError Unit) visits [FS, Console] =
   bind (Sum (FSOp APartial) ConsoleOp)
        (resp_sum (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp)
        (Result IOError Bytes) (Result IOError Unit)
     (injectL (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp (Result IOError Bytes)
       (read_bytes APartial cap (bytes_encode "conformance/fs/fixtures/three-lines.txt")))
-    (\r .
+    (λr .
       match r {
-        Err e    => Ret (Sum (FSOp APartial) ConsoleOp)
+        Err e    ⇒ Ret (Sum (FSOp APartial) ConsoleOp)
                         (resp_sum (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp)
                         (Result IOError Unit) (Err IOError Unit e) ;
-        Ok bytes => printLines (lines (bytes_decode bytes))
+        Ok bytes ⇒ printLines (lines (bytes_decode bytes))
       })

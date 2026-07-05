@@ -6,7 +6,7 @@
 -- (inductives) and the SCT termination measure (recursion), 37 §7.
 
 -- Attempted coinductive former (greatest fixpoint): an infinite stream.
-codata Stream (a : Type) = SCons : a -> Stream a -> Stream a
+codata Stream (a : Type) = SCons : a → Stream a → Stream a
 
 -- Attempted productive corecursion: an infinite value with no fuel / no
 -- inductive measure. "Guarded" by the SCons head, but there is no guardedness

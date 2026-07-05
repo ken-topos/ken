@@ -64,7 +64,7 @@ fn eval_def(env: &ElabEnv, store: &mut EvalStore, id: GlobalId) -> EvalVal {
 }
 
 fn eval_view(env: &mut ElabEnv, store: &mut EvalStore, name: &str, ty: &str, expr: &str) -> EvalVal {
-    let src = format!("view {name} : {ty} = {expr}");
+    let src = format!("const {name} : {ty} = {expr}");
     let id = env
         .elaborate_decl(&src)
         .unwrap_or_else(|e| panic!("{name} failed to elaborate: {e}"));
@@ -429,7 +429,7 @@ fn letter_frequency_shape() {
     let mut store = make_store(&env);
     // "banana": b,a,n,a,n,a -> {'a':3,'b':1,'n':2}, ascending by key.
     env.elaborate_decl(
-        "view bumpCount (leq : Char -> Char -> Bool) (key : Char) (m : Tree Char Nat) : Tree Char Nat = \
+        "fn bumpCount (leq : Char -> Char -> Bool) (key : Char) (m : Tree Char Nat) : Tree Char Nat = \
          match lookup Char Nat leq key m { \
            None => insert Char Nat leq key (Suc Zero) m ; \
            Some n => insert Char Nat leq key (Suc n) m \
@@ -437,7 +437,7 @@ fn letter_frequency_shape() {
     )
     .expect("bumpCount should elaborate");
     env.elaborate_decl(
-        "view countChars (leq : Char -> Char -> Bool) (cs : List Char) (m : Tree Char Nat) : Tree Char Nat = \
+        "fn countChars (leq : Char -> Char -> Bool) (cs : List Char) (m : Tree Char Nat) : Tree Char Nat = \
          match cs { \
            Nil => m ; \
            Cons c cs2 => countChars leq cs2 (bumpCount leq c m) \
@@ -533,7 +533,7 @@ fn lookup_empty_law_is_a_real_reducing_proof() {
     // This is a kernel CHECK (is the type inhabited), not an `eval` — the
     // Prop itself is a type, not a runtime data value.
     env.elaborate_decl(
-        "view orderedEmptyProof (k : Type) (v : Type) (leq : k -> k -> Bool) : \
+        "fn orderedEmptyProof (k : Type) (v : Type) (leq : k -> k -> Bool) : \
          Ordered k v leq (empty k v) = tt",
     )
     .expect("Ordered on an empty map must be provable by tt");

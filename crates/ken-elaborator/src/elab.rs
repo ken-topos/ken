@@ -81,7 +81,7 @@ pub struct ElabResult {
     /// projection is the B1 `T`/`delegated` channel (TE-E).
     pub temporal_obligations: Vec<crate::temporal::TemporalObligation>,
     /// Checked surface effect row for `view ... visits [...]` declarations.
-    /// Present only when the real view elaboration path consumed the parsed
+    /// Present only when the real const elaboration path consumed the parsed
     /// row annotation and ran the row-poly escape check.
     pub effect_row_type: Option<crate::effects::RowType>,
 }
@@ -2589,7 +2589,7 @@ fn elaborate_v0(
 /// §4`): arbitrary recursive δ-unfolding in conversion. Here the recursive call
 /// is to an *opaque* (δ blocks during checking); only after SCT acceptance does
 /// it become transparent, and termination is by structural descent on an
-/// inductive sub-term (SCT's `↓`) — not general δ. A recursive view carrying
+/// inductive sub-term (SCT's `↓`) — not general δ. A recursive fn carrying
 /// `requires` clauses (so the full type ≠ the carrier Pi-chain) is a tracked
 /// follow-on; L3a's recursive views (`map`/`filter`/`fold`/`zip`/`unfoldUpTo`/
 /// `sort`/`insert`) carry none.
@@ -2604,9 +2604,9 @@ fn elaborate_recursive_view(
     // 1. Elaborate the declared type (recursive views are annotated).
     let ty_core = {
         let mut cx = ElabCtx::new(env, globals, num_values, numeric_env);
-        let ty = rdecl.ty.as_ref().ok_or_else(|| ElabError::Internal(
-            "recursive view/let requires a type annotation".into(),
-        ))?;
+        let ty = rdecl.ty.as_ref().ok_or_else(|| {
+            ElabError::Internal("recursive declaration requires a type annotation".into())
+        })?;
         let ty_c = elab_type(&mut cx, ty)?;
         cx.metas.zonk_term(&ty_c)
     };
@@ -2670,7 +2670,7 @@ fn elaborate_recursive_view(
 /// (`[[sct-unapplied-self-reference-over-accepts]]`).
 ///
 /// Each member requires an explicit type annotation (mirrors the existing
-/// singleton recursive-view rule — a mutual group's forward references need
+/// singleton recursive-const rule — a mutual group's forward references need
 /// every member's *type* resolvable before any body is elaborated).
 pub fn elaborate_mutual_group(
     env: &mut GlobalEnv,
@@ -2848,7 +2848,7 @@ fn elaborate_view_with_spec(
             let carrier_ty = {
                 let mut cx = ElabCtx::new(env, globals, num_values, numeric_env).with_classes(class_env);
                 let ty = rdecl.ty.as_ref().ok_or_else(|| ElabError::Internal(
-                    "recursive view with spec clauses requires a type annotation".into(),
+                    "recursive const with spec clauses requires a type annotation".into(),
                 ))?;
                 let ty_c = elab_type(&mut cx, ty)?;
                 cx.metas.zonk_term(&ty_c)
@@ -2958,7 +2958,7 @@ fn elaborate_view_with_spec(
         // Recursive: the opaque was pre-admitted with the carrier Pi-chain. For
         // L3a's recursive views (no `requires`), `full_ty` == the carrier
         // Pi-chain, so the opaque's type is already `full_ty`. Kernel-check +
-        // SCT-gate the singleton group, then upgrade. (A recursive view WITH
+        // SCT-gate the singleton group, then upgrade. (A recursive fn WITH
         // `requires` — `full_ty` ≠ carrier — is a tracked follow-on; see
         // `elaborate_recursive_view`'s K2c note.)
         let result = kernel_check(env, &Context::new(), &full_body, &full_ty)

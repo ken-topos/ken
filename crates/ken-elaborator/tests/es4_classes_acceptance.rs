@@ -53,7 +53,7 @@
 //! laws; every field (`leq`/`refl`/`antisym`/`trans`/`total`) is a direct
 //! `.`-projection off `Ord_instance_Int` (`33 §5.2` eta), zero-NEW-delta,
 //! never a fresh postulate. This gave K6 its first REAL customer: writing
-//! `leq = leqChar` (a separately-defined view that also reduces to
+//! `leq = leqChar` (a separately-defined const that also reduces to
 //! `leq_int`, just via a different name) made the kernel re-check FAIL —
 //! `refl`'s expected codomain `IsTrue (leqChar x x)` and the transported
 //! term's own inferred codomain `IsTrue ((Ord_instance_Int).leq x x)` both
@@ -520,7 +520,7 @@ fn where_ord_supplies_same_comparator_as_explicit_form() {
     // (a) explicit comparator form (ES2-remainder's landed shape).
     let explicit_id = env
         .elaborate_decl(
-            "view sortObligationExplicit (leq : Int -> Int -> Bool) (ys : List Int) (xs : List Int) : Prop = \
+            "fn sortObligationExplicit (leq : Int -> Int -> Bool) (ys : List Int) (xs : List Int) : Prop = \
              And (isSorted Int leq ys) (Perm Int ys xs)",
         )
         .expect("explicit-comparator obligation elaborates");
@@ -529,7 +529,7 @@ fn where_ord_supplies_same_comparator_as_explicit_form() {
     // resolved dictionary, same obligation shape.
     let via_dict_id = env
         .elaborate_decl(
-            "view sortObligationViaDict (ys : List Int) (xs : List Int) : Prop where Ord Int = \
+            "fn sortObligationViaDict (ys : List Int) (xs : List Int) : Prop where Ord Int = \
              And (isSorted Int (d.leq) ys) (Perm Int ys xs)",
         )
         .expect("`where Ord Int` obligation elaborates — d.leq must project the resolved dictionary's leq field");

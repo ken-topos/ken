@@ -27,76 +27,76 @@ data OrdResult = Lt | Eq | Gt
 -- Local `list_append`/`concat` -- only what `natToDecimalFueled` needs
 -- for its multi-digit branch; kept self-contained rather than pulling in
 -- `packages/collections` for two small defs.
-view list_append (a : Type) (xs : List a) (ys : List a) : List a =
-  match xs { Nil => ys ; Cons x xs2 => Cons a x (list_append a xs2 ys) }
+fn list_append (a : Type) (xs : List a) (ys : List a) : List a =
+  match xs { Nil ⇒ ys ; Cons x xs2 ⇒ Cons a x (list_append a xs2 ys) }
 
-view concat (a : String) (b : String) : String =
+fn concat (a : String) (b : String) : String =
   list_char_to_string (list_append Char (string_to_list_char a) (string_to_list_char b))
 
 -- ── Nat helpers ──────────────────────────────────────────────────────────────
 
-view natAdd (a : Nat) (b : Nat) : Nat =
-  match a { Zero => b ; Suc m => Suc (natAdd m b) }
+fn natAdd (a : Nat) (b : Nat) : Nat =
+  match a { Zero ⇒ b ; Suc m ⇒ Suc (natAdd m b) }
 
 -- natSub: monus (a - b, floored at 0 if a < b).
-view natSub (a : Nat) (b : Nat) : Nat =
+fn natSub (a : Nat) (b : Nat) : Nat =
   match b {
-    Zero  => a ;
-    Suc n => match a {
-               Zero  => Zero ;
-               Suc m => natSub m n
+    Zero  ⇒ a ;
+    Suc n ⇒ match a {
+               Zero  ⇒ Zero ;
+               Suc m ⇒ natSub m n
              }
   }
 
 -- natCmpZero: compare Zero against b. Used by natCmp to avoid nested
 -- patterns (`Suc _` triggers ReachabilityError).
-view natCmpZero (b : Nat) : OrdResult =
-  match b { Zero => Eq ; Suc n => Lt }
+fn natCmpZero (b : Nat) : OrdResult =
+  match b { Zero ⇒ Eq ; Suc n ⇒ Lt }
 
 -- natCmp: structural comparison, returns OrdResult (L3 prelude).
 -- SCT: both a and b decrease by one per step.
-view natCmp (a : Nat) (b : Nat) : OrdResult =
+fn natCmp (a : Nat) (b : Nat) : OrdResult =
   match a {
-    Zero  => natCmpZero b ;
-    Suc m => match b { Zero => Gt ; Suc n => natCmp m n }
+    Zero  ⇒ natCmpZero b ;
+    Suc m ⇒ match b { Zero ⇒ Gt ; Suc n ⇒ natCmp m n }
   }
 
-view natToInt (n : Nat) : Int =
-  match n { Zero => (0 : Int) ; Suc m => (1 : Int) + natToInt m }
+fn natToInt (n : Nat) : Int =
+  match n { Zero ⇒ (0 : Int) ; Suc m ⇒ (1 : Int) + natToInt m }
 
 -- ── GCD (fuel-bounded) ───────────────────────────────────────────────────────
 
 -- natGcdFueled: subtraction-based GCD with explicit fuel.
 -- SCT: `f` is a strict structural sub-term of `Suc f`.
-view natGcdFueled (fuel : Nat) (a : Nat) (b : Nat) : Nat =
+fn natGcdFueled (fuel : Nat) (a : Nat) (b : Nat) : Nat =
   match fuel {
-    Zero  => a ;
-    Suc f => match natCmp a b {
-               Eq => a ;
-               Gt => natGcdFueled f (natSub a b) b ;
-               Lt => natGcdFueled f a (natSub b a)
+    Zero  ⇒ a ;
+    Suc f ⇒ match natCmp a b {
+               Eq ⇒ a ;
+               Gt ⇒ natGcdFueled f (natSub a b) b ;
+               Lt ⇒ natGcdFueled f a (natSub b a)
              }
   }
 
 -- natGcd: uses a + b as fuel (always sufficient for subtraction-based GCD).
-view natGcd (a : Nat) (b : Nat) : Nat =
+fn natGcd (a : Nat) (b : Nat) : Nat =
   let fuel : Nat = natAdd a b in
   natGcdFueled fuel a b
 
 -- ── Readable Nat literals ────────────────────────────────────────────────────
 
-view one    : Nat = Suc Zero
-view two    : Nat = Suc one
-view three  : Nat = Suc two
-view four   : Nat = Suc three
-view five   : Nat = Suc four
-view six    : Nat = Suc five
-view seven  : Nat = Suc six
-view eight  : Nat = Suc seven
-view nine   : Nat = Suc eight
-view ten    : Nat = Suc nine
-view eleven : Nat = Suc ten
-view twelve : Nat = Suc eleven
+const one    : Nat = Suc Zero
+const two    : Nat = Suc one
+const three  : Nat = Suc two
+const four   : Nat = Suc three
+const five   : Nat = Suc four
+const six    : Nat = Suc five
+const seven  : Nat = Suc six
+const eight  : Nat = Suc seven
+const nine   : Nat = Suc eight
+const ten    : Nat = Suc nine
+const eleven : Nat = Suc ten
+const twelve : Nat = Suc eleven
 
 -- ── Decimal printing ─────────────────────────────────────────────────────────
 --
@@ -105,50 +105,50 @@ view twelve : Nat = Suc eleven
 -- matches, no nested-pattern violation) + a `Nat`-fuel loop (same
 -- fuel-over-`natGcdFueled` shape as this file's own `natGcdFueled`).
 
-view sub10 (n : Nat) : Option Nat =
-  match n { Zero => None Nat ; Suc n1 =>
-  match n1 { Zero => None Nat ; Suc n2 =>
-  match n2 { Zero => None Nat ; Suc n3 =>
-  match n3 { Zero => None Nat ; Suc n4 =>
-  match n4 { Zero => None Nat ; Suc n5 =>
-  match n5 { Zero => None Nat ; Suc n6 =>
-  match n6 { Zero => None Nat ; Suc n7 =>
-  match n7 { Zero => None Nat ; Suc n8 =>
-  match n8 { Zero => None Nat ; Suc n9 =>
-  match n9 { Zero => None Nat ; Suc n10 => Some Nat n10 } } } } } } } } } }
+fn sub10 (n : Nat) : Option Nat =
+  match n { Zero ⇒ None Nat ; Suc n1 ⇒
+  match n1 { Zero ⇒ None Nat ; Suc n2 ⇒
+  match n2 { Zero ⇒ None Nat ; Suc n3 ⇒
+  match n3 { Zero ⇒ None Nat ; Suc n4 ⇒
+  match n4 { Zero ⇒ None Nat ; Suc n5 ⇒
+  match n5 { Zero ⇒ None Nat ; Suc n6 ⇒
+  match n6 { Zero ⇒ None Nat ; Suc n7 ⇒
+  match n7 { Zero ⇒ None Nat ; Suc n8 ⇒
+  match n8 { Zero ⇒ None Nat ; Suc n9 ⇒
+  match n9 { Zero ⇒ None Nat ; Suc n10 ⇒ Some Nat n10 } } } } } } } } } }
 
-view mod10Fueled (fuel : Nat) (n : Nat) : Nat =
+fn mod10Fueled (fuel : Nat) (n : Nat) : Nat =
   match fuel {
-    Zero => n ;
-    Suc f => match sub10 n { None => n ; Some n2 => mod10Fueled f n2 }
+    Zero ⇒ n ;
+    Suc f ⇒ match sub10 n { None ⇒ n ; Some n2 ⇒ mod10Fueled f n2 }
   }
 
-view mod10 (n : Nat) : Nat = mod10Fueled n n
+fn mod10 (n : Nat) : Nat = mod10Fueled n n
 
-view div10Fueled (fuel : Nat) (n : Nat) (q : Nat) : Nat =
+fn div10Fueled (fuel : Nat) (n : Nat) (q : Nat) : Nat =
   match fuel {
-    Zero => q ;
-    Suc f => match sub10 n { None => q ; Some n2 => div10Fueled f n2 (Suc q) }
+    Zero ⇒ q ;
+    Suc f ⇒ match sub10 n { None ⇒ q ; Some n2 ⇒ div10Fueled f n2 (Suc q) }
   }
 
-view div10 (n : Nat) : Nat = div10Fueled n n Zero
+fn div10 (n : Nat) : Nat = div10Fueled n n Zero
 
-view digitChar (d : Nat) : String =
+fn digitChar (d : Nat) : String =
   list_char_to_string (Cons Char ((48 : Int) + natToInt d) (Nil Char))
 
-view natToDecimalFueled (fuel : Nat) (n : Nat) : String =
+fn natToDecimalFueled (fuel : Nat) (n : Nat) : String =
   match fuel {
-    Zero => digitChar n ;
-    Suc f => match div10 n {
-      Zero  => digitChar (mod10 n) ;
-      Suc q => concat (natToDecimalFueled f (Suc q)) (digitChar (mod10 n))
+    Zero ⇒ digitChar n ;
+    Suc f ⇒ match div10 n {
+      Zero  ⇒ digitChar (mod10 n) ;
+      Suc q ⇒ concat (natToDecimalFueled f (Suc q)) (digitChar (mod10 n))
     }
   }
 
-view natToDecimal (n : Nat) : String =
-  match n { Zero => "0" ; Suc m => natToDecimalFueled (Suc m) (Suc m) }
+fn natToDecimal (n : Nat) : String =
+  match n { Zero ⇒ "0" ; Suc m ⇒ natToDecimalFueled (Suc m) (Suc m) }
 
 -- ── Oracle ───────────────────────────────────────────────────────────────────
 
 -- main: gcd(12, 8) = 4
-view main : IO Unit = print_line (natToDecimal (natGcd twelve eight))
+proc main : IO Unit visits [Console] = print_line (natToDecimal (natGcd twelve eight))

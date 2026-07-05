@@ -71,7 +71,7 @@ fn eval_def(env: &ElabEnv, store: &mut EvalStore, id: GlobalId) -> EvalVal {
 /// snapshot otherwise (`l3_strings_roundtrip_acceptance.rs`'s documented
 /// discipline).
 fn eval_view(env: &mut ElabEnv, store: &mut EvalStore, name: &str, ty: &str, expr: &str) -> EvalVal {
-    let src = format!("view {name} : {ty} = {expr}");
+    let src = format!("const {name} : {ty} = {expr}");
     let id = env
         .elaborate_decl(&src)
         .unwrap_or_else(|e| panic!("{name} failed to elaborate: {e}"));
@@ -228,7 +228,7 @@ fn list_floor_recursion_in_sct_sound_zone() {
     // just non-decreasing, squarely in the SCT's sound-REJECT zone.
     let mut env2 = mk_env();
     let result = env2.elaborate_decl(
-        "view bad (a : Type) (xs : List a) : List a = \
+        "fn bad (a : Type) (xs : List a) : List a = \
          match xs { Nil => Nil a ; Cons x xs2 => bad a (Cons a x xs2) }",
     );
     assert!(

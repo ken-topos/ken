@@ -44,13 +44,13 @@ fn eval_def(env: &ElabEnv, store: &mut EvalStore, id: GlobalId) -> EvalVal {
 
 /// `surface/strings/string-literal-elaborates` (VAL1-surface, `37 §2.1`)
 ///
-/// A string literal in a view body elaborates and the view's type is `String`.
+/// A string literal in a const body elaborates and the view's type is `String`.
 #[test]
 fn string_literal_elaborates_to_string_type() {
     let mut env = ElabEnv::new().expect("base env");
     let result = env
-        .elaborate_decl("view greeting : String = \"Hello, World!\"")
-        .expect("string literal view elaborates");
+        .elaborate_decl("const greeting : String = \"Hello, World!\"")
+        .expect("string literal fn elaborates");
 
     let str_id = *env.globals.get("String").expect("String registered");
     let (_, ty) = env.env.const_type(result).expect("greeting has type");
@@ -70,8 +70,8 @@ fn string_literal_elaborates_to_string_type() {
 fn string_literal_evaluates_to_str_val() {
     let mut env = ElabEnv::new().expect("base env");
     let id = env
-        .elaborate_decl("view greeting : String = \"Hello, World!\"")
-        .expect("string literal view elaborates");
+        .elaborate_decl("const greeting : String = \"Hello, World!\"")
+        .expect("string literal fn elaborates");
 
     let mut store = make_store(&env);
     let val = eval_def(&env, &mut store, id);
@@ -87,12 +87,12 @@ fn string_literal_evaluates_to_str_val() {
 /// `surface/strings/string-literal-infer-path` (VAL1-surface)
 ///
 /// A string literal without type ascription still elaborates correctly when
-/// the view has no explicit return type (infer path).
+/// the const has no explicit return type (infer path).
 #[test]
 fn string_literal_infer_path_elaborates() {
     let mut env = ElabEnv::new().expect("base env");
     let id = env
-        .elaborate_decl("view s = \"Ken language\"")
+        .elaborate_decl("const s = \"Ken language\"")
         .expect("unascribed string literal elaborates");
 
     let str_id = *env.globals.get("String").expect("String registered");
@@ -114,7 +114,7 @@ fn string_literal_infer_path_elaborates() {
 fn print_line_type_checks_as_io_unit() {
     let mut env = ElabEnv::new().expect("base env");
     let id = env
-        .elaborate_decl("view main : IO Unit = print_line \"Hello, World!\"")
+        .elaborate_decl("proc main : IO Unit visits [Console] = print_line \"Hello, World!\"")
         .expect("print_line app elaborates");
 
     let io_id = *env.globals.get("IO").expect("IO registered");
@@ -136,7 +136,7 @@ fn print_line_type_checks_as_io_unit() {
 fn print_line_prim_reduction_builds_itree() {
     let mut env = ElabEnv::new().expect("base env");
     let id = env
-        .elaborate_decl("view main : IO Unit = print_line \"Hello, World!\"")
+        .elaborate_decl("proc main : IO Unit visits [Console] = print_line \"Hello, World!\"")
         .expect("print_line app elaborates");
 
     let p = &env.prelude_env;
@@ -194,7 +194,7 @@ fn fizzbuzz_classification_elaborates() {
         .expect("FizzTag");
     env.elaborate_decl("data IsZero = Zero_ | NonZero_").expect("IsZero");
     env.elaborate_decl(
-        "view isZero (n : Nat) : IsZero = \
+        "fn isZero (n : Nat) : IsZero = \
          match n { Zero => Zero_ ; Suc m => NonZero_ }",
     )
     .expect("isZero");
@@ -202,45 +202,45 @@ fn fizzbuzz_classification_elaborates() {
     // mod3 via Mod3 accumulator type
     env.elaborate_decl("data Mod3 = Zero3 | One3 | Two3").expect("Mod3");
     env.elaborate_decl(
-        "view incMod3 (x : Mod3) : Mod3 = \
+        "fn incMod3 (x : Mod3) : Mod3 = \
          match x { Zero3 => One3 ; One3 => Two3 ; Two3 => Zero3 }",
     )
     .expect("incMod3");
     env.elaborate_decl(
-        "view isZeroMod3 (x : Mod3) : IsZero = \
+        "fn isZeroMod3 (x : Mod3) : IsZero = \
          match x { Zero3 => Zero_ ; One3 => NonZero_ ; Two3 => NonZero_ }",
     )
     .expect("isZeroMod3");
     env.elaborate_decl(
-        "view mod3Step (n : Nat) (acc : Mod3) : Mod3 = \
+        "fn mod3Step (n : Nat) (acc : Mod3) : Mod3 = \
          match n { Zero => acc ; Suc m => mod3Step m (incMod3 acc) }",
     )
     .expect("mod3Step");
-    env.elaborate_decl("view mod3 (n : Nat) : Mod3 = mod3Step n Zero3").expect("mod3");
+    env.elaborate_decl("fn mod3 (n : Nat) : Mod3 = mod3Step n Zero3").expect("mod3");
 
     // mod5 via Mod5 accumulator type
     env.elaborate_decl("data Mod5 = Zero5 | One5 | Two5 | Three5 | Four5").expect("Mod5");
     env.elaborate_decl(
-        "view incMod5 (x : Mod5) : Mod5 = match x { \
+        "fn incMod5 (x : Mod5) : Mod5 = match x { \
          Zero5 => One5 ; One5 => Two5 ; Two5 => Three5 ; Three5 => Four5 ; Four5 => Zero5 }",
     )
     .expect("incMod5");
     env.elaborate_decl(
-        "view isZeroMod5 (x : Mod5) : IsZero = match x { \
+        "fn isZeroMod5 (x : Mod5) : IsZero = match x { \
          Zero5 => Zero_ ; One5 => NonZero_ ; Two5 => NonZero_ ; \
          Three5 => NonZero_ ; Four5 => NonZero_ }",
     )
     .expect("isZeroMod5");
     env.elaborate_decl(
-        "view mod5Step (n : Nat) (acc : Mod5) : Mod5 = \
+        "fn mod5Step (n : Nat) (acc : Mod5) : Mod5 = \
          match n { Zero => acc ; Suc m => mod5Step m (incMod5 acc) }",
     )
     .expect("mod5Step");
-    env.elaborate_decl("view mod5 (n : Nat) : Mod5 = mod5Step n Zero5").expect("mod5");
+    env.elaborate_decl("fn mod5 (n : Nat) : Mod5 = mod5Step n Zero5").expect("mod5");
 
     // classify
     env.elaborate_decl(
-        "view classify (n : Nat) : FizzTag = \
+        "fn classify (n : Nat) : FizzTag = \
          match isZeroMod3 (mod3 n) { \
            Zero_ => match isZeroMod5 (mod5 n) { \
              Zero_ => IsFizzBuzz ; NonZero_ => IsFizz } ; \
@@ -259,21 +259,21 @@ fn fizzbuzz_classification_elaborates() {
 fn fibonacci_iterative_elaborates() {
     let mut env = ElabEnv::new().expect("base env");
     env.elaborate_decl(
-        "view natAdd (a : Nat) (b : Nat) : Nat = \
+        "fn natAdd (a : Nat) (b : Nat) : Nat = \
          match a { Zero => b ; Suc m => Suc (natAdd m b) }",
     )
     .expect("natAdd");
     env.elaborate_decl(
-        "view natToInt (n : Nat) : Int = \
+        "fn natToInt (n : Nat) : Int = \
          match n { Zero => (0 : Int) ; Suc m => (1 : Int) + natToInt m }",
     )
     .expect("natToInt");
     env.elaborate_decl(
-        "view fibStep (n : Nat) (a : Nat) (b : Nat) : Nat = \
+        "fn fibStep (n : Nat) (a : Nat) (b : Nat) : Nat = \
          match n { Zero => a ; Suc m => fibStep m b (natAdd a b) }",
     )
     .expect("fibStep");
-    env.elaborate_decl("view fib (n : Nat) : Nat = fibStep n Zero (Suc Zero)")
+    env.elaborate_decl("fn fib (n : Nat) : Nat = fibStep n Zero (Suc Zero)")
         .expect("fib");
     // F(10): define ten via chain
     for (name, pred) in [("one","Zero"),("two","Suc Zero"),("three","Suc (Suc Zero)"),
@@ -281,14 +281,14 @@ fn fibonacci_iterative_elaborates() {
                          ("six","Suc five"),("seven","Suc six"),("eight","Suc seven"),
                          ("nine","Suc eight"),("ten","Suc nine")] {
         let _ = pred; // suppress warning
-        env.elaborate_decl(&format!("view {} : Nat = Suc {}", name,
+        env.elaborate_decl(&format!("const {} : Nat = Suc {}", name,
             match name { "one" => "Zero", "two" => "one", "three" => "two",
                          "four" => "three", "five" => "four", "six" => "five",
                          "seven" => "six", "eight" => "seven", "nine" => "eight",
                          "ten" => "nine", _ => "Zero" }))
             .expect(name);
     }
-    env.elaborate_decl("view main : Int = natToInt (fib ten)").expect("main");
+    env.elaborate_decl("const main : Int = natToInt (fib ten)").expect("main");
 }
 
 /// Regression for GAP-nested-patterns (`elab.rs::infer_match` pattern-matrix
@@ -302,14 +302,14 @@ fn is_even_nested_pattern_elaborates_and_reduces() {
     let mut env = ElabEnv::new().expect("base env");
     env.elaborate_decl("data BoolL = TrueL | FalseL").expect("BoolL");
     env.elaborate_decl(
-        "view isEven (n : Nat) : BoolL = \
+        "fn isEven (n : Nat) : BoolL = \
          match n { Zero => TrueL ; Suc Zero => FalseL ; Suc (Suc m) => isEven m }",
     )
     .expect("isEven");
     for (name, pred) in [("one", "Zero"), ("two", "one"), ("three", "two"), ("four", "three")] {
-        env.elaborate_decl(&format!("view {} : Nat = Suc {}", name, pred)).expect(name);
+        env.elaborate_decl(&format!("const {} : Nat = Suc {}", name, pred)).expect(name);
     }
-    env.elaborate_decl("view result : BoolL = isEven four").expect("result");
+    env.elaborate_decl("const result : BoolL = isEven four").expect("result");
 }
 
 // ── Batch-2: GCD (subtraction-based with fuel) ───────────────────────────────
@@ -319,12 +319,12 @@ fn is_even_nested_pattern_elaborates_and_reduces() {
 fn gcd_views_elaborate() {
     let mut env = ElabEnv::new().expect("base env");
     env.elaborate_decl(
-        "view natAdd (a : Nat) (b : Nat) : Nat = \
+        "fn natAdd (a : Nat) (b : Nat) : Nat = \
          match a { Zero => b ; Suc m => Suc (natAdd m b) }",
     )
     .expect("natAdd");
     env.elaborate_decl(
-        "view natSub (a : Nat) (b : Nat) : Nat = \
+        "fn natSub (a : Nat) (b : Nat) : Nat = \
          match b { Zero => a ; Suc n => match a { Zero => Zero ; Suc m => natSub m n } }",
     )
     .expect("natSub");
@@ -333,17 +333,17 @@ fn gcd_views_elaborate() {
     // Lt/Eq/Gt, not just Bool) still gets one, declared locally here.
     env.elaborate_decl("data OrdResult = Lt | Eq | Gt").expect("OrdResult");
     env.elaborate_decl(
-        "view natCmpZero (b : Nat) : OrdResult = \
+        "fn natCmpZero (b : Nat) : OrdResult = \
          match b { Zero => Eq ; Suc n => Lt }",
     )
     .expect("natCmpZero");
     env.elaborate_decl(
-        "view natCmp (a : Nat) (b : Nat) : OrdResult = \
+        "fn natCmp (a : Nat) (b : Nat) : OrdResult = \
          match a { Zero => natCmpZero b ; Suc m => match b { Zero => Gt ; Suc n => natCmp m n } }",
     )
     .expect("natCmp");
     env.elaborate_decl(
-        "view natGcdFueled (fuel : Nat) (a : Nat) (b : Nat) : Nat = \
+        "fn natGcdFueled (fuel : Nat) (a : Nat) (b : Nat) : Nat = \
          match fuel { \
            Zero => a ; \
            Suc f => match natCmp a b { \
@@ -353,7 +353,7 @@ fn gcd_views_elaborate() {
     )
     .expect("natGcdFueled");
     env.elaborate_decl(
-        "view natGcd (a : Nat) (b : Nat) : Nat = \
+        "fn natGcd (a : Nat) (b : Nat) : Nat = \
          let fuel : Nat = natAdd a b in natGcdFueled fuel a b",
     )
     .expect("natGcd");
@@ -377,7 +377,7 @@ fn gcd_views_elaborate() {
 fn ackermann_sct_gap_closed() {
     let mut env = ElabEnv::new().expect("base env");
     let result = env.elaborate_decl(
-        "view ack (m : Nat) (n : Nat) : Nat = \
+        "fn ack (m : Nat) (n : Nat) : Nat = \
          match m { \
            Zero => Suc n ; \
            Suc p => match n { \

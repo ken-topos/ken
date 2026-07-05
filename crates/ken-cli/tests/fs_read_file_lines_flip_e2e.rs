@@ -43,15 +43,15 @@ fn workspace_root() -> PathBuf {
 fn program_src(auth: &str, path: &str) -> String {
     format!(
         r#"
-view isNewline (c : Char) : Bool = eq_int (charToInt c) 10
+fn isNewline (c : Char) : Bool = eq_int (charToInt c) 10
 
-view consFirst (c : Char) (acc : List (List Char)) : List (List Char) =
+fn consFirst (c : Char) (acc : List (List Char)) : List (List Char) =
   match acc {{
     Nil           => Cons (List Char) (Cons Char c (Nil Char)) (Nil (List Char)) ;
     Cons seg rest => Cons (List Char) (Cons Char c seg) rest
   }}
 
-view splitNL (xs : List Char) : List (List Char) =
+fn splitNL (xs : List Char) : List (List Char) =
   match xs {{
     Nil       => Cons (List Char) (Nil Char) (Nil (List Char)) ;
     Cons c cs =>
@@ -61,7 +61,7 @@ view splitNL (xs : List Char) : List (List Char) =
       }}
   }}
 
-view dropTrailingEmpty (segs : List (List Char)) : List (List Char) =
+fn dropTrailingEmpty (segs : List (List Char)) : List (List Char) =
   match segs {{
     Nil => Nil (List Char) ;
     Cons seg rest =>
@@ -75,21 +75,21 @@ view dropTrailingEmpty (segs : List (List Char)) : List (List Char) =
       }}
   }}
 
-view mapListCharToString (segs : List (List Char)) : List String =
+fn mapListCharToString (segs : List (List Char)) : List String =
   match segs {{
     Nil           => Nil String ;
     Cons seg rest => Cons String (list_char_to_string seg) (mapListCharToString rest)
   }}
 
-view lines (s : String) : List String =
+fn lines (s : String) : List String =
   mapListCharToString (dropTrailingEmpty (splitNL (string_to_list_char s)))
 
-view Compose (r : Type) : Type =
+const Compose (r : Type) : Type =
   ITree (Sum (FSOp {auth}) ConsoleOp)
         (resp_sum (FSOp {auth}) ConsoleOp (fs_resp {auth}) console_resp)
         r
 
-view printLines (xs : List String) : Compose (Result IOError Unit) =
+proc printLines (xs : List String) : Compose (Result IOError Unit) visits [Console] =
   match xs {{
     Nil =>
       Ret (Sum (FSOp {auth}) ConsoleOp)
@@ -103,7 +103,7 @@ view printLines (xs : List String) : Compose (Result IOError Unit) =
         (\_ . printLines xs')
   }}
 
-view main (cap : Cap {auth}) : Compose (Result IOError Unit) =
+proc main (cap : Cap {auth}) : Compose (Result IOError Unit) visits [FS, Console] =
   bind (Sum (FSOp {auth}) ConsoleOp)
        (resp_sum (FSOp {auth}) ConsoleOp (fs_resp {auth}) console_resp)
        (Result IOError Bytes) (Result IOError Unit)

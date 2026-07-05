@@ -337,7 +337,7 @@ fn related_pair_proved() {
 #[test]
 fn distinguishing_pair_disproved_with_witness() {
     let (mut env, _p, q) = make_env_pq();
-    // Simulate: leaking view has a distinguishing pair — two ζ-equal inputs
+    // Simulate: leaking const has a distinguishing pair — two ζ-equal inputs
     // with ζ-observable output difference. The product obligation has a countermodel.
     let (result, triple) = synthetic_disproved(
         &mut env,
