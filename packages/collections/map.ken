@@ -1363,6 +1363,163 @@ fn lookupStopResult
         (lookupMkStepTrueEq k v leq key' l k2 v2 r hOuter) (lookupStepTrueReduces k v leq key' l k2 v2 r)))
     (lookupMkInnerTrueEq k v leq key' l k2 v2 r hInner)
 
+fn orderEquiv (k : Type) (leq : k → k → Bool) (a : k) (b : k) : Prop =
+  And (Equal Bool (leq a b) True) (Equal Bool (leq b a) True)
+
+fn lookupOrderEquivOuterAgree
+  (k : Type) (leq : k → k → Bool)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (key : k) (key' : k) (k2 : k)
+  (heq : orderEquiv k leq key key')
+  : Equal Bool (leq key k2) (leq key' k2) =
+  boolValueEqFromBiimpl (leq key k2) (leq key' k2)
+    (λh. transLeq key' key k2 (andSnd (Equal Bool (leq key key') True) (Equal Bool (leq key' key) True) heq) h)
+    (λh. transLeq key key' k2 (andFst (Equal Bool (leq key key') True) (Equal Bool (leq key' key) True) heq) h)
+    (boolDichotomy (leq key k2))
+    (boolDichotomy (leq key' k2))
+
+fn lookupOrderEquivInnerAgree
+  (k : Type) (leq : k → k → Bool)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (key : k) (key' : k) (k2 : k)
+  (heq : orderEquiv k leq key key')
+  : Equal Bool (leq k2 key) (leq k2 key') =
+  boolValueEqFromBiimpl (leq k2 key) (leq k2 key')
+    (λh. transLeq k2 key key' h (andFst (Equal Bool (leq key key') True) (Equal Bool (leq key' key) True) heq))
+    (λh. transLeq k2 key' key h (andSnd (Equal Bool (leq key key') True) (Equal Bool (leq key' key) True) heq))
+    (boolDichotomy (leq k2 key))
+    (boolDichotomy (leq k2 key'))
+
+fn lookupOrderEquivBothFalse
+  (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (key' : k)
+  (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (ihR : Equal (Option v) (lookup k v leq key r) (lookup k v leq key' r))
+  (hOuter : Equal Bool (leq key k2) False) (hOuter' : Equal Bool (leq key' k2) False)
+  : Equal (Option v) (lookup k v leq key (Node k v l k2 v2 r))
+                      (lookup k v leq key' (Node k v l k2 v2 r)) =
+  trans (Option v) (lookup k v leq key (Node k v l k2 v2 r))
+                    (lookup k v leq key r)
+                    (lookup k v leq key' (Node k v l k2 v2 r))
+    (lookupIntoRBridge k v leq key l k2 v2 r hOuter)
+    (trans (Option v) (lookup k v leq key r)
+                       (lookup k v leq key' r)
+                       (lookup k v leq key' (Node k v l k2 v2 r))
+      ihR
+      (sym (Option v) (lookup k v leq key' (Node k v l k2 v2 r)) (lookup k v leq key' r)
+         (lookupIntoRBridge k v leq key' l k2 v2 r hOuter')))
+
+fn lookupOrderEquivBothInnerFalse
+  (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (key' : k)
+  (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (ihL : Equal (Option v) (lookup k v leq key l) (lookup k v leq key' l))
+  (hOuter : Equal Bool (leq key k2) True) (hInner : Equal Bool (leq k2 key) False)
+  (hOuter' : Equal Bool (leq key' k2) True) (hInner' : Equal Bool (leq k2 key') False)
+  : Equal (Option v) (lookup k v leq key (Node k v l k2 v2 r))
+                      (lookup k v leq key' (Node k v l k2 v2 r)) =
+  trans (Option v) (lookup k v leq key (Node k v l k2 v2 r))
+                    (lookup k v leq key l)
+                    (lookup k v leq key' (Node k v l k2 v2 r))
+    (lookupIntoLBridge k v leq key l k2 v2 r hOuter hInner)
+    (trans (Option v) (lookup k v leq key l)
+                       (lookup k v leq key' l)
+                       (lookup k v leq key' (Node k v l k2 v2 r))
+      ihL
+      (sym (Option v) (lookup k v leq key' (Node k v l k2 v2 r)) (lookup k v leq key' l)
+         (lookupIntoLBridge k v leq key' l k2 v2 r hOuter' hInner')))
+
+fn lookupOrderEquivBothStop
+  (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (key' : k)
+  (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (hOuter : Equal Bool (leq key k2) True) (hInner : Equal Bool (leq k2 key) True)
+  (hOuter' : Equal Bool (leq key' k2) True) (hInner' : Equal Bool (leq k2 key') True)
+  : Equal (Option v) (lookup k v leq key (Node k v l k2 v2 r))
+                      (lookup k v leq key' (Node k v l k2 v2 r)) =
+  trans (Option v) (lookup k v leq key (Node k v l k2 v2 r))
+                    (Some v v2)
+                    (lookup k v leq key' (Node k v l k2 v2 r))
+    (lookupStopResult k v leq key l k2 v2 r hOuter hInner)
+    (sym (Option v) (lookup k v leq key' (Node k v l k2 v2 r)) (Some v v2)
+       (lookupStopResult k v leq key' l k2 v2 r hOuter' hInner'))
+
+fn lookupOrderEquivInnerDispatch
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (key : k) (key' : k) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (heq : orderEquiv k leq key key')
+  (ihL : Equal (Option v) (lookup k v leq key l) (lookup k v leq key' l))
+  (outerAgree : Equal Bool (leq key k2) (leq key' k2))
+  (innerAgree : Equal Bool (leq k2 key) (leq k2 key'))
+  (hOuter : Equal Bool (leq key k2) True)
+  (oInner : Or (Equal Bool (leq k2 key) True) (Equal Bool (leq k2 key) False))
+  : Equal (Option v) (lookup k v leq key (Node k v l k2 v2 r))
+                      (lookup k v leq key' (Node k v l k2 v2 r)) =
+  match oInner {
+    Inl hInner ⇒
+      lookupOrderEquivBothStop k v leq key key' l k2 v2 r hOuter hInner
+        (trans Bool (leq key' k2) (leq key k2) True (sym Bool (leq key k2) (leq key' k2) outerAgree) hOuter)
+        (trans Bool (leq k2 key') (leq k2 key) True (sym Bool (leq k2 key) (leq k2 key') innerAgree) hInner) ;
+    Inr hInnerFalse ⇒
+      lookupOrderEquivBothInnerFalse k v leq key key' l k2 v2 r ihL hOuter hInnerFalse
+        (trans Bool (leq key' k2) (leq key k2) True (sym Bool (leq key k2) (leq key' k2) outerAgree) hOuter)
+        (trans Bool (leq k2 key') (leq k2 key) False (sym Bool (leq k2 key) (leq k2 key') innerAgree) hInnerFalse)
+  }
+
+fn lookupOrderEquivNodeDispatch
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (key : k) (key' : k) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
+  (heq : orderEquiv k leq key key')
+  (ihL : Equal (Option v) (lookup k v leq key l) (lookup k v leq key' l))
+  (ihR : Equal (Option v) (lookup k v leq key r) (lookup k v leq key' r))
+  (outerAgree : Equal Bool (leq key k2) (leq key' k2))
+  (innerAgree : Equal Bool (leq k2 key) (leq k2 key'))
+  (oOuter : Or (Equal Bool (leq key k2) True) (Equal Bool (leq key k2) False))
+  : Equal (Option v) (lookup k v leq key (Node k v l k2 v2 r))
+                      (lookup k v leq key' (Node k v l k2 v2 r)) =
+  match oOuter {
+    Inl hOuter ⇒ lookupOrderEquivInnerDispatch k v leq transLeq key key' l k2 v2 r heq ihL outerAgree innerAgree hOuter (boolDichotomy (leq k2 key)) ;
+    Inr hOuterFalse ⇒
+      lookupOrderEquivBothFalse k v leq key key' l k2 v2 r ihR hOuterFalse
+        (trans Bool (leq key' k2) (leq key k2) False (sym Bool (leq key k2) (leq key' k2) outerAgree) hOuterFalse)
+  }
+
+fn lookupOrderEquivAgree
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (key : k) (key' : k) (m : Tree k v)
+  : orderEquiv k leq key key' →
+    Equal (Option v) (lookup k v leq key m) (lookup k v leq key' m) =
+  match m {
+    Leaf ⇒ λheq. tt ;
+    Node l k2 v2 r ⇒
+      λheq.
+        lookupOrderEquivNodeDispatch k v leq transLeq key key' l k2 v2 r heq
+          (lookupOrderEquivAgree k v leq transLeq key key' l heq)
+          (lookupOrderEquivAgree k v leq transLeq key key' r heq)
+          (lookupOrderEquivOuterAgree k leq transLeq key key' k2 heq)
+          (lookupOrderEquivInnerAgree k leq transLeq key key' k2 heq)
+          (boolDichotomy (leq key k2))
+  }
+
+fn memberOrderEquivAgree
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (key : k) (key' : k) (m : Tree k v)
+  : orderEquiv k leq key key' →
+    Equal Bool (member k v leq key m) (member k v leq key' m) =
+  λheq.
+    cong (Option v) Bool (lookup k v leq key m) (lookup k v leq key' m)
+      (λo. match o { None ⇒ False ; Some x ⇒ True })
+      (lookupOrderEquivAgree k v leq transLeq key key' m heq)
+
+fn setMemberOrderEquivAgree
+  (k : Type) (leq : k → k → Bool)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (key : k) (key' : k) (s : Tree k Unit)
+  : orderEquiv k leq key key' →
+    Equal Bool (setMember k leq key s) (setMember k leq key' s) =
+  memberOrderEquivAgree k Unit leq transLeq key key' s
+
 fn lookupIntoLInnerDispatch
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (key' : k) (val : v)
   (k2 : k) (v2 : v) (l : Tree k v) (r : Tree k v)
@@ -1596,9 +1753,6 @@ fn lookupLocality
 --   anticipated).
 --
 -- Confirmed on the fixed kernel: builds clean, ~1.7s for the whole file.
-
-fn orderEquiv (k : Type) (leq : k → k → Bool) (a : k) (b : k) : Prop =
-  And (Equal Bool (leq a b) True) (Equal Bool (leq b a) True)
 
 fn notOrderEquivToKey (k : Type) (leq : k → k → Bool) (key : k) (k2 : k) : Prop =
   Not (orderEquiv k leq key k2)

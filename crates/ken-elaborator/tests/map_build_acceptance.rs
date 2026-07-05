@@ -727,6 +727,16 @@ fn lookupassocagree_law5_is_a_real_general_proof_term() {
         "noDupAppendRight",
         "notMatchTransferViaEquiv",
         "lookupStopBridge",
+        "lookupOrderEquivOuterAgree",
+        "lookupOrderEquivInnerAgree",
+        "lookupOrderEquivBothFalse",
+        "lookupOrderEquivBothInnerFalse",
+        "lookupOrderEquivBothStop",
+        "lookupOrderEquivInnerDispatch",
+        "lookupOrderEquivNodeDispatch",
+        "lookupOrderEquivAgree",
+        "memberOrderEquivAgree",
+        "setMemberOrderEquivAgree",
     ] {
         let id = env.globals[name];
         assert!(
