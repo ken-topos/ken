@@ -129,7 +129,7 @@ impl<'s> Lexer<'s> {
     }
 
     fn is_ident_continue(c: char) -> bool {
-        c.is_alphanumeric() || c == '_' || c == '\''
+        c.is_ascii_alphanumeric() || c == '_' || c == '\''
     }
 
     pub fn next_token(&mut self) -> Result<(Token, Span), ElabError> {
@@ -380,7 +380,7 @@ impl<'s> Lexer<'s> {
         }
 
         // Identifiers and keywords
-        if c.is_alphabetic() || c == '_' {
+        if c.is_ascii_alphabetic() || c == '_' {
             let mut s = String::new();
             while self.cur().map(Self::is_ident_continue).unwrap_or(false) {
                 s.push(self.advance().unwrap());
@@ -411,9 +411,10 @@ impl<'s> Lexer<'s> {
                 "import"   => Token::KwImport,
                 "use"      => Token::KwUse,
                 "pub"      => Token::KwPub,
+                "l"        => Token::Ident("level".to_string()),
                 _ => {
                     let first = s.chars().next().unwrap();
-                    if first.is_uppercase() {
+                    if first.is_ascii_uppercase() {
                         Token::ConId(s)
                     } else {
                         Token::Ident(s)

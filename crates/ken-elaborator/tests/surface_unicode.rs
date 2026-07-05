@@ -28,18 +28,30 @@ fn surf1_d3_unicode_and_ascii_lex_to_same_tokens() {
                    fn surf1_m (b : Bool) : Bool = match b { True ⇒ False ; False ⇒ True }";
 
     assert_eq!(token_kinds(ascii), token_kinds(unicode));
-    assert_eq!(token_kinds("Omega Sigma Pi forall exists not in level === <= >= /= /\\ \\/ <: ><"),
-               token_kinds("Ω Σ Π ∀ ∃ ¬ ∈ ℓ ≡ ≤ ≥ ≠ ∧ ∨ ⊑ ×"));
+    assert_eq!(token_kinds("Omega Sigma Pi forall exists not in level l === <= >= /= /\\ \\/ <: ><"),
+               token_kinds("Ω Σ Π ∀ ∃ ¬ ∈ ℓ ℓ ≡ ≤ ≥ ≠ ∧ ∨ ⊑ ×"));
 }
 
 #[test]
 fn surf1_d3_formatter_emits_canonical_unicode() {
-    let src = "fn f : Omega -> Sigma = \\x . x\nmatch x { A => B }\n-- keep -> and => in comments\n\"keep -> and \\\"=>\\\" in strings\"";
+    let src = "fn f : Omega -> Sigma = \\x . x\nmatch x { A => B }\nnot in level l === <= >= /= /\\ \\/ <: ><\n-- keep -> and => not in level in comments\n\"keep -> and \\\"=>\\\" not in level in strings\"";
     let formatted = canonical_unicode(src);
     assert!(formatted.contains("fn f : Ω → Σ = λx . x"));
     assert!(formatted.contains("match x { A ⇒ B }"));
-    assert!(formatted.contains("-- keep -> and => in comments"));
-    assert!(formatted.contains("\"keep -> and \\\"=>\\\" in strings\""));
+    assert!(formatted.contains("¬ ∈ ℓ ℓ ≡ ≤ ≥ ≠ ∧ ∨ ⊑ ×"));
+    assert!(formatted.contains("-- keep -> and => not in level in comments"));
+    assert!(formatted.contains("\"keep -> and \\\"=>\\\" not in level in strings\""));
+}
+
+#[test]
+fn surf1_d3_rejects_unbounded_unicode_identifiers() {
+    for src in [
+        "fn surf1_bad (а : Type) : Type = Type", // Cyrillic small a
+        "fn surf1_bad (xа : Type) : Type = Type", // ASCII start, Cyrillic continuation
+        "fn Ｔ : Type = Type",                  // fullwidth capital T
+    ] {
+        assert!(Lexer::lex(src).is_err(), "unbounded Unicode identifier accepted: {src}");
+    }
 }
 
 #[test]

@@ -8,7 +8,7 @@ fn ident_tail(src: &str, start: usize) -> Option<(String, usize)> {
     let mut end = start;
     let mut out = String::new();
     for (offset, c) in src[start..].char_indices() {
-        if c.is_alphanumeric() || c == '_' || c == '\'' {
+        if c.is_ascii_alphanumeric() || c == '_' || c == '\'' {
             out.push(c);
             end = start + offset + c.len_utf8();
         } else {
@@ -25,6 +25,9 @@ fn canonical_ident(ident: &str) -> Option<&'static str> {
         "Pi" => Some("Π"),
         "forall" => Some("∀"),
         "exists" => Some("∃"),
+        "not" => Some("¬"),
+        "in" => Some("∈"),
+        "level" | "l" => Some("ℓ"),
         _ => None,
     }
 }
@@ -107,7 +110,7 @@ pub fn canonical_unicode(src: &str) -> String {
             continue;
         }
 
-        if c.is_alphabetic() || c == '_' {
+        if c.is_ascii_alphabetic() || c == '_' {
             if let Some((ident, end)) = ident_tail(src, pos) {
                 if let Some(glyph) = canonical_ident(&ident) {
                     out.push_str(glyph);
