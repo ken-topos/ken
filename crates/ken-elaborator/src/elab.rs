@@ -1675,13 +1675,12 @@ fn check_view_visits_row(rdecl: &RDecl) -> Result<Option<crate::effects::RowType
         _ => return Ok(None),
     };
 
-    let mut row_vars = HashMap::new();
+    // D1 fail-closed rule: row variables are bound by a higher-order latent-row
+    // occurrence in the declaration type, then referenced again in `visits`.
+    // Until production latent-row extraction is wired, this map is empty, so
+    // `[e]` / `[E | e]` reject instead of minting a fresh row variable here.
+    let row_vars = crate::effects::row_var_map(&[]);
     let mut decl = crate::effects::EffectDecl::new(&rdecl.name);
-    if let Some(tail) = &visits.tail {
-        let rv = crate::effects::RowVar(0);
-        row_vars.insert(tail.clone(), rv);
-        decl = decl.with_param_row(rv);
-    }
 
     let declared = crate::effects::surface_row_to_row_type(visits, &row_vars)
         .map_err(|reason| ElabError::TypeMismatch {
