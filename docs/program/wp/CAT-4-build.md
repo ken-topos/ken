@@ -112,8 +112,10 @@ on it): **D0 → D1 → D2 → D3 → D4-land-half.**
   landed law 5 roundtrip). `orderEquivKey leq a b := bool_and (leq a b) (leq b a)`
   is the **Bool decision**; the landed Prop-valued `orderEquiv` is for laws only.
 - **D2 — `union`/`intersection`/`difference` (Fork A, §4):** `fn insertWith` +
-  the three ops + one shared `foldPreservesOrdered` (`f`-independent) + the
-  lookup 2×2 characterization table.
+  transparent `toList`-stream fused workers for the three ops, worker
+  `Ordered` preservation, and the lookup 2×2 characterization table. Fork A's
+  semantic pin is the combining behavior/orientation (`f (from-a) (from-b)`)
+  and lookup table, not a literal tree-fold source spelling.
 - **D3 — `keys`/`values` (§6):** `fn keys` (reuse `pairKeys`+`toList`),
   `fn pairVals` + `fn values` (net-new mirror projection), keys-ascending
   coherence (off landed `toListOrdered`) + keys/values projection coherence.
@@ -145,7 +147,7 @@ finite 2×2, **no `Tree` induction**. Stated extensionally (pin 5).
   `insert`/`lookup`/`toList`/`fold`/`fromList` + laws 1/5; `leqNat`+4 laws are
   `Axiom`-free. Grep the law fields for `Axiom`/postulate/opaque → zero. (AC2)
 - **G3 — `Ordered`-preservation** proved for `delete` and the three set-ops
-  (shared `foldPreservesOrdered`, `f`-independent). (AC3)
+  through their rebuild/list-worker preservation lemmas. (AC3)
 - **G4 — Characterizations proved:** D2 lookup 2×2; D1 None-law (unconditional)
   + other-key law; D3 keys-ascending + keys/values projection coherence. (AC4)
 - **G5 — Relation `Ω`-soundness.** Property predicates are Π-into-Ω; transitive

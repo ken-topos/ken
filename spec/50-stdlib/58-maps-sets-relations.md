@@ -237,24 +237,38 @@ y. y)`; a biased-only op forces a second op the first time anyone merges
 values). Orientation `f (from-a) (from-b)`, matching `unionWith`:
 
 ```
-view insertWith (k : Type) (v : Type) (leq : k -> k -> Bool) (f : v -> v -> v) (key : k) (val : v) (m : Tree k v) : Tree k v =
+fn insertWith (k : Type) (v : Type) (leq : k -> k -> Bool) (f : v -> v -> v) (key : k) (val : v) (m : Tree k v) : Tree k v =
   …                                                    -- like `insert`, but on key-collision store `f val old`
 
-view union (k : Type) (v : Type) (leq : k -> k -> Bool) (f : v -> v -> v) (a : Tree k v) (b : Tree k v) : Tree k v =
-  fold k v (Tree k v) (\key val acc. insertWith k v leq f key val acc) b a
+fn unionFromListAcc … (xs : List (Pair k v)) (acc : Tree k v) : Tree k v =
+  match xs { Nil => acc ; Cons e xs2 => unionFromListAcc … xs2 (insertWith … (pairFst e) (pairSnd e) acc) }
+
+fn union (k : Type) (v : Type) (leq : k -> k -> Bool) (f : v -> v -> v) (a : Tree k v) (b : Tree k v) : Tree k v =
+  unionFromListAcc k v leq f (toList k v a) b
 ```
 
-`intersection`/`difference` are the same fold-into-a-fresh-accumulator shape
-with a **membership test** against the other map (no combining fn needed — they
-select keys, they don't merge values):
+`intersection`/`difference` use the same transparent `toList`-stream worker
+shape, with a **membership test** against the other map (no combining fn needed
+— they select keys, they don't merge values):
 
 ```
-view intersection … (a : Tree k v) (b : Tree k v) : Tree k v =
-  fold k v (Tree k v) (\key val acc. match member k v leq key b { True => insert k v leq key val acc ; False => acc }) (empty k v) a
+fn intersectionFromListAcc … (xs : List (Pair k v)) (keep : Tree k v) (acc : Tree k v) : Tree k v =
+  match xs { Nil => acc ; Cons e xs2 => match member … (pairFst e) keep { True => intersectionFromListAcc … xs2 keep (insert … (pairFst e) (pairSnd e) acc) ; False => intersectionFromListAcc … xs2 keep acc } }
 
-view difference … (a : Tree k v) (b : Tree k v) : Tree k v =
-  fold k v (Tree k v) (\key val acc. match member k v leq key b { True => acc ; False => insert k v leq key val acc }) (empty k v) a
+fn intersection … (a : Tree k v) (b : Tree k v) : Tree k v =
+  intersectionFromListAcc … (toList k v a) b (empty k v)
+
+fn differenceFromListAcc … (xs : List (Pair k v)) (reject : Tree k v) (acc : Tree k v) : Tree k v =
+  match xs { Nil => acc ; Cons e xs2 => match member … (pairFst e) reject { True => differenceFromListAcc … xs2 reject acc ; False => differenceFromListAcc … xs2 reject (insert … (pairFst e) (pairSnd e) acc) } }
+
+fn difference … (a : Tree k v) (b : Tree k v) : Tree k v =
+  differenceFromListAcc … (toList k v a) b (empty k v)
 ```
+
+The worker spelling is canonical for this build. Fork A's semantic pin is the
+combining function behavior, orientation `f (from-a) (from-b)`, `Ordered`
+preservation, and the lookup characterization, not a literal fold-over-tree
+source form.
 
 - **Lookup characterization (the D2 map law, Fork A):** `lookup k (union f a b)`
   is the 2×2 table — both-`None → None`; `(Some x, None) → Some x`; `(None, Some

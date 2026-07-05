@@ -1707,6 +1707,23 @@ fn lookupLocality
         (boolDichotomy (leq key k2))
   }
 
+fn insertLookupHit
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (reflLeq : (x : k) → Equal Bool (leq x x) True)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (inserted : k) (query : k) (val : v) (acc : Tree k v)
+  (heq : orderEquiv k leq query inserted)
+  : Equal (Option v)
+      (lookup k v leq query (insert k v leq inserted val acc))
+      (Some v val) =
+  trans (Option v)
+    (lookup k v leq query (insert k v leq inserted val acc))
+    (lookup k v leq inserted (insert k v leq inserted val acc))
+    (Some v val)
+    (lookupOrderEquivAgree k v leq transLeq query inserted
+      (insert k v leq inserted val acc) heq)
+    (lookupFoundAfterInsert k v leq reflLeq inserted val acc)
+
 -- Law 5 (`54 §5.3`, Map capstone unit 2 -- the final law) -- agreement:
 -- `Ordered m -> Distinct leq m -> lookup key m = assoc key (toList m)`.
 --
@@ -1756,6 +1773,26 @@ fn lookupLocality
 
 fn notOrderEquivToKey (k : Type) (leq : k → k → Bool) (key : k) (k2 : k) : Prop =
   Not (orderEquiv k leq key k2)
+
+fn notOrderEquivFromLeftFalse
+  (k : Type) (leq : k → k → Bool) (a : k) (b : k)
+  (hfalse : Equal Bool (leq a b) False)
+  : notOrderEquivToKey k leq a b =
+  λheq.
+    absurd (trans Bool True (leq a b) False
+      (sym Bool (leq a b) True
+        (andFst (Equal Bool (leq a b) True) (Equal Bool (leq b a) True) heq))
+      hfalse)
+
+fn notOrderEquivFromRightFalse
+  (k : Type) (leq : k → k → Bool) (a : k) (b : k)
+  (hfalse : Equal Bool (leq b a) False)
+  : notOrderEquivToKey k leq a b =
+  λheq.
+    absurd (trans Bool True (leq b a) False
+      (sym Bool (leq b a) True
+        (andSnd (Equal Bool (leq a b) True) (Equal Bool (leq b a) True) heq))
+      hfalse)
 
 fn NoDup (k : Type) (v : Type) (leq : k → k → Bool) (xs : List (Pair k v)) : Prop =
   match xs {
@@ -2798,13 +2835,43 @@ fn insertWithFoldStepReduces
       (insertWithFoldStep k v leq f key val acc)
       (insertWith k v leq f key val acc) = Refl
 
+fn unionFromListAcc
+  (k : Type) (v : Type) (leq : k → k → Bool) (f : v → v → v)
+  (xs : List (Pair k v)) (acc : Tree k v) : Tree k v =
+  match xs {
+    Nil ⇒ acc ;
+    Cons e xs2 ⇒
+      unionFromListAcc k v leq f xs2
+        (insertWithFoldStep k v leq f (pairFst k v e) (pairSnd k v e) acc)
+  }
+
+fn unionFromListAccConsBridge
+  (k : Type) (v : Type) (leq : k → k → Bool) (f : v → v → v)
+  (e : Pair k v) (xs2 : List (Pair k v)) (acc : Tree k v)
+  : Equal (Tree k v)
+      (unionFromListAcc k v leq f (Cons (Pair k v) e xs2) acc)
+      (unionFromListAcc k v leq f xs2
+        (insertWithFoldStep k v leq f (pairFst k v e) (pairSnd k v e) acc)) = Refl
+
 fn union (k : Type) (v : Type) (leq : k → k → Bool) (f : v → v → v) (a : Tree k v) (b : Tree k v) : Tree k v =
-  fold k v (Tree k v) (insertWithFoldStep k v leq f) b a
+  unionFromListAcc k v leq f (toList k v a) b
 
 fn unionLookupTable (v : Type) (f : v → v → v) (left : Option v) (right : Option v) : Option v =
   match left {
     None ⇒ right ;
     Some x ⇒ match right { None ⇒ Some v x ; Some y ⇒ Some v (f x y) }
+  }
+
+fn intersectionLookupTable (v : Type) (left : Option v) (keep : Bool) (prior : Option v) : Option v =
+  match left {
+    None ⇒ prior ;
+    Some x ⇒ match keep { True ⇒ Some v x ; False ⇒ prior }
+  }
+
+fn differenceLookupTable (v : Type) (left : Option v) (reject : Bool) (prior : Option v) : Option v =
+  match left {
+    None ⇒ prior ;
+    Some x ⇒ match reject { True ⇒ prior ; False ⇒ Some v x }
   }
 
 fn insertWithLookupResult (v : Type) (f : v → v → v) (val : v) (prior : Option v) : Option v =
@@ -2817,41 +2884,6 @@ fn insertWithLookupResultFor
   (k : Type) (v : Type) (leq : k → k → Bool)
   (f : v → v → v) (key : k) (val : v) (m : Tree k v) : Option v =
   insertWithLookupResult v f val (lookup k v leq key m)
-
-fn unionLookupCharacterization
-  (k : Type) (v : Type) (leq : k → k → Bool) (f : v → v → v) (key : k) (a : Tree k v) (b : Tree k v)
-  : Prop =
-  Equal (Option v)
-    (lookup k v leq key (union k v leq f a b))
-    (unionLookupTable v f (lookup k v leq key a) (lookup k v leq key b))
-
-fn unionLookupBothNoneLaw
-  (k : Type) (v : Type) (leq : k → k → Bool) (f : v → v → v) (key : k) (a : Tree k v) (b : Tree k v)
-  : Prop =
-  Equal (Option v) (lookup k v leq key a) (None v) →
-  Equal (Option v) (lookup k v leq key b) (None v) →
-  Equal (Option v) (lookup k v leq key (union k v leq f a b)) (None v)
-
-fn unionLookupLeftOnlyLaw
-  (k : Type) (v : Type) (leq : k → k → Bool) (f : v → v → v) (key : k) (x : v) (a : Tree k v) (b : Tree k v)
-  : Prop =
-  Equal (Option v) (lookup k v leq key a) (Some v x) →
-  Equal (Option v) (lookup k v leq key b) (None v) →
-  Equal (Option v) (lookup k v leq key (union k v leq f a b)) (Some v x)
-
-fn unionLookupRightOnlyLaw
-  (k : Type) (v : Type) (leq : k → k → Bool) (f : v → v → v) (key : k) (y : v) (a : Tree k v) (b : Tree k v)
-  : Prop =
-  Equal (Option v) (lookup k v leq key a) (None v) →
-  Equal (Option v) (lookup k v leq key b) (Some v y) →
-  Equal (Option v) (lookup k v leq key (union k v leq f a b)) (Some v y)
-
-fn unionLookupBothSomeLaw
-  (k : Type) (v : Type) (leq : k → k → Bool) (f : v → v → v) (key : k) (x : v) (y : v) (a : Tree k v) (b : Tree k v)
-  : Prop =
-  Equal (Option v) (lookup k v leq key a) (Some v x) →
-  Equal (Option v) (lookup k v leq key b) (Some v y) →
-  Equal (Option v) (lookup k v leq key (union k v leq f a b)) (Some v (f x y))
 
 fn allKeysMapNotMatchBelow
   (k : Type) (v : Type) (leq : k → k → Bool)
@@ -2917,20 +2949,113 @@ fn allKeysMapNotMatchAbove
                              (allKeys k v (leAbove k v leq k2) r)) h))))
   }
 
-fn intersection (k : Type) (v : Type) (leq : k → k → Bool) (a : Tree k v) (b : Tree k v) : Tree k v =
-  fold k v (Tree k v)
-    (λkey.λval.λacc.
-      match member k v leq key b {
-        True ⇒ insert k v leq key val acc ;
-        False ⇒ acc
-      })
-    (empty k v) a
+fn intersectionFromListAcc
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (xs : List (Pair k v)) (keep : Tree k v) (acc : Tree k v) : Tree k v =
+  match xs {
+    Nil ⇒ acc ;
+    Cons e xs2 ⇒
+      match member k v leq (pairFst k v e) keep {
+        True ⇒ intersectionFromListAcc k v leq xs2 keep
+          (insert k v leq (pairFst k v e) (pairSnd k v e) acc) ;
+        False ⇒ intersectionFromListAcc k v leq xs2 keep acc
+      }
+  }
 
-fn intersectionLookupCharacterization
-  (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (a : Tree k v) (b : Tree k v)
-  : Prop =
-  Equal (Option v) (lookup k v leq key b) (None v) →
-  Equal (Option v) (lookup k v leq key (intersection k v leq a b)) (None v)
+fn intersectionFromListAccStep
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (e : Pair k v) (xs2 : List (Pair k v)) (keep : Tree k v) (acc : Tree k v) (m : Bool) : Tree k v =
+  match m {
+    True ⇒ intersectionFromListAcc k v leq xs2 keep
+      (insert k v leq (pairFst k v e) (pairSnd k v e) acc) ;
+    False ⇒ intersectionFromListAcc k v leq xs2 keep acc
+  }
+
+fn intersectionFromListAccFinalBridge
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (e : Pair k v) (xs2 : List (Pair k v)) (keep : Tree k v) (acc : Tree k v)
+  : Equal (Tree k v)
+      (intersectionFromListAcc k v leq (Cons (Pair k v) e xs2) keep acc)
+      (intersectionFromListAccStep k v leq e xs2 keep acc (member k v leq (pairFst k v e) keep)) = Refl
+
+fn intersectionFromListAccStepTrueEq
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (e : Pair k v) (xs2 : List (Pair k v)) (keep : Tree k v) (acc : Tree k v)
+  (q : Equal Bool (member k v leq (pairFst k v e) keep) True)
+  : Equal (Tree k v)
+      (intersectionFromListAccStep k v leq e xs2 keep acc (member k v leq (pairFst k v e) keep))
+      (intersectionFromListAccStep k v leq e xs2 keep acc True) =
+  cong Bool (Tree k v) (member k v leq (pairFst k v e) keep) True
+    (intersectionFromListAccStep k v leq e xs2 keep acc) q
+
+fn intersectionFromListAccStepFalseEq
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (e : Pair k v) (xs2 : List (Pair k v)) (keep : Tree k v) (acc : Tree k v)
+  (q : Equal Bool (member k v leq (pairFst k v e) keep) False)
+  : Equal (Tree k v)
+      (intersectionFromListAccStep k v leq e xs2 keep acc (member k v leq (pairFst k v e) keep))
+      (intersectionFromListAccStep k v leq e xs2 keep acc False) =
+  cong Bool (Tree k v) (member k v leq (pairFst k v e) keep) False
+    (intersectionFromListAccStep k v leq e xs2 keep acc) q
+
+fn intersectionFromListAccStepTrueReduces
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (e : Pair k v) (xs2 : List (Pair k v)) (keep : Tree k v) (acc : Tree k v)
+  : Equal (Tree k v)
+      (intersectionFromListAccStep k v leq e xs2 keep acc True)
+      (intersectionFromListAcc k v leq xs2 keep
+        (insert k v leq (pairFst k v e) (pairSnd k v e) acc)) = Refl
+
+fn intersectionFromListAccStepFalseReduces
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (e : Pair k v) (xs2 : List (Pair k v)) (keep : Tree k v) (acc : Tree k v)
+  : Equal (Tree k v)
+      (intersectionFromListAccStep k v leq e xs2 keep acc False)
+      (intersectionFromListAcc k v leq xs2 keep acc) = Refl
+
+fn intersectionFromListAccTrueBridge
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (e : Pair k v) (xs2 : List (Pair k v)) (keep : Tree k v) (acc : Tree k v)
+  (q : Equal Bool (member k v leq (pairFst k v e) keep) True)
+  : Equal (Tree k v)
+      (intersectionFromListAcc k v leq (Cons (Pair k v) e xs2) keep acc)
+      (intersectionFromListAcc k v leq xs2 keep
+        (insert k v leq (pairFst k v e) (pairSnd k v e) acc)) =
+  trans (Tree k v)
+    (intersectionFromListAcc k v leq (Cons (Pair k v) e xs2) keep acc)
+    (intersectionFromListAccStep k v leq e xs2 keep acc (member k v leq (pairFst k v e) keep))
+    (intersectionFromListAcc k v leq xs2 keep
+      (insert k v leq (pairFst k v e) (pairSnd k v e) acc))
+    (intersectionFromListAccFinalBridge k v leq e xs2 keep acc)
+    (trans (Tree k v)
+      (intersectionFromListAccStep k v leq e xs2 keep acc (member k v leq (pairFst k v e) keep))
+      (intersectionFromListAccStep k v leq e xs2 keep acc True)
+      (intersectionFromListAcc k v leq xs2 keep
+        (insert k v leq (pairFst k v e) (pairSnd k v e) acc))
+      (intersectionFromListAccStepTrueEq k v leq e xs2 keep acc q)
+      (intersectionFromListAccStepTrueReduces k v leq e xs2 keep acc))
+
+fn intersectionFromListAccFalseBridge
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (e : Pair k v) (xs2 : List (Pair k v)) (keep : Tree k v) (acc : Tree k v)
+  (q : Equal Bool (member k v leq (pairFst k v e) keep) False)
+  : Equal (Tree k v)
+      (intersectionFromListAcc k v leq (Cons (Pair k v) e xs2) keep acc)
+      (intersectionFromListAcc k v leq xs2 keep acc) =
+  trans (Tree k v)
+    (intersectionFromListAcc k v leq (Cons (Pair k v) e xs2) keep acc)
+    (intersectionFromListAccStep k v leq e xs2 keep acc (member k v leq (pairFst k v e) keep))
+    (intersectionFromListAcc k v leq xs2 keep acc)
+    (intersectionFromListAccFinalBridge k v leq e xs2 keep acc)
+    (trans (Tree k v)
+      (intersectionFromListAccStep k v leq e xs2 keep acc (member k v leq (pairFst k v e) keep))
+      (intersectionFromListAccStep k v leq e xs2 keep acc False)
+      (intersectionFromListAcc k v leq xs2 keep acc)
+      (intersectionFromListAccStepFalseEq k v leq e xs2 keep acc q)
+      (intersectionFromListAccStepFalseReduces k v leq e xs2 keep acc))
+
+fn intersection (k : Type) (v : Type) (leq : k → k → Bool) (a : Tree k v) (b : Tree k v) : Tree k v =
+  intersectionFromListAcc k v leq (toList k v a) b (empty k v)
 
 fn intersectionLookupSomeLaw
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (x : v) (a : Tree k v) (b : Tree k v)
@@ -2939,14 +3064,113 @@ fn intersectionLookupSomeLaw
   Equal Bool (member k v leq key b) True →
   Equal (Option v) (lookup k v leq key (intersection k v leq a b)) (Some v x)
 
+fn differenceFromListAcc
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (xs : List (Pair k v)) (reject : Tree k v) (acc : Tree k v) : Tree k v =
+  match xs {
+    Nil ⇒ acc ;
+    Cons e xs2 ⇒
+      match member k v leq (pairFst k v e) reject {
+        True ⇒ differenceFromListAcc k v leq xs2 reject acc ;
+        False ⇒ differenceFromListAcc k v leq xs2 reject
+          (insert k v leq (pairFst k v e) (pairSnd k v e) acc)
+      }
+  }
+
+fn differenceFromListAccStep
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (e : Pair k v) (xs2 : List (Pair k v)) (reject : Tree k v) (acc : Tree k v) (m : Bool) : Tree k v =
+  match m {
+    True ⇒ differenceFromListAcc k v leq xs2 reject acc ;
+    False ⇒ differenceFromListAcc k v leq xs2 reject
+      (insert k v leq (pairFst k v e) (pairSnd k v e) acc)
+  }
+
+fn differenceFromListAccFinalBridge
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (e : Pair k v) (xs2 : List (Pair k v)) (reject : Tree k v) (acc : Tree k v)
+  : Equal (Tree k v)
+      (differenceFromListAcc k v leq (Cons (Pair k v) e xs2) reject acc)
+      (differenceFromListAccStep k v leq e xs2 reject acc (member k v leq (pairFst k v e) reject)) = Refl
+
+fn differenceFromListAccStepTrueEq
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (e : Pair k v) (xs2 : List (Pair k v)) (reject : Tree k v) (acc : Tree k v)
+  (q : Equal Bool (member k v leq (pairFst k v e) reject) True)
+  : Equal (Tree k v)
+      (differenceFromListAccStep k v leq e xs2 reject acc (member k v leq (pairFst k v e) reject))
+      (differenceFromListAccStep k v leq e xs2 reject acc True) =
+  cong Bool (Tree k v) (member k v leq (pairFst k v e) reject) True
+    (differenceFromListAccStep k v leq e xs2 reject acc) q
+
+fn differenceFromListAccStepFalseEq
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (e : Pair k v) (xs2 : List (Pair k v)) (reject : Tree k v) (acc : Tree k v)
+  (q : Equal Bool (member k v leq (pairFst k v e) reject) False)
+  : Equal (Tree k v)
+      (differenceFromListAccStep k v leq e xs2 reject acc (member k v leq (pairFst k v e) reject))
+      (differenceFromListAccStep k v leq e xs2 reject acc False) =
+  cong Bool (Tree k v) (member k v leq (pairFst k v e) reject) False
+    (differenceFromListAccStep k v leq e xs2 reject acc) q
+
+fn differenceFromListAccStepTrueReduces
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (e : Pair k v) (xs2 : List (Pair k v)) (reject : Tree k v) (acc : Tree k v)
+  : Equal (Tree k v)
+      (differenceFromListAccStep k v leq e xs2 reject acc True)
+      (differenceFromListAcc k v leq xs2 reject acc) = Refl
+
+fn differenceFromListAccStepFalseReduces
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (e : Pair k v) (xs2 : List (Pair k v)) (reject : Tree k v) (acc : Tree k v)
+  : Equal (Tree k v)
+      (differenceFromListAccStep k v leq e xs2 reject acc False)
+      (differenceFromListAcc k v leq xs2 reject
+        (insert k v leq (pairFst k v e) (pairSnd k v e) acc)) = Refl
+
+fn differenceFromListAccTrueBridge
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (e : Pair k v) (xs2 : List (Pair k v)) (reject : Tree k v) (acc : Tree k v)
+  (q : Equal Bool (member k v leq (pairFst k v e) reject) True)
+  : Equal (Tree k v)
+      (differenceFromListAcc k v leq (Cons (Pair k v) e xs2) reject acc)
+      (differenceFromListAcc k v leq xs2 reject acc) =
+  trans (Tree k v)
+    (differenceFromListAcc k v leq (Cons (Pair k v) e xs2) reject acc)
+    (differenceFromListAccStep k v leq e xs2 reject acc (member k v leq (pairFst k v e) reject))
+    (differenceFromListAcc k v leq xs2 reject acc)
+    (differenceFromListAccFinalBridge k v leq e xs2 reject acc)
+    (trans (Tree k v)
+      (differenceFromListAccStep k v leq e xs2 reject acc (member k v leq (pairFst k v e) reject))
+      (differenceFromListAccStep k v leq e xs2 reject acc True)
+      (differenceFromListAcc k v leq xs2 reject acc)
+      (differenceFromListAccStepTrueEq k v leq e xs2 reject acc q)
+      (differenceFromListAccStepTrueReduces k v leq e xs2 reject acc))
+
+fn differenceFromListAccFalseBridge
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (e : Pair k v) (xs2 : List (Pair k v)) (reject : Tree k v) (acc : Tree k v)
+  (q : Equal Bool (member k v leq (pairFst k v e) reject) False)
+  : Equal (Tree k v)
+      (differenceFromListAcc k v leq (Cons (Pair k v) e xs2) reject acc)
+      (differenceFromListAcc k v leq xs2 reject
+        (insert k v leq (pairFst k v e) (pairSnd k v e) acc)) =
+  trans (Tree k v)
+    (differenceFromListAcc k v leq (Cons (Pair k v) e xs2) reject acc)
+    (differenceFromListAccStep k v leq e xs2 reject acc (member k v leq (pairFst k v e) reject))
+    (differenceFromListAcc k v leq xs2 reject
+      (insert k v leq (pairFst k v e) (pairSnd k v e) acc))
+    (differenceFromListAccFinalBridge k v leq e xs2 reject acc)
+    (trans (Tree k v)
+      (differenceFromListAccStep k v leq e xs2 reject acc (member k v leq (pairFst k v e) reject))
+      (differenceFromListAccStep k v leq e xs2 reject acc False)
+      (differenceFromListAcc k v leq xs2 reject
+        (insert k v leq (pairFst k v e) (pairSnd k v e) acc))
+      (differenceFromListAccStepFalseEq k v leq e xs2 reject acc q)
+      (differenceFromListAccStepFalseReduces k v leq e xs2 reject acc))
+
 fn difference (k : Type) (v : Type) (leq : k → k → Bool) (a : Tree k v) (b : Tree k v) : Tree k v =
-  fold k v (Tree k v)
-    (λkey.λval.λacc.
-      match member k v leq key b {
-        True ⇒ acc ;
-        False ⇒ insert k v leq key val acc
-      })
-    (empty k v) a
+  differenceFromListAcc k v leq (toList k v a) b (empty k v)
 
 fn differenceLookupCharacterization
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (a : Tree k v) (b : Tree k v)
@@ -3603,6 +3827,526 @@ fn insertWithFoldStepLookupLocality
       (insertWith k v leq f inserted val acc)
       (insertWithFoldStepReduces k v leq f inserted val acc))
 
+fn insertWithFoldStepLookupHit
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (reflLeq : (x : k) → Equal Bool (leq x x) True)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (f : v → v → v) (inserted : k) (query : k) (val : v) (acc : Tree k v)
+  (heq : orderEquiv k leq query inserted)
+  : Equal (Option v)
+      (lookup k v leq query (insertWithFoldStep k v leq f inserted val acc))
+      (insertWithLookupResult v f val (lookup k v leq query acc)) =
+  J (λt _. Equal (Option v)
+      (lookup k v leq query t)
+      (insertWithLookupResult v f val (lookup k v leq query acc)))
+    (trans (Option v)
+      (lookup k v leq query (insertWith k v leq f inserted val acc))
+      (lookup k v leq inserted (insertWith k v leq f inserted val acc))
+      (insertWithLookupResult v f val (lookup k v leq query acc))
+      (lookupOrderEquivAgree k v leq transLeq query inserted
+        (insertWith k v leq f inserted val acc) heq)
+      (trans (Option v)
+        (lookup k v leq inserted (insertWith k v leq f inserted val acc))
+        (insertWithLookupResult v f val (lookup k v leq inserted acc))
+        (insertWithLookupResult v f val (lookup k v leq query acc))
+        (insertWithLookupCharacterization k v leq reflLeq f inserted val acc)
+        (sym (Option v)
+          (insertWithLookupResult v f val (lookup k v leq query acc))
+          (insertWithLookupResult v f val (lookup k v leq inserted acc))
+          (cong (Option v) (Option v)
+            (lookup k v leq query acc)
+            (lookup k v leq inserted acc)
+            (insertWithLookupResult v f val)
+            (lookupOrderEquivAgree k v leq transLeq query inserted acc heq)))))
+    (sym (Tree k v)
+      (insertWithFoldStep k v leq f inserted val acc)
+      (insertWith k v leq f inserted val acc)
+      (insertWithFoldStepReduces k v leq f inserted val acc))
+
+fn unionFromListAccLookupAssocHit
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (reflLeq : (x : k) → Equal Bool (leq x x) True)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (f : v → v → v) (query : k) (e : Pair k v) (xs2 : List (Pair k v)) (acc : Tree k v)
+  (q1 : Equal Bool (leq query (pairFst k v e)) True)
+  (q2 : Equal Bool (leq (pairFst k v e) query) True)
+  (tailSkip : allInList k v (notOrderEquivToKey k leq query) xs2)
+  (ih : Equal (Option v)
+          (lookup k v leq query
+            (unionFromListAcc k v leq f xs2
+              (insertWithFoldStep k v leq f (pairFst k v e) (pairSnd k v e) acc)))
+          (unionLookupTable v f
+            (assoc k v leq query xs2)
+            (lookup k v leq query
+              (insertWithFoldStep k v leq f (pairFst k v e) (pairSnd k v e) acc))))
+  : Equal (Option v)
+      (lookup k v leq query (unionFromListAcc k v leq f (Cons (Pair k v) e xs2) acc))
+      (unionLookupTable v f (assoc k v leq query (Cons (Pair k v) e xs2)) (lookup k v leq query acc)) =
+  trans (Option v)
+    (lookup k v leq query (unionFromListAcc k v leq f (Cons (Pair k v) e xs2) acc))
+    (lookup k v leq query
+      (unionFromListAcc k v leq f xs2
+        (insertWithFoldStep k v leq f (pairFst k v e) (pairSnd k v e) acc)))
+    (unionLookupTable v f (assoc k v leq query (Cons (Pair k v) e xs2)) (lookup k v leq query acc))
+    (cong (Tree k v) (Option v)
+      (unionFromListAcc k v leq f (Cons (Pair k v) e xs2) acc)
+      (unionFromListAcc k v leq f xs2
+        (insertWithFoldStep k v leq f (pairFst k v e) (pairSnd k v e) acc))
+      (lookup k v leq query)
+      (unionFromListAccConsBridge k v leq f e xs2 acc))
+    (trans (Option v)
+      (lookup k v leq query
+        (unionFromListAcc k v leq f xs2
+          (insertWithFoldStep k v leq f (pairFst k v e) (pairSnd k v e) acc)))
+      (unionLookupTable v f
+        (assoc k v leq query xs2)
+        (lookup k v leq query
+          (insertWithFoldStep k v leq f (pairFst k v e) (pairSnd k v e) acc)))
+      (unionLookupTable v f (assoc k v leq query (Cons (Pair k v) e xs2)) (lookup k v leq query acc))
+      ih
+      (trans (Option v)
+        (unionLookupTable v f
+          (assoc k v leq query xs2)
+          (lookup k v leq query
+            (insertWithFoldStep k v leq f (pairFst k v e) (pairSnd k v e) acc)))
+        (lookup k v leq query
+          (insertWithFoldStep k v leq f (pairFst k v e) (pairSnd k v e) acc))
+        (unionLookupTable v f (assoc k v leq query (Cons (Pair k v) e xs2)) (lookup k v leq query acc))
+        (trans (Option v)
+          (unionLookupTable v f
+            (assoc k v leq query xs2)
+            (lookup k v leq query
+              (insertWithFoldStep k v leq f (pairFst k v e) (pairSnd k v e) acc)))
+          (unionLookupTable v f
+            (None v)
+            (lookup k v leq query
+              (insertWithFoldStep k v leq f (pairFst k v e) (pairSnd k v e) acc)))
+          (lookup k v leq query
+            (insertWithFoldStep k v leq f (pairFst k v e) (pairSnd k v e) acc))
+          (cong (Option v) (Option v)
+            (assoc k v leq query xs2)
+            (None v)
+            (λleft. unionLookupTable v f left
+              (lookup k v leq query
+                (insertWithFoldStep k v leq f (pairFst k v e) (pairSnd k v e) acc)))
+            (assocNoMatchIsNone k v leq query xs2 tailSkip))
+          Refl)
+        (trans (Option v)
+          (lookup k v leq query
+            (insertWithFoldStep k v leq f (pairFst k v e) (pairSnd k v e) acc))
+          (insertWithLookupResult v f (pairSnd k v e) (lookup k v leq query acc))
+          (unionLookupTable v f (assoc k v leq query (Cons (Pair k v) e xs2)) (lookup k v leq query acc))
+          (insertWithFoldStepLookupHit k v leq reflLeq transLeq f
+            (pairFst k v e) query (pairSnd k v e) acc
+            (andIntro (Equal Bool (leq query (pairFst k v e)) True)
+              (Equal Bool (leq (pairFst k v e) query) True) q1 q2))
+          (sym (Option v)
+            (unionLookupTable v f (assoc k v leq query (Cons (Pair k v) e xs2)) (lookup k v leq query acc))
+            (insertWithLookupResult v f (pairSnd k v e) (lookup k v leq query acc))
+            (cong (Option v) (Option v)
+              (assoc k v leq query (Cons (Pair k v) e xs2))
+              (Some v (pairSnd k v e))
+              (λleft. unionLookupTable v f left (lookup k v leq query acc))
+              (assocSkipHeadStopBridge k v leq query e xs2 q1 q2))))))
+
+fn unionFromListAccLookupAssocMiss
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (f : v → v → v) (query : k) (e : Pair k v) (xs2 : List (Pair k v)) (acc : Tree k v)
+  (hnot : notOrderEquivToKey k leq (pairFst k v e) query)
+  (assocSkip : Equal (Option v) (assoc k v leq query (Cons (Pair k v) e xs2)) (assoc k v leq query xs2))
+  (ih : Equal (Option v)
+          (lookup k v leq query
+            (unionFromListAcc k v leq f xs2
+              (insertWithFoldStep k v leq f (pairFst k v e) (pairSnd k v e) acc)))
+          (unionLookupTable v f
+            (assoc k v leq query xs2)
+            (lookup k v leq query
+              (insertWithFoldStep k v leq f (pairFst k v e) (pairSnd k v e) acc))))
+  : Equal (Option v)
+      (lookup k v leq query (unionFromListAcc k v leq f (Cons (Pair k v) e xs2) acc))
+      (unionLookupTable v f (assoc k v leq query (Cons (Pair k v) e xs2)) (lookup k v leq query acc)) =
+  trans (Option v)
+    (lookup k v leq query (unionFromListAcc k v leq f (Cons (Pair k v) e xs2) acc))
+    (lookup k v leq query
+      (unionFromListAcc k v leq f xs2
+        (insertWithFoldStep k v leq f (pairFst k v e) (pairSnd k v e) acc)))
+    (unionLookupTable v f (assoc k v leq query (Cons (Pair k v) e xs2)) (lookup k v leq query acc))
+    (cong (Tree k v) (Option v)
+      (unionFromListAcc k v leq f (Cons (Pair k v) e xs2) acc)
+      (unionFromListAcc k v leq f xs2
+        (insertWithFoldStep k v leq f (pairFst k v e) (pairSnd k v e) acc))
+      (lookup k v leq query)
+      (unionFromListAccConsBridge k v leq f e xs2 acc))
+    (trans (Option v)
+      (lookup k v leq query
+        (unionFromListAcc k v leq f xs2
+          (insertWithFoldStep k v leq f (pairFst k v e) (pairSnd k v e) acc)))
+      (unionLookupTable v f
+        (assoc k v leq query xs2)
+        (lookup k v leq query
+          (insertWithFoldStep k v leq f (pairFst k v e) (pairSnd k v e) acc)))
+      (unionLookupTable v f (assoc k v leq query (Cons (Pair k v) e xs2)) (lookup k v leq query acc))
+      ih
+      (trans (Option v)
+        (unionLookupTable v f
+          (assoc k v leq query xs2)
+          (lookup k v leq query
+            (insertWithFoldStep k v leq f (pairFst k v e) (pairSnd k v e) acc)))
+        (unionLookupTable v f (assoc k v leq query xs2) (lookup k v leq query acc))
+        (unionLookupTable v f (assoc k v leq query (Cons (Pair k v) e xs2)) (lookup k v leq query acc))
+        (cong (Option v) (Option v)
+          (lookup k v leq query
+            (insertWithFoldStep k v leq f (pairFst k v e) (pairSnd k v e) acc))
+          (lookup k v leq query acc)
+          (λright. unionLookupTable v f (assoc k v leq query xs2) right)
+          (insertWithFoldStepLookupLocality k v leq transLeq f
+            (pairFst k v e) query (pairSnd k v e) acc hnot))
+        (sym (Option v)
+          (unionLookupTable v f (assoc k v leq query (Cons (Pair k v) e xs2)) (lookup k v leq query acc))
+          (unionLookupTable v f (assoc k v leq query xs2) (lookup k v leq query acc))
+          (cong (Option v) (Option v)
+            (assoc k v leq query (Cons (Pair k v) e xs2))
+            (assoc k v leq query xs2)
+            (λleft. unionLookupTable v f left (lookup k v leq query acc))
+            assocSkip))))
+
+fn unionFromListAccLookupAssocInner
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (reflLeq : (x : k) → Equal Bool (leq x x) True)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (f : v → v → v) (query : k) (e : Pair k v) (xs2 : List (Pair k v)) (acc : Tree k v)
+  (h : NoDup k v leq (Cons (Pair k v) e xs2))
+  (ih : Equal (Option v)
+          (lookup k v leq query
+            (unionFromListAcc k v leq f xs2
+              (insertWithFoldStep k v leq f (pairFst k v e) (pairSnd k v e) acc)))
+          (unionLookupTable v f
+            (assoc k v leq query xs2)
+            (lookup k v leq query
+              (insertWithFoldStep k v leq f (pairFst k v e) (pairSnd k v e) acc))))
+  (q1 : Equal Bool (leq query (pairFst k v e)) True)
+  (o2 : Or (Equal Bool (leq (pairFst k v e) query) True) (Equal Bool (leq (pairFst k v e) query) False))
+  : Equal (Option v)
+      (lookup k v leq query (unionFromListAcc k v leq f (Cons (Pair k v) e xs2) acc))
+      (unionLookupTable v f (assoc k v leq query (Cons (Pair k v) e xs2)) (lookup k v leq query acc)) =
+  match o2 {
+    Inl q2 ⇒
+      unionFromListAccLookupAssocHit k v leq reflLeq transLeq f query e xs2 acc q1 q2
+        (allInListMapNotMatchTransfer k v leq transLeq query (pairFst k v e) q1 q2 xs2
+          (andFst
+            (allInList k v (notOrderEquivToKey k leq (pairFst k v e)) xs2)
+            (NoDup k v leq xs2) h))
+        ih ;
+    Inr q2False ⇒
+      unionFromListAccLookupAssocMiss k v leq transLeq f query e xs2 acc
+        (notOrderEquivFromLeftFalse k leq (pairFst k v e) query q2False)
+        (assocSkipHeadBridge k v leq query e xs2 q1 q2False)
+        ih
+  }
+
+fn unionFromListAccLookupAssocDispatch
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (reflLeq : (x : k) → Equal Bool (leq x x) True)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (f : v → v → v) (query : k) (e : Pair k v) (xs2 : List (Pair k v)) (acc : Tree k v)
+  (h : NoDup k v leq (Cons (Pair k v) e xs2))
+  (ih : Equal (Option v)
+          (lookup k v leq query
+            (unionFromListAcc k v leq f xs2
+              (insertWithFoldStep k v leq f (pairFst k v e) (pairSnd k v e) acc)))
+          (unionLookupTable v f
+            (assoc k v leq query xs2)
+            (lookup k v leq query
+              (insertWithFoldStep k v leq f (pairFst k v e) (pairSnd k v e) acc))))
+  (o1 : Or (Equal Bool (leq query (pairFst k v e)) True) (Equal Bool (leq query (pairFst k v e)) False))
+  : Equal (Option v)
+      (lookup k v leq query (unionFromListAcc k v leq f (Cons (Pair k v) e xs2) acc))
+      (unionLookupTable v f (assoc k v leq query (Cons (Pair k v) e xs2)) (lookup k v leq query acc)) =
+  match o1 {
+    Inl q1 ⇒
+      unionFromListAccLookupAssocInner k v leq reflLeq transLeq f query e xs2 acc h ih q1
+        (boolDichotomy (leq (pairFst k v e) query)) ;
+    Inr q1False ⇒
+      unionFromListAccLookupAssocMiss k v leq transLeq f query e xs2 acc
+        (notOrderEquivFromRightFalse k leq (pairFst k v e) query q1False)
+        (assocSkipHeadBridgeFalse k v leq query e xs2 q1False)
+        ih
+  }
+
+fn unionFromListAccLookupAssoc
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (reflLeq : (x : k) → Equal Bool (leq x x) True)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (f : v → v → v) (query : k) (xs : List (Pair k v)) (acc : Tree k v)
+  : NoDup k v leq xs →
+    Equal (Option v)
+      (lookup k v leq query (unionFromListAcc k v leq f xs acc))
+      (unionLookupTable v f (assoc k v leq query xs) (lookup k v leq query acc)) =
+  match xs {
+    Nil ⇒ λh. Refl ;
+    Cons e xs2 ⇒
+      λh.
+        unionFromListAccLookupAssocDispatch k v leq reflLeq transLeq f query e xs2 acc h
+          (unionFromListAccLookupAssoc k v leq reflLeq transLeq f query xs2
+            (insertWithFoldStep k v leq f (pairFst k v e) (pairSnd k v e) acc)
+            (andSnd
+              (allInList k v (notOrderEquivToKey k leq (pairFst k v e)) xs2)
+            (NoDup k v leq xs2) h))
+          (boolDichotomy (leq query (pairFst k v e)))
+  }
+
+fn unionLookupCharacterization
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (reflLeq : (x : k) → Equal Bool (leq x x) True)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (f : v → v → v) (key : k) (a : Tree k v) (b : Tree k v)
+  : Ordered k v leq a → Distinct k v leq a →
+    Equal (Option v)
+      (lookup k v leq key (union k v leq f a b))
+      (unionLookupTable v f (lookup k v leq key a) (lookup k v leq key b)) =
+  λhord. λhdist.
+    trans (Option v)
+      (lookup k v leq key (union k v leq f a b))
+      (unionLookupTable v f (assoc k v leq key (toList k v a)) (lookup k v leq key b))
+      (unionLookupTable v f (lookup k v leq key a) (lookup k v leq key b))
+      (unionFromListAccLookupAssoc k v leq reflLeq transLeq f key (toList k v a) b hdist)
+      (cong (Option v) (Option v)
+        (assoc k v leq key (toList k v a))
+        (lookup k v leq key a)
+        (λleft. unionLookupTable v f left (lookup k v leq key b))
+        (sym (Option v)
+          (lookup k v leq key a)
+          (assoc k v leq key (toList k v a))
+          (lookupAssocAgree k v leq transLeq key a hord hdist)))
+
+fn unionLookupBothNoneLaw
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (reflLeq : (x : k) → Equal Bool (leq x x) True)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (f : v → v → v) (key : k) (a : Tree k v) (b : Tree k v)
+  : Ordered k v leq a → Distinct k v leq a →
+    Equal (Option v) (lookup k v leq key a) (None v) →
+    Equal (Option v) (lookup k v leq key b) (None v) →
+    Equal (Option v) (lookup k v leq key (union k v leq f a b)) (None v) =
+  λhord. λhdist. λha. λhb.
+    trans (Option v)
+      (lookup k v leq key (union k v leq f a b))
+      (unionLookupTable v f (lookup k v leq key a) (lookup k v leq key b))
+      (None v)
+      (unionLookupCharacterization k v leq reflLeq transLeq f key a b hord hdist)
+      (trans (Option v)
+        (unionLookupTable v f (lookup k v leq key a) (lookup k v leq key b))
+        (unionLookupTable v f (None v) (lookup k v leq key b))
+        (None v)
+        (cong (Option v) (Option v)
+          (lookup k v leq key a)
+          (None v)
+          (λleft. unionLookupTable v f left (lookup k v leq key b))
+          ha)
+        hb)
+
+fn unionLookupLeftOnlyLaw
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (reflLeq : (x : k) → Equal Bool (leq x x) True)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (f : v → v → v) (key : k) (x : v) (a : Tree k v) (b : Tree k v)
+  : Ordered k v leq a → Distinct k v leq a →
+    Equal (Option v) (lookup k v leq key a) (Some v x) →
+    Equal (Option v) (lookup k v leq key b) (None v) →
+    Equal (Option v) (lookup k v leq key (union k v leq f a b)) (Some v x) =
+  λhord. λhdist. λha. λhb.
+    trans (Option v)
+      (lookup k v leq key (union k v leq f a b))
+      (unionLookupTable v f (lookup k v leq key a) (lookup k v leq key b))
+      (Some v x)
+      (unionLookupCharacterization k v leq reflLeq transLeq f key a b hord hdist)
+      (trans (Option v)
+        (unionLookupTable v f (lookup k v leq key a) (lookup k v leq key b))
+        (unionLookupTable v f (Some v x) (lookup k v leq key b))
+        (Some v x)
+        (cong (Option v) (Option v)
+          (lookup k v leq key a)
+          (Some v x)
+          (λleft. unionLookupTable v f left (lookup k v leq key b))
+          ha)
+        (cong (Option v) (Option v)
+          (lookup k v leq key b)
+          (None v)
+          (λright. unionLookupTable v f (Some v x) right)
+          hb))
+
+fn unionLookupRightOnlyLaw
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (reflLeq : (x : k) → Equal Bool (leq x x) True)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (f : v → v → v) (key : k) (y : v) (a : Tree k v) (b : Tree k v)
+  : Ordered k v leq a → Distinct k v leq a →
+    Equal (Option v) (lookup k v leq key a) (None v) →
+    Equal (Option v) (lookup k v leq key b) (Some v y) →
+    Equal (Option v) (lookup k v leq key (union k v leq f a b)) (Some v y) =
+  λhord. λhdist. λha. λhb.
+    trans (Option v)
+      (lookup k v leq key (union k v leq f a b))
+      (unionLookupTable v f (lookup k v leq key a) (lookup k v leq key b))
+      (Some v y)
+      (unionLookupCharacterization k v leq reflLeq transLeq f key a b hord hdist)
+      (trans (Option v)
+        (unionLookupTable v f (lookup k v leq key a) (lookup k v leq key b))
+        (unionLookupTable v f (None v) (lookup k v leq key b))
+        (Some v y)
+        (cong (Option v) (Option v)
+          (lookup k v leq key a)
+          (None v)
+          (λleft. unionLookupTable v f left (lookup k v leq key b))
+          ha)
+        hb)
+
+fn unionLookupBothSomeLaw
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (reflLeq : (x : k) → Equal Bool (leq x x) True)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (f : v → v → v) (key : k) (x : v) (y : v) (a : Tree k v) (b : Tree k v)
+  : Ordered k v leq a → Distinct k v leq a →
+    Equal (Option v) (lookup k v leq key a) (Some v x) →
+    Equal (Option v) (lookup k v leq key b) (Some v y) →
+    Equal (Option v) (lookup k v leq key (union k v leq f a b)) (Some v (f x y)) =
+  λhord. λhdist. λha. λhb.
+    trans (Option v)
+      (lookup k v leq key (union k v leq f a b))
+      (unionLookupTable v f (lookup k v leq key a) (lookup k v leq key b))
+      (Some v (f x y))
+      (unionLookupCharacterization k v leq reflLeq transLeq f key a b hord hdist)
+      (trans (Option v)
+        (unionLookupTable v f (lookup k v leq key a) (lookup k v leq key b))
+        (unionLookupTable v f (Some v x) (lookup k v leq key b))
+        (Some v (f x y))
+        (cong (Option v) (Option v)
+          (lookup k v leq key a)
+          (Some v x)
+          (λleft. unionLookupTable v f left (lookup k v leq key b))
+          ha)
+        (cong (Option v) (Option v)
+          (lookup k v leq key b)
+          (Some v y)
+          (λright. unionLookupTable v f (Some v x) right)
+          hb))
+
+fn memberFromLookupNone
+  (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (m : Tree k v)
+  (h : Equal (Option v) (lookup k v leq key m) (None v))
+  : Equal Bool (member k v leq key m) False =
+  cong (Option v) Bool
+    (lookup k v leq key m)
+    (None v)
+    (λo. match o { None ⇒ False ; Some x ⇒ True })
+    h
+
+fn notOrderEquivFromMemberTrueFalse
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (inserted : k) (query : k) (keep : Tree k v)
+  (hInserted : Equal Bool (member k v leq inserted keep) True)
+  (hQuery : Equal Bool (member k v leq query keep) False)
+  : notOrderEquivToKey k leq inserted query =
+  λheq.
+    absurd (trans Bool True (member k v leq inserted keep) False
+      (sym Bool (member k v leq inserted keep) True hInserted)
+      (trans Bool
+        (member k v leq inserted keep)
+        (member k v leq query keep)
+        False
+        (memberOrderEquivAgree k v leq transLeq inserted query keep heq)
+        hQuery))
+
+fn intersectionFromListAccLookupNoneDispatch
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (key : k) (e : Pair k v) (xs2 : List (Pair k v)) (keep : Tree k v) (acc : Tree k v)
+  (hKeep : Equal Bool (member k v leq key keep) False)
+  (hAcc : Equal (Option v) (lookup k v leq key acc) (None v))
+  (o : Or (Equal Bool (member k v leq (pairFst k v e) keep) True)
+          (Equal Bool (member k v leq (pairFst k v e) keep) False))
+  : Equal (Option v)
+      (lookup k v leq key (intersectionFromListAcc k v leq (Cons (Pair k v) e xs2) keep acc))
+      (None v) =
+  match o {
+    Inl q ⇒
+      trans (Option v)
+        (lookup k v leq key (intersectionFromListAcc k v leq (Cons (Pair k v) e xs2) keep acc))
+        (lookup k v leq key
+          (intersectionFromListAcc k v leq xs2 keep
+            (insert k v leq (pairFst k v e) (pairSnd k v e) acc)))
+        (None v)
+        (cong (Tree k v) (Option v)
+          (intersectionFromListAcc k v leq (Cons (Pair k v) e xs2) keep acc)
+          (intersectionFromListAcc k v leq xs2 keep
+            (insert k v leq (pairFst k v e) (pairSnd k v e) acc))
+          (lookup k v leq key)
+          (intersectionFromListAccTrueBridge k v leq e xs2 keep acc q))
+        (intersectionFromListAccLookupNone k v leq transLeq key xs2 keep
+          (insert k v leq (pairFst k v e) (pairSnd k v e) acc)
+          hKeep
+          (trans (Option v)
+            (lookup k v leq key (insert k v leq (pairFst k v e) (pairSnd k v e) acc))
+            (lookup k v leq key acc)
+            (None v)
+            (lookupLocality k v leq transLeq (pairFst k v e) key (pairSnd k v e) acc
+              (notOrderEquivFromMemberTrueFalse k v leq transLeq (pairFst k v e) key keep q hKeep))
+            hAcc)) ;
+    Inr q ⇒
+      trans (Option v)
+        (lookup k v leq key (intersectionFromListAcc k v leq (Cons (Pair k v) e xs2) keep acc))
+        (lookup k v leq key (intersectionFromListAcc k v leq xs2 keep acc))
+        (None v)
+        (cong (Tree k v) (Option v)
+          (intersectionFromListAcc k v leq (Cons (Pair k v) e xs2) keep acc)
+          (intersectionFromListAcc k v leq xs2 keep acc)
+          (lookup k v leq key)
+          (intersectionFromListAccFalseBridge k v leq e xs2 keep acc q))
+        (intersectionFromListAccLookupNone k v leq transLeq key xs2 keep acc hKeep hAcc)
+  }
+
+fn intersectionFromListAccLookupNone
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (key : k) (xs : List (Pair k v)) (keep : Tree k v) (acc : Tree k v)
+  : Equal Bool (member k v leq key keep) False →
+    Equal (Option v) (lookup k v leq key acc) (None v) →
+    Equal (Option v) (lookup k v leq key (intersectionFromListAcc k v leq xs keep acc)) (None v) =
+  match xs {
+    Nil ⇒ λhKeep. λhAcc. hAcc ;
+    Cons e xs2 ⇒
+      λhKeep. λhAcc.
+        intersectionFromListAccLookupNoneDispatch k v leq transLeq key e xs2 keep acc hKeep hAcc
+          (boolDichotomy (member k v leq (pairFst k v e) keep))
+  }
+
+fn intersectionLookupCharacterization
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (key : k) (a : Tree k v) (b : Tree k v)
+  : Equal (Option v) (lookup k v leq key b) (None v) →
+    Equal (Option v) (lookup k v leq key (intersection k v leq a b)) (None v) =
+  λhb.
+    intersectionFromListAccLookupNone k v leq transLeq key (toList k v a) b (empty k v)
+      (memberFromLookupNone k v leq key b hb)
+      (lookupEmptyIsNone k v leq key)
+
+fn insertWithFoldStepPreservesOrdered
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (total : (x : k) → (y : k) → Or (Equal Bool (leq x y) True) (Equal Bool (leq y x) True))
+  (f : v → v → v) (key : k) (val : v) (acc : Tree k v)
+  : Ordered k v leq acc → Ordered k v leq (insertWithFoldStep k v leq f key val acc) =
+  λh.
+    J (λt _. Ordered k v leq t)
+      (insertWithPreservesOrdered k v leq transLeq total f key val acc h)
+      (sym (Tree k v)
+        (insertWithFoldStep k v leq f key val acc)
+        (insertWith k v leq f key val acc)
+        (insertWithFoldStepReduces k v leq f key val acc))
+
 fn foldInsertWithPreservesOrdered
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
@@ -3620,13 +4364,131 @@ fn foldInsertWithPreservesOrdered
             (foldInsertWithPreservesOrdered k v leq transLeq total f l acc h))
   }
 
+fn unionFromListAccPreservesOrdered
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (total : (x : k) → (y : k) → Or (Equal Bool (leq x y) True) (Equal Bool (leq y x) True))
+  (f : v → v → v) (xs : List (Pair k v)) (acc : Tree k v)
+  : Ordered k v leq acc → Ordered k v leq (unionFromListAcc k v leq f xs acc) =
+  match xs {
+    Nil ⇒ λh. h ;
+    Cons e xs2 ⇒
+      λh.
+        unionFromListAccPreservesOrdered k v leq transLeq total f xs2
+          (insertWithFoldStep k v leq f (pairFst k v e) (pairSnd k v e) acc)
+          (insertWithFoldStepPreservesOrdered k v leq transLeq total f
+            (pairFst k v e) (pairSnd k v e) acc h)
+  }
+
 fn unionPreservesOrdered
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (total : (x : k) → (y : k) → Or (Equal Bool (leq x y) True) (Equal Bool (leq y x) True))
   (f : v → v → v) (a : Tree k v) (b : Tree k v)
   : Ordered k v leq b → Ordered k v leq (union k v leq f a b) =
-  foldInsertWithPreservesOrdered k v leq transLeq total f a b
+  unionFromListAccPreservesOrdered k v leq transLeq total f (toList k v a) b
+
+fn intersectionFromListAccPreservesOrderedDispatch
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (total : (x : k) → (y : k) → Or (Equal Bool (leq x y) True) (Equal Bool (leq y x) True))
+  (e : Pair k v) (xs2 : List (Pair k v)) (keep : Tree k v) (acc : Tree k v)
+  (h : Ordered k v leq acc)
+  (o : Or (Equal Bool (member k v leq (pairFst k v e) keep) True)
+          (Equal Bool (member k v leq (pairFst k v e) keep) False))
+  : Ordered k v leq (intersectionFromListAcc k v leq (Cons (Pair k v) e xs2) keep acc) =
+  match o {
+    Inl q ⇒
+      J (λt _. Ordered k v leq t)
+        (intersectionFromListAccPreservesOrdered k v leq transLeq total xs2 keep
+          (insert k v leq (pairFst k v e) (pairSnd k v e) acc)
+          (preservesOrdered k v leq transLeq total (pairFst k v e) (pairSnd k v e) acc h))
+        (sym (Tree k v)
+          (intersectionFromListAcc k v leq (Cons (Pair k v) e xs2) keep acc)
+          (intersectionFromListAcc k v leq xs2 keep
+            (insert k v leq (pairFst k v e) (pairSnd k v e) acc))
+          (intersectionFromListAccTrueBridge k v leq e xs2 keep acc q)) ;
+    Inr q ⇒
+      J (λt _. Ordered k v leq t)
+        (intersectionFromListAccPreservesOrdered k v leq transLeq total xs2 keep acc h)
+        (sym (Tree k v)
+          (intersectionFromListAcc k v leq (Cons (Pair k v) e xs2) keep acc)
+          (intersectionFromListAcc k v leq xs2 keep acc)
+          (intersectionFromListAccFalseBridge k v leq e xs2 keep acc q))
+  }
+
+fn intersectionFromListAccPreservesOrdered
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (total : (x : k) → (y : k) → Or (Equal Bool (leq x y) True) (Equal Bool (leq y x) True))
+  (xs : List (Pair k v)) (keep : Tree k v) (acc : Tree k v)
+  : Ordered k v leq acc → Ordered k v leq (intersectionFromListAcc k v leq xs keep acc) =
+  match xs {
+    Nil ⇒ λh. h ;
+    Cons e xs2 ⇒
+      λh.
+        intersectionFromListAccPreservesOrderedDispatch k v leq transLeq total e xs2 keep acc h
+          (boolDichotomy (member k v leq (pairFst k v e) keep))
+  }
+
+fn intersectionPreservesOrdered
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (total : (x : k) → (y : k) → Or (Equal Bool (leq x y) True) (Equal Bool (leq y x) True))
+  (a : Tree k v) (b : Tree k v)
+  : Ordered k v leq (intersection k v leq a b) =
+  intersectionFromListAccPreservesOrdered k v leq transLeq total (toList k v a) b (empty k v) (orderedEmpty k v leq)
+
+fn differenceFromListAccPreservesOrderedDispatch
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (total : (x : k) → (y : k) → Or (Equal Bool (leq x y) True) (Equal Bool (leq y x) True))
+  (e : Pair k v) (xs2 : List (Pair k v)) (reject : Tree k v) (acc : Tree k v)
+  (h : Ordered k v leq acc)
+  (o : Or (Equal Bool (member k v leq (pairFst k v e) reject) True)
+          (Equal Bool (member k v leq (pairFst k v e) reject) False))
+  : Ordered k v leq (differenceFromListAcc k v leq (Cons (Pair k v) e xs2) reject acc) =
+  match o {
+    Inl q ⇒
+      J (λt _. Ordered k v leq t)
+        (differenceFromListAccPreservesOrdered k v leq transLeq total xs2 reject acc h)
+        (sym (Tree k v)
+          (differenceFromListAcc k v leq (Cons (Pair k v) e xs2) reject acc)
+          (differenceFromListAcc k v leq xs2 reject acc)
+          (differenceFromListAccTrueBridge k v leq e xs2 reject acc q)) ;
+    Inr q ⇒
+      J (λt _. Ordered k v leq t)
+        (differenceFromListAccPreservesOrdered k v leq transLeq total xs2 reject
+          (insert k v leq (pairFst k v e) (pairSnd k v e) acc)
+          (preservesOrdered k v leq transLeq total (pairFst k v e) (pairSnd k v e) acc h))
+        (sym (Tree k v)
+          (differenceFromListAcc k v leq (Cons (Pair k v) e xs2) reject acc)
+          (differenceFromListAcc k v leq xs2 reject
+            (insert k v leq (pairFst k v e) (pairSnd k v e) acc))
+          (differenceFromListAccFalseBridge k v leq e xs2 reject acc q))
+  }
+
+fn differenceFromListAccPreservesOrdered
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (total : (x : k) → (y : k) → Or (Equal Bool (leq x y) True) (Equal Bool (leq y x) True))
+  (xs : List (Pair k v)) (reject : Tree k v) (acc : Tree k v)
+  : Ordered k v leq acc → Ordered k v leq (differenceFromListAcc k v leq xs reject acc) =
+  match xs {
+    Nil ⇒ λh. h ;
+    Cons e xs2 ⇒
+      λh.
+        differenceFromListAccPreservesOrderedDispatch k v leq transLeq total e xs2 reject acc h
+          (boolDichotomy (member k v leq (pairFst k v e) reject))
+  }
+
+fn differencePreservesOrdered
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (total : (x : k) → (y : k) → Or (Equal Bool (leq x y) True) (Equal Bool (leq y x) True))
+  (a : Tree k v) (b : Tree k v)
+  : Ordered k v leq (difference k v leq a b) =
+  differenceFromListAccPreservesOrdered k v leq transLeq total (toList k v a) b (empty k v) (orderedEmpty k v leq)
 
 fn setUnion (k : Type) (leq : k → k → Bool) (s : Tree k Unit) (t : Tree k Unit) : Tree k Unit =
   union k Unit leq (λx.λy. MkUnit) s t
