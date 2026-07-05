@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # System packages
-sudo apt-get update && sudo apt-get install -y tmux
+sudo apt-get update && sudo apt-get install -y tmux curl
 
 # Claude Code CLI — install from npm first (puts `claude` on PATH
 # via /usr/local/share/npm-global/bin), use it to register MCP servers,
@@ -10,6 +10,11 @@ sudo apt-get update && sudo apt-get install -y tmux
 # ~/.local/bin. The native build is the officially-supported path
 # going forward; the TUI nags on first run when it's still npm-based.
 npm install -g @anthropic-ai/claude-code
+
+# Codex CLI — standalone installer in non-interactive mode. The installer
+# places `codex` in ~/.local/bin by default, which bash -lc picks up through
+# the devcontainer user's standard profile.
+curl -fsSL https://chatgpt.com/codex/install.sh | CODEX_NON_INTERACTIVE=1 sh
 
 # Python tooling
 pip install uv
@@ -23,8 +28,42 @@ pip install mootup
 # they resolve from any cwd. The wrappers read CONVO_ROLE at runtime
 # to look up the per-role API key from .moot/actors.json.
 DEVCONTAINER_DIR="$(realpath .devcontainer)"
+PROJECT_ROOT="$(dirname "$DEVCONTAINER_DIR")"
 claude mcp add convo "$DEVCONTAINER_DIR/run-moot-mcp.sh" -s user
 claude mcp add convo-channel "$DEVCONTAINER_DIR/run-moot-channel.sh" -s user
+
+# Register MCP servers for Codex at user scope so Codex finds them regardless
+# of cwd (agents launch in worktrees under .worktrees/, not the project root).
+# The wrappers read CONVO_ROLE at runtime to look up the per-role API key from
+# .moot/actors.json.
+mkdir -p /home/node/.codex
+chmod 700 /home/node/.codex
+cat > /home/node/.codex/config.toml <<CODEX_CONFIG
+approval_policy = "never"
+sandbox_mode = "danger-full-access"
+
+# Optional: uncomment when using the Ken LLM proxy as Codex model provider.
+# The proxy expects LLM_PROXY_SHARED_SECRET in the Codex process environment.
+# model_provider = "moot-llm-proxy"
+#
+# [model_providers.moot-llm-proxy]
+# name = "Moot LLM proxy"
+# base_url = "http://127.0.0.1:8090/v1"
+# env_key = "LLM_PROXY_SHARED_SECRET"
+
+[mcp_servers.convo]
+command = "$DEVCONTAINER_DIR/run-moot-mcp.sh"
+cwd = "$PROJECT_ROOT"
+env_vars = ["CONVO_ROLE", "CONVO_API_URL", "CONVO_WORKTREE"]
+startup_timeout_sec = 30
+
+[mcp_servers.convo-channel]
+command = "$DEVCONTAINER_DIR/run-moot-channel.sh"
+cwd = "$PROJECT_ROOT"
+env_vars = ["CONVO_ROLE", "CONVO_API_URL", "CONVO_WORKTREE"]
+startup_timeout_sec = 30
+CODEX_CONFIG
+chmod 600 /home/node/.codex/config.toml
 
 # Migrate from the npm-installed claude to the native build. This runs
 # LAST (after `claude mcp add`) because `claude install` deletes the
