@@ -80,6 +80,10 @@ pub struct ElabResult {
     /// assumed (`21 §5.2`); they never enter `trusted_base()`. Their sole
     /// projection is the B1 `T`/`delegated` channel (TE-E).
     pub temporal_obligations: Vec<crate::temporal::TemporalObligation>,
+    /// Checked surface effect row for `view ... visits [...]` declarations.
+    /// Present only when the real view elaboration path consumed the parsed
+    /// row annotation and ran the row-poly escape check.
+    pub effect_row_type: Option<crate::effects::RowType>,
 }
 
 impl ElabResult {
@@ -1665,6 +1669,40 @@ fn rtype_head_name(ty: &RType) -> String {
     }
 }
 
+fn check_view_visits_row(rdecl: &RDecl) -> Result<Option<crate::effects::RowType>, ElabError> {
+    let visits = match &rdecl.kind {
+        RDeclKind::View { visits: Some(row), .. } => row,
+        _ => return Ok(None),
+    };
+
+    let mut row_vars = HashMap::new();
+    let mut decl = crate::effects::EffectDecl::new(&rdecl.name);
+    if let Some(tail) = &visits.tail {
+        let rv = crate::effects::RowVar(0);
+        row_vars.insert(tail.clone(), rv);
+        decl = decl.with_param_row(rv);
+    }
+
+    let declared = crate::effects::surface_row_to_row_type(visits, &row_vars)
+        .map_err(|reason| ElabError::TypeMismatch {
+            span: visits.span.clone(),
+            reason,
+        })?;
+    decl = decl.with_declared_row_type(declared.clone());
+
+    let rows = crate::effects::infer_all_poly(&HashMap::new(), &[decl.clone()]);
+    let inferred = rows.get(&rdecl.name).ok_or_else(|| {
+        ElabError::Internal(format!("effect row inference omitted '{}'", rdecl.name))
+    })?;
+    crate::effects::check_decl_poly(&decl, inferred, &crate::effects::EffectRow::empty())
+        .map_err(|err| ElabError::TypeMismatch {
+            span: visits.span.clone(),
+            reason: err.to_string(),
+        })?;
+
+    Ok(Some(declared))
+}
+
 /// V1 elaboration: returns the definition id plus any emitted obligation holes.
 pub fn elaborate_rdecl_v1(
     env: &mut GlobalEnv,
@@ -1676,6 +1714,7 @@ pub fn elaborate_rdecl_v1(
 ) -> Result<ElabResult, ElabError> {
     match &rdecl.kind {
         RDeclKind::View { constraints, .. } => {
+            let effect_row_type = check_view_visits_row(rdecl)?;
             // Check `where C T` constraints via `instance_search` (`37 §6`,
             // L3b). This is the producer the QA grep gate checks.
             let mut dict_id: Option<GlobalId> = None;
@@ -1701,12 +1740,15 @@ pub fn elaborate_rdecl_v1(
             // save/restore any prior `d` binding around the call so it
             // never leaks to sibling decls.
             let saved_d = dict_id.map(|id| globals.insert("d".to_string(), id));
-            let result = elaborate_view_or_let(env, globals, num_values, numeric_env, class_env, rdecl);
+            let mut result = elaborate_view_or_let(env, globals, num_values, numeric_env, class_env, rdecl);
             if dict_id.is_some() {
                 match saved_d.unwrap() {
                     Some(prev) => { globals.insert("d".to_string(), prev); }
                     None => { globals.remove("d"); }
                 }
+            }
+            if let Ok(result) = &mut result {
+                result.effect_row_type = effect_row_type;
             }
             result
         }
@@ -1728,7 +1770,7 @@ pub fn elaborate_rdecl_v1(
             )?;
             // Register data type in the module map for orphan check (`33 §5.3`).
             class_env.global_modules.insert(d_id, class_env.current_module);
-            Ok(ElabResult { name: rdecl.name.clone(), def_id: d_id, obligations: vec![], foreign_binding: None, temporal_obligations: vec![] })
+            Ok(ElabResult { name: rdecl.name.clone(), def_id: d_id, obligations: vec![], foreign_binding: None, temporal_obligations: vec![], effect_row_type: None })
         }
         RDeclKind::TypeAlias { ty } => {
             // A type alias `type T = A` declares T as a transparent definition
@@ -1744,7 +1786,7 @@ pub fn elaborate_rdecl_v1(
             let id = declare_def(env, vec![], alias_ty, alias_body)
                 .map_err(|e| ElabError::KernelRejected { error: e, span: rdecl.span.clone() })?;
             globals.insert(rdecl.name.clone(), id);
-            Ok(ElabResult { name: rdecl.name.clone(), def_id: id, obligations: vec![], foreign_binding: None, temporal_obligations: vec![] })
+            Ok(ElabResult { name: rdecl.name.clone(), def_id: id, obligations: vec![], foreign_binding: None, temporal_obligations: vec![], effect_row_type: None })
         }
         RDeclKind::Foreign { symbol, library, is_pure, visits } => {
             elaborate_foreign_decl(
@@ -1927,6 +1969,7 @@ fn elab_class_decl(
         obligations: vec![],
         foreign_binding: None,
         temporal_obligations: vec![],
+        effect_row_type: None,
     })
 }
 
@@ -2137,6 +2180,7 @@ fn elab_instance_decl(
         obligations: vec![],
         foreign_binding: None,
         temporal_obligations: vec![],
+        effect_row_type: None,
     })
 }
 
@@ -2203,6 +2247,7 @@ fn elab_derive(
         obligations: vec![],
         foreign_binding: None,
         temporal_obligations: vec![],
+        effect_row_type: None,
     })
 }
 
@@ -2267,6 +2312,7 @@ fn elaborate_foreign_decl(
         obligations,
         foreign_binding: Some(binding),
         temporal_obligations: vec![],
+        effect_row_type: None,
     })
 }
 
@@ -2334,7 +2380,7 @@ fn elaborate_v0(
         ElabError::KernelRejected { error: e, span: rdecl.span.clone() }
     })?;
     globals.insert(rdecl.name.clone(), id);
-    Ok(ElabResult { name: rdecl.name.clone(), def_id: id, obligations: body_obligations, foreign_binding: None, temporal_obligations: vec![] })
+    Ok(ElabResult { name: rdecl.name.clone(), def_id: id, obligations: body_obligations, foreign_binding: None, temporal_obligations: vec![], effect_row_type: None })
 }
 
 /// Elaborate a self-recursive `view`/`let` through the SCT gate (Approach A).
@@ -2419,6 +2465,7 @@ fn elaborate_recursive_view(
                 obligations: body_obligations,
                 foreign_binding: None,
                 temporal_obligations: vec![],
+                effect_row_type: None,
             })
         }
         Err(e) => {
@@ -2542,6 +2589,7 @@ pub fn elaborate_mutual_group(
                     obligations,
                     foreign_binding: None,
                     temporal_obligations: vec![],
+                    effect_row_type: None,
                 })
                 .collect())
         }
@@ -2765,7 +2813,7 @@ fn elaborate_view_with_spec(
         globals.insert(rdecl.name.clone(), id);
         id
     };
-    Ok(ElabResult { name: rdecl.name.clone(), def_id: id, obligations: ens_obligations, foreign_binding: None, temporal_obligations: vec![] })
+    Ok(ElabResult { name: rdecl.name.clone(), def_id: id, obligations: ens_obligations, foreign_binding: None, temporal_obligations: vec![], effect_row_type: None })
 }
 
 /// Elaborate `prove name : φ` (`21 §6.3`, §3).
@@ -2797,7 +2845,7 @@ fn elaborate_prove(
         span: rdecl.span.clone(),
         kind: ObligationKind::Prove,
     };
-    Ok(ElabResult { name: rdecl.name.clone(), def_id: hole_id, obligations: vec![obl], foreign_binding: None, temporal_obligations: vec![] })
+    Ok(ElabResult { name: rdecl.name.clone(), def_id: hole_id, obligations: vec![obl], foreign_binding: None, temporal_obligations: vec![], effect_row_type: None })
 }
 
 /// Elaborate `temporal name { φ }` — a delegated temporal/behavioral
@@ -2840,6 +2888,7 @@ fn elaborate_temporal(
         obligations: vec![],
         foreign_binding: None,
         temporal_obligations: vec![obl],
+        effect_row_type: None,
     })
 }
 
@@ -2894,7 +2943,7 @@ fn elaborate_law(
     globals.insert(rdecl.name.clone(), law_id);
 
     // Return: def_id = law_id (the law postulate), obligations = per-field holes
-    Ok(ElabResult { name: rdecl.name.clone(), def_id: law_id, obligations, foreign_binding: None, temporal_obligations: vec![] })
+    Ok(ElabResult { name: rdecl.name.clone(), def_id: law_id, obligations, foreign_binding: None, temporal_obligations: vec![], effect_row_type: None })
 }
 
 // ----- helpers -----

@@ -659,6 +659,7 @@ fn expand_scope(
                             obligations: vec![],
                             foreign_binding: None,
                             temporal_obligations: vec![],
+                            effect_row_type: None,
                         });
                         i += 1;
                         continue;

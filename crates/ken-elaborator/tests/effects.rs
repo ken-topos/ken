@@ -1116,6 +1116,36 @@ fn surf1_surface_visits_open_row_reaches_join_and_stays_conservative() {
     );
 }
 
+/// SURF-1 D1 production path: real `RDeclKind::View` elaboration consumes the
+/// parsed `visits` row and records the checked `RowType`. If the
+/// `elaborate_rdecl_v1` hook is removed, this fails with `None`.
+#[test]
+fn surf1_view_elaboration_consumes_visits_row() {
+    let src = "view surf1_visits (x : Nat) : Nat visits [Console | e] = x";
+    let decls = parse_decls(src).expect("view with open visits row must parse");
+    let rdecl = resolve_decl(&decls[0]).expect("view with open visits row must resolve");
+    let mut env = ken_elaborator::ElabEnv::new().expect("base env");
+
+    let result = ken_elaborator::elab::elaborate_rdecl_v1(
+        &mut env.env,
+        &mut env.globals,
+        &mut env.num_values,
+        &env.numeric_env,
+        &mut env.class_env,
+        &rdecl,
+    )
+    .expect("view with D1 visits row must elaborate");
+
+    let row = result
+        .effect_row_type
+        .expect("production view elaboration must expose checked visits row");
+    assert_eq!(
+        row,
+        RowType::singleton("Console").join(RowType::Var(RowVar(0))),
+        "written [Console | e] must reach production checking as a Join"
+    );
+}
+
 /// SURF-1 D1 / `36 §1.5.5`: recursive row-polymorphic inference ranges over
 /// `RowType` and terminates at the idempotent fixpoint `e ∪ e = e`.
 #[test]
