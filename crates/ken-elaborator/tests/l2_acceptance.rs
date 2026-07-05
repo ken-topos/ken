@@ -415,7 +415,7 @@ fn ac7_refinement_intro_emits_obligation() {
 
     // The return type `{ n : Int | P n }` forces an obligation `P 3` at the
     // introduction site.
-    let result = env.elaborate_decl_v1("view nonneg_val : { n : Int | P n } = 3");
+    let result = env.elaborate_decl_v1("const nonneg_val : { n : Int | P n } = 3");
 
     let elab_result =
         result.unwrap_or_else(|e| panic!("AC7a: expected success, got: {}", e));
@@ -437,9 +437,9 @@ fn ac7_plain_carrier_no_obligation() {
     // This is the negative discriminant complementing AC7a's positive discriminant:
     //   AC7a: `{ n : Int | P n }` annotation → obligation emitted
     //   AC7b: `Int`               annotation → no obligation
-    let result = env.elaborate_decl_v1("view plain_val : Int = 5");
+    let result = env.elaborate_decl_v1("const plain_val : Int = 5");
     let elab_result = result.unwrap_or_else(|e| {
-        panic!("AC7b: plain-Int view should accept, got: {}", e)
+        panic!("AC7b: plain-Int const should accept, got: {}", e)
     });
 
     assert!(

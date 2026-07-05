@@ -22,8 +22,8 @@ data FizzTag = Plain | IsFizz | IsBuzz | IsFizzBuzz
 -- Helper: is a Nat zero?
 data IsZero = Zero_ | NonZero_
 
-view isZero (n : Nat) : IsZero =
-  match n { Zero => Zero_ ; Suc m => NonZero_ }
+fn isZero (n : Nat) : IsZero =
+  match n { Zero ⇒ Zero_ ; Suc m ⇒ NonZero_ }
 
 -- ── mod3 ──────────────────────────────────────────────────────────────────────
 -- Modular accumulator for mod3: a 3-element cycle type avoids nested patterns
@@ -31,111 +31,111 @@ view isZero (n : Nat) : IsZero =
 
 data Mod3 = Zero3 | One3 | Two3
 
-view incMod3 (x : Mod3) : Mod3 =
-  match x { Zero3 => One3 ; One3 => Two3 ; Two3 => Zero3 }
+fn incMod3 (x : Mod3) : Mod3 =
+  match x { Zero3 ⇒ One3 ; One3 ⇒ Two3 ; Two3 ⇒ Zero3 }
 
-view isZeroMod3 (x : Mod3) : IsZero =
-  match x { Zero3 => Zero_ ; One3 => NonZero_ ; Two3 => NonZero_ }
+fn isZeroMod3 (x : Mod3) : IsZero =
+  match x { Zero3 ⇒ Zero_ ; One3 ⇒ NonZero_ ; Two3 ⇒ NonZero_ }
 
-view mod3Step (n : Nat) (acc : Mod3) : Mod3 =
-  match n { Zero => acc ; Suc m => mod3Step m (incMod3 acc) }
+fn mod3Step (n : Nat) (acc : Mod3) : Mod3 =
+  match n { Zero ⇒ acc ; Suc m ⇒ mod3Step m (incMod3 acc) }
 
-view mod3 (n : Nat) : Mod3 = mod3Step n Zero3
+fn mod3 (n : Nat) : Mod3 = mod3Step n Zero3
 
 -- ── mod5 ──────────────────────────────────────────────────────────────────────
 -- Same pattern with a 5-element cycle type.
 
 data Mod5 = Zero5 | One5 | Two5 | Three5 | Four5
 
-view incMod5 (x : Mod5) : Mod5 =
-  match x { Zero5 => One5 ; One5 => Two5 ; Two5 => Three5 ; Three5 => Four5 ; Four5 => Zero5 }
+fn incMod5 (x : Mod5) : Mod5 =
+  match x { Zero5 ⇒ One5 ; One5 ⇒ Two5 ; Two5 ⇒ Three5 ; Three5 ⇒ Four5 ; Four5 ⇒ Zero5 }
 
-view isZeroMod5 (x : Mod5) : IsZero =
-  match x { Zero5 => Zero_ ; One5 => NonZero_ ; Two5 => NonZero_ ; Three5 => NonZero_ ; Four5 => NonZero_ }
+fn isZeroMod5 (x : Mod5) : IsZero =
+  match x { Zero5 ⇒ Zero_ ; One5 ⇒ NonZero_ ; Two5 ⇒ NonZero_ ; Three5 ⇒ NonZero_ ; Four5 ⇒ NonZero_ }
 
-view mod5Step (n : Nat) (acc : Mod5) : Mod5 =
-  match n { Zero => acc ; Suc m => mod5Step m (incMod5 acc) }
+fn mod5Step (n : Nat) (acc : Mod5) : Mod5 =
+  match n { Zero ⇒ acc ; Suc m ⇒ mod5Step m (incMod5 acc) }
 
-view mod5 (n : Nat) : Mod5 = mod5Step n Zero5
+fn mod5 (n : Nat) : Mod5 = mod5Step n Zero5
 
 -- ── classify ─────────────────────────────────────────────────────────────────
 
-view classify (n : Nat) : FizzTag =
+fn classify (n : Nat) : FizzTag =
   match isZeroMod3 (mod3 n) {
-    Zero_    => match isZeroMod5 (mod5 n) {
-                  Zero_    => IsFizzBuzz ;
-                  NonZero_ => IsFizz } ;
-    NonZero_ => match isZeroMod5 (mod5 n) {
-                  Zero_    => IsBuzz ;
-                  NonZero_ => Plain }
+    Zero_    ⇒ match isZeroMod5 (mod5 n) {
+                  Zero_    ⇒ IsFizzBuzz ;
+                  NonZero_ ⇒ IsFizz } ;
+    NonZero_ ⇒ match isZeroMod5 (mod5 n) {
+                  Zero_    ⇒ IsBuzz ;
+                  NonZero_ ⇒ Plain }
   }
 
 -- ── Decimal printing (`natToDecimal`, `ken-interp` has no `div_int`/
 -- `mod_int`) ──────────────────────────────────────────────────────────────────
 
-view natAdd (a : Nat) (b : Nat) : Nat =
-  match a { Zero => b ; Suc m => Suc (natAdd m b) }
+fn natAdd (a : Nat) (b : Nat) : Nat =
+  match a { Zero ⇒ b ; Suc m ⇒ Suc (natAdd m b) }
 
-view natToInt (n : Nat) : Int =
-  match n { Zero => (0 : Int) ; Suc m => (1 : Int) + natToInt m }
+fn natToInt (n : Nat) : Int =
+  match n { Zero ⇒ (0 : Int) ; Suc m ⇒ (1 : Int) + natToInt m }
 
-view list_append (a : Type) (xs : List a) (ys : List a) : List a =
-  match xs { Nil => ys ; Cons x xs2 => Cons a x (list_append a xs2 ys) }
+fn list_append (a : Type) (xs : List a) (ys : List a) : List a =
+  match xs { Nil ⇒ ys ; Cons x xs2 ⇒ Cons a x (list_append a xs2 ys) }
 
-view concat (a : String) (b : String) : String =
+fn concat (a : String) (b : String) : String =
   list_char_to_string (list_append Char (string_to_list_char a) (string_to_list_char b))
 
-view sub10 (n : Nat) : Option Nat =
-  match n { Zero => None Nat ; Suc n1 =>
-  match n1 { Zero => None Nat ; Suc n2 =>
-  match n2 { Zero => None Nat ; Suc n3 =>
-  match n3 { Zero => None Nat ; Suc n4 =>
-  match n4 { Zero => None Nat ; Suc n5 =>
-  match n5 { Zero => None Nat ; Suc n6 =>
-  match n6 { Zero => None Nat ; Suc n7 =>
-  match n7 { Zero => None Nat ; Suc n8 =>
-  match n8 { Zero => None Nat ; Suc n9 =>
-  match n9 { Zero => None Nat ; Suc n10 => Some Nat n10 } } } } } } } } } }
+fn sub10 (n : Nat) : Option Nat =
+  match n { Zero ⇒ None Nat ; Suc n1 ⇒
+  match n1 { Zero ⇒ None Nat ; Suc n2 ⇒
+  match n2 { Zero ⇒ None Nat ; Suc n3 ⇒
+  match n3 { Zero ⇒ None Nat ; Suc n4 ⇒
+  match n4 { Zero ⇒ None Nat ; Suc n5 ⇒
+  match n5 { Zero ⇒ None Nat ; Suc n6 ⇒
+  match n6 { Zero ⇒ None Nat ; Suc n7 ⇒
+  match n7 { Zero ⇒ None Nat ; Suc n8 ⇒
+  match n8 { Zero ⇒ None Nat ; Suc n9 ⇒
+  match n9 { Zero ⇒ None Nat ; Suc n10 ⇒ Some Nat n10 } } } } } } } } } }
 
-view mod10Fueled (fuel : Nat) (n : Nat) : Nat =
+fn mod10Fueled (fuel : Nat) (n : Nat) : Nat =
   match fuel {
-    Zero => n ;
-    Suc f => match sub10 n { None => n ; Some n2 => mod10Fueled f n2 }
+    Zero ⇒ n ;
+    Suc f ⇒ match sub10 n { None ⇒ n ; Some n2 ⇒ mod10Fueled f n2 }
   }
 
-view mod10 (n : Nat) : Nat = mod10Fueled n n
+fn mod10 (n : Nat) : Nat = mod10Fueled n n
 
-view div10Fueled (fuel : Nat) (n : Nat) (q : Nat) : Nat =
+fn div10Fueled (fuel : Nat) (n : Nat) (q : Nat) : Nat =
   match fuel {
-    Zero => q ;
-    Suc f => match sub10 n { None => q ; Some n2 => div10Fueled f n2 (Suc q) }
+    Zero ⇒ q ;
+    Suc f ⇒ match sub10 n { None ⇒ q ; Some n2 ⇒ div10Fueled f n2 (Suc q) }
   }
 
-view div10 (n : Nat) : Nat = div10Fueled n n Zero
+fn div10 (n : Nat) : Nat = div10Fueled n n Zero
 
-view digitChar (d : Nat) : String =
+fn digitChar (d : Nat) : String =
   list_char_to_string (Cons Char ((48 : Int) + natToInt d) (Nil Char))
 
-view natToDecimalFueled (fuel : Nat) (n : Nat) : String =
+fn natToDecimalFueled (fuel : Nat) (n : Nat) : String =
   match fuel {
-    Zero => digitChar n ;
-    Suc f => match div10 n {
-      Zero  => digitChar (mod10 n) ;
-      Suc q => concat (natToDecimalFueled f (Suc q)) (digitChar (mod10 n))
+    Zero ⇒ digitChar n ;
+    Suc f ⇒ match div10 n {
+      Zero  ⇒ digitChar (mod10 n) ;
+      Suc q ⇒ concat (natToDecimalFueled f (Suc q)) (digitChar (mod10 n))
     }
   }
 
-view natToDecimal (n : Nat) : String =
-  match n { Zero => "0" ; Suc m => natToDecimalFueled (Suc m) (Suc m) }
+fn natToDecimal (n : Nat) : String =
+  match n { Zero ⇒ "0" ; Suc m ⇒ natToDecimalFueled (Suc m) (Suc m) }
 
 -- ── Output line + IO loop ────────────────────────────────────────────────────
 
-view fizzBuzzLine (n : Nat) : String =
+fn fizzBuzzLine (n : Nat) : String =
   match classify n {
-    IsFizz     => "Fizz" ;
-    IsBuzz     => "Buzz" ;
-    IsFizzBuzz => "FizzBuzz" ;
-    Plain      => natToDecimal n
+    IsFizz     ⇒ "Fizz" ;
+    IsBuzz     ⇒ "Buzz" ;
+    IsFizzBuzz ⇒ "FizzBuzz" ;
+    Plain      ⇒ natToDecimal n
   }
 
 -- fizzBuzzLoop remaining current: prints `fizzBuzzLine current`, then
@@ -146,15 +146,15 @@ view fizzBuzzLine (n : Nat) : String =
 --
 -- `Vis`/`Ret` now take `ITree`'s 3 explicit params (State-effect-build lift,
 -- VAL2 #10 / OQ-C.C2): `E=ConsoleOp`, `Resp=console_resp`, `R=Unit`.
-view fizzBuzzLoop (remaining : Nat) (current : Nat) : IO Unit =
+proc fizzBuzzLoop (remaining : Nat) (current : Nat) : IO Unit visits [Console] =
   match remaining {
-    Zero  => Ret ConsoleOp console_resp Unit MkUnit ;
-    Suc r => Vis ConsoleOp console_resp Unit (Write (fizzBuzzLine current)) (\_. fizzBuzzLoop r (Suc current))
+    Zero  ⇒ Ret ConsoleOp console_resp Unit MkUnit ;
+    Suc r ⇒ Vis ConsoleOp console_resp Unit (Write (fizzBuzzLine current)) (λ_. fizzBuzzLoop r (Suc current))
   }
 
 -- ── Oracle ───────────────────────────────────────────────────────────────────
 
 -- main: fizzBuzzLine 1..20, one per line.
-view twenty : Nat = Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Zero))))))))))))))))))))
+const twenty : Nat = Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Suc (Zero))))))))))))))))))))
 
-view main : IO Unit = fizzBuzzLoop twenty (Suc Zero)
+proc main : IO Unit visits [Console] = fizzBuzzLoop twenty (Suc Zero)

@@ -18,7 +18,7 @@ use ken_kernel::{
     whnf, Context, Decl, GlobalEnv, GlobalId, InductiveDecl, Level, LevelVar, Term,
 };
 
-use crate::ast::{BinOp, NumLit};
+use crate::ast::{BinOp, DefKeyword, NumLit};
 use crate::classes::{ClassEnv, ClassInfo, ClassKind, InstanceInfo};
 use crate::data;
 use crate::error::{ElabError, Span};
@@ -80,6 +80,10 @@ pub struct ElabResult {
     /// assumed (`21 §5.2`); they never enter `trusted_base()`. Their sole
     /// projection is the B1 `T`/`delegated` channel (TE-E).
     pub temporal_obligations: Vec<crate::temporal::TemporalObligation>,
+    /// Checked surface effect row for `view ... visits [...]` declarations.
+    /// Present only when the real const elaboration path consumed the parsed
+    /// row annotation and ran the row-poly escape check.
+    pub effect_row_type: Option<crate::effects::RowType>,
 }
 
 impl ElabResult {
@@ -1665,6 +1669,217 @@ fn rtype_head_name(ty: &RType) -> String {
     }
 }
 
+fn check_view_visits_row(rdecl: &RDecl) -> Result<Option<crate::effects::RowType>, ElabError> {
+    let visits = match &rdecl.kind {
+        RDeclKind::View { visits: Some(row), .. } => row,
+        _ => return Ok(None),
+    };
+
+    // D1 fail-closed rule: row variables are bound by a higher-order latent-row
+    // occurrence in the declaration type, then referenced again in `visits`.
+    // Until production latent-row extraction is wired, this map is empty, so
+    // `[e]` / `[E | e]` reject instead of minting a fresh row variable here.
+    let row_vars = crate::effects::row_var_map(&[]);
+    let mut decl = crate::effects::EffectDecl::new(&rdecl.name);
+
+    let declared = crate::effects::surface_row_to_row_type(visits, &row_vars)
+        .map_err(|reason| ElabError::TypeMismatch {
+            span: visits.span.clone(),
+            reason,
+        })?;
+    decl = decl.with_declared_row_type(declared.clone());
+
+    let rows = crate::effects::infer_all_poly(&HashMap::new(), &[decl.clone()]);
+    let inferred = rows.get(&rdecl.name).ok_or_else(|| {
+        ElabError::Internal(format!("effect row inference omitted '{}'", rdecl.name))
+    })?;
+    crate::effects::check_decl_poly(&decl, inferred, &crate::effects::EffectRow::empty())
+        .map_err(|err| ElabError::TypeMismatch {
+            span: visits.span.clone(),
+            reason: err.to_string(),
+        })?;
+
+    Ok(Some(declared))
+}
+
+pub fn surface_declared_row_type(rdecl: &RDecl) -> Result<Option<crate::effects::RowType>, ElabError> {
+    let visits = match &rdecl.kind {
+        RDeclKind::View { visits: Some(row), .. } => row,
+        _ => return Ok(None),
+    };
+    let row_vars = crate::effects::row_var_map(&[]);
+    crate::effects::surface_row_to_row_type(visits, &row_vars)
+        .map(Some)
+        .map_err(|reason| ElabError::TypeMismatch {
+            span: visits.span.clone(),
+            reason,
+        })
+}
+
+fn is_empty_closed_row(row: &crate::effects::RowType) -> bool {
+    row.concrete_effects().is_empty() && row.row_vars().is_empty()
+}
+
+fn explicit_value_param_count_from_type(ty: &RType) -> usize {
+    match ty {
+        RType::RPi(_, domain, codomain, _) => {
+            let domain_is_type_param = matches!(&**domain, RType::RUniv(_, _));
+            usize::from(!domain_is_type_param) + explicit_value_param_count_from_type(codomain)
+        }
+        _ => 0,
+    }
+}
+
+fn leading_lambda_count(expr: &RExpr) -> usize {
+    match expr {
+        RExpr::RLam(_, body, _) => 1 + leading_lambda_count(body),
+        _ => 0,
+    }
+}
+
+fn explicit_value_param_count(rdecl: &RDecl) -> usize {
+    rdecl
+        .ty
+        .as_ref()
+        .map(explicit_value_param_count_from_type)
+        .unwrap_or_else(|| leading_lambda_count(&rdecl.body))
+}
+
+fn decl_eval_body(expr: &RExpr) -> &RExpr {
+    match expr {
+        RExpr::RLam(_, body, _) => decl_eval_body(body),
+        _ => expr,
+    }
+}
+
+fn infer_expr_row_type(
+    expr: &RExpr,
+    effect_rows: &HashMap<String, crate::effects::RowType>,
+) -> crate::effects::RowType {
+    match expr {
+        RExpr::RCon(name, _) => effect_rows
+            .get(name)
+            .cloned()
+            .unwrap_or_else(crate::effects::RowType::empty),
+        RExpr::RVar(_, _, _)
+        | RExpr::RUniv(_, _)
+        | RExpr::RNumLit(_, _)
+        | RExpr::RStr(_, _) => crate::effects::RowType::empty(),
+        RExpr::RApp(f, a, _) => infer_expr_row_type(f, effect_rows)
+            .join(infer_expr_row_type(a, effect_rows)),
+        RExpr::RLam(_, _, _) | RExpr::RPi(_, _, _, _) | RExpr::RArrow(_, _, _) => {
+            crate::effects::RowType::empty()
+        }
+        RExpr::RLet(_, _, val, body, _) => infer_expr_row_type(val, effect_rows)
+            .join(infer_expr_row_type(body, effect_rows)),
+        RExpr::RAsc(e, _, _) | RExpr::ROld(e, _) | RExpr::RProj(e, _, _) => {
+            infer_expr_row_type(e, effect_rows)
+        }
+        RExpr::RBinOp(_, l, r, _) => infer_expr_row_type(l, effect_rows)
+            .join(infer_expr_row_type(r, effect_rows)),
+        RExpr::RMatch { scrut, arms, .. } => {
+            let mut row = infer_expr_row_type(scrut, effect_rows);
+            for arm in arms {
+                row = row.join(infer_expr_row_type(&arm.body, effect_rows));
+            }
+            row
+        }
+    }
+}
+
+/// SURF-1 D2 purity-keyword check (`36 §1.6`) over the current production
+/// declaration path. Legacy `view` stays unchecked until the D3/D4 migration.
+pub fn check_surface_purity(
+    rdecl: &RDecl,
+    effect_rows: &HashMap<String, crate::effects::RowType>,
+) -> Result<(), ElabError> {
+    let (keyword, is_space_op, visits) = match &rdecl.kind {
+        RDeclKind::View { keyword, is_space_op, visits, .. } => (*keyword, *is_space_op, visits),
+        _ => return Ok(()),
+    };
+    if keyword == DefKeyword::View {
+        return Ok(());
+    }
+
+    let declared = surface_declared_row_type(rdecl)?.unwrap_or_else(crate::effects::RowType::empty);
+    let inferred = infer_expr_row_type(decl_eval_body(&rdecl.body), effect_rows);
+    let decl = crate::effects::EffectDecl::new(&rdecl.name)
+        .with_declared_row_type(declared.clone());
+    crate::effects::check_decl_poly(&decl, &inferred, &crate::effects::EffectRow::empty())
+        .map_err(|err| ElabError::TypeMismatch {
+            span: rdecl.span.clone(),
+            reason: format!("false purity or effect escape in `{}`: {}", rdecl.name, err),
+        })?;
+
+    let has_impure_decl = !is_empty_closed_row(&declared) || is_space_op;
+    let explicit_value_params = explicit_value_param_count(rdecl);
+
+    match keyword {
+        DefKeyword::Const => {
+            if explicit_value_params > 0 {
+                return Err(ElabError::TypeMismatch {
+                    span: rdecl.span.clone(),
+                    reason: format!(
+                        "`const {}` has {} explicit value parameter(s); use `fn` for a pure function",
+                        rdecl.name, explicit_value_params
+                    ),
+                });
+            }
+            if has_impure_decl {
+                return Err(ElabError::TypeMismatch {
+                    span: rdecl.span.clone(),
+                    reason: format!(
+                        "`const {}` declares an effect row or space operation; use `proc`",
+                        rdecl.name
+                    ),
+                });
+            }
+        }
+        DefKeyword::Fn => {
+            if explicit_value_params == 0 {
+                return Err(ElabError::TypeMismatch {
+                    span: rdecl.span.clone(),
+                    reason: format!(
+                        "`fn {}` has zero explicit value parameters; use `const`",
+                        rdecl.name
+                    ),
+                });
+            }
+            if has_impure_decl {
+                return Err(ElabError::TypeMismatch {
+                    span: rdecl.span.clone(),
+                    reason: format!(
+                        "`fn {}` declares an effect row or space operation; use `proc`",
+                        rdecl.name
+                    ),
+                });
+            }
+        }
+        DefKeyword::Proc => {
+            if !has_impure_decl {
+                let expected = if explicit_value_params == 0 { "const" } else { "fn" };
+                return Err(ElabError::TypeMismatch {
+                    span: rdecl.span.clone(),
+                    reason: format!(
+                        "`proc {}` is provably pure with an empty declared row; use `{}`",
+                        rdecl.name, expected
+                    ),
+                });
+            }
+        }
+        DefKeyword::View => {}
+    }
+
+    if !matches!(keyword, DefKeyword::Proc) && visits.is_some() {
+        return Err(ElabError::TypeMismatch {
+            span: rdecl.span.clone(),
+            reason: "`visits` is only valid on `proc` definitions".to_string(),
+        });
+    }
+
+    Ok(())
+}
+
 /// V1 elaboration: returns the definition id plus any emitted obligation holes.
 pub fn elaborate_rdecl_v1(
     env: &mut GlobalEnv,
@@ -1676,6 +1891,7 @@ pub fn elaborate_rdecl_v1(
 ) -> Result<ElabResult, ElabError> {
     match &rdecl.kind {
         RDeclKind::View { constraints, .. } => {
+            let effect_row_type = check_view_visits_row(rdecl)?;
             // Check `where C T` constraints via `instance_search` (`37 §6`,
             // L3b). This is the producer the QA grep gate checks.
             let mut dict_id: Option<GlobalId> = None;
@@ -1701,12 +1917,15 @@ pub fn elaborate_rdecl_v1(
             // save/restore any prior `d` binding around the call so it
             // never leaks to sibling decls.
             let saved_d = dict_id.map(|id| globals.insert("d".to_string(), id));
-            let result = elaborate_view_or_let(env, globals, num_values, numeric_env, class_env, rdecl);
+            let mut result = elaborate_view_or_let(env, globals, num_values, numeric_env, class_env, rdecl);
             if dict_id.is_some() {
                 match saved_d.unwrap() {
                     Some(prev) => { globals.insert("d".to_string(), prev); }
                     None => { globals.remove("d"); }
                 }
+            }
+            if let Ok(result) = &mut result {
+                result.effect_row_type = effect_row_type;
             }
             result
         }
@@ -1728,7 +1947,7 @@ pub fn elaborate_rdecl_v1(
             )?;
             // Register data type in the module map for orphan check (`33 §5.3`).
             class_env.global_modules.insert(d_id, class_env.current_module);
-            Ok(ElabResult { name: rdecl.name.clone(), def_id: d_id, obligations: vec![], foreign_binding: None, temporal_obligations: vec![] })
+            Ok(ElabResult { name: rdecl.name.clone(), def_id: d_id, obligations: vec![], foreign_binding: None, temporal_obligations: vec![], effect_row_type: None })
         }
         RDeclKind::TypeAlias { ty } => {
             // A type alias `type T = A` declares T as a transparent definition
@@ -1744,7 +1963,7 @@ pub fn elaborate_rdecl_v1(
             let id = declare_def(env, vec![], alias_ty, alias_body)
                 .map_err(|e| ElabError::KernelRejected { error: e, span: rdecl.span.clone() })?;
             globals.insert(rdecl.name.clone(), id);
-            Ok(ElabResult { name: rdecl.name.clone(), def_id: id, obligations: vec![], foreign_binding: None, temporal_obligations: vec![] })
+            Ok(ElabResult { name: rdecl.name.clone(), def_id: id, obligations: vec![], foreign_binding: None, temporal_obligations: vec![], effect_row_type: None })
         }
         RDeclKind::Foreign { symbol, library, is_pure, visits } => {
             elaborate_foreign_decl(
@@ -1927,6 +2146,7 @@ fn elab_class_decl(
         obligations: vec![],
         foreign_binding: None,
         temporal_obligations: vec![],
+        effect_row_type: None,
     })
 }
 
@@ -2137,6 +2357,7 @@ fn elab_instance_decl(
         obligations: vec![],
         foreign_binding: None,
         temporal_obligations: vec![],
+        effect_row_type: None,
     })
 }
 
@@ -2203,6 +2424,7 @@ fn elab_derive(
         obligations: vec![],
         foreign_binding: None,
         temporal_obligations: vec![],
+        effect_row_type: None,
     })
 }
 
@@ -2267,6 +2489,7 @@ fn elaborate_foreign_decl(
         obligations,
         foreign_binding: Some(binding),
         temporal_obligations: vec![],
+        effect_row_type: None,
     })
 }
 
@@ -2334,7 +2557,7 @@ fn elaborate_v0(
         ElabError::KernelRejected { error: e, span: rdecl.span.clone() }
     })?;
     globals.insert(rdecl.name.clone(), id);
-    Ok(ElabResult { name: rdecl.name.clone(), def_id: id, obligations: body_obligations, foreign_binding: None, temporal_obligations: vec![] })
+    Ok(ElabResult { name: rdecl.name.clone(), def_id: id, obligations: body_obligations, foreign_binding: None, temporal_obligations: vec![], effect_row_type: None })
 }
 
 /// Elaborate a self-recursive `view`/`let` through the SCT gate (Approach A).
@@ -2366,7 +2589,7 @@ fn elaborate_v0(
 /// §4`): arbitrary recursive δ-unfolding in conversion. Here the recursive call
 /// is to an *opaque* (δ blocks during checking); only after SCT acceptance does
 /// it become transparent, and termination is by structural descent on an
-/// inductive sub-term (SCT's `↓`) — not general δ. A recursive view carrying
+/// inductive sub-term (SCT's `↓`) — not general δ. A recursive fn carrying
 /// `requires` clauses (so the full type ≠ the carrier Pi-chain) is a tracked
 /// follow-on; L3a's recursive views (`map`/`filter`/`fold`/`zip`/`unfoldUpTo`/
 /// `sort`/`insert`) carry none.
@@ -2381,9 +2604,9 @@ fn elaborate_recursive_view(
     // 1. Elaborate the declared type (recursive views are annotated).
     let ty_core = {
         let mut cx = ElabCtx::new(env, globals, num_values, numeric_env);
-        let ty = rdecl.ty.as_ref().ok_or_else(|| ElabError::Internal(
-            "recursive view/let requires a type annotation".into(),
-        ))?;
+        let ty = rdecl.ty.as_ref().ok_or_else(|| {
+            ElabError::Internal("recursive declaration requires a type annotation".into())
+        })?;
         let ty_c = elab_type(&mut cx, ty)?;
         cx.metas.zonk_term(&ty_c)
     };
@@ -2419,6 +2642,7 @@ fn elaborate_recursive_view(
                 obligations: body_obligations,
                 foreign_binding: None,
                 temporal_obligations: vec![],
+                effect_row_type: None,
             })
         }
         Err(e) => {
@@ -2446,7 +2670,7 @@ fn elaborate_recursive_view(
 /// (`[[sct-unapplied-self-reference-over-accepts]]`).
 ///
 /// Each member requires an explicit type annotation (mirrors the existing
-/// singleton recursive-view rule — a mutual group's forward references need
+/// singleton recursive-const rule — a mutual group's forward references need
 /// every member's *type* resolvable before any body is elaborated).
 pub fn elaborate_mutual_group(
     env: &mut GlobalEnv,
@@ -2542,6 +2766,7 @@ pub fn elaborate_mutual_group(
                     obligations,
                     foreign_binding: None,
                     temporal_obligations: vec![],
+                    effect_row_type: None,
                 })
                 .collect())
         }
@@ -2623,7 +2848,7 @@ fn elaborate_view_with_spec(
             let carrier_ty = {
                 let mut cx = ElabCtx::new(env, globals, num_values, numeric_env).with_classes(class_env);
                 let ty = rdecl.ty.as_ref().ok_or_else(|| ElabError::Internal(
-                    "recursive view with spec clauses requires a type annotation".into(),
+                    "recursive const with spec clauses requires a type annotation".into(),
                 ))?;
                 let ty_c = elab_type(&mut cx, ty)?;
                 cx.metas.zonk_term(&ty_c)
@@ -2733,7 +2958,7 @@ fn elaborate_view_with_spec(
         // Recursive: the opaque was pre-admitted with the carrier Pi-chain. For
         // L3a's recursive views (no `requires`), `full_ty` == the carrier
         // Pi-chain, so the opaque's type is already `full_ty`. Kernel-check +
-        // SCT-gate the singleton group, then upgrade. (A recursive view WITH
+        // SCT-gate the singleton group, then upgrade. (A recursive fn WITH
         // `requires` — `full_ty` ≠ carrier — is a tracked follow-on; see
         // `elaborate_recursive_view`'s K2c note.)
         let result = kernel_check(env, &Context::new(), &full_body, &full_ty)
@@ -2765,7 +2990,7 @@ fn elaborate_view_with_spec(
         globals.insert(rdecl.name.clone(), id);
         id
     };
-    Ok(ElabResult { name: rdecl.name.clone(), def_id: id, obligations: ens_obligations, foreign_binding: None, temporal_obligations: vec![] })
+    Ok(ElabResult { name: rdecl.name.clone(), def_id: id, obligations: ens_obligations, foreign_binding: None, temporal_obligations: vec![], effect_row_type: None })
 }
 
 /// Elaborate `prove name : φ` (`21 §6.3`, §3).
@@ -2797,7 +3022,7 @@ fn elaborate_prove(
         span: rdecl.span.clone(),
         kind: ObligationKind::Prove,
     };
-    Ok(ElabResult { name: rdecl.name.clone(), def_id: hole_id, obligations: vec![obl], foreign_binding: None, temporal_obligations: vec![] })
+    Ok(ElabResult { name: rdecl.name.clone(), def_id: hole_id, obligations: vec![obl], foreign_binding: None, temporal_obligations: vec![], effect_row_type: None })
 }
 
 /// Elaborate `temporal name { φ }` — a delegated temporal/behavioral
@@ -2840,6 +3065,7 @@ fn elaborate_temporal(
         obligations: vec![],
         foreign_binding: None,
         temporal_obligations: vec![obl],
+        effect_row_type: None,
     })
 }
 
@@ -2894,7 +3120,7 @@ fn elaborate_law(
     globals.insert(rdecl.name.clone(), law_id);
 
     // Return: def_id = law_id (the law postulate), obligations = per-field holes
-    Ok(ElabResult { name: rdecl.name.clone(), def_id: law_id, obligations, foreign_binding: None, temporal_obligations: vec![] })
+    Ok(ElabResult { name: rdecl.name.clone(), def_id: law_id, obligations, foreign_binding: None, temporal_obligations: vec![], effect_row_type: None })
 }
 
 // ----- helpers -----

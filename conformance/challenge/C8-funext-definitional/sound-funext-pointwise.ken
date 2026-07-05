@@ -17,14 +17,14 @@
 -- funext (funext itself works). "Equality that computes" is reachable here;
 -- "equality that computes *for non-convertible witnesses*" is the frontier.
 
-view idb (y : Bool) : Bool = y
-view f (x : Bool) : Bool = x
-view g (x : Bool) : Bool = idb x
+fn idb (y : Bool) : Bool = y
+fn f (x : Bool) : Bool = x
+fn g (x : Bool) : Bool = idb x
 
 -- f and g are pointwise-CONVERTIBLE (idb x β-reduces to x). funext reduces the
 -- function-`Equal` to `(x:Bool) → Equal Bool x (idb x)` ≡ `(x:Bool) → Equal Bool
 -- x x`, discharged by a bare reflexivity lambda — no `match` needed.
-view funextGood : Equal (Bool -> Bool) f g = \x. Refl
+const funextGood : Equal (Bool → Bool) f g = λx. Refl
 
 -- Expected: ELABORATES (PASS) — CONFIRMED at run. `eq_at_pi` reduces the
 -- function-`Equal` to the pointwise Π on the surface checking path, and `\x.

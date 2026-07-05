@@ -52,12 +52,12 @@ fn j_elaborates_to_a_real_term_j_node() {
     let mut env = mk_env();
     let ids = env
         .elaborate_file(
-            "view refl_test (ty : Type) (a : ty) (q : Equal ty a a) : Equal ty a a = \
+            "fn refl_test (ty : Type) (a : ty) (q : Equal ty a a) : Equal ty a a = \
                J (\\b' _. Equal ty a b') Refl q",
         )
         .expect("J on refl should elaborate and kernel-check");
     let id = ids[0];
-    let (_, body) = env.env.transparent_body(id).expect("view must be transparent");
+    let (_, body) = env.env.transparent_body(id).expect("const must be transparent");
     assert!(
         mentions_j(&body),
         "elaborated body must contain a real Term::J node, got {:?}",
@@ -71,7 +71,7 @@ fn ill_typed_transport_wrong_equation_is_kernel_rejected() {
     // `base` proves `Equal ty bogus bogus` (an unrelated free variable) but
     // the motive demands `base : Equal ty a a` — not convertible.
     let res = env.elaborate_file(
-        "view bad_transport (ty : Type) (a : ty) (b : ty) (q : Equal ty a b) \
+        "fn bad_transport (ty : Type) (a : ty) (b : ty) (q : Equal ty a b) \
            (bogus : ty) (r : Equal ty bogus bogus) : Equal ty a b = \
            J (\\b' _. Equal ty a b') r q",
     );
@@ -88,7 +88,7 @@ fn ill_typed_transport_wrong_witness_type_is_kernel_rejected() {
     // `eq` isn't even an `Eq`-typed value (it's a plain `ty`), so `J` must
     // reject at the point it tries to recover `A`/`a`/`b` from its type.
     let res = env.elaborate_file(
-        "view not_an_eq (ty : Type) (a : ty) (not_a_proof : ty) : ty = \
+        "fn not_an_eq (ty : Type) (a : ty) (not_a_proof : ty) : ty = \
            J (\\b' _. ty) a not_a_proof",
     );
     assert!(
@@ -135,8 +135,8 @@ fn stuck_match_over_abstract_key_transports_via_hand_written_motive() {
     // `packages/lawful-classes/lawful_classes.ken`.
     let ids = env
         .elaborate_file(
-            "view stuck_of (k : Bool) : Bool = match k { True => True ; False => False }\n\
-             view stuck_transport (k : Bool) (q : Equal Bool True k) \
+            "fn stuck_of (k : Bool) : Bool = match k { True => True ; False => False }\n\
+             fn stuck_transport (k : Bool) (q : Equal Bool True k) \
                : Equal Bool (stuck_of k) True = \
                J (\\b' _. Equal Bool (stuck_of b') True) tt q",
         )
@@ -145,7 +145,7 @@ fn stuck_match_over_abstract_key_transports_via_hand_written_motive() {
     let (_, body) = env
         .env
         .transparent_body(stuck_transport_id)
-        .expect("view must be transparent");
+        .expect("const must be transparent");
     assert!(mentions_j(&body), "the proof must be a real Term::J, got {:?}", body);
 }
 
@@ -161,13 +161,13 @@ fn stuck_match_transports_via_package_sym() {
     // exercises from the package rather than hand-inlining it).
     let ids = env
         .elaborate_file(
-            "view stuck_of2 (k : Bool) : Bool = match k { True => True ; False => False }\n\
-             view stuck_transport2 (k : Bool) (q : Equal Bool k True) \
+            "fn stuck_of2 (k : Bool) : Bool = match k { True => True ; False => False }\n\
+             fn stuck_transport2 (k : Bool) (q : Equal Bool k True) \
                : Equal Bool (stuck_of2 k) True = \
                J (\\b' _. Equal Bool (stuck_of2 b') True) tt (sym Bool k True q)",
         )
         .expect("J + package sym must transport a stuck match too");
     let id = ids[1];
-    let (_, body) = env.env.transparent_body(id).expect("view must be transparent");
+    let (_, body) = env.env.transparent_body(id).expect("const must be transparent");
     assert!(mentions_j(&body), "must bottom out in a real Term::J, got {:?}", body);
 }

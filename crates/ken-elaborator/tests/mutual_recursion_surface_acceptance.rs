@@ -24,8 +24,8 @@ fn fresh_env() -> ElabEnv {
 }
 
 const IS_EVEN_ODD: &str = "\
-    view isEven (n : Nat) : Bool = match n { Zero => True ; Suc m => isOdd m }\n\
-    view isOdd (n : Nat) : Bool = match n { Zero => False ; Suc m => isEven m }";
+    fn isEven (n : Nat) : Bool = match n { Zero => True ; Suc m => isOdd m }\n\
+    fn isOdd (n : Nat) : Bool = match n { Zero => False ; Suc m => isEven m }";
 
 #[test]
 fn is_even_is_odd_mutual_group_elaborates_as_one_group() {
@@ -40,8 +40,8 @@ fn is_even_is_odd_mutual_group_elaborates_as_one_group() {
 fn is_even_is_odd_compute_correct_values() {
     let mut env = fresh_env();
     env.elaborate_file(IS_EVEN_ODD).expect("mutual group elaborates");
-    env.elaborate_decl("view three : Nat = Suc (Suc (Suc Zero))").expect("three declares");
-    env.elaborate_decl("view four : Nat = Suc three").expect("four declares");
+    env.elaborate_decl("const three : Nat = Suc (Suc (Suc Zero))").expect("three declares");
+    env.elaborate_decl("const four : Nat = Suc three").expect("four declares");
 
     // `Equal Bool (op ...) True/False`, once the operand reduces to a
     // concrete `Bool` constructor, observationally COLLAPSES to `Top`
@@ -50,11 +50,11 @@ fn is_even_is_odd_compute_correct_values() {
     // `packages/lawful-classes/lawful_classes.ken`). Elaborating only
     // succeeds if the operand genuinely reduced to the SAME concrete
     // constructor as the right-hand side — a real correctness check.
-    env.elaborate_decl("view checkOdd3 : Equal Bool (isEven three) False = tt")
+    env.elaborate_decl("const checkOdd3 : Equal Bool (isEven three) False = tt")
         .expect("isEven 3 must reduce to False (3 is odd)");
-    env.elaborate_decl("view checkEven4 : Equal Bool (isEven four) True = tt")
+    env.elaborate_decl("const checkEven4 : Equal Bool (isEven four) True = tt")
         .expect("isEven 4 must reduce to True (4 is even)");
-    env.elaborate_decl("view checkOdd3b : Equal Bool (isOdd three) True = tt")
+    env.elaborate_decl("const checkOdd3b : Equal Bool (isOdd three) True = tt")
         .expect("isOdd 3 must reduce to True (3 is odd)");
 }
 
@@ -62,8 +62,8 @@ fn is_even_is_odd_compute_correct_values() {
 fn non_terminating_mutual_group_is_rejected_by_sct() {
     let mut env = fresh_env();
     let res = env.elaborate_file(
-        "view loopA (n : Nat) : Bool = loopB n\n\
-         view loopB (n : Nat) : Bool = loopA n",
+        "fn loopA (n : Nat) : Bool = loopB n\n\
+         fn loopB (n : Nat) : Bool = loopA n",
     );
     assert!(
         res.is_err(),
@@ -77,7 +77,7 @@ fn single_recursion_still_works_unaffected_by_the_grouping_pass() {
     // any sibling) must keep working exactly as it did before this WP.
     let mut env = fresh_env();
     env.elaborate_decl(
-        "view natAdd (a : Nat) (b : Nat) : Nat = \
+        "fn natAdd (a : Nat) (b : Nat) : Nat = \
          match a { Zero => b ; Suc m => Suc (natAdd m b) }",
     )
     .expect("ordinary single self-recursion must still elaborate");

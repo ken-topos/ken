@@ -5,20 +5,20 @@
 -- prefix of length ≤ n. Total by construction — no coinductive value.
 -- (This is the landed shape from l3a_acceptance.rs.)
 
-view unfoldUpTo (a : Type) (s : Type) (step : s -> Option (Prod a s))
+fn unfoldUpTo (a : Type) (s : Type) (step : s → Option (Prod a s))
                 (n : Nat) (seed : s) : List a =
   match n {
-    Zero  => Nil a ;
-    Suc m => match step seed {
-               None   => Nil a ;
-               Some p => match p {
-                           MkProd x y => Cons a x (unfoldUpTo a s step m y) } } }
+    Zero  ⇒ Nil a ;
+    Suc m ⇒ match step seed {
+               None   ⇒ Nil a ;
+               Some p ⇒ match p {
+                           MkProd x y ⇒ Cons a x (unfoldUpTo a s step m y) } } }
 
 -- A concrete stream-like producer, fuel-bounded: the naturals up to fuel n.
-view natsStep (seed : Nat) : Option (Prod Nat Nat) =
+fn natsStep (seed : Nat) : Option (Prod Nat Nat) =
   Some (Prod Nat Nat) (MkProd Nat Nat seed (Suc seed))
 
-view natsUpTo (n : Nat) : List Nat = unfoldUpTo Nat Nat natsStep n Zero
+fn natsUpTo (n : Nat) : List Nat = unfoldUpTo Nat Nat natsStep n Zero
 
 -- Expected: `natsUpTo (Suc (Suc (Suc Zero)))` reduces to
 -- Cons 0 (Cons 1 (Cons 2 Nil)) — a finite prefix, terminating on the fuel.

@@ -49,7 +49,7 @@ fn arrow_returned_from_view_body_is_a_real_pi() {
     let mut env = fresh_env();
     // `Int -> Int` written as the BODY, not an annotation — unreachable by
     // the old surface (`->` was type-position only).
-    let id = env.elaborate_decl("view t : Type = Int -> Int").expect("arrow as body value");
+    let id = env.elaborate_decl("const t : Type = Int -> Int").expect("arrow as body value");
     assert!(matches!(body_of(&env, id), Term::Pi(_, _)), "must lower to a real Term::Pi");
 }
 
@@ -57,7 +57,7 @@ fn arrow_returned_from_view_body_is_a_real_pi() {
 fn arrow_let_bound_is_a_real_pi() {
     let mut env = fresh_env();
     let id = env
-        .elaborate_decl("view t : Type = let ty = Int -> Bool in ty")
+        .elaborate_decl("const t : Type = let ty = Int -> Bool in ty")
         .expect("arrow let-bound");
     assert!(contains_pi(&body_of(&env, id)), "let-bound arrow must lower to Term::Pi");
 }
@@ -65,9 +65,9 @@ fn arrow_let_bound_is_a_real_pi() {
 #[test]
 fn arrow_passed_as_an_ordinary_function_argument() {
     let mut env = fresh_env();
-    env.elaborate_decl("view id_ty (t : Type) : Type = t").expect("id_ty declares");
+    env.elaborate_decl("const id_ty (t : Type) : Type = t").expect("id_ty declares");
     let id = env
-        .elaborate_decl("view t : Type = id_ty (Int -> Bool)")
+        .elaborate_decl("const t : Type = id_ty (Int -> Bool)")
         .expect("arrow passed as a function argument");
     // `id_ty` is the identity on Type, so the body contains the argument's
     // core term (wrapped in the `App(Const(id_ty), _)` call).
@@ -78,7 +78,7 @@ fn arrow_passed_as_an_ordinary_function_argument() {
 fn dependent_arrow_in_expr_position_is_a_real_pi() {
     let mut env = fresh_env();
     let id = env
-        .elaborate_decl("view t : Type = (x : Int) -> Bool")
+        .elaborate_decl("const t : Type = (x : Int) -> Bool")
         .expect("dependent arrow as body value");
     assert!(matches!(body_of(&env, id), Term::Pi(_, _)), "dependent arrow must lower to Term::Pi");
 }
@@ -87,7 +87,7 @@ fn dependent_arrow_in_expr_position_is_a_real_pi() {
 fn arrow_is_right_associative() {
     let mut env = fresh_env();
     let id = env
-        .elaborate_decl("view t : Type = Int -> Int -> Bool")
+        .elaborate_decl("const t : Type = Int -> Int -> Bool")
         .expect("right-assoc arrow chain");
     // `Int -> Int -> Bool` = `Int -> (Int -> Bool)`: outer Pi's codomain is
     // itself a Pi (not the other possible grouping).
@@ -103,7 +103,7 @@ fn plain_parenthesized_ascription_is_unaffected() {
     // misfire on: `(x : Int)` with no trailing `->` is an ordinary
     // parenthesized ascription, unrelated to VAL2 #4.
     let mut env = fresh_env();
-    env.elaborate_decl("view t (x : Int) : Int = (x : Int)")
+    env.elaborate_decl("fn t (x : Int) : Int = (x : Int)")
         .expect("plain parenthesized ascription must still parse and elaborate");
 }
 
@@ -114,7 +114,7 @@ fn ill_typed_arrow_domain_is_still_kernel_rejected() {
     // rejected — the new expr-position path doesn't bypass kernel Pi
     // well-formedness checking.
     let mut env = fresh_env();
-    let res = env.elaborate_decl("view t : Type = 5 -> Bool");
+    let res = env.elaborate_decl("const t : Type = 5 -> Bool");
     assert!(res.is_err(), "an arrow with a non-type domain must be rejected, got {res:?}");
 }
 
@@ -123,6 +123,6 @@ fn annotation_position_arrow_unaffected_by_the_new_expr_path() {
     // The pre-existing (already-working) type-annotation use must stay
     // byte-behaviorally unaffected by this widening.
     let mut env = fresh_env();
-    env.elaborate_decl("view f (g : Int -> Int) (x : Int) : Int = g x")
+    env.elaborate_decl("fn f (g : Int -> Int) (x : Int) : Int = g x")
         .expect("annotation-position arrow must still work exactly as before");
 }

@@ -75,7 +75,7 @@ fn decimal_mul_exact_flips_vs_saturating() {
     // `mul_decimal` used `saturating_mul`, clamping to i64::MAX. The
     // derived `decimalMul` runs bignum `mul_int`, exact.
     let result = eval_view(
-        "view t = decimalMul (MkDecimalPair 10000000000 0) (MkDecimalPair 10000000000 0)",
+        "const t = decimalMul (MkDecimalPair 10000000000 0) (MkDecimalPair 10000000000 0)",
     );
     match &result {
         EvalVal::Ctor { args, .. } => {
@@ -108,7 +108,7 @@ fn decimal_eq_distinct_flips_vs_false_true() {
     // `decimalEq` aligns exactly via `decimalPow10`/`mul_int`, so this must
     // reduce to `false`.
     let result = eval_view(
-        "view t = decimalEq (MkDecimalPair 9223372036854775807 0) \
+        "const t = decimalEq (MkDecimalPair 9223372036854775807 0) \
                              (MkDecimalPair 9223372036854775807 1)",
     );
     assert_eq!(
@@ -123,7 +123,7 @@ fn decimal_eq_distinct_flips_vs_false_true() {
 #[test]
 fn decimal_eq_same_value_both_alignments_true() {
     let result = eval_view(
-        "view t = decimalEq (MkDecimalPair 9223372036854775807 1) \
+        "const t = decimalEq (MkDecimalPair 9223372036854775807 1) \
                              (MkDecimalPair 92233720368547758070 0)",
     );
     assert_eq!(
@@ -137,7 +137,7 @@ fn decimal_eq_same_value_both_alignments_true() {
 /// Sanity: `decimalAdd` at the same exponent needs no alignment.
 #[test]
 fn decimal_add_same_exponent() {
-    let result = eval_view("view t = decimalAdd (MkDecimalPair 1 0) (MkDecimalPair 2 0)");
+    let result = eval_view("const t = decimalAdd (MkDecimalPair 1 0) (MkDecimalPair 2 0)");
     assert_eq!(as_decimal(&result), (3, 0));
 }
 
@@ -148,7 +148,7 @@ fn decimal_add_same_exponent() {
 fn char_is_isscalar_refinement() {
     // `Char` erases to `Int` (refinement-erasure) — a value of type `Char`
     // reduces to a plain `Int`, never a `List`/`u32`-tagged carrier.
-    let result = eval_view("view t : Char = 65");
+    let result = eval_view("const t : Char = 65");
     assert_eq!(result, EvalVal::Int(65));
 }
 
@@ -157,13 +157,13 @@ fn char_is_isscalar_refinement() {
 /// surface/numbers/char-eq-and-ord-on-projection (soundness)
 #[test]
 fn char_eq_and_ord_on_projection() {
-    assert_eq!(eval_view("view t = eqChar 65 65"), EvalVal::Bool(true));
-    assert_eq!(eval_view("view t = eqChar 65 66"), EvalVal::Bool(false));
+    assert_eq!(eval_view("const t = eqChar 65 65"), EvalVal::Bool(true));
+    assert_eq!(eval_view("const t = eqChar 65 66"), EvalVal::Bool(false));
     // The order PAIR (accept a<=b while reject b<=a) — a single accept is
     // green-vs-green under an orientation flip.
-    assert_eq!(eval_view("view t = leqChar 65 66"), EvalVal::Bool(true));
-    assert_eq!(eval_view("view t = leqChar 66 65"), EvalVal::Bool(false));
-    assert_eq!(eval_view("view t = charToInt 65"), EvalVal::Int(65));
+    assert_eq!(eval_view("const t = leqChar 65 66"), EvalVal::Bool(true));
+    assert_eq!(eval_view("const t = leqChar 66 65"), EvalVal::Bool(false));
+    assert_eq!(eval_view("const t = charToInt 65"), EvalVal::Int(65));
 }
 
 // ── AC-C3 — surrogate/OOR reject, flips vs isScalar:=true (soundness) ──────
@@ -174,9 +174,9 @@ fn int_to_char_rejects_surrogate_and_oor() {
     // The non-degenerate PAIR: reject surrogate/OOR *while* a valid scalar
     // accepts — a single valid-accept case is green-vs-green under a stub
     // `isScalar := true` ([[two-arm-producer-needs-a-case-per-arm]]).
-    let surrogate = eval_view("view t = intToChar 55296"); // 0xD800
-    let oor = eval_view("view t = intToChar 1114112"); // 0x110000
-    let valid = eval_view("view t = intToChar 65"); // 'A'
+    let surrogate = eval_view("const t = intToChar 55296"); // 0xD800
+    let oor = eval_view("const t = intToChar 1114112"); // 0x110000
+    let valid = eval_view("const t = intToChar 65"); // 'A'
 
     let (surrogate_id, oor_id, valid_id) = match (&surrogate, &oor, &valid) {
         (
@@ -201,7 +201,7 @@ fn int_to_char_rejects_surrogate_and_oor() {
 fn char_deceq_pin1_structural_encoding() {
     let src = include_str!("../src/decimal_char.rs");
     assert!(
-        src.contains("view isScalar (c : Int) : Prop = IsTrue (inRangeBool c)"),
+        src.contains("fn isScalar (c : Int) : Prop = IsTrue (inRangeBool c)"),
         "isScalar's definition head must be `IsTrue (<computed Bool>)` — \
          never a raw `∨`/`∃`/multi-ctor form as its own Ω-sort (`16 §1.3`); \
          the required value-level `or_bool`/`and_bool` inside `inRangeBool` \
@@ -216,5 +216,5 @@ fn char_deceq_pin1_structural_encoding() {
 /// scalar-proof component can desync the comparison.
 #[test]
 fn char_deceq_pin1_value_consequence() {
-    assert_eq!(eval_view("view t = eqChar 97 97"), EvalVal::Bool(true));
+    assert_eq!(eval_view("const t = eqChar 97 97"), EvalVal::Bool(true));
 }

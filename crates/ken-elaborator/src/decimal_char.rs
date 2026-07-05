@@ -125,7 +125,7 @@ pub fn register_decimal_char(elab: &mut ElabEnv) -> Result<DecimalCharEnv, ElabE
         .insert("decimalPow10Unbounded".to_string(), unbounded_id);
 
     let pow10_src = format!(
-        "view decimalPow10 (k : Int) : Int = {}",
+        "fn decimalPow10 (k : Int) : Int = {}",
         pow10_cascade_body(MAX_SHIFT, "decimalPow10Unbounded")
     );
     elab.elaborate_decl(&pow10_src)
@@ -137,7 +137,7 @@ pub fn register_decimal_char(elab: &mut ElabEnv) -> Result<DecimalCharEnv, ElabE
     // (`mul_int`-exact, never `saturating_*`), then combine via `add_int`/
     // `sub_int`/`eq_int`.
     elab.elaborate_decl(
-        "view decimalAdd (d1 : Decimal) (d2 : Decimal) : Decimal = \
+        "fn decimalAdd (d1 : Decimal) (d2 : Decimal) : Decimal = \
          match d1 { MkDecimalPair ca ea => \
          match d2 { MkDecimalPair cb eb => \
            match (leq_int ea eb) { \
@@ -148,7 +148,7 @@ pub fn register_decimal_char(elab: &mut ElabEnv) -> Result<DecimalCharEnv, ElabE
     .map_err(|e| ElabError::Internal(format!("decimalAdd failed: {}", e)))?;
 
     elab.elaborate_decl(
-        "view decimalSub (d1 : Decimal) (d2 : Decimal) : Decimal = \
+        "fn decimalSub (d1 : Decimal) (d2 : Decimal) : Decimal = \
          match d1 { MkDecimalPair ca ea => \
          match d2 { MkDecimalPair cb eb => \
            match (leq_int ea eb) { \
@@ -159,7 +159,7 @@ pub fn register_decimal_char(elab: &mut ElabEnv) -> Result<DecimalCharEnv, ElabE
     .map_err(|e| ElabError::Internal(format!("decimalSub failed: {}", e)))?;
 
     elab.elaborate_decl(
-        "view decimalMul (d1 : Decimal) (d2 : Decimal) : Decimal = \
+        "fn decimalMul (d1 : Decimal) (d2 : Decimal) : Decimal = \
          match d1 { MkDecimalPair ca ea => \
          match d2 { MkDecimalPair cb eb => \
            MkDecimalPair (mul_int ca cb) (add_int ea eb) \
@@ -168,7 +168,7 @@ pub fn register_decimal_char(elab: &mut ElabEnv) -> Result<DecimalCharEnv, ElabE
     .map_err(|e| ElabError::Internal(format!("decimalMul failed: {}", e)))?;
 
     elab.elaborate_decl(
-        "view decimalEq (d1 : Decimal) (d2 : Decimal) : Bool = \
+        "fn decimalEq (d1 : Decimal) (d2 : Decimal) : Bool = \
          match d1 { MkDecimalPair ca ea => \
          match d2 { MkDecimalPair cb eb => \
            match (leq_int ea eb) { \
@@ -208,10 +208,10 @@ pub fn register_decimal_char(elab: &mut ElabEnv) -> Result<DecimalCharEnv, ElabE
     // `IsTrue` bridges a decidable `Bool` to the proof-irrelevant `Ω`
     // sub-singleton (`IsTrue true ≡ Top`, `IsTrue false ≡ Bottom`) —
     // established spelling, matching `packages/lawful-classes/
-    // lawful_classes.ken`'s `view IsTrue (b : Bool) : Prop = Equal Bool b
+    // lawful_classes.ken`'s `fn IsTrue (b : Bool) : Prop = Equal Bool b
     // True` verbatim (not vendored — the one-line definition is restated
     // here since that package isn't part of the auto-loaded core prelude).
-    elab.elaborate_decl("view IsTrue (b : Bool) : Prop = Equal Bool b True")
+    elab.elaborate_decl("fn IsTrue (b : Bool) : Prop = Equal Bool b True")
         .map_err(|e| ElabError::Internal(format!("IsTrue failed: {}", e)))?;
 
     // Scalar bounds `[0, 0xD7FF] ∪ [0xE000, 0x10FFFF]` spelled in decimal
@@ -222,13 +222,13 @@ pub fn register_decimal_char(elab: &mut ElabEnv) -> Result<DecimalCharEnv, ElabE
     // forbidden (the forbidden form is a raw `∨`/`∃` as `isScalar`'s own
     // Ω-sort, which `IsTrue (<Bool>)` below never is).
     elab.elaborate_decl(
-        "view inRangeBool (c : Int) : Bool = \
+        "fn inRangeBool (c : Int) : Bool = \
          or_bool (and_bool (leq_int 0 c) (leq_int c 55295)) \
                  (and_bool (leq_int 57344 c) (leq_int c 1114111))",
     )
     .map_err(|e| ElabError::Internal(format!("inRangeBool failed: {}", e)))?;
 
-    elab.elaborate_decl("view isScalar (c : Int) : Prop = IsTrue (inRangeBool c)")
+    elab.elaborate_decl("fn isScalar (c : Int) : Prop = IsTrue (inRangeBool c)")
         .map_err(|e| ElabError::Internal(format!("isScalar failed: {}", e)))?;
 
     elab.elaborate_decl("type Char = { c : Int | isScalar c }")
@@ -239,17 +239,17 @@ pub fn register_decimal_char(elab: &mut ElabEnv) -> Result<DecimalCharEnv, ElabE
         .ok_or_else(|| ElabError::Internal("Char not registered".into()))?;
 
     // Derived ops over the (erased-to-identity) projection (`18a §5.9.1(3)`).
-    elab.elaborate_decl("view eqChar (a : Char) (b : Char) : Bool = eq_int a b")
+    elab.elaborate_decl("fn eqChar (a : Char) (b : Char) : Bool = eq_int a b")
         .map_err(|e| ElabError::Internal(format!("eqChar failed: {}", e)))?;
-    elab.elaborate_decl("view leqChar (a : Char) (b : Char) : Bool = leq_int a b")
+    elab.elaborate_decl("fn leqChar (a : Char) (b : Char) : Bool = leq_int a b")
         .map_err(|e| ElabError::Internal(format!("leqChar failed: {}", e)))?;
-    elab.elaborate_decl("view charToInt (c : Char) : Int = c")
+    elab.elaborate_decl("fn charToInt (c : Char) : Int = c")
         .map_err(|e| ElabError::Internal(format!("charToInt failed: {}", e)))?;
     // `Int.toChar` — face-(c): `None` on surrogate/out-of-range, `Some` on a
     // valid scalar; the `inRangeBool` check REDUCES (via the pulled-up
     // `leq_int`), so this is not a stuck neutral on rejection (AC-C3).
     elab.elaborate_decl(
-        "view intToChar (n : Int) : Option Char = \
+        "fn intToChar (n : Int) : Option Char = \
          match (inRangeBool n) { True => Some Char n ; False => None Char }",
     )
     .map_err(|e| ElabError::Internal(format!("intToChar failed: {}", e)))?;

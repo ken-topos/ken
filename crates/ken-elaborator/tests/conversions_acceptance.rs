@@ -136,7 +136,7 @@ fn min_intn_expr(w: &Width) -> String {
 fn ac1_round_trip_law_at_max_every_width() {
     for w in WIDTHS {
         let v = eval_view(&format!(
-            "view t : Option {name} = intTo{name} ({snake}_to_int {max})",
+            "const t : Option {name} = intTo{name} ({snake}_to_int {max})",
             name = w.name,
             snake = w.snake,
             max = w.max,
@@ -149,7 +149,7 @@ fn ac1_round_trip_law_at_max_every_width() {
 fn ac1_round_trip_law_at_min_every_signed_width() {
     for w in WIDTHS.iter().filter(|w| w.signed) {
         let v = eval_view(&format!(
-            "view t : Option {name} = intTo{name} ({snake}_to_int {min_intn})",
+            "const t : Option {name} = intTo{name} ({snake}_to_int {min_intn})",
             name = w.name,
             snake = w.snake,
             min_intn = min_intn_expr(w),
@@ -163,25 +163,25 @@ fn ac1_round_trip_law_at_min_every_signed_width() {
 #[test]
 fn ac2_narrowing_boundary_every_width() {
     for w in WIDTHS {
-        let at_max = eval_view(&format!("view t : Option {name} = intTo{name} {max}", name = w.name, max = w.max));
+        let at_max = eval_view(&format!("const t : Option {name} = intTo{name} {max}", name = w.name, max = w.max));
         assert_some_eq(&at_max, w.max, &format!("{}: T_MAX", w.name));
 
         let above_max = eval_view(&format!(
-            "view t : Option {name} = intTo{name} (add_int {max} 1)",
+            "const t : Option {name} = intTo{name} (add_int {max} 1)",
             name = w.name,
             max = w.max,
         ));
         assert_none(&above_max, &format!("{}: T_MAX+1", w.name));
 
         let at_min = eval_view(&format!(
-            "view t : Option {name} = intTo{name} {min}",
+            "const t : Option {name} = intTo{name} {min}",
             name = w.name,
             min = min_int_expr(w),
         ));
         assert_some_eq(&at_min, w.min, &format!("{}: T_MIN", w.name));
 
         let below_min = eval_view(&format!(
-            "view t : Option {name} = intTo{name} (sub_int {min} 1)",
+            "const t : Option {name} = intTo{name} (sub_int {min} 1)",
             name = w.name,
             min = min_int_expr(w),
         ));
@@ -196,7 +196,7 @@ fn ac2_narrowing_boundary_every_width() {
 #[test]
 fn ac3_no_implicit_cross_type_coercion_rejects() {
     assert!(
-        !elaborates_ok("view rejectMix (x : Int) (y : Int64) : Int = x + y"),
+        !elaborates_ok("fn rejectMix (x : Int) (y : Int64) : Int = x + y"),
         "Int + Int64 with no explicit conversion must be a type error"
     );
 }
@@ -209,7 +209,7 @@ fn ac3_no_implicit_cross_type_coercion_rejects() {
 #[test]
 fn ac3_explicit_conversion_accepts_as_option() {
     assert!(
-        elaborates_ok("view acceptConv (x : Int) : Option Int64 = intToInt64 x"),
+        elaborates_ok("fn acceptConv (x : Int) : Option Int64 = intToInt64 x"),
         "the explicit Int -> Option Int64 conversion must accept"
     );
 }
@@ -221,14 +221,14 @@ fn ac4_checked_add_boundary_every_width() {
     for w in WIDTHS {
         // In-range at the very edge: (T_MAX - 1) + 1 = T_MAX -> Some(T_MAX).
         let in_range = eval_view(&format!(
-            "view t : Option {name} = checkedAdd{name} {near_max} 1",
+            "const t : Option {name} = checkedAdd{name} {near_max} 1",
             name = w.name,
             near_max = w.max - 1,
         ));
         assert_some_eq(&in_range, w.max, &format!("{}: checkedAdd in-range edge", w.name));
 
         // Overflow: T_MAX + 1 -> None, never a wrapped/truncated Some.
-        let overflow = eval_view(&format!("view t : Option {name} = checkedAdd{name} {max} 1", name = w.name, max = w.max));
+        let overflow = eval_view(&format!("const t : Option {name} = checkedAdd{name} {max} 1", name = w.name, max = w.max));
         assert_none(&overflow, &format!("{}: checkedAdd T_MAX+1", w.name));
     }
 }
@@ -237,7 +237,7 @@ fn ac4_checked_add_boundary_every_width() {
 fn ac4_checked_sub_underflow_every_width() {
     for w in WIDTHS {
         let underflow = eval_view(&format!(
-            "view t : Option {name} = checkedSub{name} {min} 1",
+            "const t : Option {name} = checkedSub{name} {min} 1",
             name = w.name,
             min = if w.signed { min_intn_lit_arg(w) } else { "0".to_string() },
         ));
@@ -256,7 +256,7 @@ fn ac4_saturating_add_clamps_at_boundary_every_width() {
     for w in WIDTHS {
         // T_MAX + T_MAX always overflows every width (including UInt64) ->
         // clamps to T_MAX, never wraps.
-        let v = eval_view(&format!("view t : {name} = saturatingAdd{name} {max} {max}", name = w.name, max = w.max));
+        let v = eval_view(&format!("const t : {name} = saturatingAdd{name} {max} {max}", name = w.name, max = w.max));
         assert_eval_eq(&v, w.max, &format!("{}: saturatingAdd(T_MAX,T_MAX) clamp", w.name));
     }
 }
@@ -267,7 +267,7 @@ fn ac4_saturating_sub_clamps_at_lower_boundary_every_width() {
         // T_MIN - T_MAX always underflows (or, for unsigned, 0 - MAX) ->
         // clamps to T_MIN.
         let v = eval_view(&format!(
-            "view t : {name} = saturatingSub{name} {min} {max}",
+            "const t : {name} = saturatingSub{name} {min} {max}",
             name = w.name,
             min = if w.signed { min_intn_lit_arg(w) } else { "0".to_string() },
             max = w.max,
@@ -280,7 +280,7 @@ fn ac4_saturating_sub_clamps_at_lower_boundary_every_width() {
 fn ac4_saturating_add_no_overflow_still_exact() {
     // Non-regression: the interior (no clamp needed) still computes the
     // exact sum, not a clamped or wrapped value.
-    let v = eval_view("view t : Int8 = saturatingAddInt8 10 20");
+    let v = eval_view("const t : Int8 = saturatingAddInt8 10 20");
     assert_eq!(v, EvalVal::Int(30));
 }
 
@@ -290,7 +290,7 @@ fn ac4_saturating_add_no_overflow_still_exact() {
 fn ac5_neg_intn_degrades_on_min_every_signed_width() {
     for w in WIDTHS.iter().filter(|w| w.signed) {
         let v = eval_view(&format!(
-            "view t : {name} = neg_{snake} {min_intn}",
+            "const t : {name} = neg_{snake} {min_intn}",
             name = w.name,
             snake = w.snake,
             min_intn = min_intn_expr(w),
@@ -302,7 +302,7 @@ fn ac5_neg_intn_degrades_on_min_every_signed_width() {
 #[test]
 fn ac5_neg_intn_computes_in_range_every_signed_width() {
     for w in WIDTHS.iter().filter(|w| w.signed) {
-        let v = eval_view(&format!("view t : {name} = neg_{snake} 5", name = w.name, snake = w.snake));
+        let v = eval_view(&format!("const t : {name} = neg_{snake} 5", name = w.name, snake = w.snake));
         assert_eq!(v, EvalVal::Int(-5), "{}: neg(5) must be -5", w.name);
     }
 }
@@ -314,7 +314,7 @@ fn ac5_neg_intn_computes_in_range_every_signed_width() {
 fn neg_uintn_out_of_scope_unregistered() {
     for w in WIDTHS.iter().filter(|w| !w.signed) {
         assert!(
-            !elaborates_ok(&format!("view t : {name} = neg_{snake} 5", name = w.name, snake = w.snake)),
+            !elaborates_ok(&format!("const t : {name} = neg_{snake} 5", name = w.name, snake = w.snake)),
             "{}: neg_{} must not be registered (unsigned negation is out of scope)",
             w.name,
             w.snake,
@@ -327,7 +327,7 @@ fn neg_uintn_out_of_scope_unregistered() {
 #[test]
 fn float_conversion_floor_out_of_scope() {
     assert!(
-        !elaborates_ok("view t : Float = int_to_float 5"),
+        !elaborates_ok("const t : Float = int_to_float 5"),
         "Int.toFloat/the Float conversion arms are a separate tranche, not built here"
     );
 }

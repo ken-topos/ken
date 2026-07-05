@@ -34,33 +34,33 @@
 
 -- `map` -- a functor over `List`, structural recursion on the `Cons` tail
 -- (SCT sound zone, same shape as the landed floor combinators).
-view map (a b : Type) (f : a -> b) (xs : List a) : List b =
+fn map (a b : Type) (f : a → b) (xs : List a) : List b =
   match xs {
-    Nil => Nil b ;
-    Cons h t => Cons b (f h) (map a b f t)
+    Nil ⇒ Nil b ;
+    Cons h t ⇒ Cons b (f h) (map a b f t)
   }
 
 -- Boxes a `String -> String` so it can be a `List` element (GAP-arrow-
 -- type-as-type-arg workaround, see above).
-data StrFn = MkStrFn (String -> String)
+data StrFn = MkStrFn (String → String)
 
-view applyStrFn (box : StrFn) (s : String) : String =
-  match box { MkStrFn f => f s }
+fn applyStrFn (box : StrFn) (s : String) : String =
+  match box { MkStrFn f ⇒ f s }
 
 -- Each closure captures its own `p` independently -- the defining property
 -- Closures/Value_capture probes (a naive shared-mutable-capture bug would
 -- make all three prepend the SAME, last-bound prefix).
-view mkPrefixer (p : String) : StrFn = MkStrFn (\s . concat p s)
+fn mkPrefixer (p : String) : StrFn = MkStrFn (λs . concat p s)
 
-view greeters : List StrFn =
+const greeters : List StrFn =
   Cons StrFn (mkPrefixer "Hello, ")
     (Cons StrFn (mkPrefixer "Bye, ")
       (Cons StrFn (mkPrefixer "Hey, ")
         (Nil StrFn)))
 
-view greetings : List String = map StrFn String (\box . applyStrFn box "World") greeters
+const greetings : List String = map StrFn String (λbox . applyStrFn box "World") greeters
 
-view expected : List String =
+const expected : List String =
   Cons String "Hello, World"
     (Cons String "Bye, World"
       (Cons String "Hey, World"
@@ -68,10 +68,10 @@ view expected : List String =
 
 -- ── Oracle ───────────────────────────────────────────────────────────────────
 
-view finalCheck : String =
+const finalCheck : String =
   match list_eq String eq greetings expected {
-    True => "PASS" ;
-    False => "FAIL"
+    True ⇒ "PASS" ;
+    False ⇒ "FAIL"
   }
 
-view main : IO Unit = print_line finalCheck
+proc main : IO Unit visits [Console] = print_line finalCheck

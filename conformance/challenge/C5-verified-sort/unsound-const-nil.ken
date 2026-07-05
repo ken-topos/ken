@@ -6,7 +6,7 @@
 -- sorted) — so an isSorted-ONLY obligation would pass. `Perm Nil xs` is FALSE
 -- for non-empty xs — this is the conjunct that makes it a real sort.
 
-view sortBad (a : Type) (leq : a -> a -> Bool) (xs : List a)
+fn sortBad (a : Type) (leq : a → a → Bool) (xs : List a)
   : { ys : List a | And (isSorted a leq ys) (Perm a ys xs) } =
   Nil a
 

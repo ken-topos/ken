@@ -46,7 +46,7 @@ fn goal_closing_over_pre_scrutinee_type_param_narrows_correctly() {
     // references both.
     let id = env
         .elaborate_decl(
-            "view sameHead (a : Type) (v : a) (xs : List a) : Equal a v v -> Prop = \
+            "fn sameHead (a : Type) (v : a) (xs : List a) : Equal a v v -> Prop = \
              match xs { Nil => \\h. Equal a v v ; \
                         Cons b bs => \\h. Equal a v v }",
         )

@@ -49,71 +49,71 @@ data OrdResult = Lt | Eq | Gt
 -- (FS-effect, `crates/ken-elaborator/src/bytes.rs`, symbol `"append"`); this
 -- is the pure `List a -> List a -> List a` op and must not shadow or be
 -- shadowed by it (AC6 / Architect brief-condition 2).
-view list_append (a : Type) (xs : List a) (ys : List a) : List a =
+fn list_append (a : Type) (xs : List a) (ys : List a) : List a =
   match xs {
-    Nil => ys ;
-    Cons x xs2 => Cons a x (list_append a xs2 ys)
+    Nil ⇒ ys ;
+    Cons x xs2 ⇒ Cons a x (list_append a xs2 ys)
   }
 
-view nth (a : Type) (n : Nat) (xs : List a) : Option a =
+fn nth (a : Type) (n : Nat) (xs : List a) : Option a =
   match xs {
-    Nil => None a ;
-    Cons h t => match n {
-      Zero => Some a h ;
-      Suc m => nth a m t
+    Nil ⇒ None a ;
+    Cons h t ⇒ match n {
+      Zero ⇒ Some a h ;
+      Suc m ⇒ nth a m t
     }
   }
 
-view take (a : Type) (n : Nat) (xs : List a) : List a =
+fn take (a : Type) (n : Nat) (xs : List a) : List a =
   match n {
-    Zero => Nil a ;
-    Suc m => match xs {
-      Nil => Nil a ;
-      Cons h t => Cons a h (take a m t)
+    Zero ⇒ Nil a ;
+    Suc m ⇒ match xs {
+      Nil ⇒ Nil a ;
+      Cons h t ⇒ Cons a h (take a m t)
     }
   }
 
-view drop (a : Type) (n : Nat) (xs : List a) : List a =
+fn drop (a : Type) (n : Nat) (xs : List a) : List a =
   match n {
-    Zero => xs ;
-    Suc m => match xs {
-      Nil => Nil a ;
-      Cons h t => drop a m t
+    Zero ⇒ xs ;
+    Suc m ⇒ match xs {
+      Nil ⇒ Nil a ;
+      Cons h t ⇒ drop a m t
     }
   }
 
 -- Saturating `Nat` monus (never underflows) -- `slice`'s length. Identical
 -- shape to the landed `val1_string_literals.rs:327` `natSub`.
-view natSub (a : Nat) (b : Nat) : Nat =
+fn natSub (a : Nat) (b : Nat) : Nat =
   match b {
-    Zero => a ;
-    Suc n => match a {
-      Zero => Zero ;
-      Suc m => natSub m n
+    Zero ⇒ a ;
+    Suc n ⇒ match a {
+      Zero ⇒ Zero ;
+      Suc m ⇒ natSub m n
     }
   }
 
-view list_eq (a : Type) (eqf : a -> a -> Bool) (xs : List a) (ys : List a) : Bool =
+fn list_eq (a : Type) (eqf : a → a → Bool) (xs : List a) (ys : List a) : Bool =
   match xs {
-    Nil => match ys { Nil => True ; Cons h t => False } ;
-    Cons x xs2 => match ys {
-      Nil => False ;
-      Cons y ys2 => match eqf x y {
-        True => list_eq a eqf xs2 ys2 ;
-        False => False
+    Nil ⇒ match ys { Nil ⇒ True ; Cons h t ⇒ False } ;
+    Cons x xs2 ⇒ match ys {
+      Nil ⇒ False ;
+      Cons y ys2 ⇒ match eqf x y {
+        True ⇒ list_eq a eqf xs2 ys2 ;
+        False ⇒ False
       }
     }
   }
 
-view list_compare (a : Type) (cmp : a -> a -> OrdResult) (xs : List a) (ys : List a) : OrdResult =
+fn list_compare (a : Type) (cmp : a → a → OrdResult) (xs : List a) (ys : List a) : OrdResult =
   match xs {
-    Nil => match ys { Nil => Eq ; Cons h t => Lt } ;
-    Cons x xs2 => match ys {
-      Nil => Gt ;
-      Cons y ys2 => match cmp x y {
-        Eq => list_compare a cmp xs2 ys2 ;
-        Lt => Lt ;
-        Gt => Gt
+    Nil ⇒ match ys { Nil ⇒ Eq ; Cons h t ⇒ Lt } ;
+    Cons x xs2 ⇒ match ys {
+      Nil ⇒ Gt ;
+      Cons y ys2 ⇒ match cmp x y {
+        Eq ⇒ list_compare a cmp xs2 ys2 ;
+        Lt ⇒ Lt ;
+        Gt ⇒ Gt
       }
     }
   }
@@ -123,10 +123,10 @@ view list_compare (a : Type) (cmp : a -> a -> OrdResult) (xs : List a) (ys : Lis
 -- of Char comparison (settled input #4, `docs/program/wp/L3-strings-surface.md`
 -- SS2): `Eq` on `eqChar`; else `Lt`/`Gt` by `leqChar`'s antisymmetry +
 -- totality (both landed `Ord Char` laws, by transport from `Ord Int`).
-view compareChar (a : Char) (b : Char) : OrdResult =
+fn compareChar (a : Char) (b : Char) : OrdResult =
   match eqChar a b {
-    True => Eq ;
-    False => match leqChar a b { True => Lt ; False => Gt }
+    True ⇒ Eq ;
+    False ⇒ match leqChar a b { True ⇒ Lt ; False ⇒ Gt }
   }
 
 -- The 5 derived string ops (SS2.5), routed through the real
@@ -137,29 +137,29 @@ view compareChar (a : Char) (b : Char) : OrdResult =
 -- follow-on; filing these as proof-carrying instances would over-claim the
 -- trust level).
 
-view concat (a : String) (b : String) : String =
+fn concat (a : String) (b : String) : String =
   list_char_to_string (list_append Char (string_to_list_char a) (string_to_list_char b))
 
 -- `slice` clamps by construction: `drop` past the end yields `Nil`, `take`
 -- past the end stops at the end, and the length `natSub j i` saturates at
 -- `0` when `j < i` -- never an underflow, never stuck.
-view slice (i : Nat) (j : Nat) (s : String) : String =
+fn slice (i : Nat) (j : Nat) (s : String) : String =
   list_char_to_string (take Char (natSub j i) (drop Char i (string_to_list_char s)))
 
 -- `charAt` is total and honest about absence -- `Option Char`, never a
 -- sentinel or a partial index.
-view charAt (i : Nat) (s : String) : Option Char =
+fn charAt (i : Nat) (s : String) : Option Char =
   nth Char i (string_to_list_char s)
 
 -- Codepoint-wise equality over the scalar sequence -- rides the landed
 -- `eqChar`. This is NEVER NFC-normalization equality (ADR 0010 SS3: that
 -- identifies distinct scalar sequences, so over the codepoint carrier it is
 -- non-canonical -- a lawful `DecEq` for it would inhabit `Bottom`).
-view eq (a : String) (b : String) : Bool =
+fn eq (a : String) (b : String) : Bool =
   list_eq Char eqChar (string_to_list_char a) (string_to_list_char b)
 
 -- 3-way, codepoint-wise lexicographic order -- the more fundamental op,
 -- subsuming `<=`/`<`/`==` (a `leq`-only interface cannot cheaply recover
 -- 3-way).
-view compare (a : String) (b : String) : OrdResult =
+fn compare (a : String) (b : String) : OrdResult =
   list_compare Char compareChar (string_to_list_char a) (string_to_list_char b)

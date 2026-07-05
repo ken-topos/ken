@@ -45,7 +45,7 @@ fn peel_lams(t: &Term, n: usize) -> &Term {
 fn ac1_list_hypothesis_threading_elaborates_and_narrows_structurally() {
     let mut env = mk_env();
     env.elaborate_decl(
-        "view allTrue (xs : List Bool) : Prop = \
+        "fn allTrue (xs : List Bool) : Prop = \
          match xs { Nil => Equal Bool True True ; \
                     Cons b bs => And (Equal Bool b True) (allTrue bs) }",
     )
@@ -57,7 +57,7 @@ fn ac1_list_hypothesis_threading_elaborates_and_narrows_structurally() {
     // sufficient (no annotated-lambda syntax needed).
     let id = env
         .elaborate_decl(
-            "view tailGoal (xs : List Bool) : allTrue xs -> Prop = \
+            "fn tailGoal (xs : List Bool) : allTrue xs -> Prop = \
              match xs { Nil => \\h. Equal Bool True True ; \
                         Cons b bs => \\h. allTrue bs }",
         )
@@ -129,7 +129,7 @@ fn ac1_tree_two_recursive_fields_elaborates_and_narrows_structurally() {
 
     // A Tree-shaped predicate (structural, no `leq` — orthogonal to Gap A).
     env.elaborate_decl(
-        "view allPos (t : Tree Nat) : Prop = \
+        "fn allPos (t : Tree Nat) : Prop = \
          match t { Leaf => Equal Bool True True ; \
                    Node l k r => And (Equal Bool True True) (And (allPos l) (allPos r)) }",
     )
@@ -140,7 +140,7 @@ fn ac1_tree_two_recursive_fields_elaborates_and_narrows_structurally() {
     // order) rather than List's single recursive field.
     let id = env
         .elaborate_decl(
-            "view leftGoal (t : Tree Nat) : allPos t -> Prop = \
+            "fn leftGoal (t : Tree Nat) : allPos t -> Prop = \
              match t { Leaf => \\h. Equal Bool True True ; \
                        Node l k r => \\h. allPos l }",
         )
@@ -205,7 +205,7 @@ fn ac1_tree_two_recursive_fields_elaborates_and_narrows_structurally() {
 fn ac2_mis_narrowed_cons_arm_stays_kernel_rejected() {
     let mut env = mk_env();
     env.elaborate_decl(
-        "view allTrue (xs : List Bool) : Prop = \
+        "fn allTrue (xs : List Bool) : Prop = \
          match xs { Nil => Equal Bool True True ; \
                     Cons b bs => And (Equal Bool b True) (allTrue bs) }",
     )
@@ -217,7 +217,7 @@ fn ac2_mis_narrowed_cons_arm_stays_kernel_rejected() {
     // `allTrue bs` — a genuine, wrongly-typed term the kernel must reject
     // if the narrowing (and the kernel's own re-check of it) is real.
     let err = env.elaborate_decl(
-        "view badTailGoal (xs : List Bool) : allTrue xs -> allTrue xs = \
+        "fn badTailGoal (xs : List Bool) : allTrue xs -> allTrue xs = \
          match xs { Nil => \\h. h ; \
                     Cons b bs => \\h. allTrue bs }",
     );
@@ -248,7 +248,7 @@ fn ac2b_tree_dual_recursive_descent_passes_sct() {
 
     let id = env
         .elaborate_decl(
-            "view allPosRec (t : Tree Nat) : Prop = \
+            "fn allPosRec (t : Tree Nat) : Prop = \
              match t { Leaf => Equal Bool True True ; \
                        Node l k r => And (allPosRec l) (allPosRec r) }",
         )

@@ -47,15 +47,16 @@ pub mod state;
 
 pub use algebra::{cap_set, row_join, CapParam};
 pub use check::{
-    check_capabilities, check_capabilities_no_handler, check_cross_space,
-    check_decl, check_escape, check_higher_order_guard, check_tail_resumptive,
+    check_capabilities, check_capabilities_no_handler, check_cross_space, check_decl,
+    check_decl_poly, check_escape, check_higher_order_guard, check_tail_resumptive,
     CrossSpaceAccess, EffectError, ResumeKind, WitnessMap,
 };
-pub use infer::{infer_all, infer_row, EffectDecl};
-pub use itree::{bind, handler_fold, perform, HandlerCase, ITree, Response, Value};
-pub use row::{EffectName, EffectRow, RowSubst, RowType, RowVar};
 pub use extract::{
-    build_decl_from_telescope, classify_telescope, ParamTy, RowVarAllocator,
+    build_decl_from_telescope, classify_telescope, row_var_map, surface_row_to_row_type, ParamTy,
+    RowVarAllocator,
 };
+pub use infer::{infer_all, infer_all_poly, infer_row, infer_row_type, EffectDecl};
+pub use itree::{bind, handler_fold, perform, HandlerCase, ITree, Response, Value};
 pub use lower::{lower_bind, lower_elim_itree, lower_handler_fold_uniform};
+pub use row::{EffectName, EffectRow, RowSubst, RowType, RowVar};
 pub use row_poly::{check_row_poly_escape, infer_row_poly};

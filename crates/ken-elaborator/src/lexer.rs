@@ -14,6 +14,9 @@ use crate::error::{ElabError, Span};
 pub enum Token {
     // V0 keywords
     KwView,
+    KwConst,
+    KwFn,
+    KwProc,
     KwLet,
     KwIn,
     KwType,
@@ -34,7 +37,7 @@ pub enum Token {
     KwClass,     // "class"    — typeclass declaration
     KwInstance,  // "instance" — instance declaration
     KwDerive,    // "derive"   — auto-derive request
-    KwWhere,     // "where"    — constraint list in class/instance/view
+    KwWhere,     // "where"    — constraint list in class/instance/declaration
     // B2 keywords (`72 §4`, spellings are `(oracle)`/`OQ-syntax`)
     KwTemporal,  // "temporal" — a delegated temporal-obligation block
     // ES3 keywords (`33 §3-4` — modules/imports/visibility)
@@ -66,6 +69,17 @@ pub enum Token {
     Minus,        // `-`  — type-directed infix subtraction (VAL2 #11)
     Star,         // `*`  — type-directed infix multiply
     EqEq,         // `==` — structural equality
+    PropEq,       // `===` / `≡` — propositional equality notation
+    Le,           // `<=` / `≤`
+    Ge,           // `>=` / `≥`
+    Ne,           // `/=` / `≠`
+    And,          // `/\` / `∧`
+    Or,           // `\/` / `∨`
+    Member,       // `∈` — membership notation; distinct from keyword `in`
+    FlowsTo,      // `<:` / `⊑`
+    Join,         // `⊔`
+    Meet,         // `⊓`
+    Times,        // `><` / `×`
     // L2 punctuation
     FatArrow,     // `=>` — match arm separator
     // L1 numeric literal tokens
@@ -116,7 +130,7 @@ impl<'s> Lexer<'s> {
     }
 
     fn is_ident_continue(c: char) -> bool {
-        c.is_alphanumeric() || c == '_' || c == '\''
+        c.is_ascii_alphanumeric() || c == '_' || c == '\''
     }
 
     pub fn next_token(&mut self) -> Result<(Token, Span), ElabError> {
@@ -197,6 +211,10 @@ impl<'s> Lexer<'s> {
                 self.advance();
                 if self.cur() == Some('=') {
                     self.advance();
+                    if self.cur() == Some('=') {
+                        self.advance();
+                        return Ok((Token::PropEq, Span::new(start, self.pos)));
+                    }
                     return Ok((Token::EqEq, Span::new(start, self.pos)));
                 }
                 if self.cur() == Some('>') {
@@ -209,13 +227,97 @@ impl<'s> Lexer<'s> {
                 self.advance();
                 return Ok((Token::Dot, Span::new(start, self.pos)));
             }
-            '\\' | 'λ' => {
+            '\\' => {
+                self.advance();
+                if self.cur() == Some('/') {
+                    self.advance();
+                    return Ok((Token::Or, Span::new(start, self.pos)));
+                }
+                return Ok((Token::Lambda, Span::new(start, self.pos)));
+            }
+            'λ' => {
                 self.advance();
                 return Ok((Token::Lambda, Span::new(start, self.pos)));
             }
             '→' => {
                 self.advance();
                 return Ok((Token::Arrow, Span::new(start, self.pos)));
+            }
+            '⇒' => {
+                self.advance();
+                return Ok((Token::FatArrow, Span::new(start, self.pos)));
+            }
+            '≡' => {
+                self.advance();
+                return Ok((Token::PropEq, Span::new(start, self.pos)));
+            }
+            '≤' => {
+                self.advance();
+                return Ok((Token::Le, Span::new(start, self.pos)));
+            }
+            '≥' => {
+                self.advance();
+                return Ok((Token::Ge, Span::new(start, self.pos)));
+            }
+            '≠' => {
+                self.advance();
+                return Ok((Token::Ne, Span::new(start, self.pos)));
+            }
+            '∧' => {
+                self.advance();
+                return Ok((Token::And, Span::new(start, self.pos)));
+            }
+            '∨' => {
+                self.advance();
+                return Ok((Token::Or, Span::new(start, self.pos)));
+            }
+            '⊑' => {
+                self.advance();
+                return Ok((Token::FlowsTo, Span::new(start, self.pos)));
+            }
+            '⊔' => {
+                self.advance();
+                return Ok((Token::Join, Span::new(start, self.pos)));
+            }
+            '⊓' => {
+                self.advance();
+                return Ok((Token::Meet, Span::new(start, self.pos)));
+            }
+            '×' => {
+                self.advance();
+                return Ok((Token::Times, Span::new(start, self.pos)));
+            }
+            'Ω' => {
+                self.advance();
+                return Ok((Token::ConId("Omega".to_string()), Span::new(start, self.pos)));
+            }
+            'Σ' => {
+                self.advance();
+                return Ok((Token::ConId("Sigma".to_string()), Span::new(start, self.pos)));
+            }
+            'Π' => {
+                self.advance();
+                return Ok((Token::ConId("Pi".to_string()), Span::new(start, self.pos)));
+            }
+            '∀' => {
+                self.advance();
+                return Ok((Token::Ident("forall".to_string()), Span::new(start, self.pos)));
+            }
+            '∃' => {
+                self.advance();
+                return Ok((Token::Ident("exists".to_string()), Span::new(start, self.pos)));
+            }
+            '¬' => {
+                self.advance();
+                return Ok((Token::Ident("not".to_string()), Span::new(start, self.pos)));
+            }
+            '∈' => {
+                self.advance();
+                return Ok((Token::Member, Span::new(start, self.pos)));
+            }
+            'ℓ' => {
+                self.advance();
+                return Ok((Token::Ident("level".to_string()), Span::new(start, self.pos)));
             }
             '+' => {
                 self.advance();
@@ -237,6 +339,39 @@ impl<'s> Lexer<'s> {
                 }
                 return Ok((Token::Minus, Span::new(start, self.pos)));
             }
+            '<' => {
+                self.advance();
+                if self.cur() == Some('=') {
+                    self.advance();
+                    return Ok((Token::Le, Span::new(start, self.pos)));
+                }
+                if self.cur() == Some(':') {
+                    self.advance();
+                    return Ok((Token::FlowsTo, Span::new(start, self.pos)));
+                }
+            }
+            '>' => {
+                self.advance();
+                if self.cur() == Some('=') {
+                    self.advance();
+                    return Ok((Token::Ge, Span::new(start, self.pos)));
+                }
+                if self.cur() == Some('<') {
+                    self.advance();
+                    return Ok((Token::Times, Span::new(start, self.pos)));
+                }
+            }
+            '/' => {
+                self.advance();
+                if self.cur() == Some('=') {
+                    self.advance();
+                    return Ok((Token::Ne, Span::new(start, self.pos)));
+                }
+                if self.cur() == Some('\\') {
+                    self.advance();
+                    return Ok((Token::And, Span::new(start, self.pos)));
+                }
+            }
             _ => {}
         }
 
@@ -246,13 +381,15 @@ impl<'s> Lexer<'s> {
         }
 
         // Identifiers and keywords
-        if c.is_alphabetic() || c == '_' {
+        if c.is_ascii_alphabetic() || c == '_' {
             let mut s = String::new();
             while self.cur().map(Self::is_ident_continue).unwrap_or(false) {
                 s.push(self.advance().unwrap());
             }
             let tok = match s.as_str() {
-                "view"     => Token::KwView,
+                "const"    => Token::KwConst,
+                "fn"       => Token::KwFn,
+                "proc"     => Token::KwProc,
                 "let"      => Token::KwLet,
                 "in"       => Token::KwIn,
                 "Type"     => Token::KwType,
@@ -275,9 +412,10 @@ impl<'s> Lexer<'s> {
                 "import"   => Token::KwImport,
                 "use"      => Token::KwUse,
                 "pub"      => Token::KwPub,
+                "l"        => Token::Ident("level".to_string()),
                 _ => {
                     let first = s.chars().next().unwrap();
-                    if first.is_uppercase() {
+                    if first.is_ascii_uppercase() {
                         Token::ConId(s)
                     } else {
                         Token::Ident(s)

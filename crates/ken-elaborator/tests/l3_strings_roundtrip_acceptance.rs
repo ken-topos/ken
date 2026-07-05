@@ -56,7 +56,7 @@ fn eval_def(env: &ElabEnv, store: &mut EvalStore, id: GlobalId) -> EvalVal {
 /// `make_store` time, or a literal declared after store creation evaluates
 /// against a stale (missing-entry) snapshot.
 fn eval_view(env: &mut ElabEnv, store: &mut EvalStore, name: &str, ty: &str, expr: &str) -> EvalVal {
-    let src = format!("view {name} : {ty} = {expr}");
+    let src = format!("const {name} : {ty} = {expr}");
     let id = env
         .elaborate_decl(&src)
         .unwrap_or_else(|e| panic!("{name} failed to elaborate: {e}"));
@@ -321,7 +321,7 @@ fn ac4_l2s_totality_on_nontrivial_list() {
 fn derived_list_char_surface_out_of_scope() {
     let mut env = ElabEnv::new().expect("base env");
     let result = env.elaborate_decl(
-        "view t : String = concat (string_to_list_char \"a\") (string_to_list_char \"b\")",
+        "const t : String = concat (string_to_list_char \"a\") (string_to_list_char \"b\")",
     );
     assert!(result.is_err(), "concat over List Char must not exist yet (slice 2, Team Language)");
 }

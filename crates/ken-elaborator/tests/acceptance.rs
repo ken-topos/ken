@@ -49,7 +49,7 @@ fn last_type(env: &ElabEnv, id: ken_kernel::GlobalId) -> Term {
 fn id_elaborates_checks() {
     let mut env = mk_env();
     let id = env
-        .elaborate_decl("view id (A : Type) (x : A) : A = x")
+        .elaborate_decl("fn id (A : Type) (x : A) : A = x")
         .expect("id should elaborate");
 
     // Expected body: Lam(Univ 0, Lam(Var 0, Var 0))
@@ -68,8 +68,8 @@ fn id_elaborates_checks() {
 fn const_elaborates_checks() {
     let mut env = mk_env();
     let id = env
-        .elaborate_decl("view const (A B : Type) (x : A) (y : B) : A = x")
-        .expect("const should elaborate");
+        .elaborate_decl("fn konst (A B : Type) (x : A) (y : B) : A = x")
+        .expect("konst should elaborate");
 
     // Body x is Var 1 in scope [y, x, B, A] (innermost first).
     let body = last_body(&env, id);
@@ -94,7 +94,7 @@ fn const_elaborates_checks() {
 fn apply_elaborates_checks() {
     let mut env = mk_env();
     let id = env
-        .elaborate_decl("view apply (A B : Type) (f : (x : A) -> B) (x : A) : B = f x")
+        .elaborate_decl("fn apply (A B : Type) (f : (x : A) -> B) (x : A) : B = f x")
         .expect("apply should elaborate");
 
     let body = last_body(&env, id);
@@ -145,7 +145,7 @@ fn ascription_on_lambda() {
 fn base_type_app() {
     let mut env = mk_env();
     let id = env
-        .elaborate_decl("view idNat (x : Nat) : Nat = x")
+        .elaborate_decl("fn idNat (x : Nat) : Nat = x")
         .expect("idNat should elaborate");
 
     let nat_id = *env.globals.get("Nat").expect("Nat must be in globals");
@@ -167,7 +167,7 @@ fn base_type_app() {
 #[test]
 fn type_mismatch_rejected() {
     let mut env = mk_env();
-    let result = env.elaborate_decl("view bad (x : Nat) : Bool = x");
+    let result = env.elaborate_decl("fn bad (x : Nat) : Bool = x");
     assert!(
         matches!(result, Err(ElabError::KernelRejected { .. })),
         "type-mismatch-rejected: expected KernelRejected, got {:?}",
@@ -180,7 +180,7 @@ fn type_mismatch_rejected() {
 fn wrong_return_app_rejected() {
     let mut env = mk_env();
     let result = env
-        .elaborate_decl("view badApp (f : (x : Nat) -> Bool) (x : Nat) : Nat = f x");
+        .elaborate_decl("fn badApp (f : (x : Nat) -> Bool) (x : Nat) : Nat = f x");
     assert!(
         matches!(result, Err(ElabError::KernelRejected { .. })),
         "wrong-return-app-rejected: expected KernelRejected, got {:?}",
@@ -193,7 +193,7 @@ fn wrong_return_app_rejected() {
 fn wrong_arity_rejected() {
     let mut env = mk_env();
     let result =
-        env.elaborate_decl("view badLam (x : Nat) : (y : Nat) -> Nat = \\y . \\z . x");
+        env.elaborate_decl("fn badLam (x : Nat) : (y : Nat) -> Nat = \\y . \\z . x");
     assert!(
         matches!(result, Err(ElabError::LambdaVsNonFunction { .. })),
         "wrong-arity-rejected: expected LambdaVsNonFunction (caught by V0), got {:?}",
@@ -220,7 +220,7 @@ fn under_applied_lambda_rejected() {
 /// Correct resolution → kernel accepts; capture bug → kernel rejects.
 #[test]
 fn shadow_outer_not_captured() {
-    let src = "view f (A : Type) (x : A) : Type -> A = \\B . x";
+    let src = "fn f (A : Type) (x : A) : Type -> A = \\B . x";
 
     // --- correct path ---
     let mut env = mk_env();
@@ -295,7 +295,7 @@ fn shadow_outer_not_captured() {
 /// the elaboration verdict.
 #[test]
 fn shadow_resolver_emits_outer_index() {
-    let src = "view f (A : Type) (x : A) : Type -> A = \\B . x";
+    let src = "fn f (A : Type) (x : A) : Type -> A = \\B . x";
     let decls = parse_decls(src).expect("parse failed");
     let rdecl = resolve_decl(&decls[0]).expect("resolution failed");
 
@@ -323,7 +323,7 @@ fn nested_app_each_binder() {
     let mut env = mk_env();
     let id = env
         .elaborate_decl(
-            "view nested (A : Type) (f : (x : A) -> A) (x : A) : A = f (f x)",
+            "fn nested (A : Type) (f : (x : A) -> A) (x : A) : A = f (f x)",
         )
         .expect("nested-app should elaborate");
 
@@ -347,7 +347,7 @@ fn nested_app_each_binder() {
 #[test]
 fn unbound_name_rejected_at_resolution() {
     let mut env = mk_env();
-    let result = env.elaborate_decl("view unbound (x : Nat) : Nat = y");
+    let result = env.elaborate_decl("fn unbound (x : Nat) : Nat = y");
     assert!(
         matches!(
             &result,
@@ -390,16 +390,16 @@ fn pipeline_emits_explicit_core() {
 
     let mut env = mk_env();
     let cases = [
-        ("view id (A : Type) (x : A) : A = x", "id"),
+        ("fn id (A : Type) (x : A) : A = x", "id"),
         (
-            "view const (A B : Type) (x : A) (y : B) : A = x",
-            "const",
+            "fn konst (A B : Type) (x : A) (y : B) : A = x",
+            "konst",
         ),
         (
-            "view apply (A B : Type) (f : (x : A) -> B) (x : A) : B = f x",
+            "fn apply (A B : Type) (f : (x : A) -> B) (x : A) : B = f x",
             "apply",
         ),
-        ("view idNat (x : Nat) : Nat = x", "idNat"),
+        ("fn idNat (x : Nat) : Nat = x", "idNat"),
     ];
 
     for (src, name) in &cases {
@@ -427,7 +427,7 @@ fn pipeline_errors_at_correct_stage() {
     // (a) parse error: missing body
     {
         let mut env = mk_env();
-        let result = env.elaborate_decl("view id (A : Type) (x : A) : A =");
+        let result = env.elaborate_decl("fn id (A : Type) (x : A) : A =");
         assert!(
             matches!(result, Err(ElabError::ParseError { .. })),
             "(a) missing body should be a parse error, got {:?}",
@@ -438,7 +438,7 @@ fn pipeline_errors_at_correct_stage() {
     //     UnresolvedCon at elaboration — both prove the name was rejected)
     {
         let mut env = mk_env();
-        let result = env.elaborate_decl("view u (x : Nat) : Nat = y");
+        let result = env.elaborate_decl("fn u (x : Nat) : Nat = y");
         assert!(
             matches!(
                 &result,
@@ -452,7 +452,7 @@ fn pipeline_errors_at_correct_stage() {
     // (c) kernel rejection: body type mismatch
     {
         let mut env = mk_env();
-        let result = env.elaborate_decl("view bad (x : Nat) : Bool = x");
+        let result = env.elaborate_decl("fn bad (x : Nat) : Bool = x");
         assert!(
             matches!(result, Err(ElabError::KernelRejected { .. })),
             "(c) body mismatch should be KernelRejected, got {:?}",
@@ -472,7 +472,7 @@ fn pipeline_errors_at_correct_stage() {
 fn id_pi_level_max() {
     let mut env = mk_env();
     let id = env
-        .elaborate_decl("view id (A : Type) (x : A) : A = x")
+        .elaborate_decl("fn id (A : Type) (x : A) : A = x")
         .expect("id should elaborate");
 
     let ty = last_type(&env, id);
@@ -503,7 +503,7 @@ fn id_pi_level_max() {
 fn two_distinct_levels() {
     let mut env = mk_env();
     let id = env
-        .elaborate_decl("view poly (A : Type 1) (B : Type 2) (x : A) : A = x")
+        .elaborate_decl("fn poly (A : Type 1) (B : Type 2) (x : A) : A = x")
         .expect("poly should elaborate");
 
     let ty = last_type(&env, id);

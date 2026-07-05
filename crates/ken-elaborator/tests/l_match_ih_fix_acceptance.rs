@@ -36,13 +36,13 @@ fn ac2_tree_size_uses_both_ihs_and_computes_right_value() {
     // of Int arithmetic to keep this test self-contained and avoid the
     // native-Int-add ordering subtlety.
     env.elaborate_decl(
-        "view natAdd (a : Nat) (b : Nat) : Nat = \
+        "fn natAdd (a : Nat) (b : Nat) : Nat = \
          match a { Zero => b ; Suc m => Suc (natAdd m b) }",
     )
     .expect("natAdd should declare");
 
     env.elaborate_decl(
-        "view size (t : Tree) : Nat = \
+        "fn size (t : Tree) : Nat = \
          match t { \
            Leaf => Zero ; \
            Node l c r => Suc (natAdd (size l) (size r)) \
@@ -54,14 +54,14 @@ fn ac2_tree_size_uses_both_ihs_and_computes_right_value() {
     // size = 1 + (1 + 0 + 0) + (1 + 0 + 0) = 3.
     let id = env
         .elaborate_decl(
-            "view t3 : Tree = \
+            "const t3 : Tree = \
              Node (Node Leaf 97 Leaf) 98 (Node Leaf 99 Leaf)",
         )
         .expect("t3 should declare");
     let _ = id;
 
     let result_id = env
-        .elaborate_decl("view result : Nat = size t3")
+        .elaborate_decl("const result : Nat = size t3")
         .expect("size t3 should elaborate");
 
     let mut store = ken_interp::eval::EvalStore::new();
@@ -99,7 +99,7 @@ fn ac3_discriminating_pair_accepts_valid_rejects_ill_typed_sibling() {
     env_ok.elaborate_decl(TREE_DECL).expect("Tree should declare");
     env_ok
         .elaborate_decl(
-            "view depth (t : Tree) : Nat = \
+            "fn depth (t : Tree) : Nat = \
              match t { Leaf => Zero ; Node l c r => Suc Zero }",
         )
         .expect("valid >=2-rec-field match must accept (AC3, positive half)");
@@ -109,7 +109,7 @@ fn ac3_discriminating_pair_accepts_valid_rejects_ill_typed_sibling() {
     let mut env_bad = fresh_env();
     env_bad.elaborate_decl(TREE_DECL).expect("Tree should declare");
     let res = env_bad.elaborate_decl(
-        "view badDepth (t : Tree) : Nat = \
+        "fn badDepth (t : Tree) : Nat = \
          match t { Leaf => Zero ; Node l c r => 99 }",
     );
     assert!(
@@ -127,7 +127,7 @@ fn ac4_no_regression_0_and_1_recursive_field_types() {
     env.elaborate_decl("data Color = Red | Green | Blue")
         .expect("Color should declare");
     env.elaborate_decl(
-        "view isRed (c : Color) : Nat = \
+        "fn isRed (c : Color) : Nat = \
          match c { Red => Suc Zero ; Green => Zero ; Blue => Zero }",
     )
     .expect("0-recursive-field match must still elaborate (AC4)");
@@ -137,7 +137,7 @@ fn ac4_no_regression_0_and_1_recursive_field_types() {
     env2.elaborate_decl("data NatList = NNil | NCons Nat NatList")
         .expect("NatList should declare");
     env2.elaborate_decl(
-        "view natListLen (xs : NatList) : Nat = \
+        "fn natListLen (xs : NatList) : Nat = \
          match xs { NNil => Zero ; NCons h t => Suc (natListLen t) }",
     )
     .expect("single-recursive-field match must still elaborate (AC4)");
@@ -148,7 +148,7 @@ fn ac4_no_regression_0_and_1_recursive_field_types() {
     env3.elaborate_decl("data Snoc = SLeaf Char | SNode Snoc Char")
         .expect("Snoc should declare");
     env3.elaborate_decl(
-        "view snocLen (s : Snoc) : Nat = \
+        "fn snocLen (s : Snoc) : Nat = \
          match s { SLeaf c => Suc Zero ; SNode t c => Suc (snocLen t) }",
     )
     .expect("1-rec+1-other match must still elaborate (AC4)");
@@ -162,12 +162,12 @@ fn ac4_three_recursive_fields_also_elaborates() {
     env.elaborate_decl("data Tri = TLeaf | TNode Tri Tri Tri")
         .expect("Tri should declare");
     env.elaborate_decl(
-        "view natAdd (a : Nat) (b : Nat) : Nat = \
+        "fn natAdd (a : Nat) (b : Nat) : Nat = \
          match a { Zero => b ; Suc m => Suc (natAdd m b) }",
     )
     .expect("natAdd should declare");
     env.elaborate_decl(
-        "view triSize (t : Tri) : Nat = \
+        "fn triSize (t : Tri) : Nat = \
          match t { \
            TLeaf => Zero ; \
            TNode a b c => Suc (natAdd (natAdd (triSize a) (triSize b)) (triSize c)) \

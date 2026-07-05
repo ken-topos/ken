@@ -7,7 +7,9 @@
 //! L2 additions: `data D p₁…pₙ = C₁ τ… | C₂ τ…` sum types; `match e { … }`
 //! pattern matching; `type T = A` surface type aliases; `T a b` type app.
 
-use crate::ast::{Binder, CtorDecl, Decl, Expr, MatchArm, PatKind, Pattern, Type};
+use crate::ast::{
+    Binder, CtorDecl, Decl, DefKeyword, EffectRowSyntax, Expr, MatchArm, PatKind, Pattern, Type,
+};
 use crate::error::{ElabError, Span};
 use crate::lexer::Token;
 use crate::temporal::TemporalExpr;
@@ -64,6 +66,20 @@ impl Parser {
         let (tok, span) = self.advance();
         match tok {
             Token::Ident(s) | Token::ConId(s) => Ok((s, span)),
+            other => Err(ElabError::ParseError {
+                msg: format!("expected identifier, found {:?}", other),
+                span,
+            }),
+        }
+    }
+
+    fn expect_legacy_view_name(&mut self) -> Result<(String, Span), ElabError> {
+        let (tok, span) = self.advance();
+        match tok {
+            Token::Ident(s) | Token::ConId(s) => Ok((s, span)),
+            Token::KwConst => Ok(("const".to_string(), span)),
+            Token::KwFn => Ok(("fn".to_string(), span)),
+            Token::KwProc => Ok(("proc".to_string(), span)),
             other => Err(ElabError::ParseError {
                 msg: format!("expected identifier, found {:?}", other),
                 span,
@@ -129,7 +145,9 @@ impl Parser {
         let start = self.peek_span().start;
         match self.peek().clone() {
             Token::KwSpace => self.parse_space_view_decl(start),
-            Token::KwView => self.parse_view_decl(start, false),
+            Token::KwConst => self.parse_view_decl(start, false, DefKeyword::Const),
+            Token::KwFn => self.parse_view_decl(start, false, DefKeyword::Fn),
+            Token::KwProc => self.parse_view_decl(start, false, DefKeyword::Proc),
             Token::KwLet => self.parse_let_decl(start),
             Token::KwProve => self.parse_prove_decl(start),
             Token::KwLaw => self.parse_law_decl(start),
@@ -146,9 +164,9 @@ impl Parser {
             Token::KwPub => self.parse_pub_decl(start),
             other => Err(ElabError::ParseError {
                 msg: format!(
-                    "expected 'view', 'let', 'prove', 'law', 'data', 'type', 'foreign', \
+                    "expected 'const', 'fn', 'proc', 'let', 'prove', 'law', 'data', 'type', 'foreign', \
                      'temporal', 'class', 'instance', 'derive', 'module', 'import', 'use', \
-                     'pub', or 'space view', found {:?}",
+                     'pub', or 'space proc', found {:?}",
                     other
                 ),
                 span: self.peek_span().clone(),
@@ -159,17 +177,26 @@ impl Parser {
     fn parse_space_view_decl(&mut self, start: usize) -> Result<Decl, ElabError> {
         self.advance(); // consume 'space'
         match self.peek().clone() {
-            Token::KwView => self.parse_view_decl(start, true),
+            Token::KwProc => self.parse_view_decl(start, true, DefKeyword::Proc),
             other => Err(ElabError::ParseError {
-                msg: format!("expected 'view' after 'space', found {:?}", other),
+                msg: format!("expected 'proc' after 'space', found {:?}", other),
                 span: self.peek_span().clone(),
             }),
         }
     }
 
-    fn parse_view_decl(&mut self, start: usize, is_space_op: bool) -> Result<Decl, ElabError> {
-        self.advance(); // consume 'view'
-        let (name, _) = self.expect_ident()?;
+    fn parse_view_decl(
+        &mut self,
+        start: usize,
+        is_space_op: bool,
+        keyword: DefKeyword,
+    ) -> Result<Decl, ElabError> {
+        self.advance(); // consume definition keyword
+        let (name, _) = if keyword == DefKeyword::View {
+            self.expect_legacy_view_name()?
+        } else {
+            self.expect_ident()?
+        };
 
         let mut params = Vec::new();
         while matches!(self.peek(), Token::LParen)
@@ -217,17 +244,26 @@ impl Parser {
             }
         }
 
+        let visits = if self.is_contextual_ident("visits") {
+            self.advance(); // consume contextual 'visits'
+            Some(self.parse_effect_row_syntax()?)
+        } else {
+            None
+        };
+
         self.expect(&Token::Eq)?;
         let body = self.parse_expr()?;
         let end = body.span().end;
 
         Ok(Decl::ViewDecl {
+            keyword,
             name,
             params,
             ret_ty,
             requires,
             ensures,
             constraints,
+            visits,
             body,
             is_space_op,
             span: Span::new(start, end),
@@ -427,7 +463,11 @@ impl Parser {
 
     /// Is the current token the contextual temporal-operator word `op`?
     fn is_t_op(&self, op: &str) -> bool {
-        matches!(self.peek(), Token::Ident(s) if s == op)
+        self.is_contextual_ident(op)
+    }
+
+    fn is_contextual_ident(&self, ident: &str) -> bool {
+        matches!(self.peek(), Token::Ident(s) if s == ident)
     }
 
     /// `law Name (param) { field : φ ; … }`
@@ -764,6 +804,73 @@ impl Parser {
         })
     }
 
+    /// Parse `[...]` effect-row syntax (`36 §1.5`).
+    ///
+    /// Accepted shapes:
+    /// - `[Console, FS]` — concrete row
+    /// - `[e]` — bare row variable
+    /// - `[Console | e]` — open row with concrete heads and a variable tail
+    pub fn parse_effect_row_syntax(&mut self) -> Result<EffectRowSyntax, ElabError> {
+        let start = self.peek_span().start;
+        self.expect(&Token::LBracket)?;
+
+        let mut heads = Vec::new();
+        let mut tail = None;
+        while !matches!(self.peek(), Token::RBracket | Token::Eof) {
+            let (name, span) = self.expect_ident()?;
+            let is_row_var = name
+                .chars()
+                .next()
+                .map(|c| c.is_lowercase())
+                .unwrap_or(false);
+
+            if is_row_var {
+                if heads.is_empty() && tail.is_none() {
+                    tail = Some(name);
+                    break;
+                }
+                return Err(ElabError::ParseError {
+                    msg: "row variable must appear as bare [e] or as the tail in [E | e]"
+                        .to_string(),
+                    span,
+                });
+            }
+
+            heads.push(name);
+            match self.peek() {
+                Token::Comma => {
+                    self.advance();
+                }
+                Token::Pipe => {
+                    self.advance();
+                    let (tail_name, tail_span) = self.expect_ident()?;
+                    let tail_is_var = tail_name
+                        .chars()
+                        .next()
+                        .map(|c| c.is_lowercase())
+                        .unwrap_or(false);
+                    if !tail_is_var {
+                        return Err(ElabError::ParseError {
+                            msg: "open row tail must be a lowercase row variable".to_string(),
+                            span: tail_span,
+                        });
+                    }
+                    tail = Some(tail_name);
+                    break;
+                }
+                _ => {}
+            }
+        }
+
+        let end = self.peek_span().end;
+        self.expect(&Token::RBracket)?;
+        Ok(EffectRowSyntax {
+            heads,
+            tail,
+            span: Span::new(start, end),
+        })
+    }
+
     // ----- type parsing -----
 
     pub fn parse_type(&mut self) -> Result<Type, ElabError> {
@@ -803,6 +910,11 @@ impl Parser {
     }
 
     fn can_start_atom_type(&self) -> bool {
+        if matches!(self.peek(), Token::Ident(s) if s == "visits")
+            && matches!(self.lookahead(1), Token::LBracket)
+        {
+            return false;
+        }
         matches!(
             self.peek(),
             Token::ConId(_) | Token::Ident(_) | Token::KwType | Token::LParen

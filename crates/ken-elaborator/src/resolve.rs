@@ -6,7 +6,7 @@
 //! L2 additions: `data` declarations, `type` aliases, `match` expressions,
 //! type application (`T a b`).
 
-use crate::ast::{BinOp, Decl, Expr, NumLit, PatKind, Type};
+use crate::ast::{BinOp, Decl, DefKeyword, EffectRowSyntax, Expr, NumLit, PatKind, Type};
 use crate::error::{ElabError, Span};
 
 /// A resolved constructor declaration (from `data` decl resolution).
@@ -56,10 +56,15 @@ pub struct RDecl {
 /// Discriminates the declaration kind for elaboration dispatch.
 #[derive(Clone, Debug)]
 pub enum RDeclKind {
-    /// A `view` (or `space view`) definition.
+    /// A definition using legacy `view` or SURF-1 `const`/`fn`/`proc`.
     /// `constraints` = `where C T` list resolved from the surface `where`
     /// clause; checked against `instance_search` in `elaborate_rdecl_v1`.
-    View { is_space_op: bool, constraints: Vec<(String, RType)> },
+    View {
+        keyword: DefKeyword,
+        is_space_op: bool,
+        constraints: Vec<(String, RType)>,
+        visits: Option<EffectRowSyntax>,
+    },
     /// A `let` binding.
     Let,
     /// A `prove name : φ` standalone obligation.
@@ -259,12 +264,14 @@ pub fn resolve_decl(decl: &Decl) -> Result<RDecl, ElabError> {
             "resolve_decl: module/import/pub decls must be expanded by modules.rs first".into(),
         )),
         Decl::ViewDecl {
+            keyword,
             name,
             params,
             ret_ty,
             requires,
             ensures,
             constraints,
+            visits,
             body,
             is_space_op,
             span,
@@ -351,8 +358,10 @@ pub fn resolve_decl(decl: &Decl) -> Result<RDecl, ElabError> {
                 ensures: resolved_ensures,
                 span: span.clone(),
                 kind: RDeclKind::View {
+                    keyword: *keyword,
                     is_space_op: *is_space_op,
                     constraints: resolved_constraints,
+                    visits: visits.clone(),
                 },
             })
         }

@@ -17,7 +17,7 @@
 //! **derived** Ken `view`s over the floor (`N/A` oracle-ref, `18a §5`
 //! ~L439-440) — no new native surface, reusing `leq_int`/`add_int`/
 //! `sub_int`/`mul_int`/`and_bool`/`Option`/`Some`/`None`, matching
-//! `decimal_char.rs`'s native-primitive + Ken-view split (`intToChar`).
+//! `decimal_char.rs`'s native-primitive + Ken-fn split (`intToChar`).
 //!
 //! `neg_intN` (signed widths only) stays NATIVE and checked — it does NOT
 //! demote to `sub_int 0 x` like bignum `neg_int`, since `neg(MIN_intN)`
@@ -107,7 +107,7 @@ pub fn register_conversions(elab: &mut ElabEnv) -> Result<(), ElabError> {
         // Native Bool-check (`leq_int`, already-audited F5) + a Ken view
         // constructing the `Option` — the `intToChar` pattern (`decimal_char.rs`).
         let int_to_n_src = format!(
-            "view intTo{name} (n : Int) : Option {name} = \
+            "fn intTo{name} (n : Int) : Option {name} = \
              match (and_bool (leq_int {min} n) (leq_int n {max})) {{ \
                True => Some {name} (int_to_{snake}_raw n) ; \
                False => None {name} \
@@ -125,7 +125,7 @@ pub fn register_conversions(elab: &mut ElabEnv) -> Result<(), ElabError> {
         // (`18a §5`, ~L439) — the narrowing `None` IS the overflow semantics.
         for (op_label, int_op) in [("Add", "add_int"), ("Sub", "sub_int"), ("Mul", "mul_int")] {
             let src = format!(
-                "view checked{op}{name} (a : {name}) (b : {name}) : Option {name} = \
+                "fn checked{op}{name} (a : {name}) (b : {name}) : Option {name} = \
                  intTo{name} ({int_op} ({snake}_to_int a) ({snake}_to_int b))",
                 op = op_label,
                 name = spec.name,
@@ -157,7 +157,7 @@ pub fn register_conversions(elab: &mut ElabEnv) -> Result<(), ElabError> {
         for (op_label, int_op) in [("Add", "add_int"), ("Sub", "sub_int"), ("Mul", "mul_int")] {
             let sum = format!("({int_op} ({snake}_to_int a) ({snake}_to_int b))", int_op = int_op, snake = spec.snake);
             let src = format!(
-                "view saturating{op}{name} (a : {name}) (b : {name}) : {name} = \
+                "fn saturating{op}{name} (a : {name}) (b : {name}) : {name} = \
                  match (leq_int {sum} {max}) {{ \
                    True => match (leq_int {min} {sum}) {{ \
                      True => int_to_{snake}_raw {sum} ; \

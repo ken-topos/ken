@@ -37,9 +37,9 @@ fn eval_int_decl(env: &mut ElabEnv, src: &str) -> i128 {
 #[test]
 fn infix_minus_matches_prefix_sub_int() {
     let mut env = fresh_env();
-    let infix = eval_int_decl(&mut env, "view r : Int = 10 - 3");
+    let infix = eval_int_decl(&mut env, "const r : Int = 10 - 3");
     let mut env2 = fresh_env();
-    let prefix = eval_int_decl(&mut env2, "view r : Int = sub_int 10 3");
+    let prefix = eval_int_decl(&mut env2, "const r : Int = sub_int 10 3");
     assert_eq!(infix, prefix, "infix '-' must match prefix 'sub_int'");
     assert_eq!(infix, 7);
 }
@@ -47,9 +47,9 @@ fn infix_minus_matches_prefix_sub_int() {
 #[test]
 fn infix_star_matches_prefix_mul_int() {
     let mut env = fresh_env();
-    let infix = eval_int_decl(&mut env, "view r : Int = 6 * 7");
+    let infix = eval_int_decl(&mut env, "const r : Int = 6 * 7");
     let mut env2 = fresh_env();
-    let prefix = eval_int_decl(&mut env2, "view r : Int = mul_int 6 7");
+    let prefix = eval_int_decl(&mut env2, "const r : Int = mul_int 6 7");
     assert_eq!(infix, prefix, "infix '*' must match prefix 'mul_int'");
     assert_eq!(infix, 42);
 }
@@ -58,12 +58,12 @@ fn infix_star_matches_prefix_mul_int() {
 fn star_binds_tighter_than_plus_and_minus() {
     let mut env = fresh_env();
     // 2 + 3 * 4 = 2 + 12 = 14, NOT (2 + 3) * 4 = 20.
-    let v = eval_int_decl(&mut env, "view r : Int = 2 + 3 * 4");
+    let v = eval_int_decl(&mut env, "const r : Int = 2 + 3 * 4");
     assert_eq!(v, 14, "'*' must bind tighter than '+' (conventional precedence)");
 
     let mut env2 = fresh_env();
     // 20 - 3 * 4 = 20 - 12 = 8, NOT (20 - 3) * 4 = 68.
-    let v2 = eval_int_decl(&mut env2, "view r : Int = 20 - 3 * 4");
+    let v2 = eval_int_decl(&mut env2, "const r : Int = 20 - 3 * 4");
     assert_eq!(v2, 8, "'*' must bind tighter than '-' (conventional precedence)");
 }
 
@@ -71,6 +71,6 @@ fn star_binds_tighter_than_plus_and_minus() {
 fn minus_and_plus_are_left_associative() {
     let mut env = fresh_env();
     // 10 - 3 - 2 = (10 - 3) - 2 = 5, NOT 10 - (3 - 2) = 9.
-    let v = eval_int_decl(&mut env, "view r : Int = 10 - 3 - 2");
+    let v = eval_int_decl(&mut env, "const r : Int = 10 - 3 - 2");
     assert_eq!(v, 5, "'-' must be left-associative");
 }

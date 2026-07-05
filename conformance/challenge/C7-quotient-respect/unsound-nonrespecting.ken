@@ -6,25 +6,25 @@
 
 data DPair = MkDPair Int Int
 
-view denoteEq (x : DPair) (y : DPair) : Prop =
-  match x { MkDPair cx ex =>
-    match y { MkDPair cy ey =>
+fn denoteEq (x : DPair) (y : DPair) : Prop =
+  match x { MkDPair cx ex ⇒
+    match y { MkDPair cy ey ⇒
       Equal Bool (and_bool (eq_int (add_int ex 1) ey) (eq_int cx (mul_int cy 10))) True } }
 
-view Decimal : Type = DPair / denoteEq
+const Decimal : Type = DPair / denoteEq
 
 -- coeffPair does NOT respect denoteEq: MkDPair 10 (-1) and MkDPair 1 0 satisfy
 -- denoteEq (both denote 1) but coeffPair gives 10 vs 1.
-view coeffPair (p : DPair) : Int = match p { MkDPair c e => c }
+fn coeffPair (p : DPair) : Int = match p { MkDPair c e ⇒ c }
 
 -- The respect obligation `(x y) -> denoteEq x y -> Equal Int (coeffPair x)
 -- (coeffPair y)` is UNPROVABLE: at x=(10,-1), y=(1,0) it demands Equal Int 10 1
 -- (the same Bottom C1 reaches). There is no proof term to supply.
-view coeffRespect (x : DPair) (y : DPair) (h : denoteEq x y)
+fn coeffRespect (x : DPair) (y : DPair) (h : denoteEq x y)
   : Equal Int (coeffPair x) (coeffPair y) = Axiom   -- FALSE — no honest inhabitant
 
-view coeffDecimal (d : Decimal) : Int =
-  elim_/ (\ _ . Int) coeffPair coeffRespect d
+fn coeffDecimal (d : Decimal) : Int =
+  elim_/ (λ _ . Int) coeffPair coeffRespect d
 
 -- Expected correct behavior: REJECTED — the `respect` obligation for `coeff` is
 -- unprovable, so `elim_/` cannot be given a valid respect argument; the lift

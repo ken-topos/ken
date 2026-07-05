@@ -17,16 +17,16 @@
 
 -- reverseListChar: structural recursion on `xs`, SCT decreasing on the
 -- `Cons` tail (`xs2`) -- same sound-zone shape as the landed floor.
-view reverseListChar (a : Type) (xs : List a) : List a =
+fn reverseListChar (a : Type) (xs : List a) : List a =
   match xs {
-    Nil => Nil a ;
-    Cons x xs2 => list_append a (reverseListChar a xs2) (Cons a x (Nil a))
+    Nil ⇒ Nil a ;
+    Cons x xs2 ⇒ list_append a (reverseListChar a xs2) (Cons a x (Nil a))
   }
 
-view reverseString (s : String) : String =
+fn reverseString (s : String) : String =
   list_char_to_string (reverseListChar Char (string_to_list_char s))
 
-view palindrome (s : String) : Bool = eq s (reverseString s)
+fn palindrome (s : String) : Bool = eq s (reverseString s)
 
 -- ── Oracle ───────────────────────────────────────────────────────────────────
 --
@@ -35,19 +35,19 @@ view palindrome (s : String) : Bool = eq s (reverseString s)
 -- a non-palindrome same-length pair ("hello"), the empty string (vacuously
 -- a palindrome), and a single character (trivially a palindrome). Any one
 -- wrong flips the result to "FAIL".
-view finalCheck : String =
+const finalCheck : String =
   match palindrome "racecar" {
-    True => match palindrome "hello" {
-      False => match palindrome "" {
-        True => match palindrome "a" {
-          True => "PASS" ;
-          False => "FAIL"
+    True ⇒ match palindrome "hello" {
+      False ⇒ match palindrome "" {
+        True ⇒ match palindrome "a" {
+          True ⇒ "PASS" ;
+          False ⇒ "FAIL"
         } ;
-        False => "FAIL"
+        False ⇒ "FAIL"
       } ;
-      True => "FAIL"
+      True ⇒ "FAIL"
     } ;
-    False => "FAIL"
+    False ⇒ "FAIL"
   }
 
-view main : IO Unit = print_line finalCheck
+proc main : IO Unit visits [Console] = print_line finalCheck

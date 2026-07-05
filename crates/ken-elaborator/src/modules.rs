@@ -202,14 +202,28 @@ fn apply_import(
 /// exercises them nested).
 fn qualify_decl_name(decl: &Decl, prefix: &str) -> Decl {
     match decl {
-        Decl::ViewDecl { name, params, ret_ty, requires, ensures, constraints, body, is_space_op, span } => {
+        Decl::ViewDecl {
+            keyword,
+            name,
+            params,
+            ret_ty,
+            requires,
+            ensures,
+            constraints,
+            visits,
+            body,
+            is_space_op,
+            span,
+        } => {
             Decl::ViewDecl {
+                keyword: *keyword,
                 name: qualify(prefix, name),
                 params: params.clone(),
                 ret_ty: ret_ty.clone(),
                 requires: requires.clone(),
                 ensures: ensures.clone(),
                 constraints: constraints.clone(),
+                visits: visits.clone(),
                 body: body.clone(),
                 is_space_op: *is_space_op,
                 span: span.clone(),
@@ -366,12 +380,14 @@ fn rewrite_rdecl(scope: &Scope, exports: &HashMap<String, HashMap<String, String
         .map(|e| rewrite_rexpr(scope, exports, e))
         .collect::<Result<Vec<_>, ElabError>>()?;
     let kind = match rdecl.kind {
-        RDeclKind::View { is_space_op, constraints } => RDeclKind::View {
+        RDeclKind::View { keyword, is_space_op, constraints, visits } => RDeclKind::View {
+            keyword,
             is_space_op,
             constraints: constraints
                 .into_iter()
                 .map(|(c, t)| Ok((c, rewrite_rtype(scope, exports, t)?)))
                 .collect::<Result<Vec<_>, ElabError>>()?,
+            visits,
         },
         RDeclKind::Let => RDeclKind::Let,
         RDeclKind::Prove => RDeclKind::Prove,
@@ -437,6 +453,48 @@ fn is_qualifiable(decl: &Decl) -> bool {
         decl,
         Decl::ViewDecl { .. } | Decl::LetDecl { .. } | Decl::DataDecl { .. } | Decl::TypeAlias { .. }
     )
+}
+
+fn register_effect_row(elab: &mut ElabEnv, result: &crate::elab::ElabResult) {
+    if let Some(row) = &result.effect_row_type {
+        elab.effect_rows.insert(result.name.clone(), row.clone());
+    }
+    if let Some(fb) = &result.foreign_binding {
+        elab.foreign_env.register(result.name.clone(), fb.clone());
+        if !fb.effect_row.is_empty() {
+            elab.effect_rows.insert(
+                result.name.clone(),
+                crate::effects::RowType::Concrete(fb.effect_row.clone()),
+            );
+        }
+    }
+}
+
+fn register_declared_effect_row(
+    elab: &mut ElabEnv,
+    rdecl: &crate::resolve::RDecl,
+) -> Result<(), ElabError> {
+    if let Some(row) = crate::elab::surface_declared_row_type(rdecl)? {
+        elab.effect_rows.insert(rdecl.name.clone(), row);
+    }
+    Ok(())
+}
+
+fn elaborate_checked(
+    elab: &mut ElabEnv,
+    rdecl: &crate::resolve::RDecl,
+) -> Result<crate::elab::ElabResult, ElabError> {
+    crate::elab::check_surface_purity(rdecl, &elab.effect_rows)?;
+    let result = crate::elab::elaborate_rdecl_v1(
+        &mut elab.env,
+        &mut elab.globals,
+        &mut elab.num_values,
+        &elab.numeric_env,
+        &mut elab.class_env,
+        rdecl,
+    )?;
+    register_effect_row(elab, &result);
+    Ok(result)
 }
 
 /// Expand and elaborate a compilation unit's raw decls (one `elaborate_*`
@@ -549,24 +607,20 @@ fn expand_scope(
                     }
                     if scc.len() == 1 {
                         let rdecl = &rdecls[k];
-                        let result = crate::elab::elaborate_rdecl_v1(
-                            &mut elab.env,
-                            &mut elab.globals,
-                            &mut elab.num_values,
-                            &elab.numeric_env,
-                            &mut elab.class_env,
-                            rdecl,
-                        )?;
-                        if let Some(fb) = &result.foreign_binding {
-                            elab.foreign_env.register(result.name.clone(), fb.clone());
-                        }
+                        let result = elaborate_checked(elab, rdecl)?;
                         ids.push(result);
                     } else {
                         let members: Vec<crate::resolve::RDecl> =
                             scc.iter().map(|&m| rdecls[m].clone()).collect();
+                        let mut group_effect_rows = elab.effect_rows.clone();
+                        for rdecl in &members {
+                            if let Some(row) = crate::elab::surface_declared_row_type(rdecl)? {
+                                group_effect_rows.insert(rdecl.name.clone(), row);
+                            }
+                        }
                         // Eligibility guard: the new group path only covers
                         // the plain V0 view/let shape (matches the existing
-                        // singleton recursive-view rule) — a mutual member
+                        // singleton recursive-const rule) — a mutual member
                         // needing requires/ensures/where/refinement-return
                         // is out of this WP's scope; fail clearly rather
                         // than silently dropping its obligation.
@@ -574,7 +628,7 @@ fn expand_scope(
                             let simple_kind = matches!(&rdecl.kind, RDeclKind::Let)
                                 || matches!(
                                     &rdecl.kind,
-                                    RDeclKind::View { constraints, is_space_op }
+                                    RDeclKind::View { constraints, is_space_op, .. }
                                         if constraints.is_empty() && !is_space_op
                                 );
                             let has_refine_return = rdecl
@@ -588,12 +642,13 @@ fn expand_scope(
                                 || has_refine_return
                             {
                                 return Err(ElabError::Internal(format!(
-                                    "mutual recursion is only supported for plain view/let \
+                                    "mutual recursion is only supported for plain recursive \
                                      definitions (no requires/ensures/where-constraints/\
                                      refinement-return); '{}' does not qualify",
                                     rdecl.name
                                 )));
                             }
+                            crate::elab::check_surface_purity(rdecl, &group_effect_rows)?;
                         }
                         let results = crate::elab::elaborate_mutual_group(
                             &mut elab.env,
@@ -603,10 +658,9 @@ fn expand_scope(
                             &elab.class_env,
                             &members,
                         )?;
-                        for result in results {
-                            if let Some(fb) = &result.foreign_binding {
-                                elab.foreign_env.register(result.name.clone(), fb.clone());
-                            }
+                        for (rdecl, result) in members.iter().zip(results) {
+                            register_effect_row(elab, &result);
+                            register_declared_effect_row(elab, rdecl)?;
                             ids.push(result);
                         }
                     }
@@ -657,6 +711,7 @@ fn expand_scope(
                             obligations: vec![],
                             foreign_binding: None,
                             temporal_obligations: vec![],
+                            effect_row_type: None,
                         });
                         i += 1;
                         continue;
@@ -667,17 +722,7 @@ fn expand_scope(
                     let renamed = qualify_decl_name(inner, prefix);
                     let rdecl = resolve::resolve_decl(&renamed)?;
                     let rdecl = rewrite_rdecl(scope, &elab.module_state.exports, rdecl)?;
-                    let result = crate::elab::elaborate_rdecl_v1(
-                        &mut elab.env,
-                        &mut elab.globals,
-                        &mut elab.num_values,
-                        &elab.numeric_env,
-                        &mut elab.class_env,
-                        &rdecl,
-                    )?;
-                    if let Some(fb) = &result.foreign_binding {
-                        elab.foreign_env.register(result.name.clone(), fb.clone());
-                    }
+                    let result = elaborate_checked(elab, &rdecl)?;
                     if is_pub {
                         // Only the decl's own qualified name is exported —
                         // never a `DataDecl`'s constructors (`33 §4.2`,
@@ -691,17 +736,7 @@ fn expand_scope(
                     // Not module-qualifiable (class/instance/law/foreign/
                     // temporal/prove) — elaborate unchanged, unqualified.
                     let rdecl = resolve::resolve_decl(inner)?;
-                    let result = crate::elab::elaborate_rdecl_v1(
-                        &mut elab.env,
-                        &mut elab.globals,
-                        &mut elab.num_values,
-                        &elab.numeric_env,
-                        &mut elab.class_env,
-                        &rdecl,
-                    )?;
-                    if let Some(fb) = &result.foreign_binding {
-                        elab.foreign_env.register(result.name.clone(), fb.clone());
-                    }
+                    let result = elaborate_checked(elab, &rdecl)?;
                     ids.push(result);
                 }
                 i += 1;

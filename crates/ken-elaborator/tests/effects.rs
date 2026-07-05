@@ -13,12 +13,17 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use ken_elaborator::effects::{
-    bind, check_capabilities_no_handler, check_cross_space, check_escape,
-    check_higher_order_guard, check_row_poly_escape, check_tail_resumptive,
-    handler_fold, perform, infer_all, infer_row_poly,
+    bind, build_decl_from_telescope, check_capabilities_no_handler,
+    check_cross_space, check_decl_poly, check_escape, check_higher_order_guard,
+    check_row_poly_escape, check_tail_resumptive, classify_telescope,
+    handler_fold, perform, infer_all, infer_all_poly, infer_row_poly,
+    row_var_map, surface_row_to_row_type,
     CapParam, CrossSpaceAccess, EffectDecl, EffectError, EffectName, EffectRow,
-    HandlerCase, ITree, ResumeKind, RowSubst, RowType, RowVar, WitnessMap,
+    HandlerCase, ITree, ParamTy, ResumeKind, RowSubst, RowType, RowVar,
+    RowVarAllocator, WitnessMap,
 };
+use ken_elaborator::parser::parse_decls;
+use ken_elaborator::resolve::{resolve_decl, RDeclKind};
 
 // ============================================================
 // EFF1 — effect row: transitive inference + static check
@@ -209,7 +214,7 @@ fn eff_pure_default_is_effect_free() {
 
     assert!(
         rows["double"].is_empty(),
-        "pure view with no calls must have inferred row ∅"
+        "pure const with no calls must have inferred row ∅"
     );
 
     // Escape check with ρ_decl = ∅ (no annotation) also passes
@@ -1045,6 +1050,148 @@ fn row_poly_mixed_concrete_and_var() {
         "mixed concrete+var declared correctly — must accept");
 }
 
+/// SURF-1 D1 / PK8: a written bare row variable in `visits [e]` survives
+/// parse+resolve and translates to the same `RowVar` as the HOF parameter's
+/// latent row. This is the missing surface path; hand-building
+/// `with_declared_row_type(RowType::Var(_))` is not enough.
+#[test]
+fn surf1_surface_visits_bare_row_var_reaches_row_type() {
+    let src = r#"
+        proc traverse (f : A -> B) (xs : ListA) : ListB visits [e] = xs
+    "#;
+    let decls = parse_decls(src).expect("proc with visits [e] must parse");
+    let rdecl = resolve_decl(&decls[0]).expect("proc with visits [e] must resolve");
+
+    let visits = match &rdecl.kind {
+        RDeclKind::View { visits: Some(row), .. } => row,
+        other => panic!("expected resolved const visits row, got {:?}", other),
+    };
+
+    let telescope = vec![("e", ParamTy::HofEffectful)];
+    let mut alloc = RowVarAllocator::new();
+    let classified = classify_telescope(&telescope, &mut alloc);
+    let vars = row_var_map(&classified);
+
+    let declared = surface_row_to_row_type(visits, &vars)
+        .expect("[e] must resolve to the HOF row variable");
+    assert_eq!(declared, RowType::Var(RowVar(0)));
+
+    let decl = build_decl_from_telescope("traverse", &classified)
+        .with_declared_row_type(declared);
+    let inferred = infer_all_poly(&HashMap::new(), &[decl.clone()]);
+    check_decl_poly(&decl, &inferred["traverse"], &EffectRow::empty())
+        .expect("ρ_e ⊆ ρ_e: written [e] must cover the inferred row variable");
+}
+
+/// SURF-1 D1 / PK9: `[Console | e]` lowers to a symbolic join and remains
+/// conservative. The single-arm subset rule accepts a matching concrete head
+/// plus the same variable, but still rejects an unrelated concrete effect.
+#[test]
+fn surf1_surface_visits_open_row_reaches_join_and_stays_conservative() {
+    let src = r#"
+        proc logged (f : A -> B) (x : A) : B visits [Console | e] = x
+    "#;
+    let decls = parse_decls(src).expect("proc with visits [Console | e] must parse");
+    let rdecl = resolve_decl(&decls[0]).expect("open row const must resolve");
+
+    let visits = match &rdecl.kind {
+        RDeclKind::View { visits: Some(row), .. } => row,
+        other => panic!("expected resolved open visits row, got {:?}", other),
+    };
+
+    let telescope = vec![("e", ParamTy::HofEffectful)];
+    let mut alloc = RowVarAllocator::new();
+    let classified = classify_telescope(&telescope, &mut alloc);
+    let vars = row_var_map(&classified);
+    let declared = surface_row_to_row_type(visits, &vars)
+        .expect("[Console | e] must resolve to Concrete(Console) ∪ Var(e)");
+
+    let inferred_ok = RowType::singleton("Console").join(RowType::Var(RowVar(0)));
+    assert!(inferred_ok.is_subset_of(&declared));
+
+    let inferred_bad = RowType::singleton("FS").join(RowType::Var(RowVar(0)));
+    assert!(
+        !inferred_bad.is_subset_of(&declared),
+        "x ⊆ [Console | e] stays conservative single-arm; FS is not silently covered"
+    );
+}
+
+/// SURF-1 D1 production path: real `RDeclKind::View` elaboration consumes the
+/// parsed concrete `visits` row and records the checked `RowType`. If the
+/// `elaborate_rdecl_v1` hook is removed, this fails with `None`.
+#[test]
+fn surf1_view_elaboration_consumes_visits_row() {
+    let src = "proc surf1_visits (x : Nat) : Nat visits [Console] = x";
+    let decls = parse_decls(src).expect("const with concrete visits row must parse");
+    let rdecl = resolve_decl(&decls[0]).expect("const with concrete visits row must resolve");
+    let mut env = ken_elaborator::ElabEnv::new().expect("base env");
+
+    let result = ken_elaborator::elab::elaborate_rdecl_v1(
+        &mut env.env,
+        &mut env.globals,
+        &mut env.num_values,
+        &env.numeric_env,
+        &mut env.class_env,
+        &rdecl,
+    )
+    .expect("const with concrete D1 visits row must elaborate");
+
+    let row = result
+        .effect_row_type
+        .expect("production const elaboration must expose checked visits row");
+    assert_eq!(
+        row,
+        RowType::singleton("Console"),
+        "written [Console] must reach production checking as a RowType"
+    );
+}
+
+/// SURF-1 D1 production path: row variables fail closed unless the same
+/// variable was allocated from a HOF latent-row binding in the declaration
+/// type. A plain first-order const must not synthesize `e` from `visits`.
+#[test]
+fn surf1_view_elaboration_rejects_unbound_visits_row_var() {
+    let src = "proc surf1_bad_visits (x : Nat) : Nat visits [Console | e] = x";
+    let decls = parse_decls(src).expect("const with open visits row must parse");
+    let rdecl = resolve_decl(&decls[0]).expect("const with open visits row must resolve");
+    let mut env = ken_elaborator::ElabEnv::new().expect("base env");
+
+    let err = ken_elaborator::elab::elaborate_rdecl_v1(
+        &mut env.env,
+        &mut env.globals,
+        &mut env.num_values,
+        &env.numeric_env,
+        &mut env.class_env,
+        &rdecl,
+    )
+    .expect_err("unbound visits row variable must reject fail-closed");
+
+    assert!(
+        format!("{err:?}").contains("unknown row variable `e` in visits row"),
+        "unexpected error for unbound row variable: {err:?}"
+    );
+}
+
+/// SURF-1 D1 / `36 §1.5.5`: recursive row-polymorphic inference ranges over
+/// `RowType` and terminates at the idempotent fixpoint `e ∪ e = e`.
+#[test]
+fn surf1_recursive_row_poly_fixpoint_is_idempotent() {
+    let traverse = EffectDecl::new("traverse")
+        .with_param_row(RowVar(0))
+        .with_callee("traverse")
+        .with_declared_row_type(RowType::Var(RowVar(0)));
+
+    let rows = infer_all_poly(&HashMap::new(), &[traverse.clone()]);
+    assert_eq!(
+        rows["traverse"],
+        RowType::Var(RowVar(0)),
+        "recursive release of the same row variable must stabilize at e"
+    );
+
+    check_decl_poly(&traverse, &rows["traverse"], &EffectRow::empty())
+        .expect("recursive traverse row e must satisfy declared [e]");
+}
+
 // ============================================================
 // EFF-LOW — ITree kernel-term lowering (emit Term::Elim, kernel-checked)
 // ============================================================
@@ -1065,7 +1212,6 @@ fn row_poly_mixed_concrete_and_var() {
 
 use ken_elaborator::effects::{
     lower_bind, lower_elim_itree, lower_handler_fold_uniform,
-    build_decl_from_telescope, classify_telescope, ParamTy, RowVarAllocator,
 };
 use ken_kernel::{
     declare_inductive, infer as kernel_infer, normalize, whnf,
@@ -1519,6 +1665,6 @@ fn classify_telescope_hof_effectful_cannot_be_silently_dropped() {
 fn existing_surface_invariants_still_green() {
     use ken_elaborator::ElabEnv;
     let mut env = ElabEnv::new().expect("base env failed");
-    env.elaborate_decl("view id (A : Type) (x : A) : A = x")
+    env.elaborate_decl("fn id (A : Type) (x : A) : A = x")
         .expect("id elaboration must still pass after adding effects module");
 }

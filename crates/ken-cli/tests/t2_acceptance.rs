@@ -40,8 +40,8 @@ fn closed_triple(env: &mut GlobalEnv, id: &str, phi: Term) -> ObligationTriple {
 #[test]
 fn ac1_well_typed_def_registers() {
     let mut env = fresh();
-    // `view idNat (x : Nat) : Nat = x` — identity on Nat (Ken declaration syntax)
-    let result = env.elaborate_decl("view idNat (x : Nat) : Nat = x");
+    // `fn idNat (x : Nat) : Nat = x` — identity on Nat (Ken declaration syntax)
+    let result = env.elaborate_decl("fn idNat (x : Nat) : Nat = x");
     assert!(
         result.is_ok(),
         "well-typed definition should elaborate; got: {:?}",
@@ -56,7 +56,7 @@ fn ac1_ill_typed_def_rejected_not_registered() {
     let mut env = fresh();
     let before = env.globals.len();
     // Type mismatch: value is Nat, declared return type is Bool.
-    let result = env.elaborate_decl("view bad (x : Nat) : Bool = x");
+    let result = env.elaborate_decl("fn bad (x : Nat) : Bool = x");
     assert!(result.is_err(), "ill-typed definition should fail");
     assert_eq!(
         env.globals.len(),
@@ -230,7 +230,7 @@ fn ac4_type_error_no_panic() {
 #[test]
 fn ac5_session_state_persists() {
     let mut env = fresh();
-    env.elaborate_decl("view Myid (x : Nat) : Nat = x")
+    env.elaborate_decl("fn Myid (x : Nat) : Nat = x")
         .expect("define Myid");
     let result = env.elaborate_expr("Myid");
     assert!(
@@ -242,12 +242,12 @@ fn ac5_session_state_persists() {
 
 /// AC5b — A definition is usable in a `:check` after it is defined.
 ///
-/// After defining `view myid (x : Nat) : Nat = x`, the session env has `Nat`
+/// After defining `fn myid (x : Nat) : Nat = x`, the session env has `Nat`
 /// available; we directly prove `Pi(Nat, Nat)` (the type of myid) via IPC.
 #[test]
 fn ac5_definition_usable_in_check() {
     let mut env = fresh();
-    env.elaborate_decl("view myid (x : Nat) : Nat = x")
+    env.elaborate_decl("fn myid (x : Nat) : Nat = x")
         .expect("define myid");
     // Pi(Nat, Nat) — the IPC closes with identity.
     let nat_id = *env.globals.get("Nat").expect("Nat registered in env");

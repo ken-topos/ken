@@ -9,15 +9,15 @@
 -- fBad and gBad DIFFER at a point:
 --   fBad x = True   (constant True)     fBad False = True
 --   gBad x = x      (identity)          gBad False = False   -- disagree at False
-view fBad (x : Bool) : Bool = True
-view gBad (x : Bool) : Bool = x
+fn fBad (x : Bool) : Bool = True
+fn gBad (x : Bool) : Bool = x
 
 -- The (false) claim: fBad and gBad are equal as functions. funext reduces
 -- `Equal (Bool -> Bool) fBad gBad` to  (x : Bool) -> Equal Bool True x, and
 -- `\x. Refl` demands `Refl : Equal Bool True x` — i.e. `True ≡ x` — which is
 -- FALSE for an abstract `x` (True and x are not convertible). So the proof is
 -- ill-typed and the definition is REJECTED.
-view funextBad : Equal (Bool -> Bool) fBad gBad = \x. Refl
+const funextBad : Equal (Bool → Bool) fBad gBad = λx. Refl
 
 -- Expected: REJECTED (CONFIRMED at run — `Refl: the two sides of the goal are
 -- not convertible`). A GENUINE proof attempt failing, NOT an `Axiom` (an honest

@@ -7,13 +7,13 @@
 //! - AC1 (`user-deceq-instance-keys-map-via-real-search`): user `instance
 //!   DecEq K` → `Map K v` via `where DecEq K` accepts; absence → `NoInstance`.
 //! - AC2 (`user-ord-instance-drives-verified-sort`): user `instance Ord K`
-//!   → `view where Ord K` accepts; absence → `NoInstance`.
+//!   → `const where Ord K` accepts; absence → `NoInstance`.
 //! - AC3 (`user-ord-sort-emits-both-conjuncts`, soundness): verified sort
 //!   under user `Ord K` emits the conjoined `isSorted ∧ Perm` obligation —
 //!   both conjuncts, `Perm` present (the untrusted-layer omission guard).
 //! - AC4 (`user-deceq-keyed-map-canonical-identity`): `Map K v` identity is
 //!   `DecEq`-keyed (byte-order canonical, `41 §3a`), NOT `Ord`-keyed — a
-//!   `where DecEq K`-only view accepts; adding `where Ord K` (no `Ord K`
+//!   `where DecEq K`-only const accepts; adding `where Ord K` (no `Ord K`
 //!   instance) rejects, showing the identity gate is DecEq.
 
 use ken_elaborator::{error::ElabError, ElabEnv, ObligationKind};
@@ -33,7 +33,7 @@ fn elab(env: &mut ElabEnv, src: &str) -> Result<GlobalId, ElabError> {
 
 /// `surface/collections/user-deceq-instance-keys-map-via-real-search` (AC1, ★)
 ///
-/// (a) `data K` + `instance DecEq K {}` + `view where DecEq K` → accepts:
+/// (a) `data K` + `instance DecEq K {}` + `const where DecEq K` → accepts:
 ///     `instance_search("DecEq", "K")` returns `Some(id)` (the real resolver).
 /// (b) Same `K` **without** `instance DecEq K` → `NoInstance` (no silent
 ///     built-in fallback; the reject arm is the guard against a built-in-only
@@ -52,11 +52,11 @@ fn user_deceq_instance_keys_map_via_real_search() {
     // The constraint `where DecEq K` fires instance_search("DecEq", "K") →
     // Some(id); body `k` has type `K` matching the return type.
     let r_a = env_a.elaborate_decl(
-        "view mapKey (k : K) : K where DecEq K = k",
+        "fn mapKey (k : K) : K where DecEq K = k",
     );
     assert!(
         r_a.is_ok(),
-        "AC1(a): user DecEq K instance → view with `where DecEq K` must accept; \
+        "AC1(a): user DecEq K instance → const with `where DecEq K` must accept; \
          got {:?}",
         r_a
     );
@@ -73,7 +73,7 @@ fn user_deceq_instance_keys_map_via_real_search() {
     elab(&mut env_b, "data K = MkK").unwrap();
     // No `instance DecEq K` declared.
     let r_b = env_b.elaborate_decl(
-        "view mapKey (k : K) : K where DecEq K = k",
+        "fn mapKey (k : K) : K where DecEq K = k",
     );
     assert!(
         matches!(r_b, Err(ElabError::NoInstance { .. })),
@@ -89,7 +89,7 @@ fn user_deceq_instance_keys_map_via_real_search() {
 
 /// `surface/collections/user-ord-instance-drives-verified-sort` (AC2)
 ///
-/// (a) `data K` + `instance Ord K {}` + `view where Ord K` → accepts:
+/// (a) `data K` + `instance Ord K {}` + `const where Ord K` → accepts:
 ///     `instance_search("Ord", "K")` returns `Some(id)`.
 /// (b) Same `K` without `instance Ord K` → `NoInstance`.
 ///
@@ -105,11 +105,11 @@ fn user_ord_instance_drives_verified_sort() {
     // view `where Ord K` fires instance_search("Ord", "K") → Some(id).
     // Body `xs` returns `List K` (the identity on the list).
     let r_a = env_a.elaborate_decl(
-        "view sortK (xs : List K) : List K where Ord K = xs",
+        "fn sortK (xs : List K) : List K where Ord K = xs",
     );
     assert!(
         r_a.is_ok(),
-        "AC2(a): user Ord K instance → view with `where Ord K` must accept; \
+        "AC2(a): user Ord K instance → const with `where Ord K` must accept; \
          got {:?}",
         r_a
     );
@@ -120,7 +120,7 @@ fn user_ord_instance_drives_verified_sort() {
     elab(&mut env_b, "data K = MkK").unwrap();
     // No `instance Ord K`.
     let r_b = env_b.elaborate_decl(
-        "view sortK (xs : List K) : List K where Ord K = xs",
+        "fn sortK (xs : List K) : List K where Ord K = xs",
     );
     assert!(
         matches!(r_b, Err(ElabError::NoInstance { .. })),
@@ -135,7 +135,7 @@ fn user_ord_instance_drives_verified_sort() {
 
 /// `surface/collections/user-ord-sort-emits-both-conjuncts` (AC3, soundness ★)
 ///
-/// A `sort`-shaped view with `where Ord K` (user instance) and the refinement
+/// A `sort`-shaped const with `where Ord K` (user instance) and the refinement
 /// `{ ys : List K | And (isSorted K ys) (Perm K ys xs) }` emits the conjoined
 /// Ensures obligation carrying BOTH `isSorted` AND the load-bearing `Perm`
 /// conjunct on the user-`Ord` path.
@@ -156,7 +156,7 @@ fn user_ord_sort_emits_both_conjuncts() {
     elab(&mut env, "data K = MkK").unwrap();
     elab(&mut env, "instance Ord K { }").unwrap();
 
-    // Declare a sort-shaped view with the full conjoined refinement and
+    // Declare a sort-shaped const with the full conjoined refinement and
     // `where Ord K`.  Body `Nil K` (the empty list) type-checks against
     // `List K` (the refinement carrier) and causes the elaborator to emit
     // the Ensures obligation
@@ -167,12 +167,12 @@ fn user_ord_sort_emits_both_conjuncts() {
     // `True` comparator is a valid (if trivial) `K -> K -> Bool`.
     let res = env
         .elaborate_decl_v1(
-            "view sortK (xs : List K) : \
+            "fn sortK (xs : List K) : \
              { ys : List K | And (isSorted K (\\_ _. True) ys) (Perm K ys xs) } \
              where Ord K = Nil K",
         )
         .expect(
-            "AC3: sort-shaped view with user Ord K + refinement must elaborate",
+            "AC3: sort-shaped const with user Ord K + refinement must elaborate",
         );
 
     // The conjoined Ensures obligation must be emitted.
@@ -210,9 +210,9 @@ fn user_ord_sort_emits_both_conjuncts() {
 /// `Map K v` canonical form is byte-order keyed (`41 §3a`), enforced by
 /// `DecEq K` (not `Ord K`). The discriminating pair:
 ///
-/// (a) `view where DecEq K` only (no Ord) → accepts: Map identity needs only
+/// (a) `const where DecEq K` only (no Ord) → accepts: Map identity needs only
 ///     `DecEq K`; the constraint check resolves `instance_search("DecEq","K")`.
-/// (b) `view where Ord K` (no `Ord K` instance, only `DecEq K` registered) →
+/// (b) `const where Ord K` (no `Ord K` instance, only `DecEq K` registered) →
 ///     `NoInstance`: if identity required `Ord`, this would need to accept.
 ///     Its rejection shows that `Ord` is NOT the map-identity gate — the
 ///     correct gate is `DecEq` alone.
@@ -233,7 +233,7 @@ fn user_deceq_keyed_map_canonical_identity() {
     // (a) Map key op with `where DecEq K` only → accepts (byte-order canonical;
     //     DecEq is the identity gate, not Ord).
     let r_a = env.elaborate_decl(
-        "view mapIdentity (k : K) : K where DecEq K = k",
+        "fn mapIdentity (k : K) : K where DecEq K = k",
     );
     assert!(
         r_a.is_ok(),
@@ -242,11 +242,11 @@ fn user_deceq_keyed_map_canonical_identity() {
         r_a
     );
 
-    // (b) Ord-gated view fails → Ord is NOT required for Map identity.
+    // (b) Ord-gated const fails → Ord is NOT required for Map identity.
     // If Ord were the identity gate, this would need to accept; its rejection
     // proves the gate is DecEq alone.
     let r_b = env.elaborate_decl(
-        "view ordGatedOp (k : K) : K where Ord K = k",
+        "fn ordGatedOp (k : K) : K where Ord K = k",
     );
     assert!(
         matches!(r_b, Err(ElabError::NoInstance { .. })),

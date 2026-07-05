@@ -31,7 +31,7 @@ fn ac1_cross_decl_lowercase_global_resolves() {
     // First declaration: registers "forty_two" in globals.
     elab_ok(&mut env, "let forty_two : Int = 42");
     // Second declaration: body references "forty_two" — was UnboundName pre-fix.
-    let result = env.elaborate_decl("view use_global : Int = forty_two");
+    let result = env.elaborate_decl("const use_global : Int = forty_two");
     assert!(
         result.is_ok(),
         "cross-decl lowercase global should resolve; got: {:?}",
@@ -45,7 +45,7 @@ fn ac1_absent_name_still_errors() {
     // Post-fix the error is UnresolvedCon (elaboration stage) not UnboundName
     // (resolution stage) — both prove the name was rejected.
     let mut env = mk_env();
-    let result = env.elaborate_decl("view uses_absent : Int = no_such_global");
+    let result = env.elaborate_decl("const uses_absent : Int = no_such_global");
     assert!(
         matches!(
             result,
@@ -61,8 +61,8 @@ fn ac1_two_decl_chain() {
     // Verify a chain of two cross-decl references.
     let mut env = mk_env();
     elab_ok(&mut env, "let base_val : Int = 10");
-    let mid_id = elab_ok(&mut env, "view mid_val : Int = base_val");
-    let top_id = elab_ok(&mut env, "view top_val : Int = mid_val");
+    let mid_id = elab_ok(&mut env, "const mid_val : Int = base_val");
+    let top_id = elab_ok(&mut env, "const top_val : Int = mid_val");
     // Both second and third declarations must have resolved successfully.
     assert_ne!(mid_id, top_id);
 }
@@ -86,13 +86,13 @@ fn ac2_local_param_shadows_global() {
 
     // View with a PARAMETER also named "pp". Body `pp` must resolve to the param.
     let shadow_id =
-        elab_ok(&mut env, "view shadow_view (pp : Int) : Int = pp");
+        elab_ok(&mut env, "fn shadow_view (pp : Int) : Int = pp");
 
     // Extract the transparent body: should be Lam(Int, Var(0)).
     let (_, body) = env
         .env
         .transparent_body(shadow_id)
-        .expect("shadow_view is transparent");
+        .expect("shadow_const is transparent");
 
     // Apply body to a distinguishing term (Int type itself) and β-reduce.
     // · If body = Lam(Int, Var(0))        → result is Int_const  (local shadow ✓)
@@ -127,7 +127,7 @@ fn ac2_local_let_binding_shadows_global() {
     // The body resolves "inner" inside the let-binding to de-Bruijn 0, not the global.
     let shadow_id = elab_ok(
         &mut env,
-        "view let_shadow : Int = let inner : Int = 7 in inner",
+        "const let_shadow : Int = let inner : Int = 7 in inner",
     );
 
     // The body should evaluate to the literal 7, not the postulate inner_g_id.
@@ -159,7 +159,7 @@ fn ac2_local_let_binding_shadows_global() {
 fn ac3_uppercase_con_still_resolves() {
     let mut env = mk_env();
     elab_ok(&mut env, "data MaybeI = NoI | SomeI Int");
-    let result = env.elaborate_decl("view get_no_i : MaybeI = NoI");
+    let result = env.elaborate_decl("const get_no_i : MaybeI = NoI");
     assert!(
         result.is_ok(),
         "uppercase constructor reference should still resolve; got: {:?}",

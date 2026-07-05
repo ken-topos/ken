@@ -14,21 +14,21 @@
 
 data Tree = Leaf | Node Tree Char Tree
 
-view inorder (t : Tree) : List Char =
+fn inorder (t : Tree) : List Char =
   match t {
-    Leaf => Nil Char ;
-    Node l c r => list_append Char (inorder l) (Cons Char c (inorder r))
+    Leaf ⇒ Nil Char ;
+    Node l c r ⇒ list_append Char (inorder l) (Cons Char c (inorder r))
   }
 
-view sampleTree : Tree =
+const sampleTree : Tree =
   Node
     (Node (Node Leaf 97 Leaf) 98 (Node Leaf 99 Leaf))
     100
     (Node (Node Leaf 101 Leaf) 102 (Node Leaf 103 Leaf))
 
-view traversalResult : String = list_char_to_string (inorder sampleTree)
+const traversalResult : String = list_char_to_string (inorder sampleTree)
 
-view finalCheck : String =
-  match eq traversalResult "abcdefg" { True => "PASS" ; False => "FAIL" }
+const finalCheck : String =
+  match eq traversalResult "abcdefg" { True ⇒ "PASS" ; False ⇒ "FAIL" }
 
-view main : IO Unit = print_line finalCheck
+proc main : IO Unit visits [Console] = print_line finalCheck

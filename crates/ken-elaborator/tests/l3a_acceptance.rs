@@ -27,26 +27,26 @@ fn mk_env() -> ElabEnv {
 fn setup_combinators(env: &mut ElabEnv) {
     // `map : (a → b) → List a → List b` — functor.
     env.elaborate_decl(
-        "view map (a b : Type) (f : a → b) (xs : List a) : List b = \
+        "fn map (a b : Type) (f : a → b) (xs : List a) : List b = \
          match xs { Nil => Nil b ; Cons h t => Cons b (f h) (map a b f t) }",
     )
     .expect("map elaborates");
     // `fold : (a → b → b) → b → List a → b` — foldr.
     env.elaborate_decl(
-        "view fold (a b : Type) (f : a → b → b) (z : b) (xs : List a) : b = \
+        "fn fold (a b : Type) (f : a → b → b) (z : b) (xs : List a) : b = \
          match xs { Nil => z ; Cons h t => f h (fold a b f z t) }",
     )
     .expect("fold elaborates");
     // `zip : List a → List b → List (Prod a b)`.
     env.elaborate_decl(
-        "view zip (a b : Type) (xs : List a) (ys : List b) : List (Prod a b) = \
+        "fn zip (a b : Type) (xs : List a) (ys : List b) : List (Prod a b) = \
          match xs { Nil => Nil (Prod a b) ; Cons h t => match ys { Nil => Nil (Prod a b) ; Cons k u => Cons (Prod a b) (MkProd a b h k) (zip a b t u) } }",
     )
     .expect("zip elaborates");
     // `unfoldUpTo : (s → Option (Prod a s)) → Nat → s → List a` — fuel-bounded
     // inductive unfold (the no-coinduction infinitude demo, `37 §5`).
     env.elaborate_decl(
-        "view unfoldUpTo (a s : Type) (step : s → Option (Prod a s)) (n : Nat) (seed : s) : List a = \
+        "fn unfoldUpTo (a s : Type) (step : s → Option (Prod a s)) (n : Nat) (seed : s) : List a = \
          match n { Zero => Nil a ; Suc m => match step seed { None => Nil a ; Some p => match p { MkProd x y => Cons a x (unfoldUpTo a s step m y) } } }",
     )
     .expect("unfoldUpTo elaborates");
@@ -55,7 +55,7 @@ fn setup_combinators(env: &mut ElabEnv) {
     // matchable data, `data Bool = True | False`; the former `OrdResult`
     // 3-way branch workaround is retired, `30 §6`/ES2).
     env.elaborate_decl(
-        "view insert (a : Type) (leq : a → a → Bool) (x : a) (xs : List a) : List a = \
+        "fn insert (a : Type) (leq : a → a → Bool) (x : a) (xs : List a) : List a = \
          match xs { Nil => Cons a x (Nil a) ; Cons h t => match leq x h { True => Cons a x (Cons a h t) ; False => Cons a h (insert a leq x t) } }",
     )
     .expect("insert elaborates");
@@ -71,7 +71,7 @@ fn list_pattern_matches_via_real_elim() {
     let mut env = mk_env();
     let id = env
         .elaborate_decl(
-            "view head (a : Type) (xs : List a) : Option a = \
+            "fn head (a : Type) (xs : List a) : Option a = \
              match xs { Nil => None a ; Cons h t => Some a h }",
         )
         .expect("head elaborates");
@@ -148,7 +148,7 @@ fn fuel_bounded_unfold_produces_finite_prefix() {
     setup_combinators(&mut env);
 
     let unfold_id = env.globals["unfoldUpTo"];
-    // SCT accepted: the recursive view upgraded to transparent (out of
+    // SCT accepted: the recursive const upgraded to transparent (out of
     // trusted_base) — the recursion terminates by structural descent on the
     // `Nat` fuel (SCT's ↓), not by coinduction.
     assert!(
@@ -325,7 +325,7 @@ fn functor_law_emits_obligation_cross_decl_resolves() {
     // `L-resolver-globals` fallback (`c3a3f1d`).
     let res = env
         .elaborate_decl_v1(
-            "view map_id (a : Type) (xs : List a) : Int \
+            "fn map_id (a : Type) (xs : List a) : Int \
              ensures Equal (List a) (map a a (\\x. x) xs) xs = 0",
         )
         .expect("map_id elaborates (cross-decl ref `map` resolves)");
@@ -415,7 +415,7 @@ fn sort_emits_issorted_and_perm() {
                                  // threads it through `isSorted` too (`isSorted a leq ys`, real def, `§6`).
     let res = env
         .elaborate_decl_v1(
-            "view sort (a : Type) (leq : a → a → Bool) (xs : List a) : \
+            "fn sort (a : Type) (leq : a → a → Bool) (xs : List a) : \
              { ys : List a | And (isSorted a leq ys) (Perm a ys xs) } = \
              match xs { Nil => Nil a ; Cons h t => insert a leq h (sort a leq t) }",
         )

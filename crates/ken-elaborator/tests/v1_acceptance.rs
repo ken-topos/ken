@@ -49,7 +49,7 @@ fn weaken(t: &Term, by: i64) -> Term {
 
 /// verify/spec-syntax/requires-elaborates-to-pi-proof-arg
 ///
-/// `view divide (n : Nat) (d : Nat) : Nat requires NonZero d = n`
+/// `fn divide (n : Nat) (d : Nat) : Nat requires NonZero d = n`
 /// → core type includes Π proof-arg for the precondition.
 #[test]
 fn requires_elaborates_to_pi_proof_arg() {
@@ -57,7 +57,7 @@ fn requires_elaborates_to_pi_proof_arg() {
     decl_nat_pred(&mut env, "NonZero");
 
     let res = env
-        .elaborate_decl_v1("view divide (n : Nat) (d : Nat) : Nat requires NonZero d = n")
+        .elaborate_decl_v1("fn divide (n : Nat) (d : Nat) : Nat requires NonZero d = n")
         .expect("requires clause should elaborate");
 
     // No ensures obligations — all requires, no ensures
@@ -96,7 +96,7 @@ fn unwrap_pi_chain(ty: &Term) -> Vec<Term> {
 
 /// verify/spec-syntax/ensures-emits-obligation-not-sigma
 ///
-/// `view abs (n : Nat) : Nat ensures NonNeg n = n`
+/// `fn abs (n : Nat) : Nat ensures NonNeg n = n`
 /// → core body is bare Nat value (not Σ); one obligation emitted.
 #[test]
 fn ensures_emits_obligation_not_sigma() {
@@ -104,7 +104,7 @@ fn ensures_emits_obligation_not_sigma() {
     decl_nat_pred(&mut env, "NonNeg");
 
     let res = env
-        .elaborate_decl_v1("view abs (n : Nat) : Nat ensures NonNeg n = n")
+        .elaborate_decl_v1("fn abs (n : Nat) : Nat ensures NonNeg n = n")
         .expect("ensures should elaborate");
 
     // Exactly one obligation hole
@@ -133,7 +133,7 @@ fn ensures_emits_obligation_not_sigma() {
 
 /// verify/spec-syntax/refinement-lowers-to-carrier
 ///
-/// `view mkPos (n : Nat) : { k : Nat | NonNeg k } = n`
+/// `fn mkPos (n : Nat) : { k : Nat | NonNeg k } = n`
 /// → core return type is `Nat` (carrier), not `Sigma(Nat, NonNeg)`.
 #[test]
 fn refinement_lowers_to_carrier() {
@@ -142,7 +142,7 @@ fn refinement_lowers_to_carrier() {
 
     // Refinement type in return-type position: lowers to carrier Nat, no Sigma formed.
     let res = env
-        .elaborate_decl_v1("view mkPos (n : Nat) : { k : Nat | NonNeg k } = n")
+        .elaborate_decl_v1("fn mkPos (n : Nat) : { k : Nat | NonNeg k } = n")
         .expect("refinement return type should lower to carrier");
 
     let id = res.def_id;
@@ -156,12 +156,12 @@ fn refinement_lowers_to_carrier() {
 
 /// verify/spec-syntax/non-omega-predicate-surface-error
 ///
-/// `view f (n : Nat) : Nat requires Nat = n` → rejected (Nat is Type 0, not Ω).
+/// `fn f (n : Nat) : Nat requires Nat = n` → rejected (Nat is Type 0, not Ω).
 #[test]
 fn non_omega_predicate_surface_error() {
     let mut env = mk_env();
     // `Nat` (a type) used as a proposition — should fail
-    let result = env.elaborate_decl_v1("view f (n : Nat) : Nat requires Nat = n");
+    let result = env.elaborate_decl_v1("fn f (n : Nat) : Nat requires Nat = n");
     assert!(
         result.is_err(),
         "non-Ω requires clause must be rejected, got {:?}",
@@ -177,7 +177,7 @@ fn result_in_ensures_resolves() {
 
     // `result` in ensures scope → resolves to body value
     let res = env
-        .elaborate_decl_v1("view g (n : Nat) : Nat ensures Equal result n = n")
+        .elaborate_decl_v1("fn g (n : Nat) : Nat ensures Equal result n = n")
         .expect("result in ensures should resolve");
     assert_eq!(res.obligations.len(), 1, "one ensures obligation");
 }
@@ -190,7 +190,7 @@ fn result_out_of_ensures_rejects() {
 
     // `result` in requires scope → scope error
     let result = env
-        .elaborate_decl_v1("view h (n : Nat) : Nat requires Equal result n = n");
+        .elaborate_decl_v1("fn h (n : Nat) : Nat requires Equal result n = n");
     assert!(
         result.is_err(),
         "result in requires must be rejected, got {:?}",
@@ -213,7 +213,7 @@ fn old_resolves_in_space_op_ensures() {
     // space view: old(n) is in scope in ensures
     let res = env
         .elaborate_decl_v1(
-            "space view inc (n : Nat) : Nat ensures Equal n (old n) = n",
+            "space proc inc (n : Nat) : Nat ensures Equal n (old n) = n",
         )
         .expect("old in space-op ensures should resolve");
     // Obligation is emitted
@@ -229,10 +229,10 @@ fn old_out_of_scope_rejects() {
     decl_nat_rel(&mut env, "Equal");
 
     let result = env
-        .elaborate_decl_v1("view k (n : Nat) : Nat ensures Equal n (old n) = n");
+        .elaborate_decl_v1("fn k (n : Nat) : Nat ensures Equal n (old n) = n");
     assert!(
         result.is_err(),
-        "old in pure view ensures must be rejected, got {:?}",
+        "old in pure const ensures must be rejected, got {:?}",
         result.ok()
     );
 }
@@ -249,10 +249,10 @@ fn proved_status_cert_checks_not_in_trusted_base() {
     let mut env = mk_env();
     decl_nat_pred(&mut env, "TrueProp");
 
-    // `view tst (n : Nat) : Nat ensures TrueProp n = n`
+    // `fn tst (n : Nat) : Nat ensures TrueProp n = n`
     // The obligation goal (closed) = Pi(Nat, TrueProp Var(0))
     let res = env
-        .elaborate_decl_v1("view tst (n : Nat) : Nat ensures TrueProp n = n")
+        .elaborate_decl_v1("fn tst (n : Nat) : Nat ensures TrueProp n = n")
         .expect("elaborates");
     let obl = &res.obligations[0];
     assert!(env.is_open_hole(obl.hole_id), "hole is initially open");
@@ -289,7 +289,7 @@ fn bogus_cert_not_proved() {
     decl_nat_pred(&mut env, "PropQ");
 
     let res = env
-        .elaborate_decl_v1("view btest (n : Nat) : Nat ensures PropQ n = n")
+        .elaborate_decl_v1("fn btest (n : Nat) : Nat ensures PropQ n = n")
         .expect("elaborates");
     let obl = &res.obligations[0];
 
@@ -315,7 +315,7 @@ fn unknown_hole_distinct_from_proved() {
 
     // Open hole
     let res = env
-        .elaborate_decl_v1("view utest (n : Nat) : Nat ensures PropR n = n")
+        .elaborate_decl_v1("fn utest (n : Nat) : Nat ensures PropR n = n")
         .expect("elaborates");
     let obl = &res.obligations[0];
     assert!(
@@ -372,7 +372,7 @@ fn epistemic_projection_distinct() {
     // (we test this via discharge_hole; see proved_status_cert_checks_not_in_trusted_base)
     // unknown side: open hole → in trusted_base
     let res = env
-        .elaborate_decl_v1("view etest (n : Nat) : Nat ensures PropE n = n")
+        .elaborate_decl_v1("fn etest (n : Nat) : Nat ensures PropE n = n")
         .expect("elaborates");
     let obl = &res.obligations[0];
     assert!(env.is_open_hole(obl.hole_id), "unknown: hole in trusted_base");
@@ -387,7 +387,7 @@ fn epistemic_projection_distinct() {
 
 /// verify/spec-syntax/obligation-hole-set-exposed-to-v2
 ///
-/// A view with two ensures clauses emits exactly two obligation holes.
+/// A const with two ensures clauses emits exactly two obligation holes.
 #[test]
 fn obligation_hole_set_exposed_to_v2() {
     let mut env = mk_env();
@@ -397,7 +397,7 @@ fn obligation_hole_set_exposed_to_v2() {
     // Two ensures clauses → exactly two obligation holes
     let res = env
         .elaborate_decl_v1(
-            "view f2 (n : Nat) : Nat ensures Pos n ensures NonNeg2 n = n",
+            "fn f2 (n : Nat) : Nat ensures Pos n ensures NonNeg2 n = n",
         )
         .expect("two ensures should elaborate");
 
@@ -480,7 +480,7 @@ fn law_all_omega_fields_is_proposition() {
 fn v0_behavior_unchanged() {
     let mut env = mk_env();
     let id = env
-        .elaborate_decl("view id (A : Type) (x : A) : A = x")
+        .elaborate_decl("fn id (A : Type) (x : A) : A = x")
         .expect("V0 id should elaborate");
 
     // Core body unchanged: Lam(Type 0, Lam(Var(0), Var(0)))
@@ -493,7 +493,7 @@ fn v0_behavior_unchanged() {
 
     // No obligations (no spec forms)
     let res_v1 = env
-        .elaborate_decl_v1("view const2 (A : Type) (x : A) (y : A) : A = x")
+        .elaborate_decl_v1("fn const2 (A : Type) (x : A) (y : A) : A = x")
         .expect("V0 const should elaborate via V1 path");
     assert!(res_v1.obligations.is_empty(), "no spec forms → no obligations");
 }
@@ -509,7 +509,7 @@ fn v0_behavior_unchanged() {
 
 /// verify/spec-syntax/requires-on-first-param-of-two  (verdict-flip: was TypeMismatch, now ok)
 ///
-/// `view f (n : Nat) (d : Nat) : Nat requires Positive n = d` — `requires`
+/// `fn f (n : Nat) (d : Nat) : Nat requires Positive n = d` — `requires`
 /// clause references `n` (the FIRST param, not the last). Before the fix:
 /// kernel TypeMismatch. After: elaborates cleanly and the body is `d` (correct).
 #[test]
@@ -518,7 +518,7 @@ fn requires_on_first_of_two_params() {
     decl_nat_pred(&mut env, "Positive");
 
     let res = env
-        .elaborate_decl_v1("view f (n : Nat) (d : Nat) : Nat requires Positive n = d")
+        .elaborate_decl_v1("fn f (n : Nat) (d : Nat) : Nat requires Positive n = d")
         .expect("requires on non-final param must elaborate after fix");
 
     // No ensures → no obligations
@@ -557,9 +557,9 @@ fn requires_on_middle_param_of_three() {
     let mut env = mk_env();
     decl_nat_pred(&mut env, "MidPred");
 
-    // view g (a : Nat) (b : Nat) (c : Nat) : Nat requires MidPred b = a
+    // fn g (a : Nat) (b : Nat) (c : Nat) : Nat requires MidPred b = a
     let res = env
-        .elaborate_decl_v1("view g (a : Nat) (b : Nat) (c : Nat) : Nat requires MidPred b = a")
+        .elaborate_decl_v1("fn g (a : Nat) (b : Nat) (c : Nat) : Nat requires MidPred b = a")
         .expect("requires on middle param must elaborate after fix");
 
     assert!(res.obligations.is_empty(), "requires-only → no obligations");
@@ -599,7 +599,7 @@ fn requires_on_final_param_unaffected() {
     decl_nat_pred(&mut env, "FinalPred");
 
     let res = env
-        .elaborate_decl_v1("view h (n : Nat) (d : Nat) : Nat requires FinalPred d = n")
+        .elaborate_decl_v1("fn h (n : Nat) (d : Nat) : Nat requires FinalPred d = n")
         .expect("requires on final param must still elaborate (regression)");
 
     assert!(res.obligations.is_empty());
