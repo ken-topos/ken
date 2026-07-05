@@ -1702,7 +1702,7 @@ fn check_view_visits_row(rdecl: &RDecl) -> Result<Option<crate::effects::RowType
     Ok(Some(declared))
 }
 
-fn lower_view_visits_row(rdecl: &RDecl) -> Result<Option<crate::effects::RowType>, ElabError> {
+pub fn surface_declared_row_type(rdecl: &RDecl) -> Result<Option<crate::effects::RowType>, ElabError> {
     let visits = match &rdecl.kind {
         RDeclKind::View { visits: Some(row), .. } => row,
         _ => return Ok(None),
@@ -1801,7 +1801,7 @@ pub fn check_surface_purity(
         return Ok(());
     }
 
-    let declared = lower_view_visits_row(rdecl)?.unwrap_or_else(crate::effects::RowType::empty);
+    let declared = surface_declared_row_type(rdecl)?.unwrap_or_else(crate::effects::RowType::empty);
     let inferred = infer_expr_row_type(decl_eval_body(&rdecl.body), effect_rows);
     let decl = crate::effects::EffectDecl::new(&rdecl.name)
         .with_declared_row_type(declared.clone());

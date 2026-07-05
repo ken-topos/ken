@@ -470,6 +470,16 @@ fn register_effect_row(elab: &mut ElabEnv, result: &crate::elab::ElabResult) {
     }
 }
 
+fn register_declared_effect_row(
+    elab: &mut ElabEnv,
+    rdecl: &crate::resolve::RDecl,
+) -> Result<(), ElabError> {
+    if let Some(row) = crate::elab::surface_declared_row_type(rdecl)? {
+        elab.effect_rows.insert(rdecl.name.clone(), row);
+    }
+    Ok(())
+}
+
 fn elaborate_checked(
     elab: &mut ElabEnv,
     rdecl: &crate::resolve::RDecl,
@@ -602,6 +612,12 @@ fn expand_scope(
                     } else {
                         let members: Vec<crate::resolve::RDecl> =
                             scc.iter().map(|&m| rdecls[m].clone()).collect();
+                        let mut group_effect_rows = elab.effect_rows.clone();
+                        for rdecl in &members {
+                            if let Some(row) = crate::elab::surface_declared_row_type(rdecl)? {
+                                group_effect_rows.insert(rdecl.name.clone(), row);
+                            }
+                        }
                         // Eligibility guard: the new group path only covers
                         // the plain V0 view/let shape (matches the existing
                         // singleton recursive-view rule) — a mutual member
@@ -612,8 +628,8 @@ fn expand_scope(
                             let simple_kind = matches!(&rdecl.kind, RDeclKind::Let)
                                 || matches!(
                                     &rdecl.kind,
-                                    RDeclKind::View { constraints, is_space_op, visits, .. }
-                                        if constraints.is_empty() && !is_space_op && visits.is_none()
+                                    RDeclKind::View { constraints, is_space_op, .. }
+                                        if constraints.is_empty() && !is_space_op
                                 );
                             let has_refine_return = rdecl
                                 .ty
@@ -632,7 +648,7 @@ fn expand_scope(
                                     rdecl.name
                                 )));
                             }
-                            crate::elab::check_surface_purity(rdecl, &elab.effect_rows)?;
+                            crate::elab::check_surface_purity(rdecl, &group_effect_rows)?;
                         }
                         let results = crate::elab::elaborate_mutual_group(
                             &mut elab.env,
@@ -642,8 +658,9 @@ fn expand_scope(
                             &elab.class_env,
                             &members,
                         )?;
-                        for result in results {
+                        for (rdecl, result) in members.iter().zip(results) {
                             register_effect_row(elab, &result);
+                            register_declared_effect_row(elab, rdecl)?;
                             ids.push(result);
                         }
                     }

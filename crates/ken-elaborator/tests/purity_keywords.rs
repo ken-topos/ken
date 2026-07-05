@@ -71,6 +71,28 @@ fn surf1_d2_fn_calling_proc_reuses_escape_gate() {
 }
 
 #[test]
+fn surf1_d2_recursive_proc_group_with_visits_reaches_checker() {
+    let mut env = ElabEnv::new().expect("base env");
+
+    env.elaborate_file(
+        "proc surf1_even_proc (n : Nat) : Bool visits [Console] = \
+             match n { Zero => True ; Suc m => surf1_odd_proc m }\n\
+         proc surf1_odd_proc (n : Nat) : Bool visits [Console] = \
+             match n { Zero => False ; Suc m => surf1_even_proc m }",
+    )
+    .expect("mutually recursive proc group with visits must not be screened out");
+
+    let bad_fn =
+        err_text(env.elaborate_decl("fn surf1_even_bad (n : Nat) : Bool = surf1_even_proc n"));
+    assert!(
+        bad_fn.contains("false purity or effect escape")
+            && bad_fn.contains("EffectEscapes")
+            && bad_fn.contains("Console"),
+        "effect rows from a recursive proc group must seed later purity checks: {bad_fn}"
+    );
+}
+
+#[test]
 fn surf1_d2_fn_and_const_cannot_declare_effect_rows() {
     let mut env = ElabEnv::new().expect("base env");
 
