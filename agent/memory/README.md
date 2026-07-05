@@ -7,6 +7,11 @@ as it turned out, **shared** across every worktree agent). Migrating it here
 makes it reviewable in git and readable by any harness — Claude Code today,
 Codex next (which loads `AGENTS.md` + skills, not a tool-specific memory file).
 
+The migration from the private store is complete; `MIGRATION-LOG.md` is the
+coverage audit — every source lesson from the old store appears there exactly
+once, with its disposition (kept, merged into a kept file, dropped, or excluded
+as personal) and the reasoning.
+
 ## What belongs here
 
 - **Operational lessons** — the "gotcha → why → how-to-apply" genre: anti-
@@ -18,12 +23,13 @@ Codex next (which loads `AGENTS.md` + skills, not a tool-specific memory file).
 ## What does NOT belong here
 
 - **Stale/transient state** — campaign status, in-flight WP notes, "what's
-  active now." That lives in the tracker (`docs/program/IMPLEMENTATION-PROGRESS.md`)
-  and moot handoff/checkpoint docs, not here.
+  active now." That lives in the tracker
+  (`docs/program/IMPLEMENTATION-PROGRESS.md`) and moot handoff/checkpoint docs,
+  not here.
 - **Operator/personal identity** — who the operator is, their timezone, personal
   preferences. This stays **out of git** (a clone shouldn't carry it); it lives
-  in the operator's personal, non-repo memory (`~/.codex/AGENTS.md` /
-  Claude Code's private store), never in the tracked corpus.
+  in the operator's personal, non-repo memory (`~/.codex/AGENTS.md` / Claude
+  Code's private store), never in the tracked corpus.
 - **Short always-applies *rules*** — those fold directly into `AGENTS.md` or the
   relevant skill prose; only the indexed *lessons* live here.
 
@@ -59,11 +65,11 @@ An agent loads **its path + ancestors**. Examples:
 | `steward` | `fleet` + `enclave` + `roles/steward` |
 | `integrator` | `fleet` + `roles/integrator` |
 
-Function is the primary axis; `teams/` is a parallel branch a role also pulls, so
-"all leaders" (`build/leaders`) and "all kernel" (`teams/kernel`) coexist with no
-duplication. **A lesson lives at the broadest scope where every reader must apply
-it.** A genuinely cross-cutting lesson gets a `scope:` tag in its frontmatter
-rather than being copied.
+Function is the primary axis; `teams/` is a parallel branch a role also pulls,
+so "all leaders" (`build/leaders`) and "all kernel" (`teams/kernel`) coexist
+with no duplication. **A lesson lives at the broadest scope where every reader
+must apply it.** A genuinely cross-cutting lesson gets a `scope:` tag in its
+frontmatter rather than being copied.
 
 ## Wiring (how it gets loaded)
 
