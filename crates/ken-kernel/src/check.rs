@@ -414,9 +414,13 @@ pub fn check(env: &GlobalEnv, ctx: &Context, t: &Term, ty: &Term) -> KernelResul
             }
             Ok(())
         }
-        Term::Let { ty, val, body } => {
-            classify(env, ctx, ty)?;
-            check(env, ctx, val, ty)?;
+        Term::Let {
+            ty: let_ty,
+            val,
+            body,
+        } => {
+            classify(env, ctx, let_ty)?;
+            check(env, ctx, val, let_ty)?;
             check(env, ctx, &subst0(body, val), ty)
         }
         // --- K2 introduction forms (`15`, `16`) ---
@@ -1118,6 +1122,118 @@ mod tests {
     use super::*;
     use crate::env::GlobalEnv;
     use crate::term::Level;
+
+    struct BoolNat {
+        bool_: GlobalId,
+        true_: GlobalId,
+        nat: GlobalId,
+        zero: GlobalId,
+    }
+
+    fn bool_nat_env() -> (GlobalEnv, BoolNat) {
+        let mut env = GlobalEnv::new();
+
+        let bool_ = declare_inductive(&mut env, |_| InductiveSpec {
+            level_params: vec![],
+            params: vec![],
+            indices: vec![],
+            level: Level::zero(),
+            constructors: vec![
+                CtorSpec {
+                    args: vec![],
+                    target_indices: vec![],
+                },
+                CtorSpec {
+                    args: vec![],
+                    target_indices: vec![],
+                },
+            ],
+        })
+        .expect("Bool");
+        let true_ = env.inductive(bool_).unwrap().constructors[0].id;
+
+        let nat = declare_inductive(&mut env, |_| InductiveSpec {
+            level_params: vec![],
+            params: vec![],
+            indices: vec![],
+            level: Level::zero(),
+            constructors: vec![CtorSpec {
+                args: vec![],
+                target_indices: vec![],
+            }],
+        })
+        .expect("Nat");
+        let zero = env.inductive(nat).unwrap().constructors[0].id;
+
+        (
+            env,
+            BoolNat {
+                bool_,
+                true_,
+                nat,
+                zero,
+            },
+        )
+    }
+
+    fn bool_ty(ids: &BoolNat) -> Term {
+        Term::indformer(ids.bool_, vec![])
+    }
+
+    fn nat_ty(ids: &BoolNat) -> Term {
+        Term::indformer(ids.nat, vec![])
+    }
+
+    fn true_term(ids: &BoolNat) -> Term {
+        Term::constructor(ids.true_, vec![])
+    }
+
+    fn zero_term(ids: &BoolNat) -> Term {
+        Term::constructor(ids.zero, vec![])
+    }
+
+    fn let_term(let_ty: Term, val: Term, body: Term) -> Term {
+        Term::Let {
+            ty: Box::new(let_ty),
+            val: Box::new(val),
+            body: Box::new(body),
+        }
+    }
+
+    #[test]
+    fn let_check_rejects_wrong_outer_expected_type() {
+        let (env, ids) = bool_nat_env();
+        let ctx = Context::new();
+        let let_zero_as_bool = let_term(nat_ty(&ids), zero_term(&ids), Term::var(0));
+
+        assert!(matches!(
+            check(&env, &ctx, &let_zero_as_bool, &bool_ty(&ids)),
+            Err(KernelError::TypeMismatch { .. })
+        ));
+    }
+
+    #[test]
+    fn let_check_accepts_valid_body_at_outer_expected_type() {
+        let (env, ids) = bool_nat_env();
+        let ctx = Context::new();
+        let let_true_at_bool = let_term(nat_ty(&ids), zero_term(&ids), true_term(&ids));
+
+        assert!(check(&env, &ctx, &let_true_at_bool, &bool_ty(&ids)).is_ok());
+    }
+
+    #[test]
+    fn let_check_preserves_check_mode_for_intro_body() {
+        let (env, ids) = bool_nat_env();
+        let ctx = Context::new();
+        let pi_bool_bool = Term::pi(bool_ty(&ids), bool_ty(&ids));
+        let let_lambda = let_term(
+            nat_ty(&ids),
+            zero_term(&ids),
+            Term::lam(bool_ty(&ids), Term::var(0)),
+        );
+
+        assert!(check(&env, &ctx, &let_lambda, &pi_bool_bool).is_ok());
+    }
 
     #[test]
     fn universe_no_type_type() {
