@@ -377,6 +377,31 @@ Reproduce the conformance suite from the self-hosted build. **Deps.** S1.
 
 ---
 
+## Backlog — captured notes (unsequenced)
+
+Operator-captured items, recorded so they are not lost; **not yet sequenced into
+WPs.** Each notes the WS it would attach to.
+
+- **BL1 — Platform-aware line endings / platform-aware code (→ WS-L L6 / WS-X).**
+  `packages/…/read-file-lines.ken`'s `isNewLine` matches only **LF** (the
+  Unix/Linux/BSD standard), not **CRLF** (Windows). The narrow fix is a CRLF-aware
+  splitter; the real question it raises is **how Ken expresses platform-aware
+  code** at all (conditional compilation? a platform capability/effect? a
+  normalized-newline view in the I/O layer?). See operator report
+  `local/Multi-Platform Support for Ken Language.md`. Not a focus — recorded.
+- **BL2 — Editor / tooling support (→ WS-T, Ergo).** Ken needs editor
+  integration: an **LSP server**, an **Emacs major mode**, and a
+  **highlight.js-equivalent** (syntax highlighting for web/docs). Natural Ergo
+  (T-series) work once the surface syntax is stable. Recorded, not a focus.
+- **BL3 — Unicode surface symbols (→ WS-L surface / Ergo, ES-taxonomy).** The
+  `.ken` examples so far use **ASCII spellings** of operators/symbols; Ken should
+  prefer the **Unicode forms** (e.g. `→`, `∀`, `λ`, `Π`, `Σ`) for readability
+  (agents-write / humans-read). Likely a lexer alias table + a formatter
+  normalization pass; coordinate with BL2 (highlighting) and the ES surface
+  taxonomy. Recorded, minor.
+
+---
+
 ## Fan-out plan for agent teams
 
 - **Team Foundation** → F1, F3, F4, then T1-schema; **Sec3** (supply-chain);

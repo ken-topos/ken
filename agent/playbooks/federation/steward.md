@@ -114,7 +114,7 @@ that is a stall to diagnose (§7), not a stopping point.
 ### 2c. The WP release process (author → commit → merge → kick off)
 
 A WP is **not** releasable as a terse catalog pointer. The build teams run
-**Sonnet 5**; the Opus 4.8 enclave
+**T2**; the T1 enclave
 (Steward/spec-author/architect, the most capable models in the fleet) must
 **front-load the design judgment** and hand the team a **detailed, shovel-ready
 brief** — the implementer should execute mostly mechanically, not design
@@ -122,7 +122,7 @@ brief** — the implementer should execute mostly mechanically, not design
 
 > ### ★★★ THE HANDOFF GATE — run before EVERY kickoff/handoff mention ★★★
 >
-> Forward progress is **credit-bound**, so it is **token-bound**, and the Opus
+> Forward progress is **credit-bound**, so it is **token-bound**, and the T1
 > **enclave is the single most expensive unit in the fleet.** A stale-context
 > elaboration is therefore the **biggest waste lever there is** — and the one
 > discipline that fixes it is compacting the enclave/team at the WP seam. **This
@@ -148,31 +148,51 @@ brief** — the implementer should execute mostly mechanically, not design
 >    time**. Do **not** trust `moot compact`'s "sent" line (no-op-prone). *A
 >    post-kickoff compaction eats the just-delivered kickoff and forces a costly
 >    re-kick — the exact 2026-07-02 miss.*
->    **⛔ BUILD TEAMS: ALWAYS COMPACT BEFORE A WP. NO EXCEPTIONS. (operator,
->    2026-07-04.)** For a build-team kickoff (leader + implementer + QA), you
->    compact **every** member **unconditionally** — you do **not** check the ctx
->    level first, you do **not** weigh whether the context is "warm/relevant," you
->    do **not** exempt a member because a prior-WP parallel left them running. The
->    ctx% is **irrelevant** for the build-team decision: the answer is always
->    compact. **Do not even look at the number to decide** — the number cannot
->    produce a "skip." This closes the exact hole below: the moment you find
->    yourself reasoning *"they're only at N%"* or *"that context is an asset,"* you
->    have already violated the rule — **stop and compact.**
->    **EACH means EACH — never rationalize leaving any member uncompacted.** The
->    **high-ctx threshold is 33% (operator, 2026-07-04)** — but that threshold is
->    the *general* backstop (enclave / any role); it is **not** a gate the build
->    team gets to sit under, because the build-team rule is *unconditional* (above).
+>    **⛔ ALWAYS COMPACT BEFORE NEW WORK — BUILD TEAMS *AND* THE SPEC ENCLAVE.
+>    NO EXCEPTIONS. NO BEFORE-WORK THRESHOLD. (operator, 2026-07-04, enclave twice.)**
+>    For **any** unit you are about to hand a new work item — a build team (leader
+>    + implementer + QA) **or** the spec enclave (spec-leader + spec-author +
+>    conformance-validator) — you compact **every** member **unconditionally**
+>    before the handoff. You do **not** check the ctx level first, you do **not**
+>    weigh whether the context is "warm/relevant," you do **not** exempt a member
+>    because a prior task left them running or because they are "under threshold."
+>    The ctx% is **irrelevant to the decision**: the answer is always compact.
+>    **Do not even look at the number to decide** — the number cannot produce a
+>    "skip." The instant you find yourself reasoning *"they're only at N%,"* *"that
+>    context is an asset,"* *"I'll compact at the next seam,"* or *"let me wait for
+>    X first"* — you have **already violated the rule**: stop and compact.
+>    **EACH means EACH — never rationalize leaving any member uncompacted.**
+>    **The 33% figure is a mid-flight CEILING, not a before-work gate (operator,
+>    2026-07-04).** It means only: if a unit drifts over 33% *while working* with no
+>    new-work handoff in sight, compact it at the next safe seam. It is **never** a
+>    licence to skip the before-new-work compaction because a unit is "under 33%" —
+>    that inversion is exactly the hole that re-opened the failure. **Before new
+>    work: compact unconditionally, ctx unread. Mid-work: 33% ceiling. Two separate
+>    rules; the enclave gets NO before-work exemption.** (Retro-ordering unchanged:
+>    step 1 still requires the prior retro posted before you compact — but you
+>    **drive that retro to completion NOW** (nudge if needed) so you can compact
+>    NOW; "waiting for the retro" is a reason to *finish the retro*, never a reason
+>    to defer the compaction or take on new work uncompacted.)
 >    Token-credit conservation is a **hard rule** and every subsequent turn
 >    re-bills stale context. Compaction is **not lossy for what matters** — the
 >    summary preserves recent detail **and** the agent **re-fetches any source from
 >    the filesystem** at pickup — so there is *never* a reason to carry ctx forward.
->    Two operator corrections drove this: **2026-07-03** — left CV at 60% at a seam,
->    rationalizing "reviews at merge"; **2026-07-04** — released Phase-2 VAL2 to
->    Team Language at impl 47–49% / qa 34% **without compacting**, rationalizing
->    "under threshold + warm relevant context" — the operator's reply: *"Always
->    compact the build teams before a WP. No exceptions."* Sibling of
->    [[playbooks-state-mechanism-not-intent]]: compact **mechanically at the seam**,
->    never on a story about ctx level or when/whether the agent will engage.
+>    **Three operator corrections drove this — the enclave TWICE:** **2026-07-03** —
+>    left CV at 60% at a seam, rationalizing "reviews at merge"; **2026-07-04 (a)** —
+>    released Phase-2 VAL2 to Team Language at impl 47–49% / qa 34% **without
+>    compacting**, rationalizing "under threshold + warm relevant context";
+>    **2026-07-04 (b)** — let **CV run uncompacted through *five* unrelated work
+>    units** (FS-driver conformance → FS Phase-2 gate → challenge-suite run → drills
+>    → reconcile) to **67%**, again rationalizing "compact at the flip seam" +
+>    "wait for the retro first"; the operator compacted CV **manually** and hardened
+>    the rule to **always compact the spec enclave before new work.** The repeat is
+>    the tell: **a per-role before-work threshold *invites* the "still under it"
+>    rationalization — so there is none.** Each of those five unit-boundaries was
+>    itself a compaction trigger I skipped by treating the enclave's flow as
+>    continuous; it is not — **each new work unit = compact first.** Sibling of
+>    [[playbooks-state-mechanism-not-intent]] and [[spec-enclave-always-compact-before-new-work]]:
+>    compact **mechanically at the seam**, never on a story about ctx level or
+>    when/whether the agent will engage.
 > 5. **VERIFY THE DROP.** `capture-pane` each: ctx **actually fell**
 >    (→ ~0–low %) or a `Compacting…` / queued `❯ /compact`. A "sent" report
 >    is **not** proof. Unchanged ctx ⇒ resend.
@@ -188,7 +208,7 @@ brief** — the implementer should execute mostly mechanically, not design
    branch `wp/<ID>-<slug>` (`git branch wp/<ID>-<slug> origin/main` — the fetched
    ref, never stale local `main`). It must: pin every
    **settled** decision as a *fixed input* (cite `/spec` + the OQ register; never
-   leave a decided fork "open" for a weaker model to relitigate — that is the
+   leave a decided fork "open" for a lower-tier model to relitigate — that is the
    failure mode); give a **mandated deliverable outline** (each section ending in
    a concrete implementable choice, not a survey); list **testable acceptance
    criteria**; and state the **do-not-reopen guardrails**. This is the *frame* —
@@ -303,11 +323,18 @@ brief** — the implementer should execute mostly mechanically, not design
    enclave — `spec-leader`, `spec-author`, `conformance-validator` — is
    `compact-verified` **then** mentioned, one act. **Compact BEFORE the mention,
    never after** (a post-kickoff compaction eats the kickoff → re-kick). Only
-   after the drop is verified do you post. The spec
-   enclave (clean-room authority, Opus) then brings the brief + the relevant
+   after the drop is verified do you post. **The enclave is compacted
+   *unconditionally* before new work — ctx unread, NO 33% exemption (gate step 4,
+   operator 2026-07-04).** This is *the* place the miss recurs: the enclave feels
+   like a continuous reviewer you can keep feeding, so its context silently
+   accumulates across unrelated units (CV → 67% over five features). It is not
+   continuous — **every new work unit handed to the enclave is a fresh
+   compact-first kickoff**, no matter how "warm" or "still under threshold" it
+   looks. The spec
+   enclave (clean-room authority, T1) then brings the brief + the relevant
    `/spec` and `/conformance` to **full, team-ready rigor** on that branch — the
-   deep technical/behavioral detail a Sonnet-5 build team is better handed than
-   left to invent (the Opus enclave front-loads the hardest design judgment). You mention **only the spec-leader** (the §9 edge to the
+   deep technical/behavioral detail a T2 build team is better handed than
+   left to invent (the T1 enclave front-loads the hardest design judgment). You mention **only the spec-leader** (the §9 edge to the
    spec enclave); the spec-leader assigns spec-author / conformance-validator
    internally. This elaboration step sits **between** you and the build team —
    the team never receives a brief that the spec enclave has not elaborated.
@@ -351,7 +378,7 @@ that doesn't respond may simply not have been notified, so **re-mention** before
 assuming a stall.
 
 So the pipeline is **Steward (frame) → spec-leader (elaborate) → build team
-(execute)** — each Opus enclave layer adds rigor before the weaker model
+(execute)** — each T1 enclave layer adds rigor before the T2 build team
 receives it. *Steward-internal* operational docs that no build team needs to
 spec against (the progress tracker, playbook/`agent/` corpus edits) skip the
 spec-leader step and go straight to `main` via a Steward-owned Integrator merge.
@@ -410,7 +437,7 @@ work flow, so you own the clean context boundary that flows with it. The rules:
   — a `Compacting…` spinner, ctx dropped, or `❯ /compact` + "Press up to edit
   queued messages" (it queued behind an active turn and **will** fire at that
   turn's end — a clean seam, which is correct). An empty `❯ ` with unchanged ctx
-  means it did **not** land — resend. Enclave Opus agents rarely hit a natural
+  means it did **not** land — resend. T1 enclave agents rarely hit a natural
   idle seam during a dense event stream (an errata/reconcile cascade keeps them
   turn-to-turn), so a queued `/compact` is the normal, desired outcome: it fires
   at the next turn boundary. Watch for **idle→busy drift** between capture and
@@ -450,7 +477,7 @@ work flow, so you own the clean context boundary that flows with it. The rules:
   emphasizes stall patterns + the proxy and does **not** mention ctx% — so if you
   follow the prompt's emphasis, the scan (which lives only here, in the playbook)
   falls out, and nothing signals its absence (a stall-scan comes back "all clear"
-  while an Opus agent silently climbs). Two failure amplifiers, both real: **(1)**
+  while a T1 agent silently climbs). Two failure amplifiers, both real: **(1)**
   a **"minimal tick"** run to conserve compute (e.g. during an infra/credit
   crisis) that drops to just proxy + main-tip **must still include the one cheap
   `capture-pane | grep ctx%`** — it is the cheapest high-value line in the tick,
@@ -459,7 +486,7 @@ work flow, so you own the clean context boundary that flows with it. The rules:
   the **peak-risk window**: none of them hits the Steward-delivery boundary compact
   (they route author→spec-leader→Integrator, bypassing your hook entirely), so the
   %-scan is the **only** trigger that can catch it — *escalate* the scan during a
-  cascade, never relax it. Operationally: **scan the Opus enclave's ctx% (`for r in
+  cascade, never relax it. Operationally: **scan the T1 enclave's ctx% (`for r in
   spec-author conformance-validator architect; do tmux capture-pane -t moot-$r -p |
   grep -oE 'ctx [0-9]+%'; done`) BEFORE the stall-scan, every tick.** A tick that
   reports "all clear" without a ctx% line is an **incomplete tick**.
@@ -500,7 +527,7 @@ gate on the axis the fork turns on** (soundness → Architect, conformance → C
 with the other enclave members **notified-and-proceed** — acting on the ruling,
 they do **not** each independently re-adjudicate. The three-way
 independent-grounding **conjunction** (every gate re-derives the fact at source)
-is a **merge-gate instrument**: worth its ~3× Opus cost when it re-checks a
+is a **merge-gate instrument**: worth its ~3× T1 cost when it re-checks a
 *finished artifact* and can catch a *shipped* error (laundered-citation, a false
 `proved`) — but **overkill for a scope-direction call**, where one grounding +
 the owner's ruling settles it and the extra groundings buy only token burn.
@@ -716,7 +743,7 @@ than re-refereeing each instance.
 ### 7a. The watchdog + comms-drop backstop — the exact mechanism
 
 The patterns above are *what* to catch; this is *how*. State the mechanism,
-because a compacted (or a just-below-Opus successor) Steward will otherwise
+because a compacted (or a lower-tier successor) Steward will otherwise
 improvise it wrong.
 
 **Arm the watchdog as a private `CronCreate`, never the convo `schedule_call`.**
