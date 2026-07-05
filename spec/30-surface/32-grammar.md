@@ -20,7 +20,7 @@ decl ::=
   | "type" ConId tyvar* "=" type  -- alias / refinement
   | "record" ConId tyvar* "{" field ("," field)* "}" derive?  -- product
   | "data" ConId tyvar* "=" ctor ("|" ctor)* derive?  -- sum / inductive
-  | "class" ConId binder* "{" field ("," field)* "}"  -- typeclass (33 §5, ADR 0008)
+  | "class" ConId binder* "{" class_field ("," class_field)* "}"  -- typeclass (33 §5, ADR 0008)
   | "instance" ConId atype* "{" field_assign ("," field_assign)* "}"  -- instance (33 §5)
   | "foreign" ident ":" type foreign_spec  -- FFI (38)
   | "space" ConId "{" (cell | decl | becomes)* "}"  -- state region (36)
@@ -34,6 +34,8 @@ constraints ::= "where" constraint ("," constraint)*  -- instance constraints (3
 constraint  ::= ConId atype+                          -- e.g.  DecEq A
 binder  ::= "(" ident+ ":" type ")" | "{" ident+ ":" type "}"   -- {…} implicit
 field   ::= ident ":" type
+class_field ::= field_purity? ident ":" type
+field_purity ::= "const" | "fn" | "proc"  -- checked class-field purity (33 §5.2, 39 §6.0)
 ctor    ::= ConId arg_types?                       -- e.g.  Cons a (List a)
 arg_types ::= type+ | "{" field ("," field)* "}"   -- positional or named
 effects ::= "visits" "[" row "]"                   -- effect row (36 §1), proc only

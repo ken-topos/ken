@@ -178,6 +178,13 @@ claim with no conformance case is a claim no one can rely on
   cited by the prover. A **kernel-backed vs elaborator-convention** split:
   AC4/6/7/8 bottom out in landed producers; the coherence convention (AC1/2/3/5)
   is netted solely by conformance.
+- `surface/classes/seed-class-field-purity.md` — SURF-2 class-field purity:
+  optional `[const|fn|proc]` markers on class fields, erased-before-kernel
+  metadata that is parsed/stored on the class, enforced on instance fields
+  through the existing SURF-1 purity checker, surfaced by `.field` projection,
+  backward-compatible for unmarked fields, and explicitly excluded from the
+  AC4 Type/Omega sort discriminant. Pins the `proc traverse` unblock for CAT-2
+  D3 while keeping zero kernel/Cargo.lock/trusted-base delta.
 - `surface/modules/seed-modules.md` — ES3 minimal modules/imports (`33 §3-4`,
   the bounded L4 slice): `module`/`import`/`pub`/abstract-export **elaborate
   away** to the kernel's single flat append-only `Σ` (`11 §4`) — **zero new

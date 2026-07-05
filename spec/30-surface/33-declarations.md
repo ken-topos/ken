@@ -222,7 +222,50 @@ must be the real kernel sort, computed over **all** fields — a mis-keyed
 
 `class C (A : Type) { op₁ : T₁ ; … ; law₁ : P₁ ; … }` elaborates to a **record
 type** — the **right-nested Σ** over the field telescope (`../10-kernel/13 §3`),
-parameterised by the class head `A`:
+parameterised by the class head `A`. A class field may also carry an optional
+leading purity keyword:
+
+```
+class Traversable (f : Type → Type) {
+  functor  : Functor f
+  foldable : Foldable f
+  proc traverse :
+    (g : Type → Type) → Applicative g → (a b : Type) →
+    (a → g b) → f a → g (f b)
+}
+```
+
+The field forms are:
+
+```
+class_field ::= field_name : type
+              | (const | fn | proc) field_name : type
+```
+
+An unmarked field is **unclassified** and keeps the pre-SURF-2 behaviour: the
+instance field is checked only against its declared type, and projection carries
+no extra static-purity signal. A marked field's keyword is a **checked
+signature** over the field declaration itself, reusing the definition-level
+SURF-1 purity discipline (`§1`, `36 §1.6`): `const`/`fn` fields must be pure
+with the corresponding explicit-value-arity classification, and `proc` fields
+must be potentially effectful/effect-row-polymorphic under that same
+classifier. Because class fields have no separate value-binder list, the
+arity/effect telescope is read from the field's **declared type**; implicit
+parameters still do not count (`36 §1.6.3(b)`). A later instance expression must
+match the stored field classification, but it cannot redefine what the class
+field marker meant. The marker is surface/elaboration metadata attached to the
+field declaration, not a field of the class record.
+
+**AC4 non-interference.** A class-field purity marker does **not** enter the
+Type/Ω discriminant. The class's sort is still the kernel-computed sort of the
+right-nested Σ over the field **types** alone (§5.1): an operation type such as
+`traverse : …` is relevant because of its type, not because the author wrote
+`proc`; an Ω law field remains Ω because its type is Ω, not because it is
+unmarked. The elaborator may store `Some(proc)`/`Some(fn)`/`Some(const)` beside
+the field for checking and projection, but it must not feed that marker into
+`sort_sigma`, class-kind selection, or instance-coherence policy.
+
+The record type itself is unchanged:
 
 ```
 C A  ≡  (op₁ : T₁) × … × (opₙ : Tₙ) × (law₁ : P₁) × … × (lawₘ : Pₘ)
