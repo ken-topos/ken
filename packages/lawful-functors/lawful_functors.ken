@@ -61,19 +61,11 @@ class Monoid a {
 -- ========================================================================
 -- Instance 1 -- the `List` append monoid (the canonical inductive carrier).
 -- ========================================================================
--- `op = list_append`, `mempty = Nil`. The three laws are proved GENERICALLY
--- in `a` (the proofs below are `(a : Type) -> ...` views); only the
--- `instance` BUNDLING is monomorphic (`List Nat`), because a parametric
--- instance HEAD `instance Monoid (List a)` does not elaborate on the landed
--- elaborator -- the free `a` in the head has no binder path (`UnresolvedCon`;
--- grounded by probe). This is a SECOND surface gap beyond Architect's
--- higher-kinded class-param one, elaboration-side (the parser already parses
--- the head; generalization over the head's free vars is what's missing).
--- Flagged to Steward as a pinned sub-deliverable; the map-verified-laws
--- precedent is the same -- a parametric structure's `instance`/`where`
--- bundling is `(oracle)`-deferred while the parametric substance is real.
--- Until it lands, the List monoid bundles at a closed element type; the
--- generality lives in the proofs.
+-- `op = list_append`, `mempty = Nil`. The three laws and the Monoid instance
+-- are GENERIC in `a`: the CAT-1 D1 parametric-instance-head path elaborates
+-- `instance Monoid (List a)` as `(a : Type) -> Monoid (List a)`, and the law
+-- fields cite the existing generic `list_*` proofs rather than re-proving
+-- them at a closed carrier.
 
 -- Left unit is DEFINITIONAL: `list_append Nil x` iota-reduces to `x` by
 -- append's first match arm, so the goal `Equal (List a) x x` stays
@@ -118,19 +110,17 @@ fn list_right_unit (a : Type) (xs : List a)
         (list_right_unit a t)
   }
 
--- Closed-carrier bundling (today-form; generalizes once the parametric-head
--- extension lands). `list_*` proofs instantiated at `Nat`.
 instance Semigroup (List Nat) {
   op    = list_append Nat ;
   assoc = list_assoc Nat
 }
 
-instance Monoid (List Nat) {
-  op         = list_append Nat ;
-  mempty     = Nil Nat ;
-  assoc      = list_assoc Nat ;
-  left_unit  = list_left_unit Nat ;
-  right_unit = list_right_unit Nat
+instance Monoid (List a) {
+  op         = list_append a ;
+  mempty     = Nil a ;
+  assoc      = list_assoc a ;
+  left_unit  = list_left_unit a ;
+  right_unit = list_right_unit a
 }
 
 -- ========================================================================

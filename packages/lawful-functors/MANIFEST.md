@@ -27,12 +27,11 @@ class-parameter extension does (see *Pinned sub-deliverables* below); they are
 - `instance Semigroup Bool`, `instance Monoid Bool` — the **Bool conjunction
   monoid** (`op = bool_and`, `mempty = True`); laws proved by **finite
   case-split**, zero `Axiom`.
-- `instance Semigroup (List Nat)`, `instance Monoid (List Nat)` — the **List
+- `instance Semigroup (List Nat)` and `instance Monoid (List a)` — the **List
   append monoid** (`op = list_append`, `mempty = Nil`); laws proved by
-  **induction + `cong`**, zero `Axiom`. The law *proofs* (`list_assoc`,
-  `list_left_unit`, `list_right_unit`) are **generic in the element type**
-  (`(a : Type) -> …` views); only the `instance` bundling is monomorphic —
-  see *Pinned sub-deliverables*.
+  **induction + `cong`**, zero `Axiom`. The `Monoid` dictionary is genuinely
+  generic in the element type and cites the generic `list_assoc`,
+  `list_left_unit`, and `list_right_unit` proofs.
 
 ## Derivation path + `trusted_base()` delta
 
@@ -77,18 +76,11 @@ Two surface gaps block the *fully general* forms of this tranche. Both are
 flagged to Steward (`findings/forks → Steward`, per the CAT-1 frame).
 
 1. **Higher-kinded class parameter** — `class Functor (f : Type -> Type)`.
-   The class param is hard-coded to `Type0` (`elab_class_decl`, 3 sites) and
-   the parser takes a bare ident only. **Architect's CAT-1 core ruling** sized
-   this (AST param-kind field, parser binder form, ~10-line elab fix, an
-   instance-side build-verify point). **Blocks `Functor`/`Foldable`** — held.
+   CAT-1 D1 landed the bounded elaborator extension (AST param-kind field,
+   parser binder form, the `elab_class_decl` kind substitution, and
+   bare-indformer instance-head verification). `Functor`/`Foldable` source is
+   still held for the D3 package slice.
 2. **Parametric instance head** — `instance Monoid (List a)` (a value class
-   over a *parametric* carrier). The parser *accepts* the head, but
-   elaboration has no binder path for the head's free `a` and does not
-   generalize the instance over it (`UnresolvedCon "a"`, grounded by probe).
-   This is **distinct from (1)** (which is about the class *param*'s kind);
-   here the *instance head* needs its free vars bound/generalized. **Does not
-   block the tranche** — the value monoids bundle at closed carriers (`Bool`,
-   `List Nat`) today and their proofs are already generic; the parametric
-   `instance` is a generality upgrade. The `map-verified-laws` precedent is
-   the same shape — a parametric structure's `instance`/`where` bundling is
-   `(oracle)`-deferred while the parametric substance is real.
+   over a *parametric* carrier). CAT-1 D1 landed the free-head-variable
+   generalizer, and CAT-1 D2 uses it here: the dictionary is elaborated as
+   `(a : Type) -> Monoid (List a)`.
