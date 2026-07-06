@@ -7,6 +7,7 @@
 
 use std::collections::HashMap;
 use ken_kernel::{GlobalId, Term};
+use crate::ast::DefKeyword;
 
 /// Whether a class is a property class (Ω-sorted Σ-chain, coherence-free via
 /// Ω-PI) or a structure class (Type-sorted, canonical-one-per-head rule).
@@ -39,6 +40,9 @@ pub struct ClassInfo {
     /// expected type (`ken_kernel::subst::subst_tel`) and to drive `.field`
     /// projection (`elab.rs`'s `RExpr::RProj`).
     pub field_types: Vec<Term>,
+    /// Optional SURF-2 purity marker per field. This metadata is erased before
+    /// kernel admission; it must stay parallel to `field_names`/`field_types`.
+    pub field_purities: Vec<Option<DefKeyword>>,
     /// Kernel `GlobalId` of the class's Σ-record type (`C : Type → sort`).
     pub type_id: GlobalId,
     /// Whether this is a property or structure class (`33 §5.1`).
@@ -51,6 +55,10 @@ pub struct ClassInfo {
 pub struct InstanceInfo {
     /// Kernel `GlobalId` of the instance's Σ-record value.
     pub instance_id: GlobalId,
+    /// Class this instance inhabits. Used only by surface projection purity.
+    pub class_name: String,
+    /// Inferred effect row for each instance field, in class-field order.
+    pub field_effect_rows: Vec<crate::effects::RowType>,
     /// Module where this instance was declared (for orphan check).
     pub module_id: u32,
 }

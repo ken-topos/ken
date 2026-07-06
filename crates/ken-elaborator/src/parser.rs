@@ -8,7 +8,8 @@
 //! pattern matching; `type T = A` surface type aliases; `T a b` type app.
 
 use crate::ast::{
-    Binder, CtorDecl, Decl, DefKeyword, EffectRowSyntax, Expr, MatchArm, PatKind, Pattern, Type,
+    Binder, ClassField, CtorDecl, Decl, DefKeyword, EffectRowSyntax, Expr, MatchArm, PatKind,
+    Pattern, Type,
 };
 use crate::error::{ElabError, Span};
 use crate::lexer::Token;
@@ -522,10 +523,29 @@ impl Parser {
         self.expect(&Token::LBrace)?;
         let mut fields = Vec::new();
         while !matches!(self.peek(), Token::RBrace | Token::Eof) {
+            let purity = match self.peek() {
+                Token::KwConst => {
+                    self.advance();
+                    Some(DefKeyword::Const)
+                }
+                Token::KwFn => {
+                    self.advance();
+                    Some(DefKeyword::Fn)
+                }
+                Token::KwProc => {
+                    self.advance();
+                    Some(DefKeyword::Proc)
+                }
+                _ => None,
+            };
             let (field_name, _) = self.expect_ident()?;
             self.expect(&Token::Colon)?;
             let ty = self.parse_type()?;
-            fields.push((field_name, ty));
+            fields.push(ClassField {
+                purity,
+                name: field_name,
+                ty,
+            });
             if matches!(self.peek(), Token::Semicolon) {
                 self.advance();
             }
@@ -922,6 +942,11 @@ impl Parser {
     fn can_start_atom_type(&self) -> bool {
         if matches!(self.peek(), Token::Ident(s) if s == "visits")
             && matches!(self.lookahead(1), Token::LBracket)
+        {
+            return false;
+        }
+        if matches!(self.peek(), Token::Ident(_) | Token::ConId(_))
+            && matches!(self.lookahead(1), Token::Colon)
         {
             return false;
         }
