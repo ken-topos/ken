@@ -21,6 +21,63 @@ pub struct CtorDecl {
     pub span: Span,
 }
 
+/// A constructor argument in an explicit constructor signature (`34 §2.2`).
+#[derive(Clone, Debug)]
+pub enum ConstructorSignatureArg {
+    /// `(x : A) -> ...` — an explicit dependent binder.
+    Explicit(Binder),
+    /// `{x : A} -> ...` — an implicit dependent binder.
+    Implicit(Binder),
+    /// `A -> ...` — an anonymous non-dependent argument.
+    Anonymous(Expr),
+}
+
+impl ConstructorSignatureArg {
+    pub fn span(&self) -> &Span {
+        match self {
+            ConstructorSignatureArg::Explicit(b) | ConstructorSignatureArg::Implicit(b) => &b.span,
+            ConstructorSignatureArg::Anonymous(e) => e.span(),
+        }
+    }
+}
+
+/// The peeled telescope and final result target of `C : ...`.
+#[derive(Clone, Debug)]
+pub struct ConstructorSignature {
+    pub args: Vec<ConstructorSignatureArg>,
+    pub result: Expr,
+    pub span: Span,
+}
+
+/// A constructor inside an explicit `where` data block.
+#[derive(Clone, Debug)]
+pub enum ExplicitDataCtor {
+    /// Simple default-result sugar, same surface as legacy `C τ...`.
+    Simple(CtorDecl),
+    /// Full constructor signature `C : telescope -> D params indices`.
+    Signature {
+        name: String,
+        signature: ConstructorSignature,
+        span: Span,
+    },
+}
+
+impl ExplicitDataCtor {
+    pub fn name(&self) -> &str {
+        match self {
+            ExplicitDataCtor::Simple(c) => &c.name,
+            ExplicitDataCtor::Signature { name, .. } => name,
+        }
+    }
+
+    pub fn span(&self) -> &Span {
+        match self {
+            ExplicitDataCtor::Simple(c) => &c.span,
+            ExplicitDataCtor::Signature { span, .. } => span,
+        }
+    }
+}
+
 /// A single arm of a `match` expression.
 #[derive(Clone, Debug)]
 pub struct MatchArm {
@@ -128,6 +185,20 @@ pub enum Decl {
         type_params: Vec<String>,
         /// Constructors in declaration order.
         ctors: Vec<CtorDecl>,
+        span: Span,
+    },
+    /// `data D (Δp) : Δi -> Type where { ... }` — explicit inductive-family
+    /// syntax (`34 §2`). This parser/AST slice stores the surface shape only;
+    /// lowering is staged to the later dependent-constructor elaboration WP.
+    ExplicitDataDecl {
+        /// Type former name (uppercase-initial).
+        name: String,
+        /// Parameter binders before the colon.
+        params: Vec<Binder>,
+        /// Family result/index telescope after the colon.
+        family: Type,
+        /// Constructors in declaration order.
+        ctors: Vec<ExplicitDataCtor>,
         span: Span,
     },
     /// `type T = A` — surface type alias.
@@ -244,6 +315,7 @@ impl Decl {
             | Decl::ProveDecl { name, .. }
             | Decl::LawDecl { name, .. }
             | Decl::DataDecl { name, .. }
+            | Decl::ExplicitDataDecl { name, .. }
             | Decl::TypeAlias { name, .. }
             | Decl::ForeignDecl { name, .. }
             | Decl::TemporalDecl { name, .. }
@@ -260,6 +332,7 @@ impl Decl {
             | Decl::ProveDecl { span, .. }
             | Decl::LawDecl { span, .. }
             | Decl::DataDecl { span, .. }
+            | Decl::ExplicitDataDecl { span, .. }
             | Decl::TypeAlias { span, .. }
             | Decl::ForeignDecl { span, .. }
             | Decl::TemporalDecl { span, .. }

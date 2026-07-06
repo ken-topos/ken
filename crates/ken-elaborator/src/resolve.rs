@@ -500,6 +500,14 @@ pub fn resolve_decl(decl: &Decl) -> Result<RDecl, ElabError> {
             })
         }
 
+        Decl::ExplicitDataDecl { name, span, .. } => Err(ElabError::ParseError {
+            msg: format!(
+                "explicit data family '{}' parses, but elaboration is staged to a later slice",
+                name
+            ),
+            span: span.clone(),
+        }),
+
         Decl::TypeAlias { name, ty, span } => {
             let mut scope = Scope::new();
             let rty = resolve_type(&mut scope, ty)?;

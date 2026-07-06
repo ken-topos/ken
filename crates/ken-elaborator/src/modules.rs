@@ -22,7 +22,7 @@
 
 use std::collections::HashMap;
 
-use crate::ast::{CtorDecl, Decl, ImportKind};
+use crate::ast::{CtorDecl, Decl, ExplicitDataCtor, ImportKind};
 use crate::error::{ElabError, Span};
 use crate::resolve::{self, RCtorDecl, RDecl, RDeclKind, RExpr, RMatchArm, RPatKind, RPattern, RType};
 use crate::ElabEnv;
@@ -241,6 +241,27 @@ fn qualify_decl_name(decl: &Decl, prefix: &str) -> Decl {
             ctors: ctors
                 .iter()
                 .map(|c| CtorDecl { name: qualify(prefix, &c.name), args: c.args.clone(), span: c.span.clone() })
+                .collect(),
+            span: span.clone(),
+        },
+        Decl::ExplicitDataDecl { name, params, family, ctors, span } => Decl::ExplicitDataDecl {
+            name: qualify(prefix, name),
+            params: params.clone(),
+            family: family.clone(),
+            ctors: ctors
+                .iter()
+                .map(|c| match c {
+                    ExplicitDataCtor::Simple(c) => ExplicitDataCtor::Simple(CtorDecl {
+                        name: qualify(prefix, &c.name),
+                        args: c.args.clone(),
+                        span: c.span.clone(),
+                    }),
+                    ExplicitDataCtor::Signature { name, signature, span } => ExplicitDataCtor::Signature {
+                        name: qualify(prefix, name),
+                        signature: signature.clone(),
+                        span: span.clone(),
+                    },
+                })
                 .collect(),
             span: span.clone(),
         },
@@ -467,7 +488,11 @@ fn rewrite_rdecl(scope: &Scope, exports: &HashMap<String, HashMap<String, String
 fn is_qualifiable(decl: &Decl) -> bool {
     matches!(
         decl,
-        Decl::ViewDecl { .. } | Decl::LetDecl { .. } | Decl::DataDecl { .. } | Decl::TypeAlias { .. }
+        Decl::ViewDecl { .. }
+        | Decl::LetDecl { .. }
+        | Decl::DataDecl { .. }
+        | Decl::ExplicitDataDecl { .. }
+        | Decl::TypeAlias { .. }
     )
 }
 
