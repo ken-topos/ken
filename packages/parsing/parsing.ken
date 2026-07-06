@@ -7,21 +7,39 @@
 data SourceId = MkSourceId Nat
 
 fn IsUtf8 (bs : Bytes) : Prop =
-  Equal Bytes bs bs
+  Equal Bytes (bytes_encode (bytes_decode bs)) bs
 
-data Source = MkSource SourceId Bytes Nat
+fn SourceLength (bs : Bytes) (n : Nat) : Prop =
+  match n {
+    Zero =>
+      Equal Int
+        (bytes_length bs)
+        (bytes_length (bytes_slice bs (bytes_length bs) (bytes_length bs))) ;
+    Suc n2 => SourceLength bs n2 -> Bottom
+  }
+
+class Source {
+  sourceIdField : SourceId ;
+  sourceBytesField : Bytes ;
+  sourceLengthField : Nat ;
+  sourceUtf8Field : IsUtf8 sourceBytesField ;
+  sourceLengthValidField : SourceLength sourceBytesField sourceLengthField
+}
 
 fn sourceId (s : Source) : SourceId =
-  match s { MkSource sid bytes len => sid }
+  s.sourceIdField
 
 fn sourceBytes (s : Source) : Bytes =
-  match s { MkSource sid bytes len => bytes }
+  s.sourceBytesField
 
 fn sourceLength (s : Source) : Nat =
-  match s { MkSource sid bytes len => len }
+  s.sourceLengthField
 
 fn sourceUtf8 (s : Source) : IsUtf8 (sourceBytes s) =
-  match s { MkSource sid bytes len => Refl }
+  s.sourceUtf8Field
+
+fn sourceLengthValid (s : Source) : SourceLength (sourceBytes s) (sourceLength s) =
+  s.sourceLengthValidField
 
 data Span = MkSpan Nat Nat
 

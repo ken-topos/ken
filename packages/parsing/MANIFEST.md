@@ -5,8 +5,8 @@ CAT-5 D1 lands the source/span core only.
 
 ## Public API in D1
 
-- `SourceId`, `Source`, `IsUtf8`, `sourceId`, `sourceBytes`,
-  `sourceUtf8`, and `sourceLength`.
+- `SourceId`, `Source`, `IsUtf8`, `SourceLength`, `sourceId`,
+  `sourceBytes`, `sourceUtf8`, `sourceLength`, and `sourceLengthValid`.
 - `Span`, `spanStart`, `spanEnd`, `LessEqNat`, and `ValidSpan`.
 - `Located`, `locatedSource`, `locatedSpan`, `locatedValue`, and
   `ValidLocated`.
@@ -15,8 +15,9 @@ CAT-5 D1 lands the source/span core only.
 
 ## Contract
 
-- `Source` carries artifact identity, original `Bytes`, UTF-8 evidence, and a
-  `Nat` byte length. `String` is not the offset basis.
+- `Source` is a checked record carrying artifact identity, original `Bytes`,
+  UTF-8 evidence, a `Nat` byte length, and a proof that the recorded length is
+  the byte length of `sourceBytes`. `String` is not the offset basis.
 - `Span` carries only half-open byte endpoints. A bare `Span` does not identify
   a source artifact.
 - `ValidSpan s sp` requires `spanStart sp <= spanEnd sp <= sourceLength s`.
@@ -25,10 +26,11 @@ CAT-5 D1 lands the source/span core only.
 
 ## Derivation path and trusted-base delta
 
-The D1 surface is ordinary Ken data, transparent functions, and proof-returning
-definitions over `Nat`, `Bool`, `Bytes`, `Equal`, and `And`. It adds no kernel
-primitive, compiler parser hook, CLI/source-loader behavior, export/provenance
-policy, or language-semantics change. Expected `trusted_base()` delta is zero.
+The D1 surface is ordinary Ken data, a class-backed record, transparent
+functions, and proof-returning definitions over `Nat`, `Bool`, `Bytes`,
+`Equal`, and `And`. It adds no kernel primitive, compiler parser hook,
+CLI/source-loader behavior, export/provenance policy, or language-semantics
+change. Expected `trusted_base()` delta is zero.
 
 ## Deferred CAT-5 slices
 
