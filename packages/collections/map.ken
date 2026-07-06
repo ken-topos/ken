@@ -1806,6 +1806,9 @@ fn NoDup (k : Type) (v : Type) (leq : k → k → Bool) (xs : List (Pair k v)) :
 fn Distinct (k : Type) (v : Type) (leq : k → k → Bool) (m : Tree k v) : Prop =
   NoDup k v leq (toList k v m)
 
+fn distinctEmpty (k : Type) (v : Type) (leq : k → k → Bool) :
+  Distinct k v leq (empty k v) = tt
+
 fn assocStepInner
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k)
   (e : Pair k v) (xs2 : List (Pair k v)) (y : Bool) : Option v =
@@ -2146,6 +2149,81 @@ fn assocPrefixWins
     Nil ⇒ λhskip. assocNoMatchIsNone k v leq key ys hskip ;
     Cons e xs2 ⇒
       λhskip. assocPrefixWinsDispatch k v leq key e xs2 ys (assocPrefixWins k v leq key xs2 ys hskip) (boolDichotomy (leq key (pairFst k v e)))
+  }
+
+fn assocNoneImpliesNoMatchInner
+  (k : Type) (v : Type) (leq : k → k → Bool) (key : k)
+  (e : Pair k v) (xs2 : List (Pair k v))
+  (hAssoc : Equal (Option v) (assoc k v leq key (Cons (Pair k v) e xs2)) (None v))
+  (q1 : Equal Bool (leq key (pairFst k v e)) True)
+  (o2 : Or (Equal Bool (leq (pairFst k v e) key) True) (Equal Bool (leq (pairFst k v e) key) False))
+  : allInList k v (notOrderEquivToKey k leq key) (Cons (Pair k v) e xs2) =
+  match o2 {
+    Inl q2 ⇒
+      absurd
+        (trans (Option v)
+          (Some v (pairSnd k v e))
+          (assoc k v leq key (Cons (Pair k v) e xs2))
+          (None v)
+          (sym (Option v)
+            (assoc k v leq key (Cons (Pair k v) e xs2))
+            (Some v (pairSnd k v e))
+            (assocSkipHeadStopBridge k v leq key e xs2 q1 q2))
+          hAssoc) ;
+    Inr q2False ⇒
+      andIntro
+        (notOrderEquivToKey k leq key (pairFst k v e))
+        (allInList k v (notOrderEquivToKey k leq key) xs2)
+        (notOrderEquivFromRightFalse k leq key (pairFst k v e) q2False)
+        (assocNoneImpliesNoMatch k v leq key xs2
+          (trans (Option v)
+            (assoc k v leq key xs2)
+            (assoc k v leq key (Cons (Pair k v) e xs2))
+            (None v)
+            (sym (Option v)
+              (assoc k v leq key (Cons (Pair k v) e xs2))
+              (assoc k v leq key xs2)
+              (assocSkipHeadBridge k v leq key e xs2 q1 q2False))
+            hAssoc))
+  }
+
+fn assocNoneImpliesNoMatchDispatch
+  (k : Type) (v : Type) (leq : k → k → Bool) (key : k)
+  (e : Pair k v) (xs2 : List (Pair k v))
+  (hAssoc : Equal (Option v) (assoc k v leq key (Cons (Pair k v) e xs2)) (None v))
+  (o1 : Or (Equal Bool (leq key (pairFst k v e)) True) (Equal Bool (leq key (pairFst k v e)) False))
+  : allInList k v (notOrderEquivToKey k leq key) (Cons (Pair k v) e xs2) =
+  match o1 {
+    Inl q1 ⇒
+      assocNoneImpliesNoMatchInner k v leq key e xs2 hAssoc q1
+        (boolDichotomy (leq (pairFst k v e) key)) ;
+    Inr q1False ⇒
+      andIntro
+        (notOrderEquivToKey k leq key (pairFst k v e))
+        (allInList k v (notOrderEquivToKey k leq key) xs2)
+        (notOrderEquivFromLeftFalse k leq key (pairFst k v e) q1False)
+        (assocNoneImpliesNoMatch k v leq key xs2
+          (trans (Option v)
+            (assoc k v leq key xs2)
+            (assoc k v leq key (Cons (Pair k v) e xs2))
+            (None v)
+            (sym (Option v)
+              (assoc k v leq key (Cons (Pair k v) e xs2))
+              (assoc k v leq key xs2)
+              (assocSkipHeadBridgeFalse k v leq key e xs2 q1False))
+            hAssoc))
+  }
+
+fn assocNoneImpliesNoMatch
+  (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (xs : List (Pair k v))
+  : Equal (Option v) (assoc k v leq key xs) (None v) →
+    allInList k v (notOrderEquivToKey k leq key) xs =
+  match xs {
+    Nil ⇒ λhAssoc. tt ;
+    Cons e xs2 ⇒
+      λhAssoc.
+        assocNoneImpliesNoMatchDispatch k v leq key e xs2 hAssoc
+          (boolDichotomy (leq key (pairFst k v e)))
   }
 
 -- Given `leq key k2 = False` (key strictly not-below k2) and a bound
@@ -4310,6 +4388,66 @@ fn memberFromLookupNone
     (λo. match o { None ⇒ False ; Some x ⇒ True })
     h
 
+fn memberFromLookupSome
+  (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (m : Tree k v) (val : v)
+  (h : Equal (Option v) (lookup k v leq key m) (Some v val))
+  : Equal Bool (member k v leq key m) True =
+  cong (Option v) Bool
+    (lookup k v leq key m)
+    (Some v val)
+    (optionIsSome v)
+    h
+
+fn lookupNoneFromMemberFalseHit
+  (v : Type) (val : v)
+  (h : Equal Bool True False)
+  : Equal (Option v) (Some v val) (None v) =
+  absurd h
+
+fn lookupNoneFromMemberFalse
+  (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (m : Tree k v)
+  : Equal Bool (member k v leq key m) False →
+    Equal (Option v) (lookup k v leq key m) (None v) =
+  match m {
+    Leaf ⇒ λh. tt ;
+    Node l k2 v2 r ⇒
+      match leq key k2 {
+        True ⇒
+          match leq k2 key {
+            True ⇒ lookupNoneFromMemberFalseHit v v2 ;
+            False ⇒ lookupNoneFromMemberFalse k v leq key l
+          } ;
+        False ⇒ lookupNoneFromMemberFalse k v leq key r
+      }
+  }
+
+fn lookupUnitSomeFromMemberTrueLeaf
+  (h : Equal Bool False True)
+  : Equal (Option Unit) (None Unit) (Some Unit MkUnit) =
+  absurd h
+
+fn lookupUnitSomeFromMemberTrueHit
+  (val : Unit) (h : Equal Bool True True)
+  : Equal (Option Unit) (Some Unit val) (Some Unit MkUnit) =
+  match val { MkUnit ⇒ tt }
+
+fn lookupUnitSomeFromMemberTrue
+  (k : Type) (leq : k → k → Bool) (key : k) (m : Tree k Unit)
+  : Equal Bool (member k Unit leq key m) True →
+    Equal (Option Unit) (lookup k Unit leq key m) (Some Unit MkUnit) =
+  match m {
+    Leaf ⇒ lookupUnitSomeFromMemberTrueLeaf ;
+    Node l k2 v2 r ⇒
+      match leq key k2 {
+        True ⇒
+          match leq k2 key {
+            True ⇒ lookupUnitSomeFromMemberTrueHit v2 ;
+            False ⇒ lookupUnitSomeFromMemberTrue k leq key l
+          } ;
+        False ⇒ lookupUnitSomeFromMemberTrue k leq key r
+      }
+  }
+
 fn notOrderEquivFromMemberTrueFalse
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
@@ -4707,6 +4845,32 @@ fn intersectionLookupSomeLaw
           (lookupAssocAgree k v leq transLeq key a hord hdist))
         ha)
       hmem
+
+fn intersectionLookupLeftNoneLaw
+  (k : Type) (leq : k → k → Bool)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (key : k) (a : Tree k Unit) (b : Tree k Unit)
+  : Ordered k Unit leq a → Distinct k Unit leq a →
+    Equal Bool (member k Unit leq key a) False →
+    Equal (Option Unit) (lookup k Unit leq key (intersection k Unit leq a b)) (None Unit) =
+  λhord. λhdist. λhmem.
+    trans (Option Unit)
+      (lookup k Unit leq key (intersection k Unit leq a b))
+      (lookup k Unit leq key (empty k Unit))
+      (None Unit)
+      (intersectionFromListAccLookupLocality k Unit leq transLeq key
+        (toList k Unit a) b (empty k Unit)
+        (assocNoneImpliesNoMatch k Unit leq key (toList k Unit a)
+          (trans (Option Unit)
+            (assoc k Unit leq key (toList k Unit a))
+            (lookup k Unit leq key a)
+            (None Unit)
+            (sym (Option Unit)
+              (lookup k Unit leq key a)
+              (assoc k Unit leq key (toList k Unit a))
+              (lookupAssocAgree k Unit leq transLeq key a hord hdist))
+            (lookupNoneFromMemberFalse k Unit leq key a hmem))))
+      (lookupEmptyIsNone k Unit leq key)
 
 fn differenceFromListAccLookupLocalityDispatch
   (k : Type) (v : Type) (leq : k → k → Bool)
@@ -5335,10 +5499,180 @@ fn setUnionMemberLaw
         (unionLookupCharacterization k Unit leq reflLeq transLeq unitCombine x s t hord hdist))
       (unionLookupTableMember (lookup k Unit leq x s) (lookup k Unit leq x t))
 
-fn setIntersectionMemberLaw (k : Type) (leq : k → k → Bool) (x : k) (s : Tree k Unit) (t : Tree k Unit) : Prop =
-  Equal Bool
-    (setMember k leq x (setIntersection k leq s t))
+fn setIntersectionMemberLeftFalseRhs
+  (k : Type) (leq : k → k → Bool) (x : k) (s : Tree k Unit) (t : Tree k Unit)
+  (hLeft : Equal Bool (setMember k leq x s) False)
+  : Equal Bool (bool_and (setMember k leq x s) (setMember k leq x t)) False =
+  trans Bool
     (bool_and (setMember k leq x s) (setMember k leq x t))
+    (bool_and False (setMember k leq x t))
+    False
+    (cong Bool Bool
+      (setMember k leq x s)
+      False
+      (λleft. bool_and left (setMember k leq x t))
+      hLeft)
+    tt
+
+fn setIntersectionMemberRightFalseRhs
+  (k : Type) (leq : k → k → Bool) (x : k) (s : Tree k Unit) (t : Tree k Unit)
+  (hLeft : Equal Bool (setMember k leq x s) True)
+  (hRight : Equal Bool (setMember k leq x t) False)
+  : Equal Bool (bool_and (setMember k leq x s) (setMember k leq x t)) False =
+  trans Bool
+    (bool_and (setMember k leq x s) (setMember k leq x t))
+    (bool_and True (setMember k leq x t))
+    False
+    (cong Bool Bool
+      (setMember k leq x s)
+      True
+      (λleft. bool_and left (setMember k leq x t))
+      hLeft)
+    (trans Bool
+      (bool_and True (setMember k leq x t))
+      (bool_and True False)
+      False
+      (cong Bool Bool
+        (setMember k leq x t)
+        False
+        (λright. bool_and True right)
+        hRight)
+      tt)
+
+fn setIntersectionMemberBothTrueRhs
+  (k : Type) (leq : k → k → Bool) (x : k) (s : Tree k Unit) (t : Tree k Unit)
+  (hLeft : Equal Bool (setMember k leq x s) True)
+  (hRight : Equal Bool (setMember k leq x t) True)
+  : Equal Bool (bool_and (setMember k leq x s) (setMember k leq x t)) True =
+  trans Bool
+    (bool_and (setMember k leq x s) (setMember k leq x t))
+    (bool_and True (setMember k leq x t))
+    True
+    (cong Bool Bool
+      (setMember k leq x s)
+      True
+      (λleft. bool_and left (setMember k leq x t))
+      hLeft)
+    (trans Bool
+      (bool_and True (setMember k leq x t))
+      (bool_and True True)
+      True
+      (cong Bool Bool
+        (setMember k leq x t)
+        True
+        (λright. bool_and True right)
+        hRight)
+      tt)
+
+fn setIntersectionMemberLeftFalseCase
+  (k : Type) (leq : k → k → Bool)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (x : k) (s : Tree k Unit) (t : Tree k Unit)
+  (hord : Ordered k Unit leq s) (hdist : Distinct k Unit leq s)
+  (hLeft : Equal Bool (setMember k leq x s) False)
+  : Equal Bool
+      (setMember k leq x (setIntersection k leq s t))
+      (bool_and (setMember k leq x s) (setMember k leq x t)) =
+  trans Bool
+    (setMember k leq x (setIntersection k leq s t))
+    False
+    (bool_and (setMember k leq x s) (setMember k leq x t))
+    (memberFromLookupNone k Unit leq x (setIntersection k leq s t)
+      (intersectionLookupLeftNoneLaw k leq transLeq x s t hord hdist hLeft))
+    (sym Bool
+      (bool_and (setMember k leq x s) (setMember k leq x t))
+      False
+      (setIntersectionMemberLeftFalseRhs k leq x s t hLeft))
+
+fn setIntersectionMemberRightFalseCase
+  (k : Type) (leq : k → k → Bool)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (x : k) (s : Tree k Unit) (t : Tree k Unit)
+  (hLeft : Equal Bool (setMember k leq x s) True)
+  (hRight : Equal Bool (setMember k leq x t) False)
+  : Equal Bool
+      (setMember k leq x (setIntersection k leq s t))
+      (bool_and (setMember k leq x s) (setMember k leq x t)) =
+  trans Bool
+    (setMember k leq x (setIntersection k leq s t))
+    False
+    (bool_and (setMember k leq x s) (setMember k leq x t))
+    (memberFromLookupNone k Unit leq x (setIntersection k leq s t)
+      (intersectionLookupCharacterization k Unit leq transLeq x s t
+        (lookupNoneFromMemberFalse k Unit leq x t hRight)))
+    (sym Bool
+      (bool_and (setMember k leq x s) (setMember k leq x t))
+      False
+      (setIntersectionMemberRightFalseRhs k leq x s t hLeft hRight))
+
+fn setIntersectionMemberBothTrueCase
+  (k : Type) (leq : k → k → Bool)
+  (reflLeq : (x : k) → Equal Bool (leq x x) True)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (x : k) (s : Tree k Unit) (t : Tree k Unit)
+  (hord : Ordered k Unit leq s) (hdist : Distinct k Unit leq s)
+  (hLeft : Equal Bool (setMember k leq x s) True)
+  (hRight : Equal Bool (setMember k leq x t) True)
+  : Equal Bool
+      (setMember k leq x (setIntersection k leq s t))
+      (bool_and (setMember k leq x s) (setMember k leq x t)) =
+  trans Bool
+    (setMember k leq x (setIntersection k leq s t))
+    True
+    (bool_and (setMember k leq x s) (setMember k leq x t))
+    (memberFromLookupSome k Unit leq x (setIntersection k leq s t) MkUnit
+      (intersectionLookupSomeLaw k Unit leq reflLeq transLeq x MkUnit s t hord hdist
+        (lookupUnitSomeFromMemberTrue k leq x s hLeft)
+        hRight))
+    (sym Bool
+      (bool_and (setMember k leq x s) (setMember k leq x t))
+      True
+      (setIntersectionMemberBothTrueRhs k leq x s t hLeft hRight))
+
+fn setIntersectionMemberRightDispatch
+  (k : Type) (leq : k → k → Bool)
+  (reflLeq : (x : k) → Equal Bool (leq x x) True)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (x : k) (s : Tree k Unit) (t : Tree k Unit)
+  (hord : Ordered k Unit leq s) (hdist : Distinct k Unit leq s)
+  (hLeft : Equal Bool (setMember k leq x s) True)
+  (oRight : Or (Equal Bool (setMember k leq x t) True) (Equal Bool (setMember k leq x t) False))
+  : Equal Bool
+      (setMember k leq x (setIntersection k leq s t))
+      (bool_and (setMember k leq x s) (setMember k leq x t)) =
+  match oRight {
+    Inl hRight ⇒ setIntersectionMemberBothTrueCase k leq reflLeq transLeq x s t hord hdist hLeft hRight ;
+    Inr hRight ⇒ setIntersectionMemberRightFalseCase k leq transLeq x s t hLeft hRight
+  }
+
+fn setIntersectionMemberDispatch
+  (k : Type) (leq : k → k → Bool)
+  (reflLeq : (x : k) → Equal Bool (leq x x) True)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (x : k) (s : Tree k Unit) (t : Tree k Unit)
+  (hord : Ordered k Unit leq s) (hdist : Distinct k Unit leq s)
+  (oLeft : Or (Equal Bool (setMember k leq x s) True) (Equal Bool (setMember k leq x s) False))
+  : Equal Bool
+      (setMember k leq x (setIntersection k leq s t))
+      (bool_and (setMember k leq x s) (setMember k leq x t)) =
+  match oLeft {
+    Inl hLeft ⇒ setIntersectionMemberRightDispatch k leq reflLeq transLeq x s t hord hdist hLeft
+      (boolDichotomy (setMember k leq x t)) ;
+    Inr hLeft ⇒ setIntersectionMemberLeftFalseCase k leq transLeq x s t hord hdist hLeft
+  }
+
+fn setIntersectionMemberLaw
+  (k : Type) (leq : k → k → Bool)
+  (reflLeq : (x : k) → Equal Bool (leq x x) True)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (x : k) (s : Tree k Unit) (t : Tree k Unit)
+  : Ordered k Unit leq s → Distinct k Unit leq s →
+    Equal Bool
+      (setMember k leq x (setIntersection k leq s t))
+      (bool_and (setMember k leq x s) (setMember k leq x t)) =
+  λhord. λhdist.
+    setIntersectionMemberDispatch k leq reflLeq transLeq x s t hord hdist
+      (boolDichotomy (setMember k leq x s))
 
 fn setDifferenceMemberLaw
   (k : Type) (leq : k → k → Bool)
@@ -5361,45 +5695,250 @@ fn setDifferenceMemberLaw
         (differenceLookupCharacterization k Unit leq reflLeq transLeq x s t hord hdist))
       (differenceLookupExpectedMember k leq x s t)
 
-fn setUnionCommLaw (k : Type) (leq : k → k → Bool) (x : k) (s : Tree k Unit) (t : Tree k Unit) : Prop =
-  Equal Bool
-    (setMember k leq x (setUnion k leq s t))
-    (setMember k leq x (setUnion k leq t s))
+fn setMemberEmptyFalse
+  (k : Type) (leq : k → k → Bool) (x : k)
+  : Equal Bool (setMember k leq x (empty k Unit)) False =
+  memberFromLookupNone k Unit leq x (empty k Unit)
+    (lookupEmptyIsNone k Unit leq x)
 
-fn setUnionAssocLaw (k : Type) (leq : k → k → Bool) (x : k) (a : Tree k Unit) (b : Tree k Unit) (c : Tree k Unit) : Prop =
-  Equal Bool
-    (setMember k leq x (setUnion k leq (setUnion k leq a b) c))
-    (setMember k leq x (setUnion k leq a (setUnion k leq b c)))
+fn setUnionCommLaw
+  (k : Type) (leq : k → k → Bool)
+  (reflLeq : (x : k) → Equal Bool (leq x x) True)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (x : k) (s : Tree k Unit) (t : Tree k Unit)
+  : Ordered k Unit leq s → Distinct k Unit leq s →
+    Ordered k Unit leq t → Distinct k Unit leq t →
+    Equal Bool
+      (setMember k leq x (setUnion k leq s t))
+      (setMember k leq x (setUnion k leq t s)) =
+  λhordS. λhdistS. λhordT. λhdistT.
+    trans Bool
+      (setMember k leq x (setUnion k leq s t))
+      (cat4_bool_or (setMember k leq x s) (setMember k leq x t))
+      (setMember k leq x (setUnion k leq t s))
+      (setUnionMemberLaw k leq reflLeq transLeq x s t hordS hdistS)
+      (trans Bool
+        (cat4_bool_or (setMember k leq x s) (setMember k leq x t))
+        (cat4_bool_or (setMember k leq x t) (setMember k leq x s))
+        (setMember k leq x (setUnion k leq t s))
+        (cat4_bool_or_comm (setMember k leq x s) (setMember k leq x t))
+        (sym Bool
+          (setMember k leq x (setUnion k leq t s))
+          (cat4_bool_or (setMember k leq x t) (setMember k leq x s))
+          (setUnionMemberLaw k leq reflLeq transLeq x t s hordT hdistT)))
 
-fn setUnionIdempotentLaw (k : Type) (leq : k → k → Bool) (x : k) (s : Tree k Unit) : Prop =
-  Equal Bool
-    (setMember k leq x (setUnion k leq s s))
-    (setMember k leq x s)
+fn setUnionAssocLaw
+  (k : Type) (leq : k → k → Bool)
+  (reflLeq : (x : k) → Equal Bool (leq x x) True)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (x : k) (a : Tree k Unit) (b : Tree k Unit) (c : Tree k Unit)
+  : Ordered k Unit leq a → Distinct k Unit leq a →
+    Ordered k Unit leq b → Distinct k Unit leq b →
+    Ordered k Unit leq (setUnion k leq a b) → Distinct k Unit leq (setUnion k leq a b) →
+    Equal Bool
+      (setMember k leq x (setUnion k leq (setUnion k leq a b) c))
+      (setMember k leq x (setUnion k leq a (setUnion k leq b c))) =
+  λhordA. λhdistA. λhordB. λhdistB. λhordAB. λhdistAB.
+    trans Bool
+      (setMember k leq x (setUnion k leq (setUnion k leq a b) c))
+      (cat4_bool_or (setMember k leq x (setUnion k leq a b)) (setMember k leq x c))
+      (setMember k leq x (setUnion k leq a (setUnion k leq b c)))
+      (setUnionMemberLaw k leq reflLeq transLeq x (setUnion k leq a b) c hordAB hdistAB)
+      (trans Bool
+        (cat4_bool_or (setMember k leq x (setUnion k leq a b)) (setMember k leq x c))
+        (cat4_bool_or (cat4_bool_or (setMember k leq x a) (setMember k leq x b)) (setMember k leq x c))
+        (setMember k leq x (setUnion k leq a (setUnion k leq b c)))
+        (cong Bool Bool
+          (setMember k leq x (setUnion k leq a b))
+          (cat4_bool_or (setMember k leq x a) (setMember k leq x b))
+          (λleft. cat4_bool_or left (setMember k leq x c))
+          (setUnionMemberLaw k leq reflLeq transLeq x a b hordA hdistA))
+        (trans Bool
+          (cat4_bool_or (cat4_bool_or (setMember k leq x a) (setMember k leq x b)) (setMember k leq x c))
+          (cat4_bool_or (setMember k leq x a) (cat4_bool_or (setMember k leq x b) (setMember k leq x c)))
+          (setMember k leq x (setUnion k leq a (setUnion k leq b c)))
+          (cat4_bool_or_assoc (setMember k leq x a) (setMember k leq x b) (setMember k leq x c))
+          (trans Bool
+            (cat4_bool_or (setMember k leq x a) (cat4_bool_or (setMember k leq x b) (setMember k leq x c)))
+            (cat4_bool_or (setMember k leq x a) (setMember k leq x (setUnion k leq b c)))
+            (setMember k leq x (setUnion k leq a (setUnion k leq b c)))
+            (cong Bool Bool
+              (cat4_bool_or (setMember k leq x b) (setMember k leq x c))
+              (setMember k leq x (setUnion k leq b c))
+              (λright. cat4_bool_or (setMember k leq x a) right)
+              (sym Bool
+                (setMember k leq x (setUnion k leq b c))
+                (cat4_bool_or (setMember k leq x b) (setMember k leq x c))
+                (setUnionMemberLaw k leq reflLeq transLeq x b c hordB hdistB)))
+            (sym Bool
+              (setMember k leq x (setUnion k leq a (setUnion k leq b c)))
+              (cat4_bool_or (setMember k leq x a) (setMember k leq x (setUnion k leq b c)))
+              (setUnionMemberLaw k leq reflLeq transLeq x a (setUnion k leq b c) hordA hdistA)))))
 
-fn setUnionIdentityLaw (k : Type) (leq : k → k → Bool) (x : k) (s : Tree k Unit) : Prop =
-  And
-    (Equal Bool (setMember k leq x (setUnion k leq (empty k Unit) s)) (setMember k leq x s))
-    (Equal Bool (setMember k leq x (setUnion k leq s (empty k Unit))) (setMember k leq x s))
+fn setUnionIdempotentLaw
+  (k : Type) (leq : k → k → Bool)
+  (reflLeq : (x : k) → Equal Bool (leq x x) True)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (x : k) (s : Tree k Unit)
+  : Ordered k Unit leq s → Distinct k Unit leq s →
+    Equal Bool
+      (setMember k leq x (setUnion k leq s s))
+      (setMember k leq x s) =
+  λhord. λhdist.
+    trans Bool
+      (setMember k leq x (setUnion k leq s s))
+      (cat4_bool_or (setMember k leq x s) (setMember k leq x s))
+      (setMember k leq x s)
+      (setUnionMemberLaw k leq reflLeq transLeq x s s hord hdist)
+      (cat4_bool_or_idempotent (setMember k leq x s))
 
-fn setIntersectionCommLaw (k : Type) (leq : k → k → Bool) (x : k) (s : Tree k Unit) (t : Tree k Unit) : Prop =
-  Equal Bool
-    (setMember k leq x (setIntersection k leq s t))
-    (setMember k leq x (setIntersection k leq t s))
+fn setUnionIdentityLaw
+  (k : Type) (leq : k → k → Bool)
+  (reflLeq : (x : k) → Equal Bool (leq x x) True)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (x : k) (s : Tree k Unit)
+  : Ordered k Unit leq s → Distinct k Unit leq s →
+    And
+      (Equal Bool (setMember k leq x (setUnion k leq (empty k Unit) s)) (setMember k leq x s))
+      (Equal Bool (setMember k leq x (setUnion k leq s (empty k Unit))) (setMember k leq x s)) =
+  λhord. λhdist.
+    andIntro
+      (Equal Bool (setMember k leq x (setUnion k leq (empty k Unit) s)) (setMember k leq x s))
+      (Equal Bool (setMember k leq x (setUnion k leq s (empty k Unit))) (setMember k leq x s))
+      (trans Bool
+        (setMember k leq x (setUnion k leq (empty k Unit) s))
+        (cat4_bool_or (setMember k leq x (empty k Unit)) (setMember k leq x s))
+        (setMember k leq x s)
+        (setUnionMemberLaw k leq reflLeq transLeq x (empty k Unit) s
+          (orderedEmpty k Unit leq)
+          (distinctEmpty k Unit leq))
+        (trans Bool
+          (cat4_bool_or (setMember k leq x (empty k Unit)) (setMember k leq x s))
+          (cat4_bool_or False (setMember k leq x s))
+          (setMember k leq x s)
+          (cong Bool Bool
+            (setMember k leq x (empty k Unit))
+            False
+            (λleft. cat4_bool_or left (setMember k leq x s))
+            (setMemberEmptyFalse k leq x))
+          (cat4_bool_or_left_identity (setMember k leq x s))))
+      (trans Bool
+        (setMember k leq x (setUnion k leq s (empty k Unit)))
+        (cat4_bool_or (setMember k leq x s) (setMember k leq x (empty k Unit)))
+        (setMember k leq x s)
+        (setUnionMemberLaw k leq reflLeq transLeq x s (empty k Unit) hord hdist)
+        (trans Bool
+          (cat4_bool_or (setMember k leq x s) (setMember k leq x (empty k Unit)))
+          (cat4_bool_or (setMember k leq x s) False)
+          (setMember k leq x s)
+          (cong Bool Bool
+            (setMember k leq x (empty k Unit))
+            False
+            (λright. cat4_bool_or (setMember k leq x s) right)
+            (setMemberEmptyFalse k leq x))
+          (cat4_bool_or_right_identity (setMember k leq x s))))
 
-fn setIntersectionAssocLaw (k : Type) (leq : k → k → Bool) (x : k) (a : Tree k Unit) (b : Tree k Unit) (c : Tree k Unit) : Prop =
-  Equal Bool
-    (setMember k leq x (setIntersection k leq (setIntersection k leq a b) c))
-    (setMember k leq x (setIntersection k leq a (setIntersection k leq b c)))
+fn setIntersectionCommLaw
+  (k : Type) (leq : k → k → Bool)
+  (reflLeq : (x : k) → Equal Bool (leq x x) True)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (x : k) (s : Tree k Unit) (t : Tree k Unit)
+  : Ordered k Unit leq s → Distinct k Unit leq s →
+    Ordered k Unit leq t → Distinct k Unit leq t →
+    Equal Bool
+      (setMember k leq x (setIntersection k leq s t))
+      (setMember k leq x (setIntersection k leq t s)) =
+  λhordS. λhdistS. λhordT. λhdistT.
+    trans Bool
+      (setMember k leq x (setIntersection k leq s t))
+      (bool_and (setMember k leq x s) (setMember k leq x t))
+      (setMember k leq x (setIntersection k leq t s))
+      (setIntersectionMemberLaw k leq reflLeq transLeq x s t hordS hdistS)
+      (trans Bool
+        (bool_and (setMember k leq x s) (setMember k leq x t))
+        (bool_and (setMember k leq x t) (setMember k leq x s))
+        (setMember k leq x (setIntersection k leq t s))
+        (bool_and_comm (setMember k leq x s) (setMember k leq x t))
+        (sym Bool
+          (setMember k leq x (setIntersection k leq t s))
+          (bool_and (setMember k leq x t) (setMember k leq x s))
+          (setIntersectionMemberLaw k leq reflLeq transLeq x t s hordT hdistT)))
 
-fn setIntersectionIdempotentLaw (k : Type) (leq : k → k → Bool) (x : k) (s : Tree k Unit) : Prop =
-  Equal Bool
-    (setMember k leq x (setIntersection k leq s s))
-    (setMember k leq x s)
+fn setIntersectionAssocLaw
+  (k : Type) (leq : k → k → Bool)
+  (reflLeq : (x : k) → Equal Bool (leq x x) True)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (x : k) (a : Tree k Unit) (b : Tree k Unit) (c : Tree k Unit)
+  : Ordered k Unit leq a → Distinct k Unit leq a →
+    Ordered k Unit leq b → Distinct k Unit leq b →
+    Ordered k Unit leq (setIntersection k leq a b) → Distinct k Unit leq (setIntersection k leq a b) →
+    Equal Bool
+      (setMember k leq x (setIntersection k leq (setIntersection k leq a b) c))
+      (setMember k leq x (setIntersection k leq a (setIntersection k leq b c))) =
+  λhordA. λhdistA. λhordB. λhdistB. λhordAB. λhdistAB.
+    trans Bool
+      (setMember k leq x (setIntersection k leq (setIntersection k leq a b) c))
+      (bool_and (setMember k leq x (setIntersection k leq a b)) (setMember k leq x c))
+      (setMember k leq x (setIntersection k leq a (setIntersection k leq b c)))
+      (setIntersectionMemberLaw k leq reflLeq transLeq x (setIntersection k leq a b) c hordAB hdistAB)
+      (trans Bool
+        (bool_and (setMember k leq x (setIntersection k leq a b)) (setMember k leq x c))
+        (bool_and (bool_and (setMember k leq x a) (setMember k leq x b)) (setMember k leq x c))
+        (setMember k leq x (setIntersection k leq a (setIntersection k leq b c)))
+        (cong Bool Bool
+          (setMember k leq x (setIntersection k leq a b))
+          (bool_and (setMember k leq x a) (setMember k leq x b))
+          (λleft. bool_and left (setMember k leq x c))
+          (setIntersectionMemberLaw k leq reflLeq transLeq x a b hordA hdistA))
+        (trans Bool
+          (bool_and (bool_and (setMember k leq x a) (setMember k leq x b)) (setMember k leq x c))
+          (bool_and (setMember k leq x a) (bool_and (setMember k leq x b) (setMember k leq x c)))
+          (setMember k leq x (setIntersection k leq a (setIntersection k leq b c)))
+          (bool_and_assoc (setMember k leq x a) (setMember k leq x b) (setMember k leq x c))
+          (trans Bool
+            (bool_and (setMember k leq x a) (bool_and (setMember k leq x b) (setMember k leq x c)))
+            (bool_and (setMember k leq x a) (setMember k leq x (setIntersection k leq b c)))
+            (setMember k leq x (setIntersection k leq a (setIntersection k leq b c)))
+            (cong Bool Bool
+              (bool_and (setMember k leq x b) (setMember k leq x c))
+              (setMember k leq x (setIntersection k leq b c))
+              (λright. bool_and (setMember k leq x a) right)
+              (sym Bool
+                (setMember k leq x (setIntersection k leq b c))
+                (bool_and (setMember k leq x b) (setMember k leq x c))
+                (setIntersectionMemberLaw k leq reflLeq transLeq x b c hordB hdistB)))
+            (sym Bool
+              (setMember k leq x (setIntersection k leq a (setIntersection k leq b c)))
+              (bool_and (setMember k leq x a) (setMember k leq x (setIntersection k leq b c)))
+              (setIntersectionMemberLaw k leq reflLeq transLeq x a (setIntersection k leq b c) hordA hdistA)))))
 
-fn setIntersectionIdentityLaw (k : Type) (leq : k → k → Bool) (x : k) (s : Tree k Unit) : Prop =
-  Equal Bool
-    (setMember k leq x (setIntersection k leq s s))
-    (setMember k leq x s)
+fn setIntersectionIdempotentLaw
+  (k : Type) (leq : k → k → Bool)
+  (reflLeq : (x : k) → Equal Bool (leq x x) True)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (x : k) (s : Tree k Unit)
+  : Ordered k Unit leq s → Distinct k Unit leq s →
+    Equal Bool
+      (setMember k leq x (setIntersection k leq s s))
+      (setMember k leq x s) =
+  λhord. λhdist.
+    trans Bool
+      (setMember k leq x (setIntersection k leq s s))
+      (bool_and (setMember k leq x s) (setMember k leq x s))
+      (setMember k leq x s)
+      (setIntersectionMemberLaw k leq reflLeq transLeq x s s hord hdist)
+      (bool_and_idempotent (setMember k leq x s))
+
+fn setIntersectionIdentityLaw
+  (k : Type) (leq : k → k → Bool)
+  (reflLeq : (x : k) → Equal Bool (leq x x) True)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (x : k) (s : Tree k Unit)
+  : Ordered k Unit leq s → Distinct k Unit leq s →
+    Equal Bool
+      (setMember k leq x (setIntersection k leq s s))
+      (setMember k leq x s) =
+  setIntersectionIdempotentLaw k leq reflLeq transLeq x s
 
 fn pairVals (k : Type) (v : Type) (xs : List (Pair k v)) : List v =
   match xs {
