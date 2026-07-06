@@ -136,6 +136,57 @@ prototype's stubbed sums and missing exhaustiveness.
   per the untrusted-layer lesson (a constant motive can still type-check, so the
   verdict alone is green-vs-green).
 
+## surface/data-match/proof-returning-dependent-motive (AC8)
+- spec: `spec/30-surface/34-data-match.md §3.5`,
+  `spec/30-surface/39-elaboration.md §2.1`, `10-kernel/14 §3`
+- given — **positive red-to-green**:
+
+  ```ken
+  fn km_scrutinee (b : Bool) : Bool = b
+
+  fn km_proof_motive_positive (b : Bool)
+    : Equal Bool (km_scrutinee b) (km_scrutinee b) =
+    match km_scrutinee b {
+      True  => tt ;
+      False => tt
+    }
+  ```
+
+  Companion **negative sibling**:
+
+  ```ken
+  fn km_proof_motive_negative (b : Bool)
+    : Equal Bool (km_scrutinee b) True ->
+      Equal Bool (km_scrutinee b) True =
+    match km_scrutinee b {
+      True  => \p. p ;
+      False => \p. tt
+    }
+  ```
+
+- expect:
+  - the positive case **accepts**: the `match` elaborates to the ordinary
+    `elim_Bool` with an `Ω`-codomain motive recovered from the expected target
+    `P[x] := Equal Bool x x`, after transparent unfolding of `km_scrutinee`.
+    The current pre-fix symptom to assert in the build regression is the
+    whole-body rejection
+    `KernelRejected { TypeMismatch { expected: Type 0, found: Ω0 } }`, not a
+    generic `is_err()`.
+  - the negative case **rejects** after branch specialization: in the `False`
+    branch, the codomain is `Equal Bool False True` (`Bottom`), while `tt`
+    proves `Top`. This must remain a wrong-specialized-branch failure, not an
+    accepted proof by proof irrelevance and not a constant motive that ignores
+    `km_scrutinee b`.
+- why: proof-returning dependent `match` is ordinary dependent elimination into
+  `Ω`, and branch obligations remain exact before proof irrelevance. This is
+  the minimized Ken-owned shape for KM-dependent-match-proof-motive: a single
+  two-constructor scrutinee, an `Equal`/proof target mentioning the scrutinee
+  through one transparent reducible head, and branch-local proof closure. Direct
+  `match b` proof motives already check on the pre-fix branch, so the reducible
+  head is load-bearing; broader non-variable/nested/multi-scrutinee recovery and
+  indexed-family proof motives stay out of this seed unless a later build proves
+  they are the same mechanism.
+
 ## surface/data-match/refinement-obligation (AC7) (soundness) — TR7
 - spec: `spec/30-surface/34-data-match.md §5`, `21 §2`, `22 §2.1`
 - given: `type NonNeg = { n : Int | n ≥ 0 }`; (a) passing a plain `Int` `e`
@@ -166,6 +217,7 @@ prototype's stubbed sums and missing exhaustiveness.
 | reachability-redundant-arm        | AC4      | redundant arm flagged; guard subtlety |            |
 | indexed-impossible-pair           | AC5      | reject impossible app / omit imposs.  | soundness  |
 | branch-refinement-is-hypothesis   | AC6      | dependent motive + `22 §3` hypothesis |            |
+| proof-returning-dependent-motive  | AC8      | `Ω` proof motive + exact branches     |            |
 | refinement-obligation             | AC7      | emit-on-intro / free-on-forget        | soundness  |
 
 ## Cross-case sweep (internal consistency)
@@ -187,6 +239,12 @@ prototype's stubbed sums and missing exhaustiveness.
   green-vs-green: AC3 (named witness), AC6 (dependent motive shape), AC7
   (emitted VC). Each names the **structural** signal, not just accept/reject —
   the cases that would otherwise pass vacuously under their exact bug.
+- **Proof motives do not weaken branch checking** (`34 §3.5`, `39 §2.1`): AC8's
+  positive accepts only because each branch checks at the constructor-specialized
+  `Ω` target; its negative sibling must reject at the wrong branch target. A fix
+  that accepts the negative by erasing the dependency or by using proof
+  irrelevance before method checking contradicts AC6's dependent-motive
+  discipline rather than extending it.
 
 ## Subsumed upstream (one home per property)
 
