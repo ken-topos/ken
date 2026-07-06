@@ -156,6 +156,30 @@ fn bad_constructor_result_targets_are_surface_errors() {
 }
 
 #[test]
+fn same_family_occurrence_in_result_index_rejects_before_install() {
+    let mut env = mk_env();
+    let err = expect_err(
+        &mut env,
+        "data Bad : Type -> Type where { BadMk : Bad (Bad Int) }",
+    );
+    assert!(
+        err.contains("bad constructor result target")
+            && err.contains("BadMk")
+            && err.contains("Bad")
+            && err.contains("result indices may mention only data parameters"),
+        "unexpected diagnostic: {err}"
+    );
+    assert!(
+        !env.globals.contains_key("Bad"),
+        "rejected family should not be installed"
+    );
+    assert!(
+        !env.globals.contains_key("BadMk"),
+        "rejected constructor should not be installed"
+    );
+}
+
+#[test]
 fn negative_recursive_occurrence_rejects_through_kernel_gate() {
     let mut env = mk_env();
     let err = expect_err(
