@@ -1438,17 +1438,14 @@ fn elab_num_lit_infer(
 ) -> Result<(Term, Term), ElabError> {
     let (val, type_id) = num_lit_default_type(lit, cx.numeric_env);
     let ty_term = Term::const_(type_id, vec![]);
-    // ES2: RE-CLASS declare_postulate -> declare_primitive. A literal's value
-    // is an audited primitive constant (its content is the number itself),
-    // not an assumed axiom — `PrimReduction::Op` is reused as the id-kind
-    // marker only; `eval`'s `num_values` side-table lookup (`ken-interp`)
-    // intercepts before any symbol dispatch, so the symbol is never actually
-    // invoked.
+    // A literal's value comes from checked surface syntax and is stored in the
+    // elaborator side table for evaluation; it is not a primitive operation or
+    // an assumed axiom in trust accounting.
     let postulate_id = declare_primitive(
         cx.env,
         vec![],
         ty_term.clone(),
-        PrimReduction::Op { symbol: "literal" },
+        PrimReduction::Literal,
     )
     .map_err(|e| ElabError::KernelRejected { error: e, span: span.clone() })?;
     cx.num_values.insert(postulate_id, val);
@@ -1499,13 +1496,13 @@ fn elab_num_lit_checked(
             _ => None,
         };
         if let Some(val) = val_opt {
-            // ES2: RE-CLASS declare_postulate -> declare_primitive (see
-            // `elab_num_lit_infer`'s comment — same rationale).
+            // Checked numeric literals are accounting-neutral values; see
+            // `elab_num_lit_infer`.
             let postulate_id = declare_primitive(
                 cx.env,
                 vec![],
                 exp_wh.clone(),
-                PrimReduction::Op { symbol: "literal" },
+                PrimReduction::Literal,
             )
             .map_err(|e| ElabError::KernelRejected { error: e, span: span.clone() })?;
             cx.num_values.insert(postulate_id, val);
@@ -1544,13 +1541,13 @@ fn elab_str_lit(
     if let Some(exp) = expected {
         unify_types(&mut cx.metas, exp, &str_ty);
     }
-    // ES2: RE-CLASS declare_postulate -> declare_primitive (same rationale as
-    // `elab_num_lit_infer`).
+    // Checked string literals are accounting-neutral values; see
+    // `elab_num_lit_infer`.
     let lit_id = declare_primitive(
         cx.env,
         vec![],
         str_ty.clone(),
-        PrimReduction::Op { symbol: "literal" },
+        PrimReduction::Literal,
     )
     .map_err(|e| ElabError::KernelRejected { error: e, span: span.clone() })?;
     cx.num_values.insert(lit_id, NumericLitVal::Str(s.to_owned()));
