@@ -390,7 +390,7 @@ fn elab_type(cx: &mut ElabCtx, ty: &RType) -> Result<Term, ElabError> {
 
         RType::RVarTy(i, _, _) => Ok(Term::var(*i)),
 
-        RType::RArr(a, b, _) => {
+        RType::RArr(a, b, _) | RType::REffectArr(a, _, b, _) => {
             let a_core = elab_type(cx, a)?;
             let b_core = elab_type(cx, b)?;
             Ok(Term::pi(a_core, weaken(&b_core, 1)))
@@ -1737,8 +1737,22 @@ fn explicit_value_param_count_from_field_type(ty: &RType) -> usize {
             usize::from(!domain_is_type_param)
                 + explicit_value_param_count_from_field_type(codomain)
         }
-        RType::RArr(_, codomain, _) => 1 + explicit_value_param_count_from_field_type(codomain),
+        RType::RArr(_, codomain, _) | RType::REffectArr(_, _, codomain, _) => {
+            1 + explicit_value_param_count_from_field_type(codomain)
+        }
         _ => 0,
+    }
+}
+
+fn type_contains_effect_row(ty: &RType) -> bool {
+    match ty {
+        RType::REffectArr(_, _, _, _) => true,
+        RType::RPi(_, domain, codomain, _) | RType::RArr(domain, codomain, _) => {
+            type_contains_effect_row(domain) || type_contains_effect_row(codomain)
+        }
+        RType::RApp(f, a, _) => type_contains_effect_row(f) || type_contains_effect_row(a),
+        RType::RRefine(_, carrier, _, _) => type_contains_effect_row(carrier),
+        RType::RUniv(_, _) | RType::RCon(_, _) | RType::RVarTy(_, _, _) => false,
     }
 }
 
@@ -1759,7 +1773,15 @@ fn check_class_field_marker(
     span: &Span,
 ) -> Result<(), ElabError> {
     let explicit_value_params = explicit_value_param_count_from_field_type(ty);
+    let has_effect_row = type_contains_effect_row(ty);
     match keyword {
+        DefKeyword::Const | DefKeyword::Fn if has_effect_row => Err(ElabError::TypeMismatch {
+            span: span.clone(),
+            reason: format!(
+                "`{:?}` class field `{}` declares an effect row; use `proc`",
+                keyword, field_name
+            ),
+        }),
         DefKeyword::Const if explicit_value_params > 0 => Err(ElabError::TypeMismatch {
             span: span.clone(),
             reason: format!(
@@ -1778,6 +1800,13 @@ fn check_class_field_marker(
             span: span.clone(),
             reason: format!(
                 "`proc` class field `{}` has zero explicit value parameters; use `const`",
+                field_name
+            ),
+        }),
+        DefKeyword::Proc if !has_effect_row => Err(ElabError::TypeMismatch {
+            span: span.clone(),
+            reason: format!(
+                "`proc` class field `{}` declares no latent effect row; use `fn`/`const` for pure fields",
                 field_name
             ),
         }),
@@ -2220,7 +2249,9 @@ fn head_type_name(ty: &RType) -> String {
         RType::RCon(s, _) | RType::RVarTy(_, s, _) => s.clone(),
         RType::RApp(f, _, _) => head_type_name(f),
         RType::RUniv(_, _) => "Type".to_string(),
-        RType::RArr(_, _, _) | RType::RPi(_, _, _, _) => "->".to_string(),
+        RType::RArr(_, _, _) | RType::REffectArr(_, _, _, _) | RType::RPi(_, _, _, _) => {
+            "->".to_string()
+        }
         RType::RRefine(_, inner, _, _) => head_type_name(inner),
     }
 }
@@ -2833,7 +2864,9 @@ fn elaborate_view_or_let(
 /// emit a refinement-introduction obligation for the return type (`22 §2.1`).
 pub(crate) fn innermost_refine_pred(ty: &RType) -> Option<&RExpr> {
     match ty {
-        RType::RPi(_, _, cod, _) | RType::RArr(_, cod, _) => innermost_refine_pred(cod),
+        RType::RPi(_, _, cod, _)
+        | RType::RArr(_, cod, _)
+        | RType::REffectArr(_, _, cod, _) => innermost_refine_pred(cod),
         RType::RRefine(_, _, phi, _) => Some(phi),
         _ => None,
     }

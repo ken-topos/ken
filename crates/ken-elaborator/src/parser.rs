@@ -915,6 +915,12 @@ impl Parser {
         let lhs = self.parse_type_app()?;
         if matches!(self.peek(), Token::Arrow) {
             self.advance();
+            if matches!(self.peek(), Token::LBracket) {
+                let row = self.parse_effect_row_syntax()?;
+                let rhs = self.parse_type()?;
+                let span = Span::merge(lhs.span(), rhs.span());
+                return Ok(Type::TEffectArr(Box::new(lhs), row, Box::new(rhs), span));
+            }
             let rhs = self.parse_type()?;
             let span = Span::merge(lhs.span(), rhs.span());
             return Ok(Type::TArr(Box::new(lhs), Box::new(rhs), span));

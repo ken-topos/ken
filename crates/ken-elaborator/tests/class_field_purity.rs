@@ -31,7 +31,7 @@ fn surf2_d1_proc_traverse_parses_elaborates_and_registers_metadata() {
              foldable : Foldable f ;
              proc traverse :
                (g : (Type -> Type)) -> Applicative g -> (a : Type) -> (b : Type) ->
-               (a -> g b) -> f a -> g (f b)
+               (a ->[e] g b) -> f a -> g (f b)
          }",
     )
     .expect("marked Traversable signature must parse and elaborate");
@@ -65,7 +65,7 @@ fn surf2_d1_marked_instance_fields_and_projection_are_checked() {
 
     env.elaborate_file(
         "class Effectful A {
-             proc step : A -> A
+             proc step : A ->[FS] A
          }
 
          proc step_int (x : Int) : Int visits [FS] = x
@@ -153,6 +153,29 @@ fn surf2_d1_const_fn_and_malformed_markers_follow_field_signature() {
     assert!(
         bad_proc.contains("`proc` class field `not_proc`") && bad_proc.contains("use `const`"),
         "value-shaped proc field must reject with should-be-const wording: {bad_proc}"
+    );
+
+    let bad_pure_proc = err_text(env.elaborate_decl(
+        "class BadPureProcField A {
+             proc pure_step : A -> A
+         }",
+    ));
+    assert!(
+        bad_pure_proc.contains("`proc` class field `pure_step`")
+            && bad_pure_proc.contains("no latent effect row"),
+        "pure-arrow proc field must reject because the field type does not earn proc: {bad_pure_proc}"
+    );
+
+    let bad_effectful_fn = err_text(env.elaborate_decl(
+        "class BadEffectfulFnField A {
+             fn impure_fn : A ->[FS] A
+         }",
+    ));
+    assert!(
+        bad_effectful_fn.contains("class field `impure_fn`")
+            && bad_effectful_fn.contains("declares an effect row")
+            && bad_effectful_fn.contains("use `proc`"),
+        "fn field with a latent effect row must reject as should-be-proc: {bad_effectful_fn}"
     );
 }
 

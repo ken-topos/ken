@@ -391,6 +391,9 @@ pub enum Type {
     TPi(String, Box<Type>, Box<Type>, Span),
     /// `A -> B` — non-dependent arrow.
     TArr(Box<Type>, Box<Type>, Span),
+    /// `A ->[ρ] B` — latent-effect arrow. The row is surface metadata for
+    /// purity classification and erases to the same kernel Π as `TArr`.
+    TEffectArr(Box<Type>, EffectRowSyntax, Box<Type>, Span),
     /// `Type` or `Type n` — universe.
     TUniv(Option<u32>, Span),
     /// `ConId` — a base type by name (uppercase).
@@ -408,6 +411,7 @@ impl Type {
         match self {
             Type::TPi(_, _, _, s)
             | Type::TArr(_, _, s)
+            | Type::TEffectArr(_, _, _, s)
             | Type::TUniv(_, s)
             | Type::TCon(_, s)
             | Type::TVar(_, s)

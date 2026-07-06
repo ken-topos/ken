@@ -272,6 +272,12 @@ fn rewrite_rtype(scope: &Scope, exports: &HashMap<String, HashMap<String, String
             Box::new(rewrite_rtype(scope, exports, *b)?),
             s,
         ),
+        RType::REffectArr(a, row, b, s) => RType::REffectArr(
+            Box::new(rewrite_rtype(scope, exports, *a)?),
+            row,
+            Box::new(rewrite_rtype(scope, exports, *b)?),
+            s,
+        ),
         RType::RRefine(x, a, phi, s) => RType::RRefine(
             x,
             Box::new(rewrite_rtype(scope, exports, *a)?),
