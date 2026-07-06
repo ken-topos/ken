@@ -8,8 +8,8 @@
 //! pattern matching; `type T = A` surface type aliases; `T a b` type app.
 
 use crate::ast::{
-    Binder, ClassField, CtorDecl, Decl, DefKeyword, EffectRowSyntax, Expr, MatchArm, PatKind,
-    Pattern, Type,
+    Binder, ClassField, ConstructorSignature, ConstructorSignatureArg, CtorDecl, Decl, DefKeyword,
+    EffectRowSyntax, ExplicitDataCtor, Expr, MatchArm, PatKind, Pattern, Type,
 };
 use crate::error::{ElabError, Span};
 use crate::lexer::Token;
@@ -300,6 +300,42 @@ impl Parser {
         let ty = self.parse_type()?;
         let end = self.peek_span().end;
         self.expect(&Token::RParen)?;
+        Ok(Binder {
+            names,
+            ty,
+            span: Span::new(start, end),
+        })
+    }
+
+    fn is_implicit_binder_ahead(&self) -> bool {
+        if !matches!(self.peek(), Token::LBrace) {
+            return false;
+        }
+        let mut i = 1;
+        while matches!(self.lookahead(i), Token::Ident(_) | Token::ConId(_)) {
+            i += 1;
+        }
+        i > 1 && matches!(self.lookahead(i), Token::Colon)
+    }
+
+    fn parse_implicit_binder(&mut self) -> Result<Binder, ElabError> {
+        let start = self.peek_span().start;
+        self.expect(&Token::LBrace)?;
+        let mut names = Vec::new();
+        while matches!(self.peek(), Token::Ident(_) | Token::ConId(_)) {
+            let (n, _) = self.expect_ident()?;
+            names.push(n);
+        }
+        if names.is_empty() {
+            return Err(ElabError::ParseError {
+                msg: "implicit binder needs at least one name".to_string(),
+                span: self.peek_span().clone(),
+            });
+        }
+        self.expect(&Token::Colon)?;
+        let ty = self.parse_type()?;
+        let end = self.peek_span().end;
+        self.expect(&Token::RBrace)?;
         Ok(Binder {
             names,
             ty,
@@ -694,18 +730,43 @@ impl Parser {
     }
 
     /// `data D p₁…pₙ = C₁ τ₁₁… | C₂ τ₂₁… | …`
+    /// or `data D (Δp) : Δi -> Type where { C : ... ; ... }`.
     ///
-    /// Simple (non-indexed) inductive type declaration (`34 §1`). Type params
-    /// are lowercase idents; constructors are `ConId type_atom*`.
+    /// The legacy `=` arm remains deliberately narrow: constructors are
+    /// `ConId type_atom*`, never `ConId : ctor_type`.
     fn parse_data_decl(&mut self, start: usize) -> Result<Decl, ElabError> {
         self.advance(); // consume 'data'
         let (name, _) = self.expect_con()?;
 
-        // Collect type-parameter names (lowercase identifiers before `=`).
-        let mut type_params = Vec::new();
-        while matches!(self.peek(), Token::Ident(_)) {
+        let mut legacy_params = Vec::new();
+        while matches!(self.peek(), Token::Ident(_) | Token::ConId(_)) {
             let (p, _) = self.expect_ident()?;
-            type_params.push(p);
+            legacy_params.push(p);
+        }
+
+        let mut explicit_params = Vec::new();
+        while self.is_binder_ahead() {
+            explicit_params.push(self.parse_binder()?);
+        }
+
+        if matches!(self.peek(), Token::Colon) {
+            if !legacy_params.is_empty() {
+                return Err(ElabError::ParseError {
+                    msg: "explicit data family parameters must use binder syntax".to_string(),
+                    span: self.peek_span().clone(),
+                });
+            }
+            return self.parse_explicit_data_decl(start, name, explicit_params);
+        }
+
+        if !explicit_params.is_empty() {
+            return Err(ElabError::ParseError {
+                msg: "parenthesized data parameters require an explicit family ':'".to_string(),
+                span: explicit_params
+                    .first()
+                    .map(|p| p.span.clone())
+                    .unwrap_or_else(|| self.peek_span().clone()),
+            });
         }
 
         self.expect(&Token::Eq)?;
@@ -725,10 +786,130 @@ impl Parser {
         let end = ctors.last().map(|c| c.span.end).unwrap_or(start);
         Ok(Decl::DataDecl {
             name,
-            type_params,
+            type_params: legacy_params,
             ctors,
             span: Span::new(start, end),
         })
+    }
+
+    fn parse_explicit_data_decl(
+        &mut self,
+        start: usize,
+        name: String,
+        params: Vec<Binder>,
+    ) -> Result<Decl, ElabError> {
+        self.expect(&Token::Colon)?;
+        let family = self.parse_type()?;
+        self.expect(&Token::KwWhere)?;
+        self.expect(&Token::LBrace)?;
+        if matches!(self.peek(), Token::RBrace | Token::Eof) {
+            return Err(ElabError::ParseError {
+                msg: "explicit data block requires at least one constructor".to_string(),
+                span: self.peek_span().clone(),
+            });
+        }
+        let mut ctors = Vec::new();
+        while !matches!(self.peek(), Token::RBrace | Token::Eof) {
+            ctors.push(self.parse_explicit_data_ctor()?);
+            if matches!(self.peek(), Token::Semicolon) {
+                self.advance();
+            } else if !matches!(self.peek(), Token::RBrace) {
+                return Err(ElabError::ParseError {
+                    msg: "expected ';' or '}' after data constructor".to_string(),
+                    span: self.peek_span().clone(),
+                });
+            }
+        }
+        let end = self.peek_span().end;
+        self.expect(&Token::RBrace)?;
+        Ok(Decl::ExplicitDataDecl {
+            name,
+            params,
+            family,
+            ctors,
+            span: Span::new(start, end),
+        })
+    }
+
+    fn parse_explicit_data_ctor(&mut self) -> Result<ExplicitDataCtor, ElabError> {
+        if matches!(self.peek(), Token::ConId(_)) && matches!(self.lookahead(1), Token::Colon) {
+            let start = self.peek_span().start;
+            let (name, _) = self.expect_con()?;
+            self.expect(&Token::Colon)?;
+            let signature = self.parse_constructor_signature()?;
+            let end = signature.span.end;
+            Ok(ExplicitDataCtor::Signature {
+                name,
+                signature,
+                span: Span::new(start, end),
+            })
+        } else {
+            self.parse_ctor_decl().map(ExplicitDataCtor::Simple)
+        }
+    }
+
+    fn parse_constructor_signature(&mut self) -> Result<ConstructorSignature, ElabError> {
+        let start = self.peek_span().start;
+        let mut args = Vec::new();
+        loop {
+            if self.is_binder_ahead() {
+                let binder = self.parse_binder()?;
+                if matches!(self.peek(), Token::Arrow) {
+                    self.advance();
+                    args.push(ConstructorSignatureArg::Explicit(binder));
+                    continue;
+                }
+                let result = self.binder_result_expr(binder)?;
+                let end = result.span().end;
+                return Ok(ConstructorSignature {
+                    args,
+                    result,
+                    span: Span::new(start, end),
+                });
+            }
+
+            if self.is_implicit_binder_ahead() {
+                let binder = self.parse_implicit_binder()?;
+                if matches!(self.peek(), Token::Arrow) {
+                    self.advance();
+                    args.push(ConstructorSignatureArg::Implicit(binder));
+                    continue;
+                }
+                return Err(ElabError::ParseError {
+                    msg: "implicit constructor binder must be followed by '->'".to_string(),
+                    span: binder.span,
+                });
+            }
+
+            let expr = self.parse_infix_expr()?;
+            if matches!(self.peek(), Token::Arrow) {
+                self.advance();
+                args.push(ConstructorSignatureArg::Anonymous(expr));
+            } else {
+                let end = expr.span().end;
+                return Ok(ConstructorSignature {
+                    args,
+                    result: expr,
+                    span: Span::new(start, end),
+                });
+            }
+        }
+    }
+
+    fn binder_result_expr(&self, binder: Binder) -> Result<Expr, ElabError> {
+        if binder.names.len() == 1 {
+            let name = binder.names[0].clone();
+            Ok(Expr::EAsc(
+                Box::new(Expr::EVar(name, binder.span.clone())),
+                Box::new(binder.ty),
+                binder.span,
+            ))
+        } else {
+            Err(ElabError::ParseError {
+                msg: "constructor result cannot be a binder group".to_string(),
+                span: binder.span,
+            })
+        }
     }
 
     /// `C τ₁ τ₂ …` — one constructor in a `data` declaration.
