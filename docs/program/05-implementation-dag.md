@@ -156,6 +156,7 @@ off V4/X1/L; WS-R never gates.)*
 | **K2** | **observational layer**: `Eq`-by-type, `cast`, strict-prop **Ω**, set-quotients, truncation (`15–16`) | K1 | the ADR-0005 headline |
 | **K2c** | conversion: lazy-WHNF NbE computing the obs ops + Ω proof-irrelevance + **SCT** (`17`) | K2 | decidable conversion |
 | **KM-index-impossible-branch-synthesis** | sanctioned Type-level impossible-branch method synthesis for indexed eliminators (`14`,`16`,`34`) | K1, SURF-GADT | prerequisite for `SURF-gadt-coverage-diagnostics` AC5 value-returning omissions |
+| **KM-target-index-positivity** | kernel inductive admission checks constructor target indices for same-family / positivity violations (`14`,`34`) | K1, SURF-GADT | non-blocking follow-up before any later recursive target-index surface extension |
 | **K-api** | typing judgment + stable kernel API (`18`) | K2c | the TCB boundary |
 | **K3** | content-addressed value model, O(1) eq, FNV+memcmp (`41`) | F4, K1 | no Leech on the hot path |
 | **X1** | reference interpreter — **strict CBV + sharing** (`42`) | K1, K3 | the oracle |

@@ -1000,6 +1000,50 @@ fn ac5_d_in_own_indices_rejected() {
     assert!(r.is_err(), "Bad4 (D in own indices) rejected");
 }
 
+#[test]
+fn ac5_d_in_constructor_target_index_rejected() {
+    // data Bad : Type 0 → Type 0 where mk : Bad (Bad Nat)
+    //
+    // This builds the declaration directly through the kernel API, proving the
+    // target-index guard is kernel-side and not only the surface GADT guard.
+    let (mut env, _empty, _unit, _bool, nat, _pair) = pos_env();
+    let nat_t = Term::indformer(nat, vec![]);
+    let r = declare_inductive(&mut env, |bad| InductiveSpec {
+        level_params: vec![],
+        params: vec![],
+        indices: vec![Term::Type(Level::zero())],
+        level: Level::zero(),
+        constructors: vec![CtorSpec {
+            args: vec![],
+            target_indices: vec![Term::app(Term::indformer(bad, vec![]), nat_t)],
+        }],
+    });
+    assert!(
+        r.is_err(),
+        "same-family occurrence in constructor target index rejected at kernel admission"
+    );
+}
+
+#[test]
+fn ac5_vec_style_constructor_target_indices_admitted() {
+    // `std_env` declares:
+    //   vnil  : Vec A zero
+    //   vcons : (n : Nat) → A → Vec A n → Vec A (suc n)
+    //
+    // The target indices mention only existing constructors, params, and
+    // constructor telescope binders; they must remain admitted.
+    let (env, s) = std_env();
+    let vec_decl = env.inductive(s.vec_).expect("Vec admitted");
+    assert_eq!(
+        vec_decl.constructors[0].target_indices,
+        vec![Term::constructor(s.zero, vec![])]
+    );
+    assert_eq!(
+        vec_decl.constructors[1].target_indices,
+        vec![Term::app(Term::constructor(s.suc, vec![]), Term::var(2))]
+    );
+}
+
 // ===========================================================================
 // AC-7 — Decidable checking on the K1 fragment (termination) (`seed-k1.md` AC-7)
 // ===========================================================================
