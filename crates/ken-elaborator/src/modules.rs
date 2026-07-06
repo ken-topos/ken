@@ -264,6 +264,7 @@ fn qualify_decl_name(decl: &Decl, prefix: &str) -> Decl {
                 .map(|c| CtorDecl {
                     name: qualify(prefix, &c.name),
                     args: c.args.clone(),
+                    field_labels: c.field_labels.clone(),
                     span: c.span.clone(),
                 })
                 .collect(),
@@ -285,6 +286,7 @@ fn qualify_decl_name(decl: &Decl, prefix: &str) -> Decl {
                     ExplicitDataCtor::Simple(c) => ExplicitDataCtor::Simple(CtorDecl {
                         name: qualify(prefix, &c.name),
                         args: c.args.clone(),
+                        field_labels: c.field_labels.clone(),
                         span: c.span.clone(),
                     }),
                     ExplicitDataCtor::Signature {
@@ -498,6 +500,7 @@ fn rewrite_rdecl(
                             .into_iter()
                             .map(|t| rewrite_rtype(scope, exports, t))
                             .collect::<Result<Vec<_>, ElabError>>()?,
+                        field_labels: c.field_labels,
                         span: c.span,
                     })
                 })
