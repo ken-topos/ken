@@ -659,6 +659,57 @@ fn subst_term_generalize(term: &Term, target: &Term, u: &Term) -> Term {
     }
 }
 
+/// Reduce transparent branch goals enough to expose constructor-local matches
+/// in proposition/type positions without recursively normalizing stuck
+/// eliminator methods. Full normalisation can chase recursive transparent defs
+/// indefinitely under neutral scrutinees; this deliberately stops at stuck
+/// `Elim` nodes.
+fn simplify_branch_goal(env: &GlobalEnv, ctx: &Context, term: &Term) -> Term {
+    match whnf(env, ctx, term) {
+        Term::Pi(a, b) => {
+            let a_s = simplify_branch_goal(env, ctx, &a);
+            let mut ctx2 = ctx.clone();
+            ctx2.push(a_s.clone());
+            Term::pi(a_s, simplify_branch_goal(env, &ctx2, &b))
+        }
+        Term::Sigma(a, b) => {
+            let a_s = simplify_branch_goal(env, ctx, &a);
+            let mut ctx2 = ctx.clone();
+            ctx2.push(a_s.clone());
+            Term::sigma(a_s, simplify_branch_goal(env, &ctx2, &b))
+        }
+        Term::Eq(a, x, y) => Term::Eq(
+            Box::new(simplify_branch_goal(env, ctx, &a)),
+            Box::new(simplify_branch_goal(env, ctx, &x)),
+            Box::new(simplify_branch_goal(env, ctx, &y)),
+        ),
+        Term::App(f, a) => Term::app(
+            simplify_branch_goal(env, ctx, &f),
+            simplify_branch_goal(env, ctx, &a),
+        ),
+        Term::Ascript(t, a) => Term::Ascript(
+            Box::new(simplify_branch_goal(env, ctx, &t)),
+            Box::new(simplify_branch_goal(env, ctx, &a)),
+        ),
+        Term::Cast(a, b, e, t) => Term::Cast(
+            Box::new(simplify_branch_goal(env, ctx, &a)),
+            Box::new(simplify_branch_goal(env, ctx, &b)),
+            Box::new(simplify_branch_goal(env, ctx, &e)),
+            Box::new(simplify_branch_goal(env, ctx, &t)),
+        ),
+        Term::J(motive, base, eq) => Term::J(
+            Box::new(simplify_branch_goal(env, ctx, &motive)),
+            Box::new(simplify_branch_goal(env, ctx, &base)),
+            Box::new(simplify_branch_goal(env, ctx, &eq)),
+        ),
+        Term::Absurd(motive, proof) => Term::Absurd(
+            Box::new(simplify_branch_goal(env, ctx, &motive)),
+            Box::new(simplify_branch_goal(env, ctx, &proof)),
+        ),
+        other => other,
+    }
+}
+
 /// Check `match scrut { C₁ p… => e₁ ; … }` against a KNOWN `expected` goal
 /// that may reference the scrutinee (a per-branch-varying `Ω`- or `Type`-
 /// motive) — the K4/AC4 dependent-elimination path. Only FLAT constructor
@@ -777,6 +828,11 @@ fn check_match_dependent(
             &weaken(&scrut_core, n as i64),
             &concrete,
         );
+        let expected_here = if matches!(arm.body, RExpr::RLam(_, _, _)) {
+            expected_here
+        } else {
+            simplify_branch_goal(cx.env, &cx.ctx, &expected_here)
+        };
         let body_core = check(cx, &arm.body, &expected_here, &arm.span)?;
         for _ in 0..n {
             cx.ctx.pop();

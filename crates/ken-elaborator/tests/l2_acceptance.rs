@@ -566,7 +566,7 @@ fn ac8_wrong_specialized_branch_still_rejects() {
 }
 
 #[test]
-fn ac8_cat4_option_table_probe_still_rejects_distinct_mechanism() {
+fn ac8_option_table_branch_motive_elaborates() {
     let mut env = mk_env();
     elab_ok(
         &mut env,
@@ -592,13 +592,10 @@ fn ac8_cat4_option_table_probe_still_rejects_distinct_mechanism() {
         "fn km_option_refl (o : Option Unit) : Equal (Option Unit) o o = Refl",
     );
 
-    // Mechanical CAT-4 D3 reconstruction from the Ken-owned
-    // `intersectionLookupMemberCharacterization` trigger: a nested
+    // Mechanical CAT-4 D3 reconstruction from the Ken-owned trigger: a nested
     // proof-returning `match km_lookup ...` whose option-table target mentions
-    // the lookup scrutinee and a reducible membership test. D1/D2 fixed the
-    // old `Type 0`/`Ω0` motive-sort failure; this remaining rejection is the
-    // distinct option-table branch-motive conversion split Runtime needs named.
-    let err = elab(
+    // the lookup scrutinee and a reducible membership test.
+    elab_ok(
         &mut env,
         "fn intersectionLookupMemberCharacterization (b : Bool) \
            : Equal (Option Unit) \
@@ -619,8 +616,57 @@ fn ac8_cat4_option_table_probe_still_rejects_distinct_mechanism() {
                    (km_member_from_lookup (Some Unit x)) (None Unit)) \
              } \
            }",
+    );
+}
+
+#[test]
+fn ac8_option_table_wrong_constructor_argument_still_rejects() {
+    let mut env = mk_env();
+    elab_ok(
+        &mut env,
+        "fn km_intersection_table (left : Option Unit) (keep : Bool) (prior : Option Unit) \
+           : Option Unit = \
+           match left { \
+             None => prior ; \
+             Some x => match keep { True => Some Unit x ; False => prior } \
+           }",
+    );
+    elab_ok(
+        &mut env,
+        "fn km_member_from_lookup (left : Option Unit) : Bool = \
+           match left { None => False ; Some x => True }",
+    );
+    elab_ok(
+        &mut env,
+        "fn km_lookup (b : Bool) : Option Unit = \
+           match b { True => Some Unit MkUnit ; False => None Unit }",
+    );
+    elab_ok(
+        &mut env,
+        "fn km_option_refl (o : Option Unit) : Equal (Option Unit) o o = Refl",
+    );
+
+    let err = elab(
+        &mut env,
+        "fn intersectionLookupMemberCharacterizationBad (b : Bool) \
+           : Equal (Option Unit) \
+               (km_intersection_table (km_lookup b) \
+                 (km_member_from_lookup (km_lookup b)) (None Unit)) \
+               (km_intersection_table (km_lookup b) \
+                 (km_member_from_lookup (km_lookup b)) (None Unit)) = \
+           match km_lookup b { \
+             None => km_option_refl \
+               (km_intersection_table (None Unit) \
+                 (km_member_from_lookup (None Unit)) (None Unit)) ; \
+             Some x => match km_member_from_lookup (Some Unit x) { \
+               True => km_option_refl (None Unit) ; \
+               False => km_option_refl \
+                 (km_intersection_table (Some Unit x) \
+                   (km_member_from_lookup (Some Unit x)) (None Unit)) \
+             } \
+           }",
     )
-    .expect_err("CAT-4 option-table probe should still reject before the follow-on split");
+    .expect_err("wrong constructor-argument proof must reject");
 
     match err {
         ElabError::KernelRejected {
@@ -633,17 +679,68 @@ fn ac8_cat4_option_table_probe_still_rejects_distinct_mechanism() {
         } => {
             assert!(
                 !matches!((&*expected, &*found), (Term::Type(Level::Zero), Term::Omega(Level::Zero))),
-                "D3 classification must not be the pre-D1 proof-motive sort failure"
-            );
-            assert!(
-                !matches!(&*expected, Term::Type(_)) && !matches!(&*found, Term::Omega(_)),
-                "D3 classification must reject after proof-motive Ω sorting, got expected {expected:?}, found {found:?}"
+                "wrong-argument rejection must not be the pre-D1 proof-motive sort failure"
             );
         }
         other => panic!(
-            "CAT-4 option-table probe must reject through the distinct kernel TypeMismatch, got {other:?}"
+            "wrong-argument sibling must reject through kernel TypeMismatch, got {other:?}"
         ),
     }
+}
+
+#[test]
+fn ac8_direct_lookup_member_reflection_helper_elaborates() {
+    let mut env = mk_env();
+    elab_ok(
+        &mut env,
+        "data MiniTree k v = MiniLeaf | MiniNode (MiniTree k v) k v (MiniTree k v)",
+    );
+    elab_ok(
+        &mut env,
+        "fn mini_lookup (k : Type) (v : Type) (leq : k -> k -> Bool) \
+           (key : k) (m : MiniTree k v) : Option v = \
+           match m { \
+             MiniLeaf => None v ; \
+             MiniNode l k2 v2 r => match leq key k2 { \
+               True => match leq k2 key { \
+                 True => Some v v2 ; \
+                 False => mini_lookup k v leq key l \
+               } ; \
+               False => mini_lookup k v leq key r \
+             } \
+           }",
+    );
+    elab_ok(
+        &mut env,
+        "fn mini_member (k : Type) (v : Type) (leq : k -> k -> Bool) \
+           (key : k) (m : MiniTree k v) : Bool = \
+           match mini_lookup k v leq key m { None => False ; Some x => True }",
+    );
+    elab_ok(
+        &mut env,
+        "fn mini_lookup_none_from_member_false_hit (v : Type) (val : v) \
+           (h : Equal Bool True False) \
+           : Equal (Option v) (Some v val) (None v) = \
+           absurd h",
+    );
+    elab_ok(
+        &mut env,
+        "fn mini_lookup_none_from_member_false \
+           (k : Type) (v : Type) (leq : k -> k -> Bool) \
+           (key : k) (m : MiniTree k v) \
+           : Equal Bool (mini_member k v leq key m) False -> \
+             Equal (Option v) (mini_lookup k v leq key m) (None v) = \
+           match m { \
+             MiniLeaf => \\h. tt ; \
+             MiniNode l k2 v2 r => match leq key k2 { \
+               True => match leq k2 key { \
+                 True => mini_lookup_none_from_member_false_hit v v2 ; \
+                 False => mini_lookup_none_from_member_false k v leq key l \
+               } ; \
+               False => mini_lookup_none_from_member_false k v leq key r \
+             } \
+           }",
+    );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
