@@ -6,7 +6,10 @@
 //! L2 additions: `data` declarations, `type` aliases, `match` expressions,
 //! type application (`T a b`).
 
-use crate::ast::{BinOp, ClassField, Decl, DefKeyword, EffectRowSyntax, Expr, NumLit, PatKind, Type};
+use crate::ast::{
+    BinOp, ClassField, ConstructorSignatureArg, Decl, DefKeyword, EffectRowSyntax,
+    ExplicitDataCtor, Expr, NumLit, PatKind, Type,
+};
 use crate::error::{ElabError, Span};
 
 /// A resolved constructor declaration (from `data` decl resolution).
@@ -14,6 +17,25 @@ use crate::error::{ElabError, Span};
 pub struct RCtorDecl {
     pub name: String,
     pub args: Vec<RType>,
+    pub span: Span,
+}
+
+/// A resolved data-head parameter or constructor telescope entry.
+#[derive(Clone, Debug)]
+pub struct RTelescopeEntry {
+    pub name: Option<String>,
+    pub ty: RType,
+    pub span: Span,
+}
+
+/// A resolved constructor in an explicit `data ... where` family declaration.
+#[derive(Clone, Debug)]
+pub struct RExplicitCtorDecl {
+    pub name: String,
+    pub args: Vec<RTelescopeEntry>,
+    /// `None` means simple default-result sugar; only valid for non-indexed
+    /// explicit families.
+    pub result: Option<RType>,
     pub span: Span,
 }
 
@@ -87,6 +109,13 @@ pub enum RDeclKind {
         type_params: Vec<String>,
         ctors: Vec<RCtorDecl>,
     },
+    /// A `data D (Δp) : (Δi) -> Type where { ... }` inductive family (`34 §2`).
+    ExplicitDataDecl {
+        params: Vec<RTelescopeEntry>,
+        indices: Vec<RTelescopeEntry>,
+        level: Option<u32>,
+        ctors: Vec<RExplicitCtorDecl>,
+    },
     /// A `type T = A` surface type alias.
     TypeAlias { ty: RType },
     /// `foreign f : T = "symbol" "library" [pure] [E1, …]` (`38 §2.1`).
@@ -125,9 +154,7 @@ pub enum RDeclKind {
         fields: Vec<(String, RExpr)>,
     },
     /// `derive ClassName for DataName` (`33 §5.6`, `39 §6.6`).
-    DeriveDecl {
-        data_name: String,
-    },
+    DeriveDecl { data_name: String },
 }
 
 /// A resolved expression — names replaced by de Bruijn indices.
@@ -221,6 +248,7 @@ impl RType {
 
 // ----- scope -----
 
+#[derive(Clone)]
 struct Scope(Vec<String>);
 
 impl Scope {
@@ -286,6 +314,187 @@ enum PropCtx {
     None,
 }
 
+fn unsupported_constructor_type_expr(expr: &Expr) -> ElabError {
+    ElabError::ParseError {
+        msg: "constructor signatures support type-forming expressions here; strings, matches, projections, lets, lambdas, and unsupported infix expressions are staged out".into(),
+        span: expr.span().clone(),
+    }
+}
+
+fn expr_as_type(expr: &Expr) -> Result<Type, ElabError> {
+    match expr {
+        Expr::EVar(name, span) | Expr::ECon(name, span) => {
+            Ok(Type::TVar(name.clone(), span.clone()))
+        }
+        Expr::EUniv(level, span) => Ok(Type::TUniv(*level, span.clone())),
+        Expr::EApp(f, a, span) => Ok(Type::TApp(
+            Box::new(expr_as_type(f)?),
+            Box::new(expr_as_type(a)?),
+            span.clone(),
+        )),
+        Expr::EPi(name, domain, codomain, span) => Ok(Type::TPi(
+            name.clone(),
+            domain.clone(),
+            Box::new(expr_as_type(codomain)?),
+            span.clone(),
+        )),
+        Expr::EArrow(domain, codomain, span) => Ok(Type::TArr(
+            Box::new(expr_as_type(domain)?),
+            Box::new(expr_as_type(codomain)?),
+            span.clone(),
+        )),
+        Expr::ENumLit(NumLit::Int(0), span) => Ok(Type::TVar("Zero".to_string(), span.clone())),
+        Expr::EBinOp(BinOp::Add, lhs, rhs, span) => {
+            if matches!(rhs.as_ref(), Expr::ENumLit(NumLit::Int(1), _)) {
+                Ok(Type::TApp(
+                    Box::new(Type::TVar("Suc".to_string(), span.clone())),
+                    Box::new(expr_as_type(lhs)?),
+                    span.clone(),
+                ))
+            } else {
+                Err(unsupported_constructor_type_expr(expr))
+            }
+        }
+        Expr::ELam(..)
+        | Expr::ELet(..)
+        | Expr::EAsc(..)
+        | Expr::EOld(..)
+        | Expr::ENumLit(..)
+        | Expr::EStr(..)
+        | Expr::EBinOp(..)
+        | Expr::EMatch { .. }
+        | Expr::EProj(..) => Err(unsupported_constructor_type_expr(expr)),
+    }
+}
+
+fn require_single_binder(names: &[String], span: &Span, what: &str) -> Result<(), ElabError> {
+    if names.len() == 1 {
+        Ok(())
+    } else {
+        Err(ElabError::ParseError {
+            msg: format!(
+                "{} binder groups are staged out; write one binder at a time",
+                what
+            ),
+            span: span.clone(),
+        })
+    }
+}
+
+fn resolve_explicit_family_indices(
+    scope: &mut Scope,
+    family: &Type,
+) -> Result<(Vec<RTelescopeEntry>, Option<u32>), ElabError> {
+    match family {
+        Type::TUniv(level, _) => Ok((vec![], *level)),
+        Type::TArr(domain, codomain, span) | Type::TEffectArr(domain, _, codomain, span) => {
+            let domain_r = resolve_type(scope, domain)?;
+            let name = format!("_index{}", scope.depth());
+            scope.push(&name);
+            let (mut rest, level) = resolve_explicit_family_indices(scope, codomain)?;
+            scope.pop();
+            let entry = RTelescopeEntry {
+                name: None,
+                ty: domain_r,
+                span: span.clone(),
+            };
+            rest.insert(0, entry);
+            Ok((rest, level))
+        }
+        Type::TPi(name, domain, codomain, span) => {
+            let domain_r = resolve_type(scope, domain)?;
+            scope.push(name);
+            let (mut rest, level) = resolve_explicit_family_indices(scope, codomain)?;
+            scope.pop();
+            let entry = RTelescopeEntry {
+                name: Some(name.clone()),
+                ty: domain_r,
+                span: span.clone(),
+            };
+            rest.insert(0, entry);
+            Ok((rest, level))
+        }
+        _ => Err(ElabError::ParseError {
+            msg: "explicit data family head must be an index telescope ending in Type".into(),
+            span: family.span().clone(),
+        }),
+    }
+}
+
+fn resolve_explicit_ctor(
+    params_scope: &Scope,
+    ctor: &ExplicitDataCtor,
+) -> Result<RExplicitCtorDecl, ElabError> {
+    let mut scope = params_scope.clone();
+    match ctor {
+        ExplicitDataCtor::Simple(c) => {
+            let mut args = Vec::new();
+            for ty in &c.args {
+                let rty = resolve_type(&mut scope, ty)?;
+                args.push(RTelescopeEntry {
+                    name: None,
+                    ty: rty,
+                    span: ty.span().clone(),
+                });
+                let name = format!("_arg{}", scope.depth());
+                scope.push(&name);
+            }
+            Ok(RExplicitCtorDecl {
+                name: c.name.clone(),
+                args,
+                result: None,
+                span: c.span.clone(),
+            })
+        }
+        ExplicitDataCtor::Signature {
+            name,
+            signature,
+            span,
+        } => {
+            let mut args = Vec::new();
+            for arg in &signature.args {
+                match arg {
+                    ConstructorSignatureArg::Explicit(binder)
+                    | ConstructorSignatureArg::Implicit(binder) => {
+                        require_single_binder(
+                            &binder.names,
+                            &binder.span,
+                            "explicit data constructor",
+                        )?;
+                        let rty = resolve_type(&mut scope, &binder.ty)?;
+                        let name = binder.names[0].clone();
+                        scope.push(&name);
+                        args.push(RTelescopeEntry {
+                            name: Some(name),
+                            ty: rty,
+                            span: binder.span.clone(),
+                        });
+                    }
+                    ConstructorSignatureArg::Anonymous(expr) => {
+                        let ty = expr_as_type(expr)?;
+                        let rty = resolve_type(&mut scope, &ty)?;
+                        args.push(RTelescopeEntry {
+                            name: None,
+                            ty: rty,
+                            span: expr.span().clone(),
+                        });
+                        let name = format!("_arg{}", scope.depth());
+                        scope.push(&name);
+                    }
+                }
+            }
+            let result_ty = expr_as_type(&signature.result)?;
+            let result = resolve_type(&mut scope, &result_ty)?;
+            Ok(RExplicitCtorDecl {
+                name: name.clone(),
+                args,
+                result: Some(result),
+                span: span.clone(),
+            })
+        }
+    }
+}
+
 // ----- public entry points -----
 
 pub fn resolve_decls(decls: &[Decl]) -> Result<Vec<RDecl>, ElabError> {
@@ -303,9 +512,11 @@ pub fn resolve_decl(decl: &Decl) -> Result<RDecl, ElabError> {
         // hands `resolve_decl` an already-unwrapped, already-qualified
         // ordinary decl. Unreachable from that pipeline; kept exhaustive
         // for `Decl`'s other (non-`ken-elaborator`-internal) callers.
-        Decl::ModuleDecl { .. } | Decl::ImportDecl { .. } | Decl::Pub(_) => Err(ElabError::Internal(
-            "resolve_decl: module/import/pub decls must be expanded by modules.rs first".into(),
-        )),
+        Decl::ModuleDecl { .. } | Decl::ImportDecl { .. } | Decl::Pub(_) => {
+            Err(ElabError::Internal(
+                "resolve_decl: module/import/pub decls must be expanded by modules.rs first".into(),
+            ))
+        }
         Decl::ViewDecl {
             keyword,
             name,
@@ -369,15 +580,13 @@ pub fn resolve_decl(decl: &Decl) -> Result<RDecl, ElabError> {
                 });
 
             let full_ty = match resolved_ret {
-                Some(ret) => Some(
-                    single_binders
-                        .into_iter()
-                        .rev()
-                        .fold(ret, |acc, (bname, bty)| {
-                            let s = acc.span().clone();
-                            RType::RPi(bname, Box::new(bty), Box::new(acc), s)
-                        }),
-                ),
+                Some(ret) => Some(single_binders.into_iter().rev().fold(
+                    ret,
+                    |acc, (bname, bty)| {
+                        let s = acc.span().clone();
+                        RType::RPi(bname, Box::new(bty), Box::new(acc), s)
+                    },
+                )),
                 None => None,
             };
 
@@ -409,7 +618,12 @@ pub fn resolve_decl(decl: &Decl) -> Result<RDecl, ElabError> {
             })
         }
 
-        Decl::LetDecl { name, ty, val, span } => {
+        Decl::LetDecl {
+            name,
+            ty,
+            val,
+            span,
+        } => {
             let mut scope = Scope::new();
             let resolved_ty = match ty {
                 Some(t) => Some(resolve_type(&mut scope, t)?),
@@ -441,7 +655,12 @@ pub fn resolve_decl(decl: &Decl) -> Result<RDecl, ElabError> {
             })
         }
 
-        Decl::LawDecl { name, param, fields, span } => {
+        Decl::LawDecl {
+            name,
+            param,
+            fields,
+            span,
+        } => {
             let mut scope = Scope::new();
             // `param` is in scope for each field proposition
             scope.push(param);
@@ -467,7 +686,12 @@ pub fn resolve_decl(decl: &Decl) -> Result<RDecl, ElabError> {
             })
         }
 
-        Decl::DataDecl { name, type_params, ctors, span } => {
+        Decl::DataDecl {
+            name,
+            type_params,
+            ctors,
+            span,
+        } => {
             // Each type param is in scope (as a type variable) for the ctor args.
             let mut scope = Scope::new();
             for p in type_params {
@@ -500,13 +724,46 @@ pub fn resolve_decl(decl: &Decl) -> Result<RDecl, ElabError> {
             })
         }
 
-        Decl::ExplicitDataDecl { name, span, .. } => Err(ElabError::ParseError {
-            msg: format!(
-                "explicit data family '{}' parses, but elaboration is staged to a later slice",
-                name
-            ),
-            span: span.clone(),
-        }),
+        Decl::ExplicitDataDecl {
+            name,
+            params,
+            family,
+            ctors,
+            span,
+        } => {
+            let mut scope = Scope::new();
+            let mut rparams = Vec::new();
+            for binder in params {
+                require_single_binder(&binder.names, &binder.span, "explicit data parameter")?;
+                let rty = resolve_type(&mut scope, &binder.ty)?;
+                let pname = binder.names[0].clone();
+                scope.push(&pname);
+                rparams.push(RTelescopeEntry {
+                    name: Some(pname),
+                    ty: rty,
+                    span: binder.span.clone(),
+                });
+            }
+            let (indices, level) = resolve_explicit_family_indices(&mut scope, family)?;
+            let rctors = ctors
+                .iter()
+                .map(|ctor| resolve_explicit_ctor(&scope, ctor))
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(RDecl {
+                name: name.clone(),
+                ty: None,
+                body: RExpr::RUniv(level, span.clone()),
+                requires: vec![],
+                ensures: vec![],
+                span: span.clone(),
+                kind: RDeclKind::ExplicitDataDecl {
+                    params: rparams,
+                    indices,
+                    level,
+                    ctors: rctors,
+                },
+            })
+        }
 
         Decl::TypeAlias { name, ty, span } => {
             let mut scope = Scope::new();
@@ -522,7 +779,15 @@ pub fn resolve_decl(decl: &Decl) -> Result<RDecl, ElabError> {
             })
         }
 
-        Decl::ForeignDecl { name, ty, symbol, library, is_pure, visits, span } => {
+        Decl::ForeignDecl {
+            name,
+            ty,
+            symbol,
+            library,
+            is_pure,
+            visits,
+            span,
+        } => {
             let mut scope = Scope::new();
             let rty = resolve_type(&mut scope, ty)?;
             Ok(RDecl {
@@ -541,7 +806,12 @@ pub fn resolve_decl(decl: &Decl) -> Result<RDecl, ElabError> {
             })
         }
 
-        Decl::TemporalDecl { name, formula, source, span } => {
+        Decl::TemporalDecl {
+            name,
+            formula,
+            source,
+            span,
+        } => {
             // The temporal formula is carried as-is — its atoms are event
             // names over `Σ`, not term variables, so no de Bruijn resolution.
             Ok(RDecl {
@@ -558,7 +828,13 @@ pub fn resolve_decl(decl: &Decl) -> Result<RDecl, ElabError> {
             })
         }
 
-        Decl::ClassDecl { name, param, param_kind, fields, span } => {
+        Decl::ClassDecl {
+            name,
+            param,
+            param_kind,
+            fields,
+            span,
+        } => {
             // Fields form a real Σ-telescope (`33 §5.2`): a later field's
             // type may reference an EARLIER field by name (a law like
             // `refl : (x:a) -> IsTrue (eq x x)` refers to the `eq` op
@@ -575,7 +851,12 @@ pub fn resolve_decl(decl: &Decl) -> Result<RDecl, ElabError> {
                 scope.push(p);
             }
             let mut resolved_fields = Vec::new();
-            for ClassField { purity, name: fname, ty } in fields {
+            for ClassField {
+                purity,
+                name: fname,
+                ty,
+            } in fields
+            {
                 let rty = resolve_type(&mut scope, ty)?;
                 resolved_fields.push(RClassField {
                     purity: *purity,
@@ -599,7 +880,13 @@ pub fn resolve_decl(decl: &Decl) -> Result<RDecl, ElabError> {
             })
         }
 
-        Decl::InstanceDecl { class_name, head_type, constraints, fields, span } => {
+        Decl::InstanceDecl {
+            class_name,
+            head_type,
+            constraints,
+            fields,
+            span,
+        } => {
             let mut scope = Scope::new();
             let mut head_params = Vec::new();
             collect_instance_head_params(head_type, &mut head_params);
@@ -637,7 +924,11 @@ pub fn resolve_decl(decl: &Decl) -> Result<RDecl, ElabError> {
             })
         }
 
-        Decl::DeriveDecl { class_name, data_name, span } => Ok(RDecl {
+        Decl::DeriveDecl {
+            class_name,
+            data_name,
+            span,
+        } => Ok(RDecl {
             name: class_name.clone(),
             ty: None,
             body: RExpr::RUniv(None, span.clone()),
@@ -770,7 +1061,12 @@ fn resolve_expr_ctx(scope: &mut Scope, expr: &Expr, ctx: PropCtx) -> Result<RExp
             scope.push(x);
             let rb = resolve_expr_ctx(scope, b, ctx)?;
             scope.pop();
-            Ok(RExpr::RPi(x.clone(), Box::new(ra), Box::new(rb), span.clone()))
+            Ok(RExpr::RPi(
+                x.clone(),
+                Box::new(ra),
+                Box::new(rb),
+                span.clone(),
+            ))
         }
 
         Expr::EArrow(a, b, span) => {
@@ -814,9 +1110,18 @@ fn resolve_pattern(pat: &crate::ast::Pattern) -> Result<(RPattern, Vec<String>),
     match &pat.kind {
         // Wild patterns consume one de Bruijn slot so outer vars remain consistent
         // with the method lambda structure (which binds ALL ctor args, not just named ones).
-        PatKind::Wild => Ok((RPattern { kind: RPatKind::Wild, span: pat.span.clone() }, vec!["_".to_string()])),
+        PatKind::Wild => Ok((
+            RPattern {
+                kind: RPatKind::Wild,
+                span: pat.span.clone(),
+            },
+            vec!["_".to_string()],
+        )),
         PatKind::Var(name) => Ok((
-            RPattern { kind: RPatKind::Var(name.clone()), span: pat.span.clone() },
+            RPattern {
+                kind: RPatKind::Var(name.clone()),
+                span: pat.span.clone(),
+            },
             vec![name.clone()],
         )),
         PatKind::Ctor(name, subs) => {
@@ -828,7 +1133,10 @@ fn resolve_pattern(pat: &crate::ast::Pattern) -> Result<(RPattern, Vec<String>),
                 all_names.extend(names);
             }
             Ok((
-                RPattern { kind: RPatKind::Ctor(name.clone(), rsubs), span: pat.span.clone() },
+                RPattern {
+                    kind: RPatKind::Ctor(name.clone(), rsubs),
+                    span: pat.span.clone(),
+                },
                 all_names,
             ))
         }
@@ -870,7 +1178,12 @@ fn resolve_type(scope: &mut Scope, ty: &Type) -> Result<RType, ElabError> {
             scope.push(x);
             let rb = resolve_type(scope, b)?;
             scope.pop();
-            Ok(RType::RPi(x.clone(), Box::new(ra), Box::new(rb), span.clone()))
+            Ok(RType::RPi(
+                x.clone(),
+                Box::new(ra),
+                Box::new(rb),
+                span.clone(),
+            ))
         }
 
         Type::TRefine(x, a, phi, span) => {
@@ -878,7 +1191,12 @@ fn resolve_type(scope: &mut Scope, ty: &Type) -> Result<RType, ElabError> {
             scope.push(x);
             let rphi = resolve_expr_ctx(scope, phi, PropCtx::None)?;
             scope.pop();
-            Ok(RType::RRefine(x.clone(), Box::new(ra), Box::new(rphi), span.clone()))
+            Ok(RType::RRefine(
+                x.clone(),
+                Box::new(ra),
+                Box::new(rphi),
+                span.clone(),
+            ))
         }
 
         Type::TApp(f, a, span) => {

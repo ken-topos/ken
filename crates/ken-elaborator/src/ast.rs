@@ -188,8 +188,8 @@ pub enum Decl {
         span: Span,
     },
     /// `data D (Δp) : Δi -> Type where { ... }` — explicit inductive-family
-    /// syntax (`34 §2`). This parser/AST slice stores the surface shape only;
-    /// lowering is staged to the later dependent-constructor elaboration WP.
+    /// syntax (`34 §2`), lowered by the data elaborator to a kernel inductive
+    /// family.
     ExplicitDataDecl {
         /// Type former name (uppercase-initial).
         name: String,
