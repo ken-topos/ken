@@ -5,10 +5,11 @@
 //! located values, total parse results, and zero trusted-base delta.
 
 use ken_elaborator::{foreign::trusted_base_delta, ElabEnv, NumericLitVal};
-use ken_interp::eval::{eval, EvalStore, EvalVal};
+use ken_interp::eval::{apply, eval, EvalStore, EvalVal};
 use ken_kernel::Decl;
 use ken_kernel::GlobalId;
 use std::collections::HashSet;
+use std::rc::Rc;
 
 const PARSING_KEN: &str = include_str!("../../../packages/parsing/parsing.ken");
 
@@ -35,7 +36,9 @@ fn make_store(env: &ElabEnv) -> EvalStore {
     let mut store = EvalStore::new();
     let mkdecimalpair_id = env.prelude_env.mkdecimalpair_id;
     for (id, v) in &env.num_values {
-        store.num_values.insert(*id, lit_to_eval(v, mkdecimalpair_id));
+        store
+            .num_values
+            .insert(*id, lit_to_eval(v, mkdecimalpair_id));
     }
     store
 }
@@ -60,6 +63,134 @@ fn nat_count(env: &ElabEnv, v: &EvalVal) -> u64 {
         }
         other => panic!("expected a Nat Ctor chain, got {other:?}"),
     }
+}
+
+fn ctor_args<'a>(env: &ElabEnv, v: &'a EvalVal, ctor: &str) -> &'a [EvalVal] {
+    let expected = env
+        .globals
+        .get(ctor)
+        .copied()
+        .unwrap_or_else(|| panic!("{ctor} should be in scope"));
+    match v {
+        EvalVal::Ctor { id, args, .. } if *id == expected => args.as_ref().as_slice(),
+        other => panic!("expected {ctor}, got {other:?}"),
+    }
+}
+
+fn span_bounds(env: &ElabEnv, v: &EvalVal) -> (u64, u64) {
+    let args = ctor_args(env, v, "MkSpan");
+    assert_eq!(
+        args.len(),
+        2,
+        "MkSpan must have start/end args, got {args:?}"
+    );
+    (nat_count(env, &args[0]), nat_count(env, &args[1]))
+}
+
+fn located_span<'a>(env: &ElabEnv, v: &'a EvalVal) -> &'a EvalVal {
+    let args = ctor_args(env, v, "MkLocated");
+    assert!(
+        args.len() >= 3,
+        "MkLocated must carry type/source/span/value args, got {args:?}"
+    );
+    &args[2]
+}
+
+fn syntax_root_and_children<'a>(env: &ElabEnv, v: &'a EvalVal) -> (&'a EvalVal, &'a EvalVal) {
+    let args = ctor_args(env, v, "MkSyntax");
+    assert!(
+        args.len() >= 3,
+        "MkSyntax must carry type/root/children args, got {args:?}"
+    );
+    (&args[1], &args[2])
+}
+
+fn collect_located_list_spans(env: &ElabEnv, v: &EvalVal, out: &mut Vec<(u64, u64)>) {
+    let nil_id = env.globals["Nil"];
+    let cons_id = env.globals["Cons"];
+    match v {
+        EvalVal::Ctor { id, .. } if *id == nil_id => {}
+        EvalVal::Ctor { id, args, .. } if *id == cons_id => {
+            assert!(
+                args.len() >= 3,
+                "Cons must carry type/head/tail args, got {args:?}"
+            );
+            out.push(span_bounds(env, located_span(env, &args[1])));
+            collect_located_list_spans(env, &args[2], out);
+        }
+        other => panic!("expected List (Located _), got {other:?}"),
+    }
+}
+
+fn syntax_spans(env: &ElabEnv, v: &EvalVal) -> Vec<(u64, u64)> {
+    let (root, children) = syntax_root_and_children(env, v);
+    let mut out = vec![span_bounds(env, located_span(env, root))];
+    collect_located_list_spans(env, children, &mut out);
+    out
+}
+
+fn nat_val(env: &ElabEnv, n: u64) -> EvalVal {
+    let mut v = EvalVal::Ctor {
+        id: env.prelude_env.zero_id,
+        args: Rc::new(vec![]),
+        slot: 0,
+    };
+    for _ in 0..n {
+        v = EvalVal::Ctor {
+            id: env.prelude_env.suc_id,
+            args: Rc::new(vec![v]),
+            slot: 0,
+        };
+    }
+    v
+}
+
+fn pair_val(fst: EvalVal, snd: EvalVal) -> EvalVal {
+    EvalVal::Pair {
+        fst: Rc::new(fst),
+        snd: Rc::new(snd),
+        slot: 0,
+    }
+}
+
+fn source_runtime_value(env: &ElabEnv, sid: u64, bytes: &[u8]) -> EvalVal {
+    let source_id = EvalVal::Ctor {
+        id: env.globals["MkSourceId"],
+        args: Rc::new(vec![nat_val(env, sid)]),
+        slot: 0,
+    };
+    let source_bytes = EvalVal::Bytes(bytes.to_vec());
+    let source_length = nat_val(env, bytes.len() as u64);
+    let unit = EvalVal::Bytes(b"x".to_vec());
+    let proof = EvalVal::Neutral;
+    pair_val(
+        source_id,
+        pair_val(
+            source_bytes,
+            pair_val(
+                source_length,
+                pair_val(
+                    unit,
+                    pair_val(
+                        proof.clone(),
+                        pair_val(proof.clone(), pair_val(proof, EvalVal::Neutral)),
+                    ),
+                ),
+            ),
+        ),
+    )
+}
+
+fn run_parser(env: &ElabEnv, store: &mut EvalStore, source: EvalVal) -> EvalVal {
+    let parser = eval_def(env, store, "parseBoolExpr");
+    let parser = apply(parser, source, &env.env, store);
+    let parser = apply(parser, nat_val(env, 0), &env.env, store);
+    apply(parser, EvalVal::Neutral, &env.env, store)
+}
+
+fn run_formatter(env: &ElabEnv, store: &mut EvalStore, source: EvalVal) -> EvalVal {
+    let formatter = eval_def(env, store, "formatBoolExpr");
+    apply(formatter, source, &env.env, store)
 }
 
 #[test]
@@ -115,6 +246,32 @@ fn cat5_d1_source_span_package_elaborates_zero_delta() {
         "ParserLaws",
         "parserPure",
         "parserFail",
+        "syntaxRoot",
+        "syntaxChildren",
+        "eraseSpans",
+        "cat5ListAppend",
+        "ValidLocatedList",
+        "ValidSyntax",
+        "boolExprEq",
+        "cat5NatEq",
+        "cat5NatAdd",
+        "cat5NatLt",
+        "cat5BoolAnd",
+        "sourceByteEq",
+        "sourceByteEqAt",
+        "cat5StartsTrue",
+        "cat5StartsFalse",
+        "cat5StartsNotOpen",
+        "cat5StartsAndOpen",
+        "cat5SkipSpacesFuel",
+        "cat5SkipSpaces",
+        "cat5SyntaxLeaf",
+        "cat5SyntaxNode1",
+        "cat5SyntaxNode2",
+        "parseBoolExprAtFuel",
+        "parseBoolExpr",
+        "printBoolExpr",
+        "formatBoolExpr",
     ] {
         let id = env
             .globals
@@ -133,7 +290,16 @@ fn cat5_d1_source_span_package_elaborates_zero_delta() {
         );
     }
 
-    for name in ["SourceId", "Source", "Span", "Located", "ParseError", "ParseResult"] {
+    for name in [
+        "SourceId",
+        "Source",
+        "Span",
+        "Located",
+        "ParseError",
+        "ParseResult",
+        "BoolExpr",
+        "Syntax",
+    ] {
         let id = env
             .globals
             .get(name)
@@ -191,6 +357,44 @@ fn cat5_d2_parser_result_surface_is_total_and_located() {
 }
 
 #[test]
+fn cat5_d3_bool_expression_surface_is_package_owned() {
+    assert!(
+        PARSING_KEN.contains("data BoolExpr =")
+            && PARSING_KEN.contains("BTrue")
+            && PARSING_KEN.contains("BFalse")
+            && PARSING_KEN.contains("BNot BoolExpr")
+            && PARSING_KEN.contains("BAnd BoolExpr BoolExpr"),
+        "D3 must expose the package-owned BoolExpr data surface"
+    );
+    assert!(
+        PARSING_KEN.contains("data Syntax a = MkSyntax (Located a) (List (Located a))")
+            && PARSING_KEN.contains("fn eraseSpans (x : Syntax BoolExpr) : BoolExpr =")
+            && PARSING_KEN.contains("fn ValidSyntax"),
+        "D3 Syntax must be package-owned located syntax, not compiler AST"
+    );
+    assert!(
+        PARSING_KEN.contains("const parseBoolExpr : Parser (Syntax BoolExpr) =")
+            && PARSING_KEN.contains("fn printBoolExpr (e : BoolExpr) : Bytes =")
+            && PARSING_KEN.contains("fn formatBoolExpr (s : Source) : Result ParseError Bytes ="),
+        "D3 must export parser, printer, and formatter with the pinned types"
+    );
+    assert!(
+        PARSING_KEN.contains("bytes_at (sourceBytes s)")
+            && PARSING_KEN.contains("bytes_encode \"true\"")
+            && PARSING_KEN.contains("bytes_encode \"false\"")
+            && PARSING_KEN.contains("bytes_encode \"(not \"")
+            && PARSING_KEN.contains("bytes_encode \"(and \""),
+        "D3 must operate over Source bytes and canonical ASCII token bytes"
+    );
+    assert!(
+        !PARSING_KEN.contains("compiler")
+            && !PARSING_KEN.contains("AST")
+            && !PARSING_KEN.contains("= Axiom"),
+        "D3 package surface must not route through compiler ASTs or package axioms"
+    );
+}
+
+#[test]
 fn cat5_d1_source_span_surface_is_byte_artifact_and_source_explicit() {
     assert!(
         PARSING_KEN.contains("fn IsUtf8 (bs : Bytes) : Prop =")
@@ -227,8 +431,7 @@ fn cat5_d1_source_span_surface_is_byte_artifact_and_source_explicit() {
         "Source must not expose the old unconstrained MkSource constructor"
     );
     assert!(
-        !PARSING_KEN.contains("sourceBytesField : String")
-            && !PARSING_KEN.contains("String Nat"),
+        !PARSING_KEN.contains("sourceBytesField : String") && !PARSING_KEN.contains("String Nat"),
         "Source must not use normalized String as the offset basis"
     );
     assert!(
@@ -533,7 +736,9 @@ fn cat5_d1_reflexive_utf8_and_length_proofs_rejected() {
             const cat5_fake_length : SourceLength cat5_unit cat5_bytes Zero = Refl
             "#,
         )
-        .expect_err("SourceLength must not be provable by reflexive equality for arbitrary bytes/length");
+        .expect_err(
+            "SourceLength must not be provable by reflexive equality for arbitrary bytes/length",
+        );
     let msg = format!("{err}");
     assert!(
         msg.contains("Refl")
@@ -712,5 +917,89 @@ fn cat5_d2_broken_fuel_repetition_producer_path_is_not_exported() {
             || msg.contains("unresolved")
             || msg.contains("Unresolved"),
         "old consuming repeatWithFuel producer path should reject at name resolution, got {msg}"
+    );
+}
+
+#[test]
+fn cat5_d3_bool_parser_printer_formatter_roundtrip_on_source_bytes() {
+    let mut env = mk_env();
+    env.elaborate_file(
+        r#"
+        const cat5_d3_expr : BoolExpr =
+          BAnd BTrue (BNot BFalse)
+
+        const cat5_d3_printed_bytes : Bytes =
+          printBoolExpr cat5_d3_expr
+        "#,
+    )
+    .expect("D3 Boolean parser/printer/formatter producer path must elaborate");
+
+    let mut store = make_store(&env);
+    let printed = eval_def(&env, &mut store, "cat5_d3_printed_bytes");
+    assert_eq!(
+        printed,
+        EvalVal::Bytes(b"(and true (not false))".to_vec()),
+        "printBoolExpr must emit canonical ASCII bytes"
+    );
+
+    let source = source_runtime_value(&env, 2, b"(and true (not false))");
+    let parsed = run_parser(&env, &mut store, source.clone());
+    let parsed_args = ctor_args(&env, &parsed, "Parsed");
+    assert!(
+        parsed_args.len() >= 4,
+        "Parsed must carry type/value/span/next args, got {parsed_args:?}"
+    );
+    let syntax = parsed_args[1].clone();
+    let expected_expr = eval_def(&env, &mut store, "cat5_d3_expr");
+    let (root, _) = syntax_root_and_children(&env, &syntax);
+    let root_args = ctor_args(&env, root, "MkLocated");
+    assert_eq!(
+        root_args[3], expected_expr,
+        "parseBoolExpr (printBoolExpr e) must erase back to e"
+    );
+
+    let formatted = run_formatter(&env, &mut store, source.clone());
+    let formatted_args = ctor_args(&env, &formatted, "Ok");
+    assert!(
+        formatted_args.len() >= 3,
+        "Ok must carry error type/value type/payload args, got {formatted_args:?}"
+    );
+    assert_eq!(
+        formatted_args[2],
+        EvalVal::Bytes(b"(and true (not false))".to_vec()),
+        "formatBoolExpr must preserve the erased tree by printing canonical bytes"
+    );
+
+    let idempotent = run_formatter(
+        &env,
+        &mut store,
+        source_runtime_value(&env, 4, b"(and true (not false))"),
+    );
+    let idempotent_args = ctor_args(&env, &idempotent, "Ok");
+    assert_eq!(
+        idempotent_args[2],
+        EvalVal::Bytes(b"(and true (not false))".to_vec()),
+        "formatBoolExpr must be idempotent on generated bytes"
+    );
+
+    let spans = syntax_spans(&env, &syntax);
+    assert_eq!(
+        spans,
+        vec![(0, 22), (5, 9), (10, 21), (15, 20)],
+        "parsed syntax must expose valid spans for every package-owned syntax node"
+    );
+    assert!(
+        spans.iter().all(|(start, end)| start <= end && *end <= 22),
+        "all parsed syntax spans must be within the concrete Source length: {spans:?}"
+    );
+
+    let bad = run_parser(
+        &env,
+        &mut store,
+        source_runtime_value(&env, 3, b"true and false"),
+    );
+    assert!(
+        matches!(bad, EvalVal::Ctor { id, .. } if id == env.globals["Failed"]),
+        "`true and false` must reject; D3 has no implicit precedence table"
     );
 }
