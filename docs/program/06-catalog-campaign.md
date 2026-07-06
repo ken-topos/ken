@@ -52,6 +52,27 @@ derivation path, declared trust delta; law fields **proved**, not postulated,
 except an audited primitive-carrier delta). The catalog is a *verified
 computational substrate*, not a convenience stdlib.
 
+## Catalog quality cadence
+
+Catalog work has two legitimate phases:
+
+1. **Functional discovery/build.** The owning team gets the component to exist,
+   run, and prove the required laws. For hard proof engineering this may leave a
+   large, rough file with local helper names, sparse comments, and proof-search
+   scaffolding. That is acceptable at the functional gate if the proofs are real,
+   the trusted base is unchanged, and the acceptance criteria are met.
+2. **Catalog refinement.** A follow-on WP raises the component to first-party
+   catalog standards: organization, naming, comments, package docs,
+   harmonization with sibling packages, and behavior-preserving refactor. This
+   is not optional cleanup; it is how a discovered proof becomes an exemplary
+   artifact.
+
+The style standard itself is tracked as `catalog-style-guide`. Its first
+application should be a small-package `catalog-refinement-pilot`, not the
+largest proof-heavy body. Once the pilot proves the workflow, large components
+such as maps/sets/relations get their own refinement WPs after their functional
+builds land.
+
 ## Lane A — catalog WP decomposition
 
 Sequenced against what has **landed** (Layer 0 core types + `Eq`/`DecEq`/`Ord`;
