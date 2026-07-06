@@ -5,11 +5,10 @@
 //! located values, total parse results, and zero trusted-base delta.
 
 use ken_elaborator::{foreign::trusted_base_delta, ElabEnv, NumericLitVal};
-use ken_interp::eval::{apply, eval, EvalStore, EvalVal};
+use ken_interp::eval::{eval, EvalStore, EvalVal};
 use ken_kernel::Decl;
 use ken_kernel::GlobalId;
 use std::collections::HashSet;
-use std::rc::Rc;
 
 const PARSING_KEN: &str = include_str!("../../../packages/parsing/parsing.ken");
 
@@ -129,68 +128,23 @@ fn syntax_spans(env: &ElabEnv, v: &EvalVal) -> Vec<(u64, u64)> {
     out
 }
 
-fn nat_val(env: &ElabEnv, n: u64) -> EvalVal {
-    let mut v = EvalVal::Ctor {
-        id: env.prelude_env.zero_id,
-        args: Rc::new(vec![]),
-        slot: 0,
-    };
+fn nat_expr(n: usize) -> String {
+    let mut s = "Zero".to_string();
     for _ in 0..n {
-        v = EvalVal::Ctor {
-            id: env.prelude_env.suc_id,
-            args: Rc::new(vec![v]),
-            slot: 0,
-        };
+        s = format!("Suc ({s})");
     }
-    v
+    s
 }
 
-fn pair_val(fst: EvalVal, snd: EvalVal) -> EvalVal {
-    EvalVal::Pair {
-        fst: Rc::new(fst),
-        snd: Rc::new(snd),
-        slot: 0,
+fn neutralize_fixture_proofs(env: &ElabEnv, store: &mut EvalStore, names: &[&str]) {
+    for name in names {
+        let id = env
+            .globals
+            .get(*name)
+            .copied()
+            .unwrap_or_else(|| panic!("{name} should be in scope"));
+        store.num_values.insert(id, EvalVal::Neutral);
     }
-}
-
-fn source_runtime_value(env: &ElabEnv, sid: u64, bytes: &[u8]) -> EvalVal {
-    let source_id = EvalVal::Ctor {
-        id: env.globals["MkSourceId"],
-        args: Rc::new(vec![nat_val(env, sid)]),
-        slot: 0,
-    };
-    let source_bytes = EvalVal::Bytes(bytes.to_vec());
-    let source_length = nat_val(env, bytes.len() as u64);
-    let unit = EvalVal::Bytes(b"x".to_vec());
-    let proof = EvalVal::Neutral;
-    pair_val(
-        source_id,
-        pair_val(
-            source_bytes,
-            pair_val(
-                source_length,
-                pair_val(
-                    unit,
-                    pair_val(
-                        proof.clone(),
-                        pair_val(proof.clone(), pair_val(proof, EvalVal::Neutral)),
-                    ),
-                ),
-            ),
-        ),
-    )
-}
-
-fn run_parser(env: &ElabEnv, store: &mut EvalStore, source: EvalVal) -> EvalVal {
-    let parser = eval_def(env, store, "parseBoolExpr");
-    let parser = apply(parser, source, &env.env, store);
-    let parser = apply(parser, nat_val(env, 0), &env.env, store);
-    apply(parser, EvalVal::Neutral, &env.env, store)
-}
-
-fn run_formatter(env: &ElabEnv, store: &mut EvalStore, source: EvalVal) -> EvalVal {
-    let formatter = eval_def(env, store, "formatBoolExpr");
-    apply(formatter, source, &env.env, store)
 }
 
 #[test]
@@ -923,18 +877,129 @@ fn cat5_d2_broken_fuel_repetition_producer_path_is_not_exported() {
 #[test]
 fn cat5_d3_bool_parser_printer_formatter_roundtrip_on_source_bytes() {
     let mut env = mk_env();
-    env.elaborate_file(
+    let printed_len = nat_expr(22);
+    let bad_len = nat_expr(14);
+    env.elaborate_file(&format!(
         r#"
+        data Cat5D3PrintedSource = MkCat5D3PrintedSource
+        data Cat5D3FormattedSource = MkCat5D3FormattedSource
+        data Cat5D3BadSource = MkCat5D3BadSource
+
+        const cat5_d3_unit_byte : Bytes = bytes_encode "x"
+        const cat5_d3_unit_valid : UnitByteLength cat5_d3_unit_byte = Axiom
+
         const cat5_d3_expr : BoolExpr =
           BAnd BTrue (BNot BFalse)
 
         const cat5_d3_printed_bytes : Bytes =
           printBoolExpr cat5_d3_expr
+
+        const cat5_d3_printed_utf8 : IsUtf8 cat5_d3_printed_bytes = Axiom
+        const cat5_d3_printed_length_valid
+          : SourceLength cat5_d3_unit_byte cat5_d3_printed_bytes ({printed_len}) =
+          Axiom
+
+        instance Source Cat5D3PrintedSource {{
+          sourceIdField = MkSourceId (Suc (Suc Zero)) ;
+          sourceBytesField = cat5_d3_printed_bytes ;
+          sourceLengthField = ({printed_len}) ;
+          sourceLengthUnitField = cat5_d3_unit_byte ;
+          sourceLengthUnitValidField = cat5_d3_unit_valid ;
+          sourceUtf8Field = cat5_d3_printed_utf8 ;
+          sourceLengthValidField = cat5_d3_printed_length_valid
+        }}
+
+        const cat5_d3_source : Source = Source_instance_Cat5D3PrintedSource
+
+        const cat5_d3_parse_printed : ParseResult (Syntax BoolExpr) =
+          parseBoolExpr cat5_d3_source Zero (lessEqNatZeroLeft (sourceLength cat5_d3_source))
+
+        const cat5_d3_parse_printed_erases : Bool =
+          match cat5_d3_parse_printed {{
+            Parsed syntax consumed next => boolExprEq (eraseSpans syntax) cat5_d3_expr ;
+            Failed err => False
+          }}
+
+        const cat5_d3_parsed_syntax : Syntax BoolExpr =
+          match cat5_d3_parse_printed {{
+            Parsed syntax consumed next => syntax ;
+            Failed err => cat5SyntaxLeaf cat5_d3_source Zero Zero BFalse
+          }}
+
+        const cat5_d3_formatted : Result ParseError Bytes =
+          formatBoolExpr cat5_d3_source
+
+        const cat5_d3_formatted_bytes : Bytes =
+          match cat5_d3_formatted {{
+            Ok bs => bs ;
+            Err err => bytes_encode "ERR"
+          }}
+
+        const cat5_d3_formatted_utf8 : IsUtf8 cat5_d3_formatted_bytes = Axiom
+        const cat5_d3_formatted_length_valid
+          : SourceLength cat5_d3_unit_byte cat5_d3_formatted_bytes ({printed_len}) =
+          Axiom
+
+        instance Source Cat5D3FormattedSource {{
+          sourceIdField = MkSourceId (Suc (Suc (Suc Zero))) ;
+          sourceBytesField = cat5_d3_formatted_bytes ;
+          sourceLengthField = ({printed_len}) ;
+          sourceLengthUnitField = cat5_d3_unit_byte ;
+          sourceLengthUnitValidField = cat5_d3_unit_valid ;
+          sourceUtf8Field = cat5_d3_formatted_utf8 ;
+          sourceLengthValidField = cat5_d3_formatted_length_valid
+        }}
+
+        const cat5_d3_formatted_source : Source = Source_instance_Cat5D3FormattedSource
+
+        const cat5_d3_format_idempotent : Result ParseError Bytes =
+          formatBoolExpr cat5_d3_formatted_source
+
+        const cat5_d3_format_idempotent_bytes : Bytes =
+          match cat5_d3_format_idempotent {{
+            Ok bs => bs ;
+            Err err => bytes_encode "ERR"
+          }}
+
+        const cat5_d3_bad_bytes : Bytes = bytes_encode "true and false"
+        const cat5_d3_bad_utf8 : IsUtf8 cat5_d3_bad_bytes = Axiom
+        const cat5_d3_bad_length_valid
+          : SourceLength cat5_d3_unit_byte cat5_d3_bad_bytes ({bad_len}) =
+          Axiom
+
+        instance Source Cat5D3BadSource {{
+          sourceIdField = MkSourceId (Suc (Suc (Suc (Suc Zero)))) ;
+          sourceBytesField = cat5_d3_bad_bytes ;
+          sourceLengthField = ({bad_len}) ;
+          sourceLengthUnitField = cat5_d3_unit_byte ;
+          sourceLengthUnitValidField = cat5_d3_unit_valid ;
+          sourceUtf8Field = cat5_d3_bad_utf8 ;
+          sourceLengthValidField = cat5_d3_bad_length_valid
+        }}
+
+        const cat5_d3_bad_source : Source = Source_instance_Cat5D3BadSource
+
+        const cat5_d3_bad_parse : ParseResult (Syntax BoolExpr) =
+          parseBoolExpr cat5_d3_bad_source Zero (lessEqNatZeroLeft (sourceLength cat5_d3_bad_source))
         "#,
-    )
+    ))
     .expect("D3 Boolean parser/printer/formatter producer path must elaborate");
 
     let mut store = make_store(&env);
+    neutralize_fixture_proofs(
+        &env,
+        &mut store,
+        &[
+            "record_nil_val",
+            "cat5_d3_unit_valid",
+            "cat5_d3_printed_utf8",
+            "cat5_d3_printed_length_valid",
+            "cat5_d3_formatted_utf8",
+            "cat5_d3_formatted_length_valid",
+            "cat5_d3_bad_utf8",
+            "cat5_d3_bad_length_valid",
+        ],
+    );
     let printed = eval_def(&env, &mut store, "cat5_d3_printed_bytes");
     assert_eq!(
         printed,
@@ -942,8 +1007,7 @@ fn cat5_d3_bool_parser_printer_formatter_roundtrip_on_source_bytes() {
         "printBoolExpr must emit canonical ASCII bytes"
     );
 
-    let source = source_runtime_value(&env, 2, b"(and true (not false))");
-    let parsed = run_parser(&env, &mut store, source.clone());
+    let parsed = eval_def(&env, &mut store, "cat5_d3_parse_printed");
     let parsed_args = ctor_args(&env, &parsed, "Parsed");
     assert!(
         parsed_args.len() >= 4,
@@ -957,8 +1021,15 @@ fn cat5_d3_bool_parser_printer_formatter_roundtrip_on_source_bytes() {
         root_args[3], expected_expr,
         "parseBoolExpr (printBoolExpr e) must erase back to e"
     );
+    assert!(
+        matches!(
+            eval_def(&env, &mut store, "cat5_d3_parse_printed_erases"),
+            EvalVal::Ctor { id, .. } if id == env.globals["True"]
+        ),
+        "the checked surface erasure witness must evaluate to True"
+    );
 
-    let formatted = run_formatter(&env, &mut store, source.clone());
+    let formatted = eval_def(&env, &mut store, "cat5_d3_formatted");
     let formatted_args = ctor_args(&env, &formatted, "Ok");
     assert!(
         formatted_args.len() >= 3,
@@ -970,11 +1041,7 @@ fn cat5_d3_bool_parser_printer_formatter_roundtrip_on_source_bytes() {
         "formatBoolExpr must preserve the erased tree by printing canonical bytes"
     );
 
-    let idempotent = run_formatter(
-        &env,
-        &mut store,
-        source_runtime_value(&env, 4, b"(and true (not false))"),
-    );
+    let idempotent = eval_def(&env, &mut store, "cat5_d3_format_idempotent");
     let idempotent_args = ctor_args(&env, &idempotent, "Ok");
     assert_eq!(
         idempotent_args[2],
@@ -993,11 +1060,7 @@ fn cat5_d3_bool_parser_printer_formatter_roundtrip_on_source_bytes() {
         "all parsed syntax spans must be within the concrete Source length: {spans:?}"
     );
 
-    let bad = run_parser(
-        &env,
-        &mut store,
-        source_runtime_value(&env, 3, b"true and false"),
-    );
+    let bad = eval_def(&env, &mut store, "cat5_d3_bad_parse");
     assert!(
         matches!(bad, EvalVal::Ctor { id, .. } if id == env.globals["Failed"]),
         "`true and false` must reject; D3 has no implicit precedence table"
