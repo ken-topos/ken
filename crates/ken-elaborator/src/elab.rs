@@ -538,20 +538,15 @@ fn check(cx: &mut ElabCtx, expr: &RExpr, expected: &Term, _span: &Span) -> Resul
             // regardless (`flat` already excludes those).
             let dependent_eligible = flat
                 && {
-                    let (probe_core, probe_ty) = infer(cx, scrut)?;
-                    match probe_core {
-                        Term::Var(_) => {
-                            let probe_ty_wh = whnf(cx.env, &cx.ctx, &probe_ty);
-                            let (head, _) = peel_app(&probe_ty_wh);
-                            match head {
-                                Term::IndFormer { id, .. } => cx
-                                    .env
-                                    .inductive(id)
-                                    .map(|ind| ind.indices.is_empty())
-                                    .unwrap_or(false),
-                                _ => false,
-                            }
-                        }
+                    let (_, probe_ty) = infer(cx, scrut)?;
+                    let probe_ty_wh = whnf(cx.env, &cx.ctx, &probe_ty);
+                    let (head, _) = peel_app(&probe_ty_wh);
+                    match head {
+                        Term::IndFormer { id, .. } => cx
+                            .env
+                            .inductive(id)
+                            .map(|ind| ind.indices.is_empty())
+                            .unwrap_or(false),
                         _ => false,
                     }
                 };
@@ -571,102 +566,93 @@ fn check(cx: &mut ElabCtx, expr: &RExpr, expected: &Term, _span: &Span) -> Resul
     }
 }
 
-/// Replace `Var(j)` with `u` (weakened under binders as usual), leaving
-/// EVERY OTHER free variable's index completely UNCHANGED — no decrement.
-///
-/// Unlike `subst_var` (built for β-reduction: substituting into a binder's
-/// body while that binder is REMOVED, so indices above the target must shift
-/// down to close the gap), this is for goal-GENERALIZATION over one
-/// particular value while the surrounding context does NOT shrink: the
-/// generalized variable (e.g. a `match` scrutinee) stays a real entry in Γ —
-/// only this NEW term (the motive body) stops referencing it directly, in
-/// favor of a fresh outer binder. Any OTHER free variable in `term` — in
-/// particular one declared BEFORE the generalized variable (e.g. a generic
-/// `(a : Type)` parameter closed over by the goal) — keeps its ORIGINAL
-/// index; `subst_var`'s decrement would silently misindex it onto whatever
-/// happens to sit one slot over, a `TypeMismatch`-producing bug invisible on
-/// every prior nullary-family case only because none of those goals happened
-/// to reference a variable positioned above the scrutinee.
-fn subst_var_generalize(term: &Term, j: usize, u: &Term) -> Term {
-    let u_under = |binder: usize| -> Term { ken_kernel::subst::shift(u, binder as i64, 0) };
+/// Replace an occurrence of `target` with `u` while preserving the surrounding
+/// context exactly. Under binders both `target` and `u` are weakened, so the
+/// match is against the same outer term as seen from the deeper scope.
+fn subst_term_generalize(term: &Term, target: &Term, u: &Term) -> Term {
+    if term == target {
+        return u.clone();
+    }
+
+    let under = |t: &Term| -> Term { weaken(t, 1) };
     match term {
-        Term::Var(i) => {
-            if *i == j {
-                u_under(0)
-            } else {
-                Term::Var(*i)
-            }
-        }
         Term::Pi(a, b) => Term::pi(
-            subst_var_generalize(a, j, u),
-            subst_var_generalize(b, j + 1, &u_under(1)),
+            subst_term_generalize(a, target, u),
+            subst_term_generalize(b, &under(target), &under(u)),
         ),
         Term::Lam(a, t) => Term::lam(
-            subst_var_generalize(a, j, u),
-            subst_var_generalize(t, j + 1, &u_under(1)),
+            subst_term_generalize(a, target, u),
+            subst_term_generalize(t, &under(target), &under(u)),
         ),
         Term::Sigma(a, b) => Term::sigma(
-            subst_var_generalize(a, j, u),
-            subst_var_generalize(b, j + 1, &u_under(1)),
+            subst_term_generalize(a, target, u),
+            subst_term_generalize(b, &under(target), &under(u)),
         ),
         Term::Let { ty, val, body } => Term::Let {
-            ty: Box::new(subst_var_generalize(ty, j, u)),
-            val: Box::new(subst_var_generalize(val, j, u)),
-            body: Box::new(subst_var_generalize(body, j + 1, &u_under(1))),
+            ty: Box::new(subst_term_generalize(ty, target, u)),
+            val: Box::new(subst_term_generalize(val, target, u)),
+            body: Box::new(subst_term_generalize(body, &under(target), &under(u))),
         },
-        Term::App(f, a) => Term::app(subst_var_generalize(f, j, u), subst_var_generalize(a, j, u)),
-        Term::Pair(a, b) => Term::pair(subst_var_generalize(a, j, u), subst_var_generalize(b, j, u)),
-        Term::Proj1(p) => Term::proj1(subst_var_generalize(p, j, u)),
-        Term::Proj2(p) => Term::proj2(subst_var_generalize(p, j, u)),
+        Term::App(f, a) => Term::app(
+            subst_term_generalize(f, target, u),
+            subst_term_generalize(a, target, u),
+        ),
+        Term::Pair(a, b) => Term::pair(
+            subst_term_generalize(a, target, u),
+            subst_term_generalize(b, target, u),
+        ),
+        Term::Proj1(p) => Term::proj1(subst_term_generalize(p, target, u)),
+        Term::Proj2(p) => Term::proj2(subst_term_generalize(p, target, u)),
         Term::Ascript(t, a) => Term::Ascript(
-            Box::new(subst_var_generalize(t, j, u)),
-            Box::new(subst_var_generalize(a, j, u)),
+            Box::new(subst_term_generalize(t, target, u)),
+            Box::new(subst_term_generalize(a, target, u)),
         ),
         Term::Eq(a, t, u2) => Term::Eq(
-            Box::new(subst_var_generalize(a, j, u)),
-            Box::new(subst_var_generalize(t, j, u)),
-            Box::new(subst_var_generalize(u2, j, u)),
+            Box::new(subst_term_generalize(a, target, u)),
+            Box::new(subst_term_generalize(t, target, u)),
+            Box::new(subst_term_generalize(u2, target, u)),
         ),
         Term::Cast(a, b, e, t) => Term::Cast(
-            Box::new(subst_var_generalize(a, j, u)),
-            Box::new(subst_var_generalize(b, j, u)),
-            Box::new(subst_var_generalize(e, j, u)),
-            Box::new(subst_var_generalize(t, j, u)),
+            Box::new(subst_term_generalize(a, target, u)),
+            Box::new(subst_term_generalize(b, target, u)),
+            Box::new(subst_term_generalize(e, target, u)),
+            Box::new(subst_term_generalize(t, target, u)),
         ),
         Term::J(ml, d2, e) => Term::J(
-            Box::new(subst_var_generalize(ml, j, u)),
-            Box::new(subst_var_generalize(d2, j, u)),
-            Box::new(subst_var_generalize(e, j, u)),
+            Box::new(subst_term_generalize(ml, target, u)),
+            Box::new(subst_term_generalize(d2, target, u)),
+            Box::new(subst_term_generalize(e, target, u)),
         ),
         Term::Quot(a, r) => Term::Quot(
-            Box::new(subst_var_generalize(a, j, u)),
-            Box::new(subst_var_generalize(r, j, u)),
+            Box::new(subst_term_generalize(a, target, u)),
+            Box::new(subst_term_generalize(r, target, u)),
         ),
-        Term::QuotClass(t) => Term::QuotClass(Box::new(subst_var_generalize(t, j, u))),
-        Term::Trunc(a) => Term::Trunc(Box::new(subst_var_generalize(a, j, u))),
-        Term::TruncProj(t) => Term::TruncProj(Box::new(subst_var_generalize(t, j, u))),
-        Term::Refl(t) => Term::Refl(Box::new(subst_var_generalize(t, j, u))),
+        Term::QuotClass(t) => Term::QuotClass(Box::new(subst_term_generalize(t, target, u))),
+        Term::Trunc(a) => Term::Trunc(Box::new(subst_term_generalize(a, target, u))),
+        Term::TruncProj(t) => Term::TruncProj(Box::new(subst_term_generalize(t, target, u))),
+        Term::Refl(t) => Term::Refl(Box::new(subst_term_generalize(t, target, u))),
         Term::QuotElim { motive, method, respect, scrut } => Term::QuotElim {
-            motive: Box::new(subst_var_generalize(motive, j, u)),
-            method: Box::new(subst_var_generalize(method, j, u)),
-            respect: Box::new(subst_var_generalize(respect, j, u)),
-            scrut: Box::new(subst_var_generalize(scrut, j, u)),
+            motive: Box::new(subst_term_generalize(motive, target, u)),
+            method: Box::new(subst_term_generalize(method, target, u)),
+            respect: Box::new(subst_term_generalize(respect, target, u)),
+            scrut: Box::new(subst_term_generalize(scrut, target, u)),
         },
         Term::Elim { fam, level_args, params, motive, methods, indices, scrut } => Term::Elim {
             fam: *fam,
             level_args: level_args.clone(),
-            params: params.iter().map(|p| subst_var_generalize(p, j, u)).collect(),
-            motive: Box::new(subst_var_generalize(motive, j, u)),
-            methods: methods.iter().map(|m| subst_var_generalize(m, j, u)).collect(),
-            indices: indices.iter().map(|i| subst_var_generalize(i, j, u)).collect(),
-            scrut: Box::new(subst_var_generalize(scrut, j, u)),
+            params: params.iter().map(|p| subst_term_generalize(p, target, u)).collect(),
+            motive: Box::new(subst_term_generalize(motive, target, u)),
+            methods: methods.iter().map(|m| subst_term_generalize(m, target, u)).collect(),
+            indices: indices.iter().map(|i| subst_term_generalize(i, target, u)).collect(),
+            scrut: Box::new(subst_term_generalize(scrut, target, u)),
         },
         Term::Absurd(motive, proof) => Term::Absurd(
-            Box::new(subst_var_generalize(motive, j, u)),
-            Box::new(subst_var_generalize(proof, j, u)),
+            Box::new(subst_term_generalize(motive, target, u)),
+            Box::new(subst_term_generalize(proof, target, u)),
         ),
         Term::Type(_)
         | Term::Omega(_)
+        | Term::Var(_)
         | Term::Const { .. }
         | Term::IndFormer { .. }
         | Term::Constructor { .. } => term.clone(),
@@ -675,12 +661,9 @@ fn subst_var_generalize(term: &Term, j: usize, u: &Term) -> Term {
 
 /// Check `match scrut { C₁ p… => e₁ ; … }` against a KNOWN `expected` goal
 /// that may reference the scrutinee (a per-branch-varying `Ω`- or `Type`-
-/// motive) — the K4/AC4 dependent-elimination path. `scrut` must elaborate
-/// to a bound variable (`Term::Var`); only FLAT constructor patterns are
-/// supported (no nested constructor sub-patterns) — both are sufficient for
-/// a structure-class law proof (`ES4-lawproofs`) and deliberately narrower
-/// than `infer_match`'s general nested-pattern compiler, which this does
-/// not touch or replace.
+/// motive) — the K4/AC4 dependent-elimination path. Only FLAT constructor
+/// patterns are supported (no nested constructor sub-patterns), deliberately
+/// narrower than `infer_match`'s general nested-pattern compiler.
 fn check_match_dependent(
     cx: &mut ElabCtx,
     scrut: &RExpr,
@@ -705,16 +688,6 @@ fn check_match_dependent(
     let expected = &cx.metas.zonk_term(expected);
     let (scrut_core, scrut_ty_raw) = infer(cx, scrut)?;
     let scrut_ty = whnf(cx.env, &cx.ctx, &scrut_ty_raw);
-    let scrut_idx = match &scrut_core {
-        Term::Var(k) => *k,
-        _ => {
-            return Err(ElabError::Internal(
-                "dependent match (AC4): scrutinee must be a bound variable so the \
-                 goal can be generalized over it"
-                    .into(),
-            ))
-        }
-    };
 
     let (head, params_terms) = peel_app(&scrut_ty);
     let d_id = match &head {
@@ -733,16 +706,14 @@ fn check_match_dependent(
         .clone();
     let m = ind.params.len();
 
-    // The motive: `expected` with `Var(scrut_idx)` abstracted to a fresh
-    // outer binder — `weaken` shifts every free var (scrut_idx included) up
-    // by 1 first, then `subst_var_generalize` replaces the shifted scrut_idx
-    // with the new Var(0); every OTHER free var (in particular one declared
-    // BEFORE the scrutinee, e.g. a generic `(a : Type)` param the goal
-    // closes over) keeps its shifted-by-1 index UNCHANGED — the scrutinee's
-    // own binder is not actually leaving Γ, so nothing above it should be
-    // renumbered (plain `subst_var` would wrongly decrement it onto
-    // whatever sits one slot over; see `subst_var_generalize`'s doc).
-    let motive_body = subst_var_generalize(&weaken(expected, 1), scrut_idx + 1, &Term::var(0));
+    // The motive: `expected` with the elaborated scrutinee abstracted to a
+    // fresh outer binder. This handles both the original bound-variable case
+    // (`match b`) and the AC8 transparent-head case (`match km_scrutinee b`).
+    // Every other free variable keeps its shifted index; the outer context is
+    // not being shrunk, only this motive body stops mentioning the concrete
+    // scrutinee term directly.
+    let motive_body =
+        subst_term_generalize(&weaken(expected, 1), &weaken(&scrut_core, 1), &Term::var(0));
     // `expected` is already zonked (above); the CONTEXT itself may still
     // hold an unresolved metavariable for some other in-scope parameter
     // (e.g. `a`'s own `(a : Type)` binding) that `kernel_infer` would need
@@ -801,7 +772,11 @@ fn check_match_dependent(
         for j in (0..n).rev() {
             concrete = Term::app(concrete, Term::var(j));
         }
-        let expected_here = subst_var_generalize(&weaken(expected, n as i64), scrut_idx + n, &concrete);
+        let expected_here = subst_term_generalize(
+            &weaken(expected, n as i64),
+            &weaken(&scrut_core, n as i64),
+            &concrete,
+        );
         let body_core = check(cx, &arm.body, &expected_here, &arm.span)?;
         for _ in 0..n {
             cx.ctx.pop();
@@ -853,7 +828,11 @@ fn check_match_dependent(
             let ih_ty = if nb == 0 {
                 // DIRECT case — byte-identical to before this WP.
                 let field_var = Term::var(n - 1 - pos);
-                subst_var_generalize(&weaken(expected, n as i64), scrut_idx + n, &field_var)
+                subst_term_generalize(
+                    &weaken(expected, n as i64),
+                    &weaken(&scrut_core, n as i64),
+                    &field_var,
+                )
             } else {
                 // W-STYLE case: Π(b1:B1)...(b_nb:B_nb). expected[scrut := field_var b1..b_nb].
                 // Built in the bare [fields] frame (j = 0); the outer
@@ -873,9 +852,9 @@ fn check_match_dependent(
                 // occurrence to (field_var b_bar). (idxs empty -> this IS
                 // method_type's `M idxs (a_pos b_bar)`, in the elaborator's
                 // already-applied `expected = M scrut` representation.)
-                let mut ih_ty = subst_var_generalize(
+                let mut ih_ty = subst_term_generalize(
                     &weaken(expected, (n + nb) as i64),
-                    scrut_idx + n + nb,
+                    &weaken(&scrut_core, (n + nb) as i64),
                     &scrut_body,
                 );
 

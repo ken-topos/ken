@@ -1,6 +1,6 @@
 //! L2 acceptance tests: `data` / `match` / exhaustiveness / refinements.
 //!
-//! Pins: `conformance/surface/data-match/seed-data-match.md` AC1–AC7.
+//! Pins: `conformance/surface/data-match/seed-data-match.md` AC1–AC8.
 //! Spec: `spec/30-surface/34-data-match.md`.
 //!
 //! AC5 (indexed families) and AC6 (dependent motive) are deferred — they
@@ -25,6 +25,26 @@ fn elab_ok(env: &mut ElabEnv, src: &str) -> GlobalId {
 
 fn body_of(env: &ElabEnv, id: GlobalId) -> Term {
     env.env.transparent_body(id).expect("not a transparent def").1
+}
+
+fn term_mentions_const(t: &Term, target: GlobalId) -> bool {
+    match t {
+        Term::Const { id, .. } if *id == target => true,
+        _ => t
+            .children()
+            .into_iter()
+            .any(|child| term_mentions_const(child, target)),
+    }
+}
+
+fn term_mentions_var(t: &Term, target: usize) -> bool {
+    match t {
+        Term::Var(i) if *i == target => true,
+        _ => t
+            .children()
+            .into_iter()
+            .any(|child| term_mentions_var(child, target)),
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -446,6 +466,184 @@ fn ac7_plain_carrier_no_obligation() {
         elab_result.obligations.is_empty(),
         "AC7b: spurious obligation emitted for plain Int annotation (no refinement)"
     );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AC8  proof-returning-dependent-motive  (`34 §3.5`, `39 §2.1`, `14 §3`)
+//
+// Positive red-to-green for KM-dependent-match-proof-motive-build D1. On the
+// pre-fix `927dd34` head this literal source rejects at the whole body with
+// `KernelRejected { TypeMismatch { expected: Type 0, found: Ω0 } }`, because
+// `match km_scrutinee b` missed checked dependent-motive recovery and fell
+// through to `infer_match`'s constant `D -> Type 0` motive path.
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn ac8_proof_returning_match_through_transparent_scrutinee_elaborates() {
+    let mut env = mk_env();
+    let scrutinee_id = elab_ok(&mut env, "fn km_scrutinee (b : Bool) : Bool = b");
+
+    let id = elab_ok(
+        &mut env,
+        "fn km_proof_motive_positive (b : Bool) \
+           : Equal Bool (km_scrutinee b) (km_scrutinee b) = \
+           match km_scrutinee b { True => tt ; False => tt }",
+    );
+
+    let body = body_of(&env, id);
+    let mut inner = &body;
+    while let Term::Lam(_, body) = inner {
+        inner = body;
+    }
+
+    let (motive, scrut) = match inner {
+        Term::Elim { fam, motive, scrut, .. } => {
+            assert_eq!(*fam, env.globals["Bool"], "AC8 must eliminate over Bool");
+            (motive.as_ref(), scrut.as_ref())
+        }
+        other => panic!(
+            "AC8 proof-returning match must lower to Term::Elim, got {other:?}"
+        ),
+    };
+    assert!(
+        term_mentions_const(scrut, scrutinee_id),
+        "the scrutinee should preserve the transparent helper call"
+    );
+
+    let (motive_body, motive_ty) = match motive {
+        Term::Ascript(body, ty) => (body.as_ref(), ty.as_ref()),
+        other => panic!(
+            "AC8 motive must be ascribed so the kernel sees its Ω codomain, got {other:?}"
+        ),
+    };
+    match motive_ty {
+        Term::Pi(_, codomain) => {
+            assert_eq!(
+                **codomain,
+                Term::Omega(Level::Zero),
+                "AC8 motive codomain must be Ω0"
+            );
+        }
+        other => panic!("AC8 motive type must be a Pi over Bool, got {other:?}"),
+    }
+    match motive_body {
+        Term::Lam(_, body) => {
+            assert!(
+                term_mentions_var(body, 0),
+                "AC8 motive body must mention the generalized scrutinee binder"
+            );
+            assert!(
+                !term_mentions_const(body, scrutinee_id),
+                "AC8 motive body must abstract over `km_scrutinee b`, not keep a constant motive"
+            );
+        }
+        other => panic!("AC8 motive body must be a lambda, got {other:?}"),
+    }
+}
+
+#[test]
+fn ac8_wrong_specialized_branch_still_rejects() {
+    let mut env = mk_env();
+    elab_ok(&mut env, "fn km_scrutinee (b : Bool) : Bool = b");
+
+    let err = elab(
+        &mut env,
+        "fn km_proof_motive_negative (b : Bool) \
+           : Equal Bool (km_scrutinee b) True -> Equal Bool (km_scrutinee b) True = \
+           match km_scrutinee b { True => \\p. p ; False => \\p. tt }",
+    )
+    .expect_err("AC8 negative must reject");
+
+    match err {
+        ElabError::KernelRejected {
+            error: ken_kernel::KernelError::TypeMismatch { .. },
+            ..
+        } => {}
+        other => panic!(
+            "AC8 negative must reject through branch-obligation kernel TypeMismatch, got {other:?}"
+        ),
+    }
+}
+
+#[test]
+fn ac8_cat4_option_table_probe_still_rejects_distinct_mechanism() {
+    let mut env = mk_env();
+    elab_ok(
+        &mut env,
+        "fn km_intersection_table (left : Option Unit) (keep : Bool) (prior : Option Unit) \
+           : Option Unit = \
+           match left { \
+             None => prior ; \
+             Some x => match keep { True => Some Unit x ; False => prior } \
+           }",
+    );
+    elab_ok(
+        &mut env,
+        "fn km_member_from_lookup (left : Option Unit) : Bool = \
+           match left { None => False ; Some x => True }",
+    );
+    elab_ok(
+        &mut env,
+        "fn km_lookup (b : Bool) : Option Unit = \
+           match b { True => Some Unit MkUnit ; False => None Unit }",
+    );
+    elab_ok(
+        &mut env,
+        "fn km_option_refl (o : Option Unit) : Equal (Option Unit) o o = Refl",
+    );
+
+    // Mechanical CAT-4 D3 reconstruction from the Ken-owned
+    // `intersectionLookupMemberCharacterization` trigger: a nested
+    // proof-returning `match km_lookup ...` whose option-table target mentions
+    // the lookup scrutinee and a reducible membership test. D1/D2 fixed the
+    // old `Type 0`/`Ω0` motive-sort failure; this remaining rejection is the
+    // distinct option-table branch-motive conversion split Runtime needs named.
+    let err = elab(
+        &mut env,
+        "fn intersectionLookupMemberCharacterization (b : Bool) \
+           : Equal (Option Unit) \
+               (km_intersection_table (km_lookup b) \
+                 (km_member_from_lookup (km_lookup b)) (None Unit)) \
+               (km_intersection_table (km_lookup b) \
+                 (km_member_from_lookup (km_lookup b)) (None Unit)) = \
+           match km_lookup b { \
+             None => km_option_refl \
+               (km_intersection_table (None Unit) \
+                 (km_member_from_lookup (None Unit)) (None Unit)) ; \
+             Some x => match km_member_from_lookup (Some Unit x) { \
+               True => km_option_refl \
+                 (km_intersection_table (Some Unit x) \
+                   (km_member_from_lookup (Some Unit x)) (None Unit)) ; \
+               False => km_option_refl \
+                 (km_intersection_table (Some Unit x) \
+                   (km_member_from_lookup (Some Unit x)) (None Unit)) \
+             } \
+           }",
+    )
+    .expect_err("CAT-4 option-table probe should still reject before the follow-on split");
+
+    match err {
+        ElabError::KernelRejected {
+            error:
+                ken_kernel::KernelError::TypeMismatch {
+                    expected,
+                    found,
+                },
+            ..
+        } => {
+            assert!(
+                !matches!((&*expected, &*found), (Term::Type(Level::Zero), Term::Omega(Level::Zero))),
+                "D3 classification must not be the pre-D1 proof-motive sort failure"
+            );
+            assert!(
+                !matches!(&*expected, Term::Type(_)) && !matches!(&*found, Term::Omega(_)),
+                "D3 classification must reject after proof-motive Ω sorting, got expected {expected:?}, found {found:?}"
+            );
+        }
+        other => panic!(
+            "CAT-4 option-table probe must reject through the distinct kernel TypeMismatch, got {other:?}"
+        ),
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
