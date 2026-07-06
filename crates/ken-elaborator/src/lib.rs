@@ -21,6 +21,7 @@ pub mod export;
 pub mod format;
 pub mod foreign;
 pub mod ifc;
+pub mod literate;
 pub mod trace;
 pub mod protocol;
 pub mod error;
@@ -79,6 +80,7 @@ pub use prelude::PreludeEnv;
 pub use foreign::{
     trusted_base_delta, FfiRuntimeCheck, ForeignBinding, ForeignEnv, MarshalKind, MarshalSig,
 };
+pub use literate::{extract_ken_md, validate_ken_md_fences, KenMdExtraction};
 pub use classes::{ClassEnv, ClassInfo, ClassKind, InstanceInfo};
 
 /// The surface-level elaboration environment.
@@ -231,6 +233,20 @@ impl ElabEnv {
     /// every successfully elaborated declaration.
     pub fn elaborate_file(&mut self, src: &str) -> Result<Vec<GlobalId>, ElabError> {
         let decls = parser::parse_decls(src)?;
+        let results = modules::expand_and_elaborate(self, &decls)?;
+        Ok(results.into_iter().map(|r| r.def_id).collect())
+    }
+
+    /// Elaborate a single `.ken.md` source artifact.
+    ///
+    /// The Markdown extractor is a read-boundary transform only: it preserves
+    /// byte offsets into the original artifact by blanking prose, validates
+    /// each compiled fence independently, then reuses the ordinary file
+    /// parser/elaborator path on the full blank-preserved buffer.
+    pub fn elaborate_ken_md_file(&mut self, src: &str) -> Result<Vec<GlobalId>, ElabError> {
+        let extracted = literate::extract_ken_md(src)?;
+        literate::validate_ken_md_fences(&extracted)?;
+        let decls = parser::parse_decls(&extracted.source)?;
         let results = modules::expand_and_elaborate(self, &decls)?;
         Ok(results.into_iter().map(|r| r.def_id).collect())
     }

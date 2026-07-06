@@ -53,7 +53,13 @@ fn run_file(path: Option<&str>) {
         }
     };
 
-    let ids = match elab_env.elaborate_file(&src) {
+    let ids_result = if path.ends_with(".ken.md") {
+        elab_env.elaborate_ken_md_file(&src)
+    } else {
+        elab_env.elaborate_file(&src)
+    };
+
+    let ids = match ids_result {
         Ok(ids) => ids,
         Err(e) => {
             eprintln!("ken run: elaboration error in '{}': {:?}", path, e);
