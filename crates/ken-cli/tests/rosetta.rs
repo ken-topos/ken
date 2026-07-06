@@ -16,7 +16,9 @@
 //! never elaborated — confirmed empirically, `ken-elaborator/src/elab.rs`
 //! has no `ImportDecl`/`ModuleDecl` handling). Examples that reuse
 //! `packages/collections` (per the frame's DRY rule) need its symbols
-//! concatenated ahead of their own source before `ken run`.
+//! concatenated ahead of their own source before `ken run`. `collections.ken`
+//! now carries proof terms using `cong`, so the proof-only transport package
+//! must precede collections in that concatenated prelude.
 //!
 //! **This concatenation is NOT applied blanket to every example.**
 //! Empirically, unconditionally prepending declarations that a given
@@ -53,8 +55,12 @@ fn rosetta_dir() -> PathBuf {
 const NEEDS_COLLECTIONS: &[&str] = &["palindrome", "closures", "merge-sort", "tree-traversal"];
 
 fn collections_prelude() -> String {
-    fs::read_to_string(workspace_root().join("packages/collections/collections.ken"))
-        .expect("packages/collections/collections.ken must be readable")
+    let transport = fs::read_to_string(workspace_root().join("packages/transport/transport.ken"))
+        .expect("packages/transport/transport.ken must be readable");
+    let collections =
+        fs::read_to_string(workspace_root().join("packages/collections/collections.ken"))
+            .expect("packages/collections/collections.ken must be readable");
+    format!("{transport}\n{collections}")
 }
 
 enum Oracle {
