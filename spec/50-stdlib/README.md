@@ -11,6 +11,10 @@
 > CV's derivation-path table, `../../conformance/surface/taxonomy/`). ES4 builds
 > these as in-repo packages under `packages/`.
 
+This file is the spec/index side of the catalog. The source-style and
+refinement contract for realized packages lives in
+`../../docs/program/07-catalog-style-guide.md`.
+
 The standard packages are **ordinary Ken** (they self-host atop the kernel and
 the built-ins), with one discipline that distinguishes them from a typical
 standard library: **their core abstractions carry their laws as propositions**
