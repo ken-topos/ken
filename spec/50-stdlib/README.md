@@ -116,6 +116,16 @@ adjacency; and the transitive closure is **bounded-reachability `IsTrue`** —
 The `Nat` carrier (a net-new `Axiom`-free `leqNat`) is the discriminator floor,
 not the `Axiom`-holed `Ord Int`/`Ord Char`.
 
+The **Layer-3 parsing/syntax/diagnostics contract** — source artifacts as byte
+identity, half-open byte spans, total parser result values, small package-owned
+grammars, parser/printer and formatter laws, and diagnostic primary/secondary
+span validity — is pinned in **`59-parsing-syntax-diagnostics.md`** (CAT-5).
+It is an ordinary `packages/parsing/` catalog package: no compiler parser
+rewrite, no compiler-internal AST as public API, no full Ken syntax reflection,
+and no `.ken.md` implementation work. A derived input such as a blanked
+`.ken.md` compiled view is only an offset-preserving view of the original
+source artifact; the original artifact owns diagnostic identity.
+
 ## 4. I/O, effects, serialization
 
 - Effect interfaces (`../30-surface/36`):
