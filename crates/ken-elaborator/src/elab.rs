@@ -1756,6 +1756,93 @@ fn type_contains_effect_row(ty: &RType) -> bool {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum RTypeHead {
+    Con(String),
+    Var(usize, String),
+}
+
+fn rtype_heads_match(a: &RTypeHead, b: &RTypeHead) -> bool {
+    match (a, b) {
+        (RTypeHead::Con(a), RTypeHead::Con(b)) => a == b,
+        (RTypeHead::Var(_, a), RTypeHead::Var(_, b)) => a == b,
+        (RTypeHead::Con(a), RTypeHead::Var(_, b))
+        | (RTypeHead::Var(_, a), RTypeHead::Con(b)) => a == b,
+    }
+}
+
+fn rtype_app_head(ty: &RType) -> Option<RTypeHead> {
+    match ty {
+        RType::RApp(f, _, _) => rtype_app_head(f),
+        RType::RCon(name, _) => Some(RTypeHead::Con(name.clone())),
+        RType::RVarTy(index, name, _) => Some(RTypeHead::Var(*index, name.clone())),
+        _ => None,
+    }
+}
+
+fn rtype_is_app_headed_by(ty: &RType, head: &RTypeHead) -> bool {
+    matches!(ty, RType::RApp(_, _, _))
+        && rtype_app_head(ty)
+            .as_ref()
+            .is_some_and(|candidate| rtype_heads_match(candidate, head))
+}
+
+fn type_is_applicative_dict_for_head(ty: &RType, head: &RTypeHead) -> bool {
+    match ty {
+        RType::RApp(f, arg, _) => {
+            matches!(&**f, RType::RCon(name, _) if name == "Applicative")
+                && rtype_app_head(arg)
+                    .as_ref()
+                    .is_some_and(|candidate| rtype_heads_match(candidate, head))
+        }
+        _ => false,
+    }
+}
+
+fn callback_result_head(ty: &RType) -> Option<RTypeHead> {
+    match ty {
+        RType::RArr(_, codomain, _) | RType::REffectArr(_, _, codomain, _) => {
+            let head = rtype_app_head(codomain)?;
+            rtype_is_app_headed_by(codomain, &head).then_some(head)
+        }
+        _ => None,
+    }
+}
+
+fn collect_field_arrow_chain<'a>(ty: &'a RType, args: &mut Vec<&'a RType>) -> &'a RType {
+    match ty {
+        RType::RPi(_, domain, codomain, _) => {
+            args.push(domain);
+            collect_field_arrow_chain(codomain, args)
+        }
+        RType::RArr(domain, codomain, _) | RType::REffectArr(domain, _, codomain, _) => {
+            args.push(domain);
+            collect_field_arrow_chain(codomain, args)
+        }
+        _ => ty,
+    }
+}
+
+fn type_has_applicative_row_polymorphic_contract(ty: &RType) -> bool {
+    let mut args = Vec::new();
+    let result = collect_field_arrow_chain(ty, &mut args);
+    for arg in &args {
+        let Some(head) = callback_result_head(arg) else {
+            continue;
+        };
+        if rtype_is_app_headed_by(result, &head)
+            && args.iter().any(|candidate| type_is_applicative_dict_for_head(candidate, &head))
+        {
+            return true;
+        }
+    }
+    false
+}
+
+fn field_type_earns_proc(ty: &RType) -> bool {
+    type_contains_effect_row(ty) || type_has_applicative_row_polymorphic_contract(ty)
+}
+
 fn class_field_declared_row(keyword: DefKeyword, field_name: &str) -> crate::effects::RowType {
     match keyword {
         DefKeyword::Proc => crate::effects::RowType::singleton(format!(
@@ -1773,12 +1860,12 @@ fn check_class_field_marker(
     span: &Span,
 ) -> Result<(), ElabError> {
     let explicit_value_params = explicit_value_param_count_from_field_type(ty);
-    let has_effect_row = type_contains_effect_row(ty);
+    let earns_proc = field_type_earns_proc(ty);
     match keyword {
-        DefKeyword::Const | DefKeyword::Fn if has_effect_row => Err(ElabError::TypeMismatch {
+        DefKeyword::Const | DefKeyword::Fn if earns_proc => Err(ElabError::TypeMismatch {
             span: span.clone(),
             reason: format!(
-                "`{:?}` class field `{}` declares an effect row; use `proc`",
+                "`{:?}` class field `{}` declares a latent or row-polymorphic effect; use `proc`",
                 keyword, field_name
             ),
         }),
@@ -1803,10 +1890,10 @@ fn check_class_field_marker(
                 field_name
             ),
         }),
-        DefKeyword::Proc if !has_effect_row => Err(ElabError::TypeMismatch {
+        DefKeyword::Proc if !earns_proc => Err(ElabError::TypeMismatch {
             span: span.clone(),
             reason: format!(
-                "`proc` class field `{}` declares no latent effect row; use `fn`/`const` for pure fields",
+                "`proc` class field `{}` declares no latent or row-polymorphic effect; use `fn`/`const` for pure fields",
                 field_name
             ),
         }),
@@ -1840,6 +1927,7 @@ struct ProjectionPurityCtx<'a> {
     globals: &'a HashMap<String, GlobalId>,
     class_env: &'a ClassEnv,
     local_constraints: &'a [(String, RType)],
+    bound_dict_classes: &'a [(String, String)],
 }
 
 fn instance_class_for_global<'a>(
@@ -1875,6 +1963,11 @@ fn projected_field_row_type(
     let Some(ctx) = ctx else {
         return crate::effects::RowType::empty();
     };
+    if let RExpr::RVar(_, name, _) = base {
+        if let Some((_, class_name)) = ctx.bound_dict_classes.iter().find(|(n, _)| n == name) {
+            return projected_class_field_row_type(ctx.class_env, class_name, field);
+        }
+    }
     let Some(instance_id) = projected_instance_id(base, ctx) else {
         return crate::effects::RowType::empty();
     };
@@ -1904,6 +1997,46 @@ fn projected_field_row_type(
         )),
         _ => crate::effects::RowType::empty(),
     }
+}
+
+fn projected_class_field_row_type(
+    class_env: &ClassEnv,
+    class_name: &str,
+    field: &str,
+) -> crate::effects::RowType {
+    let Some(class_info) = class_env.classes.get(class_name) else {
+        return crate::effects::RowType::empty();
+    };
+    let Some(idx) = class_info.field_names.iter().position(|n| n == field) else {
+        return crate::effects::RowType::empty();
+    };
+    match class_info.field_purities.get(idx).copied().flatten() {
+        Some(DefKeyword::Proc) => crate::effects::RowType::singleton(format!(
+            "projected proc class field `{}.{}`",
+            class_name, field
+        )),
+        _ => crate::effects::RowType::empty(),
+    }
+}
+
+fn class_name_for_dictionary_type(class_env: &ClassEnv, ty: &RType) -> Option<String> {
+    let head = rtype_head_name(ty);
+    class_env.classes.contains_key(&head).then_some(head)
+}
+
+fn collect_bound_dictionary_params(
+    ty: Option<&RType>,
+    class_env: &ClassEnv,
+) -> Vec<(String, String)> {
+    let mut dicts = Vec::new();
+    let mut cur = ty;
+    while let Some(RType::RPi(name, domain, codomain, _)) = cur {
+        if let Some(class_name) = class_name_for_dictionary_type(class_env, domain) {
+            dicts.push((name.clone(), class_name));
+        }
+        cur = Some(codomain);
+    }
+    dicts
 }
 
 fn infer_expr_row_type(
@@ -1965,10 +2098,12 @@ pub fn check_surface_purity(
     }
 
     let declared = surface_declared_row_type(rdecl)?.unwrap_or_else(crate::effects::RowType::empty);
+    let bound_dict_classes = collect_bound_dictionary_params(rdecl.ty.as_ref(), class_env);
     let projection_ctx = ProjectionPurityCtx {
         globals,
         class_env,
         local_constraints: constraints,
+        bound_dict_classes: &bound_dict_classes,
     };
     let inferred = infer_expr_row_type(decl_eval_body(&rdecl.body), effect_rows, Some(&projection_ctx));
     let decl = crate::effects::EffectDecl::new(&rdecl.name)
@@ -2416,6 +2551,7 @@ fn compute_ordered_field_values(
             globals: cx.globals,
             class_env,
             local_constraints: &[],
+            bound_dict_classes: &[],
         };
         let field_row = infer_expr_row_type(&fields[pos].1, effect_rows, Some(&projection_ctx));
         if let Some(keyword) = field_purities[i] {
@@ -2451,6 +2587,7 @@ fn check_instance_field_purity(
         globals,
         class_env,
         local_constraints: &[],
+        bound_dict_classes: &[],
     };
     let inferred = infer_expr_row_type(expr, effect_rows, Some(&projection_ctx));
     let impure = !is_empty_closed_row(&inferred);

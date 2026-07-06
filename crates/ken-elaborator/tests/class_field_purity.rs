@@ -31,10 +31,10 @@ fn surf2_d1_proc_traverse_parses_elaborates_and_registers_metadata() {
              foldable : Foldable f ;
              proc traverse :
                (g : (Type -> Type)) -> Applicative g -> (a : Type) -> (b : Type) ->
-               (a ->[e] g b) -> f a -> g (f b)
+               (a -> g b) -> f a -> g (f b)
          }",
     )
-    .expect("marked Traversable signature must parse and elaborate");
+    .expect("landed marked Traversable signature must parse and elaborate");
 
     let traversable = env
         .class_env
@@ -96,6 +96,17 @@ fn surf2_d1_marked_instance_fields_and_projection_are_checked() {
             && bad_where.contains("EffectEscapes")
             && bad_where.contains("FS"),
         "where-dictionary proc projection must be visible to SURF-1 checking: {bad_where}"
+    );
+
+    let bad_bound = err_text(env.elaborate_decl(
+        "fn bad_bound (d : Effectful Int) (x : Int) : Int =
+                 d.step x",
+    ));
+    assert!(
+        bad_bound.contains("false purity or effect escape")
+            && bad_bound.contains("EffectEscapes")
+            && bad_bound.contains("projected proc class field `Effectful.step`"),
+        "bound dictionary proc projection must be visible to SURF-1 checking: {bad_bound}"
     );
 
     env.elaborate_decl("fn step_bool (x : Bool) : Bool = x")
@@ -162,7 +173,7 @@ fn surf2_d1_const_fn_and_malformed_markers_follow_field_signature() {
     ));
     assert!(
         bad_pure_proc.contains("`proc` class field `pure_step`")
-            && bad_pure_proc.contains("no latent effect row"),
+            && bad_pure_proc.contains("no latent or row-polymorphic effect"),
         "pure-arrow proc field must reject because the field type does not earn proc: {bad_pure_proc}"
     );
 
@@ -173,7 +184,7 @@ fn surf2_d1_const_fn_and_malformed_markers_follow_field_signature() {
     ));
     assert!(
         bad_effectful_fn.contains("class field `impure_fn`")
-            && bad_effectful_fn.contains("declares an effect row")
+            && bad_effectful_fn.contains("declares a latent or row-polymorphic effect")
             && bad_effectful_fn.contains("use `proc`"),
         "fn field with a latent effect row must reject as should-be-proc: {bad_effectful_fn}"
     );
