@@ -63,6 +63,97 @@ is a core term the kernel `check`s (`../10-kernel/18 §4`). Consequences:
 8. **Obligation emission** — where a refinement/contract is introduced, emit the
    proof obligation (`../20-verification/22`) and leave a hole/`prove` slot.
 
+### 2.1 Proof-returning dependent `match` motives
+
+When a surface `match` is checked against a known expected type, motive recovery
+is part of elaboration. For a proof-returning dependent `match` (`34 §3.5`), the
+expected type is itself a proposition, commonly `Equal A lhs rhs`, whose operands
+mention the scrutinee directly or through a transparent/reducible expression. The
+elaborator MUST treat this as an ordinary dependent eliminator into `Ω`, not as a
+non-dependent match whose proof result is inferred from the first arm.
+
+The required elaboration contract is:
+
+1. Infer the scrutinee core term `s` and type `D p̄ ī`; reject non-inductive
+   scrutinees with the ordinary `match` type error.
+2. Infer/classify the expected target `E[s]`. If it classifies as `Ω_l`, this is
+   a proof motive; if it classifies as `Type l`, this is ordinary large
+   elimination. These two cases are both valid sorts for `Term::Elim`
+   (`../10-kernel/14 §3`). The elaborator MUST NOT force an `Ω` target through
+   `Type`, and MUST NOT coerce a `Type` target into `Ω`.
+3. Recover the motive by generalizing the expected target over the scrutinee and
+   indices: `M = λī x. E[x]`. Transparent aliases and reducible heads needed to
+   expose the dependency, including `Equal` unfolding to kernel `Eq`
+   (`../50-stdlib/53 §1`), are handled by the same WHNF/transparent-unfolding
+   discipline used elsewhere in elaboration. If multiple incomparable
+   generalizations remain possible, report an ambiguity/unsupported-dependent-
+   motive error; do not choose one silently.
+4. For each constructor method, check the branch body against the specialized
+   target `E[cₖ fields]` under the constructor telescope and branch refinement
+   (`34 §3.3`). A branch proof for `E[cᵢ ...]` is not acceptable in the
+   `cₖ` branch unless the two propositions are definitionally equal after the
+   existing kernel reductions. `Ω` proof irrelevance applies only after this
+   type check succeeds at the same proposition.
+5. Emit `Term::Elim { motive = M, methods, indices = ī, scrut = s }` and run
+   the ordinary kernel re-check. The emitted motive may be an ascribed lambda
+   when needed so the kernel can infer its codomain sort.
+
+**Audit boundary.** A build that touches this area must classify failures at the
+following layers, using Ken-owned reproducers rather than CAT-4 proof-search
+speculation:
+
+- **Surface motive construction.** Wrong abstraction of `E[s]` over the
+  scrutinee or indices is an elaborator bug. If the emitted core is ill-typed,
+  the kernel rejects fail-closed; an elaborator-only fix remains outside the
+  TCB so long as `crates/ken-kernel`, `Cargo.lock`, and `trusted_base()` are
+  unchanged.
+- **Proof-sort handling.** A Type-vs-Omega failure on an otherwise well-formed
+  proof motive means some layer tried to classify `Ω_l` as `Type l` (or the
+  reverse). If this is in motive recovery, route Language. If the kernel's
+  `Term::Elim` checker rejects a motive whose codomain is `Ω_l`, route Kernel
+  plus Architect because `14 §3` already admits `Ω`-codomain motives.
+- **`Equal` lowering under branch refinement.** `Equal` is transparent to `Eq`;
+  branch specialization substitutes the constructor form into the equality
+  operands before `Refl`, `tt`, `J`, `absurd`, or library transport is checked.
+  A wrong-specialized branch must still reject. An acceptance of such a branch
+  is a soundness issue, not an ergonomic diagnostic bug.
+- **Kernel `Term::Elim` checking.** The kernel checks the motive against
+  `(Δ_i) → D p̄ Δ_i → sort`, each method against the constructor-specialized
+  method type, the indices, and the scrutinee (`../10-kernel/14 §3`). If the
+  kernel rejects a core term that satisfies those obligations, the finding is a
+  kernel completeness bug. If it accepts a method that does not satisfy the
+  specialized target, the finding is a TCB soundness bug and requires Architect
+  plus Kernel review before build continues.
+- **Fail-closed posture.** An implementation may reject a valid proof-returning
+  dependent match while the mechanism is incomplete. It may not accept by
+  dropping the dependency, replacing the proof target with a constant `Top`, or
+  using proof irrelevance before branch methods have checked at their exact
+  propositions.
+
+**Expected green/red shape.** The minimized regression for this mechanism should
+be smaller than the CAT-4 map proof but preserve the same load-bearing shape:
+an option-like or two-constructor scrutinee, a target `P[s] : Ω` such as
+`Equal R (f s) (g s)`, and branch bodies that close locally at `P[C0]` and
+`P[C1 x]`. The positive case accepts. A sibling where one branch supplies a
+proof for the other branch's specialized target rejects. A whole-body
+`KernelRejected { TypeMismatch { expected: Type 0, found: Omega0 } }` on this
+shape is not an acceptable final diagnostic; it must be classified to one of the
+audit layers above.
+
+**Mechanism split rule.** The semantic rule is one rule: dependent elimination
+into a proof target. If the minimized reproducer shows separable implementation
+work, split implementation only along these boundaries:
+
+- **proof-motive sort recovery** — `Ω` vs `Type` motive classification and
+  branch checking for a single-scrutinee proof target; this is required here;
+- **generalized scrutinee dependency** — targets that mention a reducible term
+  equal to a non-variable scrutinee, nested/multi-scrutinee matrix recovery, or
+  other occurrence-selection ambiguity; split only if absent from the minimized
+  required seed;
+- **indexed-family dependent match** — non-empty index telescopes and
+  index-impossible method synthesis remain the existing `34 §4.3`/L2-indexed
+  surface unless the minimized proof-motive reproducer truly depends on them.
+
 ## 3. What elaboration must guarantee
 
 - **Well-typed output.** Every emitted core term `check`s in the kernel; if it
@@ -822,7 +913,10 @@ The elaborator: scope resolution, implicit insertion, bidirectional HM+dependent
 inference with unification up to conversion, level inference, instance
 resolution, `match`→`elim_D` with exhaustiveness, full sugar expansion, and
 obligation emission — all producing kernel-checked core, with stable surface
-diagnostics. **V0** delivers the minimal slice (G1); the rest grows with the
+diagnostics. Proof-returning dependent `match` motives add the focused
+`34 §3.5`/`§2.1` seed: a positive `Ω`-target case and a wrong-specialized-branch
+negative that classify any Type-vs-Omega whole-body rejection to a named layer.
+**V0** delivers the minimal slice (G1); the rest grows with the
 surface. **Instance resolution (§6)** is the **Lc** slice — the search
 algorithm, its landed-SCT termination, and the T1 diagnostics. Conformance:
 `../../conformance/surface/elaboration/` — well-typed-output invariant (every

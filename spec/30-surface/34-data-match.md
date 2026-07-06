@@ -255,6 +255,61 @@ The five everyday combinators built on `J` — `subst`, `cong`, `cast`, `sym`,
 `trans` — are ordinary non-recursive library `view`s, **not** formers; they are
 listed in `../50-stdlib/53-transport.md`.
 
+### 3.5 Proof-returning dependent motives
+
+A `match` may be checked against an expected **proof target** whose type is an
+`Ω` proposition and whose statement depends on the scrutinee. This is not a new
+surface construct and not a CAT-4 special case: it is the ordinary dependent
+eliminator of `§3.2` with an `Ω`-codomain motive (`../10-kernel/14 §3`).
+
+The canonical shape is:
+
+```
+match s {
+  C0        => p0
+  C1 x ...  => p1
+}
+```
+
+checked at a target `P[s] : Ω`, where `P` may be a direct equality
+(`Equal A lhs[s] rhs[s]` / `Eq A lhs[s] rhs[s]`) or any proof expression that
+mentions `s` after the same transparent unfolding and WHNF exposure used by
+ordinary elaboration. The elaborator recovers the motive
+`M = λx. P[x]` (and, for indexed families, `λī x. P[ī, x]`) and emits
+`elim_D M ... s`. Each branch is then checked against the **specialized**
+target:
+
+- the `C0` method must inhabit `P[C0]`;
+- the `C1 x ...` method must inhabit `P[C1 x ...]`;
+- a nested proof-returning `match` repeats the same rule at its own scrutinee.
+
+`Equal` has no separate rule here. The prelude spelling is a transparent alias
+for the kernel's computing `Eq` (`../50-stdlib/53 §1`), so branch refinement is
+ordinary substitution into the equality operands followed by the existing
+`Eq`/`Top`/`Bottom` reductions (`../10-kernel/16 §1.4`, §2). A branch may close
+with `tt`, `Refl`, `J`, or a library combinator only if that term checks against
+the branch-specialized proof target. In particular, proof irrelevance does **not
+erase the branch obligation**: it equates proofs only after both proofs have
+already been checked at the same proposition (`../10-kernel/16 §1.2`).
+
+**Acceptance boundary.** A proof-returning dependent `match` accepts when:
+
+- the scrutinee elaborates to an inductive value and the target classifies as a
+  sort (`Ω_l` for proof targets, `Type l` for ordinary large elimination);
+- the motive can be recovered by generalizing the expected target over the
+  scrutinee and any indices it mentions;
+- every type-possible constructor has a method whose body checks against the
+  target after the constructor fields and branch refinement have been applied.
+
+**Rejection boundary.** The same surface rejects when any branch supplies a proof
+for the wrong specialized target, when the target does not classify as a sort,
+when motive recovery would require guessing which occurrences to generalize, or
+when the ordinary exhaustiveness/reachability checks of `§4` fail. The
+elaborator may report an explicit "unsupported dependent motive" for a
+not-yet-implemented recovery shape, but it must not silently fall back to a
+constant motive that ignores the dependency, and it must not accept all proof
+branches by proof irrelevance.
+
 ## 4. Exhaustiveness and reachability (required — the headline safety)
 
 Ken requires this from day one. The checker is a **surface algorithm** (not a
@@ -405,6 +460,11 @@ universe computation — each is an instance of a landed kernel rule.
   elimination** is permitted under the predicative universe checks (`14 §3`), so
   a `match` may compute a *type* (e.g. an indexed result). No level restriction
   beyond the kernel's `Univ` checks (`12 §1`).
+- **Proof-returning `match` → `elim_D`.** A proof target such as
+  `Equal A lhs rhs` lands in `Ω_l` (`15 §2`, `16 §2`), so the recovered motive
+  may have codomain `Ω_l` rather than `Type ℓ'` (`§3.5`, `14 §3`). This is the
+  same predicative Π-into-Ω rule as other propositions (`16 §1.1`); it adds no
+  universe coercion and does not turn the proof target into a `Type`.
 - **Refinement `{x:A|φ}`.** `φ : Ω` (proof-irrelevant, `12 §5`/`16 §1`); the
   refinement's **core image is its carrier `A`** (`§5`), so it sits at `A`'s
   level `l` (`A : Type l`) — a *subtype at the same level*, predicative, **no
@@ -416,6 +476,8 @@ universe computation — each is an instance of a landed kernel rule.
 Real sum types with constructors + a computing eliminator (no opaque lowering);
 indexed/GADT-like families with index-aware coverage; `match` → `elim_D` with
 dependent-motive recovery and per-branch definitional refinement;
+proof-returning dependent motives whose `Equal`/`Ω` target mentions the
+scrutinee, with wrong-specialized-branch negatives;
 **exhaustiveness + reachability** checking with a named unmatched-pattern
 witness; `Result`/`Option`/`Either` in the prelude; and refinement types with
 free forgetful coercion + obligation emission on introduction. Acceptance is
