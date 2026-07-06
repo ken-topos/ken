@@ -135,7 +135,8 @@ spec draft is declared review-ready.
 
 - Accepted constructor syntax is the explicit family form:
   `data D (Δ_p) : (Δ_i) -> Type where { C : (Δ_k) -> D Δ_p t̄ }`.
-  Old `data D a = C A | ...` remains simple non-indexed sugar.
+  Old `data D a = C A | ...` remains simple non-indexed sugar and does not
+  admit `C : ctor_type` signatures.
 - `32-grammar.md` needs a concrete grammar addition for the explicit data head
   and constructor signature form. `34-data-match.md` carries the behavioral
   contract and examples.

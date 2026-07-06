@@ -19,7 +19,7 @@ decl ::=
   | "proc"  ident binder* (":" type)? effects? contract* constraints? "=" expr  -- effectful / imperative
   | "type" ConId tyvar* "=" type  -- alias / refinement
   | "record" ConId tyvar* "{" field ("," field)* "}" derive?  -- product
-  | "data" ConId tyvar* "=" ctor ("|" ctor)* derive?  -- simple sum sugar
+  | "data" ConId tyvar* "=" simple_ctor ("|" simple_ctor)* derive?  -- simple sum sugar
   | "data" ConId data_param* ":" data_family data_block derive?  -- inductive family
   | "class" ConId binder* "{" class_field ("," class_field)* "}"  -- typeclass (33 §5, ADR 0008)
   | "instance" ConId atype* "{" field_assign ("," field_assign)* "}"  -- instance (33 §5)
@@ -39,9 +39,10 @@ class_field ::= field_purity? ident ":" type
 field_purity ::= "const" | "fn" | "proc"  -- checked class-field purity (33 §5.2, 39 §6.0)
 data_param ::= binder
 data_family ::= type                               -- index telescope ending in Type
-data_block ::= "where" "{" ctor (";" ctor)* "}"
-ctor    ::= ConId arg_types?                       -- e.g.  Cons a (List a)
-          | ConId ":" ctor_type                    -- dependent/GADT-like signature
+data_block ::= "where" "{" data_ctor (";" data_ctor)* "}"
+simple_ctor ::= ConId arg_types?                   -- e.g.  Cons a (List a)
+data_ctor ::= simple_ctor
+           | ConId ":" ctor_type                   -- dependent/GADT-like signature
 ctor_type ::= ctor_arg "->" ctor_type | type       -- telescope ending in D params indices
 ctor_arg ::= binder | type                         -- named/implicit or anonymous
 arg_types ::= type+ | "{" field ("," field)* "}"   -- positional or named
@@ -63,8 +64,9 @@ purity-rejected program, caught at elaboration (`36 §1.6.3`), not by the parser
 
 **Data declarations have a simple form and an explicit family form (`34 §2`).**
 The old `data D a = C A | ...` form remains sugar for a non-indexed family
-whose constructors target `D a`. The explicit form is the normative spelling for
-dependent constructors:
+whose constructors target `D a`; it admits only `simple_ctor`, not
+`C : ctor_type`. The explicit form is the normative spelling for dependent
+constructors:
 
 ```ken
 data Vec (A : Type) : Nat -> Type where {

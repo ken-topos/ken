@@ -142,6 +142,34 @@ prototype's stubbed sums and missing exhaustiveness.
   constructor targets. Structural: assert the emitted family/constructor
   metadata, not merely that some declaration accepted.
 
+## surface/data-match/legacy-form-explicit-signature-rejected (AC9)
+- spec: `spec/30-surface/32-grammar.md §1`, `34 §2`
+- given: the staged-out spelling that puts an explicit constructor signature in
+  the legacy `=` form:
+
+  ```ken
+  data Box A = Mk : A -> Box A
+  ```
+
+  and the two accepted neighboring spellings:
+
+  ```ken
+  data Box A = Mk A
+
+  data Box (A : Type) : Type where {
+    Mk : A -> Box A
+  }
+  ```
+
+- expect: the legacy `Mk : A -> Box A` spelling **rejects at the syntax
+  boundary**: the `=` form accepts only `simple_ctor` / default-result sugar.
+  The old simple `Mk A` form still **accepts**, and the explicit `where` form
+  with `Mk : A -> Box A` **accepts**.
+- why: this prevents the two declaration forms from silently converging. A
+  parser that reuses the full `data_ctor` production in the legacy `=` arm would
+  accept the staged-out spelling while still passing the positive explicit
+  `where` cases.
+
 ## surface/data-match/proof-carrying-constructor-signature (AC9)
 - spec: `34 §2.2`/`§2.3`, `39 §2.2`
 - given: a checked-source-style proof-carrying constructor shape:
@@ -330,6 +358,7 @@ prototype's stubbed sums and missing exhaustiveness.
 | reachability-redundant-arm        | AC4      | redundant arm flagged; guard subtlety |            |
 | indexed-impossible-pair           | AC5      | reject impossible app / omit imposs.  | soundness  |
 | dependent-constructor-vec-decl    | AC9      | explicit family/ctor targets          |            |
+| legacy-explicit-signature-reject  | AC9      | `=` form stays simple/default-result  |            |
 | proof-carrying-ctor-signature     | AC9      | telescope scoping, proof fields       |            |
 | bad-constructor-result-target     | AC9      | target must be declared family        | soundness  |
 | explicit-signature-positivity     | AC9      | kernel positivity still gates         | soundness  |
