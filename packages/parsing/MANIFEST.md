@@ -6,7 +6,8 @@ CAT-5 D1 lands the source/span core only.
 ## Public API in D1
 
 - `SourceId`, `Source`, `IsUtf8`, `SourceLength`, `sourceId`,
-  `sourceBytes`, `sourceUtf8`, `sourceLength`, and `sourceLengthValid`.
+  `sourceBytes`, `sourceUtf8`, `sourceLength`, `sourceLengthUnit`,
+  `sourceLengthUnitValid`, and `sourceLengthValid`.
 - `Span`, `spanStart`, `spanEnd`, `LessEqNat`, and `ValidSpan`.
 - `Located`, `locatedSource`, `locatedSpan`, `locatedValue`, and
   `ValidLocated`.
@@ -16,7 +17,8 @@ CAT-5 D1 lands the source/span core only.
 ## Contract
 
 - `Source` is a checked record carrying artifact identity, original `Bytes`,
-  UTF-8 evidence, a `Nat` byte length, and a proof that the recorded length is
+  UTF-8 evidence, a `Nat` byte length, a one-byte unit witness for converting
+  that `Nat` count to `Int`, and a proof that the converted recorded length is
   the byte length of `sourceBytes`. `String` is not the offset basis.
 - `Span` carries only half-open byte endpoints. A bare `Span` does not identify
   a source artifact.

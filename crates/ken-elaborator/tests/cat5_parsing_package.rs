@@ -25,9 +25,7 @@ fn cat5_d1_source_span_package_elaborates_zero_delta() {
     env.elaborate_file(PARSING_KEN)
         .expect("packages/parsing/parsing.ken must elaborate");
     let after_trusted: HashSet<GlobalId> = env.env.trusted_base().into_iter().collect();
-    let mut new_trusted: HashSet<_> = after_trusted.difference(&base_trusted).copied().collect();
-    new_trusted.remove(&env.class_env.record_nil_id);
-    new_trusted.remove(&env.class_env.record_nil_val_id);
+    let new_trusted: HashSet<_> = after_trusted.difference(&base_trusted).copied().collect();
     assert!(
         new_trusted.is_empty(),
         "parsing.ken must add no new trusted_base entries, got {new_trusted:?}"
@@ -38,8 +36,13 @@ fn cat5_d1_source_span_package_elaborates_zero_delta() {
         "sourceBytes",
         "sourceUtf8",
         "sourceLength",
+        "sourceLengthUnit",
+        "sourceLengthUnitValid",
         "sourceLengthValid",
         "SourceLength",
+        "UnitByteLength",
+        "cat5ZeroInt",
+        "cat5NatToInt",
         "spanStart",
         "spanEnd",
         "cat5LeqNat",
@@ -92,18 +95,23 @@ fn cat5_d1_source_span_surface_is_byte_artifact_and_source_explicit() {
         "IsUtf8 must be round-trip evidence over the source bytes, not reflexive equality"
     );
     assert!(
-        PARSING_KEN.contains("fn SourceLength (bs : Bytes) (n : Nat) : Prop =")
+        PARSING_KEN.contains("fn cat5NatToInt (unit : Bytes) (n : Nat) : Int =")
+            && PARSING_KEN.contains("fn UnitByteLength (unit : Bytes) : Prop =")
+            && PARSING_KEN.contains("fn SourceLength (unit : Bytes) (bs : Bytes) (n : Nat) : Prop =")
             && PARSING_KEN.contains("bytes_length bs")
-            && PARSING_KEN.contains("match n"),
-        "SourceLength must tie sourceLength to sourceBytes"
+            && PARSING_KEN.contains("cat5NatToInt unit n"),
+        "SourceLength must tie sourceLength to sourceBytes through a one-byte unit witness"
     );
     assert!(
         PARSING_KEN.contains("class Source {")
             && PARSING_KEN.contains("sourceBytesField : Bytes")
             && PARSING_KEN.contains("sourceLengthField : Nat")
+            && PARSING_KEN.contains("sourceLengthUnitField : Bytes")
+            && PARSING_KEN
+                .contains("sourceLengthUnitValidField : UnitByteLength sourceLengthUnitField")
             && PARSING_KEN.contains("sourceUtf8Field : IsUtf8 sourceBytesField")
             && PARSING_KEN
-                .contains("sourceLengthValidField : SourceLength sourceBytesField sourceLengthField"),
+                .contains("sourceLengthValidField : SourceLength sourceLengthUnitField sourceBytesField sourceLengthField"),
         "Source must be a dependent record carrying bytes, length, and both proof fields"
     );
     assert!(
@@ -154,7 +162,7 @@ fn cat5_d1_valid_half_open_bounds_and_zero_width_offsets_check() {
           sourceUtf8 s
 
         fn cat5_source_length_valid_projects (s : Source)
-          : SourceLength (sourceBytes s) (sourceLength s) =
+          : SourceLength (sourceLengthUnit s) (sourceBytes s) (sourceLength s) =
           sourceLengthValid s
 
         fn cat5_located_true (s : Source) : Located Bool =
@@ -169,6 +177,92 @@ fn cat5_d1_valid_half_open_bounds_and_zero_width_offsets_check() {
         "#,
     )
     .expect("valid half-open and zero-width spans should check");
+}
+
+#[test]
+fn cat5_d1_concrete_nonempty_source_constructs_and_projects() {
+    let mut env = mk_env();
+    env.elaborate_file(
+        r#"
+        data Cat5ConcreteSource = MkCat5ConcreteSource
+
+        const cat5_unit_byte : Bytes = bytes_encode "x"
+        const cat5_abc_bytes : Bytes = bytes_encode "abc"
+        const cat5_unit_valid : UnitByteLength cat5_unit_byte = Axiom
+        const cat5_utf8_valid : IsUtf8 cat5_abc_bytes = Axiom
+        const cat5_length3_valid
+          : SourceLength cat5_unit_byte cat5_abc_bytes (Suc (Suc (Suc Zero))) =
+          Axiom
+
+        instance Source Cat5ConcreteSource {
+          sourceIdField = MkSourceId Zero ;
+          sourceBytesField = cat5_abc_bytes ;
+          sourceLengthField = Suc (Suc (Suc Zero)) ;
+          sourceLengthUnitField = cat5_unit_byte ;
+          sourceLengthUnitValidField = cat5_unit_valid ;
+          sourceUtf8Field = cat5_utf8_valid ;
+          sourceLengthValidField = cat5_length3_valid
+        }
+
+        const cat5_source : Source = Source_instance_Cat5ConcreteSource
+
+        const cat5_projected_bytes : Bytes = sourceBytes cat5_source
+        const cat5_projected_length : Nat = sourceLength cat5_source
+        const cat5_projected_utf8 : IsUtf8 (sourceBytes cat5_source) =
+          sourceUtf8 cat5_source
+        const cat5_projected_length_valid
+          : SourceLength (sourceLengthUnit cat5_source) (sourceBytes cat5_source) (sourceLength cat5_source) =
+          sourceLengthValid cat5_source
+
+        const cat5_span_all : Span = MkSpan Zero (sourceLength cat5_source)
+        const cat5_valid_all : ValidSpan cat5_source cat5_span_all =
+          andIntro
+            (LessEqNat (spanStart cat5_span_all) (spanEnd cat5_span_all))
+            (LessEqNat (spanEnd cat5_span_all) (sourceLength cat5_source))
+            (lessEqNatZeroLeft (sourceLength cat5_source))
+            (lessEqNatRefl (sourceLength cat5_source))
+        "#,
+    )
+    .expect("a concrete non-empty Source must construct and project with real length evidence");
+}
+
+#[test]
+fn cat5_d1_concrete_mismatched_source_length_rejected() {
+    let mut env = mk_env();
+    let err = env
+        .elaborate_file(
+            r#"
+            data Cat5BadSource = MkCat5BadSource
+
+            const cat5_unit_byte : Bytes = bytes_encode "x"
+            const cat5_abc_bytes : Bytes = bytes_encode "abc"
+            const cat5_unit_valid : UnitByteLength cat5_unit_byte = Axiom
+            const cat5_utf8_valid : IsUtf8 cat5_abc_bytes = Axiom
+            const cat5_length3_valid
+              : SourceLength cat5_unit_byte cat5_abc_bytes (Suc (Suc (Suc Zero))) =
+              Axiom
+
+            instance Source Cat5BadSource {
+              sourceIdField = MkSourceId Zero ;
+              sourceBytesField = cat5_abc_bytes ;
+              sourceLengthField = Suc (Suc Zero) ;
+              sourceLengthUnitField = cat5_unit_byte ;
+              sourceLengthUnitValidField = cat5_unit_valid ;
+              sourceUtf8Field = cat5_utf8_valid ;
+              sourceLengthValidField = cat5_length3_valid
+            }
+            "#,
+        )
+        .expect_err("three-byte source must reject a recorded length of two");
+    let msg = format!("{err}");
+    assert!(
+        msg.contains("Refl")
+            || msg.contains("not convertible")
+            || msg.contains("Type mismatch")
+            || msg.contains("type mismatch")
+            || msg.contains("Kernel rejected"),
+        "mismatched source length should reject during proof checking, got {msg}"
+    );
 }
 
 #[test]
@@ -267,7 +361,8 @@ fn cat5_d1_reflexive_utf8_and_length_proofs_rejected() {
         .elaborate_file(
             r#"
             const cat5_bytes : Bytes = bytes_encode "abc"
-            const cat5_fake_length : SourceLength cat5_bytes Zero = Refl
+            const cat5_unit : Bytes = bytes_encode "x"
+            const cat5_fake_length : SourceLength cat5_unit cat5_bytes Zero = Refl
             "#,
         )
         .expect_err("SourceLength must not be provable by reflexive equality for arbitrary bytes/length");

@@ -9,21 +9,29 @@ data SourceId = MkSourceId Nat
 fn IsUtf8 (bs : Bytes) : Prop =
   Equal Bytes (bytes_encode (bytes_decode bs)) bs
 
-fn SourceLength (bs : Bytes) (n : Nat) : Prop =
+fn cat5ZeroInt (unit : Bytes) : Int =
+  (bytes_length unit) - (bytes_length unit)
+
+fn cat5NatToInt (unit : Bytes) (n : Nat) : Int =
   match n {
-    Zero =>
-      Equal Int
-        (bytes_length bs)
-        (bytes_length (bytes_slice bs (bytes_length bs) (bytes_length bs))) ;
-    Suc n2 => SourceLength bs n2 -> Bottom
+    Zero => cat5ZeroInt unit ;
+    Suc n2 => (bytes_length unit) + (cat5NatToInt unit n2)
   }
+
+fn UnitByteLength (unit : Bytes) : Prop =
+  Equal Int (bytes_length unit) (cat5NatToInt unit (Suc Zero))
+
+fn SourceLength (unit : Bytes) (bs : Bytes) (n : Nat) : Prop =
+  Equal Int (bytes_length bs) (cat5NatToInt unit n)
 
 class Source {
   sourceIdField : SourceId ;
   sourceBytesField : Bytes ;
   sourceLengthField : Nat ;
+  sourceLengthUnitField : Bytes ;
+  sourceLengthUnitValidField : UnitByteLength sourceLengthUnitField ;
   sourceUtf8Field : IsUtf8 sourceBytesField ;
-  sourceLengthValidField : SourceLength sourceBytesField sourceLengthField
+  sourceLengthValidField : SourceLength sourceLengthUnitField sourceBytesField sourceLengthField
 }
 
 fn sourceId (s : Source) : SourceId =
@@ -38,7 +46,14 @@ fn sourceLength (s : Source) : Nat =
 fn sourceUtf8 (s : Source) : IsUtf8 (sourceBytes s) =
   s.sourceUtf8Field
 
-fn sourceLengthValid (s : Source) : SourceLength (sourceBytes s) (sourceLength s) =
+fn sourceLengthUnit (s : Source) : Bytes =
+  s.sourceLengthUnitField
+
+fn sourceLengthUnitValid (s : Source) : UnitByteLength (sourceLengthUnit s) =
+  s.sourceLengthUnitValidField
+
+fn sourceLengthValid (s : Source)
+  : SourceLength (sourceLengthUnit s) (sourceBytes s) (sourceLength s) =
   s.sourceLengthValidField
 
 data Span = MkSpan Nat Nat
