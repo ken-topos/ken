@@ -541,6 +541,30 @@ fn ac8_proof_returning_match_through_transparent_scrutinee_elaborates() {
     }
 }
 
+#[test]
+fn ac8_wrong_specialized_branch_still_rejects() {
+    let mut env = mk_env();
+    elab_ok(&mut env, "fn km_scrutinee (b : Bool) : Bool = b");
+
+    let err = elab(
+        &mut env,
+        "fn km_proof_motive_negative (b : Bool) \
+           : Equal Bool (km_scrutinee b) True -> Equal Bool (km_scrutinee b) True = \
+           match km_scrutinee b { True => \\p. p ; False => \\p. tt }",
+    )
+    .expect_err("AC8 negative must reject");
+
+    match err {
+        ElabError::KernelRejected {
+            error: ken_kernel::KernelError::TypeMismatch { .. },
+            ..
+        } => {}
+        other => panic!(
+            "AC8 negative must reject through branch-obligation kernel TypeMismatch, got {other:?}"
+        ),
+    }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Additional robustness tests
 // ─────────────────────────────────────────────────────────────────────────────
