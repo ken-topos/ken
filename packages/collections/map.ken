@@ -1952,6 +1952,20 @@ fn orderEquivSym
     (andSnd (Equal Bool (leq a b) True) (Equal Bool (leq b a) True) h)
     (andFst (Equal Bool (leq a b) True) (Equal Bool (leq b a) True) h)
 
+fn orderEquivTrans
+  (k : Type) (leq : k → k → Bool)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (a : k) (b : k) (c : k)
+  (hab : orderEquiv k leq a b) (hbc : orderEquiv k leq b c)
+  : orderEquiv k leq a c =
+  andIntro (Equal Bool (leq a c) True) (Equal Bool (leq c a) True)
+    (transLeq a b c
+      (andFst (Equal Bool (leq a b) True) (Equal Bool (leq b a) True) hab)
+      (andFst (Equal Bool (leq b c) True) (Equal Bool (leq c b) True) hbc))
+    (transLeq c b a
+      (andSnd (Equal Bool (leq b c) True) (Equal Bool (leq c b) True) hbc)
+      (andSnd (Equal Bool (leq a b) True) (Equal Bool (leq b a) True) hab))
+
 fn notOrderEquivSwap
   (k : Type) (leq : k → k → Bool) (a : k) (b : k)
   (hnot : Not (orderEquiv k leq a b))
@@ -2628,6 +2642,67 @@ fn orderEquivKeyTrueFromOrderEquiv
       (andFst (Equal Bool (leq a b) True) (Equal Bool (leq b a) True) h)
       (andSnd (Equal Bool (leq a b) True) (Equal Bool (leq b a) True) h)
 
+fn orderEquivFromOrderEquivKeyTrueInner
+  (k : Type) (leq : k → k → Bool) (a : k) (b : k)
+  (q1 : Equal Bool (leq a b) True)
+  (o2 : Or (Equal Bool (leq b a) True) (Equal Bool (leq b a) False))
+  : Equal Bool (orderEquivKey k leq a b) True → orderEquiv k leq a b =
+  match o2 {
+    Inl q2 ⇒ λh.
+      andIntro (Equal Bool (leq a b) True) (Equal Bool (leq b a) True) q1 q2 ;
+    Inr q2False ⇒ λh.
+      absurd
+        (trans Bool
+          True
+          (orderEquivKey k leq a b)
+          False
+          (sym Bool (orderEquivKey k leq a b) True h)
+          (trans Bool
+            (orderEquivKey k leq a b)
+            (bool_and True (leq b a))
+            False
+            (cong Bool Bool
+              (leq a b)
+              True
+              (λleft. bool_and left (leq b a))
+              q1)
+            (cong Bool Bool
+              (leq b a)
+              False
+              (λright. bool_and True right)
+              q2False)))
+  }
+
+fn orderEquivFromOrderEquivKeyTrueDispatch
+  (k : Type) (leq : k → k → Bool) (a : k) (b : k)
+  (o1 : Or (Equal Bool (leq a b) True) (Equal Bool (leq a b) False))
+  : Equal Bool (orderEquivKey k leq a b) True → orderEquiv k leq a b =
+  match o1 {
+    Inl q1 ⇒ orderEquivFromOrderEquivKeyTrueInner k leq a b q1 (boolDichotomy (leq b a)) ;
+    Inr q1False ⇒ λh.
+      absurd
+        (trans Bool
+          True
+          (orderEquivKey k leq a b)
+          False
+          (sym Bool (orderEquivKey k leq a b) True h)
+          (trans Bool
+            (orderEquivKey k leq a b)
+            (bool_and False (leq b a))
+            False
+            (cong Bool Bool
+              (leq a b)
+              False
+              (λleft. bool_and left (leq b a))
+              q1False)
+            tt))
+  }
+
+fn orderEquivFromOrderEquivKeyTrue
+  (k : Type) (leq : k → k → Bool) (a : k) (b : k)
+  : Equal Bool (orderEquivKey k leq a b) True → orderEquiv k leq a b =
+  orderEquivFromOrderEquivKeyTrueDispatch k leq a b (boolDichotomy (leq a b))
+
 fn orderEquivKeyFalseToNot
   (k : Type) (leq : k → k → Bool) (a : k) (b : k)
   (hfalse : Equal Bool (orderEquivKey k leq a b) False)
@@ -2798,6 +2873,78 @@ fn deleteFromListAccLookupNone
           (boolDichotomy (orderEquivKey k leq key (pairFst k v e)))
   }
 
+fn deleteFromListAccLookupLocalityDispatch
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (deleted : k) (query : k) (e : Pair k v) (xs2 : List (Pair k v)) (acc : Tree k v)
+  (hskip : allInList k v (notOrderEquivToKey k leq query) (Cons (Pair k v) e xs2))
+  (o : Or (Equal Bool (orderEquivKey k leq deleted (pairFst k v e)) True)
+          (Equal Bool (orderEquivKey k leq deleted (pairFst k v e)) False))
+  : Equal (Option v)
+      (lookup k v leq query (deleteFromListAcc k v leq deleted (Cons (Pair k v) e xs2) acc))
+      (lookup k v leq query acc) =
+  match o {
+    Inl q ⇒
+      trans (Option v)
+        (lookup k v leq query (deleteFromListAcc k v leq deleted (Cons (Pair k v) e xs2) acc))
+        (lookup k v leq query (deleteFromListAcc k v leq deleted xs2 acc))
+        (lookup k v leq query acc)
+        (cong (Tree k v) (Option v)
+          (deleteFromListAcc k v leq deleted (Cons (Pair k v) e xs2) acc)
+          (deleteFromListAcc k v leq deleted xs2 acc)
+          (lookup k v leq query)
+          (deleteFromListAccTrueBridge k v leq deleted e xs2 acc q))
+        (deleteFromListAccLookupLocality k v leq transLeq deleted query xs2 acc
+          (andSnd
+            (notOrderEquivToKey k leq query (pairFst k v e))
+            (allInList k v (notOrderEquivToKey k leq query) xs2) hskip)) ;
+    Inr q ⇒
+      trans (Option v)
+        (lookup k v leq query (deleteFromListAcc k v leq deleted (Cons (Pair k v) e xs2) acc))
+        (lookup k v leq query
+          (deleteFromListAcc k v leq deleted xs2
+            (insert k v leq (pairFst k v e) (pairSnd k v e) acc)))
+        (lookup k v leq query acc)
+        (cong (Tree k v) (Option v)
+          (deleteFromListAcc k v leq deleted (Cons (Pair k v) e xs2) acc)
+          (deleteFromListAcc k v leq deleted xs2
+            (insert k v leq (pairFst k v e) (pairSnd k v e) acc))
+          (lookup k v leq query)
+          (deleteFromListAccFalseBridge k v leq deleted e xs2 acc q))
+        (trans (Option v)
+          (lookup k v leq query
+            (deleteFromListAcc k v leq deleted xs2
+              (insert k v leq (pairFst k v e) (pairSnd k v e) acc)))
+          (lookup k v leq query (insert k v leq (pairFst k v e) (pairSnd k v e) acc))
+          (lookup k v leq query acc)
+          (deleteFromListAccLookupLocality k v leq transLeq deleted query xs2
+            (insert k v leq (pairFst k v e) (pairSnd k v e) acc)
+            (andSnd
+              (notOrderEquivToKey k leq query (pairFst k v e))
+              (allInList k v (notOrderEquivToKey k leq query) xs2) hskip))
+          (lookupLocality k v leq transLeq (pairFst k v e) query (pairSnd k v e) acc
+            (notOrderEquivSwap k leq query (pairFst k v e)
+              (andFst
+                (notOrderEquivToKey k leq query (pairFst k v e))
+                (allInList k v (notOrderEquivToKey k leq query) xs2) hskip))))
+  }
+
+fn deleteFromListAccLookupLocality
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (deleted : k) (query : k) (xs : List (Pair k v)) (acc : Tree k v)
+  : allInList k v (notOrderEquivToKey k leq query) xs →
+    Equal (Option v)
+      (lookup k v leq query (deleteFromListAcc k v leq deleted xs acc))
+      (lookup k v leq query acc) =
+  match xs {
+    Nil ⇒ λhskip. Refl ;
+    Cons e xs2 ⇒
+      λhskip.
+        deleteFromListAccLookupLocalityDispatch k v leq transLeq deleted query e xs2 acc hskip
+          (boolDichotomy (orderEquivKey k leq deleted (pairFst k v e)))
+  }
+
 fn deleteLookupNoneLaw
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
@@ -2806,11 +2953,275 @@ fn deleteLookupNoneLaw
   deleteFromListAccLookupNone k v leq transLeq key (toList k v m) (Leaf k v)
     (lookupEmptyIsNone k v leq key)
 
+fn notOrderEquivFromDeletedMatch
+  (k : Type) (leq : k → k → Bool)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (deleted : k) (query : k) (entryKey : k)
+  (hDeletedEntry : Equal Bool (orderEquivKey k leq deleted entryKey) True)
+  (hnotDeletedQuery : notOrderEquivToKey k leq deleted query)
+  : notOrderEquivToKey k leq query entryKey =
+  λhQueryEntry.
+    hnotDeletedQuery
+      (orderEquivTrans k leq transLeq deleted entryKey query
+        (orderEquivFromOrderEquivKeyTrue k leq deleted entryKey hDeletedEntry)
+        (orderEquivSym k leq query entryKey hQueryEntry))
+
+fn deleteFromListAccLookupOtherAssocDeletedHitAbsurd
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (deleted : k) (query : k) (e : Pair k v) (xs2 : List (Pair k v)) (acc : Tree k v)
+  (hDeletedEntry : Equal Bool (orderEquivKey k leq deleted (pairFst k v e)) True)
+  (hnotDeletedQuery : notOrderEquivToKey k leq deleted query)
+  (q1 : Equal Bool (leq query (pairFst k v e)) True)
+  (q2 : Equal Bool (leq (pairFst k v e) query) True)
+  : Equal (Option v)
+      (lookup k v leq query (deleteFromListAcc k v leq deleted (Cons (Pair k v) e xs2) acc))
+      (assoc k v leq query (Cons (Pair k v) e xs2)) =
+  absurd
+    (hnotDeletedQuery
+      (orderEquivTrans k leq transLeq deleted (pairFst k v e) query
+        (orderEquivFromOrderEquivKeyTrue k leq deleted (pairFst k v e) hDeletedEntry)
+        (andIntro (Equal Bool (leq (pairFst k v e) query) True)
+          (Equal Bool (leq query (pairFst k v e)) True) q2 q1)))
+
+fn deleteFromListAccLookupOtherAssocHitSurvivor
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (reflLeq : (x : k) → Equal Bool (leq x x) True)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (deleted : k) (query : k) (e : Pair k v) (xs2 : List (Pair k v)) (acc : Tree k v)
+  (h : NoDup k v leq (Cons (Pair k v) e xs2))
+  (qDeletedFalse : Equal Bool (orderEquivKey k leq deleted (pairFst k v e)) False)
+  (q1 : Equal Bool (leq query (pairFst k v e)) True)
+  (q2 : Equal Bool (leq (pairFst k v e) query) True)
+  : Equal (Option v)
+      (lookup k v leq query (deleteFromListAcc k v leq deleted (Cons (Pair k v) e xs2) acc))
+      (assoc k v leq query (Cons (Pair k v) e xs2)) =
+  trans (Option v)
+    (lookup k v leq query (deleteFromListAcc k v leq deleted (Cons (Pair k v) e xs2) acc))
+    (lookup k v leq query
+      (deleteFromListAcc k v leq deleted xs2
+        (insert k v leq (pairFst k v e) (pairSnd k v e) acc)))
+    (assoc k v leq query (Cons (Pair k v) e xs2))
+    (cong (Tree k v) (Option v)
+      (deleteFromListAcc k v leq deleted (Cons (Pair k v) e xs2) acc)
+      (deleteFromListAcc k v leq deleted xs2
+        (insert k v leq (pairFst k v e) (pairSnd k v e) acc))
+      (lookup k v leq query)
+      (deleteFromListAccFalseBridge k v leq deleted e xs2 acc qDeletedFalse))
+    (trans (Option v)
+      (lookup k v leq query
+        (deleteFromListAcc k v leq deleted xs2
+          (insert k v leq (pairFst k v e) (pairSnd k v e) acc)))
+      (lookup k v leq query (insert k v leq (pairFst k v e) (pairSnd k v e) acc))
+      (assoc k v leq query (Cons (Pair k v) e xs2))
+      (deleteFromListAccLookupLocality k v leq transLeq deleted query xs2
+        (insert k v leq (pairFst k v e) (pairSnd k v e) acc)
+        (allInListMapNotMatchTransfer k v leq transLeq query (pairFst k v e) q1 q2 xs2
+          (andFst
+            (allInList k v (notOrderEquivToKey k leq (pairFst k v e)) xs2)
+            (NoDup k v leq xs2) h)))
+      (trans (Option v)
+        (lookup k v leq query (insert k v leq (pairFst k v e) (pairSnd k v e) acc))
+        (Some v (pairSnd k v e))
+        (assoc k v leq query (Cons (Pair k v) e xs2))
+        (insertLookupHit k v leq reflLeq transLeq (pairFst k v e) query (pairSnd k v e) acc
+          (andIntro (Equal Bool (leq query (pairFst k v e)) True)
+            (Equal Bool (leq (pairFst k v e) query) True) q1 q2))
+        (sym (Option v)
+          (assoc k v leq query (Cons (Pair k v) e xs2))
+          (Some v (pairSnd k v e))
+          (assocSkipHeadStopBridge k v leq query e xs2 q1 q2))))
+
+fn deleteFromListAccLookupOtherAssocHit
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (reflLeq : (x : k) → Equal Bool (leq x x) True)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (deleted : k) (query : k) (e : Pair k v) (xs2 : List (Pair k v)) (acc : Tree k v)
+  (h : NoDup k v leq (Cons (Pair k v) e xs2))
+  (hnotDeletedQuery : notOrderEquivToKey k leq deleted query)
+  (q1 : Equal Bool (leq query (pairFst k v e)) True)
+  (q2 : Equal Bool (leq (pairFst k v e) query) True)
+  (oDeleted : Or (Equal Bool (orderEquivKey k leq deleted (pairFst k v e)) True)
+                 (Equal Bool (orderEquivKey k leq deleted (pairFst k v e)) False))
+  : Equal (Option v)
+      (lookup k v leq query (deleteFromListAcc k v leq deleted (Cons (Pair k v) e xs2) acc))
+      (assoc k v leq query (Cons (Pair k v) e xs2)) =
+  match oDeleted {
+    Inl qDeleted ⇒
+      deleteFromListAccLookupOtherAssocDeletedHitAbsurd k v leq transLeq deleted query e xs2 acc
+        qDeleted hnotDeletedQuery q1 q2 ;
+    Inr qDeletedFalse ⇒
+      deleteFromListAccLookupOtherAssocHitSurvivor k v leq reflLeq transLeq deleted query e xs2 acc
+        h qDeletedFalse q1 q2
+  }
+
+fn deleteFromListAccLookupOtherAssocMiss
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (reflLeq : (x : k) → Equal Bool (leq x x) True)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (deleted : k) (query : k) (e : Pair k v) (xs2 : List (Pair k v)) (acc : Tree k v)
+  (hTail : NoDup k v leq xs2)
+  (hnotDeletedQuery : notOrderEquivToKey k leq deleted query)
+  (hacc : Equal (Option v) (lookup k v leq query acc) (None v))
+  (hnotQueryEntry : notOrderEquivToKey k leq query (pairFst k v e))
+  (assocSkip : Equal (Option v) (assoc k v leq query (Cons (Pair k v) e xs2)) (assoc k v leq query xs2))
+  (oDeleted : Or (Equal Bool (orderEquivKey k leq deleted (pairFst k v e)) True)
+                 (Equal Bool (orderEquivKey k leq deleted (pairFst k v e)) False))
+  : Equal (Option v)
+      (lookup k v leq query (deleteFromListAcc k v leq deleted (Cons (Pair k v) e xs2) acc))
+      (assoc k v leq query (Cons (Pair k v) e xs2)) =
+  match oDeleted {
+    Inl qDeleted ⇒
+      trans (Option v)
+        (lookup k v leq query (deleteFromListAcc k v leq deleted (Cons (Pair k v) e xs2) acc))
+        (lookup k v leq query (deleteFromListAcc k v leq deleted xs2 acc))
+        (assoc k v leq query (Cons (Pair k v) e xs2))
+        (cong (Tree k v) (Option v)
+          (deleteFromListAcc k v leq deleted (Cons (Pair k v) e xs2) acc)
+          (deleteFromListAcc k v leq deleted xs2 acc)
+          (lookup k v leq query)
+          (deleteFromListAccTrueBridge k v leq deleted e xs2 acc qDeleted))
+        (trans (Option v)
+          (lookup k v leq query (deleteFromListAcc k v leq deleted xs2 acc))
+          (assoc k v leq query xs2)
+          (assoc k v leq query (Cons (Pair k v) e xs2))
+          (deleteFromListAccLookupOtherAssoc k v leq reflLeq transLeq deleted query xs2 acc
+            hTail hnotDeletedQuery hacc)
+          (sym (Option v)
+            (assoc k v leq query (Cons (Pair k v) e xs2))
+            (assoc k v leq query xs2)
+            assocSkip)) ;
+    Inr qDeletedFalse ⇒
+      trans (Option v)
+        (lookup k v leq query (deleteFromListAcc k v leq deleted (Cons (Pair k v) e xs2) acc))
+        (lookup k v leq query
+          (deleteFromListAcc k v leq deleted xs2
+            (insert k v leq (pairFst k v e) (pairSnd k v e) acc)))
+        (assoc k v leq query (Cons (Pair k v) e xs2))
+        (cong (Tree k v) (Option v)
+          (deleteFromListAcc k v leq deleted (Cons (Pair k v) e xs2) acc)
+          (deleteFromListAcc k v leq deleted xs2
+            (insert k v leq (pairFst k v e) (pairSnd k v e) acc))
+          (lookup k v leq query)
+          (deleteFromListAccFalseBridge k v leq deleted e xs2 acc qDeletedFalse))
+        (trans (Option v)
+          (lookup k v leq query
+            (deleteFromListAcc k v leq deleted xs2
+              (insert k v leq (pairFst k v e) (pairSnd k v e) acc)))
+          (assoc k v leq query xs2)
+          (assoc k v leq query (Cons (Pair k v) e xs2))
+          (deleteFromListAccLookupOtherAssoc k v leq reflLeq transLeq deleted query xs2
+            (insert k v leq (pairFst k v e) (pairSnd k v e) acc)
+            hTail hnotDeletedQuery
+            (trans (Option v)
+              (lookup k v leq query (insert k v leq (pairFst k v e) (pairSnd k v e) acc))
+              (lookup k v leq query acc)
+              (None v)
+              (lookupLocality k v leq transLeq (pairFst k v e) query (pairSnd k v e) acc
+                (notOrderEquivSwap k leq query (pairFst k v e) hnotQueryEntry))
+              hacc))
+          (sym (Option v)
+            (assoc k v leq query (Cons (Pair k v) e xs2))
+            (assoc k v leq query xs2)
+            assocSkip))
+  }
+
+fn deleteFromListAccLookupOtherAssocInner
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (reflLeq : (x : k) → Equal Bool (leq x x) True)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (deleted : k) (query : k) (e : Pair k v) (xs2 : List (Pair k v)) (acc : Tree k v)
+  (h : NoDup k v leq (Cons (Pair k v) e xs2))
+  (hnotDeletedQuery : notOrderEquivToKey k leq deleted query)
+  (hacc : Equal (Option v) (lookup k v leq query acc) (None v))
+  (q1 : Equal Bool (leq query (pairFst k v e)) True)
+  (o2 : Or (Equal Bool (leq (pairFst k v e) query) True) (Equal Bool (leq (pairFst k v e) query) False))
+  : Equal (Option v)
+      (lookup k v leq query (deleteFromListAcc k v leq deleted (Cons (Pair k v) e xs2) acc))
+      (assoc k v leq query (Cons (Pair k v) e xs2)) =
+  match o2 {
+    Inl q2 ⇒
+      deleteFromListAccLookupOtherAssocHit k v leq reflLeq transLeq deleted query e xs2 acc
+        h hnotDeletedQuery q1 q2
+        (boolDichotomy (orderEquivKey k leq deleted (pairFst k v e))) ;
+    Inr q2False ⇒
+      deleteFromListAccLookupOtherAssocMiss k v leq reflLeq transLeq deleted query e xs2 acc
+        (andSnd
+          (allInList k v (notOrderEquivToKey k leq (pairFst k v e)) xs2)
+          (NoDup k v leq xs2) h)
+        hnotDeletedQuery hacc
+        (notOrderEquivFromRightFalse k leq query (pairFst k v e) q2False)
+        (assocSkipHeadBridge k v leq query e xs2 q1 q2False)
+        (boolDichotomy (orderEquivKey k leq deleted (pairFst k v e)))
+  }
+
+fn deleteFromListAccLookupOtherAssocDispatch
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (reflLeq : (x : k) → Equal Bool (leq x x) True)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (deleted : k) (query : k) (e : Pair k v) (xs2 : List (Pair k v)) (acc : Tree k v)
+  (h : NoDup k v leq (Cons (Pair k v) e xs2))
+  (hnotDeletedQuery : notOrderEquivToKey k leq deleted query)
+  (hacc : Equal (Option v) (lookup k v leq query acc) (None v))
+  (o1 : Or (Equal Bool (leq query (pairFst k v e)) True) (Equal Bool (leq query (pairFst k v e)) False))
+  : Equal (Option v)
+      (lookup k v leq query (deleteFromListAcc k v leq deleted (Cons (Pair k v) e xs2) acc))
+      (assoc k v leq query (Cons (Pair k v) e xs2)) =
+  match o1 {
+    Inl q1 ⇒
+      deleteFromListAccLookupOtherAssocInner k v leq reflLeq transLeq deleted query e xs2 acc
+        h hnotDeletedQuery hacc q1
+        (boolDichotomy (leq (pairFst k v e) query)) ;
+    Inr q1False ⇒
+      deleteFromListAccLookupOtherAssocMiss k v leq reflLeq transLeq deleted query e xs2 acc
+        (andSnd
+          (allInList k v (notOrderEquivToKey k leq (pairFst k v e)) xs2)
+          (NoDup k v leq xs2) h)
+        hnotDeletedQuery hacc
+        (notOrderEquivFromLeftFalse k leq query (pairFst k v e) q1False)
+        (assocSkipHeadBridgeFalse k v leq query e xs2 q1False)
+        (boolDichotomy (orderEquivKey k leq deleted (pairFst k v e)))
+  }
+
+fn deleteFromListAccLookupOtherAssoc
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (reflLeq : (x : k) → Equal Bool (leq x x) True)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (deleted : k) (query : k) (xs : List (Pair k v)) (acc : Tree k v)
+  : NoDup k v leq xs →
+    notOrderEquivToKey k leq deleted query →
+    Equal (Option v) (lookup k v leq query acc) (None v) →
+    Equal (Option v)
+      (lookup k v leq query (deleteFromListAcc k v leq deleted xs acc))
+      (assoc k v leq query xs) =
+  match xs {
+    Nil ⇒ λh. λhnotDeletedQuery. λhacc. hacc ;
+    Cons e xs2 ⇒
+      λh. λhnotDeletedQuery. λhacc.
+        deleteFromListAccLookupOtherAssocDispatch k v leq reflLeq transLeq deleted query e xs2 acc
+          h hnotDeletedQuery hacc
+          (boolDichotomy (leq query (pairFst k v e)))
+  }
+
 fn deleteLookupOtherKeyLaw
-  (k : Type) (v : Type) (leq : k → k → Bool) (deleted : k) (key : k) (m : Tree k v)
-  : Prop =
-  (And (Equal Bool (leq deleted key) True) (Equal Bool (leq key deleted) True) → Bottom) →
-  Equal (Option v) (lookup k v leq key (delete k v leq deleted m)) (lookup k v leq key m)
+  (k : Type) (v : Type) (leq : k → k → Bool)
+  (reflLeq : (x : k) → Equal Bool (leq x x) True)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (deleted : k) (key : k) (m : Tree k v)
+  : Ordered k v leq m → Distinct k v leq m →
+    notOrderEquivToKey k leq deleted key →
+    Equal (Option v) (lookup k v leq key (delete k v leq deleted m)) (lookup k v leq key m) =
+  λhord. λhdist. λhnot.
+    trans (Option v)
+      (lookup k v leq key (delete k v leq deleted m))
+      (assoc k v leq key (toList k v m))
+      (lookup k v leq key m)
+      (deleteFromListAccLookupOtherAssoc k v leq reflLeq transLeq deleted key (toList k v m) (Leaf k v)
+        hdist hnot (lookupEmptyIsNone k v leq key))
+      (sym (Option v)
+        (lookup k v leq key m)
+        (assoc k v leq key (toList k v m))
+        (lookupAssocAgree k v leq transLeq key m hord hdist))
 
 fn fromListAccPreservesOrdered
   (k : Type) (v : Type) (leq : k → k → Bool)
@@ -5988,10 +6399,15 @@ fn valuesProjectToList (k : Type) (v : Type) (m : Tree k v)
   : Equal (List v) (values k v m) (pairVals k v (toList k v m)) =
   Refl
 
-fn keysValuesProjectionCoherence (k : Type) (v : Type) (m : Tree k v) : Prop =
-  And
+fn keysValuesProjectionCoherence (k : Type) (v : Type) (m : Tree k v)
+  : And
+      (Equal (List k) (keys k v m) (pairKeys k v (toList k v m)))
+      (Equal (List v) (values k v m) (pairVals k v (toList k v m))) =
+  andIntro
     (Equal (List k) (keys k v m) (pairKeys k v (toList k v m)))
     (Equal (List v) (values k v m) (pairVals k v (toList k v m)))
+    (keysProjectToList k v m)
+    (valuesProjectToList k v m)
 
 fn keysAscending
   (k : Type) (v : Type) (leq : k → k → Bool) (m : Tree k v)
