@@ -565,6 +565,87 @@ fn ac8_wrong_specialized_branch_still_rejects() {
     }
 }
 
+#[test]
+fn ac8_cat4_option_table_probe_still_rejects_distinct_mechanism() {
+    let mut env = mk_env();
+    elab_ok(
+        &mut env,
+        "fn km_intersection_table (left : Option Unit) (keep : Bool) (prior : Option Unit) \
+           : Option Unit = \
+           match left { \
+             None => prior ; \
+             Some x => match keep { True => Some Unit x ; False => prior } \
+           }",
+    );
+    elab_ok(
+        &mut env,
+        "fn km_member_from_lookup (left : Option Unit) : Bool = \
+           match left { None => False ; Some x => True }",
+    );
+    elab_ok(
+        &mut env,
+        "fn km_lookup (b : Bool) : Option Unit = \
+           match b { True => Some Unit MkUnit ; False => None Unit }",
+    );
+    elab_ok(
+        &mut env,
+        "fn km_option_refl (o : Option Unit) : Equal (Option Unit) o o = Refl",
+    );
+
+    // Mechanical CAT-4 D3 reconstruction from the Ken-owned
+    // `intersectionLookupMemberCharacterization` trigger: a nested
+    // proof-returning `match km_lookup ...` whose option-table target mentions
+    // the lookup scrutinee and a reducible membership test. D1/D2 fixed the
+    // old `Type 0`/`Ω0` motive-sort failure; this remaining rejection is the
+    // distinct option-table branch-motive conversion split Runtime needs named.
+    let err = elab(
+        &mut env,
+        "fn intersectionLookupMemberCharacterization (b : Bool) \
+           : Equal (Option Unit) \
+               (km_intersection_table (km_lookup b) \
+                 (km_member_from_lookup (km_lookup b)) (None Unit)) \
+               (km_intersection_table (km_lookup b) \
+                 (km_member_from_lookup (km_lookup b)) (None Unit)) = \
+           match km_lookup b { \
+             None => km_option_refl \
+               (km_intersection_table (None Unit) \
+                 (km_member_from_lookup (None Unit)) (None Unit)) ; \
+             Some x => match km_member_from_lookup (Some Unit x) { \
+               True => km_option_refl \
+                 (km_intersection_table (Some Unit x) \
+                   (km_member_from_lookup (Some Unit x)) (None Unit)) ; \
+               False => km_option_refl \
+                 (km_intersection_table (Some Unit x) \
+                   (km_member_from_lookup (Some Unit x)) (None Unit)) \
+             } \
+           }",
+    )
+    .expect_err("CAT-4 option-table probe should still reject before the follow-on split");
+
+    match err {
+        ElabError::KernelRejected {
+            error:
+                ken_kernel::KernelError::TypeMismatch {
+                    expected,
+                    found,
+                },
+            ..
+        } => {
+            assert!(
+                !matches!((&*expected, &*found), (Term::Type(Level::Zero), Term::Omega(Level::Zero))),
+                "D3 classification must not be the pre-D1 proof-motive sort failure"
+            );
+            assert!(
+                !matches!(&*expected, Term::Type(_)) && !matches!(&*found, Term::Omega(_)),
+                "D3 classification must reject after proof-motive Ω sorting, got expected {expected:?}, found {found:?}"
+            );
+        }
+        other => panic!(
+            "CAT-4 option-table probe must reject through the distinct kernel TypeMismatch, got {other:?}"
+        ),
+    }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Additional robustness tests
 // ─────────────────────────────────────────────────────────────────────────────
