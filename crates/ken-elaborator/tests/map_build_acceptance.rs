@@ -22,10 +22,10 @@ const MAP_KEN: &str = include_str!("../../../packages/collections/map.ken");
 
 fn mk_env() -> ElabEnv {
     let mut env = ElabEnv::new().expect("base env");
-    env.elaborate_file(COLLECTIONS_KEN)
-        .expect("packages/collections/collections.ken must elaborate");
     env.elaborate_file(TRANSPORT_KEN)
         .expect("packages/transport/transport.ken must elaborate");
+    env.elaborate_file(COLLECTIONS_KEN)
+        .expect("packages/collections/collections.ken must elaborate");
     env.elaborate_file(MAP_KEN)
         .expect("packages/collections/map.ken must elaborate");
     env

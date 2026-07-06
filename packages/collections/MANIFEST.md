@@ -15,13 +15,32 @@
   the prelude here (would reopen ES2's retirement; a second consumer, e.g.
   verified `sort`, triggers that subsume decision later — Architect ruling
   `evt_1stp9sspm6ag8`).
-- The 7-combinator `List`/`Nat` floor: `list_append`, `nth`, `take`, `drop`,
-  `natSub` (saturating monus), `list_eq`, `list_compare` — each a
+- The original 7-combinator `List`/`Nat` floor: `list_append`, `nth`, `take`,
+  `drop`, `natSub` (saturating monus), `list_eq`, `list_compare` — each a
   termination-checked recursive derived def (`declare_recursive_group` +
   `sct_check` + `declare_def`) over the real generic `Term::Elim` (`34 §3`).
   `list_append` is a **distinct** name from the landed `Bytes`-domain
   `append` (FS-effect, `crates/ken-elaborator/src/bytes.rs`) — verified
   distinct global id, no `[FS]` effect row.
+- The CAT-3 D1 structural collection slice: `map`, `filter`, `mem`, `length`,
+  `min`, plus proof-returning laws `take_drop_decomposition`, `map_length`,
+  and `length_take_min`. The filter membership characterization is deliberately
+  held out until its comparator/Iff statement is pinned; no `fn law : Prop =
+  ...` wrapper is shipped.
+- The CAT-3 D2 verified Bool sorting slice: `bool_and`, `boolLeq`,
+  `eqFromOrd`, `count`, package-local comparator-indexed `Perm`, transparent
+  generic `insert`/`sort`, and the proved `List Bool` carrier
+  `insertTrueBool`/`sortBool` with `sortBoolSorted` and `sortBoolPerm`.
+  `Perm` is count/multiset equality over an explicit comparator, never a raw
+  proof-relevant `data ... : Ω` family.
+- The CAT-3 D3 projection-abstraction slice: capitalized ordinary record
+  classes `View`, `Lens`, `Iso`, `Representation`, `RefinementView`,
+  `IndexedView`, and `SetoidMorphism`. The concrete lens is the first-component
+  lens over `Pair Bool Bool`, with proof-returning `fstLensGetSet`,
+  `fstLensSetGet`, and `fstLensSetSet` laws. The set-get/set-set laws use the
+  full `Equal (Pair Bool Bool) ...` public shape. Polymorphic `Lens s a` /
+  `Iso a b` and quotient-carrier views remain build-later walls; the
+  setoid-morphism flavor ships now with field `project`.
 - `compareChar : Char -> Char -> OrdResult` — a faithful 3-way repackaging of
   the landed `leqChar`/`eqChar` (`crates/ken-elaborator/src/decimal_char.rs`),
   not a re-derivation of Char comparison.
@@ -33,15 +52,18 @@
 
 ## Derivation path + `trusted_base()` delta
 
-- **Zero new kernel feature, zero `trusted_base()` delta.** Every combinator
-  and string op is a `declare_def` (checked, upgraded opaque -> transparent on
-  SCT success) or an ordinary `view`; `OrdResult` is a checked `data`
-  inductive (kernel-admitted by positivity), never a
+- **Zero new kernel feature, zero `trusted_base()` delta.** Every combinator,
+  law, and string op is a `declare_def` (checked, upgraded opaque ->
+  transparent on SCT success) or an ordinary `fn`; `OrdResult` is a checked
+  `data` inductive (kernel-admitted by positivity), never a
   `declare_primitive`/`declare_postulate`/`declare_opaque`. No native interp
-  primitive is added for any of the 7 combinators or the 5 string ops
+  primitive is added for any of the list combinators/laws or the 5 string ops
   (Approach A, Architect ruling `evt_4k1yqah3yvpds`) — deriving trivially
   structural folds keeps the audited primitive set small
   (subsume-don't-proliferate).
+- **Package dependency.** The CAT-3 proof terms use `cong`, so harnesses and
+  consumers load `packages/transport/transport.ken` before this file. The
+  dependency is proof-only and adds no trusted-base delta.
 - **SCT sound zone.** Every recursive call is an applied call whose decreasing
   argument is a strict subterm of a matched argument (the `Cons` tail and/or
   the `Suc` predecessor) — none of the 7 lean on the SCT's unapplied-self-

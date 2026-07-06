@@ -11,10 +11,10 @@ const LAWFUL_FUNCTORS_KEN: &str =
 
 fn mk_env_with_lawful_functors() -> ElabEnv {
     let mut env = ElabEnv::new().expect("base env construction failed");
-    env.elaborate_file(COLLECTIONS_KEN)
-        .expect("packages/collections/collections.ken must elaborate");
     env.elaborate_file(TRANSPORT_KEN)
         .expect("packages/transport/transport.ken must elaborate");
+    env.elaborate_file(COLLECTIONS_KEN)
+        .expect("packages/collections/collections.ken must elaborate");
     env.elaborate_file(LAWFUL_FUNCTORS_KEN)
         .expect("packages/lawful-functors/lawful_functors.ken must elaborate");
     env

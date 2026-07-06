@@ -32,8 +32,8 @@ fn mk_env() -> ElabEnv {
 
 fn mk_env_with_map() -> ElabEnv {
     let mut env = ElabEnv::new().expect("base env construction failed");
-    env.elaborate_file(COLLECTIONS_KEN).expect("collections.ken must elaborate");
     env.elaborate_file(TRANSPORT_KEN).expect("transport.ken must elaborate");
+    env.elaborate_file(COLLECTIONS_KEN).expect("collections.ken must elaborate");
     env.elaborate_file(MAP_KEN).expect("map.ken must elaborate");
     env
 }

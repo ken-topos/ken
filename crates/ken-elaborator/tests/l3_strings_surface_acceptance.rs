@@ -25,9 +25,12 @@ use ken_kernel::{Decl, GlobalId, Term};
 
 const COLLECTIONS_KEN: &str =
     include_str!("../../../packages/collections/collections.ken");
+const TRANSPORT_KEN: &str = include_str!("../../../packages/transport/transport.ken");
 
 fn mk_env() -> ElabEnv {
     let mut env = ElabEnv::new().expect("base env");
+    env.elaborate_file(TRANSPORT_KEN)
+        .expect("packages/transport/transport.ken must elaborate");
     env.elaborate_file(COLLECTIONS_KEN)
         .expect("packages/collections/collections.ken must elaborate");
     env
