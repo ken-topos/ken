@@ -209,6 +209,103 @@ fn legacy_simple_data_still_elaborates() {
     );
 }
 
+const VECTOR_DECL: &str = r#"
+data Vector (A : Type) : Nat -> Type where {
+  EmptyVector : Vector A Zero;
+  ConsVector : (n : Nat) -> A -> Vector A n -> Vector A (Suc n)
+}
+"#;
+
+#[test]
+fn indexed_impossible_constructor_may_be_omitted_from_non_empty_vector_match() {
+    let mut env = mk_env();
+    elab_ok(&mut env, VECTOR_DECL);
+
+    let head_id = elab_ok(
+        &mut env,
+        r#"
+        fn vectorHead (A : Type) (n : Nat) (v : Vector A (Suc n)) : A =
+          match v { ConsVector m x xs => x }
+        "#,
+    );
+
+    let body = env.env.transparent_body(head_id).expect("transparent").1;
+    let body = peel_lams(&body, 3);
+    let elim = match body {
+        Term::App(f, proof) => {
+            assert!(
+                matches!(proof.as_ref(), Term::Refl(_)),
+                "indexed elim result must be applied to generated equality evidence"
+            );
+            f.as_ref()
+        }
+        other => panic!("expected indexed elim applied to equality evidence, got {other:?}"),
+    };
+    let Term::Elim {
+        motive,
+        methods,
+        indices,
+        ..
+    } = elim
+    else {
+        panic!("expected dependent vector elim, got {elim:?}");
+    };
+    assert_eq!(
+        indices.len(),
+        1,
+        "indexed match must pass the scrutinee index"
+    );
+    assert_eq!(methods.len(), 2);
+    assert!(
+        contains_absurd(&methods[0]),
+        "omitted EmptyVector method must discharge through absurdity"
+    );
+    assert!(
+        motive_has_index_and_scrutinee_lambdas(motive),
+        "motive must abstract the index before the scrutinee"
+    );
+}
+
+#[test]
+fn indexed_head_rejects_empty_vector_application() {
+    let mut env = mk_env();
+    elab_ok(&mut env, VECTOR_DECL);
+    elab_ok(
+        &mut env,
+        r#"
+        fn vectorHead (A : Type) (n : Nat) (v : Vector A (Suc n)) : A =
+          match v { ConsVector m x xs => x }
+        "#,
+    );
+
+    let err = expect_err(
+        &mut env,
+        "const badHead : Nat = vectorHead Nat Zero (EmptyVector Nat)",
+    );
+    assert!(
+        err.contains("type mismatch") || err.contains("kernel rejected"),
+        "unexpected diagnostic: {err}"
+    );
+}
+
+#[test]
+fn type_possible_indexed_constructor_is_still_required() {
+    let mut env = mk_env();
+    elab_ok(&mut env, VECTOR_DECL);
+
+    let err = expect_err(
+        &mut env,
+        r#"
+        fn badVectorHead (A : Type) (n : Nat) (v : Vector A n) : A =
+          match v { ConsVector m x xs => x }
+        "#,
+    );
+    assert!(
+        err.contains("non-exhaustive match") && err.contains("EmptyVector"),
+        "unexpected diagnostic: {err}"
+    );
+}
+
 fn peel_app(term: &Term) -> (&Term, Vec<&Term>) {
     let mut head = term;
     let mut args = Vec::new();
@@ -218,4 +315,29 @@ fn peel_app(term: &Term) -> (&Term, Vec<&Term>) {
     }
     args.reverse();
     (head, args)
+}
+
+fn peel_lams(mut term: &Term, count: usize) -> &Term {
+    for _ in 0..count {
+        match term {
+            Term::Lam(_, body) => term = body,
+            other => panic!("expected lambda, got {other:?}"),
+        }
+    }
+    term
+}
+
+fn contains_absurd(term: &Term) -> bool {
+    match term {
+        Term::Absurd(_, _) => true,
+        _ => term.children().iter().any(|child| contains_absurd(child)),
+    }
+}
+
+fn motive_has_index_and_scrutinee_lambdas(motive: &Term) -> bool {
+    match motive {
+        Term::Ascript(term, _) => motive_has_index_and_scrutinee_lambdas(term),
+        Term::Lam(_, body) => matches!(body.as_ref(), Term::Lam(_, _)),
+        _ => false,
+    }
 }
