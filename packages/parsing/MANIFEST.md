@@ -1,9 +1,10 @@
 # `parsing` -- source artifacts, spans, parsers, syntax, and diagnostics
 
 **Spec catalog entry:** `spec/50-stdlib/59-parsing-syntax-diagnostics.md`.
-CAT-5 D1 lands the source/span core only.
+CAT-5 D2 lands the parser result and combinator floor on top of the D1
+source/span core.
 
-## Public API in D1
+## Public API through D2
 
 - `SourceId`, `Source`, `IsUtf8`, `EmptyBytes`, `NonEmptyBytes`,
   `UnitByteLength`, `SourceLength`, `sourceId`, `sourceBytes`, `sourceUtf8`,
@@ -14,6 +15,11 @@ CAT-5 D1 lands the source/span core only.
   `ValidLocated`.
 - `validZeroWidthSpan` as a checked helper for the common valid
   zero-width-span case.
+- `ParseError`, `errorSource`, and `errorSpan`.
+- `ParseResult a = Parsed ... | Failed ...`.
+- `Parser a`, `ParsedValid`, `FailedValid`, `ParseResultValid`,
+  `ParserValid`, `ParserTotal`, `ParserSourceLocal`, and `ParserLaws`.
+- `parserPure` and `parserFail` as the bounded D2 parser producer floor.
 
 ## Contract
 
@@ -26,17 +32,24 @@ CAT-5 D1 lands the source/span core only.
 - `ValidSpan s sp` requires `spanStart sp <= spanEnd sp <= sourceLength s`.
 - `Located a` pairs a value with a `SourceId` and `Span`; `ValidLocated`
   checks both the source id and span against a concrete `Source`.
+- `Parser a` is total over well-formed calls by returning `ParseResult a`.
+  Success and failure validity are public predicates: `ParsedValid` requires a
+  valid consumed span with `spanStart = start` and `spanEnd = next`;
+  `FailedValid` requires the error to point at the input source and carry a
+  valid span.
+- Repetition is deferred beyond D2. There is no exported unguarded `many` or
+  fuel-bounded repetition helper until the package can also expose a checked
+  progress/next-validity surface.
 
 ## Derivation path and trusted-base delta
 
-The D1 surface is ordinary Ken data, a class-backed record, transparent
+The D1/D2 surface is ordinary Ken data, a class-backed record, transparent
 functions, and proof-returning definitions over `Nat`, `Bool`, `Bytes`,
-`Equal`, and `And`. It adds no kernel primitive, compiler parser hook,
-CLI/source-loader behavior, export/provenance policy, or language-semantics
-change. Expected `trusted_base()` delta is zero.
+`Equal`, `And`, `List`, and parser-result data. It adds no kernel primitive,
+compiler parser hook, CLI/source-loader behavior, export/provenance policy, or
+language-semantics change. Expected `trusted_base()` delta is zero.
 
 ## Deferred CAT-5 slices
 
-Parser result and combinator floor, the fully parenthesized Boolean grammar,
-formatter laws, diagnostics, and `.ken.md` derived-view examples are deferred
-to later CAT-5 build slices.
+The fully parenthesized Boolean grammar, formatter laws, diagnostics, and
+`.ken.md` derived-view examples are deferred to later CAT-5 build slices.
