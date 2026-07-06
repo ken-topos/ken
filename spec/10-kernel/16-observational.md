@@ -3,7 +3,7 @@
 > Status: **K2 elaborated; K2c series-2 completes the three obs-reduction
 > seams** (§3.2 inductive index rewrite, §4.1 non-constant-motive `J`, §5.1
 > full quotient `respect`); **K5 completes the observational fragment** —
-> `Top`-intro (`tt`) and `Bottom`-elim (`absurd`, Ω-only) as direct prelude
+> `Top`-intro (`tt`) and `Bottom`-elim (`absurd`) as direct prelude
 > rules (§1.4). Normative for the interface, computation rules,
 > and algorithmic reduction behavior. This is the machinery `15-identity.md`
 > reuses: the strict proposition universe Omega, observational equality `Eq`
@@ -163,25 +163,23 @@ to definitional equality, so `Top` is a genuine singleton. No elimination
 rule is needed or provided: a proof of `Top` carries no information (Ω-PI),
 so nothing can be learned by casing on it.
 
-**Bottom-elimination (ex falso).** From a proof of `Bottom`, any
-*proposition* follows:
+**Bottom-elimination (ex falso).** From a proof of `Bottom`, any classified
+type follows:
 
 ```
-  Gamma |- C : Omega_l     Gamma |- p : Bottom
+  Gamma |- C : Omega_l or Gamma |- C : Type l     Gamma |- p : Bottom
   ─────────────────────────────────────────────  (Bottom-Elim)
   Gamma |- absurd C p : C
 ```
 
-- **Scope: the motive `C` must be a proposition (`C : Omega_l`)**, not an
-  arbitrary type. This is the minimal-safe scope, and it is exactly what the
-  observational fragment needs — every proof obligation whose discharge
-  routes through a contradictory hypothesis concludes an equality
-  `Eq … : Omega`. Eliminating `Bottom` into `Type` (the general
-  `False_rect`) is *also* sound — the elimination is vacuous regardless of
-  codomain — but is **not** admitted here; it is a cheap, independently
-  justified reopen with its own discriminating rule if a concrete need
-  surfaces. The kernel enforces `C : Omega_l` (a *sort* check, not a
-  wildcard): an `absurd` whose motive classifies as `Type` is rejected.
+- **Scope: the motive `C` must classify as a type**, either a strict
+  proposition (`C : Omega_l`) or an ordinary value type (`C : Type l`). The
+  proof argument must still check as actual `Bottom`; constructor-disjointness
+  or an impossible equality proposition does not by itself synthesize a closed
+  contradiction. A downstream unreachable branch may bind a premise whose type
+  normalizes to `Bottom` (for example an index equality refuted by
+  constructor-disjointness) and use `absurd C p`, but the kernel never
+  fabricates `p`.
 - **`absurd C p` never reduces.** `Bottom` has no constructor, so there is
   no canonical proof for the eliminator to match on; an `absurd` term is
   **neutral forever**. It only ever appears under a hypothesis that is
@@ -209,15 +207,17 @@ inhabits a genuine sub-singleton, so Ω-PI gives it its full singleton
 structure — every reduct of a `Top` obligation is a *true* equality, so a
 canonical proof is exactly right; (ii) `Bottom`-elim is **vacuous** —
 because `Bottom` is empty, `absurd` never fires, so it cannot manufacture a
-proof that breaks proof irrelevance, regardless of the motive. Soundness is
-therefore entirely a matter of **typing admission**: no new reduction rule
-and no new conversion rule are introduced — an `absurd` term's type is
-always its motive `C : Omega_l`, so any two `absurd` terms are compared at
-an Omega-classified ambient type and the §1.2 proof-irrelevance shortcut
-settles them. This completes the observational fragment and is **distinct
-from** — and does not reopen — the forbidden direction of projecting a
-non-empty Omega inhabitant *out* into `Type` (the general
-`Type → Omega`/large-elimination-out-of-Omega danger, §1.1).
+proof that breaks proof irrelevance or a relevant data value by computation,
+regardless of the motive. Soundness is therefore entirely a matter of
+**typing admission**: no new reduction rule and no new conversion rule are
+introduced — an `absurd` term's type is always its motive `C`, which may be
+`Omega_l` or `Type l`. For `Omega_l` motives the §1.2 proof-irrelevance
+shortcut settles comparisons; for `Type l` motives, `Absurd` remains an
+ordinary neutral term justified only by `p : Bottom`. This completes the
+observational fragment and is **distinct from** — and does not reopen — the
+forbidden direction of projecting a non-empty Omega inhabitant *out* into
+`Type` (the general `Type → Omega`/large-elimination-out-of-Omega danger,
+§1.1).
 
 ## 2. Observational equality `Eq`
 

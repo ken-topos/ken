@@ -860,21 +860,17 @@ fn infer_quot_elim(
     Ok(Term::app(motive.clone(), scrut.clone()))
 }
 
-/// `absurd C p : C` — ex-falso (`16 §1.3`, K5). Sound because `Bottom` is
-/// empty: `p` proves the impossible, so `Absurd` never has a canonical
-/// scrutinee to compute on and stays neutral forever — it cannot break
-/// proof-irrelevance regardless of codomain. Scoped to `C : Ω` (minimal-safe;
-/// `p.proj: Bottom → Type` is a sound but out-of-scope generalization,
-/// `16 §1.3`). Non-dependent: `Bottom` has no indices to abstract over, so
-/// the result is `motive` itself, never substituted.
+/// `absurd C p : C` — ex-falso (`16 §1.3`, K5/KM-index-impossible). Sound
+/// because `Bottom` is empty: `p` proves the impossible, so `Absurd` never has a
+/// canonical scrutinee to compute on and stays neutral forever. The motive may
+/// be either a proposition (`Ω`) or a value type (`Type`), but the proof must
+/// still check as actual `Bottom`; constructor disjointness alone does not
+/// synthesize a closed contradiction. Non-dependent: `Bottom` has no indices to
+/// abstract over, so the result is `motive` itself, never substituted.
 fn infer_absurd(env: &GlobalEnv, ctx: &Context, motive: &Term, proof: &Term) -> KernelResult<Term> {
     check(env, ctx, proof, &crate::obs::bottom_term(env))?;
-    match classify(env, ctx, motive)? {
-        Sort::Omega(_) => Ok(motive.clone()),
-        Sort::Type(_) => Err(KernelError::BadEliminator(
-            "absurd's motive must be a proposition (Ω_l), not a type (Type ℓ)".into(),
-        )),
-    }
+    classify(env, ctx, motive)?;
+    Ok(motive.clone())
 }
 
 // --- declaration admission (`18 §4`) ---------------------------------------
