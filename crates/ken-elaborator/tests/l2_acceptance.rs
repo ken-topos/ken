@@ -1,6 +1,6 @@
 //! L2 acceptance tests: `data` / `match` / exhaustiveness / refinements.
 //!
-//! Pins: `conformance/surface/data-match/seed-data-match.md` AC1–AC7.
+//! Pins: `conformance/surface/data-match/seed-data-match.md` AC1–AC8.
 //! Spec: `spec/30-surface/34-data-match.md`.
 //!
 //! AC5 (indexed families) and AC6 (dependent motive) are deferred — they
@@ -25,6 +25,26 @@ fn elab_ok(env: &mut ElabEnv, src: &str) -> GlobalId {
 
 fn body_of(env: &ElabEnv, id: GlobalId) -> Term {
     env.env.transparent_body(id).expect("not a transparent def").1
+}
+
+fn term_mentions_const(t: &Term, target: GlobalId) -> bool {
+    match t {
+        Term::Const { id, .. } if *id == target => true,
+        _ => t
+            .children()
+            .into_iter()
+            .any(|child| term_mentions_const(child, target)),
+    }
+}
+
+fn term_mentions_var(t: &Term, target: usize) -> bool {
+    match t {
+        Term::Var(i) if *i == target => true,
+        _ => t
+            .children()
+            .into_iter()
+            .any(|child| term_mentions_var(child, target)),
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -446,6 +466,79 @@ fn ac7_plain_carrier_no_obligation() {
         elab_result.obligations.is_empty(),
         "AC7b: spurious obligation emitted for plain Int annotation (no refinement)"
     );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AC8  proof-returning-dependent-motive  (`34 §3.5`, `39 §2.1`, `14 §3`)
+//
+// Positive red-to-green for KM-dependent-match-proof-motive-build D1. On the
+// pre-fix `927dd34` head this literal source rejects at the whole body with
+// `KernelRejected { TypeMismatch { expected: Type 0, found: Ω0 } }`, because
+// `match km_scrutinee b` missed checked dependent-motive recovery and fell
+// through to `infer_match`'s constant `D -> Type 0` motive path.
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn ac8_proof_returning_match_through_transparent_scrutinee_elaborates() {
+    let mut env = mk_env();
+    let scrutinee_id = elab_ok(&mut env, "fn km_scrutinee (b : Bool) : Bool = b");
+
+    let id = elab_ok(
+        &mut env,
+        "fn km_proof_motive_positive (b : Bool) \
+           : Equal Bool (km_scrutinee b) (km_scrutinee b) = \
+           match km_scrutinee b { True => tt ; False => tt }",
+    );
+
+    let body = body_of(&env, id);
+    let mut inner = &body;
+    while let Term::Lam(_, body) = inner {
+        inner = body;
+    }
+
+    let (motive, scrut) = match inner {
+        Term::Elim { fam, motive, scrut, .. } => {
+            assert_eq!(*fam, env.globals["Bool"], "AC8 must eliminate over Bool");
+            (motive.as_ref(), scrut.as_ref())
+        }
+        other => panic!(
+            "AC8 proof-returning match must lower to Term::Elim, got {other:?}"
+        ),
+    };
+    assert!(
+        term_mentions_const(scrut, scrutinee_id),
+        "the scrutinee should preserve the transparent helper call"
+    );
+
+    let (motive_body, motive_ty) = match motive {
+        Term::Ascript(body, ty) => (body.as_ref(), ty.as_ref()),
+        other => panic!(
+            "AC8 motive must be ascribed so the kernel sees its Ω codomain, got {other:?}"
+        ),
+    };
+    match motive_ty {
+        Term::Pi(_, codomain) => {
+            assert_eq!(
+                **codomain,
+                Term::Omega(Level::Zero),
+                "AC8 motive codomain must be Ω0"
+            );
+        }
+        other => panic!("AC8 motive type must be a Pi over Bool, got {other:?}"),
+    }
+    match motive_body {
+        Term::Lam(_, body) => {
+            assert!(
+                term_mentions_var(body, 0),
+                "AC8 motive body must mention the generalized scrutinee binder"
+            );
+            assert!(
+                !term_mentions_const(body, scrutinee_id),
+                "AC8 motive body must abstract over `km_scrutinee b`, not keep a constant motive"
+            );
+        }
+        other => panic!("AC8 motive body must be a lambda, got {other:?}"),
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
