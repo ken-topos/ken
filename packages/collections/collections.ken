@@ -38,12 +38,14 @@
 -- real, per the Architect's forward note).
 data OrdResult = Lt | Eq | Gt
 
--- The `List`/`Nat` combinator floor (SS4.1). Every recursive call below is an
--- APPLIED call whose decreasing argument is a strict subterm of a matched
--- argument (the `Cons` tail and/or the `Suc` predecessor) -- squarely in the
--- SCT's sound zone, never leaning on the SCT's unapplied-self-reference /
+-- The `List`/`Nat` combinator floor (SS4.1) plus the CAT-3 Layer-1
+-- structural list ops/laws. Every recursive call below is an APPLIED call
+-- whose decreasing argument is a strict subterm of a matched argument (the
+-- `Cons` tail and/or the `Suc` predecessor) -- squarely in the SCT's sound
+-- zone, never leaning on the SCT's unapplied-self-reference /
 -- recursion-through-opaque-map over-accept hole
--- (`sct-unapplied-self-reference-over-accepts`).
+-- (`sct-unapplied-self-reference-over-accepts`). Proof terms use `cong` from
+-- `packages/transport`, so load transport before this package.
 
 -- `list_append` -- a DISTINCT name from the landed `Bytes`-domain `append`
 -- (FS-effect, `crates/ken-elaborator/src/bytes.rs`, symbol `"append"`); this
@@ -79,6 +81,89 @@ fn drop (a : Type) (n : Nat) (xs : List a) : List a =
     Suc m ⇒ match xs {
       Nil ⇒ Nil a ;
       Cons h t ⇒ drop a m t
+    }
+  }
+
+-- CAT-3 Layer-1 structural list operations. These are ordinary transparent
+-- recursive definitions over `List`/`Nat`; no primitive or postulate is added.
+fn map (a : Type) (b : Type) (f : a → b) (xs : List a) : List b =
+  match xs {
+    Nil ⇒ Nil b ;
+    Cons h t ⇒ Cons b (f h) (map a b f t)
+  }
+
+fn filter (a : Type) (p : a → Bool) (xs : List a) : List a =
+  match xs {
+    Nil ⇒ Nil a ;
+    Cons h t ⇒ match p h {
+      True ⇒ Cons a h (filter a p t) ;
+      False ⇒ filter a p t
+    }
+  }
+
+fn mem (a : Type) (eqf : a → a → Bool) (x : a) (xs : List a) : Bool =
+  match xs {
+    Nil ⇒ False ;
+    Cons h t ⇒ match eqf x h {
+      True ⇒ True ;
+      False ⇒ mem a eqf x t
+    }
+  }
+
+fn length (a : Type) (xs : List a) : Nat =
+  match xs {
+    Nil ⇒ Zero ;
+    Cons h t ⇒ Suc (length a t)
+  }
+
+fn min (m : Nat) (n : Nat) : Nat =
+  match m {
+    Zero ⇒ Zero ;
+    Suc m2 ⇒ match n {
+      Zero ⇒ Zero ;
+      Suc n2 ⇒ Suc (min m2 n2)
+    }
+  }
+
+fn take_drop_decomposition (a : Type) (n : Nat) (xs : List a)
+  : Equal (List a) (list_append a (take a n xs) (drop a n xs)) xs =
+  match n {
+    Zero ⇒ Refl ;
+    Suc m ⇒ match xs {
+      Nil ⇒ tt ;
+      Cons h t ⇒
+        cong (List a) (List a)
+          (list_append a (take a m t) (drop a m t))
+          t
+          (Cons a h)
+          (take_drop_decomposition a m t)
+    }
+  }
+
+fn map_length (a : Type) (b : Type) (f : a → b) (xs : List a)
+  : Equal Nat (length b (map a b f xs)) (length a xs) =
+  match xs {
+    Nil ⇒ tt ;
+    Cons h t ⇒
+      cong Nat Nat
+        (length b (map a b f t))
+        (length a t)
+        Suc
+        (map_length a b f t)
+  }
+
+fn length_take_min (a : Type) (n : Nat) (xs : List a)
+  : Equal Nat (length a (take a n xs)) (min n (length a xs)) =
+  match n {
+    Zero ⇒ tt ;
+    Suc m ⇒ match xs {
+      Nil ⇒ tt ;
+      Cons h t ⇒
+        cong Nat Nat
+          (length a (take a m t))
+          (min m (length a t))
+          Suc
+          (length_take_min a m t)
     }
   }
 
