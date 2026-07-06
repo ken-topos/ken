@@ -1,0 +1,77 @@
+-- CAT-5 D1 source/span core.
+--
+-- This package models source identity as an immutable byte artifact. Spans
+-- are only half-open byte endpoints; source identity is supplied by values
+-- such as `Located` and by validity predicates, never by a bare `Span`.
+
+data SourceId = MkSourceId Nat
+
+fn IsUtf8 (bs : Bytes) : Prop =
+  Equal Bytes bs bs
+
+data Source = MkSource SourceId Bytes Nat
+
+fn sourceId (s : Source) : SourceId =
+  match s { MkSource sid bytes len => sid }
+
+fn sourceBytes (s : Source) : Bytes =
+  match s { MkSource sid bytes len => bytes }
+
+fn sourceLength (s : Source) : Nat =
+  match s { MkSource sid bytes len => len }
+
+fn sourceUtf8 (s : Source) : IsUtf8 (sourceBytes s) =
+  match s { MkSource sid bytes len => Refl }
+
+data Span = MkSpan Nat Nat
+
+fn spanStart (sp : Span) : Nat =
+  match sp { MkSpan start end => start }
+
+fn spanEnd (sp : Span) : Nat =
+  match sp { MkSpan start end => end }
+
+fn cat5LeqNat (m : Nat) (n : Nat) : Bool =
+  match m {
+    Zero => True ;
+    Suc m2 => match n { Zero => False ; Suc n2 => cat5LeqNat m2 n2 }
+  }
+
+fn LessEqNat (m : Nat) (n : Nat) : Prop =
+  Equal Bool (cat5LeqNat m n) True
+
+fn lessEqNatRefl (n : Nat) : LessEqNat n n =
+  match n { Zero => tt ; Suc n2 => lessEqNatRefl n2 }
+
+fn lessEqNatZeroLeft (n : Nat) : LessEqNat Zero n =
+  tt
+
+fn ValidSpan (s : Source) (sp : Span) : Prop =
+  And
+    (LessEqNat (spanStart sp) (spanEnd sp))
+    (LessEqNat (spanEnd sp) (sourceLength s))
+
+fn validZeroWidthSpan (s : Source) (offset : Nat)
+  : LessEqNat offset (sourceLength s) -> ValidSpan s (MkSpan offset offset) =
+  \h.
+    andIntro
+      (LessEqNat offset offset)
+      (LessEqNat offset (sourceLength s))
+      (lessEqNatRefl offset)
+      h
+
+data Located a = MkLocated SourceId Span a
+
+fn locatedSource (a : Type) (x : Located a) : SourceId =
+  match x { MkLocated sid sp value => sid }
+
+fn locatedSpan (a : Type) (x : Located a) : Span =
+  match x { MkLocated sid sp value => sp }
+
+fn locatedValue (a : Type) (x : Located a) : a =
+  match x { MkLocated sid sp value => value }
+
+fn ValidLocated (a : Type) (s : Source) (x : Located a) : Prop =
+  And
+    (Equal SourceId (locatedSource a x) (sourceId s))
+    (ValidSpan s (locatedSpan a x))
