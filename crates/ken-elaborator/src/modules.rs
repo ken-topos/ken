@@ -272,6 +272,12 @@ fn rewrite_rtype(scope: &Scope, exports: &HashMap<String, HashMap<String, String
             Box::new(rewrite_rtype(scope, exports, *b)?),
             s,
         ),
+        RType::REffectArr(a, row, b, s) => RType::REffectArr(
+            Box::new(rewrite_rtype(scope, exports, *a)?),
+            row,
+            Box::new(rewrite_rtype(scope, exports, *b)?),
+            s,
+        ),
         RType::RRefine(x, a, phi, s) => RType::RRefine(
             x,
             Box::new(rewrite_rtype(scope, exports, *a)?),
@@ -427,7 +433,13 @@ fn rewrite_rdecl(scope: &Scope, exports: &HashMap<String, HashMap<String, String
                 .transpose()?,
             fields: fields
                 .into_iter()
-                .map(|(n, t)| Ok((n, rewrite_rtype(scope, exports, t)?)))
+                .map(|f| {
+                    Ok(crate::resolve::RClassField {
+                        purity: f.purity,
+                        name: f.name,
+                        ty: rewrite_rtype(scope, exports, f.ty)?,
+                    })
+                })
                 .collect::<Result<Vec<_>, ElabError>>()?,
         },
         RDeclKind::InstanceDecl { head_params, head_type, constraints, fields } => RDeclKind::InstanceDecl {
@@ -488,13 +500,19 @@ fn elaborate_checked(
     elab: &mut ElabEnv,
     rdecl: &crate::resolve::RDecl,
 ) -> Result<crate::elab::ElabResult, ElabError> {
-    crate::elab::check_surface_purity(rdecl, &elab.effect_rows)?;
-    let result = crate::elab::elaborate_rdecl_v1(
+    crate::elab::check_surface_purity(
+        rdecl,
+        &elab.effect_rows,
+        &elab.globals,
+        &elab.class_env,
+    )?;
+    let result = crate::elab::elaborate_rdecl_v1_with_effect_rows(
         &mut elab.env,
         &mut elab.globals,
         &mut elab.num_values,
         &elab.numeric_env,
         &mut elab.class_env,
+        &elab.effect_rows,
         rdecl,
     )?;
     register_effect_row(elab, &result);
@@ -652,7 +670,12 @@ fn expand_scope(
                                     rdecl.name
                                 )));
                             }
-                            crate::elab::check_surface_purity(rdecl, &group_effect_rows)?;
+                            crate::elab::check_surface_purity(
+                                rdecl,
+                                &group_effect_rows,
+                                &elab.globals,
+                                &elab.class_env,
+                            )?;
                         }
                         let results = crate::elab::elaborate_mutual_group(
                             &mut elab.env,

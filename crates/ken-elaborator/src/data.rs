@@ -139,7 +139,7 @@ fn rtype_to_kernel(
 
         RType::RVarTy(i, _, _) => Term::var(*i),
 
-        RType::RArr(a, b, _) => {
+        RType::RArr(a, b, _) | RType::REffectArr(a, _, b, _) => {
             let a_k = rtype_to_kernel(a, d_name, d_id, globals, ind_id_set);
             let b_k = rtype_to_kernel(b, d_name, d_id, globals, ind_id_set);
             // Non-dependent arrow A → B: in kernel Π representation, B lives

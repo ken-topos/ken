@@ -51,6 +51,14 @@ pub enum DefKeyword {
     Proc,
 }
 
+/// A class field declaration, with optional SURF-2 purity metadata.
+#[derive(Clone, Debug)]
+pub struct ClassField {
+    pub purity: Option<DefKeyword>,
+    pub name: String,
+    pub ty: Type,
+}
+
 /// A surface pattern (`34 §3`, `32 §4`).
 #[derive(Clone, Debug)]
 pub struct Pattern {
@@ -157,8 +165,8 @@ pub enum Decl {
         param: Option<String>,
         /// Optional kind annotation for the parameter. Absent means `Type0`.
         param_kind: Option<Type>,
-        /// Field declarations: (name, type_expr).
-        fields: Vec<(String, Type)>,
+        /// Field declarations, in Sigma-telescope order.
+        fields: Vec<ClassField>,
         span: Span,
     },
     /// `instance C HeadType [where C₁ T₁ ; …] { field = expr ; … }` —
@@ -383,6 +391,9 @@ pub enum Type {
     TPi(String, Box<Type>, Box<Type>, Span),
     /// `A -> B` — non-dependent arrow.
     TArr(Box<Type>, Box<Type>, Span),
+    /// `A ->[ρ] B` — latent-effect arrow. The row is surface metadata for
+    /// purity classification and erases to the same kernel Π as `TArr`.
+    TEffectArr(Box<Type>, EffectRowSyntax, Box<Type>, Span),
     /// `Type` or `Type n` — universe.
     TUniv(Option<u32>, Span),
     /// `ConId` — a base type by name (uppercase).
@@ -400,6 +411,7 @@ impl Type {
         match self {
             Type::TPi(_, _, _, s)
             | Type::TArr(_, _, s)
+            | Type::TEffectArr(_, _, _, s)
             | Type::TUniv(_, s)
             | Type::TCon(_, s)
             | Type::TVar(_, s)

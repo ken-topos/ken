@@ -162,6 +162,8 @@ fn ac3_overlap_check_first_ok_second_errors() {
         ("Eq2".to_string(), "Int".to_string()),
         ken_elaborator::InstanceInfo {
             instance_id: GlobalId(999),
+            class_name: "Eq2".to_string(),
+            field_effect_rows: vec![],
             module_id: 0,
         },
     );
@@ -224,7 +226,12 @@ fn ac4_property_vs_structure_sort_discriminant() {
     use ken_kernel::GlobalId;
     env_str.class_env.instances.insert(
         ("Count2".to_string(), "Int".to_string()),
-        ken_elaborator::InstanceInfo { instance_id: GlobalId(888), module_id: 0 },
+        ken_elaborator::InstanceInfo {
+            instance_id: GlobalId(888),
+            class_name: "Count2".to_string(),
+            field_effect_rows: vec![],
+            module_id: 0,
+        },
     );
     let r4 = env_str.elaborate_decl("instance Count2 Int { n = n }");
     assert!(

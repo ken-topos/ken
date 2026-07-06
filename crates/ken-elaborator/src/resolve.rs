@@ -6,7 +6,7 @@
 //! L2 additions: `data` declarations, `type` aliases, `match` expressions,
 //! type application (`T a b`).
 
-use crate::ast::{BinOp, Decl, DefKeyword, EffectRowSyntax, Expr, NumLit, PatKind, Type};
+use crate::ast::{BinOp, ClassField, Decl, DefKeyword, EffectRowSyntax, Expr, NumLit, PatKind, Type};
 use crate::error::{ElabError, Span};
 
 /// A resolved constructor declaration (from `data` decl resolution).
@@ -51,6 +51,14 @@ pub struct RDecl {
     pub ensures: Vec<RExpr>,
     pub span: Span,
     pub kind: RDeclKind,
+}
+
+/// A resolved class field declaration, with optional SURF-2 purity metadata.
+#[derive(Clone, Debug)]
+pub struct RClassField {
+    pub purity: Option<DefKeyword>,
+    pub name: String,
+    pub ty: RType,
 }
 
 /// Discriminates the declaration kind for elaboration dispatch.
@@ -102,8 +110,8 @@ pub enum RDeclKind {
         param: Option<String>,
         /// Optional resolved kind for the class parameter. Absent means `Type0`.
         param_kind: Option<RType>,
-        /// Resolved field types (param in scope if present).
-        fields: Vec<(String, RType)>,
+        /// Resolved field types (param and earlier fields in scope if present).
+        fields: Vec<RClassField>,
     },
     /// `instance C HeadType [where …] { field = expr ; … }` (`39 §6`).
     InstanceDecl {
@@ -184,6 +192,9 @@ impl RExpr {
 pub enum RType {
     RPi(String, Box<RType>, Box<RType>, Span),
     RArr(Box<RType>, Box<RType>, Span),
+    /// `A ->[ρ] B` — latent-effect arrow, erased to the same kernel Π as
+    /// `RArr` after class-field purity has inspected the row.
+    REffectArr(Box<RType>, EffectRowSyntax, Box<RType>, Span),
     RUniv(Option<u32>, Span),
     RCon(String, Span),
     RVarTy(usize, String, Span),
@@ -198,6 +209,7 @@ impl RType {
         match self {
             RType::RPi(_, _, _, s)
             | RType::RArr(_, _, s)
+            | RType::REffectArr(_, _, _, s)
             | RType::RUniv(_, s)
             | RType::RCon(_, s)
             | RType::RVarTy(_, _, s)
@@ -247,7 +259,10 @@ fn collect_instance_head_params(ty: &Type, out: &mut Vec<String>) {
                 out.push(name.clone());
             }
         }
-        Type::TPi(_, a, b, _) | Type::TArr(a, b, _) | Type::TApp(a, b, _) => {
+        Type::TPi(_, a, b, _)
+        | Type::TArr(a, b, _)
+        | Type::TEffectArr(a, _, b, _)
+        | Type::TApp(a, b, _) => {
             collect_instance_head_params(a, out);
             collect_instance_head_params(b, out);
         }
@@ -552,9 +567,13 @@ pub fn resolve_decl(decl: &Decl) -> Result<RDecl, ElabError> {
                 scope.push(p);
             }
             let mut resolved_fields = Vec::new();
-            for (fname, ty) in fields {
+            for ClassField { purity, name: fname, ty } in fields {
                 let rty = resolve_type(&mut scope, ty)?;
-                resolved_fields.push((fname.clone(), rty));
+                resolved_fields.push(RClassField {
+                    purity: *purity,
+                    name: fname.clone(),
+                    ty: rty,
+                });
                 scope.push(fname);
             }
             Ok(RDecl {
@@ -826,6 +845,16 @@ fn resolve_type(scope: &mut Scope, ty: &Type) -> Result<RType, ElabError> {
             let ra = resolve_type(scope, a)?;
             let rb = resolve_type(scope, b)?;
             Ok(RType::RArr(Box::new(ra), Box::new(rb), span.clone()))
+        }
+        Type::TEffectArr(a, row, b, span) => {
+            let ra = resolve_type(scope, a)?;
+            let rb = resolve_type(scope, b)?;
+            Ok(RType::REffectArr(
+                Box::new(ra),
+                row.clone(),
+                Box::new(rb),
+                span.clone(),
+            ))
         }
 
         Type::TPi(x, a, b, span) => {

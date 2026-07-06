@@ -23,7 +23,7 @@ use crate::classes::{ClassEnv, ClassInfo, ClassKind, InstanceInfo};
 use crate::data;
 use crate::error::{ElabError, Span};
 use crate::numbers::{AddEntry, BinOpEntry, NumericEnv, NumericLitVal};
-use crate::resolve::{RDecl, RDeclKind, RExpr, RMatchArm, RPatKind, RPattern, RType};
+use crate::resolve::{RClassField, RDecl, RDeclKind, RExpr, RMatchArm, RPatKind, RPattern, RType};
 
 // ----- obligation model -----
 
@@ -390,7 +390,7 @@ fn elab_type(cx: &mut ElabCtx, ty: &RType) -> Result<Term, ElabError> {
 
         RType::RVarTy(i, _, _) => Ok(Term::var(*i)),
 
-        RType::RArr(a, b, _) => {
+        RType::RArr(a, b, _) | RType::REffectArr(a, _, b, _) => {
             let a_core = elab_type(cx, a)?;
             let b_core = elab_type(cx, b)?;
             Ok(Term::pi(a_core, weaken(&b_core, 1)))
@@ -1730,6 +1730,177 @@ fn explicit_value_param_count_from_type(ty: &RType) -> usize {
     }
 }
 
+fn explicit_value_param_count_from_field_type(ty: &RType) -> usize {
+    match ty {
+        RType::RPi(_, domain, codomain, _) => {
+            let domain_is_type_param = matches!(&**domain, RType::RUniv(_, _));
+            usize::from(!domain_is_type_param)
+                + explicit_value_param_count_from_field_type(codomain)
+        }
+        RType::RArr(_, codomain, _) | RType::REffectArr(_, _, codomain, _) => {
+            1 + explicit_value_param_count_from_field_type(codomain)
+        }
+        _ => 0,
+    }
+}
+
+fn type_contains_effect_row(ty: &RType) -> bool {
+    match ty {
+        RType::REffectArr(_, _, _, _) => true,
+        RType::RPi(_, domain, codomain, _) | RType::RArr(domain, codomain, _) => {
+            type_contains_effect_row(domain) || type_contains_effect_row(codomain)
+        }
+        RType::RApp(f, a, _) => type_contains_effect_row(f) || type_contains_effect_row(a),
+        RType::RRefine(_, carrier, _, _) => type_contains_effect_row(carrier),
+        RType::RUniv(_, _) | RType::RCon(_, _) | RType::RVarTy(_, _, _) => false,
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum RTypeHead {
+    Con(String),
+    Var(usize, String),
+}
+
+fn rtype_heads_match(a: &RTypeHead, b: &RTypeHead) -> bool {
+    match (a, b) {
+        (RTypeHead::Con(a), RTypeHead::Con(b)) => a == b,
+        (RTypeHead::Var(_, a), RTypeHead::Var(_, b)) => a == b,
+        (RTypeHead::Con(a), RTypeHead::Var(_, b))
+        | (RTypeHead::Var(_, a), RTypeHead::Con(b)) => a == b,
+    }
+}
+
+fn rtype_app_head(ty: &RType) -> Option<RTypeHead> {
+    match ty {
+        RType::RApp(f, _, _) => rtype_app_head(f),
+        RType::RCon(name, _) => Some(RTypeHead::Con(name.clone())),
+        RType::RVarTy(index, name, _) => Some(RTypeHead::Var(*index, name.clone())),
+        _ => None,
+    }
+}
+
+fn rtype_is_app_headed_by(ty: &RType, head: &RTypeHead) -> bool {
+    matches!(ty, RType::RApp(_, _, _))
+        && rtype_app_head(ty)
+            .as_ref()
+            .is_some_and(|candidate| rtype_heads_match(candidate, head))
+}
+
+fn type_is_applicative_dict_for_head(ty: &RType, head: &RTypeHead) -> bool {
+    match ty {
+        RType::RApp(f, arg, _) => {
+            matches!(&**f, RType::RCon(name, _) if name == "Applicative")
+                && rtype_app_head(arg)
+                    .as_ref()
+                    .is_some_and(|candidate| rtype_heads_match(candidate, head))
+        }
+        _ => false,
+    }
+}
+
+fn callback_result_head(ty: &RType) -> Option<RTypeHead> {
+    match ty {
+        RType::RArr(_, codomain, _) | RType::REffectArr(_, _, codomain, _) => {
+            let head = rtype_app_head(codomain)?;
+            rtype_is_app_headed_by(codomain, &head).then_some(head)
+        }
+        _ => None,
+    }
+}
+
+fn collect_field_arrow_chain<'a>(ty: &'a RType, args: &mut Vec<&'a RType>) -> &'a RType {
+    match ty {
+        RType::RPi(_, domain, codomain, _) => {
+            args.push(domain);
+            collect_field_arrow_chain(codomain, args)
+        }
+        RType::RArr(domain, codomain, _) | RType::REffectArr(domain, _, codomain, _) => {
+            args.push(domain);
+            collect_field_arrow_chain(codomain, args)
+        }
+        _ => ty,
+    }
+}
+
+fn type_has_applicative_row_polymorphic_contract(ty: &RType) -> bool {
+    let mut args = Vec::new();
+    let result = collect_field_arrow_chain(ty, &mut args);
+    for arg in &args {
+        let Some(head) = callback_result_head(arg) else {
+            continue;
+        };
+        if rtype_is_app_headed_by(result, &head)
+            && args.iter().any(|candidate| type_is_applicative_dict_for_head(candidate, &head))
+        {
+            return true;
+        }
+    }
+    false
+}
+
+fn field_type_earns_proc(ty: &RType) -> bool {
+    type_contains_effect_row(ty) || type_has_applicative_row_polymorphic_contract(ty)
+}
+
+fn class_field_declared_row(keyword: DefKeyword, field_name: &str) -> crate::effects::RowType {
+    match keyword {
+        DefKeyword::Proc => crate::effects::RowType::singleton(format!(
+            "proc class field `{}`",
+            field_name
+        )),
+        DefKeyword::Const | DefKeyword::Fn | DefKeyword::View => crate::effects::RowType::empty(),
+    }
+}
+
+fn check_class_field_marker(
+    keyword: DefKeyword,
+    field_name: &str,
+    ty: &RType,
+    span: &Span,
+) -> Result<(), ElabError> {
+    let explicit_value_params = explicit_value_param_count_from_field_type(ty);
+    let earns_proc = field_type_earns_proc(ty);
+    match keyword {
+        DefKeyword::Const | DefKeyword::Fn if earns_proc => Err(ElabError::TypeMismatch {
+            span: span.clone(),
+            reason: format!(
+                "`{:?}` class field `{}` declares a latent or row-polymorphic effect; use `proc`",
+                keyword, field_name
+            ),
+        }),
+        DefKeyword::Const if explicit_value_params > 0 => Err(ElabError::TypeMismatch {
+            span: span.clone(),
+            reason: format!(
+                "`const` class field `{}` has {} explicit value parameter(s); use `fn`",
+                field_name, explicit_value_params
+            ),
+        }),
+        DefKeyword::Fn if explicit_value_params == 0 => Err(ElabError::TypeMismatch {
+            span: span.clone(),
+            reason: format!(
+                "`fn` class field `{}` has zero explicit value parameters; use `const`",
+                field_name
+            ),
+        }),
+        DefKeyword::Proc if explicit_value_params == 0 => Err(ElabError::TypeMismatch {
+            span: span.clone(),
+            reason: format!(
+                "`proc` class field `{}` has zero explicit value parameters; use `const`",
+                field_name
+            ),
+        }),
+        DefKeyword::Proc if !earns_proc => Err(ElabError::TypeMismatch {
+            span: span.clone(),
+            reason: format!(
+                "`proc` class field `{}` declares no latent or row-polymorphic effect; use `fn`/`const` for pure fields",
+                field_name
+            ),
+        }),
+        DefKeyword::View | DefKeyword::Const | DefKeyword::Fn | DefKeyword::Proc => Ok(()),
+    }
+}
+
 fn leading_lambda_count(expr: &RExpr) -> usize {
     match expr {
         RExpr::RLam(_, body, _) => 1 + leading_lambda_count(body),
@@ -1752,9 +1923,126 @@ fn decl_eval_body(expr: &RExpr) -> &RExpr {
     }
 }
 
+struct ProjectionPurityCtx<'a> {
+    globals: &'a HashMap<String, GlobalId>,
+    class_env: &'a ClassEnv,
+    local_constraints: &'a [(String, RType)],
+    bound_dict_classes: &'a [(String, String)],
+}
+
+fn instance_class_for_global<'a>(
+    class_env: &'a ClassEnv,
+    instance_id: GlobalId,
+) -> Option<&'a str> {
+    class_env
+        .instances
+        .values()
+        .find(|inst| inst.instance_id == instance_id)
+        .map(|inst| inst.class_name.as_str())
+}
+
+fn projected_instance_id(
+    base: &RExpr,
+    ctx: &ProjectionPurityCtx<'_>,
+) -> Option<GlobalId> {
+    match base {
+        RExpr::RCon(name, _) if name == "d" && ctx.local_constraints.len() == 1 => {
+            let (class_name, head_ty) = &ctx.local_constraints[0];
+            ctx.class_env.instance_search(class_name, &rtype_head_name(head_ty))
+        }
+        RExpr::RCon(name, _) => ctx.globals.get(name).copied(),
+        _ => None,
+    }
+}
+
+fn projected_field_row_type(
+    base: &RExpr,
+    field: &str,
+    ctx: Option<&ProjectionPurityCtx<'_>>,
+) -> crate::effects::RowType {
+    let Some(ctx) = ctx else {
+        return crate::effects::RowType::empty();
+    };
+    if let RExpr::RVar(_, name, _) = base {
+        if let Some((_, class_name)) = ctx.bound_dict_classes.iter().find(|(n, _)| n == name) {
+            return projected_class_field_row_type(ctx.class_env, class_name, field);
+        }
+    }
+    let Some(instance_id) = projected_instance_id(base, ctx) else {
+        return crate::effects::RowType::empty();
+    };
+    let Some(class_name) = instance_class_for_global(ctx.class_env, instance_id) else {
+        return crate::effects::RowType::empty();
+    };
+    let Some(class_info) = ctx.class_env.classes.get(class_name) else {
+        return crate::effects::RowType::empty();
+    };
+    let Some(idx) = class_info.field_names.iter().position(|n| n == field) else {
+        return crate::effects::RowType::empty();
+    };
+    if let Some(row) = ctx
+        .class_env
+        .instances
+        .values()
+        .find(|inst| inst.instance_id == instance_id)
+        .and_then(|inst| inst.field_effect_rows.get(idx))
+        .filter(|row| !is_empty_closed_row(row))
+    {
+        return row.clone();
+    }
+    match class_info.field_purities.get(idx).copied().flatten() {
+        Some(DefKeyword::Proc) => crate::effects::RowType::singleton(format!(
+            "projected proc class field `{}.{}`",
+            class_name, field
+        )),
+        _ => crate::effects::RowType::empty(),
+    }
+}
+
+fn projected_class_field_row_type(
+    class_env: &ClassEnv,
+    class_name: &str,
+    field: &str,
+) -> crate::effects::RowType {
+    let Some(class_info) = class_env.classes.get(class_name) else {
+        return crate::effects::RowType::empty();
+    };
+    let Some(idx) = class_info.field_names.iter().position(|n| n == field) else {
+        return crate::effects::RowType::empty();
+    };
+    match class_info.field_purities.get(idx).copied().flatten() {
+        Some(DefKeyword::Proc) => crate::effects::RowType::singleton(format!(
+            "projected proc class field `{}.{}`",
+            class_name, field
+        )),
+        _ => crate::effects::RowType::empty(),
+    }
+}
+
+fn class_name_for_dictionary_type(class_env: &ClassEnv, ty: &RType) -> Option<String> {
+    let head = rtype_head_name(ty);
+    class_env.classes.contains_key(&head).then_some(head)
+}
+
+fn collect_bound_dictionary_params(
+    ty: Option<&RType>,
+    class_env: &ClassEnv,
+) -> Vec<(String, String)> {
+    let mut dicts = Vec::new();
+    let mut cur = ty;
+    while let Some(RType::RPi(name, domain, codomain, _)) = cur {
+        if let Some(class_name) = class_name_for_dictionary_type(class_env, domain) {
+            dicts.push((name.clone(), class_name));
+        }
+        cur = Some(codomain);
+    }
+    dicts
+}
+
 fn infer_expr_row_type(
     expr: &RExpr,
     effect_rows: &HashMap<String, crate::effects::RowType>,
+    projection_ctx: Option<&ProjectionPurityCtx<'_>>,
 ) -> crate::effects::RowType {
     match expr {
         RExpr::RCon(name, _) => effect_rows
@@ -1765,22 +2053,26 @@ fn infer_expr_row_type(
         | RExpr::RUniv(_, _)
         | RExpr::RNumLit(_, _)
         | RExpr::RStr(_, _) => crate::effects::RowType::empty(),
-        RExpr::RApp(f, a, _) => infer_expr_row_type(f, effect_rows)
-            .join(infer_expr_row_type(a, effect_rows)),
+        RExpr::RApp(f, a, _) => infer_expr_row_type(f, effect_rows, projection_ctx)
+            .join(infer_expr_row_type(a, effect_rows, projection_ctx)),
         RExpr::RLam(_, _, _) | RExpr::RPi(_, _, _, _) | RExpr::RArrow(_, _, _) => {
             crate::effects::RowType::empty()
         }
-        RExpr::RLet(_, _, val, body, _) => infer_expr_row_type(val, effect_rows)
-            .join(infer_expr_row_type(body, effect_rows)),
-        RExpr::RAsc(e, _, _) | RExpr::ROld(e, _) | RExpr::RProj(e, _, _) => {
-            infer_expr_row_type(e, effect_rows)
+        RExpr::RLet(_, _, val, body, _) => infer_expr_row_type(val, effect_rows, projection_ctx)
+            .join(infer_expr_row_type(body, effect_rows, projection_ctx)),
+        RExpr::RAsc(e, _, _) | RExpr::ROld(e, _) => {
+            infer_expr_row_type(e, effect_rows, projection_ctx)
         }
-        RExpr::RBinOp(_, l, r, _) => infer_expr_row_type(l, effect_rows)
-            .join(infer_expr_row_type(r, effect_rows)),
+        RExpr::RProj(e, field, _) => {
+            infer_expr_row_type(e, effect_rows, projection_ctx)
+                .join(projected_field_row_type(e, field, projection_ctx))
+        }
+        RExpr::RBinOp(_, l, r, _) => infer_expr_row_type(l, effect_rows, projection_ctx)
+            .join(infer_expr_row_type(r, effect_rows, projection_ctx)),
         RExpr::RMatch { scrut, arms, .. } => {
-            let mut row = infer_expr_row_type(scrut, effect_rows);
+            let mut row = infer_expr_row_type(scrut, effect_rows, projection_ctx);
             for arm in arms {
-                row = row.join(infer_expr_row_type(&arm.body, effect_rows));
+                row = row.join(infer_expr_row_type(&arm.body, effect_rows, projection_ctx));
             }
             row
         }
@@ -1792,9 +2084,13 @@ fn infer_expr_row_type(
 pub fn check_surface_purity(
     rdecl: &RDecl,
     effect_rows: &HashMap<String, crate::effects::RowType>,
+    globals: &HashMap<String, GlobalId>,
+    class_env: &ClassEnv,
 ) -> Result<(), ElabError> {
-    let (keyword, is_space_op, visits) = match &rdecl.kind {
-        RDeclKind::View { keyword, is_space_op, visits, .. } => (*keyword, *is_space_op, visits),
+    let (keyword, is_space_op, visits, constraints) = match &rdecl.kind {
+        RDeclKind::View { keyword, is_space_op, visits, constraints } => {
+            (*keyword, *is_space_op, visits, constraints.as_slice())
+        }
         _ => return Ok(()),
     };
     if keyword == DefKeyword::View {
@@ -1802,7 +2098,14 @@ pub fn check_surface_purity(
     }
 
     let declared = surface_declared_row_type(rdecl)?.unwrap_or_else(crate::effects::RowType::empty);
-    let inferred = infer_expr_row_type(decl_eval_body(&rdecl.body), effect_rows);
+    let bound_dict_classes = collect_bound_dictionary_params(rdecl.ty.as_ref(), class_env);
+    let projection_ctx = ProjectionPurityCtx {
+        globals,
+        class_env,
+        local_constraints: constraints,
+        bound_dict_classes: &bound_dict_classes,
+    };
+    let inferred = infer_expr_row_type(decl_eval_body(&rdecl.body), effect_rows, Some(&projection_ctx));
     let decl = crate::effects::EffectDecl::new(&rdecl.name)
         .with_declared_row_type(declared.clone());
     crate::effects::check_decl_poly(&decl, &inferred, &crate::effects::EffectRow::empty())
@@ -1887,6 +2190,26 @@ pub fn elaborate_rdecl_v1(
     num_values: &mut HashMap<GlobalId, NumericLitVal>,
     numeric_env: &NumericEnv,
     class_env: &mut ClassEnv,
+    rdecl: &RDecl,
+) -> Result<ElabResult, ElabError> {
+    elaborate_rdecl_v1_with_effect_rows(
+        env,
+        globals,
+        num_values,
+        numeric_env,
+        class_env,
+        &HashMap::new(),
+        rdecl,
+    )
+}
+
+pub fn elaborate_rdecl_v1_with_effect_rows(
+    env: &mut GlobalEnv,
+    globals: &mut HashMap<String, GlobalId>,
+    num_values: &mut HashMap<GlobalId, NumericLitVal>,
+    numeric_env: &NumericEnv,
+    class_env: &mut ClassEnv,
+    effect_rows: &HashMap<String, crate::effects::RowType>,
     rdecl: &RDecl,
 ) -> Result<ElabResult, ElabError> {
     match &rdecl.kind {
@@ -1990,6 +2313,7 @@ pub fn elaborate_rdecl_v1(
         RDeclKind::InstanceDecl { head_params, head_type, constraints, fields } => {
             elab_instance_decl(
                 env, globals, num_values, numeric_env, class_env, rdecl,
+                effect_rows,
                 &rdecl.name.clone(), head_params, head_type, constraints, fields,
             )
         }
@@ -2060,7 +2384,9 @@ fn head_type_name(ty: &RType) -> String {
         RType::RCon(s, _) | RType::RVarTy(_, s, _) => s.clone(),
         RType::RApp(f, _, _) => head_type_name(f),
         RType::RUniv(_, _) => "Type".to_string(),
-        RType::RArr(_, _, _) | RType::RPi(_, _, _, _) => "->".to_string(),
+        RType::RArr(_, _, _) | RType::REffectArr(_, _, _, _) | RType::RPi(_, _, _, _) => {
+            "->".to_string()
+        }
         RType::RRefine(_, inner, _, _) => head_type_name(inner),
     }
 }
@@ -2080,7 +2406,7 @@ fn elab_class_decl(
     rdecl: &RDecl,
     param: &Option<String>,
     param_kind: Option<&RType>,
-    fields: &[(String, RType)],
+    fields: &[RClassField],
 ) -> Result<ElabResult, ElabError> {
     let span = &rdecl.span;
     let has_param = param.is_some();
@@ -2108,8 +2434,11 @@ fn elab_class_decl(
             cx.ctx.push(param_kind_core.clone());
         }
         let mut tys = Vec::new();
-        for (_, fty) in fields {
-            let t = elab_type(&mut cx, fty)?;
+        for field in fields {
+            if let Some(keyword) = field.purity {
+                check_class_field_marker(keyword, &field.name, &field.ty, span)?;
+            }
+            let t = elab_type(&mut cx, &field.ty)?;
             let t = cx.metas.zonk_term(&t);
             cx.ctx.push(t.clone());
             tys.push(t);
@@ -2155,8 +2484,9 @@ fn elab_class_decl(
         ClassInfo {
             param: param.clone(),
             param_kind: has_param.then_some(param_kind_core),
-            field_names: fields.iter().map(|(n, _)| n.clone()).collect(),
+            field_names: fields.iter().map(|f| f.name.clone()).collect(),
             field_types: field_types.clone(),
+            field_purities: fields.iter().map(|f| f.purity).collect(),
             type_id: id,
             kind,
             module_id: class_env.current_module,
@@ -2191,15 +2521,22 @@ fn compute_ordered_field_values(
     class_name: &str,
     head_core: &Term,
     fields: &[(String, RExpr)],
+    effect_rows: &HashMap<String, crate::effects::RowType>,
     span: &Span,
-) -> Result<Vec<Term>, ElabError> {
-    let (field_names, field_types, has_param) = {
+) -> Result<(Vec<Term>, Vec<crate::effects::RowType>), ElabError> {
+    let (field_names, field_types, field_purities, has_param) = {
         let ci = class_env.classes.get(class_name).ok_or_else(|| {
             ElabError::UnresolvedCon { name: class_name.to_string(), span: span.clone() }
         })?;
-        (ci.field_names.clone(), ci.field_types.clone(), ci.param.is_some())
+        (
+            ci.field_names.clone(),
+            ci.field_types.clone(),
+            ci.field_purities.clone(),
+            ci.param.is_some(),
+        )
     };
     let mut values: Vec<Term> = Vec::new();
+    let mut field_rows: Vec<crate::effects::RowType> = Vec::new();
     for (i, fname) in field_names.iter().enumerate() {
         let pos = fields.iter().position(|(n, _)| n == fname).ok_or_else(|| {
             ElabError::Internal(format!("instance missing field '{}'", fname))
@@ -2210,10 +2547,73 @@ fn compute_ordered_field_values(
         }
         args.extend(values.iter().cloned());
         let expected = ken_kernel::subst::subst_tel(&field_types[i], &args);
+        let projection_ctx = ProjectionPurityCtx {
+            globals: cx.globals,
+            class_env,
+            local_constraints: &[],
+            bound_dict_classes: &[],
+        };
+        let field_row = infer_expr_row_type(&fields[pos].1, effect_rows, Some(&projection_ctx));
+        if let Some(keyword) = field_purities[i] {
+            check_instance_field_purity(
+                keyword,
+                class_name,
+                fname,
+                &fields[pos].1,
+                effect_rows,
+                cx.globals,
+                class_env,
+                span,
+            )?;
+        }
         let v = check(cx, &fields[pos].1, &expected, span)?;
         values.push(cx.metas.zonk_term(&v));
+        field_rows.push(field_row);
     }
-    Ok(values)
+    Ok((values, field_rows))
+}
+
+fn check_instance_field_purity(
+    keyword: DefKeyword,
+    class_name: &str,
+    field_name: &str,
+    expr: &RExpr,
+    effect_rows: &HashMap<String, crate::effects::RowType>,
+    globals: &HashMap<String, GlobalId>,
+    class_env: &ClassEnv,
+    span: &Span,
+) -> Result<(), ElabError> {
+    let projection_ctx = ProjectionPurityCtx {
+        globals,
+        class_env,
+        local_constraints: &[],
+        bound_dict_classes: &[],
+    };
+    let inferred = infer_expr_row_type(expr, effect_rows, Some(&projection_ctx));
+    let impure = !is_empty_closed_row(&inferred);
+    match keyword {
+        DefKeyword::Proc if !impure => Err(ElabError::TypeMismatch {
+            span: span.clone(),
+            reason: format!(
+                "class field `{}.{}` requires `proc` but instance implementation is pure",
+                class_name, field_name
+            ),
+        }),
+        DefKeyword::Const | DefKeyword::Fn if impure => {
+            let declared = class_field_declared_row(keyword, field_name);
+            let decl = crate::effects::EffectDecl::new(&format!("{}.{}", class_name, field_name))
+                .with_declared_row_type(declared);
+            crate::effects::check_decl_poly(&decl, &inferred, &crate::effects::EffectRow::empty())
+                .map_err(|err| ElabError::TypeMismatch {
+                    span: span.clone(),
+                    reason: format!(
+                        "class field `{}.{}` requires `{:?}` but instance implementation is effectful: {}",
+                        class_name, field_name, keyword, err
+                    ),
+                })
+        }
+        _ => Ok(()),
+    }
 }
 
 fn push_type0_params(cx: &mut ElabCtx, count: usize) {
@@ -2250,6 +2650,7 @@ fn elab_instance_decl(
     numeric_env: &NumericEnv,
     class_env: &mut ClassEnv,
     rdecl: &RDecl,
+    effect_rows: &HashMap<String, crate::effects::RowType>,
     class_name: &str,
     head_params: &[String],
     head_type: &RType,
@@ -2332,7 +2733,7 @@ fn elab_instance_decl(
     });
 
     // ---- admit the instance ----------------------------------------------
-    let instance_id = if has_self_ref {
+    let (instance_id, field_effect_rows) = if has_self_ref {
         // Direct self-referential constraint: encode as a fixpoint-arrow so
         // sct_check sees the self-loop in App position and rejects (`39 §6.4`).
         //
@@ -2356,16 +2757,24 @@ fn elab_instance_decl(
             },
         )
         .map_err(|_| ElabError::NonTerminatingInstances { span: span.clone() })?;
-        ids[0]
+        (ids[0], vec![])
     } else if !constraints.is_empty() {
         // Non-self-ref constrained instance: elaborate fields, then route through
         // declare_recursive_group so sct_check runs on the group (`39 §6.4`).
         // Body has no App(Const(own_id), ...) → edges.is_empty() → sct_check
         // accepts. Mutual/indirect cycles are not detected here (see above).
-        let ordered_vals: Vec<Term> = {
+        let (ordered_vals, field_effect_rows): (Vec<Term>, Vec<crate::effects::RowType>) = {
             let mut cx = ElabCtx::new(env, globals, num_values, numeric_env).with_classes(&*class_env);
             push_type0_params(&mut cx, head_params.len());
-            compute_ordered_field_values(&mut cx, class_env, class_name, &head_core, fields, span)?
+            compute_ordered_field_values(
+                &mut cx,
+                class_env,
+                class_name,
+                &head_core,
+                fields,
+                effect_rows,
+                span,
+            )?
         };
         let pair_chain = close_type0_lams(
             build_pair_chain(&ordered_vals, class_env.record_nil_val_id),
@@ -2378,20 +2787,29 @@ fn elab_instance_decl(
             |_ids| vec![pair_chain],
         )
         .map_err(|e| ElabError::KernelRejected { error: e, span: span.clone() })?;
-        ids[0]
+        (ids[0], field_effect_rows)
     } else {
         // No constraints: declare_def path (no recursion possible, SCT not needed).
-        let ordered_vals: Vec<Term> = {
+        let (ordered_vals, field_effect_rows): (Vec<Term>, Vec<crate::effects::RowType>) = {
             let mut cx = ElabCtx::new(env, globals, num_values, numeric_env).with_classes(&*class_env);
             push_type0_params(&mut cx, head_params.len());
-            compute_ordered_field_values(&mut cx, class_env, class_name, &head_core, fields, span)?
+            compute_ordered_field_values(
+                &mut cx,
+                class_env,
+                class_name,
+                &head_core,
+                fields,
+                effect_rows,
+                span,
+            )?
         };
         let pair_chain = close_type0_lams(
             build_pair_chain(&ordered_vals, class_env.record_nil_val_id),
             head_params.len(),
         );
-        declare_def(env, vec![], closed_instance_ty, pair_chain)
-            .map_err(|e| ElabError::KernelRejected { error: e, span: span.clone() })?
+        let id = declare_def(env, vec![], closed_instance_ty, pair_chain)
+            .map_err(|e| ElabError::KernelRejected { error: e, span: span.clone() })?;
+        (id, field_effect_rows)
     };
 
     // ---- register instance ----------------------------------------------
@@ -2402,7 +2820,12 @@ fn elab_instance_decl(
     // all definitionally equal; the key is occupied but we don't error).
     class_env.instances.insert(
         instance_key,
-        InstanceInfo { instance_id, module_id: class_env.current_module },
+        InstanceInfo {
+            instance_id,
+            class_name: class_name.to_string(),
+            field_effect_rows,
+            module_id: class_env.current_module,
+        },
     );
 
     Ok(ElabResult {
@@ -2469,7 +2892,12 @@ fn elab_derive(
     class_env.global_modules.insert(instance_id, class_env.current_module);
     class_env.instances.insert(
         (class_name.to_string(), head_name),
-        InstanceInfo { instance_id, module_id: class_env.current_module },
+        InstanceInfo {
+            instance_id,
+            class_name: class_name.to_string(),
+            field_effect_rows: vec![],
+            module_id: class_env.current_module,
+        },
     );
 
     Ok(ElabResult {
@@ -2573,7 +3001,9 @@ fn elaborate_view_or_let(
 /// emit a refinement-introduction obligation for the return type (`22 §2.1`).
 pub(crate) fn innermost_refine_pred(ty: &RType) -> Option<&RExpr> {
     match ty {
-        RType::RPi(_, _, cod, _) | RType::RArr(_, cod, _) => innermost_refine_pred(cod),
+        RType::RPi(_, _, cod, _)
+        | RType::RArr(_, cod, _)
+        | RType::REffectArr(_, _, cod, _) => innermost_refine_pred(cod),
         RType::RRefine(_, _, phi, _) => Some(phi),
         _ => None,
     }
