@@ -423,30 +423,26 @@ fn check(cx: &mut ElabCtx, expr: &RExpr, expected: &Term, _span: &Span) -> Resul
             elab_str_lit(cx, s, Some(expected), span).map(|(t, _)| t)
         }
         // `Refl` — reflexivity, checked (never inferred): the expected goal
-        // must whnf to a kernel `Eq A t u` with `t`/`u` CONVERTIBLE (usually
-        // because both sides have already been reduced to the same
-        // constructor by an enclosing `match` — the standard way a
-        // structure-class law proof discharges, `33 §5.3`/ES4-classes).
+        // must originate as a kernel `Eq A t u` / prelude `Equal A t u` with
+        // `t`/`u` CONVERTIBLE. If observational equality reduces that equality
+        // to Sigma-shaped component obligations before checking sees the Eq
+        // head, synthesize the corresponding component proof. This remains
+        // gated to an equality-origin target; it is not a general Sigma/And
+        // proof search or coercion.
         // Surface sugar only: `Refl` is a bare `ConId` the resolver emits as
         // an `RCon` on scope miss (never registered as a real global), so
         // this must be checked BEFORE the generic `RCon` global lookup.
         RExpr::RCon(name, rspan) if name == "Refl" => {
             let exp_wh = whnf(cx.env, &cx.ctx, expected);
-            match exp_wh {
-                Term::Eq(a_ty, t, u) => {
-                    if convert(cx.env, &cx.ctx, &a_ty, &t, &u) {
-                        Ok(Term::Refl(t))
-                    } else {
-                        Err(ElabError::TypeMismatch {
-                            span: rspan.clone(),
-                            reason: "Refl: the two sides of the goal are not convertible".into(),
-                        })
-                    }
-                }
-                _ => Err(ElabError::TypeMismatch {
+            if matches!(exp_wh, Term::Eq(..))
+                || (matches!(exp_wh, Term::Sigma(..)) && refl_goal_originates_in_equality(cx, expected))
+            {
+                synth_refl_proof(cx.env, &cx.ctx, expected, rspan)
+            } else {
+                Err(ElabError::TypeMismatch {
                     span: rspan.clone(),
                     reason: "Refl expects an `Eq`-shaped goal".into(),
-                }),
+                })
             }
         }
         // `Axiom` — an EXPLICIT, visible postulate of the expected type
@@ -563,6 +559,47 @@ fn check(cx: &mut ElabCtx, expr: &RExpr, expected: &Term, _span: &Span) -> Resul
             unify_types(&mut cx.metas, expected, &inferred_ty);
             Ok(core)
         }
+    }
+}
+
+fn refl_goal_originates_in_equality(cx: &ElabCtx, expected: &Term) -> bool {
+    if matches!(expected, Term::Eq(..)) {
+        return true;
+    }
+    let (head, _) = peel_app(expected);
+    matches!(
+        head,
+        Term::Const { id, .. } if cx.globals.get("Equal").copied() == Some(id)
+    )
+}
+
+fn synth_refl_proof(
+    env: &GlobalEnv,
+    ctx: &Context,
+    expected: &Term,
+    span: &Span,
+) -> Result<Term, ElabError> {
+    match whnf(env, ctx, expected) {
+        Term::Eq(a_ty, t, u) => {
+            if convert(env, ctx, &a_ty, &t, &u) {
+                Ok(Term::Refl(t))
+            } else {
+                Err(ElabError::TypeMismatch {
+                    span: span.clone(),
+                    reason: "Refl: the two sides of the goal are not convertible".into(),
+                })
+            }
+        }
+        Term::Sigma(dom, cod) => {
+            let fst = synth_refl_proof(env, ctx, &dom, span)?;
+            let snd_ty = subst0(&cod, &fst);
+            let snd = synth_refl_proof(env, ctx, &snd_ty, span)?;
+            Ok(Term::pair(fst, snd))
+        }
+        _ => Err(ElabError::TypeMismatch {
+            span: span.clone(),
+            reason: "Refl expects an `Eq`-shaped goal".into(),
+        }),
     }
 }
 

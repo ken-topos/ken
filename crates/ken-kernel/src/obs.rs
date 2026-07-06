@@ -131,7 +131,9 @@ fn eq_at_sigma(env: &GlobalEnv, ctx: &Context, a1: &Term, b1: &Term, p: &Term, q
         Box::new(p2_cast),
         Box::new(Term::proj2(q.clone())),
     );
-    Term::sigma(eq_fst, second)
+    // `second` is built in the outer context. As the codomain of the Sigma
+    // proof, it lives under the newly-bound first-component equality proof.
+    Term::sigma(eq_fst, weaken(&second, 1))
 }
 
 /// `Eq Ω P Q ⇝ (P → Q) and (Q → P)` — propext definitional (`16 §2.2`).
