@@ -131,6 +131,38 @@ spec draft is declared review-ready.
   not blocked on this broad feature and that `Source` remains governed by the
   existing CAT-5 contract.
 
+## 5a. Enclave D0 rulings
+
+- Accepted constructor syntax is the explicit family form:
+  `data D (Δ_p) : (Δ_i) -> Type where { C : (Δ_k) -> D Δ_p t̄ }`.
+  Old `data D a = C A | ...` remains simple non-indexed sugar.
+- `32-grammar.md` needs a concrete grammar addition for the explicit data head
+  and constructor signature form. `34-data-match.md` carries the behavioral
+  contract and examples.
+- Constructor result targets are accepted only when their exposed codomain is
+  definitionally equal to the declared family at the declared parameters and
+  some well-typed indices. Other heads, changed parameters, wrong arity, and
+  non-family codomains reject as bad constructor result targets.
+- Constructor telescopes scope left-to-right. Earlier constructor binders scope
+  into later argument types and result indices; data-head parameters scope over
+  the whole constructor signature.
+- Initial staging admits explicit binders and implicit binders in constructor
+  signatures. Named-argument application and record-style field labels inside
+  explicit dependent constructor signatures are deferred; the existing
+  `C { f : A }` shorthand stays default-result sugar only.
+- Coverage keeps the `34 §4.3` rule: type-possible constructors remain required,
+  while index-impossible constructors may be omitted only because the elaborator
+  synthesizes an absurd method.
+- CAT-5 D3 remains on `KM-sigma-projection-execution`; this feature is not a
+  CAT-5 workaround and does not change the CAT-5 `Source` contract.
+
+Named follow-on build WPs:
+
+- `SURF-gadt-parser-ast`
+- `SURF-gadt-elaboration`
+- `SURF-gadt-coverage-diagnostics`
+- `SURF-gadt-field-sugar` (later ergonomics slice)
+
 ## 6. Guardrails
 
 - Do not consult build-team members for spec grounding; grep landed code or

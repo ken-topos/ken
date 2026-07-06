@@ -104,11 +104,12 @@ claim with no conformance case is a claim no one can rely on
   (`34`): real constructors + a computing `elim_D`, `match`→`elim_D` (nested),
   the **required exhaustiveness** safety (non-exhaustive rejects naming the
   unmatched pattern; kernel-backed totality, `34 §4.4`), reachability, indexed
-  (GADT-like) families (impossible-application rejects *while* the impossible
-  arm is omittable-by-absurdity), per-branch definitional refinement (`22 §3`
-  hypothesis), proof-returning dependent `match` motives into `Ω` with
-  wrong-specialized-branch rejection, and refinement types (carrier + emitted
-  obligation, free forgetful coercion).
+  (GADT-like) families (explicit dependent-constructor signatures,
+  impossible-application rejects *while* the impossible arm is
+  omittable-by-absurdity, omitted possible arms reject), per-branch definitional
+  refinement (`22 §3` hypothesis), proof-returning dependent `match` motives
+  into `Ω` with wrong-specialized-branch rejection, and refinement types
+  (carrier + emitted obligation, free forgetful coercion).
 - `surface/numbers/seed-numbers.md` — L1 numeric model (`35`): arbitrary-
   precision `Int` exactness above 2⁵³, literal defaulting (`2:Int`/`2.0:Float`/
   `2.0d:Decimal`), the fixed-width no-overflow obligation + no-silent-wrap seal,

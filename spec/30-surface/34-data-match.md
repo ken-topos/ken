@@ -70,36 +70,139 @@ arguments — `(b:B) → D`, the branching shape of `W` and L5's `ITree` — are
 a silent lowering — declare the stage dependency, do not present it as
 satisfied.
 
-## 2. Indexed families (GADT-like)
+## 2. Indexed families and dependent constructors (GADT-like)
 
 Constructors may target different **indices** (`../10-kernel/14 §1`), giving
-length-indexed and well-typed-by-construction data:
+length-indexed and well-typed-by-construction data. The surface form is the
+ordinary inductive-family shape, with parameters before the colon and an index
+telescope after it:
 
-```
-data Vec a : Nat → Type {                 -- explicit-index form
-  VNil  : Vec a 0
-  VCons : {n : Nat} → a → Vec a n → Vec a (n+1)
+```ken
+data D (Δ_p) : (Δ_i) -> Type where {
+  C1 : (Δ_1) -> D Δ_p t̄_1;
+  ...
 }
 ```
 
-This elaborates to the kernel family `Vec (a : Type ℓ) : Nat → Type ℓ` with
-constructors at distinct **index instances** — `VNil` at `0`, `VCons` at `n+1`
-(`14 §1`, the `vnil`/`vcons` canonical form). The index varies per constructor;
-the **parameters** (`a`) are fixed across the family. The same power refinement
-types give (`§5`) is expressed *in the data declaration*: a `view head {n} (v :
-Vec a (n+1)) : a` **cannot** be applied to an empty vector — the non-emptiness
-is in the type, and the impossible application is a kernel type error (the index
-`n+1` cannot unify with `VNil`'s `0`).
+The legacy simple form `data D a = C A | ...` remains sugar for the non-indexed
+case whose constructor result is the default `D a`. The explicit `where` form is
+required when a constructor writes its full dependent signature.
+
+### 2.1 Data heads: parameters vs. indices
+
+The binders before the colon are **parameters**. They are fixed across every
+constructor target. The type after the colon is the family result: a telescope of
+**indices** ending in `Type ℓ`. A non-indexed family writes `: Type`; an indexed
+family writes, for example, `: Nat -> Type` or `(n : Nat) -> Type`. Universe
+levels are inferred or checked by the existing `Type` rules (`12 §4`); no
+datatype-specific level calculus is added.
+
+```
+data Vec (A : Type) : Nat -> Type where {
+  VNil  : Vec A 0;
+  VCons : (n : Nat) -> A -> Vec A n -> Vec A (n+1)
+}
+```
+
+This elaborates to the kernel family `Vec (A : Type ℓ) : Nat -> Type ℓ` with
+constructors at distinct **index instances** — `VNil` at `0`, `VCons` at
+`n+1` (`14 §1`, the `vnil`/`vcons` canonical form). The index varies per
+constructor; the **parameter** `A` is fixed across the family. The same power
+refinement types give (`§5`) is expressed *in the data declaration*: a function
+whose argument has type `Vec A (n+1)` **cannot** be applied to an empty vector.
+The non-emptiness is in the type, and the impossible application is a kernel
+type error (the index `n+1` cannot unify with `VNil`'s `0`).
+
+### 2.2 Constructor signatures and telescope scope
+
+A constructor with an explicit signature is written:
+
+```
+C : (x1 : A1) -> ... -> (xm : Am) -> D Δ_p t̄
+```
+
+The elaborator peels the leading function binders as the constructor telescope
+`Δ_k` and checks the final codomain as the constructor result. Telescope scoping
+is left-to-right:
+
+- each earlier constructor binder is in scope for later argument types and for
+  the result-index expressions;
+- data-head parameters are in scope throughout every constructor signature;
+- result-index expressions may mention data parameters and constructor
+  telescope binders, but bind no new variables;
+- an anonymous arrow `A -> ...` is a non-dependent telescope entry with a
+  generated inaccessible binder name.
+
+Implicit constructor binders may be written with the existing implicit-binder
+spelling, `{x : A} -> ...`; they are ordinary telescope entries whose arguments
+may be inserted at constructor uses by the full elaborator (`39`). This initial
+feature does **not** add named-argument application or record-field labels inside
+an explicit dependent constructor signature. The old record-style shorthand
+`C { f : A, g : B }` stays sugar for the simple default-result form; dependent
+record-field constructors are a later surface refinement.
+
+### 2.3 Allowed constructor-result targets
+
+The constructor result MUST be the declared family at the declared parameters
+and some well-typed index expressions. Operationally, after ordinary
+elaboration and transparent/WHNF exposure, the codomain must be definitionally
+equal to:
+
+```
+D p̄ ī
+```
+
+where `D` is the family being declared, `p̄` are the data-head parameters in
+their declared order, and `ī` has exactly the family's index arity. The
+definitionally-equal class permits harmless aliases or reducible notation, but
+it does **not** permit a different family head, changed parameters, an
+undersaturated/oversaturated target, or a non-family result. Such a declaration
+is rejected as a bad constructor result target before or while forming the
+kernel inductive declaration. Strict positivity, nested/mutual rejection, and
+W-style admission remain exactly the kernel admission rules of `14`; the
+surface does not re-open them.
+
+Examples:
+
+```ken
+data Ty = TInt | TBool
+
+data Tm : Ty -> Type where {
+  LitInt  : Int -> Tm TInt;
+  LitBool : Bool -> Tm TBool;
+  If      : (t : Ty) -> Tm TBool -> Tm t -> Tm t -> Tm t
+}
+```
+
+and a proof-carrying constructor shape:
+
+```ken
+data CheckedSource : Type where {
+  MkCheckedSource :
+    (sid : SourceId) ->
+    (bs : Bytes) ->
+    (len : Nat) ->
+    UnitByteLength bs ->
+    IsUtf8 bs ->
+    SourceLength bs len ->
+    CheckedSource
+}
+```
+
+The second example is only an expressibility example for proof-carrying
+constructor telescopes. It does **not** change the CAT-5 `Source` contract and
+does not unblock CAT-5 D3; CAT-5 D3 remains routed through the separate
+`KM-sigma-projection-execution` mechanism.
 
 **Impossible constructors at an index** (the load-bearing reconcile, resolved in
-`§4.3`). Matching a scrutinee of type `Vec a (n+1)` **need not** write the
-`VNil` arm: `VNil : Vec a 0`, and `0 ≢ n+1`, so `VNil` is **type-impossible** at
-this index. This is sound and does **not** weaken the kernel's requirement that
-`elim_Vec` receive a method for *every* constructor (`14 §3`): the elaborator
-**synthesizes** the `VNil` method by **absurdity** from the unsatisfiable index
-equation (`§4.3`), so the kernel still receives a *total* `elim_Vec`. The
-surface omission is a convenience the elaborator discharges, never a hole in the
-eliminator.
+`§4.3`). Matching a scrutinee of type `Vec A (n+1)` **need not** write the
+`VNil` arm: `VNil : Vec A 0`, and `0 ≢ n+1`, so `VNil` is
+**type-impossible** at this index. This is sound and does **not** weaken the
+kernel's requirement that `elim_Vec` receive a method for *every* constructor
+(`14 §3`): the elaborator **synthesizes** the `VNil` method by **absurdity**
+from the unsatisfiable index equation (`§4.3`), so the kernel still receives a
+*total* `elim_Vec`. The surface omission is a convenience the elaborator
+discharges, never a hole in the eliminator.
 
 ## 3. Pattern matching → `elim_D`
 
@@ -474,15 +577,36 @@ universe computation — each is an instance of a landed kernel rule.
 ## 8. What WS-L must deliver here
 
 Real sum types with constructors + a computing eliminator (no opaque lowering);
-indexed/GADT-like families with index-aware coverage; `match` → `elim_D` with
-dependent-motive recovery and per-branch definitional refinement;
-proof-returning dependent motives whose `Equal`/`Ω` target mentions the
-scrutinee, with wrong-specialized-branch negatives;
-**exhaustiveness + reachability** checking with a named unmatched-pattern
-witness; `Result`/`Option`/`Either` in the prelude; and refinement types with
-free forgetful coercion + obligation emission on introduction. Acceptance is
-part of **G6** (real sum types end-to-end). The whole layer is **untrusted**;
-the kernel re-checks every emitted `elim_D` (`§4.4`).
+indexed/GADT-like families with dependent constructor signatures (`§2`) and
+index-aware coverage; `match` → `elim_D` with dependent-motive recovery and
+per-branch definitional refinement; proof-returning dependent motives whose
+`Equal`/`Ω` target mentions the scrutinee, with wrong-specialized-branch
+negatives; **exhaustiveness + reachability** checking with a named
+unmatched-pattern witness; `Result`/`Option`/`Either` in the prelude; and
+refinement types with free forgetful coercion + obligation emission on
+introduction. Acceptance is part of **G6** (real sum types end-to-end). The
+whole layer is **untrusted**; the kernel re-checks every emitted `elim_D`
+(`§4.4`).
+
+The dependent-constructor feature should be built in separate WPs:
+
+- **SURF-gadt-parser-ast** — accept the `32 §1` explicit `data ... : ... where`
+  form, constructor `C : telescope -> D params indices` signatures, spans, and
+  default-result sugar without changing current simple sums.
+- **SURF-gadt-elaboration** — lower data-head parameters/indices and
+  constructor telescopes to kernel inductive-family declarations, including the
+  bad-result-target diagnostics of `§2.3` and kernel re-check of positivity.
+- **SURF-gadt-coverage-diagnostics** — implement index-aware coverage for these
+  explicit signatures, including named unmatched-pattern witnesses for
+  type-possible constructors and absurd method synthesis for index-impossible
+  constructors.
+- **SURF-gadt-field-sugar** — later, add named-argument/record-field constructor
+  ergonomics for dependent signatures. This is deliberately not in the initial
+  parser/elaboration slice.
+
+No build WP in this sequence implements CAT-5 D3. CAT-5 D3 remains on
+`KM-sigma-projection-execution` and resumes unchanged after that mechanism
+lands.
 
 Conformance: `../../conformance/surface/data-match/` — AC1 (`data` is real:
 construct-then-eliminate **reduces**), AC2 (`match`→`elim_D` computes; nested→
@@ -494,6 +618,10 @@ arm may be **omitted**: a non-degenerate pair on the same `§4.3` rule), AC6
 (branch refinement = `22 §3` hypothesis — a *dependent* motive, asserted
 structurally), AC7 (refinement type — the obligation `φ` is **emitted** on
 introduction (observe the VC structurally), the forgetful direction free, no
-silent coercion). Per-case verdict/structural-flip + the **cross-case sweep**:
-the exhaustiveness/coverage class (`§4.1`/§4.3) agrees: "type-possible at the
-index ⇒ required; index-impossible ⇒ omittable-and-absurd-filled."
+silent coercion), AC8 (proof-returning dependent motive into `Ω`), and AC9
+(dependent-constructor syntax: positive `Vec`/proof-carrying declarations, bad
+result target, positivity rejection through the kernel gate, and omitted
+possible-vs-impossible coverage). Per-case verdict/structural-flip + the
+**cross-case sweep**: the exhaustiveness/coverage class (`§4.1`/§4.3`) agrees:
+"type-possible at the index ⇒ required; index-impossible ⇒
+omittable-and-absurd-filled."
