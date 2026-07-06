@@ -44,6 +44,19 @@ fn cat3_d1_structural_collections_package_elaborates_zero_delta() {
         "sortBool",
         "sortBoolSorted",
         "sortBoolPerm",
+        "idBool",
+        "fstPairBoolBool",
+        "setFstPairBoolBool",
+        "fstLensGetSet",
+        "fstLensSetGet",
+        "fstLensSetSet",
+        "boolIsoTo",
+        "boolIsoFrom",
+        "boolIsoToFrom",
+        "boolIsoFromTo",
+        "trueRefinementProject",
+        "boolPairIndexProject",
+        "idBoolRespects",
     ] {
         let id = env
             .globals
@@ -58,6 +71,30 @@ fn cat3_d1_structural_collections_package_elaborates_zero_delta() {
         assert!(
             delta.is_empty(),
             "{name} must add zero trusted_base delta, got {delta:?}"
+        );
+    }
+
+    for name in [
+        "View",
+        "Lens",
+        "Iso",
+        "Representation",
+        "RefinementView",
+        "IndexedView",
+        "SetoidMorphism",
+    ] {
+        let id = env
+            .globals
+            .get(name)
+            .copied()
+            .unwrap_or_else(|| panic!("{name} should be exported by collections.ken"));
+        match env.env.lookup(id) {
+            Some(Decl::Transparent { .. }) => {}
+            other => panic!("{name} must be a transparent checked record type, got {other:?}"),
+        }
+        assert!(
+            !env.env.trusted_base().contains(&id),
+            "{name}'s own class-type id must never enter trusted_base()"
         );
     }
 }
@@ -104,6 +141,20 @@ fn cat3_d1_law_surfaces_are_proof_returning_not_prop_wrappers() {
         COLLECTIONS_KEN.contains("fn eqFromOrd")
             && COLLECTIONS_KEN.contains("bool_and (le x y) (le y x)"),
         "eqFromOrd must be the pinned bool_and (le x y) (le y x) definition"
+    );
+    assert!(
+        COLLECTIONS_KEN.contains("class View A")
+            && COLLECTIONS_KEN.contains("class Lens A")
+            && COLLECTIONS_KEN.contains("class SetoidMorphism A")
+            && COLLECTIONS_KEN.contains("project : Bool → Bool"),
+        "CAT-3 D3 must expose capitalized View/Lens records and a setoid-morphism project field"
+    );
+    assert!(
+        !COLLECTIONS_KEN.contains("class view")
+            && !COLLECTIONS_KEN.contains("fn view")
+            && !COLLECTIONS_KEN.contains("const view")
+            && !COLLECTIONS_KEN.contains("\nview "),
+        "CAT-3 D3 must not introduce a lowercase `view` identifier or retired view declaration"
     );
 }
 
@@ -229,5 +280,104 @@ fn cat3_d2_bad_sorted_and_bad_perm_witnesses_rejected() {
             || msg.contains("type mismatch")
             || msg.contains("Kernel rejected"),
         "bad permutation witness should reject during proof checking, got {msg}"
+    );
+}
+
+#[test]
+fn cat3_d3_view_lens_records_and_flavors_check_against_real_package_defs() {
+    let mut env = mk_env();
+
+    for class_name in [
+        "View",
+        "Lens",
+        "Iso",
+        "Representation",
+        "RefinementView",
+        "IndexedView",
+        "SetoidMorphism",
+    ] {
+        assert!(
+            env.class_env.classes.contains_key(class_name),
+            "{class_name} should be registered as an ordinary class/record"
+        );
+    }
+    assert!(
+        env.class_env.classes["SetoidMorphism"]
+            .field_names
+            .iter()
+            .any(|name| name == "project"),
+        "setoid-morphism flavor must use field name `project`"
+    );
+
+    env.elaborate_decl(
+        "const cat3_d3_get_set_sample \
+           : Equal Bool \
+               (fstPairBoolBool (setFstPairBoolBool False (mkPair Bool Bool True True))) \
+               False \
+           = fstLensGetSet False (mkPair Bool Bool True True)",
+    )
+    .expect("get-set lens law should be proof-returning and check");
+
+    env.elaborate_decl(
+        "const cat3_d3_set_get_sample \
+           : And \
+              (Equal Bool \
+                (pairFst Bool Bool (setFstPairBoolBool (fstPairBoolBool (mkPair Bool Bool True False)) (mkPair Bool Bool True False))) \
+                (pairFst Bool Bool (mkPair Bool Bool True False))) \
+              (Equal Bool \
+                (pairSnd Bool Bool (setFstPairBoolBool (fstPairBoolBool (mkPair Bool Bool True False)) (mkPair Bool Bool True False))) \
+                (pairSnd Bool Bool (mkPair Bool Bool True False))) \
+           = fstLensSetGet (mkPair Bool Bool True False)",
+    )
+    .expect("set-get lens law should be proof-returning and check componentwise");
+
+    env.elaborate_decl(
+        "const cat3_d3_set_set_sample \
+           : And \
+              (Equal Bool \
+                (pairFst Bool Bool (setFstPairBoolBool False (setFstPairBoolBool True (mkPair Bool Bool True False)))) \
+                (pairFst Bool Bool (setFstPairBoolBool False (mkPair Bool Bool True False)))) \
+              (Equal Bool \
+                (pairSnd Bool Bool (setFstPairBoolBool False (setFstPairBoolBool True (mkPair Bool Bool True False)))) \
+                (pairSnd Bool Bool (setFstPairBoolBool False (mkPair Bool Bool True False)))) \
+           = fstLensSetSet True False (mkPair Bool Bool True False)",
+    )
+    .expect("set-set lens law should be proof-returning and check componentwise");
+
+    env.elaborate_decl(
+        "const cat3_d3_indexed_project_sample \
+           : Equal Bool \
+               (boolPairIndexProject (mkPair Bool Bool True False) True) \
+               False \
+           = tt",
+    )
+    .expect("indexed flavor should expose a concrete project operation");
+
+    env.elaborate_decl(
+        "const cat3_d3_setoid_project_sample \
+           : Equal Bool (idBool True) (idBool True) = \
+             idBoolRespects True True tt",
+    )
+    .expect("setoid-morphism respects law should check through project");
+}
+
+#[test]
+fn cat3_d3_wrong_lens_endpoint_rejected() {
+    let mut env = mk_env();
+    let err = env
+        .elaborate_decl(
+            "const cat3_bad_lens_get_set \
+               : Equal Bool \
+                   (fstPairBoolBool (setFstPairBoolBool False (mkPair Bool Bool True True))) \
+                   True \
+               = fstLensGetSet False (mkPair Bool Bool True True)",
+        )
+        .expect_err("wrong get-set endpoint must not typecheck");
+    let msg = format!("{err}");
+    assert!(
+        msg.contains("Type mismatch")
+            || msg.contains("type mismatch")
+            || msg.contains("Kernel rejected"),
+        "wrong lens law endpoint should reject during proof checking, got {msg}"
     );
 }

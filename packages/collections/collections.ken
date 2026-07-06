@@ -381,6 +381,145 @@ fn sortBoolPerm (xs : List Bool)
     }
   }
 
+-- CAT-3 D3 projection abstraction. These are ordinary class records over the
+-- landed right-nested Sigma record machinery. The concrete lens is intentionally
+-- `Pair Bool Bool` only: polymorphic `Lens s a` / `Iso a b` and quotient-carrier
+-- views need surface support that is not part of this slice.
+class View A {
+  project : A → A
+}
+
+class Lens A {
+  get : Pair Bool Bool → Bool ;
+  set : Bool → Pair Bool Bool → Pair Bool Bool ;
+  get_set : (a : Bool) → (s : Pair Bool Bool) →
+    Equal Bool (get (set a s)) a ;
+  set_get : (s : Pair Bool Bool) →
+    And
+      (Equal Bool (pairFst Bool Bool (set (get s) s)) (pairFst Bool Bool s))
+      (Equal Bool (pairSnd Bool Bool (set (get s) s)) (pairSnd Bool Bool s)) ;
+  set_set : (a : Bool) → (b : Bool) → (s : Pair Bool Bool) →
+    And
+      (Equal Bool (pairFst Bool Bool (set b (set a s))) (pairFst Bool Bool (set b s)))
+      (Equal Bool (pairSnd Bool Bool (set b (set a s))) (pairSnd Bool Bool (set b s)))
+}
+
+class Iso A {
+  to : Bool → Bool ;
+  from : Bool → Bool ;
+  to_from : (x : Bool) → Equal Bool (to (from x)) x ;
+  from_to : (x : Bool) → Equal Bool (from (to x)) x
+}
+
+class Representation A {
+  encode : Bool → Bool ;
+  decode : Bool → Bool ;
+  roundtrip : (x : Bool) → Equal Bool (decode (encode x)) x
+}
+
+class RefinementView A {
+  project : ({ b : Bool | Equal Bool b True }) → Bool
+}
+
+class IndexedView A {
+  project : Pair Bool Bool → Bool → Bool
+}
+
+class SetoidMorphism A {
+  project : Bool → Bool ;
+  respects : (x : Bool) → (y : Bool) →
+    (Equal Bool x y) → Equal Bool (project x) (project y)
+}
+
+fn idBool (x : Bool) : Bool = x
+
+fn fstPairBoolBool (p : Pair Bool Bool) : Bool =
+  pairFst Bool Bool p
+
+fn setFstPairBoolBool (a : Bool) (p : Pair Bool Bool) : Pair Bool Bool =
+  mkPair Bool Bool a (pairSnd Bool Bool p)
+
+fn fstLensGetSet (a : Bool) (s : Pair Bool Bool)
+  : Equal Bool (fstPairBoolBool (setFstPairBoolBool a s)) a =
+  Refl
+
+fn fstLensSetGet (s : Pair Bool Bool)
+  : And
+      (Equal Bool (pairFst Bool Bool (setFstPairBoolBool (fstPairBoolBool s) s)) (pairFst Bool Bool s))
+      (Equal Bool (pairSnd Bool Bool (setFstPairBoolBool (fstPairBoolBool s) s)) (pairSnd Bool Bool s)) =
+  andIntro
+    (Equal Bool (pairFst Bool Bool (setFstPairBoolBool (fstPairBoolBool s) s)) (pairFst Bool Bool s))
+    (Equal Bool (pairSnd Bool Bool (setFstPairBoolBool (fstPairBoolBool s) s)) (pairSnd Bool Bool s))
+    Refl
+    Refl
+
+fn fstLensSetSet (a : Bool) (b : Bool) (s : Pair Bool Bool)
+  : And
+      (Equal Bool (pairFst Bool Bool (setFstPairBoolBool b (setFstPairBoolBool a s))) (pairFst Bool Bool (setFstPairBoolBool b s)))
+      (Equal Bool (pairSnd Bool Bool (setFstPairBoolBool b (setFstPairBoolBool a s))) (pairSnd Bool Bool (setFstPairBoolBool b s))) =
+  andIntro
+    (Equal Bool (pairFst Bool Bool (setFstPairBoolBool b (setFstPairBoolBool a s))) (pairFst Bool Bool (setFstPairBoolBool b s)))
+    (Equal Bool (pairSnd Bool Bool (setFstPairBoolBool b (setFstPairBoolBool a s))) (pairSnd Bool Bool (setFstPairBoolBool b s)))
+    Refl
+    Refl
+
+instance View Bool {
+  project = idBool
+}
+
+instance Lens Unit {
+  get = fstPairBoolBool ;
+  set = setFstPairBoolBool ;
+  get_set = fstLensGetSet ;
+  set_get = fstLensSetGet ;
+  set_set = fstLensSetSet
+}
+
+fn boolIsoTo (x : Bool) : Bool = x
+fn boolIsoFrom (x : Bool) : Bool = x
+fn boolIsoToFrom (x : Bool) : Equal Bool (boolIsoTo (boolIsoFrom x)) x =
+  Refl
+fn boolIsoFromTo (x : Bool) : Equal Bool (boolIsoFrom (boolIsoTo x)) x =
+  Refl
+
+instance Iso Unit {
+  to = boolIsoTo ;
+  from = boolIsoFrom ;
+  to_from = boolIsoToFrom ;
+  from_to = boolIsoFromTo
+}
+
+instance Representation Unit {
+  encode = boolIsoTo ;
+  decode = boolIsoFrom ;
+  roundtrip = boolIsoFromTo
+}
+
+fn trueRefinementProject (x : { b : Bool | Equal Bool b True }) : Bool = x
+
+instance RefinementView Unit {
+  project = trueRefinementProject
+}
+
+fn boolPairIndexProject (p : Pair Bool Bool) (ix : Bool) : Bool =
+  match ix {
+    False ⇒ pairFst Bool Bool p ;
+    True ⇒ pairSnd Bool Bool p
+  }
+
+instance IndexedView Unit {
+  project = boolPairIndexProject
+}
+
+fn idBoolRespects (x : Bool) (y : Bool)
+  : Equal Bool x y → Equal Bool (idBool x) (idBool y) =
+  λp. p
+
+instance SetoidMorphism Unit {
+  project = idBool ;
+  respects = idBoolRespects
+}
+
 -- Saturating `Nat` monus (never underflows) -- `slice`'s length. Identical
 -- shape to the landed `val1_string_literals.rs:327` `natSub`.
 fn natSub (a : Nat) (b : Nat) : Nat =
