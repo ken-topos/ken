@@ -327,19 +327,7 @@ fn validate_ctor_result_target(
         }
     }
 
-    let target_indices = args[param_count..].to_vec();
-    if target_indices
-        .iter()
-        .any(|index| term_mentions_inductive(index, d_id))
-    {
-        return Err(bad_ctor_target(
-            ctor,
-            d_name,
-            "result indices may mention only data parameters and constructor binders",
-        ));
-    }
-
-    Ok(target_indices)
+    Ok(args[param_count..].to_vec())
 }
 
 fn bad_ctor_target(ctor: &RExplicitCtorDecl, d_name: &str, reason: &str) -> ElabError {
@@ -361,16 +349,6 @@ fn peel_app(term: &Term) -> (Term, Vec<Term>) {
     }
     args.reverse();
     (head, args)
-}
-
-fn term_mentions_inductive(term: &Term, d_id: GlobalId) -> bool {
-    match term {
-        Term::IndFormer { id, .. } if *id == d_id => true,
-        _ => term
-            .children()
-            .into_iter()
-            .any(|child| term_mentions_inductive(child, d_id)),
-    }
 }
 
 fn level_from_nat(n: u32) -> Level {
