@@ -320,29 +320,21 @@ fn cat3_d3_view_lens_records_and_flavors_check_against_real_package_defs() {
 
     env.elaborate_decl(
         "const cat3_d3_set_get_sample \
-           : And \
-              (Equal Bool \
-                (pairFst Bool Bool (setFstPairBoolBool (fstPairBoolBool (mkPair Bool Bool True False)) (mkPair Bool Bool True False))) \
-                (pairFst Bool Bool (mkPair Bool Bool True False))) \
-              (Equal Bool \
-                (pairSnd Bool Bool (setFstPairBoolBool (fstPairBoolBool (mkPair Bool Bool True False)) (mkPair Bool Bool True False))) \
-                (pairSnd Bool Bool (mkPair Bool Bool True False))) \
+           : Equal (Pair Bool Bool) \
+              (setFstPairBoolBool (fstPairBoolBool (mkPair Bool Bool True False)) (mkPair Bool Bool True False)) \
+              (mkPair Bool Bool True False) \
            = fstLensSetGet (mkPair Bool Bool True False)",
     )
-    .expect("set-get lens law should be proof-returning and check componentwise");
+    .expect("set-get lens law should be proof-returning and check as full pair equality");
 
     env.elaborate_decl(
         "const cat3_d3_set_set_sample \
-           : And \
-              (Equal Bool \
-                (pairFst Bool Bool (setFstPairBoolBool False (setFstPairBoolBool True (mkPair Bool Bool True False)))) \
-                (pairFst Bool Bool (setFstPairBoolBool False (mkPair Bool Bool True False)))) \
-              (Equal Bool \
-                (pairSnd Bool Bool (setFstPairBoolBool False (setFstPairBoolBool True (mkPair Bool Bool True False)))) \
-                (pairSnd Bool Bool (setFstPairBoolBool False (mkPair Bool Bool True False)))) \
+           : Equal (Pair Bool Bool) \
+              (setFstPairBoolBool False (setFstPairBoolBool True (mkPair Bool Bool True False))) \
+              (setFstPairBoolBool False (mkPair Bool Bool True False)) \
            = fstLensSetSet True False (mkPair Bool Bool True False)",
     )
-    .expect("set-set lens law should be proof-returning and check componentwise");
+    .expect("set-set lens law should be proof-returning and check as full pair equality");
 
     env.elaborate_decl(
         "const cat3_d3_indexed_project_sample \

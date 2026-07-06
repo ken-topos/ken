@@ -395,13 +395,9 @@ class Lens A {
   get_set : (a : Bool) → (s : Pair Bool Bool) →
     Equal Bool (get (set a s)) a ;
   set_get : (s : Pair Bool Bool) →
-    And
-      (Equal Bool (pairFst Bool Bool (set (get s) s)) (pairFst Bool Bool s))
-      (Equal Bool (pairSnd Bool Bool (set (get s) s)) (pairSnd Bool Bool s)) ;
+    Equal (Pair Bool Bool) (set (get s) s) s ;
   set_set : (a : Bool) → (b : Bool) → (s : Pair Bool Bool) →
-    And
-      (Equal Bool (pairFst Bool Bool (set b (set a s))) (pairFst Bool Bool (set b s)))
-      (Equal Bool (pairSnd Bool Bool (set b (set a s))) (pairSnd Bool Bool (set b s)))
+    Equal (Pair Bool Bool) (set b (set a s)) (set b s)
 }
 
 class Iso A {
@@ -444,24 +440,14 @@ fn fstLensGetSet (a : Bool) (s : Pair Bool Bool)
   Refl
 
 fn fstLensSetGet (s : Pair Bool Bool)
-  : And
-      (Equal Bool (pairFst Bool Bool (setFstPairBoolBool (fstPairBoolBool s) s)) (pairFst Bool Bool s))
-      (Equal Bool (pairSnd Bool Bool (setFstPairBoolBool (fstPairBoolBool s) s)) (pairSnd Bool Bool s)) =
-  andIntro
-    (Equal Bool (pairFst Bool Bool (setFstPairBoolBool (fstPairBoolBool s) s)) (pairFst Bool Bool s))
-    (Equal Bool (pairSnd Bool Bool (setFstPairBoolBool (fstPairBoolBool s) s)) (pairSnd Bool Bool s))
-    Refl
-    Refl
+  : Equal (Pair Bool Bool) (setFstPairBoolBool (fstPairBoolBool s) s) s =
+  Refl
 
 fn fstLensSetSet (a : Bool) (b : Bool) (s : Pair Bool Bool)
-  : And
-      (Equal Bool (pairFst Bool Bool (setFstPairBoolBool b (setFstPairBoolBool a s))) (pairFst Bool Bool (setFstPairBoolBool b s)))
-      (Equal Bool (pairSnd Bool Bool (setFstPairBoolBool b (setFstPairBoolBool a s))) (pairSnd Bool Bool (setFstPairBoolBool b s))) =
-  andIntro
-    (Equal Bool (pairFst Bool Bool (setFstPairBoolBool b (setFstPairBoolBool a s))) (pairFst Bool Bool (setFstPairBoolBool b s)))
-    (Equal Bool (pairSnd Bool Bool (setFstPairBoolBool b (setFstPairBoolBool a s))) (pairSnd Bool Bool (setFstPairBoolBool b s)))
-    Refl
-    Refl
+  : Equal (Pair Bool Bool)
+      (setFstPairBoolBool b (setFstPairBoolBool a s))
+      (setFstPairBoolBool b s) =
+  Refl
 
 instance View Bool {
   project = idBool

@@ -37,11 +37,10 @@
   classes `View`, `Lens`, `Iso`, `Representation`, `RefinementView`,
   `IndexedView`, and `SetoidMorphism`. The concrete lens is the first-component
   lens over `Pair Bool Bool`, with proof-returning `fstLensGetSet`,
-  `fstLensSetGet`, and `fstLensSetSet` laws. The set-get/set-set laws are
-  componentwise over `pairFst`/`pairSnd`, because a general pair-eta surface is
-  not part of this slice. Polymorphic `Lens s a` / `Iso a b` and quotient-carrier
-  views remain build-later walls; the setoid-morphism flavor ships now with
-  field `project`.
+  `fstLensSetGet`, and `fstLensSetSet` laws. The set-get/set-set laws use the
+  full `Equal (Pair Bool Bool) ...` public shape. Polymorphic `Lens s a` /
+  `Iso a b` and quotient-carrier views remain build-later walls; the
+  setoid-morphism flavor ships now with field `project`.
 - `compareChar : Char -> Char -> OrdResult` — a faithful 3-way repackaging of
   the landed `leqChar`/`eqChar` (`crates/ken-elaborator/src/decimal_char.rs`),
   not a re-derivation of Char comparison.
