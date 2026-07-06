@@ -6,7 +6,8 @@ elaborator-local route.
 **Reviewer:** Architect mandatory. Kernel QA mandatory for any kernel or
 conversion change. Language QA mandatory for any elaborator behavior change.
 **Branch:** `wp/KM-index-impossible-branch-synthesis`.
-**Status:** Steward frame. Blocks `SURF-gadt-coverage-diagnostics` D1.
+**Status:** Steward frame, scope amended after Architect D0 ruling. Blocks
+`SURF-gadt-coverage-diagnostics` D1.
 **Size:** M. **Risk:** high until D0 chooses the authority boundary.
 
 ## 0. Trigger
@@ -45,6 +46,20 @@ Architect ruled at `evt_1ez4b96dqdnsk`:
 - route a prerequisite mechanism WP that decides the exact proof-producing
   route.
 
+Architect ruled again at `evt_181ehbwbpc8ey` after Kernel D0 corrected the
+initial route-1 read:
+
+- Type-valued `Absurd` is necessary but not a complete mechanism by itself;
+- the contradiction for an omitted indexed branch must come from a
+  branch-local equality premise introduced by the downstream indexed-match
+  motive, not from a fabricated closed proof;
+- this WP should implement the bounded kernel/spec change that lets `absurd C
+  p : C` accept `C : Type l` as well as `C : Omega l`, still requiring
+  `p : Bottom`;
+- do not change eliminator `method_type` in this WP;
+- do not implement a closed proof-producing disjointness oracle;
+- do not implement indexed coverage classification here.
+
 ## 1. Objective
 
 Provide a sanctioned mechanism for omitted index-impossible branch synthesis in
@@ -73,6 +88,8 @@ Use these Ken-owned artifacts:
   `docs/program/wp/SURF-gadt-coverage-diagnostics.md`;
 - `spec/30-surface/34-data-match.md §4.3`, `§4.4`, and `§8`;
 - `conformance/surface/data-match/seed-data-match.md` AC5 and AC6;
+- kernel `Absurd` spec:
+  `spec/10-kernel/16-observational.md`;
 - kernel eliminator method typing:
   `crates/ken-kernel/src/inductive.rs::method_type`;
 - kernel eliminator checking:
@@ -86,8 +103,20 @@ Do not use `local/refs/`.
 
 ## 3. Required D0 Decision
 
-D0 must post an exact route before implementation. It must choose one of these
-families, or stop with a smaller named prerequisite:
+D0 has selected the Architect-approved refined route 1. The corrected route is:
+
+- **Kernel/spec:** allow `Bottom` elimination into `Type l` as well as
+  `Omega l`, still requiring an actual proof that checks as `Bottom`;
+- **No method-type change:** keep the existing eliminator method contract in
+  this WP;
+- **No proof oracle:** do not synthesize a closed contradiction from
+  constructor disjointness;
+- **Downstream evidence:** a later `SURF-gadt-coverage-diagnostics` resume must
+  use an equality-premise motive shape, applying the completed eliminator
+  result to `Refl`. Omitted impossible methods become functions over generated
+  impossible index-equality premises, e.g. `\p. absurd R p`.
+
+Earlier route families were:
 
 1. **Type-level absurd route.**
    Extend the kernel's empty/absurd eliminator so an impossible proof can
@@ -102,7 +131,8 @@ families, or stop with a smaller named prerequisite:
    Architect approval, if the project chooses that design instead of
    "by absurdity."
 
-D0 must answer:
+Kernel D0 answered the original questions at `evt_2xx844vfjyrq1`, and the
+Architect ruling at `evt_181ehbwbpc8ey` refines the answer:
 
 - What term proves the omitted branch impossible?
 - What type does that proof inhabit?
@@ -118,24 +148,26 @@ routing the spec/frame change through Steward and Architect.
 
 ## 4. Deliverables
 
-The final deliverable depends on D0's selected route.
+Implement the minimal refined route-1 mechanism and focused tests:
 
-For route 1 or route 2, implement the minimal mechanism and focused tests:
-
-1. Add the kernel/conversion/elaborator support needed to construct a sound
-   omitted-method term for a proven index-impossible branch in a Type-valued
-   motive.
-2. Add a minimized Ken-owned regression for a `Vec`-like family where the
-   `VNil` method target is Type-valued and the impossibility proof is available.
-3. Add negatives proving that unknown index comparisons and type-possible
-   constructors do not get fabricated methods.
-4. Preserve existing `Absurd` / `J` / `cast` / eliminator behavior outside the
-   selected route.
-5. Leave `SURF-gadt-coverage-diagnostics` package behavior out of scope except
-   for a minimized mechanism test if Language is explicitly co-owned by D0.
-
-For route 3, produce the spec/frame change and stop before build unless
-Architect explicitly approves implementation under this WP.
+1. Amend `spec/10-kernel/16-observational.md` so `Bottom` elimination may target
+   `Type l` as well as `Omega l`, while still requiring `p : Bottom` and
+   remaining neutral with no computation rule.
+2. Update the kernel `Absurd` checker to accept classified `Type` motives as
+   well as `Omega` motives, still rejecting proofs that do not check as
+   `Bottom`.
+3. Add focused kernel positives: in a context/postulate
+   `p : Eq Nat Zero (Suc n)` or equivalent constructor-disjoint equality that
+   reduces to `Bottom`, `absurd Bool p : Bool` checks; include a Type motive
+   that mentions ordinary context variables.
+4. Add focused negatives: `absurd Bool tt` rejects; `Refl` does not inhabit the
+   disjoint equality; a neutral/unknown index equation does not convert to
+   `Bottom` and cannot feed `absurd`.
+5. Preserve existing `Omega` absurd behavior, eliminator behavior, `J`, `cast`,
+   observational equality, and SCT/trusted-base traversal through both
+   `Absurd` motive and proof positions.
+6. Leave `SURF-gadt-coverage-diagnostics` behavior, indexed coverage
+   classification, and package/catalog behavior out of scope.
 
 ## 5. Acceptance Criteria
 
@@ -144,6 +176,8 @@ AC1. Authority boundary explicit.
 - The final handoff states whether the mechanism is kernel, conversion,
   elaborator-local, or a routed spec reframe.
 - Any kernel/conversion change receives Kernel QA and Architect review.
+- The spec amendment and kernel implementation are reviewed together; a
+  code-only Type-valued `Absurd` change is out of scope.
 
 AC2. Type-valued impossible branch is constructible only from evidence.
 
@@ -192,8 +226,11 @@ kernel-implementer -> kernel-qa -> Architect -> Integrator
 If D0 selects an elaborator-only implementation after Architect approval, route
 Language implementer and Language QA as co-owners before Architect review.
 
-If D0 selects re-specification, stop and route the spec/frame change through
-Steward before implementation.
+This WP now includes the narrow `spec/10-kernel/16-observational.md` amendment.
+If implementation discovers it needs a broader spec change, branch-local
+evidence in `method_type`, a closed disjointness proof oracle, or indexed
+coverage behavior, stop and route back to Steward/Architect before building
+through.
 
 ## 7. Do Not Reopen
 
