@@ -13,8 +13,9 @@ use ken_kernel::{
     inductive::{peel_app, recursive_args},
     infer as kernel_infer,
     sct::sct_check,
-    subst::{subst0, subst_outer, weaken},
-    whnf, Context, Decl, GlobalEnv, GlobalId, InductiveDecl, Level, LevelVar, Term,
+    subst::{subst0, subst_outer, subst_tel, weaken},
+    whnf, ConstructorDecl, Context, Decl, GlobalEnv, GlobalId, InductiveDecl, Level, LevelVar,
+    Term,
 };
 
 use crate::ast::{BinOp, DefKeyword, NumLit};
@@ -546,32 +547,16 @@ fn check(cx: &mut ElabCtx, expr: &RExpr, expected: &Term, _span: &Span) -> Resul
                     .all(|s| matches!(s.kind, RPatKind::Var(_) | RPatKind::Wild)),
                 _ => false,
             });
-            // Further restrict to NON-INDEXED families (`Bool`, `List a`,
-            // `Tree`, every carrier a proof case-splits on). `check_match_
-            // dependent` generalizes the motive over the scrutinee only
-            // (`Term::Elim{indices: vec![]}`, always) — correct exactly when
-            // the family has zero result-indices (`34 §3.2`'s general case
-            // degenerates to this for a non-GADT family). Every family
-            // reachable via legacy simple `data` syntax has zero indices.
-            // Explicit `data ... where` families can now introduce indices,
-            // but indexed coverage and index-impossible method synthesis are
-            // staged to the later coverage-diagnostics work; keep them off
-            // this non-indexed dependent-match path.
-            // Nested constructor sub-patterns (`Suc (Suc m)`) stay on the
-            // existing general `infer_match`/`compile_match_matrix` compiler
-            // regardless (`flat` already excludes those).
+            // Flat checked matches use the dependent-match producer path. For
+            // indexed families this path emits an equality-premise motive and
+            // can synthesize omitted index-impossible methods; nested patterns
+            // stay on the existing general `infer_match`/`compile_match_matrix`
+            // compiler unchanged.
             let dependent_eligible = flat && {
                 let (_, probe_ty) = infer(cx, scrut)?;
                 let probe_ty_wh = whnf(cx.env, &cx.ctx, &probe_ty);
                 let (head, _) = peel_app(&probe_ty_wh);
-                match head {
-                    Term::IndFormer { id, .. } => cx
-                        .env
-                        .inductive(id)
-                        .map(|ind| ind.indices.is_empty())
-                        .unwrap_or(false),
-                    _ => false,
-                }
+                matches!(head, Term::IndFormer { .. })
             };
             if dependent_eligible {
                 check_match_dependent(cx, scrut, arms, expected, span)
@@ -627,6 +612,21 @@ fn synth_refl_proof(
             span: span.clone(),
             reason: "Refl expects an `Eq`-shaped goal".into(),
         }),
+    }
+}
+
+fn synth_generated_index_evidence(
+    env: &GlobalEnv,
+    ctx: &Context,
+    expected: &Term,
+    span: &Span,
+) -> Result<Term, ElabError> {
+    match whnf(env, ctx, expected) {
+        Term::Const { id, .. } if id == env.top_id() => Ok(Term::Const {
+            id: env.tt_id(),
+            level_args: vec![],
+        }),
+        _ => synth_refl_proof(env, ctx, expected, span),
     }
 }
 
@@ -826,7 +826,7 @@ fn check_match_dependent(
     let (scrut_core, scrut_ty_raw) = infer(cx, scrut)?;
     let scrut_ty = whnf(cx.env, &cx.ctx, &scrut_ty_raw);
 
-    let (head, params_terms) = peel_app(&scrut_ty);
+    let (head, scrut_args) = peel_app(&scrut_ty);
     let d_id = match &head {
         Term::IndFormer { id, .. } => *id,
         _ => {
@@ -842,15 +842,28 @@ fn check_match_dependent(
         .ok_or_else(|| ElabError::Internal(format!("inductive {:?} not found", d_id)))?
         .clone();
     let m = ind.params.len();
+    let n_i = ind.indices.len();
+    if scrut_args.len() != m + n_i {
+        return Err(ElabError::TypeMismatch {
+            span: span.clone(),
+            reason: "match scrutinee has the wrong number of family arguments".into(),
+        });
+    }
+    let params_terms = scrut_args[..m].to_vec();
+    let scrut_indices = scrut_args[m..].to_vec();
 
-    // The motive: `expected` with the elaborated scrutinee abstracted to a
-    // fresh outer binder. This handles both the original bound-variable case
-    // (`match b`) and the AC8 transparent-head case (`match km_scrutinee b`).
-    // Every other free variable keeps its shifted index; the outer context is
-    // not being shrunk, only this motive body stops mentioning the concrete
-    // scrutinee term directly.
-    let motive_body =
-        subst_term_generalize(&weaken(expected, 1), &weaken(&scrut_core, 1), &Term::var(0));
+    // The motive: `expected` with the elaborated scrutinee abstracted to the
+    // final `D p̄ ī` binder. Indexed families additionally return a telescope
+    // of branch-local equalities `Eq I_j i_j i0_j -> ...`; the completed elim is
+    // applied to `Refl` at the actual scrutinee indices after construction.
+    let motive_base_depth = n_i + 1;
+    let motive_user_body = subst_term_generalize(
+        &weaken(expected, motive_base_depth as i64),
+        &weaken(&scrut_core, motive_base_depth as i64),
+        &Term::var(0),
+    );
+    let motive_premises = motive_index_premises(&ind, &params_terms, &scrut_indices);
+    let motive_body = wrap_premise_pis(motive_user_body, &motive_premises);
     // `expected` is already zonked (above); the CONTEXT itself may still
     // hold an unresolved metavariable for some other in-scope parameter
     // (e.g. `a`'s own `(a : Type)` binding) that `kernel_infer` would need
@@ -859,14 +872,15 @@ fn check_match_dependent(
     let zonked_ctx = Context {
         types: cx.ctx.types.iter().map(|t| cx.metas.zonk_term(t)).collect(),
     };
+    let motive_ctx = motive_context(&zonked_ctx, &ind, &params_terms);
     let motive_sort =
-        kernel_infer(cx.env, &zonked_ctx, expected).map_err(|e| ElabError::KernelRejected {
+        kernel_infer(cx.env, &motive_ctx, &motive_body).map_err(|e| ElabError::KernelRejected {
             error: e,
             span: span.clone(),
         })?;
-    let motive_ty = Term::pi(scrut_ty.clone(), weaken(&motive_sort, 1));
+    let motive_ty = motive_type(&ind, d_id, &params_terms, &motive_sort);
     let motive = Term::Ascript(
-        Box::new(Term::lam(scrut_ty.clone(), motive_body)),
+        Box::new(wrap_motive_lambdas(&ind, d_id, &params_terms, motive_body)),
         Box::new(motive_ty),
     );
 
@@ -875,31 +889,31 @@ fn check_match_dependent(
     for (k, ctor) in ind.constructors.iter().enumerate() {
         let arm_idx = arms
             .iter()
-            .position(|a| matches!(&a.pat.kind, RPatKind::Ctor(name, _) if cx.globals.get(name).copied() == Some(ctor.id)))
-            .ok_or_else(|| ElabError::ExhaustivenessError {
-                missing: cx.globals.iter().find(|(_, &id)| id == ctor.id).map(|(n, _)| n.clone()).unwrap_or_default(),
-                span: span.clone(),
-            })?;
-        arm_used[arm_idx] = true;
-        let arm = &arms[arm_idx];
-        let sub_pats = match &arm.pat.kind {
-            RPatKind::Ctor(_, subs) => subs.clone(),
-            _ => unreachable!("guarded by the position() match above"),
-        };
-        if sub_pats.len() != ctor.args.len() {
-            return Err(ElabError::Internal(
-                "dependent match (AC4): constructor arity mismatch".into(),
-            ));
-        }
-        let n = sub_pats.len();
-        for (j, sp) in sub_pats.iter().enumerate() {
-            if !matches!(sp.kind, RPatKind::Var(_) | RPatKind::Wild) {
+            .position(|a| matches!(&a.pat.kind, RPatKind::Ctor(name, _) if cx.globals.get(name).copied() == Some(ctor.id)));
+        let n = ctor.args.len();
+        if let Some(arm_idx) = arm_idx {
+            arm_used[arm_idx] = true;
+            let arm = &arms[arm_idx];
+            let sub_pats = match &arm.pat.kind {
+                RPatKind::Ctor(_, subs) => subs.clone(),
+                _ => unreachable!("guarded by the position() match above"),
+            };
+            if sub_pats.len() != n {
                 return Err(ElabError::Internal(
-                    "dependent match (AC4): nested constructor sub-patterns are not \
-                     yet supported here"
-                        .into(),
+                    "dependent match (AC4): constructor arity mismatch".into(),
                 ));
             }
+            for sp in &sub_pats {
+                if !matches!(sp.kind, RPatKind::Var(_) | RPatKind::Wild) {
+                    return Err(ElabError::Internal(
+                        "dependent match (AC4): nested constructor sub-patterns are not \
+                         yet supported here"
+                            .into(),
+                    ));
+                }
+            }
+        }
+        for j in 0..n {
             let raw_ty = subst_outer(&ctor.args[j], m, &params_terms, j);
             cx.ctx.push(raw_ty);
         }
@@ -915,48 +929,42 @@ fn check_match_dependent(
         for j in (0..n).rev() {
             concrete = Term::app(concrete, Term::var(j));
         }
+        let target_indices = ctor_target_indices(ctor, &ind, &params_terms, n);
         let expected_here = subst_term_generalize(
             &weaken(expected, n as i64),
             &weaken(&scrut_core, n as i64),
             &concrete,
         );
-        let expected_here = if matches!(arm.body, RExpr::RLam(_, _, _)) {
-            expected_here
+        let premise_domains =
+            method_index_premises(&ind, &params_terms, &target_indices, &scrut_indices, n);
+        let method = if let Some(arm_idx) = arm_idx {
+            let arm = &arms[arm_idx];
+            let expected_here = if matches!(arm.body, RExpr::RLam(_, _, _)) {
+                expected_here
+            } else {
+                simplify_branch_goal(cx.env, &cx.ctx, &expected_here)
+            };
+            let body_core = check(cx, &arm.body, &expected_here, &arm.span)?;
+            wrap_premise_lams(body_core, &premise_domains)
         } else {
-            simplify_branch_goal(cx.env, &cx.ctx, &expected_here)
+            let expected_here = simplify_branch_goal(cx.env, &cx.ctx, &expected_here);
+            let missing = ctor_name(cx, ctor.id);
+            synthesize_omitted_index_method(cx, &premise_domains, &expected_here, &missing, span)?
         };
-        let body_core = check(cx, &arm.body, &expected_here, &arm.span)?;
         for _ in 0..n {
             cx.ctx.pop();
         }
 
         // IH-slot emission (`dependent-match-nonnullary`, Map Gap B): the
-        // kernel's `method_type` requires `Π(fields) Π(ih₁…ih_p). M(Cₖ …)` —
+        // kernel's `method_type` requires `Π(fields) Π(ih₁…ih_p). M t̄ (Cₖ …)` —
         // `p = recursive_args(ctor).len()` dead (never surface-referenced)
         // binders between the `n` field lambdas and the body. REUSE the
         // kernel's own producer (`ken_kernel::inductive::recursive_args`,
         // the exact function `method_type` uses) rather than re-deriving
-        // recursive-field detection locally.
-        //
-        // Non-indexed `List`/`Tree`/`ITree`-style families (this WP): a
-        // recursive field is either DIRECT (`branching_tel` empty — `Cons x
-        // xs2`, IH `M xs2`) or W-STYLE (`branching_tel` non-empty — `Vis op
-        // k` with `k : Resp op -> ITree …`, IH `Π(b̄:B̄). M (k b̄)`, mirroring
-        // `ken_kernel::inductive::method_type`'s W-style branch, `dep-match-
-        // wstyle`). `idxs` is always empty here (guarded by the
-        // `dependent_eligible` gate above, which restricts to non-indexed
-        // families) — a genuinely INDEXED family is a finding -> Steward,
-        // never a silent build.
+        // recursive-field detection locally. For indexed families, direct IHs
+        // use the same equality-premise motive shape as constructor methods:
+        // `M idxs recursive_field`.
         let rec = recursive_args(ctor, d_id, m);
-        for (_, _, idxs) in &rec {
-            if !idxs.is_empty() {
-                return Err(ElabError::Internal(
-                    "dependent match: indexed-family recursive field is out of scope \
-                     (W-style fields of a non-indexed family only) — finding -> Steward"
-                        .into(),
-                ));
-            }
-        }
         // Each IH's type is the goal `expected` specialized to that
         // recursive field — `M xs2` for the direct tail of `Cons x xs2`, or
         // `Π(b̄:B̄). M (k b̄)` for the W-style continuation of `Vis op k`. IHs
@@ -970,17 +978,29 @@ fn check_match_dependent(
         // slot's own `nb` (its branch binders live inside its own domain
         // type, never in the method telescope) — the load-bearing
         // correction pinned in `dependent-match-wstyle.md`.
-        let mut method = body_core;
-        for (pos, branching_tel, _) in rec.iter().rev() {
+        let mut method = method;
+        for (pos, branching_tel, idxs) in rec.iter().rev() {
             let nb = branching_tel.len();
             let ih_ty = if nb == 0 {
-                // DIRECT case — byte-identical to before this WP.
                 let field_var = Term::var(n - 1 - pos);
-                subst_term_generalize(
+                let ih_body = subst_term_generalize(
                     &weaken(expected, n as i64),
                     &weaken(&scrut_core, n as i64),
                     &field_var,
-                )
+                );
+                let ih_indices: Vec<Term> = idxs
+                    .iter()
+                    .map(|t| {
+                        ken_kernel::subst::shift(
+                            &subst_outer(t, m, &params_terms, *pos),
+                            (n - pos) as i64,
+                            0,
+                        )
+                    })
+                    .collect();
+                let ih_premises =
+                    method_index_premises(&ind, &params_terms, &ih_indices, &scrut_indices, n);
+                wrap_premise_pis(ih_body, &ih_premises)
             } else {
                 // W-STYLE case: Π(b1:B1)...(b_nb:B_nb). expected[scrut := field_var b1..b_nb].
                 // Built in the bare [fields] frame (j = 0); the outer
@@ -1042,15 +1062,216 @@ fn check_match_dependent(
         .map(|m| m.expect("every ctor bucket filled above"))
         .collect();
 
-    Ok(Term::Elim {
+    let top_premises =
+        method_index_premises(&ind, &params_terms, &scrut_indices, &scrut_indices, 0);
+    let mut elim = Term::Elim {
         fam: d_id,
         level_args: vec![],
         params: params_terms,
         motive: Box::new(motive),
         methods,
-        indices: vec![],
+        indices: scrut_indices.clone(),
         scrut: Box::new(scrut_core),
-    })
+    };
+    for premise in &top_premises {
+        let proof = synth_generated_index_evidence(cx.env, &cx.ctx, premise, span)?;
+        elim = Term::app(elim, proof);
+    }
+    Ok(elim)
+}
+
+fn motive_context(outer: &Context, ind: &InductiveDecl, params: &[Term]) -> Context {
+    let mut ctx = outer.clone();
+    for j in 0..ind.indices.len() {
+        ctx.push(subst_outer(&ind.indices[j], ind.params.len(), params, j));
+    }
+    ctx.push(indexed_scrutinee_type(ind, ind.id, params));
+    ctx
+}
+
+fn motive_type(ind: &InductiveDecl, d_id: GlobalId, params: &[Term], motive_sort: &Term) -> Term {
+    let mut ty = Term::pi(
+        indexed_scrutinee_type(ind, d_id, params),
+        motive_sort.clone(),
+    );
+    for j in (0..ind.indices.len()).rev() {
+        ty = Term::pi(
+            subst_outer(&ind.indices[j], ind.params.len(), params, j),
+            ty,
+        );
+    }
+    ty
+}
+
+fn wrap_motive_lambdas(ind: &InductiveDecl, d_id: GlobalId, params: &[Term], body: Term) -> Term {
+    let mut term = Term::lam(indexed_scrutinee_type(ind, d_id, params), body);
+    for j in (0..ind.indices.len()).rev() {
+        term = Term::lam(
+            subst_outer(&ind.indices[j], ind.params.len(), params, j),
+            term,
+        );
+    }
+    term
+}
+
+fn indexed_scrutinee_type(ind: &InductiveDecl, d_id: GlobalId, params: &[Term]) -> Term {
+    let n_i = ind.indices.len();
+    let mut d_app = Term::IndFormer {
+        id: d_id,
+        level_args: vec![],
+    };
+    for p in params {
+        d_app = Term::app(d_app, weaken(p, n_i as i64));
+    }
+    for j in 0..n_i {
+        d_app = Term::app(d_app, Term::var(n_i - 1 - j));
+    }
+    d_app
+}
+
+fn motive_index_premises(
+    ind: &InductiveDecl,
+    params: &[Term],
+    scrut_indices: &[Term],
+) -> Vec<Term> {
+    let n_i = ind.indices.len();
+    (0..n_i)
+        .filter_map(|j| {
+            let raw_index_ty = subst_outer(&ind.indices[j], ind.params.len(), params, j);
+            // Later dependent index domains would require heterogeneous
+            // transport through earlier equality premises; do not emit an
+            // ill-typed ordinary Eq premise for those cases.
+            if index_domain_mentions_prior_index(&raw_index_ty, j) {
+                return None;
+            }
+            let index_ty = ken_kernel::subst::shift(&raw_index_ty, (n_i - j + 1) as i64, 0);
+            let abstract_index = Term::var(n_i - j);
+            let actual_index = weaken(&scrut_indices[j], (n_i + 1) as i64);
+            Some(Term::Eq(
+                Box::new(index_ty),
+                Box::new(abstract_index),
+                Box::new(actual_index),
+            ))
+        })
+        .collect()
+}
+
+fn ctor_target_indices(
+    ctor: &ConstructorDecl,
+    ind: &InductiveDecl,
+    params: &[Term],
+    field_count: usize,
+) -> Vec<Term> {
+    ctor.target_indices
+        .iter()
+        .map(|t| subst_outer(t, ind.params.len(), params, field_count))
+        .collect()
+}
+
+fn method_index_premises(
+    ind: &InductiveDecl,
+    params: &[Term],
+    target_indices: &[Term],
+    scrut_indices: &[Term],
+    field_count: usize,
+) -> Vec<Term> {
+    (0..ind.indices.len())
+        .filter_map(|j| {
+            let raw_index_ty = subst_outer(&ind.indices[j], ind.params.len(), params, j);
+            // Keep constructor/top premise arity aligned with the motive
+            // premises above.
+            if index_domain_mentions_prior_index(&raw_index_ty, j) {
+                return None;
+            }
+            let index_ty_with_fields =
+                ken_kernel::subst::shift(&raw_index_ty, field_count as i64, j);
+            let index_ty = subst_tel(&index_ty_with_fields, &target_indices[..j]);
+            let actual_index = weaken(&scrut_indices[j], field_count as i64);
+            Some(Term::Eq(
+                Box::new(index_ty),
+                Box::new(target_indices[j].clone()),
+                Box::new(actual_index),
+            ))
+        })
+        .collect()
+}
+
+fn index_domain_mentions_prior_index(term: &Term, prior_count: usize) -> bool {
+    match term {
+        Term::Var(i) => *i < prior_count,
+        Term::Pi(dom, cod) | Term::Lam(dom, cod) | Term::Sigma(dom, cod) => {
+            index_domain_mentions_prior_index(dom, prior_count)
+                || index_domain_mentions_prior_index(cod, prior_count + 1)
+        }
+        Term::Let { ty, val, body } => {
+            index_domain_mentions_prior_index(ty, prior_count)
+                || index_domain_mentions_prior_index(val, prior_count)
+                || index_domain_mentions_prior_index(body, prior_count + 1)
+        }
+        _ => term
+            .children()
+            .iter()
+            .any(|child| index_domain_mentions_prior_index(child, prior_count)),
+    }
+}
+
+fn wrap_premise_pis(body: Term, premises: &[Term]) -> Term {
+    let mut term = weaken(&body, premises.len() as i64);
+    for i in (0..premises.len()).rev() {
+        term = Term::pi(weaken(&premises[i], i as i64), term);
+    }
+    term
+}
+
+fn wrap_premise_lams(body: Term, premises: &[Term]) -> Term {
+    wrap_premise_lams_from_full(weaken(&body, premises.len() as i64), premises)
+}
+
+fn wrap_premise_lams_from_full(body: Term, premises: &[Term]) -> Term {
+    let mut term = body;
+    for i in (0..premises.len()).rev() {
+        term = Term::lam(weaken(&premises[i], i as i64), term);
+    }
+    term
+}
+
+fn synthesize_omitted_index_method(
+    cx: &ElabCtx,
+    premise_domains: &[Term],
+    expected_here: &Term,
+    missing: &str,
+    span: &Span,
+) -> Result<Term, ElabError> {
+    let bottom = Term::const_(cx.env.bottom_id(), vec![]);
+    let impossible_idx = premise_domains
+        .iter()
+        .enumerate()
+        .find_map(|(i, premise)| {
+            let mut premise_ctx = cx.ctx.clone();
+            premise_ctx.push(premise.clone());
+            kernel_check(cx.env, &premise_ctx, &Term::var(0), &bottom)
+                .is_ok()
+                .then_some(i)
+        })
+        .ok_or_else(|| ElabError::ExhaustivenessError {
+            missing: missing.to_string(),
+            span: span.clone(),
+        })?;
+    let premise_count = premise_domains.len();
+    let proof_var = Term::var(premise_count - 1 - impossible_idx);
+    let body = Term::Absurd(
+        Box::new(weaken(expected_here, premise_count as i64)),
+        Box::new(proof_var),
+    );
+    Ok(wrap_premise_lams_from_full(body, premise_domains))
+}
+
+fn ctor_name(cx: &ElabCtx, id: GlobalId) -> String {
+    cx.globals
+        .iter()
+        .find(|(_, &candidate)| candidate == id)
+        .map(|(name, _)| name.clone())
+        .unwrap_or_else(|| format!("<ctor_{:?}>", id))
 }
 
 fn infer(cx: &mut ElabCtx, expr: &RExpr) -> Result<(Term, Term), ElabError> {
