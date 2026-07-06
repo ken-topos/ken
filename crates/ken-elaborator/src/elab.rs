@@ -615,6 +615,21 @@ fn synth_refl_proof(
     }
 }
 
+fn synth_generated_index_evidence(
+    env: &GlobalEnv,
+    ctx: &Context,
+    expected: &Term,
+    span: &Span,
+) -> Result<Term, ElabError> {
+    match whnf(env, ctx, expected) {
+        Term::Const { id, .. } if id == env.top_id() => Ok(Term::Const {
+            id: env.tt_id(),
+            level_args: vec![],
+        }),
+        _ => synth_refl_proof(env, ctx, expected, span),
+    }
+}
+
 /// Replace an occurrence of `target` with `u` while preserving the surrounding
 /// context exactly. Under binders both `target` and `u` are weakened, so the
 /// match is against the same outer term as seen from the deeper scope.
@@ -1059,7 +1074,7 @@ fn check_match_dependent(
         scrut: Box::new(scrut_core),
     };
     for premise in &top_premises {
-        let proof = synth_refl_proof(cx.env, &cx.ctx, premise, span)?;
+        let proof = synth_generated_index_evidence(cx.env, &cx.ctx, premise, span)?;
         elim = Term::app(elim, proof);
     }
     Ok(elim)
@@ -1121,19 +1136,22 @@ fn motive_index_premises(
 ) -> Vec<Term> {
     let n_i = ind.indices.len();
     (0..n_i)
-        .map(|j| {
-            let index_ty = ken_kernel::subst::shift(
-                &subst_outer(&ind.indices[j], ind.params.len(), params, j),
-                (n_i - j + 1) as i64,
-                j,
-            );
+        .filter_map(|j| {
+            let raw_index_ty = subst_outer(&ind.indices[j], ind.params.len(), params, j);
+            // Later dependent index domains would require heterogeneous
+            // transport through earlier equality premises; do not emit an
+            // ill-typed ordinary Eq premise for those cases.
+            if index_domain_mentions_prior_index(&raw_index_ty, j) {
+                return None;
+            }
+            let index_ty = ken_kernel::subst::shift(&raw_index_ty, (n_i - j + 1) as i64, 0);
             let abstract_index = Term::var(n_i - j);
             let actual_index = weaken(&scrut_indices[j], (n_i + 1) as i64);
-            Term::Eq(
+            Some(Term::Eq(
                 Box::new(index_ty),
                 Box::new(abstract_index),
                 Box::new(actual_index),
-            )
+            ))
         })
         .collect()
 }
@@ -1158,19 +1176,43 @@ fn method_index_premises(
     field_count: usize,
 ) -> Vec<Term> {
     (0..ind.indices.len())
-        .map(|j| {
+        .filter_map(|j| {
             let raw_index_ty = subst_outer(&ind.indices[j], ind.params.len(), params, j);
+            // Keep constructor/top premise arity aligned with the motive
+            // premises above.
+            if index_domain_mentions_prior_index(&raw_index_ty, j) {
+                return None;
+            }
             let index_ty_with_fields =
                 ken_kernel::subst::shift(&raw_index_ty, field_count as i64, j);
             let index_ty = subst_tel(&index_ty_with_fields, &target_indices[..j]);
             let actual_index = weaken(&scrut_indices[j], field_count as i64);
-            Term::Eq(
+            Some(Term::Eq(
                 Box::new(index_ty),
                 Box::new(target_indices[j].clone()),
                 Box::new(actual_index),
-            )
+            ))
         })
         .collect()
+}
+
+fn index_domain_mentions_prior_index(term: &Term, prior_count: usize) -> bool {
+    match term {
+        Term::Var(i) => *i < prior_count,
+        Term::Pi(dom, cod) | Term::Lam(dom, cod) | Term::Sigma(dom, cod) => {
+            index_domain_mentions_prior_index(dom, prior_count)
+                || index_domain_mentions_prior_index(cod, prior_count + 1)
+        }
+        Term::Let { ty, val, body } => {
+            index_domain_mentions_prior_index(ty, prior_count)
+                || index_domain_mentions_prior_index(val, prior_count)
+                || index_domain_mentions_prior_index(body, prior_count + 1)
+        }
+        _ => term
+            .children()
+            .iter()
+            .any(|child| index_domain_mentions_prior_index(child, prior_count)),
+    }
 }
 
 fn wrap_premise_pis(body: Term, premises: &[Term]) -> Term {

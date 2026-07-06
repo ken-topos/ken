@@ -267,6 +267,42 @@ fn indexed_impossible_constructor_may_be_omitted_from_non_empty_vector_match() {
 }
 
 #[test]
+fn concrete_non_empty_vector_index_omits_empty_constructor() {
+    let mut env = mk_env();
+    elab_ok(&mut env, VECTOR_DECL);
+
+    elab_ok(
+        &mut env,
+        r#"
+        fn vectorHeadZero (A : Type) (v : Vector A (Suc Zero)) : A =
+          match v { ConsVector m x xs => x }
+        "#,
+    );
+}
+
+#[test]
+fn dependent_index_telescope_lifts_prior_index_in_motive_premise() {
+    let mut env = mk_env();
+    elab_file_ok(
+        &mut env,
+        r#"
+        data IsZero : Nat -> Type where {
+          IsZeroZero : IsZero Zero
+        }
+
+        data DepIndex : (n : Nat) -> IsZero n -> Type where {
+          DepMk : DepIndex Zero IsZeroZero
+        }
+
+        const depValue : DepIndex Zero IsZeroZero = DepMk
+
+        fn depHead (p : IsZero Zero) (x : DepIndex Zero p) : Nat =
+          match x { DepMk => Zero }
+        "#,
+    );
+}
+
+#[test]
 fn indexed_head_rejects_empty_vector_application() {
     let mut env = mk_env();
     elab_ok(&mut env, VECTOR_DECL);
