@@ -82,11 +82,15 @@ pub fn telescope_to_pi(tel: &[Term], body: Term) -> Term {
 /// A primitive reduction rule — the *interface* a primitive registers (`14
 /// §5`). K1 defines only the interface; the value model (K3) and kernel API
 /// (K-api) elaborate the registered computation. Primitives are opaque
-/// constants in K1; their literal reduction is trusted-base, audited later.
+/// constants in K1. Checked surface literals carry separate accounting status:
+/// they are values, not primitive operations or assumed postulates.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PrimReduction {
     /// An opaque primitive type (e.g. `Int : Type 0`) — no reduction.
     OpaqueType,
+    /// A checked surface literal whose value is stored by the elaborator side
+    /// table. This is not a trusted primitive assumption.
+    Literal,
     /// A primitive operation awaiting its registered reduction (K3).
     Op {
         /// Symbolic name, for `trusted_base()` enumeration.
@@ -395,14 +399,19 @@ impl GlobalEnv {
         self.decls.iter()
     }
 
-    /// The postulates and primitives in `Σ` — the unchecked assumptions a
+    /// The postulates and real primitives in `Σ` — the unchecked assumptions a
     /// program rests on (`18 §5`). The prelude `Top`/`Bottom` constants are
     /// excluded: they are fixed kernel vocabulary (`16 §1.3`), not user
-    /// assumptions.
+    /// assumptions. Checked surface literals are also excluded: their values
+    /// are stored as syntax-derived data, not as primitive operations.
     pub fn trusted_base(&self) -> Vec<GlobalId> {
         self.decls
             .iter()
-            .filter(|d| matches!(d, Decl::Opaque { .. } | Decl::Primitive { .. }))
+            .filter(|d| match d {
+                Decl::Opaque { .. } => true,
+                Decl::Primitive { reduction, .. } => *reduction != PrimReduction::Literal,
+                _ => false,
+            })
             .filter(|d| !self.is_prelude(d.id()))
             .map(|d| d.id())
             .collect()

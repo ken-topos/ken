@@ -1325,6 +1325,7 @@ pub fn eval(env: &[EvalVal], term: &Term, globals: &GlobalEnv, store: &mut EvalS
                 Some(Decl::Transparent { body, .. }) => eval(&Vec::new(), body, globals, store),
                 Some(Decl::Primitive { reduction, .. }) => match reduction {
                     PrimReduction::OpaqueType => EvalVal::Neutral,
+                    PrimReduction::Literal => EvalVal::Neutral,
                     PrimReduction::Op { symbol } => EvalVal::CtorPending {
                         id: *id,
                         args: vec![],
