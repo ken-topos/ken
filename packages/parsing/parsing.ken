@@ -18,8 +18,19 @@ fn cat5NatToInt (unit : Bytes) (n : Nat) : Int =
     Suc n2 => (bytes_length unit) + (cat5NatToInt unit n2)
   }
 
+fn EmptyBytes (bs : Bytes) : Prop =
+  Equal Bytes bs (bytes_slice bs (bytes_length bs) (cat5ZeroInt bs))
+
+fn NonEmptyBytes (bs : Bytes) : Prop =
+  EmptyBytes bs -> Bottom
+
 fn UnitByteLength (unit : Bytes) : Prop =
-  Equal Int (bytes_length unit) (cat5NatToInt unit (Suc Zero))
+  And
+    (NonEmptyBytes unit)
+    ((left : Bytes) -> (right : Bytes) ->
+      Equal Bytes unit (bytes_concat left right) ->
+      NonEmptyBytes left ->
+      EmptyBytes right)
 
 fn SourceLength (unit : Bytes) (bs : Bytes) (n : Nat) : Prop =
   Equal Int (bytes_length bs) (cat5NatToInt unit n)

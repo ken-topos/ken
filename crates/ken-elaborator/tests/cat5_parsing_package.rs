@@ -41,6 +41,8 @@ fn cat5_d1_source_span_package_elaborates_zero_delta() {
         "sourceLengthValid",
         "SourceLength",
         "UnitByteLength",
+        "EmptyBytes",
+        "NonEmptyBytes",
         "cat5ZeroInt",
         "cat5NatToInt",
         "spanStart",
@@ -96,11 +98,15 @@ fn cat5_d1_source_span_surface_is_byte_artifact_and_source_explicit() {
     );
     assert!(
         PARSING_KEN.contains("fn cat5NatToInt (unit : Bytes) (n : Nat) : Int =")
+            && PARSING_KEN.contains("fn EmptyBytes (bs : Bytes) : Prop =")
+            && PARSING_KEN.contains("fn NonEmptyBytes (bs : Bytes) : Prop =")
             && PARSING_KEN.contains("fn UnitByteLength (unit : Bytes) : Prop =")
             && PARSING_KEN.contains("fn SourceLength (unit : Bytes) (bs : Bytes) (n : Nat) : Prop =")
+            && PARSING_KEN.contains("bytes_concat left right")
+            && PARSING_KEN.contains("NonEmptyBytes unit")
             && PARSING_KEN.contains("bytes_length bs")
             && PARSING_KEN.contains("cat5NatToInt unit n"),
-        "SourceLength must tie sourceLength to sourceBytes through a one-byte unit witness"
+        "SourceLength must tie sourceLength to sourceBytes through a non-empty byte-atomic unit witness"
     );
     assert!(
         PARSING_KEN.contains("class Source {")
@@ -262,6 +268,44 @@ fn cat5_d1_concrete_mismatched_source_length_rejected() {
             || msg.contains("type mismatch")
             || msg.contains("Kernel rejected"),
         "mismatched source length should reject during proof checking, got {msg}"
+    );
+}
+
+#[test]
+fn cat5_d1_multibyte_unit_cannot_make_three_bytes_report_one() {
+    let mut env = mk_env();
+    let err = env
+        .elaborate_file(
+            r#"
+            data Cat5BadUnitSource = MkCat5BadUnitSource
+
+            const cat5_abc_bytes : Bytes = bytes_encode "abc"
+            const cat5_bad_unit_valid : UnitByteLength cat5_abc_bytes = Refl
+            const cat5_utf8_valid : IsUtf8 cat5_abc_bytes = Axiom
+            const cat5_bad_length_valid
+              : SourceLength cat5_abc_bytes cat5_abc_bytes (Suc Zero) =
+              Refl
+
+            instance Source Cat5BadUnitSource {
+              sourceIdField = MkSourceId Zero ;
+              sourceBytesField = cat5_abc_bytes ;
+              sourceLengthField = Suc Zero ;
+              sourceLengthUnitField = cat5_abc_bytes ;
+              sourceLengthUnitValidField = cat5_bad_unit_valid ;
+              sourceUtf8Field = cat5_utf8_valid ;
+              sourceLengthValidField = cat5_bad_length_valid
+            }
+            "#,
+        )
+        .expect_err("a multi-byte unit must not let three source bytes report length one");
+    let msg = format!("{err}");
+    assert!(
+        msg.contains("Refl")
+            || msg.contains("not convertible")
+            || msg.contains("Type mismatch")
+            || msg.contains("type mismatch")
+            || msg.contains("Kernel rejected"),
+        "multi-byte unit counterexample should reject during proof checking, got {msg}"
     );
 }
 
