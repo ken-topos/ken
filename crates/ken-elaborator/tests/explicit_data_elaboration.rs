@@ -1,5 +1,5 @@
-use ken_elaborator::ElabEnv;
-use ken_kernel::{GlobalId, Term};
+use ken_elaborator::{ElabEnv, ElabError};
+use ken_kernel::{GlobalId, KernelError, Term};
 
 fn mk_env() -> ElabEnv {
     ElabEnv::new().expect("base env construction failed")
@@ -192,16 +192,28 @@ fn bad_constructor_result_targets_are_surface_errors() {
 #[test]
 fn same_family_occurrence_in_result_index_rejects_before_install() {
     let mut env = mk_env();
-    let err = expect_err(
-        &mut env,
-        "data Bad : Type -> Type where { BadMk : Bad (Bad Int) }",
+    let result = env.elaborate_decl("data Bad : Type -> Type where { BadMk : Bad (Bad Int) }");
+    let err = result.expect_err("same-family target index should reject");
+    let rendered = err.to_string();
+    assert!(
+        !rendered.contains("bad constructor result target"),
+        "same-family target index should no longer reject through surface target validation: {rendered}"
     );
     assert!(
-        err.contains("bad constructor result target")
-            && err.contains("BadMk")
-            && err.contains("Bad")
-            && err.contains("result indices may mention only data parameters"),
-        "unexpected diagnostic: {err}"
+        matches!(
+            &err,
+            ElabError::KernelRejected {
+                error: KernelError::PositivityViolation(_),
+                ..
+            }
+        ),
+        "same-family target index should reach kernel positivity, got {err:?}"
+    );
+    assert!(
+        rendered.contains("kernel rejected")
+            && rendered.contains("D occurs in constructor")
+            && rendered.contains("target index"),
+        "unexpected diagnostic: {rendered}"
     );
     assert!(
         !env.globals.contains_key("Bad"),
