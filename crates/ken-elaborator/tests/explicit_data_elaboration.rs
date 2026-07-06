@@ -43,6 +43,40 @@ fn non_indexed_explicit_family_elaborates_and_constructor_is_usable() {
 }
 
 #[test]
+fn legacy_named_constructor_field_sugar_lowers_to_positional_constructor() {
+    let mut env = mk_env();
+    let id = elab_ok(&mut env, "data Point = MkPoint { x : Int, y : Int }");
+
+    let ind = env.env.inductive(id).expect("Point should elaborate");
+    assert!(ind.indices.is_empty());
+    assert_eq!(ind.constructors.len(), 1);
+    assert_eq!(ind.constructors[0].args.len(), 2);
+
+    elab_ok(&mut env, "let point : Point = MkPoint 1 2");
+}
+
+#[test]
+fn explicit_where_named_constructor_field_sugar_lowers_to_positional_constructor() {
+    let mut env = mk_env();
+    let id = elab_ok(
+        &mut env,
+        r#"
+        data PairBox (A : Type) : Type where {
+          PairBoxed { first : A, second : A }
+        }
+        "#,
+    );
+
+    let ind = env.env.inductive(id).expect("PairBox should elaborate");
+    assert_eq!(ind.params.len(), 1);
+    assert!(ind.indices.is_empty());
+    assert_eq!(ind.constructors.len(), 1);
+    assert_eq!(ind.constructors[0].args.len(), 2);
+
+    elab_ok(&mut env, "let pairBox : PairBox Int = PairBoxed Int 1 2");
+}
+
+#[test]
 fn indexed_vector_family_records_indices_and_constructor_targets() {
     let mut env = mk_env();
     let id = elab_ok(

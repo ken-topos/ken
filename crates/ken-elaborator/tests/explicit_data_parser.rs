@@ -187,6 +187,66 @@ fn explicit_where_block_accepts_simple_default_result_constructors() {
 }
 
 #[test]
+fn legacy_data_accepts_named_constructor_field_sugar() {
+    let decl = single_decl("data Point = MkPoint { x : Int, y : Int }");
+    let Decl::DataDecl { ctors, .. } = decl else {
+        panic!("expected legacy data declaration");
+    };
+    assert_eq!(ctors.len(), 1);
+    assert_eq!(ctors[0].name, "MkPoint");
+    assert_eq!(ctors[0].args.len(), 2);
+    assert_eq!(
+        ctors[0].field_labels.as_ref().expect("field labels"),
+        &vec!["x".to_string(), "y".to_string()]
+    );
+}
+
+#[test]
+fn explicit_where_simple_constructor_accepts_named_field_sugar() {
+    let decl = single_decl(
+        r#"
+        data PairBox (A : Type) : Type where {
+          PairBoxed { first : A, second : A }
+        }
+        "#,
+    );
+    let Decl::ExplicitDataDecl { ctors, .. } = decl else {
+        panic!("expected explicit family declaration");
+    };
+    match &ctors[0] {
+        ExplicitDataCtor::Simple(ctor) => {
+            assert_eq!(ctor.name, "PairBoxed");
+            assert_eq!(ctor.args.len(), 2);
+            assert_eq!(
+                ctor.field_labels.as_ref().expect("field labels"),
+                &vec!["first".to_string(), "second".to_string()]
+            );
+        }
+        other => panic!("expected simple constructor sugar, got {other:?}"),
+    }
+}
+
+#[test]
+fn named_constructor_field_sugar_rejects_duplicate_labels() {
+    let err = parse_decls("data Point = MkPoint { x : Int, x : Int }")
+        .expect_err("duplicate constructor field labels must reject");
+    let msg = format!("{err}");
+    assert!(
+        msg.contains("duplicate field `x`") && msg.contains("MkPoint"),
+        "{msg}"
+    );
+}
+
+#[test]
+fn explicit_signature_constructor_rejects_record_style_field_list() {
+    let err =
+        parse_decls("data Box (A : Type) : Type where { Mk : { value : A, other : A } -> Box A }")
+            .expect_err("record-style field lists inside explicit signatures are out of scope");
+    let msg = format!("{err}");
+    assert!(msg.contains("found Comma"), "{msg}");
+}
+
+#[test]
 fn legacy_data_form_stays_simple_and_rejects_explicit_signatures() {
     let legacy = single_decl("data Box A = Mk A");
     let Decl::DataDecl {
@@ -203,6 +263,7 @@ fn legacy_data_form_stays_simple_and_rejects_explicit_signatures() {
     assert_eq!(ctors.len(), 1);
     assert_eq!(ctors[0].name, "Mk");
     assert_eq!(ctors[0].args.len(), 1);
+    assert!(ctors[0].field_labels.is_none());
 
     parse_decls("data Box (A : Type) : Type where { Mk : A -> Box A }")
         .expect("explicit where form must parse");

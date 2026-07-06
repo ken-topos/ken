@@ -912,10 +912,15 @@ impl Parser {
         }
     }
 
-    /// `C τ₁ τ₂ …` — one constructor in a `data` declaration.
+    /// `C τ₁ τ₂ …` or `C { f : τ₁, g : τ₂ }` — one constructor in a `data`
+    /// declaration. Record-style labels are declaration metadata only; the
+    /// constructor telescope remains positional in declaration order.
     fn parse_ctor_decl(&mut self) -> Result<CtorDecl, ElabError> {
         let start = self.peek_span().start;
         let (name, _) = self.expect_con()?;
+        if matches!(self.peek(), Token::LBrace) {
+            return self.parse_named_ctor_decl(name, start);
+        }
         let mut args = Vec::new();
         // Collect type atoms (stop at `|`, `=`, `\n`-equivalent token starts, EOF)
         while self.can_start_atom_type() {
@@ -929,6 +934,63 @@ impl Parser {
         Ok(CtorDecl {
             name,
             args,
+            field_labels: None,
+            span: Span::new(start, end),
+        })
+    }
+
+    fn parse_named_ctor_decl(&mut self, name: String, start: usize) -> Result<CtorDecl, ElabError> {
+        self.expect(&Token::LBrace)?;
+        if matches!(self.peek(), Token::RBrace | Token::Eof) {
+            return Err(ElabError::ParseError {
+                msg: format!("constructor `{name}` field list requires at least one field"),
+                span: self.peek_span().clone(),
+            });
+        }
+
+        let mut args = Vec::new();
+        let mut field_labels = Vec::new();
+        loop {
+            let (field, field_span) = self.expect_ident()?;
+            if field_labels.iter().any(|existing| existing == &field) {
+                return Err(ElabError::ParseError {
+                    msg: format!("duplicate field `{field}` in constructor `{name}`"),
+                    span: field_span,
+                });
+            }
+            self.expect(&Token::Colon)?;
+            let ty = self.parse_type()?;
+            field_labels.push(field);
+            args.push(ty);
+
+            match self.peek() {
+                Token::Comma => {
+                    self.advance();
+                    if matches!(self.peek(), Token::RBrace) {
+                        return Err(ElabError::ParseError {
+                            msg: format!("constructor `{name}` field list has a trailing comma"),
+                            span: self.peek_span().clone(),
+                        });
+                    }
+                }
+                Token::RBrace => break,
+                other => {
+                    return Err(ElabError::ParseError {
+                        msg: format!(
+                            "expected ',' or '}}' in constructor `{name}` field list, found {other:?}"
+                        ),
+                        span: self.peek_span().clone(),
+                    })
+                }
+            }
+        }
+
+        let end = self.peek_span().end;
+        self.expect(&Token::RBrace)?;
+        Ok(CtorDecl {
+            name,
+            args,
+            field_labels: Some(field_labels),
             span: Span::new(start, end),
         })
     }

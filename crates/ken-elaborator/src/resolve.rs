@@ -17,6 +17,7 @@ use crate::error::{ElabError, Span};
 pub struct RCtorDecl {
     pub name: String,
     pub args: Vec<RType>,
+    pub field_labels: Option<Vec<String>>,
     pub span: Span,
 }
 
@@ -429,10 +430,13 @@ fn resolve_explicit_ctor(
     match ctor {
         ExplicitDataCtor::Simple(c) => {
             let mut args = Vec::new();
-            for ty in &c.args {
+            for (idx, ty) in c.args.iter().enumerate() {
                 let rty = resolve_type(&mut scope, ty)?;
                 args.push(RTelescopeEntry {
-                    name: None,
+                    name: c
+                        .field_labels
+                        .as_ref()
+                        .and_then(|labels| labels.get(idx).cloned()),
                     ty: rty,
                     span: ty.span().clone(),
                 });
@@ -707,6 +711,7 @@ pub fn resolve_decl(decl: &Decl) -> Result<RDecl, ElabError> {
                 rctors.push(RCtorDecl {
                     name: c.name.clone(),
                     args: rargs,
+                    field_labels: c.field_labels.clone(),
                     span: c.span.clone(),
                 });
             }

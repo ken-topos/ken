@@ -125,10 +125,18 @@ impl ElabEnv {
         // consistent GlobalId. Declared via the raw inductive machinery
         // (`data.rs::elab_data_decl`, not `elaborate_decl`) since the full
         // `ElabEnv` doesn't exist yet at this point in construction.
-        let true_ctor =
-            resolve::RCtorDecl { name: "True".into(), args: vec![], span: Span::zero() };
-        let false_ctor =
-            resolve::RCtorDecl { name: "False".into(), args: vec![], span: Span::zero() };
+        let true_ctor = resolve::RCtorDecl {
+            name: "True".into(),
+            args: vec![],
+            field_labels: None,
+            span: Span::zero(),
+        };
+        let false_ctor = resolve::RCtorDecl {
+            name: "False".into(),
+            args: vec![],
+            field_labels: None,
+            span: Span::zero(),
+        };
         data::elab_data_decl(
             &mut env,
             &mut globals,

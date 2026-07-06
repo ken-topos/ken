@@ -18,6 +18,8 @@ pub struct CtorDecl {
     pub name: String,
     /// Positional argument types (no binder names at the surface level).
     pub args: Vec<Type>,
+    /// Optional field labels from record-style declaration sugar.
+    pub field_labels: Option<Vec<String>>,
     pub span: Span,
 }
 
