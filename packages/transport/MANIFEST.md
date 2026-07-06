@@ -1,61 +1,110 @@
 # `transport` — `subst`, `cong`, `cast`, `sym`, `trans`
 
-**Spec catalog entry:** `spec/50-stdlib/53-transport.md` (five combinators)
-and `spec/30-surface/34-data-match.md §3.4` (the `J` surface former these
-combinators are built from). Build WP: `docs/program/wp/surface-transport.md`
-(Map Gap A).
+## Spec catalog entry and build/refinement WP
+
+**Spec catalog entry:** `spec/50-stdlib/53-transport.md` defines the five
+derived transport combinators. `spec/30-surface/34-data-match.md §3.4` owns
+the `J` surface former that each combinator uses.
+
+**Build WP:** `docs/program/wp/surface-transport.md` (Map Gap A).
+**Refinement WP:** `docs/program/wp/catalog-refinement-pilot.md`.
+
+This package is a small, zero-delta catalog package. It exposes ordinary
+transport conveniences while keeping the trusted implementation in the existing
+kernel equality and `J` machinery.
 
 ## Public API
 
-- **`J motive base eq`** — not a package export, a **surface term-former**
-  (`ken-elaborator/src/elab.rs`, `infer_j`), the identity eliminator. Elaborates
-  directly to the kernel's existing `Term::J` (already in `trusted_base()`).
-  Infer-mode; the motive is user-written and elaborated bidirectionally from
-  `eq`'s inferred type (a bare unannotated `\b' _. G[b']` cannot itself be
-  `infer`'d — see the doc comment on `infer_j`).
-- **`Eq A a b`** — the kernel's native equality *type*, spelled directly
-  (`infer_eq`/the `elab_type` companion arm), needed because the prelude's
-  `Equal` alias (`prelude.rs:337`) is `declare_def`-monomorphic at `Type0` and
-  cannot express `cast`'s `Eq Type A B` (an equality between two *types*,
-  one universe level up). Zero new trust — `Term::Eq` already exists and is
-  already in `trusted_base()`; this is surface plumbing to reach it directly
-  instead of only through the level-fixed `Equal` alias. Needed to spell the
-  five combinators' own signatures (the spec listing's `Eq A a b`, not
-  `Equal A a b`).
-- `view subst`, `view cong`, `view cast`, `view sym`, `view trans` — the five
-  combinators, each a non-recursive `view` over `J` (`transport.ken`).
+- `subst` — transports a `Type`-valued family along `Eq ty x y`.
+- `cong` — maps equality of endpoints through a function.
+- `cast` — transports a value along equality between two types.
+- `sym` — reverses a propositional equality.
+- `trans` — composes two propositional equalities.
 
-## Derivation path + `trusted_base()` delta
+The package also relies on two already-trusted surface/kernel constructs:
 
-**Zero delta.** `Term::J`/`Term::Cast`/`Term::Eq` all already exist
-(`ken-kernel/src/term.rs`) and are already in `trusted_base()` — this package
-adds no `declare_primitive`, no `declare_postulate`, no new `Decl`/`Term`
-variant, and touches no `crates/ken-kernel/` file. Every combinator is a
-non-recursive `view` (SCT-trivial) that reduces through the kernel's existing
-`J`/`Cast` typing and reduction rules (`check.rs::infer_j`, `obs.rs::j_nonrefl`).
+- **`J motive base eq`** is a surface term former, not a package export. It
+  elaborates directly to the kernel's existing `Term::J` path
+  (`crates/ken-elaborator/src/elab.rs::infer_j`).
+- **`Eq A a b`** is the kernel's native equality type, spelled directly by the
+  surface. The prelude `Equal` alias is level-fixed at `Type0`, so it cannot
+  express `cast`'s equality between two `Type` values.
 
-`Eq` (the type-position surface spelling) is the same kind of plumbing as
-`Refl`/`absurd`/`tt` — no new elimination form, no new reduction rule, purely
-a way to *write* an existing kernel type former directly (needed because the
-`Equal` alias cannot spell a universe-polymorphic use).
+## Source map
 
-## Naming convention
+| Reader task | Where |
+|---|---|
+| Package contract, proof strategy, trust posture | `transport.ken` package header |
+| Lowercase binder convention | `transport.ken` package header; this manifest's "Proof families" section |
+| Public operations/proofs | `transport.ken` section "Public transport combinators" |
+| `subst` family transport route | `transport.ken`, `subst` |
+| `cong` Ω-valued transport route | `transport.ken`, `cong` |
+| Raw type transport route | `transport.ken`, `cast` |
+| Equality symmetry/composition routes | `transport.ken`, `sym` and `trans` |
+| Trust delta | This manifest's "`trusted_base()` delta" section |
+| Validation owner/evidence | This manifest's "Validation evidence" section |
 
-The spec listing (`53-transport.md §2`) uses capitalized math-style names
-(`A`, `B`, `P`) for readability. The surface grammar parses any capitalized
-identifier as a constructor reference (`ECon`), never checked against local
-scope (`resolve.rs::resolve_expr_ctx`), so a bound type/family parameter
-referenced inside an expression *body* (not just a type annotation) must be
-lowercase — matching every other package in this catalog (`class Eq a`, never
-`Eq A`). `transport.ken`'s five combinators are spelled with lowercase
-parameter names accordingly; the shape is otherwise verbatim the spec
-listing.
+No package README is currently needed: the manifest is the durable navigation
+surface, and the source is a single short module.
 
-## Consumers
+## Derivation path
 
-`map-verified-laws`'s four comparison-dependent Branch-B laws (preservation,
-found-after-insert, locality, agreement) are gated on this package together
-with the non-nullary dependent match of Gap B (`52 §7d`). The `Equal`/`Eq`
-alias transparency (CV grounding, `evt_19a2qs0gj4ycz`) means the Map's
-existing `Equal Bool (leq …) True` order-hypotheses need no migration to be
-`J`-transportable.
+The five public combinators are all non-recursive wrappers over `J`. `J`
+elaborates to the kernel's existing equality eliminator and reduction path
+(`Term::J` / `Term::Cast` / `Term::Eq` in `crates/ken-kernel/src/term.rs`).
+
+`Eq` is the direct surface spelling of the native equality type. It is the same
+kind of surface plumbing as `Refl` or `absurd`: it makes an existing kernel
+type former reachable in source, and it adds no new elimination form or
+reduction rule.
+
+## `trusted_base()` delta
+
+**Zero delta.** This package adds no trusted declaration, primitive wrapper,
+opaque trusted entry, kernel change, or Cargo change.
+
+Every public name is checked as ordinary Ken source and reduces through the
+already-trusted equality machinery. The direct `Eq` spelling is required only
+because `cast` needs `Eq Type ty ty2`, while the prelude `Equal` alias is
+monomorphic at `Type0`.
+
+## Proof families
+
+- **Family transport (`subst`).** The `J` motive computes the family at the
+  transported endpoint.
+- **Function congruence (`cong`).** The equality proof is transported through
+  the image equality motive in `Omega`.
+- **Raw type transport (`cast`).** The equality proof relates two `Type`
+  values, so the motive computes a value of the ambient universe.
+- **Equality algebra (`sym`, `trans`).** Both are direct `J` eliminations over
+  the equality endpoint.
+
+The source uses lowercase binders such as `ty`, `ty2`, and `fam` where the
+parameter is referenced in a term body. The spec prose uses math-style
+capitalized names (`A`, `B`, `P`), but the current surface parses capitalized
+identifiers as constructor references in expression bodies. The lowercase names
+preserve the spec shape without changing the public combinator names.
+
+## Consumers and compatibility notes
+
+The public names `subst`, `cong`, `cast`, `sym`, and `trans` are stable and are
+preserved by catalog refinement.
+
+`packages/lawful-functors` uses `cong`/`sym`/`trans` for inductive congruence
+steps. The map verified-laws work also depends on the transport package for the
+Gap-A route around stuck comparison transport. The `Equal`/`Eq` alias
+transparency means existing `Equal Bool (leq ...) True` order hypotheses remain
+`J`-transportable without source migration.
+
+## Validation evidence
+
+Primary acceptance coverage is
+`scripts/ken-cargo test -p ken-elaborator --test surface_transport_acceptance -- --nocapture`.
+
+Refinement review also checks:
+
+- `git diff --check`;
+- no diff under `crates/ken-kernel`, `Cargo.lock`, or `conformance`;
+- trust-drift grep over `packages/transport` for trusted declarations,
+  primitive wrappers, and raw proof-relevant data declarations;
+- public-name availability for `subst`, `cong`, `cast`, `sym`, and `trans`.
