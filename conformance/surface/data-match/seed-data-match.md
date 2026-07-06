@@ -27,8 +27,9 @@ prototype's stubbed sums and missing exhaustiveness.
   (a disabled checker still *rejects*, via the kernel — green-vs-green on the
   bare verdict).
 - **type-possible-at-index ⇒ required; index-impossible ⇒ omittable** (`34
-  §4.3`) is **one rule** at two index regimes; AC3 and AC5 are its two faces and
-  the cross-case sweep asserts they agree.
+  §4.3`) is **one rule** at two index regimes; AC3, AC5, and AC9's explicit
+  dependent-constructor coverage case are its faces, and the cross-case sweep
+  asserts they agree.
 - **(soundness)** cases encode a commitment that must never regress (`../../
   README.md`): `{TR3, TR5b, TR7}` — the headline exhaustiveness safety, the
   index-impossible auto-fill-by-absurdity (a wrong fill admits a partial
@@ -118,6 +119,146 @@ prototype's stubbed sums and missing exhaustiveness.
   arm); a bug that fabricates a non-absurd `VNil` would **accept (b)** (or
   admit a partial `head`). Asserting only one side is green-vs-green; the pair
   pins that "index-impossible" is computed, not assumed.
+
+## surface/data-match/dependent-constructor-vec-declaration (AC9)
+- spec: `spec/30-surface/32-grammar.md §1`, `34 §2`, `39 §2.2`,
+  `10-kernel/14 §1`
+- given: the explicit dependent-constructor form for length-indexed vectors:
+
+  ```ken
+  data Vec (A : Type) : Nat -> Type where {
+    VNil  : Vec A 0;
+    VCons : (n : Nat) -> A -> Vec A n -> Vec A (n+1)
+  }
+  ```
+
+- expect: **accepts** through parse, data-declaration elaboration, and kernel
+  re-check. The emitted kernel family has parameter telescope `(A : Type)`,
+  index telescope `Nat`, `VNil` at index `0`, and `VCons` with constructor
+  telescope `(n : Nat) -> A -> Vec A n` targeting `n+1`.
+- why: this is the new surface producer path for GADT-like declarations. A build
+  that only accepts old `data D = C type_atom*` forms rejects before reaching the
+  kernel; a build that parses the syntax but drops result indices emits the wrong
+  constructor targets. Structural: assert the emitted family/constructor
+  metadata, not merely that some declaration accepted.
+
+## surface/data-match/legacy-form-explicit-signature-rejected (AC9)
+- spec: `spec/30-surface/32-grammar.md §1`, `34 §2`
+- given: the staged-out spelling that puts an explicit constructor signature in
+  the legacy `=` form:
+
+  ```ken
+  data Box A = Mk : A -> Box A
+  ```
+
+  and the two accepted neighboring spellings:
+
+  ```ken
+  data Box A = Mk A
+
+  data Box (A : Type) : Type where {
+    Mk : A -> Box A
+  }
+  ```
+
+- expect: the legacy `Mk : A -> Box A` spelling **rejects at the syntax
+  boundary**: the `=` form accepts only `simple_ctor` / default-result sugar.
+  The old simple `Mk A` form still **accepts**, and the explicit `where` form
+  with `Mk : A -> Box A` **accepts**.
+- why: this prevents the two declaration forms from silently converging. A
+  parser that reuses the full `data_ctor` production in the legacy `=` arm would
+  accept the staged-out spelling while still passing the positive explicit
+  `where` cases.
+
+## surface/data-match/proof-carrying-constructor-signature (AC9)
+- spec: `34 §2.2`/`§2.3`, `39 §2.2`
+- given: a checked-source-style proof-carrying constructor shape:
+
+  ```ken
+  data CheckedSource : Type where {
+    MkCheckedSource :
+      (sid : SourceId) ->
+      (bs : Bytes) ->
+      (len : Nat) ->
+      UnitByteLength bs ->
+      IsUtf8 bs ->
+      SourceLength bs len ->
+      CheckedSource
+  }
+  ```
+
+- expect: **accepts** as a single constructor telescope with earlier binders
+  (`bs`, `len`) in scope for later proof argument types and with result target
+  exactly `CheckedSource`. This acceptance does not change CAT-5 `Source` and
+  does not implement CAT-5 D3.
+- why: the syntax must express evidence-carrying constructors without encoding
+  them as records, class dictionaries, or smart constructors. **Flip:** a parser
+  that treats `MkCheckedSource :` as the old atom-list syntax rejects; a scoping
+  bug fails to resolve `bs`/`len` in the later proof argument types.
+
+## surface/data-match/bad-constructor-result-target-rejected (AC9) (soundness)
+- spec: `34 §2.3`, `39 §2.2`
+- given: a constructor whose codomain is not the declared family at its declared
+  parameters:
+
+  ```ken
+  data Vec (A : Type) : Nat -> Type where {
+    BadHead  : List A;
+    BadParam : Vec Bool 0
+  }
+  ```
+
+- expect: **rejects** with a bad-constructor-result-target diagnostic naming the
+  offending constructor and the expected family head `Vec A _`. The rejection
+  must not be reported as a positivity failure, missing constructor argument, or
+  generic parse error.
+- why: constructor result targets define the family being admitted. Accepting
+  another head or changed parameters would smuggle a constructor into the wrong
+  inductive family. The diagnostic class is load-bearing for implementers: the
+  error is at the surface result-target check before a kernel inductive
+  declaration can honestly be formed.
+
+## surface/data-match/explicit-signature-positivity-rejected (AC9) (soundness)
+- spec: `34 §1`/`§2.3`, `39 §2.2`, `10-kernel/14 §8`
+- given: the explicit-signature spelling of a negative recursive occurrence:
+
+  ```ken
+  data Bad : Type where {
+    MkBad : (Bad -> Bool) -> Bad
+  }
+  ```
+
+- expect: **rejects** through the kernel strict-positivity admission gate,
+  surfaced at `MkBad`. The elaborator may preflight enough to report a better
+  span, but the normative verdict is the landed kernel's negativity verdict; no
+  new surface positivity rule is trusted.
+- why: explicit constructor signatures must not bypass the existing kernel
+  soundness gate. **Flip:** a build that treats the constructor type as an
+  opaque field list or fails to route the emitted inductive through
+  `check_positivity` admits `Bad`.
+
+## surface/data-match/gadt-coverage-possible-vs-impossible (AC9) (soundness)
+- spec: `34 §2`, `§4.3`, `39 §2.2`
+- given: the explicit `Vec` declaration above and two matches:
+
+  ```ken
+  fn head (A : Type) (n : Nat) (v : Vec A (n+1)) : A =
+    match v { VCons _ x _ => x }
+
+  fn bad_head_any (A : Type) (n : Nat) (v : Vec A n) : A =
+    match v { VCons _ x _ => x }
+  ```
+
+- expect:
+  - `head` **accepts**: `VNil` is index-impossible at `n+1`, so its method is
+    synthesized by absurdity.
+  - `bad_head_any` **rejects** as non-exhaustive, naming the unmatched
+    type-possible pattern `VNil` because `n` may be `0`.
+- why: this pins the exact negative distinction requested for dependent
+  constructors. A checker that treats all omitted constructors as impossible
+  accepts `bad_head_any`; a checker that treats all family constructors as
+  required rejects `head`. The pair must move in opposite directions on the same
+  type-possible-at-index rule.
 
 ## surface/data-match/branch-refinement-is-hypothesis (AC6)
 - spec: `spec/30-surface/34-data-match.md §3.3`, `20-verification/22 §3`
@@ -216,6 +357,12 @@ prototype's stubbed sums and missing exhaustiveness.
 | exhaustiveness-required           | AC3      | non-exh rejects **naming** `Blue`     | soundness  |
 | reachability-redundant-arm        | AC4      | redundant arm flagged; guard subtlety |            |
 | indexed-impossible-pair           | AC5      | reject impossible app / omit imposs.  | soundness  |
+| dependent-constructor-vec-decl    | AC9      | explicit family/ctor targets          |            |
+| legacy-explicit-signature-reject  | AC9      | `=` form stays simple/default-result  |            |
+| proof-carrying-ctor-signature     | AC9      | telescope scoping, proof fields       |            |
+| bad-constructor-result-target     | AC9      | target must be declared family        | soundness  |
+| explicit-signature-positivity     | AC9      | kernel positivity still gates         | soundness  |
+| gadt-coverage-possible-impossible | AC9      | omit impossible / require possible    | soundness  |
 | branch-refinement-is-hypothesis   | AC6      | dependent motive + `22 §3` hypothesis |            |
 | proof-returning-dependent-motive  | AC8      | `Ω` proof motive + exact branches     |            |
 | refinement-obligation             | AC7      | emit-on-intro / free-on-forget        | soundness  |
@@ -224,9 +371,10 @@ prototype's stubbed sums and missing exhaustiveness.
 
 - **The coverage class agrees** (`34 §4.1`/§4.3): every coverage case treats a
   constructor as **required iff type-possible at the scrutinee's index**. AC3
-  (`Color`, trivial index ⇒ all three required ⇒ `Blue` missing rejects) and AC5
-  (`Vec a (n+1)` ⇒ `VNil` index-impossible ⇒ omittable) are the **two faces of
-  one rule** and must not contradict: a reading that made `VNil` "required at
+  (`Color`, trivial index ⇒ all three required ⇒ `Blue` missing rejects), AC5
+  (`Vec a (n+1)` ⇒ `VNil` index-impossible ⇒ omittable), and AC9 (`Vec A
+  (n+1)` omits `VNil`, while `Vec A n` must still cover `VNil`) are the faces
+  of one rule and must not contradict: a reading that made `VNil` "required at
   `n+1`" would also have to make `Blue` "omittable at `Color`" — they move
   together. No case asserts a constructor *both* required and omittable at the
   same index.

@@ -154,6 +154,57 @@ work, split implementation only along these boundaries:
   index-impossible method synthesis remain the existing `34 §4.3`/L2-indexed
   surface unless the minimized proof-motive reproducer truly depends on them.
 
+### 2.2 Dependent constructor declaration elaboration
+
+For an explicit family declaration (`32 §1`, `34 §2`):
+
+```ken
+data D (Δ_p) : (Δ_i) -> Type where {
+  C : (Δ_k) -> D Δ_p t̄
+}
+```
+
+elaboration constructs the kernel inductive-family declaration of `14 §1`; it
+does not encode constructors as opaque constants, records, smart constructors,
+or class dictionaries.
+
+The required elaboration contract is:
+
+1. Elaborate the data-head parameter telescope `Δ_p` and classify the type after
+   the colon as an index telescope `Δ_i` ending in `Type ℓ`. A declaration whose
+   head does not end in a universe is a data-head error, not a kernel-family
+   declaration.
+2. For each constructor, elaborate its signature in the context `Γ, Δ_p`.
+   Peeling leading explicit binders, implicit binders, and anonymous arrows
+   gives the constructor telescope `Δ_k`. Earlier constructor binders are in
+   scope for later argument types and for the final result indices.
+3. Check the constructor codomain against the declared family: after ordinary
+   transparent unfolding and WHNF exposure, it must be definitionally equal to
+   `D p̄ ī`, where `p̄` are the data-head parameters in order and `ī` has the
+   declared index arity. The index expressions are elaborated in `Γ, Δ_p, Δ_k`.
+4. Emit the kernel constructor signature `(Δ_k) -> D p̄ ī` and the enclosing
+   kernel inductive declaration. The kernel remains responsible for type
+   checking constructor argument types, universe levels, strict positivity,
+   W-style admission, nested/mutual rejection, and eliminator generation
+   (`14 §1`/`§8`).
+
+**Diagnostics and staging.**
+
+- A result codomain whose exposed head is not `D`, whose parameters are not the
+  declared data-head parameters, whose index arity is wrong, or whose codomain is
+  not a family application is reported as a **bad constructor result target**
+  naming the constructor and the expected family head.
+- A negative recursive occurrence, nested occurrence, or mutual-family shape is
+  routed through the kernel admission verdict and surfaced at the constructor
+  span; the elaborator does not implement a second positivity checker.
+- `{x : A} -> ...` in a constructor signature is an implicit telescope binder.
+  Named-argument application and record-field labels inside explicit dependent
+  constructor signatures are intentionally staged out; the old `C { f : A }`
+  shorthand remains default-result sugar only.
+- CAT-5 D3 is not implemented here and must not be routed through this feature.
+  The CAT-5 `Source` surface remains governed by the existing CAT-5 contract and
+  the immediate unblocker remains `KM-sigma-projection-execution`.
+
 ## 3. What elaboration must guarantee
 
 - **Well-typed output.** Every emitted core term `check`s in the kernel; if it
