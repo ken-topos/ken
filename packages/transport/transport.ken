@@ -1,10 +1,15 @@
--- Transport combinators -- the derived `subst`/`cong`/`cast`/`sym`/`trans`
--- (`spec/50-stdlib/53-transport.md`). Each is a thin, non-recursive `view`
--- over the single surface former `J` (`spec/30-surface/34-data-match.md
--- SS3.4`). Zero `trusted_base()` delta: every one reduces through the
--- already-trusted `Term::J` -> `Term::Cast` (`ken-kernel/src/term.rs`,
--- `obs.rs`); no `declare_primitive`, no `declare_postulate`, no kernel
--- change.
+-- Transport package (`spec/50-stdlib/53-transport.md`) exposes the five
+-- derived combinators `subst`/`cong`/`cast`/`sym`/`trans`.
+--
+-- Proof strategy: each public name is a thin, non-recursive wrapper over the
+-- single surface former `J` (`spec/30-surface/34-data-match.md` SS3.4).  The
+-- endpoint proof decides the motive branch; no package-local helper or
+-- recursive proof is needed.
+--
+-- Trust posture: zero `trusted_base()` delta. Every combinator reduces through
+-- the already-trusted `Term::J` -> `Term::Cast` path
+-- (`ken-kernel/src/term.rs`, `obs.rs`); this package adds no
+-- primitive wrapper, unproven declaration, or kernel change.
 --
 -- Naming note: the spec listing writes these with capitalized math-style
 -- names (`A`, `B`, `P`) for readability. The actual surface grammar parses
@@ -17,14 +22,16 @@
 -- `Eq A`). These five combinators are spelled accordingly; the shape is
 -- otherwise verbatim the spec listing.
 
--- `subst` -- transport a `Type`-valued family along a propositional
--- equality (`53 SS2`).
+-- Public transport combinators
+
+-- `subst` -- transport a `Type`-valued family along a propositional equality
+-- (`53 SS2`). The `J` motive names the family at the transported endpoint.
 fn subst (ty : Type) (x : ty) (y : ty) (fam : ty → Type)
            (p : Eq ty x y) (px : fam x) : fam y =
   J (λy' _. fam y') px p
 
 -- `cong` -- lift an equality of endpoints to an equality of images under any
--- function; the motive lands in `Omega` (proof-irrelevant), relying on `J`'s
+-- function. The motive lands in `Omega` (proof-irrelevant), relying on `J`'s
 -- unconstrained codomain sort (`34 SS3.4`).
 fn cong (ty : Type) (ty2 : Type) (x : ty) (y : ty) (f : ty → ty2)
           (p : Eq ty x y) : Eq ty2 (f x) (f y) =
