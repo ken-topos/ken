@@ -223,6 +223,14 @@ fn explicit_family_rejects_bare_head_parameters() {
 }
 
 #[test]
+fn explicit_family_rejects_empty_constructor_block() {
+    let err = parse_decls("data Empty : Type where {}")
+        .expect_err("explicit family block must contain at least one constructor");
+    let msg = format!("{err}");
+    assert!(msg.contains("requires at least one constructor"), "{msg}");
+}
+
+#[test]
 fn constructor_result_indices_use_expression_surface() {
     let decl = single_decl(
         r#"

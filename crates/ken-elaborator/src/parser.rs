@@ -802,6 +802,12 @@ impl Parser {
         let family = self.parse_type()?;
         self.expect(&Token::KwWhere)?;
         self.expect(&Token::LBrace)?;
+        if matches!(self.peek(), Token::RBrace | Token::Eof) {
+            return Err(ElabError::ParseError {
+                msg: "explicit data block requires at least one constructor".to_string(),
+                span: self.peek_span().clone(),
+            });
+        }
         let mut ctors = Vec::new();
         while !matches!(self.peek(), Token::RBrace | Token::Eof) {
             ctors.push(self.parse_explicit_data_ctor()?);
