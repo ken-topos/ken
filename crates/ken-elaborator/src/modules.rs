@@ -24,7 +24,10 @@ use std::collections::HashMap;
 
 use crate::ast::{CtorDecl, Decl, ExplicitDataCtor, ImportKind};
 use crate::error::{ElabError, Span};
-use crate::resolve::{self, RCtorDecl, RDecl, RDeclKind, RExpr, RMatchArm, RPatKind, RPattern, RType};
+use crate::resolve::{
+    self, RCtorDecl, RDecl, RDeclKind, RExplicitCtorDecl, RExpr, RMatchArm, RPatKind, RPattern,
+    RTelescopeEntry, RType,
+};
 use crate::ElabEnv;
 
 /// Persistent cross-call module bookkeeping (lives on `ElabEnv`).
@@ -74,7 +77,8 @@ impl Scope {
         }
         match self.bindings.get(bare) {
             None => {
-                self.bindings.insert(bare.to_string(), Binding::One(qualified.to_string()));
+                self.bindings
+                    .insert(bare.to_string(), Binding::One(qualified.to_string()));
             }
             Some(Binding::One(existing)) if existing == qualified => {}
             Some(Binding::One(existing)) => {
@@ -89,7 +93,8 @@ impl Scope {
                 if !v.iter().any(|e| e == qualified) {
                     v.push(qualified.to_string());
                 }
-                self.bindings.insert(bare.to_string(), Binding::Ambiguous(v));
+                self.bindings
+                    .insert(bare.to_string(), Binding::Ambiguous(v));
             }
         }
     }
@@ -98,7 +103,8 @@ impl Scope {
     /// import binding (ambiguous or not) — `33 §3.3`.
     fn bind_local(&mut self, bare: &str, qualified: &str) {
         self.locals.insert(bare.to_string());
-        self.bindings.insert(bare.to_string(), Binding::One(qualified.to_string()));
+        self.bindings
+            .insert(bare.to_string(), Binding::One(qualified.to_string()));
     }
 }
 
@@ -138,9 +144,15 @@ fn resolve_ref(
                 // simply not a declared name — both are the identical
                 // surface diagnostic: not in scope, never reaching the
                 // kernel.
-                None => Err(ElabError::UnboundName { name: name.to_string(), span: span.clone() }),
+                None => Err(ElabError::UnboundName {
+                    name: name.to_string(),
+                    span: span.clone(),
+                }),
             },
-            None => Err(ElabError::UnboundName { name: name.to_string(), span: span.clone() }),
+            None => Err(ElabError::UnboundName {
+                name: name.to_string(),
+                span: span.clone(),
+            }),
         }
     } else {
         match scope.bindings.get(name) {
@@ -162,24 +174,25 @@ fn apply_import(
     kind: &ImportKind,
     span: &Span,
 ) -> Result<(), ElabError> {
-    let pubmap = exports
-        .get(module)
-        .ok_or_else(|| ElabError::UnboundName { name: module.to_string(), span: span.clone() })?;
+    let pubmap = exports.get(module).ok_or_else(|| ElabError::UnboundName {
+        name: module.to_string(),
+        span: span.clone(),
+    })?;
     match kind {
         ImportKind::Qualified => {
-            scope.prefixes.insert(module.to_string(), module.to_string());
+            scope
+                .prefixes
+                .insert(module.to_string(), module.to_string());
         }
         ImportKind::Aliased(alias) => {
             scope.prefixes.insert(alias.clone(), module.to_string());
         }
         ImportKind::Selective(names) => {
             for n in names {
-                let q = pubmap
-                    .get(n)
-                    .ok_or_else(|| ElabError::UnboundName {
-                        name: format!("{}.{}", module, n),
-                        span: span.clone(),
-                    })?;
+                let q = pubmap.get(n).ok_or_else(|| ElabError::UnboundName {
+                    name: format!("{}.{}", module, n),
+                    span: span.clone(),
+                })?;
                 scope.bind_import(n, q);
             }
         }
@@ -214,37 +227,55 @@ fn qualify_decl_name(decl: &Decl, prefix: &str) -> Decl {
             body,
             is_space_op,
             span,
-        } => {
-            Decl::ViewDecl {
-                keyword: *keyword,
-                name: qualify(prefix, name),
-                params: params.clone(),
-                ret_ty: ret_ty.clone(),
-                requires: requires.clone(),
-                ensures: ensures.clone(),
-                constraints: constraints.clone(),
-                visits: visits.clone(),
-                body: body.clone(),
-                is_space_op: *is_space_op,
-                span: span.clone(),
-            }
-        }
-        Decl::LetDecl { name, ty, val, span } => Decl::LetDecl {
+        } => Decl::ViewDecl {
+            keyword: *keyword,
+            name: qualify(prefix, name),
+            params: params.clone(),
+            ret_ty: ret_ty.clone(),
+            requires: requires.clone(),
+            ensures: ensures.clone(),
+            constraints: constraints.clone(),
+            visits: visits.clone(),
+            body: body.clone(),
+            is_space_op: *is_space_op,
+            span: span.clone(),
+        },
+        Decl::LetDecl {
+            name,
+            ty,
+            val,
+            span,
+        } => Decl::LetDecl {
             name: qualify(prefix, name),
             ty: ty.clone(),
             val: val.clone(),
             span: span.clone(),
         },
-        Decl::DataDecl { name, type_params, ctors, span } => Decl::DataDecl {
+        Decl::DataDecl {
+            name,
+            type_params,
+            ctors,
+            span,
+        } => Decl::DataDecl {
             name: qualify(prefix, name),
             type_params: type_params.clone(),
             ctors: ctors
                 .iter()
-                .map(|c| CtorDecl { name: qualify(prefix, &c.name), args: c.args.clone(), span: c.span.clone() })
+                .map(|c| CtorDecl {
+                    name: qualify(prefix, &c.name),
+                    args: c.args.clone(),
+                    span: c.span.clone(),
+                })
                 .collect(),
             span: span.clone(),
         },
-        Decl::ExplicitDataDecl { name, params, family, ctors, span } => Decl::ExplicitDataDecl {
+        Decl::ExplicitDataDecl {
+            name,
+            params,
+            family,
+            ctors,
+            span,
+        } => Decl::ExplicitDataDecl {
             name: qualify(prefix, name),
             params: params.clone(),
             family: family.clone(),
@@ -256,7 +287,11 @@ fn qualify_decl_name(decl: &Decl, prefix: &str) -> Decl {
                         args: c.args.clone(),
                         span: c.span.clone(),
                     }),
-                    ExplicitDataCtor::Signature { name, signature, span } => ExplicitDataCtor::Signature {
+                    ExplicitDataCtor::Signature {
+                        name,
+                        signature,
+                        span,
+                    } => ExplicitDataCtor::Signature {
                         name: qualify(prefix, name),
                         signature: signature.clone(),
                         span: span.clone(),
@@ -274,7 +309,11 @@ fn qualify_decl_name(decl: &Decl, prefix: &str) -> Decl {
     }
 }
 
-fn rewrite_rtype(scope: &Scope, exports: &HashMap<String, HashMap<String, String>>, ty: RType) -> Result<RType, ElabError> {
+fn rewrite_rtype(
+    scope: &Scope,
+    exports: &HashMap<String, HashMap<String, String>>,
+    ty: RType,
+) -> Result<RType, ElabError> {
     Ok(match ty {
         RType::RCon(name, span) => {
             let n = resolve_ref(scope, exports, &name, &span)?;
@@ -313,7 +352,11 @@ fn rewrite_rtype(scope: &Scope, exports: &HashMap<String, HashMap<String, String
     })
 }
 
-fn rewrite_rexpr(scope: &Scope, exports: &HashMap<String, HashMap<String, String>>, e: RExpr) -> Result<RExpr, ElabError> {
+fn rewrite_rexpr(
+    scope: &Scope,
+    exports: &HashMap<String, HashMap<String, String>>,
+    e: RExpr,
+) -> Result<RExpr, ElabError> {
     Ok(match e {
         RExpr::RCon(name, span) => {
             let n = resolve_ref(scope, exports, &name, &span)?;
@@ -362,7 +405,9 @@ fn rewrite_rexpr(scope: &Scope, exports: &HashMap<String, HashMap<String, String
                 .collect::<Result<Vec<_>, ElabError>>()?;
             RExpr::RMatch { scrut, arms, span }
         }
-        RExpr::RProj(e, field, s) => RExpr::RProj(Box::new(rewrite_rexpr(scope, exports, *e)?), field, s),
+        RExpr::RProj(e, field, s) => {
+            RExpr::RProj(Box::new(rewrite_rexpr(scope, exports, *e)?), field, s)
+        }
         RExpr::RPi(x, a, b, s) => RExpr::RPi(
             x,
             Box::new(rewrite_rtype(scope, exports, *a)?),
@@ -377,7 +422,11 @@ fn rewrite_rexpr(scope: &Scope, exports: &HashMap<String, HashMap<String, String
     })
 }
 
-fn rewrite_rpattern(scope: &Scope, exports: &HashMap<String, HashMap<String, String>>, p: RPattern) -> Result<RPattern, ElabError> {
+fn rewrite_rpattern(
+    scope: &Scope,
+    exports: &HashMap<String, HashMap<String, String>>,
+    p: RPattern,
+) -> Result<RPattern, ElabError> {
     let kind = match p.kind {
         RPatKind::Wild => RPatKind::Wild,
         RPatKind::Var(n) => RPatKind::Var(n),
@@ -393,8 +442,15 @@ fn rewrite_rpattern(scope: &Scope, exports: &HashMap<String, HashMap<String, Str
     Ok(RPattern { kind, span: p.span })
 }
 
-fn rewrite_rdecl(scope: &Scope, exports: &HashMap<String, HashMap<String, String>>, rdecl: RDecl) -> Result<RDecl, ElabError> {
-    let ty = rdecl.ty.map(|t| rewrite_rtype(scope, exports, t)).transpose()?;
+fn rewrite_rdecl(
+    scope: &Scope,
+    exports: &HashMap<String, HashMap<String, String>>,
+    rdecl: RDecl,
+) -> Result<RDecl, ElabError> {
+    let ty = rdecl
+        .ty
+        .map(|t| rewrite_rtype(scope, exports, t))
+        .transpose()?;
     let body = rewrite_rexpr(scope, exports, rdecl.body)?;
     let requires = rdecl
         .requires
@@ -407,7 +463,12 @@ fn rewrite_rdecl(scope: &Scope, exports: &HashMap<String, HashMap<String, String
         .map(|e| rewrite_rexpr(scope, exports, e))
         .collect::<Result<Vec<_>, ElabError>>()?;
     let kind = match rdecl.kind {
-        RDeclKind::View { keyword, is_space_op, constraints, visits } => RDeclKind::View {
+        RDeclKind::View {
+            keyword,
+            is_space_op,
+            constraints,
+            visits,
+        } => RDeclKind::View {
             keyword,
             is_space_op,
             constraints: constraints
@@ -442,12 +503,69 @@ fn rewrite_rdecl(scope: &Scope, exports: &HashMap<String, HashMap<String, String
                 })
                 .collect::<Result<Vec<_>, ElabError>>()?,
         },
-        RDeclKind::TypeAlias { ty } => RDeclKind::TypeAlias { ty: rewrite_rtype(scope, exports, ty)? },
-        RDeclKind::Foreign { symbol, library, is_pure, visits } => {
-            RDeclKind::Foreign { symbol, library, is_pure, visits }
+        RDeclKind::ExplicitDataDecl {
+            params,
+            indices,
+            level,
+            ctors,
+        } => {
+            let rewrite_entry = |entry: RTelescopeEntry| -> Result<RTelescopeEntry, ElabError> {
+                Ok(RTelescopeEntry {
+                    name: entry.name,
+                    ty: rewrite_rtype(scope, exports, entry.ty)?,
+                    span: entry.span,
+                })
+            };
+            RDeclKind::ExplicitDataDecl {
+                params: params
+                    .into_iter()
+                    .map(rewrite_entry)
+                    .collect::<Result<Vec<_>, ElabError>>()?,
+                indices: indices
+                    .into_iter()
+                    .map(rewrite_entry)
+                    .collect::<Result<Vec<_>, ElabError>>()?,
+                level,
+                ctors: ctors
+                    .into_iter()
+                    .map(|c| {
+                        Ok(RExplicitCtorDecl {
+                            name: c.name,
+                            args: c
+                                .args
+                                .into_iter()
+                                .map(rewrite_entry)
+                                .collect::<Result<Vec<_>, ElabError>>()?,
+                            result: c
+                                .result
+                                .map(|t| rewrite_rtype(scope, exports, t))
+                                .transpose()?,
+                            span: c.span,
+                        })
+                    })
+                    .collect::<Result<Vec<_>, ElabError>>()?,
+            }
         }
+        RDeclKind::TypeAlias { ty } => RDeclKind::TypeAlias {
+            ty: rewrite_rtype(scope, exports, ty)?,
+        },
+        RDeclKind::Foreign {
+            symbol,
+            library,
+            is_pure,
+            visits,
+        } => RDeclKind::Foreign {
+            symbol,
+            library,
+            is_pure,
+            visits,
+        },
         RDeclKind::Temporal { formula, source } => RDeclKind::Temporal { formula, source },
-        RDeclKind::ClassDecl { param, param_kind, fields } => RDeclKind::ClassDecl {
+        RDeclKind::ClassDecl {
+            param,
+            param_kind,
+            fields,
+        } => RDeclKind::ClassDecl {
             param,
             param_kind: param_kind
                 .map(|t| rewrite_rtype(scope, exports, t))
@@ -463,7 +581,12 @@ fn rewrite_rdecl(scope: &Scope, exports: &HashMap<String, HashMap<String, String
                 })
                 .collect::<Result<Vec<_>, ElabError>>()?,
         },
-        RDeclKind::InstanceDecl { head_params, head_type, constraints, fields } => RDeclKind::InstanceDecl {
+        RDeclKind::InstanceDecl {
+            head_params,
+            head_type,
+            constraints,
+            fields,
+        } => RDeclKind::InstanceDecl {
             head_params,
             head_type: rewrite_rtype(scope, exports, head_type)?,
             constraints: constraints
@@ -477,7 +600,15 @@ fn rewrite_rdecl(scope: &Scope, exports: &HashMap<String, HashMap<String, String
         },
         RDeclKind::DeriveDecl { data_name } => RDeclKind::DeriveDecl { data_name },
     };
-    Ok(RDecl { name: rdecl.name, ty, body, requires, ensures, span: rdecl.span, kind })
+    Ok(RDecl {
+        name: rdecl.name,
+        ty,
+        body,
+        requires,
+        ensures,
+        span: rdecl.span,
+        kind,
+    })
 }
 
 /// Does this (unwrapped) decl kind participate in module-local-name
@@ -489,10 +620,10 @@ fn is_qualifiable(decl: &Decl) -> bool {
     matches!(
         decl,
         Decl::ViewDecl { .. }
-        | Decl::LetDecl { .. }
-        | Decl::DataDecl { .. }
-        | Decl::ExplicitDataDecl { .. }
-        | Decl::TypeAlias { .. }
+            | Decl::LetDecl { .. }
+            | Decl::DataDecl { .. }
+            | Decl::ExplicitDataDecl { .. }
+            | Decl::TypeAlias { .. }
     )
 }
 
@@ -525,12 +656,7 @@ fn elaborate_checked(
     elab: &mut ElabEnv,
     rdecl: &crate::resolve::RDecl,
 ) -> Result<crate::elab::ElabResult, ElabError> {
-    crate::elab::check_surface_purity(
-        rdecl,
-        &elab.effect_rows,
-        &elab.globals,
-        &elab.class_env,
-    )?;
+    crate::elab::check_surface_purity(rdecl, &elab.effect_rows, &elab.globals, &elab.class_env)?;
     let result = crate::elab::elaborate_rdecl_v1_with_effect_rows(
         &mut elab.env,
         &mut elab.globals,
@@ -581,13 +707,19 @@ fn expand_scope(
                 apply_import(scope, &elab.module_state.exports, module, kind, span)?;
                 i += 1;
             }
-            Decl::ModuleDecl { name, decls: inner, span: _ } => {
+            Decl::ModuleDecl {
+                name,
+                decls: inner,
+                span: _,
+            } => {
                 let child_prefix = qualify(prefix, name);
                 let mut child_scope = Scope::default();
                 let (child_ids, child_exports) =
                     expand_scope(elab, inner, &child_prefix, &mut child_scope)?;
                 ids.extend(child_ids);
-                elab.module_state.exports.insert(child_prefix, child_exports);
+                elab.module_state
+                    .exports
+                    .insert(child_prefix, child_exports);
                 i += 1;
             }
             // A maximal run of non-`pub` `view`/`let` decls (VAL2 #3, mutual
@@ -632,7 +764,11 @@ fn expand_scope(
                     .map(|a| {
                         (0..n)
                             .filter(|&b| {
-                                a != b && crate::elab::rexpr_mentions_name(&rdecls[a].body, &bare_names[b])
+                                a != b
+                                    && crate::elab::rexpr_mentions_name(
+                                        &rdecls[a].body,
+                                        &bare_names[b],
+                                    )
                             })
                             .collect()
                     })
@@ -753,8 +889,12 @@ fn expand_scope(
                         // observer, kernel included.
                         let qualified = qualify(prefix, name);
                         let ty = ken_kernel::Term::ty(ken_kernel::Level::Zero);
-                        let id = ken_kernel::declare_postulate(&mut elab.env, vec![], ty)
-                            .map_err(|e| ElabError::KernelRejected { error: e, span: span.clone() })?;
+                        let id = ken_kernel::declare_postulate(&mut elab.env, vec![], ty).map_err(
+                            |e| ElabError::KernelRejected {
+                                error: e,
+                                span: span.clone(),
+                            },
+                        )?;
                         elab.globals.insert(qualified.clone(), id);
                         exports_here.insert(name.clone(), qualified.clone());
                         ids.push(crate::elab::ElabResult {
@@ -824,8 +964,9 @@ fn scc_membership(adj: &[Vec<usize>]) -> Vec<Vec<usize>> {
     }
     (0..n)
         .map(|i| {
-            let mut members: Vec<usize> =
-                (0..n).filter(|&j| j == i || (reach[i][j] && reach[j][i])).collect();
+            let mut members: Vec<usize> = (0..n)
+                .filter(|&j| j == i || (reach[i][j] && reach[j][i]))
+                .collect();
             members.sort_unstable();
             members
         })
@@ -835,7 +976,10 @@ fn scc_membership(adj: &[Vec<usize>]) -> Vec<Vec<usize>> {
 /// Entry point: expand + elaborate one `elaborate_*` call's raw decls
 /// against the persisted root scope (the file-level implicit module,
 /// `33 §3.1`), returning every produced `ElabResult` in order.
-pub fn expand_and_elaborate(elab: &mut ElabEnv, decls: &[Decl]) -> Result<Vec<crate::elab::ElabResult>, ElabError> {
+pub fn expand_and_elaborate(
+    elab: &mut ElabEnv,
+    decls: &[Decl],
+) -> Result<Vec<crate::elab::ElabResult>, ElabError> {
     let mut scope = elab.module_state.root_scope.clone();
     let (results, _root_exports) = expand_scope(elab, decls, "", &mut scope)?;
     elab.module_state.root_scope = scope;

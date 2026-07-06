@@ -7,12 +7,11 @@
 use std::collections::HashMap;
 
 use ken_kernel::{
-    check as kernel_check,
-    convert,
-    declare_def, declare_postulate, declare_primitive, declare_recursive_group,
+    check as kernel_check, convert, declare_def, declare_postulate, declare_primitive,
+    declare_recursive_group,
     env::PrimReduction,
-    infer as kernel_infer,
     inductive::{peel_app, recursive_args},
+    infer as kernel_infer,
     sct::sct_check,
     subst::{subst0, subst_outer, weaken},
     whnf, Context, Decl, GlobalEnv, GlobalId, InductiveDecl, Level, LevelVar, Term,
@@ -150,23 +149,22 @@ impl MetaCtx {
                 val: Box::new(self.zonk_term(val)),
                 body: Box::new(self.zonk_term(body)),
             },
-            Term::Const { id, level_args } => Term::const_(
-                *id,
-                level_args.iter().map(|l| self.zonk_level(l)).collect(),
-            ),
-            Term::IndFormer { id, level_args } => Term::indformer(
-                *id,
-                level_args.iter().map(|l| self.zonk_level(l)).collect(),
-            ),
-            Term::Constructor { id, level_args } => Term::constructor(
-                *id,
-                level_args.iter().map(|l| self.zonk_level(l)).collect(),
-            ),
+            Term::Const { id, level_args } => {
+                Term::const_(*id, level_args.iter().map(|l| self.zonk_level(l)).collect())
+            }
+            Term::IndFormer { id, level_args } => {
+                Term::indformer(*id, level_args.iter().map(|l| self.zonk_level(l)).collect())
+            }
+            Term::Constructor { id, level_args } => {
+                Term::constructor(*id, level_args.iter().map(|l| self.zonk_level(l)).collect())
+            }
             Term::Sigma(a, b) => Term::sigma(self.zonk_term(a), self.zonk_term(b)),
             Term::Pair(a, b) => Term::pair(self.zonk_term(a), self.zonk_term(b)),
             Term::Proj1(p) => Term::proj1(self.zonk_term(p)),
             Term::Proj2(p) => Term::proj2(self.zonk_term(p)),
-            Term::Ascript(t, a) => Term::Ascript(Box::new(self.zonk_term(t)), Box::new(self.zonk_term(a))),
+            Term::Ascript(t, a) => {
+                Term::Ascript(Box::new(self.zonk_term(t)), Box::new(self.zonk_term(a)))
+            }
             // `[K2]`-reserved formers — `J`/`Eq`/`Cast`/`Ascript` are exactly
             // the new surface-transport constructs; recursing here closes a
             // pre-existing `zonk_term` completeness gap that nothing built
@@ -194,9 +192,16 @@ impl MetaCtx {
                 Box::new(self.zonk_term(d)),
                 Box::new(self.zonk_term(e)),
             ),
-            Term::Quot(a, r) => Term::Quot(Box::new(self.zonk_term(a)), Box::new(self.zonk_term(r))),
+            Term::Quot(a, r) => {
+                Term::Quot(Box::new(self.zonk_term(a)), Box::new(self.zonk_term(r)))
+            }
             Term::QuotClass(t) => Term::QuotClass(Box::new(self.zonk_term(t))),
-            Term::QuotElim { motive, method, respect, scrut } => Term::QuotElim {
+            Term::QuotElim {
+                motive,
+                method,
+                respect,
+                scrut,
+            } => Term::QuotElim {
                 motive: Box::new(self.zonk_term(motive)),
                 method: Box::new(self.zonk_term(method)),
                 respect: Box::new(self.zonk_term(respect)),
@@ -204,8 +209,18 @@ impl MetaCtx {
             },
             Term::Trunc(t) => Term::Trunc(Box::new(self.zonk_term(t))),
             Term::TruncProj(t) => Term::TruncProj(Box::new(self.zonk_term(t))),
-            Term::Absurd(c, p) => Term::Absurd(Box::new(self.zonk_term(c)), Box::new(self.zonk_term(p))),
-            Term::Elim { fam, level_args, params, motive, methods, indices, scrut } => Term::Elim {
+            Term::Absurd(c, p) => {
+                Term::Absurd(Box::new(self.zonk_term(c)), Box::new(self.zonk_term(p)))
+            }
+            Term::Elim {
+                fam,
+                level_args,
+                params,
+                motive,
+                methods,
+                indices,
+                scrut,
+            } => Term::Elim {
                 fam: *fam,
                 level_args: level_args.iter().map(|l| self.zonk_level(l)).collect(),
                 params: params.iter().map(|p| self.zonk_term(p)).collect(),
@@ -253,8 +268,14 @@ fn unify_types(metas: &mut MetaCtx, t1: &Term, t2: &Term) {
             unify_types(metas, b1, b2);
         }
         (
-            Term::Const { id: id1, level_args: la1 },
-            Term::Const { id: id2, level_args: la2 },
+            Term::Const {
+                id: id1,
+                level_args: la1,
+            },
+            Term::Const {
+                id: id2,
+                level_args: la2,
+            },
         ) if id1 == id2 => {
             for (l1, l2) in la1.iter().zip(la2.iter()) {
                 unify_levels(metas, l1, l2);
@@ -351,9 +372,15 @@ fn elab_type(cx: &mut ElabCtx, ty: &RType) -> Result<Term, ElabError> {
             // Term::Constructor{..} = head`), permanently stalling
             // reduction on an otherwise-concrete scrutinee.
             if let Some(_) = cx.env.constructor(id) {
-                Ok(Term::Constructor { id, level_args: vec![] })
+                Ok(Term::Constructor {
+                    id,
+                    level_args: vec![],
+                })
             } else if cx.env.inductive(id).is_some() {
-                Ok(Term::IndFormer { id, level_args: vec![] })
+                Ok(Term::IndFormer {
+                    id,
+                    level_args: vec![],
+                })
             } else {
                 Ok(Term::const_(id, vec![]))
             }
@@ -406,9 +433,7 @@ fn elab_type(cx: &mut ElabCtx, ty: &RType) -> Result<Term, ElabError> {
 
         // Refinement lowers to the carrier type (`21 §6.3`): `{x:A|φ}` → `A`.
         // The predicate φ is tracked separately; obligation emitted at introduction.
-        RType::RRefine(_, carrier, _phi, _) => {
-            elab_type(cx, carrier)
-        }
+        RType::RRefine(_, carrier, _phi, _) => elab_type(cx, carrier),
     }
 }
 
@@ -416,12 +441,8 @@ fn elab_type(cx: &mut ElabCtx, ty: &RType) -> Result<Term, ElabError> {
 
 fn check(cx: &mut ElabCtx, expr: &RExpr, expected: &Term, _span: &Span) -> Result<Term, ElabError> {
     match expr {
-        RExpr::RNumLit(lit, num_span) => {
-            elab_num_lit_checked(cx, lit, expected, num_span)
-        }
-        RExpr::RStr(s, span) => {
-            elab_str_lit(cx, s, Some(expected), span).map(|(t, _)| t)
-        }
+        RExpr::RNumLit(lit, num_span) => elab_num_lit_checked(cx, lit, expected, num_span),
+        RExpr::RStr(s, span) => elab_str_lit(cx, s, Some(expected), span).map(|(t, _)| t),
         // `Refl` — reflexivity, checked (never inferred): the expected goal
         // must originate as a kernel `Eq A t u` / prelude `Equal A t u` with
         // `t`/`u` CONVERTIBLE. If observational equality reduces that equality
@@ -435,7 +456,8 @@ fn check(cx: &mut ElabCtx, expr: &RExpr, expected: &Term, _span: &Span) -> Resul
         RExpr::RCon(name, rspan) if name == "Refl" => {
             let exp_wh = whnf(cx.env, &cx.ctx, expected);
             if matches!(exp_wh, Term::Eq(..))
-                || (matches!(exp_wh, Term::Sigma(..)) && refl_goal_originates_in_equality(cx, expected))
+                || (matches!(exp_wh, Term::Sigma(..))
+                    && refl_goal_originates_in_equality(cx, expected))
             {
                 synth_refl_proof(cx.env, &cx.ctx, expected, rspan)
             } else {
@@ -452,8 +474,12 @@ fn check(cx: &mut ElabCtx, expr: &RExpr, expected: &Term, _span: &Span) -> Resul
         // grep-able `Opaque` — never a silent/implicit assumption. Checked
         // (not inferred), same discipline as `Refl`.
         RExpr::RCon(name, rspan) if name == "Axiom" => {
-            let id = declare_postulate(cx.env, vec![], expected.clone())
-                .map_err(|e| ElabError::KernelRejected { error: e, span: rspan.clone() })?;
+            let id = declare_postulate(cx.env, vec![], expected.clone()).map_err(|e| {
+                ElabError::KernelRejected {
+                    error: e,
+                    span: rspan.clone(),
+                }
+            })?;
             Ok(Term::const_(id, vec![]))
         }
         // `absurd h` — Bottom-elimination (K5, `16 §1.4`): from `h : Bottom`
@@ -467,7 +493,10 @@ fn check(cx: &mut ElabCtx, expr: &RExpr, expected: &Term, _span: &Span) -> Resul
         RExpr::RApp(f, arg, rspan) if matches!(f.as_ref(), RExpr::RCon(n, _) if n == "absurd") => {
             let bottom = Term::const_(cx.env.bottom_id(), vec![]);
             let proof_core = check(cx, arg, &bottom, rspan)?;
-            Ok(Term::Absurd(Box::new(expected.clone()), Box::new(proof_core)))
+            Ok(Term::Absurd(
+                Box::new(expected.clone()),
+                Box::new(proof_core),
+            ))
         }
         RExpr::RLam(_, body, lam_span) => {
             let exp_wh = whnf(cx.env, &cx.ctx, expected);
@@ -512,7 +541,9 @@ fn check(cx: &mut ElabCtx, expr: &RExpr, expected: &Term, _span: &Span) -> Resul
             // existing general `infer_match`/`compile_match_matrix`
             // nested-pattern compiler unchanged.
             let flat = arms.iter().all(|a| match &a.pat.kind {
-                RPatKind::Ctor(_, subs) => subs.iter().all(|s| matches!(s.kind, RPatKind::Var(_) | RPatKind::Wild)),
+                RPatKind::Ctor(_, subs) => subs
+                    .iter()
+                    .all(|s| matches!(s.kind, RPatKind::Var(_) | RPatKind::Wild)),
                 _ => false,
             });
             // Further restrict to NON-INDEXED families (`Bool`, `List a`,
@@ -521,31 +552,27 @@ fn check(cx: &mut ElabCtx, expr: &RExpr, expected: &Term, _span: &Span) -> Resul
             // (`Term::Elim{indices: vec![]}`, always) — correct exactly when
             // the family has zero result-indices (`34 §3.2`'s general case
             // degenerates to this for a non-GADT family). Every family
-            // reachable via ordinary surface `data` syntax has zero indices
-            // (`elab_data_decl`/`data.rs` hardcodes `indices: vec![]` /
-            // `target_indices: vec![]` unconditionally — there is no surface
-            // GADT/index syntax today), so this is not a scope restriction in
-            // practice, only a defensive guard against ever mis-handling a
-            // hand-built indexed family (e.g. `Perm`) this way. Indexed
-            // families are a distinct, harder later WP (index
-            // generalization + higher-order pattern unification, `39 §2.3`).
+            // reachable via legacy simple `data` syntax has zero indices.
+            // Explicit `data ... where` families can now introduce indices,
+            // but indexed coverage and index-impossible method synthesis are
+            // staged to the later coverage-diagnostics work; keep them off
+            // this non-indexed dependent-match path.
             // Nested constructor sub-patterns (`Suc (Suc m)`) stay on the
             // existing general `infer_match`/`compile_match_matrix` compiler
             // regardless (`flat` already excludes those).
-            let dependent_eligible = flat
-                && {
-                    let (_, probe_ty) = infer(cx, scrut)?;
-                    let probe_ty_wh = whnf(cx.env, &cx.ctx, &probe_ty);
-                    let (head, _) = peel_app(&probe_ty_wh);
-                    match head {
-                        Term::IndFormer { id, .. } => cx
-                            .env
-                            .inductive(id)
-                            .map(|ind| ind.indices.is_empty())
-                            .unwrap_or(false),
-                        _ => false,
-                    }
-                };
+            let dependent_eligible = flat && {
+                let (_, probe_ty) = infer(cx, scrut)?;
+                let probe_ty_wh = whnf(cx.env, &cx.ctx, &probe_ty);
+                let (head, _) = peel_app(&probe_ty_wh);
+                match head {
+                    Term::IndFormer { id, .. } => cx
+                        .env
+                        .inductive(id)
+                        .map(|ind| ind.indices.is_empty())
+                        .unwrap_or(false),
+                    _ => false,
+                }
+            };
             if dependent_eligible {
                 check_match_dependent(cx, scrut, arms, expected, span)
             } else {
@@ -668,19 +695,41 @@ fn subst_term_generalize(term: &Term, target: &Term, u: &Term) -> Term {
         Term::Trunc(a) => Term::Trunc(Box::new(subst_term_generalize(a, target, u))),
         Term::TruncProj(t) => Term::TruncProj(Box::new(subst_term_generalize(t, target, u))),
         Term::Refl(t) => Term::Refl(Box::new(subst_term_generalize(t, target, u))),
-        Term::QuotElim { motive, method, respect, scrut } => Term::QuotElim {
+        Term::QuotElim {
+            motive,
+            method,
+            respect,
+            scrut,
+        } => Term::QuotElim {
             motive: Box::new(subst_term_generalize(motive, target, u)),
             method: Box::new(subst_term_generalize(method, target, u)),
             respect: Box::new(subst_term_generalize(respect, target, u)),
             scrut: Box::new(subst_term_generalize(scrut, target, u)),
         },
-        Term::Elim { fam, level_args, params, motive, methods, indices, scrut } => Term::Elim {
+        Term::Elim {
+            fam,
+            level_args,
+            params,
+            motive,
+            methods,
+            indices,
+            scrut,
+        } => Term::Elim {
             fam: *fam,
             level_args: level_args.clone(),
-            params: params.iter().map(|p| subst_term_generalize(p, target, u)).collect(),
+            params: params
+                .iter()
+                .map(|p| subst_term_generalize(p, target, u))
+                .collect(),
             motive: Box::new(subst_term_generalize(motive, target, u)),
-            methods: methods.iter().map(|m| subst_term_generalize(m, target, u)).collect(),
-            indices: indices.iter().map(|i| subst_term_generalize(i, target, u)).collect(),
+            methods: methods
+                .iter()
+                .map(|m| subst_term_generalize(m, target, u))
+                .collect(),
+            indices: indices
+                .iter()
+                .map(|i| subst_term_generalize(i, target, u))
+                .collect(),
             scrut: Box::new(subst_term_generalize(scrut, target, u)),
         },
         Term::Absurd(motive, proof) => Term::Absurd(
@@ -810,8 +859,11 @@ fn check_match_dependent(
     let zonked_ctx = Context {
         types: cx.ctx.types.iter().map(|t| cx.metas.zonk_term(t)).collect(),
     };
-    let motive_sort = kernel_infer(cx.env, &zonked_ctx, expected)
-        .map_err(|e| ElabError::KernelRejected { error: e, span: span.clone() })?;
+    let motive_sort =
+        kernel_infer(cx.env, &zonked_ctx, expected).map_err(|e| ElabError::KernelRejected {
+            error: e,
+            span: span.clone(),
+        })?;
     let motive_ty = Term::pi(scrut_ty.clone(), weaken(&motive_sort, 1));
     let motive = Term::Ascript(
         Box::new(Term::lam(scrut_ty.clone(), motive_body)),
@@ -853,7 +905,10 @@ fn check_match_dependent(
         }
         // Reconstruct the concrete scrutinee `Cₖ p̄ (Var(n-1)) … (Var(0))`
         // in the (now n-deeper) context.
-        let mut concrete = Term::Constructor { id: ctor.id, level_args: vec![] };
+        let mut concrete = Term::Constructor {
+            id: ctor.id,
+            level_args: vec![],
+        };
         for p in &params_terms {
             concrete = Term::app(concrete, weaken(p, n as i64));
         }
@@ -977,10 +1032,15 @@ fn check_match_dependent(
     }
     for (i, used) in arm_used.iter().enumerate() {
         if !used {
-            return Err(ElabError::ReachabilityError { span: arms[i].span.clone() });
+            return Err(ElabError::ReachabilityError {
+                span: arms[i].span.clone(),
+            });
         }
     }
-    let methods: Vec<Term> = methods.into_iter().map(|m| m.expect("every ctor bucket filled above")).collect();
+    let methods: Vec<Term> = methods
+        .into_iter()
+        .map(|m| m.expect("every ctor bucket filled above"))
+        .collect();
 
     Ok(Term::Elim {
         fam: d_id,
@@ -1014,21 +1074,35 @@ fn infer(cx: &mut ElabCtx, expr: &RExpr) -> Result<(Term, Term), ElabError> {
                     span: span.clone(),
                 })?;
             // Constructor: Term::Constructor with the ctor's declared type.
-            let ctor_ty = cx.env.constructor(id).map(|(ind, k)| {
-                ind.constructors[k].type_.clone()
-            });
+            let ctor_ty = cx
+                .env
+                .constructor(id)
+                .map(|(ind, k)| ind.constructors[k].type_.clone());
             if let Some(ty) = ctor_ty {
-                return Ok((Term::Constructor { id, level_args: vec![] }, ty));
+                return Ok((
+                    Term::Constructor {
+                        id,
+                        level_args: vec![],
+                    },
+                    ty,
+                ));
             }
             // Inductive type former: Term::IndFormer.
             let ind_ty = cx.env.inductive(id).map(|ind| ind.former_type.clone());
             if let Some(ty) = ind_ty {
-                return Ok((Term::IndFormer { id, level_args: vec![] }, ty));
+                return Ok((
+                    Term::IndFormer {
+                        id,
+                        level_args: vec![],
+                    },
+                    ty,
+                ));
             }
             // Regular constant (postulate/def/primitive).
-            let (_, decl_ty) = cx.env.const_type(id).ok_or_else(|| {
-                ElabError::Internal(format!("no type for global '{}'", name))
-            })?;
+            let (_, decl_ty) = cx
+                .env
+                .const_type(id)
+                .ok_or_else(|| ElabError::Internal(format!("no type for global '{}'", name)))?;
             Ok((Term::const_(id, vec![]), decl_ty.clone()))
         }
 
@@ -1116,25 +1190,15 @@ fn infer(cx: &mut ElabCtx, expr: &RExpr) -> Result<(Term, Term), ElabError> {
         // `old e` in a space-op ensures (`21 §6.4`).
         // Simplified V1 model: elaborates to the same term as `e` (the pre-state
         // value shares the type of `e`; full state-transformer semantics is V3+).
-        RExpr::ROld(e, _) => {
-            infer(cx, e)
-        }
+        RExpr::ROld(e, _) => infer(cx, e),
 
-        RExpr::RNumLit(lit, span) => {
-            elab_num_lit_infer(cx, lit, span)
-        }
+        RExpr::RNumLit(lit, span) => elab_num_lit_infer(cx, lit, span),
 
-        RExpr::RStr(s, span) => {
-            elab_str_lit(cx, s, None, span)
-        }
+        RExpr::RStr(s, span) => elab_str_lit(cx, s, None, span),
 
-        RExpr::RBinOp(op, lhs, rhs, span) => {
-            elab_binop(cx, op, lhs, rhs, span)
-        }
+        RExpr::RBinOp(op, lhs, rhs, span) => elab_binop(cx, op, lhs, rhs, span),
 
-        RExpr::RMatch { scrut, arms, span } => {
-            infer_match(cx, scrut, arms, span)
-        }
+        RExpr::RMatch { scrut, arms, span } => infer_match(cx, scrut, arms, span),
 
         RExpr::RProj(base, field, span) => infer_proj(cx, base, field, span),
 
@@ -1192,8 +1256,11 @@ fn infer_eq(
         types: cx.ctx.types.iter().map(|t| cx.metas.zonk_term(t)).collect(),
     };
     let zonked_eq = cx.metas.zonk_term(&eq_term);
-    let ty = kernel_infer(cx.env, &zonked_ctx, &zonked_eq)
-        .map_err(|e| ElabError::KernelRejected { error: e, span: span.clone() })?;
+    let ty =
+        kernel_infer(cx.env, &zonked_ctx, &zonked_eq).map_err(|e| ElabError::KernelRejected {
+            error: e,
+            span: span.clone(),
+        })?;
     Ok((eq_term, ty))
 }
 
@@ -1205,7 +1272,12 @@ fn infer_eq(
 /// terms, `11 §1`); the kernel's own `kernel_infer` classifies the result
 /// (`Type ℓ` or `Ω`, whichever the domain/codomain sorts license) rather
 /// than this function guessing a sort.
-fn infer_pi(cx: &mut ElabCtx, a: &RType, b: &RExpr, span: &Span) -> Result<(Term, Term), ElabError> {
+fn infer_pi(
+    cx: &mut ElabCtx,
+    a: &RType,
+    b: &RExpr,
+    span: &Span,
+) -> Result<(Term, Term), ElabError> {
     let a_core = elab_type(cx, a)?;
     let a_core = cx.metas.zonk_term(&a_core);
     cx.ctx.push(a_core.clone());
@@ -1219,8 +1291,11 @@ fn infer_pi(cx: &mut ElabCtx, a: &RType, b: &RExpr, span: &Span) -> Result<(Term
         types: cx.ctx.types.iter().map(|t| cx.metas.zonk_term(t)).collect(),
     };
     let zonked_pi = cx.metas.zonk_term(&pi);
-    let sort = kernel_infer(cx.env, &zonked_ctx, &zonked_pi)
-        .map_err(|e| ElabError::KernelRejected { error: e, span: span.clone() })?;
+    let sort =
+        kernel_infer(cx.env, &zonked_ctx, &zonked_pi).map_err(|e| ElabError::KernelRejected {
+            error: e,
+            span: span.clone(),
+        })?;
     Ok((pi, sort))
 }
 
@@ -1234,7 +1309,12 @@ fn infer_pi(cx: &mut ElabCtx, a: &RType, b: &RExpr, span: &Span) -> Result<(Term
 /// implicit `Pi` binder (the exact same construction `elab_type`'s
 /// `RType::RArr` arm already uses for the type-position non-dependent
 /// arrow). Elaborates to the existing kernel `Term::Pi` — no new variant.
-fn infer_arrow(cx: &mut ElabCtx, a: &RExpr, b: &RExpr, span: &Span) -> Result<(Term, Term), ElabError> {
+fn infer_arrow(
+    cx: &mut ElabCtx,
+    a: &RExpr,
+    b: &RExpr,
+    span: &Span,
+) -> Result<(Term, Term), ElabError> {
     let (a_core, _a_ty) = infer(cx, a)?;
     let (b_core, _b_ty) = infer(cx, b)?;
     let a_core = cx.metas.zonk_term(&a_core);
@@ -1245,8 +1325,11 @@ fn infer_arrow(cx: &mut ElabCtx, a: &RExpr, b: &RExpr, span: &Span) -> Result<(T
         types: cx.ctx.types.iter().map(|t| cx.metas.zonk_term(t)).collect(),
     };
     let zonked_pi = cx.metas.zonk_term(&pi);
-    let sort = kernel_infer(cx.env, &zonked_ctx, &zonked_pi)
-        .map_err(|e| ElabError::KernelRejected { error: e, span: span.clone() })?;
+    let sort =
+        kernel_infer(cx.env, &zonked_ctx, &zonked_pi).map_err(|e| ElabError::KernelRejected {
+            error: e,
+            span: span.clone(),
+        })?;
     Ok((pi, sort))
 }
 
@@ -1346,8 +1429,10 @@ fn infer_j(
         types: cx.ctx.types.iter().map(|t| cx.metas.zonk_term(t)).collect(),
     };
     let zonked_term_j = cx.metas.zonk_term(&term_j);
-    kernel_infer(cx.env, &zonked_ctx, &zonked_term_j)
-        .map_err(|e| ElabError::KernelRejected { error: e, span: span.clone() })?;
+    kernel_infer(cx.env, &zonked_ctx, &zonked_term_j).map_err(|e| ElabError::KernelRejected {
+        error: e,
+        span: span.clone(),
+    })?;
 
     Ok((term_j, result_ty))
 }
@@ -1361,7 +1446,12 @@ fn infer_j(
 /// its own self-projection off the SAME base (works whether `base` is a
 /// concrete instance value or an opaque bound variable like a `where`-
 /// supplied dictionary).
-fn infer_proj(cx: &mut ElabCtx, base: &RExpr, field: &str, span: &Span) -> Result<(Term, Term), ElabError> {
+fn infer_proj(
+    cx: &mut ElabCtx,
+    base: &RExpr,
+    field: &str,
+    span: &Span,
+) -> Result<(Term, Term), ElabError> {
     let (base_core, base_ty) = infer(cx, base)?;
     // Deliberately inspect `base_ty` AS ELABORATED (never `whnf`'d): a class
     // type is itself `Decl::Transparent` (`elab_class_decl` admits it via
@@ -1374,16 +1464,20 @@ fn infer_proj(cx: &mut ElabCtx, base: &RExpr, field: &str, span: &Span) -> Resul
     let (class_type_id, head_arg) = match &base_ty {
         Term::App(f, a) => match f.as_ref() {
             Term::Const { id, .. } => (*id, Some((**a).clone())),
-            _ => return Err(ElabError::TypeMismatch {
-                span: span.clone(),
-                reason: "projection base's type is not a class dictionary".into(),
-            }),
+            _ => {
+                return Err(ElabError::TypeMismatch {
+                    span: span.clone(),
+                    reason: "projection base's type is not a class dictionary".into(),
+                })
+            }
         },
         Term::Const { id, .. } => (*id, None),
-        _ => return Err(ElabError::TypeMismatch {
-            span: span.clone(),
-            reason: "projection base's type is not a class dictionary".into(),
-        }),
+        _ => {
+            return Err(ElabError::TypeMismatch {
+                span: span.clone(),
+                reason: "projection base's type is not a class dictionary".into(),
+            })
+        }
     };
     let class_env = cx.class_env.ok_or_else(|| ElabError::TypeMismatch {
         span: span.clone(),
@@ -1398,10 +1492,14 @@ fn infer_proj(cx: &mut ElabCtx, base: &RExpr, field: &str, span: &Span) -> Resul
             span: span.clone(),
             reason: "projection base's type is not a known class dictionary".into(),
         })?;
-    let idx = field_names.iter().position(|n| n == field).ok_or_else(|| ElabError::UnresolvedCon {
-        name: field.to_string(),
-        span: span.clone(),
-    })?;
+    let idx =
+        field_names
+            .iter()
+            .position(|n| n == field)
+            .ok_or_else(|| ElabError::UnresolvedCon {
+                name: field.to_string(),
+                span: span.clone(),
+            })?;
 
     // Build proj1(proj2^idx(base_core)) — field `idx`'s value. Each
     // earlier field's self-projection (proj1(proj2^j(base_core)), j<idx)
@@ -1441,13 +1539,11 @@ fn elab_num_lit_infer(
     // A literal's value comes from checked surface syntax and is stored in the
     // elaborator side table for evaluation; it is not a primitive operation or
     // an assumed axiom in trust accounting.
-    let postulate_id = declare_primitive(
-        cx.env,
-        vec![],
-        ty_term.clone(),
-        PrimReduction::Literal,
-    )
-    .map_err(|e| ElabError::KernelRejected { error: e, span: span.clone() })?;
+    let postulate_id = declare_primitive(cx.env, vec![], ty_term.clone(), PrimReduction::Literal)
+        .map_err(|e| ElabError::KernelRejected {
+        error: e,
+        span: span.clone(),
+    })?;
     cx.num_values.insert(postulate_id, val);
     Ok((Term::const_(postulate_id, vec![]), ty_term))
 }
@@ -1479,9 +1575,17 @@ fn elab_num_lit_checked(
             NumLit::Int(n) => {
                 // Accept Int literals at any integer numeric type.
                 let is_int_type = [
-                    nenv.int_id, nenv.int8_id, nenv.int16_id, nenv.int32_id, nenv.int64_id,
-                    nenv.uint8_id, nenv.uint16_id, nenv.uint32_id, nenv.uint64_id,
-                ].contains(&ty_id);
+                    nenv.int_id,
+                    nenv.int8_id,
+                    nenv.int16_id,
+                    nenv.int32_id,
+                    nenv.int64_id,
+                    nenv.uint8_id,
+                    nenv.uint16_id,
+                    nenv.uint32_id,
+                    nenv.uint64_id,
+                ]
+                .contains(&ty_id);
                 if is_int_type {
                     Some(crate::numbers::int_lit_val(*n, &exp_wh, nenv))
                 } else {
@@ -1498,13 +1602,13 @@ fn elab_num_lit_checked(
         if let Some(val) = val_opt {
             // Checked numeric literals are accounting-neutral values; see
             // `elab_num_lit_infer`.
-            let postulate_id = declare_primitive(
-                cx.env,
-                vec![],
-                exp_wh.clone(),
-                PrimReduction::Literal,
-            )
-            .map_err(|e| ElabError::KernelRejected { error: e, span: span.clone() })?;
+            let postulate_id =
+                declare_primitive(cx.env, vec![], exp_wh.clone(), PrimReduction::Literal).map_err(
+                    |e| ElabError::KernelRejected {
+                        error: e,
+                        span: span.clone(),
+                    },
+                )?;
             cx.num_values.insert(postulate_id, val);
             return Ok(Term::const_(postulate_id, vec![]));
         }
@@ -1543,24 +1647,26 @@ fn elab_str_lit(
     }
     // Checked string literals are accounting-neutral values; see
     // `elab_num_lit_infer`.
-    let lit_id = declare_primitive(
-        cx.env,
-        vec![],
-        str_ty.clone(),
-        PrimReduction::Literal,
-    )
-    .map_err(|e| ElabError::KernelRejected { error: e, span: span.clone() })?;
-    cx.num_values.insert(lit_id, NumericLitVal::Str(s.to_owned()));
+    let lit_id = declare_primitive(cx.env, vec![], str_ty.clone(), PrimReduction::Literal)
+        .map_err(|e| ElabError::KernelRejected {
+            error: e,
+            span: span.clone(),
+        })?;
+    cx.num_values
+        .insert(lit_id, NumericLitVal::Str(s.to_owned()));
     Ok((Term::const_(lit_id, vec![]), str_ty))
 }
 
 /// Returns the default (Val, TypeId) for a literal without an expected type.
 fn num_lit_default_type(lit: &NumLit, nenv: &NumericEnv) -> (NumericLitVal, GlobalId) {
     match lit {
-        NumLit::Int(n)       => (NumericLitVal::Int(*n), nenv.int_id),
-        NumLit::Float(f)     => (NumericLitVal::Float(*f), nenv.float_id),
-        NumLit::Decimal(c,e) => (NumericLitVal::Decimal { coeff: *c, exp: *e }, nenv.decimal_id),
-        NumLit::Float32(f)   => (NumericLitVal::Float32(*f), nenv.float32_id),
+        NumLit::Int(n) => (NumericLitVal::Int(*n), nenv.int_id),
+        NumLit::Float(f) => (NumericLitVal::Float(*f), nenv.float_id),
+        NumLit::Decimal(c, e) => (
+            NumericLitVal::Decimal { coeff: *c, exp: *e },
+            nenv.decimal_id,
+        ),
+        NumLit::Float32(f) => (NumericLitVal::Float32(*f), nenv.float32_id),
     }
 }
 
@@ -1580,12 +1686,13 @@ fn elab_binop(
 
     match op {
         BinOp::Add | BinOp::WrappingAdd => {
-            let entry: &AddEntry = cx.numeric_env.classify_add(&lhs_ty_wh).ok_or_else(|| {
-                ElabError::TypeMismatch {
-                    span: span.clone(),
-                    reason: format!("'+' / '+%' not supported on this type"),
-                }
-            })?;
+            let entry: &AddEntry =
+                cx.numeric_env
+                    .classify_add(&lhs_ty_wh)
+                    .ok_or_else(|| ElabError::TypeMismatch {
+                        span: span.clone(),
+                        reason: format!("'+' / '+%' not supported on this type"),
+                    })?;
             let result_ty = Term::const_(entry.result_id, vec![]);
             let rhs_core = check(cx, rhs, &result_ty, span)?;
             let op_id = if matches!(op, BinOp::WrappingAdd) {
@@ -1608,8 +1715,13 @@ fn elab_binop(
                         rhs_core.clone(),
                     );
                     let closed = close_goal(&cx.ctx, phi);
-                    let hole_id = declare_postulate(cx.env, vec![], closed.clone())
-                        .map_err(|e| ElabError::KernelRejected { error: e, span: span.clone() })?;
+                    let hole_id =
+                        declare_postulate(cx.env, vec![], closed.clone()).map_err(|e| {
+                            ElabError::KernelRejected {
+                                error: e,
+                                span: span.clone(),
+                            }
+                        })?;
                     let obl_id = cx.obl_counter;
                     cx.obl_counter += 1;
                     cx.obligations.push(Obligation {
@@ -1626,12 +1738,13 @@ fn elab_binop(
         }
 
         BinOp::Sub => {
-            let entry: &BinOpEntry = cx.numeric_env.classify_sub(&lhs_ty_wh).ok_or_else(|| {
-                ElabError::TypeMismatch {
-                    span: span.clone(),
-                    reason: format!("'-' not supported on this type"),
-                }
-            })?;
+            let entry: &BinOpEntry =
+                cx.numeric_env
+                    .classify_sub(&lhs_ty_wh)
+                    .ok_or_else(|| ElabError::TypeMismatch {
+                        span: span.clone(),
+                        reason: format!("'-' not supported on this type"),
+                    })?;
             let result_ty = Term::const_(entry.result_id, vec![]);
             let rhs_core = check(cx, rhs, &result_ty, span)?;
             let op_term = Term::const_(entry.op_id, vec![]);
@@ -1640,12 +1753,13 @@ fn elab_binop(
         }
 
         BinOp::Mul => {
-            let entry: &BinOpEntry = cx.numeric_env.classify_mul(&lhs_ty_wh).ok_or_else(|| {
-                ElabError::TypeMismatch {
-                    span: span.clone(),
-                    reason: format!("'*' not supported on this type"),
-                }
-            })?;
+            let entry: &BinOpEntry =
+                cx.numeric_env
+                    .classify_mul(&lhs_ty_wh)
+                    .ok_or_else(|| ElabError::TypeMismatch {
+                        span: span.clone(),
+                        reason: format!("'*' not supported on this type"),
+                    })?;
             let result_ty = Term::const_(entry.result_id, vec![]);
             let rhs_core = check(cx, rhs, &result_ty, span)?;
             let op_term = Term::const_(entry.op_id, vec![]);
@@ -1654,12 +1768,13 @@ fn elab_binop(
         }
 
         BinOp::EqEq => {
-            let eq_entry = cx.numeric_env.classify_eq(&lhs_ty_wh).ok_or_else(|| {
-                ElabError::TypeMismatch {
-                    span: span.clone(),
-                    reason: format!("'==' not supported on this type"),
-                }
-            })?;
+            let eq_entry =
+                cx.numeric_env
+                    .classify_eq(&lhs_ty_wh)
+                    .ok_or_else(|| ElabError::TypeMismatch {
+                        span: span.clone(),
+                        reason: format!("'==' not supported on this type"),
+                    })?;
             let rhs_core = check(cx, rhs, &lhs_ty_wh, span)?;
             let bool_ty = Term::indformer(cx.numeric_env.bool_id, vec![]);
             let op_term = Term::const_(eq_entry.op_id, vec![]);
@@ -1740,7 +1855,9 @@ fn rtype_head_name(ty: &RType) -> String {
 
 fn check_view_visits_row(rdecl: &RDecl) -> Result<Option<crate::effects::RowType>, ElabError> {
     let visits = match &rdecl.kind {
-        RDeclKind::View { visits: Some(row), .. } => row,
+        RDeclKind::View {
+            visits: Some(row), ..
+        } => row,
         _ => return Ok(None),
     };
 
@@ -1751,10 +1868,12 @@ fn check_view_visits_row(rdecl: &RDecl) -> Result<Option<crate::effects::RowType
     let row_vars = crate::effects::row_var_map(&[]);
     let mut decl = crate::effects::EffectDecl::new(&rdecl.name);
 
-    let declared = crate::effects::surface_row_to_row_type(visits, &row_vars)
-        .map_err(|reason| ElabError::TypeMismatch {
-            span: visits.span.clone(),
-            reason,
+    let declared =
+        crate::effects::surface_row_to_row_type(visits, &row_vars).map_err(|reason| {
+            ElabError::TypeMismatch {
+                span: visits.span.clone(),
+                reason,
+            }
         })?;
     decl = decl.with_declared_row_type(declared.clone());
 
@@ -1762,18 +1881,23 @@ fn check_view_visits_row(rdecl: &RDecl) -> Result<Option<crate::effects::RowType
     let inferred = rows.get(&rdecl.name).ok_or_else(|| {
         ElabError::Internal(format!("effect row inference omitted '{}'", rdecl.name))
     })?;
-    crate::effects::check_decl_poly(&decl, inferred, &crate::effects::EffectRow::empty())
-        .map_err(|err| ElabError::TypeMismatch {
+    crate::effects::check_decl_poly(&decl, inferred, &crate::effects::EffectRow::empty()).map_err(
+        |err| ElabError::TypeMismatch {
             span: visits.span.clone(),
             reason: err.to_string(),
-        })?;
+        },
+    )?;
 
     Ok(Some(declared))
 }
 
-pub fn surface_declared_row_type(rdecl: &RDecl) -> Result<Option<crate::effects::RowType>, ElabError> {
+pub fn surface_declared_row_type(
+    rdecl: &RDecl,
+) -> Result<Option<crate::effects::RowType>, ElabError> {
     let visits = match &rdecl.kind {
-        RDeclKind::View { visits: Some(row), .. } => row,
+        RDeclKind::View {
+            visits: Some(row), ..
+        } => row,
         _ => return Ok(None),
     };
     let row_vars = crate::effects::row_var_map(&[]);
@@ -1835,8 +1959,9 @@ fn rtype_heads_match(a: &RTypeHead, b: &RTypeHead) -> bool {
     match (a, b) {
         (RTypeHead::Con(a), RTypeHead::Con(b)) => a == b,
         (RTypeHead::Var(_, a), RTypeHead::Var(_, b)) => a == b,
-        (RTypeHead::Con(a), RTypeHead::Var(_, b))
-        | (RTypeHead::Var(_, a), RTypeHead::Con(b)) => a == b,
+        (RTypeHead::Con(a), RTypeHead::Var(_, b)) | (RTypeHead::Var(_, a), RTypeHead::Con(b)) => {
+            a == b
+        }
     }
 }
 
@@ -1900,7 +2025,9 @@ fn type_has_applicative_row_polymorphic_contract(ty: &RType) -> bool {
             continue;
         };
         if rtype_is_app_headed_by(result, &head)
-            && args.iter().any(|candidate| type_is_applicative_dict_for_head(candidate, &head))
+            && args
+                .iter()
+                .any(|candidate| type_is_applicative_dict_for_head(candidate, &head))
         {
             return true;
         }
@@ -1914,10 +2041,9 @@ fn field_type_earns_proc(ty: &RType) -> bool {
 
 fn class_field_declared_row(keyword: DefKeyword, field_name: &str) -> crate::effects::RowType {
     match keyword {
-        DefKeyword::Proc => crate::effects::RowType::singleton(format!(
-            "proc class field `{}`",
-            field_name
-        )),
+        DefKeyword::Proc => {
+            crate::effects::RowType::singleton(format!("proc class field `{}`", field_name))
+        }
         DefKeyword::Const | DefKeyword::Fn | DefKeyword::View => crate::effects::RowType::empty(),
     }
 }
@@ -2010,14 +2136,12 @@ fn instance_class_for_global<'a>(
         .map(|inst| inst.class_name.as_str())
 }
 
-fn projected_instance_id(
-    base: &RExpr,
-    ctx: &ProjectionPurityCtx<'_>,
-) -> Option<GlobalId> {
+fn projected_instance_id(base: &RExpr, ctx: &ProjectionPurityCtx<'_>) -> Option<GlobalId> {
     match base {
         RExpr::RCon(name, _) if name == "d" && ctx.local_constraints.len() == 1 => {
             let (class_name, head_ty) = &ctx.local_constraints[0];
-            ctx.class_env.instance_search(class_name, &rtype_head_name(head_ty))
+            ctx.class_env
+                .instance_search(class_name, &rtype_head_name(head_ty))
         }
         RExpr::RCon(name, _) => ctx.globals.get(name).copied(),
         _ => None,
@@ -2118,10 +2242,9 @@ fn infer_expr_row_type(
             .get(name)
             .cloned()
             .unwrap_or_else(crate::effects::RowType::empty),
-        RExpr::RVar(_, _, _)
-        | RExpr::RUniv(_, _)
-        | RExpr::RNumLit(_, _)
-        | RExpr::RStr(_, _) => crate::effects::RowType::empty(),
+        RExpr::RVar(_, _, _) | RExpr::RUniv(_, _) | RExpr::RNumLit(_, _) | RExpr::RStr(_, _) => {
+            crate::effects::RowType::empty()
+        }
         RExpr::RApp(f, a, _) => infer_expr_row_type(f, effect_rows, projection_ctx)
             .join(infer_expr_row_type(a, effect_rows, projection_ctx)),
         RExpr::RLam(_, _, _) | RExpr::RPi(_, _, _, _) | RExpr::RArrow(_, _, _) => {
@@ -2132,10 +2255,8 @@ fn infer_expr_row_type(
         RExpr::RAsc(e, _, _) | RExpr::ROld(e, _) => {
             infer_expr_row_type(e, effect_rows, projection_ctx)
         }
-        RExpr::RProj(e, field, _) => {
-            infer_expr_row_type(e, effect_rows, projection_ctx)
-                .join(projected_field_row_type(e, field, projection_ctx))
-        }
+        RExpr::RProj(e, field, _) => infer_expr_row_type(e, effect_rows, projection_ctx)
+            .join(projected_field_row_type(e, field, projection_ctx)),
         RExpr::RBinOp(_, l, r, _) => infer_expr_row_type(l, effect_rows, projection_ctx)
             .join(infer_expr_row_type(r, effect_rows, projection_ctx)),
         RExpr::RMatch { scrut, arms, .. } => {
@@ -2157,9 +2278,12 @@ pub fn check_surface_purity(
     class_env: &ClassEnv,
 ) -> Result<(), ElabError> {
     let (keyword, is_space_op, visits, constraints) = match &rdecl.kind {
-        RDeclKind::View { keyword, is_space_op, visits, constraints } => {
-            (*keyword, *is_space_op, visits, constraints.as_slice())
-        }
+        RDeclKind::View {
+            keyword,
+            is_space_op,
+            visits,
+            constraints,
+        } => (*keyword, *is_space_op, visits, constraints.as_slice()),
         _ => return Ok(()),
     };
     if keyword == DefKeyword::View {
@@ -2174,9 +2298,13 @@ pub fn check_surface_purity(
         local_constraints: constraints,
         bound_dict_classes: &bound_dict_classes,
     };
-    let inferred = infer_expr_row_type(decl_eval_body(&rdecl.body), effect_rows, Some(&projection_ctx));
-    let decl = crate::effects::EffectDecl::new(&rdecl.name)
-        .with_declared_row_type(declared.clone());
+    let inferred = infer_expr_row_type(
+        decl_eval_body(&rdecl.body),
+        effect_rows,
+        Some(&projection_ctx),
+    );
+    let decl =
+        crate::effects::EffectDecl::new(&rdecl.name).with_declared_row_type(declared.clone());
     crate::effects::check_decl_poly(&decl, &inferred, &crate::effects::EffectRow::empty())
         .map_err(|err| ElabError::TypeMismatch {
             span: rdecl.span.clone(),
@@ -2229,7 +2357,11 @@ pub fn check_surface_purity(
         }
         DefKeyword::Proc => {
             if !has_impure_decl {
-                let expected = if explicit_value_params == 0 { "const" } else { "fn" };
+                let expected = if explicit_value_params == 0 {
+                    "const"
+                } else {
+                    "fn"
+                };
                 return Err(ElabError::TypeMismatch {
                     span: rdecl.span.clone(),
                     reason: format!(
@@ -2309,11 +2441,16 @@ pub fn elaborate_rdecl_v1_with_effect_rows(
             // save/restore any prior `d` binding around the call so it
             // never leaks to sibling decls.
             let saved_d = dict_id.map(|id| globals.insert("d".to_string(), id));
-            let mut result = elaborate_view_or_let(env, globals, num_values, numeric_env, class_env, rdecl);
+            let mut result =
+                elaborate_view_or_let(env, globals, num_values, numeric_env, class_env, rdecl);
             if dict_id.is_some() {
                 match saved_d.unwrap() {
-                    Some(prev) => { globals.insert("d".to_string(), prev); }
-                    None => { globals.remove("d"); }
+                    Some(prev) => {
+                        globals.insert("d".to_string(), prev);
+                    }
+                    None => {
+                        globals.remove("d");
+                    }
                 }
             }
             if let Ok(result) = &mut result {
@@ -2325,21 +2462,58 @@ pub fn elaborate_rdecl_v1_with_effect_rows(
             elaborate_view_or_let(env, globals, num_values, numeric_env, class_env, rdecl)
         }
         RDeclKind::Prove => elaborate_prove(env, globals, num_values, numeric_env, rdecl),
-        RDeclKind::Law { param, fields } => {
-            elaborate_law(env, globals, num_values, numeric_env, rdecl, param.clone(), fields.clone())
-        }
+        RDeclKind::Law { param, fields } => elaborate_law(
+            env,
+            globals,
+            num_values,
+            numeric_env,
+            rdecl,
+            param.clone(),
+            fields.clone(),
+        ),
         RDeclKind::DataDecl { type_params, ctors } => {
-            let d_id = data::elab_data_decl(
+            let d_id =
+                data::elab_data_decl(env, globals, &rdecl.name, type_params, ctors, &rdecl.span)?;
+            // Register data type in the module map for orphan check (`33 §5.3`).
+            class_env
+                .global_modules
+                .insert(d_id, class_env.current_module);
+            Ok(ElabResult {
+                name: rdecl.name.clone(),
+                def_id: d_id,
+                obligations: vec![],
+                foreign_binding: None,
+                temporal_obligations: vec![],
+                effect_row_type: None,
+            })
+        }
+        RDeclKind::ExplicitDataDecl {
+            params,
+            indices,
+            level,
+            ctors,
+        } => {
+            let d_id = data::elab_explicit_data_decl(
                 env,
                 globals,
                 &rdecl.name,
-                type_params,
+                params,
+                indices,
+                *level,
                 ctors,
                 &rdecl.span,
             )?;
-            // Register data type in the module map for orphan check (`33 §5.3`).
-            class_env.global_modules.insert(d_id, class_env.current_module);
-            Ok(ElabResult { name: rdecl.name.clone(), def_id: d_id, obligations: vec![], foreign_binding: None, temporal_obligations: vec![], effect_row_type: None })
+            class_env
+                .global_modules
+                .insert(d_id, class_env.current_module);
+            Ok(ElabResult {
+                name: rdecl.name.clone(),
+                def_id: d_id,
+                obligations: vec![],
+                foreign_binding: None,
+                temporal_obligations: vec![],
+                effect_row_type: None,
+            })
         }
         RDeclKind::TypeAlias { ty } => {
             // A type alias `type T = A` declares T as a transparent definition
@@ -2352,43 +2526,85 @@ pub fn elaborate_rdecl_v1_with_effect_rows(
             };
             let _ = alias_id;
             let alias_ty = Term::ty(Level::Zero);
-            let id = declare_def(env, vec![], alias_ty, alias_body)
-                .map_err(|e| ElabError::KernelRejected { error: e, span: rdecl.span.clone() })?;
+            let id = declare_def(env, vec![], alias_ty, alias_body).map_err(|e| {
+                ElabError::KernelRejected {
+                    error: e,
+                    span: rdecl.span.clone(),
+                }
+            })?;
             globals.insert(rdecl.name.clone(), id);
-            Ok(ElabResult { name: rdecl.name.clone(), def_id: id, obligations: vec![], foreign_binding: None, temporal_obligations: vec![], effect_row_type: None })
+            Ok(ElabResult {
+                name: rdecl.name.clone(),
+                def_id: id,
+                obligations: vec![],
+                foreign_binding: None,
+                temporal_obligations: vec![],
+                effect_row_type: None,
+            })
         }
-        RDeclKind::Foreign { symbol, library, is_pure, visits } => {
-            elaborate_foreign_decl(
-                env, globals, num_values, numeric_env, rdecl,
-                symbol, library, *is_pure, visits,
-            )
-        }
+        RDeclKind::Foreign {
+            symbol,
+            library,
+            is_pure,
+            visits,
+        } => elaborate_foreign_decl(
+            env,
+            globals,
+            num_values,
+            numeric_env,
+            rdecl,
+            symbol,
+            library,
+            *is_pure,
+            visits,
+        ),
         RDeclKind::Temporal { formula, source } => {
             elaborate_temporal(env, globals, rdecl, formula, source)
         }
-        RDeclKind::ClassDecl { param, param_kind, fields } => {
-            elab_class_decl(
-                env,
-                globals,
-                num_values,
-                numeric_env,
-                class_env,
-                rdecl,
-                param,
-                param_kind.as_ref(),
-                fields,
-            )
-        }
-        RDeclKind::InstanceDecl { head_params, head_type, constraints, fields } => {
-            elab_instance_decl(
-                env, globals, num_values, numeric_env, class_env, rdecl,
-                effect_rows,
-                &rdecl.name.clone(), head_params, head_type, constraints, fields,
-            )
-        }
-        RDeclKind::DeriveDecl { data_name } => {
-            elab_derive(env, globals, num_values, numeric_env, class_env, rdecl, &rdecl.name.clone(), data_name)
-        }
+        RDeclKind::ClassDecl {
+            param,
+            param_kind,
+            fields,
+        } => elab_class_decl(
+            env,
+            globals,
+            num_values,
+            numeric_env,
+            class_env,
+            rdecl,
+            param,
+            param_kind.as_ref(),
+            fields,
+        ),
+        RDeclKind::InstanceDecl {
+            head_params,
+            head_type,
+            constraints,
+            fields,
+        } => elab_instance_decl(
+            env,
+            globals,
+            num_values,
+            numeric_env,
+            class_env,
+            rdecl,
+            effect_rows,
+            &rdecl.name.clone(),
+            head_params,
+            head_type,
+            constraints,
+            fields,
+        ),
+        RDeclKind::DeriveDecl { data_name } => elab_derive(
+            env,
+            globals,
+            num_values,
+            numeric_env,
+            class_env,
+            rdecl,
+            &rdecl.name.clone(),
+            data_name,
+        ),
     }
 }
 
@@ -2403,9 +2619,8 @@ pub fn init_class_env(
         .map_err(|e| ElabError::Internal(format!("RecordNil postulate: {}", e)))?;
     globals.insert("RecordNil".to_string(), record_nil_id);
     // record_nil_val : RecordNil — the unique inhabitant.
-    let record_nil_val_id =
-        declare_postulate(env, vec![], Term::const_(record_nil_id, vec![]))
-            .map_err(|e| ElabError::Internal(format!("record_nil_val postulate: {}", e)))?;
+    let record_nil_val_id = declare_postulate(env, vec![], Term::const_(record_nil_id, vec![]))
+        .map_err(|e| ElabError::Internal(format!("record_nil_val postulate: {}", e)))?;
     globals.insert("record_nil_val".to_string(), record_nil_val_id);
     Ok(ClassEnv {
         classes: std::collections::HashMap::new(),
@@ -2525,8 +2740,10 @@ fn elab_class_decl(
         if has_param {
             ctx_a.push(param_kind_core.clone());
         }
-        kernel_infer(env, &ctx_a, &sigma_chain)
-            .map_err(|e| ElabError::KernelRejected { error: e, span: span.clone() })?
+        kernel_infer(env, &ctx_a, &sigma_chain).map_err(|e| ElabError::KernelRejected {
+            error: e,
+            span: span.clone(),
+        })?
     };
 
     // Classify: Ω = property class, Type = structure class.
@@ -2544,10 +2761,15 @@ fn elab_class_decl(
         (chain_sort, sigma_chain)
     };
 
-    let id = declare_def(env, vec![], class_ty, class_body)
-        .map_err(|e| ElabError::KernelRejected { error: e, span: span.clone() })?;
+    let id =
+        declare_def(env, vec![], class_ty, class_body).map_err(|e| ElabError::KernelRejected {
+            error: e,
+            span: span.clone(),
+        })?;
     globals.insert(rdecl.name.clone(), id);
-    class_env.global_modules.insert(id, class_env.current_module);
+    class_env
+        .global_modules
+        .insert(id, class_env.current_module);
     class_env.classes.insert(
         rdecl.name.clone(),
         ClassInfo {
@@ -2594,9 +2816,13 @@ fn compute_ordered_field_values(
     span: &Span,
 ) -> Result<(Vec<Term>, Vec<crate::effects::RowType>), ElabError> {
     let (field_names, field_types, field_purities, has_param) = {
-        let ci = class_env.classes.get(class_name).ok_or_else(|| {
-            ElabError::UnresolvedCon { name: class_name.to_string(), span: span.clone() }
-        })?;
+        let ci = class_env
+            .classes
+            .get(class_name)
+            .ok_or_else(|| ElabError::UnresolvedCon {
+                name: class_name.to_string(),
+                span: span.clone(),
+            })?;
         (
             ci.field_names.clone(),
             ci.field_types.clone(),
@@ -2607,9 +2833,10 @@ fn compute_ordered_field_values(
     let mut values: Vec<Term> = Vec::new();
     let mut field_rows: Vec<crate::effects::RowType> = Vec::new();
     for (i, fname) in field_names.iter().enumerate() {
-        let pos = fields.iter().position(|(n, _)| n == fname).ok_or_else(|| {
-            ElabError::Internal(format!("instance missing field '{}'", fname))
-        })?;
+        let pos = fields
+            .iter()
+            .position(|(n, _)| n == fname)
+            .ok_or_else(|| ElabError::Internal(format!("instance missing field '{}'", fname)))?;
         let mut args: Vec<Term> = Vec::new();
         if has_param {
             args.push(head_core.clone());
@@ -2730,9 +2957,13 @@ fn elab_instance_decl(
 
     // ---- look up class ---------------------------------------------------
     let (class_module, class_type_id, class_kind) = {
-        let ci = class_env.classes.get(class_name).ok_or_else(|| {
-            ElabError::UnresolvedCon { name: class_name.to_string(), span: span.clone() }
-        })?;
+        let ci = class_env
+            .classes
+            .get(class_name)
+            .ok_or_else(|| ElabError::UnresolvedCon {
+                name: class_name.to_string(),
+                span: span.clone(),
+            })?;
         (ci.module_id, ci.type_id, ci.kind.clone())
     };
 
@@ -2773,7 +3004,12 @@ fn elab_instance_decl(
 
     // ---- build instance type --------------------------------------------
     // App(class_type, head) if parameterized, else class_type directly.
-    let instance_ty = if class_env.classes.get(class_name).map(|ci| ci.param.is_some()).unwrap_or(false) {
+    let instance_ty = if class_env
+        .classes
+        .get(class_name)
+        .map(|ci| ci.param.is_some())
+        .unwrap_or(false)
+    {
         Term::app(Term::const_(class_type_id, vec![]), head_core.clone())
     } else {
         Term::const_(class_type_id, vec![])
@@ -2813,18 +3049,14 @@ fn elab_instance_decl(
         // (Var(0) = the parameter, not strictly decreasing) → SCT rejects.
         let t = closed_instance_ty.clone();
         let fixpoint_ty = Term::pi(t.clone(), t.clone());
-        let ids = declare_recursive_group(
-            env,
-            vec![(vec![], fixpoint_ty)],
-            |ids| {
-                let own_id = ids[0];
-                let body = Term::lam(
-                    t.clone(),
-                    Term::app(Term::const_(own_id, vec![]), Term::var(0)),
-                );
-                vec![body]
-            },
-        )
+        let ids = declare_recursive_group(env, vec![(vec![], fixpoint_ty)], |ids| {
+            let own_id = ids[0];
+            let body = Term::lam(
+                t.clone(),
+                Term::app(Term::const_(own_id, vec![]), Term::var(0)),
+            );
+            vec![body]
+        })
         .map_err(|_| ElabError::NonTerminatingInstances { span: span.clone() })?;
         (ids[0], vec![])
     } else if !constraints.is_empty() {
@@ -2833,7 +3065,8 @@ fn elab_instance_decl(
         // Body has no App(Const(own_id), ...) → edges.is_empty() → sct_check
         // accepts. Mutual/indirect cycles are not detected here (see above).
         let (ordered_vals, field_effect_rows): (Vec<Term>, Vec<crate::effects::RowType>) = {
-            let mut cx = ElabCtx::new(env, globals, num_values, numeric_env).with_classes(&*class_env);
+            let mut cx =
+                ElabCtx::new(env, globals, num_values, numeric_env).with_classes(&*class_env);
             push_type0_params(&mut cx, head_params.len());
             compute_ordered_field_values(
                 &mut cx,
@@ -2850,17 +3083,17 @@ fn elab_instance_decl(
             head_params.len(),
         );
         let inst_ty = closed_instance_ty.clone();
-        let ids = declare_recursive_group(
-            env,
-            vec![(vec![], inst_ty)],
-            |_ids| vec![pair_chain],
-        )
-        .map_err(|e| ElabError::KernelRejected { error: e, span: span.clone() })?;
+        let ids = declare_recursive_group(env, vec![(vec![], inst_ty)], |_ids| vec![pair_chain])
+            .map_err(|e| ElabError::KernelRejected {
+                error: e,
+                span: span.clone(),
+            })?;
         (ids[0], field_effect_rows)
     } else {
         // No constraints: declare_def path (no recursion possible, SCT not needed).
         let (ordered_vals, field_effect_rows): (Vec<Term>, Vec<crate::effects::RowType>) = {
-            let mut cx = ElabCtx::new(env, globals, num_values, numeric_env).with_classes(&*class_env);
+            let mut cx =
+                ElabCtx::new(env, globals, num_values, numeric_env).with_classes(&*class_env);
             push_type0_params(&mut cx, head_params.len());
             compute_ordered_field_values(
                 &mut cx,
@@ -2876,15 +3109,21 @@ fn elab_instance_decl(
             build_pair_chain(&ordered_vals, class_env.record_nil_val_id),
             head_params.len(),
         );
-        let id = declare_def(env, vec![], closed_instance_ty, pair_chain)
-            .map_err(|e| ElabError::KernelRejected { error: e, span: span.clone() })?;
+        let id = declare_def(env, vec![], closed_instance_ty, pair_chain).map_err(|e| {
+            ElabError::KernelRejected {
+                error: e,
+                span: span.clone(),
+            }
+        })?;
         (id, field_effect_rows)
     };
 
     // ---- register instance ----------------------------------------------
     let inst_name = format!("{}_instance_{}", class_name, head_name);
     globals.insert(inst_name, instance_id);
-    class_env.global_modules.insert(instance_id, class_env.current_module);
+    class_env
+        .global_modules
+        .insert(instance_id, class_env.current_module);
     // For property classes, allow multiple registrations (Ω-PI means they're
     // all definitionally equal; the key is occupied but we don't error).
     class_env.instances.insert(
@@ -2926,15 +3165,23 @@ fn elab_derive(
     let span = &rdecl.span;
 
     let (class_type_id, has_param) = {
-        let ci = class_env.classes.get(class_name).ok_or_else(|| {
-            ElabError::UnresolvedCon { name: class_name.to_string(), span: span.clone() }
-        })?;
+        let ci = class_env
+            .classes
+            .get(class_name)
+            .ok_or_else(|| ElabError::UnresolvedCon {
+                name: class_name.to_string(),
+                span: span.clone(),
+            })?;
         (ci.type_id, ci.param.is_some())
     };
 
-    let data_id = globals.get(data_name).copied().ok_or_else(|| {
-        ElabError::UnresolvedCon { name: data_name.to_string(), span: span.clone() }
-    })?;
+    let data_id = globals
+        .get(data_name)
+        .copied()
+        .ok_or_else(|| ElabError::UnresolvedCon {
+            name: data_name.to_string(),
+            span: span.clone(),
+        })?;
 
     let data_term = if env.inductive(data_id).is_some() {
         Term::indformer(data_id, vec![])
@@ -2952,13 +3199,19 @@ fn elab_derive(
     // class Σ-chain). The kernel's declare_def re-checks: a malformed candidate
     // (wrong type) is rejected here.
     let candidate = Term::const_(class_env.record_nil_val_id, vec![]);
-    let instance_id = declare_def(env, vec![], instance_ty, candidate)
-        .map_err(|e| ElabError::KernelRejected { error: e, span: span.clone() })?;
+    let instance_id = declare_def(env, vec![], instance_ty, candidate).map_err(|e| {
+        ElabError::KernelRejected {
+            error: e,
+            span: span.clone(),
+        }
+    })?;
 
     let head_name = data_name.to_string();
     let inst_name = format!("{}_instance_{}", class_name, head_name);
     globals.insert(inst_name, instance_id);
-    class_env.global_modules.insert(instance_id, class_env.current_module);
+    class_env
+        .global_modules
+        .insert(instance_id, class_env.current_module);
     class_env.instances.insert(
         (class_name.to_string(), head_name),
         InstanceInfo {
@@ -2995,34 +3248,39 @@ fn elaborate_foreign_decl(
 
     let ty_core = {
         let mut cx = ElabCtx::new(env, globals, num_values, numeric_env);
-        let ty = rdecl.ty.as_ref().ok_or_else(|| ElabError::Internal(
-            "foreign decl must have a type annotation".into()
-        ))?;
+        let ty = rdecl.ty.as_ref().ok_or_else(|| {
+            ElabError::Internal("foreign decl must have a type annotation".into())
+        })?;
         let ty_c = elab_type(&mut cx, ty)?;
         cx.metas.zonk_term(&ty_c)
     };
 
-    let bytes_id = globals.get("Bytes").copied().ok_or_else(|| {
-        ElabError::Internal("Bytes not registered before foreign layer".into())
-    })?;
+    let bytes_id = globals
+        .get("Bytes")
+        .copied()
+        .ok_or_else(|| ElabError::Internal("Bytes not registered before foreign layer".into()))?;
 
     // Foreign ensures → runtime check obligations (AC4).
-    let ensures_strs: Vec<String> = rdecl.ensures
-        .iter()
-        .map(|e| format!("{:?}", e))
-        .collect();
+    let ensures_strs: Vec<String> = rdecl.ensures.iter().map(|e| format!("{:?}", e)).collect();
 
     let binding = elaborate_foreign(
-        env, globals, bytes_id,
-        &rdecl.name, ty_core,
-        symbol, library, is_pure, visits,
+        env,
+        globals,
+        bytes_id,
+        &rdecl.name,
+        ty_core,
+        symbol,
+        library,
+        is_pure,
+        visits,
         &ensures_strs,
         &rdecl.span,
     )?;
 
     let def_id = binding.postulate_id;
 
-    let obligations: Vec<Obligation> = binding.runtime_checks
+    let obligations: Vec<Obligation> = binding
+        .runtime_checks
         .iter()
         .enumerate()
         .map(|(i, rc)| Obligation {
@@ -3053,7 +3311,9 @@ fn elaborate_view_or_let(
     rdecl: &RDecl,
 ) -> Result<ElabResult, ElabError> {
     // Check for implicit ensures from a return-type refinement (`22 §2.1`).
-    let has_refine_return = rdecl.ty.as_ref()
+    let has_refine_return = rdecl
+        .ty
+        .as_ref()
         .and_then(|ty| innermost_refine_pred(ty))
         .is_some();
     if rdecl.requires.is_empty() && rdecl.ensures.is_empty() && !has_refine_return {
@@ -3070,9 +3330,9 @@ fn elaborate_view_or_let(
 /// emit a refinement-introduction obligation for the return type (`22 §2.1`).
 pub(crate) fn innermost_refine_pred(ty: &RType) -> Option<&RExpr> {
     match ty {
-        RType::RPi(_, _, cod, _)
-        | RType::RArr(_, cod, _)
-        | RType::REffectArr(_, _, cod, _) => innermost_refine_pred(cod),
+        RType::RPi(_, _, cod, _) | RType::RArr(_, cod, _) | RType::REffectArr(_, _, cod, _) => {
+            innermost_refine_pred(cod)
+        }
         RType::RRefine(_, _, phi, _) => Some(phi),
         _ => None,
     }
@@ -3104,13 +3364,26 @@ fn elaborate_v0(
             (body_c, ty_c)
         };
         let obligations = std::mem::take(&mut cx.obligations);
-        (cx.metas.zonk_term(&ty_raw), cx.metas.zonk_term(&body_raw), obligations)
+        (
+            cx.metas.zonk_term(&ty_raw),
+            cx.metas.zonk_term(&body_raw),
+            obligations,
+        )
     };
-    let id = declare_def(env, vec![], ty_core, body_core).map_err(|e| {
-        ElabError::KernelRejected { error: e, span: rdecl.span.clone() }
-    })?;
+    let id =
+        declare_def(env, vec![], ty_core, body_core).map_err(|e| ElabError::KernelRejected {
+            error: e,
+            span: rdecl.span.clone(),
+        })?;
     globals.insert(rdecl.name.clone(), id);
-    Ok(ElabResult { name: rdecl.name.clone(), def_id: id, obligations: body_obligations, foreign_binding: None, temporal_obligations: vec![], effect_row_type: None })
+    Ok(ElabResult {
+        name: rdecl.name.clone(),
+        def_id: id,
+        obligations: body_obligations,
+        foreign_binding: None,
+        temporal_obligations: vec![],
+        effect_row_type: None,
+    })
 }
 
 /// Elaborate a self-recursive `view`/`let` through the SCT gate (Approach A).
@@ -3208,7 +3481,10 @@ fn elaborate_recursive_view(
                 }
             }
             globals.remove(&rdecl.name);
-            Err(ElabError::KernelRejected { error: e, span: rdecl.span.clone() })
+            Err(ElabError::KernelRejected {
+                error: e,
+                span: rdecl.span.clone(),
+            })
         }
     }
 }
@@ -3238,10 +3514,12 @@ pub fn elaborate_mutual_group(
     let mut ty_cores: Vec<Term> = Vec::with_capacity(members.len());
     for rdecl in members {
         let mut cx = ElabCtx::new(env, globals, num_values, numeric_env);
-        let ty = rdecl.ty.as_ref().ok_or_else(|| ElabError::Internal(format!(
-            "mutually-recursive '{}' requires a type annotation",
-            rdecl.name
-        )))?;
+        let ty = rdecl.ty.as_ref().ok_or_else(|| {
+            ElabError::Internal(format!(
+                "mutually-recursive '{}' requires a type annotation",
+                rdecl.name
+            ))
+        })?;
         let ty_c = elab_type(&mut cx, ty)?;
         ty_cores.push(cx.metas.zonk_term(&ty_c));
     }
@@ -3253,7 +3531,11 @@ pub fn elaborate_mutual_group(
     let mut ids: Vec<GlobalId> = Vec::with_capacity(members.len());
     for (rdecl, ty_core) in members.iter().zip(&ty_cores) {
         let id = env.fresh_id();
-        env.add_decl(Decl::Opaque { id, level_params: vec![], ty: ty_core.clone() });
+        env.add_decl(Decl::Opaque {
+            id,
+            level_params: vec![],
+            ty: ty_core.clone(),
+        });
         globals.insert(rdecl.name.clone(), id);
         ids.push(id);
     }
@@ -3264,7 +3546,8 @@ pub fn elaborate_mutual_group(
     let mut all_obligations: Vec<Vec<Obligation>> = Vec::with_capacity(members.len());
     let elab_err = (|| -> Result<(), ElabError> {
         for (rdecl, ty_core) in members.iter().zip(&ty_cores) {
-            let mut cx = ElabCtx::new(env, globals, num_values, numeric_env).with_classes(class_env);
+            let mut cx =
+                ElabCtx::new(env, globals, num_values, numeric_env).with_classes(class_env);
             let body_c = check(&mut cx, &rdecl.body, ty_core, &rdecl.span)?;
             let obligations = std::mem::take(&mut cx.obligations);
             bodies.push(cx.metas.zonk_term(&body_c));
@@ -3296,7 +3579,8 @@ pub fn elaborate_mutual_group(
     // isolation (a member could look non-terminating alone but be fine via
     // the group's cross-cycle measure, or vice versa look terminating alone
     // while the CYCLE diverges).
-    let group_bodies: Vec<(GlobalId, Term)> = ids.iter().cloned().zip(bodies.iter().cloned()).collect();
+    let group_bodies: Vec<(GlobalId, Term)> =
+        ids.iter().cloned().zip(bodies.iter().cloned()).collect();
     let admit_result: Result<(), ken_kernel::KernelError> = (|| {
         for (body, ty_core) in bodies.iter().zip(&ty_cores) {
             kernel_check(env, &Context::new(), body, ty_core)?;
@@ -3337,7 +3621,10 @@ pub fn elaborate_mutual_group(
             for rdecl in members {
                 globals.remove(&rdecl.name);
             }
-            Err(ElabError::KernelRejected { error: e, span: members[0].span.clone() })
+            Err(ElabError::KernelRejected {
+                error: e,
+                span: members[0].span.clone(),
+            })
         }
     }
 }
@@ -3350,19 +3637,17 @@ pub fn elaborate_mutual_group(
 pub(crate) fn rexpr_mentions_name(expr: &RExpr, name: &str) -> bool {
     match expr {
         RExpr::RCon(n, _) => n == name,
-        RExpr::RVar(_, _, _) | RExpr::RUniv(_, _) | RExpr::RNumLit(_, _) | RExpr::RStr(_, _) => false,
-        RExpr::RApp(f, a, _) => {
-            rexpr_mentions_name(f, name) || rexpr_mentions_name(a, name)
+        RExpr::RVar(_, _, _) | RExpr::RUniv(_, _) | RExpr::RNumLit(_, _) | RExpr::RStr(_, _) => {
+            false
         }
+        RExpr::RApp(f, a, _) => rexpr_mentions_name(f, name) || rexpr_mentions_name(a, name),
         RExpr::RLam(_, b, _) => rexpr_mentions_name(b, name),
         RExpr::RLet(_, _, rhs, body, _) => {
             rexpr_mentions_name(rhs, name) || rexpr_mentions_name(body, name)
         }
         RExpr::RAsc(e, _, _) => rexpr_mentions_name(e, name),
         RExpr::ROld(e, _) => rexpr_mentions_name(e, name),
-        RExpr::RBinOp(_, l, r, _) => {
-            rexpr_mentions_name(l, name) || rexpr_mentions_name(r, name)
-        }
+        RExpr::RBinOp(_, l, r, _) => rexpr_mentions_name(l, name) || rexpr_mentions_name(r, name),
         RExpr::RMatch { scrut, arms, .. } => {
             rexpr_mentions_name(scrut, name)
                 || arms.iter().any(|a| rexpr_mentions_name(&a.body, name))
@@ -3395,42 +3680,45 @@ fn elaborate_view_with_spec(
     // type+body in one context so their level metas unify.
     let is_recursive = rexpr_mentions_name(&rdecl.body, &rdecl.name);
 
-    let (body_raw, carrier_ty_raw, pre_admit_id): (Term, Term, Option<GlobalId>) =
-        if is_recursive {
-            // Recursive: elab the carrier type, pre-admit, then elab the body.
-            let carrier_ty = {
-                let mut cx = ElabCtx::new(env, globals, num_values, numeric_env).with_classes(class_env);
-                let ty = rdecl.ty.as_ref().ok_or_else(|| ElabError::Internal(
+    let (body_raw, carrier_ty_raw, pre_admit_id): (Term, Term, Option<GlobalId>) = if is_recursive {
+        // Recursive: elab the carrier type, pre-admit, then elab the body.
+        let carrier_ty = {
+            let mut cx =
+                ElabCtx::new(env, globals, num_values, numeric_env).with_classes(class_env);
+            let ty = rdecl.ty.as_ref().ok_or_else(|| {
+                ElabError::Internal(
                     "recursive const with spec clauses requires a type annotation".into(),
-                ))?;
-                let ty_c = elab_type(&mut cx, ty)?;
-                cx.metas.zonk_term(&ty_c)
-            };
-            let id = env.fresh_id();
-            env.add_decl(Decl::Opaque {
-                id,
-                level_params: vec![],
-                ty: carrier_ty.clone(),
-            });
-            globals.insert(rdecl.name.clone(), id);
-            let body = {
-                let mut cx = ElabCtx::new(env, globals, num_values, numeric_env).with_classes(class_env);
-                let body_c = check(&mut cx, &rdecl.body, &carrier_ty, &rdecl.span)?;
-                cx.metas.zonk_term(&body_c)
-            };
-            (body, carrier_ty, Some(id))
-        } else {
-            // Non-recursive: original one-context flow.
-            let mut cx = ElabCtx::new(env, globals, num_values, numeric_env).with_classes(class_env);
-            if let Some(ty) = &rdecl.ty {
-                let ty_c = elab_type(&mut cx, ty)?;
-                let body_c = check(&mut cx, &rdecl.body, &ty_c, &rdecl.span)?;
-                (cx.metas.zonk_term(&body_c), cx.metas.zonk_term(&ty_c), None)
-            } else {
-                let (body_c, ty_c) = infer(&mut cx, &rdecl.body)?;
-                (cx.metas.zonk_term(&body_c), cx.metas.zonk_term(&ty_c), None)
-            }
+                )
+            })?;
+            let ty_c = elab_type(&mut cx, ty)?;
+            cx.metas.zonk_term(&ty_c)
         };
+        let id = env.fresh_id();
+        env.add_decl(Decl::Opaque {
+            id,
+            level_params: vec![],
+            ty: carrier_ty.clone(),
+        });
+        globals.insert(rdecl.name.clone(), id);
+        let body = {
+            let mut cx =
+                ElabCtx::new(env, globals, num_values, numeric_env).with_classes(class_env);
+            let body_c = check(&mut cx, &rdecl.body, &carrier_ty, &rdecl.span)?;
+            cx.metas.zonk_term(&body_c)
+        };
+        (body, carrier_ty, Some(id))
+    } else {
+        // Non-recursive: original one-context flow.
+        let mut cx = ElabCtx::new(env, globals, num_values, numeric_env).with_classes(class_env);
+        if let Some(ty) = &rdecl.ty {
+            let ty_c = elab_type(&mut cx, ty)?;
+            let body_c = check(&mut cx, &rdecl.body, &ty_c, &rdecl.span)?;
+            (cx.metas.zonk_term(&body_c), cx.metas.zonk_term(&ty_c), None)
+        } else {
+            let (body_c, ty_c) = infer(&mut cx, &rdecl.body)?;
+            (cx.metas.zonk_term(&body_c), cx.metas.zonk_term(&ty_c), None)
+        }
+    };
 
     // Build the param context from the Pi-chain of the carrier type.
     let param_types = unwrap_pi_chain(&carrier_ty_raw);
@@ -3444,7 +3732,15 @@ fn elaborate_view_with_spec(
     let mut req_cores: Vec<Term> = Vec::new();
     for req in &rdecl.requires {
         let phi_core = elab_in_ctx_at_omega(
-            env, globals, num_values, numeric_env, class_env, &param_ctx, req, &omega, &rdecl.span,
+            env,
+            globals,
+            num_values,
+            numeric_env,
+            class_env,
+            &param_ctx,
+            req,
+            &omega,
+            &rdecl.span,
         )?;
         req_cores.push(phi_core);
     }
@@ -3469,13 +3765,25 @@ fn elaborate_view_with_spec(
     let mut obl_counter = 0u32;
     for ens in &all_ensures {
         let psi_core = elab_in_ctx_at_omega(
-            env, globals, num_values, numeric_env, class_env, &ens_ctx, ens, &omega, &rdecl.span,
+            env,
+            globals,
+            num_values,
+            numeric_env,
+            class_env,
+            &ens_ctx,
+            ens,
+            &omega,
+            &rdecl.span,
         )?;
         // goal = ψ[body_inner/result]: result = Var(0) in ens_ctx, substitute body
         let goal_open = subst0(&psi_core, &body_inner);
         let closed = close_goal(&param_ctx, goal_open);
-        let hole_id = declare_postulate(env, vec![], closed.clone())
-            .map_err(|e| ElabError::KernelRejected { error: e, span: rdecl.span.clone() })?;
+        let hole_id = declare_postulate(env, vec![], closed.clone()).map_err(|e| {
+            ElabError::KernelRejected {
+                error: e,
+                span: rdecl.span.clone(),
+            }
+        })?;
         ens_obligations.push(Obligation {
             id: obl_counter,
             hole_id,
@@ -3538,12 +3846,22 @@ fn elaborate_view_with_spec(
         }
     } else {
         let id = declare_def(env, vec![], full_ty, full_body).map_err(|e| {
-            ElabError::KernelRejected { error: e, span: rdecl.span.clone() }
+            ElabError::KernelRejected {
+                error: e,
+                span: rdecl.span.clone(),
+            }
         })?;
         globals.insert(rdecl.name.clone(), id);
         id
     };
-    Ok(ElabResult { name: rdecl.name.clone(), def_id: id, obligations: ens_obligations, foreign_binding: None, temporal_obligations: vec![], effect_row_type: None })
+    Ok(ElabResult {
+        name: rdecl.name.clone(),
+        def_id: id,
+        obligations: ens_obligations,
+        foreign_binding: None,
+        temporal_obligations: vec![],
+        effect_row_type: None,
+    })
 }
 
 /// Elaborate `prove name : φ` (`21 §6.3`, §3).
@@ -3565,8 +3883,12 @@ fn elaborate_prove(
         cx.metas.zonk_term(&phi_raw)
     };
     // Declare as postulate (the hole)
-    let hole_id = declare_postulate(env, vec![], phi_core.clone())
-        .map_err(|e| ElabError::KernelRejected { error: e, span: rdecl.span.clone() })?;
+    let hole_id = declare_postulate(env, vec![], phi_core.clone()).map_err(|e| {
+        ElabError::KernelRejected {
+            error: e,
+            span: rdecl.span.clone(),
+        }
+    })?;
     globals.insert(rdecl.name.clone(), hole_id);
     let obl = Obligation {
         id: 0,
@@ -3575,7 +3897,14 @@ fn elaborate_prove(
         span: rdecl.span.clone(),
         kind: ObligationKind::Prove,
     };
-    Ok(ElabResult { name: rdecl.name.clone(), def_id: hole_id, obligations: vec![obl], foreign_binding: None, temporal_obligations: vec![], effect_row_type: None })
+    Ok(ElabResult {
+        name: rdecl.name.clone(),
+        def_id: hole_id,
+        obligations: vec![obl],
+        foreign_binding: None,
+        temporal_obligations: vec![],
+        effect_row_type: None,
+    })
 }
 
 /// Elaborate `temporal name { φ }` — a delegated temporal/behavioral
@@ -3652,8 +3981,12 @@ fn elaborate_law(
             unify_types(&mut cx.metas, &omega, &phi_ty_raw);
             cx.metas.zonk_term(&phi_raw)
         };
-        let hole_id = declare_postulate(env, vec![], phi_core.clone())
-            .map_err(|e| ElabError::KernelRejected { error: e, span: rdecl.span.clone() })?;
+        let hole_id = declare_postulate(env, vec![], phi_core.clone()).map_err(|e| {
+            ElabError::KernelRejected {
+                error: e,
+                span: rdecl.span.clone(),
+            }
+        })?;
         let law_field_name = format!("{}_{}", rdecl.name, field_name);
         globals.insert(law_field_name, hole_id);
         obligations.push(Obligation {
@@ -3668,12 +4001,21 @@ fn elaborate_law(
     // The law itself: declare a postulate of the conjunction type.
     // For V1, law_id is a fresh postulate (placeholder — full Σ-of-Ω is V3+).
     let law_ty = Term::omega(Level::Zero);
-    let law_id = declare_postulate(env, vec![], law_ty)
-        .map_err(|e| ElabError::KernelRejected { error: e, span: rdecl.span.clone() })?;
+    let law_id = declare_postulate(env, vec![], law_ty).map_err(|e| ElabError::KernelRejected {
+        error: e,
+        span: rdecl.span.clone(),
+    })?;
     globals.insert(rdecl.name.clone(), law_id);
 
     // Return: def_id = law_id (the law postulate), obligations = per-field holes
-    Ok(ElabResult { name: rdecl.name.clone(), def_id: law_id, obligations, foreign_binding: None, temporal_obligations: vec![], effect_row_type: None })
+    Ok(ElabResult {
+        name: rdecl.name.clone(),
+        def_id: law_id,
+        obligations,
+        foreign_binding: None,
+        temporal_obligations: vec![],
+        effect_row_type: None,
+    })
 }
 
 // ----- helpers -----
@@ -3709,13 +4051,9 @@ fn elab_in_ctx_at_omega(
         _ => {
             // Check if the kernel will accept it as Ω — check core at omega
             // If not, surface error
-            kernel_check(env, ctx, &core_zonked, omega).map_err(|_| {
-                ElabError::TypeMismatch {
-                    span: span.clone(),
-                    reason: format!(
-                        "spec proposition must have type Ω, found non-proposition"
-                    ),
-                }
+            kernel_check(env, ctx, &core_zonked, omega).map_err(|_| ElabError::TypeMismatch {
+                span: span.clone(),
+                reason: format!("spec proposition must have type Ω, found non-proposition"),
             })?;
         }
     }
@@ -3816,8 +4154,12 @@ fn tail_codomain(
     match tail_col_kinds[0] {
         ColKind::Ih(_) => {
             let ih_ty = weaken(ret_ty_base, depth_before_tail as i64);
-            let rest =
-                tail_codomain(&tail_col_types[1..], &tail_col_kinds[1..], ret_ty_base, depth_before_tail);
+            let rest = tail_codomain(
+                &tail_col_types[1..],
+                &tail_col_kinds[1..],
+                ret_ty_base,
+                depth_before_tail,
+            );
             Term::pi(ih_ty, weaken(&rest, 1))
         }
         ColKind::Real => {
@@ -4061,16 +4403,25 @@ fn build_ctor_buckets(
                     if cx.globals.get(name).copied() == Some(c0.id) {
                         let mut new_pats = subs.clone();
                         new_pats.extend_from_slice(&r.real_pats[1..]);
-                        bucket.push(RowState { real_pats: new_pats, arm_idx: r.arm_idx });
+                        bucket.push(RowState {
+                            real_pats: new_pats,
+                            arm_idx: r.arm_idx,
+                        });
                     }
                 }
                 RPatKind::Wild | RPatKind::Var(_) => {
                     let span = r.real_pats[0].span.clone();
                     let mut new_pats: Vec<RPattern> = (0..c0.args.len())
-                        .map(|_| RPattern { kind: RPatKind::Wild, span: span.clone() })
+                        .map(|_| RPattern {
+                            kind: RPatKind::Wild,
+                            span: span.clone(),
+                        })
                         .collect();
                     new_pats.extend_from_slice(&r.real_pats[1..]);
-                    bucket.push(RowState { real_pats: new_pats, arm_idx: r.arm_idx });
+                    bucket.push(RowState {
+                        real_pats: new_pats,
+                        arm_idx: r.arm_idx,
+                    });
                 }
             }
         }
@@ -4089,8 +4440,9 @@ fn build_ctor_buckets(
         }
 
         let n_args0 = c0.args.len();
-        let field_types0: Vec<Term> =
-            (0..n_args0).map(|j| subst_outer(&c0.args[j], m0, params0, j)).collect();
+        let field_types0: Vec<Term> = (0..n_args0)
+            .map(|j| subst_outer(&c0.args[j], m0, params0, j))
+            .collect();
         let p_ihs0 = recursive_args(c0, d_id0, m0).len();
 
         // `col_types`/`col_kinds` stay index-aligned; an `Ih` slot's own type
@@ -4171,7 +4523,10 @@ fn infer_match(
     let rows: Vec<RowState> = arms
         .iter()
         .enumerate()
-        .map(|(i, arm)| RowState { real_pats: vec![arm.pat.clone()], arm_idx: i })
+        .map(|(i, arm)| RowState {
+            real_pats: vec![arm.pat.clone()],
+            arm_idx: i,
+        })
         .collect();
 
     let mut ret_ty_slot: Option<Term> = None;
@@ -4197,7 +4552,9 @@ fn infer_match(
     //    it was expanded into via a wildcard row) is dead code.
     for (i, used) in arm_used.iter().enumerate() {
         if !used {
-            return Err(ElabError::ReachabilityError { span: arms[i].span.clone() });
+            return Err(ElabError::ReachabilityError {
+                span: arms[i].span.clone(),
+            });
         }
     }
 
@@ -4274,12 +4631,14 @@ fn lower_by_inner(term: &Term, k: usize, cutoff: usize) -> Option<Term> {
             lower_by_inner(a, k, cutoff)?,
         )),
         Term::Const { id, level_args } => Some(Term::const_(*id, level_args.clone())),
-        Term::IndFormer { id, level_args } => {
-            Some(Term::IndFormer { id: *id, level_args: level_args.clone() })
-        }
-        Term::Constructor { id, level_args } => {
-            Some(Term::Constructor { id: *id, level_args: level_args.clone() })
-        }
+        Term::IndFormer { id, level_args } => Some(Term::IndFormer {
+            id: *id,
+            level_args: level_args.clone(),
+        }),
+        Term::Constructor { id, level_args } => Some(Term::Constructor {
+            id: *id,
+            level_args: level_args.clone(),
+        }),
         other => Some(other.clone()),
     }
 }
