@@ -880,6 +880,7 @@ mod tests {
             false_,
             nat,
             zero,
+            suc,
             ..
         } = std;
         let nat_ty = Term::IndFormer {
@@ -927,6 +928,74 @@ mod tests {
             &mut store,
         );
         assert_eq!(r, EvalVal::Unknown, "fst(pair unknown u) must be Unknown");
+
+        let pair_with_unknown_tail = Term::Pair(
+            Box::new(Term::Constructor {
+                id: zero,
+                level_args: vec![],
+            }),
+            Box::new(Term::Pair(
+                Box::new(Term::app(
+                    Term::Constructor {
+                        id: suc,
+                        level_args: vec![],
+                    },
+                    Term::Constructor {
+                        id: zero,
+                        level_args: vec![],
+                    },
+                )),
+                Box::new(hole.clone()),
+            )),
+        );
+
+        // Whole-pair evaluation stays strict: an unknown tail poisons the pair.
+        let r = eval(&[], &pair_with_unknown_tail, &env, &mut store);
+        assert_eq!(
+            r,
+            EvalVal::Unknown,
+            "whole pair with unknown tail must remain Unknown"
+        );
+
+        // But a projection chain may demand only an earlier concrete field.
+        let r = eval(
+            &[],
+            &Term::Proj1(Box::new(Term::Proj2(Box::new(pair_with_unknown_tail.clone())))),
+            &env,
+            &mut store,
+        );
+        assert_eq!(
+            nat_val(&r, zero, suc),
+            Some(1),
+            "fst(snd(pair zero (pair (suc zero) unknown))) must demand only the selected field"
+        );
+
+        let record_id =
+            declare_postulate(&mut env, vec![], nat_ty.clone()).expect("transparent record");
+        env.upgrade_to_transparent(record_id, pair_with_unknown_tail.clone());
+        let r = eval(
+            &[],
+            &Term::Proj1(Box::new(Term::Proj2(Box::new(Term::Const {
+                id: record_id,
+                level_args: vec![],
+            })))),
+            &env,
+            &mut store,
+        );
+        assert_eq!(
+            nat_val(&r, zero, suc),
+            Some(1),
+            "projection must reduce through transparent pair-chain definitions"
+        );
+
+        // Projecting the unknown tail itself still returns Unknown.
+        let r = eval(
+            &[],
+            &Term::Proj2(Box::new(Term::Proj2(Box::new(pair_with_unknown_tail)))),
+            &env,
+            &mut store,
+        );
+        assert_eq!(r, EvalVal::Unknown, "requested unknown field must stay Unknown");
 
         // elim on unknown scrutinee → unknown
         let r = eval(
