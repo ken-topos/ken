@@ -172,11 +172,11 @@ fn cat5_d1_source_span_package_elaborates_zero_delta() {
         "UnitByteLength",
         "EmptyBytes",
         "NonEmptyBytes",
-        "cat5ZeroInt",
-        "cat5NatToInt",
+        "byteUnitZeroInt",
+        "byteUnitNatToInt",
         "spanStart",
         "spanEnd",
-        "cat5LeqNat",
+        "natLeqBool",
         "LessEqNat",
         "lessEqNatRefl",
         "lessEqNatZeroLeft",
@@ -203,25 +203,25 @@ fn cat5_d1_source_span_package_elaborates_zero_delta() {
         "syntaxRoot",
         "syntaxChildren",
         "eraseSpans",
-        "cat5ListAppend",
+        "listAppend",
         "ValidLocatedList",
         "ValidSyntax",
         "boolExprEq",
-        "cat5NatEq",
-        "cat5NatAdd",
-        "cat5NatLt",
-        "cat5BoolAnd",
+        "natEqBool",
+        "natAdd",
+        "natLtBool",
+        "boolAnd",
         "sourceByteEq",
         "sourceByteEqAt",
-        "cat5StartsTrue",
-        "cat5StartsFalse",
-        "cat5StartsNotOpen",
-        "cat5StartsAndOpen",
-        "cat5SkipSpacesFuel",
-        "cat5SkipSpaces",
-        "cat5SyntaxLeaf",
-        "cat5SyntaxNode1",
-        "cat5SyntaxNode2",
+        "startsTrueToken",
+        "startsFalseToken",
+        "startsNotOpenToken",
+        "startsAndOpenToken",
+        "skipSpacesFuel",
+        "skipSpaces",
+        "syntaxLeaf",
+        "syntaxNodeUnary",
+        "syntaxNodeBinary",
         "parseBoolExprAtFuel",
         "parseBoolExpr",
         "printBoolExpr",
@@ -357,7 +357,7 @@ fn cat5_d1_source_span_surface_is_byte_artifact_and_source_explicit() {
         "IsUtf8 must be round-trip evidence over the source bytes, not reflexive equality"
     );
     assert!(
-        PARSING_KEN.contains("fn cat5NatToInt (unit : Bytes) (n : Nat) : Int =")
+        PARSING_KEN.contains("fn byteUnitNatToInt (unit : Bytes) (n : Nat) : Int =")
             && PARSING_KEN.contains("fn EmptyBytes (bs : Bytes) : Prop =")
             && PARSING_KEN.contains("fn NonEmptyBytes (bs : Bytes) : Prop =")
             && PARSING_KEN.contains("fn UnitByteLength (unit : Bytes) : Prop =")
@@ -365,7 +365,7 @@ fn cat5_d1_source_span_surface_is_byte_artifact_and_source_explicit() {
             && PARSING_KEN.contains("bytes_concat left right")
             && PARSING_KEN.contains("NonEmptyBytes unit")
             && PARSING_KEN.contains("bytes_length bs")
-            && PARSING_KEN.contains("cat5NatToInt unit n"),
+            && PARSING_KEN.contains("byteUnitNatToInt unit n"),
         "SourceLength must tie sourceLength to sourceBytes through a non-empty byte-atomic unit witness"
     );
     assert!(
@@ -408,37 +408,37 @@ fn cat5_d1_valid_half_open_bounds_and_zero_width_offsets_check() {
     let mut env = mk_env();
     env.elaborate_file(
         r#"
-        fn cat5_span_zero_zero (s : Source) : Span = MkSpan Zero Zero
+        fn zero_width_span_at_start (s : Source) : Span = MkSpan Zero Zero
 
-        fn cat5_valid_zero_zero (s : Source) : ValidSpan s (cat5_span_zero_zero s) =
+        fn valid_zero_width_span_at_start (s : Source) : ValidSpan s (zero_width_span_at_start s) =
           andIntro
-            (LessEqNat (spanStart (cat5_span_zero_zero s)) (spanEnd (cat5_span_zero_zero s)))
-            (LessEqNat (spanEnd (cat5_span_zero_zero s)) (sourceLength s))
+            (LessEqNat (spanStart (zero_width_span_at_start s)) (spanEnd (zero_width_span_at_start s)))
+            (LessEqNat (spanEnd (zero_width_span_at_start s)) (sourceLength s))
             (lessEqNatRefl Zero)
             (lessEqNatZeroLeft (sourceLength s))
 
-        fn cat5_span_zero_at_offset (offset : Nat) : Span = MkSpan offset offset
+        fn zero_width_span_at_offset (offset : Nat) : Span = MkSpan offset offset
 
-        fn cat5_valid_zero_at_offset (s : Source) (offset : Nat)
-          : LessEqNat offset (sourceLength s) -> ValidSpan s (cat5_span_zero_at_offset offset) =
+        fn valid_zero_width_span_at_offset (s : Source) (offset : Nat)
+          : LessEqNat offset (sourceLength s) -> ValidSpan s (zero_width_span_at_offset offset) =
           \h. validZeroWidthSpan s offset h
 
-        fn cat5_source_utf8_projects (s : Source) : IsUtf8 (sourceBytes s) =
+        fn source_utf8_projects (s : Source) : IsUtf8 (sourceBytes s) =
           sourceUtf8 s
 
-        fn cat5_source_length_valid_projects (s : Source)
+        fn source_length_valid_projects (s : Source)
           : SourceLength (sourceLengthUnit s) (sourceBytes s) (sourceLength s) =
           sourceLengthValid s
 
-        fn cat5_located_true (s : Source) : Located Bool =
-          MkLocated Bool (sourceId s) (cat5_span_zero_zero s) True
+        fn located_true_value (s : Source) : Located Bool =
+          MkLocated Bool (sourceId s) (zero_width_span_at_start s) True
 
-        fn cat5_valid_located_true (s : Source) : ValidLocated Bool s (cat5_located_true s) =
+        fn valid_located_true_value (s : Source) : ValidLocated Bool s (located_true_value s) =
           andIntro
-            (Equal SourceId (locatedSource Bool (cat5_located_true s)) (sourceId s))
-            (ValidSpan s (locatedSpan Bool (cat5_located_true s)))
+            (Equal SourceId (locatedSource Bool (located_true_value s)) (sourceId s))
+            (ValidSpan s (locatedSpan Bool (located_true_value s)))
             Refl
-            (cat5_valid_zero_zero s)
+            (valid_zero_width_span_at_start s)
         "#,
     )
     .expect("valid half-open and zero-width spans should check");
@@ -449,63 +449,63 @@ fn cat5_d1_concrete_nonempty_source_constructs_and_projects() {
     let mut env = mk_env();
     env.elaborate_file(
         r#"
-        data Cat5ConcreteSource = MkCat5ConcreteSource
+        data ConcreteByteSource = MkConcreteByteSource
 
-        const cat5_unit_byte : Bytes = bytes_encode "x"
-        const cat5_abc_bytes : Bytes = bytes_encode "abc"
-        const cat5_unit_valid : UnitByteLength cat5_unit_byte = Axiom
-        const cat5_utf8_valid : IsUtf8 cat5_abc_bytes = Axiom
-        const cat5_length3_valid
-          : SourceLength cat5_unit_byte cat5_abc_bytes (Suc (Suc (Suc Zero))) =
+        const source_unit_byte : Bytes = bytes_encode "x"
+        const sample_abc_bytes : Bytes = bytes_encode "abc"
+        const source_unit_valid : UnitByteLength source_unit_byte = Axiom
+        const sample_utf8_valid : IsUtf8 sample_abc_bytes = Axiom
+        const sample_length3_valid
+          : SourceLength source_unit_byte sample_abc_bytes (Suc (Suc (Suc Zero))) =
           Axiom
 
-        instance Source Cat5ConcreteSource {
+        instance Source ConcreteByteSource {
           sourceIdField = MkSourceId Zero ;
-          sourceBytesField = cat5_abc_bytes ;
+          sourceBytesField = sample_abc_bytes ;
           sourceLengthField = Suc (Suc (Suc Zero)) ;
-          sourceLengthUnitField = cat5_unit_byte ;
-          sourceLengthUnitValidField = cat5_unit_valid ;
-          sourceUtf8Field = cat5_utf8_valid ;
-          sourceLengthValidField = cat5_length3_valid
+          sourceLengthUnitField = source_unit_byte ;
+          sourceLengthUnitValidField = source_unit_valid ;
+          sourceUtf8Field = sample_utf8_valid ;
+          sourceLengthValidField = sample_length3_valid
         }
 
-        const cat5_source : Source = Source_instance_Cat5ConcreteSource
+        const sample_source : Source = Source_instance_ConcreteByteSource
 
-        const cat5_projected_bytes : Bytes = sourceBytes cat5_source
-        const cat5_projected_length : Nat = sourceLength cat5_source
-        const cat5_projected_utf8 : IsUtf8 (sourceBytes cat5_source) =
-          sourceUtf8 cat5_source
-        const cat5_projected_length_valid
-          : SourceLength (sourceLengthUnit cat5_source) (sourceBytes cat5_source) (sourceLength cat5_source) =
-          sourceLengthValid cat5_source
+        const projected_bytes : Bytes = sourceBytes sample_source
+        const projected_length : Nat = sourceLength sample_source
+        const projected_utf8 : IsUtf8 (sourceBytes sample_source) =
+          sourceUtf8 sample_source
+        const projected_length_valid
+          : SourceLength (sourceLengthUnit sample_source) (sourceBytes sample_source) (sourceLength sample_source) =
+          sourceLengthValid sample_source
 
-        const cat5_span_all : Span = MkSpan Zero (sourceLength cat5_source)
-        const cat5_valid_all : ValidSpan cat5_source cat5_span_all =
+        const full_source_span : Span = MkSpan Zero (sourceLength sample_source)
+        const full_source_span_valid : ValidSpan sample_source full_source_span =
           andIntro
-            (LessEqNat (spanStart cat5_span_all) (spanEnd cat5_span_all))
-            (LessEqNat (spanEnd cat5_span_all) (sourceLength cat5_source))
-            (lessEqNatZeroLeft (sourceLength cat5_source))
-            (lessEqNatRefl (sourceLength cat5_source))
+            (LessEqNat (spanStart full_source_span) (spanEnd full_source_span))
+            (LessEqNat (spanEnd full_source_span) (sourceLength sample_source))
+            (lessEqNatZeroLeft (sourceLength sample_source))
+            (lessEqNatRefl (sourceLength sample_source))
         "#,
     )
     .expect("a concrete non-empty Source must construct and project with real length evidence");
 
     let mut store = make_store(&env);
-    let projected_bytes = eval_def(&env, &mut store, "cat5_projected_bytes");
+    let projected_bytes = eval_def(&env, &mut store, "projected_bytes");
     assert_eq!(
         projected_bytes,
         EvalVal::Bytes(b"abc".to_vec()),
         "sourceBytes must execute through a concrete class-backed Source instance"
     );
 
-    let projected_length = eval_def(&env, &mut store, "cat5_projected_length");
+    let projected_length = eval_def(&env, &mut store, "projected_length");
     assert_eq!(
         nat_count(&env, &projected_length),
         3,
         "sourceLength must execute through the same class-backed Source instance"
     );
 
-    let projected_utf8 = eval_def(&env, &mut store, "cat5_projected_utf8");
+    let projected_utf8 = eval_def(&env, &mut store, "projected_utf8");
     assert_eq!(
         projected_utf8,
         EvalVal::Unknown,
@@ -519,24 +519,24 @@ fn cat5_d1_concrete_mismatched_source_length_rejected() {
     let err = env
         .elaborate_file(
             r#"
-            data Cat5BadSource = MkCat5BadSource
+            data MismatchedLengthSource = MkMismatchedLengthSource
 
-            const cat5_unit_byte : Bytes = bytes_encode "x"
-            const cat5_abc_bytes : Bytes = bytes_encode "abc"
-            const cat5_unit_valid : UnitByteLength cat5_unit_byte = Axiom
-            const cat5_utf8_valid : IsUtf8 cat5_abc_bytes = Axiom
-            const cat5_length3_valid
-              : SourceLength cat5_unit_byte cat5_abc_bytes (Suc (Suc (Suc Zero))) =
+            const source_unit_byte : Bytes = bytes_encode "x"
+            const sample_abc_bytes : Bytes = bytes_encode "abc"
+            const source_unit_valid : UnitByteLength source_unit_byte = Axiom
+            const sample_utf8_valid : IsUtf8 sample_abc_bytes = Axiom
+            const sample_length3_valid
+              : SourceLength source_unit_byte sample_abc_bytes (Suc (Suc (Suc Zero))) =
               Axiom
 
-            instance Source Cat5BadSource {
+            instance Source MismatchedLengthSource {
               sourceIdField = MkSourceId Zero ;
-              sourceBytesField = cat5_abc_bytes ;
+              sourceBytesField = sample_abc_bytes ;
               sourceLengthField = Suc (Suc Zero) ;
-              sourceLengthUnitField = cat5_unit_byte ;
-              sourceLengthUnitValidField = cat5_unit_valid ;
-              sourceUtf8Field = cat5_utf8_valid ;
-              sourceLengthValidField = cat5_length3_valid
+              sourceLengthUnitField = source_unit_byte ;
+              sourceLengthUnitValidField = source_unit_valid ;
+              sourceUtf8Field = sample_utf8_valid ;
+              sourceLengthValidField = sample_length3_valid
             }
             "#,
         )
@@ -558,23 +558,23 @@ fn cat5_d1_multibyte_unit_cannot_make_three_bytes_report_one() {
     let err = env
         .elaborate_file(
             r#"
-            data Cat5BadUnitSource = MkCat5BadUnitSource
+            data MultiByteUnitSource = MkMultiByteUnitSource
 
-            const cat5_abc_bytes : Bytes = bytes_encode "abc"
-            const cat5_bad_unit_valid : UnitByteLength cat5_abc_bytes = Refl
-            const cat5_utf8_valid : IsUtf8 cat5_abc_bytes = Axiom
-            const cat5_bad_length_valid
-              : SourceLength cat5_abc_bytes cat5_abc_bytes (Suc Zero) =
+            const sample_abc_bytes : Bytes = bytes_encode "abc"
+            const invalid_unit_valid : UnitByteLength sample_abc_bytes = Refl
+            const sample_utf8_valid : IsUtf8 sample_abc_bytes = Axiom
+            const invalid_length_valid
+              : SourceLength sample_abc_bytes sample_abc_bytes (Suc Zero) =
               Refl
 
-            instance Source Cat5BadUnitSource {
+            instance Source MultiByteUnitSource {
               sourceIdField = MkSourceId Zero ;
-              sourceBytesField = cat5_abc_bytes ;
+              sourceBytesField = sample_abc_bytes ;
               sourceLengthField = Suc Zero ;
-              sourceLengthUnitField = cat5_abc_bytes ;
-              sourceLengthUnitValidField = cat5_bad_unit_valid ;
-              sourceUtf8Field = cat5_utf8_valid ;
-              sourceLengthValidField = cat5_bad_length_valid
+              sourceLengthUnitField = sample_abc_bytes ;
+              sourceLengthUnitValidField = invalid_unit_valid ;
+              sourceUtf8Field = sample_utf8_valid ;
+              sourceLengthValidField = invalid_length_valid
             }
             "#,
         )
@@ -596,11 +596,11 @@ fn cat5_d1_end_past_source_length_rejected() {
     let err = env
         .elaborate_file(
             r#"
-            const cat5_bad_span : Span = MkSpan Zero (Suc (Suc (Suc Zero)))
-            fn cat5_bad_valid (s : Source) : ValidSpan s cat5_bad_span =
+            const invalid_span : Span = MkSpan Zero (Suc (Suc (Suc Zero)))
+            fn invalid_span_valid (s : Source) : ValidSpan s invalid_span =
               andIntro
-                (LessEqNat (spanStart cat5_bad_span) (spanEnd cat5_bad_span))
-                (LessEqNat (spanEnd cat5_bad_span) (sourceLength s))
+                (LessEqNat (spanStart invalid_span) (spanEnd invalid_span))
+                (LessEqNat (spanEnd invalid_span) (sourceLength s))
                 tt
                 tt
             "#,
@@ -621,11 +621,11 @@ fn cat5_d1_start_after_end_rejected() {
     let err = env
         .elaborate_file(
             r#"
-            const cat5_bad_span : Span = MkSpan (Suc (Suc Zero)) (Suc Zero)
-            fn cat5_bad_valid (s : Source) : ValidSpan s cat5_bad_span =
+            const invalid_span : Span = MkSpan (Suc (Suc Zero)) (Suc Zero)
+            fn invalid_span_valid (s : Source) : ValidSpan s invalid_span =
               andIntro
-                (LessEqNat (spanStart cat5_bad_span) (spanEnd cat5_bad_span))
-                (LessEqNat (spanEnd cat5_bad_span) (sourceLength s))
+                (LessEqNat (spanStart invalid_span) (spanEnd invalid_span))
+                (LessEqNat (spanEnd invalid_span) (sourceLength s))
                 tt
                 tt
             "#,
@@ -646,9 +646,9 @@ fn cat5_d1_old_unconstrained_source_constructor_rejected() {
     let err = env
         .elaborate_file(
             r#"
-            const cat5_sid : SourceId = MkSourceId Zero
-            const cat5_bad_source : Source =
-              MkSource cat5_sid (bytes_encode "abc") (Suc (Suc (Suc Zero)))
+            const sample_source_id : SourceId = MkSourceId Zero
+            const invalid_source : Source =
+              MkSource sample_source_id (bytes_encode "abc") (Suc (Suc (Suc Zero)))
             "#,
         )
         .expect_err("old three-argument MkSource constructor must not be available");
@@ -667,8 +667,8 @@ fn cat5_d1_reflexive_utf8_and_length_proofs_rejected() {
     let err = env
         .elaborate_file(
             r#"
-            const cat5_bytes : Bytes = bytes_encode "abc"
-            const cat5_fake_utf8 : IsUtf8 cat5_bytes = Refl
+            const sample_bytes : Bytes = bytes_encode "abc"
+            const fake_utf8 : IsUtf8 sample_bytes = Refl
             "#,
         )
         .expect_err("IsUtf8 must not be provable by reflexive equality over arbitrary bytes");
@@ -685,9 +685,9 @@ fn cat5_d1_reflexive_utf8_and_length_proofs_rejected() {
     let err = env
         .elaborate_file(
             r#"
-            const cat5_bytes : Bytes = bytes_encode "abc"
-            const cat5_unit : Bytes = bytes_encode "x"
-            const cat5_fake_length : SourceLength cat5_unit cat5_bytes Zero = Refl
+            const sample_bytes : Bytes = bytes_encode "abc"
+            const sample_unit : Bytes = bytes_encode "x"
+            const fake_length : SourceLength sample_unit sample_bytes Zero = Refl
             "#,
         )
         .expect_err(
@@ -708,10 +708,10 @@ fn cat5_d2_success_parser_carries_valid_consumed_span_from_start() {
     let mut env = mk_env();
     env.elaborate_file(
         r#"
-        const cat5_success_parser : Parser Bool =
+        const success_parser : Parser Bool =
           parserPure Bool True
 
-        const cat5_success_parser_valid : ParserValid Bool cat5_success_parser =
+        const success_parser_valid : ParserValid Bool success_parser =
           \s. \start. \h.
             andIntro
               (ValidSpan s (MkSpan start start))
@@ -725,14 +725,14 @@ fn cat5_d2_success_parser_carries_valid_consumed_span_from_start() {
                 Refl
                 Refl)
 
-        const cat5_success_parser_laws : ParserLaws Bool cat5_success_parser =
+        const success_parser_laws : ParserLaws Bool success_parser =
           andIntro
-            (ParserValid Bool cat5_success_parser)
-            (And (ParserTotal Bool cat5_success_parser) (ParserSourceLocal Bool cat5_success_parser))
-            cat5_success_parser_valid
+            (ParserValid Bool success_parser)
+            (And (ParserTotal Bool success_parser) (ParserSourceLocal Bool success_parser))
+            success_parser_valid
             (andIntro
-              (ParserTotal Bool cat5_success_parser)
-              (ParserSourceLocal Bool cat5_success_parser)
+              (ParserTotal Bool success_parser)
+              (ParserSourceLocal Bool success_parser)
               (\s. \start. \h. tt)
               (\s. \start. \h. validZeroWidthSpan s start h))
         "#,
@@ -745,10 +745,10 @@ fn cat5_d2_failed_parser_carries_same_source_valid_span() {
     let mut env = mk_env();
     env.elaborate_file(
         r#"
-        const cat5_failed_parser : Parser Bool =
+        const failed_parser : Parser Bool =
           parserFail Bool
 
-        const cat5_failed_parser_valid : ParserValid Bool cat5_failed_parser =
+        const failed_parser_valid : ParserValid Bool failed_parser =
           \s. \start. \h.
             andIntro
               (Equal SourceId (errorSource (MkParseError (sourceId s) (MkSpan start start))) (sourceId s))
@@ -756,7 +756,7 @@ fn cat5_d2_failed_parser_carries_same_source_valid_span() {
               Refl
               (validZeroWidthSpan s start h)
 
-        const cat5_failed_parser_source_local : ParserSourceLocal Bool cat5_failed_parser =
+        const failed_parser_source_local : ParserSourceLocal Bool failed_parser =
           \s. \start. \h. Refl
         "#,
     )
@@ -769,11 +769,11 @@ fn cat5_d2_failure_with_wrong_source_rejected_by_law() {
     let err = env
         .elaborate_file(
             r#"
-            const cat5_bad_failed_parser : Parser Bool =
+            const wrong_source_failed_parser : Parser Bool =
               \s. \start. \h.
                 Failed Bool (MkParseError (MkSourceId (Suc Zero)) (MkSpan start start))
 
-            const cat5_bad_failed_parser_valid : ParserValid Bool cat5_bad_failed_parser =
+            const wrong_source_failed_parser_valid : ParserValid Bool wrong_source_failed_parser =
               \s. \start. \h.
                 andIntro
                   (Equal SourceId (errorSource (MkParseError (MkSourceId (Suc Zero)) (MkSpan start start))) (sourceId s))
@@ -800,11 +800,11 @@ fn cat5_d2_failure_with_invalid_span_rejected_by_law() {
     let err = env
         .elaborate_file(
             r#"
-            const cat5_bad_span_failed_parser : Parser Bool =
+            const invalid_span_failed_parser : Parser Bool =
               \s. \start. \h.
                 Failed Bool (MkParseError (sourceId s) (MkSpan (Suc (Suc Zero)) (Suc Zero)))
 
-            const cat5_bad_span_failed_parser_valid : ParserValid Bool cat5_bad_span_failed_parser =
+            const invalid_span_failed_parser_valid : ParserValid Bool invalid_span_failed_parser =
               \s. \start. \h.
                 andIntro
                   (Equal SourceId (errorSource (MkParseError (sourceId s) (MkSpan (Suc (Suc Zero)) (Suc Zero)))) (sourceId s))
@@ -833,11 +833,11 @@ fn cat5_d2_repetition_is_deferred_no_unguarded_many_or_repeat() {
     let err = env
         .elaborate_file(
             r#"
-            const cat5_zero_width_parser : Parser Bool =
+            const zero_width_parser : Parser Bool =
               parserPure Bool True
 
-            const cat5_unguarded_repeat : Parser (List Bool) =
-              repeat Bool cat5_zero_width_parser
+            const unguarded_repeat : Parser (List Bool) =
+              repeat Bool zero_width_parser
             "#,
         )
         .expect_err("unguarded repetition must not be exported by the D2 package");
@@ -856,12 +856,12 @@ fn cat5_d2_broken_fuel_repetition_producer_path_is_not_exported() {
     let err = env
         .elaborate_file(
             r#"
-            const cat5_one_byte_parser : Parser Bool =
+            const one_byte_parser : Parser Bool =
               \s. \start. \h.
                 Parsed Bool True (MkSpan start (Suc start)) (Suc start)
 
-            const cat5_repeat_two : Parser (List Bool) =
-              repeatWithFuel Bool (Suc (Suc Zero)) cat5_one_byte_parser
+            const repeat_two : Parser (List Bool) =
+              repeatWithFuel Bool (Suc (Suc Zero)) one_byte_parser
             "#,
         )
         .expect_err("D2 must not export the broken fuel repetition helper");
@@ -881,106 +881,106 @@ fn cat5_d3_bool_parser_printer_formatter_roundtrip_on_source_bytes() {
     let bad_len = nat_expr(14);
     env.elaborate_file(&format!(
         r#"
-        data Cat5D3PrintedSource = MkCat5D3PrintedSource
-        data Cat5D3FormattedSource = MkCat5D3FormattedSource
-        data Cat5D3BadSource = MkCat5D3BadSource
+        data PrintedBoolExprSource = MkPrintedBoolExprSource
+        data FormattedBoolExprSource = MkFormattedBoolExprSource
+        data InfixBoolExprSource = MkInfixBoolExprSource
 
-        const cat5_d3_unit_byte : Bytes = bytes_encode "x"
-        const cat5_d3_unit_valid : UnitByteLength cat5_d3_unit_byte = Axiom
+        const bool_expr_source_unit : Bytes = bytes_encode "x"
+        const bool_expr_unit_valid : UnitByteLength bool_expr_source_unit = Axiom
 
-        const cat5_d3_expr : BoolExpr =
+        const representative_bool_expr : BoolExpr =
           BAnd BTrue (BNot BFalse)
 
-        const cat5_d3_printed_bytes : Bytes =
-          printBoolExpr cat5_d3_expr
+        const printed_bool_expr_bytes : Bytes =
+          printBoolExpr representative_bool_expr
 
-        const cat5_d3_printed_utf8 : IsUtf8 cat5_d3_printed_bytes = Axiom
-        const cat5_d3_printed_length_valid
-          : SourceLength cat5_d3_unit_byte cat5_d3_printed_bytes ({printed_len}) =
+        const printed_bool_expr_utf8 : IsUtf8 printed_bool_expr_bytes = Axiom
+        const printed_bool_expr_length_valid
+          : SourceLength bool_expr_source_unit printed_bool_expr_bytes ({printed_len}) =
           Axiom
 
-        instance Source Cat5D3PrintedSource {{
+        instance Source PrintedBoolExprSource {{
           sourceIdField = MkSourceId (Suc (Suc Zero)) ;
-          sourceBytesField = cat5_d3_printed_bytes ;
+          sourceBytesField = printed_bool_expr_bytes ;
           sourceLengthField = ({printed_len}) ;
-          sourceLengthUnitField = cat5_d3_unit_byte ;
-          sourceLengthUnitValidField = cat5_d3_unit_valid ;
-          sourceUtf8Field = cat5_d3_printed_utf8 ;
-          sourceLengthValidField = cat5_d3_printed_length_valid
+          sourceLengthUnitField = bool_expr_source_unit ;
+          sourceLengthUnitValidField = bool_expr_unit_valid ;
+          sourceUtf8Field = printed_bool_expr_utf8 ;
+          sourceLengthValidField = printed_bool_expr_length_valid
         }}
 
-        const cat5_d3_source : Source = Source_instance_Cat5D3PrintedSource
+        const printed_bool_expr_source : Source = Source_instance_PrintedBoolExprSource
 
-        const cat5_d3_parse_printed : ParseResult (Syntax BoolExpr) =
-          parseBoolExpr cat5_d3_source Zero (lessEqNatZeroLeft (sourceLength cat5_d3_source))
+        const parse_printed_bool_expr : ParseResult (Syntax BoolExpr) =
+          parseBoolExpr printed_bool_expr_source Zero (lessEqNatZeroLeft (sourceLength printed_bool_expr_source))
 
-        const cat5_d3_parse_printed_erases : Bool =
-          match cat5_d3_parse_printed {{
-            Parsed syntax consumed next => boolExprEq (eraseSpans syntax) cat5_d3_expr ;
+        const parse_printed_bool_expr_erases : Bool =
+          match parse_printed_bool_expr {{
+            Parsed syntax consumed next => boolExprEq (eraseSpans syntax) representative_bool_expr ;
             Failed err => False
           }}
 
-        const cat5_d3_parsed_syntax : Syntax BoolExpr =
-          match cat5_d3_parse_printed {{
+        const parsed_bool_expr_syntax : Syntax BoolExpr =
+          match parse_printed_bool_expr {{
             Parsed syntax consumed next => syntax ;
-            Failed err => cat5SyntaxLeaf cat5_d3_source Zero Zero BFalse
+            Failed err => syntaxLeaf printed_bool_expr_source Zero Zero BFalse
           }}
 
-        const cat5_d3_formatted : Result ParseError Bytes =
-          formatBoolExpr cat5_d3_source
+        const format_printed_bool_expr : Result ParseError Bytes =
+          formatBoolExpr printed_bool_expr_source
 
-        const cat5_d3_formatted_bytes : Bytes =
-          match cat5_d3_formatted {{
+        const formatted_bool_expr_bytes : Bytes =
+          match format_printed_bool_expr {{
             Ok bs => bs ;
             Err err => bytes_encode "ERR"
           }}
 
-        const cat5_d3_formatted_utf8 : IsUtf8 cat5_d3_formatted_bytes = Axiom
-        const cat5_d3_formatted_length_valid
-          : SourceLength cat5_d3_unit_byte cat5_d3_formatted_bytes ({printed_len}) =
+        const formatted_bool_expr_utf8 : IsUtf8 formatted_bool_expr_bytes = Axiom
+        const formatted_bool_expr_length_valid
+          : SourceLength bool_expr_source_unit formatted_bool_expr_bytes ({printed_len}) =
           Axiom
 
-        instance Source Cat5D3FormattedSource {{
+        instance Source FormattedBoolExprSource {{
           sourceIdField = MkSourceId (Suc (Suc (Suc Zero))) ;
-          sourceBytesField = cat5_d3_formatted_bytes ;
+          sourceBytesField = formatted_bool_expr_bytes ;
           sourceLengthField = ({printed_len}) ;
-          sourceLengthUnitField = cat5_d3_unit_byte ;
-          sourceLengthUnitValidField = cat5_d3_unit_valid ;
-          sourceUtf8Field = cat5_d3_formatted_utf8 ;
-          sourceLengthValidField = cat5_d3_formatted_length_valid
+          sourceLengthUnitField = bool_expr_source_unit ;
+          sourceLengthUnitValidField = bool_expr_unit_valid ;
+          sourceUtf8Field = formatted_bool_expr_utf8 ;
+          sourceLengthValidField = formatted_bool_expr_length_valid
         }}
 
-        const cat5_d3_formatted_source : Source = Source_instance_Cat5D3FormattedSource
+        const formatted_bool_expr_source : Source = Source_instance_FormattedBoolExprSource
 
-        const cat5_d3_format_idempotent : Result ParseError Bytes =
-          formatBoolExpr cat5_d3_formatted_source
+        const reformat_bool_expr : Result ParseError Bytes =
+          formatBoolExpr formatted_bool_expr_source
 
-        const cat5_d3_format_idempotent_bytes : Bytes =
-          match cat5_d3_format_idempotent {{
+        const reformatted_bool_expr_bytes : Bytes =
+          match reformat_bool_expr {{
             Ok bs => bs ;
             Err err => bytes_encode "ERR"
           }}
 
-        const cat5_d3_bad_bytes : Bytes = bytes_encode "true and false"
-        const cat5_d3_bad_utf8 : IsUtf8 cat5_d3_bad_bytes = Axiom
-        const cat5_d3_bad_length_valid
-          : SourceLength cat5_d3_unit_byte cat5_d3_bad_bytes ({bad_len}) =
+        const infix_bool_expr_bytes : Bytes = bytes_encode "true and false"
+        const infix_bool_expr_utf8 : IsUtf8 infix_bool_expr_bytes = Axiom
+        const infix_bool_expr_length_valid
+          : SourceLength bool_expr_source_unit infix_bool_expr_bytes ({bad_len}) =
           Axiom
 
-        instance Source Cat5D3BadSource {{
+        instance Source InfixBoolExprSource {{
           sourceIdField = MkSourceId (Suc (Suc (Suc (Suc Zero)))) ;
-          sourceBytesField = cat5_d3_bad_bytes ;
+          sourceBytesField = infix_bool_expr_bytes ;
           sourceLengthField = ({bad_len}) ;
-          sourceLengthUnitField = cat5_d3_unit_byte ;
-          sourceLengthUnitValidField = cat5_d3_unit_valid ;
-          sourceUtf8Field = cat5_d3_bad_utf8 ;
-          sourceLengthValidField = cat5_d3_bad_length_valid
+          sourceLengthUnitField = bool_expr_source_unit ;
+          sourceLengthUnitValidField = bool_expr_unit_valid ;
+          sourceUtf8Field = infix_bool_expr_utf8 ;
+          sourceLengthValidField = infix_bool_expr_length_valid
         }}
 
-        const cat5_d3_bad_source : Source = Source_instance_Cat5D3BadSource
+        const infix_bool_expr_source : Source = Source_instance_InfixBoolExprSource
 
-        const cat5_d3_bad_parse : ParseResult (Syntax BoolExpr) =
-          parseBoolExpr cat5_d3_bad_source Zero (lessEqNatZeroLeft (sourceLength cat5_d3_bad_source))
+        const parse_infix_bool_expr : ParseResult (Syntax BoolExpr) =
+          parseBoolExpr infix_bool_expr_source Zero (lessEqNatZeroLeft (sourceLength infix_bool_expr_source))
         "#,
     ))
     .expect("D3 Boolean parser/printer/formatter producer path must elaborate");
@@ -991,30 +991,30 @@ fn cat5_d3_bool_parser_printer_formatter_roundtrip_on_source_bytes() {
         &mut store,
         &[
             "record_nil_val",
-            "cat5_d3_unit_valid",
-            "cat5_d3_printed_utf8",
-            "cat5_d3_printed_length_valid",
-            "cat5_d3_formatted_utf8",
-            "cat5_d3_formatted_length_valid",
-            "cat5_d3_bad_utf8",
-            "cat5_d3_bad_length_valid",
+            "bool_expr_unit_valid",
+            "printed_bool_expr_utf8",
+            "printed_bool_expr_length_valid",
+            "formatted_bool_expr_utf8",
+            "formatted_bool_expr_length_valid",
+            "infix_bool_expr_utf8",
+            "infix_bool_expr_length_valid",
         ],
     );
-    let printed = eval_def(&env, &mut store, "cat5_d3_printed_bytes");
+    let printed = eval_def(&env, &mut store, "printed_bool_expr_bytes");
     assert_eq!(
         printed,
         EvalVal::Bytes(b"(and true (not false))".to_vec()),
         "printBoolExpr must emit canonical ASCII bytes"
     );
 
-    let parsed = eval_def(&env, &mut store, "cat5_d3_parse_printed");
+    let parsed = eval_def(&env, &mut store, "parse_printed_bool_expr");
     let parsed_args = ctor_args(&env, &parsed, "Parsed");
     assert!(
         parsed_args.len() >= 4,
         "Parsed must carry type/value/span/next args, got {parsed_args:?}"
     );
     let syntax = parsed_args[1].clone();
-    let expected_expr = eval_def(&env, &mut store, "cat5_d3_expr");
+    let expected_expr = eval_def(&env, &mut store, "representative_bool_expr");
     let (root, _) = syntax_root_and_children(&env, &syntax);
     let root_args = ctor_args(&env, root, "MkLocated");
     assert_eq!(
@@ -1023,13 +1023,13 @@ fn cat5_d3_bool_parser_printer_formatter_roundtrip_on_source_bytes() {
     );
     assert!(
         matches!(
-            eval_def(&env, &mut store, "cat5_d3_parse_printed_erases"),
+            eval_def(&env, &mut store, "parse_printed_bool_expr_erases"),
             EvalVal::Ctor { id, .. } if id == env.globals["True"]
         ),
         "the checked surface erasure witness must evaluate to True"
     );
 
-    let formatted = eval_def(&env, &mut store, "cat5_d3_formatted");
+    let formatted = eval_def(&env, &mut store, "format_printed_bool_expr");
     let formatted_args = ctor_args(&env, &formatted, "Ok");
     assert!(
         formatted_args.len() >= 3,
@@ -1041,7 +1041,7 @@ fn cat5_d3_bool_parser_printer_formatter_roundtrip_on_source_bytes() {
         "formatBoolExpr must preserve the erased tree by printing canonical bytes"
     );
 
-    let idempotent = eval_def(&env, &mut store, "cat5_d3_format_idempotent");
+    let idempotent = eval_def(&env, &mut store, "reformat_bool_expr");
     let idempotent_args = ctor_args(&env, &idempotent, "Ok");
     assert_eq!(
         idempotent_args[2],
@@ -1060,7 +1060,7 @@ fn cat5_d3_bool_parser_printer_formatter_roundtrip_on_source_bytes() {
         "all parsed syntax spans must be within the concrete Source length: {spans:?}"
     );
 
-    let bad = eval_def(&env, &mut store, "cat5_d3_bad_parse");
+    let bad = eval_def(&env, &mut store, "parse_infix_bool_expr");
     assert!(
         matches!(bad, EvalVal::Ctor { id, .. } if id == env.globals["Failed"]),
         "`true and false` must reject; D3 has no implicit precedence table"

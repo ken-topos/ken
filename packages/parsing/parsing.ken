@@ -1,4 +1,4 @@
--- CAT-5 D1/D2 source/span and parser-result core.
+-- Source/span, parser-result, and Boolean syntax core.
 --
 -- This package models source identity as an immutable byte artifact. Spans
 -- are only half-open byte endpoints; source identity is supplied by values
@@ -9,17 +9,17 @@ data SourceId = MkSourceId Nat
 fn IsUtf8 (bs : Bytes) : Prop =
   Equal Bytes (bytes_encode (bytes_decode bs)) bs
 
-fn cat5ZeroInt (unit : Bytes) : Int =
+fn byteUnitZeroInt (unit : Bytes) : Int =
   (bytes_length unit) - (bytes_length unit)
 
-fn cat5NatToInt (unit : Bytes) (n : Nat) : Int =
+fn byteUnitNatToInt (unit : Bytes) (n : Nat) : Int =
   match n {
-    Zero => cat5ZeroInt unit ;
-    Suc n2 => (bytes_length unit) + (cat5NatToInt unit n2)
+    Zero => byteUnitZeroInt unit ;
+    Suc n2 => (bytes_length unit) + (byteUnitNatToInt unit n2)
   }
 
 fn EmptyBytes (bs : Bytes) : Prop =
-  Equal Bytes bs (bytes_slice bs (bytes_length bs) (cat5ZeroInt bs))
+  Equal Bytes bs (bytes_slice bs (bytes_length bs) (byteUnitZeroInt bs))
 
 fn NonEmptyBytes (bs : Bytes) : Prop =
   EmptyBytes bs -> Bottom
@@ -33,7 +33,7 @@ fn UnitByteLength (unit : Bytes) : Prop =
       EmptyBytes right)
 
 fn SourceLength (unit : Bytes) (bs : Bytes) (n : Nat) : Prop =
-  Equal Int (bytes_length bs) (cat5NatToInt unit n)
+  Equal Int (bytes_length bs) (byteUnitNatToInt unit n)
 
 class Source {
   sourceIdField : SourceId ;
@@ -75,14 +75,14 @@ fn spanStart (sp : Span) : Nat =
 fn spanEnd (sp : Span) : Nat =
   match sp { MkSpan start end => end }
 
-fn cat5LeqNat (m : Nat) (n : Nat) : Bool =
+fn natLeqBool (m : Nat) (n : Nat) : Bool =
   match m {
     Zero => True ;
-    Suc m2 => match n { Zero => False ; Suc n2 => cat5LeqNat m2 n2 }
+    Suc m2 => match n { Zero => False ; Suc n2 => natLeqBool m2 n2 }
   }
 
 fn LessEqNat (m : Nat) (n : Nat) : Prop =
-  Equal Bool (cat5LeqNat m n) True
+  Equal Bool (natLeqBool m n) True
 
 fn lessEqNatRefl (n : Nat) : LessEqNat n n =
   match n { Zero => tt ; Suc n2 => lessEqNatRefl n2 }
@@ -205,10 +205,10 @@ fn syntaxChildren (a : Type) (x : Syntax a) : List (Located a) =
 fn eraseSpans (x : Syntax BoolExpr) : BoolExpr =
   locatedValue BoolExpr (syntaxRoot BoolExpr x)
 
-fn cat5ListAppend (a : Type) (xs : List a) (ys : List a) : List a =
+fn listAppend (a : Type) (xs : List a) (ys : List a) : List a =
   match xs {
     Nil => ys ;
-    Cons x rest => Cons a x (cat5ListAppend a rest ys)
+    Cons x rest => Cons a x (listAppend a rest ys)
   }
 
 fn ValidLocatedList (a : Type) (s : Source) (xs : List (Located a)) : Prop =
@@ -246,90 +246,90 @@ fn boolExprEq (x : BoolExpr) (y : BoolExpr) : Bool =
     }
   }
 
-fn cat5NatEq (m : Nat) (n : Nat) : Bool =
+fn natEqBool (m : Nat) (n : Nat) : Bool =
   match m {
     Zero => match n { Zero => True ; Suc n2 => False } ;
-    Suc m2 => match n { Zero => False ; Suc n2 => cat5NatEq m2 n2 }
+    Suc m2 => match n { Zero => False ; Suc n2 => natEqBool m2 n2 }
   }
 
-fn cat5NatAdd (m : Nat) (n : Nat) : Nat =
-  match n { Zero => m ; Suc n2 => Suc (cat5NatAdd m n2) }
+fn natAdd (m : Nat) (n : Nat) : Nat =
+  match n { Zero => m ; Suc n2 => Suc (natAdd m n2) }
 
-fn cat5NatLt (m : Nat) (n : Nat) : Bool =
-  match n { Zero => False ; Suc n2 => cat5LeqNat m n2 }
+fn natLtBool (m : Nat) (n : Nat) : Bool =
+  match n { Zero => False ; Suc n2 => natLeqBool m n2 }
 
-fn cat5BoolAnd (p : Bool) (q : Bool) : Bool =
+fn boolAnd (p : Bool) (q : Bool) : Bool =
   match p { True => q ; False => False }
 
 fn sourceByteEq (s : Source) (pos : Nat) (code : Int) : Bool =
-  match cat5NatLt pos (sourceLength s) {
-    True => eq_int (bytes_at (sourceBytes s) (cat5NatToInt (sourceLengthUnit s) pos)) code ;
+  match natLtBool pos (sourceLength s) {
+    True => eq_int (bytes_at (sourceBytes s) (byteUnitNatToInt (sourceLengthUnit s) pos)) code ;
     False => False
   }
 
 fn sourceByteEqAt (s : Source) (start : Nat) (offset : Nat) (code : Int) : Bool =
-  sourceByteEq s (cat5NatAdd start offset) code
+  sourceByteEq s (natAdd start offset) code
 
-fn cat5StartsTrue (s : Source) (start : Nat) : Bool =
-  cat5BoolAnd
+fn startsTrueToken (s : Source) (start : Nat) : Bool =
+  boolAnd
     (sourceByteEqAt s start Zero (116 : Int))
-    (cat5BoolAnd
+    (boolAnd
       (sourceByteEqAt s start (Suc Zero) (114 : Int))
-      (cat5BoolAnd
+      (boolAnd
         (sourceByteEqAt s start (Suc (Suc Zero)) (117 : Int))
         (sourceByteEqAt s start (Suc (Suc (Suc Zero))) (101 : Int))))
 
-fn cat5StartsFalse (s : Source) (start : Nat) : Bool =
-  cat5BoolAnd
+fn startsFalseToken (s : Source) (start : Nat) : Bool =
+  boolAnd
     (sourceByteEqAt s start Zero (102 : Int))
-    (cat5BoolAnd
+    (boolAnd
       (sourceByteEqAt s start (Suc Zero) (97 : Int))
-      (cat5BoolAnd
+      (boolAnd
         (sourceByteEqAt s start (Suc (Suc Zero)) (108 : Int))
-        (cat5BoolAnd
+        (boolAnd
           (sourceByteEqAt s start (Suc (Suc (Suc Zero))) (115 : Int))
           (sourceByteEqAt s start (Suc (Suc (Suc (Suc Zero)))) (101 : Int)))))
 
-fn cat5StartsNotOpen (s : Source) (start : Nat) : Bool =
-  cat5BoolAnd
+fn startsNotOpenToken (s : Source) (start : Nat) : Bool =
+  boolAnd
     (sourceByteEqAt s start Zero (40 : Int))
-    (cat5BoolAnd
+    (boolAnd
       (sourceByteEqAt s start (Suc Zero) (110 : Int))
-      (cat5BoolAnd
+      (boolAnd
         (sourceByteEqAt s start (Suc (Suc Zero)) (111 : Int))
-        (cat5BoolAnd
+        (boolAnd
           (sourceByteEqAt s start (Suc (Suc (Suc Zero))) (116 : Int))
           (sourceByteEqAt s start (Suc (Suc (Suc (Suc Zero)))) (32 : Int)))))
 
-fn cat5StartsAndOpen (s : Source) (start : Nat) : Bool =
-  cat5BoolAnd
+fn startsAndOpenToken (s : Source) (start : Nat) : Bool =
+  boolAnd
     (sourceByteEqAt s start Zero (40 : Int))
-    (cat5BoolAnd
+    (boolAnd
       (sourceByteEqAt s start (Suc Zero) (97 : Int))
-      (cat5BoolAnd
+      (boolAnd
         (sourceByteEqAt s start (Suc (Suc Zero)) (110 : Int))
-        (cat5BoolAnd
+        (boolAnd
           (sourceByteEqAt s start (Suc (Suc (Suc Zero))) (100 : Int))
           (sourceByteEqAt s start (Suc (Suc (Suc (Suc Zero)))) (32 : Int)))))
 
-fn cat5SkipSpacesFuel (fuel : Nat) (s : Source) (pos : Nat) : Nat =
+fn skipSpacesFuel (fuel : Nat) (s : Source) (pos : Nat) : Nat =
   match fuel {
     Zero => pos ;
     Suc fuel2 => match sourceByteEq s pos (32 : Int) {
-      True => cat5SkipSpacesFuel fuel2 s (Suc pos) ;
+      True => skipSpacesFuel fuel2 s (Suc pos) ;
       False => pos
     }
   }
 
-fn cat5SkipSpaces (s : Source) (pos : Nat) : Nat =
-  cat5SkipSpacesFuel (sourceLength s) s pos
+fn skipSpaces (s : Source) (pos : Nat) : Nat =
+  skipSpacesFuel (sourceLength s) s pos
 
-fn cat5SyntaxLeaf (s : Source) (start : Nat) (end : Nat) (value : BoolExpr) : Syntax BoolExpr =
+fn syntaxLeaf (s : Source) (start : Nat) (end : Nat) (value : BoolExpr) : Syntax BoolExpr =
   MkSyntax BoolExpr
     (MkLocated BoolExpr (sourceId s) (MkSpan start end) value)
     (Nil (Located BoolExpr))
 
-fn cat5SyntaxNode1
+fn syntaxNodeUnary
   (s : Source) (start : Nat) (end : Nat) (value : BoolExpr) (child : Syntax BoolExpr)
   : Syntax BoolExpr =
   MkSyntax BoolExpr
@@ -338,13 +338,13 @@ fn cat5SyntaxNode1
       (syntaxRoot BoolExpr child)
       (syntaxChildren BoolExpr child))
 
-fn cat5SyntaxNode2
+fn syntaxNodeBinary
   (s : Source) (start : Nat) (end : Nat) (value : BoolExpr)
   (left : Syntax BoolExpr) (right : Syntax BoolExpr)
   : Syntax BoolExpr =
   MkSyntax BoolExpr
     (MkLocated BoolExpr (sourceId s) (MkSpan start end) value)
-    (cat5ListAppend
+    (listAppend
       (Located BoolExpr)
       (Cons (Located BoolExpr)
         (syntaxRoot BoolExpr left)
@@ -356,55 +356,55 @@ fn cat5SyntaxNode2
 fn parseBoolExprAtFuel (fuel : Nat) (s : Source) (start : Nat) : ParseResult (Syntax BoolExpr) =
   match fuel {
     Zero => Failed (Syntax BoolExpr) (MkParseError (sourceId s) (MkSpan start start)) ;
-    Suc fuel2 => match cat5StartsTrue s start {
+    Suc fuel2 => match startsTrueToken s start {
       True =>
         Parsed (Syntax BoolExpr)
-          (cat5SyntaxLeaf s start (cat5NatAdd start (Suc (Suc (Suc (Suc Zero))))) BTrue)
-          (MkSpan start (cat5NatAdd start (Suc (Suc (Suc (Suc Zero))))))
-          (cat5NatAdd start (Suc (Suc (Suc (Suc Zero))))) ;
-      False => match cat5StartsFalse s start {
+          (syntaxLeaf s start (natAdd start (Suc (Suc (Suc (Suc Zero))))) BTrue)
+          (MkSpan start (natAdd start (Suc (Suc (Suc (Suc Zero))))))
+          (natAdd start (Suc (Suc (Suc (Suc Zero))))) ;
+      False => match startsFalseToken s start {
         True =>
           Parsed (Syntax BoolExpr)
-            (cat5SyntaxLeaf s start (cat5NatAdd start (Suc (Suc (Suc (Suc (Suc Zero)))))) BFalse)
-            (MkSpan start (cat5NatAdd start (Suc (Suc (Suc (Suc (Suc Zero)))))))
-            (cat5NatAdd start (Suc (Suc (Suc (Suc (Suc Zero)))))) ;
-        False => match cat5StartsNotOpen s start {
+            (syntaxLeaf s start (natAdd start (Suc (Suc (Suc (Suc (Suc Zero)))))) BFalse)
+            (MkSpan start (natAdd start (Suc (Suc (Suc (Suc (Suc Zero)))))))
+            (natAdd start (Suc (Suc (Suc (Suc (Suc Zero)))))) ;
+        False => match startsNotOpenToken s start {
           True =>
-            match parseBoolExprAtFuel fuel2 s (cat5SkipSpaces s (cat5NatAdd start (Suc (Suc (Suc (Suc (Suc Zero))))))) {
-              Parsed child childSpan childNext => match sourceByteEq s (cat5SkipSpaces s childNext) (41 : Int) {
+            match parseBoolExprAtFuel fuel2 s (skipSpaces s (natAdd start (Suc (Suc (Suc (Suc (Suc Zero))))))) {
+              Parsed child childSpan childNext => match sourceByteEq s (skipSpaces s childNext) (41 : Int) {
                 True =>
                   Parsed (Syntax BoolExpr)
-                    (cat5SyntaxNode1
+                    (syntaxNodeUnary
                       s
                       start
-                      (Suc (cat5SkipSpaces s childNext))
+                      (Suc (skipSpaces s childNext))
                       (BNot (eraseSpans child))
                       child)
-                    (MkSpan start (Suc (cat5SkipSpaces s childNext)))
-                    (Suc (cat5SkipSpaces s childNext)) ;
-                False => Failed (Syntax BoolExpr) (MkParseError (sourceId s) (MkSpan (cat5SkipSpaces s childNext) (cat5SkipSpaces s childNext)))
+                    (MkSpan start (Suc (skipSpaces s childNext)))
+                    (Suc (skipSpaces s childNext)) ;
+                False => Failed (Syntax BoolExpr) (MkParseError (sourceId s) (MkSpan (skipSpaces s childNext) (skipSpaces s childNext)))
               } ;
               Failed err => Failed (Syntax BoolExpr) err
             } ;
-          False => match cat5StartsAndOpen s start {
+          False => match startsAndOpenToken s start {
             True =>
-              match parseBoolExprAtFuel fuel2 s (cat5SkipSpaces s (cat5NatAdd start (Suc (Suc (Suc (Suc (Suc Zero))))))) {
+              match parseBoolExprAtFuel fuel2 s (skipSpaces s (natAdd start (Suc (Suc (Suc (Suc (Suc Zero))))))) {
                 Parsed left leftSpan leftNext => match sourceByteEq s leftNext (32 : Int) {
                   True =>
-                    match parseBoolExprAtFuel fuel2 s (cat5SkipSpaces s (Suc leftNext)) {
-                      Parsed right rightSpan rightNext => match sourceByteEq s (cat5SkipSpaces s rightNext) (41 : Int) {
+                    match parseBoolExprAtFuel fuel2 s (skipSpaces s (Suc leftNext)) {
+                      Parsed right rightSpan rightNext => match sourceByteEq s (skipSpaces s rightNext) (41 : Int) {
                         True =>
                           Parsed (Syntax BoolExpr)
-                            (cat5SyntaxNode2
+                            (syntaxNodeBinary
                               s
                               start
-                              (Suc (cat5SkipSpaces s rightNext))
+                              (Suc (skipSpaces s rightNext))
                               (BAnd (eraseSpans left) (eraseSpans right))
                               left
                               right)
-                            (MkSpan start (Suc (cat5SkipSpaces s rightNext)))
-                            (Suc (cat5SkipSpaces s rightNext)) ;
-                        False => Failed (Syntax BoolExpr) (MkParseError (sourceId s) (MkSpan (cat5SkipSpaces s rightNext) (cat5SkipSpaces s rightNext)))
+                            (MkSpan start (Suc (skipSpaces s rightNext)))
+                            (Suc (skipSpaces s rightNext)) ;
+                        False => Failed (Syntax BoolExpr) (MkParseError (sourceId s) (MkSpan (skipSpaces s rightNext) (skipSpaces s rightNext)))
                       } ;
                       Failed err => Failed (Syntax BoolExpr) err
                     } ;
@@ -421,10 +421,10 @@ fn parseBoolExprAtFuel (fuel : Nat) (s : Source) (start : Nat) : ParseResult (Sy
 
 const parseBoolExpr : Parser (Syntax BoolExpr) =
   \s. \start. \h.
-    match parseBoolExprAtFuel (sourceLength s) s (cat5SkipSpaces s start) {
-      Parsed syntax consumed next => match cat5NatEq (cat5SkipSpaces s next) (sourceLength s) {
-        True => Parsed (Syntax BoolExpr) syntax (MkSpan start (cat5SkipSpaces s next)) (cat5SkipSpaces s next) ;
-        False => Failed (Syntax BoolExpr) (MkParseError (sourceId s) (MkSpan (cat5SkipSpaces s next) (cat5SkipSpaces s next)))
+    match parseBoolExprAtFuel (sourceLength s) s (skipSpaces s start) {
+      Parsed syntax consumed next => match natEqBool (skipSpaces s next) (sourceLength s) {
+        True => Parsed (Syntax BoolExpr) syntax (MkSpan start (skipSpaces s next)) (skipSpaces s next) ;
+        False => Failed (Syntax BoolExpr) (MkParseError (sourceId s) (MkSpan (skipSpaces s next) (skipSpaces s next)))
       } ;
       Failed err => Failed (Syntax BoolExpr) err
     }

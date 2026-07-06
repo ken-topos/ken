@@ -1,10 +1,10 @@
 # `parsing` -- source artifacts, spans, parsers, syntax, and diagnostics
 
 **Spec catalog entry:** `spec/50-stdlib/59-parsing-syntax-diagnostics.md`.
-CAT-5 D3 lands the fully parenthesized Boolean grammar on top of the D1
-source/span core and D2 parser result floor.
+This package provides the source/span core, parser result surface, and a
+fully parenthesized Boolean expression grammar.
 
-## Public API through D3
+## Public API
 
 - `SourceId`, `Source`, `IsUtf8`, `EmptyBytes`, `NonEmptyBytes`,
   `UnitByteLength`, `SourceLength`, `sourceId`, `sourceBytes`, `sourceUtf8`,
@@ -19,7 +19,7 @@ source/span core and D2 parser result floor.
 - `ParseResult a = Parsed ... | Failed ...`.
 - `Parser a`, `ParsedValid`, `FailedValid`, `ParseResultValid`,
   `ParserValid`, `ParserTotal`, `ParserSourceLocal`, and `ParserLaws`.
-- `parserPure` and `parserFail` as the bounded D2 parser producer floor.
+- `parserPure` and `parserFail` as the basic parser producers.
 - `BoolExpr = BTrue | BFalse | BNot BoolExpr | BAnd BoolExpr BoolExpr`.
 - `Syntax a`, `syntaxRoot`, `syntaxChildren`, `eraseSpans`,
   `ValidLocatedList`, and `ValidSyntax`.
@@ -41,23 +41,23 @@ source/span core and D2 parser result floor.
   valid consumed span with `spanStart = start` and `spanEnd = next`;
   `FailedValid` requires the error to point at the input source and carry a
   valid span.
-- Repetition is deferred beyond D2. There is no exported unguarded `many` or
+- Repetition is not exported. There is no exported unguarded `many` or
   fuel-bounded repetition helper until the package can also expose a checked
   progress/next-validity surface.
-- `parseBoolExpr` recognizes the D3 grammar over source bytes: `true`, `false`,
+- `parseBoolExpr` recognizes the Boolean grammar over source bytes: `true`, `false`,
   `(not e)`, and `(and e1 e2)`. There is no precedence table; `true and false`
   rejects. `printBoolExpr` emits canonical ASCII bytes, and `formatBoolExpr`
   parses a source and prints the erased tree.
 
 ## Derivation path and trusted-base delta
 
-The D1/D2/D3 surface is ordinary Ken data, a class-backed record, transparent
+The package surface is ordinary Ken data, a class-backed record, transparent
 functions, and proof-returning definitions over `Nat`, `Bool`, `Bytes`,
 `Equal`, `And`, `List`, and parser-result data. It adds no kernel primitive,
 compiler parser hook, CLI/source-loader behavior, export/provenance policy, or
 language-semantics change. Expected `trusted_base()` delta is zero.
 
-## Deferred CAT-5 slices
+## Deferred Work
 
-Diagnostics and `.ken.md` derived-view examples are deferred to later CAT-5
-build slices.
+Diagnostics and `.ken.md` derived-view examples are deferred to later package
+work.
