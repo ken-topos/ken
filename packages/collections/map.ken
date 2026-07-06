@@ -101,6 +101,9 @@ fn member (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (m : Tree k v
     Some x  ⇒ True
   }
 
+fn optionIsSome (v : Type) (o : Option v) : Bool =
+  match o { None ⇒ False ; Some x ⇒ True }
+
 -- `fromList` folds `insert` over the list (`52 §4.2`): `fromList = foldr (\
 -- (k,v) m. insert k v m) empty`. Threaded via an accumulator so EARLIER list
 -- entries are inserted FIRST and LATER entries insert last (and so overwrite
@@ -2862,6 +2865,18 @@ fn unionLookupTable (v : Type) (f : v → v → v) (left : Option v) (right : Op
     Some x ⇒ match right { None ⇒ Some v x ; Some y ⇒ Some v (f x y) }
   }
 
+fn unitCombine (x : Unit) (y : Unit) : Unit = MkUnit
+
+fn unionLookupTableMember
+  (left : Option Unit) (right : Option Unit)
+  : Equal Bool
+      (optionIsSome Unit (unionLookupTable Unit unitCombine left right))
+      (cat4_bool_or (optionIsSome Unit left) (optionIsSome Unit right)) =
+  match left {
+    None ⇒ match right { None ⇒ tt ; Some y ⇒ tt } ;
+    Some x ⇒ match right { None ⇒ tt ; Some y ⇒ tt }
+  }
+
 fn intersectionLookupTable (v : Type) (left : Option v) (keep : Bool) (prior : Option v) : Option v =
   match left {
     None ⇒ prior ;
@@ -2916,6 +2931,32 @@ fn differenceLookupExpectedFalse
     False
     (λm. match m { True ⇒ None v ; False ⇒ lookup k v leq key a })
     q
+
+fn differenceLookupExpectedMemberOption
+  (left : Option Unit) (reject : Bool) : Option Unit =
+  match reject {
+    True ⇒ None Unit ;
+    False ⇒ left
+  }
+
+fn differenceLookupExpectedMemberTable
+  (left : Option Unit) (reject : Bool)
+  : Equal Bool
+      (optionIsSome Unit (differenceLookupExpectedMemberOption left reject))
+      (bool_and (optionIsSome Unit left) (bool_not reject)) =
+  match reject {
+    True ⇒ match left { None ⇒ tt ; Some x ⇒ tt } ;
+    False ⇒ match left { None ⇒ tt ; Some x ⇒ tt }
+  }
+
+fn differenceLookupExpectedMember
+  (k : Type) (leq : k → k → Bool) (key : k) (s : Tree k Unit) (t : Tree k Unit)
+  : Equal Bool
+      (optionIsSome Unit (differenceLookupExpected k Unit leq key s t))
+      (bool_and (setMember k leq key s) (bool_not (setMember k leq key t))) =
+  differenceLookupExpectedMemberTable
+    (lookup k Unit leq key s)
+    (member k Unit leq key t)
 
 fn insertWithLookupResult (v : Type) (f : v → v → v) (val : v) (prior : Option v) : Option v =
   match prior {
@@ -5260,7 +5301,7 @@ fn differencePreservesOrdered
   differenceFromListAccPreservesOrdered k v leq transLeq total (toList k v a) b (empty k v) (orderedEmpty k v leq)
 
 fn setUnion (k : Type) (leq : k → k → Bool) (s : Tree k Unit) (t : Tree k Unit) : Tree k Unit =
-  union k Unit leq (λx.λy. MkUnit) s t
+  union k Unit leq unitCombine s t
 
 fn setIntersection (k : Type) (leq : k → k → Bool) (s : Tree k Unit) (t : Tree k Unit) : Tree k Unit =
   intersection k Unit leq s t
@@ -5268,20 +5309,57 @@ fn setIntersection (k : Type) (leq : k → k → Bool) (s : Tree k Unit) (t : Tr
 fn setDifference (k : Type) (leq : k → k → Bool) (s : Tree k Unit) (t : Tree k Unit) : Tree k Unit =
   difference k Unit leq s t
 
-fn setUnionMemberLaw (k : Type) (leq : k → k → Bool) (x : k) (s : Tree k Unit) (t : Tree k Unit) : Prop =
-  Equal Bool
-    (setMember k leq x (setUnion k leq s t))
-    (cat4_bool_or (setMember k leq x s) (setMember k leq x t))
+fn setUnionMemberLaw
+  (k : Type) (leq : k → k → Bool)
+  (reflLeq : (x : k) → Equal Bool (leq x x) True)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (x : k) (s : Tree k Unit) (t : Tree k Unit)
+  : Ordered k Unit leq s → Distinct k Unit leq s →
+    Equal Bool
+      (setMember k leq x (setUnion k leq s t))
+      (cat4_bool_or (setMember k leq x s) (setMember k leq x t)) =
+  λhord. λhdist.
+    trans Bool
+      (setMember k leq x (setUnion k leq s t))
+      (optionIsSome Unit
+        (unionLookupTable Unit unitCombine
+          (lookup k Unit leq x s)
+          (lookup k Unit leq x t)))
+      (cat4_bool_or (setMember k leq x s) (setMember k leq x t))
+      (cong (Option Unit) Bool
+        (lookup k Unit leq x (setUnion k leq s t))
+        (unionLookupTable Unit unitCombine
+          (lookup k Unit leq x s)
+          (lookup k Unit leq x t))
+        (optionIsSome Unit)
+        (unionLookupCharacterization k Unit leq reflLeq transLeq unitCombine x s t hord hdist))
+      (unionLookupTableMember (lookup k Unit leq x s) (lookup k Unit leq x t))
 
 fn setIntersectionMemberLaw (k : Type) (leq : k → k → Bool) (x : k) (s : Tree k Unit) (t : Tree k Unit) : Prop =
   Equal Bool
     (setMember k leq x (setIntersection k leq s t))
     (bool_and (setMember k leq x s) (setMember k leq x t))
 
-fn setDifferenceMemberLaw (k : Type) (leq : k → k → Bool) (x : k) (s : Tree k Unit) (t : Tree k Unit) : Prop =
-  Equal Bool
-    (setMember k leq x (setDifference k leq s t))
-    (bool_and (setMember k leq x s) (bool_not (setMember k leq x t)))
+fn setDifferenceMemberLaw
+  (k : Type) (leq : k → k → Bool)
+  (reflLeq : (x : k) → Equal Bool (leq x x) True)
+  (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
+  (x : k) (s : Tree k Unit) (t : Tree k Unit)
+  : Ordered k Unit leq s → Distinct k Unit leq s →
+    Equal Bool
+      (setMember k leq x (setDifference k leq s t))
+      (bool_and (setMember k leq x s) (bool_not (setMember k leq x t))) =
+  λhord. λhdist.
+    trans Bool
+      (setMember k leq x (setDifference k leq s t))
+      (optionIsSome Unit (differenceLookupExpected k Unit leq x s t))
+      (bool_and (setMember k leq x s) (bool_not (setMember k leq x t)))
+      (cong (Option Unit) Bool
+        (lookup k Unit leq x (setDifference k leq s t))
+        (differenceLookupExpected k Unit leq x s t)
+        (optionIsSome Unit)
+        (differenceLookupCharacterization k Unit leq reflLeq transLeq x s t hord hdist))
+      (differenceLookupExpectedMember k leq x s t)
 
 fn setUnionCommLaw (k : Type) (leq : k → k → Bool) (x : k) (s : Tree k Unit) (t : Tree k Unit) : Prop =
   Equal Bool
