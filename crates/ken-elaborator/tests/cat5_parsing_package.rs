@@ -4,7 +4,8 @@
 //! byte-artifact `Source`, half-open byte `Span`, explicit validity proofs,
 //! located values, total parse results, and zero trusted-base delta.
 
-use ken_elaborator::{foreign::trusted_base_delta, ElabEnv};
+use ken_elaborator::{foreign::trusted_base_delta, ElabEnv, NumericLitVal};
+use ken_interp::eval::{eval, EvalStore, EvalVal};
 use ken_kernel::Decl;
 use ken_kernel::GlobalId;
 use std::collections::HashSet;
@@ -16,6 +17,49 @@ fn mk_env() -> ElabEnv {
     env.elaborate_file(PARSING_KEN)
         .expect("packages/parsing/parsing.ken must elaborate");
     env
+}
+
+fn lit_to_eval(v: &NumericLitVal, mkdecimalpair_id: GlobalId) -> EvalVal {
+    match v {
+        NumericLitVal::Int(n) => EvalVal::from(*n),
+        NumericLitVal::Float(f) => EvalVal::Float(*f),
+        NumericLitVal::Float32(f) => EvalVal::Float32(*f),
+        NumericLitVal::Decimal { coeff, exp } => {
+            ken_interp::decimal_value(mkdecimalpair_id, *coeff, *exp)
+        }
+        NumericLitVal::Str(s) => EvalVal::Str(s.clone()),
+    }
+}
+
+fn make_store(env: &ElabEnv) -> EvalStore {
+    let mut store = EvalStore::new();
+    let mkdecimalpair_id = env.prelude_env.mkdecimalpair_id;
+    for (id, v) in &env.num_values {
+        store.num_values.insert(*id, lit_to_eval(v, mkdecimalpair_id));
+    }
+    store
+}
+
+fn eval_def(env: &ElabEnv, store: &mut EvalStore, name: &str) -> EvalVal {
+    let id = env
+        .globals
+        .get(name)
+        .copied()
+        .unwrap_or_else(|| panic!("{name} should be in scope"));
+    match env.env.lookup(id) {
+        Some(Decl::Transparent { body, .. }) => eval(&[], body, &env.env, store),
+        _ => EvalVal::Unknown,
+    }
+}
+
+fn nat_count(env: &ElabEnv, v: &EvalVal) -> u64 {
+    match v {
+        EvalVal::Ctor { id, args, .. } if *id == env.prelude_env.zero_id && args.is_empty() => 0,
+        EvalVal::Ctor { id, args, .. } if *id == env.prelude_env.suc_id && args.len() == 1 => {
+            1 + nat_count(env, &args[0])
+        }
+        other => panic!("expected a Nat Ctor chain, got {other:?}"),
+    }
 }
 
 #[test]
@@ -288,6 +332,28 @@ fn cat5_d1_concrete_nonempty_source_constructs_and_projects() {
         "#,
     )
     .expect("a concrete non-empty Source must construct and project with real length evidence");
+
+    let mut store = make_store(&env);
+    let projected_bytes = eval_def(&env, &mut store, "cat5_projected_bytes");
+    assert_eq!(
+        projected_bytes,
+        EvalVal::Bytes(b"abc".to_vec()),
+        "sourceBytes must execute through a concrete class-backed Source instance"
+    );
+
+    let projected_length = eval_def(&env, &mut store, "cat5_projected_length");
+    assert_eq!(
+        nat_count(&env, &projected_length),
+        3,
+        "sourceLength must execute through the same class-backed Source instance"
+    );
+
+    let projected_utf8 = eval_def(&env, &mut store, "cat5_projected_utf8");
+    assert_eq!(
+        projected_utf8,
+        EvalVal::Unknown,
+        "projecting a noncomputational proof field must not manufacture evidence"
+    );
 }
 
 #[test]

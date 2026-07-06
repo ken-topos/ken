@@ -386,6 +386,119 @@ fn make_closure(body: Rc<Term>, captured: Rc<Env>, store: &mut EvalStore) -> Eva
     }
 }
 
+#[derive(Clone, Copy)]
+enum Projection {
+    Fst,
+    Snd,
+}
+
+fn project_value(mut val: EvalVal, path: &[Projection]) -> EvalVal {
+    for projection in path {
+        val = match (projection, val) {
+            (Projection::Fst, EvalVal::Pair { fst, .. }) => (*fst).clone(),
+            (Projection::Snd, EvalVal::Pair { snd, .. }) => (*snd).clone(),
+            (_, EvalVal::Unknown) => return EvalVal::Unknown,
+            _ => return EvalVal::Neutral,
+        };
+    }
+    val
+}
+
+fn eval_projection_path(
+    env: &[EvalVal],
+    term: &Term,
+    globals: &GlobalEnv,
+    store: &mut EvalStore,
+    path: &[Projection],
+) -> EvalVal {
+    if path.is_empty() {
+        return eval(env, term, globals, store);
+    }
+
+    match term {
+        Term::Ascript(inner, _) => eval_projection_path(env, inner, globals, store, path),
+        Term::Proj1(inner) => {
+            let mut inner_path = Vec::with_capacity(path.len() + 1);
+            inner_path.push(Projection::Fst);
+            inner_path.extend_from_slice(path);
+            eval_projection_path(env, inner, globals, store, &inner_path)
+        }
+        Term::Proj2(inner) => {
+            let mut inner_path = Vec::with_capacity(path.len() + 1);
+            inner_path.push(Projection::Snd);
+            inner_path.extend_from_slice(path);
+            eval_projection_path(env, inner, globals, store, &inner_path)
+        }
+        Term::Pair(fst, snd) => {
+            let selected = match path[0] {
+                Projection::Fst => fst,
+                Projection::Snd => snd,
+            };
+            if path.len() == 1 {
+                eval(env, selected, globals, store)
+            } else {
+                eval_projection_path(env, selected, globals, store, &path[1..])
+            }
+        }
+        Term::Const { id, .. } => {
+            if let Some(Decl::Transparent { body, .. }) = globals.lookup(*id) {
+                eval_projection_path(&[], body, globals, store, path)
+            } else {
+                project_value(eval(env, term, globals, store), path)
+            }
+        }
+        _ => project_value(eval(env, term, globals, store), path),
+    }
+}
+
+fn projection_path_from_var0(term: &Term) -> Option<Vec<Projection>> {
+    match term {
+        Term::Var(0) => Some(Vec::new()),
+        Term::Proj1(inner) => {
+            let mut path = projection_path_from_var0(inner)?;
+            path.push(Projection::Fst);
+            Some(path)
+        }
+        Term::Proj2(inner) => {
+            let mut path = projection_path_from_var0(inner)?;
+            path.push(Projection::Snd);
+            Some(path)
+        }
+        Term::Ascript(inner, _) => projection_path_from_var0(inner),
+        _ => None,
+    }
+}
+
+fn projection_accessor_path(term: &Term, globals: &GlobalEnv) -> Option<Vec<Projection>> {
+    match term {
+        Term::Lam(_, body) => {
+            let path = projection_path_from_var0(body)?;
+            if path.is_empty() {
+                None
+            } else {
+                Some(path)
+            }
+        }
+        Term::Ascript(inner, _) => projection_accessor_path(inner, globals),
+        Term::Const { id, .. } => match globals.lookup(*id) {
+            Some(Decl::Transparent { body, .. }) => projection_accessor_path(body, globals),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+fn eval_projection_accessor_app(
+    env: &[EvalVal],
+    fun: &Term,
+    arg: &Term,
+    globals: &GlobalEnv,
+    store: &mut EvalStore,
+) -> Option<EvalVal> {
+    let path = projection_accessor_path(fun, globals)?;
+    Some(eval_projection_path(env, arg, globals, store, &path))
+}
+
 // ── ι (eliminator) reduction ──────────────────────────────────────────────────
 
 /// Fire the ι reduct for an eliminator (`42 §3.3`).
@@ -1256,6 +1369,9 @@ pub fn eval(env: &[EvalVal], term: &Term, globals: &GlobalEnv, store: &mut EvalS
 
         // --- Application: CBV — force operator then argument ---
         Term::App(f, u) => {
+            if let Some(projected) = eval_projection_accessor_app(env, f, u, globals, store) {
+                return projected;
+            }
             let fv = eval(env, f, globals, store);
             let uv = eval(env, u, globals, store);
             apply(fv, uv, globals, store)
@@ -1288,22 +1404,8 @@ pub fn eval(env: &[EvalVal], term: &Term, globals: &GlobalEnv, store: &mut EvalS
             }
             make_pair(av, bv, store)
         }
-        Term::Proj1(p) => {
-            let pv = eval(env, p, globals, store);
-            match pv {
-                EvalVal::Pair { fst, .. } => (*fst).clone(),
-                EvalVal::Unknown => EvalVal::Unknown,
-                _ => EvalVal::Neutral,
-            }
-        }
-        Term::Proj2(p) => {
-            let pv = eval(env, p, globals, store);
-            match pv {
-                EvalVal::Pair { snd, .. } => (*snd).clone(),
-                EvalVal::Unknown => EvalVal::Unknown,
-                _ => EvalVal::Neutral,
-            }
-        }
+        Term::Proj1(p) => eval_projection_path(env, p, globals, store, &[Projection::Fst]),
+        Term::Proj2(p) => eval_projection_path(env, p, globals, store, &[Projection::Snd]),
 
         // --- Let: strict binding, shared result ---
         Term::Let { val, body, .. } => {
