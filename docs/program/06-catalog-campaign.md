@@ -52,6 +52,45 @@ derivation path, declared trust delta; law fields **proved**, not postulated,
 except an audited primitive-carrier delta). The catalog is a *verified
 computational substrate*, not a convenience stdlib.
 
+## Catalog quality cadence
+
+Catalog work has two legitimate, named phases. They are separate because hard
+proof engineering often discovers the proof before it discovers the clearest
+presentation of that proof.
+
+1. **Functional discovery/build.** The owning team gets the component to exist,
+   run, and prove the required laws. This phase may merge a rough but correct
+   source artifact: local helper names, sparse comments, long proof families,
+   and discovery-shaped organization are acceptable at this gate if the proofs
+   are real, the derivation path is stated, the trusted-base delta is honest,
+   and the WP acceptance criteria are met.
+2. **Catalog refinement.** A follow-on WP raises the landed component to
+   first-party catalog standards: organization, naming, comments, package docs,
+   source-map navigation, harmonization with sibling packages, and
+   behavior-preserving refactor. This is not optional cleanup; it is the planned
+   step that turns a discovered proof into exemplary Ken literature.
+
+The durable standard is `07-catalog-style-guide.md`. Functional builds are not
+blocked on perfect style, but the Steward should record a refinement follow-on
+for any catalog component whose source is not yet guide-quality. A refinement WP
+does not weaken proof obligations and does not create semantic churn unless its
+kickoff explicitly scopes a separate behavior change.
+
+The first application is a small-package `catalog-refinement-pilot`, not the
+largest proof-heavy body. Once the pilot proves the workflow, large components
+such as maps/sets/relations get their own refinement WPs after their functional
+builds land.
+
+Refinement review roles are fixed:
+
+- owning build team: behavior preservation, public API/proof names, imports, and
+  package tests;
+- QA: gates, exact-head validation, diff hygiene, and trust-drift greps;
+- Librarian: manifest/source-map navigation and durable README/spec-index
+  pointers;
+- Architect: only when the refinement crosses a proof boundary, law shape,
+  abstraction boundary, trust-delta claim, or observable package split.
+
 ## Lane A — catalog WP decomposition
 
 Sequenced against what has **landed** (Layer 0 core types + `Eq`/`DecEq`/`Ord`;

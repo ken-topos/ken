@@ -6,6 +6,11 @@
 > package here is *ordinary Ken* over the built-ins — imported, derivable,
 > **kernel-re-checked** — never part of `trusted_base()`.
 
+Catalog source and manifests follow the durable style/refinement contract in
+`../docs/program/07-catalog-style-guide.md`: functional builds may land rough
+but proved, and explicit refinement WPs raise packages to first-party catalog
+quality without weakening proofs.
+
 These are the third tier of the surface taxonomy (`../spec/30-surface/30 §5`):
 **optional, explicitly imported, out of `trusted_base()`** — not the
 always-present prelude (`30 §4`) and not the built-in surface TCB (`30 §3`). The
