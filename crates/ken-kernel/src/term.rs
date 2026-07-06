@@ -334,11 +334,11 @@ pub enum Term {
     Trunc(Box<Term>),
     /// `|t|` — `[K2]` truncation projection (`16`).
     TruncProj(Box<Term>),
-    /// `absurd C p` — `[K2]` ex-falso (`16 §1.3`, K5): `C : Ω` the motive,
-    /// `p : Bottom` the (necessarily-impossible) proof. Non-dependent —
-    /// `Bottom` has no indices to abstract over, so this returns `C` itself,
-    /// never substituting into it. Never reduces (`Bottom` has no
-    /// constructor to ι-match on) — stays neutral permanently.
+    /// `absurd C p` — `[K2]` ex-falso (`16 §1.3`, K5): `C : Ω` or `C : Type`
+    /// the motive, `p : Bottom` the (necessarily-impossible) proof.
+    /// Non-dependent — `Bottom` has no indices to abstract over, so this
+    /// returns `C` itself, never substituting into it. Never reduces (`Bottom`
+    /// has no constructor to ι-match on) — stays neutral permanently.
     Absurd(Box<Term>, Box<Term>),
 }
 
