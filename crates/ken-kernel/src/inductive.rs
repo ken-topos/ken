@@ -131,8 +131,9 @@ fn check_pos_arg(d: GlobalId, pol: Pol, a: &Term) -> bool {
 
 /// Run the strict-positivity check on a family declaration (`14 §8`): every
 /// constructor argument type must be strictly positive in `D`. The family's
-/// own parameters and indices are also `occurs`-checked (K1 rejects `D`
-/// appearing in its own indices, `Bad4`, and nested parameter occurrences).
+/// own parameters, indices, and each constructor's result target indices are
+/// also `occurs`-checked (K1 rejects `D` appearing in its own indices, `Bad4`,
+/// and nested parameter occurrences).
 pub fn check_positivity(ind: &InductiveDecl) -> KernelResult<()> {
     let d = ind.id;
     for p in &ind.params {
@@ -154,6 +155,14 @@ pub fn check_positivity(ind: &InductiveDecl) -> KernelResult<()> {
             if !check_pos_arg(d, Pol::Plus, a) {
                 return Err(KernelError::PositivityViolation(format!(
                     "non-strictly-positive occurrence of D in constructor {:?} arg {j}",
+                    c.id
+                )));
+            }
+        }
+        for (j, ix) in c.target_indices.iter().enumerate() {
+            if occurs(d, ix) {
+                return Err(KernelError::PositivityViolation(format!(
+                    "D occurs in constructor {:?} target index {j}",
                     c.id
                 )));
             }
@@ -417,16 +426,15 @@ pub fn iota_reduct(
             // idxs[i] in [Δ_p, args_before_pos, b₁..b_{nb}]; subst_outer replaces
             // m params (inner_depth=pos+nb), then subst_tel substitutes pos args
             // (weakened by nb to sit inside the binders).
-            let ctor_args_inner: Vec<Term> =
-                ctor_args[..*pos].iter().map(|t| weaken(t, nb as i64)).collect();
+            let ctor_args_inner: Vec<Term> = ctor_args[..*pos]
+                .iter()
+                .map(|t| weaken(t, nb as i64))
+                .collect();
             let idx_vals_inner: Vec<Term> = idxs
                 .iter()
                 .map(|t| {
                     subst_levels(
-                        &subst_tel(
-                            &subst_outer(t, m, params, *pos + nb),
-                            &ctor_args_inner,
-                        ),
+                        &subst_tel(&subst_outer(t, m, params, *pos + nb), &ctor_args_inner),
                         &ind.level_params,
                         level_args,
                     )
@@ -448,8 +456,10 @@ pub fn iota_reduct(
             // weakened by bk → result in [Γ, b₁..b_{bk}].
             let mut ih_term = elim_inner;
             for bk in (0..nb).rev() {
-                let ctor_args_k: Vec<Term> =
-                    ctor_args[..*pos].iter().map(|t| weaken(t, bk as i64)).collect();
+                let ctor_args_k: Vec<Term> = ctor_args[..*pos]
+                    .iter()
+                    .map(|t| weaken(t, bk as i64))
+                    .collect();
                 let b_dom = subst_levels(
                     &subst_tel(
                         &subst_outer(&branching_tel[bk], m, params, *pos + bk),
@@ -622,7 +632,10 @@ mod tests {
             former_type: Term::Type(Level::zero()),
         };
         ind.build_types();
-        assert!(check_positivity(&ind).is_ok(), "W-style is strictly positive");
+        assert!(
+            check_positivity(&ind).is_ok(),
+            "W-style is strictly positive"
+        );
         // K1.5: recursive_args now includes the W-style arg.
         let rec = recursive_args(&ind.constructors[0], d(0), 0);
         assert_eq!(rec.len(), 1);
