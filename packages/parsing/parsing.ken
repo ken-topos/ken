@@ -1,4 +1,4 @@
--- CAT-5 D1 source/span core.
+-- CAT-5 D1/D2 source/span and parser-result core.
 --
 -- This package models source identity as an immutable byte artifact. Spans
 -- are only half-open byte endpoints; source identity is supplied by values
@@ -119,3 +119,71 @@ fn ValidLocated (a : Type) (s : Source) (x : Located a) : Prop =
   And
     (Equal SourceId (locatedSource a x) (sourceId s))
     (ValidSpan s (locatedSpan a x))
+
+data ParseError = MkParseError SourceId Span
+
+fn errorSource (err : ParseError) : SourceId =
+  match err { MkParseError sid sp => sid }
+
+fn errorSpan (err : ParseError) : Span =
+  match err { MkParseError sid sp => sp }
+
+data ParseResult a =
+  Parsed a Span Nat |
+  Failed ParseError
+
+const Parser (a : Type) : Type =
+  (s : Source) -> (start : Nat) -> LessEqNat start (sourceLength s) -> ParseResult a
+
+fn ParsedValid (s : Source) (start : Nat) (consumed : Span) (next : Nat) : Prop =
+  And
+    (ValidSpan s consumed)
+    (And
+      (Equal Nat (spanStart consumed) start)
+      (Equal Nat (spanEnd consumed) next))
+
+fn FailedValid (s : Source) (err : ParseError) : Prop =
+  And
+    (Equal SourceId (errorSource err) (sourceId s))
+    (ValidSpan s (errorSpan err))
+
+fn ParseResultValid (a : Type) (s : Source) (start : Nat) (r : ParseResult a) : Prop =
+  match r {
+    Parsed value consumed next => ParsedValid s start consumed next ;
+    Failed err => FailedValid s err
+  }
+
+fn ParserValid (a : Type) (p : Parser a) : Prop =
+  (s : Source) -> (start : Nat) -> (h : LessEqNat start (sourceLength s)) ->
+    ParseResultValid a s start (p s start h)
+
+fn ParseResultTotal (a : Type) (r : ParseResult a) : Prop =
+  match r {
+    Parsed value consumed next => Equal Bool True True ;
+    Failed err => Equal Bool True True
+  }
+
+fn ParserTotal (a : Type) (p : Parser a) : Prop =
+  (s : Source) -> (start : Nat) -> (h : LessEqNat start (sourceLength s)) ->
+    ParseResultTotal a (p s start h)
+
+fn ParseResultSourceLocal (a : Type) (s : Source) (r : ParseResult a) : Prop =
+  match r {
+    Parsed value consumed next => ValidSpan s consumed ;
+    Failed err => Equal SourceId (errorSource err) (sourceId s)
+  }
+
+fn ParserSourceLocal (a : Type) (p : Parser a) : Prop =
+  (s : Source) -> (start : Nat) -> (h : LessEqNat start (sourceLength s)) ->
+    ParseResultSourceLocal a s (p s start h)
+
+fn ParserLaws (a : Type) (p : Parser a) : Prop =
+  And
+    (ParserValid a p)
+    (And (ParserTotal a p) (ParserSourceLocal a p))
+
+fn parserPure (a : Type) (value : a) : Parser a =
+  \s. \start. \h. Parsed a value (MkSpan start start) start
+
+const parserFail (a : Type) : Parser a =
+  \s. \start. \h. Failed a (MkParseError (sourceId s) (MkSpan start start))
