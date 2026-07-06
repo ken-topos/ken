@@ -27,6 +27,12 @@
   and `length_take_min`. The filter membership characterization is deliberately
   held out until its comparator/Iff statement is pinned; no `fn law : Prop =
   ...` wrapper is shipped.
+- The CAT-3 D2 verified Bool sorting slice: `bool_and`, `boolLeq`,
+  `eqFromOrd`, `count`, package-local comparator-indexed `Perm`, transparent
+  generic `insert`/`sort`, and the proved `List Bool` carrier
+  `insertTrueBool`/`sortBool` with `sortBoolSorted` and `sortBoolPerm`.
+  `Perm` is count/multiset equality over an explicit comparator, never a raw
+  proof-relevant `data ... : Ω` family.
 - `compareChar : Char -> Char -> OrdResult` — a faithful 3-way repackaging of
   the landed `leqChar`/`eqChar` (`crates/ken-elaborator/src/decimal_char.rs`),
   not a re-derivation of Char comparison.

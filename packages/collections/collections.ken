@@ -167,6 +167,220 @@ fn length_take_min (a : Type) (n : Nat) (xs : List a)
     }
   }
 
+-- CAT-3 D2 verified insertion-sort slice. `Perm` is intentionally the
+-- package-local count/multiset equality surface, not the older prelude
+-- truncation relation; consumers that load this package get the executable
+-- comparator-indexed form needed by the verified `List Bool` carrier.
+fn bool_and (p : Bool) (q : Bool) : Bool =
+  match p { True ⇒ q ; False ⇒ False }
+
+fn boolLeq (x : Bool) (y : Bool) : Bool =
+  match x { False ⇒ True ; True ⇒ y }
+
+fn eqFromOrd (a : Type) (le : a → a → Bool) (x : a) (y : a) : Bool =
+  bool_and (le x y) (le y x)
+
+fn count (a : Type) (eqf : a → a → Bool) (x : a) (xs : List a) : Nat =
+  match xs {
+    Nil ⇒ Zero ;
+    Cons h t ⇒ match eqf x h {
+      True ⇒ Suc (count a eqf x t) ;
+      False ⇒ count a eqf x t
+    }
+  }
+
+fn Perm (a : Type) (eqf : a → a → Bool) (xs : List a) (ys : List a) : Prop =
+  (x : a) → Equal Nat (count a eqf x xs) (count a eqf x ys)
+
+fn insert (a : Type) (le : a → a → Bool) (x : a) (xs : List a) : List a =
+  match xs {
+    Nil ⇒ Cons a x (Nil a) ;
+    Cons h t ⇒ match le x h {
+      True ⇒ Cons a x (Cons a h t) ;
+      False ⇒ Cons a h (insert a le x t)
+    }
+  }
+
+fn sort (a : Type) (le : a → a → Bool) (xs : List a) : List a =
+  match xs {
+    Nil ⇒ Nil a ;
+    Cons h t ⇒ insert a le h (sort a le t)
+  }
+
+fn boolHeadLeq (x : Bool) (xs : List Bool) : Prop =
+  match xs {
+    Nil ⇒ Equal Bool True True ;
+    Cons h t ⇒ Equal Bool (boolLeq x h) True
+  }
+
+fn falseHeadLeq (xs : List Bool) : boolHeadLeq False xs =
+  match xs {
+    Nil ⇒ tt ;
+    Cons h t ⇒ tt
+  }
+
+fn boolConsSorted (x : Bool) (xs : List Bool)
+  : isSorted Bool boolLeq xs → boolHeadLeq x xs →
+    isSorted Bool boolLeq (Cons Bool x xs) =
+  match xs {
+    Nil ⇒ λh. λhb. tt ;
+    Cons h t ⇒ λhxs. λhb.
+      andIntro
+        (Equal Bool (boolLeq x h) True)
+        (isSorted Bool boolLeq (Cons Bool h t))
+        hb
+        hxs
+  }
+
+fn boolSortedTail (x : Bool) (xs : List Bool)
+  : isSorted Bool boolLeq (Cons Bool x xs) → isSorted Bool boolLeq xs =
+  match xs {
+    Nil ⇒ λh. tt ;
+    Cons h t ⇒ λhCons.
+      andSnd
+        (Equal Bool (boolLeq x h) True)
+        (isSorted Bool boolLeq (Cons Bool h t))
+        hCons
+  }
+
+fn insertTrueBool (xs : List Bool) : List Bool =
+  match xs {
+    Nil ⇒ Cons Bool True (Nil Bool) ;
+    Cons h t ⇒ match h {
+      True ⇒ Cons Bool True (Cons Bool True t) ;
+      False ⇒ Cons Bool False (insertTrueBool t)
+    }
+  }
+
+fn sortBool (xs : List Bool) : List Bool =
+  match xs {
+    Nil ⇒ Nil Bool ;
+    Cons h t ⇒ match h {
+      False ⇒ Cons Bool False (sortBool t) ;
+      True ⇒ insertTrueBool (sortBool t)
+    }
+  }
+
+fn sortedInsertTrueBool (xs : List Bool)
+  : isSorted Bool boolLeq xs → isSorted Bool boolLeq (insertTrueBool xs) =
+  match xs {
+    Nil ⇒ λh. tt ;
+    Cons h t ⇒ match h {
+      True ⇒ λhxs.
+        boolConsSorted True (Cons Bool True t) hxs tt ;
+      False ⇒ λhxs.
+        boolConsSorted
+          False
+          (insertTrueBool t)
+          (sortedInsertTrueBool t (boolSortedTail False t hxs))
+          (falseHeadLeq (insertTrueBool t))
+    }
+  }
+
+fn sortBoolSorted (xs : List Bool) : isSorted Bool boolLeq (sortBool xs) =
+  match xs {
+    Nil ⇒ tt ;
+    Cons h t ⇒ match h {
+      False ⇒
+        boolConsSorted
+          False
+          (sortBool t)
+          (sortBoolSorted t)
+          (falseHeadLeq (sortBool t)) ;
+      True ⇒ sortedInsertTrueBool (sortBool t) (sortBoolSorted t)
+    }
+  }
+
+fn insertTrueBoolCountFalse (xs : List Bool)
+  : Equal Nat
+      (count Bool (eqFromOrd Bool boolLeq) False (insertTrueBool xs))
+      (count Bool (eqFromOrd Bool boolLeq) False xs) =
+  match xs {
+    Nil ⇒ tt ;
+    Cons h t ⇒ match h {
+      True ⇒ Refl ;
+      False ⇒
+        cong Nat Nat
+          (count Bool (eqFromOrd Bool boolLeq) False (insertTrueBool t))
+          (count Bool (eqFromOrd Bool boolLeq) False t)
+          Suc
+          (insertTrueBoolCountFalse t)
+    }
+  }
+
+fn insertTrueBoolCountTrue (xs : List Bool)
+  : Equal Nat
+      (count Bool (eqFromOrd Bool boolLeq) True (insertTrueBool xs))
+      (Suc (count Bool (eqFromOrd Bool boolLeq) True xs)) =
+  match xs {
+    Nil ⇒ tt ;
+    Cons h t ⇒ match h {
+      True ⇒ Refl ;
+      False ⇒ insertTrueBoolCountTrue t
+    }
+  }
+
+fn sortBoolCountFalse (xs : List Bool)
+  : Equal Nat
+      (count Bool (eqFromOrd Bool boolLeq) False xs)
+      (count Bool (eqFromOrd Bool boolLeq) False (sortBool xs)) =
+  match xs {
+    Nil ⇒ tt ;
+    Cons h t ⇒ match h {
+      False ⇒
+        cong Nat Nat
+          (count Bool (eqFromOrd Bool boolLeq) False t)
+          (count Bool (eqFromOrd Bool boolLeq) False (sortBool t))
+          Suc
+          (sortBoolCountFalse t) ;
+      True ⇒
+        trans Nat
+          (count Bool (eqFromOrd Bool boolLeq) False t)
+          (count Bool (eqFromOrd Bool boolLeq) False (sortBool t))
+          (count Bool (eqFromOrd Bool boolLeq) False (insertTrueBool (sortBool t)))
+          (sortBoolCountFalse t)
+          (sym Nat
+            (count Bool (eqFromOrd Bool boolLeq) False (insertTrueBool (sortBool t)))
+            (count Bool (eqFromOrd Bool boolLeq) False (sortBool t))
+            (insertTrueBoolCountFalse (sortBool t)))
+    }
+  }
+
+fn sortBoolCountTrue (xs : List Bool)
+  : Equal Nat
+      (count Bool (eqFromOrd Bool boolLeq) True xs)
+      (count Bool (eqFromOrd Bool boolLeq) True (sortBool xs)) =
+  match xs {
+    Nil ⇒ tt ;
+    Cons h t ⇒ match h {
+      False ⇒ sortBoolCountTrue t ;
+      True ⇒
+        trans Nat
+          (Suc (count Bool (eqFromOrd Bool boolLeq) True t))
+          (Suc (count Bool (eqFromOrd Bool boolLeq) True (sortBool t)))
+          (count Bool (eqFromOrd Bool boolLeq) True (insertTrueBool (sortBool t)))
+          (cong Nat Nat
+            (count Bool (eqFromOrd Bool boolLeq) True t)
+            (count Bool (eqFromOrd Bool boolLeq) True (sortBool t))
+            Suc
+            (sortBoolCountTrue t))
+          (sym Nat
+            (count Bool (eqFromOrd Bool boolLeq) True (insertTrueBool (sortBool t)))
+            (Suc (count Bool (eqFromOrd Bool boolLeq) True (sortBool t)))
+            (insertTrueBoolCountTrue (sortBool t)))
+    }
+  }
+
+fn sortBoolPerm (xs : List Bool)
+  : Perm Bool (eqFromOrd Bool boolLeq) xs (sortBool xs) =
+  match xs {
+    Nil ⇒ λq. match q { False ⇒ tt ; True ⇒ tt } ;
+    Cons h t ⇒ λq. match q {
+      False ⇒ sortBoolCountFalse (Cons Bool h t) ;
+      True ⇒ sortBoolCountTrue (Cons Bool h t)
+    }
+  }
+
 -- Saturating `Nat` monus (never underflows) -- `slice`'s length. Identical
 -- shape to the landed `val1_string_literals.rs:327` `natSub`.
 fn natSub (a : Nat) (b : Nat) : Nat =

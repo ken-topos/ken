@@ -1,8 +1,9 @@
-//! CAT-3 D1 acceptance for the structural collection-law slice.
+//! CAT-3 acceptance for the structural collection-law slice.
 //!
 //! This file checks the real package source, not hand-copied snippets. The D1
 //! surface is deliberately bounded to structural list ops plus proof-returning
 //! `take`/`drop`, `map` length, and `take` length/min laws.
+//! D2 adds the verified `List Bool` insertion-sort/count-permutation slice.
 
 use ken_elaborator::{foreign::trusted_base_delta, ElabEnv};
 use ken_kernel::Decl;
@@ -32,6 +33,17 @@ fn cat3_d1_structural_collections_package_elaborates_zero_delta() {
         "take_drop_decomposition",
         "map_length",
         "length_take_min",
+        "bool_and",
+        "boolLeq",
+        "eqFromOrd",
+        "count",
+        "Perm",
+        "insert",
+        "sort",
+        "insertTrueBool",
+        "sortBool",
+        "sortBoolSorted",
+        "sortBoolPerm",
     ] {
         let id = env
             .globals
@@ -75,7 +87,23 @@ fn cat3_d1_law_surfaces_are_proof_returning_not_prop_wrappers() {
     );
     assert!(
         !COLLECTIONS_KEN.contains("= Axiom"),
-        "collections CAT-3 D1 slice must not use Axiom"
+        "collections CAT-3 slice must not use Axiom"
+    );
+    assert!(
+        !COLLECTIONS_KEN.contains("data Perm"),
+        "CAT-3 D2 permutation must be count equality, not a raw proof-relevant data family"
+    );
+    assert!(
+        COLLECTIONS_KEN.contains("fn Perm (a : Type) (eqf : a → a → Bool)")
+            && COLLECTIONS_KEN.contains(
+                "(x : a) → Equal Nat (count a eqf x xs) (count a eqf x ys)"
+            ),
+        "CAT-3 D2 Perm must be the comparator-indexed count/multiset equality surface"
+    );
+    assert!(
+        COLLECTIONS_KEN.contains("fn eqFromOrd")
+            && COLLECTIONS_KEN.contains("bool_and (le x y) (le y x)"),
+        "eqFromOrd must be the pinned bool_and (le x y) (le y x) definition"
     );
 }
 
@@ -127,6 +155,25 @@ fn cat3_d1_positive_surfaces_check_against_real_package_defs() {
 }
 
 #[test]
+fn cat3_d2_bool_sort_surfaces_check_against_real_package_defs() {
+    let mut env = mk_env();
+    let sample = "(Cons Bool True (Cons Bool False (Cons Bool True (Nil Bool))))";
+
+    env.elaborate_decl(&format!(
+        "const cat3_sort_bool_sorted_sample \
+           : isSorted Bool boolLeq (sortBool {sample}) = sortBoolSorted {sample}"
+    ))
+    .expect("sortBoolSorted should prove the sortedness surface");
+
+    env.elaborate_decl(&format!(
+        "const cat3_sort_bool_perm_sample \
+           : Perm Bool (eqFromOrd Bool boolLeq) {sample} (sortBool {sample}) = \
+             sortBoolPerm {sample}"
+    ))
+    .expect("sortBoolPerm should prove count/multiset equality");
+}
+
+#[test]
 fn cat3_d1_wrong_take_drop_witness_rejected() {
     let mut env = mk_env();
     let err = env
@@ -146,5 +193,41 @@ fn cat3_d1_wrong_take_drop_witness_rejected() {
             || msg.contains("type mismatch")
             || msg.contains("Kernel rejected"),
         "wrong witness should reject during type/proof checking, got {msg}"
+    );
+}
+
+#[test]
+fn cat3_d2_bad_sorted_and_bad_perm_witnesses_rejected() {
+    let mut env = mk_env();
+
+    let err = env
+        .elaborate_decl(
+            "const cat3_bad_sorted_bool \
+               : isSorted Bool boolLeq (Cons Bool True (Cons Bool False (Nil Bool))) = tt",
+        )
+        .expect_err("descending Bool list must not satisfy isSorted");
+    let msg = format!("{err}");
+    assert!(
+        msg.contains("Type mismatch")
+            || msg.contains("type mismatch")
+            || msg.contains("Kernel rejected"),
+        "bad sorted witness should reject during proof checking, got {msg}"
+    );
+
+    let err = env
+        .elaborate_decl(
+            "const cat3_bad_perm_bool \
+               : Perm Bool (eqFromOrd Bool boolLeq) \
+                   (Cons Bool True (Nil Bool)) \
+                   (Nil Bool) = \
+                 \\q. match q { False => tt ; True => tt }",
+        )
+        .expect_err("dropping True must not satisfy count-based Perm");
+    let msg = format!("{err}");
+    assert!(
+        msg.contains("Type mismatch")
+            || msg.contains("type mismatch")
+            || msg.contains("Kernel rejected"),
+        "bad permutation witness should reject during proof checking, got {msg}"
     );
 }
