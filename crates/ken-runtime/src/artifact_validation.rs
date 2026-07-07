@@ -90,6 +90,7 @@ pub struct ProofErasureBoundaryWitness {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ProofErasureBoundaryFacts {
+    pub runtime_declaration_targets: BTreeSet<RuntimeSymbol>,
     pub record_field_statuses: BTreeMap<RuntimeSymbol, Vec<ProofErasureFieldStatus>>,
     pub checked_core_record_field_statuses: BTreeMap<RuntimeSymbol, Vec<ProofErasureFieldStatus>>,
     pub lowerability: BTreeMap<RuntimeSymbol, RuntimeLowerabilityStatus>,
@@ -327,6 +328,7 @@ pub fn proof_erasure_boundary_facts_from_program(
 ) -> ProofErasureBoundaryFacts {
     let metadata = &program.erased_core.metadata;
     ProofErasureBoundaryFacts {
+        runtime_declaration_targets: metadata.runtime_declaration_targets.clone(),
         record_field_statuses: program_declaration_record_field_statuses(program),
         checked_core_record_field_statuses: program_checked_core_record_field_statuses(program),
         lowerability: metadata.lowerability.clone(),
@@ -356,6 +358,11 @@ pub fn validate_proof_erasure_boundary_witness(
     }
 
     let recomputed = proof_erasure_boundary_facts_from_program(program);
+    require_witness_lane_match(
+        &witness.facts.runtime_declaration_targets,
+        &recomputed.runtime_declaration_targets,
+        "runtime_declaration_targets",
+    )?;
     require_witness_lane_match(
         &witness.facts.record_field_statuses,
         &recomputed.record_field_statuses,

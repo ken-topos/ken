@@ -84,6 +84,7 @@ pub fn erase_checked_core_package_for_target<'a>(
             .collect(),
         lowerability: lowerability_map(&semantic.lowerability),
         unsupported: symbol_bytes_map(&semantic.unsupported),
+        runtime_declaration_targets: targets.iter().map(ToString::to_string).collect(),
         checked_core: checked_core_metadata(semantic),
         runtime_checks: runtime_checks_for_targets(package, &targets),
         capabilities: capabilities_for_targets(package, &targets),
@@ -138,6 +139,11 @@ pub fn emit_proof_erasure_boundary_witness(
 
     let package_facts = proof_erasure_boundary_facts_from_package(package, program);
     let program_facts = proof_erasure_boundary_facts_from_program(program);
+    require_erasure_lane_match(
+        &package_facts.runtime_declaration_targets,
+        &program_facts.runtime_declaration_targets,
+        "runtime_declaration_targets",
+    )?;
     require_erasure_lane_match(
         &package_facts.record_field_statuses,
         &program_facts.record_field_statuses,
@@ -436,6 +442,11 @@ fn proof_erasure_boundary_facts_from_package(
 ) -> ProofErasureBoundaryFacts {
     let semantic = &package.artifact.semantic;
     ProofErasureBoundaryFacts {
+        runtime_declaration_targets: program
+            .erased_core
+            .metadata
+            .runtime_declaration_targets
+            .clone(),
         record_field_statuses: package_declaration_record_field_statuses(package, program),
         checked_core_record_field_statuses: package_record_field_statuses(package),
         lowerability: lowerability_map(&semantic.lowerability),
@@ -456,16 +467,15 @@ fn package_declaration_record_field_statuses(
 ) -> BTreeMap<String, Vec<ProofErasureFieldStatus>> {
     let package_records = package_record_field_statuses(package);
     program
-        .declarations
+        .erased_core
+        .metadata
+        .runtime_declaration_targets
         .iter()
-        .filter_map(|declaration| {
-            if !matches!(declaration.kind, RuntimeDeclarationKind::Record { .. }) {
-                return None;
-            }
+        .filter_map(|symbol| {
             package_records
-                .get(&declaration.symbol)
+                .get(symbol)
                 .cloned()
-                .map(|fields| (declaration.symbol.clone(), fields))
+                .map(|fields| (symbol.clone(), fields))
         })
         .collect()
 }

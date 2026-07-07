@@ -341,6 +341,14 @@ fn proof_erasure_boundary_witness_accepts_pair_derived_metadata() {
         package.core_semantic_hash
     );
     assert_eq!(report.artifact.artifact_hash, package.artifact_hash);
+    assert!(report
+        .facts
+        .runtime_declaration_targets
+        .contains(&target.to_string()));
+    assert!(!report
+        .facts
+        .runtime_declaration_targets
+        .contains(&non_target_record.to_string()));
     let field_statuses = report
         .facts
         .record_field_statuses
@@ -392,6 +400,24 @@ fn proof_erasure_boundary_witness_accepts_pair_derived_metadata() {
             .any(|bytes| bytes == &b"non-target unsupported".to_vec()),
         "non-target unsupported lane survives in the witness"
     );
+}
+
+#[test]
+fn proof_erasure_boundary_witness_rejects_missing_runtime_record_declaration() {
+    let (package, target, _, _) = proof_erasure_record_package();
+    let mut program =
+        erase_checked_core_package_for_target(&package, [&target]).expect("erasure succeeds");
+    program.declarations.clear();
+
+    let err = emit_proof_erasure_boundary_witness(&package, &program)
+        .expect_err("missing runtime record declaration must reject");
+
+    assert!(matches!(
+        err,
+        ErasureError::ProofErasureBoundaryWitness(witness)
+            if witness.stage == ProofErasureBoundaryWitnessStage::WitnessMismatch
+                && witness.lane == "record_field_statuses"
+    ));
 }
 
 #[test]

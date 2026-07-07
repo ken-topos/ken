@@ -40,6 +40,7 @@ pub struct RuntimeMetadata {
     pub dependency_semantic_hashes: BTreeMap<RuntimeSymbol, String>,
     pub lowerability: BTreeMap<RuntimeSymbol, RuntimeLowerabilityStatus>,
     pub unsupported: BTreeMap<RuntimeSymbol, Vec<u8>>,
+    pub runtime_declaration_targets: BTreeSet<RuntimeSymbol>,
     pub checked_core: RuntimeCheckedCoreMetadata,
     pub runtime_checks: BTreeSet<RuntimeSymbol>,
     pub capabilities: BTreeSet<RuntimeSymbol>,
