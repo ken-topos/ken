@@ -10,6 +10,7 @@
 //! - `unknown` propagation (Kleene/Heyting logic, `41 §6`)
 
 pub mod canonical;
+pub mod cranelift_backend;
 pub mod hash;
 pub mod ir;
 pub mod store;
@@ -17,6 +18,7 @@ pub mod unknown;
 pub mod values;
 
 pub use canonical::Canonical;
+pub use cranelift_backend::*;
 pub use hash::fnv1a_64;
 pub use ir::*;
 pub use store::{InternResult, Space, Store, StoreStats};
