@@ -85,15 +85,26 @@ projection. Projection views bind the projected field to the package
 `RecordSigmaMetadata` / `FieldMetadata` entry that justifies its position,
 name, checked field type symbol, and runtime status.
 
+Structured primitive views may expose primitive literals and primitive
+applications only when the stable primitive symbol, primitive-registry
+reference, reduction class, lowerability, and partiality evidence agree with
+`PrimitiveMetadata`. Literal declarations use the literal reduction class; op
+references become explicit primitive application shapes with package-facing
+registry identity. Checked-partial and trusted-partial primitives must name the
+package obligation or assumption that justifies their trap-capable runtime
+contract.
+
 A body view must fail closed, with stable report lanes, when package facts do
 not justify the requested structure. In particular, stale constructor identity,
 missing branch data, unsupported dependent motives, unsupported proof-only
 matches, unsupported eliminator shapes, unsupported dependent field shapes,
 non-executable erased-field projection, stale field identity/order, unsupported
-record/projection shapes, and impossible-branch use without package evidence are
-loud rejects before erasure/runtime IR. This section does not define runtime
-IR, evaluator behavior, ABI/layout, native backend lowering, coverage changes,
-or a raw-source fallback.
+record/projection shapes, stale primitive metadata, unsupported primitive names,
+host-dependent primitive attempts, primitive partiality without package
+obligation/assumption evidence, and impossible-branch use without package
+evidence are loud rejects before erasure/runtime IR. This section does not
+define runtime IR, evaluator behavior, ABI/layout, native backend lowering,
+coverage changes, or a raw-source fallback.
 
 ## 2. Relation to Existing Specs
 

@@ -470,6 +470,23 @@ fn lower_body_term_inner(
             stack.pop();
             lowered
         }
+        CheckedCoreBodyTerm::PrimitiveLiteral(view) => Err(expression_lowering_error(
+            root_symbol,
+            "primitive_literal_lowering_unsupported",
+            format!(
+                "primitive literal {} is exposed by checked-core body view but Runtime NC16 lowering owns execution",
+                view.symbol
+            ),
+        )),
+        CheckedCoreBodyTerm::PrimitiveApplication(view) => Err(expression_lowering_error(
+            root_symbol,
+            "primitive_application_lowering_unsupported",
+            format!(
+                "primitive application {} with {} arguments is exposed by checked-core body view but Runtime NC16 lowering owns execution",
+                view.primitive.symbol,
+                view.arguments.len()
+            ),
+        )),
         CheckedCoreBodyTerm::Lambda { body, .. } => {
             if captures_outer_variable(body) {
                 return Err(expression_lowering_error(
@@ -963,6 +980,11 @@ fn has_free_variable_at_or_above(term: &CheckedCoreBodyTerm, bound: usize) -> bo
     match term {
         CheckedCoreBodyTerm::Variable { de_bruijn_index } => *de_bruijn_index >= bound,
         CheckedCoreBodyTerm::DirectDeclarationCall { .. } => false,
+        CheckedCoreBodyTerm::PrimitiveLiteral(_) => false,
+        CheckedCoreBodyTerm::PrimitiveApplication(view) => view
+            .arguments
+            .iter()
+            .any(|argument| has_free_variable_at_or_above(argument, bound)),
         CheckedCoreBodyTerm::ConstructorReference(_) => false,
         CheckedCoreBodyTerm::ErasedConstructorArgument { .. } => false,
         CheckedCoreBodyTerm::Lambda { body, .. } => has_free_variable_at_or_above(body, bound + 1),

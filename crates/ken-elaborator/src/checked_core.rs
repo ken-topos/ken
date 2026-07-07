@@ -317,6 +317,22 @@ pub struct CheckedCoreMatchBranchView {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CheckedCorePrimitiveView {
+    pub symbol: StableSymbol,
+    pub registry_symbol: String,
+    pub registry_ref: String,
+    pub reduction: PrimitiveReductionMetadata,
+    pub partiality: PartialityMetadata,
+    pub lowerability: LowerabilityStatus,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CheckedCorePrimitiveApplicationView {
+    pub primitive: CheckedCorePrimitiveView,
+    pub arguments: Vec<CheckedCoreBodyTerm>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CheckedCoreRecordSigmaView {
     pub symbol: StableSymbol,
     pub kind: RecordSigmaKind,
@@ -368,6 +384,8 @@ pub enum CheckedCoreBodyTerm {
         symbol: StableSymbol,
         level_args: Vec<CheckedCoreLevelView>,
     },
+    PrimitiveLiteral(CheckedCorePrimitiveView),
+    PrimitiveApplication(CheckedCorePrimitiveApplicationView),
     ConstructorReference(CheckedCoreConstructorView),
     ErasedConstructorArgument {
         term: Vec<u8>,
@@ -476,6 +494,25 @@ pub enum CheckedCoreBodyViewError {
         symbol: StableSymbol,
         reason: String,
     },
+    StalePrimitiveMetadata {
+        symbol: StableSymbol,
+        primitive: StableSymbol,
+        reason: String,
+    },
+    UnsupportedPrimitiveName {
+        symbol: StableSymbol,
+        primitive: StableSymbol,
+    },
+    HostDependentPrimitiveAttempt {
+        symbol: StableSymbol,
+        primitive: StableSymbol,
+        reason: String,
+    },
+    UnjustifiedPrimitivePartiality {
+        symbol: StableSymbol,
+        primitive: StableSymbol,
+        reason: String,
+    },
     UnjustifiedImpossibleBranch {
         symbol: StableSymbol,
     },
@@ -552,6 +589,16 @@ impl CheckedCoreBodyViewError {
             }
             CheckedCoreBodyViewError::UnsupportedRecordProjectionShape { .. } => {
                 "unsupported_record_projection_shape"
+            }
+            CheckedCoreBodyViewError::StalePrimitiveMetadata { .. } => "stale_primitive_metadata",
+            CheckedCoreBodyViewError::UnsupportedPrimitiveName { .. } => {
+                "unsupported_primitive_name"
+            }
+            CheckedCoreBodyViewError::HostDependentPrimitiveAttempt { .. } => {
+                "host_dependent_primitive_attempt"
+            }
+            CheckedCoreBodyViewError::UnjustifiedPrimitivePartiality { .. } => {
+                "unjustified_primitive_partiality"
             }
             CheckedCoreBodyViewError::UnjustifiedImpossibleBranch { .. } => {
                 "unjustified_impossible_branch"
@@ -672,6 +719,34 @@ impl fmt::Display for CheckedCoreBodyViewError {
                     "declaration {symbol} uses unsupported record/Sigma projection shape: {reason}"
                 )
             }
+            CheckedCoreBodyViewError::StalePrimitiveMetadata {
+                symbol,
+                primitive,
+                reason,
+            } => write!(
+                f,
+                "declaration {symbol} has stale primitive metadata for {primitive}: {reason}"
+            ),
+            CheckedCoreBodyViewError::UnsupportedPrimitiveName { symbol, primitive } => write!(
+                f,
+                "declaration {symbol} references unsupported primitive {primitive}"
+            ),
+            CheckedCoreBodyViewError::HostDependentPrimitiveAttempt {
+                symbol,
+                primitive,
+                reason,
+            } => write!(
+                f,
+                "declaration {symbol} references host-dependent primitive {primitive}: {reason}"
+            ),
+            CheckedCoreBodyViewError::UnjustifiedPrimitivePartiality {
+                symbol,
+                primitive,
+                reason,
+            } => write!(
+                f,
+                "declaration {symbol} references primitive {primitive} without justified partiality: {reason}"
+            ),
             CheckedCoreBodyViewError::UnjustifiedImpossibleBranch { symbol } => write!(
                 f,
                 "declaration {symbol} uses an impossible branch without package evidence"
@@ -2621,6 +2696,32 @@ fn decode_supported_body_term_after_tag(
                 decode_stable_symbol(cursor).map_err(|reason| malformed_body(owner, reason))?;
             let level_args =
                 decode_levels(cursor).map_err(|reason| malformed_body(owner, reason))?;
+            if semantic.primitive_metadata.contains_key(&symbol)
+                || semantic.primitive_refs.contains_key(&symbol)
+                || symbol.namespace == SymbolNamespace::Primitive
+            {
+                reject_primitive_level_args(owner, &symbol, &level_args)?;
+                let primitive = checked_primitive_view(semantic, owner, &symbol)?;
+                return match primitive.reduction {
+                    PrimitiveReductionMetadata::Literal => {
+                        Ok(CheckedCoreBodyTerm::PrimitiveLiteral(primitive))
+                    }
+                    PrimitiveReductionMetadata::Op => {
+                        Ok(CheckedCoreBodyTerm::PrimitiveApplication(
+                            CheckedCorePrimitiveApplicationView {
+                                primitive,
+                                arguments: Vec::new(),
+                            },
+                        ))
+                    }
+                    PrimitiveReductionMetadata::OpaqueType => {
+                        Err(CheckedCoreBodyViewError::UnsupportedPrimitiveName {
+                            symbol: owner.clone(),
+                            primitive: symbol,
+                        })
+                    }
+                };
+            }
             if &symbol == owner {
                 return Err(CheckedCoreBodyViewError::UnsupportedTermShape {
                     symbol: owner.clone(),
@@ -2701,6 +2802,10 @@ fn decode_supported_body_term_after_tag(
                     None,
                 )?)
             };
+            if let CheckedCoreBodyTerm::PrimitiveApplication(mut view) = *function {
+                view.arguments.push(*argument);
+                return Ok(CheckedCoreBodyTerm::PrimitiveApplication(view));
+            }
             Ok(CheckedCoreBodyTerm::Application { function, argument })
         }
         "let" => {
@@ -2768,6 +2873,141 @@ fn constructor_spine_needs_erased_family_argument(term: &CheckedCoreBodyTerm) ->
         return false;
     };
     applied_args < constructor.family_parameter_count
+}
+
+fn checked_primitive_view(
+    semantic: &CheckedCoreSemanticInputs,
+    owner: &StableSymbol,
+    symbol: &StableSymbol,
+) -> Result<CheckedCorePrimitiveView, CheckedCoreBodyViewError> {
+    let Some(meta) = semantic.primitive_metadata.get(symbol) else {
+        return Err(CheckedCoreBodyViewError::UnsupportedPrimitiveName {
+            symbol: owner.clone(),
+            primitive: symbol.clone(),
+        });
+    };
+    let registry_ref = semantic.primitive_refs.get(symbol).ok_or_else(|| {
+        CheckedCoreBodyViewError::StalePrimitiveMetadata {
+            symbol: owner.clone(),
+            primitive: symbol.clone(),
+            reason: "missing primitive_refs entry".to_string(),
+        }
+    })?;
+    let expected_ref = format!("primitive-registry:{}", meta.registry_symbol);
+    if registry_ref != &expected_ref {
+        return Err(CheckedCoreBodyViewError::StalePrimitiveMetadata {
+            symbol: owner.clone(),
+            primitive: symbol.clone(),
+            reason: format!(
+                "primitive_refs entry {registry_ref:?} does not match {expected_ref:?}"
+            ),
+        });
+    }
+    if symbol.namespace != SymbolNamespace::Primitive
+        || symbol.components.len() != 1
+        || symbol.components[0] != meta.registry_symbol
+    {
+        return Err(CheckedCoreBodyViewError::StalePrimitiveMetadata {
+            symbol: owner.clone(),
+            primitive: symbol.clone(),
+            reason: format!(
+                "stable primitive identity must be prim:{}",
+                meta.registry_symbol
+            ),
+        });
+    }
+    reject_unsupported_primitive_lowerability(owner, symbol, &meta.lowerability)?;
+    justify_primitive_partiality(semantic, owner, symbol, &meta.partiality)?;
+
+    Ok(CheckedCorePrimitiveView {
+        symbol: symbol.clone(),
+        registry_symbol: meta.registry_symbol.clone(),
+        registry_ref: registry_ref.clone(),
+        reduction: meta.reduction.clone(),
+        partiality: meta.partiality.clone(),
+        lowerability: meta.lowerability.clone(),
+    })
+}
+
+fn reject_primitive_level_args(
+    owner: &StableSymbol,
+    primitive: &StableSymbol,
+    level_args: &[CheckedCoreLevelView],
+) -> Result<(), CheckedCoreBodyViewError> {
+    if level_args.is_empty() {
+        Ok(())
+    } else {
+        Err(CheckedCoreBodyViewError::StalePrimitiveMetadata {
+            symbol: owner.clone(),
+            primitive: primitive.clone(),
+            reason: "primitive body-view terms do not support level arguments".to_string(),
+        })
+    }
+}
+
+fn reject_unsupported_primitive_lowerability(
+    owner: &StableSymbol,
+    primitive: &StableSymbol,
+    lowerability: &LowerabilityStatus,
+) -> Result<(), CheckedCoreBodyViewError> {
+    match lowerability {
+        LowerabilityStatus::Supported => Ok(()),
+        LowerabilityStatus::RequiresFeature { feature, reason }
+            if feature.contains("host") || reason.contains("host") =>
+        {
+            Err(CheckedCoreBodyViewError::HostDependentPrimitiveAttempt {
+                symbol: owner.clone(),
+                primitive: primitive.clone(),
+                reason: reason.clone(),
+            })
+        }
+        LowerabilityStatus::Unsupported { .. }
+        | LowerabilityStatus::Deferred { .. }
+        | LowerabilityStatus::RequiresFeature { .. }
+        | LowerabilityStatus::Explicit { .. } => {
+            Err(CheckedCoreBodyViewError::UnsupportedPrimitiveName {
+                symbol: owner.clone(),
+                primitive: primitive.clone(),
+            })
+        }
+    }
+}
+
+fn justify_primitive_partiality(
+    semantic: &CheckedCoreSemanticInputs,
+    owner: &StableSymbol,
+    primitive: &StableSymbol,
+    partiality: &PartialityMetadata,
+) -> Result<(), CheckedCoreBodyViewError> {
+    match partiality {
+        PartialityMetadata::Total => Ok(()),
+        PartialityMetadata::CheckedPartial { obligation } => {
+            if semantic.obligations.contains_key(obligation)
+                && semantic.obligation_metadata.contains_key(obligation)
+            {
+                Ok(())
+            } else {
+                Err(CheckedCoreBodyViewError::UnjustifiedPrimitivePartiality {
+                    symbol: owner.clone(),
+                    primitive: primitive.clone(),
+                    reason: format!("missing checked-partial obligation {obligation}"),
+                })
+            }
+        }
+        PartialityMetadata::TrustedPartial { assumption } => {
+            if semantic.assumptions.contains_key(assumption)
+                && semantic.assumption_trust_metadata.contains_key(assumption)
+            {
+                Ok(())
+            } else {
+                Err(CheckedCoreBodyViewError::UnjustifiedPrimitivePartiality {
+                    symbol: owner.clone(),
+                    primitive: primitive.clone(),
+                    reason: format!("missing trusted-partial assumption {assumption}"),
+                })
+            }
+        }
+    }
 }
 
 fn decode_supported_record_sigma_construction(
@@ -3966,6 +4206,103 @@ mod tests {
         (package, target, record)
     }
 
+    fn primitive_symbols() -> (StableSymbol, StableSymbol, StableSymbol) {
+        (
+            decl_symbol("primitive_target"),
+            StableSymbol::primitive("lit_int_2"),
+            StableSymbol::primitive("add_int"),
+        )
+    }
+
+    fn primitive_table(
+        target: StableSymbol,
+        literal: StableSymbol,
+        add: StableSymbol,
+    ) -> StableSymbolTable {
+        table_many(&[
+            (GlobalId(1), target),
+            (GlobalId(40), literal),
+            (GlobalId(41), add),
+        ])
+    }
+
+    fn primitive_application_body() -> Term {
+        Term::App(
+            Box::new(Term::App(
+                Box::new(Term::Const {
+                    id: GlobalId(41),
+                    level_args: Vec::new(),
+                }),
+                Box::new(Term::Const {
+                    id: GlobalId(40),
+                    level_args: Vec::new(),
+                }),
+            )),
+            Box::new(Term::Const {
+                id: GlobalId(40),
+                level_args: Vec::new(),
+            }),
+        )
+    }
+
+    fn primitive_body_view_package(
+    ) -> (CheckedCorePackage, StableSymbol, StableSymbol, StableSymbol) {
+        let (target, literal, add) = primitive_symbols();
+        let table = primitive_table(target.clone(), literal.clone(), add.clone());
+        let ty = Term::Type(Level::zero());
+        let decl = Decl::Transparent {
+            id: GlobalId(1),
+            level_params: Vec::new(),
+            ty: ty.clone(),
+            body: primitive_application_body(),
+        };
+
+        let mut semantic = CheckedCoreSemanticInputs::default();
+        for symbol in [&target, &literal, &add] {
+            semantic.symbols.insert(symbol.clone());
+            semantic
+                .lowerability
+                .insert(symbol.clone(), LowerabilityStatus::Supported);
+        }
+        semantic
+            .declarations
+            .insert(target.clone(), canonical_decl_bytes(&decl, &table).unwrap());
+        semantic
+            .primitive_refs
+            .insert(literal.clone(), "primitive-registry:lit_int_2".to_string());
+        semantic.primitive_metadata.insert(
+            literal.clone(),
+            PrimitiveMetadata {
+                registry_symbol: "lit_int_2".to_string(),
+                reduction: PrimitiveReductionMetadata::Literal,
+                partiality: PartialityMetadata::Total,
+                lowerability: LowerabilityStatus::Supported,
+            },
+        );
+        semantic
+            .primitive_refs
+            .insert(add.clone(), "primitive-registry:add_int".to_string());
+        semantic.primitive_metadata.insert(
+            add.clone(),
+            PrimitiveMetadata {
+                registry_symbol: "add_int".to_string(),
+                reduction: PrimitiveReductionMetadata::Op,
+                partiality: PartialityMetadata::Total,
+                lowerability: LowerabilityStatus::Supported,
+            },
+        );
+        let package = emit_checked_core_package(
+            body_view_header(),
+            CheckedCoreArtifactInputs {
+                semantic,
+                source_identity: BTreeMap::new(),
+                annotations: BTreeMap::new(),
+            },
+        )
+        .unwrap();
+        (package, target, literal, add)
+    }
+
     fn replace_body(
         package: &mut CheckedCorePackage,
         target: &StableSymbol,
@@ -4130,6 +4467,147 @@ mod tests {
             },
             other => panic!("expected lambda body, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn body_view_recovers_package_bound_primitive_literal_and_application() {
+        let (package, target, literal, add) = primitive_body_view_package();
+        let selection =
+            body_view_selection(&package, target.clone(), BTreeSet::from([target.clone()]));
+
+        let view = checked_core_declaration_body_view(&package, &selection, &target).unwrap();
+
+        let CheckedCoreBodyTerm::PrimitiveApplication(application) = view.body else {
+            panic!("expected package-derived primitive application view");
+        };
+        assert_eq!(application.primitive.symbol, add);
+        assert_eq!(application.primitive.registry_symbol, "add_int");
+        assert_eq!(
+            application.primitive.reduction,
+            PrimitiveReductionMetadata::Op
+        );
+        assert_eq!(application.primitive.partiality, PartialityMetadata::Total);
+        assert_eq!(
+            application.primitive.lowerability,
+            LowerabilityStatus::Supported
+        );
+        assert_eq!(application.arguments.len(), 2);
+        for argument in application.arguments {
+            let CheckedCoreBodyTerm::PrimitiveLiteral(literal_view) = argument else {
+                panic!("expected primitive literal argument");
+            };
+            assert_eq!(literal_view.symbol, literal);
+            assert_eq!(literal_view.registry_symbol, "lit_int_2");
+            assert_eq!(literal_view.reduction, PrimitiveReductionMetadata::Literal);
+            assert_eq!(literal_view.partiality, PartialityMetadata::Total);
+            assert_eq!(literal_view.lowerability, LowerabilityStatus::Supported);
+        }
+    }
+
+    #[test]
+    fn body_view_rejects_stale_primitive_metadata() {
+        let (mut package, target, _literal, add) = primitive_body_view_package();
+        package
+            .artifact
+            .semantic
+            .primitive_refs
+            .insert(add.clone(), "primitive-registry:stale_add".to_string());
+        refresh_package_hashes(&mut package);
+        let selection =
+            body_view_selection(&package, target.clone(), BTreeSet::from([target.clone()]));
+
+        let err = checked_core_declaration_body_view(&package, &selection, &target).unwrap_err();
+
+        assert!(matches!(
+            err,
+            CheckedCoreBodyViewError::StalePrimitiveMetadata { .. }
+        ));
+        assert_eq!(err.lane(), "stale_primitive_metadata");
+        assert!(err.to_string().contains(&add.to_string()));
+    }
+
+    #[test]
+    fn body_view_rejects_unsupported_primitive_name() {
+        let (mut package, target, _literal, _add) = primitive_body_view_package();
+        let missing = StableSymbol::primitive("missing_primitive");
+        let table = table_many(&[
+            (GlobalId(1), target.clone()),
+            (GlobalId(99), missing.clone()),
+        ]);
+        replace_body(
+            &mut package,
+            &target,
+            Term::Const {
+                id: GlobalId(99),
+                level_args: Vec::new(),
+            },
+            &table,
+        );
+        let selection =
+            body_view_selection(&package, target.clone(), BTreeSet::from([target.clone()]));
+
+        let err = checked_core_declaration_body_view(&package, &selection, &target).unwrap_err();
+
+        assert_eq!(
+            err,
+            CheckedCoreBodyViewError::UnsupportedPrimitiveName {
+                symbol: target,
+                primitive: missing,
+            }
+        );
+        assert_eq!(err.lane(), "unsupported_primitive_name");
+    }
+
+    #[test]
+    fn body_view_rejects_host_dependent_primitive_attempt() {
+        let (mut package, target, _literal, add) = primitive_body_view_package();
+        let meta = package
+            .artifact
+            .semantic
+            .primitive_metadata
+            .get_mut(&add)
+            .unwrap();
+        meta.lowerability = LowerabilityStatus::RequiresFeature {
+            feature: "host-dependent-primitive".to_string(),
+            reason: "depends on host locale".to_string(),
+        };
+        refresh_package_hashes(&mut package);
+        let selection =
+            body_view_selection(&package, target.clone(), BTreeSet::from([target.clone()]));
+
+        let err = checked_core_declaration_body_view(&package, &selection, &target).unwrap_err();
+
+        assert!(matches!(
+            err,
+            CheckedCoreBodyViewError::HostDependentPrimitiveAttempt { .. }
+        ));
+        assert_eq!(err.lane(), "host_dependent_primitive_attempt");
+        assert!(err.to_string().contains("host locale"));
+    }
+
+    #[test]
+    fn body_view_rejects_unjustified_partial_primitive_contract() {
+        let (mut package, target, _literal, add) = primitive_body_view_package();
+        let obligation = StableSymbol::obligation("missing-add-int-overflow");
+        package.artifact.semantic.symbols.insert(obligation.clone());
+        let meta = package
+            .artifact
+            .semantic
+            .primitive_metadata
+            .get_mut(&add)
+            .unwrap();
+        meta.partiality = PartialityMetadata::CheckedPartial { obligation };
+        refresh_package_hashes(&mut package);
+        let selection =
+            body_view_selection(&package, target.clone(), BTreeSet::from([target.clone()]));
+
+        let err = checked_core_declaration_body_view(&package, &selection, &target).unwrap_err();
+
+        assert!(matches!(
+            err,
+            CheckedCoreBodyViewError::UnjustifiedPrimitivePartiality { .. }
+        ));
+        assert_eq!(err.lane(), "unjustified_primitive_partiality");
     }
 
     #[test]
