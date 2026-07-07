@@ -25,10 +25,13 @@ done from that spec — never from AGPLv3 or other copyleft source (see
    security workstream, and the behavioral seam) that the Steward decomposes
    into the catalog. Supersedes `02`'s dependency summary where the design
    changed it.
-4. **`03-program-of-work.md`** — self-contained, team-sized work packages with
+4. **`07-compiler-program.md`** and **`08-compiler-continuation.md`** — the
+   Rust bootstrap compiler campaign, its NC1-NC9 checkpoint, and the follow-on
+   campaigns for broad Ken input, native artifacts, and stronger guarantees.
+5. **`03-program-of-work.md`** — self-contained, team-sized work packages with
    spec sources, acceptance criteria, dependencies, and a fan-out plan across
    agent teams.
-5. **`04-git-and-integration.md`** — the git workflow and coordination model:
+6. **`04-git-and-integration.md`** — the git workflow and coordination model:
    protected `main`, per-team PRs, a single Integrator who merges and notifies,
    and how it maps onto mootup spaces and Decisions. Realized by WP F1.
 

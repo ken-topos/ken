@@ -12,6 +12,7 @@ pub mod bytes;
 pub mod checked_core;
 pub mod classes;
 pub mod capabilities;
+pub mod compiler_driver;
 pub mod conversions;
 pub mod data;
 pub mod decimal_char;
