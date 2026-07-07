@@ -254,6 +254,242 @@ pub struct ConsumedCheckedCorePackage {
     pub symbols: BTreeSet<StableSymbol>,
 }
 
+/// Package-authoritative closure facts needed before exposing body views.
+///
+/// The producer is expected to fill this from the selected checked-core target
+/// closure/report. This type deliberately carries only package and closure
+/// identity facts, not source declarations or compiler-driver side tables.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CheckedCoreBodyViewSelection {
+    pub package_identity: StableSymbol,
+    pub package_core_semantic_hash: u64,
+    pub package_artifact_hash: u64,
+    pub target_symbol: StableSymbol,
+    pub reachable_declarations: BTreeSet<StableSymbol>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CheckedCoreBodyView {
+    pub package_identity: StableSymbol,
+    pub package_core_semantic_hash: u64,
+    pub package_artifact_hash: u64,
+    pub target_symbol: StableSymbol,
+    pub declarations: BTreeMap<StableSymbol, CheckedCoreDeclarationBodyView>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CheckedCoreDeclarationBodyView {
+    pub symbol: StableSymbol,
+    pub level_params: Vec<u64>,
+    pub checked_type: Vec<u8>,
+    pub body: CheckedCoreBodyTerm,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CheckedCoreBodyTerm {
+    Variable {
+        de_bruijn_index: usize,
+    },
+    DirectDeclarationCall {
+        symbol: StableSymbol,
+        level_args: Vec<CheckedCoreLevelView>,
+    },
+    Lambda {
+        parameter_type: Vec<u8>,
+        body: Box<CheckedCoreBodyTerm>,
+    },
+    Application {
+        function: Box<CheckedCoreBodyTerm>,
+        argument: Box<CheckedCoreBodyTerm>,
+    },
+    Let {
+        value_type: Vec<u8>,
+        value: Box<CheckedCoreBodyTerm>,
+        body: Box<CheckedCoreBodyTerm>,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CheckedCoreLevelView {
+    Zero,
+    Suc(Box<CheckedCoreLevelView>),
+    Max(Box<CheckedCoreLevelView>, Box<CheckedCoreLevelView>),
+    Var(u64),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CheckedCoreBodyViewError {
+    InvalidPackage(CheckedCorePackageError),
+    MismatchedPackageIdentity {
+        expected: StableSymbol,
+        found: StableSymbol,
+    },
+    MismatchedCoreSemanticHash {
+        expected: u64,
+        found: u64,
+    },
+    MismatchedArtifactHash {
+        expected: u64,
+        found: u64,
+    },
+    TargetOutsideSelectedClosure {
+        target: StableSymbol,
+    },
+    RequestedBodyOutsideSelectedClosure {
+        target: StableSymbol,
+        symbol: StableSymbol,
+    },
+    MissingDeclarationBody {
+        symbol: StableSymbol,
+    },
+    MismatchedDeclarationSymbol {
+        expected: StableSymbol,
+        found: StableSymbol,
+    },
+    UnsupportedDeclarationKind {
+        symbol: StableSymbol,
+        kind: String,
+    },
+    UnsupportedTermShape {
+        symbol: StableSymbol,
+        tag: String,
+    },
+    BodyReferenceOutsideSelectedClosure {
+        owner: StableSymbol,
+        referenced: StableSymbol,
+    },
+    BodyReferenceWithoutDeclaration {
+        owner: StableSymbol,
+        referenced: StableSymbol,
+    },
+    MalformedCanonicalBytes {
+        symbol: StableSymbol,
+        reason: String,
+    },
+    TrailingCanonicalBytes {
+        symbol: StableSymbol,
+        remaining: usize,
+    },
+}
+
+impl CheckedCoreBodyViewError {
+    pub fn lane(&self) -> &'static str {
+        match self {
+            CheckedCoreBodyViewError::InvalidPackage(_) => "invalid_checked_core_package",
+            CheckedCoreBodyViewError::MismatchedPackageIdentity { .. } => {
+                "body_view_package_identity_mismatch"
+            }
+            CheckedCoreBodyViewError::MismatchedCoreSemanticHash { .. } => {
+                "body_view_semantic_hash_mismatch"
+            }
+            CheckedCoreBodyViewError::MismatchedArtifactHash { .. } => {
+                "body_view_artifact_hash_mismatch"
+            }
+            CheckedCoreBodyViewError::TargetOutsideSelectedClosure { .. } => {
+                "target_outside_selected_closure"
+            }
+            CheckedCoreBodyViewError::RequestedBodyOutsideSelectedClosure { .. } => {
+                "body_outside_selected_closure"
+            }
+            CheckedCoreBodyViewError::MissingDeclarationBody { .. } => {
+                "missing_checked_declaration_body"
+            }
+            CheckedCoreBodyViewError::MismatchedDeclarationSymbol { .. } => {
+                "mismatched_checked_declaration_symbol"
+            }
+            CheckedCoreBodyViewError::UnsupportedDeclarationKind { .. } => {
+                "unsupported_checked_declaration_kind"
+            }
+            CheckedCoreBodyViewError::UnsupportedTermShape { .. } => {
+                "unsupported_checked_body_shape"
+            }
+            CheckedCoreBodyViewError::BodyReferenceOutsideSelectedClosure { .. } => {
+                "body_reference_outside_selected_closure"
+            }
+            CheckedCoreBodyViewError::BodyReferenceWithoutDeclaration { .. } => {
+                "body_reference_without_declaration"
+            }
+            CheckedCoreBodyViewError::MalformedCanonicalBytes { .. } => {
+                "malformed_checked_declaration_body"
+            }
+            CheckedCoreBodyViewError::TrailingCanonicalBytes { .. } => {
+                "trailing_checked_declaration_body_bytes"
+            }
+        }
+    }
+}
+
+impl fmt::Display for CheckedCoreBodyViewError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CheckedCoreBodyViewError::InvalidPackage(err) => err.fmt(f),
+            CheckedCoreBodyViewError::MismatchedPackageIdentity { expected, found } => {
+                write!(
+                    f,
+                    "body view package identity mismatch: expected {expected}, got {found}"
+                )
+            }
+            CheckedCoreBodyViewError::MismatchedCoreSemanticHash { expected, found } => write!(
+                f,
+                "body view semantic hash mismatch: expected {expected:#x}, got {found:#x}"
+            ),
+            CheckedCoreBodyViewError::MismatchedArtifactHash { expected, found } => write!(
+                f,
+                "body view artifact hash mismatch: expected {expected:#x}, got {found:#x}"
+            ),
+            CheckedCoreBodyViewError::TargetOutsideSelectedClosure { target } => {
+                write!(f, "target {target} is outside the selected closure")
+            }
+            CheckedCoreBodyViewError::RequestedBodyOutsideSelectedClosure { target, symbol } => {
+                write!(
+                    f,
+                    "requested body {symbol} is outside selected target {target} closure"
+                )
+            }
+            CheckedCoreBodyViewError::MissingDeclarationBody { symbol } => {
+                write!(f, "selected declaration {symbol} has no checked body bytes")
+            }
+            CheckedCoreBodyViewError::MismatchedDeclarationSymbol { expected, found } => write!(
+                f,
+                "checked declaration bytes identify {found}, expected {expected}"
+            ),
+            CheckedCoreBodyViewError::UnsupportedDeclarationKind { symbol, kind } => {
+                write!(
+                    f,
+                    "declaration {symbol} has unsupported body-view kind {kind}"
+                )
+            }
+            CheckedCoreBodyViewError::UnsupportedTermShape { symbol, tag } => {
+                write!(f, "declaration {symbol} uses unsupported body term {tag}")
+            }
+            CheckedCoreBodyViewError::BodyReferenceOutsideSelectedClosure { owner, referenced } => {
+                write!(
+                    f,
+                    "declaration {owner} references {referenced} outside selected closure"
+                )
+            }
+            CheckedCoreBodyViewError::BodyReferenceWithoutDeclaration { owner, referenced } => {
+                write!(
+                    f,
+                    "declaration {owner} references {referenced} without a package body"
+                )
+            }
+            CheckedCoreBodyViewError::MalformedCanonicalBytes { symbol, reason } => {
+                write!(
+                    f,
+                    "malformed checked declaration bytes for {symbol}: {reason}"
+                )
+            }
+            CheckedCoreBodyViewError::TrailingCanonicalBytes { symbol, remaining } => write!(
+                f,
+                "checked declaration bytes for {symbol} have {remaining} trailing bytes"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for CheckedCoreBodyViewError {}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CheckedCoreFixture {
     pub name: String,
@@ -756,6 +992,136 @@ pub fn consume_checked_core_package_for_target<'a>(
         artifact_hash: package.artifact_hash,
         symbols: package.artifact.semantic.symbols.clone(),
     })
+}
+
+pub fn checked_core_body_view_for_selection(
+    package: &CheckedCorePackage,
+    selection: &CheckedCoreBodyViewSelection,
+) -> Result<CheckedCoreBodyView, CheckedCoreBodyViewError> {
+    let semantic = validate_body_view_selection(package, selection)?;
+    let mut declarations = BTreeMap::new();
+
+    for symbol in &selection.reachable_declarations {
+        declarations.insert(
+            symbol.clone(),
+            decode_declaration_body_view(semantic, selection, symbol)?,
+        );
+    }
+
+    Ok(CheckedCoreBodyView {
+        package_identity: package.header.package_identity.clone(),
+        package_core_semantic_hash: package.core_semantic_hash,
+        package_artifact_hash: package.artifact_hash,
+        target_symbol: selection.target_symbol.clone(),
+        declarations,
+    })
+}
+
+pub fn checked_core_declaration_body_view(
+    package: &CheckedCorePackage,
+    selection: &CheckedCoreBodyViewSelection,
+    symbol: &StableSymbol,
+) -> Result<CheckedCoreDeclarationBodyView, CheckedCoreBodyViewError> {
+    let semantic = validate_body_view_selection(package, selection)?;
+    if !selection.reachable_declarations.contains(symbol) {
+        return Err(
+            CheckedCoreBodyViewError::RequestedBodyOutsideSelectedClosure {
+                target: selection.target_symbol.clone(),
+                symbol: symbol.clone(),
+            },
+        );
+    }
+    decode_declaration_body_view(semantic, selection, symbol)
+}
+
+fn validate_body_view_selection<'a>(
+    package: &'a CheckedCorePackage,
+    selection: &CheckedCoreBodyViewSelection,
+) -> Result<&'a CheckedCoreSemanticInputs, CheckedCoreBodyViewError> {
+    validate_checked_core_package(package).map_err(CheckedCoreBodyViewError::InvalidPackage)?;
+    if selection.package_identity != package.header.package_identity {
+        return Err(CheckedCoreBodyViewError::MismatchedPackageIdentity {
+            expected: package.header.package_identity.clone(),
+            found: selection.package_identity.clone(),
+        });
+    }
+    if selection.package_core_semantic_hash != package.core_semantic_hash {
+        return Err(CheckedCoreBodyViewError::MismatchedCoreSemanticHash {
+            expected: package.core_semantic_hash,
+            found: selection.package_core_semantic_hash,
+        });
+    }
+    if selection.package_artifact_hash != package.artifact_hash {
+        return Err(CheckedCoreBodyViewError::MismatchedArtifactHash {
+            expected: package.artifact_hash,
+            found: selection.package_artifact_hash,
+        });
+    }
+    if !selection
+        .reachable_declarations
+        .contains(&selection.target_symbol)
+    {
+        return Err(CheckedCoreBodyViewError::TargetOutsideSelectedClosure {
+            target: selection.target_symbol.clone(),
+        });
+    }
+    Ok(&package.artifact.semantic)
+}
+
+fn decode_declaration_body_view(
+    semantic: &CheckedCoreSemanticInputs,
+    selection: &CheckedCoreBodyViewSelection,
+    symbol: &StableSymbol,
+) -> Result<CheckedCoreDeclarationBodyView, CheckedCoreBodyViewError> {
+    let bytes = semantic.declarations.get(symbol).ok_or_else(|| {
+        CheckedCoreBodyViewError::MissingDeclarationBody {
+            symbol: symbol.clone(),
+        }
+    })?;
+    let mut cursor = CanonicalCursor::new(bytes);
+    let kind = cursor
+        .read_tag()
+        .map_err(|reason| malformed_body(symbol, reason))?;
+    if kind != "transparent" {
+        return Err(CheckedCoreBodyViewError::UnsupportedDeclarationKind {
+            symbol: symbol.clone(),
+            kind,
+        });
+    }
+
+    let encoded_symbol =
+        decode_stable_symbol(&mut cursor).map_err(|reason| malformed_body(symbol, reason))?;
+    if &encoded_symbol != symbol {
+        return Err(CheckedCoreBodyViewError::MismatchedDeclarationSymbol {
+            expected: symbol.clone(),
+            found: encoded_symbol,
+        });
+    }
+    let level_params =
+        decode_level_params(&mut cursor).map_err(|reason| malformed_body(symbol, reason))?;
+    let checked_type =
+        capture_canonical_term(&mut cursor).map_err(|reason| malformed_body(symbol, reason))?;
+    let body = decode_supported_body_term(&mut cursor, semantic, selection, symbol)?;
+    if cursor.remaining() != 0 {
+        return Err(CheckedCoreBodyViewError::TrailingCanonicalBytes {
+            symbol: symbol.clone(),
+            remaining: cursor.remaining(),
+        });
+    }
+
+    Ok(CheckedCoreDeclarationBodyView {
+        symbol: symbol.clone(),
+        level_params,
+        checked_type,
+        body,
+    })
+}
+
+fn malformed_body(symbol: &StableSymbol, reason: String) -> CheckedCoreBodyViewError {
+    CheckedCoreBodyViewError::MalformedCanonicalBytes {
+        symbol: symbol.clone(),
+        reason,
+    }
 }
 
 pub fn representative_checked_core_fixtures(
@@ -1883,6 +2249,295 @@ impl CanonicalSink {
     }
 }
 
+struct CanonicalCursor<'a> {
+    bytes: &'a [u8],
+    pos: usize,
+}
+
+impl<'a> CanonicalCursor<'a> {
+    fn new(bytes: &'a [u8]) -> Self {
+        Self { bytes, pos: 0 }
+    }
+
+    fn remaining(&self) -> usize {
+        self.bytes.len().saturating_sub(self.pos)
+    }
+
+    fn read_tag(&mut self) -> Result<String, String> {
+        self.read_str()
+    }
+
+    fn expect_tag(&mut self, expected: &'static str) -> Result<(), String> {
+        let found = self.read_tag()?;
+        if found == expected {
+            Ok(())
+        } else {
+            Err(format!("expected tag {expected:?}, found {found:?}"))
+        }
+    }
+
+    fn read_str(&mut self) -> Result<String, String> {
+        let len = self.read_len()?;
+        let bytes = self.read_exact(len)?;
+        let value =
+            std::str::from_utf8(bytes).map_err(|err| format!("invalid UTF-8 string: {err}"))?;
+        Ok(value.to_string())
+    }
+
+    fn read_u64(&mut self) -> Result<u64, String> {
+        let bytes = self.read_exact(8)?;
+        let mut value = [0_u8; 8];
+        value.copy_from_slice(bytes);
+        Ok(u64::from_be_bytes(value))
+    }
+
+    fn read_len(&mut self) -> Result<usize, String> {
+        let raw = self.read_u64()?;
+        usize::try_from(raw).map_err(|_| format!("length {raw} does not fit usize"))
+    }
+
+    fn read_exact(&mut self, len: usize) -> Result<&'a [u8], String> {
+        let end = self
+            .pos
+            .checked_add(len)
+            .ok_or_else(|| format!("canonical byte offset overflow at {}", self.pos))?;
+        if end > self.bytes.len() {
+            return Err(format!(
+                "unexpected end of canonical bytes: need {len}, have {}",
+                self.remaining()
+            ));
+        }
+        let bytes = &self.bytes[self.pos..end];
+        self.pos = end;
+        Ok(bytes)
+    }
+}
+
+fn decode_stable_symbol(cursor: &mut CanonicalCursor<'_>) -> Result<StableSymbol, String> {
+    cursor.expect_tag("symbol")?;
+    let namespace = match cursor.read_str()?.as_str() {
+        "decl" => SymbolNamespace::Declaration,
+        "ctor" => SymbolNamespace::Constructor,
+        "prim" => SymbolNamespace::Primitive,
+        "module" => SymbolNamespace::Module,
+        "meta" => SymbolNamespace::Metadata,
+        "obl" => SymbolNamespace::Obligation,
+        "assume" => SymbolNamespace::Assumption,
+        "dep" => SymbolNamespace::Dependency,
+        "unsupported" => SymbolNamespace::Unsupported,
+        other => return Err(format!("unknown stable symbol namespace {other:?}")),
+    };
+    let len = cursor.read_len()?;
+    let mut components = Vec::with_capacity(len);
+    for _ in 0..len {
+        components.push(cursor.read_str()?);
+    }
+    Ok(StableSymbol {
+        namespace,
+        components,
+    })
+}
+
+fn decode_level_params(cursor: &mut CanonicalCursor<'_>) -> Result<Vec<u64>, String> {
+    cursor.expect_tag("level_params")?;
+    let len = cursor.read_len()?;
+    let mut params = Vec::with_capacity(len);
+    for _ in 0..len {
+        params.push(cursor.read_u64()?);
+    }
+    Ok(params)
+}
+
+fn capture_canonical_term(cursor: &mut CanonicalCursor<'_>) -> Result<Vec<u8>, String> {
+    let start = cursor.pos;
+    skip_term(cursor)?;
+    Ok(cursor.bytes[start..cursor.pos].to_vec())
+}
+
+fn decode_supported_body_term(
+    cursor: &mut CanonicalCursor<'_>,
+    semantic: &CheckedCoreSemanticInputs,
+    selection: &CheckedCoreBodyViewSelection,
+    owner: &StableSymbol,
+) -> Result<CheckedCoreBodyTerm, CheckedCoreBodyViewError> {
+    let tag = cursor
+        .read_tag()
+        .map_err(|reason| malformed_body(owner, reason))?;
+    match tag.as_str() {
+        "var" => {
+            let raw = cursor
+                .read_u64()
+                .map_err(|reason| malformed_body(owner, reason))?;
+            let de_bruijn_index = usize::try_from(raw).map_err(|_| {
+                malformed_body(owner, format!("variable index {raw} does not fit usize"))
+            })?;
+            Ok(CheckedCoreBodyTerm::Variable { de_bruijn_index })
+        }
+        "const" => {
+            let symbol =
+                decode_stable_symbol(cursor).map_err(|reason| malformed_body(owner, reason))?;
+            let level_args =
+                decode_levels(cursor).map_err(|reason| malformed_body(owner, reason))?;
+            if &symbol == owner {
+                return Err(CheckedCoreBodyViewError::UnsupportedTermShape {
+                    symbol: owner.clone(),
+                    tag: "recursive_direct_call".to_string(),
+                });
+            }
+            if !selection.reachable_declarations.contains(&symbol) {
+                return Err(
+                    CheckedCoreBodyViewError::BodyReferenceOutsideSelectedClosure {
+                        owner: owner.clone(),
+                        referenced: symbol,
+                    },
+                );
+            }
+            if !semantic.declarations.contains_key(&symbol) {
+                return Err(CheckedCoreBodyViewError::BodyReferenceWithoutDeclaration {
+                    owner: owner.clone(),
+                    referenced: symbol,
+                });
+            }
+            Ok(CheckedCoreBodyTerm::DirectDeclarationCall { symbol, level_args })
+        }
+        "lam" => {
+            let parameter_type =
+                capture_canonical_term(cursor).map_err(|reason| malformed_body(owner, reason))?;
+            let body = Box::new(decode_supported_body_term(
+                cursor, semantic, selection, owner,
+            )?);
+            Ok(CheckedCoreBodyTerm::Lambda {
+                parameter_type,
+                body,
+            })
+        }
+        "app" => {
+            let function = Box::new(decode_supported_body_term(
+                cursor, semantic, selection, owner,
+            )?);
+            let argument = Box::new(decode_supported_body_term(
+                cursor, semantic, selection, owner,
+            )?);
+            Ok(CheckedCoreBodyTerm::Application { function, argument })
+        }
+        "let" => {
+            let value_type =
+                capture_canonical_term(cursor).map_err(|reason| malformed_body(owner, reason))?;
+            let value = Box::new(decode_supported_body_term(
+                cursor, semantic, selection, owner,
+            )?);
+            let body = Box::new(decode_supported_body_term(
+                cursor, semantic, selection, owner,
+            )?);
+            Ok(CheckedCoreBodyTerm::Let {
+                value_type,
+                value,
+                body,
+            })
+        }
+        _ => Err(CheckedCoreBodyViewError::UnsupportedTermShape {
+            symbol: owner.clone(),
+            tag,
+        }),
+    }
+}
+
+fn decode_levels(cursor: &mut CanonicalCursor<'_>) -> Result<Vec<CheckedCoreLevelView>, String> {
+    let len = cursor.read_len()?;
+    let mut levels = Vec::with_capacity(len);
+    for _ in 0..len {
+        levels.push(decode_level_view(cursor)?);
+    }
+    Ok(levels)
+}
+
+fn decode_level_view(cursor: &mut CanonicalCursor<'_>) -> Result<CheckedCoreLevelView, String> {
+    match cursor.read_tag()?.as_str() {
+        "level_zero" => Ok(CheckedCoreLevelView::Zero),
+        "level_suc" => Ok(CheckedCoreLevelView::Suc(Box::new(decode_level_view(
+            cursor,
+        )?))),
+        "level_max" => Ok(CheckedCoreLevelView::Max(
+            Box::new(decode_level_view(cursor)?),
+            Box::new(decode_level_view(cursor)?),
+        )),
+        "level_var" => Ok(CheckedCoreLevelView::Var(cursor.read_u64()?)),
+        other => Err(format!("unsupported level tag {other:?}")),
+    }
+}
+
+fn skip_term(cursor: &mut CanonicalCursor<'_>) -> Result<(), String> {
+    match cursor.read_tag()?.as_str() {
+        "type" | "omega" => skip_level(cursor),
+        "var" => {
+            cursor.read_u64()?;
+            Ok(())
+        }
+        "const" | "ind_former" | "constructor_ref" => {
+            decode_stable_symbol(cursor)?;
+            skip_levels(cursor)
+        }
+        "elim" => {
+            decode_stable_symbol(cursor)?;
+            skip_levels(cursor)?;
+            skip_terms(cursor)?;
+            skip_term(cursor)?;
+            skip_terms(cursor)?;
+            skip_terms(cursor)?;
+            skip_term(cursor)
+        }
+        "pi" | "lam" | "app" | "sigma" | "pair" | "ascript" | "quot" | "absurd" => {
+            skip_term(cursor)?;
+            skip_term(cursor)
+        }
+        "proj1" | "proj2" | "refl" | "quot_class" | "trunc" | "trunc_proj" => skip_term(cursor),
+        "let" | "eq" | "j" => {
+            skip_term(cursor)?;
+            skip_term(cursor)?;
+            skip_term(cursor)
+        }
+        "cast" | "quot_elim" => {
+            skip_term(cursor)?;
+            skip_term(cursor)?;
+            skip_term(cursor)?;
+            skip_term(cursor)
+        }
+        other => Err(format!("unsupported term tag {other:?}")),
+    }
+}
+
+fn skip_terms(cursor: &mut CanonicalCursor<'_>) -> Result<(), String> {
+    let len = cursor.read_len()?;
+    for _ in 0..len {
+        skip_term(cursor)?;
+    }
+    Ok(())
+}
+
+fn skip_levels(cursor: &mut CanonicalCursor<'_>) -> Result<(), String> {
+    let len = cursor.read_len()?;
+    for _ in 0..len {
+        skip_level(cursor)?;
+    }
+    Ok(())
+}
+
+fn skip_level(cursor: &mut CanonicalCursor<'_>) -> Result<(), String> {
+    match cursor.read_tag()?.as_str() {
+        "level_zero" => Ok(()),
+        "level_suc" => skip_level(cursor),
+        "level_max" => {
+            skip_level(cursor)?;
+            skip_level(cursor)
+        }
+        "level_var" => {
+            cursor.read_u64()?;
+            Ok(())
+        }
+        other => Err(format!("unsupported level tag {other:?}")),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use ken_kernel::env::{Decl, PrimReduction};
@@ -1898,6 +2553,100 @@ mod tests {
         let mut table = StableSymbolTable::new();
         table.insert_global(id, symbol);
         table
+    }
+
+    fn table_many(entries: &[(GlobalId, StableSymbol)]) -> StableSymbolTable {
+        let mut table = StableSymbolTable::new();
+        for (id, symbol) in entries {
+            table.insert_global(*id, symbol.clone());
+        }
+        table
+    }
+
+    fn body_view_header() -> CheckedCorePackageHeader {
+        CheckedCorePackageHeader::v0(
+            "checked-core-body-view-test",
+            "ken-kernel:test",
+            "docs/program/wp/NC13-checked-core-body-view.md",
+            "spec/10-kernel/18a-primitive-registry.md:test",
+            StableSymbol::new(SymbolNamespace::Module, vec!["body_view_pkg".to_string()]),
+        )
+    }
+
+    fn body_view_package() -> (CheckedCorePackage, StableSymbol, StableSymbol) {
+        let target = decl_symbol("target");
+        let helper = decl_symbol("helper");
+        let target_id = GlobalId(1);
+        let helper_id = GlobalId(2);
+        let table = table_many(&[(target_id, target.clone()), (helper_id, helper.clone())]);
+        let ty = Term::Type(Level::zero());
+        let helper_decl = Decl::Transparent {
+            id: helper_id,
+            level_params: Vec::new(),
+            ty: ty.clone(),
+            body: Term::Lam(Box::new(ty.clone()), Box::new(Term::Var(0))),
+        };
+        let target_decl = Decl::Transparent {
+            id: target_id,
+            level_params: Vec::new(),
+            ty: ty.clone(),
+            body: Term::Lam(
+                Box::new(ty.clone()),
+                Box::new(Term::Let {
+                    ty: Box::new(ty),
+                    val: Box::new(Term::App(
+                        Box::new(Term::Const {
+                            id: helper_id,
+                            level_args: Vec::new(),
+                        }),
+                        Box::new(Term::Var(0)),
+                    )),
+                    body: Box::new(Term::Var(0)),
+                }),
+            ),
+        };
+
+        let mut semantic = CheckedCoreSemanticInputs::default();
+        semantic.symbols.insert(target.clone());
+        semantic.symbols.insert(helper.clone());
+        semantic
+            .lowerability
+            .insert(target.clone(), LowerabilityStatus::Supported);
+        semantic
+            .lowerability
+            .insert(helper.clone(), LowerabilityStatus::Supported);
+        semantic.declarations.insert(
+            target.clone(),
+            canonical_decl_bytes(&target_decl, &table).unwrap(),
+        );
+        semantic.declarations.insert(
+            helper.clone(),
+            canonical_decl_bytes(&helper_decl, &table).unwrap(),
+        );
+        let package = emit_checked_core_package(
+            body_view_header(),
+            CheckedCoreArtifactInputs {
+                semantic,
+                source_identity: BTreeMap::new(),
+                annotations: BTreeMap::new(),
+            },
+        )
+        .unwrap();
+        (package, target, helper)
+    }
+
+    fn body_view_selection(
+        package: &CheckedCorePackage,
+        target: StableSymbol,
+        reachable_declarations: BTreeSet<StableSymbol>,
+    ) -> CheckedCoreBodyViewSelection {
+        CheckedCoreBodyViewSelection {
+            package_identity: package.header.package_identity.clone(),
+            package_core_semantic_hash: package.core_semantic_hash,
+            package_artifact_hash: package.artifact_hash,
+            target_symbol: target,
+            reachable_declarations,
+        }
     }
 
     #[test]
@@ -1979,6 +2728,271 @@ mod tests {
             canonical_decl_bytes(&decl_a, &table(GlobalId(11), stable.clone())).unwrap(),
             canonical_decl_bytes(&decl_b, &table(GlobalId(77), stable)).unwrap(),
             "primitive GlobalId drift must not change canonical primitive identity"
+        );
+    }
+
+    #[test]
+    fn body_view_recovers_target_and_reachable_declaration_bodies() {
+        let (package, target, helper) = body_view_package();
+        let selection = body_view_selection(
+            &package,
+            target.clone(),
+            BTreeSet::from([target.clone(), helper.clone()]),
+        );
+
+        let view = checked_core_body_view_for_selection(&package, &selection).unwrap();
+
+        assert_eq!(view.package_identity, package.header.package_identity);
+        assert_eq!(view.package_core_semantic_hash, package.core_semantic_hash);
+        assert_eq!(view.package_artifact_hash, package.artifact_hash);
+        assert_eq!(view.target_symbol, target);
+        assert!(
+            view.declarations.contains_key(&helper),
+            "reachable declaration body must be recovered from package bytes"
+        );
+        let target_body = &view.declarations[&view.target_symbol].body;
+        match target_body {
+            CheckedCoreBodyTerm::Lambda { body, .. } => match body.as_ref() {
+                CheckedCoreBodyTerm::Let { value, body, .. } => {
+                    match value.as_ref() {
+                        CheckedCoreBodyTerm::Application { function, argument } => {
+                            assert_eq!(
+                                function.as_ref(),
+                                &CheckedCoreBodyTerm::DirectDeclarationCall {
+                                    symbol: helper,
+                                    level_args: Vec::new(),
+                                }
+                            );
+                            assert_eq!(
+                                argument.as_ref(),
+                                &CheckedCoreBodyTerm::Variable { de_bruijn_index: 0 }
+                            );
+                        }
+                        other => panic!("expected helper application, got {other:?}"),
+                    }
+                    assert_eq!(
+                        body.as_ref(),
+                        &CheckedCoreBodyTerm::Variable { de_bruijn_index: 0 }
+                    );
+                }
+                other => panic!("expected let body, got {other:?}"),
+            },
+            other => panic!("expected lambda body, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn body_view_rejects_malformed_declaration_bytes() {
+        let (mut package, target, helper) = body_view_package();
+        package
+            .artifact
+            .semantic
+            .declarations
+            .insert(target.clone(), b"not canonical".to_vec());
+        package.core_semantic_hash = semantic_fingerprint(&package.artifact.semantic);
+        package.artifact_hash = package_artifact_fingerprint(
+            &package.header,
+            &package.artifact,
+            package.core_semantic_hash,
+        );
+        let selection = body_view_selection(
+            &package,
+            target.clone(),
+            BTreeSet::from([target.clone(), helper]),
+        );
+
+        let err = checked_core_body_view_for_selection(&package, &selection).unwrap_err();
+
+        assert!(matches!(
+            err,
+            CheckedCoreBodyViewError::MalformedCanonicalBytes { .. }
+        ));
+        assert_eq!(err.lane(), "malformed_checked_declaration_body");
+    }
+
+    #[test]
+    fn body_view_rejects_stale_package_identity_and_hash_facts() {
+        let (package, target, helper) = body_view_package();
+        let mut selection = body_view_selection(
+            &package,
+            target.clone(),
+            BTreeSet::from([target.clone(), helper.clone()]),
+        );
+
+        selection.package_identity =
+            StableSymbol::new(SymbolNamespace::Module, vec!["other_pkg".to_string()]);
+        let err = checked_core_body_view_for_selection(&package, &selection).unwrap_err();
+        assert!(matches!(
+            err,
+            CheckedCoreBodyViewError::MismatchedPackageIdentity { .. }
+        ));
+
+        selection = body_view_selection(
+            &package,
+            target.clone(),
+            BTreeSet::from([target.clone(), helper.clone()]),
+        );
+        selection.package_core_semantic_hash ^= 1;
+        let err = checked_core_body_view_for_selection(&package, &selection).unwrap_err();
+        assert!(matches!(
+            err,
+            CheckedCoreBodyViewError::MismatchedCoreSemanticHash { .. }
+        ));
+
+        selection = body_view_selection(&package, target, BTreeSet::from([helper]));
+        selection.package_artifact_hash ^= 1;
+        let err = checked_core_body_view_for_selection(&package, &selection).unwrap_err();
+        assert!(matches!(
+            err,
+            CheckedCoreBodyViewError::MismatchedArtifactHash { .. }
+        ));
+    }
+
+    #[test]
+    fn body_view_rejects_missing_reachable_body() {
+        let (mut package, target, helper) = body_view_package();
+        package.artifact.semantic.declarations.remove(&helper);
+        package.core_semantic_hash = semantic_fingerprint(&package.artifact.semantic);
+        package.artifact_hash = package_artifact_fingerprint(
+            &package.header,
+            &package.artifact,
+            package.core_semantic_hash,
+        );
+        let selection = body_view_selection(
+            &package,
+            target.clone(),
+            BTreeSet::from([target, helper.clone()]),
+        );
+
+        let err = checked_core_body_view_for_selection(&package, &selection).unwrap_err();
+
+        assert_eq!(
+            err,
+            CheckedCoreBodyViewError::MissingDeclarationBody { symbol: helper }
+        );
+    }
+
+    #[test]
+    fn body_view_rejects_unsupported_declaration_kind() {
+        let (mut package, target, helper) = body_view_package();
+        let opaque_id = GlobalId(3);
+        let opaque_decl = Decl::Opaque {
+            id: opaque_id,
+            level_params: Vec::new(),
+            ty: Term::Type(Level::zero()),
+        };
+        let opaque_table = table(opaque_id, helper.clone());
+        package.artifact.semantic.declarations.insert(
+            helper.clone(),
+            canonical_decl_bytes(&opaque_decl, &opaque_table).unwrap(),
+        );
+        package.core_semantic_hash = semantic_fingerprint(&package.artifact.semantic);
+        package.artifact_hash = package_artifact_fingerprint(
+            &package.header,
+            &package.artifact,
+            package.core_semantic_hash,
+        );
+        let selection = body_view_selection(
+            &package,
+            target.clone(),
+            BTreeSet::from([target, helper.clone()]),
+        );
+
+        let err = checked_core_declaration_body_view(&package, &selection, &helper).unwrap_err();
+
+        assert_eq!(
+            err,
+            CheckedCoreBodyViewError::UnsupportedDeclarationKind {
+                symbol: helper,
+                kind: "opaque".to_string(),
+            }
+        );
+        assert_eq!(err.lane(), "unsupported_checked_declaration_kind");
+    }
+
+    #[test]
+    fn body_view_rejects_unsupported_transparent_body_shape() {
+        let (mut package, target, helper) = body_view_package();
+        let target_id = GlobalId(1);
+        let ty = Term::Type(Level::zero());
+        let unsupported_decl = Decl::Transparent {
+            id: target_id,
+            level_params: Vec::new(),
+            ty: ty.clone(),
+            body: Term::Ascript(Box::new(Term::Var(0)), Box::new(ty)),
+        };
+        package.artifact.semantic.declarations.insert(
+            target.clone(),
+            canonical_decl_bytes(&unsupported_decl, &table(target_id, target.clone())).unwrap(),
+        );
+        package.core_semantic_hash = semantic_fingerprint(&package.artifact.semantic);
+        package.artifact_hash = package_artifact_fingerprint(
+            &package.header,
+            &package.artifact,
+            package.core_semantic_hash,
+        );
+        let selection = body_view_selection(
+            &package,
+            target.clone(),
+            BTreeSet::from([target.clone(), helper]),
+        );
+
+        let err = checked_core_declaration_body_view(&package, &selection, &target).unwrap_err();
+
+        assert_eq!(
+            err,
+            CheckedCoreBodyViewError::UnsupportedTermShape {
+                symbol: target,
+                tag: "ascript".to_string(),
+            }
+        );
+        assert_eq!(err.lane(), "unsupported_checked_body_shape");
+    }
+
+    #[test]
+    fn body_view_rejects_body_outside_selected_closure() {
+        let (package, target, helper) = body_view_package();
+        let selection =
+            body_view_selection(&package, target.clone(), BTreeSet::from([target.clone()]));
+
+        let err = checked_core_declaration_body_view(&package, &selection, &helper).unwrap_err();
+
+        assert_eq!(
+            err,
+            CheckedCoreBodyViewError::RequestedBodyOutsideSelectedClosure {
+                target,
+                symbol: helper,
+            }
+        );
+    }
+
+    #[test]
+    fn body_view_rejects_target_outside_selected_closure() {
+        let (package, target, helper) = body_view_package();
+        let selection = body_view_selection(&package, target.clone(), BTreeSet::from([helper]));
+
+        let err = checked_core_body_view_for_selection(&package, &selection).unwrap_err();
+
+        assert_eq!(
+            err,
+            CheckedCoreBodyViewError::TargetOutsideSelectedClosure { target }
+        );
+    }
+
+    #[test]
+    fn body_view_rejects_references_outside_selected_closure() {
+        let (package, target, helper) = body_view_package();
+        let selection =
+            body_view_selection(&package, target.clone(), BTreeSet::from([target.clone()]));
+
+        let err = checked_core_declaration_body_view(&package, &selection, &target).unwrap_err();
+
+        assert_eq!(
+            err,
+            CheckedCoreBodyViewError::BodyReferenceOutsideSelectedClosure {
+                owner: target,
+                referenced: helper,
+            }
         );
     }
 
