@@ -232,6 +232,72 @@ boundary labels, foreign binding/marshalling facts, runtime-check obligations,
 and declassify/audit references to be represented whenever they affect the
 checked declaration graph.
 
+### 5.1 NC3 Compiler-Metadata Coverage
+
+NC3 makes the compiler-relevant coverage set explicit so native lowering never
+has to recover checked meaning from raw source, naming convention, append order,
+or absence. The metadata below is still checked-core package metadata. It does
+not define native layout, runtime IR, ABI, backend lowering, Cranelift rules, or
+compiler verification.
+
+Every entry that affects runtime meaning participates in
+`core_semantic_hash`. Non-semantic annotations may aid diagnostics, but a
+consumer must not use them to decide whether a declaration is lowerable or what
+runtime construct it denotes.
+
+Required coverage areas:
+
+- **Primitive registry entries.** Record primitive-registry symbol, checked
+  type, reduction class (`opaque-type`, `literal`, or operation), partiality
+  face, assumptions or obligations needed by that primitive, and lowerability
+  status.
+- **Data and constructors.** Record family parameters, indices, constructor
+  symbols, argument telescopes, target indices, recursive positions, generated
+  types, eliminator/admission status, and lowerability status for the family
+  and each constructor.
+- **Records and Sigma.** Record field names, field order, checked field types,
+  runtime-field versus erasable law/proof-field status, projection metadata,
+  and lowerability status. This distinguishes runtime data from evidence
+  without committing to a native layout.
+- **Classes, instances, and dictionaries.** Record class kind, parameter kind,
+  canonical instance key, dictionary symbol, field order, field types, field
+  effect rows, law/proof fields, coherence/orphan data, dependencies, and
+  lowerability status. Dictionary values remain ordinary checked core.
+- **Recursion.** Record recursive-group id, member symbols, SCC relation,
+  structural or size-change admission result, checked bodies/types, diagnostics
+  needed to explain rejection, and lowerability status.
+- **Effects, capabilities, and foreigns.** Record declared and inferred rows,
+  row variables, performed effects, capability parameters, authority
+  references, boundary labels, foreign binding symbol, marshalling facts,
+  runtime-check obligations, declassify/audit references, and lowerability
+  status.
+- **Obligations.** Record stable obligation id, goal-core reference, status,
+  origin declaration, delegated export reference when present, and whether the
+  obligation affects runtime meaning.
+- **Assumptions and trust delta.** Record explicit assumes, holes, foreign
+  postulates, declassify authorities, primitive assumptions, reachable
+  `trusted_base_delta` entries, and whether each entry affects runtime meaning.
+
+Lowerability status is explicit and semantic:
+
+- `supported` means the checked metadata is sufficient for the selected
+  compiler stage to continue.
+- `unsupported` means the package is valid checked core, but target lowering of
+  any closure reaching the entry must fail loudly before erasure/runtime IR.
+- `deferred` means a named later stage owns the decision; a consumer that is not
+  that stage must treat the entry as not lowerable for its target.
+- `requires-feature` means the entry lowers only when a named, versioned
+  compiler feature is enabled; otherwise it fails like `unsupported`.
+- `explicit:<state>` is reserved for versioned, named states with specified
+  fail/continue behavior. Unknown explicit states reject for the current
+  consumer rather than defaulting to support.
+
+Omitting required metadata that affects runtime meaning is invalid package
+data, not `deferred`. An unsupported or deferred entry is honest only when the
+checked meaning is otherwise fully represented and the entry names the stable
+symbol, section or field, reason, responsible later stage if any, and whether
+it blocks target lowering.
+
 ## 6. Assumptions, Obligations, and Trust
 
 NC1 packages must preserve the assumption boundary explicitly. For every target
@@ -285,11 +351,13 @@ There are three separate cases:
    omitted reachable trust metadata rejects the package before semantic use.
 2. **Explicit unsupported semantic entry.** A valid package may say a stable
    symbol or feature is checked but not lowerable by the current compiler stage.
-   The entry names the symbol, field or section, status (`unsupported`,
-   `deferred`, or `requires-feature`), reason, responsible later stage, and
-   whether it blocks package validation or only target lowering. Compiling a
-   target whose dependency closure reaches a lowering-blocking entry rejects
-   before erasure/runtime IR, naming the stable symbol and reason.
+   The entry names the symbol, field or section, status (`supported`,
+   `unsupported`, `deferred`, `requires-feature`, or a versioned
+   `explicit:<state>`), reason, responsible later stage, and whether it blocks
+   package validation or only target lowering. Compiling a target whose
+   dependency closure reaches a lowering-blocking entry rejects before
+   erasure/runtime IR, naming the stable symbol and reason. No consumer may
+   reinterpret an absent entry as `supported`.
 3. **Non-semantic annotation.** `annotations` is an optional namespaced lane for
    diagnostics, display, profiling notes, or provenance decoration. Unknown
    annotations may be ignored, are excluded from `core_semantic_hash`, and are
@@ -303,6 +371,18 @@ compiler-stage lowerability gaps, not for hiding semantic omissions.
 
 ## 9. Examples
 
+- `Bool` records zero parameters, zero indices, constructors `False` and
+  `True`, zero recursive positions, supported eliminator metadata, and
+  supported family/constructor lowerability.
+- `Nat` records constructors `Zero` and `Succ`, with `Succ`'s recursive
+  position explicit and structural-recursion metadata available to accepted
+  recursive groups over `Nat`.
+- `Option A` records one parameter, zero indices, constructors `None` and
+  `Some`, constructor argument metadata, and supported eliminator/lowerability
+  status.
+- `List A` records one parameter, constructors `Nil` and `Cons`, the recursive
+  tail position in `Cons`, and recursion metadata for accepted definitions such
+  as append or map.
 - `fn idNat (x : Nat) : Nat = x` becomes a transparent checked declaration with
   stable symbol, checked type, checked body, dependency set, and no need for the
   original surface text.
@@ -316,9 +396,20 @@ compiler-stage lowerability gaps, not for hiding semantic omissions.
   metadata. Inductive carriers such as `Bool` can carry zero-delta law proofs;
   primitive-carrier laws such as audited `Int` laws remain visible in the trust
   delta instead of being silently treated as proved.
+- A class dictionary such as an `Eq Bool` dictionary records the class symbol,
+  head key, dictionary symbol, runtime method fields, erasable law/proof fields,
+  field order, dependencies, and supported dictionary lowerability.
+- A primitive operation such as `nat_add` records the primitive-registry symbol,
+  checked type, operation reduction class, total/partial face, any associated
+  obligation or primitive assumption, and supported or explicit unsupported
+  lowerability.
 - `packages/collections/collections.ken` demonstrates recursive groups,
   inductive metadata, proof-returning declarations, and proof terms such as
   `sortBool` and `take_drop_decomposition`.
+- An accepted recursive group records its group id, member symbols, checked
+  bodies/types, SCC relation, structural or size-change admission, and
+  lowerability status. A rejected or stage-deferred group remains explicit and
+  fails loudly if a target closure reaches it.
 - `packages/lawful-functors/lawful_functors.ken` demonstrates higher-kinded
   class parameters, parametric instance heads, dictionary symbols, and package
   dependency closure.
@@ -357,6 +448,15 @@ artifacts once the emitter exists, then mutate one dimension at a time:
 - unknown semantic field rejects unless it is in `annotations`;
 - dropped metadata, orphan metadata, or primitive/class/inductive/effect use
   without metadata rejects;
+- changing primitive partiality, data constructor recursion positions,
+  record/Sigma runtime-field status, class dictionary fields, accepted
+  recursion admission, effect/foreign boundary metadata, or obligation/trust
+  runtime-meaning flags changes `core_semantic_hash`;
+- a target closure reaching an `unsupported`, `deferred`, unmet
+  `requires-feature`, or unknown `explicit:<state>` lowerability entry rejects
+  before erasure/runtime IR and names the stable symbol;
+- a target closure reaching a missing lowerability entry rejects before
+  erasure/runtime IR and names the stable symbol;
 - reachable `trusted_base_delta` omission rejects;
 - semantic hash mismatch rejects;
 - equal checked-core meaning with different source spelling keeps
