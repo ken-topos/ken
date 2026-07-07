@@ -1549,6 +1549,87 @@ mod tests {
     }
 
     #[test]
+    fn nc8_certificate_rejects_unsupported_total_primitive_in_validated_example() {
+        let mut program =
+            seed_program_with_lowerability(Some(RuntimeLowerabilityStatus::Supported));
+        program.examples = vec![RuntimeExample {
+            name: "unsupported-total-primitive".to_string(),
+            checked_core_shape: "diagnostic label only".to_string(),
+            ir: RuntimeExpr::PrimitiveCall {
+                primitive: RuntimePrimitive {
+                    symbol: "sub_int".to_string(),
+                    partiality: RuntimePartiality::Total,
+                },
+                args: vec![
+                    RuntimeExpr::Value(RuntimeValue::Int(2)),
+                    RuntimeExpr::Value(RuntimeValue::Int(1)),
+                ],
+            },
+            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int(1)),
+        }];
+        let certificate = RuntimeArtifactCertificate::supported_runtime_artifact_for(&program);
+
+        let err = validate_supported_runtime_artifact_certificate(&program, &certificate)
+            .expect_err("unsupported total primitives are outside the NC6 supported subset");
+
+        assert_eq!(err.stage, RuntimeArtifactValidationStage::ClaimRecompute);
+        assert_eq!(err.fact, "all_runtime_primitives_supported");
+        assert!(err.reason.contains("sub_int"));
+    }
+
+    #[test]
+    fn nc8_certificate_rejects_add_int_wrong_arity_in_reachable_transparent_declaration() {
+        let mut program =
+            seed_program_with_lowerability(Some(RuntimeLowerabilityStatus::Supported));
+        program.declarations[0].kind = RuntimeDeclarationKind::Transparent {
+            body: RuntimeExpr::PrimitiveCall {
+                primitive: RuntimePrimitive {
+                    symbol: "add_int".to_string(),
+                    partiality: RuntimePartiality::Total,
+                },
+                args: vec![RuntimeExpr::Value(RuntimeValue::Int(1))],
+            },
+        };
+        let certificate = RuntimeArtifactCertificate::supported_runtime_artifact_for(&program);
+
+        let err = validate_supported_runtime_artifact_certificate(&program, &certificate)
+            .expect_err("add_int arity mismatch is outside the NC6 supported subset");
+
+        assert_eq!(err.stage, RuntimeArtifactValidationStage::ClaimRecompute);
+        assert_eq!(err.fact, "all_runtime_primitives_supported");
+        assert!(err.reason.contains("arity 1"));
+    }
+
+    #[test]
+    fn nc8_certificate_rejects_add_int_non_int_operand_shape() {
+        let mut program =
+            seed_program_with_lowerability(Some(RuntimeLowerabilityStatus::Supported));
+        program.examples = vec![RuntimeExample {
+            name: "add-int-non-int-operand".to_string(),
+            checked_core_shape: "diagnostic label only".to_string(),
+            ir: RuntimeExpr::PrimitiveCall {
+                primitive: RuntimePrimitive {
+                    symbol: "add_int".to_string(),
+                    partiality: RuntimePartiality::Total,
+                },
+                args: vec![
+                    RuntimeExpr::Value(RuntimeValue::Bool(true)),
+                    RuntimeExpr::Value(RuntimeValue::Int(1)),
+                ],
+            },
+            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int(2)),
+        }];
+        let certificate = RuntimeArtifactCertificate::supported_runtime_artifact_for(&program);
+
+        let err = validate_supported_runtime_artifact_certificate(&program, &certificate)
+            .expect_err("add_int non-Int operands are outside the NC6 supported subset");
+
+        assert_eq!(err.stage, RuntimeArtifactValidationStage::ClaimRecompute);
+        assert_eq!(err.fact, "all_runtime_primitives_supported");
+        assert!(err.reason.contains("non-Int operand"));
+    }
+
+    #[test]
     fn missing_lowerability_metadata_rejects_before_backend_lowering() {
         let program = seed_program_with_lowerability(None);
 

@@ -538,11 +538,17 @@ fn validate_runtime_expr(
         RuntimeExpr::Let { .. } => Err(unsupported_runtime_expr_error("Let", fact_subject)),
         RuntimeExpr::If { .. } => Err(unsupported_runtime_expr_error("If", fact_subject)),
         RuntimeExpr::PrimitiveCall { primitive, args } => {
-            if matches!(primitive.partiality, RuntimePartiality::TrustedTrap { .. }) {
-                return Err(claim_recompute_error(
-                    "no_declaration_trust_metadata",
-                    format!("{fact_subject} uses trusted partial primitive trap metadata"),
-                ));
+            match &primitive.partiality {
+                RuntimePartiality::Total => {
+                    validate_total_primitive_call(&primitive.symbol, args, fact_subject)?;
+                }
+                RuntimePartiality::CheckedTrap { .. } => {}
+                RuntimePartiality::TrustedTrap { .. } => {
+                    return Err(claim_recompute_error(
+                        "no_declaration_trust_metadata",
+                        format!("{fact_subject} uses trusted partial primitive trap metadata"),
+                    ));
+                }
             }
             for arg in args {
                 validate_runtime_expr(arg, fact_subject)?;
@@ -597,6 +603,40 @@ fn unsupported_runtime_expr_error(
             "{fact_subject} contains {construct}, which is outside the NC6 seed-example subset"
         ),
     )
+}
+
+fn validate_total_primitive_call(
+    symbol: &str,
+    args: &[RuntimeExpr],
+    fact_subject: &str,
+) -> Result<(), RuntimeArtifactValidationError> {
+    if symbol != "add_int" {
+        return Err(claim_recompute_error(
+            "all_runtime_primitives_supported",
+            format!("{fact_subject} uses total primitive {symbol}, outside the NC6 supported set"),
+        ));
+    }
+    if args.len() != 2 {
+        return Err(claim_recompute_error(
+            "all_runtime_primitives_supported",
+            format!(
+                "{fact_subject} uses add_int with arity {}, expected 2",
+                args.len()
+            ),
+        ));
+    }
+    for arg in args {
+        if !matches!(
+            arg,
+            RuntimeExpr::Var(_) | RuntimeExpr::Value(RuntimeValue::Int(_))
+        ) {
+            return Err(claim_recompute_error(
+                "all_runtime_primitives_supported",
+                format!("{fact_subject} uses add_int with a non-Int operand shape"),
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn validate_runtime_value(
