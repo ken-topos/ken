@@ -470,23 +470,15 @@ fn lower_body_term_inner(
             stack.pop();
             lowered
         }
-        CheckedCoreBodyTerm::PrimitiveLiteral(view) => Err(expression_lowering_error(
+        CheckedCoreBodyTerm::PrimitiveLiteral(view) => lower_primitive_literal(root_symbol, view),
+        CheckedCoreBodyTerm::PrimitiveApplication(view) => lower_primitive_application(
+            view,
+            declarations,
+            stack,
             root_symbol,
-            "primitive_literal_lowering_unsupported",
-            format!(
-                "primitive literal {} is exposed by checked-core body view but Runtime NC16 lowering owns execution",
-                view.symbol
-            ),
-        )),
-        CheckedCoreBodyTerm::PrimitiveApplication(view) => Err(expression_lowering_error(
-            root_symbol,
-            "primitive_application_lowering_unsupported",
-            format!(
-                "primitive application {} with {} arguments is exposed by checked-core body view but Runtime NC16 lowering owns execution",
-                view.primitive.symbol,
-                view.arguments.len()
-            ),
-        )),
+            context_depth,
+            branch_remap,
+        ),
         CheckedCoreBodyTerm::Lambda { body, .. } => {
             if captures_outer_variable(body) {
                 return Err(expression_lowering_error(
@@ -750,6 +742,160 @@ fn require_same_record_field(
             "stale_field_identity_order",
             format!("record/Sigma field view changed: expected {expected:?}, got {actual:?}"),
         ))
+    }
+}
+
+fn lower_primitive_literal(
+    root_symbol: &StableSymbol,
+    view: &checked_core::CheckedCorePrimitiveView,
+) -> Result<RuntimeExpr, ErasureError> {
+    require_expression_supported(
+        root_symbol,
+        &view.symbol,
+        &view.lowerability,
+        "primitive_lowerability_blocked",
+    )?;
+    if !matches!(
+        view.reduction,
+        checked_core::PrimitiveReductionMetadata::Literal
+    ) {
+        return Err(expression_lowering_error(
+            root_symbol,
+            "stale_primitive_metadata",
+            format!(
+                "primitive literal view for {} has non-literal reduction {:?}",
+                view.symbol, view.reduction
+            ),
+        ));
+    }
+    if !matches!(view.partiality, PartialityMetadata::Total) {
+        return Err(expression_lowering_error(
+            root_symbol,
+            "primitive_literal_partiality_unsupported",
+            format!(
+                "primitive literal {} carries partiality metadata",
+                view.symbol
+            ),
+        ));
+    }
+
+    primitive_literal_value(&view.registry_symbol)
+        .map(RuntimeExpr::Value)
+        .ok_or_else(|| {
+            expression_lowering_error(
+                root_symbol,
+                "unsupported_primitive_literal",
+                format!(
+                    "primitive literal {} has unsupported registry symbol {}",
+                    view.symbol, view.registry_symbol
+                ),
+            )
+        })
+}
+
+fn lower_primitive_application(
+    view: &checked_core::CheckedCorePrimitiveApplicationView,
+    declarations: &BTreeMap<StableSymbol, checked_core::CheckedCoreDeclarationBodyView>,
+    stack: &mut Vec<StableSymbol>,
+    root_symbol: &StableSymbol,
+    context_depth: usize,
+    branch_remap: Option<BranchBinderRemap>,
+) -> Result<RuntimeExpr, ErasureError> {
+    require_expression_supported(
+        root_symbol,
+        &view.primitive.symbol,
+        &view.primitive.lowerability,
+        "primitive_lowerability_blocked",
+    )?;
+    if !matches!(
+        view.primitive.reduction,
+        checked_core::PrimitiveReductionMetadata::Op
+    ) {
+        return Err(expression_lowering_error(
+            root_symbol,
+            "stale_primitive_metadata",
+            format!(
+                "primitive application view for {} has non-op reduction {:?}",
+                view.primitive.symbol, view.primitive.reduction
+            ),
+        ));
+    }
+
+    let mut args = Vec::with_capacity(view.arguments.len());
+    for argument in &view.arguments {
+        args.push(lower_body_term_inner(
+            argument,
+            declarations,
+            stack,
+            root_symbol,
+            context_depth,
+            branch_remap,
+        )?);
+    }
+
+    Ok(RuntimeExpr::PrimitiveCall {
+        primitive: runtime_primitive_from_view(&view.primitive),
+        args,
+    })
+}
+
+fn primitive_literal_value(registry_symbol: &str) -> Option<RuntimeValue> {
+    if let Some(raw) = registry_symbol.strip_prefix("lit_int_") {
+        return raw.parse::<i64>().ok().map(RuntimeValue::Int);
+    }
+    match registry_symbol {
+        "lit_bool_true" => return Some(RuntimeValue::Bool(true)),
+        "lit_bool_false" => return Some(RuntimeValue::Bool(false)),
+        _ => {}
+    }
+    if let Some(raw) = registry_symbol.strip_prefix("lit_string_") {
+        return Some(RuntimeValue::String(raw.to_string()));
+    }
+    if let Some(raw) = registry_symbol.strip_prefix("lit_bytes_hex_") {
+        return decode_hex_bytes(raw).map(RuntimeValue::Bytes);
+    }
+    None
+}
+
+fn decode_hex_bytes(raw: &str) -> Option<Vec<u8>> {
+    let bytes = raw.as_bytes();
+    if bytes.len() % 2 != 0 {
+        return None;
+    }
+    let mut out = Vec::with_capacity(bytes.len() / 2);
+    for pair in bytes.chunks_exact(2) {
+        let high = hex_nibble(pair[0])?;
+        let low = hex_nibble(pair[1])?;
+        out.push((high << 4) | low);
+    }
+    Some(out)
+}
+
+fn hex_nibble(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        b'A'..=b'F' => Some(byte - b'A' + 10),
+        _ => None,
+    }
+}
+
+fn runtime_primitive_from_view(view: &checked_core::CheckedCorePrimitiveView) -> RuntimePrimitive {
+    RuntimePrimitive {
+        symbol: view.registry_symbol.clone(),
+        partiality: runtime_partiality_from_checked(&view.partiality),
+    }
+}
+
+fn runtime_partiality_from_checked(partiality: &PartialityMetadata) -> RuntimePartiality {
+    match partiality {
+        PartialityMetadata::Total => RuntimePartiality::Total,
+        PartialityMetadata::CheckedPartial { obligation } => RuntimePartiality::CheckedTrap {
+            obligation: obligation.to_string(),
+        },
+        PartialityMetadata::TrustedPartial { assumption } => RuntimePartiality::TrustedTrap {
+            assumption: assumption.to_string(),
+        },
     }
 }
 
@@ -1041,19 +1187,7 @@ fn lower_primitive(
     Ok(RuntimeDeclarationKind::Primitive {
         op: RuntimePrimitive {
             symbol: meta.registry_symbol.clone(),
-            partiality: match &meta.partiality {
-                PartialityMetadata::Total => RuntimePartiality::Total,
-                PartialityMetadata::CheckedPartial { obligation } => {
-                    RuntimePartiality::CheckedTrap {
-                        obligation: obligation.to_string(),
-                    }
-                }
-                PartialityMetadata::TrustedPartial { assumption } => {
-                    RuntimePartiality::TrustedTrap {
-                        assumption: assumption.to_string(),
-                    }
-                }
-            },
+            partiality: runtime_partiality_from_checked(&meta.partiality),
         },
     })
 }

@@ -905,36 +905,344 @@ impl<'a> RuntimeIrEvaluatorState<'a> {
         }
 
         match primitive.symbol.as_str() {
-            "add_int" => {
-                if args.len() != 2 {
-                    return Err(eval_unsupported(
-                        "PrimitiveCall",
-                        format!("add_int expects 2 args, got {}", args.len()),
-                    ));
-                }
-                let mut args = args.into_iter();
-                let lhs = args.next().expect("arg count checked");
-                let rhs = args.next().expect("arg count checked");
-                let (EvaluatedValue::Int(lhs), EvaluatedValue::Int(rhs)) = (lhs, rhs) else {
-                    return Err(eval_unsupported(
-                        "PrimitiveCall",
-                        "add_int only supports Int arguments in the supported runtime-IR subset",
-                    ));
-                };
-                let sum = lhs.checked_add(rhs).ok_or_else(|| {
-                    eval_unsupported(
-                        "PrimitiveCall",
-                        "add_int overflow is outside the supported runtime-IR subset",
-                    )
-                })?;
-                Ok(RuntimeIrOutcome::Value(EvaluatedValue::Int(sum)))
-            }
+            "add_int" => eval_int_binop(&primitive.symbol, args, |lhs, rhs| lhs.checked_add(rhs)),
+            "sub_int" => eval_int_binop(&primitive.symbol, args, |lhs, rhs| lhs.checked_sub(rhs)),
+            "mul_int" => eval_int_binop(&primitive.symbol, args, |lhs, rhs| lhs.checked_mul(rhs)),
+            "eq_int" => eval_int_cmp(&primitive.symbol, args, |lhs, rhs| lhs == rhs),
+            "leq_int" => eval_int_cmp(&primitive.symbol, args, |lhs, rhs| lhs <= rhs),
+            "not_bool" => eval_bool_unop(&primitive.symbol, args, |value| !value),
+            "and_bool" => eval_bool_binop(&primitive.symbol, args, |lhs, rhs| lhs && rhs),
+            "or_bool" => eval_bool_binop(&primitive.symbol, args, |lhs, rhs| lhs || rhs),
+            "bytes_length" => eval_bytes_length(&primitive.symbol, args),
+            "bytes_at" => eval_bytes_at(&primitive.symbol, args),
+            "bytes_slice" => eval_bytes_slice(&primitive.symbol, args),
+            "bytes_concat" => eval_bytes_concat(&primitive.symbol, args),
+            "bytes_encode" => eval_bytes_encode(&primitive.symbol, args),
+            "bytes_decode" => eval_bytes_decode(&primitive.symbol, args),
+            "byte_length" => eval_string_byte_length(&primitive.symbol, args),
+            "char_length" => eval_string_char_length(&primitive.symbol, args),
             other => Err(eval_unsupported(
                 "PrimitiveCall",
                 format!("primitive {other} is not in the supported runtime-IR set"),
             )),
         }
     }
+}
+
+fn eval_int_binop(
+    symbol: &str,
+    args: Vec<EvaluatedValue>,
+    op: impl FnOnce(i64, i64) -> Option<i64>,
+) -> Result<RuntimeIrOutcome, RuntimeIrEvaluationError> {
+    let (lhs, rhs) = expect_two_ints(symbol, args)?;
+    let value = op(lhs, rhs).ok_or_else(|| {
+        eval_unsupported(
+            "PrimitiveCall",
+            format!("{symbol} overflow is outside the supported runtime-IR subset"),
+        )
+    })?;
+    Ok(RuntimeIrOutcome::Value(EvaluatedValue::Int(value)))
+}
+
+fn eval_int_cmp(
+    symbol: &str,
+    args: Vec<EvaluatedValue>,
+    op: impl FnOnce(i64, i64) -> bool,
+) -> Result<RuntimeIrOutcome, RuntimeIrEvaluationError> {
+    let (lhs, rhs) = expect_two_ints(symbol, args)?;
+    Ok(RuntimeIrOutcome::Value(EvaluatedValue::Bool(op(lhs, rhs))))
+}
+
+fn eval_bool_unop(
+    symbol: &str,
+    args: Vec<EvaluatedValue>,
+    op: impl FnOnce(bool) -> bool,
+) -> Result<RuntimeIrOutcome, RuntimeIrEvaluationError> {
+    let value = expect_one_bool(symbol, args)?;
+    Ok(RuntimeIrOutcome::Value(EvaluatedValue::Bool(op(value))))
+}
+
+fn eval_bool_binop(
+    symbol: &str,
+    args: Vec<EvaluatedValue>,
+    op: impl FnOnce(bool, bool) -> bool,
+) -> Result<RuntimeIrOutcome, RuntimeIrEvaluationError> {
+    let (lhs, rhs) = expect_two_bools(symbol, args)?;
+    Ok(RuntimeIrOutcome::Value(EvaluatedValue::Bool(op(lhs, rhs))))
+}
+
+fn eval_bytes_length(
+    symbol: &str,
+    args: Vec<EvaluatedValue>,
+) -> Result<RuntimeIrOutcome, RuntimeIrEvaluationError> {
+    let bytes = expect_one_bytes(symbol, args)?;
+    Ok(RuntimeIrOutcome::Value(EvaluatedValue::Int(usize_to_i64(
+        symbol,
+        bytes.len(),
+    )?)))
+}
+
+fn eval_bytes_at(
+    symbol: &str,
+    args: Vec<EvaluatedValue>,
+) -> Result<RuntimeIrOutcome, RuntimeIrEvaluationError> {
+    let (bytes, index) = expect_bytes_int(symbol, args)?;
+    let index = usize::try_from(index).map_err(|_| {
+        eval_unsupported(
+            "PrimitiveCall",
+            format!("{symbol} index must be non-negative"),
+        )
+    })?;
+    let Some(byte) = bytes.get(index) else {
+        return Err(eval_unsupported(
+            "PrimitiveCall",
+            format!("{symbol} index {index} is outside the byte buffer"),
+        ));
+    };
+    Ok(RuntimeIrOutcome::Value(EvaluatedValue::Int(i64::from(
+        *byte,
+    ))))
+}
+
+fn eval_bytes_slice(
+    symbol: &str,
+    args: Vec<EvaluatedValue>,
+) -> Result<RuntimeIrOutcome, RuntimeIrEvaluationError> {
+    let (bytes, start, len) = expect_bytes_int_int(symbol, args)?;
+    let start = usize::try_from(start).map_err(|_| {
+        eval_unsupported(
+            "PrimitiveCall",
+            format!("{symbol} start must be non-negative"),
+        )
+    })?;
+    let len = usize::try_from(len).map_err(|_| {
+        eval_unsupported(
+            "PrimitiveCall",
+            format!("{symbol} length must be non-negative"),
+        )
+    })?;
+    if start > bytes.len() || len > bytes.len() - start {
+        return Err(eval_unsupported(
+            "PrimitiveCall",
+            format!(
+                "{symbol} slice [{start}, {}) is outside the byte buffer",
+                start + len
+            ),
+        ));
+    }
+    Ok(RuntimeIrOutcome::Value(EvaluatedValue::Bytes(
+        bytes[start..start + len].to_vec(),
+    )))
+}
+
+fn eval_bytes_concat(
+    symbol: &str,
+    args: Vec<EvaluatedValue>,
+) -> Result<RuntimeIrOutcome, RuntimeIrEvaluationError> {
+    let (left, right) = expect_two_bytes(symbol, args)?;
+    let mut out = Vec::with_capacity(left.len().checked_add(right.len()).ok_or_else(|| {
+        eval_unsupported(
+            "PrimitiveCall",
+            format!("{symbol} output length overflows the host addressable subset"),
+        )
+    })?);
+    out.extend_from_slice(&left);
+    out.extend_from_slice(&right);
+    Ok(RuntimeIrOutcome::Value(EvaluatedValue::Bytes(out)))
+}
+
+fn eval_bytes_encode(
+    symbol: &str,
+    args: Vec<EvaluatedValue>,
+) -> Result<RuntimeIrOutcome, RuntimeIrEvaluationError> {
+    let value = expect_one_string(symbol, args)?;
+    Ok(RuntimeIrOutcome::Value(EvaluatedValue::Bytes(
+        value.into_bytes(),
+    )))
+}
+
+fn eval_bytes_decode(
+    symbol: &str,
+    args: Vec<EvaluatedValue>,
+) -> Result<RuntimeIrOutcome, RuntimeIrEvaluationError> {
+    let bytes = expect_one_bytes(symbol, args)?;
+    let value = String::from_utf8(bytes).map_err(|_| {
+        eval_unsupported(
+            "PrimitiveCall",
+            format!("{symbol} input is not valid UTF-8 in the supported runtime-IR subset"),
+        )
+    })?;
+    Ok(RuntimeIrOutcome::Value(EvaluatedValue::String(value)))
+}
+
+fn eval_string_byte_length(
+    symbol: &str,
+    args: Vec<EvaluatedValue>,
+) -> Result<RuntimeIrOutcome, RuntimeIrEvaluationError> {
+    let value = expect_one_string(symbol, args)?;
+    Ok(RuntimeIrOutcome::Value(EvaluatedValue::Int(usize_to_i64(
+        symbol,
+        value.len(),
+    )?)))
+}
+
+fn eval_string_char_length(
+    symbol: &str,
+    args: Vec<EvaluatedValue>,
+) -> Result<RuntimeIrOutcome, RuntimeIrEvaluationError> {
+    let value = expect_one_string(symbol, args)?;
+    Ok(RuntimeIrOutcome::Value(EvaluatedValue::Int(usize_to_i64(
+        symbol,
+        value.chars().count(),
+    )?)))
+}
+
+fn expect_two_ints(
+    symbol: &str,
+    args: Vec<EvaluatedValue>,
+) -> Result<(i64, i64), RuntimeIrEvaluationError> {
+    if args.len() != 2 {
+        return Err(wrong_arity(symbol, 2, args.len()));
+    }
+    let mut args = args.into_iter();
+    let lhs = args.next().expect("arg count checked");
+    let rhs = args.next().expect("arg count checked");
+    let (EvaluatedValue::Int(lhs), EvaluatedValue::Int(rhs)) = (lhs, rhs) else {
+        return Err(wrong_type(symbol, "Int, Int"));
+    };
+    Ok((lhs, rhs))
+}
+
+fn expect_one_bool(
+    symbol: &str,
+    args: Vec<EvaluatedValue>,
+) -> Result<bool, RuntimeIrEvaluationError> {
+    if args.len() != 1 {
+        return Err(wrong_arity(symbol, 1, args.len()));
+    }
+    let mut args = args.into_iter();
+    let EvaluatedValue::Bool(value) = args.next().expect("arg count checked") else {
+        return Err(wrong_type(symbol, "Bool"));
+    };
+    Ok(value)
+}
+
+fn expect_two_bools(
+    symbol: &str,
+    args: Vec<EvaluatedValue>,
+) -> Result<(bool, bool), RuntimeIrEvaluationError> {
+    if args.len() != 2 {
+        return Err(wrong_arity(symbol, 2, args.len()));
+    }
+    let mut args = args.into_iter();
+    let lhs = args.next().expect("arg count checked");
+    let rhs = args.next().expect("arg count checked");
+    let (EvaluatedValue::Bool(lhs), EvaluatedValue::Bool(rhs)) = (lhs, rhs) else {
+        return Err(wrong_type(symbol, "Bool, Bool"));
+    };
+    Ok((lhs, rhs))
+}
+
+fn expect_one_bytes(
+    symbol: &str,
+    args: Vec<EvaluatedValue>,
+) -> Result<Vec<u8>, RuntimeIrEvaluationError> {
+    if args.len() != 1 {
+        return Err(wrong_arity(symbol, 1, args.len()));
+    }
+    let mut args = args.into_iter();
+    let EvaluatedValue::Bytes(value) = args.next().expect("arg count checked") else {
+        return Err(wrong_type(symbol, "Bytes"));
+    };
+    Ok(value)
+}
+
+fn expect_two_bytes(
+    symbol: &str,
+    args: Vec<EvaluatedValue>,
+) -> Result<(Vec<u8>, Vec<u8>), RuntimeIrEvaluationError> {
+    if args.len() != 2 {
+        return Err(wrong_arity(symbol, 2, args.len()));
+    }
+    let mut args = args.into_iter();
+    let lhs = args.next().expect("arg count checked");
+    let rhs = args.next().expect("arg count checked");
+    let (EvaluatedValue::Bytes(lhs), EvaluatedValue::Bytes(rhs)) = (lhs, rhs) else {
+        return Err(wrong_type(symbol, "Bytes, Bytes"));
+    };
+    Ok((lhs, rhs))
+}
+
+fn expect_bytes_int(
+    symbol: &str,
+    args: Vec<EvaluatedValue>,
+) -> Result<(Vec<u8>, i64), RuntimeIrEvaluationError> {
+    if args.len() != 2 {
+        return Err(wrong_arity(symbol, 2, args.len()));
+    }
+    let mut args = args.into_iter();
+    let bytes = args.next().expect("arg count checked");
+    let index = args.next().expect("arg count checked");
+    let (EvaluatedValue::Bytes(bytes), EvaluatedValue::Int(index)) = (bytes, index) else {
+        return Err(wrong_type(symbol, "Bytes, Int"));
+    };
+    Ok((bytes, index))
+}
+
+fn expect_bytes_int_int(
+    symbol: &str,
+    args: Vec<EvaluatedValue>,
+) -> Result<(Vec<u8>, i64, i64), RuntimeIrEvaluationError> {
+    if args.len() != 3 {
+        return Err(wrong_arity(symbol, 3, args.len()));
+    }
+    let mut args = args.into_iter();
+    let bytes = args.next().expect("arg count checked");
+    let start = args.next().expect("arg count checked");
+    let len = args.next().expect("arg count checked");
+    let (EvaluatedValue::Bytes(bytes), EvaluatedValue::Int(start), EvaluatedValue::Int(len)) =
+        (bytes, start, len)
+    else {
+        return Err(wrong_type(symbol, "Bytes, Int, Int"));
+    };
+    Ok((bytes, start, len))
+}
+
+fn expect_one_string(
+    symbol: &str,
+    args: Vec<EvaluatedValue>,
+) -> Result<String, RuntimeIrEvaluationError> {
+    if args.len() != 1 {
+        return Err(wrong_arity(symbol, 1, args.len()));
+    }
+    let mut args = args.into_iter();
+    let EvaluatedValue::String(value) = args.next().expect("arg count checked") else {
+        return Err(wrong_type(symbol, "String"));
+    };
+    Ok(value)
+}
+
+fn usize_to_i64(symbol: &str, value: usize) -> Result<i64, RuntimeIrEvaluationError> {
+    i64::try_from(value).map_err(|_| {
+        eval_unsupported(
+            "PrimitiveCall",
+            format!("{symbol} length exceeds the supported Int runtime subset"),
+        )
+    })
+}
+
+fn wrong_arity(symbol: &str, expected: usize, found: usize) -> RuntimeIrEvaluationError {
+    eval_unsupported(
+        "PrimitiveCall",
+        format!("{symbol} expects {expected} args, got {found}"),
+    )
+}
+
+fn wrong_type(symbol: &str, expected: &'static str) -> RuntimeIrEvaluationError {
+    eval_unsupported(
+        "PrimitiveCall",
+        format!("{symbol} expects {expected} arguments in the supported runtime-IR subset"),
+    )
 }
 
 fn ground_value(value: EvaluatedValue) -> Result<RuntimeGroundValue, RuntimeIrEvaluationError> {
