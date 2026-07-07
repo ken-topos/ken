@@ -157,30 +157,51 @@ mechanical, not just convention.
 ## Verify, then announce
 
 After merging, **confirm it landed on `main` and CI is green, and fetch**,
-before you post anything. Then: resolve the mootup merge Decision (`resolve_decision`,
-marked merged); post a terse ship note (commit SHA, what landed, gate results —
-real content, not restated scope); **sweep the merged branch on BOTH sides** —
-the **remote** (`git push origin --delete wp/<ID>`) **and the local shared-store
-ref** (`git branch -D wp/<ID>`). The local prune matters because a **squash-merge
-makes the branch's original commits NON-ancestors of `main`**, so the local
-`wp/<ID>` ref lingers forever in the shared clone and clutters every worktree's
-`git branch` (and falsely reads as "open" in a naive ancestor check). If
-`git branch -D` is refused (`checked out at .../.worktrees/<role>`), the owning
-team hasn't returned to its home branch yet — your rebase-guidance nudge frees
-it, and the watchdog stale-branch prune (below) retries next pass. And **notify the Steward — and only the
-Steward — on a merge (operator, 2026-07-04).** The merge is the Steward's cue: it
-owns the WP catalog, the progress tracker, and post-merge sequencing (releasing
-the next WP, a spec-reconcile or other fast-follow, closing the WP + chasing
-retros), and no CI/merge event notifies it otherwise — without this it has to
-poll or be told a merge landed before it can route the sequenced follow-on. That
-is a real Steward next-move (**not** a pure FYI), so it is within §2 mention
-discipline. **Do NOT notify team leaders on a merge — they have no action to take
-on a raw merge event (operator, 2026-07-04).** A team rebases onto the new
-`origin/main` when it picks up its next WP (its implementer already runs `git
-rebase origin/main` first), and the **Steward** — not you — routes any downstream
-work (including a cross-team rebase, if a merge actually affects an in-flight WP)
-to the relevant team via that next release/kickoff. So the merge ship-note
-mentions **the Steward, and no one else.**
+before you announce. Then run these post-merge steps in this exact order:
+
+1. **Update your Integrator status first.** Use `update_status` with the merge
+   result in the string: merged WP/PR, landed `main` SHA, and whether cleanup is
+   still in progress or complete. Example:
+   `Merged <WP> as <sha>; posting ship note and cleaning branch refs`.
+2. **Reply in the WP thread with the ship note, mentioning the Steward only.**
+   Use the WP thread id from the merge-ready / PR-gating exchange; do not post a
+   new root message. The `mentions` list is exactly the live Steward
+   participant id. The note includes the commit SHA, PR number, exact approved
+   head merged, gate results, and cleanup state. This is the notification that
+   lets Steward update the tracker, relay the merge, collect retros, and release
+   dependent work.
+3. **Resolve the mootup merge Decision** if the WP used one
+   (`resolve_decision`, marked merged). If the WP used a thread-only gate, say
+   that in the ship note rather than inventing a Decision.
+4. **Sweep the merged branch on BOTH sides** — the **remote**
+   (`git push origin --delete wp/<ID>`) and the local shared-store ref
+   (`git branch -D wp/<ID>`). If a local worktree still holds the branch, report
+   that in the same WP thread and retry on the watchdog pass after release.
+
+**The merge ship-note MUST mention the Steward, and ONLY the Steward.** In the
+`post_response`/`share` call, the `mentions` list contains exactly the live
+Steward participant id — no team leader, implementer, QA, reviewer, placeholder,
+or prose-only `@steward`. This is not an FYI. It is the handoff that closes the
+WP loop: the Steward owns the WP catalog, the progress tracker, post-merge
+sequencing, downstream release/kickoff routing, and retro closure. If the ship
+note does not wake the Steward, the merge can be correct and still stall the
+program because no one closes the WP or releases the next step.
+
+The local prune matters because a **squash-merge makes the branch's original
+commits NON-ancestors of `main`**, so the local `wp/<ID>` ref lingers forever in
+the shared clone and clutters every worktree's `git branch` (and falsely reads
+as "open" in a naive ancestor check). If `git branch -D` is refused (`checked out
+at .../.worktrees/<role>`), the owning team hasn't returned to its home branch
+yet — your rebase-guidance nudge frees it, and the watchdog stale-branch prune
+(below) retries next pass.
+
+**Do NOT notify team leaders on a merge — they have no action to take on a raw
+merge event (operator, 2026-07-04).** A team rebases onto the new `origin/main`
+when it picks up its next WP (its implementer already runs `git rebase
+origin/main` first), and the **Steward** — not you — routes any downstream work
+(including a cross-team rebase, if a merge actually affects an in-flight WP) to
+the relevant team via that next release/kickoff. So the merge ship-note mentions
+**the Steward, and no one else.**
 
 ## Keep the pipeline moving (watchdog)
 
