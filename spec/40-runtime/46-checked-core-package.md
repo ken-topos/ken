@@ -102,6 +102,52 @@ comments, spans, formatting, or source spelling have the same
 metadata entry, obligation, assumption, trust delta, unsupported semantic entry,
 or dependency semantic hash changes `core_semantic_hash`.
 
+### 3.2 Stable Symbols and Canonical Inputs
+
+`GlobalId` is a producer-local index only. A package emitter may use it to find
+the already-admitted kernel declaration while constructing a package, but no
+exported identity, canonical reference, semantic hash input, dependency edge,
+obligation id, assumption entry, or primitive reference may depend on the
+numeric `GlobalId` allocation order.
+
+Every serialized reference resolves through an artifact-level stable symbol
+whose namespace identifies the semantic role:
+
+- top-level declarations use a canonical package and module-qualified
+  declaration symbol;
+- constructors use the parent family stable symbol plus the constructor name;
+- primitives use the primitive-registry symbol string, not the primitive
+  declaration's local `GlobalId`;
+- modules use package-qualified module path symbols for export bookkeeping
+  only; module paths are not kernel primitives;
+- metadata entries key by the stable symbol or stable obligation id they
+  describe;
+- obligations use their stable clause ids, such as `f.ensures.0`,
+  `Monoid.law.assoc`, or `f.temporal.0`;
+- assumptions and trust entries key by the stable symbol or stable obligation
+  id they attach to, never by a raw postulate id alone.
+
+Canonical checked-core encoding is over semantic value sets, not producer append
+order. Kernel `Level` values encode from semilattice normal form. Kernel `Term`
+values encode their binder and argument order structurally, but every global,
+inductive former, constructor, eliminator family, or primitive reference inside
+the term encodes through the stable-symbol layer. Declaration, metadata,
+recursive-group, dependency, obligation, assumption, unsupported, and annotation
+tables that are semantically sets or maps sort by their stable key before
+hashing.
+
+`core_semantic_hash` is computed from the canonical semantic inputs only:
+stable-symbol bindings, checked declarations, primitive references, inductive
+metadata, class/instance metadata, recursion metadata, effects/foreign
+metadata, obligations, assumptions, `trusted_base_delta`, unsupported semantic
+entries, behavioral export references/hashes, and dependency semantic hashes.
+`artifact_hash` may additionally include source identity, source hashes,
+signatures, provenance, and non-semantic annotations. Changing comments, spans,
+formatting, source spelling, producer-local allocation order, or non-semantic
+annotations must not change `core_semantic_hash`; changing any semantic or
+trust input must change `core_semantic_hash` or a referenced dependency/export
+hash.
+
 ## 4. Required Sections
 
 Every required section below must be present. An explicitly empty section means
