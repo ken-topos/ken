@@ -2421,6 +2421,86 @@ mod tests {
     }
 
     #[test]
+    fn validator_rejects_bad_kind_empty_header_and_incomplete_lowerability() {
+        let mut package = representative_checked_core_fixtures()
+            .unwrap()
+            .pop()
+            .unwrap()
+            .package;
+
+        package.header.package_kind = "UncheckedCorePackage".to_string();
+        assert_eq!(
+            validate_checked_core_package(&package).unwrap_err(),
+            CheckedCorePackageError::UnsupportedPackageKind {
+                found: "UncheckedCorePackage".to_string(),
+            }
+        );
+
+        let mut package = representative_checked_core_fixtures()
+            .unwrap()
+            .pop()
+            .unwrap()
+            .package;
+        package.header.kernel_ref.clear();
+        assert_eq!(
+            validate_checked_core_package(&package).unwrap_err(),
+            CheckedCorePackageError::EmptyHeaderField {
+                field: "kernel_ref",
+            }
+        );
+
+        let mut package = representative_checked_core_fixtures()
+            .unwrap()
+            .pop()
+            .unwrap()
+            .package;
+        let bool_ty = StableSymbol::declaration("fixture", &["Core"], "Bool");
+        package.artifact.semantic.lowerability.remove(&bool_ty);
+        package.core_semantic_hash = semantic_fingerprint(&package.artifact.semantic);
+        package.artifact_hash = package_artifact_fingerprint(
+            &package.header,
+            &package.artifact,
+            package.core_semantic_hash,
+        );
+
+        assert_eq!(
+            validate_checked_core_package(&package).unwrap_err(),
+            CheckedCorePackageError::MissingLowerability { symbol: bool_ty },
+        );
+    }
+
+    #[test]
+    fn validator_rejects_unsupported_entries_without_blocking_lowerability() {
+        let mut package = representative_checked_core_fixtures()
+            .unwrap()
+            .pop()
+            .unwrap()
+            .package;
+        let bool_ty = StableSymbol::declaration("fixture", &["Core"], "Bool");
+        package
+            .artifact
+            .semantic
+            .unsupported
+            .insert(bool_ty.clone(), b"must block if unsupported".to_vec());
+        package
+            .artifact
+            .semantic
+            .lowerability
+            .insert(bool_ty.clone(), LowerabilityStatus::Supported);
+        package.core_semantic_hash = semantic_fingerprint(&package.artifact.semantic);
+        package.artifact_hash = package_artifact_fingerprint(
+            &package.header,
+            &package.artifact,
+            package.core_semantic_hash,
+        );
+
+        assert_eq!(
+            validate_checked_core_package(&package).unwrap_err(),
+            CheckedCorePackageError::UnsupportedEntryNotBlocking { symbol: bool_ty },
+        );
+    }
+
+    #[test]
     fn emitter_materializes_missing_compiler_metadata_as_unsupported() {
         let f = decl_symbol("stage_gap");
         let mut semantic = CheckedCoreSemanticInputs::default();
