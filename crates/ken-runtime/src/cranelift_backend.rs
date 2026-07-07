@@ -1505,6 +1505,50 @@ mod tests {
     }
 
     #[test]
+    fn nc8_certificate_rejects_let_expression_in_validated_example() {
+        let mut program =
+            seed_program_with_lowerability(Some(RuntimeLowerabilityStatus::Supported));
+        program.examples = vec![RuntimeExample {
+            name: "let-outside-supported-subset".to_string(),
+            checked_core_shape: "diagnostic label only".to_string(),
+            ir: RuntimeExpr::Let {
+                value: Box::new(RuntimeExpr::Value(RuntimeValue::Int(1))),
+                body: Box::new(RuntimeExpr::Var(0)),
+            },
+            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int(1)),
+        }];
+        let certificate = RuntimeArtifactCertificate::supported_runtime_artifact_for(&program);
+
+        let err = validate_supported_runtime_artifact_certificate(&program, &certificate)
+            .expect_err("let expressions are outside the NC6 supported subset");
+
+        assert_eq!(err.stage, RuntimeArtifactValidationStage::ClaimRecompute);
+        assert_eq!(err.fact, "all_runtime_expressions_supported");
+        assert!(err.reason.contains("Let"));
+    }
+
+    #[test]
+    fn nc8_certificate_rejects_if_expression_in_reachable_transparent_declaration() {
+        let mut program =
+            seed_program_with_lowerability(Some(RuntimeLowerabilityStatus::Supported));
+        program.declarations[0].kind = RuntimeDeclarationKind::Transparent {
+            body: RuntimeExpr::If {
+                scrutinee: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+                then_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int(1))),
+                else_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int(0))),
+            },
+        };
+        let certificate = RuntimeArtifactCertificate::supported_runtime_artifact_for(&program);
+
+        let err = validate_supported_runtime_artifact_certificate(&program, &certificate)
+            .expect_err("if expressions are outside the NC6 supported subset");
+
+        assert_eq!(err.stage, RuntimeArtifactValidationStage::ClaimRecompute);
+        assert_eq!(err.fact, "all_runtime_expressions_supported");
+        assert!(err.reason.contains("If"));
+    }
+
+    #[test]
     fn missing_lowerability_metadata_rejects_before_backend_lowering() {
         let program = seed_program_with_lowerability(None);
 

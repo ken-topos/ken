@@ -535,19 +535,8 @@ fn validate_runtime_expr(
     match expr {
         RuntimeExpr::Value(value) => validate_runtime_value(value, fact_subject),
         RuntimeExpr::Var(_) => Ok(()),
-        RuntimeExpr::Let { value, body } => {
-            validate_runtime_expr(value, fact_subject)?;
-            validate_runtime_expr(body, fact_subject)
-        }
-        RuntimeExpr::If {
-            scrutinee,
-            then_expr,
-            else_expr,
-        } => {
-            validate_runtime_expr(scrutinee, fact_subject)?;
-            validate_runtime_expr(then_expr, fact_subject)?;
-            validate_runtime_expr(else_expr, fact_subject)
-        }
+        RuntimeExpr::Let { .. } => Err(unsupported_runtime_expr_error("Let", fact_subject)),
+        RuntimeExpr::If { .. } => Err(unsupported_runtime_expr_error("If", fact_subject)),
         RuntimeExpr::PrimitiveCall { primitive, args } => {
             if matches!(primitive.partiality, RuntimePartiality::TrustedTrap { .. }) {
                 return Err(claim_recompute_error(
@@ -596,6 +585,18 @@ fn validate_runtime_expr(
         )),
         RuntimeExpr::Trap(_) => Ok(()),
     }
+}
+
+fn unsupported_runtime_expr_error(
+    construct: &'static str,
+    fact_subject: &str,
+) -> RuntimeArtifactValidationError {
+    claim_recompute_error(
+        "all_runtime_expressions_supported",
+        format!(
+            "{fact_subject} contains {construct}, which is outside the NC6 seed-example subset"
+        ),
+    )
 }
 
 fn validate_runtime_value(
