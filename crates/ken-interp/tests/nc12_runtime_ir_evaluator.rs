@@ -14,8 +14,9 @@ use ken_runtime::{
     RuntimeFieldStatus, RuntimeGroundValue, RuntimeInterpreterObservation,
     RuntimeIrDifferentialStage, RuntimeIrDifferentialVerdict, RuntimeIrEvidenceFact,
     RuntimeIrSeedEnvironment, RuntimeIrTargetIdentity, RuntimeIrTrustTier,
-    RuntimeLowerabilityStatus, RuntimeMetadata, RuntimeObservation, RuntimeProgram,
-    RuntimeSymbolMetadata, RuntimeTrap, RuntimeTrapCode, RuntimeValue,
+    RuntimeLowerabilityStatus, RuntimeMetadata, RuntimeObservation, RuntimePartiality,
+    RuntimePrimitive, RuntimeProgram, RuntimeSymbolMetadata, RuntimeTrap, RuntimeTrapCode,
+    RuntimeValue,
 };
 
 struct OracleFixture {
@@ -330,6 +331,34 @@ fn stale_oracle_identity_rejects_before_runtime_ir_evaluation() {
 }
 
 #[test]
+fn external_runtime_example_rejects_before_evaluation() {
+    let stored = scalar_seed_example();
+    let mut external = stored.clone();
+    external.ir = ken_runtime::RuntimeExpr::Value(RuntimeValue::Int(99));
+    external.observation = RuntimeObservation::Returned(RuntimeGroundValue::Int(99));
+    let program = runtime_program(stored, 0x1209);
+    let oracle = oracle_observation(&program, &external);
+
+    let report = compare_runtime_ir_with_interpreter_observation(
+        &program,
+        &external,
+        &RuntimeIrSeedEnvironment::empty(),
+        oracle,
+    );
+
+    assert_no_wp_local_report_names(&report);
+    assert!(report.runtime_ir.is_none());
+    assert!(matches!(
+        report.verdict,
+        RuntimeIrDifferentialVerdict::Unsupported {
+            stage: RuntimeIrDifferentialStage::BoundaryPreflight,
+            construct: "RuntimeExample",
+            ref reason,
+        } if reason.contains("not present byte-for-byte")
+    ));
+}
+
+#[test]
 fn unsupported_effect_metadata_rejects_without_success_observation() {
     let example = scalar_seed_example();
     let mut program = runtime_program(example.clone(), 0x1206);
@@ -415,6 +444,36 @@ fn package_level_trust_metadata_rejects_before_runtime_ir_success() {
             } if reason.contains("package carries trust metadata")
         ));
     }
+}
+
+#[test]
+fn add_int_overflow_rejects_without_host_panic_or_wrap() {
+    let example = ken_runtime::RuntimeExample {
+        name: "add-int-overflow".to_string(),
+        checked_core_shape: "overflowing add_int fixture".to_string(),
+        ir: ken_runtime::RuntimeExpr::PrimitiveCall {
+            primitive: RuntimePrimitive {
+                symbol: "add_int".to_string(),
+                partiality: RuntimePartiality::Total,
+            },
+            args: vec![
+                ken_runtime::RuntimeExpr::Value(RuntimeValue::Int(i64::MAX)),
+                ken_runtime::RuntimeExpr::Value(RuntimeValue::Int(1)),
+            ],
+        },
+        observation: RuntimeObservation::Returned(RuntimeGroundValue::Int(i64::MIN)),
+    };
+    let program = runtime_program(example.clone(), 0x1210);
+
+    let err = evaluate_runtime_ir_example(&program, &example, &RuntimeIrSeedEnvironment::empty())
+        .expect_err("overflowing add_int is outside the current small-int subset");
+
+    assert_eq!(err.construct, "PrimitiveCall");
+    assert_eq!(
+        err.stage,
+        ken_runtime::RuntimeIrEvaluationStage::RuntimeIrEvaluation
+    );
+    assert!(err.reason.contains("add_int overflow"));
 }
 
 #[test]

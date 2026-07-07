@@ -273,6 +273,7 @@ pub fn evaluate_runtime_ir_example(
     env: &RuntimeIrSeedEnvironment,
 ) -> Result<RuntimeIrRunReport, RuntimeIrEvaluationError> {
     reject_runtime_ir_program_blockers(program)?;
+    reject_unbound_runtime_example(program, example)?;
     let observation = evaluate_runtime_ir_expr(&example.ir, env)?;
     let artifact = RuntimeArtifactIdentity::from_program(program);
     let target = RuntimeIrTargetIdentity::from_example(example);
@@ -552,6 +553,27 @@ pub fn reject_runtime_ir_program_blockers(
         }
     }
     Ok(())
+}
+
+fn reject_unbound_runtime_example(
+    program: &RuntimeProgram,
+    example: &RuntimeExample,
+) -> Result<(), RuntimeIrEvaluationError> {
+    if program
+        .examples
+        .iter()
+        .any(|candidate| candidate == example)
+    {
+        return Ok(());
+    }
+
+    Err(preflight_unsupported(
+        "RuntimeExample",
+        format!(
+            "example {} is not present byte-for-byte in RuntimeProgram.examples for the exact runtime artifact",
+            example.name
+        ),
+    ))
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -899,7 +921,13 @@ impl<'a> RuntimeIrEvaluatorState<'a> {
                         "add_int only supports Int arguments in the supported runtime-IR subset",
                     ));
                 };
-                Ok(RuntimeIrOutcome::Value(EvaluatedValue::Int(lhs + rhs)))
+                let sum = lhs.checked_add(rhs).ok_or_else(|| {
+                    eval_unsupported(
+                        "PrimitiveCall",
+                        "add_int overflow is outside the supported runtime-IR subset",
+                    )
+                })?;
+                Ok(RuntimeIrOutcome::Value(EvaluatedValue::Int(sum)))
             }
             other => Err(eval_unsupported(
                 "PrimitiveCall",
