@@ -1329,15 +1329,20 @@ mod tests {
         .unwrap();
         let mut semantic = out.package.artifact.semantic.clone();
         let obligation = StableSymbol::obligation("main.ensures.0");
+        let assumption = StableSymbol::assumption(&target, "trusted-fixture");
         let dependency = StableSymbol::new(
             SymbolNamespace::Dependency,
             vec!["dep-pkg".to_string(), "checked-core".to_string()],
         );
         semantic.symbols.insert(obligation.clone());
+        semantic.symbols.insert(assumption.clone());
         semantic.symbols.insert(dependency.clone());
         semantic
             .obligations
             .insert(obligation.clone(), b"goal-core".to_vec());
+        semantic
+            .assumptions
+            .insert(assumption.clone(), b"trusted fixture assumption".to_vec());
         semantic.obligation_metadata.insert(
             obligation.clone(),
             ObligationMetadata {
@@ -1346,6 +1351,17 @@ mod tests {
                 affects_runtime_meaning: true,
             },
         );
+        semantic.assumption_trust_metadata.insert(
+            assumption.clone(),
+            AssumptionTrustMetadata {
+                kind: AssumptionTrustKind::Hole,
+                target: target.clone(),
+                affects_runtime_meaning: true,
+            },
+        );
+        semantic
+            .trusted_base_delta
+            .insert(target.clone(), b"trusted fixture target".to_vec());
         semantic
             .dependency_semantic_hashes
             .insert(dependency.clone(), "sha256:dependency".to_string());
@@ -1354,7 +1370,7 @@ mod tests {
         let closures = compute_target_closures(
             &manifest(package_name),
             &package,
-            selector(package_name, target),
+            selector(package_name, target.clone()),
         )
         .unwrap();
         let closure = &closures[0];
@@ -1363,10 +1379,45 @@ mod tests {
             .semantic
             .obligation_metadata
             .contains_key(&obligation));
+        assert!(closure.semantic.assumptions.contains_key(&assumption));
+        assert!(closure
+            .semantic
+            .assumption_trust_metadata
+            .contains_key(&assumption));
+        assert!(closure.semantic.trusted_base_delta.contains_key(&target));
+        assert!(closure.report.assumptions.contains(&assumption));
+        assert!(closure.report.trusted_base_delta.contains(&target));
         assert_eq!(
             closure.report.dependency_semantic_hashes.get(&dependency),
             Some(&"sha256:dependency".to_string())
         );
+    }
+
+    #[test]
+    fn target_closure_reports_unresolved_references_without_runtime_success() {
+        let package_name = "closure_unresolved";
+        let target = main_symbol(package_name);
+        let unresolved = StableSymbol::declaration(package_name, &[], "Bool");
+        let out = compile_ken_source(package_name, real_source(), selector(package_name, target))
+            .unwrap();
+        let closure = &out.closures[0];
+
+        assert!(
+            closure.external_symbols.contains(&unresolved),
+            "declaration references without in-package bodies must remain explicit externals"
+        );
+        assert!(closure
+            .report
+            .unsupported_lanes
+            .get(&unresolved)
+            .unwrap()
+            .iter()
+            .any(|lane| lane.lane == "unresolved_checked_core_symbol"));
+        assert!(matches!(
+            closure.report.runtime_lowering,
+            ReportFact::Unavailable(UnavailableLane { ref lane, .. })
+                if lane == "unresolved_checked_core_symbol"
+        ));
     }
 
     #[test]
