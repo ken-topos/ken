@@ -123,3 +123,42 @@ view satisfying the acceptance criteria. Runtime remains parked on NC14 proper
 until this prerequisite lands or Language identifies an equivalent landed
 surface. Kernel boundary review remains required before NC14 proper uses
 impossible-branch facts for trap lowering.
+
+## Runtime handoff
+
+The prerequisite extends the existing `ken_elaborator::checked_core` body-view
+API. Runtime should consume the same package-authoritative entry points it
+already uses for expression bodies:
+
+- `checked_core_body_view_for_selection(package, selection)`
+- `checked_core_declaration_body_view(package, selection, symbol)`
+- `CheckedCoreBodyTerm::ConstructorReference(CheckedCoreConstructorView)`
+- `CheckedCoreBodyTerm::Match(CheckedCoreMatchView)`
+- `CheckedCoreMatchBranchView`
+
+`CheckedCoreConstructorView` carries the package-bound constructor symbol,
+parent family symbol, level arguments, family parameter/index counts,
+constructor arity, target-index count, recursive positions, constructor
+lowerability, and family lowerability. Constructor applications are still
+represented by ordinary `Application` nodes whose callee is a constructor
+reference, so payload order remains the canonical checked-core application
+order.
+
+`CheckedCoreMatchView` carries the family symbol, level arguments, canonical
+parameter bytes, canonical motive bytes, canonical index bytes, decoded
+scrutinee, and constructor-ordered branch views. Each branch pairs the
+constructor metadata above with the decoded method body.
+
+Stable body-view error lanes Runtime may preserve in reports:
+
+- `stale_constructor_identity`
+- `missing_match_branch_data`
+- `unsupported_dependent_motive`
+- `unsupported_proof_only_match`
+- `unsupported_eliminator_shape`
+- `unjustified_impossible_branch`
+
+The view remains a pre-lowering package surface. Current expression lowering
+still rejects constructor and match body terms with
+`constructor_lowering_unsupported` and `match_lowering_unsupported` until the
+Runtime-owned NC14 lowering WP consumes this seam deliberately.
