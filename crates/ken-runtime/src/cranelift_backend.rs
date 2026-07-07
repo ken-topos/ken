@@ -1485,6 +1485,26 @@ mod tests {
     }
 
     #[test]
+    fn nc8_certificate_rejects_unknown_runtime_value_by_recomputation() {
+        let mut program =
+            seed_program_with_lowerability(Some(RuntimeLowerabilityStatus::Supported));
+        program.examples = vec![RuntimeExample {
+            name: "unknown-runtime-value".to_string(),
+            checked_core_shape: "diagnostic label only".to_string(),
+            ir: RuntimeExpr::Value(RuntimeValue::Unknown),
+            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int(0)),
+        }];
+        let certificate = RuntimeArtifactCertificate::supported_runtime_artifact_for(&program);
+
+        let err = validate_supported_runtime_artifact_certificate(&program, &certificate)
+            .expect_err("unknown runtime values are outside the supported subset");
+
+        assert_eq!(err.stage, RuntimeArtifactValidationStage::ClaimRecompute);
+        assert_eq!(err.fact, "all_runtime_values_supported");
+        assert!(err.reason.contains("unknown runtime data"));
+    }
+
+    #[test]
     fn missing_lowerability_metadata_rejects_before_backend_lowering() {
         let program = seed_program_with_lowerability(None);
 

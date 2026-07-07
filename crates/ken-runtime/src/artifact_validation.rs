@@ -619,11 +619,14 @@ fn validate_runtime_value(
             "no_foreign_or_effectful_boundaries",
             format!("{fact_subject} contains a closure reference value"),
         )),
+        RuntimeValue::Unknown => Err(claim_recompute_error(
+            "all_runtime_values_supported",
+            format!("{fact_subject} contains unknown runtime data"),
+        )),
         RuntimeValue::Bool(_)
         | RuntimeValue::Int(_)
         | RuntimeValue::Bytes(_)
-        | RuntimeValue::String(_)
-        | RuntimeValue::Unknown => Ok(()),
+        | RuntimeValue::String(_) => Ok(()),
     }
 }
 
