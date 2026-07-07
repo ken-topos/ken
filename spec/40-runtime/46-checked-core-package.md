@@ -32,10 +32,31 @@ prove no new theorem, and do not expand the type-soundness TCB. A bad package
 reader may reject or miscompile; it cannot make an unchecked term into a Ken
 proof unless the kernel itself admits that term.
 
-This chapter defines the semantic contents of the artifact. The exact canonical
-byte encoding and stable-symbol spelling are follow-on compiler-package work;
-they must preserve the value sets, coverage rules, and compatibility semantics
-defined here.
+This chapter defines the semantic contents of the artifact. Emitter-specific
+canonical bytes and stable-symbol spellings must preserve the value sets,
+coverage rules, and compatibility semantics defined here.
+
+### 1.1 NC4 Emitter and Validator
+
+NC4 adds the first elaborator-side emitter for `CheckedCorePackage v0`. The
+emitter is an untrusted package projection over already-admitted checked core
+and NC1-NC3 metadata. It adds no kernel admission rule and performs no erasure,
+runtime IR construction, ABI/layout selection, Cranelift lowering, native
+backend lowering, or compiler verification.
+
+An emitted package carries the required header, explicit `version = 0`,
+canonical semantic inputs, artifact/provenance inputs, `core_semantic_hash`, and
+`artifact_hash`. The validator checks the header before semantic use, rejects
+unsupported or missing versions, checks stable-symbol closure for package
+sections, recomputes the hashes, and enforces that compiler-relevant symbols
+have explicit lowerability metadata.
+
+If the current emitter cannot populate compiler-relevant metadata for a checked
+symbol, it must materialize an explicit blocking unsupported entry and
+lowerability status instead of silently omitting the field. A target consumer
+whose closure reaches that entry rejects before erasure/runtime IR. A consumer
+of a valid emitted package must be able to validate and inspect the checked-core
+artifact without reading raw surface source bytes.
 
 ## 2. Relation to Existing Specs
 

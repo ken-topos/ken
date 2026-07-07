@@ -11,6 +11,9 @@ use std::fmt;
 use ken_kernel::env::{Decl, PrimReduction};
 use ken_kernel::{GlobalId, Level, Term};
 
+pub const CHECKED_CORE_PACKAGE_KIND: &str = "CheckedCorePackage";
+pub const CHECKED_CORE_SCHEMA_VERSION: u32 = 0;
+
 /// The semantic role of a stable checked-core identity.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum SymbolNamespace {
@@ -184,6 +187,145 @@ pub struct CheckedCoreArtifactInputs {
     pub source_identity: BTreeMap<String, String>,
     pub annotations: BTreeMap<String, Vec<u8>>,
 }
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CheckedCorePackageHeader {
+    pub package_kind: String,
+    pub version: Option<u32>,
+    pub producer: String,
+    pub kernel_ref: String,
+    pub spec_ref: String,
+    pub primitive_registry_ref: String,
+    pub package_identity: StableSymbol,
+    pub dependency_semantic_hashes: BTreeMap<StableSymbol, String>,
+}
+
+impl CheckedCorePackageHeader {
+    pub fn v0(
+        producer: impl Into<String>,
+        kernel_ref: impl Into<String>,
+        spec_ref: impl Into<String>,
+        primitive_registry_ref: impl Into<String>,
+        package_identity: StableSymbol,
+    ) -> Self {
+        Self {
+            package_kind: CHECKED_CORE_PACKAGE_KIND.to_string(),
+            version: Some(CHECKED_CORE_SCHEMA_VERSION),
+            producer: producer.into(),
+            kernel_ref: kernel_ref.into(),
+            spec_ref: spec_ref.into(),
+            primitive_registry_ref: primitive_registry_ref.into(),
+            package_identity,
+            dependency_semantic_hashes: BTreeMap::new(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CheckedCorePackage {
+    pub header: CheckedCorePackageHeader,
+    pub artifact: CheckedCoreArtifactInputs,
+    pub core_semantic_hash: u64,
+    pub artifact_hash: u64,
+}
+
+impl CheckedCorePackage {
+    pub fn canonical_bytes(&self) -> Vec<u8> {
+        canonical_package_bytes(
+            &self.header,
+            &self.artifact,
+            self.core_semantic_hash,
+            self.artifact_hash,
+        )
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ConsumedCheckedCorePackage {
+    pub package_identity: StableSymbol,
+    pub core_semantic_hash: u64,
+    pub artifact_hash: u64,
+    pub symbols: BTreeSet<StableSymbol>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CheckedCoreFixture {
+    pub name: String,
+    pub package: CheckedCorePackage,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CheckedCorePackageError {
+    UnsupportedPackageKind {
+        found: String,
+    },
+    MissingVersion,
+    UnsupportedVersion {
+        found: u32,
+    },
+    EmptyHeaderField {
+        field: &'static str,
+    },
+    MissingSymbol {
+        section: &'static str,
+        symbol: StableSymbol,
+    },
+    MissingLowerability {
+        symbol: StableSymbol,
+    },
+    UnsupportedEntryNotBlocking {
+        symbol: StableSymbol,
+    },
+    SemanticHashMismatch {
+        expected: u64,
+        actual: u64,
+    },
+    ArtifactHashMismatch {
+        expected: u64,
+        actual: u64,
+    },
+    LoweringReadiness(LoweringReadinessError),
+}
+
+impl fmt::Display for CheckedCorePackageError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CheckedCorePackageError::UnsupportedPackageKind { found } => {
+                write!(f, "unsupported checked-core package kind {found:?}")
+            }
+            CheckedCorePackageError::MissingVersion => {
+                write!(f, "missing checked-core package version")
+            }
+            CheckedCorePackageError::UnsupportedVersion { found } => {
+                write!(f, "unsupported checked-core package version {found}")
+            }
+            CheckedCorePackageError::EmptyHeaderField { field } => {
+                write!(f, "empty checked-core package header field {field}")
+            }
+            CheckedCorePackageError::MissingSymbol { section, symbol } => {
+                write!(f, "{section} references undeclared stable symbol {symbol}")
+            }
+            CheckedCorePackageError::MissingLowerability { symbol } => {
+                write!(f, "missing lowerability metadata for {symbol}")
+            }
+            CheckedCorePackageError::UnsupportedEntryNotBlocking { symbol } => write!(
+                f,
+                "unsupported entry for {symbol} must also have blocking lowerability"
+            ),
+            CheckedCorePackageError::SemanticHashMismatch { expected, actual } => write!(
+                f,
+                "checked-core semantic hash mismatch: expected {expected:#x}, got {actual:#x}"
+            ),
+            CheckedCorePackageError::ArtifactHashMismatch { expected, actual } => write!(
+                f,
+                "checked-core artifact hash mismatch: expected {expected:#x}, got {actual:#x}"
+            ),
+            CheckedCorePackageError::LoweringReadiness(err) => err.fmt(f),
+        }
+    }
+}
+
+impl std::error::Error for CheckedCorePackageError {}
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum LowerabilityStatus {
@@ -527,6 +669,609 @@ pub fn semantic_fingerprint(inputs: &CheckedCoreSemanticInputs) -> u64 {
 
 pub fn artifact_fingerprint(inputs: &CheckedCoreArtifactInputs) -> u64 {
     fingerprint(&canonical_artifact_bytes(inputs))
+}
+
+pub fn emit_checked_core_package(
+    header: CheckedCorePackageHeader,
+    mut artifact: CheckedCoreArtifactInputs,
+) -> Result<CheckedCorePackage, CheckedCorePackageError> {
+    validate_header(&header)?;
+    materialize_emitter_completeness(&mut artifact.semantic);
+
+    let core_semantic_hash = semantic_fingerprint(&artifact.semantic);
+    let artifact_hash = package_artifact_fingerprint(&header, &artifact, core_semantic_hash);
+    let package = CheckedCorePackage {
+        header,
+        artifact,
+        core_semantic_hash,
+        artifact_hash,
+    };
+    validate_checked_core_package(&package)?;
+    Ok(package)
+}
+
+pub fn validate_checked_core_package(
+    package: &CheckedCorePackage,
+) -> Result<(), CheckedCorePackageError> {
+    validate_header(&package.header)?;
+    validate_semantic_contract(&package.artifact.semantic)?;
+
+    let expected_semantic = semantic_fingerprint(&package.artifact.semantic);
+    if package.core_semantic_hash != expected_semantic {
+        return Err(CheckedCorePackageError::SemanticHashMismatch {
+            expected: expected_semantic,
+            actual: package.core_semantic_hash,
+        });
+    }
+
+    let expected_artifact = package_artifact_fingerprint(
+        &package.header,
+        &package.artifact,
+        package.core_semantic_hash,
+    );
+    if package.artifact_hash != expected_artifact {
+        return Err(CheckedCorePackageError::ArtifactHashMismatch {
+            expected: expected_artifact,
+            actual: package.artifact_hash,
+        });
+    }
+
+    Ok(())
+}
+
+pub fn consume_checked_core_package_for_target<'a>(
+    package: &CheckedCorePackage,
+    target_closure: impl IntoIterator<Item = &'a StableSymbol>,
+) -> Result<ConsumedCheckedCorePackage, CheckedCorePackageError> {
+    validate_checked_core_package(package)?;
+    ensure_lowerable_for_target(target_closure, &package.artifact.semantic.lowerability)
+        .map_err(CheckedCorePackageError::LoweringReadiness)?;
+
+    Ok(ConsumedCheckedCorePackage {
+        package_identity: package.header.package_identity.clone(),
+        core_semantic_hash: package.core_semantic_hash,
+        artifact_hash: package.artifact_hash,
+        symbols: package.artifact.semantic.symbols.clone(),
+    })
+}
+
+pub fn representative_checked_core_fixtures(
+) -> Result<Vec<CheckedCoreFixture>, CheckedCorePackageError> {
+    Ok(vec![CheckedCoreFixture {
+        name: "bool-nat-option-list-dictionary-effects".to_string(),
+        package: emit_checked_core_package(
+            fixture_header("bool_nat_option_list_dictionary_effects"),
+            CheckedCoreArtifactInputs {
+                semantic: representative_fixture_semantic_inputs(),
+                source_identity: BTreeMap::new(),
+                annotations: BTreeMap::new(),
+            },
+        )?,
+    }])
+}
+
+fn validate_header(header: &CheckedCorePackageHeader) -> Result<(), CheckedCorePackageError> {
+    if header.package_kind != CHECKED_CORE_PACKAGE_KIND {
+        return Err(CheckedCorePackageError::UnsupportedPackageKind {
+            found: header.package_kind.clone(),
+        });
+    }
+    match header.version {
+        Some(CHECKED_CORE_SCHEMA_VERSION) => {}
+        Some(found) => return Err(CheckedCorePackageError::UnsupportedVersion { found }),
+        None => return Err(CheckedCorePackageError::MissingVersion),
+    }
+    for (field, value) in [
+        ("producer", &header.producer),
+        ("kernel_ref", &header.kernel_ref),
+        ("spec_ref", &header.spec_ref),
+        ("primitive_registry_ref", &header.primitive_registry_ref),
+    ] {
+        if value.is_empty() {
+            return Err(CheckedCorePackageError::EmptyHeaderField { field });
+        }
+    }
+    Ok(())
+}
+
+fn validate_semantic_contract(
+    semantic: &CheckedCoreSemanticInputs,
+) -> Result<(), CheckedCorePackageError> {
+    for (section, symbol) in semantic_symbol_references(semantic) {
+        if !semantic.symbols.contains(&symbol) {
+            return Err(CheckedCorePackageError::MissingSymbol { section, symbol });
+        }
+    }
+
+    for symbol in compiler_relevant_symbols(semantic) {
+        if !semantic.lowerability.contains_key(&symbol) {
+            return Err(CheckedCorePackageError::MissingLowerability { symbol });
+        }
+    }
+
+    for symbol in semantic.unsupported.keys() {
+        match semantic.lowerability.get(symbol) {
+            Some(status) if status.blocks_lowering() => {}
+            _ => {
+                return Err(CheckedCorePackageError::UnsupportedEntryNotBlocking {
+                    symbol: symbol.clone(),
+                })
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn materialize_emitter_completeness(semantic: &mut CheckedCoreSemanticInputs) {
+    for (_, symbol) in semantic_symbol_references(semantic) {
+        semantic.symbols.insert(symbol);
+    }
+
+    for symbol in compiler_relevant_symbols(semantic) {
+        semantic.symbols.insert(symbol.clone());
+        semantic.lowerability.entry(symbol.clone()).or_insert_with(|| {
+            let reason = format!(
+                "NC4 emitter has no compiler-relevant metadata for {symbol}; explicit unsupported entry materialized instead of omitting it"
+            );
+            semantic
+                .unsupported
+                .entry(symbol.clone())
+                .or_insert_with(|| reason.as_bytes().to_vec());
+            LowerabilityStatus::Unsupported { reason }
+        });
+    }
+}
+
+fn compiler_relevant_symbols(semantic: &CheckedCoreSemanticInputs) -> BTreeSet<StableSymbol> {
+    let mut symbols = BTreeSet::new();
+    symbols.extend(semantic.declarations.keys().cloned());
+    symbols.extend(semantic.primitive_refs.keys().cloned());
+    symbols.extend(semantic.primitive_metadata.keys().cloned());
+    symbols.extend(semantic.data_metadata.keys().cloned());
+    for meta in semantic.data_metadata.values() {
+        for ctor in &meta.constructors {
+            symbols.insert(ctor.symbol.clone());
+        }
+    }
+    symbols.extend(semantic.record_sigma_metadata.keys().cloned());
+    symbols.extend(semantic.class_instance_metadata.keys().cloned());
+    symbols.extend(semantic.recursion_metadata.keys().cloned());
+    for meta in semantic.recursion_metadata.values() {
+        symbols.extend(meta.group_members.iter().cloned());
+    }
+    symbols.extend(semantic.effects_foreign_metadata.keys().cloned());
+    symbols
+}
+
+fn semantic_symbol_references(
+    semantic: &CheckedCoreSemanticInputs,
+) -> Vec<(&'static str, StableSymbol)> {
+    let mut refs = Vec::new();
+    refs.extend(
+        semantic
+            .declarations
+            .keys()
+            .cloned()
+            .map(|symbol| ("declarations", symbol)),
+    );
+    refs.extend(
+        semantic
+            .primitive_refs
+            .keys()
+            .cloned()
+            .map(|symbol| ("primitive_refs", symbol)),
+    );
+    refs.extend(
+        semantic
+            .primitive_metadata
+            .keys()
+            .cloned()
+            .map(|symbol| ("primitive_metadata", symbol)),
+    );
+    for (symbol, meta) in &semantic.primitive_metadata {
+        refs.push(("primitive_metadata", symbol.clone()));
+        match &meta.partiality {
+            PartialityMetadata::Total => {}
+            PartialityMetadata::CheckedPartial { obligation } => {
+                refs.push(("primitive_metadata.partiality", obligation.clone()));
+            }
+            PartialityMetadata::TrustedPartial { assumption } => {
+                refs.push(("primitive_metadata.partiality", assumption.clone()));
+            }
+        }
+    }
+    for (symbol, meta) in &semantic.data_metadata {
+        refs.push(("data_metadata", symbol.clone()));
+        for ctor in &meta.constructors {
+            refs.push(("data_metadata.constructors", ctor.symbol.clone()));
+        }
+    }
+    for (symbol, meta) in &semantic.record_sigma_metadata {
+        refs.push(("record_sigma_metadata", symbol.clone()));
+        for field in &meta.fields {
+            refs.push(("record_sigma_metadata.fields", field.ty.clone()));
+        }
+    }
+    for (symbol, meta) in &semantic.class_instance_metadata {
+        refs.push(("class_instance_metadata", symbol.clone()));
+        if let Some(class_symbol) = &meta.class_symbol {
+            refs.push(("class_instance_metadata.class", class_symbol.clone()));
+        }
+        if let Some(dictionary_symbol) = &meta.dictionary_symbol {
+            refs.push((
+                "class_instance_metadata.dictionary",
+                dictionary_symbol.clone(),
+            ));
+        }
+        if let Some(head_symbol) = &meta.head_symbol {
+            refs.push(("class_instance_metadata.head", head_symbol.clone()));
+        }
+    }
+    for (symbol, meta) in &semantic.recursion_metadata {
+        refs.push(("recursion_metadata", symbol.clone()));
+        for member in &meta.group_members {
+            refs.push(("recursion_metadata.group_members", member.clone()));
+        }
+    }
+    for (symbol, meta) in &semantic.effects_foreign_metadata {
+        refs.push(("effects_foreign_metadata", symbol.clone()));
+        for capability in &meta.capabilities {
+            refs.push(("effects_foreign_metadata.capabilities", capability.clone()));
+        }
+        for runtime_check in &meta.runtime_checks {
+            refs.push((
+                "effects_foreign_metadata.runtime_checks",
+                runtime_check.clone(),
+            ));
+        }
+    }
+    for (symbol, meta) in &semantic.obligation_metadata {
+        refs.push(("obligation_metadata", symbol.clone()));
+        refs.push(("obligation_metadata.origin", meta.origin.clone()));
+    }
+    for (symbol, meta) in &semantic.assumption_trust_metadata {
+        refs.push(("assumption_trust_metadata", symbol.clone()));
+        refs.push(("assumption_trust_metadata.target", meta.target.clone()));
+    }
+    refs.extend(
+        semantic
+            .obligations
+            .keys()
+            .cloned()
+            .map(|symbol| ("obligations", symbol)),
+    );
+    refs.extend(
+        semantic
+            .assumptions
+            .keys()
+            .cloned()
+            .map(|symbol| ("assumptions", symbol)),
+    );
+    refs.extend(
+        semantic
+            .trusted_base_delta
+            .keys()
+            .cloned()
+            .map(|symbol| ("trusted_base_delta", symbol)),
+    );
+    refs.extend(
+        semantic
+            .dependency_semantic_hashes
+            .keys()
+            .cloned()
+            .map(|symbol| ("dependency_semantic_hashes", symbol)),
+    );
+    refs.extend(
+        semantic
+            .unsupported
+            .keys()
+            .cloned()
+            .map(|symbol| ("unsupported", symbol)),
+    );
+    refs.extend(
+        semantic
+            .lowerability
+            .keys()
+            .cloned()
+            .map(|symbol| ("lowerability", symbol)),
+    );
+    refs
+}
+
+fn package_artifact_fingerprint(
+    header: &CheckedCorePackageHeader,
+    artifact: &CheckedCoreArtifactInputs,
+    core_semantic_hash: u64,
+) -> u64 {
+    fingerprint(&canonical_package_envelope_bytes(
+        header,
+        artifact,
+        core_semantic_hash,
+    ))
+}
+
+fn canonical_package_bytes(
+    header: &CheckedCorePackageHeader,
+    artifact: &CheckedCoreArtifactInputs,
+    core_semantic_hash: u64,
+    artifact_hash: u64,
+) -> Vec<u8> {
+    let mut out = CanonicalSink::new();
+    out.bytes(&canonical_package_envelope_bytes(
+        header,
+        artifact,
+        core_semantic_hash,
+    ));
+    out.tag("artifact_hash");
+    out.u64(artifact_hash);
+    out.finish()
+}
+
+fn canonical_package_envelope_bytes(
+    header: &CheckedCorePackageHeader,
+    artifact: &CheckedCoreArtifactInputs,
+    core_semantic_hash: u64,
+) -> Vec<u8> {
+    let mut out = CanonicalSink::new();
+    out.tag("CheckedCorePackageEnvelope");
+    encode_package_header(header, &mut out);
+    out.tag("core_semantic_hash");
+    out.u64(core_semantic_hash);
+    out.bytes(&canonical_artifact_bytes(artifact));
+    out.finish()
+}
+
+fn encode_package_header(header: &CheckedCorePackageHeader, out: &mut CanonicalSink) {
+    out.tag("header");
+    out.str(&header.package_kind);
+    match header.version {
+        Some(version) => {
+            out.tag("version_some");
+            out.u64(u64::from(version));
+        }
+        None => out.tag("version_none"),
+    }
+    out.str(&header.producer);
+    out.str(&header.kernel_ref);
+    out.str(&header.spec_ref);
+    out.str(&header.primitive_registry_ref);
+    header.package_identity.encode(out);
+    encode_string_map(
+        "dependency_semantic_hashes",
+        &header.dependency_semantic_hashes,
+        out,
+    );
+}
+
+fn fixture_header(name: &str) -> CheckedCorePackageHeader {
+    CheckedCorePackageHeader::v0(
+        "ken-elaborator:checked-core-emitter",
+        "ken-kernel:current",
+        "spec/40-runtime/46-checked-core-package.md:v0",
+        "spec/10-kernel/18a-primitive-registry.md:current",
+        StableSymbol::new(
+            SymbolNamespace::Module,
+            vec!["fixture".to_string(), name.to_string()],
+        ),
+    )
+}
+
+fn representative_fixture_semantic_inputs() -> CheckedCoreSemanticInputs {
+    let bool_ty = StableSymbol::declaration("fixture", &["Core"], "Bool");
+    let false_ctor = StableSymbol::constructor(&bool_ty, "False");
+    let true_ctor = StableSymbol::constructor(&bool_ty, "True");
+    let nat_ty = StableSymbol::declaration("fixture", &["Core"], "Nat");
+    let zero_ctor = StableSymbol::constructor(&nat_ty, "Zero");
+    let succ_ctor = StableSymbol::constructor(&nat_ty, "Succ");
+    let option_ty = StableSymbol::declaration("fixture", &["Core"], "Option");
+    let none_ctor = StableSymbol::constructor(&option_ty, "None");
+    let some_ctor = StableSymbol::constructor(&option_ty, "Some");
+    let list_ty = StableSymbol::declaration("fixture", &["Core"], "List");
+    let nil_ctor = StableSymbol::constructor(&list_ty, "Nil");
+    let cons_ctor = StableSymbol::constructor(&list_ty, "Cons");
+    let eq_class = StableSymbol::declaration("fixture", &["Classes"], "Eq");
+    let eq_bool_dict = StableSymbol::declaration("fixture", &["Classes"], "EqBoolDict");
+    let add_nat = StableSymbol::primitive("nat_add");
+    let append_group = StableSymbol::declaration("fixture", &["Core"], "List.append.group");
+    let effectful = StableSymbol::declaration("fixture", &["Effects"], "print_line");
+    let cap = StableSymbol::new(
+        SymbolNamespace::Metadata,
+        vec!["fixture".to_string(), "ConsoleCap".to_string()],
+    );
+
+    let mut inputs = CheckedCoreSemanticInputs::default();
+    for symbol in [
+        bool_ty.clone(),
+        false_ctor.clone(),
+        true_ctor.clone(),
+        nat_ty.clone(),
+        zero_ctor.clone(),
+        succ_ctor.clone(),
+        option_ty.clone(),
+        none_ctor.clone(),
+        some_ctor.clone(),
+        list_ty.clone(),
+        nil_ctor.clone(),
+        cons_ctor.clone(),
+        eq_class.clone(),
+        eq_bool_dict.clone(),
+        add_nat.clone(),
+        append_group.clone(),
+        effectful.clone(),
+        cap.clone(),
+    ] {
+        inputs.symbols.insert(symbol);
+    }
+
+    for symbol in [
+        bool_ty.clone(),
+        nat_ty.clone(),
+        option_ty.clone(),
+        list_ty.clone(),
+        eq_class.clone(),
+        eq_bool_dict.clone(),
+        append_group.clone(),
+        effectful.clone(),
+    ] {
+        inputs.declarations.insert(
+            symbol.clone(),
+            format!("checked-decl:{symbol}").into_bytes(),
+        );
+    }
+
+    inputs.data_metadata.insert(
+        bool_ty.clone(),
+        DataMetadata {
+            parameter_count: 0,
+            index_count: 0,
+            constructors: vec![
+                ConstructorMetadata {
+                    symbol: false_ctor.clone(),
+                    argument_count: 0,
+                    target_index_count: 0,
+                    recursive_positions: Vec::new(),
+                    lowerability: LowerabilityStatus::Supported,
+                },
+                ConstructorMetadata {
+                    symbol: true_ctor.clone(),
+                    argument_count: 0,
+                    target_index_count: 0,
+                    recursive_positions: Vec::new(),
+                    lowerability: LowerabilityStatus::Supported,
+                },
+            ],
+            eliminator: LowerabilityStatus::Supported,
+            lowerability: LowerabilityStatus::Supported,
+        },
+    );
+    inputs.data_metadata.insert(
+        nat_ty.clone(),
+        DataMetadata {
+            parameter_count: 0,
+            index_count: 0,
+            constructors: vec![
+                ConstructorMetadata {
+                    symbol: zero_ctor.clone(),
+                    argument_count: 0,
+                    target_index_count: 0,
+                    recursive_positions: Vec::new(),
+                    lowerability: LowerabilityStatus::Supported,
+                },
+                ConstructorMetadata {
+                    symbol: succ_ctor.clone(),
+                    argument_count: 1,
+                    target_index_count: 0,
+                    recursive_positions: vec![0],
+                    lowerability: LowerabilityStatus::Supported,
+                },
+            ],
+            eliminator: LowerabilityStatus::Supported,
+            lowerability: LowerabilityStatus::Supported,
+        },
+    );
+    inputs.data_metadata.insert(
+        option_ty.clone(),
+        DataMetadata {
+            parameter_count: 1,
+            index_count: 0,
+            constructors: vec![
+                ConstructorMetadata {
+                    symbol: none_ctor.clone(),
+                    argument_count: 0,
+                    target_index_count: 0,
+                    recursive_positions: Vec::new(),
+                    lowerability: LowerabilityStatus::Supported,
+                },
+                ConstructorMetadata {
+                    symbol: some_ctor.clone(),
+                    argument_count: 1,
+                    target_index_count: 0,
+                    recursive_positions: Vec::new(),
+                    lowerability: LowerabilityStatus::Supported,
+                },
+            ],
+            eliminator: LowerabilityStatus::Supported,
+            lowerability: LowerabilityStatus::Supported,
+        },
+    );
+    inputs.data_metadata.insert(
+        list_ty.clone(),
+        DataMetadata {
+            parameter_count: 1,
+            index_count: 0,
+            constructors: vec![
+                ConstructorMetadata {
+                    symbol: nil_ctor.clone(),
+                    argument_count: 0,
+                    target_index_count: 0,
+                    recursive_positions: Vec::new(),
+                    lowerability: LowerabilityStatus::Supported,
+                },
+                ConstructorMetadata {
+                    symbol: cons_ctor.clone(),
+                    argument_count: 2,
+                    target_index_count: 0,
+                    recursive_positions: vec![1],
+                    lowerability: LowerabilityStatus::Supported,
+                },
+            ],
+            eliminator: LowerabilityStatus::Supported,
+            lowerability: LowerabilityStatus::Supported,
+        },
+    );
+    inputs.class_instance_metadata.insert(
+        eq_bool_dict.clone(),
+        ClassInstanceMetadata {
+            kind: ClassInstanceKind::Dictionary,
+            class_symbol: Some(eq_class.clone()),
+            dictionary_symbol: Some(eq_bool_dict.clone()),
+            head_symbol: Some(bool_ty.clone()),
+            field_order: vec!["eq".to_string(), "refl".to_string()],
+            law_fields: BTreeSet::from(["refl".to_string()]),
+            lowerability: LowerabilityStatus::Supported,
+        },
+    );
+    inputs
+        .primitive_refs
+        .insert(add_nat.clone(), "primitive-registry:nat_add".to_string());
+    inputs.primitive_metadata.insert(
+        add_nat.clone(),
+        PrimitiveMetadata {
+            registry_symbol: "nat_add".to_string(),
+            reduction: PrimitiveReductionMetadata::Op,
+            partiality: PartialityMetadata::Total,
+            lowerability: LowerabilityStatus::Supported,
+        },
+    );
+    inputs.recursion_metadata.insert(
+        append_group.clone(),
+        RecursionMetadata {
+            group_members: vec![append_group.clone()],
+            admission: RecursionAdmission::AcceptedStructural,
+            scc_index: 0,
+            lowerability: LowerabilityStatus::Supported,
+        },
+    );
+    inputs.effects_foreign_metadata.insert(
+        effectful.clone(),
+        EffectsForeignMetadata {
+            declared_effects: BTreeSet::from(["Console".to_string()]),
+            capabilities: BTreeSet::from([cap.clone()]),
+            foreign_symbol: None,
+            boundary: EffectBoundary::Effectful,
+            runtime_checks: BTreeSet::new(),
+            lowerability: LowerabilityStatus::Supported,
+        },
+    );
+
+    for symbol in compiler_relevant_symbols(&inputs) {
+        inputs
+            .lowerability
+            .insert(symbol, LowerabilityStatus::Supported);
+    }
+
+    inputs
 }
 
 fn encode_decl(
@@ -1631,5 +2376,167 @@ mod tests {
         );
 
         assert!(!canonical_semantic_bytes(&inputs).is_empty());
+    }
+
+    #[test]
+    fn emitter_adds_v0_schema_hashes_and_validates_representative_fixtures() {
+        let fixtures = representative_checked_core_fixtures().unwrap();
+
+        assert_eq!(fixtures.len(), 1);
+        for fixture in fixtures {
+            assert_eq!(
+                fixture.package.header.version,
+                Some(CHECKED_CORE_SCHEMA_VERSION)
+            );
+            assert_eq!(
+                fixture.package.header.package_kind,
+                CHECKED_CORE_PACKAGE_KIND
+            );
+            validate_checked_core_package(&fixture.package).unwrap();
+            assert!(!fixture.package.canonical_bytes().is_empty());
+        }
+    }
+
+    #[test]
+    fn validator_rejects_missing_or_unsupported_artifact_versions() {
+        let mut package = representative_checked_core_fixtures()
+            .unwrap()
+            .pop()
+            .unwrap()
+            .package;
+
+        package.header.version = Some(CHECKED_CORE_SCHEMA_VERSION + 1);
+        assert_eq!(
+            validate_checked_core_package(&package).unwrap_err(),
+            CheckedCorePackageError::UnsupportedVersion {
+                found: CHECKED_CORE_SCHEMA_VERSION + 1,
+            }
+        );
+
+        package.header.version = None;
+        assert_eq!(
+            validate_checked_core_package(&package).unwrap_err(),
+            CheckedCorePackageError::MissingVersion
+        );
+    }
+
+    #[test]
+    fn emitter_materializes_missing_compiler_metadata_as_unsupported() {
+        let f = decl_symbol("stage_gap");
+        let mut semantic = CheckedCoreSemanticInputs::default();
+        semantic.symbols.insert(f.clone());
+        semantic
+            .declarations
+            .insert(f.clone(), b"checked-core".to_vec());
+
+        let package = emit_checked_core_package(
+            fixture_header("stage_gap"),
+            CheckedCoreArtifactInputs {
+                semantic,
+                source_identity: BTreeMap::new(),
+                annotations: BTreeMap::new(),
+            },
+        )
+        .unwrap();
+
+        assert!(
+            package.artifact.semantic.unsupported.contains_key(&f),
+            "the emitter must materialize a loud unsupported entry, not omit compiler metadata"
+        );
+        assert!(matches!(
+            package.artifact.semantic.lowerability.get(&f),
+            Some(LowerabilityStatus::Unsupported { .. })
+        ));
+
+        let err = consume_checked_core_package_for_target(&package, [&f]).unwrap_err();
+        assert!(
+            matches!(err, CheckedCorePackageError::LoweringReadiness(_)),
+            "target consumption must fail before erasure/runtime IR when closure reaches the unsupported entry"
+        );
+    }
+
+    #[test]
+    fn package_consumer_uses_artifact_without_surface_source() {
+        let mut fixture = representative_checked_core_fixtures()
+            .unwrap()
+            .pop()
+            .unwrap()
+            .package;
+        fixture.artifact.source_identity.clear();
+        fixture.artifact.annotations.clear();
+        fixture.core_semantic_hash = semantic_fingerprint(&fixture.artifact.semantic);
+        fixture.artifact_hash = package_artifact_fingerprint(
+            &fixture.header,
+            &fixture.artifact,
+            fixture.core_semantic_hash,
+        );
+
+        let target = StableSymbol::declaration("fixture", &["Core"], "Bool");
+        let consumed = consume_checked_core_package_for_target(&fixture, [&target]).unwrap();
+
+        assert_eq!(consumed.core_semantic_hash, fixture.core_semantic_hash);
+        assert!(
+            consumed.symbols.contains(&target),
+            "consume path should read the checked-core artifact symbol table, not surface source"
+        );
+    }
+
+    #[test]
+    fn validator_rejects_semantic_and_artifact_hash_mismatches() {
+        let mut package = representative_checked_core_fixtures()
+            .unwrap()
+            .pop()
+            .unwrap()
+            .package;
+        let bool_ty = StableSymbol::declaration("fixture", &["Core"], "Bool");
+        package
+            .artifact
+            .semantic
+            .declarations
+            .insert(bool_ty, b"tampered".to_vec());
+
+        assert!(matches!(
+            validate_checked_core_package(&package),
+            Err(CheckedCorePackageError::SemanticHashMismatch { .. })
+        ));
+
+        let mut package = representative_checked_core_fixtures()
+            .unwrap()
+            .pop()
+            .unwrap()
+            .package;
+        package.artifact.annotations.insert(
+            "diagnostic.display".to_string(),
+            b"changed envelope only".to_vec(),
+        );
+        assert!(matches!(
+            validate_checked_core_package(&package),
+            Err(CheckedCorePackageError::ArtifactHashMismatch { .. })
+        ));
+    }
+
+    #[test]
+    fn validator_rejects_orphan_metadata_after_emission() {
+        let mut package = representative_checked_core_fixtures()
+            .unwrap()
+            .pop()
+            .unwrap()
+            .package;
+        let add = StableSymbol::primitive("nat_add");
+        package.artifact.semantic.symbols.remove(&add);
+        package.core_semantic_hash = semantic_fingerprint(&package.artifact.semantic);
+        package.artifact_hash = package_artifact_fingerprint(
+            &package.header,
+            &package.artifact,
+            package.core_semantic_hash,
+        );
+
+        assert_eq!(
+            validate_checked_core_package(&package).unwrap_err(),
+            CheckedCorePackageError::MissingSymbol {
+                section: "primitive_refs",
+                symbol: add,
+            }
+        );
     }
 }
