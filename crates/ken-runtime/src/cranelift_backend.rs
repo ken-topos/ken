@@ -1680,6 +1680,43 @@ mod tests {
     }
 
     #[test]
+    fn nc8_certificate_rejects_top_level_var_example() {
+        let mut program =
+            seed_program_with_lowerability(Some(RuntimeLowerabilityStatus::Supported));
+        program.examples = vec![RuntimeExample {
+            name: "top-level-var".to_string(),
+            checked_core_shape: "diagnostic label only".to_string(),
+            ir: RuntimeExpr::Var(0),
+            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int(0)),
+        }];
+        let certificate = RuntimeArtifactCertificate::supported_runtime_artifact_for(&program);
+
+        let err = validate_supported_runtime_artifact_certificate(&program, &certificate)
+            .expect_err("unbound var is outside the first NC8 validator");
+
+        assert_eq!(err.stage, RuntimeArtifactValidationStage::ClaimRecompute);
+        assert_eq!(err.fact, "all_runtime_expressions_supported");
+        assert!(err.reason.contains("Var"));
+    }
+
+    #[test]
+    fn nc8_certificate_rejects_var_in_reachable_transparent_declaration() {
+        let mut program =
+            seed_program_with_lowerability(Some(RuntimeLowerabilityStatus::Supported));
+        program.declarations[0].kind = RuntimeDeclarationKind::Transparent {
+            body: RuntimeExpr::Var(0),
+        };
+        let certificate = RuntimeArtifactCertificate::supported_runtime_artifact_for(&program);
+
+        let err = validate_supported_runtime_artifact_certificate(&program, &certificate)
+            .expect_err("transparent declaration var is outside the first NC8 validator");
+
+        assert_eq!(err.stage, RuntimeArtifactValidationStage::ClaimRecompute);
+        assert_eq!(err.fact, "all_runtime_expressions_supported");
+        assert!(err.reason.contains("Var"));
+    }
+
+    #[test]
     fn missing_lowerability_metadata_rejects_before_backend_lowering() {
         let program = seed_program_with_lowerability(None);
 

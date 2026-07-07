@@ -534,7 +534,7 @@ fn validate_runtime_expr(
 ) -> Result<(), RuntimeArtifactValidationError> {
     match expr {
         RuntimeExpr::Value(value) => validate_runtime_value(value, fact_subject),
-        RuntimeExpr::Var(_) => Ok(()),
+        RuntimeExpr::Var(_) => Err(unsupported_runtime_expr_error("Var", fact_subject)),
         RuntimeExpr::Let { .. } => Err(unsupported_runtime_expr_error("Let", fact_subject)),
         RuntimeExpr::If { .. } => Err(unsupported_runtime_expr_error("If", fact_subject)),
         RuntimeExpr::PrimitiveCall { primitive, args } => {
