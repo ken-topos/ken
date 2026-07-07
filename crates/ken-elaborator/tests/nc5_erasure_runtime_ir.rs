@@ -4,7 +4,10 @@ use ken_elaborator::checked_core::{
     ObligationStatus, PartialityMetadata, StableSymbol, SymbolNamespace,
 };
 use ken_elaborator::erasure::{erase_checked_core_package_for_target, ErasureError};
-use ken_runtime::{RuntimeDeclarationKind, RuntimePartiality};
+use ken_runtime::{
+    RuntimeAssumptionTrustKind, RuntimeDeclarationKind, RuntimeEffectBoundary,
+    RuntimeLowerabilityStatus, RuntimeObligationStatus, RuntimePartiality,
+};
 
 fn fixture_package() -> CheckedCorePackage {
     representative_checked_core_fixtures()
@@ -36,6 +39,7 @@ fn reemit(mut package: CheckedCorePackage) -> CheckedCorePackage {
 fn erasure_consumes_package_only_and_preserves_metadata() {
     let mut package = fixture_package();
     let target = symbol("decl:fixture::Effects::print_line");
+    let non_target_blocker = symbol("decl:fixture::Core::Bool");
     let obligation = StableSymbol::obligation("print_line.runtime.0");
     let assumption = StableSymbol::assumption(&target, "console-authority");
 
@@ -72,6 +76,16 @@ fn erasure_consumes_package_only_and_preserves_metadata() {
         assumption.clone(),
         b"trusted base delta survives erasure".to_vec(),
     );
+    package.artifact.semantic.lowerability.insert(
+        non_target_blocker.clone(),
+        LowerabilityStatus::Unsupported {
+            reason: "non-target blocker remains auditable".to_string(),
+        },
+    );
+    package.artifact.semantic.unsupported.insert(
+        non_target_blocker.clone(),
+        b"non-target unsupported".to_vec(),
+    );
     package.artifact.source_identity.insert(
         "diagnostic-only".to_string(),
         "surface bytes ignored".to_string(),
@@ -98,6 +112,83 @@ fn erasure_consumes_package_only_and_preserves_metadata() {
         .metadata
         .trusted_base_delta
         .contains_key(&assumption.to_string()));
+    let obligation_audit = program
+        .erased_core
+        .metadata
+        .obligation_metadata
+        .get(&obligation.to_string())
+        .expect("obligation metadata survives");
+    assert_eq!(obligation_audit.status, RuntimeObligationStatus::Unknown);
+    assert_eq!(obligation_audit.origin, target.to_string());
+    assert!(obligation_audit.affects_runtime_meaning);
+
+    let assumption_audit = program
+        .erased_core
+        .metadata
+        .assumption_trust_metadata
+        .get(&assumption.to_string())
+        .expect("assumption/trust metadata survives");
+    assert_eq!(
+        assumption_audit.kind,
+        RuntimeAssumptionTrustKind::PrimitiveAssumption
+    );
+    assert_eq!(assumption_audit.target, target.to_string());
+    assert!(assumption_audit.affects_runtime_meaning);
+
+    assert!(matches!(
+        program
+            .erased_core
+            .metadata
+            .lowerability
+            .get(&target.to_string()),
+        Some(RuntimeLowerabilityStatus::Supported)
+    ));
+    assert!(matches!(
+        program
+            .erased_core
+            .metadata
+            .lowerability
+            .get(&non_target_blocker.to_string()),
+        Some(RuntimeLowerabilityStatus::Unsupported { reason })
+            if reason == "non-target blocker remains auditable"
+    ));
+    assert_eq!(
+        program
+            .erased_core
+            .metadata
+            .unsupported
+            .get(&non_target_blocker.to_string()),
+        Some(&b"non-target unsupported".to_vec())
+    );
+    let symbol_audit = &program.declarations[0].metadata;
+    assert_eq!(
+        symbol_audit
+            .obligation_metadata
+            .get(&obligation.to_string()),
+        Some(obligation_audit)
+    );
+    assert_eq!(
+        symbol_audit
+            .assumption_trust_metadata
+            .get(&assumption.to_string()),
+        Some(assumption_audit)
+    );
+    assert!(matches!(
+        symbol_audit.lowerability,
+        Some(RuntimeLowerabilityStatus::Supported)
+    ));
+
+    let effect_audit = program
+        .erased_core
+        .metadata
+        .checked_core
+        .effects_foreign_metadata
+        .get(&target.to_string())
+        .expect("effects/foreign metadata lane survives");
+    assert_eq!(effect_audit.boundary, RuntimeEffectBoundary::Effectful);
+    assert!(effect_audit
+        .capabilities
+        .contains("meta:fixture::ConsoleCap"));
     assert!(
         !program.erased_core.metadata.effects.is_empty(),
         "effect metadata survives as IR metadata"

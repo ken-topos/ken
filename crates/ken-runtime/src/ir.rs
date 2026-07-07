@@ -33,12 +33,180 @@ pub struct ErasedExecutableCore {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RuntimeMetadata {
     pub obligations: BTreeMap<RuntimeSymbol, Vec<u8>>,
+    pub obligation_metadata: BTreeMap<RuntimeSymbol, RuntimeObligationMetadata>,
     pub assumptions: BTreeMap<RuntimeSymbol, Vec<u8>>,
+    pub assumption_trust_metadata: BTreeMap<RuntimeSymbol, RuntimeAssumptionTrustMetadata>,
     pub trusted_base_delta: BTreeMap<RuntimeSymbol, Vec<u8>>,
     pub dependency_semantic_hashes: BTreeMap<RuntimeSymbol, String>,
+    pub lowerability: BTreeMap<RuntimeSymbol, RuntimeLowerabilityStatus>,
+    pub unsupported: BTreeMap<RuntimeSymbol, Vec<u8>>,
+    pub checked_core: RuntimeCheckedCoreMetadata,
     pub runtime_checks: BTreeSet<RuntimeSymbol>,
     pub capabilities: BTreeSet<RuntimeSymbol>,
     pub effects: BTreeSet<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RuntimeObligationMetadata {
+    pub status: RuntimeObligationStatus,
+    pub origin: RuntimeSymbol,
+    pub affects_runtime_meaning: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RuntimeObligationStatus {
+    Proved,
+    Tested,
+    Delegated,
+    Unknown,
+    Disproved,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RuntimeAssumptionTrustMetadata {
+    pub kind: RuntimeAssumptionTrustKind,
+    pub target: RuntimeSymbol,
+    pub affects_runtime_meaning: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RuntimeAssumptionTrustKind {
+    Postulate,
+    Hole,
+    Foreign,
+    Declassify,
+    PrimitiveAssumption,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RuntimeLowerabilityStatus {
+    Supported,
+    Unsupported { reason: String },
+    Deferred { later_stage: String, reason: String },
+    RequiresFeature { feature: String, reason: String },
+    Explicit { state: String, reason: String },
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct RuntimeCheckedCoreMetadata {
+    pub primitive_metadata: BTreeMap<RuntimeSymbol, RuntimePrimitiveAuditMetadata>,
+    pub data_metadata: BTreeMap<RuntimeSymbol, RuntimeDataAuditMetadata>,
+    pub record_sigma_metadata: BTreeMap<RuntimeSymbol, RuntimeRecordSigmaAuditMetadata>,
+    pub class_instance_metadata: BTreeMap<RuntimeSymbol, RuntimeClassInstanceAuditMetadata>,
+    pub recursion_metadata: BTreeMap<RuntimeSymbol, RuntimeRecursionAuditMetadata>,
+    pub effects_foreign_metadata: BTreeMap<RuntimeSymbol, RuntimeEffectsForeignAuditMetadata>,
+    pub metadata: BTreeMap<RuntimeSymbol, Vec<u8>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RuntimePrimitiveAuditMetadata {
+    pub registry_symbol: String,
+    pub reduction: RuntimePrimitiveReductionMetadata,
+    pub partiality: RuntimePartialityMetadata,
+    pub lowerability: RuntimeLowerabilityStatus,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RuntimePrimitiveReductionMetadata {
+    OpaqueType,
+    Literal,
+    Op,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RuntimePartialityMetadata {
+    Total,
+    CheckedPartial { obligation: RuntimeSymbol },
+    TrustedPartial { assumption: RuntimeSymbol },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RuntimeDataAuditMetadata {
+    pub parameter_count: usize,
+    pub index_count: usize,
+    pub constructors: Vec<RuntimeConstructorAuditMetadata>,
+    pub eliminator: RuntimeLowerabilityStatus,
+    pub lowerability: RuntimeLowerabilityStatus,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RuntimeConstructorAuditMetadata {
+    pub symbol: RuntimeSymbol,
+    pub argument_count: usize,
+    pub target_index_count: usize,
+    pub recursive_positions: Vec<usize>,
+    pub lowerability: RuntimeLowerabilityStatus,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RuntimeRecordSigmaAuditMetadata {
+    pub kind: RuntimeRecordSigmaKind,
+    pub fields: Vec<RuntimeFieldAuditMetadata>,
+    pub lowerability: RuntimeLowerabilityStatus,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RuntimeRecordSigmaKind {
+    Record,
+    Sigma,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RuntimeFieldAuditMetadata {
+    pub name: String,
+    pub ty: RuntimeSymbol,
+    pub runtime: RuntimeFieldStatus,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RuntimeClassInstanceAuditMetadata {
+    pub kind: RuntimeClassInstanceKind,
+    pub class_symbol: Option<RuntimeSymbol>,
+    pub dictionary_symbol: Option<RuntimeSymbol>,
+    pub head_symbol: Option<RuntimeSymbol>,
+    pub field_order: Vec<String>,
+    pub law_fields: BTreeSet<String>,
+    pub lowerability: RuntimeLowerabilityStatus,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RuntimeClassInstanceKind {
+    Class,
+    Instance,
+    Dictionary,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RuntimeRecursionAuditMetadata {
+    pub group_members: Vec<RuntimeSymbol>,
+    pub admission: RuntimeRecursionAdmission,
+    pub scc_index: usize,
+    pub lowerability: RuntimeLowerabilityStatus,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RuntimeRecursionAdmission {
+    NonRecursive,
+    AcceptedStructural,
+    AcceptedSizeChange,
+    Rejected,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RuntimeEffectsForeignAuditMetadata {
+    pub declared_effects: BTreeSet<String>,
+    pub capabilities: BTreeSet<RuntimeSymbol>,
+    pub foreign_symbol: Option<String>,
+    pub boundary: RuntimeEffectBoundary,
+    pub runtime_checks: BTreeSet<RuntimeSymbol>,
+    pub lowerability: RuntimeLowerabilityStatus,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RuntimeEffectBoundary {
+    Pure,
+    Effectful,
+    Foreign,
 }
 
 /// Runtime declaration lowered from a checked-core symbol.
@@ -75,8 +243,12 @@ pub enum RuntimeDeclarationKind {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RuntimeSymbolMetadata {
     pub obligations: BTreeSet<RuntimeSymbol>,
+    pub obligation_metadata: BTreeMap<RuntimeSymbol, RuntimeObligationMetadata>,
     pub assumptions: BTreeSet<RuntimeSymbol>,
+    pub assumption_trust_metadata: BTreeMap<RuntimeSymbol, RuntimeAssumptionTrustMetadata>,
     pub trusted_base_delta: BTreeSet<RuntimeSymbol>,
+    pub lowerability: Option<RuntimeLowerabilityStatus>,
+    pub unsupported: Option<Vec<u8>>,
     pub runtime_checks: BTreeSet<RuntimeSymbol>,
     pub capabilities: BTreeSet<RuntimeSymbol>,
     pub effects: BTreeSet<String>,
@@ -86,8 +258,12 @@ impl RuntimeSymbolMetadata {
     pub fn empty() -> Self {
         Self {
             obligations: BTreeSet::new(),
+            obligation_metadata: BTreeMap::new(),
             assumptions: BTreeSet::new(),
+            assumption_trust_metadata: BTreeMap::new(),
             trusted_base_delta: BTreeSet::new(),
+            lowerability: None,
+            unsupported: None,
             runtime_checks: BTreeSet::new(),
             capabilities: BTreeSet::new(),
             effects: BTreeSet::new(),

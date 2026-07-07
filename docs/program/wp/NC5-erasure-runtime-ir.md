@@ -47,6 +47,10 @@ the semantic authority.
   meaning.
 - Lowerability blockers, reachable unsupported entries, foreign boundaries, and
   runtime metadata gaps reject before backend work.
+- Runtime artifacts preserve auditable checked-core metadata, including
+  obligation status/origin/runtime-impact, assumption/trust kind/target/runtime
+  impact, lowerability/unsupported status, and the checked-core semantic
+  metadata lanes present in the package.
 - Runtime IR contains explicit primitives, traps, closures, ADTs, records,
   effects, and calls, but no Cranelift, ABI, object-format, native layout, or
   pointer-identity surface.
