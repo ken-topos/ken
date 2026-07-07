@@ -4,7 +4,7 @@
 //! deliberately below the native/backend boundary: evaluator success is only a
 //! runtime-IR observation, not kernel evidence, source-semantics proof, native
 //! validation, Cranelift validation, object validation, linker validation, or
-//! broader NC8/NC9 evidence.
+//! broader artifact-validation evidence.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -151,7 +151,7 @@ impl RuntimeIrSeedEnvironment {
         }
     }
 
-    pub fn nc5_seed() -> Self {
+    pub fn closure_capture_seed() -> Self {
         let mut values = BTreeMap::new();
         values.insert(
             "decl:fixture::Local::y".to_string(),
