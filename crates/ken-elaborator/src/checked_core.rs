@@ -276,6 +276,7 @@ pub enum CheckedCorePackageError {
     UnsupportedEntryNotBlocking {
         symbol: StableSymbol,
     },
+    DependencySemanticHashesMismatch,
     SemanticHashMismatch {
         expected: u64,
         actual: u64,
@@ -311,6 +312,10 @@ impl fmt::Display for CheckedCorePackageError {
             CheckedCorePackageError::UnsupportedEntryNotBlocking { symbol } => write!(
                 f,
                 "unsupported entry for {symbol} must also have blocking lowerability"
+            ),
+            CheckedCorePackageError::DependencySemanticHashesMismatch => write!(
+                f,
+                "header dependency semantic hashes must match semantic dependency hashes"
             ),
             CheckedCorePackageError::SemanticHashMismatch { expected, actual } => write!(
                 f,
@@ -695,6 +700,7 @@ pub fn validate_checked_core_package(
 ) -> Result<(), CheckedCorePackageError> {
     validate_header(&package.header)?;
     validate_semantic_contract(&package.artifact.semantic)?;
+    validate_dependency_hash_lane_coherence(package)?;
 
     let expected_semantic = semantic_fingerprint(&package.artifact.semantic);
     if package.core_semantic_hash != expected_semantic {
@@ -716,6 +722,17 @@ pub fn validate_checked_core_package(
         });
     }
 
+    Ok(())
+}
+
+fn validate_dependency_hash_lane_coherence(
+    package: &CheckedCorePackage,
+) -> Result<(), CheckedCorePackageError> {
+    if package.header.dependency_semantic_hashes
+        != package.artifact.semantic.dependency_semantic_hashes
+    {
+        return Err(CheckedCorePackageError::DependencySemanticHashesMismatch);
+    }
     Ok(())
 }
 
@@ -2497,6 +2514,41 @@ mod tests {
         assert_eq!(
             validate_checked_core_package(&package).unwrap_err(),
             CheckedCorePackageError::UnsupportedEntryNotBlocking { symbol: bool_ty },
+        );
+    }
+
+    #[test]
+    fn validator_rejects_dependency_hash_lane_mismatch_after_hash_recompute() {
+        let mut package = representative_checked_core_fixtures()
+            .unwrap()
+            .pop()
+            .unwrap()
+            .package;
+        let dependency = StableSymbol::new(
+            SymbolNamespace::Dependency,
+            vec!["dep-pkg".to_string(), "checked-core".to_string()],
+        );
+        package.artifact.semantic.symbols.insert(dependency.clone());
+        package
+            .artifact
+            .semantic
+            .dependency_semantic_hashes
+            .insert(dependency.clone(), "sha256:semantic-lane".to_string());
+        package
+            .header
+            .dependency_semantic_hashes
+            .insert(dependency, "sha256:header-lane".to_string());
+        package.core_semantic_hash = semantic_fingerprint(&package.artifact.semantic);
+        package.artifact_hash = package_artifact_fingerprint(
+            &package.header,
+            &package.artifact,
+            package.core_semantic_hash,
+        );
+
+        assert_eq!(
+            validate_checked_core_package(&package).unwrap_err(),
+            CheckedCorePackageError::DependencySemanticHashesMismatch,
+            "hash recomputation must not hide disagreement between header and semantic dependency closures"
         );
     }
 

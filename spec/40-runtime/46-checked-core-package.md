@@ -51,6 +51,11 @@ unsupported or missing versions, checks stable-symbol closure for package
 sections, recomputes the hashes, and enforces that compiler-relevant symbols
 have explicit lowerability metadata.
 
+The header `dependency_semantic_hashes` and the semantic
+`dependency_semantic_hashes` input are the same dependency closure, recorded in
+both lanes for envelope inspection and semantic hashing. A validator must reject
+packages where those maps differ.
+
 If the current emitter cannot populate compiler-relevant metadata for a checked
 symbol, it must materialize an explicit blocking unsupported entry and
 lowerability status instead of silently omitting the field. A target consumer
