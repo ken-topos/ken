@@ -10,6 +10,11 @@ rust-version.workspace = true
 description = "Runtime crate — production content-addressed value store (K3)"
 
 [dependencies]
+cranelift-codegen = "0.113.1"
+cranelift-frontend = "0.113.1"
+cranelift-jit = "0.113.1"
+cranelift-module = "0.113.1"
+cranelift-native = "0.113.1"
 unicode-normalization = "0.1"
 
 [dev-dependencies]
