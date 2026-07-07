@@ -37,14 +37,95 @@ pub struct NativeTrustReport {
     pub backend: &'static str,
     pub fidelity: NativeFidelity,
     pub verifier_passed: bool,
+    pub toolchain: NativeToolchainReport,
+    pub evidence: NativeRunEvidence,
     pub assumptions: BTreeSet<String>,
     pub unsupported: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NativeToolchainReport {
+    pub cranelift: NativeEvidenceFact,
+    pub linker: NativeEvidenceFact,
+    pub runtime: NativeEvidenceFact,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum NativeEvidenceFact {
+    Available {
+        value: String,
+        evidence_source: String,
+    },
+    Unavailable {
+        reason: String,
+    },
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct NativeRunEvidence {
+    pub package_identity: Option<String>,
+    pub core_semantic_hash: Option<u64>,
+    pub runtime_artifact_hash: Option<u64>,
+    pub evidence_sources: BTreeMap<String, String>,
+    pub unavailable: BTreeSet<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct InterpreterOracleObservation {
+    pub artifact: NativeArtifactIdentity,
+    pub observation: RuntimeObservation,
+    pub evidence_source: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NativeDifferentialReport {
+    pub example: String,
+    pub artifact: NativeArtifactIdentity,
+    pub oracle: InterpreterOracleObservation,
+    pub native: Option<CraneliftRunReport>,
+    pub verdict: NativeDifferentialVerdict,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NativeArtifactIdentity {
+    pub package_identity: String,
+    pub core_semantic_hash: u64,
+    pub runtime_artifact_hash: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum NativeDifferentialVerdict {
+    F1InterpreterAgreement {
+        stage: NativeDifferentialStage,
+    },
+    Unsupported {
+        stage: NativeDifferentialStage,
+        construct: &'static str,
+        reason: String,
+    },
+    Mismatch {
+        stage: NativeDifferentialStage,
+        interpreter: RuntimeObservation,
+        native: RuntimeObservation,
+    },
+    BackendFailure {
+        stage: NativeDifferentialStage,
+        reason: String,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum NativeDifferentialStage {
+    BoundaryPreflight,
+    NativeLoweringOrExecution,
+    InterpreterNativeCompare,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum NativeFidelity {
     F0NativeExample,
     F1SeedObservationAgreement,
+    F1InterpreterDifferentialAgreement,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -133,6 +214,58 @@ pub fn run_nc6_seed_examples(
         .iter()
         .map(|example| run_example_with_seed_observation(example, &env))
         .collect()
+}
+
+pub fn run_example_with_interpreter_observation(
+    program: &RuntimeProgram,
+    example: &RuntimeExample,
+    env: &NativeSeedEnvironment,
+    oracle: InterpreterOracleObservation,
+) -> NativeDifferentialReport {
+    let artifact = NativeArtifactIdentity::from_program(program);
+
+    if oracle.artifact != artifact {
+        return oracle_identity_mismatch_report(example, artifact, oracle);
+    }
+
+    if let Err(err) = reject_program_blockers(program) {
+        return differential_error_report(example, artifact, oracle, err, true);
+    }
+
+    match run_example_native(
+        example,
+        env,
+        NativeFidelity::F0NativeExample,
+        NativeRunEvidence::from_program(program),
+    ) {
+        Ok(mut native) => {
+            if native.observation == oracle.observation {
+                native.trust.fidelity = NativeFidelity::F1InterpreterDifferentialAgreement;
+                NativeDifferentialReport {
+                    example: example.name.clone(),
+                    artifact,
+                    oracle,
+                    native: Some(native),
+                    verdict: NativeDifferentialVerdict::F1InterpreterAgreement {
+                        stage: NativeDifferentialStage::InterpreterNativeCompare,
+                    },
+                }
+            } else {
+                NativeDifferentialReport {
+                    example: example.name.clone(),
+                    artifact,
+                    verdict: NativeDifferentialVerdict::Mismatch {
+                        stage: NativeDifferentialStage::InterpreterNativeCompare,
+                        interpreter: oracle.observation.clone(),
+                        native: native.observation.clone(),
+                    },
+                    oracle,
+                    native: Some(native),
+                }
+            }
+        }
+        Err(err) => differential_error_report(example, artifact, oracle, err, false),
+    }
 }
 
 pub fn reject_program_blockers(program: &RuntimeProgram) -> Result<(), CraneliftBackendError> {
@@ -282,16 +415,29 @@ pub fn run_example_with_seed_observation(
     example: &RuntimeExample,
     env: &NativeSeedEnvironment,
 ) -> Result<CraneliftRunReport, CraneliftBackendError> {
+    let mut report = run_example_native(
+        example,
+        env,
+        NativeFidelity::F0NativeExample,
+        NativeRunEvidence::seed_example(),
+    )?;
+    if report.observation == example.observation {
+        report.trust.fidelity = NativeFidelity::F1SeedObservationAgreement;
+    }
+    Ok(report)
+}
+
+fn run_example_native(
+    example: &RuntimeExample,
+    env: &NativeSeedEnvironment,
+    fidelity: NativeFidelity,
+    evidence: NativeRunEvidence,
+) -> Result<CraneliftRunReport, CraneliftBackendError> {
     let compiled = compile_expr(&example.ir, env)?;
     let verifier_passed = compiled.verifier_passed;
     let assumptions = compiled.assumptions.clone();
     let unsupported = compiled.unsupported.clone();
     let (observation, native_returned) = compiled.run()?;
-    let fidelity = if observation == example.observation {
-        NativeFidelity::F1SeedObservationAgreement
-    } else {
-        NativeFidelity::F0NativeExample
-    };
     Ok(CraneliftRunReport {
         example: example.name.clone(),
         observation,
@@ -301,10 +447,134 @@ pub fn run_example_with_seed_observation(
             backend: "Cranelift JIT",
             fidelity,
             verifier_passed,
+            toolchain: native_toolchain_report(),
+            evidence,
             assumptions,
             unsupported,
         },
     })
+}
+
+impl NativeArtifactIdentity {
+    fn from_program(program: &RuntimeProgram) -> Self {
+        Self {
+            package_identity: program.package_identity.clone(),
+            core_semantic_hash: program.core_semantic_hash,
+            runtime_artifact_hash: program.artifact_hash,
+        }
+    }
+}
+
+impl NativeRunEvidence {
+    fn seed_example() -> Self {
+        let mut evidence = Self::default();
+        evidence.unavailable.insert(
+            "package/core/runtime artifact identity unavailable for standalone seed example"
+                .to_string(),
+        );
+        evidence.evidence_sources.insert(
+            "backend".to_string(),
+            "compiled Cranelift JIT run".to_string(),
+        );
+        evidence
+    }
+
+    fn from_program(program: &RuntimeProgram) -> Self {
+        let mut evidence = Self {
+            package_identity: Some(program.package_identity.clone()),
+            core_semantic_hash: Some(program.core_semantic_hash),
+            runtime_artifact_hash: Some(program.artifact_hash),
+            evidence_sources: BTreeMap::new(),
+            unavailable: BTreeSet::new(),
+        };
+        evidence.evidence_sources.insert(
+            "package_identity".to_string(),
+            "RuntimeProgram.package_identity from the exact runtime artifact".to_string(),
+        );
+        evidence.evidence_sources.insert(
+            "core_semantic_hash".to_string(),
+            "RuntimeProgram.core_semantic_hash from the exact runtime artifact".to_string(),
+        );
+        evidence.evidence_sources.insert(
+            "runtime_artifact_hash".to_string(),
+            "RuntimeProgram.artifact_hash from the exact runtime artifact".to_string(),
+        );
+        evidence.evidence_sources.insert(
+            "backend".to_string(),
+            "compiled Cranelift JIT run".to_string(),
+        );
+        evidence
+    }
+}
+
+fn native_toolchain_report() -> NativeToolchainReport {
+    NativeToolchainReport {
+        cranelift: NativeEvidenceFact::Unavailable {
+            reason: "Cranelift package/version fact is not captured from the exact run yet"
+                .to_string(),
+        },
+        linker: NativeEvidenceFact::Unavailable {
+            reason: "linker/finalizer fact is not captured from the exact run yet".to_string(),
+        },
+        runtime: NativeEvidenceFact::Available {
+            value: format!("ken-runtime {}", env!("CARGO_PKG_VERSION")),
+            evidence_source: "compiled ken-runtime crate version embedded by Cargo for this binary"
+                .to_string(),
+        },
+    }
+}
+
+fn oracle_identity_mismatch_report(
+    example: &RuntimeExample,
+    artifact: NativeArtifactIdentity,
+    oracle: InterpreterOracleObservation,
+) -> NativeDifferentialReport {
+    let reason = format!(
+        "oracle artifact identity {:?} does not match runtime artifact identity {:?}",
+        oracle.artifact, artifact
+    );
+    NativeDifferentialReport {
+        example: example.name.clone(),
+        artifact,
+        oracle,
+        native: None,
+        verdict: NativeDifferentialVerdict::Unsupported {
+            stage: NativeDifferentialStage::BoundaryPreflight,
+            construct: "InterpreterOracleObservation",
+            reason,
+        },
+    }
+}
+
+fn differential_error_report(
+    example: &RuntimeExample,
+    artifact: NativeArtifactIdentity,
+    oracle: InterpreterOracleObservation,
+    err: CraneliftBackendError,
+    preflight: bool,
+) -> NativeDifferentialReport {
+    let verdict = match err {
+        CraneliftBackendError::Unsupported(err) => NativeDifferentialVerdict::Unsupported {
+            stage: if preflight {
+                NativeDifferentialStage::BoundaryPreflight
+            } else {
+                NativeDifferentialStage::NativeLoweringOrExecution
+            },
+            construct: err.construct,
+            reason: err.reason,
+        },
+        CraneliftBackendError::Backend(err) => NativeDifferentialVerdict::BackendFailure {
+            stage: NativeDifferentialStage::NativeLoweringOrExecution,
+            reason: err.to_string(),
+        },
+    };
+    NativeDifferentialReport {
+        example: example.name.clone(),
+        artifact,
+        oracle,
+        native: None,
+        verdict,
+    }
 }
 
 struct CompiledExpr {
