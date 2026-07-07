@@ -4,10 +4,15 @@
 //! realizing the kernel's reductions in CBV-with-sharing order (`42 §1`–`§4`).
 
 pub mod eval;
+pub mod proof_erasure_checker;
 
 pub use eval::{
     apply, decimal_value, drive_h, drive_h_instrumented, eval, run_io, ConsoleIds, Env, EvalStore,
     EvalVal, FSIds, ITreeIds, RunIoError, SlotId, SumIds,
+};
+pub use proof_erasure_checker::{
+    ken_check_proof_erasure_boundary_witness, KenProofErasureBoundaryCheckError,
+    KenProofErasureBoundaryCheckStage, NC9_PROOF_ERASURE_BOUNDARY_CHECKER_SOURCE,
 };
 
 pub fn describe() -> &'static str {

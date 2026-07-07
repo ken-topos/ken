@@ -118,8 +118,23 @@ pub struct ProofErasureBoundaryWitnessReport {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct KenCheckedProofErasureBoundaryReport {
+    pub tier: ProofErasureBoundaryWitnessTier,
+    pub artifact: RuntimeArtifactIdentity,
+    pub checker: KenProofErasureBoundaryChecker,
+    pub evidence_source: String,
+    pub helper_assumptions: Vec<String>,
+    pub facts: ProofErasureBoundaryFacts,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ProofErasureBoundaryWitnessTier {
     Nc9BoundedProofErasureBoundary,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum KenProofErasureBoundaryChecker {
+    Nc9KenLaneVerdictCheckerV1,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
