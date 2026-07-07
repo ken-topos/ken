@@ -128,6 +128,29 @@ coordinates with Lane B)**. The two Ward-adjacent layers (L12, L14) are
 scheduled *with* Lane B so the catalog's protocol/attestation/obligation
 structures and Ward's seam stay one design.
 
+## Deferred Z3 evaluation gate
+
+Z3 remains an optional proof-search accelerator, not a trusted checker and not a
+dependency for the current catalog builds. The Z3 work should wait until the
+catalog contains enough large, proof-heavy Ken packages that an enabled/disabled
+comparison is meaningful.
+
+When the catalog reaches that scale, run the two-step program recorded in
+`03-program-of-work.md` under V3:
+
+1. **Z3 integration:** add an optional, off-by-default Z3-backed proof-search
+   path that can propose certificates or witnesses for the decidable/FO prover
+   fragments. The kernel must still re-check every successful result.
+2. **Throughput characterization:** run the same catalog verification corpus
+   with Z3 disabled and enabled. Compare wall-clock verification time,
+   obligation closure rate, kernel certificate-check time, determinism, failure
+   modes, and operational/dependency complexity.
+
+The output is a decision report: keep and expand the solver path, keep it as a
+manual opt-in, or remove/defer it. Do not make Z3 default unless catalog-scale
+measurements show the extra complexity buys a clear verification-throughput
+benefit.
+
 **Fleet fan-out (Lane A).** Uses existing team ownership; the catalog is wide
 enough to run several teams in parallel once patterns are blessed:
 - **Language** → CAT-1/CAT-2/CAT-3 (core classes, collections, parse) — the L8

@@ -178,6 +178,24 @@ automation rate meets the Phase-2 target. **Deps.** V2. **Parallel.** V4,
 L-stream. **Note.** Riskiest WP — checkpoint after classifier + decidable path
 before building the Kripke layer.
 
+**Deferred Z3 evaluation program.** Do not treat Z3 as required for current
+soundness or as part of the trusted path. Split the Z3 work into two later WPs,
+sequenced after the software catalog has enough large, proof-heavy Ken programs
+to make throughput differences measurable:
+
+- **V3a — Z3 proof-search adapter.** Add an optional, off-by-default Z3-backed
+  search path for the decidable/FO fragments, preserving oracle-not-authority:
+  Z3 may propose witnesses or certificates, but `proved` still means a
+  kernel-checked certificate. The disabled path remains the baseline.
+- **V3b — Z3 throughput characterization.** Run the same catalog verification
+  corpus with Z3 disabled and enabled, measuring wall-clock time, obligation
+  closure rate, kernel certificate-check time, failure modes, determinism, and
+  dependency/operational complexity. The output is a keep/expand/remove
+  recommendation; if the benefit is not clear on catalog-scale programs, do not
+  make the solver path default.
+
+Frame: `wp/V3-z3-throughput-evaluation`.
+
 ### V4 — Proof-failure diagnostics · L · ★★
 **Objective.** Make every failure legible to humans and agents. **Scope.**
 Countermodel extraction; **typed holes with provenance** (program still
