@@ -160,7 +160,16 @@ pub struct CheckedCoreSemanticInputs {
     pub symbols: BTreeSet<StableSymbol>,
     pub declarations: BTreeMap<StableSymbol, Vec<u8>>,
     pub primitive_refs: BTreeMap<StableSymbol, String>,
+    pub primitive_metadata: BTreeMap<StableSymbol, PrimitiveMetadata>,
+    pub data_metadata: BTreeMap<StableSymbol, DataMetadata>,
+    pub record_sigma_metadata: BTreeMap<StableSymbol, RecordSigmaMetadata>,
+    pub class_instance_metadata: BTreeMap<StableSymbol, ClassInstanceMetadata>,
+    pub recursion_metadata: BTreeMap<StableSymbol, RecursionMetadata>,
+    pub effects_foreign_metadata: BTreeMap<StableSymbol, EffectsForeignMetadata>,
     pub metadata: BTreeMap<StableSymbol, Vec<u8>>,
+    pub lowerability: BTreeMap<StableSymbol, LowerabilityStatus>,
+    pub obligation_metadata: BTreeMap<StableSymbol, ObligationMetadata>,
+    pub assumption_trust_metadata: BTreeMap<StableSymbol, AssumptionTrustMetadata>,
     pub obligations: BTreeMap<StableSymbol, Vec<u8>>,
     pub assumptions: BTreeMap<StableSymbol, Vec<u8>>,
     pub trusted_base_delta: BTreeMap<StableSymbol, Vec<u8>>,
@@ -174,6 +183,251 @@ pub struct CheckedCoreArtifactInputs {
     pub semantic: CheckedCoreSemanticInputs,
     pub source_identity: BTreeMap<String, String>,
     pub annotations: BTreeMap<String, Vec<u8>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum LowerabilityStatus {
+    Supported,
+    Unsupported { reason: String },
+    Deferred { later_stage: String, reason: String },
+    RequiresFeature { feature: String, reason: String },
+    Explicit { state: String, reason: String },
+}
+
+impl LowerabilityStatus {
+    pub fn blocks_lowering(&self) -> bool {
+        matches!(
+            self,
+            LowerabilityStatus::Unsupported { .. }
+                | LowerabilityStatus::Deferred { .. }
+                | LowerabilityStatus::RequiresFeature { .. }
+                | LowerabilityStatus::Explicit { .. }
+        )
+    }
+
+    fn encode(&self, out: &mut CanonicalSink) {
+        match self {
+            LowerabilityStatus::Supported => out.tag("supported"),
+            LowerabilityStatus::Unsupported { reason } => {
+                out.tag("unsupported");
+                out.str(reason);
+            }
+            LowerabilityStatus::Deferred {
+                later_stage,
+                reason,
+            } => {
+                out.tag("deferred");
+                out.str(later_stage);
+                out.str(reason);
+            }
+            LowerabilityStatus::RequiresFeature { feature, reason } => {
+                out.tag("requires_feature");
+                out.str(feature);
+                out.str(reason);
+            }
+            LowerabilityStatus::Explicit { state, reason } => {
+                out.tag("explicit");
+                out.str(state);
+                out.str(reason);
+            }
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum LoweringReadinessError {
+    MissingLowerability {
+        symbol: StableSymbol,
+    },
+    Blocked {
+        symbol: StableSymbol,
+        status: LowerabilityStatus,
+    },
+}
+
+impl fmt::Display for LoweringReadinessError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            LoweringReadinessError::MissingLowerability { symbol } => {
+                write!(f, "missing lowerability metadata for {symbol}")
+            }
+            LoweringReadinessError::Blocked { symbol, status } => {
+                write!(f, "lowering blocked for {symbol}: {status:?}")
+            }
+        }
+    }
+}
+
+impl std::error::Error for LoweringReadinessError {}
+
+pub fn ensure_lowerable_for_target<'a>(
+    target_closure: impl IntoIterator<Item = &'a StableSymbol>,
+    lowerability: &BTreeMap<StableSymbol, LowerabilityStatus>,
+) -> Result<(), LoweringReadinessError> {
+    for symbol in target_closure {
+        let status = lowerability.get(symbol).ok_or_else(|| {
+            LoweringReadinessError::MissingLowerability {
+                symbol: symbol.clone(),
+            }
+        })?;
+        if status.blocks_lowering() {
+            return Err(LoweringReadinessError::Blocked {
+                symbol: symbol.clone(),
+                status: status.clone(),
+            });
+        }
+    }
+    Ok(())
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PrimitiveMetadata {
+    pub registry_symbol: String,
+    pub reduction: PrimitiveReductionMetadata,
+    pub partiality: PartialityMetadata,
+    pub lowerability: LowerabilityStatus,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PrimitiveReductionMetadata {
+    OpaqueType,
+    Literal,
+    Op,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PartialityMetadata {
+    Total,
+    CheckedPartial { obligation: StableSymbol },
+    TrustedPartial { assumption: StableSymbol },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DataMetadata {
+    pub parameter_count: usize,
+    pub index_count: usize,
+    pub constructors: Vec<ConstructorMetadata>,
+    pub eliminator: LowerabilityStatus,
+    pub lowerability: LowerabilityStatus,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ConstructorMetadata {
+    pub symbol: StableSymbol,
+    pub argument_count: usize,
+    pub target_index_count: usize,
+    pub recursive_positions: Vec<usize>,
+    pub lowerability: LowerabilityStatus,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RecordSigmaMetadata {
+    pub kind: RecordSigmaKind,
+    pub fields: Vec<FieldMetadata>,
+    pub lowerability: LowerabilityStatus,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RecordSigmaKind {
+    Record,
+    Sigma,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FieldMetadata {
+    pub name: String,
+    pub ty: StableSymbol,
+    pub runtime: RuntimeFieldStatus,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RuntimeFieldStatus {
+    Runtime,
+    ErasedLaw,
+    ErasedProof,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ClassInstanceMetadata {
+    pub kind: ClassInstanceKind,
+    pub class_symbol: Option<StableSymbol>,
+    pub dictionary_symbol: Option<StableSymbol>,
+    pub head_symbol: Option<StableSymbol>,
+    pub field_order: Vec<String>,
+    pub law_fields: BTreeSet<String>,
+    pub lowerability: LowerabilityStatus,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ClassInstanceKind {
+    Class,
+    Instance,
+    Dictionary,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RecursionMetadata {
+    pub group_members: Vec<StableSymbol>,
+    pub admission: RecursionAdmission,
+    pub scc_index: usize,
+    pub lowerability: LowerabilityStatus,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RecursionAdmission {
+    NonRecursive,
+    AcceptedStructural,
+    AcceptedSizeChange,
+    Rejected,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EffectsForeignMetadata {
+    pub declared_effects: BTreeSet<String>,
+    pub capabilities: BTreeSet<StableSymbol>,
+    pub foreign_symbol: Option<String>,
+    pub boundary: EffectBoundary,
+    pub runtime_checks: BTreeSet<StableSymbol>,
+    pub lowerability: LowerabilityStatus,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum EffectBoundary {
+    Pure,
+    Effectful,
+    Foreign,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ObligationMetadata {
+    pub status: ObligationStatus,
+    pub origin: StableSymbol,
+    pub affects_runtime_meaning: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ObligationStatus {
+    Proved,
+    Tested,
+    Delegated,
+    Unknown,
+    Disproved,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AssumptionTrustMetadata {
+    pub kind: AssumptionTrustKind,
+    pub target: StableSymbol,
+    pub affects_runtime_meaning: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum AssumptionTrustKind {
+    Postulate,
+    Hole,
+    Foreign,
+    Declassify,
+    PrimitiveAssumption,
 }
 
 pub fn canonical_level_bytes(level: &Level) -> Vec<u8> {
@@ -207,7 +461,32 @@ pub fn canonical_semantic_bytes(inputs: &CheckedCoreSemanticInputs) -> Vec<u8> {
     encode_symbol_set("symbols", &inputs.symbols, &mut out);
     encode_bytes_map("declarations", &inputs.declarations, &mut out);
     encode_string_map("primitive_refs", &inputs.primitive_refs, &mut out);
+    encode_primitive_metadata_map("primitive_metadata", &inputs.primitive_metadata, &mut out);
+    encode_data_metadata_map("data_metadata", &inputs.data_metadata, &mut out);
+    encode_record_sigma_metadata_map(
+        "record_sigma_metadata",
+        &inputs.record_sigma_metadata,
+        &mut out,
+    );
+    encode_class_instance_metadata_map(
+        "class_instance_metadata",
+        &inputs.class_instance_metadata,
+        &mut out,
+    );
+    encode_recursion_metadata_map("recursion_metadata", &inputs.recursion_metadata, &mut out);
+    encode_effects_foreign_metadata_map(
+        "effects_foreign_metadata",
+        &inputs.effects_foreign_metadata,
+        &mut out,
+    );
     encode_bytes_map("metadata", &inputs.metadata, &mut out);
+    encode_lowerability_map("lowerability", &inputs.lowerability, &mut out);
+    encode_obligation_metadata_map("obligation_metadata", &inputs.obligation_metadata, &mut out);
+    encode_assumption_trust_metadata_map(
+        "assumption_trust_metadata",
+        &inputs.assumption_trust_metadata,
+        &mut out,
+    );
     encode_bytes_map("obligations", &inputs.obligations, &mut out);
     encode_bytes_map("assumptions", &inputs.assumptions, &mut out);
     encode_bytes_map("trusted_base_delta", &inputs.trusted_base_delta, &mut out);
@@ -541,6 +820,254 @@ fn encode_string_map(
     }
 }
 
+fn encode_lowerability_map(
+    tag: &'static str,
+    map: &BTreeMap<StableSymbol, LowerabilityStatus>,
+    out: &mut CanonicalSink,
+) {
+    out.tag(tag);
+    out.seq_len(map.len());
+    for (symbol, status) in map {
+        symbol.encode(out);
+        status.encode(out);
+    }
+}
+
+fn encode_primitive_metadata_map(
+    tag: &'static str,
+    map: &BTreeMap<StableSymbol, PrimitiveMetadata>,
+    out: &mut CanonicalSink,
+) {
+    out.tag(tag);
+    out.seq_len(map.len());
+    for (symbol, meta) in map {
+        symbol.encode(out);
+        out.str(&meta.registry_symbol);
+        encode_primitive_reduction_metadata(&meta.reduction, out);
+        encode_partiality_metadata(&meta.partiality, out);
+        meta.lowerability.encode(out);
+    }
+}
+
+fn encode_primitive_reduction_metadata(meta: &PrimitiveReductionMetadata, out: &mut CanonicalSink) {
+    match meta {
+        PrimitiveReductionMetadata::OpaqueType => out.tag("opaque_type"),
+        PrimitiveReductionMetadata::Literal => out.tag("literal"),
+        PrimitiveReductionMetadata::Op => out.tag("op"),
+    }
+}
+
+fn encode_partiality_metadata(meta: &PartialityMetadata, out: &mut CanonicalSink) {
+    match meta {
+        PartialityMetadata::Total => out.tag("total"),
+        PartialityMetadata::CheckedPartial { obligation } => {
+            out.tag("checked_partial");
+            obligation.encode(out);
+        }
+        PartialityMetadata::TrustedPartial { assumption } => {
+            out.tag("trusted_partial");
+            assumption.encode(out);
+        }
+    }
+}
+
+fn encode_data_metadata_map(
+    tag: &'static str,
+    map: &BTreeMap<StableSymbol, DataMetadata>,
+    out: &mut CanonicalSink,
+) {
+    out.tag(tag);
+    out.seq_len(map.len());
+    for (symbol, meta) in map {
+        symbol.encode(out);
+        out.u64(meta.parameter_count as u64);
+        out.u64(meta.index_count as u64);
+        out.tag("constructors");
+        out.seq_len(meta.constructors.len());
+        for ctor in &meta.constructors {
+            ctor.symbol.encode(out);
+            out.u64(ctor.argument_count as u64);
+            out.u64(ctor.target_index_count as u64);
+            out.tag("recursive_positions");
+            out.seq_len(ctor.recursive_positions.len());
+            for pos in &ctor.recursive_positions {
+                out.u64(*pos as u64);
+            }
+            ctor.lowerability.encode(out);
+        }
+        meta.eliminator.encode(out);
+        meta.lowerability.encode(out);
+    }
+}
+
+fn encode_record_sigma_metadata_map(
+    tag: &'static str,
+    map: &BTreeMap<StableSymbol, RecordSigmaMetadata>,
+    out: &mut CanonicalSink,
+) {
+    out.tag(tag);
+    out.seq_len(map.len());
+    for (symbol, meta) in map {
+        symbol.encode(out);
+        match meta.kind {
+            RecordSigmaKind::Record => out.tag("record"),
+            RecordSigmaKind::Sigma => out.tag("sigma"),
+        }
+        out.tag("fields");
+        out.seq_len(meta.fields.len());
+        for field in &meta.fields {
+            out.str(&field.name);
+            field.ty.encode(out);
+            match field.runtime {
+                RuntimeFieldStatus::Runtime => out.tag("runtime"),
+                RuntimeFieldStatus::ErasedLaw => out.tag("erased_law"),
+                RuntimeFieldStatus::ErasedProof => out.tag("erased_proof"),
+            }
+        }
+        meta.lowerability.encode(out);
+    }
+}
+
+fn encode_class_instance_metadata_map(
+    tag: &'static str,
+    map: &BTreeMap<StableSymbol, ClassInstanceMetadata>,
+    out: &mut CanonicalSink,
+) {
+    out.tag(tag);
+    out.seq_len(map.len());
+    for (symbol, meta) in map {
+        symbol.encode(out);
+        match meta.kind {
+            ClassInstanceKind::Class => out.tag("class"),
+            ClassInstanceKind::Instance => out.tag("instance"),
+            ClassInstanceKind::Dictionary => out.tag("dictionary"),
+        }
+        encode_optional_symbol(&meta.class_symbol, out);
+        encode_optional_symbol(&meta.dictionary_symbol, out);
+        encode_optional_symbol(&meta.head_symbol, out);
+        out.tag("field_order");
+        out.seq_len(meta.field_order.len());
+        for field in &meta.field_order {
+            out.str(field);
+        }
+        out.tag("law_fields");
+        out.seq_len(meta.law_fields.len());
+        for field in &meta.law_fields {
+            out.str(field);
+        }
+        meta.lowerability.encode(out);
+    }
+}
+
+fn encode_recursion_metadata_map(
+    tag: &'static str,
+    map: &BTreeMap<StableSymbol, RecursionMetadata>,
+    out: &mut CanonicalSink,
+) {
+    out.tag(tag);
+    out.seq_len(map.len());
+    for (symbol, meta) in map {
+        symbol.encode(out);
+        out.tag("group_members");
+        out.seq_len(meta.group_members.len());
+        for member in &meta.group_members {
+            member.encode(out);
+        }
+        match meta.admission {
+            RecursionAdmission::NonRecursive => out.tag("non_recursive"),
+            RecursionAdmission::AcceptedStructural => out.tag("accepted_structural"),
+            RecursionAdmission::AcceptedSizeChange => out.tag("accepted_size_change"),
+            RecursionAdmission::Rejected => out.tag("rejected"),
+        }
+        out.u64(meta.scc_index as u64);
+        meta.lowerability.encode(out);
+    }
+}
+
+fn encode_effects_foreign_metadata_map(
+    tag: &'static str,
+    map: &BTreeMap<StableSymbol, EffectsForeignMetadata>,
+    out: &mut CanonicalSink,
+) {
+    out.tag(tag);
+    out.seq_len(map.len());
+    for (symbol, meta) in map {
+        symbol.encode(out);
+        out.tag("declared_effects");
+        out.seq_len(meta.declared_effects.len());
+        for effect in &meta.declared_effects {
+            out.str(effect);
+        }
+        encode_symbol_set("capabilities", &meta.capabilities, out);
+        match &meta.foreign_symbol {
+            Some(symbol) => {
+                out.tag("foreign_symbol_some");
+                out.str(symbol);
+            }
+            None => out.tag("foreign_symbol_none"),
+        }
+        match meta.boundary {
+            EffectBoundary::Pure => out.tag("pure"),
+            EffectBoundary::Effectful => out.tag("effectful"),
+            EffectBoundary::Foreign => out.tag("foreign"),
+        }
+        encode_symbol_set("runtime_checks", &meta.runtime_checks, out);
+        meta.lowerability.encode(out);
+    }
+}
+
+fn encode_obligation_metadata_map(
+    tag: &'static str,
+    map: &BTreeMap<StableSymbol, ObligationMetadata>,
+    out: &mut CanonicalSink,
+) {
+    out.tag(tag);
+    out.seq_len(map.len());
+    for (symbol, meta) in map {
+        symbol.encode(out);
+        match meta.status {
+            ObligationStatus::Proved => out.tag("proved"),
+            ObligationStatus::Tested => out.tag("tested"),
+            ObligationStatus::Delegated => out.tag("delegated"),
+            ObligationStatus::Unknown => out.tag("unknown"),
+            ObligationStatus::Disproved => out.tag("disproved"),
+        }
+        meta.origin.encode(out);
+        out.u64(if meta.affects_runtime_meaning { 1 } else { 0 });
+    }
+}
+
+fn encode_assumption_trust_metadata_map(
+    tag: &'static str,
+    map: &BTreeMap<StableSymbol, AssumptionTrustMetadata>,
+    out: &mut CanonicalSink,
+) {
+    out.tag(tag);
+    out.seq_len(map.len());
+    for (symbol, meta) in map {
+        symbol.encode(out);
+        match meta.kind {
+            AssumptionTrustKind::Postulate => out.tag("postulate"),
+            AssumptionTrustKind::Hole => out.tag("hole"),
+            AssumptionTrustKind::Foreign => out.tag("foreign"),
+            AssumptionTrustKind::Declassify => out.tag("declassify"),
+            AssumptionTrustKind::PrimitiveAssumption => out.tag("primitive_assumption"),
+        }
+        meta.target.encode(out);
+        out.u64(if meta.affects_runtime_meaning { 1 } else { 0 });
+    }
+}
+
+fn encode_optional_symbol(symbol: &Option<StableSymbol>, out: &mut CanonicalSink) {
+    match symbol {
+        Some(symbol) => {
+            out.tag("some");
+            symbol.encode(out);
+        }
+        None => out.tag("none"),
+    }
+}
+
 fn fingerprint(bytes: &[u8]) -> u64 {
     let mut hash = 0xcbf2_9ce4_8422_2325u64;
     for byte in bytes {
@@ -788,5 +1315,321 @@ mod tests {
             !bytes.is_empty(),
             "obligation and dependency sections must have canonical key spaces"
         );
+    }
+
+    #[test]
+    fn runtime_meaning_metadata_changes_semantic_fingerprint() {
+        let add = StableSymbol::primitive("int_add");
+        let obligation = StableSymbol::obligation("int_add.totality");
+        let assumption = StableSymbol::assumption(&add, "primitive-totality");
+        let mut base = CheckedCoreSemanticInputs::default();
+        base.symbols.insert(add.clone());
+        base.primitive_refs
+            .insert(add.clone(), "primitive-registry:int_add".to_string());
+        base.primitive_metadata.insert(
+            add.clone(),
+            PrimitiveMetadata {
+                registry_symbol: "int_add".to_string(),
+                reduction: PrimitiveReductionMetadata::Op,
+                partiality: PartialityMetadata::CheckedPartial { obligation },
+                lowerability: LowerabilityStatus::Supported,
+            },
+        );
+
+        let mut changed = base.clone();
+        changed.primitive_metadata.insert(
+            add.clone(),
+            PrimitiveMetadata {
+                registry_symbol: "int_add".to_string(),
+                reduction: PrimitiveReductionMetadata::Op,
+                partiality: PartialityMetadata::TrustedPartial { assumption },
+                lowerability: LowerabilityStatus::Supported,
+            },
+        );
+
+        assert_ne!(
+            semantic_fingerprint(&base),
+            semantic_fingerprint(&changed),
+            "partiality/trust metadata affects runtime meaning and must enter core_semantic_hash"
+        );
+    }
+
+    #[test]
+    fn lowering_rejects_reachable_unsupported_symbol() {
+        let f = decl_symbol("uses_big_int_div");
+        let g = decl_symbol("needs_closure_erasure");
+        let h = decl_symbol("needs_codegen_feature");
+        let i = decl_symbol("blocked_explicit_state");
+        let ok = decl_symbol("plain_supported");
+        let mut lowerability = BTreeMap::new();
+        lowerability.insert(
+            f.clone(),
+            LowerabilityStatus::Unsupported {
+                reason: "native lowering has no checked division trap metadata".to_string(),
+            },
+        );
+        lowerability.insert(
+            g.clone(),
+            LowerabilityStatus::Deferred {
+                later_stage: "NC5-erasure-runtime-ir".to_string(),
+                reason: "closure representation is not selected in NC3".to_string(),
+            },
+        );
+        lowerability.insert(
+            h.clone(),
+            LowerabilityStatus::RequiresFeature {
+                feature: "native-ffi-v1".to_string(),
+                reason: "FFI lowering must be explicitly enabled".to_string(),
+            },
+        );
+        lowerability.insert(
+            i.clone(),
+            LowerabilityStatus::Explicit {
+                state: "blocked-by-policy".to_string(),
+                reason: "policy state has no continue semantics for this consumer".to_string(),
+            },
+        );
+        lowerability.insert(ok.clone(), LowerabilityStatus::Supported);
+
+        ensure_lowerable_for_target([&ok], &lowerability)
+            .expect("supported entries must be accepted by the package-side gate");
+
+        let err = ensure_lowerable_for_target([&f], &lowerability).unwrap_err();
+
+        assert_eq!(
+            err,
+            LoweringReadinessError::Blocked {
+                symbol: f,
+                status: LowerabilityStatus::Unsupported {
+                    reason: "native lowering has no checked division trap metadata".to_string(),
+                },
+            },
+            "reachable unsupported entries must fail loudly before erasure/runtime IR"
+        );
+
+        let err = ensure_lowerable_for_target([&g], &lowerability).unwrap_err();
+
+        assert_eq!(
+            err,
+            LoweringReadinessError::Blocked {
+                symbol: g,
+                status: LowerabilityStatus::Deferred {
+                    later_stage: "NC5-erasure-runtime-ir".to_string(),
+                    reason: "closure representation is not selected in NC3".to_string(),
+                },
+            },
+            "deferred entries must fail closed for a target lowerer that is not the named stage"
+        );
+
+        let err = ensure_lowerable_for_target([&h], &lowerability).unwrap_err();
+
+        assert_eq!(
+            err,
+            LoweringReadinessError::Blocked {
+                symbol: h,
+                status: LowerabilityStatus::RequiresFeature {
+                    feature: "native-ffi-v1".to_string(),
+                    reason: "FFI lowering must be explicitly enabled".to_string(),
+                },
+            },
+            "requires-feature entries must fail closed unless a versioned feature consumer handles them"
+        );
+
+        let err = ensure_lowerable_for_target([&i], &lowerability).unwrap_err();
+
+        assert_eq!(
+            err,
+            LoweringReadinessError::Blocked {
+                symbol: i,
+                status: LowerabilityStatus::Explicit {
+                    state: "blocked-by-policy".to_string(),
+                    reason: "policy state has no continue semantics for this consumer".to_string(),
+                },
+            },
+            "unknown explicit states must not default to supported"
+        );
+
+        let missing = decl_symbol("missing_lowerability");
+        let err = ensure_lowerable_for_target([&missing], &lowerability).unwrap_err();
+
+        assert_eq!(
+            err,
+            LoweringReadinessError::MissingLowerability { symbol: missing },
+            "missing lowerability metadata must not default to supported"
+        );
+    }
+
+    #[test]
+    fn lowerability_metadata_is_semantic_and_stably_ordered() {
+        let f = decl_symbol("f");
+        let g = decl_symbol("g");
+        let mut a = CheckedCoreSemanticInputs::default();
+        a.lowerability
+            .insert(g.clone(), LowerabilityStatus::Supported);
+        a.lowerability.insert(
+            f.clone(),
+            LowerabilityStatus::Deferred {
+                later_stage: "NC5-erasure-runtime-ir".to_string(),
+                reason: "needs erased closure representation".to_string(),
+            },
+        );
+
+        let mut b = CheckedCoreSemanticInputs::default();
+        b.lowerability.insert(
+            f.clone(),
+            LowerabilityStatus::Deferred {
+                later_stage: "NC5-erasure-runtime-ir".to_string(),
+                reason: "needs erased closure representation".to_string(),
+            },
+        );
+        b.lowerability
+            .insert(g.clone(), LowerabilityStatus::Supported);
+
+        let mut changed = a.clone();
+        changed.lowerability.insert(
+            f,
+            LowerabilityStatus::Unsupported {
+                reason: "not lowerable by this compiler stage".to_string(),
+            },
+        );
+
+        assert_eq!(canonical_semantic_bytes(&a), canonical_semantic_bytes(&b));
+        assert_ne!(semantic_fingerprint(&a), semantic_fingerprint(&changed));
+    }
+
+    #[test]
+    fn acceptance_examples_fit_metadata_without_runtime_layout() {
+        let bool_ty = decl_symbol("Bool");
+        let false_ctor = StableSymbol::constructor(&bool_ty, "False");
+        let true_ctor = StableSymbol::constructor(&bool_ty, "True");
+        let nat_ty = decl_symbol("Nat");
+        let zero_ctor = StableSymbol::constructor(&nat_ty, "Zero");
+        let succ_ctor = StableSymbol::constructor(&nat_ty, "Succ");
+        let option_ty = decl_symbol("Option");
+        let list_ty = decl_symbol("List");
+        let eq_class = decl_symbol("Eq");
+        let eq_bool_dict = decl_symbol("EqBoolDict");
+        let add_nat = StableSymbol::primitive("nat_add");
+        let append_group = decl_symbol("List.append.group");
+        let effectful = decl_symbol("print_line");
+        let cap = StableSymbol::new(
+            SymbolNamespace::Metadata,
+            vec!["pkg".to_string(), "ConsoleCap".to_string()],
+        );
+
+        let mut inputs = CheckedCoreSemanticInputs::default();
+        inputs.data_metadata.insert(
+            bool_ty.clone(),
+            DataMetadata {
+                parameter_count: 0,
+                index_count: 0,
+                constructors: vec![
+                    ConstructorMetadata {
+                        symbol: false_ctor,
+                        argument_count: 0,
+                        target_index_count: 0,
+                        recursive_positions: Vec::new(),
+                        lowerability: LowerabilityStatus::Supported,
+                    },
+                    ConstructorMetadata {
+                        symbol: true_ctor,
+                        argument_count: 0,
+                        target_index_count: 0,
+                        recursive_positions: Vec::new(),
+                        lowerability: LowerabilityStatus::Supported,
+                    },
+                ],
+                eliminator: LowerabilityStatus::Supported,
+                lowerability: LowerabilityStatus::Supported,
+            },
+        );
+        inputs.data_metadata.insert(
+            nat_ty.clone(),
+            DataMetadata {
+                parameter_count: 0,
+                index_count: 0,
+                constructors: vec![
+                    ConstructorMetadata {
+                        symbol: zero_ctor,
+                        argument_count: 0,
+                        target_index_count: 0,
+                        recursive_positions: Vec::new(),
+                        lowerability: LowerabilityStatus::Supported,
+                    },
+                    ConstructorMetadata {
+                        symbol: succ_ctor,
+                        argument_count: 1,
+                        target_index_count: 0,
+                        recursive_positions: vec![0],
+                        lowerability: LowerabilityStatus::Supported,
+                    },
+                ],
+                eliminator: LowerabilityStatus::Supported,
+                lowerability: LowerabilityStatus::Supported,
+            },
+        );
+        inputs.data_metadata.insert(
+            option_ty,
+            DataMetadata {
+                parameter_count: 1,
+                index_count: 0,
+                constructors: Vec::new(),
+                eliminator: LowerabilityStatus::Supported,
+                lowerability: LowerabilityStatus::Supported,
+            },
+        );
+        inputs.data_metadata.insert(
+            list_ty,
+            DataMetadata {
+                parameter_count: 1,
+                index_count: 0,
+                constructors: Vec::new(),
+                eliminator: LowerabilityStatus::Supported,
+                lowerability: LowerabilityStatus::Supported,
+            },
+        );
+        inputs.class_instance_metadata.insert(
+            eq_class.clone(),
+            ClassInstanceMetadata {
+                kind: ClassInstanceKind::Dictionary,
+                class_symbol: Some(eq_class.clone()),
+                dictionary_symbol: Some(eq_bool_dict),
+                head_symbol: Some(bool_ty),
+                field_order: vec!["eq".to_string(), "refl".to_string()],
+                law_fields: BTreeSet::from(["refl".to_string()]),
+                lowerability: LowerabilityStatus::Supported,
+            },
+        );
+        inputs.primitive_metadata.insert(
+            add_nat,
+            PrimitiveMetadata {
+                registry_symbol: "nat_add".to_string(),
+                reduction: PrimitiveReductionMetadata::Op,
+                partiality: PartialityMetadata::Total,
+                lowerability: LowerabilityStatus::Supported,
+            },
+        );
+        inputs.recursion_metadata.insert(
+            append_group.clone(),
+            RecursionMetadata {
+                group_members: vec![append_group],
+                admission: RecursionAdmission::AcceptedStructural,
+                scc_index: 0,
+                lowerability: LowerabilityStatus::Supported,
+            },
+        );
+        inputs.effects_foreign_metadata.insert(
+            effectful,
+            EffectsForeignMetadata {
+                declared_effects: BTreeSet::from(["Console".to_string()]),
+                capabilities: BTreeSet::from([cap]),
+                foreign_symbol: None,
+                boundary: EffectBoundary::Effectful,
+                runtime_checks: BTreeSet::new(),
+                lowerability: LowerabilityStatus::Supported,
+            },
+        );
+
+        assert!(!canonical_semantic_bytes(&inputs).is_empty());
     }
 }
