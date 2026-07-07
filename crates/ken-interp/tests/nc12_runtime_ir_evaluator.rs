@@ -153,7 +153,7 @@ fn runtime_ir_evaluator_runs_nc5_seed_subset_without_native_claims() {
     for example in nc5_seed_examples() {
         let program = runtime_program(example.clone(), 0x1202);
         let env = if example.name == "closure-capture-application" {
-            RuntimeIrSeedEnvironment::nc5_seed()
+            RuntimeIrSeedEnvironment::closure_capture_seed()
         } else {
             RuntimeIrSeedEnvironment::empty()
         };
