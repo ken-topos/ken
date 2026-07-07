@@ -326,6 +326,9 @@ pub enum CheckedCoreBodyTerm {
         level_args: Vec<CheckedCoreLevelView>,
     },
     ConstructorReference(CheckedCoreConstructorView),
+    ErasedConstructorArgument {
+        term: Vec<u8>,
+    },
     Lambda {
         parameter_type: Vec<u8>,
         body: Box<CheckedCoreBodyTerm>,
@@ -2535,9 +2538,16 @@ fn decode_supported_body_term(
             let function = Box::new(decode_supported_body_term(
                 cursor, semantic, selection, owner,
             )?);
-            let argument = Box::new(decode_supported_body_term(
-                cursor, semantic, selection, owner,
-            )?);
+            let argument = if constructor_spine_needs_erased_family_argument(&function) {
+                Box::new(CheckedCoreBodyTerm::ErasedConstructorArgument {
+                    term: capture_canonical_term(cursor)
+                        .map_err(|reason| malformed_body(owner, reason))?,
+                })
+            } else {
+                Box::new(decode_supported_body_term(
+                    cursor, semantic, selection, owner,
+                )?)
+            };
             Ok(CheckedCoreBodyTerm::Application { function, argument })
         }
         "let" => {
@@ -2563,6 +2573,19 @@ fn decode_supported_body_term(
             tag,
         }),
     }
+}
+
+fn constructor_spine_needs_erased_family_argument(term: &CheckedCoreBodyTerm) -> bool {
+    let mut applied_args = 0usize;
+    let mut current = term;
+    while let CheckedCoreBodyTerm::Application { function, .. } = current {
+        applied_args += 1;
+        current = function;
+    }
+    let CheckedCoreBodyTerm::ConstructorReference(constructor) = current else {
+        return false;
+    };
+    applied_args < constructor.family_parameter_count
 }
 
 fn decode_supported_match_view(
