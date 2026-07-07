@@ -9,6 +9,7 @@
 
 mod ast;
 pub mod bytes;
+pub mod checked_core;
 pub mod classes;
 pub mod capabilities;
 pub mod conversions;
