@@ -473,6 +473,22 @@ fn lower_body_term(
                 context_depth + 1,
             )?),
         }),
+        CheckedCoreBodyTerm::ConstructorReference(constructor) => Err(expression_lowering_error(
+            root_symbol,
+            "constructor_lowering_unsupported",
+            format!(
+                "constructor {} is exposed in the checked-core body view but not yet lowered here",
+                constructor.symbol
+            ),
+        )),
+        CheckedCoreBodyTerm::Match(view) => Err(expression_lowering_error(
+            root_symbol,
+            "match_lowering_unsupported",
+            format!(
+                "match over {} is exposed in the checked-core body view but not yet lowered here",
+                view.family_symbol
+            ),
+        )),
     }
 }
 
@@ -499,6 +515,7 @@ fn has_free_variable_at_or_above(term: &CheckedCoreBodyTerm, bound: usize) -> bo
     match term {
         CheckedCoreBodyTerm::Variable { de_bruijn_index } => *de_bruijn_index >= bound,
         CheckedCoreBodyTerm::DirectDeclarationCall { .. } => false,
+        CheckedCoreBodyTerm::ConstructorReference(_) => false,
         CheckedCoreBodyTerm::Lambda { body, .. } => has_free_variable_at_or_above(body, bound + 1),
         CheckedCoreBodyTerm::Application { function, argument } => {
             has_free_variable_at_or_above(function, bound)
@@ -507,6 +524,13 @@ fn has_free_variable_at_or_above(term: &CheckedCoreBodyTerm, bound: usize) -> bo
         CheckedCoreBodyTerm::Let { value, body, .. } => {
             has_free_variable_at_or_above(value, bound)
                 || has_free_variable_at_or_above(body, bound + 1)
+        }
+        CheckedCoreBodyTerm::Match(view) => {
+            has_free_variable_at_or_above(&view.scrutinee, bound)
+                || view
+                    .branches
+                    .iter()
+                    .any(|branch| has_free_variable_at_or_above(&branch.method, bound))
         }
     }
 }

@@ -286,6 +286,37 @@ pub struct CheckedCoreDeclarationBodyView {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CheckedCoreConstructorView {
+    pub symbol: StableSymbol,
+    pub family_symbol: StableSymbol,
+    pub level_args: Vec<CheckedCoreLevelView>,
+    pub family_parameter_count: usize,
+    pub family_index_count: usize,
+    pub argument_count: usize,
+    pub target_index_count: usize,
+    pub recursive_positions: Vec<usize>,
+    pub constructor_lowerability: LowerabilityStatus,
+    pub family_lowerability: LowerabilityStatus,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CheckedCoreMatchView {
+    pub family_symbol: StableSymbol,
+    pub level_args: Vec<CheckedCoreLevelView>,
+    pub parameters: Vec<Vec<u8>>,
+    pub motive: Vec<u8>,
+    pub indices: Vec<Vec<u8>>,
+    pub scrutinee: Box<CheckedCoreBodyTerm>,
+    pub branches: Vec<CheckedCoreMatchBranchView>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CheckedCoreMatchBranchView {
+    pub constructor: CheckedCoreConstructorView,
+    pub method: CheckedCoreBodyTerm,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CheckedCoreBodyTerm {
     Variable {
         de_bruijn_index: usize,
@@ -294,6 +325,7 @@ pub enum CheckedCoreBodyTerm {
         symbol: StableSymbol,
         level_args: Vec<CheckedCoreLevelView>,
     },
+    ConstructorReference(CheckedCoreConstructorView),
     Lambda {
         parameter_type: Vec<u8>,
         body: Box<CheckedCoreBodyTerm>,
@@ -307,6 +339,7 @@ pub enum CheckedCoreBodyTerm {
         value: Box<CheckedCoreBodyTerm>,
         body: Box<CheckedCoreBodyTerm>,
     },
+    Match(CheckedCoreMatchView),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -353,6 +386,32 @@ pub enum CheckedCoreBodyViewError {
     UnsupportedTermShape {
         symbol: StableSymbol,
         tag: String,
+    },
+    StaleConstructorIdentity {
+        owner: StableSymbol,
+        constructor: StableSymbol,
+    },
+    MissingMatchBranchData {
+        symbol: StableSymbol,
+        family: StableSymbol,
+        expected: usize,
+        found: usize,
+    },
+    UnsupportedDependentMotive {
+        symbol: StableSymbol,
+        family: StableSymbol,
+    },
+    UnsupportedProofOnlyMatch {
+        symbol: StableSymbol,
+        family: StableSymbol,
+    },
+    UnsupportedEliminatorShape {
+        symbol: StableSymbol,
+        family: StableSymbol,
+        reason: String,
+    },
+    UnjustifiedImpossibleBranch {
+        symbol: StableSymbol,
     },
     BodyReferenceOutsideSelectedClosure {
         owner: StableSymbol,
@@ -402,6 +461,22 @@ impl CheckedCoreBodyViewError {
             }
             CheckedCoreBodyViewError::UnsupportedTermShape { .. } => {
                 "unsupported_checked_body_shape"
+            }
+            CheckedCoreBodyViewError::StaleConstructorIdentity { .. } => {
+                "stale_constructor_identity"
+            }
+            CheckedCoreBodyViewError::MissingMatchBranchData { .. } => "missing_match_branch_data",
+            CheckedCoreBodyViewError::UnsupportedDependentMotive { .. } => {
+                "unsupported_dependent_motive"
+            }
+            CheckedCoreBodyViewError::UnsupportedProofOnlyMatch { .. } => {
+                "unsupported_proof_only_match"
+            }
+            CheckedCoreBodyViewError::UnsupportedEliminatorShape { .. } => {
+                "unsupported_eliminator_shape"
+            }
+            CheckedCoreBodyViewError::UnjustifiedImpossibleBranch { .. } => {
+                "unjustified_impossible_branch"
             }
             CheckedCoreBodyViewError::BodyReferenceOutsideSelectedClosure { .. } => {
                 "body_reference_outside_selected_closure"
@@ -462,6 +537,41 @@ impl fmt::Display for CheckedCoreBodyViewError {
             CheckedCoreBodyViewError::UnsupportedTermShape { symbol, tag } => {
                 write!(f, "declaration {symbol} uses unsupported body term {tag}")
             }
+            CheckedCoreBodyViewError::StaleConstructorIdentity { owner, constructor } => {
+                write!(
+                    f,
+                    "declaration {owner} references stale constructor identity {constructor}"
+                )
+            }
+            CheckedCoreBodyViewError::MissingMatchBranchData {
+                symbol,
+                family,
+                expected,
+                found,
+            } => write!(
+                f,
+                "declaration {symbol} match for {family} has {found} branches, expected {expected}"
+            ),
+            CheckedCoreBodyViewError::UnsupportedDependentMotive { symbol, family } => write!(
+                f,
+                "declaration {symbol} uses unsupported dependent motive for {family}"
+            ),
+            CheckedCoreBodyViewError::UnsupportedProofOnlyMatch { symbol, family } => write!(
+                f,
+                "declaration {symbol} uses unsupported proof-only match for {family}"
+            ),
+            CheckedCoreBodyViewError::UnsupportedEliminatorShape {
+                symbol,
+                family,
+                reason,
+            } => write!(
+                f,
+                "declaration {symbol} uses unsupported eliminator shape for {family}: {reason}"
+            ),
+            CheckedCoreBodyViewError::UnjustifiedImpossibleBranch { symbol } => write!(
+                f,
+                "declaration {symbol} uses an impossible branch without package evidence"
+            ),
             CheckedCoreBodyViewError::BodyReferenceOutsideSelectedClosure { owner, referenced } => {
                 write!(
                     f,
@@ -2400,6 +2510,16 @@ fn decode_supported_body_term(
             }
             Ok(CheckedCoreBodyTerm::DirectDeclarationCall { symbol, level_args })
         }
+        "constructor_ref" => {
+            let symbol =
+                decode_stable_symbol(cursor).map_err(|reason| malformed_body(owner, reason))?;
+            let level_args =
+                decode_levels(cursor).map_err(|reason| malformed_body(owner, reason))?;
+            Ok(CheckedCoreBodyTerm::ConstructorReference(
+                checked_constructor_view(semantic, owner, &symbol, level_args)?,
+            ))
+        }
+        "elim" => decode_supported_match_view(cursor, semantic, selection, owner),
         "lam" => {
             let parameter_type =
                 capture_canonical_term(cursor).map_err(|reason| malformed_body(owner, reason))?;
@@ -2435,11 +2555,353 @@ fn decode_supported_body_term(
                 body,
             })
         }
+        "absurd" => Err(CheckedCoreBodyViewError::UnjustifiedImpossibleBranch {
+            symbol: owner.clone(),
+        }),
         _ => Err(CheckedCoreBodyViewError::UnsupportedTermShape {
             symbol: owner.clone(),
             tag,
         }),
     }
+}
+
+fn decode_supported_match_view(
+    cursor: &mut CanonicalCursor<'_>,
+    semantic: &CheckedCoreSemanticInputs,
+    selection: &CheckedCoreBodyViewSelection,
+    owner: &StableSymbol,
+) -> Result<CheckedCoreBodyTerm, CheckedCoreBodyViewError> {
+    let family_symbol =
+        decode_stable_symbol(cursor).map_err(|reason| malformed_body(owner, reason))?;
+    let data = semantic.data_metadata.get(&family_symbol).ok_or_else(|| {
+        CheckedCoreBodyViewError::UnsupportedEliminatorShape {
+            symbol: owner.clone(),
+            family: family_symbol.clone(),
+            reason: "missing package data metadata".to_string(),
+        }
+    })?;
+    if data.eliminator.blocks_lowering() {
+        return Err(CheckedCoreBodyViewError::UnsupportedEliminatorShape {
+            symbol: owner.clone(),
+            family: family_symbol,
+            reason: "eliminator lowerability blocks runtime use".to_string(),
+        });
+    }
+
+    let level_args = decode_levels(cursor).map_err(|reason| malformed_body(owner, reason))?;
+    let parameters =
+        capture_canonical_terms(cursor).map_err(|reason| malformed_body(owner, reason))?;
+    if parameters.len() != data.parameter_count {
+        return Err(CheckedCoreBodyViewError::UnsupportedEliminatorShape {
+            symbol: owner.clone(),
+            family: family_symbol,
+            reason: format!(
+                "expected {} family parameters, got {}",
+                data.parameter_count,
+                parameters.len()
+            ),
+        });
+    }
+
+    let motive = capture_canonical_term(cursor).map_err(|reason| malformed_body(owner, reason))?;
+    validate_supported_match_motive(owner, &family_symbol, data, &motive)?;
+
+    let method_count = cursor
+        .read_len()
+        .map_err(|reason| malformed_body(owner, reason))?;
+    if method_count != data.constructors.len() {
+        return Err(CheckedCoreBodyViewError::MissingMatchBranchData {
+            symbol: owner.clone(),
+            family: family_symbol,
+            expected: data.constructors.len(),
+            found: method_count,
+        });
+    }
+    let mut branches = Vec::with_capacity(method_count);
+    for ctor in &data.constructors {
+        let constructor =
+            checked_constructor_view_from_metadata(&family_symbol, data, ctor, level_args.clone())
+                .map_err(
+                    |constructor| CheckedCoreBodyViewError::StaleConstructorIdentity {
+                        owner: owner.clone(),
+                        constructor,
+                    },
+                )?;
+        let method = decode_supported_body_term(cursor, semantic, selection, owner)?;
+        branches.push(CheckedCoreMatchBranchView {
+            constructor,
+            method,
+        });
+    }
+
+    let indices =
+        capture_canonical_terms(cursor).map_err(|reason| malformed_body(owner, reason))?;
+    if indices.len() != data.index_count {
+        return Err(CheckedCoreBodyViewError::UnsupportedEliminatorShape {
+            symbol: owner.clone(),
+            family: family_symbol,
+            reason: format!(
+                "expected {} family indices, got {}",
+                data.index_count,
+                indices.len()
+            ),
+        });
+    }
+    if data.index_count != 0 {
+        return Err(CheckedCoreBodyViewError::UnsupportedDependentMotive {
+            symbol: owner.clone(),
+            family: family_symbol,
+        });
+    }
+
+    let scrutinee = Box::new(decode_supported_body_term(
+        cursor, semantic, selection, owner,
+    )?);
+    Ok(CheckedCoreBodyTerm::Match(CheckedCoreMatchView {
+        family_symbol,
+        level_args,
+        parameters,
+        motive,
+        indices,
+        scrutinee,
+        branches,
+    }))
+}
+
+fn checked_constructor_view(
+    semantic: &CheckedCoreSemanticInputs,
+    owner: &StableSymbol,
+    symbol: &StableSymbol,
+    level_args: Vec<CheckedCoreLevelView>,
+) -> Result<CheckedCoreConstructorView, CheckedCoreBodyViewError> {
+    for (family_symbol, data) in &semantic.data_metadata {
+        for ctor in &data.constructors {
+            if &ctor.symbol == symbol {
+                return checked_constructor_view_from_metadata(
+                    family_symbol,
+                    data,
+                    ctor,
+                    level_args,
+                )
+                .map_err(|constructor| {
+                    CheckedCoreBodyViewError::StaleConstructorIdentity {
+                        owner: owner.clone(),
+                        constructor,
+                    }
+                });
+            }
+        }
+    }
+    Err(CheckedCoreBodyViewError::StaleConstructorIdentity {
+        owner: owner.clone(),
+        constructor: symbol.clone(),
+    })
+}
+
+fn checked_constructor_view_from_metadata(
+    family_symbol: &StableSymbol,
+    data: &DataMetadata,
+    ctor: &ConstructorMetadata,
+    level_args: Vec<CheckedCoreLevelView>,
+) -> Result<CheckedCoreConstructorView, StableSymbol> {
+    if ctor.symbol.namespace != SymbolNamespace::Constructor
+        || !constructor_parent_matches_family(&ctor.symbol, family_symbol)
+    {
+        return Err(ctor.symbol.clone());
+    }
+    Ok(CheckedCoreConstructorView {
+        symbol: ctor.symbol.clone(),
+        family_symbol: family_symbol.clone(),
+        level_args,
+        family_parameter_count: data.parameter_count,
+        family_index_count: data.index_count,
+        argument_count: ctor.argument_count,
+        target_index_count: ctor.target_index_count,
+        recursive_positions: ctor.recursive_positions.clone(),
+        constructor_lowerability: ctor.lowerability.clone(),
+        family_lowerability: data.lowerability.clone(),
+    })
+}
+
+fn constructor_parent_matches_family(constructor: &StableSymbol, family: &StableSymbol) -> bool {
+    constructor.components.len() == family.components.len() + 1
+        && constructor.components[..family.components.len()] == family.components[..]
+}
+
+fn validate_supported_match_motive(
+    owner: &StableSymbol,
+    family: &StableSymbol,
+    data: &DataMetadata,
+    motive: &[u8],
+) -> Result<(), CheckedCoreBodyViewError> {
+    if data.index_count != 0 {
+        return Err(CheckedCoreBodyViewError::UnsupportedDependentMotive {
+            symbol: owner.clone(),
+            family: family.clone(),
+        });
+    }
+    match inspect_non_dependent_motive(motive).map_err(|reason| malformed_body(owner, reason))? {
+        MotiveShape::ConstantType => Ok(()),
+        MotiveShape::Dependent => Err(CheckedCoreBodyViewError::UnsupportedDependentMotive {
+            symbol: owner.clone(),
+            family: family.clone(),
+        }),
+        MotiveShape::ProofOnly => Err(CheckedCoreBodyViewError::UnsupportedProofOnlyMatch {
+            symbol: owner.clone(),
+            family: family.clone(),
+        }),
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum MotiveShape {
+    ConstantType,
+    Dependent,
+    ProofOnly,
+}
+
+fn inspect_non_dependent_motive(motive: &[u8]) -> Result<MotiveShape, String> {
+    let mut cursor = CanonicalCursor::new(motive);
+    if cursor.read_tag()?.as_str() != "ascript" {
+        return Ok(MotiveShape::Dependent);
+    }
+
+    if cursor.read_tag()?.as_str() != "lam" {
+        return Ok(MotiveShape::Dependent);
+    }
+    skip_term(&mut cursor)?;
+    let body_start = cursor.pos;
+    skip_term(&mut cursor)?;
+    let body = &cursor.bytes[body_start..cursor.pos];
+    if canonical_term_contains_free_var(body, 0)? {
+        return Ok(MotiveShape::Dependent);
+    }
+
+    let sort = inspect_non_indexed_motive_type_sort(&mut cursor)?;
+    if cursor.remaining() != 0 {
+        return Err(format!(
+            "motive bytes have {} trailing bytes",
+            cursor.remaining()
+        ));
+    }
+    Ok(sort)
+}
+
+fn inspect_non_indexed_motive_type_sort(
+    cursor: &mut CanonicalCursor<'_>,
+) -> Result<MotiveShape, String> {
+    if cursor.read_tag()?.as_str() != "pi" {
+        return Ok(MotiveShape::Dependent);
+    }
+    skip_term(cursor)?;
+    match cursor.read_tag()?.as_str() {
+        "type" => {
+            skip_level(cursor)?;
+            Ok(MotiveShape::ConstantType)
+        }
+        "omega" => {
+            skip_level(cursor)?;
+            Ok(MotiveShape::ProofOnly)
+        }
+        _ => Ok(MotiveShape::Dependent),
+    }
+}
+
+fn canonical_term_contains_free_var(bytes: &[u8], target: usize) -> Result<bool, String> {
+    let mut cursor = CanonicalCursor::new(bytes);
+    let contains = term_contains_free_var(&mut cursor, target)?;
+    if cursor.remaining() != 0 {
+        return Err(format!(
+            "term bytes have {} trailing bytes",
+            cursor.remaining()
+        ));
+    }
+    Ok(contains)
+}
+
+fn term_contains_free_var(cursor: &mut CanonicalCursor<'_>, target: usize) -> Result<bool, String> {
+    match cursor.read_tag()?.as_str() {
+        "type" | "omega" => {
+            skip_level(cursor)?;
+            Ok(false)
+        }
+        "var" => {
+            let raw = cursor.read_u64()?;
+            let index = usize::try_from(raw)
+                .map_err(|_| format!("variable index {raw} does not fit usize"))?;
+            Ok(index == target)
+        }
+        "const" | "ind_former" | "constructor_ref" => {
+            decode_stable_symbol(cursor)?;
+            skip_levels(cursor)?;
+            Ok(false)
+        }
+        "elim" => {
+            decode_stable_symbol(cursor)?;
+            skip_levels(cursor)?;
+            if terms_contain_free_var(cursor, target)? {
+                return Ok(true);
+            }
+            if term_contains_free_var(cursor, target)? {
+                return Ok(true);
+            }
+            if terms_contain_free_var(cursor, target)? {
+                return Ok(true);
+            }
+            if terms_contain_free_var(cursor, target)? {
+                return Ok(true);
+            }
+            term_contains_free_var(cursor, target)
+        }
+        "pi" | "sigma" => {
+            let left = term_contains_free_var(cursor, target)?;
+            let right = term_contains_free_var(cursor, target + 1)?;
+            Ok(left || right)
+        }
+        "lam" => {
+            let parameter = term_contains_free_var(cursor, target)?;
+            let body = term_contains_free_var(cursor, target + 1)?;
+            Ok(parameter || body)
+        }
+        "app" | "pair" | "ascript" | "quot" | "absurd" => {
+            let left = term_contains_free_var(cursor, target)?;
+            let right = term_contains_free_var(cursor, target)?;
+            Ok(left || right)
+        }
+        "proj1" | "proj2" | "refl" | "quot_class" | "trunc" | "trunc_proj" => {
+            term_contains_free_var(cursor, target)
+        }
+        "let" => {
+            let ty = term_contains_free_var(cursor, target)?;
+            let value = term_contains_free_var(cursor, target)?;
+            let body = term_contains_free_var(cursor, target + 1)?;
+            Ok(ty || value || body)
+        }
+        "eq" | "j" => {
+            let a = term_contains_free_var(cursor, target)?;
+            let b = term_contains_free_var(cursor, target)?;
+            let c = term_contains_free_var(cursor, target)?;
+            Ok(a || b || c)
+        }
+        "cast" | "quot_elim" => {
+            let a = term_contains_free_var(cursor, target)?;
+            let b = term_contains_free_var(cursor, target)?;
+            let c = term_contains_free_var(cursor, target)?;
+            let d = term_contains_free_var(cursor, target)?;
+            Ok(a || b || c || d)
+        }
+        other => Err(format!("unsupported term tag {other:?}")),
+    }
+}
+
+fn terms_contain_free_var(cursor: &mut CanonicalCursor<'_>, target: usize) -> Result<bool, String> {
+    let len = cursor.read_len()?;
+    for _ in 0..len {
+        if term_contains_free_var(cursor, target)? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 fn decode_levels(cursor: &mut CanonicalCursor<'_>) -> Result<Vec<CheckedCoreLevelView>, String> {
@@ -2512,6 +2974,15 @@ fn skip_terms(cursor: &mut CanonicalCursor<'_>) -> Result<(), String> {
         skip_term(cursor)?;
     }
     Ok(())
+}
+
+fn capture_canonical_terms(cursor: &mut CanonicalCursor<'_>) -> Result<Vec<Vec<u8>>, String> {
+    let len = cursor.read_len()?;
+    let mut terms = Vec::with_capacity(len);
+    for _ in 0..len {
+        terms.push(capture_canonical_term(cursor)?);
+    }
+    Ok(terms)
 }
 
 fn skip_levels(cursor: &mut CanonicalCursor<'_>) -> Result<(), String> {
@@ -2633,6 +3104,151 @@ mod tests {
         )
         .unwrap();
         (package, target, helper)
+    }
+
+    fn refresh_package_hashes(package: &mut CheckedCorePackage) {
+        package.core_semantic_hash = semantic_fingerprint(&package.artifact.semantic);
+        package.artifact_hash = package_artifact_fingerprint(
+            &package.header,
+            &package.artifact,
+            package.core_semantic_hash,
+        );
+    }
+
+    fn bool_data_symbols() -> (StableSymbol, StableSymbol, StableSymbol) {
+        let bool_ty = decl_symbol("Bool");
+        let false_ctor = StableSymbol::constructor(&bool_ty, "False");
+        let true_ctor = StableSymbol::constructor(&bool_ty, "True");
+        (bool_ty, false_ctor, true_ctor)
+    }
+
+    fn constant_type_motive(scrut_ty: Term, ret_ty: Term) -> Term {
+        Term::Ascript(
+            Box::new(Term::lam(scrut_ty.clone(), ret_ty)),
+            Box::new(Term::pi(scrut_ty, Term::ty(Level::zero()))),
+        )
+    }
+
+    fn proof_only_motive(scrut_ty: Term) -> Term {
+        Term::Ascript(
+            Box::new(Term::lam(scrut_ty.clone(), Term::Omega(Level::zero()))),
+            Box::new(Term::pi(scrut_ty, Term::Omega(Level::zero()))),
+        )
+    }
+
+    fn data_match_package() -> (CheckedCorePackage, StableSymbol, StableSymbol, StableSymbol) {
+        let target = decl_symbol("target_data_match");
+        let target_id = GlobalId(1);
+        let bool_id = GlobalId(10);
+        let false_id = GlobalId(11);
+        let true_id = GlobalId(12);
+        let (bool_ty, false_ctor, true_ctor) = bool_data_symbols();
+        let table = table_many(&[
+            (target_id, target.clone()),
+            (bool_id, bool_ty.clone()),
+            (false_id, false_ctor.clone()),
+            (true_id, true_ctor.clone()),
+        ]);
+        let scrut_ty = Term::IndFormer {
+            id: bool_id,
+            level_args: Vec::new(),
+        };
+        let match_body = Term::Elim {
+            fam: bool_id,
+            level_args: Vec::new(),
+            params: Vec::new(),
+            motive: Box::new(constant_type_motive(
+                scrut_ty.clone(),
+                Term::Type(Level::zero()),
+            )),
+            methods: vec![
+                Term::Constructor {
+                    id: false_id,
+                    level_args: Vec::new(),
+                },
+                Term::Constructor {
+                    id: true_id,
+                    level_args: Vec::new(),
+                },
+            ],
+            indices: Vec::new(),
+            scrut: Box::new(Term::Constructor {
+                id: true_id,
+                level_args: Vec::new(),
+            }),
+        };
+        let decl = Decl::Transparent {
+            id: target_id,
+            level_params: Vec::new(),
+            ty: scrut_ty,
+            body: match_body,
+        };
+
+        let mut semantic = CheckedCoreSemanticInputs::default();
+        for symbol in [&target, &bool_ty, &false_ctor, &true_ctor] {
+            semantic.symbols.insert(symbol.clone());
+            semantic
+                .lowerability
+                .insert(symbol.clone(), LowerabilityStatus::Supported);
+        }
+        semantic
+            .declarations
+            .insert(target.clone(), canonical_decl_bytes(&decl, &table).unwrap());
+        semantic.data_metadata.insert(
+            bool_ty.clone(),
+            DataMetadata {
+                parameter_count: 0,
+                index_count: 0,
+                constructors: vec![
+                    ConstructorMetadata {
+                        symbol: false_ctor.clone(),
+                        argument_count: 0,
+                        target_index_count: 0,
+                        recursive_positions: Vec::new(),
+                        lowerability: LowerabilityStatus::Supported,
+                    },
+                    ConstructorMetadata {
+                        symbol: true_ctor.clone(),
+                        argument_count: 0,
+                        target_index_count: 0,
+                        recursive_positions: Vec::new(),
+                        lowerability: LowerabilityStatus::Supported,
+                    },
+                ],
+                eliminator: LowerabilityStatus::Supported,
+                lowerability: LowerabilityStatus::Supported,
+            },
+        );
+        let package = emit_checked_core_package(
+            body_view_header(),
+            CheckedCoreArtifactInputs {
+                semantic,
+                source_identity: BTreeMap::new(),
+                annotations: BTreeMap::new(),
+            },
+        )
+        .unwrap();
+        (package, target, false_ctor, true_ctor)
+    }
+
+    fn replace_body(
+        package: &mut CheckedCorePackage,
+        target: &StableSymbol,
+        body: Term,
+        table: &StableSymbolTable,
+    ) {
+        let decl = Decl::Transparent {
+            id: GlobalId(1),
+            level_params: Vec::new(),
+            ty: Term::Type(Level::zero()),
+            body,
+        };
+        package
+            .artifact
+            .semantic
+            .declarations
+            .insert(target.clone(), canonical_decl_bytes(&decl, table).unwrap());
+        refresh_package_hashes(package);
     }
 
     fn body_view_selection(
@@ -2994,6 +3610,315 @@ mod tests {
                 referenced: helper,
             }
         );
+    }
+
+    #[test]
+    fn body_view_recovers_package_bound_constructor_and_match_view() {
+        let (package, target, false_ctor, true_ctor) = data_match_package();
+        let selection =
+            body_view_selection(&package, target.clone(), BTreeSet::from([target.clone()]));
+
+        let view = checked_core_declaration_body_view(&package, &selection, &target).unwrap();
+
+        let CheckedCoreBodyTerm::Match(match_view) = view.body else {
+            panic!("expected package-derived match view");
+        };
+        assert_eq!(match_view.branches.len(), 2);
+        assert_eq!(match_view.branches[0].constructor.symbol, false_ctor);
+        assert_eq!(match_view.branches[0].constructor.argument_count, 0);
+        assert_eq!(match_view.branches[0].constructor.target_index_count, 0);
+        assert_eq!(
+            match_view.branches[0].constructor.constructor_lowerability,
+            LowerabilityStatus::Supported
+        );
+        assert_eq!(match_view.branches[1].constructor.symbol, true_ctor.clone());
+        assert!(match_view.parameters.is_empty());
+        assert!(match_view.indices.is_empty());
+        assert!(match_view.motive.len() > 8);
+        assert_eq!(
+            match_view.scrutinee.as_ref(),
+            &CheckedCoreBodyTerm::ConstructorReference(CheckedCoreConstructorView {
+                symbol: true_ctor.clone(),
+                family_symbol: match_view.family_symbol.clone(),
+                level_args: Vec::new(),
+                family_parameter_count: 0,
+                family_index_count: 0,
+                argument_count: 0,
+                target_index_count: 0,
+                recursive_positions: Vec::new(),
+                constructor_lowerability: LowerabilityStatus::Supported,
+                family_lowerability: LowerabilityStatus::Supported,
+            })
+        );
+        assert!(matches!(
+            &match_view.branches[1].method,
+            CheckedCoreBodyTerm::ConstructorReference(ctor) if ctor.symbol == true_ctor
+        ));
+    }
+
+    #[test]
+    fn body_view_rejects_stale_constructor_identity() {
+        let (mut package, target, _, _) = data_match_package();
+        let ghost = StableSymbol::constructor(&decl_symbol("Ghost"), "MadeUp");
+        let table = table_many(&[(GlobalId(1), target.clone()), (GlobalId(99), ghost.clone())]);
+        replace_body(
+            &mut package,
+            &target,
+            Term::Constructor {
+                id: GlobalId(99),
+                level_args: Vec::new(),
+            },
+            &table,
+        );
+        let selection =
+            body_view_selection(&package, target.clone(), BTreeSet::from([target.clone()]));
+
+        let err = checked_core_declaration_body_view(&package, &selection, &target).unwrap_err();
+
+        assert_eq!(
+            err,
+            CheckedCoreBodyViewError::StaleConstructorIdentity {
+                owner: target,
+                constructor: ghost,
+            }
+        );
+        assert_eq!(err.lane(), "stale_constructor_identity");
+    }
+
+    #[test]
+    fn body_view_rejects_missing_match_branch_data() {
+        let (mut package, target, _, _) = data_match_package();
+        let (bool_ty, false_ctor, true_ctor) = bool_data_symbols();
+        let table = table_many(&[
+            (GlobalId(1), target.clone()),
+            (GlobalId(10), bool_ty),
+            (GlobalId(11), false_ctor),
+            (GlobalId(12), true_ctor),
+        ]);
+        replace_body(
+            &mut package,
+            &target,
+            Term::Elim {
+                fam: GlobalId(10),
+                level_args: Vec::new(),
+                params: Vec::new(),
+                motive: Box::new(constant_type_motive(
+                    Term::IndFormer {
+                        id: GlobalId(10),
+                        level_args: Vec::new(),
+                    },
+                    Term::Type(Level::zero()),
+                )),
+                methods: vec![Term::Constructor {
+                    id: GlobalId(11),
+                    level_args: Vec::new(),
+                }],
+                indices: Vec::new(),
+                scrut: Box::new(Term::Constructor {
+                    id: GlobalId(12),
+                    level_args: Vec::new(),
+                }),
+            },
+            &table,
+        );
+        let selection =
+            body_view_selection(&package, target.clone(), BTreeSet::from([target.clone()]));
+
+        let err = checked_core_declaration_body_view(&package, &selection, &target).unwrap_err();
+
+        assert!(matches!(
+            err,
+            CheckedCoreBodyViewError::MissingMatchBranchData {
+                expected: 2,
+                found: 1,
+                ..
+            }
+        ));
+        assert_eq!(err.lane(), "missing_match_branch_data");
+    }
+
+    #[test]
+    fn body_view_rejects_unsupported_dependent_motive() {
+        let (mut package, target, _, _) = data_match_package();
+        let (bool_ty, false_ctor, true_ctor) = bool_data_symbols();
+        let table = table_many(&[
+            (GlobalId(1), target.clone()),
+            (GlobalId(10), bool_ty),
+            (GlobalId(11), false_ctor),
+            (GlobalId(12), true_ctor),
+        ]);
+        let scrut_ty = Term::IndFormer {
+            id: GlobalId(10),
+            level_args: Vec::new(),
+        };
+        let motive = Term::Ascript(
+            Box::new(Term::lam(scrut_ty.clone(), Term::Var(0))),
+            Box::new(Term::pi(scrut_ty, Term::ty(Level::zero()))),
+        );
+        replace_body(
+            &mut package,
+            &target,
+            Term::Elim {
+                fam: GlobalId(10),
+                level_args: Vec::new(),
+                params: Vec::new(),
+                motive: Box::new(motive),
+                methods: vec![
+                    Term::Constructor {
+                        id: GlobalId(11),
+                        level_args: Vec::new(),
+                    },
+                    Term::Constructor {
+                        id: GlobalId(12),
+                        level_args: Vec::new(),
+                    },
+                ],
+                indices: Vec::new(),
+                scrut: Box::new(Term::Constructor {
+                    id: GlobalId(12),
+                    level_args: Vec::new(),
+                }),
+            },
+            &table,
+        );
+        let selection =
+            body_view_selection(&package, target.clone(), BTreeSet::from([target.clone()]));
+
+        let err = checked_core_declaration_body_view(&package, &selection, &target).unwrap_err();
+
+        assert!(matches!(
+            err,
+            CheckedCoreBodyViewError::UnsupportedDependentMotive { .. }
+        ));
+        assert_eq!(err.lane(), "unsupported_dependent_motive");
+    }
+
+    #[test]
+    fn body_view_rejects_unsupported_proof_only_match() {
+        let (mut package, target, _, _) = data_match_package();
+        let (bool_ty, false_ctor, true_ctor) = bool_data_symbols();
+        let table = table_many(&[
+            (GlobalId(1), target.clone()),
+            (GlobalId(10), bool_ty),
+            (GlobalId(11), false_ctor),
+            (GlobalId(12), true_ctor),
+        ]);
+        replace_body(
+            &mut package,
+            &target,
+            Term::Elim {
+                fam: GlobalId(10),
+                level_args: Vec::new(),
+                params: Vec::new(),
+                motive: Box::new(proof_only_motive(Term::IndFormer {
+                    id: GlobalId(10),
+                    level_args: Vec::new(),
+                })),
+                methods: vec![
+                    Term::Constructor {
+                        id: GlobalId(11),
+                        level_args: Vec::new(),
+                    },
+                    Term::Constructor {
+                        id: GlobalId(12),
+                        level_args: Vec::new(),
+                    },
+                ],
+                indices: Vec::new(),
+                scrut: Box::new(Term::Constructor {
+                    id: GlobalId(12),
+                    level_args: Vec::new(),
+                }),
+            },
+            &table,
+        );
+        let selection =
+            body_view_selection(&package, target.clone(), BTreeSet::from([target.clone()]));
+
+        let err = checked_core_declaration_body_view(&package, &selection, &target).unwrap_err();
+
+        assert!(matches!(
+            err,
+            CheckedCoreBodyViewError::UnsupportedProofOnlyMatch { .. }
+        ));
+        assert_eq!(err.lane(), "unsupported_proof_only_match");
+    }
+
+    #[test]
+    fn body_view_rejects_unsupported_eliminator_shape() {
+        let (mut package, target, _, _) = data_match_package();
+        let (bool_ty, _, _) = bool_data_symbols();
+        package
+            .artifact
+            .semantic
+            .data_metadata
+            .get_mut(&bool_ty)
+            .unwrap()
+            .eliminator = LowerabilityStatus::Unsupported {
+            reason: "dependent match lowering not selected".to_string(),
+        };
+        refresh_package_hashes(&mut package);
+        let selection =
+            body_view_selection(&package, target.clone(), BTreeSet::from([target.clone()]));
+
+        let err = checked_core_declaration_body_view(&package, &selection, &target).unwrap_err();
+
+        assert!(matches!(
+            err,
+            CheckedCoreBodyViewError::UnsupportedEliminatorShape { .. }
+        ));
+        assert_eq!(err.lane(), "unsupported_eliminator_shape");
+    }
+
+    #[test]
+    fn body_view_rejects_unjustified_impossible_branch() {
+        let (mut package, target, _, _) = data_match_package();
+        let (bool_ty, false_ctor, true_ctor) = bool_data_symbols();
+        let table = table_many(&[
+            (GlobalId(1), target.clone()),
+            (GlobalId(10), bool_ty),
+            (GlobalId(11), false_ctor),
+            (GlobalId(12), true_ctor),
+        ]);
+        replace_body(
+            &mut package,
+            &target,
+            Term::Elim {
+                fam: GlobalId(10),
+                level_args: Vec::new(),
+                params: Vec::new(),
+                motive: Box::new(constant_type_motive(
+                    Term::IndFormer {
+                        id: GlobalId(10),
+                        level_args: Vec::new(),
+                    },
+                    Term::Type(Level::zero()),
+                )),
+                methods: vec![
+                    Term::Absurd(Box::new(Term::Type(Level::zero())), Box::new(Term::Var(0))),
+                    Term::Constructor {
+                        id: GlobalId(12),
+                        level_args: Vec::new(),
+                    },
+                ],
+                indices: Vec::new(),
+                scrut: Box::new(Term::Constructor {
+                    id: GlobalId(12),
+                    level_args: Vec::new(),
+                }),
+            },
+            &table,
+        );
+        let selection =
+            body_view_selection(&package, target.clone(), BTreeSet::from([target.clone()]));
+
+        let err = checked_core_declaration_body_view(&package, &selection, &target).unwrap_err();
+
+        assert_eq!(
+            err,
+            CheckedCoreBodyViewError::UnjustifiedImpossibleBranch { symbol: target }
+        );
+        assert_eq!(err.lane(), "unjustified_impossible_branch");
     }
 
     #[test]

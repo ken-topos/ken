@@ -63,6 +63,28 @@ whose closure reaches that entry rejects before erasure/runtime IR. A consumer
 of a valid emitted package must be able to validate and inspect the checked-core
 artifact without reading raw surface source bytes.
 
+### 1.2 Checked Body Views
+
+A checked-core body view is an untrusted projection over a valid
+`CheckedCorePackage v0` plus the exact target closure selected for a later
+compiler stage. It is not a new authority lane: before exposing a declaration
+body, the view must validate package identity, semantic hash, artifact hash,
+target membership, and selected-closure membership against the package.
+
+Structured constructor and match views may expose constructor references and
+supported eliminator shape only from canonical package declaration bytes and
+package data metadata. Constructor identity is package-bound by the stable
+constructor symbol, parent family symbol, arity, target-index count, recursive
+positions, and lowerability metadata already carried in the package.
+
+A body view must fail closed, with stable report lanes, when package facts do
+not justify the requested structure. In particular, stale constructor identity,
+missing branch data, unsupported dependent motives, unsupported proof-only
+matches, unsupported eliminator shapes, and impossible-branch use without
+package evidence are loud rejects before erasure/runtime IR. This section does
+not define runtime IR, evaluator behavior, ABI/layout, native backend lowering,
+coverage changes, or a raw-source fallback.
+
 ## 2. Relation to Existing Specs
 
 NC1 reuses the existing contracts below and defines only the checked-core
