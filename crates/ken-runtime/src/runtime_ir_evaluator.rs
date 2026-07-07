@@ -1,4 +1,4 @@
-//! NC12 backend-neutral Runtime IR evaluator and interpreter comparison report.
+//! Backend-neutral Runtime IR evaluator and interpreter comparison report.
 //!
 //! This module executes `RuntimeExpr` directly from the runtime artifact. It is
 //! deliberately below the native/backend boundary: evaluator success is only a
@@ -28,7 +28,7 @@ pub struct RuntimeIrRunReport {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RuntimeIrEvaluator {
-    Nc12RuntimeIrEvaluatorV1,
+    DirectRuntimeIrEvaluatorV1,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -65,7 +65,7 @@ pub struct RuntimeIrDifferentialReport {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RuntimeIrDifferentialVerdict {
-    Nc12InterpreterRuntimeIrAgreement {
+    InterpreterRuntimeIrAgreement {
         stage: RuntimeIrDifferentialStage,
     },
     Unsupported {
@@ -111,8 +111,8 @@ pub struct RuntimeIrTrustReport {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RuntimeIrTrustTier {
-    Nc12RuntimeIrObservation,
-    Nc12InterpreterRuntimeIrAgreement,
+    RuntimeIrObservation,
+    InterpreterRuntimeIrAgreement,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -195,7 +195,7 @@ impl RuntimeIrRunEvidence {
         );
         evidence_sources.insert(
             "runtime_ir_evaluator".to_string(),
-            "ken-runtime NC12 direct RuntimeExpr evaluator".to_string(),
+            "ken-runtime direct RuntimeExpr evaluator".to_string(),
         );
         Self {
             package_identity: program.package_identity.clone(),
@@ -217,9 +217,9 @@ impl RuntimeIrRunEvidence {
 impl RuntimeIrTrustReport {
     fn observation() -> Self {
         Self {
-            tier: RuntimeIrTrustTier::Nc12RuntimeIrObservation,
+            tier: RuntimeIrTrustTier::RuntimeIrObservation,
             evaluator: RuntimeIrEvidenceFact::Available {
-                value: "NC12 direct RuntimeExpr evaluator".to_string(),
+                value: "direct RuntimeExpr evaluator".to_string(),
                 evidence_source: "ken-runtime evaluated the RuntimeExpr without Cranelift"
                     .to_string(),
             },
@@ -228,14 +228,14 @@ impl RuntimeIrTrustReport {
                     .to_string(),
             },
             native_backend: RuntimeIrEvidenceFact::Unavailable {
-                reason: "NC12 runtime-IR evaluation does not invoke Cranelift or native code"
+                reason: "direct runtime-IR evaluation does not invoke Cranelift or native code"
                     .to_string(),
             },
             object_artifact: RuntimeIrEvidenceFact::Unavailable {
-                reason: "NC12 runtime-IR evaluation does not emit object artifacts".to_string(),
+                reason: "direct runtime-IR evaluation does not emit object artifacts".to_string(),
             },
             linker: RuntimeIrEvidenceFact::Unavailable {
-                reason: "NC12 runtime-IR evaluation does not invoke a linker".to_string(),
+                reason: "direct runtime-IR evaluation does not invoke a linker".to_string(),
             },
             source_level_proof: RuntimeIrEvidenceFact::Unavailable {
                 reason: "runtime-IR observation is not a source-level semantics proof".to_string(),
@@ -245,7 +245,7 @@ impl RuntimeIrTrustReport {
 
     fn agreement() -> Self {
         let mut report = Self::caller_supplied_interpreter_observation();
-        report.tier = RuntimeIrTrustTier::Nc12InterpreterRuntimeIrAgreement;
+        report.tier = RuntimeIrTrustTier::InterpreterRuntimeIrAgreement;
         report
     }
 
@@ -277,14 +277,14 @@ pub fn evaluate_runtime_ir_example(
     let artifact = RuntimeArtifactIdentity::from_program(program);
     let target = RuntimeIrTargetIdentity::from_example(example);
     Ok(RuntimeIrRunReport {
-        evaluator: RuntimeIrEvaluator::Nc12RuntimeIrEvaluatorV1,
+        evaluator: RuntimeIrEvaluator::DirectRuntimeIrEvaluatorV1,
         target: target.clone(),
         artifact: artifact.clone(),
         observation: RuntimeIrObservation {
             artifact,
             target,
             observation,
-            evidence_source: "ken-runtime NC12 direct RuntimeExpr evaluator".to_string(),
+            evidence_source: "ken-runtime direct RuntimeExpr evaluator".to_string(),
         },
         evidence: RuntimeIrRunEvidence::from_program_and_example(program, example),
         trust: RuntimeIrTrustReport::observation(),
@@ -370,7 +370,7 @@ pub fn compare_runtime_ir_with_interpreter_observation(
     let runtime_ir = report.observation;
     let (verdict, trust) = if interpreter.observation == runtime_ir.observation {
         (
-            RuntimeIrDifferentialVerdict::Nc12InterpreterRuntimeIrAgreement {
+            RuntimeIrDifferentialVerdict::InterpreterRuntimeIrAgreement {
                 stage: RuntimeIrDifferentialStage::InterpreterRuntimeIrCompare,
             },
             RuntimeIrTrustReport::agreement(),
@@ -402,19 +402,19 @@ pub fn reject_runtime_ir_program_blockers(
     if !program.erased_core.metadata.effects.is_empty() {
         return Err(preflight_unsupported(
             "RuntimeProgram",
-            "package carries effect metadata outside the NC12 supported subset",
+            "package carries effect metadata outside the supported runtime-IR subset",
         ));
     }
     if !program.erased_core.metadata.capabilities.is_empty() {
         return Err(preflight_unsupported(
             "RuntimeProgram",
-            "package carries capability metadata outside the NC12 supported subset",
+            "package carries capability metadata outside the supported runtime-IR subset",
         ));
     }
     if !program.erased_core.metadata.runtime_checks.is_empty() {
         return Err(preflight_unsupported(
             "RuntimeProgram",
-            "package carries runtime-check metadata outside the NC12 supported subset",
+            "package carries runtime-check metadata outside the supported runtime-IR subset",
         ));
     }
     if !program.erased_core.metadata.assumptions.is_empty()
@@ -427,7 +427,7 @@ pub fn reject_runtime_ir_program_blockers(
     {
         return Err(preflight_unsupported(
             "RuntimeProgram",
-            "package carries trust metadata outside the NC12 supported subset",
+            "package carries trust metadata outside the supported runtime-IR subset",
         ));
     }
 
@@ -479,7 +479,7 @@ pub fn reject_runtime_ir_program_blockers(
             return Err(preflight_unsupported(
                 "RuntimeProgram",
                 format!(
-                    "{} carries effect metadata outside the NC12 supported subset",
+                    "{} carries effect metadata outside the supported runtime-IR subset",
                     declaration.symbol
                 ),
             ));
@@ -488,7 +488,7 @@ pub fn reject_runtime_ir_program_blockers(
             return Err(preflight_unsupported(
                 "RuntimeProgram",
                 format!(
-                    "{} carries capability metadata outside the NC12 supported subset",
+                    "{} carries capability metadata outside the supported runtime-IR subset",
                     declaration.symbol
                 ),
             ));
@@ -497,7 +497,7 @@ pub fn reject_runtime_ir_program_blockers(
             return Err(preflight_unsupported(
                 "RuntimeProgram",
                 format!(
-                    "{} carries runtime-check metadata outside the NC12 supported subset",
+                    "{} carries runtime-check metadata outside the supported runtime-IR subset",
                     declaration.symbol
                 ),
             ));
@@ -509,7 +509,7 @@ pub fn reject_runtime_ir_program_blockers(
             return Err(preflight_unsupported(
                 "RuntimeProgram",
                 format!(
-                    "{} carries trust metadata outside the NC12 supported subset",
+                    "{} carries trust metadata outside the supported runtime-IR subset",
                     declaration.symbol
                 ),
             ));
@@ -520,7 +520,7 @@ pub fn reject_runtime_ir_program_blockers(
                 return Err(preflight_unsupported(
                     "RuntimeProgram",
                     format!(
-                        "{} declares effects outside the NC12 supported subset",
+                        "{} declares effects outside the supported runtime-IR subset",
                         declaration.symbol
                     ),
                 ));
@@ -544,7 +544,7 @@ pub fn reject_runtime_ir_program_blockers(
                 return Err(preflight_unsupported(
                     "RuntimeProgram",
                     format!(
-                        "{} carries effects/foreign metadata outside the NC12 subset",
+                        "{} carries effects/foreign metadata outside the supported runtime-IR subset",
                         declaration.symbol
                     ),
                 ));
@@ -741,7 +741,7 @@ impl<'a> RuntimeIrEvaluatorState<'a> {
             }
             RuntimeExpr::Effect { effect, .. } => Err(eval_unsupported(
                 "Effect",
-                format!("effect {effect} is not modeled in the NC12 supported subset"),
+                format!("effect {effect} is not modeled in the supported runtime-IR subset"),
             )),
             RuntimeExpr::Trap(trap) => Ok(RuntimeIrOutcome::Trap(trap.clone())),
         }
@@ -801,7 +801,7 @@ impl<'a> RuntimeIrEvaluatorState<'a> {
             }),
             RuntimeValue::ClosureRef { .. } => Err(eval_unsupported(
                 "ClosureRef",
-                "pre-existing closure references are not executable by the NC12 evaluator",
+                "pre-existing closure references are not executable by the direct runtime-IR evaluator",
             )),
             RuntimeValue::Unknown => Err(eval_unsupported(
                 "Unknown",
@@ -896,14 +896,14 @@ impl<'a> RuntimeIrEvaluatorState<'a> {
                 let (EvaluatedValue::Int(lhs), EvaluatedValue::Int(rhs)) = (lhs, rhs) else {
                     return Err(eval_unsupported(
                         "PrimitiveCall",
-                        "add_int only supports Int arguments in NC12",
+                        "add_int only supports Int arguments in the supported runtime-IR subset",
                     ));
                 };
                 Ok(RuntimeIrOutcome::Value(EvaluatedValue::Int(lhs + rhs)))
             }
             other => Err(eval_unsupported(
                 "PrimitiveCall",
-                format!("primitive {other} is not in the NC12 supported set"),
+                format!("primitive {other} is not in the supported runtime-IR set"),
             )),
         }
     }
@@ -930,7 +930,7 @@ fn ground_value(value: EvaluatedValue) -> Result<RuntimeGroundValue, RuntimeIrEv
         }),
         EvaluatedValue::Closure { .. } => Err(eval_unsupported(
             "Closure",
-            "closures are callable but not observable ground values in NC12",
+            "closures are callable but not observable ground values in the supported runtime-IR subset",
         )),
     }
 }

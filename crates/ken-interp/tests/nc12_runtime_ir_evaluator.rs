@@ -1,4 +1,5 @@
 use std::collections::BTreeSet;
+use std::fmt::Debug;
 
 use ken_elaborator::checked_core::{StableSymbol, SymbolNamespace};
 use ken_elaborator::compiler_driver::{
@@ -21,6 +22,16 @@ struct OracleFixture {
     globals: GlobalEnv,
     store: EvalStore,
     term: Term,
+}
+
+fn assert_no_wp_local_report_names(report: &impl Debug) {
+    let rendered = format!("{report:?}");
+    let forbidden_upper = ["N", "C12"].concat();
+    let forbidden_camel = ["N", "c12"].concat();
+    assert!(
+        !rendered.contains(&forbidden_upper) && !rendered.contains(&forbidden_camel),
+        "durable report/debug surface must not contain WP-local naming: {rendered}"
+    );
 }
 
 fn interpreter_add_2_3_fixture() -> OracleFixture {
@@ -124,7 +135,7 @@ fn oracle_observation(
     let value = eval(&[], &term, &globals, &mut store);
     let observation = match value {
         EvalVal::Int(value) => RuntimeObservation::Returned(RuntimeGroundValue::Int(value)),
-        other => panic!("NC12 oracle fixture must return Int, got {other:?}"),
+        other => panic!("runtime IR oracle fixture must return Int, got {other:?}"),
     };
     RuntimeInterpreterObservation {
         artifact: RuntimeArtifactIdentity::from_program(program),
@@ -149,6 +160,7 @@ fn runtime_ir_evaluator_runs_nc5_seed_subset_without_native_claims() {
         let report =
             evaluate_runtime_ir_example(&program, &example, &env).expect("runtime IR evaluates");
 
+        assert_no_wp_local_report_names(&report);
         assert_eq!(report.observation.observation, example.observation);
         assert_eq!(
             report.artifact,
@@ -158,10 +170,7 @@ fn runtime_ir_evaluator_runs_nc5_seed_subset_without_native_claims() {
             report.target,
             RuntimeIrTargetIdentity::from_example(&example)
         );
-        assert_eq!(
-            report.trust.tier,
-            RuntimeIrTrustTier::Nc12RuntimeIrObservation
-        );
+        assert_eq!(report.trust.tier, RuntimeIrTrustTier::RuntimeIrObservation);
         assert!(matches!(
             report.trust.native_backend,
             RuntimeIrEvidenceFact::Unavailable { .. }
@@ -195,6 +204,7 @@ fn caller_supplied_interpreter_agreement_binds_identities_without_live_path_clai
         oracle.clone(),
     );
 
+    assert_no_wp_local_report_names(&report);
     assert_eq!(
         report.artifact,
         RuntimeArtifactIdentity::from_program(&program)
@@ -206,13 +216,13 @@ fn caller_supplied_interpreter_agreement_binds_identities_without_live_path_clai
     assert_eq!(report.interpreter, oracle);
     assert_eq!(
         report.verdict,
-        RuntimeIrDifferentialVerdict::Nc12InterpreterRuntimeIrAgreement {
+        RuntimeIrDifferentialVerdict::InterpreterRuntimeIrAgreement {
             stage: RuntimeIrDifferentialStage::InterpreterRuntimeIrCompare,
         }
     );
     assert_eq!(
         report.trust.tier,
-        RuntimeIrTrustTier::Nc12InterpreterRuntimeIrAgreement
+        RuntimeIrTrustTier::InterpreterRuntimeIrAgreement
     );
     assert!(matches!(
         report.trust.native_backend,
@@ -266,6 +276,7 @@ fn disagreement_report_names_artifact_target_and_both_observations() {
         oracle,
     );
 
+    assert_no_wp_local_report_names(&report);
     assert_eq!(report.artifact.artifact_hash, 0x1204);
     assert_eq!(report.target.example, "mismatched-runtime-ir");
     assert!(report.runtime_ir.is_some(), "runtime side must have run");
@@ -279,7 +290,7 @@ fn disagreement_report_names_artifact_target_and_both_observations() {
     ));
     assert_ne!(
         report.trust.tier,
-        RuntimeIrTrustTier::Nc12InterpreterRuntimeIrAgreement,
+        RuntimeIrTrustTier::InterpreterRuntimeIrAgreement,
         "mismatch reports must not carry the agreement trust tier"
     );
     assert!(matches!(
@@ -306,6 +317,7 @@ fn stale_oracle_identity_rejects_before_runtime_ir_evaluation() {
         oracle,
     );
 
+    assert_no_wp_local_report_names(&report);
     assert!(report.runtime_ir.is_none());
     assert!(matches!(
         report.verdict,
