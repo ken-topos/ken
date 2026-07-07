@@ -4,12 +4,12 @@
 //! `RuntimeProgram`. It does not certify Cranelift, native execution, object
 //! layout, or whole-compiler correctness.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 use crate::{
     RuntimeDeclarationKind, RuntimeEffectBoundary, RuntimeExpr, RuntimeLowerabilityStatus,
-    RuntimePartiality, RuntimeProgram, RuntimeSymbol, RuntimeValue,
+    RuntimeObligationMetadata, RuntimePartiality, RuntimeProgram, RuntimeSymbol, RuntimeValue,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -83,6 +83,79 @@ pub enum RuntimeArtifactValidationTier {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ProofErasureBoundaryWitness {
+    pub artifact: RuntimeArtifactIdentity,
+    pub facts: ProofErasureBoundaryFacts,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ProofErasureBoundaryFacts {
+    pub runtime_declaration_targets: BTreeSet<RuntimeSymbol>,
+    pub record_field_statuses: BTreeMap<RuntimeSymbol, Vec<ProofErasureFieldStatus>>,
+    pub checked_core_record_field_statuses: BTreeMap<RuntimeSymbol, Vec<ProofErasureFieldStatus>>,
+    pub lowerability: BTreeMap<RuntimeSymbol, RuntimeLowerabilityStatus>,
+    pub unsupported: BTreeMap<RuntimeSymbol, Vec<u8>>,
+    pub obligations: BTreeMap<RuntimeSymbol, Vec<u8>>,
+    pub obligation_metadata: BTreeMap<RuntimeSymbol, RuntimeObligationMetadata>,
+    pub assumptions: BTreeMap<RuntimeSymbol, Vec<u8>>,
+    pub assumption_trust_metadata: BTreeMap<RuntimeSymbol, crate::RuntimeAssumptionTrustMetadata>,
+    pub trusted_base_delta: BTreeMap<RuntimeSymbol, Vec<u8>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ProofErasureFieldStatus {
+    pub name: String,
+    pub status: crate::RuntimeFieldStatus,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ProofErasureBoundaryWitnessReport {
+    pub tier: ProofErasureBoundaryWitnessTier,
+    pub artifact: RuntimeArtifactIdentity,
+    pub validator: ProofErasureBoundaryWitnessValidator,
+    pub evidence_source: String,
+    pub facts: ProofErasureBoundaryFacts,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct KenCheckedProofErasureBoundaryReport {
+    pub tier: ProofErasureBoundaryWitnessTier,
+    pub artifact: RuntimeArtifactIdentity,
+    pub checker: KenProofErasureBoundaryChecker,
+    pub evidence_source: String,
+    pub helper_assumptions: Vec<String>,
+    pub facts: ProofErasureBoundaryFacts,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ProofErasureBoundaryWitnessTier {
+    Nc9BoundedProofErasureBoundary,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum KenProofErasureBoundaryChecker {
+    Nc9KenLaneVerdictCheckerV1,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ProofErasureBoundaryWitnessValidator {
+    Nc9ProofErasureBoundaryWitnessV1,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ProofErasureBoundaryWitnessError {
+    pub stage: ProofErasureBoundaryWitnessStage,
+    pub lane: &'static str,
+    pub reason: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ProofErasureBoundaryWitnessStage {
+    WitnessIdentity,
+    WitnessMismatch,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RuntimeArtifactValidationError {
     pub stage: RuntimeArtifactValidationStage,
     pub fact: &'static str,
@@ -140,6 +213,14 @@ impl fmt::Display for RuntimeArtifactValidationError {
 }
 
 impl std::error::Error for RuntimeArtifactValidationError {}
+
+impl fmt::Display for ProofErasureBoundaryWitnessError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}/{}: {}", self.stage, self.lane, self.reason)
+    }
+}
+
+impl std::error::Error for ProofErasureBoundaryWitnessError {}
 
 pub fn validate_supported_runtime_artifact_certificate(
     program: &RuntimeProgram,
@@ -254,6 +335,103 @@ pub fn validate_supported_runtime_artifact_certificate(
             "ken-runtime NC8 checker recomputed supported-subset facts from RuntimeProgram"
                 .to_string(),
         facts,
+    })
+}
+
+pub fn proof_erasure_boundary_facts_from_program(
+    program: &RuntimeProgram,
+) -> ProofErasureBoundaryFacts {
+    let metadata = &program.erased_core.metadata;
+    ProofErasureBoundaryFacts {
+        runtime_declaration_targets: metadata.runtime_declaration_targets.clone(),
+        record_field_statuses: program_declaration_record_field_statuses(program),
+        checked_core_record_field_statuses: program_checked_core_record_field_statuses(program),
+        lowerability: metadata.lowerability.clone(),
+        unsupported: metadata.unsupported.clone(),
+        obligations: metadata.obligations.clone(),
+        obligation_metadata: metadata.obligation_metadata.clone(),
+        assumptions: metadata.assumptions.clone(),
+        assumption_trust_metadata: metadata.assumption_trust_metadata.clone(),
+        trusted_base_delta: metadata.trusted_base_delta.clone(),
+    }
+}
+
+pub fn validate_proof_erasure_boundary_witness(
+    program: &RuntimeProgram,
+    witness: &ProofErasureBoundaryWitness,
+) -> Result<ProofErasureBoundaryWitnessReport, ProofErasureBoundaryWitnessError> {
+    let artifact = RuntimeArtifactIdentity::from_program(program);
+    if witness.artifact != artifact {
+        return Err(proof_erasure_witness_error(
+            ProofErasureBoundaryWitnessStage::WitnessIdentity,
+            "artifact_identity",
+            format!(
+                "witness identity {:?} does not match RuntimeProgram identity {:?}",
+                witness.artifact, artifact
+            ),
+        ));
+    }
+
+    let recomputed = proof_erasure_boundary_facts_from_program(program);
+    require_witness_lane_match(
+        &witness.facts.runtime_declaration_targets,
+        &recomputed.runtime_declaration_targets,
+        "runtime_declaration_targets",
+    )?;
+    require_witness_lane_match(
+        &witness.facts.record_field_statuses,
+        &recomputed.record_field_statuses,
+        "record_field_statuses",
+    )?;
+    require_witness_lane_match(
+        &witness.facts.checked_core_record_field_statuses,
+        &recomputed.checked_core_record_field_statuses,
+        "checked_core_record_field_statuses",
+    )?;
+    require_witness_lane_match(
+        &witness.facts.lowerability,
+        &recomputed.lowerability,
+        "lowerability",
+    )?;
+    require_witness_lane_match(
+        &witness.facts.unsupported,
+        &recomputed.unsupported,
+        "unsupported",
+    )?;
+    require_witness_lane_match(
+        &witness.facts.obligations,
+        &recomputed.obligations,
+        "obligations",
+    )?;
+    require_witness_lane_match(
+        &witness.facts.obligation_metadata,
+        &recomputed.obligation_metadata,
+        "obligation_metadata",
+    )?;
+    require_witness_lane_match(
+        &witness.facts.assumptions,
+        &recomputed.assumptions,
+        "assumptions",
+    )?;
+    require_witness_lane_match(
+        &witness.facts.assumption_trust_metadata,
+        &recomputed.assumption_trust_metadata,
+        "assumption_trust_metadata",
+    )?;
+    require_witness_lane_match(
+        &witness.facts.trusted_base_delta,
+        &recomputed.trusted_base_delta,
+        "trusted_base_delta",
+    )?;
+
+    Ok(ProofErasureBoundaryWitnessReport {
+        tier: ProofErasureBoundaryWitnessTier::Nc9BoundedProofErasureBoundary,
+        artifact,
+        validator: ProofErasureBoundaryWitnessValidator::Nc9ProofErasureBoundaryWitnessV1,
+        evidence_source:
+            "ken-runtime NC9 witness checker recomputed proof-erasure boundary facts from RuntimeProgram"
+                .to_string(),
+        facts: recomputed,
     })
 }
 
@@ -643,6 +821,89 @@ fn validate_runtime_value(
         | RuntimeValue::Int(_)
         | RuntimeValue::Bytes(_)
         | RuntimeValue::String(_) => Ok(()),
+    }
+}
+
+fn program_declaration_record_field_statuses(
+    program: &RuntimeProgram,
+) -> BTreeMap<RuntimeSymbol, Vec<ProofErasureFieldStatus>> {
+    let mut statuses = BTreeMap::new();
+    for declaration in &program.declarations {
+        collect_declaration_field_statuses(&mut statuses, &declaration.symbol, &declaration.kind);
+    }
+    statuses
+}
+
+fn program_checked_core_record_field_statuses(
+    program: &RuntimeProgram,
+) -> BTreeMap<RuntimeSymbol, Vec<ProofErasureFieldStatus>> {
+    program
+        .erased_core
+        .metadata
+        .checked_core
+        .record_sigma_metadata
+        .iter()
+        .map(|(symbol, meta)| {
+            (
+                symbol.clone(),
+                meta.fields
+                    .iter()
+                    .map(|field| ProofErasureFieldStatus {
+                        name: field.name.clone(),
+                        status: field.runtime.clone(),
+                    })
+                    .collect(),
+            )
+        })
+        .collect()
+}
+
+fn collect_declaration_field_statuses(
+    statuses: &mut BTreeMap<RuntimeSymbol, Vec<ProofErasureFieldStatus>>,
+    symbol: &RuntimeSymbol,
+    kind: &RuntimeDeclarationKind,
+) {
+    if let RuntimeDeclarationKind::Record { fields } = kind {
+        statuses.insert(
+            symbol.clone(),
+            fields
+                .iter()
+                .map(|field| ProofErasureFieldStatus {
+                    name: field.name.clone(),
+                    status: field.status.clone(),
+                })
+                .collect(),
+        );
+    }
+}
+
+fn require_witness_lane_match<T: PartialEq + fmt::Debug>(
+    witness: &T,
+    recomputed: &T,
+    lane: &'static str,
+) -> Result<(), ProofErasureBoundaryWitnessError> {
+    if witness == recomputed {
+        Ok(())
+    } else {
+        Err(proof_erasure_witness_error(
+            ProofErasureBoundaryWitnessStage::WitnessMismatch,
+            lane,
+            format!(
+                "witness lane does not match RuntimeProgram recomputation: witness={witness:?}, recomputed={recomputed:?}"
+            ),
+        ))
+    }
+}
+
+pub fn proof_erasure_witness_error(
+    stage: ProofErasureBoundaryWitnessStage,
+    lane: &'static str,
+    reason: impl Into<String>,
+) -> ProofErasureBoundaryWitnessError {
+    ProofErasureBoundaryWitnessError {
+        stage,
+        lane,
+        reason: reason.into(),
     }
 }
 

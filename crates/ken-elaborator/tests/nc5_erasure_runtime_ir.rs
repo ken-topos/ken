@@ -1,12 +1,18 @@
 use ken_elaborator::checked_core::{
     emit_checked_core_package, representative_checked_core_fixtures, AssumptionTrustKind,
     AssumptionTrustMetadata, CheckedCorePackage, LowerabilityStatus, ObligationMetadata,
-    ObligationStatus, PartialityMetadata, StableSymbol, SymbolNamespace,
+    ObligationStatus, PartialityMetadata, RecordSigmaKind, RecordSigmaMetadata, StableSymbol,
+    SymbolNamespace,
 };
-use ken_elaborator::erasure::{erase_checked_core_package_for_target, ErasureError};
+use ken_elaborator::erasure::{
+    emit_proof_erasure_boundary_witness, emit_proof_erasure_boundary_witness_for_targets,
+    erase_checked_core_package_for_target, ErasureError,
+};
 use ken_runtime::{
-    RuntimeAssumptionTrustKind, RuntimeDeclarationKind, RuntimeEffectBoundary,
-    RuntimeLowerabilityStatus, RuntimeObligationStatus, RuntimePartiality,
+    validate_proof_erasure_boundary_witness, ProofErasureBoundaryWitnessStage,
+    ProofErasureBoundaryWitnessTier, RuntimeAssumptionTrustKind, RuntimeDeclarationKind,
+    RuntimeEffectBoundary, RuntimeFieldStatus, RuntimeLowerabilityStatus, RuntimeObligationStatus,
+    RuntimePartiality,
 };
 
 fn fixture_package() -> CheckedCorePackage {
@@ -33,6 +39,122 @@ fn reemit(mut package: CheckedCorePackage) -> CheckedCorePackage {
     package.header.dependency_semantic_hashes =
         package.artifact.semantic.dependency_semantic_hashes.clone();
     emit_checked_core_package(package.header, package.artifact).expect("package re-emits")
+}
+
+fn proof_erasure_record_package() -> (CheckedCorePackage, StableSymbol, StableSymbol, StableSymbol)
+{
+    let mut package = fixture_package();
+    let target = StableSymbol::declaration("fixture", &["Proof"], "ErasureRecord");
+    let obligation = StableSymbol::obligation("erasure-record.obligation");
+    let assumption = StableSymbol::assumption(&target, "trusted-helper");
+    let non_target_record = StableSymbol::declaration("fixture", &["Proof"], "NonTargetRecord");
+    let non_target_unsupported = StableSymbol::new(
+        SymbolNamespace::Unsupported,
+        ["fixture".to_string(), "NonTarget".to_string()],
+    );
+
+    package.artifact.semantic.symbols.extend([
+        target.clone(),
+        non_target_record.clone(),
+        obligation.clone(),
+        assumption.clone(),
+        non_target_unsupported.clone(),
+    ]);
+    package
+        .artifact
+        .semantic
+        .declarations
+        .insert(target.clone(), b"checked-decl:erasure-record".to_vec());
+    package.artifact.semantic.declarations.insert(
+        non_target_record.clone(),
+        b"checked-decl:non-target-record".to_vec(),
+    );
+    package.artifact.semantic.record_sigma_metadata.insert(
+        target.clone(),
+        RecordSigmaMetadata {
+            kind: RecordSigmaKind::Record,
+            fields: vec![
+                ken_elaborator::checked_core::FieldMetadata {
+                    name: "runtime_payload".to_string(),
+                    ty: target.clone(),
+                    runtime: ken_elaborator::checked_core::RuntimeFieldStatus::Runtime,
+                },
+                ken_elaborator::checked_core::FieldMetadata {
+                    name: "law_payload".to_string(),
+                    ty: target.clone(),
+                    runtime: ken_elaborator::checked_core::RuntimeFieldStatus::ErasedLaw,
+                },
+                ken_elaborator::checked_core::FieldMetadata {
+                    name: "proof_payload".to_string(),
+                    ty: target.clone(),
+                    runtime: ken_elaborator::checked_core::RuntimeFieldStatus::ErasedProof,
+                },
+            ],
+            lowerability: LowerabilityStatus::Supported,
+        },
+    );
+    package.artifact.semantic.record_sigma_metadata.insert(
+        non_target_record.clone(),
+        RecordSigmaMetadata {
+            kind: RecordSigmaKind::Record,
+            fields: vec![ken_elaborator::checked_core::FieldMetadata {
+                name: "non_target_proof".to_string(),
+                ty: non_target_record.clone(),
+                runtime: ken_elaborator::checked_core::RuntimeFieldStatus::ErasedProof,
+            }],
+            lowerability: LowerabilityStatus::Supported,
+        },
+    );
+    package
+        .artifact
+        .semantic
+        .lowerability
+        .insert(target.clone(), LowerabilityStatus::Supported);
+    package
+        .artifact
+        .semantic
+        .lowerability
+        .insert(non_target_record.clone(), LowerabilityStatus::Supported);
+    package.artifact.semantic.obligations.insert(
+        obligation.clone(),
+        b"obligation survives the proof-erasure boundary".to_vec(),
+    );
+    package.artifact.semantic.obligation_metadata.insert(
+        obligation.clone(),
+        ObligationMetadata {
+            status: ObligationStatus::Unknown,
+            origin: target.clone(),
+            affects_runtime_meaning: true,
+        },
+    );
+    package.artifact.semantic.assumptions.insert(
+        assumption.clone(),
+        b"assumption survives the proof-erasure boundary".to_vec(),
+    );
+    package.artifact.semantic.assumption_trust_metadata.insert(
+        assumption.clone(),
+        AssumptionTrustMetadata {
+            kind: AssumptionTrustKind::PrimitiveAssumption,
+            target: target.clone(),
+            affects_runtime_meaning: true,
+        },
+    );
+    package.artifact.semantic.trusted_base_delta.insert(
+        assumption.clone(),
+        b"trusted-base delta survives the proof-erasure boundary".to_vec(),
+    );
+    package.artifact.semantic.lowerability.insert(
+        non_target_unsupported.clone(),
+        LowerabilityStatus::Unsupported {
+            reason: "non-target unsupported lane remains auditable".to_string(),
+        },
+    );
+    package.artifact.semantic.unsupported.insert(
+        non_target_unsupported.clone(),
+        b"non-target unsupported".to_vec(),
+    );
+
+    (reemit(package), target, obligation, assumption)
 }
 
 #[test]
@@ -193,6 +315,282 @@ fn erasure_consumes_package_only_and_preserves_metadata() {
         !program.erased_core.metadata.effects.is_empty(),
         "effect metadata survives as IR metadata"
     );
+}
+
+#[test]
+fn proof_erasure_boundary_witness_accepts_pair_derived_metadata() {
+    let (package, target, obligation, assumption) = proof_erasure_record_package();
+    let non_target_record = StableSymbol::declaration("fixture", &["Proof"], "NonTargetRecord");
+    let program =
+        erase_checked_core_package_for_target(&package, [&target]).expect("erasure succeeds");
+
+    let witness = emit_proof_erasure_boundary_witness_for_targets(&package, [&target], &program)
+        .expect("pair-derived witness emits");
+    let report = validate_proof_erasure_boundary_witness(&program, &witness)
+        .expect("runtime witness report validates");
+
+    assert_eq!(
+        report.tier,
+        ProofErasureBoundaryWitnessTier::Nc9BoundedProofErasureBoundary
+    );
+    assert_eq!(
+        report.artifact.package_identity,
+        package.header.package_identity.to_string()
+    );
+    assert_eq!(
+        report.artifact.core_semantic_hash,
+        package.core_semantic_hash
+    );
+    assert_eq!(report.artifact.artifact_hash, package.artifact_hash);
+    assert!(report
+        .facts
+        .runtime_declaration_targets
+        .contains(&target.to_string()));
+    assert!(!report
+        .facts
+        .runtime_declaration_targets
+        .contains(&non_target_record.to_string()));
+    let field_statuses = report
+        .facts
+        .record_field_statuses
+        .get(&target.to_string())
+        .expect("record field statuses present");
+    assert_eq!(
+        field_statuses
+            .iter()
+            .map(|field| (field.name.clone(), field.status.clone()))
+            .collect::<Vec<_>>(),
+        vec![
+            ("runtime_payload".to_string(), RuntimeFieldStatus::Runtime),
+            ("law_payload".to_string(), RuntimeFieldStatus::ErasedLaw),
+            ("proof_payload".to_string(), RuntimeFieldStatus::ErasedProof),
+        ]
+    );
+    assert_eq!(
+        report
+            .facts
+            .checked_core_record_field_statuses
+            .get(&target.to_string()),
+        Some(field_statuses)
+    );
+    assert!(!report
+        .facts
+        .record_field_statuses
+        .contains_key(&non_target_record.to_string()));
+    assert!(report
+        .facts
+        .checked_core_record_field_statuses
+        .contains_key(&non_target_record.to_string()));
+    assert!(report
+        .facts
+        .obligation_metadata
+        .contains_key(&obligation.to_string()));
+    assert!(report
+        .facts
+        .assumption_trust_metadata
+        .contains_key(&assumption.to_string()));
+    assert!(report
+        .facts
+        .trusted_base_delta
+        .contains_key(&assumption.to_string()));
+    assert!(
+        report
+            .facts
+            .unsupported
+            .values()
+            .any(|bytes| bytes == &b"non-target unsupported".to_vec()),
+        "non-target unsupported lane survives in the witness"
+    );
+}
+
+#[test]
+fn proof_erasure_boundary_witness_rejects_missing_runtime_record_declaration() {
+    let (package, target, _, _) = proof_erasure_record_package();
+    let mut program =
+        erase_checked_core_package_for_target(&package, [&target]).expect("erasure succeeds");
+    program.declarations.clear();
+
+    let err = emit_proof_erasure_boundary_witness_for_targets(&package, [&target], &program)
+        .expect_err("missing runtime record declaration must reject");
+
+    assert!(matches!(
+        err,
+        ErasureError::ProofErasureBoundaryWitness(witness)
+            if witness.stage == ProofErasureBoundaryWitnessStage::WitnessMismatch
+                && witness.lane == "record_field_statuses"
+    ));
+}
+
+#[test]
+fn proof_erasure_boundary_witness_rejects_missing_record_declaration_and_target_metadata() {
+    let (package, target, _, _) = proof_erasure_record_package();
+    let mut program =
+        erase_checked_core_package_for_target(&package, [&target]).expect("erasure succeeds");
+    program.declarations.clear();
+    program
+        .erased_core
+        .metadata
+        .runtime_declaration_targets
+        .clear();
+
+    let err = emit_proof_erasure_boundary_witness_for_targets(&package, [&target], &program)
+        .expect_err("missing runtime record declaration and target metadata must reject");
+
+    assert!(matches!(
+        err,
+        ErasureError::ProofErasureBoundaryWitness(witness)
+            if witness.stage == ProofErasureBoundaryWitnessStage::WitnessMismatch
+                && witness.lane == "runtime_declaration_targets"
+    ));
+}
+
+#[test]
+fn proof_erasure_boundary_pair_only_emitter_rejects_ambiguous_record_targets() {
+    let (package, target, _, _) = proof_erasure_record_package();
+    let mut program =
+        erase_checked_core_package_for_target(&package, [&target]).expect("erasure succeeds");
+    program.declarations.clear();
+    program
+        .erased_core
+        .metadata
+        .runtime_declaration_targets
+        .clear();
+
+    let err = emit_proof_erasure_boundary_witness(&package, &program)
+        .expect_err("pair-only witness emission must fail closed without record target evidence");
+
+    assert!(matches!(
+        err,
+        ErasureError::ProofErasureBoundaryWitness(witness)
+            if witness.stage == ProofErasureBoundaryWitnessStage::WitnessMismatch
+                && witness.lane == "runtime_declaration_targets"
+    ));
+}
+
+#[test]
+fn proof_erasure_boundary_witness_rejects_stale_identity() {
+    let (package, target, _, _) = proof_erasure_record_package();
+    let mut program =
+        erase_checked_core_package_for_target(&package, [&target]).expect("erasure succeeds");
+    program.artifact_hash += 1;
+
+    let err = emit_proof_erasure_boundary_witness_for_targets(&package, [&target], &program)
+        .expect_err("stale identity must reject before witness success");
+
+    assert!(matches!(
+        err,
+        ErasureError::ProofErasureBoundaryWitness(witness)
+            if witness.stage == ProofErasureBoundaryWitnessStage::WitnessIdentity
+                && witness.lane == "artifact_identity"
+    ));
+}
+
+#[test]
+fn proof_erasure_boundary_witness_names_dropped_metadata_lanes() {
+    for lane in [
+        "obligation_metadata",
+        "assumption_trust_metadata",
+        "lowerability",
+        "unsupported",
+    ] {
+        let (package, target, _, _) = proof_erasure_record_package();
+        let mut program =
+            erase_checked_core_package_for_target(&package, [&target]).expect("erasure succeeds");
+        match lane {
+            "obligation_metadata" => program.erased_core.metadata.obligation_metadata.clear(),
+            "assumption_trust_metadata" => {
+                program
+                    .erased_core
+                    .metadata
+                    .assumption_trust_metadata
+                    .clear();
+            }
+            "lowerability" => {
+                program
+                    .erased_core
+                    .metadata
+                    .lowerability
+                    .remove(&target.to_string());
+            }
+            "unsupported" => program.erased_core.metadata.unsupported.clear(),
+            _ => unreachable!("test lanes are exhaustive"),
+        }
+
+        let err =
+            match emit_proof_erasure_boundary_witness_for_targets(&package, [&target], &program) {
+                Ok(_) => panic!("{lane} drop must reject"),
+                Err(err) => err,
+            };
+
+        assert!(matches!(
+            err,
+            ErasureError::ProofErasureBoundaryWitness(witness)
+                if witness.stage == ProofErasureBoundaryWitnessStage::WitnessMismatch
+                    && witness.lane == lane
+        ));
+    }
+}
+
+#[test]
+fn proof_erasure_boundary_witness_rejects_field_status_drift() {
+    let (package, target, _, _) = proof_erasure_record_package();
+    let mut program =
+        erase_checked_core_package_for_target(&package, [&target]).expect("erasure succeeds");
+    let RuntimeDeclarationKind::Record { fields } = &mut program.declarations[0].kind else {
+        panic!("fixture target lowers to record");
+    };
+    fields[1].status = RuntimeFieldStatus::Runtime;
+
+    let err = emit_proof_erasure_boundary_witness_for_targets(&package, [&target], &program)
+        .expect_err("field status drift must reject");
+
+    assert!(matches!(
+        err,
+        ErasureError::ProofErasureBoundaryWitness(witness)
+            if witness.stage == ProofErasureBoundaryWitnessStage::WitnessMismatch
+                && witness.lane == "record_field_statuses"
+    ));
+}
+
+#[test]
+fn proof_erasure_boundary_witness_rejects_checked_core_field_status_drift() {
+    let (package, target, _, _) = proof_erasure_record_package();
+    let mut program =
+        erase_checked_core_package_for_target(&package, [&target]).expect("erasure succeeds");
+    let metadata = program
+        .erased_core
+        .metadata
+        .checked_core
+        .record_sigma_metadata
+        .get_mut(&target.to_string())
+        .expect("checked-core record metadata present");
+    metadata.fields[2].runtime = RuntimeFieldStatus::Runtime;
+
+    let err = emit_proof_erasure_boundary_witness_for_targets(&package, [&target], &program)
+        .expect_err("checked-core metadata field status drift must reject");
+
+    assert!(matches!(
+        err,
+        ErasureError::ProofErasureBoundaryWitness(witness)
+            if witness.stage == ProofErasureBoundaryWitnessStage::WitnessMismatch
+                && witness.lane == "checked_core_record_field_statuses"
+    ));
+}
+
+#[test]
+fn proof_erasure_boundary_witness_report_rejects_witness_program_mismatch() {
+    let (package, target, _, _) = proof_erasure_record_package();
+    let mut program =
+        erase_checked_core_package_for_target(&package, [&target]).expect("erasure succeeds");
+    let witness = emit_proof_erasure_boundary_witness_for_targets(&package, [&target], &program)
+        .expect("pair-derived witness emits");
+    program.erased_core.metadata.obligations.clear();
+
+    let err = validate_proof_erasure_boundary_witness(&program, &witness)
+        .expect_err("witness/program mismatch must reject");
+
+    assert_eq!(err.stage, ProofErasureBoundaryWitnessStage::WitnessMismatch);
+    assert_eq!(err.lane, "obligations");
 }
 
 #[test]

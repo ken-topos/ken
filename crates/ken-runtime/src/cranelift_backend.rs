@@ -18,9 +18,11 @@ use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{default_libcall_names, Linkage, Module};
 
 use crate::{
-    validate_supported_runtime_artifact_certificate, RuntimeArtifactCertificate,
-    RuntimeArtifactValidationError, RuntimeArtifactValidationReport, RuntimeDeclarationKind,
-    RuntimeEffectBoundary, RuntimeExample, RuntimeExpr, RuntimeGroundValue,
+    proof_erasure_boundary_facts_from_program, proof_erasure_witness_error,
+    validate_supported_runtime_artifact_certificate, KenCheckedProofErasureBoundaryReport,
+    ProofErasureBoundaryWitnessError, ProofErasureBoundaryWitnessStage, RuntimeArtifactCertificate,
+    RuntimeArtifactIdentity, RuntimeArtifactValidationError, RuntimeArtifactValidationReport,
+    RuntimeDeclarationKind, RuntimeEffectBoundary, RuntimeExample, RuntimeExpr, RuntimeGroundValue,
     RuntimeLowerabilityStatus, RuntimeObservation, RuntimePartiality, RuntimePrimitive,
     RuntimeProgram, RuntimeTrap, RuntimeTrapCode, RuntimeValue,
 };
@@ -40,6 +42,7 @@ pub struct NativeTrustReport {
     pub fidelity: NativeFidelity,
     pub verifier_passed: bool,
     pub artifact_validation: Option<RuntimeArtifactValidationReport>,
+    pub ken_checked_proof_erasure_boundary: Option<KenCheckedProofErasureBoundaryReport>,
     pub toolchain: NativeToolchainReport,
     pub evidence: NativeRunEvidence,
     pub assumptions: BTreeSet<String>,
@@ -267,6 +270,7 @@ pub fn run_nc8_validated_seed_examples(
                 NativeFidelity::F0NativeExample,
                 NativeRunEvidence::from_program(program),
                 Some(validation.clone()),
+                None,
             )?;
             if report.observation == example.observation {
                 report.trust.fidelity = NativeFidelity::F1SeedObservationAgreement;
@@ -282,7 +286,7 @@ pub fn run_example_with_interpreter_observation(
     env: &NativeSeedEnvironment,
     oracle: InterpreterOracleObservation,
 ) -> NativeDifferentialReport {
-    run_example_with_interpreter_observation_and_validation(program, example, env, oracle, None)
+    run_example_with_interpreter_observation_and_reports(program, example, env, oracle, None, None)
 }
 
 pub fn run_validated_example_with_interpreter_observation(
@@ -302,12 +306,108 @@ pub fn run_validated_example_with_interpreter_observation(
     ))
 }
 
+pub fn run_ken_checked_proof_erasure_example_with_interpreter_observation(
+    program: &RuntimeProgram,
+    example: &RuntimeExample,
+    env: &NativeSeedEnvironment,
+    oracle: InterpreterOracleObservation,
+    proof_erasure_boundary: KenCheckedProofErasureBoundaryReport,
+) -> Result<NativeDifferentialReport, ProofErasureBoundaryWitnessError> {
+    let artifact = RuntimeArtifactIdentity::from_program(program);
+    if proof_erasure_boundary.artifact != artifact {
+        return Err(proof_erasure_witness_error(
+            ProofErasureBoundaryWitnessStage::WitnessIdentity,
+            "artifact_identity",
+            format!(
+                "Ken-checked proof-erasure report identity {:?} does not match RuntimeProgram identity {:?}",
+                proof_erasure_boundary.artifact, artifact
+            ),
+        ));
+    }
+    let recomputed_facts = proof_erasure_boundary_facts_from_program(program);
+    if let Some(lane) =
+        proof_erasure_boundary_report_mismatch_lane(&proof_erasure_boundary, &recomputed_facts)
+    {
+        return Err(proof_erasure_witness_error(
+            ProofErasureBoundaryWitnessStage::WitnessMismatch,
+            lane,
+            "Ken-checked proof-erasure report facts do not match the RuntimeProgram lanes",
+        ));
+    }
+
+    Ok(run_example_with_interpreter_observation_and_reports(
+        program,
+        example,
+        env,
+        oracle,
+        None,
+        Some(proof_erasure_boundary),
+    ))
+}
+
+fn proof_erasure_boundary_report_mismatch_lane(
+    report: &KenCheckedProofErasureBoundaryReport,
+    recomputed: &crate::ProofErasureBoundaryFacts,
+) -> Option<&'static str> {
+    if report.facts.runtime_declaration_targets != recomputed.runtime_declaration_targets {
+        return Some("runtime_declaration_targets");
+    }
+    if report.facts.record_field_statuses != recomputed.record_field_statuses {
+        return Some("record_field_statuses");
+    }
+    if report.facts.checked_core_record_field_statuses
+        != recomputed.checked_core_record_field_statuses
+    {
+        return Some("checked_core_record_field_statuses");
+    }
+    if report.facts.lowerability != recomputed.lowerability {
+        return Some("lowerability");
+    }
+    if report.facts.unsupported != recomputed.unsupported {
+        return Some("unsupported");
+    }
+    if report.facts.obligations != recomputed.obligations {
+        return Some("obligations");
+    }
+    if report.facts.obligation_metadata != recomputed.obligation_metadata {
+        return Some("obligation_metadata");
+    }
+    if report.facts.assumptions != recomputed.assumptions {
+        return Some("assumptions");
+    }
+    if report.facts.assumption_trust_metadata != recomputed.assumption_trust_metadata {
+        return Some("assumption_trust_metadata");
+    }
+    if report.facts.trusted_base_delta != recomputed.trusted_base_delta {
+        return Some("trusted_base_delta");
+    }
+    None
+}
+
 fn run_example_with_interpreter_observation_and_validation(
     program: &RuntimeProgram,
     example: &RuntimeExample,
     env: &NativeSeedEnvironment,
     oracle: InterpreterOracleObservation,
     artifact_validation: Option<RuntimeArtifactValidationReport>,
+) -> NativeDifferentialReport {
+    run_example_with_interpreter_observation_and_reports(
+        program,
+        example,
+        env,
+        oracle,
+        artifact_validation,
+        None,
+    )
+}
+
+fn run_example_with_interpreter_observation_and_reports(
+    program: &RuntimeProgram,
+    example: &RuntimeExample,
+    env: &NativeSeedEnvironment,
+    oracle: InterpreterOracleObservation,
+    artifact_validation: Option<RuntimeArtifactValidationReport>,
+    ken_checked_proof_erasure_boundary: Option<KenCheckedProofErasureBoundaryReport>,
 ) -> NativeDifferentialReport {
     let artifact = NativeArtifactIdentity::from_program(program);
 
@@ -325,6 +425,7 @@ fn run_example_with_interpreter_observation_and_validation(
         NativeFidelity::F0NativeExample,
         NativeRunEvidence::from_program(program),
         artifact_validation,
+        ken_checked_proof_erasure_boundary,
     ) {
         Ok(mut native) => {
             if native.observation == oracle.observation {
@@ -509,6 +610,7 @@ pub fn run_example_with_seed_observation(
         NativeFidelity::F0NativeExample,
         NativeRunEvidence::seed_example(),
         None,
+        None,
     )?;
     if report.observation == example.observation {
         report.trust.fidelity = NativeFidelity::F1SeedObservationAgreement;
@@ -522,6 +624,7 @@ fn run_example_native(
     fidelity: NativeFidelity,
     evidence: NativeRunEvidence,
     artifact_validation: Option<RuntimeArtifactValidationReport>,
+    ken_checked_proof_erasure_boundary: Option<KenCheckedProofErasureBoundaryReport>,
 ) -> Result<CraneliftRunReport, CraneliftBackendError> {
     let compiled = compile_expr(&example.ir, env)?;
     let verifier_passed = compiled.verifier_passed;
@@ -538,6 +641,7 @@ fn run_example_native(
             fidelity,
             verifier_passed,
             artifact_validation,
+            ken_checked_proof_erasure_boundary,
             toolchain: native_toolchain_report(),
             evidence,
             assumptions,

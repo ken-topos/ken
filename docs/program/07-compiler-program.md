@@ -86,6 +86,12 @@ Fidelity tiers:
 The first useful campaign targets F1/F2. Later work raises selected paths to
 F3-F5 without pretending the whole backend is kernel-certified.
 
+NC9's first Ken-checked pass evidence is intentionally narrower than whole
+erasure or self-hosting: it checks bounded proof-erasure metadata and
+pass-boundary facts across the concrete `CheckedCorePackage v0` /
+`RuntimeProgram` pair. It does not certify runtime expression/body lowering,
+Cranelift, linker behavior, native execution, or whole-compiler correctness.
+
 ## 5. Work Packages
 
 The compiler work packages use `NC` IDs. They extend `X3` rather than replacing
@@ -102,7 +108,7 @@ campaign that makes it buildable.
 | `NC6` | Cranelift backend spike | Runtime | NC5, X1 |
 | `NC7` | Differential harness and native trust report | Runtime/Verify | NC6 |
 | `NC8` | First certificate validator | Verify/Kernel | NC5, NC7 |
-| `NC9` | First Ken-owned or Ken-checked compiler pass | Language/Runtime/Verify | NC8 |
+| `NC9` | Bounded Ken-checked proof-erasure boundary checker | Verify-led | NC8 |
 
 The individual WP briefs live under `docs/program/wp/`.
 

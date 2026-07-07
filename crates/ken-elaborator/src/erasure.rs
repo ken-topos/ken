@@ -19,6 +19,7 @@ use crate::checked_core::{
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ErasureError {
     InvalidPackage(CheckedCorePackageError),
+    ProofErasureBoundaryWitness(ProofErasureBoundaryWitnessError),
     UnsupportedErasure {
         symbol: StableSymbol,
         reason: String,
@@ -33,6 +34,7 @@ impl fmt::Display for ErasureError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ErasureError::InvalidPackage(err) => err.fmt(f),
+            ErasureError::ProofErasureBoundaryWitness(err) => err.fmt(f),
             ErasureError::UnsupportedErasure { symbol, reason } => {
                 write!(f, "unsupported erasure for {symbol}: {reason}")
             }
@@ -48,6 +50,12 @@ impl std::error::Error for ErasureError {}
 impl From<CheckedCorePackageError> for ErasureError {
     fn from(value: CheckedCorePackageError) -> Self {
         ErasureError::InvalidPackage(value)
+    }
+}
+
+impl From<ProofErasureBoundaryWitnessError> for ErasureError {
+    fn from(value: ProofErasureBoundaryWitnessError) -> Self {
+        ErasureError::ProofErasureBoundaryWitness(value)
     }
 }
 
@@ -76,6 +84,7 @@ pub fn erase_checked_core_package_for_target<'a>(
             .collect(),
         lowerability: lowerability_map(&semantic.lowerability),
         unsupported: symbol_bytes_map(&semantic.unsupported),
+        runtime_declaration_targets: targets.iter().map(ToString::to_string).collect(),
         checked_core: checked_core_metadata(semantic),
         runtime_checks: runtime_checks_for_targets(package, &targets),
         capabilities: capabilities_for_targets(package, &targets),
@@ -102,6 +111,134 @@ pub fn erase_checked_core_package_for_target<'a>(
         declarations,
         examples: nc5_seed_examples(),
     })
+}
+
+pub fn emit_proof_erasure_boundary_witness(
+    package: &CheckedCorePackage,
+    program: &RuntimeProgram,
+) -> Result<ProofErasureBoundaryWitness, ErasureError> {
+    let expected_targets = program
+        .erased_core
+        .metadata
+        .runtime_declaration_targets
+        .clone();
+    let record_symbols = package
+        .artifact
+        .semantic
+        .record_sigma_metadata
+        .keys()
+        .map(ToString::to_string)
+        .collect::<BTreeSet<_>>();
+    if !record_symbols.is_subset(&expected_targets) {
+        return Err(proof_erasure_witness_error(
+            ProofErasureBoundaryWitnessStage::WitnessMismatch,
+            "runtime_declaration_targets",
+            format!(
+                "pair-only witness emission cannot distinguish non-target records from missing runtime targets: records={record_symbols:?}, runtime_targets={expected_targets:?}"
+            ),
+        )
+        .into());
+    }
+
+    emit_proof_erasure_boundary_witness_with_targets(package, expected_targets, program)
+}
+
+pub fn emit_proof_erasure_boundary_witness_for_targets<'a>(
+    package: &CheckedCorePackage,
+    target_closure: impl IntoIterator<Item = &'a StableSymbol>,
+    program: &RuntimeProgram,
+) -> Result<ProofErasureBoundaryWitness, ErasureError> {
+    let expected_targets = target_closure
+        .into_iter()
+        .map(ToString::to_string)
+        .collect::<BTreeSet<_>>();
+    emit_proof_erasure_boundary_witness_with_targets(package, expected_targets, program)
+}
+
+fn emit_proof_erasure_boundary_witness_with_targets(
+    package: &CheckedCorePackage,
+    expected_targets: BTreeSet<String>,
+    program: &RuntimeProgram,
+) -> Result<ProofErasureBoundaryWitness, ErasureError> {
+    validate_checked_core_package(package)?;
+
+    let package_identity = RuntimeArtifactIdentity {
+        package_identity: package.header.package_identity.to_string(),
+        core_semantic_hash: package.core_semantic_hash,
+        artifact_hash: package.artifact_hash,
+    };
+    let program_identity = RuntimeArtifactIdentity::from_program(program);
+    if package_identity != program_identity {
+        return Err(proof_erasure_witness_error(
+            ProofErasureBoundaryWitnessStage::WitnessIdentity,
+            "artifact_identity",
+            format!(
+                "CheckedCorePackage identity {:?} does not match RuntimeProgram identity {:?}",
+                package_identity, program_identity
+            ),
+        )
+        .into());
+    }
+
+    let package_facts = proof_erasure_boundary_facts_from_package(package, expected_targets);
+    let program_facts = proof_erasure_boundary_facts_from_program(program);
+    require_erasure_lane_match(
+        &package_facts.runtime_declaration_targets,
+        &program_facts.runtime_declaration_targets,
+        "runtime_declaration_targets",
+    )?;
+    require_erasure_lane_match(
+        &package_facts.record_field_statuses,
+        &program_facts.record_field_statuses,
+        "record_field_statuses",
+    )?;
+    require_erasure_lane_match(
+        &package_facts.checked_core_record_field_statuses,
+        &program_facts.checked_core_record_field_statuses,
+        "checked_core_record_field_statuses",
+    )?;
+    require_erasure_lane_match(
+        &package_facts.lowerability,
+        &program_facts.lowerability,
+        "lowerability",
+    )?;
+    require_erasure_lane_match(
+        &package_facts.unsupported,
+        &program_facts.unsupported,
+        "unsupported",
+    )?;
+    require_erasure_lane_match(
+        &package_facts.obligations,
+        &program_facts.obligations,
+        "obligations",
+    )?;
+    require_erasure_lane_match(
+        &package_facts.obligation_metadata,
+        &program_facts.obligation_metadata,
+        "obligation_metadata",
+    )?;
+    require_erasure_lane_match(
+        &package_facts.assumptions,
+        &program_facts.assumptions,
+        "assumptions",
+    )?;
+    require_erasure_lane_match(
+        &package_facts.assumption_trust_metadata,
+        &program_facts.assumption_trust_metadata,
+        "assumption_trust_metadata",
+    )?;
+    require_erasure_lane_match(
+        &package_facts.trusted_base_delta,
+        &program_facts.trusted_base_delta,
+        "trusted_base_delta",
+    )?;
+
+    let witness = ProofErasureBoundaryWitness {
+        artifact: program_identity,
+        facts: package_facts,
+    };
+    validate_proof_erasure_boundary_witness(program, &witness)?;
+    Ok(witness)
 }
 
 fn reject_reachable_unsupported(
@@ -339,6 +476,88 @@ fn metadata_for_symbol(
         runtime_checks: runtime_checks_for_targets(package, &[symbol.clone()]),
         capabilities: capabilities_for_targets(package, &[symbol.clone()]),
         effects: effects_for_targets(package, &[symbol.clone()]),
+    }
+}
+
+fn proof_erasure_boundary_facts_from_package(
+    package: &CheckedCorePackage,
+    expected_targets: BTreeSet<String>,
+) -> ProofErasureBoundaryFacts {
+    let semantic = &package.artifact.semantic;
+    ProofErasureBoundaryFacts {
+        record_field_statuses: package_declaration_record_field_statuses(
+            package,
+            &expected_targets,
+        ),
+        runtime_declaration_targets: expected_targets,
+        checked_core_record_field_statuses: package_record_field_statuses(package),
+        lowerability: lowerability_map(&semantic.lowerability),
+        unsupported: symbol_bytes_map(&semantic.unsupported),
+        obligations: symbol_bytes_map(&semantic.obligations),
+        obligation_metadata: obligation_metadata_map(&semantic.obligation_metadata),
+        assumptions: symbol_bytes_map(&semantic.assumptions),
+        assumption_trust_metadata: assumption_trust_metadata_map(
+            &semantic.assumption_trust_metadata,
+        ),
+        trusted_base_delta: symbol_bytes_map(&semantic.trusted_base_delta),
+    }
+}
+
+fn package_declaration_record_field_statuses(
+    package: &CheckedCorePackage,
+    expected_targets: &BTreeSet<String>,
+) -> BTreeMap<String, Vec<ProofErasureFieldStatus>> {
+    let package_records = package_record_field_statuses(package);
+    expected_targets
+        .iter()
+        .filter_map(|symbol| {
+            package_records
+                .get(symbol)
+                .cloned()
+                .map(|fields| (symbol.clone(), fields))
+        })
+        .collect()
+}
+
+fn package_record_field_statuses(
+    package: &CheckedCorePackage,
+) -> BTreeMap<String, Vec<ProofErasureFieldStatus>> {
+    package
+        .artifact
+        .semantic
+        .record_sigma_metadata
+        .iter()
+        .map(|(symbol, meta)| {
+            (
+                symbol.to_string(),
+                meta.fields
+                    .iter()
+                    .map(|field| ProofErasureFieldStatus {
+                        name: field.name.clone(),
+                        status: runtime_field_status(&field.runtime),
+                    })
+                    .collect(),
+            )
+        })
+        .collect()
+}
+
+fn require_erasure_lane_match<T: PartialEq + fmt::Debug>(
+    package: &T,
+    program: &T,
+    lane: &'static str,
+) -> Result<(), ErasureError> {
+    if package == program {
+        Ok(())
+    } else {
+        Err(proof_erasure_witness_error(
+            ProofErasureBoundaryWitnessStage::WitnessMismatch,
+            lane,
+            format!(
+                "CheckedCorePackage lane does not match RuntimeProgram lane: package={package:?}, program={program:?}"
+            ),
+        )
+        .into())
     }
 }
 
