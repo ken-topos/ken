@@ -26,6 +26,9 @@ which later backends are validated).
 4. The **content store and its limits** (`44-capacity.md`): addressing, dedup,
    reclamation, and the (deliberately chosen, not numerologically fixed)
    capacity story.
+5. The **checked-core package** (`46-checked-core-package.md`): the stable
+   post-elaboration, kernel-admitted compiler input, including version,
+   semantic-hash, metadata, and trust-coverage rules.
 
 ## 2. The two design commitments this section encodes
 
