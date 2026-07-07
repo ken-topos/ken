@@ -117,6 +117,49 @@ pub fn emit_proof_erasure_boundary_witness(
     package: &CheckedCorePackage,
     program: &RuntimeProgram,
 ) -> Result<ProofErasureBoundaryWitness, ErasureError> {
+    let expected_targets = program
+        .erased_core
+        .metadata
+        .runtime_declaration_targets
+        .clone();
+    let record_symbols = package
+        .artifact
+        .semantic
+        .record_sigma_metadata
+        .keys()
+        .map(ToString::to_string)
+        .collect::<BTreeSet<_>>();
+    if !record_symbols.is_subset(&expected_targets) {
+        return Err(proof_erasure_witness_error(
+            ProofErasureBoundaryWitnessStage::WitnessMismatch,
+            "runtime_declaration_targets",
+            format!(
+                "pair-only witness emission cannot distinguish non-target records from missing runtime targets: records={record_symbols:?}, runtime_targets={expected_targets:?}"
+            ),
+        )
+        .into());
+    }
+
+    emit_proof_erasure_boundary_witness_with_targets(package, expected_targets, program)
+}
+
+pub fn emit_proof_erasure_boundary_witness_for_targets<'a>(
+    package: &CheckedCorePackage,
+    target_closure: impl IntoIterator<Item = &'a StableSymbol>,
+    program: &RuntimeProgram,
+) -> Result<ProofErasureBoundaryWitness, ErasureError> {
+    let expected_targets = target_closure
+        .into_iter()
+        .map(ToString::to_string)
+        .collect::<BTreeSet<_>>();
+    emit_proof_erasure_boundary_witness_with_targets(package, expected_targets, program)
+}
+
+fn emit_proof_erasure_boundary_witness_with_targets(
+    package: &CheckedCorePackage,
+    expected_targets: BTreeSet<String>,
+    program: &RuntimeProgram,
+) -> Result<ProofErasureBoundaryWitness, ErasureError> {
     validate_checked_core_package(package)?;
 
     let package_identity = RuntimeArtifactIdentity {
@@ -137,7 +180,7 @@ pub fn emit_proof_erasure_boundary_witness(
         .into());
     }
 
-    let package_facts = proof_erasure_boundary_facts_from_package(package, program);
+    let package_facts = proof_erasure_boundary_facts_from_package(package, expected_targets);
     let program_facts = proof_erasure_boundary_facts_from_program(program);
     require_erasure_lane_match(
         &package_facts.runtime_declaration_targets,
@@ -438,16 +481,15 @@ fn metadata_for_symbol(
 
 fn proof_erasure_boundary_facts_from_package(
     package: &CheckedCorePackage,
-    program: &RuntimeProgram,
+    expected_targets: BTreeSet<String>,
 ) -> ProofErasureBoundaryFacts {
     let semantic = &package.artifact.semantic;
     ProofErasureBoundaryFacts {
-        runtime_declaration_targets: program
-            .erased_core
-            .metadata
-            .runtime_declaration_targets
-            .clone(),
-        record_field_statuses: package_declaration_record_field_statuses(package, program),
+        record_field_statuses: package_declaration_record_field_statuses(
+            package,
+            &expected_targets,
+        ),
+        runtime_declaration_targets: expected_targets,
         checked_core_record_field_statuses: package_record_field_statuses(package),
         lowerability: lowerability_map(&semantic.lowerability),
         unsupported: symbol_bytes_map(&semantic.unsupported),
@@ -463,13 +505,10 @@ fn proof_erasure_boundary_facts_from_package(
 
 fn package_declaration_record_field_statuses(
     package: &CheckedCorePackage,
-    program: &RuntimeProgram,
+    expected_targets: &BTreeSet<String>,
 ) -> BTreeMap<String, Vec<ProofErasureFieldStatus>> {
     let package_records = package_record_field_statuses(package);
-    program
-        .erased_core
-        .metadata
-        .runtime_declaration_targets
+    expected_targets
         .iter()
         .filter_map(|symbol| {
             package_records

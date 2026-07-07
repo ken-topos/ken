@@ -5,7 +5,8 @@ use ken_elaborator::checked_core::{
     SymbolNamespace,
 };
 use ken_elaborator::erasure::{
-    emit_proof_erasure_boundary_witness, erase_checked_core_package_for_target, ErasureError,
+    emit_proof_erasure_boundary_witness, emit_proof_erasure_boundary_witness_for_targets,
+    erase_checked_core_package_for_target, ErasureError,
 };
 use ken_runtime::{
     validate_proof_erasure_boundary_witness, ProofErasureBoundaryWitnessStage,
@@ -323,7 +324,7 @@ fn proof_erasure_boundary_witness_accepts_pair_derived_metadata() {
     let program =
         erase_checked_core_package_for_target(&package, [&target]).expect("erasure succeeds");
 
-    let witness = emit_proof_erasure_boundary_witness(&package, &program)
+    let witness = emit_proof_erasure_boundary_witness_for_targets(&package, [&target], &program)
         .expect("pair-derived witness emits");
     let report = validate_proof_erasure_boundary_witness(&program, &witness)
         .expect("runtime witness report validates");
@@ -409,7 +410,7 @@ fn proof_erasure_boundary_witness_rejects_missing_runtime_record_declaration() {
         erase_checked_core_package_for_target(&package, [&target]).expect("erasure succeeds");
     program.declarations.clear();
 
-    let err = emit_proof_erasure_boundary_witness(&package, &program)
+    let err = emit_proof_erasure_boundary_witness_for_targets(&package, [&target], &program)
         .expect_err("missing runtime record declaration must reject");
 
     assert!(matches!(
@@ -421,13 +422,59 @@ fn proof_erasure_boundary_witness_rejects_missing_runtime_record_declaration() {
 }
 
 #[test]
+fn proof_erasure_boundary_witness_rejects_missing_record_declaration_and_target_metadata() {
+    let (package, target, _, _) = proof_erasure_record_package();
+    let mut program =
+        erase_checked_core_package_for_target(&package, [&target]).expect("erasure succeeds");
+    program.declarations.clear();
+    program
+        .erased_core
+        .metadata
+        .runtime_declaration_targets
+        .clear();
+
+    let err = emit_proof_erasure_boundary_witness_for_targets(&package, [&target], &program)
+        .expect_err("missing runtime record declaration and target metadata must reject");
+
+    assert!(matches!(
+        err,
+        ErasureError::ProofErasureBoundaryWitness(witness)
+            if witness.stage == ProofErasureBoundaryWitnessStage::WitnessMismatch
+                && witness.lane == "runtime_declaration_targets"
+    ));
+}
+
+#[test]
+fn proof_erasure_boundary_pair_only_emitter_rejects_ambiguous_record_targets() {
+    let (package, target, _, _) = proof_erasure_record_package();
+    let mut program =
+        erase_checked_core_package_for_target(&package, [&target]).expect("erasure succeeds");
+    program.declarations.clear();
+    program
+        .erased_core
+        .metadata
+        .runtime_declaration_targets
+        .clear();
+
+    let err = emit_proof_erasure_boundary_witness(&package, &program)
+        .expect_err("pair-only witness emission must fail closed without record target evidence");
+
+    assert!(matches!(
+        err,
+        ErasureError::ProofErasureBoundaryWitness(witness)
+            if witness.stage == ProofErasureBoundaryWitnessStage::WitnessMismatch
+                && witness.lane == "runtime_declaration_targets"
+    ));
+}
+
+#[test]
 fn proof_erasure_boundary_witness_rejects_stale_identity() {
     let (package, target, _, _) = proof_erasure_record_package();
     let mut program =
         erase_checked_core_package_for_target(&package, [&target]).expect("erasure succeeds");
     program.artifact_hash += 1;
 
-    let err = emit_proof_erasure_boundary_witness(&package, &program)
+    let err = emit_proof_erasure_boundary_witness_for_targets(&package, [&target], &program)
         .expect_err("stale identity must reject before witness success");
 
     assert!(matches!(
@@ -469,10 +516,11 @@ fn proof_erasure_boundary_witness_names_dropped_metadata_lanes() {
             _ => unreachable!("test lanes are exhaustive"),
         }
 
-        let err = match emit_proof_erasure_boundary_witness(&package, &program) {
-            Ok(_) => panic!("{lane} drop must reject"),
-            Err(err) => err,
-        };
+        let err =
+            match emit_proof_erasure_boundary_witness_for_targets(&package, [&target], &program) {
+                Ok(_) => panic!("{lane} drop must reject"),
+                Err(err) => err,
+            };
 
         assert!(matches!(
             err,
@@ -493,7 +541,7 @@ fn proof_erasure_boundary_witness_rejects_field_status_drift() {
     };
     fields[1].status = RuntimeFieldStatus::Runtime;
 
-    let err = emit_proof_erasure_boundary_witness(&package, &program)
+    let err = emit_proof_erasure_boundary_witness_for_targets(&package, [&target], &program)
         .expect_err("field status drift must reject");
 
     assert!(matches!(
@@ -518,7 +566,7 @@ fn proof_erasure_boundary_witness_rejects_checked_core_field_status_drift() {
         .expect("checked-core record metadata present");
     metadata.fields[2].runtime = RuntimeFieldStatus::Runtime;
 
-    let err = emit_proof_erasure_boundary_witness(&package, &program)
+    let err = emit_proof_erasure_boundary_witness_for_targets(&package, [&target], &program)
         .expect_err("checked-core metadata field status drift must reject");
 
     assert!(matches!(
@@ -534,7 +582,7 @@ fn proof_erasure_boundary_witness_report_rejects_witness_program_mismatch() {
     let (package, target, _, _) = proof_erasure_record_package();
     let mut program =
         erase_checked_core_package_for_target(&package, [&target]).expect("erasure succeeds");
-    let witness = emit_proof_erasure_boundary_witness(&package, &program)
+    let witness = emit_proof_erasure_boundary_witness_for_targets(&package, [&target], &program)
         .expect("pair-derived witness emits");
     program.erased_core.metadata.obligations.clear();
 
