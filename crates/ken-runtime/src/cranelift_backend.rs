@@ -45,9 +45,20 @@ pub struct NativeTrustReport {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NativeToolchainReport {
-    pub cranelift: String,
-    pub linker: String,
-    pub runtime: String,
+    pub cranelift: NativeEvidenceFact,
+    pub linker: NativeEvidenceFact,
+    pub runtime: NativeEvidenceFact,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum NativeEvidenceFact {
+    Available {
+        value: String,
+        evidence_source: String,
+    },
+    Unavailable {
+        reason: String,
+    },
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -61,6 +72,7 @@ pub struct NativeRunEvidence {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct InterpreterOracleObservation {
+    pub artifact: NativeArtifactIdentity,
     pub observation: RuntimeObservation,
     pub evidence_source: String,
 }
@@ -211,6 +223,10 @@ pub fn run_example_with_interpreter_observation(
     oracle: InterpreterOracleObservation,
 ) -> NativeDifferentialReport {
     let artifact = NativeArtifactIdentity::from_program(program);
+
+    if oracle.artifact != artifact {
+        return oracle_identity_mismatch_report(example, artifact, oracle);
+    }
 
     if let Err(err) = reject_program_blockers(program) {
         return differential_error_report(example, artifact, oracle, err, true);
@@ -493,9 +509,40 @@ impl NativeRunEvidence {
 
 fn native_toolchain_report() -> NativeToolchainReport {
     NativeToolchainReport {
-        cranelift: "Cranelift JIT selected by the compiled cranelift-jit dependency".to_string(),
-        linker: "cranelift-jit in-process finalized function".to_string(),
-        runtime: format!("ken-runtime {}", env!("CARGO_PKG_VERSION")),
+        cranelift: NativeEvidenceFact::Unavailable {
+            reason: "Cranelift package/version fact is not captured from the exact run yet"
+                .to_string(),
+        },
+        linker: NativeEvidenceFact::Unavailable {
+            reason: "linker/finalizer fact is not captured from the exact run yet".to_string(),
+        },
+        runtime: NativeEvidenceFact::Available {
+            value: format!("ken-runtime {}", env!("CARGO_PKG_VERSION")),
+            evidence_source: "compiled ken-runtime crate version embedded by Cargo for this binary"
+                .to_string(),
+        },
+    }
+}
+
+fn oracle_identity_mismatch_report(
+    example: &RuntimeExample,
+    artifact: NativeArtifactIdentity,
+    oracle: InterpreterOracleObservation,
+) -> NativeDifferentialReport {
+    let reason = format!(
+        "oracle artifact identity {:?} does not match runtime artifact identity {:?}",
+        oracle.artifact, artifact
+    );
+    NativeDifferentialReport {
+        example: example.name.clone(),
+        artifact,
+        oracle,
+        native: None,
+        verdict: NativeDifferentialVerdict::Unsupported {
+            stage: NativeDifferentialStage::BoundaryPreflight,
+            construct: "InterpreterOracleObservation",
+            reason,
+        },
     }
 }
 

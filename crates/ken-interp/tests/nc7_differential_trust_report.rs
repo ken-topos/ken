@@ -3,10 +3,11 @@ use std::collections::BTreeSet;
 use ken_interp::{eval, EvalStore, EvalVal};
 use ken_kernel::{declare_primitive, GlobalEnv, Level, PrimReduction, Term};
 use ken_runtime::{
-    nc5_seed_examples, ErasedExecutableCore, InterpreterOracleObservation, NativeDifferentialStage,
-    NativeDifferentialVerdict, NativeFidelity, RuntimeDeclaration, RuntimeDeclarationKind,
-    RuntimeExpr, RuntimeField, RuntimeFieldStatus, RuntimeGroundValue, RuntimeLowerabilityStatus,
-    RuntimeMetadata, RuntimeObservation, RuntimeProgram, RuntimeSymbolMetadata, RuntimeValue,
+    nc5_seed_examples, ErasedExecutableCore, InterpreterOracleObservation, NativeArtifactIdentity,
+    NativeDifferentialStage, NativeDifferentialVerdict, NativeEvidenceFact, NativeFidelity,
+    RuntimeDeclaration, RuntimeDeclarationKind, RuntimeExpr, RuntimeField, RuntimeFieldStatus,
+    RuntimeGroundValue, RuntimeLowerabilityStatus, RuntimeMetadata, RuntimeObservation,
+    RuntimeProgram, RuntimeSymbolMetadata, RuntimeValue,
 };
 
 struct OracleFixture {
@@ -66,7 +67,15 @@ fn interpreter_add_2_3_fixture() -> OracleFixture {
     }
 }
 
-fn oracle_observation() -> InterpreterOracleObservation {
+fn artifact_identity(artifact_hash: u64) -> NativeArtifactIdentity {
+    NativeArtifactIdentity {
+        package_identity: "module:fixture::nc7".to_string(),
+        core_semantic_hash: 0x7001,
+        runtime_artifact_hash: artifact_hash,
+    }
+}
+
+fn oracle_observation(artifact: NativeArtifactIdentity) -> InterpreterOracleObservation {
     let OracleFixture {
         globals,
         mut store,
@@ -78,6 +87,7 @@ fn oracle_observation() -> InterpreterOracleObservation {
         other => panic!("NC7 oracle fixture must return Int, got {other:?}"),
     };
     InterpreterOracleObservation {
+        artifact,
         observation,
         evidence_source: "ken-interp eval over GlobalEnv + closed core Term: add_int 2 3"
             .to_string(),
@@ -126,14 +136,16 @@ fn scalar_seed_example() -> ken_runtime::RuntimeExample {
 fn interpreter_backed_f1_report_uses_real_oracle_not_seed_observation() {
     let example = scalar_seed_example();
     let program = runtime_program(example.clone(), 0x7002);
+    let artifact = artifact_identity(0x7002);
 
     let report = ken_runtime::run_example_with_interpreter_observation(
         &program,
         &example,
         &ken_runtime::NativeSeedEnvironment::empty(),
-        oracle_observation(),
+        oracle_observation(artifact.clone()),
     );
 
+    assert_eq!(report.oracle.artifact, artifact);
     assert_eq!(
         report.verdict,
         NativeDifferentialVerdict::F1InterpreterAgreement {
@@ -148,6 +160,18 @@ fn interpreter_backed_f1_report_uses_real_oracle_not_seed_observation() {
     assert_eq!(report.artifact.package_identity, "module:fixture::nc7");
     assert_eq!(report.artifact.core_semantic_hash, 0x7001);
     assert_eq!(report.artifact.runtime_artifact_hash, 0x7002);
+    assert!(matches!(
+        native.trust.toolchain.cranelift,
+        NativeEvidenceFact::Unavailable { .. }
+    ));
+    assert!(matches!(
+        native.trust.toolchain.linker,
+        NativeEvidenceFact::Unavailable { .. }
+    ));
+    assert!(matches!(
+        native.trust.toolchain.runtime,
+        NativeEvidenceFact::Available { .. }
+    ));
     assert!(report
         .oracle
         .evidence_source
@@ -164,12 +188,13 @@ fn mismatch_report_names_compare_stage_after_both_sides_run() {
     example.name = "mismatched-runtime-ir".to_string();
     example.ir = RuntimeExpr::Value(RuntimeValue::Int(4));
     let program = runtime_program(example.clone(), 0x7003);
+    let artifact = artifact_identity(0x7003);
 
     let report = ken_runtime::run_example_with_interpreter_observation(
         &program,
         &example,
         &ken_runtime::NativeSeedEnvironment::empty(),
-        oracle_observation(),
+        oracle_observation(artifact),
     );
 
     assert!(report.native.is_some(), "native side must have run");
@@ -188,6 +213,7 @@ fn mismatch_report_names_compare_stage_after_both_sides_run() {
 fn unsupported_preflight_report_emits_no_differential_claim() {
     let example = scalar_seed_example();
     let mut program = runtime_program(example.clone(), 0x7004);
+    let artifact = artifact_identity(0x7004);
     program
         .erased_core
         .metadata
@@ -198,7 +224,7 @@ fn unsupported_preflight_report_emits_no_differential_claim() {
         &program,
         &example,
         &ken_runtime::NativeSeedEnvironment::empty(),
-        oracle_observation(),
+        oracle_observation(artifact),
     );
 
     assert!(report.native.is_none());
@@ -207,6 +233,32 @@ fn unsupported_preflight_report_emits_no_differential_claim() {
         NativeDifferentialVerdict::Unsupported {
             stage: NativeDifferentialStage::BoundaryPreflight,
             construct: "RuntimeProgram",
+            ..
+        }
+    ));
+}
+
+#[test]
+fn oracle_identity_mismatch_emits_no_f1_and_does_not_run_native() {
+    let example = scalar_seed_example();
+    let program = runtime_program(example.clone(), 0x7005);
+    let wrong_artifact = artifact_identity(0x7777);
+
+    let report = ken_runtime::run_example_with_interpreter_observation(
+        &program,
+        &example,
+        &ken_runtime::NativeSeedEnvironment::empty(),
+        oracle_observation(wrong_artifact),
+    );
+
+    assert!(report.native.is_none());
+    assert_eq!(report.artifact, artifact_identity(0x7005));
+    assert_eq!(report.oracle.artifact, artifact_identity(0x7777));
+    assert!(matches!(
+        report.verdict,
+        NativeDifferentialVerdict::Unsupported {
+            stage: NativeDifferentialStage::BoundaryPreflight,
+            construct: "InterpreterOracleObservation",
             ..
         }
     ));
