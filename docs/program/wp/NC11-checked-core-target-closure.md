@@ -12,8 +12,8 @@ dependencies needed by later erasure/runtime lowering.
 
 ## Scope
 
-NC11 strengthens the package boundary before broader lowering starts. It answers:
-"What exact checked-core facts belong to this target?"
+NC11 strengthens the package boundary before broader lowering starts. It
+answers: "What exact checked-core facts belong to this target?"
 
 In scope:
 
@@ -54,3 +54,28 @@ Out of scope:
 - No raw-source fallback for missing checked-core facts.
 - No new kernel admission rule.
 - No promotion of NC8/NC9 validation beyond their bounded surfaces.
+
+## D1 Language Implementation Notes
+
+The D1 implementation stays on the NC10 elaborator/compiler-driver surface:
+target closure is recomputed from the validated `CheckedCorePackage v0` and the
+exact selected target report. It does not change checked-core schema, kernel
+admission, runtime IR, native artifact emission, or validation evidence.
+
+Closure facts exposed to later WPs:
+
+- `TargetClosure.semantic` is the checked-core semantic slice for the target:
+  reachable declarations, reachable metadata, obligations, assumptions,
+  trust-delta entries, lowerability facts, unsupported entries, and package
+  dependency hashes.
+- `TargetClosureReport` records package identity, package hashes, closure
+  semantic hash, closure identity, reachable declaration symbols, external
+  stable symbols, lowerability facts, unsupported lanes, assumptions,
+  obligations, trusted-base delta, and the still-unavailable runtime-lowering
+  fact.
+- Undeclared stable symbols referenced by checked-core declaration bytes remain
+  explicit `unresolved_checked_core_symbol` lanes. They are not treated as
+  successfully lowered dependencies.
+- Reachable unsupported or non-lowerable entries remain closure facts and make
+  runtime lowering unavailable for the report; NC11 does not attempt erasure or
+  `RuntimeProgram` construction.

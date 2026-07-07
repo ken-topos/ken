@@ -13,10 +13,11 @@ use std::path::Path;
 use ken_kernel::{Decl, GlobalId};
 
 use crate::checked_core::{
-    canonical_decl_bytes, emit_checked_core_package, validate_checked_core_package,
-    AssumptionTrustKind, AssumptionTrustMetadata, CheckedCoreArtifactInputs, CheckedCorePackage,
-    CheckedCorePackageError, CheckedCorePackageHeader, CheckedCoreSemanticInputs,
-    LowerabilityStatus, StableSymbol, StableSymbolTable, SymbolNamespace,
+    canonical_decl_bytes, canonical_symbol_bytes, emit_checked_core_package, semantic_fingerprint,
+    validate_checked_core_package, AssumptionTrustKind, AssumptionTrustMetadata,
+    CheckedCoreArtifactInputs, CheckedCorePackage, CheckedCorePackageError,
+    CheckedCorePackageHeader, CheckedCoreSemanticInputs, LowerabilityStatus, StableSymbol,
+    StableSymbolTable, SymbolNamespace,
 };
 use crate::{ElabEnv, ElabError};
 
@@ -113,6 +114,7 @@ pub enum TargetSelector {
 pub struct CompilerDriverOutput {
     pub package: CheckedCorePackage,
     pub report: TargetSelectionReport,
+    pub closures: Vec<TargetClosure>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -140,6 +142,37 @@ pub struct SelectedTargetReport {
     pub kind: CompilerTargetKind,
     pub lowerability: Option<LowerabilityStatus>,
     pub lanes: Vec<UnavailableLane>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TargetClosure {
+    pub package_identity: StableSymbol,
+    pub target: SelectedTargetReport,
+    pub closure_identity: u64,
+    pub reachable_declarations: BTreeSet<StableSymbol>,
+    pub external_symbols: BTreeSet<StableSymbol>,
+    pub semantic: CheckedCoreSemanticInputs,
+    pub report: TargetClosureReport,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TargetClosureReport {
+    pub package_identity: StableSymbol,
+    pub target_symbol: StableSymbol,
+    pub target_kind: CompilerTargetKind,
+    pub package_core_semantic_hash: u64,
+    pub package_artifact_hash: u64,
+    pub closure_semantic_hash: u64,
+    pub closure_identity: u64,
+    pub reachable_declarations: BTreeSet<StableSymbol>,
+    pub external_symbols: BTreeSet<StableSymbol>,
+    pub dependency_semantic_hashes: BTreeMap<StableSymbol, String>,
+    pub obligations: BTreeSet<StableSymbol>,
+    pub assumptions: BTreeSet<StableSymbol>,
+    pub lowerability: BTreeMap<StableSymbol, LowerabilityStatus>,
+    pub unsupported_lanes: BTreeMap<StableSymbol, Vec<UnavailableLane>>,
+    pub trusted_base_delta: BTreeSet<StableSymbol>,
+    pub runtime_lowering: ReportFact,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -188,6 +221,10 @@ pub enum CompilerDriverError {
     MissingStableSymbol {
         id: GlobalId,
     },
+    MissingClosureMetadata {
+        section: &'static str,
+        symbol: StableSymbol,
+    },
 }
 
 impl fmt::Display for CompilerDriverError {
@@ -225,6 +262,10 @@ impl fmt::Display for CompilerDriverError {
             CompilerDriverError::MissingStableSymbol { id } => {
                 write!(f, "missing stable symbol for admitted global {id}")
             }
+            CompilerDriverError::MissingClosureMetadata { section, symbol } => write!(
+                f,
+                "target closure is missing required {section} metadata for {symbol}"
+            ),
         }
     }
 }
@@ -289,8 +330,22 @@ pub fn compile_ken_package_sources(
 
     let package = emit_package_from_env(manifest, &sources, &env, &admitted)?;
     let selected = select_targets(manifest, &package, selector)?;
+    let closures = build_target_closures(&package, &selected)?;
     let report = build_target_selection_report(&package, selected);
-    Ok(CompilerDriverOutput { package, report })
+    Ok(CompilerDriverOutput {
+        package,
+        report,
+        closures,
+    })
+}
+
+pub fn compute_target_closures(
+    manifest: &CompilerManifest,
+    package: &CheckedCorePackage,
+    selector: TargetSelector,
+) -> Result<Vec<TargetClosure>, CompilerDriverError> {
+    let selected = select_targets(manifest, package, selector)?;
+    build_target_closures(package, &selected)
 }
 
 fn emit_package_from_env(
@@ -675,6 +730,352 @@ fn build_target_selection_report(
     report
 }
 
+fn build_target_closures(
+    package: &CheckedCorePackage,
+    selected_targets: &[SelectedTargetReport],
+) -> Result<Vec<TargetClosure>, CompilerDriverError> {
+    validate_checked_core_package(package)?;
+    selected_targets
+        .iter()
+        .map(|target| build_target_closure(package, target))
+        .collect()
+}
+
+fn build_target_closure(
+    package: &CheckedCorePackage,
+    target: &SelectedTargetReport,
+) -> Result<TargetClosure, CompilerDriverError> {
+    let semantic = &package.artifact.semantic;
+    validate_closure_metadata(semantic)?;
+    let dependency_index = declaration_dependency_index(package);
+    let mut reachable_declarations = BTreeSet::from([target.symbol.clone()]);
+    let mut closure_symbols = BTreeSet::from([target.symbol.clone()]);
+    let mut external_symbols = BTreeSet::new();
+    let mut queue = vec![target.symbol.clone()];
+
+    while let Some(symbol) = queue.pop() {
+        if let Some(dependencies) = dependency_index.get(&symbol) {
+            for dependency in dependencies {
+                include_closure_symbol(
+                    semantic,
+                    dependency.clone(),
+                    &mut closure_symbols,
+                    &mut reachable_declarations,
+                    &mut external_symbols,
+                    &mut queue,
+                );
+            }
+        }
+
+        for dependency in metadata_dependencies_for_symbol(semantic, &symbol) {
+            include_closure_symbol(
+                semantic,
+                dependency,
+                &mut closure_symbols,
+                &mut reachable_declarations,
+                &mut external_symbols,
+                &mut queue,
+            );
+        }
+    }
+
+    let closure_semantic =
+        slice_closure_semantic(semantic, &closure_symbols, &reachable_declarations);
+    validate_closure_metadata(&closure_semantic)?;
+    let report = build_target_closure_report(
+        package,
+        target,
+        &closure_semantic,
+        &reachable_declarations,
+        &external_symbols,
+    );
+
+    Ok(TargetClosure {
+        package_identity: package.header.package_identity.clone(),
+        target: target.clone(),
+        closure_identity: report.closure_identity,
+        reachable_declarations,
+        external_symbols,
+        semantic: closure_semantic,
+        report,
+    })
+}
+
+fn declaration_dependency_index(
+    package: &CheckedCorePackage,
+) -> BTreeMap<StableSymbol, BTreeSet<StableSymbol>> {
+    let mut encoded_symbols = package
+        .artifact
+        .semantic
+        .symbols
+        .iter()
+        .map(|symbol| (symbol.clone(), canonical_symbol_bytes(symbol)))
+        .collect::<Vec<_>>();
+    encoded_symbols.sort_by(|(left, _), (right, _)| left.cmp(right));
+
+    let mut index = BTreeMap::new();
+    for (owner, bytes) in &package.artifact.semantic.declarations {
+        let mut dependencies = BTreeSet::new();
+        for (candidate, needle) in &encoded_symbols {
+            if candidate != owner && contains_subslice(bytes, needle) {
+                dependencies.insert(candidate.clone());
+            }
+        }
+        index.insert(owner.clone(), dependencies);
+    }
+    index
+}
+
+fn include_closure_symbol(
+    semantic: &CheckedCoreSemanticInputs,
+    symbol: StableSymbol,
+    closure_symbols: &mut BTreeSet<StableSymbol>,
+    reachable_declarations: &mut BTreeSet<StableSymbol>,
+    external_symbols: &mut BTreeSet<StableSymbol>,
+    queue: &mut Vec<StableSymbol>,
+) {
+    if semantic.declarations.contains_key(&symbol) {
+        if reachable_declarations.insert(symbol.clone()) {
+            queue.push(symbol.clone());
+        }
+        closure_symbols.insert(symbol);
+    } else {
+        if !has_semantic_entry(semantic, &symbol) {
+            external_symbols.insert(symbol.clone());
+        }
+        closure_symbols.insert(symbol);
+    }
+}
+
+fn has_semantic_entry(semantic: &CheckedCoreSemanticInputs, symbol: &StableSymbol) -> bool {
+    semantic.primitive_refs.contains_key(symbol)
+        || semantic.primitive_metadata.contains_key(symbol)
+        || semantic.data_metadata.contains_key(symbol)
+        || semantic.record_sigma_metadata.contains_key(symbol)
+        || semantic.class_instance_metadata.contains_key(symbol)
+        || semantic.recursion_metadata.contains_key(symbol)
+        || semantic.effects_foreign_metadata.contains_key(symbol)
+        || semantic.metadata.contains_key(symbol)
+        || semantic.lowerability.contains_key(symbol)
+        || semantic.obligation_metadata.contains_key(symbol)
+        || semantic.assumption_trust_metadata.contains_key(symbol)
+        || semantic.obligations.contains_key(symbol)
+        || semantic.assumptions.contains_key(symbol)
+        || semantic.trusted_base_delta.contains_key(symbol)
+        || semantic.dependency_semantic_hashes.contains_key(symbol)
+        || semantic.unsupported.contains_key(symbol)
+}
+
+fn metadata_dependencies_for_symbol(
+    semantic: &CheckedCoreSemanticInputs,
+    symbol: &StableSymbol,
+) -> Vec<StableSymbol> {
+    let mut dependencies = Vec::new();
+
+    if let Some(meta) = semantic.primitive_metadata.get(symbol) {
+        match &meta.partiality {
+            crate::checked_core::PartialityMetadata::Total => {}
+            crate::checked_core::PartialityMetadata::CheckedPartial { obligation } => {
+                dependencies.push(obligation.clone());
+            }
+            crate::checked_core::PartialityMetadata::TrustedPartial { assumption } => {
+                dependencies.push(assumption.clone());
+            }
+        }
+    }
+    if let Some(meta) = semantic.data_metadata.get(symbol) {
+        dependencies.extend(meta.constructors.iter().map(|ctor| ctor.symbol.clone()));
+    }
+    if let Some(meta) = semantic.record_sigma_metadata.get(symbol) {
+        dependencies.extend(meta.fields.iter().map(|field| field.ty.clone()));
+    }
+    if let Some(meta) = semantic.class_instance_metadata.get(symbol) {
+        dependencies.extend(meta.class_symbol.iter().cloned());
+        dependencies.extend(meta.dictionary_symbol.iter().cloned());
+        dependencies.extend(meta.head_symbol.iter().cloned());
+    }
+    if let Some(meta) = semantic.recursion_metadata.get(symbol) {
+        dependencies.extend(meta.group_members.iter().cloned());
+    }
+    if let Some(meta) = semantic.effects_foreign_metadata.get(symbol) {
+        dependencies.extend(meta.capabilities.iter().cloned());
+        dependencies.extend(meta.runtime_checks.iter().cloned());
+    }
+
+    for (obligation, meta) in &semantic.obligation_metadata {
+        if &meta.origin == symbol {
+            dependencies.push(obligation.clone());
+        }
+    }
+    for (assumption, meta) in &semantic.assumption_trust_metadata {
+        if &meta.target == symbol {
+            dependencies.push(assumption.clone());
+        }
+    }
+
+    dependencies
+}
+
+fn slice_closure_semantic(
+    semantic: &CheckedCoreSemanticInputs,
+    closure_symbols: &BTreeSet<StableSymbol>,
+    reachable_declarations: &BTreeSet<StableSymbol>,
+) -> CheckedCoreSemanticInputs {
+    let mut sliced = CheckedCoreSemanticInputs::default();
+    sliced.symbols.extend(closure_symbols.iter().cloned());
+    sliced.declarations = filter_map_by_keys(&semantic.declarations, reachable_declarations);
+    sliced.primitive_refs = filter_map_by_keys(&semantic.primitive_refs, closure_symbols);
+    sliced.primitive_metadata = filter_map_by_keys(&semantic.primitive_metadata, closure_symbols);
+    sliced.data_metadata = filter_map_by_keys(&semantic.data_metadata, closure_symbols);
+    sliced.record_sigma_metadata =
+        filter_map_by_keys(&semantic.record_sigma_metadata, closure_symbols);
+    sliced.class_instance_metadata =
+        filter_map_by_keys(&semantic.class_instance_metadata, closure_symbols);
+    sliced.recursion_metadata = filter_map_by_keys(&semantic.recursion_metadata, closure_symbols);
+    sliced.effects_foreign_metadata =
+        filter_map_by_keys(&semantic.effects_foreign_metadata, closure_symbols);
+    sliced.metadata = filter_map_by_keys(&semantic.metadata, closure_symbols);
+    sliced.lowerability = filter_map_by_keys(&semantic.lowerability, closure_symbols);
+    sliced.obligation_metadata = filter_map_by_keys(&semantic.obligation_metadata, closure_symbols);
+    sliced.assumption_trust_metadata =
+        filter_map_by_keys(&semantic.assumption_trust_metadata, closure_symbols);
+    sliced.obligations = filter_map_by_keys(&semantic.obligations, closure_symbols);
+    sliced.assumptions = filter_map_by_keys(&semantic.assumptions, closure_symbols);
+    sliced.trusted_base_delta = filter_map_by_keys(&semantic.trusted_base_delta, closure_symbols);
+    sliced.dependency_semantic_hashes = semantic.dependency_semantic_hashes.clone();
+    sliced.unsupported = filter_map_by_keys(&semantic.unsupported, closure_symbols);
+    sliced
+        .symbols
+        .extend(sliced.dependency_semantic_hashes.keys().cloned());
+    sliced
+}
+
+fn filter_map_by_keys<T: Clone>(
+    map: &BTreeMap<StableSymbol, T>,
+    keys: &BTreeSet<StableSymbol>,
+) -> BTreeMap<StableSymbol, T> {
+    map.iter()
+        .filter(|(symbol, _)| keys.contains(*symbol))
+        .map(|(symbol, value)| (symbol.clone(), value.clone()))
+        .collect()
+}
+
+fn validate_closure_metadata(
+    semantic: &CheckedCoreSemanticInputs,
+) -> Result<(), CompilerDriverError> {
+    for symbol in semantic.obligations.keys() {
+        if !semantic.obligation_metadata.contains_key(symbol) {
+            return Err(CompilerDriverError::MissingClosureMetadata {
+                section: "obligation",
+                symbol: symbol.clone(),
+            });
+        }
+    }
+    for symbol in semantic.assumptions.keys() {
+        if !semantic.assumption_trust_metadata.contains_key(symbol) {
+            return Err(CompilerDriverError::MissingClosureMetadata {
+                section: "assumption",
+                symbol: symbol.clone(),
+            });
+        }
+    }
+    Ok(())
+}
+
+fn build_target_closure_report(
+    package: &CheckedCorePackage,
+    target: &SelectedTargetReport,
+    semantic: &CheckedCoreSemanticInputs,
+    reachable_declarations: &BTreeSet<StableSymbol>,
+    external_symbols: &BTreeSet<StableSymbol>,
+) -> TargetClosureReport {
+    let mut unsupported_lanes = BTreeMap::new();
+
+    for lane in target
+        .lanes
+        .iter()
+        .filter(|lane| lane.lane != "runtime_lowering_unavailable")
+    {
+        unsupported_lanes
+            .entry(target.symbol.clone())
+            .or_insert_with(Vec::new)
+            .push(lane.clone());
+    }
+
+    for (symbol, status) in &semantic.lowerability {
+        if status.blocks_lowering() {
+            unsupported_lanes
+                .entry(symbol.clone())
+                .or_insert_with(Vec::new)
+                .push(UnavailableLane::new(
+                    "non_lowerable_closure_member",
+                    format!("closure member blocks runtime lowering: {status:?}"),
+                ));
+        }
+    }
+
+    for symbol in semantic.unsupported.keys() {
+        unsupported_lanes
+            .entry(symbol.clone())
+            .or_insert_with(Vec::new)
+            .push(UnavailableLane::new(
+                "checked_core_unsupported",
+                "reachable checked-core unsupported lane blocks runtime lowering",
+            ));
+    }
+
+    for symbol in external_symbols {
+        unsupported_lanes
+            .entry(symbol.clone())
+            .or_insert_with(Vec::new)
+            .push(UnavailableLane::new(
+                "unresolved_checked_core_symbol",
+                "closure references a stable symbol without an in-package declaration or dependency body",
+            ));
+    }
+
+    let runtime_lane = unsupported_lanes
+        .values()
+        .flat_map(|lanes| lanes.iter())
+        .next()
+        .cloned()
+        .unwrap_or_else(|| {
+            UnavailableLane::new(
+                "runtime_lowering_unavailable",
+                "NC11 computes checked-core target closure only; runtime lowering starts in later NC work",
+            )
+        });
+
+    let mut report = TargetClosureReport {
+        package_identity: package.header.package_identity.clone(),
+        target_symbol: target.symbol.clone(),
+        target_kind: target.kind.clone(),
+        package_core_semantic_hash: package.core_semantic_hash,
+        package_artifact_hash: package.artifact_hash,
+        closure_semantic_hash: semantic_fingerprint(semantic),
+        closure_identity: 0,
+        reachable_declarations: reachable_declarations.clone(),
+        external_symbols: external_symbols.clone(),
+        dependency_semantic_hashes: semantic.dependency_semantic_hashes.clone(),
+        obligations: semantic.obligations.keys().cloned().collect(),
+        assumptions: semantic.assumptions.keys().cloned().collect(),
+        lowerability: semantic.lowerability.clone(),
+        unsupported_lanes,
+        trusted_base_delta: semantic.trusted_base_delta.keys().cloned().collect(),
+        runtime_lowering: ReportFact::Unavailable(runtime_lane),
+    };
+    report.closure_identity = target_closure_report_fingerprint(&report);
+    report
+}
+
+fn contains_subslice(haystack: &[u8], needle: &[u8]) -> bool {
+    !needle.is_empty()
+        && haystack.len() >= needle.len()
+        && haystack
+            .windows(needle.len())
+            .any(|window| window == needle)
+}
+
 fn target_report_fingerprint(report: &TargetSelectionReport) -> u64 {
     let mut bytes = Vec::new();
     push_str(&mut bytes, &report.package_identity.to_string());
@@ -716,6 +1117,57 @@ fn target_report_fingerprint(report: &TargetSelectionReport) -> u64 {
     fingerprint(&bytes)
 }
 
+fn target_closure_report_fingerprint(report: &TargetClosureReport) -> u64 {
+    let mut bytes = Vec::new();
+    push_str(&mut bytes, &report.package_identity.to_string());
+    push_str(&mut bytes, &report.target_symbol.to_string());
+    push_str(&mut bytes, &format!("{:?}", report.target_kind));
+    push_str(
+        &mut bytes,
+        &format!("{:016x}", report.package_core_semantic_hash),
+    );
+    push_str(
+        &mut bytes,
+        &format!("{:016x}", report.package_artifact_hash),
+    );
+    push_str(
+        &mut bytes,
+        &format!("{:016x}", report.closure_semantic_hash),
+    );
+    push_report_fact(&mut bytes, &report.runtime_lowering);
+    for symbol in &report.reachable_declarations {
+        push_str(&mut bytes, &symbol.to_string());
+    }
+    for symbol in &report.external_symbols {
+        push_str(&mut bytes, &symbol.to_string());
+    }
+    for (dependency, hash) in &report.dependency_semantic_hashes {
+        push_str(&mut bytes, &dependency.to_string());
+        push_str(&mut bytes, hash);
+    }
+    for obligation in &report.obligations {
+        push_str(&mut bytes, &obligation.to_string());
+    }
+    for assumption in &report.assumptions {
+        push_str(&mut bytes, &assumption.to_string());
+    }
+    for (symbol, status) in &report.lowerability {
+        push_str(&mut bytes, &symbol.to_string());
+        push_str(&mut bytes, &format!("{status:?}"));
+    }
+    for (symbol, lanes) in &report.unsupported_lanes {
+        push_str(&mut bytes, &symbol.to_string());
+        for lane in lanes {
+            push_str(&mut bytes, &lane.lane);
+            push_str(&mut bytes, &lane.reason);
+        }
+    }
+    for trusted in &report.trusted_base_delta {
+        push_str(&mut bytes, &trusted.to_string());
+    }
+    fingerprint(&bytes)
+}
+
 fn push_report_fact(bytes: &mut Vec<u8>, fact: &ReportFact) {
     match fact {
         ReportFact::Emitted => push_str(bytes, "emitted"),
@@ -744,6 +1196,9 @@ fn fingerprint(bytes: &[u8]) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::checked_core::{
+        emit_checked_core_package, CheckedCoreArtifactInputs, ObligationMetadata, ObligationStatus,
+    };
 
     fn main_symbol(package: &str) -> StableSymbol {
         StableSymbol::declaration(package, &[], "main")
@@ -755,6 +1210,42 @@ mod tests {
 
     fn real_source() -> CompilerSource {
         CompilerSource::new("src/main.ken", "const main : Bool = True")
+    }
+
+    fn dependent_source(helper_body: &str) -> CompilerSource {
+        CompilerSource::new(
+            "src/main.ken",
+            format!("const helper : Bool = {helper_body}\nconst main : Bool = helper"),
+        )
+    }
+
+    fn selector(package: &str, symbol: StableSymbol) -> TargetSelector {
+        TargetSelector::StableSymbol {
+            package_identity: package_id(package),
+            symbol,
+            kind: CompilerTargetKind::Executable,
+        }
+    }
+
+    fn manifest(package: &str) -> CompilerManifest {
+        CompilerManifest::new(package, Vec::new())
+    }
+
+    fn reemit_with_semantic(
+        package: &CheckedCorePackage,
+        semantic: CheckedCoreSemanticInputs,
+    ) -> CheckedCorePackage {
+        let mut header = package.header.clone();
+        header.dependency_semantic_hashes = semantic.dependency_semantic_hashes.clone();
+        emit_checked_core_package(
+            header,
+            CheckedCoreArtifactInputs {
+                semantic,
+                source_identity: package.artifact.source_identity.clone(),
+                annotations: package.artifact.annotations.clone(),
+            },
+        )
+        .unwrap()
     }
 
     #[test]
@@ -775,6 +1266,8 @@ mod tests {
         assert_eq!(out.report.package_identity, package_id("nc10_demo"));
         assert_eq!(out.report.selected_targets.len(), 1);
         assert_eq!(out.report.selected_targets[0].symbol, target);
+        assert_eq!(out.closures.len(), 1);
+        assert_eq!(out.closures[0].target.symbol, target);
         assert_eq!(out.report.checked_core_emission, ReportFact::Emitted);
         assert!(matches!(
             out.report.runtime_lowering,
@@ -790,6 +1283,211 @@ mod tests {
             out.report.validation_facts,
             ReportFact::Unavailable(UnavailableLane { ref lane, .. })
                 if lane == "validation_facts_unavailable"
+        ));
+    }
+
+    #[test]
+    fn target_closure_reaches_declaration_dependencies_and_changes_with_content() {
+        let package = "closure_pkg";
+        let target = main_symbol(package);
+        let helper = StableSymbol::declaration(package, &[], "helper");
+        let selector = selector(package, target.clone());
+        let true_out = compile_ken_package_sources(
+            &manifest(package),
+            vec![dependent_source("True")],
+            selector.clone(),
+        )
+        .unwrap();
+        let false_out = compile_ken_package_sources(
+            &manifest(package),
+            vec![dependent_source("False")],
+            selector,
+        )
+        .unwrap();
+
+        let closure = &true_out.closures[0];
+        assert!(closure.reachable_declarations.contains(&target));
+        assert!(
+            closure.reachable_declarations.contains(&helper),
+            "helper must be discovered from checked-core declaration bytes, not a hand table"
+        );
+        assert_ne!(
+            true_out.closures[0].closure_identity, false_out.closures[0].closure_identity,
+            "reachable checked-core body changes must change target closure identity"
+        );
+    }
+
+    #[test]
+    fn target_closure_preserves_obligations_trust_and_dependencies() {
+        let package_name = "closure_meta";
+        let target = main_symbol(package_name);
+        let out = compile_ken_source(
+            package_name,
+            real_source(),
+            selector(package_name, target.clone()),
+        )
+        .unwrap();
+        let mut semantic = out.package.artifact.semantic.clone();
+        let obligation = StableSymbol::obligation("main.ensures.0");
+        let assumption = StableSymbol::assumption(&target, "trusted-fixture");
+        let dependency = StableSymbol::new(
+            SymbolNamespace::Dependency,
+            vec!["dep-pkg".to_string(), "checked-core".to_string()],
+        );
+        semantic.symbols.insert(obligation.clone());
+        semantic.symbols.insert(assumption.clone());
+        semantic.symbols.insert(dependency.clone());
+        semantic
+            .obligations
+            .insert(obligation.clone(), b"goal-core".to_vec());
+        semantic
+            .assumptions
+            .insert(assumption.clone(), b"trusted fixture assumption".to_vec());
+        semantic.obligation_metadata.insert(
+            obligation.clone(),
+            ObligationMetadata {
+                status: ObligationStatus::Unknown,
+                origin: target.clone(),
+                affects_runtime_meaning: true,
+            },
+        );
+        semantic.assumption_trust_metadata.insert(
+            assumption.clone(),
+            AssumptionTrustMetadata {
+                kind: AssumptionTrustKind::Hole,
+                target: target.clone(),
+                affects_runtime_meaning: true,
+            },
+        );
+        semantic
+            .trusted_base_delta
+            .insert(target.clone(), b"trusted fixture target".to_vec());
+        semantic
+            .dependency_semantic_hashes
+            .insert(dependency.clone(), "sha256:dependency".to_string());
+        let package = reemit_with_semantic(&out.package, semantic);
+
+        let closures = compute_target_closures(
+            &manifest(package_name),
+            &package,
+            selector(package_name, target.clone()),
+        )
+        .unwrap();
+        let closure = &closures[0];
+        assert!(closure.semantic.obligations.contains_key(&obligation));
+        assert!(closure
+            .semantic
+            .obligation_metadata
+            .contains_key(&obligation));
+        assert!(closure.semantic.assumptions.contains_key(&assumption));
+        assert!(closure
+            .semantic
+            .assumption_trust_metadata
+            .contains_key(&assumption));
+        assert!(closure.semantic.trusted_base_delta.contains_key(&target));
+        assert!(closure.report.assumptions.contains(&assumption));
+        assert!(closure.report.trusted_base_delta.contains(&target));
+        assert_eq!(
+            closure.report.dependency_semantic_hashes.get(&dependency),
+            Some(&"sha256:dependency".to_string())
+        );
+    }
+
+    #[test]
+    fn target_closure_reports_unresolved_references_without_runtime_success() {
+        let package_name = "closure_unresolved";
+        let target = main_symbol(package_name);
+        let unresolved = StableSymbol::declaration(package_name, &[], "Bool");
+        let out = compile_ken_source(package_name, real_source(), selector(package_name, target))
+            .unwrap();
+        let closure = &out.closures[0];
+
+        assert!(
+            closure.external_symbols.contains(&unresolved),
+            "declaration references without in-package bodies must remain explicit externals"
+        );
+        assert!(closure
+            .report
+            .unsupported_lanes
+            .get(&unresolved)
+            .unwrap()
+            .iter()
+            .any(|lane| lane.lane == "unresolved_checked_core_symbol"));
+        assert!(matches!(
+            closure.report.runtime_lowering,
+            ReportFact::Unavailable(UnavailableLane { ref lane, .. })
+                if lane == "unresolved_checked_core_symbol"
+        ));
+    }
+
+    #[test]
+    fn target_closure_rejects_dropped_reachable_metadata() {
+        let package_name = "closure_gap";
+        let target = main_symbol(package_name);
+        let out = compile_ken_source(
+            package_name,
+            real_source(),
+            selector(package_name, target.clone()),
+        )
+        .unwrap();
+        let mut semantic = out.package.artifact.semantic.clone();
+        let obligation = StableSymbol::obligation("main.ensures.0");
+        semantic.symbols.insert(obligation.clone());
+        semantic
+            .obligations
+            .insert(obligation.clone(), b"goal-core".to_vec());
+        let package = reemit_with_semantic(&out.package, semantic);
+
+        let err = compute_target_closures(
+            &manifest(package_name),
+            &package,
+            selector(package_name, target),
+        )
+        .unwrap_err();
+        assert!(matches!(
+            err,
+            CompilerDriverError::MissingClosureMetadata { section: "obligation", symbol }
+                if symbol == obligation
+        ));
+    }
+
+    #[test]
+    fn target_closure_reports_non_lowerable_reachable_members() {
+        let package_name = "closure_unsupported";
+        let target = main_symbol(package_name);
+        let helper = StableSymbol::declaration(package_name, &[], "helper");
+        let out = compile_ken_package_sources(
+            &manifest(package_name),
+            vec![dependent_source("True")],
+            selector(package_name, target.clone()),
+        )
+        .unwrap();
+        let mut semantic = out.package.artifact.semantic.clone();
+        let status = LowerabilityStatus::Unsupported {
+            reason: "fixture helper blocks lowering".to_string(),
+        };
+        semantic.lowerability.insert(helper.clone(), status);
+        semantic
+            .unsupported
+            .insert(helper.clone(), b"helper blocked".to_vec());
+        let package = reemit_with_semantic(&out.package, semantic);
+
+        let closures = compute_target_closures(
+            &manifest(package_name),
+            &package,
+            selector(package_name, target),
+        )
+        .unwrap();
+        assert!(closures[0]
+            .report
+            .unsupported_lanes
+            .get(&helper)
+            .unwrap()
+            .iter()
+            .any(|lane| lane.lane == "non_lowerable_closure_member"));
+        assert!(matches!(
+            closures[0].report.runtime_lowering,
+            ReportFact::Unavailable(_)
         ));
     }
 
