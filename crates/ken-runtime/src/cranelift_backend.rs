@@ -1346,7 +1346,9 @@ mod tests {
             .into_iter()
             .find(|example| example.name == "closed-scalar-primitive")
             .expect("seed exists");
-        let program = seed_program_with_lowerability(Some(RuntimeLowerabilityStatus::Supported));
+        let mut program =
+            seed_program_with_lowerability(Some(RuntimeLowerabilityStatus::Supported));
+        program.examples = vec![example.clone()];
         let certificate = RuntimeArtifactCertificate::supported_runtime_artifact_for(&program);
         let oracle = InterpreterOracleObservation {
             artifact: NativeArtifactIdentity::from_program(&program),
@@ -1438,7 +1440,12 @@ mod tests {
 
     #[test]
     fn nc8_certificate_contradictory_claim_rejects() {
-        let program = seed_program_with_lowerability(Some(RuntimeLowerabilityStatus::Supported));
+        let mut program =
+            seed_program_with_lowerability(Some(RuntimeLowerabilityStatus::Supported));
+        program.examples = vec![nc5_seed_examples()
+            .into_iter()
+            .find(|example| example.name == "closed-scalar-primitive")
+            .expect("seed exists")];
         let mut certificate = RuntimeArtifactCertificate::supported_runtime_artifact_for(&program);
         certificate
             .claim
@@ -1601,7 +1608,7 @@ mod tests {
     }
 
     #[test]
-    fn nc8_certificate_rejects_add_int_non_int_operand_shape() {
+    fn nc8_certificate_rejects_add_int_non_literal_int_operand_shape() {
         let mut program =
             seed_program_with_lowerability(Some(RuntimeLowerabilityStatus::Supported));
         program.examples = vec![RuntimeExample {
@@ -1622,11 +1629,54 @@ mod tests {
         let certificate = RuntimeArtifactCertificate::supported_runtime_artifact_for(&program);
 
         let err = validate_supported_runtime_artifact_certificate(&program, &certificate)
-            .expect_err("add_int non-Int operands are outside the NC6 supported subset");
+            .expect_err("add_int non-literal-Int operands are outside the NC8 subset");
 
         assert_eq!(err.stage, RuntimeArtifactValidationStage::ClaimRecompute);
         assert_eq!(err.fact, "all_runtime_primitives_supported");
-        assert!(err.reason.contains("non-Int operand"));
+        assert!(err.reason.contains("non-literal-Int operand"));
+    }
+
+    #[test]
+    fn nc8_certificate_rejects_add_int_var_bound_to_bool_payload() {
+        let mut program =
+            seed_program_with_lowerability(Some(RuntimeLowerabilityStatus::Supported));
+        program.examples = vec![RuntimeExample {
+            name: "add-int-var-bound-to-bool".to_string(),
+            checked_core_shape: "diagnostic label only".to_string(),
+            ir: RuntimeExpr::Match {
+                scrutinee: Box::new(RuntimeExpr::Construct {
+                    constructor: "ctor:fixture::BoolBox::Box".to_string(),
+                    args: vec![RuntimeExpr::Value(RuntimeValue::Bool(true))],
+                }),
+                cases: vec![RuntimeMatchCase {
+                    constructor: "ctor:fixture::BoolBox::Box".to_string(),
+                    binders: 1,
+                    body: RuntimeExpr::PrimitiveCall {
+                        primitive: RuntimePrimitive {
+                            symbol: "add_int".to_string(),
+                            partiality: RuntimePartiality::Total,
+                        },
+                        args: vec![
+                            RuntimeExpr::Var(0),
+                            RuntimeExpr::Value(RuntimeValue::Int(1)),
+                        ],
+                    },
+                }],
+                default: RuntimeTrap {
+                    code: RuntimeTrapCode::PatternMatchFailure,
+                    message: "unused default".to_string(),
+                },
+            },
+            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int(2)),
+        }];
+        let certificate = RuntimeArtifactCertificate::supported_runtime_artifact_for(&program);
+
+        let err = validate_supported_runtime_artifact_certificate(&program, &certificate)
+            .expect_err("add_int variable operands are outside the first NC8 validator");
+
+        assert_eq!(err.stage, RuntimeArtifactValidationStage::ClaimRecompute);
+        assert_eq!(err.fact, "all_runtime_primitives_supported");
+        assert!(err.reason.contains("non-literal-Int operand"));
     }
 
     #[test]

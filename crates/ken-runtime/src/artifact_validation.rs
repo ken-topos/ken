@@ -626,13 +626,10 @@ fn validate_total_primitive_call(
         ));
     }
     for arg in args {
-        if !matches!(
-            arg,
-            RuntimeExpr::Var(_) | RuntimeExpr::Value(RuntimeValue::Int(_))
-        ) {
+        if !matches!(arg, RuntimeExpr::Value(RuntimeValue::Int(_))) {
             return Err(claim_recompute_error(
                 "all_runtime_primitives_supported",
-                format!("{fact_subject} uses add_int with a non-Int operand shape"),
+                format!("{fact_subject} uses add_int with a non-literal-Int operand shape"),
             ));
         }
     }
