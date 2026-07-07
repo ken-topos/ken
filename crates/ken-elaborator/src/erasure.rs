@@ -370,10 +370,55 @@ fn lower_body_term(
     root_symbol: &StableSymbol,
     context_depth: usize,
 ) -> Result<RuntimeExpr, ErasureError> {
+    lower_body_term_inner(term, declarations, stack, root_symbol, context_depth, None)
+}
+
+#[derive(Clone, Copy)]
+struct BranchBinderRemap {
+    start: usize,
+    count: usize,
+}
+
+impl BranchBinderRemap {
+    fn enter_binding(self) -> Self {
+        Self {
+            start: self.start + 1,
+            count: self.count,
+        }
+    }
+
+    fn runtime_index(self, de_bruijn_index: usize) -> usize {
+        if (self.start..self.start + self.count).contains(&de_bruijn_index) {
+            self.start + (self.count - 1 - (de_bruijn_index - self.start))
+        } else {
+            de_bruijn_index
+        }
+    }
+}
+
+fn lower_body_term_inner(
+    term: &CheckedCoreBodyTerm,
+    declarations: &BTreeMap<StableSymbol, checked_core::CheckedCoreDeclarationBodyView>,
+    stack: &mut Vec<StableSymbol>,
+    root_symbol: &StableSymbol,
+    context_depth: usize,
+    branch_remap: Option<BranchBinderRemap>,
+) -> Result<RuntimeExpr, ErasureError> {
     let owner = stack
         .last()
         .expect("expression lowering stack always has an owner")
         .clone();
+    if let Some((constructor, args)) = constructor_application_spine(term) {
+        return lower_constructor_application(
+            constructor,
+            &args,
+            declarations,
+            stack,
+            root_symbol,
+            context_depth,
+            branch_remap,
+        );
+    }
     match term {
         CheckedCoreBodyTerm::Variable { de_bruijn_index } => {
             if *de_bruijn_index >= context_depth {
@@ -385,11 +430,14 @@ fn lower_body_term(
                     ),
                 ));
             }
-            let index = u32::try_from(*de_bruijn_index).map_err(|_| {
+            let runtime_index = branch_remap
+                .map(|remap| remap.runtime_index(*de_bruijn_index))
+                .unwrap_or(*de_bruijn_index);
+            let index = u32::try_from(runtime_index).map_err(|_| {
                 expression_lowering_error(
                     root_symbol,
                     "variable_index_overflow",
-                    format!("variable index {de_bruijn_index} does not fit runtime IR"),
+                    format!("variable index {runtime_index} does not fit runtime IR"),
                 )
             })?;
             Ok(RuntimeExpr::Var(index))
@@ -411,12 +459,13 @@ fn lower_body_term(
                 )
             })?;
             stack.push(symbol.clone());
-            let lowered = lower_body_term(
+            let lowered = lower_body_term_inner(
                 &declaration.body,
                 declarations,
                 stack,
                 root_symbol,
                 context_depth,
+                branch_remap,
             );
             stack.pop();
             lowered
@@ -432,63 +481,272 @@ fn lower_body_term(
             Ok(RuntimeExpr::Closure {
                 captures: Vec::new(),
                 params: vec!["arg0".to_string()],
-                body: Box::new(lower_body_term(
+                body: Box::new(lower_body_term_inner(
                     body,
                     declarations,
                     stack,
                     root_symbol,
                     context_depth + 1,
+                    branch_remap.map(BranchBinderRemap::enter_binding),
                 )?),
             })
         }
         CheckedCoreBodyTerm::Application { function, argument } => Ok(RuntimeExpr::Call {
-            callee: Box::new(lower_body_term(
+            callee: Box::new(lower_body_term_inner(
                 function,
                 declarations,
                 stack,
                 root_symbol,
                 context_depth,
+                branch_remap,
             )?),
-            args: vec![lower_body_term(
+            args: vec![lower_body_term_inner(
                 argument,
                 declarations,
                 stack,
                 root_symbol,
                 context_depth,
+                branch_remap,
             )?],
         }),
         CheckedCoreBodyTerm::Let { value, body, .. } => Ok(RuntimeExpr::Let {
-            value: Box::new(lower_body_term(
+            value: Box::new(lower_body_term_inner(
                 value,
                 declarations,
                 stack,
                 root_symbol,
                 context_depth,
+                branch_remap,
             )?),
-            body: Box::new(lower_body_term(
+            body: Box::new(lower_body_term_inner(
                 body,
                 declarations,
                 stack,
                 root_symbol,
                 context_depth + 1,
+                branch_remap.map(BranchBinderRemap::enter_binding),
             )?),
         }),
-        CheckedCoreBodyTerm::ConstructorReference(constructor) => Err(expression_lowering_error(
+        CheckedCoreBodyTerm::ConstructorReference(_) => {
+            unreachable!("constructor references are handled by constructor_application_spine")
+        }
+        CheckedCoreBodyTerm::ErasedConstructorArgument { .. } => Err(expression_lowering_error(
             root_symbol,
-            "constructor_lowering_unsupported",
-            format!(
-                "constructor {} is exposed in the checked-core body view but not yet lowered here",
-                constructor.symbol
-            ),
+            "erased_constructor_argument_outside_constructor",
+            "constructor family parameters are erased and cannot appear as runtime expressions",
         )),
-        CheckedCoreBodyTerm::Match(view) => Err(expression_lowering_error(
+        CheckedCoreBodyTerm::Match(view) => lower_match_view(
+            view,
+            declarations,
+            stack,
             root_symbol,
-            "match_lowering_unsupported",
+            context_depth,
+            branch_remap,
+        ),
+    }
+}
+
+fn constructor_application_spine<'a>(
+    term: &'a CheckedCoreBodyTerm,
+) -> Option<(
+    &'a checked_core::CheckedCoreConstructorView,
+    Vec<&'a CheckedCoreBodyTerm>,
+)> {
+    let mut args = Vec::new();
+    let mut current = term;
+    while let CheckedCoreBodyTerm::Application { function, argument } = current {
+        args.push(argument.as_ref());
+        current = function.as_ref();
+    }
+    let CheckedCoreBodyTerm::ConstructorReference(constructor) = current else {
+        return None;
+    };
+    args.reverse();
+    Some((constructor, args))
+}
+
+fn lower_constructor_application(
+    constructor: &checked_core::CheckedCoreConstructorView,
+    args: &[&CheckedCoreBodyTerm],
+    declarations: &BTreeMap<StableSymbol, checked_core::CheckedCoreDeclarationBodyView>,
+    stack: &mut Vec<StableSymbol>,
+    root_symbol: &StableSymbol,
+    context_depth: usize,
+    branch_remap: Option<BranchBinderRemap>,
+) -> Result<RuntimeExpr, ErasureError> {
+    reject_level_args(root_symbol, &constructor.level_args)?;
+    require_expression_supported(
+        root_symbol,
+        &constructor.family_symbol,
+        &constructor.family_lowerability,
+        "data_lowerability_blocked",
+    )?;
+    require_expression_supported(
+        root_symbol,
+        &constructor.symbol,
+        &constructor.constructor_lowerability,
+        "constructor_lowerability_blocked",
+    )?;
+    if constructor.family_index_count != 0 || constructor.target_index_count != 0 {
+        return Err(expression_lowering_error(
+            root_symbol,
+            "dependent_constructor_lowering_unsupported",
             format!(
-                "match over {} is exposed in the checked-core body view but not yet lowered here",
-                view.family_symbol
+                "constructor {} belongs to indexed family {}",
+                constructor.symbol, constructor.family_symbol
             ),
-        )),
+        ));
+    }
+    let expected = constructor.family_parameter_count + constructor.argument_count;
+    if args.len() != expected {
+        return Err(expression_lowering_error(
+            root_symbol,
+            "constructor_arity_mismatch",
+            format!(
+                "constructor {} expects {} family parameters plus {} runtime arguments, got {}",
+                constructor.symbol,
+                constructor.family_parameter_count,
+                constructor.argument_count,
+                args.len()
+            ),
+        ));
+    }
+    let runtime_args = args[constructor.family_parameter_count..]
+        .iter()
+        .map(|arg| {
+            lower_body_term_inner(
+                arg,
+                declarations,
+                stack,
+                root_symbol,
+                context_depth,
+                branch_remap,
+            )
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(RuntimeExpr::Construct {
+        constructor: constructor.symbol.to_string(),
+        args: runtime_args,
+    })
+}
+
+fn lower_match_view(
+    view: &checked_core::CheckedCoreMatchView,
+    declarations: &BTreeMap<StableSymbol, checked_core::CheckedCoreDeclarationBodyView>,
+    stack: &mut Vec<StableSymbol>,
+    root_symbol: &StableSymbol,
+    context_depth: usize,
+    branch_remap: Option<BranchBinderRemap>,
+) -> Result<RuntimeExpr, ErasureError> {
+    reject_level_args(root_symbol, &view.level_args)?;
+    if !view.indices.is_empty() {
+        return Err(expression_lowering_error(
+            root_symbol,
+            "unsupported_dependent_motive",
+            format!("match over {} carries runtime indices", view.family_symbol),
+        ));
+    }
+    let scrutinee = Box::new(lower_body_term_inner(
+        &view.scrutinee,
+        declarations,
+        stack,
+        root_symbol,
+        context_depth,
+        branch_remap,
+    )?);
+    let mut cases = Vec::with_capacity(view.branches.len());
+    for branch in &view.branches {
+        let constructor = &branch.constructor;
+        reject_level_args(root_symbol, &constructor.level_args)?;
+        require_expression_supported(
+            root_symbol,
+            &constructor.family_symbol,
+            &constructor.family_lowerability,
+            "data_lowerability_blocked",
+        )?;
+        require_expression_supported(
+            root_symbol,
+            &constructor.symbol,
+            &constructor.constructor_lowerability,
+            "constructor_lowerability_blocked",
+        )?;
+        if constructor.family_index_count != 0 || constructor.target_index_count != 0 {
+            return Err(expression_lowering_error(
+                root_symbol,
+                "dependent_constructor_lowering_unsupported",
+                format!(
+                    "match branch constructor {} belongs to indexed family {}",
+                    constructor.symbol, constructor.family_symbol
+                ),
+            ));
+        }
+        let body = peel_match_branch_method(
+            &branch.method,
+            constructor.argument_count,
+            root_symbol,
+            &constructor.symbol,
+        )?;
+        cases.push(RuntimeMatchCase {
+            constructor: constructor.symbol.to_string(),
+            binders: constructor.argument_count,
+            body: lower_body_term_inner(
+                body,
+                declarations,
+                stack,
+                root_symbol,
+                context_depth + constructor.argument_count,
+                Some(BranchBinderRemap {
+                    start: branch_remap.map(|remap| remap.start).unwrap_or(0),
+                    count: constructor.argument_count,
+                }),
+            )?,
+        });
+    }
+    Ok(RuntimeExpr::Match {
+        scrutinee,
+        cases,
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: format!("no runtime match case selected for {}", view.family_symbol),
+        },
+    })
+}
+
+fn peel_match_branch_method<'a>(
+    mut method: &'a CheckedCoreBodyTerm,
+    binders: usize,
+    root_symbol: &StableSymbol,
+    constructor: &StableSymbol,
+) -> Result<&'a CheckedCoreBodyTerm, ErasureError> {
+    for position in 0..binders {
+        let CheckedCoreBodyTerm::Lambda { body, .. } = method else {
+            return Err(expression_lowering_error(
+                root_symbol,
+                "match_branch_arity_mismatch",
+                format!(
+                    "branch for constructor {constructor} is missing binder {position} of {binders}"
+                ),
+            ));
+        };
+        method = body.as_ref();
+    }
+    Ok(method)
+}
+
+fn require_expression_supported(
+    root_symbol: &StableSymbol,
+    symbol: &StableSymbol,
+    status: &LowerabilityStatus,
+    lane: &'static str,
+) -> Result<(), ErasureError> {
+    if status.blocks_lowering() {
+        Err(expression_lowering_error(
+            root_symbol,
+            lane,
+            format!("{symbol} lowerability is blocking: {status:?}"),
+        ))
+    } else {
+        Ok(())
     }
 }
 
@@ -516,6 +774,7 @@ fn has_free_variable_at_or_above(term: &CheckedCoreBodyTerm, bound: usize) -> bo
         CheckedCoreBodyTerm::Variable { de_bruijn_index } => *de_bruijn_index >= bound,
         CheckedCoreBodyTerm::DirectDeclarationCall { .. } => false,
         CheckedCoreBodyTerm::ConstructorReference(_) => false,
+        CheckedCoreBodyTerm::ErasedConstructorArgument { .. } => false,
         CheckedCoreBodyTerm::Lambda { body, .. } => has_free_variable_at_or_above(body, bound + 1),
         CheckedCoreBodyTerm::Application { function, argument } => {
             has_free_variable_at_or_above(function, bound)

@@ -10,14 +10,14 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::path::Path;
 
-use ken_kernel::{Decl, GlobalId};
+use ken_kernel::{Decl, GlobalId, Term};
 
 use crate::checked_core::{
     canonical_decl_bytes, canonical_symbol_bytes, emit_checked_core_package, semantic_fingerprint,
     validate_checked_core_package, AssumptionTrustKind, AssumptionTrustMetadata,
     CheckedCoreArtifactInputs, CheckedCorePackage, CheckedCorePackageError,
-    CheckedCorePackageHeader, CheckedCoreSemanticInputs, LowerabilityStatus, StableSymbol,
-    StableSymbolTable, SymbolNamespace,
+    CheckedCorePackageHeader, CheckedCoreSemanticInputs, ConstructorMetadata, DataMetadata,
+    LowerabilityStatus, StableSymbol, StableSymbolTable, SymbolNamespace,
 };
 use crate::{ElabEnv, ElabError};
 
@@ -379,6 +379,7 @@ fn emit_package_from_env(
             .insert(symbol, LowerabilityStatus::Supported);
     }
 
+    add_data_metadata(env, &symbols, &mut semantic);
     apply_manifest_target_metadata(manifest, &mut semantic);
     add_trusted_base_metadata(env, &symbols, &mut semantic);
 
@@ -493,6 +494,71 @@ fn apply_manifest_target_metadata(
                 );
             }
         }
+    }
+}
+
+fn add_data_metadata(
+    env: &ElabEnv,
+    symbols: &BTreeMap<GlobalId, StableSymbol>,
+    semantic: &mut CheckedCoreSemanticInputs,
+) {
+    for decl in env.env.decls() {
+        let Decl::Inductive(ind) = decl else {
+            continue;
+        };
+        let Some(family) = symbols.get(&ind.id).cloned() else {
+            continue;
+        };
+        semantic
+            .lowerability
+            .entry(family.clone())
+            .or_insert(LowerabilityStatus::Supported);
+
+        let constructors = ind
+            .constructors
+            .iter()
+            .filter_map(|constructor| {
+                let symbol = symbols.get(&constructor.id).cloned()?;
+                semantic
+                    .lowerability
+                    .entry(symbol.clone())
+                    .or_insert(LowerabilityStatus::Supported);
+                Some(ConstructorMetadata {
+                    symbol,
+                    argument_count: constructor.args.len(),
+                    target_index_count: constructor.target_indices.len(),
+                    recursive_positions: constructor
+                        .args
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(position, arg)| {
+                            is_recursive_constructor_arg(arg, ind.id).then_some(position)
+                        })
+                        .collect(),
+                    lowerability: LowerabilityStatus::Supported,
+                })
+            })
+            .collect();
+
+        semantic.data_metadata.insert(
+            family,
+            DataMetadata {
+                parameter_count: ind.params.len(),
+                index_count: ind.indices.len(),
+                constructors,
+                eliminator: LowerabilityStatus::Supported,
+                lowerability: LowerabilityStatus::Supported,
+            },
+        );
+    }
+}
+
+fn is_recursive_constructor_arg(arg: &Term, family: GlobalId) -> bool {
+    match arg {
+        Term::IndFormer { id, .. } => *id == family,
+        Term::App(function, _) => is_recursive_constructor_arg(function, family),
+        Term::Pi(_, codomain) => is_recursive_constructor_arg(codomain, family),
+        _ => false,
     }
 }
 
@@ -1397,21 +1463,45 @@ mod tests {
     fn target_closure_reports_unresolved_references_without_runtime_success() {
         let package_name = "closure_unresolved";
         let target = main_symbol(package_name);
-        let unresolved = StableSymbol::declaration(package_name, &[], "Bool");
-        let out = compile_ken_source(package_name, real_source(), selector(package_name, target))
-            .unwrap();
+        let out = compile_ken_source(
+            package_name,
+            real_source(),
+            selector(package_name, target.clone()),
+        )
+        .unwrap();
         let closure = &out.closures[0];
+        let bool_symbol = StableSymbol::declaration(package_name, &[], "Bool");
+        let true_symbol = StableSymbol::constructor(&bool_symbol, "True");
 
         assert!(
-            closure.external_symbols.contains(&unresolved),
-            "declaration references without in-package bodies must remain explicit externals"
+            !closure.external_symbols.contains(&bool_symbol),
+            "package data metadata resolves constructor families without external fallback"
+        );
+        assert!(closure.semantic.data_metadata.contains_key(&bool_symbol));
+
+        let mut semantic = out.package.artifact.semantic.clone();
+        semantic.data_metadata.remove(&bool_symbol);
+        semantic.lowerability.remove(&bool_symbol);
+        semantic.lowerability.remove(&true_symbol);
+        let package = reemit_with_semantic(&out.package, semantic);
+        let closures = compute_target_closures(
+            &manifest(package_name),
+            &package,
+            selector(package_name, target),
+        )
+        .unwrap();
+        let closure = &closures[0];
+
+        assert!(
+            closure.external_symbols.contains(&bool_symbol)
+                || closure.external_symbols.contains(&true_symbol),
+            "declaration references without package metadata must remain explicit externals"
         );
         assert!(closure
             .report
             .unsupported_lanes
-            .get(&unresolved)
-            .unwrap()
-            .iter()
+            .values()
+            .flatten()
             .any(|lane| lane.lane == "unresolved_checked_core_symbol"));
         assert!(matches!(
             closure.report.runtime_lowering,
