@@ -109,16 +109,30 @@ campaign that makes it buildable.
 | `NC7` | Differential harness and native trust report | Runtime/Verify | NC6 |
 | `NC8` | First certificate validator | Verify/Kernel | NC5, NC7 |
 | `NC9` | Bounded Ken-checked proof-erasure boundary checker | Verify-led | NC8 |
+| `NC10` | Compiler driver and target-selection boundary | Language-led | NC9 |
+| `NC11` | Checked-core target closure and metadata completeness | Language-led | NC10 |
+| `NC12` | Runtime-IR evaluator and comparison harness | Runtime-led | NC10, NC11 |
+| `NC13` | Core expression lowering | Runtime-led | NC11, NC12 |
+| `NC14` | Data constructor and pattern-match lowering | Runtime-led | NC13 |
+| `NC15` | Records, Sigma, projections, and proof-erasure field lowering | Runtime-led | NC13, NC14 |
+| `NC16` | Primitive value lowering | Runtime-led | NC13 |
+| `NC17` | Recursion, dictionaries/classes, modules, package refs | Language/Runtime | NC11, NC13-NC16 |
+| `NC18` | Effects and foreign-boundary runtime-IR representation | Runtime-led | NC12-NC17 |
 
 The individual WP briefs live under `docs/program/wp/`.
 
+NC10-NC18 are the first follow-on campaign after the original NC1-NC9 compiler
+program. They broaden the input path to arbitrary accepted Ken packages and
+lower selected targets into broad runtime IR, but they still stop before native
+artifact emission. The continuation frame is `08-compiler-continuation.md`.
+
 ## 6. Non-Goals
 
-Do not make the compiler consume arbitrary surface syntax directly in the first
-campaign. Do not trust Cranelift output as a Ken proof. Do not make native
-pointer identity observable. Do not block catalog development on self-hosting.
-Do not require the Rust bootstrap compiler to disappear once self-hosting
-exists.
+Do not make the compiler consume arbitrary surface syntax directly in the
+original NC1-NC9 campaign. Do not trust Cranelift output as a Ken proof. Do not
+make native pointer identity observable. Do not block catalog development on
+self-hosting. Do not require the Rust bootstrap compiler to disappear once
+self-hosting exists.
 
 ## 7. Review Boundaries
 
