@@ -118,6 +118,12 @@ impl fmt::Display for StableSymbol {
     }
 }
 
+pub fn canonical_symbol_bytes(symbol: &StableSymbol) -> Vec<u8> {
+    let mut out = CanonicalSink::new();
+    symbol.encode(&mut out);
+    out.finish()
+}
+
 /// Producer-local mapping from kernel ids to stable symbols.
 #[derive(Clone, Debug, Default)]
 pub struct StableSymbolTable {
