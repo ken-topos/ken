@@ -8,10 +8,11 @@ use ken_interp::{eval, EvalStore, EvalVal};
 use ken_kernel::{declare_primitive, GlobalEnv, Level, PrimReduction, Term};
 use ken_runtime::{
     compare_runtime_ir_with_interpreter_observation, evaluate_runtime_ir_example,
-    nc5_seed_examples, ErasedExecutableCore, RuntimeArtifactIdentity, RuntimeDeclaration,
-    RuntimeDeclarationKind, RuntimeField, RuntimeFieldStatus, RuntimeGroundValue,
-    RuntimeInterpreterObservation, RuntimeIrDifferentialStage, RuntimeIrDifferentialVerdict,
-    RuntimeIrEvidenceFact, RuntimeIrSeedEnvironment, RuntimeIrTargetIdentity, RuntimeIrTrustTier,
+    nc5_seed_examples, ErasedExecutableCore, RuntimeArtifactIdentity, RuntimeAssumptionTrustKind,
+    RuntimeAssumptionTrustMetadata, RuntimeDeclaration, RuntimeDeclarationKind, RuntimeField,
+    RuntimeFieldStatus, RuntimeGroundValue, RuntimeInterpreterObservation,
+    RuntimeIrDifferentialStage, RuntimeIrDifferentialVerdict, RuntimeIrEvidenceFact,
+    RuntimeIrSeedEnvironment, RuntimeIrTargetIdentity, RuntimeIrTrustTier,
     RuntimeLowerabilityStatus, RuntimeMetadata, RuntimeObservation, RuntimeProgram,
     RuntimeSymbolMetadata, RuntimeTrap, RuntimeTrapCode, RuntimeValue,
 };
@@ -182,7 +183,7 @@ fn runtime_ir_evaluator_runs_nc5_seed_subset_without_native_claims() {
 }
 
 #[test]
-fn interpreter_backed_agreement_uses_live_oracle_and_binds_identities() {
+fn caller_supplied_interpreter_agreement_binds_identities_without_live_path_claim() {
     let example = scalar_seed_example();
     let program = runtime_program(example.clone(), 0x1203);
     let oracle = oracle_observation(&program, &example);
@@ -220,6 +221,15 @@ fn interpreter_backed_agreement_uses_live_oracle_and_binds_identities() {
     assert!(matches!(
         report.trust.source_level_proof,
         RuntimeIrEvidenceFact::Unavailable { .. }
+    ));
+    assert!(matches!(
+        report.trust.interpreter_oracle,
+        RuntimeIrEvidenceFact::Available {
+            value,
+            evidence_source,
+        } if value == "caller-supplied interpreter observation"
+            && evidence_source.contains("supplied by the caller")
+            && evidence_source.contains("not interpreter provenance")
     ));
     let runtime_ir = report.runtime_ir.expect("runtime IR side ran");
     assert_eq!(
@@ -321,6 +331,65 @@ fn unsupported_effect_metadata_rejects_without_success_observation() {
             ..
         }
     ));
+}
+
+#[test]
+fn package_level_trust_metadata_rejects_before_runtime_ir_success() {
+    for lane in [
+        "assumptions",
+        "assumption_trust_metadata",
+        "trusted_base_delta",
+    ] {
+        let example = scalar_seed_example();
+        let mut program = runtime_program(example.clone(), 0x1208);
+        match lane {
+            "assumptions" => {
+                program.erased_core.metadata.assumptions.insert(
+                    "assume:fixture::pkg".to_string(),
+                    b"package assumption".to_vec(),
+                );
+            }
+            "assumption_trust_metadata" => {
+                program
+                    .erased_core
+                    .metadata
+                    .assumption_trust_metadata
+                    .insert(
+                        "assume:fixture::pkg".to_string(),
+                        RuntimeAssumptionTrustMetadata {
+                            kind: RuntimeAssumptionTrustKind::Postulate,
+                            target: "decl:fixture::Main::main".to_string(),
+                            affects_runtime_meaning: true,
+                        },
+                    );
+            }
+            "trusted_base_delta" => {
+                program.erased_core.metadata.trusted_base_delta.insert(
+                    "assume:fixture::pkg".to_string(),
+                    b"package trust delta".to_vec(),
+                );
+            }
+            _ => unreachable!("test lane list is exhaustive"),
+        }
+        let oracle = oracle_observation(&program, &example);
+
+        let report = compare_runtime_ir_with_interpreter_observation(
+            &program,
+            &example,
+            &RuntimeIrSeedEnvironment::empty(),
+            oracle,
+        );
+
+        assert!(report.runtime_ir.is_none(), "{lane} must not evaluate");
+        assert!(matches!(
+            report.verdict,
+            RuntimeIrDifferentialVerdict::Unsupported {
+                stage: RuntimeIrDifferentialStage::BoundaryPreflight,
+                construct: "RuntimeProgram",
+                ref reason,
+            } if reason.contains("package carries trust metadata")
+        ));
+    }
 }
 
 #[test]

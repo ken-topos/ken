@@ -247,9 +247,8 @@ impl RuntimeIrTrustReport {
         let mut report = Self::observation();
         report.tier = RuntimeIrTrustTier::Nc12InterpreterRuntimeIrAgreement;
         report.interpreter_oracle = RuntimeIrEvidenceFact::Available {
-            value: "landed ken-interp observation".to_string(),
-            evidence_source: "caller supplied observation from the live ken-interp path"
-                .to_string(),
+            value: "caller-supplied interpreter observation".to_string(),
+            evidence_source: "RuntimeInterpreterObservation supplied by the caller; this API verifies only artifact and target identity, not interpreter provenance".to_string(),
         };
         report
     }
@@ -409,6 +408,19 @@ pub fn reject_runtime_ir_program_blockers(
         return Err(preflight_unsupported(
             "RuntimeProgram",
             "package carries runtime-check metadata outside the NC12 supported subset",
+        ));
+    }
+    if !program.erased_core.metadata.assumptions.is_empty()
+        || !program
+            .erased_core
+            .metadata
+            .assumption_trust_metadata
+            .is_empty()
+        || !program.erased_core.metadata.trusted_base_delta.is_empty()
+    {
+        return Err(preflight_unsupported(
+            "RuntimeProgram",
+            "package carries trust metadata outside the NC12 supported subset",
         ));
     }
 
