@@ -317,7 +317,7 @@ pub fn run_ken_checked_proof_erasure_example_with_interpreter_observation(
     if proof_erasure_boundary.artifact != artifact {
         return Err(proof_erasure_witness_error(
             ProofErasureBoundaryWitnessStage::WitnessIdentity,
-            "ken_checked_proof_erasure_boundary",
+            "artifact_identity",
             format!(
                 "Ken-checked proof-erasure report identity {:?} does not match RuntimeProgram identity {:?}",
                 proof_erasure_boundary.artifact, artifact
@@ -325,10 +325,12 @@ pub fn run_ken_checked_proof_erasure_example_with_interpreter_observation(
         ));
     }
     let recomputed_facts = proof_erasure_boundary_facts_from_program(program);
-    if proof_erasure_boundary.facts != recomputed_facts {
+    if let Some(lane) =
+        proof_erasure_boundary_report_mismatch_lane(&proof_erasure_boundary, &recomputed_facts)
+    {
         return Err(proof_erasure_witness_error(
             ProofErasureBoundaryWitnessStage::WitnessMismatch,
-            "ken_checked_proof_erasure_boundary",
+            lane,
             "Ken-checked proof-erasure report facts do not match the RuntimeProgram lanes",
         ));
     }
@@ -341,6 +343,45 @@ pub fn run_ken_checked_proof_erasure_example_with_interpreter_observation(
         None,
         Some(proof_erasure_boundary),
     ))
+}
+
+fn proof_erasure_boundary_report_mismatch_lane(
+    report: &KenCheckedProofErasureBoundaryReport,
+    recomputed: &crate::ProofErasureBoundaryFacts,
+) -> Option<&'static str> {
+    if report.facts.runtime_declaration_targets != recomputed.runtime_declaration_targets {
+        return Some("runtime_declaration_targets");
+    }
+    if report.facts.record_field_statuses != recomputed.record_field_statuses {
+        return Some("record_field_statuses");
+    }
+    if report.facts.checked_core_record_field_statuses
+        != recomputed.checked_core_record_field_statuses
+    {
+        return Some("checked_core_record_field_statuses");
+    }
+    if report.facts.lowerability != recomputed.lowerability {
+        return Some("lowerability");
+    }
+    if report.facts.unsupported != recomputed.unsupported {
+        return Some("unsupported");
+    }
+    if report.facts.obligations != recomputed.obligations {
+        return Some("obligations");
+    }
+    if report.facts.obligation_metadata != recomputed.obligation_metadata {
+        return Some("obligation_metadata");
+    }
+    if report.facts.assumptions != recomputed.assumptions {
+        return Some("assumptions");
+    }
+    if report.facts.assumption_trust_metadata != recomputed.assumption_trust_metadata {
+        return Some("assumption_trust_metadata");
+    }
+    if report.facts.trusted_base_delta != recomputed.trusted_base_delta {
+        return Some("trusted_base_delta");
+    }
+    None
 }
 
 fn run_example_with_interpreter_observation_and_validation(

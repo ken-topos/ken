@@ -18,10 +18,10 @@ use ken_runtime::{
     run_ken_checked_proof_erasure_example_with_interpreter_observation, ErasedExecutableCore,
     InterpreterOracleObservation, KenProofErasureBoundaryChecker, NativeArtifactIdentity,
     NativeDifferentialStage, NativeDifferentialVerdict, NativeFidelity, NativeSeedEnvironment,
-    ProofErasureBoundaryWitness, ProofErasureBoundaryWitnessTier, RuntimeArtifactIdentity,
-    RuntimeDeclaration, RuntimeDeclarationKind, RuntimeField, RuntimeFieldStatus,
-    RuntimeGroundValue, RuntimeLowerabilityStatus, RuntimeMetadata, RuntimeObservation,
-    RuntimeProgram, RuntimeSymbolMetadata,
+    ProofErasureBoundaryWitness, ProofErasureBoundaryWitnessStage, ProofErasureBoundaryWitnessTier,
+    RuntimeArtifactIdentity, RuntimeDeclaration, RuntimeDeclarationKind, RuntimeField,
+    RuntimeFieldStatus, RuntimeGroundValue, RuntimeLowerabilityStatus, RuntimeMetadata,
+    RuntimeObservation, RuntimeProgram, RuntimeSymbolMetadata,
 };
 
 fn fixture_package() -> CheckedCorePackage {
@@ -352,4 +352,39 @@ fn native_trust_report_records_nc9_separately_from_nc8_and_f1() {
         ProofErasureBoundaryWitnessTier::Nc9BoundedProofErasureBoundary
     );
     assert!(nc9.evidence_source.contains("ken-interp"));
+}
+
+#[test]
+fn native_trust_report_attachment_recheck_names_concrete_mismatch_lane() {
+    let (package, target, _, _) = proof_erasure_record_package();
+    let program =
+        erase_checked_core_package_for_target(&package, [&target]).expect("erasure succeeds");
+    let witness = emit_proof_erasure_boundary_witness_for_targets(&package, [&target], &program)
+        .expect("witness emits");
+    let mut nc9_report = ken_check_proof_erasure_boundary_witness(&program, &witness)
+        .expect("Ken/Rust checker agreement accepts");
+    nc9_report.facts.assumptions.clear();
+
+    let example = program.examples[0].clone();
+    let oracle = InterpreterOracleObservation {
+        artifact: NativeArtifactIdentity {
+            package_identity: program.package_identity.clone(),
+            core_semantic_hash: program.core_semantic_hash,
+            runtime_artifact_hash: program.artifact_hash,
+        },
+        observation: example.observation.clone(),
+        evidence_source: "test oracle for exact NC9 RuntimeProgram identity".to_string(),
+    };
+
+    let err = run_ken_checked_proof_erasure_example_with_interpreter_observation(
+        &program,
+        &example,
+        &NativeSeedEnvironment::empty(),
+        oracle,
+        nc9_report,
+    )
+    .expect_err("attached NC9 report with stale assumptions lane must reject");
+
+    assert_eq!(err.stage, ProofErasureBoundaryWitnessStage::WitnessMismatch);
+    assert_eq!(err.lane, "assumptions");
 }
