@@ -136,6 +136,25 @@ pub fn run_nc6_seed_examples(
 }
 
 pub fn reject_program_blockers(program: &RuntimeProgram) -> Result<(), CraneliftBackendError> {
+    if !program.erased_core.metadata.effects.is_empty() {
+        return Err(unsupported(
+            "RuntimeProgram",
+            "package carries effect metadata outside the NC6 D1 supported subset",
+        ));
+    }
+    if !program.erased_core.metadata.capabilities.is_empty() {
+        return Err(unsupported(
+            "RuntimeProgram",
+            "package carries capability metadata outside the NC6 D1 supported subset",
+        ));
+    }
+    if !program.erased_core.metadata.runtime_checks.is_empty() {
+        return Err(unsupported(
+            "RuntimeProgram",
+            "package carries runtime-check metadata outside the NC6 D1 supported subset",
+        ));
+    }
+
     for declaration in &program.declarations {
         if declaration.metadata.unsupported.is_some()
             || program
@@ -180,6 +199,46 @@ pub fn reject_program_blockers(program: &RuntimeProgram) -> Result<(), Cranelift
             ));
         }
 
+        if !declaration.metadata.effects.is_empty() {
+            return Err(unsupported(
+                "RuntimeProgram",
+                format!(
+                    "{} carries effect metadata outside the NC6 D1 supported subset",
+                    declaration.symbol
+                ),
+            ));
+        }
+        if !declaration.metadata.capabilities.is_empty() {
+            return Err(unsupported(
+                "RuntimeProgram",
+                format!(
+                    "{} carries capability metadata outside the NC6 D1 supported subset",
+                    declaration.symbol
+                ),
+            ));
+        }
+        if !declaration.metadata.runtime_checks.is_empty() {
+            return Err(unsupported(
+                "RuntimeProgram",
+                format!(
+                    "{} carries runtime-check metadata outside the NC6 D1 supported subset",
+                    declaration.symbol
+                ),
+            ));
+        }
+        if !declaration.metadata.assumptions.is_empty()
+            || !declaration.metadata.assumption_trust_metadata.is_empty()
+            || !declaration.metadata.trusted_base_delta.is_empty()
+        {
+            return Err(unsupported(
+                "RuntimeProgram",
+                format!(
+                    "{} carries trust metadata outside the NC6 D1 supported subset",
+                    declaration.symbol
+                ),
+            ));
+        }
+
         if let RuntimeDeclarationKind::EffectBoundary { effects } = &declaration.kind {
             if !effects.is_empty() {
                 return Err(unsupported(
@@ -200,12 +259,16 @@ pub fn reject_program_blockers(program: &RuntimeProgram) -> Result<(), Cranelift
             .get(&declaration.symbol)
         {
             if effect_meta.boundary == RuntimeEffectBoundary::Foreign
+                || effect_meta.boundary == RuntimeEffectBoundary::Effectful
                 || effect_meta.foreign_symbol.is_some()
+                || !effect_meta.declared_effects.is_empty()
+                || !effect_meta.capabilities.is_empty()
+                || !effect_meta.runtime_checks.is_empty()
             {
                 return Err(unsupported(
                     "RuntimeProgram",
                     format!(
-                        "{} crosses a foreign boundary outside the NC6 D1 subset",
+                        "{} carries effects/foreign metadata outside the NC6 D1 subset",
                         declaration.symbol
                     ),
                 ));
@@ -773,8 +836,9 @@ fn backend_module(reason: String) -> CraneliftBackendError {
 mod tests {
     use super::*;
     use crate::{
-        nc5_seed_examples, ErasedExecutableCore, RuntimeDeclaration, RuntimeFieldStatus,
-        RuntimeMatchCase, RuntimeMetadata, RuntimeSymbolMetadata,
+        nc5_seed_examples, ErasedExecutableCore, RuntimeAssumptionTrustKind,
+        RuntimeAssumptionTrustMetadata, RuntimeDeclaration, RuntimeEffectsForeignAuditMetadata,
+        RuntimeFieldStatus, RuntimeMatchCase, RuntimeMetadata, RuntimeSymbolMetadata,
     };
 
     fn seed_program_with_lowerability(status: Option<RuntimeLowerabilityStatus>) -> RuntimeProgram {
@@ -941,6 +1005,160 @@ mod tests {
             .insert(symbol, b"unsupported target".to_vec());
 
         let err = run_nc6_seed_examples(&program).expect_err("unsupported metadata rejects");
+
+        assert!(matches!(
+            err,
+            CraneliftBackendError::Unsupported(UnsupportedLowering {
+                construct: "RuntimeProgram",
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn reachable_declaration_effect_metadata_rejects_before_backend_lowering() {
+        for lane in [
+            "effects",
+            "capabilities",
+            "runtime_checks",
+            "assumptions",
+            "assumption_trust_metadata",
+            "trusted_base_delta",
+        ] {
+            let mut program =
+                seed_program_with_lowerability(Some(RuntimeLowerabilityStatus::Supported));
+            let target = program.declarations[0].symbol.clone();
+            match lane {
+                "effects" => {
+                    program.declarations[0]
+                        .metadata
+                        .effects
+                        .insert("Console".to_string());
+                }
+                "capabilities" => {
+                    program.declarations[0]
+                        .metadata
+                        .capabilities
+                        .insert("cap:Console".to_string());
+                }
+                "runtime_checks" => {
+                    program.declarations[0]
+                        .metadata
+                        .runtime_checks
+                        .insert("check:Console".to_string());
+                }
+                "assumptions" => {
+                    program.declarations[0]
+                        .metadata
+                        .assumptions
+                        .insert("assume:Console".to_string());
+                }
+                "assumption_trust_metadata" => {
+                    program.declarations[0]
+                        .metadata
+                        .assumption_trust_metadata
+                        .insert(
+                            "assume:Console".to_string(),
+                            RuntimeAssumptionTrustMetadata {
+                                kind: RuntimeAssumptionTrustKind::Declassify,
+                                target,
+                                affects_runtime_meaning: true,
+                            },
+                        );
+                }
+                "trusted_base_delta" => {
+                    program.declarations[0]
+                        .metadata
+                        .trusted_base_delta
+                        .insert("assume:Console".to_string());
+                }
+                _ => unreachable!("test lanes are exhaustive"),
+            }
+
+            let err = match run_nc6_seed_examples(&program) {
+                Ok(_) => panic!("expected {lane} metadata to reject"),
+                Err(err) => err,
+            };
+
+            assert!(matches!(
+                err,
+                CraneliftBackendError::Unsupported(UnsupportedLowering {
+                    construct: "RuntimeProgram",
+                    ..
+                })
+            ));
+        }
+    }
+
+    #[test]
+    fn reachable_package_effect_metadata_rejects_before_backend_lowering() {
+        for lane in ["effects", "capabilities", "runtime_checks"] {
+            let mut program =
+                seed_program_with_lowerability(Some(RuntimeLowerabilityStatus::Supported));
+            match lane {
+                "effects" => {
+                    program
+                        .erased_core
+                        .metadata
+                        .effects
+                        .insert("Console".to_string());
+                }
+                "capabilities" => {
+                    program
+                        .erased_core
+                        .metadata
+                        .capabilities
+                        .insert("cap:Console".to_string());
+                }
+                "runtime_checks" => {
+                    program
+                        .erased_core
+                        .metadata
+                        .runtime_checks
+                        .insert("check:Console".to_string());
+                }
+                _ => unreachable!("test lanes are exhaustive"),
+            }
+
+            let err = match run_nc6_seed_examples(&program) {
+                Ok(_) => panic!("expected package {lane} metadata to reject"),
+                Err(err) => err,
+            };
+
+            assert!(matches!(
+                err,
+                CraneliftBackendError::Unsupported(UnsupportedLowering {
+                    construct: "RuntimeProgram",
+                    ..
+                })
+            ));
+        }
+    }
+
+    #[test]
+    fn reachable_effectful_checked_core_metadata_rejects_before_backend_lowering() {
+        let mut program =
+            seed_program_with_lowerability(Some(RuntimeLowerabilityStatus::Supported));
+        let symbol = program.declarations[0].symbol.clone();
+        program
+            .erased_core
+            .metadata
+            .checked_core
+            .effects_foreign_metadata
+            .insert(
+                symbol,
+                RuntimeEffectsForeignAuditMetadata {
+                    declared_effects: BTreeSet::from(["Console".to_string()]),
+                    capabilities: BTreeSet::from(["cap:Console".to_string()]),
+                    foreign_symbol: None,
+                    boundary: RuntimeEffectBoundary::Effectful,
+                    runtime_checks: BTreeSet::from(["check:Console".to_string()]),
+                    lowerability: RuntimeLowerabilityStatus::Supported,
+                },
+            );
+
+        let err = run_nc6_seed_examples(&program)
+            .expect_err("effectful checked-core metadata must reject");
 
         assert!(matches!(
             err,
