@@ -317,6 +317,49 @@ pub struct CheckedCoreMatchBranchView {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CheckedCoreRecordSigmaView {
+    pub symbol: StableSymbol,
+    pub kind: RecordSigmaKind,
+    pub fields: Vec<CheckedCoreRecordSigmaFieldView>,
+    pub lowerability: LowerabilityStatus,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CheckedCoreRecordSigmaFieldView {
+    pub position: usize,
+    pub name: String,
+    pub ty: StableSymbol,
+    pub runtime: RuntimeFieldStatus,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CheckedCoreRecordSigmaConstructionView {
+    pub record: CheckedCoreRecordSigmaView,
+    pub fields: Vec<CheckedCoreRecordSigmaFieldValue>,
+    pub terminator: Vec<u8>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CheckedCoreRecordSigmaFieldValue {
+    Runtime {
+        field: CheckedCoreRecordSigmaFieldView,
+        value: Box<CheckedCoreBodyTerm>,
+    },
+    Erased {
+        field: CheckedCoreRecordSigmaFieldView,
+        term: Vec<u8>,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CheckedCoreRecordSigmaProjectionView {
+    pub record: CheckedCoreRecordSigmaView,
+    pub field: CheckedCoreRecordSigmaFieldView,
+    pub base: Box<CheckedCoreBodyTerm>,
+    pub skipped_fields: Vec<CheckedCoreRecordSigmaFieldView>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CheckedCoreBodyTerm {
     Variable {
         de_bruijn_index: usize,
@@ -343,6 +386,8 @@ pub enum CheckedCoreBodyTerm {
         body: Box<CheckedCoreBodyTerm>,
     },
     Match(CheckedCoreMatchView),
+    RecordSigmaConstruction(CheckedCoreRecordSigmaConstructionView),
+    RecordSigmaProjection(CheckedCoreRecordSigmaProjectionView),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -413,6 +458,24 @@ pub enum CheckedCoreBodyViewError {
         family: StableSymbol,
         reason: String,
     },
+    UnsupportedDependentFieldShape {
+        symbol: StableSymbol,
+        reason: String,
+    },
+    NonExecutableErasedFieldProjection {
+        symbol: StableSymbol,
+        record: StableSymbol,
+        field: String,
+    },
+    StaleFieldIdentityOrder {
+        symbol: StableSymbol,
+        record: StableSymbol,
+        reason: String,
+    },
+    UnsupportedRecordProjectionShape {
+        symbol: StableSymbol,
+        reason: String,
+    },
     UnjustifiedImpossibleBranch {
         symbol: StableSymbol,
     },
@@ -477,6 +540,18 @@ impl CheckedCoreBodyViewError {
             }
             CheckedCoreBodyViewError::UnsupportedEliminatorShape { .. } => {
                 "unsupported_eliminator_shape"
+            }
+            CheckedCoreBodyViewError::UnsupportedDependentFieldShape { .. } => {
+                "unsupported_dependent_field_shape"
+            }
+            CheckedCoreBodyViewError::NonExecutableErasedFieldProjection { .. } => {
+                "non_executable_erased_field_projection"
+            }
+            CheckedCoreBodyViewError::StaleFieldIdentityOrder { .. } => {
+                "stale_field_identity_order"
+            }
+            CheckedCoreBodyViewError::UnsupportedRecordProjectionShape { .. } => {
+                "unsupported_record_projection_shape"
             }
             CheckedCoreBodyViewError::UnjustifiedImpossibleBranch { .. } => {
                 "unjustified_impossible_branch"
@@ -571,6 +646,32 @@ impl fmt::Display for CheckedCoreBodyViewError {
                 f,
                 "declaration {symbol} uses unsupported eliminator shape for {family}: {reason}"
             ),
+            CheckedCoreBodyViewError::UnsupportedDependentFieldShape { symbol, reason } => write!(
+                f,
+                "declaration {symbol} uses unsupported dependent record/Sigma field shape: {reason}"
+            ),
+            CheckedCoreBodyViewError::NonExecutableErasedFieldProjection {
+                symbol,
+                record,
+                field,
+            } => write!(
+                f,
+                "declaration {symbol} projects erased field {record}.{field} as a runtime value"
+            ),
+            CheckedCoreBodyViewError::StaleFieldIdentityOrder {
+                symbol,
+                record,
+                reason,
+            } => write!(
+                f,
+                "declaration {symbol} has stale field identity/order for {record}: {reason}"
+            ),
+            CheckedCoreBodyViewError::UnsupportedRecordProjectionShape { symbol, reason } => {
+                write!(
+                    f,
+                    "declaration {symbol} uses unsupported record/Sigma projection shape: {reason}"
+                )
+            }
             CheckedCoreBodyViewError::UnjustifiedImpossibleBranch { symbol } => write!(
                 f,
                 "declaration {symbol} uses an impossible branch without package evidence"
@@ -1214,7 +1315,14 @@ fn decode_declaration_body_view(
         decode_level_params(&mut cursor).map_err(|reason| malformed_body(symbol, reason))?;
     let checked_type =
         capture_canonical_term(&mut cursor).map_err(|reason| malformed_body(symbol, reason))?;
-    let body = decode_supported_body_term(&mut cursor, semantic, selection, symbol)?;
+    let body = decode_supported_body_term(
+        &mut cursor,
+        semantic,
+        selection,
+        symbol,
+        &[],
+        Some(&checked_type),
+    )?;
     if cursor.remaining() != 0 {
         return Err(CheckedCoreBodyViewError::TrailingCanonicalBytes {
             symbol: symbol.clone(),
@@ -2472,10 +2580,32 @@ fn decode_supported_body_term(
     semantic: &CheckedCoreSemanticInputs,
     selection: &CheckedCoreBodyViewSelection,
     owner: &StableSymbol,
+    type_context: &[Vec<u8>],
+    expected_type: Option<&[u8]>,
 ) -> Result<CheckedCoreBodyTerm, CheckedCoreBodyViewError> {
     let tag = cursor
         .read_tag()
         .map_err(|reason| malformed_body(owner, reason))?;
+    decode_supported_body_term_after_tag(
+        tag,
+        cursor,
+        semantic,
+        selection,
+        owner,
+        type_context,
+        expected_type,
+    )
+}
+
+fn decode_supported_body_term_after_tag(
+    tag: String,
+    cursor: &mut CanonicalCursor<'_>,
+    semantic: &CheckedCoreSemanticInputs,
+    selection: &CheckedCoreBodyViewSelection,
+    owner: &StableSymbol,
+    type_context: &[Vec<u8>],
+    expected_type: Option<&[u8]>,
+) -> Result<CheckedCoreBodyTerm, CheckedCoreBodyViewError> {
     match tag.as_str() {
         "var" => {
             let raw = cursor
@@ -2522,12 +2652,25 @@ fn decode_supported_body_term(
                 checked_constructor_view(semantic, owner, &symbol, level_args)?,
             ))
         }
-        "elim" => decode_supported_match_view(cursor, semantic, selection, owner),
+        "elim" => decode_supported_match_view(cursor, semantic, selection, owner, type_context),
         "lam" => {
             let parameter_type =
                 capture_canonical_term(cursor).map_err(|reason| malformed_body(owner, reason))?;
+            let body_expected = expected_type
+                .map(canonical_pi_codomain)
+                .transpose()
+                .map_err(|reason| malformed_body(owner, reason))?
+                .flatten();
+            let mut inner_context = Vec::with_capacity(type_context.len() + 1);
+            inner_context.push(parameter_type.clone());
+            inner_context.extend_from_slice(type_context);
             let body = Box::new(decode_supported_body_term(
-                cursor, semantic, selection, owner,
+                cursor,
+                semantic,
+                selection,
+                owner,
+                &inner_context,
+                body_expected.as_deref(),
             )?);
             Ok(CheckedCoreBodyTerm::Lambda {
                 parameter_type,
@@ -2536,7 +2679,12 @@ fn decode_supported_body_term(
         }
         "app" => {
             let function = Box::new(decode_supported_body_term(
-                cursor, semantic, selection, owner,
+                cursor,
+                semantic,
+                selection,
+                owner,
+                type_context,
+                None,
             )?);
             let argument = if constructor_spine_needs_erased_family_argument(&function) {
                 Box::new(CheckedCoreBodyTerm::ErasedConstructorArgument {
@@ -2545,7 +2693,12 @@ fn decode_supported_body_term(
                 })
             } else {
                 Box::new(decode_supported_body_term(
-                    cursor, semantic, selection, owner,
+                    cursor,
+                    semantic,
+                    selection,
+                    owner,
+                    type_context,
+                    None,
                 )?)
             };
             Ok(CheckedCoreBodyTerm::Application { function, argument })
@@ -2554,10 +2707,23 @@ fn decode_supported_body_term(
             let value_type =
                 capture_canonical_term(cursor).map_err(|reason| malformed_body(owner, reason))?;
             let value = Box::new(decode_supported_body_term(
-                cursor, semantic, selection, owner,
+                cursor,
+                semantic,
+                selection,
+                owner,
+                type_context,
+                Some(&value_type),
             )?);
+            let mut inner_context = Vec::with_capacity(type_context.len() + 1);
+            inner_context.push(value_type.clone());
+            inner_context.extend_from_slice(type_context);
             let body = Box::new(decode_supported_body_term(
-                cursor, semantic, selection, owner,
+                cursor,
+                semantic,
+                selection,
+                owner,
+                &inner_context,
+                expected_type,
             )?);
             Ok(CheckedCoreBodyTerm::Let {
                 value_type,
@@ -2568,6 +2734,22 @@ fn decode_supported_body_term(
         "absurd" => Err(CheckedCoreBodyViewError::UnjustifiedImpossibleBranch {
             symbol: owner.clone(),
         }),
+        "pair" => decode_supported_record_sigma_construction(
+            cursor,
+            semantic,
+            selection,
+            owner,
+            type_context,
+            expected_type,
+        ),
+        "proj1" | "proj2" => decode_supported_record_sigma_projection(
+            tag,
+            cursor,
+            semantic,
+            selection,
+            owner,
+            type_context,
+        ),
         _ => Err(CheckedCoreBodyViewError::UnsupportedTermShape {
             symbol: owner.clone(),
             tag,
@@ -2588,11 +2770,429 @@ fn constructor_spine_needs_erased_family_argument(term: &CheckedCoreBodyTerm) ->
     applied_args < constructor.family_parameter_count
 }
 
+fn decode_supported_record_sigma_construction(
+    cursor: &mut CanonicalCursor<'_>,
+    semantic: &CheckedCoreSemanticInputs,
+    selection: &CheckedCoreBodyViewSelection,
+    owner: &StableSymbol,
+    type_context: &[Vec<u8>],
+    expected_type: Option<&[u8]>,
+) -> Result<CheckedCoreBodyTerm, CheckedCoreBodyViewError> {
+    let Some(expected_type) = expected_type else {
+        return Err(CheckedCoreBodyViewError::StaleFieldIdentityOrder {
+            symbol: owner.clone(),
+            record: owner.clone(),
+            reason: "pair body has no package-owned expected record/Sigma type".to_string(),
+        });
+    };
+    if type_has_dependent_sigma(expected_type).map_err(|reason| malformed_body(owner, reason))? {
+        return Err(CheckedCoreBodyViewError::UnsupportedDependentFieldShape {
+            symbol: owner.clone(),
+            reason: "expected type contains a dependent Sigma field".to_string(),
+        });
+    }
+
+    let record_symbol = record_head_symbol_from_type(expected_type)
+        .map_err(|reason| malformed_body(owner, reason))?
+        .ok_or_else(|| CheckedCoreBodyViewError::StaleFieldIdentityOrder {
+            symbol: owner.clone(),
+            record: owner.clone(),
+            reason: "expected type has no stable record/Sigma metadata head".to_string(),
+        })?;
+    let record = checked_record_sigma_view(semantic, owner, &record_symbol)?;
+    if record.fields.is_empty() {
+        return Err(CheckedCoreBodyViewError::StaleFieldIdentityOrder {
+            symbol: owner.clone(),
+            record: record.symbol,
+            reason: "pair body cannot construct a zero-field record/Sigma".to_string(),
+        });
+    }
+
+    let mut fields = Vec::with_capacity(record.fields.len());
+    for (index, field) in record.fields.iter().enumerate() {
+        if index > 0 {
+            let tag = cursor
+                .read_tag()
+                .map_err(|reason| malformed_body(owner, reason))?;
+            if tag != "pair" {
+                return Err(CheckedCoreBodyViewError::StaleFieldIdentityOrder {
+                    symbol: owner.clone(),
+                    record: record.symbol.clone(),
+                    reason: format!("field {} expected nested pair, found {tag:?}", field.name),
+                });
+            }
+        }
+
+        match field.runtime {
+            RuntimeFieldStatus::Runtime => {
+                let value = Box::new(decode_supported_body_term(
+                    cursor,
+                    semantic,
+                    selection,
+                    owner,
+                    type_context,
+                    None,
+                )?);
+                fields.push(CheckedCoreRecordSigmaFieldValue::Runtime {
+                    field: field.clone(),
+                    value,
+                });
+            }
+            RuntimeFieldStatus::ErasedLaw | RuntimeFieldStatus::ErasedProof => {
+                let term = capture_canonical_term(cursor)
+                    .map_err(|reason| malformed_body(owner, reason))?;
+                fields.push(CheckedCoreRecordSigmaFieldValue::Erased {
+                    field: field.clone(),
+                    term,
+                });
+            }
+        }
+    }
+
+    let terminator_start = cursor.pos;
+    let terminator_tag = cursor
+        .read_tag()
+        .map_err(|reason| malformed_body(owner, reason))?;
+    cursor.pos = terminator_start;
+    if terminator_tag == "pair" {
+        return Err(CheckedCoreBodyViewError::StaleFieldIdentityOrder {
+            symbol: owner.clone(),
+            record: record.symbol.clone(),
+            reason: "pair body carries more fields than package metadata".to_string(),
+        });
+    }
+    let terminator =
+        capture_canonical_term(cursor).map_err(|reason| malformed_body(owner, reason))?;
+
+    Ok(CheckedCoreBodyTerm::RecordSigmaConstruction(
+        CheckedCoreRecordSigmaConstructionView {
+            record,
+            fields,
+            terminator,
+        },
+    ))
+}
+
+fn decode_supported_record_sigma_projection(
+    first_tag: String,
+    cursor: &mut CanonicalCursor<'_>,
+    semantic: &CheckedCoreSemanticInputs,
+    selection: &CheckedCoreBodyViewSelection,
+    owner: &StableSymbol,
+    type_context: &[Vec<u8>],
+) -> Result<CheckedCoreBodyTerm, CheckedCoreBodyViewError> {
+    if first_tag == "proj2" {
+        return Err(CheckedCoreBodyViewError::UnsupportedRecordProjectionShape {
+            symbol: owner.clone(),
+            reason: "bare proj2 exposes a record/Sigma tail, not an executable field".to_string(),
+        });
+    }
+
+    let mut skipped_count = 0usize;
+    let mut base_tag = cursor
+        .read_tag()
+        .map_err(|reason| malformed_body(owner, reason))?;
+    while base_tag == "proj2" {
+        skipped_count += 1;
+        base_tag = cursor
+            .read_tag()
+            .map_err(|reason| malformed_body(owner, reason))?;
+    }
+
+    let base = decode_supported_body_term_after_tag(
+        base_tag,
+        cursor,
+        semantic,
+        selection,
+        owner,
+        type_context,
+        None,
+    )?;
+    let record_symbol = record_symbol_for_projection_base(semantic, owner, &base, type_context)?;
+    let record = checked_record_sigma_view(semantic, owner, &record_symbol)?;
+    let field = record.fields.get(skipped_count).cloned().ok_or_else(|| {
+        CheckedCoreBodyViewError::StaleFieldIdentityOrder {
+            symbol: owner.clone(),
+            record: record.symbol.clone(),
+            reason: format!(
+                "projection skipped {skipped_count} fields but metadata has {}",
+                record.fields.len()
+            ),
+        }
+    })?;
+    if field.runtime != RuntimeFieldStatus::Runtime {
+        return Err(
+            CheckedCoreBodyViewError::NonExecutableErasedFieldProjection {
+                symbol: owner.clone(),
+                record: record.symbol,
+                field: field.name,
+            },
+        );
+    }
+    let skipped_fields = record.fields[..skipped_count].to_vec();
+
+    Ok(CheckedCoreBodyTerm::RecordSigmaProjection(
+        CheckedCoreRecordSigmaProjectionView {
+            record,
+            field,
+            base: Box::new(base),
+            skipped_fields,
+        },
+    ))
+}
+
+fn checked_record_sigma_view(
+    semantic: &CheckedCoreSemanticInputs,
+    owner: &StableSymbol,
+    symbol: &StableSymbol,
+) -> Result<CheckedCoreRecordSigmaView, CheckedCoreBodyViewError> {
+    let meta = semantic.record_sigma_metadata.get(symbol).ok_or_else(|| {
+        CheckedCoreBodyViewError::StaleFieldIdentityOrder {
+            symbol: owner.clone(),
+            record: symbol.clone(),
+            reason: "missing package record/Sigma metadata".to_string(),
+        }
+    })?;
+    if meta.lowerability.blocks_lowering() {
+        return Err(CheckedCoreBodyViewError::UnsupportedRecordProjectionShape {
+            symbol: owner.clone(),
+            reason: format!("record/Sigma {symbol} lowerability blocks runtime use"),
+        });
+    }
+
+    Ok(CheckedCoreRecordSigmaView {
+        symbol: symbol.clone(),
+        kind: meta.kind.clone(),
+        fields: meta
+            .fields
+            .iter()
+            .enumerate()
+            .map(|(position, field)| CheckedCoreRecordSigmaFieldView {
+                position,
+                name: field.name.clone(),
+                ty: field.ty.clone(),
+                runtime: field.runtime.clone(),
+            })
+            .collect(),
+        lowerability: meta.lowerability.clone(),
+    })
+}
+
+fn record_symbol_for_projection_base(
+    semantic: &CheckedCoreSemanticInputs,
+    owner: &StableSymbol,
+    base: &CheckedCoreBodyTerm,
+    type_context: &[Vec<u8>],
+) -> Result<StableSymbol, CheckedCoreBodyViewError> {
+    match base {
+        CheckedCoreBodyTerm::Variable { de_bruijn_index } => {
+            let ty = type_context.get(*de_bruijn_index).ok_or_else(|| {
+                CheckedCoreBodyViewError::UnsupportedRecordProjectionShape {
+                    symbol: owner.clone(),
+                    reason: format!(
+                        "projection base variable {de_bruijn_index} has no checked type context"
+                    ),
+                }
+            })?;
+            record_head_symbol_from_type(ty)
+                .map_err(|reason| malformed_body(owner, reason))?
+                .ok_or_else(
+                    || CheckedCoreBodyViewError::UnsupportedRecordProjectionShape {
+                        symbol: owner.clone(),
+                        reason: "projection base variable is not record/Sigma typed".to_string(),
+                    },
+                )
+        }
+        CheckedCoreBodyTerm::DirectDeclarationCall { symbol, .. } => {
+            let ty = declaration_checked_type_bytes(semantic, symbol).map_err(|reason| {
+                CheckedCoreBodyViewError::UnsupportedRecordProjectionShape {
+                    symbol: owner.clone(),
+                    reason,
+                }
+            })?;
+            record_head_symbol_from_type(&ty)
+                .map_err(|reason| malformed_body(owner, reason))?
+                .ok_or_else(
+                    || CheckedCoreBodyViewError::UnsupportedRecordProjectionShape {
+                        symbol: owner.clone(),
+                        reason: format!("direct call {symbol} is not record/Sigma typed"),
+                    },
+                )
+        }
+        CheckedCoreBodyTerm::RecordSigmaConstruction(view) => Ok(view.record.symbol.clone()),
+        _ => Err(CheckedCoreBodyViewError::UnsupportedRecordProjectionShape {
+            symbol: owner.clone(),
+            reason: "projection base shape has no package-owned record/Sigma type".to_string(),
+        }),
+    }
+}
+
+fn declaration_checked_type_bytes(
+    semantic: &CheckedCoreSemanticInputs,
+    symbol: &StableSymbol,
+) -> Result<Vec<u8>, String> {
+    let bytes = semantic
+        .declarations
+        .get(symbol)
+        .ok_or_else(|| format!("projection base {symbol} has no checked declaration bytes"))?;
+    let mut cursor = CanonicalCursor::new(bytes);
+    let kind = cursor.read_tag()?;
+    if kind != "transparent" {
+        return Err(format!(
+            "projection base {symbol} has unsupported declaration kind {kind}"
+        ));
+    }
+    let encoded_symbol = decode_stable_symbol(&mut cursor)?;
+    if &encoded_symbol != symbol {
+        return Err(format!(
+            "projection base declaration bytes identify {encoded_symbol}, expected {symbol}"
+        ));
+    }
+    decode_level_params(&mut cursor)?;
+    capture_canonical_term(&mut cursor)
+}
+
+fn canonical_pi_codomain(bytes: &[u8]) -> Result<Option<Vec<u8>>, String> {
+    let mut cursor = CanonicalCursor::new(bytes);
+    if cursor.read_tag()?.as_str() != "pi" {
+        return Ok(None);
+    }
+    skip_term(&mut cursor)?;
+    let codomain = capture_canonical_term(&mut cursor)?;
+    if cursor.remaining() != 0 {
+        return Err(format!(
+            "function type bytes have {} trailing bytes",
+            cursor.remaining()
+        ));
+    }
+    Ok(Some(codomain))
+}
+
+fn record_head_symbol_from_type(bytes: &[u8]) -> Result<Option<StableSymbol>, String> {
+    let mut cursor = CanonicalCursor::new(bytes);
+    let symbol = record_head_symbol_from_type_cursor(&mut cursor)?;
+    Ok(symbol)
+}
+
+fn record_head_symbol_from_type_cursor(
+    cursor: &mut CanonicalCursor<'_>,
+) -> Result<Option<StableSymbol>, String> {
+    match cursor.read_tag()?.as_str() {
+        "const" | "ind_former" => {
+            let symbol = decode_stable_symbol(cursor)?;
+            skip_levels(cursor)?;
+            Ok(Some(symbol))
+        }
+        "app" => {
+            let symbol = record_head_symbol_from_type_cursor(cursor)?;
+            skip_term(cursor)?;
+            Ok(symbol)
+        }
+        _ => Ok(None),
+    }
+}
+
+fn type_has_dependent_sigma(bytes: &[u8]) -> Result<bool, String> {
+    let mut cursor = CanonicalCursor::new(bytes);
+    let found = term_has_dependent_sigma(&mut cursor)?;
+    if cursor.remaining() != 0 {
+        return Err(format!(
+            "type bytes have {} trailing bytes",
+            cursor.remaining()
+        ));
+    }
+    Ok(found)
+}
+
+fn term_has_dependent_sigma(cursor: &mut CanonicalCursor<'_>) -> Result<bool, String> {
+    match cursor.read_tag()?.as_str() {
+        "sigma" => {
+            if term_has_dependent_sigma(cursor)? {
+                return Ok(true);
+            }
+            let codomain_start = cursor.pos;
+            if term_contains_free_var(cursor, 0)? {
+                return Ok(true);
+            }
+            let codomain = &cursor.bytes[codomain_start..cursor.pos];
+            canonical_term_contains_free_var(codomain, 0)
+        }
+        "pi" | "lam" => {
+            let left = term_has_dependent_sigma(cursor)?;
+            let right = term_has_dependent_sigma(cursor)?;
+            Ok(left || right)
+        }
+        "app" | "pair" | "ascript" | "quot" | "absurd" => {
+            let left = term_has_dependent_sigma(cursor)?;
+            let right = term_has_dependent_sigma(cursor)?;
+            Ok(left || right)
+        }
+        "proj1" | "proj2" | "refl" | "quot_class" | "trunc" | "trunc_proj" => {
+            term_has_dependent_sigma(cursor)
+        }
+        "let" | "eq" | "j" => {
+            let a = term_has_dependent_sigma(cursor)?;
+            let b = term_has_dependent_sigma(cursor)?;
+            let c = term_has_dependent_sigma(cursor)?;
+            Ok(a || b || c)
+        }
+        "cast" | "quot_elim" => {
+            let a = term_has_dependent_sigma(cursor)?;
+            let b = term_has_dependent_sigma(cursor)?;
+            let c = term_has_dependent_sigma(cursor)?;
+            let d = term_has_dependent_sigma(cursor)?;
+            Ok(a || b || c || d)
+        }
+        "type" | "omega" => {
+            skip_level(cursor)?;
+            Ok(false)
+        }
+        "var" => {
+            cursor.read_u64()?;
+            Ok(false)
+        }
+        "const" | "ind_former" | "constructor_ref" => {
+            decode_stable_symbol(cursor)?;
+            skip_levels(cursor)?;
+            Ok(false)
+        }
+        "elim" => {
+            decode_stable_symbol(cursor)?;
+            skip_levels(cursor)?;
+            if terms_have_dependent_sigma(cursor)? {
+                return Ok(true);
+            }
+            if term_has_dependent_sigma(cursor)? {
+                return Ok(true);
+            }
+            if terms_have_dependent_sigma(cursor)? {
+                return Ok(true);
+            }
+            if terms_have_dependent_sigma(cursor)? {
+                return Ok(true);
+            }
+            term_has_dependent_sigma(cursor)
+        }
+        other => Err(format!("unsupported term tag {other:?}")),
+    }
+}
+
+fn terms_have_dependent_sigma(cursor: &mut CanonicalCursor<'_>) -> Result<bool, String> {
+    let len = cursor.read_len()?;
+    for _ in 0..len {
+        if term_has_dependent_sigma(cursor)? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
 fn decode_supported_match_view(
     cursor: &mut CanonicalCursor<'_>,
     semantic: &CheckedCoreSemanticInputs,
     selection: &CheckedCoreBodyViewSelection,
     owner: &StableSymbol,
+    type_context: &[Vec<u8>],
 ) -> Result<CheckedCoreBodyTerm, CheckedCoreBodyViewError> {
     let family_symbol =
         decode_stable_symbol(cursor).map_err(|reason| malformed_body(owner, reason))?;
@@ -2650,7 +3250,8 @@ fn decode_supported_match_view(
                         constructor,
                     },
                 )?;
-        let method = decode_supported_body_term(cursor, semantic, selection, owner)?;
+        let method =
+            decode_supported_body_term(cursor, semantic, selection, owner, type_context, None)?;
         branches.push(CheckedCoreMatchBranchView {
             constructor,
             method,
@@ -2678,7 +3279,12 @@ fn decode_supported_match_view(
     }
 
     let scrutinee = Box::new(decode_supported_body_term(
-        cursor, semantic, selection, owner,
+        cursor,
+        semantic,
+        selection,
+        owner,
+        type_context,
+        None,
     )?);
     Ok(CheckedCoreBodyTerm::Match(CheckedCoreMatchView {
         family_symbol,
@@ -3252,6 +3858,112 @@ mod tests {
         )
         .unwrap();
         (package, target, false_ctor, true_ctor)
+    }
+
+    fn record_sigma_symbols() -> (StableSymbol, StableSymbol, StableSymbol) {
+        (
+            decl_symbol("RecordPayload"),
+            decl_symbol("RuntimePayload"),
+            decl_symbol("record_value"),
+        )
+    }
+
+    fn record_sigma_metadata(payload: &StableSymbol) -> RecordSigmaMetadata {
+        RecordSigmaMetadata {
+            kind: RecordSigmaKind::Record,
+            fields: vec![
+                FieldMetadata {
+                    name: "runtime_payload".to_string(),
+                    ty: payload.clone(),
+                    runtime: RuntimeFieldStatus::Runtime,
+                },
+                FieldMetadata {
+                    name: "law_payload".to_string(),
+                    ty: payload.clone(),
+                    runtime: RuntimeFieldStatus::ErasedLaw,
+                },
+                FieldMetadata {
+                    name: "proof_payload".to_string(),
+                    ty: payload.clone(),
+                    runtime: RuntimeFieldStatus::ErasedProof,
+                },
+            ],
+            lowerability: LowerabilityStatus::Supported,
+        }
+    }
+
+    fn record_sigma_table(
+        record: StableSymbol,
+        payload: StableSymbol,
+        target: StableSymbol,
+    ) -> StableSymbolTable {
+        table_many(&[
+            (GlobalId(1), target),
+            (GlobalId(10), record),
+            (GlobalId(11), payload),
+        ])
+    }
+
+    fn record_type() -> Term {
+        Term::Const {
+            id: GlobalId(10),
+            level_args: Vec::new(),
+        }
+    }
+
+    fn payload_type() -> Term {
+        Term::Const {
+            id: GlobalId(11),
+            level_args: Vec::new(),
+        }
+    }
+
+    fn record_pair_body() -> Term {
+        Term::Pair(
+            Box::new(Term::Var(0)),
+            Box::new(Term::Pair(
+                Box::new(Term::Type(Level::zero())),
+                Box::new(Term::Pair(
+                    Box::new(Term::Omega(Level::zero())),
+                    Box::new(Term::Type(Level::zero())),
+                )),
+            )),
+        )
+    }
+
+    fn record_sigma_package() -> (CheckedCorePackage, StableSymbol, StableSymbol) {
+        let (record, payload, target) = record_sigma_symbols();
+        let table = record_sigma_table(record.clone(), payload.clone(), target.clone());
+        let decl = Decl::Transparent {
+            id: GlobalId(1),
+            level_params: Vec::new(),
+            ty: Term::pi(payload_type(), record_type()),
+            body: Term::Lam(Box::new(payload_type()), Box::new(record_pair_body())),
+        };
+
+        let mut semantic = CheckedCoreSemanticInputs::default();
+        for symbol in [&target, &record, &payload] {
+            semantic.symbols.insert(symbol.clone());
+            semantic
+                .lowerability
+                .insert(symbol.clone(), LowerabilityStatus::Supported);
+        }
+        semantic
+            .declarations
+            .insert(target.clone(), canonical_decl_bytes(&decl, &table).unwrap());
+        semantic
+            .record_sigma_metadata
+            .insert(record.clone(), record_sigma_metadata(&payload));
+        let package = emit_checked_core_package(
+            body_view_header(),
+            CheckedCoreArtifactInputs {
+                semantic,
+                source_identity: BTreeMap::new(),
+                annotations: BTreeMap::new(),
+            },
+        )
+        .unwrap();
+        (package, target, record)
     }
 
     fn replace_body(
@@ -3942,6 +4654,232 @@ mod tests {
             CheckedCoreBodyViewError::UnjustifiedImpossibleBranch { symbol: target }
         );
         assert_eq!(err.lane(), "unjustified_impossible_branch");
+    }
+
+    #[test]
+    fn body_view_recovers_package_bound_record_sigma_construction() {
+        let (package, target, record) = record_sigma_package();
+        let selection =
+            body_view_selection(&package, target.clone(), BTreeSet::from([target.clone()]));
+
+        let view = checked_core_declaration_body_view(&package, &selection, &target).unwrap();
+
+        let CheckedCoreBodyTerm::Lambda { body, .. } = view.body else {
+            panic!("expected lambda returning record/Sigma construction");
+        };
+        let CheckedCoreBodyTerm::RecordSigmaConstruction(construction) = body.as_ref() else {
+            panic!("expected package-derived record/Sigma construction view");
+        };
+        assert_eq!(construction.record.symbol, record);
+        assert_eq!(construction.record.kind, RecordSigmaKind::Record);
+        assert_eq!(
+            construction
+                .record
+                .fields
+                .iter()
+                .map(|field| (field.position, field.name.as_str(), field.runtime.clone()))
+                .collect::<Vec<_>>(),
+            vec![
+                (0, "runtime_payload", RuntimeFieldStatus::Runtime),
+                (1, "law_payload", RuntimeFieldStatus::ErasedLaw),
+                (2, "proof_payload", RuntimeFieldStatus::ErasedProof),
+            ]
+        );
+        assert_eq!(construction.fields.len(), 3);
+        assert!(matches!(
+            &construction.fields[0],
+            CheckedCoreRecordSigmaFieldValue::Runtime {
+                field,
+                value,
+            } if field.name == "runtime_payload"
+                && matches!(value.as_ref(), CheckedCoreBodyTerm::Variable { de_bruijn_index: 0 })
+        ));
+        assert!(matches!(
+            &construction.fields[1],
+            CheckedCoreRecordSigmaFieldValue::Erased { field, term }
+                if field.name == "law_payload" && !term.is_empty()
+        ));
+        assert!(matches!(
+            &construction.fields[2],
+            CheckedCoreRecordSigmaFieldValue::Erased { field, term }
+                if field.name == "proof_payload" && !term.is_empty()
+        ));
+        assert!(!construction.terminator.is_empty());
+    }
+
+    #[test]
+    fn body_view_recovers_runtime_record_sigma_projection() {
+        let (mut package, target, record) = record_sigma_package();
+        let (record_ty, payload, _) = record_sigma_symbols();
+        let table = record_sigma_table(record_ty, payload, target.clone());
+        replace_body(
+            &mut package,
+            &target,
+            Term::Lam(
+                Box::new(record_type()),
+                Box::new(Term::Proj1(Box::new(Term::Var(0)))),
+            ),
+            &table,
+        );
+        let selection =
+            body_view_selection(&package, target.clone(), BTreeSet::from([target.clone()]));
+
+        let view = checked_core_declaration_body_view(&package, &selection, &target).unwrap();
+
+        let CheckedCoreBodyTerm::Lambda { body, .. } = view.body else {
+            panic!("expected projection lambda");
+        };
+        let CheckedCoreBodyTerm::RecordSigmaProjection(projection) = body.as_ref() else {
+            panic!("expected package-derived record/Sigma projection view");
+        };
+        assert_eq!(projection.record.symbol, record);
+        assert_eq!(projection.field.position, 0);
+        assert_eq!(projection.field.name, "runtime_payload");
+        assert_eq!(projection.field.runtime, RuntimeFieldStatus::Runtime);
+        assert!(projection.skipped_fields.is_empty());
+        assert!(matches!(
+            projection.base.as_ref(),
+            CheckedCoreBodyTerm::Variable { de_bruijn_index: 0 }
+        ));
+    }
+
+    #[test]
+    fn body_view_rejects_non_executable_erased_field_projection() {
+        let (mut package, target, record) = record_sigma_package();
+        let (record_ty, payload, _) = record_sigma_symbols();
+        let table = record_sigma_table(record_ty, payload, target.clone());
+        replace_body(
+            &mut package,
+            &target,
+            Term::Lam(
+                Box::new(record_type()),
+                Box::new(Term::Proj1(Box::new(Term::Proj2(Box::new(Term::Var(0)))))),
+            ),
+            &table,
+        );
+        let selection =
+            body_view_selection(&package, target.clone(), BTreeSet::from([target.clone()]));
+
+        let err = checked_core_declaration_body_view(&package, &selection, &target).unwrap_err();
+
+        assert_eq!(
+            err,
+            CheckedCoreBodyViewError::NonExecutableErasedFieldProjection {
+                symbol: target,
+                record,
+                field: "law_payload".to_string(),
+            }
+        );
+        assert_eq!(err.lane(), "non_executable_erased_field_projection");
+    }
+
+    #[test]
+    fn body_view_rejects_stale_field_identity_order_mismatch() {
+        let (mut package, target, record) = record_sigma_package();
+        let (record_ty, payload, _) = record_sigma_symbols();
+        let table = record_sigma_table(record_ty, payload, target.clone());
+        let decl = Decl::Transparent {
+            id: GlobalId(1),
+            level_params: Vec::new(),
+            ty: Term::pi(payload_type(), record_type()),
+            body: Term::Lam(
+                Box::new(payload_type()),
+                Box::new(Term::Pair(
+                    Box::new(Term::Var(0)),
+                    Box::new(Term::Type(Level::zero())),
+                )),
+            ),
+        };
+        package
+            .artifact
+            .semantic
+            .declarations
+            .insert(target.clone(), canonical_decl_bytes(&decl, &table).unwrap());
+        refresh_package_hashes(&mut package);
+        let selection =
+            body_view_selection(&package, target.clone(), BTreeSet::from([target.clone()]));
+
+        let err = checked_core_declaration_body_view(&package, &selection, &target).unwrap_err();
+
+        assert!(matches!(
+            err,
+            CheckedCoreBodyViewError::StaleFieldIdentityOrder { .. }
+        ));
+        assert_eq!(err.lane(), "stale_field_identity_order");
+        assert!(err.to_string().contains(&record.to_string()));
+    }
+
+    #[test]
+    fn body_view_rejects_unsupported_dependent_record_sigma_field_shape() {
+        let (mut package, target, _) = record_sigma_package();
+        let (record_ty, payload, _) = record_sigma_symbols();
+        let table = record_sigma_table(record_ty, payload, target.clone());
+        replace_body(
+            &mut package,
+            &target,
+            Term::Lam(
+                Box::new(payload_type()),
+                Box::new(Term::Pair(
+                    Box::new(Term::Var(0)),
+                    Box::new(Term::Type(Level::zero())),
+                )),
+            ),
+            &table,
+        );
+        let decl = Decl::Transparent {
+            id: GlobalId(1),
+            level_params: Vec::new(),
+            ty: Term::pi(
+                payload_type(),
+                Term::sigma(Term::Type(Level::zero()), Term::Var(0)),
+            ),
+            body: Term::Lam(
+                Box::new(payload_type()),
+                Box::new(Term::Pair(
+                    Box::new(Term::Var(0)),
+                    Box::new(Term::Type(Level::zero())),
+                )),
+            ),
+        };
+        package
+            .artifact
+            .semantic
+            .declarations
+            .insert(target.clone(), canonical_decl_bytes(&decl, &table).unwrap());
+        refresh_package_hashes(&mut package);
+        let selection =
+            body_view_selection(&package, target.clone(), BTreeSet::from([target.clone()]));
+
+        let err = checked_core_declaration_body_view(&package, &selection, &target).unwrap_err();
+
+        assert!(matches!(
+            err,
+            CheckedCoreBodyViewError::UnsupportedDependentFieldShape { .. }
+        ));
+        assert_eq!(err.lane(), "unsupported_dependent_field_shape");
+    }
+
+    #[test]
+    fn body_view_rejects_unsupported_record_projection_shape() {
+        let (mut package, target, _) = record_sigma_package();
+        let (record_ty, payload, _) = record_sigma_symbols();
+        let table = record_sigma_table(record_ty, payload, target.clone());
+        replace_body(
+            &mut package,
+            &target,
+            Term::Proj1(Box::new(Term::Var(0))),
+            &table,
+        );
+        let selection =
+            body_view_selection(&package, target.clone(), BTreeSet::from([target.clone()]));
+
+        let err = checked_core_declaration_body_view(&package, &selection, &target).unwrap_err();
+
+        assert!(matches!(
+            err,
+            CheckedCoreBodyViewError::UnsupportedRecordProjectionShape { .. }
+        ));
+        assert_eq!(err.lane(), "unsupported_record_projection_shape");
     }
 
     #[test]
