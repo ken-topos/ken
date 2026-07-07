@@ -105,8 +105,10 @@ or dependency semantic hash changes `core_semantic_hash`.
 ## 4. Required Sections
 
 Every required section below must be present. An explicitly empty section means
-"none"; an omitted section means "invalid package". A package may not use an
-unsupported entry or annotation to stand in for a missing required section.
+"none"; an omitted section means "invalid package". The optional `annotations`
+lane is defined in section 8 and is not a required section. A package may not
+use an unsupported entry or annotation to stand in for a missing required
+section.
 
 | Section | Payload | Reject |
 |---|---|---|
@@ -123,11 +125,12 @@ unsupported entry or annotation to stand in for a missing required section.
 | `behavioral_export` | `71` reference/hash | temporal/export gap |
 | `hashes_provenance` | semantic/artifact hashes | hash mismatch |
 | `unsupported` | explicit unsupported entries | malformed/reachable block |
-| `annotations` | non-semantic lane | malformed annotation |
 
 Unknown top-level semantic sections or unknown required features reject unless a
 selected, versioned translator explicitly handles them. Unknown entries inside
 the namespaced `annotations` lane may be ignored because they are not semantic.
+If no non-semantic annotations are present, the lane may be omitted; omission of
+`annotations` is equivalent to an empty non-semantic annotation set.
 
 ## 5. Declaration and Metadata Coverage
 
@@ -245,7 +248,8 @@ There are three separate cases:
    diagnostics, display, profiling notes, or provenance decoration. Unknown
    annotations may be ignored, are excluded from `core_semantic_hash`, and are
    included only in `artifact_hash` if serialized. A consumer must not branch on
-   an annotation to determine checked-core meaning.
+   an annotation to determine checked-core meaning. A missing `annotations`
+   lane is valid and means there are no non-semantic annotations.
 
 A producer that cannot represent the checked meaning of a declaration in v0 must
 not emit a v0 package for that declaration. The unsupported lane is for honest
@@ -303,6 +307,7 @@ artifacts once the emitter exists, then mutate one dimension at a time:
 - valid v0 accepts after required-section and re-check coverage;
 - missing `package_kind`, missing `version`, or unsupported `version` rejects;
 - required section omitted rejects, while an explicit empty section can accept;
+- omitted `annotations` accepts and means no non-semantic annotations;
 - unknown semantic field rejects unless it is in `annotations`;
 - dropped metadata, orphan metadata, or primitive/class/inductive/effect use
   without metadata rejects;
