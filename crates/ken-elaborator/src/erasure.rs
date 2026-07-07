@@ -543,16 +543,196 @@ fn lower_body_term_inner(
             context_depth,
             branch_remap,
         ),
-        CheckedCoreBodyTerm::RecordSigmaConstruction(_) => Err(expression_lowering_error(
+        CheckedCoreBodyTerm::RecordSigmaConstruction(view) => lower_record_sigma_construction(
+            view,
+            declarations,
+            stack,
             root_symbol,
-            "record_construction_lowering_unsupported",
-            "record/Sigma construction lowering is deferred to NC15 Runtime",
-        )),
-        CheckedCoreBodyTerm::RecordSigmaProjection(_) => Err(expression_lowering_error(
+            context_depth,
+            branch_remap,
+        ),
+        CheckedCoreBodyTerm::RecordSigmaProjection(view) => lower_record_sigma_projection(
+            view,
+            declarations,
+            stack,
             root_symbol,
-            "record_projection_lowering_unsupported",
-            "record/Sigma projection lowering is deferred to NC15 Runtime",
-        )),
+            context_depth,
+            branch_remap,
+        ),
+    }
+}
+
+fn lower_record_sigma_construction(
+    view: &checked_core::CheckedCoreRecordSigmaConstructionView,
+    declarations: &BTreeMap<StableSymbol, checked_core::CheckedCoreDeclarationBodyView>,
+    stack: &mut Vec<StableSymbol>,
+    root_symbol: &StableSymbol,
+    context_depth: usize,
+    branch_remap: Option<BranchBinderRemap>,
+) -> Result<RuntimeExpr, ErasureError> {
+    require_expression_supported(
+        root_symbol,
+        &view.record.symbol,
+        &view.record.lowerability,
+        "record_lowerability_blocked",
+    )?;
+    validate_record_field_view(root_symbol, &view.record)?;
+    if view.fields.len() != view.record.fields.len() {
+        return Err(expression_lowering_error(
+            root_symbol,
+            "stale_field_identity_order",
+            format!(
+                "record/Sigma construction for {} carries {} fields, expected {}",
+                view.record.symbol,
+                view.fields.len(),
+                view.record.fields.len()
+            ),
+        ));
+    }
+
+    let mut runtime_fields = Vec::new();
+    for (expected, value) in view.record.fields.iter().zip(&view.fields) {
+        match value {
+            checked_core::CheckedCoreRecordSigmaFieldValue::Runtime { field, value } => {
+                require_same_record_field(root_symbol, expected, field)?;
+                if !matches!(field.runtime, checked_core::RuntimeFieldStatus::Runtime) {
+                    return Err(expression_lowering_error(
+                        root_symbol,
+                        "non_runtime_record_field_value",
+                        format!("field {} is not executable at runtime", field.name),
+                    ));
+                }
+                runtime_fields.push((
+                    field.name.clone(),
+                    lower_body_term_inner(
+                        value,
+                        declarations,
+                        stack,
+                        root_symbol,
+                        context_depth,
+                        branch_remap,
+                    )?,
+                ));
+            }
+            checked_core::CheckedCoreRecordSigmaFieldValue::Erased { field, .. } => {
+                require_same_record_field(root_symbol, expected, field)?;
+                if matches!(field.runtime, checked_core::RuntimeFieldStatus::Runtime) {
+                    return Err(expression_lowering_error(
+                        root_symbol,
+                        "runtime_field_erased_value",
+                        format!(
+                            "runtime field {} cannot be supplied by erased bytes",
+                            field.name
+                        ),
+                    ));
+                }
+            }
+        }
+    }
+
+    Ok(RuntimeExpr::Record {
+        fields: runtime_fields,
+    })
+}
+
+fn lower_record_sigma_projection(
+    view: &checked_core::CheckedCoreRecordSigmaProjectionView,
+    declarations: &BTreeMap<StableSymbol, checked_core::CheckedCoreDeclarationBodyView>,
+    stack: &mut Vec<StableSymbol>,
+    root_symbol: &StableSymbol,
+    context_depth: usize,
+    branch_remap: Option<BranchBinderRemap>,
+) -> Result<RuntimeExpr, ErasureError> {
+    require_expression_supported(
+        root_symbol,
+        &view.record.symbol,
+        &view.record.lowerability,
+        "record_lowerability_blocked",
+    )?;
+    validate_record_field_view(root_symbol, &view.record)?;
+    let expected = view.record.fields.get(view.field.position).ok_or_else(|| {
+        expression_lowering_error(
+            root_symbol,
+            "stale_field_identity_order",
+            format!(
+                "record/Sigma projection for {} references missing field position {}",
+                view.record.symbol, view.field.position
+            ),
+        )
+    })?;
+    require_same_record_field(root_symbol, expected, &view.field)?;
+    if !matches!(
+        view.field.runtime,
+        checked_core::RuntimeFieldStatus::Runtime
+    ) {
+        return Err(expression_lowering_error(
+            root_symbol,
+            "non_executable_erased_field_projection",
+            format!(
+                "field {} of {} is erased and cannot become a runtime value",
+                view.field.name, view.record.symbol
+            ),
+        ));
+    }
+    for skipped in &view.skipped_fields {
+        let Some(expected) = view.record.fields.get(skipped.position) else {
+            return Err(expression_lowering_error(
+                root_symbol,
+                "stale_field_identity_order",
+                format!(
+                    "record/Sigma projection for {} skips missing field position {}",
+                    view.record.symbol, skipped.position
+                ),
+            ));
+        };
+        require_same_record_field(root_symbol, expected, skipped)?;
+    }
+
+    Ok(RuntimeExpr::Project {
+        record: Box::new(lower_body_term_inner(
+            &view.base,
+            declarations,
+            stack,
+            root_symbol,
+            context_depth,
+            branch_remap,
+        )?),
+        field: view.field.name.clone(),
+    })
+}
+
+fn validate_record_field_view(
+    root_symbol: &StableSymbol,
+    record: &checked_core::CheckedCoreRecordSigmaView,
+) -> Result<(), ErasureError> {
+    for (expected_position, field) in record.fields.iter().enumerate() {
+        if field.position != expected_position {
+            return Err(expression_lowering_error(
+                root_symbol,
+                "stale_field_identity_order",
+                format!(
+                    "record/Sigma metadata for {} has field {} at position {}, expected {}",
+                    record.symbol, field.name, field.position, expected_position
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn require_same_record_field(
+    root_symbol: &StableSymbol,
+    expected: &checked_core::CheckedCoreRecordSigmaFieldView,
+    actual: &checked_core::CheckedCoreRecordSigmaFieldView,
+) -> Result<(), ErasureError> {
+    if expected == actual {
+        Ok(())
+    } else {
+        Err(expression_lowering_error(
+            root_symbol,
+            "stale_field_identity_order",
+            format!("record/Sigma field view changed: expected {expected:?}, got {actual:?}"),
+        ))
     }
 }
 
