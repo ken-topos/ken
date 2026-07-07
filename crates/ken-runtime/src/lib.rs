@@ -9,6 +9,7 @@
 //! - Arena page chaining beyond a single flat Vec (`44 §1b`)
 //! - `unknown` propagation (Kleene/Heyting logic, `41 §6`)
 
+pub mod artifact_validation;
 pub mod canonical;
 pub mod cranelift_backend;
 pub mod hash;
@@ -17,6 +18,7 @@ pub mod store;
 pub mod unknown;
 pub mod values;
 
+pub use artifact_validation::*;
 pub use canonical::Canonical;
 pub use cranelift_backend::*;
 pub use hash::fnv1a_64;

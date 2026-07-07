@@ -18,7 +18,9 @@ use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{default_libcall_names, Linkage, Module};
 
 use crate::{
-    RuntimeDeclarationKind, RuntimeEffectBoundary, RuntimeExample, RuntimeExpr, RuntimeGroundValue,
+    validate_supported_runtime_artifact_certificate, RuntimeArtifactCertificate,
+    RuntimeArtifactValidationError, RuntimeArtifactValidationReport, RuntimeDeclarationKind,
+    RuntimeEffectBoundary, RuntimeExample, RuntimeExpr, RuntimeGroundValue,
     RuntimeLowerabilityStatus, RuntimeObservation, RuntimePartiality, RuntimePrimitive,
     RuntimeProgram, RuntimeTrap, RuntimeTrapCode, RuntimeValue,
 };
@@ -37,6 +39,7 @@ pub struct NativeTrustReport {
     pub backend: &'static str,
     pub fidelity: NativeFidelity,
     pub verifier_passed: bool,
+    pub artifact_validation: Option<RuntimeArtifactValidationReport>,
     pub toolchain: NativeToolchainReport,
     pub evidence: NativeRunEvidence,
     pub assumptions: BTreeSet<String>,
@@ -135,6 +138,12 @@ pub enum CraneliftBackendError {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ValidatedNativeRunError {
+    Validation(RuntimeArtifactValidationError),
+    Backend(CraneliftBackendError),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UnsupportedLowering {
     pub construct: &'static str,
     pub reason: String,
@@ -160,6 +169,31 @@ impl fmt::Display for CraneliftBackendError {
 }
 
 impl std::error::Error for CraneliftBackendError {}
+
+impl fmt::Display for ValidatedNativeRunError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ValidatedNativeRunError::Validation(err) => {
+                write!(f, "runtime artifact validation failed: {err}")
+            }
+            ValidatedNativeRunError::Backend(err) => write!(f, "{err}"),
+        }
+    }
+}
+
+impl std::error::Error for ValidatedNativeRunError {}
+
+impl From<RuntimeArtifactValidationError> for ValidatedNativeRunError {
+    fn from(err: RuntimeArtifactValidationError) -> Self {
+        ValidatedNativeRunError::Validation(err)
+    }
+}
+
+impl From<CraneliftBackendError> for ValidatedNativeRunError {
+    fn from(err: CraneliftBackendError) -> Self {
+        ValidatedNativeRunError::Backend(err)
+    }
+}
 
 impl fmt::Display for UnsupportedLowering {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -216,11 +250,64 @@ pub fn run_nc6_seed_examples(
         .collect()
 }
 
+pub fn run_nc8_validated_seed_examples(
+    program: &RuntimeProgram,
+    certificate: &RuntimeArtifactCertificate,
+) -> Result<Vec<CraneliftRunReport>, ValidatedNativeRunError> {
+    let validation = validate_supported_runtime_artifact_certificate(program, certificate)?;
+    reject_program_blockers(program)?;
+    let env = NativeSeedEnvironment::nc5_seed();
+    program
+        .examples
+        .iter()
+        .map(|example| {
+            let mut report = run_example_native(
+                example,
+                &env,
+                NativeFidelity::F0NativeExample,
+                NativeRunEvidence::from_program(program),
+                Some(validation.clone()),
+            )?;
+            if report.observation == example.observation {
+                report.trust.fidelity = NativeFidelity::F1SeedObservationAgreement;
+            }
+            Ok(report)
+        })
+        .collect()
+}
+
 pub fn run_example_with_interpreter_observation(
     program: &RuntimeProgram,
     example: &RuntimeExample,
     env: &NativeSeedEnvironment,
     oracle: InterpreterOracleObservation,
+) -> NativeDifferentialReport {
+    run_example_with_interpreter_observation_and_validation(program, example, env, oracle, None)
+}
+
+pub fn run_validated_example_with_interpreter_observation(
+    program: &RuntimeProgram,
+    example: &RuntimeExample,
+    env: &NativeSeedEnvironment,
+    oracle: InterpreterOracleObservation,
+    certificate: &RuntimeArtifactCertificate,
+) -> Result<NativeDifferentialReport, RuntimeArtifactValidationError> {
+    let validation = validate_supported_runtime_artifact_certificate(program, certificate)?;
+    Ok(run_example_with_interpreter_observation_and_validation(
+        program,
+        example,
+        env,
+        oracle,
+        Some(validation),
+    ))
+}
+
+fn run_example_with_interpreter_observation_and_validation(
+    program: &RuntimeProgram,
+    example: &RuntimeExample,
+    env: &NativeSeedEnvironment,
+    oracle: InterpreterOracleObservation,
+    artifact_validation: Option<RuntimeArtifactValidationReport>,
 ) -> NativeDifferentialReport {
     let artifact = NativeArtifactIdentity::from_program(program);
 
@@ -237,6 +324,7 @@ pub fn run_example_with_interpreter_observation(
         env,
         NativeFidelity::F0NativeExample,
         NativeRunEvidence::from_program(program),
+        artifact_validation,
     ) {
         Ok(mut native) => {
             if native.observation == oracle.observation {
@@ -420,6 +508,7 @@ pub fn run_example_with_seed_observation(
         env,
         NativeFidelity::F0NativeExample,
         NativeRunEvidence::seed_example(),
+        None,
     )?;
     if report.observation == example.observation {
         report.trust.fidelity = NativeFidelity::F1SeedObservationAgreement;
@@ -432,6 +521,7 @@ fn run_example_native(
     env: &NativeSeedEnvironment,
     fidelity: NativeFidelity,
     evidence: NativeRunEvidence,
+    artifact_validation: Option<RuntimeArtifactValidationReport>,
 ) -> Result<CraneliftRunReport, CraneliftBackendError> {
     let compiled = compile_expr(&example.ir, env)?;
     let verifier_passed = compiled.verifier_passed;
@@ -447,6 +537,7 @@ fn run_example_native(
             backend: "Cranelift JIT",
             fidelity,
             verifier_passed,
+            artifact_validation,
             toolchain: native_toolchain_report(),
             evidence,
             assumptions,
@@ -1106,9 +1197,10 @@ fn backend_module(reason: String) -> CraneliftBackendError {
 mod tests {
     use super::*;
     use crate::{
-        nc5_seed_examples, ErasedExecutableCore, RuntimeAssumptionTrustKind,
-        RuntimeAssumptionTrustMetadata, RuntimeDeclaration, RuntimeEffectsForeignAuditMetadata,
-        RuntimeFieldStatus, RuntimeMatchCase, RuntimeMetadata, RuntimeSymbolMetadata,
+        nc5_seed_examples, ErasedExecutableCore, RuntimeArtifactValidationStage,
+        RuntimeArtifactValidationTier, RuntimeAssumptionTrustKind, RuntimeAssumptionTrustMetadata,
+        RuntimeDeclaration, RuntimeEffectsForeignAuditMetadata, RuntimeFieldStatus,
+        RuntimeMatchCase, RuntimeMetadata, RuntimeSymbolMetadata,
     };
 
     fn seed_program_with_lowerability(status: Option<RuntimeLowerabilityStatus>) -> RuntimeProgram {
@@ -1246,6 +1338,429 @@ mod tests {
         assert!(reports
             .iter()
             .all(|report| report.trust.fidelity == NativeFidelity::F1SeedObservationAgreement));
+    }
+
+    #[test]
+    fn nc8_valid_certificate_records_f2_validation_separate_from_f1() {
+        let example = nc5_seed_examples()
+            .into_iter()
+            .find(|example| example.name == "closed-scalar-primitive")
+            .expect("seed exists");
+        let mut program =
+            seed_program_with_lowerability(Some(RuntimeLowerabilityStatus::Supported));
+        program.examples = vec![example.clone()];
+        let certificate = RuntimeArtifactCertificate::supported_runtime_artifact_for(&program);
+        let oracle = InterpreterOracleObservation {
+            artifact: NativeArtifactIdentity::from_program(&program),
+            observation: example.observation.clone(),
+            evidence_source: "test oracle over matching RuntimeProgram identity".to_string(),
+        };
+
+        let report = run_validated_example_with_interpreter_observation(
+            &program,
+            &example,
+            &NativeSeedEnvironment::empty(),
+            oracle,
+            &certificate,
+        )
+        .expect("certificate validates");
+
+        assert_eq!(
+            report.verdict,
+            NativeDifferentialVerdict::F1InterpreterAgreement {
+                stage: NativeDifferentialStage::InterpreterNativeCompare,
+            }
+        );
+        let native = report.native.expect("native side ran");
+        assert_eq!(
+            native.trust.fidelity,
+            NativeFidelity::F1InterpreterDifferentialAgreement
+        );
+        let validation = native
+            .trust
+            .artifact_validation
+            .expect("validated artifact fact is report-visible");
+        assert_eq!(
+            validation.tier,
+            RuntimeArtifactValidationTier::F2BoundedRuntimeArtifactValidation
+        );
+        assert_eq!(
+            validation.artifact.package_identity,
+            program.package_identity
+        );
+        assert_eq!(
+            validation.artifact.core_semantic_hash,
+            program.core_semantic_hash
+        );
+        assert_eq!(validation.artifact.artifact_hash, program.artifact_hash);
+        assert!(validation
+            .evidence_source
+            .contains("recomputed supported-subset facts"));
+    }
+
+    #[test]
+    fn nc8_certificate_wrong_identity_rejects_before_native_run() {
+        let program = seed_program_with_lowerability(Some(RuntimeLowerabilityStatus::Supported));
+        let mut certificate = RuntimeArtifactCertificate::supported_runtime_artifact_for(&program);
+        certificate.artifact_hash = Some(0xdead_beef);
+
+        let err = validate_supported_runtime_artifact_certificate(&program, &certificate)
+            .expect_err("wrong artifact identity rejects");
+
+        assert_eq!(err.stage, RuntimeArtifactValidationStage::ArtifactIdentity);
+        assert_eq!(err.fact, "runtime_artifact_identity");
+    }
+
+    #[test]
+    fn nc8_certificate_missing_fields_rejects_loudly() {
+        let program = seed_program_with_lowerability(Some(RuntimeLowerabilityStatus::Supported));
+        let mut certificate = RuntimeArtifactCertificate::supported_runtime_artifact_for(&program);
+        certificate.core_semantic_hash = None;
+
+        let err = validate_supported_runtime_artifact_certificate(&program, &certificate)
+            .expect_err("missing identity field rejects");
+
+        assert_eq!(
+            err.stage,
+            RuntimeArtifactValidationStage::MalformedCertificate
+        );
+        assert_eq!(err.fact, "core_semantic_hash");
+
+        let mut certificate = RuntimeArtifactCertificate::supported_runtime_artifact_for(&program);
+        certificate.claim.as_mut().expect("claim exists").facts = None;
+        let err = validate_supported_runtime_artifact_certificate(&program, &certificate)
+            .expect_err("missing facts reject");
+
+        assert_eq!(
+            err.stage,
+            RuntimeArtifactValidationStage::MalformedCertificate
+        );
+        assert_eq!(err.fact, "facts");
+    }
+
+    #[test]
+    fn nc8_certificate_contradictory_claim_rejects() {
+        let mut program =
+            seed_program_with_lowerability(Some(RuntimeLowerabilityStatus::Supported));
+        program.examples = vec![nc5_seed_examples()
+            .into_iter()
+            .find(|example| example.name == "closed-scalar-primitive")
+            .expect("seed exists")];
+        let mut certificate = RuntimeArtifactCertificate::supported_runtime_artifact_for(&program);
+        certificate
+            .claim
+            .as_mut()
+            .expect("claim exists")
+            .facts
+            .as_mut()
+            .expect("facts exist")
+            .declaration_count = Some(program.declarations.len() + 1);
+
+        let err = validate_supported_runtime_artifact_certificate(&program, &certificate)
+            .expect_err("contradictory count rejects");
+
+        assert_eq!(err.stage, RuntimeArtifactValidationStage::ClaimMismatch);
+        assert_eq!(err.fact, "declaration_count");
+    }
+
+    #[test]
+    fn nc8_certificate_false_supported_claim_rejects_by_recomputation() {
+        let mut program =
+            seed_program_with_lowerability(Some(RuntimeLowerabilityStatus::Unsupported {
+                reason: "not lowerable".to_string(),
+            }));
+        let symbol = program.declarations[0].symbol.clone();
+        program.declarations[0].metadata.lowerability =
+            Some(RuntimeLowerabilityStatus::Unsupported {
+                reason: "not lowerable".to_string(),
+            });
+        program
+            .erased_core
+            .metadata
+            .unsupported
+            .insert(symbol, b"hidden blocker".to_vec());
+        let certificate = RuntimeArtifactCertificate::supported_runtime_artifact_for(&program);
+
+        let err = validate_supported_runtime_artifact_certificate(&program, &certificate)
+            .expect_err("false supported-subset claim rejects");
+
+        assert_eq!(err.stage, RuntimeArtifactValidationStage::ClaimRecompute);
+        assert!(matches!(
+            err.fact,
+            "no_reachable_unsupported_entries" | "all_reachable_lowerability_supported"
+        ));
+    }
+
+    #[test]
+    fn nc8_certificate_rejects_unknown_runtime_value_by_recomputation() {
+        let mut program =
+            seed_program_with_lowerability(Some(RuntimeLowerabilityStatus::Supported));
+        program.examples = vec![RuntimeExample {
+            name: "unknown-runtime-value".to_string(),
+            checked_core_shape: "diagnostic label only".to_string(),
+            ir: RuntimeExpr::Value(RuntimeValue::Unknown),
+            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int(0)),
+        }];
+        let certificate = RuntimeArtifactCertificate::supported_runtime_artifact_for(&program);
+
+        let err = validate_supported_runtime_artifact_certificate(&program, &certificate)
+            .expect_err("unknown runtime values are outside the supported subset");
+
+        assert_eq!(err.stage, RuntimeArtifactValidationStage::ClaimRecompute);
+        assert_eq!(err.fact, "all_runtime_values_supported");
+        assert!(err.reason.contains("unknown runtime data"));
+    }
+
+    #[test]
+    fn nc8_certificate_rejects_let_expression_in_validated_example() {
+        let mut program =
+            seed_program_with_lowerability(Some(RuntimeLowerabilityStatus::Supported));
+        program.examples = vec![RuntimeExample {
+            name: "let-outside-supported-subset".to_string(),
+            checked_core_shape: "diagnostic label only".to_string(),
+            ir: RuntimeExpr::Let {
+                value: Box::new(RuntimeExpr::Value(RuntimeValue::Int(1))),
+                body: Box::new(RuntimeExpr::Var(0)),
+            },
+            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int(1)),
+        }];
+        let certificate = RuntimeArtifactCertificate::supported_runtime_artifact_for(&program);
+
+        let err = validate_supported_runtime_artifact_certificate(&program, &certificate)
+            .expect_err("let expressions are outside the NC6 supported subset");
+
+        assert_eq!(err.stage, RuntimeArtifactValidationStage::ClaimRecompute);
+        assert_eq!(err.fact, "all_runtime_expressions_supported");
+        assert!(err.reason.contains("Let"));
+    }
+
+    #[test]
+    fn nc8_certificate_rejects_if_expression_in_reachable_transparent_declaration() {
+        let mut program =
+            seed_program_with_lowerability(Some(RuntimeLowerabilityStatus::Supported));
+        program.declarations[0].kind = RuntimeDeclarationKind::Transparent {
+            body: RuntimeExpr::If {
+                scrutinee: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+                then_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int(1))),
+                else_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int(0))),
+            },
+        };
+        let certificate = RuntimeArtifactCertificate::supported_runtime_artifact_for(&program);
+
+        let err = validate_supported_runtime_artifact_certificate(&program, &certificate)
+            .expect_err("if expressions are outside the NC6 supported subset");
+
+        assert_eq!(err.stage, RuntimeArtifactValidationStage::ClaimRecompute);
+        assert_eq!(err.fact, "all_runtime_expressions_supported");
+        assert!(err.reason.contains("If"));
+    }
+
+    #[test]
+    fn nc8_certificate_rejects_unsupported_total_primitive_in_validated_example() {
+        let mut program =
+            seed_program_with_lowerability(Some(RuntimeLowerabilityStatus::Supported));
+        program.examples = vec![RuntimeExample {
+            name: "unsupported-total-primitive".to_string(),
+            checked_core_shape: "diagnostic label only".to_string(),
+            ir: RuntimeExpr::PrimitiveCall {
+                primitive: RuntimePrimitive {
+                    symbol: "sub_int".to_string(),
+                    partiality: RuntimePartiality::Total,
+                },
+                args: vec![
+                    RuntimeExpr::Value(RuntimeValue::Int(2)),
+                    RuntimeExpr::Value(RuntimeValue::Int(1)),
+                ],
+            },
+            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int(1)),
+        }];
+        let certificate = RuntimeArtifactCertificate::supported_runtime_artifact_for(&program);
+
+        let err = validate_supported_runtime_artifact_certificate(&program, &certificate)
+            .expect_err("unsupported total primitives are outside the NC6 supported subset");
+
+        assert_eq!(err.stage, RuntimeArtifactValidationStage::ClaimRecompute);
+        assert_eq!(err.fact, "all_runtime_primitives_supported");
+        assert!(err.reason.contains("sub_int"));
+    }
+
+    #[test]
+    fn nc8_certificate_rejects_add_int_wrong_arity_in_reachable_transparent_declaration() {
+        let mut program =
+            seed_program_with_lowerability(Some(RuntimeLowerabilityStatus::Supported));
+        program.declarations[0].kind = RuntimeDeclarationKind::Transparent {
+            body: RuntimeExpr::PrimitiveCall {
+                primitive: RuntimePrimitive {
+                    symbol: "add_int".to_string(),
+                    partiality: RuntimePartiality::Total,
+                },
+                args: vec![RuntimeExpr::Value(RuntimeValue::Int(1))],
+            },
+        };
+        let certificate = RuntimeArtifactCertificate::supported_runtime_artifact_for(&program);
+
+        let err = validate_supported_runtime_artifact_certificate(&program, &certificate)
+            .expect_err("add_int arity mismatch is outside the NC6 supported subset");
+
+        assert_eq!(err.stage, RuntimeArtifactValidationStage::ClaimRecompute);
+        assert_eq!(err.fact, "all_runtime_primitives_supported");
+        assert!(err.reason.contains("arity 1"));
+    }
+
+    #[test]
+    fn nc8_certificate_rejects_add_int_non_literal_int_operand_shape() {
+        let mut program =
+            seed_program_with_lowerability(Some(RuntimeLowerabilityStatus::Supported));
+        program.examples = vec![RuntimeExample {
+            name: "add-int-non-int-operand".to_string(),
+            checked_core_shape: "diagnostic label only".to_string(),
+            ir: RuntimeExpr::PrimitiveCall {
+                primitive: RuntimePrimitive {
+                    symbol: "add_int".to_string(),
+                    partiality: RuntimePartiality::Total,
+                },
+                args: vec![
+                    RuntimeExpr::Value(RuntimeValue::Bool(true)),
+                    RuntimeExpr::Value(RuntimeValue::Int(1)),
+                ],
+            },
+            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int(2)),
+        }];
+        let certificate = RuntimeArtifactCertificate::supported_runtime_artifact_for(&program);
+
+        let err = validate_supported_runtime_artifact_certificate(&program, &certificate)
+            .expect_err("add_int non-literal-Int operands are outside the NC8 subset");
+
+        assert_eq!(err.stage, RuntimeArtifactValidationStage::ClaimRecompute);
+        assert_eq!(err.fact, "all_runtime_primitives_supported");
+        assert!(err.reason.contains("non-literal-Int operand"));
+    }
+
+    #[test]
+    fn nc8_certificate_rejects_add_int_var_bound_to_bool_payload() {
+        let mut program =
+            seed_program_with_lowerability(Some(RuntimeLowerabilityStatus::Supported));
+        program.examples = vec![RuntimeExample {
+            name: "add-int-var-bound-to-bool".to_string(),
+            checked_core_shape: "diagnostic label only".to_string(),
+            ir: RuntimeExpr::Match {
+                scrutinee: Box::new(RuntimeExpr::Construct {
+                    constructor: "ctor:fixture::BoolBox::Box".to_string(),
+                    args: vec![RuntimeExpr::Value(RuntimeValue::Bool(true))],
+                }),
+                cases: vec![RuntimeMatchCase {
+                    constructor: "ctor:fixture::BoolBox::Box".to_string(),
+                    binders: 1,
+                    body: RuntimeExpr::PrimitiveCall {
+                        primitive: RuntimePrimitive {
+                            symbol: "add_int".to_string(),
+                            partiality: RuntimePartiality::Total,
+                        },
+                        args: vec![
+                            RuntimeExpr::Var(0),
+                            RuntimeExpr::Value(RuntimeValue::Int(1)),
+                        ],
+                    },
+                }],
+                default: RuntimeTrap {
+                    code: RuntimeTrapCode::PatternMatchFailure,
+                    message: "unused default".to_string(),
+                },
+            },
+            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int(2)),
+        }];
+        let certificate = RuntimeArtifactCertificate::supported_runtime_artifact_for(&program);
+
+        let err = validate_supported_runtime_artifact_certificate(&program, &certificate)
+            .expect_err("add_int variable operands are outside the first NC8 validator");
+
+        assert_eq!(err.stage, RuntimeArtifactValidationStage::ClaimRecompute);
+        assert_eq!(err.fact, "all_runtime_expressions_supported");
+        assert!(err.reason.contains("Match"));
+    }
+
+    #[test]
+    fn nc8_certificate_rejects_top_level_var_example() {
+        let mut program =
+            seed_program_with_lowerability(Some(RuntimeLowerabilityStatus::Supported));
+        program.examples = vec![RuntimeExample {
+            name: "top-level-var".to_string(),
+            checked_core_shape: "diagnostic label only".to_string(),
+            ir: RuntimeExpr::Var(0),
+            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int(0)),
+        }];
+        let certificate = RuntimeArtifactCertificate::supported_runtime_artifact_for(&program);
+
+        let err = validate_supported_runtime_artifact_certificate(&program, &certificate)
+            .expect_err("unbound var is outside the first NC8 validator");
+
+        assert_eq!(err.stage, RuntimeArtifactValidationStage::ClaimRecompute);
+        assert_eq!(err.fact, "all_runtime_expressions_supported");
+        assert!(err.reason.contains("Var"));
+    }
+
+    #[test]
+    fn nc8_certificate_rejects_project_from_non_record_example() {
+        let mut program =
+            seed_program_with_lowerability(Some(RuntimeLowerabilityStatus::Supported));
+        program.examples = vec![RuntimeExample {
+            name: "project-from-int".to_string(),
+            checked_core_shape: "diagnostic label only".to_string(),
+            ir: RuntimeExpr::Project {
+                record: Box::new(RuntimeExpr::Value(RuntimeValue::Int(1))),
+                field: "x".to_string(),
+            },
+            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int(1)),
+        }];
+        let certificate = RuntimeArtifactCertificate::supported_runtime_artifact_for(&program);
+
+        let err = validate_supported_runtime_artifact_certificate(&program, &certificate)
+            .expect_err("project is outside the first NC8 validator");
+
+        assert_eq!(err.stage, RuntimeArtifactValidationStage::ClaimRecompute);
+        assert_eq!(err.fact, "all_runtime_expressions_supported");
+        assert!(err.reason.contains("Project"));
+    }
+
+    #[test]
+    fn nc8_certificate_rejects_top_level_observable_closure() {
+        let mut program =
+            seed_program_with_lowerability(Some(RuntimeLowerabilityStatus::Supported));
+        program.examples = vec![RuntimeExample {
+            name: "top-level-closure".to_string(),
+            checked_core_shape: "diagnostic label only".to_string(),
+            ir: RuntimeExpr::Closure {
+                captures: Vec::new(),
+                params: Vec::new(),
+                body: Box::new(RuntimeExpr::Value(RuntimeValue::Int(1))),
+            },
+            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int(1)),
+        }];
+        let certificate = RuntimeArtifactCertificate::supported_runtime_artifact_for(&program);
+
+        let err = validate_supported_runtime_artifact_certificate(&program, &certificate)
+            .expect_err("closure is outside the first NC8 validator");
+
+        assert_eq!(err.stage, RuntimeArtifactValidationStage::ClaimRecompute);
+        assert_eq!(err.fact, "all_runtime_expressions_supported");
+        assert!(err.reason.contains("Closure"));
+    }
+
+    #[test]
+    fn nc8_certificate_rejects_var_in_reachable_transparent_declaration() {
+        let mut program =
+            seed_program_with_lowerability(Some(RuntimeLowerabilityStatus::Supported));
+        program.declarations[0].kind = RuntimeDeclarationKind::Transparent {
+            body: RuntimeExpr::Var(0),
+        };
+        let certificate = RuntimeArtifactCertificate::supported_runtime_artifact_for(&program);
+
+        let err = validate_supported_runtime_artifact_certificate(&program, &certificate)
+            .expect_err("transparent declaration var is outside the first NC8 validator");
+
+        assert_eq!(err.stage, RuntimeArtifactValidationStage::ClaimRecompute);
+        assert_eq!(err.fact, "all_runtime_expressions_supported");
+        assert!(err.reason.contains("Var"));
     }
 
     #[test]
