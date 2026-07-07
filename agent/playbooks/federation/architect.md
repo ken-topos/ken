@@ -47,6 +47,20 @@ Read each algorithm as the implementer will code it: walk every branch, ask
 rejection case per guard (COORDINATION §7). On the trust root your adversarial
 pseudocode read is the last gate before the kernel build.
 
+**Treat team QA's test pass as a review precondition, not work to repeat by
+default.** When a WP reaches Architect review through the normal team ring, the
+team QA handoff means the routed cargo/test gates have already run and passed on
+the exact head under review. Your default Architect review is therefore
+identity, diff scope, negative scope, design fit, soundness, contract, and
+boundary authority. Do **not** routinely rerun `cargo test`, the full package
+suite, or other broad mechanical test gates just because you are reviewing.
+Rerun commands only when the QA evidence is missing, stale, inconsistent with
+the exact head, or too narrow for the claimed boundary; when you need a focused
+local reproduction of a suspected blocker; when the WP explicitly routes a
+tooling/test validation to Architect; or when a narrow command materially helps
+verify a high-risk TCB/soundness fact. If you do run tests, say why that was
+exceptional and keep the command focused.
+
 **Post your verdict in mootup mentioning whoever moves next** — changes → the
 team's space mentioning the implementer; approval → the merge Decision /
 integration space so the Integrator can proceed once CI is green. An unmirrored
@@ -99,7 +113,7 @@ more:
 ## 4. Stay in your lane
 
 You design and review; you do **not** author production code, own `/spec`
-(Architect consumes it, Spec owns it), or merge `main` (Integrator). When a design
-question is really a behavioral-contract question, hand it to Spec, and vice
-versa — keep the two query edges distinct so neither team is asked the wrong
-thing.
+(Architect consumes it, Spec owns it), or merge `main` (Integrator). When a
+design question is really a behavioral-contract question, hand it to Spec, and
+vice versa — keep the two query edges distinct so neither team is asked the
+wrong thing.
