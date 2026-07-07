@@ -543,6 +543,16 @@ fn lower_body_term_inner(
             context_depth,
             branch_remap,
         ),
+        CheckedCoreBodyTerm::RecordSigmaConstruction(_) => Err(expression_lowering_error(
+            root_symbol,
+            "record_construction_lowering_unsupported",
+            "record/Sigma construction lowering is deferred to NC15 Runtime",
+        )),
+        CheckedCoreBodyTerm::RecordSigmaProjection(_) => Err(expression_lowering_error(
+            root_symbol,
+            "record_projection_lowering_unsupported",
+            "record/Sigma projection lowering is deferred to NC15 Runtime",
+        )),
     }
 }
 
@@ -790,6 +800,17 @@ fn has_free_variable_at_or_above(term: &CheckedCoreBodyTerm, bound: usize) -> bo
                     .branches
                     .iter()
                     .any(|branch| has_free_variable_at_or_above(&branch.method, bound))
+        }
+        CheckedCoreBodyTerm::RecordSigmaConstruction(view) => {
+            view.fields.iter().any(|field| match field {
+                checked_core::CheckedCoreRecordSigmaFieldValue::Runtime { value, .. } => {
+                    has_free_variable_at_or_above(value, bound)
+                }
+                checked_core::CheckedCoreRecordSigmaFieldValue::Erased { .. } => false,
+            })
+        }
+        CheckedCoreBodyTerm::RecordSigmaProjection(view) => {
+            has_free_variable_at_or_above(&view.base, bound)
         }
     }
 }

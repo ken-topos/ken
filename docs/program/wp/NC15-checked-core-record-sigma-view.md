@@ -75,6 +75,29 @@ Out of scope:
 - No `crates/ken-kernel`, `crates/ken-runtime`, `crates/ken-interp`,
   backend, Cargo, package, or native-output files move in this prerequisite.
 
+## Delivered seam
+
+The prerequisite extends `ken_elaborator::checked_core` with structured
+record/Sigma body-view terms:
+
+- `CheckedCoreRecordSigmaConstructionView` binds a right-nested `pair` body to
+  package-owned `RecordSigmaMetadata` / `FieldMetadata`. Runtime fields decode
+  as executable checked-core body terms; erased law/proof fields remain opaque
+  canonical term bytes and are not executable values.
+- `CheckedCoreRecordSigmaProjectionView` recognizes the supported
+  `proj1(proj2^k(base))` field-projection shape when the base's checked type
+  identifies a package record/Sigma metadata entry. The projected field carries
+  stable position, name, checked type symbol, and runtime status.
+- The new stable lanes are
+  `unsupported_dependent_field_shape`,
+  `non_executable_erased_field_projection`, `stale_field_identity_order`, and
+  `unsupported_record_projection_shape`.
+
+The current erasure path rejects the new terms with
+`record_construction_lowering_unsupported` and
+`record_projection_lowering_unsupported` until the Runtime-owned NC15 lowering
+consumes this seam.
+
 ## Guardrails
 
 - Do not make erased proof/law fields observable at runtime.

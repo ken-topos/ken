@@ -77,13 +77,23 @@ package data metadata. Constructor identity is package-bound by the stable
 constructor symbol, parent family symbol, arity, target-index count, recursive
 positions, and lowerability metadata already carried in the package.
 
+Structured record/Sigma views may expose pair construction and field projection
+only when package facts identify the record/Sigma head and field order/status.
+Runtime fields are exposed as executable subterms. Erased law/proof fields are
+carried as opaque checked-core bytes and must not become runtime values through
+projection. Projection views bind the projected field to the package
+`RecordSigmaMetadata` / `FieldMetadata` entry that justifies its position,
+name, checked field type symbol, and runtime status.
+
 A body view must fail closed, with stable report lanes, when package facts do
 not justify the requested structure. In particular, stale constructor identity,
 missing branch data, unsupported dependent motives, unsupported proof-only
-matches, unsupported eliminator shapes, and impossible-branch use without
-package evidence are loud rejects before erasure/runtime IR. This section does
-not define runtime IR, evaluator behavior, ABI/layout, native backend lowering,
-coverage changes, or a raw-source fallback.
+matches, unsupported eliminator shapes, unsupported dependent field shapes,
+non-executable erased-field projection, stale field identity/order, unsupported
+record/projection shapes, and impossible-branch use without package evidence are
+loud rejects before erasure/runtime IR. This section does not define runtime
+IR, evaluator behavior, ABI/layout, native backend lowering, coverage changes,
+or a raw-source fallback.
 
 ## 2. Relation to Existing Specs
 
