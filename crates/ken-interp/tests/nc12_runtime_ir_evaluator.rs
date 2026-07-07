@@ -277,6 +277,19 @@ fn disagreement_report_names_artifact_target_and_both_observations() {
             runtime_ir: RuntimeObservation::Returned(RuntimeGroundValue::Int(4)),
         }
     ));
+    assert_ne!(
+        report.trust.tier,
+        RuntimeIrTrustTier::Nc12InterpreterRuntimeIrAgreement,
+        "mismatch reports must not carry the agreement trust tier"
+    );
+    assert!(matches!(
+        report.trust.interpreter_oracle,
+        RuntimeIrEvidenceFact::Available {
+            value,
+            evidence_source,
+        } if value == "caller-supplied interpreter observation"
+            && evidence_source.contains("supplied by the caller")
+    ));
 }
 
 #[test]

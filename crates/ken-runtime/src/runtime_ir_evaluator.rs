@@ -244,8 +244,13 @@ impl RuntimeIrTrustReport {
     }
 
     fn agreement() -> Self {
-        let mut report = Self::observation();
+        let mut report = Self::caller_supplied_interpreter_observation();
         report.tier = RuntimeIrTrustTier::Nc12InterpreterRuntimeIrAgreement;
+        report
+    }
+
+    fn caller_supplied_interpreter_observation() -> Self {
+        let mut report = Self::observation();
         report.interpreter_oracle = RuntimeIrEvidenceFact::Available {
             value: "caller-supplied interpreter observation".to_string(),
             evidence_source: "RuntimeInterpreterObservation supplied by the caller; this API verifies only artifact and target identity, not interpreter provenance".to_string(),
@@ -338,10 +343,7 @@ pub fn compare_runtime_ir_with_interpreter_observation(
     }
 
     let report = match evaluate_runtime_ir_example(program, example, env) {
-        Ok(mut report) => {
-            report.trust = RuntimeIrTrustReport::agreement();
-            report
-        }
+        Ok(report) => report,
         Err(err) => {
             return RuntimeIrDifferentialReport {
                 artifact,
@@ -365,18 +367,23 @@ pub fn compare_runtime_ir_with_interpreter_observation(
         }
     };
 
-    let trust = report.trust;
     let runtime_ir = report.observation;
-    let verdict = if interpreter.observation == runtime_ir.observation {
-        RuntimeIrDifferentialVerdict::Nc12InterpreterRuntimeIrAgreement {
-            stage: RuntimeIrDifferentialStage::InterpreterRuntimeIrCompare,
-        }
+    let (verdict, trust) = if interpreter.observation == runtime_ir.observation {
+        (
+            RuntimeIrDifferentialVerdict::Nc12InterpreterRuntimeIrAgreement {
+                stage: RuntimeIrDifferentialStage::InterpreterRuntimeIrCompare,
+            },
+            RuntimeIrTrustReport::agreement(),
+        )
     } else {
-        RuntimeIrDifferentialVerdict::Mismatch {
-            stage: RuntimeIrDifferentialStage::InterpreterRuntimeIrCompare,
-            interpreter: interpreter.observation.clone(),
-            runtime_ir: runtime_ir.observation.clone(),
-        }
+        (
+            RuntimeIrDifferentialVerdict::Mismatch {
+                stage: RuntimeIrDifferentialStage::InterpreterRuntimeIrCompare,
+                interpreter: interpreter.observation.clone(),
+                runtime_ir: runtime_ir.observation.clone(),
+            },
+            RuntimeIrTrustReport::caller_supplied_interpreter_observation(),
+        )
     };
 
     RuntimeIrDifferentialReport {
