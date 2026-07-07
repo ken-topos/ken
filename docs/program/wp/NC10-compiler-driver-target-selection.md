@@ -5,10 +5,10 @@
 
 ## Objective
 
-Create the first general compiler entry point for Ken source/packages. The driver
-must accept normal Ken input, run the existing elaborator and kernel admission
-path, emit `CheckedCorePackage v0`, and select executable or library targets for
-later lowering.
+Create the first general compiler entry point for Ken source/packages. The
+driver must accept normal Ken input, run the existing elaborator and kernel
+admission path, emit `CheckedCorePackage v0`, and select executable or library
+targets for later lowering.
 
 NC10 starts the General Ken-to-Runtime-IR Compiler campaign. It does not broaden
 runtime lowering by itself; it makes the input and target boundary explicit.
@@ -79,3 +79,25 @@ source semantic evidence after checked-core emission.
   native executability.
 - Do not broaden NC8/NC9 evidence labels.
 - Do not introduce a Rust-kernel dependency on compiler driver output.
+
+## D1 implementation notes
+
+The Language implementation adds `ken_elaborator::compiler_driver` as the first
+compiler-facing entry point. It accepts in-memory `.ken` source sets or a single
+`.ken` file path, runs the normal `ElabEnv` source path, emits
+`CheckedCorePackage v0` with the NC4 package emitter, and then selects targets
+by an exact stable symbol or by a manifest-declared target.
+
+Target selection is intentionally a checked-core/package-boundary report, not a
+lowering claim. The report binds the exact package identity,
+`core_semantic_hash`, and `artifact_hash`, records selected target symbols, and
+keeps separate unavailable lanes for runtime lowering, native artifacts, and
+validation facts. Non-runtime targets and targets whose checked-core metadata
+blocks lowering are selected only with named lanes (`non_runtime_target` or
+`unsupported_target_metadata`); they are never silently dropped.
+
+Raw source identity is retained only in the package envelope for diagnostics and
+provenance. It is not used as semantic evidence after checked-core emission and
+does not replace checked-core identity. NC10 adds no runtime IR lowering, native
+artifact emission, validation/proof claim, kernel rule, trusted primitive, or
+backend authority.
