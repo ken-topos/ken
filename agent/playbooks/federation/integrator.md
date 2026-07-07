@@ -244,22 +244,68 @@ survived — recreate the ref at the SHA from the Decision, then verify at both
 (operator, 2026-06-29).** CI status (green/red) and a freshly-resolved review
 Decision push **no notification to you** — there is no `ken-ci` bridge, so
 **nobody will ever tell you a PR went green; you must poll.** You are a
-sanctioned scheduler (COORDINATION §1, §13). **Arm it with a *private*
-`CronCreate` timer — NOT the convo `schedule_call`:**
-`CronCreate(cron="3,11,19,27,35,43,51,59 * * * *", prompt="Integrator poll:
-gh pr checks on every open PR + its merge Decision; merge any green+approved,
-mention the missing reviewer on green-but-unvoted, the implementer on CI-red",
-recurring=true)` while **any** PR is open. `CronCreate` wakes **your own
-session** and posts nothing to the space; the convo `schedule_call` would
-broadcast its read into the space as a System event everyone sees (and can't run
-`gh` anyway). On each wake run a **tight pass** — `gh pr checks <n>` on every
-open PR + check its merge Decision — and **merge the instant it is green +
-approved** (don't wait for a leader to re-ping you). On green-but-unvoted, mention
-the missing reviewer; on CI-red, mention the implementer. A green + approved PR
-left unmerged because you weren't polling **is a pipeline stall you caused** — the
-operator caught exactly this (two green PRs unmerged ~25 min). A `durable:false`
-cron dies on session exit, so **re-arm at session start**; `CronDelete` it when no
-PRs are open (`CronList` shows your jobs). Reading CI is *yours alone* — nobody else can see it.
+sanctioned scheduler (COORDINATION §1, §13). **Arm the watchdog immediately
+after you publish/open any PR that is not yet merged**, and keep it armed until
+there are no open integration PRs. Opening a PR and then waiting for a mention
+is a pipeline stall.
+
+If your harness exposes `CronCreate`, arm it with a *private* timer — NOT the
+convo `schedule_call`:
+
+```text
+CronCreate(cron="3,11,19,27,35,43,51,59 * * * *",
+  prompt="Integrator poll: pull recent Convo context, check every open PR with
+    gh pr checks, verify review/approval state, merge any green+approved PR,
+    report CI red to the implementer, report missing approval to the reviewer,
+    prune stale landed wp/* refs when safe, and post only for real stalls,
+    merges, or required routing.",
+  recurring=true)
+```
+
+`CronCreate` wakes **your own session** and posts nothing to the space; the
+convo `schedule_call` would broadcast its read into the space as a System event
+everyone sees (and cannot run `gh` anyway). On each wake run a **tight pass**:
+`gh pr checks <n>` on every open PR + check its merge Decision, then **merge the
+instant it is green + approved** (do not wait for a leader to re-ping you). On
+green-but-unvoted, mention the missing reviewer; on CI-red, mention the
+implementer. A green + approved PR left unmerged because you were not polling
+**is a pipeline stall you caused**. The operator caught exactly this: two green
+PRs unmerged ~25 min. A `durable:false` cron dies on session exit, so **re-arm
+at session start**; `CronDelete` it when no PRs are open (`CronList` shows your
+jobs). Reading CI is *yours alone* — nobody else can see it.
+
+**Codex/tmux fallback when `CronCreate` is unavailable.** Use a managed local
+wake helper that sends the prompt into `moot-integrator`; do not use a bare
+untracked `while sleep` loop. The helper must have:
+
+- state under `$XDG_STATE_HOME` or `~/.local/state`;
+- a pid file and log file;
+- `start`, `stop`, `status`, `tick`, and `restart` commands;
+- duplicate-start refusal;
+- a pane-busy check so it skips rather than stacking prompts mid-turn;
+- `TARGET=moot-integrator`;
+- `INTERVAL_SECONDS=480` by default;
+- the same watchdog prompt as above.
+
+The setup shape is:
+
+```bash
+TARGET=moot-integrator \
+INTERVAL_SECONDS=480 \
+MESSAGE='[Integrator watchdog tick] Pull recent Convo context, check every open
+PR with gh pr checks, verify review/approval state, merge any green+approved PR,
+report CI red to the implementer, report missing approval to the reviewer, prune
+stale landed wp/* refs when safe, and post only for real stalls, merges, or
+required routing.' \
+  local/integrator-watchdog-wake.sh start
+```
+
+If the helper does not exist yet, create it by copying the Steward managed wake
+helper pattern and changing only the state directory, default target, interval,
+and message. Do this as local ignored tooling; it is session plumbing, not a
+repo artifact. Check it with `local/integrator-watchdog-wake.sh status`. Stop it
+with `local/integrator-watchdog-wake.sh stop` only when there are no open
+integration PRs.
 
 ## Mirror GitHub into mootup
 
