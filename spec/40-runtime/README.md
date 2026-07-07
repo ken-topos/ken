@@ -29,6 +29,10 @@ which later backends are validated).
 5. The **checked-core package** (`46-checked-core-package.md`): the stable
    post-elaboration, kernel-admitted compiler input, including version,
    semantic-hash, metadata, and trust-coverage rules.
+6. The **erasure/runtime-IR boundary** (`47-erasure-runtime-ir.md`): the first
+   executable compiler artifact below checked core, including proof erasure,
+   runtime IR, loud unsupported-erasure rejection, and interpreter comparison
+   observations.
 
 ## 2. The two design commitments this section encodes
 

@@ -11,12 +11,14 @@
 
 pub mod canonical;
 pub mod hash;
+pub mod ir;
 pub mod store;
 pub mod unknown;
 pub mod values;
 
 pub use canonical::Canonical;
 pub use hash::fnv1a_64;
+pub use ir::*;
 pub use store::{InternResult, Space, Store, StoreStats};
 pub use unknown::Unknown;
 pub use values::{Sign, Value};
