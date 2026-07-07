@@ -1358,6 +1358,9 @@ mod tests {
     fn lowering_rejects_reachable_unsupported_symbol() {
         let f = decl_symbol("uses_big_int_div");
         let g = decl_symbol("needs_closure_erasure");
+        let h = decl_symbol("needs_codegen_feature");
+        let i = decl_symbol("blocked_explicit_state");
+        let ok = decl_symbol("plain_supported");
         let mut lowerability = BTreeMap::new();
         lowerability.insert(
             f.clone(),
@@ -1372,6 +1375,24 @@ mod tests {
                 reason: "closure representation is not selected in NC3".to_string(),
             },
         );
+        lowerability.insert(
+            h.clone(),
+            LowerabilityStatus::RequiresFeature {
+                feature: "native-ffi-v1".to_string(),
+                reason: "FFI lowering must be explicitly enabled".to_string(),
+            },
+        );
+        lowerability.insert(
+            i.clone(),
+            LowerabilityStatus::Explicit {
+                state: "blocked-by-policy".to_string(),
+                reason: "policy state has no continue semantics for this consumer".to_string(),
+            },
+        );
+        lowerability.insert(ok.clone(), LowerabilityStatus::Supported);
+
+        ensure_lowerable_for_target([&ok], &lowerability)
+            .expect("supported entries must be accepted by the package-side gate");
 
         let err = ensure_lowerable_for_target([&f], &lowerability).unwrap_err();
 
@@ -1398,6 +1419,34 @@ mod tests {
                 },
             },
             "deferred entries must fail closed for a target lowerer that is not the named stage"
+        );
+
+        let err = ensure_lowerable_for_target([&h], &lowerability).unwrap_err();
+
+        assert_eq!(
+            err,
+            LoweringReadinessError::Blocked {
+                symbol: h,
+                status: LowerabilityStatus::RequiresFeature {
+                    feature: "native-ffi-v1".to_string(),
+                    reason: "FFI lowering must be explicitly enabled".to_string(),
+                },
+            },
+            "requires-feature entries must fail closed unless a versioned feature consumer handles them"
+        );
+
+        let err = ensure_lowerable_for_target([&i], &lowerability).unwrap_err();
+
+        assert_eq!(
+            err,
+            LoweringReadinessError::Blocked {
+                symbol: i,
+                status: LowerabilityStatus::Explicit {
+                    state: "blocked-by-policy".to_string(),
+                    reason: "policy state has no continue semantics for this consumer".to_string(),
+                },
+            },
+            "unknown explicit states must not default to supported"
         );
 
         let missing = decl_symbol("missing_lowerability");
