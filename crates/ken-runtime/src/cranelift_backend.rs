@@ -1675,8 +1675,8 @@ mod tests {
             .expect_err("add_int variable operands are outside the first NC8 validator");
 
         assert_eq!(err.stage, RuntimeArtifactValidationStage::ClaimRecompute);
-        assert_eq!(err.fact, "all_runtime_primitives_supported");
-        assert!(err.reason.contains("non-literal-Int operand"));
+        assert_eq!(err.fact, "all_runtime_expressions_supported");
+        assert!(err.reason.contains("Match"));
     }
 
     #[test]
@@ -1697,6 +1697,53 @@ mod tests {
         assert_eq!(err.stage, RuntimeArtifactValidationStage::ClaimRecompute);
         assert_eq!(err.fact, "all_runtime_expressions_supported");
         assert!(err.reason.contains("Var"));
+    }
+
+    #[test]
+    fn nc8_certificate_rejects_project_from_non_record_example() {
+        let mut program =
+            seed_program_with_lowerability(Some(RuntimeLowerabilityStatus::Supported));
+        program.examples = vec![RuntimeExample {
+            name: "project-from-int".to_string(),
+            checked_core_shape: "diagnostic label only".to_string(),
+            ir: RuntimeExpr::Project {
+                record: Box::new(RuntimeExpr::Value(RuntimeValue::Int(1))),
+                field: "x".to_string(),
+            },
+            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int(1)),
+        }];
+        let certificate = RuntimeArtifactCertificate::supported_runtime_artifact_for(&program);
+
+        let err = validate_supported_runtime_artifact_certificate(&program, &certificate)
+            .expect_err("project is outside the first NC8 validator");
+
+        assert_eq!(err.stage, RuntimeArtifactValidationStage::ClaimRecompute);
+        assert_eq!(err.fact, "all_runtime_expressions_supported");
+        assert!(err.reason.contains("Project"));
+    }
+
+    #[test]
+    fn nc8_certificate_rejects_top_level_observable_closure() {
+        let mut program =
+            seed_program_with_lowerability(Some(RuntimeLowerabilityStatus::Supported));
+        program.examples = vec![RuntimeExample {
+            name: "top-level-closure".to_string(),
+            checked_core_shape: "diagnostic label only".to_string(),
+            ir: RuntimeExpr::Closure {
+                captures: Vec::new(),
+                params: Vec::new(),
+                body: Box::new(RuntimeExpr::Value(RuntimeValue::Int(1))),
+            },
+            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int(1)),
+        }];
+        let certificate = RuntimeArtifactCertificate::supported_runtime_artifact_for(&program);
+
+        let err = validate_supported_runtime_artifact_certificate(&program, &certificate)
+            .expect_err("closure is outside the first NC8 validator");
+
+        assert_eq!(err.stage, RuntimeArtifactValidationStage::ClaimRecompute);
+        assert_eq!(err.fact, "all_runtime_expressions_supported");
+        assert!(err.reason.contains("Closure"));
     }
 
     #[test]

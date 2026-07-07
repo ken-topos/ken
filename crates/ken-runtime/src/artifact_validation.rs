@@ -555,36 +555,14 @@ fn validate_runtime_expr(
             }
             Ok(())
         }
-        RuntimeExpr::Construct { args, .. } => {
-            for arg in args {
-                validate_runtime_expr(arg, fact_subject)?;
-            }
-            Ok(())
+        RuntimeExpr::Construct { .. } => {
+            Err(unsupported_runtime_expr_error("Construct", fact_subject))
         }
-        RuntimeExpr::Match {
-            scrutinee, cases, ..
-        } => {
-            validate_runtime_expr(scrutinee, fact_subject)?;
-            for case in cases {
-                validate_runtime_expr(&case.body, fact_subject)?;
-            }
-            Ok(())
-        }
-        RuntimeExpr::Record { fields } => {
-            for (_, field) in fields {
-                validate_runtime_expr(field, fact_subject)?;
-            }
-            Ok(())
-        }
-        RuntimeExpr::Project { record, .. } => validate_runtime_expr(record, fact_subject),
-        RuntimeExpr::Closure { body, .. } => validate_runtime_expr(body, fact_subject),
-        RuntimeExpr::Call { callee, args } => {
-            validate_runtime_expr(callee, fact_subject)?;
-            for arg in args {
-                validate_runtime_expr(arg, fact_subject)?;
-            }
-            Ok(())
-        }
+        RuntimeExpr::Match { .. } => Err(unsupported_runtime_expr_error("Match", fact_subject)),
+        RuntimeExpr::Record { .. } => Err(unsupported_runtime_expr_error("Record", fact_subject)),
+        RuntimeExpr::Project { .. } => Err(unsupported_runtime_expr_error("Project", fact_subject)),
+        RuntimeExpr::Closure { .. } => Err(unsupported_runtime_expr_error("Closure", fact_subject)),
+        RuntimeExpr::Call { .. } => Err(unsupported_runtime_expr_error("Call", fact_subject)),
         RuntimeExpr::Effect { .. } => Err(claim_recompute_error(
             "no_foreign_or_effectful_boundaries",
             format!("{fact_subject} contains an effectful runtime expression"),
