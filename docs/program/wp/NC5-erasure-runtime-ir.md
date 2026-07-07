@@ -15,11 +15,16 @@ closures, ADTs, records, calls, traps, primitives, and runtime observations.
 
 ## Deliverables
 
-- Erasure boundary spec.
-- Runtime IR syntax and value model sketch.
-- Observation relation against interpreter behavior.
-- Unsupported-erasure diagnostics.
-- Small examples lowered from checked core to runtime IR.
+- Erasure boundary spec: `spec/40-runtime/47-erasure-runtime-ir.md`.
+- Runtime IR syntax and value model sketch:
+  `crates/ken-runtime/src/ir.rs`.
+- Observation relation against interpreter behavior:
+  `spec/40-runtime/47-erasure-runtime-ir.md §5` and the NC5 seed examples in
+  `crates/ken-runtime/src/ir.rs`.
+- Unsupported-erasure diagnostics:
+  `crates/ken-elaborator/src/erasure.rs`.
+- Small examples lowered from checked core to runtime IR:
+  `ken_runtime::nc5_seed_examples`.
 
 ## Acceptance
 
@@ -33,3 +38,16 @@ closures, ADTs, records, calls, traps, primitives, and runtime observations.
 
 Do not target Cranelift directly from checked core. Do not make backend layout
 the semantic authority.
+
+## D1 Evidence
+
+- Package-only consumption enters through
+  `erase_checked_core_package_for_target`, which validates
+  `CheckedCorePackage v0` and copies no source-identity lane into runtime IR
+  meaning.
+- Lowerability blockers, reachable unsupported entries, foreign boundaries, and
+  runtime metadata gaps reject before backend work.
+- Runtime IR contains explicit primitives, traps, closures, ADTs, records,
+  effects, and calls, but no Cranelift, ABI, object-format, native layout, or
+  pointer-identity surface.
+- Observation checks are limited to returned ground values and explicit traps.

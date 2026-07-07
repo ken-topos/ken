@@ -18,6 +18,7 @@ pub mod decimal_char;
 pub mod diagnostics;
 pub mod elab;
 pub mod effects;
+pub mod erasure;
 pub mod export;
 pub mod format;
 pub mod foreign;
