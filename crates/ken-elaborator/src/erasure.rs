@@ -1,4 +1,4 @@
-//! NC5 erasure boundary from `CheckedCorePackage v0` to Ken runtime IR.
+//! Erasure boundary from `CheckedCorePackage v0` to Ken runtime IR.
 //!
 //! This module consumes only the checked-core package artifact. Source identity
 //! may remain in the package envelope for diagnostics and provenance, but it is
@@ -10,9 +10,11 @@ use std::fmt;
 use ken_runtime::*;
 
 use crate::checked_core::{
-    self, consume_checked_core_package_for_target, validate_checked_core_package,
-    CheckedCorePackage, CheckedCorePackageError, ClassInstanceKind, ClassInstanceMetadata,
-    DataMetadata, EffectBoundary, EffectsForeignMetadata, LowerabilityStatus, PartialityMetadata,
+    self, checked_core_body_view_for_selection, consume_checked_core_package_for_target,
+    validate_checked_core_package, CheckedCoreBodyTerm, CheckedCoreBodyViewError,
+    CheckedCoreBodyViewSelection, CheckedCoreLevelView, CheckedCorePackage,
+    CheckedCorePackageError, ClassInstanceKind, ClassInstanceMetadata, DataMetadata,
+    EffectBoundary, EffectsForeignMetadata, LowerabilityStatus, PartialityMetadata,
     PrimitiveMetadata, RecordSigmaMetadata, RecursionMetadata, StableSymbol,
 };
 
@@ -20,6 +22,11 @@ use crate::checked_core::{
 pub enum ErasureError {
     InvalidPackage(CheckedCorePackageError),
     ProofErasureBoundaryWitness(ProofErasureBoundaryWitnessError),
+    ExpressionLowering {
+        symbol: StableSymbol,
+        lane: &'static str,
+        reason: String,
+    },
     UnsupportedErasure {
         symbol: StableSymbol,
         reason: String,
@@ -35,6 +42,14 @@ impl fmt::Display for ErasureError {
         match self {
             ErasureError::InvalidPackage(err) => err.fmt(f),
             ErasureError::ProofErasureBoundaryWitness(err) => err.fmt(f),
+            ErasureError::ExpressionLowering {
+                symbol,
+                lane,
+                reason,
+            } => write!(
+                f,
+                "unsupported checked-core expression lowering for {symbol} [{lane}]: {reason}"
+            ),
             ErasureError::UnsupportedErasure { symbol, reason } => {
                 write!(f, "unsupported erasure for {symbol}: {reason}")
             }
@@ -93,7 +108,7 @@ pub fn erase_checked_core_package_for_target<'a>(
 
     let mut declarations = Vec::new();
     for target in &targets {
-        declarations.push(lower_symbol(package, target)?);
+        declarations.push(lower_symbol(package, &targets, target)?);
     }
 
     Ok(RuntimeProgram {
@@ -266,6 +281,7 @@ fn reject_reachable_unsupported(
 
 fn lower_symbol(
     package: &CheckedCorePackage,
+    target_closure: &[StableSymbol],
     symbol: &StableSymbol,
 ) -> Result<RuntimeDeclaration, ErasureError> {
     let semantic = &package.artifact.semantic;
@@ -282,10 +298,7 @@ fn lower_symbol(
     } else if let Some(meta) = semantic.class_instance_metadata.get(symbol) {
         lower_class_instance(symbol, meta)?
     } else if semantic.declarations.contains_key(symbol) {
-        return Err(ErasureError::UnsupportedErasure {
-            symbol: symbol.clone(),
-            reason: "checked declaration body lowering is not in NC5 seed".to_string(),
-        });
+        lower_transparent_declaration(package, target_closure, symbol)?
     } else {
         return Err(ErasureError::MissingRuntimeMetadata {
             symbol: symbol.clone(),
@@ -298,6 +311,220 @@ fn lower_symbol(
         kind,
         metadata: metadata_for_symbol(package, symbol),
     })
+}
+
+fn lower_transparent_declaration(
+    package: &CheckedCorePackage,
+    target_closure: &[StableSymbol],
+    symbol: &StableSymbol,
+) -> Result<RuntimeDeclarationKind, ErasureError> {
+    let reachable_declarations = target_closure
+        .iter()
+        .filter(|candidate| {
+            package
+                .artifact
+                .semantic
+                .declarations
+                .contains_key(*candidate)
+                && !has_runtime_metadata(&package.artifact.semantic, candidate)
+        })
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    let selection = CheckedCoreBodyViewSelection {
+        package_identity: package.header.package_identity.clone(),
+        package_core_semantic_hash: package.core_semantic_hash,
+        package_artifact_hash: package.artifact_hash,
+        target_symbol: symbol.clone(),
+        reachable_declarations,
+    };
+    let view = checked_core_body_view_for_selection(package, &selection)
+        .map_err(|err| expression_view_error(symbol, err))?;
+    let declaration = view.declarations.get(symbol).ok_or_else(|| {
+        expression_lowering_error(
+            symbol,
+            "missing_expression_body_view",
+            "body view did not return the selected transparent declaration",
+        )
+    })?;
+    let mut stack = vec![symbol.clone()];
+    let body = lower_body_term(&declaration.body, &view.declarations, &mut stack, symbol, 0)?;
+    Ok(RuntimeDeclarationKind::Transparent { body })
+}
+
+fn has_runtime_metadata(
+    semantic: &checked_core::CheckedCoreSemanticInputs,
+    symbol: &StableSymbol,
+) -> bool {
+    semantic.primitive_metadata.contains_key(symbol)
+        || semantic.data_metadata.contains_key(symbol)
+        || semantic.record_sigma_metadata.contains_key(symbol)
+        || semantic.recursion_metadata.contains_key(symbol)
+        || semantic.effects_foreign_metadata.contains_key(symbol)
+        || semantic.class_instance_metadata.contains_key(symbol)
+}
+
+fn lower_body_term(
+    term: &CheckedCoreBodyTerm,
+    declarations: &BTreeMap<StableSymbol, checked_core::CheckedCoreDeclarationBodyView>,
+    stack: &mut Vec<StableSymbol>,
+    root_symbol: &StableSymbol,
+    context_depth: usize,
+) -> Result<RuntimeExpr, ErasureError> {
+    let owner = stack
+        .last()
+        .expect("expression lowering stack always has an owner")
+        .clone();
+    match term {
+        CheckedCoreBodyTerm::Variable { de_bruijn_index } => {
+            if *de_bruijn_index >= context_depth {
+                return Err(expression_lowering_error(
+                    root_symbol,
+                    "unbound_de_bruijn_variable",
+                    format!(
+                        "variable index {de_bruijn_index} escapes runtime context depth {context_depth}"
+                    ),
+                ));
+            }
+            let index = u32::try_from(*de_bruijn_index).map_err(|_| {
+                expression_lowering_error(
+                    root_symbol,
+                    "variable_index_overflow",
+                    format!("variable index {de_bruijn_index} does not fit runtime IR"),
+                )
+            })?;
+            Ok(RuntimeExpr::Var(index))
+        }
+        CheckedCoreBodyTerm::DirectDeclarationCall { symbol, level_args } => {
+            reject_level_args(root_symbol, level_args)?;
+            if stack.contains(symbol) {
+                return Err(expression_lowering_error(
+                    root_symbol,
+                    "direct_call_cycle",
+                    format!("direct declaration call cycle from {owner} reaches {symbol}"),
+                ));
+            }
+            let declaration = declarations.get(symbol).ok_or_else(|| {
+                expression_lowering_error(
+                    root_symbol,
+                    "unresolved_direct_declaration_call",
+                    format!("body references {symbol} without a selected body view"),
+                )
+            })?;
+            stack.push(symbol.clone());
+            let lowered = lower_body_term(
+                &declaration.body,
+                declarations,
+                stack,
+                root_symbol,
+                context_depth,
+            );
+            stack.pop();
+            lowered
+        }
+        CheckedCoreBodyTerm::Lambda { body, .. } => {
+            if captures_outer_variable(body) {
+                return Err(expression_lowering_error(
+                    root_symbol,
+                    "implicit_closure_capture",
+                    "lambda body references an outer de Bruijn binding without an explicit runtime capture lane",
+                ));
+            }
+            Ok(RuntimeExpr::Closure {
+                captures: Vec::new(),
+                params: vec!["arg0".to_string()],
+                body: Box::new(lower_body_term(
+                    body,
+                    declarations,
+                    stack,
+                    root_symbol,
+                    context_depth + 1,
+                )?),
+            })
+        }
+        CheckedCoreBodyTerm::Application { function, argument } => Ok(RuntimeExpr::Call {
+            callee: Box::new(lower_body_term(
+                function,
+                declarations,
+                stack,
+                root_symbol,
+                context_depth,
+            )?),
+            args: vec![lower_body_term(
+                argument,
+                declarations,
+                stack,
+                root_symbol,
+                context_depth,
+            )?],
+        }),
+        CheckedCoreBodyTerm::Let { value, body, .. } => Ok(RuntimeExpr::Let {
+            value: Box::new(lower_body_term(
+                value,
+                declarations,
+                stack,
+                root_symbol,
+                context_depth,
+            )?),
+            body: Box::new(lower_body_term(
+                body,
+                declarations,
+                stack,
+                root_symbol,
+                context_depth + 1,
+            )?),
+        }),
+    }
+}
+
+fn reject_level_args(
+    owner: &StableSymbol,
+    level_args: &[CheckedCoreLevelView],
+) -> Result<(), ErasureError> {
+    if level_args.is_empty() {
+        Ok(())
+    } else {
+        Err(expression_lowering_error(
+            owner,
+            "level_arguments_unsupported",
+            "runtime expression lowering does not instantiate level-polymorphic direct calls",
+        ))
+    }
+}
+
+fn captures_outer_variable(term: &CheckedCoreBodyTerm) -> bool {
+    has_free_variable_at_or_above(term, 1)
+}
+
+fn has_free_variable_at_or_above(term: &CheckedCoreBodyTerm, bound: usize) -> bool {
+    match term {
+        CheckedCoreBodyTerm::Variable { de_bruijn_index } => *de_bruijn_index >= bound,
+        CheckedCoreBodyTerm::DirectDeclarationCall { .. } => false,
+        CheckedCoreBodyTerm::Lambda { body, .. } => has_free_variable_at_or_above(body, bound + 1),
+        CheckedCoreBodyTerm::Application { function, argument } => {
+            has_free_variable_at_or_above(function, bound)
+                || has_free_variable_at_or_above(argument, bound)
+        }
+        CheckedCoreBodyTerm::Let { value, body, .. } => {
+            has_free_variable_at_or_above(value, bound)
+                || has_free_variable_at_or_above(body, bound + 1)
+        }
+    }
+}
+
+fn expression_view_error(symbol: &StableSymbol, err: CheckedCoreBodyViewError) -> ErasureError {
+    expression_lowering_error(symbol, err.lane(), err.to_string())
+}
+
+fn expression_lowering_error(
+    symbol: &StableSymbol,
+    lane: &'static str,
+    reason: impl Into<String>,
+) -> ErasureError {
+    ErasureError::ExpressionLowering {
+        symbol: symbol.clone(),
+        lane,
+        reason: reason.into(),
+    }
 }
 
 fn lower_primitive(
@@ -388,7 +615,7 @@ fn lower_effects(
     if meta.boundary == EffectBoundary::Foreign || meta.foreign_symbol.is_some() {
         return Err(ErasureError::UnsupportedErasure {
             symbol: symbol.clone(),
-            reason: "NC5 does not assign foreign boundary runtime meaning".to_string(),
+            reason: "runtime erasure does not assign foreign boundary runtime meaning".to_string(),
         });
     }
     require_supported(symbol, &meta.lowerability)?;
