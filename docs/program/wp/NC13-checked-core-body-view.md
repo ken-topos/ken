@@ -75,6 +75,42 @@ Out of scope:
 - Existing NC10-NC12 tests continue to pass, and the new surface does not change
   kernel admission or trusted-base accounting.
 
+## Implemented Language Surface
+
+Runtime should consume the Language-owned body view through
+`ken_elaborator::checked_core`:
+
+- `CheckedCoreBodyViewSelection` carries the selected closure facts:
+  package identity, package semantic hash, package artifact hash, target symbol,
+  and reachable declarations.
+- `checked_core_body_view_for_selection(package, selection)` validates the
+  package and selection facts, then returns all reachable transparent
+  declaration bodies as `CheckedCoreBodyView`.
+- `checked_core_declaration_body_view(package, selection, symbol)` returns one
+  declaration body and rejects symbols outside the selected closure.
+
+The returned `CheckedCoreBodyTerm` intentionally covers only the NC13 seed
+expression forms: de Bruijn variables, direct declaration calls, lambdas,
+applications, and non-recursive lets. Checked type annotations are preserved as
+canonical checked-core term bytes, not source text.
+
+Stable `CheckedCoreBodyViewError::lane()` values for downstream diagnostics:
+
+- `invalid_checked_core_package`
+- `body_view_package_identity_mismatch`
+- `body_view_semantic_hash_mismatch`
+- `body_view_artifact_hash_mismatch`
+- `target_outside_selected_closure`
+- `body_outside_selected_closure`
+- `missing_checked_declaration_body`
+- `mismatched_checked_declaration_symbol`
+- `unsupported_checked_declaration_kind`
+- `unsupported_checked_body_shape`
+- `body_reference_outside_selected_closure`
+- `body_reference_without_declaration`
+- `malformed_checked_declaration_body`
+- `trailing_checked_declaration_body_bytes`
+
 ## Guardrails
 
 - Do not create a raw-source fallback or use source text as semantic evidence
