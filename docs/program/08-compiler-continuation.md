@@ -26,10 +26,12 @@ not a whole-compiler proof.
 
 The next work keeps that honesty. We broaden one boundary at a time:
 
-1. accept arbitrary Ken source/packages and lower as much as the current language
-   can soundly represent;
-2. emit native executables/libraries from the broader runtime artifact;
-3. then broaden validation and guarantees over the larger path.
+1. accept arbitrary Ken source/packages and lower as much as the current
+   language can soundly represent;
+2. emit Ken-only native executables from the broader runtime artifact;
+3. then broaden validation and guarantees over the executable path;
+4. add native library artifacts and interop as a separate phase before
+   self-hosting.
 
 ## 2. Remaining compiler campaigns
 
@@ -39,9 +41,10 @@ do not pretend that one more campaign finishes the compiler.
 | Campaign | Working range | Primary result | Boundary |
 |---|---|---|---|
 | General Ken-to-Runtime-IR Compiler | NC10-NC18 | Arbitrary accepted Ken packages can be compiled through checked-core into broad `RuntimeProgram` artifacts or fail loudly with stable unsupported lanes. | No native artifacts beyond existing spike. |
-| Native Artifact Emitter | NC19-NC27 | Broad runtime artifacts can produce reproducible executable or library artifacts with explicit ABI, runtime support, packaging, and toolchain facts. | No stronger guarantee than evidence actually checked. |
+| Native Ken Executable Emitter | NC19-NC27 | Broad runtime artifacts can produce reproducible platform executables for Ken-only closed targets, with runtime support, packaging, and toolchain facts. | No library ABI, C ABI, Rust interop, or cross-package native linking claim. |
 | Broad Validation and Translation Guarantees | NC28-NC36 | Runtime and backend artifacts gain context-sensitive validators, translation validation, reproducibility checks, and richer trust reports. | Still not full self-hosting or whole-compiler proof. |
-| Ken-Owned Pass Expansion / Self-Hosting | NC37+ | Selected compiler passes move from Rust-produced to Ken-authored or Ken-checked implementations. | Rust kernel and Rust bootstrap compiler remain permanent diversity paths. |
+| Native Library Artifact Generation | NC37-NC45 | Checked Ken packages can emit linkable library artifacts plus companion semantic metadata so later Ken compilations can consume them as checked dependencies. | Library artifacts are not executable proof carriers; C/Rust interop remains explicit and metadata-backed. |
+| Ken-Owned Pass Expansion / Self-Hosting | NC46+ | Selected compiler passes move from Rust-produced to Ken-authored or Ken-checked implementations. | Rust kernel and Rust bootstrap compiler remain permanent diversity paths. |
 
 This ordering follows the trust boundary. It is cheaper and safer to make the
 middle artifact broad and inspectable before making native output broad, and to
@@ -89,8 +92,8 @@ native binary.
 
 ### Exit criteria
 
-- A package/file compiler entry point accepts Ken source and emits a checked-core
-  package plus a target-selection report.
+- A package/file compiler entry point accepts Ken source and emits a
+  checked-core package plus a target-selection report.
 - Target closure selection is deterministic, content-addressed, and records
   exact package identity, target symbols, dependencies, obligations,
   assumptions, unsupported lanes, and `trusted_base_delta`.
@@ -107,25 +110,24 @@ native binary.
 ### Guardrails
 
 - Do not use raw source as semantic evidence after checked-core emission.
-- Do not add kernel rules, trusted primitives, or kernel dependencies on compiler
-  artifacts.
-- Do not make Cranelift, object layout, linker behavior, or native execution part
-  of this program's success condition.
+- Do not add kernel rules, trusted primitives, or kernel dependencies on
+  compiler artifacts.
+- Do not make Cranelift, object layout, linker behavior, or native execution
+  part of this program's success condition.
 - Do not silently lower effects, foreign calls, partial primitives, impossible
   matches, dictionary holes, or unresolved obligations.
 - Do not upgrade a report field from unavailable to tested, validated, or proved
   unless the exact run provides the named evidence.
 
-## 4. NC19-NC27: Native Artifact Emitter
+## 4. NC19-NC27: Native Ken Executable Emitter
 
-The second follow-on campaign turns broad `RuntimeProgram` artifacts into real
-native artifacts.
+The second follow-on campaign turns broad `RuntimeProgram` artifacts into
+real native executables for Ken-only closed targets.
 
 Expected work areas:
 
-- executable and library artifact model;
-- public entry points and export metadata;
-- ABI, symbol, and calling-convention policy;
+- executable artifact model;
+- `main`/entry-point selection and executable packaging metadata;
 - runtime support layer for values, closures, constructors, records, traps,
   effects, and foreign boundaries;
 - object/linker packaging and reproducible build metadata;
@@ -135,6 +137,13 @@ Expected work areas:
 This campaign should not claim stronger validation merely because it emits
 native files. It broadens the output boundary first; stronger guarantees remain
 the following campaign.
+
+Library artifacts are explicitly out of this phase. In particular, NC19-NC27
+should not define a stable Ken library ABI, C ABI, Rust interop surface,
+cross-package native linking contract, or metadata sidecar format for imported
+native libraries. A closed executable may embed or package its trust report and
+semantic identities, but it does not need to be consumed later as a checked Ken
+dependency.
 
 ## 5. NC28-NC36: Broad Validation and Translation Guarantees
 
@@ -155,10 +164,43 @@ The target is not a source-to-binary theorem for all Ken programs. The target is
 a disciplined evidence ladder where each reported guarantee is independently
 checkable and exact-run grounded.
 
-## 6. NC37+: Ken-Owned Pass Expansion and Self-Hosting
+## 6. NC37-NC45: Native Library Artifact Generation
 
-Once broad input, useful native output, and broad validation are stable, selected
-compiler passes can move into Ken.
+After executable emission and broad validation are useful, Ken should add a
+separate library-generation campaign. A compiled Ken library must be usable by a
+later Ken compilation as if the dependency had been compiled in the same
+package graph. That requires a semantic import artifact in addition to any
+native object, static library, or shared library.
+
+Expected work areas:
+
+- library artifact modes: Ken-only library, C ABI export floor, and Rust
+  binding/wrapper generation;
+- companion semantic metadata carrying `CheckedCorePackage` identity, stable
+  symbols, exported target closures, dependency semantic hashes, obligations,
+  assumptions, `trusted_base_delta`, erased proof/law field status, and native
+  artifact hashes;
+- Ken-to-Ken library import semantics that consume the semantic artifact rather
+  than treating native object code as proof evidence;
+- ABI and calling-convention policy for exported runtime values, closures,
+  constructors, records, traps, effects, and foreign boundaries;
+- runtime ownership/allocation rules across library boundaries;
+- C interop as the stable floor, with Rust interop preferably generated as a
+  Rust crate or wrapper over stable Ken/C-compatible handles rather than a
+  promise of Rust's unstable native ABI;
+- trust reports that distinguish checked package facts, tested native behavior,
+  validated translation facts, and unavailable proof-erasure or interop claims.
+
+This phase must keep the native object and the semantic artifact conceptually
+separate. A native library may be a cached executable realization of checked
+Ken semantics; it is not itself the semantic authority. If a consumer cannot
+validate the companion metadata against the package hashes and exported closure,
+the import must fail before linking or execution.
+
+## 7. NC46+: Ken-Owned Pass Expansion and Self-Hosting
+
+Once broad input, useful native output, and broad validation are stable,
+selected compiler passes can move into Ken.
 
 Good early candidates are validators, canonical witness checkers, and local
 rewrites with small input/output contracts. Poor early candidates are kernel

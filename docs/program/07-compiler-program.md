@@ -33,7 +33,7 @@ surface Ken
   -> erased executable core
   -> Ken runtime IR
   -> Cranelift
-  -> native object or binary
+  -> native executable binary
 ```
 
 The important boundary is `CheckedCorePackage v0`. Surface and elaborator work
@@ -55,6 +55,15 @@ enlarge the trusted base.
 
 LLVM, C, and WASM remain possible future secondary targets, but they are not the
 bootstrap compiler's first target.
+
+The near-term native target is Ken-only executable generation. Native library
+generation is a separate later compiler-program phase because it needs a
+different artifact contract: linkable native code must travel with companion
+semantic metadata so a later Ken compilation can consume the library as a
+checked dependency rather than trusting the object file as proof evidence. C
+interop is the eventual stable floor for foreign consumers; Rust interop is
+desirable, but should be generated as Rust wrappers/crates over stable Ken or C
+compatible handles, not as a promise of Rust's unstable native ABI.
 
 ## 4. Fidelity Model
 
@@ -124,15 +133,18 @@ The individual WP briefs live under `docs/program/wp/`.
 NC10-NC18 are the first follow-on campaign after the original NC1-NC9 compiler
 program. They broaden the input path to arbitrary accepted Ken packages and
 lower selected targets into broad runtime IR, but they still stop before native
-artifact emission. The continuation frame is `08-compiler-continuation.md`.
+artifact emission. The continuation frame is `08-compiler-continuation.md`;
+that frame now sequences native Ken-only executables before native library
+artifacts, and places library generation before self-hosting.
 
 ## 6. Non-Goals
 
 Do not make the compiler consume arbitrary surface syntax directly in the
 original NC1-NC9 campaign. Do not trust Cranelift output as a Ken proof. Do not
-make native pointer identity observable. Do not block catalog development on
-self-hosting. Do not require the Rust bootstrap compiler to disappear once
-self-hosting exists.
+make native pointer identity observable. Do not treat a native object, static
+library, or shared library as semantic authority without the checked companion
+metadata. Do not block catalog development on self-hosting. Do not require the
+Rust bootstrap compiler to disappear once self-hosting exists.
 
 ## 7. Review Boundaries
 
