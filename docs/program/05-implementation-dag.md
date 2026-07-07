@@ -94,7 +94,7 @@ flowchart TD
   subgraph WSX["WS-X · Runtime & scale"]
     X1["X1 interpreter strict-CBV"]
     X2["X2 runtime hardening"]
-    X3["X3 native backend"]
+    X3["X3/NC Rust bootstrap compiler"]
     X4["X4 scale/limits"]
   end
   subgraph WSS["WS-S · Self-hosting"]
@@ -187,10 +187,10 @@ off V4/X1/L; WS-R never gates.)*
 | **B2** | `Temporal` datatype + surface notation (data, not modalities) (`72`) | L2, B1 | |
 | **B3** | trace/instrumentation contract: `Σ`-events, correlation, runtime `Q`/`P`/`T` (`73`) | B1, X1 | feeds Ward monitor |
 | **B4** | agentic boundary (envelope = Sec1/Sec2; metamorphic; RV) — mostly doc/conformance (`74`) | Sec1, Sec2, B3 | no new mechanism |
-| **X3** | native backend (Cranelift/LLVM) behind the interpreter, differential-tested | X1, L-core | |
+| **X3/NC** | Rust bootstrap compiler: checked-core artifact, runtime IR, Cranelift backend, differential harness, trust report, validators, first Ken-owned pass (`07-compiler-program.md`) | X1, L-core | Cranelift selected; self-hosting remains additive |
 | **X4** | scale & limits validation; `space` runtime realization | X2 | loud at limits |
-| **S1** | Stage-1 Ken-subset compiler atop the Rust kernel | L-complete | kernel stays Rust |
-| **S2** | full self-hosted elaborator/codegen | S1 | |
+| **S1** | Stage-1 Ken-subset compiler atop the Rust kernel and checked-core boundary | L-complete, NC boundary | kernel stays Rust; Rust bootstrap remains |
+| **S2** | full self-hosted elaborator/codegen | S1 | additive to Rust bootstrap |
 | **T2** | REPL (the *Little Prover* loop) | V4, X1 | |
 | **T3** | test/property framework | L2 | |
 | **T4** | pedagogy + reference docs | G2 | |
