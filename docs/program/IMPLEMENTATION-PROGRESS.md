@@ -14,6 +14,6335 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
+> ### NC27 CLOSED; CATALOG FRONTIER NEXT (2026-07-08 14:34 UTC)
+>
+> Current NC27 state: Runtime and Verify completed joint D0 on
+> `wp/NC27-executable-phase-closeout @
+> a9b6c48bb7282758f30809968a1d83f7e213091c`. Verify D0
+> `evt_2xknxqrmayakv`, Runtime D0 `evt_3g8f0pd7n9stc`, and Runtime leader's
+> joint D0 handoff `evt_4zen3dbpmzhjb` agreed that Runtime owns D1 directly,
+> with Verify as the first exact-head review gate and no separate Verify
+> prerequisite. Runtime implementer handed off original head
+> `86e5f9c4f0e8b4fcc271a0d88fd7186fc057eba9` at `evt_nhpws12kffk1`;
+> cumulative diff was exactly
+> `crates/ken-runtime/src/native_execution_differential.rs`. Verify blocked that
+> head at `evt_5hf2sxjjgat6d` on blocker-class laundering in
+> `positive_corpus_blocker(...)`. Runtime repaired to
+> `3fa047336de170c15b207ab0f1bc5e37270b9508` at `evt_6afvxq3dcg772`, and Verify
+> approved that repair at `evt_52vtj18qkh99y`. Runtime QA then blocked
+> `3fa047...` at `evt_hrt8q2169khj` because `claim_inventory` still laundered
+> runtime-IR / interpreter mismatch claims into `Unavailable`; Runtime repaired
+> to `500be2c044a96ce8523ca4183ee5d45afbf324af` at `evt_20zsrp1y9ceh9`.
+> Runtime QA blocked `500be2...` at `evt_2atw0zet5atcf` because
+> `NativeExecution` inventory still became `Unavailable` after later comparison
+> failure; Runtime repaired to
+> `1e14d038c300aef0ee65462fffa90e21ae5aa83c` at `evt_46a0r6zhqnpf7`, and
+> Runtime QA approved at `evt_3cqfr5c8768jv`. Architect then blocked
+> `1e14d...` at `evt_74ftf5m6yhdv9`: out-of-phase trust overclaims were caught
+> by the corpus blocker, but `claim_inventory` still mirrored over-promoted
+> `Tested` / `Validated` / `Proved` lanes instead of reporting NC27 `Failed`.
+> Runtime implementer repaired that bounded inventory issue and handed off exact
+> head `7f8d2b8d2c85b57f5dbe79005b1935842f2cdd39` at `evt_2hkd61pkatf3d`;
+> repair scope remained the same single Runtime file, with implementer validation
+> green and the WP branch released. Runtime leader routed that repaired head to
+> Architect for exact-head re-review at `evt_65cf3p4rc8nst`; Architect approved
+> the exact head at `evt_5yrp30r6s3b4v`; Runtime QA approved the same head at
+> `evt_7yed43scm9ggc`; Runtime leader requested integration at
+> `evt_451rfb10brs7y` under merge decision `dec_1w58pxm6yh22e`. Integrator
+> merged PR #364 and posted `evt_gxtg3em1zz15`: NC27 landed on
+> `origin/main @ 067da98879b9622ac7079131b52aa89d83ed0e4d` from approved head
+> `7f8d2b8d2c85b57f5dbe79005b1935842f2cdd39`; GitHub branch deletion and local
+> cleanup were complete. Steward fetched and verified local `origin/main` at the
+> same SHA, then requested Runtime §10 retros/retros-in closeout at
+> `evt_4es6w1k1jxb22`. Runtime leader opened the closeout at
+> `evt_4nf1nkgshcmmd`; Runtime implementer posted its retro at
+> `evt_7eskyq30ffctw`; Runtime QA posted its retro at `evt_49cbyr11afbmr`.
+> Because those member retros were mention-free, Steward nudged Runtime leader
+> for the leader coordination retro and retros-in handoff at
+> `evt_5r1ywz1zy8m62`. Runtime leader posted the leader retro at
+> `evt_7n1v7w4kcnadk` and the retros-in closeout at `evt_3801jtdyd21x2`, so
+> NC27 is closed. Operator instruction: stop the NC sequence after NC27 and
+> shift back to catalog work; do not release NC28 unless explicitly
+> re-instructed. Next Steward action: select and prepare the catalog frontier.
+>
+> ### PRIOR FRONTIER: NC26 CLOSED; NC27 RELEASED TO RUNTIME/VERIFY (2026-07-08 13:44 UTC)
+>
+> Current NC26 state: Architect blocked the original exact head
+> `831aece0b9eb6fa07720bd1f4feca12030c72978` at `evt_295njypfseqwn`
+> on a bounded backend-verifier provenance honesty gap. Runtime implementer
+> repaired the branch and handed off exact head
+> `f4e62b3d9ecc3c164abb9e32b47ec527cd4f0669` at
+> `evt_3w9ftc7mtfr2k`; Architect approved that repaired head at
+> `evt_3j8sq9sk98fh3`, Verify re-approved at `evt_mt35z88qsmcj`, and
+> Runtime QA re-approved at `evt_1a90zpz3wvj7n`. Runtime leader opened and
+> resolved merge Decision `dec_3g4hqfqrrrktd`, then routed Integrator at
+> `evt_5y92qrj7c57bv`. Integrator merged PR #363 and posted the formal
+> merge note at `evt_300jhjj3mj6d9`: `NC26-native-trust-report-provenance`
+> landed on `origin/main @ a9b6c48bb7282758f30809968a1d83f7e213091c`
+> from approved head `f4e62b3d9ecc3c164abb9e32b47ec527cd4f0669`, with
+> merge handling complete. Steward fetched and verified the same
+> `origin/main` SHA locally, then requested Runtime §10 closeout at
+> `evt_2b0twa9521gc3`. Runtime leader opened closeout at
+> `evt_1txyr0xkbgsyg`, requesting Runtime implementer and Runtime QA retros.
+> Runtime QA posted its retro at `evt_66cyhpbqtcdv6`, and Runtime implementer
+> posted its retro at `evt_xj8hphg42mc7`. Steward nudged Runtime leader for the
+> leader coordination retro and retros-in handoff at `evt_7vcqwe05bvhkp`.
+> Runtime leader posted the coordination retro at `evt_6br5c89mzz4nd` and the
+> retros-in handoff at `evt_614mb52xz30wb`, so NC26 is closed. Steward then
+> created `wp/NC27-executable-phase-closeout @
+> a9b6c48bb7282758f30809968a1d83f7e213091c`, compacted Runtime leader /
+> implementer / QA, Verify leader / implementer / QA, and Integrator in one
+> batch, verified compaction in each pane, and released NC27 to Runtime and
+> Verify leaders for joint D0 at `evt_471efxwp2sw9x`. Next Steward action:
+> await Runtime/Verify D0 classification for NC27; no routing stall is present.
+>
+> ### PRIOR FRONTIER: NC26 IN ARCHITECT REVIEW (2026-07-08 13:14 UTC)
+>
+> Current NC24 state: Runtime D0 read `evt_1ftbw335fdkzj` and Verify D0
+> confirmation `evt_3hf0k5d6981xs` agreed that no separate Verify prerequisite
+> was needed; Runtime owns D1, with Verify exact-head review before Runtime QA.
+> Runtime leader released D1 at `evt_2dng6vx1b581s`. Runtime implementer hit a
+> temporary branch-hold at `evt_72q07nj8ye5g0`; Verify leader released the WP
+> branch at `evt_6wssj1azxjgjr`; Runtime implementer resumed and handed off
+> exact head `eca80de5e96a186f89ea85b79315a8c68fe67da5` at
+> `evt_2fdm71qxxyaea`. Verify blocked that exact head at
+> `evt_22w3nqydd5m8w` on two bounded Runtime repair items: trapped native cases
+> currently become hard execution errors instead of first-class NC24 lane/report
+> outcomes, and stale or forged `NativeInterpreterLaneInput::Available(...)`
+> evidence is collapsed to `Unavailable` instead of rejected as detached
+> evidence. Pane scan showed the block had not been picked up by Runtime, so
+> Steward routed a focused repair nudge to Runtime leader at
+> `evt_3e4f91vatksbd`. Runtime leader routed the bounded repair to Runtime
+> implementer at `evt_4ct6b17bam6ak`, and Runtime implementer picked it up at
+> `evt_32qqk0pw5ctds`. Runtime implementer then hit a second branch-hold at
+> `evt_2y3qn1edyv6yw`; Verify leader released the branch at
+> `evt_6aq4eymwrck4e`, and Runtime implementer resumed repair work on the
+> shared WP branch at `evt_2kh8wvpsm3tg`. Runtime implementer handed off
+> repaired exact head `09e9c697694313f74269d79c2529aa5c7ecedcc3` at
+> `evt_6916n9xt5ah77`; Verify approved it for Runtime QA at
+> `evt_204wexfy4pq26`; Runtime QA picked up, hit a branch hold at
+> `evt_3c1n6j2g9q3sw`, resumed after Verify released the branch at
+> `evt_585ps3bz41kz7`, and approved exact head `09e9c697...` at
+> `evt_13gnfp8b5rc9s`. Runtime leader routed Architect review at
+> `evt_6hqc4gdh9r9n3`. Architect blocked `09e9c697...` at
+> `evt_44zt7xs5z9h51` because the trap-unavailable report path returned before
+> validating the executable artifact file identity. Runtime implementer picked
+> up the bounded Architect-block repair at `evt_6xdpq94trb2va` and handed off
+> repaired exact head `a77b63b96e091fddac5927c9384c8c31b5fe6c8a` at
+> `evt_4hd90hgrh82c`; Architect picked up re-review at `evt_712ks2rh1pqz1`,
+> approved at `evt_6by2z0j23n1ec`, and Runtime leader routed Runtime QA
+> re-review at `evt_3jhfwdazwzdtm`. Runtime QA approved final head
+> `a77b63b...` at `evt_2jmjvwtsf1v47`; Runtime leader routed Integrator at
+> `evt_763282dan5az5`. Integrator published PR #360 at `evt_6rbezryah0n96`,
+> requested the formal merge Decision at `evt_1pfpmtthfmd7t`, and Runtime
+> leader created resolved merge Decision `dec_7006qn75y0191` at
+> `evt_m5y1p9taefem`. Integrator merged PR #360 at `evt_2vmkxws8pf6e7`,
+> landing `origin/main @ 6b417340755f4cc1ff5719795e0b62cbae78ecff` with
+> `build + test`, `conformance suite`, `clean-room provenance check`, and
+> `path-guard` green; remote and local WP refs were deleted. Runtime leader
+> opened §10 closeout at `evt_58xsn4cb4b770`. Runtime implementer posted its
+> retro at `evt_7239x1aybyb9w`; Runtime QA posted its retro at
+> `evt_4808ztdbdt7e2`; Steward nudged Runtime leader for closeout at
+> `evt_488jtjt7scmmz`. Runtime leader posted the coordination retro at
+> `evt_5m91tcqg3wksa` and retros-in handoff at `evt_16jmcjn03npzz`, so NC24
+> is closed. Steward identified `NC25-effects-foreign-executable-policy` as the
+> next ready compiler-phase WP and created
+> `wp/NC25-effects-foreign-executable-policy @
+> 6b417340755f4cc1ff5719795e0b62cbae78ecff`. Pat then corrected the Steward
+> compaction playbook: start all handoff compactions in the same gate pass, then
+> verify every pane. Steward committed the playbook fix locally and routed clean
+> branch `wp/steward-batch-start-compactions @
+> 22bffb9c00feb24412dc9586db2cfea0d4a0c861` to Integrator at
+> `evt_3t7139dn2a834`; Integrator merged PR #361 at `evt_65spdg0xaz3s2`,
+> landing `origin/main @ 436006d71636503d943b9bc9ecf4f6c718548990`. Steward
+> re-anchored `steward/work` onto that main tip, moved
+> `wp/NC25-effects-foreign-executable-policy` to the same SHA, compacted Runtime
+> leader / implementer / QA, Verify leader / implementer / QA, and Integrator,
+> then released NC25 to Runtime and Verify leaders for joint D0 at
+> `evt_19nxk79bx4em4`. Runtime D0 read `evt_2epem0a55xycc` and Verify D0
+> confirmation `evt_2fxftn9yg52fp` agreed that no separate Verify-owned
+> prerequisite WP is needed; Runtime owns D1, with Verify exact-head review
+> before Runtime QA. Runtime leader opened D1 at `evt_6th8qhy3dgncx`.
+> Runtime implementer handed off exact head
+> `4a52f76375d0ccdd2b8aa0f5cd76814bfd659692` at `evt_43t967cw3nv61`;
+> the cumulative diff is exactly
+> `crates/ken-runtime/src/native_execution_differential.rs` from base
+> `origin/main @ 436006d71636503d943b9bc9ecf4f6c718548990`. Verify
+> approved the exact head for Runtime QA at `evt_603b12eg4s4d1`. Runtime QA
+> picked up at `evt_34qvcjp95j0b0` and approved at `evt_1wggfgr8z33m6`,
+> with focused native differential, object-linker, and full Runtime library
+> suites green. Runtime leader routed Architect exact-head review at
+> `evt_52jd3q480xb2r`, and Architect picked it up at `evt_62xgvkjcr8sd8`.
+> Architect blocked the head at `evt_22f4zkjmgfa31`: NC18
+> `RuntimeEffectsForeignAuditMetadata.lowerability` was not consumed before
+> returning `NativeTested`. Runtime repaired the bounded one-file blocker and
+> handed off exact head `6d4b2f8898b7433f6cdc65ff0e7298069f1c9431` at
+> `evt_7435nyfv80ex9`. Architect approved that repaired head at
+> `evt_zb70g54yxafd`, Runtime leader routed the changed SHA through exact-head
+> re-review at `evt_77cbcb41q2044`, Verify approved at
+> `evt_3kfwvaywm4749`, and Runtime QA approved at `evt_fzxb7kps5whe`.
+> Runtime leader opened and resolved merge Decision `dec_2nhbkbeef6a0e`, then
+> routed Integrator publish/merge at `evt_4mxzk3pzrhg8f`. Integrator opened
+> PR #362 for the exact head; Steward verified all required checks were green
+> (`build + test`, `clean-room provenance check`, `conformance suite`,
+> `path-guard`) and posted a focused Integrator merge nudge at
+> `evt_4zsz6qqhxx5hq` because no merge note had landed after the original
+> request. GitHub then showed PR #362 merged as
+> `origin/main @ dbc0044e2e96655b3d8da82ae4fcdb2ba5f6ceb8` on exact approved
+> head `6d4b2f8898b7433f6cdc65ff0e7298069f1c9431`; Steward fetched and
+> verified the same `origin/main` SHA locally. Because Integrator had still
+> not posted the required Convo merge note, Steward relayed the verified merge
+> and requested the missing Integrator note plus Runtime closeout at
+> `evt_7za41dyb0qh1s`. Runtime leader opened NC25 §10 closeout at
+> `evt_3cedgnwcyh0r0`, requesting Runtime implementer and Runtime QA retros.
+> Runtime implementer posted its retro at `evt_6qrpt7dbv82zc`, and Runtime QA
+> posted its retro at `evt_2sjepx85zrbxh`. No leader closeout event landed
+> after both member retros, so Steward nudged Runtime leader for the
+> coordination retro and retros-in handoff at `evt_40ss4h889ch8p`. Runtime
+> leader posted the NC25 coordination retro at `evt_55096gt221mk4` and the
+> retros-in handoff at `evt_5jrr0jzpxds7j`, so NC25 is closed. Steward created
+> `wp/NC26-native-trust-report-provenance @
+> dbc0044e2e96655b3d8da82ae4fcdb2ba5f6ceb8`, compacted Runtime leader /
+> implementer / QA, Verify leader / implementer / QA, and Integrator in one
+> batch handoff gate, verified compaction/queued-drop state in each pane, and
+> released NC26 to Verify and Runtime leaders for joint D0 at
+> `evt_svr50wkgygc6`. Verify D0 classified Runtime as the D1 owner, with
+> Verify as the first exact-head review gate, at `evt_6h7c7gqhzbzvj`.
+> Runtime D0 matched that split and released D1 at `evt_64qg9nzm7saeq`.
+> Runtime implementer handed off exact head
+> `831aece0b9eb6fa07720bd1f4feca12030c72978` at `evt_2tkr6ptfhpg7k`;
+> the cumulative diff is exactly
+> `crates/ken-runtime/src/native_execution_differential.rs` from base
+> `origin/main @ dbc0044e2e96655b3d8da82ae4fcdb2ba5f6ceb8`. Integrator
+> posted the late formal NC25 merge note at `evt_zrqj4wphjnj2`; remote
+> branch cleanup is complete, while local NC25 ref cleanup is still blocked by
+> a runtime-implementer worktree checkout. Verify approved the NC26 exact head
+> for Runtime QA at `evt_q8g0hmpz1s4a`, and Runtime QA approved at
+> `evt_6yw81a72ckm19`. Runtime leader routed Architect exact-head review at
+> `evt_e395131kxmqe`; Architect picked up review at `evt_4rxa4jkja2473`.
+> Next Steward action: await Architect approve/block on NC26 head
+> `831aece0...`; no routing stall is present.
+>
+> Current NC22 state: Architect approved exact head
+> `01bd7e4d7ebaaaf93f12eeb08c539845e34c2cf1` at `evt_pm35388j1mv9`;
+> Runtime leader routed it to Integrator at `evt_3e689w5xpzvtj`; Integrator
+> merged PR #358 at `evt_5z6m4ccet7ret`, landing
+> `origin/main @ 89fb35333c34a8fdfb1db8a097039e0f0e091d3e` with all required
+> checks green and cleanup complete. Steward requested Runtime closeout at
+> `evt_57m6gn4vc3hy8`. Runtime leader opened the closeout at
+> `evt_5bhrxr6eqhk4r`, and Runtime implementer posted its §10 retro at
+> `evt_ggqve11hkavn`. Runtime QA posted its §10 retro at
+> `evt_4jhmn257jk42g`. Steward nudged Runtime leader for the leader retro and
+> retros-in handoff at `evt_3jjvz6erjebdq`. Runtime leader posted its §10 retro
+> at `evt_3wm2xqmxazkhf` and the retros-in handoff at `evt_7x522y40ktaa9`, so
+> NC22 is closed. Steward inspected the next compiler-program candidate from
+> `origin/main`, created `wp/NC23-object-linker-packaging` at
+> `origin/main @ 89fb35333c34a8fdfb1db8a097039e0f0e091d3e`, compacted Runtime
+> leader / implementer / QA plus Integrator and verified `Context compacted` in
+> all four panes, then released NC23 to Runtime at `evt_2zqbrf6fm7ks2`. Next
+> Runtime leader opened D0 and routed Runtime D1 at `evt_92apm2kpcsbt` with no
+> cross-lane prerequisite; Runtime implementer picked up D1 at
+> `evt_33fgggpx6pxkb` and handed off exact head
+> `f0fb6fc0aea40278a0a82800bbf0c613c3b5e55a` to Runtime QA at
+> `evt_2csqn9rbvs119`. Runtime QA picked up at `evt_n4r6xhvsgx0` and
+> approved the head at `evt_4j2we2ct12na0`. Runtime leader routed Architect
+> review; Architect blocked the original head at `evt_sbwdg4bpyyvr` on an
+> NC20/NC21 consumer predicate revalidation gap. Runtime repaired at exact head
+> `886caa0e36ce79e05127600033d2a7101dd99c05` and handed it back at
+> `evt_564yaadjdmbwv`; Runtime QA approved the repaired head at
+> `evt_7pewv2zwwvy9r`. Runtime leader routed Architect re-review; Architect
+> closed the original blocker but blocked repaired head `886caa0` at
+> `evt_4fnrqxtvyxj8k` on missing NC20 package header kind/version and NC21
+> platform support kind/version checks. Runtime implementer repaired at exact
+> head `39f15aff53c169816e3a0352811a2cdac3b45ea8` and handed it to Runtime QA
+> at `evt_5d1wgb9d4t56e`; Runtime QA picked up at `evt_54chk6p2q2hx8`.
+> Runtime QA approved final reviewed head
+> `0de8da17c33a94e63765f1980cc2016af07b537f` at `evt_z5pftpk5tpwx`,
+> with a test-only QA delta covering the version guards directly. Runtime
+> leader routed Architect re-review at `evt_3p2m44m3stft7`, and Architect
+> picked up exact-head re-review at `evt_57575d50snqx8`. Architect approved
+> at `evt_3r4je7p1mvdb2`; Runtime leader routed the exact approved head to
+> Integrator at `evt_684gsg56y96w2`; Integrator merged PR #359 at
+> `evt_7tqkmp0aac3d1`, landing
+> `origin/main @ 9f1516d21210349aeb58d4f5708da946ce2771e5` with all required
+> checks green and cleanup complete. Steward requested Runtime §10 closeout at
+> `evt_6qy6et1w0jcpe`. Runtime leader opened closeout at
+> `evt_3jm4pr7rfqxcj`, requesting Runtime implementer and Runtime QA retros.
+> Runtime QA posted its §10 retro at `evt_3gjc1g1yr2yfz`; Runtime implementer
+> posted its §10 retro at `evt_pg4sgdzg4qkw`. Steward re-read the Convo tail,
+> found no leader closeout, and nudged Runtime leader for the coordination
+> retro and retros-in handoff at `evt_g40ddff7vg9h`. Runtime leader posted the
+> coordination retro at `evt_5snaem83kc6bf` and retros-in handoff at
+> `evt_400cgsmz243ez`, so NC23 is closed. Next Steward action is to
+> compact-gate Runtime, Verify, and Integrator, then release NC24
+> `NC24-native-execution-differential-suite` from
+> `origin/main @ 9f1516d21210349aeb58d4f5708da946ce2771e5`. Steward
+> compacted and verified Runtime leader / implementer / QA, Verify leader /
+> implementer / QA, and Integrator, created branch
+> `wp/NC24-native-execution-differential-suite @
+> 9f1516d21210349aeb58d4f5708da946ce2771e5`, and released NC24 to Runtime and
+> Verify leaders for joint D0 at `evt_25va679g44b1e`.
+>
+> `NC16-primitive-value-lowering` landed via PR #348 and is closed. Steward
+> released `NC17-recursion-dictionaries-modules` to Language/Runtime for joint
+> D0 after compacting both receiving rings. Runtime and Language both stopped
+> Runtime D1 on a narrow Language-owned producer/package prerequisite. That
+> prerequisite is implemented and QA-approved; Runtime reviewed the seam and
+> opened Runtime D1 on the exact prerequisite head. Runtime D1 is repaired,
+> QA-approved, Architect-approved, and merged as PR #349. Runtime and Language
+> §10 retros are complete, so NC17 is closed. Steward also landed Pat's NC18 gate
+> / native-executable phase instruction as PR #350: if the NC18 final report
+> clears the starter Ken-only executable subset, proceed directly to NC19;
+> otherwise frame the smallest prerequisite before native codegen. NC18 is now
+> active: Runtime D0 opened D1 directly, Runtime implementer handed off exact
+> head `9828bb876eef6f6879d5311b9aac9a58ffa6ee20`, Verify blocked that head on
+> a boundary/scope mismatch, Runtime corrected the scope, Language approved the
+> cross-lane erasure/lowering boundary question, and Verify re-opened review on
+> the same exact head. Verify then blocked the corrected scope on report
+> honesty: the NC18 summary/report path can classify malformed effect/foreign
+> authority as comparison-unavailable instead of unsupported. Runtime repaired
+> that blocker at exact head `2336c345227361cf4ed476e099de4d3882113b92`; Verify
+> approved the repair for Runtime QA. Runtime QA then found one remaining
+> report/native-gate honesty bug for transparent `RuntimeExpr::Effect` bodies;
+> Runtime repaired it at exact head `c278922aca0f7e190e58b7b63aa77bae08fe97a8`,
+> Runtime QA approved that head, Architect approved it for integration, and
+> Integrator merged PR #351 on the exact approved NC18 head. Runtime completed
+> §10 closeout and gave the final NC18 gate statement: the landed NC10-NC18
+> report clears the starter Ken-only executable subset for NC19. Steward then
+> compacted the receiving Spec/Runtime lanes plus Verify leader and kicked off
+> NC19 from `origin/main @ 23b078e62741463d37b4eac070a8ee6b82ec94ed`. Pat
+> then asked to schedule an FFI/effect compiler subprogram after the native
+> library target pass; Steward authored a docs-only program update. The first
+> Architect request had a bad object ID, Architect blocked on exact-head
+> identity, and Steward re-requested review on the actual docs-only head.
+> Architect approved the corrected exact head, and Steward routed it to
+> Integrator for normal publish/gate/merge; Integrator opened and merged PR
+> #352, landing the scheduling note at
+> `origin/main @ 6a2ef72ae346ab0ccc9faa37d85d1743985dcd95`. Steward removed the
+> temporary worktree that blocked Integrator's local branch cleanup, and
+> Integrator completed cleanup. NC19 spec-first D1 was conformance-approved and
+> closed; Runtime D1 materialization produced head `9989876`, Verify blocked it
+> on hash canonicalization and negative-lane laundering, Runtime repaired at
+> `7cc897c`, Verify approved the repair, Runtime QA approved it, Architect
+> blocked one malformed-field gap, Runtime repaired again at `001d295`, Runtime
+> QA and Architect approved that final head, and Integrator merged PR #353,
+> landing NC19 at `origin/main @
+> 497716a8a9518fa1e4edae9c4b1f7d7f46f235e8`.
+> Runtime leader posted the NC19 coordination retro and retros-in closeout, so
+> NC19 is closed. Steward compacted the Language and Runtime receiving rings
+> and released NC20 to Language/Runtime joint D0 at `evt_424rx38s8sj5m`.
+> Runtime D0 and Language D0 converged on a Language-first prerequisite on the
+> shared NC20 branch: materialize package-authoritative executable entrypoint
+> metadata at the checked-core / target-closure seam before Runtime packages it
+> for later native emission. Language leader routed D1 to Language implementer
+> at `evt_5dy9eqcad55ay`, and Language implementer picked it up at
+> `evt_b60qvvc8ddr7`. Integrator briefly blocked on missing local GitHub CLI
+> auth, then restored auth at `evt_2q2txm67x00e4`; no open PR was blocked.
+> Language implementer handed off exact head
+> `6cd43ff4489dc9b833939768efafd957bea8a61c` for Language QA at
+> `evt_3fn43smb83pde`; Language QA approved at `evt_2fgay0m882k9w`.
+> Language leader closed the prerequisite and handed to Runtime at
+> `evt_3v81q516yt71b`; Runtime leader opened Runtime D1 at
+> `evt_39tct5yyqy27`. Runtime implementer handed off initial Runtime D1 head
+> `3f67bb2b98831a8cb8b43a5db58e1913a6f8ac57`; Runtime QA blocked it on a
+> missing closure-identity consistency check, Runtime repaired at
+> `3df7acf2d235fe660bd7c67e9078aba7b59a9945`, and Runtime QA approved that
+> repaired head. Architect approved at `evt_2b77037jzddh3`, and Runtime leader
+> routed the exact approved head to Integrator at `evt_20fna4c7xsbvb`.
+> Integrator picked up the merge request, published unchanged exact head
+> `3df7acf2d235fe660bd7c67e9078aba7b59a9945` as PR #355, and merged it to
+> `origin/main @ 81015b6742bcb290c0c3e112590ddc70e2c8965d` with all required
+> checks green. Runtime did not post §10 retros-in after the merge; Steward
+> nudged Runtime leader for closeout at `evt_5re6tfh64r2mb`. Runtime QA then
+> posted its §10 retro at `evt_13shsws4dfdq7`, and Runtime implementer posted
+> its §10 retro at `evt_qjwfd05xh921`. Runtime leader did not post the leader
+> retro / retros-in handoff after both member retros were in, so Steward sent a
+> focused closeout nudge at `evt_7fv110ncwyrz`; Runtime leader then posted the
+> coordination retro at `evt_7s9cbj8d50pgm` and retros-in closeout at
+> `evt_5ryr75bmekhpb`. NC20 is closed. Steward compact-gated Runtime leader,
+> Runtime implementer, Runtime QA, and Integrator, then released NC21
+> `NC21-platform-runtime-support` to Runtime at `evt_3jx033zykq10h`. Runtime
+> leader opened D0 at `evt_12vzz6zmtq7xv`, found no cross-lane prerequisite,
+> and routed D1 directly to Runtime implementer. Runtime implementer picked up
+> D1 at `evt_579negf8drvtg` and handed off exact head
+> `1965f4643a02825ad05d6f0f88ddb776152b64a1` at
+> `evt_6hs02fpm702n1`. Runtime QA blocked that head at
+> `evt_56mq67w202gh1` because NC21 could accept a runtime-IR run report for a
+> different declaration/example in the same artifact. Runtime repaired the
+> target binding at `137dc26cddd08c6916d53a7bbc986a8ac1c89f2b`, handed off at
+> `evt_j3tc8q1dtctp`, and Runtime QA approved at `evt_4653f82hyf8g9`.
+> Runtime leader routed Architect review at `evt_gmy18am7qrga`; Architect
+> blocked exact head `137dc26cddd08c6916d53a7bbc986a8ac1c89f2b` at
+> `evt_42s7f5vcety8c` on two support-layer honesty gaps: NC21 did not
+> revalidate the embedded NC20 entrypoint metadata/invariants, and the
+> run-report target check could still be ambiguous when runtime examples shared
+> a target identity. Runtime implementer picked up the Architect blocker at
+> `evt_2bczmzwdhpgqk`, repaired at exact head
+> `1ba6ad6e4d4dd36435e929b5ab19705a908a4c5e`, and handed that repair to
+> Runtime QA at `evt_7d5g1r6zq5rqp`. Runtime QA picked up re-review at
+> `evt_3nfk3z1vcv9cb`, approved the Architect-blocker repair at
+> `evt_1f4rfpdmq3zxc`, and Runtime leader routed exact head
+> `1ba6ad6e4d4dd36435e929b5ab19705a908a4c5e` back to Architect for re-review
+> at `evt_32g3vjknd44xs`. Architect picked up that re-review at
+> `evt_310367j6tgjzk` and approved at `evt_7m3afp5nb3s77`. Runtime leader
+> routed the exact approved head to Integrator at `evt_5z2c0n2wmev8e`;
+> Integrator merged PR #356 at `evt_s4vwq5k6ejk7`, landing NC21 on
+> `origin/main @ e7ca278464983e1886f48d265fb321b09f2b8b66` with all required
+> checks green and cleanup complete. The next NC21 step is Runtime §10
+> closeout; Steward requested Runtime closeout at `evt_74b0gb52qwyjp`.
+> Runtime leader opened the NC21 Runtime retro call at `evt_6je4y873hnxf8` for
+> Runtime implementer and Runtime QA. Runtime implementer posted its retro at
+> `evt_49a3vpe3p6gsq`, and Runtime QA posted its retro at
+> `evt_5c5g16xt1g9c2`. No new Convo event arrived after the QA retro, and the
+> Runtime leader pane was idle at prompt, so Steward sent a focused NC21
+> closeout nudge to Runtime leader at `evt_6d7xjsqbwegyk`. Runtime leader then
+> posted the leader retro at `evt_12805d930jjg7` and retros-in handoff at
+> `evt_5s80yxn15p796`, so NC21 is closed. The next release candidate from
+> `origin/main` is `NC22-broad-cranelift-lowering`. Steward stopped an idle
+> Integrator background terminal, compacted Runtime leader / implementer / QA
+> and Integrator, verified `Context compacted` in all four panes, and released
+> NC22 to Runtime at `evt_6nnwbsapywqvq`. Runtime leader opened D0 at
+> `evt_4scj1evnr9bbw` with no cross-lane prerequisite, Runtime implementer
+> picked up at `evt_5jbecrzpxp9jt`, and handed off exact head
+> `fc1bf57a1cd4ff0f85426af82def70d06a0f8e67` at `evt_2bynw8badaf6v`.
+> Runtime QA picked up at `evt_z70xtkghqbd6`, added a narrow test-only
+> foreign-boundary regression, and approved exact head
+> `01bd7e4d7ebaaaf93f12eeb08c539845e34c2cf1` at `evt_1z8g4htchsce2`.
+> Runtime leader routed that reviewed head to Architect at
+> `evt_6yh959ygsr35d`. Architect picked up at `evt_1nvfnm9kxr6w0` and
+> approved at `evt_pm35388j1mv9`. Runtime leader routed the approved head to
+> Integrator at `evt_3e689w5xpzvtj`; Integrator merged PR #358 at
+> `evt_5z6m4ccet7ret`, landing
+> `origin/main @ 89fb35333c34a8fdfb1db8a097039e0f0e091d3e` with all required
+> checks green and cleanup complete. Steward requested Runtime §10 closeout at
+> `evt_57m6gn4vc3hy8`. Runtime leader opened the closeout at
+> `evt_5bhrxr6eqhk4r`, and Runtime implementer posted its retro at
+> `evt_ggqve11hkavn`. Runtime QA posted its retro at `evt_4jhmn257jk42g`;
+> Steward nudged Runtime leader for closeout at `evt_3jjvz6erjebdq`. Runtime
+> leader posted the coordination retro at `evt_3wm2xqmxazkhf` and the
+> retros-in handoff at `evt_7x522y40ktaa9`, so NC22 is closed. Steward created
+> `wp/NC23-object-linker-packaging` at the NC22 landed base, compact-gated
+> Runtime leader / implementer / QA plus Integrator, and released NC23 at
+> `evt_2zqbrf6fm7ks2`. Runtime leader opened D0 and routed D1 at
+> `evt_92apm2kpcsbt`; Runtime implementer picked up at `evt_33fgggpx6pxkb` and
+> handed off exact head `f0fb6fc0aea40278a0a82800bbf0c613c3b5e55a` to Runtime
+> QA at `evt_2csqn9rbvs119`. Runtime QA picked up at `evt_n4r6xhvsgx0`.
+> Separately, Pat directed the Integrator watchdog to stop scanning Convo on
+> timer ticks; Steward updated the Integrator playbook on
+> `wp/integrator-watchdog-pr-only` and routed it directly under
+> operator/Steward playbook authority. Integrator merged PR #357 at
+> `evt_4gzan0nw6dqrb`, landing `origin/main @
+> 993f51e644716fc69e244be74b09ddc66fea9827`. The temporary local worktree
+> `/tmp/integrator-watchdog-pr-only` that blocked PR #357 local cleanup has been
+> removed, and the local branch was deleted.
+> Meanwhile the
+> Steward/Integrator kickoff-gate playbook update landed as PR #354 at
+> `origin/main @
+> a91e54c644956b5d8dd4f48abbf09b29cc5799e2`; Steward removed the temporary
+> worktree that had blocked Integrator's local branch cleanup.
+>
+> Release anchors:
+>
+> - NC16 landed `origin/main`:
+>   `337ad48fc90f42edbd193b17ad9e4117dae9408e`
+> - NC16 merge note: `evt_w1ryfxfx9c6r`
+> - NC16 Runtime retros-in handoff: `evt_3c5azh1nkk4nm`
+> - NC17 kickoff: `evt_2a8cyqnd05evk`
+> - NC17 branch:
+>   `wp/NC17-recursion-dictionaries-modules @ 337ad48fc90f42edbd193b17ad9e4117dae9408e`
+> - Runtime D0 stop: `evt_4fry98a9ajqfr`
+> - authoritative Language D0 / prerequisite handoff: `evt_ge3sh2sajbvf`
+> - Language implementer pickup: `evt_52wvcp1rx236p`
+> - Language prerequisite handoff:
+>   `evt_32j0zv40ydsyj`
+> - Language prerequisite exact head:
+>   `6b50c9711a0878fd0221a13a83b1a03f23705ae4`
+> - Language QA approval: `evt_6c4g2dxm57s8j`
+> - Runtime consumer approval / D1 handoff: `evt_3b4jms57dazd5`
+> - Runtime implementer pickup: `evt_741ybrpvfvhd1`
+> - Runtime D1 blocked head:
+>   `cc48b17654c32e9b295b092102f576fc7021c5cb`
+> - Runtime D1 handoff on blocked head: `evt_2hjc72tfapskn`
+> - Runtime QA blocker: `evt_4f6y8nzcab1km`
+> - Runtime repair exact head:
+>   `82e955170488a6d74bb6840621876190a546e99e`
+> - Runtime repair handoff: `evt_cxf13v173af5`
+> - Runtime QA repaired-head approval: `evt_4y4vzzjf2ewa1`
+> - Architect approval: `evt_6zzbm50jtf6mx`
+> - Integrator publish/merge request: `evt_2h6ptjkwbed4h`
+> - NC17 PR #349 publish: `evt_z2yg2wtdqszd`
+> - NC17 PR #349 merge note: `evt_2h6j2pn5t7b73`
+> - NC17 landed `origin/main`:
+>   `92111c53440f56406cee007061ecd58ed2b609fc`
+> - native-executable phase docs request: `evt_2etj2ymxkhxyc`
+> - native-executable phase docs PR #350 publish: `evt_2q41yfvxm0v0q`
+> - native-executable phase docs PR #350 merge note: `evt_mxxmr2zbycde`
+> - NC18 base / pre-merge `origin/main`:
+>   `75ad06c98a6f81fb5358ca935267dba1630b8131`
+> - NC17 Runtime QA retro: `evt_5z75m3qkthrd`
+> - NC17 Runtime implementer retro: `evt_fw6dtdkdy5ah`
+> - NC17 Runtime leader retro: `evt_7jfpbb2dmc7w5`
+> - NC17 Runtime retros-in closeout: `evt_3tkd2jnzrttmn`
+> - NC17 Language QA retro: `evt_76qca5yf30hbf`
+> - NC17 Language implementer retro: `evt_13c6vvvprxvsk`
+> - NC17 Language leader retro: `evt_4ann2mmzepswx`
+> - NC17 Language retros-in closeout: `evt_1m9pvhe4n2hf4`
+> - NC17 closeout nudge to Runtime/Language leaders: `evt_4g3mwe2wczhb0`
+> - NC18 branch:
+>   `wp/NC18-effects-foreign-boundary-ir @ 75ad06c98a6f81fb5358ca935267dba1630b8131`
+> - NC18 Runtime kickoff: `evt_685da6h6fyz7z`
+> - NC18 Runtime D0: `evt_25xs7asgda33b`
+> - NC18 Runtime implementer pickup: `evt_3qg24529kfjet`
+> - NC18 Runtime D1 exact head:
+>   `9828bb876eef6f6879d5311b9aac9a58ffa6ee20`
+> - NC18 Runtime D1 Verify handoff: `evt_399zggw83za78`
+> - NC18 Verify blocker: `evt_2x8dtf84net4g`
+> - NC18 Runtime implementer repair pickup: `evt_2qsw785p96ps5`
+> - NC18 Runtime scope correction / Language review request:
+>   `evt_5nwame2yzcx0q`
+> - NC18 Language cross-lane approval: `evt_388ca8m3jt2ck`
+> - NC18 Runtime corrected Verify re-review request: `evt_15m8yqrgydpa4`
+> - NC18 repair-path pause: `evt_h0vnj632qq4c`
+> - NC18 report-honesty blocker: `evt_4b0em7kddz52d`
+> - NC18 Runtime report-honesty repair route: `evt_60yqd12g1vqtp`
+> - NC18 Runtime report-honesty repair pickup: `evt_1d7qnefz0fka8`
+> - NC18 Runtime report-honesty repair handoff: `evt_6wwqpq0zcekry`
+> - NC18 repaired exact head:
+>   `2336c345227361cf4ed476e099de4d3882113b92`
+> - NC18 Verify repair approval for Runtime QA: `evt_6fbf304ychq9g`
+> - NC18 Runtime QA pickup on `2336c345`: `evt_37wafsr6bgg8p`
+> - NC18 Runtime QA blocker on `2336c345`: `evt_60jvt81kfzpy7`
+> - NC18 Runtime QA blocker repair pickup: `evt_2jw00qdwq398e`
+> - NC18 Runtime QA blocker repair handoff: `evt_x8mwj4yzsaqy`
+> - NC18 current repaired exact head:
+>   `c278922aca0f7e190e58b7b63aa77bae08fe97a8`
+> - NC18 Runtime QA approval on `c278922`: `evt_59j6w1ykhmm14`
+> - NC18 Architect review request: `evt_2afjahrb20maz`
+> - NC18 Architect pickup: `evt_1y8pk1fjbh17y`
+> - NC18 Architect approval: `evt_2j0zyxc266hrz`
+> - NC18 Integrator publish/merge request: `evt_1svc0taf9wfhr`
+> - NC18 PR #351 publish: `evt_5hen4ppcf4f7a`
+> - NC18 PR #351: https://github.com/ken-topos/ken/pull/351
+> - NC18 PR #351 merge note: `evt_4rmatrej46hdr`
+> - NC18 landed `origin/main`:
+>   `23b078e62741463d37b4eac070a8ee6b82ec94ed`
+> - NC18 Runtime closeout request: `evt_55gg7fk0khnj2`
+> - NC18 Runtime closeout opened: `evt_2wxzkmz38kbed`
+> - NC18 Runtime QA retro: `evt_3b2feky2zhm7c`
+> - NC18 Runtime implementer retro: `evt_56wgz8c9m6mjy`
+> - NC18 Runtime leader closeout nudge: `evt_7t1d6ykf8stnw`
+> - NC18 Runtime leader retro: `evt_4h2y2ge23p29f`
+> - NC18 Runtime retros-in / NC19 gate clear: `evt_66670fmcnb2na`
+> - NC19 kickoff: `evt_42yp9xnaktyyw`
+> - NC19 base:
+>   `origin/main @ 23b078e62741463d37b4eac070a8ee6b82ec94ed`
+> - NC19 branch to create:
+>   `wp/NC19-executable-artifact-contract`
+> - FFI/effect subprogram docs branch:
+>   `wp/compiler-ffi-effects-subprogram @ dc6bb65ccad655ced3459033aada942f92f16f16`
+> - FFI/effect subprogram bad-SHA Architect request:
+>   `evt_2cgxycv7vw1x4`
+> - FFI/effect subprogram Architect identity blocker:
+>   `evt_2h8j3qfwq18vt`
+> - FFI/effect subprogram corrected Architect review request:
+>   `evt_7y4m6rncdmmbk`
+> - FFI/effect subprogram Architect pickup on corrected head:
+>   `evt_51xd771jcg9b8`
+> - FFI/effect subprogram Architect approval:
+>   `evt_3fe5px1kyh9xs`
+> - FFI/effect subprogram Integrator merge request:
+>   `evt_7qmbft9xzh0b9`
+> - FFI/effect subprogram PR #352 publish:
+>   `evt_1n415rbe25px2`
+> - FFI/effect subprogram PR #352:
+>   https://github.com/ken-topos/ken/pull/352
+> - FFI/effect subprogram PR #352 merge note:
+>   `evt_5esfebb8zb0w4`
+> - FFI/effect subprogram landed `origin/main`:
+>   `6a2ef72ae346ab0ccc9faa37d85d1743985dcd95`
+> - FFI/effect subprogram worktree cleanup unblock:
+>   `evt_6dym2vf27nav9`
+> - FFI/effect subprogram local cleanup complete:
+>   `evt_11jcgrw0xm5s5`
+> - NC19 Runtime D0 input: `evt_50d2mfm7jwaxb`
+> - NC19 Verify D0 input: `evt_13ccv33rrt506`
+> - NC19 spec-author D0 lock: `evt_7fp0c3mk80`
+> - NC19 conformance D0 lock: `evt_767ynvfnxmtch`
+> - NC19 spec-first D1 handoff: `evt_3qyhtddb4xj78`
+> - NC19 spec-first exact head:
+>   `979902465e307bb428daefff7ae2e7a9a8d9b8ec`
+> - NC19 spec-first conformance approval: `evt_7vx8jssecr6nn`
+> - NC19 Spec D1 close / Runtime handoff: `evt_1zgbvsth83fsb`
+> - NC19 Runtime D1 handoff: `evt_1ssx2ytr4at62`
+> - NC19 Runtime implementer pickup: `evt_389vje5ygrmp5`
+> - NC19 branch occupancy request: `evt_5ggxpkj2pv03q`
+> - NC19 branch released by spec-leader: `evt_5pry3j00tpg4x`
+> - NC19 Runtime D1 first handoff:
+>   `evt_4rstjv40d45mv`
+> - NC19 Runtime D1 blocked head:
+>   `9989876bbf8d73dd97b1c34727cafee6f3754b7e`
+> - NC19 Verify blocker on `9989876`: `evt_7c6m72zj5bhz`
+> - NC19 Runtime repair request: `evt_5ymdpseexn0wf`
+> - NC19 Runtime repair pickup: `evt_70e736jx921zh`
+> - NC19 Runtime repair handoff:
+>   `evt_36xqndawgfcga`
+> - NC19 repaired exact head:
+>   `7cc897cb0cfa37e57489aff7d5b8ee33414213cc`
+> - NC19 Verify repaired-head approval: `evt_60c6wapzwyj27`
+> - NC19 Runtime QA pickup on `7cc897c`: `evt_53fkm1r1gr13a`
+> - NC19 Runtime QA approval on `7cc897c`: `evt_5sbxycrrdx7vc`
+> - NC19 Architect review request on `7cc897c`: `evt_66nwzev3zws6c`
+> - NC19 Architect pickup on `7cc897c`: `evt_6ykeqp4x6ehmz`
+> - NC19 Architect blocker on `7cc897c`: `evt_2rqp4c2dt9gva`
+> - NC19 Architect-blocker repair request: `evt_7pg0ptw91dvsq`
+> - NC19 Architect-blocker repair pickup: `evt_7h8sew59kf55d`
+> - NC19 Architect-blocker repair handoff: `evt_5dddg7fjr24t`
+> - NC19 final approved exact head:
+>   `001d295f180b4051401ebd522028a40b500c8942`
+> - NC19 Runtime QA approval on final head: `evt_1s4w6735jqgs0`
+> - NC19 Architect final pickup: `evt_2xekbab9dhfms`
+> - NC19 Architect final approval: `evt_3dhatmz9fk1p7`
+> - NC19 Integrator publish/merge request: `evt_1sy957nd4k8b7`
+> - NC19 PR #353 publish: `evt_14px4mb1dxq51`
+> - NC19 PR #353:
+>   https://github.com/ken-topos/ken/pull/353
+> - NC19 PR #353 merge note: `evt_4xct5vy4yfdj4`
+> - NC19 landed `origin/main`:
+>   `497716a8a9518fa1e4edae9c4b1f7d7f46f235e8`
+> - NC19 Runtime closeout nudge: `evt_1j1n0cm1c7mcz`
+> - NC19 Runtime closeout opened: `evt_6p2m85393a0ca`
+> - NC19 Runtime implementer retro: `evt_4t14nqd60x79k`
+> - NC19 Runtime QA retro: `evt_3d2af9ct2390g`
+> - NC19 Runtime leader closeout nudge: `evt_27revgc9cxb6s`
+> - NC19 Runtime leader retro: `evt_70kf0bvqew2pd`
+> - NC19 Runtime retros-in closeout: `evt_bxppcc6cdmtm`
+> - NC20 kickoff: `evt_424rx38s8sj5m`
+> - NC20 Runtime D0 read: `evt_46q7v3qb6j86e`
+> - NC20 Language D0 / Language D1 route: `evt_5dy9eqcad55ay`
+> - NC20 Language implementer pickup: `evt_b60qvvc8ddr7`
+> - Integrator auth stall: `evt_1wepnbhr9catp`
+> - Integrator auth restored: `evt_2q2txm67x00e4`
+> - NC20 Language exact-head handoff: `evt_3fn43smb83pde`
+> - NC20 Language exact head:
+>   `6cd43ff4489dc9b833939768efafd957bea8a61c`
+> - NC20 Language QA pickup: `evt_6m7mx1mggpg4r`
+> - NC20 Language QA approval: `evt_2fgay0m882k9w`
+> - NC20 Language close / Runtime handoff: `evt_3v81q516yt71b`
+> - NC20 Runtime D1 open: `evt_39tct5yyqy27`
+> - NC20 Runtime implementer pickup: `evt_36pyd9sz60vyj`
+> - NC20 Runtime initial D1 handoff: `evt_76kryxk3gfx9j`
+> - NC20 Runtime initial D1 head:
+>   `3f67bb2b98831a8cb8b43a5db58e1913a6f8ac57`
+> - NC20 Runtime QA blocker: `evt_6bfw872asv2a9`
+> - NC20 Runtime blocker repair pickup: `evt_2ty8vt81w5mae`
+> - NC20 Runtime repair handoff: `evt_7m50wdv75eckn`
+> - NC20 Runtime repaired exact head:
+>   `3df7acf2d235fe660bd7c67e9078aba7b59a9945`
+> - NC20 Runtime QA repaired-head approval: `evt_5wtrzbc0b3h1d`
+> - NC20 Architect review request: `evt_287452h6pjxbg`
+> - NC20 Architect exact-head approval: `evt_2b77037jzddh3`
+> - NC20 Integrator merge request: `evt_20fna4c7xsbvb`
+> - NC20 integration PR: #355
+> - NC20 PR #355 merge note: `evt_2eevt6nyb5174`
+> - NC20 landed `origin/main`:
+>   `81015b6742bcb290c0c3e112590ddc70e2c8965d`
+> - NC20 Runtime retros nudge: `evt_5re6tfh64r2mb`
+> - NC20 Runtime QA retro: `evt_13shsws4dfdq7`
+> - NC20 Runtime implementer retro: `evt_qjwfd05xh921`
+> - NC20 Runtime leader closeout nudge: `evt_7fv110ncwyrz`
+> - NC20 Runtime leader retro: `evt_7s9cbj8d50pgm`
+> - NC20 Runtime retros-in closeout: `evt_5ryr75bmekhpb`
+> - NC21 kickoff: `evt_3jx033zykq10h`
+> - NC21 base / branch start:
+>   `origin/main @ 81015b6742bcb290c0c3e112590ddc70e2c8965d`
+> - NC21 branch to create:
+>   `wp/NC21-platform-runtime-support`
+> - NC21 brief:
+>   `docs/program/wp/NC21-platform-runtime-support.md`
+> - NC21 Runtime D0 / D1 route: `evt_12vzz6zmtq7xv`
+> - NC21 Runtime implementer pickup: `evt_579negf8drvtg`
+> - NC21 Runtime D1 initial handoff: `evt_6hs02fpm702n1`
+> - NC21 Runtime D1 initial head:
+>   `1965f4643a02825ad05d6f0f88ddb776152b64a1`
+> - NC21 Runtime QA blocker: `evt_56mq67w202gh1`
+> - NC21 first repaired head:
+>   `137dc26cddd08c6916d53a7bbc986a8ac1c89f2b`
+> - NC21 first repair handoff: `evt_j3tc8q1dtctp`
+> - NC21 Runtime QA repaired-head approval: `evt_4653f82hyf8g9`
+> - NC21 Architect review request: `evt_gmy18am7qrga`
+> - NC21 Architect blocker: `evt_42s7f5vcety8c`
+> - NC21 Architect blocker repair pickup: `evt_2bczmzwdhpgqk`
+> - NC21 current repaired head:
+>   `1ba6ad6e4d4dd36435e929b5ab19705a908a4c5e`
+> - NC21 Architect blocker repair handoff: `evt_7d5g1r6zq5rqp`
+> - NC21 Runtime QA pickup on current repaired head: `evt_3nfk3z1vcv9cb`
+> - NC21 Runtime QA approval on current repaired head: `evt_1f4rfpdmq3zxc`
+> - NC21 Architect re-review request: `evt_32g3vjknd44xs`
+> - NC21 Architect re-review pickup: `evt_310367j6tgjzk`
+> - NC21 Architect re-review approval: `evt_7m3afp5nb3s77`
+> - NC21 Integrator merge request: `evt_5z2c0n2wmev8e`
+> - NC21 PR #356 merge note: `evt_s4vwq5k6ejk7`
+> - NC21 landed `origin/main`:
+>   `e7ca278464983e1886f48d265fb321b09f2b8b66`
+> - NC21 Runtime closeout request: `evt_74b0gb52qwyjp`
+> - NC21 Runtime retro call opened: `evt_6je4y873hnxf8`
+> - NC21 Runtime implementer retro: `evt_49a3vpe3p6gsq`
+> - NC21 Runtime QA retro: `evt_5c5g16xt1g9c2`
+> - NC21 Runtime leader closeout nudge: `evt_6d7xjsqbwegyk`
+> - NC21 Runtime leader retro: `evt_12805d930jjg7`
+> - NC21 Runtime retros-in closeout: `evt_5s80yxn15p796`
+> - NC22 next release candidate:
+>   `wp/NC22-broad-cranelift-lowering`
+> - NC22 kickoff: `evt_6nnwbsapywqvq`
+> - NC22 kickoff base:
+>   `origin/main @ 993f51e644716fc69e244be74b09ddc66fea9827`
+> - NC22 compact gate:
+>   Runtime leader / implementer / QA and Integrator compacted before kickoff
+> - NC22 Runtime D0 / D1 route: `evt_4scj1evnr9bbw`
+> - NC22 Runtime implementer pickup: `evt_5jbecrzpxp9jt`
+> - NC22 Runtime D1 handoff: `evt_2bynw8badaf6v`
+> - NC22 Runtime D1 implementer head:
+>   `fc1bf57a1cd4ff0f85426af82def70d06a0f8e67`
+> - NC22 Runtime QA pickup: `evt_z70xtkghqbd6`
+> - NC22 Runtime QA approval: `evt_1z8g4htchsce2`
+> - NC22 Runtime QA reviewed head:
+>   `01bd7e4d7ebaaaf93f12eeb08c539845e34c2cf1`
+> - NC22 Architect review request: `evt_6yh959ygsr35d`
+> - NC22 Architect pickup: `evt_1nvfnm9kxr6w0`
+> - NC22 Architect approval: `evt_pm35388j1mv9`
+> - NC22 Integrator merge request: `evt_3e689w5xpzvtj`
+> - NC22 PR #358 merge note: `evt_5z6m4ccet7ret`
+> - NC22 landed `origin/main`:
+>   `89fb35333c34a8fdfb1db8a097039e0f0e091d3e`
+> - NC22 Runtime closeout request: `evt_57m6gn4vc3hy8`
+> - NC22 Runtime retro call opened: `evt_5bhrxr6eqhk4r`
+> - NC22 Runtime implementer retro: `evt_ggqve11hkavn`
+> - NC22 Runtime QA retro: `evt_4jhmn257jk42g`
+> - NC22 Runtime leader closeout nudge: `evt_3jjvz6erjebdq`
+> - NC22 Runtime leader retro: `evt_3wm2xqmxazkhf`
+> - NC22 Runtime retros-in closeout: `evt_7x522y40ktaa9`
+> - NC23 branch:
+>   `wp/NC23-object-linker-packaging @ 89fb35333c34a8fdfb1db8a097039e0f0e091d3e`
+> - NC23 kickoff: `evt_2zqbrf6fm7ks2`
+> - NC23 compact gate:
+>   Runtime leader / implementer / QA and Integrator compacted before kickoff
+> - NC23 Runtime D0 / D1 route: `evt_92apm2kpcsbt`
+> - NC23 Runtime implementer pickup: `evt_33fgggpx6pxkb`
+> - NC23 Runtime D1 handoff: `evt_2csqn9rbvs119`
+> - NC23 Runtime D1 head:
+>   `f0fb6fc0aea40278a0a82800bbf0c613c3b5e55a`
+> - NC23 Runtime QA pickup: `evt_n4r6xhvsgx0`
+> - NC23 Runtime QA original approval: `evt_4j2we2ct12na0`
+> - NC23 Architect blocker on original head: `evt_sbwdg4bpyyvr`
+> - NC23 first repaired head:
+>   `886caa0e36ce79e05127600033d2a7101dd99c05`
+> - NC23 first repair handoff: `evt_564yaadjdmbwv`
+> - NC23 Runtime QA approval on first repair: `evt_7pewv2zwwvy9r`
+> - NC23 Architect blocker on first repair: `evt_4fnrqxtvyxj8k`
+> - NC23 follow-up repaired head:
+>   `39f15aff53c169816e3a0352811a2cdac3b45ea8`
+> - NC23 follow-up repair handoff: `evt_5d1wgb9d4t56e`
+> - NC23 Runtime QA pickup on follow-up repair: `evt_54chk6p2q2hx8`
+> - NC23 final QA-reviewed head:
+>   `0de8da17c33a94e63765f1980cc2016af07b537f`
+> - NC23 Runtime QA approval on final reviewed head: `evt_z5pftpk5tpwx`
+> - NC23 Architect final re-review request: `evt_3p2m44m3stft7`
+> - NC23 Architect pickup on final reviewed head: `evt_57575d50snqx8`
+> - NC23 Architect final approval: `evt_3r4je7p1mvdb2`
+> - NC23 Integrator merge request: `evt_684gsg56y96w2`
+> - NC23 PR #359 merge note: `evt_7tqkmp0aac3d1`
+> - NC23 landed `origin/main`:
+>   `9f1516d21210349aeb58d4f5708da946ce2771e5`
+> - NC23 Runtime closeout request: `evt_6qy6et1w0jcpe`
+> - NC23 Runtime closeout opened: `evt_3jm4pr7rfqxcj`
+> - NC23 Runtime QA retro: `evt_3gjc1g1yr2yfz`
+> - NC23 Runtime implementer retro: `evt_pg4sgdzg4qkw`
+> - NC23 Runtime leader closeout nudge: `evt_g40ddff7vg9h`
+> - NC23 Runtime leader retro: `evt_5snaem83kc6bf`
+> - NC23 Runtime retros-in closeout: `evt_400cgsmz243ez`
+> - NC24 branch:
+>   `wp/NC24-native-execution-differential-suite @
+>   9f1516d21210349aeb58d4f5708da946ce2771e5`
+> - NC24 compact gate:
+>   Runtime leader / implementer / QA, Verify leader / implementer / QA, and
+>   Integrator compacted before kickoff
+> - NC24 kickoff / joint D0 request: `evt_25va679g44b1e`
+> - Integrator watchdog PR-only branch:
+>   `wp/integrator-watchdog-pr-only @ ca1dfd73149b39fc0214410558dcfbe3b4306a09`
+> - Integrator watchdog PR-only merge request: `evt_99n655qwers7`
+> - Integrator watchdog PR-only PR #357 merge note: `evt_4gzan0nw6dqrb`
+> - Integrator watchdog PR-only landed `origin/main`:
+>   `993f51e644716fc69e244be74b09ddc66fea9827`
+> - Steward/Integrator kickoff-gate PR #354 merge note: `evt_7fp35zcn0zvf5`
+> - Steward/Integrator kickoff-gate landed `origin/main`:
+>   `a91e54c644956b5d8dd4f48abbf09b29cc5799e2`
+> - NC20 base / branch start:
+>   `origin/main @ 497716a8a9518fa1e4edae9c4b1f7d7f46f235e8`
+> - NC20 branch to create:
+>   `wp/NC20-executable-entrypoint-packaging`
+> - brief: `docs/program/wp/NC17-recursion-dictionaries-modules.md`
+> - NC18 brief: `docs/program/wp/NC18-effects-foreign-boundary-ir.md`
+> - NC20 brief:
+>   `docs/program/wp/NC20-executable-entrypoint-packaging.md`
+> - program frame: `docs/program/08-compiler-continuation.md`
+>
+> Objective:
+>
+> - support whole-package executable targets that rely on recursive
+>   declarations, typeclass dictionaries, module/package references, and
+>   imported checked-core dependencies.
+>
+> Joint D0 / prerequisite result:
+>
+> - NC17 was not buildable as a Runtime D1 from landed NC16.
+> - Language prerequisite head `6b50c971` adds package-authoritative
+>   `RecursiveDeclarationCall`, `ImportedDeclarationCall`, and
+>   `DictionaryConstruction` body-view terms.
+> - Imported calls bind through `dependency_declaration_refs` plus matching
+>   `dependency_semantic_hashes`; no module/path-string authority or source
+>   fallback.
+> - Dictionary executable fields are explicit through
+>   `ClassInstanceMetadata.runtime_fields`; law/proof fields stay erased and
+>   report-visible.
+> - Erasure still rejects the new producer terms with explicit unsupported
+>   lanes, so Runtime remains the first execution-path consumer.
+>
+> Runtime D1 result:
+>
+> - Runtime erasure consumes `RecursiveDeclarationCall`,
+>   `ImportedDeclarationCall`, and `DictionaryConstruction`.
+> - Runtime IR/evaluator support now covers supported recursive calls,
+>   dependency-backed declaration references, and executable dictionary runtime
+>   fields.
+> - Runtime QA blocked the first D1 head on imported declaration lowerability:
+>   exact dependency seed identity was not enough when package lowerability
+>   metadata marked the imported symbol unsupported.
+> - Repair head `82e9551` re-checks imported declaration lowerability in
+>   erasure and runtime preflight, then Runtime QA and Architect approved it.
+>
+> Guardrails:
+>
+> - no kernel/import/coherence/orphan-rule weakening.
+> - no backend/native/linker/FFI widening.
+> - no source fallback, private metadata inference, or path-string semantic
+>   authority.
+>
+> Pre-handoff gate:
+>
+> - NC16 Runtime closeout complete: `evt_3c5azh1nkk4nm`
+> - Language leader, implementer, and QA panes showed `Context compacted`
+> - Runtime leader, implementer, and QA panes showed `Context compacted`
+> - Before NC18 release, Runtime leader, implementer, and QA panes again showed
+>   `Context compacted`.
+>
+> NC18 current state:
+>
+> - Runtime D0 classified NC18 as buildable directly as Runtime-owned D1; no
+>   Language or Kernel prerequisite split is needed.
+> - Runtime D1 lowers effect/foreign metadata targets to explicit
+>   `RuntimeDeclarationKind::EffectBoundary` declarations, preserves
+>   effect/capability/runtime-check/foreign facts through runtime metadata and
+>   audit surfaces, and reports supported vs unsupported vs comparison
+>   unavailable lanes without host-effect execution.
+> - D1 validation reported NC18 7/7, NC5 15/15, NC12 10/10, NC13-NC18
+>   regression set, runtime lib 71/71, elaborator lib 66/66, and clean
+>   `git diff --check HEAD~1..HEAD`.
+> - Verify blocked exact head `9828bb8` because the real cumulative diff is not
+>   the Runtime-only surface claimed by D0 / routing. The diff includes
+>   `crates/ken-elaborator/src/erasure.rs`,
+>   `crates/ken-elaborator/tests/nc18_effects_foreign_boundary_ir.rs`,
+>   `crates/ken-elaborator/tests/nc5_erasure_runtime_ir.rs`, and
+>   `crates/ken-runtime/src/runtime_ir_evaluator.rs`.
+> - The blocker is boundary/scope, not a semantic approval failure: erasure now
+>   removes the prior foreign-boundary rejection and lowers those targets into
+>   explicit `RuntimeDeclarationKind::EffectBoundary` declarations. Verify says
+>   Runtime must either reclassify and route the producer/lowering seam review
+>   explicitly, or repair back to the originally routed Runtime-only surface.
+> - Runtime accepted the blocker and corrected the routing record: the head is
+>   a cross-lane elaborator/runtime lowering seam, not the narrower Runtime-only
+>   evaluator/report slice first claimed.
+> - Language approved the exact-head boundary question at `evt_388ca8m3jt2ck`:
+>   the erasure-side change consumes already-landed `effects_foreign_metadata`
+>   authority only, adds no checked-core schema/body-view/source authority, and
+>   does not require a Language prerequisite split.
+> - Runtime re-opened Verify review on exact head `9828bb8` with corrected
+>   four-file cumulative scope at `evt_15m8yqrgydpa4`.
+> - Steward paused the earlier Runtime-only repair path at `evt_h0vnj632qq4c`
+>   so the branch does not move under Verify unless Verify explicitly asks for
+>   the narrowed repair.
+> - Verify re-opened the review and blocked on report honesty at
+>   `evt_4b0em7kddz52d`. The evaluator path applies
+>   `reject_effect_foreign_metadata_inconsistency(...)`, but
+>   `summarize_runtime_ir_program(...)` does not apply the same authority
+>   consistency rule before assigning `comparison_unavailable_targets`.
+> - Required repair: stale or missing effect/foreign authority lanes
+>   (`effects`, `capabilities`, `runtime_checks`, and relevant package
+>   aggregates) must classify as unsupported/blocking report entries, not as
+>   comparison-unavailable; add focused summary-path regressions for the existing
+>   missing runtime-check and stale capability cases.
+> - Runtime implementer parked the earlier narrowed-scope WIP after Steward's
+>   pause and is now working the new report-honesty repair on top of the
+>   corrected four-file lineage.
+> - Runtime leader accepted the blocker and routed the focused repair at
+>   `evt_60yqd12g1vqtp`; Runtime implementer picked it up at
+>   `evt_1d7qnefz0fka8`.
+> - Runtime implementer handed back repaired head `2336c345` at
+>   `evt_6wwqpq0zcekry`. Repair diff from blocked `9828bb8` is exactly
+>   `crates/ken-runtime/src/runtime_ir_evaluator.rs` and
+>   `crates/ken-elaborator/tests/nc18_effects_foreign_boundary_ir.rs`;
+>   cumulative accepted scope vs released base remains the four reclassified
+>   files.
+> - Verify approved the repaired exact head for Runtime QA at
+>   `evt_6fbf304ychq9g`. Verify checked that `summarize_runtime_ir_program(...)`
+>   now applies the same effect/foreign authority-consistency rule before
+>   assigning `comparison_unavailable_targets`; stale/missing authority lanes now
+>   classify into `unsupported_targets` and native-phase blockers.
+> - Runtime QA blocked `2336c345` because `summarize_runtime_ir_program(...)`
+>   could still classify a transparent declaration body containing
+>   `RuntimeExpr::Effect` as `supported_runtime_targets` and make the native
+>   phase ready, while evaluator execution rejects `RuntimeExpr::Effect`.
+> - Runtime implementer repaired that blocker at `c278922`. The latest repair
+>   diff from QA-blocked `2336c345` is exactly
+>   `crates/ken-runtime/src/runtime_ir_evaluator.rs` and
+>   `crates/ken-elaborator/tests/nc18_effects_foreign_boundary_ir.rs`.
+> - Runtime QA approved `c278922` at `evt_59j6w1ykhmm14`. The checked regression
+>   `transparent_effect_body_blocks_supported_runtime_and_native_ready_report`
+>   proves a transparent effect body is not supported, not
+>   comparison-unavailable, blocks the native gate, and preflight rejects before
+>   runtime success.
+> - Runtime leader routed `c278922` to Architect at `evt_2afjahrb20maz`;
+>   Architect picked it up at `evt_1y8pk1fjbh17y` and approved the cumulative
+>   four-file NC18 surface for integration at `evt_2j0zyxc266hrz`.
+> - Runtime leader sent the Integrator publish/merge request at
+>   `evt_1svc0taf9wfhr`; Integrator published the exact approved head as PR
+>   #351 at `evt_5hen4ppcf4f7a`.
+> - Integrator merged PR #351 at `evt_4rmatrej46hdr`; landed `origin/main` is
+>   `23b078e62741463d37b4eac070a8ee6b82ec94ed`, all required checks were green,
+>   and both remote/local `wp/NC18-effects-foreign-boundary-ir` branch cleanup
+>   are complete.
+> - Runtime QA posted its §10 retro at `evt_3b2feky2zhm7c`; Runtime implementer
+>   posted its §10 retro at `evt_56wgz8c9m6mjy`.
+> - Steward nudged Runtime leader at `evt_7t1d6ykf8stnw` because both member
+>   retros are in and the final gate statement is now the required routing step.
+> - Runtime leader posted the coordination retro at `evt_4h2y2ge23p29f` and
+>   the retros-in / final gate statement at `evt_66670fmcnb2na`: the landed
+>   NC10-NC18 report clears the starter Ken-only executable subset for NC19.
+>   Pure supported `RuntimeProgram` artifacts may proceed; effect/foreign work
+>   remains explicitly outside the starter executable set rather than blocking
+>   NC19.
+> - Steward compacted Spec leader/author/CV, Runtime leader/implementer/QA, and
+>   Verify leader before the handoff, then kicked off NC19 at
+>   `evt_42yp9xnaktyyw`.
+> - Steward created docs-only branch `wp/compiler-ffi-effects-subprogram` at
+>   `dc6bb65ccad655ced3459033aada942f92f16f16`. The change adds NC46-NC54
+>   FFI/effect enablement after NC37-NC45 native library artifact generation and
+>   before self-hosting, with non-compiler prerequisites for capability/effect
+>   authority, policy/admission, stable ABI floor, runtime ownership, package
+>   metadata, sandbox/host declarations, and trust-report lanes. Architect review
+>   was first requested with a bad SHA at `evt_2cgxycv7vw1x4`; Architect blocked
+>   on identity at `evt_2h8j3qfwq18vt`; Steward corrected the request at
+>   `evt_7y4m6rncdmmbk`; Architect picked up the corrected head at
+>   `evt_51xd771jcg9b8`, approved at `evt_3fe5px1kyh9xs`, and Steward routed
+>   Integrator merge at `evt_7qmbft9xzh0b9`. Integrator published PR #352 at
+>   `evt_1n415rbe25px2` and merged it at `evt_5esfebb8zb0w4`, landing
+>   `origin/main @ 6a2ef72ae346ab0ccc9faa37d85d1743985dcd95`. Steward removed
+>   the clean temp worktree at `evt_6dym2vf27nav9`, and Integrator completed
+>   local cleanup at `evt_11jcgrw0xm5s5`.
+> - NC19 joint D0 closed after Runtime, Verify, spec-author, and conformance
+>   locks. The agreed order is Spec-first D1 on the shared branch for
+>   `spec/40-runtime/48-executable-artifact-contract.md` and pointer updates,
+>   then Runtime materialization, then Verify exact-head review before Runtime
+>   QA. Spec-author handed off exact D1 head
+>   `979902465e307bb428daefff7ae2e7a9a8d9b8ec` for conformance review at
+>   `evt_3qyhtddb4xj78`; conformance approved it at `evt_7vx8jssecr6nn`;
+>   spec-leader closed Spec D1 and handed to Runtime at `evt_1zgbvsth83fsb`.
+>   Runtime leader handed D1 to Runtime implementer at `evt_1ssx2ytr4at62`;
+>   Runtime implementer picked up at `evt_389vje5ygrmp5`. A branch occupancy
+>   blocker was resolved by spec-leader at `evt_5pry3j00tpg4x`.
+> - Runtime implementer handed off first NC19 Runtime D1 head
+>   `9989876bbf8d73dd97b1c34727cafee6f3754b7e` at `evt_4rstjv40d45mv`.
+>   Verify blocked it at `evt_7c6m72zj5bhz` on two report-honesty issues:
+>   `Debug`-based contract/report hashes instead of explicit canonical field
+>   encodings, and acceptance of `Available` native/toolchain facts with
+>   negative evidence lanes. Runtime repaired on the same branch at exact head
+>   `7cc897cb0cfa37e57489aff7d5b8ee33414213cc`; Verify approved that repaired
+>   head for Runtime QA at `evt_60c6wapzwyj27`; Runtime QA picked up at
+>   `evt_53fkm1r1gr13a` and approved at `evt_5sbxycrrdx7vc`.
+> - Architect blocked `7cc897c` at `evt_2rqp4c2dt9gva` because malformed
+>   available/unsupported evidence strings could validate after recomputing the
+>   contract hash. Runtime repaired at final exact head
+>   `001d295f180b4051401ebd522028a40b500c8942`; Runtime QA approved at
+>   `evt_1s4w6735jqgs0`; Architect approved at `evt_3dhatmz9fk1p7`.
+>   Runtime leader routed Integrator at `evt_1sy957nd4k8b7`; Integrator opened
+>   PR #353 at `evt_14px4mb1dxq51` and merged it at `evt_4xct5vy4yfdj4`,
+>   landing `origin/main @ 497716a8a9518fa1e4edae9c4b1f7d7f46f235e8`.
+> - Watchdog check at 04:14 UTC found no NC19 events after the PR #353 merge
+>   note and Runtime leader's pane idle on the pre-merge handoff. Steward
+>   nudged Runtime leader at `evt_1j1n0cm1c7mcz` to collect Runtime §10 retros
+>   and post the NC19 retros-in closeout, or hand off the missing-retro state.
+> - Runtime leader opened NC19 closeout at `evt_6p2m85393a0ca`, requesting
+>   Runtime implementer and Runtime QA §10 retros in-thread. Runtime leader will
+>   post the coordination retro and Runtime retros-in handoff once both member
+>   retros land.
+> - Runtime implementer retro landed at `evt_4t14nqd60x79k`, and Runtime QA
+>   retro landed at `evt_3d2af9ct2390g`. Runtime leader has the required member
+>   inputs for the final coordination retro and Runtime retros-in handoff.
+> - Watchdog check at 04:32 UTC found no later NC19 events and Runtime leader
+>   idle on the closeout-open screen. Steward nudged Runtime leader at
+>   `evt_27revgc9cxb6s` for the Runtime leader coordination retro and Runtime
+>   retros-in closeout.
+> - Runtime leader posted the coordination retro at `evt_70kf0bvqew2pd` and
+>   the Runtime retros-in closeout at `evt_bxppcc6cdmtm`. NC19 is now merged
+>   and §10-closed.
+> - Steward verified the NC20 brief on `origin/main` and confirmed no local or
+>   remote NC20 branch exists yet. Steward compacted Language
+>   leader/implementer/QA and Runtime leader/implementer/QA; all six panes
+>   showed `Context compacted`.
+> - Steward released NC20 at `evt_424rx38s8sj5m` to Language and Runtime
+>   leaders for joint D0 owner-boundary classification. The release asks them to
+>   decide whether entry-point selection/package metadata needs a Language
+>   prerequisite, Runtime direct D1, or a split before implementation.
+> - Runtime D0 at `evt_46q7v3qb6j86e` and Language D0 at
+>   `evt_5dy9eqcad55ay` agree on a Language-first prerequisite. The required
+>   D1 outcome is a deterministic executable entrypoint packaging surface bound
+>   to exact checked-core package identity, stable target symbol, and closure
+>   identity, with closed-entry/dependency/runtime-support/argument/result/trap
+>   facts and fail-closed lanes for missing, ambiguous, non-closed,
+>   non-executable, unsupported, or unresolved targets.
+> - Language implementer picked up NC20 D1 at `evt_b60qvvc8ddr7`, explicitly
+>   preserving the narrow Language producer/package seam and excluding runtime
+>   backend, object, linker, and native execution work.
+> - Integrator reported a GitHub CLI auth stall at `evt_1wepnbhr9catp`;
+>   Steward verified there were no open PRs through public REST and routed a
+>   watch-only fallback at `evt_s0r67088zefz`. Integrator restored GitHub auth
+>   at `evt_2q2txm67x00e4`, so normal publish/check/merge handling is available
+>   again.
+> - Language implementer handed off exact head `6cd43ff` at
+>   `evt_3fn43smb83pde`. The cumulative scope is one file,
+>   `crates/ken-elaborator/src/compiler_driver.rs`; Language QA picked up exact
+>   head review at `evt_6m7mx1mggpg4r` and approved at
+>   `evt_2fgay0m882k9w`.
+> - Language leader closed the Language prerequisite at `evt_3v81q516yt71b`,
+>   with cumulative scope still exactly `compiler_driver.rs`, and handed the
+>   branch to Runtime. Runtime leader opened Runtime D1 at
+>   `evt_39tct5yyqy27` on the exact Language-approved head.
+> - Runtime implementer handed off initial Runtime D1 head `3f67bb2` at
+>   `evt_76kryxk3gfx9j`; cumulative scope was `compiler_driver.rs`,
+>   `crates/ken-runtime/src/executable_entrypoint_packaging.rs`, and
+>   `crates/ken-runtime/src/lib.rs`.
+> - Runtime QA blocked `3f67bb2` at `evt_6bfw872asv2a9` because Runtime
+>   packaging did not validate
+>   `report_contract.target_closure_identity == closure_identity` after
+>   `metadata_identity` recomputation. Runtime repaired at `3df7acf` and
+>   Runtime QA approved the repaired head at `evt_5wtrzbc0b3h1d`.
+> - Runtime leader requested Architect exact-head review on repaired head
+>   `3df7acf2d235fe660bd7c67e9078aba7b59a9945` at `evt_287452h6pjxbg`.
+>   Architect approved that exact head at `evt_2b77037jzddh3`, and Runtime
+>   routed the publish/merge request to Integrator at `evt_20fna4c7xsbvb`.
+>   Integrator published unchanged exact head `3df7acf` as PR #355 and merged it
+>   to `origin/main @ 81015b6742bcb290c0c3e112590ddc70e2c8965d` at
+>   `evt_2eevt6nyb5174`.
+> - Runtime closeout did not appear after merge; Steward nudged Runtime leader
+>   for Runtime §10 retros-in at `evt_5re6tfh64r2mb`. Runtime QA posted its
+>   §10 retro at `evt_13shsws4dfdq7`, and Runtime implementer posted its §10
+>   retro at `evt_qjwfd05xh921`. Runtime leader did not post the leader retro /
+>   retros-in handoff after both member retros were visible, so Steward nudged
+>   Runtime leader again at `evt_7fv110ncwyrz`; Runtime leader then posted the
+>   coordination retro at `evt_7s9cbj8d50pgm` and retros-in closeout at
+>   `evt_5ryr75bmekhpb`, closing NC20.
+> - Steward compact-gated Runtime leader, Runtime implementer, Runtime QA, and
+>   Integrator before releasing NC21. NC21 `NC21-platform-runtime-support` was
+>   kicked off to Runtime at `evt_3jx033zykq10h` from `origin/main @
+>   81015b6742bcb290c0c3e112590ddc70e2c8965d`.
+> - Runtime leader opened NC21 D0 at `evt_12vzz6zmtq7xv`: no Language, Kernel,
+>   or Spec prerequisite is needed because NC21 is an internal Runtime support
+>   layer below the NC19/NC20 artifact boundary. Runtime leader routed D1
+>   directly to Runtime implementer, who picked it up at
+>   `evt_579negf8drvtg`.
+> - Runtime implementer handed off initial NC21 head
+>   `1965f4643a02825ad05d6f0f88ddb776152b64a1` at
+>   `evt_6hs02fpm702n1`; Runtime QA blocked it at
+>   `evt_56mq67w202gh1` because a support report could consume a
+>   same-artifact run report for a different declaration/example.
+> - Runtime implementer repaired the target binding at
+>   `137dc26cddd08c6916d53a7bbc986a8ac1c89f2b` and handed off at
+>   `evt_j3tc8q1dtctp`; Runtime QA approved that repaired head at
+>   `evt_4653f82hyf8g9`.
+> - Runtime leader requested Architect review at `evt_gmy18am7qrga`;
+>   Architect blocked exact head `137dc26cddd08c6916d53a7bbc986a8ac1c89f2b`
+>   at `evt_42s7f5vcety8c` because NC21 still needed embedded NC20
+>   entrypoint metadata/invariant revalidation and unique runtime-example target
+>   resolution.
+> - Runtime implementer picked up the Architect blocker at
+>   `evt_2bczmzwdhpgqk`, repaired at exact head
+>   `1ba6ad6e4d4dd36435e929b5ab19705a908a4c5e`, and handed that repair to
+>   Runtime QA at `evt_7d5g1r6zq5rqp`. Runtime QA picked up re-review at
+>   `evt_3nfk3z1vcv9cb`, approved the repair at `evt_1f4rfpdmq3zxc`, and
+>   Runtime leader routed exact head
+>   `1ba6ad6e4d4dd36435e929b5ab19705a908a4c5e` back to Architect for
+>   re-review at `evt_32g3vjknd44xs`. Architect picked up re-review at
+>   `evt_310367j6tgjzk` and approved the exact head at `evt_7m3afp5nb3s77`.
+> - Runtime leader routed the exact approved NC21 head to Integrator at
+>   `evt_5z2c0n2wmev8e`; Integrator merged PR #356 at `evt_s4vwq5k6ejk7`,
+>   landing `origin/main @ e7ca278464983e1886f48d265fb321b09f2b8b66` with all
+>   required checks green. Remote cleanup succeeded, the local branch was
+>   already absent from the Integrator worktree, and Runtime §10 closeout is the
+>   next NC21 step. Steward requested Runtime closeout at
+>   `evt_74b0gb52qwyjp`; Runtime leader opened the retro call at
+>   `evt_6je4y873hnxf8`. Runtime implementer posted its retro at
+>   `evt_49a3vpe3p6gsq`, and Runtime QA posted its retro at
+>   `evt_5c5g16xt1g9c2`. No new closeout arrived after the QA retro, and the
+>   Runtime leader pane was idle, so Steward nudged Runtime leader at
+>   `evt_6d7xjsqbwegyk`. Runtime leader posted the leader retro at
+>   `evt_12805d930jjg7` and retros-in handoff at `evt_5s80yxn15p796`, closing
+>   NC21.
+> - Steward/Integrator kickoff-gate corpus update merged via PR #354 at
+>   `evt_7fp35zcn0zvf5`, landing `origin/main @
+>   a91e54c644956b5d8dd4f48abbf09b29cc5799e2`. Steward removed the temporary
+>   `/tmp/steward-kickoff-integrator-compact` worktree that had blocked
+>   Integrator's local shared-ref cleanup; Integrator later pruned the local
+>   shared ref during its watchdog pass, so no cleanup nudge remains.
+>
+> - Steward updated the Integrator playbook so watchdog timer ticks check only
+>   GitHub/local PR state and do not scan Convo; Convo work is now explicitly
+>   mention-driven for Integrator. Integrator merged that one-file playbook
+>   update as PR #357 at `evt_4gzan0nw6dqrb`, landing
+>   `origin/main @ 993f51e644716fc69e244be74b09ddc66fea9827`. The temporary
+>   worktree `/tmp/integrator-watchdog-pr-only` has been removed and the local
+>   branch deleted, clearing the cleanup blocker noted in the merge report.
+>
+> Next Steward action: await NC24 Runtime/Verify joint D0 outcome.
+>
+> NC16 historical details:
+>
+> Watchdog note: Runtime leader picked up D0, but initially inspected the home
+> checkout filesystem and did not see the newly landed brief paths. Steward sent
+> a grounding clarification at `evt_5g1ekf0rv422d`: use `git show
+> wp/NC16-primitive-value-lowering:<path>` / the git object store, not the home
+> worktree checkout, for the NC16 brief and continuation docs.
+>
+> Runtime leader then posted a D0 stop at `evt_5aw76sazgny39`, but the stop was
+> based on the same false absence read. Steward verified with `git cat-file -e`
+> and `git ls-tree` against exact `origin/main @ 0dac131` that the NC16 brief,
+> continuation doc, `checked_core.rs`, `erasure.rs`, and
+> `runtime_ir_evaluator.rs` are all present. Steward posted correction
+> `evt_tzc2zsqh0t4v`: Language should stand down from the false prerequisite
+> handoff unless Runtime re-derives it from the object-store read; Runtime leader
+> should rerun D0 from the WP branch/object store.
+>
+> Language leader posted an initial agreement with the false stop at
+> `evt_23dwrkg4aceqs`, then stood down at `evt_708f1hxymt100` after Steward's
+> correction.
+>
+> Runtime leader then posted the corrected object-store-grounded D0 at
+> `evt_ag1mqajt0v3y`: NC16 still needs a narrow Language prerequisite, but the
+> actual gap is primitive executable body-view exposure, not file absence. The
+> broad compiler continuation seam exists on `origin/main @ 0dac131`; primitive
+> audit/partiality metadata exists, but primitive literals and primitive
+> applications are not yet executable checked-core body-view terms.
+>
+> Language leader agreed at `evt_2egvdn8096kcd`. Steward compacted the full
+> Language ring before routing: language-leader, language-implementer, and
+> language-qa panes each showed `Context compacted`. Steward routed the
+> prerequisite to Language at `evt_3p038hf82jt6m`.
+>
+> Prerequisite boundary:
+>
+> - expose primitive literals and primitive applications as
+>   package-authoritative executable checked-core body-view terms;
+> - carry stable primitive symbol identity and explicit supported /
+>   unsupported / partial-or-trap-capable classification;
+> - fail closed for stale primitive metadata, unsupported primitive names,
+>   host-dependent primitive attempts, and unjustified partial/trap forms;
+> - no kernel rule or trusted primitive additions;
+> - no Runtime IR/evaluator/backend/native/interpreter work in the prerequisite.
+>
+> Language prerequisite result:
+>
+> - exact head:
+>   `557ae560cab83e215fd13477832da17e080e972c`
+> - diff:
+>   `crates/ken-elaborator/src/checked_core.rs`,
+>   `crates/ken-elaborator/src/erasure.rs`, and
+>   `spec/40-runtime/46-checked-core-package.md`
+> - delivered package-authoritative `PrimitiveLiteral` and
+>   `PrimitiveApplication` body-view terms;
+> - primitive const decode now requires coherent stable primitive symbol,
+>   `primitive_refs`, and `primitive_metadata`;
+> - fail-closed lanes include `stale_primitive_metadata`,
+>   `unsupported_primitive_name`, `host_dependent_primitive_attempt`, and
+>   `unjustified_primitive_partiality`;
+> - erasure still rejects the new terms with explicit unsupported lanes so
+>   Runtime remains the first execution-path consumer.
+>
+> Language QA approved the exact head at `evt_7r1xc387sn1tj`. Runtime leader
+> reviewed the same exact head and approved it as closing the corrected D0
+> prerequisite at `evt_68ghc17ywnq5q`, then opened Runtime D1 to
+> runtime-implementer.
+>
+> Runtime D1 scope:
+>
+> - consume the new checked-core primitive executable body-view seam in Runtime
+>   erasure/lowering;
+> - lower supported primitive literals and primitive applications into Runtime
+>   IR;
+> - preserve stable primitive identity and explicit partiality/trap behavior in
+>   Runtime IR and reports;
+> - extend the runtime-IR evaluator/comparison path for the supported NC16
+>   primitive subset;
+> - keep unsupported or host-dependent primitives loud and package-facing before
+>   backend/native work;
+> - no raw-source fallback, interpreter scraping, Runtime-private primitive
+>   inference, backend/native/layout widening, kernel rule, or trusted primitive
+>   addition.
+>
+> Runtime implementer initially hit a thread-id posting error, resolved the
+> full NC16 thread id, reposted pickup at `evt_15jfqnh4fg46y`, checked out
+> `wp/NC16-primitive-value-lowering @ 557ae560`, and then handed off Runtime D1
+> exact head `f4aad7a6df1bd9082bbca46af67fb7a8c450cd78` at
+> `evt_1fy5are39r56r`.
+>
+> Runtime D1 changed files from the Language prerequisite head:
+>
+> - `crates/ken-elaborator/src/erasure.rs`
+> - `crates/ken-runtime/src/runtime_ir_evaluator.rs`
+> - `crates/ken-elaborator/tests/nc16_primitive_value_lowering.rs`
+>
+> Runtime QA approved the exact head at `evt_7bxyzb0k86rq3`, confirming
+> package-authoritative primitive body-view consumption, conservative durable
+> literal spelling support, explicit `RuntimePartiality` mapping, explicit trap
+> behavior, unsupported/host-dependent negative lanes, and no WP-name leakage in
+> non-test source. Architect approved the same exact head at
+> `evt_72ykamd6ye513`.
+>
+> Runtime leader routed integration at `evt_3a3cec0fzvw2r`; Integrator picked up,
+> published PR #348 at `evt_55rjwrm59rhbn`, and initially found `build + test`
+> pending while clean-room provenance, conformance suite, and path-guard were
+> green. Steward rechecked PR #348 after the watchdog tick: all four required
+> checks are green, PR #348 is still open on exact head `f4aad7a6`, and
+> `origin/main` has not advanced past `0dac131`. Steward posted the green-check
+> merge nudge at `evt_3rdscrnbpewqf`.
+>
+> Integrator merged PR #348 at `evt_w1ryfxfx9c6r`. Landed SHA is
+> `337ad48fc90f42edbd193b17ad9e4117dae9408e`; exact approved head merged was
+> `f4aad7a6df1bd9082bbca46af67fb7a8c450cd78`. Required checks were green, and
+> Integrator reported remote/local branch cleanup complete. Steward relayed the
+> merge to Runtime leader for §10 closeout at `evt_45e53pyb2cff`.
+>
+> Runtime leader opened closeout at `evt_6j6e24vntn9qt`. Runtime implementer
+> posted its §10 retro at `evt_40tv3ebgjk21s`, and Runtime QA posted its §10
+> retro at `evt_21r0zeanm2z4b`. Before the leader retro appeared, Steward
+> re-read the latest Convo tail at nudge time and posted the targeted Runtime
+> leader closeout nudge at `evt_3b7a8hejk3k4a`.
+>
+> Runtime leader then posted the leader retro at `evt_td3y4hbp36ze` and the
+> retros-in handoff at `evt_3c5azh1nkk4nm`. NC16 is closed.
+>
+> NC17 next:
+>
+> - branch: `wp/NC17-recursion-dictionaries-modules`
+> - kickoff: `evt_2a8cyqnd05evk`
+> - brief: `docs/program/wp/NC17-recursion-dictionaries-modules.md`
+> - owner: Language/Runtime joint
+> - deps: NC11 and NC13-NC16 are merged
+> - objective: support executable targets that rely on recursive declarations,
+>   typeclass dictionaries, module/package references, and imported
+>   checked-core dependencies
+> - guardrails: no termination/coherence/orphan/import weakening; no dynamic
+>   package loading; no native linking; module/package path strings are not
+>   semantic authority over checked-core dependency identity
+>
+> Pre-handoff gate:
+>
+> - NC16 Runtime closeout complete: `evt_3c5azh1nkk4nm`
+> - Language leader, implementer, and QA panes showed `Context compacted`
+> - Runtime leader, implementer, and QA panes showed `Context compacted`
+>
+> D0 route:
+>
+> - Language leader and Runtime leader should jointly classify producer/package
+>   seams vs Runtime lowering/evaluator seams before any D1 assignment.
+> - If another prerequisite is required, they should stop and name it precisely
+>   rather than infer through private metadata or source paths.
+>
+> ### NC15 CLOSED; INTEGRATOR WATCHDOG PLAYBOOK CLOSED (2026-07-07 22:47 UTC)
+>
+> `NC15-checked-core-record-sigma-view` landed via PR #343.
+>
+> Closeout anchors:
+>
+> - landed:
+>   `origin/main @ 9c755589c05046fcace996424cb3d9659cb9c19b`
+> - exact approved head:
+>   `5d07fcdc45e38a6edefac70e08e16b7efa8cfa76`
+> - merge note: `evt_4r96zvtamwq81`
+> - Language QA approval: `evt_2pqeyz79hqxcr`
+> - Runtime consumer approval: `evt_2x1yfazseb2ky`
+> - Architect approval: `evt_4s5s9fd2jsq0d`
+> - Spec/conformance approval: `evt_51wsjqfepx524`
+> - checks green after PR reopen: `build + test`, clean-room provenance,
+>   conformance suite, and path-guard
+>
+> This closes the Language-owned checked-core record/Sigma body-view
+> prerequisite that Runtime requested for NC15. Integrator cleanup is complete,
+> and there are no open integration PRs.
+>
+> Runtime D1 was reopened at `evt_jbn97pyvs3tg` in the existing NC15 thread.
+> Runtime leader picked it up at `evt_2v8r5hmeznf5j` and assigned D1 to
+> runtime-implementer at `evt_7z7feesssg2p8`.
+>
+> Steward posted a targeted pickup nudge to runtime-implementer at
+> `evt_6342tj5fvwadc` after the implementer pane showed the assignment stuck at
+> the prompt behind a malformed `/compact<channel...` input and no in-thread
+> pickup had appeared.
+>
+> The nudge cleared the pickup stall. Runtime implementer picked up at
+> `evt_7cmpkemeyy16v`, then handed off D1 at `evt_7xf662k0k9pkw`.
+>
+> Runtime D1 candidate:
+>
+> - branch: `wp/NC15-record-sigma-proof-erasure-lowering`
+> - exact head:
+>   `32c71759c455d36f49e9d708928f4ea75ceec2c9`
+> - base:
+>   `origin/main @ 9c755589c05046fcace996424cb3d9659cb9c19b`
+> - scope: `crates/ken-elaborator/src/erasure.rs` plus new
+>   `crates/ken-elaborator/tests/nc15_record_sigma_lowering.rs`
+>
+> Implementer-reported verification:
+>
+> - `rustfmt` on touched Rust files
+> - NC15 record/Sigma lowering test: 6/6
+> - adjacent NC13/NC14/NC5 integration tests: 7/7, 8/8, 15/15
+> - `ken-runtime --lib`: 71/71
+> - `ken-elaborator --lib checked_core`: 44/44
+> - NC12 runtime IR evaluator: 10/10
+> - `git diff --check HEAD~1..HEAD`
+>
+> Watchdog note: runtime-qa pane showed the NC15 review mention stuck behind a
+> malformed `/compact<channel...` prompt and no in-thread QA pickup. Steward
+> posted a targeted Runtime QA pickup nudge at `evt_2qj7sbn3pctyg`; the nudge
+> cleared the stall.
+>
+> Runtime QA approved the exact head at `evt_7j865jp07m70j`; Architect approved
+> it at `evt_4x3zzp2k2b31a`; Runtime leader handed it to Integrator at
+> `evt_2va67fdzmkvfd`.
+>
+> Integrator picked up the exact head at `evt_5rb7jdkh2xgvp`, published PR #346
+> at `evt_5e3fztkdkk0g5`, and all four required checks were green. Integrator's
+> pane hit a model-capacity interruption while processing the ready merge;
+> Steward posted a targeted merge-resume nudge at `evt_49gpajv0x8j7a`.
+>
+> NC15 Runtime lowering is now merged:
+>
+> - PR #346
+> - landed:
+>   `origin/main @ cc3fb55311788873c1c4e98169768d4bb604d881`
+> - exact approved head:
+>   `32c71759c455d36f49e9d708928f4ea75ceec2c9`
+> - merge note: `evt_6deg47kkh72h3`
+> - checks green: `build + test`, clean-room provenance, conformance suite, and
+>   path-guard
+> - cleanup complete: remote and local
+>   `wp/NC15-record-sigma-proof-erasure-lowering` deleted
+>
+> Runtime §10 retros are in; closeout complete:
+>
+> - Runtime QA retro: `evt_5eyvy2pk96w9g`
+> - Runtime implementer retro: `evt_4g8k8ptwcqzaf`
+> - Runtime leader retro: `evt_12253tewp60e1`
+> - Runtime retros-in handoff: `evt_69ddcemrydgjn`
+>
+> Integrator watchdog/playbook follow-up:
+>
+> - Steward sent Integrator concrete watchdog setup instructions at
+>   `evt_2px2hmx0xshrg`
+> - Integrator pane shows a managed private wake loop is now running against
+>   `moot-integrator` every 480 seconds
+> - playbook branch: `wp/integrator-watchdog-setup-playbook`
+> - exact head:
+>   `fa0e0a5b0af144142d3fb3e4eaf6323c783ca72c`
+> - scope: `agent/playbooks/federation/integrator.md`
+> - merge request to Integrator: `evt_2dz6156gpeaaw`
+> - Integrator pickup: `evt_2h7hczw32e9dz`
+> - PR #347 opened at `evt_44e3vnyazxg5`
+> - all PR #347 checks went green; Steward posted merge nudge
+>   `evt_52vdy55dak77g`
+> - PR #347 landed on `origin/main` at
+>   `0dac1316750ef453eeef64edfbb2ba1112c75137`; merge note:
+>   `evt_60egkqjg34cmz`
+> - remote branch deleted; local branch delete was blocked by the temporary
+>   Steward worktree, which Steward removed before asking Integrator to retry
+>   cleanup at `evt_4a7w97wfhqz3z`
+> - local cleanup complete: Integrator deleted
+>   `wp/integrator-watchdog-setup-playbook`; no open integration PRs remain
+>   (`evt_xx6t9qwy3j2r`)
+> - intent: require arming the Integrator watchdog immediately after opening any
+>   unmerged PR; document the private `CronCreate` path and Codex/tmux managed
+>   wake-loop fallback
+>
+> Parallel compiler program docs note:
+>
+> - branch: `wp/compiler-library-phase-note`
+> - exact head:
+>   `e139e4db7182d23a9a5abec0363be28ff906382a`
+> - PR #345 opened at `evt_3qcxvrzd911my`
+> - PR #345 landed on `origin/main` at
+>   `18e9d497f351ac960282ea0ad50fba367aafe701`; merge note:
+>   `evt_7s5kqmsaw2t3f`
+> - scope: `docs/program/07-compiler-program.md` and
+>   `docs/program/08-compiler-continuation.md`
+> - intent: near-term native codegen is Ken-only executables; native library
+>   generation becomes a later compiler-program phase before self-hosting
+> - Steward released the temporary local checkout blocker by removing
+>   `/tmp/ken-compiler-library-phase`, then asked Integrator to retry local
+>   branch cleanup at `evt_2j7q6zz7rdd5v`; Integrator's pane shows the stale
+>   local branch ref was then deleted successfully
+>
+> Reopen frame:
+>
+> - branch: `wp/NC15-record-sigma-proof-erasure-lowering`
+> - base:
+>   `origin/main @ 9c755589c05046fcace996424cb3d9659cb9c19b`
+> - owner: Runtime
+> - objective: lower runtime records, executable Sigma-shaped values,
+>   projections, and proof/law-erased fields using the landed
+>   package-authoritative checked-core body-view seam
+>
+> Pre-handoff gate:
+>
+> - NC14 Runtime closeout complete: `evt_2yn3q7evnnsmx`
+> - Runtime leader, implementer, and QA panes were quiescent and showed
+>   `Context compacted` before the reopen handoff
+>
+> Next Steward action: continue normal watchdog; no NC15 Runtime or Integrator
+> watchdog-playbook action remains.
+>
+> ### NC15 LANGUAGE PREREQUISITE IN INTEGRATION (2026-07-07 21:34 UTC)
+>
+> `NC15-checked-core-record-sigma-view` has cleared the full exact-head review
+> chain and is in Integrator hands.
+>
+> Exact approved head:
+>
+> - branch: `wp/NC15-checked-core-record-sigma-view`
+> - head:
+>   `5d07fcdc45e38a6edefac70e08e16b7efa8cfa76`
+> - base:
+>   `origin/main @ 51489675301eb52b3d44e70a867f3775077c97bf`
+>
+> Approval / gate anchors:
+>
+> - Language QA approval: `evt_2pqeyz79hqxcr`
+> - Runtime consumer approval: `evt_2x1yfazseb2ky`
+> - Architect approval: `evt_4s5s9fd2jsq0d`
+> - Integrator PR #343 publish: 2026-07-07 21:23 UTC in thread `thr_22yn`
+> - Spec/conformance approval after Integrator's missing-gate report:
+>   `evt_51wsjqfepx524`
+>
+> Integrator hit a protected-branch/PR auto-close hiccup while merging PR #343,
+> restored the exact reviewed head, reopened the PR, and is waiting on the
+> rerun `build + test` gate; the other rerun checks were already green in the
+> pane scan. No Steward nudge is required because Integrator is actively
+> working the merge.
+>
+> Parallel playbook branch:
+>
+> - `wp/architect-review-test-assumption` landed via PR #344 at
+>   `origin/main @ fbb81ee5ac83d699b0b09642e7ef14c7f7ba69a0`
+> - exact approved head:
+>   `a797f231bdd8e5da933c278d7a7864d6c2ce91d3`
+> - merge note: `evt_267r23wv32vbx`
+> - checks green: `build + test`, clean-room provenance, conformance suite,
+>   and path-guard
+>
+> Next Steward action: wait for the NC15 prerequisite landed SHA, then update
+> this tracker and route the NC15 Runtime reopen only after that prerequisite
+> lands.
+>
+> ### NC15 LANGUAGE PREREQUISITE IN QA (2026-07-07 21:20 UTC)
+>
+> Language implementer handed off the NC15 prerequisite to Language QA at
+> `evt_rk43jyss63bb`; Language QA picked it up at `evt_2y0qtzwqsxq8k`.
+>
+> Exact candidate:
+>
+> - branch: `wp/NC15-checked-core-record-sigma-view`
+> - head:
+>   `5d07fcdc45e38a6edefac70e08e16b7efa8cfa76`
+> - base/frame:
+>   `origin/main @ 51489675301eb52b3d44e70a867f3775077c97bf`,
+>   frame `6e74bf68de994152bc2fda10b0da8e86e96be977`
+>
+> Implementer-reported scope:
+>
+> - `crates/ken-elaborator/src/checked_core.rs`
+> - `crates/ken-elaborator/src/erasure.rs`
+> - `docs/program/wp/NC15-checked-core-record-sigma-view.md`
+> - `spec/40-runtime/46-checked-core-package.md`
+>
+> Next Steward action: watch for Language QA verdict on exact head `5d07fcd`.
+>
+> ### NC15 LANGUAGE PREREQUISITE D1 ACTIVE (2026-07-07 21:18 UTC)
+>
+> Language leader accepted D0 for
+> `wp/NC15-checked-core-record-sigma-view @
+> 6e74bf68de994152bc2fda10b0da8e86e96be977` and assigned D1 to
+> language-implementer at `evt_19cd7cfmcn21c`.
+>
+> Accepted D1 scope:
+>
+> - expected code surface: `crates/ken-elaborator/src/checked_core.rs`
+> - `crates/ken-elaborator/src/erasure.rs` only if an explicit fail-closed
+>   unsupported lane is needed before Runtime NC15 consumes the new body-view
+>   terms
+> - `spec/40-runtime/46-checked-core-package.md` only if the executable
+>   record/Sigma body-view extension needs a narrow durable package-contract
+>   note
+>
+> Closed scope remains: no kernel Sigma rule change, no Runtime
+> IR/evaluator/backend/native work, no Verify implementation work, no
+> raw-source fallback, no private canonical-byte consumer, and no proof
+> reconstruction from erased fields.
+>
+> Next Steward action: watch for Language implementer exact-head handoff to QA.
+>
+> ### NC15 LANGUAGE PREREQUISITE RELEASED (2026-07-07 21:15 UTC)
+>
+> Steward framed and released the narrow Language prerequisite
+> `NC15-checked-core-record-sigma-view` at `evt_6ke89w0r9dpb5`.
+>
+> Branch and frame:
+>
+> - branch: `wp/NC15-checked-core-record-sigma-view`
+> - exact frame head:
+>   `6e74bf68de994152bc2fda10b0da8e86e96be977`
+> - base:
+>   `origin/main @ 51489675301eb52b3d44e70a867f3775077c97bf`
+> - frame:
+>   `docs/program/wp/NC15-checked-core-record-sigma-view.md`
+>
+> Pre-handoff gate:
+>
+> - NC14 Language prerequisite closeout is complete: `evt_yf0a7yjnayys`
+> - Language leader pane showed `Context compacted`
+> - Language implementer pane showed `Context compacted`
+> - Language QA pane showed `Context compacted`
+>
+> Objective: expose package-authoritative checked-core body-view terms for
+> executable record/Sigma construction and projection so Runtime can later
+> reopen NC15 D1 without raw-source or private canonical-byte fallback.
+>
+> Next Steward action: watch for Language D0 / D1 routing on the prerequisite.
+>
+> ### NC15 D0 STOP: LANGUAGE PREREQUISITE NEEDED (2026-07-07 21:06 UTC)
+>
+> Runtime picked up NC15 and completed the requested D0 boundary read at
+> `evt_48n0hqx29mskq`.
+>
+> D0 verdict:
+>
+> - Runtime should not open D1 directly from
+>   `origin/main @ 51489675301eb52b3d44e70a867f3775077c97bf`.
+> - A narrow Language prerequisite is needed first.
+> - Verify is not a prerequisite blocker on the landed base, because the NC9
+>   field-status witness lanes are already present and recomputable from the
+>   package/program pair.
+>
+> Required prerequisite shape:
+>
+> - extend the checked-core body-view seam so Runtime can consume
+>   package-authoritative executable record/Sigma construction and projection
+>   facts without raw-source or private canonical-byte fallback;
+> - include explicit field identity/order and field runtime-status visibility
+>   at the body-view point;
+> - fail closed for unsupported dependent field shapes and non-executable
+>   erased-field projections;
+> - no new kernel Sigma rule change.
+>
+> Runtime routed the prerequisite to Language leader in the NC15 thread at
+> `evt_48n0hqx29mskq`. Language leader pane shows active pickup of that D0
+> boundary read; no Steward stall post required.
+>
+> Next Steward action: watch for Language prerequisite routing / exact branch
+> handoff, then track NC15 reopening once the prerequisite lands.
+>
+> ### NC15 RELEASED TO RUNTIME (2026-07-07 20:55 UTC)
+>
+> Steward released `NC15-record-sigma-proof-erasure-lowering` to Runtime at
+> `evt_7yjsdyagb9yvh`.
+>
+> Release frame:
+>
+> - base:
+>   `origin/main @ 51489675301eb52b3d44e70a867f3775077c97bf`
+> - branch: `wp/NC15-record-sigma-proof-erasure-lowering`
+> - frame:
+>   `origin/main:docs/program/wp/NC15-record-sigma-proof-erasure-lowering.md`
+> - owner: Runtime-led, with Verify support
+>
+> Pre-handoff gate:
+>
+> - NC14 Runtime closeout is complete: `evt_2yn3q7evnnsmx`
+> - Runtime leader pane showed `Context compacted`
+> - Runtime implementer pane showed `Context compacted`
+> - Runtime QA pane showed `Context compacted`
+>
+> D0 requested from Runtime: confirm whether Runtime can proceed directly, or
+> whether a narrow Language or Verify prerequisite is needed for checked-core
+> field/status metadata before lowering can start.
+>
+> Next Steward action: watch for Runtime D0 / any prerequisite routing.
+>
+> ### INTEGRATOR PLAYBOOK MERGED; NC15 RELEASE GATE NEXT (2026-07-07 20:44 UTC)
+>
+> The Integrator post-merge playbook clarification landed and Integrator was
+> restarted afterward.
+>
+> Closeout anchors:
+>
+> - PR #342 / landed
+>   `origin/main @ 51489675301eb52b3d44e70a867f3775077c97bf`
+> - exact approved head:
+>   `wp/integrator-post-merge-playbook @
+>   cac9f690562f19ed0c575c505b9c706520547fce`
+> - merge request: `evt_5qj727r1ct4n3`
+> - Integrator publish note: `evt_1kdadwkkx985g`
+> - Integrator merge status: `evt_35j7f0hnqj3gk`
+> - Integrator thread ship note / cleanup: `evt_1s7myf7zpg7an`
+> - GitHub checks green: `build + test`, clean-room provenance,
+>   conformance suite, and path-guard
+>
+> Scope was exactly `agent/playbooks/federation/integrator.md`, clarifying
+> post-merge order: update Integrator status first, then reply in the WP
+> thread mentioning Steward, then resolve any merge Decision and clean up
+> branches.
+>
+> Next Steward action: compact-gate the NC15 owner and release
+> `NC15-record-sigma-proof-erasure-lowering`.
+>
+> ### NC14 CLOSED; NC15 READY NEXT (2026-07-07 20:36 UTC)
+>
+> Runtime closeout for `NC14-data-match-lowering` is complete.
+>
+> Closeout anchors:
+>
+> - PR #341 / landed
+>   `origin/main @ cac4ad9ffecd4c9a908ee051f2c1f3d4b37f1167`
+> - exact approved head:
+>   `wp/NC14-data-match-lowering @
+>   8d02f58453d7dd8d21ba262ba9f0020f261bd4f8`
+> - Runtime QA approval: `evt_bdejeqft0eez`
+> - Architect approval: `evt_5erkhjw9x3g7e`
+> - merge note: `evt_3a8c22zp11z99`
+> - Integrator cleanup note: `evt_5s6rs9wsjwzzt`
+> - Runtime QA retro: `evt_36y8rkc94mhkh`
+> - Runtime implementer retro: `evt_1w0adsv916dj6`
+> - Runtime leader coordination retro: `evt_4y9zmq8z9dbg3`
+> - Runtime `retros in`: `evt_2yn3q7evnnsmx`
+>
+> Steward also requested integration of the Integrator playbook clarification at
+> `evt_5qj727r1ct4n3`:
+> `wp/integrator-post-merge-playbook @
+> cac9f690562f19ed0c575c505b9c706520547fce`.
+>
+> Next Steward action: after the playbook branch lands / restart completes,
+> compact-gate the NC15 owner and release the next compiler WP.
+
+> ### NC14 MERGED; RUNTIME RETROS REQUESTED (2026-07-07 20:31 UTC)
+>
+> NC14 proper `NC14-data-match-lowering` merged via PR #341.
+>
+> Closeout anchors:
+>
+> - landed `origin/main @ cac4ad9ffecd4c9a908ee051f2c1f3d4b37f1167`
+> - exact approved head:
+>   `wp/NC14-data-match-lowering @
+>   8d02f58453d7dd8d21ba262ba9f0020f261bd4f8`
+> - Runtime QA approval: `evt_bdejeqft0eez`
+> - Architect approval: `evt_5erkhjw9x3g7e`
+> - merge note: `evt_3a8c22zp11z99`
+> - Integrator status / branch cleanup note: `evt_5s6rs9wsjwzzt`
+>
+> Steward relayed the merge and requested Runtime §10 closeout at
+> `evt_7kghvezxmmnr9`.
+>
+> Next Steward action: await Runtime retros-in for NC14, then compact-gate
+> the owner for NC15 and release the next compiler WP.
+
+> ### NC14 RUNTIME D1 ACTIVE; Z3 PROGRAM NOTE MERGED (2026-07-07 20:08 UTC)
+>
+> The NC14 closeout at `evt_yf0a7yjnayys` was the Language prerequisite
+> `NC14-checked-core-data-match-view`, not NC14 proper. Runtime NC14 D1 remains
+> active on `wp/NC14-data-match-lowering`; runtime-implementer picked up at
+> `evt_n03ec39pkrc0` and is currently running the implementation/verification
+> loop. Do not start NC15 until Runtime NC14 lands and retros are in.
+>
+> The Z3 throughput evaluation program note also landed: Integrator merged
+> `wp/z3-throughput-evaluation-program` as PR #340 at
+> `origin/main @ b26bf3d713f4258d24859217fd2e96895bb76a7d`
+> (`evt_53eahb8rn542k`), with green `build + test`, clean-room provenance,
+> conformance suite, and path-guard checks. The docs-only branch was cleaned up.
+>
+> Next Steward action: await Runtime implementer exact-head handoff for
+> `NC14-data-match-lowering`; route Runtime QA / Kernel / Architect review as
+> required by the impossible-branch semantic cut. NC15 remains queued.
+
+> ### NC14 D1 ACTIVE; LANGUAGE PREREQ CLOSED (2026-07-07 19:53 UTC)
+>
+> Integrator shipped NC10 to `main` at `evt_5852pdwzs4br5`.
+>
+> Closeout anchors:
+>
+> - PR #333
+> - landed `main`: `e68450f3ad4e705bc251278d8c1db7370adccf00`
+> - exact approved head:
+>   `wp/NC10-compiler-driver-target-selection @
+>   775342f6d29ed848b6d028a1d458d7637ecf5028`
+> - gate chain honored: kickoff `evt_71qx5ybsd7f3f`, Language D0
+>   `evt_3mr8dzjgn8wnv`, D1 handoff `evt_3d7cp3cvz98dr`, Steward nudge
+>   `evt_7xxd1cgx4nn7z`, Language leader review `evt_79a006v7h8khq`,
+>   Language QA `evt_4hwms8f52g35c`, Architect route
+>   `evt_1cd2k8p1anafp`, Steward reconnect nudge `evt_6nvj5kzwqphek`, and
+>   Architect approval `evt_1rwsx61j5jmbh`
+> - GitHub checks green before merge: `build + test`, clean-room provenance
+>   check, conformance suite, and path-guard
+>
+> Branch cleanup: Integrator deleted the remote branch at merge, but local
+> shared-store branch deletion was deferred because
+> `/workspaces/ken/.worktrees/language-qa` still had
+> `wp/NC10-compiler-driver-target-selection` checked out. Language QA released
+> that worktree at `evt_npmzbzqtr7yd`; local verification now shows it on
+> `language-qa/work @ 6789e4251f39cb879cf827ffede913a8a0d37c94`. Integrator
+> then completed deferred local shared-store cleanup at `evt_1bxaqeg0a7t29`;
+> the deleted ref head was
+> `775342f6d29ed848b6d028a1d458d7637ecf5028`.
+>
+> Steward requested Language §10 retros from language-leader at
+> `evt_6vk6zs0kxcb02`, anchored on PR #333 / `origin/main @
+> e68450f3ad4e705bc251278d8c1db7370adccf00` and final reviewed head
+> `775342f6d29ed848b6d028a1d458d7637ecf5028`.
+>
+> Steward requested the `language-qa` branch release at
+> `evt_5epztf4p5w33q`.
+>
+> Language leader opened the §10 retro call at `evt_360enbm0ewehs`. Language
+> implementer retro is in at `evt_43fxfqy0zm9d4`; Language QA retro is in at
+> `evt_5d2atcrs29a3e`.
+>
+> Steward nudged Integrator to retry local shared-store cleanup at
+> `evt_75k16kdkdpg4k` and nudged language-leader for leader retro / retros-in
+> at `evt_15dda1fnn2vmc`.
+>
+> Language leader coordination retro is in at `evt_4nr0hqht0wct`, and
+> Language `retros in` closeout is `evt_1tyvvtcxgj5c8`.
+>
+> NC10 is closed. NC11 (`Checked-core target closure and metadata
+> completeness`) is now active because its sole dependency is NC10. The landed
+> frame is `origin/main:docs/program/wp/NC11-checked-core-target-closure.md`.
+>
+> Pre-handoff gate for NC11: Team Language was compacted before kickoff; the
+> leader, implementer, and QA panes all showed `Context compacted`.
+>
+> Steward released NC11 to language-leader at `evt_h7mrw7qe5pyk`, with branch
+> `wp/NC11-checked-core-target-closure`, base `origin/main @
+> e68450f3ad4e705bc251278d8c1db7370adccf00`, and a D0 request to confirm the
+> Language/Runtime boundary before D1.
+>
+> Language D0 proceeded inside Language at `evt_4zzwjw419920j`; no early
+> Runtime query was required, and D1 scope was pinned to
+> `crates/ken-elaborator/src/compiler_driver.rs`,
+> `crates/ken-elaborator/src/checked_core.rs`, and the NC11 WP brief, with no
+> kernel/runtime/interp/verify/spec/conformance/Cargo/packages/local-ref scope.
+>
+> Language implementer picked up D1 at `evt_1kca4zr3rgvsm` and handed off exact
+> head `wp/NC11-checked-core-target-closure @
+> eeae56b9d5cb65cdf865180b3b613fde5a0119fb` at `evt_6sfrxsh3g86bs`.
+>
+> Language leader reviewed that exact head and routed to QA at
+> `evt_4tf67nwgwtm07`.
+>
+> Language QA blocked the exact head at `evt_5awq8zhsqmd46`. Scope/tests were
+> otherwise clean, but the required NC11 fixtures for unresolved checked-core
+> references and assumption/trust preservation into both semantic slice and
+> report were missing. QA handed the repair to language-implementer.
+>
+> Language implementer disconnected/reconnected immediately after the blocker
+> (`evt_20dv8tm2qda90` / `evt_4rt5z894at4nn`) and had not posted pickup, so
+> Steward nudged the narrow repair at `evt_7erd4ykskkm29`. Implementer picked
+> up the repair at `evt_4deh5j016ktrp`.
+>
+> Branch-release blocker cleared: language-qa released
+> `wp/NC11-checked-core-target-closure` at `evt_3vptvy632071m`. Implementer
+> acknowledged and resumed the narrow repair at `evt_18zjs99z2d5jb`.
+>
+> Language implementer handed off repaired exact head
+> `wp/NC11-checked-core-target-closure @
+> 539f34355853bdb12408431e55c045bb82296bee` at `evt_ya6sk6p9tc6e`. The
+> repair delta from blocked head `eeae56b` was test-only in
+> `crates/ken-elaborator/src/compiler_driver.rs`.
+>
+> Language QA approved the repaired head at `evt_3mkgbaejd90v0`. Runtime
+> downstream review approved the same head at `evt_11eswjpxv782e`, confirming
+> the closure/report boundary carries the right pre-lowering Runtime-facing
+> facts without claiming runtime lowering or success.
+>
+> Runtime approval did not mention the next actor, and no Language pickup
+> followed, so Steward nudged language-leader for the next NC11 routing step at
+> `evt_tdhzqc8c5cv9`. Language leader routed exact-head Architect review at
+> `evt_3fkyyzg5axchm`.
+>
+> Architect approved exact head
+> `539f34355853bdb12408431e55c045bb82296bee` at `evt_1gz2c3nm092zv`.
+> Language leader routed merge-ready to Integrator at `evt_51snsxyz90c7s`.
+>
+> Integrator merged NC11 as PR #334 at `evt_1v11scd1e74mz`; landed
+> `origin/main @ 40d71c2da4697cefd4d024c82cd3145c60f6f922` at
+> `2026-07-07T14:00:41Z`. CI was green (`build + test`, clean-room provenance
+> check, conformance suite, path-guard), and remote/local branch cleanup is
+> complete.
+>
+> Steward requested NC11 Language §10 retros at `evt_45xb8deye033z`, anchored
+> on PR #334 / landed `main @ 40d71c2` and final reviewed head `539f343`.
+> Language leader opened the member retro call at `evt_2qmhn52k3gaad`.
+> Language QA retro is in at `evt_m85gyncdfhf7`.
+> Language implementer retro is in at `evt_7n3v0rcmgxrws`.
+> Steward routed both member retros back to language-leader at
+> `evt_6wv80dj3hryp`.
+>
+> Language leader coordination retro is in at `evt_4qejvhr7r3xbd`, and
+> Language `retros in` closeout is `evt_3mv09j4v9w7a3`. NC11 is closed.
+>
+> NC12 (`Runtime-IR Evaluator and Comparison Harness`) is now ready because
+> NC10 and NC11 are both closed. Its frame is available on landed `main` at
+> `origin/main:docs/program/wp/NC12-runtime-ir-evaluator.md`; owner is
+> Runtime-led with Verify support; branch is `wp/NC12-runtime-ir-evaluator`;
+> base for kickoff is `origin/main @
+> 40d71c2da4697cefd4d024c82cd3145c60f6f922`.
+>
+> Next Steward action: compact-gate Team Runtime, then release NC12 to
+> runtime-leader.
+>
+> Pre-handoff gate for NC12: Team Runtime was compacted before kickoff; the
+> leader, implementer, and QA panes all showed `Context compacted`.
+>
+> Steward released NC12 to runtime-leader at `evt_1cbfk4t3cz3am`, with branch
+> `wp/NC12-runtime-ir-evaluator`, base `origin/main @
+> 40d71c2da4697cefd4d024c82cd3145c60f6f922`, and a D0 request to confirm the
+> Runtime-owned evaluator/comparison boundary before D1. Thread all NC12
+> activity under that kickoff.
+>
+> Runtime leader accepted D0 at `evt_37b0em9yxh3db`: Runtime can own NC12;
+> Verify support is deferred until Runtime has a concrete evaluator and
+> comparison/report surface; D1 is pinned to backend-neutral runtime-IR
+> evaluator/comparison work under `crates/ken-runtime/src/`, exports in
+> `crates/ken-runtime/src/lib.rs`, and one focused test file under
+> `crates/ken-interp/tests/` or `crates/ken-runtime/tests/`, with dependency
+> churn discouraged.
+>
+> Runtime implementer acknowledged D1 pickup at `evt_56v2xq2364eja`. Live pane
+> check shows active implementation work on the evaluator and comparison
+> harness, currently resolving compile/borrow issues after adding
+> `crates/ken-runtime/src/runtime_ir_evaluator.rs` and exports.
+>
+> Runtime implementer handed off D1 exact head
+> `wp/NC12-runtime-ir-evaluator @
+> 860ee623a791aec2fae1e9603b8e3e1b6ad7e800` at `evt_qx0gr6jw8yk3`; scope was
+> `crates/ken-runtime/src/runtime_ir_evaluator.rs`,
+> `crates/ken-runtime/src/lib.rs`, and
+> `crates/ken-interp/tests/nc12_runtime_ir_evaluator.rs`.
+>
+> Runtime leader routed Verify review at `evt_3jbxqre4f0t9x`. Verify blocked
+> that exact head at `evt_2es2ze7278s0` on two boundary/report findings:
+> package-level trust metadata was not rejected in NC12 preflight despite the
+> routed trust-metadata rejection claim, and the agreement/report surface
+> overclaimed live interpreter-oracle provenance while accepting caller-supplied
+> observations.
+>
+> Runtime leader routed the repair at `evt_1xx4phtm6ny88`, asking for
+> package-level trust metadata preflight rejection plus a narrow oracle/report
+> honesty fix. Runtime implementer acknowledged repair pickup at
+> `evt_g6fjdxyxx2rm`, scoped to those two named findings.
+>
+> Runtime implementer handed off repaired exact head
+> `wp/NC12-runtime-ir-evaluator @
+> acd6b52bdd4a5503b2987ccba721ab488c948f04` at `evt_71jb69q8gqyzd`. Repair
+> diff from blocked head `860ee623a791aec2fae1e9603b8e3e1b6ad7e800` was
+> exactly `crates/ken-runtime/src/runtime_ir_evaluator.rs` and
+> `crates/ken-interp/tests/nc12_runtime_ir_evaluator.rs`.
+>
+> Runtime leader routed Verify re-review at `evt_1wh7q5kym9y70`. Verify
+> approved the repaired head for Runtime QA at `evt_n81p4kbg7z0a`, confirming
+> the package-level trust metadata preflight rejection and downgraded
+> caller-supplied interpreter observation wording close the two prior findings.
+>
+> Runtime QA picked up exact head `acd6b52bdd4a5503b2987ccba721ab488c948f04`
+> at `evt_7qwbgr5653pd0` and is actively verifying the cumulative NC12 surface
+> plus the repaired trust-metadata and oracle-honesty boundaries.
+>
+> Runtime QA blocked the repaired head at `evt_660rynw62jqjf` because mismatch
+> reports still carried the `Nc12InterpreterRuntimeIrAgreement` trust tier.
+> Runtime implementer picked up that repair at `evt_5th17rhn5283d` and handed
+> back exact head `wp/NC12-runtime-ir-evaluator @
+> 0021c8560be01eb4ccd543705b2d31517c955bf2` at `evt_27stb989yeehg`.
+>
+> Operator flagged `Nc12InterpreterRuntimeIrAgreement` as likely WP identifier
+> leakage into source. Steward checked exact head `0021c856` and confirmed
+> NC12-prefixed operational names appear in durable runtime source/API/report
+> surface (`RuntimeIrEvaluator`, `RuntimeIrDifferentialVerdict`,
+> `RuntimeIrTrustTier`, and evidence strings). Steward routed a durable-naming
+> gate to runtime-leader at `evt_1ft4657gw254m`: stable functional names should
+> replace `Nc12...` variants and report strings before NC12 advances, while WP
+> docs/test filenames may keep the WP ID.
+>
+> Runtime QA paused the pre-gate re-review at `evt_6dwm6dajrhrrn`. Runtime
+> leader routed the narrow durable-name repair at `evt_1n2vwzqvccgne` and
+> confirmed the superseded QA request should not advance at `evt_6z7gzfp9zpm46`.
+>
+> Runtime implementer picked up the repair at `evt_3g98msn4srwff` and handed
+> back exact head `wp/NC12-runtime-ir-evaluator @
+> 0e0e8698d9234488af1222d1260f90f734cfd945` at `evt_7p7v6435nhz1v`. The
+> branch was released. Repair diff from `0021c856` was exactly:
+> `crates/ken-runtime/src/runtime_ir_evaluator.rs` and
+> `crates/ken-interp/tests/nc12_runtime_ir_evaluator.rs`. Durable variants now
+> use stable functional names including
+> `RuntimeIrEvaluator::DirectRuntimeIrEvaluatorV1`,
+> `RuntimeIrDifferentialVerdict::InterpreterRuntimeIrAgreement`, and
+> `RuntimeIrTrustTier::{RuntimeIrObservation, InterpreterRuntimeIrAgreement}`.
+> The repair also replaced report/evidence strings with functional wording and
+> added assertions keeping `NC12` / `Nc12` out of report/debug surfaces.
+>
+> Runtime leader resumed Runtime QA on exact head `0e0e8698` at
+> `evt_5njvj7rcf94s2`. Runtime QA picked up at `evt_3zm2m9mvtt3yb` and
+> approved the exact head for Architect review at `evt_7jgme8801xb2b`,
+> confirming exact identity, the three-file cumulative scope, the durable
+> naming gate, package-level trust-metadata preflight, caller-supplied oracle
+> honesty, and mismatch/agreement trust-tier behavior.
+>
+> Runtime leader routed Architect exact-head review at `evt_625082qxrz323`.
+> Architect blocked exact head `0e0e8698` at `evt_3ybvj5rbjar9t` on two
+> merge-blocking findings: `evaluate_runtime_ir_example(...)` could report an
+> arbitrary caller-supplied `RuntimeExample` under a valid `RuntimeProgram`
+> artifact identity without checking membership in `program.examples`, and
+> `add_int` used raw host `i64` addition that can panic or wrap instead of
+> failing loudly or modeling arbitrary-precision arithmetic.
+>
+> Runtime leader routed the narrow repair to runtime-implementer at
+> `evt_20my9pq1j413c`, scoped to the existing NC12 runtime/test surface:
+> bind evaluated examples to the exact runtime artifact and replace raw
+> `add_int` with checked addition plus focused regressions. Runtime implementer
+> picked up at `evt_2k8xhn2p7161t`.
+>
+> Runtime implementer handed off repaired exact head
+> `wp/NC12-runtime-ir-evaluator @
+> dc90c0e589ecc06405b07834141757b5838ee2ea` at `evt_61rxh2c766gzr`.
+> Runtime QA approved that exact head at `evt_2ephe736pc3t3`. Runtime leader
+> routed Architect re-review at `evt_1hh4g1ggwtqar`; Architect picked up at
+> `evt_58q1h7ndtbz8z` and approved at `evt_18hb149se0kn7`. Runtime leader
+> routed merge-ready to Integrator at `evt_1ncyje33r8wbv`.
+>
+> Integrator opened PR #335 at `evt_6pty91xxrnpvp`. Pat issued a temporary
+> hold at `evt_4vztf1p58x4v8`; Integrator honored it at `evt_5deet478gdj6w`.
+> Pat cleared the hold at `evt_1e5am2kmm0rfy`. Integrator merged NC12 at
+> `evt_g1a5cgstb7ys`; PR #335 landed on `origin/main @
+> 336e9fb7e767025d525f8b0ecf50bd05bd6cc0a4` at
+> `2026-07-07T15:42:24Z`, with `build + test`, clean-room provenance check,
+> conformance suite, and path-guard green. Remote/local branch cleanup is
+> complete.
+>
+> Post-merge operator audit found one more durable operational identifier in
+> landed non-test runtime source: `RuntimeIrSeedEnvironment::nc5_seed()` at
+> `crates/ken-runtime/src/runtime_ir_evaluator.rs:154`. Steward also verified
+> a non-test module comment still says `broader NC8/NC9 evidence`. Steward
+> routed a narrow post-merge cleanup to runtime-leader at `evt_2qc96wc3kvvgy`
+> on a fresh branch off `origin/main`, asking Runtime to rename the public
+> `nc5_seed` helper to stable functional wording, sweep non-test runtime
+> source for operational `NC[0-9]` / `Nc[0-9]` / `nc[0-9]` identifiers, and
+> keep scope to `crates/ken-runtime/src/runtime_ir_evaluator.rs` plus necessary
+> test call-site updates.
+>
+> Runtime leader accepted and routed the cleanup to runtime-implementer at
+> `evt_2f9p13qpkcjmx`, with branch
+> `wp/NC12-runtime-ir-evaluator-naming-cleanup` from exact base `origin/main @
+> 336e9fb7e767025d525f8b0ecf50bd05bd6cc0a4`. NC12 should not close for retros
+> until this cleanup lands or is explicitly declined.
+>
+> Runtime implementer acknowledged pickup at `evt_45ga0tp5rpphf`. Live pane /
+> worktree checks show active work on
+> `wp/NC12-runtime-ir-evaluator-naming-cleanup`: the branch was created from
+> the required landed base, `RuntimeIrSeedEnvironment::nc5_seed()` has been
+> renamed to `closure_capture_seed()`, the non-test runtime doc wording
+> `broader NC8/NC9 evidence` has been replaced with stable functional wording,
+> and the NC12 test call site has been updated. The requested non-test runtime
+> grep is clean for `NC[0-9]` / `Nc[0-9]` / `nc[0-9]` and `nc5_seed`; diff
+> hygiene, rustfmt, the NC12 evaluator test, and `ken-runtime` tests are green
+> so far. No exact-head handoff has been posted yet.
+>
+> Runtime implementer handed off exact cleanup head
+> `wp/NC12-runtime-ir-evaluator-naming-cleanup @
+> fe2f60c9c10abdaf244e3fa47d906f61db1abfe3` at `evt_2r9vq7281b8c3`,
+> branch released, with repair scope limited to
+> `crates/ken-runtime/src/runtime_ir_evaluator.rs` and
+> `crates/ken-interp/tests/nc12_runtime_ir_evaluator.rs`.
+>
+> Runtime leader routed exact-head Runtime QA at `evt_4r4rgm97qv522`. Runtime
+> QA approved at `evt_40tzw0tvb8cqn`, confirming exact landed-main base
+> `336e9fb7e767025d525f8b0ecf50bd05bd6cc0a4`, the two-file naming-only
+> repair scope, clean non-test runtime grep for
+> `RuntimeIrSeedEnvironment::nc5_seed`, `pub fn nc5_seed`, `NC[0-9]`,
+> `Nc[0-9]`, and `nc[0-9]`, and green NC12 / `ken-runtime` tests. Runtime
+> leader routed Architect review at
+> `evt_6hrkmekyfg0j3`.
+>
+> Architect approved exact cleanup head
+> `fe2f60c9c10abdaf244e3fa47d906f61db1abfe3` at `evt_63dag0bfct6hv`,
+> confirming the diff is naming-only, non-test runtime source is clean for the
+> durable-name sweep, existing test/WP fixture naming remains outside the
+> durable runtime source/API/report surface gate, and no evaluator/report
+> behavior or trust boundary changed.
+>
+> Runtime leader routed merge-ready at `evt_7h0fw740pe6s6`. Integrator opened
+> PR #336 at `evt_3884y0kxyj70g`, then merged it at `evt_3yxd9zhjxn2qa` on
+> green CI. The cleanup landed on `origin/main` as
+> `bf8b2433991baaf6597f920742d28f721b8484fc` at `2026-07-07T16:07:17Z`.
+> Checks were green: `build + test`, clean-room provenance check, conformance
+> suite, and path-guard. Remote/local branch cleanup is complete.
+>
+> Steward requested Runtime §10 closeout/retros from runtime-leader at
+> `evt_236a4ewxvt983`, anchored on both PR #335 / landed
+> `336e9fb7e767025d525f8b0ecf50bd05bd6cc0a4` and PR #336 / landed
+> `bf8b2433991baaf6597f920742d28f721b8484fc`.
+>
+> Runtime leader opened the NC12 Runtime §10 retro call at
+> `evt_433krnhm6bwxv`, mentioning runtime-implementer and runtime-qa and
+> anchoring the harvest on both the original NC12 evaluator merge and the
+> post-merge durable-naming cleanup.
+>
+> Runtime QA retro is in at `evt_5rhpt6mg7rbws`.
+>
+> Runtime implementer retro is in at `evt_6k3kfmc6ad6rm`. Runtime leader
+> coordination retro is in at `evt_246pdr87fbjvp`, and Runtime `retros in`
+> closeout is `evt_nya1rspp9jqp`. NC12 is closed.
+>
+> NC13 (`Core Expression Lowering`) is now ready because NC11 and NC12 are
+> both closed. Its frame is available on landed `main` at
+> `origin/main:docs/program/wp/NC13-core-expression-lowering.md`; owner is
+> Runtime-led with Language support as needed; branch is
+> `wp/NC13-core-expression-lowering`; base for kickoff is `origin/main @
+> bf8b2433991baaf6597f920742d28f721b8484fc`.
+>
+> Steward released NC13 to runtime-leader at `evt_50421j5ha77wn`, with a D0
+> request to confirm the Runtime/Language boundary before D1 movement. The
+> intended scope is checked-core to runtime-IR lowering for ordinary core
+> expression forms: lexical variables, non-recursive lets, lambdas,
+> applications, closures/captures, direct calls to selected reachable
+> declarations, evaluator support/tests for generated forms, and stable
+> unsupported-lane diagnostics. Guardrails carried forward: no
+> Cranelift/native broadening, no raw-source inspection after checked-core
+> emission, no pattern/data broadening beyond existing seed support, no
+> recursion/dictionaries/modules broadening, no silent closure-capture or arity
+> fallback, preserve package/target/closure/obligation/assumption/trusted-base
+> metadata, and carry the NC12 durable report/API claim audit forward.
+>
+> Runtime leader completed NC13 D0 at `evt_16gtg3sbyymdk`. Runtime accepts
+> the NC13 boundary and ownership frame, but blocked D1 on a narrow Language
+> prerequisite: the current checked-core package surface records declaration
+> bodies in `CheckedCoreSemanticInputs.declarations` as canonical `Vec<u8>`
+> only, and the current erasure/runtime path still rejects checked
+> declaration body lowering with
+> `checked declaration body lowering is not in NC5 seed` when a reachable
+> symbol is a declaration body rather than an existing metadata-only seed
+> form. Runtime does not see a landed package-side decoder or stable body-view
+> API that would let Runtime consume checked-core `Term` structure from the
+> emitted package artifact without stepping outside the checked-core artifact
+> contract.
+>
+> Runtime requested Language preflight for the minimal package-authoritative
+> checked-core body-view surface needed for selected target declarations after
+> checked-core emission. Guardrails: no raw-source fallback, no
+> compiler-driver semantic widening, no kernel rule change, just enough
+> structure for NC13 expression lowering over declaration bodies and
+> referenced declarations with stable failure for unsupported shapes.
+>
+> Pane scan showed language-leader independently confirmed Runtime's read and
+> asked Steward to route the narrow Language prerequisite, but that Convo post
+> did not land. Steward treated that as a delivery failure and routed the
+> prerequisite explicitly.
+>
+> Steward framed the prerequisite on branch
+> `wp/NC13-checked-core-body-view @
+> a0ebb87a572e4fea568dd834129a8a318e10f340` from base `origin/main @
+> bf8b2433991baaf6597f920742d28f721b8484fc`. The frame lives at
+> `docs/program/wp/NC13-checked-core-body-view.md`, owner Language-led with
+> Runtime review. Scope is the minimal package-authoritative checked-core
+> declaration body-view surface Runtime needs before opening NC13 expression
+> lowering.
+>
+> Pre-handoff gate for the prerequisite: Team Language was compacted before
+> kickoff; language-leader, language-implementer, and language-qa panes all
+> showed `Context compacted`.
+>
+> Steward released `NC13-checked-core-body-view` to language-leader at
+> `evt_2wgej3v2j4hs0`, asking for Language D0 on the exact frame/head and
+> narrow D1 routing if accepted. Runtime remains parked on NC13 proper until
+> this prerequisite lands or Language identifies an equivalent already-landed
+> surface.
+>
+> Language D0 accepted the prerequisite at `evt_2ktesxkjrdzak` and routed D1
+> to language-implementer. The first D1 route text carried a mistyped SHA and
+> treated the branch like a remote ref; language-leader corrected that at
+> `evt_7f5xb0tt60rzw` after Steward's branch-resolution correction. Correct
+> local shared-store head is
+> `wp/NC13-checked-core-body-view @
+> a0ebb87a572e4fea568dd834129a8a318e10f340`.
+>
+> Language implementer picked up D1 at `evt_7w3e0ybvkac1q`, verified the
+> corrected local branch ref and `origin/main @
+> bf8b2433991baaf6597f920742d28f721b8484fc`, and committed to keeping scope
+> to the Language package-side checked-core body-view surface with no
+> runtime/interp/kernel/verify/compiler changes and no raw-source fallback.
+>
+> Language implementer handed off exact head
+> `wp/NC13-checked-core-body-view @
+> 0ffb31a7cfc15dcce63badc803408928dfd6b31f` at `evt_81pr48yhddm0`.
+> Cumulative diff is exactly `crates/ken-elaborator/src/checked_core.rs` and
+> `docs/program/wp/NC13-checked-core-body-view.md`; the branch was released.
+> The implementation added the package-authoritative checked-core body-view
+> API and stable body-view error lanes for the NC13 seed body forms, with no
+> runtime/interp/kernel/verify/compiler/Cargo/spec movement.
+>
+> Language QA approved exact head `0ffb31a7cfc15dcce63badc803408928dfd6b31f`
+> at `evt_7594mnc49k1vy`, confirming exact branch identity, base/merge-base
+> `bf8b2433991baaf6597f920742d28f721b8484fc`, the two-file cumulative diff,
+> clean negative scope, package-authoritative derivation from validated
+> `CheckedCorePackage v0`, focused positive/negative body-view fixtures, no
+> public NC13/WP identifiers in durable non-test implementation names/report
+> strings, and green `ken-elaborator` checks. QA released the branch and
+> posted idle status at `evt_6hbryvh09eexh`.
+>
+> Language leader routed the QA-approved head to Runtime review at
+> `evt_dj5v26dfcs0b`, naming the Runtime-facing API and stable error lanes
+> delivered on this SHA. Runtime review is required by the WP frame before
+> integration because this prerequisite is specifically the surface Runtime
+> must consume before NC13 D1 resumes.
+>
+> Runtime leader approved exact head
+> `0ffb31a7cfc15dcce63badc803408928dfd6b31f` at `evt_7zeaj303g9wrf`,
+> confirming that the delivered seam closes the NC13 D0 prerequisite and is
+> sufficient for Runtime to open NC13 D1 without violating the checked-core
+> artifact boundary. Runtime found no missing consumer fact and no drift into
+> runtime lowering, compiler-driver widening, or kernel authority.
+>
+> Language leader routed Architect exact-head review at
+> `evt_2pd4qqb2x9m9f`. Architect picked up at `evt_4rx02f1fxcf0a`, reviewing
+> exact identity/scope against `origin/main @
+> bf8b2433991baaf6597f920742d28f721b8484fc` and the package-authoritative
+> body-view seam boundaries.
+>
+> Architect approved exact head
+> `0ffb31a7cfc15dcce63badc803408928dfd6b31f` at `evt_4evzq2bnteg5e`,
+> confirming the two-file cumulative diff, clean negative scope, package-
+> authoritative body decoding from canonical declaration bytes, narrow body
+> forms, explicit pre-lowering error lanes, no raw-source fallback, and no
+> movement in kernel authority, compiler-driver target semantics, runtime
+> lowering, native/backend scope, or NC8/NC9 validation claims. Architect also
+> noted that recursive/cyclic direct-call policy is left to the follow-on NC13
+> Runtime lowering WP.
+>
+> Language leader routed merge-ready at `evt_7jbp9ts406cmv`. Integrator
+> opened PR #337 at `evt_2v8gy0byk2bkc` and merged on green CI at
+> `evt_hn9mvq751mt3`. The prerequisite landed on `origin/main @
+> f710a48a131e83676641de116e11e54cb62b46ea` at
+> `2026-07-07T17:01:42Z`; `build + test`, clean-room provenance check,
+> conformance suite, and path-guard were green. Remote/local branch cleanup is
+> complete. Integrator posted idle/no-open-PR status at `evt_520c1sq2ycdbs`.
+>
+> Steward requested Language §10 closeout/retros at `evt_7h47twzyrkrzy`,
+> anchored on PR #337, landed `main @ f710a48`, final reviewed head
+> `0ffb31a`, QA approval `evt_7594mnc49k1vy`, Runtime approval
+> `evt_7zeaj303g9wrf`, Architect approval `evt_4evzq2bnteg5e`, and merge note
+> `evt_hn9mvq751mt3`.
+>
+> Language leader opened the retro call at `evt_6bbtrcpaqg45v`. Language
+> implementer retro is in at `evt_5sxphh87athr5`; Language QA retro is in at
+> `evt_792g116zn28es`. Steward routed both member retros back to
+> language-leader at `evt_7jsm40fecxywd` for leader coordination retro and
+> retros-in closeout.
+>
+> Language leader coordination retro is in at `evt_3e4v159mwday0`, and
+> Language `retros in` closeout is `evt_3ggg743sjbv9q`. The
+> `NC13-checked-core-body-view` prerequisite is closed.
+>
+> Steward attempted the Runtime compact gate before resuming NC13 D1. Runtime
+> leader and Runtime QA panes both showed `Context compacted`. Runtime
+> implementer did not compact cleanly: its pane repeatedly re-entered a stale
+> placeholder prompt (`Write tests for @filename`) after `/compact` attempts.
+> Steward interrupted only that stale placeholder run and retried a clean
+> `/compact`, but the pane returned to the same state. The handoff is held and
+> no Runtime NC13 D1 release has been posted.
+>
+> Steward logged the compact-gate blocker in the NC13 thread at
+> `evt_57yjpj7qx7z94`.
+>
+> Final compact verification then showed Runtime implementer had completed
+> compaction too, so all three Runtime panes were compacted. Steward released
+> NC13 D1 to runtime-leader at `evt_6e2knxfqh1wpb`.
+>
+> Runtime is to resume `wp/NC13-core-expression-lowering`, rebased or
+> restarted from landed prerequisite `origin/main @
+> f710a48a131e83676641de116e11e54cb62b46ea`, preserving the original D0
+> guardrails and explicitly rejecting or handling recursive/cyclic direct-call
+> policy in the Runtime lowering slice.
+>
+> Runtime leader picked up at `evt_7byewzceqbc2j`, created
+> `wp/NC13-core-expression-lowering @
+> f710a48a131e83676641de116e11e54cb62b46ea`, and handed Runtime D1 to
+> runtime-implementer with the body-view seam and recursion/cycle policy
+> guardrails preserved.
+>
+> Runtime implementer acknowledged pickup at `evt_6590n8ff02pbm`, after
+> reloading the build implementer playbook and memory scopes. The implementer
+> is now working on `wp/NC13-core-expression-lowering @
+> f710a48a131e83676641de116e11e54cb62b46ea` and will hand back an exact
+> committed head plus cumulative file scope for Runtime QA.
+>
+> Runtime implementer handed off exact head
+> `wp/NC13-core-expression-lowering @
+> 056514db6b428e83a4f0868869e1c00d734b3121` at `evt_3dkbxjdx6a2sn`. The
+> branch was released; cumulative file scope is exactly
+> `crates/ken-elaborator/src/erasure.rs` and
+> `crates/ken-elaborator/tests/nc13_core_expression_lowering.rs`.
+>
+> Runtime QA picked up at `evt_4tra5z4pznrxa` and approved exact head
+> `056514db6b428e83a4f0868869e1c00d734b3121` at `evt_2kt7tjzkzvk5k`.
+> QA confirmed the same two-file scope, green focused/full checks, no native
+> or schema broadening, body-view-only lowering, explicit fail-closed lanes for
+> direct-call cycles and implicit lexical capture, and branch release.
+>
+> Runtime leader routed Architect exact-head review at `evt_1rfaenvzj9wz5`.
+> Architect picked up the review at `evt_3avh8x7nwjzee` and approved exact
+> head `056514db6b428e83a4f0868869e1c00d734b3121` at
+> `evt_4yd93p1cmns0x`.
+>
+> Runtime leader routed merge-ready to Integrator at `evt_5c4h4an9t700s`.
+> Integrator opened PR #338 and then merged it on green CI at
+> `evt_60bp2pbd61b3y`. The NC13 core-expression-lowering slice landed on
+> `origin/main @ b0738a72baad895edab1b9cafed3d26b02dc853f` at
+> `2026-07-07T18:21:07Z`; `build + test`, clean-room provenance check,
+> conformance suite, and path-guard were green. Remote/local branch cleanup
+> is complete. Integrator posted idle/no-open-PR status at
+> `evt_6tkz11spfw3at`.
+>
+> Steward relayed the merge and requested Runtime §10 closeout/retros from
+> runtime-leader at `evt_240j1vkm0w4gp`, anchored on PR #338, landed
+> `origin/main @ b0738a72baad895edab1b9cafed3d26b02dc853f`, exact approved
+> head `056514db6b428e83a4f0868869e1c00d734b3121`, Runtime QA approval
+> `evt_2kt7tjzkzvk5k`, Architect approval `evt_4yd93p1cmns0x`, and merge note
+> `evt_60bp2pbd61b3y`.
+>
+> Runtime leader opened the NC13 Runtime §10 retro call at
+> `evt_3dwmrafcber2k`. Runtime QA retro is in at `evt_423z6btnm7qk0`;
+> Runtime implementer retro is in at `evt_5je3dyndfjj4q`. Runtime leader
+> coordination retro is in at `evt_3teq1hw6wjax7`, and Runtime `retros in`
+> closeout is `evt_xws25qvktxz8`. NC13 is closed.
+>
+> NC14 (`Data and Match Lowering`) is now ready because NC13 is closed. Its
+> frame is available on landed `main` at
+> `origin/main:docs/program/wp/NC14-data-match-lowering.md`; owner is
+> Runtime-led with Kernel and Language review; branch is
+> `wp/NC14-data-match-lowering`; base for kickoff is `origin/main @
+> b0738a72baad895edab1b9cafed3d26b02dc853f`.
+>
+> Pre-handoff gate for NC14: Team Runtime was compacted before kickoff; the
+> leader, implementer, and QA panes all showed `Context compacted`.
+>
+> Steward released NC14 to runtime-leader at `evt_70xf2k39jqz4z`, with a D0
+> request to confirm the Runtime/Kernel/Language boundary before D1. The
+> objective is checked-core to runtime-IR lowering for supported user data
+> constructors and pattern matches, runtime-IR evaluator support, and stable
+> lowerability/report lanes. Guardrails carried forward: do not weaken kernel
+> admission or coverage, do not turn impossible branches into arbitrary host
+> behavior, do not claim NC8 certificate coverage for context-sensitive match
+> forms without a later validator, and no Cranelift/native broadening.
+>
+> Runtime D0 stopped at `evt_2dsnrs3cwcwa3`: Runtime already has downstream
+> runtime-IR/evaluator shapes for constructors and matches, but the current
+> Language-owned checked-core body-view seam is still NC13-shaped and rejects
+> `constructor_ref` / `elim` as unsupported. Runtime must not open NC14 D1 by
+> parsing raw canonical bytes or reopening source authority.
+>
+> Language D0 agreed at `evt_6c783vvdwe0r3`: no equivalent package-side
+> constructor/match surface exists on `origin/main @ b0738a72`; the missing seam
+> is Language-owned and should extend the checked-core package/body-view surface
+> just enough for constructor references and supported match/eliminator
+> structure. Kernel D0 agreed at `evt_b3t0ezq5j4hk`: no kernel rule change is
+> needed, and impossible-branch behavior may become a trap/reject lane only
+> when exact package-side checked-core facts justify it on the exact artifact.
+>
+> Steward framed the prerequisite on branch
+> `wp/NC14-checked-core-data-match-view @
+> f4939b6604e6d8977251da4d0a70d484d7fdbf67` from base `origin/main @
+> b0738a72baad895edab1b9cafed3d26b02dc853f`. The frame lives at
+> `docs/program/wp/NC14-checked-core-data-match-view.md`, owner Language-led
+> with Runtime review and Kernel boundary review.
+>
+> Pre-handoff gate for the prerequisite: Team Language was compacted before
+> kickoff; language-leader, language-implementer, and language-qa panes all
+> showed `Context compacted`.
+>
+> Steward released `NC14-checked-core-data-match-view` to language-leader at
+> `evt_5a9qc2p82xy57`, asking for Language D0 on the exact frame/head,
+> including whether `spec/40-runtime/46-checked-core-package.md` needs a narrow
+> contract pointer. Runtime remains parked on NC14 proper until this
+> prerequisite lands or Language identifies an equivalent landed surface.
+>
+> Language D0 accepted the exact frame at `evt_26hw5kz2gvpz2`, decided the
+> prerequisite should include a narrow contract pointer in
+> `spec/40-runtime/46-checked-core-package.md`, and routed D1 to
+> language-implementer. Expected scope is
+> `crates/ken-elaborator/src/checked_core.rs`,
+> `docs/program/wp/NC14-checked-core-data-match-view.md`,
+> `spec/40-runtime/46-checked-core-package.md`, plus
+> `crates/ken-elaborator/src/lib.rs` only if export is required.
+>
+> Language implementer picked up D1 at `evt_64mt0y6rxpbsv`, grounded the
+> frame/base, and initially worked on a local implementation branch because
+> Steward's temporary frame worktree still held the WP branch at pickup time.
+> Steward removed `/tmp/ken-nc14-prereq-frame` after confirming it was clean,
+> so the `wp/NC14-checked-core-data-match-view` branch was no longer held by
+> the frame checkout.
+>
+> Language implementer handed off exact head
+> `wp/NC14-checked-core-data-match-view @
+> c21485451e7dd0b30c8fd97db4e4b33aa5a11b1c` at `evt_23yqhcap88sc2`.
+> Cumulative diff is exactly
+> `crates/ken-elaborator/src/checked_core.rs`,
+> `crates/ken-elaborator/src/erasure.rs`,
+> `docs/program/wp/NC14-checked-core-data-match-view.md`, and
+> `spec/40-runtime/46-checked-core-package.md`.
+>
+> Language QA approved the exact head at `evt_4qhvzjxy7jk67` and released the
+> branch from the QA worktree. Runtime consumer review approved the same head
+> at `evt_30h4hs8bcxs4x`, confirming that the prerequisite closes the
+> package-side gap needed before Runtime opens NC14 D1, while preserving the
+> separate impossible-branch semantic-cut check for NC14 proper.
+>
+> Language leader routed Architect exact-head review at `evt_2668x4c7y1t0f`.
+> Architect approved the exact head at `evt_7jc6p3pe25ejf`, verifying the
+> package-authoritative constructor/match body-view seam, stable fail-closed
+> lanes, erasure non-consumption, and clean negative scope.
+>
+> Language leader sent the merge-ready handoff to Integrator at
+> `evt_3ve3hbq3av1kn`. Integrator published the exact approved head and opened
+> PR #339 at `evt_2wban0tjjt5eb`; top-level Integrator status
+> `evt_316frxk6nc13` confirms CI gating is in progress. Initial check tail from
+> the Integrator pane showed clean-room provenance, conformance suite, and
+> path-guard passing, with `build + test` still pending.
+>
+> Integrator merged PR #339 at `evt_7w0xrf9p80hw7`; landed `origin/main @
+> 979264c6e7e3137d94c03320aad3f2bdf1554897` at
+> `2026-07-07T19:17:06Z`. CI was green (`build + test`, clean-room provenance
+> check, conformance suite, path-guard), and remote/local branch cleanup is
+> complete. Top-level Integrator status `evt_c31md0xdy19` confirms no open
+> integration PRs.
+>
+> Steward requested Language §10 retros for the prerequisite at
+> `evt_5d7ahmhny72hv`. Language leader opened the retro call at
+> `evt_34jh66qay7vtz`. Language QA retro is in at `evt_18vwgc9reg5ng`, and
+> Language implementer retro is in at `evt_6h5yxqdfk3agy`.
+>
+> Runtime compact gate before resuming NC14 proper: runtime-leader,
+> runtime-implementer, and runtime-qa all showed `Context compacted`.
+>
+> Steward released NC14 proper back to runtime-leader for D1 at
+> `evt_78hhnp26221gg`, with branch `wp/NC14-data-match-lowering`, base
+> `origin/main @ 979264c6e7e3137d94c03320aad3f2bdf1554897`, and the original
+> NC14 frame `docs/program/wp/NC14-data-match-lowering.md`. Runtime should
+> consume the newly landed package-authoritative constructor/match body-view
+> seam, keep unsupported dependent/proof-only shapes fail-closed before
+> backend work, and route Kernel/Architect review for the impossible-branch
+> semantic cut and runtime/report boundary.
+>
+> Runtime leader picked up D1 and is reading the landed brief/current seams.
+> The local `wp/NC14-data-match-lowering` ref is still at the old
+> `b0738a72baad895edab1b9cafed3d26b02dc853f` base, so Runtime leader is
+> preparing the implementer handoff with explicit instructions to start from
+> `origin/main @ 979264c6e7e3137d94c03320aad3f2bdf1554897` and move the WP
+> branch forward before coding.
+>
+> Runtime leader handed D1 to runtime-implementer at `evt_2yq2p0f90shj5`.
+> The handoff preserves the landed-base requirement, Runtime-owned NC14 scope,
+> package-authoritative body-view consumption only, and explicit Kernel /
+> Architect review routing if impossible-branch trap lowering becomes
+> executable. Runtime implementer has picked up the handoff, reloaded the role
+> context, verified `origin/main @
+> 979264c6e7e3137d94c03320aad3f2bdf1554897`, and is working from the stale
+> local branch/base correction before coding.
+>
+> Watchdog pane scan at 19:53 UTC showed Runtime implementation active in
+> `moot-runtime-implementer` on constructor/match lowering. No Runtime nudge was
+> needed. Language prerequisite closeout was wedged: both member retros were in,
+> but no Language leader coordination retro / retros-in handoff had landed.
+> Steward nudged `language-leader` at `evt_1rwvmcqrj224z`, anchored on Language
+> QA retro `evt_18vwgc9reg5ng` and Language implementer retro
+> `evt_6h5yxqdfk3agy`.
+>
+> Language leader then posted the prerequisite coordination retro / retros-in
+> closeout at `evt_yf0a7yjnayys`. `NC14-checked-core-data-match-view` is now
+> fully closed. Runtime NC14 D1 remains active.
+>
+> Next Steward action: await Runtime implementer exact-head handoff.
+
+> ### NC10 APPROVED FOR INTEGRATION (2026-07-07 13:00 UTC)
+>
+> Architect approved NC10 for integration at `evt_1rwsx61j5jmbh`.
+>
+> Exact approved head:
+>
+> - `wp/NC10-compiler-driver-target-selection @
+>   775342f6d29ed848b6d028a1d458d7637ecf5028`
+> - merge-base: `origin/main @
+>   68813ae53f413f35e2246f5d6450c43bda7f6354`
+>
+> Gate chain:
+>
+> - Steward kickoff: `evt_71qx5ybsd7f3f`
+> - Language D0: `evt_3mr8dzjgn8wnv`
+> - Implementer D1 handoff: `evt_3d7cp3cvz98dr`
+> - Steward review nudge: `evt_7xxd1cgx4nn7z`
+> - Language leader review: `evt_79a006v7h8khq`
+> - Language QA approval: `evt_4hwms8f52g35c`
+> - Language Architect-review route: `evt_1cd2k8p1anafp`
+> - Steward Architect nudge after transient reconnect: `evt_6nvj5kzwqphek`
+> - Architect approval: `evt_1rwsx61j5jmbh`
+>
+> Approved scope: `crates/ken-elaborator/src/compiler_driver.rs`,
+> `crates/ken-elaborator/src/lib.rs`, and the compiler continuation/program
+> docs plus NC10-NC18 WP frames. No `spec/`, `conformance/`,
+> `crates/ken-runtime`, `crates/ken-kernel`, `crates/ken-interp`, `Cargo.lock`,
+> or `local/refs` movement.
+>
+> Architect boundary read: NC10 remains Language-owned source/package input
+> through `ElabEnv` to `CheckedCorePackage v0`, then target
+> selection/report-shaping only. Runtime lowering, native artifact emission,
+> validation/proof facts, Cranelift/backend/native/linker scope, NC8/NC9
+> evidence broadening, kernel TCB growth, trusted primitive growth, and raw
+> source semantic fallback remain out of scope.
+>
+> Steward routed the exact approved head to Integrator at
+> `evt_3v0b0qfw8dsna`, with the gate chain, expected cumulative scope, and
+> negative-scope guardrails.
+>
+> Next Steward action: await Integrator publish/gate/merge result.
+
+> ### NC10 LANGUAGE APPROVED; ARCHITECT REVIEW PENDING (2026-07-07 12:38 UTC)
+>
+> Language review completed on exact head
+> `wp/NC10-compiler-driver-target-selection @
+> 775342f6d29ed848b6d028a1d458d7637ecf5028`.
+>
+> Gate anchors:
+>
+> - Language leader exact-head review: `evt_79a006v7h8khq`
+> - Language QA pickup: `evt_tn3e1qq5aatt`
+> - Language QA approval: `evt_4hwms8f52g35c`
+> - Architect-only review request: `evt_1cd2k8p1anafp`
+>
+> Language result: no Language-side blocker, no Runtime/Verify prerequisite,
+> and no owner-boundary drift. The implementation stays within real
+> `.ken`/source-set input through `ElabEnv` into admitted `CheckedCorePackage
+> v0`, then deterministic target selection/reporting at the checked-core
+> package boundary.
+>
+> The downstream review request correctly mentions live Architect. System events
+> show Architect disconnected at `evt_9h183ydh8a91` and reconnected at
+> `evt_1eca1q9qctwf5`; no Architect verdict has posted yet.
+>
+> Operator identified the reconnect/no-pickup pattern as likely transient
+> `convo-channel` MCP failure. Steward nudged Architect only at
+> `evt_6nvj5kzwqphek`.
+>
+> Next Steward action: await Architect exact-head approve/block on
+> `775342f6d29ed848b6d028a1d458d7637ecf5028`; nudge only if no pickup appears
+> after a real stall interval.
+
+> ### NC10 D1 HANDED OFF; LANGUAGE REVIEW NEEDED (2026-07-07 12:32 UTC)
+>
+> Language implementer posted the NC10 D1 implementation handoff at
+> `evt_3d7cp3cvz98dr`.
+>
+> Exact handoff head:
+>
+> - `wp/NC10-compiler-driver-target-selection @
+>   775342f6d29ed848b6d028a1d458d7637ecf5028`
+>
+> Delivered shape per handoff:
+>
+> - new Language-owned `ken_elaborator::compiler_driver` entry point from real
+>   `.ken` source/source sets through `ElabEnv` to `CheckedCorePackage v0`;
+> - deterministic target selection by exact stable symbol or manifest target;
+> - target report binding package identity, `core_semantic_hash`,
+>   `artifact_hash`, selected stable target symbols, assumptions/trust,
+>   unsupported lanes, and explicit unavailable lanes for runtime lowering,
+>   native artifact, and validation facts;
+> - positive and negative coverage for missing, ambiguous, absent-manifest,
+>   non-runtime, unsupported-target-metadata, stale package identity, and
+>   foreign-package target cases.
+>
+> Handoff states no owner-boundary blocker and no runtime IR lowering,
+> native/backend/Cranelift work, Verify evidence claim, kernel rule/TCB change,
+> trusted primitive, raw-source semantic evidence, `spec/`, `Cargo.lock`,
+> `crates/ken-runtime`, `crates/ken-kernel`, `crates/ken-interp`, or
+> `local/refs` movement.
+>
+> Next Steward action: ensure language-leader picks up exact-head D1 review,
+> then await Language review/QA routing.
+
+> ### NC10 D0 COMPLETE; D1 ACTIVE IN LANGUAGE (2026-07-07 12:23 UTC)
+>
+> Language leader posted NC10 D0 at `evt_3mr8dzjgn8wnv`.
+>
+> D0 result: Language can own NC10 on the handed frame with no immediate
+> Runtime or Verify prerequisite. The work remains source/package →
+> elaborator/kernel → `CheckedCorePackage v0` → deterministic target
+> selection/reporting. Runtime/Verify routing is required only if D1 discovers
+> a real owner-boundary prerequisite.
+>
+> Language leader routed D1 to language-implementer on exact kickoff head
+> `dfe07dd`; language-implementer acknowledged pickup at `evt_4z52qmhzhwxzy`.
+>
+> Watchdog pane scan during this tick showed language-implementer active and
+> locally ahead of Convo: branch
+> `wp/NC10-compiler-driver-target-selection @ 775342f`
+> (`NC10: compiler driver target selection`) existed and the implementer was
+> freeing the branch. This is not yet a review handoff because no Convo handoff
+> has posted.
+>
+> Next Steward action: await the official Language implementer handoff or a
+> blocker post in the NC10 thread.
+
+> ### NC10 RELEASED TO LANGUAGE (2026-07-07 12:22 UTC)
+>
+> Steward released `NC10-compiler-driver-target-selection` to
+> language-leader at `evt_71qx5ybsd7f3f`.
+>
+> Exact kickoff head:
+>
+> - `wp/NC10-compiler-driver-target-selection @ dfe07dd`
+> - base: `origin/main @ 68813ae`
+> - Architect handoff: `evt_36xe7h1g3jy9h`
+>
+> Handoff gate proof: Team Language compacted before the kickoff. Pane
+> verification showed `Context compacted` for:
+>
+> - `language-leader`
+> - `language-implementer`
+> - `language-qa`
+>
+> Release route: Language-led D0 boundary/readiness pass first. Language must
+> confirm whether NC10 is implementable inside Language on the handed frame, or
+> identify any narrow Runtime/Verify prerequisite before D1 branch movement.
+>
+> Guardrails carried in the kickoff: checked-core remains semantic authority;
+> target selection does not imply lowerability, runtime validation, native
+> executability, or whole-compiler proof; no kernel TCB growth, no raw-source
+> semantic fallback, no Cranelift/linker/native artifact claim, and no NC8/NC9
+> evidence broadening.
+>
+> Next Steward action: await Language D0 boundary/readiness result.
+
+> ### NC10 PROGRAM CONTINUATION READY FOR LANGUAGE (2026-07-07 12:14 UTC)
+>
+> Architect handed off the post-NC9 compiler continuation at
+> `evt_36xe7h1g3jy9h`.
+>
+> Branch/commit:
+>
+> - branch pointer: `wp/NC10-compiler-driver-target-selection @
+>   dfe07dd`
+> - commit: `dfe07dd docs: frame compiler continuation program`
+> - base: `origin/main @ 68813ae`
+>
+> Scope of the frame commit:
+>
+> - new continuation chapter: `docs/program/08-compiler-continuation.md`
+> - program index updates: `docs/program/07-compiler-program.md`,
+>   `docs/program/05-implementation-dag.md`, and `docs/program/README.md`
+> - follow-on WP frames: `docs/program/wp/NC10-*` through
+>   `docs/program/wp/NC18-*`
+>
+> Program decision: NC10-NC18 are the next campaign, the General
+> Ken-to-Runtime-IR Compiler. The first routable target is NC10:
+> compiler driver and target-selection boundary, Language-led with
+> Runtime/Verify support as needed.
+>
+> Guardrails carried forward: checked-core remains semantic authority; no
+> kernel TCB growth; no raw-source semantic fallback; no Cranelift, linker,
+> native artifact, or whole-compiler claim in NC10-NC18; NC8/NC9 evidence
+> labels stay bounded.
+>
+> Next Steward action: compact-gate Team Language and release NC10 to
+> language-leader on exact branch pointer `dfe07dd`.
+
+> ### NC9 COMPLETE (MERGED + RETROS IN) (2026-07-07 10:36 UTC)
+>
+> `NC9-first-ken-owned-pass` is fully closed.
+>
+> Closeout anchors:
+>
+> - PR #332
+> - landed `main`: `68813ae53f413f35e2246f5d6450c43bda7f6354`
+> - exact approved head:
+>   `wp/NC9-first-ken-owned-pass @
+>   41d804a8456095c4017b5d73359405ae41c739e0`
+> - merge note: `evt_n2bwfpy877h6`
+> - Architect approval: `evt_10e0d46sngc18`
+> - cross-lane prerequisite anchor: Runtime handback `evt_4crhdv5pbsg87`
+>
+> Verify leader posted retros-in at `evt_1am6vfnpa7qmf`.
+>
+> Required Verify-lane §10 retros landed in-thread:
+>
+> - Verify QA retro: `evt_5txgbtcet3cdj`
+> - Verify implementer retro: `evt_v5yjak5cjq54`
+> - Verify leader coordination retro: `evt_183r4n6fh8vr`
+>
+> Harvest summary: NC9's recurring lesson is that once a bounded checker fact
+> becomes report-visible, every downstream revalidation or attachment path must
+> preserve the same concrete lane vocabulary as the primary checker. Aggregate
+> report-slot labels are insufficient when the acceptance frame requires named
+> lanes. The Runtime prerequisite split held: Verify consumed the handed-back
+> pair-derived witness/report API rather than reconstructing boundary evidence
+> locally.
+>
+> Compiler-program note: `docs/program/07-compiler-program.md` currently lists
+> NC1 through NC9 only. With NC9 closed, the documented NC compiler campaign is
+> complete; the next compiler move needs a new WP/program extension or operator
+> direction.
+>
+> Next Steward action: hold the compiler lane idle pending a new compiler WP,
+> program extension, or operator direction.
+
+> ### NC9 D0 COMPLETE; FRAME NARROWED FOR VERIFY (2026-07-07 08:45 UTC)
+>
+> Architect returned the NC9 D0 target-selection ruling at
+> `evt_5wr950f14zmpr`, grounded in landed
+> `origin/main @ 193d62cf3fde78e301f576b1e9248a9b767424c3`.
+>
+> Decision: NC9's first target is a bounded Ken-checked proof-erasure
+> metadata/pass-boundary checker, not pattern-match lowering, dictionary
+> lowering, closure conversion, whole erasure, or self-hosting.
+>
+> Steward amended:
+>
+> - `docs/program/wp/NC9-first-ken-owned-pass.md`
+> - `docs/program/07-compiler-program.md`
+>
+> Release branch created from `origin/main @
+> 193d62cf3fde78e301f576b1e9248a9b767424c3`:
+>
+> - `wp/NC9-first-ken-owned-pass @
+>   2bac230584736b849f3a7ac89efb0ff4e23b874d`
+>
+> The narrowed frame is Verify-led, with Runtime support for the Rust-side
+> erasure-boundary witness and trust-report integration, and Language support
+> only as needed to expose checked-core package fixture fields cleanly.
+>
+> Acceptance boundary now pinned:
+>
+> - exact `package_identity`, `core_semantic_hash`, and `artifact_hash`;
+> - proof-erasure classification and metadata survival;
+> - runtime/proof/law field status;
+> - lowerability and unsupported lanes;
+> - obligations, assumptions, trust metadata, and trusted-base delta;
+> - Rust/Ken checker agreement on positive and negative fixtures;
+> - diagnostics naming the failing lane.
+>
+> Guardrails: preserve the Rust bootstrap path, add no kernel TCB or raw-source
+> authority, do not broaden NC8's runtime validator, and leave Cranelift,
+> linker, native execution, object layout, and whole-compiler correctness
+> `Unavailable` or out of scope.
+>
+> Team Verify compact gate completed before kickoff: verify-leader,
+> verify-implementer, and verify-qa panes each showed `Context compacted`.
+>
+> Steward released the narrowed NC9 build kickoff to Verify leader at
+> `evt_43c05w0naaxsw`, in the NC9 thread rooted at `evt_46tkafnsprxpv`.
+>
+> Verify leader accepted pickup at `evt_25m0k3ghrghhw` on exact frame head
+> `2bac230584736b849f3a7ac89efb0ff4e23b874d`. Verify will route
+> implementer/QA on the bounded witness/checker slice and will explicitly
+> route Runtime or Language support in-thread only if the witness surface needs
+> it.
+>
+> Follow-up at `evt_7e3kzz07wcmw`: Verify implementer and QA are aligned and
+> parked on the narrowed boundary; Verify leader is actively checking whether
+> D1 is buildable inside Verify scope or requires explicit Runtime/Language
+> support first. No branch movement or scope widening until that route posts
+> in-thread.
+>
+> Watchdog at 2026-07-07 09:13 UTC found no new NC9 thread activity since
+> `evt_pq810bfyb1va` and Verify leader idle at the prompt. Steward issued a
+> D1-routing nudge to Verify leader only at `evt_2ednf61f2x33j`, asking for
+> either a Verify implementer route, an explicit Runtime/Language support
+> route, or a blocker requiring Steward/Architect adjustment.
+>
+> Verify leader responded at `evt_3htk9a3nz1naf`: NC9 needs an explicit
+> Runtime prerequisite before Verify implementer starts. Missing surface is a
+> Runtime-emitted bounded erasure-boundary witness plus separate NC9
+> trust-report fact plumbing. Verify remains owner of the later Ken checker,
+> Rust/Ken cross-check, mismatch diagnostics, QA route, and review chain.
+>
+> Runtime leader accepted pickup at `evt_53ge88g0ah030`, holding the lane
+> narrow: derive the witness from the exact `CheckedCorePackage v0` /
+> `RuntimeProgram` pair, bind `package_identity`, `core_semantic_hash`, and
+> `artifact_hash`, include only routed NC9 metadata/pass-boundary facts, and
+> avoid NC8 validator widening, runtime expression/body-lowering claims,
+> kernel/raw-source/native-code authority, or silent Language absorption.
+>
+> Runtime leader routed the prerequisite to Runtime implementer at
+> `evt_75s7ajqn2wqvp`. Runtime implementer acknowledged at
+> `evt_13xqms428pan9` and marked implementation in progress at
+> `evt_cy38jea467y8` on `wp/NC9-first-ken-owned-pass`. Watchdog pane scan at
+> 2026-07-07 09:34 UTC showed active finalization work with focused erasure
+> boundary, runtime, and NC7 gates green after an edge-case fix; implementer was
+> committing/releasing and had not yet posted a handoff in Convo.
+> Follow-up pane scan at 2026-07-07 09:36 UTC showed Runtime implementer had
+> committed `aedd350` (`NC9: add proof-erasure boundary witness surface`) on
+> `wp/NC9-first-ken-owned-pass` and detached `/tmp/nc9-frame` to release the
+> branch. No Convo handoff had posted yet.
+>
+> Runtime implementer formally handed off
+> `aedd350cd10a206213fd5ca5505606eb84772813` at `evt_28j5zd6s5xz3x`;
+> Runtime leader routed Runtime QA at `evt_4ypbf1g3p1dy7`; Runtime QA picked
+> up at `evt_f2jwx6evvveh`.
+>
+> Runtime QA blocked `aedd350` at `evt_4e886ncz0tzq7`. Finding:
+> `emit_proof_erasure_boundary_witness` could still succeed after the
+> runtime-side target record declaration was removed, because package-side
+> declaration field facts were filtered through the already-provided
+> `RuntimeProgram.declarations` list. Missing/stale runtime declarations for
+> package records in the emitted boundary must reject with a named
+> `WitnessMismatch` lane. Runtime QA released the shared branch back to
+> Runtime implementer.
+>
+> Runtime implementer acknowledged the QA blocker at `evt_afejj4pyvymb` and is
+> repairing the missing-runtime-record-declaration false positive on
+> `wp/NC9-first-ken-owned-pass`.
+>
+> Runtime implementer repaired the first blocker at
+> `e773659e29a76a12fdc0f9450b32e87b5882ed33` (`evt_3wc7btzmx08et`), but
+> Runtime QA blocked again at `evt_60q3jzf7j555j`: the new
+> `runtime_declaration_targets` lane was still program-owned, so dropping both
+> a runtime declaration and that metadata lane could still produce an empty
+> success witness.
+>
+> Runtime implementer repaired the second blocker at
+> `476c3f64e924d30c8d0cfda52e32511f17487923` (`evt_7zc20bb78n0ed`):
+> `emit_proof_erasure_boundary_witness_for_targets(package, targets, program)`
+> now binds package-side target expectations to explicit erasure target input,
+> and the pair-only emitter fails closed for ambiguous record targets.
+> Runtime QA approved the repaired head at `evt_66af5tb3xvxy3`; Runtime leader
+> handed the approved prerequisite back to Verify at `evt_4crhdv5pbsg87`.
+>
+> Verify leader accepted the Runtime prerequisite on exact head
+> `476c3f64e924d30c8d0cfda52e32511f17487923` and released Verify D1 at
+> `evt_394rpbgrzrcjt`. Verify implementer is now active on the bounded Ken
+> checker / Rust-Ken cross-check slice against that witness surface. Verify QA
+> acknowledged active review prep at `evt_5kbn61raexfjq` and will wait for the
+> exact implementer handoff before checkout/testing.
+>
+> Verify implementer acknowledged active pickup at `evt_6z2qweq13fq0q` and
+> checked out `wp/NC9-first-ken-owned-pass @
+> 476c3f64e924d30c8d0cfda52e32511f17487923`. Verify leader confirmed the
+> execution state at `evt_4hm0zqzhpr5m5`; Verify QA reconfirmed exact-boundary
+> review prep at `evt_18g9a8zhr2njx`.
+>
+> Verify implementer handed off the bounded checker slice at
+> `07346919a29e71aea6f23dc297f027a4dbd2c1b4` (`evt_4py83ra0ypjdg`). Verify QA
+> picked up the exact head at `evt_77422yb3fqnss`, but Verify leader blocked it
+> at `evt_48dksvearf1m8`: the report attachment path in
+> `run_ken_checked_proof_erasure_example_with_interpreter_observation` collapsed
+> fact mismatches to aggregate lane `ken_checked_proof_erasure_boundary` instead
+> of naming the concrete failing NC9 lane.
+>
+> Verify implementer acknowledged the blocker at `evt_24fth34v0nv5x`, then hit a
+> shared-branch occupancy blocker because Verify QA still had
+> `wp/NC9-first-ken-owned-pass` checked out (`evt_4f7kftgqnvhvr`). Verify QA
+> released the branch at `evt_61e6yh3acaxyy` and reconfirmed at
+> `evt_6x602xsnk3kdz`; pane scan showed Verify implementer then checked out the
+> WP branch at `07346919a29e71aea6f23dc297f027a4dbd2c1b4` and resumed the narrow
+> attachment-path concrete-lane diagnostic repair.
+>
+> Verify implementer handed off repaired head
+> `41d804a8456095c4017b5d73359405ae41c739e0` at `evt_3h431q5a2cmk6`.
+> Repair stayed within `crates/ken-runtime/src/cranelift_backend.rs` and
+> `crates/ken-interp/tests/nc9_proof_erasure_boundary_checker.rs`: the
+> attachment recheck now reports `artifact_identity` for identity mismatch and
+> the first concrete NC9 lane for fact mismatches; regression
+> `native_trust_report_attachment_recheck_names_concrete_mismatch_lane` covers
+> an `assumptions`-lane mismatch. Verify leader approved the blocker closure
+> for QA at `evt_5heznfq28zsw0`; Verify QA picked up exact-head re-review at
+> `evt_2fka43kmrhqzw`.
+>
+> Verify QA approved `41d804a8456095c4017b5d73359405ae41c739e0` at
+> `evt_3gj5k5qj0spwp`. Verify leader posted final routing at
+> `evt_4g74qz7k4c5zj`, with NC9 approved through Verify QA and ready for
+> Architect review. The approved cumulative Verify diff from Runtime-approved
+> head `476c3f64e924d30c8d0cfda52e32511f17487923` remains the routed six-file
+> checker/report slice, and the preserved guardrails are no NC8 widening, no
+> runtime expression/body-lowering claims, and no kernel/raw-source/native/
+> linker/Cranelift/whole-compiler authority movement.
+>
+> Architect pane scan showed Architect picked up the exact-head review on
+> `41d804a8456095c4017b5d73359405ae41c739e0` after `evt_4g74qz7k4c5zj`; no
+> Architect verdict had posted yet.
+>
+> Architect approved exact head `41d804a8456095c4017b5d73359405ae41c739e0` for
+> integration at `evt_10e0d46sngc18`. Approval preserved the bounded NC9
+> proof-erasure metadata/pass-boundary scope, accepted the lane-verdict checker
+> evidence level with explicit helper assumption reporting, and confirmed no
+> NC8 validator widening, runtime expression/body-lowering claims,
+> kernel/raw-source/native/linker/Cranelift/whole-compiler authority movement,
+> `Cargo.lock`, `crates/ken-kernel`, `spec/`, or `local/refs` changes.
+>
+> Steward routed the exact head to Integrator at `evt_646p6n7amg3y5`, with the
+> Architect-approved cumulative file scope and gate chain, asking Integrator to
+> publish/gate/merge and announce the merge result to Steward only.
+>
+> Integrator picked up at `evt_3x1k9tv06mtv9`, published the branch at
+> `evt_7csbryb4964md`, and opened PR #332 at `evt_7kh9x3qqssdtg`. Integrator
+> is watching the required GitHub checks and will merge when the exact approved
+> head gate is green.
+>
+> Integrator shipped NC9 to `main` at `evt_n2bwfpy877h6`.
+>
+> - PR: #332
+> - landed `main`: `68813ae53f413f35e2246f5d6450c43bda7f6354`
+> - exact approved head:
+>   `wp/NC9-first-ken-owned-pass @
+>   41d804a8456095c4017b5d73359405ae41c739e0`
+> - GitHub checks green before merge: `build + test`, clean-room provenance
+>   check, conformance suite, and path-guard
+> - branch cleanup complete: remote and local shared-store branch refs deleted
+>
+> Steward requested NC9 §10 retros from Verify leader at `evt_55yhqva793eqv`,
+> anchored on PR #332 / `origin/main @
+> 68813ae53f413f35e2246f5d6450c43bda7f6354` and final reviewed head
+> `41d804a8456095c4017b5d73359405ae41c739e0`.
+>
+> Next Steward action: close NC9 when retros-in arrives.
+
+> ### NC9 D0 TARGET SELECTION ROUTED TO ARCHITECT (2026-07-07 08:34 UTC)
+>
+> NC8 is complete, so `NC9-first-ken-owned-pass` is the next compiler-program
+> DAG node. The existing frame at
+> `docs/program/wp/NC9-first-ken-owned-pass.md` is too broad to release directly
+> to a build team because it asks the owning team to choose the semantic pass
+> itself.
+>
+> Steward compacted Architect before routing the new work; pane verification
+> showed `Context compacted`.
+>
+> Steward opened the NC9 D0 target-selection thread at `evt_46tkafnsprxpv`,
+> mentioning only Architect. Requested D0 output:
+>
+> - choose the smallest sound first Ken-owned or Ken-checked compiler pass after
+>   NC8;
+> - choose Language/Runtime/Verify ownership or prerequisite splits;
+> - pin the first build slice's acceptance surface, agreement/checker success,
+>   and unavailable/out-of-scope facts;
+> - name any required spec/program/WP amendment before release;
+> - preserve the Rust bootstrap path, NC8 F2/F1 boundary, no kernel TCB growth,
+>   and no NC8 validator broadening without context-sensitive recomputation.
+>
+> Next Steward action: await Architect D0 ruling, then amend/release NC9 to the
+> selected owning team through the normal compact-verified handoff gate.
+>
+> ### NC8 COMPLETE (MERGED + RETROS IN) (2026-07-07 08:26 UTC)
+>
+> `NC8-first-certificate-validator` is fully closed.
+>
+> Closeout anchors:
+>
+> - PR #331
+> - landed `main`: `193d62cf3fde78e301f576b1e9248a9b767424c3`
+> - exact approved head:
+>   `6e58062e124e46e1f63d5d3e454bc36dcdbd0d1e`
+> - merge note: `evt_3k72gzwpdp00p`
+> - Architect approval: `evt_7vfnk5c5yyyrj`
+> - Verify functional completion: `evt_5v5s9cy7bnser`
+> - retros-in handoff: `evt_1gypq7wp6rwha`
+>
+> Required §10 retros landed in-thread:
+>
+> - Verify QA retro: `evt_378f8r6skcv4m`
+> - Verify implementer retro: `evt_1p0s4phv2z1nh`
+> - Verify leader coordination retro: `evt_6w7fjt19gxyz1`
+>
+> Harvest note: for report-visible F2 validators, artifact identity binding is
+> necessary but not sufficient. The accepted syntax/value surface must match the
+> exact supported subset of the current consumer. Recursive child-only
+> validation over context-sensitive forms is not enough; either recompute local
+> preconditions fully or reject those forms in the first validator.
+>
+> Next Steward action: continue compiler-program DAG from post-NC8 frontier.
+>
+> ### NC8 MERGED; VERIFY RETROS EXPECTED (2026-07-07 08:24 UTC)
+>
+> Integrator shipped NC8 to `main` at `evt_3k72gzwpdp00p`.
+>
+> - PR: #331
+> - merge commit on `main`:
+>   `193d62cf3fde78e301f576b1e9248a9b767424c3`
+> - exact approved head merged:
+>   `wp/NC8-first-certificate-validator @
+>   6e58062e124e46e1f63d5d3e454bc36dcdbd0d1e`
+> - GitHub checks green before merge: `build + test`, clean-room provenance
+>   check, conformance suite, and path-guard
+> - `origin/main` fetched locally by Integrator:
+>   `6e178eb49513c8142dc6fc1d217f2b3b96d33f5f ->
+>   193d62cf3fde78e301f576b1e9248a9b767424c3`
+> - branch cleanup complete: remote `wp/NC8-first-certificate-validator`
+>   deleted; local shared-store branch ref deleted
+>
+> Gate chain honored on the merged head:
+>
+> - Verify D0: `evt_3v52hzkham4mx`
+> - Kernel D0: `evt_6gnw2qjz295fa`
+> - joint D0: `evt_240tvhpg4sydv`
+> - repair handoff: `evt_5ks6vny3r4zfc`
+> - Verify re-review: `evt_3stns2a36csv1`
+> - Verify QA: `evt_4fz4gt33kcanq`
+> - Architect integration approval: `evt_7vfnk5c5yyyrj`
+>
+> Verify leader posted functional completion at `evt_5v5s9cy7bnser`, confirming
+> the shipped artifact matches the approved scope and that no further Verify
+> implementation/review action remains. This did not include the normal §10
+> retro set.
+>
+> Next Steward action: request Verify §10 retros-in so NC8 can close fully.
+>
+> ### NC8 INTEGRATION PICKED UP (2026-07-07 08:19 UTC)
+>
+> Steward routed NC8 integration to Integrator at `evt_7spdb51kr43qh` on exact
+> approved head:
+>
+> - `wp/NC8-first-certificate-validator @
+>   6e58062e124e46e1f63d5d3e454bc36dcdbd0d1e`
+>
+> Integrator acknowledged pickup at `evt_4y79p6ck0esb7`, verified the exact
+> approved head, cumulative diff, and final Verify + Architect gate chain, and
+> began publishing the branch for CI/merge gate at `evt_1k5braekdmj9x`.
+>
+> Next Steward action: await Integrator publish/CI/merge result. No Steward
+> nudge needed while Integrator is actively handling the gate.
+>
+> ### NC8 APPROVED FOR INTEGRATION (2026-07-07 08:18 UTC)
+>
+> Architect approved NC8 for integration at `evt_7vfnk5c5yyyrj`; Verify leader
+> closed out the gate chain for Steward integration handling at
+> `evt_aqr8en7d7t9n`.
+>
+> Approved exact head:
+>
+> - `wp/NC8-first-certificate-validator @
+>   6e58062e124e46e1f63d5d3e454bc36dcdbd0d1e`
+> - landed base:
+>   `origin/main @ 6e178eb49513c8142dc6fc1d217f2b3b96d33f5f`
+>
+> Final gate chain on this exact head:
+>
+> - Verify D0 boundary read: `evt_3v52hzkham4mx`
+> - Kernel D0 signoff: `evt_6gnw2qjz295fa`
+> - joint D0 decision: `evt_240tvhpg4sydv`
+> - latest Architect blocker on prior head `2b2d530`: `evt_7nxvh0khznn0r`
+> - repair handoff: `evt_5ks6vny3r4zfc`
+> - Verify re-review approval: `evt_3stns2a36csv1`
+> - Verify QA approval: `evt_4fz4gt33kcanq`
+> - Architect integration approval: `evt_7vfnk5c5yyyrj`
+>
+> Approved NC8 shape:
+>
+> - artifact-local F2 validator binds exact artifact identity on
+>   `package_identity`, `core_semantic_hash`, and `artifact_hash`;
+> - recomputation stays `RuntimeProgram`-only and rejects malformed, stale,
+>   contradictory, unsupported, and false claims loudly;
+> - accepted expression surface is intentionally narrow: supported literal
+>   values, total `add_int(Value(Int), Value(Int))`, bounded `CheckedTrap`, and
+>   explicit `Trap`;
+> - `Var`, `Let`, `If`, and context-sensitive compound forms `Construct`,
+>   `Match`, `Record`, `Project`, `Closure`, and `Call` reject under
+>   `ClaimRecompute / all_runtime_expressions_supported`;
+> - unsupported primitive symbols, wrong `add_int` arity, variable/non-literal
+>   operands, non-Int operands, `Unknown`, `ClosureRef`, and `TrustedTrap`
+>   reject as routed;
+> - NC8 F2 remains separate from NC7 F1; Cranelift/linker exact-run facts remain
+>   `Unavailable`; no kernel/raw-source/native-code/whole-compiler authority
+>   expansion.
+>
+> Future-scope note to preserve: any later expansion to constructors, matches,
+> records, projections, closures, or calls needs context-sensitive recomputation
+> and fresh review before it can carry F2 validation.
+>
+> Next Steward action: route Integrator for normal publish/gate/merge on
+> `6e58062`.
+>
+> ### NC8 ARCHITECT RE-REVIEW ACTIVE ON `6e58062` (2026-07-07 08:14 UTC)
+>
+> Architect blocked prior head `2b2d53085bed8721be01fafaa62ac9831f87d2dd` at
+> `evt_7nxvh0khznn0r`. The unbound-`Var` repair was accepted, but NC8 still
+> accepted context-sensitive compound expression forms by recursively checking
+> only children:
+>
+> - `Construct`, `Match`, `Record`, `Project`, `Closure`, and `Call`;
+> - concrete over-claims included projection from `Value(Int(1))` and
+>   top-level observable `Closure`.
+>
+> Verify leader agreed and routed systematic repair at `evt_5tzn6v32h0q04`.
+> Verify implementer repaired at `evt_5ks6vny3r4zfc`:
+>
+> - `wp/NC8-first-certificate-validator @
+>   6e58062e124e46e1f63d5d3e454bc36dcdbd0d1e`
+> - repair narrows `validate_runtime_expr` to closed forms the first NC8
+>   validator can certify now: supported literal values, total
+>   `add_int(Value(Int), Value(Int))`, bounded `CheckedTrap`, and explicit
+>   `Trap`;
+> - context-sensitive compound forms now reject under `ClaimRecompute` /
+>   `all_runtime_expressions_supported`;
+> - negative regressions cover projection from `Value(Int(1))` and top-level
+>   observable `Closure`;
+> - prior tightenings remain intact: exact identity binding, `Unknown` / `Var`
+>   / `Let` / `If` rejection, unsupported primitive symbol/arity/non-literal
+>   operand rejection, `TrustedTrap` rejection, and F2/F1 separation.
+>
+> Verify leader approved the repaired head at `evt_3stns2a36csv1`; Verify QA
+> approved at `evt_4fz4gt33kcanq`; Verify leader routed Architect re-review at
+> `evt_2dmps3tyhs9se`.
+>
+> Current review target:
+>
+> - `wp/NC8-first-certificate-validator @
+>   6e58062e124e46e1f63d5d3e454bc36dcdbd0d1e`
+> - landed base:
+>   `origin/main @ 6e178eb49513c8142dc6fc1d217f2b3b96d33f5f`
+> - cumulative diff remains:
+>   `crates/ken-runtime/src/artifact_validation.rs`,
+>   `crates/ken-runtime/src/cranelift_backend.rs`,
+>   `crates/ken-runtime/src/lib.rs`, and
+>   `docs/program/wp/NC8-first-certificate-validator.md`
+>
+> Next Steward action: await Architect re-review on `6e58062`. The handoff is
+> fresh, correctly routed, and Architect's pane is active, so no Steward nudge is
+> needed.
+>
+> ### NC8 ARCHITECT RE-REVIEW ACTIVE ON `2b2d530` (2026-07-07 08:01 UTC)
+>
+> Verify leader routed Architect re-review at `evt_awgrr6qz2n1z` after Verify
+> QA approval:
+>
+> - `wp/NC8-first-certificate-validator @
+>   2b2d53085bed8721be01fafaa62ac9831f87d2dd`
+> - landed base:
+>   `origin/main @ 6e178eb49513c8142dc6fc1d217f2b3b96d33f5f`
+> - approval chain for this exact head:
+>   - repair handoff: `evt_34m4r81zw1rqc`
+>   - Verify re-review approval: `evt_54efre2bvk093`
+>   - Verify QA approval: `evt_4ky3wfk057h1m`
+>
+> Current approved Verify/QA shape:
+>
+> - artifact-local validator keeps exact identity binding on
+>   `package_identity`, `core_semantic_hash`, and `artifact_hash`;
+> - checker recomputes from `RuntimeProgram` only;
+> - first NC8 validator is narrowed to the closed scalar subset it can certify:
+>   standalone `Var`, `Unknown`, `Let`, `If`, unsupported total primitive
+>   symbols, wrong `add_int` arity, non-literal/non-Int `add_int` operands, and
+>   variable-bound non-Int operand shapes reject under `ClaimRecompute`;
+> - `TrustedTrap` rejection and bounded `CheckedTrap` remain unchanged;
+> - `F2BoundedRuntimeArtifactValidation` remains separate from NC7
+>   `F1InterpreterDifferentialAgreement`;
+> - Cranelift/linker exact-run facts remain `Unavailable`, not prose evidence;
+> - no kernel TCB growth, raw-source checker input, native-execution
+>   certification, `local/refs`, or whole-compiler proof claim found by
+>   Verify/QA.
+>
+> Next Steward action: await Architect re-review on `2b2d530`. The handoff is
+> fresh and correctly routed, so no Steward nudge is needed.
+>
+> ### NC8 VAR REPAIR QA-APPROVED; ROUTE ARCHITECT REVIEW (2026-07-07 08:00 UTC)
+>
+> Verify QA approved the repaired NC8 head at `evt_4ky3wfk057h1m`:
+>
+> - `wp/NC8-first-certificate-validator @
+>   2b2d53085bed8721be01fafaa62ac9831f87d2dd`
+> - `RuntimeExpr::Var(_)` now rejects under `ClaimRecompute` /
+>   `all_runtime_expressions_supported`;
+> - negative regressions cover top-level validated `Var(0)` and reachable
+>   transparent declaration body `Var(0)`;
+> - prior repairs remain intact: literal-only `add_int` operands, unsupported
+>   primitive/arity rejection, `Unknown`/`Let`/`If` rejection, `TrustedTrap`
+>   rejection, and bounded `CheckedTrap`;
+> - exact artifact identity binding, artifact-local recomputation,
+>   `F2BoundedRuntimeArtifactValidation` / NC7 F1 separation, and unavailable
+>   Cranelift/linker exact-run facts all remain in the approved frame;
+> - QA verification: `git diff --check`, `ken-runtime nc8`, full
+>   `ken-runtime`, and NC7 differential trust report tests passed; the known
+>   `ken-runtime` fmt failure remains outside the NC8 diff in `store.rs`.
+>
+> Next Steward action: await Verify leader routing to Architect re-review on
+> `2b2d53085bed8721be01fafaa62ac9831f87d2dd`. QA already routed the next move
+> to Verify leader in `evt_4ky3wfk057h1m`, so no Steward nudge is needed.
+>
+> ### NC8 VAR REPAIR ACTIVE WITH VERIFY QA (2026-07-07 07:59 UTC)
+>
+> Verify implementer repaired the unbound `RuntimeExpr::Var(_)` blocker at
+> `evt_34m4r81zw1rqc`:
+>
+> - `wp/NC8-first-certificate-validator @
+>   2b2d53085bed8721be01fafaa62ac9831f87d2dd`
+> - blocked head repaired:
+>   `08ba0e742966c12e3ad561c3281fbf28fadc6220`
+> - repair rejects all `RuntimeExpr::Var(_)` under `ClaimRecompute` /
+>   `all_runtime_expressions_supported`;
+> - repair adds negative NC8 regressions for top-level validated `Var(0)` and
+>   reachable transparent declaration body `Var(0)`;
+> - prior repairs remain intact: literal-only `add_int` operands, unsupported
+>   primitive/arity rejection, `Unknown`/`Let`/`If` rejection, `TrustedTrap`
+>   rejection, and bounded `CheckedTrap` behavior;
+> - repair stays limited to `crates/ken-runtime/src/artifact_validation.rs` and
+>   `crates/ken-runtime/src/cranelift_backend.rs`; no kernel/backend authority
+>   expansion.
+>
+> Verify leader approved the repaired head for Verify QA at
+> `evt_54efre2bvk093`, confirming the unbound-variable over-claim is closed
+> within the blocked-finding scope and that exact identity binding,
+> artifact-local recomputation, and F2/F1 separation remain unchanged.
+>
+> Next Steward action: await Verify QA re-review on
+> `2b2d53085bed8721be01fafaa62ac9831f87d2dd`. Verify leader already routed the
+> next move to Verify QA in `evt_54efre2bvk093`, so no Steward nudge is needed.
+>
+> ### NC8 ARCHITECT BLOCKED ON UNBOUND `Var` (2026-07-07 07:56 UTC)
+>
+> The NC8 repair loop moved through three supported-subset honesty gaps after
+> the prior QA block:
+>
+> 1. Verify implementer repaired the QA `Let`/`If` expression-form blocker at
+>    `evt_40360fthe34v2`:
+>
+>    - `wp/NC8-first-certificate-validator @
+>      6d2a31618b23e531e949a617fce9accc042b9a4b`
+>    - repair rejected `RuntimeExpr::Let` and `RuntimeExpr::If` with
+>      `ClaimRecompute` / `all_runtime_expressions_supported`;
+>    - repair added negative regressions for `Let` in a validated example and
+>      `If` in a reachable transparent declaration body.
+>
+>    Verify leader approved the repair at `evt_5n7wzy9pezvh`; Verify QA
+>    approved at `evt_7pqhess6fbhyq`; Verify leader routed Architect review at
+>    `evt_36xwbyjm7jmk0`.
+>
+> 2. Architect blocked `6d2a316` at `evt_2q4837q6b4m6g`: NC8 still accepted
+>    arbitrary total `RuntimeExpr::PrimitiveCall` forms, while the NC6 lowering
+>    boundary only supports total primitive `add_int` with arity 2. Verify
+>    leader agreed at `evt_63fw8hy3f7n2j`.
+>
+>    Verify implementer repaired at `evt_3rv2mvzg347he`:
+>
+>    - `wp/NC8-first-certificate-validator @
+>      31b2e7d942676967a4adeee7e5dbce606e4d6644`
+>    - repair rejected total primitive calls outside the current NC6 primitive
+>      subset with `ClaimRecompute` / `all_runtime_primitives_supported`;
+>    - repair required total primitive symbol `add_int`, arity 2, and
+>      conservative operand shape `Var(_)` or `Value(Int(_))`;
+>    - repair added negative regressions for unsupported total primitive
+>      symbol, wrong `add_int` arity, and non-Int operand shape.
+>
+>    Verify leader approved this repair at `evt_2dxb2y1a17edv`.
+>
+> 3. Verify QA blocked `31b2e7d` at `evt_6bbas4k7s37mb`: arbitrary `Var(_)`
+>    operands were still broader than the NC6 supported primitive boundary
+>    because variables can be bound to non-Int values by matches. Verify leader
+>    agreed at `evt_qvj8f5r50dr9`.
+>
+>    Verify implementer repaired at `evt_vswr3hdzj3q9`:
+>
+>    - `wp/NC8-first-certificate-validator @
+>      08ba0e742966c12e3ad561c3281fbf28fadc6220`
+>    - repair narrowed total `add_int` operands to literal
+>      `RuntimeExpr::Value(RuntimeValue::Int(_))` only;
+>    - arbitrary `Var(_)` operands now reject with `ClaimRecompute` /
+>      `all_runtime_primitives_supported`;
+>    - repair added the requested negative regression for a `Match` binding a
+>      constructor Bool payload and then using `Var(0)` as an `add_int`
+>      operand;
+>    - positive/contradictory NC8 fixtures were narrowed to the closed scalar
+>      example.
+>
+> Verify leader approved `08ba0e7` at `evt_gth77kgr1jds`. Verify QA approved it
+> at `evt_6zvmrg6hh62ew`; note this event id appears in the routing summary for
+> the final head. Verify leader routed Architect re-review at
+> `evt_5sttxg7n2tb3m`, mentioning only Architect.
+>
+> Architect re-reviewed `08ba0e7` at `evt_33eb61g9s84w5` and blocked it on one
+> remaining supported-subset over-claim:
+>
+> - `RuntimeExpr::Var(_)` is still accepted unconditionally by NC8
+>   recomputation;
+> - the NC6 backend only accepts `Var` when the lowering environment has a
+>   binding for that index;
+> - therefore an otherwise matching certificate over a validated example or
+>   reachable transparent declaration body containing top-level `Var(0)` can
+>   still produce `F2BoundedRuntimeArtifactValidation`, even though NC6 rejects
+>   the same artifact before native execution.
+>
+> Verify leader agreed and routed the narrow repair at `evt_69vc84fyq2wpb`.
+>
+> Current blocked head:
+>
+> - `wp/NC8-first-certificate-validator @
+>   08ba0e742966c12e3ad561c3281fbf28fadc6220`
+> - cumulative diff vs `origin/main @
+>   6e178eb49513c8142dc6fc1d217f2b3b96d33f5f`:
+>   `crates/ken-runtime/src/artifact_validation.rs`,
+>   `crates/ken-runtime/src/cranelift_backend.rs`,
+>   `crates/ken-runtime/src/lib.rs`, and
+>   `docs/program/wp/NC8-first-certificate-validator.md`
+>
+> Current verified shape retained:
+>
+> - exact artifact identity binding remains on `package_identity`,
+>   `core_semantic_hash`, and `artifact_hash`;
+> - checker recomputes from `RuntimeProgram` only;
+> - unsupported/false claims reject loudly, including `Unknown`, `Let`, `If`,
+>   unsupported total primitive symbols, wrong `add_int` arity, literal
+>   non-Int operands, and variable-bound non-Int primitive operands;
+> - `F2BoundedRuntimeArtifactValidation` remains separate from NC7
+>   `F1InterpreterDifferentialAgreement`;
+> - no kernel TCB growth, raw-source checker input, Cranelift/linker/native
+>   certification, `local/refs`, or whole-compiler proof claim found by
+>   Verify/QA.
+>
+> Required repair:
+>
+> - reject `RuntimeExpr::Var(_)` unless NC8 can recompute a valid local binding
+>   context proving it is bound by an accepted supported form;
+> - given the current first-validator scope is already narrowed to the closed
+>   scalar example, the safer first repair is to reject `Var(_)` outright under
+>   an explicit supported-subset `ClaimRecompute` fact;
+> - add negative regressions for top-level validated `Var(0)` and/or reachable
+>   transparent declaration body `Var(0)`;
+> - preserve the already repaired primitive checks, `Unknown`/`Let`/`If`
+>   rejection, `TrustedTrap` rejection, bounded `CheckedTrap`, and no authority
+>   expansion.
+>
+> Next Steward action: await Verify implementer repair. Verify leader already
+> routed the next move to Verify implementer in `evt_69vc84fyq2wpb`, so no
+> Steward nudge is needed.
+>
+> ### NC8 QA BLOCKED ON SUPPORTED-SUBSET EXPRESSIONS (2026-07-07 07:35 UTC)
+>
+> Verify implementer handed off initial NC8 D1 at `evt_45cw42yq44wgp`:
+>
+> - `wp/NC8-first-certificate-validator @
+>   9e8b815965aaea937a32277a11699042ae68a952`
+>
+> Initial implementation shape:
+>
+> - added `RuntimeArtifactCertificate` and NC8 supported-runtime-artifact
+>   checker in `ken-runtime`;
+> - checker binds `package_identity`, `core_semantic_hash`, and
+>   `artifact_hash`;
+> - checker recomputes supported-subset facts from `RuntimeProgram` only;
+> - successful validation surfaces as report-visible
+>   `F2BoundedRuntimeArtifactValidation`, separate from NC7 F1.
+>
+> Verify leader blocked the initial head at `evt_aa3znmb88q2s`: the validator
+> accepted `RuntimeValue::Unknown` as supported even though the NC6 backend
+> boundary rejects `Unknown` before lowering. Verify implementer repaired at
+> `evt_cwr77emywq0r`:
+>
+> - `wp/NC8-first-certificate-validator @
+>   6e4ce878e143dd1932a8020d48d2efb196784717`
+> - repair changed NC8 recomputation to reject `RuntimeValue::Unknown` with
+>   `ClaimRecompute` / `all_runtime_values_supported`;
+> - repair added a negative regression for an otherwise matching certificate
+>   over a runtime example containing `RuntimeValue::Unknown`.
+>
+> Verify leader re-reviewed and approved the repaired head for Verify QA at
+> `evt_2rqvwkc8dhwtn`. Verify QA blocked the repaired head at
+> `evt_2fy52f1xv3qpa`.
+>
+> QA finding:
+>
+> - `crates/ken-runtime/src/artifact_validation.rs` still validates
+>   `RuntimeExpr::Let` and `RuntimeExpr::If` recursively, and accepts
+>   `RuntimeExpr::Trap`, so NC8 can emit `F2BoundedRuntimeArtifactValidation`
+>   for artifacts whose examples or transparent declaration bodies contain
+>   forms the current NC6 seed-example backend rejects as unsupported.
+> - The backend boundary rejects `Let` and `If` outside the NC6 seed subset at
+>   `crates/ken-runtime/src/cranelift_backend.rs:953-960`.
+>
+> Expected repair:
+>
+> - reject expression forms outside the current NC6 supported seed-example
+>   subset, at minimum `RuntimeExpr::Let` and `RuntimeExpr::If`, with loud
+>   `ClaimRecompute` evidence naming the supported-subset boundary;
+> - add negative NC8 regression(s) proving an otherwise matching certificate
+>   rejects when a validated example or reachable transparent declaration body
+>   contains those unsupported forms.
+>
+> QA verified on the blocked head: `git diff --check`, focused NC8 runtime
+> tests, full `ken-runtime` tests, and the NC7 differential report regression
+> pass. Package-wide `scripts/ken-cargo fmt -p ken-runtime --check` fails on a
+> pre-existing/touched-outside-diff `store.rs:602` formatting issue, not on the
+> NC8 diff.
+>
+> Next Steward action: await Verify implementer repair; QA already routed the
+> next move to Verify implementer in `evt_2fy52f1xv3qpa`, so no Steward nudge is
+> needed.
+>
+> ### NC8 D1 ACTIVE WITH VERIFY IMPLEMENTER (2026-07-07 07:20 UTC)
+>
+> Verify leader routed D1 to Verify implementer at `evt_1h411m6fgma9x`,
+> mentioning Verify implementer for pickup and Verify QA for standby on the
+> same boundary.
+>
+> D1 implementation constraints from the routing:
+>
+> - implement only the artifact-local validator target approved by Verify and
+>   Kernel D0;
+> - certificate must bind exact `RuntimeProgram` identity:
+>   `package_identity`, `core_semantic_hash`, and `artifact_hash`;
+> - checker must recompute supported-subset facts from `RuntimeProgram` alone;
+> - malformed, stale, contradictory, or unsupported claims must reject loudly;
+> - report-visible validated fact must remain distinct from NC7
+>   `F1InterpreterDifferentialAgreement`;
+> - stop and route back if any needed fact cannot be recomputed from
+>   `RuntimeProgram` alone.
+>
+> Verify QA standby focus is exact identity binding, independent recomputation,
+> loud false-claim rejection, separate F2-style validated fact with no backend
+> certification over-claim, and unavailable facts remaining unavailable.
+>
+> Next Steward action: await Verify implementer pickup/handoff. No nudge is
+> needed while Verify D1 is freshly routed.
+>
+> ### NC8 D0 COMPLETE; VERIFY D1 ROUTING EXPECTED (2026-07-07 07:18 UTC)
+>
+> Verify leader picked up NC8 D0 at `evt_3v52hzkham4mx`; Kernel leader posted
+> the kernel-boundary read at `evt_6gnw2qjz295fa`; Verify leader recorded the
+> joint D0 decision at `evt_240tvhpg4sydv`.
+>
+> Joint D0 outcome on:
+>
+> - `wp/NC8-first-certificate-validator @
+>   db8a3a1a5d26f0fd9a7ebda25577d5afcbece0e6`
+>
+> Confirmed target:
+>
+> - bounded certificate schema plus checker for the NC5/NC6 supported
+>   runtime-artifact subset;
+> - checker consumes the exact `RuntimeProgram`;
+> - certificate binds to `package_identity`, `core_semantic_hash`, and
+>   `artifact_hash`;
+> - checker independently recomputes supported-subset facts from the artifact;
+> - successful validation may surface as a distinct bounded F2-style validated
+>   fact in the native trust report, separate from NC7
+>   `F1InterpreterDifferentialAgreement`;
+> - malformed, stale, unsupported, or contradictory certificates reject loudly;
+> - unavailable exact-run facts remain unavailable, not prose evidence.
+>
+> Boundary decision:
+>
+> - no kernel TCB growth;
+> - no kernel admission primitive or kernel certificate checker;
+> - no raw-source checker input;
+> - no Cranelift/linker/native-execution certification;
+> - no pre-D1 Architect/Steward fork required for the confirmed target.
+>
+> D1 owner/review path:
+>
+> - D1 owner: Verify implementation path;
+> - Kernel remains boundary-review only unless Verify finds a fact that cannot
+>   be recomputed from `RuntimeProgram` alone;
+> - exact implementation head needs Verify semantics review, Verify QA, then
+>   Architect exact-head review before integration because this changes
+>   report-visible evidence-tier wording.
+>
+> Next Steward action: await Verify leader's D1 handoff. If no D1 handoff
+> appears after a normal short routing interval, nudge Verify leader in the NC8
+> thread.
+>
+> ### NC8 RELEASED TO VERIFY/KERNEL D0 (2026-07-07 07:15 UTC)
+>
+> Steward sharpened the previously thin NC8 frame on branch:
+>
+> - `wp/NC8-first-certificate-validator @
+>   db8a3a1a5d26f0fd9a7ebda25577d5afcbece0e6`
+> - base: `origin/main @
+>   6e178eb49513c8142dc6fc1d217f2b3b96d33f5f`
+> - frame doc: `docs/program/wp/NC8-first-certificate-validator.md`
+>
+> The updated frame pins the preferred D0 target as a supported-runtime-artifact
+> validator for the NC5/NC6 subset, with exact `RuntimeProgram` identity
+> binding and independent recomputation, while leaving Verify/Kernel D0 room to
+> narrow the target if the landed code demands it.
+>
+> Steward released NC8 to Verify leader and Kernel leader at
+> `evt_amkq20eeg7q5`, mentioning only those two leaders. D0 owner split:
+>
+> - Verify owns certificate/trust-report semantics, false-claim rejection,
+>   evidence-tier wording, and whether the validation claim is sufficient for
+>   a bounded F2-style report-visible entry.
+> - Kernel owns the kernel-boundary read: whether the checker can remain
+>   outside the kernel TCB, and whether any proposed kernel change must stop
+>   for Architect/Steward fork before D1.
+>
+> Handoff gate proof: Verify leader/implementer/QA and Kernel
+> leader/implementer/QA were quiescent after NC7 and
+> `KM-target-index-positivity` closeout; `/compact` was sent to all six panes
+> before kickoff; each pane showed `Context compacted` before the kickoff.
+>
+> Next Steward action: watch for Verify/Kernel D0 pickup. D1 must not start
+> until the validation target, report claim, kernel-boundary posture, owner
+> split, and Architect-review need are explicit.
+>
+> ### NC7 CLOSED; NC8 READY TO ASSESS (2026-07-07 07:05 UTC)
+>
+> Architect approved the NC7 pre-D1 boundary at `evt_566scdcrexgrn`, after
+> Runtime/Verify D0 consolidation at `evt_7th5f4mjk0wn5` and Verify tightening
+> at `evt_4m0k57b4pvt2z`. Runtime leader routed D1 to Runtime implementer at
+> `evt_7cn930rhtpfjh`, mentioning only Runtime implementer.
+>
+> Initial D1 head:
+>
+> - `wp/NC7-differential-trust-report @
+>   2fcb3cf0af685344a7da2fe77f61ab270e42ec3b`
+>
+> Runtime implementer handed off initial D1 at `evt_4qrj0qw8gfrgr`; Runtime
+> leader routed the required pre-QA Verify review at `evt_2nwf0ah3d9217`.
+> Verify blocked that head at `evt_2z9kf72vw6fej` on two report-semantics
+> findings:
+>
+> - `F1InterpreterDifferentialAgreement` was claimable from observation
+>   equality plus a free-form oracle string, without a machine-checked
+>   oracle/runtime artifact identity binding.
+> - `NativeToolchainReport` asserted prose toolchain facts instead of using
+>   exact-run evidence sources or explicit unavailable lanes.
+>
+> Runtime leader routed the blocker repair at `evt_3ppm1f7dmgb6c`. Runtime
+> implementer repaired and released:
+>
+> - `wp/NC7-differential-trust-report @
+>   d5fb6a982561b4d5732046ed818eb29102dd5b53`
+> - repair handoff: `evt_57et6jv3yyq08`
+> - cumulative scope remains `crates/ken-runtime/src/cranelift_backend.rs` and
+>   `crates/ken-interp/tests/nc7_differential_trust_report.rs`
+>
+> Repair shape:
+>
+> - `InterpreterOracleObservation` now carries structured
+>   `NativeArtifactIdentity`; F1 requires matching oracle/runtime artifact
+>   identity before native execution or any F1 upgrade.
+> - Identity mismatch returns boundary-preflight `Unsupported` with no native
+>   report and no differential claim.
+> - The report contract exposes both `NativeDifferentialReport.artifact` and
+>   `NativeDifferentialReport.oracle.artifact` as structured identities.
+> - `NativeToolchainReport` now uses `NativeEvidenceFact::{Available,
+>   Unavailable}`; runtime version is evidence-backed, while Cranelift/linker
+>   facts are explicitly unavailable until exact-run capture exists.
+>
+> Verify re-review approved the repaired head for Runtime QA at
+> `evt_25kfxr9r6942f`. Runtime leader routed Runtime QA at
+> `evt_27gyvv224a61z`, mentioning only Runtime QA. Runtime QA picked up at
+> `evt_7jwtdyjqb3vt3` and approved the repaired head for Architect review at
+> `evt_6t8j6j8xtacb1`, after checking branch identity, diff scope,
+> interpreter-backed F1 behavior, unsupported/mismatch separation,
+> non-circular harness shape, guardrail scans, and the focused test set.
+>
+> Runtime leader routed the required Architect exact-head review at
+> `evt_54fhts6tvdbg6`, mentioning only Architect. Architect approved the
+> repaired head for integration at `evt_6q3dagext6k9s`. Runtime leader routed
+> Integrator at `evt_54vqx99gv4q2y`; Integrator picked up, opened PR #330,
+> waited for green GitHub checks, and merged NC7 at `evt_1s606y6tyrdhv`.
+>
+> Landed result:
+>
+> - PR: #330
+> - landed `origin/main @
+>   6e178eb49513c8142dc6fc1d217f2b3b96d33f5f`
+> - exact approved head merged: `wp/NC7-differential-trust-report @
+>   d5fb6a982561b4d5732046ed818eb29102dd5b53`
+> - GitHub checks green before merge: `build + test`, clean-room provenance,
+>   conformance suite, and path-guard
+> - branch cleanup completed by Integrator
+>
+> Runtime §10 closeout is complete:
+>
+> - Runtime implementer retro: `evt_4nd5fw9708nn2`
+> - Runtime QA retro: `evt_6t943cm2wt8n1`
+> - Runtime leader retro: `evt_54n3sxnpfhb2w`
+> - Runtime retros-in closeout: `evt_3wbtwjvpvzj7x`
+>
+> NC7 is closed. Per `docs/program/07-compiler-program.md §5`, `NC8` (first
+> certificate validator) depends on NC5 and NC7, so its dependencies are now
+> met.
+>
+> Next Steward action: assess and release `NC8-first-certificate-validator`
+> after compact-gating the receiving unit.
+>
+> ### NC7 RELEASED TO RUNTIME/VERIFY D0 (2026-07-07 06:15 UTC)
+>
+> Steward released `NC7-differential-trust-report` to Runtime and Verify at
+> `evt_6ssrc7c0j8zxx`.
+>
+> Branch:
+>
+> - `wp/NC7-differential-trust-report @
+>   436d1c75e953d0637371633783f2e6f00f15a50b`
+>
+> Release basis:
+>
+> - NC6 landed as PR #329 at
+>   `origin/main @ 436d1c75e953d0637371633783f2e6f00f15a50b`
+> - Runtime NC6 retros-in closeout: `evt_5zz8kmqx1hnc`
+> - NC7 brief: `docs/program/wp/NC7-differential-trust-report.md`
+> - Compiler program frame: `docs/program/07-compiler-program.md §4-§5`
+>
+> D0 owner split requested: Runtime owns the Cranelift/runtime artifact side
+> and interpreter/native execution comparison path; Verify owns the
+> trust-report/fidelity semantics pressure. The leaders must jointly re-derive
+> the landed owner split, pin the real interpreter-oracle path, pin supported
+> fixtures and loud unsupported cases, pin trust-report schema boundaries, and
+> decide whether Architect pre-D1 review is needed.
+>
+> Handoff gate proof: Runtime leader/implementer/QA and Verify
+> leader/implementer/QA were quiescent after NC6 closeout; `/compact` was sent
+> to all six panes and each pane showed `Context compacted` before the kickoff.
+>
+> Next Steward action: await Runtime/Verify D0 pickup and boundary read. Ensure
+> D1 does not start until the owner split, interpreter-oracle path, report
+> semantics, F0/F1/F2 posture, and Architect-review need are explicit.
+>
+> ### NC6 CLOSED; NC7 READY TO RELEASE (2026-07-07 06:14 UTC)
+>
+> Integrator shipped NC6 at `evt_6cfn7znrgbfx0`. PR #329 landed on
+> `origin/main @ 436d1c75e953d0637371633783f2e6f00f15a50b`, merging exact
+> approved head `wp/NC6-cranelift-backend-spike @
+> f28e2a026b81812be8ded69302e44581dcb9d1ad`. GitHub checks were green before
+> merge: `build + test`, `clean-room provenance check`, `conformance suite`,
+> and `path-guard`. Integrator also deleted the remote and local shared-store
+> `wp/NC6-cranelift-backend-spike` branch refs.
+>
+> Gate chain honored on the landed head:
+>
+> - Architect D0 boundary approval: `evt_4akqkgwqsnmwt`
+> - Runtime implementer repair handoff: `evt_29ez1yzmpeg5`
+> - Runtime QA approval: `evt_2cg17h84bjehh`
+> - Architect integration approval: `evt_4mgg7jbd25cxx`
+>
+> Runtime §10 closeout is complete:
+>
+> - Runtime implementer retro: `evt_5q25w6zw8pfyw`
+> - Runtime QA retro: `evt_3md2q3rw9rrkd`
+> - Runtime leader retro: `evt_39q2g4afr3jea`
+> - Runtime retros-in handoff: `evt_5zz8kmqx1hnc`
+>
+> NC6 is closed. `NC7-differential-trust-report` is now ready because its only
+> program dependency is NC6.
+>
+> Next Steward action: compact-gate Runtime + Verify and release NC7.
+>
+> ### NC6 PR #329 OPEN; CI GATE ACTIVE (2026-07-07 05:56 UTC)
+>
+> Integrator picked up NC6 at `evt_4zdkcatxhxeap`, verified exact approved head
+> `f28e2a026b81812be8ded69302e44581dcb9d1ad`, the cumulative diff against
+> `origin/main`, and the Runtime QA + Architect gate chain. Integrator posted
+> root status `evt_4we3yr5pzzxn6` that the branch is being published for CI and
+> merge gate. Integrator then published the branch at `evt_wssfefc7pve8` and
+> opened PR #329 at `evt_2gtdygrx2rcx3`.
+>
+> CI state from GitHub at 2026-07-07 05:56 UTC: `path-guard`,
+> `conformance suite`, and `clean-room provenance check` are green; `build +
+> test` is still running. No Steward nudge is needed because Integrator is
+> actively watching the required checks.
+>
+> Active integration target:
+>
+> - `wp/NC6-cranelift-backend-spike @
+>   f28e2a026b81812be8ded69302e44581dcb9d1ad`
+>
+> Next Steward action: await Integrator merge result. On merge, relay to
+> Runtime leader for §10 closeout if needed and update this tracker.
+>
+> ### NC6 APPROVED; INTEGRATION ROUTED (2026-07-07 06:00 UTC)
+>
+> Architect approved NC6 exact repaired head `f28e2a0` for integration at
+> `evt_4mgg7jbd25cxx`. Architect verified the cumulative NC6 diff against
+> landed NC5 `ae7f9f3`, the one-file repair diff from blocked `066a220`, the
+> D0 guardrails, Cranelift verifier/runtime tests, NC5 erasure regression, and
+> the F0 native execution plus `F1SeedObservationAgreement` posture. Architect
+> added a non-blocking NC7 note: `CraneliftRunReport.native_returned` must
+> remain diagnostic-only and must not become trust-report semantics or
+> Ken-observable meaning.
+>
+> Runtime leader routed Integrator at `evt_55qztyjcr165t`, mentioning
+> Integrator correctly, for:
+>
+> - `wp/NC6-cranelift-backend-spike @
+>   f28e2a026b81812be8ded69302e44581dcb9d1ad`
+>
+> Gate chain on the routed head:
+>
+> - D0 Architect boundary approval: `evt_4akqkgwqsnmwt`
+> - D1 implementer handoff on blocked head: `evt_52qpcxgbp04c3`
+> - Runtime QA blocker on blocked head: `evt_525ktqvrhdx7q`
+> - implementer repair handoff: `evt_29ez1yzmpeg5`
+> - Runtime QA approval on repaired head: `evt_2cg17h84bjehh`
+> - Architect approval for integration: `evt_4mgg7jbd25cxx`
+>
+> Live pane check: Integrator has received the integration mention and is
+> active. No Steward nudge is needed.
+>
+> Next Steward action: await Integrator publish/gate/merge result. On merge,
+> relay to Runtime leader for §10 closeout and update this tracker.
+>
+> ### NC6 POST-QA ARCHITECT REVIEW ACTIVE (2026-07-07 05:55 UTC)
+>
+> Runtime implementer handed off NC6 D1 at `evt_52qpcxgbp04c3` on
+> `066a220ed8b6f8601764ba33d6b47a2c6c8e7a2a`. Runtime leader routed Runtime
+> QA at `evt_7f3gp1gmzvsj0`. Runtime QA blocked that exact head at
+> `evt_525ktqvrhdx7q` because reachable effect/capability/runtime-check
+> metadata could still proceed to backend lowering instead of loud
+> unsupported rejection.
+>
+> Runtime implementer picked up the blocker at `evt_3d89vf5s7gpqm` and handed
+> back repaired head `f28e2a026b81812be8ded69302e44581dcb9d1ad` at
+> `evt_29ez1yzmpeg5`. Repair scope was one file,
+> `crates/ken-runtime/src/cranelift_backend.rs`, extending preflight rejection
+> for reachable package/declaration effect, capability, runtime-check, trust,
+> and checked-core effects/foreign metadata lanes before Cranelift lowering.
+>
+> Runtime leader routed QA re-review at `evt_4m2516hfq4kfv`. Runtime QA picked
+> up at `evt_3hfwve8epw5f9` and approved repaired exact head `f28e2a0` at
+> `evt_2cg17h84bjehh`, verifying the one-file repair diff, full NC6 cumulative
+> scope, Cranelift focused/runtime tests, NC5 erasure regression, and guardrails.
+>
+> Runtime leader routed required post-QA Architect exact-head review at
+> `evt_3pft6y0rgah4d`, mentioning Architect correctly.
+>
+> Active candidate:
+>
+> - `wp/NC6-cranelift-backend-spike @
+>   f28e2a026b81812be8ded69302e44581dcb9d1ad`
+>
+> Live pane check: Architect has picked up and is actively completing the exact
+> head review; no Steward nudge is needed.
+>
+> Next Steward action: wait for Architect verdict. If approved, ensure Runtime
+> leader routes Integrator with exact head, QA approval, Architect approval,
+> supported subset, F0/F1 seed-observation posture, and guardrails.
+>
+> ### NC6 D1 ACTIVE IN RUNTIME IMPLEMENTER (2026-07-07 05:12 UTC)
+>
+> Runtime leader posted the NC6 D0 owner-boundary read at
+> `evt_6xmczfx4wtq60`. Architect approved the D0 boundary at
+> `evt_4akqkgwqsnmwt` with guardrails: Runtime may open D1 on NC5 runtime
+> artifacts / `RuntimeExpr` only; Cranelift is the sole backend target; no raw
+> source, checked-core body lowering outside NC5 erasure, kernel authority,
+> layout/ABI/pointer/object-format meaning, or claim above F0/F1.
+>
+> Runtime leader opened D1 to Runtime implementer at `evt_96dqgmvz04ah`,
+> leaving the shared branch free from the leader worktree. Runtime implementer
+> picked up at `evt_4qg37phzyawm4` and the live pane shows active D1 work on
+> compatible Cranelift dependencies, a backend module, verifier/native
+> execution/trap/unsupported tests, and a trust report.
+>
+> Active head remains:
+>
+> - `wp/NC6-cranelift-backend-spike @
+>   ae7f9f326b54c89071c7616826cae664ed368c6a`
+>
+> Next Steward action: monitor for Runtime implementer handoff to Runtime
+> leader / Runtime QA, then verify the next route carries exact head, file
+> scope, supported subset, unsupported set, verification commands, and whether
+> F1 evidence is interpreter-backed or seed-observation-backed.
+>
+> ### NC6 RELEASED TO RUNTIME D0 (2026-07-07 05:06 UTC)
+>
+> NC5 is closed: Runtime leader retro landed at `evt_6442sc5c1hvxs`, and
+> Runtime retros-in closeout landed at `evt_509mtg4qsv3g0`. Steward verified
+> `origin/main @ ae7f9f326b54c89071c7616826cae664ed368c6a` contains the NC6
+> brief, X1/`ken-interp`, NC5 `ken-runtime` runtime IR, and NC5 erasure path.
+>
+> NC6 release:
+>
+> - branch `wp/NC6-cranelift-backend-spike @
+>   ae7f9f326b54c89071c7616826cae664ed368c6a`
+> - kickoff / thread root: `evt_2ammjcm6g9xc9`
+> - owner: Runtime leader for D0, then Runtime implementation/QA
+>
+> Handoff gate proof: Runtime leader, Runtime implementer, and Runtime QA were
+> all quiescent after NC5 closeout and each pane showed `Context compacted`
+> before the NC6 kickoff mention. The kickoff mentioned only Runtime leader.
+>
+> Required next move: Runtime D0 re-derives the owner boundary from the landed
+> tree, confirms NC5 runtime IR / checked-core-derived runtime artifact is the
+> only semantic input, identifies the supported Cranelift spike subset and loud
+> unsupported cases, and decides whether Architect pre-D1 review is needed
+> before code starts.
+>
+> ### NC5 CLOSED; NC6 READY TO RELEASE (2026-07-07 04:45 UTC)
+>
+> Runtime implementer picked up the repair at `evt_4qawt99jqdv1h`, briefly
+> blocked on QA holding the branch at `evt_6sfy08d6js5ks`, then QA released the
+> branch at `evt_c1ykfabwnjw3`. Runtime implementer committed and handed the
+> repaired head to Runtime QA at `evt_3gvfdp9b6ckef`.
+>
+> Repaired candidate:
+>
+> - `wp/NC5-erasure-runtime-ir @
+>   83081305c06cf42533064b23da636cd11d6e5455`
+>
+> Repair scope reported:
+>
+> - extended `RuntimeMetadata` / `RuntimeSymbolMetadata` with typed auditable
+>   obligation metadata, assumption/trust metadata, lowerability, unsupported
+>   status, and an explicit checked-core metadata section;
+> - mapped checked-core semantic metadata lanes into runtime artifact metadata
+>   and per-symbol metadata;
+> - strengthened NC5 tests to assert exact status/kind/origin/target/
+>   `affects_runtime_meaning`/lowerability/unsupported survival, plus
+>   effects/capability metadata-lane survival.
+>
+> Runtime QA picked up repaired exact-head verification at `evt_3en9r5zyvqp5q`
+> and approved the exact repaired head at `evt_245kz4m76qcmj`. QA verified the
+> repair-only diff against blocked `915b521` is limited to:
+>
+> - `crates/ken-runtime/src/ir.rs`
+> - `crates/ken-elaborator/src/erasure.rs`
+> - `crates/ken-elaborator/tests/nc5_erasure_runtime_ir.rs`
+> - `docs/program/wp/NC5-erasure-runtime-ir.md`
+>
+> Runtime leader routed Architect exact-head re-review at
+> `evt_6yh1mv6rq2nr1`, but Convo recorded no mention, so Steward repaired the
+> route at `evt_71yxseehmsxc5`, mentioning only Architect and pinning the
+> repaired head plus QA approval.
+>
+> Architect approved repaired exact head `8308130` for integration at
+> `evt_1kfnh3y5spx1e`. Runtime leader routed integration at
+> `evt_55q7p0bg6n282`, but Convo recorded no mention, so Steward repaired the
+> Integrator handoff at `evt_77y405w16tny`, mentioning only Integrator.
+> Integrator picked up from that mention, published PR #328, waited for green
+> GitHub checks, and merged NC5 to `main` at
+> `ae7f9f326b54c89071c7616826cae664ed368c6a` in `evt_4r2g2hgp1whpz`.
+> Steward fetched `origin/main` and verified it resolves to the same commit.
+> Runtime leader's pane showed idle after reading the merge note without
+> collecting closeout, so Steward nudged Runtime leader at `evt_b8wn72yt4hwf`
+> to collect Runtime implementer + Runtime QA retros, post the leader retro, and
+> send the retros-in handoff. Runtime leader picked up the nudge and posted
+> member retro requests at `evt_74mpf20qhq01v` and `evt_64wdtgmapawvg`, but
+> both requests recorded no mentions, so Steward repaired the member-retro route
+> at `evt_6wy0h5nx2dvhv`, mentioning Runtime implementer and Runtime QA.
+> Runtime implementer retro landed at `evt_3fk3apf2nykzn`; Runtime QA retro
+> landed at `evt_5sf4v7dm9r9kv`. Steward routed those anchors back to Runtime
+> leader at `evt_76z4q01q78yh5` for the leader retro and retros-in handoff.
+> Runtime leader retro landed at `evt_6442sc5c1hvxs`; Runtime retros-in
+> closeout landed at `evt_509mtg4qsv3g0`. NC5 is closed.
+>
+> Next Steward action: compact-gate Runtime and release `NC6` if its
+> prerequisites still match the landed tree.
+>
+> ### NC5 METADATA-SURVIVAL REPAIR ACTIVE (2026-07-07 03:08 UTC)
+>
+> Runtime QA approved `wp/NC5-erasure-runtime-ir @
+> 915b5212b502de11fe31c85dd61f1842f379e568` at `evt_76b4kf3zazd2v`. Runtime
+> leader routed exact-head Architect review at `evt_4smw12z3aydtd`; Runtime QA
+> also re-reminded Architect after Pat's nudge at `evt_1kg9vsqh7r7jv`.
+>
+> Architect blocked the exact head at `evt_5f8etk4bbd7cx` on one semantic-cut
+> finding: the runtime artifact does not preserve enough auditable metadata
+> through erasure/runtime IR. The current `RuntimeMetadata` /
+> `RuntimeSymbolMetadata` retains a reduced subset and drops richer obligation,
+> assumption/trust, and lowerability facts needed by NC5's own spec and D0
+> guardrail.
+>
+> Required repair:
+>
+> - preserve obligation metadata, not just obligation IDs/bytes;
+> - preserve assumption/trust metadata, including kind/origin/target and
+>   `affects_runtime_meaning`;
+> - preserve checked-core lowerability / unsupported status for lowered symbols;
+> - preserve relevant checked-core semantic metadata lanes when present;
+> - add tests proving exact field survival for status/kind/origin/target/
+>   `affects_runtime_meaning`/lowerability, not just ID survival.
+>
+> Runtime leader routed repair at `evt_3qv65dk00gx0t`, but Convo recorded no
+> mention. Steward repaired the handoff to Runtime implementer at
+> `evt_5vsa698wf4swy`. Runtime implementer received that repaired route and is
+> actively working in the pane.
+>
+> Runtime implementer handed repaired head `8308130` to Runtime QA at
+> `evt_3gvfdp9b6ckef`; see current NC5 entry above.
+>
+> ### NC5 D1 IN RUNTIME QA (2026-07-07 02:52 UTC)
+>
+> Runtime implementer handed NC5 D1 to Runtime QA at `evt_333vgdggbbgzs`.
+> Runtime QA picked up exact-head verification at `evt_1p5psv1srhdt8`.
+>
+> Candidate:
+>
+> - `wp/NC5-erasure-runtime-ir @
+>   915b5212b502de11fe31c85dd61f1842f379e568`
+>
+> Implementer reported scope:
+>
+> - new `spec/40-runtime/47-erasure-runtime-ir.md`;
+> - backend-neutral `ken-runtime::ir` syntax/value/observation seed examples;
+> - `ken_elaborator::erasure::erase_checked_core_package_for_target` lowering
+>   from `CheckedCorePackage v0` into runtime IR with loud unsupported-erasure
+>   diagnostics;
+> - tests for package-only consumption/metadata preservation, lowerability
+>   blockers, nested constructor blockers, checked partial primitive trap face,
+>   foreign-boundary rejection, and metadata-gap rejection.
+>
+> Implementer verification: `rustfmt --check` on new NC5 Rust files,
+> `git diff --check`, `scripts/ken-cargo test -p ken-runtime`, and
+> `scripts/ken-cargo test -p ken-elaborator --test nc5_erasure_runtime_ir`.
+>
+> Runtime QA is verifying branch identity, spec/code/test evidence,
+> package-only consumption, loud unsupported-erasure rejection, no
+> raw-source/backend/layout/kernel drift, and the scoped observation surface.
+>
+> Runtime QA approved at `evt_76b4kf3zazd2v`; Architect blocked at
+> `evt_5f8etk4bbd7cx`. See current NC5 entry above.
+>
+> ### NC5 D1 ACTIVE IN RUNTIME IMPLEMENTER (2026-07-07 02:40 UTC)
+>
+> Runtime implementer posted the NC5 D1 pickup at `evt_1hn5wdyjdzhmf` after the
+> Steward routing repair `evt_55j5kcx561sfh`. The live pane also shows active
+> grounding of the branch/spec and repo shape before edits. No Steward nudge is
+> needed.
+>
+> Runtime implementer handed off at `evt_333vgdggbbgzs`; see current NC5 entry
+> above.
+>
+> ### NC5 D1 ASSIGNED TO RUNTIME IMPLEMENTER (2026-07-07 02:30 UTC)
+>
+> Runtime leader routed D1 at `evt_4pc3nmsr9180j`, but the event carried no
+> mention. Steward repaired the routing at `evt_55j5kcx561sfh`, mentioning only
+> Runtime implementer and pointing to the Runtime leader D1 brief plus the
+> Architect-approved boundary at `evt_1vf86dz1k4t0x`.
+>
+> Active D1 assignment:
+>
+> - branch `wp/NC5-erasure-runtime-ir @
+>   35ded83c5281afed068c122ab32d12a095cf4932`
+> - owner: Runtime implementer, then Runtime QA, then Architect exact-head
+>   review
+> - scope: runtime-authored boundary/spec/code/test frame for erasure from
+>   `CheckedCorePackage v0` into runtime IR, with loud unsupported-erasure
+>   rejection and package-only consumption evidence
+>
+> Runtime implementer pickup is active by live pane; see current NC5 entry above.
+>
+> ### NC5 D0 APPROVED; RUNTIME D1 ROUTING NEXT (2026-07-07 02:27 UTC)
+>
+> Architect approved the NC5 pre-D1 boundary review at `evt_1vf86dz1k4t0x`.
+> Runtime may open D1; no separate architect-authored precursor WP is needed.
+>
+> Approved D1 posture:
+>
+> - Runtime authors D1, including the architecturally relevant boundary spec
+>   before or alongside code: package validation/lowerability input, erasure
+>   relation, runtime-IR value model, observation relation, and
+>   unsupported-erasure diagnostics.
+> - Architect review remains required after Runtime QA on the exact D1 head.
+> - Mid-D1 Architect query is required only if Runtime discovers pressure to
+>   define ABI/layout/backend semantics, kernel authority, raw-source fallback,
+>   or a new proof/trust claim.
+>
+> Guardrails confirmed: `CheckedCorePackage v0` is the sole semantic input
+> below the frontend; erased executable core is not backend layout; obligations,
+> assumptions, `trusted_base_delta`, behavioral/export refs, capability/trust
+> facts, lowerability blockers, and runtime-check obligations survive as
+> auditable per-symbol metadata/hash inputs; runtime IR must not make Cranelift,
+> ABI, pointer identity, register/stack layout, object format, or backend poison
+> the semantic authority.
+>
+> Runtime leader routed D1 at `evt_4pc3nmsr9180j`; Steward repaired the missing
+> implementer mention at `evt_55j5kcx561sfh`. See current NC5 entry above.
+>
+> ### NC5 D0 ROUTED TO ARCHITECT REVIEW (2026-07-07 02:24 UTC)
+>
+> Runtime leader picked up `NC5-erasure-runtime-ir` and posted the D0
+> owner-boundary read at `evt_16nxx0nx4a53j`.
+>
+> D0 result:
+>
+> - Runtime owns the erasure pass, runtime-IR syntax/value-model draft,
+>   lowering rules, loud unsupported diagnostics, small checked-core lowering
+>   examples, and first comparison harness shape.
+> - Spec/architecture owns the normative line between checked-core meaning,
+>   erased executable core, runtime IR, surviving semantic metadata, and the
+>   observation relation Runtime must preserve.
+> - Architect pre-D1 boundary review is required before implementation starts,
+>   because NC5 is the first semantic step below `CheckedCorePackage v0`.
+>
+> Runtime's D0 cut keeps obligations, assumptions, `trusted_base_delta`,
+> effects/capabilities/foreign boundaries, traps, partial primitives, closures,
+> calls, ADTs, and records explicit through the erasure/runtime-IR boundary.
+> Unsupported or lowerability-blocked checked-core symbols, backend-layout or
+> ABI-dependent semantics, unspecified effect/foreign/trust paths, erasure that
+> changes branch choice/data representation/observable result, and silently
+> dropped runtime-check obligations must fail loudly before backend work.
+>
+> Architect approved at `evt_1vf86dz1k4t0x`; see current NC5 entry above.
+>
+> ### NC5 RELEASED TO RUNTIME D0 (2026-07-07 02:19 UTC)
+>
+> Steward released `NC5-erasure-runtime-ir` to Runtime at
+> `evt_4113t0r136k3d`.
+>
+> Branch/head:
+>
+> - `wp/NC5-erasure-runtime-ir @
+>   35ded83c5281afed068c122ab32d12a095cf4932`
+>
+> Release gate:
+>
+> - NC4 merged as PR #327 and closed with retros-in at
+>   `evt_60dw66npxpe16`.
+> - Runtime leader, implementer, and QA panes were compact-gated before the
+>   handoff; all three showed `Context compacted`.
+>
+> Required D0 result: classify Runtime implementation versus spec/architecture
+> framing, decide whether Architect pre-D1 boundary review is needed, pin the
+> erased executable core versus Ken runtime IR split, and identify loud
+> unsupported-erasure cases. NC5 is Runtime-owned but Architect-reviewed because
+> it pins the erasure/runtime-IR boundary below `CheckedCorePackage v0`.
+>
+> Guardrails: no direct Cranelift-from-checked-core path, no backend layout as
+> semantic authority, no backend/Cranelift implementation in NC5, no
+> compiler-verification claim beyond NC5 boundary checks, no kernel TCB
+> expansion, no raw surface-source consume path, and no `local/refs`.
+>
+> Runtime picked up at `evt_16nxx0nx4a53j`; see the current NC5 D0 entry above.
+>
+> ### NC4 CLOSED; NEXT COMPILER WP READY TO ASSESS (2026-07-07 02:16 UTC)
+>
+> NC4 Language closeout is complete at `evt_60dw66npxpe16` after PR #327 /
+> `origin/main @ 35ded83c5281afed068c122ab32d12a095cf4932`.
+>
+> Retro anchors:
+>
+> - Language implementer: `evt_7ncvyeecp2mcr`
+> - Language QA: `evt_3wer0jgfd2knv`
+> - Language leader retro: `evt_6e5bg17mjm5a0`
+> - retros-in handoff: `evt_60dw66npxpe16`
+>
+> NC4 result: `CheckedCorePackage v0` now has an elaborator-side
+> emitter/header/schema, package validation, representative fixtures, and
+> consume-without-source checks at the checked-core package boundary. Missing
+> compiler-relevant metadata remains explicit unsupported-entry plus blocking
+> lowerability. The final repaired head closed dependency-hash lane
+> incoherence: header and semantic `dependency_semantic_hashes` must match,
+> divergence rejects with `DependencySemanticHashesMismatch`, and the
+> regression still rejects after recomputing both package hashes.
+>
+> NC4 stayed Language-only at the checked-core package boundary, with no
+> runtime IR, ABI/layout, backend/Cranelift, compiler-verification,
+> raw-source fallback, or kernel-TCB movement.
+>
+> Next Steward action: inspect the next compiler WP and compact-gate its
+> receiving unit before release.
+>
+> ### NC4 MEMBER RETROS IN; LEADER CLOSEOUT PENDING (2026-07-07 02:15 UTC)
+>
+> NC4 member retros landed after the PR #327 merge:
+>
+> - Language implementer retro: `evt_7ncvyeecp2mcr`
+> - Language QA retro: `evt_3wer0jgfd2knv`
+>
+> Language leader reported closeout active at `evt_3k592vcp4z4tj`, but that
+> note still listed the already-landed member retros as pending. Steward nudged
+> the leader at `evt_e9tvaj8vg7r4` to post the leader coordination retro plus
+> `retros in` handoff. NC4 remains merged / not closed until that handoff
+> lands.
+>
+> Next Steward action: await the leader handoff; nudge again only if the
+> closeout stalls.
+>
+> ### NC4 MERGED; LANGUAGE RETROS PENDING (2026-07-07 02:14 UTC)
+>
+> Integrator merged `NC4-checked-core-emitter` as PR #327 at
+> `evt_29h6h7bdx4azn`.
+>
+> Merge anchor:
+>
+> - landed: `origin/main @ 35ded83c5281afed068c122ab32d12a095cf4932`
+> - final reviewed head:
+>   `693d2d5fce3106bd41fd97fe1cd2f24931e29cb3`
+> - gates: build + test, conformance suite, clean-room provenance check, and
+>   path-guard green before merge
+>
+> Review anchors on exact `693d2d5`:
+>
+> - Language QA approval: `evt_5h4f7qqcd5b6q`
+> - Spec/conformance approval: `evt_42yeag3smxfx`
+> - Architect approval: `evt_447db4yx5zgqw`
+> - Language integration request: `evt_4b9jt1vhyapze`
+>
+> Steward relayed the merge and requested NC4 §10 closeout from Language
+> leader at `evt_35ybwez8bfznq`. NC4 remains merged / retros-pending until
+> Language posts implementer + QA retros, the leader coordination retro, and
+> the `retros in` handoff to Steward.
+>
+> Next Steward action: await NC4 retros-in, then compact-gate the next
+> receiving unit before releasing the next compiler WP.
+>
+> ### NC4 IN INTEGRATION / CI (2026-07-07 02:13 UTC)
+>
+> `NC4-checked-core-emitter` is merge-ready and with Integrator as PR #327.
+>
+> Active reviewed head:
+>
+> - `wp/NC4-checked-core-emitter @
+>   693d2d5fce3106bd41fd97fe1cd2f24931e29cb3`
+>
+> Review / gate anchors on exact `693d2d5`:
+>
+> - Language QA approval: `evt_5h4f7qqcd5b6q`
+> - Spec/conformance approval: `evt_42yeag3smxfx`
+> - Architect approval: `evt_447db4yx5zgqw`
+> - Language integration request: `evt_4b9jt1vhyapze`
+> - Integrator PR-open note: `evt_6bqsz81pfvmd7`
+> - CI partial-green note: `evt_52e98e2ewny0j`
+>
+> Repair history: Architect and Spec/conformance blocked earlier head
+> `6bb6dc6` on dependency-hash lane incoherence. Repaired head `693d2d5`
+> requires header and semantic `dependency_semantic_hashes` to match before
+> hash acceptance / semantic use, adds loud `DependencySemanticHashesMismatch`,
+> and tests that a mismatch still rejects after recomputing both package
+> hashes.
+>
+> Current integration state: PR #327 has clean-room provenance,
+> conformance-suite, and path-guard green; `build + test` is still running.
+> Integrator is actively holding the merge gate until the final required check
+> passes. No Steward routing needed.
+>
+> ### NC4 D1 QA ACTIVE (2026-07-07 01:53 UTC)
+>
+> `NC4-checked-core-emitter` has moved through Language D0, implementer D1,
+> and leader review. Language QA picked up exact-head review at
+> `evt_83a7gpycp8nd`.
+>
+> Exact D1 head under QA:
+>
+> - `wp/NC4-checked-core-emitter @
+>   b8e1c4d92335644d7d2aa0201edbbe5177ee5967`
+>
+> Event anchors:
+>
+> - Language D0 owner-boundary ruling / D1 assignment:
+>   `evt_yxk3kebmycp7`
+> - Implementer D1 handoff: `evt_8q4ga4mn8zq3`
+> - Leader review / QA route: `evt_79ccw7ebv2v77`
+> - QA pickup: `evt_83a7gpycp8nd`
+>
+> D0 result: NC4 remains Language-owned at the checked-core package boundary
+> so long as validation and consume-without-source stay package-structure /
+> semantic-contract checks, not runtime execution or native-lowering behavior.
+>
+> Current scope under review is exactly
+> `crates/ken-elaborator/src/checked_core.rs`,
+> `spec/40-runtime/46-checked-core-package.md`, and
+> `docs/program/wp/NC4-checked-core-emitter.md`.
+>
+> Live pane check: Language QA is actively reviewing `b8e1c4d`, with scope and
+> guarded paths clean, and is adding a narrow test-only QA repair for validator
+> rejection coverage. No Steward routing needed.
+>
+> ### NC4 RELEASED TO LANGUAGE D0 (2026-07-07 01:40 UTC)
+>
+> Steward released `NC4-checked-core-emitter` to Language at
+> `evt_5jd5810h2yfzc`.
+>
+> Branch/head:
+>
+> - `wp/NC4-checked-core-emitter @
+>   4b9a0238f78fe27991d61f63bca92a32433556b3`
+>
+> Release gate:
+>
+> - NC3 merged as PR #326 and closed with retros-in at
+>   `evt_1qb4fwentx00n`.
+> - Language leader, implementer, and QA panes were compact-gated before the
+>   handoff; all three showed `Context compacted`.
+>
+> Required D0 result: classify owner-boundary and stop conditions before D1.
+> Default owner is Language, but D0 must stop if fixture emission, validation,
+> or consume-without-source tests require Runtime-owned ABI/layout/runtime-IR,
+> backend/Cranelift, compiler-verification, or kernel TCB movement.
+>
+> Guardrails: emit `CheckedCorePackage v0` artifacts only; no backend
+> lowering, Cranelift dependency, surface-parser shortcut around the checked
+> artifact, runtime/erasure/ABI/layout/compiler-verification commitment, kernel
+> TCB expansion, or `local/refs`.
+>
+> Next Steward action: await Language D0 classification or route a stall if the
+> ring goes quiet without pickup.
+>
+> ### NC3 CLOSED; NC4 READY TO RELEASE (2026-07-07 01:33 UTC)
+>
+> NC3 Language closeout is complete at `evt_1qb4fwentx00n` after PR #326 /
+> `origin/main @ 4b9a0238f78fe27991d61f63bca92a32433556b3`.
+>
+> Retro anchors:
+>
+> - Language implementer: `evt_2pjcjs07d9a7d`
+> - Language QA: `evt_1aawffs0mhvz5`
+> - Language leader retro: `evt_7r9b4k0d60awd`
+> - retros-in handoff: `evt_1qb4fwentx00n`
+>
+> NC3 result: typed checked-core metadata lanes landed for primitives,
+> data/constructors, records/Sigma, classes/instances/dictionaries,
+> recursion, effects/foreigns, obligations, assumptions/trust, lowerability,
+> unsupported entries, dependency hashes, and trust delta. Lowerability stays
+> explicit and fail-closed package-side before erasure/runtime IR; only
+> `supported` continues. Runtime-meaning metadata participates in
+> `core_semantic_hash`; annotations remain artifact-only/non-semantic.
+>
+> NC3 stayed Language-only on the checked-core package boundary, with no
+> runtime/erasure/ABI/layout/Cranelift/backend/compiler-verification movement
+> and no kernel TCB expansion.
+>
+> Next Steward action: compact-gate Language, then release
+> `NC4-checked-core-emitter`.
+>
+> ### NC3 MEMBER RETROS IN; LEADER CLOSEOUT PENDING (2026-07-07 01:30 UTC)
+>
+> NC3 member retros landed after the PR #326 merge:
+>
+> - Language QA retro: `evt_1aawffs0mhvz5`
+> - Language implementer retro: `evt_2pjcjs07d9a7d`
+>
+> Language leader reported closeout active at `evt_6x1tatb5qsdex` and will
+> post the leader coordination retro plus `retros in` handoff to Steward.
+> NC3 remains merged / not closed until that handoff lands.
+>
+> Next Steward action: await the leader handoff; nudge only if the closeout
+> stalls.
+>
+> ### NC3 MERGED; LANGUAGE RETROS PENDING (2026-07-07 01:29 UTC)
+>
+> Integrator merged `NC3-compiler-metadata-coverage` as PR #326 at
+> `evt_eh88scfenaza`.
+>
+> Merge anchor:
+>
+> - landed: `origin/main @ 4b9a0238f78fe27991d61f63bca92a32433556b3`
+> - final reviewed head:
+>   `c2c9f5149a5f5a3db29eadf9548d31445e9141a1`
+> - gates: build + test, conformance suite, clean-room provenance check, and
+>   path-guard green before merge
+>
+> Review anchors on exact `c2c9f51`:
+>
+> - Language QA approval: `evt_2s98ehfd25axj`
+> - Spec/conformance approval: `evt_1p8jpef7wqe9b`
+> - Architect approval: `evt_26kskcc1phnz4`
+> - Language integration request: `evt_310fxda2xjx7x`
+>
+> Steward relayed the merge and requested NC3 §10 closeout from
+> Language leader at `evt_5p31mrzx04d13`. NC3 remains merged /
+> retros-pending until Language posts implementer + QA retros, the leader
+> coordination retro, and the `retros in` handoff to Steward.
+>
+> Next Steward action: await NC3 retros-in, then compact-gate the next
+> receiving unit before releasing NC4.
+>
+> ### NC3 D1 ACTIVE IN LANGUAGE (2026-07-07 01:11 UTC)
+>
+> Language leader picked up `NC3-compiler-metadata-coverage` and completed D0
+> at `evt_69n76zvwqvcy`.
+>
+> D0 ruling: NC3 is Language-only unless implementation uncovers a concrete
+> runtime-owned lowering contract that the checked-core package cannot specify
+> without crossing into runtime ABI/layout/IR. Current grounding stays at the
+> post-elaboration, kernel-admitted checked-core boundary and the
+> `checked_core` package-emitter surface.
+>
+> Language implementer picked up D1 at `evt_3jx2209v2rx7s` on exact branch/head:
+>
+> - `wp/NC3-compiler-metadata-coverage @
+>   2f036044b93942f62c23d78b05c703c5a2c24821`
+>
+> Live pane check: Language implementer is actively editing the checked-core
+> metadata/spec surface; Language leader and QA are idle/event-driven. No
+> Steward routing needed.
+>
+> ### NC3 RELEASED TO LANGUAGE D0 (2026-07-07 01:04 UTC)
+>
+> Steward released `NC3-compiler-metadata-coverage` to Language at
+> `evt_73axjcf48ggp7`.
+>
+> Branch/head:
+>
+> - `wp/NC3-compiler-metadata-coverage @
+>   2f036044b93942f62c23d78b05c703c5a2c24821`
+>
+> Release gate:
+>
+> - NC2 merged as PR #325 and closed with retros-in at
+>   `evt_6vk8nrhkcbada`.
+> - Language leader, implementer, and QA panes were compact-gated before the
+>   handoff; all three showed `Context compacted`.
+>
+> Required D0 result: classify Language-only vs Language+Runtime ownership;
+> pin metadata coverage for primitives, data/constructors, records/Sigma,
+> classes/instances/dictionaries, recursion, effects/capabilities/foreigns,
+> obligations, assumptions, and trust delta; define lowerability status fields;
+> pin hash participation rules for runtime-meaningful metadata; propose
+> acceptance examples for `Bool`, `Nat`, `Option`, lists, class dictionaries,
+> primitive operations, and accepted recursive groups.
+>
+> Guardrails: do not silently omit metadata that affects runtime meaning; do
+> not finalize native layout; no backend lowering, ABI/layout, Cranelift,
+> compiler-verification, self-hosting, runtime IR commitments, raw source
+> consume path, kernel TCB expansion, or `local/refs` in NC3.
+>
+> Next Steward action: await Language D0 classification or route a stall if the
+> ring goes quiet without pickup.
+>
+> ### NC2 CLOSED; NC3 READY TO RELEASE (2026-07-07 01:01 UTC)
+>
+> NC2 Language closeout is complete at `evt_6vk8nrhkcbada` after PR #325 /
+> `origin/main @ 2f036044b93942f62c23d78b05c703c5a2c24821`.
+>
+> Retro anchors:
+>
+> - Language implementer: `evt_37tx2nwse5ba4`
+> - Language QA: `evt_2yxkhgzmr0qve`
+> - Language leader retro: `evt_h26d70v5d66m`
+> - retros-in handoff: `evt_6vk8nrhkcbada`
+>
+> NC2 result: checked-core package identity now has elaborator-side stable
+> symbol and canonical semantic/artifact input scaffolding. Local `GlobalId`s
+> are producer-local only; canonical references resolve through
+> `StableSymbolTable`; missing stable bindings reject before bytes emit; levels
+> normalize before encoding; semantic maps/sets sort by stable key; primitive
+> identity keys on registry symbol strings; annotations affect artifact identity
+> but not semantic identity. NC2 stayed Language-only, with no runtime/erasure/
+> ABI/Cranelift/backend/compiler-verification movement and no kernel TCB
+> expansion.
+>
+> Next Steward action: compact-gate Language, then release
+> `NC3-compiler-metadata-coverage` for D0 owner-boundary classification.
+>
+> ### NC2 MEMBER RETROS IN; LEADER CLOSEOUT PENDING (2026-07-07 01:00 UTC)
+>
+> NC2 member retros landed after the PR #325 merge:
+>
+> - Language implementer retro: `evt_37tx2nwse5ba4`
+> - Language QA retro: `evt_2yxkhgzmr0qve`
+>
+> Language leader reported closeout active at `evt_62c7p5sa6hngg` and will
+> post the leader coordination retro plus `retros in` handoff to Steward.
+> NC2 remains merged / not closed until that handoff lands.
+>
+> Next Steward action: await the leader handoff; nudge only if the closeout
+> stalls.
+>
+> ### NC2 MERGED; LANGUAGE RETROS PENDING (2026-07-07 00:59 UTC)
+>
+> Integrator merged `NC2-stable-symbols-canonical-encoding` as PR #325 at
+> `evt_4mtegtrz8kyqe`.
+>
+> Merge anchor:
+>
+> - landed: `origin/main @ 2f036044b93942f62c23d78b05c703c5a2c24821`
+> - final reviewed head:
+>   `d280aaed6f0c40b5e8eb3b67fbc5e45726ca11f3`
+> - gates: build + test, conformance suite, clean-room provenance check, and
+>   path-guard green before merge
+>
+> Review anchors on exact `d280aae`:
+>
+> - Language QA approval: `evt_6bms8rtcf7104`
+> - Spec/conformance approval: `evt_5ra9fcx0x8qxc`
+> - Architect approval: `evt_79rrt5sqgq5kx`
+> - Language integration request: `evt_44x8jrdwwgfy6`
+>
+> Steward relayed the merge and requested NC2 §10 closeout from
+> Language leader at `evt_5dsjff4y63b85`. NC2 remains merged /
+> retros-pending until Language posts implementer + QA retros, the leader
+> coordination retro, and the `retros in` handoff to Steward.
+>
+> Next Steward action: await NC2 retros-in, then compact-gate the next
+> receiving unit before releasing NC3.
+>
+> ### NC2 D1 QA ACTIVE (2026-07-07 00:52 UTC)
+>
+> `NC2-stable-symbols-canonical-encoding` has moved through Language D0,
+> Language implementer D1, and Language leader review. Exact reviewed head:
+>
+> - `wp/NC2-stable-symbols-canonical-encoding @
+>   d280aaed6f0c40b5e8eb3b67fbc5e45726ca11f3`
+>
+> Event anchors:
+>
+> - Language D0 / D1 route: `evt_5f9zqxk77yxda`
+> - Implementer D1 handoff: `evt_1561xygge4bs9`
+> - Leader review / QA route: `evt_790639yx2aqqj`
+> - QA pickup: `evt_22re0aw43x5b`
+>
+> Scope under review is exactly
+> `crates/ken-elaborator/src/checked_core.rs`,
+> `crates/ken-elaborator/src/lib.rs`,
+> `docs/program/wp/NC2-stable-symbols-canonical-encoding.md`, and
+> `spec/40-runtime/46-checked-core-package.md`.
+>
+> Live pane check: Language QA is active on the exact head; focused
+> `checked_core` tests passed 8/8, hygiene checks are clean, and a broader
+> `ken-elaborator` package run is in progress. No Steward routing needed.
+>
+> ### NC2 RELEASED TO LANGUAGE D0 (2026-07-07 00:38 UTC)
+>
+> Steward released `NC2-stable-symbols-canonical-encoding` to Language at
+> `evt_1an7k1pntfsjg`.
+>
+> Branch/head:
+>
+> - `wp/NC2-stable-symbols-canonical-encoding @
+>   a59625034387c94fe5f2fc721608259519da7356`
+>
+> Release gate:
+>
+> - NC1 merged as PR #324 and closed with retros-in at
+>   `evt_3rdbf3atxsy1w`.
+> - Language leader, implementer, and QA panes were compact-gated before the
+>   handoff; all three showed `Context compacted`.
+>
+> Required D0 result: classify the Language/Runtime owner boundary; pin the
+> stable-symbol rule and its relation to local `GlobalId`; pin canonical
+> ordering/encoding inputs for declarations, kernel terms, primitive registry
+> entries, modules, metadata, obligations, and assumptions; define package hash
+> behavior for equal artifacts and semantic/trust changes; propose acceptance
+> tests for cross-session comparability, order independence, metadata
+> preservation, primitive identity stability, and hash-change negatives.
+>
+> Guardrails: no module paths as kernel primitives; no allocation order as
+> external identity; no kernel TCB expansion without a separate stop/fork; no
+> raw source consume path, backend lowering, ABI/layout, Cranelift,
+> compiler-verification, self-hosting, or `local/refs` in NC2.
+>
+> Next Steward action: await Language D0 classification or route a stall if the
+> ring goes quiet without a pickup.
+>
+> ### NC1 CLOSED; NC2 READY TO RELEASE (2026-07-07 00:33 UTC)
+>
+> NC1 closeout is complete at `evt_3rdbf3atxsy1w` after PR #324 /
+> `origin/main @ a59625034387c94fe5f2fc721608259519da7356`.
+>
+> Retro anchors:
+>
+> - spec-author: `evt_13wrbrmepj5mw`
+> - conformance-validator: `evt_6527kz328aerh`
+> - spec-leader retro: `evt_6fye75nt2k0ay`
+> - retros-in handoff: `evt_3rdbf3atxsy1w`
+>
+> NC1 result: `CheckedCorePackage v0` is now pinned as the
+> post-elaboration/kernel-admitted compiler input boundary. No kernel TCB
+> expansion, raw surface consume path, backend ABI/layout commitment, or
+> compiler-verification claim. Required semantic sections keep `empty !=
+> missing`; optional non-semantic `annotations` may be omitted.
+>
+> Next Steward action: release `NC2-stable-symbols-canonical-encoding` to the
+> build side from `origin/main @ a596250`.
+>
+> ### NC1 RETROS PARTIAL; SPEC-LEADER CLOSEOUT NUDGED (2026-07-07 00:32 UTC)
+>
+> NC1 member retros are in after PR #324:
+>
+> - spec-author retro: `evt_13wrbrmepj5mw`
+> - conformance-validator retro: `evt_6527kz328aerh`
+>
+> No spec-leader closeout handoff had landed after both retros, so Steward
+> nudged spec-leader at `evt_701gz5qvzpqr9` for the leader coordination retro
+> and `retros in` handoff. NC2 remains unreleased until that handoff lands.
+>
+> ### NC1 MERGED; SPEC RETROS PENDING (2026-07-07 00:30 UTC)
+>
+> Integrator merged `wp/NC1-checked-core-package` as PR #324 at
+> `evt_7hm4qn5t6r1pj`.
+>
+> Merge anchor:
+>
+> - landed: `origin/main @ a59625034387c94fe5f2fc721608259519da7356`
+> - final reviewed head: `34458e76ee42d0264b59d652a247af75c9938135`
+> - gates: build + test, conformance suite, clean-room provenance check, and
+>   path-guard green before merge
+>
+> Integrator routed NC1 closeout / downstream routing to Spec leader and
+> Steward. Await Spec §10 retros-in before closing NC1 and releasing NC2.
+>
+> ### NC1 APPROVED; INTEGRATOR ROUTED (2026-07-07 00:27 UTC)
+>
+> Spec-enclave review is complete on exact head
+> `wp/NC1-checked-core-package @
+> 34458e76ee42d0264b59d652a247af75c9938135` (`34458e7`).
+>
+> Review anchors:
+>
+> - Initial spec-author draft: `f9bd485bf3c978ad8b0deedc9ea96f21f0861c95`
+> - Conformance blocker: `evt_5ty5999eq1h00`
+> - Amended-head conformance approval: `evt_2cpbtwpp2sm8a`
+> - Spec-leader review-complete handoff: `evt_67xadnpep7t3f`
+> - Steward integration request: `evt_3g1y90nefwj7e`
+>
+> Approved result: new `spec/40-runtime/46-checked-core-package.md` plus
+> `spec/40-runtime/README.md`, `spec/SPEC-PROGRESS.md`, the compiler program
+> frame docs, NC1-NC9 WP briefs, and the narrow DAG pointer update. No kernel
+> TCB expansion, raw surface-source consume path, backend ABI/layout
+> commitment, or compiler-verification claim. Await Integrator publish/CI/merge
+> on exact `34458e7`.
+>
+> ### NC1 D0 COMPLETE; SPEC-AUTHOR D1 DRAFTING ROUTED (2026-07-07 00:13 UTC)
+>
+> Spec leader completed NC1 D0 at `evt_3hh9x9ymy9svg` on exact released head
+> `wp/NC1-checked-core-package @
+> be1a6df55aa2dd4ac4c9bacd7051a67fd4539982`.
+>
+> Merged D0 decisions:
+>
+> - no stop condition; no kernel TCB expansion, raw surface consume path,
+>   backend ABI/layout commitment, or compiler-verification claim;
+> - normative home: new `spec/40-runtime/46-checked-core-package.md`, with
+>   minimal pointers in `spec/40-runtime/README.md` and `spec/SPEC-PROGRESS.md`;
+> - boundary: surface Ken -> elaborator -> kernel admission ->
+>   `CheckedCorePackage v0` -> erasure/runtime IR;
+> - required locks: package-kind/version, `version = 0`, preserve/bump/named
+>   translation, `empty != missing`, unknown semantic fields reject unless
+>   explicitly non-semantic, total declaration/metadata coverage, trust-delta
+>   completeness;
+> - hash boundary: at least `core_semantic_hash` vs `artifact_hash`;
+> - cite `71` and `63`; do not restate behavioral export or supply-chain
+>   governance.
+>
+> Spec leader routed spec-author to D1 draft the new spec chapter plus the
+> two pointer updates. CV acknowledged the review hold at `evt_5xt9hsbf4jdgh`;
+> spec-author picked up D1 drafting at `evt_7rsaqxtx9jdd4`. Await
+> spec-author handoff; no Steward post needed unless drafting stalls.
+>
+> ### NC1 D0 ACTIVE IN SPEC ENCLAVE (2026-07-07 00:12 UTC)
+>
+> Spec leader picked up `NC1-checked-core-package` at `evt_2chhssy8pp86x`
+> on exact released head
+> `be1a6df55aa2dd4ac4c9bacd7051a67fd4539982`.
+>
+> D0 routing:
+>
+> - Spec-author request: `evt_45m1gshjrz8e3`
+> - Conformance-validator request: `evt_4t58dx4cwz1p3`
+> - Conformance D0 reply: `evt_4h1sfhp5acwmc`
+> - Spec-leader accepted the conformance lock frame and routed those
+>   constraints into the spec-author D0 at `evt_3dae1c0t84jgn`
+>
+> Current lock frame: required package-kind/version with loud reject for
+> unsupported versions; required-section table with `empty != missing`; loud
+> reject for unknown semantic fields unless NC1 defines a non-semantic
+> extension lane; canonical semantic-hash rule over checked-core meaning only;
+> total declaration/metadata coverage and trust-delta completeness; no raw
+> surface consume path.
+>
+> Spec-author is active composing/posting the normative home and outline reply.
+> No Steward routing needed unless the thread-posting issue persists or the D0
+> stops on a scope fork.
+>
+> ### NC1 CHECKED-CORE PACKAGE RELEASED TO SPEC (2026-07-07 00:00 UTC)
+>
+> Steward created and released the first compiler-program WP:
+> `wp/NC1-checked-core-package @
+> be1a6df55aa2dd4ac4c9bacd7051a67fd4539982` (`be1a6df`), based on
+> `origin/main @ fcb0f75883e318061a2fe7570b1a651785426769`.
+>
+> Kickoff event: `evt_6476a6eqcyz8s`, routed to `spec-leader` after
+> compact-gating spec-leader, spec-author, and conformance-validator.
+>
+> Branch scope: `docs/program/07-compiler-program.md`, NC1-NC9 WP briefs under
+> `docs/program/wp/`, and a narrow `05-implementation-dag.md` pointer update
+> from `X3 native backend` to the `X3/NC` Rust bootstrap compiler campaign.
+>
+> Required next move: Spec enclave D0 for `CheckedCorePackage v0`, then
+> spec-author/CV elaboration and review routing. No build-team work until the
+> checked-core artifact contract is merged.
+>
+> ### SURF-TARGET-INDEX-KERNEL-AUTHORITY CLOSED; COMPILER NC1 NEXT (2026-07-06 23:59 UTC)
+>
+> Language §10 closeout is complete at `evt_6svq29naevqes` after PR #323 /
+> `origin/main @ fcb0f75883e318061a2fe7570b1a651785426769`.
+>
+> Retro anchors:
+>
+> - Language QA: `evt_4atqx5z448s7s`
+> - Language implementer: `evt_2b8nb07g9v6nv`
+> - Language leader: `evt_6aqj55aa8x50y`
+> - Retros-in handoff: `evt_6svq29naevqes`
+>
+> The GADT/KM/follow-on sequence is now closed. Next Steward action: start the
+> compiler program by releasing `NC1-checked-core-package` to the Spec enclave
+> after compact-gating spec-leader, spec-author, and conformance-validator.
+>
+> ### SURF-TARGET-INDEX-KERNEL-AUTHORITY MERGED; RETROS PENDING (2026-07-06 23:58 UTC)
+>
+> Integrator merged `wp/SURF-target-index-kernel-authority` as PR #323 at
+> `evt_3a1z7d7ktw0gp`.
+>
+> Merge anchor:
+>
+> - landed: `origin/main @ fcb0f75883e318061a2fe7570b1a651785426769`
+> - final reviewed head: `95a59d00287e3aa5765a71da21c959f5c59141d6`
+> - gates: build + test, conformance suite, clean-room provenance check, and
+>   path-guard green before merge
+>
+> Integrator routed Language §10 closeout to `language-leader`. Await
+> Language retros-in handoff before closing the follow-on and starting the
+> compiler WP sequence.
+>
+> ### SURF-TARGET-INDEX-KERNEL-AUTHORITY PR #323 OPEN; CI RUNNING (2026-07-06 23:56 UTC)
+>
+> Integrator picked up `SURF-target-index-kernel-authority` at
+> `evt_16m6bddv5jde3`, published the reviewed head `95a59d0`, and opened
+> PR #323 at `evt_7532ex11nnbth`.
+>
+> CI update at `evt_1e73n87n49fsa`: clean-room provenance check is green;
+> `build + test`, `conformance suite`, and `path-guard` are still running.
+> Await Integrator merge on green or route-back if a gate fails.
+>
+> ### SURF-TARGET-INDEX-KERNEL-AUTHORITY APPROVED; INTEGRATOR ROUTED (2026-07-06 23:55 UTC)
+>
+> Architect approved exact head `wp/SURF-target-index-kernel-authority @
+> 95a59d00287e3aa5765a71da21c959f5c59141d6` (`95a59d0`) at
+> `evt_51geyvg3a94eg`.
+>
+> Approval finding: authority placement is correct. Non-authority constructor
+> result-target validation remains surface-side; the removed logic is only the
+> duplicated same-family target-index scan. Same-family target indices still
+> reject, now through kernel admission because `origin/main @ ed991ed`
+> includes the `target_indices` positivity scan.
+>
+> Language leader routed normal integration to Integrator at
+> `evt_k7qgy7jpkdcx`. Await publish/CI/merge on exact `95a59d0`.
+>
+> ### SURF-TARGET-INDEX-KERNEL-AUTHORITY ARCHITECT REVIEW NUDGED AFTER RESTART (2026-07-06 23:52 UTC)
+>
+> Pat reported the computer was asleep. Convo showed the service reconnect
+> window at `2026-07-06T23:43Z`. The only workflow movement during that window
+> was Language leader's Architect review request at `evt_18txt84ebthnd`, which
+> landed immediately before disconnect/reconnect events.
+>
+> Steward restarted the review path with a single Architect mention in the live
+> WP thread at `evt_5bwbq1szkeqdy`.
+>
+> Active head remains
+> `wp/SURF-target-index-kernel-authority @
+> 95a59d00287e3aa5765a71da21c959f5c59141d6` (`95a59d0`). Required next move:
+> Architect review of the authority-boundary candidate, then normal integration
+> routing if approved.
+>
+> ### SURF-TARGET-INDEX-KERNEL-AUTHORITY QA-APPROVED; ARCHITECT NEXT (2026-07-06 22:02 UTC)
+>
+> Language moved the follow-on from D0 through QA on the exact D1 head
+> `wp/SURF-target-index-kernel-authority @
+> 95a59d00287e3aa5765a71da21c959f5c59141d6` (`95a59d0`).
+>
+> D0 result: bounded implementation, not no-op. Language found the old
+> surface-side same-family target-index guard in
+> `crates/ken-elaborator/src/data.rs::validate_ctor_result_target` and chose
+> to remove only that duplicated authority so the rejected shape reaches kernel
+> admission. Family-head, parameter-preservation, and index-arity validation
+> stay surface-owned.
+>
+> Evidence anchors:
+>
+> - Language D0: `evt_26s9qw7x6g834`
+> - Implementer D1 handoff: `evt_5cypj8wvj901a`
+> - Language leader review: `evt_2c0rx2ydw6h76`
+> - Language QA approval: `evt_110rv88k8g5es`
+>
+> Scope is exactly the Steward frame doc plus
+> `crates/ken-elaborator/src/data.rs` and
+> `crates/ken-elaborator/tests/explicit_data_elaboration.rs`. QA reports the
+> focused negative now rejects through
+> `ElabError::KernelRejected { KernelError::PositivityViolation, ... }`
+> rather than the old surface diagnostic, while the Vec-style positive
+> target-index case and non-authority surface validations remain green.
+>
+> Required next move: Language leader routes Architect review for this
+> authority-boundary decision. No Steward nudge yet: QA approval is fresh.
+>
+> ### SURF-TARGET-INDEX-KERNEL-AUTHORITY RELEASED TO LANGUAGE (2026-07-06 21:45 UTC)
+>
+> Steward framed the post-KM surface/kernel authority follow-on on
+> `wp/SURF-target-index-kernel-authority @
+> cbc0910d43fef9dd61ede8cae5b5a9636fae41df` (`cbc0910`) and released it to
+> `language-leader` at `evt_57yjh0et4en4q` after compact-gating Language
+> leader, implementer, and QA panes.
+>
+> Purpose: decide whether the pre-KM surface same-family target-index guard
+> should remain as an early diagnostic or be removed as duplicated authority now
+> that kernel admission is the trusted gate. Kernel result is conservative:
+> same-family recursive target indices remain rejected. Language D0 may choose
+> no-op, bounded removal of duplicate surface authority, or a stop/fork if it
+> proposes broader target-index expressivity.
+>
+> ### KM-TARGET-INDEX-POSITIVITY CLOSED; SURFACE FOLLOW-ON DECISION NEXT (2026-07-06 21:43 UTC)
+>
+> `KM-target-index-positivity` was approved and merged:
+>
+> - Kernel QA approval: `evt_7pb17j48mztyc`
+> - Architect approval / Decision `dec_7d0w135g9jp6p`: `evt_2n3zmfddk6jys`
+> - Integrator merge: `evt_55mw0105yjyvm`
+> - PR #322 landed at `origin/main @
+>   ed991ed525b925a65afb4e53574ac19ebde368d0`
+> - final reviewed head: `36f9cf4e0cde6380df6608b025d51d45976ec184`
+>
+> Kernel leader requested §10 retros at `evt_4q4spd7a8k95p`. Retros are in:
+> implementer `evt_525k3thg5hkhn`, QA `evt_3cvezrtmvkret`, leader retro
+> `evt_2n3kehe4dda77`, and retros-in handoff `evt_6hq6zdrz0mx2d`.
+>
+> Kernel result: conservative skipped-field fix only. Kernel strict positivity
+> now scans constructor `target_indices` and rejects same-family occurrences
+> there before admission succeeds; no broader positivity rule was introduced
+> and no elaborator/surface/spec/conformance movement was needed. Next
+> Steward action: decide/route the small surface follow-on, if any, before
+> compiler kickoff.
+>
+> ### KM-TARGET-INDEX-POSITIVITY D1 ACTIVE (2026-07-06 21:25 UTC)
+>
+> Kernel leader completed D0 at `evt_7wk2hb7krp653`. D0 conclusion: this is
+> the conservative skipped-field fix, not a broader positivity redesign.
+> `target_indices` are already kernel payload and used in constructor type /
+> eliminator method construction; `check_positivity` scans params, family
+> indices, and constructor args, but skipped `c.target_indices`.
+>
+> Kernel implementer picked up D1 at `evt_6s57k1ay8d41g` and posted the formal
+> handoff at `evt_591snp6k3mt74` on exact branch
+> `wp/KM-target-index-positivity @
+> 36f9cf4e0cde6380df6608b025d51d45976ec184` (`36f9cf4`). The handoff reports
+> the conservative target-index positivity guard, kernel-only scope, focused
+> AC5 acceptance pass, full `ken-kernel` pass, clean `git diff --check`, and
+> rustfmt check over touched files.
+>
+> Await Kernel leader routing to Kernel QA, then Architect review.
+>
+> ### KM-TARGET-INDEX-POSITIVITY RELEASED TO KERNEL (2026-07-06 21:04 UTC)
+>
+> `SURF-gadt-field-sugar` is now §10-closed. Language retros-in handoff:
+> `evt_1cg5x6qaky4rs`; retros: QA `evt_6d8s0j15amy9t`, implementer
+> `evt_4tycc9xh5n56n`, leader companion retro `evt_29mvxz895wyzn`.
+>
+> Steward released `KM-target-index-positivity` to `kernel-leader` at
+> `evt_1gcgrc2hcwg4e` after compact-gating Kernel leader, implementer, and QA
+> panes.
+>
+> Active KM branch/head:
+> `wp/KM-target-index-positivity @
+> 2f827bc0d07389b08f59d9213201b76aa98c0195` (`2f827bc`). Required next action:
+> Kernel D0 audit, with D0 stop if the team proposes a broader positivity rule
+> or any spec/surface movement. Kernel QA and Architect review are mandatory.
+>
+> ### SURF-GADT FIELD SUGAR RETROS PARTIAL (2026-07-06 21:02 UTC)
+>
+> Language closeout is moving after the restart. Language QA posted the
+> `SURF-gadt-field-sugar` §10 retro at `evt_6d8s0j15amy9t`. Language
+> implementer is active on the retro request in the pane; await implementer
+> retro, then language-leader coordination retro / retros-in handoff.
+>
+> `KM-target-index-positivity` remains queued but unreleased until that
+> handoff lands.
+>
+> ### SURF-GADT FIELD SUGAR CLOSEOUT ACTIVE (2026-07-06 21:01 UTC)
+>
+> After Pat restarted the other agents, Steward sent a comms/restart check to
+> `language-leader` at `evt_6r7c9kr6gnhvt`. Language leader acknowledged at
+> `evt_9rpp7y52w2vr` and is proceeding with `SURF-gadt-field-sugar` §10
+> closeout.
+>
+> Language leader requested member retros at `evt_1zaww5qfyymbs`, anchored on
+> PR #321 / `origin/main @ e026e7218f376001376f50743a17ec9d5c8a556e` and final
+> reviewed head `02cb53e741e9554b859263bf2b2ff656db4bb2b7`. Await
+> language-implementer + language-qa retros, then leader retro / retros-in
+> handoff. `KM-target-index-positivity` remains queued but unreleased until
+> that handoff lands.
+>
+> ### SURF-GADT FIELD SUGAR RETRO REQUEST RETRIED (2026-07-06 20:50 UTC)
+>
+> Pat reported the mootup.io services had been unresponsive and restarted
+> them. After reconnect events appeared, Steward retried the Language closeout
+> request at `evt_1bxe2b3x1tyr5`.
+>
+> State remains unchanged: `SURF-gadt-field-sugar` is merged, Language retros
+> are pending, and `KM-target-index-positivity` must not be released until the
+> Language ring posts retros-in.
+>
+> ### SURF-GADT FIELD SUGAR RETRO NUDGED (2026-07-06 20:41 UTC)
+>
+> Watchdog found no Convo events after Steward's Language §10 request
+> `evt_3wvza628sx7gy`, and Language panes were idle. Steward nudged
+> `language-leader` at `evt_1kxvnefs3qxqc`.
+>
+> Current state is still `SURF-gadt-field-sugar` merged / retros pending.
+> `KM-target-index-positivity` remains queued but unreleased until the
+> Language ring posts retros-in.
+>
+> ### SURF-GADT FIELD SUGAR MERGED; RETROS PENDING (2026-07-06 20:11 UTC)
+>
+> Integrator merged `wp/SURF-gadt-field-sugar` as PR #321 at
+> `evt_3dqs12cnfsr59`.
+>
+> Merge anchor:
+> - landed: `origin/main @ e026e7218f376001376f50743a17ec9d5c8a556e`
+> - time: `2026-07-06T20:09:57Z`
+> - final reviewed head: `02cb53e741e9554b859263bf2b2ff656db4bb2b7`
+> - gates: build + test, conformance suite, clean-room provenance check, and
+>   path-guard green before merge
+>
+> Steward requested Language §10 retros at `evt_3wvza628sx7gy`. Do not release
+> `KM-target-index-positivity` until the Language retro loop is closed.
+>
+> ### SURF-GADT FIELD SUGAR PR #321 OPEN (2026-07-06 20:08 UTC)
+>
+> Integrator accepted the corrected cumulative scope and published
+> `wp/SURF-gadt-field-sugar` as PR #321 at `evt_4x31qhmbbab5r`.
+>
+> Exact reviewed head:
+> `02cb53e741e9554b859263bf2b2ff656db4bb2b7` (`02cb53e`). Scope is the
+> corrected eight-file cumulative diff: the WP frame doc plus seven
+> `crates/ken-elaborator` files. Integrator reports `git diff --check` clean
+> and revised negative scope empty before publish. Current next action: await
+> CI/gate and merge result from Integrator.
+>
+> ### SURF-GADT FIELD SUGAR SCOPE RECONCILED (2026-07-06 20:07 UTC)
+>
+> Integrator correctly blocked at `evt_3drfkxz5kx1x8`: cumulative
+> `origin/main...wp/SURF-gadt-field-sugar` includes the seven reviewed
+> elaborator files **plus** `docs/program/wp/SURF-gadt-field-sugar.md`, while
+> the active handoff wording had listed only the D1 implementation delta.
+>
+> Language implementer confirmed the accounting split at `evt_5dpbjyp2w9egf`:
+> the D1 delta `5860448..02cb53e` is exactly the seven reviewed elaborator
+> files, and the extra cumulative file is the Steward-authored frame doc from
+> kickoff commit `5860448`.
+>
+> Steward reconciled the merge scope for Integrator at
+> `evt_2g8ys65wthmdj`; Integrator's follow-up hold at `evt_5yxwa6wkq3h28`
+> appears to have raced with that message. Steward then sent an explicit
+> corrected merge request at `evt_2mewaj89jpbd1`.
+>
+> Active integration scope is now explicitly the eight cumulative files:
+> `docs/program/wp/SURF-gadt-field-sugar.md` plus the seven reviewed
+> `crates/ken-elaborator` files at exact head `wp/SURF-gadt-field-sugar @
+> 02cb53e741e9554b859263bf2b2ff656db4bb2b7` (`02cb53e`). Revised negative
+> scope: empty outside `crates/ken-elaborator/**` and that single WP frame doc.
+> Await Integrator publish/gate/merge result.
+>
+> ### SURF-GADT FIELD SUGAR INTEGRATION NUDGED (2026-07-06 20:02 UTC)
+>
+> Watchdog check found no Convo response after Language's Integrator merge
+> request at `evt_5ebrey908y9g`, and the Integrator pane was idle. Steward
+> posted a targeted Integrator-only routing nudge at `evt_5s8t13bna517c`.
+>
+> Active target remains unchanged:
+> `wp/SURF-gadt-field-sugar @
+> 02cb53e741e9554b859263bf2b2ff656db4bb2b7` (`02cb53e`), with Language QA
+> approval `evt_3rz05v3dh705` and Architect approval `evt_5ghck4g686wzp`.
+> Await Integrator publish/gate/merge result. Do not kick
+> `KM-target-index-positivity` until field-sugar has landed and its §10 loop is
+> closed.
+>
+> ### OPERATOR SEQUENCE PIN: GADT → KM → GADT REFINEMENTS → COMPILER (2026-07-06 19:40 UTC)
+>
+> Pat sequencing instruction: once `SURF-gadt-field-sugar` lands, Steward
+> should close its merge/retro loop and then kick off the already framed
+> `KM-target-index-positivity` WP. After that KM lands, route any small GADT
+> surface refinements that follow from the kernel target-index admission result
+> before starting the compiler WPs.
+>
+> The compiler program starts after that GADT/KM sequence. Compiler docs and
+> WPs are already integrated: `docs/program/07-compiler-program.md` and
+> `docs/program/wp/NC1-checked-core-package.md` through
+> `docs/program/wp/NC9-first-ken-owned-pass.md`. First compiler kickoff is
+> expected to be `NC1-checked-core-package` to the Spec enclave unless the
+> just-landed KM/GADT result creates a narrower prerequisite.
+>
+> ### SURF-GADT FIELD SUGAR INTEGRATOR ROUTED (2026-07-06 19:29 UTC)
+>
+> Retained for audit. Current queue order was superseded by the operator
+> sequence pin above.
+>
+> Language picked up `SURF-gadt-field-sugar` from Steward release
+> `evt_62zmrnvrh7v4w`. D0 audit landed at `evt_1da98v37d8yv5` and narrowed
+> the accepted D1 slice to **declaration-only** named-record constructor
+> argument sugar: no constructor-expression labels, no constructor-pattern
+> labels, and no record-style labels inside explicit dependent constructor
+> signatures. The bounded path preserves labels only as untrusted
+> elaborator-side metadata and lowers to the existing positional constructor
+> telescope.
+>
+> Language implementer acknowledged the temporary-branch route at
+> `evt_ea4skmzhfekk`; language-leader accepted the route at
+> `evt_2jmh4zjk5fx0v` because `wp/SURF-gadt-field-sugar` is checked out in
+> the leader worktree. D1 handoff is
+> `language-implementer/SURF-gadt-field-sugar-D1 @
+> 02cb53e741e9554b859263bf2b2ff656db4bb2b7` (`02cb53e`), posted at
+> `evt_2ggjyy6xvvy2v`.
+>
+> Leader review approved / routed QA at `evt_d2gesynn47yg`. Language QA
+> approved / no blockers at `evt_3rz05v3dh705`; Language leader routed
+> Architect at `evt_39qww1qkb353r`; Architect approved / no blockers at
+> `evt_5ghck4g686wzp`. Language leader promoted the real WP branch to the
+> reviewed SHA and routed Integrator at `evt_5ebrey908y9g`.
+>
+> Exact integration target:
+> `wp/SURF-gadt-field-sugar @
+> 02cb53e741e9554b859263bf2b2ff656db4bb2b7` (`02cb53e`). Candidate diff is
+> seven `crates/ken-elaborator` files only; `git diff --check` passes;
+> negative scope is empty for `crates/ken-kernel`, `Cargo.lock`, `packages`,
+> `spec`, `conformance`, and `local/refs`. Current next action: await
+> Integrator publish/gate/merge result; no Steward post is needed.
+>
+> ### SURF-GADT FIELD SUGAR ARCHITECT REVIEW PENDING (2026-07-06 19:24 UTC)
+>
+> Retained for audit. This state was superseded by Architect approval
+> `evt_5ghck4g686wzp` and Integrator routing `evt_5ebrey908y9g`.
+>
+> ### SURF-GADT FIELD SUGAR QA REVIEW ACTIVE (2026-07-06 19:21 UTC)
+>
+> Retained for audit. This state was superseded by QA approval
+> `evt_3rz05v3dh705` and Architect routing `evt_39qww1qkb353r`.
+>
+> ### SURF-GADT FIELD SUGAR RELEASED TO LANGUAGE (2026-07-06 19:16 UTC)
+>
+> Retained for audit. This state was superseded by D0/D1 progress at
+> `evt_1da98v37d8yv5`, `evt_2ggjyy6xvvy2v`, and `evt_d2gesynn47yg`.
+>
+> Steward framed the final queued surface GADT ergonomics WP on
+> `wp/SURF-gadt-field-sugar @
+> 5860448193522f7ce9604ac825685cfce99ed36c` (`5860448`), based on
+> `origin/main @ 127066d5b4e0926478a229490ac505f2469e590d`. Frame doc:
+> `docs/program/wp/SURF-gadt-field-sugar.md`.
+>
+> Handoff posted to Language leader only at `evt_62zmrnvrh7v4w`.
+> Handoff gate proof: `SURF-gadt-parser-ast`, `SURF-gadt-elaboration`, and
+> `SURF-gadt-coverage-diagnostics` are merged and §10-closed; the Language
+> leader, implementer, and QA panes were compact-gated immediately before
+> release and all showed `Context compacted`.
+>
+> Required D0: audit which named-field constructor spellings are already
+> parsed/representable, then either implement the bounded sugar that lowers to
+> the existing positional constructor telescope or stop for a scope fork.
+> Guardrails: no kernel/Cargo/packages/spec/conformance movement without a
+> routed fork; no indexed coverage, omitted-branch, motive, or
+> `KM-target-index-positivity` work in this WP.
+>
+> ### SURF-GADT COVERAGE CLOSED; NEXT SURFACE WP TO FRAME (2026-07-06 19:02 UTC)
+>
+> Retained for audit. This state was superseded by the `SURF-gadt-field-sugar`
+> release at `evt_62zmrnvrh7v4w`.
+>
+> Integrator merged `wp/SURF-gadt-coverage-diagnostics` as PR #320 at
+> `origin/main @ 127066d5b4e0926478a229490ac505f2469e590d`
+> (`2026-07-06T18:43:19Z`) from final reviewed blocker-fix head
+> `f3dbb0d5d04c4c7705794e026d4eb72db0ec272e`; merge event:
+> `evt_mrxvdbtzd8k0`. Gates were green before merge: build + test,
+> conformance suite, clean-room provenance check, and path-guard. Integrator
+> reports remote branch and local shared-clone ref cleanup complete.
+>
+> Steward requested Language §10 retros at `evt_63337244f8th8`; Language
+> retros are in at `evt_6cg4z8eq5ezv9` with implementer retro
+> `evt_3aa02bxs957xm` and QA retro `evt_75y6prqkk89jq`. Current next action:
+> frame `SURF-gadt-field-sugar`, then compact-gate the Language ring before
+> release. After that final surface GADT WP, the separate Kernel expressivity
+> follow-up is `KM-target-index-positivity`.
+>
+> ### SURF-GADT COVERAGE FIX APPROVED; INTEGRATION ROUTING (2026-07-06 18:40 UTC)
+>
+> Retained for audit. This state was superseded by PR #320 merge at
+> `evt_mrxvdbtzd8k0`.
+>
+> Language implementer handed off blocker-fix head
+> `language-implementer/SURF-gadt-coverage-fix @
+> f3dbb0d5d04c4c7705794e026d4eb72db0ec272e` at `evt_29ty5k2e8mx3n`; parent
+> is blocked head `2e46f6c`. Blocker-fix delta is exactly
+> `crates/ken-elaborator/src/elab.rs` and
+> `crates/ken-elaborator/tests/explicit_data_elaboration.rs`; cumulative diff
+> remains those files plus the pre-existing WP frame doc.
+>
+> Language leader approved / routed QA at `evt_1hndm98ffnjgf`. Language QA
+> re-approved / no blockers at `evt_1aknw0paq2msw`; Language leader posted the
+> Architect re-review request at `evt_41pwyrjc3zw89`. Reported blocker closures:
+> generated internal equality evidence uses
+> `tt` only for generated premises whose WHNF is kernel `Top`; surface `Refl`
+> remains shape-gated; dependent index-domain lifting is fixed conservatively;
+> demanded `Vector A (Suc Zero)` and dependent two-index regressions pass.
+> Architect approved / no blockers at `evt_31peyfatbz37t`. Language leader
+> routed Integrator at `evt_277q7drm8996n` for exact reviewed blocker-fix head
+> `f3dbb0d`, to publish/merge via `wp/SURF-gadt-coverage-diagnostics`.
+> Current next action: await Integrator publish/merge result.
+>
+> ### SURF-GADT COVERAGE FIX QA-APPROVED; ARCHITECT NEXT (2026-07-06 18:37 UTC)
+>
+> Retained for audit. This state was superseded by Architect approval at
+> `evt_31peyfatbz37t`.
+>
+> Language implementer handed off blocker-fix head
+> `language-implementer/SURF-gadt-coverage-fix @
+> f3dbb0d5d04c4c7705794e026d4eb72db0ec272e` at `evt_29ty5k2e8mx3n`; parent
+> is blocked head `2e46f6c`. Leader/QA approvals landed at
+> `evt_1hndm98ffnjgf` and `evt_1aknw0paq2msw`; Architect re-review was
+> requested at `evt_41pwyrjc3zw89`.
+>
+> ### SURF-GADT COVERAGE ARCHITECT CR; REPAIR ACTIVE (2026-07-06 18:18 UTC)
+>
+> Retained for audit. This state was superseded by blocker-fix handoff at
+> `evt_29ty5k2e8mx3n` and QA approval at `evt_1aknw0paq2msw`.
+>
+> Architect change-requested exact candidate
+> `wp/SURF-gadt-coverage-diagnostics @
+> 2e46f6c9f7dfc104cd62a3d6a10fd650a5a9dcd7` at `evt_6gxjatfzaced1`.
+> Scope/hygiene passed, but two blockers must be fixed in the same
+> elaborator-only frame:
+>
+> - generated internal equality evidence must handle equality-origin premises
+>   whose WHNF is `Top` after observational equality reduction, without turning
+>   surface `Refl` into general proof search;
+> - motive-premise domain lifting must be corrected for dependent index
+>   telescopes, with a regression where a later index domain mentions an
+>   earlier index binder.
+>
+> Architect also requested a concrete-index `Vector A (Suc Zero)` regression.
+> Language QA withdrew approval for `2e46f6c` at `evt_3tmc5kfghh0f9`.
+> Language leader routed the blocker fix to language-implementer at
+> `evt_7bqv1dr3cqpyn`; language-implementer acknowledged at
+> `evt_8fjp4wkwq536`. Architect confirmed the repair scope at
+> `evt_6jhar7kvfzrq`; Language leader pinned no further routing until a fix
+> head at `evt_q9rj8nqp8qd6`. Current next action: await exact blocker-fix head
+> / blocker report from language-implementer.
+>
+> Watchdog note: because `wp/SURF-gadt-coverage-diagnostics` is checked out in
+> the language-leader worktree, language-implementer is repairing on temporary
+> branch `language-implementer/SURF-gadt-coverage-fix` from exact blocked head
+> `2e46f6c`; implementer posted that route at `evt_3p82vqy1zk4q3`, and
+> language-leader accepted it at `evt_7xnf58p0ae3sn`. Pane scan shows the
+> blocker fix is actively in progress in `crates/ken-elaborator/src/elab.rs`
+> and `crates/ken-elaborator/tests/explicit_data_elaboration.rs`. Current next
+> action remains await exact blocker-fix commit/head.
+>
+> ### SURF-GADT COVERAGE D1 HANDED TO IMPLEMENTER (2026-07-06 17:45 UTC)
+>
+> Retained for audit. This state was superseded by Architect change request at
+> `evt_6gxjatfzaced1` and blocker-fix routing at `evt_7bqv1dr3cqpyn`.
+>
+> `KM-index-impossible-branch-synthesis` is fully closed: Integrator merged PR
+> #319 at `origin/main @ a4dabbbd1c422cae84bc2be371f2fa6c618ac79b`
+> (`2026-07-06T17:20:43Z`) from final reviewed head `4be6baa`; Kernel
+> implementer retro is `evt_16f19enceqfh9`, Kernel QA retro is
+> `evt_1hw2zd6arssnt`, and Kernel leader retro / `retros in` is
+> `evt_1ppb3vkv2k948`.
+>
+> Steward re-released `SURF-gadt-coverage-diagnostics` to Language leader only
+> at `evt_32yd32mqmpj23`. Resume branch:
+> `wp/SURF-gadt-coverage-diagnostics @
+> 4b558457e80ffd2637ca65e10a1739a72b124097`, regrounded as needed on landed
+> mechanism `a4dabbb`. Required shape remains the equality-premise motive route
+> from `evt_181ehbwbpc8ey`: omitted index-impossible branches consume generated
+> index-equality premises that check as `Bottom` and feed Type-valued
+> `Absurd`; unknown/type-possible constructors remain required.
+>
+> Language leader accepted the re-release and routed resumed D1 to
+> language-implementer at `evt_6r4tj03kjfk2k`, preserving the same
+> equality-premise route and negative-scope pins. Current next action: await
+> language-implementer candidate head / blocker report.
+>
+> Language implementer handed off exact candidate
+> `wp/SURF-gadt-coverage-diagnostics @
+> 2e46f6c9f7dfc104cd62a3d6a10fd650a5a9dcd7` (`SURF-gadt-coverage: indexed
+> match premises`) at `evt_crhetyn2f0r8`; branch is released back to
+> `language-implementer/work`. Language leader approved / routed QA at
+> `evt_589hmjkr6txdv`; Language QA approved / no blockers at
+> `evt_53g8x9x59nkze`; Language leader posted the final Architect review
+> request at `evt_40afnye5t3d8x`. Scope remains elaborator/test-only plus
+> pre-existing WP frame doc; negative scope remains empty for
+> `crates/ken-kernel`, `Cargo.lock`, packages, spec, conformance, and
+> `local/refs`. Current next action: await Architect review on exact
+> `2e46f6c`.
+>
+> ### KM INDEX-IMPOSSIBLE MERGED; KERNEL CLOSEOUT NUDGED (2026-07-06 17:42 UTC)
+>
+> Retained for audit. This state was superseded by Kernel leader closeout at
+> `evt_1ppb3vkv2k948` and Language re-release at `evt_32yd32mqmpj23`.
+>
+> Integrator merged `wp/KM-index-impossible-branch-synthesis` as PR #319 at
+> `origin/main @ a4dabbbd1c422cae84bc2be371f2fa6c618ac79b`
+> (`2026-07-06T17:20:43Z`) at `evt_7z844pza5d8sg`. Gate result on final
+> reviewed head `4be6baa`: build + test, conformance suite, clean-room
+> provenance check, and path-guard were green before merge. Remote branch and
+> local shared-clone ref cleanup are complete. Steward requested Kernel §10
+> retros at `evt_5aj3mzvn0a2mk`.
+>
+> Kernel-leader requested retros at `evt_6eymx52ec8fzh`; Kernel QA retro is in
+> at `evt_1hw2zd6arssnt`; Kernel implementer retro is in at
+> `evt_16f19enceqfh9`. Steward nudged Kernel leader only at
+> `evt_450fqazk98bza` because the member retros were both in and the leader
+> closeout had not landed after roughly twenty minutes. Current next action:
+> await Kernel leader coordination retro / `retros in`, then re-release
+> `SURF-gadt-coverage-diagnostics` to Language against landed mechanism
+> `a4dabbb`.
+>
+> ### KM INDEX-IMPOSSIBLE REVIEW COMPLETE; INTEGRATOR ROUTED (2026-07-06 17:18 UTC)
+>
+> `KM-index-impossible-branch-synthesis` review is complete on exact head
+> `wp/KM-index-impossible-branch-synthesis @
+> 4be6baa0aed43833af1b343aed69734d004d4700`. Kernel QA approved at
+> `evt_4myncrvhwv9yd`; Architect approved at `evt_3hzj5sd4sr2p4`; Spec/CV
+> approved at `evt_23g200q69d1ye`. Steward posted a close-loop note to
+> kernel-leader only at `evt_7g05e7jz3d88j`; spec-leader confirmed review
+> complete at `evt_rdexweawp77v`. Kernel-leader resolved
+> `dec_5swabzekpj4qk` approved and routed Integrator at `evt_6drj1pp2n06h8`.
+>
+> Current next action: await Integrator publish/merge result. Do not re-release
+> `SURF-gadt-coverage-diagnostics` until this mechanism lands and
+> cleanup/closeout state is clear.
+>
+> ### KM INDEX-IMPOSSIBLE QA + ARCHITECT APPROVED; SPEC PENDING (2026-07-06 17:00 UTC)
+>
+> Kernel implementation for `KM-index-impossible-branch-synthesis` is approved
+> by Kernel QA and Architect on exact head
+> `wp/KM-index-impossible-branch-synthesis @
+> 4be6baa0aed43833af1b343aed69734d004d4700`. Kernel QA verdict:
+> `evt_4myncrvhwv9yd`. Kernel-leader opened review Decision
+> `dec_5swabzekpj4qk` at `evt_tvms4sj45r50`. Architect approved with no
+> blockers at `evt_3hzj5sd4sr2p4`.
+>
+> Spec-side review is still pending: spec-leader routed
+> `dec_5swabzekpj4qk` to conformance-validator at `evt_61z051k87tpx8`.
+> Kernel-leader has already recorded the same state in-thread and is holding
+> the Integrator request until the Spec/CV verdict lands. Current next action:
+> await conformance-validator on exact `4be6baa`; do not route Integrator yet.
+>
+> ### KM INDEX-IMPOSSIBLE SCOPE AMENDED; KERNEL UNBLOCKED (2026-07-06 16:44 UTC)
+>
+> Architect ruled at `evt_181ehbwbpc8ey`: the corrected Kernel D0 stop is valid
+> and pure Type-level `Absurd` is not a complete mechanism by itself, but the
+> buildable route is a refined route 1. The WP should generalize `Bottom`
+> elimination so `absurd C p : C` accepts `C : Type l` as well as
+> `C : Omega l`, still requiring `p : Bottom`, with no new reduction rule, no
+> closed disjointness proof oracle, no eliminator `method_type` change, and no
+> indexed coverage implementation.
+>
+> Steward chose to include the narrow `spec/10-kernel/16-observational.md`
+> amendment in this same WP, not split a companion spec WP. The frame was
+> amended on `wp/KM-index-impossible-branch-synthesis @
+> f9d99b825f427dc446b57cb55c4a520b3d4b403b`
+> (`KM-index-impossible: align spec scope`). Scope-release post to
+> kernel-leader only: `evt_5mcqe40cqk9dw`. Kernel-leader caught that the
+> temporary Steward worktree still held the branch; Steward removed
+> `/tmp/km-index-scope` and confirmed branch release at `evt_44f45af8c9kpx`.
+>
+> Kernel-leader verified the branch was free and assigned D1 to
+> kernel-implementer at `evt_46d8xsh3q4jpc`; kernel-implementer picked it up
+> and is implementing from exact head `f9d99b8`. Current next action: await
+> the implementer handoff. Review route remains
+> `kernel-implementer -> kernel-qa -> Architect -> Integrator`. Architect is
+> mandatory because this is a kernel/spec boundary change. Downstream
+> `SURF-gadt-coverage-diagnostics` remains held until this lands, then resumes
+> on the equality-premise motive shape from the Architect ruling.
+>
+> ### KM INDEX-IMPOSSIBLE D0 STOP — ARCHITECT REVIEWING (2026-07-06 16:39 UTC)
+>
+> Kernel D0 stopped `KM-index-impossible-branch-synthesis` with **no edits and
+> no candidate commit**. Exact held frame remains
+> `wp/KM-index-impossible-branch-synthesis @
+> 96c58b5d36369c8375728d787e6622cae6215640`. Kernel implementer first posted
+> a tentative Type-level-`Absurd` route at `evt_7wdr0mam7qnwj`, then corrected
+> it and stopped at `evt_2xx844vfjyrq1`; kernel-leader agreed and routed
+> Architect at `evt_4qjgr4azc5hmd`.
+>
+> D0 result: Type-level `Absurd` is necessary for AC5's value-returning omitted
+> impossible branches, but it is not sufficient by itself. The method term
+> `absurd (M t_k (c_k ...)) p` still requires an in-context contradiction
+> `p : Bottom` or a proposition convertible to `Bottom`. Current
+> `method_type` supplies constructor args and recursive IHs only; it does not
+> supply a branch-local index equality/impossibility witness. Observational
+> equality can classify `Eq Nat Zero (Suc n)` as `Bottom`, but that proposition
+> is not itself an inhabitant.
+>
+> Current next action: await Architect route ruling. Architect is actively
+> reviewing in pane `%109`, so no Steward nudge/post was needed on this
+> watchdog pass. `SURF-gadt-coverage-diagnostics` remains held at `4b55845`;
+> `KM-target-index-positivity` remains separate unless the ruling joins them.
+>
+> ### KM INDEX-IMPOSSIBLE RELEASED (2026-07-06 16:34 UTC)
+>
+> Steward framed and released the prerequisite mechanism WP requested by the
+> Architect ruling on `SURF-gadt-coverage-diagnostics`. Branch/frame:
+> `wp/KM-index-impossible-branch-synthesis @
+> 96c58b5d36369c8375728d787e6622cae6215640`
+> (`KM-index-impossible-branch-synthesis: frame mechanism`). Kickoff posted to
+> **kernel-leader only** at `evt_4k9a49t297y7x`.
+>
+> Gate proof: `SURF-gadt-coverage-diagnostics` remains parked at
+> `wp/SURF-gadt-coverage-diagnostics @
+> 4b558457e80ffd2637ca65e10a1739a72b124097` with no behavior-change
+> candidate. Architect ruling `evt_1ez4b96dqdnsk` holds D1 until a sanctioned
+> Type-level impossible-branch synthesis / indexed-impossibility mechanism
+> lands or is rerouted. Language D0 stop is `evt_6w4475nx6cssc`, leader hold is
+> `evt_hprzvp0y3aa`, and QA parked at `evt_7v3cp6tjewz68`. Kernel leader,
+> implementer, and QA panes were compacted before release; Steward worktree is
+> back on `steward/work`.
+>
+> D0 objective: Kernel must choose the proof-producing route for AC5
+> value-returning omitted impossible branches: extend kernel empty/absurd
+> elimination to `Type` motives with elaborator evidence construction; expose
+> branch-local index equality/impossibility evidence in eliminator/method
+> typing; or stop for explicit spec/Architect rerouting if the project wants a
+> dummy-motive design instead of absurdity. Kernel QA is mandatory for any
+> kernel/conversion change. `KM-target-index-positivity` stays separate unless
+> D0 proves a shared mechanism. Current next action: await Kernel D0/D1 or
+> scope stop.
+>
+> ### SURF-GADT COVERAGE D0 STOP — ARCHITECT RULING REQUESTED (2026-07-06 16:26 UTC)
+>
+> Language D0 stopped `SURF-gadt-coverage-diagnostics` with **no behavior
+> change and no candidate commit**. Exact held frame remains
+> `wp/SURF-gadt-coverage-diagnostics @
+> 4b558457e80ffd2637ca65e10a1739a72b124097`. Implementer D0 stop:
+> `evt_6w4475nx6cssc`; worktree release: `evt_77nv4vgn2m7h9`; leader review /
+> hold request: `evt_hprzvp0y3aa`.
+>
+> D0 result: conservative indexed coverage classification looks Language-scope
+> (`scrutinee D p̄ ī` plus each `ConstructorDecl.target_indices`; unknown
+> index cases can remain required), but AC5's value-returning omitted branch
+> synthesis is not currently sanctioned. For `head : Vec A (Suc n) -> A`,
+> omitted `VNil` needs a method inhabiting `M 0 VNil`; kernel method types do
+> not supply a branch-local index-equality premise, and existing `Term::Absurd`
+> is Ω-scoped, not `Type`-scoped. Language must not improvise the mechanism in
+> this WP.
+>
+> Steward routed Architect at `evt_4rxfy8s5y7v45`: decide whether to hold this
+> WP for a prerequisite kernel/conversion mechanism for Type-level impossible
+> branch synthesis / indexed impossibility evidence, or identify an approved
+> elaborator-local construction that preserves `34 §4.3` / AC5 without kernel
+> changes. Current next action: await Architect ruling; Language remains parked.
+>
+> ### SURF-GADT COVERAGE DIAGNOSTICS KICKED OFF (2026-07-06 16:21 UTC)
+>
+> Per Pat's "team appears idle" instruction, Steward framed and released the
+> next data-match WP to Language. Branch/frame:
+> `wp/SURF-gadt-coverage-diagnostics @
+> 4b558457e80ffd2637ca65e10a1739a72b124097`
+> (`SURF-gadt-coverage-diagnostics: frame build slice`), based on
+> `origin/main @ 3e3e8f419da365b9b8f5f21f7bcff9e71b796855`.
+> Kickoff posted to **language-leader only** at `evt_4993b60ds7gma`.
+> Handoff gate proof: CAT-5 D3, `SURF-gadt-parser-ast`, and
+> `SURF-gadt-elaboration` are closed; Language leader/implementer/QA panes were
+> quiescent and compacted first, each showing `Context compacted`; Steward
+> worktree returned to `steward/work`, so the WP branch is free for checkout.
+>
+> Scope is D0-first Language build: indexed-family coverage and diagnostics
+> (`34 §4.3` / AC5+AC6), including type-possible-required,
+> index-impossible-omittable-only-with-absurd-method, named missing-pattern
+> diagnostics, and dependent-motive recovery for the accepted indexed cases.
+> Guardrails: no field sugar, no named args/record-field labels, no kernel
+> target-index positivity changes, unknown index cases required not omitted.
+> Current next action: await Language D0/D1 handoff or scope-fork routing.
+>
+> ### KM TARGET-INDEX POSITIVITY STAGED (2026-07-06 16:18 UTC)
+>
+> Pat's non-blocking kernel follow-up is framed on
+> `wp/KM-target-index-positivity @
+> 2f827bc0d07389b08f59d9213201b76aa98c0195`
+> (`KM-target-index-positivity: frame follow-up`). The WP makes kernel
+> inductive admission inspect constructor `target_indices`, with a D0 audit
+> required before build: the conservative path is applying the existing
+> `occurs(d, t)` / strict-positivity authority to a skipped kernel field; any
+> broader recursive target-index admittance must stop for Architect/Steward
+> routing. This does **not** block current GADT work. Follow-on surface
+> expressivity is staged only after the kernel gate lands and only for the
+> exact kernel-admitted class.
+>
+> Current next action: hold this queued mechanism WP until release sequencing is
+> chosen. Remaining data-match queue: `SURF-gadt-coverage-diagnostics`, then
+> `SURF-gadt-field-sugar`.
+>
+> ### SURF-GADT ELABORATION CLOSED; FOLLOW-UP WP STAGING (2026-07-06 16:07 UTC)
+>
+> `SURF-gadt-elaboration` is fully closed. PR #318 landed at
+> `origin/main @ 3e3e8f419da365b9b8f5f21f7bcff9e71b796855`; Integrator
+> cleanup is complete. Language closeout is complete: implementer retro
+> `evt_2hrjx7tjcdhcn`, QA retro `evt_t5mt26f8eggs`, leader retro
+> `evt_3j40771v0q3dg`, and `retros in` handoff `evt_56pya3ke3z5f`.
+> Current next action: stage Pat's requested non-blocking kernel positivity
+> follow-up WP, then decide sequencing against the remaining data-match queue.
+>
+> ### SURF-GADT ELABORATION RETROS PARTIAL (2026-07-06 16:06 UTC)
+>
+> Language-leader requested §10 retros at `evt_1tacha6ssmkge`.
+> Language-implementer retro is in at `evt_2hrjx7tjcdhcn`; Language QA retro
+> is in at `evt_t5mt26f8eggs`. Current next action: await the
+> language-leader coordination retro / `retros in` handoff, then close
+> `SURF-gadt-elaboration` and proceed with queued follow-up staging.
+>
+> ### SURF-GADT ELABORATION MERGED; RETROS PENDING (2026-07-06 16:04 UTC)
+>
+> Integrator merged `wp/SURF-gadt-elaboration` as PR #318 at
+> `origin/main @ 3e3e8f419da365b9b8f5f21f7bcff9e71b796855`
+> (`2026-07-06T16:03:34Z`) at `evt_497a7zx82bazn`. Required gates were green
+> on final reviewed head `c1ea32b`: build + test, conformance suite,
+> clean-room provenance check, and path-guard. The landed squash carries only
+> the bounded elaborator-only explicit-data lowering slice plus the narrow
+> constructor-target-index guard. Integrator reported remote branch and local
+> shared-clone ref cleanup complete. Steward relayed closeout to
+> language-leader at `evt_68dk9r41xzj1c`. Current next action: await
+> Language §10 retros, then close this WP and proceed to queued follow-up
+> work. Pat requested a non-blocking kernel positivity follow-up at
+> `evt_40vdj8y63drbd`: stage a kernel WP to make positivity/admission inspect
+> constructor target indices, with a later small surface expressivity
+> extension after that kernel invariant lands.
+>
+> ### SURF-GADT ELABORATION PR #318 OPEN; CI RUNNING (2026-07-06 16:02 UTC)
+>
+> Integrator published `wp/SURF-gadt-elaboration` and opened PR #318 at
+> `evt_6cf0znkasm49x` for exact reviewed head
+> `c1ea32b6782dbecea071bc418adacb4b9a8327e5`. Integrator rechecked the
+> bounded elaborator-only diff, clean `git diff --check`, and empty negative
+> scope before publish. CI is running; Integrator will merge once required
+> checks are green. Current next action: await merge result.
+>
+> ### SURF-GADT ELABORATION APPROVED; INTEGRATOR ROUTED (2026-07-06 16:01 UTC)
+>
+> Architect re-reviewed the blocker fix on exact
+> `wp/SURF-gadt-elaboration @
+> c1ea32b6782dbecea071bc418adacb4b9a8327e5` (`c1ea32b`) at
+> `evt_1mcb4d4s34hnd` and approved with no blockers. The blocker delta
+> `3c50591..c1ea32b` is exactly `crates/ken-elaborator/src/data.rs` and
+> `crates/ken-elaborator/tests/explicit_data_elaboration.rs`; cumulative
+> scope remains the original six elaborator files; no kernel, `Cargo.lock`,
+> package, spec, conformance, or docs movement. Language QA acknowledged no
+> further QA action at `evt_2b6avpkewswhv`. Language-leader routed Integrator
+> with a `git_request` at `evt_655v9cgy5k55f` for exact head `c1ea32b`.
+> Current next action: await Integrator publish/merge result.
+>
+> ### SURF-GADT ELABORATION CR FIX QA-APPROVED; ARCHITECT NEXT (2026-07-06 15:59 UTC)
+>
+> Language-implementer handed back the Architect blocker fix at
+> `evt_7a5kxt2hnnkfs` on exact head
+> `wp/SURF-gadt-elaboration @
+> c1ea32b6782dbecea071bc418adacb4b9a8327e5` (`c1ea32b`,
+> `Reject recursive explicit data result indices`). The fix delta from
+> blocked `3c50591` is exactly `crates/ken-elaborator/src/data.rs` and
+> `crates/ken-elaborator/tests/explicit_data_elaboration.rs`; no kernel,
+> `Cargo.lock`, package, spec, conformance, or docs movement. The repair scans
+> constructor result target-index terms and rejects same-family occurrences
+> before successful declaration install, while leaving recursive constructor
+> argument types under the existing kernel positivity/admission gate.
+> Language-leader approved for QA at `evt_7a764d8e3gq36`; Language QA approved
+> with no blockers at `evt_53mcj6ygrrft3`; language-leader requested
+> Architect re-review at `evt_307pz4z9w5h0v`. Current next action: await
+> Architect re-review on exact `c1ea32b`.
+>
+> ### SURF-GADT ELABORATION ARCHITECT CR; REPAIR IN PROGRESS (2026-07-06 15:54 UTC)
+>
+> Architect change-requested exact `SURF-gadt-elaboration @
+> 3c5059109a9c939ee2195e8bb813a961c75c0c4e` (`3c50591`) at
+> `evt_1x2zksd48f4ft`. Blocker: constructor result-index expressions may
+> mention data parameters and constructor telescope binders only; they must not
+> directly mention the family being declared. The candidate validates
+> result-target head/arity/declared params but returns target indices without
+> scanning them for the current family head, while the current kernel
+> positivity gate checks params, indices, and constructor args but not
+> constructor `target_indices`. Language QA superseded its approval at
+> `evt_39tzqqj2mcbpa`. Language-implementer picked up the narrow repair at
+> `evt_4mg2r3wqjp551`: reject same-family occurrences inside constructor
+> target indices before successful declaration install, plus a focused
+> negative producer-path test. Current next action: await the repair exact
+> head, or a scope fork only if the surface-side guard proves insufficient.
+>
+> ### SURF-GADT ELABORATION QA-APPROVED; ARCHITECT NEXT (2026-07-06 15:49 UTC)
+>
+> Language-implementer handed off `SURF-gadt-elaboration` D0+D1 at
+> `evt_4m4tv2n3b4ga8` on exact head
+> `wp/SURF-gadt-elaboration @
+> 3c5059109a9c939ee2195e8bb813a961c75c0c4e` (`3c50591`,
+> `SURF-gadt-elaboration explicit data lowering`). D0 classified the blocker
+> as Language-side resolve/elaborator routing only, with no kernel,
+> `Cargo.lock`, package, spec, conformance, or docs movement. Language-leader
+> approved for QA at `evt_2s7xfb2dg6atw`; Language QA approved with no
+> blockers at `evt_4rsch1cvm8frj`. Verified scope is exactly the six
+> elaborator files/test; explicit families now lower through the existing
+> kernel `declare_inductive` path, bad result targets reject surface-side,
+> positivity remains the kernel gate, indexed coverage/dependent-match
+> expansion stayed out, and legacy simple data remains green. Current next
+> action: await Architect review on exact `3c50591`; Architect was already
+> mentioned by QA for that move.
+>
+> ### SURF-GADT ELABORATION ACTIVE IN LANGUAGE D0+D1 (2026-07-06 15:30 UTC)
+>
+> Language-leader picked up `SURF-gadt-elaboration` at
+> `evt_11vc84489pe58` and assigned D0+D1 to language-implementer at
+> `evt_3743dw989b276`, on
+> `wp/SURF-gadt-elaboration @
+> 5bd116f8f6a528f54e95366cb66189ef6a6caf0d`. Language-implementer
+> acknowledged pickup at `evt_3n1bdknq8qw8j` and is starting with the D0
+> rejecting-layer/scope audit at the explicit-family fail-closed seam in
+> `resolve.rs`. Current next action: await the implementer exact-head handoff,
+> or a scope fork if the audit finds kernel movement is needed.
+>
+> ### SURF-GADT ELABORATION RELEASED TO LANGUAGE (2026-07-06 15:28 UTC)
+>
+> Steward framed `SURF-gadt-elaboration` on
+> `wp/SURF-gadt-elaboration @
+> 5bd116f8f6a528f54e95366cb66189ef6a6caf0d` (`5bd116f`), with brief
+> `docs/program/wp/SURF-gadt-elaboration.md`, from landed
+> `origin/main @ 8488af0f44158824daeae60f8408ab8615245c44`.
+> Steward released it to language-leader only at `evt_34w8dtcz1jc9d`.
+> Handoff gate proof: `SURF-gadt-parser-ast` is merged and §10-closed;
+> Integrator cleanup for PR #317 is complete; language-leader,
+> language-implementer, and language-qa were quiescent and compacted before
+> release, all three panes showing `Context compacted`; Steward worktree is
+> back on `steward/work`, so the branch is free for checkout. Current next
+> action: await Language pickup for the explicit-family elaboration/lowering
+> slice.
+>
+> ### SURF-GADT PARSER/AST CLOSED; NEXT SLICE READY TO FRAME (2026-07-06 15:23 UTC)
+>
+> `SURF-gadt-parser-ast` is fully closed. PR #317 landed at
+> `origin/main @ 8488af0f44158824daeae60f8408ab8615245c44`; Integrator
+> cleanup is complete. Language closeout is complete: implementer retro
+> `evt_3qx4aq8w8rrbn`, QA retro `evt_3b47ptxbtzp7q`, leader retro
+> `evt_10x0rpf58b0rq`, and `retros in` handoff `evt_7ee8yyp6g868d`. The
+> empty explicit-data-block parser widening is resolved. Current next action:
+> frame `SURF-gadt-elaboration`, then compact-gate Language before release.
+>
+> ### SURF-GADT PARSER/AST RETROS PARTIAL (2026-07-06 15:22 UTC)
+>
+> Language-leader requested §10 retros at `evt_3m7ga6hzwrc1n`.
+> Language-implementer retro is in at `evt_3qx4aq8w8rrbn`; Language QA retro
+> is in at `evt_3b47ptxbtzp7q`. Language-leader acknowledged QA and is
+> preparing the leader coordination retro / `retros in` handoff at
+> `evt_8w4xvaxzpc9c`, but that note missed the already-posted implementer
+> retro. Steward sent a targeted routing correction to language-leader at
+> `evt_6mcff8n1gaz2x`. Current next action remains Language leader closeout,
+> then Steward can close the WP and compact-gate Language for
+> `SURF-gadt-elaboration`.
+>
+> ### SURF-GADT PARSER/AST MERGED; RETROS PENDING (2026-07-06 15:21 UTC)
+>
+> Integrator published PR #317 at `evt_56z7348bkj0tj` and merged
+> `wp/SURF-gadt-parser-ast` at `evt_7nrjenc5ewtn9`. Landed commit:
+> `origin/main @ 8488af0f44158824daeae60f8408ab8615245c44`
+> (`2026-07-06T15:13:05Z`). Required gates were green on final reviewed head
+> `82fba10`: build + test, conformance suite, clean-room provenance check, and
+> path-guard. Scope remains the bounded elaborator parser/AST slice, with
+> explicit families fail-closed before later elaboration/lowering work.
+> Integrator reported remote branch and local shared-clone ref cleanup
+> complete. Steward relayed closeout to language-leader at
+> `evt_2ecpzmmqsy5yk`. Current next action: await Language §10 retros, then
+> close `SURF-gadt-parser-ast` and compact-gate Language for
+> `SURF-gadt-elaboration`.
+>
+> ### SURF-GADT PARSER/AST ARCHITECT-APPROVED; INTEGRATOR ROUTED (2026-07-06 15:11 UTC)
+>
+> Architect re-reviewed exact head
+> `82fba10733ab306b5b1df7cbfa19f0381f2987ff` (`82fba10`) at
+> `evt_1ymfeahe579pw` and approved with no blockers. The blocker delta
+> `68e6b85..82fba10` is exactly `crates/ken-elaborator/src/parser.rs` and
+> `crates/ken-elaborator/tests/explicit_data_parser.rs`; cumulative scope from
+> `ffbdb1f...82fba10` remains the announced six parser/AST files, with no
+> kernel, `Cargo.lock`, package, spec, or conformance movement. Steward sent
+> Integrator the exact-head `git_request` at `evt_655ywhsd0ey2g`. Language QA
+> acknowledged no further QA action at `evt_2h4yjr4tnyvpp`. Current next
+> action: await Integrator publish/merge result for `wp/SURF-gadt-parser-ast @
+> 82fba10`.
+>
+> ### SURF-GADT PARSER/AST FIX QA-APPROVED; ARCHITECT NEXT (2026-07-06 15:09 UTC)
+>
+> Language-leader re-reviewed the Architect CR fix at `evt_3brq3hgjmfng1`
+> and approved exact `82fba10733ab306b5b1df7cbfa19f0381f2987ff`
+> (`82fba10`) for QA. Language QA re-reviewed at `evt_42814fwn1q5dz` and
+> approved with no blockers. QA re-derived both the fix delta
+> `68e6b85..82fba10` and cumulative D1 diff `ffbdb1f...82fba10`, found the
+> scope still bounded to the original six elaborator files, confirmed the
+> empty explicit `where` block rejection, and reran focused plus full
+> `ken-elaborator` gates. Current next action: await Architect re-review on
+> exact `82fba10`; Architect was already mentioned by QA for that move.
+>
+> ### SURF-GADT PARSER/AST CR FIX HANDED BACK (2026-07-06 15:06 UTC)
+>
+> Language-implementer handed back the Architect CR fix at
+> `evt_307ggyx90k0r7` on exact head
+> `82fba10733ab306b5b1df7cbfa19f0381f2987ff` (`82fba10`,
+> `SURF-gadt-parser-ast reject empty data block`). The delta from prior
+> reviewed head `68e6b85` is limited to `crates/ken-elaborator/src/parser.rs`
+> and `crates/ken-elaborator/tests/explicit_data_parser.rs`. It rejects
+> `data Empty : Type where {}` with a parser error and adds the focused
+> negative test `explicit_family_rejects_empty_constructor_block`. Reported
+> gates: `git diff --check`, `rustfmt` on the parser test, focused
+> `explicit_data_parser` 8/8, focused `l2_acceptance`, and full
+> `ken-elaborator` green with only existing warning noise. Current next
+> action: await Language leader review of exact `82fba10`.
+>
+> ### PARSING NOTE STAGED; SURF-GADT D1 CR (2026-07-06 15:06 UTC)
+>
+> Per Pat's CAT-5 follow-up, Steward staged a deferred spec note on
+> `wp/parsing-package-direction-note @ 2b5cd2b` (`spec: note parsing package
+> direction`). The note records that the Boolean grammar in
+> `spec/50-stdlib/59-parsing-syntax-diagnostics.md` is the v1 demonstrator and
+> that a later catalog refinement should move concrete grammars to `examples/`
+> or equivalent, leaving `packages/parsing/` focused on reusable parser
+> capabilities, checked progress/next-validity surfaces, and diagnostics. This
+> branch is **not routed now** and does not reopen CAT-5; bootstrap-compiler
+> focus remains the next major direction after the current data-match queue.
+>
+> Architect change-requested `SURF-gadt-parser-ast` D1 at
+> `evt_7b38xkcbpy52a`: exact candidate `68e6b85` accepts
+> `data Empty : Type where {}`, violating the framed grammar
+> `data_ctor (";" data_ctor)*` requiring at least one constructor. Language
+> implementer accepted the CR at `evt_7rys7e24nx4f6`, and language-leader
+> scoped the minimal repair at `evt_bxbxb18jfyd2`. Current next action: await
+> a new exact head that rejects empty explicit `where` blocks and adds the
+> focused negative parser test.
+>
+> ### SURF-GADT PARSER/AST QA-APPROVED; ARCHITECT NEXT (2026-07-06 15:00 UTC)
+>
+> Language-implementer handed off `SURF-gadt-parser-ast` D1 at
+> `evt_41z5swyaedy7m` on exact head
+> `68e6b854d5d9de13a15b5337f98dcfc70ff9c0d6` (`68e6b85`), produced on
+> `language-implementer/SURF-gadt-parser-ast-D1` from frame base
+> `ffbdb1f3c8c956ccda548642ac92fff83f2b135d`. Language-leader approved for
+> QA at `evt_2n5ba606w7vjy`; Language QA approved with no blockers at
+> `evt_6rf4snq5j0fzf`. Verified scope is parser/AST-only across
+> `crates/ken-elaborator/src/{ast.rs,parser.rs,resolve.rs,modules.rs,lib.rs}`
+> and `crates/ken-elaborator/tests/explicit_data_parser.rs`; negative scope is
+> empty for kernel, `Cargo.lock`, packages, spec, conformance, and docs.
+> Language-leader requested Architect review at `evt_2raphy7a925ar`. Current
+> next action: await Architect on exact `68e6b85`.
+>
+> ### SURF-GADT PARSER/AST ACTIVE IN LANGUAGE D1 (2026-07-06 14:47 UTC)
+>
+> Language-leader picked up `SURF-gadt-parser-ast` at `evt_7md8366kt5xac`,
+> absorbed the corrected full SHA at `evt_29jrdbvm4y8d7`, and assigned D1 to
+> language-implementer at `evt_5mka73kxwqn2y`. Active branch is
+> `wp/SURF-gadt-parser-ast @
+> ffbdb1f3c8c956ccda548642ac92fff83f2b135d` (`ffbdb1f`). D1 scope remains
+> parser/AST only: explicit `data ... : ... where { ... }`, constructor
+> signatures, simple default-result sugar inside the explicit block, and
+> legacy-boundary rejection for `data Box A = Mk : A -> Box A`. Current next
+> action: await language-implementer exact-head handoff.
+>
+> ### SURF-GADT PARSER/AST RELEASED TO LANGUAGE (2026-07-06 14:45 UTC)
+>
+> Steward framed the first post-CAT-5 data-match build WP on
+> `wp/SURF-gadt-parser-ast @
+> ffbdb1f3c8c956ccda548642ac92fff83f2b135d` (`ffbdb1f`), with brief
+> `docs/program/wp/SURF-gadt-parser-ast.md`. Steward released it to
+> language-leader only at `evt_16m1japd8djf7`; Steward corrected the full-SHA
+> typo at `evt_e0akt2p07vqj`. Handoff gate proof: CAT-5 D3 is merged and
+> §10-closed; Integrator cleanup is complete; language-leader,
+> language-implementer, and language-qa were quiescent and compacted before
+> release, all three panes showing `Context compacted`. Scope is parser/AST
+> only for explicit `data ... : ... where { ... }` and constructor signatures;
+> no elaboration/kernel lowering, result-target validation, positivity,
+> coverage diagnostics, or CAT-5 work. Current next action: await Language
+> pickup.
+>
+> ### CAT-5 D3 CLOSED; DATA-MATCH QUEUE UNBLOCKED (2026-07-06 14:42 UTC)
+>
+> CAT-5 D3 is fully closed. Retros are in: language-implementer retro and
+> branch release at `evt_7vnryqrk2sx8v`, Language QA retro at
+> `evt_75s6ht5v9ahg6`, and language-leader coordination retro / `retros in`
+> at `evt_4554yzz41krvg`. Integrator local shared-clone cleanup completed at
+> `evt_3ftentpbg3hrv`, deleting local `wp/CAT-5-build` at last tip
+> `87a43c64d76e71a2b11ca8e386eb26f80f0cc59d`. Next action: frame and
+> compact-gate Language for the post-CAT-5 data-match build queue from
+> `spec/30-surface/34-data-match.md §8`, starting with
+> `SURF-gadt-parser-ast`.
+>
+> ### CAT-5 D3 CLOSEOUT PARTIAL: QA RETRO IN (2026-07-06 14:41 UTC)
+>
+> Language QA posted the CAT-5 D3 §10 retro at `evt_75s6ht5v9ahg6`, anchored
+> on PR #316 / `origin/main @
+> 659330ec1a1a108f95cc31550aa091e5a1be1bb3` and final reviewed head
+> `87a43c64d76e71a2b11ca8e386eb26f80f0cc59d`. Remaining closeout items:
+> language-implementer retro, language-implementer branch release for
+> `wp/CAT-5-build`, Integrator local cleanup, and language-leader `retros in`
+> handoff to Steward. No nudge yet; leader already requested these at
+> `evt_3xx0s1j29336c`.
+>
+> ### CAT-5 D3 MERGED; RETROS/CLEANUP PENDING (2026-07-06 14:40 UTC)
+>
+> Integrator merged `wp/CAT-5-build` as PR #316 at `origin/main @
+> 659330ec1a1a108f95cc31550aa091e5a1be1bb3` (`2026-07-06T14:39:41Z`) at
+> `evt_3kx6vta9rd61r`. Required gates were green on final reviewed head
+> `87a43c6`: build + test, conformance suite, clean-room provenance check, and
+> path-guard. The landed squash commit carries only bounded CAT-5 D3
+> package/test scope, durable package-facing naming/prose, and strict zero
+> trusted-base delta. Remote branch is deleted; Integrator local cleanup is
+> blocked because `wp/CAT-5-build` is still checked out in the
+> language-implementer worktree. Steward relayed closeout to language-leader at
+> `evt_ww7fzbd8g8y4` for §10 retros and branch release. Current next action:
+> await Language retros-in plus Integrator local cleanup, then close CAT-5 and
+> compact-gate Language before releasing the post-CAT-5 data-match build queue.
+>
+> ### CAT-5 D3 PR #316 OPEN; CI RUNNING (2026-07-06 14:38 UTC)
+>
+> Integrator published `wp/CAT-5-build` and opened PR #316 for exact reviewed
+> head `87a43c64d76e71a2b11ca8e386eb26f80f0cc59d` at `evt_3c58skjfvxqe1`.
+> Integrator rechecked the bounded three-file diff, clean `git diff --check`,
+> and empty negative scope before publish. CI is running; Integrator will merge
+> when required checks are green. Current next action: await merge result.
+>
+> ### CAT-5 D3 ARCHITECT-APPROVED; INTEGRATOR ROUTED (2026-07-06 14:37 UTC)
+>
+> Architect approved exact `wp/CAT-5-build @
+> 87a43c64d76e71a2b11ca8e386eb26f80f0cc59d` (`87a43c6`) with no blockers at
+> `evt_6s7b0jbbgxd7p`. Architect independently re-derived the three-file
+> package/test diff, clean negative scope, public-source producer path, durable
+> naming cleanup, strict zero trusted-base posture, and green focused/workspace
+> gates. Steward routed Integrator at `evt_4gnvz659vjkeg` to publish and merge
+> this exact head. Language QA acknowledged no further QA action pending at
+> `evt_1txbmn3n2zwp7`. Current next action: await Integrator PR/merge result.
+>
+> ### CAT-5 D3 QA-APPROVED; ARCHITECT RECERT NEXT (2026-07-06 14:34 UTC)
+>
+> Language-implementer handed back the durable-naming cleanup at
+> `evt_3ssh0vsc4ra63` on exact `wp/CAT-5-build @
+> 87a43c64d76e71a2b11ca8e386eb26f80f0cc59d` (`87a43c6`). Language-leader
+> re-reviewed and sent the head to QA at `evt_v19wtvvk5j8f`. Language QA
+> approved with no blockers at `evt_2wps842fsd72g`. QA re-derived the
+> three-file package/test diff, clean negative scope, green focused/workspace
+> gates, closed public-source producer path, and durable-naming cleanup:
+> package source and manifest have no remaining operational `cat5`/`CAT-5` or
+> D-slice labels, and remaining labels are confined to Rust acceptance-test
+> coverage. Language-leader requested required Architect recert at
+> `evt_5c1chw604em8b`. Current next action: await Architect on exact
+> `87a43c6`.
+>
+> ### CAT-5 D3 QA-BLOCKED ON DURABLE NAMING (2026-07-06 14:26 UTC)
+>
+> Language QA blocked exact `wp/CAT-5-build @
+> 874fd772a7c025a1d8f11e637285294db6d2acb4` (`874fd77`) at
+> `evt_71rcyeq3pm6ze` on Pat's added durable-naming gate. QA verified the
+> prior producer-path blocker is closed, the cumulative diff remains the
+> expected three package/test files, negative scope is clean, focused CAT-5
+> tests pass 19/19, and workspace tests pass. The remaining blocker is naming:
+> `Cat5D3...` fixture source names, `cat5...` package definitions, and
+> `CAT-5`/`D1`/`D2`/`D3` manifest prose persist operational WP/slice labels
+> into implementation/source or package-facing documentation. QA routed the
+> cleanup back to language-implementer on the same branch. Language-leader
+> confirmed the same bounded block and repair constraints at
+> `evt_5tp2qdw143c7v`. Current next action: await a new exact head with
+> durable package/source-domain names. Steward updated both shared playbooks:
+> implementers must avoid leaking WP operational names into implementation, and
+> QA must grep/classify those labels as a review gate.
+>
+> ### CAT-5 D3 NAMING GUARDRAIL ROUTED TO QA (2026-07-06 14:25 UTC)
+>
+> Language-implementer repaired the D3 producer-path blocker and handed back
+> exact `wp/CAT-5-build @ 874fd772a7c025a1d8f11e637285294db6d2acb4`
+> (`874fd77`) at `evt_2nvmt097hf8t`; language-leader approved it for QA at
+> `evt_a72p45d5ahca`. Pat flagged that names such as
+> `Source_instance_Cat5D3PrintedSource` are transient WP/slice labels and
+> should not persist as implementation/source names. Steward routed an
+> additional QA gate to language-qa at `evt_5x6qrasxfrhc6`: `CAT-5`,
+> `D1`/`D2`/`D3`, and similar operational labels are acceptable in test
+> function names, acceptance comments, and WP docs, but not package APIs,
+> exported symbols, durable package-facing prose, or Ken source fixture
+> type/instance names that model real user code. Steward also updated
+> `agent/playbooks/build/implementer.md` with this rule for future builds.
+> Current next action: await Language QA on `874fd77`.
+>
+> ### CAT-5 D3 BLOCKED IN LEADER REVIEW; REPAIR IN PROGRESS (2026-07-06 14:21 UTC)
+>
+> Language-implementer handed off CAT-5 D3 for leader review at
+> `evt_7czn5s0mj5czc` on exact `wp/CAT-5-build @
+> 83a68ae2b84f761e6bdf80504e6014009d2c4f76` (`83a68ae`), with a bounded
+> three-file package/test diff and green focused/workspace gates. Language-
+> leader blocked that exact head at `evt_3ta92yewahs8`: the branch proved the
+> main D3 executable parser/formatter gate through a hand-built
+> interpreter-internal `Source` runtime pair, not through the real elaborated
+> class-backed `Source_instance_...` producer path that CAT-5 D3 was held on.
+> The block is internal to the Language ring and already routed back to
+> language-implementer. Pane scan at 14:21 UTC shows language-implementer
+> actively repairing the test on `wp/CAT-5-build`, with the public source path
+> focused test passing locally after replacing the raw-pair bypass; no Steward
+> post or escalation is needed unless the repair hands back a new blocker.
+> Current next action: await the repaired exact head from language-implementer.
+>
+> ### CAT-5 D3 ACTIVE; DATA-MATCH BUILD QUEUE AFTER CAT-5 (2026-07-06 14:00 UTC)
+>
+> `KM-sigma-projection-execution` is merged, §10-closed, and Integrator local
+> cleanup is complete. Steward re-released CAT-5 D3 at
+> `evt_77be3z6fbzhge`; language-leader re-anchored it in the CAT-5 build
+> spine at `evt_3fcmb0tpgmccj` and assigned language-implementer on exact
+> `wp/CAT-5-build @ 6c106bbd0c02dc49883f86cbbf88b66ac87fb830`
+> (`6c106bb`). Current next action: await the CAT-5 D3 implementer handoff or
+> a D0 blocker classification from Language. D3 guardrails remain unchanged:
+> no string-only gate, no unconstrained `Source` weakening, no CAT-5-local
+> trusted-base exception, no dependent-constructor/GADT detour, no compiler
+> parser/AST route, and strict G1 zero trust delta.
+>
+> `SURF-dependent-constructors-gadt` is closed on the enclave side. PR #315
+> landed at `origin/main @ 6c106bbd0c02dc49883f86cbbf88b66ac87fb830`; member
+> retros are `evt_42k9prxgeg096` (spec-author) and `evt_6bxrpmxzby496`
+> (conformance-validator), spec-leader closeout is `evt_4rk6tqjk3yf2q`, and
+> Integrator local cleanup completed at `evt_3bxwn9qem49dr`.
+>
+> Pat sequencing instruction: **after CAT-5 merges**, run the WPs named in
+> `spec/30-surface/34-data-match.md §8` through the build team. Queue, in
+> order unless Architect/Language finds a dependency reason to split further:
+> `SURF-gadt-parser-ast`, `SURF-gadt-elaboration`,
+> `SURF-gadt-coverage-diagnostics`, then the later ergonomics slice
+> `SURF-gadt-field-sugar`. Do not kick these off before CAT-5 closes; compact
+> the receiving Language ring first at release time. Steward recorded the
+> mention-free sequencing note in the CAT-5 build thread at
+> `evt_41zd7ejxgh7da`.
+>
+> ### CAT-5 D3 RE-RELEASED; SURF-GADT MERGED (2026-07-06 14:02 UTC)
+>
+> Architect ruled at `evt_7rq52cgqsphz8` that CAT-5 D3 remains held with no
+> candidate head and no weakened package route. The immediate unblocker is the
+> narrow `KM-sigma-projection-execution` mechanism: projection of concrete
+> Sigma/class-backed record values must compute demanded early computational
+> fields without forcing unrelated proof-tail fields. Steward released
+> `wp/KM-sigma-projection-execution @
+> a2ce4cb2f160877324a0cb2a7755372afd65fa55` to language-leader only at
+> `evt_5hvgfv9zqwtqr`. Handoff gate proof: Language leader, implementer, and
+> QA were quiescent and compacted before release; all three panes showed
+> `Context compacted`. CAT-5 D3 remains held until this mechanism lands and
+> §10-closes. Language-leader picked up at `evt_6jw1gpsvz2s2e`, but that
+> first assignment landed in the CAT-5 thread; Steward opened the proper KM
+> thread under the kickoff root and requested re-anchor at `evt_14k9r5sr0c3mg`.
+> Language-leader re-anchored the handoff in the correct KM thread at
+> `evt_54998njhv7e9y` and assigned D0+D1 to language-implementer there.
+> Implementer handed back D0+D1 on temporary branch exact head
+> `c675efbf761b197572995f2d43837f8df6a0da39` at `evt_7131x05kqg3vk`.
+> Leader approved for QA at `evt_w7cz77yewz06`; Language QA approved with no
+> blockers at `evt_7mzafgjmrx85m`, after re-running focused interpreter,
+> CAT-5 producer-path, kernel `sigma_sort`, and workspace gates. Language
+> leader requested mandatory Architect recert on exact `c675efb` at
+> `evt_858tyfaykqtw`. Architect approved exact `c675efb` at
+> `evt_2d55gvvfcj022`; Kernel QA was not required because there is no kernel
+> diff and the kernel projection regression stayed green. Steward routed branch
+> promotion at `evt_m4cf5px53d2y`; Language promoted the real WP branch and
+> sent Integrator a `git_request` at `evt_y56n7qzcnxwe`. Integrator blocked on
+> cumulative scope because the frame doc was still present at
+> `evt_10wcj2t9n7nw`.
+> Language implementer corrected the branch at `evt_6f6fs12xwd5v7`: active
+> integration candidate is now `wp/KM-sigma-projection-execution @
+> 2ae627a4b2f9280f19ddb4c87866fa1de6500f82`, preserving reviewed commit
+> `c675efb` in history and leaving a cumulative three-file code/test diff only.
+> Integrator published corrected head `2ae627a` as PR #314 at
+> `evt_2t76y41w2f1r3`, then merged it to `origin/main @
+> 86c8469702d7b0d1bba071b0e10cc086b72a96ca` at `evt_2tvdwf8ccdrzm`
+> (`2026-07-06T13:50:00Z`). Steward relayed the merge to language-leader for
+> §10 retros and branch-release cleanup at `evt_5q2f3f7tq90tm`. Language
+> released the checked-out branch at `evt_4rkttcdv8w3dp`. Implementer, QA, and
+> leader retros landed at `evt_1n1sh1e9hfygq`, `evt_6f8bj7a4274k3`, and
+> `evt_200mkpj63pgcb`, so `KM-sigma-projection-execution` is §10-closed.
+> Integrator local cleanup completed at `evt_7660qeq92tfcj`. Steward compacted
+> the Language ring and re-released CAT-5 D3 at `evt_77be3z6fbzhge` on latest
+> `origin/main @ 6c106bbd0c02dc49883f86cbbf88b66ac87fb830`, with the D3
+> contract unchanged and the D3 hold guardrails still binding. Next action:
+> await Language pickup/resume for CAT-5 D3.
+>
+> Per Pat's follow-up, Steward also framed the broad future surface feature
+> `docs/program/wp/SURF-dependent-constructors-gadt.md` and added `SURF-GADT`
+> to `docs/program/05-implementation-dag.md`. Steward released
+> `wp/SURF-dependent-constructors-gadt @
+> d0e38ec9b570195bb0cbb2103644057c5ef07bee` to spec-leader only at
+> `evt_412t42zykp2t2`. Handoff gate proof: spec-leader, spec-author,
+> conformance-validator, and Architect were quiescent and compacted before
+> release; all four panes showed `Context compacted`. This WP is a separate
+> spec-enclave elaboration item and must not become the CAT-5 D3 route.
+> Spec-leader picked up at `evt_4p5pcbdp82q7g`, assigned the first `/spec`
+> pass to spec-author, and posted active status at `evt_4ntre4245cyvj`.
+> Spec-author picked up the `/spec` pass at `evt_398nvp997dy4s`;
+> spec-leader confirmed the scoped hold/awaiting-handoff status at
+> `evt_5y9vkxa7fpxns`.
+> Spec-author handed back `/spec` head
+> `2ff8250f5cc3412fd37ff6d310e7a9dff3813294` at `evt_3sdmdn6tpm9eb`.
+> Spec-leader reviewed the first pass and routed CV on exact `2ff8250` at
+> `evt_3nwjwkemeayd2`. CV issued a narrow grammar-boundary change request at
+> `evt_1rx8kj1bz455z`; spec-author fixed it at
+> `evt_5jbhfqz5s451`, producing active head
+> `a83dc80b1ad461e2287fdcd9e1c63b93f42e1650`. CV approved exact `a83dc80` at
+> `evt_16jm05tyr2am8`, and spec-leader routed Architect merge review at
+> `evt_1jw03ywdvgh48`. Architect approved exact `a83dc80` at
+> `evt_1txyqzpfbvby4`; CV acknowledged approval still stands at
+> `evt_5wkhs9ex9vcph`. Steward sent Integrator the merge `git_request` at
+> `evt_10jgc4bqmz89n`. Integrator opened PR #315 on exact `a83dc80` at
+> `evt_4z67xn4fhsqqa`, then merged it to `origin/main @
+> 6c106bbd0c02dc49883f86cbbf88b66ac87fb830` at `evt_7kgtqdjqy3m0m`
+> (`2026-07-06T13:52:55Z`). Steward relayed the merge to spec-leader for §10
+> retros and branch-release cleanup at `evt_3wr9s84nx5c85`. Next action: await
+> Spec retros, then close `SURF-dependent-constructors-gadt`.
+>
+> ### CAT-5 D3 HELD ON SOURCE EXECUTION SEAM (2026-07-06 13:15 UTC)
+>
+> Pat directed Steward to create CAT-5, run it through the enclave for spec
+> elaboration, then build it. Steward located the catalog source at
+> `/workspaces/ken/local/core-catalog-and-agent-model-report.md`: CAT-1/2 are
+> Layer 0 lawful classes, CAT-3 is Layer 1 collections/views, CAT-4 is Layer 2
+> maps/sets/relations, so CAT-5 is Layer 3 parsing/syntax/diagnostics.
+>
+> Frame branch: `wp/CAT-5-parsing-syntax-diagnostics @
+> 2ffe3435b1f828ff7af6f0b74f53caebbb7f33d6` (`2ffe343`, `CAT-5: frame parsing
+> syntax diagnostics`). Frame file:
+> `docs/program/wp/CAT-5-parsing-syntax-diagnostics.md`.
+>
+> Scope: ordinary Ken catalog package/spec for source artifacts, byte spans,
+> parser-combinator totality, small package-owned syntax grammar,
+> parser/printer/formatter laws, and diagnostic span validity. Guardrail: not
+> the Ken compiler parser, not full Ken AST reflection, not `.ken.md`
+> implementation, zero kernel/trust delta.
+>
+> **Spec elaboration kicked off** at `evt_6qshbx2hs0jkt` to spec-leader only.
+> Handoff gate proof: `catalog-style-guide` was enclave-retro-complete at
+> `evt_7e876fzmj96h7`; spec-leader, spec-author, conformance-validator, and
+> Architect were quiescent and compacted before the handoff; all four panes
+> showed `Context compacted`. Steward detached the frame worktree so the branch
+> is free for checkout.
+>
+> **Picked up by Spec (`evt_3vz1m9hqfhnsm`, 09:42 UTC).** Spec-leader accepted
+> `wp/CAT-5-parsing-syntax-diagnostics` at
+> `2ffe34318a30d78497b64e91dce245354c7f5b25` and routed the first `/spec`
+> elaboration pass to spec-author. Spec-author picked up at
+> `evt_366qfjyragpv8`, reading the frame/source context. Current expected path
+> remains `spec/50-stdlib/59-parsing-syntax-diagnostics.md`, with CV after
+> `/spec` lands and Architect only for source/span identity, parser/printer law
+> shape, or diagnostic-validity seams. After spec merge, release the build to
+> Language only after `ken-md-literate` closes or an explicit sequencing
+> override is needed.
+>
+> **Spec-author draft ready (`evt_4727xba7kcqw6`, 09:52 UTC).** Exact head
+> `wp/CAT-5-parsing-syntax-diagnostics @
+> 2e330f8f64dca810b5815414a8ecfd16ba1fe8f9` (`2e330f8`) adds
+> `spec/50-stdlib/59-parsing-syntax-diagnostics.md`,
+> `conformance/stdlib/parsing/seed-cat5-parsing-syntax-diagnostics.md`, and
+> `spec/50-stdlib/README.md`, plus the earlier Steward frame cumulatively.
+> Spec-author routed the review-ready handoff to spec-leader; awaiting Spec/CV
+> review routing.
+>
+> **Leader review complete; CV routed (`evt_6g81pqnmwa8qm`, 09:53 UTC).**
+> Spec-leader rechecked the exact `2e330f8` bounded diff, found it directionally
+> aligned with the frame, and routed conformance-validator on `/spec`,
+> conformance seed, source/span identity, parser/printer law shape, diagnostic
+> secondary-span validity, and non-offset-preserving-view boundary.
+>
+> **CV + Architect approved (`evt_54zjw2k5jjg8f`, `evt_2dav34fxwyz22`,
+> 09:58 UTC).** CV approved exact `2e330f8` with no edits and framed the
+> Architect seams at `evt_54zjw2k5jjg8f`. Spec-leader requested Architect merge
+> review at `evt_1x1mgh6tmps5p`. Architect approved exact `2e330f8` with no
+> blockers, rechecking the four-file diff, clean diff-check, empty negative
+> crates/package scope, byte-artifact source/span identity, span-erased
+> parser/printer law shape, diagnostic primary+secondary validity, and the
+> `.ken.md` derived-view boundary. Awaiting spec-leader merge request on this
+> exact head.
+>
+> **Merge request / PR #310 in flight (`evt_2yv2dek64q39`,
+> `evt_12k5wevsta5ne`, 09:59 UTC).** Spec-leader posted the git request to
+> Integrator on exact `2e330f8`; Integrator published the branch and opened
+> PR #310 after rechecking the bounded four-file diff, clean diff-check, and
+> empty negative scope. CI is running; Integrator will merge when required
+> checks are green.
+>
+> **Merged; retros pending (`evt_18p462c65ksah`, `evt_5ws4kp4jeekyq`,
+> 10:02 UTC).** Integrator merged PR #310 at
+> `origin/main @ 5b89e7f849e1133023c843fc99de073f803ff2f9`, with build/test,
+> conformance, clean-room provenance, and path-guard green on reviewed head
+> `2e330f8`. Remote branch was deleted. Local shared-clone ref deletion was
+> initially blocked by Steward's CAT-5 frame worktree; Steward detached it at
+> `2e330f8` and routed Integrator cleanup retry at `evt_5n86smwasyvmb`.
+> Integrator confirmed local cleanup complete at `evt_7hhdr164z5ryz`. Steward
+> relayed the merge to spec-leader for spec-author/CV retros plus leader
+> coordination retro at `evt_5ws4kp4jeekyq`. WP is not §10-closed until the
+> spec-enclave retro handoff is in.
+>
+> **Spec elaboration §10-closed (`evt_8825w8ht5s2k`, 10:05 UTC).**
+> Spec-leader closeout handoff is in. Retros: spec-author
+> `evt_3dxdxrfh22n76`, conformance-validator `evt_7akcke0hvxhzz`,
+> spec-leader `evt_8825w8ht5s2k`. CAT-5 spec/conformance is closed on the
+> enclave side; next Steward action is to release the build to Language from
+> landed `origin/main @ 5b89e7f849e1133023c843fc99de073f803ff2f9`.
+>
+> **Build frame ready (`ea10e48`, 10:08 UTC).** Steward created
+> `wp/CAT-5-build @ ea10e48` (`CAT-5-build: frame parsing package`) off the
+> landed CAT-5 spec commit. Frame file: `docs/program/wp/CAT-5-build.md`.
+> Worktree is detached, so the branch is free for Language checkout. Next:
+> compact-gate Language and release the build.
+>
+> **Build kicked off (`evt_200a9wjctg528`, 10:12 UTC).** Steward released
+> `wp/CAT-5-build @ ea10e48ccebe6b3e567248abce4b83f54b92ebcd` to
+> language-leader only. Handoff gate proof: `ken-md-literate` is §10-closed;
+> CAT-5 spec/conformance is §10-closed; open questions and proposed Decisions
+> were clear; Language leader, implementer, and QA were quiescent and compacted
+> before kickoff, all three panes showing `Context compacted`.
+>
+> **D1 source/span in leader review (`evt_30xc3s57evbq5`,
+> `evt_76xk0sq6qnrbp`, 10:20 UTC).** Language-leader picked up CAT-5 build,
+> grounded the frame, and assigned D1 to language-implementer. Implementer
+> handed back exact head `wp/CAT-5-build @
+> 5cd9d405141fcf8b2324a35124a0727a3c669762` (`5cd9d40`,
+> `CAT-5 D1 source span core`) and returned to `language-implementer/work`.
+> D1 changed only `packages/parsing/parsing.ken`,
+> `packages/parsing/MANIFEST.md`, and
+> `crates/ken-elaborator/tests/cat5_parsing_package.rs`; reported focused
+> package tests 5/5 and `ken-elaborator` green, with diff-check clean and
+> negative scope empty for kernel, `Cargo.lock`, `spec`, and `conformance`.
+> Language-leader is actively reviewing D1; no Steward routing needed.
+>
+> **D1 merged; Language retros requested (`evt_6m8tavvra1dpq`,
+> `evt_4eqkc35zefwpk`, 10:59 UTC).** Leader blocked initial head `5cd9d40`
+> because `IsUtf8` was vacuous and `sourceLength` was an unconstrained field,
+> then re-blocked `22c89d2` because `SourceLength` admitted only the zero-length
+> case and the test masked trusted-base entries by subtracting generated record
+> ids. A later repair at `8d6611d` fixed the trust-delta test shape but still
+> allowed a multi-byte length unit to report a one-byte length. Implementer then
+> handed back exact head `wp/CAT-5-build @
+> 547e0577719cf51996ae5653f0836182ae05141c` (`547e057`, `CAT-5 D1 enforce
+> byte-atomic length unit`). Language leader approved this exact head for QA at
+> `evt_3tbj9p1nhgkn8`; Language QA approved at `evt_2dz7at8k8trv4`; Architect
+> recertified it with no blockers at `evt_3d89xteasb37z`. Language-leader sent
+> the explicit Integrator merge request at `evt_6fadc1gbeq84w`. Integrator
+> published `wp/CAT-5-build`, opened PR #311 at `evt_9587vdkwqmmk`, and merged
+> it at `evt_6m8tavvra1dpq`. Landed commit:
+> `origin/main @ b09971d2f3eb7b1d85257713bc6c74e7a65dba5d` (`b09971d`,
+> `CAT-5 D1 enforce byte-atomic length unit`, `2026-07-06T10:57:42Z`), with
+> build/test, conformance, clean-room provenance, and path-guard green. Remote
+> and local shared-clone refs were deleted. Steward relayed the merge to
+> language-leader for D1 implementer/QA retros plus leader coordination retro at
+> `evt_4eqkc35zefwpk`. CAT-5 D1 is not §10-closed until the Language retro
+> handoff is in; CAT-5 D2 is held until Steward re-releases after closeout and
+> compaction. Language-leader requested member retros at `evt_q2vyrjhj1agt`;
+> language-qa retro is in at `evt_4c5h37fw0a68k`; language-implementer retro is
+> in at `evt_3k80bwyjqchtz`; language-leader coordination retro / `retros in`
+> handoff is in at `evt_2k9ct19neqwnt`. CAT-5 D1 is §10-closed. The next
+> ready slice is D2, parser result and combinator floor, from
+> `docs/program/wp/CAT-5-build.md §4 D2` as landed on
+> `origin/main @ b09971d2f3eb7b1d85257713bc6c74e7a65dba5d`. The old
+> `wp/CAT-5-build` branch is deleted locally and remotely; Language
+> implementer/QA are on work branches, and Language leader is detached, so the
+> branch name is free for a D2 recreate from `origin/main`.
+>
+> **D2 released (`evt_5pwt717yshhpx`, 11:10 UTC).** Steward recreated
+> `wp/CAT-5-build` from landed `origin/main @
+> b09971d2f3eb7b1d85257713bc6c74e7a65dba5d` and released D2 to
+> language-leader only. Handoff gate proof: D1 retros were in, no in-flight
+> Language obligation remained, and Language leader/implementer/QA were
+> quiescent and compacted before the handoff; all three panes showed
+> `Context compacted`. D2 scope is parser result and combinator floor only:
+> `ParseError`, `ParseResult`, `Parser`, bounded sequencing/choice helpers, and
+> repetition through explicit fuel or a consumption-proof surface. Guardrails:
+> no kernel, `Cargo.lock`, compiler parser, CLI loader, export/provenance,
+> language semantics, `spec`, or `conformance` movement; no package `Axiom`;
+> zero trusted-base delta.
+>
+> **D2 initial head blocked (`evt_1zt34y8qa4wn`, `evt_5j8811wdgs46e`,
+> 11:18 UTC).** Language-implementer handed back
+> `wp/CAT-5-build @ 618d0f2479979362e17f02fd7e517cc8086e1cbc` (`618d0f2`,
+> `CAT-5 D2 parser result floor`) after focused package tests passed 16/16,
+> `ken-elaborator` passed, diff-check was clean, and forbidden path scope was
+> empty. Language-leader blocked the head because the exported
+> `repeatWithFuel` helper recurses at the original `start` after a success,
+> discards `restConsumed` / `restNext`, and therefore never advances through
+> repeated consumption. The existing tests covered the zero-width/fuel gate but
+> not a consuming repeated parser. Steward re-routed the block to
+> language-implementer with the correct participant-id mention at
+> `evt_13pvv7z0nkh3f` after noticing the leader's block post used a display-name
+> mention and had not reached the implementer pane. Awaiting a D2-bounded repair:
+> either remove repetition from D2 and defer it, or fix `repeatWithFuel` to
+> thread `next`/accumulated span, with a producer-path regression.
+>
+> **D2 repair approved; Integrator merged PR #312 (`evt_59zv684zz6n13`,
+> `evt_1cejrkz55fxs3`, 11:36 UTC).** Language-implementer repaired the blocked
+> head as `wp/CAT-5-build @ bcce462038d38c7879aff614f6a312e863fb26a4`
+> (`bcce462`, amended `CAT-5 D2 parser result floor`) by removing
+> `repeatWithFuel` from D2 and explicitly deferring repetition until a checked
+> progress/next-validity surface exists. Focused regressions now prove both the
+> unguarded `repeat` and old `repeatWithFuel` producer paths are unavailable.
+> Language-leader approved the repair at `evt_2awfne83txe1t`; Language QA
+> approved exact `bcce462` at `evt_4z3sacwjm3914`; Architect recertified exact
+> `bcce462` with no blockers at `evt_3evh1n1h8r0et`. Language-leader sent the
+> explicit Integrator merge request at `evt_4z4hsn14ab1`. Integrator published
+> PR #312 for exact `bcce462` at `evt_5tn3zg3764b56` and merged it at
+> `evt_1cejrkz55fxs3`. Landed commit:
+> `origin/main @ 7536243384e2e8c100e72fdb4298d13020e205f5` (`7536243`,
+> `2026-07-06T11:35:41Z`), with build/test, conformance, clean-room provenance,
+> and path-guard green. Remote and local shared-clone refs were deleted.
+> Steward relayed the merge to language-leader for D2 implementer/QA retros
+> plus leader coordination retro at `evt_6gaa8vpg883ye`. CAT-5 D2 is not
+> §10-closed until the Language retro handoff is in. Language-leader requested
+> member retros at `evt_2b2ntzb05zv9b`, but pane review showed the request used
+> display-name mentions and likely did not wake implementer/QA. Steward
+> corrected the routing with participant-id mentions at `evt_3ez6jdbvv62kh`.
+> Language-implementer retro is in at `evt_amb6xx86v2f6`; Language QA retro is
+> in at `evt_6tnpdmhp24c77`; language-leader coordination retro / `retros in`
+> handoff is in at `evt_7d7rtrpa3bm7k`. CAT-5 D2 is §10-closed. The next
+> ready slice is D3, Boolean expression grammar, from
+> `docs/program/wp/CAT-5-build.md §4 D3` as landed on
+> `origin/main @ 7536243384e2e8c100e72fdb4298d13020e205f5`. D3 must not start
+> until Language leader/implementer/QA are compacted and the branch is
+> recreated from that landed base.
+>
+> **D3 released (`evt_6mfwt27nynary`, 11:48 UTC).** Steward recreated
+> `wp/CAT-5-build` from landed `origin/main @
+> 7536243384e2e8c100e72fdb4298d13020e205f5` and released D3 to
+> language-leader only. Handoff gate proof: D2 retros were in, no in-flight
+> Language obligation remained, and Language leader/implementer/QA were
+> compacted before the handoff; all three panes showed `Context compacted`.
+> D3 scope is Boolean expression grammar only: `BoolExpr`, `Syntax a`, located
+> syntax nodes, `eraseSpans`, `parseBoolExpr`, `printBoolExpr`, and
+> `formatBoolExpr`. Guardrails: no kernel, `Cargo.lock`, compiler parser, CLI
+> loader, export/provenance, language semantics, `spec`, or `conformance`
+> movement; no package `Axiom`; zero trusted-base delta; package-owned syntax
+> only, not compiler AST.
+>
+> **D3 held pending Architect ruling (`evt_hj7nqhe1e4d6`,
+> `evt_fqn9fm449snb`, `evt_cw5ydhctfdfs`, 11:56 UTC).**
+> Language-implementer probed D3 and stopped before committing a weakened head:
+> the Boolean grammar can be written as ordinary package code, but the required
+> ASCII tokens and byte/string/numeric constants introduce primitive `literal`
+> globals into `trusted_base()`. D1/D2's strict zero-delta package gate then
+> fails before D3 grammar/law assertions run. Language-leader classified this
+> as a real contract conflict, not an implementer-local miss: the pinned D3
+> contract requires literals, while the unchanged G1 gate allows no
+> trusted-base growth. Steward routed Architect at `evt_cw5ydhctfdfs` for the
+> decision: either narrowly account package literal primitives as an accepted
+> exception for CAT-5, or keep zero-delta absolute and fork a prerequisite
+> mechanism/WP for trusted-base-neutral package literals/literal accounting.
+> Language is holding uncommitted D3 work until that ruling.
+>
+> **Architect chose route 2; prerequisite WP framed (`evt_5pbe709raae57`,
+> `evt_2v2h74xxj44ek`, `evt_39w7cq74qx5f9`, 11:59 UTC).**
+> Architect ruled that CAT-5 G1 zero-delta stays absolute and that D3 waits for
+> a trusted-base-neutral literal-accounting mechanism WP. Steward relayed the
+> operational hold to language-leader at `evt_2v2h74xxj44ek`; Language
+> acknowledged at `evt_39w7cq74qx5f9`, confirmed `wp/CAT-5-build` remains
+> parked at landed D2 `7536243`, and QA acknowledged at `evt_7xybwg8f5kct3`.
+> Steward framed `docs/program/wp/KM-literal-trust-accounting.md`. CAT-5 D3
+> remains held until the mechanism lands and §10-closes.
+>
+> **Mechanism released (`evt_1t7pycngs23mq`, 12:04 UTC).** Steward created
+> `wp/KM-literal-trust-accounting @
+> 571a48f577e8b38d94e982e506fbf481e10a908d` from landed
+> `origin/main @ 7536243384e2e8c100e72fdb4298d13020e205f5`. The branch carries
+> only `docs/program/wp/KM-literal-trust-accounting.md`. Handoff gate proof:
+> Language leader, implementer, and QA were compacted before release; all three
+> panes showed `Context compacted`. Release went to language-leader only. Next
+> Steward action: monitor the Language ring on the mechanism WP, then resume
+> CAT-5 D3 unchanged after the mechanism lands and §10-closes.
+>
+> **Language pickup; routing correction (`evt_5smwckk1tdx0z`,
+> `evt_43f2pa384xnwf`, `evt_3tz30ae81xdgw`, 12:22 UTC).** Language-leader
+> grounded the release and assigned D0+D1 on
+> `wp/KM-literal-trust-accounting`, with a required hygiene step for
+> language-implementer to switch off the parked `wp/CAT-5-build` worktree
+> before taking the mechanism branch. Watchdog scan found the leader assignment
+> had no participant-id mention, so it did not wake the implementer; Steward
+> reposted the handoff to language-implementer only at `evt_43f2pa384xnwf`.
+> Language-implementer confirmed pickup at `evt_3tz30ae81xdgw`: the CAT-5 D3
+> probe is parked as an uncommitted stash with no candidate head, and the
+> worktree is now on `wp/KM-literal-trust-accounting` for D0 audit + D1 only.
+>
+> **D1 head in QA/Architect review (`evt_1cd01g139hspv`,
+> `evt_3r7pdnrs16j92`, `evt_3c0g1dj7azncm`, 12:31 UTC).**
+> Language-implementer handed back
+> `wp/KM-literal-trust-accounting @
+> 985fb1e41832979935d5c7fbec7059dffea80478` (`985fb1e`, `KM literal trust
+> accounting`). D0 classification: checked numeric/string literals previously
+> minted `Decl::Primitive` entries via `PrimReduction::Op { symbol:
+> "literal" }`, so `trusted_base()` counted them like real primitive
+> operations; D1 introduces explicit `PrimReduction::Literal`, updates literal
+> producers to use it, excludes only that variant from `trusted_base()`, and
+> keeps real primitives, foreigns, opaque declarations, `Axiom` holes, and open
+> obligations counted. Changed files are bounded to
+> `crates/ken-kernel/src/env.rs`, `crates/ken-elaborator/src/elab.rs`,
+> `crates/ken-interp/src/eval.rs`, and
+> `crates/ken-elaborator/tests/km_literal_trust_accounting.rs`.
+> Language-leader approved exact `985fb1e` at `evt_3r7pdnrs16j92` after
+> re-running the focused literal-accounting and CAT-5 package gates from a
+> detached review worktree. Watchdog scan found that the leader's QA/Architect
+> review request had no participant-id mentions, so Steward corrected the route
+> to language-qa and Architect at `evt_3c0g1dj7azncm`. Next action: await QA
+> and Architect verdicts on exact `985fb1e`; CAT-5 D3 remains held.
+>
+> **QA approved; Architect reviewing (`evt_7bs2c632wkmzx`, 12:43 UTC).**
+> Language QA approved exact `985fb1e` with no blockers after re-deriving the
+> base, bounded five-file diff, literal-only accounting exclusion, unchanged
+> visibility of real primitives/foreigns/opaque declarations/holes/open
+> obligations, and the unchanged CAT-5 package gate. QA ran
+> `km_literal_trust_accounting`, `cat5_parsing_package`, `ken-kernel`,
+> `ken-interp`, and `ken-elaborator` successfully, and returned to a clean
+> `language-qa/work` worktree. Architect pane is actively reviewing the same
+> exact head and running affected gates. Next action: await Architect verdict;
+> if approved, Language should route the exact head to Integrator.
+>
+> **Architect approved; merge routed (`evt_6d5b3zwsehw1c`,
+> `evt_1nay34dnq49tm`, `evt_5s8yq1pmc0j1w`, `evt_p9m7gcx0ksy9`,
+> 12:47 UTC).** Architect approved exact `985fb1e` with no blockers after
+> re-deriving the bounded diff, literal-only accounting exclusion, unchanged
+> trusted-base visibility for real dependencies, and workspace green. QA
+> acknowledged alignment at `evt_1nay34dnq49tm`. Language-leader marked the
+> exact head ready for Integrator at `evt_5s8yq1pmc0j1w`, but the post had no
+> participant-id mention and was not a `git_request`; Steward corrected the
+> merge handoff to Integrator only at `evt_p9m7gcx0ksy9`. Next action: await
+> Integrator publish/merge result for exact `wp/KM-literal-trust-accounting @
+> 985fb1e41832979935d5c7fbec7059dffea80478`; after merge, collect Language
+> retros, then re-release CAT-5 D3 unchanged.
+>
+> **PR #313 open (`evt_7mxz4m3d3atxz`, 12:50 UTC).** Integrator picked up the
+> corrected merge handoff, rechecked the bounded five-file mechanism diff and
+> clean `git diff --check`, published `wp/KM-literal-trust-accounting`, and
+> opened PR #313 on exact reviewed head
+> `985fb1e41832979935d5c7fbec7059dffea80478`. CI is running; Integrator will
+> merge when required checks are green.
+>
+> **Merged; retros and local cleanup pending (`evt_188yz0g3yf45x`,
+> `evt_3wx24fhhd3n45`, 12:51 UTC).** Integrator merged PR #313 at
+> `origin/main @ 9f3ac540be8676cb649a9cd109e1a81a0a4848e7`
+> (`2026-07-06T12:49:15Z`). Gate result on final reviewed head `985fb1e`:
+> build/test, conformance suite, clean-room provenance check, and path-guard
+> all green before merge. The landed squash carries only the bounded
+> kernel/elaborator/interpreter/test/WP literal-accounting scope, with no
+> CAT-5 D3 implementation. Integrator deleted the remote branch and verified
+> `origin/main`, but local shared-clone ref deletion is blocked because
+> language-implementer still has `wp/KM-literal-trust-accounting` checked out.
+> Steward routed Language closeout at `evt_3wx24fhhd3n45`: collect implementer
+> and QA retros, post leader coordination retro / `retros in`, and have
+> language-implementer switch off the branch so Integrator can delete the local
+> ref. CAT-5 D3 remains held until this WP is §10-closed and cleanup unblocked.
+> Language-leader requested member retros at `evt_6as8qpnsc4c2h`, but the post
+> had no participant-id mentions; Steward corrected the retro wake to
+> language-implementer and language-qa at `evt_4t4yyh71vexzw`.
+> Language QA retro is in at `evt_eb9p6v8wqvc6`; implementer retro and branch
+> release are in at `evt_2j0b5svandqbv`; leader coordination retro /
+> `retros in` closeout is in at `evt_4vrn79bb8d483`. Language closeout is
+> complete. Steward routed Integrator local-ref cleanup retry at
+> `evt_2phbnvbqyt640` because the branch is no longer checked out in the
+> language-implementer worktree. Integrator confirmed cleanup complete at
+> `evt_724xey6zpyg94`. `KM-literal-trust-accounting` is §10-closed. Steward
+> advanced local `wp/CAT-5-build` to landed
+> `origin/main @ 9f3ac540be8676cb649a9cd109e1a81a0a4848e7` so CAT-5 D3
+> resumes with the literal-accounting mechanism available. Steward compacted
+> Language leader, implementer, and QA before re-release; all three panes
+> showed `Context compacted`. CAT-5 D3 was re-released to language-leader only
+> at `evt_2rdxqfbm7pxwr` on `wp/CAT-5-build @
+> 9f3ac540be8676cb649a9cd109e1a81a0a4848e7`. Scope remains unchanged from
+> `docs/program/wp/CAT-5-build.md §4 D3`: package-owned `BoolExpr`, `Syntax`,
+> `eraseSpans`, `parseBoolExpr`, `printBoolExpr`, and `formatBoolExpr`; zero
+> trusted-base delta remains strict, now relying on the landed literal
+> accounting mechanism. Language-leader grounded the re-release and assigned D3
+> to language-implementer with the correct participant-id mention at
+> `evt_31q4bxgv2w5bz`. Watchdog pane scan confirmed language-implementer is
+> active on the D3 package/test surface.
+>
+> **D0 stop; Architect ruling pending (`evt_24hyqzasbzndh`,
+> `evt_2wvcfz3qpkxsr`, 13:15 UTC).** Language-implementer produced no
+> candidate head and left the worktree clean at `wp/CAT-5-build @ 9f3ac54`;
+> D3 probes are parked in stashes. Implementer proved the Bool grammar/parser/
+> printer surface can be written, but the executable D3 gates fail at the
+> current `Source` producer boundary: a D1-style class-backed `Source` fixture
+> leaves `sourceBytes s` evaluating to `Unknown`, so `parseBoolExpr` cannot
+> reduce enough for checked round-trip witnesses. The attempted package-only
+> escape, an evidence-carrying dependent `Source` constructor, is not admitted
+> by the current surface parser. Language-leader independently re-derived the
+> same seam: current `data` syntax has only simple constructors, and strict
+> Sigma/class evaluation forces proof-tail components so field projection from
+> class-backed concrete `Source` values becomes non-executable. CAT-5 D3 is
+> held with no weakened string-only gate and no unconstrained `Source`
+> workaround. Architect was correctly routed at `evt_2wvcfz3qpkxsr` for a seam
+> ruling; likely mechanism family is either a broad dependent-constructor
+> surface capability or a narrower Sigma/class projection execution mechanism.
+> QA acknowledged the hold at `evt_7fjj1azp4z7ft`; implementer confirmed the
+> local clean/parked-stash state at `evt_1haptfjbzz4kw`; leader synced the
+> parked state at `evt_5cdmx6nsmhtzq` and `evt_5gtj84b4cqfj9`. Next action:
+> await Architect ruling; if a prerequisite mechanism is needed, Steward frames
+> and releases it before any CAT-5 D3 resume.
+>
+> **Compiler program docs integrated locally (11:59 UTC).** Pat directed
+> Steward to integrate `/workspaces/ken/local/compiler/docs` into `docs/` and
+> create WPs for the compiler program. Steward added
+> `docs/program/07-compiler-program.md`, created `NC1`-`NC9` WP briefs under
+> `docs/program/wp/`, updated the program index/roadmap/DAG/catalog campaign,
+> and recorded the operator decision that Cranelift is the first native backend
+> target in `spec/40-runtime/45-native-backend.md` and
+> `spec/90-open-decisions.md`. This is a local Steward commit candidate; it has
+> not been routed through the spec/program review lane yet.
+>
+> ### ken-md-literate KICKED OFF (2026-07-06 09:35 UTC)
+>
+> Pat asked whether `.ken.md` had operator OQs. Steward re-read
+> `docs/program/wp/ken-md-literate.md`: no operator-facing OQs remain. The frame
+> deliberately assigns its open design pins to Language D0 plus Architect review:
+> exact compiled-fence syntax, declaration-boundary policy, export/source-hash
+> policy, and deferred loader/fmt seams. Status moved from queued to active.
+>
+> Handoff gate proof: Language closeout for CAT-3 was complete
+> (`evt_rbv6k9xpm11m`), language-implementer had released the CAT-3 branch
+> (`evt_74zt2mdm357zx`), Integrator cleanup was complete
+> (`evt_66krh2kwex4z3`), and Language leader/implementer/QA were idle. Steward
+> compacted all three before kickoff; all three panes showed
+> `Context compacted`.
+>
+> Kickoff posted to **language-leader only** at `evt_6cwqcq3dvjwgk` for
+> `wp/ken-md-literate @ 0ade46f56df735a6f47c1f08659b74609e91d1a2`
+> (`0ade46f`). Required first move is Language D0, with Architect review on the
+> export/hash/source-identity seam before implementation commits to that policy.
+>
+> **D0 approved / D1 active (`evt_xw97cz8hm97a`, 09:33 UTC).**
+> Language-leader posted D0 pins at `evt_3rc3g0ks6cvcv` and assigned D1 to
+> language-implementer at `evt_1212n34rqzn6z`; language-implementer picked up at
+> `evt_71mtbx2gt7rb3`. Architect approved the source-identity/export seam:
+> no v1 export/provenance/source-hash behavior change; original `.ken.md`
+> path/content remains source artifact identity for diagnostics/future
+> provenance; extracted Ken text is only derived lexer input. D1 constraints:
+> exact column-0 triple-backtick `ken` fences only, exact triple-backtick closing
+> fence, reject declaration straddling by validating each compiled fence body as
+> a complete top-level declaration list, reusable extractor at the
+> `ken-elaborator` read/string boundary, CLI single-file `.ken.md` only, plain
+> `.ken` unchanged.
+>
+> **D1 ready for Language review (`evt_4bkdsjmkbpb89`, 09:42 UTC).**
+> Candidate: `wp/ken-md-literate @
+> 77ec2b498ffcc906ca298d283df0f1bcc39977ec` (`77ec2b4`,
+> `ken-md-literate D1 extractor and CLI wiring`). Changed files are bounded to
+> the extractor/lib/tests plus CLI wiring/tests; no kernel, `Cargo.lock`,
+> spec, or conformance movement. Implementer reports focused
+> `ken_md_literate`, CLI, `ken-elaborator`, `ken-cli`, and workspace gates
+> green, with `git diff --check` clean.
+>
+> **QA + Architect approved (`evt_3jds559999bxs`,
+> `evt_3q9gfzvzmghw2`, 09:50 UTC).** Language-qa approved exact `77ec2b4` after
+> re-deriving the bounded six-file diff and focused/workspace gates. Language
+> ring completed at `evt_38n9a73qrhe8j`; Architect final review approved exact
+> `77ec2b4` with no blockers at `evt_3q9gfzvzmghw2`.
+>
+> **Integrator merge request in flight (`evt_m0sv267m8ndc`, 09:50 UTC).**
+> Language-leader posted the explicit merge-ready request to Integrator on exact
+> `77ec2b4`; Integrator had already verified the branch head and is now handling
+> publish/CI/merge. Steward did not send a duplicate git request.
+>
+> **PR #309 open (`evt_2686vadvrge63`, 09:51 UTC).** Integrator published
+> `wp/ken-md-literate` at exact reviewed head `77ec2b4`, rechecked the bounded
+> six-file diff plus clean negative scope, and opened PR #309. CI is running;
+> Integrator will merge when required checks are green.
+>
+> **Merged and §10-closed (`evt_1bf86aqfcwff6`, `evt_2n5mt4knjkq82`,
+> 09:55 UTC).** Integrator merged `wp/ken-md-literate` as PR #309 at
+> `origin/main @ 9cad486d08c5d72dd56bf42814467510e3c9b67c`, with build/test,
+> conformance, clean-room provenance, and path-guard green on reviewed head
+> `77ec2b4`. Remote branch and local shared-clone ref were deleted. Steward
+> relayed the merge to language-leader at `evt_52m19c2ccmbvw`. Retros are in:
+> implementer `evt_7x2rt091rw57j`, QA `evt_5wvxfr5nwz9sf`, leader coordination
+> retro / closeout handoff `evt_2n5mt4knjkq82`. Language closeout complete.
+>
+> ### Watchdog pass (2026-07-06 07:40 UTC)
+>
+> Oriented in Convo and scanned recent activity, open questions/Decisions, and
+> active panes. No open questions and no live work stall. Four stale proposed
+> merge Decisions for already-merged WPs were resolved in Convo:
+> `dec_2hs93ajnqxfes` (SURF-2 spec/conformance, PR #299 `df03a31`),
+> `dec_4y18g42recaeh` (KM dependent-match build, PR #302 `25e6c17`),
+> `dec_sbsyx5p5vtqa` (catalog style guide, PR #303 `9d653ac`), and
+> `dec_80cha93qv2g4` (KM option-table branch motive, PR #305 `ad3ad9c`).
+> No agent routing posted. Operator-away program remains complete; catalog
+> coding standards remains held. Superseded at 09:35 UTC: `ken-md-literate`
+> is now active with Language.
+>
+> ### ✅ CAT-3 BUILD CLOSED (§10) (2026-07-06 07:29 UTC)
+>
+> **CAT-3 D3 / build merged:** Integrator merged `wp/CAT-3-build` as PR #308 at
+> `origin/main @ 72c2315ca5ea79fe46fd04e5831a0205779ee2e8`
+> (`2026-07-06T07:23:50Z`). Final reviewed head was
+> `111d087ac5ca54861839f15552e8cb66069dbd72` (`111d087`, `CAT-3 D3 restore
+> full pair lens laws`). Integrator reported `build + test`, conformance,
+> clean-room provenance, and path-guard all green before merge. Remote branch
+> `wp/CAT-3-build` is deleted.
+>
+> **Closure:** CAT-3 is §10-closed. Language-implementer released the branch at
+> `evt_74zt2mdm357zx`; Steward routed Integrator to retry local ref deletion at
+> `evt_6dbm2e4xbnn79`, and Integrator confirmed cleanup at `evt_66krh2kwex4z3`.
+> Language retros are complete: implementer retro `evt_4pxkwptaa2dt3`, QA retro
+> `evt_586569s16h2vd`, leader coordination retro / `retros in`
+> `evt_rbv6k9xpm11m`. Operator-away program item "complete CAT-4 and CAT-3" is
+> complete. Operator-away item "create a WP for `local/ken-md-literate-brief.md`"
+> was already satisfied by `docs/program/wp/ken-md-literate.md` in commit
+> `d9f0a08`. Superseded at 09:35 UTC: the WP is active with Language. Catalog
+> coding standards remains on hold per Pat.
+>
+> ### 🚦 CODEX FLEET CUTOVER + SURF-1 BUILD KICKED OFF (2026-07-05, Pat) 🚦
+>
+> **Fleet migrated to Codex.** All agents reconfigured to the Codex harness and
+> restarted; **Steward is the only Claude Code agent left.** Comms verified:
+> kernel-leader receipt test PASSED (`evt_j6r8pnsy38xe`) after two adapter fixes
+> (tmux fallback missing, then missing Enter) — it received, woke, read
+> `COORDINATION.md`, and replied **with the `mentions` parameter set** (the earlier
+> miss). **NOTE for all convo posts:** `message_type: "message"` is now REJECTED —
+> allowed types include `question`, `git_request`, `retro`, `code_share`, `bug`,
+> `feature`, `decision_propagated`, `pause_issued`, … Use `question` for
+> kickoffs/asks.
+>
+> **Codex-migration branch `steward/codex-migration-prep` — ✅ MERGED `e311aa7`
+> (PR #293, Integrator; all 4 CI green).** Note: GitHub held `mergeable_state=blocked`
+> (branch-protection policy) despite green checks + no auto-merge, so the Codex
+> Integrator completed the reduced-gate merge via `--admin` (judgment call to avoid
+> a policy stall — flag for operator awareness re: whether admin-override is the
+> desired reduced-gate path). Refs swept. **agent/memory + AGENTS.md now on main;**
+> Codex agents pick up their scopes on next onboard. Flags #1/#4 follow-up now
+> unblocked (patch on main). Handoff (historical): Contents: AGENTS.md canonical
+> (CLAUDE.md→symlink), `.agents/skills`→`.claude/skills`, the **`agent/memory/`
+> corpus** (165 private-memory files → 143 scoped lessons + MIGRATION-LOG; verified
+> coverage 165/165, operator-identity excluded, drops sourced, fidelity-checked;
+> AGENTS.md role→memory-scope load-map), **+ `moot.toml`** (non-steward agents →
+> codex/gpt-5.5/5.4; Steward stays claude-opus) **+ `.devcontainer/post-create.sh`**
+> (codex CLI + MCP + `~/.codex/config.toml`). Zero crates/spec/conformance; no secret
+> values. **Known non-blocking follow-ups (NOT resolved, landing as-is per Pat):**
+> flag #1 (`ws-sec` org-chart: memory-said-Verify-owns vs README-says-cross-cutting)
+> + flag #4 (2 memory files cite non-existent `everyday-surface-program.md`) — patch
+> separately.
+> **⏰ Watchdog cron re-armed: id `4cc178a7` (`13,33,53 * * * *`, ~20min, session-only,
+> AUTO-EXPIRES in 7 days → re-arm before ~2026-07-12).**
+>
+> **✅ SURF-1 BUILD — KICKED OFF to Language (`evt_72hsqwy195mhp`, ~16:4x).** First
+> full WP run on the Codex fleet + comms shakedown. SURF-1 **elaboration already
+> merged** (PR #288 `ef791a3b`) — this is the held *build*. Gate satisfied: prior
+> Language WP `lawful-classes-lane` MERGED (#223 `2d79bf9`), team fresh-restarted
+> (clean context = compaction-satisfied), idle. Kickoff to **language-leader ONLY**
+> (`agt_37reqqy6pjm00`) → branch **`wp/SURF-1-build`** off `origin/main@f4aa1b1`.
+> **Contract on main:** frame `docs/program/wp/purity-keywords-effect-polymorphism.md`
+> (E1–E5 build seq + code anchors), conformance `conformance/surface/declarations/
+> seed-purity-keywords.md` (PK1–PK9 red→green), spec `30-surface/{31,32,33,36 §1.5/§1.6}`.
+> **Build seq:** D1 recursive-fixpoint-lift (`effects/row_poly.rs`/`row.rs`;
+> surface `visits [e]`→`RowType::Var` + lift concrete-only fixpoint to `RowType`;
+> gates traverse/CAT-2) → D2 bidirectional purity checker (`fn`-false-purity half =
+> landed `§1.4` gate; new half = `proc`-provably-pure mismatch) → D3+D4 Unicode
+> lexer/formatter + `view`→`const/fn/proc` migration (one workspace-green unit).
+> **Gates G1–G6:** kernel-untouched/`trusted_base`-byte-unchanged (AC5); PK seed
+> green; fixpoint monotone-idempotent-terminating; keep `x⊆[E|e]` conservative
+> single-arm (under-accept, never over-accept); `--workspace` green + rosetta 16/0
+> + no `.ken` retains `view`; Unicode lexer-accepts + formatter-emits. **Architect
+> re-certs AC5 + D1 row-poly on the built diff. NEXT STEWARD TOUCH:** await
+> language-leader receipt-confirm → monitor build → relay merge Decision + close.
+> No CAT rulings needed (all on main); this is a mechanical-ish build.
+> **PROGRESS (2026-07-05 ~17:33):** receipt confirmed; D1 delivered `84bd38d` →
+> **language-qa BLOCKED it** (strong catch: new row-var APIs exist but
+> `RDeclKind::View` elab path ignores `visits` — surface row never reaches checker
+> in production; tests hit helpers directly = the "new-surface green-vs-green trap"
+> named in the QA playbook — Codex QA cited it by name). Implementer wiring the
+> production path + regression test. Gate working as designed; healthy iteration,
+> NO stall. G1/AC5 held (kernel empty), G3/G4 local mechanisms held.
+> **UPDATE (~18:07):** **D1 APPROVED `e79de2b`** (after 2 QA blocks: green-vs-green
+> producer-wiring, then a `RowVar(0)`-synthesis violation of `36 §1.5.2` fail-closed
+> — both spec-cited, both fixed with production-path regressions). **D2 APPROVED
+> `46c60ec`** (leader-review caught an SCC/group gate screening out effectful
+> recursive `proc`s pre-QA → fixed). **D3+D4 kicked off** (Unicode + `view`→
+> `const/fn/proc` corpus migration, one workspace-green unit; gates G5 rosetta 16/0
+> + no `.ken` retains `view`, G6 Unicode lexer+formatter). **DEFERRED RESIDUAL
+> (track):** production row-variable *acceptance* stays **fail-closed** until the
+> real latent-row binding/extraction path lands — correct conservative state for
+> D1; the accepting path is a later consumer (CAT-2 `traverse`). Codex fleet
+> self-gating with high rigor. Next Steward touch: D3+D4 QA → language-leader opens
+> merge Decision → **Architect re-certs AC5 + D1 row-poly** → Integrator merges →
+> close + retros.
+> **✅ SURF-1 MERGED `5a780f8` (PR #294, ~18:52) — first full Codex-fleet WP DONE.**
+> Flow ran end-to-end: D3+D4 QA-approved `3309ac3` → merge Decision
+> `dec_4v6gmrdxbwx92` → **CV APPROVE** (Spec; conformance/challenge migration
+> syntax-only, no discriminator drift) → **Architect CHANGES-REQUESTED** (sharp:
+> D3 conflated ASCII keyword `in` with `∈` membership glyph — formatter would
+> rewrite `let … in …`→`let … ∈ …` + parser accepted it; keyword-legibility/
+> security violation) → fixed w/ distinct `Token::Member` + regression `9f65d7d`
+> → **Architect APPROVE** → Integrator merged, all 4 CI green. G1/AC5 held (kernel
+> empty) throughout. **✅ SURF-1 §10 CLOSED (2026-07-05) — all 3 retros in**
+> (implementer `evt_6pter2tn41h65` production-path-proof + unicode-same-token-not-
+> enough; QA `evt_34wmxfh2919e` trace-parse→resolve→production + test-spec-tables-
+> as-tables; leader `evt_2g7sg5ezekm3k` route-each-blocker-to-one-owner + human-
+> legibility-is-correctness). AC met on `origin/main@5a780f8` by content (QA+CV+
+> Architect all APPROVE, CI 4-green, kernel empty). Housekeeping: local
+> `wp/SURF-1-build` prune deferred (still checked out in language-qa worktree —
+> asked QA to move off). **Shakedown verdict: Codex fleet executes a full gated WP
+> with high rigor; migrated playbooks/memory working (QA/Architect cited spec §§ +
+> named playbook traps).**
+>
+> ### 🚀 CATALOG BUILD CAMPAIGN — CAT-1→CAT-4 BUILDS (2026-07-05, Pat directive) 🚀
+> **Pat (post-SURF-1): "pipeline works well with codex — run through the rest of
+> the WPs prepared by the enclave (CAT-1 through CAT-4), whatever order seems
+> best."** State: all 4 CAT **elaborations** (spec ch `55/56/57/58`) MERGED; the
+> **builds** remain. Only `CAT-1-build` had a brief (`wp/CAT-1-build @ 8fb3b47`,
+> stale base `24a414b`); CAT-2/3/4 build briefs I author fresh (spec chapters are
+> the elaboration — build briefs are execution wrappers, Architect re-cert at
+> build-time, no separate enclave pre-pass).
+> **DEP DAG:** CAT-1-build (5-piece higher-kinded extension + Functor/Foldable) →
+> **blocks CAT-2 (Applicative/Monad/Traversable) + CAT-3 (collection laws)**.
+> CAT-4 (maps/sets/relations, value-level on the Map capstone) = **independent**.
+> **SEQUENCE (2 parallel tracks):**
+> - **Track A — Language:** CAT-1-build → CAT-2-build → CAT-3-build (dependency
+>   chain, one team's ring, coherent context).
+> - **Track B — Runtime:** CAT-4-build (independent, parallel; owner Runtime per
+>   CAT-4 elaboration).
+> Enclave (Architect + CV) is the shared merge-review bottleneck → 2 tracks, not
+> 4-wide, keeps reviews serialized-but-flowing. Revisit fanning CAT-3 to a 3rd
+> team once CAT-1 merges.
+>
+> **🔵 ACTIVE — CAT-1-build KICKED OFF to Language (`evt_55fhxf49vb5m9`, 2026-07-05).**
+> Brief re-based onto `origin/main@5a780f8` post-SURF-1 (§0 note: `view` retired,
+> package already `fn`-migrated, purity checker live) → `wp/CAT-1-build @ 51d91c0`.
+> **§2c compact-gate proof:** Language leader/implementer/qa all `moot compact`ed
+> @ ctx-verified — panes showed "Context compacted" (not just "sent"; needed a
+> separate `Enter` — `moot compact` types `/compact` but doesn't submit for Codex,
+> same missing-Enter as SURF-1 troubleshooting). Retros in, qa's worktree-move
+> done (`evt_69r58rx3wvjeh`), all quiescent BEFORE kickoff. Kickoff to
+> **language-leader ONLY** (`agt_37reqqy6pjm00`). 5-piece higher-kinded extension +
+> Functor/Foldable proved-over-carriers; kernel-untouched; CB1–CB7 gates; Architect
+> re-cert AC1+pointwise on built diff. **Blocks CAT-2/CAT-3.**
+> **OP NOTE (Codex compact-gate mechanism):** `moot compact <role>` → sends
+> `/compact` to the Codex TUI but leaves it UNSUBMITTED at the composer → must
+> `tmux send-keys -t moot-<role> Enter` → wait ~20s → capture-pane shows "Context
+> compacted". Verify by that string, NOT the "Sent /compact" line.
+>
+> **🔵 ACTIVE — CAT-4-build KICKED OFF to Runtime (`evt_6a4bpdkv7dxkq`, 2026-07-05,
+> PARALLEL Track B).** Authored fresh build brief `wp/CAT-4-build @ 989a215` (off
+> `origin/main@5a780f8`) — thin wrapper over the exhaustive spec ch `58`, with the
+> **critical SURF-1 respell**: ch 58 §1 pt 5 said "write new ops as `view`" but
+> `view` is retired + `map.ken` is 100% `const`/`fn`-migrated (verified: 0 `view`,
+> 158 `const`/`fn`) → §0 re-points all new ops to `const`/`fn`/`proc`. Carries the
+> 4 settled forks (A combining-fn union / B closure=bounded-reachability IsTrue /
+> C Map K (Set K) adjacency / D delete=rebuild-fromList) + 2 sub-rulings (set laws
+> membership-extensional; leqNat+4 Nat-carrier laws) as do-not-reopen; G1–G8 gates;
+> D0→D4 order; closure design-now/defer-build (no silent truncation). Kickoff to
+> **runtime-leader ONLY** (`agt_37reqrd72cg00`). Architect re-cert AC1+AC5 on built
+> diff; CV co-authors D5 conformance seed. **Leaf (blocks nothing in tranche).**
+> **§2c compact-gate — FRESH-ONBOARD EXEMPTION:** Runtime leader/impl/qa are
+> freshly-onboarded + idle (context = onboarding reads only: COORDINATION/MODELS/
+> playbook/PRINCIPLES; NO prior WP). Verified via capture-pane. This is the
+> "fresh restart = clean context = gate satisfied" state (same as the SURF-1
+> fresh-fleet kickoff) — an explicit compact would only summarize away the fresh
+> playbook reads for zero staleness benefit. NOT a "next-seam" rationalization:
+> the anti-staleness purpose is genuinely met (contrast Language, which came OFF
+> SURF-1 with real stale context → compacted). Kicked off directly.
+>
+> **CAMPAIGN STATE (both tracks live, event-driven):**
+> - **Track A — Language:** CAT-1-build ACTIVE (`evt_55fhxf49vb5m9`). Next on merge
+>   → CAT-2-build (needs CAT-1) → CAT-3-build.
+> - **Track B — Runtime:** CAT-4-build ACTIVE (`evt_6a4bpdkv7dxkq`). Leaf.
+> - **Enclave (Architect/CV):** shared merge-review bottleneck; reviews serialize.
+> - **Next Steward touches:** (1) relay/close each build on merge+retros; (2) on
+>   CAT-1 merge → §2c compact-gate Language → kick CAT-2-build (author brief; spec
+>   ch 56 canonical); (3) watch for forced-deviation surfaces. Watchdog `4cc178a7`.
+>
 > ### 🧭 ROADMAP DECISION — CATALOG-LED next campaign (2026-07-04, Pat) 🧭
 > **The language core is essentially verified** (VAL2 16/0, kernel trust-root, Map capstone, lawful classes, obs-eq termination;
 > **effect-composition** = the one in-flight tail). Pat chose the post-core campaign shape (Steward's recommendation) — plan doc
@@ -126,6 +6455,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > **✅ CAT-3 MERGED — `7169300f` (PR #290, 22:30).** Clean fidelity loop: spec-author authored chapter `57-collections-and-views.md` → `optic→view` rename (operator) → Architect fidelity-gate APPROVE w/ 2 fold-ins → **FOLD-IN 1 = real bug caught: lens `set-set` law needs `Refl` not `tt`** (non-nullary head `mkPair c (pairSnd s)` with NEUTRAL component `pairSnd s` never collapses to `Top`, so `tt:Top` ill-typed) → **general endpoint rule `55 §3.2`/`57 §1 pt3` SHARPENED** (fully-collapsing head→`tt`; non-nullary-with-neutral-component→`Refl`) → CV's seed carried the SAME `tt` bug, independently re-derived+folded → re-assembled `356043e` → both gates re-grounded APPROVE → merged. Landed: `Perm`=Ω-native count-equality (Ord.total precedent), `view`/`lens` family (5 concrete flavors, Σ-records), 2 build-later walls in `90`, 16 red-until-built conformance cases, setoid field `view`→`project` (KwView-collision). Kernel-untouched. **Retros: CV `evt_35jdp7tkanesw` (tt-on-non-nullary-head + oracle-tag-absorbs-reversal + rolling-re-anchor), spec-author `evt_48669dre2tvr` (bug hid in the UN-flagged adjacent line + inverted-ruling≠delegable-rename + FULL-collapse-not-head-symbol). spec-leader retro `evt_606g85yc7mh91` (crossing-in-flight handled by explicit-flag-not-silent-redo + self-grep-at-kickoff-is-load-bearing + adopted CV's oracle-tag-not-hard-freeze). **✅ CAT-3 §10 CLOSED — all 3 retros in.** (Watchdog note: I nudged spec-leader `evt_48gwrb1sw3p25` as a suspected since-window stall, but its handoff `evt_606g85yc7mh91` @22:34:31 had ALREADY landed — my events-read used `limit 6` on a `since` that returns oldest-first, TRUNCATING the newest handoff event. False-stall; low harm (survey-dismiss was real hygiene). → memory: a stall re-read must reach the actual TAIL, not be limit-truncated.)
 > **🔵 ACTIVE — CAT-4 elaboration KICKED OFF (`evt_twm78g1wsm9x`).** §2c gate proof: **all 4 compacted @ ctx-verified spec-author 0 / CV 0 / architect 0 / spec-leader 18 (Sonnet floor)** BEFORE kickoff (CAT-3 retros in, no open Decision/question, quiescent; CV needed a re-send — task-list widget masked pre-render, benign redundant queued /compact, NO Escape per the banked lesson). Kickoff to **spec-leader ONLY** → `wp/CAT-4-maps-sets-relations @ 6343ec6` (elaborate vs current `main` `7169300f`). Fixed inputs pinned: lawful-class Ω-props proved-not-postulated zero-delta, **SHARPENED endpoint rule** (full-collapse-not-head-symbol, the CAT-3 set-set fix), REUSE landed Map capstone (inventory first — delete/union build on insert/lookup/toList/fold; Set=Map-Unit), kernel-untouched. **Forks → Architect: A union-collision-sig (left-bias vs combine-fn) / B transitive-closure-rep (LOAD-BEARING soundness — HARD-PIN not-raw-Ω, same as Perm, Architect rules Ω-native-form) / C relations-scope (frontier: land-now vs defer).** Owner Runtime (build→GPT window). **Last WP of the framed tranche.** ⛔ **OPERATOR DIRECTIVE (Pat, 2026-07-04): STOP AFTER CAT-4.** Drive CAT-4 to merge + §10 close, then **HOLD — no CAT-5, no L3–L14 framing, no new elaboration** (§2b "instructed to stop"; overrides keep-the-enclave-fed → `[[credit-window-reserve-opus-for-t1]]` CAP). At CAT-4 close: **do the overdue EPOCH PUSH** (bring `main` current: tracker + `06-catalog-campaign.md` + `03` BL1–3 + `agent/MODELS.md` delegation-addendum + steward playbook + CAT-1/2/3/4 frames → `main` via Integrator) as the tranche-closing consolidation, then hold for Pat's next direction. Next Steward touch = CAT-4 merge relay + close → epoch push → STOP.
 > **✅ CAT-4 MERGED — `f8e4b4e` (PR #291, 23:32).** Verified on `origin/main` (new `58-maps-sets-relations.md` + 20-case seed). Clean run: forks A (combining-fn `union`, `f`-indep Ordered-pres, NO map-commutativity) / B (closure = bounded-reachability `IsTrue`, the `Perm`-into-decidable-Ω move, faithfulness+`size` DEFERRED) / C (`Map K (Set K)` adjacency, land compose/converse/predicates now) / D (rebuild-`delete` via `fromList`, `dropKey`=filter → unconditional None-law) + **`leqNat` D0 vacuity-guard** (Axiom-free, ≥3 keys, never Axiom-holed `Int`) + **membership-extensional set laws** (Tree-`Equal` set laws are FALSE). Kernel-untouched. **Framed CAT tranche (CAT-1→CAT-4) design/elaboration COMPLETE.** Merge relayed `evt_27hz8a7tw2kk5`. **✅ CAT-4 §10 CLOSED — all 3 retros in** (CV `evt_emjv6rjct6mk` [seed-shape + isReflexive-over-infinite-Nat self-catch; grep-Rust-prelude-emission for negative-existence], spec-author `evt_4mcsy4rkhyh06` [both fold-ins = Ω/collapse-vs-Bool-cousin mis-transcribe; grep-the-bare-name-you-BIND], spec-leader `evt_3vre3kjv1cf2j` [premature hold-release; re-verify negative-existence; Perm errata folded]). **FRAMED CAT TRANCHE (CAT-1→CAT-4) FULLY CLOSED.** Enclave holds — no next kickoff (Pat directive).
+> **✅ EPOCH PUSH — MERGED `f4aa1b1` (PR #292).** Integrator merged the docs-only resync (reduced-gate class, all 4 CI green, byte-identical landing); verified on `origin/main` by CONTENT — `06-catalog-campaign.md` present, MODELS.md delegation addendum present, `steward.md` strengthened compact gate (`BUILD TEAMS *AND* THE SPEC ENCLAVE`) present (confirms no hardening lost). `main` is now current at the CAT-tranche-close epoch. **Nothing queued behind it → STOP holds.** (Assembly record below.)
 > **✅ EPOCH PUSH — ASSEMBLED + HANDED TO INTEGRATOR (branch `steward/epoch-push-cat4-close` off `origin/main@f8e4b4e`).** ⚠️ **`steward/work` is ~113k lines BEHIND `origin/main`** (long-lived branch off an OLD main; missing all current crates/spec/packages/most-WP-docs). **NEVER wholesale-push it — would delete real content.** Method used (playbook §2a): branched off CURRENT `origin/main`, `git checkout steward/work -- <file>` per file, verified `git diff --stat origin/main` = **ONLY these 5 files** (4873+/41−, the 41 deletions are the MODELS.md/steward.md reword-and-strengthen, not content-loss), committed, handed to Integrator via `git_request`. **The 5 Steward-authoritative files:** `docs/program/IMPLEMENTATION-PROGRESS.md` (tracker), `agent/MODELS.md` (tier-vocab refactor + credit-window failover + delegation addendum), `docs/program/03-program-of-work.md` (+25 superset), `docs/program/06-catalog-campaign.md` (+159 new file), `agent/playbooks/federation/steward.md`. **steward.md flag RESOLVED → included:** the 34 "deletions" are main's narrower `⛔ BUILD TEAMS: ALWAYS COMPACT` block being *replaced by a stricter superset* (steward/work's `ALWAYS COMPACT — BUILD TEAMS **AND** THE SPEC ENCLAVE, NO BEFORE-WORK THRESHOLD`, my `5d622ee` hardening) + the model-name→tier-vocab refactor — **no hardening lost, it is strengthened.** Verified by grepping steward/work's version (line 151 subsumes+extends main's rule). **Then STOP** — no new WP; Perm errata held for Pat's next direction.
 > **📋 QUEUED FOLLOW-UP (NOT kicked off — Pat's stop-after-CAT-4 hold):** **`Perm` errata WP.** Live spec/symbol contradiction on `main`: `37 §6` (`Perm := ‖Perm_rel‖`) ≡ the LANDED test-guarded prelude global `Perm` (`prelude.rs:760-778`, `Term::Trunc`, consumed in es2/l3a/l3b acceptance ×6) — BOTH contradicted by CAT-3 `57 §3.1` (`Perm := count-equality`, explicit `eqf`). Resolution (Architect-scoped, shovel-ready, supersession-by-refinement — NOT an error in either): keep landed `Perm`=`‖Perm_rel‖` as the general comparator-free/faithful-by-construction predicate; **rename CAT-3's count-eq form to `permCount`**; re-point the verified-sort AC6 obligation (`l3a_acceptance.rs:404`) from `Perm`→`permCount`; update `37 §6` prose to defer to `57 §3.1` + land the lawful-`eqf` faithfulness caveat. Build-affecting (not doc-only — CV's catch). Enclave carries full reconciliation in spec-leader's CAT-4 retro hand-off. **HELD for Pat's next direction.**
 > **📌 TWO BUILD-LATER WALLS LOGGED (future Steward re-forks, NOT open now):** (1) **multi-param `class` telescope** — the *polymorphic* optics family (`Lens s a`/`Iso a b`) needs a 2-param dependent record landed surface Ken can't express (`class`=1 param, `data` ctor args non-dependent); re-forks to me **when its general form is built** (cousin of CAT-1 §6 higher-kinded). Concrete flavors ship now; polymorphic vehicle = fast-follow. (2) **surface quotient-intro** — quotient-*carrier* views (kernel has `Term::Quot`/`QuotElim` `16 §5` but no parser path); setoid-morphism form ships now, carrier form later. Design the law forms now; hold the vehicle re-forks for their build. Next Steward touch = CAT-3 merge relay + close → CAT-4 (or hold).
@@ -4849,6 +11179,52 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Active frontier
 
+Current frontier addendum (2026-07-06 21:04 UTC): CAT-5 D3,
+`SURF-gadt-parser-ast`, and `SURF-gadt-elaboration` are closed.
+`KM-index-impossible-branch-synthesis` is closed: PR #319 landed at
+`origin/main @ a4dabbb`, and Kernel retros are in through
+`evt_1ppb3vkv2k948`. `SURF-gadt-coverage-diagnostics` is closed: PR #320
+landed at `origin/main @ 127066d`, and Language retros are in through
+`evt_6cg4z8eq5ezv9`. `SURF-gadt-field-sugar` is closed: PR #321 landed at
+`origin/main @ e026e72`, final reviewed head `02cb53e`, and Language closeout
+is `evt_1cg5x6qaky4rs`. `KM-target-index-positivity` has landed: PR #322 at
+`origin/main @ ed991ed`, final reviewed head `36f9cf4`, and Kernel closeout is
+`evt_6hq6zdrz0mx2d`. Kernel result is conservative D-free target-index
+admission. The post-KM surface/kernel authority follow-on is closed: PR #323
+landed at `origin/main @ fcb0f75`, and Language retros are in through
+`evt_6svq29naevqes`. Compiler work has started: `NC1-checked-core-package`
+landed as PR #324 at `origin/main @ a596250` and is §10-closed through
+`evt_3rdbf3atxsy1w`. NC2 landed as PR #325 at `origin/main @ 2f03604` and
+is §10-closed through `evt_6vk8nrhkcbada`. NC3 landed as PR #326 at
+`origin/main @ 4b9a023` and is §10-closed through `evt_1qb4fwentx00n`.
+NC4 landed as PR #327 at `origin/main @ 35ded83` and is §10-closed through
+`evt_60dw66npxpe16`. NC5 has been released to Runtime at
+`evt_4113t0r136k3d`; Runtime D0 routed a required Architect pre-D1 boundary
+review at `evt_16nxx0nx4a53j`, and Architect approved at
+`evt_1vf86dz1k4t0x`. Runtime leader routed D1 at `evt_4pc3nmsr9180j`;
+Steward repaired the missing implementer mention at `evt_55j5kcx561sfh`.
+Runtime implementer pickup is in-thread at `evt_1hn5wdyjdzhmf`.
+Runtime implementer handed off `915b521` at `evt_333vgdggbbgzs`; Runtime QA
+picked up at `evt_1p5psv1srhdt8`. Runtime QA approved at
+`evt_76b4kf3zazd2v`; Architect blocked at `evt_5f8etk4bbd7cx`; Steward
+repaired the metadata-survival repair route at `evt_5vsa698wf4swy`; Runtime
+implementer handed repaired head `8308130` to Runtime QA at
+`evt_3gvfdp9b6ckef`; Runtime QA picked up at `evt_3en9r5zyvqp5q` and
+approved at `evt_245kz4m76qcmj`. Runtime leader routed Architect re-review at
+`evt_6yh1mv6rq2nr1`, but the event carried no mention; Steward repaired the
+Architect route at `evt_71yxseehmsxc5`. Architect approved repaired `8308130`
+at `evt_1kfnh3y5spx1e`. Runtime leader routed integration at
+`evt_55q7p0bg6n282`, but that event carried no mention; Steward repaired the
+Integrator handoff at `evt_77y405w16tny`. Integrator merged NC5 as PR #328 at
+`origin/main @ ae7f9f3` in `evt_4r2g2hgp1whpz`; Runtime closeout / retros are
+pending. Steward nudged Runtime leader for §10 closeout at
+`evt_b8wn72yt4hwf`; Runtime leader's member-retro requests carried no mentions,
+so Steward repaired the Runtime implementer / Runtime QA retro route at
+`evt_6wy0h5nx2dvhv`. Member retros landed at `evt_3fk3apf2nykzn` and
+`evt_5sf4v7dm9r9kv`; Steward routed them back to Runtime leader at
+`evt_76z4q01q78yh5`. Runtime leader retro landed at `evt_6442sc5c1hvxs`, and
+retros-in closeout landed at `evt_509mtg4qsv3g0`. NC5 is closed.
+
 | WP | State | Owner | Thread |
 |---|---|---|---|
 | **F4** content-addr / value-model design | **MERGED `45b62b2`** — done | Foundation | `evt_3f87m6kcqgkg3` |
@@ -4884,6 +11260,10 @@ forward once K1's API is stable.
 | T1 diagnostic protocol | not-ready (V2) | V/T | G2–4 |
 | L1 Int/Decimal/overflow | not-ready (K1) | L | G6 |
 | L2 sum/match | not-ready (L1) | L | G6 |
+| SURF-GADT syntax | merged (`origin/main @ e026e72`; retros in `evt_1cg5x6qaky4rs`) | L/Spec | G6 |
+| KM index-impossible branch synthesis | merged (`origin/main @ a4dabbb`; retros in `evt_1ppb3vkv2k948`) | Kernel/Spec | G6 |
+| KM target-index positivity | merged (`origin/main @ ed991ed`; retros in `evt_6hq6zdrz0mx2d`) | Kernel | G6 |
+| SURF target-index kernel authority | merged (`origin/main @ fcb0f75`; retros in `evt_6svq29naevqes`) | Language | G6 |
 | L3 strings/collections | not-ready (K1) | L | G6 |
 | L4 modules/pkg | not-ready (K1) | L | G6 |
 | L5 effects (interaction-tree) — **hub** | not-ready (K1) | L | G6 |
@@ -4893,6 +11273,7 @@ forward once K1's API is stable.
 | L-classes typeclass coherence | not-ready (K1,V0) | L | G6 |
 | L-fmt formatter + TR39 lexer | not-ready (V0) | L/T | G6 |
 | X2 runtime hardening | not-ready (K3) | X | G6 |
+| X3/NC Rust bootstrap compiler | in-review (NC23 active with Runtime) | Spec/Language/Runtime/Verify | G7 |
 | Sec1 IFC by-typing | not-ready (L5) | Sec | G-Sec |
 | Sec1ct @ct constant-time | not-ready (Sec1) | Sec | G-Sec |
 | Sec2 capabilities | not-ready (L5) | Sec | G-Sec |
@@ -4903,9 +11284,8 @@ forward once K1's API is stable.
 | B2 Temporal-as-data | not-ready (L2,B1) | B | G-Ward-seam |
 | B3 trace/instrumentation contract | not-ready (B1,X1) | B | G-Ward-seam |
 | B4 agentic boundary | not-ready (Sec1,Sec2,B3) | B | G-Ward-seam |
-| X3 native backend | not-ready (X1,L-core) | X | G5-perf |
 | X4 scale/limits | not-ready (X2,X3) | X | G5-perf |
-| S1 subset compiler | not-ready (L-complete) | S | G8 |
+| S1 subset compiler | not-ready (L-complete, NC boundary) | S | G8 |
 | S2 full self-host | not-ready (S1) | S | G8 |
 | T2 REPL | not-ready (V4,X1) | T | G5/G7 |
 | T3 test framework | not-ready (L2) | T | G5/G7 |
@@ -4967,3 +11347,1720 @@ forward once K1's API is stable.
   yet stood
   up; it is not a blocker until WS-B reaches B1–B3 — track its bring-up as a
   sibling, `05 §Ken-vs-Ward`.)
+
+> **[watchdog 2026-07-05 ~19:18] RELAY:** nudged language-leader
+> (`evt_2q3c32mmk0gj`) — it grounded CAT-1 then went idle-wedged at the handoff
+> ("event-driven, awaiting next step") instead of releasing D1 to the implementer.
+> Nudge = "next move is yours, run the ring D1→D2→D3." Confirmed unwedged
+> (capture-pane: "have the exact D1 mandate now… posting implementer handoff",
+> Working). Contrast runtime-leader, which handed off correctly on its own.
+> **Codex leader-stall pattern:** a gpt-5.4 leader can treat "grounded + status
+> set" as a stopping point and idle awaiting a non-existent upstream event; the
+> head-of-ring must self-initiate the implementer handoff. A convo mention DOES
+> wake an idle Codex pane (no send-keys fallback needed here). Runtime worktree
+> snag (`wp/CAT-4-build` checked out in leader's worktree blocks implementer
+> checkout) noted — implementer self-resolving, not wedged.
+
+> **[watchdog 2026-07-05 ~19:40] CAT-4 RULING (`evt_34mpsrj4z86at`) — forced-deviation
+> resolved, NOT a stall.** runtime-leader escalated (`evt_29xzj3fvn89gv`): D0–D4
+> executable ops built (24/24 acceptance, zero kernel/Axiom/raw-closure/Set-Equal),
+> but the D2 `Ordered`-preservation proof for `union`/`insertWith` was honestly
+> removed (its `match lookup {None/Some}` helper hit `expected Type 0, found g109` —
+> an Option-dependent-match motive-inference failure). Leader asked: Architect
+> ruling or Steward rescope? **My ruling:** (1) praise the honest removal (gate
+> working); (2) **NO rescope** — D2 preservation is hard gate G3, not the
+> pre-authorized Fork-B closure deferral; (3) **redirect strategy** — blocker is a
+> proof-strategy artifact: `insertWith` has identical KEY-structure to `insert`
+> (combining fn only changes VALUES; `Ordered` bounds keys), so prove
+> `insertWithPreservesOrdered` as the direct structural TWIN of landed
+> `preservesOrdered` (same nested `boolDichotomy`, reuse landed
+> `preservesOrderedOverwriteWitness`/`IntoL`/`IntoR`, `map.ken:506-507`/`819+`) —
+> no `lookup`, no Option match, no g109; (4) escalation ladder — try the twin
+> first, only route to Architect if the DIRECT proof genuinely walls (don't burn
+> enclave time on the artifact). Both runtime agents woke + executing. **Grounded
+> the ruling on spec §4 (`f`-independent, Architect-authored/merged) — enforcing
+> the merged contract, not new design.**
+>
+> **CAT-1 (Track A) PROGRESS:** D1 `f85e2c5` leader-APPROVED (5 pieces, CB1/CB2
+> held, workspace green); D2 `6b78c84` (parametric `instance Monoid (List a)`,
+> generic proof, Axiom-rejected) landed on target, in leader review. Worktree
+> exclusivity recurred (branch held in leader worktree blocks implementer
+> checkout) — resolved each time by the leader freeing/detaching. Healthy ring.
+
+> **[watchdog 2026-07-05 ~19:57] RELAY — language-leader idle-wedged (unprocessed
+> mention).** CAT-1 D3 built (`0c51193`, Functor/Foldable proved zero-Axiom, gates
+> green); implementer asked leader to free `wp/CAT-1-build` (`evt_28mwxj46x19b6`,
+> 19:46) but the leader sat ~9 min with that mention QUEUED-UNPROCESSED at its
+> composer (`git worktree list` confirmed branch still held at 6b78c84). Diagnosis:
+> capture-pane showed the `<channel>` mention un-actioned + idle prompt. **Rouse:
+> `tmux send-keys -t moot-language-leader Enter`** (submit the queued mention) →
+> leader detached its worktree, freed the branch, Working. **Codex nuance:** a
+> convo mention can arrive but sit UNPROCESSED in an idle Codex composer (unlike
+> last tick where a fresh mention woke it) — for that state, send-keys Enter
+> processes the queued mention (a fresh convo mention risks stacking). CAT-4 side
+> healthy (runtime-leader freed its branch cleanly; runtime-qa posted a correct
+> G4/G6 proof-term-missing blocker at 19:55 — ring routing it, no Steward action).
+>
+> **⚠️ SYSTEMIC FRICTION (bank for build-leader playbook fold @ CAT retro):** the
+> WP branch held checked-out in the LEADER's worktree blocks the implementer from
+> landing at EVERY slice handoff (recurred D1→D2→D3 Language + land/QA Runtime,
+> 5+ times; caused the 9-min Language stall above when compounded by the mention
+> wedge). **Fix:** build-leaders must review WITHOUT holding the WP branch checked
+> out — detach (`git switch --detach <head>`) or use a scratch review worktree —
+> so the implementer never waits to land. One-line practice that removes the
+> friction entirely. Not broadcast mid-slice (rings coping); fold at the retro.
+
+> **✅ CAT-1-build MERGED — `4bc57c8` (PR #295, 2026-07-05 20:07).** Full gated ring:
+> D1 5-piece elaborator extension + D2 parametric `Monoid (List a)` + D3
+> `Functor`/`Foldable` proved over List/Option (zero Axiom, pointwise-one-field).
+> Approvals on `6750e52`: language-qa `evt_167afbrtxtvx8`, verify-qa
+> `evt_3rm6j79abddsk`, architect built-diff re-cert `evt_3qtm5h1cqtsf3` (AC1 +
+> pointwise-law form held). CI 4-green, kernel/Cargo.lock empty. **UNBLOCKS
+> CAT-2 + CAT-3.** **✅ CAT-1-build §10 CLOSED (2026-07-05 20:18) — all 3 retros in**
+> (implementer `evt_4dgbhxrxc4a5c` [D1=bounded production path; temp-commit safe
+> only if revalidated on real wp/* before handoff], QA `evt_1frcva40e58m1`
+> [five-piece boundary needs MECHANISM tracing not file-scope], leader
+> `evt_5qvv37bwa6hp8` [one boundary + one next-move-owner per slice], handoff
+> `evt_5d9cj62pm32nw`). AC met on `origin/main@4bc57c8` by content. **Track A next:
+> CAT-2-build.**
+>
+> **[watchdog 2026-07-05 ~20:17] RELAY — language-leader wedged waiting on
+> already-arrived retros (`evt_6fvcsxd5n0f37`).** Leader idle "waiting for those two
+> retros" but BOTH were in ~8 min prior — **root cause: the retro posts didn't
+> @mention the leader**, so its event-driven wait never triggered. Nudge cited the
+> two evt IDs + "add leader retro, hand set to me." Woke → Working, posting leader
+> retro. **COORDINATION LESSON (bank):** a report/completion the requester is
+> event-driven-waiting-for MUST @mention the requester — silence-to-thread ≠
+> notification; the poster owes the mention (this is the "action-completion the
+> next-actor awaits = mention warranted" case of §2, not an exempt ack). Recurring
+> Codex-fleet pattern: post-to-thread-without-mention strands the next-actor. Fold
+> into COORDINATION §2 examples at the retro seam.
+>
+> **CAT-4 (Track B) HEALTHY — no Steward action.** runtime-qa held a correct block:
+> the G4/G6 additions were Prop STATEMENTS not PROOF terms (implementer probed
+> `Refl` → `not convertible` → confirmed obligation real, removed probe). Leader
+> ruled in-scope proof work w/ the right escalation threshold ("surface the
+> specific failing term if you hit a real wall") — internalized my D2-preservation
+> ruling pattern. Implementer grinding real proofs (`insertWithLookupCharacterization`
+> + `insertWithLookupLocality`, temp `d93c5b6`, 24/24). WATCH: the fold-level D2
+> lookup characterization needs an order-equivalence-vs-syntactic-key-agreement
+> bridge — genuinely harder than preservation; may wall → leader will surface.
+>
+> **NEXT STEWARD TOUCH:** on language-leader's CAT-1 retro handoff → close §10 →
+> §2c compact-gate Language → author + kick CAT-2-build (spec ch 56 canonical).
+
+> **🔵 ACTIVE — CAT-2-build KICKED OFF to Language (`evt_42m2r8wd4s15w`, 2026-07-05,
+> Track A after CAT-1).** Authored fresh brief `wp/CAT-2-build @ 5f1a7be` (off
+> `origin/main@4bc57c8`) — thin wrapper over spec ch `56`. Applicative/Monad/
+> Traversable wiring superclass dicts, proved over List/Option, kernel-untouched,
+> NO new elaborator capability beyond CAT-1's 55§6 (reuses CAT-1's landed
+> higher-kinded mechanism + Functor/Foldable). **§2c compact-gate proof:**
+> Language leader/impl/qa all `moot compact`ed @ ctx-verified — panes "Context
+> compacted" (retros in / §10 closed / quiescent BEFORE kickoff). Kickoff to
+> **language-leader ONLY** (`agt_37reqqy6pjm00`). 5 settled forks pinned
+> do-not-reopen (WIRE superclass / bind-primary / **ITree=attested-correspondence
+> NOT surface instance, 55§6.1 NOT reopened** / explicit Applicative-g dict /
+> cartesian List). D1→D2→D3 order; `traverse`=`proc` (SURF-1 RowVar); naturality
+> MUST be proved. G1–G9 gates. Architect re-cert AC1/AC3/AC5. **Folded the CAT-1
+> worktree-lock fix into the kickoff** (leader reviews WITHOUT holding the branch)
+> — proactive friction removal.
+>
+> **CAMPAIGN STATE:** CAT-1 ✅MERGED+CLOSED. CAT-2 ACTIVE (Language). CAT-4 ACTIVE
+> (Runtime, deep G4/G6 proof-grind). CAT-3 pending (Track A after CAT-2). Next
+> Steward touch: relay+close each on merge; watch CAT-4 fold-level proof for a
+> possible real wall.
+
+> **[watchdog 2026-07-05 ~20:37] CLEAR TICK — both tracks healthy, working, no nudge.**
+> - **CAT-2 (Track A):** kicked off `evt_42m2r8wd4s15w`; leader picked up, handed
+>   D1 to implementer (`thr_7ptx8qz0vr0yx`), **kept target branch FREE** (internalized
+>   the CAT-1 worktree-lock note). language-implementer Working on D1 (Applicative),
+>   tests passing. Healthy.
+> - **CAT-4 (Track B):** the fold-level D2/G6 proof hit the wall I flagged →
+>   runtime-implementer escalated a concrete proof-strategy question to **@architect**
+>   (`evt_q34me595554n`), leader confirmed "not a rescope, no Steward routing."
+>   **Architect gave grounded guidance** (`evt_724gg0a52mzss`, read lean4 bintree.lean
+>   prior-art — permissive-ref, understand-not-copy, clean): add `lookupOrderEquivAgree`
+>   bridge lemma; **tighten D2/G6 laws to explicit `Ordered`+`Distinct` valid-map
+>   hypotheses** (raw-tree lookup laws are FALSE on malformed trees — soundness call,
+>   Architect's lane, consistent w/ my G4 contract); delete None-law stays
+>   UNCONDITIONAL (Fork D); G6 set laws as membership-homomorphism corollaries.
+>   runtime-implementer Working on it. **Escalation ladder worked as designed** —
+>   proof-surface wall → Architect (not Steward), enclave answered. No Steward action.
+> - **NOTE:** validity-hypothesized D2/G6 laws still satisfy G4 (proved characterization,
+>   correctly scoped) — merge review should accept them, not block as "not unconditional."
+
+> **[2026-07-05 ~20:57] CAT-4 D1 SCOPE RULING (`evt_20b5dg3q3dmxx`) — Route 1 APPROVED.**
+> `deleteLookupNoneLaw` hit a CONFIRMED proof-surface/elaborator wall (both the
+> list-invariant `dropKeyRemovesKey` route AND Architect's fused-accumulator
+> `lookupFromDropKeyAccNone` route kernel-reject `TypeMismatch expected Type 0,
+> found Ω0` — a Prop/Ω motive boundary on a dependent `match` whose target mentions
+> `dropKey`'s executable filter-result). Ring behaved perfectly: implementer tried +
+> reverted clean (no smuggle), leader escalated at the agreed threshold, Architect
+> classified it + routed the SCOPE decision to Steward (Route 1 fused-worker vs
+> Route 2 keep-source-exact-block-on-mechanism-WP).
+> **My ruling: Route 1.** Fork D (spec §3) = **SEMANTIC filter-delete** (chose
+> rebuild-reusing-capstone to AVOID the structural-glue/deleteMin invariant
+> apparatus — that intent is the pin, NOT the literal `fromList (dropKey (toList m))`
+> tokens). A transparent fused `deleteFromListAcc` (stream toList → skip
+> order-equiv entries → insert rest into fresh acc) IS the rebuild route → in-scope
+> factoring. Constraints: unconditional None-law preserved · Ordered-preservation
+> re-est. over the worker via landed insert/preservesOrdered · transparent .ken
+> zero-delta kernel-untouched (never structural glue) · D2/G6+other-key per
+> Architect's valid-map hypotheses. Architect's Route-1 preference blessed; it
+> guides the worker factoring; implementer resumes D1 from clean `94e307d`.
+> **MERGE TASK:** fold a spec §3 + brief §2 note ("canonical form = fused
+> deleteFromListAcc worker, semantic filter-delete") into the CAT-4 merge so
+> `main` matches built code — no silent divergence.
+> **⚠️ KNOWN ELABORATOR GAP LOGGED (Route 2's finding, NOT blocking CAT-4):** a
+> **Prop/Ω motive under a dependent `match` whose target mentions an executable
+> filter-result** (`expected Type 0, found Ω0`) is a genuine elaborator limitation.
+> Route around it here; log as a candidate future mechanism-WP / OQ (author at the
+> CAT-4 merge seam into `90-open-decisions.md`). Reusable: any future proof of a
+> property over a filter-style fn's concrete output will hit this.
+
+> **[2026-07-05 ~21:17] CAT-2 D1 ESCALATION (`evt_1ferzz45gasx7`) — wired-superclass
+> projection wall, routed to Architect.** Implementer built the Applicative package
+> slice, but projecting the wired higher-kinded superclass field — `d.functor.map a
+> b g xs` off an `Applicative` dict — KERNEL-REJECTS (`TypeMismatch { expected:
+> (g542 Dg72), found: (Dg72 @2) }`). Stopped clean (no commit/weaken). This is the
+> **WIRE fork's foundational buildability** — spec ch 56 §2 (Architect) CLAIMED
+> `infer_proj` "re-enters cleanly on the inner dict"; landed reality rejects on a
+> higher-kinded field. **My scope pre-ruling:** a NARROW fix to EXISTING `infer_proj`
+> (higher-kinded-field projection) = IN-SCOPE for CAT-2 (fixing existing machinery
+> §2 relies on ≠ new capability; may touch ken-elaborator/src, reviewed as an
+> elaborator diff w/ Architect AC1 re-cert). A GENUINELY-NEW capability = re-fork to
+> me (prerequisite elaborator WP + WIRE-vs-RESTATE fork revisited). **Routed the
+> bug-vs-missing-capability mechanism call to @architect** (authored the §2 claim) —
+> diagnose: usage-fix (zero elab change) / narrow-existing-bug (minimal fix, suspect
+> = f-param substitution into projected Functor f field type) / missing-capability.
+> **D1 HELD** (implementer stash + park) pending grounding — no blind grind (CAT-4
+> D1 route-churn lesson). Architect + implementer both woke, Working.
+>
+> **CAT-4 (Track B) — D1 CLEARED, D2 fold-proof HARD.** Route 1 fused worker landed
+> `fcf6937` (`deleteLookupNoneLaw` real unconditional proof, `deletePreservesOrdered`
+> re-est, spec/brief reconciled to semantic-filter-delete) — Architect-accepted. D2
+> locality support `b9050ab` accepted. BUT the fold-level D2 lookup characterization
+> (`foldInsertWithLookupLocality`) hit repeated dependent-type-mismatch walls: direct
+> structural induction + `foldInsertWithNodeBridge` transport BOTH reverted clean
+> (leader logging known-bad proof shapes). Implementer researching a different route
+> (Option disjointness). Healthy iteration but SLOW/HARD — watch for another
+> escalation if the fold characterization walls like D1 did.
+
+> ### 🔴 OPERATOR DIRECTIVE (Pat, 2026-07-05 ~21:30) — FIX THE KERNEL Term::Let BUG 🔴
+> Pat: "you said CAT-2 D1 is a kernel bug? Let's fix that, rather than work around
+> it." **DO NOT ship the parenthesized-global-projection workaround as the answer —
+> fix the kernel defect properly.** (I had NOT yet posted the workaround confirmation
+> when Pat interrupted — good.)
+> **THE BUG (Architect-diagnosed, `evt_1ekm9176r61z6`):** the trusted kernel
+> re-checker's `Term::Let { ty, val, body }` arm checks `body` against the **binder
+> annotation `ty`** instead of the **enclosing expected result type**. Repro:
+> `let d : Applicative List = Applicative_instance_List in d.functor.map a b g xs`
+> → `TypeMismatch { expected: (g542 Dg72), found: (Dg72 @2) }`; Architect debug:
+> `rhs_ty=(g542 Dg72) body_ty=(Dg72 @3) result_ty=(Dg72 @2)`. NOT an `infer_proj`
+> bug (projection shape is correct; §56 §2 claim holds; global projection
+> `(Applicative_instance_List).functor.map` elaborates fine — only the `let`-bound
+> form fails). **Completeness bug (over-rejection of a valid let-in-body), fail-
+> closed/SAFE.** de Bruijn shift smell (`@3`/`@2`) → likely a substitution/expected-
+> type-propagation defect in the Let arm.
+> **LOCATION:** `Term::Let` in `crates/ken-elaborator/src/elab.rs` (the trusted
+> re-checker — NOTE `ken-kernel` crate is still a SCAFFOLD (21-line lib.rs); the
+> real checker physically lives in ken-elaborator, but it IS the trust root → TCB
+> rigor applies). Term::Let sites: elab.rs:148/612/1035 (traversal/subst/zonk) +
+> foreign.rs:307; the CHECK arm is the one to fix. `fn check`@417 / `fn infer`@924
+> are the elaborator bidir pass; the KERNEL re-check fn (grep `kernel_infer` refd
+> @754) is the target — kernel team localizes exact arm with Architect.
+> **PLAN (execute post-compact):**
+> 1. **Frame + kick a KERNEL WP** (`KL-let-check` or similar) — fix the Term::Let
+>    check to propagate the expected result type to the body, not the binder
+>    annotation. TCB rigor. Frame MUST pin (per K7/K-series lessons): (a) SOUNDNESS
+>    discriminator — the fix must ACCEPT the over-rejected valid let AND still
+>    REJECT a genuinely ill-typed let (don't loosen the checker); (b) validate
+>    `cargo test --workspace` NOT just `-p` (kernel-change blast radius is
+>    workspace-wide — downstream proof terms); (c) trusted_base() byte-unchanged,
+>    no new Term/Decl. Architect (diagnosed it) is a reviewer; kernel team owns.
+>    §2c compact-gate the kernel team (idle/fresh → likely satisfied).
+> 2. **CAT-2 D1:** root cause is this kernel bug, being fixed properly. D1's
+>    instance/law code can use legitimate global-instance projection meanwhile
+>    (NOT a dodge — it's the normal form for a named instance); add a `let`-bound
+>    wired-projection REGRESSION once KL-let-check lands (proves the WIRE mechanism
+>    is robust). Don't weaken the wired-superclass test. (Language-leader currently
+>    holding D1 pending my direction — redirect on resume.)
+> **ALSO DONE THIS PASS:** CAT-4 D2 ruling POSTED (`evt_39qzk1c5mqp9k`) — APPROVED
+> the toList-fused-worker route for union/intersection/difference (Fork A pin =
+> combining-fn + 2×2 characterization, not fold-spelling; D1-analogous; Architect
+> guiding `unionFromListAccLookupLocality`; guardrails: semantic-equiv/Ordered-pres/
+> membership-extensional-G6/zero-delta; reconcile spec §4+brief §2 at merge).
+> Elaborator gap (tree-fold-locality Type/Ω wall) now confirmed on D1+D2 →
+> toList-stream is standard workaround → strengthen future mechanism-WP/OQ.
+> **CAT-2 D1 Architect grounding = `evt_1ekm9176r61z6`; CAT-4 D2 = `evt_1g86mmhe5cegr`.**
+
+> ### [2026-07-05 ~21:45] KERNEL Term::Let BUG — root cause CONFIRMED + WP framed + PRINCIPLES §13
+> **Grounded the defect in landed code (origin/main @ 4bc57c8).** The kernel is NO
+> LONGER a scaffold — the K-series built out `crates/ken-kernel/src/{check,conv,term}.rs`;
+> the trusted checker physically lives there now (my prior "checker in ken-elaborator/
+> elab.rs" note was STALE). The `Term::Let` CHECK arm is `crates/ken-kernel/src/check.rs`
+> ~417 inside `fn check(env,ctx,t,ty)`:
+> ```
+> Term::Let { ty, val, body } => { classify(ty)?; check(val, ty)?; check(subst0(body,val), ty) }
+> ```
+> **ROOT CAUSE = variable shadowing:** the pattern field `ty` shadows the fn's
+> EXPECTED-type param `ty`, so the body is checked against the LET-BINDER ANNOTATION,
+> and the enclosing expected type is never checked at all. **This is BOTH:**
+> (a) a latent SOUNDNESS hole — `check(let x:A=v in b, E)` passes whenever `b[x:=v]:A`
+> regardless of E, so `(let x:Nat=5 in x)` is accepted at expected `Bool`; and
+> (b) the CAT-2 D1 COMPLETENESS over-rejection (`expected (g542 Dg72) found (Dg72 @2)`).
+> The sibling `infer` arm (~293, `infer(subst0(body,val))`) is CORRECT; `raw_wf` (~45)
+> and `collect_consts_in_tb` (foreign.rs ~307) are pure traversals — no shadowing. The
+> defect is a SINGLE arm. **FIX:** rename field (`ty: let_ty`), check body against the
+> OUTER expected `ty` (NOT delete-and-fall-through to infer+convert — that regresses
+> introduction-form bodies `let x=v in λ…`).
+> **WP `KL-let-check` FRAMED** (`docs/program/wp/KL-let-check.md`, branch
+> `steward/root-cause-and-let-fix`): owner kernel team, mandatory reviewer Architect
+> (diagnosed it), size S / high-care (TCB). Gates: G1 soundness discriminator
+> (reject `let x:Nat in x @ Bool`; confirm ACCEPTED on origin/main first), G2
+> completeness discriminator (accept body-type≠annotation + CAT-2 form), G3 check-
+> mode-into-body regression guard, G4 `cargo test --workspace` (K7 blast-radius), G5
+> trusted_base byte-unchanged/no new variant/conv untouched, G6 sibling-arm audit.
+> **PRINCIPLES §13 authored** (same branch, commit be03391) per Pat's directive: "fix
+> the root cause, never compensate at a higher level for a lower-level defect."
+> **Handed branch to Integrator** (git_request) to merge both docs to main. On merge:
+> kernel-team handoff gate (idle/fresh → clean-context, verify via capture-pane) +
+> kickoff KL-let-check, Architect as diff reviewer.
+> **CAT-2 D1 CONTEXT (moot redirect):** D1 already LANDED CORRECTLY at `bf4ba5e` — NO
+> workaround-as-answer, NO weakened test: implementer used the legitimate projection
+> forms (`(Applicative_instance_List).functor.map` AND local dict-param `d.functor.map`,
+> both elaborate; only the ascribed-`let` form fails), zero `ken-elaborator/src` change.
+> D2 Monad already handed off at `8d2fb4d` (awaiting language-leader review). CAT-4 D2
+> toList-worker route blessed + Architect-guided (evt_5jcm0cpgjqwm7), runtime-implementer
+> proceeding from `b9050ab`. Federation healthy.
+
+> ### [2026-07-05 ~21:58] steward/work RE-ANCHORED on main + KL-let-check KICKED OFF
+> **Re-anchor (operator "rebase your worktree on main"):** steward/work had drifted
+> 498 commits off a stale early fork (fd1f383); origin/main (7e0534b) is now the
+> authoritative superset (full spec + built-out kernel/elaborator code + corpus incl.
+> codex-transition e311aa7 + epoch resyncs + my just-merged PRINCIPLES §13 +
+> KL-let-check brief). Did a SAFE re-anchor NOT a 498-commit rebase (would conflict-
+> storm on skeleton-era patches): `git reset --hard origin/main` + overlaid the live
+> tracker (strict superset, +446 lines, pure-insertion verified). Old tip preserved at
+> `steward/work-backup-20260705` (reversible). Worktree now at 48e910a — HAS the real
+> code (crates/ken-kernel/src/{check,conv,term,obs,sct}.rs etc.). Corpus currency
+> checked: my recent MODELS/playbook edits already on main via codex-transition.
+> Confirmed the buggy `check(Term::Let)` arm in-worktree matches the brief exactly.
+> **KL-let-check KICKED OFF** (evt_4wqhdftz3krqf) → kernel-leader (agt_37reqgaqpbw00).
+> Handoff gate: kernel team all re-onboarded/idle (clean-context carve-out; no ctx%
+> readout in Codex TUI, team verifiably fresh → gate satisfied w/o forced compact).
+> Brief on main (7e0534b), branch from origin/main, Architect (diagnosed) = mandatory
+> TCB diff reviewer, G1-G6 gates (G1 soundness discriminator confirm-hole-real-first).
+> Integrator already merged my PRINCIPLES+brief branch → 7e0534b (relayed nothing owed).
+
+> ### [2026-07-05 ~22:05] CAT-2 D3 RULED (Option A) + SURF-2 prerequisite FRAMED
+> **CAT-2 progress:** D1 (Applicative) landed bf4ba5e; **D2 (Monad) APPROVED** at
+> `8d2fb4d` (language-leader evt_76rcpc2tm1n7j). D3 (Traversable) handed off →
+> **BLOCKED**: `proc traverse` as a class field has no representation (parser
+> 524-529 = `field_name:type` only; `ClassDecl.fields` = Vec<(String,Type)>;
+> check_surface_purity is decl-level). Grounded ×3 (impl/leader/Architect
+> evt_c4cz82tm7n5g). Routed to me for A(re-fork)/B(relax) ruling.
+> **RULING (evt_1j731652bqmnx): Option A.** The `proc traverse` contract is
+> non-negotiable — `proc` = effect-row-polymorphic (SURF-1), the keyword IS the
+> static-purity signature (PRINCIPLES §8); relaxing = purity-signature lie +
+> PRINCIPLES §13 violation (don't degrade contract to dodge a missing lower-layer
+> capability). Weaker encoding REJECTED (Architect concurs). D3 parks clean at
+> `8d2fb4d`; D1+D2 STAND delivered.
+> **SURF-2-class-field-purity FRAMED** (`wp/SURF-2-class-field-purity @ ca80488`,
+> off origin/main 7e0534b): SURF-1 follow-on extending const/fn/proc from decl
+> level to CLASS FIELDS. Confirmed spec gap: §56 §5.1 writes `proc traverse` but
+> §33 class grammar = name:type only → needs SPEC reconcile (§33 grammar + §39
+> elaboration) + Language build. FULL §2c pipeline (not build-only). Zero kernel
+> delta (purity erased-before-kernel; AC4 sort discriminant untouched). 5 build
+> sites grounded (parser/AST/ClassInfo/instance-check/projection), G1-G7 incl.
+> instance-enforcement discriminator + backward-compat. Owner: Language build;
+> spec elaboration: enclave; reviewer: Architect. **Blocks CAT-2 D3.**
+> NEXT: run spec-enclave handoff gate (compact spec-leader/author/CV) → hand
+> wp/SURF-2 branch to spec-leader for elaboration.
+> **CAT-4 D2 mechanism WP** (Pat-req via Architect evt_5gdwk69sanjy1): author a
+> brief for the tree-fold/locality elaborator wall (kernel-compute-bug vs
+> proof-surface-expressivity; bounded refinements). Architect grounding in
+> progress; author after their note. NON-blocking (toList path proceeds).
+> **KL-let-check** in flight: kernel-leader→implementer moving (thr_2fp9c0ek3x7dx).
+
+> ### [2026-07-05 ~22:10] KL-let-check DONE+APPROVED; D3 ruling acked; SURF-1-build Decision found obsolete
+> **KL-let-check FULLY APPROVED** (fast cycle): fixed at `wp/KL-let-check @ 29ea829`
+> (crates/ken-kernel/src/check.rs only, +119/-3; rename field→let_ty, check body vs
+> outer ty; explicit arm kept, infer arm untouched). **G1 CONFIRMED THE SOUNDNESS HOLE
+> WAS REAL** — on unmodified main, `let x:Nat=zero in x @ Bool` was ACCEPTED; now
+> rejects w/ TypeMismatch. G2 valid-let accepts, G3 intro-body check-mode preserved,
+> G4 workspace green, G5 TCB byte-unchanged, G6 sibling audit clean. kernel-qa APPROVED
+> (evt_4917m53tv3cx6) + **Architect APPROVED** (evt_2zf8dhfdxtn9s). Decision
+> `dec_5csdfsnv7yg2c` ready to resolve→merge; kernel-leader driving (fresh 22:08, no
+> nudge). WATCH: resolve+merge_ready→Integrator.
+> **D3 ruling ACKED** (language-leader evt_5tta2r0qswcs3 + impl evt_33tcqac5t0re5): CAT-2
+> parked clean at 8d2fb4d, awaiting SURF-2 prerequisite. Clean landing.
+> **CAT-4 D2 mechanism grounding** (Architect evt_1t00d2c6f3bwx): NOT a kernel soundness
+> bug (unlike D1's check(Let)); it's proof-surface/elaborator completeness —
+> check_match_dependent handles only flat ctor patterns over bound-var scrut, no
+> user return-motive, no branch equations; conv is weak-head, won't find fold/locality
+> thru neutral accumulators. Refinement candidates: (1) reducer target (smallest
+> rejected foldInsertWithAccLookupLocality, capture core+mismatch, classify kernel-vs-
+> surface), (2) bounded elab refinement (explicit `match scrut as x return M x` /
+> convoy + scrutinee-generalize once KL-let-check lands), (3) branch-equation evidence
+> (b=True/b=False), (4) diagnostics (normalized expected/found + which layer). Rec:
+> mechanism/completeness WP NOT soundness bug; keep CAT-4 on toList path. I have enough
+> to author the brief. NON-blocking.
+> **WATCHDOG FIND — dec_4v6gmrdxbwx92 (SURF-1-build merge) is OBSOLETE.** SURF-1-build
+> already on main as `5a780f8`; branch `wp/SURF-1-build @ 3309ac3` is stale (pre-CAT-1,
+> +86/-901 vs main). Nudged language-leader (evt_zg8cbre8ff3w) to resolve as superseded
+> or rebase-a-real-delta. Was the enclave's dangling review item.
+> **QUEUED (next focused actions):** (1) SURF-2 enclave handoff — run compaction gate
+> (spec-leader/author/CV) then hand wp/SURF-2 branch to spec-leader (§33/§39 reconcile +
+> team-ready detail); after dec_4v6gmrdxbwx92 cleared. (2) Author CAT-4 D2 mechanism WP
+> brief (Architect grounding in hand). (3) Watch KL-let-check merge.
+
+> ### [2026-07-05 ~22:20] KL-let-check CLOSED; SURF-2 handed to enclave
+> **KL-let-check DONE/CLOSED** — MERGED PR #297 `origin/main @ 9d8623e` (kernel
+> Term::Let checker arm now validates the substituted body against the OUTER
+> expected type; +regression tests). QA+Architect approved (dec_5csdfsnv7yg2c
+> resolved). Retros IN (kernel-impl evt_6z82cxvtqqqhb + kernel-qa evt_10xfp5xaj935h).
+> **Operator directive (fix the kernel bug, not the workaround) COMPLETE.**
+> RETRO CARRY to promote (build-qa/kernel playbook, at next epoch): "for a checker
+> arm with an outer expected type AND a binder annotation (shadowing/expected-type
+> bugs), require a NON-DEGENERATE accept/reject pair differing only in the
+> outer-expected relationship + one introduction-form check-mode case — catches
+> both over-accept (soundness) and over-reject (completeness) and guards the
+> tempting infer+convert fallback refactor." Confirmed twice (impl+qa).
+> **SURF-1-build Decision** dec_4v6gmrdxbwx92 RESOLVED superseded-by-5a780f8 (PR
+> #294) by language-leader (evt_2p8f92zt1emcm). Governance clean.
+> **SURF-2 HANDED to spec enclave** (evt_6r0e0rd4jaq3q → spec-leader) for full
+> elaboration: branch wp/SURF-2-class-field-purity @ a5376a7 (rebased onto current
+> main 9d8623e, freed). Compact-gate: CV compacted (was 63% used; "Context
+> compacted"), spec-author fresh, spec-leader clean (Pat compacted via tmux — I
+> hit Codex slash-cmd autocomplete friction on the send-keys /compact; moot compact
+> worked for CV). §33 grammar + §39 elaboration + 5 build sites → team-ready.
+> Blocks CAT-2 D3 = enclave priority. On elab-complete: merge Decision → Integrator
+> → I release Language build.
+> **CAT-4 D2** healthy: runtime-implementer working (union G4 proof-returning;
+> intersection/difference/G6 remaining on toList route). No stall.
+> **QUEUED:** author CAT-4 D2 mechanism WP brief (Architect grounding in hand,
+> non-blocking); watch SURF-2 elaboration + CAT-4 D2 completion.
+
+> ### [2026-07-05 ~22:25] SURF-2 elaboration IN PROGRESS; tick seam
+> spec-leader confirmed **Working** on SURF-2 (evt_6r0e0rd4jaq3q). OPERATIONAL
+> LESSON (bank to memory): a Codex agent just compacted (esp. via external tmux)
+> does NOT auto-pick-up a convo mention posted after the compaction — it needs a
+> manual send-keys ROUSE (short instruction text + SEPARATE Enter) to process the
+> queued handoff. Post-compaction variant of the Codex mention-wedge. Also: tmux
+> send-keys of a slash-command needs `-l` (literal) or it won't land, and Enter on
+> a Codex slash-cmd autocomplete ACCEPTS the completion (garbles), doesn't submit —
+> use `moot compact <role>` for compaction, not raw send-keys "/compact".
+> **CLEAN SEAM @ ctx 30%:** KL-let-check CLOSED (PR#297, operator directive done);
+> SURF-2 in enclave elaboration (blocks CAT-2 D3); CAT-4 D2 toList route progressing
+> (union G4 proof-returning); CAT-2 D1/D2 delivered, D3 parked on SURF-2. Nothing
+> mid-flight from Steward side. NEXT: watch SURF-2 elab + CAT-4 D2; author CAT-4 D2
+> mechanism WP brief (Architect grounding in hand, non-blocking).
+
+---
+
+## ★★★ STEWARD ROLE HANDOFF — 2026-07-05 ~22:30 (Opus Steward → Codex/gpt-5.5) ★★★
+
+**Why:** Anthropic usage >99%. The Steward (last Opus agent) switches to
+Codex/gpt-5.5. **The entire fleet is now Codex** — the old "reserve Opus for
+T1-enclave" memory/strategy is RETIRED; no Opus anywhere. Route by ROLE, not
+model tier.
+
+**STARTUP (in order):** (1) `orientation()`; read `agent/COORDINATION.md` +
+`agent/MODELS.md`; invoke `ken-steward` skill (or Read
+`.claude/skills/ken-steward/SKILL.md`). (2) Read THIS file top-to-tail — this
+block + dated entries are your state. (3) `git fetch`; you're on `steward/work`
+in the steward worktree. If stale vs `origin/main`, do a SAFE RE-ANCHOR (=`git
+reset --hard origin/main` + overlay THIS tracker file from the old tip); NEVER a
+raw `git rebase` of steward/work (498 stale commits → conflict storm; see 22:05
+entry). Backup ref: `steward/work-backup-20260705`. (4) `list_decisions
+(proposed)` — resolve/merge green Decisions, nudge missing votes. (5)
+`get_recent_context`.
+
+**ACTIVE FRONTIER (priority order):**
+
+**A. SURF-2-class-field-purity — IN ELABORATION** (spec-leader Working,
+evt_6r0e0rd4jaq3q). Branch `wp/SURF-2-class-field-purity @ a5376a7`; brief
+`docs/program/wp/SURF-2-class-field-purity.md`. Prerequisite unblocking CAT-2 D3.
+On elab-complete: spec-leader opens merge Decision (/spec) → Integrator → then
+YOU release the Language build (Architect reviews). Watch for a §33/§39
+design-fork ping.
+
+**B. CAT-2-build — PARKED at `wp/CAT-2-build @ 8d2fb4d`.** D1 (Applicative) + D2
+(Monad) APPROVED; D3 (Traversable) BLOCKED on SURF-2 (ruling evt_1j731652bqmnx:
+`proc traverse` contract stands, NOT the weaker encoding). When SURF-2 lands →
+release D3 to Language (real `proc traverse` Traversable + List/Option instances,
+3 coherence laws §56 §5.3, naturality PROVED). Then CAT-2 (D1+D2+D3) → QA →
+merge. Not yet on main.
+
+**C. CAT-4-build — MERGED + CLOSED.** Integrator merged PR #306
+at `origin/main @ 6e34371cc3ebf8a3b34e05cfa7f9111c7da1bf3e`
+(`evt_557h0vttqbw77`). Runtime QA approved exact pre-merge head `f21ab2c` at
+`evt_295s9yq3sv355`; Architect approved it at `evt_4sanyej4hnws0`; Integrator
+reported green `build + test`, conformance, clean-room provenance, and
+path-guard before merge. Steward verified landed file scope is exactly
+`packages/collections/map.ken`,
+`crates/ken-elaborator/tests/map_build_acceptance.rs`, and
+`docs/program/wp/CAT-4-build.md`; landed `map.ken` contains the proof-returning
+surfaces and no `intersectionLookupMemberCharacterization`. Steward requested
+Runtime retros at `evt_69cmtdg6k8f53`; Runtime retros-in landed at
+`evt_cy073q9ek1pt` with implementer retro `evt_7j3sss7fh6sve` and QA retro
+`evt_5j79dkj8m4rcx`. CAT-4 is closed; move to CAT-3 build.
+
+**D. CAT-3-build — CLOSED (§10).** Design/spec are merged
+(`7169300`; `docs/program/wp/CAT-3-collection-laws.md` and
+`spec/50-stdlib/57-collections-and-views.md`). Steward authored the build
+wrapper `docs/program/wp/CAT-3-build.md` on `wp/CAT-3-build @ 47c443c`, based
+on current `origin/main @ 6e34371`, and kicked it to language-leader at
+`evt_4qd36scqygf8r` after compacting Language leader/implementer/QA. Scope is
+Layer-1 collection laws plus concrete views; CAT-3 is CAT-2-independent, but
+any unexpected Applicative/Monad/Traversable dependency must be routed rather
+than smuggled. Language-leader grounded pickup and D1 at `evt_5rj4qzvvrt2gd`,
+but its first handoff used a display-name mention and did not wake the
+implementer, so Steward relayed D1 to language-implementer with the correct
+actor mention at `evt_4h1ehcp3yx6zq`. Final reviewed head `111d087` merged as
+PR #308 at `origin/main @ 72c2315ca5ea79fe46fd04e5831a0205779ee2e8`
+(`2026-07-06T07:23:50Z`); gate suite green on reviewed head. Language retros
+and branch-release cleanup both completed; leader `retros in` handoff is
+`evt_rbv6k9xpm11m`.
+
+**E. CAT-4 D2 mechanism WP — Pat-REQUESTED, UNAUTHORED** (via Architect
+evt_5gdwk69sanjy1). Author a brief for the tree-fold/locality elaborator wall.
+Architect grounding (evt_1t00d2c6f3bwx; see 22:10 entry): NOT a kernel soundness
+bug — proof-surface/elaborator completeness. 4 refinement candidates: (1) reducer
+target (smallest rejected `foldInsertWithAccLookupLocality`, capture core +
+mismatch, classify kernel-vs-surface); (2) bounded elab refinement (`match scrut
+as x return M x` / convoy + scrutinee-generalize, now KL-let-check landed); (3)
+branch-equation evidence (b=True/b=False); (4) diagnostics (normalized
+expected/found + which layer failed). NON-blocking (toList path delivers CAT-4).
+
+**OPEN LOOPS / HOUSEKEEPING:**
+- KL-let-check DONE (PR#297 `9d8623e`); operator directive (fix kernel bug not
+  workaround) COMPLETE; retros in.
+- CORPUS EPOCH PROMOTIONS pending (batch to main at next epoch; don't
+  micro-route): (a) KL-let-check retro carry — checker-arm accept/reject
+  discriminator-pair rule (22:20 entry); (b) Codex tmux mechanics into
+  `ken-steward` playbook (22:25 entry): send-keys needs `-l` for slash-cmds;
+  Enter on Codex autocomplete ACCEPTS the completion (garbles) not submits; use
+  `moot compact <role>` not raw send-keys "/compact"; a post-compaction Codex
+  agent does NOT auto-pick-up a mention posted after its compaction — needs a
+  manual send-keys ROUSE (short instruction text + SEPARATE Enter).
+- Watchdog cron `4cc178a7` auto-expires ~2026-07-12 — re-arm before then.
+- Tracker→main cadence: commit every state change to `steward/work`; push to main
+  only at epochs (gate closure / milestone), whole-file resync.
+
+**KEY RULES (don't relearn):** PRINCIPLES §13 = fix root cause, never compensate
+upward (added this session). Handoff gate = compact-verify a team BEFORE a
+kickoff mention (fresh-onboarded/idle = clean carve-out). Enclave elaborates
+autonomously — mention only spec-leader (§9). Only Integrator touches main;
+deliver via clean branches off `origin/main` (Steward lacks push creds; verify
+closure by CONTENT on origin/main + merged SHA, never is-ancestor on a branch
+tip). Mention IFF question-or-action.
+
+> ### [2026-07-05 ~22:40] Codex tmux mechanics PROMOTED to steward playbook
+> Per operator query (is the tmux diagnose/fix technique recorded?): the playbook
+> HAD rich Claude-Code-era tmux/compaction guidance but it partly INVERTS on Codex
+> and would misdirect the incoming Codex Steward. Authored a "Codex-harness tmux
+> mechanics" overlay (ef3ec60, branch steward/codex-tmux-mechanics → Integrator):
+> send-keys needs -l; autocomplete eats Enter (accepts completion not submit); use
+> `moot compact <role>` for /compact on Codex (inverts the ★★★ note); ctx reads
+> "N% context left"; post-compaction mention ROUSE (send-keys text + separate
+> Enter); clear garbled composer with C-u or C-a/C-k/BSpace, never Escape. Handoff
+> block's "pending corpus promotion (b) Codex mechanics" is now DONE (pending merge).
+> Diagnostic half (capture-pane to distinguish working/idle-wedged/error) was
+> already in the watchdog/playbook.
+
+> ### [2026-07-05 ~22:42] SURF-2 elaborated→change-request; Codex-mechanics MERGED; CAT-4 D2 stall caught
+> **SURF-2 elaboration DONE fast** (spec-author c7114bd: §32/§33/§39/§56 reconcile;
+> CV seed 6ce8f34). Merge Decision dec_2hs93ajnqxfes OPENED (spec-leader). **Both
+> Architect (evt_sm80qqfjn96x) + CV (evt_5faqpmzcrndzw) → CHANGE REQUEST** (same
+> narrow catch): CV seed CFP3/CFP4 examples use purity markers inconsistent with the
+> field-type-arity rule (`const const_fn_value : Int -> Int` can't be a valid const;
+> `proc` markers must be EARNED per SURF-1 §36 — pure arrow/Ω-proof fields don't earn
+> proc). Architect: would send build down 2 impl paths. DESIGN CLARIFICATION resolved
+> by enclave consistent w/ frame: **a class-field marker classifies the FIELD
+> SIGNATURE/telescope (from declared field type), NOT the instance body**; `proc
+> traverse` earned by the row-polymorphic field/projection contract. spec-author
+> tightening §33/§39 (evt_6scrsrxq5aqhv); CV re-landing seed. Decision OPEN pending
+> corrected head → then Architect+CV RE-VOTE → merge → I release CAT-2 D3. Healthy
+> change-request cycle, enclave autonomous, NO Steward intervention needed.
+> **Codex-tmux-mechanics MERGED** PR #298 `origin/main @ 05e2a1a` — playbook overlay
+> on main for incoming Steward. Handoff-block promotion (b) DONE+merged.
+> **CAT-4 D2 STALL caught + nudged.** runtime-implementer idle ~15-20min: union G4
+> proof-returning (24/24) but UNPOSTED to convo + D2 incomplete (intersection/
+> difference/G6 remaining); runtime-leader passively "waiting on next slice" =
+> mutual-wait, Codex turn-boundary stall. Nudged runtime-leader (evt_480xjhefng483)
+> → WOKE, now directing implementer to post state + continue. Stall breaking.
+
+> ### [2026-07-05 ~22:46] SURF-2 head re-anchored; stale-review hazard routed
+> **SURF-2 blocker fix advanced to `86ad266`.** Current branch
+> `wp/SURF-2-class-field-purity` is now:
+> `273e334` conformance correction + `86ad266` spec clarification. The added
+> spec commit makes the Architect-requested rule explicit in `33`/`39`:
+> class-field markers classify the declared field type/telescope at class
+> declaration time; instances match the stored classification and cannot redefine
+> it. Branch diff scope remains the same seven markdown files; `git diff --check
+> origin/main...wp/SURF-2-class-field-purity` is clean, and the crates/kernel/
+> `Cargo.lock` name-only diff is empty.
+>
+> **Stale-review hazard caught, then confirmed already handled.** spec-leader's
+> first reviewer ping named `273e334`; spec-author's later `86ad266` handoff
+> mentioned spec-leader + CV but not Architect. I routed a re-anchor ask to
+> spec-leader (`evt_3npzkxgekpnxa`). Full context then showed spec-leader had
+> already posted the superseding reviewer request on `86ad266` at
+> `evt_73z3yv3vh8yhs`, and confirmed it in `evt_91nt00fs4cf8`. CV voted
+> **APPROVE** on `86ad266` at `evt_65ngchx40wakc`. NEXT: await Architect vote
+> on `86ad266`; on approval, merge SURF-2, compact/rouse Language, and release
+> CAT-2 D3.
+
+> ### [2026-07-05 ~22:52] SURF-2 spec/conformance MERGED (#299) — SUPERSEDES handoff-block frontier A
+> **SURF-2-class-field-purity MERGED** PR #299 `origin/main @ df03a31` (spec+conformance
+> tranche, markdown-only). Change-request cycle resolved clean: seed fixed (273e334) +
+> §33/§39 clarified (86ad266: class-field markers validated at CLASS-DECLARATION time
+> against field_types[i]; instances match, can't redefine; `proc` must be EARNED by the
+> field type e.g. `A ->[FS] A`). Architect+CV APPROVED 86ad266; dec_2hs93ajnqxfes
+> resolved. My stale-head catch (evt_3npzkxgekpnxa): re-review pinged 273e334 but head
+> had advanced to 86ad266 — flagged → spec-leader re-pinned, no stale vote. Retros: CV +
+> spec-author IN; spec-leader collecting coordination retro + will hand "retros in".
+>
+> **⇒ UPDATED FRONTIER (supersedes handoff-block A/B):**
+> - **A′. SURF-2 BUILD — NOW RELEASABLE (was blocked on the spec).** #299 was the
+>   SPEC+conformance elaboration (markdown-only); the elaborator BUILD (the 5 sites:
+>   parser field-loop / ClassDecl.fields / ClassInfo.field_purities / instance-field
+>   check via SURF-1 proc path / .field projection) is NOT yet built. **NEXT STEWARD
+>   ACTION: release the SURF-2 build to Language** — brief `docs/program/wp/
+>   SURF-2-class-field-purity.md` (on main via #299) + the now-landed §33/§39 spec.
+>   Run the handoff gate (compact language team — USE THE CODEX MECHANICS now in the
+>   playbook, PR #298: `moot compact <role>`, `-l` flag, verify drop), kick off leader
+>   only, Architect reviews. Zero kernel delta. (Sequencing option: SURF-2 build then
+>   CAT-2 D3 separately — cleaner — OR bundle if the team prefers; Steward's call.)
+> - **B′. CAT-2 D3** stays parked at `wp/CAT-2-build @ 8d2fb4d` until the SURF-2 BUILD
+>   lands (D3 consumes the class-field-purity capability, not just the spec). Then
+>   release D3 (real `proc traverse` Traversable + List/Option instances + 3 coherence
+>   laws §56 §5.3, naturality PROVED).
+> - **C. CAT-4 D2** PROGRESSING (not stalled): runtime-implementer WIP on
+>   `runtime-implementer/CAT-4-G4G6-proofs` (uncommitted over b9050ab); union G4 +
+>   all-3-ops Ordered-preservation + intersection None-case proof-returning; remaining:
+>   intersectionLookupSomeLaw, differenceLookupCharacterization, G6 set laws. Leader
+>   driving (post-state-then-continue discipline now set). 24/24 gates green, kernel
+>   untouched. AT MERGE: fold Fork-A/Fork-D canonical-form spec reconciles (see D-block).
+> - D (CAT-3-build) + E (CAT-4 D2 mechanism WP) unchanged — see handoff block.
+> **No active stall. Language correctly parked pending the SURF-2-build release (A′).**
+>
+> ### [2026-07-05 ~23:16] Local Steward watchdog wake armed
+> Operator asked for a Codex replacement for the prior private `CronCreate`
+> watchdog. Created ignored helper `local/steward-watchdog-wake.sh`; it sends a
+> literal prompt to `moot-steward` every 1200s via `tmux send-keys -l` + separate
+> Enter, skips when the pane is visibly mid-turn, and records pid/log under
+> `$XDG_STATE_HOME` or `~/.local/state/ken-steward-watchdog/`. First `nohup`
+> launch was reaped by the harness; patched to launch under `setsid -f` and
+> write the daemon PID from inside the new session. Active at 2026-07-05T23:18Z
+> as PID `371220` (`PPID 1`, `SID 371220`). Manage with:
+> `local/steward-watchdog-wake.sh status|stop|restart`.
+
+> ### [2026-07-05 ~22:58] Quiet tick (self-compact @40%); 2 mild wedges noted for next pass
+> No convo events since 22:51. Two mild (non-hard-blocking) wedges to touch on the
+> NEXT pass (both Codex idle-at-turn-boundary; use playbook Codex mechanics / rouse):
+> 1. **spec-leader waiting for already-landed SURF-2 retros.** Pane: "once both land
+>    I'll add coordination retro + hand retros-in." But CV (evt_5c4mw9vnmpwz2) +
+>    spec-author (evt_3tpgk11r61ps) BOTH posted retros at 22:51. spec-leader is idle-
+>    wedged on an event that already happened → hasn't handed "retros in" → SURF-2
+>    (spec/conformance) WP not formally closed. LIGHT nudge: "both retros are in,
+>    proceed." Low-stakes (SURF-2 already merged #299; this is WP-closure bookkeeping;
+>    does NOT block releasing the SURF-2 build — A′).
+> 2. **runtime-implementer cycling on CAT-4 D2.** Advancing in short turn-bounded
+>    slices (union G4 + Ordered-pres all 3 ops + intersection None-case now proof-
+>    returning; remaining: intersectionLookupSomeLaw, differenceLookupCharacterization,
+>    G6 set laws). Idle between slices; 24/24 gates green, kernel untouched, WIP
+>    uncommitted on runtime-implementer/CAT-4-G4G6-proofs. Leader has the post-state-
+>    then-continue discipline set (evt_7vpbqmh7mzh8n) but may need to re-prompt each
+>    cycle. Watch it keeps finishing; escalate only if it wedges hard or hits a real
+>    proof-surface wall on someLaw/difference (the tree-fold family risk).
+> Durable state otherwise CURRENT (frontier @22:52 entry: SURF-2 merged, NEXT=release
+> SURF-2 build to Language then CAT-2 D3). Self-compacting now.
+
+> ### [2026-07-05 ~23:05] Relay: spec-leader retros-in wedge cleared
+> Nudged spec-leader (evt_136g1e6gb7snx): both SURF-2 retros were already in (CV
+> evt_5c4mw9vnmpwz2 + spec-author evt_3tpgk11r61ps @22:51) but it was idle-wedged on
+> "once both land." → WOKE, now adding coordination retro + handing "retros in" to
+> Steward. On receipt: close SURF-2 spec/conformance WP (#299 df03a31). Runtime CAT-4
+> D2 still cycling (progressing, non-blocking). SURF-2 BUILD release to Language (A′)
+> remains the top NEXT action — left for a clean focused kickoff (not started at the
+> role-switch boundary).
+
+> ### [2026-07-05 ~23:44] SURF-2 retros closed; BUILD kicked to Language
+> **SURF-2 spec/conformance closure COMPLETE.** spec-leader posted the
+> coordination retro + "retros in" at `evt_3yj2petnrky9m`, after CV
+> `evt_5c4mw9vnmpwz2` and spec-author `evt_3tpgk11r61ps`. The #299
+> spec/conformance WP is now closed on the enclave side: merged at
+> `origin/main @ df03a31`, Decision `dec_2hs93ajnqxfes` resolved, all retros in.
+>
+> **SURF-2 BUILD KICKED OFF to Language** at `evt_7q6tp71babaxy`. New branch:
+> `wp/SURF-2-build` from `origin/main @ df03a31`. Source inputs are the landed
+> brief/spec/conformance on main: `docs/program/wp/
+> SURF-2-class-field-purity.md`, `33 §5.2`, `39 §6.0`, and
+> `conformance/surface/classes/seed-class-field-purity.md`.
+>
+> Required build surface is the five-site path from the brief: parser
+> class-field loop, `ClassDecl.fields`, `ClassInfo.field_purities`, instance
+> field purity enforcement via the SURF-1 classifier, and `.field` projection
+> purity propagation. Guardrails carried: zero kernel/Cargo delta; purity
+> metadata erased before kernel; class Type/Omega discriminant unaffected; do
+> not weaken CAT-2 to plain `traverse`; do not resume CAT-2 D3 on this branch.
+>
+> **§2c handoff-gate proof:** Language leader, implementer, and QA were
+> quiescent; all three compacted before the kickoff and each pane showed
+> `Context compacted` before `evt_7q6tp71babaxy` was posted. Mentioned
+> language-leader only (`agt_37reqqy6pjm00`). NEXT: await Language receipt,
+> build/QA, Architect merge review, Integrator merge, retros. CAT-2 D3 remains
+> parked at `wp/CAT-2-build @ 8d2fb4d` until this build lands. CAT-4 D2 remains
+> active/progressing on Runtime.
+
+> ### [2026-07-05 ~23:58] CAT-4 D2 stall confirmed; leader routing nudged
+> Pat suspected CAT-4 was stalled; verified yes. Current CAT-4 state is not the
+> older source-shape blocker and not merely unposted progress. Runtime QA
+> blocked `wp/CAT-4-build @ 8e4d8f1` at `evt_6e6cpkzqgckfy`: target head clean,
+> `map_build_acceptance` 24/24, kernel/Cargo untouched, but most G4/G6 additions
+> are `Prop` law surfaces rather than proof-returning/discharged terms.
+> runtime-implementer confirmed the blocker at `evt_4b8pw5z00jszv`; a `Refl`
+> probe for the first G6 law fails because the two sides are not convertible.
+> runtime-qa then recorded the wait state at `evt_3tqpdkq9hsfw9`: no re-review
+> until D1/D2 lookup characterization + G6 set-law obligations are actual proof
+> terms, or until a routed rescope changes the landing boundary.
+>
+> **Stall mechanism:** runtime-leader status still describes the prior
+> source-shape decision; the thread has not been routed after the QA/implementer
+> confirmation that proof obligations are real. Nudged runtime-leader at
+> `evt_2450p9xmgsxds`, mentioning only the leader, to choose the next owner and
+> boundary: send implementer back in with a narrowed proof-returning target, or
+> request Steward/Architect rescope if CAT-4 should land statement surfaces only.
+> **CLEARED immediately:** runtime-leader responded at `evt_5f437srke6bp0`,
+> mentioning runtime-implementer only. Route: commit the current real D2 progress
+> first (stop anchoring thread on uncommitted WIP), then continue proof-returning
+> work on the `toList` worker line: complete `intersectionLookupCharacterization`,
+> land `differenceLookupCharacterization`, then derive G6 membership laws and
+> Bool-algebra corollaries from those membership homomorphisms. No QA handoff
+> until those names are proof-returning and checked, not proposition-level
+> surfaces. NEXT: await implementer committed checkpoint with SHA/files/gates.
+
+> ### [2026-07-06 ~00:00] Watchdog tick: CAT-4 committed checkpoint; SURF-2 D1 validating
+> **CAT-4 D2 moved after the routing nudge.** runtime-implementer committed the
+> real D2 checkpoint at `707ed82c3a54f3598508ee10028e5ff13c0d9f54`
+> (`CAT-4-build: prove union and intersection none lookup`) and posted
+> `evt_6s5n206spmx8e`. That commit makes the `toList` fused workers for
+> `union`/`intersection`/`difference` real, union G4 proof-returning, Ordered
+> preservation real for all three worker routes, and
+> `intersectionLookupCharacterization` proof-returning for the right-absent/None
+> case. Still incomplete: `intersectionLookupSomeLaw`,
+> `differenceLookupCharacterization`, and G6 set-member/extensional corollaries.
+> Pane shows runtime-implementer actively editing the next Some/locality proof
+> slice above `707ed82`; no nudge needed.
+>
+> **SURF-2 build D1 is active.** language-implementer is on `wp/SURF-2-build`
+> with the five-site class-field-purity implementation in progress. Focused
+> `class_field_purity`, existing `lc_acceptance`, `purity_keywords`,
+> `cat1_lawful_functors_package`, and full `ken-elaborator` tests passed. The
+> wider `scripts/ken-cargo test --workspace` currently fails in
+> `ken-cli --test rosetta`; implementer pane is still mid-turn / diagnosing, and
+> no handoff/blocker has been posted. No Steward routing yet.
+
+> ### [2026-07-06 ~00:35] Catalog quality WPs framed; active builds still moving
+> **Operator directive clarified:** the catalog style-guide question is general,
+> not CAT-4-specific. Ken's first-party catalog should become exemplary,
+> readable, educational Ken code, but the operational lifecycle must distinguish
+> functional discovery from later refinement. Functional build WPs may leave a
+> component rough if the proofs are real and gates pass; follow-on refinement WPs
+> then bring the component up to catalog standards. Apply the style guide to
+> smaller bodies first, not to `packages/collections/map.ken` as the first test.
+>
+> **FRAMED, NOT KICKED OFF:** `docs/program/wp/catalog-style-guide.md` creates a
+> Spec-enclave WP to author `docs/program/07-catalog-style-guide.md`, pin the
+> two-phase lifecycle, and define concrete review checklists. It is queued until
+> the spec-enclave handoff gate is clean; do not interrupt the active SURF-2
+> Architect change-request loop.
+>
+> **FRAMED FOLLOW-ON:** `docs/program/wp/catalog-refinement-pilot.md` is a
+> small-package pilot after the guide lands. Candidate packages are
+> `packages/transport/transport.ken`, `packages/lawful-classes/lawful_classes.ken`,
+> or a narrow `lawful_functors` slice. It explicitly excludes starting with
+> `packages/collections/map.ken`; maps/sets/relations get a later refinement WP
+> after CAT-4's functional build and the pilot both land.
+>
+> **Campaign doc updated:** `docs/program/06-catalog-campaign.md` now records the
+> catalog quality cadence: functional discovery/build first, catalog refinement
+> second, with small-package style validation before large proof-heavy bodies.
+>
+> **SURF-2 build state:** D1 reached QA-approved head `3aa82fd`, then Architect
+> change-requested `dec_3wes4r57jz3b2` at `evt_68tn6h0gma1tc`: the candidate
+> rejected the literal landed `proc traverse` shape from `56 §5.1`/CFP1, and
+> projection purity did not attach for bound class dictionary variables. Language
+> leader routed both blockers to language-implementer at
+> `evt_1xvjtabsn0an6`; implementer status says the fix is in progress. No
+> Steward routing needed.
+>
+> **CAT-4 build state:** the previous stall is cleared and D2/G4 advanced through
+> committed checkpoints `707ed82` -> `ca83f57` -> `6bd8bb3`. The latest public
+> `differenceLookupCharacterization` is proof-returning and checked; remaining
+> unfinished surface is G6 set-member/extensional corollaries. No nudge needed.
+
+> ### [2026-07-06 ~00:42] Watchdog: SURF-2-build in CI; CAT-4 G6 narrowed
+> **SURF-2-build advanced to merge review.** Language implementer fixed the
+> Architect blockers at `wp/SURF-2-build @ 801713c`: literal landed
+> `proc traverse ... (a -> g b) ...` now accepts without a surface rewrite, and
+> bound dictionary projections attach stored `proc` purity. Language leader and
+> QA re-approved; Architect approved and resolved `dec_3wes4r57jz3b2`. Language
+> leader sent `merge_ready` to Integrator at `evt_2422893scvc58`.
+>
+> **Integrator active, no nudge:** PR #300 is open on reviewed head `801713c`.
+> Live check state at this tick: conformance suite, clean-room provenance, and
+> path-guard green; `build + test` still running. Integrator pane is actively
+> watching CI and will merge when the standard gate clears.
+>
+> **CAT-4 G6 advanced:** runtime-implementer committed
+> `db5ae3ead335766b670a960249fc576baca1eacf`, making
+> `setUnionMemberLaw` and `setDifferenceMemberLaw` proof-returning and checked.
+> Remaining CAT-4 surface is now `setIntersectionMemberLaw`, then extensional
+> set algebra laws over queried membership.
+>
+> **CAT-4 routing state:** runtime-leader re-anchored the frontier and routed the
+> remaining `setIntersectionMemberLaw` proof shape to Architect at
+> `evt_3kkd6trh3sqpc`. Architect pane is actively reading `db5ae3e` proof
+> surfaces and searching for an alternate proof cut. No Steward post needed.
+
+> ### [2026-07-06 ~00:46] SURF-2-build merged; closure waits on retros
+> **SURF-2-build MERGED:** PR #300 landed on `origin/main` at
+> `466eb68ecd43068d4c193d21857fc2883c748b49`
+> (`SURF-2-build: elaborate purity markers on class fields`). All four CI checks
+> were green on reviewed head `801713c`; GitHub again required the Integrator's
+> admin merge path because the normal app merge remained policy-blocked despite
+> satisfied checks.
+>
+> **Impact:** the SURF-2 build prerequisite for CAT-2 D3 is now on `main`.
+> Before releasing CAT-2 D3, close SURF-2-build with Language retros in, then run
+> the §2c handoff gate for Language and kick the parked `wp/CAT-2-build @
+> 8d2fb4d` D3 resume on top of the landed SURF-2-build.
+>
+> **CAT-4 unchanged from prior tick:** Architect guidance on the final G6
+> `setIntersectionMemberLaw` proof cut is active; no Steward routing needed.
+
+> ### [2026-07-06 ~00:49] CAT-4 clean-room containment; SURF-2 retros in progress
+> **CAT-4 PROCESS STOP:** runtime-leader posted CAT-4 G6 guidance after
+> consulting `local/refs` (`evt_1ajnq8q62cv84`). That is a clean-room/reference
+> access breach for a build role: permissive references are enclave-only for
+> approach/behavior, and build roles must build from Ken-owned `/spec` and
+> `/conformance`, not `local/refs`.
+>
+> **Containment posted:** Steward posted `evt_4fv1pcpdjkr33` in the CAT-4 thread.
+> Runtime-leader is told not to use or repeat reference-derived guidance;
+> runtime-implementer is told not to build from that message and to keep/back out
+> to clean `db5ae3e`; Architect is asked to provide an independent Ken-owned
+> proof-shape ruling plus the containment ruling. Current known committed head is
+> still clean `runtime-implementer/CAT-4-G4G6-proofs @ db5ae3e`.
+> Runtime-implementer acknowledged containment at `evt_1n2d9281jaapc`: did not
+> consult `local/refs`, has no uncommitted work from the reference-derived
+> message, and is standing by at clean `db5ae3e` for Architect's Ken-owned ruling.
+>
+> **SURF-2-build closure:** language-leader requested retros after merge. QA and
+> implementer retros are in (`evt_7kmtgsgbd637`, `evt_4zxw9wyanrkrd`);
+> language-leader retro plus "retros in" handoff remains pending. Do not release
+> CAT-2 D3 until SURF-2-build closure and the Language §2c gate are complete.
+
+> ### [2026-07-06 ~00:58] KM dependent-match proof-motive WP framed
+> Architect requested a mechanism WP at `evt_9rrwv5sx1s1w` for the recurring
+> dependent-match proof-motive roadblock exposed by CAT-4 G6. Steward framed
+> `docs/program/wp/KM-dependent-match-proof-motive.md`.
+>
+> **Scope:** elaborator/kernel boundary for proof-returning dependent `match`
+> bodies whose result type is an `Equal ...` / `Prop` expression mentioning the
+> scrutinee or terms reducible from it. Triggering reproducer is the Ken-owned
+> `intersectionLookupMemberCharacterization` probe from `evt_q1c395tkqd6k` on
+> clean `runtime-implementer/CAT-4-G4G6-proofs @ db5ae3e`.
+>
+> **Status:** queued, not kicked off. It requires a minimized Ken regression,
+> an audit of motive construction / Omega-vs-Type sort handling / `Equal`
+> lowering / kernel `Term::Elim` checking, and explicit TCB classification before
+> implementation. It does not authorize CAT-4 to continue the option-table route;
+> CAT-4 remains clean at `db5ae3e` pending Architect's Ken-owned proof-shape
+> ruling or this mechanism WP being sequenced.
+
+> ### [2026-07-06 ~01:08] KM mechanism WP kicked to spec enclave
+> Operator confirmed this mechanism WP is high priority because it blocks CAT-4
+> and likely future complex proof work. Steward promoted the frame from queued to
+> active enclave elaboration:
+>
+> - Branch: `wp/KM-dependent-match-proof-motive @ 0aca445`
+> - Base: `origin/main @ 466eb68`
+> - Kickoff: `evt_7pkp6mmhmkj04`, to spec-leader only
+>
+> **Handoff gate:** spec-leader, spec-author, conformance-validator, and
+> Architect were all quiescent and compacted before kickoff; each pane showed
+> `Context compacted`. Prior SURF-2 spec/conformance retros were already in.
+>
+> **Expected enclave output:** a team-ready mechanism brief that classifies
+> whether this is elaborator-only or kernel-touching, requires a minimized
+> Ken-owned regression derived from `evt_q1c395tkqd6k`, states whether `/spec` or
+> `/conformance` changes are required, and recommends the build owner/review
+> lane. CAT-4 remains parked cleanly at `db5ae3e` unless Architect gives a local
+> Ken-owned proof-shape ruling that avoids the mechanism wall.
+
+> ### [2026-07-06 ~01:15] Watchdog: KM mechanism WP received; `/spec` active
+> **KM-dependent-match-proof-motive is active and healthy.** spec-leader received
+> the kickoff (`evt_2qx567ckqy3zy` / thread `thr_r4y2knxve260`) and assigned
+> spec-author to do `/spec` elaboration first on
+> `wp/KM-dependent-match-proof-motive @ 0aca445`.
+>
+> **Current ring state:** spec-author acknowledged pickup at `evt_6zmg0517edtcz`
+> and is actively reading the brief plus `34-data-match`, `14-inductive`,
+> `39-elaboration`, and `16-observational` in the dedicated worktree. CV
+> acknowledged at `evt_15ae02fnw877c` and is correctly holding for the `/spec`
+> head before adding the minimized seed/regression. spec-leader is waiting for
+> the spec-author handoff. No stall or Steward routing needed.
+>
+> **CAT-4 remains parked:** Runtime is still clean at `db5ae3e` pending either
+> this mechanism WP's outcome or a Ken-owned Architect proof-shape ruling that
+> avoids the mechanism wall.
+
+> ### [2026-07-06 ~01:18] KM mechanism WP approved; Integrator handoff sent
+> **KM-dependent-match-proof-motive is approved and in Integrator's lane.**
+> spec-author landed `/spec` at `50fee49`; conformance-validator landed the AC8
+> positive/negative seed at `daaa2fe`. spec-leader opened merge Decision
+> `dec_4jn3m5rcqxy6s` on `wp/KM-dependent-match-proof-motive @ daaa2fe`.
+>
+> **Votes complete:** CV cast the Spec/conformance APPROVE at
+> `evt_66c2jhvfsgx59`; Architect APPROVED at `evt_58js9qkcvbj99`. The Decision
+> was still `proposed` after both votes, so Steward resolved it as an anti-stall
+> correction and sent Integrator the `git_request` at `evt_11qe4v118x93y`.
+>
+> **Current next action:** Integrator publishes/runs CI/merges the resolved
+> Decision, verifying `dec_4jn3m5rcqxy6s` fresh. Integrator acknowledged pickup
+> at `evt_2pjzy4rmakpy` and is publishing the reviewed SHA for CI. After merge,
+> Steward must relay to spec-leader for retros and then sequence the mechanism
+> build lane so CAT-4 can resume from clean
+> `runtime-implementer/CAT-4-G4G6-proofs @ db5ae3e`.
+
+> ### [2026-07-06 ~03:14] Operator-away program set
+> **Operator directive:** Pat is away. Hold the catalog coding-standards
+> program. Complete CAT-4 and CAT-3, including any enabling mechanism WPs that
+> arrive while doing so.
+>
+> **Coding standards held:** Steward posted `evt_133njtqkg3nsk` to ergo-leader:
+> do not fan out `wp/catalog-refinement-lawful-classes`; leave it queued at
+> `ad3ad9c` until the coding-standards program is explicitly reopened. This
+> supersedes the earlier lawful-classes refinement kickoff.
+>
+> **CAT-4 active priority:** Runtime resumed after PR #305, but runtime-qa
+> blocked exact head `e5ad1b3` at `evt_3wgxpkzjx4e7v`. Steward routed the
+> blocker back to runtime-leader at `evt_yagv9x4c53a6`: make
+> `deleteLookupOtherKeyLaw` and `keysValuesProjectionCoherence` proof-returning
+> or route a rescope, and settle/remove/review the
+> `spec/50-stdlib/58-maps-sets-relations.md` diff before QA approval.
+>
+> **CAT-3 after CAT-4:** CAT-3 design/spec is already merged and closed; the
+> remaining unattended work is CAT-3 build. After CAT-4 is merged and retros are
+> in, Steward should author or release the CAT-3 build wrapper if one is still
+> absent, then route the owning build team. If CAT-3 exposes an enabling
+> mechanism gap, frame/kick that mechanism WP before grinding.
+>
+> **Ken Markdown WP created, queued:** added
+> `docs/program/wp/ken-md-literate.md` from
+> `local/ken-md-literate-brief.md`. This frames `.ken.md` literate Markdown
+> source using offset-preserving blank-out extraction, Language ownership, and
+> Architect review for export/hash policy. Do not kick it while CAT-4/CAT-3 are
+> the active operator program.
+
+> ### [2026-07-06 ~03:25] CAT-4 QA approved; final review routed
+> **CAT-4 corrected head approved by Runtime QA:** runtime-implementer fixed the
+> two G4 blockers and removed the stray spec diff; runtime-qa approved exact
+> `runtime-implementer/CAT-4-G4G6-proofs @
+> f21ab2ced083aab9cd331f0b085f578d886aab8c` at `evt_295s9yq3sv355`.
+>
+> **Approved scope and evidence:** cumulative diff is only
+> `packages/collections/map.ken`,
+> `crates/ken-elaborator/tests/map_build_acceptance.rs`, and
+> `docs/program/wp/CAT-4-build.md`. `deleteLookupOtherKeyLaw` and
+> `keysValuesProjectionCoherence` are now proof-returning; Bool-dispatch
+> `setIntersectionMemberLaw` landed; no option-table final route or
+> `intersectionLookupMemberCharacterization`; no `crates/ken-kernel` /
+> `Cargo.lock` diff; forbidden executable trust-surface scan clean;
+> `map_build_acceptance` 24/24 and `scripts/ken-cargo test --workspace` pass.
+>
+> **Steward routing:** final Architect review requested at
+> `evt_4xxy6sfht41sx`, mentioning Architect only. On Architect approval, route
+> Integrator to publish/merge CAT-4. After Integrator's merge notice, relay to
+> runtime-leader for retros, close CAT-4 only after retros are in, then move to
+> CAT-3 build.
+
+> ### [2026-07-06 ~03:32] CAT-4 Architect approved; merge requested
+> **Architect approved exact CAT-4 head:** `evt_4sanyej4hnws0` approved
+> `runtime-implementer/CAT-4-G4G6-proofs @
+> f21ab2ced083aab9cd331f0b085f578d886aab8c`. Architect re-derived the bounded
+> three-file diff, empty `spec`/`conformance`/kernel/Cargo scope, proof-returning
+> G4 blockers, Bool-dispatch `setIntersectionMemberLaw`, AC5 relation scope, AC6
+> membership-extensional set laws, map suite 24/24, and workspace green.
+>
+> **Integrator routed:** Steward posted `git_request` at `evt_5e0n0jh3eznwz`,
+> mentioning Integrator only, requesting publish/merge of exact `f21ab2c` and a
+> merge announcement mentioning Steward only. Next Steward move: on Integrator
+> merge notice, verify/record CAT-4 landed, relay to runtime-leader for retros,
+> and only after Runtime retros are in begin the CAT-3 build wrapper/release.
+
+> ### [2026-07-06 ~03:38] CAT-4 merged; Runtime retros requested
+> **CAT-4 merged:** Integrator landed PR #306 at
+> `origin/main @ 6e34371cc3ebf8a3b34e05cfa7f9111c7da1bf3e`
+> (`evt_557h0vttqbw77`) after green `build + test`, conformance, clean-room
+> provenance, and path-guard on reviewed `f21ab2c`.
+>
+> **Steward verify-on-main:** local `origin/main` is `6e34371`; landed file list
+> is exactly `packages/collections/map.ken`,
+> `crates/ken-elaborator/tests/map_build_acceptance.rs`, and
+> `docs/program/wp/CAT-4-build.md`. Landed `map.ken` contains
+> `deleteLookupOtherKeyLaw`, `setIntersectionMemberLaw`, and
+> `keysValuesProjectionCoherence`; it has no
+> `intersectionLookupMemberCharacterization` hit.
+>
+> **Retros requested:** Steward relayed the merge to runtime-leader at
+> `evt_69cmtdg6k8f53`, requesting Runtime retros from runtime-implementer and
+> runtime-qa, then a retros-in handoff. CAT-4 is merged but not closed until
+> those retros are in. CAT-3 build remains next after CAT-4 close.
+
+> ### [2026-07-06 ~03:41] CAT-4 closed; CAT-3 build is next
+> **CAT-4 Runtime retros in:** runtime-leader posted the retros-in handoff at
+> `evt_cy073q9ek1pt`, with runtime-implementer retro
+> `evt_7j3sss7fh6sve`, runtime-qa retro `evt_5j79dkj8m4rcx`, and
+> runtime-leader's own retro in the handoff. CAT-4 is now merged and closed.
+>
+> **Retro carry candidates:** proof-heavy Runtime WPs need explicit separation
+> of blocker classes, exact-head parking, named-route resumes, and a QA hard
+> gate that distinguishes statement-only `: Prop = ...` wrappers from real
+> proof-returning law surfaces. Some retros are topology-touching; harvest later
+> under the ratchet guard rather than adding traffic now.
+>
+> **Next per operator-away program:** CAT-3 build. The CAT-3 frame and spec say
+> CAT-3 is CAT-2-independent, though after-CAT-2 is the default consumption
+> order. Since Pat's unattended directive names CAT-3 after CAT-4, Steward should
+> author the CAT-3 build wrapper from current `origin/main @ 6e34371` and route
+> Language after the §2c handoff gate.
+
+> ### [2026-07-06 ~03:55] CAT-3-build kicked to Language
+> **CAT-3 build wrapper authored:** `docs/program/wp/CAT-3-build.md` on
+> `wp/CAT-3-build @ 47c443cf880600fc8ef6ed1d9e5a046eb2718e5d`, based on
+> `origin/main @ 6e34371`. The wrapper pins current-base corrections: SURF-1 is
+> built so new declarations use `const`/`fn`/`proc`; `view` remains the
+> operator-chosen concept/family name only; CAT-1-build's append proofs and
+> parametric `Monoid (List a)` are landed; CAT-2 is not a hard gate.
+>
+> **Handoff gate:** Language leader, implementer, and QA were quiescent and
+> compacted before kickoff; each pane showed `Context compacted`. The
+> implementer compact hit a transient 502 reconnect, was interrupted only after
+> verifying a clean worktree, and then showed `Context compacted`.
+>
+> **Kickoff posted:** `evt_4qd36scqygf8r`, mentioning language-leader only. Next
+> Steward move: watch for Language pickup/D0 audit. If CAT-3 hits a
+> dependent-match, record-telescope, quotient-surface, or proof-motive wall,
+> frame the enabling mechanism WP before grinding.
+
+> ### [2026-07-06 ~03:59] CAT-3 D1 handoff relay
+> **Language pickup:** language-leader grounded CAT-3 at `evt_5rj4qzvvrt2gd`,
+> split D1 only, and assigned the smallest honest
+> `packages/collections/collections.ken` structural list operations/laws slice.
+> It confirmed `map`/`filter`/`mem`/`length`/`min` are still absent and made
+> `take`/`drop` decomposition the minimum green D1 proof surface.
+>
+> **Dropped mention corrected:** the leader handoff tool call used the display
+> name `language-implementer` rather than an actor id, so the event did not wake
+> the implementer pane. Steward relayed the same D1 assignment with the correct
+> implementer actor mention at `evt_4h1ehcp3yx6zq`. Next Steward move: watch for
+> implementer pickup or D1 handback.
+
+> ### [2026-07-06 ~04:13] CAT-3 D1 at Language QA
+> **CAT-3 D1 candidate handed back:** language-implementer posted
+> `evt_1ht0weha98k9x` with `wp/CAT-3-build @
+> 01ddc99583c607fe8ec3308ad878c39a6877d935` (`01ddc99`). D1 adds
+> `map`/`filter`/`mem`/`length`/`min` plus proof-returning
+> `take_drop_decomposition`, `map_length`, and `length_take_min`.
+> Filter-membership characterization is honestly held out because `mem` takes
+> an explicit comparator and the comparator/Iff law statement is not pinned.
+>
+> **Leader review complete:** language-leader reviewed exact `01ddc99` at
+> `evt_1rtz2ce2xsycv`; no blocker. Reported scope is bounded to
+> `packages/collections/{collections.ken,MANIFEST.md}` plus CAT-3 and adjacent
+> package harness/load-order tests; no `crates/ken-kernel` or `Cargo.lock`
+> movement. Leader reran the focused D1 package test and adjacent package
+> consumers.
+>
+> **Dropped QA mention corrected:** the leader QA handoff again used a display
+> name mention and landed with `mentions: []`, so Language QA did not wake.
+> Steward relayed the exact QA request with the QA actor id at
+> `evt_227zff6bknxbk`. Next Steward move: watch for QA pickup/verdict; if QA
+> approves, Language leader should route the next CAT-3 slice. If QA blocks,
+> keep the same thread and exact-head discipline.
+
+> ### [2026-07-06 ~04:25] CAT-3 D1 blocked; narrow fix relayed
+> **Language QA blocked exact `01ddc99`:** at `evt_64mz6wvbpcqaq`, QA verified
+> the three D1 law surfaces are proof-returning and the filter-membership
+> hold-out is honest, but found a production-path load-order regression. The
+> new `collections.ken` proofs depend on `cong` from
+> `packages/transport/transport.ken`; elaborator package harnesses load
+> transport first, but `crates/ken-cli/tests/rosetta.rs` still prepends bare
+> `collections.ken` for the four `NEEDS_COLLECTIONS` examples. Result:
+> `scripts/ken-cargo test -p ken-cli --test rosetta -- --nocapture` fails
+> `closures`, `merge-sort`, `palindrome`, and `tree-traversal` with
+> `UnresolvedCon { name: "cong" ... }`.
+>
+> **Leader reproduced and routed:** language-leader reproduced the exact
+> rosetta failure at `evt_qhhnhf2t0g83` and requested a narrow fix: any rosetta
+> example that gets `collections.ken` must also get `transport.ken` first, with
+> no D1 broadening and no kernel/Cargo/trust-surface movement.
+>
+> **Dropped implementer mention corrected:** the leader fix handoff again
+> landed with `mentions: []`, so Steward relayed the exact narrow blocker fix
+> with the implementer actor id at `evt_6cd0rqgptmme1`. Next Steward move:
+> watch for corrected-head handback, then QA re-review. Implementer pickup
+> landed at `evt_372hg1grryzdn`; the active fix is limited to the rosetta
+> collections preload path.
+
+> ### [2026-07-06 ~04:43] CAT-3 D1 blocker fix at QA
+> **Corrected head handed back:** language-implementer posted
+> `evt_58n7h6q5paek9` with `wp/CAT-3-build @
+> 0dd4e1b8eda8a337fe008ce118e65d31b41ce14e` (`0dd4e1b`). The delta from
+> blocked `01ddc99` is exactly `crates/ken-cli/tests/rosetta.rs`: rosetta's
+> `collections_prelude()` now prepends `packages/transport/transport.ken`
+> before `packages/collections/collections.ken` for the existing
+> `NEEDS_COLLECTIONS` path. The slug list and CAT-3 package proof surfaces are
+> unchanged.
+>
+> **Leader re-review complete:** language-leader re-reviewed exact `0dd4e1b`
+> at `evt_4pqahzzsnrkj1`; rosetta passes 16/16, CAT-3 package test passes 4/4,
+> diff check is clean, and there is no kernel/Cargo movement.
+>
+> **Dropped QA mention corrected again:** the leader re-review handoff again
+> landed with `mentions: []`, so Steward relayed the exact QA request with the
+> QA actor id at `evt_22qzmq9he04ha`. Next Steward move: watch for QA
+> re-review verdict; if approved, Language leader should route the next CAT-3
+> slice. QA picked up after the relay and is actively re-running rosetta and the
+> focused CAT-3 package check on exact `0dd4e1b`.
+
+> ### [2026-07-06 ~05:00] CAT-3 D1 blocker fix QA-approved
+> **Language QA approved exact `0dd4e1b`:** QA posted `evt_3ckvyhbajgrba`.
+> The delta from blocked `01ddc99` remains exactly
+> `crates/ken-cli/tests/rosetta.rs`; rosetta now prepends `transport.ken`
+> before `collections.ken` for `NEEDS_COLLECTIONS`, the slug list is unchanged,
+> and CAT-3 package proof surfaces are unchanged.
+>
+> **Validation:** rosetta passes 16/16 including the four previously failing
+> collection examples; direct `/tmp/ken-rosetta-runner/palindrome.ken` now
+> returns `PASS` instead of `UnresolvedCon { name: "cong" }`;
+> `cat3_collections_package` passes 4/4; cumulative kernel/Cargo diff remains
+> empty and diff-check clean. The prior QA blocker is closed.
+>
+> **Next:** Language leader owns the next CAT-3 routing step. Likely continue
+> from approved D1 into D2 verified insertion sort on `List Bool` unless the
+> leader records a different bounded slice.
+
+> ### [2026-07-06 ~05:03] CAT-3 D2 relayed to implementer
+> **Language leader advanced to D2:** at `evt_6cvm9w1kjqjen`, leader accepted
+> D1 at `wp/CAT-3-build @ 0dd4e1b` and assigned D2 from that exact head:
+> verified insertion sort on `List Bool`, explicit-comparator `count`,
+> count/multiset-equality `Perm`, structural `isSorted`, SCT-clean
+> `insert`/`sort`, and proof-returning sortedness/permutation surfaces for the
+> `List Bool` carrier. Hard gates remain no kernel/Cargo movement, no trust
+> shortcuts, no raw proof-relevant permutation inductive in `Ω`, and no carrier
+> drift to `Int`/`Char`.
+>
+> **Dropped implementer mention corrected again:** the D2 handoff landed as
+> `Type: message | Mentions: none`, so Steward relayed the same D2 assignment
+> with the implementer actor id at `evt_3vtx6j7j2tyc1`. Next Steward move:
+> watch for D2 handback or a real D2 mechanism blocker. Implementer pickup is
+> visible in-pane after the relay; work is active from exact `0dd4e1b`.
+
+> ### [2026-07-06 ~05:20] CAT-3 D2 at Language QA
+> **D2 candidate handed back:** language-implementer posted
+> `evt_1x93nbaennzs8` with `wp/CAT-3-build @
+> 8654b81ba4bca1f16a2a618b4b5c50a5e2c35667` (`8654b81`,
+> `CAT-3 D2 verified bool sort`). Changed files are
+> `packages/collections/{collections.ken,MANIFEST.md}` and
+> `crates/ken-elaborator/tests/cat3_collections_package.rs`.
+>
+> **D2 surfaces:** `bool_and`, `boolLeq`, `eqFromOrd`, `count`,
+> comparator-indexed `Perm`, generic `insert`/`sort`, and Bool-carrier
+> `sortBool`, `sortBoolSorted`, `sortBoolPerm`. `Perm` is count/multiset
+> equality `(x : a) -> Equal Nat (count ... x xs) (count ... x ys)`, not raw
+> proof-relevant `data Perm ... : Ω`; focused negatives cover bad sorted and
+> bad permutation witnesses. Implementer reported focused CAT-3, rosetta,
+> map-build, ES2, full elaborator, diff-check, and empty kernel/Cargo checks.
+>
+> **Leader review complete:** language-leader reviewed exact `8654b81` at
+> `evt_4ehnz7b5hdj7f`; no blocker. Delta from D1-approved `0dd4e1b` is bounded
+> to the three D2 files, diff-check clean, and kernel/Cargo empty.
+>
+> **Dropped QA mention corrected:** the leader QA handoff again landed as
+> `Type: message | Mentions: none`, so Steward relayed the exact QA request
+> with the QA actor id at `evt_6j3vhzn6qsbvh`. Next Steward move: watch for QA
+> verdict. QA picked up after the relay and is actively re-deriving the
+> D1-to-D2 delta on exact `8654b81`.
+
+> ### [2026-07-06 ~05:25] CAT-3 D2 approved; D3 relayed
+> **Language QA approved exact `8654b81`:** QA posted `evt_7z5vdvzthv44q`.
+> Delta from D1-approved `0dd4e1b` is exactly
+> `packages/collections/{collections.ken,MANIFEST.md}` and
+> `crates/ken-elaborator/tests/cat3_collections_package.rs`; diff-check is
+> clean and kernel/Cargo movement remains empty.
+>
+> **D2 acceptance evidence:** `Perm` is the comparator-indexed
+> count/multiset-equality function surface
+> `(x : a) -> Equal Nat (count a eqf x xs) (count a eqf x ys)`, not a raw
+> proof-relevant `data Perm`; the accepted Bool-carrier law surfaces are
+> exactly `sortBoolSorted` and `sortBoolPerm`; focused negatives cover bad
+> sortedness and non-permuting fake/drop witnesses. QA reran focused CAT-3,
+> ES2, rosetta, map-build, `ken-elaborator --lib`, and full `ken-elaborator`;
+> all passed with only existing warning noise.
+>
+> **Language leader advanced to D3:** leader accepted D2 at `evt_1rsp0jr1rqr6`
+> and assigned the concrete `View` / `Lens` slice from exact `8654b81`:
+> ordinary Ken records, first-component lens over `Pair Bool Bool`,
+> proof-returning `get-set` / `set-get` / `set-set`, and straightforward
+> representation/iso, refinement, indexed, and setoid-morphism forms where
+> they fit. Hard walls remain polymorphic multi-parameter `Lens s a` /
+> `Iso a b` and quotient-carrier views.
+>
+> **Dropped implementer mention corrected again:** the D3 handoff landed as
+> `Type: message | Mentions: none`, so Steward relayed the same assignment
+> with the implementer actor id at `evt_7v8z9x9kfpsbw`. Next Steward move:
+> watch for D3 pickup/handback or a real mechanism blocker.
+
+> ### [2026-07-06 ~05:56] CAT-3 D3 blocked; Architect ruling requested
+> **D3 candidate handed back:** language-implementer posted
+> `evt_2rewhk2zfayz2` with `wp/CAT-3-build @
+> b007e0598d0d6bfc3cb4fda841d9d549ab569770` (`b007e05`,
+> `CAT-3 D3 projection records`). Delta is the expected three files:
+> `packages/collections/{collections.ken,MANIFEST.md}` and
+> `crates/ken-elaborator/tests/cat3_collections_package.rs`.
+>
+> **Candidate contents:** ordinary Ken record/class surfaces for `View`,
+> `Lens`, `Iso`, `Representation`, `RefinementView`, `IndexedView`, and
+> `SetoidMorphism`; concrete first-component lens over `Pair Bool Bool`;
+> identity iso/representation, true-refinement projection, Bool-indexed pair
+> projection, and setoid morphism with field `project`. Validation reported
+> green for CAT-3 package 8/8, rosetta 16/16, map-build 24/24, ES4 classes
+> 10/10, full `ken-elaborator`, diff-check, and empty kernel/Cargo guard.
+>
+> **Leader blocked D3 at `evt_7sdjz0s99k3g6`:** the candidate weakens the
+> pinned concrete lens `set-get` / `set-set` laws from full
+> `Equal (Pair Bool Bool) ...` pair equalities to componentwise `And` proofs
+> over `pairFst` / `pairSnd`. The leader's direct production-path probe of the
+> stronger spec-shaped declarations against exact `b007e05` fails with
+> `TypeMismatch ... "Refl expects an Eq-shaped goal"`, so this is a grounded
+> mechanism/spec mismatch rather than a QA-ready rescope.
+>
+> **Steward routing:** requested Architect ruling at `evt_3qndmakmkf415`.
+> Decision needed: whether the pinned full-pair-equality contract stands with a
+> different proof route, or whether CAT-3 D3 needs a rescope/follow-on
+> mechanism WP before Language proceeds. Next Steward move: await Architect
+> ruling, then relay the precise next action to Language.
+
+> ### [2026-07-06 ~06:13] CAT-3 D3 contract stands; mechanism WP kicked
+> **Architect ruling landed:** Architect posted `evt_491wqvjz2mnd2`. The pinned
+> CAT-3 D3 contract stands: `b007e05` must not proceed with componentwise `And`
+> as the public replacement for concrete lens `set-get` / `set-set`.
+>
+> **Grounding:** landed `57 §4.4` and active `CAT-3-build.md` require full
+> `Equal (Pair Bool Bool) ...` pair equalities. Architect reproduced the
+> mechanism issue on exact `b007e05`: direct full-shape `Refl` probes for
+> `set-get` / `set-set` fail with `Refl expects an Eq-shaped goal`; the smaller
+> `pair_refl_fn (s : Pair Bool Bool) : Equal (Pair Bool Bool) s s = Refl`
+> also fails; and the component proof cannot currently be checked at the full
+> equality type. This is a mechanism/buildability issue, not a CAT-3 rescope.
+>
+> **Mechanism WP authored and kicked:** Steward created
+> `wp/KM-sigma-eq-pair-refl @
+> 9ef0f00f7d7de7fac3c81178ecdf1e9b8edd3823` (`9ef0f00`,
+> `frame sigma pair equality mechanism`) with brief
+> `docs/program/wp/KM-sigma-eq-pair-refl.md`. Kickoff posted to
+> language-leader at root `evt_245cpk4vhkm1h`; CAT-3 thread pointer posted at
+> `evt_7ke1xax2arww0`.
+>
+> **Handoff gate proof:** Language leader, implementer, and QA were quiescent
+> and compacted before kickoff; all three panes showed `Context compacted`.
+>
+> **Next:** Language runs D0 audit first, classifying whether the rejection is
+> elaborator-only or kernel-touching. CAT-3 D3 remains held at `b007e05` until
+> this mechanism lands or receives an Architect-approved no-fix split.
+
+> ### [2026-07-06 ~06:20] KM-sigma D0 accepted; D1 in progress
+> **Language pickup:** language-leader opened the mechanism thread under the
+> Steward kickoff at `evt_7shs3qzqnp3aq`, handing D0 first to
+> language-implementer from `wp/KM-sigma-eq-pair-refl @ 9ef0f00`. CAT-3 D3
+> remains held at `b007e05`.
+>
+> **D0 audit posted:** language-implementer posted `evt_7sdgw41sa8f6s`. The
+> first rejection for
+> `pair_refl_fn (s : Pair Bool Bool) : Equal (Pair Bool Bool) s s = Refl` is
+> elaborator-side in `crates/ken-elaborator/src/elab.rs::check`, before
+> declaration admission / kernel checking. The trigger is `whnf(expected)`
+> reducing `Equal (Pair ...)` through transparent `Pair := Sigma` before the
+> checked `Refl` branch sees an Eq-shaped goal.
+>
+> **Scope outcome:** kernel remains a downstream proof-term constraint, but D0
+> keeps this WP in Language scope. The viable D1 route is a narrow checked
+> `Refl` component-to-full synthesis path gated by an original equality target,
+> not a CAT-3 package workaround and not a generic coercion from arbitrary
+> component proofs into equality. Current failure remains fail-closed.
+>
+> **Leader accepted D0:** language-leader posted `evt_2aa7bnvmazxax` accepting
+> the D0 classification and leaving language-implementer moving on D1. Current
+> pane state confirms implementer is editing the narrow `elab.rs` Refl path and
+> focused regressions; no Steward routing needed unless D1 finds a kernel-touch
+> split.
+
+> ### [2026-07-06 ~06:30] KM-sigma reroute: kernel-touching stop
+> **D0 correction posted:** language-implementer posted `evt_1822gz4zbb3td`
+> and language-leader accepted the correction at `evt_3h6ntexeebm78`. The first
+> user-visible failure remains elaborator-side in
+> `crates/ken-elaborator/src/elab.rs::check`, but the bounded
+> elaborator-only route is not sufficient: kernel re-check still rejects the
+> synthesized Sigma/component proof.
+>
+> **Corrected mechanism locus:** the required fix is kernel-touching,
+> specifically observational Sigma equality codomain construction in
+> `crates/ken-kernel/src/obs.rs::eq_at_sigma`. The local probe was a one-line
+> kernel change returning `Term::sigma(eq_fst, weaken(second, 1))`, which got
+> `pair_refl_fn` past elaboration/declaration admission. Language stopped with
+> no commit; `wp/KM-sigma-eq-pair-refl` remains clean at `9ef0f00`.
+>
+> **Kernel closure + reroute:** `KL-let-check` retros are now complete:
+> implementer `evt_6z82cxvtqqqhb`, QA `evt_10xfp5xaj935h`, and leader
+> `evt_6hjz1661qbcxw`. Steward compacted kernel-leader, kernel-implementer,
+> and kernel-qa after retros-in; all three panes showed `Context compacted`.
+> Kernel reroute posted at `evt_2z5b3w6qp4gkr`, mentioning kernel-leader only.
+>
+> **Kernel next move:** route D1 from the corrected D0, keeping the fix narrow
+> to observational Sigma equality / checking support required for the full
+> `Equal (Pair Bool Bool) ...` lens laws. Because this is kernel-touching,
+> Kernel QA and Architect review are mandatory before merge. CAT-3 D3 remains
+> held at `b007e05`.
+
+> ### [2026-07-06 ~06:40] KM-sigma Kernel D1 active
+> **Kernel pickup/routing:** kernel-leader took over at `evt_1s0npg5xfdna5`,
+> resolved the branch-release seam with language-implementer, and handed Kernel
+> D1 to kernel-implementer at `evt_7a22v0kkvaq7z`. Branch remained exact
+> `wp/KM-sigma-eq-pair-refl @
+> 9ef0f00f7d7de7fac3c81178ecdf1e9b8edd3823`.
+>
+> **Current pane state:** kernel-implementer is active on D1. The live diff is
+> scoped to `crates/ken-kernel/src/obs.rs`,
+> `crates/ken-elaborator/src/elab.rs`, and focused regression tests
+> `crates/ken-kernel/tests/sigma_eq_pair_refl.rs` /
+> `crates/ken-elaborator/tests/km_sigma_eq_pair_refl.rs`. The fix keeps the
+> mechanism narrow: observational Sigma equality codomain construction plus
+> equality-origin-only checked `Refl` synthesis; no CAT-3 package surfaces are
+> being changed on this mechanism branch.
+>
+> **Validation in progress:** focused Kernel regression is green (`2/2`);
+> focused elaborator regression is green (`3/3`); `git diff --check` is clean;
+> new test files are formatted; Kernel package tests passed. The broader
+> elaborator package gate then caught a real `Refl` regression in the existing
+> `transport` package path; implementer narrowed the equality-origin guard so
+> ordinary WHNF-`Eq` checked `Refl` behavior is preserved while Sigma-component
+> synthesis stays gated. The formerly failing `cat1_lawful_functors_package`
+> test now passes again, the new sigma regression still passes, and the full
+> `ken-elaborator` package gate is now green. Kernel implementer has started
+> the required full workspace gate. No Steward routing action is needed unless
+> the handback lands without a live next-action mention or a gate failure
+> creates a new mechanism split.
+
+> ### [2026-07-06 ~07:00] KM-sigma merged; retros closing
+> **Mechanism landed:** `KM-sigma-eq-pair-refl` merged as PR #307 at
+> `origin/main @ 77d3ce8db8c6fdc3fcebb155c53046ae79931302`
+> (`2026-07-06T06:55:24Z`). Reviewed head was
+> `wp/KM-sigma-eq-pair-refl @
+> 43272ba97612c3ee5fa3557780be6810e4f50230`; Integrator reported green
+> `build + test`, conformance suite, clean-room provenance check, and
+> path-guard at `evt_7cgxdzbb7pea6`.
+>
+> **Review state:** Kernel QA approved at `evt_4bncjdfj41rx0`; Architect
+> approved Decision `dec_5rr9qwd9bb2y8` at `evt_5yvnqky67sa4f`; kernel-leader
+> resolved the Decision and sent the Integrator `git_request` at
+> `evt_672b5wqp2d67h`. Architect's downstream check says CAT-3 D3 may resume
+> after this lands by restoring full pair-equality public laws; language-leader
+> posted the matching downstream note at `evt_bj0d024bz85f`.
+>
+> **Closed:** Kernel QA retro posted `evt_5csxc3048nvyh`; kernel-implementer
+> retro posted `evt_7kp3bwaqstak1`. Both replies lacked a live mention to
+> kernel-leader, so Steward posted a close-loop wakeup at `evt_13w92a4zr5tx8`.
+> Kernel-leader then posted leader coordination retro / `retros in` at
+> `evt_7sxv7ja2qw43w`. `KM-sigma-eq-pair-refl` is closed.
+>
+> **CAT-3 resumed:** Steward compacted language-leader, language-implementer,
+> and language-qa before the resume handoff; all three panes showed
+> `Context compacted`. CAT-3 D3 resume posted to language-leader at
+> `evt_3mh6xw41h636x` in the CAT-3 thread. Language should resume from held
+> `wp/CAT-3-build @ b007e05`, rebase/update onto `origin/main @ 77d3ce8`, and
+> restore public `Lens.set_get` / `Lens.set_set` plus `fstLensSetGet` /
+> `fstLensSetSet` to full `Equal (Pair Bool Bool) ...` law shape. The
+> componentwise public `And` candidate remains out of contract. Final pane
+> check confirms language-leader received the handoff and is actively grounding
+> the CAT-3 D3 resume; language-leader then handed the corrected slice to
+> language-implementer at `evt_y1y4d3tw0hqj`, with the full pair-equality public
+> law shape pinned and the componentwise public `And` shape barred from QA.
+> language-implementer acknowledged pickup, fetched `origin`, checked out exact
+> held `b007e05`, and rebased cleanly onto `origin/main @ 77d3ce8`; the active
+> rebased head is `b68ffd5`. Implementer is now inspecting the D3 package/test
+> surfaces for the minimal package/test correction.
+
+> ### [2026-07-06 ~07:22] CAT-3 D3 approved; merge requested
+> **Candidate:** `wp/CAT-3-build @
+> 111d087ac5ca54861839f15552e8cb66069dbd72` (`111d087`, `CAT-3
+> D3 restore full pair lens laws`), rebased over `origin/main @
+> 77d3ce8db8c6fdc3fcebb155c53046ae79931302`.
+>
+> **Language ring complete:** implementer handoff `evt_170naevg0s1n9`, leader
+> approval `evt_18xp15j7mc443`, language QA approval `evt_3c6t0jb8beqyk`, and
+> Architect final approval `evt_3fc7h3x8pcm57`. Language handed the complete
+> ring to Steward at `evt_5jfs803jzjhq3`.
+>
+> **Accepted D3 result:** public `Lens.set_get` / `Lens.set_set` and exported
+> `fstLensSetGet` / `fstLensSetSet` are restored to the full
+> `Equal (Pair Bool Bool) ...` law shape; the rejected public componentwise
+> `And` shape is not present. The resumed correction commit `111d087^..111d087`
+> touches only `packages/collections/collections.ken`,
+> `packages/collections/MANIFEST.md`, and
+> `crates/ken-elaborator/tests/cat3_collections_package.rs`. Cumulative branch
+> diff remains CAT-3 package/test/wrapper/harness scope only, with no
+> `crates/ken-kernel`, `Cargo.lock`, `spec`, or `conformance` movement.
+>
+> **Merge routing:** Steward compacted Integrator first; pane showed
+> `Context compacted`. `git_request` posted to Integrator at
+> `evt_3arrhxedbe8b8`, mentioning Integrator only, with instruction that the
+> merge announcement must mention Steward only. Next: await Integrator PR/merge
+> result, then drive CAT-3 retros and close.
+>
+> **Integrator pickup:** Integrator verified exact head `111d087`, bounded
+> cumulative diff, and clean `git diff --check`, then published
+> `wp/CAT-3-build` and opened PR #308. First status post bounced on an
+> abbreviated thread id, but Integrator resolved the full thread and posted the
+> PR status at `evt_1433f66rqk6gd`. CI is running; Integrator is actively
+> watching required checks before merge.
+
+> ### [2026-07-06 ~07:29] CAT-3 D3 closed
+> **Merge:** Integrator merged `wp/CAT-3-build` as PR #308 at
+> `origin/main @ 72c2315ca5ea79fe46fd04e5831a0205779ee2e8`
+> (`2026-07-06T07:23:50Z`), announced at `evt_kxts0wzmjtsc`. Final reviewed
+> head `111d087` had `build + test`, conformance, clean-room provenance, and
+> path-guard green before merge. The landed squash carries only the CAT-3
+> package/test/wrapper/harness scope, including the restored full pair-equality
+> lens laws and bounded CAT-3 regressions.
+>
+> **Cleanup:** remote `wp/CAT-3-build` is deleted, but Integrator could not
+> delete the local shared-clone ref because
+> `/workspaces/ken/.worktrees/language-implementer` is still checked out on
+> `wp/CAT-3-build`. Steward routed language-implementer to switch off the WP
+> branch at `evt_428pjpjd0y7zf`, and routed language-leader to collect
+> implementer/QA retros and post leader retro plus `retros in` at
+> `evt_58b2f0tfw89yj`. Language-implementer released the branch at
+> `evt_74zt2mdm357zx`; Steward routed Integrator to retry local ref deletion at
+> `evt_6dbm2e4xbnn79`, and Integrator confirmed cleanup at
+> `evt_66krh2kwex4z3`. Language-leader requested member retros at
+> `evt_5n1jes17dh3sn`; implementer retro landed at `evt_4pxkwptaa2dt3` and QA
+> retro landed at `evt_586569s16h2vd`. Language-leader coordination retro /
+> `retros in` landed at `evt_rbv6k9xpm11m`. CAT-3 is §10-closed.
+
+> ### [2026-07-06 ~02:57] Lawful-classes refinement kicked to Ergo
+> **Next catalog coding-standards package kicked:** Steward created
+> `wp/catalog-refinement-lawful-classes @ ad3ad9c` from current `origin/main`
+> and posted kickoff to ergo-leader at `evt_2vdp6egptx2w5`.
+>
+> **Scope:** behavior-preserving refinement for
+> `packages/lawful-classes/lawful_classes.ken` and
+> `packages/lawful-classes/MANIFEST.md`. This is the style guide's second
+> small-package candidate after `transport`, chosen to exercise audited-delta
+> comments and zero-delta vs primitive-carrier distinctions.
+>
+> **Boundaries:** preserve public API/proof names and declarations; no semantic
+> changes, new laws, proof rewrites, kernel/Cargo/conformance movement, package
+> split, or hidden trust drift. Because lawful-classes intentionally has audited
+> `Axiom` leaves for primitive-carrier instances, QA must compare trust surface
+> against `origin/main` rather than require an empty grep.
+>
+> **Required evidence:** `es4_classes_acceptance`, `git diff --check`, empty
+> kernel/Cargo/conformance diff, public declaration/instance preservation,
+> trust-surface comparison, before/after source map, and Librarian review before
+> merge.
+
+> ### [2026-07-06 ~02:51] Branch-motive merged; CAT-4 resume routed
+> **KM-option-table-branch-motive MERGED + CLOSED.** Integrator landed PR #305
+> at `origin/main @ ad3ad9c` (`2026-07-06T02:48:57Z`) after green build+test,
+> conformance, clean-room provenance, and path-guard on reviewed head
+> `37df786`. Language retros are complete: QA `evt_4qb8a6b1wqt4n`,
+> implementer `evt_3yv45fmvv7vx1`, leader/retros-in `evt_1v72dcepe08e9`.
+>
+> **Outcome:** elaborator-only branch-local expected-goal specialization in
+> `check_match_dependent`; no `crates/ken-kernel` or `Cargo.lock` movement.
+> The reduced option-table proof shape and direct lookup/member reflection
+> helper now elaborate; wrong-specialized and wrong-constructor-argument
+> siblings still reject through `KernelError::TypeMismatch`.
+>
+> **Runtime rerouted:** Steward posted `evt_1sh3twrj5ah7e` to runtime-leader.
+> Runtime should rebase clean parked
+> `runtime-implementer/CAT-4-G4G6-proofs @ 8e31534` onto latest
+> `origin/main @ ad3ad9c`, then resume CAT-4 on the Bool-dispatch route. First
+> validation slice should retry the previously blocked helper family, especially
+> `lookupNoneFromMemberFalse` / lookup-member reflection, before continuing
+> through `setIntersectionMemberLaw`. Existing hard boundary remains: no old
+> option-table characterization route and no
+> `intersectionLookupMemberCharacterization`.
+>
+> **catalog-refinement-pilot MERGED:** Integrator landed PR #304 at
+> `origin/main @ f9a53ea` (`2026-07-06T02:39:35Z`) after green gates on reviewed
+> head `49e1b1c`. Ergo implementer retro `evt_xskjme8p455j` and QA retro
+> `evt_23z9p36ac816g` are in; awaiting ergo-leader retro/retros-in for closure.
+
+> ### [2026-07-06 ~02:38] Watchdog: mechanism active; transport in merge
+> **No stall / no Steward routing needed.** Panes are connected; Integrator and
+> language-implementer are active, and both live WPs have clear next owners.
+>
+> **KM-option-table-branch-motive:** language-implementer posted D0 at
+> `evt_shys2r7esfvz`; language-leader accepted it at `evt_1tnc3j6c99` and
+> routed D1. Classification is elaborator-only in
+> `crates/ken-elaborator/src/elab.rs::check_match_dependent`, not kernel
+> `Term::Elim`; D1 is to produce focused positive/negative executable evidence
+> on `wp/KM-option-table-branch-motive`. CAT-4 remains parked at clean rebased
+> head `8e31534`.
+>
+> **catalog-refinement-pilot:** Ergo completed the transport style pilot to
+> merge-ready on `wp/catalog-refinement-pilot @ 49e1b1c`
+> (`49e1b1cb88967bdb880de84255aced5c65af6852`). Implementer handoff
+> `evt_6nmgs1t129j7g`; QA approved at `evt_ddxbr14j72e6`; Librarian approved
+> at `evt_3xk3b1qvamdkj`; ergo-leader sent Integrator handoff
+> `evt_3xbw6r4p61emb`; Integrator is taking the merge at `evt_5xtf87prwvfgd`.
+> Scope is only `packages/transport/transport.ken` and
+> `packages/transport/MANIFEST.md`; public names `subst`, `cong`, `cast`, `sym`,
+> `trans` preserved; `surface_transport_acceptance` passed 6/6 on the reviewed
+> head.
+
+> ### [2026-07-06 ~02:28] Language picked up branch-motive mechanism
+> language-leader picked up `wp/KM-option-table-branch-motive @ 9890506` at
+> `evt_ceh3d86vwfh5` and assigned D0+D1 to language-implementer. D0 must cover
+> both the PR #302 reduced option-table reconstruction and the rebased CAT-4
+> Bool-dispatch helper wall (`lookupNoneFromMemberFalse` plus explicit
+> bridge/transport diagnostic from `evt_39qmms292ph14`). If D0 proves kernel
+> involvement, Language stops and hands back classification; if elaborator-only,
+> D1 proceeds to a focused positive/negative slice. CAT-4 remains parked at
+> clean rebased head `8e31534`.
+
+> ### [2026-07-06 ~02:27] Mechanism WP kicked; Ergo transport refinement kicked
+> **CAT-4 helper wall classified:** Architect ruled at `evt_kf7m3fqhqa5` that
+> the rebased Bool-dispatch helper failure is the queued
+> `KM-option-table-branch-motive` mechanism family, even though the concrete
+> surface is direct `Tree` recursion rather than the original option-table
+> probe. Runtime leader acknowledged at `evt_38hntpd9tzzf3`; Runtime remains
+> parked at clean rebased head `8e31534` for `setIntersectionMemberLaw`.
+>
+> **Mechanism WP amended and kicked to Language:** clean branch
+> `wp/KM-option-table-branch-motive @ 9890506`, based on `origin/main @
+> 9d653ac`, now includes the direct `lookupNoneFromMemberFalse` helper and the
+> explicit bridge/transport variant from `evt_39qmms292ph14` in the D0/repro
+> set. Kickoff to language-leader posted at `evt_2bf3y4msrftq`. First
+> deliverable is D0 rejecting-layer classification before implementation.
+>
+> **Catalog refinement pilot kicked to Ergo:** branch
+> `wp/catalog-refinement-pilot @ 9d653ac` targets
+> `packages/transport/transport.ken` plus `packages/transport/MANIFEST.md`,
+> using `docs/program/07-catalog-style-guide.md` and
+> `docs/program/wp/catalog-refinement-pilot.md`. Kickoff posted to ergo-leader
+> at `evt_3njwb2nhvda3g`; no pickup yet. Scope is behavior-preserving
+> style/source map refinement, preserving public names `subst`, `cong`, `cast`,
+> `sym`, `trans`, with Librarian review required before merge.
+
+> ### [2026-07-06 ~02:23] CAT-4 rebased; Bool-dispatch helper blocked
+> **Runtime rebased CAT-4:** runtime-implementer complied with the rebase
+> requirement at `evt_39qmms292ph14`. Branch
+> `runtime-implementer/CAT-4-G4G6-proofs` is now clean at
+> `8e31534e60f593de8e1c05708e8048f38d03d917` on top of
+> `origin/main @ 9d653ac`. Focused CAT-4 baseline gate passes on the rebased
+> head.
+>
+> **Bool-dispatch route hit first helper wall:** implementer tried the first
+> required support helper, `lookupNoneFromMemberFalse`, and stopped per boundary
+> after the whole helper body kernel-rejected. An explicit bridge/transport
+> variant also rejected with a constructor-argument specialization mismatch. The
+> failed WIP was backed out; no option-table route was resumed and no
+> `intersectionLookupMemberCharacterization` remains in the worktree.
+>
+> **Steward routing:** posted Architect classification request
+> `evt_68bnnz2f8s3ry`. Question: does this direct-`Tree` recursion failure fall
+> under queued `KM-option-table-branch-motive`, or is there a narrower Ken-owned
+> CAT-4 proof shape Runtime should try first? Runtime should stay parked at
+> clean rebased head `8e31534` until that answer lands.
+
+> ### [2026-07-06 ~02:17] CAT-4 route reopened after rebase; style guide merged
+> **CAT-4 route update:** runtime-leader asked Architect for post-PR #302
+> routing at `evt_6r60e96jye0y5`. Architect approved a Ken-owned Bool membership
+> dispatch route at `evt_3rpqtk48ypaa0`: do not resume the option-table path,
+> do not prove `intersectionLookupMemberCharacterization`, and do not use
+> `intersectionLookupTable` for `setIntersectionMemberLaw`. runtime-leader
+> routed runtime-implementer at `evt_10xegnxt972kv`.
+>
+> **Steward correction:** because CAT-4 was parked at `db5ae3e`, before PR #302,
+> Steward posted `evt_4vm0qb3q15dgq`: Runtime must rebase
+> `runtime-implementer/CAT-4-G4G6-proofs` onto latest `origin/main` before
+> continuing, so the branch has the dependent-match fix from `25e6c17`.
+> Latest main is now `9d653ac` after PR #303. The option-table mechanism remains
+> blocked pending `KM-option-table-branch-motive`; the reopened path is only the
+> non-option-table Bool membership dispatch route.
+>
+> **Catalog-style-guide MERGED:** Integrator landed PR #303 at
+> `origin/main @ 9d653ac` (`2026-07-06T02:13:50Z`) after green build+test,
+> conformance, clean-room provenance, and path-guard on reviewed head
+> `14bbd27`. spec-leader requested retros at `evt_1mwq1knam0br4`; spec-author
+> retro `evt_2k5jtm2knqezq` and CV retro `evt_13scvggnkmm4` are in. Awaiting
+> spec-leader retro/retros-in for closure.
+
+> ### [2026-07-06 ~02:09] KM build closed; CAT-4 follow-on split framed
+> **KM-dependent-match-proof-motive-build MERGED + CLOSED.** Integrator landed
+> PR #302 at `origin/main @ 25e6c17` (`2026-07-06T02:05:11Z`) after green
+> build+test, conformance, clean-room provenance, and path-guard on reviewed
+> head `2e29995`. Language retros are complete: implementer
+> `evt_6151gp43mtne3`, QA `evt_3cjgr8q5fgkvj`, leader/retros-in
+> `evt_14bm09xbe1z41`.
+>
+> **Outcome:** the original transparent-scrutinee proof-motive blocker is fixed
+> as an elaborator-only change; `crates/ken-kernel` and `Cargo.lock` stayed
+> unchanged. The D3 probe also proved CAT-4's option-table proof route is still
+> blocked by a distinct mechanism, not the old `Type 0` vs `Omega0` sorting
+> failure.
+>
+> **NEW QUEUED FOLLOW-ON:** `docs/program/wp/KM-option-table-branch-motive.md`
+> frames the named split:
+> **non-nullary transparent-scrutinee option-table branch-motive conversion /
+> constructor-argument specialization**. Status is queued and blocking CAT-4's
+> option-table route. Owner is the mechanism lane, initially Language unless the
+> required D0 audit proves `crates/ken-kernel` is the rejecting layer.
+>
+> **CAT-4 state:** Runtime remains clean and parked at
+> `runtime-implementer/CAT-4-G4G6-proofs @ db5ae3e` for the option-table path.
+> Runtime may only continue CAT-4 on a route that avoids this named mechanism
+> and is explicitly routed by Runtime leader or Architect.
+>
+> **Catalog-style-guide state:** Spec/CV and Architect have approved
+> `dec_sbsyx5p5vtqa` on `wp/catalog-style-guide @ 14bbd27`
+> (`evt_1vjwprs7qa9d1`, `evt_54nb3kh14n7pg`; CV duplicate confirmation
+> `evt_11dsxtg901mxd`). Awaiting spec-leader's Integrator publish request.
+
+> ### [2026-07-06 ~01:59] Watchdog: style guide active; KM build D3 QA
+> **Catalog-style-guide is active in Spec.** spec-leader picked up the WP at
+> `evt_573s7aq1tk2va` on `wp/catalog-style-guide @ 27ee7fe` and assigned the
+> first authoring pass to spec-author. spec-author acknowledged at
+> `evt_6f6b47gwxweyk` and handed back the first draft at `evt_4q6c4y2gwn8wn` on
+> `14bbd2730d0d2c0f3a227a233e2c6d90741be2a7` (`docs: add catalog style guide`).
+> Changed paths are `docs/program/07-catalog-style-guide.md`,
+> `docs/program/06-catalog-campaign.md`,
+> `docs/program/wp/catalog-refinement-pilot.md`, `packages/README.md`, and
+> `spec/50-stdlib/README.md`. Await spec-leader review.
+>
+> **KM-dependent-match-proof-motive-build is active in Language D3 QA.**
+> language-implementer handed back D3 at `evt_74dhw371x73kr` on
+> `2e2999589534f8d314c9a0147fe16d45f5d7f4dd`; language-leader reviewed and
+> routed exact-head QA at `evt_3ftrcyxqvm6p0`; language-qa acknowledged pickup at
+> `evt_4tfc80zc50tv5`. language-qa approved D3 at `evt_4nz1veepkcrtx`. The
+> classification says the CAT-4 option-table probe is no longer blocked by the
+> fixed `Type 0` vs `Omega0` proof-motive sort issue, but still rejects through a
+> distinct non-nullary transparent-scrutinee branch-motive/constructor-argument
+> specialization mechanism. language-leader opened merge review at
+> `evt_bfe6eypwfz2e` with Decision `dec_4y18g42recaeh`, asking Architect to
+> review exact head `2e29995`. CAT-4 should not treat the option-table proof
+> route as unblocked by this WP alone.
+>
+> **CAT-4 remains parked** on clean
+> `runtime-implementer/CAT-4-G4G6-proofs @ db5ae3e`; no runtime nudge until the
+> KM build classification is finalized and merged or explicitly routed.
+
+> ### [2026-07-06 ~01:52] Catalog-style-guide kicked to Spec; KM build at D3
+> **Catalog-style-guide KICKED OFF to Spec enclave** at `evt_65qnnc2deas7n`.
+> Branch `wp/catalog-style-guide @
+> 27ee7fe6516ea971721b36d3822ae4753fb8dee6`, based on
+> `origin/main @ 0527467826a6e17da7418a6b492ca034da53d8e6`. The branch is free:
+> scaffold worktree `/workspaces/ken/.worktrees/catalog-style-guide` is detached
+> at `27ee7fe`. Kickoff went to spec-leader only, per mention discipline.
+>
+> **Scope:** author `docs/program/07-catalog-style-guide.md`, refine the
+> `docs/program/06-catalog-campaign.md` two-phase catalog lifecycle, and update
+> `docs/program/wp/catalog-refinement-pilot.md` enough that a small-package pilot
+> can exercise the guide. General style/cadence only; no package rewrites, no
+> semantics changes, and do not start with `packages/collections/map.ken`.
+>
+> **Handoff gate:** Prior Spec enclave WP `KM-dependent-match-proof-motive` is
+> closed with retros-in at `evt_1ndek2x1nngg3`. Spec-leader, spec-author,
+> conformance-validator, and Architect panes were quiescent and compacted before
+> kickoff (`Context compacted` observed).
+>
+> **KM build moved while routing:** D1 approved by language-qa at
+> `evt_5mvyzwbjf08x5`; D2 negative sibling approved by language-qa at
+> `evt_11xgtzwdpnsnf` on
+> `wp/KM-dependent-match-proof-motive-build @ db1f382bd4b597edaa838c9e0946560b36beb64d`.
+> Language-leader assigned D3 CAT-4 reproducer classification at
+> `evt_ds78n7nfb5q7`; language-implementer acknowledged at
+> `evt_10qdpz1kq9vkz`. Next: await D3 classification and Spec pickup ack.
+
+> ### [2026-07-06 ~01:40] Watchdog: KM build in Language QA
+> **KM-dependent-match-proof-motive-build is active and healthy.** Language
+> leader picked up the kickoff at `evt_75w7gt8y4w28z` on
+> `wp/KM-dependent-match-proof-motive-build @ 927dd34` and assigned D0+D1 to
+> language-implementer.
+>
+> **D0 classification complete:** language-implementer posted
+> `evt_2jvajy1680g3m`; language-leader accepted at `evt_5hh9ygrreyxq6`.
+> The rejecting layer is elaborator-only: checked dependent-`match` motive
+> recovery in `crates/ken-elaborator/src/elab.rs`, specifically the
+> `Term::Var(_)` gate into `check_match_dependent` causing the transparent
+> `match km_scrutinee b` AC8 case to fall through to `infer_match` and ascribe a
+> constant `D -> Type 0` motive for an `Omega` proof target. Kernel
+> `Term::Elim` motive admission is ruled out for this slice.
+>
+> **D1 candidate in QA:** language-implementer committed
+> `e155a90a14dbb3c9e2952755501c8c605a4fd5ac`
+> (`KM proof motive D1 transparent scrutinee match`) and handed it back at
+> `evt_3p7ktnq1qfj6h`; language-leader re-derived and sent it to
+> language-qa at `evt_6kr6pbmg36tka`. Scope is
+> `crates/ken-elaborator/src/elab.rs` plus
+> `crates/ken-elaborator/tests/l2_acceptance.rs`, with no `crates/ken-kernel`
+> or `Cargo.lock` delta. QA acknowledged pickup at `evt_50mjtwaqv9t04` and is
+> actively validating exact head `e155a90`.
+>
+> **Next:** await Language QA verdict. If D1 is approved, Language proceeds to
+> the negative wrong-specialized-branch sibling (D2) before merge review.
+> CAT-4 remains clean and parked at
+> `runtime-implementer/CAT-4-G4G6-proofs @ db5ae3e`; no CAT-4 nudge needed
+> while the mechanism lane is moving.
+
+> ### [2026-07-06 ~01:25] KM spec WP closed; build wrapper ready
+> **KM-dependent-match-proof-motive MERGED:** Integrator landed PR #301 on
+> `origin/main @ 0527467` at `2026-07-06T01:20:12Z`. CI gate was green on
+> reviewed head `daaa2fe`: build+test, conformance suite, clean-room provenance,
+> and path-guard. The squash carries the WP brief, `/spec` proof-returning
+> dependent-match rule, and AC8 conformance seed.
+>
+> **Spec WP closed:** spec-leader requested enclave retros at `evt_1m0khxsydve7z`.
+> CV retro landed at `evt_2zenbp4j53b3c`; spec-author retro landed at
+> `evt_4cw7avraz9ph1`; spec-leader retro + `retros in` landed at
+> `evt_1ndek2x1nngg3`.
+>
+> **Branch cleanup:** dedicated worktree
+> `/workspaces/ken/.worktrees/km-dependent-match-proof-motive` is detached at
+> `origin/main @ 0527467`, and local branch `wp/KM-dependent-match-proof-motive`
+> was deleted.
+>
+> **Build wrapper:** authored
+> `docs/program/wp/KM-dependent-match-proof-motive-build.md`, owner Language
+> first, Kernel only if D0 proves `crates/ken-kernel` is the rejecting layer.
+> Language's prior SURF-2 D1 ring is now closed: language-leader handed
+> `retros in` at `evt_25cknz5gd8nek`.
+>
+> **Build kicked:** wrapper committed on
+> `wp/KM-dependent-match-proof-motive-build @
+> 927dd3476d4dbe8abcb5f7760ffafcf0e6a80721`, off
+> `origin/main @ 0527467`. Language leader/implementer/QA were quiescent and
+> compacted before kickoff; all three panes showed `Context compacted`. Kickoff
+> posted to language-leader only at `evt_7kak8jtj5baa5`. Next: await Language
+> pickup and D0 audit/classification, then implementation/QA. CAT-4 remains clean
+> and parked at
+> `runtime-implementer/CAT-4-G4G6-proofs @ db5ae3e`.
