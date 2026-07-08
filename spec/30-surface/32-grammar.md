@@ -23,6 +23,9 @@ decl ::=
   | "data" ConId data_param* ":" data_family data_block derive?  -- inductive family
   | "class" ConId binder* "{" class_field ("," class_field)* "}"  -- typeclass (33 §5, ADR 0008)
   | "instance" ConId atype* "{" field_assign ("," field_assign)* "}"  -- instance (33 §5)
+  | "prop" ConId tyvar* binder* ":" type prop_block?  -- proposition family / claim shape
+  | "lemma" ident binder* ":" type "=" expr  -- standalone checked proof theorem
+  | "proof" ident "for" path binder* ":" type "=" expr  -- attached proof theorem
   | "foreign" ident ":" type foreign_spec  -- FFI (38)
   | "space" ConId "{" (cell | decl | becomes)* "}"  -- state region (36)
   | "policy" ConId "{" decl* "}"  -- policy module (65) [OQ-syntax]
@@ -52,7 +55,19 @@ row     ::= ConId ("," ConId)*                      -- concrete row  [FS, Consol
           | ConId ("," ConId)* "|" ident            -- open row  [FS | e]  (concrete head + poly tail)
 contract::= "requires" expr | "ensures" expr       -- (20)
 derive  ::= "derive" "(" ConId ("," ConId)* ")"    -- DecEq, Show, … (33)
+path    ::= ident ("." ident)*                     -- qualified value/module path
+prop_block ::= "where" "{" prop_intro (";" prop_intro)* "}"
+prop_intro ::= ident ":" type
 ```
+
+**Proof-claim declarations are ordinary checked terms.** `prop`, `lemma`, and
+attached `proof` all elaborate to existing checked terms only. `prop` requires
+an `Omega`-valued result and may carry an optional constructor-style
+`where` block whose intro helpers elaborate to ordinary proof terms under the
+family namespace. `lemma` is a checked theorem in the ordinary module
+namespace. `proof` attaches a checked theorem to a resolved subject path, and
+the canonical attached name is `subject::proof_name`. None of these forms adds
+a new kernel declaration class, a trusted proof table, or ambient proof search.
 
 **Definition keywords are purity-checked (`33 §1`, `36 §1.6`).** `const`/`fn`/
 `proc` replace the retired `view`; the grammar admits `binder*` on all, but
@@ -121,6 +136,8 @@ expr ::=
   | "if" expr "then" expr "else" expr  -- = match on Bool
   | "match" expr ("," expr)* "{" arm+ "}"  -- pattern match (34)
   | expr "." ident | expr ".1" | expr ".2"  -- field / projection
+  | path "::" ident  -- canonical attached-proof path
+  | "(" "proof" ident "for" path ")"  -- attached-proof selector expression
   | "(" expr ("," expr)* ")"  -- tuple / pair / grouping
   | "{" field_assign ("," field_assign)* "}"  -- record literal
   | "temporal" "{" expr "}"  -- temporal obligation → Temporal data (72) [OQ-syntax]

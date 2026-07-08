@@ -402,3 +402,108 @@ refined fields, update/pun), the module/import system + package manager with
 content-addressed lockfiles, visibility/abstraction, and the
 class/instance/constraint mechanism with **lawful** instances and `derive`.
 Conformance: `../../conformance/surface/declarations/`.
+
+## 8. Named proof claims — `prop`, `lemma`, and attached `proof`
+
+These declarations are surface/elaboration vocabulary over existing checked
+terms only. They add no new kernel declaration class, no trusted proof table,
+and no ambient proof search. The proof-claim surface has three roles:
+
+- `prop` names a proposition family / claim shape.
+- `lemma` names a reusable standalone checked proof theorem.
+- `proof <name> for <subject>` names a checked proof term attached to a
+  resolved subject API.
+
+### 8.1 Proposition families — `prop`
+
+`prop` is the claim-shape spelling for an `Omega`-valued family. A `prop`
+declares a family whose telescope ends in `Omega`; the declaration is private
+by default and may be exported with `pub prop`.
+
+The family can carry an optional constructor-style `where` block:
+
+```ken
+prop AppendsTo (A : Type) : List A -> List A -> List A -> Omega where {
+  nil  : AppendsTo A xs nil xs;
+  cons : ...
+}
+```
+
+The `where` block elaborates to ordinary checked introduction helpers over an
+`Omega`-clean encoding. The public proposition remains proof-irrelevant; the
+elaborator may keep an internal witness relation, but only the public `Omega`
+proposition and checked intro helpers escape. If the elaborator cannot produce
+an `Omega`-clean checked encoding, it rejects the `prop`.
+
+Intro helper names are not bare module names. They are addressed canonically
+through the family name, as `AppendsTo.nil`, `AppendsTo.cons`, and so on, and
+import/export follows the family's visibility. A bare `nil` in the module
+namespace is still just the ordinary value constructor if one exists; `prop`
+does not reserve that bare space.
+
+### 8.2 Attached proofs — `proof`
+
+Attached proofs are checked proof definitions attached to a resolved subject.
+
+```ken
+proof appends for list_append
+  (A : Type) (xs : List A) (ys : List A)
+  : AppendsTo A xs ys (list_append A xs ys) = ...
+```
+
+The canonical path is `subject::proof_name` - for example
+`Collections.List.list_append::appends`. The selector syntax
+`(proof appends for list_append)` resolves to that same proof term. Subject
+resolution runs first; attached lookup runs only after the subject is
+resolved. A bare `appends` never resolves to the attached proof.
+
+For generic attached proofs, the proof telescope must repeat the subject's
+public call telescope exactly, preserving binder order and explicit/implicit
+shape up to alpha-renaming. A mismatch rejects before the proof is used.
+Duplicate proof names on the same resolved subject reject. The same proof name
+may appear on different subjects because the canonical paths differ.
+
+Attached proofs are private by default, just like other declarations. `pub
+proof p for s` is exportable only if `s` is exported. Importing an exported
+subject makes its exported attached proofs available only through the explicit
+attached path (`s::p`, or `M.s::p` under qualified import); it does not
+ambiently import `p` as a bare value.
+
+Same-subject attached proofs are unordered and independent. An attached proof
+must reject if its dependency graph mentions another attached proof for the
+same resolved subject, directly or through a helper. Standalone lemmas are the
+factoring point: `subject::p1` and `subject::p2` may both depend on
+`append_nil_right`, but `append_nil_right` itself must not depend on either
+attached proof if either attached proof uses it.
+
+### 8.3 Standalone lemmas — `lemma`
+
+`lemma` is the standalone checked proof-definition form. It is a reusable proof
+theorem in the ordinary module namespace, parameterized like a function and
+instantiated by ordinary application.
+
+```ken
+lemma append_nil_right
+  (A : Type) (xs : List A)
+  : AppendsTo A xs nil xs = ...
+```
+
+The result annotation is required and must classify at `Omega`. The body is an
+ordinary checked proof term; `lemma` is not a bundled `prop + proof`, not an
+attached proof, and not a new kernel concept. If authors want an open
+obligation, the existing `prove` path remains the status-bearing form.
+
+`lemma` obeys ordinary module visibility: private by default, `pub lemma` to
+export, and imports/shadowing/ambiguity follow the `33 §3-4` module rules. A
+lemma is never addressed as `subject::name` unless it is separately declared as
+an attached proof, which is a distinct declaration.
+
+Caller use is ordinary application:
+
+```ken
+let h1 = append_nil_right A xs
+let h2 = (proof appends for list_append) A xs ys
+```
+
+Both are ordinary proof terms after resolution, so they can be passed to
+transport, rewrite, congruence, induction, or class-law fields.

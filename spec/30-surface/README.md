@@ -48,7 +48,7 @@ L8).
 | Sum / inductive | `data D = C1 … | C2 …` | inductive family (`14`) |
 | Pattern match | `match e { … }` | `elim_D` (`14 §3`, `39`) |
 | Definition / value | `let x : A = e` | global/local def (`11 §4`) |
-| Proposition / spec | `requires`/`ensures`/`prove`/`law` | Ω terms + obligations (`20`) |
+| Proposition / spec | `prop`/`lemma`/`proof`/`prove`/`law` | Ω terms + obligations (`20`) |
 | Effectful function | `view f (…) visits [E] = …` | effect-rowed type (`36`) |
 | Module | `module M { … }` / `import` | namespaced env (`33`) |
 | Stateful region | `space S { … }` | the state/effect model (`36`, OQ-Space DECIDED) |
