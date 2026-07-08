@@ -142,9 +142,10 @@ brief** — the implementer should execute mostly mechanically, not design
 >
 > 1. **RETROS IN.** The receiving unit's prior WP is closed and every retro is
 >    posted (compaction eats an un-posted retro — §2c compaction discipline).
-> 2. **NO IN-FLIGHT OBLIGATION** on any member — no pending review vote, open
->    `question`, or unfinished handoff. Compaction **drops** it — resolve
->    or reassign first (K3).
+> 2. **NO IN-FLIGHT OBLIGATION** on any receiving-unit member **or on
+>    Integrator** — no pending review vote, open `question`, unfinished handoff,
+>    open PR check/merge obligation, or cleanup pass. Compaction **drops** it —
+>    resolve or reassign first (K3).
 > 3. **QUIESCENT.** `capture-pane` each member **and `moot-integrator`**;
 >    **none mid-reasoning** (compaction summarizes in-flight work away).
 > 4. **COMPACT EACH — BEFORE the kickoff, never after.** `tmux send-keys -t
@@ -420,10 +421,13 @@ work flow, so you own the clean context boundary that flows with it. The rules:
   at the merge gate). Resolve, reassign, or confirm-not-actually-required first.
 - **Precondition: quiescent.** Never compact an agent mid-reasoning — it
   summarizes away in-flight work. Compact only at a clean boundary.
-- **Singletons self-compact** (Steward, Architect, Integrator, Librarian) via
-  `request_context_reset` (self-only) at their own task boundaries — the
-  **checkpoint-and-seam** discipline below (§2d). `request_context_reset` cannot
-  reset another agent; cross-agent compaction is the Steward's alone.
+- **Singletons self-compact except for the Integrator kickoff/handoff seam.**
+  Steward, Architect, Integrator, and Librarian use `request_context_reset`
+  (self-only) at their own task boundaries — the **checkpoint-and-seam**
+  discipline below (§2d). Integrator additionally gets Steward-triggered
+  `moot-integrator` compaction at every kickoff/handoff seam under the explicit
+  exception above. `request_context_reset` cannot reset another agent;
+  cross-agent compaction is the Steward's alone.
 - **★★★ `moot compact` IS UNRELIABLE (no-op-prone) — VERIFY THE DROP, ALWAYS;
   fall back to `tmux send-keys`.** It prints `"Sent /compact to moot-<role>"`
   whether or not the slash command reaches the REPL. **Reconciled 2026-07-02
