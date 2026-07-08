@@ -1025,6 +1025,20 @@ impl<'a> Lowering<'a> {
                     body: (**body).clone(),
                 })
             }
+            RuntimeExpr::DeclarationRef { symbol } => Err(unsupported(
+                "DeclarationRef",
+                format!("declaration reference {symbol} requires NC17 call-graph lowering"),
+            )),
+            RuntimeExpr::ImportedDeclarationRef {
+                symbol,
+                dependency,
+                dependency_semantic_hash,
+            } => Err(unsupported(
+                "ImportedDeclarationRef",
+                format!(
+                    "imported declaration {symbol} from {dependency} @ {dependency_semantic_hash} requires dependency linking"
+                ),
+            )),
             RuntimeExpr::Call { callee, args } => {
                 let lowered_callee = self.lower_expr(builder, callee, env)?;
                 let Lowered::Closure {

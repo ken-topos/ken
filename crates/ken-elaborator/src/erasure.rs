@@ -318,15 +318,12 @@ fn lower_transparent_declaration(
     target_closure: &[StableSymbol],
     symbol: &StableSymbol,
 ) -> Result<RuntimeDeclarationKind, ErasureError> {
+    let semantic = &package.artifact.semantic;
     let reachable_declarations = target_closure
         .iter()
         .filter(|candidate| {
-            package
-                .artifact
-                .semantic
-                .declarations
-                .contains_key(*candidate)
-                && !has_runtime_metadata(&package.artifact.semantic, candidate)
+            semantic.declarations.contains_key(*candidate)
+                && !has_runtime_metadata(semantic, candidate)
         })
         .cloned()
         .collect::<BTreeSet<_>>();
@@ -336,6 +333,8 @@ fn lower_transparent_declaration(
         package_artifact_hash: package.artifact_hash,
         target_symbol: symbol.clone(),
         reachable_declarations,
+        external_symbols: external_declaration_symbols(&package.artifact.semantic),
+        dependency_semantic_hashes: package.artifact.semantic.dependency_semantic_hashes.clone(),
     };
     let view = checked_core_body_view_for_selection(package, &selection)
         .map_err(|err| expression_view_error(symbol, err))?;
@@ -347,7 +346,14 @@ fn lower_transparent_declaration(
         )
     })?;
     let mut stack = vec![symbol.clone()];
-    let body = lower_body_term(&declaration.body, &view.declarations, &mut stack, symbol, 0)?;
+    let body = lower_body_term(
+        &declaration.body,
+        &view.declarations,
+        semantic,
+        &mut stack,
+        symbol,
+        0,
+    )?;
     Ok(RuntimeDeclarationKind::Transparent { body })
 }
 
@@ -363,14 +369,38 @@ fn has_runtime_metadata(
         || semantic.class_instance_metadata.contains_key(symbol)
 }
 
+fn external_declaration_symbols(
+    semantic: &checked_core::CheckedCoreSemanticInputs,
+) -> BTreeSet<StableSymbol> {
+    semantic
+        .symbols
+        .iter()
+        .filter(|symbol| {
+            !semantic.declarations.contains_key(*symbol)
+                && !has_runtime_metadata(semantic, symbol)
+                && semantic.lowerability.contains_key(*symbol)
+        })
+        .cloned()
+        .collect()
+}
+
 fn lower_body_term(
     term: &CheckedCoreBodyTerm,
     declarations: &BTreeMap<StableSymbol, checked_core::CheckedCoreDeclarationBodyView>,
+    semantic: &checked_core::CheckedCoreSemanticInputs,
     stack: &mut Vec<StableSymbol>,
     root_symbol: &StableSymbol,
     context_depth: usize,
 ) -> Result<RuntimeExpr, ErasureError> {
-    lower_body_term_inner(term, declarations, stack, root_symbol, context_depth, None)
+    lower_body_term_inner(
+        term,
+        declarations,
+        semantic,
+        stack,
+        root_symbol,
+        context_depth,
+        None,
+    )
 }
 
 #[derive(Clone, Copy)]
@@ -399,6 +429,7 @@ impl BranchBinderRemap {
 fn lower_body_term_inner(
     term: &CheckedCoreBodyTerm,
     declarations: &BTreeMap<StableSymbol, checked_core::CheckedCoreDeclarationBodyView>,
+    semantic: &checked_core::CheckedCoreSemanticInputs,
     stack: &mut Vec<StableSymbol>,
     root_symbol: &StableSymbol,
     context_depth: usize,
@@ -413,6 +444,7 @@ fn lower_body_term_inner(
             constructor,
             &args,
             declarations,
+            semantic,
             stack,
             root_symbol,
             context_depth,
@@ -462,6 +494,7 @@ fn lower_body_term_inner(
             let lowered = lower_body_term_inner(
                 &declaration.body,
                 declarations,
+                semantic,
                 stack,
                 root_symbol,
                 context_depth,
@@ -470,10 +503,17 @@ fn lower_body_term_inner(
             stack.pop();
             lowered
         }
+        CheckedCoreBodyTerm::RecursiveDeclarationCall(view) => {
+            lower_recursive_declaration_call(view, declarations, root_symbol)
+        }
+        CheckedCoreBodyTerm::ImportedDeclarationCall(view) => {
+            lower_imported_declaration_call(view, semantic, root_symbol)
+        }
         CheckedCoreBodyTerm::PrimitiveLiteral(view) => lower_primitive_literal(root_symbol, view),
         CheckedCoreBodyTerm::PrimitiveApplication(view) => lower_primitive_application(
             view,
             declarations,
+            semantic,
             stack,
             root_symbol,
             context_depth,
@@ -493,6 +533,7 @@ fn lower_body_term_inner(
                 body: Box::new(lower_body_term_inner(
                     body,
                     declarations,
+                    semantic,
                     stack,
                     root_symbol,
                     context_depth + 1,
@@ -504,6 +545,7 @@ fn lower_body_term_inner(
             callee: Box::new(lower_body_term_inner(
                 function,
                 declarations,
+                semantic,
                 stack,
                 root_symbol,
                 context_depth,
@@ -512,6 +554,7 @@ fn lower_body_term_inner(
             args: vec![lower_body_term_inner(
                 argument,
                 declarations,
+                semantic,
                 stack,
                 root_symbol,
                 context_depth,
@@ -522,6 +565,7 @@ fn lower_body_term_inner(
             value: Box::new(lower_body_term_inner(
                 value,
                 declarations,
+                semantic,
                 stack,
                 root_symbol,
                 context_depth,
@@ -530,6 +574,7 @@ fn lower_body_term_inner(
             body: Box::new(lower_body_term_inner(
                 body,
                 declarations,
+                semantic,
                 stack,
                 root_symbol,
                 context_depth + 1,
@@ -547,6 +592,7 @@ fn lower_body_term_inner(
         CheckedCoreBodyTerm::Match(view) => lower_match_view(
             view,
             declarations,
+            semantic,
             stack,
             root_symbol,
             context_depth,
@@ -555,6 +601,7 @@ fn lower_body_term_inner(
         CheckedCoreBodyTerm::RecordSigmaConstruction(view) => lower_record_sigma_construction(
             view,
             declarations,
+            semantic,
             stack,
             root_symbol,
             context_depth,
@@ -563,6 +610,16 @@ fn lower_body_term_inner(
         CheckedCoreBodyTerm::RecordSigmaProjection(view) => lower_record_sigma_projection(
             view,
             declarations,
+            semantic,
+            stack,
+            root_symbol,
+            context_depth,
+            branch_remap,
+        ),
+        CheckedCoreBodyTerm::DictionaryConstruction(view) => lower_dictionary_construction(
+            view,
+            declarations,
+            semantic,
             stack,
             root_symbol,
             context_depth,
@@ -571,9 +628,216 @@ fn lower_body_term_inner(
     }
 }
 
+fn lower_recursive_declaration_call(
+    view: &checked_core::CheckedCoreRecursiveCallView,
+    declarations: &BTreeMap<StableSymbol, checked_core::CheckedCoreDeclarationBodyView>,
+    root_symbol: &StableSymbol,
+) -> Result<RuntimeExpr, ErasureError> {
+    reject_level_args(root_symbol, &view.level_args)?;
+    require_expression_supported(
+        root_symbol,
+        &view.symbol,
+        &view.lowerability,
+        "recursive_lowerability_blocked",
+    )?;
+    if !matches!(
+        view.admission,
+        checked_core::RecursionAdmission::AcceptedStructural
+            | checked_core::RecursionAdmission::AcceptedSizeChange
+    ) {
+        return Err(expression_lowering_error(
+            root_symbol,
+            "unsupported_recursive_shape",
+            format!(
+                "recursive call to {} has non-executable admission {:?}",
+                view.symbol, view.admission
+            ),
+        ));
+    }
+    if !view.group_members.contains(&view.symbol) {
+        return Err(expression_lowering_error(
+            root_symbol,
+            "stale_recursive_group_member",
+            format!(
+                "recursive call to {} is absent from group {}",
+                view.symbol, view.group_symbol
+            ),
+        ));
+    }
+    if !declarations.contains_key(&view.symbol) {
+        return Err(expression_lowering_error(
+            root_symbol,
+            "unresolved_recursive_declaration_call",
+            format!(
+                "recursive call to {} has no selected body view in group {}",
+                view.symbol, view.group_symbol
+            ),
+        ));
+    }
+    Ok(RuntimeExpr::DeclarationRef {
+        symbol: view.symbol.to_string(),
+    })
+}
+
+fn lower_imported_declaration_call(
+    view: &checked_core::CheckedCoreImportedDeclarationCallView,
+    semantic: &checked_core::CheckedCoreSemanticInputs,
+    root_symbol: &StableSymbol,
+) -> Result<RuntimeExpr, ErasureError> {
+    reject_level_args(root_symbol, &view.level_args)?;
+    let lowerability = semantic.lowerability.get(&view.symbol).ok_or_else(|| {
+        expression_lowering_error(
+            root_symbol,
+            "imported_declaration_missing_lowerability",
+            format!(
+                "imported declaration {} has no lowerability metadata",
+                view.symbol
+            ),
+        )
+    })?;
+    require_expression_supported(
+        root_symbol,
+        &view.symbol,
+        lowerability,
+        "imported_declaration_lowerability_blocked",
+    )?;
+    if view.dependency_semantic_hash.is_empty() {
+        return Err(expression_lowering_error(
+            root_symbol,
+            "missing_dependency_identity",
+            format!(
+                "imported declaration {} through {} has an empty semantic hash",
+                view.symbol, view.dependency
+            ),
+        ));
+    }
+    Ok(RuntimeExpr::ImportedDeclarationRef {
+        symbol: view.symbol.to_string(),
+        dependency: view.dependency.to_string(),
+        dependency_semantic_hash: view.dependency_semantic_hash.clone(),
+    })
+}
+
+fn lower_dictionary_construction(
+    view: &checked_core::CheckedCoreDictionaryConstructionView,
+    declarations: &BTreeMap<StableSymbol, checked_core::CheckedCoreDeclarationBodyView>,
+    semantic: &checked_core::CheckedCoreSemanticInputs,
+    stack: &mut Vec<StableSymbol>,
+    root_symbol: &StableSymbol,
+    context_depth: usize,
+    branch_remap: Option<BranchBinderRemap>,
+) -> Result<RuntimeExpr, ErasureError> {
+    require_expression_supported(
+        root_symbol,
+        &view.dictionary.symbol,
+        &view.dictionary.lowerability,
+        "dictionary_lowerability_blocked",
+    )?;
+    validate_dictionary_field_view(root_symbol, &view.dictionary)?;
+    if view.fields.len() != view.dictionary.fields.len() {
+        return Err(expression_lowering_error(
+            root_symbol,
+            "stale_dictionary_field_selection",
+            format!(
+                "dictionary construction for {} carries {} fields, expected {}",
+                view.dictionary.symbol,
+                view.fields.len(),
+                view.dictionary.fields.len()
+            ),
+        ));
+    }
+
+    let mut runtime_fields = Vec::new();
+    for (expected, value) in view.dictionary.fields.iter().zip(&view.fields) {
+        match value {
+            checked_core::CheckedCoreDictionaryFieldValue::Runtime { field, value } => {
+                require_same_dictionary_field(root_symbol, expected, field)?;
+                if !matches!(
+                    field.runtime,
+                    checked_core::DictionaryFieldRuntimeStatus::Runtime
+                ) {
+                    return Err(expression_lowering_error(
+                        root_symbol,
+                        "non_executable_dictionary_field_use",
+                        format!("dictionary field {} is not executable", field.name),
+                    ));
+                }
+                runtime_fields.push((
+                    field.name.clone(),
+                    lower_body_term_inner(
+                        value,
+                        declarations,
+                        semantic,
+                        stack,
+                        root_symbol,
+                        context_depth,
+                        branch_remap,
+                    )?,
+                ));
+            }
+            checked_core::CheckedCoreDictionaryFieldValue::Erased { field, .. } => {
+                require_same_dictionary_field(root_symbol, expected, field)?;
+                if matches!(
+                    field.runtime,
+                    checked_core::DictionaryFieldRuntimeStatus::Runtime
+                ) {
+                    return Err(expression_lowering_error(
+                        root_symbol,
+                        "runtime_dictionary_field_erased_value",
+                        format!(
+                            "runtime dictionary field {} cannot be supplied by erased bytes",
+                            field.name
+                        ),
+                    ));
+                }
+            }
+        }
+    }
+
+    Ok(RuntimeExpr::Record {
+        fields: runtime_fields,
+    })
+}
+
+fn validate_dictionary_field_view(
+    root_symbol: &StableSymbol,
+    dictionary: &checked_core::CheckedCoreDictionaryView,
+) -> Result<(), ErasureError> {
+    for (expected_position, field) in dictionary.fields.iter().enumerate() {
+        if field.position != expected_position {
+            return Err(expression_lowering_error(
+                root_symbol,
+                "stale_dictionary_field_selection",
+                format!(
+                    "dictionary metadata for {} has field {} at position {}, expected {}",
+                    dictionary.symbol, field.name, field.position, expected_position
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn require_same_dictionary_field(
+    root_symbol: &StableSymbol,
+    expected: &checked_core::CheckedCoreDictionaryFieldView,
+    actual: &checked_core::CheckedCoreDictionaryFieldView,
+) -> Result<(), ErasureError> {
+    if expected == actual {
+        Ok(())
+    } else {
+        Err(expression_lowering_error(
+            root_symbol,
+            "stale_dictionary_field_selection",
+            format!("dictionary field view changed: expected {expected:?}, got {actual:?}"),
+        ))
+    }
+}
+
 fn lower_record_sigma_construction(
     view: &checked_core::CheckedCoreRecordSigmaConstructionView,
     declarations: &BTreeMap<StableSymbol, checked_core::CheckedCoreDeclarationBodyView>,
+    semantic: &checked_core::CheckedCoreSemanticInputs,
     stack: &mut Vec<StableSymbol>,
     root_symbol: &StableSymbol,
     context_depth: usize,
@@ -616,6 +880,7 @@ fn lower_record_sigma_construction(
                     lower_body_term_inner(
                         value,
                         declarations,
+                        semantic,
                         stack,
                         root_symbol,
                         context_depth,
@@ -647,6 +912,7 @@ fn lower_record_sigma_construction(
 fn lower_record_sigma_projection(
     view: &checked_core::CheckedCoreRecordSigmaProjectionView,
     declarations: &BTreeMap<StableSymbol, checked_core::CheckedCoreDeclarationBodyView>,
+    semantic: &checked_core::CheckedCoreSemanticInputs,
     stack: &mut Vec<StableSymbol>,
     root_symbol: &StableSymbol,
     context_depth: usize,
@@ -701,6 +967,7 @@ fn lower_record_sigma_projection(
         record: Box::new(lower_body_term_inner(
             &view.base,
             declarations,
+            semantic,
             stack,
             root_symbol,
             context_depth,
@@ -796,6 +1063,7 @@ fn lower_primitive_literal(
 fn lower_primitive_application(
     view: &checked_core::CheckedCorePrimitiveApplicationView,
     declarations: &BTreeMap<StableSymbol, checked_core::CheckedCoreDeclarationBodyView>,
+    semantic: &checked_core::CheckedCoreSemanticInputs,
     stack: &mut Vec<StableSymbol>,
     root_symbol: &StableSymbol,
     context_depth: usize,
@@ -826,6 +1094,7 @@ fn lower_primitive_application(
         args.push(lower_body_term_inner(
             argument,
             declarations,
+            semantic,
             stack,
             root_symbol,
             context_depth,
@@ -922,6 +1191,7 @@ fn lower_constructor_application(
     constructor: &checked_core::CheckedCoreConstructorView,
     args: &[&CheckedCoreBodyTerm],
     declarations: &BTreeMap<StableSymbol, checked_core::CheckedCoreDeclarationBodyView>,
+    semantic: &checked_core::CheckedCoreSemanticInputs,
     stack: &mut Vec<StableSymbol>,
     root_symbol: &StableSymbol,
     context_depth: usize,
@@ -970,6 +1240,7 @@ fn lower_constructor_application(
             lower_body_term_inner(
                 arg,
                 declarations,
+                semantic,
                 stack,
                 root_symbol,
                 context_depth,
@@ -986,6 +1257,7 @@ fn lower_constructor_application(
 fn lower_match_view(
     view: &checked_core::CheckedCoreMatchView,
     declarations: &BTreeMap<StableSymbol, checked_core::CheckedCoreDeclarationBodyView>,
+    semantic: &checked_core::CheckedCoreSemanticInputs,
     stack: &mut Vec<StableSymbol>,
     root_symbol: &StableSymbol,
     context_depth: usize,
@@ -1002,6 +1274,7 @@ fn lower_match_view(
     let scrutinee = Box::new(lower_body_term_inner(
         &view.scrutinee,
         declarations,
+        semantic,
         stack,
         root_symbol,
         context_depth,
@@ -1045,6 +1318,7 @@ fn lower_match_view(
             body: lower_body_term_inner(
                 body,
                 declarations,
+                semantic,
                 stack,
                 root_symbol,
                 context_depth + constructor.argument_count,
@@ -1126,6 +1400,8 @@ fn has_free_variable_at_or_above(term: &CheckedCoreBodyTerm, bound: usize) -> bo
     match term {
         CheckedCoreBodyTerm::Variable { de_bruijn_index } => *de_bruijn_index >= bound,
         CheckedCoreBodyTerm::DirectDeclarationCall { .. } => false,
+        CheckedCoreBodyTerm::RecursiveDeclarationCall(_) => false,
+        CheckedCoreBodyTerm::ImportedDeclarationCall(_) => false,
         CheckedCoreBodyTerm::PrimitiveLiteral(_) => false,
         CheckedCoreBodyTerm::PrimitiveApplication(view) => view
             .arguments
@@ -1159,6 +1435,14 @@ fn has_free_variable_at_or_above(term: &CheckedCoreBodyTerm, bound: usize) -> bo
         }
         CheckedCoreBodyTerm::RecordSigmaProjection(view) => {
             has_free_variable_at_or_above(&view.base, bound)
+        }
+        CheckedCoreBodyTerm::DictionaryConstruction(view) => {
+            view.fields.iter().any(|field| match field {
+                checked_core::CheckedCoreDictionaryFieldValue::Runtime { value, .. } => {
+                    has_free_variable_at_or_above(value, bound)
+                }
+                checked_core::CheckedCoreDictionaryFieldValue::Erased { .. } => false,
+            })
         }
     }
 }
@@ -1637,6 +1921,7 @@ fn runtime_class_instance_metadata(
         dictionary_symbol: meta.dictionary_symbol.as_ref().map(ToString::to_string),
         head_symbol: meta.head_symbol.as_ref().map(ToString::to_string),
         field_order: meta.field_order.clone(),
+        runtime_fields: meta.runtime_fields.clone(),
         law_fields: meta.law_fields.clone(),
         lowerability: runtime_lowerability_status(&meta.lowerability),
     }

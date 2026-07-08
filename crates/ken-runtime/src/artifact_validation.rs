@@ -740,6 +740,14 @@ fn validate_runtime_expr(
         RuntimeExpr::Record { .. } => Err(unsupported_runtime_expr_error("Record", fact_subject)),
         RuntimeExpr::Project { .. } => Err(unsupported_runtime_expr_error("Project", fact_subject)),
         RuntimeExpr::Closure { .. } => Err(unsupported_runtime_expr_error("Closure", fact_subject)),
+        RuntimeExpr::DeclarationRef { .. } => Err(unsupported_runtime_expr_error(
+            "DeclarationRef",
+            fact_subject,
+        )),
+        RuntimeExpr::ImportedDeclarationRef { .. } => Err(unsupported_runtime_expr_error(
+            "ImportedDeclarationRef",
+            fact_subject,
+        )),
         RuntimeExpr::Call { .. } => Err(unsupported_runtime_expr_error("Call", fact_subject)),
         RuntimeExpr::Effect { .. } => Err(claim_recompute_error(
             "no_foreign_or_effectful_boundaries",

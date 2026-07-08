@@ -94,6 +94,30 @@ registry identity. Checked-partial and trusted-partial primitives must name the
 package obligation or assumption that justifies their trap-capable runtime
 contract.
 
+Structured recursion views may expose recursive declaration references only
+when the referenced declaration is in the selected closure and package
+`RecursionMetadata` places the owner and referenced declaration in an accepted
+structural or size-change group. The view carries the group symbol, members,
+admission face, SCC index, level arguments, and lowerability status. Rejected,
+non-recursive, missing, or non-lowerable recursion metadata must block the body
+view before runtime IR.
+
+Structured imported-declaration views may expose checked-core dependency calls
+only as a pair of the imported stable declaration symbol and the exact
+dependency identity that owns it. The package records imported declaration
+references separately from raw module paths: each imported declaration symbol
+maps to a dependency symbol, and that dependency symbol must have a matching
+entry in `dependency_semantic_hashes` in both the package and selected closure.
+The dependency semantic hash, not a package/module path string, is the authority
+for the import edge.
+
+Structured dictionary views may expose runtime dictionary fields only when
+`ClassInstanceMetadata` marks them as runtime fields. Law and proof fields stay
+erased checked-core bytes in the body view and remain visible in reports; they
+must not become runtime values. A dictionary field classified as both runtime
+and law/proof, or a field classification that does not match the package field
+order, is a blocking package-view error.
+
 A body view must fail closed, with stable report lanes, when package facts do
 not justify the requested structure. In particular, stale constructor identity,
 missing branch data, unsupported dependent motives, unsupported proof-only
@@ -101,10 +125,12 @@ matches, unsupported eliminator shapes, unsupported dependent field shapes,
 non-executable erased-field projection, stale field identity/order, unsupported
 record/projection shapes, stale primitive metadata, unsupported primitive names,
 host-dependent primitive attempts, primitive partiality without package
-obligation/assumption evidence, and impossible-branch use without package
-evidence are loud rejects before erasure/runtime IR. This section does not
-define runtime IR, evaluator behavior, ABI/layout, native backend lowering,
-coverage changes, or a raw-source fallback.
+obligation/assumption evidence, unsupported recursive shapes, stale or missing
+dependency identity, non-executable dictionary field use, stale dictionary
+field selection, and impossible-branch use without package evidence are loud
+rejects before erasure/runtime IR. This section does not define runtime IR,
+evaluator behavior, ABI/layout, native backend lowering, coverage changes, or a
+raw-source fallback.
 
 ## 2. Relation to Existing Specs
 
@@ -265,6 +291,9 @@ The declaration graph is total and closed:
   metadata;
 - every dependency edge names an earlier declaration in the package or an
   imported package by semantic hash and stable symbol;
+- every executable imported declaration reference maps the imported stable
+  symbol to a dependency symbol whose semantic hash is present in
+  `dependency_semantic_hashes`;
 - a metadata entry for an absent symbol is invalid, even if the metadata is
   otherwise well-formed.
 
@@ -330,8 +359,9 @@ Required coverage areas:
   without committing to a native layout.
 - **Classes, instances, and dictionaries.** Record class kind, parameter kind,
   canonical instance key, dictionary symbol, field order, field types, field
-  effect rows, law/proof fields, coherence/orphan data, dependencies, and
-  lowerability status. Dictionary values remain ordinary checked core.
+  effect rows, explicitly runtime fields, law/proof fields, coherence/orphan
+  data, dependencies, and lowerability status. Dictionary values remain
+  ordinary checked core.
 - **Recursion.** Record recursive-group id, member symbols, SCC relation,
   structural or size-change admission result, checked bodies/types, diagnostics
   needed to explain rejection, and lowerability status.
