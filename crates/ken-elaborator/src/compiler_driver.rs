@@ -1974,6 +1974,7 @@ mod tests {
         emit_checked_core_package, CheckedCoreArtifactInputs, ClassInstanceKind,
         ClassInstanceMetadata, ObligationMetadata, ObligationStatus,
     };
+    use crate::erasure::erase_checked_core_package_for_target;
 
     fn main_symbol(package: &str) -> StableSymbol {
         StableSymbol::declaration(package, &[], "main")
@@ -2033,6 +2034,193 @@ mod tests {
             .into_iter()
             .flatten()
             .any(|lane| lane.lane == expected)
+    }
+
+    fn runtime_entrypoint(
+        entrypoint: &ExecutableEntrypointPackage,
+    ) -> ken_runtime::ExecutableEntrypointPackageMetadata {
+        let mut converted = ken_runtime::ExecutableEntrypointPackageMetadata {
+            package_identity: entrypoint.package_identity.to_string(),
+            package_core_semantic_hash: entrypoint.package_core_semantic_hash,
+            package_artifact_hash: entrypoint.package_artifact_hash,
+            target_symbol: entrypoint.target_symbol.to_string(),
+            target_kind: match entrypoint.target_kind {
+                CompilerTargetKind::Executable => {
+                    ken_runtime::ExecutableEntrypointTargetKind::Executable
+                }
+                CompilerTargetKind::Library => ken_runtime::ExecutableEntrypointTargetKind::Library,
+                CompilerTargetKind::NonRuntime => {
+                    ken_runtime::ExecutableEntrypointTargetKind::NonRuntime
+                }
+            },
+            closure_identity: entrypoint.closure_identity,
+            closure_semantic_hash: entrypoint.closure_semantic_hash,
+            metadata_identity: entrypoint.metadata_identity,
+            closed_entry: runtime_entrypoint_verdict(&entrypoint.closed_entry),
+            dependency_closure: runtime_dependency_closure(&entrypoint.dependency_closure),
+            required_runtime_support: entrypoint
+                .required_runtime_support
+                .iter()
+                .map(runtime_support)
+                .collect(),
+            argument_packaging: ken_runtime::ExecutableArgumentPackaging {
+                shape: runtime_argument_shape(&entrypoint.argument_packaging.shape),
+                evidence_source: entrypoint.argument_packaging.evidence_source.clone(),
+            },
+            result_observation: ken_runtime::ExecutableResultObservation {
+                shape: runtime_result_shape(&entrypoint.result_observation.shape),
+                evidence_source: entrypoint.result_observation.evidence_source.clone(),
+            },
+            trap_contract: ken_runtime::ExecutableTrapContract {
+                shape: runtime_trap_shape(&entrypoint.trap_contract.shape),
+                blocking_lanes: runtime_lane_map(&entrypoint.trap_contract.blocking_lanes),
+            },
+            report_contract: ken_runtime::ExecutableReportContract {
+                target_closure_identity: entrypoint.report_contract.target_closure_identity,
+                target_closure_report_hash: entrypoint.report_contract.target_closure_report_hash,
+                evidence_source: entrypoint.report_contract.evidence_source.clone(),
+            },
+            unsupported_lanes: runtime_lane_map(&entrypoint.unsupported_lanes),
+        };
+        converted.metadata_identity = ken_runtime::executable_entrypoint_metadata_hash(&converted);
+        converted
+    }
+
+    fn runtime_entrypoint_verdict(
+        verdict: &ExecutableEntrypointVerdict,
+    ) -> ken_runtime::ExecutableEntrypointVerdict {
+        match verdict {
+            ExecutableEntrypointVerdict::ClosedKenOnly => {
+                ken_runtime::ExecutableEntrypointVerdict::ClosedKenOnly
+            }
+            ExecutableEntrypointVerdict::Unavailable { lanes } => {
+                ken_runtime::ExecutableEntrypointVerdict::Unavailable {
+                    lanes: lanes.iter().map(runtime_lane).collect(),
+                }
+            }
+        }
+    }
+
+    fn runtime_dependency_closure(
+        closure: &ExecutableDependencyClosure,
+    ) -> ken_runtime::ExecutableDependencyClosure {
+        match closure {
+            ExecutableDependencyClosure::ClosedKenOnly => {
+                ken_runtime::ExecutableDependencyClosure::ClosedKenOnly
+            }
+            ExecutableDependencyClosure::ImportsUnavailable {
+                external_symbols,
+                imported_declaration_refs,
+            } => ken_runtime::ExecutableDependencyClosure::ImportsUnavailable {
+                external_symbols: external_symbols.iter().map(ToString::to_string).collect(),
+                imported_declaration_refs: imported_declaration_refs
+                    .iter()
+                    .map(|(declaration, dependency)| {
+                        (declaration.to_string(), dependency.to_string())
+                    })
+                    .collect(),
+            },
+        }
+    }
+
+    fn runtime_support(
+        support: &ExecutableRuntimeSupport,
+    ) -> ken_runtime::ExecutableRuntimeSupport {
+        match support {
+            ExecutableRuntimeSupport::RuntimeValues => {
+                ken_runtime::ExecutableRuntimeSupport::RuntimeValues
+            }
+            ExecutableRuntimeSupport::FunctionCalls => {
+                ken_runtime::ExecutableRuntimeSupport::FunctionCalls
+            }
+            ExecutableRuntimeSupport::PrimitiveValues => {
+                ken_runtime::ExecutableRuntimeSupport::PrimitiveValues
+            }
+            ExecutableRuntimeSupport::PrimitiveOperations => {
+                ken_runtime::ExecutableRuntimeSupport::PrimitiveOperations
+            }
+            ExecutableRuntimeSupport::AlgebraicData => {
+                ken_runtime::ExecutableRuntimeSupport::AlgebraicData
+            }
+            ExecutableRuntimeSupport::PatternMatching => {
+                ken_runtime::ExecutableRuntimeSupport::PatternMatching
+            }
+            ExecutableRuntimeSupport::RecordsSigma => {
+                ken_runtime::ExecutableRuntimeSupport::RecordsSigma
+            }
+            ExecutableRuntimeSupport::Dictionaries => {
+                ken_runtime::ExecutableRuntimeSupport::Dictionaries
+            }
+            ExecutableRuntimeSupport::Recursion => ken_runtime::ExecutableRuntimeSupport::Recursion,
+            ExecutableRuntimeSupport::TrapReporting => {
+                ken_runtime::ExecutableRuntimeSupport::TrapReporting
+            }
+        }
+    }
+
+    fn runtime_argument_shape(
+        shape: &ExecutableArgumentShape,
+    ) -> ken_runtime::ExecutableArgumentShape {
+        match shape {
+            ExecutableArgumentShape::ClosedNullary => {
+                ken_runtime::ExecutableArgumentShape::ClosedNullary
+            }
+            ExecutableArgumentShape::UnsupportedRuntimeArguments { parameter_count } => {
+                ken_runtime::ExecutableArgumentShape::UnsupportedRuntimeArguments {
+                    parameter_count: *parameter_count,
+                }
+            }
+            ExecutableArgumentShape::Unavailable { lane } => {
+                ken_runtime::ExecutableArgumentShape::Unavailable {
+                    lane: runtime_lane(lane),
+                }
+            }
+        }
+    }
+
+    fn runtime_result_shape(shape: &ExecutableResultShape) -> ken_runtime::ExecutableResultShape {
+        match shape {
+            ExecutableResultShape::RuntimeValue => ken_runtime::ExecutableResultShape::RuntimeValue,
+            ExecutableResultShape::Unavailable { lane } => {
+                ken_runtime::ExecutableResultShape::Unavailable {
+                    lane: runtime_lane(lane),
+                }
+            }
+        }
+    }
+
+    fn runtime_trap_shape(shape: &ExecutableTrapShape) -> ken_runtime::ExecutableTrapShape {
+        match shape {
+            ExecutableTrapShape::RuntimeTrapReport => {
+                ken_runtime::ExecutableTrapShape::RuntimeTrapReport
+            }
+            ExecutableTrapShape::Unavailable { lane } => {
+                ken_runtime::ExecutableTrapShape::Unavailable {
+                    lane: runtime_lane(lane),
+                }
+            }
+        }
+    }
+
+    fn runtime_lane_map(
+        lanes: &BTreeMap<StableSymbol, Vec<UnavailableLane>>,
+    ) -> BTreeMap<String, Vec<ken_runtime::ExecutableEntrypointUnavailableLane>> {
+        lanes
+            .iter()
+            .map(|(symbol, lanes)| {
+                (
+                    symbol.to_string(),
+                    lanes.iter().map(runtime_lane).collect::<Vec<_>>(),
+                )
+            })
+            .collect()
+    }
+
+    fn runtime_lane(lane: &UnavailableLane) -> ken_runtime::ExecutableEntrypointUnavailableLane {
+        ken_runtime::ExecutableEntrypointUnavailableLane {
+            lane: lane.lane.clone(),
+            reason: lane.reason.clone(),
+        }
     }
 
     #[test]
@@ -2106,6 +2294,55 @@ mod tests {
             ReportFact::Unavailable(UnavailableLane { ref lane, .. })
                 if lane == "validation_facts_unavailable"
         ));
+    }
+
+    #[test]
+    fn compiler_produced_entrypoint_materializes_runtime_packaging() {
+        let target = main_symbol("nc20_demo");
+        let out = compile_ken_source("nc20_demo", real_source(), selector("nc20_demo", target))
+            .expect("real source compiles through checked-core");
+        let closure = out.closures.first().expect("selected target closure");
+        let program = erase_checked_core_package_for_target(
+            &out.package,
+            closure.reachable_declarations.iter(),
+        )
+        .expect("compiler-produced closure lowers to runtime IR");
+        let report = ken_runtime::summarize_runtime_ir_program(&program);
+        let contract = ken_runtime::executable_artifact_contract_for_runtime_report(
+            &program,
+            &report,
+            out.executable_entrypoints[0].target_symbol.to_string(),
+            "ken-elaborator compiler-driver test",
+        )
+        .expect("runtime contract materializes");
+        let entrypoint = runtime_entrypoint(&out.executable_entrypoints[0]);
+
+        let package = ken_runtime::executable_entrypoint_package_for_runtime_contract(
+            &program,
+            &report,
+            &contract,
+            entrypoint,
+            "ken-elaborator compiler-driver test",
+        )
+        .expect("runtime entrypoint package materializes");
+
+        assert_eq!(
+            package.header.target,
+            out.executable_entrypoints[0].target_symbol.to_string()
+        );
+        assert_eq!(
+            package.runtime_artifact,
+            ken_runtime::RuntimeArtifactIdentity::from_program(&program)
+        );
+        assert_eq!(
+            package.runtime_report_hash,
+            ken_runtime::runtime_ir_program_report_hash(&report)
+        );
+        assert_eq!(
+            package.executable_contract_hash,
+            ken_runtime::executable_artifact_contract_hash(&contract)
+        );
+        assert!(package.header.package_hash != 0);
     }
 
     #[test]
