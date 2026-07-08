@@ -286,6 +286,13 @@ fn validate_entrypoint_identity(
         "report_contract.evidence_source",
         &entrypoint.report_contract.evidence_source,
     )?;
+    if entrypoint.report_contract.target_closure_identity != entrypoint.closure_identity {
+        return Err(packaging_error(
+            ExecutableEntrypointPackagingStage::EntrypointIdentity,
+            "report_contract.target_closure_identity",
+            "entrypoint report contract closure identity does not match the entrypoint closure identity",
+        ));
+    }
     validate_lane_map(&entrypoint.unsupported_lanes)?;
     if entrypoint.metadata_identity != executable_entrypoint_metadata_hash(entrypoint) {
         return Err(packaging_error(
@@ -939,6 +946,29 @@ mod tests {
         .expect_err("stale metadata identity rejects");
         assert_eq!(err.stage, ExecutableEntrypointPackagingStage::Hash);
         assert_eq!(err.field, "metadata_identity");
+    }
+
+    #[test]
+    fn mismatched_report_contract_closure_identity_rejects_after_hash_refresh() {
+        let program = pure_program();
+        let (report, contract) = runtime_contract(&program);
+        let mut entrypoint = entrypoint_for(&program);
+        entrypoint.report_contract.target_closure_identity ^= 1;
+        entrypoint.metadata_identity = executable_entrypoint_metadata_hash(&entrypoint);
+
+        let err = executable_entrypoint_package_for_runtime_contract(
+            &program,
+            &report,
+            &contract,
+            entrypoint,
+            "ken-runtime unit test",
+        )
+        .expect_err("mismatched report-contract closure identity rejects");
+        assert_eq!(
+            err.stage,
+            ExecutableEntrypointPackagingStage::EntrypointIdentity
+        );
+        assert_eq!(err.field, "report_contract.target_closure_identity");
     }
 
     #[test]
