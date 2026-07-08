@@ -209,6 +209,7 @@ pub fn run_native_execution_differential(
         example: target_example.name.clone(),
         checked_core_shape: target_example.checked_core_shape.clone(),
     };
+    let executable_path = validate_executable_artifact(package, artifact_root.as_ref())?;
 
     if matches!(
         run_report.observation.observation,
@@ -250,7 +251,6 @@ pub fn run_native_execution_differential(
         });
     }
 
-    let executable_path = validate_executable_artifact(package, artifact_root.as_ref())?;
     let native = run_packaged_executable(&executable_path, &run_report.observation.observation)?;
 
     let runtime_ir = compare_runtime_ir_lane(
@@ -1109,6 +1109,38 @@ mod tests {
                 ref reason,
             } if reason.contains("trap")
         ));
+    }
+
+    #[test]
+    fn trap_observation_still_rejects_stale_executable_artifact() {
+        let program = starter_program(38);
+        let mut run_report = runtime_ir_run_report(&program);
+        let output_dir = temp_output_dir("nc24-trap-stale-executable");
+        let mut package = package_for(&program, &run_report, &output_dir);
+        run_report.observation.observation = RuntimeObservation::Trapped(RuntimeTrap {
+            code: RuntimeTrapCode::ExplicitTrap,
+            message: "fixture trap".to_string(),
+        });
+        package.runtime_report_hash = object_linker_runtime_ir_run_report_hash(&run_report);
+        package.header.package_hash = object_linker_executable_package_hash(&package);
+        fs::write(
+            output_dir.join(&package.executable_artifact.relative_path),
+            b"not the packaged executable",
+        )
+        .expect("mutate packaged executable bytes");
+
+        let err = run_native_execution_differential(
+            &program,
+            &package,
+            &run_report,
+            &output_dir,
+            interpreter_available(&program, &run_report),
+            "native differential unit test",
+        )
+        .expect_err("trap path rejects stale executable bytes before report");
+
+        assert_eq!(err.stage, NativeExecutionDifferentialStage::ArtifactFile);
+        assert_eq!(err.field, "executable_artifact.byte_len");
     }
 
     #[test]
