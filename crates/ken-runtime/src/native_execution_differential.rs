@@ -823,40 +823,65 @@ fn positive_corpus_blocker(
                 .to_string(),
         });
     }
+    match &report.effect_foreign_policy.status {
+        NativeEffectForeignExecutableStatus::NativeTested => {}
+        NativeEffectForeignExecutableStatus::RepresentedUnavailable { reason } => {
+            return Some(NativeExecutablePhaseStatus::Unavailable {
+                reason: reason.clone(),
+            });
+        }
+        NativeEffectForeignExecutableStatus::Unsupported { reason } => {
+            return Some(NativeExecutablePhaseStatus::Unsupported {
+                reason: reason.clone(),
+            });
+        }
+    }
     if !matches!(report.native, NativeExecutionLaneReport::Available(_)) {
         return Some(NativeExecutablePhaseStatus::Unavailable {
             reason: "native execution lane is unavailable for this target".to_string(),
         });
     }
-    if !matches!(
-        report.runtime_ir,
+    match &report.runtime_ir {
         NativeComparisonLaneReport::TestedAgreement {
             lane: NativeDifferentialLane::RuntimeIrEvaluator,
             ..
+        } => {}
+        NativeComparisonLaneReport::Mismatch { diagnostic, .. } => {
+            return Some(NativeExecutablePhaseStatus::Failed {
+                reason: diagnostic.message.clone(),
+            });
         }
-    ) {
-        return Some(NativeExecutablePhaseStatus::Failed {
-            reason: "runtime-IR differential lane is not tested agreement".to_string(),
-        });
+        NativeComparisonLaneReport::TestedAgreement { .. } => {
+            return Some(NativeExecutablePhaseStatus::Failed {
+                reason: "runtime-IR differential lane has the wrong comparison lane".to_string(),
+            });
+        }
+        NativeComparisonLaneReport::Unavailable { reason, .. } => {
+            return Some(NativeExecutablePhaseStatus::Unavailable {
+                reason: format!("runtime-IR differential unavailable: {reason}"),
+            });
+        }
     }
-    if !matches!(
-        report.interpreter,
+    match &report.interpreter {
         NativeComparisonLaneReport::TestedAgreement {
             lane: NativeDifferentialLane::Interpreter,
             ..
+        } => {}
+        NativeComparisonLaneReport::Mismatch { diagnostic, .. } => {
+            return Some(NativeExecutablePhaseStatus::Failed {
+                reason: diagnostic.message.clone(),
+            });
         }
-    ) {
-        return Some(NativeExecutablePhaseStatus::Unavailable {
-            reason: "interpreter differential lane is not tested agreement".to_string(),
-        });
-    }
-    if !matches!(
-        report.effect_foreign_policy.status,
-        NativeEffectForeignExecutableStatus::NativeTested
-    ) {
-        return Some(NativeExecutablePhaseStatus::Unavailable {
-            reason: "effect/foreign executable policy is not native-tested".to_string(),
-        });
+        NativeComparisonLaneReport::TestedAgreement { .. } => {
+            return Some(NativeExecutablePhaseStatus::Failed {
+                reason: "interpreter differential lane has the wrong comparison lane".to_string(),
+            });
+        }
+        NativeComparisonLaneReport::Unavailable { reason, .. } => {
+            return Some(NativeExecutablePhaseStatus::Unavailable {
+                reason: format!("interpreter differential unavailable: {reason}"),
+            });
+        }
     }
     if !matches!(
         report.verdict,
@@ -4119,6 +4144,70 @@ mod tests {
         assert!(matches!(
             closeout.recommendation,
             NativeExecutablePhaseRecommendation::FramePrerequisiteWp { .. }
+        ));
+    }
+
+    #[test]
+    fn closeout_classifies_interpreter_mismatch_as_failed() {
+        let program = starter_program(52);
+        let run_report = runtime_ir_run_report(&program);
+        let output_dir = temp_output_dir("nc27-closeout-interpreter-mismatch");
+        let package = package_for(&program, &run_report, &output_dir);
+        let mut interpreter = match interpreter_available(&program, &run_report) {
+            NativeInterpreterLaneInput::Available(interpreter) => interpreter,
+            NativeInterpreterLaneInput::Unavailable { .. } => unreachable!(),
+        };
+        interpreter.observation = RuntimeObservation::Returned(RuntimeGroundValue::Int(53));
+        let report = run_native_execution_differential(
+            &program,
+            &package,
+            &run_report,
+            &output_dir,
+            NativeInterpreterLaneInput::Available(interpreter),
+            "native differential unit test",
+        )
+        .expect("interpreter mismatch report materializes");
+
+        let closeout =
+            close_native_executable_phase([&report], std::iter::empty(), "nc27 unit test");
+
+        assert!(closeout.corpus.positive_cases.is_empty());
+        assert_eq!(closeout.corpus.blockers.len(), 1);
+        assert!(matches!(
+            closeout.corpus.blockers[0].status,
+            NativeExecutablePhaseStatus::Failed { ref reason }
+                if reason.contains("native differential mismatch")
+                    && reason.contains(&program.package_identity)
+        ));
+    }
+
+    #[test]
+    fn closeout_classifies_effect_policy_unsupported_as_unsupported() {
+        let base_program = starter_program(53);
+        let run_report = runtime_ir_run_report(&base_program);
+        let output_dir = temp_output_dir("nc27-closeout-effect-unsupported");
+        let package = package_for(&base_program, &run_report, &output_dir);
+        let mut program = base_program.clone();
+        replace_target_body_with_effect(&mut program);
+        let report = run_native_execution_differential(
+            &program,
+            &package,
+            &run_report,
+            &output_dir,
+            interpreter_available(&program, &run_report),
+            "native differential unit test",
+        )
+        .expect("effect policy unsupported report materializes");
+
+        let closeout =
+            close_native_executable_phase([&report], std::iter::empty(), "nc27 unit test");
+
+        assert!(closeout.corpus.positive_cases.is_empty());
+        assert_eq!(closeout.corpus.blockers.len(), 1);
+        assert!(matches!(
+            closeout.corpus.blockers[0].status,
+            NativeExecutablePhaseStatus::Unsupported { ref reason }
+                if reason.contains("RuntimeExpr::Effect")
         ));
     }
 
