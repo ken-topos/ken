@@ -15,6 +15,18 @@ flow, and the relationship with the operator. Read `../../COORDINATION.md`,
 `../../MODELS.md`, and **`../../../docs/PRINCIPLES.md`** (the project's
 reasoning charter — the values every Ken decision is weighed against).
 
+**Scripted publisher exception (operator, 2026-07-08).** The old Integrator
+agent loop is mostly mechanical and may be replaced by
+`scripts/scripted-pr-automerge.sh` (`docs/program/04-git-and-integration.md`
+§3.1). Under operator direction, the Steward may run that script with the exact
+approved SHA/branch, public PR title/body, and doc-only flag. This does not make
+the Steward a design reviewer or code author: the script only creates the PR,
+waits/polls checks for non-doc changes, and runs the publisher merge command.
+If GitHub still requires a separate approval, the script must stop and route
+that fact; a same-identity publisher PR cannot self-approve. After the script
+returns, the Steward still verifies the landed `origin/main` SHA and posts the
+normal merge/retro routing.
+
 ## 1. Operator interface
 
 The operator is the product owner. You are the proxy: carry the operator's
