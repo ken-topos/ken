@@ -10,11 +10,14 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 use crate::{
-    runtime_executable_entrypoint_package_hash, ExecutableRuntimeSupport, RuntimeArtifactIdentity,
-    RuntimeDeclaration, RuntimeDeclarationKind, RuntimeExecutableEntrypointPackage, RuntimeExpr,
-    RuntimeGroundValue, RuntimeIrRunReport, RuntimeLowerabilityStatus, RuntimeObservation,
-    RuntimeProgram, RuntimeSymbol, RuntimeTrap, RuntimeTrapCode, RuntimeValue,
-    EXECUTABLE_ENTRYPOINT_PACKAGE_KIND, EXECUTABLE_ENTRYPOINT_PACKAGE_VERSION,
+    executable_entrypoint_metadata_hash, runtime_executable_entrypoint_package_hash,
+    ExecutableArgumentShape, ExecutableDependencyClosure, ExecutableEntrypointTargetKind,
+    ExecutableEntrypointVerdict, ExecutableResultShape, ExecutableRuntimeSupport,
+    ExecutableTrapShape, RuntimeArtifactIdentity, RuntimeDeclaration, RuntimeDeclarationKind,
+    RuntimeExecutableEntrypointPackage, RuntimeExpr, RuntimeGroundValue, RuntimeIrRunReport,
+    RuntimeLowerabilityStatus, RuntimeObservation, RuntimeProgram, RuntimeSymbol, RuntimeTrap,
+    RuntimeTrapCode, RuntimeValue, EXECUTABLE_ENTRYPOINT_PACKAGE_KIND,
+    EXECUTABLE_ENTRYPOINT_PACKAGE_VERSION,
 };
 
 pub const PLATFORM_RUNTIME_SUPPORT_KIND: &str = "KenPlatformRuntimeSupport";
@@ -361,6 +364,7 @@ fn validate_entrypoint_package_binding(
             "entrypoint package hash is stale",
         ));
     }
+    validate_entrypoint_metadata_payload(package)?;
     let artifact = RuntimeArtifactIdentity::from_program(program);
     if package.runtime_artifact != artifact {
         return Err(platform_error(
@@ -377,6 +381,91 @@ fn validate_entrypoint_package_binding(
             PlatformRuntimeSupportStage::RuntimeBinding,
             "package_identity",
             "entrypoint metadata does not match the exact RuntimeProgram identity",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_entrypoint_metadata_payload(
+    package: &RuntimeExecutableEntrypointPackage,
+) -> Result<(), PlatformRuntimeSupportError> {
+    let entrypoint = &package.entrypoint;
+    if entrypoint.metadata_identity != executable_entrypoint_metadata_hash(entrypoint) {
+        return Err(platform_error(
+            PlatformRuntimeSupportStage::Hash,
+            "entrypoint.metadata_identity",
+            "entrypoint metadata identity is stale",
+        ));
+    }
+    if entrypoint.target_kind != ExecutableEntrypointTargetKind::Executable {
+        return Err(platform_error(
+            PlatformRuntimeSupportStage::EntrypointPackage,
+            "entrypoint.target_kind",
+            "entrypoint metadata does not name an executable target",
+        ));
+    }
+    if !matches!(
+        entrypoint.closed_entry,
+        ExecutableEntrypointVerdict::ClosedKenOnly
+    ) {
+        return Err(platform_error(
+            PlatformRuntimeSupportStage::EntrypointPackage,
+            "entrypoint.closed_entry",
+            "entrypoint metadata is not closed Ken-only",
+        ));
+    }
+    if !matches!(
+        entrypoint.dependency_closure,
+        ExecutableDependencyClosure::ClosedKenOnly
+    ) {
+        return Err(platform_error(
+            PlatformRuntimeSupportStage::EntrypointPackage,
+            "entrypoint.dependency_closure",
+            "entrypoint metadata carries imported or external dependencies",
+        ));
+    }
+    if !entrypoint.unsupported_lanes.is_empty() {
+        return Err(platform_error(
+            PlatformRuntimeSupportStage::EntrypointPackage,
+            "entrypoint.unsupported_lanes",
+            "entrypoint metadata carries unsupported or unavailable lanes",
+        ));
+    }
+    if !matches!(
+        entrypoint.argument_packaging.shape,
+        ExecutableArgumentShape::ClosedNullary
+    ) {
+        return Err(platform_error(
+            PlatformRuntimeSupportStage::EntrypointPackage,
+            "entrypoint.argument_packaging",
+            "NC21 only supports closed nullary executable entrypoints",
+        ));
+    }
+    if !matches!(
+        entrypoint.result_observation.shape,
+        ExecutableResultShape::RuntimeValue
+    ) {
+        return Err(platform_error(
+            PlatformRuntimeSupportStage::EntrypointPackage,
+            "entrypoint.result_observation",
+            "entrypoint result observation is not a runtime value",
+        ));
+    }
+    if !matches!(
+        entrypoint.trap_contract.shape,
+        ExecutableTrapShape::RuntimeTrapReport
+    ) {
+        return Err(platform_error(
+            PlatformRuntimeSupportStage::EntrypointPackage,
+            "entrypoint.trap_contract",
+            "entrypoint trap contract is not a runtime trap report",
+        ));
+    }
+    if entrypoint.report_contract.target_closure_identity != entrypoint.closure_identity {
+        return Err(platform_error(
+            PlatformRuntimeSupportStage::EntrypointPackage,
+            "entrypoint.report_contract.target_closure_identity",
+            "entrypoint report contract closure identity does not match the entrypoint closure identity",
         ));
     }
     Ok(())
@@ -428,20 +517,24 @@ fn validate_runtime_ir_run_report_target(
             "RuntimeIrRunReport evidence target does not match the run target",
         ));
     }
-    let example = program
-        .examples
-        .iter()
-        .find(|example| {
-            example.name == run_report.target.example
-                && example.checked_core_shape == run_report.target.checked_core_shape
-        })
-        .ok_or_else(|| {
-            platform_error(
-                PlatformRuntimeSupportStage::RuntimeObservationSupport,
-                "runtime_ir_run_report.target",
-                "RuntimeIrRunReport target is not present in the exact RuntimeProgram examples",
-            )
-        })?;
+    let mut matching_examples = program.examples.iter().filter(|example| {
+        example.name == run_report.target.example
+            && example.checked_core_shape == run_report.target.checked_core_shape
+    });
+    let Some(example) = matching_examples.next() else {
+        return Err(platform_error(
+            PlatformRuntimeSupportStage::RuntimeObservationSupport,
+            "runtime_ir_run_report.target",
+            "RuntimeIrRunReport target is not present in the exact RuntimeProgram examples",
+        ));
+    };
+    if matching_examples.next().is_some() {
+        return Err(platform_error(
+            PlatformRuntimeSupportStage::RuntimeObservationSupport,
+            "runtime_ir_run_report.target",
+            "RuntimeIrRunReport target identity is ambiguous in the exact RuntimeProgram examples",
+        ));
+    }
     if !matches!(
         &example.ir,
         RuntimeExpr::DeclarationRef { symbol } if symbol == &package.entrypoint.target_symbol
@@ -1334,6 +1427,49 @@ mod tests {
     }
 
     #[test]
+    fn stale_entrypoint_metadata_payload_rejects_before_runtime_support() {
+        let (body, observation) = supported_body_and_observation();
+        let program = starter_program(body, observation.clone());
+        let (_report, mut package) = packaged_entrypoint(&program);
+        let run_report = runtime_ir_run_report(&program);
+        package.entrypoint.target_kind = ExecutableEntrypointTargetKind::Library;
+
+        let err = platform_runtime_support_for_entrypoint(
+            &program,
+            &package,
+            &run_report,
+            PlatformRuntimeTarget::starter("test-starter-platform"),
+            "ken-runtime unit test",
+        )
+        .expect_err("stale embedded entrypoint metadata rejects");
+        assert_eq!(err.stage, PlatformRuntimeSupportStage::Hash);
+        assert_eq!(err.field, "entrypoint.metadata_identity");
+    }
+
+    #[test]
+    fn refreshed_non_executable_entrypoint_payload_rejects() {
+        let (body, observation) = supported_body_and_observation();
+        let program = starter_program(body, observation.clone());
+        let (_report, mut package) = packaged_entrypoint(&program);
+        let run_report = runtime_ir_run_report(&program);
+        package.entrypoint.target_kind = ExecutableEntrypointTargetKind::Library;
+        package.entrypoint.metadata_identity =
+            executable_entrypoint_metadata_hash(&package.entrypoint);
+        package.header.package_hash = runtime_executable_entrypoint_package_hash(&package);
+
+        let err = platform_runtime_support_for_entrypoint(
+            &program,
+            &package,
+            &run_report,
+            PlatformRuntimeTarget::starter("test-starter-platform"),
+            "ken-runtime unit test",
+        )
+        .expect_err("refreshed non-executable entrypoint metadata rejects");
+        assert_eq!(err.stage, PlatformRuntimeSupportStage::EntrypointPackage);
+        assert_eq!(err.field, "entrypoint.target_kind");
+    }
+
+    #[test]
     fn stable_abi_target_rejects_before_native_execution() {
         let (body, observation) = supported_body_and_observation();
         let program = starter_program(body, observation.clone());
@@ -1489,6 +1625,51 @@ mod tests {
             "ken-runtime unit test",
         )
         .expect_err("helper run report must not satisfy the main entrypoint");
+        assert_eq!(
+            err.stage,
+            PlatformRuntimeSupportStage::RuntimeObservationSupport
+        );
+        assert_eq!(err.field, "runtime_ir_run_report.target");
+    }
+
+    #[test]
+    fn runtime_ir_run_report_target_identity_must_be_unique() {
+        let (body, observation) = supported_body_and_observation();
+        let mut program = starter_program(body, observation);
+        let helper = "decl:fixture::Executable::helper".to_string();
+        program.erased_core.symbols.insert(helper.clone());
+        program
+            .erased_core
+            .metadata
+            .lowerability
+            .insert(helper.clone(), RuntimeLowerabilityStatus::Supported);
+        program.declarations.push(RuntimeDeclaration {
+            symbol: helper.clone(),
+            kind: RuntimeDeclarationKind::Transparent {
+                body: RuntimeExpr::Value(RuntimeValue::Bool(true)),
+            },
+            metadata: RuntimeSymbolMetadata {
+                lowerability: Some(RuntimeLowerabilityStatus::Supported),
+                ..RuntimeSymbolMetadata::empty()
+            },
+        });
+        program.examples.push(crate::RuntimeExample {
+            name: program.examples[0].name.clone(),
+            checked_core_shape: program.examples[0].checked_core_shape.clone(),
+            ir: RuntimeExpr::DeclarationRef { symbol: helper },
+            observation: RuntimeObservation::Returned(RuntimeGroundValue::Bool(true)),
+        });
+        let (_report, package) = packaged_entrypoint(&program);
+        let helper_run_report = runtime_ir_run_report_for_example(&program, 1);
+
+        let err = platform_runtime_support_for_entrypoint(
+            &program,
+            &package,
+            &helper_run_report,
+            PlatformRuntimeTarget::starter("test-starter-platform"),
+            "ken-runtime unit test",
+        )
+        .expect_err("duplicate runtime example target identity rejects");
         assert_eq!(
             err.stage,
             PlatformRuntimeSupportStage::RuntimeObservationSupport
