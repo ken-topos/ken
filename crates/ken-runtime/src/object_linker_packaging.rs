@@ -12,6 +12,7 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
+use crate::platform_runtime_support::validate_entrypoint_metadata_payload;
 use crate::{
     emit_runtime_ir_object_with_cranelift, fnv1a_64, platform_runtime_support_report_hash,
     run_runtime_ir_report_with_cranelift, runtime_executable_entrypoint_package_hash,
@@ -373,6 +374,16 @@ fn validate_entrypoint_package(
             "entrypoint package hash is stale",
         ));
     }
+    validate_entrypoint_metadata_payload(package).map_err(|err| {
+        packaging_error(
+            match err.stage {
+                crate::PlatformRuntimeSupportStage::Hash => ObjectLinkerPackagingStage::Hash,
+                _ => ObjectLinkerPackagingStage::EntrypointPackage,
+            },
+            err.field,
+            err.reason,
+        )
+    })?;
     if package.runtime_artifact != RuntimeArtifactIdentity::from_program(program) {
         return Err(packaging_error(
             ObjectLinkerPackagingStage::EntrypointPackage,
@@ -1213,6 +1224,21 @@ mod tests {
         .expect("runtime-IR evaluator produces an observation")
     }
 
+    fn platform_support(
+        program: &RuntimeProgram,
+        entrypoint: &RuntimeExecutableEntrypointPackage,
+        run_report: &RuntimeIrRunReport,
+    ) -> PlatformRuntimeSupportReport {
+        platform_runtime_support_for_entrypoint(
+            program,
+            entrypoint,
+            run_report,
+            crate::PlatformRuntimeTarget::starter(native_platform_target_name()),
+            "object linker unit test",
+        )
+        .expect("platform support materializes")
+    }
+
     fn temp_output_dir(name: &str) -> PathBuf {
         let mut dir = std::env::temp_dir();
         dir.push(format!(
@@ -1302,6 +1328,61 @@ mod tests {
 
         assert_eq!(err.stage, ObjectLinkerPackagingStage::Hash);
         assert_eq!(err.field, "platform_runtime_support_hash");
+    }
+
+    #[test]
+    fn stale_mutated_entrypoint_payload_rejects_before_linking() {
+        let observation = RuntimeObservation::Returned(RuntimeGroundValue::Int(11));
+        let program = starter_program(int_body(11), observation);
+        let (_report, mut entrypoint) = packaged_entrypoint(&program);
+        let run_report = runtime_ir_run_report(&program);
+        let support = platform_support(&program, &entrypoint, &run_report);
+        entrypoint.entrypoint.target_kind = ExecutableEntrypointTargetKind::Library;
+
+        let err = package_starter_executable_artifact(
+            &program,
+            &entrypoint,
+            &support,
+            &run_report,
+            &NativeSeedEnvironment::empty(),
+            temp_output_dir("nc23-stale-payload"),
+            "object linker unit test",
+        )
+        .expect_err("stale mutated entrypoint payload rejects");
+
+        assert_eq!(err.stage, ObjectLinkerPackagingStage::Hash);
+        assert_eq!(err.field, "entrypoint.metadata_identity");
+    }
+
+    #[test]
+    fn forged_support_for_non_executable_payload_rejects_before_linking() {
+        let observation = RuntimeObservation::Returned(RuntimeGroundValue::Int(13));
+        let program = starter_program(int_body(13), observation);
+        let (_report, mut entrypoint) = packaged_entrypoint(&program);
+        let run_report = runtime_ir_run_report(&program);
+        let mut support = platform_support(&program, &entrypoint, &run_report);
+
+        entrypoint.entrypoint.target_kind = ExecutableEntrypointTargetKind::Library;
+        entrypoint.entrypoint.metadata_identity =
+            executable_entrypoint_metadata_hash(&entrypoint.entrypoint);
+        entrypoint.header.package_hash = runtime_executable_entrypoint_package_hash(&entrypoint);
+        support.entrypoint_package_hash = entrypoint.header.package_hash;
+        support.entrypoint_metadata_identity = entrypoint.entrypoint.metadata_identity;
+        support.header.support_hash = platform_runtime_support_report_hash(&support);
+
+        let err = package_starter_executable_artifact(
+            &program,
+            &entrypoint,
+            &support,
+            &run_report,
+            &NativeSeedEnvironment::empty(),
+            temp_output_dir("nc23-forged-support"),
+            "object linker unit test",
+        )
+        .expect_err("forged support around non-executable payload rejects");
+
+        assert_eq!(err.stage, ObjectLinkerPackagingStage::EntrypointPackage);
+        assert_eq!(err.field, "entrypoint.target_kind");
     }
 
     #[test]
