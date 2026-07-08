@@ -19,8 +19,8 @@ use crate::{
     ObjectLinkerArtifactKind, ObjectLinkerExecutablePackage, RuntimeArtifactIdentity,
     RuntimeDeclaration, RuntimeDeclarationKind, RuntimeEffectBoundary, RuntimeExpr,
     RuntimeGroundValue, RuntimeInterpreterObservation, RuntimeIrRunReport, RuntimeIrTargetIdentity,
-    RuntimeObservation, RuntimeProgram, RuntimeSymbol, OBJECT_LINKER_PACKAGE_KIND,
-    OBJECT_LINKER_PACKAGE_VERSION,
+    RuntimeLowerabilityStatus, RuntimeObservation, RuntimeProgram, RuntimeSymbol,
+    OBJECT_LINKER_PACKAGE_KIND, OBJECT_LINKER_PACKAGE_VERSION,
 };
 
 pub const NATIVE_EXECUTION_DIFFERENTIAL_REPORT_KIND: &str = "KenNativeExecutionDifferentialReport";
@@ -567,6 +567,10 @@ fn effect_foreign_executable_policy_report(
             "checked_core.boundary={}",
             boundary_tag(&meta.boundary)
         ));
+        facts.insert(format!(
+            "checked_core.lowerability={}",
+            lowerability_status_tag(&meta.lowerability)
+        ));
         for effect in &meta.declared_effects {
             facts.insert(format!("checked_core.effect={effect}"));
         }
@@ -578,6 +582,20 @@ fn effect_foreign_executable_policy_report(
         }
         if let Some(foreign_symbol) = &meta.foreign_symbol {
             facts.insert(format!("checked_core.foreign_symbol={foreign_symbol}"));
+        }
+
+        if !matches!(meta.lowerability, RuntimeLowerabilityStatus::Supported) {
+            return Ok(policy_report(
+                target_symbol,
+                NativeEffectForeignExecutableStatus::Unsupported {
+                    reason: format!(
+                        "checked-core effect/foreign metadata is not native-lowerable: {:?}",
+                        meta.lowerability
+                    ),
+                },
+                facts,
+                "RuntimeProgram.erased_core.metadata.checked_core.effects_foreign_metadata.lowerability",
+            ));
         }
 
         if meta.boundary == RuntimeEffectBoundary::Foreign || meta.foreign_symbol.is_some() {
@@ -767,6 +785,25 @@ fn boundary_tag(boundary: &RuntimeEffectBoundary) -> &'static str {
         RuntimeEffectBoundary::Pure => "pure",
         RuntimeEffectBoundary::Effectful => "effectful",
         RuntimeEffectBoundary::Foreign => "foreign",
+    }
+}
+
+fn lowerability_status_tag(status: &RuntimeLowerabilityStatus) -> String {
+    match status {
+        RuntimeLowerabilityStatus::Supported => "supported".to_string(),
+        RuntimeLowerabilityStatus::Unsupported { reason } => {
+            format!("unsupported:{reason}")
+        }
+        RuntimeLowerabilityStatus::Deferred {
+            later_stage,
+            reason,
+        } => format!("deferred:{later_stage}:{reason}"),
+        RuntimeLowerabilityStatus::RequiresFeature { feature, reason } => {
+            format!("requires_feature:{feature}:{reason}")
+        }
+        RuntimeLowerabilityStatus::Explicit { state, reason } => {
+            format!("explicit:{state}:{reason}")
+        }
     }
 }
 
@@ -1716,6 +1753,65 @@ mod tests {
         assert!(matches!(
             report.native,
             NativeExecutionLaneReport::Unavailable { .. }
+        ));
+    }
+
+    #[test]
+    fn non_supported_effect_foreign_lowerability_is_unsupported_not_native_tested() {
+        let base_program = starter_program(45);
+        let run_report = runtime_ir_run_report(&base_program);
+        let output_dir = temp_output_dir("nc25-lowerability-unsupported");
+        let package = package_for(&base_program, &run_report, &output_dir);
+        let mut program = base_program.clone();
+        let symbol = program.declarations[0].symbol.clone();
+        program
+            .erased_core
+            .metadata
+            .checked_core
+            .effects_foreign_metadata
+            .insert(
+                symbol,
+                crate::RuntimeEffectsForeignAuditMetadata {
+                    declared_effects: BTreeSet::new(),
+                    capabilities: BTreeSet::new(),
+                    foreign_symbol: None,
+                    boundary: RuntimeEffectBoundary::Pure,
+                    runtime_checks: BTreeSet::new(),
+                    lowerability: RuntimeLowerabilityStatus::Unsupported {
+                        reason: "requires host-effect policy".to_string(),
+                    },
+                },
+            );
+
+        let report = run_native_execution_differential(
+            &program,
+            &package,
+            &run_report,
+            &output_dir,
+            interpreter_available(&program, &run_report),
+            "native differential unit test",
+        )
+        .expect("non-supported effect/foreign lowerability reports unsupported");
+
+        assert!(matches!(
+            report.effect_foreign_policy.status,
+            NativeEffectForeignExecutableStatus::Unsupported { ref reason }
+                if reason.contains("not native-lowerable")
+        ));
+        assert!(report
+            .effect_foreign_policy
+            .facts
+            .contains("checked_core.lowerability=unsupported:requires host-effect policy"));
+        assert!(matches!(
+            report.native,
+            NativeExecutionLaneReport::Unavailable { .. }
+        ));
+        assert!(matches!(
+            report.verdict,
+            NativeExecutionDifferentialVerdict::Unavailable {
+                lane: NativeDifferentialLane::NativeExecution,
+                ..
+            }
         ));
     }
 
