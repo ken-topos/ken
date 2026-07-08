@@ -386,7 +386,7 @@ fn validate_entrypoint_package_binding(
     Ok(())
 }
 
-fn validate_entrypoint_metadata_payload(
+pub(crate) fn validate_entrypoint_metadata_payload(
     package: &RuntimeExecutableEntrypointPackage,
 ) -> Result<(), PlatformRuntimeSupportError> {
     let entrypoint = &package.entrypoint;
