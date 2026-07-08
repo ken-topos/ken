@@ -2,9 +2,11 @@
 //!
 //! NC24 consumes compiler-produced NC23 object/linker packages and compares
 //! exact native execution observations against runtime-IR evaluator reports and
-//! interpreter observations when that lane is available. The report is tested
-//! evidence only: it does not claim translation validation, proof, library ABI,
-//! C/Rust interop, or foreign execution support.
+//! interpreter observations when that lane is available. NC25 carries NC18
+//! effect/foreign facts through that report surface so host-effect and FFI
+//! execution stay explicitly unavailable unless a later policy makes them
+//! executable. The report is tested evidence only: it does not claim translation
+//! validation, proof, library ABI, C/Rust interop, or foreign execution support.
 
 use std::collections::BTreeSet;
 use std::fmt;
@@ -15,15 +17,16 @@ use std::process::Command;
 use crate::{
     fnv1a_64, object_linker_executable_package_hash, object_linker_runtime_ir_run_report_hash,
     ObjectLinkerArtifactKind, ObjectLinkerExecutablePackage, RuntimeArtifactIdentity,
+    RuntimeDeclaration, RuntimeDeclarationKind, RuntimeEffectBoundary, RuntimeExpr,
     RuntimeGroundValue, RuntimeInterpreterObservation, RuntimeIrRunReport, RuntimeIrTargetIdentity,
     RuntimeObservation, RuntimeProgram, RuntimeSymbol, OBJECT_LINKER_PACKAGE_KIND,
     OBJECT_LINKER_PACKAGE_VERSION,
 };
 
 pub const NATIVE_EXECUTION_DIFFERENTIAL_REPORT_KIND: &str = "KenNativeExecutionDifferentialReport";
-pub const NATIVE_EXECUTION_DIFFERENTIAL_REPORT_VERSION: u32 = 0;
+pub const NATIVE_EXECUTION_DIFFERENTIAL_REPORT_VERSION: u32 = 1;
 pub const NATIVE_EXECUTION_DIFFERENTIAL_SPEC_REF: &str =
-    "docs/program/wp/NC24-native-execution-differential-suite.md";
+    "docs/program/wp/NC25-effects-foreign-executable-policy.md";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NativeExecutionDifferentialReport {
@@ -33,6 +36,7 @@ pub struct NativeExecutionDifferentialReport {
     pub runtime_ir: NativeComparisonLaneReport,
     pub interpreter: NativeComparisonLaneReport,
     pub verdict: NativeExecutionDifferentialVerdict,
+    pub effect_foreign_policy: NativeEffectForeignExecutablePolicyReport,
     pub unavailable_claims: BTreeSet<NativeExecutionUnavailableClaim>,
 }
 
@@ -116,6 +120,21 @@ pub enum NativeLaneVerdict {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NativeEffectForeignExecutablePolicyReport {
+    pub target_symbol: RuntimeSymbol,
+    pub status: NativeEffectForeignExecutableStatus,
+    pub facts: BTreeSet<String>,
+    pub evidence_source: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum NativeEffectForeignExecutableStatus {
+    NativeTested,
+    RepresentedUnavailable { reason: String },
+    Unsupported { reason: String },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NativeMismatchDiagnostic {
     pub package_identity: String,
     pub target_symbol: RuntimeSymbol,
@@ -174,6 +193,7 @@ pub enum NativeExecutionDifferentialStage {
     PackageIdentity,
     RuntimeIrRunReport,
     ArtifactFile,
+    EffectForeignExecutablePolicy,
     NativeExecution,
     InterpreterEvidence,
 }
@@ -210,6 +230,47 @@ pub fn run_native_execution_differential(
         checked_core_shape: target_example.checked_core_shape.clone(),
     };
     let executable_path = validate_executable_artifact(package, artifact_root.as_ref())?;
+    let effect_foreign_policy =
+        effect_foreign_executable_policy_report(program, &package.header.target_symbol)?;
+
+    if let Some(reason) = effect_foreign_policy_unavailable_reason(&effect_foreign_policy) {
+        let interpreter = unavailable_interpreter_for_policy(
+            &target,
+            &expected_target,
+            interpreter,
+            &run_report.observation.observation,
+            &reason,
+        )?;
+        return Ok(NativeExecutionDifferentialReport {
+            header: NativeExecutionDifferentialHeader {
+                report_kind: NATIVE_EXECUTION_DIFFERENTIAL_REPORT_KIND.to_string(),
+                version: NATIVE_EXECUTION_DIFFERENTIAL_REPORT_VERSION,
+                spec_ref: NATIVE_EXECUTION_DIFFERENTIAL_SPEC_REF.to_string(),
+                producer: producer.into(),
+            },
+            target,
+            native: NativeExecutionLaneReport::Unavailable {
+                reason: reason.clone(),
+                evidence_source:
+                    "NC25 effect/foreign executable policy rejected native execution before launch"
+                        .to_string(),
+            },
+            runtime_ir: NativeComparisonLaneReport::Unavailable {
+                lane: NativeDifferentialLane::NativeExecution,
+                reason: reason.clone(),
+                evidence_source:
+                    "NC18 effect/foreign facts are represented; NC25 keeps native execution unavailable"
+                        .to_string(),
+            },
+            interpreter,
+            verdict: NativeExecutionDifferentialVerdict::Unavailable {
+                lane: NativeDifferentialLane::NativeExecution,
+                reason,
+            },
+            effect_foreign_policy,
+            unavailable_claims: required_unavailable_claims(),
+        });
+    }
 
     if matches!(
         run_report.observation.observation,
@@ -247,6 +308,7 @@ pub fn run_native_execution_differential(
                 lane: NativeDifferentialLane::NativeExecution,
                 reason,
             },
+            effect_foreign_policy,
             unavailable_claims: required_unavailable_claims(),
         });
     }
@@ -274,6 +336,7 @@ pub fn run_native_execution_differential(
         runtime_ir,
         interpreter,
         verdict,
+        effect_foreign_policy,
         unavailable_claims: required_unavailable_claims(),
     })
 }
@@ -463,6 +526,287 @@ fn validate_executable_artifact(
         ));
     }
     Ok(path)
+}
+
+fn effect_foreign_executable_policy_report(
+    program: &RuntimeProgram,
+    target_symbol: &RuntimeSymbol,
+) -> Result<NativeEffectForeignExecutablePolicyReport, NativeExecutionDifferentialError> {
+    let declaration = program
+        .declarations
+        .iter()
+        .find(|declaration| declaration.symbol == *target_symbol)
+        .ok_or_else(|| {
+            differential_error(
+                NativeExecutionDifferentialStage::EffectForeignExecutablePolicy,
+                "target_symbol",
+                "packaged target declaration is absent from the RuntimeProgram",
+            )
+        })?;
+
+    let mut facts = BTreeSet::new();
+    let checked_meta = program
+        .erased_core
+        .metadata
+        .checked_core
+        .effects_foreign_metadata
+        .get(target_symbol);
+
+    if let Some(reason) =
+        effect_foreign_metadata_inconsistency_reason(program, declaration, checked_meta)
+    {
+        return Err(differential_error(
+            NativeExecutionDifferentialStage::EffectForeignExecutablePolicy,
+            "effect_foreign_metadata",
+            reason,
+        ));
+    }
+
+    if let Some(meta) = checked_meta {
+        facts.insert(format!(
+            "checked_core.boundary={}",
+            boundary_tag(&meta.boundary)
+        ));
+        for effect in &meta.declared_effects {
+            facts.insert(format!("checked_core.effect={effect}"));
+        }
+        for capability in &meta.capabilities {
+            facts.insert(format!("checked_core.capability={capability}"));
+        }
+        for runtime_check in &meta.runtime_checks {
+            facts.insert(format!("checked_core.runtime_check={runtime_check}"));
+        }
+        if let Some(foreign_symbol) = &meta.foreign_symbol {
+            facts.insert(format!("checked_core.foreign_symbol={foreign_symbol}"));
+        }
+
+        if meta.boundary == RuntimeEffectBoundary::Foreign || meta.foreign_symbol.is_some() {
+            return Ok(policy_report(
+                target_symbol,
+                NativeEffectForeignExecutableStatus::RepresentedUnavailable {
+                    reason:
+                        "foreign-boundary facts are represented, but native FFI execution is unavailable"
+                            .to_string(),
+                },
+                facts,
+                "RuntimeProgram.erased_core.metadata.checked_core.effects_foreign_metadata",
+            ));
+        }
+        if meta.boundary == RuntimeEffectBoundary::Effectful
+            || !meta.declared_effects.is_empty()
+            || !meta.capabilities.is_empty()
+            || !meta.runtime_checks.is_empty()
+        {
+            return Ok(policy_report(
+                target_symbol,
+                NativeEffectForeignExecutableStatus::RepresentedUnavailable {
+                    reason:
+                        "effect/capability/runtime-check facts are represented, but host-effect execution is unavailable"
+                            .to_string(),
+                },
+                facts,
+                "RuntimeProgram.erased_core.metadata.checked_core.effects_foreign_metadata",
+            ));
+        }
+    }
+
+    if !declaration.metadata.effects.is_empty()
+        || !declaration.metadata.capabilities.is_empty()
+        || !declaration.metadata.runtime_checks.is_empty()
+    {
+        for effect in &declaration.metadata.effects {
+            facts.insert(format!("runtime_symbol.effect={effect}"));
+        }
+        for capability in &declaration.metadata.capabilities {
+            facts.insert(format!("runtime_symbol.capability={capability}"));
+        }
+        for runtime_check in &declaration.metadata.runtime_checks {
+            facts.insert(format!("runtime_symbol.runtime_check={runtime_check}"));
+        }
+        facts.insert("checked_core.effect_foreign_authority=missing".to_string());
+        return Ok(policy_report(
+            target_symbol,
+            NativeEffectForeignExecutableStatus::RepresentedUnavailable {
+                reason:
+                    "target carries effect, capability, or runtime-check metadata without checked-core executable authority"
+                        .to_string(),
+            },
+            facts,
+            "RuntimeDeclaration.metadata effect/capability/runtime-check facts",
+        ));
+    }
+
+    if let RuntimeDeclarationKind::EffectBoundary { effects } = &declaration.kind {
+        if !effects.is_empty() {
+            for effect in effects {
+                facts.insert(format!("runtime_effect_boundary.effect={effect}"));
+            }
+            return Ok(policy_report(
+                target_symbol,
+                NativeEffectForeignExecutableStatus::RepresentedUnavailable {
+                    reason:
+                        "target declares effect-boundary metadata without host-effect execution"
+                            .to_string(),
+                },
+                facts,
+                "RuntimeDeclarationKind::EffectBoundary",
+            ));
+        }
+    }
+
+    if let RuntimeDeclarationKind::Transparent { body } = &declaration.kind {
+        if let Some(effect) = runtime_expr_effect(body) {
+            facts.insert(format!("runtime_expr.effect={effect}"));
+            return Ok(policy_report(
+                target_symbol,
+                NativeEffectForeignExecutableStatus::Unsupported {
+                    reason:
+                        "transparent RuntimeExpr::Effect bodies are outside native executable policy"
+                            .to_string(),
+                },
+                facts,
+                "RuntimeDeclaration transparent body",
+            ));
+        }
+    }
+
+    Ok(policy_report(
+        target_symbol,
+        NativeEffectForeignExecutableStatus::NativeTested,
+        facts,
+        "NC25 found no effect/foreign facts on the packaged target",
+    ))
+}
+
+fn effect_foreign_metadata_inconsistency_reason(
+    program: &RuntimeProgram,
+    declaration: &RuntimeDeclaration,
+    checked_meta: Option<&crate::RuntimeEffectsForeignAuditMetadata>,
+) -> Option<String> {
+    let effect_meta = checked_meta?;
+    if effect_meta.declared_effects != declaration.metadata.effects {
+        return Some(format!(
+            "{} has stale or missing effect/foreign authority metadata in effects",
+            declaration.symbol
+        ));
+    }
+    if effect_meta.capabilities != declaration.metadata.capabilities {
+        return Some(format!(
+            "{} has stale or missing effect/foreign authority metadata in capabilities",
+            declaration.symbol
+        ));
+    }
+    if effect_meta.runtime_checks != declaration.metadata.runtime_checks {
+        return Some(format!(
+            "{} has stale or missing effect/foreign authority metadata in runtime_checks",
+            declaration.symbol
+        ));
+    }
+    if !program
+        .erased_core
+        .metadata
+        .effects
+        .is_superset(&effect_meta.declared_effects)
+    {
+        return Some(format!(
+            "{} has stale or missing effect/foreign authority metadata in package effects",
+            declaration.symbol
+        ));
+    }
+    if !program
+        .erased_core
+        .metadata
+        .capabilities
+        .is_superset(&effect_meta.capabilities)
+    {
+        return Some(format!(
+            "{} has stale or missing effect/foreign authority metadata in package capabilities",
+            declaration.symbol
+        ));
+    }
+    if !program
+        .erased_core
+        .metadata
+        .runtime_checks
+        .is_superset(&effect_meta.runtime_checks)
+    {
+        return Some(format!(
+            "{} has stale or missing effect/foreign authority metadata in package runtime checks",
+            declaration.symbol
+        ));
+    }
+    None
+}
+
+fn policy_report(
+    target_symbol: &RuntimeSymbol,
+    status: NativeEffectForeignExecutableStatus,
+    facts: BTreeSet<String>,
+    evidence_source: impl Into<String>,
+) -> NativeEffectForeignExecutablePolicyReport {
+    NativeEffectForeignExecutablePolicyReport {
+        target_symbol: target_symbol.clone(),
+        status,
+        facts,
+        evidence_source: evidence_source.into(),
+    }
+}
+
+fn effect_foreign_policy_unavailable_reason(
+    report: &NativeEffectForeignExecutablePolicyReport,
+) -> Option<String> {
+    match &report.status {
+        NativeEffectForeignExecutableStatus::NativeTested => None,
+        NativeEffectForeignExecutableStatus::RepresentedUnavailable { reason }
+        | NativeEffectForeignExecutableStatus::Unsupported { reason } => Some(reason.clone()),
+    }
+}
+
+fn boundary_tag(boundary: &RuntimeEffectBoundary) -> &'static str {
+    match boundary {
+        RuntimeEffectBoundary::Pure => "pure",
+        RuntimeEffectBoundary::Effectful => "effectful",
+        RuntimeEffectBoundary::Foreign => "foreign",
+    }
+}
+
+fn runtime_expr_effect(expr: &RuntimeExpr) -> Option<&str> {
+    match expr {
+        RuntimeExpr::Value(_)
+        | RuntimeExpr::Var(_)
+        | RuntimeExpr::DeclarationRef { .. }
+        | RuntimeExpr::ImportedDeclarationRef { .. }
+        | RuntimeExpr::Trap(_) => None,
+        RuntimeExpr::Let { value, body } => {
+            runtime_expr_effect(value).or_else(|| runtime_expr_effect(body))
+        }
+        RuntimeExpr::If {
+            scrutinee,
+            then_expr,
+            else_expr,
+        } => runtime_expr_effect(scrutinee)
+            .or_else(|| runtime_expr_effect(then_expr))
+            .or_else(|| runtime_expr_effect(else_expr)),
+        RuntimeExpr::PrimitiveCall { args, .. } | RuntimeExpr::Construct { args, .. } => {
+            args.iter().find_map(runtime_expr_effect)
+        }
+        RuntimeExpr::Match {
+            scrutinee, cases, ..
+        } => runtime_expr_effect(scrutinee).or_else(|| {
+            cases
+                .iter()
+                .find_map(|case| runtime_expr_effect(&case.body))
+        }),
+        RuntimeExpr::Record { fields } => fields
+            .iter()
+            .find_map(|(_, value)| runtime_expr_effect(value)),
+        RuntimeExpr::Project { record, .. } => runtime_expr_effect(record),
+        RuntimeExpr::Closure { body, .. } => runtime_expr_effect(body),
+        RuntimeExpr::Call { callee, args } => {
+            runtime_expr_effect(callee).or_else(|| args.iter().find_map(runtime_expr_effect))
+        }
+        RuntimeExpr::Effect { effect, .. } => Some(effect),
+    }
 }
 
 fn run_packaged_executable(
@@ -655,6 +999,47 @@ fn unavailable_interpreter_for_trap(
     }
 }
 
+fn unavailable_interpreter_for_policy(
+    target: &NativeExecutionTargetIdentity,
+    expected_target: &RuntimeIrTargetIdentity,
+    interpreter: NativeInterpreterLaneInput,
+    runtime_ir: &RuntimeObservation,
+    policy_reason: &str,
+) -> Result<NativeComparisonLaneReport, NativeExecutionDifferentialError> {
+    match interpreter {
+        NativeInterpreterLaneInput::Unavailable {
+            reason,
+            evidence_source,
+        } => Ok(NativeComparisonLaneReport::Unavailable {
+            lane: NativeDifferentialLane::Interpreter,
+            reason,
+            evidence_source,
+        }),
+        NativeInterpreterLaneInput::Available(interpreter) => {
+            if interpreter.artifact != target.runtime_artifact {
+                return Err(detached_interpreter_evidence(
+                    "artifact",
+                    "asserted-available interpreter observation artifact identity does not match RuntimeProgram",
+                ));
+            }
+            if &interpreter.target != expected_target {
+                return Err(detached_interpreter_evidence(
+                    "target",
+                    "asserted-available interpreter observation target identity does not match RuntimeIrRunReport",
+                ));
+            }
+            Ok(NativeComparisonLaneReport::Unavailable {
+                lane: NativeDifferentialLane::NativeExecution,
+                reason: policy_reason.to_string(),
+                evidence_source: format!(
+                    "{}; interpreter observation {:?}; runtime-IR observation {:?}",
+                    interpreter.evidence_source, interpreter.observation, runtime_ir
+                ),
+            })
+        }
+    }
+}
+
 fn differential_verdict(
     runtime_ir: &NativeComparisonLaneReport,
     interpreter: &NativeComparisonLaneReport,
@@ -819,6 +1204,73 @@ mod tests {
                 observation: RuntimeObservation::Returned(RuntimeGroundValue::Int(value)),
             }],
         }
+    }
+
+    fn add_checked_effect_foreign_metadata(
+        program: &mut RuntimeProgram,
+        boundary: RuntimeEffectBoundary,
+        effects: BTreeSet<String>,
+        capabilities: BTreeSet<String>,
+        runtime_checks: BTreeSet<String>,
+        foreign_symbol: Option<String>,
+    ) {
+        let symbol = program.declarations[0].symbol.clone();
+        program.declarations[0].metadata.effects = effects.clone();
+        program.declarations[0].metadata.capabilities = capabilities.clone();
+        program.declarations[0].metadata.runtime_checks = runtime_checks.clone();
+        program
+            .erased_core
+            .metadata
+            .effects
+            .extend(effects.iter().cloned());
+        program
+            .erased_core
+            .metadata
+            .capabilities
+            .extend(capabilities.iter().cloned());
+        program
+            .erased_core
+            .metadata
+            .runtime_checks
+            .extend(runtime_checks.iter().cloned());
+        program
+            .erased_core
+            .metadata
+            .checked_core
+            .effects_foreign_metadata
+            .insert(
+                symbol,
+                crate::RuntimeEffectsForeignAuditMetadata {
+                    declared_effects: effects,
+                    capabilities,
+                    foreign_symbol,
+                    boundary,
+                    runtime_checks,
+                    lowerability: RuntimeLowerabilityStatus::Supported,
+                },
+            );
+    }
+
+    fn add_runtime_effect_metadata_without_checked_authority(program: &mut RuntimeProgram) {
+        program.declarations[0]
+            .metadata
+            .effects
+            .insert("host.io".to_string());
+        program
+            .erased_core
+            .metadata
+            .effects
+            .insert("host.io".to_string());
+    }
+
+    fn replace_target_body_with_effect(program: &mut RuntimeProgram) {
+        program.declarations[0].kind = RuntimeDeclarationKind::Transparent {
+            body: RuntimeExpr::Effect {
+                effect: "host.io".to_string(),
+                capability: None,
+                args: vec![RuntimeExpr::Value(RuntimeValue::Int(1))],
+            },
+        };
     }
 
     fn packaged_entrypoint(program: &RuntimeProgram) -> crate::RuntimeExecutableEntrypointPackage {
@@ -994,6 +1446,10 @@ mod tests {
         assert!(report
             .unavailable_claims
             .contains(&NativeExecutionUnavailableClaim::LibraryAbi));
+        assert!(matches!(
+            report.effect_foreign_policy.status,
+            NativeEffectForeignExecutableStatus::NativeTested
+        ));
         assert_eq!(
             report.verdict,
             NativeExecutionDifferentialVerdict::RuntimeIrTestedAgreement {
@@ -1138,6 +1594,243 @@ mod tests {
             "native differential unit test",
         )
         .expect_err("trap path rejects stale executable bytes before report");
+
+        assert_eq!(err.stage, NativeExecutionDifferentialStage::ArtifactFile);
+        assert_eq!(err.field, "executable_artifact.byte_len");
+    }
+
+    #[test]
+    fn foreign_boundary_target_reports_policy_unavailable_before_native_execution() {
+        let base_program = starter_program(39);
+        let run_report = runtime_ir_run_report(&base_program);
+        let output_dir = temp_output_dir("nc25-foreign-unavailable");
+        let package = package_for(&base_program, &run_report, &output_dir);
+        let mut program = base_program.clone();
+        add_checked_effect_foreign_metadata(
+            &mut program,
+            RuntimeEffectBoundary::Foreign,
+            BTreeSet::new(),
+            BTreeSet::new(),
+            BTreeSet::new(),
+            Some("host_print".to_string()),
+        );
+
+        let report = run_native_execution_differential(
+            &program,
+            &package,
+            &run_report,
+            &output_dir,
+            interpreter_available(&program, &run_report),
+            "native differential unit test",
+        )
+        .expect("foreign boundary is represented as unavailable");
+
+        assert!(matches!(
+            report.effect_foreign_policy.status,
+            NativeEffectForeignExecutableStatus::RepresentedUnavailable { ref reason }
+                if reason.contains("foreign-boundary")
+        ));
+        assert!(report
+            .effect_foreign_policy
+            .facts
+            .contains("checked_core.foreign_symbol=host_print"));
+        assert!(matches!(
+            report.native,
+            NativeExecutionLaneReport::Unavailable { ref reason, .. }
+                if reason.contains("foreign")
+        ));
+        assert!(matches!(
+            report.verdict,
+            NativeExecutionDifferentialVerdict::Unavailable {
+                lane: NativeDifferentialLane::NativeExecution,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn missing_effect_authority_reports_represented_unavailable() {
+        let base_program = starter_program(40);
+        let run_report = runtime_ir_run_report(&base_program);
+        let output_dir = temp_output_dir("nc25-missing-effect-authority");
+        let package = package_for(&base_program, &run_report, &output_dir);
+        let mut program = base_program.clone();
+        add_runtime_effect_metadata_without_checked_authority(&mut program);
+
+        let report = run_native_execution_differential(
+            &program,
+            &package,
+            &run_report,
+            &output_dir,
+            interpreter_available(&program, &run_report),
+            "native differential unit test",
+        )
+        .expect("missing authority is represented as unavailable");
+
+        assert!(matches!(
+            report.effect_foreign_policy.status,
+            NativeEffectForeignExecutableStatus::RepresentedUnavailable { ref reason }
+                if reason.contains("without checked-core executable authority")
+        ));
+        assert!(report
+            .effect_foreign_policy
+            .facts
+            .contains("checked_core.effect_foreign_authority=missing"));
+    }
+
+    #[test]
+    fn unsupported_capability_facts_remain_unavailable_not_native_tested() {
+        let base_program = starter_program(41);
+        let run_report = runtime_ir_run_report(&base_program);
+        let output_dir = temp_output_dir("nc25-capability-unavailable");
+        let package = package_for(&base_program, &run_report, &output_dir);
+        let mut program = base_program.clone();
+        add_checked_effect_foreign_metadata(
+            &mut program,
+            RuntimeEffectBoundary::Effectful,
+            BTreeSet::from(["host.io".to_string()]),
+            BTreeSet::from(["cap:fixture::HostIo".to_string()]),
+            BTreeSet::new(),
+            None,
+        );
+
+        let report = run_native_execution_differential(
+            &program,
+            &package,
+            &run_report,
+            &output_dir,
+            interpreter_available(&program, &run_report),
+            "native differential unit test",
+        )
+        .expect("capability facts are represented as unavailable");
+
+        assert!(matches!(
+            report.effect_foreign_policy.status,
+            NativeEffectForeignExecutableStatus::RepresentedUnavailable { ref reason }
+                if reason.contains("effect/capability/runtime-check")
+        ));
+        assert!(report
+            .effect_foreign_policy
+            .facts
+            .contains("checked_core.capability=cap:fixture::HostIo"));
+        assert!(matches!(
+            report.native,
+            NativeExecutionLaneReport::Unavailable { .. }
+        ));
+    }
+
+    #[test]
+    fn stale_effect_metadata_rejects_before_native_execution() {
+        let base_program = starter_program(42);
+        let run_report = runtime_ir_run_report(&base_program);
+        let output_dir = temp_output_dir("nc25-stale-effect-metadata");
+        let package = package_for(&base_program, &run_report, &output_dir);
+        let mut program = base_program.clone();
+        let symbol = program.declarations[0].symbol.clone();
+        program
+            .erased_core
+            .metadata
+            .effects
+            .insert("host.io".to_string());
+        program
+            .erased_core
+            .metadata
+            .checked_core
+            .effects_foreign_metadata
+            .insert(
+                symbol,
+                crate::RuntimeEffectsForeignAuditMetadata {
+                    declared_effects: BTreeSet::from(["host.io".to_string()]),
+                    capabilities: BTreeSet::new(),
+                    foreign_symbol: None,
+                    boundary: RuntimeEffectBoundary::Effectful,
+                    runtime_checks: BTreeSet::new(),
+                    lowerability: RuntimeLowerabilityStatus::Supported,
+                },
+            );
+
+        let err = run_native_execution_differential(
+            &program,
+            &package,
+            &run_report,
+            &output_dir,
+            interpreter_available(&program, &run_report),
+            "native differential unit test",
+        )
+        .expect_err("stale effect metadata rejects");
+
+        assert_eq!(
+            err.stage,
+            NativeExecutionDifferentialStage::EffectForeignExecutablePolicy
+        );
+        assert_eq!(err.field, "effect_foreign_metadata");
+        assert!(err.reason.contains("stale or missing"));
+    }
+
+    #[test]
+    fn hidden_runtime_effect_body_reports_unsupported_without_native_execution() {
+        let base_program = starter_program(43);
+        let run_report = runtime_ir_run_report(&base_program);
+        let output_dir = temp_output_dir("nc25-hidden-effect-body");
+        let package = package_for(&base_program, &run_report, &output_dir);
+        let mut program = base_program.clone();
+        replace_target_body_with_effect(&mut program);
+
+        let report = run_native_execution_differential(
+            &program,
+            &package,
+            &run_report,
+            &output_dir,
+            interpreter_available(&program, &run_report),
+            "native differential unit test",
+        )
+        .expect("hidden RuntimeExpr::Effect is an unsupported policy report");
+
+        assert!(matches!(
+            report.effect_foreign_policy.status,
+            NativeEffectForeignExecutableStatus::Unsupported { ref reason }
+                if reason.contains("RuntimeExpr::Effect")
+        ));
+        assert!(report
+            .effect_foreign_policy
+            .facts
+            .contains("runtime_expr.effect=host.io"));
+        assert!(matches!(
+            report.native,
+            NativeExecutionLaneReport::Unavailable { .. }
+        ));
+    }
+
+    #[test]
+    fn effect_policy_unavailable_still_rejects_stale_executable_artifact() {
+        let base_program = starter_program(44);
+        let run_report = runtime_ir_run_report(&base_program);
+        let output_dir = temp_output_dir("nc25-effect-stale-executable");
+        let package = package_for(&base_program, &run_report, &output_dir);
+        let mut program = base_program.clone();
+        add_checked_effect_foreign_metadata(
+            &mut program,
+            RuntimeEffectBoundary::Foreign,
+            BTreeSet::new(),
+            BTreeSet::new(),
+            BTreeSet::new(),
+            Some("host_print".to_string()),
+        );
+        fs::write(
+            output_dir.join(&package.executable_artifact.relative_path),
+            b"not the packaged executable",
+        )
+        .expect("mutate packaged executable bytes");
+
+        let err = run_native_execution_differential(
+            &program,
+            &package,
+            &run_report,
+            &output_dir,
+            interpreter_available(&program, &run_report),
+            "native differential unit test",
+        )
+        .expect_err("policy unavailable path validates executable identity first");
 
         assert_eq!(err.stage, NativeExecutionDifferentialStage::ArtifactFile);
         assert_eq!(err.field, "executable_artifact.byte_len");
