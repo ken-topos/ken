@@ -1536,12 +1536,6 @@ fn lower_effects(
     symbol: &StableSymbol,
     meta: &EffectsForeignMetadata,
 ) -> Result<RuntimeDeclarationKind, ErasureError> {
-    if meta.boundary == EffectBoundary::Foreign || meta.foreign_symbol.is_some() {
-        return Err(ErasureError::UnsupportedErasure {
-            symbol: symbol.clone(),
-            reason: "runtime erasure does not assign foreign boundary runtime meaning".to_string(),
-        });
-    }
     require_supported(symbol, &meta.lowerability)?;
     Ok(RuntimeDeclarationKind::EffectBoundary {
         effects: meta.declared_effects.clone(),

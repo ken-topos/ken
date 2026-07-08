@@ -695,7 +695,7 @@ fn checked_partial_primitive_lowers_to_explicit_trap_face() {
 }
 
 #[test]
-fn foreign_boundary_rejects_without_backend_or_ffi_semantics() {
+fn foreign_boundary_survives_as_metadata_without_ffi_semantics() {
     let mut package = fixture_package();
     let target = symbol("decl:fixture::Effects::print_line");
     let meta = package
@@ -708,13 +708,25 @@ fn foreign_boundary_rejects_without_backend_or_ffi_semantics() {
     meta.foreign_symbol = Some("host.console.print_line".to_string());
     let package = reemit(package);
 
-    let err = erase_checked_core_package_for_target(&package, [&target])
-        .expect_err("foreign boundary must reject in NC5");
+    let program =
+        erase_checked_core_package_for_target(&package, [&target]).expect("erasure succeeds");
 
-    assert!(matches!(
-        err,
-        ErasureError::UnsupportedErasure { symbol, .. } if symbol == target
-    ));
+    let RuntimeDeclarationKind::EffectBoundary { effects } = &program.declarations[0].kind else {
+        panic!("foreign target lowers to an explicit effect boundary");
+    };
+    assert!(effects.contains("Console"));
+    let effect_audit = program
+        .erased_core
+        .metadata
+        .checked_core
+        .effects_foreign_metadata
+        .get(&target.to_string())
+        .expect("foreign metadata survives");
+    assert_eq!(effect_audit.boundary, RuntimeEffectBoundary::Foreign);
+    assert_eq!(
+        effect_audit.foreign_symbol.as_deref(),
+        Some("host.console.print_line")
+    );
 }
 
 #[test]
