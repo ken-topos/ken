@@ -48,6 +48,22 @@ fn prop_seed_shape_elaborates_without_trusted_base_growth() {
 }
 
 #[test]
+fn local_prop_intro_resolves_through_the_family_name() {
+    let env = elaborate_ok(
+        r#"
+        prop HasProof (a : Type) : Omega where {
+          intro : HasProof a
+        }
+        const consume (a : Type) : HasProof a = HasProof.intro a
+        "#,
+    );
+
+    assert!(env.globals.contains_key("HasProof"));
+    assert!(env.globals.contains_key("HasProof.intro"));
+    assert!(env.globals.contains_key("consume"));
+}
+
+#[test]
 fn standalone_lemma_is_checked_in_ordinary_namespace() {
     let env = elaborate_ok(
         r#"
@@ -213,6 +229,25 @@ fn module_selective_import_exposes_canonical_attached_proof_only() {
 
     assert!(env.globals.contains_key("M.id::id_self"));
     assert!(!env.globals.contains_key("id_self"));
+    assert!(env.globals.contains_key("consume"));
+}
+
+#[test]
+fn module_selective_import_exposes_prop_intro_without_bare_intro() {
+    let env = elaborate_ok(
+        r#"
+        module M {
+          pub prop HasProof (a : Type) : Omega where {
+            intro : HasProof a
+          }
+        }
+        import M (HasProof)
+        const consume (a : Type) : HasProof a = HasProof.intro a
+        "#,
+    );
+
+    assert!(env.globals.contains_key("M.HasProof"));
+    assert!(env.globals.contains_key("M.HasProof.intro"));
     assert!(env.globals.contains_key("consume"));
 }
 

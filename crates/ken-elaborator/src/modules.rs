@@ -132,6 +132,16 @@ fn resolve_ref(
 ) -> Result<String, ElabError> {
     if let Some(dot) = name.rfind('.') {
         let (prefix_part, leaf) = (&name[..dot], &name[dot + 1..]);
+        if let Some(binding) = scope.bindings.get(prefix_part) {
+            return match binding {
+                Binding::One(q) => Ok(format!("{q}.{leaf}")),
+                Binding::Ambiguous(sources) => Err(ElabError::AmbiguousReference {
+                    name: name.to_string(),
+                    sources: sources.clone(),
+                    span: span.clone(),
+                }),
+            };
+        }
         let canonical_module = scope
             .prefixes
             .get(prefix_part)
