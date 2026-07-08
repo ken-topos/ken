@@ -70,10 +70,15 @@ Script behavior:
 
 - resolves the target branch/commit and publishes a PR branch if needed;
 - creates the PR with the supplied title/body;
-- for `--doc-only`, runs the squash merge with branch deletion and returns;
+- for `--doc-only`, runs the squash merge and returns;
 - otherwise reads the latest completed `CI` workflow duration, waits that time
   plus 10%, then begins polling PR checks;
-- when all checks pass, runs the squash merge with branch deletion and returns.
+- when all checks pass, runs the squash merge and returns.
+
+Remote head-branch deletion is handled by the repository setting, not by the
+script. Do not add `gh pr merge --delete-branch`: in the shared-worktree layout
+that option can fail after a successful remote merge while trying to delete or
+switch local branches.
 
 The merge command uses the publisher's admin merge authority, guarded by
 `--match-head-commit`, because the protected-branch ruleset may block ordinary
