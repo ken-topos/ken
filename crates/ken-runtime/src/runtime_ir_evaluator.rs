@@ -11,9 +11,9 @@ use std::fmt;
 
 use crate::{
     RuntimeArtifactIdentity, RuntimeDeclaration, RuntimeDeclarationKind, RuntimeEffectBoundary,
-    RuntimeExample, RuntimeExpr, RuntimeGroundValue, RuntimeLowerabilityStatus, RuntimeObservation,
-    RuntimePartiality, RuntimePrimitive, RuntimeProgram, RuntimeSymbol, RuntimeTrap,
-    RuntimeTrapCode, RuntimeValue,
+    RuntimeEffectsForeignAuditMetadata, RuntimeExample, RuntimeExpr, RuntimeGroundValue,
+    RuntimeLowerabilityStatus, RuntimeObservation, RuntimePartiality, RuntimePrimitive,
+    RuntimeProgram, RuntimeSymbol, RuntimeTrap, RuntimeTrapCode, RuntimeValue,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -96,6 +96,23 @@ pub struct RuntimeIrRunEvidence {
     pub checked_core_shape: String,
     pub evidence_sources: BTreeMap<String, String>,
     pub unavailable: BTreeSet<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RuntimeIrProgramReport {
+    pub artifact: RuntimeArtifactIdentity,
+    pub supported_runtime_targets: BTreeSet<RuntimeSymbol>,
+    pub comparison_unavailable_targets: BTreeMap<RuntimeSymbol, String>,
+    pub unsupported_targets: BTreeMap<RuntimeSymbol, String>,
+    pub evidence_sources: BTreeMap<String, String>,
+    pub unavailable: BTreeSet<String>,
+    pub native_phase_gate: RuntimeIrNativePhaseGate,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RuntimeIrNativePhaseGate {
+    ReadyForStarterKenOnlyExecutableSubset,
+    Blocked { blockers: BTreeSet<String> },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -438,9 +455,125 @@ pub fn compare_runtime_ir_with_interpreter_observation(
     }
 }
 
+pub fn summarize_runtime_ir_program(program: &RuntimeProgram) -> RuntimeIrProgramReport {
+    let artifact = RuntimeArtifactIdentity::from_program(program);
+    let mut supported_runtime_targets = BTreeSet::new();
+    let mut comparison_unavailable_targets = BTreeMap::new();
+    let mut unsupported_targets = BTreeMap::new();
+    let mut unavailable = BTreeSet::from([
+        "native_backend_validation".to_string(),
+        "object_artifact_validation".to_string(),
+        "linker_validation".to_string(),
+        "source_level_proof_validation".to_string(),
+    ]);
+    let mut blockers = BTreeSet::new();
+
+    for declaration in &program.declarations {
+        if declaration.metadata.unsupported.is_some()
+            || program
+                .erased_core
+                .metadata
+                .unsupported
+                .contains_key(&declaration.symbol)
+        {
+            let reason = format!("{} is a reachable unsupported entry", declaration.symbol);
+            unsupported_targets.insert(declaration.symbol.clone(), reason.clone());
+            blockers.insert(reason);
+            continue;
+        }
+
+        match declaration.metadata.lowerability.as_ref().or_else(|| {
+            program
+                .erased_core
+                .metadata
+                .lowerability
+                .get(&declaration.symbol)
+        }) {
+            Some(RuntimeLowerabilityStatus::Supported) => {}
+            Some(other) => {
+                let reason = format!(
+                    "{} has blocking lowerability metadata: {:?}",
+                    declaration.symbol, other
+                );
+                unsupported_targets.insert(declaration.symbol.clone(), reason.clone());
+                blockers.insert(reason);
+                continue;
+            }
+            None => {
+                let reason = format!(
+                    "{} is missing runtime lowerability metadata",
+                    declaration.symbol
+                );
+                unsupported_targets.insert(declaration.symbol.clone(), reason.clone());
+                blockers.insert(reason);
+                continue;
+            }
+        }
+
+        if let Some(reason) = effect_foreign_metadata_inconsistency_reason(program, declaration) {
+            unsupported_targets.insert(declaration.symbol.clone(), reason.clone());
+            blockers.insert(reason);
+            continue;
+        }
+
+        if let RuntimeDeclarationKind::Transparent { body } = &declaration.kind {
+            if runtime_expr_contains_effect(body) {
+                let reason = unsupported_runtime_effect_reason(&declaration.symbol);
+                unsupported_targets.insert(declaration.symbol.clone(), reason.clone());
+                blockers.insert(reason);
+                continue;
+            }
+        }
+
+        if let Some(reason) = effect_foreign_unavailable_reason(program, declaration) {
+            unavailable.insert(format!(
+                "{} comparison unavailable: {reason}",
+                declaration.symbol
+            ));
+            comparison_unavailable_targets.insert(declaration.symbol.clone(), reason);
+        } else {
+            supported_runtime_targets.insert(declaration.symbol.clone());
+        }
+    }
+
+    let native_phase_gate = if blockers.is_empty() && !supported_runtime_targets.is_empty() {
+        RuntimeIrNativePhaseGate::ReadyForStarterKenOnlyExecutableSubset
+    } else {
+        if supported_runtime_targets.is_empty() {
+            blockers.insert(
+                "no pure supported RuntimeProgram declaration is available for the starter native-codegen subset"
+                    .to_string(),
+            );
+        }
+        RuntimeIrNativePhaseGate::Blocked { blockers }
+    };
+
+    RuntimeIrProgramReport {
+        artifact,
+        supported_runtime_targets,
+        comparison_unavailable_targets,
+        unsupported_targets,
+        evidence_sources: BTreeMap::from([
+            (
+                "runtime_artifact_identity".to_string(),
+                "RuntimeProgram package/core/artifact identity from the exact runtime artifact"
+                    .to_string(),
+            ),
+            (
+                "checked_core_effect_foreign_metadata".to_string(),
+                "RuntimeProgram.erased_core.metadata.checked_core.effects_foreign_metadata"
+                    .to_string(),
+            ),
+        ]),
+        unavailable,
+        native_phase_gate,
+    }
+}
+
 pub fn reject_runtime_ir_program_blockers(
     program: &RuntimeProgram,
 ) -> Result<(), RuntimeIrEvaluationError> {
+    reject_effect_foreign_metadata_inconsistency(program)?;
     if !program.erased_core.metadata.effects.is_empty() {
         return Err(preflight_unsupported(
             "RuntimeProgram",
@@ -603,6 +736,145 @@ pub fn reject_runtime_ir_program_blockers(
     Ok(())
 }
 
+fn reject_effect_foreign_metadata_inconsistency(
+    program: &RuntimeProgram,
+) -> Result<(), RuntimeIrEvaluationError> {
+    for declaration in &program.declarations {
+        if let Some(reason) = effect_foreign_metadata_inconsistency_reason(program, declaration) {
+            return Err(stale_effect_foreign_metadata_error(reason));
+        }
+    }
+    Ok(())
+}
+
+fn effect_foreign_metadata_inconsistency_reason(
+    program: &RuntimeProgram,
+    declaration: &RuntimeDeclaration,
+) -> Option<String> {
+    let effect_meta = program
+        .erased_core
+        .metadata
+        .checked_core
+        .effects_foreign_metadata
+        .get(&declaration.symbol)?;
+
+    if effect_meta.declared_effects != declaration.metadata.effects {
+        return Some(stale_effect_foreign_metadata_reason(
+            &declaration.symbol,
+            "effects",
+        ));
+    }
+    if effect_meta.capabilities != declaration.metadata.capabilities {
+        return Some(stale_effect_foreign_metadata_reason(
+            &declaration.symbol,
+            "capabilities",
+        ));
+    }
+    if effect_meta.runtime_checks != declaration.metadata.runtime_checks {
+        return Some(stale_effect_foreign_metadata_reason(
+            &declaration.symbol,
+            "runtime_checks",
+        ));
+    }
+    if !program
+        .erased_core
+        .metadata
+        .effects
+        .is_superset(&effect_meta.declared_effects)
+    {
+        return Some(stale_effect_foreign_metadata_reason(
+            &declaration.symbol,
+            "package effects",
+        ));
+    }
+    if !program
+        .erased_core
+        .metadata
+        .capabilities
+        .is_superset(&effect_meta.capabilities)
+    {
+        return Some(stale_effect_foreign_metadata_reason(
+            &declaration.symbol,
+            "package capabilities",
+        ));
+    }
+    if !program
+        .erased_core
+        .metadata
+        .runtime_checks
+        .is_superset(&effect_meta.runtime_checks)
+    {
+        return Some(stale_effect_foreign_metadata_reason(
+            &declaration.symbol,
+            "package runtime checks",
+        ));
+    }
+    None
+}
+
+fn stale_effect_foreign_metadata_reason(symbol: &RuntimeSymbol, lane: &'static str) -> String {
+    format!("{symbol} has stale or missing effect/foreign authority metadata in {lane}")
+}
+
+fn stale_effect_foreign_metadata_error(reason: String) -> RuntimeIrEvaluationError {
+    preflight_unsupported("RuntimeProgram", reason)
+}
+
+fn effect_foreign_unavailable_reason(
+    program: &RuntimeProgram,
+    declaration: &RuntimeDeclaration,
+) -> Option<String> {
+    let checked_meta = program
+        .erased_core
+        .metadata
+        .checked_core
+        .effects_foreign_metadata
+        .get(&declaration.symbol);
+    checked_meta
+        .and_then(effect_foreign_audit_unavailable_reason)
+        .or_else(|| {
+            (!declaration.metadata.effects.is_empty()
+                || !declaration.metadata.capabilities.is_empty()
+                || !declaration.metadata.runtime_checks.is_empty())
+            .then(|| {
+                "target carries effect, capability, or runtime-check metadata without executable runtime-IR evidence"
+                    .to_string()
+            })
+        })
+        .or_else(|| {
+            if let RuntimeDeclarationKind::EffectBoundary { effects } = &declaration.kind {
+                (!effects.is_empty()).then(|| {
+                    "target declares effect-boundary metadata without host-effect execution"
+                        .to_string()
+                })
+            } else {
+                None
+            }
+        })
+}
+
+fn effect_foreign_audit_unavailable_reason(
+    meta: &RuntimeEffectsForeignAuditMetadata,
+) -> Option<String> {
+    if meta.boundary == RuntimeEffectBoundary::Foreign || meta.foreign_symbol.is_some() {
+        Some(
+            "foreign-boundary facts are represented, but host FFI execution is unavailable"
+                .to_string(),
+        )
+    } else if meta.boundary == RuntimeEffectBoundary::Effectful
+        || !meta.declared_effects.is_empty()
+        || !meta.capabilities.is_empty()
+        || !meta.runtime_checks.is_empty()
+    {
+        Some(
+            "effect/capability/runtime-check facts are represented, but host-effect execution is unavailable"
+                .to_string(),
+        )
+    } else {
+        None
+    }
+}
+
 fn reject_runtime_expr_blockers(
     program: &RuntimeProgram,
     expr: &RuntimeExpr,
@@ -699,9 +971,57 @@ fn reject_runtime_expr_blockers(
             for arg in args {
                 reject_runtime_expr_blockers(program, arg)?;
             }
-            Ok(())
+            Err(preflight_unsupported(
+                "Effect",
+                unsupported_runtime_effect_reason("RuntimeExpr::Effect"),
+            ))
         }
     }
+}
+
+fn runtime_expr_contains_effect(expr: &RuntimeExpr) -> bool {
+    match expr {
+        RuntimeExpr::Value(_) | RuntimeExpr::Var(_) | RuntimeExpr::Trap(_) => false,
+        RuntimeExpr::Let { value, body } => {
+            runtime_expr_contains_effect(value) || runtime_expr_contains_effect(body)
+        }
+        RuntimeExpr::If {
+            scrutinee,
+            then_expr,
+            else_expr,
+        } => {
+            runtime_expr_contains_effect(scrutinee)
+                || runtime_expr_contains_effect(then_expr)
+                || runtime_expr_contains_effect(else_expr)
+        }
+        RuntimeExpr::PrimitiveCall { args, .. } | RuntimeExpr::Construct { args, .. } => {
+            args.iter().any(runtime_expr_contains_effect)
+        }
+        RuntimeExpr::Match {
+            scrutinee, cases, ..
+        } => {
+            runtime_expr_contains_effect(scrutinee)
+                || cases
+                    .iter()
+                    .any(|case| runtime_expr_contains_effect(&case.body))
+        }
+        RuntimeExpr::Record { fields } => fields
+            .iter()
+            .any(|(_, value)| runtime_expr_contains_effect(value)),
+        RuntimeExpr::Project { record, .. } => runtime_expr_contains_effect(record),
+        RuntimeExpr::Closure { body, .. } => runtime_expr_contains_effect(body),
+        RuntimeExpr::DeclarationRef { .. } | RuntimeExpr::ImportedDeclarationRef { .. } => false,
+        RuntimeExpr::Call { callee, args } => {
+            runtime_expr_contains_effect(callee) || args.iter().any(runtime_expr_contains_effect)
+        }
+        RuntimeExpr::Effect { .. } => true,
+    }
+}
+
+fn unsupported_runtime_effect_reason(subject: &str) -> String {
+    format!(
+        "{subject} contains RuntimeExpr::Effect, which is outside supported runtime-IR execution"
+    )
 }
 
 fn require_referenced_symbol_supported(
