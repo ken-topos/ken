@@ -22,9 +22,10 @@ use crate::{
     validate_supported_runtime_artifact_certificate, KenCheckedProofErasureBoundaryReport,
     ProofErasureBoundaryWitnessError, ProofErasureBoundaryWitnessStage, RuntimeArtifactCertificate,
     RuntimeArtifactIdentity, RuntimeArtifactValidationError, RuntimeArtifactValidationReport,
-    RuntimeDeclarationKind, RuntimeEffectBoundary, RuntimeExample, RuntimeExpr, RuntimeGroundValue,
-    RuntimeLowerabilityStatus, RuntimeObservation, RuntimePartiality, RuntimePrimitive,
-    RuntimeProgram, RuntimeTrap, RuntimeTrapCode, RuntimeValue,
+    RuntimeDeclaration, RuntimeDeclarationKind, RuntimeEffectBoundary, RuntimeExample, RuntimeExpr,
+    RuntimeGroundValue, RuntimeIrRunReport, RuntimeIrTargetIdentity, RuntimeLowerabilityStatus,
+    RuntimeObservation, RuntimePartiality, RuntimePrimitive, RuntimeProgram, RuntimeSymbol,
+    RuntimeTrap, RuntimeTrapCode, RuntimeValue,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -93,6 +94,15 @@ pub struct NativeDifferentialReport {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NativeRuntimeIrComparisonReport {
+    pub example: String,
+    pub artifact: NativeArtifactIdentity,
+    pub runtime_ir: RuntimeIrRunReport,
+    pub native: Option<CraneliftRunReport>,
+    pub verdict: NativeRuntimeIrComparisonVerdict,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NativeArtifactIdentity {
     pub package_identity: String,
     pub core_semantic_hash: u64,
@@ -121,10 +131,32 @@ pub enum NativeDifferentialVerdict {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub enum NativeRuntimeIrComparisonVerdict {
+    RuntimeIrNativeAgreement {
+        stage: NativeDifferentialStage,
+    },
+    Unsupported {
+        stage: NativeDifferentialStage,
+        construct: &'static str,
+        reason: String,
+    },
+    Mismatch {
+        stage: NativeDifferentialStage,
+        runtime_ir: RuntimeObservation,
+        native: RuntimeObservation,
+    },
+    BackendFailure {
+        stage: NativeDifferentialStage,
+        reason: String,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum NativeDifferentialStage {
     BoundaryPreflight,
     NativeLoweringOrExecution,
     InterpreterNativeCompare,
+    RuntimeIrNativeCompare,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -132,6 +164,7 @@ pub enum NativeFidelity {
     F0NativeExample,
     F1SeedObservationAgreement,
     F1InterpreterDifferentialAgreement,
+    F1RuntimeIrEvaluatorAgreement,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -265,6 +298,7 @@ pub fn run_nc8_validated_seed_examples(
         .iter()
         .map(|example| {
             let mut report = run_example_native(
+                Some(program),
                 example,
                 &env,
                 NativeFidelity::F0NativeExample,
@@ -345,6 +379,77 @@ pub fn run_ken_checked_proof_erasure_example_with_interpreter_observation(
     ))
 }
 
+pub fn run_runtime_ir_report_with_cranelift(
+    program: &RuntimeProgram,
+    run_report: RuntimeIrRunReport,
+    env: &NativeSeedEnvironment,
+) -> NativeRuntimeIrComparisonReport {
+    let artifact = NativeArtifactIdentity::from_program(program);
+    let example = match runtime_ir_report_example(program, &run_report) {
+        Ok(example) => example,
+        Err(err) => {
+            return runtime_ir_comparison_error_report(
+                artifact,
+                run_report,
+                err,
+                NativeDifferentialStage::BoundaryPreflight,
+            );
+        }
+    };
+
+    if let Err(err) = reject_program_blockers(program) {
+        return runtime_ir_comparison_error_report(
+            artifact,
+            run_report,
+            err,
+            NativeDifferentialStage::BoundaryPreflight,
+        );
+    }
+
+    match run_example_native(
+        Some(program),
+        example,
+        env,
+        NativeFidelity::F0NativeExample,
+        NativeRunEvidence::from_program(program),
+        None,
+        None,
+    ) {
+        Ok(mut native) => {
+            if native.observation == run_report.observation.observation {
+                native.trust.fidelity = NativeFidelity::F1RuntimeIrEvaluatorAgreement;
+                NativeRuntimeIrComparisonReport {
+                    example: example.name.clone(),
+                    artifact,
+                    runtime_ir: run_report,
+                    native: Some(native),
+                    verdict: NativeRuntimeIrComparisonVerdict::RuntimeIrNativeAgreement {
+                        stage: NativeDifferentialStage::RuntimeIrNativeCompare,
+                    },
+                }
+            } else {
+                NativeRuntimeIrComparisonReport {
+                    example: example.name.clone(),
+                    artifact,
+                    verdict: NativeRuntimeIrComparisonVerdict::Mismatch {
+                        stage: NativeDifferentialStage::RuntimeIrNativeCompare,
+                        runtime_ir: run_report.observation.observation.clone(),
+                        native: native.observation.clone(),
+                    },
+                    runtime_ir: run_report,
+                    native: Some(native),
+                }
+            }
+        }
+        Err(err) => runtime_ir_comparison_error_report(
+            artifact,
+            run_report,
+            err,
+            NativeDifferentialStage::NativeLoweringOrExecution,
+        ),
+    }
+}
+
 fn proof_erasure_boundary_report_mismatch_lane(
     report: &KenCheckedProofErasureBoundaryReport,
     recomputed: &crate::ProofErasureBoundaryFacts,
@@ -420,6 +525,7 @@ fn run_example_with_interpreter_observation_and_reports(
     }
 
     match run_example_native(
+        Some(program),
         example,
         env,
         NativeFidelity::F0NativeExample,
@@ -473,7 +579,20 @@ pub fn reject_program_blockers(program: &RuntimeProgram) -> Result<(), Cranelift
     if !program.erased_core.metadata.runtime_checks.is_empty() {
         return Err(unsupported(
             "RuntimeProgram",
-            "package carries runtime-check metadata outside the NC6 D1 supported subset",
+            "package carries runtime-check metadata outside the supported native subset",
+        ));
+    }
+    if !program.erased_core.metadata.assumptions.is_empty()
+        || !program
+            .erased_core
+            .metadata
+            .assumption_trust_metadata
+            .is_empty()
+        || !program.erased_core.metadata.trusted_base_delta.is_empty()
+    {
+        return Err(unsupported(
+            "RuntimeProgram",
+            "package carries trust metadata outside the supported native subset",
         ));
     }
 
@@ -605,6 +724,7 @@ pub fn run_example_with_seed_observation(
     env: &NativeSeedEnvironment,
 ) -> Result<CraneliftRunReport, CraneliftBackendError> {
     let mut report = run_example_native(
+        None,
         example,
         env,
         NativeFidelity::F0NativeExample,
@@ -619,6 +739,7 @@ pub fn run_example_with_seed_observation(
 }
 
 fn run_example_native(
+    program: Option<&RuntimeProgram>,
     example: &RuntimeExample,
     env: &NativeSeedEnvironment,
     fidelity: NativeFidelity,
@@ -626,7 +747,10 @@ fn run_example_native(
     artifact_validation: Option<RuntimeArtifactValidationReport>,
     ken_checked_proof_erasure_boundary: Option<KenCheckedProofErasureBoundaryReport>,
 ) -> Result<CraneliftRunReport, CraneliftBackendError> {
-    let compiled = compile_expr(&example.ir, env)?;
+    let compiled = match program {
+        Some(program) => compile_program_expr(program, &example.ir, env)?,
+        None => compile_expr(&example.ir, env)?,
+    };
     let verifier_passed = compiled.verifier_passed;
     let assumptions = compiled.assumptions.clone();
     let unsupported = compiled.unsupported.clone();
@@ -648,6 +772,60 @@ fn run_example_native(
             unsupported,
         },
     })
+}
+
+fn runtime_ir_report_example<'a>(
+    program: &'a RuntimeProgram,
+    run_report: &RuntimeIrRunReport,
+) -> Result<&'a RuntimeExample, CraneliftBackendError> {
+    let artifact = RuntimeArtifactIdentity::from_program(program);
+    if run_report.artifact != artifact || run_report.observation.artifact != artifact {
+        return Err(unsupported(
+            "RuntimeIrRunReport",
+            "RuntimeIrRunReport artifact identity does not match the exact RuntimeProgram",
+        ));
+    }
+    if run_report.observation.target != run_report.target {
+        return Err(unsupported(
+            "RuntimeIrRunReport",
+            "RuntimeIrRunReport observation target does not match the run target",
+        ));
+    }
+    if run_report.evidence.package_identity != program.package_identity
+        || run_report.evidence.core_semantic_hash != program.core_semantic_hash
+        || run_report.evidence.runtime_artifact_hash != program.artifact_hash
+    {
+        return Err(unsupported(
+            "RuntimeIrRunReport",
+            "RuntimeIrRunReport evidence identity does not match the exact RuntimeProgram",
+        ));
+    }
+    if run_report.evidence.target_example != run_report.target.example
+        || run_report.evidence.checked_core_shape != run_report.target.checked_core_shape
+    {
+        return Err(unsupported(
+            "RuntimeIrRunReport",
+            "RuntimeIrRunReport evidence target does not match the run target",
+        ));
+    }
+
+    let mut matches = program
+        .examples
+        .iter()
+        .filter(|example| RuntimeIrTargetIdentity::from_example(example) == run_report.target);
+    let Some(example) = matches.next() else {
+        return Err(unsupported(
+            "RuntimeIrRunReport",
+            "RuntimeIrRunReport target is not present in RuntimeProgram.examples",
+        ));
+    };
+    if matches.next().is_some() {
+        return Err(unsupported(
+            "RuntimeIrRunReport",
+            "RuntimeIrRunReport target identity is ambiguous in RuntimeProgram.examples",
+        ));
+    }
+    Ok(example)
 }
 
 impl NativeArtifactIdentity {
@@ -772,6 +950,33 @@ fn differential_error_report(
     }
 }
 
+fn runtime_ir_comparison_error_report(
+    artifact: NativeArtifactIdentity,
+    run_report: RuntimeIrRunReport,
+    err: CraneliftBackendError,
+    stage: NativeDifferentialStage,
+) -> NativeRuntimeIrComparisonReport {
+    let example = run_report.target.example.clone();
+    let verdict = match err {
+        CraneliftBackendError::Unsupported(err) => NativeRuntimeIrComparisonVerdict::Unsupported {
+            stage,
+            construct: err.construct,
+            reason: err.reason,
+        },
+        CraneliftBackendError::Backend(err) => NativeRuntimeIrComparisonVerdict::BackendFailure {
+            stage: NativeDifferentialStage::NativeLoweringOrExecution,
+            reason: err.to_string(),
+        },
+    };
+    NativeRuntimeIrComparisonReport {
+        example,
+        artifact,
+        runtime_ir: run_report,
+        native: None,
+        verdict,
+    }
+}
+
 struct CompiledExpr {
     module: JITModule,
     func_id: cranelift_module::FuncId,
@@ -822,6 +1027,30 @@ fn compile_expr(
     expr: &RuntimeExpr,
     seed_env: &NativeSeedEnvironment,
 ) -> Result<CompiledExpr, CraneliftBackendError> {
+    compile_expr_with_declarations(expr, seed_env, BTreeMap::new())
+}
+
+fn compile_program_expr(
+    program: &RuntimeProgram,
+    expr: &RuntimeExpr,
+    seed_env: &NativeSeedEnvironment,
+) -> Result<CompiledExpr, CraneliftBackendError> {
+    compile_expr_with_declarations(
+        expr,
+        seed_env,
+        program
+            .declarations
+            .iter()
+            .map(|declaration| (declaration.symbol.as_str(), declaration))
+            .collect(),
+    )
+}
+
+fn compile_expr_with_declarations<'a>(
+    expr: &RuntimeExpr,
+    seed_env: &'a NativeSeedEnvironment,
+    declarations: BTreeMap<&'a str, &'a RuntimeDeclaration>,
+) -> Result<CompiledExpr, CraneliftBackendError> {
     let mut module = new_jit_module()?;
     let mut sig = module.make_signature();
     sig.returns.push(AbiParam::new(types::I64));
@@ -835,6 +1064,8 @@ fn compile_expr(
     let mut func_ctx = FunctionBuilderContext::new();
     let mut compiler = Lowering {
         seed_env,
+        declarations,
+        declaration_stack: Vec::new(),
         result_table: BTreeMap::new(),
         next_token: 0,
         assumptions: BTreeSet::new(),
@@ -905,6 +1136,8 @@ fn verify_cranelift_function(
 
 struct Lowering<'a> {
     seed_env: &'a NativeSeedEnvironment,
+    declarations: BTreeMap<&'a str, &'a RuntimeDeclaration>,
+    declaration_stack: Vec<RuntimeSymbol>,
     result_table: BTreeMap<i64, RuntimeGroundValue>,
     next_token: i64,
     assumptions: BTreeSet<String>,
@@ -913,8 +1146,14 @@ struct Lowering<'a> {
 
 #[derive(Clone)]
 enum Lowered {
-    Int(cranelift_codegen::ir::Value),
-    Bool(cranelift_codegen::ir::Value),
+    Int {
+        value: cranelift_codegen::ir::Value,
+        known: Option<i64>,
+    },
+    Bool {
+        value: cranelift_codegen::ir::Value,
+        known: Option<bool>,
+    },
     Bytes(Vec<u8>),
     String(String),
     Constructor {
@@ -948,6 +1187,37 @@ impl<'a> Lowering<'a> {
             RuntimeExpr::PrimitiveCall { primitive, args } => {
                 self.lower_primitive_call(builder, primitive, args, env)
             }
+            RuntimeExpr::Let { value, body } => {
+                let lowered_value = self.lower_expr(builder, value, env)?;
+                if let Lowered::Trap(trap) = lowered_value {
+                    return Ok(Lowered::Trap(trap));
+                }
+                let mut body_env = vec![lowered_value];
+                body_env.extend_from_slice(env);
+                self.lower_expr(builder, body, &body_env)
+            }
+            RuntimeExpr::If {
+                scrutinee,
+                then_expr,
+                else_expr,
+            } => {
+                let lowered_scrutinee = self.lower_expr(builder, scrutinee, env)?;
+                let Lowered::Bool {
+                    known: Some(scrutinee),
+                    ..
+                } = lowered_scrutinee
+                else {
+                    return Err(unsupported(
+                        "If",
+                        "branch lowering requires a statically known Bool scrutinee",
+                    ));
+                };
+                if scrutinee {
+                    self.lower_expr(builder, then_expr, env)
+                } else {
+                    self.lower_expr(builder, else_expr, env)
+                }
+            }
             RuntimeExpr::Construct { constructor, args } => {
                 let lowered_args = args
                     .iter()
@@ -965,10 +1235,7 @@ impl<'a> Lowering<'a> {
             } => {
                 let lowered_scrutinee = self.lower_expr(builder, scrutinee, env)?;
                 let Lowered::Constructor { constructor, args } = lowered_scrutinee else {
-                    return Err(unsupported(
-                        "Match",
-                        "scrutinee is not a constructor value in the NC6 subset",
-                    ));
+                    return Err(unsupported("Match", "scrutinee is not a constructor value"));
                 };
                 let Some(case) = cases.iter().find(|case| case.constructor == constructor) else {
                     return Ok(Lowered::Trap(default.clone()));
@@ -1025,10 +1292,7 @@ impl<'a> Lowering<'a> {
                     body: (**body).clone(),
                 })
             }
-            RuntimeExpr::DeclarationRef { symbol } => Err(unsupported(
-                "DeclarationRef",
-                format!("declaration reference {symbol} requires NC17 call-graph lowering"),
-            )),
+            RuntimeExpr::DeclarationRef { symbol } => self.lower_declaration_ref(builder, symbol),
             RuntimeExpr::ImportedDeclarationRef {
                 symbol,
                 dependency,
@@ -1068,19 +1332,46 @@ impl<'a> Lowering<'a> {
                 self.lower_expr(builder, &body, &call_env)
             }
             RuntimeExpr::Trap(trap) => Ok(Lowered::Trap(trap.clone())),
-            RuntimeExpr::Let { .. } => Err(unsupported(
-                "Let",
-                "let lowering is outside the NC6 seed-example subset",
-            )),
-            RuntimeExpr::If { .. } => Err(unsupported(
-                "If",
-                "branch lowering is outside the NC6 seed-example subset",
-            )),
             RuntimeExpr::Effect { effect, .. } => Err(unsupported(
                 "Effect",
-                format!("effect {effect} is not modeled in the NC6 D1 subset"),
+                format!("effect {effect} is not modeled in the supported native subset"),
             )),
         }
+    }
+
+    fn lower_declaration_ref(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        symbol: &RuntimeSymbol,
+    ) -> Result<Lowered, CraneliftBackendError> {
+        if self.declaration_stack.contains(symbol) {
+            return Err(unsupported(
+                "DeclarationRef",
+                format!(
+                    "recursive declaration reference {symbol} requires NC22+ recursive lowering"
+                ),
+            ));
+        }
+        let declaration = self
+            .declarations
+            .get(symbol.as_str())
+            .copied()
+            .ok_or_else(|| {
+                unsupported(
+                    "DeclarationRef",
+                    format!("{symbol} is not present in the exact RuntimeProgram"),
+                )
+            })?;
+        let RuntimeDeclarationKind::Transparent { body } = &declaration.kind else {
+            return Err(unsupported(
+                "DeclarationRef",
+                format!("{symbol} is not an executable transparent declaration"),
+            ));
+        };
+        self.declaration_stack.push(symbol.clone());
+        let result = self.lower_expr(builder, body, &[]);
+        self.declaration_stack.pop();
+        result
     }
 
     fn lower_value(
@@ -1089,10 +1380,14 @@ impl<'a> Lowering<'a> {
         value: &RuntimeValue,
     ) -> Result<Lowered, CraneliftBackendError> {
         match value {
-            RuntimeValue::Bool(value) => Ok(Lowered::Bool(
-                builder.ins().iconst(types::I64, i64::from(*value)),
-            )),
-            RuntimeValue::Int(value) => Ok(Lowered::Int(builder.ins().iconst(types::I64, *value))),
+            RuntimeValue::Bool(value) => Ok(Lowered::Bool {
+                value: builder.ins().iconst(types::I64, i64::from(*value)),
+                known: Some(*value),
+            }),
+            RuntimeValue::Int(value) => Ok(Lowered::Int {
+                value: builder.ins().iconst(types::I64, *value),
+                known: Some(*value),
+            }),
             RuntimeValue::Bytes(value) => Ok(Lowered::Bytes(value.clone())),
             RuntimeValue::String(value) => Ok(Lowered::String(value.clone())),
             RuntimeValue::Constructor { constructor, args } => Ok(Lowered::Constructor {
@@ -1110,7 +1405,7 @@ impl<'a> Lowering<'a> {
             }),
             RuntimeValue::ClosureRef { .. } => Err(unsupported(
                 "ClosureRef",
-                "pre-existing closure references are not lowered by the NC6 seed backend",
+                "pre-existing closure references are not lowered by the native backend",
             )),
             RuntimeValue::Unknown => Err(unsupported(
                 "Unknown",
@@ -1139,12 +1434,14 @@ impl<'a> Lowering<'a> {
         value: &RuntimeGroundValue,
     ) -> Result<Lowered, CraneliftBackendError> {
         match value {
-            RuntimeGroundValue::Bool(value) => Ok(Lowered::Bool(
-                builder.ins().iconst(types::I64, i64::from(*value)),
-            )),
-            RuntimeGroundValue::Int(value) => {
-                Ok(Lowered::Int(builder.ins().iconst(types::I64, *value)))
-            }
+            RuntimeGroundValue::Bool(value) => Ok(Lowered::Bool {
+                value: builder.ins().iconst(types::I64, i64::from(*value)),
+                known: Some(*value),
+            }),
+            RuntimeGroundValue::Int(value) => Ok(Lowered::Int {
+                value: builder.ins().iconst(types::I64, *value),
+                known: Some(*value),
+            }),
             RuntimeGroundValue::Bytes(value) => Ok(Lowered::Bytes(value.clone())),
             RuntimeGroundValue::String(value) => Ok(Lowered::String(value.clone())),
             RuntimeGroundValue::Constructor { constructor, args } => Ok(Lowered::Constructor {
@@ -1205,29 +1502,412 @@ impl<'a> Lowering<'a> {
         }
 
         match primitive.symbol.as_str() {
-            "add_int" => {
-                if args.len() != 2 {
-                    return Err(unsupported(
-                        "PrimitiveCall",
-                        format!("add_int expects 2 args, got {}", args.len()),
-                    ));
-                }
-                let mut lowered_args = lowered_args.into_iter();
-                let lhs = lowered_args.next().expect("arg count checked");
-                let rhs = lowered_args.next().expect("arg count checked");
-                let (Lowered::Int(lhs), Lowered::Int(rhs)) = (lhs, rhs) else {
-                    return Err(unsupported(
-                        "PrimitiveCall",
-                        "add_int only supports Int arguments in NC6 D1",
-                    ));
-                };
-                Ok(Lowered::Int(builder.ins().iadd(lhs, rhs)))
-            }
+            "add_int" => self.lower_int_binop(
+                builder,
+                "add_int",
+                lowered_args,
+                |builder, lhs, rhs| builder.ins().iadd(lhs, rhs),
+                |lhs, rhs| lhs.checked_add(rhs),
+            ),
+            "sub_int" => self.lower_int_binop(
+                builder,
+                "sub_int",
+                lowered_args,
+                |builder, lhs, rhs| builder.ins().isub(lhs, rhs),
+                |lhs, rhs| lhs.checked_sub(rhs),
+            ),
+            "mul_int" => self.lower_int_binop(
+                builder,
+                "mul_int",
+                lowered_args,
+                |builder, lhs, rhs| builder.ins().imul(lhs, rhs),
+                |lhs, rhs| lhs.checked_mul(rhs),
+            ),
+            "eq_int" => self.lower_int_cmp(
+                builder,
+                "eq_int",
+                lowered_args,
+                cranelift_codegen::ir::condcodes::IntCC::Equal,
+                |lhs, rhs| lhs == rhs,
+            ),
+            "leq_int" => self.lower_int_cmp(
+                builder,
+                "leq_int",
+                lowered_args,
+                cranelift_codegen::ir::condcodes::IntCC::SignedLessThanOrEqual,
+                |lhs, rhs| lhs <= rhs,
+            ),
+            "not_bool" => self.lower_bool_not(builder, lowered_args),
+            "and_bool" => self.lower_bool_binop(
+                builder,
+                "and_bool",
+                lowered_args,
+                |builder, lhs, rhs| builder.ins().band(lhs, rhs),
+                |lhs, rhs| lhs && rhs,
+            ),
+            "or_bool" => self.lower_bool_binop(
+                builder,
+                "or_bool",
+                lowered_args,
+                |builder, lhs, rhs| builder.ins().bor(lhs, rhs),
+                |lhs, rhs| lhs || rhs,
+            ),
+            "bytes_length" => self.lower_bytes_length(builder, lowered_args),
+            "bytes_at" => self.lower_bytes_at(builder, lowered_args),
+            "bytes_slice" => self.lower_bytes_slice(lowered_args),
+            "bytes_concat" => self.lower_bytes_concat(lowered_args),
+            "bytes_encode" => self.lower_bytes_encode(lowered_args),
+            "bytes_decode" => self.lower_bytes_decode(lowered_args),
+            "byte_length" => self.lower_string_byte_length(builder, lowered_args),
+            "char_length" => self.lower_string_char_length(builder, lowered_args),
             other => Err(unsupported(
                 "PrimitiveCall",
-                format!("primitive {other} is not in the NC6 D1 supported set"),
+                format!("primitive {other} is not in the supported native set"),
             )),
         }
+    }
+
+    fn lower_int_binop(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        symbol: &'static str,
+        args: Vec<Lowered>,
+        emit: impl FnOnce(
+            &mut FunctionBuilder<'_>,
+            cranelift_codegen::ir::Value,
+            cranelift_codegen::ir::Value,
+        ) -> cranelift_codegen::ir::Value,
+        eval: impl FnOnce(i64, i64) -> Option<i64>,
+    ) -> Result<Lowered, CraneliftBackendError> {
+        let (lhs, rhs) = expect_two_args(symbol, args)?;
+        let (
+            Lowered::Int {
+                value: lhs,
+                known: lhs_known,
+            },
+            Lowered::Int {
+                value: rhs,
+                known: rhs_known,
+            },
+        ) = (lhs, rhs)
+        else {
+            return Err(unsupported(
+                "PrimitiveCall",
+                format!("{symbol} only supports Int arguments in native lowering"),
+            ));
+        };
+        let known = lhs_known
+            .and_then(|lhs| rhs_known.and_then(|rhs| eval(lhs, rhs)))
+            .ok_or_else(|| {
+                unsupported(
+                    "PrimitiveCall",
+                    format!(
+                        "{symbol} requires statically known non-overflowing Int operands in native lowering"
+                    ),
+                )
+            })?;
+        Ok(Lowered::Int {
+            value: emit(builder, lhs, rhs),
+            known: Some(known),
+        })
+    }
+
+    fn lower_int_cmp(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        symbol: &'static str,
+        args: Vec<Lowered>,
+        cc: cranelift_codegen::ir::condcodes::IntCC,
+        eval: impl FnOnce(i64, i64) -> bool,
+    ) -> Result<Lowered, CraneliftBackendError> {
+        let (lhs, rhs) = expect_two_args(symbol, args)?;
+        let (
+            Lowered::Int {
+                value: lhs,
+                known: lhs_known,
+            },
+            Lowered::Int {
+                value: rhs,
+                known: rhs_known,
+            },
+        ) = (lhs, rhs)
+        else {
+            return Err(unsupported(
+                "PrimitiveCall",
+                format!("{symbol} only supports Int arguments in native lowering"),
+            ));
+        };
+        let cmp = builder.ins().icmp(cc, lhs, rhs);
+        let value = builder.ins().uextend(types::I64, cmp);
+        Ok(Lowered::Bool {
+            value,
+            known: lhs_known.and_then(|lhs| rhs_known.map(|rhs| eval(lhs, rhs))),
+        })
+    }
+
+    fn lower_bool_not(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        args: Vec<Lowered>,
+    ) -> Result<Lowered, CraneliftBackendError> {
+        let [arg]: [Lowered; 1] = args.try_into().map_err(|args: Vec<Lowered>| {
+            unsupported(
+                "PrimitiveCall",
+                format!("not_bool expects 1 arg, got {}", args.len()),
+            )
+        })?;
+        let Lowered::Bool { value, known } = arg else {
+            return Err(unsupported(
+                "PrimitiveCall",
+                "not_bool only supports Bool arguments in native lowering",
+            ));
+        };
+        let one = builder.ins().iconst(types::I64, 1);
+        Ok(Lowered::Bool {
+            value: builder.ins().bxor(value, one),
+            known: known.map(|value| !value),
+        })
+    }
+
+    fn lower_bool_binop(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        symbol: &'static str,
+        args: Vec<Lowered>,
+        emit: impl FnOnce(
+            &mut FunctionBuilder<'_>,
+            cranelift_codegen::ir::Value,
+            cranelift_codegen::ir::Value,
+        ) -> cranelift_codegen::ir::Value,
+        eval: impl FnOnce(bool, bool) -> bool,
+    ) -> Result<Lowered, CraneliftBackendError> {
+        let (lhs, rhs) = expect_two_args(symbol, args)?;
+        let (
+            Lowered::Bool {
+                value: lhs,
+                known: lhs_known,
+            },
+            Lowered::Bool {
+                value: rhs,
+                known: rhs_known,
+            },
+        ) = (lhs, rhs)
+        else {
+            return Err(unsupported(
+                "PrimitiveCall",
+                format!("{symbol} only supports Bool arguments in native lowering"),
+            ));
+        };
+        Ok(Lowered::Bool {
+            value: emit(builder, lhs, rhs),
+            known: lhs_known.and_then(|lhs| rhs_known.map(|rhs| eval(lhs, rhs))),
+        })
+    }
+
+    fn lower_bytes_length(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        args: Vec<Lowered>,
+    ) -> Result<Lowered, CraneliftBackendError> {
+        let [arg]: [Lowered; 1] = args.try_into().map_err(|args: Vec<Lowered>| {
+            unsupported(
+                "PrimitiveCall",
+                format!("bytes_length expects 1 arg, got {}", args.len()),
+            )
+        })?;
+        let Lowered::Bytes(bytes) = arg else {
+            return Err(unsupported(
+                "PrimitiveCall",
+                "bytes_length only supports Bytes arguments in native lowering",
+            ));
+        };
+        let len = i64::try_from(bytes.len()).map_err(|_| {
+            unsupported(
+                "PrimitiveCall",
+                "bytes_length result does not fit the runtime Int representation",
+            )
+        })?;
+        Ok(Lowered::Int {
+            value: builder.ins().iconst(types::I64, len),
+            known: Some(len),
+        })
+    }
+
+    fn lower_bytes_at(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        args: Vec<Lowered>,
+    ) -> Result<Lowered, CraneliftBackendError> {
+        let (bytes, index) = expect_two_args("bytes_at", args)?;
+        let (
+            Lowered::Bytes(bytes),
+            Lowered::Int {
+                known: Some(index), ..
+            },
+        ) = (bytes, index)
+        else {
+            return Err(unsupported(
+                "PrimitiveCall",
+                "bytes_at requires Bytes and statically known Int arguments",
+            ));
+        };
+        let Some(byte) = usize::try_from(index)
+            .ok()
+            .and_then(|index| bytes.get(index).copied())
+        else {
+            return Ok(Lowered::Trap(RuntimeTrap {
+                code: RuntimeTrapCode::ExplicitTrap,
+                message: "bytes_at bounds obligation failed".to_string(),
+            }));
+        };
+        Ok(Lowered::Int {
+            value: builder.ins().iconst(types::I64, i64::from(byte)),
+            known: Some(i64::from(byte)),
+        })
+    }
+
+    fn lower_bytes_slice(&mut self, args: Vec<Lowered>) -> Result<Lowered, CraneliftBackendError> {
+        let [bytes, start, len]: [Lowered; 3] = args.try_into().map_err(|args: Vec<Lowered>| {
+            unsupported(
+                "PrimitiveCall",
+                format!("bytes_slice expects 3 args, got {}", args.len()),
+            )
+        })?;
+        let (
+            Lowered::Bytes(bytes),
+            Lowered::Int {
+                known: Some(start), ..
+            },
+            Lowered::Int {
+                known: Some(len), ..
+            },
+        ) = (bytes, start, len)
+        else {
+            return Err(unsupported(
+                "PrimitiveCall",
+                "bytes_slice requires Bytes and statically known Int bounds",
+            ));
+        };
+        let (Ok(start), Ok(len)) = (usize::try_from(start), usize::try_from(len)) else {
+            return Ok(Lowered::Trap(RuntimeTrap {
+                code: RuntimeTrapCode::ExplicitTrap,
+                message: "bytes_slice bounds obligation failed".to_string(),
+            }));
+        };
+        let Some(end) = start.checked_add(len).filter(|end| *end <= bytes.len()) else {
+            return Ok(Lowered::Trap(RuntimeTrap {
+                code: RuntimeTrapCode::ExplicitTrap,
+                message: "bytes_slice bounds obligation failed".to_string(),
+            }));
+        };
+        Ok(Lowered::Bytes(bytes[start..end].to_vec()))
+    }
+
+    fn lower_bytes_concat(&mut self, args: Vec<Lowered>) -> Result<Lowered, CraneliftBackendError> {
+        let (lhs, rhs) = expect_two_args("bytes_concat", args)?;
+        let (Lowered::Bytes(mut lhs), Lowered::Bytes(rhs)) = (lhs, rhs) else {
+            return Err(unsupported(
+                "PrimitiveCall",
+                "bytes_concat only supports Bytes arguments in native lowering",
+            ));
+        };
+        lhs.extend(rhs);
+        Ok(Lowered::Bytes(lhs))
+    }
+
+    fn lower_bytes_encode(&mut self, args: Vec<Lowered>) -> Result<Lowered, CraneliftBackendError> {
+        let [arg]: [Lowered; 1] = args.try_into().map_err(|args: Vec<Lowered>| {
+            unsupported(
+                "PrimitiveCall",
+                format!("bytes_encode expects 1 arg, got {}", args.len()),
+            )
+        })?;
+        let Lowered::String(value) = arg else {
+            return Err(unsupported(
+                "PrimitiveCall",
+                "bytes_encode only supports String arguments in native lowering",
+            ));
+        };
+        Ok(Lowered::Bytes(value.into_bytes()))
+    }
+
+    fn lower_bytes_decode(&mut self, args: Vec<Lowered>) -> Result<Lowered, CraneliftBackendError> {
+        let [arg]: [Lowered; 1] = args.try_into().map_err(|args: Vec<Lowered>| {
+            unsupported(
+                "PrimitiveCall",
+                format!("bytes_decode expects 1 arg, got {}", args.len()),
+            )
+        })?;
+        let Lowered::Bytes(value) = arg else {
+            return Err(unsupported(
+                "PrimitiveCall",
+                "bytes_decode only supports Bytes arguments in native lowering",
+            ));
+        };
+        String::from_utf8(value).map(Lowered::String).map_err(|_| {
+            unsupported(
+                "PrimitiveCall",
+                "bytes_decode only supports valid UTF-8 bytes in native lowering",
+            )
+        })
+    }
+
+    fn lower_string_byte_length(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        args: Vec<Lowered>,
+    ) -> Result<Lowered, CraneliftBackendError> {
+        let [arg]: [Lowered; 1] = args.try_into().map_err(|args: Vec<Lowered>| {
+            unsupported(
+                "PrimitiveCall",
+                format!("byte_length expects 1 arg, got {}", args.len()),
+            )
+        })?;
+        let Lowered::String(value) = arg else {
+            return Err(unsupported(
+                "PrimitiveCall",
+                "byte_length only supports String arguments in native lowering",
+            ));
+        };
+        let len = i64::try_from(value.len()).map_err(|_| {
+            unsupported(
+                "PrimitiveCall",
+                "byte_length result does not fit the runtime Int representation",
+            )
+        })?;
+        Ok(Lowered::Int {
+            value: builder.ins().iconst(types::I64, len),
+            known: Some(len),
+        })
+    }
+
+    fn lower_string_char_length(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        args: Vec<Lowered>,
+    ) -> Result<Lowered, CraneliftBackendError> {
+        let [arg]: [Lowered; 1] = args.try_into().map_err(|args: Vec<Lowered>| {
+            unsupported(
+                "PrimitiveCall",
+                format!("char_length expects 1 arg, got {}", args.len()),
+            )
+        })?;
+        let Lowered::String(value) = arg else {
+            return Err(unsupported(
+                "PrimitiveCall",
+                "char_length only supports String arguments in native lowering",
+            ));
+        };
+        let len = i64::try_from(value.chars().count()).map_err(|_| {
+            unsupported(
+                "PrimitiveCall",
+                "char_length result does not fit the runtime Int representation",
+            )
+        })?;
+        Ok(Lowered::Int {
+            value: builder.ins().iconst(types::I64, len),
+            known: Some(len),
+        })
     }
 
     fn emit_result(
@@ -1236,8 +1916,8 @@ impl<'a> Lowering<'a> {
         value: Lowered,
     ) -> Result<(cranelift_codegen::ir::Value, ResultDecoder), CraneliftBackendError> {
         match value {
-            Lowered::Int(value) => Ok((value, ResultDecoder::Int)),
-            Lowered::Bool(value) => Ok((value, ResultDecoder::Bool)),
+            Lowered::Int { value, .. } => Ok((value, ResultDecoder::Int)),
+            Lowered::Bool { value, .. } => Ok((value, ResultDecoder::Bool)),
             value => {
                 let ground = self.ground_value(value)?;
                 let token = self.intern_result(ground);
@@ -1254,13 +1934,19 @@ impl<'a> Lowering<'a> {
         value: Lowered,
     ) -> Result<RuntimeGroundValue, CraneliftBackendError> {
         match value {
-            Lowered::Int(_) => Err(unsupported(
+            Lowered::Int {
+                known: Some(value), ..
+            } => Ok(RuntimeGroundValue::Int(value)),
+            Lowered::Int { known: None, .. } => Err(unsupported(
                 "Result",
-                "internal error: Int scalar should decode directly from native return",
+                "native aggregate result contains a non-constant Int field",
             )),
-            Lowered::Bool(_) => Err(unsupported(
+            Lowered::Bool {
+                known: Some(value), ..
+            } => Ok(RuntimeGroundValue::Bool(value)),
+            Lowered::Bool { known: None, .. } => Err(unsupported(
                 "Result",
-                "internal error: Bool scalar should decode directly from native return",
+                "native aggregate result contains a non-constant Bool field",
             )),
             Lowered::Bytes(value) => Ok(RuntimeGroundValue::Bytes(value)),
             Lowered::String(value) => Ok(RuntimeGroundValue::String(value)),
@@ -1279,7 +1965,7 @@ impl<'a> Lowering<'a> {
             }),
             Lowered::Closure { .. } => Err(unsupported(
                 "Closure",
-                "closures are callable but not observable ground values in NC6 D1",
+                "closures are callable but not observable ground values in native lowering",
             )),
             Lowered::Trap(trap) => Err(unsupported(
                 "Trap",
@@ -1294,6 +1980,19 @@ impl<'a> Lowering<'a> {
         self.result_table.insert(token, ground);
         token
     }
+}
+
+fn expect_two_args(
+    symbol: &'static str,
+    args: Vec<Lowered>,
+) -> Result<(Lowered, Lowered), CraneliftBackendError> {
+    let [lhs, rhs]: [Lowered; 2] = args.try_into().map_err(|args: Vec<Lowered>| {
+        unsupported(
+            "PrimitiveCall",
+            format!("{symbol} expects 2 args, got {}", args.len()),
+        )
+    })?;
+    Ok((lhs, rhs))
 }
 
 fn unsupported(construct: &'static str, reason: impl Into<String>) -> CraneliftBackendError {
@@ -1315,10 +2014,11 @@ fn backend_module(reason: String) -> CraneliftBackendError {
 mod tests {
     use super::*;
     use crate::{
-        nc5_seed_examples, ErasedExecutableCore, RuntimeArtifactValidationStage,
-        RuntimeArtifactValidationTier, RuntimeAssumptionTrustKind, RuntimeAssumptionTrustMetadata,
-        RuntimeDeclaration, RuntimeEffectsForeignAuditMetadata, RuntimeFieldStatus,
-        RuntimeMatchCase, RuntimeMetadata, RuntimeSymbolMetadata,
+        evaluate_runtime_ir_example, nc5_seed_examples, ErasedExecutableCore,
+        RuntimeArtifactValidationStage, RuntimeArtifactValidationTier, RuntimeAssumptionTrustKind,
+        RuntimeAssumptionTrustMetadata, RuntimeDeclaration, RuntimeEffectsForeignAuditMetadata,
+        RuntimeFieldStatus, RuntimeIrSeedEnvironment, RuntimeMatchCase, RuntimeMetadata,
+        RuntimeSymbolMetadata,
     };
 
     fn seed_program_with_lowerability(status: Option<RuntimeLowerabilityStatus>) -> RuntimeProgram {
@@ -1349,6 +2049,50 @@ mod tests {
                 },
             }],
             examples: nc5_seed_examples(),
+        }
+    }
+
+    fn nc22_program_with_body(
+        body: RuntimeExpr,
+        observation: RuntimeObservation,
+    ) -> RuntimeProgram {
+        let symbol = "decl:fixture::Main::main".to_string();
+        let mut metadata = RuntimeMetadata::default();
+        metadata
+            .lowerability
+            .insert(symbol.clone(), RuntimeLowerabilityStatus::Supported);
+        RuntimeProgram {
+            package_identity: "module:fixture::nc22".to_string(),
+            core_semantic_hash: 22,
+            artifact_hash: 2200,
+            erased_core: ErasedExecutableCore {
+                symbols: BTreeSet::from([symbol.clone()]),
+                metadata,
+            },
+            declarations: vec![RuntimeDeclaration {
+                symbol: symbol.clone(),
+                kind: RuntimeDeclarationKind::Transparent { body },
+                metadata: RuntimeSymbolMetadata {
+                    lowerability: Some(RuntimeLowerabilityStatus::Supported),
+                    ..RuntimeSymbolMetadata::empty()
+                },
+            }],
+            examples: vec![RuntimeExample {
+                name: "main-entrypoint".to_string(),
+                checked_core_shape: "compiler-produced declaration ref".to_string(),
+                ir: RuntimeExpr::DeclarationRef { symbol },
+                observation,
+            }],
+        }
+    }
+
+    fn total_primitive(symbol: &str, args: Vec<RuntimeExpr>) -> RuntimeExpr {
+        RuntimeExpr::PrimitiveCall {
+            primitive: RuntimePrimitive {
+                symbol: symbol.to_string(),
+                partiality: RuntimePartiality::Total,
+            },
+            args,
         }
     }
 
@@ -1456,6 +2200,237 @@ mod tests {
         assert!(reports
             .iter()
             .all(|report| report.trust.fidelity == NativeFidelity::F1SeedObservationAgreement));
+    }
+
+    #[test]
+    fn nc22_cranelift_agrees_with_runtime_ir_report_for_broad_starter_shapes() {
+        let body = RuntimeExpr::Let {
+            value: Box::new(total_primitive(
+                "add_int",
+                vec![
+                    RuntimeExpr::Value(RuntimeValue::Int(2)),
+                    RuntimeExpr::Value(RuntimeValue::Int(3)),
+                ],
+            )),
+            body: Box::new(RuntimeExpr::Call {
+                callee: Box::new(RuntimeExpr::Closure {
+                    captures: Vec::new(),
+                    params: vec!["x".to_string()],
+                    body: Box::new(RuntimeExpr::Match {
+                        scrutinee: Box::new(RuntimeExpr::Construct {
+                            constructor: "ctor:fixture::Box::Box".to_string(),
+                            args: vec![RuntimeExpr::Var(0)],
+                        }),
+                        cases: vec![RuntimeMatchCase {
+                            constructor: "ctor:fixture::Box::Box".to_string(),
+                            binders: 1,
+                            body: RuntimeExpr::Record {
+                                fields: vec![
+                                    (
+                                        "ok".to_string(),
+                                        RuntimeExpr::If {
+                                            scrutinee: Box::new(total_primitive(
+                                                "eq_int",
+                                                vec![
+                                                    RuntimeExpr::Var(0),
+                                                    RuntimeExpr::Value(RuntimeValue::Int(5)),
+                                                ],
+                                            )),
+                                            then_expr: Box::new(RuntimeExpr::Value(
+                                                RuntimeValue::Bool(true),
+                                            )),
+                                            else_expr: Box::new(RuntimeExpr::Value(
+                                                RuntimeValue::Bool(false),
+                                            )),
+                                        },
+                                    ),
+                                    (
+                                        "value".to_string(),
+                                        total_primitive(
+                                            "sub_int",
+                                            vec![
+                                                total_primitive(
+                                                    "mul_int",
+                                                    vec![
+                                                        RuntimeExpr::Var(0),
+                                                        RuntimeExpr::Value(RuntimeValue::Int(2)),
+                                                    ],
+                                                ),
+                                                RuntimeExpr::Value(RuntimeValue::Int(3)),
+                                            ],
+                                        ),
+                                    ),
+                                ],
+                            },
+                        }],
+                        default: RuntimeTrap {
+                            code: RuntimeTrapCode::PatternMatchFailure,
+                            message: "unexpected constructor".to_string(),
+                        },
+                    }),
+                }),
+                args: vec![RuntimeExpr::Var(0)],
+            }),
+        };
+        let observation = RuntimeObservation::Returned(RuntimeGroundValue::Record {
+            fields: vec![
+                ("ok".to_string(), RuntimeGroundValue::Bool(true)),
+                ("value".to_string(), RuntimeGroundValue::Int(7)),
+            ],
+        });
+        let program = nc22_program_with_body(body, observation.clone());
+        let run_report = evaluate_runtime_ir_example(
+            &program,
+            &program.examples[0],
+            &RuntimeIrSeedEnvironment::empty(),
+        )
+        .expect("runtime-IR evaluator runs the compiler-produced artifact");
+
+        let report = run_runtime_ir_report_with_cranelift(
+            &program,
+            run_report,
+            &NativeSeedEnvironment::empty(),
+        );
+
+        assert_eq!(
+            report.verdict,
+            NativeRuntimeIrComparisonVerdict::RuntimeIrNativeAgreement {
+                stage: NativeDifferentialStage::RuntimeIrNativeCompare,
+            }
+        );
+        let native = report.native.expect("native side ran");
+        assert_eq!(native.observation, observation);
+        assert_eq!(
+            native.trust.fidelity,
+            NativeFidelity::F1RuntimeIrEvaluatorAgreement
+        );
+        assert_eq!(
+            native.trust.evidence.runtime_artifact_hash,
+            Some(program.artifact_hash)
+        );
+    }
+
+    #[test]
+    fn nc22_imported_dependency_lowers_as_stable_unsupported_native_lane() {
+        let symbol = "decl:fixture::Main::main".to_string();
+        let dependency = "dep:fixture".to_string();
+        let imported = "decl:dep::value".to_string();
+        let dependency_hash = "hash:dep".to_string();
+        let mut program = nc22_program_with_body(
+            RuntimeExpr::ImportedDeclarationRef {
+                symbol: imported.clone(),
+                dependency: dependency.clone(),
+                dependency_semantic_hash: dependency_hash.clone(),
+            },
+            RuntimeObservation::Returned(RuntimeGroundValue::Int(9)),
+        );
+        program.declarations[0].symbol = symbol.clone();
+        program.erased_core.symbols.insert(imported.clone());
+        program
+            .erased_core
+            .metadata
+            .lowerability
+            .insert(imported.clone(), RuntimeLowerabilityStatus::Supported);
+        program
+            .erased_core
+            .metadata
+            .dependency_semantic_hashes
+            .insert(dependency.clone(), dependency_hash.clone());
+        let mut runtime_env = RuntimeIrSeedEnvironment::empty();
+        runtime_env.insert_imported_declaration(
+            imported,
+            dependency,
+            dependency_hash,
+            RuntimeGroundValue::Int(9),
+        );
+        let run_report = evaluate_runtime_ir_example(&program, &program.examples[0], &runtime_env)
+            .expect("runtime-IR evaluator can use an exact imported seed binding");
+
+        let report = run_runtime_ir_report_with_cranelift(
+            &program,
+            run_report,
+            &NativeSeedEnvironment::empty(),
+        );
+
+        assert!(matches!(
+            report.verdict,
+            NativeRuntimeIrComparisonVerdict::Unsupported {
+                stage: NativeDifferentialStage::NativeLoweringOrExecution,
+                construct: "ImportedDeclarationRef",
+                ..
+            }
+        ));
+        assert!(report.native.is_none());
+    }
+
+    #[test]
+    fn nc22_runtime_ir_report_identity_mismatch_rejects_before_native_lowering() {
+        let program = nc22_program_with_body(
+            RuntimeExpr::Value(RuntimeValue::Int(1)),
+            RuntimeObservation::Returned(RuntimeGroundValue::Int(1)),
+        );
+        let mut run_report = evaluate_runtime_ir_example(
+            &program,
+            &program.examples[0],
+            &RuntimeIrSeedEnvironment::empty(),
+        )
+        .expect("runtime-IR evaluator runs");
+        run_report.evidence.runtime_artifact_hash = 0xdead_beef;
+
+        let report = run_runtime_ir_report_with_cranelift(
+            &program,
+            run_report,
+            &NativeSeedEnvironment::empty(),
+        );
+
+        assert!(matches!(
+            report.verdict,
+            NativeRuntimeIrComparisonVerdict::Unsupported {
+                stage: NativeDifferentialStage::BoundaryPreflight,
+                construct: "RuntimeIrRunReport",
+                ..
+            }
+        ));
+        assert!(report.native.is_none());
+    }
+
+    #[test]
+    fn nc22_ambiguous_runtime_ir_report_target_rejects_before_native_lowering() {
+        let mut program = nc22_program_with_body(
+            RuntimeExpr::Value(RuntimeValue::Int(1)),
+            RuntimeObservation::Returned(RuntimeGroundValue::Int(1)),
+        );
+        program.examples.push(program.examples[0].clone());
+        let mut run_report = evaluate_runtime_ir_example(
+            &nc22_program_with_body(
+                RuntimeExpr::Value(RuntimeValue::Int(1)),
+                RuntimeObservation::Returned(RuntimeGroundValue::Int(1)),
+            ),
+            &program.examples[0],
+            &RuntimeIrSeedEnvironment::empty(),
+        )
+        .expect("runtime-IR evaluator runs");
+        run_report.artifact = RuntimeArtifactIdentity::from_program(&program);
+        run_report.observation.artifact = RuntimeArtifactIdentity::from_program(&program);
+        run_report.evidence.package_identity = program.package_identity.clone();
+        run_report.evidence.core_semantic_hash = program.core_semantic_hash;
+        run_report.evidence.runtime_artifact_hash = program.artifact_hash;
+
+        let report = run_runtime_ir_report_with_cranelift(
+            &program,
+            run_report,
+            &NativeSeedEnvironment::empty(),
+        );
+
+        assert!(matches!(
+            report.verdict,
+            NativeRuntimeIrComparisonVerdict::Unsupported {
+                stage: NativeDifferentialStage::BoundaryPreflight,
+                construct: "RuntimeIrRunReport",
+                ..
+            }
+        ));
+        assert!(report.native.is_none());
     }
 
     #[test]
@@ -2073,6 +3048,40 @@ mod tests {
     }
 
     #[test]
+    fn reachable_foreign_checked_core_metadata_rejects_before_backend_lowering() {
+        let mut program =
+            seed_program_with_lowerability(Some(RuntimeLowerabilityStatus::Supported));
+        let symbol = program.declarations[0].symbol.clone();
+        program
+            .erased_core
+            .metadata
+            .checked_core
+            .effects_foreign_metadata
+            .insert(
+                symbol,
+                RuntimeEffectsForeignAuditMetadata {
+                    declared_effects: BTreeSet::new(),
+                    capabilities: BTreeSet::new(),
+                    foreign_symbol: Some("host.fixture.foreign".to_string()),
+                    boundary: RuntimeEffectBoundary::Foreign,
+                    runtime_checks: BTreeSet::new(),
+                    lowerability: RuntimeLowerabilityStatus::Supported,
+                },
+            );
+
+        let err =
+            run_nc6_seed_examples(&program).expect_err("foreign checked-core metadata must reject");
+
+        assert!(matches!(
+            err,
+            CraneliftBackendError::Unsupported(UnsupportedLowering {
+                construct: "RuntimeProgram",
+                ..
+            })
+        ));
+    }
+
+    #[test]
     fn explicit_partial_primitive_reports_trap_not_backend_bug() {
         let example = nc5_seed_examples()
             .into_iter()
@@ -2119,6 +3128,33 @@ mod tests {
             err,
             CraneliftBackendError::Unsupported(UnsupportedLowering {
                 construct: "Unknown",
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn overflowing_int_primitive_rejects_before_native_wrapping_semantics() {
+        let example = RuntimeExample {
+            name: "overflowing-add-int".to_string(),
+            checked_core_shape: "diagnostic label only".to_string(),
+            ir: total_primitive(
+                "add_int",
+                vec![
+                    RuntimeExpr::Value(RuntimeValue::Int(i64::MAX)),
+                    RuntimeExpr::Value(RuntimeValue::Int(1)),
+                ],
+            ),
+            observation: RuntimeObservation::Returned(RuntimeGroundValue::Int(i64::MIN)),
+        };
+
+        let err = run_example_with_seed_observation(&example, &NativeSeedEnvironment::empty())
+            .expect_err("native lowering must not use wrapping Int semantics");
+
+        assert!(matches!(
+            err,
+            CraneliftBackendError::Unsupported(UnsupportedLowering {
+                construct: "PrimitiveCall",
                 ..
             })
         ));
