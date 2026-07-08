@@ -16,17 +16,18 @@ use std::process::Command;
 
 use crate::{
     fnv1a_64, object_linker_executable_package_hash, object_linker_runtime_ir_run_report_hash,
-    ObjectLinkerArtifactKind, ObjectLinkerExecutablePackage, RuntimeArtifactIdentity,
-    RuntimeDeclaration, RuntimeDeclarationKind, RuntimeEffectBoundary, RuntimeExpr,
-    RuntimeGroundValue, RuntimeInterpreterObservation, RuntimeIrRunReport, RuntimeIrTargetIdentity,
+    ObjectLinkerArtifactKind, ObjectLinkerEvidenceFact, ObjectLinkerEvidenceLane,
+    ObjectLinkerExecutablePackage, RuntimeArtifactIdentity, RuntimeDeclaration,
+    RuntimeDeclarationKind, RuntimeEffectBoundary, RuntimeExpr, RuntimeGroundValue,
+    RuntimeInterpreterObservation, RuntimeIrRunReport, RuntimeIrTargetIdentity,
     RuntimeLowerabilityStatus, RuntimeObservation, RuntimeProgram, RuntimeSymbol,
     OBJECT_LINKER_PACKAGE_KIND, OBJECT_LINKER_PACKAGE_VERSION,
 };
 
 pub const NATIVE_EXECUTION_DIFFERENTIAL_REPORT_KIND: &str = "KenNativeExecutionDifferentialReport";
-pub const NATIVE_EXECUTION_DIFFERENTIAL_REPORT_VERSION: u32 = 1;
+pub const NATIVE_EXECUTION_DIFFERENTIAL_REPORT_VERSION: u32 = 2;
 pub const NATIVE_EXECUTION_DIFFERENTIAL_SPEC_REF: &str =
-    "docs/program/wp/NC25-effects-foreign-executable-policy.md";
+    "docs/program/wp/NC26-native-trust-report-provenance.md";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NativeExecutionDifferentialReport {
@@ -37,6 +38,7 @@ pub struct NativeExecutionDifferentialReport {
     pub interpreter: NativeComparisonLaneReport,
     pub verdict: NativeExecutionDifferentialVerdict,
     pub effect_foreign_policy: NativeEffectForeignExecutablePolicyReport,
+    pub trust: NativeExecutableTrustReport,
     pub unavailable_claims: BTreeSet<NativeExecutionUnavailableClaim>,
 }
 
@@ -135,6 +137,109 @@ pub enum NativeEffectForeignExecutableStatus {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NativeExecutableTrustReport {
+    pub provenance: NativeExecutableProvenance,
+    pub evidence_lanes: Vec<NativeExecutableEvidenceLane>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NativeExecutableProvenance {
+    pub checked_core: NativeCheckedCoreProvenance,
+    pub runtime_ir: NativeRuntimeIrProvenance,
+    pub object_linker: NativeObjectLinkerProvenance,
+    pub toolchain: NativeToolchainProvenance,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NativeCheckedCoreProvenance {
+    pub package_identity: String,
+    pub core_semantic_hash: u64,
+    pub artifact_hash: u64,
+    pub evidence_source: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NativeRuntimeIrProvenance {
+    pub runtime_artifact: RuntimeArtifactIdentity,
+    pub target: RuntimeIrTargetIdentity,
+    pub runtime_report_hash: u64,
+    pub evidence_source: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NativeObjectLinkerProvenance {
+    pub object_linker_package_hash: u64,
+    pub entrypoint_package_hash: u64,
+    pub platform_runtime_support_hash: u64,
+    pub object_artifact_kind: ObjectLinkerArtifactKind,
+    pub object_artifact_hash: u64,
+    pub object_byte_len: u64,
+    pub executable_artifact_hash: u64,
+    pub executable_byte_len: u64,
+    pub executable_relative_path: String,
+    pub smoke_evidence_source: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NativeToolchainProvenance {
+    pub ken_runtime: NativeRecordedFact,
+    pub native_backend: NativeRecordedFact,
+    pub backend_verifier: NativeRecordedFact,
+    pub object_emission: NativeRecordedFact,
+    pub linker_or_finalizer: NativeRecordedFact,
+    pub host_platform: NativeRecordedFact,
+    pub library_abi: NativeRecordedFact,
+    pub c_abi_interop: NativeRecordedFact,
+    pub rust_interop: NativeRecordedFact,
+    pub cross_package_native_linking: NativeRecordedFact,
+    pub whole_compiler_proof: NativeRecordedFact,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum NativeRecordedFact {
+    Available {
+        value: String,
+        evidence_source: String,
+        lane: ObjectLinkerEvidenceLane,
+    },
+    Unavailable {
+        reason: String,
+        lane: ObjectLinkerEvidenceLane,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NativeExecutableEvidenceLane {
+    pub claim: NativeExecutableEvidenceClaim,
+    pub status: NativeExecutableEvidenceStatus,
+    pub evidence_source: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum NativeExecutableEvidenceClaim {
+    NativeExecution,
+    RuntimeIrDifferential,
+    InterpreterDifferential,
+    EffectForeignExecutablePolicy,
+    TranslationValidation,
+    WholeCompilerProof,
+    LibraryAbi,
+    CAbiInterop,
+    RustInterop,
+    CrossPackageNativeLinking,
+    ForeignExecution,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum NativeExecutableEvidenceStatus {
+    Tested,
+    Validated,
+    Proved,
+    Unavailable { reason: String },
+    Unsupported { reason: String },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NativeMismatchDiagnostic {
     pub package_identity: String,
     pub target_symbol: RuntimeSymbol,
@@ -194,6 +299,7 @@ pub enum NativeExecutionDifferentialStage {
     RuntimeIrRunReport,
     ArtifactFile,
     EffectForeignExecutablePolicy,
+    Provenance,
     NativeExecution,
     InterpreterEvidence,
 }
@@ -241,6 +347,34 @@ pub fn run_native_execution_differential(
             &run_report.observation.observation,
             &reason,
         )?;
+        let native = NativeExecutionLaneReport::Unavailable {
+            reason: reason.clone(),
+            evidence_source:
+                "NC25 effect/foreign executable policy rejected native execution before launch"
+                    .to_string(),
+        };
+        let runtime_ir = NativeComparisonLaneReport::Unavailable {
+            lane: NativeDifferentialLane::NativeExecution,
+            reason: reason.clone(),
+            evidence_source:
+                "NC18 effect/foreign facts are represented; NC25 keeps native execution unavailable"
+                    .to_string(),
+        };
+        let verdict = NativeExecutionDifferentialVerdict::Unavailable {
+            lane: NativeDifferentialLane::NativeExecution,
+            reason,
+        };
+        let trust = native_executable_trust_report(
+            program,
+            package,
+            run_report,
+            &target,
+            &native,
+            &runtime_ir,
+            &interpreter,
+            &verdict,
+            &effect_foreign_policy,
+        );
         return Ok(NativeExecutionDifferentialReport {
             header: NativeExecutionDifferentialHeader {
                 report_kind: NATIVE_EXECUTION_DIFFERENTIAL_REPORT_KIND.to_string(),
@@ -249,25 +383,12 @@ pub fn run_native_execution_differential(
                 producer: producer.into(),
             },
             target,
-            native: NativeExecutionLaneReport::Unavailable {
-                reason: reason.clone(),
-                evidence_source:
-                    "NC25 effect/foreign executable policy rejected native execution before launch"
-                        .to_string(),
-            },
-            runtime_ir: NativeComparisonLaneReport::Unavailable {
-                lane: NativeDifferentialLane::NativeExecution,
-                reason: reason.clone(),
-                evidence_source:
-                    "NC18 effect/foreign facts are represented; NC25 keeps native execution unavailable"
-                        .to_string(),
-            },
+            native,
+            runtime_ir,
             interpreter,
-            verdict: NativeExecutionDifferentialVerdict::Unavailable {
-                lane: NativeDifferentialLane::NativeExecution,
-                reason,
-            },
+            verdict,
             effect_foreign_policy,
+            trust,
             unavailable_claims: required_unavailable_claims(),
         });
     }
@@ -283,6 +404,34 @@ pub fn run_native_execution_differential(
             &run_report.observation.observation,
         )?;
         let reason = "NC24 starter native execution cannot decode trap reports from the NC23 scalar executable ABI; trap comparison remains first-class unavailable".to_string();
+        let native = NativeExecutionLaneReport::Unavailable {
+            reason: reason.clone(),
+            evidence_source:
+                "RuntimeIrRunReport observed a trap; NC23 executable ABI carries scalar stdout only"
+                    .to_string(),
+        };
+        let runtime_ir = NativeComparisonLaneReport::Unavailable {
+            lane: NativeDifferentialLane::NativeExecution,
+            reason: reason.clone(),
+            evidence_source:
+                "runtime-IR trap observation is preserved but native trap decoding is unavailable"
+                    .to_string(),
+        };
+        let verdict = NativeExecutionDifferentialVerdict::Unavailable {
+            lane: NativeDifferentialLane::NativeExecution,
+            reason,
+        };
+        let trust = native_executable_trust_report(
+            program,
+            package,
+            run_report,
+            &target,
+            &native,
+            &runtime_ir,
+            &interpreter,
+            &verdict,
+            &effect_foreign_policy,
+        );
         return Ok(NativeExecutionDifferentialReport {
             header: NativeExecutionDifferentialHeader {
                 report_kind: NATIVE_EXECUTION_DIFFERENTIAL_REPORT_KIND.to_string(),
@@ -291,24 +440,12 @@ pub fn run_native_execution_differential(
                 producer: producer.into(),
             },
             target,
-            native: NativeExecutionLaneReport::Unavailable {
-                reason: reason.clone(),
-                evidence_source: "RuntimeIrRunReport observed a trap; NC23 executable ABI carries scalar stdout only"
-                    .to_string(),
-            },
-            runtime_ir: NativeComparisonLaneReport::Unavailable {
-                lane: NativeDifferentialLane::NativeExecution,
-                reason: reason.clone(),
-                evidence_source:
-                    "runtime-IR trap observation is preserved but native trap decoding is unavailable"
-                        .to_string(),
-            },
+            native,
+            runtime_ir,
             interpreter,
-            verdict: NativeExecutionDifferentialVerdict::Unavailable {
-                lane: NativeDifferentialLane::NativeExecution,
-                reason,
-            },
+            verdict,
             effect_foreign_policy,
+            trust,
             unavailable_claims: required_unavailable_claims(),
         });
     }
@@ -323,6 +460,18 @@ pub fn run_native_execution_differential(
     let interpreter =
         compare_interpreter_lane(&target, &expected_target, interpreter, &native.observation)?;
     let verdict = differential_verdict(&runtime_ir, &interpreter);
+    let native = NativeExecutionLaneReport::Available(native);
+    let trust = native_executable_trust_report(
+        program,
+        package,
+        run_report,
+        &target,
+        &native,
+        &runtime_ir,
+        &interpreter,
+        &verdict,
+        &effect_foreign_policy,
+    );
 
     Ok(NativeExecutionDifferentialReport {
         header: NativeExecutionDifferentialHeader {
@@ -332,11 +481,12 @@ pub fn run_native_execution_differential(
             producer: producer.into(),
         },
         target,
-        native: NativeExecutionLaneReport::Available(native),
+        native,
         runtime_ir,
         interpreter,
         verdict,
         effect_foreign_policy,
+        trust,
         unavailable_claims: required_unavailable_claims(),
     })
 }
@@ -408,7 +558,157 @@ fn validate_object_linker_package(
             "NC24 only consumes NC23 packages whose exact smoke run passed",
         ));
     }
+    validate_object_linker_provenance(package)?;
     Ok(())
+}
+
+fn validate_object_linker_provenance(
+    package: &ObjectLinkerExecutablePackage,
+) -> Result<(), NativeExecutionDifferentialError> {
+    if package.object_artifact.kind != ObjectLinkerArtifactKind::CraneliftObject {
+        return Err(provenance_error(
+            "object_artifact.kind",
+            "object/linker package object artifact must be the Cranelift object named by NC23",
+        ));
+    }
+    require_available_fact(
+        "toolchain.native_backend",
+        &package.toolchain.native_backend,
+        ObjectLinkerEvidenceLane::BuildArtifact,
+    )?;
+    require_available_fact(
+        "toolchain.linker_or_finalizer",
+        &package.toolchain.linker_or_finalizer,
+        ObjectLinkerEvidenceLane::BuildArtifact,
+    )?;
+    require_available_fact(
+        "toolchain.ken_runtime",
+        &package.toolchain.ken_runtime,
+        ObjectLinkerEvidenceLane::BuildArtifact,
+    )?;
+    require_available_fact(
+        "toolchain.host_platform",
+        &package.toolchain.host_platform,
+        ObjectLinkerEvidenceLane::Tested,
+    )?;
+    require_available_fact(
+        "toolchain.backend_verifier",
+        &package.toolchain.backend_verifier,
+        ObjectLinkerEvidenceLane::Tested,
+    )?;
+    require_available_fact(
+        "toolchain.object_emission",
+        &package.toolchain.object_emission,
+        ObjectLinkerEvidenceLane::BuildArtifact,
+    )?;
+    require_unavailable_fact("toolchain.library_abi", &package.toolchain.library_abi)?;
+    require_unavailable_fact("toolchain.c_abi_interop", &package.toolchain.c_abi_interop)?;
+    require_unavailable_fact("toolchain.rust_interop", &package.toolchain.rust_interop)?;
+    require_unavailable_fact(
+        "toolchain.cross_package_native_linking",
+        &package.toolchain.cross_package_native_linking,
+    )?;
+    require_unavailable_fact(
+        "toolchain.whole_compiler_proof",
+        &package.toolchain.whole_compiler_proof,
+    )?;
+
+    let expected_object_hash =
+        format!("object hash {:016x}", package.object_artifact.artifact_hash);
+    match &package.toolchain.object_emission {
+        ObjectLinkerEvidenceFact::Available { value, .. } if value == &expected_object_hash => {}
+        ObjectLinkerEvidenceFact::Available { .. } => {
+            return Err(provenance_error(
+                "toolchain.object_emission",
+                "object emission fact does not name the exact object artifact hash",
+            ));
+        }
+        ObjectLinkerEvidenceFact::Unavailable { .. } => {
+            unreachable!("require_available_fact accepted only available object emission facts")
+        }
+    }
+    match &package.toolchain.host_platform {
+        ObjectLinkerEvidenceFact::Available { value, .. }
+            if value == &package.header.starter_platform_target => {}
+        ObjectLinkerEvidenceFact::Available { .. } => {
+            return Err(provenance_error(
+                "toolchain.host_platform",
+                "host platform fact does not match the object/linker package target",
+            ));
+        }
+        ObjectLinkerEvidenceFact::Unavailable { .. } => {
+            unreachable!("require_available_fact accepted only available host facts")
+        }
+    }
+    match &package.toolchain.backend_verifier {
+        ObjectLinkerEvidenceFact::Available { value, .. }
+            if value == "Cranelift verifier passed: true" => {}
+        ObjectLinkerEvidenceFact::Available { .. } => {
+            return Err(provenance_error(
+                "toolchain.backend_verifier",
+                "backend verifier fact contradicts the exact successful Cranelift verifier producer invariant",
+            ));
+        }
+        ObjectLinkerEvidenceFact::Unavailable { .. } => {
+            unreachable!("require_available_fact accepted only available backend verifier facts")
+        }
+    }
+    Ok(())
+}
+
+fn require_available_fact(
+    field: &'static str,
+    fact: &ObjectLinkerEvidenceFact,
+    expected_lane: ObjectLinkerEvidenceLane,
+) -> Result<(), NativeExecutionDifferentialError> {
+    match fact {
+        ObjectLinkerEvidenceFact::Available {
+            value,
+            evidence_source,
+            lane,
+        } if !value.trim().is_empty()
+            && !evidence_source.trim().is_empty()
+            && *lane == expected_lane =>
+        {
+            Ok(())
+        }
+        ObjectLinkerEvidenceFact::Available { .. } => Err(provenance_error(
+            field,
+            "available toolchain fact has the wrong lane or missing evidence text",
+        )),
+        ObjectLinkerEvidenceFact::Unavailable { .. } => Err(provenance_error(
+            field,
+            "required object/linker toolchain fact is unavailable",
+        )),
+    }
+}
+
+fn require_unavailable_fact(
+    field: &'static str,
+    fact: &ObjectLinkerEvidenceFact,
+) -> Result<(), NativeExecutionDifferentialError> {
+    match fact {
+        ObjectLinkerEvidenceFact::Unavailable { reason, lane }
+            if !reason.trim().is_empty() && *lane == ObjectLinkerEvidenceLane::Unavailable =>
+        {
+            Ok(())
+        }
+        ObjectLinkerEvidenceFact::Unavailable { .. } => Err(provenance_error(
+            field,
+            "unavailable toolchain fact has the wrong lane or missing reason",
+        )),
+        ObjectLinkerEvidenceFact::Available { .. } => Err(provenance_error(
+            field,
+            "unsupported library/interop/proof lane was reported available",
+        )),
+    }
+}
+
+fn provenance_error(
+    field: &'static str,
+    reason: impl Into<String>,
+) -> NativeExecutionDifferentialError {
+    differential_error(NativeExecutionDifferentialStage::Provenance, field, reason)
 }
 
 fn validate_runtime_ir_report<'a>(
@@ -1114,6 +1414,306 @@ fn differential_verdict(
     }
 }
 
+fn native_executable_trust_report(
+    program: &RuntimeProgram,
+    package: &ObjectLinkerExecutablePackage,
+    run_report: &RuntimeIrRunReport,
+    target: &NativeExecutionTargetIdentity,
+    native: &NativeExecutionLaneReport,
+    runtime_ir: &NativeComparisonLaneReport,
+    interpreter: &NativeComparisonLaneReport,
+    verdict: &NativeExecutionDifferentialVerdict,
+    effect_policy: &NativeEffectForeignExecutablePolicyReport,
+) -> NativeExecutableTrustReport {
+    NativeExecutableTrustReport {
+        provenance: NativeExecutableProvenance {
+            checked_core: NativeCheckedCoreProvenance {
+                package_identity: program.package_identity.clone(),
+                core_semantic_hash: program.core_semantic_hash,
+                artifact_hash: program.artifact_hash,
+                evidence_source:
+                    "RuntimeProgram package/core/artifact identity from exact checked-core erasure"
+                        .to_string(),
+            },
+            runtime_ir: NativeRuntimeIrProvenance {
+                runtime_artifact: target.runtime_artifact.clone(),
+                target: run_report.target.clone(),
+                runtime_report_hash: target.runtime_report_hash,
+                evidence_source:
+                    "RuntimeIrRunReport hash and target were preflight-checked against object/linker package"
+                        .to_string(),
+            },
+            object_linker: NativeObjectLinkerProvenance {
+                object_linker_package_hash: target.object_linker_package_hash,
+                entrypoint_package_hash: package.entrypoint_package_hash,
+                platform_runtime_support_hash: package.platform_runtime_support_hash,
+                object_artifact_kind: package.object_artifact.kind.clone(),
+                object_artifact_hash: package.object_artifact.artifact_hash,
+                object_byte_len: package.object_artifact.byte_len,
+                executable_artifact_hash: target.executable_artifact_hash,
+                executable_byte_len: package.executable_artifact.byte_len,
+                executable_relative_path: target.executable_relative_path.clone(),
+                smoke_evidence_source: package.smoke.evidence_source.clone(),
+            },
+            toolchain: NativeToolchainProvenance {
+                ken_runtime: recorded_fact(&package.toolchain.ken_runtime),
+                native_backend: recorded_fact(&package.toolchain.native_backend),
+                backend_verifier: recorded_fact(&package.toolchain.backend_verifier),
+                object_emission: recorded_fact(&package.toolchain.object_emission),
+                linker_or_finalizer: recorded_fact(&package.toolchain.linker_or_finalizer),
+                host_platform: recorded_fact(&package.toolchain.host_platform),
+                library_abi: recorded_fact(&package.toolchain.library_abi),
+                c_abi_interop: recorded_fact(&package.toolchain.c_abi_interop),
+                rust_interop: recorded_fact(&package.toolchain.rust_interop),
+                cross_package_native_linking: recorded_fact(
+                    &package.toolchain.cross_package_native_linking,
+                ),
+                whole_compiler_proof: recorded_fact(&package.toolchain.whole_compiler_proof),
+            },
+        },
+        evidence_lanes: native_executable_evidence_lanes(
+            native,
+            runtime_ir,
+            interpreter,
+            verdict,
+            effect_policy,
+        ),
+    }
+}
+
+fn recorded_fact(fact: &ObjectLinkerEvidenceFact) -> NativeRecordedFact {
+    match fact {
+        ObjectLinkerEvidenceFact::Available {
+            value,
+            evidence_source,
+            lane,
+        } => NativeRecordedFact::Available {
+            value: value.clone(),
+            evidence_source: evidence_source.clone(),
+            lane: lane.clone(),
+        },
+        ObjectLinkerEvidenceFact::Unavailable { reason, lane } => NativeRecordedFact::Unavailable {
+            reason: reason.clone(),
+            lane: lane.clone(),
+        },
+    }
+}
+
+fn native_executable_evidence_lanes(
+    native: &NativeExecutionLaneReport,
+    runtime_ir: &NativeComparisonLaneReport,
+    interpreter: &NativeComparisonLaneReport,
+    verdict: &NativeExecutionDifferentialVerdict,
+    effect_policy: &NativeEffectForeignExecutablePolicyReport,
+) -> Vec<NativeExecutableEvidenceLane> {
+    vec![
+        evidence_lane(
+            NativeExecutableEvidenceClaim::NativeExecution,
+            native_execution_evidence_status(native, verdict, effect_policy),
+            native_execution_evidence_source(native),
+        ),
+        evidence_lane(
+            NativeExecutableEvidenceClaim::RuntimeIrDifferential,
+            comparison_evidence_status(runtime_ir),
+            comparison_evidence_source(runtime_ir),
+        ),
+        evidence_lane(
+            NativeExecutableEvidenceClaim::InterpreterDifferential,
+            comparison_evidence_status(interpreter),
+            comparison_evidence_source(interpreter),
+        ),
+        evidence_lane(
+            NativeExecutableEvidenceClaim::EffectForeignExecutablePolicy,
+            effect_policy_evidence_status(effect_policy),
+            effect_policy.evidence_source.clone(),
+        ),
+        evidence_lane(
+            NativeExecutableEvidenceClaim::TranslationValidation,
+            NativeExecutableEvidenceStatus::Unavailable {
+                reason: "NC26 records no translation-validation producing check for native executables"
+                    .to_string(),
+            },
+            "NC26 trust report honesty guard".to_string(),
+        ),
+        evidence_lane(
+            NativeExecutableEvidenceClaim::WholeCompilerProof,
+            NativeExecutableEvidenceStatus::Unavailable {
+                reason: "native execution, Cranelift emission, and linker smoke tests are not Ken proof"
+                    .to_string(),
+            },
+            "NC26 trust report honesty guard".to_string(),
+        ),
+        evidence_lane(
+            NativeExecutableEvidenceClaim::LibraryAbi,
+            NativeExecutableEvidenceStatus::Unavailable {
+                reason: "native library ABI is outside the NC19-NC27 executable phase".to_string(),
+            },
+            "NC26 trust report unavailable lane".to_string(),
+        ),
+        evidence_lane(
+            NativeExecutableEvidenceClaim::CAbiInterop,
+            NativeExecutableEvidenceStatus::Unavailable {
+                reason: "C ABI interop is outside the NC19-NC27 executable phase".to_string(),
+            },
+            "NC26 trust report unavailable lane".to_string(),
+        ),
+        evidence_lane(
+            NativeExecutableEvidenceClaim::RustInterop,
+            NativeExecutableEvidenceStatus::Unavailable {
+                reason: "Rust interop is outside the NC19-NC27 executable phase".to_string(),
+            },
+            "NC26 trust report unavailable lane".to_string(),
+        ),
+        evidence_lane(
+            NativeExecutableEvidenceClaim::CrossPackageNativeLinking,
+            NativeExecutableEvidenceStatus::Unavailable {
+                reason: "cross-package native linking is outside the NC19-NC27 executable phase"
+                    .to_string(),
+            },
+            "NC26 trust report unavailable lane".to_string(),
+        ),
+        evidence_lane(
+            NativeExecutableEvidenceClaim::ForeignExecution,
+            NativeExecutableEvidenceStatus::Unavailable {
+                reason: "foreign execution remains unavailable unless a later host policy produces authority"
+                    .to_string(),
+            },
+            "NC26 trust report unavailable lane".to_string(),
+        ),
+    ]
+}
+
+fn evidence_lane(
+    claim: NativeExecutableEvidenceClaim,
+    status: NativeExecutableEvidenceStatus,
+    evidence_source: String,
+) -> NativeExecutableEvidenceLane {
+    NativeExecutableEvidenceLane {
+        claim,
+        status,
+        evidence_source,
+    }
+}
+
+fn native_execution_evidence_status(
+    native: &NativeExecutionLaneReport,
+    verdict: &NativeExecutionDifferentialVerdict,
+    effect_policy: &NativeEffectForeignExecutablePolicyReport,
+) -> NativeExecutableEvidenceStatus {
+    match (native, verdict, &effect_policy.status) {
+        (
+            NativeExecutionLaneReport::Available(_),
+            NativeExecutionDifferentialVerdict::RuntimeIrTestedAgreement { .. },
+            NativeEffectForeignExecutableStatus::NativeTested,
+        ) => NativeExecutableEvidenceStatus::Tested,
+        (
+            NativeExecutionLaneReport::Available(_),
+            NativeExecutionDifferentialVerdict::RuntimeIrTestedAgreement { .. },
+            NativeEffectForeignExecutableStatus::RepresentedUnavailable { reason },
+        ) => NativeExecutableEvidenceStatus::Unavailable {
+            reason: format!(
+                "inconsistent NC26 report: native execution was tested despite unavailable effect/foreign policy: {reason}"
+            ),
+        },
+        (
+            NativeExecutionLaneReport::Available(_),
+            NativeExecutionDifferentialVerdict::RuntimeIrTestedAgreement { .. },
+            NativeEffectForeignExecutableStatus::Unsupported { reason },
+        ) => NativeExecutableEvidenceStatus::Unsupported {
+            reason: format!(
+                "inconsistent NC26 report: native execution was tested despite unsupported effect/foreign policy: {reason}"
+            ),
+        },
+        (NativeExecutionLaneReport::Available(_), NativeExecutionDifferentialVerdict::Mismatch { diagnostic, .. }, _) => {
+            NativeExecutableEvidenceStatus::Unavailable {
+                reason: format!("native execution produced a mismatch: {}", diagnostic.message),
+            }
+        }
+        (NativeExecutionLaneReport::Available(_), NativeExecutionDifferentialVerdict::Unavailable { reason, .. }, _) => {
+            NativeExecutableEvidenceStatus::Unavailable {
+                reason: reason.clone(),
+            }
+        }
+        (
+            NativeExecutionLaneReport::Unavailable { .. },
+            _,
+            NativeEffectForeignExecutableStatus::Unsupported { reason },
+        ) => NativeExecutableEvidenceStatus::Unsupported {
+            reason: reason.clone(),
+        },
+        (
+            NativeExecutionLaneReport::Unavailable { reason, .. },
+            _,
+            NativeEffectForeignExecutableStatus::NativeTested
+            | NativeEffectForeignExecutableStatus::RepresentedUnavailable { .. },
+        ) => NativeExecutableEvidenceStatus::Unavailable {
+            reason: reason.clone(),
+        },
+    }
+}
+
+fn native_execution_evidence_source(native: &NativeExecutionLaneReport) -> String {
+    match native {
+        NativeExecutionLaneReport::Available(observation) => observation.evidence_source.clone(),
+        NativeExecutionLaneReport::Unavailable {
+            evidence_source, ..
+        } => evidence_source.clone(),
+    }
+}
+
+fn comparison_evidence_status(
+    report: &NativeComparisonLaneReport,
+) -> NativeExecutableEvidenceStatus {
+    match report {
+        NativeComparisonLaneReport::TestedAgreement { .. } => {
+            NativeExecutableEvidenceStatus::Tested
+        }
+        NativeComparisonLaneReport::Mismatch { diagnostic, .. } => {
+            NativeExecutableEvidenceStatus::Unavailable {
+                reason: format!(
+                    "comparison lane produced a mismatch: {}",
+                    diagnostic.message
+                ),
+            }
+        }
+        NativeComparisonLaneReport::Unavailable { reason, .. } => {
+            NativeExecutableEvidenceStatus::Unavailable {
+                reason: reason.clone(),
+            }
+        }
+    }
+}
+
+fn comparison_evidence_source(report: &NativeComparisonLaneReport) -> String {
+    match report {
+        NativeComparisonLaneReport::TestedAgreement {
+            evidence_source, ..
+        }
+        | NativeComparisonLaneReport::Unavailable {
+            evidence_source, ..
+        } => evidence_source.clone(),
+        NativeComparisonLaneReport::Mismatch { diagnostic, .. } => diagnostic.message.clone(),
+    }
+}
+
+fn effect_policy_evidence_status(
+    report: &NativeEffectForeignExecutablePolicyReport,
+) -> NativeExecutableEvidenceStatus {
+    match &report.status {
+        NativeEffectForeignExecutableStatus::NativeTested => NativeExecutableEvidenceStatus::Tested,
+        NativeEffectForeignExecutableStatus::RepresentedUnavailable { reason } => {
+            NativeExecutableEvidenceStatus::Unavailable {
+                reason: reason.clone(),
+            }
+        }
+        NativeEffectForeignExecutableStatus::Unsupported { reason } => {
+            NativeExecutableEvidenceStatus::Unsupported {
+                reason: reason.clone(),
+            }
+        }
+    }
+}
+
 fn lane_verdict(report: &NativeComparisonLaneReport) -> NativeLaneVerdict {
     match report {
         NativeComparisonLaneReport::TestedAgreement { .. } => NativeLaneVerdict::TestedAgreement,
@@ -1430,6 +2030,19 @@ mod tests {
         format!("{}-{}", std::env::consts::ARCH, std::env::consts::OS)
     }
 
+    fn trust_lane_status<'a>(
+        report: &'a NativeExecutionDifferentialReport,
+        claim: &NativeExecutableEvidenceClaim,
+    ) -> &'a NativeExecutableEvidenceStatus {
+        report
+            .trust
+            .evidence_lanes
+            .iter()
+            .find(|lane| &lane.claim == claim)
+            .map(|lane| &lane.status)
+            .expect("trust lane is present")
+    }
+
     #[test]
     fn reports_tested_native_runtime_and_interpreter_agreement() {
         let program = starter_program(24);
@@ -1451,11 +2064,66 @@ mod tests {
             report.header.report_kind,
             NATIVE_EXECUTION_DIFFERENTIAL_REPORT_KIND
         );
+        assert_eq!(
+            report.header.version,
+            NATIVE_EXECUTION_DIFFERENTIAL_REPORT_VERSION
+        );
+        assert_eq!(
+            report.header.spec_ref,
+            NATIVE_EXECUTION_DIFFERENTIAL_SPEC_REF
+        );
         assert_eq!(report.target.package_identity, program.package_identity);
         assert_eq!(
             report.target.executable_artifact_hash,
             package.executable_artifact.artifact_hash
         );
+        assert_eq!(
+            report.trust.provenance.checked_core.package_identity,
+            program.package_identity
+        );
+        assert_eq!(
+            report.trust.provenance.checked_core.core_semantic_hash,
+            program.core_semantic_hash
+        );
+        assert_eq!(
+            report.trust.provenance.checked_core.artifact_hash,
+            program.artifact_hash
+        );
+        assert_eq!(
+            report.trust.provenance.runtime_ir.runtime_artifact,
+            RuntimeArtifactIdentity::from_program(&program)
+        );
+        assert_eq!(
+            report.trust.provenance.runtime_ir.runtime_report_hash,
+            package.runtime_report_hash
+        );
+        assert_eq!(
+            report
+                .trust
+                .provenance
+                .object_linker
+                .object_linker_package_hash,
+            package.header.package_hash
+        );
+        assert_eq!(
+            report.trust.provenance.object_linker.object_artifact_hash,
+            package.object_artifact.artifact_hash
+        );
+        assert_eq!(
+            report
+                .trust
+                .provenance
+                .object_linker
+                .executable_artifact_hash,
+            package.executable_artifact.artifact_hash
+        );
+        assert!(matches!(
+            report.trust.provenance.toolchain.host_platform,
+            NativeRecordedFact::Available {
+                lane: ObjectLinkerEvidenceLane::Tested,
+                ..
+            }
+        ));
         assert!(matches!(
             report.native,
             NativeExecutionLaneReport::Available(NativeExecutionObservation {
@@ -1494,6 +2162,44 @@ mod tests {
                 interpreter: NativeLaneVerdict::TestedAgreement,
             }
         );
+        assert_eq!(
+            trust_lane_status(&report, &NativeExecutableEvidenceClaim::NativeExecution),
+            &NativeExecutableEvidenceStatus::Tested
+        );
+        assert_eq!(
+            trust_lane_status(
+                &report,
+                &NativeExecutableEvidenceClaim::RuntimeIrDifferential
+            ),
+            &NativeExecutableEvidenceStatus::Tested
+        );
+        assert_eq!(
+            trust_lane_status(
+                &report,
+                &NativeExecutableEvidenceClaim::InterpreterDifferential
+            ),
+            &NativeExecutableEvidenceStatus::Tested
+        );
+        assert_eq!(
+            trust_lane_status(
+                &report,
+                &NativeExecutableEvidenceClaim::EffectForeignExecutablePolicy
+            ),
+            &NativeExecutableEvidenceStatus::Tested
+        );
+        assert!(matches!(
+            trust_lane_status(
+                &report,
+                &NativeExecutableEvidenceClaim::TranslationValidation
+            ),
+            NativeExecutableEvidenceStatus::Unavailable { reason }
+                if reason.contains("no translation-validation producing check")
+        ));
+        assert!(matches!(
+            trust_lane_status(&report, &NativeExecutableEvidenceClaim::WholeCompilerProof),
+            NativeExecutableEvidenceStatus::Unavailable { reason }
+                if reason.contains("not Ken proof")
+        ));
     }
 
     #[test]
@@ -1557,6 +2263,92 @@ mod tests {
 
         assert_eq!(err.stage, NativeExecutionDifferentialStage::PackageIdentity);
         assert_eq!(err.field, "package_hash");
+    }
+
+    #[test]
+    fn recomputed_hash_with_mismatched_host_toolchain_rejects_before_report() {
+        let program = starter_program(46);
+        let run_report = runtime_ir_run_report(&program);
+        let output_dir = temp_output_dir("nc26-mismatched-host-toolchain");
+        let mut package = package_for(&program, &run_report, &output_dir);
+        match &mut package.toolchain.host_platform {
+            ObjectLinkerEvidenceFact::Available { value, .. } => {
+                *value = "forged-host-platform".to_string();
+            }
+            ObjectLinkerEvidenceFact::Unavailable { .. } => unreachable!(),
+        }
+        package.header.package_hash = object_linker_executable_package_hash(&package);
+
+        let err = run_native_execution_differential(
+            &program,
+            &package,
+            &run_report,
+            &output_dir,
+            interpreter_available(&program, &run_report),
+            "native differential unit test",
+        )
+        .expect_err("mismatched host toolchain fact rejects");
+
+        assert_eq!(err.stage, NativeExecutionDifferentialStage::Provenance);
+        assert_eq!(err.field, "toolchain.host_platform");
+        assert!(err.reason.contains("does not match"));
+    }
+
+    #[test]
+    fn recomputed_hash_with_overclaimed_proof_lane_rejects_before_report() {
+        let program = starter_program(47);
+        let run_report = runtime_ir_run_report(&program);
+        let output_dir = temp_output_dir("nc26-overclaimed-proof");
+        let mut package = package_for(&program, &run_report, &output_dir);
+        package.toolchain.whole_compiler_proof = ObjectLinkerEvidenceFact::Available {
+            value: "proved native executable".to_string(),
+            evidence_source: "forged unit test proof claim".to_string(),
+            lane: ObjectLinkerEvidenceLane::Tested,
+        };
+        package.header.package_hash = object_linker_executable_package_hash(&package);
+
+        let err = run_native_execution_differential(
+            &program,
+            &package,
+            &run_report,
+            &output_dir,
+            interpreter_available(&program, &run_report),
+            "native differential unit test",
+        )
+        .expect_err("overclaimed proof lane rejects");
+
+        assert_eq!(err.stage, NativeExecutionDifferentialStage::Provenance);
+        assert_eq!(err.field, "toolchain.whole_compiler_proof");
+        assert!(err.reason.contains("reported available"));
+    }
+
+    #[test]
+    fn recomputed_hash_with_contradictory_backend_verifier_rejects_before_report() {
+        let program = starter_program(48);
+        let run_report = runtime_ir_run_report(&program);
+        let output_dir = temp_output_dir("nc26-contradictory-backend-verifier");
+        let mut package = package_for(&program, &run_report, &output_dir);
+        match &mut package.toolchain.backend_verifier {
+            ObjectLinkerEvidenceFact::Available { value, .. } => {
+                *value = "Cranelift verifier passed: false".to_string();
+            }
+            ObjectLinkerEvidenceFact::Unavailable { .. } => unreachable!(),
+        }
+        package.header.package_hash = object_linker_executable_package_hash(&package);
+
+        let err = run_native_execution_differential(
+            &program,
+            &package,
+            &run_report,
+            &output_dir,
+            interpreter_available(&program, &run_report),
+            "native differential unit test",
+        )
+        .expect_err("contradictory backend verifier fact rejects");
+
+        assert_eq!(err.stage, NativeExecutionDifferentialStage::Provenance);
+        assert_eq!(err.field, "toolchain.backend_verifier");
+        assert!(err.reason.contains("contradicts"));
     }
 
     #[test]
@@ -1682,6 +2474,19 @@ mod tests {
                 lane: NativeDifferentialLane::NativeExecution,
                 ..
             }
+        ));
+        assert!(matches!(
+            trust_lane_status(&report, &NativeExecutableEvidenceClaim::NativeExecution),
+            NativeExecutableEvidenceStatus::Unavailable { reason }
+                if reason.contains("foreign")
+        ));
+        assert!(matches!(
+            trust_lane_status(
+                &report,
+                &NativeExecutableEvidenceClaim::EffectForeignExecutablePolicy
+            ),
+            NativeExecutableEvidenceStatus::Unavailable { reason }
+                if reason.contains("foreign-boundary")
         ));
     }
 
@@ -1812,6 +2617,19 @@ mod tests {
                 lane: NativeDifferentialLane::NativeExecution,
                 ..
             }
+        ));
+        assert!(matches!(
+            trust_lane_status(&report, &NativeExecutableEvidenceClaim::NativeExecution),
+            NativeExecutableEvidenceStatus::Unsupported { reason }
+                if reason.contains("not native-lowerable")
+        ));
+        assert!(matches!(
+            trust_lane_status(
+                &report,
+                &NativeExecutableEvidenceClaim::EffectForeignExecutablePolicy
+            ),
+            NativeExecutableEvidenceStatus::Unsupported { reason }
+                if reason.contains("not native-lowerable")
         ));
     }
 
