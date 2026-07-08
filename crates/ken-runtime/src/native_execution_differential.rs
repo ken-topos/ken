@@ -960,17 +960,86 @@ fn out_of_phase_claim(claim: &NativeExecutableEvidenceClaim) -> bool {
 fn phase_claim_inventory(
     report: &NativeExecutionDifferentialReport,
 ) -> Vec<NativeExecutablePhaseClaim> {
-    report
-        .trust
-        .evidence_lanes
-        .iter()
-        .map(|lane| NativeExecutablePhaseClaim {
-            target_symbol: report.target.target_symbol.clone(),
-            claim: lane.claim.clone(),
-            status: phase_status_from_evidence(&lane.status),
-            evidence_source: lane.evidence_source.clone(),
-        })
-        .collect()
+    let mut inventory = vec![
+        phase_claim(
+            report,
+            NativeExecutableEvidenceClaim::NativeExecution,
+            phase_status_from_evidence(&native_execution_evidence_status(
+                &report.native,
+                &report.verdict,
+                &report.effect_foreign_policy,
+            )),
+            native_execution_evidence_source(&report.native),
+        ),
+        phase_claim(
+            report,
+            NativeExecutableEvidenceClaim::RuntimeIrDifferential,
+            phase_status_from_comparison(&report.runtime_ir),
+            comparison_evidence_source(&report.runtime_ir),
+        ),
+        phase_claim(
+            report,
+            NativeExecutableEvidenceClaim::InterpreterDifferential,
+            phase_status_from_comparison(&report.interpreter),
+            comparison_evidence_source(&report.interpreter),
+        ),
+        phase_claim(
+            report,
+            NativeExecutableEvidenceClaim::EffectForeignExecutablePolicy,
+            phase_status_from_evidence(&effect_policy_evidence_status(
+                &report.effect_foreign_policy,
+            )),
+            report.effect_foreign_policy.evidence_source.clone(),
+        ),
+    ];
+    inventory.extend(
+        report
+            .trust
+            .evidence_lanes
+            .iter()
+            .filter(|lane| out_of_phase_claim(&lane.claim))
+            .map(|lane| {
+                phase_claim(
+                    report,
+                    lane.claim.clone(),
+                    phase_status_from_evidence(&lane.status),
+                    lane.evidence_source.clone(),
+                )
+            }),
+    );
+    inventory
+}
+
+fn phase_claim(
+    report: &NativeExecutionDifferentialReport,
+    claim: NativeExecutableEvidenceClaim,
+    status: NativeExecutablePhaseStatus,
+    evidence_source: String,
+) -> NativeExecutablePhaseClaim {
+    NativeExecutablePhaseClaim {
+        target_symbol: report.target.target_symbol.clone(),
+        claim,
+        status,
+        evidence_source,
+    }
+}
+
+fn phase_status_from_comparison(
+    report: &NativeComparisonLaneReport,
+) -> NativeExecutablePhaseStatus {
+    match report {
+        NativeComparisonLaneReport::TestedAgreement { .. } => NativeExecutablePhaseStatus::Tested,
+        NativeComparisonLaneReport::Mismatch { diagnostic, .. } => {
+            NativeExecutablePhaseStatus::Failed {
+                reason: diagnostic.message.clone(),
+            }
+        }
+        NativeComparisonLaneReport::Unavailable { reason, .. } => {
+            NativeExecutablePhaseStatus::Unavailable {
+                reason: reason.clone(),
+            }
+        }
+    }
 }
 
 fn phase_status_from_evidence(
@@ -3129,6 +3198,19 @@ mod tests {
             .expect("trust lane is present")
     }
 
+    fn closeout_claim_status<'a>(
+        closeout: &'a NativeExecutablePhaseCloseoutReport,
+        target_symbol: &RuntimeSymbol,
+        claim: &NativeExecutableEvidenceClaim,
+    ) -> &'a NativeExecutablePhaseStatus {
+        closeout
+            .claim_inventory
+            .iter()
+            .find(|entry| entry.target_symbol == *target_symbol && &entry.claim == claim)
+            .map(|entry| &entry.status)
+            .expect("closeout claim inventory entry is present")
+    }
+
     #[test]
     fn reports_tested_native_runtime_and_interpreter_agreement() {
         let program = starter_program(24);
@@ -4142,6 +4224,15 @@ mod tests {
                 if reason.contains("interpreter differential")
         ));
         assert!(matches!(
+            closeout_claim_status(
+                &closeout,
+                &report.target.target_symbol,
+                &NativeExecutableEvidenceClaim::InterpreterDifferential
+            ),
+            NativeExecutablePhaseStatus::Unavailable { reason }
+                if reason.contains("interpreter observation is not available")
+        ));
+        assert!(matches!(
             closeout.recommendation,
             NativeExecutablePhaseRecommendation::FramePrerequisiteWp { .. }
         ));
@@ -4179,6 +4270,73 @@ mod tests {
                 if reason.contains("native differential mismatch")
                     && reason.contains(&program.package_identity)
         ));
+        assert!(matches!(
+            closeout_claim_status(
+                &closeout,
+                &report.target.target_symbol,
+                &NativeExecutableEvidenceClaim::InterpreterDifferential
+            ),
+            NativeExecutablePhaseStatus::Failed { reason }
+                if reason.contains("native differential mismatch")
+                    && reason.contains(&program.package_identity)
+        ));
+    }
+
+    #[test]
+    fn closeout_classifies_runtime_ir_mismatch_inventory_as_failed() {
+        let program = starter_program(54);
+        let mut run_report = runtime_ir_run_report(&program);
+        let output_dir = temp_output_dir("nc27-closeout-runtime-ir-mismatch");
+        let mut package = package_for(&program, &run_report, &output_dir);
+        run_report.observation.observation =
+            RuntimeObservation::Returned(RuntimeGroundValue::Int(55));
+        package.runtime_report_hash = object_linker_runtime_ir_run_report_hash(&run_report);
+        package.header.package_hash = object_linker_executable_package_hash(&package);
+
+        let report = run_native_execution_differential(
+            &program,
+            &package,
+            &run_report,
+            &output_dir,
+            NativeInterpreterLaneInput::Unavailable {
+                reason: "interpreter lane intentionally unavailable in mismatch fixture"
+                    .to_string(),
+                evidence_source: "unit test".to_string(),
+            },
+            "native differential unit test",
+        )
+        .expect("runtime-IR mismatch report materializes");
+
+        let closeout =
+            close_native_executable_phase([&report], std::iter::empty(), "nc27 unit test");
+
+        assert!(closeout.corpus.positive_cases.is_empty());
+        assert_eq!(closeout.corpus.blockers.len(), 1);
+        assert!(matches!(
+            closeout.corpus.blockers[0].status,
+            NativeExecutablePhaseStatus::Failed { ref reason }
+                if reason.contains("native differential mismatch")
+                    && reason.contains(&program.package_identity)
+        ));
+        assert!(matches!(
+            closeout_claim_status(
+                &closeout,
+                &report.target.target_symbol,
+                &NativeExecutableEvidenceClaim::RuntimeIrDifferential
+            ),
+            NativeExecutablePhaseStatus::Failed { reason }
+                if reason.contains("native differential mismatch")
+                    && reason.contains(&program.package_identity)
+        ));
+        assert!(matches!(
+            closeout_claim_status(
+                &closeout,
+                &report.target.target_symbol,
+                &NativeExecutableEvidenceClaim::InterpreterDifferential
+            ),
+            NativeExecutablePhaseStatus::Unavailable { reason }
+                if reason.contains("interpreter lane intentionally unavailable")
+        ));
     }
 
     #[test]
@@ -4207,6 +4365,15 @@ mod tests {
         assert!(matches!(
             closeout.corpus.blockers[0].status,
             NativeExecutablePhaseStatus::Unsupported { ref reason }
+                if reason.contains("RuntimeExpr::Effect")
+        ));
+        assert!(matches!(
+            closeout_claim_status(
+                &closeout,
+                &report.target.target_symbol,
+                &NativeExecutableEvidenceClaim::EffectForeignExecutablePolicy
+            ),
+            NativeExecutablePhaseStatus::Unsupported { reason }
                 if reason.contains("RuntimeExpr::Effect")
         ));
     }
