@@ -998,7 +998,7 @@ fn phase_claim_inventory(
                 phase_claim(
                     report,
                     lane.claim.clone(),
-                    phase_status_from_evidence(&lane.status),
+                    phase_status_from_out_of_phase_claim(&lane.claim, &lane.status),
                     lane.evidence_source.clone(),
                 )
             }),
@@ -1071,6 +1071,31 @@ fn phase_status_from_native_execution(
         },
         (NativeExecutionLaneReport::Unavailable { reason, .. }, _) => {
             NativeExecutablePhaseStatus::Unavailable {
+                reason: reason.clone(),
+            }
+        }
+    }
+}
+
+fn phase_status_from_out_of_phase_claim(
+    claim: &NativeExecutableEvidenceClaim,
+    status: &NativeExecutableEvidenceStatus,
+) -> NativeExecutablePhaseStatus {
+    match status {
+        NativeExecutableEvidenceStatus::Tested
+        | NativeExecutableEvidenceStatus::Validated
+        | NativeExecutableEvidenceStatus::Proved => NativeExecutablePhaseStatus::Failed {
+            reason: format!(
+                "out-of-phase executable claim was over-promoted in NC26 trust report: {claim:?}"
+            ),
+        },
+        NativeExecutableEvidenceStatus::Unavailable { reason } => {
+            NativeExecutablePhaseStatus::Unavailable {
+                reason: reason.clone(),
+            }
+        }
+        NativeExecutableEvidenceStatus::Unsupported { reason } => {
+            NativeExecutablePhaseStatus::Unsupported {
                 reason: reason.clone(),
             }
         }
@@ -4460,6 +4485,15 @@ mod tests {
         assert!(matches!(
             closeout.corpus.blockers[0].status,
             NativeExecutablePhaseStatus::Failed { ref reason }
+                if reason.contains("WholeCompilerProof")
+        ));
+        assert!(matches!(
+            closeout_claim_status(
+                &closeout,
+                &report.target.target_symbol,
+                &NativeExecutableEvidenceClaim::WholeCompilerProof
+            ),
+            NativeExecutablePhaseStatus::Failed { reason }
                 if reason.contains("WholeCompilerProof")
         ));
         assert!(matches!(
