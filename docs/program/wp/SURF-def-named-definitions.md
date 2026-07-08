@@ -5,8 +5,8 @@ Spec/conformance design approval for syntax and meaning before any Language
 implementation routing.
 
 **Status:** framed for Spec D0. **Size:** S/M. **Risk:** medium — this sits
-near existing declaration keywords and must not become an unprincipled catch-all
-for terms, types, propositions, and proofs.
+near existing declaration keywords and must not become an unprincipled catch-
+all for terms, types, propositions, and proofs.
 
 ## Trigger
 
@@ -34,42 +34,47 @@ whether the existing vocabulary already covers the space:
 - `record` names bundled dependent data.
 - `prop`, `lemma`, and attached `proof` name checked propositions and proofs.
 
+## D0 outcome
+
+`def` is **out of scope** for this WP. The existing surface already covers the
+named-concept and property-bundle use cases, so this WP routes to **style
+guidance only**.
+
 ## Objective
 
-Run a Spec-enclave design pass that decides whether `def` belongs in the
-surface language, and if so pins its exact meaning tightly enough for a later
-implementation WP.
+Write the style guidance that tells catalog authors which existing form to use
+when they want a readable named concept, bundle of properties, or reusable
+proof-facing name. The guidance must stay within the locked boundary and must
+not introduce a new surface keyword.
 
-The desired output is one of:
+The preferred forms are:
 
-1. **No new keyword.** Document that `type`, `const` / `fn`, `record`,
-   `prop`, `lemma`, and attached `proof` already cover the math-facing
-   definition use cases, and add style guidance for which form to use.
-2. **A narrow `def` spelling.** Specify grammar, name resolution,
-   visibility/import behavior, elaboration target, conformance seeds, and
-   catalog style. The spelling must elaborate to existing checked declarations
-   and must not add kernel authority.
+1. **`type`** for transparent abbreviations whose role is to name a type-level
+   shape or abbreviation that should unfold transparently.
+2. **`record`** for bundled data or witnesses, especially when the named
+   concept needs projections.
+3. **`prop`** for proposition families / claim shapes that are checked as proof
+   surfaces.
+4. **`lemma`** for reusable standalone theorems.
+5. **Attached `proof`** for proof facts that belong to a specific subject and
+   should remain under `subject::name`.
+6. **`const` / `fn` / `proc`** for computational definitions; do not use
+   `def` as a synonym for any of them.
 
 ## D0 Questions
 
-Spec D0 should answer these before authoring normative text:
+Spec D0 already answered the keyword question. The remaining D1 task is to
+codify the existing-form guidance for catalog authors:
 
-- What exact thing would `def` denote?
-  - A transparent term abbreviation?
-  - A transparent type abbreviation?
-  - A proposition/property bundle?
-  - A documentation-facing synonym for one existing declaration class?
-- If `def` can denote more than one of those, what prevents it from weakening
-  Ken's settled readability split among `const`, `fn`, `proc`, `type`, `prop`,
-  `lemma`, and `proof`?
-- If the use case is "combine a set of properties into a single name," is that
-  already a `type`, `record`, `prop`, or `lemma` pattern?
-- If `def` exists, is it pure-only by construction? If so, how does the
-  elaborator reject accidental effectful bodies without duplicating `fn` /
-  `proc` purity rules?
-- If `def` introduces a name usable by later proofs, is its transparency and
-  delta-unfolding behavior identical to the existing target it elaborates to?
-- What source examples should catalog authors learn from, especially around
+- When a concept is merely a transparent abbreviation, should the reader spell
+  it as `type` instead of inventing a new name class?
+- When a concept bundles witnesses or fields, should the reader spell it as a
+  `record` instead of a bare definition?
+- When the name is a proposition family or claim shape, should the reader
+  spell it as `prop` and keep the checked proof surface explicit?
+- When the name is a reusable theorem, should the reader spell it as a
+  `lemma` rather than attaching an unrelated computational definition?
+- Which catalog examples should the style guide point at, especially around
   `AppendsTo`, `list_append`, and attached proof claims?
 
 ## Guardrails
@@ -91,9 +96,4 @@ Spec D0 should answer these before authoring normative text:
 ## Deliverables
 
 - A D0 boundary decision in Convo, grounded on the exact branch/base.
-- If accepted: normative edits to the surface grammar/declaration docs and
-  conformance seed text for positive and negative cases.
-- If rejected: a short normative/style note explaining the preferred existing
-  declaration forms for named concepts and property bundles.
-- A clear follow-on routing recommendation: Language implementation, catalog
-  style cleanup, or no implementation work.
+- This WP's routed follow-on is **catalog style cleanup** only.
