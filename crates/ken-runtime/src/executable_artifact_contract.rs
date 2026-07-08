@@ -563,7 +563,11 @@ fn validate_native_artifact_binding(
 ) -> Result<(), ExecutableArtifactContractError> {
     match &contract.native_artifact.status {
         ExecutableNativeArtifactStatus::Available {
+            kind,
             artifact_hash,
+            backend_name,
+            platform_target,
+            evidence_source,
             produced_from,
             evidence_lane,
             ..
@@ -572,6 +576,26 @@ fn validate_native_artifact_binding(
                 ExecutableArtifactContractStage::NativeArtifactBinding,
                 "evidence_lane",
                 evidence_lane,
+            )?;
+            validate_nonempty_required_text(
+                ExecutableArtifactContractStage::NativeArtifactBinding,
+                "kind",
+                kind,
+            )?;
+            validate_nonempty_required_text(
+                ExecutableArtifactContractStage::NativeArtifactBinding,
+                "backend_name",
+                backend_name,
+            )?;
+            validate_nonempty_required_text(
+                ExecutableArtifactContractStage::NativeArtifactBinding,
+                "platform_target",
+                platform_target,
+            )?;
+            validate_nonempty_required_text(
+                ExecutableArtifactContractStage::NativeArtifactBinding,
+                "evidence_source",
+                evidence_source,
             )?;
             if artifact_hash.is_none() {
                 return Err(contract_error(
@@ -664,6 +688,16 @@ fn validate_native_artifact_binding(
                     "unsupported marker target must match the contract target",
                 ));
             }
+            validate_nonempty_required_text(
+                ExecutableArtifactContractStage::NativeArtifactBinding,
+                "unsupported_marker.construct",
+                &marker.construct,
+            )?;
+            validate_nonempty_required_text(
+                ExecutableArtifactContractStage::NativeArtifactBinding,
+                "unsupported_marker.reason",
+                &marker.reason,
+            )?;
         }
     }
     Ok(())
@@ -688,11 +722,25 @@ fn validate_toolchain_binding(
         ),
     ] {
         match fact {
-            ExecutableEvidenceFact::Available { evidence_lane, .. } => {
+            ExecutableEvidenceFact::Available {
+                value,
+                evidence_source,
+                evidence_lane,
+            } => {
                 validate_positive_available_lane(
                     ExecutableArtifactContractStage::ToolchainBinding,
                     name,
                     evidence_lane,
+                )?;
+                validate_nonempty_required_text(
+                    ExecutableArtifactContractStage::ToolchainBinding,
+                    "value",
+                    value,
+                )?;
+                validate_nonempty_required_text(
+                    ExecutableArtifactContractStage::ToolchainBinding,
+                    "evidence_source",
+                    evidence_source,
                 )?;
             }
             ExecutableEvidenceFact::Unavailable { marker } => validate_unavailable_marker(marker)?,
@@ -776,6 +824,21 @@ fn validate_positive_available_lane(
             "available facts must use a positive evidence lane: tested or validated",
         ))
     }
+}
+
+fn validate_nonempty_required_text(
+    stage: ExecutableArtifactContractStage,
+    field: &'static str,
+    value: &str,
+) -> Result<(), ExecutableArtifactContractError> {
+    if value.trim().is_empty() {
+        return Err(contract_error(
+            stage,
+            field,
+            "required evidence field must be nonempty",
+        ));
+    }
+    Ok(())
 }
 
 fn validate_unavailable_marker(
@@ -1872,6 +1935,49 @@ mod tests {
     }
 
     #[test]
+    fn available_native_artifact_rejects_blank_required_evidence_fields() {
+        for field in ["kind", "backend_name", "platform_target", "evidence_source"] {
+            let program = pure_program();
+            let report = summarize_runtime_ir_program(&program);
+            let target = program.declarations[0].symbol.clone();
+            let mut contract = executable_artifact_contract_for_runtime_report(
+                &program,
+                &report,
+                target,
+                "ken-runtime unit test",
+            )
+            .unwrap();
+            let mut status = available_native_status(&contract);
+            if let ExecutableNativeArtifactStatus::Available {
+                kind,
+                backend_name,
+                platform_target,
+                evidence_source,
+                ..
+            } = &mut status
+            {
+                match field {
+                    "kind" => *kind = " \t ".to_string(),
+                    "backend_name" => *backend_name = " \t ".to_string(),
+                    "platform_target" => *platform_target = " \t ".to_string(),
+                    "evidence_source" => *evidence_source = " \t ".to_string(),
+                    _ => unreachable!(),
+                }
+            }
+            contract.native_artifact.status = status;
+            refresh_hash(&mut contract);
+
+            let err = validate_executable_artifact_contract(&program, &report, &contract)
+                .expect_err("blank available native evidence field rejects");
+            assert_eq!(
+                err.stage,
+                ExecutableArtifactContractStage::NativeArtifactBinding
+            );
+            assert_eq!(err.field, field);
+        }
+    }
+
+    #[test]
     fn available_toolchain_fact_rejects_unavailable_or_unsupported_lanes() {
         for evidence_lane in [
             ExecutableEvidenceLane::Unavailable,
@@ -1898,6 +2004,80 @@ mod tests {
                 .expect_err("available toolchain fact must use a positive lane");
             assert_eq!(err.stage, ExecutableArtifactContractStage::ToolchainBinding);
             assert_eq!(err.field, "ken_runtime");
+        }
+    }
+
+    #[test]
+    fn available_toolchain_fact_rejects_blank_value_or_evidence_source() {
+        for field in ["value", "evidence_source"] {
+            let program = pure_program();
+            let report = summarize_runtime_ir_program(&program);
+            let target = program.declarations[0].symbol.clone();
+            let mut contract = executable_artifact_contract_for_runtime_report(
+                &program,
+                &report,
+                target,
+                "ken-runtime unit test",
+            )
+            .unwrap();
+            let (value, evidence_source) = if field == "value" {
+                (" \t ".to_string(), "test exact-run evidence".to_string())
+            } else {
+                ("ken-runtime test".to_string(), " \t ".to_string())
+            };
+            contract.toolchain.ken_runtime = ExecutableEvidenceFact::Available {
+                value,
+                evidence_source,
+                evidence_lane: ExecutableEvidenceLane::Tested,
+            };
+            refresh_hash(&mut contract);
+
+            let err = validate_executable_artifact_contract(&program, &report, &contract)
+                .expect_err("blank available toolchain evidence field rejects");
+            assert_eq!(err.stage, ExecutableArtifactContractStage::ToolchainBinding);
+            assert_eq!(err.field, field);
+        }
+    }
+
+    #[test]
+    fn unsupported_native_marker_rejects_blank_construct_or_reason() {
+        for field in ["unsupported_marker.construct", "unsupported_marker.reason"] {
+            let program = pure_program();
+            let report = summarize_runtime_ir_program(&program);
+            let target = program.declarations[0].symbol.clone();
+            let mut contract = executable_artifact_contract_for_runtime_report(
+                &program,
+                &report,
+                target.clone(),
+                "ken-runtime unit test",
+            )
+            .unwrap();
+            let (construct, reason) = if field == "unsupported_marker.construct" {
+                (" \t ".to_string(), "outside starter subset".to_string())
+            } else {
+                (
+                    "RuntimeIrProgramReport.unsupported_targets".to_string(),
+                    " \t ".to_string(),
+                )
+            };
+            contract.native_artifact.status = ExecutableNativeArtifactStatus::Unsupported {
+                marker: Some(ExplicitUnsupportedMarker {
+                    lane: ExecutableUnsupportedLane::RuntimeIrTarget,
+                    target,
+                    construct,
+                    reason,
+                    evidence_lane: ExecutableEvidenceLane::Unsupported,
+                }),
+            };
+            refresh_hash(&mut contract);
+
+            let err = validate_executable_artifact_contract(&program, &report, &contract)
+                .expect_err("blank unsupported marker field rejects");
+            assert_eq!(
+                err.stage,
+                ExecutableArtifactContractStage::NativeArtifactBinding
+            );
+            assert_eq!(err.field, field);
         }
     }
 
