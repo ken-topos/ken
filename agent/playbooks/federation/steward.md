@@ -134,26 +134,32 @@ brief** — the implementer should execute mostly mechanically, not design
 > `compact-verified` **THEN** `mention`, ONE indivisible act. The compaction is
 > the *first half of the mention*, never a separate step you might reach.**
 > Every step-2 (→ enclave) and step-4 (→ team) mention below is gated by this
-> checklist — complete it **in order** before you post the mention:
+> checklist — complete it **in order** before you post the mention. The
+> **Integrator is included in this gate for every kickoff/handoff**, even when
+> not the receiving unit: deep Integrator context has caused it to forget
+> merge/watchdog playbook instructions, and every WP will eventually depend on a
+> clean Integrator merge cycle.
 >
 > 1. **RETROS IN.** The receiving unit's prior WP is closed and every retro is
 >    posted (compaction eats an un-posted retro — §2c compaction discipline).
 > 2. **NO IN-FLIGHT OBLIGATION** on any member — no pending review vote, open
 >    `question`, or unfinished handoff. Compaction **drops** it — resolve
 >    or reassign first (K3).
-> 3. **QUIESCENT.** `capture-pane` each member; **none mid-reasoning**
->    (compaction summarizes in-flight work away).
+> 3. **QUIESCENT.** `capture-pane` each member **and `moot-integrator`**;
+>    **none mid-reasoning** (compaction summarizes in-flight work away).
 > 4. **COMPACT EACH — BEFORE the kickoff, never after.** `tmux send-keys -t
 >    moot-<role> "/compact"` → wait ~2s → **separate** `Enter`, **one agent at a
 >    time**. Do **not** trust `moot compact`'s "sent" line (no-op-prone). *A
 >    post-kickoff compaction eats the just-delivered kickoff and forces a costly
 >    re-kick — the exact 2026-07-02 miss.*
->    **⛔ ALWAYS COMPACT BEFORE NEW WORK — BUILD TEAMS *AND* THE SPEC ENCLAVE.
->    NO EXCEPTIONS. NO BEFORE-WORK THRESHOLD. (operator, 2026-07-04, enclave twice.)**
+>    **⛔ ALWAYS COMPACT BEFORE NEW WORK — BUILD TEAMS, THE SPEC ENCLAVE, AND
+>    INTEGRATOR. NO EXCEPTIONS. NO BEFORE-WORK THRESHOLD. (operator,
+>    2026-07-04, enclave twice; extended to Integrator 2026-07-08.)**
 >    For **any** unit you are about to hand a new work item — a build team (leader
 >    + implementer + QA) **or** the spec enclave (spec-leader + spec-author +
->    conformance-validator) — you compact **every** member **unconditionally**
->    before the handoff. You do **not** check the ctx level first, you do **not**
+>    conformance-validator) — you compact **every** member **and Integrator**
+>    **unconditionally** before the handoff. You do **not** check the ctx level
+>    first, you do **not**
 >    weigh whether the context is "warm/relevant," you do **not** exempt a member
 >    because a prior task left them running or because they are "under threshold."
 >    The ctx% is **irrelevant to the decision**: the answer is always compact.
@@ -193,7 +199,8 @@ brief** — the implementer should execute mostly mechanically, not design
 >    [[playbooks-state-mechanism-not-intent]] and [[spec-enclave-always-compact-before-new-work]]:
 >    compact **mechanically at the seam**, never on a story about ctx level or
 >    when/whether the agent will engage.
-> 5. **VERIFY THE DROP.** `capture-pane` each: ctx **actually fell**
+> 5. **VERIFY THE DROP.** `capture-pane` each receiving-unit member and
+>    `moot-integrator`: ctx **actually fell**
 >    (→ ~0–low %) or a `Compacting…` / queued `❯ /compact`. A "sent" report
 >    is **not** proof. Unchanged ctx ⇒ resend.
 > 6. **ONLY NOW** post the kickoff/handoff mention (§2 mention discipline).
@@ -201,8 +208,9 @@ brief** — the implementer should execute mostly mechanically, not design
 > **The tell that you're about to skip it:** you've drafted the handoff mention
 > and feel *"ready to post."* That feeling **is** the gate trigger — STOP, run
 > 1–5, then post. **Proof-of-execution:** you must be able to log *"<unit>
-> compacted @ ctx-verified <n>%→~0"* beside the kickoff in the tracker. If you
-> can't write that line truthfully, you did not run the gate — go back.
+> compacted and Integrator compacted @ ctx-verified <n>%→~0"* beside the
+> kickoff in the tracker. If you can't write that line truthfully, you did not
+> run the gate — go back.
 
 1. **Steward authors the brief** at `docs/program/wp/<ID>-<slug>.md`, on the WP
    branch `wp/<ID>-<slug>` (`git branch wp/<ID>-<slug> origin/main` — the fetched
@@ -392,6 +400,11 @@ work flow, so you own the clean context boundary that flows with it. The rules:
   spec enclave's spec-leader + spec-author + conformance-validator — so they all
   start the WP with clean, minimal context. **Leaders do NOT compact their
   members; that is yours now.**
+- **Compact Integrator at the same kickoff seam.** Every new-WP kickoff/handoff
+  also compacts `moot-integrator`, even if the next move is not Integrator's.
+  Reason: when Integrator context gets deep, it has forgotten its merge,
+  watchdog, and cleanup playbook instructions; keeping it shallow at the seam
+  protects the later publish/check/merge cycle the WP will need.
 - **Gated by retros on both sides.** Compact a team **only after** its prior WP's
   retros are posted (else compaction summarizes the retro away), and deliver a
   new WP **only after** you've compacted. So the per-team WP boundary is: prior
