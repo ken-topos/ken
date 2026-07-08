@@ -7,6 +7,8 @@
 //! execution stay explicitly unavailable unless a later policy makes them
 //! executable. The report is tested evidence only: it does not claim translation
 //! validation, proof, library ABI, C/Rust interop, or foreign execution support.
+//! NC27 consumes those exact reports as a phase closeout manifest, keeping the
+//! starter corpus and excluded claims explicit before NC28 broad validation.
 
 use std::collections::BTreeSet;
 use std::fmt;
@@ -28,6 +30,11 @@ pub const NATIVE_EXECUTION_DIFFERENTIAL_REPORT_KIND: &str = "KenNativeExecutionD
 pub const NATIVE_EXECUTION_DIFFERENTIAL_REPORT_VERSION: u32 = 2;
 pub const NATIVE_EXECUTION_DIFFERENTIAL_SPEC_REF: &str =
     "docs/program/wp/NC26-native-trust-report-provenance.md";
+pub const NATIVE_EXECUTABLE_PHASE_CLOSEOUT_REPORT_KIND: &str =
+    "KenNativeExecutablePhaseCloseoutReport";
+pub const NATIVE_EXECUTABLE_PHASE_CLOSEOUT_REPORT_VERSION: u32 = 1;
+pub const NATIVE_EXECUTABLE_PHASE_CLOSEOUT_SPEC_REF: &str =
+    "docs/program/wp/NC27-executable-phase-closeout.md";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NativeExecutionDifferentialReport {
@@ -40,6 +47,103 @@ pub struct NativeExecutionDifferentialReport {
     pub effect_foreign_policy: NativeEffectForeignExecutablePolicyReport,
     pub trust: NativeExecutableTrustReport,
     pub unavailable_claims: BTreeSet<NativeExecutionUnavailableClaim>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NativeExecutablePhaseCloseoutReport {
+    pub header: NativeExecutablePhaseCloseoutHeader,
+    pub corpus: NativeExecutableCorpusManifest,
+    pub claim_inventory: Vec<NativeExecutablePhaseClaim>,
+    pub exclusions: Vec<NativeExecutableCorpusExclusion>,
+    pub recommendation: NativeExecutablePhaseRecommendation,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NativeExecutablePhaseCloseoutHeader {
+    pub report_kind: String,
+    pub version: u32,
+    pub spec_ref: String,
+    pub producer: String,
+    pub source_report_kind: String,
+    pub source_report_version: u32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NativeExecutableCorpusManifest {
+    pub positive_cases: Vec<NativeExecutableCorpusCase>,
+    pub blockers: Vec<NativeExecutableCorpusBlocker>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NativeExecutableCorpusCase {
+    pub target: NativeExecutionTargetIdentity,
+    pub checked_core: NativeCheckedCoreProvenance,
+    pub runtime_ir: NativeRuntimeIrProvenance,
+    pub object_linker: NativeObjectLinkerProvenance,
+    pub native_differential_report_hash: u64,
+    pub status: NativeExecutablePhaseStatus,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NativeExecutableCorpusBlocker {
+    pub target: NativeExecutionTargetIdentity,
+    pub native_differential_report_hash: u64,
+    pub status: NativeExecutablePhaseStatus,
+    pub evidence_source: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NativeExecutablePhaseClaim {
+    pub target_symbol: RuntimeSymbol,
+    pub claim: NativeExecutableEvidenceClaim,
+    pub status: NativeExecutablePhaseStatus,
+    pub evidence_source: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NativeExecutableCorpusExclusion {
+    pub exclusion: NativeExecutableCorpusExclusionKind,
+    pub status: NativeExecutablePhaseStatus,
+    pub reason: String,
+    pub evidence_source: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum NativeExecutableCorpusExclusionKind {
+    NonStarterExecutableArtifact,
+    NonScalarResultDecoding,
+    TrapDecoding,
+    HostEffectExecution,
+    ForeignExecution,
+    LibraryAbi,
+    CAbiInterop,
+    RustInterop,
+    CrossPackageNativeLinking,
+    TranslationValidation,
+    WholeCompilerProof,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum NativeExecutablePhaseStatus {
+    Supported,
+    Tested,
+    Validated,
+    Proved,
+    Unavailable { reason: String },
+    Unsupported { reason: String },
+    Failed { reason: String },
+    Deferred { reason: String },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum NativeExecutablePhaseRecommendation {
+    ProceedToNc28 {
+        reason: String,
+    },
+    FramePrerequisiteWp {
+        reason: String,
+        blockers: Vec<NativeExecutableCorpusBlocker>,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -510,6 +614,963 @@ where
             )
         })
         .collect()
+}
+
+pub fn close_native_executable_phase<'a, I, J>(
+    reports: I,
+    additional_exclusions: J,
+    producer: impl Into<String>,
+) -> NativeExecutablePhaseCloseoutReport
+where
+    I: IntoIterator<Item = &'a NativeExecutionDifferentialReport>,
+    J: IntoIterator<Item = NativeExecutableCorpusExclusion>,
+{
+    let mut positive_cases = Vec::new();
+    let mut blockers = Vec::new();
+    let mut claim_inventory = Vec::new();
+
+    for report in reports {
+        let report_hash = native_execution_differential_report_hash(report);
+        claim_inventory.extend(phase_claim_inventory(report));
+        if let Some(status) = positive_corpus_blocker(report) {
+            blockers.push(NativeExecutableCorpusBlocker {
+                target: report.target.clone(),
+                native_differential_report_hash: report_hash,
+                status,
+                evidence_source: "NC27 closeout checked the exact NC26 report lanes".to_string(),
+            });
+        } else {
+            positive_cases.push(NativeExecutableCorpusCase {
+                target: report.target.clone(),
+                checked_core: report.trust.provenance.checked_core.clone(),
+                runtime_ir: report.trust.provenance.runtime_ir.clone(),
+                object_linker: report.trust.provenance.object_linker.clone(),
+                native_differential_report_hash: report_hash,
+                status: NativeExecutablePhaseStatus::Supported,
+            });
+        }
+    }
+
+    let mut exclusions = required_nc27_exclusions();
+    exclusions.extend(additional_exclusions);
+    let recommendation = if !positive_cases.is_empty() && blockers.is_empty() {
+        NativeExecutablePhaseRecommendation::ProceedToNc28 {
+            reason: "starter executable corpus traverses the NC19-NC26 chain with native, runtime-IR, interpreter, effect-policy, and trust/provenance lanes tested; remaining executable claims are explicitly unavailable or unsupported"
+                .to_string(),
+        }
+    } else {
+        let reason = if positive_cases.is_empty() {
+            "no exact starter executable corpus item completed the full NC19-NC26 chain".to_string()
+        } else {
+            "at least one intended starter executable item failed the NC27 closeout gate"
+                .to_string()
+        };
+        NativeExecutablePhaseRecommendation::FramePrerequisiteWp {
+            reason,
+            blockers: blockers.clone(),
+        }
+    };
+
+    NativeExecutablePhaseCloseoutReport {
+        header: NativeExecutablePhaseCloseoutHeader {
+            report_kind: NATIVE_EXECUTABLE_PHASE_CLOSEOUT_REPORT_KIND.to_string(),
+            version: NATIVE_EXECUTABLE_PHASE_CLOSEOUT_REPORT_VERSION,
+            spec_ref: NATIVE_EXECUTABLE_PHASE_CLOSEOUT_SPEC_REF.to_string(),
+            producer: producer.into(),
+            source_report_kind: NATIVE_EXECUTION_DIFFERENTIAL_REPORT_KIND.to_string(),
+            source_report_version: NATIVE_EXECUTION_DIFFERENTIAL_REPORT_VERSION,
+        },
+        corpus: NativeExecutableCorpusManifest {
+            positive_cases,
+            blockers,
+        },
+        claim_inventory,
+        exclusions,
+        recommendation,
+    }
+}
+
+pub fn native_execution_differential_report_hash(
+    report: &NativeExecutionDifferentialReport,
+) -> u64 {
+    fnv1a_64(&canonical_native_execution_differential_report_bytes(
+        report,
+    ))
+}
+
+pub fn required_nc27_exclusions() -> Vec<NativeExecutableCorpusExclusion> {
+    vec![
+        exclusion(
+            NativeExecutableCorpusExclusionKind::NonStarterExecutableArtifact,
+            NativeExecutablePhaseStatus::Unsupported {
+                reason: "NC24 only runs NC23 StarterExecutable artifacts".to_string(),
+            },
+            "non-starter executable artifacts are outside the NC19-NC27 starter corpus",
+            "NC24 validate_executable_artifact executable_artifact.kind preflight",
+        ),
+        exclusion(
+            NativeExecutableCorpusExclusionKind::NonScalarResultDecoding,
+            NativeExecutablePhaseStatus::Unsupported {
+                reason: "NC24 starter native execution only decodes scalar Int/Bool observations"
+                    .to_string(),
+            },
+            "non-scalar native result decoding is outside the starter executable ABI",
+            "NC24 decode_native_stdout runtime_observation preflight",
+        ),
+        exclusion(
+            NativeExecutableCorpusExclusionKind::TrapDecoding,
+            NativeExecutablePhaseStatus::Unavailable {
+                reason: "NC23 executable ABI carries scalar stdout only; trap decoding remains unavailable"
+                    .to_string(),
+            },
+            "trap observations are preserved as unavailable instead of hidden from the corpus",
+            "NC24 trap path returns first-class unavailable native execution lanes",
+        ),
+        exclusion(
+            NativeExecutableCorpusExclusionKind::HostEffectExecution,
+            NativeExecutablePhaseStatus::Unavailable {
+                reason: "host-effect execution is represented by NC18/NC25 facts but unavailable for native execution"
+                    .to_string(),
+            },
+            "host-effect targets are not part of the positive starter executable corpus",
+            "NC25 effect/foreign executable policy report",
+        ),
+        exclusion(
+            NativeExecutableCorpusExclusionKind::ForeignExecution,
+            NativeExecutablePhaseStatus::Unavailable {
+                reason: "foreign execution remains unavailable unless a later host policy produces authority"
+                    .to_string(),
+            },
+            "foreign-boundary targets are explicitly unavailable for NC19-NC27",
+            "NC25 effect/foreign executable policy and NC26 trust lanes",
+        ),
+        exclusion(
+            NativeExecutableCorpusExclusionKind::LibraryAbi,
+            NativeExecutablePhaseStatus::Unavailable {
+                reason: "native library ABI is outside the NC19-NC27 executable phase".to_string(),
+            },
+            "library artifacts are deferred to NC37-NC45",
+            "NC26 trust report unavailable lane",
+        ),
+        exclusion(
+            NativeExecutableCorpusExclusionKind::CAbiInterop,
+            NativeExecutablePhaseStatus::Unavailable {
+                reason: "C ABI interop is outside the NC19-NC27 executable phase".to_string(),
+            },
+            "C ABI interop is deferred until library/FFI phases",
+            "NC26 trust report unavailable lane",
+        ),
+        exclusion(
+            NativeExecutableCorpusExclusionKind::RustInterop,
+            NativeExecutablePhaseStatus::Unavailable {
+                reason: "Rust interop is outside the NC19-NC27 executable phase".to_string(),
+            },
+            "Rust interop is deferred until library/FFI phases",
+            "NC26 trust report unavailable lane",
+        ),
+        exclusion(
+            NativeExecutableCorpusExclusionKind::CrossPackageNativeLinking,
+            NativeExecutablePhaseStatus::Unavailable {
+                reason: "cross-package native linking is outside the NC19-NC27 executable phase"
+                    .to_string(),
+            },
+            "cross-package native linking is deferred until library artifacts exist",
+            "NC26 trust report unavailable lane",
+        ),
+        exclusion(
+            NativeExecutableCorpusExclusionKind::TranslationValidation,
+            NativeExecutablePhaseStatus::Unavailable {
+                reason: "NC26 records no translation-validation producing check for native executables"
+                    .to_string(),
+            },
+            "translation validation belongs to NC28-NC36, not the executable emitter closeout",
+            "NC26 trust report honesty guard",
+        ),
+        exclusion(
+            NativeExecutableCorpusExclusionKind::WholeCompilerProof,
+            NativeExecutablePhaseStatus::Unavailable {
+                reason: "native execution, Cranelift emission, and linker smoke tests are not Ken proof"
+                    .to_string(),
+            },
+            "whole-compiler proof remains unavailable after the NC19-NC27 executable phase",
+            "NC26 trust report honesty guard",
+        ),
+    ]
+}
+
+fn exclusion(
+    exclusion: NativeExecutableCorpusExclusionKind,
+    status: NativeExecutablePhaseStatus,
+    reason: &str,
+    evidence_source: &str,
+) -> NativeExecutableCorpusExclusion {
+    NativeExecutableCorpusExclusion {
+        exclusion,
+        status,
+        reason: reason.to_string(),
+        evidence_source: evidence_source.to_string(),
+    }
+}
+
+fn positive_corpus_blocker(
+    report: &NativeExecutionDifferentialReport,
+) -> Option<NativeExecutablePhaseStatus> {
+    if report.header.report_kind != NATIVE_EXECUTION_DIFFERENTIAL_REPORT_KIND
+        || report.header.version != NATIVE_EXECUTION_DIFFERENTIAL_REPORT_VERSION
+    {
+        return Some(NativeExecutablePhaseStatus::Failed {
+            reason: "source report is not the landed NC26 native differential report kind/version"
+                .to_string(),
+        });
+    }
+    if !matches!(report.native, NativeExecutionLaneReport::Available(_)) {
+        return Some(NativeExecutablePhaseStatus::Unavailable {
+            reason: "native execution lane is unavailable for this target".to_string(),
+        });
+    }
+    if !matches!(
+        report.runtime_ir,
+        NativeComparisonLaneReport::TestedAgreement {
+            lane: NativeDifferentialLane::RuntimeIrEvaluator,
+            ..
+        }
+    ) {
+        return Some(NativeExecutablePhaseStatus::Failed {
+            reason: "runtime-IR differential lane is not tested agreement".to_string(),
+        });
+    }
+    if !matches!(
+        report.interpreter,
+        NativeComparisonLaneReport::TestedAgreement {
+            lane: NativeDifferentialLane::Interpreter,
+            ..
+        }
+    ) {
+        return Some(NativeExecutablePhaseStatus::Unavailable {
+            reason: "interpreter differential lane is not tested agreement".to_string(),
+        });
+    }
+    if !matches!(
+        report.effect_foreign_policy.status,
+        NativeEffectForeignExecutableStatus::NativeTested
+    ) {
+        return Some(NativeExecutablePhaseStatus::Unavailable {
+            reason: "effect/foreign executable policy is not native-tested".to_string(),
+        });
+    }
+    if !matches!(
+        report.verdict,
+        NativeExecutionDifferentialVerdict::RuntimeIrTestedAgreement {
+            runtime_ir: NativeLaneVerdict::TestedAgreement,
+            interpreter: NativeLaneVerdict::TestedAgreement,
+        }
+    ) {
+        return Some(NativeExecutablePhaseStatus::Failed {
+            reason: "native differential verdict does not close both comparison lanes".to_string(),
+        });
+    }
+    if !required_unavailable_claims().is_subset(&report.unavailable_claims) {
+        return Some(NativeExecutablePhaseStatus::Failed {
+            reason: "NC26 unavailable claim set is incomplete".to_string(),
+        });
+    }
+    for claim in [
+        NativeExecutableEvidenceClaim::NativeExecution,
+        NativeExecutableEvidenceClaim::RuntimeIrDifferential,
+        NativeExecutableEvidenceClaim::InterpreterDifferential,
+        NativeExecutableEvidenceClaim::EffectForeignExecutablePolicy,
+    ] {
+        match report
+            .trust
+            .evidence_lanes
+            .iter()
+            .find(|lane| lane.claim == claim)
+        {
+            Some(NativeExecutableEvidenceLane {
+                status: NativeExecutableEvidenceStatus::Tested,
+                ..
+            }) => {}
+            _ => {
+                return Some(NativeExecutablePhaseStatus::Failed {
+                    reason: format!(
+                        "required tested trust lane is absent or not tested: {claim:?}"
+                    ),
+                });
+            }
+        }
+    }
+    for lane in &report.trust.evidence_lanes {
+        if out_of_phase_claim(&lane.claim)
+            && matches!(
+                lane.status,
+                NativeExecutableEvidenceStatus::Tested
+                    | NativeExecutableEvidenceStatus::Validated
+                    | NativeExecutableEvidenceStatus::Proved
+            )
+        {
+            return Some(NativeExecutablePhaseStatus::Failed {
+                reason: format!(
+                    "out-of-phase executable claim was over-promoted in NC26 trust report: {:?}",
+                    lane.claim
+                ),
+            });
+        }
+    }
+    None
+}
+
+fn out_of_phase_claim(claim: &NativeExecutableEvidenceClaim) -> bool {
+    matches!(
+        claim,
+        NativeExecutableEvidenceClaim::TranslationValidation
+            | NativeExecutableEvidenceClaim::WholeCompilerProof
+            | NativeExecutableEvidenceClaim::LibraryAbi
+            | NativeExecutableEvidenceClaim::CAbiInterop
+            | NativeExecutableEvidenceClaim::RustInterop
+            | NativeExecutableEvidenceClaim::CrossPackageNativeLinking
+            | NativeExecutableEvidenceClaim::ForeignExecution
+    )
+}
+
+fn phase_claim_inventory(
+    report: &NativeExecutionDifferentialReport,
+) -> Vec<NativeExecutablePhaseClaim> {
+    report
+        .trust
+        .evidence_lanes
+        .iter()
+        .map(|lane| NativeExecutablePhaseClaim {
+            target_symbol: report.target.target_symbol.clone(),
+            claim: lane.claim.clone(),
+            status: phase_status_from_evidence(&lane.status),
+            evidence_source: lane.evidence_source.clone(),
+        })
+        .collect()
+}
+
+fn phase_status_from_evidence(
+    status: &NativeExecutableEvidenceStatus,
+) -> NativeExecutablePhaseStatus {
+    match status {
+        NativeExecutableEvidenceStatus::Tested => NativeExecutablePhaseStatus::Tested,
+        NativeExecutableEvidenceStatus::Validated => NativeExecutablePhaseStatus::Validated,
+        NativeExecutableEvidenceStatus::Proved => NativeExecutablePhaseStatus::Proved,
+        NativeExecutableEvidenceStatus::Unavailable { reason } => {
+            NativeExecutablePhaseStatus::Unavailable {
+                reason: reason.clone(),
+            }
+        }
+        NativeExecutableEvidenceStatus::Unsupported { reason } => {
+            NativeExecutablePhaseStatus::Unsupported {
+                reason: reason.clone(),
+            }
+        }
+    }
+}
+
+fn canonical_native_execution_differential_report_bytes(
+    report: &NativeExecutionDifferentialReport,
+) -> Vec<u8> {
+    let mut out = String::new();
+    push_native_field(&mut out, "header.report_kind", &report.header.report_kind);
+    push_native_field(
+        &mut out,
+        "header.version",
+        &report.header.version.to_string(),
+    );
+    push_native_field(&mut out, "header.spec_ref", &report.header.spec_ref);
+    push_native_field(&mut out, "header.producer", &report.header.producer);
+    push_target_identity(&mut out, "target", &report.target);
+    push_native_lane_report(&mut out, "native", &report.native);
+    push_comparison_lane_report(&mut out, "runtime_ir", &report.runtime_ir);
+    push_comparison_lane_report(&mut out, "interpreter", &report.interpreter);
+    push_differential_verdict(&mut out, "verdict", &report.verdict);
+    push_policy_report(&mut out, &report.effect_foreign_policy);
+    push_trust_report(&mut out, &report.trust);
+    for claim in &report.unavailable_claims {
+        push_native_field(&mut out, "unavailable_claim", unavailable_claim_tag(claim));
+    }
+    out.into_bytes()
+}
+
+fn push_target_identity(out: &mut String, prefix: &str, target: &NativeExecutionTargetIdentity) {
+    push_native_field(
+        out,
+        &format!("{prefix}.package_identity"),
+        &target.package_identity,
+    );
+    push_native_field(
+        out,
+        &format!("{prefix}.target_symbol"),
+        &target.target_symbol,
+    );
+    push_runtime_artifact_identity(
+        out,
+        &format!("{prefix}.runtime_artifact"),
+        &target.runtime_artifact,
+    );
+    push_native_field(
+        out,
+        &format!("{prefix}.runtime_report_hash"),
+        &format!("{:016x}", target.runtime_report_hash),
+    );
+    push_native_field(
+        out,
+        &format!("{prefix}.object_linker_package_hash"),
+        &format!("{:016x}", target.object_linker_package_hash),
+    );
+    push_native_field(
+        out,
+        &format!("{prefix}.executable_artifact_hash"),
+        &format!("{:016x}", target.executable_artifact_hash),
+    );
+    push_native_field(
+        out,
+        &format!("{prefix}.executable_relative_path"),
+        &target.executable_relative_path,
+    );
+}
+
+fn push_runtime_artifact_identity(
+    out: &mut String,
+    prefix: &str,
+    artifact: &RuntimeArtifactIdentity,
+) {
+    push_native_field(
+        out,
+        &format!("{prefix}.package_identity"),
+        &artifact.package_identity,
+    );
+    push_native_field(
+        out,
+        &format!("{prefix}.core_semantic_hash"),
+        &format!("{:016x}", artifact.core_semantic_hash),
+    );
+    push_native_field(
+        out,
+        &format!("{prefix}.artifact_hash"),
+        &format!("{:016x}", artifact.artifact_hash),
+    );
+}
+
+fn push_runtime_ir_target_identity(
+    out: &mut String,
+    prefix: &str,
+    target: &RuntimeIrTargetIdentity,
+) {
+    push_native_field(out, &format!("{prefix}.example"), &target.example);
+    push_native_field(
+        out,
+        &format!("{prefix}.checked_core_shape"),
+        &target.checked_core_shape,
+    );
+}
+
+fn push_native_lane_report(out: &mut String, prefix: &str, lane: &NativeExecutionLaneReport) {
+    match lane {
+        NativeExecutionLaneReport::Available(observation) => {
+            push_native_field(out, &format!("{prefix}.status"), "available");
+            push_observation(
+                out,
+                &format!("{prefix}.observation"),
+                &observation.observation,
+            );
+            push_native_field(out, &format!("{prefix}.stdout"), &observation.stdout);
+            push_native_field(
+                out,
+                &format!("{prefix}.exit_status"),
+                &observation.exit_status.to_string(),
+            );
+            push_native_field(
+                out,
+                &format!("{prefix}.evidence_source"),
+                &observation.evidence_source,
+            );
+        }
+        NativeExecutionLaneReport::Unavailable {
+            reason,
+            evidence_source,
+        } => {
+            push_native_field(out, &format!("{prefix}.status"), "unavailable");
+            push_native_field(out, &format!("{prefix}.reason"), reason);
+            push_native_field(out, &format!("{prefix}.evidence_source"), evidence_source);
+        }
+    }
+}
+
+fn push_comparison_lane_report(out: &mut String, prefix: &str, lane: &NativeComparisonLaneReport) {
+    match lane {
+        NativeComparisonLaneReport::TestedAgreement {
+            lane,
+            expected,
+            observed,
+            evidence_source,
+        } => {
+            push_native_field(out, &format!("{prefix}.status"), "tested_agreement");
+            push_native_field(out, &format!("{prefix}.lane"), differential_lane_tag(lane));
+            push_observation(out, &format!("{prefix}.expected"), expected);
+            push_observation(out, &format!("{prefix}.observed"), observed);
+            push_native_field(out, &format!("{prefix}.evidence_source"), evidence_source);
+        }
+        NativeComparisonLaneReport::Mismatch {
+            lane,
+            expected,
+            observed,
+            diagnostic,
+        } => {
+            push_native_field(out, &format!("{prefix}.status"), "mismatch");
+            push_native_field(out, &format!("{prefix}.lane"), differential_lane_tag(lane));
+            push_observation(out, &format!("{prefix}.expected"), expected);
+            push_observation(out, &format!("{prefix}.observed"), observed);
+            push_mismatch_diagnostic(out, &format!("{prefix}.diagnostic"), diagnostic);
+        }
+        NativeComparisonLaneReport::Unavailable {
+            lane,
+            reason,
+            evidence_source,
+        } => {
+            push_native_field(out, &format!("{prefix}.status"), "unavailable");
+            push_native_field(out, &format!("{prefix}.lane"), differential_lane_tag(lane));
+            push_native_field(out, &format!("{prefix}.reason"), reason);
+            push_native_field(out, &format!("{prefix}.evidence_source"), evidence_source);
+        }
+    }
+}
+
+fn push_differential_verdict(
+    out: &mut String,
+    prefix: &str,
+    verdict: &NativeExecutionDifferentialVerdict,
+) {
+    match verdict {
+        NativeExecutionDifferentialVerdict::RuntimeIrTestedAgreement {
+            runtime_ir,
+            interpreter,
+        } => {
+            push_native_field(
+                out,
+                &format!("{prefix}.kind"),
+                "runtime_ir_tested_agreement",
+            );
+            push_lane_verdict(out, &format!("{prefix}.runtime_ir"), runtime_ir);
+            push_lane_verdict(out, &format!("{prefix}.interpreter"), interpreter);
+        }
+        NativeExecutionDifferentialVerdict::Mismatch { lane, diagnostic } => {
+            push_native_field(out, &format!("{prefix}.kind"), "mismatch");
+            push_native_field(out, &format!("{prefix}.lane"), differential_lane_tag(lane));
+            push_mismatch_diagnostic(out, &format!("{prefix}.diagnostic"), diagnostic);
+        }
+        NativeExecutionDifferentialVerdict::Unavailable { lane, reason } => {
+            push_native_field(out, &format!("{prefix}.kind"), "unavailable");
+            push_native_field(out, &format!("{prefix}.lane"), differential_lane_tag(lane));
+            push_native_field(out, &format!("{prefix}.reason"), reason);
+        }
+    }
+}
+
+fn push_lane_verdict(out: &mut String, prefix: &str, verdict: &NativeLaneVerdict) {
+    match verdict {
+        NativeLaneVerdict::TestedAgreement => {
+            push_native_field(out, &format!("{prefix}.kind"), "tested_agreement");
+        }
+        NativeLaneVerdict::Unavailable { reason } => {
+            push_native_field(out, &format!("{prefix}.kind"), "unavailable");
+            push_native_field(out, &format!("{prefix}.reason"), reason);
+        }
+    }
+}
+
+fn push_policy_report(out: &mut String, report: &NativeEffectForeignExecutablePolicyReport) {
+    push_native_field(out, "effect_policy.target_symbol", &report.target_symbol);
+    match &report.status {
+        NativeEffectForeignExecutableStatus::NativeTested => {
+            push_native_field(out, "effect_policy.status", "native_tested");
+        }
+        NativeEffectForeignExecutableStatus::RepresentedUnavailable { reason } => {
+            push_native_field(out, "effect_policy.status", "represented_unavailable");
+            push_native_field(out, "effect_policy.reason", reason);
+        }
+        NativeEffectForeignExecutableStatus::Unsupported { reason } => {
+            push_native_field(out, "effect_policy.status", "unsupported");
+            push_native_field(out, "effect_policy.reason", reason);
+        }
+    }
+    for fact in &report.facts {
+        push_native_field(out, "effect_policy.fact", fact);
+    }
+    push_native_field(
+        out,
+        "effect_policy.evidence_source",
+        &report.evidence_source,
+    );
+}
+
+fn push_trust_report(out: &mut String, report: &NativeExecutableTrustReport) {
+    push_checked_core_provenance(out, &report.provenance.checked_core);
+    push_runtime_ir_provenance(out, &report.provenance.runtime_ir);
+    push_object_linker_provenance(out, &report.provenance.object_linker);
+    push_toolchain_provenance(out, &report.provenance.toolchain);
+    for lane in &report.evidence_lanes {
+        push_native_field(out, "trust.evidence.claim", evidence_claim_tag(&lane.claim));
+        push_phase_evidence_status(out, "trust.evidence.status", &lane.status);
+        push_native_field(out, "trust.evidence.evidence_source", &lane.evidence_source);
+    }
+}
+
+fn push_checked_core_provenance(out: &mut String, provenance: &NativeCheckedCoreProvenance) {
+    push_native_field(
+        out,
+        "trust.checked_core.package_identity",
+        &provenance.package_identity,
+    );
+    push_native_field(
+        out,
+        "trust.checked_core.core_semantic_hash",
+        &format!("{:016x}", provenance.core_semantic_hash),
+    );
+    push_native_field(
+        out,
+        "trust.checked_core.artifact_hash",
+        &format!("{:016x}", provenance.artifact_hash),
+    );
+    push_native_field(
+        out,
+        "trust.checked_core.evidence_source",
+        &provenance.evidence_source,
+    );
+}
+
+fn push_runtime_ir_provenance(out: &mut String, provenance: &NativeRuntimeIrProvenance) {
+    push_runtime_artifact_identity(
+        out,
+        "trust.runtime_ir.runtime_artifact",
+        &provenance.runtime_artifact,
+    );
+    push_runtime_ir_target_identity(out, "trust.runtime_ir.target", &provenance.target);
+    push_native_field(
+        out,
+        "trust.runtime_ir.runtime_report_hash",
+        &format!("{:016x}", provenance.runtime_report_hash),
+    );
+    push_native_field(
+        out,
+        "trust.runtime_ir.evidence_source",
+        &provenance.evidence_source,
+    );
+}
+
+fn push_object_linker_provenance(out: &mut String, provenance: &NativeObjectLinkerProvenance) {
+    push_native_field(
+        out,
+        "trust.object_linker.package_hash",
+        &format!("{:016x}", provenance.object_linker_package_hash),
+    );
+    push_native_field(
+        out,
+        "trust.object_linker.entrypoint_package_hash",
+        &format!("{:016x}", provenance.entrypoint_package_hash),
+    );
+    push_native_field(
+        out,
+        "trust.object_linker.platform_runtime_support_hash",
+        &format!("{:016x}", provenance.platform_runtime_support_hash),
+    );
+    push_native_field(
+        out,
+        "trust.object_linker.object_kind",
+        object_artifact_kind_tag(&provenance.object_artifact_kind),
+    );
+    push_native_field(
+        out,
+        "trust.object_linker.object_hash",
+        &format!("{:016x}", provenance.object_artifact_hash),
+    );
+    push_native_field(
+        out,
+        "trust.object_linker.object_byte_len",
+        &provenance.object_byte_len.to_string(),
+    );
+    push_native_field(
+        out,
+        "trust.object_linker.executable_hash",
+        &format!("{:016x}", provenance.executable_artifact_hash),
+    );
+    push_native_field(
+        out,
+        "trust.object_linker.executable_byte_len",
+        &provenance.executable_byte_len.to_string(),
+    );
+    push_native_field(
+        out,
+        "trust.object_linker.executable_relative_path",
+        &provenance.executable_relative_path,
+    );
+    push_native_field(
+        out,
+        "trust.object_linker.smoke_evidence_source",
+        &provenance.smoke_evidence_source,
+    );
+}
+
+fn push_toolchain_provenance(out: &mut String, provenance: &NativeToolchainProvenance) {
+    push_recorded_fact(out, "trust.toolchain.ken_runtime", &provenance.ken_runtime);
+    push_recorded_fact(
+        out,
+        "trust.toolchain.native_backend",
+        &provenance.native_backend,
+    );
+    push_recorded_fact(
+        out,
+        "trust.toolchain.backend_verifier",
+        &provenance.backend_verifier,
+    );
+    push_recorded_fact(
+        out,
+        "trust.toolchain.object_emission",
+        &provenance.object_emission,
+    );
+    push_recorded_fact(
+        out,
+        "trust.toolchain.linker_or_finalizer",
+        &provenance.linker_or_finalizer,
+    );
+    push_recorded_fact(
+        out,
+        "trust.toolchain.host_platform",
+        &provenance.host_platform,
+    );
+    push_recorded_fact(out, "trust.toolchain.library_abi", &provenance.library_abi);
+    push_recorded_fact(
+        out,
+        "trust.toolchain.c_abi_interop",
+        &provenance.c_abi_interop,
+    );
+    push_recorded_fact(
+        out,
+        "trust.toolchain.rust_interop",
+        &provenance.rust_interop,
+    );
+    push_recorded_fact(
+        out,
+        "trust.toolchain.cross_package_native_linking",
+        &provenance.cross_package_native_linking,
+    );
+    push_recorded_fact(
+        out,
+        "trust.toolchain.whole_compiler_proof",
+        &provenance.whole_compiler_proof,
+    );
+}
+
+fn push_recorded_fact(out: &mut String, prefix: &str, fact: &NativeRecordedFact) {
+    match fact {
+        NativeRecordedFact::Available {
+            value,
+            evidence_source,
+            lane,
+        } => {
+            push_native_field(out, &format!("{prefix}.kind"), "available");
+            push_native_field(out, &format!("{prefix}.value"), value);
+            push_native_field(out, &format!("{prefix}.evidence_source"), evidence_source);
+            push_native_field(
+                out,
+                &format!("{prefix}.lane"),
+                object_linker_evidence_lane_tag(lane),
+            );
+        }
+        NativeRecordedFact::Unavailable { reason, lane } => {
+            push_native_field(out, &format!("{prefix}.kind"), "unavailable");
+            push_native_field(out, &format!("{prefix}.reason"), reason);
+            push_native_field(
+                out,
+                &format!("{prefix}.lane"),
+                object_linker_evidence_lane_tag(lane),
+            );
+        }
+    }
+}
+
+fn push_phase_evidence_status(
+    out: &mut String,
+    prefix: &str,
+    status: &NativeExecutableEvidenceStatus,
+) {
+    match status {
+        NativeExecutableEvidenceStatus::Tested => {
+            push_native_field(out, prefix, "tested");
+        }
+        NativeExecutableEvidenceStatus::Validated => {
+            push_native_field(out, prefix, "validated");
+        }
+        NativeExecutableEvidenceStatus::Proved => {
+            push_native_field(out, prefix, "proved");
+        }
+        NativeExecutableEvidenceStatus::Unavailable { reason } => {
+            push_native_field(out, prefix, "unavailable");
+            push_native_field(out, &format!("{prefix}.reason"), reason);
+        }
+        NativeExecutableEvidenceStatus::Unsupported { reason } => {
+            push_native_field(out, prefix, "unsupported");
+            push_native_field(out, &format!("{prefix}.reason"), reason);
+        }
+    }
+}
+
+fn push_mismatch_diagnostic(out: &mut String, prefix: &str, diagnostic: &NativeMismatchDiagnostic) {
+    push_native_field(
+        out,
+        &format!("{prefix}.package_identity"),
+        &diagnostic.package_identity,
+    );
+    push_native_field(
+        out,
+        &format!("{prefix}.target_symbol"),
+        &diagnostic.target_symbol,
+    );
+    push_native_field(
+        out,
+        &format!("{prefix}.executable_artifact_hash"),
+        &format!("{:016x}", diagnostic.executable_artifact_hash),
+    );
+    push_native_field(
+        out,
+        &format!("{prefix}.lane"),
+        differential_lane_tag(&diagnostic.lane),
+    );
+    push_observation(out, &format!("{prefix}.expected"), &diagnostic.expected);
+    push_observation(out, &format!("{prefix}.observed"), &diagnostic.observed);
+    push_native_field(out, &format!("{prefix}.message"), &diagnostic.message);
+}
+
+fn push_observation(out: &mut String, prefix: &str, observation: &RuntimeObservation) {
+    match observation {
+        RuntimeObservation::Returned(value) => {
+            push_native_field(out, &format!("{prefix}.kind"), "returned");
+            push_ground_value(out, &format!("{prefix}.value"), value);
+        }
+        RuntimeObservation::Trapped(trap) => {
+            push_native_field(out, &format!("{prefix}.kind"), "trapped");
+            push_native_field(
+                out,
+                &format!("{prefix}.trap.code"),
+                trap_code_tag(&trap.code),
+            );
+            push_native_field(out, &format!("{prefix}.trap.message"), &trap.message);
+        }
+    }
+}
+
+fn push_ground_value(out: &mut String, prefix: &str, value: &RuntimeGroundValue) {
+    match value {
+        RuntimeGroundValue::Bool(value) => {
+            push_native_field(out, &format!("{prefix}.kind"), "bool");
+            push_native_field(out, &format!("{prefix}.value"), &value.to_string());
+        }
+        RuntimeGroundValue::Int(value) => {
+            push_native_field(out, &format!("{prefix}.kind"), "int");
+            push_native_field(out, &format!("{prefix}.value"), &value.to_string());
+        }
+        RuntimeGroundValue::Bytes(bytes) => {
+            push_native_field(out, &format!("{prefix}.kind"), "bytes");
+            for byte in bytes {
+                push_native_field(out, &format!("{prefix}.byte"), &byte.to_string());
+            }
+        }
+        RuntimeGroundValue::String(value) => {
+            push_native_field(out, &format!("{prefix}.kind"), "string");
+            push_native_field(out, &format!("{prefix}.value"), value);
+        }
+        RuntimeGroundValue::Constructor { constructor, args } => {
+            push_native_field(out, &format!("{prefix}.kind"), "constructor");
+            push_native_field(out, &format!("{prefix}.constructor"), constructor);
+            for arg in args {
+                push_ground_value(out, &format!("{prefix}.arg"), arg);
+            }
+        }
+        RuntimeGroundValue::Record { fields } => {
+            push_native_field(out, &format!("{prefix}.kind"), "record");
+            for (name, value) in fields {
+                push_native_field(out, &format!("{prefix}.field.name"), name);
+                push_ground_value(out, &format!("{prefix}.field.value"), value);
+            }
+        }
+    }
+}
+
+fn push_native_field(out: &mut String, key: &str, value: &str) {
+    out.push_str(key);
+    out.push('=');
+    out.push_str(&value.len().to_string());
+    out.push(':');
+    out.push_str(value);
+    out.push('\n');
+}
+
+fn evidence_claim_tag(claim: &NativeExecutableEvidenceClaim) -> &'static str {
+    match claim {
+        NativeExecutableEvidenceClaim::NativeExecution => "native_execution",
+        NativeExecutableEvidenceClaim::RuntimeIrDifferential => "runtime_ir_differential",
+        NativeExecutableEvidenceClaim::InterpreterDifferential => "interpreter_differential",
+        NativeExecutableEvidenceClaim::EffectForeignExecutablePolicy => {
+            "effect_foreign_executable_policy"
+        }
+        NativeExecutableEvidenceClaim::TranslationValidation => "translation_validation",
+        NativeExecutableEvidenceClaim::WholeCompilerProof => "whole_compiler_proof",
+        NativeExecutableEvidenceClaim::LibraryAbi => "library_abi",
+        NativeExecutableEvidenceClaim::CAbiInterop => "c_abi_interop",
+        NativeExecutableEvidenceClaim::RustInterop => "rust_interop",
+        NativeExecutableEvidenceClaim::CrossPackageNativeLinking => "cross_package_native_linking",
+        NativeExecutableEvidenceClaim::ForeignExecution => "foreign_execution",
+    }
+}
+
+fn unavailable_claim_tag(claim: &NativeExecutionUnavailableClaim) -> &'static str {
+    match claim {
+        NativeExecutionUnavailableClaim::LibraryAbi => "library_abi",
+        NativeExecutionUnavailableClaim::CAbiInterop => "c_abi_interop",
+        NativeExecutionUnavailableClaim::RustInterop => "rust_interop",
+        NativeExecutionUnavailableClaim::ForeignExecution => "foreign_execution",
+        NativeExecutionUnavailableClaim::EffectPolicyBroadening => "effect_policy_broadening",
+        NativeExecutionUnavailableClaim::TranslationValidation => "translation_validation",
+        NativeExecutionUnavailableClaim::WholeCompilerProof => "whole_compiler_proof",
+    }
+}
+
+fn differential_lane_tag(lane: &NativeDifferentialLane) -> &'static str {
+    match lane {
+        NativeDifferentialLane::NativeExecution => "native_execution",
+        NativeDifferentialLane::RuntimeIrEvaluator => "runtime_ir_evaluator",
+        NativeDifferentialLane::Interpreter => "interpreter",
+    }
+}
+
+fn object_artifact_kind_tag(kind: &ObjectLinkerArtifactKind) -> &'static str {
+    match kind {
+        ObjectLinkerArtifactKind::CraneliftObject => "cranelift_object",
+        ObjectLinkerArtifactKind::StarterExecutable => "starter_executable",
+    }
+}
+
+fn object_linker_evidence_lane_tag(lane: &ObjectLinkerEvidenceLane) -> &'static str {
+    match lane {
+        ObjectLinkerEvidenceLane::SemanticAuthority => "semantic_authority",
+        ObjectLinkerEvidenceLane::Tested => "tested",
+        ObjectLinkerEvidenceLane::BuildArtifact => "build_artifact",
+        ObjectLinkerEvidenceLane::Unavailable => "unavailable",
+        ObjectLinkerEvidenceLane::Unsupported => "unsupported",
+    }
+}
+
+fn trap_code_tag(code: &crate::RuntimeTrapCode) -> &'static str {
+    match code {
+        crate::RuntimeTrapCode::UnsupportedErasure => "unsupported_erasure",
+        crate::RuntimeTrapCode::UnsupportedPrimitivePartiality => {
+            "unsupported_primitive_partiality"
+        }
+        crate::RuntimeTrapCode::MissingRuntimeMetadata => "missing_runtime_metadata",
+        crate::RuntimeTrapCode::PatternMatchFailure => "pattern_match_failure",
+        crate::RuntimeTrapCode::ExplicitTrap => "explicit_trap",
+    }
 }
 
 fn validate_object_linker_package(
@@ -2944,6 +4005,159 @@ mod tests {
         assert!(matches!(
             reports[1].interpreter,
             NativeComparisonLaneReport::Unavailable { .. }
+        ));
+    }
+
+    #[test]
+    fn closeout_report_recommends_nc28_for_full_chain_starter_corpus() {
+        let program = starter_program(49);
+        let run_report = runtime_ir_run_report(&program);
+        let output_dir = temp_output_dir("nc27-closeout-positive");
+        let package = package_for(&program, &run_report, &output_dir);
+        let report = run_native_execution_differential(
+            &program,
+            &package,
+            &run_report,
+            &output_dir,
+            interpreter_available(&program, &run_report),
+            "native differential unit test",
+        )
+        .expect("native differential report materializes");
+
+        let closeout =
+            close_native_executable_phase([&report], std::iter::empty(), "nc27 unit test");
+
+        assert_eq!(
+            closeout.header.report_kind,
+            NATIVE_EXECUTABLE_PHASE_CLOSEOUT_REPORT_KIND
+        );
+        assert_eq!(closeout.corpus.positive_cases.len(), 1);
+        assert!(closeout.corpus.blockers.is_empty());
+        let case = &closeout.corpus.positive_cases[0];
+        assert_eq!(case.target, report.target);
+        assert_eq!(
+            case.checked_core.package_identity,
+            report.trust.provenance.checked_core.package_identity
+        );
+        assert_eq!(
+            case.runtime_ir.runtime_report_hash,
+            report.trust.provenance.runtime_ir.runtime_report_hash
+        );
+        assert_eq!(
+            case.object_linker.executable_artifact_hash,
+            report
+                .trust
+                .provenance
+                .object_linker
+                .executable_artifact_hash
+        );
+        assert_eq!(
+            case.native_differential_report_hash,
+            native_execution_differential_report_hash(&report)
+        );
+        assert_eq!(case.status, NativeExecutablePhaseStatus::Supported);
+        assert!(matches!(
+            closeout.recommendation,
+            NativeExecutablePhaseRecommendation::ProceedToNc28 { .. }
+        ));
+        assert!(closeout.claim_inventory.iter().any(|claim| {
+            claim.claim == NativeExecutableEvidenceClaim::NativeExecution
+                && claim.status == NativeExecutablePhaseStatus::Tested
+        }));
+        assert!(closeout.exclusions.iter().any(|exclusion| {
+            exclusion.exclusion == NativeExecutableCorpusExclusionKind::TrapDecoding
+                && matches!(
+                    exclusion.status,
+                    NativeExecutablePhaseStatus::Unavailable { .. }
+                )
+        }));
+        assert!(closeout.exclusions.iter().any(|exclusion| {
+            exclusion.exclusion == NativeExecutableCorpusExclusionKind::TranslationValidation
+                && matches!(
+                    exclusion.status,
+                    NativeExecutablePhaseStatus::Unavailable { .. }
+                )
+        }));
+
+        let mut changed = report.clone();
+        changed.header.producer.push_str(" changed");
+        assert_ne!(
+            native_execution_differential_report_hash(&report),
+            native_execution_differential_report_hash(&changed)
+        );
+    }
+
+    #[test]
+    fn closeout_frames_prerequisite_when_interpreter_lane_is_unavailable() {
+        let program = starter_program(50);
+        let run_report = runtime_ir_run_report(&program);
+        let output_dir = temp_output_dir("nc27-closeout-interpreter-unavailable");
+        let package = package_for(&program, &run_report, &output_dir);
+        let report = run_native_execution_differential(
+            &program,
+            &package,
+            &run_report,
+            &output_dir,
+            NativeInterpreterLaneInput::Unavailable {
+                reason: "interpreter observation is not available for this fixture".to_string(),
+                evidence_source: "unit test unavailable lane".to_string(),
+            },
+            "native differential unit test",
+        )
+        .expect("native differential report materializes");
+
+        let closeout =
+            close_native_executable_phase([&report], std::iter::empty(), "nc27 unit test");
+
+        assert!(closeout.corpus.positive_cases.is_empty());
+        assert_eq!(closeout.corpus.blockers.len(), 1);
+        assert!(matches!(
+            closeout.corpus.blockers[0].status,
+            NativeExecutablePhaseStatus::Unavailable { ref reason }
+                if reason.contains("interpreter differential")
+        ));
+        assert!(matches!(
+            closeout.recommendation,
+            NativeExecutablePhaseRecommendation::FramePrerequisiteWp { .. }
+        ));
+    }
+
+    #[test]
+    fn closeout_rejects_overclaimed_out_of_phase_proof_lane() {
+        let program = starter_program(51);
+        let run_report = runtime_ir_run_report(&program);
+        let output_dir = temp_output_dir("nc27-closeout-overclaimed-proof");
+        let package = package_for(&program, &run_report, &output_dir);
+        let mut report = run_native_execution_differential(
+            &program,
+            &package,
+            &run_report,
+            &output_dir,
+            interpreter_available(&program, &run_report),
+            "native differential unit test",
+        )
+        .expect("native differential report materializes");
+        let proof_lane = report
+            .trust
+            .evidence_lanes
+            .iter_mut()
+            .find(|lane| lane.claim == NativeExecutableEvidenceClaim::WholeCompilerProof)
+            .expect("whole-compiler proof lane is present");
+        proof_lane.status = NativeExecutableEvidenceStatus::Proved;
+
+        let closeout =
+            close_native_executable_phase([&report], std::iter::empty(), "nc27 unit test");
+
+        assert!(closeout.corpus.positive_cases.is_empty());
+        assert_eq!(closeout.corpus.blockers.len(), 1);
+        assert!(matches!(
+            closeout.corpus.blockers[0].status,
+            NativeExecutablePhaseStatus::Failed { ref reason }
+                if reason.contains("WholeCompilerProof")
+        ));
+        assert!(matches!(
+            closeout.recommendation,
+            NativeExecutablePhaseRecommendation::FramePrerequisiteWp { .. }
         ));
     }
 
