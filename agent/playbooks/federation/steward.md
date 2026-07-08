@@ -148,11 +148,16 @@ brief** — the implementer should execute mostly mechanically, not design
 >    resolve or reassign first (K3).
 > 3. **QUIESCENT.** `capture-pane` each member **and `moot-integrator`**;
 >    **none mid-reasoning** (compaction summarizes in-flight work away).
-> 4. **COMPACT EACH — BEFORE the kickoff, never after.** `tmux send-keys -t
->    moot-<role> "/compact"` → wait ~2s → **separate** `Enter`, **one agent at a
->    time**. Do **not** trust `moot compact`'s "sent" line (no-op-prone). *A
->    post-kickoff compaction eats the just-delivered kickoff and forces a costly
->    re-kick — the exact 2026-07-02 miss.*
+> 4. **START ALL COMPACTIONS — BEFORE the kickoff, never after.** After the
+>    quiescence check, start every required compaction in one pass: for each
+>    receiving-unit member and `moot-integrator`, send
+>    `tmux send-keys -t moot-<role> "/compact"`, wait ~2s for the text to render,
+>    then send a separate `Enter`, and immediately move to the next pane. Do
+>    **not** wait for one agent to finish compacting before starting the next;
+>    that serializes the handoff and leaves other panes burning stale context
+>    while you wait. Do **not** trust `moot compact`'s "sent" line
+>    (no-op-prone). *A post-kickoff compaction eats the just-delivered kickoff
+>    and forces a costly re-kick — the exact 2026-07-02 miss.*
 >    **⛔ ALWAYS COMPACT BEFORE NEW WORK — BUILD TEAMS, THE SPEC ENCLAVE, AND
 >    INTEGRATOR. NO EXCEPTIONS. NO BEFORE-WORK THRESHOLD. (operator,
 >    2026-07-04, enclave twice; extended to Integrator 2026-07-08.)**
@@ -200,10 +205,12 @@ brief** — the implementer should execute mostly mechanically, not design
 >    [[playbooks-state-mechanism-not-intent]] and [[spec-enclave-always-compact-before-new-work]]:
 >    compact **mechanically at the seam**, never on a story about ctx level or
 >    when/whether the agent will engage.
-> 5. **VERIFY THE DROP.** `capture-pane` each receiving-unit member and
->    `moot-integrator`: ctx **actually fell**
+> 5. **VERIFY EVERY DROP AFTER THE BATCH START.** `capture-pane` each
+>    receiving-unit member and `moot-integrator`: ctx **actually fell**
 >    (→ ~0–low %) or a `Compacting…` / queued `❯ /compact`. A "sent" report
->    is **not** proof. Unchanged ctx ⇒ resend.
+>    is **not** proof. Unchanged ctx ⇒ resend that pane and re-verify it. Do not
+>    post the kickoff/handoff until every required pane is compacted, compacting,
+>    or queued.
 > 6. **ONLY NOW** post the kickoff/handoff mention (§2 mention discipline).
 >
 > **The tell that you're about to skip it:** you've drafted the handoff mention
@@ -428,8 +435,9 @@ work flow, so you own the clean context boundary that flows with it. The rules:
   `moot-integrator` compaction at every kickoff/handoff seam under the explicit
   exception above. `request_context_reset` cannot reset another agent;
   cross-agent compaction is the Steward's alone.
-- **★★★ `moot compact` IS UNRELIABLE (no-op-prone) — VERIFY THE DROP, ALWAYS;
-  fall back to `tmux send-keys`.** It prints `"Sent /compact to moot-<role>"`
+- **★★★ `moot compact` IS UNRELIABLE (no-op-prone) — START ALL TARGET
+  COMPACTIONS WITH `tmux send-keys`, THEN VERIFY EVERY DROP.** It prints
+  `"Sent /compact to moot-<role>"`
   whether or not the slash command reaches the REPL. **Reconciled 2026-07-02
   (two observations):** it **no-ops when the target is mid-turn** (spec-author +
   CV sat at 74/73% → climbed to 78/76% after a "successful" `moot compact`;
@@ -438,18 +446,25 @@ work flow, so you own the clean context boundary that flows with it. The rules:
   idle-at-prompt** (same two agents, idle at `❯`, dropped 35/39% → 0% on a
   `moot compact`). So: never trust its "sent" line; the **only** proof is a
   verified ctx drop. If ctx did not move, it raced — resend via the
-  `tmux send-keys` mechanism below (which works regardless of turn state). **The working mechanism:**
+  `tmux send-keys` mechanism below (which works regardless of turn state).
+  **The working mechanism for each pane:**
   ```
   tmux send-keys -t "moot-<role>" "/compact" ; sleep 2 ; tmux send-keys -t "moot-<role>" Enter
   ```
   (the pause matters — send the text, wait **~2s**, then Enter separately; **1s
   races** — the text hasn't rendered before Enter fires an empty line. And do
-  **not** rapid-loop multiple agents in one `for` — the pane-switching races even
-  at 2s; do them one at a time, or **verify `❯ /compact` shows on the input line
-  before sending Enter** each. Confirmed 2026-07-02 compacting Team Language: a
-  tight `for r in …; do send "/compact"; sleep 1; Enter; done` left all three
-  input lines empty; sending text → capture-pane-confirm `❯ /compact` → Enter
-  landed each.) **Always VERIFY it
+  **not** use a blind tight loop that sends text/Enter too quickly — the
+  pane-switching races. The required pattern is now: start each pane's
+  `/compact` with the safe text-render-Enter sequence, move immediately to the
+  next pane, and only after all target panes have been started, poll and verify
+  the drops. If a pane is fragile or the input line is unclear, **verify
+  `❯ /compact` shows on that input line before sending Enter** for that pane.
+  Confirmed 2026-07-02 compacting Team Language: a tight
+  `for r in …; do send "/compact"; sleep 1; Enter; done` left all three input
+  lines empty; sending text → capture-pane-confirm `❯ /compact` → Enter landed
+  each. The operator later corrected the throughput side: start all compactions
+  in the same gate pass instead of waiting for each one to finish before starting
+  the next.) **Always VERIFY it
   landed** (do not trust any "sent" report): re-`capture-pane` and confirm one of
   — a `Compacting…` spinner, ctx dropped, or `❯ /compact` + "Press up to edit
   queued messages" (it queued behind an active turn and **will** fire at that
