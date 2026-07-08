@@ -345,38 +345,7 @@ pub fn executable_artifact_contract_hash(contract: &ExecutableArtifactContract) 
 }
 
 pub fn runtime_ir_program_report_hash(report: &RuntimeIrProgramReport) -> u64 {
-    let mut out = String::new();
-    push_field(&mut out, "kind", RUNTIME_IR_PROGRAM_REPORT_KIND);
-    push_field(
-        &mut out,
-        "package_identity",
-        &report.artifact.package_identity,
-    );
-    push_field(
-        &mut out,
-        "core_semantic_hash",
-        &report.artifact.core_semantic_hash.to_string(),
-    );
-    push_field(
-        &mut out,
-        "runtime_artifact_hash",
-        &report.artifact.artifact_hash.to_string(),
-    );
-    push_debug(
-        &mut out,
-        "supported_runtime_targets",
-        &report.supported_runtime_targets,
-    );
-    push_debug(
-        &mut out,
-        "comparison_unavailable_targets",
-        &report.comparison_unavailable_targets,
-    );
-    push_debug(&mut out, "unsupported_targets", &report.unsupported_targets);
-    push_debug(&mut out, "evidence_sources", &report.evidence_sources);
-    push_debug(&mut out, "unavailable", &report.unavailable);
-    push_debug(&mut out, "native_phase_gate", &report.native_phase_gate);
-    fnv1a_64(out.as_bytes())
+    fnv1a_64(&canonical_runtime_ir_program_report_bytes(report))
 }
 
 fn validate_header(
@@ -599,13 +568,11 @@ fn validate_native_artifact_binding(
             evidence_lane,
             ..
         } => {
-            if *evidence_lane == ExecutableEvidenceLane::SemanticAuthority {
-                return Err(contract_error(
-                    ExecutableArtifactContractStage::NativeArtifactBinding,
-                    "evidence_lane",
-                    "native artifact evidence cannot be semantic authority",
-                ));
-            }
+            validate_positive_available_lane(
+                ExecutableArtifactContractStage::NativeArtifactBinding,
+                "evidence_lane",
+                evidence_lane,
+            )?;
             if artifact_hash.is_none() {
                 return Err(contract_error(
                     ExecutableArtifactContractStage::NativeArtifactBinding,
@@ -722,13 +689,11 @@ fn validate_toolchain_binding(
     ] {
         match fact {
             ExecutableEvidenceFact::Available { evidence_lane, .. } => {
-                if *evidence_lane == ExecutableEvidenceLane::SemanticAuthority {
-                    return Err(contract_error(
-                        ExecutableArtifactContractStage::ToolchainBinding,
-                        name,
-                        "toolchain facts cannot be semantic authority",
-                    ));
-                }
+                validate_positive_available_lane(
+                    ExecutableArtifactContractStage::ToolchainBinding,
+                    name,
+                    evidence_lane,
+                )?;
             }
             ExecutableEvidenceFact::Unavailable { marker } => validate_unavailable_marker(marker)?,
         }
@@ -792,6 +757,25 @@ fn validate_contract_hash(
         ));
     }
     Ok(())
+}
+
+fn validate_positive_available_lane(
+    stage: ExecutableArtifactContractStage,
+    field: &'static str,
+    lane: &ExecutableEvidenceLane,
+) -> Result<(), ExecutableArtifactContractError> {
+    if matches!(
+        lane,
+        ExecutableEvidenceLane::Tested | ExecutableEvidenceLane::Validated
+    ) {
+        Ok(())
+    } else {
+        Err(contract_error(
+            stage,
+            field,
+            "available facts must use a positive evidence lane: tested or validated",
+        ))
+    }
 }
 
 fn validate_unavailable_marker(
@@ -1011,23 +995,408 @@ fn canonical_contract_bytes(contract: &ExecutableArtifactContract) -> Vec<u8> {
     push_field(&mut out, "producer", &contract.header.producer);
     push_field(&mut out, "spec_ref", &contract.header.spec_ref);
     push_field(&mut out, "target", &contract.header.target);
-    push_debug(&mut out, "checked_core", &contract.checked_core);
-    push_debug(&mut out, "runtime", &contract.runtime);
-    push_debug(&mut out, "report", &contract.report);
-    push_debug(&mut out, "native_artifact", &contract.native_artifact);
-    push_debug(&mut out, "toolchain", &contract.toolchain);
-    push_debug(
+    push_checked_core_binding(&mut out, "checked_core", &contract.checked_core);
+    push_runtime_binding(&mut out, "runtime", &contract.runtime);
+    push_report_binding(&mut out, "report", &contract.report);
+    push_native_artifact_binding(&mut out, "native_artifact", &contract.native_artifact);
+    push_toolchain_binding(&mut out, "toolchain", &contract.toolchain);
+    push_unavailable_marker_map(
         &mut out,
         "required_unavailable_lanes",
         &contract.required_unavailable_lanes,
     );
-    push_debug(&mut out, "compatibility", &contract.compatibility);
-    push_debug(
+    push_compatibility(&mut out, "compatibility", &contract.compatibility);
+    push_string_map(
         &mut out,
         "unknown_semantic_fields",
         &contract.unknown_semantic_fields,
     );
     out.into_bytes()
+}
+
+fn canonical_runtime_ir_program_report_bytes(report: &RuntimeIrProgramReport) -> Vec<u8> {
+    let mut out = String::new();
+    push_field(&mut out, "kind", RUNTIME_IR_PROGRAM_REPORT_KIND);
+    push_runtime_artifact_identity(&mut out, "artifact", &report.artifact);
+    push_string_set(
+        &mut out,
+        "supported_runtime_targets",
+        &report.supported_runtime_targets,
+    );
+    push_string_map(
+        &mut out,
+        "comparison_unavailable_targets",
+        &report.comparison_unavailable_targets,
+    );
+    push_string_map(&mut out, "unsupported_targets", &report.unsupported_targets);
+    push_string_map(&mut out, "evidence_sources", &report.evidence_sources);
+    push_string_set(&mut out, "unavailable", &report.unavailable);
+    push_native_phase_gate(&mut out, "native_phase_gate", &report.native_phase_gate);
+    out.into_bytes()
+}
+
+fn push_checked_core_binding(out: &mut String, name: &str, binding: &ExecutableCheckedCoreBinding) {
+    push_section(out, name, |out| {
+        push_field(out, "package_kind", &binding.package_kind);
+        push_field(out, "version", &binding.version.to_string());
+        push_field(out, "package_identity", &binding.package_identity);
+        push_field(
+            out,
+            "core_semantic_hash",
+            &binding.core_semantic_hash.to_string(),
+        );
+        push_field(out, "artifact_hash", &binding.artifact_hash.to_string());
+        push_string_map(
+            out,
+            "dependency_semantic_hashes",
+            &binding.dependency_semantic_hashes,
+        );
+    });
+}
+
+fn push_runtime_binding(out: &mut String, name: &str, binding: &ExecutableRuntimeBinding) {
+    push_section(out, name, |out| {
+        push_field(out, "package_identity", &binding.package_identity);
+        push_field(
+            out,
+            "core_semantic_hash",
+            &binding.core_semantic_hash.to_string(),
+        );
+        push_field(out, "artifact_hash", &binding.artifact_hash.to_string());
+        push_field(out, "selected_target", &binding.selected_target);
+        push_field(out, "evidence_source", &binding.evidence_source);
+    });
+}
+
+fn push_report_binding(out: &mut String, name: &str, binding: &ExecutableReportBinding) {
+    push_section(out, name, |out| {
+        push_field(out, "report_kind", &binding.report_kind);
+        push_field(out, "report_hash", &binding.report_hash.to_string());
+        push_runtime_artifact_identity(out, "artifact", &binding.artifact);
+        push_field(out, "selected_target", &binding.selected_target);
+        push_report_target_verdict(
+            out,
+            "selected_target_verdict",
+            &binding.selected_target_verdict,
+        );
+        push_native_phase_gate(out, "native_phase_gate", &binding.native_phase_gate);
+        push_field(out, "evidence_source", &binding.evidence_source);
+    });
+}
+
+fn push_native_artifact_binding(
+    out: &mut String,
+    name: &str,
+    binding: &ExecutableNativeArtifactBinding,
+) {
+    push_section(out, name, |out| {
+        push_native_artifact_status(out, "status", &binding.status);
+    });
+}
+
+fn push_native_artifact_status(
+    out: &mut String,
+    name: &str,
+    status: &ExecutableNativeArtifactStatus,
+) {
+    push_section(out, name, |out| match status {
+        ExecutableNativeArtifactStatus::Available {
+            kind,
+            artifact_hash,
+            backend_name,
+            platform_target,
+            evidence_source,
+            produced_from,
+            evidence_lane,
+        } => {
+            push_field(out, "status", "available");
+            push_field(out, "kind", kind);
+            push_optional_u64(out, "artifact_hash", *artifact_hash);
+            push_field(out, "backend_name", backend_name);
+            push_field(out, "platform_target", platform_target);
+            push_field(out, "evidence_source", evidence_source);
+            push_produced_from(out, "produced_from", produced_from);
+            push_evidence_lane(out, "evidence_lane", evidence_lane);
+        }
+        ExecutableNativeArtifactStatus::Unavailable { marker } => {
+            push_field(out, "status", "unavailable");
+            push_optional_unavailable_marker(out, "marker", marker.as_ref());
+        }
+        ExecutableNativeArtifactStatus::Unsupported { marker } => {
+            push_field(out, "status", "unsupported");
+            push_optional_unsupported_marker(out, "marker", marker.as_ref());
+        }
+    });
+}
+
+fn push_produced_from(
+    out: &mut String,
+    name: &str,
+    produced_from: &ExecutableArtifactProducedFrom,
+) {
+    push_section(out, name, |out| {
+        push_section(out, "checked_core", |out| {
+            push_field(
+                out,
+                "package_identity",
+                &produced_from.checked_core.package_identity,
+            );
+            push_field(
+                out,
+                "core_semantic_hash",
+                &produced_from.checked_core.core_semantic_hash.to_string(),
+            );
+            push_field(
+                out,
+                "artifact_hash",
+                &produced_from.checked_core.artifact_hash.to_string(),
+            );
+        });
+        push_runtime_artifact_identity(out, "runtime", &produced_from.runtime);
+        push_field(out, "report_hash", &produced_from.report_hash.to_string());
+    });
+}
+
+fn push_toolchain_binding(out: &mut String, name: &str, binding: &ExecutableToolchainBinding) {
+    push_section(out, name, |out| {
+        push_evidence_fact(out, "ken_runtime", &binding.ken_runtime);
+        push_evidence_fact(out, "native_backend", &binding.native_backend);
+        push_evidence_fact(out, "backend_verifier", &binding.backend_verifier);
+        push_evidence_fact(out, "host_platform", &binding.host_platform);
+        push_evidence_fact(out, "object_emission", &binding.object_emission);
+        push_evidence_fact(out, "linker_or_finalizer", &binding.linker_or_finalizer);
+        push_evidence_fact(
+            out,
+            "provenance_or_build_attestation",
+            &binding.provenance_or_build_attestation,
+        );
+    });
+}
+
+fn push_evidence_fact(out: &mut String, name: &str, fact: &ExecutableEvidenceFact) {
+    push_section(out, name, |out| match fact {
+        ExecutableEvidenceFact::Available {
+            value,
+            evidence_source,
+            evidence_lane,
+        } => {
+            push_field(out, "status", "available");
+            push_field(out, "value", value);
+            push_field(out, "evidence_source", evidence_source);
+            push_evidence_lane(out, "evidence_lane", evidence_lane);
+        }
+        ExecutableEvidenceFact::Unavailable { marker } => {
+            push_field(out, "status", "unavailable");
+            push_unavailable_marker(out, "marker", marker);
+        }
+    });
+}
+
+fn push_unavailable_marker_map(
+    out: &mut String,
+    name: &str,
+    markers: &BTreeMap<ExecutableUnavailableLane, ExplicitUnavailableMarker>,
+) {
+    push_collection(out, name, markers.len(), |out| {
+        for (lane, marker) in markers {
+            push_section(out, "entry", |out| {
+                push_unavailable_lane(out, "key", lane);
+                push_unavailable_marker(out, "value", marker);
+            });
+        }
+    });
+}
+
+fn push_unavailable_marker(out: &mut String, name: &str, marker: &ExplicitUnavailableMarker) {
+    push_section(out, name, |out| {
+        push_unavailable_lane(out, "lane", &marker.lane);
+        push_field(out, "reason", &marker.reason);
+        push_evidence_lane(out, "evidence_lane", &marker.evidence_lane);
+    });
+}
+
+fn push_optional_unavailable_marker(
+    out: &mut String,
+    name: &str,
+    marker: Option<&ExplicitUnavailableMarker>,
+) {
+    match marker {
+        Some(marker) => push_unavailable_marker(out, name, marker),
+        None => push_field(out, name, "none"),
+    }
+}
+
+fn push_unsupported_marker(out: &mut String, name: &str, marker: &ExplicitUnsupportedMarker) {
+    push_section(out, name, |out| {
+        push_unsupported_lane(out, "lane", &marker.lane);
+        push_field(out, "target", &marker.target);
+        push_field(out, "construct", &marker.construct);
+        push_field(out, "reason", &marker.reason);
+        push_evidence_lane(out, "evidence_lane", &marker.evidence_lane);
+    });
+}
+
+fn push_optional_unsupported_marker(
+    out: &mut String,
+    name: &str,
+    marker: Option<&ExplicitUnsupportedMarker>,
+) {
+    match marker {
+        Some(marker) => push_unsupported_marker(out, name, marker),
+        None => push_field(out, name, "none"),
+    }
+}
+
+fn push_runtime_artifact_identity(
+    out: &mut String,
+    name: &str,
+    artifact: &RuntimeArtifactIdentity,
+) {
+    push_section(out, name, |out| {
+        push_field(out, "package_identity", &artifact.package_identity);
+        push_field(
+            out,
+            "core_semantic_hash",
+            &artifact.core_semantic_hash.to_string(),
+        );
+        push_field(out, "artifact_hash", &artifact.artifact_hash.to_string());
+    });
+}
+
+fn push_report_target_verdict(
+    out: &mut String,
+    name: &str,
+    verdict: &ExecutableReportTargetVerdict,
+) {
+    push_section(out, name, |out| match verdict {
+        ExecutableReportTargetVerdict::SupportedRuntimeTarget => {
+            push_field(out, "verdict", "supported_runtime_target");
+        }
+        ExecutableReportTargetVerdict::ComparisonUnavailable { reason } => {
+            push_field(out, "verdict", "comparison_unavailable");
+            push_field(out, "reason", reason);
+        }
+        ExecutableReportTargetVerdict::Unsupported { reason } => {
+            push_field(out, "verdict", "unsupported");
+            push_field(out, "reason", reason);
+        }
+        ExecutableReportTargetVerdict::AbsentFromReport => {
+            push_field(out, "verdict", "absent_from_report");
+        }
+    });
+}
+
+fn push_native_phase_gate(out: &mut String, name: &str, gate: &RuntimeIrNativePhaseGate) {
+    push_section(out, name, |out| match gate {
+        RuntimeIrNativePhaseGate::ReadyForStarterKenOnlyExecutableSubset => {
+            push_field(out, "gate", "ready_for_starter_ken_only_executable_subset");
+        }
+        RuntimeIrNativePhaseGate::Blocked { blockers } => {
+            push_field(out, "gate", "blocked");
+            push_string_set(out, "blockers", blockers);
+        }
+    });
+}
+
+fn push_compatibility(
+    out: &mut String,
+    name: &str,
+    compatibility: &ExecutableContractCompatibility,
+) {
+    push_section(out, name, |out| {
+        let rule = match compatibility.rule {
+            ExecutableContractCompatibilityRule::PreserveV0 => "preserve_v0",
+        };
+        push_field(out, "rule", rule);
+        push_field(out, "version", &compatibility.version.to_string());
+    });
+}
+
+fn push_string_map(out: &mut String, name: &str, map: &BTreeMap<String, String>) {
+    push_collection(out, name, map.len(), |out| {
+        for (key, value) in map {
+            push_section(out, "entry", |out| {
+                push_field(out, "key", key);
+                push_field(out, "value", value);
+            });
+        }
+    });
+}
+
+fn push_string_set(out: &mut String, name: &str, set: &BTreeSet<String>) {
+    push_collection(out, name, set.len(), |out| {
+        for value in set {
+            push_field(out, "item", value);
+        }
+    });
+}
+
+fn push_optional_u64(out: &mut String, name: &str, value: Option<u64>) {
+    match value {
+        Some(value) => push_field(out, name, &value.to_string()),
+        None => push_field(out, name, "none"),
+    }
+}
+
+fn push_evidence_lane(out: &mut String, name: &str, lane: &ExecutableEvidenceLane) {
+    let value = match lane {
+        ExecutableEvidenceLane::SemanticAuthority => "semantic_authority",
+        ExecutableEvidenceLane::Tested => "tested",
+        ExecutableEvidenceLane::Validated => "validated",
+        ExecutableEvidenceLane::Unavailable => "unavailable",
+        ExecutableEvidenceLane::Unsupported => "unsupported",
+    };
+    push_field(out, name, value);
+}
+
+fn push_unavailable_lane(out: &mut String, name: &str, lane: &ExecutableUnavailableLane) {
+    push_field(out, name, unavailable_lane_name(lane));
+}
+
+fn push_unsupported_lane(out: &mut String, name: &str, lane: &ExecutableUnsupportedLane) {
+    let value = match lane {
+        ExecutableUnsupportedLane::RuntimeIrNativePhaseGate => "runtime_ir_native_phase_gate",
+        ExecutableUnsupportedLane::RuntimeIrTarget => "runtime_ir_target",
+        ExecutableUnsupportedLane::RuntimeIrConstruct => "runtime_ir_construct",
+    };
+    push_field(out, name, value);
+}
+
+fn unavailable_lane_name(lane: &ExecutableUnavailableLane) -> &'static str {
+    match lane {
+        ExecutableUnavailableLane::NativeExecutableArtifact => "native_executable_artifact",
+        ExecutableUnavailableLane::ObjectEmission => "object_emission",
+        ExecutableUnavailableLane::LinkerOrFinalizer => "linker_or_finalizer",
+        ExecutableUnavailableLane::LibraryAbi => "library_abi",
+        ExecutableUnavailableLane::CAbi => "c_abi",
+        ExecutableUnavailableLane::RustInterop => "rust_interop",
+        ExecutableUnavailableLane::CrossPackageNativeLinking => "cross_package_native_linking",
+        ExecutableUnavailableLane::StableForeignAbi => "stable_foreign_abi",
+        ExecutableUnavailableLane::HostEffectOrFfiExecution => "host_effect_or_ffi_execution",
+        ExecutableUnavailableLane::WholeCompilerProof => "whole_compiler_proof",
+        ExecutableUnavailableLane::NativeBackendIdentity => "native_backend_identity",
+        ExecutableUnavailableLane::BackendVerifierIdentity => "backend_verifier_identity",
+        ExecutableUnavailableLane::HostPlatformTarget => "host_platform_target",
+        ExecutableUnavailableLane::ProvenanceOrBuildAttestation => {
+            "provenance_or_build_attestation"
+        }
+    }
+}
+
+fn push_section(out: &mut String, name: &str, write: impl FnOnce(&mut String)) {
+    out.push_str(name);
+    out.push_str("={");
+    write(out);
+    out.push_str("};");
+}
+
+fn push_collection(out: &mut String, name: &str, len: usize, write: impl FnOnce(&mut String)) {
+    out.push_str(name);
+    out.push_str("=[");
+    out.push_str(&len.to_string());
+    out.push(':');
+    write(out);
+    out.push_str("];");
 }
 
 fn push_field(out: &mut String, name: &str, value: &str) {
@@ -1037,10 +1406,6 @@ fn push_field(out: &mut String, name: &str, value: &str) {
     out.push(':');
     out.push_str(value);
     out.push(';');
-}
-
-fn push_debug<T: fmt::Debug>(out: &mut String, name: &str, value: &T) {
-    push_field(out, name, &format!("{value:?}"));
 }
 
 fn contract_error(
@@ -1185,6 +1550,79 @@ mod tests {
         for lane in required_unavailable_lanes().keys() {
             assert!(validated.unavailable_lanes.contains(lane));
         }
+    }
+
+    #[test]
+    fn report_and_contract_hashes_use_canonical_field_encoding() {
+        let program = pure_program();
+        let report = summarize_runtime_ir_program(&program);
+        let target = program.declarations[0].symbol.clone();
+        let contract = executable_artifact_contract_for_runtime_report(
+            &program,
+            &report,
+            target,
+            "ken-runtime unit test",
+        )
+        .unwrap();
+
+        let report_bytes = String::from_utf8(canonical_runtime_ir_program_report_bytes(&report))
+            .expect("canonical report bytes are text");
+        assert!(report_bytes.contains("artifact={package_identity="));
+        assert!(report_bytes.contains("supported_runtime_targets=["));
+        assert!(
+            !report_bytes.contains("RuntimeIrProgramReport {")
+                && !report_bytes.contains("supported_runtime_targets:"),
+            "report hash input must not rely on Rust Debug syntax"
+        );
+
+        let contract_bytes =
+            String::from_utf8(canonical_contract_bytes(&contract)).expect("contract bytes text");
+        assert!(contract_bytes.contains("checked_core={package_kind="));
+        assert!(contract_bytes.contains("required_unavailable_lanes=["));
+        assert!(
+            !contract_bytes.contains("ExecutableArtifactContract {")
+                && !contract_bytes.contains("checked_core:"),
+            "contract hash input must not rely on Rust Debug syntax"
+        );
+        assert_eq!(
+            executable_artifact_contract_hash(&contract),
+            fnv1a_64(contract_bytes.as_bytes())
+        );
+    }
+
+    #[test]
+    fn contract_hash_is_stable_under_canonical_map_insertion_order() {
+        let program = pure_program();
+        let report = summarize_runtime_ir_program(&program);
+        let target = program.declarations[0].symbol.clone();
+        let mut left = executable_artifact_contract_for_runtime_report(
+            &program,
+            &report,
+            target.clone(),
+            "ken-runtime unit test",
+        )
+        .unwrap();
+        let mut right = executable_artifact_contract_for_runtime_report(
+            &program,
+            &report,
+            target,
+            "ken-runtime unit test",
+        )
+        .unwrap();
+        left.unknown_semantic_fields = BTreeMap::from([
+            ("z-nonsemantic".to_string(), "last".to_string()),
+            ("a-nonsemantic".to_string(), "first".to_string()),
+        ]);
+        right.unknown_semantic_fields = BTreeMap::from([
+            ("a-nonsemantic".to_string(), "first".to_string()),
+            ("z-nonsemantic".to_string(), "last".to_string()),
+        ]);
+
+        assert_eq!(
+            executable_artifact_contract_hash(&left),
+            executable_artifact_contract_hash(&right),
+            "canonical map encoding must not depend on insertion order"
+        );
     }
 
     #[test]
@@ -1394,6 +1832,73 @@ mod tests {
             .expect_err("toolchain evidence cannot be semantic authority");
         assert_eq!(err.stage, ExecutableArtifactContractStage::ToolchainBinding);
         assert_eq!(err.field, "ken_runtime");
+    }
+
+    #[test]
+    fn available_native_artifact_rejects_unavailable_or_unsupported_lanes() {
+        for evidence_lane in [
+            ExecutableEvidenceLane::Unavailable,
+            ExecutableEvidenceLane::Unsupported,
+        ] {
+            let program = pure_program();
+            let report = summarize_runtime_ir_program(&program);
+            let target = program.declarations[0].symbol.clone();
+            let mut contract = executable_artifact_contract_for_runtime_report(
+                &program,
+                &report,
+                target,
+                "ken-runtime unit test",
+            )
+            .unwrap();
+            let mut status = available_native_status(&contract);
+            if let ExecutableNativeArtifactStatus::Available {
+                evidence_lane: lane,
+                ..
+            } = &mut status
+            {
+                *lane = evidence_lane;
+            }
+            contract.native_artifact.status = status;
+            refresh_hash(&mut contract);
+
+            let err = validate_executable_artifact_contract(&program, &report, &contract)
+                .expect_err("available native artifact must use a positive lane");
+            assert_eq!(
+                err.stage,
+                ExecutableArtifactContractStage::NativeArtifactBinding
+            );
+            assert_eq!(err.field, "evidence_lane");
+        }
+    }
+
+    #[test]
+    fn available_toolchain_fact_rejects_unavailable_or_unsupported_lanes() {
+        for evidence_lane in [
+            ExecutableEvidenceLane::Unavailable,
+            ExecutableEvidenceLane::Unsupported,
+        ] {
+            let program = pure_program();
+            let report = summarize_runtime_ir_program(&program);
+            let target = program.declarations[0].symbol.clone();
+            let mut contract = executable_artifact_contract_for_runtime_report(
+                &program,
+                &report,
+                target,
+                "ken-runtime unit test",
+            )
+            .unwrap();
+            contract.toolchain.ken_runtime = ExecutableEvidenceFact::Available {
+                value: "ken-runtime test".to_string(),
+                evidence_source: "test exact-run evidence".to_string(),
+                evidence_lane,
+            };
+            refresh_hash(&mut contract);
+
+            let err = validate_executable_artifact_contract(&program, &report, &contract)
+                .expect_err("available toolchain fact must use a positive lane");
+            assert_eq!(err.stage, ExecutableArtifactContractStage::ToolchainBinding);
+            assert_eq!(err.field, "ken_runtime");
+        }
     }
 
     #[test]
