@@ -31,8 +31,9 @@ reusable with attribution; LLVM/Cranelift are permissive.)
 2. **Implementation teams work from the spec**, with prototype source kept out
    of their working context. Implementation PRs cite spec sources, not prototype
    `file:line`.
-3. **The merge gate enforces it.** The Integrator confirms each PR cites spec
-   sources and introduces no AGPL-derived code; CI runs a provenance check.
+3. **The merge gate enforces it.** Federation review and the scripted publisher
+   path confirm each PR cites spec sources and introduces no AGPL-derived code;
+   CI runs a provenance check.
 
 ## Local reference implementations (`local/refs/`)
 

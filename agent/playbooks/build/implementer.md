@@ -15,7 +15,7 @@ TCB / de Bruijn and reflect-don't-extend invariants that bound implementation).
 ## Your loop
 
 You work in **your own worktree** in the shared clone and do **local git only**
-— no `gh`, no push, no GitHub (04 §1, COORDINATION §14). The Integrator
+— no `gh`, no push, no GitHub (04 §1, COORDINATION §14). The publisher path
 publishes and merges.
 
 1. Take one WP (or one reviewable sub-task) from your leader. One at a time.
@@ -48,7 +48,7 @@ publishes and merges.
    a `>4 MiB` value underflowed the arena, untested because the max test value was
    8 KiB; the Architect caught it). Keep the change small.
 5. **Commit to `wp/<ID>` before you hand off** — never hand off uncommitted work
-   (the next agent and the Integrator only see committed state). Cite the WP ID,
+   (the next agent and the publisher path only see committed state). Cite the WP ID,
    acceptance criteria met, and your spec sources in the commit/handoff.
 6. **Return to your home branch** so QA can check `wp/<ID>` out (two worktrees
    can't hold one branch), then **hand off and stop** (template below). Set
@@ -232,7 +232,8 @@ lessons to the other teams.
   your worktree can't be checked out by QA — the handoff **deadlocks** until you
   free it. Free the branch *first*, then post the handoff.
 - **Local git only — you never touch GitHub.** No `gh`, no push, no token; the
-  Integrator publishes and merges (COORDINATION §14). After you hand off, stop.
-  Review feedback and CI-red arrive as a **mootup mention** (from the Architect
-  or the Integrator); to act on one, check `wp/<ID>` out again, `git rebase
-  origin/main`, fix, commit, hand back. Don't poll anything.
+  publisher path publishes and merges (COORDINATION §14). After you hand off,
+  stop. Review feedback and CI-red arrive as a **mootup mention** (from the
+  Architect, your leader, or the publisher caller); to act on one, check
+  `wp/<ID>` out again, `git rebase origin/main`, fix, commit, hand back. Don't
+  poll anything.

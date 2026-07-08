@@ -14,4 +14,4 @@ into the federation.
 | [orphan-watchdog-timer-record-id](orphan-watchdog-timer-record-id.md) | Watchdogs use a private CronCreate timer, not the convo schedule_call |
 | [playbooks-state-mechanism-not-intent](playbooks-state-mechanism-not-intent.md) | Playbooks must state the mechanism explicitly, not just the intent |
 | [steward-coldstart-infra-checks](steward-coldstart-infra-checks.md) | On a Steward cold-start, check fleet-wide infra before concluding stalled |
-| [steward-must-relay-merges-integrator-notifies-only-steward](steward-must-relay-merges-integrator-notifies-only-steward.md) | The Steward must relay merges; the Integrator notifies only the Steward |
+| [steward-must-relay-publisher-merges](steward-must-relay-publisher-merges.md) | The Steward must relay publisher-path merges |

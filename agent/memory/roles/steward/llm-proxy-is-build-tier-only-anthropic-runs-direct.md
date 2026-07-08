@@ -8,7 +8,7 @@ source: private memory `llm-proxy-is-build-tier-only-anthropic-runs-direct`
 
 **Every agent runs an Anthropic model DIRECT (operator, 2026-07-03):** the whole
 fleet is Anthropic — **Opus 4.8** (the Steward/spec-author/architect enclave) or
-**Sonnet 5** (build leaders/implementers/QA, Integrator, Librarian). They run
+**Sonnet 5** (build leaders/implementers/QA, Librarian). They run
 **directly on the Anthropic subscription (OAuth)** and carry **NO `env` block**
 at all in `moot.toml` — they inherit the container's direct-Anthropic auth.
 There is no open-weight tier anymore.

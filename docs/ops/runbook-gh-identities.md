@@ -2,7 +2,7 @@
 
 > **DEFERRED — graduation path, not the current setup.** Ken now uses the
 > **single-publisher** model (`../adr/0003-credential-free-publisher.md`): agents
-> do local git only, and **one** publisher identity (the Integrator) is the sole
+> do local git only, and **one** publisher identity is the sole
 > GitHub actor. To go live now, follow **`github-setup.md`** — one identity +
 > branch protection, *not* this runbook. This multi-identity runbook applies only
 > when you **graduate** to per-team GitHub identities + CODEOWNERS-routed PR
@@ -20,7 +20,7 @@ is a distinct GitHub-eligible address that delivers to your inbox. Steps marked
 cross-user token minting); **[gh]** steps can use the `gh` CLI as org owner.
 
 Identities to create: **1 GitHub App** + **4 required accounts**
-(`ken-architect`, `ken-spec-author`, `ken-spec-qa`, `ken-integrator`).
+(`ken-architect`, `ken-spec-author`, `ken-spec-qa`, `ken-publisher`).
 `ken-steward` / `ken-librarian` are optional — add when those roles go live.
 Build teams **author via the App**, so they need no accounts.
 
@@ -38,7 +38,7 @@ Build teams **author via the App**, so they need no accounts.
 
 ## Phase 1 — Create the machine-user accounts  [manual] (~10 min each)
 
-For each of `ken-architect`, `ken-spec-author`, `ken-spec-qa`, `ken-integrator`:
+For each of `ken-architect`, `ken-spec-author`, `ken-spec-qa`, `ken-publisher`:
 
 - [ ] In a **separate browser profile / incognito window** (so sessions don't
       collide), sign up at github.com with email `<you>+ken-<role>@gmail.com`
@@ -84,7 +84,7 @@ grant write.
       gh api -X PUT /orgs/ken-topos/teams/architect/memberships/ken-architect
       gh api -X PUT /orgs/ken-topos/teams/team-spec/memberships/ken-spec-author
       gh api -X PUT /orgs/ken-topos/teams/team-spec/memberships/ken-spec-qa
-      gh api -X PUT /orgs/ken-topos/teams/integration/memberships/ken-integrator
+      gh api -X PUT /orgs/ken-topos/teams/integration/memberships/ken-publisher
       ```
 - [ ] Grant each team **write** on the repo (so CODEOWNERS requests them):
       ```
@@ -129,7 +129,7 @@ Settings → Developer settings → **Fine-grained tokens** → Generate:
 - [ ] Permissions:
       - `ken-architect`, `ken-spec-author`, `ken-spec-qa`: **Pull requests: RW**,
         Contents: Read.
-      - `ken-integrator`: **Contents: RW**, **Pull requests: RW** (needed to merge
+      - `ken-publisher`: **Contents: RW**, **Pull requests: RW** (needed to merge
         + drive the queue).
 - [ ] Expiry: 90 days (or your policy). **Set a calendar reminder to rotate.**
 - [ ] Copy the token once → store in the harness/secret store keyed to that agent.
@@ -155,7 +155,7 @@ Do this while `main` is still unprotected, so you can iterate freely.
 - [ ] Open a throwaway **draft PR** touching a normal path (e.g. a README typo)
       as the App (or manually). Confirm the 4 CI checks run.
 - [ ] Mark it ready; confirm `ken-architect` is auto-requested as reviewer.
-- [ ] Approve as `ken-architect`; confirm a non-Integrator account **cannot** be
+- [ ] Approve as `ken-architect`; confirm a non-publisher account **cannot** be
       the one to merge once protection is on (you'll re-verify in Phase 8).
 - [ ] Touch `/spec/...` in another throwaway PR; confirm `team-spec` is *also*
       auto-requested. Close both PRs.
@@ -173,7 +173,7 @@ Repo → Settings → Branches → add a rule for `main` (or use a ruleset). Set
       today — they pass trivially; that's fine as a scaffold.)
 - [ ] **Require linear history**; **require merge queue**; allow **squash only**.
 - [ ] **Restrict who can merge** (push to `main`) to the **`integration`** team.
-      This is what makes `ken-integrator` the sole merger.
+      This is what makes `ken-publisher` the sole merger.
 - [ ] Block force-pushes and deletions.
 - [ ] Leave **"include administrators" OFF** during early phases so you can
       intervene if the bootstrap wedges; turn it on once the loop is stable.
@@ -190,7 +190,7 @@ names above, `required_pull_request_reviews.require_code_owner_reviews=true` +
 - [ ] Enable the **merge queue** for `main` (Settings → branch rule → merge queue)
       so `ci.yml`'s `merge_group` trigger re-checks against latest `main`.
 - [ ] Re-run the Phase-7 smoke test end to end: draft → green → ready → Architect
-      approve → **only `ken-integrator` can merge** → merged.
+      approve → **only `ken-publisher` can merge** → merged.
 
 ---
 
@@ -201,9 +201,9 @@ names above, `required_pull_request_reviews.require_code_owner_reviews=true` +
 | ken-architect | `<you>+ken-architect@…` | architect | | |
 | ken-spec-author | `<you>+ken-spec-author@…` | team-spec | | |
 | ken-spec-qa | `<you>+ken-spec-qa@…` | team-spec | | |
-| ken-integrator | `<you>+ken-integrator@…` | integration | | |
+| ken-publisher | `<you>+ken-publisher@…` | integration | | |
 | ken-ci (App) | — | — | App ID + install ID + .pem | — |
 
 Rotation: PATs every 90 days; App key if ever exposed. Each agent's harness maps
 its mootup identity → the right GitHub credential (App token for authors; the role
-PAT for Architect / Spec / Integrator).
+PAT for Architect / Spec / publisher).

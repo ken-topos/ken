@@ -13,7 +13,7 @@ solved — follow the playbook** (`agent/playbooks/federation/steward.md` §2c).
 at the clean WP boundaries — **after the prior WP's retros are in, before
 delivering the next WP**, team quiescent. Keep doing this; don't skip it.
 
-**The unsolved part is SINGLETONS** (Steward, Architect, Integrator, Librarian).
+**The unsolved part is SINGLETONS** (Steward, Architect, Librarian).
 The earlier "I know we don't have a good way to manage this yet… benefit to
 continuity between spec approval and later PR review… no clean place to compact"
 was about a **singleton (the Architect)**, not teams: the operator compacts a

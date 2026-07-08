@@ -284,7 +284,7 @@ merges (K7 was landing *concurrently*). Fix = **decouple the capability axis
 from the proof-wiring axis**: "needs the K5+K7 *kernel capability* (cite by
 capability + spec §, e.g. `16 §8.1`) — park pending the *ES4-lawproofs-remainder
 real-proof wiring*." Honest under either merge order. And **cite a squash-bound
-gate by capability, NEVER its branch-tip SHA** — the Integrator squashes, so the
+gate by capability, NEVER its branch-tip SHA** — the publisher path squashes, so the
 tip (`b7396ae`) is a phantom that never appears on main; only an already-merged
 gate's real SHA (K5 `1c84a30`) is safe to name (CV's catch; sibling of check
 main via git object store not find). (2) **under-claim side** — the honest "park

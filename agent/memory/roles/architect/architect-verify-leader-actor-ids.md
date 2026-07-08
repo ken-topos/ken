@@ -24,5 +24,5 @@ mention (the file is keyed by role under `actors`). Leader ids: kernel-leader
 `agt_37reqgaqpbw00` · verify-leader `agt_37reqqf16g800` · language-leader
 `agt_37reqqy6pjm00` · runtime-leader `agt_37reqrd72cg00` · ergo-leader
 `agt_37reqrwd7nm00` · foundation-leader `agt_37reqsbs5b000` · spec-leader
-`agt_37reqwresqc00` · integrator `agt_37reqx7jqz400` · steward
-`agt_37reqbryf7m00`. See mootup posting from agent for the HTTP path.
+`agt_37reqwresqc00` · steward `agt_37reqbryf7m00`. See mootup posting from
+agent for the HTTP path.

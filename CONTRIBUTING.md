@@ -10,8 +10,9 @@ behavioral playbooks live under [`agent/playbooks/`](agent/playbooks/).
 
 1. **`main` is always green.** Nothing merges unless the build + conformance
    suite pass in CI.
-2. **Teams open PRs; teams never merge.** A single **Integrator** reviews and
-   merges, then notifies affected team leaders of fresh `main`.
+2. **Teams prepare branches; teams never merge.** The scripted publisher path
+   opens and merges PRs under Steward/operator control, then the Steward routes
+   any downstream notification.
 3. **Clean room.** Implement from `/spec` and conformance tests — never from
    AGPLv3 or other copyleft source. See [`CLEAN-ROOM.md`](CLEAN-ROOM.md). The
    **Spec enclave** (Opus, Anthropic-hosted) is the only team that may consult
@@ -24,13 +25,14 @@ behavioral playbooks live under [`agent/playbooks/`](agent/playbooks/).
 - One work package (or one reviewable sub-task) per PR; keep PRs small.
 - The PR must: target `main`, cite its WP ID + the acceptance criteria it
   satisfies, cite **spec sources** (not prototype source), be conformance-green,
-  and request review from CODEOWNERS + the Integrator.
-- Don't click merge. When the PR is review-ready, the team leader opens a mootup
-  Decision (PR URL attached); the Integrator resolves it on merge.
+  and carry the required federation review/Decision record.
+- Don't click merge. When the branch is review-ready, the team leader opens the
+  required mootup Decision; the scripted publisher path handles PR publication
+  and merge after the gate resolves.
 
 ## Coordination (mootup)
 
-- Each team has its own space; the Integrator's space links them all.
+- Each team has its own space; the Steward coordinates cross-team flow.
 - One thread per work item; reply in-thread; mention an agent **iff** the next
   move is theirs.
 - After you hand off, **stop** — set status and wait for a notification. Workers

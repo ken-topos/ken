@@ -17,8 +17,7 @@ inheritance**, so cross-team sharing has to be deliberate.
      Runtime, Ergo, Foundation).
    - `spec/` — `leader`, `spec-author`, `conformance-validator` (the clean-room
      enclave; grounds the spec in permissive references and first principles).
-   - `federation/` — singletons: `steward`, `architect`, `integrator`,
-     `librarian`.
+   - `federation/` — singletons: `steward`, `architect`, `librarian`.
 
    **Security (WS-Sec, tier-1) and the behavioral seam (WS-B) are cross-cutting,
    owned by these existing teams** — not separate teams. Security rides Language

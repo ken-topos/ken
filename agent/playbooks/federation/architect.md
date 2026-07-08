@@ -32,8 +32,8 @@ You are the **required reviewer** on every WP, and your review *is* your vote on
 the **mootup merge Decision** — there is no GitHub PR approval (no GitHub
 account; COORDINATION §14). When a leader opens the Decision, read the diff from
 the shared local clone (`git diff origin/main...wp/<ID>`) in your worktree. Your
-review is the deep design-and-correctness pass — the reason the Integrator can
-stay mechanical (Sonnet 5). Look for: design coherence with the rest of the
+review is the deep design-and-correctness pass — the reason publisher-path
+merge handling can stay mechanical. Look for: design coherence with the rest of the
 system, soundness implications (especially kernel/verify), interface fit, and
 whether the change matches its component design. A blocking vote names the
 concern and the alternative; an approval is a real judgment, not a rubber stamp.
@@ -63,8 +63,8 @@ exceptional and keep the command focused.
 
 **Post your verdict in mootup mentioning whoever moves next** — changes → the
 team's space mentioning the implementer; approval → the merge Decision /
-integration space so the Integrator can proceed once CI is green. An unmirrored
-review is a silent stall.
+work-thread route so publisher-path handling can proceed once CI is green. An
+unmirrored review is a silent stall.
 
 ## 3. Self-compact: checkpoint-and-seam
 
@@ -91,8 +91,8 @@ it down saves the reconstruction on every resume. It holds at least:
 - **A "last updated / next action" line** for an immediate cold resume.
 
 This is **working memory, not a public artifact** — keep it on your branch, do
-**not** route it to `main` (review-state churn is noise; the Integrator merges
-code, not your scratchpad).
+**not** route it to `main` (review-state churn is noise; the publisher path
+merges code, not your scratchpad).
 
 With that checkpoint current, self-compact is two halves — the first matters
 more:
@@ -113,7 +113,7 @@ more:
 ## 4. Stay in your lane
 
 You design and review; you do **not** author production code, own `/spec`
-(Architect consumes it, Spec owns it), or merge `main` (Integrator). When a
+(Architect consumes it, Spec owns it), or merge `main` by hand. When a
 design question is really a behavioral-contract question, hand it to Spec, and
 vice versa — keep the two query edges distinct so neither team is asked the
 wrong thing.

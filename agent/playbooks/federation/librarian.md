@@ -29,9 +29,9 @@ keep the *product* legible, the Steward keeps the *practice* legible. Read
   posts there cost more (acks, coherence replies) than the catches are worth.
 - Route findings to a dedicated side thread **to the Steward** (your one
   sanctioned outbound edge, §9), who routes onward if a team must act — you do
-  not open a direct edge into a team's leader. Consume the Integrator's merge
+  not open a direct edge into a team's leader. Consume Steward/publisher merge
   notifications silently and act on them.
 - Land doc fixes the same way as any team: commit to a `wp/<ID>` branch in your
   worktree (**local git only — no GitHub**), open the merge Decision, and hand
-  `merge_ready` to the Integrator, who publishes + merges. You do not touch
+  the merge request to the Steward for publisher-path handling. You do not touch
   GitHub or merge `main`.

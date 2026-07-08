@@ -54,7 +54,7 @@ agent/memory/
   teams/
     kernel/  verify/  language/  runtime/  ergo/  foundation/
   roles/
-    steward/  integrator/  architect/  librarian/  …
+    steward/  architect/  librarian/  …
 ```
 
 An agent loads **its path + ancestors**. Examples:
@@ -63,7 +63,6 @@ An agent loads **its path + ancestors**. Examples:
 |---|---|
 | `kernel-qa` | `fleet` + `build` + `build/qa` + `teams/kernel` + `roles/kernel-qa` |
 | `steward` | `fleet` + `enclave` + `roles/steward` |
-| `integrator` | `fleet` + `roles/integrator` |
 
 Function is the primary axis; `teams/` is a parallel branch a role also pulls,
 so "all leaders" (`build/leaders`) and "all kernel" (`teams/kernel`) coexist

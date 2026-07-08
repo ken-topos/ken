@@ -3,9 +3,9 @@
 How the Ken teams share one workspace, branch, review, merge, and stay
 coordinated. The defining choice: **build/spec agents never touch GitHub.** They
 work in a single shared clone via per-agent worktrees and do **local git only**.
-A single **publisher** identity — historically operated by the Integrator, now
-scriptable by the Steward under operator direction — is the federation's only
-GitHub-network actor (push, CI, merge, fetch).
+A single **publisher** identity, driven by the checked-in scripted publisher
+path under Steward/operator control, is the federation's only GitHub-network
+actor (push, CI, merge, fetch).
 
 Two systems, one split of responsibility:
 
@@ -94,11 +94,10 @@ separate checkouts.
 ## 3. Credentials & the publisher (the one GitHub identity)
 
 Exactly **one** credentialed GitHub identity exists: the **publisher**. It is
-operated either by the Integrator fallback role or, under operator direction, by
-the Steward through the scripted publisher path below. It is the federation's
-whole GitHub-network surface — pushing `wp/<ID>` branches to trigger CI, reading
-check results, merging, and fetching `main`. Build/spec agents still hold no
-credentials and never run `gh`.
+operated through the scripted publisher path below, under Steward/operator
+control. It is the federation's whole GitHub-network surface — pushing
+`wp/<ID>` branches to trigger CI, reading check results, merging, and fetching
+`main`. Build/spec agents still hold no credentials and never run `gh`.
 
 - **Why one identity.** It collapses the per-team-account apparatus to a single
   account, removes the secret-exposure surface across the fleet, and lets every
@@ -188,9 +187,8 @@ it is not a separate reviewer. **Teams do not merge.**
   members set presence with `update_status`. (Research is not a standing team —
   the Steward dispatches it ad hoc; see
   `agent/playbooks/federation/steward.md`.)
-- **One integration space** (`ken-integration`) where the federation roles —
-  Steward, Architect, Integrator, Librarian — live, **linked** to every team
-  space (`link_space` / `create_linked_team`) so cross-space context flows.
+- **One coordination space** where the federation roles — Steward, Architect,
+  Librarian — live alongside the teams, so cross-team context flows.
 - **All GitHub I/O is the publisher path's**, so every GitHub signal reaches the
   fleet only because the publisher caller mirrors it into mootup mentioning the
   actor whose move it is (build/spec agents never see GitHub; see
@@ -216,7 +214,7 @@ it is not a separate reviewer. **Teams do not merge.**
   resolves it on merge or rejection. GitHub PR approval is only the publisher
   gate.
 - **Architecture decisions (ADRs) are also mootup Decisions** — proposed in the
-  integration space, resolved by the operator/Integrator, then committed to
+  coordination space, resolved by the operator/Steward, then committed to
   `docs/adr/`. The mootup Decision is the discussion+ratification record; the
   committed ADR is the durable artifact.
 - **Notification of fresh `main`:** on merge, the publisher caller posts a ship

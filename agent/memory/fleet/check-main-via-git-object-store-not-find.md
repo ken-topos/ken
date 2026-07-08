@@ -52,7 +52,7 @@ squash; this = branch BEHIND, phantom deletions).
 "not merged" after a rebase, and stale tmux panes lose to git (2026-07-02,
 Steward).** I diagnosed K7 (`wp/K7-eq-at-inductive-whnf`) as a ~19h
 dropped-Architect-gate stall and nudged the kernel-leader. **Wrong — it had
-merged as a *rebased* SHA `4ae2baf`** (Integrator fixed a stale base), with the
+merged as a *rebased* SHA `4ae2baf`** (the merge path fixed a stale base), with the
 whole downstream arc (`9a82745`, `b92cad6`) closed too. Three compounding
 errors: (1) `git merge-base --is-ancestor b7396ae origin/main` = NO — but
 `b7396ae` is the **pre-rebase branch tip**; a rebase-then-squash lands the
@@ -62,7 +62,7 @@ the branch tip.** (2) `git log origin/main --oneline -15 | grep` — the merged
 commits were **17-25 below tip**, outside the window → false "no match." (3) The
 tmux panes: idle agents **don't re-render**, so the kernel-leader/implementer
 panes still showed pre-merge "awaiting…" frames; I read those as current and
-read the *actually-current* Architect/Integrator "nothing queued / no open PR"
+read the *actually-current* reviewer/publisher "nothing queued / no open PR"
 as *confirming* the stall when it meant **DONE**. **How to apply:** to verify a
 WP landed, `git log origin/main --oneline -40 | grep -i "<WP-id/subject>"`
 **or** grep the delivered *content*
@@ -96,13 +96,13 @@ spec-author's `wp/State-effect` citing `prelude.rs`/`Prod`/`MkProd` as absent
 (grep=zero). spec-author re-grounded against the authoritative ref
 (`origin/main`, plus the WP branch itself) and found both symbols present and
 correctly cited — CV's grep had run against `conformance-validator/work`, whose
-base was ~94 commits behind `main` (the same staleness Integrator had already
-flagged on the unrelated #235 rebase that same session). **How to apply:** when
+base was ~94 commits behind `main` (the same stale-base class already flagged on
+the unrelated #235 rebase that same session). **How to apply:** when
 two roles disagree over "does X exist in the code," before treating either
 verdict as ground truth, confirm BOTH are grepping the SAME ref (`origin/main`
 or the WP branch tip) — a reviewer's own home worktree is exactly as capable of
-being stale as an author's, and a "not found" from a stale base reads
-identically to a real absence. This is the reconcile-dispute face of the same
+being stale as an author's, and a "not found" from a stale base reads identically
+to a real absence. This is the reconcile-dispute face of the same
 object-store lesson: check *which ref*, not just *which method* (git show vs
 find). **Two-axes corollary (State-effect finding #2):** a structural-token
 review has two INDEPENDENT axes — (1) *does the cited thing exist* (grep the
@@ -128,7 +128,7 @@ crate-file revert** — `git diff origin/main:lawful_classes.ken <branch>:…` s
 the branch reverting proofs that landed via an *intervening* merge (`b3cbaaa`)
 the stale base predates. (b) is a **FALSE alarm iff the branch's own commits
 never touched the crate files** — pure stale-base inheritance, the two-dot
-phantom again, one file over. **Fix + verify (I did this, spec-leader/Integrator
+phantom again, one file over. **Fix + verify (I did this, spec-leader/publisher
 re-verified):** `git rebase --onto <post-first-merge-main> <old-base> <branch>`
 drops the redundant first-flip commits, replays ONLY the net-new commits onto
 current `origin/main`. Then prove it clean: (1)

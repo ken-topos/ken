@@ -6,7 +6,8 @@
 
 ## Context
 
-After a team hands a WP off and the Integrator publishes its branch (ADR 0003),
+After a team hands a WP off and the publisher path publishes its branch
+(ADR 0003),
 it must wait for CI (build + conformance + clean-room + path-guard) before the
 work merges. The question: should a team stay idle during that wait, or keep
 busy — e.g. **stacked branches** on a dependent sequence, or starting a second

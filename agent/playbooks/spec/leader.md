@@ -85,9 +85,9 @@ This is the load-bearing boundary of your role — hold it precisely:
   each WP, after the prior WP's retros are in; you arrive already clean and don't
   `moot compact` anyone. Your compaction-adjacent duty is to **call for retros
   in-thread** at WP completion and **signal the Steward "retros in."** You and
-  the enclave do **local git only**
-  — no GitHub; the Integrator publishes + gates + merges, and CI-red comes back
-  as its mootup mention to the author (COORDINATION §14).
+  the enclave do **local git only** — no GitHub; the publisher path publishes +
+  gates + merges, and CI-red comes back as a mootup mention to the author
+  (COORDINATION §14).
   **Erratum timing — land the interim-honesty fix NOW when it's correct under
   ALL resolution outcomes; only bundle when the fix itself depends on the
   resolution (promoted ES4 §6 K4-staging).** When the enclave finds a landed spec
@@ -165,10 +165,11 @@ no copied AGPLv3 or copyleft source — that is what lets the build teams (and y
 consume them safely. Reviewing their *output* for clean-room
 compliance is yours; consulting copyleft or prototype material is not. You do
 **not** touch GitHub or merge `main`; package the WP, open the merge Decision,
-and post `merge_ready` to the Integrator like any leader.
+and post the `git_request` merge handoff to the Steward for publisher-path
+handling like any leader.
 
 **Free the WP branch once the elaboration merges (promoted from K1 + K2).** Your
-enclave elaborates on the `wp/<ID>` branch; after the Integrator merges it to
+enclave elaborates on the `wp/<ID>` branch; after the publisher path merges it to
 `main`, **switch your worktree back to your home branch** so the branch is freed
 — a held worktree blocks the build team from resetting `wp/<ID>` to `origin/main`
 to build (`git branch -f` fails on a branch held by another worktree; it bit both

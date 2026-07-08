@@ -15,9 +15,9 @@ more) but collectively expensive, paid on every WP, on a serial enclave.
 
 **The baseline (landed in COORDINATION §9/§10d):**
 - **spec:** leader → author → CV (Spec) + Architect (soundness), one pass each →
-  Integrator.
+  publisher path.
 - **build:** leader → implementer → QA → Architect (soundness) + CV
-  (conformance) → Integrator.
+  (conformance) → publisher path.
 - **A mid-WP fork goes to the ONE owner of its lane** — soundness→Architect,
   conformance→CV, scope/process→Steward — who rules alone. Don't cc the room;
   don't relay verbatim (summarize + route to one); don't pre-confirm a gate; a

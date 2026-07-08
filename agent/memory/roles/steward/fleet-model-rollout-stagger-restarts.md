@@ -48,7 +48,7 @@ agent came back `[mcp] Online`.**
 coordinator mid-merge (drops the thread). Enclave stays Opus (no restart). Roll
 active coordinators/implementers at their WP boundaries, staggered. Sonnet 5
 early read: strong — careful QA (kernel-qa's rigorous K2c verdict) + good
-situational awareness (Integrator caught a red main). Extends llm proxy is build
-tier only anthropic runs direct (Anthropic-direct, no env) and the
+situational awareness (the merge/publisher path caught a red main). Extends llm
+proxy is build tier only anthropic runs direct (Anthropic-direct, no env) and the
 `moot exec`-from-`/workspaces/ken` rule in bash cd main repo vs steward
 worktree.
