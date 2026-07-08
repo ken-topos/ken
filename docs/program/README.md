@@ -32,8 +32,8 @@ done from that spec — never from AGPLv3 or other copyleft source (see
    spec sources, acceptance criteria, dependencies, and a fan-out plan across
    agent teams.
 6. **`04-git-and-integration.md`** — the git workflow and coordination model:
-   protected `main`, per-team PRs, a single Integrator who merges and notifies,
-   and how it maps onto mootup spaces and Decisions. Realized by WP F1.
+   protected `main`, per-team PRs, the scripted publisher path that merges and
+   notifies, and how it maps onto mootup spaces and Decisions. Realized by WP F1.
 
 **Living status:** `IMPLEMENTATION-PROGRESS.md` is the build backbone — the
 Steward-owned tracker of WP/gate state against the DAG (`05`), surviving

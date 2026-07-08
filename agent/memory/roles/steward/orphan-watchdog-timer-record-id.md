@@ -39,5 +39,5 @@ message the space only on a real stall. **Re-arm at session start**
 your jobs). Recurring crons auto-expire after 7 days. This reversed the earlier
 "use the convo cron (`schedule_call`)" guidance, which was built on the wrong
 assumption that `schedule_call` was a private wake. Promoted into
-`agent/COORDINATION.md` §13 + build/spec leader + integrator playbooks. See
+`agent/COORDINATION.md` §13 + build/spec leader playbooks. See
 playbooks state mechanism not intent and compact wiped memory reflog first.

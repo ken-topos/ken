@@ -162,7 +162,7 @@ report, not proof evidence.
 | NC20 | Entrypoint packaging metadata | Language/Runtime | NC19 |
 | NC21 | Ken-only executable runtime | Runtime | NC19, NC20 |
 | NC22 | Cranelift lowering for runtime IR | Runtime | NC21 |
-| NC23 | Object/linker packaging | Runtime/Integrator | NC22 |
+| NC23 | Object/linker packaging | Runtime-led | NC22 |
 | NC24 | Native differential suite | Runtime/Verify | NC22, NC23 |
 | NC25 | Effect/foreign executable policy | Runtime/Verify | NC18, NC24 |
 | NC26 | Native trust report | Verify/Runtime | NC23-NC25 |

@@ -19,9 +19,9 @@ and DeepSeek agents.
   throughput comes from other teams' rings, not from this one multitasking.
 - **Across teams — parallel.** The teams are independent rings spinning at once;
   that parallelism is the entire reason the work is articulated into teams. The
-  rings couple at only three points: merges to `main` (via the Integrator), the
-  roadmap gate dependencies, and the **sanctioned cross-team query edges** (§9,
-  §11). Keep that coupling thin — it is what serializes the federation if
+  rings couple at only three points: merges to `main` (via the publisher path),
+  the roadmap gate dependencies, and the **sanctioned cross-team query edges**
+  (§9, §11). Keep that coupling thin — it is what serializes the federation if
   abused.
 
 ## 1. Event-driven, never poll
@@ -30,7 +30,7 @@ After you finish a unit of work or hand off, **post, set status, and stop.** Do
 not `/loop`, self-wake, or poll for replies. The notification system delivers
 what you need; polling burns tokens for zero value. A missing notification is a
 *stall* — catching stalls is the team leader's watchdog job, not yours. Only
-team leaders, the Integrator, and the Steward run schedulers.
+team leaders and the Steward run schedulers.
 
 ## 2. Mention discipline
 
@@ -108,7 +108,7 @@ so the next move never fires). The two parameters that get rejected:
   |---|---|
   | kickoff / assign a WP / hand work to a teammate / deliver code | `code_share` |
   | question / query / nudge / ack / general note | `question` |
-  | ask the Integrator to publish+merge a branch (the old "merge_ready") | `git_request` |
+  | ask for publisher-path merge handling | `git_request` |
   | QA→leader merge-Decision request; "request review" | `review_request` |
   | a retro bullet-set | `retro` |
   | a status line | `status_update` |
@@ -347,8 +347,8 @@ it; QA + the Architect verify **no `_ =>`** sits on a completeness-critical matc
 Tag each message with a type; the **first line is the thread title** — no
 `[TYPE]` prefix in the body. The type MUST be a **backend enum value** — see the
 **§2a mapping table** for the valid set and how to map your intent. In
-particular, a local `wp/<ID>` branch ready for the Integrator to publish + merge
-is `git_request` (the old `merge_ready` is rejected), and a QA→leader
+particular, a local `wp/<ID>` branch ready for publisher-path merge handling is
+`git_request` (the old `merge_ready` is rejected), and a QA→leader
 merge-Decision request is `review_request`. When unsure, `question` is always
 accepted.
 
@@ -363,7 +363,7 @@ edges exist** is operator-owned and fixed. The sanctioned edges are exactly:
   this / which design?").
 - any team → **Steward** — scope/priority (forwarded to the operator),
   workflow/process, and research requests.
-- any team → **Integrator** — merge status (usually via the team's own leader).
+- any team → **Steward** — merge status or publisher-path workflow questions.
 
 **There is NO enclave → build-team edge — the enclave elaborates autonomously
 (operator, 2026-07-03).** The clean-room enclave (spec-leader / spec-author / CV)
@@ -389,9 +389,10 @@ creeps in.
 **The invariant is traffic, not just edges — trust the simple flow.** The base
 flow is deliberately thin, and it *works*: **spec** — Steward frames →
 spec-leader assembles → spec-author writes → CV (Spec vote) + Architect
-(soundness vote), one pass each → Integrator merges. **build** — Steward frames
-→ leader frames the team WP → implementer builds → QA verifies → Architect
-(soundness) + CV (conformance) → Integrator merges. Two reviewers per WP, one
+(soundness vote), one pass each → publisher path merges. **build** — Steward
+frames → leader frames the team WP → implementer builds → QA verifies →
+Architect (soundness) + CV (conformance) → publisher path merges. Two reviewers
+per WP, one
 pass each; a mid-WP fork goes to the **one** owner of its lane
 (soundness → Architect, conformance → CV, scope/process → Steward) who rules —
 others do **not** pile onto the thread. Coordination entropy creeps in *below*
@@ -501,7 +502,7 @@ configuration: `../docs/ops/compute-budget.md`.
   way to swap-death the box.
 - **Scope to the touched crate** (`-p <crate>`), not `--workspace`.
   Full-workspace builds, the conformance suite, and any `--release`/LTO build
-  run **in CI**, not on the laptop. Lean on CI green (the Integrator does),
+  run **in CI**, not on the laptop. Lean on CI green (the publisher path does),
   don't reproduce it locally.
 - **`source scripts/ken-env.sh`** at session start for the shared `sccache` +
   `CARGO_HOME`, so you don't recompile dependencies other agents already built.
@@ -521,7 +522,7 @@ recurring watchdogs, each catching the layer below it failing:
 - **Team leader → its own ring.** Enumerated patterns: handed-off-but-silent,
   merge-Decision-open-no-reviewer, blocked-without-a-blocker-mention,
   idle-with-ready-work.
-- **Integrator → the merge pipeline.** Branch-published-CI-pending-too-long,
+- **Steward → the merge pipeline.** Branch-published-CI-pending-too-long,
   CI-green-but-Decision-unresolved, Decision-approved-but-CI-red,
   approved-and-green-but-unmerged.
 - **Steward → the federation (the backstop).** A whole team idle, a *stalled
@@ -546,7 +547,7 @@ Rules for every layer:
   everyone else is event-driven.
 - **Arm your watchdog with a *private* `CronCreate` timer — NOT the convo
   `schedule_call`** (operator 2026-06-29, validated). A scheduler (team leader,
-  Integrator, Steward) sets up its recurring pass at **session start, while its
+  Steward) sets up its recurring pass at **session start, while its
   ring/pipeline has open work**, with the Claude Code harness tool
   **`CronCreate`** — e.g.
   `CronCreate(cron="7,17,27,37,47,57 * * * *", prompt="Watchdog tick: pull
@@ -582,9 +583,8 @@ Rules for every layer:
 
 **Only the publisher path has GitHub credentials.** Build/spec agents do
 **local git only** in their worktrees (commit, rebase onto the already-fetched
-`origin/main`) — no `gh`, no push, no fetch, no token, no PR. The historical
-operator of that publisher path is the Integrator. Under explicit operator
-direction, the Steward may also run the checked-in scripted publisher path
+`origin/main`) — no `gh`, no push, no fetch, no token, no PR. Under explicit
+operator direction, the Steward runs the checked-in scripted publisher path
 (`scripts/scripted-pr-automerge.sh`) with only these inputs: an exact approved
 branch/SHA, public PR title, public PR body, and the docs-only flag. This keeps
 one GitHub identity; it does not give teams GitHub access, does not make the
@@ -620,8 +620,8 @@ satisfy the gate.
   line** that a thing landed — for anything load-bearing, confirm it on `origin/
   main` (the files: `git grep`/`git show`). (2) **An approved N-piece erratum/WP
   is not "landed" until you verify each piece on `main`** (the Architect's
-  3-piece-on-main gate) — the Integrator/leader who assembles a multi-cherry-pick
-  branch checks the post-merge `main` carries all of them. (3) **Authors ground
+  3-piece-on-main gate) — the leader who assembles a multi-cherry-pick branch
+  checks the post-merge `main` carries all of them. (3) **Authors ground
   the WP *base* against the landed corpus, not the notifications,** before
   building on it.
   **(4) PREVENTIVE — a multi-piece erratum is ONE branch, ONE Decision (promoted
@@ -638,9 +638,10 @@ satisfy the gate.
   diff-scope then **touches `spec/`+`conformance/`**, correctly pulls a **Spec
   vote**, and all N commits ride **one squash** to `main` together. Never publish
   the kernel piece on its own crates-only branch while siblings wait. **The
-  Integrator confirms the Decision's branch carries every cited piece before
-  merge** (validated on `s51-sigma-reland`: one branch, both `spec/`+`conformance/`
-  pieces → the Decision correctly pulled a Spec vote → "§14 compliant").
+  publisher caller confirms the Decision's branch carries every cited piece
+  before merge** (validated on `s51-sigma-reland`: one branch, both
+  `spec/`+`conformance/` pieces → the Decision correctly pulled a Spec vote →
+  "§14 compliant").
   **(5) Single-branch is necessary but NOT sufficient — verify an assembled tip on
   TWO axes, against CURRENT `main`, right before the Decision (promoted X1-effects-
   elab; both enclave authors + the Architect converged on it).** One branch
@@ -670,14 +671,14 @@ satisfy the gate.
   the Architect approved `61` with an N1/N2 honesty fold flagged "fold before
   build, not a merge-blocker." The author committed the fold declaring it
   "supersedes `b3e7989`," the coordinator had already rebased the **pre-fold**
-  tip + posted merge_ready, and the Integrator squashed the pre-fold spec to
+  tip + posted merge_ready, and the publisher path squashed the pre-fold spec to
   `main` **9 seconds before** the fold landed — so the honesty chapter hit `main`
   carrying the exact §9 over-claim the fold fixed; netted only by verify-on-main,
   re-landed in minutes. **A "supersedes X" line interlocks nothing, and
   decision-time "hasn't merged yet" is perishable within seconds.** So: **author
   side** — never "fold + declare supersede" against a WP whose votes/merge are in
-  flight; either mention the Integrator + leader to **HOLD the merge** *before*
-  committing the fold, or author it as a fresh erratum-on-current-`main`.
+  flight; either mention the leader to **HOLD the merge** *before* committing
+  the fold, or author it as a fresh erratum-on-current-`main`.
   **Coordinator side** — "not a merge blocker" ≠ "merge *before* it lands"; when
   a fold is in-flight and the merge is seconds away, **briefly HOLD** the merge
   so the chapter is correct at first landing (the coordinator can prevent the
@@ -695,20 +696,21 @@ satisfy the gate.
   build leader) assembles the Decision but does NOT cast the soundness
   vote** — soundness judgment needs the strongest model (MODELS.md tiering, made
   explicit for review routing).
-- **The Integrator merges only on a *resolved* Decision, verified fresh — never
-  on a `merge_ready` post's prose (promoted Sec1ct breach; fixed + validated
-  2/2).** A `merge_ready` is a *request*; the **resolved Decision with recorded
-  approvals** is the authorization. Before `gh pr merge` the Integrator re-reads
-  `list_decisions` and confirms `status: resolved` (not `proposed`) with the
-  Architect's (and Spec's, on spec paths) votes in — it never infers approval
-  from a reviewer *named in prose* (the Sec1ct merge skipped the gate exactly
-  this way: "`(Architect + Spec)`" read as approval while the Architect never
-  voted). Symmetrically, whoever posts `merge_ready` states `Decision: dec_XXX —
-  status: resolved` (or `proposed — awaiting <reviewer>`) and fires **real
-  @mentions** to reviewers' actor_ids (§2 live-participant), not prose names.
-- **The Integrator mirrors each GitHub state change into mootup mentioning
-  whoever moves next** — CI red → the implementer; merged → affected team
-  leaders. A GitHub state change nobody mirrors is a silent stall.
+- **The publisher path merges only on a *resolved* Decision, verified fresh —
+  never on a `merge_ready` post's prose (promoted Sec1ct breach; fixed +
+  validated 2/2).** A `merge_ready` is a *request*; the **resolved Decision with
+  recorded approvals** is the authorization. Before `gh pr merge`, the publisher
+  caller re-reads the Decision and confirms `status: resolved` (not `proposed`)
+  with the Architect's (and Spec's, on spec paths) votes in — it never infers
+  approval from a reviewer *named in prose* (the Sec1ct merge skipped the gate
+  exactly this way: "`(Architect + Spec)`" read as approval while the Architect
+  never voted). Symmetrically, whoever posts `merge_ready` states
+  `Decision: dec_XXX — status: resolved` (or `proposed — awaiting <reviewer>`)
+  and fires **real @mentions** to reviewers' actor_ids (§2 live-participant),
+  not prose names.
+- **The publisher caller mirrors each GitHub state change into mootup mentioning
+  whoever moves next** — CI red → the implementer; merged → Steward. A GitHub
+  state change nobody mirrors is a silent stall.
 - The full event→message map (what, where, mentioning whom, posted by whom) is
   in `../docs/program/04-git-and-integration.md §5`.
 
@@ -722,27 +724,16 @@ context. Who triggers a compaction is fixed (operator, 2026-06-29):
   spec-author + conformance-validator) **before delivering a WP** to the leader.
   Leaders never `moot compact` anyone — `request_context_reset` is self-only, so
   only the Steward can compact another agent (`moot compact`), and it does so for
-  teams alone, except for the Integrator seam below.
-- **Integrator is compacted by the Steward at every kickoff/handoff seam.** This
-  is the single singleton exception to self-compaction: before the Steward
-  delivers any new WP or merge-route handoff, the Steward also verifies
-  Integrator has no in-flight obligation, compacts `moot-integrator`, and
-  verifies the drop before posting the handoff mention. Reason: when Integrator
-  context gets deep, it has forgotten merge, watchdog, and cleanup playbook
-  instructions, and every WP eventually depends on a clean Integrator
-  publish/check/merge cycle. This does not make Integrator a receiving team
-  member; it is a cross-WP merge-pipeline hygiene gate.
+  teams alone.
 - **Gated by retros.** The Steward compacts a team **only after** its prior WP's
   retros are posted (compaction would otherwise summarize the retro away), and
   delivers the next WP **only after** compacting. So a team's WP boundary is:
   done → leader calls for retros in-thread → members post → leader signals the
   Steward "retros in" → Steward reviews → Steward compacts → next WP.
-- **Singletons self-compact except for the Integrator seam above.** Agents with
-  no team/leader — **Steward, Architect, Integrator, Librarian** — call
-  `request_context_reset` at their own task boundaries (Architect after a
-  review, Integrator after a merge, Librarian after a pass, Steward after a
-  directing cycle). Integrator additionally receives Steward-triggered compaction
-  at kickoff/handoff seams under the explicit exception above.
+- **Singletons self-compact.** Agents with no team/leader — **Steward,
+  Architect, Librarian** — call `request_context_reset` at their own task
+  boundaries (Architect after a review, Librarian after a pass, Steward after a
+  directing cycle).
 - **Never mid-reasoning.** Compact only at a clean boundary; it summarizes away
   in-flight work.
 - **Start new work from current `origin/main` (operator, 2026-06-29).** A WP

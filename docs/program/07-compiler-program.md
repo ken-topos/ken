@@ -131,7 +131,7 @@ campaign that makes it buildable.
 | `NC20` | Entrypoint packaging metadata | Language/Runtime | NC19 |
 | `NC21` | Ken-only executable runtime | Runtime | NC19, NC20 |
 | `NC22` | Cranelift lowering for runtime IR | Runtime | NC21 |
-| `NC23` | Object/linker packaging | Runtime/Integrator | NC22 |
+| `NC23` | Object/linker packaging | Runtime-led | NC22 |
 | `NC24` | Native differential suite | Runtime/Verify | NC22, NC23 |
 | `NC25` | Effect/foreign executable policy | Runtime/Verify | NC18, NC24 |
 | `NC26` | Native trust report | Verify/Runtime | NC23-NC25 |
@@ -166,5 +166,5 @@ Rust bootstrap compiler to disappear once self-hosting exists.
 Spec enclave owns the checked-core artifact contract, fidelity vocabulary, and
 trust-report semantics. Build teams own implementation against that contract.
 Architect reviews the native boundary, erasure boundary, and any claim that a
-pass moved from tested to validated or proved. Integrator reviews ordinary
-diff/gate hygiene and merge readiness.
+pass moved from tested to validated or proved. The scripted publisher path
+enforces ordinary diff/gate hygiene and merge readiness mechanically.

@@ -63,7 +63,7 @@ does the **comprehensive** work.
   in CI**, not on the laptop. LTO/`--release` are RAM-killers — never run N×
   locally.
 - The offload is intact under the single-publisher model (ADR 0003): the
-  **Integrator** pushes each `wp/<ID>` branch, so CI runs on **GitHub's** CPU
+  **publisher path** pushes each `wp/<ID>` branch, so CI runs on **GitHub's** CPU
   as a **pre-merge gate** — the local squash-merge compiles nothing, and the
   laptop never runs a full-workspace build. Only one identity drives the push;
   the compute story is unchanged (`../program/04-git-and-integration.md`).

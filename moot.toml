@@ -66,13 +66,6 @@ harness = "codex"
 model_reasoning_effort = "medium"
 startup_prompt = "You lead Ken's spec enclave. Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/spec/leader.md, set status, and await the Steward's kickoff. Do not poll."
 
-[agents.integrator]
-display_name = "integrator"
-model = "gpt-5.4"
-harness = "codex"
-model_reasoning_effort = "medium"
-startup_prompt = "You are Ken's Integrator (sole GitHub actor; merges to main). Read agent/COORDINATION.md (federation law) and MODELS.md first. Read agent/playbooks/federation/integrator.md and docs/program/04-git-and-integration.md, set status, await merge_ready handoffs. Do not poll."
-
 [agents.librarian]
 display_name = "librarian"
 model = "gpt-5.4"

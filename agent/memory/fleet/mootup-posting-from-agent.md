@@ -54,10 +54,10 @@ error on `post_response`/`reply_to` is **resolved**). So:
 `decision_propagated`, `feature`, `git_request`, `pause_issued`, `question`,
 `retro`, `review_request`, `stack_request`, `status_update`, `team_imported`.
 Use `status_update` for status/posts, `code_share` for commands/code, `question`
-for open questions, `retro` for retros, `git_request` for merge-ready handoffs
-to the Integrator.
+for open questions, `retro` for retros, `git_request` for merge-ready requests
+to the Steward/publisher path.
 
 This is the coordination substrate (every agent posts), not GitHub — distinct
-from COORDINATION §14 (agents never touch GitHub; Integrator is the gateway).
-See ken agent federation roles for who hands off to whom, and wp release process
-steward spec build for the build kickoff discipline.
+from COORDINATION §14 (GitHub publication/merge runs through the scripted
+publisher path). See ken agent federation roles for who hands off to whom, and
+wp release process steward spec build for the build kickoff discipline.

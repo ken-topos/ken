@@ -24,7 +24,7 @@ downstream is already correct.
 | Tier | Model (current mapping) | Roles | Why |
 |---|---|---|---|
 | **T1** (enclave) | **Opus-class** (1M, high effort, extended thinking) | Spec-author, Conformance-validator, **Steward**, **Architect** | Highest judgment; the clean-room enclave; design + workflow authority. These calls are worth the most. |
-| **T2** (build & coordination) | **Sonnet-class** | Build-team Leaders, Implementers, QA; Spec-team Leader; Integrator; Librarian | High-volume code generation, coordination, mechanical gates, verification runs, doc observation. |
+| **T2** (build & coordination) | **Sonnet-class** | Build-team Leaders, Implementers, QA; Spec-team Leader; Librarian | High-volume code generation, coordination, mechanical gates, verification runs, doc observation. |
 | **T3** | **Haiku-class** | (none currently) | Lightweight tier; held in reserve. |
 
 The operator is the human product owner; Steward is the primary proxy into the
@@ -111,9 +111,10 @@ knob is **effort**, set per role in `moot.toml`.
 - **Kernel and Verify QA** are soundness-adjacent — they are the likeliest
   candidates for a higher effort setting if verification quality lags. Start at
   the team-default effort; raise it on observed misses, not up front.
-- **Integrator effort stays low.** It enforces gates and merges; the deep
-  correctness and architectural review is the **Architect's** (T1) job on the
-  merge Decision, so the Integrator does not need a high-effort budget.
+- **Publisher-path work stays mechanical.** The deep correctness and
+  architectural review is the **Architect's** (T1) job on the merge Decision;
+  publisher handling should remain scripted/mechanical, not a high-effort model
+  task.
 
 ## Clean-room × roles (load-bearing)
 

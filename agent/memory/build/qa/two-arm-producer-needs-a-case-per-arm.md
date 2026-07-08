@@ -50,7 +50,7 @@ a named fast-follow** over moving the tip.
 
 **Temporal-race edge (ES3, 2026-07-01).** "Fold ahead of the SHA anchor" is not
 just a *logical* ordering — it is a **race against the merge pipeline**. When a
-Decision is **proposed** (SHA recorded, gates voting), the Integrator may be
+Decision is **proposed** (SHA recorded, gates voting), the publisher path may be
 mid-**PR-publish** on that SHA; a fold + re-anchor **races that publish**. If
 the publish + merge fires on the proposed SHA before your fold lands, the fix is
 **orphaned into a post-merge erratum** — the exact thing fold-ahead was meant to
@@ -58,8 +58,8 @@ avoid. Live: I folded a `11 §4` quote-fix after `dec_8ce3w6h1dm2b` was proposed
 on `cdbf155`; it **won** the race (main landed my fixed `106a601`), but it was a
 near-miss. **Rule:** a pre-merge fold-ahead is clean **only if it wins the
 race** — so when folding after a Decision is proposed, announce the new SHA
-**AND explicitly flag the Integrator to hold + merge the new tip** (never assume
-the fold beats the publish); if the Integrator has already published, treat it
+**AND explicitly flag the Steward/publisher path to hold + merge the new tip**
+(never assume the fold beats the publish); if the publisher has already published, treat it
 as a post-merge erratum, don't chase the pipeline. A fold worth doing pre-merge
 (a wrong **direct quote** gaining false authority on main — laundered-citation
 hygiene) is still worth doing; just don't leave the win to chance.

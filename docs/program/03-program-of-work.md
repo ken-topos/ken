@@ -30,9 +30,9 @@ for an `L`). WPs are the nodes of the dependency graph; the roadmap gates
 Lifecycle: **proposed** (in this catalog) → **ready** (deps merged, open
 questions resolved, its gate not blocked) → **active** (pulled into a team's
 ring) → **in review** (merge Decision open, branch published, CI green,
-Architect/Spec voting) → **merged** (the Integrator squash-merges) → **done**
-(acceptance criteria met, **retro in** per `../../agent/COORDINATION.md` §10;
-catalog + gate updated).
+Architect/Spec voting) → **merged** (the publisher path squash-merges) →
+**done** (acceptance criteria met, **retro in** per
+`../../agent/COORDINATION.md` §10; catalog + gate updated).
 
 The **Steward** owns this catalog and cross-team sequencing — decompose, size,
 sequence, track, close. The operator sets scope and priority; the Architect
@@ -450,14 +450,14 @@ coupled only through the generated export artifact (`70-behavioral/71`), so when
 it stands up it is a **parallel federation**, not a new cross-team edge. The
 Steward tracks its bring-up (`IMPLEMENTATION-PROGRESS.md`).
 
-- **Integration (the Integrator)** → owns `main`: reviews, enforces the
-  clean-room and conformance gates, merges (no other team merges), and notifies
-  team leaders of fresh `main`. A single agent (recommended) with the operator
-  as escalation. See `04-git-and-integration.md` for the full workflow.
+- **Publisher path** → owns `main` mechanics: enforces the clean-room,
+  conformance, and CI gates, merges (no team merges), fetches `origin/main`, and
+  emits the merge notification for Steward sequencing. See
+  `04-git-and-integration.md` for the full workflow.
 
-Each team gets its own mootup space; the Integrator's space is linked to all of
-them. PRs surface as mootup Events (PR URL as artifact), merge approvals as
-mootup Decisions. Synchronization is at the roadmap gates (G0–G8): no team
+Each team gets its own mootup space; merge approvals are mootup Decisions and
+PRs surface as thread artifacts where relevant. Synchronization is at the
+roadmap gates (G0–G8): no team
 advances past a gate until its acceptance criteria are met and the conformance
 suite is green on a fresh checkout. The clean-room boundary (Spec enclave grounds the spec in permissive
 references and first principles; implementation teams work from the spec) holds

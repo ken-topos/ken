@@ -3,8 +3,8 @@
 //! Team Runtime's `elim_reduce` K1.5 IH extension (`5c8dac0`, merged to
 //! `main`) is already present on this rebased branch, so the FULL fold —
 //! Team Language's lifted `ITree`/`runState` through Team Runtime's real
-//! `elim_reduce` — can be driven end-to-end here, ahead of the Integrator's
-//! formal assembly. This is NOT a hand-fed oracle: `next` is built once as a
+//! `elim_reduce` — can be driven end-to-end here, ahead of the formal merge
+//! assembly. This is NOT a hand-fed oracle: `next` is built once as a
 //! real `bind (get ()) (\n. bind (put (Suc n)) (\_. Ret n))`-shaped term
 //! (using the prelude's registered `bind`/`get`/`put`/`Ret`, never a
 //! by-hand-constructed result), then `runState`'d and evaluated through

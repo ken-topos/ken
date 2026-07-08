@@ -31,15 +31,16 @@ pushes a branch for CI before the merge), which the pure form would sacrifice.
 ## Decision
 
 **Agents do local git only; exactly one credentialed "publisher" identity —
-operated by the Integrator — is the federation's sole GitHub-network actor.**
+driven by the scripted publisher path — is the federation's sole GitHub-network
+actor.**
 
 - Every build/spec/federation agent works in its own worktree and runs **local
   git only**: commit to a `wp/<ID>` branch, rebase onto the already-fetched
   `origin/main`. No `gh`, no push, no fetch, no token, no PR.
-- The **Integrator** holds the only GitHub credentials. It **pushes** the team's
-  `wp/<ID>` branch to GitHub (so CI runs **before** the merge — the offloaded
-  pre-merge gate), **reads** CI, **merges** under branch protection, and
-  **fetches** `main` so the shared ref updates for all worktrees.
+- The **publisher path** holds the only GitHub credentials. It **pushes** the
+  team's `wp/<ID>` branch to GitHub (so CI runs **before** the merge — the
+  offloaded pre-merge gate), **reads** CI, **merges** under branch protection,
+  and **fetches** `main` so the shared ref updates for all worktrees.
 - **Review is a mootup Decision, not a GitHub PR approval.** The Architect
   (always) and Spec (on its paths) read the diff from the shared local branch
   and vote the merge Decision. The merge gate is: Decision approved + CI green +
@@ -62,14 +63,14 @@ operated by the Integrator — is the federation's sole GitHub-network actor.**
 
 ## Consequences
 
-- **The Integrator is a load-bearing singleton** — the only GitHub identity and
-  the only CI-watcher. Its watchdog and liveness backstop matter more (it is the
-  middle of the three liveness layers, COORDINATION §13).
+- **The publisher path is a load-bearing script boundary** — the only GitHub
+  identity and CI-watcher. Its checks are mechanical and routed by the Steward,
+  not by a standing merge agent.
 - **CODEOWNERS is inert** in this model (GitHub requests reviews only on PRs the
   team would open). It is retained as ownership documentation and a graduation
   artifact; review routing is done by who the leader mentions on the Decision.
 - **ADR 0002 (wait idle for CI) still holds:** there *is* a pre-merge CI wait —
-  it begins when the Integrator publishes the branch.
+  it begins when the publisher path publishes the branch.
 - The git model is documented in `../program/04-git-and-integration.md`; the
   single-publisher mechanics in `../ops/github-setup.md`.
 

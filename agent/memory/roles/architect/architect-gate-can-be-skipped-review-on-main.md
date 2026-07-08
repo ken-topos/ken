@@ -13,7 +13,7 @@ constant-time discipline, security trust model) squash-merged to `main`
 "Architect + Spec" as reviewers) was still `proposed` and I had **never been
 notified**. Two compounding causes: (1) the Decision named me in *prose* but
 never fired a real mention to my actor_id, so I got zero signal; (2) the
-Integrator merged on the leader's `merge_ready` post rather than on a *resolved*
+merge path ran on the leader's `merge_ready` post rather than on a *resolved*
 Decision. The failure is **invisible to me by construction** — I get no
 notification precisely because the mention was dropped, and I don't poll
 (COORDINATION §1). The Steward's federation watchdog caught it.
@@ -33,7 +33,7 @@ posted my Architect APPROVE as a threaded `post_response` and left the Decision
 `proposed` (deferring "assembly" to spec-leader). All 3 gates had voted APPROVE
 in *messages*, but the Decision *status* stayed `proposed` → the Steward saw it
 as blocking and `main` stalled at `805bfc3`. **The Decision object, not my
-prose, is what the Steward/Integrator watch and what authorizes a merge** (same
+prose, is what the Steward/publisher path watches and what authorizes a merge** (same
 root as the skip above: status is the source of truth). **How to apply:** once I
 observe all required gates have voted APPROVE on a multi-gate Decision, don't
 wait for a leader to "assemble" — **`resolve_decision` it myself** (I have the
@@ -49,7 +49,7 @@ dual of the silent skip.
 
 **Corollary — a pending post-merge obligation gated on someone @mentioning me
 will silently strand; ground-truth `origin/main` instead (2026-07-01).** After
-the G5 capstones got Steward APPROVE I asked the Integrator to @mention me when
+the G5 capstones got Steward APPROVE I asked for a merge note to mention me when
 the branch landed so I'd promptly land a pre-approved docs erratum. The merge
 happened (squash → `c42b77c`) and the mention **never fired** — I don't poll, so
 the erratum would have stranded indefinitely. I caught it only incidentally:
@@ -67,12 +67,12 @@ dropped-mention root as the skip/stall above). Bonus: ground-truthing
 done review loop on my spec + check main via git object store not find.
 
 **Corollary — RESOLVING an Architect-only Decision myself still does NOT wake
-the Integrator; the merge drops unless an explicit `merge_ready` wake fires
+the publisher path; the merge drops unless an explicit `merge_ready` wake fires
 (2026-07-02, K7).** I proposed + resolved the K7 Architect-only gate
-(`dec_7m45vfthh3e08`, `b7396ae`) myself and wrote "Over to @integrator" in the
-resolution/thread. The Integrator's next sweep said "no pending Decisions" and
+(`dec_7m45vfthh3e08`, `b7396ae`) myself and wrote "over to the merge path" in
+the resolution/thread. The next publisher sweep said "no pending Decisions" and
 **skipped K7** — the merge silently dropped, channel idle on the belief it was
-done. Root: **Decision-text prose ("over to Integrator") carries no wake signal;
+done. Root: **Decision-text prose ("over to the publisher path") carries no wake signal;
 an explicit `merge_ready: <branch> @ <sha>` git_request does** (the erratum
 right beside it landed precisely because spec-leader issued that git_request).
 This is the SAME dropped-signal root as the skip/stall above, one step later in
@@ -81,7 +81,7 @@ watchdog caught it; kernel-leader then issued the `merge_ready` and it moved.
 **How to apply:** whenever I resolve an Architect-only gate myself, in the SAME
 beat either issue the `merge_ready`-style wake signal or explicitly hand to the
 owning leader (kernel-leader/spec-leader) to issue it — never assume
-resolved-Decision + "over to Integrator" completes the merge. (Interim check
+resolved-Decision + "over to the publisher path" completes the merge. (Interim check
 while it's dropped: ground-truth that `origin/main` is still HONEST + green — a
 docs-only erratum landing without its code twin can leave main claiming a
 capability that isn't there; K7's erratum was carefully phrased ("once K7's
@@ -114,7 +114,7 @@ gate is higher-risk, not lower; (c) **resolve the Decision post-hoc** with the
 full verdict as the resolution text — that *is* the durable review record
 (COORDINATION §5); (d) approve → mention whoever holds the downstream (the
 Steward releasing the build/handoff hold), or flag an erratum-on-`main`. The
-Integrator/leader-side fix (verify the Decision is resolved on a fresh fetch
+leader/publisher-side fix (verify the Decision is resolved on a fresh fetch
 before merging; `merge_ready` states `Decision: dec_XXX — status: resolved`) is
 theirs to institutionalize; my side is to run the gate cleanly whenever it
 arrives, early or late. Sibling of multi piece erratum landing integrity.

@@ -3,15 +3,15 @@
 How `ken-topos/ken` (public OSS) is wired for the **single-publisher** git model
 (`../program/04-git-and-integration.md`,
 `../adr/0003-credential-free-publisher.md`). The whole fleet runs in one shared
-clone; **agents do local git only** and the **Integrator** is the sole GitHub
-identity. So the GitHub-side setup is small: one credentialed identity + branch
-protection. The larger per-team-identity apparatus is **deferred** (see
+clone; **agents do local git only** and the scripted publisher path is the sole
+GitHub actor. So the GitHub-side setup is small: one credentialed identity +
+branch protection. The larger per-team-identity apparatus is **deferred** (see
 "Graduation" below).
 
 ## Identity model: one publisher
 
 Exactly **one** GitHub identity has credentials in the environment — the
-**publisher**, operated by the Integrator. Everything else
+**publisher**, driven by the scripted publisher path. Everything else
 (build/spec/federation agents) commits locally in worktrees and never
 authenticates to GitHub.
 
@@ -20,13 +20,13 @@ Pick **one** of:
 - **A `ken-ci` GitHub App** installed on the repo (preferred): installation
   tokens are short-lived and auto-rotating — safer on a public repo than a
   long-lived PAT. Permissions (repo): Contents RW, Pull requests RW, Checks RW,
-  Actions read, Metadata read. (Not Administration.) The Integrator agent
+  Actions read, Metadata read. (Not Administration.) The publisher script
   authenticates as the App installation.
-- **A single machine-user account** `ken-integrator` (gmail `+tag`, 2FA, one
-  fine-grained PAT scoped to this repo), held by the Integrator's harness.
+- **A single machine-user publisher account** (gmail `+tag`, 2FA, one
+  fine-grained PAT scoped to this repo), held by the publisher-script harness.
   Simpler to stand up; rotate the PAT periodically.
 
-Either way it is the **only** secret in the fleet. The Integrator uses it to
+Either way it is the **only** secret in the fleet. The publisher path uses it to
 push `wp/<ID>` branches, read CI (`gh pr checks`), merge, and fetch `main`.
 
 Per-team **attribution** without per-team accounts: encode the team in the
@@ -41,7 +41,7 @@ trailer. Dashboards and the path-guard key off these, not the GitHub author.
   keeps the offloaded CI a **pre-merge gate** — a branch can't merge until its
   checks are green.
 - **Restrict who can push and merge** to the **publisher** identity. This — not
-  CODEOWNERS — is what makes the Integrator the sole merger. (CODEOWNERS is
+  CODEOWNERS — is what makes the publisher path the sole merger. (CODEOWNERS is
   inert in this model; review is a mootup Decision, see `04`.)
 - **Squash-only** merges.
 - A merge queue is **not** needed: one publisher serialises merges by
@@ -60,8 +60,8 @@ before merge.
 ## Status checklist (do these to go live)
 
 - [ ] Create the publisher identity — either the `ken-ci` App (install on
-  `ken-topos/ken`) **or** the `ken-integrator` machine-user (+tag, 2FA, PAT).
-- [ ] Point the Integrator agent's harness at the publisher token.
+  `ken-topos/ken`) **or** a publisher machine-user (+tag, 2FA, PAT).
+- [ ] Point the scripted publisher harness at the publisher token.
 - [ ] Configure branch protection / ruleset as above (required checks +
   push/merge restricted to the publisher + linear history + squash).
 - [ ] Confirm `.github/workflows/ci.yml` runs and its check names match the
