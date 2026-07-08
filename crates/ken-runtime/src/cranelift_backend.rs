@@ -3048,6 +3048,40 @@ mod tests {
     }
 
     #[test]
+    fn reachable_foreign_checked_core_metadata_rejects_before_backend_lowering() {
+        let mut program =
+            seed_program_with_lowerability(Some(RuntimeLowerabilityStatus::Supported));
+        let symbol = program.declarations[0].symbol.clone();
+        program
+            .erased_core
+            .metadata
+            .checked_core
+            .effects_foreign_metadata
+            .insert(
+                symbol,
+                RuntimeEffectsForeignAuditMetadata {
+                    declared_effects: BTreeSet::new(),
+                    capabilities: BTreeSet::new(),
+                    foreign_symbol: Some("host.fixture.foreign".to_string()),
+                    boundary: RuntimeEffectBoundary::Foreign,
+                    runtime_checks: BTreeSet::new(),
+                    lowerability: RuntimeLowerabilityStatus::Supported,
+                },
+            );
+
+        let err =
+            run_nc6_seed_examples(&program).expect_err("foreign checked-core metadata must reject");
+
+        assert!(matches!(
+            err,
+            CraneliftBackendError::Unsupported(UnsupportedLowering {
+                construct: "RuntimeProgram",
+                ..
+            })
+        ));
+    }
+
+    #[test]
     fn explicit_partial_primitive_reports_trap_not_backend_bug() {
         let example = nc5_seed_examples()
             .into_iter()
