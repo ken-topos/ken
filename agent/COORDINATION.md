@@ -712,16 +712,27 @@ context. Who triggers a compaction is fixed (operator, 2026-06-29):
   spec-author + conformance-validator) **before delivering a WP** to the leader.
   Leaders never `moot compact` anyone — `request_context_reset` is self-only, so
   only the Steward can compact another agent (`moot compact`), and it does so for
-  teams alone.
+  teams alone, except for the Integrator seam below.
+- **Integrator is compacted by the Steward at every kickoff/handoff seam.** This
+  is the single singleton exception to self-compaction: before the Steward
+  delivers any new WP or merge-route handoff, the Steward also verifies
+  Integrator has no in-flight obligation, compacts `moot-integrator`, and
+  verifies the drop before posting the handoff mention. Reason: when Integrator
+  context gets deep, it has forgotten merge, watchdog, and cleanup playbook
+  instructions, and every WP eventually depends on a clean Integrator
+  publish/check/merge cycle. This does not make Integrator a receiving team
+  member; it is a cross-WP merge-pipeline hygiene gate.
 - **Gated by retros.** The Steward compacts a team **only after** its prior WP's
   retros are posted (compaction would otherwise summarize the retro away), and
   delivers the next WP **only after** compacting. So a team's WP boundary is:
   done → leader calls for retros in-thread → members post → leader signals the
   Steward "retros in" → Steward reviews → Steward compacts → next WP.
-- **Singletons self-compact.** Agents with no team/leader — **Steward, Architect,
-  Integrator, Librarian** — call `request_context_reset` at their own task
-  boundaries (Architect after a review, Integrator after a merge, Librarian after
-  a pass, Steward after a directing cycle).
+- **Singletons self-compact except for the Integrator seam above.** Agents with
+  no team/leader — **Steward, Architect, Integrator, Librarian** — call
+  `request_context_reset` at their own task boundaries (Architect after a
+  review, Integrator after a merge, Librarian after a pass, Steward after a
+  directing cycle). Integrator additionally receives Steward-triggered compaction
+  at kickoff/handoff seams under the explicit exception above.
 - **Never mid-reasoning.** Compact only at a clean boundary; it summarizes away
   in-flight work.
 - **Start new work from current `origin/main` (operator, 2026-06-29).** A WP
