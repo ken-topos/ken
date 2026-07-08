@@ -161,6 +161,12 @@ law    Monoid (M) { assoc : … ; unit_l : … ; unit_r : … }   -- a property 
   `../30-surface/33-declarations.md`). A `law` whose fields are all propositions
   is a conjunction of props — the sound `Σ`-of-Ω-into-Ω case (`16 §1.3`), so the
   bundle is itself a proposition.
+- **Named proof claims** (`prop` / `lemma` / attached `proof`) are the same
+  proof lane with different namespacing. `prop` declares a proposition family,
+  `lemma` declares a standalone theorem in the ordinary module namespace, and
+  `proof` attaches a theorem to a resolved subject path. All three are Ω-typed
+  proof claims; none adds a new kernel declaration class or a trusted proof
+  table.
 - Goals are where Ken is used as a *proof assistant*, and where the REPL's
   "Little Prover" loop (`../30-surface/`, strategy T2) lives.
 
@@ -170,6 +176,9 @@ The clause grammar (the declaration addendum; full grammar §6.1):
 goal-decl ::= "prove" ident ":" prop                  -- a named goal proposition
             | "law"   ConId "(" ident ")" "{" law-field (";" law-field)* "}"
 law-field ::= ident ":" prop                          -- a named bundled proposition
+prop-decl ::= "prop" ConId tyvar* binder* ":" type prop_block?
+lemma-decl ::= "lemma" ident binder* ":" type "=" expr
+proof-decl ::= "proof" ident "for" path binder* ":" type "=" expr
 ```
 
 ## 4. What the binders mean (precise)
@@ -186,6 +195,10 @@ law-field ::= ident ":" prop                          -- a named bundled proposi
   **surface type error** (caught at elaboration, §6.3), not a verification
   failure. This is a load-bearing guard: the elaborator `check`s each clause
   body at Ω and rejects a non-Ω body *before* any obligation is formed.
+- A `prop` family result, `lemma` theorem, or attached `proof` theorem also
+  MUST type-check at `Ω` in its scope. The attached form is still just a proof
+  term; its canonical export name is `subject::proof_name`, and there is no
+  separate proof-table lane.
 - **`result`** is in scope only in `ensures` clauses; referencing it in a
   `requires` or a refinement predicate is a scope error.
 - **`old(e)`** (referring to a pre-state value in a postcondition) is meaningful
@@ -386,13 +399,18 @@ goal-decl ::= "prove" ident ":" prop
             | "law" ConId "(" ident ")" "{" law-field (";" law-field)* "}"
 law-field ::= ident ":" prop
 
+prop-decl  ::= "prop" ConId tyvar* binder* ":" type prop_block?
+lemma-decl ::= "lemma" ident binder* ":" type "=" expr
+proof-decl ::= "proof" ident "for" path binder* ":" type "=" expr
+
 prop      ::= expr   -- an ordinary expression; elaboration checks it at Ω (§6.3)
 ```
 
 A `prop` is syntactically just an expression (no separate proposition grammar);
 its **Ω-typing** is enforced at elaboration, not parse time (§6.3). `result` and
 `old` are ordinary identifiers at parse time; resolution (§6.3/§6.4) gives them
-their binder meaning in `ensures` scope.
+their binder meaning in `ensures` scope. `prop`, `lemma`, and attached `proof`
+all elaborate as proof claims in the same Ω-checked lane.
 
 ### 6.2 Surface AST extension
 
@@ -405,7 +423,11 @@ Decl  ::= ViewDecl name (binder list) (Type option) (Expr list) (Expr list) Expr
         | LetDecl  name (Type option) Expr
         | ProveDecl name Prop          -- new: prove name : φ
         | LawDecl   name name (LawField list)   -- new: law Name (M) { … }
+        | PropDecl  name (tyvar list) (binder list) Type (PropIntro list)
+        | LemmaDecl name (binder list) Type Expr
+        | ProofDecl name Path (binder list) Type Expr
 LawField ::= name Prop
+PropIntro ::= name Type
 
 Type  ::= …                            -- V0 forms (TPi, TArr, TUniv, TCon, TVar)
         | TRefine name Type Prop span  -- new: { x : A | φ }
@@ -494,6 +516,12 @@ elabLaw(Σ, ⟨ law Name (M) { fᵢ : φᵢ } ⟩):
   emit one obligation per field; the proved bundle is a record of proofs (33 §5)
 ```
 
+`lemma` and attached `proof` are the same Ω-checked proof path with different
+namespacing: `lemma` binds a standalone theorem in the module namespace, while
+`proof` binds the theorem under `subject::proof_name`. `prop` family helpers
+are checked at Ω in the family namespace and are ordinary proof terms, not a
+separate kernel class.
+
 ### 6.4 `old`-capture for `space` operations
 
 A `space` operation denotes a **state-transformer** `⟦f⟧ : S → R × S`
@@ -558,8 +586,8 @@ consumes. The interface is four things:
    parameter types, and the bare body. V0 re-checks it (`18 §4`); a spec program
    with a type error has no core image and is rejected (`39 §3`).
 2. **The obligation-hole set** — the ordered set of `⟨id, Γ ⊢ φ, provenance⟩`
-   (§6.5), one per `ensures`/refinement-introduction/`prove`/`law`-field site,
-   each a typed hole `?id : φ` admitted as a postulate.
+   (§6.5), one per `ensures`/refinement-introduction/`prove`/`lemma`/`proof`/
+   `law`-field site, each a typed hole `?id : φ` admitted as a postulate.
 3. **The at-introduction hypotheses** — each hole's `Γ` already carries the
    facts in scope where the obligation *arose*: preconditions and refined-
    parameter predicates (`22 §3`). V2 **extends** each `Γ` with path-sensitive
@@ -617,6 +645,10 @@ merely cited.
   contract encoding preserves the carrier's `Type` level. Consistent with `12`'s
   predicative, non-cumulative regime — no implicit lifts; a level-mismatched
   proposition is a `TypeMismatch`, not a coercion.
+- **Named proof claims stay in the same Ω lane.** `prop`, `lemma`, and attached
+  `proof` bodies all check at `Ω`; the attached form is still an ordinary proof
+  term attached to a subject path, not metadata, not a proof search table, and
+  not a new kernel declaration kind.
 
 ## 9. What WS-V must deliver here (V1)
 

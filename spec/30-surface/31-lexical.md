@@ -36,11 +36,11 @@ agents. Five principles (decided; the §2–§6 spellings are a starter under th
    read and agents write, **one canonical format** means the reader always sees
    consistent notation — no style variance to parse. (No formatting latitude.)
 4. **Keywords stay ASCII words.** `const fn proc data record match space visits
-   requires ensures` are *names* — legibility beats symbol density, and they
-   are already typeable. Notation is reserved for *operators*, where a symbol
-   carries established meaning; Unicode-ifying keywords would be decoration. (So
-   the purity keywords `const`/`fn`/`proc`, `36 §1.6`, are ASCII words, not
-   glyphs.)
+   requires ensures prop proof lemma prove law` are *names* — legibility beats
+   symbol density, and they are already typeable. Notation is reserved for
+   *operators*, where a symbol carries established meaning; Unicode-ifying
+   keywords would be decoration. (So the purity keywords `const`/`fn`/`proc`,
+   `36 §1.6`, are ASCII words, not glyphs.)
 5. **Curated and confusable-resistant (a security property, not only
    legibility).** The blessed set is **bounded** (a fixed table, not "any
    Unicode"), and the lexer **normalizes/rejects Unicode confusables** (the TR39
@@ -131,8 +131,8 @@ token ::= ident | conid | keyword | literal | operator | punct | layout
 - **`literal`** — numbers, strings, chars, bytes (§3).
 - **`operator`** — symbolic, from a fixed set plus user-defined (`33`); fixity
   and precedence are declared (`infixl`/`infixr`/`infix N`).
-- **`punct`** — `( ) [ ] { } , . ; : | = → @ ⟨ ⟩` and the spec brace `{ … | …
-  }`.
+- **`punct`** — `( ) [ ] { } , . ; : :: | = → @ ⟨ ⟩` and the spec brace
+  `{ … | … }`.
 
 ## 3. Literals (the part that matters)
 
@@ -161,7 +161,7 @@ determine the numeric story (`35`):
 
 ```
 const fn proc let type data record module import use space
-match if then else where requires ensures prove law
+match if then else where requires ensures prop proof lemma prove law
 visits foreign forall exists in as mut class instance
 becomes declassify policy temporal assume test
 ```

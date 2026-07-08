@@ -53,13 +53,14 @@ is a core term the kernel `check`s (`../10-kernel/18 §4`). Consequences:
    **exhaustiveness + reachability** checking (`34 §4`).
 7. **Sugar expansion** — telescopes (`../10-kernel/13 §3`), records → Σ (`33
    §2`), `if` → `elim_Bool`, contracts/refinements → the obligation encoding
-   (`../20-verification/21 §6`, `22`), `do`/comprehensions (if any) →
-   combinators, numeric literals → `fromInteger`/… (`35 §4`), layout → braces
-   (`31 §6`); `@ct`-annotated expressions → IFC taint label on the
-   interaction-tree perform node (`36 §3`, `../60-security/61 §5a`);
-   `temporal{}`/`Temporal` surface notation → `Temporal` inductive data
-   (`../70-behavioral/72`); `Wrapping[T]` / `+%` → wrapping-arithmetic
-   primitives (`35 §3`).
+   (`../20-verification/21 §6`, `22`), proof-claim forms (`prop` / `lemma` /
+   attached `proof`) → ordinary checked proof terms over `Ω`, `do`/
+   comprehensions (if any) → combinators, numeric literals →
+   `fromInteger`/… (`35 §4`), layout → braces (`31 §6`); `@ct`-annotated
+   expressions → IFC taint label on the interaction-tree perform node (`36 §3`,
+   `../60-security/61 §5a`); `temporal{}`/`Temporal` surface notation →
+   `Temporal` inductive data (`../70-behavioral/72`); `Wrapping[T]` / `+%` →
+   wrapping-arithmetic primitives (`35 §3`).
 8. **Obligation emission** — where a refinement/contract is introduced, emit the
    proof obligation (`../20-verification/22`) and leave a hole/`prove` slot.
 
@@ -277,11 +278,12 @@ from `31`–`38`:
   - `let x : A = expr in expr` — a local binding.
 
 **Explicitly out of V0** (each owned elsewhere, do not absorb): `data`/`match`
-(`34`, Team Language), `record`/modules (`33`), effects (`36`), FFI (`38`),
+(`34`, Team Language), `record`/modules (`33`), the proof-claim surface
+(`prop` / `lemma` / attached `proof`, `20` / `33`), effects (`36`), FFI (`38`),
 numeric and other literals (`35`), implicit arguments `{x : A}` and the
 unification that inserts them (`§2.2`–`§2.3`), instance resolution (`§2.5`),
-and `match` compilation (`§2.6`). All V0 arguments are **explicit**; V0 performs
-**no implicit insertion**.
+and `match` compilation (`§2.6`). All V0 arguments are **explicit**; V0
+performs **no implicit insertion**.
 
 **Base types.** V0 does not declare inductives. The base types it references
 (`Nat`, `Bool`) are assumed **pre-declared** in the kernel environment `Σ` as

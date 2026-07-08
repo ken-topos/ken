@@ -187,6 +187,8 @@ claim with no conformance case is a claim no one can rely on
   backward-compatible for unmarked fields, and explicitly excluded from the
   AC4 Type/Omega sort discriminant. Pins the `proc traverse` unblock for CAT-2
   D3 while keeping zero kernel/Cargo.lock/trusted-base delta.
+- `surface/declarations/seed-named-proof-claims.md` — `prop` families,
+  `lemma` theorems, attached `proof` canonicalization, and bare-name rejection.
 - `surface/modules/seed-modules.md` — ES3 minimal modules/imports (`33 §3-4`,
   the bounded L4 slice): `module`/`import`/`pub`/abstract-export **elaborate
   away** to the kernel's single flat append-only `Σ` (`11 §4`) — **zero new
