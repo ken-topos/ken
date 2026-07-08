@@ -318,15 +318,12 @@ fn lower_transparent_declaration(
     target_closure: &[StableSymbol],
     symbol: &StableSymbol,
 ) -> Result<RuntimeDeclarationKind, ErasureError> {
+    let semantic = &package.artifact.semantic;
     let reachable_declarations = target_closure
         .iter()
         .filter(|candidate| {
-            package
-                .artifact
-                .semantic
-                .declarations
-                .contains_key(*candidate)
-                && !has_runtime_metadata(&package.artifact.semantic, candidate)
+            semantic.declarations.contains_key(*candidate)
+                && !has_runtime_metadata(semantic, candidate)
         })
         .cloned()
         .collect::<BTreeSet<_>>();
@@ -349,7 +346,14 @@ fn lower_transparent_declaration(
         )
     })?;
     let mut stack = vec![symbol.clone()];
-    let body = lower_body_term(&declaration.body, &view.declarations, &mut stack, symbol, 0)?;
+    let body = lower_body_term(
+        &declaration.body,
+        &view.declarations,
+        semantic,
+        &mut stack,
+        symbol,
+        0,
+    )?;
     Ok(RuntimeDeclarationKind::Transparent { body })
 }
 
@@ -383,11 +387,20 @@ fn external_declaration_symbols(
 fn lower_body_term(
     term: &CheckedCoreBodyTerm,
     declarations: &BTreeMap<StableSymbol, checked_core::CheckedCoreDeclarationBodyView>,
+    semantic: &checked_core::CheckedCoreSemanticInputs,
     stack: &mut Vec<StableSymbol>,
     root_symbol: &StableSymbol,
     context_depth: usize,
 ) -> Result<RuntimeExpr, ErasureError> {
-    lower_body_term_inner(term, declarations, stack, root_symbol, context_depth, None)
+    lower_body_term_inner(
+        term,
+        declarations,
+        semantic,
+        stack,
+        root_symbol,
+        context_depth,
+        None,
+    )
 }
 
 #[derive(Clone, Copy)]
@@ -416,6 +429,7 @@ impl BranchBinderRemap {
 fn lower_body_term_inner(
     term: &CheckedCoreBodyTerm,
     declarations: &BTreeMap<StableSymbol, checked_core::CheckedCoreDeclarationBodyView>,
+    semantic: &checked_core::CheckedCoreSemanticInputs,
     stack: &mut Vec<StableSymbol>,
     root_symbol: &StableSymbol,
     context_depth: usize,
@@ -430,6 +444,7 @@ fn lower_body_term_inner(
             constructor,
             &args,
             declarations,
+            semantic,
             stack,
             root_symbol,
             context_depth,
@@ -479,6 +494,7 @@ fn lower_body_term_inner(
             let lowered = lower_body_term_inner(
                 &declaration.body,
                 declarations,
+                semantic,
                 stack,
                 root_symbol,
                 context_depth,
@@ -491,12 +507,13 @@ fn lower_body_term_inner(
             lower_recursive_declaration_call(view, declarations, root_symbol)
         }
         CheckedCoreBodyTerm::ImportedDeclarationCall(view) => {
-            lower_imported_declaration_call(view, root_symbol)
+            lower_imported_declaration_call(view, semantic, root_symbol)
         }
         CheckedCoreBodyTerm::PrimitiveLiteral(view) => lower_primitive_literal(root_symbol, view),
         CheckedCoreBodyTerm::PrimitiveApplication(view) => lower_primitive_application(
             view,
             declarations,
+            semantic,
             stack,
             root_symbol,
             context_depth,
@@ -516,6 +533,7 @@ fn lower_body_term_inner(
                 body: Box::new(lower_body_term_inner(
                     body,
                     declarations,
+                    semantic,
                     stack,
                     root_symbol,
                     context_depth + 1,
@@ -527,6 +545,7 @@ fn lower_body_term_inner(
             callee: Box::new(lower_body_term_inner(
                 function,
                 declarations,
+                semantic,
                 stack,
                 root_symbol,
                 context_depth,
@@ -535,6 +554,7 @@ fn lower_body_term_inner(
             args: vec![lower_body_term_inner(
                 argument,
                 declarations,
+                semantic,
                 stack,
                 root_symbol,
                 context_depth,
@@ -545,6 +565,7 @@ fn lower_body_term_inner(
             value: Box::new(lower_body_term_inner(
                 value,
                 declarations,
+                semantic,
                 stack,
                 root_symbol,
                 context_depth,
@@ -553,6 +574,7 @@ fn lower_body_term_inner(
             body: Box::new(lower_body_term_inner(
                 body,
                 declarations,
+                semantic,
                 stack,
                 root_symbol,
                 context_depth + 1,
@@ -570,6 +592,7 @@ fn lower_body_term_inner(
         CheckedCoreBodyTerm::Match(view) => lower_match_view(
             view,
             declarations,
+            semantic,
             stack,
             root_symbol,
             context_depth,
@@ -578,6 +601,7 @@ fn lower_body_term_inner(
         CheckedCoreBodyTerm::RecordSigmaConstruction(view) => lower_record_sigma_construction(
             view,
             declarations,
+            semantic,
             stack,
             root_symbol,
             context_depth,
@@ -586,6 +610,7 @@ fn lower_body_term_inner(
         CheckedCoreBodyTerm::RecordSigmaProjection(view) => lower_record_sigma_projection(
             view,
             declarations,
+            semantic,
             stack,
             root_symbol,
             context_depth,
@@ -594,6 +619,7 @@ fn lower_body_term_inner(
         CheckedCoreBodyTerm::DictionaryConstruction(view) => lower_dictionary_construction(
             view,
             declarations,
+            semantic,
             stack,
             root_symbol,
             context_depth,
@@ -655,9 +681,26 @@ fn lower_recursive_declaration_call(
 
 fn lower_imported_declaration_call(
     view: &checked_core::CheckedCoreImportedDeclarationCallView,
+    semantic: &checked_core::CheckedCoreSemanticInputs,
     root_symbol: &StableSymbol,
 ) -> Result<RuntimeExpr, ErasureError> {
     reject_level_args(root_symbol, &view.level_args)?;
+    let lowerability = semantic.lowerability.get(&view.symbol).ok_or_else(|| {
+        expression_lowering_error(
+            root_symbol,
+            "imported_declaration_missing_lowerability",
+            format!(
+                "imported declaration {} has no lowerability metadata",
+                view.symbol
+            ),
+        )
+    })?;
+    require_expression_supported(
+        root_symbol,
+        &view.symbol,
+        lowerability,
+        "imported_declaration_lowerability_blocked",
+    )?;
     if view.dependency_semantic_hash.is_empty() {
         return Err(expression_lowering_error(
             root_symbol,
@@ -678,6 +721,7 @@ fn lower_imported_declaration_call(
 fn lower_dictionary_construction(
     view: &checked_core::CheckedCoreDictionaryConstructionView,
     declarations: &BTreeMap<StableSymbol, checked_core::CheckedCoreDeclarationBodyView>,
+    semantic: &checked_core::CheckedCoreSemanticInputs,
     stack: &mut Vec<StableSymbol>,
     root_symbol: &StableSymbol,
     context_depth: usize,
@@ -723,6 +767,7 @@ fn lower_dictionary_construction(
                     lower_body_term_inner(
                         value,
                         declarations,
+                        semantic,
                         stack,
                         root_symbol,
                         context_depth,
@@ -792,6 +837,7 @@ fn require_same_dictionary_field(
 fn lower_record_sigma_construction(
     view: &checked_core::CheckedCoreRecordSigmaConstructionView,
     declarations: &BTreeMap<StableSymbol, checked_core::CheckedCoreDeclarationBodyView>,
+    semantic: &checked_core::CheckedCoreSemanticInputs,
     stack: &mut Vec<StableSymbol>,
     root_symbol: &StableSymbol,
     context_depth: usize,
@@ -834,6 +880,7 @@ fn lower_record_sigma_construction(
                     lower_body_term_inner(
                         value,
                         declarations,
+                        semantic,
                         stack,
                         root_symbol,
                         context_depth,
@@ -865,6 +912,7 @@ fn lower_record_sigma_construction(
 fn lower_record_sigma_projection(
     view: &checked_core::CheckedCoreRecordSigmaProjectionView,
     declarations: &BTreeMap<StableSymbol, checked_core::CheckedCoreDeclarationBodyView>,
+    semantic: &checked_core::CheckedCoreSemanticInputs,
     stack: &mut Vec<StableSymbol>,
     root_symbol: &StableSymbol,
     context_depth: usize,
@@ -919,6 +967,7 @@ fn lower_record_sigma_projection(
         record: Box::new(lower_body_term_inner(
             &view.base,
             declarations,
+            semantic,
             stack,
             root_symbol,
             context_depth,
@@ -1014,6 +1063,7 @@ fn lower_primitive_literal(
 fn lower_primitive_application(
     view: &checked_core::CheckedCorePrimitiveApplicationView,
     declarations: &BTreeMap<StableSymbol, checked_core::CheckedCoreDeclarationBodyView>,
+    semantic: &checked_core::CheckedCoreSemanticInputs,
     stack: &mut Vec<StableSymbol>,
     root_symbol: &StableSymbol,
     context_depth: usize,
@@ -1044,6 +1094,7 @@ fn lower_primitive_application(
         args.push(lower_body_term_inner(
             argument,
             declarations,
+            semantic,
             stack,
             root_symbol,
             context_depth,
@@ -1140,6 +1191,7 @@ fn lower_constructor_application(
     constructor: &checked_core::CheckedCoreConstructorView,
     args: &[&CheckedCoreBodyTerm],
     declarations: &BTreeMap<StableSymbol, checked_core::CheckedCoreDeclarationBodyView>,
+    semantic: &checked_core::CheckedCoreSemanticInputs,
     stack: &mut Vec<StableSymbol>,
     root_symbol: &StableSymbol,
     context_depth: usize,
@@ -1188,6 +1240,7 @@ fn lower_constructor_application(
             lower_body_term_inner(
                 arg,
                 declarations,
+                semantic,
                 stack,
                 root_symbol,
                 context_depth,
@@ -1204,6 +1257,7 @@ fn lower_constructor_application(
 fn lower_match_view(
     view: &checked_core::CheckedCoreMatchView,
     declarations: &BTreeMap<StableSymbol, checked_core::CheckedCoreDeclarationBodyView>,
+    semantic: &checked_core::CheckedCoreSemanticInputs,
     stack: &mut Vec<StableSymbol>,
     root_symbol: &StableSymbol,
     context_depth: usize,
@@ -1220,6 +1274,7 @@ fn lower_match_view(
     let scrutinee = Box::new(lower_body_term_inner(
         &view.scrutinee,
         declarations,
+        semantic,
         stack,
         root_symbol,
         context_depth,
@@ -1263,6 +1318,7 @@ fn lower_match_view(
             body: lower_body_term_inner(
                 body,
                 declarations,
+                semantic,
                 stack,
                 root_symbol,
                 context_depth + constructor.argument_count,

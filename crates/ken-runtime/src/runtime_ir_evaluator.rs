@@ -592,6 +592,139 @@ pub fn reject_runtime_ir_program_blockers(
                 ));
             }
         }
+
+        if let RuntimeDeclarationKind::Transparent { body } = &declaration.kind {
+            reject_runtime_expr_blockers(program, body)?;
+        }
+    }
+    for example in &program.examples {
+        reject_runtime_expr_blockers(program, &example.ir)?;
+    }
+    Ok(())
+}
+
+fn reject_runtime_expr_blockers(
+    program: &RuntimeProgram,
+    expr: &RuntimeExpr,
+) -> Result<(), RuntimeIrEvaluationError> {
+    match expr {
+        RuntimeExpr::Value(_) | RuntimeExpr::Var(_) | RuntimeExpr::Trap(_) => Ok(()),
+        RuntimeExpr::Let { value, body } => {
+            reject_runtime_expr_blockers(program, value)?;
+            reject_runtime_expr_blockers(program, body)
+        }
+        RuntimeExpr::If {
+            scrutinee,
+            then_expr,
+            else_expr,
+        } => {
+            reject_runtime_expr_blockers(program, scrutinee)?;
+            reject_runtime_expr_blockers(program, then_expr)?;
+            reject_runtime_expr_blockers(program, else_expr)
+        }
+        RuntimeExpr::PrimitiveCall { args, .. } | RuntimeExpr::Construct { args, .. } => {
+            for arg in args {
+                reject_runtime_expr_blockers(program, arg)?;
+            }
+            Ok(())
+        }
+        RuntimeExpr::Match {
+            scrutinee, cases, ..
+        } => {
+            reject_runtime_expr_blockers(program, scrutinee)?;
+            for case in cases {
+                reject_runtime_expr_blockers(program, &case.body)?;
+            }
+            Ok(())
+        }
+        RuntimeExpr::Record { fields } => {
+            for (_, value) in fields {
+                reject_runtime_expr_blockers(program, value)?;
+            }
+            Ok(())
+        }
+        RuntimeExpr::Project { record, .. } => reject_runtime_expr_blockers(program, record),
+        RuntimeExpr::Closure { body, .. } => reject_runtime_expr_blockers(program, body),
+        RuntimeExpr::DeclarationRef { symbol } => {
+            require_referenced_symbol_supported(program, "DeclarationRef", symbol)?;
+            if !program
+                .declarations
+                .iter()
+                .any(|declaration| declaration.symbol == *symbol)
+            {
+                return Err(preflight_unsupported(
+                    "DeclarationRef",
+                    format!("{symbol} is not present in RuntimeProgram.declarations"),
+                ));
+            }
+            Ok(())
+        }
+        RuntimeExpr::ImportedDeclarationRef {
+            symbol,
+            dependency,
+            dependency_semantic_hash,
+        } => {
+            require_referenced_symbol_supported(program, "ImportedDeclarationRef", symbol)?;
+            let expected = program
+                .erased_core
+                .metadata
+                .dependency_semantic_hashes
+                .get(dependency)
+                .ok_or_else(|| {
+                    preflight_unsupported(
+                        "ImportedDeclarationRef",
+                        format!(
+                            "dependency {dependency} for imported declaration {symbol} is missing from RuntimeProgram metadata"
+                        ),
+                    )
+                })?;
+            if expected != dependency_semantic_hash {
+                return Err(preflight_unsupported(
+                    "ImportedDeclarationRef",
+                    format!(
+                        "dependency hash for imported declaration {symbol} is {dependency_semantic_hash:?}, expected {expected:?}"
+                    ),
+                ));
+            }
+            Ok(())
+        }
+        RuntimeExpr::Call { callee, args } => {
+            reject_runtime_expr_blockers(program, callee)?;
+            for arg in args {
+                reject_runtime_expr_blockers(program, arg)?;
+            }
+            Ok(())
+        }
+        RuntimeExpr::Effect { args, .. } => {
+            for arg in args {
+                reject_runtime_expr_blockers(program, arg)?;
+            }
+            Ok(())
+        }
+    }
+}
+
+fn require_referenced_symbol_supported(
+    program: &RuntimeProgram,
+    construct: &'static str,
+    symbol: &RuntimeSymbol,
+) -> Result<(), RuntimeIrEvaluationError> {
+    let lowerability = program
+        .erased_core
+        .metadata
+        .lowerability
+        .get(symbol)
+        .ok_or_else(|| {
+            preflight_unsupported(
+                construct,
+                format!("{symbol} is missing runtime lowerability metadata"),
+            )
+        })?;
+    if !matches!(lowerability, RuntimeLowerabilityStatus::Supported) {
+        return Err(preflight_unsupported(
+            construct,
+            format!("{symbol} has blocking lowerability metadata: {lowerability:?}"),
+        ));
     }
     Ok(())
 }

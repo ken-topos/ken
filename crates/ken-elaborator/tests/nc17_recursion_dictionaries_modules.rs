@@ -415,6 +415,35 @@ fn imported_declaration_ref_requires_exact_dependency_seed_identity() {
     assert_eq!(err.construct, "ImportedDeclarationRef");
     assert!(err.reason.contains(&dependency_hash));
 
+    let mut blocked_package = package.clone();
+    blocked_package.artifact.semantic.lowerability.insert(
+        imported.clone(),
+        LowerabilityStatus::Unsupported {
+            reason: "qa probe imported declaration is not executable".to_string(),
+        },
+    );
+    blocked_package = reemit(blocked_package);
+    let err = erase_checked_core_package_for_target(&blocked_package, [&target])
+        .expect_err("blocking imported declaration lowerability must reject before runtime IR");
+    match err {
+        ErasureError::ExpressionLowering { lane, .. } => {
+            assert_eq!(lane, "imported_declaration_lowerability_blocked");
+        }
+        other => panic!("expected imported lowerability lane, got {other:?}"),
+    }
+
+    let mut blocked_program = program.clone();
+    blocked_program.erased_core.metadata.lowerability.insert(
+        imported.to_string(),
+        RuntimeLowerabilityStatus::Unsupported {
+            reason: "qa probe imported declaration is not executable".to_string(),
+        },
+    );
+    let err = evaluate_runtime_ir_example(&blocked_program, &example, &env)
+        .expect_err("runtime preflight must reject blocking imported lowerability");
+    assert_eq!(err.construct, "ImportedDeclarationRef");
+    assert!(err.reason.contains("blocking lowerability"));
+
     package
         .artifact
         .semantic
