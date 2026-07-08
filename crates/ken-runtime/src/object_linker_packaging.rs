@@ -335,6 +335,10 @@ pub fn object_linker_executable_package_hash(package: &ObjectLinkerExecutablePac
     fnv1a_64(&canonical_object_linker_package_bytes(package))
 }
 
+pub fn object_linker_runtime_ir_run_report_hash(run_report: &RuntimeIrRunReport) -> u64 {
+    runtime_ir_program_report_hash_from_run(run_report)
+}
+
 fn validate_options(
     options: &ObjectLinkerPackagingOptions,
 ) -> Result<(), ObjectLinkerPackagingError> {
