@@ -76,6 +76,7 @@ Status: TODO · DRAFT (first pass written) · REVISED (refined) · DONE
 | `40-runtime/44-capacity.md` | Content store; slot-ceiling decision; lattice's real roles | DRAFT |
 | `40-runtime/46-checked-core-package.md` | Checked-core package v0 | DRAFT |
 | `40-runtime/47-erasure-runtime-ir.md` | Erasure/runtime IR seed | DRAFT |
+| `40-runtime/48-executable-artifact-contract.md` | Artifact contract | DRAFT |
 | `50-stdlib/README.md` | Prelude + core stdlib shape | DRAFT |
 | `50-stdlib/52-map.md` | Proved pure `Map k v` over `Ord k` (VAL2 #8/OQ-A) | DRAFT |
 | `50-stdlib/53-transport.md` | Derived `subst`/`cong`/`cast`/`sym`/`trans` over the `J` former | DRAFT |
