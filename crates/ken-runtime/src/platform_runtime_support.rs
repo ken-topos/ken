@@ -235,6 +235,7 @@ pub fn platform_runtime_support_for_entrypoint(
     producer: impl Into<String>,
 ) -> Result<PlatformRuntimeSupportReport, PlatformRuntimeSupportError> {
     validate_runtime_ir_run_report_binding(program, run_report)?;
+    validate_runtime_ir_run_report_target(program, package, run_report)?;
     platform_runtime_support_for_observation(
         program,
         package,
@@ -408,6 +409,47 @@ fn validate_runtime_ir_run_report_binding(
             PlatformRuntimeSupportStage::RuntimeObservationSupport,
             "runtime_ir_run_report.target",
             "RuntimeIrRunReport observation target does not match the run target",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_runtime_ir_run_report_target(
+    program: &RuntimeProgram,
+    package: &RuntimeExecutableEntrypointPackage,
+    run_report: &RuntimeIrRunReport,
+) -> Result<(), PlatformRuntimeSupportError> {
+    if run_report.evidence.target_example != run_report.target.example
+        || run_report.evidence.checked_core_shape != run_report.target.checked_core_shape
+    {
+        return Err(platform_error(
+            PlatformRuntimeSupportStage::RuntimeObservationSupport,
+            "runtime_ir_run_report.target",
+            "RuntimeIrRunReport evidence target does not match the run target",
+        ));
+    }
+    let example = program
+        .examples
+        .iter()
+        .find(|example| {
+            example.name == run_report.target.example
+                && example.checked_core_shape == run_report.target.checked_core_shape
+        })
+        .ok_or_else(|| {
+            platform_error(
+                PlatformRuntimeSupportStage::RuntimeObservationSupport,
+                "runtime_ir_run_report.target",
+                "RuntimeIrRunReport target is not present in the exact RuntimeProgram examples",
+            )
+        })?;
+    if !matches!(
+        &example.ir,
+        RuntimeExpr::DeclarationRef { symbol } if symbol == &package.entrypoint.target_symbol
+    ) {
+        return Err(platform_error(
+            PlatformRuntimeSupportStage::RuntimeObservationSupport,
+            "runtime_ir_run_report.target",
+            "RuntimeIrRunReport target does not evaluate the packaged executable entrypoint",
         ));
     }
     Ok(())
@@ -1174,9 +1216,16 @@ mod tests {
     }
 
     fn runtime_ir_run_report(program: &RuntimeProgram) -> RuntimeIrRunReport {
+        runtime_ir_run_report_for_example(program, 0)
+    }
+
+    fn runtime_ir_run_report_for_example(
+        program: &RuntimeProgram,
+        example_index: usize,
+    ) -> RuntimeIrRunReport {
         evaluate_runtime_ir_example(
             program,
-            &program.examples[0],
+            &program.examples[example_index],
             &RuntimeIrSeedEnvironment::empty(),
         )
         .expect("runtime-IR evaluator produces an observation")
@@ -1400,5 +1449,50 @@ mod tests {
             PlatformRuntimeSupportStage::RuntimeObservationSupport
         );
         assert_eq!(err.field, "runtime_ir_run_report.artifact");
+    }
+
+    #[test]
+    fn runtime_ir_run_report_must_evaluate_packaged_entrypoint() {
+        let (body, observation) = supported_body_and_observation();
+        let mut program = starter_program(body, observation);
+        let helper = "decl:fixture::Executable::helper".to_string();
+        program.erased_core.symbols.insert(helper.clone());
+        program
+            .erased_core
+            .metadata
+            .lowerability
+            .insert(helper.clone(), RuntimeLowerabilityStatus::Supported);
+        program.declarations.push(RuntimeDeclaration {
+            symbol: helper.clone(),
+            kind: RuntimeDeclarationKind::Transparent {
+                body: RuntimeExpr::Value(RuntimeValue::Bool(true)),
+            },
+            metadata: RuntimeSymbolMetadata {
+                lowerability: Some(RuntimeLowerabilityStatus::Supported),
+                ..RuntimeSymbolMetadata::empty()
+            },
+        });
+        program.examples.push(crate::RuntimeExample {
+            name: "platform-runtime-helper".to_string(),
+            checked_core_shape: "fixture helper".to_string(),
+            ir: RuntimeExpr::DeclarationRef { symbol: helper },
+            observation: RuntimeObservation::Returned(RuntimeGroundValue::Bool(true)),
+        });
+        let (_report, package) = packaged_entrypoint(&program);
+        let helper_run_report = runtime_ir_run_report_for_example(&program, 1);
+
+        let err = platform_runtime_support_for_entrypoint(
+            &program,
+            &package,
+            &helper_run_report,
+            PlatformRuntimeTarget::starter("test-starter-platform"),
+            "ken-runtime unit test",
+        )
+        .expect_err("helper run report must not satisfy the main entrypoint");
+        assert_eq!(
+            err.stage,
+            PlatformRuntimeSupportStage::RuntimeObservationSupport
+        );
+        assert_eq!(err.field, "runtime_ir_run_report.target");
     }
 }
