@@ -336,7 +336,7 @@ fn lower_transparent_declaration(
         package_artifact_hash: package.artifact_hash,
         target_symbol: symbol.clone(),
         reachable_declarations,
-        external_symbols: BTreeSet::new(),
+        external_symbols: external_declaration_symbols(&package.artifact.semantic),
         dependency_semantic_hashes: package.artifact.semantic.dependency_semantic_hashes.clone(),
     };
     let view = checked_core_body_view_for_selection(package, &selection)
@@ -363,6 +363,21 @@ fn has_runtime_metadata(
         || semantic.recursion_metadata.contains_key(symbol)
         || semantic.effects_foreign_metadata.contains_key(symbol)
         || semantic.class_instance_metadata.contains_key(symbol)
+}
+
+fn external_declaration_symbols(
+    semantic: &checked_core::CheckedCoreSemanticInputs,
+) -> BTreeSet<StableSymbol> {
+    semantic
+        .symbols
+        .iter()
+        .filter(|symbol| {
+            !semantic.declarations.contains_key(*symbol)
+                && !has_runtime_metadata(semantic, symbol)
+                && semantic.lowerability.contains_key(*symbol)
+        })
+        .cloned()
+        .collect()
 }
 
 fn lower_body_term(
@@ -472,16 +487,12 @@ fn lower_body_term_inner(
             stack.pop();
             lowered
         }
-        CheckedCoreBodyTerm::RecursiveDeclarationCall(_) => Err(expression_lowering_error(
-            root_symbol,
-            "recursive_declaration_call_lowering_unsupported",
-            "recursive declaration calls require the NC17 Runtime consumer seam",
-        )),
-        CheckedCoreBodyTerm::ImportedDeclarationCall(_) => Err(expression_lowering_error(
-            root_symbol,
-            "imported_declaration_call_lowering_unsupported",
-            "imported checked-core declaration calls require the NC17 Runtime consumer seam",
-        )),
+        CheckedCoreBodyTerm::RecursiveDeclarationCall(view) => {
+            lower_recursive_declaration_call(view, declarations, root_symbol)
+        }
+        CheckedCoreBodyTerm::ImportedDeclarationCall(view) => {
+            lower_imported_declaration_call(view, root_symbol)
+        }
         CheckedCoreBodyTerm::PrimitiveLiteral(view) => lower_primitive_literal(root_symbol, view),
         CheckedCoreBodyTerm::PrimitiveApplication(view) => lower_primitive_application(
             view,
@@ -580,11 +591,201 @@ fn lower_body_term_inner(
             context_depth,
             branch_remap,
         ),
-        CheckedCoreBodyTerm::DictionaryConstruction(_) => Err(expression_lowering_error(
+        CheckedCoreBodyTerm::DictionaryConstruction(view) => lower_dictionary_construction(
+            view,
+            declarations,
+            stack,
             root_symbol,
-            "dictionary_construction_lowering_unsupported",
-            "dictionary runtime-field lowering requires the NC17 Runtime consumer seam",
-        )),
+            context_depth,
+            branch_remap,
+        ),
+    }
+}
+
+fn lower_recursive_declaration_call(
+    view: &checked_core::CheckedCoreRecursiveCallView,
+    declarations: &BTreeMap<StableSymbol, checked_core::CheckedCoreDeclarationBodyView>,
+    root_symbol: &StableSymbol,
+) -> Result<RuntimeExpr, ErasureError> {
+    reject_level_args(root_symbol, &view.level_args)?;
+    require_expression_supported(
+        root_symbol,
+        &view.symbol,
+        &view.lowerability,
+        "recursive_lowerability_blocked",
+    )?;
+    if !matches!(
+        view.admission,
+        checked_core::RecursionAdmission::AcceptedStructural
+            | checked_core::RecursionAdmission::AcceptedSizeChange
+    ) {
+        return Err(expression_lowering_error(
+            root_symbol,
+            "unsupported_recursive_shape",
+            format!(
+                "recursive call to {} has non-executable admission {:?}",
+                view.symbol, view.admission
+            ),
+        ));
+    }
+    if !view.group_members.contains(&view.symbol) {
+        return Err(expression_lowering_error(
+            root_symbol,
+            "stale_recursive_group_member",
+            format!(
+                "recursive call to {} is absent from group {}",
+                view.symbol, view.group_symbol
+            ),
+        ));
+    }
+    if !declarations.contains_key(&view.symbol) {
+        return Err(expression_lowering_error(
+            root_symbol,
+            "unresolved_recursive_declaration_call",
+            format!(
+                "recursive call to {} has no selected body view in group {}",
+                view.symbol, view.group_symbol
+            ),
+        ));
+    }
+    Ok(RuntimeExpr::DeclarationRef {
+        symbol: view.symbol.to_string(),
+    })
+}
+
+fn lower_imported_declaration_call(
+    view: &checked_core::CheckedCoreImportedDeclarationCallView,
+    root_symbol: &StableSymbol,
+) -> Result<RuntimeExpr, ErasureError> {
+    reject_level_args(root_symbol, &view.level_args)?;
+    if view.dependency_semantic_hash.is_empty() {
+        return Err(expression_lowering_error(
+            root_symbol,
+            "missing_dependency_identity",
+            format!(
+                "imported declaration {} through {} has an empty semantic hash",
+                view.symbol, view.dependency
+            ),
+        ));
+    }
+    Ok(RuntimeExpr::ImportedDeclarationRef {
+        symbol: view.symbol.to_string(),
+        dependency: view.dependency.to_string(),
+        dependency_semantic_hash: view.dependency_semantic_hash.clone(),
+    })
+}
+
+fn lower_dictionary_construction(
+    view: &checked_core::CheckedCoreDictionaryConstructionView,
+    declarations: &BTreeMap<StableSymbol, checked_core::CheckedCoreDeclarationBodyView>,
+    stack: &mut Vec<StableSymbol>,
+    root_symbol: &StableSymbol,
+    context_depth: usize,
+    branch_remap: Option<BranchBinderRemap>,
+) -> Result<RuntimeExpr, ErasureError> {
+    require_expression_supported(
+        root_symbol,
+        &view.dictionary.symbol,
+        &view.dictionary.lowerability,
+        "dictionary_lowerability_blocked",
+    )?;
+    validate_dictionary_field_view(root_symbol, &view.dictionary)?;
+    if view.fields.len() != view.dictionary.fields.len() {
+        return Err(expression_lowering_error(
+            root_symbol,
+            "stale_dictionary_field_selection",
+            format!(
+                "dictionary construction for {} carries {} fields, expected {}",
+                view.dictionary.symbol,
+                view.fields.len(),
+                view.dictionary.fields.len()
+            ),
+        ));
+    }
+
+    let mut runtime_fields = Vec::new();
+    for (expected, value) in view.dictionary.fields.iter().zip(&view.fields) {
+        match value {
+            checked_core::CheckedCoreDictionaryFieldValue::Runtime { field, value } => {
+                require_same_dictionary_field(root_symbol, expected, field)?;
+                if !matches!(
+                    field.runtime,
+                    checked_core::DictionaryFieldRuntimeStatus::Runtime
+                ) {
+                    return Err(expression_lowering_error(
+                        root_symbol,
+                        "non_executable_dictionary_field_use",
+                        format!("dictionary field {} is not executable", field.name),
+                    ));
+                }
+                runtime_fields.push((
+                    field.name.clone(),
+                    lower_body_term_inner(
+                        value,
+                        declarations,
+                        stack,
+                        root_symbol,
+                        context_depth,
+                        branch_remap,
+                    )?,
+                ));
+            }
+            checked_core::CheckedCoreDictionaryFieldValue::Erased { field, .. } => {
+                require_same_dictionary_field(root_symbol, expected, field)?;
+                if matches!(
+                    field.runtime,
+                    checked_core::DictionaryFieldRuntimeStatus::Runtime
+                ) {
+                    return Err(expression_lowering_error(
+                        root_symbol,
+                        "runtime_dictionary_field_erased_value",
+                        format!(
+                            "runtime dictionary field {} cannot be supplied by erased bytes",
+                            field.name
+                        ),
+                    ));
+                }
+            }
+        }
+    }
+
+    Ok(RuntimeExpr::Record {
+        fields: runtime_fields,
+    })
+}
+
+fn validate_dictionary_field_view(
+    root_symbol: &StableSymbol,
+    dictionary: &checked_core::CheckedCoreDictionaryView,
+) -> Result<(), ErasureError> {
+    for (expected_position, field) in dictionary.fields.iter().enumerate() {
+        if field.position != expected_position {
+            return Err(expression_lowering_error(
+                root_symbol,
+                "stale_dictionary_field_selection",
+                format!(
+                    "dictionary metadata for {} has field {} at position {}, expected {}",
+                    dictionary.symbol, field.name, field.position, expected_position
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn require_same_dictionary_field(
+    root_symbol: &StableSymbol,
+    expected: &checked_core::CheckedCoreDictionaryFieldView,
+    actual: &checked_core::CheckedCoreDictionaryFieldView,
+) -> Result<(), ErasureError> {
+    if expected == actual {
+        Ok(())
+    } else {
+        Err(expression_lowering_error(
+            root_symbol,
+            "stale_dictionary_field_selection",
+            format!("dictionary field view changed: expected {expected:?}, got {actual:?}"),
+        ))
     }
 }
 
@@ -1664,6 +1865,7 @@ fn runtime_class_instance_metadata(
         dictionary_symbol: meta.dictionary_symbol.as_ref().map(ToString::to_string),
         head_symbol: meta.head_symbol.as_ref().map(ToString::to_string),
         field_order: meta.field_order.clone(),
+        runtime_fields: meta.runtime_fields.clone(),
         law_fields: meta.law_fields.clone(),
         lowerability: runtime_lowerability_status(&meta.lowerability),
     }

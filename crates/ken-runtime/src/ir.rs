@@ -166,6 +166,7 @@ pub struct RuntimeClassInstanceAuditMetadata {
     pub dictionary_symbol: Option<RuntimeSymbol>,
     pub head_symbol: Option<RuntimeSymbol>,
     pub field_order: Vec<String>,
+    pub runtime_fields: BTreeSet<String>,
     pub law_fields: BTreeSet<String>,
     pub lowerability: RuntimeLowerabilityStatus,
 }
@@ -342,6 +343,14 @@ pub enum RuntimeExpr {
         captures: Vec<RuntimeSymbol>,
         params: Vec<String>,
         body: Box<RuntimeExpr>,
+    },
+    DeclarationRef {
+        symbol: RuntimeSymbol,
+    },
+    ImportedDeclarationRef {
+        symbol: RuntimeSymbol,
+        dependency: RuntimeSymbol,
+        dependency_semantic_hash: String,
     },
     Call {
         callee: Box<RuntimeExpr>,

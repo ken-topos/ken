@@ -10,8 +10,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 use crate::{
-    RuntimeArtifactIdentity, RuntimeDeclarationKind, RuntimeEffectBoundary, RuntimeExample,
-    RuntimeExpr, RuntimeGroundValue, RuntimeLowerabilityStatus, RuntimeObservation,
+    RuntimeArtifactIdentity, RuntimeDeclaration, RuntimeDeclarationKind, RuntimeEffectBoundary,
+    RuntimeExample, RuntimeExpr, RuntimeGroundValue, RuntimeLowerabilityStatus, RuntimeObservation,
     RuntimePartiality, RuntimePrimitive, RuntimeProgram, RuntimeSymbol, RuntimeTrap,
     RuntimeTrapCode, RuntimeValue,
 };
@@ -129,6 +129,14 @@ pub enum RuntimeIrEvidenceFact {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RuntimeIrSeedEnvironment {
     values: BTreeMap<RuntimeSymbol, RuntimeGroundValue>,
+    imported_values: BTreeMap<RuntimeImportedDeclarationIdentity, RuntimeGroundValue>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct RuntimeImportedDeclarationIdentity {
+    pub symbol: RuntimeSymbol,
+    pub dependency: RuntimeSymbol,
+    pub dependency_semantic_hash: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -148,6 +156,7 @@ impl RuntimeIrSeedEnvironment {
     pub fn empty() -> Self {
         Self {
             values: BTreeMap::new(),
+            imported_values: BTreeMap::new(),
         }
     }
 
@@ -157,11 +166,31 @@ impl RuntimeIrSeedEnvironment {
             "decl:fixture::Local::y".to_string(),
             RuntimeGroundValue::Int(2),
         );
-        Self { values }
+        Self {
+            values,
+            imported_values: BTreeMap::new(),
+        }
     }
 
     pub fn insert(&mut self, symbol: impl Into<RuntimeSymbol>, value: RuntimeGroundValue) {
         self.values.insert(symbol.into(), value);
+    }
+
+    pub fn insert_imported_declaration(
+        &mut self,
+        symbol: impl Into<RuntimeSymbol>,
+        dependency: impl Into<RuntimeSymbol>,
+        dependency_semantic_hash: impl Into<String>,
+        value: RuntimeGroundValue,
+    ) {
+        self.imported_values.insert(
+            RuntimeImportedDeclarationIdentity {
+                symbol: symbol.into(),
+                dependency: dependency.into(),
+                dependency_semantic_hash: dependency_semantic_hash.into(),
+            },
+            value,
+        );
     }
 }
 
@@ -274,7 +303,7 @@ pub fn evaluate_runtime_ir_example(
 ) -> Result<RuntimeIrRunReport, RuntimeIrEvaluationError> {
     reject_runtime_ir_program_blockers(program)?;
     reject_unbound_runtime_example(program, example)?;
-    let observation = evaluate_runtime_ir_expr(&example.ir, env)?;
+    let observation = evaluate_runtime_ir_program_expr(program, &example.ir, env)?;
     let artifact = RuntimeArtifactIdentity::from_program(program);
     let target = RuntimeIrTargetIdentity::from_example(example);
     Ok(RuntimeIrRunReport {
@@ -296,7 +325,19 @@ pub fn evaluate_runtime_ir_expr(
     expr: &RuntimeExpr,
     env: &RuntimeIrSeedEnvironment,
 ) -> Result<RuntimeObservation, RuntimeIrEvaluationError> {
-    let mut evaluator = RuntimeIrEvaluatorState { seed_env: env };
+    let mut evaluator = RuntimeIrEvaluatorState::standalone(env);
+    Ok(match evaluator.eval_expr(expr, &[])? {
+        RuntimeIrOutcome::Value(value) => RuntimeObservation::Returned(ground_value(value)?),
+        RuntimeIrOutcome::Trap(trap) => RuntimeObservation::Trapped(trap),
+    })
+}
+
+pub fn evaluate_runtime_ir_program_expr(
+    program: &RuntimeProgram,
+    expr: &RuntimeExpr,
+    env: &RuntimeIrSeedEnvironment,
+) -> Result<RuntimeObservation, RuntimeIrEvaluationError> {
+    let mut evaluator = RuntimeIrEvaluatorState::for_program(program, env);
     Ok(match evaluator.eval_expr(expr, &[])? {
         RuntimeIrOutcome::Value(value) => RuntimeObservation::Returned(ground_value(value)?),
         RuntimeIrOutcome::Trap(trap) => RuntimeObservation::Trapped(trap),
@@ -604,9 +645,31 @@ enum EvaluatedValue {
 
 struct RuntimeIrEvaluatorState<'a> {
     seed_env: &'a RuntimeIrSeedEnvironment,
+    declarations: BTreeMap<&'a str, &'a RuntimeDeclaration>,
+    declaration_stack: Vec<RuntimeSymbol>,
 }
 
 impl<'a> RuntimeIrEvaluatorState<'a> {
+    fn standalone(seed_env: &'a RuntimeIrSeedEnvironment) -> Self {
+        Self {
+            seed_env,
+            declarations: BTreeMap::new(),
+            declaration_stack: Vec::new(),
+        }
+    }
+
+    fn for_program(program: &'a RuntimeProgram, seed_env: &'a RuntimeIrSeedEnvironment) -> Self {
+        Self {
+            seed_env,
+            declarations: program
+                .declarations
+                .iter()
+                .map(|declaration| (declaration.symbol.as_str(), declaration))
+                .collect(),
+            declaration_stack: Vec::new(),
+        }
+    }
+
     fn eval_expr(
         &mut self,
         expr: &RuntimeExpr,
@@ -730,6 +793,12 @@ impl<'a> RuntimeIrEvaluatorState<'a> {
                     body: (**body).clone(),
                 }))
             }
+            RuntimeExpr::DeclarationRef { symbol } => self.eval_declaration_ref(symbol),
+            RuntimeExpr::ImportedDeclarationRef {
+                symbol,
+                dependency,
+                dependency_semantic_hash,
+            } => self.eval_imported_declaration_ref(symbol, dependency, dependency_semantic_hash),
             RuntimeExpr::Call { callee, args } => {
                 let callee = match value_or_trap(self.eval_expr(callee, env)?)? {
                     Ok(value) => value,
@@ -843,6 +912,73 @@ impl<'a> RuntimeIrEvaluatorState<'a> {
             )
         })?;
         self.eval_ground_value(value)
+    }
+
+    fn eval_declaration_ref(
+        &mut self,
+        symbol: &RuntimeSymbol,
+    ) -> Result<RuntimeIrOutcome, RuntimeIrEvaluationError> {
+        let kind = self
+            .declarations
+            .get(symbol.as_str())
+            .map(|declaration| declaration.kind.clone())
+            .ok_or_else(|| {
+                eval_unsupported(
+                    "DeclarationRef",
+                    format!(
+                        "declaration {symbol} is not present in the exact RuntimeProgram artifact"
+                    ),
+                )
+            })?;
+        if self.declaration_stack.len() >= 1024 {
+            return Err(eval_unsupported(
+                "DeclarationRef",
+                format!("declaration reference depth exceeded while evaluating {symbol}"),
+            ));
+        }
+        self.declaration_stack.push(symbol.clone());
+        let result = match kind {
+            RuntimeDeclarationKind::Transparent { body } => self.eval_expr(&body, &[]),
+            RuntimeDeclarationKind::Primitive { op } => Err(eval_unsupported(
+                "DeclarationRef",
+                format!(
+                    "primitive declaration {} is not a first-class runtime value",
+                    op.symbol
+                ),
+            )),
+            RuntimeDeclarationKind::Data { .. }
+            | RuntimeDeclarationKind::Record { .. }
+            | RuntimeDeclarationKind::RecursiveGroup { .. }
+            | RuntimeDeclarationKind::EffectBoundary { .. }
+            | RuntimeDeclarationKind::MetadataOnly => Err(eval_unsupported(
+                "DeclarationRef",
+                format!("{symbol} is metadata, not an executable transparent body"),
+            )),
+        };
+        self.declaration_stack.pop();
+        result
+    }
+
+    fn eval_imported_declaration_ref(
+        &mut self,
+        symbol: &RuntimeSymbol,
+        dependency: &RuntimeSymbol,
+        dependency_semantic_hash: &str,
+    ) -> Result<RuntimeIrOutcome, RuntimeIrEvaluationError> {
+        let identity = RuntimeImportedDeclarationIdentity {
+            symbol: symbol.clone(),
+            dependency: dependency.clone(),
+            dependency_semantic_hash: dependency_semantic_hash.to_string(),
+        };
+        let value = self.seed_env.imported_values.get(&identity).ok_or_else(|| {
+            eval_unsupported(
+                "ImportedDeclarationRef",
+                format!(
+                    "imported declaration {symbol} from {dependency} @ {dependency_semantic_hash} has no exact runtime seed binding"
+                ),
+            )
+        })?;
+        Ok(RuntimeIrOutcome::Value(self.eval_ground_value(value)?))
     }
 
     fn eval_ground_value(
