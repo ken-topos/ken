@@ -375,3 +375,45 @@ fn pure_program_report_keeps_starter_subset_ready() {
         RuntimeObservation::Returned(RuntimeGroundValue::Int(5))
     ));
 }
+
+#[test]
+fn transparent_effect_body_blocks_supported_runtime_and_native_ready_report() {
+    let package = fixture_package();
+    let target = symbol("decl:fixture::Core::Bool");
+    let mut program =
+        erase_checked_core_package_for_target(&package, [&target]).expect("pure target lowers");
+    program.declarations[0].kind = RuntimeDeclarationKind::Transparent {
+        body: ken_runtime::RuntimeExpr::Effect {
+            effect: "Console".to_string(),
+            capability: None,
+            args: vec![],
+        },
+    };
+    let example = program.examples[0].clone();
+
+    let report = summarize_runtime_ir_program(&program);
+    assert!(!report
+        .supported_runtime_targets
+        .contains(&target.to_string()));
+    assert!(report
+        .comparison_unavailable_targets
+        .get(&target.to_string())
+        .is_none());
+    assert!(matches!(
+        report
+            .unsupported_targets
+            .get(&target.to_string())
+            .map(String::as_str),
+        Some(reason) if reason.contains("RuntimeExpr::Effect")
+    ));
+    assert!(matches!(
+        report.native_phase_gate,
+        RuntimeIrNativePhaseGate::Blocked { blockers }
+            if blockers.iter().any(|reason| reason.contains("RuntimeExpr::Effect"))
+    ));
+
+    let err = evaluate_runtime_ir_example(&program, &example, &RuntimeIrSeedEnvironment::empty())
+        .expect_err("effectful transparent body must reject before runtime success");
+    assert_eq!(err.construct, "Effect");
+    assert!(err.reason.contains("RuntimeExpr::Effect"));
+}

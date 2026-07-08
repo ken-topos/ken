@@ -516,6 +516,15 @@ pub fn summarize_runtime_ir_program(program: &RuntimeProgram) -> RuntimeIrProgra
             continue;
         }
 
+        if let RuntimeDeclarationKind::Transparent { body } = &declaration.kind {
+            if runtime_expr_contains_effect(body) {
+                let reason = unsupported_runtime_effect_reason(&declaration.symbol);
+                unsupported_targets.insert(declaration.symbol.clone(), reason.clone());
+                blockers.insert(reason);
+                continue;
+            }
+        }
+
         if let Some(reason) = effect_foreign_unavailable_reason(program, declaration) {
             unavailable.insert(format!(
                 "{} comparison unavailable: {reason}",
@@ -962,9 +971,57 @@ fn reject_runtime_expr_blockers(
             for arg in args {
                 reject_runtime_expr_blockers(program, arg)?;
             }
-            Ok(())
+            Err(preflight_unsupported(
+                "Effect",
+                unsupported_runtime_effect_reason("RuntimeExpr::Effect"),
+            ))
         }
     }
+}
+
+fn runtime_expr_contains_effect(expr: &RuntimeExpr) -> bool {
+    match expr {
+        RuntimeExpr::Value(_) | RuntimeExpr::Var(_) | RuntimeExpr::Trap(_) => false,
+        RuntimeExpr::Let { value, body } => {
+            runtime_expr_contains_effect(value) || runtime_expr_contains_effect(body)
+        }
+        RuntimeExpr::If {
+            scrutinee,
+            then_expr,
+            else_expr,
+        } => {
+            runtime_expr_contains_effect(scrutinee)
+                || runtime_expr_contains_effect(then_expr)
+                || runtime_expr_contains_effect(else_expr)
+        }
+        RuntimeExpr::PrimitiveCall { args, .. } | RuntimeExpr::Construct { args, .. } => {
+            args.iter().any(runtime_expr_contains_effect)
+        }
+        RuntimeExpr::Match {
+            scrutinee, cases, ..
+        } => {
+            runtime_expr_contains_effect(scrutinee)
+                || cases
+                    .iter()
+                    .any(|case| runtime_expr_contains_effect(&case.body))
+        }
+        RuntimeExpr::Record { fields } => fields
+            .iter()
+            .any(|(_, value)| runtime_expr_contains_effect(value)),
+        RuntimeExpr::Project { record, .. } => runtime_expr_contains_effect(record),
+        RuntimeExpr::Closure { body, .. } => runtime_expr_contains_effect(body),
+        RuntimeExpr::DeclarationRef { .. } | RuntimeExpr::ImportedDeclarationRef { .. } => false,
+        RuntimeExpr::Call { callee, args } => {
+            runtime_expr_contains_effect(callee) || args.iter().any(runtime_expr_contains_effect)
+        }
+        RuntimeExpr::Effect { .. } => true,
+    }
+}
+
+fn unsupported_runtime_effect_reason(subject: &str) -> String {
+    format!(
+        "{subject} contains RuntimeExpr::Effect, which is outside supported runtime-IR execution"
+    )
 }
 
 fn require_referenced_symbol_supported(
