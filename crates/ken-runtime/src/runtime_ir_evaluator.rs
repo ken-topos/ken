@@ -510,6 +510,12 @@ pub fn summarize_runtime_ir_program(program: &RuntimeProgram) -> RuntimeIrProgra
             }
         }
 
+        if let Some(reason) = effect_foreign_metadata_inconsistency_reason(program, declaration) {
+            unsupported_targets.insert(declaration.symbol.clone(), reason.clone());
+            blockers.insert(reason);
+            continue;
+        }
+
         if let Some(reason) = effect_foreign_unavailable_reason(program, declaration) {
             unavailable.insert(format!(
                 "{} comparison unavailable: {reason}",
@@ -725,93 +731,84 @@ fn reject_effect_foreign_metadata_inconsistency(
     program: &RuntimeProgram,
 ) -> Result<(), RuntimeIrEvaluationError> {
     for declaration in &program.declarations {
-        let Some(effect_meta) = program
-            .erased_core
-            .metadata
-            .checked_core
-            .effects_foreign_metadata
-            .get(&declaration.symbol)
-        else {
-            continue;
-        };
-
-        require_effect_foreign_metadata_match(
-            "effects",
-            &declaration.symbol,
-            &effect_meta.declared_effects,
-            &declaration.metadata.effects,
-        )?;
-        require_effect_foreign_metadata_match(
-            "capabilities",
-            &declaration.symbol,
-            &effect_meta.capabilities,
-            &declaration.metadata.capabilities,
-        )?;
-        require_effect_foreign_metadata_match(
-            "runtime_checks",
-            &declaration.symbol,
-            &effect_meta.runtime_checks,
-            &declaration.metadata.runtime_checks,
-        )?;
-
-        if !program
-            .erased_core
-            .metadata
-            .effects
-            .is_superset(&effect_meta.declared_effects)
-        {
-            return Err(stale_effect_foreign_metadata_error(
-                &declaration.symbol,
-                "package effects",
-            ));
-        }
-        if !program
-            .erased_core
-            .metadata
-            .capabilities
-            .is_superset(&effect_meta.capabilities)
-        {
-            return Err(stale_effect_foreign_metadata_error(
-                &declaration.symbol,
-                "package capabilities",
-            ));
-        }
-        if !program
-            .erased_core
-            .metadata
-            .runtime_checks
-            .is_superset(&effect_meta.runtime_checks)
-        {
-            return Err(stale_effect_foreign_metadata_error(
-                &declaration.symbol,
-                "package runtime checks",
-            ));
+        if let Some(reason) = effect_foreign_metadata_inconsistency_reason(program, declaration) {
+            return Err(stale_effect_foreign_metadata_error(reason));
         }
     }
     Ok(())
 }
 
-fn require_effect_foreign_metadata_match(
-    lane: &'static str,
-    symbol: &RuntimeSymbol,
-    checked_core: &BTreeSet<RuntimeSymbol>,
-    declaration: &BTreeSet<RuntimeSymbol>,
-) -> Result<(), RuntimeIrEvaluationError> {
-    if checked_core == declaration {
-        Ok(())
-    } else {
-        Err(stale_effect_foreign_metadata_error(symbol, lane))
+fn effect_foreign_metadata_inconsistency_reason(
+    program: &RuntimeProgram,
+    declaration: &RuntimeDeclaration,
+) -> Option<String> {
+    let effect_meta = program
+        .erased_core
+        .metadata
+        .checked_core
+        .effects_foreign_metadata
+        .get(&declaration.symbol)?;
+
+    if effect_meta.declared_effects != declaration.metadata.effects {
+        return Some(stale_effect_foreign_metadata_reason(
+            &declaration.symbol,
+            "effects",
+        ));
     }
+    if effect_meta.capabilities != declaration.metadata.capabilities {
+        return Some(stale_effect_foreign_metadata_reason(
+            &declaration.symbol,
+            "capabilities",
+        ));
+    }
+    if effect_meta.runtime_checks != declaration.metadata.runtime_checks {
+        return Some(stale_effect_foreign_metadata_reason(
+            &declaration.symbol,
+            "runtime_checks",
+        ));
+    }
+    if !program
+        .erased_core
+        .metadata
+        .effects
+        .is_superset(&effect_meta.declared_effects)
+    {
+        return Some(stale_effect_foreign_metadata_reason(
+            &declaration.symbol,
+            "package effects",
+        ));
+    }
+    if !program
+        .erased_core
+        .metadata
+        .capabilities
+        .is_superset(&effect_meta.capabilities)
+    {
+        return Some(stale_effect_foreign_metadata_reason(
+            &declaration.symbol,
+            "package capabilities",
+        ));
+    }
+    if !program
+        .erased_core
+        .metadata
+        .runtime_checks
+        .is_superset(&effect_meta.runtime_checks)
+    {
+        return Some(stale_effect_foreign_metadata_reason(
+            &declaration.symbol,
+            "package runtime checks",
+        ));
+    }
+    None
 }
 
-fn stale_effect_foreign_metadata_error(
-    symbol: &RuntimeSymbol,
-    lane: &'static str,
-) -> RuntimeIrEvaluationError {
-    preflight_unsupported(
-        "RuntimeProgram",
-        format!("{symbol} has stale or missing effect/foreign authority metadata in {lane}"),
-    )
+fn stale_effect_foreign_metadata_reason(symbol: &RuntimeSymbol, lane: &'static str) -> String {
+    format!("{symbol} has stale or missing effect/foreign authority metadata in {lane}")
+}
+
+fn stale_effect_foreign_metadata_error(reason: String) -> RuntimeIrEvaluationError {
+    preflight_unsupported("RuntimeProgram", reason)
 }
 
 fn effect_foreign_unavailable_reason(

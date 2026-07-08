@@ -259,6 +259,26 @@ fn missing_runtime_check_fact_rejects_before_runtime_success() {
         .runtime_checks
         .remove(&runtime_check.to_string());
 
+    let report = summarize_runtime_ir_program(&program);
+    assert!(report
+        .comparison_unavailable_targets
+        .get(&target.to_string())
+        .is_none());
+    assert!(matches!(
+        report
+            .unsupported_targets
+            .get(&target.to_string())
+            .map(String::as_str),
+        Some(reason)
+            if reason.contains("runtime_checks")
+                && reason.contains("stale or missing")
+    ));
+    assert!(matches!(
+        report.native_phase_gate,
+        RuntimeIrNativePhaseGate::Blocked { blockers }
+            if blockers.iter().any(|reason| reason.contains("runtime_checks"))
+    ));
+
     let err = evaluate_runtime_ir_example(&program, &example, &RuntimeIrSeedEnvironment::empty())
         .expect_err("missing runtime-check authority must reject before success");
 
@@ -276,6 +296,26 @@ fn stale_capability_identity_rejects_before_runtime_success() {
     program.examples = vec![example.clone()];
     program.declarations[0].metadata.capabilities =
         BTreeSet::from(["meta:fixture::OtherCap".to_string()]);
+
+    let report = summarize_runtime_ir_program(&program);
+    assert!(report
+        .comparison_unavailable_targets
+        .get(&target.to_string())
+        .is_none());
+    assert!(matches!(
+        report
+            .unsupported_targets
+            .get(&target.to_string())
+            .map(String::as_str),
+        Some(reason)
+            if reason.contains("capabilities")
+                && reason.contains("stale or missing")
+    ));
+    assert!(matches!(
+        report.native_phase_gate,
+        RuntimeIrNativePhaseGate::Blocked { blockers }
+            if blockers.iter().any(|reason| reason.contains("capabilities"))
+    ));
 
     let err = evaluate_runtime_ir_example(&program, &example, &RuntimeIrSeedEnvironment::empty())
         .expect_err("stale capability authority must reject before success");
