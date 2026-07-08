@@ -81,6 +81,13 @@ largest proof-heavy body. Once the pilot proves the workflow, large components
 such as maps/sets/relations get their own refinement WPs after their functional
 builds land.
 
+One surface-language support WP now sits in front of proof-heavy catalog
+refinement: `SURF-named-proof-claims`. It frames `proof ... for ...`
+declarations and explicit attached-proof references so small public functions
+can keep ordinary executable signatures while exporting real, caller-usable
+semantic claims. Until that lands, catalog packages should continue using
+ordinary named proof definitions with durable semantic names.
+
 Refinement review roles are fixed:
 
 - owning build team: behavior preservation, public API/proof names, imports, and
