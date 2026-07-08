@@ -25,10 +25,63 @@ changes the function's use surface. For ordinary executable functions, the
 preferred human form is:
 
 ```ken
+prop AppendsTo (A : Type) : List A -> List A -> List A -> Omega where
+  nil :
+    (ys : List A) ->
+    AppendsTo A nil ys ys
+
+  cons :
+    (x : A) ->
+    (xs ys zs : List A) ->
+    AppendsTo A xs ys zs ->
+    AppendsTo A (cons x xs) ys (cons x zs)
+
 fn list_append (A : Type) (xs : List A) (ys : List A) : List A = ...
 
-proof appends for list_append :
-  AppendsTo A xs ys (list_append A xs ys) = ...
+proof appends for list_append
+  (A : Type) (xs : List A) (ys : List A)
+  : AppendsTo A xs ys (list_append A xs ys) = ...
+```
+
+A downstream proof should be able to reference that proof term explicitly:
+
+```ken
+proof caller_property for some_caller
+  (A : Type) (xs : List A) (ys : List A)
+  : SomeCallerClaim A xs ys =
+    ... (proof appends for list_append) A xs ys ...
+```
+
+The reference phrase resolves to the canonical attached-proof path:
+
+```ken
+list_append::appends
+```
+
+The two spellings have different jobs: `proof appends for list_append` is the
+human declaration/reference form, while `list_append::appends` is the stable
+path used for export, import, diagnostics, and desugared terms.
+
+By contrast, this WP intentionally does not require changing the executable
+result type to carry the claim:
+
+```ken
+fn list_append (A : Type) (xs : List A) (ys : List A)
+  : (result : List A ** AppendsTo A xs ys result) = ...
+```
+
+That dependent return style remains available when callers should receive a
+strengthened value directly. Attached proofs target the case where the ordinary
+runtime result should stay a plain `List A`, but the semantic guarantee should
+still be available to proof clients.
+
+The explicit repeated telescope is intentional. This should be rejected if the
+subject signature changes and the proof declaration is not updated:
+
+```ken
+proof appends for list_append
+  (A : Type) (xs : List A)
+  : AppendsTo A xs ys (list_append A xs ys) = ...
 ```
 
 Callers should then be able to refer to that proof explicitly when their own
@@ -37,21 +90,28 @@ is something other than `List A`.
 
 ## Objective
 
-Design and implement a surface form for **named proof claims attached to a
-definition**:
+Design and implement a surface vocabulary for proposition-oriented catalog
+source:
 
-1. A `proof ... for ...` declaration states and inhabits a proposition about an
+1. A `prop` declaration names a reusable proposition family, classified in
+   `Omega`.
+2. A `proof ... for ...` declaration states and inhabits a proposition about an
    existing function/value.
-2. The proof is a real proof term checked by the existing kernel/prover path,
+3. The proof is a real proof term checked by the existing kernel/prover path,
    not metadata, a comment, or a trusted annotation.
-3. The original function keeps its ordinary computational return type.
-4. A caller can explicitly reference the attached proof in another proof.
+4. The original function keeps its ordinary computational return type.
+5. A caller can explicitly reference the attached proof in another proof.
 
 The design goal is source that reads like literature: the function says what it
-computes, and the nearby proof says what semantic claim has been established.
+computes, the `prop` says what semantic vocabulary is being used, and the nearby
+proof says what semantic claim has been established.
 
 ## Settled direction
 
+- **Add `prop` as surface sugar.** `prop` is the proposition-family analogue of
+  `data`: it declares an `Omega`-classified claim shape. It must elaborate to
+  existing checked machinery for admissible proposition families; it does not
+  add a kernel declaration class or trusted proposition table.
 - **This is syntactic sugar over ordinary proof terms.** Do not add a kernel
   declaration class or trusted proof table. The elaborated result must be an
   ordinary named proof definition with a stable path.
@@ -65,32 +125,121 @@ computes, and the nearby proof says what semantic claim has been established.
   declaration reads `proof appends for list_append`. The declaration spelling
   and reference spelling need not be identical if the relation is obvious and
   stable.
+- **`::` is the reference punctuation.** The canonical attached-proof path is
+  `subject::proof_name`, e.g. `list_append::appends`. This marks the proof as a
+  named item in the subject's attached-proof namespace, not as record projection
+  or decimal syntax.
+- **Do not use `use` as the proof-reference keyword.** `use` already carries
+  import meaning in the surface language. Human source should use the same
+  proof-selector phrase as the declaration: `proof appends for list_append`.
+  That phrase resolves to the canonical path `list_append::appends`.
+- **Repeat the subject signature explicitly.** Generic attached proofs must
+  restate the subject's explicit telescope rather than silently inheriting it.
+  This is noisier, but it makes the proof's shape readable at the proof outset,
+  and a subject signature change should force every attached proof to be
+  revisited through a mismatch error.
+- **Multiple proofs per subject are unordered.** A subject may have many
+  attached proof names, but duplicate names on the same subject are errors and
+  declaration order must not affect resolution or meaning.
+- **Same-subject proofs are independent in this WP.** One attached proof for a
+  subject must not depend on another attached proof for the same subject,
+  directly or through an ordinary helper proof. If two claims need a shared
+  lemma, factor that lemma out as an ordinary named proof rather than making the
+  attached proofs depend on each other.
 - **Do not use operational/WP names.** Proof names are public source surface.
   They should be durable semantic names such as `appends`, `assoc`, `left_unit`,
   or `preserves_length`.
+- **Named props should be semantic vocabulary.** It is acceptable for a tiny
+  teaching example such as `list_append` / `AppendsTo` / `appends` to have
+  parallel recursive structure. That should not become the general pattern of
+  writing propositions that merely restate one implementation step-for-step.
+  A proposition should name reusable domain semantics that another
+  implementation, proof, or caller could consume independently.
 
-## Open design questions
+## `AppendsTo` in the example
 
-The Spec enclave should answer these before Language D1:
+`AppendsTo` is not a built-in. It is the named generic proposition family that
+states what it means for one list to be exactly the concatenation of two others:
 
-- **Reference punctuation.** Is `subject::proof_name` the right selector, or is
-  another punctuation clearer for "semantic claim attached to subject"? Dot
-  suggests record/module projection; `::` suggests namespace/path. The chosen
-  spelling must not collide confusingly with existing module paths, decimal
-  syntax, or future record projection.
-- **Reference keyword.** The discussion found `use list_append::appends` highly
-  readable in caller proofs, but `use` already exists as an import form in
-  `spec/30-surface/32-grammar.md`. Decide whether contextual `use` is acceptable
-  inside proof expressions, or choose a different proof-reference form.
+```ken
+prop AppendsTo (A : Type) : List A -> List A -> List A -> Omega where
+  ...
+```
+
+The complete statement of `list_append` is therefore distributed across three
+readable declarations:
+
+- `prop AppendsTo` defines the claim shape.
+- `fn list_append` computes a `List A`.
+- `proof appends for list_append` proves that this implementation's result
+  satisfies `AppendsTo`.
+
+For small structural functions, the function, proposition, and proof may look
+similar. The distinction is still useful: `AppendsTo` becomes reusable
+vocabulary for other append implementations, length lemmas, parser/token
+concatenation claims, or caller-side proofs. For larger catalog functions, the
+proposition should usually be less algorithm-shaped: sortedness, permutation,
+preservation, lookup correspondence, safety, parser soundness, and similar
+semantic properties.
+
+## Resolution model to design against
+
+- The subject in `proof appends for list_append` resolves first, using ordinary
+  value/global name resolution at the declaration or reference site.
+- Attached proof lookup happens only after the subject is resolved. The proof
+  name is looked up in that subject's attached-proof namespace.
+- The stable path is `subject::proof_name`. If the subject is qualified, the
+  proof path qualifies through the subject path, for example
+  `Collections.List.list_append::appends`.
+- Attached proof names do not enter the ordinary value namespace as bare names.
+  A bare `appends` should not silently resolve to `list_append::appends`.
+- If two visible subjects have the same unqualified name, ordinary subject
+  resolution is ambiguous before attached-proof lookup. The author must qualify
+  the subject.
+- Export/import should preserve the pair: exporting a subject's public API may
+  export its attached proof namespace; importing the subject makes attached
+  proofs available through explicit proof-selector syntax. D0 should decide the
+  exact manifest/export knob, but attached proofs must not become ambient
+  imports.
+- For this WP, attaching proofs to foreign subjects is out of scope. The
+  subject and its attached proofs should be declared in the subject's owning
+  module/package. Third-party extension-proof namespaces can be a later design
+  if needed.
+- Diagnostics should name both sides: the resolved subject path and the attached
+  proof name, e.g. `duplicate attached proof list_append::appends`.
+
+## Caller-use model to design against
+
+Calling a function does not automatically expose its attached proofs. If a
+caller proof needs the semantic claim, it asks for the proof explicitly with the
+same arguments:
+
+```ken
+let zs = list_append A xs ys
+let h = (proof appends for list_append) A xs ys
+...
+```
+
+The proof term `h` is then passed like any ordinary proof term: to `transport`,
+to a rewrite/congruence helper, to an induction step, or into a class-law field.
+If the caller goal mentions the exact call `list_append A xs ys`, the proof's
+result should line up directly. If the caller stores or transforms the result
+under another expression, the caller still uses the existing equality/transport
+machinery to move the attached claim to the goal shape. This WP should not add
+ambient automation that discovers attached proofs automatically.
+
+## Design details to pin in D0
+
+The Spec enclave should pin these details before Language D1:
+
 - **Name resolution.** Define how attached proof names are resolved, imported,
-  shadowed, exported, and shown in diagnostics. The result should be stable
-  enough for package APIs.
-- **Multiple proofs per subject.** A function may carry several claims:
-  `appends`, `length`, `assoc`, `identity`, etc. Specify ordering and duplicate
-  rejection.
-- **Generic parameters.** Decide whether the proof declaration repeats the
-  subject telescope explicitly, inherits it implicitly, or supports both. The
-  readable source form should avoid surprising implicit binders.
+  shadowed, exported, and shown in diagnostics. The result must be stable enough
+  for package APIs.
+- **Same-subject dependency rule.** Because multiple proofs are unordered, one
+  attached proof must not depend on another attached proof of the same subject
+  in this WP. D0 should check whether transitive references can reintroduce an
+  order dependency and either reject those cycles or route them through ordinary
+  named proofs outside the subject namespace.
 - **Caller use.** Show how a downstream proof imports/references an attached
   proof and passes it to transport, rewrite, induction, or a class law field.
 
@@ -99,36 +248,49 @@ The Spec enclave should answer these before Language D1:
 ### D0 — Spec design
 
 - Update the relevant surface/verification spec chapters with:
+  - grammar for `prop` declarations;
   - grammar for attached proof declarations;
   - grammar/reference form for using attached proofs;
+  - elaboration rule from `prop` to ordinary checked `Omega` proposition
+    families;
   - elaboration rule to ordinary proof definitions;
   - name-resolution/export/import behavior;
   - rejection rules for missing subjects, duplicate proof names, wrong proof
-    sort, and claims that do not type-check.
+    sort, subject-signature mismatch, same-subject proof dependency, and claims
+    that do not type-check.
 - Include a small source example centered on `list_append`:
+  - `prop AppendsTo ...`;
   - `fn list_append ... : List A`;
-  - `proof appends for list_append ...`;
+  - `proof appends for list_append ...`, repeating the explicit subject
+    telescope;
   - a caller proof that references the attached proof.
-- Decide whether `use` is acceptable as the proof-reference keyword despite the
-  existing import use, and record the reason.
+- Specify that `proof appends for list_append` in expression/reference position
+  resolves to the canonical attached-proof path `list_append::appends`.
 
 ### D1 — Parser/AST/resolution
 
 - Add the declaration syntax and AST node(s) for attached proofs.
+- Add the `prop` declaration syntax and AST node, keeping it distinct from
+  proof definitions and from computational `data`.
 - Add parser tests for:
+  - one `prop` declaration;
   - one proof attached to a function;
   - multiple proofs attached to the same function;
   - duplicate proof names rejected;
   - missing subject rejected;
-  - reference syntax accepted in a proof expression.
+  - explicit subject-signature mismatch rejected;
+  - `proof <name> for <subject>` reference syntax accepted in a proof
+    expression.
 
 ### D2 — Elaboration and proof use
 
 - Elaborate an attached proof to an ordinary proof definition whose stable
-  surface path is the chosen subject/proof selector.
+  surface path is `subject::proof_name`.
+- Elaborate `prop` to an existing checked `Omega` proposition-family
+  declaration, with no new trusted core.
 - Ensure downstream proofs can refer to the attached proof explicitly.
-- Add an end-to-end test where a caller uses `list_append::appends` or the
-  chosen equivalent to discharge a small property.
+- Add an end-to-end test where a caller writes `proof appends for list_append`
+  and the resolved proof path is `list_append::appends`.
 - Ensure package export/import preserves the attached proof path.
 
 ### D3 — Catalog pilot
