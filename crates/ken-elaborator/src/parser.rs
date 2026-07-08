@@ -9,7 +9,7 @@
 
 use crate::ast::{
     Binder, ClassField, ConstructorSignature, ConstructorSignatureArg, CtorDecl, Decl, DefKeyword,
-    EffectRowSyntax, ExplicitDataCtor, Expr, MatchArm, PatKind, Pattern, Type,
+    EffectRowSyntax, ExplicitDataCtor, Expr, MatchArm, PatKind, Pattern, PropIntro, Type,
 };
 use crate::error::{ElabError, Span};
 use crate::lexer::Token;
@@ -25,7 +25,11 @@ pub struct Parser {
 
 impl Parser {
     pub fn new(tokens: Vec<(Token, Span)>, src: String) -> Self {
-        Self { tokens, pos: 0, src }
+        Self {
+            tokens,
+            pos: 0,
+            src,
+        }
     }
 
     // ----- cursor helpers -----
@@ -151,6 +155,9 @@ impl Parser {
             Token::KwProc => self.parse_view_decl(start, false, DefKeyword::Proc),
             Token::KwLet => self.parse_let_decl(start),
             Token::KwProve => self.parse_prove_decl(start),
+            Token::KwProp => self.parse_prop_decl(start),
+            Token::KwLemma => self.parse_lemma_decl(start),
+            Token::KwProof => self.parse_attached_proof_decl(start),
             Token::KwLaw => self.parse_law_decl(start),
             Token::KwData => self.parse_data_decl(start),
             Token::KwTypeAlias => self.parse_type_alias_decl(start),
@@ -165,8 +172,9 @@ impl Parser {
             Token::KwPub => self.parse_pub_decl(start),
             other => Err(ElabError::ParseError {
                 msg: format!(
-                    "expected 'const', 'fn', 'proc', 'let', 'prove', 'law', 'data', 'type', 'foreign', \
-                     'temporal', 'class', 'instance', 'derive', 'module', 'import', 'use', \
+                    "expected 'const', 'fn', 'proc', 'let', 'prove', 'prop', 'lemma', 'proof', \
+                     'law', 'data', 'type', 'foreign', 'temporal', 'class', 'instance', \
+                     'derive', 'module', 'import', 'use', \
                      'pub', or 'space proc', found {:?}",
                     other
                 ),
@@ -343,6 +351,20 @@ impl Parser {
         })
     }
 
+    fn parse_binders(&mut self) -> Result<Vec<Binder>, ElabError> {
+        let mut params = Vec::new();
+        while matches!(self.peek(), Token::LParen)
+            && matches!(self.lookahead(1), Token::Ident(_) | Token::ConId(_))
+        {
+            if self.is_binder_ahead() {
+                params.push(self.parse_binder()?);
+            } else {
+                break;
+            }
+        }
+        Ok(params)
+    }
+
     fn parse_let_decl(&mut self, start: usize) -> Result<Decl, ElabError> {
         self.advance(); // consume 'let'
         let (name, _) = self.expect_ident()?;
@@ -373,6 +395,90 @@ impl Parser {
         Ok(Decl::ProveDecl {
             name,
             prop,
+            span: Span::new(start, end),
+        })
+    }
+
+    /// `prop P binder* : Omega where { intro : P ... ; ... }`
+    fn parse_prop_decl(&mut self, start: usize) -> Result<Decl, ElabError> {
+        self.advance(); // consume 'prop'
+        let (name, _) = self.expect_con()?;
+        let params = self.parse_binders()?;
+        self.expect(&Token::Colon)?;
+        let ret_ty = self.parse_type()?;
+        let mut intros = Vec::new();
+        if matches!(self.peek(), Token::KwWhere) {
+            self.advance();
+            self.expect(&Token::LBrace)?;
+            while !matches!(self.peek(), Token::RBrace | Token::Eof) {
+                let intro_start = self.peek_span().start;
+                let (intro_name, _) = self.expect_ident()?;
+                self.expect(&Token::Colon)?;
+                let ty = self.parse_type()?;
+                let intro_end = ty.span().end;
+                intros.push(PropIntro {
+                    name: intro_name,
+                    ty,
+                    span: Span::new(intro_start, intro_end),
+                });
+                if matches!(self.peek(), Token::Semicolon) {
+                    self.advance();
+                } else if !matches!(self.peek(), Token::RBrace) {
+                    return Err(ElabError::ParseError {
+                        msg: "expected ';' or '}' after prop intro".to_string(),
+                        span: self.peek_span().clone(),
+                    });
+                }
+            }
+            self.expect(&Token::RBrace)?;
+        }
+        let end = self.tokens[self.pos - 1].1.end;
+        Ok(Decl::PropDecl {
+            name,
+            params,
+            ret_ty,
+            intros,
+            span: Span::new(start, end),
+        })
+    }
+
+    /// `lemma name binder* : theorem = proof`
+    fn parse_lemma_decl(&mut self, start: usize) -> Result<Decl, ElabError> {
+        self.advance(); // consume 'lemma'
+        let (name, _) = self.expect_ident()?;
+        let params = self.parse_binders()?;
+        self.expect(&Token::Colon)?;
+        let theorem = self.parse_type()?;
+        self.expect(&Token::Eq)?;
+        let body = self.parse_expr()?;
+        let end = body.span().end;
+        Ok(Decl::LemmaDecl {
+            name,
+            params,
+            theorem,
+            body,
+            span: Span::new(start, end),
+        })
+    }
+
+    /// `proof p for subject binder* : theorem = proof`
+    fn parse_attached_proof_decl(&mut self, start: usize) -> Result<Decl, ElabError> {
+        self.advance(); // consume 'proof'
+        let (proof_name, _) = self.expect_ident()?;
+        self.expect_contextual_ident("for")?;
+        let subject = self.parse_path()?;
+        let params = self.parse_binders()?;
+        self.expect(&Token::Colon)?;
+        let theorem = self.parse_type()?;
+        self.expect(&Token::Eq)?;
+        let body = self.parse_expr()?;
+        let end = body.span().end;
+        Ok(Decl::AttachedProofDecl {
+            proof_name,
+            subject,
+            params,
+            theorem,
+            body,
             span: Span::new(start, end),
         })
     }
@@ -481,10 +587,7 @@ impl Parser {
             Token::Ident(s) => {
                 if is_temporal_operator(&s) {
                     return Err(ElabError::ParseError {
-                        msg: format!(
-                            "unexpected temporal operator '{}' in atom position",
-                            s
-                        ),
+                        msg: format!("unexpected temporal operator '{}' in atom position", s),
                         span: self.peek_span().clone(),
                     });
                 }
@@ -505,6 +608,33 @@ impl Parser {
 
     fn is_contextual_ident(&self, ident: &str) -> bool {
         matches!(self.peek(), Token::Ident(s) if s == ident)
+    }
+
+    fn expect_contextual_ident(&mut self, ident: &str) -> Result<Span, ElabError> {
+        match self.peek().clone() {
+            Token::Ident(s) if s == ident => {
+                let span = self.peek_span().clone();
+                self.advance();
+                Ok(span)
+            }
+            other => Err(ElabError::ParseError {
+                msg: format!("expected '{}', found {:?}", ident, other),
+                span: self.peek_span().clone(),
+            }),
+        }
+    }
+
+    fn parse_path(&mut self) -> Result<String, ElabError> {
+        let (mut path, _) = self.expect_ident()?;
+        while matches!(self.peek(), Token::Dot)
+            && matches!(self.lookahead(1), Token::Ident(_) | Token::ConId(_))
+        {
+            self.advance();
+            let (seg, _) = self.expect_ident()?;
+            path.push('.');
+            path.push_str(&seg);
+        }
+        Ok(path)
     }
 
     /// `law Name (param) { field : φ ; … }`
@@ -680,7 +810,11 @@ impl Parser {
         }
         let end = self.peek_span().end;
         self.expect(&Token::RBrace)?;
-        Ok(Decl::ModuleDecl { name, decls, span: Span::new(start, end) })
+        Ok(Decl::ModuleDecl {
+            name,
+            decls,
+            span: Span::new(start, end),
+        })
     }
 
     /// `import M` | `import M as N` | `import M (foo, Bar)` (`33 §3.2`).
@@ -711,7 +845,11 @@ impl Parser {
             _ => crate::ast::ImportKind::Qualified,
         };
         let end = self.tokens[self.pos - 1].1.end;
-        Ok(Decl::ImportDecl { module, kind, span: Span::new(start, end) })
+        Ok(Decl::ImportDecl {
+            module,
+            kind,
+            span: Span::new(start, end),
+        })
     }
 
     /// `use M` — unqualified open import (`33 §3.2`).
@@ -719,7 +857,11 @@ impl Parser {
         self.advance(); // consume 'use'
         let (module, _) = self.expect_ident()?;
         let end = self.tokens[self.pos - 1].1.end;
-        Ok(Decl::ImportDecl { module, kind: crate::ast::ImportKind::Open, span: Span::new(start, end) })
+        Ok(Decl::ImportDecl {
+            module,
+            kind: crate::ast::ImportKind::Open,
+            span: Span::new(start, end),
+        })
     }
 
     /// `pub <decl>` — export marker (`33 §4.1`).
@@ -977,8 +1119,8 @@ impl Parser {
                 other => {
                     return Err(ElabError::ParseError {
                         msg: format!(
-                            "expected ',' or '}}' in constructor `{name}` field list, found {other:?}"
-                        ),
+                        "expected ',' or '}}' in constructor `{name}` field list, found {other:?}"
+                    ),
                         span: self.peek_span().clone(),
                     })
                 }
@@ -1035,7 +1177,10 @@ impl Parser {
             (Token::Str(s), _) => s,
             (other, span) => {
                 return Err(ElabError::ParseError {
-                    msg: format!("expected string literal for library name, found {:?}", other),
+                    msg: format!(
+                        "expected string literal for library name, found {:?}",
+                        other
+                    ),
                     span,
                 })
             }
@@ -1216,7 +1361,12 @@ impl Parser {
         let phi = self.parse_prop_expr()?;
         let end = self.peek_span().end;
         self.expect(&Token::RBrace)?;
-        Ok(Type::TRefine(x, Box::new(a), Box::new(phi), Span::new(start, end)))
+        Ok(Type::TRefine(
+            x,
+            Box::new(a),
+            Box::new(phi),
+            Span::new(start, end),
+        ))
     }
 
     fn is_dep_pi_ahead(&self) -> bool {
@@ -1239,7 +1389,12 @@ impl Parser {
         self.expect(&Token::Arrow)?;
         let b = self.parse_type()?;
         let end = b.span().end;
-        Ok(Type::TPi(x, Box::new(a), Box::new(b), Span::new(start, end)))
+        Ok(Type::TPi(
+            x,
+            Box::new(a),
+            Box::new(b),
+            Span::new(start, end),
+        ))
     }
 
     fn parse_atom_type(&mut self) -> Result<Type, ElabError> {
@@ -1253,7 +1408,10 @@ impl Parser {
                 } else {
                     None
                 };
-                Ok(Type::TUniv(level, Span::new(start, self.tokens[self.pos - 1].1.end)))
+                Ok(Type::TUniv(
+                    level,
+                    Span::new(start, self.tokens[self.pos - 1].1.end),
+                ))
             }
             Token::ConId(s) => {
                 let span = self.peek_span().clone();
@@ -1325,7 +1483,12 @@ impl Parser {
                 self.advance(); // '->'
                 let b = self.parse_arrow_expr()?; // right-assoc
                 let end = b.span().end;
-                return Ok(Expr::EPi(x, Box::new(a), Box::new(b), Span::new(start, end)));
+                return Ok(Expr::EPi(
+                    x,
+                    Box::new(a),
+                    Box::new(b),
+                    Span::new(start, end),
+                ));
             }
             // Not actually a dependent arrow (no trailing `->`) — this was
             // a plain parenthesized ascription/expr; rewind and re-parse
@@ -1507,7 +1670,11 @@ impl Parser {
             self.expect(&Token::FatArrow)?;
             let body = self.parse_expr()?;
             let arm_end = body.span().end;
-            arms.push(MatchArm { pat, body, span: Span::new(arm_start, arm_end) });
+            arms.push(MatchArm {
+                pat,
+                body,
+                span: Span::new(arm_start, arm_end),
+            });
             if matches!(self.peek(), Token::Semicolon) {
                 self.advance();
             }
@@ -1539,12 +1706,19 @@ impl Parser {
                 } else {
                     sub.last().unwrap().span.end
                 };
-                Ok(Pattern { kind: PatKind::Ctor(name, sub), span: Span::new(start, end) })
+                Ok(Pattern {
+                    kind: PatKind::Ctor(name, sub),
+                    span: Span::new(start, end),
+                })
             }
             Token::Ident(name) => {
                 let span = self.peek_span().clone();
                 self.advance();
-                let kind = if name == "_" { PatKind::Wild } else { PatKind::Var(name) };
+                let kind = if name == "_" {
+                    PatKind::Wild
+                } else {
+                    PatKind::Var(name)
+                };
                 Ok(Pattern { kind, span })
             }
             other => Err(ElabError::ParseError {
@@ -1567,7 +1741,11 @@ impl Parser {
             Token::Ident(name) => {
                 let span = self.peek_span().clone();
                 self.advance();
-                let kind = if name == "_" { PatKind::Wild } else { PatKind::Var(name) };
+                let kind = if name == "_" {
+                    PatKind::Wild
+                } else {
+                    PatKind::Var(name)
+                };
                 Ok(Pattern { kind, span })
             }
             Token::ConId(name) => {
@@ -1575,14 +1753,20 @@ impl Parser {
                 let span = self.peek_span().clone();
                 self.advance();
                 let (name, span) = self.parse_dotted(name, span);
-                Ok(Pattern { kind: PatKind::Ctor(name, vec![]), span })
+                Ok(Pattern {
+                    kind: PatKind::Ctor(name, vec![]),
+                    span,
+                })
             }
             Token::LParen => {
                 self.advance();
                 let inner = self.parse_pattern()?;
                 let end = self.peek_span().end;
                 self.expect(&Token::RParen)?;
-                Ok(Pattern { kind: inner.kind, span: Span::new(start, end) })
+                Ok(Pattern {
+                    kind: inner.kind,
+                    span: Span::new(start, end),
+                })
             }
             other => Err(ElabError::ParseError {
                 msg: format!("expected an atom pattern, found {:?}", other),
@@ -1652,13 +1836,33 @@ impl Parser {
             Token::Ident(s) => {
                 let span = self.peek_span().clone();
                 self.advance();
-                Ok(Expr::EVar(s, span))
+                if matches!(self.peek(), Token::DoubleColon) {
+                    self.advance();
+                    let (proof_name, proof_span) = self.expect_ident()?;
+                    Ok(Expr::EAttachedProofRef {
+                        subject: s,
+                        proof_name,
+                        span: Span::new(span.start, proof_span.end),
+                    })
+                } else {
+                    Ok(Expr::EVar(s, span))
+                }
             }
             Token::ConId(s) => {
                 let span = self.peek_span().clone();
                 self.advance();
                 let (name, span) = self.parse_dotted(s, span);
-                Ok(Expr::ECon(name, span))
+                if matches!(self.peek(), Token::DoubleColon) {
+                    self.advance();
+                    let (proof_name, proof_span) = self.expect_ident()?;
+                    Ok(Expr::EAttachedProofRef {
+                        subject: name,
+                        proof_name,
+                        span: Span::new(span.start, proof_span.end),
+                    })
+                } else {
+                    Ok(Expr::ECon(name, span))
+                }
             }
             Token::KwType => {
                 self.advance();
@@ -1680,6 +1884,19 @@ impl Parser {
             }
             Token::LParen => {
                 self.advance();
+                if matches!(self.peek(), Token::KwProof) {
+                    self.advance();
+                    let (proof_name, _) = self.expect_ident()?;
+                    self.expect_contextual_ident("for")?;
+                    let subject = self.parse_path()?;
+                    let end = self.peek_span().end;
+                    self.expect(&Token::RParen)?;
+                    return Ok(Expr::EAttachedProofRef {
+                        subject,
+                        proof_name,
+                        span: Span::new(start, end),
+                    });
+                }
                 let inner = self.parse_expr()?;
                 self.expect(&Token::RParen)?;
                 let end = self.tokens[self.pos - 1].1.end;
@@ -1698,12 +1915,23 @@ impl Parser {
                         Expr::ENumLit(lit, _) => Expr::ENumLit(lit, span),
                         Expr::EStr(s, _) => Expr::EStr(s, span),
                         Expr::EBinOp(op, l, r, _) => Expr::EBinOp(op, l, r, span),
-                        Expr::EMatch { scrut, arms, span: _ } => {
-                            Expr::EMatch { scrut, arms, span }
-                        }
+                        Expr::EMatch {
+                            scrut,
+                            arms,
+                            span: _,
+                        } => Expr::EMatch { scrut, arms, span },
                         Expr::EProj(e, field, _) => Expr::EProj(e, field, span),
                         Expr::EPi(x, a, b, _) => Expr::EPi(x, a, b, span),
                         Expr::EArrow(a, b, _) => Expr::EArrow(a, b, span),
+                        Expr::EAttachedProofRef {
+                            subject,
+                            proof_name,
+                            ..
+                        } => Expr::EAttachedProofRef {
+                            subject,
+                            proof_name,
+                            span,
+                        },
                     },
                 })
             }
@@ -1733,7 +1961,10 @@ impl Parser {
 /// operator set here keeps the temporal grammar lexeme-free — only `temporal`
 /// itself is a lexer keyword, so the grammar adds no global identifiers.
 fn is_temporal_operator(s: &str) -> bool {
-    matches!(s, "not" | "eventually" | "always" | "next" | "and" | "or" | "until" | "leadsto")
+    matches!(
+        s,
+        "not" | "eventually" | "always" | "next" | "and" | "or" | "until" | "leadsto"
+    )
 }
 
 pub fn parse_decls(src: &str) -> Result<Vec<Decl>, ElabError> {

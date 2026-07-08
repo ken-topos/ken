@@ -100,6 +100,12 @@ pub enum RDeclKind {
     Let,
     /// A `prove name : φ` standalone obligation.
     Prove,
+    /// `prop P ... : Omega where { ... }`.
+    Prop { intros: Vec<RPropIntro> },
+    /// `lemma name ... : theorem = proof`.
+    Lemma,
+    /// `proof p for subject ... : theorem = proof`.
+    AttachedProof { subject: String, proof_name: String },
     /// A `law Name (param) { field : φ ; … }` bundle.
     Law {
         param: String,
@@ -158,6 +164,13 @@ pub enum RDeclKind {
     DeriveDecl { data_name: String },
 }
 
+#[derive(Clone, Debug)]
+pub struct RPropIntro {
+    pub name: String,
+    pub ty: RType,
+    pub span: Span,
+}
+
 /// A resolved expression — names replaced by de Bruijn indices.
 #[derive(Clone, Debug)]
 pub enum RExpr {
@@ -191,6 +204,12 @@ pub enum RExpr {
     /// `A -> B` — non-dependent function type, expr position (VAL2 #4).
     /// Both sides resolved as exprs; right-associative.
     RArrow(Box<RExpr>, Box<RExpr>, Span),
+    /// `subject::proof` / `(proof proof for subject)`.
+    RAttachedProofRef {
+        subject: String,
+        proof_name: String,
+        span: Span,
+    },
 }
 
 impl RExpr {
@@ -209,6 +228,7 @@ impl RExpr {
             | RExpr::RProj(_, _, s)
             | RExpr::RPi(_, _, _, s)
             | RExpr::RArrow(_, _, s)
+            | RExpr::RAttachedProofRef { span: s, .. }
             | RExpr::RBinOp(_, _, _, s) => s,
             RExpr::RMatch { span, .. } => span,
         }
@@ -364,7 +384,8 @@ fn expr_as_type(expr: &Expr) -> Result<Type, ElabError> {
         | Expr::EStr(..)
         | Expr::EBinOp(..)
         | Expr::EMatch { .. }
-        | Expr::EProj(..) => Err(unsupported_constructor_type_expr(expr)),
+        | Expr::EProj(..)
+        | Expr::EAttachedProofRef { .. } => Err(unsupported_constructor_type_expr(expr)),
     }
 }
 
@@ -656,6 +677,100 @@ pub fn resolve_decl(decl: &Decl) -> Result<RDecl, ElabError> {
                 ensures: vec![],
                 span: span.clone(),
                 kind: RDeclKind::Prove,
+            })
+        }
+
+        Decl::PropDecl {
+            name,
+            params,
+            ret_ty,
+            intros,
+            span,
+        } => {
+            let mut scope = Scope::new();
+            let mut single_binders: Vec<(String, RType)> = Vec::new();
+            for b in params {
+                let a = resolve_type(&mut scope, &b.ty)?;
+                for name_str in &b.names {
+                    single_binders.push((name_str.clone(), a.clone()));
+                    scope.push(name_str);
+                }
+            }
+            let resolved_ret = resolve_type(&mut scope, ret_ty)?;
+            let full_ty =
+                single_binders
+                    .into_iter()
+                    .rev()
+                    .fold(resolved_ret, |acc, (bname, bty)| {
+                        let s = acc.span().clone();
+                        RType::RPi(bname, Box::new(bty), Box::new(acc), s)
+                    });
+            let resolved_intros = intros
+                .iter()
+                .map(|intro| {
+                    Ok(RPropIntro {
+                        name: intro.name.clone(),
+                        ty: resolve_type(&mut scope, &intro.ty)?,
+                        span: intro.span.clone(),
+                    })
+                })
+                .collect::<Result<Vec<_>, ElabError>>()?;
+            Ok(RDecl {
+                name: name.clone(),
+                ty: Some(full_ty),
+                body: RExpr::RUniv(None, span.clone()),
+                requires: vec![],
+                ensures: vec![],
+                span: span.clone(),
+                kind: RDeclKind::Prop {
+                    intros: resolved_intros,
+                },
+            })
+        }
+
+        Decl::LemmaDecl {
+            name,
+            params,
+            theorem,
+            body,
+            span,
+        } => {
+            let mut scope = Scope::new();
+            let (full_ty, full_body) =
+                resolve_checked_proof_decl(params, theorem, body, &mut scope)?;
+            Ok(RDecl {
+                name: name.clone(),
+                ty: Some(full_ty),
+                body: full_body,
+                requires: vec![],
+                ensures: vec![],
+                span: span.clone(),
+                kind: RDeclKind::Lemma,
+            })
+        }
+
+        Decl::AttachedProofDecl {
+            proof_name,
+            subject,
+            params,
+            theorem,
+            body,
+            span,
+        } => {
+            let mut scope = Scope::new();
+            let (full_ty, full_body) =
+                resolve_checked_proof_decl(params, theorem, body, &mut scope)?;
+            Ok(RDecl {
+                name: format!("{subject}::{proof_name}"),
+                ty: Some(full_ty),
+                body: full_body,
+                requires: vec![],
+                ensures: vec![],
+                span: span.clone(),
+                kind: RDeclKind::AttachedProof {
+                    subject: subject.clone(),
+                    proof_name: proof_name.clone(),
+                },
             })
         }
 
@@ -954,6 +1069,39 @@ pub fn resolve_expr_standalone(expr: &Expr) -> Result<RExpr, ElabError> {
 
 // ----- internal resolution -----
 
+fn resolve_checked_proof_decl(
+    params: &[crate::ast::Binder],
+    theorem: &Type,
+    body: &Expr,
+    scope: &mut Scope,
+) -> Result<(RType, RExpr), ElabError> {
+    let mut single_binders: Vec<(String, RType)> = Vec::new();
+    for b in params {
+        let a = resolve_type(scope, &b.ty)?;
+        for name_str in &b.names {
+            single_binders.push((name_str.clone(), a.clone()));
+            scope.push(name_str);
+        }
+    }
+    let resolved_theorem = resolve_type(scope, theorem)?;
+    let resolved_body = resolve_expr(scope, body)?;
+    let full_body = single_binders
+        .iter()
+        .rev()
+        .fold(resolved_body, |acc, (bname, _)| {
+            let s = acc.span().clone();
+            RExpr::RLam(bname.clone(), Box::new(acc), s)
+        });
+    let full_ty = single_binders
+        .into_iter()
+        .rev()
+        .fold(resolved_theorem, |acc, (bname, bty)| {
+            let s = acc.span().clone();
+            RType::RPi(bname, Box::new(bty), Box::new(acc), s)
+        });
+    Ok((full_ty, full_body))
+}
+
 fn resolve_expr(scope: &mut Scope, expr: &Expr) -> Result<RExpr, ElabError> {
     resolve_expr_ctx(scope, expr, PropCtx::None)
 }
@@ -1079,6 +1227,16 @@ fn resolve_expr_ctx(scope: &mut Scope, expr: &Expr, ctx: PropCtx) -> Result<RExp
             let rb = resolve_expr_ctx(scope, b, ctx)?;
             Ok(RExpr::RArrow(Box::new(ra), Box::new(rb), span.clone()))
         }
+
+        Expr::EAttachedProofRef {
+            subject,
+            proof_name,
+            span,
+        } => Ok(RExpr::RAttachedProofRef {
+            subject: subject.clone(),
+            proof_name: proof_name.clone(),
+            span: span.clone(),
+        }),
 
         Expr::EMatch { scrut, arms, span } => {
             let rscrut = resolve_expr_ctx(scope, scrut, ctx)?;
