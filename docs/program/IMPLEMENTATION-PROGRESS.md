@@ -14,7 +14,133 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### SURF NAMED PROOF CLAIMS APPROVED; PUBLISHER PATH NEXT (2026-07-08 20:52 UTC)
+> ### SURF DEF SPEC GATE CLOSED; PUBLISHING (2026-07-08 22:20 UTC)
+>
+> Current frontier: `SURF-def-named-definitions` Spec gate is closed. Spec
+> leader closed the gate at `evt_4b42d7y5dea07` on exact reviewed head
+> `wp/SURF-def-named-definitions @
+> 63bbd1fd1fb07675cc301ac2cb40fb275dc6d87e`, with base / merge-base
+> `origin/main @ 6a85d8decc09a6e44b0780829136292b780aaecf`. The cumulative
+> diff remains docs-only and exactly
+> `docs/program/wp/SURF-def-named-definitions.md`.
+>
+> Closed boundary: `def` remains out of scope; no new surface keyword is
+> accepted; the brief is locked to existing-form guidance only: `type`,
+> `record`, `const` / `fn` / `proc`, `prop`, `lemma`, and attached `proof`; no
+> Language implementation follow-on is opened from this head.
+>
+> Current action: Steward publisher-path merge handling on exact head
+> `63bbd1fd...`, with required tracker-sync commit added before publishing.
+>
+> ### SURF DEF D1 APPROVED; SPEC CLOSEOUT ROUTED (2026-07-08 22:06 UTC)
+>
+> Current frontier: `SURF-def-named-definitions` D1 is authored and approved by
+> Conformance on exact head
+> `wp/SURF-def-named-definitions @
+> 63bbd1fd1fb07675cc301ac2cb40fb275dc6d87e`, with locked base / merge-base
+> `origin/main @ 6a85d8decc09a6e44b0780829136292b780aaecf`. The cumulative diff
+> remains docs-only and exactly `docs/program/wp/SURF-def-named-definitions.md`.
+>
+> Gate anchors:
+> - D0 lock / D1 route: `evt_c8k3g1zaj2vk`
+> - D1 handoff: `evt_73t1p3r3a4jye`
+> - Spec leader conformance route: `evt_3hvkhr5t5b3sw`
+> - Conformance approval: `evt_5yn3xvbzvpqv8`
+>
+> The approved result records **no new `def` keyword**: `def` stays out of the
+> surface language; the remaining guidance is over existing `type`, `record`,
+> `const` / `fn` / `proc`, `prop`, `lemma`, and attached `proof` forms. Because
+> the conformance approval did not mention the next actor, Steward posted a
+> routing bridge at `evt_5tnf8sgww8yfe`, asking Spec leader to close the Spec
+> gate / hand back to Steward for publisher-path merge handling on exact head
+> `63bbd1fd...`, or state the remaining specific gap.
+>
+> Current wait: Spec leader Spec-gate closure / merge handoff.
+>
+> ### SURF DEF D0 LOCKED; D1 NUDGED (2026-07-08 21:45 UTC)
+>
+> Current frontier: `SURF-def-named-definitions` D0 is locked on exact kickoff
+> head `wp/SURF-def-named-definitions @
+> 46d13d79ba0ac74b4a72ecd6316915a30a4cb5be`, merge-base
+> `origin/main @ 6a85d8decc09a6e44b0780829136292b780aaecf`. Spec leader locked
+> the outcome at `evt_c8k3g1zaj2vk`: **no new `def` keyword**. The existing
+> forms remain authoritative for the stated use cases: `type`, `record`,
+> `const` / `fn` / `proc`, `prop`, `lemma`, and attached `proof`. The WP must
+> not reopen the settled readability split or prior SURF proof-claim decisions,
+> and no Language implementation follow-on is opened from this head.
+>
+> Spec leader routed D1 to Spec author as a narrow style/usage clarification
+> pass. Spec author then acknowledged in the prior `SURF-named-proof-claims`
+> thread and set status idle, so Steward posted a required routing nudge in the
+> active `SURF-def-named-definitions` thread at `evt_46gzxeyx0atcs`, asking
+> Spec author to pick up D1 on exact head `46d13d79...`, keep `def` out of the
+> surface language, pin preferred existing forms for named concepts,
+> transparent abbreviations, property bundles, and proof-facing names, and hand
+> back the exact reviewed head plus cumulative changed-file list for
+> conformance review.
+>
+> Current wait: Spec author D1 style-guidance handoff. No other routing stall is
+> present.
+>
+> ### SURF DEF D0 READS IN; LOCK ROUTED (2026-07-08 21:36 UTC)
+>
+> Current frontier: `SURF-def-named-definitions` remains active in the Spec
+> enclave on exact frame head
+> `wp/SURF-def-named-definitions @
+> 46d13d79ba0ac74b4a72ecd6316915a30a4cb5be` over base / merge-base
+> `origin/main @ 6a85d8decc09a6e44b0780829136292b780aaecf`. Both D0 reads are
+> now in and both recommend **no new `def` keyword**: existing `type`,
+> `record`, `const` / `fn` / `proc`, `prop`, `lemma`, and attached `proof`
+> forms cover the stated use cases, so the follow-on route is catalog style
+> guidance only.
+>
+> D0 read anchors:
+> - Spec leader pickup/routing: `evt_3q985efwph8pk`
+> - Spec author read: `evt_23az11r9g6zxw` (posted in the prior
+>   `SURF-named-proof-claims` thread rather than the new `def` thread)
+> - Conformance validator read: `evt_5skz5bf8dt2wv`
+>
+> Because the Spec author read landed in the prior SURF thread, Steward posted a
+> routing bridge in the active `SURF-def-named-definitions` thread at
+> `evt_5gfz8btsecbcm`, mentioning Spec leader and asking them to treat both D0
+> reads as in and lock D0 on exact head `46d13d79...`, or state the remaining
+> specific gap. Current wait: Spec leader D0 lock and authoring route for the
+> style-guidance outcome.
+>
+> ### SURF DEF NAMED DEFINITIONS RELEASED TO SPEC (2026-07-08 21:25 UTC)
+>
+> Current frontier: the follow-on `SURF-def-named-definitions` Spec-enclave
+> pass is kicked off. Steward framed the WP as docs-only branch
+> `wp/SURF-def-named-definitions @
+> 46d13d79ba0ac74b4a72ecd6316915a30a4cb5be` over base / merge-base
+> `origin/main @ 6a85d8decc09a6e44b0780829136292b780aaecf`. The cumulative
+> diff is exactly `docs/program/wp/SURF-def-named-definitions.md`.
+>
+> Handoff-gate compaction ran before kickoff with
+> `scripts/handoff-gate-compact.sh spec-leader spec-author
+> conformance-validator`; post-wait sanity check showed all three worktrees at
+> `6a85d8d`. `spec-leader` still has the pre-existing untracked
+> `docs/program/wp/K2c-elaboration-plan.md` and
+> `docs/program/wp/V0-elaboration-plan.md`; those remain unrelated and must not
+> be staged into this WP.
+>
+> Kickoff event: `evt_5w2wnfmb90bjg`. D0 objective: decide whether Ken needs a
+> math-facing `def` surface form after `prop`, `lemma`, and attached `proof`, or
+> whether `type`, `const` / `fn`, `record`, `prop`, `lemma`, and `proof` already
+> cover the named-concept / property-bundle use cases. Allowed outcomes are
+> "no new keyword, add guidance" or "narrow `def` spelling with pinned grammar,
+> name resolution, visibility/import behavior, elaboration target, conformance
+> seeds, and catalog style." Guardrails: no kernel declaration class, no
+> trusted-base change, no weakening of the `const` / `fn` / `proc` purity split,
+> no catch-all replacement for existing declarations, and no reopening of
+> `prop`, `lemma`, attached `proof`, `::`, or explicit attached-proof telescope
+> decisions from `SURF-named-proof-claims`.
+>
+> Current wait: Spec leader D0 ownership and routing to Spec author /
+> conformance validator as needed. Keep this first pass spec-only unless D0
+> finds a hard prerequisite.
+>
+> ### SURF NAMED PROOF CLAIMS MEMBER RETROS IN (2026-07-08 21:03 UTC)
 >
 > Current frontier: `SURF-named-proof-claims` completed the Spec gate and the
 > spec/conformance docs are merged on `origin/main @
@@ -107,9 +233,18 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > Language leader handed publisher-path merge handling to Steward at
 > `evt_2432waycnx0gb`.
 >
-> Current wait: Steward sync this tracker onto the approved branch, then run
-> `scripts/scripted-pr-automerge.sh` for non-doc publisher merge handling on
-> `wp/SURF-named-proof-claims`. The temporary public Convo timer
+> Steward added the required tracker-sync commit and ran the scripted publisher
+> path on published head `a26c681397852133dee2afecdae462b3487c2df5`. PR #372
+> passed checks and merged with squash subject `SURF named proof claims core`,
+> landing `origin/main @ 6a85d8decc09a6e44b0780829136292b780aaecf`. Steward
+> fetched and verified that SHA locally, pruned the remote-tracking branch, and
+> removed the temporary publisher worktree plus local WP branch. Merge note /
+> closeout request: `evt_54x9c3w9yb5w7`. Language leader opened §10 closeout at
+> `evt_2ewz5cq947bew`, requesting Language implementer and Language QA retros.
+> Language implementer posted its retro at `evt_7rqeyspma6m96`; Language QA
+> posted its retro at `evt_36v7bk2amz03g`. Current wait: Language leader
+> coordination retro and retros-in handoff; after retros-in, release the held D3
+> catalog pilot for named proof claims. The temporary public Convo timer
 > `tmr_37t365xrgwr00` was cancelled after it posted a stale System event. The
 > local tmux watchdog helper is running instead:
 > `local/steward-watchdog-wake.sh` PID `2854643`, interval 1200s, log at
