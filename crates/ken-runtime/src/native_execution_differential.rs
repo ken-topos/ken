@@ -640,6 +640,19 @@ fn validate_object_linker_provenance(
             unreachable!("require_available_fact accepted only available host facts")
         }
     }
+    match &package.toolchain.backend_verifier {
+        ObjectLinkerEvidenceFact::Available { value, .. }
+            if value == "Cranelift verifier passed: true" => {}
+        ObjectLinkerEvidenceFact::Available { .. } => {
+            return Err(provenance_error(
+                "toolchain.backend_verifier",
+                "backend verifier fact contradicts the exact successful Cranelift verifier producer invariant",
+            ));
+        }
+        ObjectLinkerEvidenceFact::Unavailable { .. } => {
+            unreachable!("require_available_fact accepted only available backend verifier facts")
+        }
+    }
     Ok(())
 }
 
@@ -2307,6 +2320,35 @@ mod tests {
         assert_eq!(err.stage, NativeExecutionDifferentialStage::Provenance);
         assert_eq!(err.field, "toolchain.whole_compiler_proof");
         assert!(err.reason.contains("reported available"));
+    }
+
+    #[test]
+    fn recomputed_hash_with_contradictory_backend_verifier_rejects_before_report() {
+        let program = starter_program(48);
+        let run_report = runtime_ir_run_report(&program);
+        let output_dir = temp_output_dir("nc26-contradictory-backend-verifier");
+        let mut package = package_for(&program, &run_report, &output_dir);
+        match &mut package.toolchain.backend_verifier {
+            ObjectLinkerEvidenceFact::Available { value, .. } => {
+                *value = "Cranelift verifier passed: false".to_string();
+            }
+            ObjectLinkerEvidenceFact::Unavailable { .. } => unreachable!(),
+        }
+        package.header.package_hash = object_linker_executable_package_hash(&package);
+
+        let err = run_native_execution_differential(
+            &program,
+            &package,
+            &run_report,
+            &output_dir,
+            interpreter_available(&program, &run_report),
+            "native differential unit test",
+        )
+        .expect_err("contradictory backend verifier fact rejects");
+
+        assert_eq!(err.stage, NativeExecutionDifferentialStage::Provenance);
+        assert_eq!(err.field, "toolchain.backend_verifier");
+        assert!(err.reason.contains("contradicts"));
     }
 
     #[test]
