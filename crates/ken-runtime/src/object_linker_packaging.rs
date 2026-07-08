@@ -20,7 +20,9 @@ use crate::{
     NativeRuntimeIrComparisonVerdict, NativeSeedEnvironment, PlatformRuntimeEvidenceFact,
     PlatformRuntimeEvidenceLane, PlatformRuntimeSupportReport, RuntimeArtifactIdentity,
     RuntimeExecutableEntrypointPackage, RuntimeGroundValue, RuntimeIrRunReport, RuntimeObservation,
-    RuntimeProgram, RuntimeSymbol,
+    RuntimeProgram, RuntimeSymbol, EXECUTABLE_ENTRYPOINT_PACKAGE_KIND,
+    EXECUTABLE_ENTRYPOINT_PACKAGE_VERSION, PLATFORM_RUNTIME_SUPPORT_KIND,
+    PLATFORM_RUNTIME_SUPPORT_VERSION,
 };
 
 pub const OBJECT_LINKER_PACKAGE_KIND: &str = "KenObjectLinkerExecutablePackage";
@@ -367,6 +369,20 @@ fn validate_entrypoint_package(
     program: &RuntimeProgram,
     package: &RuntimeExecutableEntrypointPackage,
 ) -> Result<(), ObjectLinkerPackagingError> {
+    if package.header.package_kind != EXECUTABLE_ENTRYPOINT_PACKAGE_KIND {
+        return Err(packaging_error(
+            ObjectLinkerPackagingStage::EntrypointPackage,
+            "package_kind",
+            "entrypoint package kind is not KenExecutableEntrypointPackage",
+        ));
+    }
+    if package.header.version != EXECUTABLE_ENTRYPOINT_PACKAGE_VERSION {
+        return Err(packaging_error(
+            ObjectLinkerPackagingStage::EntrypointPackage,
+            "version",
+            "entrypoint package version is unsupported by NC23",
+        ));
+    }
     if package.header.package_hash != runtime_executable_entrypoint_package_hash(package) {
         return Err(packaging_error(
             ObjectLinkerPackagingStage::EntrypointPackage,
@@ -406,6 +422,20 @@ fn validate_platform_support(
     package: &RuntimeExecutableEntrypointPackage,
     support: &PlatformRuntimeSupportReport,
 ) -> Result<(), ObjectLinkerPackagingError> {
+    if support.header.support_kind != PLATFORM_RUNTIME_SUPPORT_KIND {
+        return Err(packaging_error(
+            ObjectLinkerPackagingStage::PlatformRuntimeSupport,
+            "support_kind",
+            "platform runtime support report kind is not KenPlatformRuntimeSupport",
+        ));
+    }
+    if support.header.version != PLATFORM_RUNTIME_SUPPORT_VERSION {
+        return Err(packaging_error(
+            ObjectLinkerPackagingStage::PlatformRuntimeSupport,
+            "version",
+            "platform runtime support report version is unsupported by NC23",
+        ));
+    }
     if support.header.support_hash != platform_runtime_support_report_hash(support) {
         return Err(packaging_error(
             ObjectLinkerPackagingStage::Hash,
@@ -1383,6 +1413,65 @@ mod tests {
 
         assert_eq!(err.stage, ObjectLinkerPackagingStage::EntrypointPackage);
         assert_eq!(err.field, "entrypoint.target_kind");
+    }
+
+    #[test]
+    fn forged_entrypoint_package_kind_version_rejects_before_linking() {
+        let observation = RuntimeObservation::Returned(RuntimeGroundValue::Int(17));
+        let program = starter_program(int_body(17), observation);
+        let (_report, mut entrypoint) = packaged_entrypoint(&program);
+        let run_report = runtime_ir_run_report(&program);
+        let mut support = platform_support(&program, &entrypoint, &run_report);
+
+        entrypoint.header.package_kind = "ForgedEntrypointPackage".to_string();
+        entrypoint.header.version = EXECUTABLE_ENTRYPOINT_PACKAGE_VERSION + 1;
+        entrypoint.header.package_hash = runtime_executable_entrypoint_package_hash(&entrypoint);
+        support.entrypoint_package_hash = entrypoint.header.package_hash;
+        support.header.support_hash = platform_runtime_support_report_hash(&support);
+
+        let err = package_starter_executable_artifact(
+            &program,
+            &entrypoint,
+            &support,
+            &run_report,
+            &NativeSeedEnvironment::empty(),
+            temp_output_dir("nc23-forged-entrypoint-header"),
+            "object linker unit test",
+        )
+        .expect_err("forged NC20 package header rejects");
+
+        assert_eq!(err.stage, ObjectLinkerPackagingStage::EntrypointPackage);
+        assert_eq!(err.field, "package_kind");
+    }
+
+    #[test]
+    fn forged_platform_support_kind_version_rejects_before_linking() {
+        let observation = RuntimeObservation::Returned(RuntimeGroundValue::Int(19));
+        let program = starter_program(int_body(19), observation);
+        let (_report, entrypoint) = packaged_entrypoint(&program);
+        let run_report = runtime_ir_run_report(&program);
+        let mut support = platform_support(&program, &entrypoint, &run_report);
+
+        support.header.support_kind = "ForgedPlatformRuntimeSupport".to_string();
+        support.header.version = PLATFORM_RUNTIME_SUPPORT_VERSION + 1;
+        support.header.support_hash = platform_runtime_support_report_hash(&support);
+
+        let err = package_starter_executable_artifact(
+            &program,
+            &entrypoint,
+            &support,
+            &run_report,
+            &NativeSeedEnvironment::empty(),
+            temp_output_dir("nc23-forged-support-header"),
+            "object linker unit test",
+        )
+        .expect_err("forged NC21 support header rejects");
+
+        assert_eq!(
+            err.stage,
+            ObjectLinkerPackagingStage::PlatformRuntimeSupport
+        );
+        assert_eq!(err.field, "support_kind");
     }
 
     #[test]
