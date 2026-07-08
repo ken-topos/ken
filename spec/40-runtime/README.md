@@ -33,6 +33,11 @@ which later backends are validated).
    executable compiler artifact below checked core, including proof erasure,
    runtime IR, loud unsupported-erasure rejection, and interpreter comparison
    observations.
+7. The **executable-artifact contract**
+   (`48-executable-artifact-contract.md`): the identity/report envelope above
+   checked core and runtime IR for closed Ken-only native executable attempts,
+   including native artifact facts, toolchain facts, explicit unavailable
+   lanes, and no-promotion rules.
 
 ## 2. The two design commitments this section encodes
 
