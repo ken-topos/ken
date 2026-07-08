@@ -183,6 +183,7 @@ pub struct CheckedCoreSemanticInputs {
     pub assumptions: BTreeMap<StableSymbol, Vec<u8>>,
     pub trusted_base_delta: BTreeMap<StableSymbol, Vec<u8>>,
     pub dependency_semantic_hashes: BTreeMap<StableSymbol, String>,
+    pub dependency_declaration_refs: BTreeMap<StableSymbol, StableSymbol>,
     pub unsupported: BTreeMap<StableSymbol, Vec<u8>>,
 }
 
@@ -266,6 +267,8 @@ pub struct CheckedCoreBodyViewSelection {
     pub package_artifact_hash: u64,
     pub target_symbol: StableSymbol,
     pub reachable_declarations: BTreeSet<StableSymbol>,
+    pub external_symbols: BTreeSet<StableSymbol>,
+    pub dependency_semantic_hashes: BTreeMap<StableSymbol, String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -333,6 +336,25 @@ pub struct CheckedCorePrimitiveApplicationView {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CheckedCoreRecursiveCallView {
+    pub symbol: StableSymbol,
+    pub level_args: Vec<CheckedCoreLevelView>,
+    pub group_symbol: StableSymbol,
+    pub group_members: Vec<StableSymbol>,
+    pub admission: RecursionAdmission,
+    pub scc_index: usize,
+    pub lowerability: LowerabilityStatus,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CheckedCoreImportedDeclarationCallView {
+    pub symbol: StableSymbol,
+    pub level_args: Vec<CheckedCoreLevelView>,
+    pub dependency: StableSymbol,
+    pub dependency_semantic_hash: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CheckedCoreRecordSigmaView {
     pub symbol: StableSymbol,
     pub kind: RecordSigmaKind,
@@ -376,6 +398,48 @@ pub struct CheckedCoreRecordSigmaProjectionView {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CheckedCoreDictionaryView {
+    pub symbol: StableSymbol,
+    pub class_symbol: Option<StableSymbol>,
+    pub dictionary_symbol: Option<StableSymbol>,
+    pub head_symbol: Option<StableSymbol>,
+    pub fields: Vec<CheckedCoreDictionaryFieldView>,
+    pub lowerability: LowerabilityStatus,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CheckedCoreDictionaryFieldView {
+    pub position: usize,
+    pub name: String,
+    pub runtime: DictionaryFieldRuntimeStatus,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum DictionaryFieldRuntimeStatus {
+    Runtime,
+    ErasedLawProof,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CheckedCoreDictionaryConstructionView {
+    pub dictionary: CheckedCoreDictionaryView,
+    pub fields: Vec<CheckedCoreDictionaryFieldValue>,
+    pub terminator: Vec<u8>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CheckedCoreDictionaryFieldValue {
+    Runtime {
+        field: CheckedCoreDictionaryFieldView,
+        value: Box<CheckedCoreBodyTerm>,
+    },
+    Erased {
+        field: CheckedCoreDictionaryFieldView,
+        term: Vec<u8>,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CheckedCoreBodyTerm {
     Variable {
         de_bruijn_index: usize,
@@ -384,6 +448,8 @@ pub enum CheckedCoreBodyTerm {
         symbol: StableSymbol,
         level_args: Vec<CheckedCoreLevelView>,
     },
+    RecursiveDeclarationCall(CheckedCoreRecursiveCallView),
+    ImportedDeclarationCall(CheckedCoreImportedDeclarationCallView),
     PrimitiveLiteral(CheckedCorePrimitiveView),
     PrimitiveApplication(CheckedCorePrimitiveApplicationView),
     ConstructorReference(CheckedCoreConstructorView),
@@ -406,6 +472,7 @@ pub enum CheckedCoreBodyTerm {
     Match(CheckedCoreMatchView),
     RecordSigmaConstruction(CheckedCoreRecordSigmaConstructionView),
     RecordSigmaProjection(CheckedCoreRecordSigmaProjectionView),
+    DictionaryConstruction(CheckedCoreDictionaryConstructionView),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -513,6 +580,31 @@ pub enum CheckedCoreBodyViewError {
         primitive: StableSymbol,
         reason: String,
     },
+    UnsupportedRecursiveShape {
+        symbol: StableSymbol,
+        referenced: StableSymbol,
+        reason: String,
+    },
+    MissingDependencyIdentity {
+        owner: StableSymbol,
+        referenced: StableSymbol,
+    },
+    StaleDependencyIdentity {
+        owner: StableSymbol,
+        referenced: StableSymbol,
+        dependency: StableSymbol,
+        reason: String,
+    },
+    NonExecutableDictionaryFieldUse {
+        symbol: StableSymbol,
+        dictionary: StableSymbol,
+        field: String,
+    },
+    StaleDictionaryFieldSelection {
+        symbol: StableSymbol,
+        dictionary: StableSymbol,
+        reason: String,
+    },
     UnjustifiedImpossibleBranch {
         symbol: StableSymbol,
     },
@@ -599,6 +691,19 @@ impl CheckedCoreBodyViewError {
             }
             CheckedCoreBodyViewError::UnjustifiedPrimitivePartiality { .. } => {
                 "unjustified_primitive_partiality"
+            }
+            CheckedCoreBodyViewError::UnsupportedRecursiveShape { .. } => {
+                "unsupported_recursive_shape"
+            }
+            CheckedCoreBodyViewError::MissingDependencyIdentity { .. } => {
+                "missing_dependency_identity"
+            }
+            CheckedCoreBodyViewError::StaleDependencyIdentity { .. } => "stale_dependency_identity",
+            CheckedCoreBodyViewError::NonExecutableDictionaryFieldUse { .. } => {
+                "non_executable_dictionary_field_use"
+            }
+            CheckedCoreBodyViewError::StaleDictionaryFieldSelection { .. } => {
+                "stale_dictionary_field_selection"
             }
             CheckedCoreBodyViewError::UnjustifiedImpossibleBranch { .. } => {
                 "unjustified_impossible_branch"
@@ -746,6 +851,43 @@ impl fmt::Display for CheckedCoreBodyViewError {
             } => write!(
                 f,
                 "declaration {symbol} references primitive {primitive} without justified partiality: {reason}"
+            ),
+            CheckedCoreBodyViewError::UnsupportedRecursiveShape {
+                symbol,
+                referenced,
+                reason,
+            } => write!(
+                f,
+                "declaration {symbol} references recursive declaration {referenced} through an unsupported shape: {reason}"
+            ),
+            CheckedCoreBodyViewError::MissingDependencyIdentity { owner, referenced } => write!(
+                f,
+                "declaration {owner} references imported declaration {referenced} without package dependency identity"
+            ),
+            CheckedCoreBodyViewError::StaleDependencyIdentity {
+                owner,
+                referenced,
+                dependency,
+                reason,
+            } => write!(
+                f,
+                "declaration {owner} references imported declaration {referenced} through stale dependency {dependency}: {reason}"
+            ),
+            CheckedCoreBodyViewError::NonExecutableDictionaryFieldUse {
+                symbol,
+                dictionary,
+                field,
+            } => write!(
+                f,
+                "declaration {symbol} attempts to expose non-executable dictionary field {dictionary}.{field} as a runtime value"
+            ),
+            CheckedCoreBodyViewError::StaleDictionaryFieldSelection {
+                symbol,
+                dictionary,
+                reason,
+            } => write!(
+                f,
+                "declaration {symbol} has stale dictionary field selection for {dictionary}: {reason}"
             ),
             CheckedCoreBodyViewError::UnjustifiedImpossibleBranch { symbol } => write!(
                 f,
@@ -1032,6 +1174,7 @@ pub struct ClassInstanceMetadata {
     pub dictionary_symbol: Option<StableSymbol>,
     pub head_symbol: Option<StableSymbol>,
     pub field_order: Vec<String>,
+    pub runtime_fields: BTreeSet<String>,
     pub law_fields: BTreeSet<String>,
     pub lowerability: LowerabilityStatus,
 }
@@ -1171,6 +1314,11 @@ pub fn canonical_semantic_bytes(inputs: &CheckedCoreSemanticInputs) -> Vec<u8> {
     encode_string_map(
         "dependency_semantic_hashes",
         &inputs.dependency_semantic_hashes,
+        &mut out,
+    );
+    encode_symbol_map(
+        "dependency_declaration_refs",
+        &inputs.dependency_declaration_refs,
         &mut out,
     );
     encode_bytes_map("unsupported", &inputs.unsupported, &mut out);
@@ -1526,6 +1674,7 @@ fn compiler_relevant_symbols(semantic: &CheckedCoreSemanticInputs) -> BTreeSet<S
         symbols.extend(meta.group_members.iter().cloned());
     }
     symbols.extend(semantic.effects_foreign_metadata.keys().cloned());
+    symbols.extend(semantic.dependency_declaration_refs.keys().cloned());
     symbols
 }
 
@@ -1647,6 +1796,10 @@ fn semantic_symbol_references(
             .cloned()
             .map(|symbol| ("dependency_semantic_hashes", symbol)),
     );
+    for (declaration, dependency) in &semantic.dependency_declaration_refs {
+        refs.push(("dependency_declaration_refs", declaration.clone()));
+        refs.push(("dependency_declaration_refs.dependency", dependency.clone()));
+    }
     refs.extend(
         semantic
             .unsupported
@@ -1913,6 +2066,7 @@ fn representative_fixture_semantic_inputs() -> CheckedCoreSemanticInputs {
             dictionary_symbol: Some(eq_bool_dict.clone()),
             head_symbol: Some(bool_ty.clone()),
             field_order: vec!["eq".to_string(), "refl".to_string()],
+            runtime_fields: BTreeSet::from(["eq".to_string()]),
             law_fields: BTreeSet::from(["refl".to_string()]),
             lowerability: LowerabilityStatus::Supported,
         },
@@ -2250,6 +2404,19 @@ fn encode_string_map(
     }
 }
 
+fn encode_symbol_map(
+    tag: &'static str,
+    map: &BTreeMap<StableSymbol, StableSymbol>,
+    out: &mut CanonicalSink,
+) {
+    out.tag(tag);
+    out.seq_len(map.len());
+    for (symbol, value) in map {
+        symbol.encode(out);
+        value.encode(out);
+    }
+}
+
 fn encode_lowerability_map(
     tag: &'static str,
     map: &BTreeMap<StableSymbol, LowerabilityStatus>,
@@ -2378,6 +2545,11 @@ fn encode_class_instance_metadata_map(
         out.tag("field_order");
         out.seq_len(meta.field_order.len());
         for field in &meta.field_order {
+            out.str(field);
+        }
+        out.tag("runtime_fields");
+        out.seq_len(meta.runtime_fields.len());
+        for field in &meta.runtime_fields {
             out.str(field);
         }
         out.tag("law_fields");
@@ -2723,12 +2895,20 @@ fn decode_supported_body_term_after_tag(
                 };
             }
             if &symbol == owner {
-                return Err(CheckedCoreBodyViewError::UnsupportedTermShape {
-                    symbol: owner.clone(),
-                    tag: "recursive_direct_call".to_string(),
-                });
+                return checked_recursive_call_view(semantic, selection, owner, symbol, level_args)
+                    .map(CheckedCoreBodyTerm::RecursiveDeclarationCall);
+            }
+            if is_same_recursive_group_reference(semantic, owner, &symbol) {
+                return checked_recursive_call_view(semantic, selection, owner, symbol, level_args)
+                    .map(CheckedCoreBodyTerm::RecursiveDeclarationCall);
             }
             if !selection.reachable_declarations.contains(&symbol) {
+                if selection.external_symbols.contains(&symbol) {
+                    return checked_imported_declaration_call_view(
+                        semantic, selection, owner, symbol, level_args,
+                    )
+                    .map(CheckedCoreBodyTerm::ImportedDeclarationCall);
+                }
                 return Err(
                     CheckedCoreBodyViewError::BodyReferenceOutsideSelectedClosure {
                         owner: owner.clone(),
@@ -2839,7 +3019,7 @@ fn decode_supported_body_term_after_tag(
         "absurd" => Err(CheckedCoreBodyViewError::UnjustifiedImpossibleBranch {
             symbol: owner.clone(),
         }),
-        "pair" => decode_supported_record_sigma_construction(
+        "pair" => decode_supported_pair_construction(
             cursor,
             semantic,
             selection,
@@ -2873,6 +3053,136 @@ fn constructor_spine_needs_erased_family_argument(term: &CheckedCoreBodyTerm) ->
         return false;
     };
     applied_args < constructor.family_parameter_count
+}
+
+fn is_same_recursive_group_reference(
+    semantic: &CheckedCoreSemanticInputs,
+    owner: &StableSymbol,
+    referenced: &StableSymbol,
+) -> bool {
+    semantic.recursion_metadata.values().any(|meta| {
+        meta.group_members.iter().any(|member| member == owner)
+            && meta.group_members.iter().any(|member| member == referenced)
+    })
+}
+
+fn checked_recursive_call_view(
+    semantic: &CheckedCoreSemanticInputs,
+    selection: &CheckedCoreBodyViewSelection,
+    owner: &StableSymbol,
+    referenced: StableSymbol,
+    level_args: Vec<CheckedCoreLevelView>,
+) -> Result<CheckedCoreRecursiveCallView, CheckedCoreBodyViewError> {
+    if !selection.reachable_declarations.contains(&referenced) {
+        return Err(
+            CheckedCoreBodyViewError::BodyReferenceOutsideSelectedClosure {
+                owner: owner.clone(),
+                referenced,
+            },
+        );
+    }
+    if !semantic.declarations.contains_key(&referenced) {
+        return Err(CheckedCoreBodyViewError::BodyReferenceWithoutDeclaration {
+            owner: owner.clone(),
+            referenced,
+        });
+    }
+    let (group_symbol, meta) = semantic
+        .recursion_metadata
+        .iter()
+        .find(|(_, meta)| {
+            meta.group_members.iter().any(|member| member == owner)
+                && meta
+                    .group_members
+                    .iter()
+                    .any(|member| member == &referenced)
+        })
+        .ok_or_else(|| CheckedCoreBodyViewError::UnsupportedRecursiveShape {
+            symbol: owner.clone(),
+            referenced: referenced.clone(),
+            reason: "missing recursive-group metadata for declaration reference".to_string(),
+        })?;
+    match meta.admission {
+        RecursionAdmission::AcceptedStructural | RecursionAdmission::AcceptedSizeChange => {}
+        RecursionAdmission::NonRecursive | RecursionAdmission::Rejected => {
+            return Err(CheckedCoreBodyViewError::UnsupportedRecursiveShape {
+                symbol: owner.clone(),
+                referenced,
+                reason: format!("recursive-group admission is {:?}", meta.admission),
+            });
+        }
+    }
+    if meta.lowerability.blocks_lowering() {
+        return Err(CheckedCoreBodyViewError::UnsupportedRecursiveShape {
+            symbol: owner.clone(),
+            referenced,
+            reason: format!(
+                "recursive-group lowerability blocks runtime use: {:?}",
+                meta.lowerability
+            ),
+        });
+    }
+    Ok(CheckedCoreRecursiveCallView {
+        symbol: referenced,
+        level_args,
+        group_symbol: group_symbol.clone(),
+        group_members: meta.group_members.clone(),
+        admission: meta.admission.clone(),
+        scc_index: meta.scc_index,
+        lowerability: meta.lowerability.clone(),
+    })
+}
+
+fn checked_imported_declaration_call_view(
+    semantic: &CheckedCoreSemanticInputs,
+    selection: &CheckedCoreBodyViewSelection,
+    owner: &StableSymbol,
+    referenced: StableSymbol,
+    level_args: Vec<CheckedCoreLevelView>,
+) -> Result<CheckedCoreImportedDeclarationCallView, CheckedCoreBodyViewError> {
+    let dependency = semantic
+        .dependency_declaration_refs
+        .get(&referenced)
+        .cloned()
+        .ok_or_else(|| CheckedCoreBodyViewError::MissingDependencyIdentity {
+            owner: owner.clone(),
+            referenced: referenced.clone(),
+        })?;
+    let semantic_hash = semantic
+        .dependency_semantic_hashes
+        .get(&dependency)
+        .ok_or_else(|| CheckedCoreBodyViewError::StaleDependencyIdentity {
+            owner: owner.clone(),
+            referenced: referenced.clone(),
+            dependency: dependency.clone(),
+            reason: "dependency declaration ref names a dependency without semantic hash"
+                .to_string(),
+        })?;
+    let selection_hash = selection
+        .dependency_semantic_hashes
+        .get(&dependency)
+        .ok_or_else(|| CheckedCoreBodyViewError::StaleDependencyIdentity {
+            owner: owner.clone(),
+            referenced: referenced.clone(),
+            dependency: dependency.clone(),
+            reason: "selected closure omits dependency semantic hash".to_string(),
+        })?;
+    if selection_hash != semantic_hash {
+        return Err(CheckedCoreBodyViewError::StaleDependencyIdentity {
+            owner: owner.clone(),
+            referenced: referenced.clone(),
+            dependency,
+            reason: format!(
+                "selected dependency hash {selection_hash:?} does not match package hash {semantic_hash:?}"
+            ),
+        });
+    }
+    Ok(CheckedCoreImportedDeclarationCallView {
+        symbol: referenced,
+        level_args,
+        dependency,
+        dependency_semantic_hash: semantic_hash.clone(),
+    })
 }
 
 fn checked_primitive_view(
@@ -3218,6 +3528,78 @@ fn checked_record_sigma_view(
     })
 }
 
+fn checked_dictionary_view(
+    semantic: &CheckedCoreSemanticInputs,
+    owner: &StableSymbol,
+    symbol: &StableSymbol,
+) -> Result<CheckedCoreDictionaryView, CheckedCoreBodyViewError> {
+    let meta = semantic
+        .class_instance_metadata
+        .get(symbol)
+        .ok_or_else(|| CheckedCoreBodyViewError::StaleDictionaryFieldSelection {
+            symbol: owner.clone(),
+            dictionary: symbol.clone(),
+            reason: "missing package dictionary metadata".to_string(),
+        })?;
+    if meta.kind != ClassInstanceKind::Dictionary {
+        return Err(CheckedCoreBodyViewError::StaleDictionaryFieldSelection {
+            symbol: owner.clone(),
+            dictionary: symbol.clone(),
+            reason: "class/instance metadata entry is not a dictionary".to_string(),
+        });
+    }
+    if meta.lowerability.blocks_lowering() {
+        return Err(CheckedCoreBodyViewError::StaleDictionaryFieldSelection {
+            symbol: owner.clone(),
+            dictionary: symbol.clone(),
+            reason: format!(
+                "dictionary lowerability blocks runtime use: {:?}",
+                meta.lowerability
+            ),
+        });
+    }
+
+    let mut fields = Vec::with_capacity(meta.field_order.len());
+    for (position, name) in meta.field_order.iter().enumerate() {
+        if meta.runtime_fields.contains(name) && meta.law_fields.contains(name) {
+            return Err(CheckedCoreBodyViewError::NonExecutableDictionaryFieldUse {
+                symbol: owner.clone(),
+                dictionary: symbol.clone(),
+                field: name.clone(),
+            });
+        }
+        let runtime = if meta.runtime_fields.contains(name) {
+            DictionaryFieldRuntimeStatus::Runtime
+        } else {
+            DictionaryFieldRuntimeStatus::ErasedLawProof
+        };
+        fields.push(CheckedCoreDictionaryFieldView {
+            position,
+            name: name.clone(),
+            runtime,
+        });
+    }
+
+    for field in meta.runtime_fields.union(&meta.law_fields) {
+        if !meta.field_order.iter().any(|candidate| candidate == field) {
+            return Err(CheckedCoreBodyViewError::StaleDictionaryFieldSelection {
+                symbol: owner.clone(),
+                dictionary: symbol.clone(),
+                reason: format!("field classification {field:?} is absent from field_order"),
+            });
+        }
+    }
+
+    Ok(CheckedCoreDictionaryView {
+        symbol: symbol.clone(),
+        class_symbol: meta.class_symbol.clone(),
+        dictionary_symbol: meta.dictionary_symbol.clone(),
+        head_symbol: meta.head_symbol.clone(),
+        fields,
+        lowerability: meta.lowerability.clone(),
+    })
+}
+
 fn record_symbol_for_projection_base(
     semantic: &CheckedCoreSemanticInputs,
     owner: &StableSymbol,
@@ -3290,6 +3672,131 @@ fn declaration_checked_type_bytes(
     }
     decode_level_params(&mut cursor)?;
     capture_canonical_term(&mut cursor)
+}
+
+fn decode_supported_pair_construction(
+    cursor: &mut CanonicalCursor<'_>,
+    semantic: &CheckedCoreSemanticInputs,
+    selection: &CheckedCoreBodyViewSelection,
+    owner: &StableSymbol,
+    type_context: &[Vec<u8>],
+    expected_type: Option<&[u8]>,
+) -> Result<CheckedCoreBodyTerm, CheckedCoreBodyViewError> {
+    if let Some(expected_type) = expected_type {
+        if let Some(symbol) = record_head_symbol_from_type(expected_type)
+            .map_err(|reason| malformed_body(owner, reason))?
+        {
+            if semantic.class_instance_metadata.contains_key(&symbol) {
+                return decode_supported_dictionary_construction(
+                    cursor,
+                    semantic,
+                    selection,
+                    owner,
+                    type_context,
+                    expected_type,
+                    symbol,
+                );
+            }
+        }
+    }
+    decode_supported_record_sigma_construction(
+        cursor,
+        semantic,
+        selection,
+        owner,
+        type_context,
+        expected_type,
+    )
+}
+
+fn decode_supported_dictionary_construction(
+    cursor: &mut CanonicalCursor<'_>,
+    semantic: &CheckedCoreSemanticInputs,
+    selection: &CheckedCoreBodyViewSelection,
+    owner: &StableSymbol,
+    type_context: &[Vec<u8>],
+    expected_type: &[u8],
+    dictionary_symbol: StableSymbol,
+) -> Result<CheckedCoreBodyTerm, CheckedCoreBodyViewError> {
+    if type_has_dependent_sigma(expected_type).map_err(|reason| malformed_body(owner, reason))? {
+        return Err(CheckedCoreBodyViewError::StaleDictionaryFieldSelection {
+            symbol: owner.clone(),
+            dictionary: dictionary_symbol,
+            reason: "dictionary expected type contains a dependent Sigma field".to_string(),
+        });
+    }
+    let dictionary = checked_dictionary_view(semantic, owner, &dictionary_symbol)?;
+    if dictionary.fields.is_empty() {
+        return Err(CheckedCoreBodyViewError::StaleDictionaryFieldSelection {
+            symbol: owner.clone(),
+            dictionary: dictionary.symbol,
+            reason: "dictionary body cannot construct a zero-field dictionary".to_string(),
+        });
+    }
+
+    let mut fields = Vec::with_capacity(dictionary.fields.len());
+    for (index, field) in dictionary.fields.iter().enumerate() {
+        if index > 0 {
+            let tag = cursor
+                .read_tag()
+                .map_err(|reason| malformed_body(owner, reason))?;
+            if tag != "pair" {
+                return Err(CheckedCoreBodyViewError::StaleDictionaryFieldSelection {
+                    symbol: owner.clone(),
+                    dictionary: dictionary.symbol.clone(),
+                    reason: format!("field {} expected nested pair, found {tag:?}", field.name),
+                });
+            }
+        }
+
+        match field.runtime {
+            DictionaryFieldRuntimeStatus::Runtime => {
+                let value = Box::new(decode_supported_body_term(
+                    cursor,
+                    semantic,
+                    selection,
+                    owner,
+                    type_context,
+                    None,
+                )?);
+                fields.push(CheckedCoreDictionaryFieldValue::Runtime {
+                    field: field.clone(),
+                    value,
+                });
+            }
+            DictionaryFieldRuntimeStatus::ErasedLawProof => {
+                let term = capture_canonical_term(cursor)
+                    .map_err(|reason| malformed_body(owner, reason))?;
+                fields.push(CheckedCoreDictionaryFieldValue::Erased {
+                    field: field.clone(),
+                    term,
+                });
+            }
+        }
+    }
+
+    let terminator_start = cursor.pos;
+    let terminator_tag = cursor
+        .read_tag()
+        .map_err(|reason| malformed_body(owner, reason))?;
+    cursor.pos = terminator_start;
+    if terminator_tag == "pair" {
+        return Err(CheckedCoreBodyViewError::StaleDictionaryFieldSelection {
+            symbol: owner.clone(),
+            dictionary: dictionary.symbol.clone(),
+            reason: "dictionary body carries more fields than package metadata".to_string(),
+        });
+    }
+    let terminator =
+        capture_canonical_term(cursor).map_err(|reason| malformed_body(owner, reason))?;
+
+    Ok(CheckedCoreBodyTerm::DictionaryConstruction(
+        CheckedCoreDictionaryConstructionView {
+            dictionary,
+            fields,
+            terminator,
+        },
+    ))
 }
 
 fn canonical_pi_codomain(bytes: &[u8]) -> Result<Option<Vec<u8>>, String> {
@@ -4303,6 +4810,186 @@ mod tests {
         (package, target, literal, add)
     }
 
+    fn recursive_body_view_package() -> (CheckedCorePackage, StableSymbol, StableSymbol) {
+        let target = decl_symbol("recursive_target");
+        let group = decl_symbol("recursive_target.group");
+        let table = table(GlobalId(1), target.clone());
+        let ty = Term::Type(Level::zero());
+        let decl = Decl::Transparent {
+            id: GlobalId(1),
+            level_params: Vec::new(),
+            ty: ty.clone(),
+            body: Term::Const {
+                id: GlobalId(1),
+                level_args: Vec::new(),
+            },
+        };
+
+        let mut semantic = CheckedCoreSemanticInputs::default();
+        for symbol in [&target, &group] {
+            semantic.symbols.insert(symbol.clone());
+            semantic
+                .lowerability
+                .insert(symbol.clone(), LowerabilityStatus::Supported);
+        }
+        semantic
+            .declarations
+            .insert(target.clone(), canonical_decl_bytes(&decl, &table).unwrap());
+        semantic.recursion_metadata.insert(
+            group.clone(),
+            RecursionMetadata {
+                group_members: vec![target.clone()],
+                admission: RecursionAdmission::AcceptedStructural,
+                scc_index: 0,
+                lowerability: LowerabilityStatus::Supported,
+            },
+        );
+        let package = emit_checked_core_package(
+            body_view_header(),
+            CheckedCoreArtifactInputs {
+                semantic,
+                source_identity: BTreeMap::new(),
+                annotations: BTreeMap::new(),
+            },
+        )
+        .unwrap();
+        (package, target, group)
+    }
+
+    fn imported_body_view_package() -> (CheckedCorePackage, StableSymbol, StableSymbol, StableSymbol)
+    {
+        let target = decl_symbol("importing_target");
+        let imported = StableSymbol::declaration("dependency-fixture", &["Dep"], "dep_value");
+        let dependency = StableSymbol::new(
+            SymbolNamespace::Dependency,
+            vec!["dependency-fixture".to_string(), "checked-core".to_string()],
+        );
+        let table = table_many(&[
+            (GlobalId(1), target.clone()),
+            (GlobalId(90), imported.clone()),
+        ]);
+        let decl = Decl::Transparent {
+            id: GlobalId(1),
+            level_params: Vec::new(),
+            ty: Term::Type(Level::zero()),
+            body: Term::Const {
+                id: GlobalId(90),
+                level_args: Vec::new(),
+            },
+        };
+
+        let mut semantic = CheckedCoreSemanticInputs::default();
+        for symbol in [&target, &imported, &dependency] {
+            semantic.symbols.insert(symbol.clone());
+        }
+        for symbol in [&target, &imported] {
+            semantic
+                .lowerability
+                .insert(symbol.clone(), LowerabilityStatus::Supported);
+        }
+        semantic
+            .declarations
+            .insert(target.clone(), canonical_decl_bytes(&decl, &table).unwrap());
+        semantic
+            .dependency_semantic_hashes
+            .insert(dependency.clone(), "sha256:dependency-body".to_string());
+        semantic
+            .dependency_declaration_refs
+            .insert(imported.clone(), dependency.clone());
+        let mut header = body_view_header();
+        header.dependency_semantic_hashes = semantic.dependency_semantic_hashes.clone();
+        let package = emit_checked_core_package(
+            header,
+            CheckedCoreArtifactInputs {
+                semantic,
+                source_identity: BTreeMap::new(),
+                annotations: BTreeMap::new(),
+            },
+        )
+        .unwrap();
+        (package, target, imported, dependency)
+    }
+
+    fn dictionary_body_view_package(
+    ) -> (CheckedCorePackage, StableSymbol, StableSymbol, StableSymbol) {
+        let target = decl_symbol("dictionary_target");
+        let helper = decl_symbol("dictionary_eq_field");
+        let dictionary = decl_symbol("EqBoolDict");
+        let class = decl_symbol("Eq");
+        let head = decl_symbol("Bool");
+        let table = table_many(&[
+            (GlobalId(1), target.clone()),
+            (GlobalId(2), helper.clone()),
+            (GlobalId(10), dictionary.clone()),
+        ]);
+        let ty = Term::Type(Level::zero());
+        let helper_decl = Decl::Transparent {
+            id: GlobalId(2),
+            level_params: Vec::new(),
+            ty: ty.clone(),
+            body: Term::Lam(Box::new(ty.clone()), Box::new(Term::Var(0))),
+        };
+        let target_decl = Decl::Transparent {
+            id: GlobalId(1),
+            level_params: Vec::new(),
+            ty: Term::Const {
+                id: GlobalId(10),
+                level_args: Vec::new(),
+            },
+            body: Term::Pair(
+                Box::new(Term::Const {
+                    id: GlobalId(2),
+                    level_args: Vec::new(),
+                }),
+                Box::new(Term::Pair(
+                    Box::new(Term::Omega(Level::zero())),
+                    Box::new(Term::Type(Level::zero())),
+                )),
+            ),
+        };
+
+        let mut semantic = CheckedCoreSemanticInputs::default();
+        for symbol in [&target, &helper, &dictionary, &class, &head] {
+            semantic.symbols.insert(symbol.clone());
+        }
+        for symbol in [&target, &helper, &dictionary] {
+            semantic
+                .lowerability
+                .insert(symbol.clone(), LowerabilityStatus::Supported);
+        }
+        semantic.declarations.insert(
+            target.clone(),
+            canonical_decl_bytes(&target_decl, &table).unwrap(),
+        );
+        semantic.declarations.insert(
+            helper.clone(),
+            canonical_decl_bytes(&helper_decl, &table).unwrap(),
+        );
+        semantic.class_instance_metadata.insert(
+            dictionary.clone(),
+            ClassInstanceMetadata {
+                kind: ClassInstanceKind::Dictionary,
+                class_symbol: Some(class),
+                dictionary_symbol: Some(dictionary.clone()),
+                head_symbol: Some(head),
+                field_order: vec!["eq".to_string(), "law".to_string()],
+                runtime_fields: BTreeSet::from(["eq".to_string()]),
+                law_fields: BTreeSet::from(["law".to_string()]),
+                lowerability: LowerabilityStatus::Supported,
+            },
+        );
+        let package = emit_checked_core_package(
+            body_view_header(),
+            CheckedCoreArtifactInputs {
+                semantic,
+                source_identity: BTreeMap::new(),
+                annotations: BTreeMap::new(),
+            },
+        )
+        .unwrap();
+        (package, target, helper, dictionary)
+    }
+
     fn replace_body(
         package: &mut CheckedCorePackage,
         target: &StableSymbol,
@@ -4334,6 +5021,12 @@ mod tests {
             package_artifact_hash: package.artifact_hash,
             target_symbol: target,
             reachable_declarations,
+            external_symbols: BTreeSet::new(),
+            dependency_semantic_hashes: package
+                .artifact
+                .semantic
+                .dependency_semantic_hashes
+                .clone(),
         }
     }
 
@@ -4502,6 +5195,173 @@ mod tests {
             assert_eq!(literal_view.partiality, PartialityMetadata::Total);
             assert_eq!(literal_view.lowerability, LowerabilityStatus::Supported);
         }
+    }
+
+    #[test]
+    fn body_view_recovers_recursive_imported_and_dictionary_package_seams() {
+        let (package, target, group) = recursive_body_view_package();
+        let selection =
+            body_view_selection(&package, target.clone(), BTreeSet::from([target.clone()]));
+
+        let view = checked_core_declaration_body_view(&package, &selection, &target).unwrap();
+
+        let CheckedCoreBodyTerm::RecursiveDeclarationCall(recursive) = view.body else {
+            panic!("expected package-derived recursive declaration call view");
+        };
+        assert_eq!(recursive.symbol, target);
+        assert_eq!(recursive.group_symbol, group);
+        assert_eq!(recursive.group_members, vec![recursive.symbol.clone()]);
+        assert_eq!(recursive.admission, RecursionAdmission::AcceptedStructural);
+        assert_eq!(recursive.lowerability, LowerabilityStatus::Supported);
+
+        let (package, target, imported, dependency) = imported_body_view_package();
+        let mut selection =
+            body_view_selection(&package, target.clone(), BTreeSet::from([target.clone()]));
+        selection.external_symbols.insert(imported.clone());
+        let view = checked_core_declaration_body_view(&package, &selection, &target).unwrap();
+
+        let CheckedCoreBodyTerm::ImportedDeclarationCall(import_view) = view.body else {
+            panic!("expected package-derived imported declaration call view");
+        };
+        assert_eq!(import_view.symbol, imported);
+        assert_eq!(import_view.dependency, dependency);
+        assert_eq!(
+            import_view.dependency_semantic_hash,
+            "sha256:dependency-body"
+        );
+
+        let (package, target, helper, dictionary) = dictionary_body_view_package();
+        let selection = body_view_selection(
+            &package,
+            target.clone(),
+            BTreeSet::from([target.clone(), helper.clone()]),
+        );
+        let view = checked_core_declaration_body_view(&package, &selection, &target).unwrap();
+
+        let CheckedCoreBodyTerm::DictionaryConstruction(dictionary_view) = view.body else {
+            panic!("expected package-derived dictionary construction view");
+        };
+        assert_eq!(dictionary_view.dictionary.symbol, dictionary);
+        assert_eq!(dictionary_view.dictionary.fields.len(), 2);
+        assert_eq!(
+            dictionary_view.dictionary.fields[0].runtime,
+            DictionaryFieldRuntimeStatus::Runtime
+        );
+        assert_eq!(
+            dictionary_view.dictionary.fields[1].runtime,
+            DictionaryFieldRuntimeStatus::ErasedLawProof
+        );
+        match &dictionary_view.fields[0] {
+            CheckedCoreDictionaryFieldValue::Runtime { field, value } => {
+                assert_eq!(field.name, "eq");
+                assert_eq!(
+                    value.as_ref(),
+                    &CheckedCoreBodyTerm::DirectDeclarationCall {
+                        symbol: helper,
+                        level_args: Vec::new(),
+                    }
+                );
+            }
+            other => panic!("expected runtime dictionary field, got {other:?}"),
+        }
+        match &dictionary_view.fields[1] {
+            CheckedCoreDictionaryFieldValue::Erased { field, term } => {
+                assert_eq!(field.name, "law");
+                assert!(
+                    !term.is_empty(),
+                    "erased law/proof dictionary field must remain report-visible bytes"
+                );
+            }
+            other => panic!("expected erased dictionary law field, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn body_view_rejects_unsupported_recursive_shape() {
+        let (mut package, target, group) = recursive_body_view_package();
+        package
+            .artifact
+            .semantic
+            .recursion_metadata
+            .get_mut(&group)
+            .unwrap()
+            .admission = RecursionAdmission::Rejected;
+        refresh_package_hashes(&mut package);
+        let selection =
+            body_view_selection(&package, target.clone(), BTreeSet::from([target.clone()]));
+
+        let err = checked_core_declaration_body_view(&package, &selection, &target).unwrap_err();
+
+        assert!(matches!(
+            err,
+            CheckedCoreBodyViewError::UnsupportedRecursiveShape { .. }
+        ));
+        assert_eq!(err.lane(), "unsupported_recursive_shape");
+    }
+
+    #[test]
+    fn body_view_rejects_stale_or_missing_dependency_identity() {
+        let (package, target, imported, dependency) = imported_body_view_package();
+        let mut selection =
+            body_view_selection(&package, target.clone(), BTreeSet::from([target.clone()]));
+        selection.external_symbols.insert(imported.clone());
+        selection
+            .dependency_semantic_hashes
+            .insert(dependency.clone(), "sha256:stale".to_string());
+
+        let err = checked_core_declaration_body_view(&package, &selection, &target).unwrap_err();
+
+        assert!(matches!(
+            err,
+            CheckedCoreBodyViewError::StaleDependencyIdentity { .. }
+        ));
+        assert_eq!(err.lane(), "stale_dependency_identity");
+
+        let (mut package, target, imported, _dependency) = imported_body_view_package();
+        package
+            .artifact
+            .semantic
+            .dependency_declaration_refs
+            .clear();
+        refresh_package_hashes(&mut package);
+        let mut selection =
+            body_view_selection(&package, target.clone(), BTreeSet::from([target.clone()]));
+        selection.external_symbols.insert(imported);
+
+        let err = checked_core_declaration_body_view(&package, &selection, &target).unwrap_err();
+
+        assert!(matches!(
+            err,
+            CheckedCoreBodyViewError::MissingDependencyIdentity { .. }
+        ));
+        assert_eq!(err.lane(), "missing_dependency_identity");
+    }
+
+    #[test]
+    fn body_view_rejects_non_executable_dictionary_field_use() {
+        let (mut package, target, helper, dictionary) = dictionary_body_view_package();
+        package
+            .artifact
+            .semantic
+            .class_instance_metadata
+            .get_mut(&dictionary)
+            .unwrap()
+            .runtime_fields
+            .insert("law".to_string());
+        refresh_package_hashes(&mut package);
+        let selection = body_view_selection(
+            &package,
+            target.clone(),
+            BTreeSet::from([target.clone(), helper]),
+        );
+
+        let err = checked_core_declaration_body_view(&package, &selection, &target).unwrap_err();
+
+        assert!(matches!(
+            err,
+            CheckedCoreBodyViewError::NonExecutableDictionaryFieldUse { .. }
+        ));
+        assert_eq!(err.lane(), "non_executable_dictionary_field_use");
     }
 
     #[test]
@@ -5742,6 +6602,7 @@ mod tests {
                 dictionary_symbol: Some(eq_bool_dict),
                 head_symbol: Some(bool_ty),
                 field_order: vec!["eq".to_string(), "refl".to_string()],
+                runtime_fields: BTreeSet::from(["eq".to_string()]),
                 law_fields: BTreeSet::from(["refl".to_string()]),
                 lowerability: LowerabilityStatus::Supported,
             },

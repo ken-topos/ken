@@ -336,6 +336,8 @@ fn lower_transparent_declaration(
         package_artifact_hash: package.artifact_hash,
         target_symbol: symbol.clone(),
         reachable_declarations,
+        external_symbols: BTreeSet::new(),
+        dependency_semantic_hashes: package.artifact.semantic.dependency_semantic_hashes.clone(),
     };
     let view = checked_core_body_view_for_selection(package, &selection)
         .map_err(|err| expression_view_error(symbol, err))?;
@@ -470,6 +472,16 @@ fn lower_body_term_inner(
             stack.pop();
             lowered
         }
+        CheckedCoreBodyTerm::RecursiveDeclarationCall(_) => Err(expression_lowering_error(
+            root_symbol,
+            "recursive_declaration_call_lowering_unsupported",
+            "recursive declaration calls require the NC17 Runtime consumer seam",
+        )),
+        CheckedCoreBodyTerm::ImportedDeclarationCall(_) => Err(expression_lowering_error(
+            root_symbol,
+            "imported_declaration_call_lowering_unsupported",
+            "imported checked-core declaration calls require the NC17 Runtime consumer seam",
+        )),
         CheckedCoreBodyTerm::PrimitiveLiteral(view) => lower_primitive_literal(root_symbol, view),
         CheckedCoreBodyTerm::PrimitiveApplication(view) => lower_primitive_application(
             view,
@@ -568,6 +580,11 @@ fn lower_body_term_inner(
             context_depth,
             branch_remap,
         ),
+        CheckedCoreBodyTerm::DictionaryConstruction(_) => Err(expression_lowering_error(
+            root_symbol,
+            "dictionary_construction_lowering_unsupported",
+            "dictionary runtime-field lowering requires the NC17 Runtime consumer seam",
+        )),
     }
 }
 
@@ -1126,6 +1143,8 @@ fn has_free_variable_at_or_above(term: &CheckedCoreBodyTerm, bound: usize) -> bo
     match term {
         CheckedCoreBodyTerm::Variable { de_bruijn_index } => *de_bruijn_index >= bound,
         CheckedCoreBodyTerm::DirectDeclarationCall { .. } => false,
+        CheckedCoreBodyTerm::RecursiveDeclarationCall(_) => false,
+        CheckedCoreBodyTerm::ImportedDeclarationCall(_) => false,
         CheckedCoreBodyTerm::PrimitiveLiteral(_) => false,
         CheckedCoreBodyTerm::PrimitiveApplication(view) => view
             .arguments
@@ -1159,6 +1178,14 @@ fn has_free_variable_at_or_above(term: &CheckedCoreBodyTerm, bound: usize) -> bo
         }
         CheckedCoreBodyTerm::RecordSigmaProjection(view) => {
             has_free_variable_at_or_above(&view.base, bound)
+        }
+        CheckedCoreBodyTerm::DictionaryConstruction(view) => {
+            view.fields.iter().any(|field| match field {
+                checked_core::CheckedCoreDictionaryFieldValue::Runtime { value, .. } => {
+                    has_free_variable_at_or_above(value, bound)
+                }
+                checked_core::CheckedCoreDictionaryFieldValue::Erased { .. } => false,
+            })
         }
     }
 }

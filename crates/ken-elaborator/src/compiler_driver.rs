@@ -167,6 +167,9 @@ pub struct TargetClosureReport {
     pub reachable_declarations: BTreeSet<StableSymbol>,
     pub external_symbols: BTreeSet<StableSymbol>,
     pub dependency_semantic_hashes: BTreeMap<StableSymbol, String>,
+    pub imported_declaration_refs: BTreeMap<StableSymbol, StableSymbol>,
+    pub dictionary_runtime_fields: BTreeMap<StableSymbol, BTreeSet<String>>,
+    pub dictionary_erased_fields: BTreeMap<StableSymbol, BTreeSet<String>>,
     pub obligations: BTreeSet<StableSymbol>,
     pub assumptions: BTreeSet<StableSymbol>,
     pub lowerability: BTreeMap<StableSymbol, LowerabilityStatus>,
@@ -906,7 +909,9 @@ fn include_closure_symbol(
         }
         closure_symbols.insert(symbol);
     } else {
-        if !has_semantic_entry(semantic, &symbol) {
+        if !has_semantic_entry(semantic, &symbol)
+            || semantic.dependency_declaration_refs.contains_key(&symbol)
+        {
             external_symbols.insert(symbol.clone());
         }
         closure_symbols.insert(symbol);
@@ -929,6 +934,7 @@ fn has_semantic_entry(semantic: &CheckedCoreSemanticInputs, symbol: &StableSymbo
         || semantic.assumptions.contains_key(symbol)
         || semantic.trusted_base_delta.contains_key(symbol)
         || semantic.dependency_semantic_hashes.contains_key(symbol)
+        || semantic.dependency_declaration_refs.contains_key(symbol)
         || semantic.unsupported.contains_key(symbol)
 }
 
@@ -1009,10 +1015,15 @@ fn slice_closure_semantic(
     sliced.assumptions = filter_map_by_keys(&semantic.assumptions, closure_symbols);
     sliced.trusted_base_delta = filter_map_by_keys(&semantic.trusted_base_delta, closure_symbols);
     sliced.dependency_semantic_hashes = semantic.dependency_semantic_hashes.clone();
+    sliced.dependency_declaration_refs =
+        filter_map_by_keys(&semantic.dependency_declaration_refs, closure_symbols);
     sliced.unsupported = filter_map_by_keys(&semantic.unsupported, closure_symbols);
     sliced
         .symbols
         .extend(sliced.dependency_semantic_hashes.keys().cloned());
+    sliced
+        .symbols
+        .extend(sliced.dependency_declaration_refs.values().cloned());
     sliced
 }
 
@@ -1091,13 +1102,40 @@ fn build_target_closure_report(
     }
 
     for symbol in external_symbols {
-        unsupported_lanes
-            .entry(symbol.clone())
-            .or_insert_with(Vec::new)
-            .push(UnavailableLane::new(
-                "unresolved_checked_core_symbol",
-                "closure references a stable symbol without an in-package declaration or dependency body",
-            ));
+        if let Some(dependency) = semantic.dependency_declaration_refs.get(symbol) {
+            if !semantic.dependency_semantic_hashes.contains_key(dependency) {
+                unsupported_lanes
+                    .entry(symbol.clone())
+                    .or_insert_with(Vec::new)
+                    .push(UnavailableLane::new(
+                        "missing_dependency_identity",
+                        "imported declaration ref names a dependency without semantic hash",
+                    ));
+            }
+        } else {
+            unsupported_lanes
+                .entry(symbol.clone())
+                .or_insert_with(Vec::new)
+                .push(UnavailableLane::new(
+                    "unresolved_checked_core_symbol",
+                    "closure references a stable symbol without an in-package declaration or dependency body",
+                ));
+        }
+    }
+
+    let mut dictionary_runtime_fields = BTreeMap::new();
+    let mut dictionary_erased_fields = BTreeMap::new();
+    for (symbol, meta) in &semantic.class_instance_metadata {
+        if meta.kind == crate::checked_core::ClassInstanceKind::Dictionary {
+            dictionary_runtime_fields.insert(symbol.clone(), meta.runtime_fields.clone());
+            let erased = meta
+                .field_order
+                .iter()
+                .filter(|field| !meta.runtime_fields.contains(*field))
+                .cloned()
+                .collect::<BTreeSet<_>>();
+            dictionary_erased_fields.insert(symbol.clone(), erased);
+        }
     }
 
     let runtime_lane = unsupported_lanes
@@ -1123,6 +1161,9 @@ fn build_target_closure_report(
         reachable_declarations: reachable_declarations.clone(),
         external_symbols: external_symbols.clone(),
         dependency_semantic_hashes: semantic.dependency_semantic_hashes.clone(),
+        imported_declaration_refs: semantic.dependency_declaration_refs.clone(),
+        dictionary_runtime_fields,
+        dictionary_erased_fields,
         obligations: semantic.obligations.keys().cloned().collect(),
         assumptions: semantic.assumptions.keys().cloned().collect(),
         lowerability: semantic.lowerability.clone(),
@@ -1211,6 +1252,22 @@ fn target_closure_report_fingerprint(report: &TargetClosureReport) -> u64 {
         push_str(&mut bytes, &dependency.to_string());
         push_str(&mut bytes, hash);
     }
+    for (declaration, dependency) in &report.imported_declaration_refs {
+        push_str(&mut bytes, &declaration.to_string());
+        push_str(&mut bytes, &dependency.to_string());
+    }
+    for (dictionary, fields) in &report.dictionary_runtime_fields {
+        push_str(&mut bytes, &dictionary.to_string());
+        for field in fields {
+            push_str(&mut bytes, field);
+        }
+    }
+    for (dictionary, fields) in &report.dictionary_erased_fields {
+        push_str(&mut bytes, &dictionary.to_string());
+        for field in fields {
+            push_str(&mut bytes, field);
+        }
+    }
     for obligation in &report.obligations {
         push_str(&mut bytes, &obligation.to_string());
     }
@@ -1263,7 +1320,8 @@ fn fingerprint(bytes: &[u8]) -> u64 {
 mod tests {
     use super::*;
     use crate::checked_core::{
-        emit_checked_core_package, CheckedCoreArtifactInputs, ObligationMetadata, ObligationStatus,
+        emit_checked_core_package, CheckedCoreArtifactInputs, ClassInstanceKind,
+        ClassInstanceMetadata, ObligationMetadata, ObligationStatus,
     };
 
     fn main_symbol(package: &str) -> StableSymbol {
@@ -1456,6 +1514,105 @@ mod tests {
         assert_eq!(
             closure.report.dependency_semantic_hashes.get(&dependency),
             Some(&"sha256:dependency".to_string())
+        );
+    }
+
+    #[test]
+    fn target_closure_reports_imported_refs_and_dictionary_runtime_fields() {
+        let package_name = "closure_nc17";
+        let target = main_symbol(package_name);
+        let out = compile_ken_source(
+            package_name,
+            real_source(),
+            selector(package_name, target.clone()),
+        )
+        .unwrap();
+        let imported = StableSymbol::declaration("dep_pkg", &["Dep"], "value");
+        let dependency = StableSymbol::new(
+            SymbolNamespace::Dependency,
+            vec!["dep_pkg".to_string(), "checked-core".to_string()],
+        );
+        let dictionary = StableSymbol::declaration(package_name, &[], "EqBoolDict");
+        let class = StableSymbol::declaration(package_name, &[], "Eq");
+        let head = StableSymbol::declaration(package_name, &[], "Bool");
+        let table = {
+            let mut table = StableSymbolTable::new();
+            table.insert_global(GlobalId(1), target.clone());
+            table.insert_global(GlobalId(10), dictionary.clone());
+            table.insert_global(GlobalId(90), imported.clone());
+            table
+        };
+        let decl = Decl::Transparent {
+            id: GlobalId(1),
+            level_params: Vec::new(),
+            ty: Term::Const {
+                id: GlobalId(10),
+                level_args: Vec::new(),
+            },
+            body: Term::Const {
+                id: GlobalId(90),
+                level_args: Vec::new(),
+            },
+        };
+        let mut semantic = out.package.artifact.semantic.clone();
+        for symbol in [&imported, &dependency, &dictionary, &class, &head] {
+            semantic.symbols.insert(symbol.clone());
+        }
+        semantic
+            .declarations
+            .insert(target.clone(), canonical_decl_bytes(&decl, &table).unwrap());
+        semantic
+            .lowerability
+            .insert(imported.clone(), LowerabilityStatus::Supported);
+        semantic
+            .lowerability
+            .insert(dictionary.clone(), LowerabilityStatus::Supported);
+        semantic
+            .dependency_semantic_hashes
+            .insert(dependency.clone(), "sha256:dep".to_string());
+        semantic
+            .dependency_declaration_refs
+            .insert(imported.clone(), dependency.clone());
+        semantic.class_instance_metadata.insert(
+            dictionary.clone(),
+            ClassInstanceMetadata {
+                kind: ClassInstanceKind::Dictionary,
+                class_symbol: Some(class),
+                dictionary_symbol: Some(dictionary.clone()),
+                head_symbol: Some(head),
+                field_order: vec!["eq".to_string(), "law".to_string()],
+                runtime_fields: BTreeSet::from(["eq".to_string()]),
+                law_fields: BTreeSet::from(["law".to_string()]),
+                lowerability: LowerabilityStatus::Supported,
+            },
+        );
+        let package = reemit_with_semantic(&out.package, semantic);
+
+        let closures = compute_target_closures(
+            &manifest(package_name),
+            &package,
+            selector(package_name, target),
+        )
+        .unwrap();
+        let report = &closures[0].report;
+
+        assert_eq!(
+            report.imported_declaration_refs.get(&imported),
+            Some(&dependency)
+        );
+        assert!(report.external_symbols.contains(&imported));
+        assert!(!report
+            .unsupported_lanes
+            .values()
+            .flatten()
+            .any(|lane| lane.lane == "unresolved_checked_core_symbol"));
+        assert_eq!(
+            report.dictionary_runtime_fields.get(&dictionary),
+            Some(&BTreeSet::from(["eq".to_string()]))
+        );
+        assert_eq!(
+            report.dictionary_erased_fields.get(&dictionary),
+            Some(&BTreeSet::from(["law".to_string()]))
         );
     }
 
