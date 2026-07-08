@@ -578,26 +578,36 @@ Rules for every layer:
   also auto-expire after 7 days. **If you still hold a convo `schedule_call`
   timer from the old guidance, `cancel_call` it and re-arm with `CronCreate`.**
 
-## 14. Agents never touch GitHub; the Integrator is the gateway
+## 14. Agents never touch GitHub; the publisher path is the gateway
 
-**Only the Integrator has GitHub credentials.** Every other agent does **local
-git only** in its worktree (commit, rebase onto the already-fetched
-`origin/main`) — no `gh`, no push, no fetch, no token, no PR. The Integrator is
-the federation's sole GitHub-network actor: it pushes `wp/<ID>` branches to
-trigger CI, reads the checks, merges, and fetches `main`
+**Only the publisher path has GitHub credentials.** Build/spec agents do
+**local git only** in their worktrees (commit, rebase onto the already-fetched
+`origin/main`) — no `gh`, no push, no fetch, no token, no PR. The historical
+operator of that publisher path is the Integrator. Under explicit operator
+direction, the Steward may also run the checked-in scripted publisher path
+(`scripts/scripted-pr-automerge.sh`) with only these inputs: an exact approved
+branch/SHA, public PR title, public PR body, and the docs-only flag. This keeps
+one GitHub identity; it does not give teams GitHub access, does not make the
+Steward a code author, and does not replace the mootup review/Decision record
 (`../docs/program/04-git-and-integration.md`).
 
+The publisher path pushes `wp/<ID>` branches to trigger CI, reads checks,
+merges, fetches `main`, and mirrors GitHub state into mootup. If GitHub reports
+that a separate review or branch-protection change is required, the script must
+stop and route that fact; it must not pretend a same-identity PR review can
+satisfy the gate.
+
 - **Agents get no GitHub notifications and never poll GitHub.** Because GitHub
-  is one identity's concern, every actionable signal reaches the fleet only as a
-  **mootup message that mentions the actor whose move it is.** Act on the
-  mention, not on a timer.
-- **CI is the Integrator's to watch — never a worker's.** Only the Integrator
-  can see CI. It reads check status for the branches it published as part of its
-  *existing* watchdog pass (`gh pr checks` / the checks API) and posts the
-  outcome: red → mention the implementer (team space) with the failing job;
-  green → advance toward merge. The optional `ken-ci` bridge mirrors
-  `check_suite` results automatically; until then the Integrator posts them.
-  After you hand a WP off, you **stop** and learn a red result from a mention.
+  is the publisher path's concern, every actionable signal reaches the fleet
+  only as a **mootup message that mentions the actor whose move it is.** Act on
+  the mention, not on a timer.
+- **CI is the publisher path's to watch — never a worker's.** It reads check
+  status for the branches it published (`gh pr checks` / the checks API) and
+  posts the outcome: red → mention the implementer (team space) with the failing
+  job; green → advance toward merge. The optional `ken-ci` bridge mirrors
+  `check_suite` results automatically; until then the publisher caller posts
+  them. After you hand a WP off, you **stop** and learn a red result from a
+  mention.
 - **Landing integrity: a merge isn't trusted until *verified on `main`* — and a
   multi-piece WP isn't landed until *every* piece is (promoted V1, ★★★
   near-miss).** A **squash-merge can silently drop pieces** of an assembly built
