@@ -12,6 +12,7 @@
 pub mod artifact_validation;
 pub mod canonical;
 pub mod cranelift_backend;
+pub mod executable_artifact_contract;
 pub mod hash;
 pub mod ir;
 pub mod runtime_ir_evaluator;
@@ -22,6 +23,7 @@ pub mod values;
 pub use artifact_validation::*;
 pub use canonical::Canonical;
 pub use cranelift_backend::*;
+pub use executable_artifact_contract::*;
 pub use hash::fnv1a_64;
 pub use ir::*;
 pub use runtime_ir_evaluator::*;
