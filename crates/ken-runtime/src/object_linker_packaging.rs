@@ -1445,6 +1445,34 @@ mod tests {
     }
 
     #[test]
+    fn forged_entrypoint_package_version_rejects_before_linking() {
+        let observation = RuntimeObservation::Returned(RuntimeGroundValue::Int(18));
+        let program = starter_program(int_body(18), observation);
+        let (_report, mut entrypoint) = packaged_entrypoint(&program);
+        let run_report = runtime_ir_run_report(&program);
+        let mut support = platform_support(&program, &entrypoint, &run_report);
+
+        entrypoint.header.version = EXECUTABLE_ENTRYPOINT_PACKAGE_VERSION + 1;
+        entrypoint.header.package_hash = runtime_executable_entrypoint_package_hash(&entrypoint);
+        support.entrypoint_package_hash = entrypoint.header.package_hash;
+        support.header.support_hash = platform_runtime_support_report_hash(&support);
+
+        let err = package_starter_executable_artifact(
+            &program,
+            &entrypoint,
+            &support,
+            &run_report,
+            &NativeSeedEnvironment::empty(),
+            temp_output_dir("nc23-forged-entrypoint-version"),
+            "object linker unit test",
+        )
+        .expect_err("forged NC20 package version rejects");
+
+        assert_eq!(err.stage, ObjectLinkerPackagingStage::EntrypointPackage);
+        assert_eq!(err.field, "version");
+    }
+
+    #[test]
     fn forged_platform_support_kind_version_rejects_before_linking() {
         let observation = RuntimeObservation::Returned(RuntimeGroundValue::Int(19));
         let program = starter_program(int_body(19), observation);
@@ -1472,6 +1500,35 @@ mod tests {
             ObjectLinkerPackagingStage::PlatformRuntimeSupport
         );
         assert_eq!(err.field, "support_kind");
+    }
+
+    #[test]
+    fn forged_platform_support_version_rejects_before_linking() {
+        let observation = RuntimeObservation::Returned(RuntimeGroundValue::Int(20));
+        let program = starter_program(int_body(20), observation);
+        let (_report, entrypoint) = packaged_entrypoint(&program);
+        let run_report = runtime_ir_run_report(&program);
+        let mut support = platform_support(&program, &entrypoint, &run_report);
+
+        support.header.version = PLATFORM_RUNTIME_SUPPORT_VERSION + 1;
+        support.header.support_hash = platform_runtime_support_report_hash(&support);
+
+        let err = package_starter_executable_artifact(
+            &program,
+            &entrypoint,
+            &support,
+            &run_report,
+            &NativeSeedEnvironment::empty(),
+            temp_output_dir("nc23-forged-support-version"),
+            "object linker unit test",
+        )
+        .expect_err("forged NC21 support version rejects");
+
+        assert_eq!(
+            err.stage,
+            ObjectLinkerPackagingStage::PlatformRuntimeSupport
+        );
+        assert_eq!(err.field, "version");
     }
 
     #[test]
