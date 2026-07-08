@@ -175,6 +175,7 @@ pub enum NativeExecutionDifferentialStage {
     RuntimeIrRunReport,
     ArtifactFile,
     NativeExecution,
+    InterpreterEvidence,
 }
 
 impl fmt::Display for NativeExecutionDifferentialError {
@@ -195,8 +196,6 @@ pub fn run_native_execution_differential(
 ) -> Result<NativeExecutionDifferentialReport, NativeExecutionDifferentialError> {
     validate_object_linker_package(program, package)?;
     let target_example = validate_runtime_ir_report(program, package, run_report)?;
-    let executable_path = validate_executable_artifact(package, artifact_root.as_ref())?;
-    let native = run_packaged_executable(&executable_path, &run_report.observation.observation)?;
     let target = NativeExecutionTargetIdentity {
         package_identity: program.package_identity.clone(),
         target_symbol: package.header.target_symbol.clone(),
@@ -206,21 +205,61 @@ pub fn run_native_execution_differential(
         executable_artifact_hash: package.executable_artifact.artifact_hash,
         executable_relative_path: package.executable_artifact.relative_path.clone(),
     };
+    let expected_target = RuntimeIrTargetIdentity {
+        example: target_example.name.clone(),
+        checked_core_shape: target_example.checked_core_shape.clone(),
+    };
+
+    if matches!(
+        run_report.observation.observation,
+        RuntimeObservation::Trapped(_)
+    ) {
+        let interpreter = unavailable_interpreter_for_trap(
+            &target,
+            &expected_target,
+            interpreter,
+            &run_report.observation.observation,
+        )?;
+        let reason = "NC24 starter native execution cannot decode trap reports from the NC23 scalar executable ABI; trap comparison remains first-class unavailable".to_string();
+        return Ok(NativeExecutionDifferentialReport {
+            header: NativeExecutionDifferentialHeader {
+                report_kind: NATIVE_EXECUTION_DIFFERENTIAL_REPORT_KIND.to_string(),
+                version: NATIVE_EXECUTION_DIFFERENTIAL_REPORT_VERSION,
+                spec_ref: NATIVE_EXECUTION_DIFFERENTIAL_SPEC_REF.to_string(),
+                producer: producer.into(),
+            },
+            target,
+            native: NativeExecutionLaneReport::Unavailable {
+                reason: reason.clone(),
+                evidence_source: "RuntimeIrRunReport observed a trap; NC23 executable ABI carries scalar stdout only"
+                    .to_string(),
+            },
+            runtime_ir: NativeComparisonLaneReport::Unavailable {
+                lane: NativeDifferentialLane::NativeExecution,
+                reason: reason.clone(),
+                evidence_source:
+                    "runtime-IR trap observation is preserved but native trap decoding is unavailable"
+                        .to_string(),
+            },
+            interpreter,
+            verdict: NativeExecutionDifferentialVerdict::Unavailable {
+                lane: NativeDifferentialLane::NativeExecution,
+                reason,
+            },
+            unavailable_claims: required_unavailable_claims(),
+        });
+    }
+
+    let executable_path = validate_executable_artifact(package, artifact_root.as_ref())?;
+    let native = run_packaged_executable(&executable_path, &run_report.observation.observation)?;
 
     let runtime_ir = compare_runtime_ir_lane(
         &target,
         &run_report.observation.observation,
         &native.observation,
     );
-    let interpreter = compare_interpreter_lane(
-        &target,
-        &RuntimeIrTargetIdentity {
-            example: target_example.name.clone(),
-            checked_core_shape: target_example.checked_core_shape.clone(),
-        },
-        interpreter,
-        &native.observation,
-    );
+    let interpreter =
+        compare_interpreter_lane(&target, &expected_target, interpreter, &native.observation)?;
     let verdict = differential_verdict(&runtime_ir, &interpreter);
 
     Ok(NativeExecutionDifferentialReport {
@@ -528,44 +567,38 @@ fn compare_interpreter_lane(
     expected_target: &RuntimeIrTargetIdentity,
     interpreter: NativeInterpreterLaneInput,
     native: &RuntimeObservation,
-) -> NativeComparisonLaneReport {
+) -> Result<NativeComparisonLaneReport, NativeExecutionDifferentialError> {
     match interpreter {
         NativeInterpreterLaneInput::Unavailable {
             reason,
             evidence_source,
-        } => NativeComparisonLaneReport::Unavailable {
+        } => Ok(NativeComparisonLaneReport::Unavailable {
             lane: NativeDifferentialLane::Interpreter,
             reason,
             evidence_source,
-        },
+        }),
         NativeInterpreterLaneInput::Available(interpreter) => {
             if interpreter.artifact != target.runtime_artifact {
-                return NativeComparisonLaneReport::Unavailable {
-                    lane: NativeDifferentialLane::Interpreter,
-                    reason:
-                        "interpreter observation artifact identity does not match RuntimeProgram"
-                            .to_string(),
-                    evidence_source: interpreter.evidence_source,
-                };
+                return Err(detached_interpreter_evidence(
+                    "artifact",
+                    "asserted-available interpreter observation artifact identity does not match RuntimeProgram",
+                ));
             }
             if &interpreter.target != expected_target {
-                return NativeComparisonLaneReport::Unavailable {
-                    lane: NativeDifferentialLane::Interpreter,
-                    reason:
-                        "interpreter observation target identity does not match RuntimeIrRunReport"
-                            .to_string(),
-                    evidence_source: interpreter.evidence_source,
-                };
+                return Err(detached_interpreter_evidence(
+                    "target",
+                    "asserted-available interpreter observation target identity does not match RuntimeIrRunReport",
+                ));
             }
             if interpreter.observation == *native {
-                NativeComparisonLaneReport::TestedAgreement {
+                Ok(NativeComparisonLaneReport::TestedAgreement {
                     lane: NativeDifferentialLane::Interpreter,
                     expected: interpreter.observation.clone(),
                     observed: native.clone(),
                     evidence_source: interpreter.evidence_source,
-                }
+                })
             } else {
-                NativeComparisonLaneReport::Mismatch {
+                Ok(NativeComparisonLaneReport::Mismatch {
                     lane: NativeDifferentialLane::Interpreter,
                     expected: interpreter.observation.clone(),
                     observed: native.clone(),
@@ -575,8 +608,49 @@ fn compare_interpreter_lane(
                         interpreter.observation,
                         native.clone(),
                     ),
-                }
+                })
             }
+        }
+    }
+}
+
+fn unavailable_interpreter_for_trap(
+    target: &NativeExecutionTargetIdentity,
+    expected_target: &RuntimeIrTargetIdentity,
+    interpreter: NativeInterpreterLaneInput,
+    runtime_ir: &RuntimeObservation,
+) -> Result<NativeComparisonLaneReport, NativeExecutionDifferentialError> {
+    match interpreter {
+        NativeInterpreterLaneInput::Unavailable {
+            reason,
+            evidence_source,
+        } => Ok(NativeComparisonLaneReport::Unavailable {
+            lane: NativeDifferentialLane::Interpreter,
+            reason,
+            evidence_source,
+        }),
+        NativeInterpreterLaneInput::Available(interpreter) => {
+            if interpreter.artifact != target.runtime_artifact {
+                return Err(detached_interpreter_evidence(
+                    "artifact",
+                    "asserted-available interpreter observation artifact identity does not match RuntimeProgram",
+                ));
+            }
+            if &interpreter.target != expected_target {
+                return Err(detached_interpreter_evidence(
+                    "target",
+                    "asserted-available interpreter observation target identity does not match RuntimeIrRunReport",
+                ));
+            }
+            Ok(NativeComparisonLaneReport::Unavailable {
+                lane: NativeDifferentialLane::NativeExecution,
+                reason: "interpreter trap observation is present, but native trap decoding is unavailable in NC24"
+                    .to_string(),
+                evidence_source: format!(
+                    "{}; interpreter observation {:?}; runtime-IR observation {:?}",
+                    interpreter.evidence_source, interpreter.observation, runtime_ir
+                ),
+            })
         }
     }
 }
@@ -662,6 +736,17 @@ fn differential_error(
     }
 }
 
+fn detached_interpreter_evidence(
+    field: &'static str,
+    reason: impl Into<String>,
+) -> NativeExecutionDifferentialError {
+    differential_error(
+        NativeExecutionDifferentialStage::InterpreterEvidence,
+        field,
+        reason,
+    )
+}
+
 fn required_unavailable_claims() -> BTreeSet<NativeExecutionUnavailableClaim> {
     BTreeSet::from([
         NativeExecutionUnavailableClaim::LibraryAbi,
@@ -691,7 +776,7 @@ mod tests {
         ExecutableTrapContract, ExecutableTrapShape, NativeSeedEnvironment, PlatformRuntimeTarget,
         RuntimeDeclaration, RuntimeDeclarationKind, RuntimeExpr, RuntimeIrSeedEnvironment,
         RuntimeLowerabilityStatus, RuntimeMetadata, RuntimePartiality, RuntimePrimitive,
-        RuntimeSymbolMetadata, RuntimeValue,
+        RuntimeSymbolMetadata, RuntimeTrap, RuntimeTrapCode, RuntimeValue,
     };
 
     fn starter_program(value: i64) -> RuntimeProgram {
@@ -979,6 +1064,109 @@ mod tests {
 
         assert_eq!(err.stage, NativeExecutionDifferentialStage::PackageIdentity);
         assert_eq!(err.field, "package_hash");
+    }
+
+    #[test]
+    fn trap_observation_is_first_class_unavailable_native_lane() {
+        let program = starter_program(26);
+        let mut run_report = runtime_ir_run_report(&program);
+        let output_dir = temp_output_dir("nc24-trap-unavailable");
+        let mut package = package_for(&program, &run_report, &output_dir);
+        run_report.observation.observation = RuntimeObservation::Trapped(RuntimeTrap {
+            code: RuntimeTrapCode::ExplicitTrap,
+            message: "fixture trap".to_string(),
+        });
+        package.runtime_report_hash = object_linker_runtime_ir_run_report_hash(&run_report);
+        package.header.package_hash = object_linker_executable_package_hash(&package);
+
+        let report = run_native_execution_differential(
+            &program,
+            &package,
+            &run_report,
+            &output_dir,
+            interpreter_available(&program, &run_report),
+            "native differential unit test",
+        )
+        .expect("trap lane report materializes");
+
+        assert!(matches!(
+            report.native,
+            NativeExecutionLaneReport::Unavailable { ref reason, .. }
+                if reason.contains("trap")
+        ));
+        assert!(matches!(
+            report.runtime_ir,
+            NativeComparisonLaneReport::Unavailable {
+                lane: NativeDifferentialLane::NativeExecution,
+                ref reason,
+                ..
+            } if reason.contains("trap")
+        ));
+        assert!(matches!(
+            report.verdict,
+            NativeExecutionDifferentialVerdict::Unavailable {
+                lane: NativeDifferentialLane::NativeExecution,
+                ref reason,
+            } if reason.contains("trap")
+        ));
+    }
+
+    #[test]
+    fn asserted_available_interpreter_artifact_mismatch_rejects() {
+        let program = starter_program(36);
+        let run_report = runtime_ir_run_report(&program);
+        let output_dir = temp_output_dir("nc24-interpreter-artifact-mismatch");
+        let package = package_for(&program, &run_report, &output_dir);
+        let mut interpreter = match interpreter_available(&program, &run_report) {
+            NativeInterpreterLaneInput::Available(interpreter) => interpreter,
+            NativeInterpreterLaneInput::Unavailable { .. } => unreachable!(),
+        };
+        interpreter.artifact.artifact_hash ^= 1;
+
+        let err = run_native_execution_differential(
+            &program,
+            &package,
+            &run_report,
+            &output_dir,
+            NativeInterpreterLaneInput::Available(interpreter),
+            "native differential unit test",
+        )
+        .expect_err("detached interpreter artifact rejects");
+
+        assert_eq!(
+            err.stage,
+            NativeExecutionDifferentialStage::InterpreterEvidence
+        );
+        assert_eq!(err.field, "artifact");
+    }
+
+    #[test]
+    fn asserted_available_interpreter_target_mismatch_rejects() {
+        let program = starter_program(37);
+        let run_report = runtime_ir_run_report(&program);
+        let output_dir = temp_output_dir("nc24-interpreter-target-mismatch");
+        let package = package_for(&program, &run_report, &output_dir);
+        let mut interpreter = match interpreter_available(&program, &run_report) {
+            NativeInterpreterLaneInput::Available(interpreter) => interpreter,
+            NativeInterpreterLaneInput::Unavailable { .. } => unreachable!(),
+        };
+        interpreter.target.example = "detached-example".to_string();
+
+        let err = run_native_execution_differential(
+            &program,
+            &package,
+            &run_report,
+            &output_dir,
+            NativeInterpreterLaneInput::Available(interpreter),
+            "native differential unit test",
+        )
+        .expect_err("detached interpreter target rejects");
+
+        assert_eq!(
+            err.stage,
+            NativeExecutionDifferentialStage::InterpreterEvidence
+        );
+        assert_eq!(err.field, "target");
     }
 
     #[test]
