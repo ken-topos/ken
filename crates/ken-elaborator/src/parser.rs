@@ -1116,12 +1116,14 @@ impl Parser {
                     }
                 }
                 Token::RBrace => break,
-                other => return Err(ElabError::ParseError {
-                    msg: format!(
+                other => {
+                    return Err(ElabError::ParseError {
+                        msg: format!(
                         "expected ',' or '}}' in constructor `{name}` field list, found {other:?}"
                     ),
-                    span: self.peek_span().clone(),
-                }),
+                        span: self.peek_span().clone(),
+                    })
+                }
             }
         }
 
