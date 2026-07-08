@@ -142,6 +142,10 @@ fn resolve_ref(
                 }),
             };
         }
+        if prefix_part.contains('.') {
+            let resolved_prefix = resolve_ref(scope, exports, prefix_part, span)?;
+            return Ok(format!("{resolved_prefix}.{leaf}"));
+        }
         let canonical_module = scope
             .prefixes
             .get(prefix_part)

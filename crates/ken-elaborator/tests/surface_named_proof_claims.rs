@@ -252,6 +252,25 @@ fn module_selective_import_exposes_prop_intro_without_bare_intro() {
 }
 
 #[test]
+fn qualified_module_import_exposes_prop_intro_through_family_path() {
+    let env = elaborate_ok(
+        r#"
+        module M {
+          pub prop HasProof (a : Type) : Omega where {
+            intro : HasProof a
+          }
+        }
+        import M
+        const consume (a : Type) : M.HasProof a = M.HasProof.intro a
+        "#,
+    );
+
+    assert!(env.globals.contains_key("M.HasProof"));
+    assert!(env.globals.contains_key("M.HasProof.intro"));
+    assert!(env.globals.contains_key("consume"));
+}
+
+#[test]
 fn public_attached_proof_requires_public_subject() {
     let err = elaborate_err(
         r#"
