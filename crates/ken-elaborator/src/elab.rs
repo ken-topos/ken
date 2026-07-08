@@ -23,7 +23,9 @@ use crate::classes::{ClassEnv, ClassInfo, ClassKind, InstanceInfo};
 use crate::data;
 use crate::error::{ElabError, Span};
 use crate::numbers::{AddEntry, BinOpEntry, NumericEnv, NumericLitVal};
-use crate::resolve::{RClassField, RDecl, RDeclKind, RExpr, RMatchArm, RPatKind, RPattern, RType};
+use crate::resolve::{
+    RClassField, RDecl, RDeclKind, RExpr, RMatchArm, RPatKind, RPattern, RPropIntro, RType,
+};
 
 // ----- obligation model -----
 
@@ -354,6 +356,9 @@ fn elab_type(cx: &mut ElabCtx, ty: &RType) -> Result<Term, ElabError> {
         RType::RUniv(Some(n), _) => Ok(Term::ty(level_from_nat(*n))),
 
         RType::RCon(name, span) => {
+            if name == "Omega" {
+                return Ok(Term::omega(Level::Zero));
+            }
             let id = cx
                 .globals
                 .get(name)
@@ -1426,6 +1431,15 @@ fn infer(cx: &mut ElabCtx, expr: &RExpr) -> Result<(Term, Term), ElabError> {
         RExpr::RPi(_, a, b, span) => infer_pi(cx, a, b, span),
 
         RExpr::RArrow(a, b, span) => infer_arrow(cx, a, b, span),
+
+        RExpr::RAttachedProofRef {
+            subject,
+            proof_name,
+            span,
+        } => infer(
+            cx,
+            &RExpr::RCon(format!("{subject}::{proof_name}"), span.clone()),
+        ),
     }
 }
 
@@ -2471,6 +2485,14 @@ fn infer_expr_row_type(
         RExpr::RLam(_, _, _) | RExpr::RPi(_, _, _, _) | RExpr::RArrow(_, _, _) => {
             crate::effects::RowType::empty()
         }
+        RExpr::RAttachedProofRef {
+            subject,
+            proof_name,
+            ..
+        } => effect_rows
+            .get(&format!("{subject}::{proof_name}"))
+            .cloned()
+            .unwrap_or_else(crate::effects::RowType::empty),
         RExpr::RLet(_, _, val, body, _) => infer_expr_row_type(val, effect_rows, projection_ctx)
             .join(infer_expr_row_type(body, effect_rows, projection_ctx)),
         RExpr::RAsc(e, _, _) | RExpr::ROld(e, _) => {
@@ -2683,6 +2705,27 @@ pub fn elaborate_rdecl_v1_with_effect_rows(
             elaborate_view_or_let(env, globals, num_values, numeric_env, class_env, rdecl)
         }
         RDeclKind::Prove => elaborate_prove(env, globals, num_values, numeric_env, rdecl),
+        RDeclKind::Prop { intros } => {
+            elaborate_prop_decl(env, globals, num_values, numeric_env, rdecl, intros)
+        }
+        RDeclKind::Lemma => elaborate_checked_theorem(
+            env,
+            globals,
+            num_values,
+            numeric_env,
+            class_env,
+            rdecl,
+            None,
+        ),
+        RDeclKind::AttachedProof { subject, .. } => elaborate_checked_theorem(
+            env,
+            globals,
+            num_values,
+            numeric_env,
+            class_env,
+            rdecl,
+            Some(subject),
+        ),
         RDeclKind::Law { param, fields } => elaborate_law(
             env,
             globals,
@@ -3879,6 +3922,7 @@ pub(crate) fn rexpr_mentions_name(expr: &RExpr, name: &str) -> bool {
         // the codomain (an `RExpr`) is scanned.
         RExpr::RPi(_, _, b, _) => rexpr_mentions_name(b, name),
         RExpr::RArrow(a, b, _) => rexpr_mentions_name(a, name) || rexpr_mentions_name(b, name),
+        RExpr::RAttachedProofRef { .. } => false,
     }
 }
 
@@ -4126,6 +4170,383 @@ fn elaborate_prove(
         temporal_obligations: vec![],
         effect_row_type: None,
     })
+}
+
+fn elaborate_prop_decl(
+    env: &mut GlobalEnv,
+    globals: &mut HashMap<String, GlobalId>,
+    num_values: &mut HashMap<GlobalId, NumericLitVal>,
+    numeric_env: &NumericEnv,
+    rdecl: &RDecl,
+    intros: &[RPropIntro],
+) -> Result<ElabResult, ElabError> {
+    let prop_ty = rdecl.ty.as_ref().ok_or_else(|| {
+        ElabError::Internal(format!(
+            "prop '{}' reached elaboration without a type",
+            rdecl.name
+        ))
+    })?;
+    validate_seed_prop_shape(prop_ty, &rdecl.name, intros, &rdecl.span)?;
+
+    let (ty_core, body_core) = {
+        let mut cx = ElabCtx::new(env, globals, num_values, numeric_env);
+        let ty = elab_type(&mut cx, prop_ty)?;
+        let ty = cx.metas.zonk_term(&ty);
+        let body = top_body_for_prop_type(env, &ty, &rdecl.span)?;
+        (ty, body)
+    };
+
+    let id = declare_def(env, vec![], ty_core.clone(), body_core).map_err(|e| {
+        ElabError::KernelRejected {
+            error: e,
+            span: rdecl.span.clone(),
+        }
+    })?;
+    globals.insert(rdecl.name.clone(), id);
+
+    let mut produced = ElabResult {
+        name: rdecl.name.clone(),
+        def_id: id,
+        obligations: vec![],
+        foreign_binding: None,
+        temporal_obligations: vec![],
+        effect_row_type: None,
+    };
+
+    for intro in intros {
+        let helper_ty = prepend_prop_params(prop_ty, &intro.ty)?;
+        let helper_name = format!("{}.{}", rdecl.name, intro.name);
+        let helper_rdecl = RDecl {
+            name: helper_name,
+            ty: Some(helper_ty),
+            body: top_intro_body(prop_ty, &intro.span)?,
+            requires: vec![],
+            ensures: vec![],
+            span: intro.span.clone(),
+            kind: RDeclKind::Lemma,
+        };
+        let helper = elaborate_checked_theorem(
+            env,
+            globals,
+            num_values,
+            numeric_env,
+            &ClassEnv::sentinel(),
+            &helper_rdecl,
+            None,
+        )?;
+        produced.def_id = id;
+        produced.obligations.extend(helper.obligations);
+    }
+
+    Ok(produced)
+}
+
+fn elaborate_checked_theorem(
+    env: &mut GlobalEnv,
+    globals: &mut HashMap<String, GlobalId>,
+    num_values: &mut HashMap<GlobalId, NumericLitVal>,
+    numeric_env: &NumericEnv,
+    class_env: &ClassEnv,
+    rdecl: &RDecl,
+    attached_subject: Option<&str>,
+) -> Result<ElabResult, ElabError> {
+    if let Some(subject) = attached_subject {
+        if rexpr_mentions_attached_subject(&rdecl.body, subject) {
+            return Err(ElabError::TypeMismatch {
+                span: rdecl.span.clone(),
+                reason: format!(
+                    "attached proof '{}' may not depend on another proof for subject '{}'",
+                    rdecl.name, subject
+                ),
+            });
+        }
+    }
+
+    let (ty_core, body_core, body_obligations) = {
+        let mut cx = ElabCtx::new(env, globals, num_values, numeric_env).with_classes(class_env);
+        let ty = rdecl.ty.as_ref().ok_or_else(|| {
+            ElabError::Internal(format!("checked theorem '{}' has no type", rdecl.name))
+        })?;
+        let ty_core = elab_type(&mut cx, ty)?;
+        let ty_core = cx.metas.zonk_term(&ty_core);
+        ensure_omega_type(cx.env, &Context::new(), &ty_core, &rdecl.span)?;
+        if let Some(subject) = attached_subject {
+            validate_attached_subject_telescope(
+                cx.env,
+                cx.globals,
+                subject,
+                &ty_core,
+                &rdecl.span,
+            )?;
+        }
+        let body_core = check(&mut cx, &rdecl.body, &ty_core, &rdecl.span)?;
+        let obligations = std::mem::take(&mut cx.obligations);
+        (
+            cx.metas.zonk_term(&ty_core),
+            cx.metas.zonk_term(&body_core),
+            obligations,
+        )
+    };
+    let id =
+        declare_def(env, vec![], ty_core, body_core).map_err(|e| ElabError::KernelRejected {
+            error: e,
+            span: rdecl.span.clone(),
+        })?;
+    globals.insert(rdecl.name.clone(), id);
+    Ok(ElabResult {
+        name: rdecl.name.clone(),
+        def_id: id,
+        obligations: body_obligations,
+        foreign_binding: None,
+        temporal_obligations: vec![],
+        effect_row_type: None,
+    })
+}
+
+fn ensure_omega_type(
+    env: &GlobalEnv,
+    ctx: &Context,
+    ty: &Term,
+    span: &Span,
+) -> Result<(), ElabError> {
+    let sort = kernel_infer(env, ctx, ty).map_err(|e| ElabError::KernelRejected {
+        error: e,
+        span: span.clone(),
+    })?;
+    match whnf(env, ctx, &sort) {
+        Term::Omega(_) => Ok(()),
+        other => Err(ElabError::TypeMismatch {
+            span: span.clone(),
+            reason: format!("proof claim type must classify at Omega, found {:?}", other),
+        }),
+    }
+}
+
+fn validate_attached_subject_telescope(
+    env: &GlobalEnv,
+    globals: &HashMap<String, GlobalId>,
+    subject: &str,
+    proof_ty: &Term,
+    span: &Span,
+) -> Result<(), ElabError> {
+    let subject_id = globals
+        .get(subject)
+        .copied()
+        .ok_or_else(|| ElabError::UnboundName {
+            name: subject.to_string(),
+            span: span.clone(),
+        })?;
+    let (_, subject_ty) = env
+        .const_type(subject_id)
+        .ok_or_else(|| ElabError::TypeMismatch {
+            span: span.clone(),
+            reason: format!("attached proof subject '{}' is not a definition", subject),
+        })?;
+    let mut ctx = Context::new();
+    let mut s_cur = subject_ty.clone();
+    let mut p_cur = proof_ty.clone();
+    loop {
+        match (whnf(env, &ctx, &s_cur), whnf(env, &ctx, &p_cur)) {
+            (Term::Pi(s_dom, s_cod), Term::Pi(p_dom, p_cod)) => {
+                let dom_sort =
+                    kernel_infer(env, &ctx, &s_dom).map_err(|e| ElabError::KernelRejected {
+                        error: e,
+                        span: span.clone(),
+                    })?;
+                if !convert(env, &ctx, &dom_sort, &s_dom, &p_dom) {
+                    return Err(ElabError::TypeMismatch {
+                        span: span.clone(),
+                        reason: format!(
+                            "attached proof telescope for '{:?}' does not match subject '{}'",
+                            proof_ty, subject
+                        ),
+                    });
+                }
+                ctx.push(*s_dom.clone());
+                s_cur = *s_cod;
+                p_cur = *p_cod;
+            }
+            (Term::Pi(_, _), _) => {
+                return Err(ElabError::TypeMismatch {
+                    span: span.clone(),
+                    reason: format!(
+                        "attached proof for '{:?}' omits part of subject '{}'s telescope",
+                        proof_ty, subject
+                    ),
+                })
+            }
+            (_, Term::Pi(_, _)) => {
+                return Err(ElabError::TypeMismatch {
+                    span: span.clone(),
+                    reason: format!(
+                        "attached proof for '{:?}' has binders beyond subject '{}'s telescope",
+                        proof_ty, subject
+                    ),
+                })
+            }
+            _ => return Ok(()),
+        }
+    }
+}
+
+fn rexpr_mentions_attached_subject(expr: &RExpr, subject: &str) -> bool {
+    let prefix = format!("{subject}::");
+    match expr {
+        RExpr::RCon(n, _) => n.starts_with(&prefix),
+        RExpr::RVar(_, _, _) | RExpr::RUniv(_, _) | RExpr::RNumLit(_, _) | RExpr::RStr(_, _) => {
+            false
+        }
+        RExpr::RApp(f, a, _) => {
+            rexpr_mentions_attached_subject(f, subject)
+                || rexpr_mentions_attached_subject(a, subject)
+        }
+        RExpr::RLam(_, b, _) => rexpr_mentions_attached_subject(b, subject),
+        RExpr::RLet(_, _, rhs, body, _) => {
+            rexpr_mentions_attached_subject(rhs, subject)
+                || rexpr_mentions_attached_subject(body, subject)
+        }
+        RExpr::RAsc(e, _, _) => rexpr_mentions_attached_subject(e, subject),
+        RExpr::ROld(e, _) => rexpr_mentions_attached_subject(e, subject),
+        RExpr::RBinOp(_, l, r, _) => {
+            rexpr_mentions_attached_subject(l, subject)
+                || rexpr_mentions_attached_subject(r, subject)
+        }
+        RExpr::RMatch { scrut, arms, .. } => {
+            rexpr_mentions_attached_subject(scrut, subject)
+                || arms
+                    .iter()
+                    .any(|a| rexpr_mentions_attached_subject(&a.body, subject))
+        }
+        RExpr::RProj(e, _, _) => rexpr_mentions_attached_subject(e, subject),
+        RExpr::RPi(_, _, b, _) => rexpr_mentions_attached_subject(b, subject),
+        RExpr::RArrow(a, b, _) => {
+            rexpr_mentions_attached_subject(a, subject)
+                || rexpr_mentions_attached_subject(b, subject)
+        }
+        RExpr::RAttachedProofRef {
+            subject: s,
+            proof_name: _,
+            ..
+        } => s == subject,
+    }
+}
+
+fn top_body_for_prop_type(env: &GlobalEnv, ty: &Term, span: &Span) -> Result<Term, ElabError> {
+    match ty {
+        Term::Pi(dom, cod) => Ok(Term::lam(
+            *dom.clone(),
+            top_body_for_prop_type(env, cod, span)?,
+        )),
+        _ => {
+            match whnf(env, &Context::new(), ty) {
+                Term::Omega(_) => {}
+                other => {
+                    return Err(ElabError::TypeMismatch {
+                        span: span.clone(),
+                        reason: format!("prop family result must be Omega, found {:?}", other),
+                    })
+                }
+            }
+            Ok(Term::const_(env.top_id(), vec![]))
+        }
+    }
+}
+
+fn top_intro_body(prop_ty: &RType, span: &Span) -> Result<RExpr, ElabError> {
+    match prop_ty {
+        RType::RPi(name, _, cod, _) => {
+            let body = top_intro_body(cod, span)?;
+            Ok(RExpr::RLam(name.clone(), Box::new(body), span.clone()))
+        }
+        _ => Ok(RExpr::RCon("tt".to_string(), span.clone())),
+    }
+}
+
+fn prepend_prop_params(prop_ty: &RType, result: &RType) -> Result<RType, ElabError> {
+    match prop_ty {
+        RType::RPi(name, dom, cod, span) => Ok(RType::RPi(
+            name.clone(),
+            dom.clone(),
+            Box::new(prepend_prop_params(cod, result)?),
+            span.clone(),
+        )),
+        _ => Ok(result.clone()),
+    }
+}
+
+fn validate_seed_prop_shape(
+    prop_ty: &RType,
+    prop_name: &str,
+    intros: &[RPropIntro],
+    span: &Span,
+) -> Result<(), ElabError> {
+    let mut param_count = 0;
+    let mut cur = prop_ty;
+    while let RType::RPi(_, _, cod, _) = cur {
+        param_count += 1;
+        cur = cod;
+    }
+    match cur {
+        RType::RCon(name, _) if name == "Omega" || name == "Prop" => {}
+        _ => {
+            return Err(ElabError::TypeMismatch {
+                span: span.clone(),
+                reason: "prop family result must be Omega".to_string(),
+            })
+        }
+    }
+    for intro in intros {
+        let args = peel_rtype_app(&intro.ty, prop_name).ok_or_else(|| ElabError::TypeMismatch {
+            span: intro.span.clone(),
+            reason: format!(
+                "prop intro '{}' must return the declared family '{}'",
+                intro.name, prop_name
+            ),
+        })?;
+        if args.len() != param_count {
+            return Err(ElabError::TypeMismatch {
+                span: intro.span.clone(),
+                reason: format!(
+                    "prop intro '{}' must apply '{}' to exactly its parameters",
+                    intro.name, prop_name
+                ),
+            });
+        }
+        for (i, arg) in args.iter().enumerate() {
+            let expected = param_count - 1 - i;
+            match arg {
+                RType::RVarTy(idx, _, _) if *idx == expected => {}
+                _ => {
+                    return Err(ElabError::TypeMismatch {
+                        span: intro.span.clone(),
+                        reason: format!(
+                            "prop intro '{}' is outside the v0 Omega-clean seed shape",
+                            intro.name
+                        ),
+                    })
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn peel_rtype_app<'a>(ty: &'a RType, head_name: &str) -> Option<Vec<&'a RType>> {
+    let mut args = Vec::new();
+    let mut cur = ty;
+    loop {
+        match cur {
+            RType::RApp(f, a, _) => {
+                args.push(a.as_ref());
+                cur = f.as_ref();
+            }
+            RType::RCon(name, _) if name == head_name => {
+                args.reverse();
+                return Some(args);
+            }
+            _ => return None,
+        }
+    }
 }
 
 /// Elaborate `temporal name { φ }` — a delegated temporal/behavioral

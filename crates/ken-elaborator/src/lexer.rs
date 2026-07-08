@@ -28,27 +28,32 @@ pub enum Token {
     KwOld,
     KwSpace,
     // L2 keywords
-    KwData,       // "data"  — inductive type declaration
-    KwMatch,      // "match" — pattern matching
-    KwTypeAlias,  // "type"  — surface type alias
+    KwData,      // "data"  — inductive type declaration
+    KwMatch,     // "match" — pattern matching
+    KwTypeAlias, // "type"  — surface type alias
     // L7 keywords (`38 §2.1`, spellings are `(oracle)`)
     KwForeign,
     // Lc keywords (`33 §5`, `39 §6`)
-    KwClass,     // "class"    — typeclass declaration
-    KwInstance,  // "instance" — instance declaration
-    KwDerive,    // "derive"   — auto-derive request
-    KwWhere,     // "where"    — constraint list in class/instance/declaration
+    KwClass,    // "class"    — typeclass declaration
+    KwInstance, // "instance" — instance declaration
+    KwDerive,   // "derive"   — auto-derive request
+    KwWhere,    // "where"    — constraint list in class/instance/declaration
     // B2 keywords (`72 §4`, spellings are `(oracle)`/`OQ-syntax`)
-    KwTemporal,  // "temporal" — a delegated temporal-obligation block
+    KwTemporal, // "temporal" — a delegated temporal-obligation block
     // ES3 keywords (`33 §3-4` — modules/imports/visibility)
-    KwModule,    // "module" — module namespace declaration
-    KwImport,    // "import" — qualified/aliased/selective import
-    KwUse,       // "use"    — unqualified open import
-    KwPub,       // "pub"    — visibility export marker
+    KwModule, // "module" — module namespace declaration
+    KwImport, // "import" — qualified/aliased/selective import
+    KwUse,    // "use"    — unqualified open import
+    KwPub,    // "pub"    — visibility export marker
+    // SURF-named-proof-claims keywords (`33 §8`)
+    KwProp,  // "prop"   — proposition-family claim shape
+    KwLemma, // "lemma"  — standalone checked theorem
+    KwProof, // "proof"  — attached checked theorem / selector
     // V0 punctuation
     LParen,
     RParen,
     Colon,
+    DoubleColon,
     Eq,
     Dot,
     Arrow,
@@ -59,38 +64,38 @@ pub enum Token {
     RBrace,
     Pipe,
     // L7 punctuation (foreign effect-row list + string attributes)
-    LBracket,  // `[`
-    RBracket,  // `]`
-    Comma,     // `,`
+    LBracket,    // `[`
+    RBracket,    // `]`
+    Comma,       // `,`
     Str(String), // `"…"` — symbol name / library name in `foreign` decls
     // L1 arithmetic operators
-    Plus,         // `+`  — type-directed infix addition
-    PlusPercent,  // `+%` — explicit wrapping add
-    Minus,        // `-`  — type-directed infix subtraction (VAL2 #11)
-    Star,         // `*`  — type-directed infix multiply
-    EqEq,         // `==` — structural equality
-    PropEq,       // `===` / `≡` — propositional equality notation
-    Le,           // `<=` / `≤`
-    Ge,           // `>=` / `≥`
-    Ne,           // `/=` / `≠`
-    And,          // `/\` / `∧`
-    Or,           // `\/` / `∨`
-    Member,       // `∈` — membership notation; distinct from keyword `in`
-    FlowsTo,      // `<:` / `⊑`
-    Join,         // `⊔`
-    Meet,         // `⊓`
-    Times,        // `><` / `×`
+    Plus,        // `+`  — type-directed infix addition
+    PlusPercent, // `+%` — explicit wrapping add
+    Minus,       // `-`  — type-directed infix subtraction (VAL2 #11)
+    Star,        // `*`  — type-directed infix multiply
+    EqEq,        // `==` — structural equality
+    PropEq,      // `===` / `≡` — propositional equality notation
+    Le,          // `<=` / `≤`
+    Ge,          // `>=` / `≥`
+    Ne,          // `/=` / `≠`
+    And,         // `/\` / `∧`
+    Or,          // `\/` / `∨`
+    Member,      // `∈` — membership notation; distinct from keyword `in`
+    FlowsTo,     // `<:` / `⊑`
+    Join,        // `⊔`
+    Meet,        // `⊓`
+    Times,       // `><` / `×`
     // L2 punctuation
-    FatArrow,     // `=>` — match arm separator
+    FatArrow, // `=>` — match arm separator
     // L1 numeric literal tokens
-    IntLit(i128),           // integer literal too large for u32
-    FloatLit(f64),          // decimal-point float: `3.14`, `1e-9`
-    DecimalLit(i64, i32),   // `d`-suffix: coeff × 10^exp; e.g. `0.1d` → (1,-1)
-    Float32Lit(f32),        // `f32`-suffix: `1.5f32`
+    IntLit(i128),         // integer literal too large for u32
+    FloatLit(f64),        // decimal-point float: `3.14`, `1e-9`
+    DecimalLit(i64, i32), // `d`-suffix: coeff × 10^exp; e.g. `0.1d` → (1,-1)
+    Float32Lit(f32),      // `f32`-suffix: `1.5f32`
     // Atoms
-    Ident(String),   // lowercase-initial term variable
-    ConId(String),   // uppercase-initial base type / constructor
-    Nat(u32),        // small non-negative integer (≤ u32::MAX); also a level digit
+    Ident(String), // lowercase-initial term variable
+    ConId(String), // uppercase-initial base type / constructor
+    Nat(u32),      // small non-negative integer (≤ u32::MAX); also a level digit
     Eof,
 }
 
@@ -205,6 +210,10 @@ impl<'s> Lexer<'s> {
             }
             ':' => {
                 self.advance();
+                if self.cur() == Some(':') {
+                    self.advance();
+                    return Ok((Token::DoubleColon, Span::new(start, self.pos)));
+                }
                 return Ok((Token::Colon, Span::new(start, self.pos)));
             }
             '=' => {
@@ -289,11 +298,17 @@ impl<'s> Lexer<'s> {
             }
             'Ω' => {
                 self.advance();
-                return Ok((Token::ConId("Omega".to_string()), Span::new(start, self.pos)));
+                return Ok((
+                    Token::ConId("Omega".to_string()),
+                    Span::new(start, self.pos),
+                ));
             }
             'Σ' => {
                 self.advance();
-                return Ok((Token::ConId("Sigma".to_string()), Span::new(start, self.pos)));
+                return Ok((
+                    Token::ConId("Sigma".to_string()),
+                    Span::new(start, self.pos),
+                ));
             }
             'Π' => {
                 self.advance();
@@ -301,11 +316,17 @@ impl<'s> Lexer<'s> {
             }
             '∀' => {
                 self.advance();
-                return Ok((Token::Ident("forall".to_string()), Span::new(start, self.pos)));
+                return Ok((
+                    Token::Ident("forall".to_string()),
+                    Span::new(start, self.pos),
+                ));
             }
             '∃' => {
                 self.advance();
-                return Ok((Token::Ident("exists".to_string()), Span::new(start, self.pos)));
+                return Ok((
+                    Token::Ident("exists".to_string()),
+                    Span::new(start, self.pos),
+                ));
             }
             '¬' => {
                 self.advance();
@@ -317,7 +338,10 @@ impl<'s> Lexer<'s> {
             }
             'ℓ' => {
                 self.advance();
-                return Ok((Token::Ident("level".to_string()), Span::new(start, self.pos)));
+                return Ok((
+                    Token::Ident("level".to_string()),
+                    Span::new(start, self.pos),
+                ));
             }
             '+' => {
                 self.advance();
@@ -387,32 +411,35 @@ impl<'s> Lexer<'s> {
                 s.push(self.advance().unwrap());
             }
             let tok = match s.as_str() {
-                "const"    => Token::KwConst,
-                "fn"       => Token::KwFn,
-                "proc"     => Token::KwProc,
-                "let"      => Token::KwLet,
-                "in"       => Token::KwIn,
-                "Type"     => Token::KwType,
+                "const" => Token::KwConst,
+                "fn" => Token::KwFn,
+                "proc" => Token::KwProc,
+                "let" => Token::KwLet,
+                "in" => Token::KwIn,
+                "Type" => Token::KwType,
                 "requires" => Token::KwRequires,
-                "ensures"  => Token::KwEnsures,
-                "prove"    => Token::KwProve,
-                "law"      => Token::KwLaw,
-                "old"      => Token::KwOld,
-                "space"    => Token::KwSpace,
-                "data"     => Token::KwData,
-                "match"    => Token::KwMatch,
-                "type"     => Token::KwTypeAlias,
-                "foreign"  => Token::KwForeign,
+                "ensures" => Token::KwEnsures,
+                "prove" => Token::KwProve,
+                "law" => Token::KwLaw,
+                "old" => Token::KwOld,
+                "space" => Token::KwSpace,
+                "data" => Token::KwData,
+                "match" => Token::KwMatch,
+                "type" => Token::KwTypeAlias,
+                "foreign" => Token::KwForeign,
                 "temporal" => Token::KwTemporal,
-                "class"    => Token::KwClass,
+                "class" => Token::KwClass,
                 "instance" => Token::KwInstance,
-                "derive"   => Token::KwDerive,
-                "where"    => Token::KwWhere,
-                "module"   => Token::KwModule,
-                "import"   => Token::KwImport,
-                "use"      => Token::KwUse,
-                "pub"      => Token::KwPub,
-                "l"        => Token::Ident("level".to_string()),
+                "derive" => Token::KwDerive,
+                "where" => Token::KwWhere,
+                "module" => Token::KwModule,
+                "import" => Token::KwImport,
+                "use" => Token::KwUse,
+                "pub" => Token::KwPub,
+                "prop" => Token::KwProp,
+                "lemma" => Token::KwLemma,
+                "proof" => Token::KwProof,
+                "l" => Token::Ident("level".to_string()),
                 _ => {
                     let first = s.chars().next().unwrap();
                     if first.is_ascii_uppercase() {

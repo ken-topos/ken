@@ -26,7 +26,7 @@ use crate::ast::{CtorDecl, Decl, ExplicitDataCtor, ImportKind};
 use crate::error::{ElabError, Span};
 use crate::resolve::{
     self, RCtorDecl, RDecl, RDeclKind, RExplicitCtorDecl, RExpr, RMatchArm, RPatKind, RPattern,
-    RTelescopeEntry, RType,
+    RPropIntro, RTelescopeEntry, RType,
 };
 use crate::ElabEnv;
 
@@ -165,6 +165,33 @@ fn resolve_ref(
             None => Ok(name.to_string()),
         }
     }
+}
+
+fn resolve_attached_ref(
+    scope: &Scope,
+    exports: &HashMap<String, HashMap<String, String>>,
+    subject: &str,
+    proof_name: &str,
+    span: &Span,
+) -> Result<String, ElabError> {
+    let subject_is_local = !subject.contains('.') && scope.locals.contains(subject);
+    let subject = resolve_ref(scope, exports, subject, span)?;
+    if !subject_is_local {
+        if let Some(dot) = subject.rfind('.') {
+            let (module, leaf) = (&subject[..dot], &subject[dot + 1..]);
+            if let Some(pubmap) = exports.get(module) {
+                let attached_key = format!("{leaf}::{proof_name}");
+                return pubmap
+                    .get(&attached_key)
+                    .cloned()
+                    .ok_or_else(|| ElabError::UnboundName {
+                        name: format!("{subject}::{proof_name}"),
+                        span: span.clone(),
+                    });
+            }
+        }
+    }
+    Ok(format!("{subject}::{proof_name}"))
 }
 
 fn apply_import(
@@ -307,6 +334,47 @@ fn qualify_decl_name(decl: &Decl, prefix: &str) -> Decl {
             ty: ty.clone(),
             span: span.clone(),
         },
+        Decl::PropDecl {
+            name,
+            params,
+            ret_ty,
+            intros,
+            span,
+        } => Decl::PropDecl {
+            name: qualify(prefix, name),
+            params: params.clone(),
+            ret_ty: ret_ty.clone(),
+            intros: intros.clone(),
+            span: span.clone(),
+        },
+        Decl::LemmaDecl {
+            name,
+            params,
+            theorem,
+            body,
+            span,
+        } => Decl::LemmaDecl {
+            name: qualify(prefix, name),
+            params: params.clone(),
+            theorem: theorem.clone(),
+            body: body.clone(),
+            span: span.clone(),
+        },
+        Decl::AttachedProofDecl {
+            proof_name,
+            subject,
+            params,
+            theorem,
+            body,
+            span,
+        } => Decl::AttachedProofDecl {
+            proof_name: proof_name.clone(),
+            subject: subject.clone(),
+            params: params.clone(),
+            theorem: theorem.clone(),
+            body: body.clone(),
+            span: span.clone(),
+        },
         other => other.clone(),
     }
 }
@@ -421,6 +489,14 @@ fn rewrite_rexpr(
             Box::new(rewrite_rexpr(scope, exports, *b)?),
             s,
         ),
+        RExpr::RAttachedProofRef {
+            subject,
+            proof_name,
+            span,
+        } => RExpr::RCon(
+            resolve_attached_ref(scope, exports, &subject, &proof_name, &span)?,
+            span,
+        ),
     })
 }
 
@@ -481,6 +557,26 @@ fn rewrite_rdecl(
         },
         RDeclKind::Let => RDeclKind::Let,
         RDeclKind::Prove => RDeclKind::Prove,
+        RDeclKind::Prop { intros } => RDeclKind::Prop {
+            intros: intros
+                .into_iter()
+                .map(|intro| {
+                    Ok(RPropIntro {
+                        name: intro.name,
+                        ty: rewrite_rtype(scope, exports, intro.ty)?,
+                        span: intro.span,
+                    })
+                })
+                .collect::<Result<Vec<_>, ElabError>>()?,
+        },
+        RDeclKind::Lemma => RDeclKind::Lemma,
+        RDeclKind::AttachedProof {
+            subject,
+            proof_name,
+        } => RDeclKind::AttachedProof {
+            subject: resolve_ref(scope, exports, &subject, &rdecl.span)?,
+            proof_name,
+        },
         RDeclKind::Law { param, fields } => RDeclKind::Law {
             param,
             fields: fields
@@ -603,8 +699,15 @@ fn rewrite_rdecl(
         },
         RDeclKind::DeriveDecl { data_name } => RDeclKind::DeriveDecl { data_name },
     };
+    let name = match &kind {
+        RDeclKind::AttachedProof {
+            subject,
+            proof_name,
+        } => format!("{subject}::{proof_name}"),
+        _ => rdecl.name,
+    };
     Ok(RDecl {
-        name: rdecl.name,
+        name,
         ty,
         body,
         requires,
@@ -624,6 +727,9 @@ fn is_qualifiable(decl: &Decl) -> bool {
         decl,
         Decl::ViewDecl { .. }
             | Decl::LetDecl { .. }
+            | Decl::PropDecl { .. }
+            | Decl::LemmaDecl { .. }
+            | Decl::AttachedProofDecl { .. }
             | Decl::DataDecl { .. }
             | Decl::ExplicitDataDecl { .. }
             | Decl::TypeAlias { .. }
@@ -690,6 +796,9 @@ fn expand_scope(
     for decl in decls {
         let inner = decl.unwrap_pub();
         if is_qualifiable(inner) {
+            if matches!(inner, Decl::AttachedProofDecl { .. }) {
+                continue;
+            }
             let bare = inner.name().to_string();
             scope.bind_local(&bare, &qualify(prefix, &bare));
         }
@@ -914,17 +1023,51 @@ fn expand_scope(
                 }
                 if is_qualifiable(inner) {
                     let bare = inner.name().to_string();
+                    if is_pub {
+                        if let Decl::AttachedProofDecl {
+                            subject,
+                            proof_name,
+                            ..
+                        } = inner
+                        {
+                            if !exports_here.contains_key(subject) {
+                                return Err(ElabError::UnboundName {
+                                    name: subject.clone(),
+                                    span: inner.span().clone(),
+                                });
+                            }
+                            if exports_here.contains_key(&format!("{subject}::{proof_name}")) {
+                                return Err(ElabError::TypeMismatch {
+                                    span: inner.span().clone(),
+                                    reason: format!(
+                                        "duplicate public attached proof '{}::{}'",
+                                        subject, proof_name
+                                    ),
+                                });
+                            }
+                        }
+                    }
                     let renamed = qualify_decl_name(inner, prefix);
                     let rdecl = resolve::resolve_decl(&renamed)?;
                     let rdecl = rewrite_rdecl(scope, &elab.module_state.exports, rdecl)?;
                     let result = elaborate_checked(elab, &rdecl)?;
                     if is_pub {
-                        // Only the decl's own qualified name is exported —
-                        // never a `DataDecl`'s constructors (`33 §4.2`,
-                        // abstract export: ctors are simply never entered
-                        // into any export table, so a client can't bring
-                        // them into scope by any import form).
-                        exports_here.insert(bare, result.name.clone());
+                        if let Decl::AttachedProofDecl {
+                            subject,
+                            proof_name,
+                            ..
+                        } = inner
+                        {
+                            exports_here
+                                .insert(format!("{subject}::{proof_name}"), result.name.clone());
+                        } else {
+                            // Only the decl's own qualified name is exported —
+                            // never a `DataDecl`'s constructors (`33 §4.2`,
+                            // abstract export: ctors are simply never entered
+                            // into any export table, so a client can't bring
+                            // them into scope by any import form).
+                            exports_here.insert(bare, result.name.clone());
+                        }
                     }
                     ids.push(result);
                 } else {

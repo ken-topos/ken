@@ -118,6 +118,14 @@ pub struct ClassField {
     pub ty: Type,
 }
 
+/// A constructor-style intro helper inside a `prop ... where { ... }` block.
+#[derive(Clone, Debug)]
+pub struct PropIntro {
+    pub name: String,
+    pub ty: Type,
+    pub span: Span,
+}
+
 /// A surface pattern (`34 §3`, `32 §4`).
 #[derive(Clone, Debug)]
 pub struct Pattern {
@@ -170,6 +178,34 @@ pub enum Decl {
     ProveDecl {
         name: String,
         prop: Expr,
+        span: Span,
+    },
+    /// `prop P ... : Omega where { intro : P ... }` — proposition-family
+    /// claim shape (`33 §8.1`), elaborated to existing Ω-checked terms only.
+    PropDecl {
+        name: String,
+        params: Vec<Binder>,
+        ret_ty: Type,
+        intros: Vec<PropIntro>,
+        span: Span,
+    },
+    /// `lemma name ... : φ = proof` — standalone checked proof theorem
+    /// (`33 §8.3`), ordinary module namespace.
+    LemmaDecl {
+        name: String,
+        params: Vec<Binder>,
+        theorem: Type,
+        body: Expr,
+        span: Span,
+    },
+    /// `proof p for subject ... : φ = proof` — attached checked proof theorem
+    /// (`33 §8.2`), exported only through `subject::p`.
+    AttachedProofDecl {
+        proof_name: String,
+        subject: String,
+        params: Vec<Binder>,
+        theorem: Type,
+        body: Expr,
         span: Span,
     },
     /// `law Name (param) { field : φ ; … }` — a named law (`21 §3`).
@@ -315,6 +351,8 @@ impl Decl {
             Decl::ViewDecl { name, .. }
             | Decl::LetDecl { name, .. }
             | Decl::ProveDecl { name, .. }
+            | Decl::PropDecl { name, .. }
+            | Decl::LemmaDecl { name, .. }
             | Decl::LawDecl { name, .. }
             | Decl::DataDecl { name, .. }
             | Decl::ExplicitDataDecl { name, .. }
@@ -324,6 +362,7 @@ impl Decl {
             | Decl::ClassDecl { name, .. } => name,
             Decl::InstanceDecl { class_name, .. } => class_name,
             Decl::DeriveDecl { class_name, .. } => class_name,
+            Decl::AttachedProofDecl { proof_name, .. } => proof_name,
         }
     }
     pub fn span(&self) -> &Span {
@@ -332,6 +371,9 @@ impl Decl {
             Decl::ViewDecl { span, .. }
             | Decl::LetDecl { span, .. }
             | Decl::ProveDecl { span, .. }
+            | Decl::PropDecl { span, .. }
+            | Decl::LemmaDecl { span, .. }
+            | Decl::AttachedProofDecl { span, .. }
             | Decl::LawDecl { span, .. }
             | Decl::DataDecl { span, .. }
             | Decl::ExplicitDataDecl { span, .. }
@@ -435,6 +477,14 @@ pub enum Expr {
     /// `32 §3`). BOTH sides are exprs (elaborate to `Type`-classified
     /// terms); right-associative. Elaborates to the existing kernel `Pi`.
     EArrow(Box<Expr>, Box<Expr>, Span),
+    /// `subject::proof` or `(proof proof for subject)` — canonical attached
+    /// proof reference. Resolver/module rewriting turns this into an ordinary
+    /// global name after resolving the subject path first.
+    EAttachedProofRef {
+        subject: String,
+        proof_name: String,
+        span: Span,
+    },
 }
 
 impl Expr {
@@ -452,6 +502,7 @@ impl Expr {
             | Expr::EStr(_, s)
             | Expr::EPi(_, _, _, s)
             | Expr::EArrow(_, _, s)
+            | Expr::EAttachedProofRef { span: s, .. }
             | Expr::EBinOp(_, _, _, s)
             | Expr::EProj(_, _, s) => s,
             Expr::EMatch { span, .. } => span,
