@@ -14,6 +14,50 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
+> ### SURF NAMED PROOF CLAIMS D0 LOCKED; SPEC D1 ACTIVE (2026-07-08 18:20 UTC)
+>
+> Current frontier: `SURF-named-proof-claims` is active in the Spec enclave on
+> exact base `wp/SURF-named-proof-claims @
+> b6aa40201448226409578c5cb6e6839f58d055e1`. The handoff-gate compaction was
+> run before kickoff with
+> `scripts/handoff-gate-compact.sh spec-leader spec-author
+> conformance-validator`; pane verification showed all three sessions past a
+> `Context compacted` boundary and all three worktrees at `b6aa402`. The kickoff
+> landed at `evt_a77jtsbz6e4a` / thread `thr_7vwr5ka8z5764`.
+>
+> Spec D0 is now locked after the operator addenda. Final D0 boundary:
+> `prop`, standalone `lemma`, and attached `proof <name> for <subject>` are in
+> scope; `def` is explicitly out of scope and moves to a follow-on if still
+> desired. Still forbidden: any new kernel declaration class, trusted proof
+> table, metadata-only proof channel, automatic proof search, or raw
+> proof-relevant inductive declared directly at `Omega`. Required pins remain
+> `subject::proof_name`, explicit repeated subject telescopes, same-subject
+> attached-proof independence, and `lemma` as the ordinary-module factoring
+> point. D0 anchors: spec-leader initial lock `evt_3tfj0zgj9nz1k`, Steward
+> `def` addendum `evt_75s2sta5t4q5x`, conformance delta
+> `evt_65as6dq4a4z8e`, spec-author delta `evt_sd23st444wyh`, amended lock
+> `evt_6s0n14hme5zkn`.
+>
+> Current owner / next action: spec-author committed D1 as
+> `wp/SURF-named-proof-claims @
+> 8520990fa6efcc7775e818b170b34054d1fe97c1`
+> (`spec: land SURF named proof claims D1`). Because the expected Convo handoff
+> did not land, Steward routed the exact head to conformance at
+> `evt_21xbq345928y6`. Cumulative diff from
+> `origin/main...wp/SURF-named-proof-claims` is exactly:
+> `conformance/README.md`,
+> `conformance/surface/declarations/seed-named-proof-claims.md`,
+> `spec/20-verification/21-spec-syntax.md`,
+> `spec/30-surface/31-lexical.md`, `spec/30-surface/32-grammar.md`,
+> `spec/30-surface/33-declarations.md`,
+> `spec/30-surface/39-elaboration.md`, and `spec/30-surface/README.md`.
+> Current wait: conformance-validator exact-head review against the amended D0
+> lock. Note:
+> `/workspaces/ken/.worktrees/spec-leader` still has pre-existing untracked
+> `docs/program/wp/K2c-elaboration-plan.md` and
+> `docs/program/wp/V0-elaboration-plan.md`; those are unrelated and must not be
+> staged into the SURF branch.
+>
 > ### NC27 CLOSED; CATALOG FRONTIER NEXT (2026-07-08 14:34 UTC)
 >
 > Current NC27 state: Runtime and Verify completed joint D0 on
