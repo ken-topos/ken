@@ -92,19 +92,26 @@ continue from the frontier. Update the DAG itself (`05`) only when the *plan*
 changes (a new WP, a re-scoped dependency); the progress file tracks *execution*
 against it.
 
-**Local-vs-`main` cadence (operator 2026-06-30).** You commit the tracker to
+**Local-vs-`main` cadence (operator 2026-07-08).** You commit the tracker to
 `steward/work` on **every** state change — that's high-churn working memory and
-your compaction-survival resume point. But **do not route every micro-update to
-`main`**: a merge cycle per update is noise (and the tracker drifts into
-cherry-pick conflicts). Instead push the tracker to `main` at the natural
-**epochs** — a **roadmap-gate closure** (G1, G2, …) or a **major-workstream
-milestone** (e.g. "kernel trust-root complete", "L5 fully delivered") — **bundled
-into the corpus routing you're already doing at that moment**, so it costs no
-extra merge cycle. That keeps `main` (the public, at-a-glance view) accurate at
-*program* granularity without per-transition noise. If `main`'s copy has drifted
-far (it will, between epochs), resync the **whole file** in one commit
-(`git checkout steward/work -- docs/program/IMPLEMENTATION-PROGRESS.md` onto a
-branch off `origin/main`) rather than cherry-picking individual updates.
+your compaction-survival resume point. You also keep `main` current by bundling
+the tracker into every Steward-run merge request. Before publishing any PR or
+merge request through the scripted publisher path, add a final tracker-sync
+commit to the candidate branch:
+
+```sh
+git fetch origin
+git checkout steward/work -- docs/program/IMPLEMENTATION-PROGRESS.md
+git add docs/program/IMPLEMENTATION-PROGRESS.md
+git commit -m "tracker: sync implementation progress"
+```
+
+Then publish the branch/SHA **after** that commit. The final PR SHA should be
+the reviewed candidate plus the tracker-sync commit, so `origin/main` preserves
+the current progress file durably and the Steward worktree can stay close to
+`main` instead of drifting behind with the only copy of important state. If the
+tracker already matches `steward/work`, skip the empty commit and publish the
+existing head.
 
 ### 2b. Run until complete, blocked, or told to stop
 
@@ -768,23 +775,29 @@ Your operational docs — the progress tracker and the `agent/` playbook +
 `COORDINATION.md` edits — skip the spec-leader step and go straight to `main`
 via a Steward-owned Integrator merge (§2c). The mechanism, exactly:
 
-1. Commit on `steward/work` (your durable working branch).
+1. Commit on `steward/work` (your durable working branch) when the working
+   change belongs there.
 2. **Route to a corpus branch off *current* `origin/main`:** `git fetch origin`;
    `git branch -f wp/steward-<slug> origin/main`;
-   `git switch wp/steward-<slug>`; `git cherry-pick -x steward/work`;
-   `git switch steward/work`. The branch is now `origin/main` + your commit only
-   (never a stale base).
-3. **`post_response` typed `git_request`, mentioning the Integrator** (its
-   `actor_id`) with the branch + SHA + files + why; ask it to push +
-   squash-merge + sweep-confirm.
-4. **SWEEP only on the Integrator's "shipped `<sha>`":** `git fetch origin`;
-   **verify-on-main with a PLAIN-TEXT grep** — `git grep -c "<plain phrase>"
-   origin/main -- <file>` — and the phrase must **not** span `**bold**` or
-   `` `code` `` markers, or it false-negatives (hit twice); then `git branch -D
-   wp/steward-<slug>`. **NEVER a preemptive `-D`** — deleting before the
-   Integrator confirms on `main` loses an unmerged branch. The squash-merge
-   often removes the branch itself, so `-D` reporting "not found" = already
-   swept = fine.
+   `git switch wp/steward-<slug>`; apply or cherry-pick the intended change.
+   The branch starts as `origin/main` + the routed change only, never a stale
+   base.
+3. **Append the tracker-sync commit before publication.** Pull the current
+   progress file from `steward/work`, commit it if it differs, and treat the
+   resulting branch tip as the PR SHA:
+   `git checkout steward/work -- docs/program/IMPLEMENTATION-PROGRESS.md`;
+   `git add docs/program/IMPLEMENTATION-PROGRESS.md`;
+   `git diff --cached --quiet || git commit -m
+   "tracker: sync implementation progress"`.
+4. **Publish/merge with the scripted publisher path** unless the operator
+   routes otherwise:
+   `scripts/scripted-pr-automerge.sh --target wp/steward-<slug> --title ...`.
+5. **SWEEP only after the script or publisher confirms the merge:** `git fetch
+   origin`; verify `origin/main` with a PLAIN-TEXT grep — `git grep -c "<plain
+   phrase>" origin/main -- <file>` — and the phrase must **not** span `**bold**`
+   or `` `code` `` markers, or it false-negatives (hit twice). The repository
+   deletes remote head branches automatically; local cleanup is optional and
+   must not delete a branch before `origin/main` is verified.
 
 This is COORDINATION §14 landing-integrity applied to your *own* edits: a
 "shipped" notification proves nothing; only verify-on-main does. A multi-piece
