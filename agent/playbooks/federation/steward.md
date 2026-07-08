@@ -225,6 +225,14 @@ brief** — the implementer should execute mostly mechanically, not design
 >    or queued.
 > 6. **ONLY NOW** post the kickoff/handoff mention (§2 mention discipline).
 >
+> **Helper script.** For the mechanical start step, prefer
+> `scripts/handoff-gate-compact.sh <agent>...` with every affected agent listed
+> explicitly, including `integrator` when the handoff gate requires it. The
+> script preflights the named worktrees and `moot-<agent>` sessions, resets each
+> worktree to `origin/main`, sends the clean-input `/compact` tmux sequence to
+> all panes in parallel, waits five minutes, and returns. After it returns,
+> still perform the capture-pane verification above before posting the kickoff.
+>
 > **The tell that you're about to skip it:** you've drafted the handoff mention
 > and feel *"ready to post."* That feeling **is** the gate trigger — STOP, run
 > 1–5, then post. **Proof-of-execution:** you must be able to log *"<unit>

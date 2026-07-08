@@ -186,7 +186,6 @@ merge_pr() {
   gh pr merge "$pr_number" \
     --admin \
     --squash \
-    --delete-branch \
     --match-head-commit "$head_sha" \
     --subject "$title" \
     --body-file "$body_file" \

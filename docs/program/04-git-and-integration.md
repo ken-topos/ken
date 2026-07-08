@@ -135,11 +135,13 @@ The script creates or finds the PR and performs the publisher merge gate. For
 docs-only changes it runs the squash merge immediately. For non-doc changes it
 reads the most recent completed `CI` workflow duration, waits that duration plus
 10%, then starts polling the PR checks. Once all checks pass, it runs the squash
-merge with branch deletion and returns. The merge command uses the publisher's
-admin merge authority, guarded by the exact PR head SHA, because the `main`
-ruleset may otherwise block the branch update even after required checks pass.
-If GitHub still blocks the merge command, the script fails with that fact rather
-than pretending the publisher identity can approve its own PR.
+merge and returns. Remote head-branch deletion is handled by the repository
+setting, not by the script, because `gh pr merge --delete-branch` can fail after
+a successful remote merge in the shared-worktree layout. The merge command uses
+the publisher's admin merge authority, guarded by the exact PR head SHA, because
+the `main` ruleset may otherwise block the branch update even after required
+checks pass. If GitHub still blocks the merge command, the script fails with
+that fact rather than pretending the publisher identity can approve its own PR.
 
 This preserves the important boundary: GitHub/CI remains the code gate, and
 mootup remains the coordination/review record. The script replaces the model
