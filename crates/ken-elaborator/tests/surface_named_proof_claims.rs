@@ -156,6 +156,49 @@ fn attached_proof_cannot_depend_on_same_subject_attached_proof() {
 }
 
 #[test]
+fn duplicate_attached_proof_name_on_same_subject_is_rejected() {
+    let err = elaborate_err(
+        r#"
+        fn id (x : Int) : Int = x
+        proof p for id (x : Int) : Equal Int (id x) x = Refl
+        proof p for id (x : Int) : Equal Int (id x) x = Refl
+        "#,
+    );
+
+    match err {
+        ElabError::TypeMismatch { reason, .. } => {
+            assert!(
+                reason.contains("duplicate proof name"),
+                "duplicate proof rejection should name the collision, got {reason}"
+            );
+        }
+        other => panic!("expected duplicate attached-proof rejection, got {other:?}"),
+    }
+}
+
+#[test]
+fn helper_lemma_cannot_launder_same_subject_dependency() {
+    let err = elaborate_err(
+        r#"
+        fn id (x : Int) : Int = x
+        proof p1 for id (x : Int) : Equal Int (id x) x = Refl
+        lemma helper (x : Int) : Equal Int (id x) x = id::p1 x
+        proof p2 for id (x : Int) : Equal Int (id x) x = helper x
+        "#,
+    );
+
+    match err {
+        ElabError::TypeMismatch { reason, .. } => {
+            assert!(
+                reason.contains("depend"),
+                "helper-closure rejection should explain the dependency, got {reason}"
+            );
+        }
+        other => panic!("expected helper-closure dependency rejection, got {other:?}"),
+    }
+}
+
+#[test]
 fn module_selective_import_exposes_canonical_attached_proof_only() {
     let env = elaborate_ok(
         r#"

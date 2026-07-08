@@ -4,7 +4,7 @@
 //! `declare_postulate`, honesty guard via `GlobalEnv::trusted_base()`, refinement
 //! lowering to carrier, `prove`/`law` declaration elaboration, `old` elaboration.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use ken_kernel::{
     check as kernel_check, convert, declare_def, declare_postulate, declare_primitive,
@@ -4250,16 +4250,11 @@ fn elaborate_checked_theorem(
     rdecl: &RDecl,
     attached_subject: Option<&str>,
 ) -> Result<ElabResult, ElabError> {
-    if let Some(subject) = attached_subject {
-        if rexpr_mentions_attached_subject(&rdecl.body, subject) {
-            return Err(ElabError::TypeMismatch {
-                span: rdecl.span.clone(),
-                reason: format!(
-                    "attached proof '{}' may not depend on another proof for subject '{}'",
-                    rdecl.name, subject
-                ),
-            });
-        }
+    if globals.contains_key(&rdecl.name) {
+        return Err(ElabError::TypeMismatch {
+            span: rdecl.span.clone(),
+            reason: format!("duplicate proof name '{}'", rdecl.name),
+        });
     }
 
     let (ty_core, body_core, body_obligations) = {
@@ -4287,6 +4282,30 @@ fn elaborate_checked_theorem(
             obligations,
         )
     };
+    if let Some(subject) = attached_subject {
+        let attached_subject_ids = globals
+            .iter()
+            .filter_map(|(name, id)| {
+                if name.starts_with(&format!("{subject}::")) {
+                    Some(*id)
+                } else {
+                    None
+                }
+            })
+            .collect::<HashSet<_>>();
+        let mut visited = HashSet::new();
+        if term_mentions_any_of(env, &ty_core, &attached_subject_ids, &mut visited)
+            || term_mentions_any_of(env, &body_core, &attached_subject_ids, &mut visited)
+        {
+            return Err(ElabError::TypeMismatch {
+                span: rdecl.span.clone(),
+                reason: format!(
+                    "attached proof '{}' may not depend on another proof for subject '{}'",
+                    rdecl.name, subject
+                ),
+            });
+        }
+    }
     let id =
         declare_def(env, vec![], ty_core, body_core).map_err(|e| ElabError::KernelRejected {
             error: e,
@@ -4389,45 +4408,36 @@ fn validate_attached_subject_telescope(
     }
 }
 
-fn rexpr_mentions_attached_subject(expr: &RExpr, subject: &str) -> bool {
-    let prefix = format!("{subject}::");
-    match expr {
-        RExpr::RCon(n, _) => n.starts_with(&prefix),
-        RExpr::RVar(_, _, _) | RExpr::RUniv(_, _) | RExpr::RNumLit(_, _) | RExpr::RStr(_, _) => {
+fn term_mentions_any_of(
+    env: &GlobalEnv,
+    term: &Term,
+    targets: &HashSet<GlobalId>,
+    visited: &mut HashSet<GlobalId>,
+) -> bool {
+    match term {
+        Term::Const { id, .. } => {
+            if targets.contains(id) {
+                return true;
+            }
+            if !visited.insert(*id) {
+                return false;
+            }
+            if let Some((_, ty)) = env.const_type(*id) {
+                if term_mentions_any_of(env, &ty, targets, visited) {
+                    return true;
+                }
+            }
+            if let Some((_, body)) = env.transparent_body(*id) {
+                if term_mentions_any_of(env, &body, targets, visited) {
+                    return true;
+                }
+            }
             false
         }
-        RExpr::RApp(f, a, _) => {
-            rexpr_mentions_attached_subject(f, subject)
-                || rexpr_mentions_attached_subject(a, subject)
-        }
-        RExpr::RLam(_, b, _) => rexpr_mentions_attached_subject(b, subject),
-        RExpr::RLet(_, _, rhs, body, _) => {
-            rexpr_mentions_attached_subject(rhs, subject)
-                || rexpr_mentions_attached_subject(body, subject)
-        }
-        RExpr::RAsc(e, _, _) => rexpr_mentions_attached_subject(e, subject),
-        RExpr::ROld(e, _) => rexpr_mentions_attached_subject(e, subject),
-        RExpr::RBinOp(_, l, r, _) => {
-            rexpr_mentions_attached_subject(l, subject)
-                || rexpr_mentions_attached_subject(r, subject)
-        }
-        RExpr::RMatch { scrut, arms, .. } => {
-            rexpr_mentions_attached_subject(scrut, subject)
-                || arms
-                    .iter()
-                    .any(|a| rexpr_mentions_attached_subject(&a.body, subject))
-        }
-        RExpr::RProj(e, _, _) => rexpr_mentions_attached_subject(e, subject),
-        RExpr::RPi(_, _, b, _) => rexpr_mentions_attached_subject(b, subject),
-        RExpr::RArrow(a, b, _) => {
-            rexpr_mentions_attached_subject(a, subject)
-                || rexpr_mentions_attached_subject(b, subject)
-        }
-        RExpr::RAttachedProofRef {
-            subject: s,
-            proof_name: _,
-            ..
-        } => s == subject,
+        _ => term
+            .children()
+            .into_iter()
+            .any(|child| term_mentions_any_of(env, child, targets, visited)),
     }
 }
 
