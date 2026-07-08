@@ -11,14 +11,16 @@ use std::fmt;
 use std::mem;
 
 use cranelift_codegen::ir::{types, AbiParam, Function, InstBuilder, UserFuncName};
+use cranelift_codegen::isa::OwnedTargetIsa;
 use cranelift_codegen::settings::{self, Configurable};
-use cranelift_codegen::{verify_function, Context};
+use cranelift_codegen::verify_function;
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
 use cranelift_jit::{JITBuilder, JITModule};
-use cranelift_module::{default_libcall_names, Linkage, Module};
+use cranelift_module::{default_libcall_names, FuncId, Linkage, Module};
+use cranelift_object::{ObjectBuilder, ObjectModule};
 
 use crate::{
-    proof_erasure_boundary_facts_from_program, proof_erasure_witness_error,
+    fnv1a_64, proof_erasure_boundary_facts_from_program, proof_erasure_witness_error,
     validate_supported_runtime_artifact_certificate, KenCheckedProofErasureBoundaryReport,
     ProofErasureBoundaryWitnessError, ProofErasureBoundaryWitnessStage, RuntimeArtifactCertificate,
     RuntimeArtifactIdentity, RuntimeArtifactValidationError, RuntimeArtifactValidationReport,
@@ -35,6 +37,19 @@ pub struct CraneliftRunReport {
     pub verifier_passed: bool,
     pub native_returned: Option<i64>,
     pub trust: NativeTrustReport,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CraneliftObjectArtifact {
+    pub example: String,
+    pub entry_symbol: String,
+    pub object_bytes: Vec<u8>,
+    pub object_hash: u64,
+    pub platform_target: String,
+    pub backend_name: String,
+    pub verifier_passed: bool,
+    pub assumptions: BTreeSet<String>,
+    pub unsupported: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -448,6 +463,40 @@ pub fn run_runtime_ir_report_with_cranelift(
             NativeDifferentialStage::NativeLoweringOrExecution,
         ),
     }
+}
+
+pub fn emit_runtime_ir_object_with_cranelift(
+    program: &RuntimeProgram,
+    run_report: &RuntimeIrRunReport,
+    env: &NativeSeedEnvironment,
+    entry_symbol: impl Into<String>,
+) -> Result<CraneliftObjectArtifact, CraneliftBackendError> {
+    let entry_symbol = entry_symbol.into();
+    let example = runtime_ir_report_example(program, run_report)?;
+    reject_program_blockers(program)?;
+
+    let compiled = compile_program_expr_object(program, &example.ir, env, &entry_symbol)?;
+    let verifier_passed = compiled.verifier_passed;
+    let assumptions = compiled.assumptions.clone();
+    let unsupported = compiled.unsupported.clone();
+    let object_bytes = compiled
+        .module
+        .finish()
+        .emit()
+        .map_err(|err| backend_module(err.to_string()))?;
+    let object_hash = fnv1a_64(&object_bytes);
+
+    Ok(CraneliftObjectArtifact {
+        example: example.name.clone(),
+        entry_symbol,
+        object_bytes,
+        object_hash,
+        platform_target: native_platform_target_name(),
+        backend_name: "Cranelift object".to_string(),
+        verifier_passed,
+        assumptions,
+        unsupported,
+    })
 }
 
 fn proof_erasure_boundary_report_mismatch_lane(
@@ -977,9 +1026,9 @@ fn runtime_ir_comparison_error_report(
     }
 }
 
-struct CompiledExpr {
-    module: JITModule,
-    func_id: cranelift_module::FuncId,
+struct CompiledModule<M> {
+    module: M,
+    func_id: FuncId,
     decoder: Option<ResultDecoder>,
     result_table: BTreeMap<i64, RuntimeGroundValue>,
     trap: Option<RuntimeTrap>,
@@ -988,6 +1037,8 @@ struct CompiledExpr {
     unsupported: Vec<String>,
 }
 
+type CompiledExpr = CompiledModule<JITModule>;
+
 #[derive(Clone, Copy)]
 enum ResultDecoder {
     Int,
@@ -995,7 +1046,7 @@ enum ResultDecoder {
     Table,
 }
 
-impl CompiledExpr {
+impl CompiledModule<JITModule> {
     fn run(mut self) -> Result<(RuntimeObservation, Option<i64>), CraneliftBackendError> {
         if let Some(trap) = self.trap {
             return Ok((RuntimeObservation::Trapped(trap), None));
@@ -1051,14 +1102,51 @@ fn compile_expr_with_declarations<'a>(
     seed_env: &'a NativeSeedEnvironment,
     declarations: BTreeMap<&'a str, &'a RuntimeDeclaration>,
 ) -> Result<CompiledExpr, CraneliftBackendError> {
-    let mut module = new_jit_module()?;
+    compile_expr_into_module(
+        new_jit_module()?,
+        "ken_nc6_seed",
+        Linkage::Local,
+        expr,
+        seed_env,
+        declarations,
+    )
+}
+
+fn compile_program_expr_object(
+    program: &RuntimeProgram,
+    expr: &RuntimeExpr,
+    seed_env: &NativeSeedEnvironment,
+    entry_symbol: &str,
+) -> Result<CompiledModule<ObjectModule>, CraneliftBackendError> {
+    compile_expr_into_module(
+        new_object_module("ken-runtime-cranelift-object")?,
+        entry_symbol,
+        Linkage::Export,
+        expr,
+        seed_env,
+        program
+            .declarations
+            .iter()
+            .map(|declaration| (declaration.symbol.as_str(), declaration))
+            .collect(),
+    )
+}
+
+fn compile_expr_into_module<'a, M: Module>(
+    mut module: M,
+    function_name: &str,
+    linkage: Linkage,
+    expr: &RuntimeExpr,
+    seed_env: &'a NativeSeedEnvironment,
+    declarations: BTreeMap<&'a str, &'a RuntimeDeclaration>,
+) -> Result<CompiledModule<M>, CraneliftBackendError> {
     let mut sig = module.make_signature();
     sig.returns.push(AbiParam::new(types::I64));
 
     let func_id = module
-        .declare_function("ken_nc6_seed", Linkage::Local, &sig)
+        .declare_function(function_name, linkage, &sig)
         .map_err(|err| backend_module(err.to_string()))?;
-    let mut ctx = Context::new();
+    let mut ctx = module.make_context();
     ctx.func = Function::with_name_signature(UserFuncName::user(0, func_id.as_u32()), sig);
 
     let mut func_ctx = FunctionBuilderContext::new();
@@ -1098,7 +1186,7 @@ fn compile_expr_with_declarations<'a>(
         .define_function(func_id, &mut ctx)
         .map_err(|err| backend_module(err.to_string()))?;
 
-    Ok(CompiledExpr {
+    Ok(CompiledModule {
         module,
         func_id,
         decoder,
@@ -1110,7 +1198,7 @@ fn compile_expr_with_declarations<'a>(
     })
 }
 
-fn new_jit_module() -> Result<JITModule, CraneliftBackendError> {
+fn native_isa() -> Result<OwnedTargetIsa, CraneliftBackendError> {
     let mut flag_builder = settings::builder();
     flag_builder
         .set("use_colocated_libcalls", "false")
@@ -1120,11 +1208,26 @@ fn new_jit_module() -> Result<JITModule, CraneliftBackendError> {
         .map_err(|err| backend(BackendFailure::Target(err.to_string())))?;
     let isa_builder = cranelift_native::builder()
         .map_err(|err| backend(BackendFailure::Target(err.to_string())))?;
-    let isa = isa_builder
+    isa_builder
         .finish(settings::Flags::new(flag_builder))
-        .map_err(|err| backend(BackendFailure::Target(err.to_string())))?;
+        .map_err(|err| backend(BackendFailure::Target(err.to_string())))
+}
+
+fn new_jit_module() -> Result<JITModule, CraneliftBackendError> {
+    let isa = native_isa()?;
     let builder = JITBuilder::with_isa(isa, default_libcall_names());
     Ok(JITModule::new(builder))
+}
+
+fn new_object_module(name: &str) -> Result<ObjectModule, CraneliftBackendError> {
+    let isa = native_isa()?;
+    let builder = ObjectBuilder::new(isa, name.as_bytes().to_vec(), default_libcall_names())
+        .map_err(|err| backend_module(err.to_string()))?;
+    Ok(ObjectModule::new(builder))
+}
+
+fn native_platform_target_name() -> String {
+    format!("{}-{}", std::env::consts::ARCH, std::env::consts::OS)
 }
 
 fn verify_cranelift_function(
