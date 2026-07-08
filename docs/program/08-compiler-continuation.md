@@ -107,6 +107,25 @@ native binary.
 - NC8 and NC9 evidence remains bounded and honest. Broad artifacts do not reuse
   narrow validation labels unless they are actually inside the validated subset.
 
+### Phase gate to native executable work
+
+NC18 is the transition gate into native executable generation. Completion of
+NC18 is sufficient to open NC19 only when the final NC10-NC18 report shows:
+
+- the starter Ken-only executable subset is supported through compiler-produced
+  `RuntimeProgram` artifacts;
+- the runtime-IR evaluator agrees with the interpreter on that starter subset;
+- unavailable comparisons are outside the starter native-codegen set, or are
+  named as blockers with a prerequisite WP;
+- effects and foreign-boundary facts are represented explicitly and do not
+  silently enter native execution;
+- reports keep unsupported, failed, unavailable, tested, validated, and proved
+  lanes distinct.
+
+If this gate is clear, the Steward should proceed directly to NC19. If it is
+not clear, do not start native codegen; frame the smallest prerequisite needed
+to close the reported gap first.
+
 ### Guardrails
 
 - Do not use raw source as semantic evidence after checked-core emission.
@@ -124,7 +143,29 @@ native binary.
 The second follow-on campaign turns broad `RuntimeProgram` artifacts into
 real native executables for Ken-only closed targets.
 
-Expected work areas:
+### Goal
+
+Emit reproducible native executables for closed Ken-only targets whose
+semantics are already represented by the NC10-NC18 `RuntimeProgram` path. The
+semantic authority remains the checked-core package plus runtime IR and the
+exact-run reports; native execution is an implementation artifact to test and
+report, not proof evidence.
+
+### Work packages
+
+| WP | Objective | Lead | Depends on |
+|---|---|---|---|
+| NC19 | Executable artifact contract | Spec/Runtime | NC18 |
+| NC20 | Entrypoint packaging metadata | Language/Runtime | NC19 |
+| NC21 | Ken-only executable runtime | Runtime | NC19, NC20 |
+| NC22 | Cranelift lowering for runtime IR | Runtime | NC21 |
+| NC23 | Object/linker packaging | Runtime/Integrator | NC22 |
+| NC24 | Native differential suite | Runtime/Verify | NC22, NC23 |
+| NC25 | Effect/foreign executable policy | Runtime/Verify | NC18, NC24 |
+| NC26 | Native trust report | Verify/Runtime | NC23-NC25 |
+| NC27 | Executable phase closeout | Runtime/Verify | NC19-NC26 |
+
+### Expected work areas
 
 - executable artifact model;
 - `main`/entry-point selection and executable packaging metadata;
@@ -144,6 +185,19 @@ cross-package native linking contract, or metadata sidecar format for imported
 native libraries. A closed executable may embed or package its trust report and
 semantic identities, but it does not need to be consumed later as a checked Ken
 dependency.
+
+### Exit criteria
+
+- The compiler can emit a platform native executable for a closed Ken-only
+  target in the supported NC10-NC18 subset.
+- The emitted executable carries or points to exact checked-core, runtime-IR,
+  native artifact, toolchain, and trust-report identities.
+- Native execution is compared against runtime-IR evaluation and interpreter
+  observations for the starter executable corpus.
+- Unsupported effects, foreign calls, library exports, dynamic imports, or
+  interop requests fail before native execution with stable lanes.
+- Native executable reports do not claim library ABI, Rust interop, C interop,
+  cross-package native linking, or whole-compiler proof.
 
 ## 5. NC28-NC36: Broad Validation and Translation Guarantees
 

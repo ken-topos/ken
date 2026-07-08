@@ -127,6 +127,15 @@ campaign that makes it buildable.
 | `NC16` | Primitive value lowering | Runtime-led | NC13 |
 | `NC17` | Recursion, dictionaries/classes, modules, package refs | Language/Runtime | NC11, NC13-NC16 |
 | `NC18` | Effects and foreign-boundary runtime-IR representation | Runtime-led | NC12-NC17 |
+| `NC19` | Executable artifact contract | Spec/Runtime | NC18 |
+| `NC20` | Entrypoint packaging metadata | Language/Runtime | NC19 |
+| `NC21` | Ken-only executable runtime | Runtime | NC19, NC20 |
+| `NC22` | Cranelift lowering for runtime IR | Runtime | NC21 |
+| `NC23` | Object/linker packaging | Runtime/Integrator | NC22 |
+| `NC24` | Native differential suite | Runtime/Verify | NC22, NC23 |
+| `NC25` | Effect/foreign executable policy | Runtime/Verify | NC18, NC24 |
+| `NC26` | Native trust report | Verify/Runtime | NC23-NC25 |
+| `NC27` | Executable phase closeout | Runtime/Verify | NC19-NC26 |
 
 The individual WP briefs live under `docs/program/wp/`.
 
@@ -136,6 +145,12 @@ lower selected targets into broad runtime IR, but they still stop before native
 artifact emission. The continuation frame is `08-compiler-continuation.md`;
 that frame now sequences native Ken-only executables before native library
 artifacts, and places library generation before self-hosting.
+
+NC19-NC27 are the next executable-generation campaign. They begin only if the
+NC18 final report clears the starter-subset gate in
+`08-compiler-continuation.md`; otherwise the Steward frames the smallest
+prerequisite gap before opening NC19. The phase targets closed Ken-only native
+executables, not libraries, C/Rust interop, or cross-package native linking.
 
 ## 6. Non-Goals
 
