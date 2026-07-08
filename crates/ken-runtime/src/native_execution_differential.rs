@@ -964,11 +964,7 @@ fn phase_claim_inventory(
         phase_claim(
             report,
             NativeExecutableEvidenceClaim::NativeExecution,
-            phase_status_from_evidence(&native_execution_evidence_status(
-                &report.native,
-                &report.verdict,
-                &report.effect_foreign_policy,
-            )),
+            phase_status_from_native_execution(&report.native, &report.effect_foreign_policy),
             native_execution_evidence_source(&report.native),
         ),
         phase_claim(
@@ -1035,6 +1031,45 @@ fn phase_status_from_comparison(
             }
         }
         NativeComparisonLaneReport::Unavailable { reason, .. } => {
+            NativeExecutablePhaseStatus::Unavailable {
+                reason: reason.clone(),
+            }
+        }
+    }
+}
+
+fn phase_status_from_native_execution(
+    native: &NativeExecutionLaneReport,
+    effect_policy: &NativeEffectForeignExecutablePolicyReport,
+) -> NativeExecutablePhaseStatus {
+    match (native, &effect_policy.status) {
+        (
+            NativeExecutionLaneReport::Available(_),
+            NativeEffectForeignExecutableStatus::NativeTested,
+        ) => NativeExecutablePhaseStatus::Tested,
+        (
+            NativeExecutionLaneReport::Available(_),
+            NativeEffectForeignExecutableStatus::RepresentedUnavailable { reason },
+        ) => NativeExecutablePhaseStatus::Failed {
+            reason: format!(
+                "native execution was observed despite unavailable effect/foreign policy: {reason}"
+            ),
+        },
+        (
+            NativeExecutionLaneReport::Available(_),
+            NativeEffectForeignExecutableStatus::Unsupported { reason },
+        ) => NativeExecutablePhaseStatus::Failed {
+            reason: format!(
+                "native execution was observed despite unsupported effect/foreign policy: {reason}"
+            ),
+        },
+        (
+            NativeExecutionLaneReport::Unavailable { .. },
+            NativeEffectForeignExecutableStatus::Unsupported { reason },
+        ) => NativeExecutablePhaseStatus::Unsupported {
+            reason: reason.clone(),
+        },
+        (NativeExecutionLaneReport::Unavailable { reason, .. }, _) => {
             NativeExecutablePhaseStatus::Unavailable {
                 reason: reason.clone(),
             }
@@ -4274,6 +4309,14 @@ mod tests {
             closeout_claim_status(
                 &closeout,
                 &report.target.target_symbol,
+                &NativeExecutableEvidenceClaim::NativeExecution
+            ),
+            NativeExecutablePhaseStatus::Tested
+        ));
+        assert!(matches!(
+            closeout_claim_status(
+                &closeout,
+                &report.target.target_symbol,
                 &NativeExecutableEvidenceClaim::InterpreterDifferential
             ),
             NativeExecutablePhaseStatus::Failed { reason }
@@ -4317,6 +4360,14 @@ mod tests {
             NativeExecutablePhaseStatus::Failed { ref reason }
                 if reason.contains("native differential mismatch")
                     && reason.contains(&program.package_identity)
+        ));
+        assert!(matches!(
+            closeout_claim_status(
+                &closeout,
+                &report.target.target_symbol,
+                &NativeExecutableEvidenceClaim::NativeExecution
+            ),
+            NativeExecutablePhaseStatus::Tested
         ));
         assert!(matches!(
             closeout_claim_status(
