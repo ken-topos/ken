@@ -30,8 +30,10 @@ The next work keeps that honesty. We broaden one boundary at a time:
    language can soundly represent;
 2. emit Ken-only native executables from the broader runtime artifact;
 3. then broaden validation and guarantees over the executable path;
-4. add native library artifacts and interop as a separate phase before
-   self-hosting.
+4. add native library artifacts as a separate phase;
+5. only after library targets are stable, add a separate FFI/effect enablement
+   program;
+6. then broaden Ken-owned passes and self-hosting.
 
 ## 2. Remaining compiler campaigns
 
@@ -43,8 +45,9 @@ do not pretend that one more campaign finishes the compiler.
 | General Ken-to-Runtime-IR Compiler | NC10-NC18 | Arbitrary accepted Ken packages can be compiled through checked-core into broad `RuntimeProgram` artifacts or fail loudly with stable unsupported lanes. | No native artifacts beyond existing spike. |
 | Native Ken Executable Emitter | NC19-NC27 | Broad runtime artifacts can produce reproducible platform executables for Ken-only closed targets, with runtime support, packaging, and toolchain facts. | No library ABI, C ABI, Rust interop, or cross-package native linking claim. |
 | Broad Validation and Translation Guarantees | NC28-NC36 | Runtime and backend artifacts gain context-sensitive validators, translation validation, reproducibility checks, and richer trust reports. | Still not full self-hosting or whole-compiler proof. |
-| Native Library Artifact Generation | NC37-NC45 | Checked Ken packages can emit linkable library artifacts plus companion semantic metadata so later Ken compilations can consume them as checked dependencies. | Library artifacts are not executable proof carriers; C/Rust interop remains explicit and metadata-backed. |
-| Ken-Owned Pass Expansion / Self-Hosting | NC46+ | Selected compiler passes move from Rust-produced to Ken-authored or Ken-checked implementations. | Rust kernel and Rust bootstrap compiler remain permanent diversity paths. |
+| Native Library Artifact Generation | NC37-NC45 | Checked Ken packages can emit linkable library artifacts plus companion semantic metadata so later Ken compilations can consume them as checked dependencies. | Library artifacts are not executable proof carriers; live FFI/effect execution remains unavailable. |
+| FFI and Effect Enablement | NC46-NC54 | Ken gains explicit host-effect and foreign-call enablement over the library artifact boundary once non-compiler prerequisites are in place. | Requires policy, runtime, ABI, safety, and packaging prerequisites outside compilation itself. |
+| Ken-Owned Pass Expansion / Self-Hosting | NC55+ | Selected compiler passes move from Rust-produced to Ken-authored or Ken-checked implementations. | Rust kernel and Rust bootstrap compiler remain permanent diversity paths. |
 
 This ordering follows the trust boundary. It is cheaper and safer to make the
 middle artifact broad and inspectable before making native output broad, and to
@@ -251,10 +254,83 @@ Ken semantics; it is not itself the semantic authority. If a consumer cannot
 validate the companion metadata against the package hashes and exported closure,
 the import must fail before linking or execution.
 
-## 7. NC46+: Ken-Owned Pass Expansion and Self-Hosting
+This phase may define the artifact and metadata shapes that later interop will
+consume, but it does not enable live host-effect execution or ambient foreign
+calls. Those authority, ABI, runtime, and policy questions are deliberately
+deferred to the following FFI/effect campaign.
+
+## 7. NC46-NC54: FFI and Effect Enablement
+
+The library target pass gives the compiler a native artifact boundary, but it
+does not by itself make host effects or foreign calls safe to execute. FFI and
+effects require system contracts outside compilation proper: policy,
+capability, ABI, runtime ownership, packaging, and audit surfaces must exist
+before the compiler can honestly lower or link those operations.
+
+This campaign therefore follows native library artifacts and precedes
+self-hosting. It turns the previously unavailable FFI/effect lanes into
+explicitly authorized, tested, and reported execution paths.
+
+### Preconditions Outside the Compiler
+
+Before this campaign starts, the following non-compiler surfaces must be
+available or framed as prerequisite WPs:
+
+- a capability/effect authority model for host resources, including how a
+  package declares, requests, denies, and audits host effects;
+- policy-as-code or equivalent admission rules for effect and foreign-call
+  permission, separate from the compiler's desire to lower a call;
+- a stable C ABI floor for values, errors, traps, allocation ownership, and
+  resource handles, plus an explicit statement that Rust interop is generated
+  wrapper code rather than a claim over Rust's unstable native ABI;
+- runtime ownership and lifetime rules for data crossing a Ken/native boundary,
+  including allocation, borrowing, finalization, and panic/trap translation;
+- package and artifact metadata for foreign symbols, dynamic/static library
+  dependencies, version constraints, platform triples, and supply-chain hashes;
+- sandboxing or host-environment declarations for side-effectful execution,
+  including unavailable lanes when a target host cannot provide the requested
+  resource;
+- diagnostic and trust-report lanes that distinguish checked Ken semantics,
+  tested native behavior, authorized effects, unavailable effects, denied
+  effects, foreign-call failures, and unsupported ABI shapes.
+
+These prerequisites are not compiler optimizations. If they are absent, the
+compiler must keep the corresponding FFI/effect path unavailable or unsupported
+rather than inventing authority by lowering or linking code.
+
+### Expected Work Areas
+
+- effect/capability authorization records attached to executable and library
+  artifacts;
+- foreign symbol declaration and resolution metadata, tied to exact package and
+  artifact identities;
+- C ABI export/import surface for the stable floor;
+- generated Rust wrappers over stable Ken/C-compatible handles;
+- runtime shims for traps, errors, allocation, handles, and effect dispatch;
+- native differential and smoke tests for authorized FFI/effect paths;
+- negative suites for stale foreign symbols, denied capabilities, missing
+  host resources, mismatched ABI shapes, and untracked side effects;
+- trust-report extensions that keep checked semantics, authorization,
+  execution tests, and unavailable proof claims separate.
+
+### Exit Criteria
+
+- A closed Ken target may execute an explicitly authorized host effect or
+  foreign call only when policy, package metadata, runtime support, and ABI
+  evidence all agree.
+- Missing or denied authority fails before native execution with a stable lane.
+- Foreign calls bind through stable symbol and artifact identities, not path
+  strings or ambient linker state.
+- C interop is the stable floor; Rust interop is generated over that floor or
+  equivalent stable handles.
+- Trust reports do not treat successful native interop tests as proof of Ken
+  semantics or as authority for future imports.
+
+## 8. NC55+: Ken-Owned Pass Expansion and Self-Hosting
 
 Once broad input, useful native output, and broad validation are stable,
-selected compiler passes can move into Ken.
+library targets and FFI/effects have explicit boundaries, selected compiler
+passes can move into Ken.
 
 Good early candidates are validators, canonical witness checkers, and local
 rewrites with small input/output contracts. Poor early candidates are kernel
