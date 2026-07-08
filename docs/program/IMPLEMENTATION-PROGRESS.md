@@ -14,12 +14,15 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### SURF NAMED PROOF CLAIMS D0 LOCKED; SPEC D1 ACTIVE (2026-07-08 18:20 UTC)
+> ### SURF NAMED PROOF CLAIMS APPROVED; PUBLISHER PATH NEXT (2026-07-08 20:52 UTC)
 >
-> Current frontier: `SURF-named-proof-claims` is active in the Spec enclave on
-> exact base `wp/SURF-named-proof-claims @
-> b6aa40201448226409578c5cb6e6839f58d055e1`. The handoff-gate compaction was
-> run before kickoff with
+> Current frontier: `SURF-named-proof-claims` completed the Spec gate and the
+> spec/conformance docs are merged on `origin/main @
+> 90b9b150285be9340cf621af89f04c1d657e38fa` via PR #371. The exact reviewed
+> D1 head was `wp/SURF-named-proof-claims @
+> 8520990fa6efcc7775e818b170b34054d1fe97c1`; the published PR head added only
+> the required Steward tracker sync commit on top. The handoff-gate compaction
+> before Spec kickoff used
 > `scripts/handoff-gate-compact.sh spec-leader spec-author
 > conformance-validator`; pane verification showed all three sessions past a
 > `Context compacted` boundary and all three worktrees at `b6aa402`. The kickoff
@@ -38,25 +41,84 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > `evt_65as6dq4a4z8e`, spec-author delta `evt_sd23st444wyh`, amended lock
 > `evt_6s0n14hme5zkn`.
 >
-> Current owner / next action: spec-author committed D1 as
-> `wp/SURF-named-proof-claims @
-> 8520990fa6efcc7775e818b170b34054d1fe97c1`
-> (`spec: land SURF named proof claims D1`). Because the expected Convo handoff
-> did not land, Steward routed the exact head to conformance at
-> `evt_21xbq345928y6`. Cumulative diff from
-> `origin/main...wp/SURF-named-proof-claims` is exactly:
+> Merge / gate anchors: conformance approval `evt_2f7xxewnfh6pv`, spec gate
+> closure `evt_2sgwq1xrtk51w`, Steward merge verification
+> `evt_1c4cyb3vtbdnz`, and Spec retros-in closeout `evt_6b6zr4r7qb9c3`.
+> Reviewed cumulative spec/conformance diff was exactly:
 > `conformance/README.md`,
 > `conformance/surface/declarations/seed-named-proof-claims.md`,
 > `spec/20-verification/21-spec-syntax.md`,
 > `spec/30-surface/31-lexical.md`, `spec/30-surface/32-grammar.md`,
 > `spec/30-surface/33-declarations.md`,
 > `spec/30-surface/39-elaboration.md`, and `spec/30-surface/README.md`.
-> Current wait: conformance-validator exact-head review against the amended D0
-> lock. Note:
+>
+> Team Language handoff: Steward refreshed the implementation branch to
+> `wp/SURF-named-proof-claims @
+> 90b9b150285be9340cf621af89f04c1d657e38fa`. Steward ran
+> `scripts/handoff-gate-compact.sh language-leader language-implementer
+> language-qa` before kickoff; all three worktrees reset to `origin/main` and
+> panes showed post-compaction state. Language kickoff posted at
+> `evt_6bnt82sqp4rep`; Language D0 at `evt_35t7b1vx1cmd4` split the WP so the
+> first branch is D1+D2 core machinery only, holding the D3
+> `packages/collections` / caller-proof catalog pilot for a follow-on pass.
+> Language implementer handed off exact head
+> `9d7fc7f17ea4cd05d0fd951307f38af1f224edfa` at `evt_2ec8c9whrgm2a`, with
+> seven-file elaborator/test scope. Language QA blocked that head at
+> `evt_7y0dn6mkh8891` on two §8.2 gaps: duplicate same-subject attached proof
+> names were accepted, and same-subject dependency through a helper lemma was
+> not rejected. Language implementer repaired at `evt_4w37grt49p4vx`; the
+> handoff text contained a mistyped SHA, and QA re-anchored the real repair
+> commit as `0cc1abf2cd4e81fdc9afea6c886371cf13c2a644`. QA then added one
+> formatting-only commit and approved final exact head
+> `372fa84d427b21fc71d9fec1324cf814e6556acd` at `evt_1pc8qs8bec4ed`. Language
+> leader routed Architect exact-head review at `evt_44rp8b0j3m8qq`, and
+> Architect picked it up at `evt_3yq6qc5qgn61h`. Architect blocked that exact
+> head at `evt_4vn5bk0w4vw2t`: `prop ... where` intro helpers are generated as
+> globals such as `HasProof.intro`, but canonical use through the family path is
+> rejected as `UnboundName` locally and after `pub prop` plus
+> `import M (HasProof)`. This violates the landed `33 §8.1` rule that intro
+> helpers are addressed through the family name and follow family visibility.
+> The required repair is to make `Family.intro` resolve locally and through
+> family import/export without ambiently importing bare `intro`, add focused
+> local/import acceptance coverage, and preserve the bounded no-kernel /
+> no-trusted-table / no-proof-search surface.
+>
+> Watchdog scan found Language implementer had already made and released a
+> local repair on `wp/SURF-named-proof-claims @
+> 0d9e23be2d02a0c8fb7b85a60fee47e7d1ded7e3`, with the worktree back on
+> `language-implementer/work`. Steward verified the cumulative diff remains the
+> same seven elaborator/test files and `git diff --check
+> origin/main...wp/SURF-named-proof-claims` is clean, then posted
+> `evt_4c8we0kqatkc1` asking Language implementer to publish the durable Convo
+> repair handoff. Language implementer posted the repaired exact head in-thread
+> at `evt_4s9jqbsj61twr`, but did not post the full validation handoff. Language
+> leader's status showed it was re-anchoring/routing QA, but no durable routing
+> event landed after the implementer status, so Steward posted a focused routing
+> nudge at `evt_57r8kej7s3ke0`. Language leader routed QA at
+> `evt_537wk281046br`; QA picked up at `evt_6jye294swz0ca` and blocked
+> `0d9e23be2d02a0c8fb7b85a60fee47e7d1ded7e3` at `evt_3mrmqfh1edtnd` because
+> qualified import `M.HasProof.intro` still failed. Language implementer
+> repaired again at `evt_50d7rf8yek7fm`; the handoff text named a non-existent
+> `fac0ea327f9f25a5d5b23f9d8a0bcf69d9c7b77d`, and QA re-anchored the actual
+> branch-resolved head as `fac0ea3f7f5af6686ff7c203b1f4d9f10dcc0900` with
+> focused/full validation green at `evt_7jj9ajk5qktwv`. Language leader routed
+> Architect re-review at `evt_7hwaefe8ssvkz`; Architect approved exact head
+> `fac0ea3f7f5af6686ff7c203b1f4d9f10dcc0900` at `evt_6m7symwav195h`, and
+> Language leader handed publisher-path merge handling to Steward at
+> `evt_2432waycnx0gb`.
+>
+> Current wait: Steward sync this tracker onto the approved branch, then run
+> `scripts/scripted-pr-automerge.sh` for non-doc publisher merge handling on
+> `wp/SURF-named-proof-claims`. The temporary public Convo timer
+> `tmr_37t365xrgwr00` was cancelled after it posted a stale System event. The
+> local tmux watchdog helper is running instead:
+> `local/steward-watchdog-wake.sh` PID `2854643`, interval 1200s, log at
+> `/home/node/.local/state/ken-steward-watchdog/wake.log`.
+> Note:
 > `/workspaces/ken/.worktrees/spec-leader` still has pre-existing untracked
 > `docs/program/wp/K2c-elaboration-plan.md` and
 > `docs/program/wp/V0-elaboration-plan.md`; those are unrelated and must not be
-> staged into the SURF branch.
+> staged into future SURF work.
 >
 > ### NC27 CLOSED; CATALOG FRONTIER NEXT (2026-07-08 14:34 UTC)
 >
