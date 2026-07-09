@@ -14,6 +14,27 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
+> ### CORRECTION — Map-laws was already merged; migration proceeds (2026-07-09 ~17:30 UTC)
+>
+> **The ~17:10 block below was a FALSE ALARM — retracted.** `map-verified-laws`
+> was NOT unmerged/orphaned/lost: it was **squash-merged** as `564cab0`
+> (2026-07-04, `ken-ci[bot]`) and **superseded** (later capstone-close
+> `fd5d2fc`/`44a40ec` + CAT-4 set/relation additions); `origin/main:packages/
+> collections/map.ken` is 6463 lines, a **superset** of the recovered branch's
+> 2225. The branch only *looked* ahead because a squash-merge dangles the
+> original commits. foundation-implementer + foundation-leader grounded the
+> correction (`evt_595xvrve590rc`); stale `wp/map-verified-laws-recovered`
+> deleted. **No re-sequence:** Foundation proceeds with `wp/catalog-tree-
+> migration` (original kickoff `evt_5x69yk60jwz3n`); `wp/catalog-literate-fence-
+> roles` still parked behind it. The `07` forges addition and the handoff-gate
+> preserve-ref guard stand (the guard is a general net; the playbook framing is
+> corrected — **branch-ahead ⇏ unmerged**).
+>
+> **Lesson:** a branch showing commits ahead of `origin/main` after a
+> squash-merge is a **stale leftover, not lost work** — grep `main` for a
+> byte-identical squash commit / compare file size before treating branch-ahead
+> as held/unmerged. This is what I got wrong; the ring's grounding caught it.
+
 > ### MAP-LAWS RECOVERED + RE-SEQUENCED; migration deferred (2026-07-09 ~17:10 UTC)
 >
 > During the Foundation handoff-gate compaction for the migration WP, the gate's
