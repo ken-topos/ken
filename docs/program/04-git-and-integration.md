@@ -99,6 +99,13 @@ control. It is the federation's whole GitHub-network surface — pushing
 `wp/<ID>` branches to trigger CI, reading check results, merging, and fetching
 `main`. Build/spec agents still hold no credentials and never run `gh`.
 
+**All merge requests route to the Steward.** A ready WP branch (deps merged,
+gates green, merge Decision resolved) is handed off with a `git_request` to the
+**Steward**, who operates the publisher path — verify base/scope → push → CI
+gate → merge → relay the merge + retro routing. There is **no separate
+Integrator role** (retired 2026-07-09, operator directive); the Steward is the
+sole merge router.
+
 - **Why one identity.** It collapses the per-team-account apparatus to a single
   account, removes the secret-exposure surface across the fleet, and lets every
   build/spec agent stay entirely GitHub-unaware — they only know local git and
