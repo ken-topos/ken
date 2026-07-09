@@ -73,16 +73,24 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >   enclave pins the path/import scheme + the package→Section/Domain mapping
 >   (incl. reconciling `06`'s `transport` Core-vs-Capability inconsistency) →
 >   Ergo builds (moves + dotted-import parser/resolver, CI-gated).
-> - **DS-2…DS-9 remain HELD** — the gate to lift them is now: **taxonomy rename
->   landed, THEN FR-3 (`ken check`) + the Librarian's DS-1 guide-update landed.**
->   FR-1/FR-2 land in parallel but do not gate DS-2.
-> - **Ergo** builds FR-1 (underway) / FR-2 / FR-3 (FR-2+FR-3 behind Architect
->   pins the ergo-leader has requested, `evt_21pkby6sfvj1g`).
-> - **Librarian** folds DS-1's retro lessons into `write-ken`/the guide +
->   `07-catalog-style-guide.md` AC5 language (`evt_57c6njjq90sbv`); enclave
+> - **DS-2…DS-9 remain HELD.** Refined gate/sequence (operator, 2026-07-09):
+>   1. **Ergo FR series lands** — FR-1 → taxonomy build → FR-3 → FR-2 (the
+>      ergo-leader's serialized order), plus the Librarian's DS-1 guide-update.
+>   2. **DS-1 revisit — LIGHT, NO-RETRO process** (operator explicitly waives the
+>      normal catalog acted-on-retro here): (a) **comment cleanup** — strip the
+>      `--` annotations from the entry's `ken` fences into prose (the operator's
+>      `.ken.md` style rule); (b) **quick in-situ verification** — re-verify DS-1
+>      where it now sits (new taxonomy path after the move) and against the FR
+>      fixes (surface-declared zero-ctor `Empty` via FR-1; validate via `ken
+>      check` once FR-3 lands). A touch-up pass, not a WP — keep it light.
+>   3. **THEN Steward kicks DS-2** on the improved guide+tooling (next DS after
+>      DS-1 per `catalog-data-structures-program.md` — reconfirm frontier then).
+> - **Ergo** builds FR-1 (underway) / taxonomy / FR-3 / FR-2 — serialized, RAM-
+>   capped (`-j 2`, scoped), FR-2/FR-3 Architect-pinned.
+> - **Librarian** folds DS-1's retro lessons + the `--`-in-fences style rule +
+>   the "cross-file import not yet available" honesty note into `write-ken`/the
+>   guide + `07` AC5 language (`evt_57c6njjq90sbv`, `evt_2y14rfkncw8az`); enclave
 >   fidelity-review; `git_request` to Steward.
-> - **Then:** Steward kicks **DS-2** on the improved guide+tooling. (Next DS after
->   DS-1 per `catalog-data-structures-program.md` — reconfirm the frontier then.)
 >
 > **HOLD after DS-1.** DS-1 is the *only* WP before an operator process review —
 > a deliberate single vertical slice validating the full reframed machinery
