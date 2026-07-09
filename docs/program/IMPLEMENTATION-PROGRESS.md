@@ -14,49 +14,51 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### DS-1 kicked (only) → HOLD for operator process review (2026-07-09 ~20:20 UTC)
+> ### DS-1 IN BUILD (only) → HOLD for operator process review (2026-07-09 ~20:50 UTC)
 >
-> **Guide fixes both landed → `origin/main @ 8a859d2`:**
-> - **Surface-reference completeness** (operator-flagged gap) — PR #386. Added
->   §2 `def` (transparent definitions, δ-unfolds vs `data` opacity) and §7 named
->   proof claims (`prop`/`lemma`/`proof`), grounded in `33 §1`/`§8`, spec-author
->   APPROVE `dec_57ng2w675tqfj`. Two landed limitations taught honestly + routed
->   as language-surface Findings: `prop` `where` accepts only the v0
->   Omega-clean seed shape (`validate_seed_prop_shape`); self-recursive `lemma`
->   body fails (`resolve.rs` fresh scope) → teach the `fn`-then-`lemma`-wrapper
->   idiom.
-> - **Proof-techniques §1 erratum** (acted-on retro) — PR #387. `tt`-vs-`Refl`-
->   vs-`Axiom` three-way + convertibility precondition. Was routed to the
->   Integrator (idle ~6h); merged via the publisher path so an approved doc fix
->   didn't stall. Architect APPROVE `dec_5a3xns9czv6v5`.
-> - **ADR 0011** platform-dependent code — **RATIFIED** (Architect, Accepted),
->   PR #385 `6817769`. Ken-side machinery claims ground-checked; "no
->   preprocessor" endorsed.
+> **DS-1 (`Empty`+`Dec`) is building at Foundation** — the full §2c pipeline ran
+> clean and fast: Steward frame (`evt_4y30yv26m67hq`) → enclave pin (Architect,
+> `Empty` Type0-⊥ coexisting w/ Ω `Bottom`; `Dec` = Lean-`Decidable` shape
+> `data Dec (P:Omega):Type0 = Yes P | No (P->Empty)`, rejecting both Ω `Or` and
+> homogeneous `Sum` since Ω doesn't inject into Type0) → **durable brief merged**
+> (`docs/program/wp/catalog-ds-1-empty-dec.md`, PR #389, spec-author pen +
+> Architect fidelity-gate `dec_2qa5tkkdwdwvb`) → **Foundation pulled**
+> (`evt_3pmwmy90kkmmr`). Build gate: Foundation (smoke test first) → Architect
+> (soundness + Ω-field admittance smoke-test) + CV (conformance) → `git_request`
+> to Steward → **CI-gated** (`Dec` is kernel-direct `declare_inductive`, so DS-1
+> carries a `crates/` delta — a surface `.ken.md` entry over a minimal prelude
+> piece). Anti-vacuity gates locked: AC4 (bridge over `DecEq Bool`, not only
+> `Int`-`Axiom`), AC3 (grep the Rust emission for the `trusted_base()` delta).
 >
-> **DS-1 KICKED — the ONE WP (operator directive).** Frame posted to the enclave
-> `evt_4y30yv26m67hq` (Architect pins, spec-author co). Three T1-design forks:
-> (1) `Empty` Type-sorted false + `absurd` large-elim; (2) `Dec := P + (P →
-> Empty)` encoding — Ω `Or` (prelude :751) vs a fresh **Type-sorted** sum (must
-> large-eliminate into Type per `23 §3`); (3) `DecEq → Dec (Equal x y)` bridge.
-> Enclave lands a **durable DS-1 brief** (spec-author pen, Architect
-> fidelity-gate) → then I pull Foundation to author the `.ken.md` entry (the
-> format pilot) → gate.
+> **HOLD after DS-1.** DS-1 is the *only* WP before an operator process review —
+> a deliberate single vertical slice validating the full reframed machinery
+> (`.ken.md`-style format · `write-ken` guide · fence roles · design→build→gate ·
+> acted-on retro). **DS-2…DS-9 parked; kick nothing else until the operator
+> resumes.** When DS-1 gates, STOP and report for review.
 >
-> **HOLD after DS-1.** Per the operator: DS-1 is the *only* WP before a process
-> review — it's a deliberate single vertical slice validating the full reframed
-> machinery (`.ken.md` format · `write-ken` guide · fence roles · design→build→
-> gate pipeline · acted-on retro loop). **DS-2…DS-9 stay parked; kick nothing
-> else until the operator resumes.** Once DS-1 gates, STOP and report for review.
+> **Guide fixes landed earlier this session:** surface-reference completeness
+> (PR #386, `def` + `prop`/`lemma`/`proof`), proof-techniques §1 erratum (PR #387,
+> acted-on retro), ADR 0011 **RATIFIED** (PR #385).
 >
-> **Also open (defensive-design, orthogonal):** a second operator research
-> question — "what would make Ken the best/very-good choice for Linux kernel
-> programming?" — answered in-thread. Disposition: **leaf-components target**
-> (verified pure/total components à la HACL\*/EverParse extracted to C behind
-> `trusted_base()`), systems-adjacent not systems. Operator corrected two
-> premises: Ken **has a compiler** (produces executables — gap is retarget, not
-> build) and an **arena allocator** (not GC). ADR-shaped like 0011 (extends its
-> F\*/HACL\* thread); offered to preserve as ADR 0012, awaiting the word. Not
-> scheduled; does not disturb the DS-1 gate.
+> **Federation-law change (operator directive, 2026-07-09):** the **Integrator
+> role is retired** — all `git_request`s route to the **Steward** (sole merge
+> router, publisher path). Broadcast to all leaders (`evt_27psnjcsv93ry`); made
+> explicit in `04-git-and-integration.md §3` + `COORDINATION.md §9`. Closes the
+> gap that stalled PR #387 (routed to the idle Integrator).
+>
+> **ADR 0012 captured (operator directive):** `docs/adr/0012-systems-programming-
+> suitability.md` — the Linux-kernel defensive-design analysis. Finding: **no
+> intrinsic barrier**; leaf-components target (HACL\*/EverParse-shaped), the A–D
+> axes with the operator's corrections (compiler exists → retarget not build;
+> arena not GC), and the grounded `store.rs` arena analysis (bump/reset non-GC,
+> per-space regions built, one page-allocator-capability seam). Status Proposed;
+> routed to @architect to ratify (as ADR 0011), flips Accepted on ratification.
+>
+> **Next micro-task (operator directive):** rename `catalog/guide/*.ken.md` →
+> `*.md` (they are docs, not ken source) — investigating the fence-check
+> mechanism first so the examples stay checked, then rename + update all
+> references (README, `write-ken` skill, `catalog/README.md`, the DS-1 brief) in
+> one merge.
 >
 > ### Sections/Domains + retro discipline + keystone WP (2026-07-09 ~19:10 UTC)
 >

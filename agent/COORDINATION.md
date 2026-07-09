@@ -364,6 +364,9 @@ edges exist** is operator-owned and fixed. The sanctioned edges are exactly:
 - any team → **Steward** — scope/priority (forwarded to the operator),
   workflow/process, and research requests.
 - any team → **Steward** — merge status or publisher-path workflow questions.
+- any team → **Steward** — `git_request`: a ready WP branch for publisher-path
+  merge. The Steward is the **sole merge router**; the Integrator role is retired
+  (2026-07-09, operator directive). Route all `git_request`s to the Steward.
 
 **There is NO enclave → build-team edge — the enclave elaborates autonomously
 (operator, 2026-07-03).** The clean-room enclave (spec-leader / spec-author / CV)
