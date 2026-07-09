@@ -14,9 +14,19 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### DS-1 IN BUILD (only) → HOLD for operator process review (2026-07-09 ~20:50 UTC)
+> ### DS-1 MERGED → HOLD campaign for operator process review (2026-07-09 ~21:40 UTC)
 >
-> **DS-1 (`Empty`+`Dec`) is building at Foundation** — the full §2c pipeline ran
+> **DS-1 (`Empty`+`Dec`) is MERGED — `origin/main @ a83060e` (PR #393, CI-green).**
+> The catalog data-structures program has its validated `.ken.md` pilot: the
+> kernel-direct `Empty`/`Dec`/`Yes`/`No`/`decide` prelude piece +
+> `catalog/packages/core/empty-dec.ken.md`. Decision `dec_6d8fs65ghxate` APPROVE
+> across foundation-qa + Architect (soundness + AC1 smoke-test) + CV
+> (conformance), gated on the correct tip `5623e53` (the `4429b29`/`1500733` SHAs
+> in flight were rebase artifacts; caught + re-anchored). `crates/ken-kernel` +
+> `Cargo.lock` delta empty; zero new `declare_primitive`/`declare_postulate`.
+> Foundation collecting retros → hands in to Steward.
+>
+> **DS-1 (`Empty`+`Dec`) — the pipeline that produced it** — the full §2c ran
 > clean and fast: Steward frame (`evt_4y30yv26m67hq`) → enclave pin (Architect,
 > `Empty` Type0-⊥ coexisting w/ Ω `Bottom`; `Dec` = Lean-`Decidable` shape
 > `data Dec (P:Omega):Type0 = Yes P | No (P->Empty)`, rejecting both Ω `Or` and
@@ -30,23 +40,27 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > piece). Anti-vacuity gates locked: AC4 (bridge over `DecEq Bool`, not only
 > `Int`-`Axiom`), AC3 (grep the Rust emission for the `trusted_base()` delta).
 >
-> **DS-1 at the merge gate** (`evt_2hx5v1gwjhxtp` merge_ready,
-> `wp/ds-1-empty-dec @ 1500733`): smoke test PASSED as pinned (`Dec` admits,
-> `elim_Dec` large-eliminates into `Type0` — no `23 §3` fallback); prelude
-> `Empty`+`Dec`+`decide` kernel-direct; entry `catalog/packages/core/empty-dec.
-> ken.md` with the `DecEq Bool` bridge. In foundation-qa → Architect+CV gate.
+> smoke test PASSED as pinned (`Dec` admits, `elim_Dec` large-eliminates into
+> `Type0` — no `23 §3` fallback); the anti-vacuity gates held (bridge over
+> `DecEq Bool` not only `Int`-`Axiom`; `trusted_base()` delta grounded on the
+> Rust emission). This is the process-review vertical slice — first `.ken.md`
+> entry built end-to-end through the reframed machinery (format · `write-ken`
+> guide · fence roles · design→build→gate · acted-on retro).
 >
-> **DS-1 findings reviewed → 3 remediation WPs created (operator directive).**
-> `docs/program/wp/ds-1-findings-remediation.md` — the acted-on retro. One
-> finding was positive (smoke test); three are real gaps, all **→ Ergo**, none
-> blocking (DS-1 ships with sound zero-new-trust workarounds): **FR-1**
-> zero-constructor `data` has no surface spelling (`parser.rs:956`); **FR-2**
-> reserved sugar `absurd` silently shadows a user global (`elab.rs:499`) —
-> hygiene, doc-note floor / collision-diagnostic principled fix; **FR-3
-> (highest value)** `ken run` has no library check-mode (`main.rs:188` requires
-> an IO-shaped last decl), so pure-library entries can't be `ken run`-validated
-> — bears on every future catalog entry + a standard-entry/guide AC reconcile.
-> **Created & queued, NOT kicked** — assignments wait for the process review.
+> **DS-1 findings → 3 remediation WPs, KICKED to Ergo (operator directive).**
+> `docs/program/wp/ds-1-findings-remediation.md` — the acted-on retro (`evt_2kw27dseyrg9s`
+> kickoff, priority FR-3→FR-1→FR-2). One finding was positive (smoke test);
+> three real gaps, all **→ Ergo**, none blocking: **FR-1** zero-constructor
+> `data` has no surface spelling (`parser.rs:956`, mechanical); **FR-2** reserved
+> sugar `absurd` silently shadows a user global (`elab.rs:499`) — hygiene,
+> diagnostic fix needs an Architect pin; **FR-3 (highest value)** `ken run` has
+> no library check-mode (`main.rs:188`), so pure-library entries can't be
+> `ken run`-validated — Architect pin on the check-mode contract + a
+> standard-entry/guide AC reconcile (Steward/Librarian companion). Ergo runs
+> these independently of the parked campaign.
+>
+> **Campaign still HELD.** DS-2…DS-9 stay parked for the operator's process
+> review of the DS-1 slice; only the Ergo remediations are unparked.
 >
 > **HOLD after DS-1.** DS-1 is the *only* WP before an operator process review —
 > a deliberate single vertical slice validating the full reframed machinery
