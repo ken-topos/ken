@@ -226,13 +226,46 @@ brief** — the implementer should execute mostly mechanically, not design
 >    or queued.
 > 6. **ONLY NOW** post the kickoff/handoff mention (§2 mention discipline).
 >
-> **Helper script.** For the mechanical start step, prefer
-> `scripts/handoff-gate-compact.sh <agent>...` with every affected agent listed
-> explicitly. The script preflights the named worktrees and `moot-<agent>`
-> sessions, resets each
-> worktree to `origin/main`, sends the clean-input `/compact` tmux sequence to
-> all panes in parallel, waits five minutes, and returns. After it returns,
-> still perform the capture-pane verification above before posting the kickoff.
+> **★ Helper script — the CANONICAL way to run the compaction start step (gate
+> step 4). Prefer it; do NOT hand-drive `tmux send-keys /compact` pane-by-pane**
+> — that races the text/Enter split and double-queues `/compact` on a busy pane
+> (observed 2026-07-09). Use the checked-in script:
+>
+> ```
+> scripts/handoff-gate-compact.sh [--wait-seconds <N>] <agent>...
+> ```
+>
+> List **every** receiving-unit member explicitly — e.g. `language-leader
+> language-implementer language-qa`, or the enclave triple `spec-leader
+> spec-author conformance-validator`. The script, in order: (1) **preflights** —
+> resolves each agent's `.worktrees/<agent>` + its `moot-<agent>` tmux session
+> and **fails before mutating anything** if any is unresolved; (2) `git fetch
+> origin`; (3) **`git reset --hard origin/main`** on each worktree — this also
+> satisfies "start new work from current `origin/main`", **but it DISCARDS any
+> uncommitted worktree state**, so only run it once the unit is quiescent with
+> its prior WP merged and retros in (which the gate already requires); (4) sends
+> the compaction sequence (`Enter` → `-l '/compact'` → `Enter`) to every pane
+> **in parallel** — `-l` literal form lands on **both Codex and Claude-Code**
+> panes, so this one script is provider-agnostic; (5) waits `--wait-seconds`
+> (**default 300**) and returns.
+>
+> **Run it in the BACKGROUND.** The default five-minute synchronous wait exceeds
+> a foreground tool timeout — launch with `run_in_background: true` (or pass a
+> short `--wait-seconds` and verify the drops yourself). Do the next prep while
+> it waits; you are re-invoked when it returns.
+>
+> **The script SENDS the compaction; it does NOT confirm the drop — gate step 5
+> is still yours.** After it returns, `capture-pane` each member and confirm ctx
+> actually fell (or a live `Compacting…` / a queued `❯ /compact`). Capture
+> **WIDE** (`tail -20`, not `tail -5`): the `Compacting…` progress bar renders a
+> few lines **above** the input, so a narrow tail shows only a stale `❯` + the
+> pre-compaction ctx and reads as a false "did not land" (observed 2026-07-09 —
+> a pane at 4% Compacting looked idle under `tail -5`). A pane whose ctx truly
+> did not move did not compact — resend the manual sequence to **that one pane**
+> and re-verify. Then handle the **post-compaction mention rouse** (a
+> just-compacted agent may not auto-pick-up a mention posted *after* its
+> compaction — rouse with a one-line `send-keys` per the §2c Codex note)
+> **with** the kickoff.
 >
 > **The tell that you're about to skip it:** you've drafted the handoff mention
 > and feel *"ready to post."* That feeling **is** the gate trigger — STOP, run
