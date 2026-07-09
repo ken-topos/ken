@@ -14,6 +14,50 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
+> ### DS-1 kicked (only) → HOLD for operator process review (2026-07-09 ~20:20 UTC)
+>
+> **Guide fixes both landed → `origin/main @ 8a859d2`:**
+> - **Surface-reference completeness** (operator-flagged gap) — PR #386. Added
+>   §2 `def` (transparent definitions, δ-unfolds vs `data` opacity) and §7 named
+>   proof claims (`prop`/`lemma`/`proof`), grounded in `33 §1`/`§8`, spec-author
+>   APPROVE `dec_57ng2w675tqfj`. Two landed limitations taught honestly + routed
+>   as language-surface Findings: `prop` `where` accepts only the v0
+>   Omega-clean seed shape (`validate_seed_prop_shape`); self-recursive `lemma`
+>   body fails (`resolve.rs` fresh scope) → teach the `fn`-then-`lemma`-wrapper
+>   idiom.
+> - **Proof-techniques §1 erratum** (acted-on retro) — PR #387. `tt`-vs-`Refl`-
+>   vs-`Axiom` three-way + convertibility precondition. Was routed to the
+>   Integrator (idle ~6h); merged via the publisher path so an approved doc fix
+>   didn't stall. Architect APPROVE `dec_5a3xns9czv6v5`.
+> - **ADR 0011** platform-dependent code — **RATIFIED** (Architect, Accepted),
+>   PR #385 `6817769`. Ken-side machinery claims ground-checked; "no
+>   preprocessor" endorsed.
+>
+> **DS-1 KICKED — the ONE WP (operator directive).** Frame posted to the enclave
+> `evt_4y30yv26m67hq` (Architect pins, spec-author co). Three T1-design forks:
+> (1) `Empty` Type-sorted false + `absurd` large-elim; (2) `Dec := P + (P →
+> Empty)` encoding — Ω `Or` (prelude :751) vs a fresh **Type-sorted** sum (must
+> large-eliminate into Type per `23 §3`); (3) `DecEq → Dec (Equal x y)` bridge.
+> Enclave lands a **durable DS-1 brief** (spec-author pen, Architect
+> fidelity-gate) → then I pull Foundation to author the `.ken.md` entry (the
+> format pilot) → gate.
+>
+> **HOLD after DS-1.** Per the operator: DS-1 is the *only* WP before a process
+> review — it's a deliberate single vertical slice validating the full reframed
+> machinery (`.ken.md` format · `write-ken` guide · fence roles · design→build→
+> gate pipeline · acted-on retro loop). **DS-2…DS-9 stay parked; kick nothing
+> else until the operator resumes.** Once DS-1 gates, STOP and report for review.
+>
+> **Also open (defensive-design, orthogonal):** a second operator research
+> question — "what would make Ken the best/very-good choice for Linux kernel
+> programming?" — answered in-thread. Disposition: **leaf-components target**
+> (verified pure/total components à la HACL\*/EverParse extracted to C behind
+> `trusted_base()`), systems-adjacent not systems. Operator corrected two
+> premises: Ken **has a compiler** (produces executables — gap is retarget, not
+> build) and an **arena allocator** (not GC). ADR-shaped like 0011 (extends its
+> F\*/HACL\* thread); offered to preserve as ADR 0012, awaiting the word. Not
+> scheduled; does not disturb the DS-1 gate.
+>
 > ### Sections/Domains + retro discipline + keystone WP (2026-07-09 ~19:10 UTC)
 >
 > Operator refinements to the catalog campaign (`06` + program docs, publishing
