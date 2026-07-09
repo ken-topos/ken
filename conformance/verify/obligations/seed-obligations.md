@@ -53,7 +53,7 @@ verdict model rests on (`22 §2.5`, `21 §5.4`) and must never regress.
 
 ### verify/obligations/refinement-introduction-emits-phi
 - spec: `22 §2.1`; `21 §2` (carrier encoding)
-- given: `type Pos = { n : Int | n > 0 }`; the introduction `(5 : Pos)` (a value
+- given: `def Pos = { n : Int | n > 0 }`; the introduction `(5 : Pos)` (a value
   `5 : Int` used where `Pos` is expected)
 - expect: emits **one** obligation `⟨id, Γ ⊢ 5 > 0, prov⟩` — the goal is
   `φ[a/x] = (n > 0)[5/n] = 5 > 0`, at Ω; provenance points to the introduction

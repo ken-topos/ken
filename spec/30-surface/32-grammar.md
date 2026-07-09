@@ -17,7 +17,7 @@ decl ::=
     "const" ident binder* (":" type)? contract* constraints? "=" expr  -- pure value (36 §1.6)
   | "fn"    ident binder* (":" type)? contract* constraints? "=" expr  -- pure function
   | "proc"  ident binder* (":" type)? effects? contract* constraints? "=" expr  -- effectful / imperative
-  | "type" ConId tyvar* "=" type  -- alias / refinement
+  | "def" ConId tyvar* "=" type  -- definition: alias / refinement ("type" reserved)
   | "record" ConId tyvar* "{" field ("," field)* "}" derive?  -- product
   | "data" ConId tyvar* "=" simple_ctor ("|" simple_ctor)* derive?  -- simple sum sugar
   | "data" ConId data_param* ":" data_family data_block derive?  -- inductive family

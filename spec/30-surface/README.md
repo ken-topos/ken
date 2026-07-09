@@ -43,7 +43,7 @@ L8).
 | Concept | Surface form | Elaborates to |
 |---|---|---|
 | Pure function (a morphism) | `view f (x : A) : B = …` | Π + λ (`13`) |
-| Type alias / refinement | `type T = …` / `{ x:A | φ }` | core type / Σ (`12 §5`, `34`) |
+| Definition (alias / refinement) | `def T = …` / `{ x:A | φ }` | core type / Σ (`12 §5`, `34`) |
 | Record (product) | `record R { f : A, … }` | right-nested Σ with η (`13 §3`) |
 | Sum / inductive | `data D = C1 … | C2 …` | inductive family (`14`) |
 | Pattern match | `match e { … }` | `elim_D` (`14 §3`, `39`) |

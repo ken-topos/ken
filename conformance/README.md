@@ -189,6 +189,11 @@ claim with no conformance case is a claim no one can rely on
   D3 while keeping zero kernel/Cargo.lock/trusted-base delta.
 - `surface/declarations/seed-named-proof-claims.md` — `prop` families,
   `lemma` theorems, attached `proof` canonicalization, and bare-name rejection.
+- `surface/declarations/seed-def-refinement.md` — SURF-def-refinement: the
+  `type` → `def` declaration-keyword rename (refinement + alias RHS forms),
+  the discriminating negative (`type` no longer parses as a declaration),
+  `type` reserved as a free identifier too, and the should-have value-position
+  steering diagnostic.
 - `surface/modules/seed-modules.md` — ES3 minimal modules/imports (`33 §3-4`,
   the bounded L4 slice): `module`/`import`/`pub`/abstract-export **elaborate
   away** to the kernel's single flat append-only `Σ` (`11 §4`) — **zero new

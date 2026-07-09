@@ -84,7 +84,7 @@ pub fn register_decimal_char(elab: &mut ElabEnv) -> Result<DecimalCharEnv, ElabE
     // ordering dependency on `Prod`'s own registration point in
     // `register_prelude`; it costs nothing (reuses the EXISTING `data`
     // machinery, no new kernel flag/`Decl` variant, `18a` AC-G). `Decimal`
-    // itself is a TRANSPARENT ALIAS (`declare_def`, via `type Decimal =
+    // itself is a TRANSPARENT ALIAS (`declare_def`, via `def Decimal =
     // DecimalPair`) rather than referencing the inductive directly, so
     // `decimal_id` stays `Term::Const`-shaped — matching
     // `classify_add`/`classify_eq`'s `Term::Const` dispatch and
@@ -92,7 +92,7 @@ pub fn register_decimal_char(elab: &mut ElabEnv) -> Result<DecimalCharEnv, ElabE
     // ITree` (`register_prelude`, above).
     elab.elaborate_decl("data DecimalPair = MkDecimalPair Int Int")
         .map_err(|e| ElabError::Internal(format!("DecimalPair failed: {}", e)))?;
-    elab.elaborate_decl("type Decimal = DecimalPair")
+    elab.elaborate_decl("def Decimal = DecimalPair")
         .map_err(|e| ElabError::Internal(format!("Decimal alias failed: {}", e)))?;
     let decimal_id = *elab
         .globals
@@ -231,7 +231,7 @@ pub fn register_decimal_char(elab: &mut ElabEnv) -> Result<DecimalCharEnv, ElabE
     elab.elaborate_decl("fn isScalar (c : Int) : Prop = IsTrue (inRangeBool c)")
         .map_err(|e| ElabError::Internal(format!("isScalar failed: {}", e)))?;
 
-    elab.elaborate_decl("type Char = { c : Int | isScalar c }")
+    elab.elaborate_decl("def Char = { c : Int | isScalar c }")
         .map_err(|e| ElabError::Internal(format!("Char failed: {}", e)))?;
     let char_id = *elab
         .globals

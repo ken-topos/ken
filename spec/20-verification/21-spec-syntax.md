@@ -94,7 +94,7 @@ A **refinement type** is the comprehension subobject (`../10-kernel/12 §5`,
 `../30-surface/34-data-match.md`): the type of `x : A` *for which `φ x` holds*.
 
 ```
-type Pos = { n : Int | n > 0 }
+def Pos = { n : Int | n > 0 }
 view head (xs : { l : List A | l ≠ nil }) : A = …      -- non-empty by type
 ```
 

@@ -87,7 +87,7 @@ rests on (`21 §5.4`) and must never regress.
 
 ### verify/spec-syntax/refinement-lowers-to-carrier
 - spec: `21 §6.3` (elabType refinement + introduction), `§2`, `§8` (level)
-- given: `type Pos = { n : Int | n > 0 }`; the introduction `(5 : Pos)`
+- given: `def Pos = { n : Int | n > 0 }`; the introduction `(5 : Pos)`
 - expect: the core type of `Pos` is **`Int`** (the carrier — `φ` not reified),
   at **exactly `Type 0`** (no level bump); the introduction `(5 : Pos)` emits
   obligation `?h : 5 > 0` and yields the core value `5 : Int`.

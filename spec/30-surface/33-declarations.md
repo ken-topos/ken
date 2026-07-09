@@ -27,8 +27,10 @@ and arity:
   at any arity: it carries an effect row `ρ` (concrete, or a row variable, `36
   §1.5`), or is a `space` operation (`36 §4`). A `proc` is the *only* keyword a
   `visits` row (non-empty, or a variable) may sit on.
-- **`type T … = …`** — a type alias or a refinement/`Σ`/Π type abbreviation
-  (transparent; unfolds by δ).
+- **`def T … = …`** — a **definition**: a base type narrowed by conditions (a
+  refinement/`Σ`/Π type abbreviation); a plain alias is the zero-condition case
+  (transparent; unfolds by δ). Was spelled `type` before `SURF-def-refinement`;
+  `type` is now reserved, not a declaration keyword.
 - All top-level definitions are **mutually recursive within a module** if the
   SCT check accepts the group; otherwise the offending recursion is reported
   (`17`).

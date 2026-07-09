@@ -3,9 +3,11 @@
 //! Recognises the token subset for G1 (V0), V1 spec-annotation keywords,
 //! L1 numeric literals (integer, float, decimal with `d`-suffix, float32 with
 //! `f32`-suffix), infix arithmetic operators `+`, `+%`, `*`, `==`,
-//! L2 sum-type/pattern-match keywords (`data`, `match`, `type`, `=>`
+//! L2 sum-type/pattern-match keywords (`data`, `match`, `def`, `=>`
 //! fat-arrow), and L7 `foreign` declaration tokens (`38 §2.1`, `(oracle)`
-//! keyword spellings).  Whitespace and `-- …` line comments are skipped.
+//! keyword spellings). `type` is reserved (SURF-def-refinement; `33 §1`)
+//! and no longer a declaration keyword. Whitespace and `-- …` line
+//! comments are skipped.
 
 use crate::error::{ElabError, Span};
 
@@ -28,9 +30,10 @@ pub enum Token {
     KwOld,
     KwSpace,
     // L2 keywords
-    KwData,      // "data"  — inductive type declaration
-    KwMatch,     // "match" — pattern matching
-    KwTypeAlias, // "type"  — surface type alias
+    KwData,  // "data" — inductive type declaration
+    KwMatch, // "match" — pattern matching
+    KwDef,   // "def"   — surface definition (refinement/alias); was "type"
+    KwTypeReserved, // "type" — reserved (SURF-def-refinement); not a decl keyword, not an identifier
     // L7 keywords (`38 §2.1`, spellings are `(oracle)`)
     KwForeign,
     // Lc keywords (`33 §5`, `39 §6`)
@@ -425,7 +428,8 @@ impl<'s> Lexer<'s> {
                 "space" => Token::KwSpace,
                 "data" => Token::KwData,
                 "match" => Token::KwMatch,
-                "type" => Token::KwTypeAlias,
+                "def" => Token::KwDef,
+                "type" => Token::KwTypeReserved,
                 "foreign" => Token::KwForeign,
                 "temporal" => Token::KwTemporal,
                 "class" => Token::KwClass,
