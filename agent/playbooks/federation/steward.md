@@ -249,10 +249,15 @@ brief** — the implementer should execute mostly mechanically, not design
 > quiescent with its prior WP merged and retros in (which the gate already
 > requires), and **eyeball each agent's branch is not ahead of `origin/main`**
 > before compacting (a `preserved/` ref is a safety net, not a substitute for
-> knowing what a ring is sitting on — a still-unmerged WP branch means the ring
-> is not actually quiescent). Real incident (2026-07-09): a Foundation
-> compaction orphaned a completed 5/5 Map-laws branch; recovered via the
-> preserve path; the guard was added in response; (4) sends
+> knowing what a ring is sitting on). **Squash-merge trap:** after a
+> squash-merge the *original* branch commits dangle **ahead** of `origin/main`
+> while their content is already merged — such a branch is a **stale leftover,
+> not unmerged work**. Grep `origin/main` for the squash commit (or compare
+> file size) **before** treating branch-ahead commits as lost/held; do not
+> re-open or "recover" them. (2026-07-09: a compaction snapshotted an
+> already-squash-merged Map-laws leftover that was briefly mis-read as lost
+> work; the Foundation ring's independent grounding corrected it. The guard is
+> retained as a general net, but branch-ahead ⇏ unmerged.) (4) sends
 > the compaction sequence (`Enter` → `-l '/compact'` → `Enter`) to every pane
 > **in parallel** — `-l` literal form lands on **both Codex and Claude-Code**
 > panes, so this one script is provider-agnostic; (5) waits `--wait-seconds`
