@@ -14,6 +14,40 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
+> ### CATALOG REFRAME DONE → data-structures program (2026-07-09 ~18:40 UTC)
+>
+> **Reframe fully executed and on `main`:** charter (`06`) + standard entry
+> format (`07`), the `packages/` → `catalog/packages/` migration (PR #379), and
+> the checked literate fence roles `ken reject`/`ken example` (PR #380,
+> `a6f30d8`). Both fence-roles §8 follow-ons recorded (whitespace-opener gap —
+> Architect's fail-closed fold recommended; reject-block partial-decl leak).
+>
+> **New design work this batch (Steward corpus, publishing now):**
+> - **`06` reworked** — added the subject-matter **strata** (S0 core toolkit → S1
+>   data → S2 capabilities → S3 formats/protocols → S4 frameworks) with the
+>   operator's **demand-pull** principle (upper strata clarify lower); added the
+>   **authoring guide** workstream (`catalog/guide/` — "writing Ken": surface
+>   reference · proof techniques · decomposition hints, drafted from fleet memory
+>   + DT practice, clean-room-bounded); fixed the migration sed-artifact
+>   (`catalog/catalog/packages/`) in the live charter; reframe marked done.
+> - **`docs/program/wp/catalog-data-structures-program.md`** — NEW: the sequenced
+>   S0+S1 enrichment program (DS-1..DS-9), demand-pull-driven by a proposed
+>   lawful JSON codec. Grounded on a full catalog/prelude/spec gap analysis: S0
+>   gaps `Empty`/`Dec`, `Applicative`/`Monad`/`Traversable`; S1 gaps `Vector`
+>   (spec-absent), `Either` (spec-named, undeclared), `Ord Nat` (unexported),
+>   List combinators, lawful `DecEq Char`→`String` (Int-`Axiom` wall). DS-1 is
+>   the `.ken.md` format pilot (no literate entry exists yet).
+> - **Steward hygiene:** playbook §6a gained a **keep-`steward/work`-fresh**
+>   protocol (reset to `origin/main` on resume/after-merge; never rebase a
+>   long-lived branch past a squash-merge) — steward/work had drifted to a
+>   pre-migration tree. New **`wrap-md-80`** Haiku-tier skill + `AGENTS.md`
+>   directs all agents to delegate 80-col reflow to a Haiku subagent (authoring
+>   stays on-model, formatting on cheapest tier).
+>
+> **Next:** kick DS-1 (`Empty`+`Dec`, format pilot) once the Foundation
+> catalog-authoring overlay is in; author the overlay + first `catalog/guide/`
+> draft in parallel. Event-driven, no watchdog.
+
 > ### CORRECTION — Map-laws was already merged; migration proceeds (2026-07-09 ~17:30 UTC)
 >
 > **The ~17:10 block below was a FALSE ALARM — retracted.** `map-verified-laws`
