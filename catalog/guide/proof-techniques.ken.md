@@ -15,7 +15,8 @@ reader recognizes it when they hit it themselves.
 ## Index
 
 1. [`tt` vs. `Refl`: the two-way
-   discriminator](#1-tt-vs-refl-the-two-way-discriminator)
+   discriminator](#1-tt-vs-refl-the-two-way-discriminator) (§1.1: when
+   neither closes)
 2. [Induction and motive construction](#2-induction-and-motive-construction)
 3. [Decidable equality: the `sound`/`complete`
    pattern](#3-decidable-equality-the-soundcomplete-pattern)
@@ -55,8 +56,11 @@ observational equality collapses two occurrences of the **same nullary
 constructor** to `Top` (`spec/10-kernel/16-observational.md`, the K7 rule):
 once that collapse fires, the goal is `Top`-shaped, not `Eq`-shaped, and
 `Refl` — which only checks against an `Eq`-shaped goal — no longer applies.
-A **neutral** (stuck) endpoint never collapses and stays `Eq`-shaped, where
-only `Refl` applies.
+A **neutral** (stuck) endpoint never collapses and stays `Eq`-shaped — but
+`Refl` needs more than "stuck": it needs the goal's two sides to be
+**convertible**, which is guaranteed when they are the *same* term (the
+trivial case below), not merely when both happen to be stuck. §1.1 below
+covers the case where neither applies.
 
 `bool_and True True` reduces to `True`, so `Equal Bool (bool_and True True)
 True` collapses all the way to `Top`:
@@ -83,11 +87,54 @@ fn selfEqRefl (x : Bool) : Equal Bool (bool_and x x) (bool_and x x) = Refl
 fn selfEqTt (x : Bool) : Equal Bool (bool_and x x) (bool_and x x) = tt
 ```
 
+### 1.1 When neither closes: opaque primitives don't reduce under conversion
+
+`selfEqRefl` above works because its goal's two sides are the **identical**
+term (`bool_and x x` on both sides) — trivially convertible, no reduction
+needed. A goal whose two sides are only *equal at runtime*, not the same
+term, needs one of them to actually **reduce** to the other during
+conversion — and a `declare_primitive` operation (`eq_int`, `and_bool`,
+`leq_int`, …) **never unfolds under conversion, even applied to concrete
+values**: the interpreter reduces it at runtime, but the kernel's
+convertibility check does not. A goal built from one is **permanently
+stuck**, whatever the arguments:
+
+```ken
+const five : Int = 5
+```
+
+```ken reject
+-- Fails: "Refl: the two sides of the goal are not convertible" — `eq_int
+-- five five` never reduces to `True` under conversion, even though `five`
+-- is concrete and the two arguments are literally the same value.
+const primEqRefl : Equal Bool (eq_int five five) True = Refl
+```
+
+```ken reject
+-- Fails too: the goal never reduced to `Top` either, for the same reason.
+const primEqTt : Equal Bool (eq_int five five) True = tt
+```
+
+```ken example
+-- The honest closer: a VISIBLE postulate, the same audited-delta shape
+-- `Int`'s own Eq/Ord instances use (§3) — the proposition is true, just not
+-- kernel-reducible at this layer.
+const primEqAxiom : Equal Bool (eq_int five five) True = Axiom
+```
+
+This is not a corner case to memorize and forget: **any law whose operation
+bottoms out in a primitive, applied to values that are not already literal
+constants in the goal itself, needs this same honest `Axiom` treatment** —
+`tt`/`Refl` are not a fallback pair that always covers a stuck goal.
+
 **The check, in order:** reduce both endpoints. Same nullary constructor (or
 a non-nullary constructor whose every component also collapses) → `Top` →
-`tt`. Anything left stuck → stays `Eq` → `Refl`. Never assume a base case
-defaults to one or the other from its shape alone — check the reduced
-endpoints, every time.
+`tt`. The identical term on both sides (or otherwise genuinely convertible,
+e.g. via a **transparent** `fn`'s own ι-reduction) → `Refl`. Stuck on an
+**opaque primitive** with no further reduction available on either side →
+neither closes — the honest move is a visible `Axiom` (§1.1). Never assume a
+base case defaults to one of the three from its shape alone — check the
+reduced endpoints and what kind of operation they're stuck on, every time.
 
 ## 2. Induction and motive construction
 
@@ -243,16 +290,18 @@ exactly the definitions that would make the kernel unsound if admitted.
 
 - A landed conformance fixture
   (`conformance/challenge/C1-deceq-noncanonical/unsound-deceq-decimal.ken`)
-  writes `Refl Bool True` — the **applied** form. The elaborator's `Refl`
-  is checked-only and matches solely on a **bare** `RCon("Refl")`
-  (`crates/ken-elaborator/src/elab.rs`, the `check` function); an applied
-  `Refl A x` falls through to ordinary application elaboration and fails
-  with `UnresolvedCon`, not the intended reflexivity proof. Because that
-  fixture is a should-REJECT arm, the file still rejects overall (for the
-  wrong reason), so this has not surfaced as a test failure. Routed to CV
-  (conformance corpus owner) as a fixture-fidelity bug, not a kernel
-  defect — the correct, working spelling is bare `Refl` (§1), which this
-  guide uses throughout.
+  writes `Refl Bool True` — the **applied** form, which fails with
+  `UnresolvedCon` (`Refl` is checked-only, matching solely a bare
+  `RCon("Refl")`, `crates/ken-elaborator/src/elab.rs`). Routed to CV as a
+  fixture-fidelity bug. **Correction, via CV's own differential
+  investigation:** the fix is not simply "use bare `Refl`" — bare `Refl`
+  *also* fails there (`"the two sides of the goal are not convertible"`),
+  and so does `tt`, because `decimalEq` bottoms out in the opaque
+  primitives `eq_int`/`and_bool`, which never reduce under conversion
+  (§1.1 — this Finding is exactly what §1.1 now teaches, added because of
+  it). The honest witness is `Axiom`. This is the campaign's own retro loop
+  working as designed: authoring against the guide surfaced a gap, and
+  fixing the gap sharpened the guide itself.
 
 ## References
 
