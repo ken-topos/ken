@@ -38,8 +38,26 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >   fidelity review, clean-room-bounded. Data-structures program (`DS-1`…) is now
 >   explicitly gated behind it.
 >
-> **Next:** frame is ready — kick the keystone WP (Librarian + enclave). Then the
-> Foundation authoring overlay (may bundle), then `DS-1`. Event-driven.
+> **MERGED (2026-07-09 ~19:45 UTC):** keystone WP is on `main` — PR #383,
+> `origin/main @ 071ce2c`. `catalog/guide/` V1 (README + surface-reference +
+> proof-techniques + decomposition-abstraction `.ken.md`) + the `write-ken` skill
+> (`agent/playbooks/tools/write-ken.md` + `.claude/skills/write-ken` symlink) +
+> `catalog/README.md` pointer. Librarian-assembled from landed Ken + fleet memory,
+> clean-room-bounded; all examples checked via `ken example`/`ken reject`, `ken
+> run` exits 0 on all three strands (both enclave reviewers independently). Merge
+> Decision `dec_14sx87f3rjz3` APPROVE (Architect + spec-author on `26e39a8`; the
+> `19dd193→26e39a8` fold touched only spec-author's surface-reference file, both
+> lanes re-verified the carry). Librarian retro pending (acted-on per Retro
+> discipline). **`DS-1` and the data-structures program are unblocked.**
+>
+> **Also landed/pending:** ADR 0011 (platform-dependent code — orientation,
+> defensive design; Proposed, routed to @architect to ratify) rides this Steward
+> corpus merge.
+>
+> **Next:** Foundation catalog-authoring overlay (largely subsumed by the guide +
+> `write-ken` skill — assess whether a thin overlay remains or `DS-1` proceeds
+> directly), then `DS-1` (`Empty`+`Dec`, the `.ken.md` format pilot). Awaiting
+> operator steer / event-driven.
 
 > ### CATALOG REFRAME DONE → data-structures program (2026-07-09 ~18:40 UTC)
 >
