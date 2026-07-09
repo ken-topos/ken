@@ -1,7 +1,11 @@
 # ADR 0011 — Platform-dependent code: interface-selection, manifest ABI, thin FFI
 
-- **Status:** Proposed (orientation — no near-term work scheduled); to be ratified
-  by the Architect
+- **Status:** Accepted (orientation — no near-term work scheduled). Ratified by
+  the Architect 2026-07-09, ground-checked against the landed corpus. The
+  ratification covers the **Ken-side machinery claims and the design
+  orientation**; the external-tool syntax (Idris `%foreign`, Agda `COMPILE`, Lean
+  `@[extern]`, Backpack, Dune) is explicitly **out of scope** — illustrative, not
+  load-bearing, and flagged below to verify against live docs.
 - **Date:** 2026-07-09
 - **Deciders:** the operator (a defensive-design question dispatched via the
   Steward); Architect ratification of the characterization of Ken's machinery
@@ -141,6 +145,15 @@ audited entry (cf. ADR 0009) — never the kernel.
   live documentation; and whether Ken ever commits to multiple compilation
   backends is itself an open decision that would activate the per-backend
   specifier design.
+- **Effectful laws are the real validation target (Architect note).** The
+  lawful-interface example carries an *effectful/temporal* law (read-after-write
+  for a filesystem), materially heavier than today's landed precedent, which is
+  **pure-algebraic** (Eq/Ord associativity etc.). The mechanism — a lawful record
+  with proof fields, over effect rows — exists, but *composing* it to prove an
+  effectful law over a platform handler is **undemonstrated**, and is the
+  concrete validation target when a real `Platform` interface is first built.
+  This ADR does not claim effectful laws are already provable the same way
+  Eq/Ord laws are; that is the open work the first `Platform` WP must discharge.
 
 ## Alternatives considered
 
