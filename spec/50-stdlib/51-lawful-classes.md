@@ -1,6 +1,6 @@
 # Lawful structure classes — `Eq`, `DecEq`, `Ord`
 
-> Status: **DRAFT v0 (ES4-classes).** The **first `packages/` catalog tranche**
+> Status: **DRAFT v0 (ES4-classes).** The **first `catalog/packages/` catalog tranche**
 > and the **pattern-setter** for every later ES4 package. An entry is *ordinary
 > Ken* with a stated **derivation path from the built-ins** and a **zero
 > `trusted_base()` delta**, and its core abstractions **carry their laws as
@@ -297,7 +297,7 @@ blocker on any instance. (`Eq`'s `refl` was always zero-delta — its goal route
 through an unresolved `bool_eq x x`, keeping the `Eq` live so `Refl` fires.)
 
 **Realization status.** The **real, kernel-checked, zero-delta** law-carrying
-instances are **on main** (Team Language, `packages/lawful-classes/`):
+instances are **on main** (Team Language, `catalog/packages/lawful-classes/`):
 `Ord Bool` `refl`/`trans`/`total` + `Eq Bool` `refl` (`72e38a5`), and now
 `Ord Bool`'s `antisym` + `DecEq Bool`'s `sound`/`complete` (`9a82745`,
 ES4-lawproofs-remainder) — so `Ord Bool` and `DecEq Bool` are **complete
@@ -338,11 +338,11 @@ instance must **declare which**:
 whose lawful instance carries an audited delta — **not** a zero-delta exemplar.
 The zero-delta exemplar is the **inductive** `Bool` (and user `data`).
 
-## 7. Placement, `packages/` layout, and the un-defer (AC4/AC5)
+## 7. Placement, `catalog/packages/` layout, and the un-defer (AC4/AC5)
 
 **Catalog placement.** These entries realize the `README §2` "Lawful classes"
 row; the catalog index (`README`) points here, and the **realized Ken source**
-lives under the in-repo **`packages/`** tree (`../../packages/README.md`) — the
+lives under the in-repo **`catalog/packages/`** tree (`../../catalog/packages/README.md`) — the
 layout established by this WP as the pattern for every later ES4 tranche: one
 package per module unit (`33 §3`), each carrying its **derivation-path +
 `trusted_base()` delta** declaration (zero on an inductive carrier; an audited
@@ -363,7 +363,7 @@ conformance edit names the target; the actual un-defer rides the build.)
 ## 8. What the build delivers + acceptance
 
 **Build (Team Language, named follow-on — not this WP):** `Eq`/`DecEq`/`Ord` +
-**canonical instances carrying real law proofs** under `packages/`, wired into
+**canonical instances carrying real law proofs** under `catalog/packages/`, wired into
 `ken-elaborator`; `where Ord a` supplies the `sort` comparator (`§4`); the CV
 #27 cases un-deferred against the real classes.
 
@@ -382,8 +382,8 @@ conformance edit names the target; the actual un-defer rides the build.)
   unlawful** (non-empty delta / re-check failure) — the discriminating case
   **flips** against it, verified by grepping the law fields for
   `declare_postulate`/holes (absence = the guarantee).
-- **AC4 (catalog + `packages/` layout).** `packages/` layout established
-  (`../../packages/README.md`), catalog placement in `README`, derivation paths
+- **AC4 (catalog + `catalog/packages/` layout).** `catalog/packages/` layout established
+  (`../../catalog/packages/README.md`), catalog placement in `README`, derivation paths
   stated — the pattern for every later ES4 tranche.
 - **AC5 (un-defer).** The two CV #27 `(deferred, gated-on-WP)` cases named as
   un-deferring on this WP's build, re-pointed to the real `Ord` (`§7`).

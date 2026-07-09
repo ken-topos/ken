@@ -234,7 +234,7 @@ creates a new source artifact and therefore new spans.
 
 ### stdlib/parsing/kernel-untouched-zero-trust-delta (soundness)
 - spec: `59 §1` / `59 §9`
-- given: the CAT-5 build diff for `packages/parsing/`.
+- given: the CAT-5 build diff for `catalog/packages/parsing/`.
 - expect: no `crates/ken-kernel`, compiler parser, primitive registry, or
   `Cargo.lock` trust-surface change is needed for the package contract; public
   laws are real proof terms with empty `trusted_base()` delta.

@@ -110,7 +110,7 @@ here.
 
 **Build scope (BL3 / D4).** The build realizes the lexer's accept-both +
 same-token behaviour and the formatter's Unicode normalization, then **runs the
-formatter over the corpus** (prelude, `packages/*`, `examples/rosetta/*`) to
+formatter over the corpus** (prelude, `catalog/packages/*`, `examples/rosetta/*`) to
 convert ASCII digraphs to canonical Unicode — landed together with the `view →
 const`/`fn`/`proc` migration (D4) as one workspace-green unit. A Unicode-surface
 `.ken` and its ASCII twin **elaborate identically** (acceptance 7), because they

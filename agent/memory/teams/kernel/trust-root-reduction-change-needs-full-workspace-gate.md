@@ -24,7 +24,7 @@ whose goal had stayed a stuck `Eq` before the fix (so `Refl` could fire via
 endpoint-convert) but, post-fix, correctly reduces all the way to `Top` —
 meaning `Refl` now rejects it and `tt` is required instead. The WP's own test
 migration had already made this exact `Refl`→`tt` swap for its own kernel-crate
-test; it just didn't extend the check to the `packages/` proofs living in a
+test; it just didn't extend the check to the `catalog/packages/` proofs living in a
 different crate.
 
 **Why this is general, not a one-off:** more reduction means some goals that

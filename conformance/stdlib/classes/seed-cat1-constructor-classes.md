@@ -3,7 +3,7 @@
 Format: `../../README.md`. First WP of the **catalog campaign**
 (`docs/program/06-catalog-campaign.md`;
 `docs/program/wp/CAT-1-constructor-classes.md`).
-CAT-1 extends the landed `packages/lawful-classes` pattern (`Eq`/`DecEq`/`Ord`,
+CAT-1 extends the landed `catalog/packages/lawful-classes` pattern (`Eq`/`DecEq`/`Ord`,
 over a **value type** `a : Type`) to the workhorse **constructor classes** and
 their value-level algebra companions. This seed pins the **discriminating
 conformance for the value-level algebra classes — `Semigroup`/`Monoid`** (the
@@ -50,7 +50,7 @@ genuinely inductive) is a Monoid-first phenomenon.
   `Semigroup`/`Monoid` are the **same shape** over `a : Type` — the spec section
   is authored by spec-author on this WP; this seed pins the discriminating
   behavior, grounded on the `51` pattern + first principles.
-- `50-stdlib/README.md §2` + `packages/README.md` — the taxonomy already names
+- `50-stdlib/README.md §2` + `catalog/packages/README.md` — the taxonomy already names
   it: a `Monoid` is `(<>, empty)` **plus real proofs** of associativity and the
   unit laws — **proved, not postulated**; an inductive-carrier instance whose
   law fields are postulated/holed has a **non-empty `trusted_base_delta`** and
@@ -58,7 +58,7 @@ genuinely inductive) is a Monoid-first phenomenon.
   bundle shape.
 - `33 §5.2`/`§5.3` — a class is a **record** (`13 §3` Σ+η); an instance is a
   record value of ops **+ law proofs**. **No new kernel former** (AC1).
-- `packages/collections/collections.ken` — the landed `list_append`
+- `catalog/packages/collections/collections.ken` — the landed `list_append`
   (`view list_append (a) (xs ys : List a) : List a`), recursing on its **first**
   argument: `list_append a Nil ys => ys`, `list_append a (Cons x xs2) ys =>
   Cons a x (list_append a xs2 ys)`. This recursion structure is the ground for
@@ -85,7 +85,7 @@ broken or law-less instance admitted as lawful is a verification-soundness hole:
 downstream `fold`/generic algorithms *assume the laws*, and a false unit law
 **inhabits `Bottom`**, [[deceq-on-noncanonical-carrier-inhabits-bottom]]).
 `(oracle)` — the literal field spellings and layering, **now resolved by the
-landed package** (`packages/lawful-functors/lawful_functors.ken`, spec `55 §2`):
+landed package** (`catalog/packages/lawful-functors/lawful_functors.ken`, spec `55 §2`):
 the operation field is **`op`** (`<>`/`mappend` is deferred surface sugar,
 OQ-syntax); the identity is **`mempty`**; the laws are **`assoc`/`left_unit`/
 `right_unit`** with `assoc` oriented `Equal a (op (op x y) z) (op x (op y z))`;
@@ -104,7 +104,7 @@ and every verdict** are
 **Static vs runtime face.** These pin the **static face** — the spec discipline
 (lawful ≡ zero-delta on an inductive carrier; a false witness fails the law
 re-check) and the discriminating shape. The **runtime/build face** — the actual
-canonical instances in `packages/` carrying real `elim_List` proof terms,
+canonical instances in `catalog/packages/` carrying real `elim_List` proof terms,
 producer-grepped for `declare_postulate`/holes on the law fields — is the
 **Team-Language build** (CAT-1 build gate), reconciled against the **landed**
 package body there, not asserted from this pre-package draft
@@ -112,7 +112,7 @@ package body there, not asserted from this pre-package draft
 [[lock-structural-output-against-landed-body]]).
 
 **Reconcile-at-build note.** This seed is authored **in parallel with**
-spec-author's `packages/lawful-functors/` (name per spec-leader's coordination).
+spec-author's `catalog/packages/lawful-functors/` (name per spec-leader's coordination).
 The exact field spellings, the `Semigroup`/`Monoid` layering choice, and the
 broken-witness carrier are **reconciled against the landed body** at the build
 gate — a heading/draft guess is not ground until the package lands
@@ -132,9 +132,9 @@ the verdict flips **solely** on witness correctness — never green-vs-green.
 
 ### stdlib/classes/monoid-unit-law-false-witness-rejected (soundness)
 - spec: `51 §5` (laws PROVED = real kernel proofs), `50-stdlib/README §2` +
-  `packages/README` (a `Monoid` is `(<>, empty)` **plus** real unit proofs),
+  `catalog/packages/README` (a `Monoid` is `(<>, empty)` **plus** real unit proofs),
   `13 §2` (Σ-Intro re-check), `16 §1` (Ω-equality); grounds on
-  `packages/collections/collections.ken` `list_append`
+  `catalog/packages/collections/collections.ken` `list_append`
 - given: two `Monoid (List Bool)`-shaped instances, **identical** in their
   operation field (`<> = list_append Bool`) and identical in the **proof term**
   offered for the left-unit law (`left_unit = Refl`), differing **only** in the
@@ -209,7 +209,7 @@ definitional, or postulating the inductive one when `Refl` "doesn't work").
   same nullary constructor observationally collapse to **`Top`** (`16 §8.1`, K7;
   spec `55 §3.2`), so the goal is no longer `Eq`-shaped and `Refl` does not
   apply; the step lifts the IH under `Cons a h` with `cong`
-  (`packages/transport`). A proof term, **never** `Axiom` (it is *provable*, so
+  (`catalog/packages/transport`). A proof term, **never** `Axiom` (it is *provable*, so
   a postulate here is an
   **avoidable delta = defect**, `51 §6`). Assert the **observable**: `Refl`
   accepts at `left_unit`, `Refl` rejects (conversion failure) at `right_unit`;

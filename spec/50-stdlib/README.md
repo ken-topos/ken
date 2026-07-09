@@ -9,7 +9,7 @@
 > ordinary Ken **with its derivation path from the built-ins stated** — a
 > catalog entry with no path is a **hidden built-in** (a spec bug caught with
 > CV's derivation-path table, `../../conformance/surface/taxonomy/`). ES4 builds
-> these as in-repo packages under `packages/`.
+> these as in-repo packages under `catalog/packages/`.
 
 This file is the spec/index side of the catalog. The source-style and
 refinement contract for realized packages lives in
@@ -49,8 +49,8 @@ A curated set of **classes with laws** (`../30-surface/33 §5`), each a package
 whose derivation bottoms out in the built-ins (the class + instances are Ken;
 the `Int` instance of `Num`/`Ord` wraps the audited primitive op, `30 §6` F2).
 The **first tranche** — `Eq`/`DecEq`/`Ord`, the pattern-setter — is pinned in
-**`51-lawful-classes.md`** (ES4-classes), with the `packages/` layout
-established at `../../packages/README.md`:
+**`51-lawful-classes.md`** (ES4-classes), with the `catalog/packages/` layout
+established at `../../catalog/packages/README.md`:
 
 | Class | Operations | Laws (propositions) |
 |---|---|---|
@@ -69,7 +69,7 @@ discipline that carries into every package build).
 The **constructor-class tranche** — `Semigroup`/`Monoid` (value-level algebra)
 and `Functor`/`Foldable` (the first classes over a type constructor
 `f : Type → Type`) — is pinned in **`55-lawful-functors.md`** (CAT-1,
-`packages/lawful-functors/`), the reusable template the **effectful tranche** —
+`catalog/packages/lawful-functors/`), the reusable template the **effectful tranche** —
 `Applicative`/`Monad`/`Traversable` — extends in **`56-effectful-classes.md`**
 (CAT-2, same package): the deep chain **wires** superclass fields (`56 §2`), and
 `Traversable.traverse` is the first effect-row-polymorphic `proc` (SURF-1,
@@ -120,7 +120,7 @@ The **Layer-3 parsing/syntax/diagnostics contract** — source artifacts as byte
 identity, half-open byte spans, total parser result values, small package-owned
 grammars, parser/printer and formatter laws, and diagnostic primary/secondary
 span validity — is pinned in **`59-parsing-syntax-diagnostics.md`** (CAT-5).
-It is an ordinary `packages/parsing/` catalog package: no compiler parser
+It is an ordinary `catalog/packages/parsing/` catalog package: no compiler parser
 rewrite, no compiler-internal AST as public API, no full Ken syntax reflection,
 and no `.ken.md` implementation work. A derived input such as a blanked
 `.ken.md` compiled view is only an offset-preserving view of the original
@@ -155,7 +155,7 @@ harvested back as ordinary packages only if they earn it.
 ## 7. What WS-L must deliver here — the dissolved L8, as packages
 
 The standard-package catalog (this file) delivered as **in-repo packages under
-`packages/`** (ES4): the lawful classes (with **proved** laws), the collection
+`catalog/packages/`** (ES4): the lawful classes (with **proved** laws), the collection
 combinators + verified building blocks, the effect/IO/serialization interfaces,
 and the test/doc tooling seed — **each with its built-in-derivation path
 stated** (the ES1 discipline; a missing path is a hidden-built-in spec bug).

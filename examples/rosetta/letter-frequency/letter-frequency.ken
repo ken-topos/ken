@@ -5,7 +5,7 @@
 --
 -- Folds the input's `List Char` (via `string_to_list_char`) into a
 -- `Tree`-backed `Map Char Nat` -- the same carrier + `empty`/`insert`/
--- `lookup` ops as the landed `packages/collections/map.ken` (Ken has no
+-- `lookup` ops as the landed `catalog/packages/collections/map.ken` (Ken has no
 -- working cross-file import, `crates/ken-cli/tests/rosetta.rs`'s own doc
 -- comment; duplicated here verbatim, the same convention `factorial.ken`/
 -- `gcd.ken` already use for shared helpers), insert-or-incrementing each

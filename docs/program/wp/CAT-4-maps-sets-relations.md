@@ -7,7 +7,7 @@ substrate).
 build held for the GPT window.
 
 **Sequence:** **after CAT-1** (the lawful-class pattern) and **on the landed Map
-capstone** (`packages/collections/map.ken`, `spec/50-stdlib/52-map.md` +
+capstone** (`catalog/packages/collections/map.ken`, `spec/50-stdlib/52-map.md` +
 `54-map-verified-laws.md` — laws 1/2/3/5 + toList-ordered already proved).
 **CAT-2- and CAT-3-independent** (value-level; the set laws optionally reuse
 CAT-3's set-membership predicates if landed — a soft link, not a gate). See
@@ -15,7 +15,7 @@ CAT-3's set-membership predicates if landed — a soft link, not a gate). See
 §"Fleet fan-out" (Runtime → maps/sets).
 
 > **Frame-by-objective, not by current state (§2c).** The landed-capstone roster
-> below is **perishable** — re-verify `packages/collections/map.ken` +
+> below is **perishable** — re-verify `catalog/packages/collections/map.ken` +
 > `54-map-verified-laws.md` at pickup. This WP **extends** a substantial landed
 > proof corpus; the first elaboration task is to inventory exactly what is already
 > proved so nothing is re-derived (`§2` pin 2).
@@ -155,7 +155,7 @@ capstone's `54`/CV discipline (convoy base-witness + specific-variant assertions
 - **AC6 — discriminators flip.** Each conformance soundness case flips
   accept→reject at the named law, specific variant.
 - **AC7 — green.** `cargo test --workspace` + rosetta (16/0) green; extends
-  `packages/collections/` (MANIFEST + derivation path updated).
+  `catalog/packages/collections/` (MANIFEST + derivation path updated).
 
 ---
 
@@ -229,9 +229,9 @@ The design contract is authored in
 grounding they rest on, and the scope register, so the Runtime build (GPT
 window) and the fidelity gate read one durable artifact, not the channel thread.
 
-Grounded on `origin/main @ 7169300f` (`packages/collections/map.ken` (2225
+Grounded on `origin/main @ 7169300f` (`catalog/packages/collections/map.ken` (2225
 lines),
-`54`/`52`, `10-kernel/16 §1.1–§1.4`/`§6`, `packages/lawful-classes/
+`54`/`52`, `10-kernel/16 §1.1–§1.4`/`§6`, `catalog/packages/lawful-classes/
 lawful_classes.ken`, `crates/ken-elaborator/src/prelude.rs`).
 
 - **E0 — §2c roster re-verified (perishable, re-checked not trusted).** The

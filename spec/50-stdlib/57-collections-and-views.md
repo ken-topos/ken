@@ -29,7 +29,7 @@ re-litigated:
 2. **Proved by induction + `cong`** (`55 §3.1`): a law over an inductive carrier
    is a recursive `view : Equal …` that `match`es the carrier, closes the base
    directly, and lifts the self-call **IH** under the constructor with `cong`
-   (`packages/transport`, `53 §2`).
+   (`catalog/packages/transport`, `53 §2`).
 3. **Per-branch `tt`-vs-`Refl`**, never uniform (`55 §3.2`): a branch closes
    with `tt` when both endpoints reduce to the **same fully-collapsing
    constructor head** — a **nullary** ctor, or one whose components all collapse
@@ -47,7 +47,7 @@ re-litigated:
 
 Surface spelling: SURF-1's `view → const`/`fn`/`proc` migration is a **deferred
 build** — on `main` today the lexer recognizes only `view`, and both
-`packages/collections/` and `packages/lawful-functors/` are 100% `view`-spelled.
+`catalog/packages/collections/` and `catalog/packages/lawful-functors/` are 100% `view`-spelled.
 **New CAT-3 ops are written `view`**, matching every landed sibling; the keyword
 migration re-spells them uniformly when SURF-1's build lands.
 
@@ -55,7 +55,7 @@ migration re-spells them uniformly when SURF-1's build lands.
 
 ### 2.1 The landed ops, and the two that are not
 
-Landed in `packages/collections/collections.ken` (exact signatures, all `view`):
+Landed in `catalog/packages/collections/collections.ken` (exact signatures, all `view`):
 
 ```
 list_append (a : Type) (xs : List a) (ys : List a) : List a
@@ -64,7 +64,7 @@ drop        (a : Type) (n : Nat) (xs : List a) : List a
 nth         (a : Type) (n : Nat) (xs : List a) : Option a
 ```
 
-**Not yet landed anywhere in `packages/`:** `map`, `filter`, `mem`, `length`,
+**Not yet landed anywhere in `catalog/packages/`:** `map`, `filter`, `mem`, `length`,
 `min`. Laws that name them are **red-until-built** (the CAT-1 `Functor` posture
 — the law is authored now, the proof lands with the op).
 
@@ -418,6 +418,6 @@ path stated (the catalog discipline, `README §intro`):
   the name does not collide with the retired `view` keyword (`§4.1`, token to
   Steward).
 - **AC7 — green.** `cargo test --workspace` + rosetta corpus green at build; the
-  new package(s) under `packages/` carry a MANIFEST + derivation path.
+  new package(s) under `catalog/packages/` carry a MANIFEST + derivation path.
   (Build-time AC, held for the GPT window; the red-until-built D1 laws flip
   green there.)

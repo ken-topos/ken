@@ -25,7 +25,7 @@ Map-container WP retires the opaque `DecEq`-keyed content-addressed heap
 `Map`/`Set` this file originally pinned (kinds `0x07`/`0x08`,
 insertion-order-independent canonical identity, O(1) slot-id equality). Under
 the landed `52-map.md` + the `37 §3.3` flip, `Map k v` and `Set a` are **proved,
-pure `packages/` trees keyed on `Ord k`**, with **extensional** identity via
+pure `catalog/packages/` trees keyed on `Ord k`**, with **extensional** identity via
 ordered `toList` (not O(1)-slot), **out of `trusted_base()`** (net-negative
 TCB), and **no separate `DecEq k` keying constraint** — `Ord` is the single
 keying faculty, key equality is the derived `leq k k' ∧ leq k' k` (`52 §2`). The
@@ -593,7 +593,7 @@ pass today (`crates/ken-elaborator/tests/val1_string_literals.rs:327`/`:334`,
 with the ES2 sanction-comment "a genuine 3-way comparison still gets one,
 declared locally"); `Ord Char` is **`leq`-only**
 (`instance Ord Char { leq refl antisym trans total }`, no `compare` method,
-`packages/lawful-classes/lawful_classes.ken:359`); `eqChar`/`leqChar` landed
+`catalog/packages/lawful-classes/lawful_classes.ken:359`); `eqChar`/`leqChar` landed
 (`= eq_int`/`= leq_int` under `Char`'s `Int` erasure,
 `crates/ken-elaborator/src/decimal_char.rs:242`); the
 `map`/`zip`/`unfoldUpTo`/`insert` recursion precedents landed

@@ -368,7 +368,7 @@ brief** — the implementer should execute mostly mechanically, not design
    (a `Refl` on an operation-wrapped goal that only stayed `Eq`-shaped because the
    operand wasn't whnf'd now reduces to `Top`, so `Refl` correctly rejects and
    must become `tt`). Those migrations live **both inside the crate** *and* **in
-   shipped `packages/` proofs** — so the blast radius is workspace-wide even
+   shipped `catalog/packages/` proofs** — so the blast radius is workspace-wide even
    though the *soundness* diff is `ken-kernel`-only. K7's frame asserted "the
    `ken-kernel` diff is the ONLY diff" as a hard AC; the build validated
    `cargo test -p ken-kernel` (153 green) and missed that `lawful_classes.ken`'s

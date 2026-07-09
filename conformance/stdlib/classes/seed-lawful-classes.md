@@ -1,7 +1,7 @@
 # ES4 lawful structure classes (`Eq`/`DecEq`/`Ord`) conformance — seed cases
 
 Format: `../../README.md`. These pin the **laws-PROVED discipline** of the first
-`packages/` catalog tranche (`spec/50-stdlib/51-lawful-classes.md`, ES4-classes)
+`catalog/packages/` catalog tranche (`spec/50-stdlib/51-lawful-classes.md`, ES4-classes)
 — the pattern every later ES4 package follows. The load-bearing property is
 **AC3**: on an **inductive carrier** an instance's **law fields are real kernel
 proofs**, so "lawful instance ≡ zero-`trusted_base()`-delta instance"; a
@@ -66,7 +66,7 @@ the same-obligation subsumption, and every verdict** are **normative**.
 
 **Static vs runtime face.** These pin the **static face** — the spec discipline
 (lawful ≡ zero-delta on an inductive carrier) and the discriminating shape. The
-**runtime/build face** — the actual canonical instances in `packages/` carrying
+**runtime/build face** — the actual canonical instances in `catalog/packages/` carrying
 real proof terms, producer-grepped for `declare_postulate`/holes on the law
 fields — is the named **Team-Language build follow-on** (`51 §8`), not this WP
 (`soundness-ac-static-vs-runtime-face`).
@@ -117,7 +117,7 @@ decoupled from `Eq`'s realization, not a blocker. Only `Eq`'s `refl` routes
 through an unresolved `bool_eq x x` (a live `Eq`, `Refl` fires). A **primitive**
 carrier still proves **no** ∀-law (no eliminator) → **audited-delta**.
 **Realization status:** the real, kernel-checked, zero-delta instances are on
-main (Team Language, `packages/lawful-classes/`): `Ord Bool`
+main (Team Language, `catalog/packages/lawful-classes/`): `Ord Bool`
 `refl`/`trans`/`total` + `Eq Bool` `refl` (`72e38a5`), and now `Ord Bool`'s
 `antisym` + `DecEq Bool`'s `sound`/`complete` (`9a82745`,
 ES4-lawproofs-remainder) — so `Ord Bool`/`DecEq Bool` are **complete**
@@ -333,7 +333,7 @@ field is fabricated or silently absent.
   (both transport/wrap the same landed `leq_int` reduction path): (a) the
   **canonical, honest-transport** instance — `leq`/`refl`/`antisym`/`trans`/
   `total` all reference `Ord Int`'s own existing fields via `.`-projection
-  (`(Ord_instance_Int).refl` etc, `packages/lawful-classes/lawful_classes.ken`)
+  (`(Ord_instance_Int).refl` etc, `catalog/packages/lawful-classes/lawful_classes.ken`)
   — every field is present and is a real, kernel-checked term (a projection
   chain that reduces, exactly as honest as `Ord Int`'s own visible `Axiom`s);
   (b) a **deceptive/incomplete** instance attempt with a law field **omitted**
@@ -422,7 +422,7 @@ field is fabricated or silently absent.
 - **AC-transport** (honesty-not-zero-delta, a derived/refinement carrier):
   `char-ord-laws-carried-not-stubbed` — `Ord Char` by transport from
   `Ord Int` (Char's canonical, refinement-erased carrier), landed
-  (`packages/lawful-classes/lawful_classes.ken`, WP lawful-classes-lane).
+  (`catalog/packages/lawful-classes/lawful_classes.ken`, WP lawful-classes-lane).
   **`Num`/`DecEq Decimal` re-defer** (Steward ruling): `Decimal`'s
   non-canonical `(coeff, exp)` carrier makes `decimalEq` an `Eq`
   (equivalence), not a `DecEq` (decision procedure for the kernel's

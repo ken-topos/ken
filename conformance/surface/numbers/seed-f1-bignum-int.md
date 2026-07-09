@@ -286,7 +286,7 @@ Structural / trace assertions on the canonical encoding — never a value.
 - **Migration surface to sweep (name-and-migrate, do not silently drop):** the
   interp eval tests (`ken-interp` numeric reductions), the store/canonical tests
   (`ken-runtime` `canonical.rs`, `store.rs` — which already round-trip
-  `Value::BigInt`), and any `packages/*.ken` / golden numeric fixture asserting
+  `Value::BigInt`), and any `catalog/packages/*.ken` / golden numeric fixture asserting
   a result at or above the `i128` boundary. If a fixture rode the old wrap/panic
   behavior, it is **corrected in this unit** (its old expectation was the bug),
   not carried forward.

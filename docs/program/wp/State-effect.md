@@ -56,7 +56,7 @@ this line*.
 2. **Handler.** `runState : s -> ([State s] a) -> Pair a s` (or the enclave's
    chosen shape) — the pure state-threading interpreter over the `ITree`,
    structurally recursive, carrying `s` as its parameter. Specify where it lives
-   (Runtime interpreter + any `packages/` surface).
+   (Runtime interpreter + any `catalog/packages/` surface).
 3. **Surface + interaction.** How a Ken program writes `get`/`put` and runs
    `runState`, and how `[State s]` composes with other effect rows (e.g. a
    program that is both `[State s]` and `[Console]`). Enclave specifies row

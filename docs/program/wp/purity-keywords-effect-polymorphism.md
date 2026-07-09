@@ -129,7 +129,7 @@ formatting convention? Decide, and state whether ASCII spellings remain accepted
 
 ### D4 — Migration
 
-Migrate every existing `.ken` (prelude, `packages/*` incl. CAT-1's
+Migrate every existing `.ken` (prelude, `catalog/packages/*` incl. CAT-1's
 `lawful-classes`/`lawful-functors`, `examples/rosetta/*`) and doc snippet from
 `view` → `fn`/`proc`, **classified by the checker's own purity inference** (so
 the migration is mechanical + checked, not hand-judged). Land together in one

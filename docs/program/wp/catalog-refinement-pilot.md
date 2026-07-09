@@ -17,17 +17,17 @@ and proofs?
 
 Candidate packages, to be confirmed at kickoff:
 
-- **First choice:** `packages/transport/transport.ken` plus
-  `packages/transport/MANIFEST.md`. This is small, zero-delta, and
+- **First choice:** `catalog/packages/transport/transport.ken` plus
+  `catalog/packages/transport/MANIFEST.md`. This is small, zero-delta, and
   proof-strategy-rich without a large law surface.
-- **Second candidate:** `packages/lawful-classes/lawful_classes.ken` plus its
+- **Second candidate:** `catalog/packages/lawful-classes/lawful_classes.ken` plus its
   manifest, if the pilot needs to exercise audited-delta comments and
   zero-delta vs. primitive-carrier distinctions.
 - **Narrow fallback:** a named slice of
-  `packages/lawful-functors/lawful_functors.ken`, such as the `Bool` monoid
+  `catalog/packages/lawful-functors/lawful_functors.ken`, such as the `Bool` monoid
   section only. Do not take the whole file as the first pilot.
 
-Do **not** start with `packages/collections/map.ken`; use this pilot to learn
+Do **not** start with `catalog/packages/collections/map.ken`; use this pilot to learn
 what the guide means on a tractable body first.
 
 ## 2. Scope

@@ -114,7 +114,7 @@ Coq `eq_rect`). It is sound **because the kernel type-checks the emitted `J`/`ca
 term** — the motive, the equality proof, and the result type are all kernel
 obligations. **The elaborator asserts nothing the kernel cannot see.**
 
-`packages/lawful-classes/lawful_classes.ken`'s own commentary records **two
+`catalog/packages/lawful-classes/lawful_classes.ken`'s own commentary records **two
 rejected approaches this WP must be distinguished from** — cite them as
 guardrails, they are the failure modes:
 

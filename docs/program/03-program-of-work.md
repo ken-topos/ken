@@ -401,7 +401,7 @@ Operator-captured items, recorded so they are not lost; **not yet sequenced into
 WPs.** Each notes the WS it would attach to.
 
 - **BL1 — Platform-aware line endings / platform-aware code (→ WS-L L6 / WS-X).**
-  `packages/…/read-file-lines.ken`'s `isNewLine` matches only **LF** (the
+  `catalog/packages/…/read-file-lines.ken`'s `isNewLine` matches only **LF** (the
   Unix/Linux/BSD standard), not **CRLF** (Windows). The narrow fix is a CRLF-aware
   splitter; the real question it raises is **how Ken expresses platform-aware
   code** at all (conditional compilation? a platform capability/effect? a

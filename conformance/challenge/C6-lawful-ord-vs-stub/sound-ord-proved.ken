@@ -1,6 +1,6 @@
 -- C6 SOUND arm — a law-PROVED Ord (case-split proofs) — should-PASS, zero-delta.
 --
--- Run against the prelude + packages/lawful-classes (class Ord, IsTrue, Equal,
+-- Run against the prelude + catalog/packages/lawful-classes (class Ord, IsTrue, Equal,
 -- bool_or, and the K5/K7 observational machinery: tt/absurd). Carrier: the same
 -- finite inductive `Two = Lo | Hi`. Because `Two` is a real inductive, each law
 -- is DISCHARGEABLE by case-split — no Axiom, no trusted_base() growth. This is

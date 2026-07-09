@@ -106,7 +106,7 @@ Notes:
   the mode-switch fallback (see §2) cannot silently regress it.
 - **G4 — full-workspace green.** `cargo test --workspace` passes, **not** just
   `-p ken-kernel`. A kernel checker change has workspace-wide blast radius:
-  downstream proof terms in `packages/` and other crates may have been riding
+  downstream proof terms in `catalog/packages/` and other crates may have been riding
   either face of the bug. (K7 lesson — a kernel-soundness diff is
   `ken-kernel`-only but the *landing unit* is workspace-wide.) If any downstream
   `.ken`/test proof term must migrate because it was exploiting the accepted-

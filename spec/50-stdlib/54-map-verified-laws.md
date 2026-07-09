@@ -29,7 +29,7 @@
 > helper defs (`Or`/`boolDichotomy`/`Not`/`assoc`/`allInList`/L1–L5) are
 > ordinary `declare_def`/`declare_inductive` admissions — no
 > `declare_primitive`, no `declare_postulate`, **no `Axiom`** anywhere
-> (`packages/collections/map.ken`).
+> (`catalog/packages/collections/map.ken`).
 
 ## 1. What this module is
 
@@ -70,8 +70,8 @@ this WP.
 All spellings below are the **landed** `map.ken` idiom (`52 §2`, the
 C5-verified-sort unbundled encoding): every op/law takes `leq` and its laws as
 **separate bare parameters**, and `IsTrue b := Equal Bool b True` (the landed
-`packages/lawful-classes` bridge). The order-law parameters, verbatim from the
-`Ord` class (`packages/lawful-classes/lawful_classes.ken`):
+`catalog/packages/lawful-classes` bridge). The order-law parameters, verbatim from the
+`Ord` class (`catalog/packages/lawful-classes/lawful_classes.ken`):
 
 ```
 leq   : k -> k -> Bool

@@ -1,6 +1,6 @@
 -- C6 STUB arm — a law-less Ord (Axiom fields) — elaborates, grows trusted_base.
 --
--- Run against the prelude + packages/lawful-classes (class Ord, IsTrue, Equal,
+-- Run against the prelude + catalog/packages/lawful-classes (class Ord, IsTrue, Equal,
 -- bool_or, Axiom). Carrier: a tiny real inductive `Two = Lo | Hi`.
 
 data Two = Lo | Hi

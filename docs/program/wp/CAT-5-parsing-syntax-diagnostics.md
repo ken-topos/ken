@@ -60,8 +60,8 @@ Out of scope:
 Before implementation, the spec enclave must pin:
 
 1. **Package shape.** Decide whether CAT-5 ships one package
-   (`packages/parsing/`) or a split package (`packages/source/` plus
-   `packages/parsing/`). Prefer one package unless the derivation path becomes
+   (`catalog/packages/parsing/`) or a split package (`catalog/packages/source/` plus
+   `catalog/packages/parsing/`). Prefer one package unless the derivation path becomes
    materially clearer by splitting.
 2. **Span model.** Pin `Span` as byte-offset based, with start/end bounds into a
    `Source`, unless the spec identifies a landed reason to use another unit.
@@ -86,7 +86,7 @@ The spec elaboration should add a new catalog chapter, expected as
 `spec/50-stdlib/59-parsing-syntax-diagnostics.md`, and a conformance seed under
 `conformance/stdlib/parsing/` or the closest existing catalog home.
 
-The build should add the corresponding package under `packages/`, with a
+The build should add the corresponding package under `catalog/packages/`, with a
 manifest that states:
 
 - derivation path from built-ins and earlier catalog packages;

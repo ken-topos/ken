@@ -95,7 +95,7 @@ admissible at all.
    (trailing-zero-strip, one-zero-limb-for-zero) invariant is preserved.
 4. **Workspace-green, not crate-green (the K7 lesson).** `cargo test
    --workspace` is the no-regression gate. F1 changes reduction *values*; any
-   `packages/` / `.ken` / golden-test artifact riding the old i128 behavior
+   `catalog/packages/` / `.ken` / golden-test artifact riding the old i128 behavior
    **migrates land-together in the one workspace-green unit**. Do **not** assert
    a "`ken-interp`-only diff."
 5. **Dependency delta recorded.** The curated crate is vendored, version-pinned,

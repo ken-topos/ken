@@ -132,7 +132,7 @@ phantom again, one file over. **Fix + verify (I did this, spec-leader/publisher
 re-verified):** `git rebase --onto <post-first-merge-main> <old-base> <branch>`
 drops the redundant first-flip commits, replays ONLY the net-new commits onto
 current `origin/main`. Then prove it clean: (1)
-`git diff origin/main HEAD -- crates/ packages/` is **EMPTY** (crate files
+`git diff origin/main HEAD -- crates/ catalog/packages/` is **EMPTY** (crate files
 byte-identical → no revert), (2) the prose diff vs main is ONLY the net-new
 reframe (grep it doesn't re-touch the already-merged first-flip lines), (3)
 `merge-tree --write-tree` clean. Rebase re-parents only, changes no content →

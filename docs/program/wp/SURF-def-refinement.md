@@ -112,11 +112,11 @@ Each deliverable ends in a concrete, checkable outcome.
    `def` refinement + `def` alias **parse and elaborate**; `type Foo = …` is
    **rejected** (discriminating negative). Optionally cover the §6 diagnostic.
    **AC:** seeds pass against the built implementation.
-8. **Migration (land-together).** Grep `spec/` and `packages/` for the `type`
+8. **Migration (land-together).** Grep `spec/` and `catalog/packages/` for the `type`
    **keyword** (declaration position only) and rewrite to `def`. The catalog has
    **zero** `type`-keyword declarations today (verify), so this is spec-example
    text plus stray. **AC:** `cargo test --workspace` green; no `type`-keyword
-   declaration remains in `spec/` or `packages/`; the `type` nonterminal and
+   declaration remains in `spec/` or `catalog/packages/`; the `type` nonterminal and
    `Type` universe are untouched everywhere.
 9. **Catalog style-guide note (`docs/program/07-catalog-style-guide.md`,
    optional).** One short "definitions are refinements" note: when to reach for

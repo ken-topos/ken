@@ -3,7 +3,7 @@
 --
 -- Task: in-order traversal of a binary tree.
 --
--- Reuses the landed `packages/collections` string surface (`eq`,
+-- Reuses the landed `catalog/packages/collections` string surface (`eq`,
 -- `list_append`, `list_char_to_string`) -- no re-derivation of a string op.
 -- A binary tree's `Node` constructor has TWO recursive `Tree` fields
 -- (GAP-multi-recursive-field-match, VAL2 #5) -- fixed by `L-match-ih-fix`

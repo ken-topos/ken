@@ -35,7 +35,7 @@ not automatically a teachable proof. The catalog should plan for both.
   catalog cadence: **functional build** -> **catalog refinement**.
 - A small-package refinement pilot frame or validation checklist, suitable for
   `catalog-refinement-pilot`.
-- If needed, small pointers from `packages/README.md` and
+- If needed, small pointers from `catalog/packages/README.md` and
   `spec/50-stdlib/README.md` to the style guide. Do not turn the language spec
   into a prose-style manual.
 

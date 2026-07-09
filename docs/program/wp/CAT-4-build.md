@@ -2,7 +2,7 @@
 
 **Owner:** Runtime build team (Map was Runtime's substrate). **Branch:**
 `wp/CAT-4-build` (off `origin/main`). **Status:** Steward frame. **Base:**
-`origin/main @ 5a780f8` (Map capstone `packages/collections/map.ken` + CAT-4
+`origin/main @ 5a780f8` (Map capstone `catalog/packages/collections/map.ken` + CAT-4
 elaboration spec ch 58 + SURF-1's `const`/`fn`/`proc` + Unicode migration).
 **Sequence:** Track B of the catalog build campaign — **independent, parallel
 with CAT-1-build** (Language). CAT-2/CAT-3-independent (value-level).
@@ -28,7 +28,7 @@ them when SURF-1's build lands." **SURF-1 has landed (`5a780f8`).** Therefore:
   `const`, and nothing is effectful ⇒ **no `proc`**). E.g. `fn leqNat …`,
   `fn bool_and …`, `fn dropKey …`, `fn delete …`, `fn union …`, `fn keys …`,
   `fn succ …`, `fn isTransitive …`.
-- **The landed siblings are already migrated:** `packages/collections/map.ken`
+- **The landed siblings are already migrated:** `catalog/packages/collections/map.ken`
   is 100% `const`/`fn` (0 `view`), and `bool_or`/`IsTrue` in
   `lawful_classes.ken` are `fn`. Match them: your new ops sit alongside
   `fn insert`/`fn lookup`/`fn fold`/`fn fromList` — same keyword family.

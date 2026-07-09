@@ -7,7 +7,7 @@ operator chose catalog-led, 2026-07-04). Establishes law-carrying classes over a
 catalog layer (collections, parsers, effects, traversals) leans on. Pattern-
 setter ⇒ **first-of-kind, T1 design + review** (`core-catalog` report, Tier C).
 
-Owner: **Language** (the `packages/`/L8 stdlib owner). Design front-loaded to the
+Owner: **Language** (the `catalog/packages/`/L8 stdlib owner). Design front-loaded to the
 enclave — **Architect owns the abstraction-boundary core** (the higher-kinded
 class mechanism + how OTT states the laws); spec-author + conformance-validator
 assist on surface + discriminating conformance. Gate: enclave elaboration →
@@ -16,7 +16,7 @@ Findings/forks → **Steward**.
 
 ## What it is
 
-Extend the landed `packages/lawful-classes` pattern (`Eq`/`DecEq`/`Ord`, over a
+Extend the landed `catalog/packages/lawful-classes` pattern (`Eq`/`DecEq`/`Ord`, over a
 **value type** `a : Type`) to the workhorse **constructor classes** and their
 value-level algebra companions:
 
@@ -38,9 +38,9 @@ Cite `spec/50-stdlib/51-lawful-classes.md`, the kernel record/Σ + Ω vocabulary
   `lawful-classes`: a **class is a record** (right-nested Σ, `33 §5.2`); a **law
   is an Ω-proposition** (`16 §1`) bridged by `view IsTrue (b:Bool):Prop = Equal
   Bool b True`. No new kernel former, no new `Term`/`Decl`.
-- **Same package discipline** as `lawful-classes` (`packages/README.md`):
+- **Same package discipline** as `lawful-classes` (`catalog/packages/README.md`):
   MANIFEST, Ken source, derivation path, declared `trusted_base()` delta. New
-  package `packages/lawful-functors/` (or extend the catalog namespace per the
+  package `catalog/packages/lawful-functors/` (or extend the catalog namespace per the
   enclave's naming — coordinate with `06`'s `ken.*` shape).
 - **Laws PROVED over inductive carriers, not postulated.** The instances land
   over **inductive** carriers (`List`, `Option`) whose laws are **provable by
@@ -143,7 +143,7 @@ pickup, do not trust this line):
 Design front-loaded by the enclave (spec-author holds the pen; Architect
 fidelity-gates the soundness pins; CV authors the discriminating conformance).
 The durable contract is `spec/50-stdlib/55-lawful-functors.md`; the value-level
-source + MANIFEST are `packages/lawful-functors/`. This section is the design
+source + MANIFEST are `catalog/packages/lawful-functors/`. This section is the design
 record + the load-bearing pins the build transcribes from.
 
 ### E1. Value-level algebra (`Semigroup`/`Monoid`) — spec-author, build-verified

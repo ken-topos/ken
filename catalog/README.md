@@ -3,7 +3,7 @@
 The catalog is Ken's home for durable, browsable reference material, serving
 four purposes:
 
-- **Packages** — the standard-package sources (`packages/`), realized Ken
+- **Packages** — the standard-package sources (`catalog/packages/`), realized Ken
   code with proof/derivation manifests.
 - **References** — catalog-wide citation conventions (`REFERENCES.md`), with
   per-entry references living in each entry.

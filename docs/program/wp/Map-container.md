@@ -4,14 +4,14 @@
 Design-settled capability WP closing VAL2 finding #8 (`letter-frequency`: `Map`
 is a bare type with zero operations). Product decision **locked by the operator**
 (OQ-A, `VAL2-gap-design-OQs.md`, 2026-07-03). Owner: spec-leader elaborates the
-API + proof shape; **Foundation** builds it as a `packages/` stdlib module. Gate:
+API + proof shape; **Foundation** builds it as a `catalog/packages/` stdlib module. Gate:
 **/spec + /conformance touching** → spec enclave elaboration, **Architect**
 (structure choice + proof soundness + zero-TCB), **Spec review**
 (conformance-validator), team QA, CI. Findings → **Steward**.
 
 ## The locked decision — DO NOT REOPEN
 
-- **A proved, pure `Map k v` keyed on `Ord k`**, shipped as a **`packages/`
+- **A proved, pure `Map k v` keyed on `Ord k`**, shipped as a **`catalog/packages/`
   stdlib module (zero TCB, NOT a kernel builtin)** — reuses the landed lawful
   `Ord`; subsume-don't-proliferate.
 - **Proved, not tested.** The operator prefers proved to tested and set **no
@@ -38,7 +38,7 @@ invariant to prove. Hence tree-first, HAMT-as-later-fast-map — both proved.
 
 ## Mandated deliverable outline (each item resolves to a concrete choice)
 
-1. **Type + representation.** `Map k v` over `Ord k` in `packages/` (enclave/
+1. **Type + representation.** `Map k v` over `Ord k` in `catalog/packages/` (enclave/
    Foundation fix the module path). Representation = **Architect's choice**
    (balanced tree recommended). Zero kernel/`trusted_base` delta.
 2. **Core API.** At least `empty`, `insert`, `lookup`, `delete`, `member`, plus
@@ -59,7 +59,7 @@ invariant to prove. Hence tree-first, HAMT-as-later-fast-map — both proved.
 ## Acceptance criteria
 
 - **AC1 — Zero kernel / `trusted_base` delta.** `git diff origin/main --
-  crates/ken-kernel/` empty; `trusted_base()` unchanged; `Map` is a `packages/`
+  crates/ken-kernel/` empty; `trusted_base()` unchanged; `Map` is a `catalog/packages/`
   stdlib module, no kernel builtin, no new kernel variant. Verify by grep, not a
   test.
 - **AC2 — Operations correct end-to-end** through the real interpreter (round-
@@ -69,7 +69,7 @@ invariant to prove. Hence tree-first, HAMT-as-later-fast-map — both proved.
   (proved-not-tested is the whole point). If any law is deferred, it is a
   **named tracked follow-on**, not a silent gap.
 - **AC4 — No regression.** `cargo test --workspace` green; lawful `Ord` and the
-  rest of `packages/` behave identically pre/post.
+  rest of `catalog/packages/` behave identically pre/post.
 
 ## Guardrails (do-not-reopen)
 
@@ -77,7 +77,7 @@ invariant to prove. Hence tree-first, HAMT-as-later-fast-map — both proved.
   → propose decomposition to Steward, never drop to tested-only.
 - **Structure = Architect's call** — HAMT is a *later* suggestion, not this WP;
   tree-first recommended; either way proved.
-- **Zero-TCB** — `packages/` stdlib, no kernel builtin; reuse landed lawful `Ord`.
+- **Zero-TCB** — `catalog/packages/` stdlib, no kernel builtin; reuse landed lawful `Ord`.
 
 ## Sequencing
 
@@ -85,7 +85,7 @@ invariant to prove. Hence tree-first, HAMT-as-later-fast-map — both proved.
   proof shape on this WP branch, merges to `main` via the Integrator, then
   Foundation is kicked. Architect (structure + proof soundness + zero-TCB) + Spec
   review (conformance-validator) + team QA + CI.
-- **Lane:** Foundation (packages/collections). Branch off `origin/main`.
+- **Lane:** Foundation (catalog/packages/collections). Branch off `origin/main`.
 - **Relation to siblings:** independent of `[State]`/`[FS]` (no effect surface);
   couples to the lawful-classes proof discipline (reuse landed `Ord`, carry real
   law proofs).

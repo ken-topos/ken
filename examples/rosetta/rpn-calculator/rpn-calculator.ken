@@ -5,12 +5,12 @@
 --
 -- Probes: `Option` composition without exceptions (stack-underflow), a
 -- fixed pre-tokenized `List RpnOp` (no string tokenizer/split-on-
--- whitespace exists yet in `packages/collections` -- not this example's
+-- whitespace exists yet in `catalog/packages/collections` -- not this example's
 -- axis to probe, so hardcoded rather than rediscovered here).
 --
 -- Division is OMITTED: `ken-interp` has no `div_int`/`mod_int` primitive
 -- at all (only `add_int`/`sub_int`/`mul_int` -- the same gap already
--- documented in `packages/collections/collections.ken`'s header comment
+-- documented in `catalog/packages/collections/collections.ken`'s header comment
 -- and the VAL2 `natToDecimal` finding). Not re-filing a second
 -- `KNOWN-GAP.md` for the same already-known gap; this example
 -- demonstrates the Option-composition axis over `+`/`-`/`*`, which is

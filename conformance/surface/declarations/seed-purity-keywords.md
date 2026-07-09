@@ -401,7 +401,7 @@ The keyword thus determines the verification treatment.
 ### surface/declarations/migration-view-fully-retired (property)
 - spec: frame D4/AC6 (`view` → `const`/`fn`/`proc`, classified by the checker's
   own inference), `31-lexical §4` (`view` leaves the reserved set)
-- given: the migrated corpus — `prelude`, `packages/*` (incl. CAT-1's
+- given: the migrated corpus — `prelude`, `catalog/packages/*` (incl. CAT-1's
   `lawful-classes`/`lawful-functors`), `examples/rosetta/*`, doc snippets.
 - expect: (a) **no `.ken` retains `view`** —
   `grep -rn '\bview\b' packages prelude examples` (as a **decl head**) returns

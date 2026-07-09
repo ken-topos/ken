@@ -11,7 +11,7 @@
 > `docs/program/wp/CV-challenge-prep.md`. Findings/questions → Steward.)
 >
 > **Harness note:** C1/C6 reference the lawful classes (`class DecEq`/`Ord`),
-> which live in `packages/lawful-classes/lawful_classes.ken` and are **not** in
+> which live in `catalog/packages/lawful-classes/lawful_classes.ken` and are **not** in
 > the CLI's default `ElabEnv`; surface `import` does not resolve a package path
 > in `ken run`. Run C1/C6 with that package **prepended** (`cat
 > lawful_classes.ken arm.ken | ken run`).
@@ -135,7 +135,7 @@ and C8 are the **two OTT faces** — C7 the *quotient* fragment (equality you
 
 Every expected-behavior is grounded against the landed code / spec at authoring
 (`origin/main`), cited per exercise. Surface syntax follows the landed
-`packages/lawful-classes/lawful_classes.ken` (classes/instances/`Axiom`/
+`catalog/packages/lawful-classes/lawful_classes.ken` (classes/instances/`Axiom`/
 `IsTrue`/`Equal`), the `es2_acceptance.rs` refinement form
 (`{ ys : List a | And (isSorted a leq ys) (Perm a ys xs) }`), K5 `absurd`
 (Bottom-elim), and the reserved quotient surface (`A / R`, `[t]`, `elim_/`,

@@ -1,6 +1,6 @@
 -- C1 SOUND arm — DecEq Char over the canonical carrier — should-PASS.
 --
--- Run against the prelude + packages/lawful-classes (class DecEq, eqChar,
+-- Run against the prelude + catalog/packages/lawful-classes (class DecEq, eqChar,
 -- Char, Bool, Equal, Prop, IsTrue, Axiom in scope).
 --
 -- Char = {c : Int | isScalar c} is canonical: one Int per codepoint under
