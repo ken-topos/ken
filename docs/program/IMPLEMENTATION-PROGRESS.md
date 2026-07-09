@@ -59,8 +59,21 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > standard-entry/guide AC reconcile (Steward/Librarian companion). Ergo runs
 > these independently of the parked campaign.
 >
-> **Campaign still HELD.** DS-2…DS-9 stay parked for the operator's process
-> review of the DS-1 slice; only the Ergo remediations are unparked.
+> **PROCESS REVIEW DONE → operator sequencing decision (2026-07-09 ~21:45 UTC).**
+> The DS-1 slice validated the process (pipeline clean+fast; enclave pin held
+> under the smoke test; anti-vacuity gates + QA re-derive caught real gaps;
+> acted-on-retro loop closed). **Operator's call: land FR-3 + the guide-update
+> BEFORE kicking DS-2**, so every future entry starts clean. Concretely:
+> - **DS-2…DS-9 remain HELD** — the gate to lift them is **FR-3 (`ken check`
+>   mode) landed AND the Librarian's DS-1 guide-update landed.** FR-1/FR-2 land
+>   in parallel but do not gate DS-2.
+> - **Ergo** builds FR-1 (underway) / FR-2 / FR-3 (FR-2+FR-3 behind Architect
+>   pins the ergo-leader has requested, `evt_21pkby6sfvj1g`).
+> - **Librarian** folds DS-1's retro lessons into `write-ken`/the guide +
+>   `07-catalog-style-guide.md` AC5 language (`evt_57c6njjq90sbv`); enclave
+>   fidelity-review; `git_request` to Steward.
+> - **Then:** Steward kicks **DS-2** on the improved guide+tooling. (Next DS after
+>   DS-1 per `catalog-data-structures-program.md` — reconfirm the frontier then.)
 >
 > **HOLD after DS-1.** DS-1 is the *only* WP before an operator process review —
 > a deliberate single vertical slice validating the full reframed machinery
