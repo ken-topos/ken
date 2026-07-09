@@ -122,12 +122,12 @@ that must be pattern-matched apart before its payload is usable —
 `def`'s transparency is the exception, not the default:
 
 ```ken reject
--- `Cap` is a `data` type — opaque, never δ-unfolds. Unlike the `def Age`
--- case above, a `Cap` value is NOT usable where a plain `Int` is expected,
+-- `Box` is a `data` type — opaque, never δ-unfolds. Unlike the `def Age`
+-- case above, a `Box` value is NOT usable where a plain `Int` is expected,
 -- even though it is "just an Int" underneath.
-data Cap = MkCap Int
+data Box = MkBox Int
 
-fn addYearsWrong (n : Int) (c : Cap) : Int = add_int n c
+fn addYearsWrong (n : Int) (b : Box) : Int = add_int n b
 ```
 
 ## 3. `data` and `match`
@@ -306,12 +306,6 @@ const trivialSample : Trivial Int sampleInt = Trivial.triv Int sampleInt
 -- and `ys`/`ys` -- not to `AppendsTo`'s own three bound parameters in
 -- order -- so this rejects with "prop intro 'nil' is outside the v0
 -- Omega-clean seed shape," not a generic syntax error.
-fn appendGuideList (a : Type) (xs : List a) (ys : List a) : List a =
-  match xs {
-    Nil      ⇒ ys ;
-    Cons x t ⇒ Cons a x (appendGuideList a t ys)
-  }
-
 prop AppendsTo (a : Type) (xs : List a) (ys : List a) (zs : List a) : Omega
   where {
     nil : AppendsTo a (Nil a) ys ys
