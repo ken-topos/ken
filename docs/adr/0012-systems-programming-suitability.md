@@ -1,11 +1,17 @@
 # ADR 0012 — Ken for systems programming: no intrinsic barrier; the leaf-components target and arena-as-capability
 
-- **Status:** Proposed (orientation — defensive design, no near-term work
-  scheduled). Routed to the Architect to ratify the **Ken-side machinery + arena
-  claims** (as with ADR 0011); status flips Proposed → Accepted on ratification.
-  The value of this ADR is **defensive confirmation plus a set of design
-  orientations that inform choices elsewhere** — it is explicitly *not* a
-  systems-programming roadmap.
+- **Status:** Accepted (orientation — defensive design, no near-term work
+  scheduled). Ratified by the Architect 2026-07-09, ground-checked against landed
+  code. The ratification covers the **Ken-side machinery + arena claims**; the
+  survey and external comparisons (HACL\*/EverParse/Rust-for-Linux/klint) are
+  illustrative, **out of sign-off** (as with ADR 0011). The ratification confirms
+  the ADR *honestly characterizes* the crown-jewel effect-row context-law
+  enforcement and the D1 productivity checker as **undemonstrated/aspirational
+  research** — it does *not* vouch those proofs are achievable; it affirms only
+  that **nothing in the design forecloses the leaf target** ("no intrinsic
+  barrier" is sound). The value of this ADR is **defensive confirmation plus a
+  set of design orientations that inform choices elsewhere** — it is explicitly
+  *not* a systems-programming roadmap.
 - **Date:** 2026-07-09
 - **Deciders:** the operator (a defensive-design question dispatched via the
   Steward); Architect ratification of the characterization of Ken's machinery and
@@ -93,9 +99,12 @@ The reasons to bother — places Ken can do what C and Rust structurally cannot:
 The gap analysis, corrected against what Ken actually has today:
 
 - **A — Freestanding codegen. Retarget, not build.** Ken **has a compiler that
-  produces executables** — so this is not "interpreted → invent a native
-  backend" (tectonic) but "hosted executable → freestanding module"
-  (engineering). Named delta: freestanding flags (no red zone, `-mcmodel=kernel`,
+  produces executables** (Architect-confirmed first-hand against the NC19–NC27
+  runtime line — executable-artifact-contract, entrypoint-packaging,
+  native-execution-differential, object-linker, Cranelift lowering) — so this is
+  not "interpreted → invent a native backend" (tectonic) but "hosted executable →
+  freestanding module" (engineering). Named delta: freestanding flags (no red
+  zone, `-mcmodel=kernel`,
   FPU-guarded SSE); no libc calls in emitted code (the pure allocation-into-arena
   leaf subset already mostly satisfies this); the arena re-backed by kernel
   memory (see B); C-linkage exported symbols; kernel stack discipline. That the
@@ -158,10 +167,12 @@ answers it:
   pages (`store.rs:43-45`, `PAGE_SIZE:28`); `append` extends the current page
   (`:77-96`); reclamation is `reset() → pages.clear()` (`:104-107`), O(pages) not
   O(values); slot ids monotonic, never reused across reset (`:33-37`, spec
-  `41 §3b`). No refcount, no tracing, no drop-based value reclamation. This *is*
-  the bump-then-reset discipline that fits the leaf pattern (bounded input →
-  bounded output → reset), and it never GC-pauses — which the kernel cannot
-  tolerate.
+  `41 §3b`). No refcount, no tracing, no drop-based value reclamation — and
+  "no GC" is not merely a present fact but **conformance-pinned**
+  (`auto_gc_not_present`, `store.rs:737`), so the property is guarded against
+  regression. This *is* the bump-then-reset discipline that fits the leaf pattern
+  (bounded input → bounded output → reset), and it never GC-pauses — which the
+  kernel cannot tolerate.
 - **Per-space regions already exist.** Each `Space` owns a *separate* arena +
   index partition and is reclaimed independently (`:191-199`, spec `44 §3`).
   Nested/scoped regions were placed in B's *expensive* half; the structural half

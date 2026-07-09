@@ -39,6 +39,13 @@ stale example cannot silently rot into a lie (`catalog-literate-fence-roles`,
 landed). Every code example in this guide is real, landed Ken; nothing here
 is aspirational syntax.
 
+**Why these docs carry `.ken.md`, not `.md`.** They are documentation, not
+package source — but the fence-check is **extension-gated**: `ken run` only
+extracts and checks `ken example`/`ken reject` fences when the path ends in
+`.ken.md` (`ken-cli/src/main.rs`, `compiler_driver.rs`). The extension is what
+keeps the examples honest; renaming to `.md` would silently un-check them. Keep
+`.ken.md` on any doc whose examples must stay verified.
+
 ## Reading paths
 
 The guide serves a wide range of readers at different depths
