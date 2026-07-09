@@ -5,6 +5,8 @@ four purposes:
 
 - **Packages** — the standard-package sources (`catalog/packages/`), realized Ken
   code with proof/derivation manifests.
+- **Guide** — the authoring guide (`guide/`): how to actually write and prove
+  Ken, the practice companion to the normative spec.
 - **References** — catalog-wide citation conventions (`REFERENCES.md`), with
   per-entry references living in each entry.
 - **Style** — a consistent entry format across every catalog area.
