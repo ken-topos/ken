@@ -757,6 +757,82 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     elab.globals.insert("Inl".to_string(), or_ind.constructors[0].id);
     elab.globals.insert("Inr".to_string(), or_ind.constructors[1].id);
 
+    // `Empty : Type0` — the computational false (DS-1, `docs/program/wp/
+    // catalog-ds-1-empty-dec.md` Fork 1), zero params/zero constructors.
+    // Bootstrapped here — same as every other prelude `data` above
+    // (`Nat`/`List`/`Option`/…) — because `Dec`'s `No` constructor (next)
+    // needs `Empty`'s `GlobalId` at kernel-declare time, before any catalog
+    // `.ken.md` file is elaborated.
+    //
+    // **Build-time finding (empirically confirmed, not a design fork):**
+    // Fork 1's `data Empty : Type0 =` does NOT parse as *written* —
+    // `parse_data_decl`/`parse_explicit_data_decl` (`parser.rs`) both
+    // require at least one constructor (a genuine landed-grammar gap: the
+    // surface has no zero-constructor `data` spelling today). The fallback
+    // is the SAME technique `ElabEnv::empty()` already uses to bootstrap
+    // `Bool` before the full `ElabEnv` exists: call `data::elab_data_decl`
+    // (the real surface-data ELABORATION function, `data.rs`) directly with
+    // an empty ctor list, bypassing only the textual parser — zero new
+    // trust category, same mechanism as every other prelude `data`. Ergo
+    // Finding: zero-constructor `data` declarations should parse.
+    let empty_id = crate::data::elab_data_decl(
+        &mut elab.env,
+        &mut elab.globals,
+        "Empty",
+        &[],
+        &[],
+        &crate::error::Span::zero(),
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude Empty failed: {}", e)))?;
+
+    // `Dec (P : Omega) : Type0 = Yes P | No (P -> Empty)` (DS-1 Fork 2) —
+    // Lean's `Decidable` shape, kernel-direct (`declare_inductive`) because
+    // surface `data` hardcodes every param to `Type0`
+    // (`crates/ken-elaborator/src/data.rs:45`) and has no way to spell the
+    // Ω-sorted `P`. Zero new trusted-base category: an ordinary
+    // `declare_inductive` admission, kernel-rechecked, identical trust
+    // category to `Or`/`Perm_rel` immediately above. Confirmed to admit and
+    // to large-eliminate into a `Type0` motive by the DS-1 build-step-1
+    // smoke test (`crates/ken-elaborator/tests/ds1_smoke_test.rs`).
+    let dec_id = ken_kernel::declare_inductive(&mut elab.env, |_dec_id| {
+        ken_kernel::InductiveSpec {
+            level_params: vec![],
+            // `Δ_p = [P : Ω₀]` — ctor-arg context has `P` at `Var(0)`.
+            params: vec![omega0.clone()],
+            indices: vec![],
+            level: Level::Zero,
+            constructors: vec![
+                // `Yes : P -> Dec P`.
+                ken_kernel::CtorSpec { args: vec![Term::var(0)], target_indices: vec![] },
+                // `No : (P -> Empty) -> Dec P`.
+                ken_kernel::CtorSpec {
+                    args: vec![Term::pi(Term::var(0), Term::indformer(empty_id, vec![]))],
+                    target_indices: vec![],
+                },
+            ],
+        }
+    })
+    .map_err(|e| ElabError::Internal(format!("prelude Dec failed: {}", e)))?;
+    elab.globals.insert("Dec".to_string(), dec_id);
+    let dec_ind = elab
+        .env
+        .inductive(dec_id)
+        .ok_or_else(|| ElabError::Internal("prelude: 'Dec' inductive not found after declare".into()))?
+        .clone();
+    elab.globals.insert("Yes".to_string(), dec_ind.constructors[0].id);
+    elab.globals.insert("No".to_string(), dec_ind.constructors[1].id);
+
+    // `decide : (P:Omega) -> Dec P -> Bool` — the kernel-direct accessor
+    // (DS-1 deliverable 1). `Dec`/`Yes`/`No` are already real `globals`
+    // entries, so this is ordinary surface `match` dispatch (the same
+    // constructor-name-in-globals resolution `boolDichotomy` uses to match
+    // on the kernel-direct `Or`/`Inl`/`Inr` immediately above) — no raw
+    // `Term::Elim` construction needed.
+    elab.elaborate_decl(
+        "fn decide (P : Omega) (d : Dec P) : Bool = match d { Yes p ⇒ True ; No f ⇒ False }",
+    )
+    .map_err(|e| ElabError::Internal(format!("prelude decide failed: {}", e)))?;
+
     let perm_body = Term::lam(
         type0.clone(),
         Term::lam(
