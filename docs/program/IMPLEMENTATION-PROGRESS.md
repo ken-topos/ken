@@ -19,7 +19,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > **The ~17:10 block below was a FALSE ALARM — retracted.** `map-verified-laws`
 > was NOT unmerged/orphaned/lost: it was **squash-merged** as `564cab0`
 > (2026-07-04, `ken-ci[bot]`) and **superseded** (later capstone-close
-> `fd5d2fc`/`44a40ec` + CAT-4 set/relation additions); `origin/main:packages/
+> `fd5d2fc`/`44a40ec` + CAT-4 set/relation additions); `origin/main:catalog/packages/
 > collections/map.ken` is 6463 lines, a **superset** of the recovered branch's
 > 2225. The branch only *looked* ahead because a squash-merge dangles the
 > original commits. foundation-implementer + foundation-leader grounded the
@@ -40,7 +40,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > During the Foundation handoff-gate compaction for the migration WP, the gate's
 > `git reset --hard origin/main` orphaned foundation-implementer's
 > `wp/map-verified-laws` branch — **completed-but-unmerged Map-capstone work
-> (5/5 laws, +1761 on `packages/collections/map.ken`)**. Recovered + preserved
+> (5/5 laws, +1761 on `catalog/packages/collections/map.ken`)**. Recovered + preserved
 > at **`wp/map-verified-laws-recovered` (tip `5719800`)**. Both gates are MET
 > (Gap A `surface-transport` merged PR #255/#257; Gap B closed) — it stalled
 > unmerged, not blocked. The leader ring had lost track of it (leader status
