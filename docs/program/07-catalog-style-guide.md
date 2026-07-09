@@ -1,150 +1,179 @@
-# Catalog style guide
+# Catalog style guide — the standard entry format
 
-**Owned by:** Spec enclave for the standard, Steward/Librarian for durable
-navigation. This guide governs first-party packages under `packages/`; it does
-not change language semantics, proof obligations, or the package trust model.
+**Owned by:** Spec enclave for the standard; Steward/Librarian for durable
+navigation. Governs first-party packages under `catalog/packages/`. It does not
+change language semantics, proof obligations, or the package trust model.
 
-The first-party catalog is not only a place where useful code lives. It is the
-reference corpus for how Ken code should state behavior, carry proofs, disclose
-assumptions, and stay readable to a human reviewer. The guide is therefore a
-review contract for catalog refinement WPs: a package may first land as a
-functional, proved artifact, then a follow-on refinement WP raises it to this
-standard without changing its behavior.
+The catalog is Ken's reference corpus — how Ken code should state behavior, carry
+proofs, disclose assumptions, stay readable to a human reviewer, teach a
+newcomer, and serve as training data (`06-catalog-campaign.md`, the four
+purposes). This guide fixes the **standard entry format** that lets one artifact
+serve all four, and it is the review contract for catalog refinement WPs: a
+component may first land as a functional, proved artifact, then a follow-on
+refinement WP raises it to this standard without changing behavior.
 
-## 1. Scope
+## 1. The entry is a literate `.ken.md` document
 
-This guide applies to ordinary Ken packages, their `MANIFEST.md` files, and
-package README/navigation docs. It is guidance for source organization, naming,
-comments, proof presentation, and refinement review.
+Each catalog package's primary artifact is a **literate `.ken.md` document** that
+carries, in one file: narrative, the component's code, its laws and proofs,
+worked examples, references, and reviewer navigation.
 
-It is not:
+- The `` ```ken `` code blocks **tangle to a compilable module** (see
+  `crates/ken-elaborator/src/literate.rs`). The tangled `.ken` is a *build
+  artifact*, not the source of truth — the `.ken.md` is.
+- This **subsumes the old `.ken` + `MANIFEST.md` split** (`subsume-don't-
+  proliferate`): the manifest's contract — source map, derivation path,
+  `trusted_base()` delta, proof-family map — becomes structured sections of the
+  entry (§7). Any machine-read trust field that tooling still needs a stable
+  location for is reconciled by the Librarian during migration; the reader sees
+  one document.
+- Purpose 1 reads the code + laws; purpose 3 reads to its chosen depth; purpose 2
+  is the literate whole; purpose 4 is the Findings section. One source,
+  mechanically separable (prose vs. fenced code).
 
-- a new surface-language rule;
-- a substitute for inhabited proof terms;
-- permission to add `Axiom`, postulates, primitives, kernel features, or
-  trusted-base entries;
-- a reason to rewrite an active functional-build branch before it is gated.
+## 2. The standard entry format
 
-Functional build WPs and refinement WPs have different bars:
+**Front matter.**
 
-- A **functional build** must implement the requested component, prove the
-  required laws, declare its trust delta honestly, and pass its gates. The
-  source may still carry discovery scaffolding, local helper names, and sparse
-  explanation if the behavior and proofs are sound.
-- A **catalog refinement** preserves behavior while improving organization,
-  names, comments, package docs, and reader navigation. It is a real WP with its
-  own gate, not optional cleanup hidden in a retro.
+- An H1 title and a one-line statement of intent (the newcomer's and the
+  training-signal's first anchor).
+- An **index**: anchor links to the sections below.
+- **Named reading paths** — the mechanism that makes progressive disclosure real
+  for the catalog's wide persona range. Route each persona to its depth, e.g.:
+  - *Newcomer* → Motivation → Using it
+  - *Practitioner* → Using it → Laws & proofs
+  - *Researcher* → Laws & proofs → Design notes
+  - *Porting from Haskell/Lean/Agda* → Design notes
 
-## 2. Exemplary Ken
+**Required sections, in order** (native markdown heading anchors; the index links
+to them):
 
-First-party catalog code is exemplary when a reviewer can answer these questions
-from the source and manifest without reverse-engineering the build history:
+1. **Motivation** — what the component is, what it refines or generalizes, why it
+   exists. Teaching-first prose.
+2. **Definition** — the component's code in `` ```ken `` blocks (tangles to the
+   module). This is the canonical source.
+3. **Using it** — worked examples and common idioms (positive usage).
+4. **Laws & proofs** — the stated laws and their inhabited proof terms (§6). The
+   contract, machine-checked.
+5. **Design notes** — why this shape; alternatives rejected; the place for
+   pedagogical negative examples (§3).
+6. **Findings** — what writing this taught us about Ken (§5). First-class.
+7. **References** — external orientation and sources (§4).
+8. **Trust & derivation** — derivation path from built-ins, `trusted_base()`
+   delta with every honest exception, proof-family map, consumers (§7).
 
-1. What abstraction does this package provide, and which spec chapter/WP owns
-   the contract?
-2. Which public names are stable, and where are their laws stated?
-3. Which proof strategy discharges each law: definitional equality, finite
-   case split, induction, transport, dictionary field reuse, or another named
-   route?
-4. What is the derivation path from built-ins to this package?
-5. What is the `trusted_base()` delta, including every honest exception?
-6. Which helpers are private scaffolding, and why do they exist?
-7. Which tests or conformance seeds prove behavior preservation and trust
-   posture?
+An entry is exemplary when a reviewer can answer, from the entry alone without
+reverse-engineering build history: what abstraction this provides and which spec
+chapter/WP owns it; which public names are stable and where their laws are
+stated; which proof strategy discharges each law; the derivation path; the trust
+delta; which helpers are private scaffolding and why; and which tests or
+conformance seeds prove behavior and trust posture.
 
-The code should optimize for the human reader who is checking the proof, not for
-the agent that found it. If a line or helper is hard to understand but
-load-bearing, explain the invariant or proof move. If a helper is only an
-artifact of discovery, rename or fold it during refinement.
+## 3. Code-block roles (the fence taxonomy)
 
-## 3. Package Layout
+Pedagogy needs negative examples, and negatives must never tangle into the
+compiled module. The literate extractor compiles **only** an exact `` ```ken ``
+fence; every other fence is prose. Roles (space form `` ```ken <role> ``, not a
+colon — consistent with the landed `` ```ken ignore `` and it preserves
+first-token `ken` highlighting):
 
-Each package directory keeps the established catalog shape:
+| Fence | Tangles as source? | CI checks | Use |
+|---|---|---|---|
+| `` ```ken `` | yes | must elaborate | the component (Definition) |
+| `` ```ken ignore `` | no | none | pure illustration/snippet |
+| `` ```ken reject `` | no | **asserts rejection** | negative example, kept honest |
+| `` ```ken example `` | no | elaborates vs. module | positive usage, checked not shipped |
 
-```text
-packages/<package>/
-  MANIFEST.md
-  <module>.ken
-  ...
-```
+- **Canonical code is THE code** (in Definition). Alternatives and anti-patterns
+  live only in Design notes, marked `` ```ken ignore `` or (preferably)
+  `` ```ken reject `` so a stale negative that silently starts compiling fails
+  CI, and a model training on the entry is not taught an ambiguous idiom.
+- The **checked** roles (`reject`, `example`) depend on the fence-roles language
+  WP (`wp/catalog-literate-fence-roles`). Until it lands, negatives use
+  `` ```ken ignore `` — safe (never tangled) but unchecked — and the entry notes
+  the gap.
 
-`MANIFEST.md` is the package contract. The Ken files are the realized source.
-The manifest must not be a prose duplicate of every line of source, but it must
-give enough structure for a reviewer to navigate the source deliberately.
+## 4. References (required)
 
-### 3.1 Source Order
+Every entry carries a References section that orients the reader and grounds the
+component in the literature. Include, where they exist:
 
-Within a module, prefer this order unless Ken's current elaboration constraints
-require a helper to be defined earlier:
+- **Wikipedia** — for concept orientation across the persona range.
+- **Papers** — arXiv, university pages, or author-owned sites. Prefer stable,
+  canonical, author-owned URLs over aggregators; note paywalls.
+- **Books** — title, author, edition; a stable link where one exists.
 
-1. Package header comment.
-2. Imports and local aliases.
-3. Public data/class declarations.
-4. Public operations.
-5. Public law statements and law-carrying classes.
-6. Private helper operations grouped by the law or instance they support.
-7. Proof terms, ordered by proof family.
-8. Instance/dictionary assembly.
-9. Narrow executable probes, only when the package uses source-local probes
-   rather than external tests.
+Format each as: title — author/venue — stable link — one line on *why* it's
+relevant here. Catalog-wide reference conventions (link hygiene, preferred
+sources, citation shape) live in `catalog/REFERENCES.md`; per-entry references
+live in the entry.
 
-When dependencies force helper-before-public ordering, keep the reader-facing
-order in the manifest's source map. The source may satisfy the elaborator; the
-manifest must satisfy the reviewer.
+## 5. Findings (required — the inward purpose)
 
-Use section comments to make large files scanable. A section should name the
-public abstraction or proof family it serves, not a WP milestone such as "D2" or
-"blocker fix".
+Writing real Ken is the fleet's dogfooding instrument. Every entry carries a
+Findings section recording what authoring it taught us about the language, each
+item routed (`06-catalog-campaign.md`, teaming):
 
-### 3.2 Public And Private Boundaries
+- **Kernel-reduction defect** → Kernel (via the enclave). The highest-value
+  Finding an entry can produce.
+- **Sugar candidate** — a recurring implementation shape the surface should
+  collapse → Ergo.
+- **Abstraction candidate** — a recurring shape that should become a general
+  `def`/`lemma`/`prop` → Ergo, or grown in-catalog as a shared package.
 
-Public names are the package API and proof surface. They should be stable across
-refinement unless the WP explicitly includes a compatibility map approved by the
-owner.
+An empty Findings section is allowed (nothing surfaced); omitting the section is
+not. Record the concrete shape, not a vague impression, so the receiving team can
+act.
 
-Private helpers should reveal their role in the name and sit close to the proof
-family that uses them. If a private helper becomes useful to a sibling package,
-do not copy it. Either move it to the right shared package in a separate scoped
-WP or record why it remains local.
+## 6. Proof presentation
 
-### 3.3 Splitting Files
+Proof-carrying code should show the shape of the proof, not bury it under
+incidental helpers. Preferred proof-family structure: state the public law or
+class field; define the operation proved (if not already public); define the
+minimum local helpers for readability; prove carrier-specific lemmas in a stable
+order (base/finite cases → induction steps → bridge lemmas → final assembly);
+assemble the instance or public theorem.
 
-A refinement WP may split files when the split improves review without changing
-the public contract. Good split boundaries are:
+Every law field that claims to be proved must be inhabited by a **real proof
+term**. An `Axiom` is allowed only when the entry's contract explicitly permits an
+audited delta (e.g. a primitive carrier whose universally-quantified laws are not
+kernel-provable). In that case: Trust & derivation lists the delta; a source
+comment explains why the proof is unavailable at this layer; conformance/tests
+distinguish the audited-delta case from a zero-delta lawful exemplar; and the
+entry does not present the instance as zero-delta. Do not replace a hard proof
+with a more literate *statement* of the law — the source must still carry the
+proof term, or the entry must disclose the trusted-base delta.
 
-- a public package family, such as algebra classes vs. functor classes;
-- an implementation family, such as operations vs. law proofs;
-- a carrier-specific instance family, such as `Bool` proofs vs. `List` proofs;
-- a reusable helper package whose derivation path and trust delta are clear.
+## 7. Trust, derivation & navigation
 
-A split must preserve imports, manifests, public names, and tests. If a rename
-is necessary, the WP must include a compatibility map listing old name, new
-name, reason, and consumers checked.
+The Trust & derivation section carries what the old `MANIFEST.md` did:
 
-Do not split only because a proof was hard to write. Split because the resulting
-artifact is easier to review.
+1. Spec catalog entry and build/refinement WP.
+2. Public API (stable names).
+3. Source map — a compact table from reader task to entry section/anchor.
+4. Derivation path from built-ins.
+5. `trusted_base()` delta, including every honest exception.
+6. Proof families.
+7. Consumers and compatibility notes.
+8. Validation evidence, or the conformance seed that owns validation.
 
-## 4. Comments
+Link to the spec for the contract; use this section to explain how the entry
+*realizes* it — do not copy the spec chapter in. The standard-package index in
+`spec/50-stdlib/README.md` stays a spec index; package-level style and navigation
+live here and in `catalog/`.
 
-Comments are required where they carry proof-review information. Comments should
-explain a contract, invariant, proof strategy, trust posture, or non-obvious
-elaboration constraint. They should not restate the syntax directly below them.
+## 8. Comments
 
-Required comment classes:
-
-- **Package header.** Names the spec chapter/WP, public abstraction, derivation
-  path, and trust delta summary.
-- **Section comments.** Divide operations, laws, helpers, proofs, and instances.
-- **Law comments.** State the proposition in reader terms and the intended proof
-  route.
-- **Helper comments.** Say why the helper exists when that is not obvious from
-  the name.
-- **Trust comments.** Explain every `Axiom`, primitive wrapper, audited delta,
-  or intentionally tested-not-trusted boundary.
-- **Staging comments.** Name the gated future capability when the package cannot
-  yet prove a natural law.
-
-Example law comment:
+Comments are required where they carry proof-review information — a contract,
+invariant, proof strategy, trust posture, or non-obvious elaboration constraint.
+They must not restate the syntax below them. Required classes: entry/package
+header (spec chapter/WP, public abstraction, derivation path, trust summary);
+section comments; law comments (the proposition in reader terms + intended proof
+route); helper comments (why it exists, when not obvious); trust comments (every
+`Axiom`, primitive wrapper, audited delta, or tested-not-trusted boundary);
+staging comments (name the gated future capability when a natural law cannot yet
+be proved). Prefer a compact source comment plus a Trust/derivation subsection
+over a long inline essay.
 
 ```ken
 -- Right unit for append. The base branch reduces both endpoints to `Nil`,
@@ -153,39 +182,24 @@ Example law comment:
 fn list_right_unit ...
 ```
 
-Poor comments merely paraphrase syntax:
+Not: `-- Defines list_right_unit.`
 
-```ken
--- Defines list_right_unit.
-fn list_right_unit ...
-```
+## 9. Naming
 
-Keep comments short enough to scan. If a proof needs a long explanation, prefer
-a compact source comment plus a manifest subsection that gives the proof map.
+Names tell a reviewer the abstraction, property, and role. Do not encode WP
+history into durable names.
 
-## 5. Naming
-
-Names should tell a reviewer the abstraction, property, and role. Do not encode
-the WP history into durable names.
-
-General rules:
-
-- Use lowercase identifiers for term/type parameters that are referenced in term
-  bodies. Capitalized identifiers are constructor-shaped in the current surface.
-- Public operations should have stable domain/action names:
-  `list_append`, `bool_and`, `compareChar`.
-- Class fields should stay short and conventional when the class gives the
-  context: `map`, `foldr`, `assoc`, `left_unit`.
-- Public law proofs should name subject plus law:
-  `list_assoc`, `list_right_unit`, `band_left_unit`.
-- Private helpers should add a role suffix:
-  `_step`, `_case`, `_dispatch`, `_bridge`, `_locality`, `_expected`.
-- Avoid opaque sequence names (`lemma1`, `helper2`, `d3_case`) in durable
-  catalog source.
-- Avoid overclaiming names. A tested function should not be named as if it were
-  a lawful instance or proof-carrying theorem.
-
-Role suffixes should mean what they say:
+- Lowercase identifiers for term/type parameters referenced in term bodies;
+  capitalized identifiers are constructor-shaped in the current surface.
+- Public operations: stable domain/action names (`list_append`, `bool_and`,
+  `compareChar`).
+- Class fields: short and conventional when the class gives context (`map`,
+  `foldr`, `assoc`, `left_unit`).
+- Public law proofs: subject plus law (`list_assoc`, `list_right_unit`,
+  `band_left_unit`).
+- Private helpers: a role suffix, sitting near the proof family they serve.
+- Avoid opaque sequence names (`lemma1`, `helper2`, `d3_case`) and overclaiming
+  names (a tested function named as if it were a proof-carrying theorem).
 
 | Suffix | Use |
 |---|---|
@@ -196,155 +210,72 @@ Role suffixes should mean what they say:
 | `_locality` | Proves a result is unchanged outside a focused key/path. |
 | `_expected` | Computes the expected value used by a statement. |
 
-Refinement may rename helpers freely if they are private. Public renames require
-the compatibility map described in section 3.3.
+Refinement may rename private helpers freely; public renames require a
+compatibility map (old name, new name, reason, consumers checked).
 
-## 6. Proof Presentation
+## 10. Two-phase build & the refinement WP contract
 
-Proof-carrying code should show the shape of the proof, not hide it behind a
-mass of incidental helpers.
+Catalog work has two named phases (`06-catalog-campaign.md`): a **functional
+build** (implement, run, prove the required laws; rough-but-correct source may
+merge if the proofs are real, the derivation path is stated, and the trust delta
+is honest) and a **catalog refinement** (raise the landed component to this
+standard entry format, behavior-preserving). They have different bars; a
+refinement is a real WP with its own gate, not cleanup hidden in a retro.
 
-Preferred proof-family structure:
+A refinement WP is behavior-preserving unless its kickoff says otherwise.
+Definition of done:
 
-1. State the public law or class field.
-2. Define the operation being proved, if it is not already public.
-3. Define the minimum local helpers needed to make the proof readable.
-4. Prove carrier-specific lemmas in a stable order: base/finite cases,
-   induction steps, bridge lemmas, final assembly.
-5. Assemble the instance or public theorem.
-
-Every law field that claims to be proved must be inhabited by a real proof term.
-An `Axiom` is allowed only when the package's contract explicitly permits an
-audited delta, such as a primitive carrier whose universally quantified laws are
-not kernel-provable. In that case:
-
-- the manifest lists the delta;
-- the source comment explains why the proof is not available at this layer;
-- conformance/tests distinguish the audited-delta case from a zero-delta lawful
-  exemplar;
-- the package does not present the instance as zero-delta.
-
-Do not replace a hard proof with a more literate statement of the law. The
-source must still carry the proof term, or the package must disclose the
-trusted-base delta.
-
-## 7. Manifest And Docs
-
-Every package manifest should contain these sections, in this order unless a
-package has a reason to differ:
-
-1. Spec catalog entry and build/refinement WP.
-2. Public API.
-3. Source map.
-4. Derivation path.
-5. `trusted_base()` delta.
-6. Proof families.
-7. Consumers and compatibility notes.
-8. Validation evidence or the conformance seed that owns validation.
-
-A source map is a compact table from reader task to file section:
-
-| Reader task | Where |
-|---|---|
-| Public operations | `<module>.ken` section "Operations" |
-| Law statements | `<module>.ken` section "Laws" |
-| `Bool` instance proofs | `<module>.ken` section "Bool instances" |
-| Trust delta | `MANIFEST.md` "trusted_base() delta" |
-
-Package docs should connect source order to the spec chapter and WP acceptance
-criteria. They should not copy the whole spec chapter into the manifest. Link to
-the spec for the contract; use the manifest to explain how this package realizes
-it.
-
-The standard-package index in `spec/50-stdlib/README.md` remains a spec index,
-not a prose-style manual. It may point to this guide, but package-level style
-and navigation live in `docs/program/07-catalog-style-guide.md` and
-`packages/`.
-
-## 8. Refinement WP Contract
-
-A refinement WP is behavior-preserving unless its kickoff explicitly says
-otherwise. Its definition of done:
-
-- Public API/proof names are preserved, or the compatibility map is approved.
+- Public API/proof names preserved, or the compatibility map is approved.
 - Existing package tests and relevant acceptance/conformance tests pass.
 - `crates/ken-kernel` and `Cargo.lock` diffs are empty.
 - No new `Axiom`, postulate, primitive, opaque trusted entry, raw
-  proof-relevant `data ... : Omega`, or proof-surface downgrade appears.
-- `trusted_base()` delta is unchanged or narrowed.
-- The manifest/source map reflects the new organization.
-- The diff improves at least one concrete guide axis: organization, naming,
-  comments, proof-family grouping, docs, or package split.
+  proof-relevant `data ... : Omega`, or proof-surface downgrade.
+- `trusted_base()` delta unchanged or narrowed.
+- The entry's Trust/derivation and source map reflect the new organization.
+- The diff improves at least one concrete axis: entry structure, reading paths,
+  examples, references, naming, comments, proof-family grouping, or Findings.
 - The retro records which guide rules were useful and which were ambiguous.
 
-Review roles:
+Review roles: **owning build team** (Foundation) — behavior preservation,
+imports, public names, tests, compatibility map; **QA** — gates, diff hygiene,
+trust-drift grep, exact-head validation; **Librarian** — durable navigation,
+source map, README/spec-index pointers, findability; **Architect** — only when
+the refinement crosses a proof boundary, changes a law shape or abstraction
+boundary, alters a trust-delta claim, or introduces a client-observable split. A
+pure naming/comment/navigation refinement whose proof terms, laws, and
+abstraction boundaries are unchanged does not require the Architect.
 
-- **Owning build team:** behavior preservation, imports, public names, package
-  tests, and compatibility map.
-- **QA:** gates, diff hygiene, trust-drift grep, and exact-head validation.
-- **Librarian:** durable navigation, manifest/source map, README/spec index
-  pointers, and whether the package is findable.
-- **Architect:** only when the refinement crosses a proof boundary, changes a
-  law shape, changes an abstraction boundary, alters a trust-delta claim, or
-  introduces a split that changes module/package boundaries in a way clients may
-  observe.
+## 11. Pilot
 
-The Architect is not required for a pure naming/comment/source-map refinement
-whose proof terms, public laws, and abstraction boundaries are unchanged.
+The **first reframed `.ken.md` entry doubles as the format pilot** — it exercises
+the full standard end to end (front matter, reading paths, the fence roles,
+References, Findings, Trust/derivation) before the format is applied to large
+proof-heavy bodies. Prefer a small, proof-strategy-rich, low-delta component for
+the pilot; do not begin with a CAT-4-scale body. Pilot evidence shows readability
+improved without behavior drift: before/after source map, public names checked,
+tests on the exact head, trust-drift grep, and a short note on which checklist
+items were exercised.
 
-## 9. Pilot Policy
+## 12. Checklists
 
-Validate the guide on one or two small packages before applying it to large
-proof-heavy bodies. The first pilot should prefer:
+**Functional build gate.** Component implements the behavior · required laws are
+real proof terms or the trusted delta is explicit and spec-permitted · derivation
+path stated · relevant conformance/acceptance tests pass · kernel/Cargo lock
+invariants checked when claimed · rough organization acceptable only if a
+refinement follow-on is recorded.
 
-- `packages/transport/transport.ken` plus its manifest: small, zero-delta, and
-  proof-strategy-rich without a large law surface;
-- optionally `packages/lawful-classes/lawful_classes.ken` if the pilot needs to
-  exercise audited-delta comments and zero-delta/primitive-carrier distinctions.
+**Standard-entry / refinement author checklist.** No semantics, law shapes, or
+proof requirements weakened · public API/proof names preserved or mapped · front
+matter has index + reading paths · required sections present and in order ·
+canonical code in `` ```ken ``, negatives in `` ```ken reject ``/`` ```ken
+ignore `` · References section present (Wikipedia/papers/books as they exist) ·
+Findings section present (empty allowed) · Trust/derivation and source map
+current · pilot rule respected unless a prior pilot landed · tests and
+trust-drift greps recorded.
 
-A narrow slice of `packages/lawful-functors/lawful_functors.ken` is acceptable
-only after the pilot has a precise slice boundary, such as the `Bool` monoid
-section. Do not begin with `packages/collections/map.ken` or any CAT-4
-proof-heavy body.
-
-Pilot evidence must show readability improved without behavior drift:
-
-- before/after source map;
-- list of public names checked;
-- tests run on the exact head;
-- trust-drift grep results;
-- short reviewer note naming which guide checklist items were exercised.
-
-## 10. Checklists
-
-### Functional Build Gate
-
-- [ ] Component implements the requested behavior.
-- [ ] Required laws are real proof terms, or the trusted delta is explicit and
-      permitted by the spec.
-- [ ] Derivation path is stated in the manifest.
-- [ ] Relevant conformance/acceptance tests pass.
-- [ ] Kernel/Cargo lock invariants are checked when the WP claims them.
-- [ ] Rough organization or naming is acceptable only if a refinement follow-on
-      is recorded.
-
-### Refinement Author Checklist
-
-- [ ] No package semantics, law shapes, or proof requirements were weakened.
-- [ ] Public API/proof names are preserved or mapped.
-- [ ] Sections and helper names reveal the proof-family structure.
-- [ ] Required comments explain strategy, invariants, and trust posture.
-- [ ] Manifest source map and trust delta are current.
-- [ ] Small-package pilot rule is respected unless a prior pilot has landed.
-- [ ] Tests and trust-drift greps are recorded.
-
-### Review Checklist
-
-- [ ] Diff is docs/style/package-organization only for the stated scope.
-- [ ] Existing tests cover behavior preservation.
-- [ ] No new `Axiom`, postulate, primitive, or trusted entry appears.
-- [ ] Any file split preserves imports and public consumers.
-- [ ] Package docs connect source order to spec chapters and acceptance
-      criteria.
-- [ ] The reviewer can find operations, laws, helpers, proofs, and trust posture
-      without reading the WP thread.
+**Review checklist.** Diff is docs/style/organization only for the stated scope ·
+tests cover behavior preservation · no new `Axiom`/postulate/primitive/trusted
+entry · any file split preserves imports and consumers · the entry connects
+source order to spec chapters and acceptance criteria · a reviewer can find
+operations, laws, helpers, proofs, trust posture, references, and findings
+without reading the WP thread.

@@ -14,6 +14,101 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
+> ### CATALOG CAMPAIGN REFRAMED; SURF-def MERGED (2026-07-09 ~16:30 UTC)
+>
+> **`SURF-def-refinement` MERGED** — PR #375 green, `origin/main @ 3fa047a`
+> (`type`→`def` at the tip; Decision `dec_6tjqwz5b8tev` APPROVE, CV Spec +
+> Architect soundness; zero kernel delta). Language closed out (§10 retros in;
+> leader-flagged recurring trap: an implementer `merge_ready` post with zero
+> mentions is a silent handoff — caught same-tick by the watchdog).
+>
+> **Catalog campaign REFRAMED (operator: Pat, 2026-07-09).** The catalog now
+> serves **four purposes at once**: (1) standard components, (2) training data
+> for future models, (3) a teaching tool across a wide persona range, (4) the
+> fleet's inward **dogfooding instrument** (surfacing kernel-reduction defects +
+> elaborator sugar/abstraction opportunities). Reworked, on Opus:
+> - **`06-catalog-campaign.md`** → the **charter**: four purposes + personas; the
+>   `catalog/` layout; **Foundation** home with **Findings routing**
+>   (defects→Kernel, sugar→Ergo, surface-impl→Language) via a catalog-authoring
+>   **overlay**, not a new team (teams are archetype-fungible; `agent/teams/` is
+>   empty — subsume-don't-proliferate); the roadmap, updated.
+> - **`07-catalog-style-guide.md`** → the **standard entry format**: each package
+>   is a literate **`.ken.md`** entry that **subsumes the old `.ken` +
+>   `MANIFEST.md` split** (operator concurred) into one document — front matter
+>   with an anchor index + **named reading paths** (progressive disclosure) →
+>   Motivation / Definition / Using it / Laws & proofs / Design notes /
+>   **Findings** / **References** / Trust & derivation. **Fence taxonomy**
+>   (`` ```ken `` source / `ignore` prose / `reject` checked-to-fail / `example`
+>   checked-not-shipped, space form). **References** required per entry
+>   (Wikipedia / arXiv/university/author papers / books).
+>
+> **Directory:** new top-level `catalog/`; `packages/` → `catalog/packages/`
+> (a light container: README + subdirs). Whole-catalog matter at `catalog/` root
+> (`README.md`, `REFERENCES.md`).
+>
+> **Two WP frames queued (Sonnet-drafted, Steward-gated ✓):**
+> - **`wp/catalog-tree-migration.md`** — Foundation (Language assists);
+>   `packages/`→`catalog/packages/` + all 303 refs. Grounded finding: **no
+>   central package-root constant** (all literal paths; ~13 sites; the **one**
+>   shipping-production ref is `crates/ken-interp/src/proof_erasure_checker.rs`).
+>   Empty kernel/`Cargo.lock` diff + final grep-sweep gate. Direct-to-team.
+> - **`wp/catalog-literate-fence-roles.md`** — Language; add checked `reject`/
+>   `example` fence roles to `literate.rs`+`lib.rs`. Hard-errors an unrecognized
+>   `ken <role>` (closes the typo hole); AC3/AC5 stale-negative discriminators.
+>   Zero kernel delta. Direct-to-Language.
+>
+> **Published this cycle** (batch → `wp/steward-catalog-reframe` off
+> `origin/main`): reworked `06`/`07` + the two WP frames +
+> `handoff-gate-compact.sh` evidence change (was `steward/work @ 156672c`) + this
+> tracker sync.
+>
+> **Next actions (event-driven, no watchdog):** kick migration WP → Foundation;
+> fence-roles WP → Language; then the Foundation catalog-authoring overlay; then
+> the **first reframed `.ken.md` batch** (doubles as the format pilot). Team
+> staffing cadence stays demand-driven.
+
+> ### SURF-def-refinement KICKED OFF TO LANGUAGE (2026-07-09 ~15:45 UTC)
+>
+> **Active WP: `SURF-def-refinement`** — replace the `type` keyword with `def`
+> (the type-level definition/refinement slot; alias = zero-condition case;
+> semantics unchanged, no kernel delta). **Operator design decision** (2026-07-09)
+> after a full design dialogue: `type` is Ken's unused Haskell-style
+> alias/refinement keyword (`data` is the real type keyword); a mathematical
+> *definition* is inherently a refinement ("an X is a Y such that P"), so `def`
+> owns that slot. Supersedes the `SURF-def-named-definitions` "no new `def`"
+> outcome (different in kind — refinement slot, not the value slot `const`/`fn`
+> own). Named-conditions in Ken today: `prop` (predicate + conclusion), property
+> `class` (structure), refinement `{x:A|φ}` (subset), `requires` (precondition).
+>
+> **Routed DIRECT to Team Language — NO Spec-enclave elaboration** (operator
+> call): it's a surface keyword swap, design settled. Enclave enters only at the
+> **merge gate** (diff touches `spec/`+`conformance/` → CV Spec vote + Architect
+> soundness vote).
+>
+> - Frame: `docs/program/wp/SURF-def-refinement.md` on `wp/SURF-def-refinement @
+>   64838fb` (base `origin/main`; ★ grammar hazard pinned in §3: rename ONLY the
+>   `type` keyword terminal, not the `type` nonterminal or the `Type` universe).
+> - Handoff gate: Language team (leader/implementer/qa) compacted to ctx 0% via
+>   `scripts/handoff-gate-compact.sh` (run in background).
+> - Kickoff: `evt_77jy1mrrc3ykj` (root thread — all SURF-def-refinement activity
+>   threads here). language-leader woke + is working it (confirmed via
+>   capture-pane, not a status string).
+> - **Wait:** Language ring leader→implementer→QA on `wp/SURF-def-refinement`,
+>   then merge Decision (Architect + CV). Event-driven; **no watchdog armed**
+>   (see below).
+>
+> **Process changes this session (operator-directed):**
+> - **ALL watchdog timers cancelled** — CronCreate `3faab560` deleted + shell
+>   watchdog `steward-watchdog-wake.sh` (PID 2854643) killed. Steward is now
+>   purely event-driven; **do not re-arm a watchdog** without operator direction.
+> - **Playbook §2c** now carries specific `handoff-gate-compact.sh` usage
+>   (background run, wide-capture verify, reset-discards-state) — published
+>   **PR #374, `origin/main @ 3c652bb`** (doc-only), verified.
+> - **`handoff-gate-compact.sh`** updated to emit post-compaction **evidence**
+>   (per-agent ctx marker + worktree HEAD/branch) after its wait — committed
+>   `steward/work @ 156672c`; **not yet on `main`** (non-doc change; publish or
+>   batch pending).
+>
 > ### STEWARD RE-ONBOARD; SURF-NAMED-PROOF CLOSED; PIVOT TO CATALOG (2026-07-09 ~14:50 UTC)
 >
 > Steward re-onboarded on Opus (operator restart). Ground-truthed fleet + git
