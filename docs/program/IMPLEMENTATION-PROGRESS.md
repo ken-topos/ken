@@ -30,6 +30,24 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > piece). Anti-vacuity gates locked: AC4 (bridge over `DecEq Bool`, not only
 > `Int`-`Axiom`), AC3 (grep the Rust emission for the `trusted_base()` delta).
 >
+> **DS-1 at the merge gate** (`evt_2hx5v1gwjhxtp` merge_ready,
+> `wp/ds-1-empty-dec @ 1500733`): smoke test PASSED as pinned (`Dec` admits,
+> `elim_Dec` large-eliminates into `Type0` — no `23 §3` fallback); prelude
+> `Empty`+`Dec`+`decide` kernel-direct; entry `catalog/packages/core/empty-dec.
+> ken.md` with the `DecEq Bool` bridge. In foundation-qa → Architect+CV gate.
+>
+> **DS-1 findings reviewed → 3 remediation WPs created (operator directive).**
+> `docs/program/wp/ds-1-findings-remediation.md` — the acted-on retro. One
+> finding was positive (smoke test); three are real gaps, all **→ Ergo**, none
+> blocking (DS-1 ships with sound zero-new-trust workarounds): **FR-1**
+> zero-constructor `data` has no surface spelling (`parser.rs:956`); **FR-2**
+> reserved sugar `absurd` silently shadows a user global (`elab.rs:499`) —
+> hygiene, doc-note floor / collision-diagnostic principled fix; **FR-3
+> (highest value)** `ken run` has no library check-mode (`main.rs:188` requires
+> an IO-shaped last decl), so pure-library entries can't be `ken run`-validated
+> — bears on every future catalog entry + a standard-entry/guide AC reconcile.
+> **Created & queued, NOT kicked** — assignments wait for the process review.
+>
 > **HOLD after DS-1.** DS-1 is the *only* WP before an operator process review —
 > a deliberate single vertical slice validating the full reframed machinery
 > (`.ken.md`-style format · `write-ken` guide · fence roles · design→build→gate ·
