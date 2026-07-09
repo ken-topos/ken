@@ -68,54 +68,60 @@ The per-entry standard format that carries these layers is the subject of
 `07-catalog-style-guide.md`. This charter fixes the *purpose, home, and layout*;
 the style guide fixes the *shape of each entry*.
 
-## The catalog's strata — subject-matter architecture
+## Sections and Domains — the catalog's subject-matter architecture
 
-The catalog is organized as **dependency strata**: each stratum is built from
-the ones beneath it, and the essential toolkit at the base is the most
-depended-upon. This is the *subject-matter* spine — orthogonal to the trust
-"rings" (kernel TCB vs. outer ring) and to the per-entry format. The set of
-strata, and which package sits in which, will see **rearrangement, inclusions,
-and exclusions** as the catalog grows; what is stable is the shape: a small
-essential core, widening as it moves outward toward applications.
+The catalog's first-level division is the **Section**. Sections are dependency-
+ordered: each is built from the ones before it, and the essential toolkit at the
+base is the most depended-upon. A Section may be subdivided, along clear
+subject-area lines, into **Domains** (e.g. the Capability Section holds a
+Cryptography Domain, a Parsing Domain, …). This is the *subject-matter* spine —
+orthogonal to the trust "rings" (kernel TCB vs. outer ring) and to the per-entry
+format. Which Sections exist, and which package sits where, will see
+**rearrangement, inclusions, and exclusions** as the catalog grows; what is
+stable is the shape: a small essential core, widening toward applications.
+
+**For now there are four Sections** — Core, Data, Algorithm, Capability. That is
+deliberately enough to keep the campaign busy; later subject areas (encodings and
+protocols, application frameworks) become their own Sections when we reach them.
 
 ```mermaid
 flowchart TB
-  S0[S0 core - essential dependent-programming toolkit] --> S1[S1 data - standard datatypes and operations]
-  S1 --> S2[S2 capabilities - focused domains: parsing, cryptography, ...]
-  S2 --> S3[S3 formats and protocols - JSON and other encodings, INET, HTTP, ...]
-  S3 --> S4[S4 frameworks - application-level: services, libraries, ...]
+  Core[Core Section - essential dependent-programming toolkit] --> Data[Data Section - standard datatypes and operations]
+  Data --> Algorithm[Algorithm Section - general algorithms over the data]
+  Algorithm --> Capability[Capability Section - focused Domains: parsing, cryptography, ...]
 ```
 
-- **S0 · core — the essential dependent/functional-programming toolkit.** The
+- **Core Section — the essential dependent/functional-programming toolkit.** The
   vocabulary of proof and abstraction: propositional equality and its lemmas
   (refl/sym/trans/cong/subst), decidability (`Dec`), dependent pairs and
   functions, sum/product/`Unit`/`Void`, and the lawful type-class scaffolding
   (`Eq`, `Ord`, `Semigroup`, `Monoid`, `Functor`/`Applicative`/`Monad`). This is
   what a Ken-untrained agent leans on first, and what everything above reuses.
-- **S1 · data — standard datatypes and their operations.** `Nat`, `Int`, `Bool`,
-  `Char`, `String`, `List`, `Vector`, `Option`, `Result`/`Either`, tuples,
-  `Map`, `Set` — each with its operations **and its laws proved**.
-- **S2 · capabilities — focused capability domains.** Parsing, cryptography, and
-  the individual competence areas that build on solid data structures.
-- **S3 · formats and protocols — tooling components.** JSON and other encodings,
-  wire/attestation transport, and network protocols (INET, HTTP). Today's
-  `transport` package is the seed of this stratum.
-- **S4 · frameworks — application level.** Service and library frameworks
-  assembled from everything below.
+- **Data Section — standard datatypes and their operations.** `Nat`, `Int`,
+  `Bool`, `Char`, `String`, `List`, `Vector`, `Option`, `Result`/`Either`,
+  tuples, `Map`, `Set` — each with its operations **and its laws proved**.
+- **Algorithm Section — general-purpose algorithms over the data.** Sorting,
+  searching, traversal, graph and numeric algorithms — reusable procedures that
+  operate on the Data Section's structures, distinct from an
+  application-facing competence.
+- **Capability Section — focused competence Domains.** Parsing, cryptography, and
+  the individual subject areas that build on solid data and algorithms; each is a
+  **Domain** within this Section (Parsing Domain, Cryptography Domain, …). Today's
+  `parsing` and `transport` packages seed this Section.
 
-**Demand-pull layering (the operator's design principle).** The deeper strata
-are *clarified by building the things that ought to sit on them*. Rather than
-speculate an exhaustive `S0`/`S1` in the abstract, we let a concrete
-upper-stratum target (a real parser, a real protocol) surface the exact core
-lemma or data operation it needs, then land that below. Build-order is therefore
-**top-informed, bottom-proven**: uppermost targets specify the requirements; the
-strata are proven from the base up. This charter's near-term work program
-(`Roadmap` → *Data-structures enrichment*) drives the catalog through `S0`+`S1`
-under exactly this discipline.
+**Demand-pull (the operator's design principle).** The deeper Sections are
+*clarified by building the things that ought to sit on them*. Rather than
+speculate an exhaustive Core/Data Section in the abstract, we let a concrete
+higher-Section target (a real parser, a real codec) surface the exact core lemma
+or data operation it needs, then land that below. Build-order is therefore
+**top-informed, bottom-proven**: higher targets specify the requirements; the
+Sections are proven from the base up. This charter's near-term work program
+(`Roadmap` → *Data-structures enrichment*) drives the catalog through the Core
+and Data Sections under exactly this discipline.
 
 The `core-catalog` report's finer Layers 0–14 (`ken.base` → `ken.verify`) slot
-*within* these strata — the strata are the coarse spine, the report's layers the
-fine sequencing inside `S2`–`S4`.
+*within* the Sections — the Sections are the coarse spine, the report's layers
+the fine sequencing inside the Algorithm and Capability Sections.
 
 ## Layout: the `catalog/` tree
 
@@ -139,9 +145,9 @@ catalog/
   conventions, the pointer to this charter and to the style guide).
 - `catalog/packages/` is **just a container** — a README and the package
   subdirectories, nothing heavier. Packages are physically **flat today**; the
-  subject-matter strata below are the *conceptual* spine and build order, and a
-  later rearrangement WP may group them into stratum subdirectories once the set
-  is large enough to warrant it.
+  Sections and Domains below are the *conceptual* spine and build order, and a
+  later rearrangement WP may group packages into Section (and, where subdivided,
+  Domain) subdirectories once the set is large enough to warrant it.
 - Each package is a **literate `.ken.md` entry** whose `ken` code blocks tangle
   to a compilable module; the tangled `.ken` is a build artifact, not the
   source of truth.
@@ -235,6 +241,33 @@ Our own agents consume the guide through a thin role skill that points at it;
 the canonical artifact is the repo-visible `catalog/guide/` so it serves
 external readers and the training-data purpose equally.
 
+## Retro discipline — catalog retros are acted on
+
+Across the rest of this project, per-WP retros are logged in the space and left
+there; that is fine for the build. **Catalog WPs are the exception: their retros
+are acted on**, because acting on them *is* the campaign's inward purpose
+(dogfooding, purpose 4). This is an explicit part of every catalog WP's retro
+instructions, and the Steward tracks the follow-through. At each catalog WP
+closeout, the retro must surface and route concrete actions:
+
+- **Into the writing skill and materials.** Anything the authoring taught about
+  *how to write Ken well* — a clearer proof technique, a decomposition that
+  worked, a pitfall — folds back into `catalog/guide/` and the `write-ken` skill.
+  The guide improves from every entry authored against it.
+- **Language surface.** A recurring shape that wants sugar → Ergo triages →
+  Language implements (the Findings routing above).
+- **Elaborator ergonomics.** A confusing error or a manual step the elaborator
+  could do → Ergo.
+- **Useful `def`s / `lemma`s / `prop`s.** A helper or law that proved reusable is
+  promoted into the catalog itself as a general-purpose entry (typically the Core
+  Section), not left local to one package.
+- **Kernel-reduction defects** → Kernel via the enclave (the highest-value
+  Finding; already in the routing above).
+
+A catalog WP is not closed until its retro's actions are captured — filed to the
+right team, or booked as a follow-on entry. The retro is a source of work, not an
+archived note.
+
 ## Cadence (fleet fit)
 
 Unchanged spine: the **T1 enclave pins each abstraction's boundary** (its laws,
@@ -271,7 +304,7 @@ refinement follow-on for any component whose entry is not yet guide-quality.
 
 ## Roadmap
 
-Sequenced along the strata above (the `core-catalog` report's Layers 0–14,
+Sequenced along the Sections above (the `core-catalog` report's Layers 0–14,
 `ken.base` → `ken.verify`, slot within them). The **core-establishing tranche is
 largely complete** — the constructor-class pattern, collections,
 maps/sets/relations, parsing, lawful classes, the purity-keyword surface split,
@@ -279,11 +312,11 @@ and named-proof claims. The reframe above changes the catalog's *purpose,
 format, home, and layout* for the phase now beginning.
 
 **Near-term: the data-structures enrichment program.** The first program of the
-reframed phase drives the catalog deliberately through `S0` (essential toolkit)
-and `S1` (standard datatypes + operations) under the demand-pull discipline —
-detailed in its own program doc
-(`docs/program/wp/catalog-data-structures-program.md`). Beyond `S1`, the
-remaining strata/layers sequence as ready:
+reframed phase drives the catalog deliberately through the **Core Section**
+(essential toolkit) and **Data Section** (standard datatypes + operations) under
+the demand-pull discipline — detailed in its own program doc
+(`docs/program/wp/catalog-data-structures-program.md`). Beyond the Data Section,
+the remaining Sections/layers sequence as ready:
 
 parse/syntax/diagnostics · automata/formal-languages · graphs/dependency
 structures · statistics/probability (exact/empirical/approximate tiers) · linear
@@ -329,15 +362,17 @@ The reframe itself has **landed**: charter (`06`) + standard entry format
 literate fence roles (`ken reject`/`ken example`) are all on `main`. The phase
 now beginning:
 
-1. **Data-structures enrichment program** — the near-term program of WPs driving
-   the catalog through `S0`+`S1` under demand-pull; sequence and rationale in
-   `docs/program/wp/catalog-data-structures-program.md`. Its first WP (`DS-1`,
-   `Empty`+`Dec`) doubles as the **`.ken.md` format pilot** — no literate entry
-   exists yet.
+1. **Initial WP — Ken reference materials + writing skill** (before the campaign
+   proper). Stand up the first version of `catalog/guide/` and the `write-ken`
+   skill, so every later catalog WP is authored against a real guide and its
+   retros have somewhere to fold improvements back into. Frame in
+   `docs/program/wp/ken-authoring-guide.md`. This is the keystone: the campaign
+   both *uses* it (to write well) and *feeds* it (via the retro discipline).
 2. **Foundation catalog-authoring overlay** — the literate-`.ken.md` pedagogy +
    Findings-filing skill attached to Foundation; the precondition for authoring
-   the first batch to guide quality.
-3. **Authoring guide (`catalog/guide/`)** — the parallel "writing Ken"
-   workstream (surface reference · proof techniques · decomposition/abstraction
-   hints), first-drafted from the fleet's own memory corpus and general DT
-   practice; runs alongside the packages, not after them.
+   the first batch to guide quality (may bundle with the initial WP).
+3. **Data-structures enrichment program** — the near-term program of WPs driving
+   the catalog through the Core and Data Sections under demand-pull; sequence and
+   rationale in `docs/program/wp/catalog-data-structures-program.md`. Its first
+   WP (`DS-1`, `Empty`+`Dec`) doubles as the **`.ken.md` format pilot** — no
+   literate entry exists yet.
