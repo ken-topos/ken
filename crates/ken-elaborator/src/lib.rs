@@ -257,12 +257,42 @@ impl ElabEnv {
     /// byte offsets into the original artifact by blanking prose, validates
     /// each compiled fence independently, then reuses the ordinary file
     /// parser/elaborator path on the full blank-preserved buffer.
+    ///
+    /// After the module elaborates, every `` ```ken reject `` block is
+    /// checked to still fail to elaborate (an unexpected success means the
+    /// negative example has gone stale) and every `` ```ken example `` block
+    /// is checked to elaborate (`catalog-literate-fence-roles` §4.6). Both
+    /// checks run **in document order against this same, module-seeded
+    /// `self`** — a deliberate V1 simplification: a later checked block may
+    /// observe declarations an earlier one introduced, and neither role
+    /// forks/rolls back env state.
     pub fn elaborate_ken_md_file(&mut self, src: &str) -> Result<Vec<GlobalId>, ElabError> {
         let extracted = literate::extract_ken_md(src)?;
         literate::validate_ken_md_fences(&extracted)?;
         let decls = parser::parse_decls(&extracted.source)?;
         let results = modules::expand_and_elaborate(self, &decls)?;
-        Ok(results.into_iter().map(|r| r.def_id).collect())
+        let ids = results.into_iter().map(|r| r.def_id).collect();
+
+        for range in &extracted.reject_ranges {
+            if self.elaborate_file(&src[range.clone()]).is_ok() {
+                return Err(ElabError::ParseError {
+                    msg: "a 'ken reject' block unexpectedly elaborated: the negative example \
+                          is stale and no longer demonstrates a rejection"
+                        .to_string(),
+                    span: Span::new(range.start, range.end),
+                });
+            }
+        }
+        for range in &extracted.example_ranges {
+            self.elaborate_file(&src[range.clone()]).map_err(|_| {
+                ElabError::ParseError {
+                    msg: "a 'ken example' block failed to elaborate".to_string(),
+                    span: Span::new(range.start, range.end),
+                }
+            })?;
+        }
+
+        Ok(ids)
     }
 
     /// Try to discharge an obligation hole with a certificate term.
