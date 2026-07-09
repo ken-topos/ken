@@ -14,6 +14,164 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
+> ### STEWARD RE-ONBOARD; SURF-NAMED-PROOF CLOSED; PIVOT TO CATALOG (2026-07-09 ~14:50 UTC)
+>
+> Steward re-onboarded on Opus (operator restart). Ground-truthed fleet + git
+> state and reviewed the recent NC1→NC27 compiler campaign + the SURF/catalog
+> pivot. Operator confirms: the last few days ran OpenAI models through several
+> compiler-development phases; **now moving back to catalog, language ergonomics,
+> and coding style.**
+>
+> **`SURF-named-proof-claims` core is now CLOSED.** Language leader posted the
+> coordination retro + retros-in handoff at `evt_251vqxgtgnx8a`; both member §10
+> retros were already in (implementer `evt_7rqeyspma6m96`, QA
+> `evt_36v7bk2amz03g`). Core D1+D2 landed as PR #372 on
+> `origin/main @ 6a85d8decc09a6e44b0780829136292b780aaecf`. The **D3
+> `packages/collections` / caller-proof catalog pilot remains HELD** — it is a
+> candidate for the catalog frontier below, releasable on operator direction.
+> Leader retro trap of note: implementer handoff text twice named a SHA that
+> didn't match the real branch tip (recurring hazard; QA re-anchored each time).
+>
+> **Fleet read corrected.** My initial pane read (language-leader `You've hit
+> your usage limit … Jul 10 22:48`, `gpt-5.4`) was a **stale scrollback frame** —
+> language-leader responded within minutes, so it is live. The operator is
+> actively migrating the fleet **back off OpenAI/GPT onto Anthropic** (kernel-
+> leader shows Sonnet 5; enclave on Opus 4.8). Per-role provider mapping is the
+> operator's; I will not assert a "frozen" fleet from a single stale pane again
+> (STALE-STATUS DISCOUNT). Watchdog armed (cron `3faab560`, :13/:43).
+>
+> **Recent-history summary (for resume):** the compiler campaign ran
+> **NC1→NC27** (Rust bootstrap: checked-core package → primitive-value lowering →
+> recursion/dictionaries/modules → effects/foreign boundary IR → object
+> linker/packaging → native trust-report/provenance → executable-phase
+> closeout), all merged + §10-closed; operator halted the NC sequence after NC27
+> (no NC28 unless re-instructed). Post-NC the pivot to catalog/ergonomics already
+> began: a **catalog style guide** landed (PR #303/#304), a
+> **catalog-refinement-pilot** landed (`origin/main @ f9a53ea`, Librarian
+> APPROVE `thr_r60t81re5mcv`; ergo retros-in `evt_7n0yhmpcsbdw9`, now fully
+> §10-closed), `wp/catalog-refinement-lawful-classes` is queued,
+> and the surface-ergonomics slice ran `SURF-def-named-definitions` (closed, no
+> new `def` keyword) + `SURF-named-proof-claims` core (now closed). Standing
+> operator directive on record: *keep the enclave developing shovel-ready catalog
+> work.*
+>
+> **Next action:** propose + sequence the catalog / language-ergonomics / coding-
+> style frontier with the operator (candidates: SURF-named-proof D3 catalog
+> pilot; `catalog-refinement-lawful-classes` + further style-guide application
+> passes; CAT-* stdlib refinement; additional ergonomics slices). Tracker's
+> mid-file strategic status table has drifted stale (predates K/NC/SURF landing)
+> — reconcile it as a T1-Steward task alongside framing the next WP.
+>
+> ### SURF NAMED PROOF CLOSEOUT NUDGED; SURF DEF CLOSED (2026-07-08 23:20 UTC)
+>
+> Current frontier: `SURF-def-named-definitions` remains fully closed and locally
+> cleaned after PR #373 landed on `origin/main @
+> 2f104966363f601e584c5799b873c6b72177572d`. No feature/design work or cleanup
+> remains for that WP.
+>
+> Real routing gap found on the watchdog pass: `SURF-named-proof-claims` core
+> D1+D2 is merged as PR #372 on `origin/main @
+> 6a85d8decc09a6e44b0780829136292b780aaecf`, and both member Language §10
+> retros are in:
+>
+> - Language implementer retro: `evt_7rqeyspma6m96`
+> - Language QA retro: `evt_36v7bk2amz03g`
+>
+> Steward posted a closeout nudge at `evt_38hhp78t61zs0`, asking Language leader
+> to post the coordination retro and retros-in handoff, or state the remaining
+> closeout blocker. Current wait: Language leader closeout for
+> `SURF-named-proof-claims` core. Reminder: the D3 catalog pilot remains held
+> unless explicitly released.
+>
+> ### SURF DEF FULLY CLOSED AND CLEANED (2026-07-08 22:45 UTC)
+>
+> Current frontier: `SURF-def-named-definitions` is fully closed. PR #373
+> landed on `origin/main @ 2f104966363f601e584c5799b873c6b72177572d`; Spec §10
+> closeout completed at `evt_2ns0g40djvase`; Spec author released the held
+> worktree at `evt_19y46nrbp1cv6`; Steward deleted the local
+> `wp/SURF-def-named-definitions` branch ref. No feature/design work or cleanup
+> remains for this WP.
+>
+> Outcome: no new `def` keyword. The merged guidance keeps named concepts and
+> property bundles on the existing declaration lattice: `type`, `record`,
+> `const` / `fn` / `proc`, `prop`, `lemma`, and attached `proof`.
+>
+> Current wait: operator direction for the next catalog/language-surface
+> frontier. Reminder: `SURF-named-proof-claims` D3 catalog pilot remains held
+> after the core D1+D2 merge unless explicitly released.
+>
+> ### SURF DEF CLOSED; BRANCH RELEASE REQUESTED (2026-07-08 22:42 UTC)
+>
+> Current frontier: `SURF-def-named-definitions` is merged and Spec §10 is
+> closed. Spec leader posted the coordination retro at `evt_gqtnb0q372n7` and
+> the retros-in closeout at `evt_2ns0g40djvase`.
+>
+> Closeout anchors:
+> - PR #373 / landed
+>   `origin/main @ 2f104966363f601e584c5799b873c6b72177572d`
+> - exact reviewed head:
+>   `63bbd1fd1fb07675cc301ac2cb40fb275dc6d87e`
+> - published tracker-sync head:
+>   `89d3c2d2af6b57ef4ecdb59908191f6fd0b22b60`
+> - Spec author retro: `evt_3d55ew1gkey67`
+> - Conformance validator retro: `evt_xxsv1g026jya`
+> - Spec leader retro: `evt_gqtnb0q372n7`
+> - Spec retros-in handoff: `evt_2ns0g40djvase`
+>
+> The only remaining local cleanup is branch occupancy:
+> `/workspaces/ken/.worktrees/spec-author` still holds
+> `wp/SURF-def-named-definitions @ 63bbd1fd...`. Steward posted a branch-release
+> request to Spec author at `evt_3d9c9gx8f6reh`. Current wait: Spec author
+> releases the branch to `spec-author/work`, then Steward can prune the local WP
+> ref. No feature/design work is open on this WP.
+>
+> ### SURF DEF MEMBER RETROS IN; LEADER CLOSEOUT NUDGED (2026-07-08 22:29 UTC)
+>
+> Current frontier: `SURF-def-named-definitions` is merged and in §10 closeout.
+> Spec leader opened closeout at `evt_1p4sp8sq8vg5m` after PR #373 landed on
+> `origin/main @ 2f104966363f601e584c5799b873c6b72177572d`. Both requested
+> member retros are now in:
+>
+> - Spec author retro: `evt_3d55ew1gkey67`
+> - Conformance validator retro: `evt_xxsv1g026jya`
+>
+> Steward posted a closeout nudge at `evt_cwyhae28txh7`, asking Spec leader to
+> post the spec-leader coordination retro and retros-in handoff, or state the
+> remaining closeout blocker. Current wait: Spec leader retros-in handoff. Note
+> that `wp/SURF-def-named-definitions` remains checked out in the Spec author
+> worktree at reviewed head `63bbd1fd...`; release/cleanup can happen after
+> retros-in.
+>
+> ### SURF DEF MERGED; SPEC CLOSEOUT REQUESTED (2026-07-08 22:24 UTC)
+>
+> Current frontier: `SURF-def-named-definitions` merged through the Steward
+> publisher path as PR #373. Landed `origin/main @
+> 2f104966363f601e584c5799b873c6b72177572d` with squash subject
+> `Document named definition guidance`.
+>
+> Merge anchors:
+> - Spec gate closure: `evt_4b42d7y5dea07`
+> - exact reviewed head:
+>   `wp/SURF-def-named-definitions @
+>   63bbd1fd1fb07675cc301ac2cb40fb275dc6d87e`
+> - published tracker-sync head:
+>   `89d3c2d2af6b57ef4ecdb59908191f6fd0b22b60`
+> - base before merge:
+>   `origin/main @ 6a85d8decc09a6e44b0780829136292b780aaecf`
+>
+> Scope: docs-only. The reviewed WP doc records the no-new-keyword outcome:
+> `def` remains out of scope; guidance stays over existing `type`, `record`,
+> `const` / `fn` / `proc`, `prop`, `lemma`, and attached `proof` forms; no
+> Language implementation follow-on is opened from this WP head. Steward fetched
+> and verified `origin/main` at the landed SHA, pruned the remote publisher
+> branch, and removed the temporary publisher worktree/local publisher branch.
+> Note: original local branch `wp/SURF-def-named-definitions` remains checked out
+> in the Spec author worktree at the reviewed head; release/cleanup should be
+> handled after Spec closeout.
+>
+> Current wait: Spec leader opens §10 closeout / retros for
+> `SURF-def-named-definitions`.
+>
 > ### SURF DEF SPEC GATE CLOSED; PUBLISHING (2026-07-08 22:20 UTC)
 >
 > Current frontier: `SURF-def-named-definitions` Spec gate is closed. Spec
