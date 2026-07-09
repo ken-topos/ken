@@ -10,12 +10,12 @@ use ken_kernel::Decl;
 use ken_kernel::GlobalId;
 use std::collections::HashSet;
 
-const PARSING_KEN: &str = include_str!("../../../packages/parsing/parsing.ken");
+const PARSING_KEN: &str = include_str!("../../../catalog/packages/parsing/parsing.ken");
 
 fn mk_env() -> ElabEnv {
     let mut env = ElabEnv::new().expect("base env");
     env.elaborate_file(PARSING_KEN)
-        .expect("packages/parsing/parsing.ken must elaborate");
+        .expect("catalog/packages/parsing/parsing.ken must elaborate");
     env
 }
 
@@ -152,7 +152,7 @@ fn cat5_d1_source_span_package_elaborates_zero_delta() {
     let mut env = ElabEnv::new().expect("base env");
     let base_trusted: HashSet<GlobalId> = env.env.trusted_base().into_iter().collect();
     env.elaborate_file(PARSING_KEN)
-        .expect("packages/parsing/parsing.ken must elaborate");
+        .expect("catalog/packages/parsing/parsing.ken must elaborate");
     let after_trusted: HashSet<GlobalId> = env.env.trusted_base().into_iter().collect();
     let new_trusted: HashSet<_> = after_trusted.difference(&base_trusted).copied().collect();
     assert!(

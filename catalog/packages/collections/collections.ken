@@ -26,7 +26,7 @@
 -- genuine 3-way comparison still gets one, declared locally").
 
 -- `OrdResult` -- the 3-way comparison result (SS2.5.1). The landed `Ord Char`
--- (`packages/lawful-classes/lawful_classes.ken`) is `leq`-only -- no
+-- (`catalog/packages/lawful-classes/lawful_classes.ken`) is `leq`-only -- no
 -- `compare` method, and no `Ordering`/`OrdResult` type exists anywhere else
 -- on `main` (ES2 retired the prelude's `OrdResult` as un-referenced bloat,
 -- but explicitly sanctions a LOCAL declaration where genuinely needed --
@@ -45,7 +45,7 @@ data OrdResult = Lt | Eq | Gt
 -- zone, never leaning on the SCT's unapplied-self-reference /
 -- recursion-through-opaque-map over-accept hole
 -- (`sct-unapplied-self-reference-over-accepts`). Proof terms use `cong` from
--- `packages/transport`, so load transport before this package.
+-- `catalog/packages/transport`, so load transport before this package.
 
 -- `list_append` -- a DISTINCT name from the landed `Bytes`-domain `append`
 -- (FS-effect, `crates/ken-elaborator/src/bytes.rs`, symbol `"append"`); this
