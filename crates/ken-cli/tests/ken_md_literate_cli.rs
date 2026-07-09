@@ -97,6 +97,93 @@ proc main : IO Unit visits [Console] = print_line "ignored"
 }
 
 #[test]
+fn ken_run_accepts_a_correctly_failing_reject_block() {
+    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"));
+    let path = dir.join("literate_reject_ok.ken.md");
+    std::fs::write(
+        &path,
+        r#"```ken
+proc main : IO Unit visits [Console] = print_line "reject ok"
+```
+```ken reject
+const bad : Nat = undefinedName
+```
+"#,
+    )
+    .expect("write fixture");
+
+    let output = Command::new(ken_bin())
+        .arg("run")
+        .arg(&path)
+        .output()
+        .expect("spawn ken run");
+
+    assert!(
+        output.status.success(),
+        "a reject block that correctly fails to elaborate must not fail the run, got {:?}; \
+         stderr: {}",
+        output.status.code(),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "reject ok\n");
+}
+
+#[test]
+fn ken_run_rejects_a_stale_reject_block() {
+    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"));
+    let path = dir.join("literate_reject_stale.ken.md");
+    let fixture = r#"```ken
+proc main : IO Unit visits [Console] = print_line "unreachable"
+```
+```ken reject
+const stale : Nat = Zero
+```
+"#;
+    std::fs::write(&path, fixture).expect("write fixture");
+
+    let output = Command::new(ken_bin())
+        .arg("run")
+        .arg(&path)
+        .output()
+        .expect("spawn ken run");
+
+    assert!(
+        !output.status.success(),
+        "a reject block that unexpectedly elaborates must fail the run"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("reject"),
+        "stderr should name the stale block's role: {stderr}"
+    );
+}
+
+#[test]
+fn ken_run_treats_unrecognized_ken_role_as_a_hard_error() {
+    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"));
+    let path = dir.join("literate_bogus_role.ken.md");
+    std::fs::write(
+        &path,
+        r#"```ken bogus
+const whatever : Nat = Zero
+```
+"#,
+    )
+    .expect("write fixture");
+
+    let output = Command::new(ken_bin())
+        .arg("run")
+        .arg(&path)
+        .output()
+        .expect("spawn ken run");
+
+    assert!(
+        !output.status.success(),
+        "an unrecognized 'ken' fence role must hard-error, not silently fall back to prose"
+    );
+}
+
+#[test]
 fn plain_ken_run_path_still_executes() {
     let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"));
     let path = dir.join("plain_success.ken");
