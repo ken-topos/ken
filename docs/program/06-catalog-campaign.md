@@ -68,6 +68,55 @@ The per-entry standard format that carries these layers is the subject of
 `07-catalog-style-guide.md`. This charter fixes the *purpose, home, and layout*;
 the style guide fixes the *shape of each entry*.
 
+## The catalog's strata — subject-matter architecture
+
+The catalog is organized as **dependency strata**: each stratum is built from
+the ones beneath it, and the essential toolkit at the base is the most
+depended-upon. This is the *subject-matter* spine — orthogonal to the trust
+"rings" (kernel TCB vs. outer ring) and to the per-entry format. The set of
+strata, and which package sits in which, will see **rearrangement, inclusions,
+and exclusions** as the catalog grows; what is stable is the shape: a small
+essential core, widening as it moves outward toward applications.
+
+```mermaid
+flowchart TB
+  S0[S0 core - essential dependent-programming toolkit] --> S1[S1 data - standard datatypes and operations]
+  S1 --> S2[S2 capabilities - focused domains: parsing, cryptography, ...]
+  S2 --> S3[S3 formats and protocols - JSON and other encodings, INET, HTTP, ...]
+  S3 --> S4[S4 frameworks - application-level: services, libraries, ...]
+```
+
+- **S0 · core — the essential dependent/functional-programming toolkit.** The
+  vocabulary of proof and abstraction: propositional equality and its lemmas
+  (refl/sym/trans/cong/subst), decidability (`Dec`), dependent pairs and
+  functions, sum/product/`Unit`/`Void`, and the lawful type-class scaffolding
+  (`Eq`, `Ord`, `Semigroup`, `Monoid`, `Functor`/`Applicative`/`Monad`). This is
+  what a Ken-untrained agent leans on first, and what everything above reuses.
+- **S1 · data — standard datatypes and their operations.** `Nat`, `Int`, `Bool`,
+  `Char`, `String`, `List`, `Vector`, `Option`, `Result`/`Either`, tuples,
+  `Map`, `Set` — each with its operations **and its laws proved**.
+- **S2 · capabilities — focused capability domains.** Parsing, cryptography, and
+  the individual competence areas that build on solid data structures.
+- **S3 · formats and protocols — tooling components.** JSON and other encodings,
+  wire/attestation transport, and network protocols (INET, HTTP). Today's
+  `transport` package is the seed of this stratum.
+- **S4 · frameworks — application level.** Service and library frameworks
+  assembled from everything below.
+
+**Demand-pull layering (the operator's design principle).** The deeper strata
+are *clarified by building the things that ought to sit on them*. Rather than
+speculate an exhaustive `S0`/`S1` in the abstract, we let a concrete
+upper-stratum target (a real parser, a real protocol) surface the exact core
+lemma or data operation it needs, then land that below. Build-order is therefore
+**top-informed, bottom-proven**: uppermost targets specify the requirements; the
+strata are proven from the base up. This charter's near-term work program
+(`Roadmap` → *Data-structures enrichment*) drives the catalog through `S0`+`S1`
+under exactly this discipline.
+
+The `core-catalog` report's finer Layers 0–14 (`ken.base` → `ken.verify`) slot
+*within* these strata — the strata are the coarse spine, the report's layers the
+fine sequencing inside `S2`–`S4`.
+
 ## Layout: the `catalog/` tree
 
 The catalog gets a top-level home. Whole-catalog matter lives at the `catalog/`
@@ -78,7 +127,8 @@ catalog/
   README.md            catalog index + the four purposes, one screen
   REFERENCES.md        catalog-wide reference conventions (per-entry refs live
                        in each entry — see the style guide)
-  catalog/packages/            light container: a README + one subdirectory per package
+  guide/               the authoring guide — "writing Ken" (see below)
+  packages/            light container: a README + one subdirectory per package
     README.md          package index / navigation
     <package>/
       <package>.ken.md  the literate entry (primary artifact; tangles to .ken)
@@ -87,23 +137,27 @@ catalog/
 
 - `catalog/` root holds any *whole-catalog* detail (index, cross-package
   conventions, the pointer to this charter and to the style guide).
-- `catalog/catalog/packages/` is **just a container** — a README and the package
-  subdirectories, nothing heavier.
+- `catalog/packages/` is **just a container** — a README and the package
+  subdirectories, nothing heavier. Packages are physically **flat today**; the
+  subject-matter strata below are the *conceptual* spine and build order, and a
+  later rearrangement WP may group them into stratum subdirectories once the set
+  is large enough to warrant it.
 - Each package is a **literate `.ken.md` entry** whose `ken` code blocks tangle
   to a compilable module; the tangled `.ken` is a build artifact, not the
   source of truth.
 
-Moving today's `catalog/packages/` to `catalog/catalog/packages/` touches build/tooling
-references (elaborator package resolution, `crates/**` test fixtures, ~70 docs,
-conformance seeds). That is a scoped **migration WP** (below), not a doc edit —
-it must land green through CI, not by hand.
+The migration that moved today's `packages/` to `catalog/packages/` has landed
+(it touched build/tooling references — elaborator package resolution,
+`crates/**` test fixtures, ~70 docs, conformance seeds — so it went through CI,
+not by hand).
 
 ## Home and Findings routing (teaming)
 
-The reframed campaign's core artifact is *proven `catalog/packages/` components in
-`.ken.md`* — **Foundation's** standing mandate (Foundation already builds the
-`catalog/packages/` stdlib; the first pass used Language because it was a *surface*
-smoke-test, a Language concern). So the catalog is homed in **Foundation**, and
+The reframed campaign's core artifact is *proven `catalog/packages/`
+components in `.ken.md`* — **Foundation's** standing mandate (Foundation
+already builds the `catalog/packages/` stdlib; the first pass used Language
+because it was a *surface* smoke-test, a Language concern). So the catalog is
+homed in **Foundation**, and
 the Findings loop is honest by construction because the *author* and the
 *fixers* are different teams — the surface builder cannot grade its own
 ergonomics homework.
@@ -117,8 +171,8 @@ flowchart LR
 ```
 
 - **Foundation** authors entries and files Findings.
-- **Kernel** (via the enclave) takes kernel-reduction defects — the highest-value
-  Finding a catalog entry can produce.
+- **Kernel** (via the enclave) takes kernel-reduction defects — the
+  highest-value Finding a catalog entry can produce.
 - **Ergo** triages ergonomics: sugar candidates and abstraction candidates.
 - **Language** implements the surface sugar Ergo greenlights.
 - **Enclave** (Architect/CV) pins each abstraction boundary and gates merges,
@@ -134,6 +188,53 @@ The **staffing cadence** stays demand-driven: run Foundation's cell on catalog
 batches; if observed throughput later justifies a standing catalog cell,
 graduate it then, informed.
 
+## The authoring guide — "writing Ken" (parallel workstream)
+
+There is **no in-model support for Ken** — no model has Ken in its training
+data, and won't for some time. The catalog shows *proven components*; it does
+not, by itself, teach the **act of writing** them. So the campaign carries a
+second,
+parallel deliverable: an **authoring guide** — reference material that helps an
+agent (ours, and hopefully others') or a person actually write Ken. It lives at
+`catalog/guide/` and is developed **alongside** the packages, not after them.
+
+It is not a fifth *purpose* — it is a deliverable that serves purposes 1
+(builders lean on it), 3 (it teaches), and 2 (how-to-write-Ken reasoning is
+itself premium, not-on-the-internet training data). It complements the normative
+spec: **`spec/30-surface` is the contract; the guide is the practice.**
+
+Three strands, synthesized from what we already have — the landed language
+surface plus what is generally known about writing dependently-typed code —
+never by copying reference source (clean-room boundary below):
+
+- **Surface reference** — the practical shape of the language: the
+  `const`/`fn`/`proc` purity split, `data`/`match`, `class`/`instance`,
+  refinement types, effect rows, and the literate `.ken.md` format. Task-first
+  ("how do I write X"), distinct from the spec's exhaustive contract.
+- **Proof techniques** — how to actually discharge laws in Ken: `refl` vs. `tt`
+  endpoints, induction and motive construction, using `Dec`, funext as a
+  definitional pointwise equality, and the non-termination hazards to avoid.
+- **Decomposition & abstraction hints** — when to reach for a `class` vs. an
+  explicit dictionary, `subsume-don't-proliferate`, coexist-when-trust-differs,
+  structural self-evidence, and the other reusable moves.
+
+**A high-value, honest synthesis source is the fleet's own hard-won memory.**
+`agent/memory/` and the Steward's operating memory already encode much of the
+proof-technique and decomposition strand as lessons paid for in real build
+failures — distilling those *outward* into public guide prose is both the
+cheapest first draft and the most authentic. General dependently-typed practice
+(Lean/Agda/Idris tactics and patterns, all widely documented in public) may be
+consulted to *sharpen* the guide, but it is written in Ken's own terms and
+**never copies reference source** — the same clean-room rule the catalog code
+obeys (`CLEAN-ROOM.md`): permissive references inform *approach*, copyleft
+references are enclave-only, and neither is transcribed. The guide is a
+companion to the catalog, so its Findings and refinement cadence mirror the
+packages'.
+
+Our own agents consume the guide through a thin role skill that points at it;
+the canonical artifact is the repo-visible `catalog/guide/` so it serves
+external readers and the training-data purpose equally.
+
 ## Cadence (fleet fit)
 
 Unchanged spine: the **T1 enclave pins each abstraction's boundary** (its laws,
@@ -144,11 +245,11 @@ runs the §2c pipeline: **Steward frame → enclave elaboration (abstraction
 boundary) → merge → build team → gate**. The **first instance of each new
 pattern** gets T1 design + review; siblings are mechanical.
 
-Package discipline is the existing `catalog/packages/` contract (manifest, Ken source,
-derivation path, declared trust delta; law fields **proved**, not postulated,
-except an audited primitive-carrier delta) — now carried inside the literate
-entry per the style guide. The catalog is a *verified computational substrate*,
-not a convenience stdlib.
+Package discipline is the existing `catalog/packages/` contract (manifest, Ken
+source, derivation path, declared trust delta; law fields **proved**, not
+postulated, except an audited primitive-carrier delta) — now carried inside the
+literate entry per the style guide. The catalog is a *verified computational
+substrate*, not a convenience stdlib.
 
 ### Two-phase quality cadence
 
@@ -170,12 +271,19 @@ refinement follow-on for any component whose entry is not yet guide-quality.
 
 ## Roadmap
 
-Sequenced against the `core-catalog` report's Layers 0–14 (`ken.base` →
-`ken.verify`). The **core-establishing tranche is largely complete** — the
-constructor-class pattern, collections, maps/sets/relations, parsing, lawful
-classes, the purity-keyword surface split, and named-proof claims. The reframe
-above changes the catalog's *purpose, format, home, and layout* for the phase
-now beginning; the remaining layers sequence as ready:
+Sequenced along the strata above (the `core-catalog` report's Layers 0–14,
+`ken.base` → `ken.verify`, slot within them). The **core-establishing tranche is
+largely complete** — the constructor-class pattern, collections,
+maps/sets/relations, parsing, lawful classes, the purity-keyword surface split,
+and named-proof claims. The reframe above changes the catalog's *purpose,
+format, home, and layout* for the phase now beginning.
+
+**Near-term: the data-structures enrichment program.** The first program of the
+reframed phase drives the catalog deliberately through `S0` (essential toolkit)
+and `S1` (standard datatypes + operations) under the demand-pull discipline —
+detailed in its own program doc
+(`docs/program/wp/catalog-data-structures-program.md`). Beyond `S1`, the
+remaining strata/layers sequence as ready:
 
 parse/syntax/diagnostics · automata/formal-languages · graphs/dependency
 structures · statistics/probability (exact/empirical/approximate tiers) · linear
@@ -216,16 +324,20 @@ default Z3 unless catalog-scale measurement shows a clear benefit.
 
 ## Sequenced next actions
 
-1. **This rework lands** — charter (`06`) + standard entry format (`07`), the
-   next Steward corpus merge.
-2. **Migration WP** — `catalog/packages/` → `catalog/catalog/packages/` with all
-   build/tooling/doc/conformance references updated; Foundation executes (with
-   Language for elaborator package-root resolution); green through CI.
-3. **Language WP** — the literate block-role taxonomy (`ken reject` checked to
-   fail, `ken example` checked-not-shipped) in `crates/ken-elaborator/src/
-   literate.rs` + the check path; small, per the style guide §2.
-4. **Foundation catalog-authoring overlay** — the literate-`.ken.md` pedagogy +
-   Findings-filing skill.
-5. **First reframed catalog batch** — authored as `.ken.md` entries under
-   `catalog/catalog/packages/`, exercising the full standard format end to end (it
-   doubles as the format's pilot).
+The reframe itself has **landed**: charter (`06`) + standard entry format
+(`07`), the `packages/` → `catalog/packages/` migration, and the checked
+literate fence roles (`ken reject`/`ken example`) are all on `main`. The phase
+now beginning:
+
+1. **Data-structures enrichment program** — the near-term program of WPs driving
+   the catalog through `S0`+`S1` under demand-pull; sequence and rationale in
+   `docs/program/wp/catalog-data-structures-program.md`. Its first WP (`DS-1`,
+   `Empty`+`Dec`) doubles as the **`.ken.md` format pilot** — no literate entry
+   exists yet.
+2. **Foundation catalog-authoring overlay** — the literate-`.ken.md` pedagogy +
+   Findings-filing skill attached to Foundation; the precondition for authoring
+   the first batch to guide quality.
+3. **Authoring guide (`catalog/guide/`)** — the parallel "writing Ken"
+   workstream (surface reference · proof techniques · decomposition/abstraction
+   hints), first-drafted from the fleet's own memory corpus and general DT
+   practice; runs alongside the packages, not after them.

@@ -95,7 +95,17 @@ is no — ask the operator or the Spec enclave.
   humans-read, decide on intrinsic merits not effort, small auditable TCB,
   reflect-don't-extend, subsume-don't-proliferate, honesty about the boundary).
   When the spec does not settle a choice, reason from it.
-- **Wrap markdown at 80 columns.**
+- **Wrap markdown at 80 columns** — target 80 *display* columns / codepoints (a
+  multi-byte `—`, `→`, `Ω` is one column); lines of 81–85 are acceptable slack,
+  so only reflow what exceeds **85**. Don't spend your own tokens hand-reflowing
+  prose: after you finish writing or editing a Markdown file, **delegate the wrap
+  to a cheap Haiku subagent** driven by the `wrap-md-80` skill. Spawn it with the
+  Agent tool (`model: haiku`), telling it to read
+  `agent/playbooks/tools/wrap-md-80.md` and apply it to your file(s). The skill
+  is a pure whitespace-only reflow (it never changes a word, and leaves code
+  fences, tables, and front matter alone); verify its output is safe with
+  `git diff -w --stat` showing **no** content change. This keeps authoring on
+  your model and formatting on the cheapest tier.
 - **Use Mermaid for diagrams and charts** — dependency graphs, flows, state
   machines, sequence diagrams — in fenced ` ```mermaid ` blocks, **not** ASCII
   art (it renders, diffs, and edits better). Mermaid/code fences are **exempt**

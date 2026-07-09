@@ -838,6 +838,35 @@ This is COORDINATION §14 landing-integrity applied to your *own* edits: a
 corpus change is **one branch** (§14); width-check markdown at 80 **display
 columns** (codepoints, not bytes) before routing.
 
+**Keep `steward/work` fresh against `origin/main` — do not let it drift
+(operator 2026-07-09).** `steward/work` is a *working copy*, not a durable log:
+it should always be `origin/main` **plus at most the current unpublished tracker
+delta**, nothing else. It drifts into a **stale tree** when tracker commits pile
+up on a base that never advances while other teams merge to `main` — the symptom
+is a worktree still carrying a superseded layout (e.g. a pre-migration
+`packages/` where `main` has `catalog/`), a giant false `origin/main..HEAD`
+diff, and merge hazards (editing catalog/spec/playbook files against that stale
+base silently *reverts* other teams' merged work if you ever route the branch).
+Refresh it:
+
+- **On resume (cold start / post-compact), after any merge notification (yours
+  *or* another team's), and before starting new corpus work:** `git fetch
+  origin`; preserve the tip cheaply — `git branch -f
+  preserved/steward-work-$(git rev-parse --short HEAD) HEAD` — then `git reset
+  --hard origin/main`. Your last publish already put the tracker on `main` via
+  the tracker-sync commit (§2a), so the reset loses nothing durable. **Re-derive**
+  the current tracker block against `main`'s version rather than blind-carrying a
+  stale copy.
+- **Never `git rebase origin/main` a long-lived `steward/work`.** A squash-merge
+  leaves the *original* branch commits dangling **ahead** of `origin/main` while
+  their content is already merged, so a rebase would replay already-landed
+  tracker commits into conflicts. Reset-to-`origin/main` + re-apply the working
+  delta is the robust move (the squash-merge trap; see §2c).
+- The corpus-branch route (step 2 above) already cuts from *current*
+  `origin/main`, so a fresh `steward/work` is not required to publish — but a
+  stale one **misleads you about what's landed** and is the root of phantom
+  "unmerged work" scares. Keep it truthful.
+
 ## 7. Federation watchdog (the backstop)
 
 You run the **top** liveness layer (COORDINATION §13) — the watcher-of-watchers
