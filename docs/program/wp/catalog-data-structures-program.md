@@ -1,11 +1,17 @@
-# Catalog data-structures enrichment program (S0 + S1)
+# Catalog data-structures enrichment program (Core + Data Sections)
 
 **Owned by the Steward.** A program — a sequenced set of work packages — that
-drives the catalog deliberately through its two innermost strata: **S0** (the
-essential dependent-programming toolkit) and **S1** (standard datatypes and
-their operations), per the charter `06-catalog-campaign.md` ("The catalog's
-strata"). This doc fixes the *sequence and rationale*; each WP gets its own
-Steward frame + enclave boundary at kickoff (the §2c pipeline).
+drives the catalog deliberately through its two innermost Sections: the **Core
+Section** (the essential dependent-programming toolkit) and the **Data Section**
+(standard datatypes and their operations), per the charter
+`06-catalog-campaign.md` ("Sections and Domains"). This doc fixes the *sequence
+and rationale*; each WP gets its own Steward frame + enclave boundary at kickoff
+(the §2c pipeline).
+
+**Gated behind the initial WP** (`docs/program/wp/ken-authoring-guide.md`): these
+entries are authored against `catalog/guide/` + the `write-ken` skill, and their
+retros feed back into it (charter → "Retro discipline"). Do not begin DS-1 until
+that keystone lands.
 
 Grounded on a gap analysis of the landed catalog (`catalog/packages/`), the
 prelude (`crates/ken-elaborator/src/prelude.rs` + `numbers.rs`/`bytes.rs`/
@@ -13,33 +19,35 @@ prelude (`crates/ken-elaborator/src/prelude.rs` + `numbers.rs`/`bytes.rs`/
 
 ## Method: demand-pull layering
 
-The operator's principle (`06` → strata): *the deeper strata are clarified by
-building the things that ought to sit on them.* We do not speculate an
-exhaustive S0/S1 in the abstract. Instead a concrete **driver** — a real
-upper-stratum target — pulls the exact toolkit lemmas and data operations it
+The operator's principle (`06` → Sections): *the deeper Sections are clarified
+by building the things that ought to sit on them.* We do not speculate an
+exhaustive Core/Data Section in the abstract. Instead a concrete **driver** — a
+real higher-Section target — pulls the exact toolkit lemmas and data ops it
 needs, and we land those below it. Build-order is **top-informed,
 bottom-proven**.
 
-**Proposed near-term driver: a lawful JSON codec** (S3 exemplar). A `Json` value
-type with `encode : Json -> String` / `decode : String -> Result E Json` and a
-proved **round-trip law** `decode (encode j) = Ok j` is a compact forcing
-function that exercises nearly all of S1 — `String`, `List`, `Map`, `Either`/
-`Result`, and lawful equality/decidability — and is high-value pedagogy (the
-round-trip law is the canonical "why proofs" demonstration). Its unmet
-dependencies *are* this program's S0/S1 WP list. The driver itself lands last
-(Phase 3), validating the tier end-to-end. The driver is revisable; if a
-different upper target is preferred, the pulled-dependency set changes with it.
+**Proposed near-term driver: a lawful JSON codec** (a future-Section exemplar).
+A `Json` value type with `encode : Json -> String` / `decode : String -> Result
+E Json` and a proved **round-trip law** `decode (encode j) = Ok j` is a compact
+forcing function that exercises nearly all of the Data Section — `String`,
+`List`, `Map`, `Either`/`Result`, and lawful equality/decidability — and is
+high-value pedagogy (the round-trip law is the canonical "why proofs"
+demonstration). Its unmet dependencies *are* this program's Core/Data WP list.
+The driver itself lands last (Phase 3), validating the two Sections end-to-end.
+The driver is revisable; if a different higher target is preferred, the
+pulled-dependency set changes with it.
 
-## Baseline — what S0/S1 already has (do not rebuild)
+## Baseline — what the Core/Data Sections already have (do not rebuild)
 
-- **S0 landed:** propositional equality (kernel `Eq`, surfaced `Equal`);
-  `subst`/`cong`/`cast`/`sym`/`trans` (`transport` package); lawful
+- **Core Section landed:** propositional equality (kernel `Eq`, surfaced
+  `Equal`); `subst`/`cong`/`cast`/`sym`/`trans` (`transport` package); lawful
   `Eq`/`DecEq`/`Ord` scaffolding (`lawful-classes` — `Bool` proved
   zero-`Axiom`, `Int` postulated); `Semigroup`/`Monoid`/`Functor`/`Foldable`
   (`lawful-functors` — `Bool`/`List`/`Option` proved zero-`Axiom`).
-- **S1 landed:** `Nat`, `Bool`, `Int`(+widths), `Char`, `String`, `List`,
-  `Option`, `Result`, `Pair`/`Prod`, `Map`, `Set` carriers (prelude + `map.ken`
-  capstone with its five inductive laws). Core ops present; see gaps below.
+- **Data Section landed:** `Nat`, `Bool`, `Int`(+widths), `Char`, `String`,
+  `List`, `Option`, `Result`, `Pair`/`Prod`, `Map`, `Set` carriers (prelude +
+  `map.ken` capstone with its five inductive laws). Core ops present; see gaps
+  below.
 
 ## The WP sequence
 
@@ -56,7 +64,7 @@ flowchart TB
   DS1 --> DS9
 ```
 
-### Phase 1 — complete the S0 toolkit
+### Phase 1 — complete the Core Section toolkit
 
 - **DS-1 · `Empty` + `Dec`.** Declare `Empty` (Type-sorted false + `absurd`) and
   `Dec P := (P) + (P -> Empty)` with `decide`, plus the bridge `DecEq a -> (x y
@@ -76,7 +84,7 @@ flowchart TB
   `Applicative`, with the naturality/identity/composition laws. Depends on DS-7.
   Home: Foundation + enclave.
 
-### Phase 2 — complete the S1 datatypes
+### Phase 2 — complete the Data Section datatypes
 
 - **DS-2 · export `Ord Nat` + a `Nat` operations entry.** Lift the private
   `leqNat`/`totalLeqNat`/`transLeqNat`/`antisymLeqNat`/`reflLeqNat` family out
@@ -103,20 +111,22 @@ flowchart TB
   Parallel spec track; the package follows the chapter. Home: Spec enclave →
   Foundation.
 - **DS-6 · lawful `DecEq Char` → `Eq`/`Ord String`.** The named blocker
-  (`collections/MANIFEST.md`): `String` ops ship as plain functions, not lawful
-  instances, because `DecEq Char` isn't lawful — `Char = {c:Int|isScalar c}` and
-  the `Int` decision is `Axiom`-postulated (Int opaque to δ). This is the S1
-  **capstone with a real wall** (Int lawfulness). *T1-design spike first:* can
-  `DecEq Char` be proved via the scalar refinement + a reducing Int-equality
-  check, or does it need a kernel move? Depends on DS-1 (`Dec`). Enclave-led.
-  Home: enclave spike → Foundation.
+  (`collections/MANIFEST.md`): `String` ops ship as plain functions, not
+  lawful instances, because `DecEq Char` isn't lawful — `Char =
+  {c:Int|isScalar c}` and the `Int` decision is `Axiom`-postulated (Int
+  opaque to δ). This is the Data Section **capstone with a real wall** (Int
+  lawfulness). *T1-design spike first:* can `DecEq Char` be proved via the
+  scalar refinement + a reducing Int-equality check, or does it need a
+  kernel move? Depends on DS-1 (`Dec`). Enclave-led. Home: enclave spike →
+  Foundation.
 
 ### Phase 3 — the driver validates the tier
 
-- **DS-9 · lawful JSON codec.** `Json` value type + `encode`/`decode` + the
-  proved round-trip law, built entirely from S0/S1 above. Consumes DS-1..DS-6.
-  Its clean assembly is the tier's acceptance test; any friction is a Finding
-  (kernel defect → Kernel; ergonomics → Ergo). Home: Foundation.
+- **DS-9 · lawful JSON codec.** `Json` value type + `encode`/`decode` +
+  the proved round-trip law, built entirely from the Core/Data Sections
+  above. Consumes DS-1..DS-6. Its clean assembly is the tier's acceptance
+  test; any friction is a Finding (kernel defect → Kernel; ergonomics →
+  Ergo). Home: Foundation.
 
 ## Format, cadence, and home
 

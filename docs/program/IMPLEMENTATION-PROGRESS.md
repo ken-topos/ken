@@ -14,6 +14,33 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
+> ### Sections/Domains + retro discipline + keystone WP (2026-07-09 ~19:10 UTC)
+>
+> Operator refinements to the catalog campaign (`06` + program docs, publishing
+> now):
+> - **Terminology:** the catalog's first-level division is the **Section**;
+>   subject-area subdivisions are **Domains** (e.g. Cryptography Domain in the
+>   Capability Section). Replaces the S0–S4 "strata" scheme. **Four Sections for
+>   now:** Core, Data, Algorithm, Capability (formats/protocols + frameworks
+>   become their own Sections later). `06` architecture section + the
+>   data-structures program reworked to Section/Domain.
+> - **Retro discipline (`06` new section):** unlike the rest of the project
+>   (retros logged, not acted on), **catalog WP retros are ACTED ON** — folded
+>   into `catalog/guide/` + the `write-ken` skill, and mined for language-surface
+>   (→Ergo/Language), elaborator (→Ergo), reusable `def`/`lemma`/`prop` (→Core
+>   Section promotion), and kernel-reduction defects (→Kernel). A catalog WP
+>   isn't closed until its retro's actions are filed. This is explicit in every
+>   catalog WP's retro instructions.
+> - **Keystone initial WP** (`docs/program/wp/ken-authoring-guide.md`, NEW): stand
+>   up `catalog/guide/` (surface reference · proof techniques · decomposition
+>   hints) + the `write-ken` skill **before the campaign proper** — Librarian
+>   assembles from landed corpus + fleet memory, enclave (Architect + spec-author)
+>   fidelity review, clean-room-bounded. Data-structures program (`DS-1`…) is now
+>   explicitly gated behind it.
+>
+> **Next:** frame is ready — kick the keystone WP (Librarian + enclave). Then the
+> Foundation authoring overlay (may bundle), then `DS-1`. Event-driven.
+
 > ### CATALOG REFRAME DONE → data-structures program (2026-07-09 ~18:40 UTC)
 >
 > **Reframe fully executed and on `main`:** charter (`06`) + standard entry
