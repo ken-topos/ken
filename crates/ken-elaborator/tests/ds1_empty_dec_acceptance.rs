@@ -108,6 +108,81 @@ fn ac1_dec_admits_and_elim_dec_large_eliminates_into_type0() {
     );
 }
 
+// AC1 mechanism probe (QA-added): the AC1 test above uses a CONSTANT
+// motive (`\x. Dec P`), which would also pass a degenerate eliminator that
+// ignores per-branch typing entirely (the ES4-lawproofs mechanism-probe
+// lesson). Confirm the kernel genuinely threads the per-constructor
+// expected method type: a No-method whose domain isn't `P -> Empty`, and
+// swapped Yes/No methods, must both be REJECTED — not just "some Type0
+// motive is accepted."
+#[test]
+fn ac1_mechanism_probe_no_method_wrong_domain_rejected() {
+    let mut env = GlobalEnv::new();
+    let empty_id = declare_inductive(&mut env, |_empty| InductiveSpec {
+        level_params: vec![],
+        params: vec![],
+        indices: vec![],
+        level: lv0(),
+        constructors: vec![],
+    })
+    .unwrap();
+    let dec_id = declare_inductive(&mut env, |_dec| InductiveSpec {
+        level_params: vec![],
+        params: vec![Term::omega(lv0())],
+        indices: vec![],
+        level: lv0(),
+        constructors: vec![
+            CtorSpec { args: vec![Term::var(0)], target_indices: vec![] },
+            CtorSpec {
+                args: vec![Term::pi(Term::var(0), Term::indformer(empty_id, vec![]))],
+                target_indices: vec![],
+            },
+        ],
+    })
+    .unwrap();
+    let dec = env.inductive(dec_id).unwrap().clone();
+    let (yes_id, no_id) = (dec.constructors[0].id, dec.constructors[1].id);
+
+    let mut ctx = Context::new();
+    ctx.push(Term::omega(lv0()));
+    let dec_p = Term::app(Term::indformer(dec_id, vec![]), Term::var(0));
+    ctx.push(dec_p);
+    let p = Term::var(1);
+
+    let motive = Term::Ascript(
+        Box::new(Term::lam(
+            Term::app(Term::indformer(dec_id, vec![]), p.clone()),
+            Term::app(Term::indformer(dec_id, vec![]), Term::var(2)),
+        )),
+        Box::new(Term::pi(
+            Term::app(Term::indformer(dec_id, vec![]), p.clone()),
+            Term::Type(lv0()),
+        )),
+    );
+    let yes_method = Term::lam(
+        p.clone(),
+        Term::app(Term::app(Term::constructor(yes_id, vec![]), Term::var(2)), Term::var(0)),
+    );
+    // BOGUS: domain is `Empty -> Empty`, not `P -> Empty`.
+    let bogus_no_method = Term::lam(
+        Term::pi(Term::indformer(empty_id, vec![]), Term::indformer(empty_id, vec![])),
+        Term::app(Term::app(Term::constructor(no_id, vec![]), Term::var(2)), Term::var(0)),
+    );
+    let elim = Term::Elim {
+        fam: dec_id,
+        level_args: vec![],
+        params: vec![p],
+        motive: Box::new(motive),
+        methods: vec![yes_method, bogus_no_method],
+        indices: vec![],
+        scrut: Box::new(Term::var(0)),
+    };
+    assert!(
+        infer(&env, &ctx, &elim).is_err(),
+        "elim_Dec must reject a No-method whose domain isn't P -> Empty"
+    );
+}
+
 // AC2 — `Empty`/`absurdEmpty` elaborate through the real prelude+surface
 // path (not the bare-kernel harness above).
 #[test]
