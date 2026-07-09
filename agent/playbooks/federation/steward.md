@@ -241,9 +241,18 @@ brief** — the implementer should execute mostly mechanically, not design
 > resolves each agent's `.worktrees/<agent>` + its `moot-<agent>` tmux session
 > and **fails before mutating anything** if any is unresolved; (2) `git fetch
 > origin`; (3) **`git reset --hard origin/main`** on each worktree — this also
-> satisfies "start new work from current `origin/main`", **but it DISCARDS any
-> uncommitted worktree state**, so only run it once the unit is quiescent with
-> its prior WP merged and retros in (which the gate already requires); (4) sends
+> satisfies "start new work from current `origin/main`", but it **moves the
+> branch ref**, so it discards **not only uncommitted state but any *committed*
+> commits the branch holds ahead of `origin/main`** (completed-but-unmerged
+> work). The script now **auto-preserves** those under a `preserved/<branch>`
+> ref before resetting and warns — but still only run it once the unit is
+> quiescent with its prior WP merged and retros in (which the gate already
+> requires), and **eyeball each agent's branch is not ahead of `origin/main`**
+> before compacting (a `preserved/` ref is a safety net, not a substitute for
+> knowing what a ring is sitting on — a still-unmerged WP branch means the ring
+> is not actually quiescent). Real incident (2026-07-09): a Foundation
+> compaction orphaned a completed 5/5 Map-laws branch; recovered via the
+> preserve path; the guard was added in response; (4) sends
 > the compaction sequence (`Enter` → `-l '/compact'` → `Enter`) to every pane
 > **in parallel** — `-l` literal form lands on **both Codex and Claude-Code**
 > panes, so this one script is provider-agnostic; (5) waits `--wait-seconds`

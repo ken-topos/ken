@@ -14,6 +14,37 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
+> ### MAP-LAWS RECOVERED + RE-SEQUENCED; migration deferred (2026-07-09 ~17:10 UTC)
+>
+> During the Foundation handoff-gate compaction for the migration WP, the gate's
+> `git reset --hard origin/main` orphaned foundation-implementer's
+> `wp/map-verified-laws` branch — **completed-but-unmerged Map-capstone work
+> (5/5 laws, +1761 on `packages/collections/map.ken`)**. Recovered + preserved
+> at **`wp/map-verified-laws-recovered` (tip `5719800`)**. Both gates are MET
+> (Gap A `surface-transport` merged PR #255/#257; Gap B closed) — it stalled
+> unmerged, not blocked. The leader ring had lost track of it (leader status
+> read "Map … confirmed merged").
+>
+> **Re-sequenced (operator, 2026-07-09):** complete the already-done Map-laws
+> rewrites FIRST, then reorganize the filesystem. Foundation kickoff redirected
+> (`evt_71b3bga0cqaxd`, thread `thr_4qm558whn2ycd`): **`map-verified-laws`**
+> (rebase recovered branch → current `main`, re-verify post `type`→`def` +
+> purity-keywords, land via Architect + CV Decision) → **THEN
+> `catalog-tree-migration`** over the final `map.ken`. `wp/catalog-literate-
+> fence-roles` (Language) still parked behind both.
+>
+> **Script safety fix:** `handoff-gate-compact.sh` now preserves committed-ahead
+> work under a `preserved/<branch>` ref before `reset --hard` (was
+> unconditional — the exact bug that orphaned the Map work). `steward/work @
+> 40a40c1`. **Lesson:** the handoff gate discards *committed* branch-ahead work,
+> not just uncommitted state — verify a ring's branch is not ahead of `main`
+> before compacting, or rely on the new preserve-ref.
+>
+> **`07` References:** added **source repositories / OSS forges** (GitHub,
+> GitLab, Codeberg, SourceHut) as a reference source type, with a clean-room
+> caveat (reader orientation only, never an authoring source; copyleft stays
+> enclave-only).
+
 > ### CATALOG CAMPAIGN REFRAMED; SURF-def MERGED (2026-07-09 ~16:30 UTC)
 >
 > **`SURF-def-refinement` MERGED** — PR #375 green, `origin/main @ 3fa047a`

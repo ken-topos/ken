@@ -102,6 +102,20 @@ worktree_for_agent() {
 reset_agent() {
   local agent="$1"
   local worktree="$2"
+  local cur_branch ahead preserve_ref
+
+  # SAFETY: `reset --hard origin/main` moves the current branch ref, which
+  # orphans any commits it holds ahead of origin/main (completed-but-unmerged
+  # work, not just uncommitted state). Preserve them under a `preserved/` ref
+  # first so a handoff compaction can never silently destroy landed work.
+  cur_branch="$(git -C "$worktree" rev-parse --abbrev-ref HEAD 2>/dev/null || printf 'HEAD')"
+  ahead="$(git -C "$worktree" rev-list --count "$origin_main"..HEAD 2>/dev/null || printf '0')"
+  if [ "${ahead:-0}" -gt 0 ]; then
+    preserve_ref="preserved/${cur_branch//\//-}-$(git -C "$worktree" rev-parse --short HEAD)"
+    git -C "$worktree" branch -f "$preserve_ref" HEAD >/dev/null 2>&1 || true
+    printf '[%s] WARNING: %s had %s commit(s) ahead of %s — preserved at %s before reset\n' \
+      "$agent" "$cur_branch" "$ahead" "$origin_main" "$preserve_ref"
+  fi
 
   printf '[%s] resetting %s to %s\n' "$agent" "$worktree" "$origin_main"
   git -C "$worktree" reset --hard "$origin_main" >/dev/null
