@@ -119,6 +119,28 @@ compact_agent() {
   tmux send-keys -t "$target" Enter
 }
 
+# Capture the post-compaction evidence for one agent: the live context marker
+# from its pane plus its worktree HEAD/branch. Grep never fails the script
+# (guarded with || true); a missing marker is reported, not fatal.
+verify_agent() {
+  local agent="$1"
+  local worktree="$2"
+  local target="moot-$agent"
+  local ctx head branch
+
+  # Bottom-most match is the live status line. Handles both Claude Code
+  # ("ctx 0%") and Codex ("0% context left"), plus an in-progress "Compacting".
+  ctx="$(tmux capture-pane -t "$target" -p 2>/dev/null \
+    | grep -oE 'ctx [0-9]+%|[0-9]+% context left|Compacting|Context compacted' \
+    | tail -1 || true)"
+  [ -n "$ctx" ] || ctx='(no ctx marker in visible pane — capture wide by hand)'
+
+  head="$(git -C "$worktree" rev-parse --short HEAD 2>/dev/null || printf '?')"
+  branch="$(git -C "$worktree" rev-parse --abbrev-ref HEAD 2>/dev/null || printf '?')"
+
+  printf '[%s] %s | worktree %s (%s)\n' "$agent" "$ctx" "$head" "$branch"
+}
+
 wait_for_jobs() {
   local stage="$1"
   shift
@@ -181,4 +203,9 @@ wait_for_jobs "compaction send" "${compact_pids[@]}"
 printf 'Compaction commands sent. Waiting %ss before returning.\n' \
   "$wait_seconds"
 sleep "$wait_seconds"
+
+printf 'Post-compaction verification (evidence):\n'
+for i in "${!resolved_agents[@]}"; do
+  verify_agent "${resolved_agents[$i]}" "${resolved_worktrees[$i]}"
+done
 printf 'Handoff-gate compaction wait complete.\n'
