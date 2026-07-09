@@ -17,7 +17,7 @@ end-to-end verification is pending the Runtime console-harvest fix landing
   (`"Hello, "`/`"Bye, "`/`"Hey, "`) are built into a list and applied to a
   common name (`"World"`) via a local `map` (a one-off, matching
   `crates/ken-elaborator/tests/l3a_acceptance.rs`'s own local `map` — not in
-  the landed `packages/collections` floor). Each closure captures `p`
+  the landed `catalog/packages/collections` floor). Each closure captures `p`
   independently — the property this task probes (a naive shared-mutable
   capture bug would make all three closures prepend the same, last-bound
   prefix).

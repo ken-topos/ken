@@ -488,10 +488,10 @@ compiler-stage lowerability gaps, not for hiding semantic omissions.
 - `Option`, `List`, and an indexed `Vec`-style family demonstrate inductive
   metadata: parameters, indices, constructor target indices, generated
   constructor types, and recursive positions must be represented explicitly.
-- `packages/transport/transport.ken` is a zero-delta equality/J baseline:
+- `catalog/packages/transport/transport.ken` is a zero-delta equality/J baseline:
   checked proof combinators such as `subst`, `cong`, `cast`, `sym`, and `trans`
   stress proof terms and equality references without new assumptions.
-- `packages/lawful-classes/lawful_classes.ken` demonstrates class and instance
+- `catalog/packages/lawful-classes/lawful_classes.ken` demonstrates class and instance
   metadata. Inductive carriers such as `Bool` can carry zero-delta law proofs;
   primitive-carrier laws such as audited `Int` laws remain visible in the trust
   delta instead of being silently treated as proved.
@@ -502,14 +502,14 @@ compiler-stage lowerability gaps, not for hiding semantic omissions.
   checked type, operation reduction class, total/partial face, any associated
   obligation or primitive assumption, and supported or explicit unsupported
   lowerability.
-- `packages/collections/collections.ken` demonstrates recursive groups,
+- `catalog/packages/collections/collections.ken` demonstrates recursive groups,
   inductive metadata, proof-returning declarations, and proof terms such as
   `sortBool` and `take_drop_decomposition`.
 - An accepted recursive group records its group id, member symbols, checked
   bodies/types, SCC relation, structural or size-change admission, and
   lowerability status. A rejected or stage-deferred group remains explicit and
   fails loudly if a target closure reaches it.
-- `packages/lawful-functors/lawful_functors.ken` demonstrates higher-kinded
+- `catalog/packages/lawful-functors/lawful_functors.ken` demonstrates higher-kinded
   class parameters, parametric instance heads, dictionary symbols, and package
   dependency closure.
 - `read_bytes`/`send` rows and a `foreign os_write ... visits [FS]` binding
@@ -518,7 +518,7 @@ compiler-stage lowerability gaps, not for hiding semantic omissions.
 - A `temporal{}` declaration demonstrates delegated behavioral data: NC1
   records stable obligation references and export hashes, while `71` defines
   the behavioral schema and no-promotion rule.
-- `packages/parsing/parsing.ken` can demonstrate source identity, spans, bytes,
+- `catalog/packages/parsing/parsing.ken` can demonstrate source identity, spans, bytes,
   and parser-result data. Its source fields are provenance/diagnostic facts, not
   a raw-source consume path.
 

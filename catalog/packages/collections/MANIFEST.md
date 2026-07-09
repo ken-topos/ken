@@ -62,7 +62,7 @@
   structural folds keeps the audited primitive set small
   (subsume-don't-proliferate).
 - **Package dependency.** The CAT-3 proof terms use `cong`, so harnesses and
-  consumers load `packages/transport/transport.ken` before this file. The
+  consumers load `catalog/packages/transport/transport.ken` before this file. The
   dependency is proof-only and adds no trusted-base delta.
 - **SCT sound zone.** Every recursive call is an applied call whose decreasing
   argument is a strict subterm of a matched argument (the `Cons` tail and/or

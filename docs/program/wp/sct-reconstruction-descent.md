@@ -232,7 +232,7 @@ still be REJECTED**:
   spec's "terminating recursion is accepted via size-change" already covers — à la
   #5/(a) — but spec-leader makes the call; if `/spec` is touched, CV reviews).
 - **Lane:** Kernel. Independent of `surface-transport`, the `[FS]` frame, and any
-  in-flight `packages/` build — disjoint crate (`ken-kernel`), no contention;
+  in-flight `catalog/packages/` build — disjoint crate (`ken-kernel`), no contention;
   Kernel is idle and can start on approach-review now.
 - **Downstream benefit:** general lexicographic/nested recursion (Ackermann and
   its kin) becomes admissible — a standing completeness win for the kernel, and it

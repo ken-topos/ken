@@ -278,7 +278,7 @@ to the laws.
 
 ### 3.3 `Map` and `Set` — proved package trees over `Ord k` (`50-stdlib/52`)
 
-`Map k v` and `Set a` are **proved, pure `packages/` modules** keyed on a lawful
+`Map k v` and `Set a` are **proved, pure `catalog/packages/` modules** keyed on a lawful
 **`Ord k`**, specified in `../50-stdlib/52-map.md`. **This supersedes an earlier
 DRAFT** that made them abstract `DecEq`-keyed content-addressed heap primitives
 (kinds `0x07`/`0x08`) — operator decision **OQ-A** (2026-07-03) chose *proved +

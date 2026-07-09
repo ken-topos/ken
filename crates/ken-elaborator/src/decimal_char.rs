@@ -207,7 +207,7 @@ pub fn register_decimal_char(elab: &mut ElabEnv) -> Result<DecimalCharEnv, ElabE
     //
     // `IsTrue` bridges a decidable `Bool` to the proof-irrelevant `Ω`
     // sub-singleton (`IsTrue true ≡ Top`, `IsTrue false ≡ Bottom`) —
-    // established spelling, matching `packages/lawful-classes/
+    // established spelling, matching `catalog/packages/lawful-classes/
     // lawful_classes.ken`'s `fn IsTrue (b : Bool) : Prop = Equal Bool b
     // True` verbatim (not vendored — the one-line definition is restated
     // here since that package isn't part of the auto-loaded core prelude).

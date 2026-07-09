@@ -1,6 +1,6 @@
 # A proved, pure `Map k v` over `Ord k`
 
-> Status: **DRAFT v0 (VAL2 #8 / OQ-A).** A `packages/` catalog entry that
+> Status: **DRAFT v0 (VAL2 #8 / OQ-A).** A `catalog/packages/` catalog entry that
 > closes `letter-frequency`'s gap — `Map` was a bare opaque type with **zero
 > operations**. Operator-locked shape (OQ-A, 2026-07-03): a **proved, pure,
 > `Ord k`-keyed** associative map, **shipped as ordinary package Ken — out of
@@ -180,7 +180,7 @@ of the correctness-now / perf-later split (flagged in §7, not hidden). The
 is stable across the rep change — only the bodies and the invariant's balance
 conjunct change.
 
-Package home: the `collections` package (`packages/collections/`, alongside the
+Package home: the `collections` package (`catalog/packages/collections/`, alongside the
 landed `List`/`Nat` floor); exact file path is Foundation's to fix.
 
 ## 4. Core API
@@ -221,7 +221,7 @@ an unproved op under the "proved map" banner. `letter-frequency`'s critical path
 
 - `toList` is the **in-order** traversal: `toList Leaf = Nil`,
   `toList (Node l k v r) = append (toList l) (Cons (k, v) (toList r))` (reusing
-  the landed `list_append`, `packages/collections`). Over an `Ordered` tree its
+  the landed `list_append`, `catalog/packages/collections`). Over an `Ordered` tree its
   output keys are **ascending** (§5.3, the load-bearing law).
 - `fromList` folds `insert` over the list (`fromList = foldr (λ (k,v) m. insert
   k v m) empty`); the result is `Ordered` (invariant preserved, §5.1) and
@@ -272,7 +272,7 @@ one `Map` correctness law that stays deferred (§7c).
   variables, not the concrete constructors `Ord Bool` case-splits on) needs a
   **propositional-rewrite / transport (`J`/`cast`) step** to fire the internal
   `if`. `surface-transport` (`19955d8`) **surfaced** the `J` former + the
-  derived `packages/transport/transport.ken` combinators (`53-transport.md`),
+  derived `catalog/packages/transport/transport.ken` combinators (`53-transport.md`),
   reducing to the kernel's **existing** `Term::J`/`Cast` (`Refl` still checks
   only pre-existing convertibility; `J` is the reachable transport).
 
@@ -470,7 +470,7 @@ gap — AC3):
   → **Gap B** (dependent-motive recovery, the widened non-indexed gate `elab.rs`
   `dependent_eligible` at `:535-553`, realizing `../30-surface/34-data-match.md
   §3.2`). Four of the five *additionally* must **align a stuck `leq k k'`** →
-  **Gap A** (the `J` former + `packages/transport/transport.ken`, surfacing the
+  **Gap A** (the `J` former + `catalog/packages/transport/transport.ken`, surfacing the
   kernel's *existing* `Term::J`/`Cast`, `53-transport.md` — the same frontier
   `lawful_classes.ken`'s relational laws need). `toList`-ordered is
   **Gap-B-only**. **Both capability WPs are now landed** (Gap A `19955d8`, Gap B
@@ -523,7 +523,7 @@ met.
   are plain functions, not `Ordered`-indexed / proof-carrying types). Named
   follow-on, not a silent gap.
 - **AC4 — no regression.** `cargo test --workspace` green; lawful `Ord` and the
-  rest of `packages/` behave identically pre/post.
+  rest of `catalog/packages/` behave identically pre/post.
 - **AC5 — build-lane retirement is real (hard Foundation build AC).** The
   `prelude.rs` `Map`/`Set` primitive is **removed** and the `es2_acceptance.rs`
   "Map/Set are primitives" assertion **flips** (they are now proved inductives),

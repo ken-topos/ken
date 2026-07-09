@@ -13,8 +13,8 @@ slot before or after CAT-2 at Steward's discretion; default consumption order is
 after CAT-2. See `../06-catalog-campaign.md` §"Lane A" (CAT-3 = Layer 1).
 
 > **Frame-by-objective, not by current state (§2c).** Every "the landed code has
-> X" line is **perishable** — re-verify against `packages/collections/` +
-> `packages/lawful-functors/` as they stand at pickup. SURF-1 migrates the `.ken`
+> X" line is **perishable** — re-verify against `catalog/packages/collections/` +
+> `catalog/packages/lawful-functors/` as they stand at pickup. SURF-1 migrates the `.ken`
 > surface (`view` → `fn`/`proc`) under this frame; do not assume the `view`
 > spelling still exists at elaboration.
 
@@ -29,7 +29,7 @@ the **agent-facing projection abstraction** (the catalog's "view" unit) that the
 higher layers (parsers, maps, relational data) build on. Two halves:
 
 - **Collection laws** over the landed list/collection ops
-  (`packages/collections/collections.ken`: `list_append`, `take`, `drop`, `nth`,
+  (`catalog/packages/collections/collections.ken`: `list_append`, `take`, `drop`, `nth`,
   `slice`, `concat`, …) plus the two structural operations a law layer needs that
   are **not yet landed** (`map`, `filter`) — length/membership/decomposition
   laws, the append monoid (**reuse CAT-1's landed proofs**), and **verified
@@ -54,7 +54,7 @@ the GPT window**; this elaboration runs on the T1 enclave.
    discrimination** (`55 §3.2`: constructor-headed → `Top` → `tt`; neutral →
    stuck `Eq` → `Refl`) apply verbatim.
 2. **Reuse, don't re-derive, the append monoid.** `list_append`'s associativity +
-   unit laws are **already proved** in `packages/lawful-functors/lawful_functors.ken`
+   unit laws are **already proved** in `catalog/packages/lawful-functors/lawful_functors.ken`
    (CAT-1: `list_assoc`/`list_left_unit`/`list_right_unit`, generic in the element
    type). CAT-3's append-monoid law is a **reference/instance**, not a new proof
    (subsume-don't-proliferate). Adding `Monoid (List a)` as a *parametric* instance
@@ -176,7 +176,7 @@ laws (D1), and the lens coherence flips (D3). Model on CV's CAT-1 seed
   against landed machinery; the shipped flavor(s) have coherence laws proved; the
   name does not collide with the retired `view` keyword (fork C resolved).
 - **AC7 — green.** `cargo test --workspace` + the rosetta corpus (16/0) green;
-  new package(s) under `packages/` with MANIFEST + derivation path.
+  new package(s) under `catalog/packages/` with MANIFEST + derivation path.
 
 ---
 
@@ -265,7 +265,7 @@ identical move for permutation. `bool_or` = transparent match-based (`:39`).
 
 **E2 — D1 structural laws + the red/green split.** Landed ops
 (`collections.ken`, all `view`): `list_append:52`, `nth:58`, `take:67`,
-`drop:76`. **Absent from all `packages/`:** `map`, `filter`, `mem`, `length`,
+`drop:76`. **Absent from all `catalog/packages/`:** `map`, `filter`, `mem`, `length`,
 `min` (only `natSub:87`, saturating monus). ⇒ decomposition #1 (`list_append
 (take n xs) (drop n xs) ≡ xs`) is **provable now**; decomposition #2 (`length
 (take n xs) ≡ min n (length xs)`) needs `length` **and** `min`, so it joins

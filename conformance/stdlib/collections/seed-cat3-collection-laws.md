@@ -3,7 +3,7 @@
 Format: `../../README.md`. Third WP of the **catalog campaign**
 (`docs/program/06-catalog-campaign.md`;
 `docs/program/wp/CAT-3-collection-laws.md`). CAT-3 = **Layer 1**: the landed
-`packages/collections` ops get their **laws as propositions, proved not
+`catalog/packages/collections` ops get their **laws as propositions, proved not
 postulated** (the CAT-1 lawful-class discipline over a **value carrier**), the
 capstone **verified `sort`** (`isSorted` and `Perm` as two laws), and the
 agent-facing **`view` abstraction** (the catalog's projection unit — the six
@@ -39,7 +39,7 @@ The **Architect's three fork rulings** (`evt_4c3q1e611va69`), as transcribed in
 
 **Red-until-built posture (CAT-1-Functor precedent).** `map`, `filter`, `sort`,
 `isSorted`, `count`, `mem`, `length`, `min`, and the `view`/`lens` records are
-**absent from `packages/` on `origin/main`** (self-grepped; `57 §2.1`/`§2.3`).
+**absent from `catalog/packages/` on `origin/main`** (self-grepped; `57 §2.1`/`§2.3`).
 Every case whose subject is one of these is **red-until-built** against the
 CAT-3 Language build (held for the GPT window); it flips green when the build
 lands the op + its law. Cases over **only** landed ops (`list_append`, `take`,
@@ -52,14 +52,14 @@ are tagged distinctly from the deeper **blocked-on-missing-op** reds.
   contract: §2 D1 structural laws, §3 verified `sort`, §4 the `view`
   abstraction, §5 derivation paths / `trusted_base()` delta, §6 AC mapping. Law
   anchors: `57 §2.2` (D1), `57 §3.4`/`§3.7` (sort), `57 §4.4` (lens).
-- `packages/collections/collections.ken` — **landed**: `list_append`
+- `catalog/packages/collections/collections.ken` — **landed**: `list_append`
   (recursing on its **first** argument, so **left unit is definitional**, right
   unit + assoc inductive), `nth`, `take`, `drop`, `natSub`,
   `list_eq (eqf : a -> a -> Bool)`, `list_compare`,
   `data OrdResult = Lt | Eq | Gt`. **NOT landed** (`57 §2.1`): `count`, `map`,
   `filter`, `sort`, `isSorted`, `mem`, `length`, `min` — hence the
   red-until-built split.
-- `packages/lawful-classes/lawful_classes.ken` — the lawful-class pattern and
+- `catalog/packages/lawful-classes/lawful_classes.ken` — the lawful-class pattern and
   **the Fork-A precedent**: `Ord.total` is stated
   `total : (x)(y) → IsTrue (bool_or (leq x y) (leq y x))` — a decidable Bool
   equation, chosen *because* a bare propositional disjunction would be
@@ -292,7 +292,7 @@ sortId  (a) (le) (xs) : List a = xs      -- identity (fails isSorted)
 - given: the `map` length-preservation law (if `map` arrives via `Functor List`,
   a law *about* the instance)
 - expect: **RED-UNTIL-BUILT — blocked** (`map` and `length` both unlanded; no
-  `Functor List` / standalone `map` on `List` in `packages/`). Flips green when
+  `Functor List` / standalone `map` on `List` in `catalog/packages/`). Flips green when
   the build lands `map` + `length` + the proof
 - why: (property) AC5 — CAT-1-Functor posture verbatim; the `map` provenance
   (`Functor List` vs standalone) is an open build sub-decision
@@ -361,7 +361,7 @@ sortId  (a) (le) (xs) : List a = xs      -- identity (fails isSorted)
   elaborates, all three proofs close by `Refl`, zero `Axiom`, **no `match` on
   the Σ-pair**
   (Σ-η, not a case-split). **RED-UNTIL-BUILT** (the `view`/`lens` record is not
-  in `packages/`)
+  in `catalog/packages/`)
 - why: (soundness) AC6 — the ACCEPT arm for the shipped concrete flavor. It is
   ordinary Ken (Fork B: plain `Σ`-record, kernel-untouched). **All three laws
   close by `Refl`** — none by `tt`: the `55 §3.2` "same head → `Top` → `tt`"

@@ -18,7 +18,7 @@ even a `spec/`-only grep, **misses the second class entirely** — it looks
 exactly like "unimplemented" when the symbol is in fact landed and load-bearing.
 
 **The concrete miss (CAT-4, the `Perm` cross-chapter reconcile, 2026-07-04).**
-Both spec-leader and the Architect independently grepped `packages/**.ken` +
+Both spec-leader and the Architect independently grepped `catalog/packages/**.ken` +
 `spec/` for a landed `Perm` declaration, found nothing, and concluded a `37 §6`
 vs `57 §3.1` `Perm` disagreement was pure spec-vs-spec prose contradiction (no
 landed code affected) — an errata/doc-only fix. **Both grounding passes were

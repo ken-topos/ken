@@ -92,7 +92,7 @@ too far: describe the *what*, not the *how* of any particular implementation.
   clean form.
 - **A zero-delta lawful instance requires an INDUCTIVE carrier — a primitive
   carrier can't be zero-delta lawful (promoted ES4-classes-build, an
-  Architect-sharpened rule for every future `packages/` tranche).** The law fields
+  Architect-sharpened rule for every future `catalog/packages/` tranche).** The law fields
   are ∀-quantified props (`∀x. IsTrue (leq x x)`, …) provable only by
   **case-analysis / induction on the carrier** — which needs an **eliminator**. A
   real `data` (e.g. `Bool`) has its eliminator → the ops are *defined* functions

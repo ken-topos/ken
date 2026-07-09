@@ -1,4 +1,4 @@
-# Map-build — implement the proved BST `Map k v` in `packages/collections` and retire the opaque primitive (VAL2 #8 / OQ-A)
+# Map-build — implement the proved BST `Map k v` in `catalog/packages/collections` and retire the opaque primitive (VAL2 #8 / OQ-A)
 
 **Steward frame → Team Foundation (build).** The spec is **already fully
 elaborated and on `main`** — `spec/50-stdlib/52-map.md` (the proved bare ordered
@@ -45,7 +45,7 @@ these:
 
 ## Mandated deliverable outline (each ends in a concrete, implementable choice)
 
-1. **Carrier + API** in `packages/collections/` (exact file path Foundation's to
+1. **Carrier + API** in `catalog/packages/collections/` (exact file path Foundation's to
    fix — alongside the landed `List`/`Nat`; `collections.ken` exists). Implement
    the **7 operations exactly as specified in `52-map.md §4`**: `empty`,
    `insert`, `lookup`, `member`, `toList` (in-order, ascending), `fromList`,
@@ -89,7 +89,7 @@ these:
   absence). This is the load-bearing "proved not tested" net (§5.4) — must fail
   **for the right reason**.
 - **AC4 — no regression.** `cargo test --workspace` green; lawful `Ord` and the
-  rest of `packages/` behave identically pre/post.
+  rest of `catalog/packages/` behave identically pre/post.
 - **AC5 — build-lane retirement is REAL (hard AC).** `prelude.rs` primitive
   **removed** + `es2_acceptance.rs` assertion **flipped**, **verified as landed**
   (not just asserted). Deliverables 3 + 4 above.

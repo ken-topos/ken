@@ -17,7 +17,7 @@ and the do-not-reopen boundaries for the build.
 
 ## 1. Objective
 
-Land `packages/parsing/` as the Layer-3 catalog package for source artifacts,
+Land `catalog/packages/parsing/` as the Layer-3 catalog package for source artifacts,
 byte spans, total parser results, a small package-owned Boolean grammar,
 parser/printer and formatter laws, and source-located diagnostics.
 
@@ -30,7 +30,7 @@ claim to parse full Ken syntax.
 
 The settled contract is `59`; do not reopen these points:
 
-1. **Package boundary.** One package under `packages/parsing/`, namespace
+1. **Package boundary.** One package under `catalog/packages/parsing/`, namespace
    `ken.parse`. Source/span, parser, grammar, and diagnostic validity are one
    public catalog surface for v1.
 2. **Source identity.** `Source` is a byte artifact over `Bytes` plus UTF-8
@@ -64,8 +64,8 @@ The settled contract is `59`; do not reopen these points:
 
 Add:
 
-- `packages/parsing/MANIFEST.md`
-- `packages/parsing/parsing.ken`
+- `catalog/packages/parsing/MANIFEST.md`
+- `catalog/packages/parsing/parsing.ken`
 - focused package acceptance tests, expected as
   `crates/ken-elaborator/tests/cat5_parsing_package.rs`
 
@@ -188,7 +188,7 @@ The manifest must state:
 
 - **G1 -- Zero trust delta.** No kernel, primitive registry, compiler parser,
   CLI loader, export/provenance, or `Cargo.lock` change. No `Axiom` in
-  `packages/parsing/`. `trusted_base()` deltas for public definitions and laws
+  `catalog/packages/parsing/`. `trusted_base()` deltas for public definitions and laws
   are empty.
 - **G2 -- Byte artifact identity.** Source/span tests prove offsets are over
   `sourceBytes`, not normalized `String` or copied substrings.

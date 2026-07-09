@@ -56,7 +56,7 @@ prove a grounded no-fix ruling and name the smaller follow-on.
 
 The target shapes are the D3 reduced option-table reconstruction and the later
 direct lookup/member reflection helper, not the whole CAT-4
-`packages/collections/map.ken` proof:
+`catalog/packages/collections/map.ken` proof:
 
 - a transparent option-like scrutinee, e.g. `km_lookup b`;
 - an option-table target whose expected result depends on the scrutinee and a

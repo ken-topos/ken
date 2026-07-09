@@ -5,7 +5,7 @@ Format: `../../README.md`. These pin the **CAT-4 deliverable**
 spec-author's landed chapter `spec/50-stdlib/58-maps-sets-relations.md` (tip
 `516ba78`, Architect's 3 fidelity fold-ins applied) — cites below are
 **re-pointed to `58 §X`** and re-anchored to that post-fold-in tip). CAT-4
-**extends the landed Map capstone** (`packages/collections/map.ken`,
+**extends the landed Map capstone** (`catalog/packages/collections/map.ken`,
 `spec/50-stdlib/54-map-verified-laws.md` — laws 1/2/3/5 + `toList`-ordered
 proved) with `delete`, the keyed-merge ops
 (`union`/`intersection`/`difference`), `keys`/`values` coherence, the

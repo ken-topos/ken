@@ -44,7 +44,7 @@ ops), the `Ordered`/`allKeys` **definitions**, **one** non-inductive law proof
 **now-landed** enabling capabilities — **Gap B** (dependent-motive recovery over
 non-nullary `Tree`/`List`, the non-indexed `elab.rs:535-553` gate,
 `dependent-match-nonnullary` `282856c`) + **Gap A** (transport over a stuck
-`leq`, the `J` former + `packages/transport/`, `surface-transport` `19955d8`).
+`leq`, the `J` former + `catalog/packages/transport/`, `surface-transport` `19955d8`).
 `Ordered empty = tt` — the **second** Branch-A proof (Disc 1) — is added +
 verified by the elaboration commit `df81689`, so it lands **realized on `main`**
 at this merge, sibling of `lookup empty`. **All five inductive laws are now
@@ -88,7 +88,7 @@ structurally forces the retirement of the constructor-less opaque primitive.
 ### stdlib/map/carrier-inductive-ops-defs-not-primitive (soundness)
 - spec: `52 §1.1`/`§3`/`§9` (AC1), `16 §1` (`Ω` props), `34 §1` (transparent
   inductive `data`)
-- given: the built `Map` package (`packages/collections/…`) as admitted into the
+- given: the built `Map` package (`catalog/packages/collections/…`) as admitted into the
   kernel environment.
 - expect: `Tree k v` is admitted by **`declare_inductive`** (two constructors
   `Leaf`/`Node`, kernel-rechecked, an induction principle exists); `insert`/
@@ -492,7 +492,7 @@ applied to the map's one `Equal`-promotion site.
 - spec: `52 §9` AC4
 - given: the workspace after the Map-container build.
 - expect: `cargo test --workspace` **green**; the lawful `Ord`/`DecEq` instances
-  and the rest of `packages/` (`List`/`Nat`) behave **identically** pre/post —
+  and the rest of `catalog/packages/` (`List`/`Nat`) behave **identically** pre/post —
   the map is an additive package plus a primitive **removal** that nothing else
   depended on for *operations* (there were none). Any consumer that only *named*
   `Map` (never built/queried it) still elaborates.

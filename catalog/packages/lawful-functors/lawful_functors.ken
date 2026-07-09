@@ -16,14 +16,14 @@
 --
 -- Laws PROVED over inductive carriers, never postulated (AC3): the `List a`
 -- append monoid and `List` Functor/Foldable laws by induction + `cong`
--- (packages/transport), `Bool`'s conjunction monoid and `Option`
+-- (catalog/packages/transport), `Bool`'s conjunction monoid and `Option`
 -- Functor/Foldable laws by finite case-split/definitional equality. Zero `Axiom`, zero
 -- `trusted_base()` delta -- every instance is a real `declare_def` record
 -- value, kernel-re-checked.
 --
 -- Dependencies (derivation path, see MANIFEST): `cong`/`sym`/`trans`
--- (packages/transport/transport.ken, over the `J` former) for the inductive
--- congruence steps; `list_append` (packages/collections/collections.ken) as
+-- (catalog/packages/transport/transport.ken, over the `J` former) for the inductive
+-- congruence steps; `list_append` (catalog/packages/collections/collections.ken) as
 -- the List monoid operation -- reused, never re-defined (subsume-don't-
 -- proliferate).
 

@@ -36,8 +36,8 @@
   delta (§5).
 - **Blocks:** the first reframed catalog batch (campaign item 5) needs this to
   author honest negative examples. **Blocked by:** nothing (the landed
-  extractor is a stable dependency; independent of the `packages/` →
-  `catalog/packages/` migration WP).
+  extractor is a stable dependency; independent of the `catalog/packages/` →
+  `catalog/catalog/packages/` migration WP).
 
 > **Perishable-state caveat.** Line numbers below are `origin/main`, the state
 > read for this frame (2026-07-09); re-locate by shape (function/match-arm
@@ -234,7 +234,7 @@ All edits are in `crates/ken-elaborator/src/literate.rs` unless noted.
 - Do not add a new CLI subcommand. `ken run <file>.ken.md` already routes
   through `elaborate_ken_md_file`; extending that one entry point is the
   minimal-diff path and is sufficient for CI to invoke (`ken run
-  catalog/packages/<pkg>/<pkg>.ken.md` becomes a complete literate check:
+  catalog/catalog/packages/<pkg>/<pkg>.ken.md` becomes a complete literate check:
   module elaborates, every `reject` block fails, every `example` block
   succeeds). A dedicated `ken check`/`ken build` subcommand, if wanted, is
   downstream (§8) and orthogonal to this WP.

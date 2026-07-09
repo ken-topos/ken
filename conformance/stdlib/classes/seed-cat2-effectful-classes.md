@@ -77,10 +77,10 @@ The five rulings this seed encodes (Architect, `evt_p39qvcmh4gy2`):
   emits a fresh `RowVar` for an abstract codomain head (SURF-1 build seam).
 - Carriers: `data List a = Nil | Cons a (List a)` /
   `data Option a = None | Some a` (`prelude.rs:189/191`) — real `Type0 → Type0`
-  indformers. `list_append` landed (`packages/collections/collections.ken:52`,
+  indformers. `list_append` landed (`catalog/packages/collections/collections.ken:52`,
   recurses on its **first** arg → left-unit definitional, right-unit/assoc
   inductive). `Semigroup`/`Monoid` + `List Nat`/`Bool` instances landed
-  (`packages/lawful-functors/`). **NOT yet landed:**
+  (`catalog/packages/lawful-functors/`). **NOT yet landed:**
   `map`/`bind`/`foldr`/`traverse` for `List`/`Option`, and the three CAT-2
   classes — so the instance-law cases are **red-until-built** (§below).
 - `14 §3` — K4 `Ω`-motive elimination (the capability the inductive law proofs
@@ -100,7 +100,7 @@ AC5), and the **effect-row-polymorphic `traverse`** (Fork C / AC6).
 **Static vs runtime face.** These pin the **static face** — the verdict shapes,
 the `tt`-vs-`Refl` endpoint map, the `proc` classification, the attested bridge,
 the wired-sub-dict reuse. The **runtime/build face** — the actual
-`packages/lawful-functors/` additions carrying real `elim_List`/`elim_Option`
+`catalog/packages/lawful-functors/` additions carrying real `elim_List`/`elim_Option`
 proof terms and the wired sub-dicts, producer-grepped for
 `declare_postulate`/holes on the law fields — is the **CAT-2 Language build**
 (held for the GPT window), reconciled against the **landed** package there, not

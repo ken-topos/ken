@@ -8,7 +8,7 @@
 -- prepends it to its argument. Three closures (capturing "Hello, "/"Bye, "/
 -- "Hey, ") are built into a list of functions -- functions as first-class
 -- list elements -- and applied to a common name via a local `map` (not in
--- the landed `packages/collections` floor; a one-off, same precedent as
+-- the landed `catalog/packages/collections` floor; a one-off, same precedent as
 -- `crates/ken-elaborator/tests/l3a_acceptance.rs`'s own local `map`).
 --
 -- GAP-arrow-type-as-type-arg (non-blocking, worked around): `A -> B`

@@ -26,7 +26,7 @@ data OrdResult = Lt | Eq | Gt
 
 -- Local `list_append`/`concat` -- only what `natToDecimalFueled` needs
 -- for its multi-digit branch; kept self-contained rather than pulling in
--- `packages/collections` for two small defs.
+-- `catalog/packages/collections` for two small defs.
 fn list_append (a : Type) (xs : List a) (ys : List a) : List a =
   match xs { Nil ⇒ ys ; Cons x xs2 ⇒ Cons a x (list_append a xs2 ys) }
 

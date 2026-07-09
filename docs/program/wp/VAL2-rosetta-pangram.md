@@ -23,9 +23,9 @@ totality/state stressors.
 No repeated work across the examples. The shared substrate is built once or
 already exists:
 - **Interpreter** — `ken-interp`, already built; examples run on it as-is.
-- **Landed packages** — `packages/collections` (7-combinator `List`/`Nat` floor +
+- **Landed packages** — `catalog/packages/collections` (7-combinator `List`/`Nat` floor +
   string surface `concat`/`slice`/`charAt`/`eq`/`compare` + local `OrdResult`),
-  `packages/lawful-classes` (`Ord`/`Eq`/`DecEq`). Examples **import and reuse**
+  `catalog/packages/lawful-classes` (`Ord`/`Eq`/`DecEq`). Examples **import and reuse**
   these — **no example re-derives** `list_append`, a sort primitive, or a string
   op.
 - **The differential runner** — the one new shared piece; **built first** (see

@@ -20,7 +20,7 @@ through the fixed CLI so far) touches no String ops. In-process verification
 (the implementer's harness, `list_char_ids` wired manually) already confirms
 `palindrome`/`closures`/`merge-sort` produce **correct values** — this is purely
 a `ken run`-path wiring gap, not a correctness issue in the examples or
-`packages/collections`.
+`catalog/packages/collections`.
 
 ## Settled inputs — DO NOT REOPEN
 - **Lane = Runtime.** `ken-cli`'s `run_file` is Runtime's file (the

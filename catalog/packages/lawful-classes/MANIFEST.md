@@ -1,7 +1,7 @@
 # `lawful-classes` — `Eq`, `DecEq`, `Ord`
 
 **Spec catalog entry:** `spec/50-stdlib/51-lawful-classes.md`. The first
-`packages/` catalog tranche and the pattern-setter for every later ES4
+`catalog/packages/` catalog tranche and the pattern-setter for every later ES4
 package.
 
 ## Public API

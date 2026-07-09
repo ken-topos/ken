@@ -78,7 +78,7 @@ catalog/
   README.md            catalog index + the four purposes, one screen
   REFERENCES.md        catalog-wide reference conventions (per-entry refs live
                        in each entry — see the style guide)
-  packages/            light container: a README + one subdirectory per package
+  catalog/packages/            light container: a README + one subdirectory per package
     README.md          package index / navigation
     <package>/
       <package>.ken.md  the literate entry (primary artifact; tangles to .ken)
@@ -87,22 +87,22 @@ catalog/
 
 - `catalog/` root holds any *whole-catalog* detail (index, cross-package
   conventions, the pointer to this charter and to the style guide).
-- `catalog/packages/` is **just a container** — a README and the package
+- `catalog/catalog/packages/` is **just a container** — a README and the package
   subdirectories, nothing heavier.
 - Each package is a **literate `.ken.md` entry** whose `ken` code blocks tangle
   to a compilable module; the tangled `.ken` is a build artifact, not the
   source of truth.
 
-Moving today's `packages/` to `catalog/packages/` touches build/tooling
+Moving today's `catalog/packages/` to `catalog/catalog/packages/` touches build/tooling
 references (elaborator package resolution, `crates/**` test fixtures, ~70 docs,
 conformance seeds). That is a scoped **migration WP** (below), not a doc edit —
 it must land green through CI, not by hand.
 
 ## Home and Findings routing (teaming)
 
-The reframed campaign's core artifact is *proven `packages/` components in
+The reframed campaign's core artifact is *proven `catalog/packages/` components in
 `.ken.md`* — **Foundation's** standing mandate (Foundation already builds the
-`packages/` stdlib; the first pass used Language because it was a *surface*
+`catalog/packages/` stdlib; the first pass used Language because it was a *surface*
 smoke-test, a Language concern). So the catalog is homed in **Foundation**, and
 the Findings loop is honest by construction because the *author* and the
 *fixers* are different teams — the surface builder cannot grade its own
@@ -144,7 +144,7 @@ runs the §2c pipeline: **Steward frame → enclave elaboration (abstraction
 boundary) → merge → build team → gate**. The **first instance of each new
 pattern** gets T1 design + review; siblings are mechanical.
 
-Package discipline is the existing `packages/` contract (manifest, Ken source,
+Package discipline is the existing `catalog/packages/` contract (manifest, Ken source,
 derivation path, declared trust delta; law fields **proved**, not postulated,
 except an audited primitive-carrier delta) — now carried inside the literate
 entry per the style guide. The catalog is a *verified computational substrate*,
@@ -218,7 +218,7 @@ default Z3 unless catalog-scale measurement shows a clear benefit.
 
 1. **This rework lands** — charter (`06`) + standard entry format (`07`), the
    next Steward corpus merge.
-2. **Migration WP** — `packages/` → `catalog/packages/` with all
+2. **Migration WP** — `catalog/packages/` → `catalog/catalog/packages/` with all
    build/tooling/doc/conformance references updated; Foundation executes (with
    Language for elaborator package-root resolution); green through CI.
 3. **Language WP** — the literate block-role taxonomy (`ken reject` checked to
@@ -227,5 +227,5 @@ default Z3 unless catalog-scale measurement shows a clear benefit.
 4. **Foundation catalog-authoring overlay** — the literate-`.ken.md` pedagogy +
    Findings-filing skill.
 5. **First reframed catalog batch** — authored as `.ken.md` entries under
-   `catalog/packages/`, exercising the full standard format end to end (it
+   `catalog/catalog/packages/`, exercising the full standard format end to end (it
    doubles as the format's pilot).

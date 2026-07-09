@@ -1,4 +1,4 @@
-# `packages/` — the standard-package catalog (realized Ken source)
+# `catalog/packages/` — the standard-package catalog (realized Ken source)
 
 > Status: **layout established by ES4-classes** (the first tranche). This tree
 > holds the **realized Ken source** for the standard-package catalog; the
@@ -27,7 +27,7 @@ One **package per directory**, a module unit in the ES3 sense
 elaborate to the flat Σ). Each package directory carries:
 
 ```
-packages/<package>/
+catalog/packages/<package>/
   MANIFEST.md      -- name, the spec catalog entry it realizes, its public API,
                    --   and the DERIVATION-PATH + trusted_base()-DELTA
                    --   declaration (the entry's contract from 50-stdlib)

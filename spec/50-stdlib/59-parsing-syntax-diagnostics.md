@@ -4,14 +4,14 @@
 > Layer-3 catalog package: source artifacts, byte spans, total parsers, small
 > package-owned grammars, parser/printer and formatter laws, and source-located
 > diagnostics. It is an ordinary standard package, expected under
-> `packages/parsing/`, with **zero kernel/trusted-base/language-semantics
+> `catalog/packages/parsing/`, with **zero kernel/trusted-base/language-semantics
 > change**. It does **not** replace Ken's compiler lexer/parser, expose the
 > compiler's internal AST, claim full Ken syntax reflection, or implement
 > `.ken.md`; it only consumes the source-identity seam pinned there.
 
 ## 1. Package Shape And Boundary
 
-CAT-5 ships as one package, `packages/parsing/`, rather than a split
+CAT-5 ships as one package, `catalog/packages/parsing/`, rather than a split
 `source`/`parsing` pair. The source/span types are inseparable from parser and
 diagnostic validity in this first slice: a parser that can return an unlocated
 failure, or a diagnostic whose span is not checked against its source, has not
