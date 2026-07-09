@@ -102,11 +102,22 @@ component in the literature. Include, where they exist:
 - **Papers** — arXiv, university pages, or author-owned sites. Prefer stable,
   canonical, author-owned URLs over aggregators; note paywalls.
 - **Books** — title, author, edition; a stable link where one exists.
+- **Source repositories** — GitHub, GitLab, Codeberg, SourceHut, and other OSS
+  forges: reference implementations, the upstream project, or notably different
+  designs of the same abstraction. Prefer a permalink (a pinned commit/tag), and
+  name the license.
+
+**Clean-room boundary (`CLEAN-ROOM.md`).** A source-repository reference is for
+the *reader's* orientation and comparison — it is **never** an authoring source.
+The entry's own code derives from Ken's spec, not from any linked repo; do not
+copy or transcribe code from a referenced forge, and never cite a copyleft
+(GPL/AGPL/CeCILL) source you consulted for approach — those stay enclave-only.
+Cite it as "here is how others solved this," not "here is where this came from."
 
 Format each as: title — author/venue — stable link — one line on *why* it's
 relevant here. Catalog-wide reference conventions (link hygiene, preferred
-sources, citation shape) live in `catalog/REFERENCES.md`; per-entry references
-live in the entry.
+sources, citation shape, license labelling) live in `catalog/REFERENCES.md`;
+per-entry references live in the entry.
 
 ## 5. Findings (required — the inward purpose)
 
