@@ -123,7 +123,7 @@ pub enum RDeclKind {
         level: Option<u32>,
         ctors: Vec<RExplicitCtorDecl>,
     },
-    /// A `type T = A` surface type alias.
+    /// A `def T = A` surface definition (alias/refinement); was `type`.
     TypeAlias { ty: RType },
     /// `foreign f : T = "symbol" "library" [pure] [E1, …]` (`38 §2.1`).
     Foreign {

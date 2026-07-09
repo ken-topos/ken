@@ -2780,7 +2780,7 @@ pub fn elaborate_rdecl_v1_with_effect_rows(
             })
         }
         RDeclKind::TypeAlias { ty } => {
-            // A type alias `type T = A` declares T as a transparent definition
+            // A definition `def T = A` declares T as a transparent definition
             // of type `Type 0` whose body is A (`34 §2`).
             let (alias_body, alias_id) = {
                 let mut cx = ElabCtx::new(env, globals, num_values, numeric_env);

@@ -239,7 +239,7 @@ pub enum Decl {
         ctors: Vec<ExplicitDataCtor>,
         span: Span,
     },
-    /// `type T = A` — surface type alias.
+    /// `def T = A` — surface definition (alias/refinement); was `type`.
     TypeAlias { name: String, ty: Type, span: Span },
     /// `foreign f : T = "symbol" "library" [pure] [E1, …]` — a C-ABI binding
     /// (`38 §2.1`, L7). Keyword spellings are `(oracle)`.

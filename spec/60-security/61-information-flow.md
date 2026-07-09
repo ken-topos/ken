@@ -647,8 +647,8 @@ engineering above stands without it.)*
 ## 7. Worked examples
 
 ```
-type Email   = String @ Secret[user]            -- PII, readable by `user` only
-type ApiKey  = Bytes  @ Secret[server]          -- never client-visible
+def Email   = String @ Secret[user]            -- PII, readable by `user` only
+def ApiKey  = Bytes  @ Secret[server]          -- never client-visible
 
 -- A type error: Secret PII reaching a Public log sink.
 view audit (e : Email) : Unit  visits [Log Public]

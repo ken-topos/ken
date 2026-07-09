@@ -330,7 +330,7 @@ prototype's stubbed sums and missing exhaustiveness.
 
 ## surface/data-match/refinement-obligation (AC7) (soundness) — TR7
 - spec: `spec/30-surface/34-data-match.md §5`, `21 §2`, `22 §2.1`
-- given: `type NonNeg = { n : Int | n ≥ 0 }`; (a) passing a plain `Int` `e`
+- given: `def NonNeg = { n : Int | n ≥ 0 }`; (a) passing a plain `Int` `e`
   where `NonNeg` is expected (introduction); (b) passing a `NonNeg` where an
   `Int` is expected (forgetful)
 - expect:

@@ -160,7 +160,7 @@ determine the numeric story (`35`):
 ## 4. Keywords (proposal)
 
 ```
-const fn proc let type data record module import use space
+const fn proc let def data record module import use space
 match if then else where requires ensures prop proof lemma prove law
 visits foreign forall exists in as mut class instance
 becomes declassify policy temporal assume test
@@ -169,9 +169,12 @@ becomes declassify policy temporal assume test
 Reserved but spelling-revisable (OQ-syntax), **except** the purity keywords
 `const`/`fn`/`proc` (`36 §1.6`), whose spellings are **fixed** by the operator
 ruling (SURF-1); `view` is **retired**. `let` remains reserved for the local
-`let … in …` expression (`32 §3`). Contextual keywords (`infixl`, `derive`, …)
-are not globally reserved. The decided post-freeze surface tokens
-are also lexed here (all spellings OQ-syntax):
+`let … in …` expression (`32 §3`). `type` is **reserved but not a declaration
+keyword** — it named the definition/refinement construct before
+`SURF-def-refinement` (`33 §1`) renamed it to `def`; `type` stays rejected as a
+free identifier to preserve future optionality. Contextual keywords
+(`infixl`, `derive`, …) are not globally reserved. The decided post-freeze
+surface tokens are also lexed here (all spellings OQ-syntax):
 
 - the wrapping-arithmetic operator `+%` (and `wrapping_add`, …) in the operator
   set (`35 §3`, OQ-1a);

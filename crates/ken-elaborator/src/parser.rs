@@ -5,7 +5,8 @@
 //! V1 additions: `space view`, `requires`/`ensures` contract clauses,
 //! `{ x : A | φ }` refinement types, `prove` and `law` declarations, `old`.
 //! L2 additions: `data D p₁…pₙ = C₁ τ… | C₂ τ…` sum types; `match e { … }`
-//! pattern matching; `type T = A` surface type aliases; `T a b` type app.
+//! pattern matching; `def T = A` surface definitions (alias/refinement,
+//! was `type`); `T a b` type app.
 
 use crate::ast::{
     Binder, ClassField, ConstructorSignature, ConstructorSignatureArg, CtorDecl, Decl, DefKeyword,
@@ -160,7 +161,13 @@ impl Parser {
             Token::KwProof => self.parse_attached_proof_decl(start),
             Token::KwLaw => self.parse_law_decl(start),
             Token::KwData => self.parse_data_decl(start),
-            Token::KwTypeAlias => self.parse_type_alias_decl(start),
+            Token::KwDef => self.parse_type_alias_decl(start),
+            Token::KwTypeReserved => Err(ElabError::ParseError {
+                msg: "'type' is reserved and is no longer a declaration keyword; \
+                      use 'def' to define a type (refinement or alias)"
+                    .to_string(),
+                span: self.peek_span().clone(),
+            }),
             Token::KwForeign => self.parse_foreign_decl(start),
             Token::KwTemporal => self.parse_temporal_decl(start),
             Token::KwClass => self.parse_class_decl(start),
@@ -173,7 +180,7 @@ impl Parser {
             other => Err(ElabError::ParseError {
                 msg: format!(
                     "expected 'const', 'fn', 'proc', 'let', 'prove', 'prop', 'lemma', 'proof', \
-                     'law', 'data', 'type', 'foreign', 'temporal', 'class', 'instance', \
+                     'law', 'data', 'def', 'foreign', 'temporal', 'class', 'instance', \
                      'derive', 'module', 'import', 'use', \
                      'pub', or 'space proc', found {:?}",
                     other
@@ -1137,9 +1144,20 @@ impl Parser {
         })
     }
 
-    /// `type T = A` — surface type alias.
+    /// `def T = A` — surface definition (refinement or alias); was `type`
+    /// before SURF-def-refinement (`33 §1`).
     fn parse_type_alias_decl(&mut self, start: usize) -> Result<Decl, ElabError> {
-        self.advance(); // consume 'type'
+        self.advance(); // consume 'def'
+        if let Token::Ident(head) = self.peek().clone() {
+            return Err(ElabError::ParseError {
+                msg: format!(
+                    "'def' defines a type (refinement or alias); use 'fn' for a \
+                     function or 'const' for a value (found lowercase head '{}')",
+                    head
+                ),
+                span: self.peek_span().clone(),
+            });
+        }
         let (name, _) = self.expect_con()?;
         self.expect(&Token::Eq)?;
         let ty = self.parse_type()?;
