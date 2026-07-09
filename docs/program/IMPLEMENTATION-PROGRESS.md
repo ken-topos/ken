@@ -46,19 +46,26 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > explicit in `04-git-and-integration.md §3` + `COORDINATION.md §9`. Closes the
 > gap that stalled PR #387 (routed to the idle Integrator).
 >
-> **ADR 0012 captured (operator directive):** `docs/adr/0012-systems-programming-
-> suitability.md` — the Linux-kernel defensive-design analysis. Finding: **no
-> intrinsic barrier**; leaf-components target (HACL\*/EverParse-shaped), the A–D
-> axes with the operator's corrections (compiler exists → retarget not build;
-> arena not GC), and the grounded `store.rs` arena analysis (bump/reset non-GC,
-> per-space regions built, one page-allocator-capability seam). Status Proposed;
-> routed to @architect to ratify (as ADR 0011), flips Accepted on ratification.
+> **ADR 0012 — ACCEPTED (operator directive + Architect ratified):**
+> `docs/adr/0012-systems-programming-suitability.md` — the Linux-kernel
+> defensive-design analysis. Finding: **no intrinsic barrier**; leaf-components
+> target (HACL\*/EverParse-shaped), the A–D axes with the operator's corrections
+> (compiler exists → retarget not build; arena not GC), and the grounded
+> `store.rs` arena analysis (bump/reset non-GC — conformance-pinned
+> `auto_gc_not_present`; per-space regions built; one page-allocator-capability
+> seam). Architect ratified against landed code (`evt_vh5r0z3q3gj3`); the
+> crown-jewel effect-row context-law + D1 productivity checker are honestly
+> flagged aspirational (sign-off confirms the honesty, not that the proofs are
+> achievable).
 >
-> **Next micro-task (operator directive):** rename `catalog/guide/*.ken.md` →
-> `*.md` (they are docs, not ken source) — investigating the fence-check
-> mechanism first so the examples stay checked, then rename + update all
-> references (README, `write-ken` skill, `catalog/README.md`, the DS-1 brief) in
-> one merge.
+> **Guide-file rename — CONSIDERED & DECLINED (operator, 2026-07-09).** Policy
+> affirmed: `catalog/guide/*.ken.md` files keep the `.ken.md` extension **even
+> though they are docs, not package source** — because the fence-check is
+> **extension-gated** (`ken run` only extracts/checks `ken example`/`ken reject`
+> fences when the path ends `.ken.md` — `ken-cli/src/main.rs:56`,
+> `compiler_driver.rs:435`). Renaming to `.md` would silently un-check every
+> guide example (AC1, anti-rot). The `.ken.md`-keeps-examples-checked convention
+> is now recorded in `catalog/guide/README.md` so it isn't re-attempted.
 >
 > ### Sections/Domains + retro discipline + keystone WP (2026-07-09 ~19:10 UTC)
 >
