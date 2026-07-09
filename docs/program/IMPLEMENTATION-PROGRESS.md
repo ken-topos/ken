@@ -64,9 +64,18 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > under the smoke test; anti-vacuity gates + QA re-derive caught real gaps;
 > acted-on-retro loop closed). **Operator's call: land FR-3 + the guide-update
 > BEFORE kicking DS-2**, so every future entry starts clean. Concretely:
-> - **DS-2…DS-9 remain HELD** — the gate to lift them is **FR-3 (`ken check`
->   mode) landed AND the Librarian's DS-1 guide-update landed.** FR-1/FR-2 land
->   in parallel but do not gate DS-2.
+> - **NEW first prerequisite (operator, 2026-07-09 "before we proceed any
+>   further"): the catalog taxonomy rename** — `docs/program/wp/catalog-taxonomy-
+>   paths-imports.md`. File paths + import spec both mirror Section > Domain by a
+>   regular rule (`catalog/packages/<Section>/<Domain>/<pkg>` ⇔
+>   `import Section.Domain.Pkg`). **Sequenced AHEAD of FR-3/guide/DS-2** because
+>   it moves the very paths they reference (double-update otherwise). Framed →
+>   enclave pins the path/import scheme + the package→Section/Domain mapping
+>   (incl. reconciling `06`'s `transport` Core-vs-Capability inconsistency) →
+>   Ergo builds (moves + dotted-import parser/resolver, CI-gated).
+> - **DS-2…DS-9 remain HELD** — the gate to lift them is now: **taxonomy rename
+>   landed, THEN FR-3 (`ken check`) + the Librarian's DS-1 guide-update landed.**
+>   FR-1/FR-2 land in parallel but do not gate DS-2.
 > - **Ergo** builds FR-1 (underway) / FR-2 / FR-3 (FR-2+FR-3 behind Architect
 >   pins the ergo-leader has requested, `evt_21pkby6sfvj1g`).
 > - **Librarian** folds DS-1's retro lessons into `write-ken`/the guide +
