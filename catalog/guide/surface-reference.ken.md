@@ -48,10 +48,11 @@ proc announce (c : Color) : IO Unit visits [Console] =
     Blue  ⇒ print_line "it's blue"
   }
 
--- Every literate entry's compiled fences tangle into one module, and
--- `ken run` executes its last definition — so the module's final compiled
--- declaration is always a nullary `proc main`, exactly like every other
--- catalog entry and CLI fixture.
+-- A literate entry's compiled fences tangle into one module, and `ken run`
+-- executes its last definition — so a runnable file's final compiled
+-- declaration is a nullary `proc main`, exactly like the CLI fixtures and
+-- runnable examples. A catalog PACKAGE entry is a library, not a runnable
+-- file, and carries no `proc main`.
 proc main : IO Unit visits [Console] = announce favorite
 ```
 
@@ -77,8 +78,10 @@ fn announceWrong (c : Color) : IO Unit = print_line "not allowed in fn"
 `data` declares a genuine inductive type: real constructors, a real
 generated eliminator, and `match` compiles to that eliminator with a
 **checked exhaustiveness** requirement
-(`spec/30-surface/34-data-match.md §1, §4`). There is no `_` wildcard escape
-from covering every constructor.
+(`spec/30-surface/34-data-match.md §1, §4`). Every constructor must be
+covered — but a final `_`/variable arm is the sanctioned way to cover the
+remaining constructors (`34 §4.1`, `§4.2`); there is no way to *skip* a
+case, not a ban on wildcards.
 
 ```ken example
 data Shape = Circle Int | Rectangle Int Int
@@ -200,7 +203,7 @@ proc silentGreet (name : String) : IO Unit =
 
 A row-polymorphic function keeps a helper's effect abstract instead of
 committing it to one concrete row — write `[e]` as the row parameter
-(`36 §1.1`'s row-variable form) when the helper's own effect should be
+(`36 §1.5.1`'s row-variable form) when the helper's own effect should be
 whatever its caller's effect happens to be, rather than hard-coding
 `[Console]` into something that has nothing to do with the console.
 
