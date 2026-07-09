@@ -1,0 +1,1 @@
+../../../agent/playbooks/tools/write-ken.md
