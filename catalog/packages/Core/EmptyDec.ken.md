@@ -257,12 +257,16 @@ isn't real surface syntax — the legacy `data D = …` form doesn't take a
 `:`-ascribed family type, so that combination remains illustrative only;
 the explicit-family `where { }` spelling above is the real one.
 
-**A user-declared `absurd` is unreachable, not a hard error.** Declaring
-`fn absurd (C : Type) (e : Empty) : C = match e { }` elaborates
-successfully — the collision is silent, not caught by a redeclaration
-error — which is exactly why this entry uses `absurdEmpty` instead (a
-`reject` fence can't demonstrate a *silent* shadowing; the finding is
-recorded in prose, `§6`).
+**A user-declared `absurd` is now a resolve-time hard error (FR-2,
+landed).** Declaring `fn absurd (C : Type) (e : Empty) : C = match e { }`
+used to elaborate successfully with the collision entirely silent — this
+entry still uses `absurdEmpty` instead (the honest, reachable name), but
+the footgun itself is now caught, not merely worked around:
+
+```ken reject
+-- Fails: 'absurd' collides with a reserved surface sugar identifier.
+fn absurd (C : Type) (e : Empty) : C = match e { }
+```
 
 ## 6. Findings
 
@@ -280,19 +284,21 @@ recorded in prose, `§6`).
   pinned spelling (`data Empty : Type0 =`) still doesn't parse, since the
   legacy `data D = …` arm doesn't take a `:`-ascribed family type — the
   explicit-family `where { }` spelling is the real one.
-- **Naming hazard, not a sugar candidate:** `absurd` is checked-mode
-  surface sugar keyed on the bare identifier (`elab.rs:499`, resolver
-  emits `RCon` on scope miss) for `Ω`-classified `Bottom`-elimination.
-  Declaring a real global named `absurd` does **not** error, but the sugar
-  unconditionally intercepts every syntactic `absurd x` application
-  regardless — a user-declared `absurd` becomes permanently unreachable via
-  ordinary call syntax. Confirmed empirically (a probe declaring `fn
-  absurd` then re-using the OLD `absurd h : Bottom` sugar shape still
-  elaborated against the NEW declaration's unrelated signature without
-  error). This entry's `Empty`-eliminator is named `absurdEmpty` instead.
-  Worth a documentation note near `elab.rs:499` for the next author who
-  reaches for this name; not urgent enough to justify changing landed sugar
-  behavior for a single naming collision.
+- **Naming hazard — landed (FR-2):** `absurd` is checked-mode surface sugar
+  keyed on the bare identifier (`elab.rs`, resolver emits `RCon` on scope
+  miss) for `Ω`-classified `Bottom`-elimination. Declaring a real global
+  named `absurd` used to elaborate with the collision entirely silent — a
+  user-declared `absurd` became permanently unreachable via ordinary call
+  syntax with no error at all (confirmed empirically: a probe declaring
+  `fn absurd` then re-using the OLD `absurd h : Bottom` sugar shape still
+  elaborated against the NEW declaration's unrelated signature). FR-2 makes
+  this a resolve-time hard error (`resolve_decl`, guarding every declared
+  name — and every `data` constructor name — against the reserved-sugar
+  set `{Refl, Axiom, absurd}`, `§5` above now demonstrates the rejection —
+  `J`/`Eq` are deliberately excluded, since their arity-3-gated sugar
+  coexists with a lower-arity type-former/class of the same name, e.g. the
+  landed `class Eq a`). This entry's `Empty`-eliminator stays named
+  `absurdEmpty` regardless (the honest, reachable name).
 - **Tooling candidate → Ergo (`ken-cli`):** `ken run` unconditionally
   executes the file's LAST declaration as an IO tree (`crates/ken-cli/src/
   main.rs`, `run_file`) — appropriate for a runnable program (the
@@ -311,7 +317,8 @@ recorded in prose, `§6`).
 
 ## 7. References
 
-- **Wikipedia** — [Decidability (logic)](https://en.wikipedia.org/wiki/Decidability_(logic))
+- **Wikipedia** —
+  [Decidability (logic)](https://en.wikipedia.org/wiki/Decidability_(logic))
   — general orientation on decidable propositions.
 - **Lean 4 core** — `Decidable` (`Init/Prelude.lean`, part of the Lean 4
   repository, Apache-2.0) — <https://github.com/leanprover/lean4> — the
