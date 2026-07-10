@@ -19,8 +19,10 @@ the way it already case-splits on a `Bool`, without losing the proof.
 **Named reading paths**
 
 - *Newcomer* → [Motivation](#1-motivation) → [Using it](#3-using-it)
-- *Practitioner* → [Using it](#3-using-it) → [Laws  proofs](#4-laws--proofs)
-- *Researcher* → [Laws  proofs](#4-laws--proofs) → [Design notes](#5-design-notes)
+- *Practitioner* → [Using it](#3-using-it) →
+  [Laws  proofs](#4-laws--proofs)
+- *Researcher* →
+  [Laws  proofs](#4-laws--proofs) → [Design notes](#5-design-notes)
 - *Porting from Lean/Agda* → [Design notes](#5-design-notes)
 
 ## 1. Motivation
@@ -54,11 +56,11 @@ zero-constructor `data` — `Empty`'s own shape — now has a real surface
 spelling, `data Empty : Type0 where { }`, landed by FR-1, `§6`; the
 literal `Type0 =` legacy spelling below is still illustrative, since the
 legacy `data D = …` form doesn't take a `:`-ascribed family type.)
-Conceptually, as if spelled at the surface:
+Conceptually, as if spelled at the surface — illustrative only, since
+`Empty` and `Dec` are already global prelude names by the time this entry
+elaborates (`§8`) and are not re-declared here:
 
 ```ken ignore
--- Illustrative only — NOT re-declared here; `Empty` and `Dec` are already
--- global prelude names by the time this entry elaborates (`§8`).
 data Empty : Type0 =
 
 data Dec (P : Omega) : Type0 =
@@ -69,30 +71,39 @@ fn decide (P : Omega) (d : Dec P) : Bool =
   match d { Yes p ⇒ True ; No f ⇒ False }
 ```
 
-What this entry *does* author, as real surface code:
+What this entry *does* author, as real surface code.
+
+The general Type-sorted eliminator for `Empty` — an uninhabited type
+eliminates into anything — is deliberately not named `absurd`: that
+identifier is reserved checked-mode surface sugar for `Ω`-classified
+`Bottom`-elimination (`crates/ken-elaborator/src/elab.rs:526`), and
+declaring a real global under the same name is now a resolve-time hard
+error (`§5`, `§6` Finding, landed via FR-2) rather than the silent,
+permanently-unreachable shadow it originally was. `absurdEmpty` is the
+honest, reachable name this entry uses instead:
 
 ```ken
--- The general Type-sorted eliminator for `Empty` — an uninhabited type
--- eliminates into anything. NOT named `absurd`: that identifier is
--- already checked-mode surface sugar for `Ω`-classified `Bottom`-
--- elimination (`crates/ken-elaborator/src/elab.rs:499`), and declaring a
--- real global under the same name would leave it permanently unreachable
--- (`§6` Finding) — every syntactic `absurd x` is intercepted by the sugar
--- before ordinary name resolution ever sees a user-declared `absurd`.
 fn absurdEmpty (C : Type) (e : Empty) : C = match e { }
+```
 
--- Ergonomic constructors — `Yes`/`No` already work directly, but a
--- lowercase smart-constructor pair reads better at call sites and mirrors
--- `yes`/`no` on the referenced Lean/Agda `Decidable`/`Dec` (`§7`).
+`Yes`/`No` already work directly as constructors; the lowercase `yes`/`no`
+pair below is a purely ergonomic smart-constructor wrapper that reads
+better at call sites and mirrors `yes`/`no` on the referenced Lean/Agda
+`Decidable`/`Dec` (`§7`):
+
+```ken
 fn yes (prp : Omega) (p : prp) : Dec prp = Yes prp p
 fn no (prp : Omega) (f : prp -> Empty) : Dec prp = No prp f
+```
 
--- `DecEq` — inlined from `catalog/packages/Core/LawfulClasses.ken`
--- (self-containment, same idiom `catalog/guide/proof-techniques.ken.md`
--- uses for `cong`/`bool_and`: `ken run` on a standalone entry has no
--- cross-package import mechanism today, `§6` Finding). `decEqDecides`
--- below is fully generic over ANY `DecEq a` instance, landed or local —
--- only the `§3` worked example needs a concrete one in scope.
+`DecEq` is inlined from `catalog/packages/Core/LawfulClasses.ken`
+(self-containment, the same idiom `catalog/guide/proof-techniques.ken.md`
+uses for `cong`/`bool_and`: `ken run` on a standalone entry has no
+cross-package import mechanism today, `§6` Finding). `decEqDecides` below
+is fully generic over ANY `DecEq a` instance, landed or local — only the
+`§3` worked example needs a concrete one in scope:
+
+```ken
 class DecEq a {
   eq       : a -> a -> Bool ;
   sound    : (x : a) -> (y : a) -> IsTrue (eq x y) -> Equal a x y ;
@@ -115,41 +126,49 @@ instance DecEq Bool {
       False ⇒ λy. match y { True ⇒ λp. absurd p ; False ⇒ λp. tt }
     }
 }
+```
 
--- Reflects a stuck `Bool` value into an equation-carrying `Or`, so a
--- computed `Bool` result can be USED as a proof, not just branched on — a
--- plain `match (d.eq x y) {...}` cannot do this itself (the scrutinee is
--- an application, not a bound variable, so the dependent-motive machinery
--- that lets `match` refine a hypothesis has nothing to bind); this is the
--- same combinator `catalog/packages/Data/Collections/Map.ken` calls
--- `boolDichotomy`, inlined here for self-containment.
+`boolDichotomy` reflects a stuck `Bool` value into an equation-carrying
+`Or`, so a computed `Bool` result can be USED as a proof, not just branched
+on — a plain `match (d.eq x y) {...}` cannot do this itself (the scrutinee
+is an application, not a bound variable, so the dependent-motive machinery
+that lets `match` refine a hypothesis has nothing to bind); this is the
+same combinator `catalog/packages/Data/Collections/Map.ken` calls
+`boolDichotomy`, inlined here for self-containment:
+
+```ken
 fn boolDichotomy (b : Bool) : Or (Equal Bool b True) (Equal Bool b False) =
   match b {
     True  ⇒ Inl (Equal Bool True True) (Equal Bool True False) tt ;
     False ⇒ Inr (Equal Bool False True) (Equal Bool False False) tt
   }
+```
 
--- `sym`/`trans` — inlined from `catalog/packages/Core/Transport.ken`
--- (self-containment, same idiom `catalog/guide/proof-techniques.ken.md`
--- uses for `cong`) for the No-branch contradiction below.
+`sym`/`trans` are inlined from `catalog/packages/Core/Transport.ken`
+(self-containment, the same idiom `catalog/guide/proof-techniques.ken.md`
+uses for `cong`) for the No-branch contradiction below:
+
+```ken
 fn sym (ty : Type) (x : ty) (y : ty) (p : Equal ty x y) : Equal ty y x =
   J (λy' _. Equal ty y' x) Refl p
 
 fn trans (ty : Type) (x : ty) (y : ty) (z : ty)
          (p : Equal ty x y) (q : Equal ty y z) : Equal ty x z =
   J (λz' _. Equal ty x z') p q
+```
 
--- The bridge: any `DecEq a` instance decides propositional equality.
--- `d.eq x y = True` (`Inl p`, `p : Equal Bool (d.eq x y) True`) → `sound`
--- hands back the proof directly. `d.eq x y = False` (`Inr q`) → assuming
--- a proof `pxy : Equal a x y` gives `d.complete x y pxy : IsTrue (d.eq x y)
--- = Equal Bool (d.eq x y) True`; combined with `q` via `sym`/`trans`, that
--- is `Equal Bool False True` — K7 (`spec/10-kernel/16-observational.md
--- §1`) makes THAT proposition definitionally `Bottom`, so the landed
--- `absurd` sugar (Bottom → any goal, INCLUDING a `Type`-sorted one, `16
--- §1` Bottom-Elim) discharges it into `Empty` directly — no new mechanism,
--- and no need for `absurdEmpty` here (this bridge is Ω → Type, not
--- Empty → C).
+The bridge: any `DecEq a` instance decides propositional equality.
+`d.eq x y = True` (`Inl p`, `p : Equal Bool (d.eq x y) True`) → `sound`
+hands back the proof directly. `d.eq x y = False` (`Inr q`) → assuming a
+proof `pxy : Equal a x y` gives `d.complete x y pxy : IsTrue (d.eq x y) =
+Equal Bool (d.eq x y) True`; combined with `q` via `sym`/`trans`, that is
+`Equal Bool False True` — K7 (`spec/10-kernel/16-observational.md §1`)
+makes THAT proposition definitionally `Bottom`, so the landed `absurd`
+sugar (Bottom → any goal, INCLUDING a `Type`-sorted one, `16 §1`
+Bottom-Elim) discharges it into `Empty` directly — no new mechanism, and no
+need for `absurdEmpty` here (this bridge is Ω → Type, not Empty → C):
+
+```ken
 fn decEqDecides (a : Type) (d : DecEq a) (x : a) (y : a) : Dec (Equal a x y) =
   match boolDichotomy (d.eq x y) {
     Inl p ⇒ Yes (Equal a x y) (d.sound x y p) ;
@@ -163,27 +182,32 @@ fn decEqDecides (a : Type) (d : DecEq a) (x : a) (y : a) : Dec (Equal a x y) =
 
 ## 3. Using it
 
+`DecEq_instance_Bool` is the synthesized dictionary value for `§2`'s
+`instance DecEq Bool { ... }` — every `instance C T { ... }` registers a
+real global `C_instance_T` (`crates/ken-elaborator/src/elab.rs:3403`), not
+just a `where`-resolved implicit dictionary. (The landed
+`catalog/packages/Core/LawfulClasses.ken` carries the SAME shape,
+independently — `§2`'s note on why this entry inlines its own.)
+
 ```ken example
--- `DecEq_instance_Bool` is the synthesized dictionary value for `§2`'s
--- `instance DecEq Bool { ... }` — every `instance C T { ... }` registers a
--- real global `C_instance_T` (`crates/ken-elaborator/src/elab.rs:3386`),
--- not just a `where`-resolved implicit dictionary. (The landed
--- `catalog/packages/Core/LawfulClasses.ken` carries the SAME
--- shape, independently — `§2`'s note on why this entry inlines its own.)
 const trueIsTrue : Dec (Equal Bool True True) =
   decEqDecides Bool DecEq_instance_Bool True True
 
 const trueIsNotFalse : Dec (Equal Bool True False) =
   decEqDecides Bool DecEq_instance_Bool True False
+```
 
--- `decide` recovers just the Bool tag, e.g. for an ordinary conditional.
+`decide` recovers just the `Bool` tag, e.g. for an ordinary conditional:
+
+```ken example
 const trueIsTrueTag : Bool = decide (Equal Bool True True) trueIsTrue
 const trueIsNotFalseTag : Bool = decide (Equal Bool True False) trueIsNotFalse
 ```
 
+`yes`/`no` construct `Dec` values directly when you already have the proof
+or refutation in hand — no `DecEq` needed:
+
 ```ken example
--- `yes`/`no` construct `Dec` values directly when you already have the
--- proof or refutation in hand — no `DecEq` needed.
 const anyProofDecides : Dec (Equal Bool True True) = yes (Equal Bool True True) tt
 
 fn refuteTrueFalse (p : Equal Bool True False) : Empty = absurd p
@@ -192,9 +216,10 @@ const refutationDecides : Dec (Equal Bool True False) =
   no (Equal Bool True False) refuteTrueFalse
 ```
 
+`absurdEmpty` — an inhabitant of `Empty`, however obtained, discharges ANY
+goal:
+
 ```ken example
--- `absurdEmpty` — an inhabitant of `Empty`, however obtained, discharges
--- ANY goal.
 fn contradictionImpliesAnything (e : Empty) : Bool = absurdEmpty Bool e
 ```
 
@@ -261,10 +286,10 @@ the explicit-family `where { }` spelling above is the real one.
 landed).** Declaring `fn absurd (C : Type) (e : Empty) : C = match e { }`
 used to elaborate successfully with the collision entirely silent — this
 entry still uses `absurdEmpty` instead (the honest, reachable name), but
-the footgun itself is now caught, not merely worked around:
+the footgun itself is now caught, not merely worked around. Fails:
+`'absurd' collides with a reserved surface sugar identifier`.
 
 ```ken reject
--- Fails: 'absurd' collides with a reserved surface sugar identifier.
 fn absurd (C : Type) (e : Empty) : C = match e { }
 ```
 

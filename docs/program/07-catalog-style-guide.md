@@ -184,32 +184,46 @@ live here and in `catalog/`.
 
 ## 8. Comments
 
-This requirement is for **package entries**, whose fences tangle to
-consumed `.ken` source read as code independently of the surrounding
-markdown; a guide/teaching doc whose fences are only checked (never
-tangled to a shipped file) uses the surrounding prose as its comment layer
-instead — see `agent/playbooks/tools/write-ken.md`'s "prose is the
-comment layer" rule, which governs that other case.
+Per `docs/PRINCIPLES.md` #14 ("Nothing required lives in a comment — express
+it in the language"): a comment is unchecked prose — nothing verifies it,
+nothing re-checks it, it can silently drift from the code it annotates. So no
+comment is ever *required* to carry proof-review information, in any entry —
+package or teaching doc alike, no fence-role exception. A required fact
+belongs in the entry's Ken proper, in the construct built to check it:
 
-Comments are required where they carry proof-review information — a contract,
-invariant, proof strategy, trust posture, or non-obvious elaboration constraint.
-They must not restate the syntax below them. Required classes: entry/package
-header (spec chapter/WP, public abstraction, derivation path, trust summary);
-section comments; law comments (the proposition in reader terms + intended proof
-route); helper comments (why it exists, when not obvious); trust comments (every
-`Axiom`, primitive wrapper, audited delta, or tested-not-trusted boundary);
-staging comments (name the gated future capability when a natural law cannot yet
-be proved). Prefer a compact source comment plus a Trust/derivation subsection
-over a long inline essay.
+- A **contract or invariant** — a `requires`/`ensures` clause, or a
+  refinement type on the value it constrains.
+- A **proposition** — a `law`/`prop`/`lemma` declaration (or, as the catalog
+  most often states one, an ordinary `fn`/`const` whose result type *is* the
+  property and whose body *is* the checked proof term), discharged directly
+  or via `prove`.
+- A **trust boundary** — an `Axiom`, recorded in the entry's Trust &
+  derivation section as a `trusted_base()` delta (§7).
+
+When a required fact has no home in one of these, that is a signal to extend
+the language (file a Finding, §5) — never to enshrine the fact in a comment
+instead.
+
+Comments and the surrounding Markdown prose carry only **genuine
+narrative** — proof strategy, naming rationale, why a thing exists the way it
+does: context a reviewer benefits from, but that nothing downstream depends
+on. State that narrative in the surrounding prose, immediately before or
+after the fence it concerns (`agent/playbooks/tools/write-ken.md`'s "prose is
+the comment layer" rule); reserve an in-fence `-- ` comment for the rare
+annotation that must point at one specific token and genuinely can't live in
+prose.
+
+The law itself is the checked type; the proof term is the checked body.
+Nothing above the fence needs to restate either — the proof strategy is
+narrative, so it belongs in the prose, not a comment:
+
+The base branch reduces both endpoints to `Nil`, so the equality collapses
+to `Top` and closes with `tt`; the step branch lifts the tail induction
+hypothesis under `Cons` with `cong`.
 
 ```ken
--- Right unit for append. The base branch reduces both endpoints to `Nil`,
--- so the equality collapses to `Top` and closes with `tt`; the step branch
--- lifts the tail induction hypothesis under `Cons` with `cong`.
 fn list_right_unit ...
 ```
-
-Not: `-- Defines list_right_unit.`
 
 ## 9. Naming
 

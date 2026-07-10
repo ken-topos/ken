@@ -106,8 +106,33 @@ anti-pattern: it duplicates, in a worse place, what the surrounding
 Markdown prose should say. Explain in prose, immediately before (or after)
 the fence; keep the fence itself as clean code. Reserve an in-fence `--`
 for the rare case where an annotation must point at one specific token and
-genuinely can't live in prose — the default is prose. `surface-reference.ken.md
-§8` has the full fence-role table this rule sits next to.
+genuinely can't live in prose — the default is prose. This holds uniformly
+for every `.ken.md` — a package entry whose fences tangle to shipped source
+and a teaching doc whose fences are only checked follow the identical rule;
+there is no fence-role exception. `surface-reference.ken.md §8` has the full
+fence-role table this rule sits next to.
+
+## A required fact goes in the language, never in a comment
+
+`docs/PRINCIPLES.md` #14: a comment is unchecked prose, so nothing that's
+*required* — a contract, an invariant, a proposition, a trust boundary — may
+live only in one. If you catch yourself writing a comment because "this has
+to be said somewhere and nothing checks it otherwise," that is the signal to
+reach for the language construct built to check it, not to write the
+comment. Where each kind of required fact goes:
+
+| Required fact | Language-proper home |
+|---|---|
+| A contract or precondition/postcondition | `requires`/`ensures`, or a refinement type on the constrained value |
+| A proposition (a law, an invariant that must hold) | `law`/`prop`/`lemma`, discharged by `prove` — or, as the catalog most often states one, an ordinary `fn`/`const` whose result type *is* the property and whose body *is* the checked proof term |
+| A trust boundary (an unproved postulate, an audited primitive) | `Axiom`, recorded as a `trusted_base()` delta in the entry's Trust & derivation section (`07-catalog-style-guide.md §7`) |
+
+If a required fact genuinely has no home in one of these, that's not license
+to fall back on a comment — it's a **Finding** (`§"Findings loop"` below):
+the language is missing a construct, and the gap should be named and routed,
+not papered over in prose no checker reads. Comments and surrounding prose
+remain for genuine narrative only — proof strategy, naming rationale, why a
+thing exists — never for the thing itself.
 
 ## Validating a `.ken.md` file: `ken run` vs. `ken check`
 
