@@ -88,3 +88,32 @@ point — a kernel-native literal, not an interpreter-only value) but adds
 former), never a `Decl`, so no `trusted_base()` filter path reaches it, and
 the BigInt-equality decision it enables is a kernel *decision* (structurally
 analogous to constructor no-confusion), not a trusted assumption.
+
+## Elaborator `IntLit` emission (`ken-elaborator`) — ADR 0013 Layer 2
+## fast-follow
+
+`elab_num_lit_infer`/`elab_num_lit_checked` (`crates/ken-elaborator/src/
+elab.rs`) construct `Term::IntLit(BigInt)` directly for `Int` literals, so
+`num-bigint` moved from `ken-elaborator/Cargo.toml`'s `[dev-dependencies]`
+(added for the `checked_core.rs` round-trip test, prior entry above did not
+cover this) to a real `[dependencies]` entry — production elaborator code
+now constructs `BigInt` values, not just tests.
+
+| crate | version (pinned) | license | `unsafe` status |
+|---|---|---|---|
+| [`num-bigint`](https://crates.io/crates/num-bigint) | `=0.4.6` | MIT OR Apache-2.0 | same crate/version as the F1/`ken-kernel` entries above — this addition's usage surface (`BigInt::from(i128)` construction, `Clone`/`PartialEq`) is the same construction/comparison subset already audited, no new code paths |
+
+**Same exact pin, reused, no new vetting.** Third entry point for the
+identical already-curated `num-bigint =0.4.6`, recorded per "small, auditable
+TCB" for completeness of the accounting, not because this crossing is itself
+TCB-critical: the elaborator is untrusted (its output is re-checked by the
+kernel on every declaration), so this addition's trust weight is far lighter
+than the `ken-kernel` entry above — but it's still an honest line, not a
+silent one.
+
+**Scope note:** adds nothing to `trusted_base()` (same reasoning as the
+`ken-kernel` entry — `Term::IntLit` is a value former, not a `Decl`); the
+`Cargo.lock` delta is empty (the crate was already resolved into the
+workspace's dependency graph from `ken-kernel`'s and `ken-elaborator`'s own
+prior dev-dependency use, so promoting it to a regular dependency changes
+no resolved version).

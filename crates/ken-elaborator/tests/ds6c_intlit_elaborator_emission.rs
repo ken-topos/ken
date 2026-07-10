@@ -128,6 +128,20 @@ fn real_distinct_int_literals_reduce_to_bottom_and_reject_tt_and_refl() {
     );
 }
 
+/// Confirms the `Refl`-vs-`tt` asymmetry above is genuinely a NARROWING to
+/// the correct rejection shape, not an over-broad pre-check that would also
+/// wrongly reject `Refl` on a legitimately `Eq`-shaped goal. `Refl`'s
+/// surface-level shape check only fires when the whnf'd expected type has
+/// ALREADY collapsed past `Eq` (to `Top`/`Bottom`); for an ABSTRACT (still
+/// genuinely `Eq`-shaped, never reduced) goal, `Refl` must still be
+/// accepted exactly as before this WP.
+#[test]
+fn refl_still_accepted_on_a_genuinely_abstract_eq_shaped_goal() {
+    let mut env = ElabEnv::new().expect("base env");
+    env.elaborate_decl("fn int_refl_abstract (x : Int) : Equal Int x x = Refl")
+        .expect("Refl must still check against a genuinely abstract (unreduced) Eq Int x x goal");
+}
+
 /// AC2 — the hack is retired on the Int path: elaborating an Int literal
 /// mints NO opaque `Decl::Primitive{reduction: Literal}` and inserts
 /// NOTHING into `num_values`. Grep-confirmable evidence, not just absence
