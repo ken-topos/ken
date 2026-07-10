@@ -99,7 +99,8 @@ pub enum PrimReduction {
 }
 
 /// A registered decidable-equality certificate for an opaque primitive type
-/// (DS-6a, ADR 0013 Layer 1) — the kernel-audited assumption that `eq_op`
+/// (`docs/adr/0013-int-decidable-equality-kernel-posture.md` Layer 1) — the
+/// kernel-audited assumption that `eq_op`
 /// decides propositional equality at the registered primitive, split into a
 /// sound direction (`eq_op` true ⇒ propositionally equal) and a complete
 /// direction (propositionally equal ⇒ `eq_op` true). Both `sound` and
@@ -234,7 +235,8 @@ pub struct GlobalEnv {
     /// introduction, the canonical proof of a goal that reduced to `Top`.
     /// Set by [`GlobalEnv::new`].
     tt_id: Option<GlobalId>,
-    /// Registered decidable-equality certificates (DS-6a, ADR 0013 Layer 1),
+    /// Registered decidable-equality certificates
+    /// (`docs/adr/0013-int-decidable-equality-kernel-posture.md` Layer 1),
     /// keyed by the primitive type's [`GlobalId`]. General, opt-in,
     /// per-primitive — an unregistered primitive has no entry here and its
     /// `Eq` stays neutral exactly as before (`obs.rs`'s fail-safe default is
@@ -421,17 +423,17 @@ impl GlobalEnv {
         self.decls.iter()
     }
 
-    /// Record a decidable-equality certificate for `prim_ty` (DS-6a). The
-    /// caller ([`crate::check::declare_deceq_certificate`]) is responsible
-    /// for having admitted `cert.sound`/`cert.complete` as checked
-    /// postulates first; this method only records the registry entry.
+    /// Record a decidable-equality certificate for `prim_ty`. The caller
+    /// ([`crate::check::declare_deceq_certificate`]) is responsible for
+    /// having admitted `cert.sound`/`cert.complete` as checked postulates
+    /// first; this method only records the registry entry.
     pub(crate) fn register_deceq_cert(&mut self, prim_ty: GlobalId, cert: DecEqCert) {
         self.deceq_certs.insert(prim_ty, cert);
     }
 
-    /// The registered decidable-equality certificate for `prim_ty`, if any
-    /// (DS-6a). `None` for every unregistered primitive — the fail-safe
-    /// default is unchanged.
+    /// The registered decidable-equality certificate for `prim_ty`, if any.
+    /// `None` for every unregistered primitive — the fail-safe default is
+    /// unchanged.
     pub fn deceq_cert(&self, prim_ty: GlobalId) -> Option<&DecEqCert> {
         self.deceq_certs.get(&prim_ty)
     }

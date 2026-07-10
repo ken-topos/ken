@@ -1114,8 +1114,10 @@ pub fn declare_primitive(
 }
 
 /// `declare_deceq_certificate` — register a decidable-equality certificate
-/// for an opaque primitive type (DS-6a, ADR 0013 Layer 1): the kernel trusts
-/// `eq_op` to decide propositional equality at `prim_ty`, both directions.
+/// for an opaque primitive type
+/// (`docs/adr/0013-int-decidable-equality-kernel-posture.md` Layer 1): the
+/// kernel trusts `eq_op` to decide propositional equality at `prim_ty`,
+/// both directions.
 /// General, opt-in, per-primitive — `prim_ty` is the *first* registrant of
 /// this mechanism, not a special case of it; an unregistered primitive's
 /// `Eq` stays neutral exactly as before (`obs.rs`'s fail-safe default is

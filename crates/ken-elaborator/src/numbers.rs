@@ -308,11 +308,11 @@ pub fn register_numeric_env(
     let mul_int_id = reg_binop!("mul_int", int_id);
     let eq_int_id  = reg_cmpop!("eq_int", int_id, bool_id);
 
-    // DS-6a (ADR 0013 Layer 1) — register `Int`'s decidable-equality
-    // certificate: the kernel trusts `eq_int` to decide `Int` equality, both
-    // directions. General opt-in mechanism; `Int` is its first registrant.
-    // `True` is `Bool`'s constructor 0 (`data Bool = True | False`,
-    // `ElabEnv::empty`).
+    // Register `Int`'s decidable-equality certificate
+    // (`docs/adr/0013-int-decidable-equality-kernel-posture.md` Layer 1):
+    // the kernel trusts `eq_int` to decide `Int` equality, both directions.
+    // General opt-in mechanism; `Int` is its first registrant. `True` is
+    // `Bool`'s constructor 0 (`data Bool = True | False`, `ElabEnv::empty`).
     let bool_true_id = env
         .inductive(bool_id)
         .ok_or_else(|| ElabError::Internal("Bool not registered as inductive".into()))?
