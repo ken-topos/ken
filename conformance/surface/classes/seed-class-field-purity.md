@@ -162,14 +162,14 @@ projection), and `50-stdlib/56-effectful-classes.md §5.1`/`§5.2`
 
 ---
 
-## CFP3 — Instance fields enforce the declared class-field purity
+## CFP3 — Instance fields satisfy the declared class-field purity (covariant)
 
-### surface/classes/proc-field-instance-rejects-pure-implementation
-- spec: `33 §5.3` (instance field checking), `36 §1.6.2`/`§1.6.3`
-  (keyword cannot lie), `39 §6` (instance record construction)
-- given: two instances for otherwise-identical marked operation fields. The
-  valid arm supplies a `proc`-classifiable implementation; the invalid arm
-  supplies a pure `fn`:
+### surface/classes/instance-field-purity-covariant-subsumption
+- spec: `33 §5.2`/`§5.3` (instance field checking), `36 §1.6.2` (DS-8b: the
+  `∅ ⊆ proc` instance-field subsumption and its one-way covariance), `39 §6`
+  (instance record construction)
+- given: witnesses for marked fields exercising both the DS-8b widening and the
+  still-live dangerous direction:
 
   ```ken
   class Effectful A {
@@ -177,20 +177,49 @@ projection), and `50-stdlib/56-effectful-classes.md §5.1`/`§5.2`
   }
 
   proc step_int (x : Int) : Int visits [FS] = x
-  instance Effectful Int { step = step_int }
+  instance Effectful Int  { step = step_int }    -- effectful witness, proc field
 
   fn step_bool (x : Bool) : Bool = x
-  instance Effectful Bool { step = step_bool }
+  instance Effectful Bool { step = step_bool }   -- PURE witness, proc field
+
+  class Pure A {
+    fn compute : A -> A
+  }
+
+  proc compute_fs (x : Bool) : Bool visits [FS] = x
+  instance Pure Bool { compute = compute_fs }     -- effectful witness, fn field
   ```
 
-- expect: the `Effectful Int` instance **accepts**; the `Effectful Bool`
-  instance **rejects** with a specific purity/classification error saying the
-  class field `step` requires `proc` (or equivalent SURF-1 false-purity wording).
-  The reject must not be asserted as a bare `is_err()`, and must not be caused
-  by overlap, orphan, or a missing field.
-- why: G3. This proves the class-field keyword is enforced, not decorative. The
-  structural discriminator is the stored marker on the class field combined with
-  the implementation's existing SURF-1 classification.
+- expect:
+  - `Effectful Int` **accepts** — an effectful witness for a `proc` field
+    (unchanged).
+  - `Effectful Bool` **accepts** — a **pure `∅`-row witness satisfies the
+    `proc` field** by covariant subsumption `∅ ⊆ ρ_field` (`proc`'s contract is
+    "may be effectful"; a pure witness is a more precise inhabitant). **This
+    reverses the pre-DS-8b behavior**, which rejected "field requires `proc`";
+    the reversal is the landed `check_instance_field_purity` change — the
+    `Proc if !impure => Err` arm removed, so a pure witness for a `proc` field
+    now falls through to `Ok` (`36 §1.6.2`, DS-8b).
+  - `Pure Bool` **rejects** — the **dangerous direction is unchanged**: an
+    effectful witness for a pure `fn` field is rejected on the specific variant
+    `class field `Pure.compute` requires `Fn` but instance implementation is
+    effectful: EffectEscapes … FS` (the retained `Const | Fn if impure => Err`
+    arm). Assert this exact variant — not a bare `is_err()`, and not overlap,
+    orphan, or a missing field.
+- why: G3, re-cast for DS-8b's covariant subsumption. The covariance is
+  **one-way**, and the **non-degenerate discriminating pair** is `Effectful
+  Bool` (pure → `proc`, **accept**) against `Pure Bool` (effectful → `fn`,
+  **reject**): a bug that made subsumption symmetric (accepting the
+  effectful-into-`fn` direction), or a regression re-adding the pure-into-`proc`
+  reject, flips exactly one of the pair — on the same
+  `check_instance_field_purity` path. The structural discriminator is the stored
+  field marker combined with the witness's SURF-1 effect-row classification
+  (`∅` vs non-`∅`).
+- AC6 (field classification unchanged): accepting a pure witness does **not**
+  weaken the field's own purity — `d.step` still projects as `proc` at a use
+  site (a pure caller still cannot call it through the dictionary), pinned by
+  `surface/classes/proc-field-projection-classifies-proc` (CFP2). Only the set
+  of witnesses that may **inhabit** the field widens.
 
 ### surface/classes/fn-and-const-field-signatures-follow-declared-type
 - spec: `33 §5.2` (class-field marker reads the field type/telescope),
