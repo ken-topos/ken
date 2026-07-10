@@ -275,9 +275,12 @@ bar.
   a functor-combinator WP alongside `Compose`, owning the freed `Sum` name.
 
 ### L6 · ⚠ PROMINENT — casing standard: PascalCase class-like, snake_case instance-like [OPERATOR-RULED]
-> **STATUS (2026-07-10 ~14:05):** standard DECIDED (operator); **renaming pass
-> DEFERRED** to ride the `.ken → .ken.md` literate transformation (one touch per
-> file). Broadcast-to-fleet-now vs hold-until-pass: **pending operator answer.**
+> **STATUS (2026-07-10 ~14:20): ADOPTED forward.** Operator ruled broadcast-now;
+> standard sent to Foundation + Librarian, **Foundation acknowledged** (new
+> authoring conforms), **Librarian folded it into authoritative guidance** —
+> `07-catalog-style-guide.md §9` + `write-ken.md` (PR #460, `main @ 16310f5`).
+> **Bulk renaming pass of landed code still DEFERRED** to ride the `.ken → .ken.md`
+> literate transformation (Librarian owns it). Forward-only from now.
 - **Call (operator, Pat):** adopt the **Python convention** for Ken-surface
   identifiers — **class-like → PascalCase, instance-like → snake_case**:
   - **PascalCase** (already conforms): types/type-constructors (`Either`,
