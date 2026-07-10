@@ -25,6 +25,7 @@ use crate::error::{ElabError, Span};
 use crate::numbers::{AddEntry, BinOpEntry, NumericEnv, NumericLitVal};
 use crate::resolve::{
     RClassField, RDecl, RDeclKind, RExpr, RMatchArm, RPatKind, RPattern, RPropIntro, RType,
+    SUGAR_ABSURD, SUGAR_AXIOM, SUGAR_EQ, SUGAR_J, SUGAR_REFL,
 };
 
 // ----- obligation model -----
@@ -407,8 +408,8 @@ fn elab_type(cx: &mut ElabCtx, ty: &RType) -> Result<Term, ElabError> {
         // needs no level parameter at all: the level is read off `A`'s own
         // classification when the surrounding declaration is later checked,
         // exactly as `check.rs`'s own `Term::Eq` inference arm already does.
-        RType::RApp(..) if peel_named_rtype_app(ty, "Eq", 3).is_some() => {
-            let args = peel_named_rtype_app(ty, "Eq", 3).expect("checked by guard");
+        RType::RApp(..) if peel_named_rtype_app(ty, SUGAR_EQ, 3).is_some() => {
+            let args = peel_named_rtype_app(ty, SUGAR_EQ, 3).expect("checked by guard");
             let a_ty_k = elab_type(cx, args[0])?;
             let a_k = elab_type(cx, args[1])?;
             let b_k = elab_type(cx, args[2])?;
@@ -459,7 +460,7 @@ fn check(cx: &mut ElabCtx, expr: &RExpr, expected: &Term, _span: &Span) -> Resul
         // Surface sugar only: `Refl` is a bare `ConId` the resolver emits as
         // an `RCon` on scope miss (never registered as a real global), so
         // this must be checked BEFORE the generic `RCon` global lookup.
-        RExpr::RCon(name, rspan) if name == "Refl" => {
+        RExpr::RCon(name, rspan) if name == SUGAR_REFL => {
             let exp_wh = whnf(cx.env, &cx.ctx, expected);
             if matches!(exp_wh, Term::Eq(..))
                 || (matches!(exp_wh, Term::Sigma(..))
@@ -479,7 +480,7 @@ fn check(cx: &mut ElabCtx, expr: &RExpr, expected: &Term, _span: &Span) -> Resul
         // posture): the resulting `trusted_base()` entry is a real,
         // grep-able `Opaque` — never a silent/implicit assumption. Checked
         // (not inferred), same discipline as `Refl`.
-        RExpr::RCon(name, rspan) if name == "Axiom" => {
+        RExpr::RCon(name, rspan) if name == SUGAR_AXIOM => {
             let id = declare_postulate(cx.env, vec![], expected.clone()).map_err(|e| {
                 ElabError::KernelRejected {
                     error: e,
@@ -496,7 +497,33 @@ fn check(cx: &mut ElabCtx, expr: &RExpr, expected: &Term, _span: &Span) -> Resul
         // bare lowercase identifier the resolver emits as an `RCon` on scope
         // miss. Checked (not inferred) so the motive comes from the goal,
         // mirroring `Refl`/`Axiom`/`tt`.
-        RExpr::RApp(f, arg, rspan) if matches!(f.as_ref(), RExpr::RCon(n, _) if n == "absurd") => {
+        //
+        // **Reserved-sugar identifiers (FR-2, `docs/program/wp/
+        // ds-1-findings-remediation.md`, Architect-corrected).** The five
+        // names matched by literal string below (`Refl`/`Axiom`/`absurd`/
+        // `J`/`Eq`, `resolve::SUGAR_*` — the shared constants this file and
+        // `resolve.rs` both read) do NOT all reserve the same way:
+        //
+        // - `Refl`/`Axiom` are a bare `RCon` — TOTAL intercept at any arity.
+        //   `resolve::RESERVED_SUGAR` rejects a declaration under either
+        //   name outright (a resolve-time hard error): it would be wholly
+        //   unreachable, full stop.
+        // - `absurd` is `RApp(RCon("absurd"), arg)` — arity-**1** only, and
+        //   also in `RESERVED_SUGAR` (this is the *originating* FR-2
+        //   footgun, DS-1's `absurdEmpty` rename; a value named `absurd` has
+        //   no other meaningful arity to coexist at).
+        // - `J`/`Eq` are `peel_named_app(_, name, 3)` — arity-**3** only,
+        //   BY DESIGN so a lower-arity type-former/class of the same name
+        //   coexists (the landed `class Eq a`, `51-lawful-classes.md §2.1`,
+        //   is arity-1 and never collides with the arity-3 `Eq A a b`
+        //   equality sugar). `J`/`Eq` are deliberately NOT in
+        //   `RESERVED_SUGAR` — a declaration-time name reject would break
+        //   every legitimate lower-arity `Eq`/`J` use, including most of the
+        //   catalog (`DecEq`/`map`/`EmptyDec.ken.md` all pull in `class
+        //   Eq`). A user-declared arity-3 type-former literally named
+        //   `Eq`/`J` remains a real but deliberately out-of-scope
+        //   reservation, not a bug this guard closes.
+        RExpr::RApp(f, arg, rspan) if matches!(f.as_ref(), RExpr::RCon(n, _) if n == SUGAR_ABSURD) => {
             let bottom = Term::const_(cx.env.bottom_id(), vec![]);
             let proof_core = check(cx, arg, &bottom, rspan)?;
             Ok(Term::Absurd(
@@ -1351,8 +1378,8 @@ fn infer(cx: &mut ElabCtx, expr: &RExpr) -> Result<(Term, Term), ElabError> {
         // from a checked goal). Detected BEFORE the generic application arm
         // below via a full application-spine peel (`absurd` only needed one
         // level; `J` needs three).
-        RExpr::RApp(..) if peel_named_app(expr, "J", 3).is_some() => {
-            let args = peel_named_app(expr, "J", 3).expect("checked by guard");
+        RExpr::RApp(..) if peel_named_app(expr, SUGAR_J, 3).is_some() => {
+            let args = peel_named_app(expr, SUGAR_J, 3).expect("checked by guard");
             infer_j(cx, args[0], args[1], args[2], expr.span())
         }
 
@@ -1361,8 +1388,8 @@ fn infer(cx: &mut ElabCtx, expr: &RExpr) -> Result<(Term, Term), ElabError> {
         // transport.md §2`). Same plumbing as the `elab_type` arm above
         // (`peel_named_rtype_app`), needed because a motive body is
         // elaborated via `infer`/`check`, not `elab_type`.
-        RExpr::RApp(..) if peel_named_app(expr, "Eq", 3).is_some() => {
-            let args = peel_named_app(expr, "Eq", 3).expect("checked by guard");
+        RExpr::RApp(..) if peel_named_app(expr, SUGAR_EQ, 3).is_some() => {
+            let args = peel_named_app(expr, SUGAR_EQ, 3).expect("checked by guard");
             infer_eq(cx, args[0], args[1], args[2], expr.span())
         }
 

@@ -520,6 +520,72 @@ fn resolve_explicit_ctor(
     }
 }
 
+// ----- reserved surface sugar (FR-2, `docs/program/wp/
+// ds-1-findings-remediation.md`) -----
+
+/// `elab.rs`'s five checked-mode surface sugar identifiers, named here so
+/// both `elab.rs`'s interception arms and this module's declaration guard
+/// below read the SAME constants and can't drift apart. They do NOT all
+/// intercept the same way — this is exactly the distinction the Architect's
+/// original FR-2 pin missed and then corrected (`docs/program/wp/
+/// ds-1-findings-remediation.md` FR-2):
+///
+/// - `Refl`/`Axiom` — a bare `RCon`, TOTAL intercept at any arity (zero
+///   arguments needed): a declared global of either name is wholly
+///   unreachable, full stop.
+/// - `absurd` — `RApp(RCon("absurd"), arg)`, arity-**1** only.
+/// - `J`/`Eq` — `peel_named_app(_, name, 3)`, arity-**3** only, BY DESIGN so
+///   a lower-arity type-former/class of the same name coexists (the landed
+///   `class Eq a` — spec-grounded, `51-lawful-classes.md §2.1` — is arity-1
+///   and never collides with the arity-3 kernel-equality sugar `Eq A a b`;
+///   the elaborator's own arity gate already disambiguates the two).
+pub(crate) const SUGAR_REFL: &str = "Refl";
+pub(crate) const SUGAR_AXIOM: &str = "Axiom";
+pub(crate) const SUGAR_ABSURD: &str = "absurd";
+pub(crate) const SUGAR_J: &str = "J";
+pub(crate) const SUGAR_EQ: &str = "Eq";
+
+/// The declaration-time hard-error set — ONLY the names above whose
+/// interception is total/arity-independent (`Refl`, `Axiom`, `absurd`).
+/// `J`/`Eq` are deliberately excluded: their arity-3-gated coexistence with
+/// lower-arity type-formers/classes is the intended, working design (a
+/// declaration-time name reject would be the wrong tool — it would break
+/// every legitimate `Eq A a b`/`J _ _ _` use in any file that also declares
+/// a lower-arity `Eq`/`J`, i.e. most of the catalog: `DecEq`, `map`,
+/// `EmptyDec.ken.md` all pull in `class Eq`). A user-declared arity-3
+/// type-former literally named `Eq`/`J` remains a real, but deliberately
+/// out-of-scope, reservation — not a bug this guard closes (see the
+/// Architect's FR-2 ruling, `docs/program/wp/ds-1-findings-remediation.md`).
+///
+/// `Cast`/`Ascript` are excluded for a different reason: they're
+/// `ken-kernel::term::Term` variants reached only via ordinary elaboration
+/// of real surface syntax (a type ascription, the `cast` derived combinator
+/// in `Core/Transport.ken`) — grep-confirmed no `RCon("Cast")`/
+/// `RCon("Ascript")` match arm exists anywhere in
+/// `elab.rs`/`resolve.rs`/`parser.rs`, so neither shadows a user global the
+/// way `Refl`/`Axiom`/`absurd` do.
+pub(crate) const RESERVED_SUGAR: &[&str] = &[SUGAR_REFL, SUGAR_AXIOM, SUGAR_ABSURD];
+
+/// Resolve-time hard error (fail-closed) when a declared name collides with
+/// a totally-reserved sugar identifier — the collision diagnostic FR-2 adds
+/// in place of DS-1's silent-shadow footgun. Grep-confirmed none of
+/// `RESERVED_SUGAR` is a prelude global, so this can never reject the
+/// bootstrap.
+fn check_no_reserved_sugar_collision(name: &str, span: &Span) -> Result<(), ElabError> {
+    if RESERVED_SUGAR.contains(&name) {
+        return Err(ElabError::ParseError {
+            msg: format!(
+                "'{name}' collides with a reserved surface sugar identifier — \
+                 checked-mode sugar intercepts every syntactic '{name}' \
+                 regardless of this declaration, leaving it permanently \
+                 unreachable; choose a different name"
+            ),
+            span: span.clone(),
+        });
+    }
+    Ok(())
+}
+
 // ----- public entry points -----
 
 pub fn resolve_decls(decls: &[Decl]) -> Result<Vec<RDecl>, ElabError> {
@@ -531,6 +597,18 @@ pub fn resolve_decls(decls: &[Decl]) -> Result<Vec<RDecl>, ElabError> {
 }
 
 pub fn resolve_decl(decl: &Decl) -> Result<RDecl, ElabError> {
+    // The single decl-kind-uniform funnel every fn/const/proc/def/data/class/
+    // instance declaration passes through — guard the produced decl's own
+    // name here, not at the ~12 downstream `globals.insert` call sites or a
+    // per-use path. `ModuleDecl`/`ImportDecl`/`Pub` are expanded away by
+    // `modules.rs` before reaching this function (see the arm below) and
+    // have no declared VALUE name of their own to guard here.
+    if !matches!(
+        decl,
+        Decl::ModuleDecl { .. } | Decl::ImportDecl { .. } | Decl::Pub(_)
+    ) {
+        check_no_reserved_sugar_collision(decl.name(), decl.span())?;
+    }
     match decl {
         // `module`/`import`/`use`/`pub` are resolved away entirely by
         // `modules.rs` before any decl reaches this function — it always
@@ -818,6 +896,10 @@ pub fn resolve_decl(decl: &Decl) -> Result<RDecl, ElabError> {
             }
             let mut rctors = Vec::new();
             for c in ctors {
+                // A constructor resolves as an `RCon` too (`33 §4.2`) — a
+                // `data … = Eq | …` ctor collides with the reserved sugar
+                // identically to a decl head bearing the same name.
+                check_no_reserved_sugar_collision(&c.name, &c.span)?;
                 let rargs = c
                     .args
                     .iter()
@@ -865,6 +947,11 @@ pub fn resolve_decl(decl: &Decl) -> Result<RDecl, ElabError> {
                 });
             }
             let (indices, level) = resolve_explicit_family_indices(&mut scope, family)?;
+            for ctor in ctors {
+                // Same collision as the legacy-form sweep above — an
+                // explicit-family ctor resolves as an `RCon` too.
+                check_no_reserved_sugar_collision(ctor.name(), ctor.span())?;
+            }
             let rctors = ctors
                 .iter()
                 .map(|ctor| resolve_explicit_ctor(&scope, ctor))

@@ -391,6 +391,38 @@ type signature, a snippet missing its surrounding declarations).
   *in the type*, so every caller sees the postcondition at the call site
   without reading the body — the same reason `sort`'s result type states
   "sorted and a permutation" rather than a comment saying so.
+- **Reserved sugar identifiers — three names you cannot declare, two you
+  usually can.** `Refl`, `Axiom`, `absurd`, `J`, and `Eq` are all
+  checked-mode surface sugar, but they don't all reserve their name the same
+  way (`elab.rs`'s special forms; `resolve::RESERVED_SUGAR`/`SUGAR_*`):
+  - `Refl` and `Axiom` intercept a bare occurrence of their own name
+    unconditionally, at any arity — a declared global under either name is
+    wholly unreachable.
+  - `absurd` intercepts a 1-argument application (`absurd h`) — the
+    canonical, and only meaningful, use of a value so named.
+  - Declaring `fn absurd (...) = ...`, or a `data`/explicit-family
+    constructor literally named `Refl`/`Axiom`/`absurd`, no longer silently
+    shadows the sugar — it's a resolve-time hard error (FR-2,
+    `docs/program/wp/ds-1-findings-remediation.md`):
+
+    ```ken reject
+    -- Fails: 'absurd' collides with a reserved surface sugar identifier.
+    fn absurd (C : Type) (e : Bool) : C = absurd e
+    ```
+
+    Pick a different name for the same idea — DS-1's `Empty` eliminator,
+    for example, is named `absurdEmpty`, not `absurd`.
+  - `J` and `Eq`, by contrast, only intercept a **3-argument** application
+    (`Eq A a b`, `J motive base eq`) — the kernel equality/`J` sugar. A
+    lower-arity type-former or `class` of the same name **coexists
+    correctly and is not an error** — this is by design, not an oversight:
+    the landed `class Eq a` (`Core/LawfulClasses.ken`) is arity-1 and never
+    collides with the arity-3 equality sugar, so declaring your own
+    lower-arity `Eq`/`J` is fine.
+
+    ```ken example
+    class Eq a { eq : a -> a -> Bool }
+    ```
 
 ## Findings
 
