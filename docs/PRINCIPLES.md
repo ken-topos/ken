@@ -233,6 +233,31 @@ workaround starts to feel permanent, or you reach for "just handle it here
 instead." That feeling is the signal the root fix was skipped — stop and push the
 fix down to where the defect lives.
 
+### 14. Nothing required lives in a comment — express it in the language
+
+A comment is **unchecked prose**: nothing verifies it, nothing re-checks it, and
+it drifts silently from the code it annotates. So a *required* fact — a contract,
+an invariant, a proof obligation, a trust boundary — must be expressed in the
+**language proper**, where the elaborator and kernel check it, never in a comment
+only a human might read. Making a comment mandatory is a two-fold failure: it
+puts the load-bearing thing where nothing checks it (over-claiming, principle 8),
+and — if the fact genuinely has no language-proper form — it hides a real gap in
+the language behind prose instead of fixing it at its layer (principle 13). A
+comment is therefore **never mandatory**; at most an optional pointer. This is
+not "fewer comments": genuine narrative — proof strategy, naming rationale, why a
+thing exists — is welcome, it simply is never the artifact anything *depends* on,
+and in a literate `.ken.md` it belongs in the surrounding Markdown, not a `--`
+inside the fence.
+
+*In practice:* a contract/invariant is `requires`/`ensures` or a refinement type;
+a proposition is `law`/`prop`/`lemma` discharged by `prove`; a trust boundary is
+`Axiom` recorded in `trusted_base_delta` (`63 §2`) — the checked construct *is*
+the record, and a comment restating it is redundant. When a required fact has no
+language-proper home, that is a signal to **extend the language** (or file the
+gap), never to enshrine the fact in a comment. The catalog style guide follows
+this: proof-review information lives in the entry's Ken, and comments/prose are
+reserved for the narrative that genuinely cannot be checked (`07 §8`).
+
 ---
 
 ## Working constraints (process, not philosophy)
