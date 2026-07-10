@@ -182,14 +182,15 @@ bar.
   breadth over the tier is the operator's stated goal for the window.
 - **Reversibility:** easy.
 
-### RUN STATUS / resume point (2026-07-10, ~07:0x UTC)
+### RUN STATUS / resume point (2026-07-10, ~07:4x UTC)
 
-**Live checkpoint for lossless resume across compaction.** **Two build tracks
-live** — **DS-8** (Foundation, assembling final instances → lands whole) and
-**DS-5b** (Kernel) — plus the **spec `∅⊆proc` fast-follow** (spec-author,
-trailing DS-8b, now clear). Both tracks gate through the Architect; hold at the
-ceiling, do NOT fan out. **DS-8b-landing playbook executed:** merged → relayed
-Foundation (assemble) + released spec-author.
+**Live checkpoint for lossless resume across compaction.** **One build track
+live** — **DS-8** (Foundation, assembling final `Traversable` instances → lands
+whole, completes Core) — plus two enclave doc/conformance reconciles trailing
+(the DS-8b `∅⊆proc` fast-follow **LANDED** PR #435; the **DS-5 §60 erratum**
+in flight, spec-author + CV). **DS-5b LANDED** (PR #436) — both elaborator
+capability builds (K1 hard-class + K2 moderate) are now on main, CI-green.
+Kernel + Ergo rings freed. Next after DS-8: Data-section breadth.
 
 - **DS-2** (`Ord Nat`) — ✅ **LANDED** `main @ 971aaad` (PR #421). Retros in.
 - **DS-7** (`Applicative`/`Monad`) — ✅ **LANDED** `main @ 88dce79` (PR #428,
@@ -222,26 +223,40 @@ Foundation (assemble) + released spec-author.
   doc-only). Honest landed/gated split (head/`Fin` landed; tail/zip/lookup gated
   on DS-5b). Chapter `60-length-indexed-vectors.md`. Enclave stood down; CV has
   forward conformance work staged on the DS-5b gate. See `L1`/`L2` + `K1`.
-- **DS-5b** (dependent-match index refinement) — 🔨 **BUILDING on Kernel**
-  (`evt_1q7m4wjk4cy8a`); frame `wp/ds-5b-dependent-match-refinement.md`
-  (`main @ c958b66`). Elaborator enhancement unblocking DS-5's tail/zip/lookup.
-  **First hard-class land of the run — see `K1`.** Comes back through kernel-qa →
-  Architect soundness gate → git_request. Soundness bars: injectivity
-  discharged-not-postulated, over-refinement discriminator, full-suite-green +
-  non-indexed-match inertness.
-- **`Vector` package** (Foundation follow-on) — **queued behind DS-5b landing**
-  (frame it for the full API once tail/zip/lookup elaborate; head-only is
-  buildable today but ship the package whole).
-- **Data section (DS-3/DS-4/DS-6)** — next after Core. DS-4 (List ext) near-
-  mechanical; DS-3 (Either/Result/Option) + DS-6 (`DecEq Char` capstone,
-  candidate 2nd kernel-move) are T1-design-needed.
-- Verify team idle in reserve. Kernel on DS-5b; Foundation assembling DS-8; Ergo
-  freed (DS-8b closed); spec-author on the fast-follow.
+- **DS-5b** (dependent-match index refinement) — ✅ **LANDED** `main @ 5058d72`
+  (PR #436, CI-green). **First hard-class land of the run (`K1`).** Pure
+  elaborator (zero kernel/data.rs/surface delta), 3 capabilities discharged via
+  kernel `J`/`Cast` (zero `Axiom`, executable `trusted_base()` set-diff), kernel
+  backstop intact (`var_refinements` elaborator-only + `kernel_check` re-run as
+  arbiter), AC8 over-refinement → `KernelRejected`, 750-test suite green,
+  non-indexed inert. **K1 addendum:** (a) a **3rd capability (goal refinement)**
+  was an honest beyond-frame implementer finding, kept in the elab.rs layer +
+  gated sound; (b) **`zip` two-vector step + `lookup` (Fin) did NOT land** —
+  precisely diagnosed wall (convoy can't yet distinguish an outer param from a
+  match-bound field), honestly deferred to a **named follow-on `DS-5c`** (§3.2.1).
+- **DS-5 §60 erratum** — 🔨 IN FLIGHT (spec-author + CV, `evt_2s4q19y178hh5`).
+  The merged `60-length-indexed-vectors.md §6` over-claims (says DS-5b unblocks
+  all of tail/zip/lookup; it lands `tail`+single-convoy only) — Architect + CV
+  both caught it. Fix: `tail` gated→landed; `zip`/`lookup` re-pointed to `DS-5c`.
+  Bundled spec+conformance on one branch, lands right after (main-honesty), CI-
+  gated. **Do not let it sit.**
+- **`Vector` package** (Foundation follow-on) — **framable now** for the
+  buildable API (`head` + `tail` + single-convoy ops), with `zip`/`lookup` gated
+  on `DS-5c` — an honest partial package (DS-5-chapter split pattern). Queue
+  behind DS-8; frame when Foundation frees.
+- **`DS-5c`** (zip two-vector convoy + Fin-indexed `lookup`) — **named deferred
+  WP**, NOT kicked this window (breadth over depth; would be a 3rd concurrent
+  capability build). The §60 erratum + Vector package both point to it.
+- **Data section (DS-3/DS-4/DS-6)** — next after Core, the breadth priority.
+  DS-4 (List ext) near-mechanical → kick first; DS-3 (Either/Result/Option) +
+  DS-6 (`DecEq Char` capstone, candidate 2nd kernel-move) are T1-design-needed.
+- Verify team idle in reserve. Kernel + Ergo freed. Foundation assembling DS-8.
+  spec-author/CV on the §60 erratum.
 
 **Next-move triggers (event-driven):** DS-8 git_request → merge (CI-gated) →
-**Core complete** → open Data section (DS-4 first, near-mechanical). DS-5b
-git_request → merge → frame+kick the full `Vector` package (Foundation). Spec
-fast-follow git_request → merge (doc-only). Hold at ceiling until one clears.
+**Core COMPLETE** → open Data section (kick DS-4 first, near-mechanical, to
+Foundation). §60 erratum git_request → merge (CI-gated, spec+conformance).
+Then Data breadth; Vector package + DS-5c are queued/named.
 
 ### P3 · Foundation is the catalog-authoring home; parallelize only independent tracks
 - **Call:** Keep catalog authoring on the Foundation team (coherence — one
