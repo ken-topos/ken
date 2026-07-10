@@ -237,7 +237,7 @@ fn ken_checker_accepts_bounded_proof_erasure_witness() {
     assert!(!report.helper_assumptions.is_empty());
     assert!(report
         .evidence_source
-        .contains("proof_erasure_boundary_checker.ken"));
+        .contains("ProofErasureBoundaryChecker.ken"));
 }
 
 #[test]
