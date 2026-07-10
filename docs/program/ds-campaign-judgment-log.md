@@ -47,7 +47,38 @@ bar.
 
 ## Language-surface / elaboration / functionality calls
 
-_(none yet — appended as they arise)_
+### L1 · DS-7 package home + basename — new `Core/EffectfulClasses.ken.md`
+- **Call:** Home the CAT-2 effectful-class family (`Applicative`+`Monad` now,
+  `Traversable` appended at DS-8) in **one new entry
+  `catalog/packages/Core/EffectfulClasses.ken.md`**, alongside
+  `LawfulFunctors.ken`/`LawfulClasses.ken` in `Core`, reusing the landed
+  `class Functor`.
+- **Options:** (a) new `Core/EffectfulClasses.ken.md` [chosen, suggested]; (b)
+  append to the existing `LawfulFunctors.ken`; (c) the chapter-56 build-note's
+  `catalog/packages/lawful-functors/` path.
+- **Why:** subsume-don't-proliferate keeps the effectful classes together in one
+  entry (they share the wired-superclass story); `Core` is where the
+  class/instance vocabulary lives; a fresh entry mirrors DS-2's one-entry-per-WP
+  shape and keeps `LawfulFunctors` stable. The chapter's `lawful-functors/` path
+  is a perishable build-note; `P3` homes authoring at Foundation and I let the
+  final basename be the build's call (frame states it as a suggestion, not a
+  pin — flagged for the handback).
+- **Reversibility:** easy (an unreferenced new catalog entry; renamable before
+  any cross-package consumer exists — there is none).
+
+### L2 · DS-7 framed straight to Foundation citing chapter 56 (no enclave finalize pass)
+- **Call:** Frame DS-7 directly to Foundation with
+  `spec/50-stdlib/56-effectful-classes.md` (CAT-2) as the build contract, rather
+  than routing the DRAFT-v0 chapter through an enclave finalize-to-build-contract
+  pass first. Architect fidelity-gates the build against the chapter at the gate.
+- **Why:** the chapter is already a build contract — exact class signatures
+  (§3.1/§4.1), the laws stated character-for-character (§3.2/§4.2), instance
+  definitions (§3.3/§4.4), the ITree-bridge disposition (§4.3), and explicit
+  acceptance criteria (§7). An enclave finalize pass would add latency without
+  adding contract; the Architect gate already re-certs build-vs-chapter fidelity
+  + soundness. Mirrors how DS-2 was framed off its own committed frame.
+- **Reversibility:** easy (routing choice; escalate to the enclave mid-build if a
+  chapter ambiguity surfaces).
 
 ---
 
@@ -72,36 +103,31 @@ _(none yet — appended as they arise)_
   breadth over the tier is the operator's stated goal for the window.
 - **Reversibility:** easy.
 
-### RUN STATUS / resume point (2026-07-10, ~04:xx UTC)
+### RUN STATUS / resume point (2026-07-10, ~05:xx UTC)
 
 **Live checkpoint for lossless resume across compaction.**
 
-- **DS-2** (`Ord Nat` export) — **KICKED to Foundation** (`evt_2axex7z2s0m77`),
-  frame `wp/ds-2-ord-nat-export.md`. Building; comes back through
-  foundation-qa → Architect (zero-new-`Axiom` gate) → git_request to Steward.
-- **DS-7** (`Applicative`/`Monad`) — **GROUNDED, next to frame+kick** (do this
-  after the pending compaction). Design is NOT just convo-recorded — it is a
-  full spec chapter **`spec/50-stdlib/56-effectful-classes.md` (DRAFT v0, CAT-2)**:
-  WIRE the superclass chain (`Applicative f` carries field `functor : Functor f`;
-  `Monad f` carries `applicative : Applicative f`); class sigs at §3.1 (Applicative:
-  `functor`,`pure`,`ap` + 4 laws `ap_id`/`ap_hom`/`ap_ich`/`ap_cmp` + `map_coh`)
-  and §4.1 (`Monad` bind-primary, Fork B); instances `List` (cartesian `ap`,
-  §3.3/§4.4) + `Option`, both **proved zero-delta** by induction; wired superclass
-  dict supplied whole (six Functor+Applicative proofs NOT re-proved). Explicit
-  wiring only — implicit-superclass-coercion sugar deferred (`OQ-syntax`), no new
-  elaborator capability. **Unblocked** (only DS-8 Traversable is gated). Landed
-  dep: `class Functor` (`LawfulFunctors.ken:188`). No Applicative/Monad package
-  yet. **Open before kick:** decide whether 56-ch DRAFT v0 needs an enclave
-  finalize-to-build-contract pass, or frame DS-7 straight to Foundation citing
-  the chapter (lean: it's detailed enough — frame to Foundation, Architect
-  fidelity-gates the build vs the chapter).
+- **DS-2** (`Ord Nat` export) — ✅ **LANDED** `origin/main @ 971aaad` (PR #421,
+  CI-green). Two added files, outer-ring, zero-`Axiom`/zero-`trusted_base()`
+  delta, Architect terminal APPROVE. Foundation stood down, retros in.
+- **DS-7** (`Applicative`/`Monad`) — ✅ **FRAMED + KICKED to Foundation**
+  (`evt_2f39kxxfnbtjr`). Frame `docs/program/wp/ds-7-applicative-monad.md`
+  (`origin/main @ b12123a`); design contract `spec/50-stdlib/56-effectful-classes.md`
+  (CAT-2). Scope = D1 `Applicative` + D2 `Monad` + List/Option instances + the
+  ITree bridge as an **attested correspondence** (no minted second `bind`, no
+  surface `instance Monad (ITree e resp)`). Building; comes back through
+  foundation-qa → Architect (fidelity vs chapter + zero-`Axiom` gate) →
+  git_request to Steward. See `L1`/`L2` for the home + routing judgment calls.
 - **DS-8** (`Traversable`) — **GATED** on SURF-1 row-var surface (landed
-  `main@ef791a3`) **+ SURF-2 class-field purity marker** (`33 §5.2`, `39 §6.0`)
-  — verify SURF-2 landed before sequencing DS-8.
+  `main@ef791a3`) **+ SURF-2 class-field purity marker** (`33 §5.2`, `39 §6.0`,
+  chapter §5.1) — **verify SURF-2 landed before sequencing DS-8** (still to check).
 - **DS-5** (`Vector` spec chapter) — independent parallel Spec-enclave track,
-  queued (kick when convenient to keep Spec productive).
-- Kernel + Verify teams **freshly restarted** by operator (re-orienting) — in
-  reserve for any DS-6 kernel move.
+  queued (kick to spec-leader to keep Spec productive alongside the Foundation
+  build).
+- **Data section (DS-3/DS-4/DS-6)** — queued after Core; DS-6 (`DecEq Char`
+  capstone) is the candidate kernel-move (boundary rules permit landing).
+- Kernel + Verify teams restarted by operator, re-oriented, idle in reserve for
+  any DS-6 kernel move.
 
 ### P3 · Foundation is the catalog-authoring home; parallelize only independent tracks
 - **Call:** Keep catalog authoring on the Foundation team (coherence — one
