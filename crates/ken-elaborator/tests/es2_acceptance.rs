@@ -22,7 +22,7 @@ use ken_elaborator::{foreign::trusted_base_delta, ElabEnv};
 use ken_kernel::env::Decl;
 use ken_kernel::{whnf, Term};
 
-const COLLECTIONS_KEN: &str = include_str!("../../../catalog/packages/Data/Collections/Collections.ken");
+const COLLECTIONS_KEN_MD: &str = include_str!("../../../catalog/packages/Data/Collections/Collections.ken.md");
 const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Transport.ken.md");
 const MAP_KEN: &str = include_str!("../../../catalog/packages/Data/Collections/Map.ken");
 
@@ -33,7 +33,7 @@ fn mk_env() -> ElabEnv {
 fn mk_env_with_map() -> ElabEnv {
     let mut env = ElabEnv::new().expect("base env construction failed");
     env.elaborate_ken_md_file(TRANSPORT_KEN_MD).expect("transport.ken must elaborate");
-    env.elaborate_file(COLLECTIONS_KEN).expect("collections.ken must elaborate");
+    env.elaborate_ken_md_file(COLLECTIONS_KEN_MD).expect("collections.ken.md must elaborate");
     env.elaborate_file(MAP_KEN).expect("map.ken must elaborate");
     env
 }
