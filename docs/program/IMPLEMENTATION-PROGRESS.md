@@ -95,11 +95,20 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >   pre-PascalCase filename — a `.contains` outside the scoped set + not an
 >   `include_str!`); one-line fix, re-gated, merged. Retro carry: rename WPs need
 >   a workspace-wide old-basename grep across ALL string patterns, not just
->   `include_str!`. **FR-3 RELEASED** (Architect-pinned: new `ken check`
->   subcommand, strict `ken run`, reuse `elaborate_ken_md_file`) → then **FR-2**
->   (absurd-collision diagnostic, Architect-pinned (1)+(2)). Serialized,
->   RAM-capped (`-j 2`, scoped). **FR-3 AC-reconcile companion** (catalog+guide
->   AC → `ken check`) is Steward/Librarian lane, gated on `ken check` landing.
+>   `include_str!`. **FR-3 LANDED** (PR #407, `origin/main @ 7b3e0e6`) — `ken
+>   check` subcommand (peer arm, strict `ken run` unchanged, reuse
+>   `elaborate_ken_md_file`; behavior-preserving `elaborate_cli_file` extraction).
+>   **FR-2 RELEASED** — the LAST FR (`absurd`-collision diagnostic: build (1)
+>   doc-note + (2) resolve-time hard error over a shared `RESERVED_SUGAR`
+>   const at `resolve_decl`, sweep ctor names too; DECLINE (3); zero-trust-delta,
+>   Architect-pinned `evt_2pnr7674mqjka`). Ergo on `wp/FR-2-absurd-collision-hygiene`.
+>   Serialized, RAM-capped (`-j 2`, scoped). **FR-3 AC-reconcile companion
+>   ROUTED to Librarian** (evt_629ch5mdg24q6): entirely guide-lane (style guide
+>   uses the fence-role table, no Steward-doc AC). Scoped: `surface-reference.ken.md`
+>   has NO `proc main` (:10/:53 `ken run`→`ken check`); proof-techniques/
+>   decomposition HAVE `proc main` (uniform `ken check` optional); guide AC1 →
+>   "`ken check` exits 0 on all three strands"; leave `ken run` *behavior*
+>   teaching (proof-techniques:322). git_request → Steward, docs-only.
 > - **Librarian** folds DS-1's retro lessons + the `--`-in-fences style rule +
 >   the "cross-file import not yet available" honesty note into `write-ken`/the
 >   guide + `07` AC5 language (`evt_57c6njjq90sbv`, `evt_2y14rfkncw8az`); enclave
