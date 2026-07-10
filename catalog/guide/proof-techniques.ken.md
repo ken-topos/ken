@@ -23,7 +23,9 @@ reader recognizes it when they hit it themselves.
 4. [`funext` is definitional](#4-funext-is-definitional)
 5. [Non-termination hazards](#5-non-termination-hazards)
 
-Shared definitions for this strand's examples:
+Shared definitions for this strand's examples. `cong` — lifting equality of
+endpoints through a function — is `catalog/packages/Core/Transport.ken`'s
+idiom, inlined here so this strand's examples are self-contained:
 
 ```ken
 fn bool_and (a : Bool) (b : Bool) : Bool = match a { True ⇒ b ; False ⇒ False }
@@ -34,9 +36,6 @@ fn list_append (a : Type) (xs : List a) (ys : List a) : List a =
     Cons x t  ⇒ Cons a x (list_append a t ys)
   }
 
--- `cong` — lift equality of endpoints through a function
--- (`catalog/packages/Core/Transport.ken`'s idiom, inlined so this
--- strand's examples are self-contained).
 fn cong (ty : Type) (ty2 : Type) (x : ty) (y : ty) (f : ty → ty2)
          (p : Equal ty x y) : Equal ty2 (f x) (f y) =
   J (λy' _. Equal ty2 (f x) (f y')) Refl p
@@ -69,9 +68,10 @@ True` collapses all the way to `Top`:
 const withTt : Equal Bool (bool_and True True) True = tt
 ```
 
+This fails with `"Refl expects an `Eq`-shaped goal"` — the goal already
+collapsed to `Top` before `Refl` was checked against it:
+
 ```ken reject
--- Fails: "Refl expects an `Eq`-shaped goal" — the goal already collapsed to
--- `Top` before `Refl` was checked against it.
 const withRefl : Equal Bool (bool_and True True) True = Refl
 ```
 
@@ -81,9 +81,10 @@ An abstract (neutral) variable never collapses, so the same shape flips:
 fn selfEqRefl (x : Bool) : Equal Bool (bool_and x x) (bool_and x x) = Refl
 ```
 
+This fails: the goal never reduced to `Top` (`x` is abstract), so there is
+nothing for `tt` (a `Top` introduction) to close:
+
 ```ken reject
--- Fails: the goal never reduced to `Top` (`x` is abstract), so there is
--- nothing for `tt` (a `Top` introduction) to close.
 fn selfEqTt (x : Bool) : Equal Bool (bool_and x x) (bool_and x x) = tt
 ```
 
@@ -103,22 +104,25 @@ stuck**, whatever the arguments:
 const five : Int = 5
 ```
 
+This fails with `"Refl: the two sides of the goal are not convertible"` —
+`eq_int five five` never reduces to `True` under conversion, even though
+`five` is concrete and the two arguments are literally the same value:
+
 ```ken reject
--- Fails: "Refl: the two sides of the goal are not convertible" — `eq_int
--- five five` never reduces to `True` under conversion, even though `five`
--- is concrete and the two arguments are literally the same value.
 const primEqRefl : Equal Bool (eq_int five five) True = Refl
 ```
 
+This fails too, for the same reason: the goal never reduced to `Top` either:
+
 ```ken reject
--- Fails too: the goal never reduced to `Top` either, for the same reason.
 const primEqTt : Equal Bool (eq_int five five) True = tt
 ```
 
+The honest closer is a VISIBLE postulate, the same audited-delta shape
+`Int`'s own Eq/Ord instances use (§3) — the proposition is true, just not
+kernel-reducible at this layer:
+
 ```ken example
--- The honest closer: a VISIBLE postulate, the same audited-delta shape
--- `Int`'s own Eq/Ord instances use (§3) — the proposition is true, just not
--- kernel-reducible at this layer.
 const primEqAxiom : Equal Bool (eq_int five five) True = Axiom
 ```
 
@@ -144,13 +148,13 @@ recursive definition (§5). The base case typically closes with `tt`
 (constructor endpoints collapse); the step case typically needs `cong` to
 lift the induction hypothesis under the outer constructor, because the two
 sides of the step's goal are **neutral** (an abstract tail `t` never
-reduces further) and so never collapse on their own:
+reduces further) and so never collapse on their own. Below is the right unit
+for `list_append`: the base case has both sides reduce to the constructor
+`Nil a` → `tt`; the step case's goal is `Cons x (list_append t Nil)` vs.
+`Cons x t` — neutral in the abstract tail `t`, so the recursive call's
+result (the induction hypothesis) is lifted under `Cons x` by `cong`:
 
 ```ken example
--- Right unit for `list_append`. Base: both sides reduce to the constructor
--- `Nil a` -> `tt`. Step: the goal is `Cons x (list_append t Nil)` vs.
--- `Cons x t` -- neutral in the abstract tail `t`, so the recursive call's
--- result (the induction hypothesis) is lifted under `Cons x` by `cong`.
 fn listRightUnit (a : Type) (xs : List a)
   : Equal (List a) (list_append a xs (Nil a)) xs =
   match xs {
@@ -229,13 +233,12 @@ Ken's equality at a function type **reduces to the pointwise family**:
 computation rule for `Π`). Function extensionality therefore needs **no
 axiom and no lemma** — a bare pointwise proof checks directly against a
 function-equality goal, because the goal *is* that pointwise type after one
-reduction step:
+reduction step. `notBool` and `flipBool` below are two syntactically
+different functions; proving them equal AS FUNCTIONS needs no `funext`
+call, only a pointwise proof, because `Equal (Bool -> Bool) f g`
+whnf-reduces to exactly that pointwise Pi type:
 
 ```ken example
--- `notBool` and `flipBool` are two syntactically different functions;
--- proving them equal AS FUNCTIONS needs no `funext` call, only a pointwise
--- proof, because `Equal (Bool -> Bool) f g` whnf-reduces to exactly that
--- pointwise Pi type.
 const notFunctionsEqual : Equal (Bool → Bool) notBool flipBool =
   λb. match b { True ⇒ tt ; False ⇒ tt }
 ```
@@ -259,8 +262,10 @@ above passes because its recursive call is on the strictly smaller tail
 whatever form it takes — a bare, unapplied self-reference is the minimal
 case:
 
+This fails with `"SCT: idempotent self-loop has no strictly-decreasing
+parameter"`:
+
 ```ken reject
--- Fails: "SCT: idempotent self-loop has no strictly-decreasing parameter".
 const bad : Bottom = bad
 ```
 
@@ -317,9 +322,10 @@ exactly the definitions that would make the kernel unsound if admitted.
   treatment common in other proof assistants (Lean/Agda/Idris), where
   `funext` is a postulate applied explicitly rather than a reduction rule.
 
+As with the surface reference strand's own compiled block (§1 there), this
+entry's tangled fences run through `ken run`, so this final compiled
+declaration is a nullary `proc main`:
+
 ```ken
--- Every literate entry's compiled fences tangle into one module, and
--- `ken run` executes its last definition — a nullary `proc main`, exactly
--- like the surface reference strand and every catalog entry.
 proc main : IO Unit visits [Console] = print_line "proof techniques ok"
 ```

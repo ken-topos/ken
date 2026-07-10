@@ -92,6 +92,15 @@ first-token `ken` highlighting):
   WP (`wp/catalog-literate-fence-roles`). Until it lands, negatives use
   `` ```ken ignore `` — safe (never tangled) but unchecked — and the entry notes
   the gap.
+- **Validating an entry: `ken run` vs. `ken check`.** A runnable entry (its
+  Definition fence ends in a nullary `proc main`) is validated with `ken run`,
+  which elaborates every fence and then drives the IO. A **pure-library**
+  entry (no `proc main` — the common shape for a catalog package) is validated
+  with `ken check <file>` instead: it runs the identical elaboration and
+  fence-role checking `ken run` does, then stops before the IO-drive step.
+  `ken run` on a pure-library entry always fails with `"last definition is not
+  an IO tree"` — that failure is not evidence against the entry; cite `ken
+  check`'s exit code as the entry's fence-validation evidence instead.
 
 ## 4. References (required)
 
@@ -174,6 +183,13 @@ Link to the spec for the contract; use this section to explain how the entry
 live here and in `catalog/`.
 
 ## 8. Comments
+
+This requirement is for **package entries**, whose fences tangle to
+consumed `.ken` source read as code independently of the surrounding
+markdown; a guide/teaching doc whose fences are only checked (never
+tangled to a shipped file) uses the surrounding prose as its comment layer
+instead — see `agent/playbooks/tools/write-ken.md`'s "prose is the
+comment layer" rule, which governs that other case.
 
 Comments are required where they carry proof-review information — a contract,
 invariant, proof strategy, trust posture, or non-obvious elaboration constraint.

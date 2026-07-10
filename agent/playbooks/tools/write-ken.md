@@ -40,10 +40,10 @@ The rule:
 ```ken example
 fn bool_and (a : Bool) (b : Bool) : Bool = match a { True ⇒ b ; False ⇒ False }
 
--- Both endpoints reduce to the SAME nullary constructor (`True`) ⇒ tt.
+-- Both endpoints reduce to the SAME nullary constructor (`True`) => tt.
 const collapsed : Equal Bool (bool_and True True) True = tt
 
--- The endpoint is a STUCK application over an abstract `x` ⇒ Refl.
+-- The endpoint is a STUCK application over an abstract x => Refl.
 fn stuck (x : Bool) : Equal Bool (bool_and x x) (bool_and x x) = Refl
 ```
 
@@ -53,6 +53,75 @@ independently. This is the single highest-value check before you commit a
 law proof; the full discriminator, with the mismatched-arity gotcha
 (`Refl` where a non-nullary head has one neutral component), is
 `catalog/guide/proof-techniques.ken.md §1`.
+
+## A brief's pinned syntax is intent, not a spelling — probe it first
+
+A design brief (an enclave pin, a WP frame) states *what* to build in Ken
+terms, but its literal syntax is not verified-parseable until you actually
+run it through the elaborator — the same discipline as the `tt`-vs-`Refl`
+rule above, applied to syntax instead of proof terminals. DS-1's first
+build attempt assumed `data Empty : Type0 =` and `absurd : (C:Type) -> Empty
+-> C` were directly typeable as written; neither was (a zero-constructor
+`data` didn't parse yet, and `absurd` turned out to be reserved sugar that
+silently shadows a same-named user declaration rather than erroring on
+redeclaration — the shadowing only surfaced by testing a *downstream call
+site*, not by reading the declaration's own clean elaboration). Before
+committing to a brief's exact spelling: write the smallest possible
+standalone probe and run it through `ken run`/`ken check`, don't reason from
+the brief's prose or the parser grammar in isolation.
+
+This applies with extra force to a **kernel-direct piece** (a `.ken.md`
+entry that needs a prelude addition the surface can't spell — an Ω-sorted
+type parameter, a large-eliminating family): confirm the new mechanism
+**admits** with a standalone bare-kernel harness (no elaborator, no
+prelude) *before* touching landed code. It's cheap and freely rewritable,
+and it catches de-Bruijn/motive-shape mistakes in a file with zero blast
+radius, rather than inside `prelude.rs`.
+
+## `class`/`instance` values are the synthesized `C_instance_T`, not `(C T)`
+
+`(C T)` is the class **applied to its head** — the dictionary's *type*, not
+a value; using it where a value is expected fails immediately (`§5` of the
+surface reference strand has the checked discriminator). The value you want
+is the synthesized global `C_instance_T`, projected exactly like any other
+record (`(C_instance_T).field`). This is easy to burn a probe cycle or two
+on the first time — it's not obvious from the `class`/`instance` declaration
+syntax alone, only from how `elab_instance_decl` names what it registers.
+
+## Prefer inlining a small helper over a cross-package dependency
+
+For a pilot or example-shaped catalog entry, inline a small (~10-line)
+landed helper (a `cong`, a `boolDichotomy`, a `sym`/`trans`) rather than
+depending on the package that defines it. This isn't just a style
+preference: cross-package `import` doesn't resolve to a real cross-file
+load yet (`07-catalog-style-guide.md §13`), so a self-contained entry is
+often the only one that can actually be verified end-to-end today.
+`proof-techniques.ken.md`'s own `cong` and DS-1's `EmptyDec.ken.md` both
+inline this way.
+
+## In a `.ken.md` file, the prose is the comment layer
+
+A `-- ` comment inside a checked or tangled `` ```ken `` fence is an
+anti-pattern: it duplicates, in a worse place, what the surrounding
+Markdown prose should say. Explain in prose, immediately before (or after)
+the fence; keep the fence itself as clean code. Reserve an in-fence `--`
+for the rare case where an annotation must point at one specific token and
+genuinely can't live in prose — the default is prose. `surface-reference.ken.md
+§8` has the full fence-role table this rule sits next to.
+
+## Validating a `.ken.md` file: `ken run` vs. `ken check`
+
+- **`ken run <file>`** — the file's last tangled declaration must be a
+  nullary `proc main`; it elaborates, checks every fence, then actually
+  drives the IO. Use it for a runnable file (a CLI fixture, a demo, the
+  guide's own strands — each carries a `proc main` for exactly this).
+- **`ken check <file>`** — elaborates and checks every fence, then stops
+  before the IO-drive; exits 0 iff elaboration and every fence behaved. Use
+  it for a **pure-library** entry (no `proc main` — the common shape for a
+  catalog package). `ken run` on a pure-library file always fails with
+  `"last definition is not an IO tree"` — that is not a fence defect, it is
+  the wrong command for the file's shape. Cite `ken check`'s exit code as
+  your fence-validation evidence for such an entry, not a `ken run` attempt.
 
 ## What to load next, by task
 

@@ -35,6 +35,11 @@ the signature and the body, not a comment
 - **`proc … visits ρ`** — potentially impure/imperative; the *only* keyword
   that may carry an effect row (§6).
 
+All three keywords in one runnable block. A literate entry's compiled fences
+tangle into one module, and `ken run` executes its last definition — so this
+block, being runnable, ends in a nullary `proc main` (§8 covers why a catalog
+*package* entry, a library rather than a runnable file, carries none):
+
 ```ken
 data Color = Red | Green | Blue
 
@@ -50,11 +55,6 @@ proc announce (c : Color) : IO Unit visits [Console] =
     Blue  ⇒ print_line "it's blue"
   }
 
--- A literate entry's compiled fences tangle into one module, and `ken run`
--- executes its last definition — so a runnable file's final compiled
--- declaration is a nullary `proc main`, exactly like the CLI fixtures and
--- runnable examples. A catalog PACKAGE entry is a library, not a runnable
--- file, and carries no `proc main`.
 proc main : IO Unit visits [Console] = announce favorite
 ```
 
@@ -67,11 +67,10 @@ catalog code the same way: explicit type parameters, applied positionally.
 
 The purity check is real, not advisory — an `fn` that performs an effect is
 rejected, and a `proc` declared with no row that performs one is rejected
-(§6 has the row-omission case):
+(§6 has the row-omission case). Here, `print_line` needs `[Console]`, and
+`fn` carries no row at all:
 
 ```ken reject
--- A `fn` cannot perform an effect — `print_line` needs `[Console]`, and
--- `fn` carries no row at all.
 fn announceWrong (c : Color) : IO Unit = print_line "not allowed in fn"
 ```
 
@@ -91,13 +90,14 @@ named once, reused everywhere `PosInt` appears) instead of a `data`
 wrapper: a `def`-refined value is, at the kernel, still just the underlying
 type's value.
 
+`five` below is usable directly wherever an `Int` is expected — `def` never
+introduces a boundary the way an inductive `data` former does:
+
 ```ken example
 def PosInt = { n : Int | Equal Bool (leq_int 0 n) True }
 
 const five : PosInt = 5
 
--- `five` is usable directly wherever an `Int` is expected — `def` never
--- introduces a boundary the way an inductive `data` former does.
 fn addToPosInt (n : Int) (p : PosInt) : Int = add_int n p
 
 const ten : Int = addToPosInt five five
@@ -119,12 +119,12 @@ const later : Int = addYears 5 myAge
 Contrast this with `data` (§3): an inductive type former **never**
 δ-unfolds, so a `data`-wrapped value is a genuinely different, opaque type
 that must be pattern-matched apart before its payload is usable —
-`def`'s transparency is the exception, not the default:
+`def`'s transparency is the exception, not the default. `Box` below is a
+`data` type — opaque, never δ-unfolds — so unlike the `def Age` case above, a
+`Box` value is NOT usable where a plain `Int` is expected, even though it is
+"just an Int" underneath:
 
 ```ken reject
--- `Box` is a `data` type — opaque, never δ-unfolds. Unlike the `def Age`
--- case above, a `Box` value is NOT usable where a plain `Int` is expected,
--- even though it is "just an Int" underneath.
 data Box = MkBox Int
 
 fn addYearsWrong (n : Int) (b : Box) : Int = add_int n b
@@ -151,13 +151,14 @@ fn area (s : Shape) : Int =
 ```
 
 A `match` missing a constructor is a hard elaboration error, not a runtime
-possibility — the surface catches it before the kernel ever sees the term:
+possibility — the surface catches it before the kernel ever sees the term.
+Below, `Caution` and `Go` are left unhandled, so it rejects as non-exhaustive:
 
 ```ken reject
 data TrafficLight = Stop | Caution | Go
 
 fn isStop (t : TrafficLight) : Bool =
-  match t { Stop ⇒ True }   -- Caution, Go unhandled: rejected as non-exhaustive
+  match t { Stop ⇒ True }
 ```
 
 `Option`/`Result` are ordinary `data` declarations built the same way — no
@@ -177,12 +178,12 @@ fn safeHead (a : Type) (xs : List a) : Option a =
 to `A` plus an emitted proof obligation, never a new kernel type former
 (`spec/30-surface/34-data-match.md §5`) — a refined value is, at runtime,
 just an `A`. This is the mechanism a `fn`'s return type uses to state a real
-postcondition instead of describing it only in a comment:
+postcondition instead of describing it only in a comment. Below, the
+refinement is the postcondition: `absInt` really does return a non-negative
+Int, and `leq_int 0 y` is the same `Bool`-valued comparator the
+lawful-classes package builds `Ord` on top of:
 
 ```ken example
--- The refinement is the postcondition: `absInt` really does return a
--- non-negative Int. `leq_int 0 y` is the same `Bool`-valued comparator the
--- lawful-classes package builds `Ord` on top of.
 fn absInt (x : Int) : { y : Int | Equal Bool (leq_int 0 y) True } =
   match leq_int 0 x {
     True  ⇒ x ;
@@ -194,12 +195,12 @@ A refinement can conjoin more than one property with the prelude's `And`
 (real landed idiom — `conformance/challenge/C5-verified-sort` proves a
 `sort` this way: the result is a `List a` that is *both* sorted *and* a
 permutation of the input, in one refinement). A function parameter can be
-refined too, the mirror case of a refined result:
+refined too, the mirror case of a refined result — a refined PARAMETER, here
+accepting only Booleans equal to `True`, the same shape
+`catalog/packages/Data/Collections/Collections.ken`'s `trueRefinementProject`
+uses:
 
 ```ken example
--- A refined PARAMETER: only Booleans equal to `True` are accepted.
--- Equivalent shape to `catalog/packages/Data/Collections/Collections.ken`'s
--- `trueRefinementProject`.
 fn projectTrue (x : { b : Bool | Equal Bool b True }) : Bool = x
 ```
 
@@ -226,15 +227,24 @@ instance Describe Bool {
 fn announceIt (b : Bool) : String = (Describe_instance_Bool).describe b
 ```
 
+**Referencing an instance as a value outside a `where`-resolved call** is
+the synthesized global `Describe_instance_Bool` above — not `(Describe
+Bool)`, which is the class **applied to its head**, i.e. the dictionary's
+*type*, not a value, so projecting a field off it fails immediately:
+
+```ken reject
+const wrong : String = (Describe Bool).describe True
+```
+
 A class field's own type may itself carry a law — the shape every entry in
-`catalog/packages/Core/` follows, covered in depth by the proof
-techniques strand:
+`catalog/packages/Core/` follows, covered in depth by the proof techniques
+strand. `Eq` below elides `sym`/`trans` for brevity; see
+`catalog/packages/Core/LawfulClasses.ken` for the full class:
 
 ```ken ignore
 class Eq a {
   eq   : a → a → Bool ;
   refl : (x : a) → IsTrue (eq x x)
-  -- … `sym`, `trans` — see catalog/packages/Core/LawfulClasses.ken
 }
 ```
 
@@ -251,11 +261,12 @@ proc greet (name : String) : IO Unit visits [Console] =
 ```
 
 Omitting a used effect from the row is rejected the same way an exhaustive
-match omission is — the checker infers the body's real effects and compares:
+match omission is — the checker infers the body's real effects and compares.
+Below, the body performs Console but the declared row is empty:
 
 ```ken reject
 proc silentGreet (name : String) : IO Unit =
-  print_line name    -- performs Console but declares no row at all
+  print_line name
 ```
 
 A row-polymorphic function keeps a helper's effect abstract instead of
@@ -288,24 +299,26 @@ general way to define an inductive relation; for that, state the property
 as a `lemma`'s result type instead (the proof-techniques strand's induction
 and motive-construction section covers this) and prove it directly.
 
+Below, `triv`'s conclusion reapplies `Trivial` to exactly its own parameters
+`a` and `x` — inside the v0 seed shape — and the intro helper is addressed
+through the family name, `Family.introName`:
+
 ```ken example
--- A `prop` with a `where` block, inside the v0 seed shape: `triv`'s
--- conclusion reapplies `Trivial` to exactly its own parameters `a` and `x`.
 prop Trivial (a : Type) (x : a) : Omega where {
   triv : Trivial a x
 }
 
 const sampleInt : Int = 42
 
--- Intro helpers are addressed through the family name, `Family.introName`.
 const trivialSample : Trivial Int sampleInt = Trivial.triv Int sampleInt
 ```
 
+Outside the seed shape: below, `nil`'s conclusion applies `AppendsTo` to
+`Nil a` and `ys`/`ys` — not to `AppendsTo`'s own three bound parameters in
+order — so this rejects with `"prop intro 'nil' is outside the v0
+Omega-clean seed shape"`, not a generic syntax error:
+
 ```ken reject
--- Outside the seed shape: `nil`'s conclusion applies `AppendsTo` to `Nil a`
--- and `ys`/`ys` -- not to `AppendsTo`'s own three bound parameters in
--- order -- so this rejects with "prop intro 'nil' is outside the v0
--- Omega-clean seed shape," not a generic syntax error.
 prop AppendsTo (a : Type) (xs : List a) (ys : List a) (zs : List a) : Omega
   where {
     nil : AppendsTo a (Nil a) ys ys
@@ -340,21 +353,20 @@ self-recursive `lemma` fails with an unresolved reference to its own name.
 The working idiom is the same shape catalog code already uses for a proof
 that needs induction: prove it as an ordinary recursive `fn` (or the
 proof-techniques strand's induction pattern), then expose a **thin,
-non-recursive `lemma` wrapper** that applies it —
+non-recursive `lemma` wrapper** that applies it. Below, the recursion
+(structurally descending on `ys`) lives in an ordinary `fn`, gated by the
+same SCT check any recursive `fn` goes through (the proof-techniques
+strand's non-termination-hazards section covers the gate itself); the
+`lemma` wrapper is not recursive itself — it just applies the `fn` that did
+the recursion, so it resolves cleanly:
 
 ```ken example
--- The recursion (structurally descending on `ys`) lives in an ordinary
--- `fn`, gated by the same SCT check any recursive `fn` goes through (the
--- proof-techniques strand's non-termination-hazards section covers the
--- gate itself).
 fn trivialByList (a : Type) (x : a) (b : Type) (ys : List b) : Trivial a x =
   match ys {
     Nil      ⇒ Trivial.triv a x ;
     Cons _ t ⇒ trivialByList a x b t
   }
 
--- The `lemma` wrapper is not recursive itself -- it just applies the `fn`
--- that did the recursion, so it resolves cleanly.
 lemma trivialByListLemma (a : Type) (x : a) (b : Type) (ys : List b) : Trivial a x =
   trivialByList a x b ys
 ```
