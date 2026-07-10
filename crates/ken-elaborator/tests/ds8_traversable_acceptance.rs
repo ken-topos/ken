@@ -21,8 +21,9 @@
 
 use ken_elaborator::ElabEnv;
 
-const TRANSPORT_KEN: &str = include_str!("../../../catalog/packages/Core/Transport.ken");
-const LAWFUL_CLASSES_KEN: &str = include_str!("../../../catalog/packages/Core/LawfulClasses.ken");
+const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Transport.ken.md");
+const LAWFUL_CLASSES_KEN_MD: &str =
+    include_str!("../../../catalog/packages/Core/LawfulClasses.ken.md");
 const COLLECTIONS_KEN: &str = include_str!("../../../catalog/packages/Data/Collections/Collections.ken");
 const LAWFUL_FUNCTORS_KEN: &str = include_str!("../../../catalog/packages/Core/LawfulFunctors.ken");
 const EFFECTFUL_CLASSES_KEN_MD: &str =
@@ -30,8 +31,8 @@ const EFFECTFUL_CLASSES_KEN_MD: &str =
 
 fn base_env() -> ElabEnv {
     let mut env = ElabEnv::empty().expect("prelude bootstrap");
-    env.elaborate_file(TRANSPORT_KEN).expect("Core/Transport.ken must elaborate");
-    env.elaborate_file(LAWFUL_CLASSES_KEN).expect("Core/LawfulClasses.ken must elaborate");
+    env.elaborate_ken_md_file(TRANSPORT_KEN_MD).expect("Core/Transport.ken must elaborate");
+    env.elaborate_ken_md_file(LAWFUL_CLASSES_KEN_MD).expect("Core/LawfulClasses.ken must elaborate");
     env.elaborate_file(COLLECTIONS_KEN).expect("Data/Collections/Collections.ken must elaborate");
     env.elaborate_file(LAWFUL_FUNCTORS_KEN).expect("Core/LawfulFunctors.ken must elaborate");
     env

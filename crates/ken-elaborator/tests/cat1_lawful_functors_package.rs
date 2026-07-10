@@ -5,13 +5,13 @@ use ken_elaborator::ElabEnv;
 use ken_kernel::Term;
 
 const COLLECTIONS_KEN: &str = include_str!("../../../catalog/packages/Data/Collections/Collections.ken");
-const TRANSPORT_KEN: &str = include_str!("../../../catalog/packages/Core/Transport.ken");
+const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Transport.ken.md");
 const LAWFUL_FUNCTORS_KEN: &str =
     include_str!("../../../catalog/packages/Core/LawfulFunctors.ken");
 
 fn mk_env_with_lawful_functors() -> ElabEnv {
     let mut env = ElabEnv::new().expect("base env construction failed");
-    env.elaborate_file(TRANSPORT_KEN)
+    env.elaborate_ken_md_file(TRANSPORT_KEN_MD)
         .expect("catalog/packages/Core/Transport.ken must elaborate");
     env.elaborate_file(COLLECTIONS_KEN)
         .expect("catalog/packages/Data/Collections/Collections.ken must elaborate");

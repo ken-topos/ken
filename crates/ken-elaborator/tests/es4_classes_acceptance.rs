@@ -83,11 +83,12 @@ use ken_elaborator::ElabEnv;
 use ken_kernel::env::Decl as KernelDecl;
 use ken_kernel::Term;
 
-const LAWFUL_CLASSES_KEN: &str = include_str!("../../../catalog/packages/Core/LawfulClasses.ken");
+const LAWFUL_CLASSES_KEN_MD: &str =
+    include_str!("../../../catalog/packages/Core/LawfulClasses.ken.md");
 
 fn mk_env_with_package() -> ElabEnv {
     let mut env = ElabEnv::new().expect("base env construction failed");
-    env.elaborate_file(LAWFUL_CLASSES_KEN).expect("catalog/packages/Core/LawfulClasses.ken must elaborate");
+    env.elaborate_ken_md_file(LAWFUL_CLASSES_KEN_MD).expect("catalog/packages/Core/LawfulClasses.ken must elaborate");
     env
 }
 
@@ -490,10 +491,13 @@ fn char_ord_laws_reject_missing_law_field() {
     // discriminating flip: the honest transport instance (above) elaborates
     // with every field present; an instance silently missing a law field
     // must be REJECTED (uninhabited record), never accepted as lawful.
-    let prefix_end = LAWFUL_CLASSES_KEN
+    let tangled = ken_elaborator::literate::extract_ken_md(LAWFUL_CLASSES_KEN_MD)
+        .expect("catalog/packages/Core/LawfulClasses.ken.md must extract")
+        .source;
+    let prefix_end = tangled
         .find("instance Ord Char")
         .expect("`instance Ord Char` marker must be present in the real package source");
-    let prefix = &LAWFUL_CLASSES_KEN[..prefix_end];
+    let prefix = &tangled[..prefix_end];
     let mut env = ElabEnv::new().expect("base env construction failed");
     env.elaborate_file(prefix).expect("package prefix (classes + Int/Bool instances) must elaborate");
 
