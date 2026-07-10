@@ -39,7 +39,7 @@ two lower tiers of the surface taxonomy (`../30-surface/30`):
   re-declared (`30 §6`: `Equal` is deleted for the kernel's `Eq`).
 
 Everything below is a **package**: imported, derivable, re-checked. Core data
-(`Unit`/`Empty`/`Nat`/`Option`/`Result`/`Pair`, `../30-surface/34`) and
+(`Unit`/`Empty`/`Nat`/`Option`/`Result`/`Either`/`Pair`, `../30-surface/34`) and
 the core combinators (`id`, `∘`, `const`, `flip`) are packages — Ken `data`/defs
 over the built-ins, not prelude (no primitive signature names them).
 
@@ -69,7 +69,8 @@ discipline that carries into every package build).
 The **constructor-class tranche** — `Semigroup`/`Monoid` (value-level algebra)
 and `Functor`/`Foldable` (the first classes over a type constructor
 `f : Type → Type`) — is pinned in **`55-lawful-functors.md`** (CAT-1,
-`catalog/packages/lawful-functors/`), the reusable template the **effectful tranche** —
+`catalog/packages/lawful-functors/`), the reusable template the **effectful
+tranche** —
 `Applicative`/`Monad`/`Traversable` — extends in **`56-effectful-classes.md`**
 (CAT-2, same package): the deep chain **wires** superclass fields (`56 §2`), and
 `Traversable.traverse` is the first effect-row-polymorphic `proc` (SURF-1,
@@ -85,9 +86,9 @@ content-addressed persistent tree is genuinely runtime). **`Map`/`Set`, by
 contrast, are proved package trees over `Ord k` — out of `trusted_base()`, not
 primitives** (`52-map.md`; OQ-A retires the earlier opaque `Map`/`Set`
 primitive, `30 §6`). This catalog provides `Array`'s combinators and hosts the
-proved `Map` module (`52-map.md`). The **verified building blocks**
-— a `sort` returning `{ ys | isSorted ys ∧ Perm ys xs }`, the proved `Map` — are
-the canonical demonstrations of the thesis; the sort's predicates
+proved `Map` module (`52-map.md`). The **verified building blocks** — a `sort`
+returning `{ ys | isSorted ys ∧ Perm ys xs }`, the proved `Map` — are the
+canonical demonstrations of the thesis; the sort's predicates
 `isSorted`/`Perm` are **definitions** the prover unfolds (`../30-surface/37 §6`,
 ES1), never postulates.
 
@@ -103,9 +104,10 @@ family is named **`view`** (operator's call) — SURF-1's retirement of the `vie
 keyword frees the word, and `view` is the standard term for a read projection.
 
 The **Layer-2 keyed-collection laws** — `delete`,
-`union`/`intersection`/`difference` (a **combining-function** `union`, subsuming
-both biases), `keys`/`values` coherence — plus the **set algebra** (`∪`/`∩`/`∖`,
-stated **membership-extensionally**, never `Equal (Set K)`: same-key-set trees
+`union`/`intersection`/`difference` (a **combining-function** `union`,
+subsuming both biases), `keys`/`values` coherence — plus the **set algebra**
+(`∪`/`∩`/`∖`, stated **membership-extensionally**, never `Equal (Set K)`:
+same-key-set trees
 differ in shape) and the **relations frontier** (composition, converse, the
 reflexive/symmetric/transitive predicates, transitive closure) are pinned in
 **`58-maps-sets-relations.md`** (CAT-4). `delete` is **rebuild-via-`fromList`**
@@ -166,8 +168,9 @@ harvested back as ordinary packages only if they earn it.
 ## 7. What WS-L must deliver here — the dissolved L8, as packages
 
 The standard-package catalog (this file) delivered as **in-repo packages under
-`catalog/packages/`** (ES4): the lawful classes (with **proved** laws), the collection
-combinators + verified building blocks, the effect/IO/serialization interfaces,
+`catalog/packages/`** (ES4): the lawful classes (with **proved** laws), the
+collection combinators + verified building blocks, the effect/IO/serialization
+interfaces,
 and the test/doc tooling seed — **each with its built-in-derivation path
 stated** (the ES1 discipline; a missing path is a hidden-built-in spec bug).
 Acceptance contributes to **G6** (a realistic verified component uses the

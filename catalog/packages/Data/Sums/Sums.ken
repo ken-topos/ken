@@ -1,21 +1,31 @@
--- `Option`/`Result` combinator floor (DS-3, `wp/ds-3-sum-type-combinators.md`).
--- Both types are prelude-declared (`Option a = None | Some a`, `Result e a =
--- Err e | Ok a` -- `Err` is FIRST, `crates/ken-elaborator/src/prelude.rs`) --
--- this entry does not re-declare either type, and reuses `option_map` +
--- `instance Functor Option` (`Core/LawfulFunctors.ken`) rather than
--- re-deriving them. One entry for both L2-sum families, not two, per
--- subsume-don't-proliferate on package count (mirrors `Data/Collections/
--- Collections.ken` holding the whole `List` floor).
+-- `Option`/`Result`/`Either` combinator floor (DS-3,
+-- `wp/ds-3-sum-type-combinators.md`; `Either`, `wp/either-catalog-package.md`).
+-- `Option`/`Result` are prelude-declared (`Option a = None | Some a`,
+-- `Result e a = Err e | Ok a` -- `Err` is FIRST,
+-- `crates/ken-elaborator/src/prelude.rs`) -- this entry does not re-declare
+-- either type, and reuses `option_map` + `instance Functor Option`
+-- (`Core/LawfulFunctors.ken`) rather than re-deriving them. `Either a b =
+-- Left a | Right b` is declared HERE, at the catalog level -- unlike
+-- `Option`/`Result`, it needs zero built-in/prelude support (an ordinary
+-- non-dependent sum), matching the spec's own model of core data as
+-- packages (`50-stdlib/README.md:42`; judgment call L5). One entry for all
+-- three L2-sum families, not three, per subsume-don't-proliferate on
+-- package count (mirrors `Data/Collections/Collections.ken` holding the
+-- whole `List` floor).
 --
 -- Zero new kernel feature, zero `trusted_base()` delta: every combinator here
--- is an ordinary structural case-split `fn`/`const` over the two declared
--- sums, in the same style as the `List` floor. Proof terms use `cong` from
+-- is an ordinary structural case-split `fn`/`const` over the declared sums,
+-- in the same style as the `List` floor. Proof terms use `cong` from
 -- `catalog/packages/Core/Transport.ken`, so load transport before this
 -- package.
 --
--- The `Either` design fork the original frame carried is MOOT here: the
--- operator later ruled (L5) that `Either` is a separate catalog package, not
--- subsumed into `Result` -- that is a distinct WP, not part of this one.
+-- `Either` is NOT a re-derivation of `Result`: an earlier DS-3-era spec
+-- erratum subsumed `Either` into `Result` (isomorphic-twin proliferation,
+-- `Either` had no declaration or user at the time) -- the operator's later
+-- L5 ruling reversed that, landing `Either` as a distinct declared package
+-- per the spec's own core-data-as-packages model. `Result` remains the
+-- error-biased sum wired into the effect system; `Either` is the neutral
+-- one, both coexist.
 
 -- ===== `Option` =====
 
@@ -73,3 +83,46 @@ fn unwrapOr (e : Type) (a : Type) (d : a) (x : Result e a) : a =
 fn unwrapOr_ok (e : Type) (a : Type) (d : a) (v : a) : Equal a (unwrapOr e a d (Ok e a v)) v = Refl
 
 fn unwrapOr_err (e : Type) (a : Type) (d : a) (u : e) : Equal a (unwrapOr e a d (Err e a u)) d = Refl
+
+-- ===== `Either` (user-level catalog package, NOT prelude — Judgment call L5:
+-- an ordinary non-dependent sum needs zero built-in support, matching the
+-- spec's own model of core data as packages, `50-stdlib/README.md:42`.
+-- `Option`/`Result` sit in the prelude today only as a bootstrap shortcut, a
+-- named spec-vs-impl gap this WP does not resolve — see
+-- `docs/program/wp/either-catalog-package.md` "Named future") =====
+
+data Either a b = Left a | Right b
+
+-- The eliminator.
+fn either (a : Type) (b : Type) (c : Type) (f : a → c) (g : b → c) (x : Either a b) : c =
+  match x { Left v ⇒ f v ; Right v ⇒ g v }
+
+fn either_left (a : Type) (b : Type) (c : Type) (f : a → c) (g : b → c) (v : a)
+  : Equal c (either a b c f g (Left a b v)) (f v) = Refl
+
+fn either_right (a : Type) (b : Type) (c : Type) (f : a → c) (g : b → c) (v : b)
+  : Equal c (either a b c f g (Right a b v)) (g v) = Refl
+
+fn mapLeft (a : Type) (b : Type) (c : Type) (f : a → c) (x : Either a b) : Either c b =
+  match x { Left v ⇒ Left c b (f v) ; Right v ⇒ Right c b v }
+
+fn mapLeft_left (a : Type) (b : Type) (c : Type) (f : a → c) (v : a)
+  : Equal (Either c b) (mapLeft a b c f (Left a b v)) (Left c b (f v)) = Refl
+
+fn mapLeft_right (a : Type) (b : Type) (c : Type) (f : a → c) (v : b)
+  : Equal (Either c b) (mapLeft a b c f (Right a b v)) (Right c b v) = Refl
+
+fn mapRight (a : Type) (b : Type) (c : Type) (g : b → c) (x : Either a b) : Either a c =
+  match x { Left v ⇒ Left a c v ; Right v ⇒ Right a c (g v) }
+
+fn mapRight_left (a : Type) (b : Type) (c : Type) (g : b → c) (v : a)
+  : Equal (Either a c) (mapRight a b c g (Left a b v)) (Left a c v) = Refl
+
+fn mapRight_right (a : Type) (b : Type) (c : Type) (g : b → c) (v : b)
+  : Equal (Either a c) (mapRight a b c g (Right a b v)) (Right a c (g v)) = Refl
+
+fn swap (a : Type) (b : Type) (x : Either a b) : Either b a =
+  match x { Left v ⇒ Right b a v ; Right v ⇒ Left b a v }
+
+fn swap_involutive (a : Type) (b : Type) (x : Either a b) : Equal (Either a b) (swap b a (swap a b x)) x =
+  match x { Left v ⇒ Refl ; Right v ⇒ Refl }

@@ -56,12 +56,33 @@ be built **and** taken apart, and the eliminator reduces.
 - **`Result`, `Option`** are ordinary prelude `data` decls (`../50-stdlib/`):
   fallibility and absence are **honest sum types**, not sentinel values. There
   is no `null` and no error code — `None`/`Err` are constructors the
-  exhaustiveness checker (`§4`) forces every consumer to handle. (**`Either` is
-  not a distinct type** — it is **subsumed by `Result`** per #7
-  subsume-don't-proliferate: `Either e a` is isomorphic to `Result e a = Err e |
-  Ok a`, the committed binary sum; a *neutral*, non-error-biased binary sum is
-  the parametric coproduct `Coproduct a b = InL a | InR b` the trust root
-  already carries (`prelude`). No first-party `Either` is declared.)
+  exhaustiveness checker (`§4`) forces every consumer to handle. **`Either a b
+  = Left a | Right b` is a distinct declared value coproduct** — a **catalog
+  package** (`50-stdlib/README.md §"Package listing"`: core data are packages,
+  Ken `data`/defs over the built-ins, not prelude primitives), NOT a prelude
+  `data` decl: an ordinary non-dependent sum needs zero kernel/elaborator/
+  effects support, so it is declared at the user level
+  (`catalog/packages/Data/Sums/Sums.ken`), matching the spec's own model.
+  `Result` remains the distinct, error-biased sum wired into the effect system
+  (`fs_resp : … = Result IOError Bytes`); `Either` is the neutral,
+  non-error-biased sibling — the two coexist, neither subsumes the other
+  (judgment call L5, 2026-07-10; an earlier erratum subsumed `Either` into
+  `Result` while `Either` had no declaration or user — that condition no
+  longer holds now that `Either` is landed). **A third, structurally
+  isomorphic neutral sum is also prelude-declared and user-reachable:**
+  `Coproduct a b = InL a | InR b` (`crates/ken-elaborator/src/effects/
+  state.rs`'s `declare_coproduct`, hand-built rather than a surface `data`
+  decl, `elab.globals.insert`-registered like any other prelude type — an
+  ordinary surface reference such as `InL a b x` elaborates). It is the
+  effect-signature composition coproduct (`ITree`'s `resp_coproduct`/
+  `injectL`/`injectR`, effect-composition `D2`) — kept hand-built as a
+  deliberate risk-reduction for effect-row plumbing, not deprecated or
+  hidden. `Either` is the catalog-level neutral sum for ordinary user
+  code; `Coproduct` is internal effect-signature plumbing most code never
+  names directly. The two are not reconciled into one declaration here —
+  that is a reflect-don't-extend opportunity the implementation's own
+  comment leaves explicitly open for the Architect to take up, not a
+  decision this WP makes.
 
 **What the elaborator builds vs. what the kernel admits (the K1/K1.5 line).**
 The elaborator lowers a `data` decl to a kernel `InductiveDecl` and relies on
@@ -251,8 +272,8 @@ patterns. Specifically:
 
 ### 3.2 Dependent-motive recovery
 
-`elim_D` takes a **motive** `M : (Δ_i) → D Δ_p Δ_i → Type ℓ'` (`14 §3`). The
-elaborator **recovers** `M` from the `match`'s expected result type by
+`elim_D` takes a **motive** `M : (Δ_i) → D Δ_p Δ_i → Type ℓ'` (`14 §3`).
+The elaborator **recovers** `M` from the `match`'s expected result type by
 abstracting it over the scrutinee and its indices:
 
 - **Non-dependent `match`** (result type independent of the scrutinee) → the
@@ -605,10 +626,12 @@ Per the standing directive, every formation rule here is given its explicit
 level computation and reconciled against `../10-kernel/12`; no rule adds a
 universe computation — each is an instance of a landed kernel rule.
 
-- **`data D (Δ_p) : (Δ_i) → Type ℓ`.** Constructor-argument types live at `ℓ` or
-  below (predicativity, `14 §1` → `12 §2`); the family lands at the declared
-  `ℓ`. **No new rule** — the kernel's inductive formation (`14 §1`) computes it.
-- **W-style argument `(b:B) → D Δ_p t̄`.** Lives at `max(level B, ℓ)`; `14 §1`'s
+- **`data D (Δ_p) : (Δ_i) → Type ℓ`.** Constructor-argument types live at `ℓ`
+  or below (predicativity, `14 §1` → `12 §2`); the family lands at the
+  declared `ℓ`. **No new rule** — the kernel's inductive formation (`14 §1`)
+  computes it.
+- **W-style argument `(b:B) → D Δ_p t̄`.** Lives at `max(level B, ℓ)`; `14
+  §1`'s
   rule forces `level B ≤ ℓ` (the domain is absorbed into the family level, `14
   §2.1`). Existing rule, **no new formation**.
 - **`match` → `elim_D`.** The motive `M` may land in any `Type ℓ'` — **large
