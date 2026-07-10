@@ -52,9 +52,6 @@ pub fn empty_prelude_env() -> PreludeEnv {
         ok_id: z,
         prod_id: z,
         mkprod_id: z,
-        either_id: z,
-        left_id: z,
-        right_id: z,
         equal_id: z,
         and_id: z,
         issorted_id: z,
@@ -112,12 +109,6 @@ pub struct PreludeEnv {
     // `Prod a b` — the `a × s` product (the `unfoldUpTo` step payload).
     pub prod_id: GlobalId,
     pub mkprod_id: GlobalId,
-    /// `Either a b = Left a | Right b` — the user-facing value disjunction
-    /// (L5; distinct from `Result`'s error reading and from the internal
-    /// effect `Coproduct`).
-    pub either_id: GlobalId,
-    pub left_id: GlobalId,
-    pub right_id: GlobalId,
     // Ω connectives / predicates (postulates, applied form).
     /// `Equal : Π(A:Type). A → A → Ω` — propositional equality (the `≡`).
     pub equal_id: GlobalId,
@@ -203,17 +194,6 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         .map_err(|e| ElabError::Internal(format!("prelude Result failed: {}", e)))?;
     elab.elaborate_decl("data Prod a b = MkProd a b")
         .map_err(|e| ElabError::Internal(format!("prelude Prod failed: {}", e)))?;
-    // `Either a b = Left a | Right b` — the user-facing value disjunction
-    // (L5, operator-ruled COEXIST: distinct from `Result`'s fallible-
-    // computation reading, and distinct from the internal effect
-    // `Coproduct` — three separate coproducts, three separate reader
-    // roles, `docs/program/wp/either-neutral-coproduct.md`). A fresh,
-    // independent type — NOT a rename of anything — a plain surface
-    // `data` exactly mirroring `Result`/`Option` above. Bare type only;
-    // combinators (`either`/`mapLeft`/`mapRight`) are a named Foundation
-    // follow-on, not this WP.
-    elab.elaborate_decl("data Either a b = Left a | Right b")
-        .map_err(|e| ElabError::Internal(format!("prelude Either failed: {}", e)))?;
 
     // VAL1-surface inductives — declared before `lookup` closure to avoid
     // conflicting borrows (elaborate_decl needs &mut elab).
@@ -263,9 +243,6 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     let ok_id = lookup("Ok")?;
     let prod_id = lookup("Prod")?;
     let mkprod_id = lookup("MkProd")?;
-    let either_id = lookup("Either")?;
-    let left_id = lookup("Left")?;
-    let right_id = lookup("Right")?;
     // VAL1-surface inductives (declared before lookup closure above).
     let unit_id = lookup("Unit")?;
     let mkunit_id = lookup("MkUnit")?;
@@ -1165,9 +1142,6 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         ok_id,
         prod_id,
         mkprod_id,
-        either_id,
-        left_id,
-        right_id,
         equal_id,
         and_id,
         issorted_id,
