@@ -85,8 +85,19 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >      check` once FR-3 lands). A touch-up pass, not a WP — keep it light.
 >   3. **THEN Steward kicks DS-2** on the improved guide+tooling (next DS after
 >      DS-1 per `catalog-data-structures-program.md` — reconfirm frontier then).
-> - **Ergo** builds FR-1 (underway) / taxonomy / FR-3 / FR-2 — serialized, RAM-
->   capped (`-j 2`, scoped), FR-2/FR-3 Architect-pinned.
+> - **Ergo** (state 2026-07-10): **FR-1 LANDED** (PR #400, `origin/main`) —
+>   surface zero-ctor `data`; its retro fold landed too (checkout-first branch
+>   self-check → build-implementer playbook, PR #401). **Taxonomy build
+>   CI-FAILED, in-fix** (PR #403 open, UNMERGED): `nc9_proof_erasure_boundary_checker`
+>   asserted the pre-PascalCase filename `proof_erasure_boundary_checker.ken`
+>   (renamed to `ProofErasureBoundaryChecker.ken`) — a `ken-interp` `.contains`
+>   assertion outside the scoped set, so it dodged the scoped run + the
+>   `include_str!` sweep; CI caught it. Steward triaged (sole real break) +
+>   relayed the one-line fix to ergo-leader; awaiting the fixed head to re-run
+>   the CI-gated merge. Retro carry: rename WPs need a workspace-wide
+>   old-basename grep across ALL string patterns, not just `include_str!`.
+>   Then **FR-3 → FR-2** next. Serialized, RAM-capped (`-j 2`, scoped),
+>   FR-2/FR-3 Architect-pinned.
 > - **Librarian** folds DS-1's retro lessons + the `--`-in-fences style rule +
 >   the "cross-file import not yet available" honesty note into `write-ken`/the
 >   guide + `07` AC5 language (`evt_57c6njjq90sbv`, `evt_2y14rfkncw8az`); enclave
