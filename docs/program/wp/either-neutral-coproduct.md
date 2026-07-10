@@ -47,8 +47,9 @@ container) and value-level neutral sums. Use sites (grep-confirmed):
   `effect_composition_state_console_e2e.rs`, `fs_read_file_lines_flip_e2e.rs`, and
   any sibling under `crates/ken-interp/tests/` / `crates/ken-cli/tests/`.
 - Spec: `spec/30-surface/36-effects.md` (effect composition) +
-  `spec/30-surface/34-data-match.md` (the just-landed L4 erratum note, which points
-  the neutral reading at `Sum a b` — **re-annotate to `Either a b`**).
+  `spec/30-surface/34-data-match.md` (the landed L4 erratum note + three list-sites
+  — **rewrite-and-restore, NOT find-replace**; see "Downstream reconciles" for the
+  pinned ACs — the L4 subsume erratum is superseded by L5).
 
 **Zero `crates/ken-kernel` delta** (confirmed — `Sum`/`InL`/`InR` never touch the
 kernel crate; the hand-built inductive IS kernel-rechecked, but renaming the
@@ -94,9 +95,30 @@ is unchanged; only the declaration site is the open axis. Ground it, don't assum
 
 ## Downstream reconciles (named, this WP or fast-follow)
 
-- The **L4 erratum note** (`34-data-match.md`) currently reads "neutral sum is
-  `Result` or the `Sum a b` coproduct" — flip to "…or the `Either a b` coproduct."
-  Fold into this WP's spec touch (it is the same file family).
+- **The L4 `Either`-subsume erratum is SUPERSEDED, not amendable by find-replace
+  (Architect catch `evt_60ahxgw3vpnqn` — AC, not optional).** It **already landed**
+  (`main @ dcc34ed`, PR #446) *before* the operator reopened, so it can't be
+  withdrawn — L5's spec touch must reverse it in place. The erratum's whole thesis
+  — *"`Either` is **not** a distinct type; subsumed by `Result`; no first-party
+  `Either` is declared"* — is exactly what L5 reverses. A mechanical `Sum a b`→
+  `Either a b` swap yields a note that **asserts and denies `Either`'s existence in
+  one breath**. So the spec touch must, as pinned ACs:
+  - **(i) REWRITE** the `34-data-match.md` subsume note to the L5 truth: `Either a
+    b = Left a | Right b` is a **distinct declared neutral coproduct** (`Left`/
+    `Right`); `Result e a = Err e | Ok a` is a **distinct error sum** (`Err`/`Ok`);
+    both honest first-party sums, different reader semantics. No "subsumed"/"no
+    first-party Either" language survives.
+  - **(ii) RESTORE `Either`** at the three list-sites the erratum dropped it from —
+    `README.md:42`, `34-data-match.md:5`, `34-data-match.md:633` — since under L5
+    `Either` is declared again and belongs in those lists.
+  - **(iii) The `:56` "ordinary prelude `data` decls" claim is CONDITIONED on
+    sub-question (a):** if `Either` migrates to a surface `data`, restore it to
+    that true set ("`Result`, `Option`, `Either` are ordinary prelude `data`
+    decls"); if it stays **hand-built**, do NOT — phrase it as "a prelude type
+    (hand-built like `ITree`)", parallel to how `Sum` was described. Match the
+    as-built declaration site, don't over-claim.
+
+  The Architect gate verifies the note is **coherently rewritten**, not swapped.
 - **DS-3** (in-flight, `Option`/`Result` combinators) is **unaffected** — Result
   and Option are separate; do not block or expand it. `Either` combinators
   (`either`/`mapLeft`/`mapRight`) are a possible **follow-on** once the type lands,

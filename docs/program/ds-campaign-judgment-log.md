@@ -232,7 +232,10 @@ bar.
   third spelling.
 - **Scope/boundary:** hand-built inductive in `effects::state::declare_sum` +
   `prelude.rs` globals + `eval.rs` D3.2 peel + ~5 effect-composition tests + 2 spec
-  files (incl. re-annotating the L4 erratum `Sum a b`→`Either a b`). **Zero
+  files. **The landed L4 subsume erratum (PR #446) is SUPERSEDED** — the spec touch
+  must REWRITE the note (Either = distinct declared coproduct, Result = distinct
+  error sum) and RESTORE `Either` at the three list-sites the erratum dropped it
+  from, NOT find-replace (Architect catch `evt_60ahxgw3vpnqn`). **Zero
   kernel-crate delta** (the inductive stays `declare_inductive`, kernel-rechecked);
   no back-compat alias (no users); no name collision. Open technical sub-question
   (Architect/team): keep hand-built vs migrate to a surface `data Either` (it's
