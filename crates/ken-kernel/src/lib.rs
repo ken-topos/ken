@@ -53,11 +53,11 @@ pub mod term;
 
 // --- re-exports (the provisional internal entry points; stable API is K-api) ---
 pub use check::{
-    check, declare_def, declare_inductive, declare_postulate, declare_primitive,
-    declare_recursive_group, infer, raw_well_formed, CtorSpec, InductiveSpec,
+    check, declare_deceq_certificate, declare_def, declare_inductive, declare_postulate,
+    declare_primitive, declare_recursive_group, infer, raw_well_formed, CtorSpec, InductiveSpec,
 };
 pub use conv::{convert, convert_type, level_eq, normalize, whnf};
-pub use env::{ConstructorDecl, Context, Decl, GlobalEnv, InductiveDecl, PrimReduction};
+pub use env::{ConstructorDecl, Context, Decl, DecEqCert, GlobalEnv, InductiveDecl, PrimReduction};
 pub use error::{KernelError, KernelResult};
 pub use term::{GlobalId, Level, LevelVar, Term};
 

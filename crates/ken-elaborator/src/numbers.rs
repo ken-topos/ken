@@ -19,7 +19,10 @@
 
 use std::collections::HashMap;
 
-use ken_kernel::{declare_postulate, declare_primitive, GlobalEnv, GlobalId, Level, Term};
+use ken_kernel::{
+    declare_deceq_certificate, declare_postulate, declare_primitive, GlobalEnv, GlobalId, Level,
+    Term,
+};
 use ken_kernel::env::PrimReduction;
 
 use crate::error::ElabError;
@@ -304,6 +307,22 @@ pub fn register_numeric_env(
     let sub_int_id = reg_binop!("sub_int", int_id);
     let mul_int_id = reg_binop!("mul_int", int_id);
     let eq_int_id  = reg_cmpop!("eq_int", int_id, bool_id);
+
+    // DS-6a (ADR 0013 Layer 1) — register `Int`'s decidable-equality
+    // certificate: the kernel trusts `eq_int` to decide `Int` equality, both
+    // directions. General opt-in mechanism; `Int` is its first registrant.
+    // `True` is `Bool`'s constructor 0 (`data Bool = True | False`,
+    // `ElabEnv::empty`).
+    let bool_true_id = env
+        .inductive(bool_id)
+        .ok_or_else(|| ElabError::Internal("Bool not registered as inductive".into()))?
+        .constructors[0]
+        .id;
+    let int_eq_cert = declare_deceq_certificate(env, int_id, eq_int_id, bool_id, bool_true_id)
+        .map_err(|e| ElabError::Internal(format!("Int deceq certificate failed: {}", e)))?;
+    globals.insert("int_eq_sound".to_string(), int_eq_cert.sound);
+    globals.insert("int_eq_complete".to_string(), int_eq_cert.complete);
+
     // `Int`'s ordering comparison (`30-taxonomy.md §4`'s "comparison
     // primitives `Int → Int → Bool`" — plural, already assumed to justify
     // `Bool`'s prelude membership — but only `eq_int` had actually been

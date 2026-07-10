@@ -119,33 +119,65 @@ internally.
 
 ## 4. Laws  proofs
 
-**Canonical `Int` instances — AUDITED-DELTA, illustrative-only (`51 §6`).**
-`Int` is a K1 primitive: opaque to δ (`leq_int x x` on a variable `x` does
-not reduce — primitive reductions fire on literals only, `ken-kernel`'s
-`conv.rs::whnf` only unfolds `Decl::Transparent`, never `Decl::Primitive`)
-and has no induction principle, so its universally-quantified laws are NOT
-kernel-provable — proving them would need a `declare_postulate` regardless
-of how the law is phrased. The operation fields wrap the audited
-`leq_int`/`eq_int` primitives (existing `trusted_base()` entries, not new
-ones); the law fields are honest, VISIBLE postulates (`Axiom` — a real,
-grep-able `Decl::Opaque`, never a silent/hidden assumption). `Int` is
-illustrative-only here — NOT the zero-delta exemplar.
+**Canonical `Int` instances (`51 §6`).** `Int` is a K1 primitive: opaque to
+δ (`leq_int x x` on a variable `x` does not reduce — primitive reductions
+fire on literals only, `ken-kernel`'s `conv.rs::whnf` only unfolds
+`Decl::Transparent`, never `Decl::Primitive`) and has no induction
+principle, so `DecEq Int`'s universally-quantified `sound`/`complete` laws
+are NOT kernel-provable from first principles — proving them would need a
+trusted assumption regardless of how the law is phrased. Rather than mint
+that assumption fresh in THIS instance (a per-package `Axiom`), `sound`/
+`complete` reference `int_eq_sound`/`int_eq_complete` — the ONE named
+kernel decidable-equality certificate for `Int` (`ken-kernel::env::
+DecEqCert`, registered once against `eq_int` during numeric-tower
+bootstrap, `docs/adr/0013-int-decidable-equality-kernel-posture.md` Layer
+1), not a fresh `Decl::Opaque` minted by elaborating this file. `Ord Int`'s
+own laws are untouched here (still `Axiom`, out of scope — `Int`'s
+ordering is not part of this certificate).
+
+`Eq Int`'s `refl`/`sym`/`trans` are then ordinary, REAL, kernel-checked
+proofs — not postulates at all — derived from `DecEq Int`'s `sound`/
+`complete` via the kernel's own `J`-eliminator over `Equal`, the same
+`sym`/`trans`-by-`J` idiom `catalog/packages/Core/Transport.ken.md` uses
+(inlined here rather than referenced by name, to avoid a same-named-`sym`/
+`trans` cross-file collision — see the `Transport.ken.md`/`EmptyDec.ken.md`
+precedent of each inlining its own copy for the same reason): `sound`
+converts a `Bool`-equation hypothesis to a propositional one, `J` transports
+it to the swapped/composed shape, `complete` converts back. This is a
+genuine "5→2 Axiom" collapse for the `Int` equality vocabulary — `Eq Int`
+contributes ZERO postulates, `DecEq Int` contributes zero NEW ones (its
+`sound`/`complete` are the SAME two kernel-registered entries `Eq Int`
+derives from, not per-instance duplicates).
+
+The `eq` field on both instances is `eq_int` DIRECTLY (the raw primitive),
+not a `fn`-wrapped alias: the certificate's own type is built kernel-side
+against `eq_int` literally (`crates/ken-elaborator/src/numbers.rs`, before
+any catalog wrapper exists to reference), so every law field's hypothesis
+must read `eq_int x y`, not a syntactically-different-but-semantically-
+equal wrapper — the exact `Ord Char` "same literal expression, not a second
+name that merely co-reduces" discipline `§5` documents below, applied here
+proactively rather than discovered by a K6-shaped failure.
 
 ```ken
 fn int_leq (x : Int) (y : Int) : Bool = leq_int x y
-fn int_eq (x : Int) (y : Int) : Bool = eq_int x y
-
-instance Eq Int {
-  eq    = int_eq ;
-  refl  = Axiom ;
-  sym   = Axiom ;
-  trans = Axiom
-}
 
 instance DecEq Int {
-  eq       = int_eq ;
-  sound    = Axiom ;
-  complete = Axiom
+  eq       = eq_int ;
+  sound    = int_eq_sound ;
+  complete = int_eq_complete
+}
+
+instance Eq Int {
+  eq    = eq_int ;
+  refl  = λx. int_eq_complete x x Refl ;
+  sym   =
+    λx.λy.λp.
+      int_eq_complete y x
+        (J (λy' _. Equal Int y' x) Refl (int_eq_sound x y p)) ;
+  trans =
+    λx.λy.λz.λp.λq.
+      int_eq_complete x z
+        (J (λz' _. Equal Int x z') (int_eq_sound x y p) (int_eq_sound y z q))
 }
 
 instance Ord Int {
@@ -363,6 +395,22 @@ instance Ord Char {
 }
 ```
 
+**`DecEq Char` — rides free by the SAME transport** (`docs/adr/0013-int-
+decidable-equality-kernel-posture.md` Layer 1's stated consequence: "someone
+writes the trivial `instance DecEq Char`"). Identical shape to `Ord Char`
+above — every field is a direct `.`-projection off `DecEq_instance_Int`,
+zero-Char-specific kernel work, zero-NEW-delta (the projected fields
+themselves resolve to the shared `int_eq_sound`/`int_eq_complete`
+certificate, not a fresh postulate).
+
+```ken
+instance DecEq Char {
+  eq       = (DecEq_instance_Int).eq ;
+  sound    = (DecEq_instance_Int).sound ;
+  complete = (DecEq_instance_Int).complete
+}
+```
+
 ## 5. Design notes
 
 **Why `Eq Bool`'s `sym`/`trans` needed a real correction, not just K7.** The
@@ -469,11 +517,13 @@ external reference implementation.
    post-K4 (`3be0e30`), the ES4-lawproofs-remainder reopen post-K5+K7, and
    `wp/eq-bool-sym-trans`'s closure post-K5+K7 (Architect ruling
    `evt_78ntsfnyjdtq6`); `docs/program/wp/lawful-classes-lane.md` (the
-   `Ord Char` re-homing).
+   `Ord Char` re-homing); `docs/adr/0013-int-decidable-equality-kernel-
+   posture.md` + `docs/program/wp/DS-6a-int-deceq-certificate.md` (the
+   `Eq`/`DecEq Int` certificate collapse + `DecEq Char`).
 2. **Public API.** `IsTrue`, `class Eq`, `class DecEq`, `bool_or`,
    `class Ord`, `instance Eq Int`, `instance DecEq Int`,
    `instance Ord Int`, `instance Ord Bool`, `instance Eq Bool`,
-   `instance DecEq Bool`, `instance Ord Char`.
+   `instance DecEq Bool`, `instance Ord Char`, `instance DecEq Char`.
 3. **Source map.**
 
    | Task | Section |
@@ -486,26 +536,44 @@ external reference implementation.
 4. **Derivation path.** The three classes are `class` declarations = record
    types (`33 §5.2`, right-nested Σ over `13 §3`), built from `Bool`
    (prelude, `30 §4`) + the kernel's `Eq`/logic vocabulary (`15`/`16`) + the
-   Σ/record machinery. No new kernel former. `Int` instances wrap audited
-   primitives (`leq_int`/`eq_int`) with visible `Axiom` law fields. `Bool`
-   instances are real `elim_Bool`-into-`Omega` case-split proofs (K4), using
-   `tt`/`absurd` (K5) over operation-wrapped equations that require K7's
-   operand-whnf to collapse. `Ord Char` transports every field via
-   `.`-projection off `Ord_instance_Int`.
-5. **`trusted_base()` delta.** `Int` instances: 9 `Axiom` entries (3 on
-   `Eq Int`'s `refl`/`sym`/`trans`, 2 on `DecEq Int`'s `sound`/`complete`,
-   4 on `Ord Int`'s `refl`/`antisym`/`trans`/`total`), each a real,
-   grep-able `Decl::Opaque` — illustrative-only, not claimed zero-delta.
-   `Bool` instances: **zero** — every law field is a genuine
-   kernel-checked proof, no `Axiom` anywhere in `Ord Bool`/`Eq Bool`/
-   `DecEq Bool`. `Ord Char`: **zero-NEW-delta** — mints no new postulate,
-   transports the `Ord Int` instance's existing `Axiom`s via projection.
+   Σ/record machinery. No new kernel former. `Ord Int` wraps the audited
+   `leq_int` primitive with visible `Axiom` law fields (untouched by
+   DS-6a, out of scope). `Eq Int`/`DecEq Int` wrap `eq_int` and derive
+   their laws from the ONE named kernel decidable-equality certificate
+   (`ken-kernel::declare_deceq_certificate`, registered once against
+   `eq_int` in `crates/ken-elaborator/src/numbers.rs`, ADR 0013 Layer 1) —
+   `DecEq Int`'s `sound`/`complete` reference the certificate directly;
+   `Eq Int`'s `refl`/`sym`/`trans` are real `J`-derived proofs built FROM
+   it, no postulate of their own. `Bool` instances are real
+   `elim_Bool`-into-`Omega` case-split proofs (K4), using `tt`/`absurd` (K5)
+   over operation-wrapped equations that require K7's operand-whnf to
+   collapse. `Ord Char`/`DecEq Char` transport every field via
+   `.`-projection off `Ord_instance_Int`/`DecEq_instance_Int`.
+5. **`trusted_base()` delta.** `Ord Int`: 4 `Axiom` entries (`refl`/
+   `antisym`/`trans`/`total`), each a real, grep-able `Decl::Opaque` —
+   illustrative-only, not claimed zero-delta, untouched by DS-6a. `Eq Int`/
+   `DecEq Int`: **zero catalog `Axiom`** — `sound`/`complete` reference the
+   pre-existing kernel certificate (registered once during numeric-tower
+   bootstrap, BEFORE this file is ever elaborated, so elaborating this file
+   contributes nothing new to `trusted_base()` for either instance);
+   `refl`/`sym`/`trans` are genuine kernel-checked proofs, not postulates.
+   The certificate itself is exactly 2 kernel `Decl::Opaque` entries,
+   audited once (`ken-kernel/src/check.rs::declare_deceq_certificate`), not
+   duplicated per catalog package — this is the "5→2 Axiom, relocated not
+   eliminated" honest accounting ADR 0013 describes. `Bool` instances:
+   **zero** — every law field is a genuine kernel-checked proof, no `Axiom`
+   anywhere in `Ord Bool`/`Eq Bool`/`DecEq Bool`. `Ord Char`/`DecEq Char`:
+   **zero-NEW-delta** — mint no new postulate, transport `Ord Int`'s
+   `Axiom`s / `DecEq Int`'s certificate reference via projection.
 6. **Proof families.** `Bool` instances: full case-split on every
    quantified variable (`x`, `y`, and for `trans`, `z`), 4–8 branches per
    law field depending on arity, each closing with `tt` (collapsed-`Top`
    branches) or `absurd` (collapsed-`Bottom`, contradictory branches) —
    `§4`'s restructuring discipline is why each hypothesis stays reusable
-   at binder time. `Ord Char`: no case-split, pure `.`-projection.
+   at binder time. `Eq Int`: `J`-eliminator composition over `Equal Int`,
+   converting through `DecEq Int`'s `sound`/`complete` at each end — no
+   case-split (`Int` has none to do). `Ord Char`/`DecEq Char`: no
+   case-split, pure `.`-projection.
 7. **Consumers.** `catalog/packages/Core/EmptyDec.ken.md` inlines its own
    `DecEq Bool` for self-containment (same idiom, independently); the
    sort/comparison threads across `Data/Collections/Collections.ken` and
@@ -516,3 +584,6 @@ external reference implementation.
    law field kernel-checked, none postulated), and that `Eq Bool`'s
    `sym`/`trans` specifically closed via the corrected full-case-split
    technique, not the original (never-shipped) hypothesis-reuse attempt.
+   `crates/ken-elaborator/tests/ds6a_int_deceq_acceptance.rs` — confirms
+   `Eq Int`/`DecEq Int`'s zero-catalog-`Axiom` posture, `DecEq Char`'s
+   transport, and the certificate's soundness/neutrality conformance arms.

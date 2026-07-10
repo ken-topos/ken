@@ -98,6 +98,22 @@ pub enum PrimReduction {
     },
 }
 
+/// A registered decidable-equality certificate for an opaque primitive type
+/// (DS-6a, ADR 0013 Layer 1) — the kernel-audited assumption that `eq_op`
+/// decides propositional equality at the registered primitive, split into a
+/// sound direction (`eq_op` true ⇒ propositionally equal) and a complete
+/// direction (propositionally equal ⇒ `eq_op` true). Both `sound` and
+/// `complete` are ordinary [`Decl::Opaque`] postulates admitted via
+/// [`crate::check::declare_postulate`] (so their types are kernel-checked
+/// before being trusted); this struct is only the registry record tying them
+/// to the primitive and its equality op.
+#[derive(Clone, Debug)]
+pub struct DecEqCert {
+    pub eq_op: GlobalId,
+    pub sound: GlobalId,
+    pub complete: GlobalId,
+}
+
 /// A constructor of an inductive family (`14 §1`).
 ///
 /// `cₖ : (Δₖ) → D Δ_p t̄ₖ`. The `args` telescope `Δₖ` and the `target_indices`
@@ -218,6 +234,12 @@ pub struct GlobalEnv {
     /// introduction, the canonical proof of a goal that reduced to `Top`.
     /// Set by [`GlobalEnv::new`].
     tt_id: Option<GlobalId>,
+    /// Registered decidable-equality certificates (DS-6a, ADR 0013 Layer 1),
+    /// keyed by the primitive type's [`GlobalId`]. General, opt-in,
+    /// per-primitive — an unregistered primitive has no entry here and its
+    /// `Eq` stays neutral exactly as before (`obs.rs`'s fail-safe default is
+    /// untouched by this registry).
+    deceq_certs: HashMap<GlobalId, DecEqCert>,
 }
 
 impl GlobalEnv {
@@ -397,6 +419,21 @@ impl GlobalEnv {
     /// `trusted_base()` enumeration, `18 §5`).
     pub fn decls(&self) -> impl Iterator<Item = &Decl> {
         self.decls.iter()
+    }
+
+    /// Record a decidable-equality certificate for `prim_ty` (DS-6a). The
+    /// caller ([`crate::check::declare_deceq_certificate`]) is responsible
+    /// for having admitted `cert.sound`/`cert.complete` as checked
+    /// postulates first; this method only records the registry entry.
+    pub(crate) fn register_deceq_cert(&mut self, prim_ty: GlobalId, cert: DecEqCert) {
+        self.deceq_certs.insert(prim_ty, cert);
+    }
+
+    /// The registered decidable-equality certificate for `prim_ty`, if any
+    /// (DS-6a). `None` for every unregistered primitive — the fail-safe
+    /// default is unchanged.
+    pub fn deceq_cert(&self, prim_ty: GlobalId) -> Option<&DecEqCert> {
+        self.deceq_certs.get(&prim_ty)
     }
 
     /// The postulates and real primitives in `Σ` — the unchecked assumptions a
