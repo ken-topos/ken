@@ -81,9 +81,10 @@ bar.
 - **Call:** **Land, this run,** a new **elaborator capability** — dependent-`match`
   index refinement (constructor **injectivity** for peeled recursive fields +
   sibling-binder **convoy**) — in `crates/ken-elaborator/src/elab.rs`'s
-  dependent-match path (near `method_index_premises`/`synthesize_omitted_index_method`).
-  Kicked to the **Kernel team** through the full ring + Architect soundness gate
-  (frame `wp/ds-5b-dependent-match-refinement.md`, `evt_1q7m4wjk4cy8a`).
+  dependent-match path (near `method_index_premises`/
+  `synthesize_omitted_index_method`). Kicked to the **Kernel team**
+  through the full ring + Architect soundness gate (frame
+  `wp/ds-5b-dependent-match-refinement.md`, `evt_1q7m4wjk4cy8a`).
 - **Trigger:** the DS-5 Architect ruling (`evt_1mnh5sngvhaty`) ground-truthed
   that `Vec`/`vnil`/`vcons`/`head`/`Fin` build+test **today**, but
   `tail`/`zip`/`lookup` are gated on exactly this one missing capability
