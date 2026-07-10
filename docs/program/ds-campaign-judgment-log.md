@@ -15,21 +15,33 @@ rule below).
 
 ---
 
-## Boundary rules for this run (self-imposed, from PRINCIPLES)
+## Boundary rules for this run (operator-ruled 2026-07-10)
 
-- **TCB is frozen.** No kernel / trusted-base growth lands unattended. If a WP
-  genuinely needs one (candidate: DS-6 `DecEq Char`, whose `Int`/`Char`
-  lawfulness spike could conclude a kernel move), it is **staged with the
-  analysis + a Finding and held for operator review**, never landed while away
-  (`PRINCIPLES` #5 — the burden is on the addition; #13 — fix at the layer, but
-  a *new* kernel capability is an operator-scale call). ← pending operator
-  confirmation.
-- **Surface-grammar changes** (new keywords, new fence roles, parser forms) are
-  `hard`: staged + flagged, not landed unattended.
+**Operator ruling:** *"You may fix kernel issues. I'll review those at the end.
+This language has no users (other than us), so a change to the kernel that we
+revert a few hours later has zero impact."* So the irreversibility ceiling I
+proposed (stage-and-hold TCB changes) is **lifted** — the no-users reality makes
+reverts cheap, which lowers the *irreversibility* bar, **not** the *correctness*
+bar.
+
+- **Kernel / TCB fixes are PERMITTED and may LAND**, routed through the full
+  Kernel-team ring + Architect soundness gate + conformance, then **logged
+  prominently here** for the operator's end-of-run review (candidate: DS-6
+  `DecEq Char` / `Int`-lawfulness spike). Not staged/held.
+- **Soundness is still non-negotiable.** The gate does not relax: a kernel change
+  must pass conv/reduction/termination rigor and conformance. Cheap-revert
+  latitude ≠ license to land an unsound change (an unsound `proved` is *wrong*,
+  not merely revertable).
+- **PRINCIPLES rigor still applies.** Prefer reflect-don't-extend (#6) and the
+  outer ring; grow the TCB only when it is the *right* fix at the right layer
+  (#5, #13), never an expedient (#4). A kernel change I'd land is one I'd defend
+  on intrinsic merits, not one that's merely easy because reverts are cheap.
+- **Surface-grammar changes** (keywords, fence roles, parser forms) — same
+  regime: land when they're the right fix (subsume-don't-proliferate first, #7),
+  logged prominently.
 - **Outer-ring functionality/elaboration calls** (instance shapes, lemma
-  phrasings, catalog API names, combinator sets) are made via the enclave with
-  PRINCIPLES as tiebreaker, **landed** through the normal ring+gate, and
-  **logged here**.
+  phrasings, catalog API names, combinator sets) — enclave-ruled with PRINCIPLES
+  as tiebreaker, landed through the normal ring+gate, logged here.
 
 ---
 
