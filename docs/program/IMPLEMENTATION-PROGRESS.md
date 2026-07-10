@@ -114,31 +114,33 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >   `wp/FR-2-absurd-collision-hygiene` per ergo-leader `evt_206v67q5gycm9` (flip
 >   J/Eq tests reject→accept, positive `class Eq a` regression-guard). Comes back
 >   through ergo-qa → Architect (design author, close read) → git_request.
->   **Steward FR-2 doc correction** `wp/fr2-doc-arity-correction @ 85ce17a`
->   (rewrote the WP doc's FR-2 section open-options → the arity-indexed ruling;
->   line numbers ground-truthed vs `origin/main` elab.rs) → routed to Architect
->   fidelity-gate `evt_7mw56ak02wt37`, docs-only, merge on APPROVE.
+>   **Steward FR-2 doc correction MERGED** (PR #410, main `08c7589`) — rewrote
+>   the WP doc's FR-2 section open-options → the arity-indexed ruling, line
+>   numbers ground-truthed vs `elab.rs`; Architect fidelity-gate APPROVE.
 >   **FR-3 AC-reconcile companion ROUTED to Librarian** (evt_629ch5mdg24q6),
 >   bundled into the guide-update WP below.
-> - **Librarian guide-update WP ASSEMBLED** — `wp/ken-authoring-guide-ds1-retro @
->   aef5093` (`dec_68pj9w955nxx6` proposed), bundling three Steward asks: DS-1's
->   acted-on-retro (`evt_57c6njjq90sbv`), the `--`-comment-in-fence anti-pattern
->   (`evt_2y14rfkncw8az`), and the FR-3 `ken check` AC-reconcile
->   (`evt_629ch5mdg24q6`). Two commits: mechanical `--`-strip sweep of the three
->   guide teaching strands (`aaffd43`), then the substantive fold (write-ken
->   subsections, surface-reference §5 discriminator, `07 §3` `ken check` note).
->   **Grounded correction to the reconcile premise:** all three guide strands DO
->   carry a runnable `proc main` and pass `ken run` today, so their invocation
->   claims stay `ken run` (strictly stronger); `ken check` targets genuine
->   pure-library entries (EmptyDec). In spec-author (surface-ref lane) + Architect
->   (methodology lane) review; git_request → Steward after both.
->   **Steward reconciliation ruling** `evt_6jv6v1y6t34a2`: (a) `07 §8` in-fence-
->   comment requirement (package entries, fences tangle to consumed source) does
->   NOT conflict with prose-is-comment-layer (teaching strands, fences only
->   checked) — discriminate on fence role; fold a one-line §8 scope-clarifier into
->   the WP. (b) EmptyDec's in-fence `--` comments are §8-required (package entry),
->   NOT debt — Steward retracts the earlier "strip `--`" framing; light-DS-1
->   revisit will not touch them.
+> - **Librarian guide-update WP MERGED** (PR #411, main `1104d84`) —
+>   `wp/ken-authoring-guide-ds1-retro`, `dec_68pj9w955nxx6` resolved (spec-author
+>   surface-ref lane + Architect methodology lane, both carry-confirmed to
+>   `d0f2c3a`; Steward fidelity-gated honesty wording). Bundled three Steward
+>   asks: DS-1's acted-on-retro (`evt_57c6njjq90sbv`), the `--`-comment-in-fence
+>   anti-pattern (`evt_2y14rfkncw8az`), the FR-3 `ken check` AC-reconcile
+>   (`evt_629ch5mdg24q6`). Landed: `--`-strip sweep of the three guide strands;
+>   write-ken subsections (probe-a-brief's-syntax-first, `C_instance_T`-not-`(C
+>   T)`, inline-over-unresolved-cross-import, prose-is-comment-layer, `ken run`
+>   vs `ken check`); surface-reference §5 `(Describe Bool).describe` reject
+>   discriminator; `07 §3` `ken check` note + `07 §8` package-vs-teaching scope
+>   clarifier. **Grounded premise correction:** all three guide strands DO carry
+>   a runnable `proc main` and pass `ken run` today → invocation claims stay
+>   `ken run` (strictly stronger); `ken check` scoped to genuine pure-library
+>   entries (EmptyDec).
+>   **Steward reconciliation ruling** `evt_6jv6v1y6t34a2` (landed in the WP):
+>   (a) `07 §8` in-fence-comment requirement (package entries, fences tangle to
+>   consumed source) does NOT conflict with prose-is-comment-layer (teaching
+>   strands, fences only checked) — discriminate on fence role. (b) EmptyDec's
+>   in-fence `--` comments are §8-required (package entry), NOT debt — Steward
+>   retracts the earlier "strip `--`" framing; light-DS-1 revisit will not
+>   touch them.
 >
 > **HOLD after DS-1.** DS-1 is the *only* WP before an operator process review —
 > a deliberate single vertical slice validating the full reframed machinery
