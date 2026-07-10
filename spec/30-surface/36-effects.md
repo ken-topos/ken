@@ -10,8 +10,8 @@
 > capabilities as static value tokens (§3). **`OQ-9` DECIDED** — tail-resumptive
 > handlers only (§5). **`OQ-Space` DECIDED** (§4) — bounded per-space Hoare,
 > shared-nothing message-passing. **`OQ-C` DECIDED** (operator, 2026-07-03) — a
-> **direct `[State s]` effect surface** (`get`/`put`/`runState`, §4.5) over the
-> existing `State S`/`runState` machinery (C2); C1 state-threading is its floor,
+> **direct `[State s]` effect surface** (`get`/`put`/`run_state`, §4.5) over the
+> existing `State S`/`run_state` machinery (C2); C1 state-threading is its floor,
 > C3 mutable refs forbidden. The kernel gains **nothing**: every construct
 > below denotes to ordinary Π/Σ/inductive terms (`../10-kernel/`) — no effect
 > machinery enters the TCB. **L5's *implementation* was gated on `K1.5`, now
@@ -737,9 +737,9 @@ space Counter {
   values are immutable and content-addressed (`../40-runtime/41-values.md`).
 
 State has **two surfaces over one denotation**: the imperative `space` block
-(§4.1–§4.4) and the direct monadic `[State s]` effect — `get`/`put`/`runState`
+(§4.1–§4.4) and the direct monadic `[State s]` effect — `get`/`put`/`run_state`
 (§4.5). Both desugar to the same `State S` signature (§2.1) and are discharged
-by the same `runState` fold (§4.2); the second is what a stateful computation
+by the same `run_state` fold (§4.2); the second is what a stateful computation
 writes when there is no `space` to hang cells on (`OQ-C`·C2, §4.5).
 
 ### 4.1 A space desugars to a `State` effect
@@ -764,25 +764,25 @@ cᵢ becomes e  (write cell i)   ⤳  bind (perform Get) (λ s. perform (Put (s 
 η). So `becomes` is **not** a kernel mutation — it is a `Get`-then-`Put` on the
 pure tree.
 
-### 4.2 The state-passing fold (`runState`)
+### 4.2 The state-passing fold (`run_state`)
 
 A space's effect is discharged by **running the tree against an initial state**
 — the canonical tail-resumptive handler (§5), a fold that threads `s` as its
 accumulator:
 
 ```
-runState : S → ITree (State S ⊕ F) R → ITree F (R × S)
-runState s (Ret r)                = Ret (r, s)
-runState s (Vis (inl Get)      k) = runState s  (k s)            -- answer with current state
-runState s (Vis (inl (Put s')) k) = runState s' (k tt)          -- adopt new state
-runState s (Vis (inr o)        k) = Vis o (λ r. runState s (k r))  -- other effects pass through
+run_state : S → ITree (State S ⊕ F) R → ITree F (R × S)
+run_state s (Ret r)                = Ret (r, s)
+run_state s (Vis (inl Get)      k) = run_state s  (k s)            -- answer with current state
+run_state s (Vis (inl (Put s')) k) = run_state s' (k tt)          -- adopt new state
+run_state s (Vis (inr o)        k) = Vis o (λ r. run_state s (k r))  -- other effects pass through
 ```
 
 - It is `elim_ITree` with the **state carried in the motive** `M _ = S → ITree F
   (R × S)` — a structural fold, **total** (`14 §3`). The continuation `k` is
   invoked **exactly once, in tail position** in every clause, so it is
   tail-resumptive (§5) and no continuation is reified.
-- `runState s₀ ⟦body⟧ : ITree F (R × S)` returns the result paired with the
+- `run_state s₀ ⟦body⟧ : ITree F (R × S)` returns the result paired with the
   **final** state; when `F = 𝟘` it collapses (§2.4) to the pure value `(R × S)`.
   So a space operation's denotation is a **state transformer** `S → R × S`. The
   kernel checks this pure term; **no mutable cell exists in the TCB**.
@@ -823,15 +823,15 @@ distribution-ready). *(FFI is the exception: a `foreign` boundary may use shared
 memory, but it is already an explicitly unsafe/untrusted boundary, `38-ffi-io.md
 §3`, so it does not weaken the in-Ken isolation property.)*
 
-### 4.5 The direct `[State s]` effect surface (`get`/`put`/`runState`)
+### 4.5 The direct `[State s]` effect surface (`get`/`put`/`run_state`)
 
 Sections §4.1–§4.2 give the **imperative** door to state — a `space` block whose
-`mut`/`becomes` desugar to `State S` and discharge by `runState`. This section
-adds the **monadic** door: writing `get`/`put`/`runState` **directly** as a
+`mut`/`becomes` desugar to `State S` and discharge by `run_state`. This section
+adds the **monadic** door: writing `get`/`put`/`run_state` **directly** as a
 first-class effect — the shape a stateful computation like `accumulator-factory`
 (VAL2 #10) needs when there is no `space` to hang cells on. It introduces **no
 new denotation**: both surfaces desugar to the *same* `State S` signature (§2.1)
-and are discharged by the *same* `runState` fold (§4.2); §4.5 only **exposes**
+and are discharged by the *same* `run_state` fold (§4.2); §4.5 only **exposes**
 that machinery as named operations. **`OQ-C` DECIDED (operator, 2026-07-03):**
 this is **C2** — an effect over the existing `ITree`/handler machinery; **C1**
 (explicit state-threading) is the floor it desugars to (§4.5.6); **C3** (real
@@ -851,7 +851,7 @@ space**, bound to that space's state type `S`. The direct surface simply lets a
 program **name** `State s` in a `visits` row without introducing a `space`. A
 single `[State s]` is the common case; two *independent* states in one
 computation are two *distinct* labels (as two spaces are), peeled by nested
-`runState` calls (§4.5.4).
+`run_state` calls (§4.5.4).
 
 #### 4.5.2 `get` and `put`
 
@@ -865,7 +865,7 @@ put : s   →[{State s}] Unit    put s'  ⤳  perform (inj (Put s'))  = Vis (inj
 ```
 
 - `s` is an ordinary (implicit) type parameter of each operation, fixed at a use
-  site by the enclosing `runState`'s initial state `s₀ : s` (§4.5.3) or by
+  site by the enclosing `run_state`'s initial state `s₀ : s` (§4.5.3) or by
   annotation.
 - `Resp Get = s` is a **non-`Unit`, `s`-typed** response — `State s` is the
   first effect whose response *depends on* a type parameter (Console's is always
@@ -879,15 +879,15 @@ put : s   →[{State s}] Unit    put s'  ⤳  perform (inj (Put s'))  = Vis (inj
   `Unit →[ρ] a` denotes to `ITree ⟦ρ⟧ a` (§1.1, §2.4), the form §4.2/§4.5.3
   use.
 
-#### 4.5.3 `runState` is §4.2's fold at `F = 𝟘` — not re-specified
+#### 4.5.3 `run_state` is §4.2's fold at `F = 𝟘` — not re-specified
 
-`runState` is **exactly** the state-passing `elim_ITree` fold of §4.2; §4.5 does
+`run_state` is **exactly** the state-passing `elim_ITree` fold of §4.2; §4.5 does
 **not** restate its equations. The direct surface exposes it as the
 program-callable handler that discharges `State s`:
 
 ```
-runState : s → ITree (State s ⊕ F) a → ITree F (a × s)      -- §4.2, verbatim
-runState s₀ m  :  a × s        when F = ∅   -- pure collapse: ITree 𝟘 (a × s) ≅ a × s (§2.4)
+run_state : s → ITree (State s ⊕ F) a → ITree F (a × s)      -- §4.2, verbatim
+run_state s₀ m  :  a × s        when F = ∅   -- pure collapse: ITree 𝟘 (a × s) ≅ a × s (§2.4)
 ```
 
 - The result pair `a × s` is `(result, final-state)` — the **Σ-pair** `R × S`
@@ -896,7 +896,7 @@ runState s₀ m  :  a × s        when F = ∅   -- pure collapse: ITree 𝟘 (a
   frame's illustrative `Pair a s` is this Σ-pair. (A named inductive
   `data Prod a b = MkProd a b` is also landed in the prelude, but the denotation
   uses the Σ-pair, not that inductive.)
-- **`runState` is an ordinary *total Ken definition*** — the §4.2 fold,
+- **`run_state` is an ordinary *total Ken definition*** — the §4.2 fold,
   structural on the sub-tree via `elim_ITree`, kernel-re-checked — **not** a
   trusted Rust primitive. This is what makes `[State s]`
   **zero-`trusted_base` delta** (AC1): the handler is *derived*, never
@@ -908,8 +908,8 @@ runState s₀ m  :  a × s        when F = ∅   -- pure collapse: ITree 𝟘 (a
   `next () = bind (get ()) (λ n. bind (put (n + 1)) (λ _. Ret n))`.
 
   ```
-  runState 0  next  =  (0, 1)     -- result = old value 0 ; final state 1 ; pair = (result, state)
-  runState 41 next  =  (41, 42)
+  run_state 0  next  =  (0, 1)     -- result = old value 0 ; final state 1 ; pair = (result, state)
+  run_state 41 next  =  (41, 42)
   ```
 
   The result is a **function of `s₀` and the pure tree alone** — re-running the
@@ -920,48 +920,48 @@ runState s₀ m  :  a × s        when F = ∅   -- pure collapse: ITree 𝟘 (a
 
 `[State s]` composes with any other row `F` by the row signature `⊕` (§2.3): a
 program that is both `[State s]` and `[Console]` denotes to
-`ITree (State s ⊕ Console) a`. `runState s₀` discharges the `State s` summand by
+`ITree (State s ⊕ Console) a`. `run_state s₀` discharges the `State s` summand by
 its **`inl`** clauses (§4.2) and **passes every other op through** by the
 **`Vis (inr o)`** clause (§4.2's fourth line), leaving `ITree Console (a × s)`;
 a Console handler — the runtime `run_io` driver (§7.2, `../40-runtime/42`) —
 then discharges the rest.
 
-- **Handler nesting = discharge order.** `runState s₀ (handleConsole m)` and
-  `handleConsole (runState s₀ m)` differ only in *which effect is peeled first*;
-  both type-check, and the threaded state is **identical** because `runState`
+- **Handler nesting = discharge order.** `run_state s₀ (handleConsole m)` and
+  `handleConsole (run_state s₀ m)` differ only in *which effect is peeled first*;
+  both type-check, and the threaded state is **identical** because `run_state`
   passes Console ops through untouched and `handleConsole` never reads `State`
   ops. `State s` and `Console` **commute** (neither handler inspects the other's
   `Vis` tags) — a discriminating conformance check (§7.5.6).
 - **Independent multiple states.** Two independent states in one computation are
-  two *distinct* labels `State s`, `State t` (§4.5.1); nest `runState` calls,
+  two *distinct* labels `State s`, `State t` (§4.5.1); nest `run_state` calls,
   the inner binding the inner state — nested total folds, no new mechanism.
 
 #### 4.5.5 Purity and totality (frame AC3)
 
 The purity/totality argument is §4.2's, applied to the direct surface:
 
-- **Total.** `runState` is a structural `elim_ITree` fold with the state carried
+- **Total.** `run_state` is a structural `elim_ITree` fold with the state carried
   in the motive `M _ = S → ITree F (R × S)` (§4.2), and each clause invokes the
   continuation **once, in tail position** (tail-resumptive, §5.2) — so it stays
   inside the total eliminator and reifies no continuation. `get`/`put` build
   finite pure `Vis` nodes (§2.1).
-- **No mutable cell exists.** The state is `runState`'s **parameter**, threaded
+- **No mutable cell exists.** The state is `run_state`'s **parameter**, threaded
   functionally; the effect **erases** to its `ITree` description (§2.4). Nowhere
   on the value path is a cell, ref, or region introduced — the C2/C3 boundary
   the WP must preserve (frame AC3; grep: no `RefCell`/`Cell`/`unsafe`/interior
   mutability on the value path).
 - **The discriminating face** (state-threaded-in-parameter vs mutated-in-place):
-  a `[State s]` program's result is determined **entirely by `runState`'s `s₀`
+  a `[State s]` program's result is determined **entirely by `run_state`'s `s₀`
   and the pure tree**. Running the *same tree* under two initial states yields
   two independent results with **no shared mutable state** between the runs, so
-  `runState s₀ m` is **re-runnable and idempotent in `m`**. In-place mutation
+  `run_state s₀ m` is **re-runnable and idempotent in `m`**. In-place mutation
   would let one run's writes leak into the next; the pure fold cannot (§7.5.6
   pins this as the C3-forbidden guard).
 
 #### 4.5.6 Relation to C1 (the floor) and the outer-ring code lift
 
 - **C1-desugaring (the locked floor).** `[State s]` is **sugar over explicit
-  state-threading** (C1): `runState`'s fold *is* the mechanical "thread `s` as
+  state-threading** (C1): `run_state`'s fold *is* the mechanical "thread `s` as
   an extra argument and result" that C1 writes by hand, and `get`/`put` are its
   packaged read/write. So every `[State s]` program **desugars to** a C1
   program — the operator's "C1 is the floor" lock (`OQ-C`). No mutation is
@@ -975,36 +975,36 @@ The purity/totality argument is §4.2's, applied to the direct surface:
   the §2/§4 model: **(a)** the **dependent response** `E.Resp e` (`State s`
   needs `Resp Get = s`, non-`Unit`); **(b)** the container coproduct **`⊕`** for
   `State s ⊕ F` (composition, §4.5.4); **(c)** **named-effect dispatch** so
-  `runState` peels `State` and passes other ops through. All three are
+  `run_state` peels `State` and passes other ops through. All three are
   §36-normative and admitted by K1.5's generic `elim_ITree`
   (`kernel/tests/k1p5_wstyle.rs`) — **the kernel is untouched** (AC1). The work
   is entirely outer-ring: `ken-elaborator/src/effects/*` + `ken-interp` + a
-  **derived** stdlib `runState`; no new `Term`/`Decl` variant, no
+  **derived** stdlib `run_state`; no new `Term`/`Decl` variant, no
   `trusted_base()` delta.
 
 #### 4.5.7 Injection into a coproduct — the surface morphism (`incl`, named)
 
-§4.5.4 discharges a composed tree by **peeling** one summand (`runState`) and
+§4.5.4 discharges a composed tree by **peeling** one summand (`run_state`) and
 passing the rest through; it presumes a tree *already* over `State s ⊕ F`. The
 dual — **getting a single-effect computation's ops *into* the coproduct** — is
 §2.3's `inj` / §2.4's `incl` (`ITree ⟦ρ_g⟧ X → ITree ⟦ρ⟧ X`, an `elim_ITree`
 map over the `Vis` tags), which the **direct surface exposes as named
 injection operations** for the binary signature `Coproduct g h`, exactly as §4.5.2
-exposes `get`/`put` and §4.5.3 exposes `runState`:
+exposes `get`/`put` and §4.5.3 exposes `run_state`:
 
 ```
-injectL : ITree g rg a -> ITree (Coproduct g h) (resp_coproduct g h rg rh) a   -- re-tag via InL
-injectR : ITree h rh a -> ITree (Coproduct g h) (resp_coproduct g h rg rh) a   -- re-tag via InR
+inject_l : ITree g rg a -> ITree (Coproduct g h) (resp_coproduct g h rg rh) a   -- re-tag via InL
+inject_r : ITree h rh a -> ITree (Coproduct g h) (resp_coproduct g h rg rh) a   -- re-tag via InR
 ```
 
 - **Denotation (normative):** the `elim_ITree` fold sending `Ret x ↦ Ret x` and
-  `Vis op k ↦ Vis (InL op) (injectL ∘ k)` (resp. `InR`), structural on the
+  `Vis op k ↦ Vis (InL op) (inject_l ∘ k)` (resp. `InR`), structural on the
   sub-tree — total (`14 §3`), no SCT, adds no kernel primitive. It is `§2.4`'s
   `incl` specialized to the two inclusions `g ↪ Coproduct g h`, `h ↪ Coproduct g h`.
 - **Well-typed iff** the response family reduces per-tag: `resp_coproduct g h rg rh
   (InL o) ≡ rg o`, `(InR o) ≡ rh o` (§2.3 `Resp (inl o) = E.Resp o`) — so the
   re-tagged continuation keeps its response type.
-- **Surface *spelling* (`injectL`/`injectR`) is proposal-level (`OQ-syntax`);
+- **Surface *spelling* (`inject_l`/`inject_r`) is proposal-level (`OQ-syntax`);
   the operation and its denotation are normative.** A program composes two base
   effects by injecting each single-effect sub-computation, then sequencing with
   `bind` (`ITree (Coproduct g h) …` is homogeneous). This is the **direct/monadic
@@ -1040,7 +1040,7 @@ handle ret ops (Vis (inr o) k) = Vis o (λ r. handle ret ops (k r))    -- F-op p
 - The handler **provides the capability**: the body that produced the `E`-node
   was elaborated with `Cap E` in scope, supplied by this handler (§2.5). Running
   the handler discharges `E` (§1.2, `handle_E`) — which is why the *only* way to
-  shrink a row is to handle it. `runState` (§4.2) is the canonical instance (`R'
+  shrink a row is to handle it. `run_state` (§4.2) is the canonical instance (`R'
   = R × S`, `ops` threading Get/Put).
 
 ### 5.2 Tail-resumptive = the continuation is used once, in tail position
@@ -1088,9 +1088,9 @@ kernel re-checks the emitted core (the elaborator is **not** in the TCB, §7):
    `requires`-as-capability distinction (§3), and the pinned cross-workstream
    interface contract (§3.1). *Acceptance 3.*
 4. **`space` state** — desugaring to a `State S` effect with `becomes` (§4.1),
-   the `runState` state-passing fold (§4.2), bounded Hoare with `old` (§4.3),
+   the `run_state` state-passing fold (§4.2), bounded Hoare with `old` (§4.3),
    and shared-nothing message-passing (§4.4); the **direct `[State s]` surface**
-   — `get`/`put`/`runState` as first-class operations over the same machinery
+   — `get`/`put`/`run_state` as first-class operations over the same machinery
    (§4.5, `OQ-C`·C2). *Acceptance 4.*
 5. **Tail-resumptive handlers** — handler-as-fold (§5.1) and the single-shot
    restriction with its totality argument (§5.2). *Acceptance 4.*
@@ -1109,7 +1109,7 @@ and lifted the `check_no_pi_bound_recursive` gate; `elim_ITree` with a
 Π-abstracted induction hypothesis is now generated (`14 §3`, AC5 in
 `kernel/tests/k1p5_wstyle.rs`). All of §2 is now buildable:
 
-- **Unblocked:** the `ITree` type, `bind`, `perform`, §5 (handlers/`runState`),
+- **Unblocked:** the `ITree` type, `bind`, `perform`, §5 (handlers/`run_state`),
   the denotation `⟦·⟧`, and the §3.1 contract any Sec/B WP rides — all admitted
   and implemented in `ken-elaborator/src/effects/itree.rs` and `row_poly.rs`.
 - **Always buildable (K1-only row machinery):** the finite-row lattice and latent
@@ -1135,7 +1135,7 @@ flowchart LR
 The kernel step sees only Π/Σ/inductive/`ITree` — **no effect-specific rule**
 (the "one pure kernel" invariant, acceptance criterion 2). Everything
 effect-shaped is discharged before the kernel: rows by inference, authority by Π
-over `Cap`, do-notation by `bind`, mutation by `runState`.
+over `Cap`, do-notation by `bind`, mutation by `run_state`.
 
 ### 7.2 The pure/impure boundary (the L7 FFI hook)
 
@@ -1210,7 +1210,7 @@ on the bug it targets, not pass vacuously):
    sequence / the `Ret` leaf), not merely "elaborates."
 3. **Capability gate** — the same `perform` **rejects** with no `Cap E` in scope
    and **accepts** under a handler that provides it (denial-path flip).
-4. **`space` + handler** — `runState s₀` on an `inc`/`get` program resumes
+4. **`space` + handler** — `run_state s₀` on an `inc`/`get` program resumes
    correctly; assert the **final state** value and that `inc`'s `old(n)`
    obligation discharges.
 5. **`pure`/`impure` boundary** — a `foreign` with a non-empty row exposes its
@@ -1218,12 +1218,12 @@ on the bug it targets, not pass vacuously):
    (`38 §3`).
 6. **Direct `[State s]` surface** — drive the **real** producer, not a hand-fed
    harness (`conformance-hand-feeds-the-deliverable`): a `get`/`put` program run
-   under `runState s₀` through the **actual interpreter** returns the correct
+   under `run_state s₀` through the **actual interpreter** returns the correct
    `(result, final-state)` Σ-pair (`R × S`, §4.2) — the post-increment `next`
-   (`runState 0 next = (0,1)`, `runState 41 next = (41,42)`, §4.5.3). Assert the
+   (`run_state 0 next = (0,1)`, `run_state 41 next = (41,42)`, §4.5.3). Assert the
    **paired value**, plus (a) **composition** — a `[State s, Console]` program
-   threads state identically whether `runState` or the Console handler is peeled
+   threads state identically whether `run_state` or the Console handler is peeled
    first (commutation, §4.5.4); (b) **re-runnability** — the same tree under two
    `s₀` gives two independent results with no cross-run state (the C3-forbidden
-   face, §4.5.5). `runState` is a derived total definition, so kernel-untouched
+   face, §4.5.5). `run_state` is a derived total definition, so kernel-untouched
    (AC1) holds structurally.

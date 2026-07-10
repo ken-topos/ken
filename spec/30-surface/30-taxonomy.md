@@ -156,7 +156,7 @@ coincide.
   is redundant; reference the derived connective (or
   `data And (A B : Ω) : Ω = conj A B`, which lands in Ω by the
   both-components-keyed `sort_sigma`, `13 §4`).
-- **`isSorted` / `Perm` → definitions (see `37 §6`).** These are **not** prelude
+- **`is_sorted` / `Perm` → definitions (see `37 §6`).** These are **not** prelude
   (no primitive signature names them) — they are the verified-`sort` showcase's
   predicates, and they **must be definitions**, specified in `37 §6` (§below).
   As postulates the flagship proof proves nothing.
@@ -224,7 +224,7 @@ built-in type (§3), computed, so it belongs **out** of `trusted_base()` entirel
 literal value). Whatever the table rules, ES2 lands it.
 
 **Net.** Of the surface soundness entries,
-`Equal`/`And`/`isSorted`/`Perm`/`Bool`/`OrdResult` and the `reg_novf`
+`Equal`/`And`/`is_sorted`/`Perm`/`Bool`/`OrdResult` and the `reg_novf`
 **predicate** become re-checked definitions or are removed (**out** of
 `trusted_base()`), literals become primitive-constant terms (out), and
 `Map`/`Set` — under OQ-A — become **proved package inductives, retired from

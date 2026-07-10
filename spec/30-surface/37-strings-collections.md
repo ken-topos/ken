@@ -524,7 +524,7 @@ explicit comparator and produces a **refinement-typed** result (`34 §5`):
 
 ```
 view sort {a} (leq : a → a → Bool) (xs : List a)
-    : { ys : List a | isSorted leq ys ∧ Perm ys xs } = …
+    : { ys : List a | is_sorted leq ys ∧ Perm ys xs } = …
 ```
 
 This matches the landed AC6 `sort` surface exactly (`l3a_acceptance.rs`, the
@@ -532,39 +532,39 @@ This matches the landed AC6 `sort` surface exactly (`l3a_acceptance.rs`, the
 `where`-constraint threading, no new surface. The refinement carries **two**
 conjuncts, and the second is **load-bearing**:
 
-- `isSorted leq ys` — `ys` is in non-decreasing `leq`-order (a decidable
+- `is_sorted leq ys` — `ys` is in non-decreasing `leq`-order (a decidable
   refinement predicate, `34 §5`).
 - `Perm ys xs` — `ys` is a **permutation** of the input (comparator-free).
 
-`isSorted`-**alone is degenerate**: `sort _ = Nil` satisfies
-`{ ys | isSorted leq ys }` (the empty list is vacuously sorted), so a
+`is_sorted`-**alone is degenerate**: `sort _ = Nil` satisfies
+`{ ys | is_sorted leq ys }` (the empty list is vacuously sorted), so a
 sortedness-only spec is met by a **constant-`Nil`** implementation that throws
 the input away — it guards nothing
 (the discriminating-example / refinement-must-not-be-vacuous discipline). The
 `Perm ys xs` conjunct is what forces `sort` to actually *be* a sort. The
 elaboration **emits the conjoined obligation**
-`isSorted leq (sort leq xs) ∧ Perm (sort leq xs) xs` on the result introduction
+`is_sorted leq (sort leq xs) ∧ Perm (sort leq xs) xs` on the result introduction
 (`34 §5`, `22 §2.1`); a verified
 `sort` discharges it with a bundled proof (AC6 observes the **emitted VC**
 structurally — per the untrusted-layer lesson, the obligation must be *emitted*,
 not assumed).
 
 **The refinement predicates are definitions, not postulates (ES1).** The
-obligation `isSorted leq (sort leq xs) ∧ Perm (sort leq xs) xs` is dischargeable
-only if the prover can **unfold** `isSorted` and `Perm` — so both are
+obligation `is_sorted leq (sort leq xs) ∧ Perm (sort leq xs) xs` is dischargeable
+only if the prover can **unfold** `is_sorted` and `Perm` — so both are
 **definitions** (`Ω`-valued, re-checked, **out** of `trusted_base()`), never
 opaque postulates. As `declare_postulate`s (their current `prelude.rs` form) the
-predicates are **undefined**: `isSorted leq (sort leq xs)` cannot reduce, so the
+predicates are **undefined**: `is_sorted leq (sort leq xs)` cannot reduce, so the
 obligation is either **undischargeable** or discharged **circularly** (the proof
 assuming the
 conclusion), and the flagship verified `sort` would prove **nothing**
 (`30 §6`, the surface-minimality invariant; ES2 lands the demotion). The
 defining shapes:
 
-- **`isSorted : Π(a : Type). (a → a → Bool) → List a → Ω`** — an `Ω`-valued
-  structural recursion over the **explicit comparator**: `isSorted leq Nil = ⊤`,
-  `isSorted leq (x :: Nil) = ⊤`, and
-  `isSorted leq (x :: y :: r) = IsTrue (leq x y) ∧ isSorted leq (y :: r)` (the
+- **`is_sorted : Π(a : Type). (a → a → Bool) → List a → Ω`** — an `Ω`-valued
+  structural recursion over the **explicit comparator**: `is_sorted leq Nil = ⊤`,
+  `is_sorted leq (x :: Nil) = ⊤`, and
+  `is_sorted leq (x :: y :: r) = IsTrue (leq x y) ∧ is_sorted leq (y :: r)` (the
   connective is the derived Ω-conjunction `And`, `16 §1.3`; the recursion
   descends structurally on the list, so it terminates). The comparator is
   `Bool`-valued (matching the landed `sort`), so the order relation enters `Ω`
@@ -648,7 +648,7 @@ with its level, and none adds a universe computation:
   rule** (`34 §7`).
 - **`Array a` / `Set a`** — abstract types at `level a`; `Map k v` at `max(level
   k, level v)`. Abstract carriers over `41`'s heap, no universe bump.
-- **Refinement `{ ys : List a | isSorted leq ys ∧ Perm ys xs }`** — carrier
+- **Refinement `{ ys : List a | is_sorted leq ys ∧ Perm ys xs }`** — carrier
   `List a` at its level; the predicate is `Ω`-valued (`12 §5`/`16 §1`),
   discharged as a V3 obligation, **no** universe bump (`34 §5`/§7).
 
@@ -658,7 +658,7 @@ convertible-view totalities (`§2.3`); collections immutable + persistent with
 observable sharing; `List`/`Option`/`Result` transparent inductive,
 `Array`/`Map`/`Set` abstract; `DecEq` for membership / `Ord` for order; the
 combinator law set (`§4`); the fuel-bounded unfold as the buildable-now
-infinitude demonstration; `sort`'s **`isSorted ∧ Perm`** refinement; the
+infinitude demonstration; `sort`'s **`is_sorted ∧ Perm`** refinement; the
 no-coinduction absence; the L-classes staging boundary.
 
 **`(oracle)`-deferred to the build team / X2 (spelling, not concept).** The
@@ -704,11 +704,11 @@ to the full lawful stdlib; L3 **unblocks T3** (the test/property framework).
   with a key type that **has** `DecEq` accepts, while one **lacking** `DecEq`
   **rejects** naming the missing instance — the verdict flips.
 - **AC6 (the verified example, structural).** `sort` (threading the explicit
-  `leq : a → a → Bool`) produces `{ ys | isSorted leq ys ∧ Perm ys xs }` — the
+  `leq : a → a → Bool`) produces `{ ys | is_sorted leq ys ∧ Perm ys xs }` — the
   **conjoined** refinement obligation is **emitted** and dischargeable; assert
   the **`Perm` conjunct is present** (a sortedness-only obligation is degenerate
-  — `const Nil` satisfies it). `isSorted`/`Perm` are the pinned **definitions**
-  (`§6`: explicit-comparator `isSorted`, `Perm := ∥Perm_rel∥`), unfoldable — not
+  — `const Nil` satisfies it). `is_sorted`/`Perm` are the pinned **definitions**
+  (`§6`: explicit-comparator `is_sorted`, `Perm := ∥Perm_rel∥`), unfoldable — not
   postulates (the demotion is the ES2-remainder follow-on).
 
 **Derived string surface — slice-2 acceptance (`§2.5` / `§2.5.1` / `§4.1`,
@@ -749,7 +749,7 @@ impl-ready).** The floor + 5 string ops, mapping the WP frame's AC1–AC7:
 **Conformance:** `../../conformance/surface/collections/` — UTF-8
 byte/char-length edge cases + the `Bytes → String` partial decode;
 persistent-update **sharing** (slot-id); the combinator laws + `Map`
-lookup/insert; the verified `sort` with the **`isSorted ∧ Perm`** obligation;
+lookup/insert; the verified `sort` with the **`is_sorted ∧ Perm`** obligation;
 the no-coinduction structural absence + the working `unfoldUpTo`; the
 `DecEq`-key verdict flip. Per-case verdict/structural-flip **and** the
 cross-case sweep: every collection's equality maps to the content-addressed

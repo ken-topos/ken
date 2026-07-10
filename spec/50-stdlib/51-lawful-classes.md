@@ -93,7 +93,7 @@ class Ord (a : Type) {
 }
 ```
 
-`leq` is the **same** `a → a → Bool` comparator the landed `sort`/`isSorted`
+`leq` is the **same** `a → a → Bool` comparator the landed `sort`/`is_sorted`
 thread explicitly (`37 §6`, ES2-remainder `2358b4d`); `Ord` *supplies* it via a
 dictionary (`§4`). `antisym` concludes the kernel's `Eq a x y` (`Ω`); the other
 three are `IsTrue`-of-`Bool` propositions. (An `Ordering`-valued
@@ -137,9 +137,9 @@ view** — one `sort`, whose comparator is either passed explicitly or supplied 
 the dictionary:
 
 ```
-view sort {a} (leq : a → a → Bool) (xs : List a) : { ys | isSorted leq ys ∧ Perm ys xs }
+view sort {a} (leq : a → a → Bool) (xs : List a) : { ys | is_sorted leq ys ∧ Perm ys xs }
                           -- explicit comparator (37 §6), and:
-view sort {a} (xs : List a) : { ys | isSorted (d.leq) ys ∧ Perm ys xs }  where Ord a
+view sort {a} (xs : List a) : { ys | is_sorted (d.leq) ys ∧ Perm ys xs }  where Ord a
                           -- `d.leq` supplied by the dictionary — the SAME view
 ```
 
@@ -147,7 +147,7 @@ There is **no second `sort`** and **no new mechanism**: `where Ord a` is
 ordinary implicit-dictionary insertion (`33 §5.4`), and a caller may still pass
 a **named, non-canonical** `Ord` value explicitly (`33 §5.5`,
 `sortBy byLength xs`) — the dependent-types escape hatch — without perturbing
-canonical resolution. The refinement predicates (`isSorted`, `Perm`) are
+canonical resolution. The refinement predicates (`is_sorted`, `Perm`) are
 unchanged; `Ord`'s `total` law is what lets a verified `sort` *discharge* the
 sortedness obligation the explicit form could only *state*.
 
@@ -182,7 +182,7 @@ over an inductive carrier, where a postulate *is* a defect.) A "the dictionary
 carries the laws" claim that passes **green-vs-green against a law-less
 dictionary** is the predicate-definedness dual
 ([[lawful-class-instances-must-carry-law-proofs]]; the ES2 analog is
-`isSorted`/`Perm` being *defined*, not postulated). **Discriminating obligation
+`is_sorted`/`Perm` being *defined*, not postulated). **Discriminating obligation
 (hard):** the conformance corpus must construct a **law-less** `Ord`-shaped
 instance (a dictionary whose law fields are postulated/holed/stubbed) and show
 it is **rejected as unlawful** (non-empty delta / re-check failure) **while**

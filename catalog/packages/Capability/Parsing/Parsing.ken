@@ -98,7 +98,7 @@ fn ValidSpan (s : Source) (sp : Span) : Prop =
 fn valid_zero_width_span (s : Source) (offset : Nat)
   : LessEqNat offset (source_length s) -> ValidSpan s (MkSpan offset offset) =
   \h.
-    andIntro
+    and_intro
       (LessEqNat offset offset)
       (LessEqNat offset (source_length s))
       (less_eq_nat_refl offset)

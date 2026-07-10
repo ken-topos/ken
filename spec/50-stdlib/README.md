@@ -87,9 +87,9 @@ contrast, are proved package trees over `Ord k` — out of `trusted_base()`, not
 primitives** (`52-map.md`; OQ-A retires the earlier opaque `Map`/`Set`
 primitive, `30 §6`). This catalog provides `Array`'s combinators and hosts the
 proved `Map` module (`52-map.md`). The **verified building blocks** — a `sort`
-returning `{ ys | isSorted ys ∧ Perm ys xs }`, the proved `Map` — are the
+returning `{ ys | is_sorted ys ∧ Perm ys xs }`, the proved `Map` — are the
 canonical demonstrations of the thesis; the sort's predicates
-`isSorted`/`Perm` are **definitions** the prover unfolds (`../30-surface/37 §6`,
+`is_sorted`/`Perm` are **definitions** the prover unfolds (`../30-surface/37 §6`,
 ES1), never postulates.
 
 The **collection laws** (length/membership/decomposition + the verified `sort`

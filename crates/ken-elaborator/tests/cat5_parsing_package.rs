@@ -411,7 +411,7 @@ fn cat5_d1_valid_half_open_bounds_and_zero_width_offsets_check() {
         fn zero_width_span_at_start (s : Source) : Span = MkSpan Zero Zero
 
         fn valid_zero_width_span_at_start (s : Source) : ValidSpan s (zero_width_span_at_start s) =
-          andIntro
+          and_intro
             (LessEqNat (span_start (zero_width_span_at_start s)) (span_end (zero_width_span_at_start s)))
             (LessEqNat (span_end (zero_width_span_at_start s)) (source_length s))
             (less_eq_nat_refl Zero)
@@ -434,7 +434,7 @@ fn cat5_d1_valid_half_open_bounds_and_zero_width_offsets_check() {
           MkLocated Bool (source_id s) (zero_width_span_at_start s) True
 
         fn valid_located_true_value (s : Source) : ValidLocated Bool s (located_true_value s) =
-          andIntro
+          and_intro
             (Equal SourceId (located_source Bool (located_true_value s)) (source_id s))
             (ValidSpan s (located_span Bool (located_true_value s)))
             Refl
@@ -481,7 +481,7 @@ fn cat5_d1_concrete_nonempty_source_constructs_and_projects() {
 
         const full_source_span : Span = MkSpan Zero (source_length sample_source)
         const full_source_span_valid : ValidSpan sample_source full_source_span =
-          andIntro
+          and_intro
             (LessEqNat (span_start full_source_span) (span_end full_source_span))
             (LessEqNat (span_end full_source_span) (source_length sample_source))
             (less_eq_nat_zero_left (source_length sample_source))
@@ -598,7 +598,7 @@ fn cat5_d1_end_past_source_length_rejected() {
             r#"
             const invalid_span : Span = MkSpan Zero (Suc (Suc (Suc Zero)))
             fn invalid_span_valid (s : Source) : ValidSpan s invalid_span =
-              andIntro
+              and_intro
                 (LessEqNat (span_start invalid_span) (span_end invalid_span))
                 (LessEqNat (span_end invalid_span) (source_length s))
                 tt
@@ -623,7 +623,7 @@ fn cat5_d1_start_after_end_rejected() {
             r#"
             const invalid_span : Span = MkSpan (Suc (Suc Zero)) (Suc Zero)
             fn invalid_span_valid (s : Source) : ValidSpan s invalid_span =
-              andIntro
+              and_intro
                 (LessEqNat (span_start invalid_span) (span_end invalid_span))
                 (LessEqNat (span_end invalid_span) (source_length s))
                 tt
@@ -713,24 +713,24 @@ fn cat5_d2_success_parser_carries_valid_consumed_span_from_start() {
 
         const success_parser_valid : ParserValid Bool success_parser =
           \s. \start. \h.
-            andIntro
+            and_intro
               (ValidSpan s (MkSpan start start))
               (And
                 (Equal Nat (span_start (MkSpan start start)) start)
                 (Equal Nat (span_end (MkSpan start start)) start))
               (valid_zero_width_span s start h)
-              (andIntro
+              (and_intro
                 (Equal Nat (span_start (MkSpan start start)) start)
                 (Equal Nat (span_end (MkSpan start start)) start)
                 Refl
                 Refl)
 
         const success_parser_laws : ParserLaws Bool success_parser =
-          andIntro
+          and_intro
             (ParserValid Bool success_parser)
             (And (ParserTotal Bool success_parser) (ParserSourceLocal Bool success_parser))
             success_parser_valid
-            (andIntro
+            (and_intro
               (ParserTotal Bool success_parser)
               (ParserSourceLocal Bool success_parser)
               (\s. \start. \h. tt)
@@ -750,7 +750,7 @@ fn cat5_d2_failed_parser_carries_same_source_valid_span() {
 
         const failed_parser_valid : ParserValid Bool failed_parser =
           \s. \start. \h.
-            andIntro
+            and_intro
               (Equal SourceId (error_source (MkParseError (source_id s) (MkSpan start start))) (source_id s))
               (ValidSpan s (error_span (MkParseError (source_id s) (MkSpan start start))))
               Refl
@@ -775,7 +775,7 @@ fn cat5_d2_failure_with_wrong_source_rejected_by_law() {
 
             const wrong_source_failed_parser_valid : ParserValid Bool wrong_source_failed_parser =
               \s. \start. \h.
-                andIntro
+                and_intro
                   (Equal SourceId (error_source (MkParseError (MkSourceId (Suc Zero)) (MkSpan start start))) (source_id s))
                   (ValidSpan s (error_span (MkParseError (MkSourceId (Suc Zero)) (MkSpan start start))))
                   Refl
@@ -806,11 +806,11 @@ fn cat5_d2_failure_with_invalid_span_rejected_by_law() {
 
             const invalid_span_failed_parser_valid : ParserValid Bool invalid_span_failed_parser =
               \s. \start. \h.
-                andIntro
+                and_intro
                   (Equal SourceId (error_source (MkParseError (source_id s) (MkSpan (Suc (Suc Zero)) (Suc Zero)))) (source_id s))
                   (ValidSpan s (error_span (MkParseError (source_id s) (MkSpan (Suc (Suc Zero)) (Suc Zero)))))
                   Refl
-                  (andIntro
+                  (and_intro
                     (LessEqNat (span_start (MkSpan (Suc (Suc Zero)) (Suc Zero))) (span_end (MkSpan (Suc (Suc Zero)) (Suc Zero))))
                     (LessEqNat (span_end (MkSpan (Suc (Suc Zero)) (Suc Zero))) (source_length s))
                     tt

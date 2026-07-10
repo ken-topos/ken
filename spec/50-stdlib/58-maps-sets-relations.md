@@ -150,7 +150,7 @@ view drop_key (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k) (xs : List 
   match xs {
     Nil => Nil (Pair k v) ;
     Cons e xs2 =>
-      match order_equiv_key k v leq key (pairFst k v e) {
+      match order_equiv_key k v leq key (pair_fst k v e) {
         True  => drop_key k v leq key xs2 ;                       -- drop ALL matches (filter)
         False => Cons (Pair k v) e (drop_key k v leq key xs2)
       }
@@ -301,17 +301,17 @@ fresh `Tree` inductions:
   `set_to_list` generalized off `Unit`): `keys k v m := pair_keys k v (to_list k v
   m)`. Net-new = just the named binding.
 - **`values`** needs one **net-new** projection, the exact mirror of `pair_keys`
-  with `pairSnd` for `pairFst`: `pair_vals k v xs := match xs { Nil => Nil v ;
-  Cons p xs2 => Cons v (pairSnd k v p) (pair_vals k v xs2) }`, then `values k v m
+  with `pair_snd` for `pair_fst`: `pair_vals k v xs := match xs { Nil => Nil v ;
+  Cons p xs2 => Cons v (pair_snd k v p) (pair_vals k v xs2) }`, then `values k v m
   := pair_vals k v (to_list k v m)`.
 - **Coherence with ordering:** `keys` are **ascending** under `Ordered m` —
-  `isSorted leq (keys m)` — off the landed **`to_list_ordered`** (which gives
-  `isSorted (pair_leq leq) (to_list m)`) + a small `pair_keys`-preserves-sortedness
+  `is_sorted leq (keys m)` — off the landed **`to_list_ordered`** (which gives
+  `is_sorted (pair_leq leq) (to_list m)`) + a small `pair_keys`-preserves-sortedness
   lemma (`pair_leq` compares first components, i.e. keys, so projecting keeps the
   order). `values` carry **no** ordering claim (values are unordered).
 - **Coherence with `to_list`:** `keys`/`values` are the two **componentwise
   projections** of `to_list` — same length, positionally aligned (`keys` reads
-  `pairFst` where `values` reads `pairSnd` of the same entry). Stated
+  `pair_fst` where `values` reads `pair_snd` of the same entry). Stated
   structurally over the shared `to_list m` traversal (no `length`/`zip` primitive
   needed — those are CAT-3/List-level and out of this chapter).
 
@@ -382,7 +382,7 @@ Everything bottoms out in landed built-ins + the Map capstone: `Nat` (prelude
 `Zero`/`Suc`); `Tree`/`empty`/`insert`/`lookup`/`member`/`to_list`/`fold`/
 `from_list`/`pair_keys`/`set_insert`/`set_member`/`set_to_list`/`all_keys`/`Ordered`/
 `order_equiv`/`assoc` + laws `preserves_ordered`(1)/`lookup_assoc_agree`(5)/
-`to_list_ordered`(4) (`map.ken`, all landed); `IsTrue`/`And`/`andIntro`/`Or`/
+`to_list_ordered`(4) (`map.ken`, all landed); `IsTrue`/`And`/`and_intro`/`Or`/
 `Inl`/`Inr`/`Not`/`absurd`/`bool_or`/`bool_dichotomy` (`prelude.rs` +
 `lawful_classes.ken`). **Net-new (this WP):** `leq_nat`+4 laws (D0);
 `bool_and`/`bool_not`; `drop_key`/`delete`+`from_list_preserves_ordered`+None-/

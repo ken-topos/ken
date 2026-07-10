@@ -212,7 +212,7 @@ fn cat3_d2_bool_sort_surfaces_check_against_real_package_defs() {
 
     env.elaborate_decl(&format!(
         "const cat3_sort_bool_sorted_sample \
-           : isSorted Bool bool_leq (sort_bool {sample}) = sort_bool_sorted {sample}"
+           : is_sorted Bool bool_leq (sort_bool {sample}) = sort_bool_sorted {sample}"
     ))
     .expect("sort_bool_sorted should prove the sortedness surface");
 
@@ -254,9 +254,9 @@ fn cat3_d2_bad_sorted_and_bad_perm_witnesses_rejected() {
     let err = env
         .elaborate_decl(
             "const cat3_bad_sorted_bool \
-               : isSorted Bool bool_leq (Cons Bool True (Cons Bool False (Nil Bool))) = tt",
+               : is_sorted Bool bool_leq (Cons Bool True (Cons Bool False (Nil Bool))) = tt",
         )
-        .expect_err("descending Bool list must not satisfy isSorted");
+        .expect_err("descending Bool list must not satisfy is_sorted");
     let msg = format!("{err}");
     assert!(
         msg.contains("Type mismatch")
@@ -312,34 +312,34 @@ fn cat3_d3_view_lens_records_and_flavors_check_against_real_package_defs() {
     env.elaborate_decl(
         "const cat3_d3_get_set_sample \
            : Equal Bool \
-               (fst_pair_bool_bool (set_fst_pair_bool_bool False (mkPair Bool Bool True True))) \
+               (fst_pair_bool_bool (set_fst_pair_bool_bool False (mk_pair Bool Bool True True))) \
                False \
-           = fst_lens_get_set False (mkPair Bool Bool True True)",
+           = fst_lens_get_set False (mk_pair Bool Bool True True)",
     )
     .expect("get-set lens law should be proof-returning and check");
 
     env.elaborate_decl(
         "const cat3_d3_set_get_sample \
            : Equal (Pair Bool Bool) \
-              (set_fst_pair_bool_bool (fst_pair_bool_bool (mkPair Bool Bool True False)) (mkPair Bool Bool True False)) \
-              (mkPair Bool Bool True False) \
-           = fst_lens_set_get (mkPair Bool Bool True False)",
+              (set_fst_pair_bool_bool (fst_pair_bool_bool (mk_pair Bool Bool True False)) (mk_pair Bool Bool True False)) \
+              (mk_pair Bool Bool True False) \
+           = fst_lens_set_get (mk_pair Bool Bool True False)",
     )
     .expect("set-get lens law should be proof-returning and check as full pair equality");
 
     env.elaborate_decl(
         "const cat3_d3_set_set_sample \
            : Equal (Pair Bool Bool) \
-              (set_fst_pair_bool_bool False (set_fst_pair_bool_bool True (mkPair Bool Bool True False))) \
-              (set_fst_pair_bool_bool False (mkPair Bool Bool True False)) \
-           = fst_lens_set_set True False (mkPair Bool Bool True False)",
+              (set_fst_pair_bool_bool False (set_fst_pair_bool_bool True (mk_pair Bool Bool True False))) \
+              (set_fst_pair_bool_bool False (mk_pair Bool Bool True False)) \
+           = fst_lens_set_set True False (mk_pair Bool Bool True False)",
     )
     .expect("set-set lens law should be proof-returning and check as full pair equality");
 
     env.elaborate_decl(
         "const cat3_d3_indexed_project_sample \
            : Equal Bool \
-               (bool_pair_index_project (mkPair Bool Bool True False) True) \
+               (bool_pair_index_project (mk_pair Bool Bool True False) True) \
                False \
            = tt",
     )
@@ -360,9 +360,9 @@ fn cat3_d3_wrong_lens_endpoint_rejected() {
         .elaborate_decl(
             "const cat3_bad_lens_get_set \
                : Equal Bool \
-                   (fst_pair_bool_bool (set_fst_pair_bool_bool False (mkPair Bool Bool True True))) \
+                   (fst_pair_bool_bool (set_fst_pair_bool_bool False (mk_pair Bool Bool True True))) \
                    True \
-               = fst_lens_get_set False (mkPair Bool Bool True True)",
+               = fst_lens_get_set False (mk_pair Bool Bool True True)",
         )
         .expect_err("wrong get-set endpoint must not typecheck");
     let msg = format!("{err}");

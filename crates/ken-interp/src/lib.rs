@@ -1766,7 +1766,7 @@ mod eff_tests {
     ///
     /// K1.5 IH extension landed (`ken-interp/src/eval.rs`'s
     /// `recursive_arg_arity`/`EvalVal::IhClosure`, State-effect-build): a
-    /// `runState`-shaped `elim_ITree` fold — motive `Type0 → Pair Type0
+    /// `run_state`-shaped `elim_ITree` fold — motive `Type0 → Pair Type0
     /// Type0` (`S → (A × S)`) — now actually reduces over a `Vis (e:StateOp)
     /// (k:Resp→ITree)` node instead of getting silently stuck. This drives a
     /// real `Vis` tree through `eval`/`elim_reduce` directly and asserts the

@@ -20,7 +20,7 @@
 //! extended to a genuinely dependent-response, coproduct-dispatching `ITree`.
 //!
 //! **No self-recursive `Const` reference anywhere in this file.** Every fold
-//! (`bind`, `runState`) is a SINGLE `Term::Elim` — the kernel's own
+//! (`bind`, `run_state`) is a SINGLE `Term::Elim` — the kernel's own
 //! induction-hypothesis (`ih`) argument for a W-style recursive field already
 //! computes the recursive result (`ih r` ≡ "the fold applied to `k r`"); there
 //! is no need to build a self-referencing definition at all, so no SCT
@@ -37,7 +37,7 @@
 //! - Helper [`v`] takes a logical (left-to-right, 0-indexed) binder position
 //!   and the total bound-context length, returning the correct `Var`.
 //!
-//! ## The "generalize, then apply" trick (`runState`'s Vis method)
+//! ## The "generalize, then apply" trick (`run_state`'s Vis method)
 //! A W-style method's higher-order IH (`ih : (r:Resp op) -> M(k r)`, i.e.
 //! `ih : Resp op -> S -> ITree F RespF (Sigma A S)` here) mentions the OUTER
 //! `op` free variable. Dispatching on `op`'s own substructure (peeling
@@ -82,7 +82,7 @@ pub struct StateEffectIds {
     pub resp_coproduct_id: GlobalId,
     /// `bind : (e:Type)(resp:e->Type)(a b:Type) -> ITree e resp a -> (a -> ITree e resp b) -> ITree e resp b`.
     pub bind_id: GlobalId,
-    /// `runState : (s f : Type) -> (RespF: f -> Type) -> (a : Type) -> s ->
+    /// `run_state : (s f : Type) -> (RespF: f -> Type) -> (a : Type) -> s ->
     ///   ITree (Coproduct (StateOp s) f) (resp_coproduct s f RespF) a ->
     ///   ITree f RespF (Sigma a s)` (`36 §4.5.3`, the `elim_ITree` fold at
     /// `F` — the return codomain is a genuine kernel `Sigma` pair, NOT the
@@ -255,12 +255,12 @@ pub fn declare_resp_state(env: &mut GlobalEnv, state_op_id: GlobalId, unit_id: G
 /// (StateOp s) f`) to an arbitrary coproduct `Coproduct g h`, given each summand's
 /// own response family as an explicit parameter (`effect-composition` D1,
 /// `evt_241dchcb5y6j8` / doc §D1.1). **Reducing `declare_def`, NEVER a
-/// postulate — the hinge D2's `injectL`/`injectR` need**: `resp_coproduct g h rg rh
+/// postulate — the hinge D2's `inject_l`/`inject_r` need**: `resp_coproduct g h rg rh
 /// (InL x)` ι-reduces to `rg x`, `(InR y)` to `rh y`, definitionally, with no
 /// wrap/reorder — the injected summand's OWN response, verbatim. One
 /// **non-recursive** `Term::Elim` over `Coproduct` (`Coproduct` has no recursive field ⇒
 /// trivially total, no SCT). State becomes the literal instance `resp_coproduct
-/// (StateOp s) f (resp_state s) RespF` (§D1.3) — `get`/`put`/`runState` below
+/// (StateOp s) f (resp_state s) RespF` (§D1.3) — `get`/`put`/`run_state` below
 /// apply the 4-arg form.
 pub fn declare_resp_coproduct(env: &mut GlobalEnv, coproduct_id: GlobalId) -> Result<GlobalId, String> {
     // Elim node ctx [g,h,rg,rh,op] (len=5): g=v(5,0), h=v(5,1), rg=v(5,2), rh=v(5,3), op=v(5,4).
@@ -293,13 +293,13 @@ pub fn declare_resp_coproduct(env: &mut GlobalEnv, coproduct_id: GlobalId) -> Re
     declare_def(env, vec![], ty, body).map_err(|e| format!("resp_coproduct declaration failed: {e:?}"))
 }
 
-/// `injectL : (g h:Type) -> (rg:g->Type) -> (rh:h->Type) -> (a:Type) ->
+/// `inject_l : (g h:Type) -> (rg:g->Type) -> (rh:h->Type) -> (a:Type) ->
 ///   ITree g rg a -> ITree (Coproduct g h) (resp_coproduct g h rg rh) a`.
 ///
 /// The left inclusion `g ↪ Coproduct g h` (`36 §2.4`'s `incl`, `effect-composition`
 /// D2, doc §D2.1) — a structural `elim_ITree` re-tag: `Ret x ↦ Ret x`
 /// (re-typed into the coproduct tree); `Vis op k ↦ Vis (InL op) ih`, where the
-/// kernel-supplied IH `ih` already computes `injectL … ∘ k` on the sub-tree
+/// kernel-supplied IH `ih` already computes `inject_l … ∘ k` on the sub-tree
 /// (no self-recursive `Const`, total by structural descent — the same
 /// IH-reuse shape `bind` uses). **Coercion-free by D1's reduction (§D1.1,
 /// §D2.2):** `ih`'s domain `rg op` is definitionally equal to `Vis (InL
@@ -389,10 +389,10 @@ pub fn declare_inject_l(
     );
     let ret_ty = apply_all(Term::indformer(itree_id, vec![]), &[ret_coproduct, ret_resp, Term::var(1)]);
     let ty = pi_chain(&final_domains, ret_ty);
-    declare_def(env, vec![], ty, body).map_err(|e| format!("injectL declaration failed: {e:?}"))
+    declare_def(env, vec![], ty, body).map_err(|e| format!("inject_l declaration failed: {e:?}"))
 }
 
-/// `injectR : (g h:Type) -> (rg:g->Type) -> (rh:h->Type) -> (a:Type) ->
+/// `inject_r : (g h:Type) -> (rg:g->Type) -> (rh:h->Type) -> (a:Type) ->
 ///   ITree h rh a -> ITree (Coproduct g h) (resp_coproduct g h rg rh) a`.
 ///
 /// The right inclusion `h ↪ Coproduct g h` — the exact mirror of [`declare_inject_l`]
@@ -474,7 +474,7 @@ pub fn declare_inject_r(
     );
     let ret_ty = apply_all(Term::indformer(itree_id, vec![]), &[ret_coproduct, ret_resp, Term::var(1)]);
     let ty = pi_chain(&final_domains, ret_ty);
-    declare_def(env, vec![], ty, body).map_err(|e| format!("injectR declaration failed: {e:?}"))
+    declare_def(env, vec![], ty, body).map_err(|e| format!("inject_r declaration failed: {e:?}"))
 }
 
 /// `bind : (e:Type)(resp:e->Type)(a b:Type) -> ITree e resp a -> (a -> ITree e resp b) -> ITree e resp b`.
@@ -568,7 +568,7 @@ pub fn declare_bind(env: &mut GlobalEnv, itree_id: GlobalId, vis_id: GlobalId) -
     declare_def(env, vec![], ty, body).map_err(|e| format!("bind declaration failed: {e:?}"))
 }
 
-/// `runState : (s f:Type) -> (RespF:f->Type) -> (a:Type) -> s ->
+/// `run_state : (s f:Type) -> (RespF:f->Type) -> (a:Type) -> s ->
 ///   ITree (Coproduct (StateOp s) f) (resp_coproduct s f RespF) a -> ITree f RespF (Sigma a s)`.
 ///
 /// Outer binder order (declaration order, base context): `s, f, RespF, a, s0,
@@ -806,7 +806,7 @@ pub fn declare_run_state(
         indices: vec![],
         scrut: Box::new(v(6, 5)), // t
     };
-    // runState s f RespF a s0 t = (elim_ITree ...) s0.
+    // run_state s f RespF a s0 t = (elim_ITree ...) s0.
     let elim_result = Term::app(elim_itree, v(6, 4) /* s0 */);
 
     // ---- outer declaration (s,f,RespF,a,s0,t) ------------------------------
@@ -842,7 +842,7 @@ pub fn declare_run_state(
     let ty = pi_chain(&final_domains, ret_ty);
 
     let _ = (get_id, put_id, inl_id, inr_id);
-    declare_def(env, vec![], ty, body).map_err(|e| format!("runState declaration failed: {e:?}"))
+    declare_def(env, vec![], ty, body).map_err(|e| format!("run_state declaration failed: {e:?}"))
 }
 
 /// `get : (s f:Type) -> (RespF:f->Type) -> Unit -> ITree (Coproduct (StateOp s) f) (resp_coproduct s f RespF) s`.
@@ -901,7 +901,7 @@ pub fn declare_get(
 /// `put : (s f:Type) -> (RespF:f->Type) -> s -> ITree (Coproduct (StateOp s) f) (resp_coproduct s f RespF) Unit`.
 /// `  = \s f RespF s'. Vis (InL (Put s')) (\_. Ret MkUnit)` (`36 §4.5.2`:
 /// `Resp (Put _) = Unit` — the old state is discarded, the new state `s'` is
-/// threaded by `runState`, not mutated here).
+/// threaded by `run_state`, not mutated here).
 pub fn declare_put(
     env: &mut GlobalEnv,
     itree_id: GlobalId,

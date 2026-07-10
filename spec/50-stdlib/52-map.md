@@ -188,7 +188,7 @@ landed `List`/`Nat` floor); exact file path is Foundation's to fix.
 Signatures are representation-independent (they do not vary by tree kind; only
 the bodies do). `Option`/`List` are the landed L2 inductives (`34 §1`); `k × v`
 is the **Σ-pair** (`../10-kernel/13 §3`, right-nested Σ with η — the same
-construct as `runState`'s result in `36 §4.5`, **distinct** from the inductive
+construct as `run_state`'s result in `36 §4.5`, **distinct** from the inductive
 `Prod`). The exact spelling of the `where`/implicit-argument surface follows
 `33 §5.4`; any still-open surface-syntax token is tagged `(oracle)`.
 
@@ -319,7 +319,7 @@ from the `IsTrue b := Equal Bool b True` bridge (`51 §2`) and the derived
 `Ω`-conjunction `∧` (`16 §1.3`) — and is a **definition the prover unfolds, out
 of `trusted_base()`**, never a postulate (the `37 §6` surface-minimality
 discipline: an opaque invariant makes the obligation undischargeable or
-circular). It models `37 §6`'s `isSorted` exactly, lifted from lists to trees.
+circular). It models `37 §6`'s `is_sorted` exactly, lifted from lists to trees.
 
 **Preservation.** `Ordered empty` is immediate (`Ordered Leaf = ⊤`, closed by
 `tt` — **Branch A, built**; no induction). `Ordered m ⇒ Ordered (insert k v m)`
@@ -353,11 +353,11 @@ landed (`preserves_ordered`).
 
 - **Ordered law (load-bearing) — Branch B, LANDED (`map-verified-laws` Unit 1,
   `54`; was §7d-deferred — Gap B only).**
-  `Ordered m ⇒ isSorted (λ a b. leq (fst a) (fst b)) (to_list m)` — the in-order
-  traversal is **ascending by key**, reusing `37 §6`'s `isSorted` predicate. It
+  `Ordered m ⇒ is_sorted (λ a b. leq (fst a) (fst b)) (to_list m)` — the in-order
+  traversal is **ascending by key**, reusing `37 §6`'s `is_sorted` predicate. It
   is **comparison-free** (`to_list` never calls `leq`; the proof feeds `IsTrue`
-  witnesses from `Ordered`'s `all_keys` into `isSorted`'s `Ω`-conjuncts via two
-  list lemmas — `isSorted`-over-`++` and `all_keys`↔`all_in_list (to_list)` — never
+  witnesses from `Ordered`'s `all_keys` into `is_sorted`'s `Ω`-conjuncts via two
+  list lemmas — `is_sorted`-over-`++` and `all_keys`↔`all_in_list (to_list)` — never
   reducing a stuck boolean), so it **clears Gap A**. But it **inducts over
   `Tree`/`List`** narrowing an `Ordered`/`all_keys` hypothesis, so it hits **Gap
   B** (the nullary dependent-match gate). Consequence: `letter-frequency`'s

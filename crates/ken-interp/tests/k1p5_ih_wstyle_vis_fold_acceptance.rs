@@ -6,7 +6,7 @@
 //! (Resp e → ITree r) → ITree r` is Π-BOUND (K1.5 W-style, `36 §4.5.6` lift
 //! (c), `ken-kernel/src/inductive.rs` `recursive_args`) — the recursive
 //! occurrence is the CODOMAIN of a function type, invisible to the old
-//! `is_recursive_arg` check, so `runState`'s `elim_ITree` fold never applied
+//! `is_recursive_arg` check, so `run_state`'s `elim_ITree` fold never applied
 //! an IH to a `Vis` node at all (silently stuck via `apply`'s catch-all).
 //!
 //! This adds `recursive_arg_arity` (peels leading `Term::Pi`s, same
@@ -16,7 +16,7 @@
 //! `elim_reduce` (mirrors the kernel's term-level IH `λb̄. elim_D … (a_j b̄)`,
 //! `iota_reduct`). These tests exercise the mechanism standalone against a
 //! synthetic W-style `ITree`, per the frame's "testable on its own" note —
-//! full `runState`/EFF6 AC2–4 only flip green once Team Language's
+//! full `run_state`/EFF6 AC2–4 only flip green once Team Language's
 //! elaborator-side lift (dependent response + coproduct + derived stdlib)
 //! integrates on top of this.
 //!
@@ -191,10 +191,10 @@ fn wstyle_ih_folds_at_depth_two() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 2 — State-shaped pair fold: threading rehearses `runState`'s (result, state)
+// 2 — State-shaped pair fold: threading rehearses `run_state`'s (result, state)
 // ═══════════════════════════════════════════════════════════════════════════
 
-/// A `runState`-shaped fold, `Bool -> Pair Bool Bool` (`S -> (A × S)` at
+/// A `run_state`-shaped fold, `Bool -> Pair Bool Bool` (`S -> (A × S)` at
 /// `A = S = Bool`): `Ret r` yields `(r, s)` for the incoming state `s`;
 /// `Vis k` denotes a `get`-like op — the response IS the current state `s`,
 /// threaded into `k` AND carried forward as the next state. Run from two

@@ -114,7 +114,7 @@ pub struct PreludeEnv {
     pub equal_id: GlobalId,
     /// `And : Ω → Ω → Ω` — conjunction (the `∧`).
     pub and_id: GlobalId,
-    /// `isSorted : Π(A:Type). List A → Ω`.
+    /// `is_sorted : Π(A:Type). List A → Ω`.
     pub issorted_id: GlobalId,
     /// `Perm : Π(A:Type). List A → List A → Ω`.
     pub perm_id: GlobalId,
@@ -164,16 +164,16 @@ pub struct PreludeEnv {
     pub resp_coproduct_id: GlobalId,
     /// `bind` over the lifted `ITree`.
     pub bind_id: GlobalId,
-    /// `runState` — the `§4.2` `elim_ITree` fold at `F` (`36 §4.5.3`).
+    /// `run_state` — the `§4.2` `elim_ITree` fold at `F` (`36 §4.5.3`).
     pub run_state_id: GlobalId,
     /// `get : Unit -> ITree (Coproduct (StateOp s) f) (resp_coproduct s f RespF) s`.
     pub get_fn_id: GlobalId,
     /// `put : s -> ITree (Coproduct (StateOp s) f) (resp_coproduct s f RespF) Unit`.
     pub put_fn_id: GlobalId,
-    /// `injectL : (g h:Type)(rg:g->Type)(rh:h->Type)(a:Type) -> ITree g rg a
+    /// `inject_l : (g h:Type)(rg:g->Type)(rh:h->Type)(a:Type) -> ITree g rg a
     ///   -> ITree (Coproduct g h) (resp_coproduct g h rg rh) a` (`effect-composition` D2).
     pub inject_l_id: GlobalId,
-    /// `injectR` — the mirror inclusion, `h ↪ Coproduct g h`.
+    /// `inject_r` — the mirror inclusion, `h ↪ Coproduct g h`.
     pub inject_r_id: GlobalId,
 }
 
@@ -299,7 +299,7 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         mkunit_id,
     )
     .map_err(ElabError::Internal)?;
-    elab.globals.insert("runState".to_string(), run_state_id);
+    elab.globals.insert("run_state".to_string(), run_state_id);
 
     let get_fn_id = state_eff::declare_get(
         &mut elab.env, itree_id, ret_id, vis_id, state_op_id, get_id, coproduct_id, inl_id, resp_coproduct_id, resp_state_id, unit_id,
@@ -313,7 +313,7 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     .map_err(ElabError::Internal)?;
     elab.globals.insert("put".to_string(), put_fn_id);
 
-    // `injectL`/`injectR` — the general coproduct injection morphism
+    // `inject_l`/`inject_r` — the general coproduct injection morphism
     // (`effect-composition` D2, doc §D2.1): the un-specialized form of
     // `get`/`put`'s hand-baked `InL` (`state.rs::declare_get`/`declare_put`
     // stay unchanged — State's tagging is *subsumed*, not forked, §D2.5).
@@ -321,13 +321,13 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         &mut elab.env, itree_id, ret_id, vis_id, coproduct_id, resp_coproduct_id, inl_id,
     )
     .map_err(ElabError::Internal)?;
-    elab.globals.insert("injectL".to_string(), inject_l_id);
+    elab.globals.insert("inject_l".to_string(), inject_l_id);
 
     let inject_r_id = state_eff::declare_inject_r(
         &mut elab.env, itree_id, ret_id, vis_id, coproduct_id, resp_coproduct_id, inr_id,
     )
     .map_err(ElabError::Internal)?;
-    elab.globals.insert("injectR".to_string(), inject_r_id);
+    elab.globals.insert("inject_r".to_string(), inject_r_id);
 
     // ── Ω constants (ES2: real definitions, demoted out of `trusted_base()`) ─
     // `Equal : Π(A:Type). Π(x:A). Π(y:A). Ω`  (the `≡`).
@@ -376,8 +376,8 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         .map_err(|e| ElabError::Internal(format!("prelude And failed: {}", e)))?;
     elab.globals.insert("And".to_string(), and_id);
 
-    // `andIntro`/`andFst`/`andSnd` -- the Sigma intro/elim helpers for `And`,
-    // built EXACTLY like `Pair`/`mkPair`/`pairFst`/`pairSnd` below (Map-
+    // `and_intro`/`and_fst`/`and_snd` -- the Sigma intro/elim helpers for `And`,
+    // built EXACTLY like `Pair`/`mk_pair`/`pair_fst`/`pair_snd` below (Map-
     // build), but Omega-sorted (`omega0`, not `type0`) since `And`'s two
     // arguments are themselves PROPOSITIONS, not types. `And A B := Sigma
     // (_:A).B` is a Sigma at Omega (`sort_sigma` classifies it there because
@@ -395,7 +395,7 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     let and_app_at_len4 =
         Term::app(Term::app(Term::const_(and_id, vec![]), Term::var(3)), Term::var(2));
 
-    // `andIntro : (a:Prop) -> (b:Prop) -> a -> b -> And a b`.
+    // `and_intro : (a:Prop) -> (b:Prop) -> a -> b -> And a b`.
     let and_intro_ty = Term::pi(
         omega0.clone(),
         Term::pi(
@@ -411,10 +411,10 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         ),
     );
     let and_intro_id = declare_def(&mut elab.env, vec![], and_intro_ty, and_intro_body)
-        .map_err(|e| ElabError::Internal(format!("prelude andIntro failed: {}", e)))?;
-    elab.globals.insert("andIntro".to_string(), and_intro_id);
+        .map_err(|e| ElabError::Internal(format!("prelude and_intro failed: {}", e)))?;
+    elab.globals.insert("and_intro".to_string(), and_intro_id);
 
-    // `andFst : (a:Prop) -> (b:Prop) -> And a b -> a`.
+    // `and_fst : (a:Prop) -> (b:Prop) -> And a b -> a`.
     let and_fst_ty = Term::pi(
         omega0.clone(),
         Term::pi(omega0.clone(), Term::pi(and_app_at_len2.clone(), Term::var(2))),
@@ -424,10 +424,10 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         Term::lam(omega0.clone(), Term::lam(and_app_at_len2.clone(), Term::proj1(Term::var(0)))),
     );
     let and_fst_id = declare_def(&mut elab.env, vec![], and_fst_ty, and_fst_body)
-        .map_err(|e| ElabError::Internal(format!("prelude andFst failed: {}", e)))?;
-    elab.globals.insert("andFst".to_string(), and_fst_id);
+        .map_err(|e| ElabError::Internal(format!("prelude and_fst failed: {}", e)))?;
+    elab.globals.insert("and_fst".to_string(), and_fst_id);
 
-    // `andSnd : (a:Prop) -> (b:Prop) -> And a b -> b`.
+    // `and_snd : (a:Prop) -> (b:Prop) -> And a b -> b`.
     let and_snd_ty = Term::pi(
         omega0.clone(),
         Term::pi(omega0.clone(), Term::pi(and_app_at_len2.clone(), Term::var(1))),
@@ -437,8 +437,8 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         Term::lam(omega0.clone(), Term::lam(and_app_at_len2, Term::proj2(Term::var(0)))),
     );
     let and_snd_id = declare_def(&mut elab.env, vec![], and_snd_ty, and_snd_body)
-        .map_err(|e| ElabError::Internal(format!("prelude andSnd failed: {}", e)))?;
-    elab.globals.insert("andSnd".to_string(), and_snd_id);
+        .map_err(|e| ElabError::Internal(format!("prelude and_snd failed: {}", e)))?;
+    elab.globals.insert("and_snd".to_string(), and_snd_id);
 
     // `Prop` — a surface-nameable alias for `Ω₀`, so a recursive `view` can
     // carry an explicit return-type ANNOTATION landing on `Ω` (required: a
@@ -498,8 +498,8 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     // spelling is missing, which `52-map.md §4`'s own hedge tags `(oracle)`
     // ("any still-open surface-syntax token is tagged `(oracle)`") — the
     // mechanism (Sigma) is landed, so this is a named-application spelling
-    // of it, not a new kernel feature or a workaround. `mkPair`/`pairFst`/
-    // `pairSnd` are the corresponding intro/elim helpers (no surface `.1`/
+    // of it, not a new kernel feature or a workaround. `mk_pair`/`pair_fst`/
+    // `pair_snd` are the corresponding intro/elim helpers (no surface `.1`/
     // `.2` projection exists for a bare Sigma — that syntax is reserved for
     // class-dictionary records only, `elab.rs::infer_proj`).
     let pair_ty_ty = Term::pi(type0.clone(), Term::pi(type0.clone(), type0.clone()));
@@ -511,7 +511,7 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         .map_err(|e| ElabError::Internal(format!("prelude Pair failed: {}", e)))?;
     elab.globals.insert("Pair".to_string(), pair_ty_id);
 
-    // `mkPair : (a:Type) -> (b:Type) -> a -> b -> Pair a b`.
+    // `mk_pair : (a:Type) -> (b:Type) -> a -> b -> Pair a b`.
     let pair_app_at_len2 =
         Term::app(Term::app(Term::const_(pair_ty_id, vec![]), Term::var(1)), Term::var(0));
     let pair_app_at_len4 =
@@ -531,10 +531,10 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         ),
     );
     let mkpair_id = declare_def(&mut elab.env, vec![], mkpair_ty, mkpair_body)
-        .map_err(|e| ElabError::Internal(format!("prelude mkPair failed: {}", e)))?;
-    elab.globals.insert("mkPair".to_string(), mkpair_id);
+        .map_err(|e| ElabError::Internal(format!("prelude mk_pair failed: {}", e)))?;
+    elab.globals.insert("mk_pair".to_string(), mkpair_id);
 
-    // `pairFst : (a:Type) -> (b:Type) -> Pair a b -> a`.
+    // `pair_fst : (a:Type) -> (b:Type) -> Pair a b -> a`.
     let fst_ty = Term::pi(
         type0.clone(),
         Term::pi(type0.clone(), Term::pi(pair_app_at_len2.clone(), Term::var(2))),
@@ -544,10 +544,10 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         Term::lam(type0.clone(), Term::lam(pair_app_at_len2.clone(), Term::proj1(Term::var(0)))),
     );
     let fst_id = declare_def(&mut elab.env, vec![], fst_ty, fst_body)
-        .map_err(|e| ElabError::Internal(format!("prelude pairFst failed: {}", e)))?;
-    elab.globals.insert("pairFst".to_string(), fst_id);
+        .map_err(|e| ElabError::Internal(format!("prelude pair_fst failed: {}", e)))?;
+    elab.globals.insert("pair_fst".to_string(), fst_id);
 
-    // `pairSnd : (a:Type) -> (b:Type) -> Pair a b -> b`.
+    // `pair_snd : (a:Type) -> (b:Type) -> Pair a b -> b`.
     let snd_ty = Term::pi(
         type0.clone(),
         Term::pi(type0.clone(), Term::pi(pair_app_at_len2.clone(), Term::var(1))),
@@ -557,8 +557,8 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         Term::lam(type0.clone(), Term::lam(pair_app_at_len2, Term::proj2(Term::var(0)))),
     );
     let snd_id = declare_def(&mut elab.env, vec![], snd_ty, snd_body)
-        .map_err(|e| ElabError::Internal(format!("prelude pairSnd failed: {}", e)))?;
-    elab.globals.insert("pairSnd".to_string(), snd_id);
+        .map_err(|e| ElabError::Internal(format!("prelude pair_snd failed: {}", e)))?;
+    elab.globals.insert("pair_snd".to_string(), snd_id);
 
     // `Decimal`/`Char` DEMOTE→derived (`18a §5.6`/`§5.9`, Phase-2 tranche #2).
     // Must run here: after `Equal`/`And`/`Prop`/`tt` (needed by `IsTrue`),
@@ -574,11 +574,11 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     crate::conversions::register_conversions(elab)
         .map_err(|e| ElabError::Internal(format!("IntN<->Int conversions failed: {}", e)))?;
 
-    // `isSorted : Π(a:Type). (a → a → Bool) → List a → Ω` (ES2-remainder,
+    // `is_sorted : Π(a:Type). (a → a → Bool) → List a → Ω` (ES2-remainder,
     // `37 §6`: the explicit-comparator form, `Ord`-class deferred).
     //
-    // `isSorted leq Nil = ⊤`, `isSorted leq (x::Nil) = ⊤`,
-    // `isSorted leq (x::y::r) = IsTrue (leq x y) ∧ isSorted leq (y::r)`, with
+    // `is_sorted leq Nil = ⊤`, `is_sorted leq (x::Nil) = ⊤`,
+    // `is_sorted leq (x::y::r) = IsTrue (leq x y) ∧ is_sorted leq (y::r)`, with
     // `IsTrue (leq x y) := Eq Bool (leq x y) True` (the `Equal`/kernel-`Eq`
     // alias already landed by ES2) and `∧` the already-demoted `And`. `⊤` is
     // spelled `Equal Bool True True` (reflexively true, no dedicated Ω-truth
@@ -586,21 +586,21 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     let list_a = |a: Term| Term::app(Term::indformer(list_id, vec![]), a);
     let _ = &list_a; // still used below for Perm's raw-term construction
     elab.elaborate_decl(
-        "fn isSorted (a : Type) (leq : a -> a -> Bool) (xs : List a) : Prop = \
+        "fn is_sorted (a : Type) (leq : a -> a -> Bool) (xs : List a) : Prop = \
          match xs { \
            Nil => Equal Bool True True ; \
            Cons x xs2 => match xs2 { \
              Nil => Equal Bool True True ; \
-             Cons y r => And (Equal Bool (leq x y) True) (isSorted a leq xs2) \
+             Cons y r => And (Equal Bool (leq x y) True) (is_sorted a leq xs2) \
            } \
          }",
     )
-    .map_err(|e| ElabError::Internal(format!("prelude isSorted failed: {}", e)))?;
+    .map_err(|e| ElabError::Internal(format!("prelude is_sorted failed: {}", e)))?;
     let issorted_id = elab
         .globals
-        .get("isSorted")
+        .get("is_sorted")
         .copied()
-        .ok_or_else(|| ElabError::Internal("prelude: 'isSorted' not registered".into()))?;
+        .ok_or_else(|| ElabError::Internal("prelude: 'is_sorted' not registered".into()))?;
 
     // `Perm : Π(A:Type). List A → List A → Ω`  (comparator-free, `37 §6`
     // ES2-remainder ruling `evt_3cn9v6em54yej`, closing ES1's "spec picks

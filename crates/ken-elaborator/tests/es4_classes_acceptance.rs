@@ -510,7 +510,7 @@ fn char_ord_laws_reject_missing_law_field() {
 
 // ─────────────────────────────────────────────────────────────────────────
 // AC2 — `where Ord a` supplies the SAME comparator the explicit-comparator
-// `sort`/`isSorted` form threads (`51 §4`, reflect-don't-extend).
+// `sort`/`is_sorted` form threads (`51 §4`, reflect-don't-extend).
 // ─────────────────────────────────────────────────────────────────────────
 
 #[test]
@@ -521,7 +521,7 @@ fn where_ord_supplies_same_comparator_as_explicit_form() {
     let explicit_id = env
         .elaborate_decl(
             "fn sortObligationExplicit (leq : Int -> Int -> Bool) (ys : List Int) (xs : List Int) : Prop = \
-             And (isSorted Int leq ys) (Perm Int ys xs)",
+             And (is_sorted Int leq ys) (Perm Int ys xs)",
         )
         .expect("explicit-comparator obligation elaborates");
 
@@ -530,12 +530,12 @@ fn where_ord_supplies_same_comparator_as_explicit_form() {
     let via_dict_id = env
         .elaborate_decl(
             "fn sortObligationViaDict (ys : List Int) (xs : List Int) : Prop where Ord Int = \
-             And (isSorted Int (d.leq) ys) (Perm Int ys xs)",
+             And (is_sorted Int (d.leq) ys) (Perm Int ys xs)",
         )
         .expect("`where Ord Int` obligation elaborates — d.leq must project the resolved dictionary's leq field");
 
     // Discriminating: both must produce a body of the SAME STRUCTURAL shape
-    // (`And (isSorted Int <cmp> ys) (Perm Int ys xs)`) — not merely "both
+    // (`And (is_sorted Int <cmp> ys) (Perm Int ys xs)`) — not merely "both
     // type-check". Peel the two param-lambdas (leq/none, ys, xs) down to the
     // inner body and compare modulo the substituted comparator.
     let (_, explicit_body) = env.env.transparent_body(explicit_id).unwrap();
@@ -556,12 +556,12 @@ fn where_ord_supplies_same_comparator_as_explicit_form() {
     let dict_inner = peel_lams(&dict_body, 2);
 
     fn is_and_is_sorted_perm_shape(t: &Term) -> bool {
-        // App(App(Const(And), isSorted-app), Perm-app) — just check the
+        // App(App(Const(And), is_sorted-app), Perm-app) — just check the
         // outer head is an application chain of depth >= 2 (structural
         // shape check; exact head ids vary run-to-run only by content, not
         // structure).
         matches!(t, Term::App(f, _) if matches!(f.as_ref(), Term::App(_, _)))
     }
-    assert!(is_and_is_sorted_perm_shape(&explicit_inner), "explicit form must have the And(isSorted,Perm) shape");
-    assert!(is_and_is_sorted_perm_shape(&dict_inner), "where Ord Int form must have the SAME And(isSorted,Perm) shape");
+    assert!(is_and_is_sorted_perm_shape(&explicit_inner), "explicit form must have the And(is_sorted,Perm) shape");
+    assert!(is_and_is_sorted_perm_shape(&dict_inner), "where Ord Int form must have the SAME And(is_sorted,Perm) shape");
 }

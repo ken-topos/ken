@@ -12,11 +12,11 @@
 //!
 //! **effect-composition update (AC6 asterisk retirement):** `main` now
 //! genuinely composes `[FS]` and `[Console]` in ONE `bind`-sequenced,
-//! `injectL`/`injectR`-tagged `ITree (Coproduct (FSOp a) ConsoleOp) …` — the
+//! `inject_l`/`inject_r`-tagged `ITree (Coproduct (FSOp a) ConsoleOp) …` — the
 //! program itself prints each line via `[Console]` (`printLines`), not a
 //! CLI-side post-render. Also no test in this file hand-constructs a `Coproduct`/
 //! `InL`/`InR` value (AC7's producer-grep, `effect-composition-conformance.md`
-//! §2) — `injectL`/`injectR` are elaborated from the surface `.ken` source
+//! §2) — `inject_l`/`inject_r` are elaborated from the surface `.ken` source
 //! above. On a denied/insufficient cap or a missing file, `main` does NOT
 //! print (fail-closed) and returns `Err e`; `ken-cli`'s unchanged
 //! `render_fs_result` still surfaces the exact `IOError` variant on stderr
@@ -99,7 +99,7 @@ proc printLines (xs : List String) : Compose (Result IOError Unit) visits [Conso
       bind (Coproduct (FSOp {auth}) ConsoleOp)
            (resp_coproduct (FSOp {auth}) ConsoleOp (fs_resp {auth}) console_resp)
            Unit (Result IOError Unit)
-        (injectR (FSOp {auth}) ConsoleOp (fs_resp {auth}) console_resp Unit (print_line x))
+        (inject_r (FSOp {auth}) ConsoleOp (fs_resp {auth}) console_resp Unit (print_line x))
         (\_ . printLines xs')
   }}
 
@@ -107,7 +107,7 @@ proc main (cap : Cap {auth}) : Compose (Result IOError Unit) visits [FS, Console
   bind (Coproduct (FSOp {auth}) ConsoleOp)
        (resp_coproduct (FSOp {auth}) ConsoleOp (fs_resp {auth}) console_resp)
        (Result IOError Bytes) (Result IOError Unit)
-    (injectL (FSOp {auth}) ConsoleOp (fs_resp {auth}) console_resp (Result IOError Bytes)
+    (inject_l (FSOp {auth}) ConsoleOp (fs_resp {auth}) console_resp (Result IOError Bytes)
       (read_bytes {auth} cap (bytes_encode "{path}")))
     (\r .
       match r {{

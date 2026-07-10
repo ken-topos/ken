@@ -5,7 +5,7 @@
 //!
 //! Distinct from the {FS,Console} terminal-driver peel (`run_io`'s D3
 //! mechanism, `fs_read_file_lines_flip_e2e.rs`): this exercises the
-//! **pure-handler** role instead — `runState` (a kernel-re-checked
+//! **pure-handler** role instead — `run_state` (a kernel-re-checked
 //! `declare_def` fold, COEXIST-preserved, BV4) peels `StateOp Nat` out of
 //! `Coproduct (StateOp Nat) ConsoleOp` via the now-general `resp_coproduct`, threads the
 //! state, and re-emits the untouched `ConsoleOp` residual tree, which
@@ -25,16 +25,16 @@ fn workspace_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
-/// `get` (State) sequenced with `injectR (print_line ...)` (Console) under
-/// `Coproduct (StateOp Nat) ConsoleOp`, run through `runState` then `run_io`.
-/// `Pair Unit Nat` is a surface-nameable alias for `runState`'s real return
+/// `get` (State) sequenced with `inject_r (print_line ...)` (Console) under
+/// `Coproduct (StateOp Nat) ConsoleOp`, run through `run_state` then `run_io`.
+/// `Pair Unit Nat` is a surface-nameable alias for `run_state`'s real return
 /// type `Sigma Unit Nat` (`prelude.rs`'s `Pair := \a b. Sigma a b`).
 const PROG: &str = r#"
 const prog : ITree ConsoleOp console_resp (Pair Unit Nat) =
-  runState Nat ConsoleOp console_resp Unit Zero
+  run_state Nat ConsoleOp console_resp Unit Zero
     (bind (Coproduct (StateOp Nat) ConsoleOp) (resp_coproduct (StateOp Nat) ConsoleOp (resp_state Nat) console_resp) Nat Unit
       (get Nat ConsoleOp console_resp MkUnit)
-      (\n . injectR (StateOp Nat) ConsoleOp (resp_state Nat) console_resp Unit (print_line "state-console-pairing")))
+      (\n . inject_r (StateOp Nat) ConsoleOp (resp_state Nat) console_resp Unit (print_line "state-console-pairing")))
 "#;
 
 #[test]

@@ -320,10 +320,10 @@ fn decomposition_and_slice_kinds_round_trip() {
         "schema": "ken.verify/v1",
         "target": { "name": "test" },
         "status": "incomplete",
-        "obligations": [{ "id": "ob:t2", "goal": {"pretty": "isSorted xs"},
+        "obligations": [{ "id": "ob:t2", "goal": {"pretty": "is_sorted xs"},
                           "context": [], "provenance": {"span":"0","clause":"ensures"},
                           "status": "open", "diagnostic": slice }],
-        "trusted_base_delta": [{"id": "?h:ob:t2", "goal": "isSorted xs"}]
+        "trusted_base_delta": [{"id": "?h:ob:t2", "goal": "is_sorted xs"}]
     });
     validate_document(&slice_doc).expect("slice document must be schema-valid");
     assert_eq!(round_trip(&slice_doc), slice_doc, "slice document round-trip identity");
@@ -730,13 +730,13 @@ fn additive_unknown_field_accepted() {
         "schema": "ken.verify/v1", "target": {"name":"t"},
         "status": "incomplete",
         "obligations": [{
-            "id": "ob:t1", "goal": {"pretty":"isSorted xs"}, "context": [],
+            "id": "ob:t1", "goal": {"pretty":"is_sorted xs"}, "context": [],
             "provenance": {"span":"0","clause":"ensures"},
             "status": "open",
             "confidence": 0.87,  // unknown field — must be ACCEPTED (ignored)
             "diagnostic": {
                 "kind": "hole", "hole_id": "?h:ob:t1",
-                "goal": "isSorted xs", "context": [], "origin": {"span":"0","clause":"ensures"},
+                "goal": "is_sorted xs", "context": [], "origin": {"span":"0","clause":"ensures"},
                 "runtime": "unknown",
                 "suggested_actions": [
                     {"kind": "add_precondition", "region": "unknown",
@@ -746,7 +746,7 @@ fn additive_unknown_field_accepted() {
                 ]
             }
         }],
-        "trusted_base_delta": [{"id": "?h:ob:t1", "goal": "isSorted xs"}],
+        "trusted_base_delta": [{"id": "?h:ob:t1", "goal": "is_sorted xs"}],
         "meta": {"version": "0.9.1"}  // unknown top-level field
     });
 

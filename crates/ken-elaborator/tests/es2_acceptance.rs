@@ -1,9 +1,9 @@
 //! ES2 acceptance tests: prelude hygiene — the `trusted_base()` shrink.
 //!
 //! Pins `docs/program/wp/ES2-prelude-hygiene.md`'s AC1/AC3/AC4 (+ the
-//! ES2-remainder AC1/AC2 for `isSorted`/`Perm`) against the **real**
+//! ES2-remainder AC1/AC2 for `is_sorted`/`Perm`) against the **real**
 //! `prelude.rs`/`trusted_base()` (producer-grep, not a hand-fed test): after
-//! ES2, `Equal`/`And`/`Bool`/`IO`/`print_line`/`isSorted`/`Perm` must not
+//! ES2, `Equal`/`And`/`Bool`/`IO`/`print_line`/`is_sorted`/`Perm` must not
 //! remain `declare_postulate`d assumed axioms. `Map`/`Set` were originally
 //! re-classed `declare_primitive` here (still trusted, audited, item-2) —
 //! **superseded by Map-build** (`spec/50-stdlib/52-map.md`, VAL2 #8/OQ-A):
@@ -13,7 +13,7 @@
 //! `declare_postulate` — a **net-negative** `trusted_base()` delta (AC4
 //! below now pins the retirement, not the re-class).
 //!
-//! Spec: `spec/30-surface/37-strings-collections.md` §6 (`isSorted`/`Perm`
+//! Spec: `spec/30-surface/37-strings-collections.md` §6 (`is_sorted`/`Perm`
 //! defining shapes); `conformance/surface/taxonomy/minimality.md` (the
 //! derivation table); `spec/50-stdlib/52-map.md` §1.1/§9 (Map-build's
 //! supersession + AC1 net-negative TCB).
@@ -49,7 +49,7 @@ fn mk_env_with_map() -> ElabEnv {
 #[test]
 fn demoted_predicates_are_transparent_not_opaque() {
     let env = mk_env();
-    for name in ["Equal", "And", "IO", "print_line", "isSorted", "Perm"] {
+    for name in ["Equal", "And", "IO", "print_line", "is_sorted", "Perm"] {
         let id = env.globals[name];
         match env.env.lookup(id) {
             Some(Decl::Transparent { .. }) => {}
@@ -84,7 +84,7 @@ fn bool_is_a_real_inductive() {
 fn demoted_predicates_absent_from_trusted_base() {
     let env = mk_env();
     let tb = env.env.trusted_base();
-    for name in ["Equal", "And", "Bool", "IO", "print_line", "isSorted", "Perm"] {
+    for name in ["Equal", "And", "Bool", "IO", "print_line", "is_sorted", "Perm"] {
         let id = env.globals[name];
         assert!(
             !tb.contains(&id),
@@ -95,13 +95,13 @@ fn demoted_predicates_absent_from_trusted_base() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ES2-remainder AC1/AC2 — isSorted/Perm are real, unfoldable definitions
+// ES2-remainder AC1/AC2 — is_sorted/Perm are real, unfoldable definitions
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// **Necessary but NOT sufficient** on its own (QA's 3rd-occurrence
 /// finding, `dec_3xzdpjm4ecwps`): `elaborate_decl_v1` succeeding here does
-/// NOT by itself prove `isSorted`/`Perm` actually unfold — checked out
-/// against `e5ffbf2` (isSorted/Perm still postulates), this exact
+/// NOT by itself prove `is_sorted`/`Perm` actually unfold — checked out
+/// against `e5ffbf2` (is_sorted/Perm still postulates), this exact
 /// assertion passes identically, because emitting the `Ensures` obligation
 /// never required the predicates to be *defined*, only *declared* (arity +
 /// sort). The real discriminant is
@@ -120,13 +120,13 @@ fn sort_refinement_unfolds_issorted_and_perm() {
     .expect("insert elaborates");
     env.elaborate_decl_v1(
         "fn sort (a : Type) (leq : a -> a -> Bool) (xs : List a) : \
-         { ys : List a | And (isSorted a leq ys) (Perm a ys xs) } = \
+         { ys : List a | And (is_sorted a leq ys) (Perm a ys xs) } = \
          match xs { Nil => Nil a ; Cons h t => insert a leq h (sort a leq t) }",
     )
     .expect("smoke check: sort refinement must at least type-check");
 }
 
-/// **The real AC2 discriminant.** Build the exact `isSorted`/`Perm`
+/// **The real AC2 discriminant.** Build the exact `is_sorted`/`Perm`
 /// applications `sort`'s own obligation contains (same registered
 /// `GlobalId`s, a concrete closed witness: `a = Bool`, `xs = ys = Nil`,
 /// `leq = \_ _. True`) and `whnf` them. A genuine definition unfolds PAST
@@ -134,7 +134,7 @@ fn sort_refinement_unfolds_issorted_and_perm() {
 /// a postulate is permanently stuck at `Const(isSorted_id)`/`Const(perm_id)`
 /// applied to its arguments — `whnf` cannot make progress on an opaque
 /// constant. Verified to actually discriminate: checked out against
-/// `e5ffbf2` (pre-ES2-remainder, isSorted/Perm still postulates) this
+/// `e5ffbf2` (pre-ES2-remainder, is_sorted/Perm still postulates) this
 /// assertion FAILS there (stuck at `Const`, per QA's now-3×-validated
 /// checkout-and-rerun technique) and PASSES on this branch.
 #[test]
@@ -153,7 +153,7 @@ fn issorted_and_perm_applications_reduce_past_their_own_head() {
     }
 
     let env = mk_env();
-    let issorted_id = env.globals["isSorted"];
+    let issorted_id = env.globals["is_sorted"];
     let perm_id = env.globals["Perm"];
     let bool_id = env.globals["Bool"];
     let true_id = env.globals["True"];
@@ -181,8 +181,8 @@ fn issorted_and_perm_applications_reduce_past_their_own_head() {
 
     assert!(
         !is_stuck_at(&issorted_reduced, issorted_id),
-        "AC2: `isSorted ...` must whnf past its own Const head (a real, \
-         unfoldable definition); stuck at Const(isSorted) means it's still \
+        "AC2: `is_sorted ...` must whnf past its own Const head (a real, \
+         unfoldable definition); stuck at Const(is_sorted) means it's still \
          an opaque postulate. Reduced to: {:?}",
         issorted_reduced
     );
