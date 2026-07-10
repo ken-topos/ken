@@ -2316,80 +2316,226 @@ The remaining outer lifting is assembled in the next checked block, using
 `cong` over `functor.map` and `apg.ap_cmp`; no surface `Applicative`
 instance for `Compose` is introduced.
 
-### 9.6 Composition law — deferred for SIZE, not capability, to `DS-8c`
+### 9.7 The `traverse` composition law (proved)
 
-**This is a scheduling deferral, not a capability gap.** The remaining
-work (below) is fully buildable TODAY with zero missing elaborator
-capability and zero `§6.1`-style fork — realistically another 40-60
-lemmas of ordinary proof engineering at this entry's own granularity
-(the ~97 lemmas across `§9.4`-`§9.5` give a concrete sense of the
-per-law scale), with a concrete, written closing plan (below), not an
-open-ended "later." It is deferred to a named follow-on, `DS-8c`
-(traverse composition coherence law), because holding the rest of
-`Traversable` — which does not depend on it — for one more law's worth
-of bookkeeping was the worse tradeoff, not because anything walls.
+`§5.3`'s composition law — `traverse (Compose ∘ map t2 ∘ t1) ≡ Compose ∘
+map (traverse t2) ∘ traverse t1` — is stated over the SAME explicit
+`compose_pure`/`compose_ap` operations as every other `Compose`-typed law
+in this entry, never through instance search (no `instance Applicative
+(Compose g h)` — that head stays kinding-blocked, `§9.4`). The composed
+action and the LHS/RHS of the law are named directly against `compose_pure`
+/`compose_ap` — `list_traverse`/`option_traverse` instantiated "at
+`Compose g h`" is simply their own recursion re-run with `compose_pure`/
+`compose_ap` substituted for `apg.pure`/`apg.ap`, which is exactly what
+`list_traverse_composed`/`option_traverse_composed` below spell out
+directly, sidestepping the kinding wall entirely (there is no dict to
+construct):
 
-**Two things are deferred, precisely — read both claims below exactly as
-scoped, not rounded up:**
+```ken
+fn cmp_traverse_action (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) (x : a) : Compose g h c =
+  apg.functor.map b (h c) t2 (t1 x)
+```
 
-1. **`Compose g h` is NOT YET a fully-proven-lawful `Applicative`.**
-   `§9.4` proves its full `Functor` instance plus **three of
-   `Applicative`'s four laws** — `ap_id`, `ap_hom`, `ap_ich` — plus
-   `map_coh`. The FOURTH law, `ap_cmp` (associativity), is NOT proved —
-   `Compose`'s `Applicative` instance is therefore not assembled in this
-   entry, and no `instance Applicative (Compose g h)` is declared here.
-   `§9.5`'s Level1/Level2 reductions are real, tested progress toward it
-   — not `ap_cmp` itself.
-2. **`§5.3`'s composition coherence law itself — `traverse` composes
-   through `Compose g h` — is separately deferred**, because it
-   CONSUMES the missing `ap_cmp`. It is not claimed, asserted, or tested
-   anywhere in this entry.
+**`Option`** — no induction, a two-arm case split (mirrors `§9.2`'s
+`option_traverse_identity_law`/`option_traverse_naturality` shape). `None`
+closes via `map_coh` then `ap_hom` (an outer `map` over a `pure` collapses
+to a `pure`, then `option_traverse`'s own `None`-arm reduction on the
+result matches `compose_pure` definitionally); `Some` closes via
+`map_coh` (turning `ap(pure(Some b))(t1 x)` back into a plain `map`) then
+`fusion_law` (fusing the two `map`s into one over `t1 x`), landing on a
+function that is `option_traverse`'s own `Some`-arm reduction — matched
+definitionally, no extra step:
 
-**Zero papering.** Every lemma in `§9.4`-`§9.5` (Level1/Level2's
-reductions included) is a real, fully-applied, kernel-checked proof term
-— no `Axiom`, no `Refl`/`tt` forced where the goal does not actually
-collapse, no stub. `ap_cmp` itself is simply absent — not declared with
-a postulated body, not present under any name.
+```ken
+fn option_traverse_composed (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) (mx : Option a) : Compose g h (Option c) =
+  match mx {
+    None ⇒ compose_pure g h apg aph (Option c) (None c) ;
+    Some x ⇒ compose_ap g h apg aph c (Option c) (compose_pure g h apg aph (c -> Option c) (Some c)) (cmp_traverse_action g h apg a b c t1 t2 x)
+  }
 
-**`DS-8c`'s spec — the concrete closing plan, so the follow-on is a
-scoped prerequisite, not an open "later":**
+fn option_traverse_composed_rhs (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) (mx : Option a) : Compose g h (Option c) =
+  apg.functor.map (Option b) (h (Option c)) (option_traverse h aph b c t2) (option_traverse g apg a b t1 mx)
 
-1. Rewrite the triple-composed crossing function (`cmp_level2_fused_map`
-   → a third level's fused `aph`-level composition) via `aph.map_coh`,
-   applied pointwise, into pure `ap`/`pure` form.
-2. Apply `aph.ap_cmp` itself as a TRIPLE-pointwise function equality
-   (the SAME `eq_at_pi` promotion `§9.4`/`§9.5` already use single- and
-   double-pointwise for `ap_ich`/`ap_naturality`, one level deeper).
-3. Lift that equality through three nested `apg` applications
-   (`functor.map`, then two `ap`s).
-4. Reconcile the result against the already-free RHS (`apg.ap_cmp`
-   instantiated at `uP`/`vP`/`W` — `uP := apg.functor.map (aph.ap b c)
-   U`, `vP := apg.functor.map (aph.ap a b) V`, the same "uprime" shape
-   `§9.4`'s `ap_ich` already uses) by splitting the triple application
-   back into the `uP`/`vP` shape.
+fn otc_none_ap_pure_form (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) : Compose g h (Option c) =
+  apg.ap (Option b) (h (Option c)) (apg.pure (Option b -> h (Option c)) (option_traverse h aph b c t2)) (apg.pure (Option b) (None b))
 
-Once `DS-8c` lands `Compose`'s `ap_cmp` (a `compose_ap_cmp` lemma, the
-same explicit-dict shape as `compose_ap_id`/`compose_ap_hom`/
-`compose_ap_ich` above), the composition coherence law itself is proved
-the SAME way every other law in this entry is — over explicit
-`compose_pure`/`compose_ap` operations threaded with explicit `apg`/
-`aph` dicts, by the same `list_traverse`/`option_traverse` induction
-shape as `§9.2`'s identity/naturality proofs. It does NOT need, and
-DS-8c does NOT deliver, a surface `instance Applicative (Compose g h)`
-— that instance's head hits the identical free-`g`/`h` kinding wall
-`§9.4` documents for `Functor`, independent of whether `ap_cmp` is
-proved (landing `ap_cmp` does nothing to resolve a head-kinding issue).
-Every Compose-typed law in this entry, proved and deferred alike, is
-and will remain stated over the explicit-dictionary operations, never
-through instance search.
+fn otc_none_step1 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) :
+  Equal (Compose g h (Option c))
+    (option_traverse_composed_rhs g h apg aph a b c t1 t2 (None a))
+    (otc_none_ap_pure_form g h apg aph a b c t1 t2) =
+  apg.map_coh (Option b) (h (Option c)) (option_traverse h aph b c t2) (apg.pure (Option b) (None b))
 
-**Scope the "lawful `Traversable`" claim precisely.** `List`/`Option`'s
-`Traversable` instances (`§9.1`) satisfy the **identity** and
-**naturality** coherence laws (`§9.2`, both proved) — they are not yet
-claimed "fully lawful `Traversable`" in the sense of all three `§5.3`
-laws; composition is the one outstanding law, tracked by `DS-8c`.
+fn otc_none_step2 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) :
+  Equal (Compose g h (Option c))
+    (otc_none_ap_pure_form g h apg aph a b c t1 t2)
+    (option_traverse_composed g h apg aph a b c t1 t2 (None a)) =
+  apg.ap_hom (Option b) (h (Option c)) (option_traverse h aph b c t2) (None b)
 
-### 9.7 Findings
+fn option_traverse_composition_none (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) :
+  Equal (Compose g h (Option c))
+    (option_traverse_composed g h apg aph a b c t1 t2 (None a))
+    (option_traverse_composed_rhs g h apg aph a b c t1 t2 (None a)) =
+  sym (Compose g h (Option c))
+    (option_traverse_composed_rhs g h apg aph a b c t1 t2 (None a))
+    (option_traverse_composed g h apg aph a b c t1 t2 (None a))
+    (trans (Compose g h (Option c))
+      (option_traverse_composed_rhs g h apg aph a b c t1 t2 (None a))
+      (otc_none_ap_pure_form g h apg aph a b c t1 t2)
+      (option_traverse_composed g h apg aph a b c t1 t2 (None a))
+      (otc_none_step1 g h apg aph a b c t1 t2)
+      (otc_none_step2 g h apg aph a b c t1 t2))
+
+fn otc_some_map_pure (g : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (t1 : a -> g b) (x : a) : g (Option b) =
+  apg.functor.map b (Option b) (Some b) (t1 x)
+
+fn otc_some_ap_pure (g : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (t1 : a -> g b) (x : a) : g (Option b) =
+  apg.ap b (Option b) (apg.pure (b -> Option b) (Some b)) (t1 x)
+
+fn otc_some_stepA (g : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (t1 : a -> g b) (x : a) :
+  Equal (g (Option b))
+    (otc_some_ap_pure g apg a b t1 x)
+    (otc_some_map_pure g apg a b t1 x) =
+  sym (g (Option b))
+    (otc_some_map_pure g apg a b t1 x)
+    (otc_some_ap_pure g apg a b t1 x)
+    (apg.map_coh b (Option b) (Some b) (t1 x))
+
+fn otc_some_rhs (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) (x : a) : Compose g h (Option c) =
+  apg.functor.map (Option b) (h (Option c)) (option_traverse h aph b c t2) (otc_some_ap_pure g apg a b t1 x)
+
+fn otc_some_mapped (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) (x : a) : Compose g h (Option c) =
+  apg.functor.map (Option b) (h (Option c)) (option_traverse h aph b c t2) (otc_some_map_pure g apg a b t1 x)
+
+fn otc_some_stepB (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) (x : a) :
+  Equal (Compose g h (Option c))
+    (otc_some_rhs g h apg aph a b c t1 t2 x)
+    (otc_some_mapped g h apg aph a b c t1 t2 x) =
+  cong (g (Option b)) (Compose g h (Option c))
+    (apg.ap b (Option b) (apg.pure (b -> Option b) (Some b)) (t1 x))
+    (otc_some_map_pure g apg a b t1 x)
+    (λy. apg.functor.map (Option b) (h (Option c)) (option_traverse h aph b c t2) y)
+    (otc_some_stepA g apg a b t1 x)
+
+fn otc_some_fused (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) (x : a) : Compose g h (Option c) =
+  apg.functor.map b (h (Option c)) (comp b (Option b) (h (Option c)) (option_traverse h aph b c t2) (Some b)) (t1 x)
+
+fn otc_some_stepC (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) (x : a) :
+  Equal (Compose g h (Option c))
+    (otc_some_mapped g h apg aph a b c t1 t2 x)
+    (otc_some_fused g h apg aph a b c t1 t2 x) =
+  sym (Compose g h (Option c))
+    (otc_some_fused g h apg aph a b c t1 t2 x)
+    (otc_some_mapped g h apg aph a b c t1 t2 x)
+    (apg.functor.fusion_law b (Option b) (h (Option c)) (option_traverse h aph b c t2) (Some b) (t1 x))
+
+-- `option_traverse_composed`'s own Some-arm goes through `compose_ap`
+-- wrapping a `compose_pure`d function — an ABSTRACT `apg`/`aph`-level
+-- reduction, never free for an opaque dict; bridged via `compose_map_coh`
+-- (this entry's own law, `§9.4`), not assumed.
+fn otc_some_compose_map_form (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) (x : a) : Compose g h (Option c) =
+  compose_map g h apg aph c (Option c) (Some c) (cmp_traverse_action g h apg a b c t1 t2 x)
+
+fn otc_some_step0 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) (x : a) :
+  Equal (Compose g h (Option c))
+    (option_traverse_composed g h apg aph a b c t1 t2 (Some a x))
+    (otc_some_compose_map_form g h apg aph a b c t1 t2 x) =
+  sym (Compose g h (Option c))
+    (otc_some_compose_map_form g h apg aph a b c t1 t2 x)
+    (option_traverse_composed g h apg aph a b c t1 t2 (Some a x))
+    (compose_map_coh g h apg aph c (Option c) (Some c) (cmp_traverse_action g h apg a b c t1 t2 x))
+
+fn otc_some_raw_map (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) (x : a) : g (h (Option c)) =
+  apg.functor.map (h c) (h (Option c)) (aph.functor.map c (Option c) (Some c)) (cmp_traverse_action g h apg a b c t1 t2 x)
+
+fn otc_some_step0b (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) (x : a) :
+  Equal (Compose g h (Option c))
+    (otc_some_compose_map_form g h apg aph a b c t1 t2 x)
+    (otc_some_raw_map g h apg aph a b c t1 t2 x) =
+  Refl
+
+fn otc_some_fused_raw (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) (x : a) : g (h (Option c)) =
+  apg.functor.map b (h (Option c)) (comp b (h c) (h (Option c)) (aph.functor.map c (Option c) (Some c)) t2) (t1 x)
+
+fn otc_some_step1 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) (x : a) :
+  Equal (Compose g h (Option c))
+    (otc_some_raw_map g h apg aph a b c t1 t2 x)
+    (otc_some_fused_raw g h apg aph a b c t1 t2 x) =
+  sym (Compose g h (Option c))
+    (otc_some_fused_raw g h apg aph a b c t1 t2 x)
+    (otc_some_raw_map g h apg aph a b c t1 t2 x)
+    (apg.functor.fusion_law b (h c) (h (Option c)) (aph.functor.map c (Option c) (Some c)) t2 (t1 x))
+
+-- Pointwise: `option_traverse`'s own `Some`-arm reduction relates the
+-- opaque `aph.ap(pure …)` form to the plain `aph.functor.map` form —
+-- `aph.map_coh`, promoted to a function-level equality by kernel
+-- conversion at the `Π` type (the `eq_at_pi` technique, `§9.8` Findings).
+fn otc_some_aph_map (h : Type -> Type) (aph : Applicative h) (b : Type) (c : Type) (t2 : b -> h c) (y : b) : h (Option c) =
+  aph.functor.map c (Option c) (Some c) (t2 y)
+
+fn otc_some_ptwise (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (b : Type) (c : Type) (t2 : b -> h c) (y : b) :
+  Equal (h (Option c))
+    (otc_some_aph_map h aph b c t2 y)
+    (option_traverse h aph b c t2 (Some b y)) =
+  aph.map_coh c (Option c) (Some c) (t2 y)
+
+fn otc_some_step2 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) (x : a) :
+  Equal (Compose g h (Option c))
+    (otc_some_fused_raw g h apg aph a b c t1 t2 x)
+    (otc_some_fused g h apg aph a b c t1 t2 x) =
+  cong (b -> h (Option c)) (Compose g h (Option c))
+    (comp b (h c) (h (Option c)) (aph.functor.map c (Option c) (Some c)) t2)
+    (comp b (Option b) (h (Option c)) (option_traverse h aph b c t2) (Some b))
+    (λf. apg.functor.map b (h (Option c)) f (t1 x))
+    (otc_some_ptwise g h apg aph b c t2)
+
+fn option_traverse_composition_some (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) (x : a) :
+  Equal (Compose g h (Option c))
+    (option_traverse_composed g h apg aph a b c t1 t2 (Some a x))
+    (option_traverse_composed_rhs g h apg aph a b c t1 t2 (Some a x)) =
+  sym (Compose g h (Option c))
+    (option_traverse_composed_rhs g h apg aph a b c t1 t2 (Some a x))
+    (option_traverse_composed g h apg aph a b c t1 t2 (Some a x))
+    (trans (Compose g h (Option c))
+      (option_traverse_composed_rhs g h apg aph a b c t1 t2 (Some a x))
+      (otc_some_mapped g h apg aph a b c t1 t2 x)
+      (option_traverse_composed g h apg aph a b c t1 t2 (Some a x))
+      (otc_some_stepB g h apg aph a b c t1 t2 x)
+      (trans (Compose g h (Option c))
+        (otc_some_mapped g h apg aph a b c t1 t2 x)
+        (otc_some_fused g h apg aph a b c t1 t2 x)
+        (option_traverse_composed g h apg aph a b c t1 t2 (Some a x))
+        (otc_some_stepC g h apg aph a b c t1 t2 x)
+        (sym (Compose g h (Option c))
+          (option_traverse_composed g h apg aph a b c t1 t2 (Some a x))
+          (otc_some_fused g h apg aph a b c t1 t2 x)
+          (trans (Compose g h (Option c))
+            (option_traverse_composed g h apg aph a b c t1 t2 (Some a x))
+            (otc_some_fused_raw g h apg aph a b c t1 t2 x)
+            (otc_some_fused g h apg aph a b c t1 t2 x)
+            (trans (Compose g h (Option c))
+              (option_traverse_composed g h apg aph a b c t1 t2 (Some a x))
+              (otc_some_raw_map g h apg aph a b c t1 t2 x)
+              (otc_some_fused_raw g h apg aph a b c t1 t2 x)
+              (trans (Compose g h (Option c))
+                (option_traverse_composed g h apg aph a b c t1 t2 (Some a x))
+                (otc_some_compose_map_form g h apg aph a b c t1 t2 x)
+                (otc_some_raw_map g h apg aph a b c t1 t2 x)
+                (otc_some_step0 g h apg aph a b c t1 t2 x)
+                (otc_some_step0b g h apg aph a b c t1 t2 x))
+              (otc_some_step1 g h apg aph a b c t1 t2 x))
+            (otc_some_step2 g h apg aph a b c t1 t2 x)))))
+
+fn option_traverse_composition (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) (mx : Option a) :
+  Equal (Compose g h (Option c))
+    (option_traverse_composed g h apg aph a b c t1 t2 mx)
+    (option_traverse_composed_rhs g h apg aph a b c t1 t2 mx) =
+  match mx {
+    None ⇒ option_traverse_composition_none g h apg aph a b c t1 t2 ;
+    Some x ⇒ option_traverse_composition_some g h apg aph a b c t1 t2 x
+  }
+```
+
+### 9.8 Findings
 
 - **AC6 confirmed, with a landed-mechanism correction along the way.**
   `traverse`'s `proc` classification and the `∅ ⊆ proc` instance-field
@@ -2425,7 +2571,7 @@ laws; composition is the one outstanding law, tracked by `DS-8c`.
   judgment calls for the operator's log, not unilateral scope changes —
   flagged to the ring at each step before acting.
 
-### 9.8 References
+### 9.9 References
 
 Same sources as `§7` (`Applicative`/`Monad`'s own references apply
 identically to `Traversable`, which is the same family); additionally:
