@@ -267,7 +267,7 @@ fn collect_consts_in_tb(
                 out.insert(*id);
             }
         }
-        Term::Var(_) | Term::Type(_) | Term::Omega(_) => {}
+        Term::Var(_) | Term::Type(_) | Term::Omega(_) | Term::IntLit(_) => {}
         Term::Pi(a, b) | Term::Lam(a, b) | Term::Sigma(a, b) | Term::Pair(a, b)
         | Term::App(a, b) => {
             collect_consts_in_tb(a, tb, out);

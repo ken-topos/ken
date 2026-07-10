@@ -9,3 +9,8 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+# Kernel-native Int literal (Term::IntLit) — canonical arbitrary-precision
+# value for the Eq-Int value-reduction arm. Same exact pin ken-interp
+# already uses (ADR 0009 curate-not-construct); see
+# docs/program/dependency-deltas.md for the vetting record.
+num-bigint = "=0.4.6"

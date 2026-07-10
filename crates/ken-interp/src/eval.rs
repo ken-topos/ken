@@ -625,7 +625,8 @@ fn term_var_free(t: &Term, target: usize) -> bool {
         | Term::Omega(_)
         | Term::Const { .. }
         | Term::IndFormer { .. }
-        | Term::Constructor { .. } => false,
+        | Term::Constructor { .. }
+        | Term::IntLit(_) => false,
     }
 }
 

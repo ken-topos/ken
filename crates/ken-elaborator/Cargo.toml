@@ -15,3 +15,8 @@ serde_json = "1"
 
 [dev-dependencies]
 ken-interp = { path = "../ken-interp" }
+# Test-only: constructs BigInt test values for checked_core.rs's IntLit
+# encode/decode round-trip test. Same already-vetted pin
+# ken-kernel/ken-interp use (docs/program/dependency-deltas.md); dev-only,
+# not part of the shipped tool-chain, so no separate delta record.
+num-bigint = "=0.4.6"

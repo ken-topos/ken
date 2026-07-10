@@ -107,7 +107,8 @@ pub fn shift(term: &Term, d: i64, cutoff: usize) -> Term {
         | Term::Omega(_)
         | Term::Const { .. }
         | Term::IndFormer { .. }
-        | Term::Constructor { .. } => term.clone(),
+        | Term::Constructor { .. }
+        | Term::IntLit(_) => term.clone(),
     }
 }
 
@@ -206,7 +207,8 @@ pub fn subst_var(term: &Term, j: usize, u: &Term) -> Term {
         | Term::Omega(_)
         | Term::Const { .. }
         | Term::IndFormer { .. }
-        | Term::Constructor { .. } => term.clone(),
+        | Term::Constructor { .. }
+        | Term::IntLit(_) => term.clone(),
     }
 }
 
@@ -344,7 +346,8 @@ pub fn subst_outer(term: &Term, m: usize, params: &[Term], inner_depth: usize) -
         | Term::Omega(_)
         | Term::Const { .. }
         | Term::IndFormer { .. }
-        | Term::Constructor { .. } => term.clone(),
+        | Term::Constructor { .. }
+        | Term::IntLit(_) => term.clone(),
     }
 }
 
@@ -530,10 +533,11 @@ pub fn subst_levels(term: &Term, params: &[LevelVar], args: &[Level]) -> Term {
             Box::new(subst_levels(proof, params, args)),
         ),
         // `Ω_ℓ` carries a level that may mention level params (`12 §4`); the
-        // other leaves have no level fields. `Var` is not de Bruijn-shifted by
-        // level instantiation.
+        // other leaves have no level fields. `Var`/`IntLit` are not de
+        // Bruijn-shifted (`IntLit`) or level-parametric (`IntLit` has no
+        // `level_args`) by level instantiation.
         Term::Omega(l) => Term::Omega(subst_level(l, params, args)),
-        Term::Var(_) => term.clone(),
+        Term::Var(_) | Term::IntLit(_) => term.clone(),
     }
 }
 

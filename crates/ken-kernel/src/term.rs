@@ -245,6 +245,14 @@ pub enum Term {
         id: GlobalId,
         level_args: Vec<Level>,
     },
+    /// A checked integer literal — a canonical `Int` value, closed (no
+    /// sub-terms, no de Bruijn content) and already in weak-head normal
+    /// form. Its type is the primitive registered via
+    /// [`crate::env::GlobalEnv::register_int_lit_type`] (`docs/adr/
+    /// 0013-int-decidable-equality-kernel-posture.md` Layer 2); `Eq` at
+    /// that primitive decides two `IntLit`s by `BigInt` value equality
+    /// (`crate::obs::eq_reduce`).
+    IntLit(num_bigint::BigInt),
 
     // --- Inductive formers & constructors (`14`) ---
     /// A use of an inductive type former `D` with explicit level arguments.
@@ -399,6 +407,7 @@ impl Term {
         match self {
             Term::Type(_) | Term::Omega(_) | Term::Var(_) => Vec::new(),
             Term::Const { .. } | Term::IndFormer { .. } | Term::Constructor { .. } => Vec::new(),
+            Term::IntLit(_) => Vec::new(),
             Term::Elim {
                 params,
                 motive,
@@ -444,6 +453,7 @@ impl fmt::Debug for Term {
             Term::Type(l) => write!(f, "Type {:?}", l),
             Term::Omega(l) => write!(f, "Ω{:?}", l),
             Term::Var(i) => write!(f, "@{}", i),
+            Term::IntLit(n) => write!(f, "{}", n),
             Term::Const { id, level_args } => {
                 write!(f, "{:?}", id)?;
                 fmt_level_args(f, level_args)

@@ -514,6 +514,7 @@ dependencies = [
  "ken-interp",
  "ken-kernel",
  "ken-runtime",
+ "num-bigint",
  "serde_json",
 ]
 
@@ -538,6 +539,9 @@ dependencies = [
 [[package]]
 name = "ken-kernel"
 version = "0.0.0"
+dependencies = [
+ "num-bigint",
+]
 
 [[package]]
 name = "ken-runtime"
