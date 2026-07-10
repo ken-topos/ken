@@ -3179,13 +3179,18 @@ fn check_instance_field_purity(
     let inferred = infer_expr_row_type(expr, effect_rows, Some(&projection_ctx));
     let impure = !is_empty_closed_row(&inferred);
     match keyword {
-        DefKeyword::Proc if !impure => Err(ElabError::TypeMismatch {
-            span: span.clone(),
-            reason: format!(
-                "class field `{}.{}` requires `proc` but instance implementation is pure",
-                class_name, field_name
-            ),
-        }),
+        // DS-8b (`docs/program/wp/ds-8b-pure-into-proc-widening.md`):
+        // covariant subsumption `∅ ⊆ open row` (SURF-1 §1.6 do-not-optimize)
+        // — a `proc` field's contract is "may be effectful," and a pure
+        // (`∅`-row) witness is a valid, more precise inhabitant of that
+        // contract. There used to be a `DefKeyword::Proc if !impure => Err`
+        // arm here (an exact-match gate that rejected every pure witness for
+        // a `proc` field, leaving e.g. `class Traversable`'s row-polymorphic
+        // `proc traverse` field with NO possible lawful instance — every
+        // real witness like `list_traverse` is genuinely pure). Removed:
+        // a pure witness for a `proc` field now falls through to the
+        // catch-all `Ok(())` below, same as it already did for an impure
+        // witness. The DANGEROUS direction is untouched — see the next arm.
         DefKeyword::Const | DefKeyword::Fn if impure => {
             let declared = class_field_declared_row(keyword, field_name);
             let decl = crate::effects::EffectDecl::new(&format!("{}.{}", class_name, field_name))
