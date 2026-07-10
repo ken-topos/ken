@@ -7,6 +7,7 @@ fn main() {
     match args.get(1).map(|s| s.as_str()).unwrap_or("") {
         "repl" => repl::run(),
         "run" => run_file(args.get(2).map(|s| s.as_str())),
+        "check" => check_file(args.get(2).map(|s| s.as_str())),
         "version" | "--version" | "-V" => {
             println!("ken {} — verified topos-oriented language", env!("CARGO_PKG_VERSION"));
             println!("kernel {}", ken_kernel::version());
@@ -20,19 +21,18 @@ fn main() {
     }
 }
 
-/// `ken run <file>` — elaborate, evaluate, and drive a Console IO program.
-///
-/// Elaborates every declaration in `<file>` in order, then evaluates the last
-/// top-level definition and runs it through the Console effect driver (`42 §6`).
-///
-/// Console IDs are harvested from the elaboration environment (`ElabEnv::globals`).
-/// Until the Language layer registers ITree/Console.Op, this returns an error.
-fn run_file(path: Option<&str>) {
+/// Read `<file>` and elaborate it (`` .ken.md `` via the literate path,
+/// otherwise the plain `.ken` path) — the shared front half of both `ken run`
+/// and `ken check`. Exits 1 on a missing argument, an unreadable file,
+/// elaborator init failure, or an elaboration error, with a message prefixed
+/// by `cmd` (`"run"`/`"check"`) so a user sees the subcommand they actually
+/// typed, not a borrowed one.
+fn elaborate_cli_file(cmd: &str, path: Option<&str>) -> (String, ken_elaborator::ElabEnv, Vec<ken_kernel::GlobalId>) {
     let path = match path {
         Some(p) => p,
         None => {
-            eprintln!("ken run: missing <file> argument");
-            eprintln!("Usage: ken run <file.ken>");
+            eprintln!("ken {cmd}: missing <file> argument");
+            eprintln!("Usage: ken {cmd} <file.ken>");
             std::process::exit(1);
         }
     };
@@ -40,7 +40,7 @@ fn run_file(path: Option<&str>) {
     let src = match std::fs::read_to_string(path) {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("ken run: cannot read '{}': {}", path, e);
+            eprintln!("ken {cmd}: cannot read '{}': {}", path, e);
             std::process::exit(1);
         }
     };
@@ -48,7 +48,7 @@ fn run_file(path: Option<&str>) {
     let mut elab_env = match ken_elaborator::ElabEnv::new() {
         Ok(e) => e,
         Err(e) => {
-            eprintln!("ken run: elaborator init failed: {:?}", e);
+            eprintln!("ken {cmd}: elaborator init failed: {:?}", e);
             std::process::exit(1);
         }
     };
@@ -62,10 +62,40 @@ fn run_file(path: Option<&str>) {
     let ids = match ids_result {
         Ok(ids) => ids,
         Err(e) => {
-            eprintln!("ken run: elaboration error in '{}': {:?}", path, e);
+            eprintln!("ken {cmd}: elaboration error in '{}': {:?}", path, e);
             std::process::exit(1);
         }
     };
+
+    (path.to_string(), elab_env, ids)
+}
+
+/// `ken check <file>` — FR-3 (`docs/program/wp/ds-1-findings-remediation.md`):
+/// a library check-mode for pure-library catalog entries, which have no
+/// natural IO `main` and so cannot satisfy `ken run`'s literal exit-0
+/// contract. Runs the identical `elaborate_ken_md_file`/`elaborate_file` path
+/// `ken run` calls before its own separate IO-execution step, then stops
+/// before the IO-drive — no new checking logic, the fence-role verdicts
+/// (`ken reject` must fail, `ken example` must elaborate) are already that
+/// call's job. Exits 0 iff elaboration + every fence behaved; inherits the
+/// shared front half's `Err -> exit 1` verbatim. Never drives IO, so a
+/// runnable program's `main` is simply never executed here (`ken run` is
+/// still how you run it) — `ken run` itself is unchanged, strict, and has no
+/// auto-detect fallthrough to this mode.
+fn check_file(path: Option<&str>) {
+    elaborate_cli_file("check", path);
+}
+
+/// `ken run <file>` — elaborate, evaluate, and drive a Console IO program.
+///
+/// Elaborates every declaration in `<file>` in order, then evaluates the last
+/// top-level definition and runs it through the Console effect driver (`42 §6`).
+///
+/// Console IDs are harvested from the elaboration environment (`ElabEnv::globals`).
+/// Until the Language layer registers ITree/Console.Op, this returns an error.
+fn run_file(path: Option<&str>) {
+    let (path, elab_env, ids) = elaborate_cli_file("run", path);
+    let path = path.as_str();
 
     let main_id = match ids.last() {
         Some(&id) => id,
@@ -371,10 +401,12 @@ fn print_help() {
     println!("Usage: ken <subcommand>");
     println!();
     println!("Subcommands:");
-    println!("  run <file>  Elaborate and run a Ken source file (Console IO)");
-    println!("  repl        Start the interactive REPL (the Little Prover loop)");
-    println!("  version     Print version and kernel information");
-    println!("  help        Print this message");
+    println!("  run <file>    Elaborate and run a Ken source file (Console IO)");
+    println!("  check <file>  Elaborate a Ken source file and verify its fences,");
+    println!("                without driving IO (for pure-library entries)");
+    println!("  repl          Start the interactive REPL (the Little Prover loop)");
+    println!("  version       Print version and kernel information");
+    println!("  help          Print this message");
 }
 
 #[cfg(test)]
