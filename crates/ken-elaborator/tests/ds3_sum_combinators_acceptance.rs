@@ -16,8 +16,8 @@ const LAWFUL_CLASSES_KEN_MD: &str =
     include_str!("../../../catalog/packages/Core/LawfulClasses.ken.md");
 const COLLECTIONS_KEN: &str =
     include_str!("../../../catalog/packages/Data/Collections/Collections.ken");
-const LAWFUL_FUNCTORS_KEN: &str =
-    include_str!("../../../catalog/packages/Core/LawfulFunctors.ken");
+const LAWFUL_FUNCTORS_KEN_MD: &str =
+    include_str!("../../../catalog/packages/Core/LawfulFunctors.ken.md");
 const SUMS_KEN: &str = include_str!("../../../catalog/packages/Data/Sums/Sums.ken");
 
 fn base_env() -> ElabEnv {
@@ -25,7 +25,7 @@ fn base_env() -> ElabEnv {
     env.elaborate_ken_md_file(TRANSPORT_KEN_MD).expect("Core/Transport.ken must elaborate");
     env.elaborate_ken_md_file(LAWFUL_CLASSES_KEN_MD).expect("Core/LawfulClasses.ken must elaborate");
     env.elaborate_file(COLLECTIONS_KEN).expect("Data/Collections/Collections.ken must elaborate");
-    env.elaborate_file(LAWFUL_FUNCTORS_KEN).expect("Core/LawfulFunctors.ken must elaborate");
+    env.elaborate_ken_md_file(LAWFUL_FUNCTORS_KEN_MD).expect("Core/LawfulFunctors.ken.md must elaborate");
     env.elaborate_file(SUMS_KEN).expect("Data/Sums/Sums.ken must elaborate");
     env
 }
@@ -73,7 +73,7 @@ fn trusted_base_delta_is_empty_across_the_file() {
     env.elaborate_ken_md_file(TRANSPORT_KEN_MD).expect("Core/Transport.ken must elaborate");
     env.elaborate_ken_md_file(LAWFUL_CLASSES_KEN_MD).expect("Core/LawfulClasses.ken must elaborate");
     env.elaborate_file(COLLECTIONS_KEN).expect("Data/Collections/Collections.ken must elaborate");
-    env.elaborate_file(LAWFUL_FUNCTORS_KEN).expect("Core/LawfulFunctors.ken must elaborate");
+    env.elaborate_ken_md_file(LAWFUL_FUNCTORS_KEN_MD).expect("Core/LawfulFunctors.ken.md must elaborate");
     let before: std::collections::BTreeSet<_> = env.env.trusted_base().into_iter().collect();
     env.elaborate_file(SUMS_KEN).expect("Data/Sums/Sums.ken must elaborate");
     let after: std::collections::BTreeSet<_> = env.env.trusted_base().into_iter().collect();
