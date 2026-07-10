@@ -134,6 +134,19 @@ not papered over in prose no checker reads. Comments and surrounding prose
 remain for genuine narrative only — proof strategy, naming rationale, why a
 thing exists — never for the thing itself.
 
+## Casing: PascalCase class-like, snake_case instance-like
+
+Effective now for all NEW catalog authoring (operator-ruled, `ds-campaign-
+judgment-log.md` §L6; full standard and examples at
+`07-catalog-style-guide.md §9`): types, type classes, and data constructors
+are PascalCase (`Either`, `Functor`, `Left`/`Some`/`Ok`); functions,
+combinators, class methods, and record fields are snake_case
+(`get_or_else`, `map_err`, `concat_map`). This reverses the camelCase you'll
+see throughout already-landed catalog code — that's pre-L6 and **not** to be
+renamed on sight; the bulk casing pass rides the future `.ken`→`.ken.md`
+literate transformation. Write new identifiers to the standard; don't touch
+old ones incidentally while you're in a file for another reason.
+
 ## Validating a `.ken.md` file: `ken run` vs. `ken check`
 
 - **`ken run <file>`** — the file's last tangled declaration must be a
