@@ -230,10 +230,39 @@ fn list_right_unit ...
 Names tell a reviewer the abstraction, property, and role. Do not encode WP
 history into durable names.
 
+**Casing (operator-ruled, `ds-campaign-judgment-log.md` §L6, effective now for
+all NEW authoring).** Ken adopts the Python convention — class-like →
+PascalCase, instance-like → snake_case — over the FP-common all-camelCase, on
+the operator's readability judgment that it distinguishes class-like from
+instance-like at a glance and reads better for the far-more-common instance
+identifiers:
+
+- **PascalCase**: types/type-constructors (`Either`, `Option`, `Nat`, `List`,
+  `Vec`), type classes (`Functor`, `Applicative`, `Monad`, `Traversable`), and
+  **data constructors** (`Left`/`Right`/`Some`/`Ok`/`Cons`/`Suc`) — these are
+  class-ilk, they construct values.
+- **snake_case**: functions/combinators AND class methods/record fields —
+  these are instance-ilk. E.g. `getOrElse→get_or_else`, `isSome→is_some`,
+  `mapErr→map_err`, `andThen→and_then`, `unwrapOr→unwrap_or`,
+  `concatMap→concat_map`. A single-word name (`either`, `swap`, `zip`,
+  `foldl`, `map`, `ap`, `pure`) is already fine either way.
+- **Boundary calls:** data constructors follow types (Pascal); class
+  *methods* follow functions (snake).
+
+**Scope — forward directive only.** Write every NEW catalog `.ken`/`.ken.md`
+identifier to this standard. Do **not** rename identifiers in already-landed
+code to fix this now — the standard's own bulk renaming pass is deferred to
+ride the `.ken` → `.ken.md` literate transformation (one touch per file,
+casing + literate encoding together), owned by the Librarian. A camelCase
+name you find in landed code (this guide's own `compareChar` example below
+included) predates L6 and is not yet non-conformant-by-omission; it's queued
+for that pass, not a defect to fix on sight.
+
 - Lowercase identifiers for term/type parameters referenced in term bodies;
   capitalized identifiers are constructor-shaped in the current surface.
 - Public operations: stable domain/action names (`list_append`, `bool_and`,
-  `compareChar`).
+  `compareChar` — pre-L6, pending the casing pass; a new entry would spell
+  this `compare_char`).
 - Class fields: short and conventional when the class gives context (`map`,
   `foldr`, `assoc`, `left_unit`).
 - Public law proofs: subject plus law (`list_assoc`, `list_right_unit`,
