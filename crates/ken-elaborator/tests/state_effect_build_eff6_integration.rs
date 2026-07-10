@@ -44,13 +44,13 @@ fn ac2_runstate_next_post_increment_through_real_interp() {
     // RespEmpty : Empty -> Type = \_. Unit (never invoked -- Empty is uninhabited).
     let resp_empty = Term::lam(empty_ty.clone(), Term::indformer(p.unit_id, vec![]));
 
-    // Op = Sum (StateOp Nat) Empty ; Resp = resp_sum Nat Empty RespEmpty.
-    let sum_ty = apply_all(
-        Term::indformer(p.sum_id, vec![]),
+    // Op = Coproduct (StateOp Nat) Empty ; Resp = resp_coproduct Nat Empty RespEmpty.
+    let coproduct_ty = apply_all(
+        Term::indformer(p.coproduct_id, vec![]),
         &[Term::app(Term::indformer(p.state_op_id, vec![]), nat_ty.clone()), empty_ty.clone()],
     );
     let resp_ty = apply_all(
-        Term::const_(p.resp_sum_id, vec![]),
+        Term::const_(p.resp_coproduct_id, vec![]),
         &[nat_ty.clone(), empty_ty.clone(), resp_empty.clone()],
     );
 
@@ -74,10 +74,10 @@ fn ac2_runstate_next_post_increment_through_real_interp() {
         Term::constructor(p.ret_id, vec![]),
         &[
             apply_all(
-                Term::indformer(p.sum_id, vec![]),
+                Term::indformer(p.coproduct_id, vec![]),
                 &[Term::app(Term::indformer(p.state_op_id, vec![]), nat_ty.clone()), empty_ty.clone()],
             ),
-            apply_all(Term::const_(p.resp_sum_id, vec![]), &[nat_ty.clone(), empty_ty.clone(), resp_empty.clone()]),
+            apply_all(Term::const_(p.resp_coproduct_id, vec![]), &[nat_ty.clone(), empty_ty.clone(), resp_empty.clone()]),
             nat_ty.clone(),
             Term::var(1),
         ],
@@ -86,13 +86,13 @@ fn ac2_runstate_next_post_increment_through_real_interp() {
     // inner bind : ITree Op Resp Unit -> (Unit -> ITree Op Resp Nat) -> ITree Op Resp Nat
     let inner_bind = apply_all(
         Term::const_(p.bind_id, vec![]),
-        &[sum_ty.clone(), resp_ty.clone(), Term::indformer(p.unit_id, vec![]), nat_ty.clone(), put_call_ctx1, inner_cont],
+        &[coproduct_ty.clone(), resp_ty.clone(), Term::indformer(p.unit_id, vec![]), nat_ty.clone(), put_call_ctx1, inner_cont],
     );
     // outer: \n. inner_bind, wrapped as the continuation for the OUTER bind over `get`.
     let outer_cont = Term::lam(nat_ty.clone(), inner_bind);
     let next_body = apply_all(
         Term::const_(p.bind_id, vec![]),
-        &[sum_ty.clone(), resp_ty.clone(), nat_ty.clone(), nat_ty.clone(), get_call, outer_cont],
+        &[coproduct_ty.clone(), resp_ty.clone(), nat_ty.clone(), nat_ty.clone(), get_call, outer_cont],
     );
 
     let mut store = ken_interp::eval::EvalStore::new();

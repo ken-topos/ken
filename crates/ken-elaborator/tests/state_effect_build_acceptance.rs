@@ -11,7 +11,7 @@
 //! (no interior mutability) are verified out-of-band by `git diff`/`grep`,
 //! not by a unit test here. AC6 (no regression) is `cargo test --workspace`.
 
-use ken_elaborator::effects::state::{declare_bind, declare_get, declare_itree, declare_put, declare_resp_state, declare_resp_sum, declare_run_state, declare_state_op, declare_sum};
+use ken_elaborator::effects::state::{declare_bind, declare_get, declare_itree, declare_put, declare_resp_state, declare_resp_coproduct, declare_run_state, declare_state_op, declare_coproduct};
 use ken_kernel::{declare_inductive, infer, normalize, CtorSpec, GlobalEnv, GlobalId, InductiveSpec, Level, Term};
 use ken_kernel::env::Context;
 
@@ -43,13 +43,13 @@ fn full_state_prelude_declares_and_typechecks() {
 
     let (itree_id, ret_id, vis_id) = declare_itree(&mut env).expect("ITree");
     let (state_op_id, get_id, put_id) = declare_state_op(&mut env).expect("StateOp");
-    let (sum_id, inl_id, inr_id) = declare_sum(&mut env).expect("Sum");
+    let (coproduct_id, inl_id, inr_id) = declare_coproduct(&mut env).expect("Coproduct");
     let resp_state_id = declare_resp_state(&mut env, state_op_id, unit_id).expect("resp_state");
-    let resp_sum_id = declare_resp_sum(&mut env, sum_id).expect("resp_sum");
+    let resp_coproduct_id = declare_resp_coproduct(&mut env, coproduct_id).expect("resp_coproduct");
     let bind_id = declare_bind(&mut env, itree_id, vis_id).expect("bind");
     let run_state_id = declare_run_state(
-        &mut env, itree_id, ret_id, vis_id, state_op_id, get_id, put_id, sum_id, inl_id, inr_id,
-        resp_state_id, resp_sum_id, unit_id, mkunit_id,
+        &mut env, itree_id, ret_id, vis_id, state_op_id, get_id, put_id, coproduct_id, inl_id, inr_id,
+        resp_state_id, resp_coproduct_id, unit_id, mkunit_id,
     )
     .expect("runState");
 
@@ -65,12 +65,12 @@ fn full_state_prelude_declares_and_typechecks() {
     let ty = infer(&env, &ctx, &resp_state_app).expect("resp_state application should typecheck");
     assert_eq!(normalize(&env, &ctx, &ty), Term::ty(lv0()));
 
-    // resp_sum is now the GENERAL `(g h:Type)->(rg:g->Type)->(rh:h->Type)->
-    // Sum g h -> Type` (`effect-composition` D1) — 4 explicit args before the
-    // still-curried `Sum g h -> Type` result.
+    // resp_coproduct is now the GENERAL `(g h:Type)->(rg:g->Type)->(rh:h->Type)->
+    // Coproduct g h -> Type` (`effect-composition` D1) — 4 explicit args before the
+    // still-curried `Coproduct g h -> Type` result.
     let const_unit_fn = Term::lam(Term::indformer(unit_id, vec![]), Term::indformer(unit_id, vec![]));
-    let resp_sum_app = apply(
-        Term::const_(resp_sum_id, vec![]),
+    let resp_coproduct_app = apply(
+        Term::const_(resp_coproduct_id, vec![]),
         &[
             Term::indformer(unit_id, vec![]),
             Term::indformer(unit_id, vec![]),
@@ -78,18 +78,18 @@ fn full_state_prelude_declares_and_typechecks() {
             const_unit_fn,
         ],
     );
-    let ty2 = infer(&env, &ctx, &resp_sum_app).expect("resp_sum (partially applied) should typecheck");
+    let ty2 = infer(&env, &ctx, &resp_coproduct_app).expect("resp_coproduct (partially applied) should typecheck");
     match ty2 {
         Term::Pi(_, _) => {}
         other => panic!("expected a Pi type, got {other:?}"),
     }
 
     let get_fn_id = declare_get(
-        &mut env, itree_id, ret_id, vis_id, state_op_id, get_id, sum_id, inl_id, resp_sum_id, resp_state_id, unit_id,
+        &mut env, itree_id, ret_id, vis_id, state_op_id, get_id, coproduct_id, inl_id, resp_coproduct_id, resp_state_id, unit_id,
     )
     .expect("get");
     let put_fn_id = declare_put(
-        &mut env, itree_id, ret_id, vis_id, state_op_id, put_id, sum_id, inl_id, resp_sum_id, resp_state_id, unit_id,
+        &mut env, itree_id, ret_id, vis_id, state_op_id, put_id, coproduct_id, inl_id, resp_coproduct_id, resp_state_id, unit_id,
         mkunit_id,
     )
     .expect("put");

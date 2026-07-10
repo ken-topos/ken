@@ -27,11 +27,11 @@
 const Eff : Type = Unit
 fn RespEff (u : Eff) : Type = Unit
 
-const Op : Type = Sum (StateOp Nat) Eff
--- `resp_sum` is now the GENERAL `(g h:Type)->(rg:g->Type)->(rh:h->Type)->
--- Sum g h -> Type` (`effect-composition` D1) -- State is the literal
--- instance `resp_sum (StateOp Nat) Eff (resp_state Nat) RespEff`.
-const Resp : Op → Type = resp_sum (StateOp Nat) Eff (resp_state Nat) RespEff
+const Op : Type = Coproduct (StateOp Nat) Eff
+-- `resp_coproduct` is now the GENERAL `(g h:Type)->(rg:g->Type)->(rh:h->Type)->
+-- Coproduct g h -> Type` (`effect-composition` D1) -- State is the literal
+-- instance `resp_coproduct (StateOp Nat) Eff (resp_state Nat) RespEff`.
+const Resp : Op → Type = resp_coproduct (StateOp Nat) Eff (resp_state Nat) RespEff
 
 fn addNat (a : Nat) (b : Nat) : Nat =
   match a { Zero ⇒ b ; Suc a2 ⇒ Suc (addNat a2 b) }

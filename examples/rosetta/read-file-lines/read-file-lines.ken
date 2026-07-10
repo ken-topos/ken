@@ -14,13 +14,13 @@
 --
 -- GENUINE COMPOSITION (effect-composition D1-D4, retires the prior "FS-read
 -- + pure-parse, NOT effect composition" asterisk): `main` performs the
--- `[FS]` read AND the `[Console]` printing in ONE type-checked `ITree (Sum
--- (FSOp APartial) ConsoleOp) (resp_sum ...) (Result IOError Unit)`, built at
--- the surface via `injectL`/`injectR` (the general `g ↪ Sum g h` / `h ↪ Sum
+-- `[FS]` read AND the `[Console]` printing in ONE type-checked `ITree (Coproduct
+-- (FSOp APartial) ConsoleOp) (resp_coproduct ...) (Result IOError Unit)`, built at
+-- the surface via `injectL`/`injectR` (the general `g ↪ Coproduct g h` / `h ↪ Coproduct
 -- g h` inclusions, `36 §2.4`'s `incl`) sequenced with the homogeneous
 -- `bind`. `run_io`'s coproduct-aware terminal driver (D3) strips the
 -- `InL`/`InR` tags down to each real base op and dispatches both effects
--- through the SAME loop -- no hand-fed `Sum` anywhere in this file. On a
+-- through the SAME loop -- no hand-fed `Coproduct` anywhere in this file. On a
 -- denied/insufficient capability or a missing file, `main` does NOT print
 -- (fail-closed) and instead returns `Err e`, which `ken-cli`'s post-run
 -- render still surfaces as a non-zero exit with the exact `IOError` variant
@@ -78,12 +78,12 @@ fn lines (s : String) : List String =
   mapListCharToString (dropTrailingEmpty (splitNL (string_to_list_char s)))
 
 -- `Compose r` -- the composed FS+Console tree, abbreviating the coproduct
--- `ITree (Sum (FSOp APartial) ConsoleOp) (resp_sum ...) r` for readability
+-- `ITree (Coproduct (FSOp APartial) ConsoleOp) (resp_coproduct ...) r` for readability
 -- (a plain `view` alias, reduces transparently -- same pattern `FS`/`IO`
 -- already use).
 const Compose (r : Type) : Type =
-  ITree (Sum (FSOp APartial) ConsoleOp)
-        (resp_sum (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp)
+  ITree (Coproduct (FSOp APartial) ConsoleOp)
+        (resp_coproduct (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp)
         r
 
 -- prints each line via `[Console]`, sequenced through the continuation one
@@ -92,12 +92,12 @@ const Compose (r : Type) : Type =
 proc printLines (xs : List String) : Compose (Result IOError Unit) visits [Console] =
   match xs {
     Nil ⇒
-      Ret (Sum (FSOp APartial) ConsoleOp)
-          (resp_sum (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp)
+      Ret (Coproduct (FSOp APartial) ConsoleOp)
+          (resp_coproduct (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp)
           (Result IOError Unit) (Ok IOError Unit MkUnit) ;
     Cons x xs' ⇒
-      bind (Sum (FSOp APartial) ConsoleOp)
-           (resp_sum (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp)
+      bind (Coproduct (FSOp APartial) ConsoleOp)
+           (resp_coproduct (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp)
            Unit (Result IOError Unit)
         (injectR (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp Unit (print_line x))
         (λ_ . printLines xs')
@@ -108,15 +108,15 @@ proc printLines (xs : List String) : Compose (Result IOError Unit) visits [Conso
 -- (read_bytes ...)`, and on success prints each parsed line via `injectR
 -- (print_line ...)` -- both effects composed in ONE `bind`-sequenced tree.
 proc main (cap : Cap APartial) : Compose (Result IOError Unit) visits [FS, Console] =
-  bind (Sum (FSOp APartial) ConsoleOp)
-       (resp_sum (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp)
+  bind (Coproduct (FSOp APartial) ConsoleOp)
+       (resp_coproduct (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp)
        (Result IOError Bytes) (Result IOError Unit)
     (injectL (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp (Result IOError Bytes)
       (read_bytes APartial cap (bytes_encode "conformance/fs/fixtures/three-lines.txt")))
     (λr .
       match r {
-        Err e    ⇒ Ret (Sum (FSOp APartial) ConsoleOp)
-                        (resp_sum (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp)
+        Err e    ⇒ Ret (Coproduct (FSOp APartial) ConsoleOp)
+                        (resp_coproduct (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp)
                         (Result IOError Unit) (Err IOError Unit e) ;
         Ok bytes ⇒ printLines (lines (bytes_decode bytes))
       })

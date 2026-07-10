@@ -20,9 +20,9 @@ the program.
 **Genuine effect composition (`effect-composition` D1–D4 — retires the
 prior honesty asterisk).** `main` performs the `[FS]` read *and* the
 `[Console]` printing in **one** type-checked
-`ITree (Sum (FSOp APartial) ConsoleOp) (resp_sum ...) (Result IOError Unit)`,
-built at the surface via `injectL`/`injectR` (the general `g ↪ Sum g h` /
-`h ↪ Sum g h` inclusions) sequenced with the ordinary homogeneous `bind` —
+`ITree (Coproduct (FSOp APartial) ConsoleOp) (resp_coproduct ...) (Result IOError Unit)`,
+built at the surface via `injectL`/`injectR` (the general `g ↪ Coproduct g h` /
+`h ↪ Coproduct g h` inclusions) sequenced with the ordinary homogeneous `bind` —
 no hand-fed coproduct anywhere. `run_io`'s coproduct-aware terminal driver
 strips the `InL`/`InR` tags and dispatches both effects through the same
 loop. What remains deferred (the honest residual, not a gap in this

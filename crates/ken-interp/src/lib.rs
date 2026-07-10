@@ -8,7 +8,7 @@ pub mod proof_erasure_checker;
 
 pub use eval::{
     apply, decimal_value, drive_h, drive_h_instrumented, eval, run_io, ConsoleIds, Env, EvalStore,
-    EvalVal, FSIds, ITreeIds, RunIoError, SlotId, SumIds,
+    EvalVal, FSIds, ITreeIds, RunIoError, SlotId, CoproductIds,
 };
 pub use proof_erasure_checker::{
     ken_check_proof_erasure_boundary_witness, KenProofErasureBoundaryCheckError,
@@ -95,7 +95,7 @@ mod tests {
         let zero = env.inductive(nat).unwrap().constructors[0].id;
         let suc = env.inductive(nat).unwrap().constructors[1].id;
 
-        // Sum A B (level-polymorphic but used mono at level 0 in tests).
+        // Coproduct A B (level-polymorphic but used mono at level 0 in tests).
         let l_var = ken_kernel::term::LevelVar(0);
         let lv_term = Level::Var(l_var);
         let sum = declare_inductive(&mut env, |_| InductiveSpec {
@@ -117,7 +117,7 @@ mod tests {
                 },
             ],
         })
-        .expect("Sum");
+        .expect("Coproduct");
         let inl = env.inductive(sum).unwrap().constructors[0].id;
         let inr = env.inductive(sum).unwrap().constructors[1].id;
 

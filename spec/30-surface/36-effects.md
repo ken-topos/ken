@@ -989,25 +989,25 @@ passing the rest through; it presumes a tree *already* over `State s ⊕ F`. The
 dual — **getting a single-effect computation's ops *into* the coproduct** — is
 §2.3's `inj` / §2.4's `incl` (`ITree ⟦ρ_g⟧ X → ITree ⟦ρ⟧ X`, an `elim_ITree`
 map over the `Vis` tags), which the **direct surface exposes as named
-injection operations** for the binary signature `Sum g h`, exactly as §4.5.2
+injection operations** for the binary signature `Coproduct g h`, exactly as §4.5.2
 exposes `get`/`put` and §4.5.3 exposes `runState`:
 
 ```
-injectL : ITree g rg a -> ITree (Sum g h) (resp_sum g h rg rh) a   -- re-tag via InL
-injectR : ITree h rh a -> ITree (Sum g h) (resp_sum g h rg rh) a   -- re-tag via InR
+injectL : ITree g rg a -> ITree (Coproduct g h) (resp_coproduct g h rg rh) a   -- re-tag via InL
+injectR : ITree h rh a -> ITree (Coproduct g h) (resp_coproduct g h rg rh) a   -- re-tag via InR
 ```
 
 - **Denotation (normative):** the `elim_ITree` fold sending `Ret x ↦ Ret x` and
   `Vis op k ↦ Vis (InL op) (injectL ∘ k)` (resp. `InR`), structural on the
   sub-tree — total (`14 §3`), no SCT, adds no kernel primitive. It is `§2.4`'s
-  `incl` specialized to the two inclusions `g ↪ Sum g h`, `h ↪ Sum g h`.
-- **Well-typed iff** the response family reduces per-tag: `resp_sum g h rg rh
+  `incl` specialized to the two inclusions `g ↪ Coproduct g h`, `h ↪ Coproduct g h`.
+- **Well-typed iff** the response family reduces per-tag: `resp_coproduct g h rg rh
   (InL o) ≡ rg o`, `(InR o) ≡ rh o` (§2.3 `Resp (inl o) = E.Resp o`) — so the
   re-tagged continuation keeps its response type.
 - **Surface *spelling* (`injectL`/`injectR`) is proposal-level (`OQ-syntax`);
   the operation and its denotation are normative.** A program composes two base
   effects by injecting each single-effect sub-computation, then sequencing with
-  `bind` (`ITree (Sum g h) …` is homogeneous). This is the **direct/monadic
+  `bind` (`ITree (Coproduct g h) …` is homogeneous). This is the **direct/monadic
   door**; the eventual sugar is the row-directed elaboration inserting `incl`
   automatically from a `visits [E, F]` row (§2.4), of which this is the floor —
   as C1 threading (§4.5.6) is the floor under `[State s]`. Realization + the

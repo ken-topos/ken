@@ -39,7 +39,7 @@ two lower tiers of the surface taxonomy (`../30-surface/30`):
   re-declared (`30 §6`: `Equal` is deleted for the kernel's `Eq`).
 
 Everything below is a **package**: imported, derivable, re-checked. Core data
-(`Unit`/`Empty`/`Nat`/`Option`/`Result`/`Pair`, `../30-surface/34`) and
+(`Unit`/`Empty`/`Nat`/`Option`/`Result`/`Either`/`Pair`, `../30-surface/34`) and
 the core combinators (`id`, `∘`, `const`, `flip`) are packages — Ken `data`/defs
 over the built-ins, not prelude (no primitive signature names them).
 
