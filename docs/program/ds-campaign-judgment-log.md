@@ -115,9 +115,23 @@ bar.
 - **Reversibility:** easy (routing choice; escalate to the enclave mid-build if a
   chapter ambiguity surfaces).
 
----
-
-## Process / sequencing calls
+### L3 · DS-8 composition-law scope — build `Compose` in-scope vs gate the law
+- **Call:** Frame DS-8 to land the Traversable **core unconditionally** (both
+  classes, both instances, `sequence`, identity + naturality laws), and decide
+  the **composition** law by a build-probe: if the `Compose g h` applicative it
+  is stated over builds cleanly in-scope (a small derived `instance Applicative
+  (Compose g h)`), build it and prove composition; else ship composition **gated
+  on a named `Compose`-applicative follow-up** with an honest landed/gated split,
+  Architect ruling the boundary at the gate. **Not pre-deciding build-vs-gate** —
+  the frame routes it to a probe + the Architect, not my unilateral call.
+- **Why:** `Compose g h` is grep-confirmed **not landed**, and §5.3 flags it
+  "CAT-2/CAT-3 derived" — so whether it builds today is a real buildability axis
+  (ground every axis, don't assume). Landing the core regardless honors "get as
+  far as you can"; gating the one law honestly (DS-5 pattern) beats either
+  forcing an unproven law or blocking the whole WP. Subsume-don't-proliferate
+  prefers building `Compose` once as a reusable derived instance if clean.
+- **Reversibility:** easy (a scope decision; the core lands either way, the
+  composition boundary is a doc/gate note).
 
 ### P1 · Sequence: DS-2 → DS-7 → DS-8 → (Data) DS-3 → DS-4 → DS-6; DS-5 spec-track in parallel
 - **Call:** Drive DS-2 (`Ord Nat` export) first, then the remaining Core toolkit
@@ -138,43 +152,45 @@ bar.
   breadth over the tier is the operator's stated goal for the window.
 - **Reversibility:** easy.
 
-### RUN STATUS / resume point (2026-07-10, ~05:3x UTC)
+### RUN STATUS / resume point (2026-07-10, ~06:1x UTC)
 
-**Live checkpoint for lossless resume across compaction.** Three tracks in
-flight: **DS-7** (Foundation), **DS-5 chapter** (Spec), **DS-5b** (Kernel).
+**Live checkpoint for lossless resume across compaction.** Core toolkit is
+landed-or-in-flight; two tracks live: **DS-8** (Foundation), **DS-5b** (Kernel).
 
-- **DS-2** (`Ord Nat` export) — ✅ **LANDED** `origin/main @ 971aaad` (PR #421,
-  CI-green). Two added files, outer-ring, zero-`Axiom`/zero-`trusted_base()`
-  delta, Architect terminal APPROVE. Foundation stood down, retros in.
-- **DS-7** (`Applicative`/`Monad`) — ✅ **FRAMED + KICKED to Foundation**
-  (`evt_2f39kxxfnbtjr`). Frame `docs/program/wp/ds-7-applicative-monad.md`
-  (`origin/main @ b12123a`); design contract `spec/50-stdlib/56-effectful-classes.md`
-  (CAT-2). Scope = D1 `Applicative` + D2 `Monad` + List/Option instances + the
-  ITree bridge as an **attested correspondence** (no minted second `bind`, no
-  surface `instance Monad (ITree e resp)`). Building; comes back through
-  foundation-qa → Architect (fidelity vs chapter + zero-`Axiom` gate) →
-  git_request to Steward. See `L1`/`L2` for the home + routing judgment calls.
-- **DS-8** (`Traversable`) — **grammatically UNBLOCKED.** SURF-2 verified landed:
-  `parse_class_decl` (`parser.rs:722–746`) accepts an optional `const`/`fn`/`proc`
-  purity marker per class field (`ClassField.purity`), so `proc traverse : …` is
-  grammatical. So DS-8 is gated only on **DS-7 landing first** (Traversable wires
-  `Applicative`), not on a missing surface. (Elaboration-side bidirectional purity
-  check for fields to be confirmed by the DS-8 build; the surface gate is cleared.)
-- **DS-5** (`Vector` spec chapter) — ✅ **FRAMED + KICKED to Spec enclave**
-  (`evt_620nrp43cwynd`); frame `wp/ds-5-vector-spec-chapter.md` (`main @ 61990ee`).
-  Architect ruling delivered (`evt_1mnh5sngvhaty`): PARTIAL buildability —
-  `Vec`/`vnil`/`vcons`/`head`/`Fin` land+test **today**; `tail`/`zip`/`lookup`
-  gated on DS-5b. spec-author transcribing the full API (head/Fin landed,
-  tail/zip/lookup gated), chapter `60-length-indexed-vectors.md`, Architect
-  fidelity-gates. See `L1`/`L2` and **`K1`**.
-- **DS-5b** (dependent-match index refinement) — ✅ **FRAMED + KICKED to Kernel**
+- **DS-2** (`Ord Nat`) — ✅ **LANDED** `main @ 971aaad` (PR #421). Retros in.
+- **DS-7** (`Applicative`/`Monad`) — ✅ **LANDED** `main @ 88dce79` (PR #428,
+  CI-green). 2 added files, outer-ring, zero-`Axiom`/zero-`trusted_base()`-delta,
+  Architect dual gate (fidelity vs chapter 56 char-for-char + soundness). WIRE
+  chain consistent; ITree bridge prose-only (no 2nd `bind`). 3 Ergo Findings
+  (dot-projection/`λ` in type position; `concatMap` inlined; arg-order). Retros in.
+  Entry `Core/EffectfulClasses.ken.md`.
+- **DS-8** (`Traversable`) — ✅ **FRAMED + KICKED to Foundation**
+  (`evt_368s003ta85w3`); frame `wp/ds-8-traversable.md` (`main @ 229dcea`), design
+  contract chapter 56 §5. **The last Core item.** Appends to
+  `Core/EffectfulClasses.ken.md`. Prereqs all landed (DS-7; Functor/Foldable
+  instances; SURF-1/SURF-2). **Open scope decision (see L3):** §5.3's composition
+  law needs a `Compose g h` applicative that is NOT landed — frame scopes it as
+  build-core-unconditionally (identity+naturality) then probe building `Compose`
+  in-scope, else ship composition gated on a named follow-up; Architect rules the
+  boundary at the gate. Building.
+- **DS-5** (`Vector` spec chapter) — ✅ **LANDED** `main @ efdc09d` (PR #427,
+  doc-only). Honest landed/gated split (head/`Fin` landed; tail/zip/lookup gated
+  on DS-5b). Chapter `60-length-indexed-vectors.md`. Enclave stood down; CV has
+  forward conformance work staged on the DS-5b gate. See `L1`/`L2` + `K1`.
+- **DS-5b** (dependent-match index refinement) — 🔨 **BUILDING on Kernel**
   (`evt_1q7m4wjk4cy8a`); frame `wp/ds-5b-dependent-match-refinement.md`
-  (`main @ c958b66`). The elaborator enhancement unblocking DS-5's
-  `tail`/`zip`/`lookup`. **First hard-class land of the run — see `K1`.** Runs
-  parallel to the DS-5 chapter; reconciles at the Architect gate. Building.
-- **Data section (DS-3/DS-4/DS-6)** — queued after Core; DS-6 (`DecEq Char`
-  capstone) is the second candidate kernel-move (boundary rules permit landing).
-- Verify team idle in reserve. Kernel team now on DS-5b.
+  (`main @ c958b66`). Elaborator enhancement unblocking DS-5's tail/zip/lookup.
+  **First hard-class land of the run — see `K1`.** Comes back through kernel-qa →
+  Architect soundness gate → git_request. Soundness bars: injectivity
+  discharged-not-postulated, over-refinement discriminator, full-suite-green +
+  non-indexed-match inertness.
+- **`Vector` package** (Foundation follow-on) — **queued behind DS-5b landing**
+  (frame it for the full API once tail/zip/lookup elaborate; head-only is
+  buildable today but ship the package whole).
+- **Data section (DS-3/DS-4/DS-6)** — next after Core. DS-4 (List ext) near-
+  mechanical; DS-3 (Either/Result/Option) + DS-6 (`DecEq Char` capstone,
+  candidate 2nd kernel-move) are T1-design-needed.
+- Verify team idle in reserve. Kernel on DS-5b; Foundation on DS-8; Spec/CV freed.
 
 ### P3 · Foundation is the catalog-authoring home; parallelize only independent tracks
 - **Call:** Keep catalog authoring on the Foundation team (coherence — one
