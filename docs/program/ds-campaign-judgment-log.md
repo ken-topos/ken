@@ -372,16 +372,17 @@ traverse composition law both deferred to DS-8c.** Foundation transcribing into
   next-touch, not folded (Architect ruling). Retros in. Proof-technique finding:
   `Cons`-vs-`Cons` abstract-element base needs `cong` not bare `tt`/`Refl`
   (memory saved).
-- **DS-3** (`Option`/`Result` combinators + `Either` ruling) — 🔨 **KICKED to
-  Foundation** (`evt_zpdcdwv8zkvr`); frame `wp/ds-3-sum-type-combinators.md`.
-  Two lanes: **(a)** mechanical combinator build (Option getOrElse/isSome/orElse;
-  Result mapErr/andThen/unwrapOr + laws; reuse existing `option_map`/`Functor
-  Option`; `Err`-first field-order caution) — proceeds now; **(b)** the `Either`
-  ruling (`L4`) — **Architect CONFIRMED SUBSUME** (`evt_13583vpn9747r`); the
-  four-site spec erratum **LANDED** (PR #446, `main @ dcc34ed`) — lane (b) fully
-  closed. Package-home rec: one entry
-  `Data/Sums/Sums.ken`. Monad-instance showcase noted as possible follow-on, not
-  forced. Normal ring → foundation-qa → Architect → git_request.
+- **DS-3** (`Option`/`Result` combinators) — 🔨 **KICKED (for real) ~13:07**.
+  ⚠ **My first kick (`evt_zpdcdwv8zkvr`, 10:45) was APPENDED after the DS-4
+  merge/retro and foundation-leader missed it on a truncated preview — DS-3 sat
+  IDLE 10:45→13:07** (~2.3h; "in flight" in prior status was wrong). Caught +
+  owned by foundation-leader (`evt_728s356ja0x0`), re-kicked as a **pure lane-(a)
+  combinator build** (Option getOrElse/isSome/orElse; Result mapErr/andThen/
+  unwrapOr + laws; reuse `option_map`/`Functor Option`; `Err`-first caution; home
+  `Data/Sums/`). The **`Either` ruling lane is MOOT** — superseded by L5 (`Either`
+  is a separate catalog package, not subsumed into `Result`); nothing about
+  `Either` in DS-3. Lesson saved: kick each WP standalone + mention-led, never
+  appended. Normal ring → foundation-qa → Architect → git_request.
 - **DS-8b** (pure-witness ⊆ `proc`-field widening) — ✅ **LANDED**
   `main @ 5c698dd` (PR #433, CI-green). The `Proc if !impure` arm purely deleted
   (dangerous `Const|Fn` arm byte-identical), zero kernel/prelude/spec/conformance
