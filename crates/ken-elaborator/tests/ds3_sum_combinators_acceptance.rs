@@ -18,7 +18,7 @@ const COLLECTIONS_KEN_MD: &str =
     include_str!("../../../catalog/packages/Data/Collections/Collections.ken.md");
 const LAWFUL_FUNCTORS_KEN_MD: &str =
     include_str!("../../../catalog/packages/Core/LawfulFunctors.ken.md");
-const SUMS_KEN: &str = include_str!("../../../catalog/packages/Data/Sums/Sums.ken");
+const SUMS_KEN_MD: &str = include_str!("../../../catalog/packages/Data/Sums/Sums.ken.md");
 
 fn base_env() -> ElabEnv {
     let mut env = ElabEnv::empty().expect("prelude bootstrap");
@@ -26,7 +26,7 @@ fn base_env() -> ElabEnv {
     env.elaborate_ken_md_file(LAWFUL_CLASSES_KEN_MD).expect("Core/LawfulClasses.ken must elaborate");
     env.elaborate_ken_md_file(COLLECTIONS_KEN_MD).expect("Data/Collections/Collections.ken.md must elaborate");
     env.elaborate_ken_md_file(LAWFUL_FUNCTORS_KEN_MD).expect("Core/LawfulFunctors.ken.md must elaborate");
-    env.elaborate_file(SUMS_KEN).expect("Data/Sums/Sums.ken must elaborate");
+    env.elaborate_ken_md_file(SUMS_KEN_MD).expect("Data/Sums/Sums.ken.md must elaborate");
     env
 }
 
@@ -56,7 +56,7 @@ fn all_combinators_and_laws_are_real_globals() {
     ] {
         assert!(
             env.globals.contains_key(name),
-            "`{}` must be a real registered global after elaborating Sums.ken",
+            "`{}` must be a real registered global after elaborating Sums.ken.md",
             name
         );
     }
@@ -64,7 +64,14 @@ fn all_combinators_and_laws_are_real_globals() {
 
 #[test]
 fn zero_axiom_in_sums_ken() {
-    assert!(!SUMS_KEN.contains("Axiom"), "Sums.ken must contain zero Axiom literals");
+    // Scoped to the tangled code, not the raw `.ken.md` (which also carries
+    // prose) — a literate file's prose can legitimately discuss the word
+    // "Axiom" without that being a code-level regression; this must stay
+    // false only if the checked/tangled fence itself contains one.
+    let tangled = ken_elaborator::literate::extract_ken_md(SUMS_KEN_MD)
+        .expect("Data/Sums/Sums.ken.md must extract")
+        .source;
+    assert!(!tangled.contains("Axiom"), "Sums.ken.md's tangled code must contain zero Axiom literals");
 }
 
 #[test]
@@ -75,11 +82,11 @@ fn trusted_base_delta_is_empty_across_the_file() {
     env.elaborate_ken_md_file(COLLECTIONS_KEN_MD).expect("Data/Collections/Collections.ken.md must elaborate");
     env.elaborate_ken_md_file(LAWFUL_FUNCTORS_KEN_MD).expect("Core/LawfulFunctors.ken.md must elaborate");
     let before: std::collections::BTreeSet<_> = env.env.trusted_base().into_iter().collect();
-    env.elaborate_file(SUMS_KEN).expect("Data/Sums/Sums.ken must elaborate");
+    env.elaborate_ken_md_file(SUMS_KEN_MD).expect("Data/Sums/Sums.ken.md must elaborate");
     let after: std::collections::BTreeSet<_> = env.env.trusted_base().into_iter().collect();
     assert_eq!(
         before, after,
-        "Sums.ken must introduce ZERO new trusted_base() entries (zero-Axiom acceptance bar)"
+        "Sums.ken.md must introduce ZERO new trusted_base() entries (zero-Axiom acceptance bar)"
     );
 }
 
