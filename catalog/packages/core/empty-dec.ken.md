@@ -47,10 +47,13 @@ keys, checked pattern-refinement — builds on this pair.
 primitives (`crates/ken-elaborator/src/prelude.rs`), not declared by this
 entry — surface `data` hardcodes every type parameter to `Type 0`
 (`crates/ken-elaborator/src/data.rs:45`), so `Dec`'s `Ω`-sorted parameter
-`P` cannot be spelled in surface syntax at all (`§5`, `§8`), and even
-`Empty`'s own zero-constructor form does not parse today (`§6` Finding) —
-both are bootstrapped the same way `Nat`/`List`/`Bool` already are, so they
-are globally available before this entry (or any `.ken` program) loads.
+`P` cannot be spelled in surface syntax at all (`§5`, `§8`); both are
+bootstrapped the same way `Nat`/`List`/`Bool` already are, so they are
+globally available before this entry (or any `.ken` program) loads. (A
+zero-constructor `data` — `Empty`'s own shape — now has a real surface
+spelling, `data Empty : Type0 where { }`, landed by FR-1, `§6`; the
+literal `Type0 =` legacy spelling below is still illustrative, since the
+legacy `data D = …` form doesn't take a `:`-ascribed family type.)
 Conceptually, as if spelled at the surface:
 
 ```ken ignore
@@ -236,20 +239,23 @@ deliberately use `DecEq Bool` (an inductive carrier, honest via K7/no-
 confusion, zero trusted-base delta) so the showcase is not vacuous — see
 `catalog/guide/` `§1.1` for the general opaque-primitive/`Axiom` pattern.
 
-**Zero-constructor `data` doesn't parse yet** and **`absurd` is reserved
-sugar** — both real, both routed as Findings (`§6`) rather than worked
-around with anything beyond the prelude's existing, zero-new-trust-category
-mechanisms (`data::elab_data_decl` called directly, and `absurdEmpty` as a
-distinct name). The first is directly checkable — `Empty`'s own pinned
-spelling (`§2`'s `` ```ken ignore `` block) is not, today, real surface
-syntax:
+**Zero-constructor `data` now parses (FR-1, landed)** and **`absurd` is
+reserved sugar** (still real, routed as a Finding, `§6`) — this entry's
+own `Empty`/`Dec` remain the prelude-bootstrapped globals (`§2`), not
+re-declared here, but the surface gap that forced that bootstrap is
+closed: an explicit-family zero-constructor block now elaborates over an
+independently-declared type, distinct from the prelude's `Empty`:
 
-```ken reject
--- Fails: "explicit data block requires at least one constructor" (a
--- zero-constructor family must be admitted via `data::elab_data_decl`
--- called directly — `§2` — not this literal spelling).
-data EmptyAttempt : Type0 where { }
+```ken example
+data EmptyAttempt : Type where { }
+
+fn absurdEmptyAttempt (C : Type) (e : EmptyAttempt) : C = match e { }
 ```
+
+The literal `Type0 =` spelling (`§2`'s `` ```ken ignore `` block) still
+isn't real surface syntax — the legacy `data D = …` form doesn't take a
+`:`-ascribed family type, so that combination remains illustrative only;
+the explicit-family `where { }` spelling above is the real one.
 
 **A user-declared `absurd` is unreachable, not a hard error.** Declaring
 `fn absurd (C : Type) (e : Empty) : C = match e { }` elaborates
@@ -261,16 +267,19 @@ recorded in prose, `§6`).
 ## 6. Findings
 
 - **Kernel-reduction defect:** none.
-- **Sugar candidate → Ergo:** the surface has no way to write a zero-
-  constructor `data` declaration (`parse_data_decl`/
+- **Sugar candidate → Ergo — landed (FR-1):** the surface originally had
+  no way to write a zero-constructor `data` declaration (`parse_data_decl`/
   `parse_explicit_data_decl` in `crates/ken-elaborator/src/parser.rs` both
-  require at least one constructor). `Empty` had to be bootstrapped via
+  required at least one constructor), so `Empty` had to be bootstrapped via
   `data::elab_data_decl` called directly (the same technique
   `ElabEnv::empty()` already uses to bootstrap `Bool`), bypassing the
   parser entirely rather than the ordinary `elaborate_decl` source-text
-  path every other prelude `data` uses. Low urgency (an empty `data` is
-  rare), but real: it blocked `Empty`'s literal pinned spelling
-  (`data Empty : Type0 =`) from working as written.
+  path every other prelude `data` uses. `docs/program/wp/
+  ds-1-findings-remediation.md` FR-1 relaxed both parser gates for the
+  zero-constructor case (`§5` now demonstrates it); `Empty`'s own literal
+  pinned spelling (`data Empty : Type0 =`) still doesn't parse, since the
+  legacy `data D = …` arm doesn't take a `:`-ascribed family type — the
+  explicit-family `where { }` spelling is the real one.
 - **Naming hazard, not a sugar candidate:** `absurd` is checked-mode
   surface sugar keyed on the bare identifier (`elab.rs:499`, resolver
   emits `RCon` on scope miss) for `Ω`-classified `Bottom`-elimination.

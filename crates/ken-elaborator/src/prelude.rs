@@ -765,16 +765,20 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     // `.ken.md` file is elaborated.
     //
     // **Build-time finding (empirically confirmed, not a design fork):**
-    // Fork 1's `data Empty : Type0 =` does NOT parse as *written* —
-    // `parse_data_decl`/`parse_explicit_data_decl` (`parser.rs`) both
-    // require at least one constructor (a genuine landed-grammar gap: the
-    // surface has no zero-constructor `data` spelling today). The fallback
-    // is the SAME technique `ElabEnv::empty()` already uses to bootstrap
-    // `Bool` before the full `ElabEnv` exists: call `data::elab_data_decl`
-    // (the real surface-data ELABORATION function, `data.rs`) directly with
-    // an empty ctor list, bypassing only the textual parser — zero new
-    // trust category, same mechanism as every other prelude `data`. Ergo
-    // Finding: zero-constructor `data` declarations should parse.
+    // Fork 1's `data Empty : Type0 =` does NOT parse as *written* — the
+    // legacy `data D = …` arm doesn't take a `:`-ascribed family type
+    // (the explicit-family `data Empty : Type0 where { }` spelling now
+    // does, `docs/program/wp/ds-1-findings-remediation.md` FR-1, landed:
+    // `parse_data_decl`/`parse_explicit_data_decl` both admit a zero-
+    // constructor case now). This bootstrap still bypasses the parser
+    // regardless of that fix — `Dec`'s `No` constructor needs `Empty`'s
+    // `GlobalId` before any catalog `.ken.md` file (hence any surface
+    // `data`) can elaborate at all, an ordering constraint FR-1 doesn't
+    // touch — via the SAME technique `ElabEnv::empty()` already uses to
+    // bootstrap `Bool` before the full `ElabEnv` exists: call
+    // `data::elab_data_decl` (the real surface-data ELABORATION function,
+    // `data.rs`) directly with an empty ctor list — zero new trust
+    // category, same mechanism as every other prelude `data`.
     let empty_id = crate::data::elab_data_decl(
         &mut elab.env,
         &mut elab.globals,
