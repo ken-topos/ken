@@ -47,6 +47,41 @@ bar.
 
 ## Language-surface / elaboration / functionality calls
 
+### K1 · ⚠ PROMINENT (elaborator-capability land) — DS-5b dependent-match index refinement
+- **Call:** **Land, this run,** a new **elaborator capability** — dependent-`match`
+  index refinement (constructor **injectivity** for peeled recursive fields +
+  sibling-binder **convoy**) — in `crates/ken-elaborator/src/elab.rs`'s
+  dependent-match path (near `method_index_premises`/`synthesize_omitted_index_method`).
+  Kicked to the **Kernel team** through the full ring + Architect soundness gate
+  (frame `wp/ds-5b-dependent-match-refinement.md`, `evt_1q7m4wjk4cy8a`).
+- **Trigger:** the DS-5 Architect ruling (`evt_1mnh5sngvhaty`) ground-truthed
+  that `Vec`/`vnil`/`vcons`/`head`/`Fin` build+test **today**, but
+  `tail`/`zip`/`lookup` are gated on exactly this one missing capability
+  (dependent-match recovers the motive over the scrutinee's own index only; it
+  does not re-type peeled fields by injectivity, nor refine sibling binders).
+- **Options:** (a) **land the enhancement this run** [chosen] — kick to Kernel,
+  full ring + soundness gate, in parallel with the DS-5 chapter; (b) ship DS-5
+  head-only-buildable, spec `tail`/`zip`/`lookup` as gated, defer the enhancement
+  to a named later WP.
+- **Why (a):** it is the **right fix at the right layer** (#5/#13 — `elab.rs`, not
+  kernel, not `data.rs`; the Architect located it precisely and the kernel already
+  admits the family + dependent `Elim`); it is a **general** dependent-match
+  capability (subsume-don't-proliferate #7 — unblocks *every* future indexed-family
+  match, not a Vector-only bolt-on); the **kernel re-check stays the fail-closed
+  backstop** so a wrong enhancement rejects rather than admitting unsoundness, and
+  the full Kernel ring + Architect gate supply the soundness supervision the run's
+  boundary rules require. The operator lifted the TCB ceiling for exactly this and
+  asked for breadth; the Kernel team was idle (zero contention with DS-7/DS-5-ch).
+  Soundness stays non-negotiable — the frame's bars: injectivity **discharged via
+  kernel no-confusion, never postulated** (zero-`Axiom`/zero-`trusted_base()`-delta),
+  an **over-refinement discriminator** (over-refinement is the unsoundness vector),
+  **full-suite-green + non-indexed-match inertness** (protects in-flight DS-7).
+- **Reversibility:** **hard-class** (a soundness-adjacent elaborator capability) —
+  revert-clean per the no-users reality, but **flagged for the operator's review**
+  regardless. This is the first hard-class land of the run. If the operator would
+  rather it had waited for review, it reverts cleanly and DS-5 still ships
+  head-only with the rest spec'd-and-gated.
+
 ### L1 · DS-7 package home + basename — new `Core/EffectfulClasses.ken.md`
 - **Call:** Home the CAT-2 effectful-class family (`Applicative`+`Monad` now,
   `Traversable` appended at DS-8) in **one new entry
@@ -103,9 +138,10 @@ bar.
   breadth over the tier is the operator's stated goal for the window.
 - **Reversibility:** easy.
 
-### RUN STATUS / resume point (2026-07-10, ~05:xx UTC)
+### RUN STATUS / resume point (2026-07-10, ~05:3x UTC)
 
-**Live checkpoint for lossless resume across compaction.**
+**Live checkpoint for lossless resume across compaction.** Three tracks in
+flight: **DS-7** (Foundation), **DS-5 chapter** (Spec), **DS-5b** (Kernel).
 
 - **DS-2** (`Ord Nat` export) — ✅ **LANDED** `origin/main @ 971aaad` (PR #421,
   CI-green). Two added files, outer-ring, zero-`Axiom`/zero-`trusted_base()`
@@ -118,16 +154,27 @@ bar.
   surface `instance Monad (ITree e resp)`). Building; comes back through
   foundation-qa → Architect (fidelity vs chapter + zero-`Axiom` gate) →
   git_request to Steward. See `L1`/`L2` for the home + routing judgment calls.
-- **DS-8** (`Traversable`) — **GATED** on SURF-1 row-var surface (landed
-  `main@ef791a3`) **+ SURF-2 class-field purity marker** (`33 §5.2`, `39 §6.0`,
-  chapter §5.1) — **verify SURF-2 landed before sequencing DS-8** (still to check).
-- **DS-5** (`Vector` spec chapter) — independent parallel Spec-enclave track,
-  queued (kick to spec-leader to keep Spec productive alongside the Foundation
-  build).
+- **DS-8** (`Traversable`) — **grammatically UNBLOCKED.** SURF-2 verified landed:
+  `parse_class_decl` (`parser.rs:722–746`) accepts an optional `const`/`fn`/`proc`
+  purity marker per class field (`ClassField.purity`), so `proc traverse : …` is
+  grammatical. So DS-8 is gated only on **DS-7 landing first** (Traversable wires
+  `Applicative`), not on a missing surface. (Elaboration-side bidirectional purity
+  check for fields to be confirmed by the DS-8 build; the surface gate is cleared.)
+- **DS-5** (`Vector` spec chapter) — ✅ **FRAMED + KICKED to Spec enclave**
+  (`evt_620nrp43cwynd`); frame `wp/ds-5-vector-spec-chapter.md` (`main @ 61990ee`).
+  Architect ruling delivered (`evt_1mnh5sngvhaty`): PARTIAL buildability —
+  `Vec`/`vnil`/`vcons`/`head`/`Fin` land+test **today**; `tail`/`zip`/`lookup`
+  gated on DS-5b. spec-author transcribing the full API (head/Fin landed,
+  tail/zip/lookup gated), chapter `60-length-indexed-vectors.md`, Architect
+  fidelity-gates. See `L1`/`L2` and **`K1`**.
+- **DS-5b** (dependent-match index refinement) — ✅ **FRAMED + KICKED to Kernel**
+  (`evt_1q7m4wjk4cy8a`); frame `wp/ds-5b-dependent-match-refinement.md`
+  (`main @ c958b66`). The elaborator enhancement unblocking DS-5's
+  `tail`/`zip`/`lookup`. **First hard-class land of the run — see `K1`.** Runs
+  parallel to the DS-5 chapter; reconciles at the Architect gate. Building.
 - **Data section (DS-3/DS-4/DS-6)** — queued after Core; DS-6 (`DecEq Char`
-  capstone) is the candidate kernel-move (boundary rules permit landing).
-- Kernel + Verify teams restarted by operator, re-oriented, idle in reserve for
-  any DS-6 kernel move.
+  capstone) is the second candidate kernel-move (boundary rules permit landing).
+- Verify team idle in reserve. Kernel team now on DS-5b.
 
 ### P3 · Foundation is the catalog-authoring home; parallelize only independent tracks
 - **Call:** Keep catalog authoring on the Foundation team (coherence — one
