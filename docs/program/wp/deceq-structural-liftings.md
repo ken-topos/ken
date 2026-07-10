@@ -39,11 +39,20 @@ complete : (x)(y)→Equal a x y→IsTrue (eq x y) }`):
    **vacuous via `absurd` on `IsTrue False`** and `complete` is vacuous via
    `Nil`/`Cons` discrimination — closed honestly, **never papered**.
 
+**The abstract-element trap (Architect's heads-up — this is the real substance).**
+Given *abstract* `DecEq a`/`DecEq b`, the element comparisons `da.eq x x'` are
+**neutral — they do not reduce.** So `sound`/`complete` cannot close by `tt`/
+`Refl` on a reduced decider; each must route through the **element instance's own
+`sound`/`complete`** applied to those neutral comparisons, glued with `cong` +
+conjunction reasoning (the DS-8c "abstract dictionaries never collapse for free"
+discipline). Use a **transparent** Bool-conjunction (define one locally, à la
+`LawfulClasses`' own `bool_or`), **not** a primitive `and` that won't reduce.
+
 ## Scope
 
 - The two instances + their real `sound`/`complete` proofs, built on the
-  existing `list_eq`/`Pair` helpers (`Collections`) and the base `DecEq`
-  dictionaries. Reuse, don't re-mint.
+  existing `list_eq` (`Collections`) + `Pair`/`mk_pair`/`pair_fst`/`pair_snd`
+  (prelude) helpers and the base `DecEq` dictionaries. Reuse, don't re-mint.
 - **Fold the one-line Collections stale-doc fix:** `Collections.ken.md ~:826`
   says lawful `DecEq Char` is "not yet landed" — it *is* landed; correct that
   line (it blocks nothing but is now false).
@@ -55,16 +64,31 @@ complete : (x)(y)→Equal a x y→IsTrue (eq x y) }`):
   decisions.md`);
 - kernel/`Cargo`/spec/`trusted_base` changes of any kind.
 
-## Design seam to settle at pickup (flag, don't guess)
+## Instance homing — RESOLVED (Architect ruling `evt_48ayfh5jg8v4z`)
 
-**Instance homing (orphan rule, `33 §5`).** An instance must home with the
-class (`DecEq`, `Core/LawfulClasses`), or the carrier's package. `Pair` is
-defined in `Collections`; `List` is prelude. Decide each instance's home so
-**neither is an orphan** — likely `Collections` (which owns `Pair`/`list_eq`
-and imports the `Core` `DecEq`), but confirm against `33 §5` and the
-`lawful-classes-lane` precedent (Ord/DecEq Char homed next to their `Int`
-twins). If the rule forces a split home or is ambiguous, **surface it to
-Steward/enclave — do not force it.**
+**Both instances home in `Core/LawfulClasses`**, alongside `DecEq {Int, Bool,
+Char}`. Grounded against `origin/main @ 9909e267`; branch-cut unblocked.
+
+- **Why not Collections (frame erratum — corrected):** an earlier draft of this
+  frame said "`Pair` is defined in `Collections`" and suggested a
+  likely-Collections home. **Both are wrong.** `Pair`/`mk_pair`/`pair_fst`/
+  `pair_snd` and `List` are **prelude** globals (`prelude.rs:490+`); Collections
+  merely *uses* them, declares neither head constructor. Under `33 §5.3` the
+  non-orphan homes are the **class** module (`DecEq` → `Core/LawfulClasses`) or
+  the **head-type constructor's** module (prelude). Collections is neither →
+  a hard orphan error. Do **not** place either instance there.
+- **Precedent is decisive:** every Core-class instance for the prelude `List`
+  homes with its class in Core — `Monoid (List a)`/`Foldable List` in
+  `LawfulFunctors`, `Traversable List` in `EffectfulClasses`. `Monoid (List a)`
+  is the structural twin of `DecEq (List a)` and its `op = list_append`
+  resolves to **Collections'** helper — identical to how `DecEq (List a)`'s
+  `eq = list_eq a (da.eq)` sources `list_eq` from Collections.
+- **Load order:** sequence **Collections before LawfulClasses** in the WP's
+  `mk_env`/load order (mirroring `cat1_lawful_functors_package.rs`:
+  `Transport → Collections → LawfulFunctors`). Acyclic — `list_eq` takes a raw
+  `eqf : a→a→Bool`, has zero `DecEq` dependency, so no cycle. The `Pair`
+  instance needs no Collections dep at all (prelude projections + element
+  deciders + a Core Bool-conjunction).
 
 ## Acceptance criteria
 
@@ -85,10 +109,11 @@ Steward/enclave — do not force it.**
 
 ## Gate
 
-Foundation ring (foundation-leader → foundation-implementer → foundation-qa) →
-**@architect fidelity/soundness gate** (proof-carrying instances: greps the
-tangled code for `Axiom`/`Refl`-paper, confirms the vacuous cases are honest and
-the homing is non-orphan) → `git_request` to Steward → **CI-gated** merge.
+Foundation ring (foundation-leader → foundation-implementer →
+foundation-qa) → **@architect fidelity/soundness gate** (proof-carrying
+instances: greps the tangled code for `Axiom`/`Refl`-paper, confirms the
+vacuous cases are honest and the homing is non-orphan) → `git_request` to
+Steward → **CI-gated** merge.
 Outer-ring, no soundness urgency beyond the honesty of the law proofs. Own the
 retro (record the harness readout — this is the hard-implementer terra trial).
 **No WP-token identifiers in the tangled source** (self-grep the whole diff).
