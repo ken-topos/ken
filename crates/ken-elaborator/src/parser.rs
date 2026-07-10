@@ -920,15 +920,19 @@ impl Parser {
 
         self.expect(&Token::Eq)?;
 
-        // Parse constructor list: `C₁ τ… | C₂ τ… | …`
+        // Parse constructor list: `C₁ τ… | C₂ τ… | …` — possibly empty
+        // (`data D =` declares a zero-constructor type, e.g. `Empty`; the
+        // kernel already admits zero-constructor inductives, `34 §1`).
         let mut ctors = Vec::new();
-        loop {
-            let ctor = self.parse_ctor_decl()?;
-            ctors.push(ctor);
-            if matches!(self.peek(), Token::Pipe) {
-                self.advance(); // consume `|`
-            } else {
-                break;
+        if matches!(self.peek(), Token::ConId(_)) {
+            loop {
+                let ctor = self.parse_ctor_decl()?;
+                ctors.push(ctor);
+                if matches!(self.peek(), Token::Pipe) {
+                    self.advance(); // consume `|`
+                } else {
+                    break;
+                }
             }
         }
 
@@ -951,12 +955,9 @@ impl Parser {
         let family = self.parse_type()?;
         self.expect(&Token::KwWhere)?;
         self.expect(&Token::LBrace)?;
-        if matches!(self.peek(), Token::RBrace | Token::Eof) {
-            return Err(ElabError::ParseError {
-                msg: "explicit data block requires at least one constructor".to_string(),
-                span: self.peek_span().clone(),
-            });
-        }
+        // The constructor list may be empty — `data D : Type where { }`
+        // declares a zero-constructor type (the kernel already admits
+        // zero-constructor inductives, `34 §1`/`34 §2`).
         let mut ctors = Vec::new();
         while !matches!(self.peek(), Token::RBrace | Token::Eof) {
             ctors.push(self.parse_explicit_data_ctor()?);

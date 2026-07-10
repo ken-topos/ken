@@ -284,11 +284,17 @@ fn explicit_family_rejects_bare_head_parameters() {
 }
 
 #[test]
-fn explicit_family_rejects_empty_constructor_block() {
-    let err = parse_decls("data Empty : Type where {}")
-        .expect_err("explicit family block must contain at least one constructor");
-    let msg = format!("{err}");
-    assert!(msg.contains("requires at least one constructor"), "{msg}");
+fn explicit_family_accepts_empty_constructor_block() {
+    // FR-1 (`docs/program/wp/ds-1-findings-remediation.md`): a zero-
+    // constructor `data` declares an empty type at the surface — the
+    // kernel already admits zero-constructor inductives (that's how
+    // `Empty` bootstrapped in DS-1); this is a pure parser/surface gap.
+    let decl = single_decl("data Empty : Type where {}");
+    let Decl::ExplicitDataDecl { name, ctors, .. } = decl else {
+        panic!("expected ExplicitDataDecl, got {decl:?}");
+    };
+    assert_eq!(name, "Empty");
+    assert!(ctors.is_empty());
 }
 
 #[test]
