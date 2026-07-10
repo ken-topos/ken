@@ -184,6 +184,13 @@ live here and in `catalog/`.
 
 ## 8. Comments
 
+This requirement is for **package entries**, whose fences tangle to
+consumed `.ken` source read as code independently of the surrounding
+markdown; a guide/teaching doc whose fences are only checked (never
+tangled to a shipped file) uses the surrounding prose as its comment layer
+instead — see `agent/playbooks/tools/write-ken.md`'s "prose is the
+comment layer" rule, which governs that other case.
+
 Comments are required where they carry proof-review information — a contract,
 invariant, proof strategy, trust posture, or non-obvious elaboration constraint.
 They must not restate the syntax below them. Required classes: entry/package
