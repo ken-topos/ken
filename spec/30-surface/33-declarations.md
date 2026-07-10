@@ -254,9 +254,12 @@ must be potentially effectful/effect-row-polymorphic under that same
 classifier. Because class fields have no separate value-binder list, the
 arity/effect telescope is read from the field's **declared type**; implicit
 parameters still do not count (`36 §1.6.3(b)`). A later instance expression must
-match the stored field classification, but it cannot redefine what the class
-field marker meant. The marker is surface/elaboration metadata attached to the
-field declaration, not a field of the class record.
+satisfy the stored field classification — by **covariant subsumption**, not
+exact equality: a pure witness inhabits a `proc` field, but the reverse (an
+effectful witness for a `fn`/`const` field) rejects (`36 §1.6.2`, DS-8b) — but
+it cannot redefine what the class field marker meant. The marker is
+surface/elaboration metadata attached to the field declaration, not a field of
+the class record.
 
 **AC4 non-interference.** A class-field purity marker does **not** enter the
 Type/Ω discriminant. The class's sort is still the kernel-computed sort of the
