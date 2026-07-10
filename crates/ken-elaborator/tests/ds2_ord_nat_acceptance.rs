@@ -87,4 +87,3 @@ fn refl_trans_antisym_need_no_conversion() {
     env.elaborate_decl("fn probeRefl (x : Nat) : IsTrue (leqNat x x) = reflLeqNat x")
         .expect("reflLeqNat must satisfy IsTrue (leqNat x x) with zero conversion code");
 }
-
