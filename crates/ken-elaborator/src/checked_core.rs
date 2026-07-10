@@ -4398,8 +4398,89 @@ fn skip_level(cursor: &mut CanonicalCursor<'_>) -> Result<(), String> {
 mod tests {
     use ken_kernel::env::{Decl, PrimReduction};
     use ken_kernel::{GlobalId, Level, LevelVar, Term};
+    use num_bigint::BigInt;
 
     use super::*;
+
+    /// Decode an `int_lit`-tagged canonical value back to its `BigInt`
+    /// (`encode_term`'s `Term::IntLit` arm's exact inverse — length-prefixed
+    /// `to_signed_bytes_be`, decoded via `from_signed_bytes_be`). Test-only:
+    /// nothing in the shipped semantic view decoders consumes an `IntLit`
+    /// yet (deciding what it MEANS to a checked-core-view consumer is a
+    /// separate, later design question) — this exists solely to prove the
+    /// syntactic round-trip itself is lossless, per the Architect's gate.
+    fn decode_int_lit(cursor: &mut CanonicalCursor<'_>) -> Result<BigInt, String> {
+        cursor.expect_tag("int_lit")?;
+        let len = cursor.read_len()?;
+        let bytes = cursor.read_exact(len)?;
+        Ok(BigInt::from_signed_bytes_be(bytes))
+    }
+
+    /// `encode_term ∘ decode_int_lit = id` on `Term::IntLit` — the property
+    /// that makes the serialization arm trustworthy, not just present. A
+    /// wrong round-trip here would silently corrupt a literal's value on
+    /// checked-core import (`Equal Int 5 5` reimporting as `Equal Int 5
+    /// <other>`), which no other test in this WP would catch (the kernel
+    /// tests never touch `checked_core.rs`; this file's own tests are the
+    /// only place this specific encode/decode pair is exercised).
+    #[test]
+    fn int_lit_encode_decode_round_trips() {
+        let table = StableSymbolTable::new();
+        let values: Vec<BigInt> = vec![
+            BigInt::from(0),
+            BigInt::from(-1),
+            BigInt::from(1),
+            BigInt::from(5),
+            BigInt::from(-123456789i64),
+            BigInt::from(i64::MAX),
+            BigInt::from(i64::MIN),
+            "9".repeat(300).parse().unwrap(),
+            format!("-{}", "1".repeat(300)).parse().unwrap(),
+        ];
+        for n in values {
+            let mut out = CanonicalSink::new();
+            encode_term(&Term::IntLit(n.clone()), &table, &mut out)
+                .expect("encode_term must not fail on IntLit");
+            let bytes = out.finish();
+
+            let mut cursor = CanonicalCursor::new(&bytes);
+            let decoded = decode_int_lit(&mut cursor).expect("decode_int_lit must not fail");
+            assert_eq!(decoded, n, "round-trip must preserve the exact BigInt value");
+            assert_eq!(
+                cursor.remaining(),
+                0,
+                "decode must consume exactly the bytes encode_term wrote, no more no less"
+            );
+        }
+    }
+
+    /// `skip_term` (the shared low-level cursor-advance primitive every
+    /// other decoder builds on) must also consume exactly the `int_lit`
+    /// payload's bytes — not too few (misparses whatever follows) and not
+    /// too many (silently swallows sibling content in a larger term).
+    #[test]
+    fn int_lit_skip_term_consumes_exactly_its_own_bytes() {
+        let table = StableSymbolTable::new();
+        // Two IntLits back to back — skip_term on the first must land the
+        // cursor exactly at the second's tag, not before or after it.
+        let mut out = CanonicalSink::new();
+        encode_term(&Term::IntLit(BigInt::from(42)), &table, &mut out).unwrap();
+        let first_len = out.finish().len();
+        let mut out = CanonicalSink::new();
+        encode_term(&Term::IntLit(BigInt::from(42)), &table, &mut out).unwrap();
+        encode_term(&Term::IntLit(BigInt::from(-7)), &table, &mut out).unwrap();
+        let bytes = out.finish();
+
+        let mut cursor = CanonicalCursor::new(&bytes);
+        skip_term(&mut cursor).expect("skip_term must succeed on int_lit");
+        assert_eq!(
+            cursor.pos, first_len,
+            "skip_term must stop exactly at the boundary between the two literals"
+        );
+        let second = decode_int_lit(&mut cursor).expect("second literal must decode cleanly");
+        assert_eq!(second, BigInt::from(-7));
+        assert_eq!(cursor.remaining(), 0);
+    }
 
     fn decl_symbol(name: &str) -> StableSymbol {
         StableSymbol::declaration("pkg", &["M"], name)

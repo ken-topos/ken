@@ -514,6 +514,7 @@ dependencies = [
  "ken-interp",
  "ken-kernel",
  "ken-runtime",
+ "num-bigint",
  "serde_json",
 ]
 
