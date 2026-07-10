@@ -20,7 +20,14 @@ publishes and merges.
 
 1. Take one WP (or one reviewable sub-task) from your leader. One at a time.
 2. Your leader opens `wp/<WP-ID>-<slug>` off `origin/main`; check it out and
-   `git rebase origin/main` first. **Ground-truth the release before you build
+   `git rebase origin/main` first. **Make the checkout your literal first shell
+   command — before any `Read`/`Edit`/`Grep` on source — and confirm
+   `git branch --show-current` matches the WP branch named in the kickoff
+   (promoted FR-1).** Reading the brief then editing source *before* the checkout
+   silently lands your work on your home branch; you won't notice until commit
+   time, and the ring stalls with nothing on `wp/<ID>` for QA or the Steward to
+   point at (FR-1: ~2 h of nudge cycling before a `git status` in the worktree
+   surfaced it). **Ground-truth the release before you build
    (promoted — validated 3× across 2 teams):** confirm the WP's elaborated spec
    is genuinely on `main` — commit + CI green + Architect/Spec approvals (the
    frame's *pipeline-status* line is the gate). **Never build from a raw
