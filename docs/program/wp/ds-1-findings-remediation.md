@@ -57,21 +57,60 @@ unreachable** via ordinary call syntax. Confirmed empirically (a probe declaring
 against the new declaration's unrelated signature, no error). DS-1 sidesteps it
 by naming its `Empty` eliminator `absurdEmpty`.
 
-**Remediation — pick the level (an Ergo/enclave call).** The silent part is the
-footgun; the options, cheapest first:
-1. **Doc note** at `elab.rs:499` (and the surface reference) enumerating the
-   reserved-sugar identifiers (`absurd`, and audit for siblings — `Refl`,
-   `Axiom` are `RCon`/`RApp` special forms per `elab.rs:1348`) so the next
-   author knows the name is taken. The implementer's recommended floor.
-2. **Collision diagnostic** — when a top-level declaration's name collides with
-   a reserved sugar identifier, emit a warning/error rather than silently
-   shadowing. Turns a silent footgun into a caught one; the principled fix.
-3. **Defer-to-global** — make the sugar fire only on a scope miss (let a real
-   declared `absurd` win). Larger behavior change to landed sugar; likely
-   over-reach for a single collision — flag, probably decline.
+**Remediation — DECIDED (Architect ruling, arity-indexed; `evt_4p5a2xkqemnge`).**
+Build **(1) + (2)**; **decline (3)**. The reserved sugar identifiers do **not**
+all intercept the same way, and the declaration-time guard's correct domain is
+only the **total-/canonical-steal** names — grouping the arity-gated names with
+the bare-`RCon` ones (the original pin's error) would reject a landed,
+spec-grounded catalog class.
 
-Recommend **(1) now, (2) if cheap.** (3) needs an explicit enclave ruling before
-touching landed sugar semantics. No kernel/trust impact at any level.
+- **`Refl` (`elab.rs:462`), `Axiom` (`elab.rs:482`)** — bare `RCon`, **total
+  intercept**: any syntactic occurrence is stolen, so a declared global of that
+  name is *wholly* unreachable. A hard error on declaration is exactly right and
+  complete.
+- **`absurd` (`elab.rs:499`)** — `RApp(RCon("absurd"), _)`, **arity-1**: the
+  canonical (and only meaningful) use of a value so named; the *originating*
+  FR-2 footgun (DS-1's `absurdEmpty` rename). No landed coexistence. Guard it.
+- **`J` (`elab.rs:1354`), `Eq` (`elab.rs:410` type-level / `1364` expr-level)** —
+  `peel_named_app(_, name, 3)`, **arity-3 only, gated *by design* to coexist**
+  with a lower-arity type-former/class of the same name. Landed `class Eq a`
+  (arity-1, `spec/50-stdlib/51-lawful-classes.md §2.1`; DecEq / lawful functors /
+  `map.ken` / `EmptyDec.ken.md` all build on it) coexists with the arity-3
+  equality sugar — the elaborator's arity gate already routes `Eq a`→class,
+  `Eq A a b`→sugar. A declaration-time name reject is the categorically wrong
+  tool here; a reference-site "arity-3 sugar fires AND a global `Eq` is in scope"
+  check would be *catastrophic* (it breaks every legitimate `Eq A a b` use in any
+  file that also imports `class Eq`). **Not guarded.**
+
+So the shared **`RESERVED_SUGAR` = {`Refl`, `Axiom`, `absurd`}** (the
+`resolve_decl` hard-error set). `Cast`/`Ascript` are `[K2]` keyword-reserved at a
+different layer with no `RCon` interception arm; `tt` has no `name == "tt"` arm —
+none belong in the guard.
+
+1. **Doc note** (`elab.rs` at the sugar arms + the surface reference) stating the
+   *actual* reservation: {`Refl`, `Axiom`, `absurd`} are reserved names
+   (declaring one is a resolve-time hard error); arity-3 `Eq`/`J` **applications**
+   are the kernel equality/`J` sugar (reserved at that arity), while a
+   lower-arity type-former/class named `Eq`/`J` coexists.
+2. **Collision diagnostic — a resolve-time HARD ERROR** in `resolve_decl`
+   (`resolve.rs`, the single decl-kind-uniform funnel), guarding the produced
+   decl's name **and** data-constructor names (a `data … = Refl | …` ctor
+   collides identically), reading the one shared `RESERVED_SUGAR` const that the
+   sugar-guard arms and the collision check both consume so they cannot drift.
+3. **Defer-to-global — DECLINED.** History-sensitive; inverts the trust posture.
+
+**Residual (deferred, out of FR-2 scope).** A user `def Eq (A B C : Type)` at
+arity-3 would be shadowed by the equality sugar — an inherent, *documented*
+reservation of the arity-3 `Eq`/`J` application form, not a silent bug FR-2 must
+close (closing it risks the coexistence lawful classes depend on). If ever
+wanted, the sound detector is a **declaration-arity** check (reject a type-former
+named `Eq`/`J` whose *own* arity is exactly 3), never a reference-site scope
+check.
+
+**Safe:** the Architect grep-confirmed none of {`Refl`, `Axiom`, `absurd`} is a
+prelude global, so the hard error cannot break the bootstrap. **Zero
+kernel/trust delta** — a pure outer-ring resolver completeness restriction,
+fail-closed.
 
 ## FR-3 · `ken run` has no library check-mode (highest value)
 
