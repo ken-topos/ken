@@ -211,40 +211,48 @@ bar.
   additive `data` + combinators, not a rework). The DS-3 combinator build (lane a)
   is independent and proceeds regardless.
 
-### L5 · ⚠ PROMINENT (trust-root prelude type) — neutral coproduct `Sum`→`Either` [OPERATOR-RULED]
-- **Call:** Rename the neutral coproduct **`Sum a b = InL a | InR b` →
-  `Either a b = Left a | Right b`** across the whole codebase — the idiomatic
-  functional spelling. One coproduct, both effect-composition (`⊕`) and
-  user-facing value sums; `Result e a = Err e | Ok a` stays a **distinct** named
-  error type. Framed `wp/either-neutral-coproduct.md`, **KICKED to Runtime**
-  (effect-machinery owner), Architect-gated, CI-gated.
-- **Decider:** **the operator (Pat), directly** — not a PRINCIPLES-stand-in call.
-  Pat asked whether `Either` denotes different semantics than `Result` to a reader;
-  I answered yes (different reader intent + how the corpus splits them: Rust/F#/Elm
-  keep a named `Result` distinct from a neutral `Either`/`Choice`; Haskell/Scala's
-  one right-biased `Either` does double duty). Pat: *"Agree. Reopen, prefer Either
-  to Sum (which only a narrow population sees as anything other than addition)."*
-- **Why:** **humans-read** (PRINCIPLES) — `Left`/`Right`/`Either` is the vocabulary
-  functional programmers reach for by reflex; `Sum`/`InL`/`InR` reads as *addition*
-  to everyone outside a narrow category-theory population. L4's structural-
-  isomorphism argument under-weighted this communicative axis. Subsume-don't-
-  proliferate still holds — this is a **rename** to one idiomatic coproduct, not a
-  third spelling.
-- **Scope/boundary:** hand-built inductive in `effects::state::declare_sum` +
-  `prelude.rs` globals + `eval.rs` D3.2 peel + ~5 effect-composition tests + 2 spec
-  files. **The landed L4 subsume erratum (PR #446) is SUPERSEDED** — the spec touch
-  must REWRITE the note (Either = distinct declared coproduct, Result = distinct
-  error sum) and RESTORE `Either` at the three list-sites the erratum dropped it
-  from, NOT find-replace (Architect catch `evt_60ahxgw3vpnqn`). **Zero
-  kernel-crate delta** (the inductive stays `declare_inductive`, kernel-rechecked);
-  no back-compat alias (no users); no name collision. Open technical sub-question
-  (Architect/team): keep hand-built vs migrate to a surface `data Either` (it's
-  non-dependent → likely expressible now).
-- **Reversibility:** **moderate-class** (a landed trust-root prelude declared-type
-  rename, pure/semantics-preserving, zero kernel-crate delta, revert-clean) —
-  flagged PROMINENT for operator review. Not soundness-adjacent (pure rename).
-- **Downstream:** DS-3 (Option/Result combinators, in flight) unaffected; `Either`
-  value combinators are a possible follow-on, not this WP.
+### L5 · ⚠ PROMINENT (trust-root prelude type) — coproduct family: add `Either`, rename effect `Sum`→`Coproduct` [OPERATOR-RULED]
+- **Call (COEXIST by role — three distinct coproducts, corrected from the first
+  cut):** (1) **ADD `Either a b = Left a | Right b`** as the user-facing value
+  disjunction; (2) **RENAME the internal effect coproduct `Sum`→`Coproduct`**
+  (type name only, **keep `InL`/`InR`** — so `eval.rs`'s peel logic is untouched);
+  (3) **RESERVE the freed `Sum`** for a future `Data.Functor.Sum` (higher-kinded
+  functor coproduct, sibling to DS-8's `Compose`). `Result e a = Err e | Ok a`
+  stays a distinct named error type. Framed `wp/either-neutral-coproduct.md`,
+  **KICKED to Runtime** (bundled to avoid a `prelude.rs` clash), Architect-gated
+  + Spec-vote, CI-gated.
+- **Decider:** **the operator (Pat), directly** — two-step. First: Pat asked if
+  `Either` differs semantically from `Result`; I answered yes (Rust/F#/Elm keep a
+  named `Result` distinct from a neutral `Either`/`Choice`) → *"Reopen, prefer
+  Either to Sum."* Then Pat probed whether the *internal* `Sum` is the same as
+  `Either` ("Either means one or the other, not both") → I clarified they're
+  structurally identical in Ken (both Type0) but different-role; Pat ruled
+  **COEXIST** (don't unify), and chose the effect coproduct be renamed to the
+  precise term **`Coproduct`** (freeing `Sum` for the real `Data.Functor.Sum`).
+- **Why:** **humans-read** — `Either`/`Left`/`Right` is the value-disjunction
+  idiom; `Sum` reads as *addition* outside a narrow CT audience AND squats on the
+  name the real functor coproduct wants (Ken's effect `Sum` is a Type0 *value*
+  coproduct, NOT the higher-kinded `Data.Functor.Sum`). Distinct reader-roles earn
+  distinct names — same principle as `Result` vs `Either` (coexist, not subsume,
+  because roles differ; #7 is not violated — three *different-role* types, no
+  redundant spelling). L4's structural-isomorphism argument under-weighted this.
+- **Scope/boundary:** add `data Either` to prelude (surface `data`, mirrors
+  `Result`); rename `Sum`→`Coproduct` in `effects::state::declare_sum` + prelude
+  globals + `injectL/R` + `resp_sum`(→`resp_coproduct`?) + tests + `36-effects.md`;
+  `eval.rs` peel = **comment-only** (InL/InR kept). **The landed L4 subsume erratum
+  (PR #446) is SUPERSEDED** — spec touch must REWRITE the `34-data-match` note
+  (Either = distinct declared coproduct; Result = distinct error sum) + RESTORE
+  `Either` at the three list-sites, NOT find-replace (Architect catch
+  `evt_60ahxgw3vpnqn`). **Zero kernel-crate delta**; no alias (no users); no name
+  collision. Open sub-question (Architect): `Coproduct` hand-built vs surface
+  `data`; `resp_sum` rename.
+- **Reversibility:** **moderate-class** (a trust-root prelude declared-type
+  add+rename, pure/semantics-preserving, zero kernel-crate delta, revert-clean) —
+  PROMINENT for operator review. Not soundness-adjacent.
+- **Downstream (named follow-ons, NOT this WP):** DS-3 (Option/Result combinators,
+  in flight) unaffected; **`Either` value combinators** (`either`/`mapLeft`/
+  `mapRight`) → Foundation, DS-3-adjacent; **`Data.Functor.Sum f g`** → a
+  functor-combinator WP alongside `Compose` when the catalog grows that family.
 
 ### P1 · Sequence: DS-2 → DS-7 → DS-8 → (Data) DS-3 → DS-4 → DS-6; DS-5 spec-track in parallel
 - **Call:** Drive DS-2 (`Ord Nat` export) first, then the remaining Core toolkit
