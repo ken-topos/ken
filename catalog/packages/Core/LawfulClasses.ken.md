@@ -10,19 +10,27 @@ equality vocabulary — no new kernel former.
 1. [Motivation](#1-motivation)
 2. [Definition](#2-definition)
 3. [Using it](#3-using-it)
-4. [Laws  proofs](#4-laws--proofs)
+4. [Laws & proofs](#4-laws--proofs)
 5. [Design notes](#5-design-notes)
 6. [Findings](#6-findings)
 7. [References](#7-references)
-8. [Trust  derivation](#8-trust--derivation)
+8. [Trust & derivation](#8-trust--derivation)
+
+The Definition introduces the public class vocabulary and the small supporting
+operations it needs. Laws & proofs is grouped by carrier and proof family:
+the audited primitive `Int` boundary, finite `Bool` case splits, then the
+projection transports for `Char`. Trust & derivation records the corresponding
+trusted-base posture and validation evidence.
 
 **Named reading paths**
 
 - *Newcomer* → [Motivation](#1-motivation) → [Using it](#3-using-it)
 - *Practitioner* → [Using it](#3-using-it) →
-  [Laws  proofs](#4-laws--proofs)
+  [Laws & proofs](#4-laws--proofs)
 - *Researcher* →
-  [Laws  proofs](#4-laws--proofs) → [Design notes](#5-design-notes)
+  [Laws & proofs](#4-laws--proofs) → [Design notes](#5-design-notes)
+- *Porting from Haskell, Lean, or Agda* → [Motivation](#1-motivation) →
+  [Definition](#2-definition) → [Design notes](#5-design-notes)
 
 ## 1. Motivation
 
@@ -69,6 +77,15 @@ class DecEq a {
   complete : (x : a) → (y : a) → Equal a x y → IsTrue (eq x y)
 }
 ```
+
+**Public surface and supporting operations.** The stable class vocabulary is
+`Eq`, `DecEq`, and `Ord`; their fields are the public operations and laws a
+consumer uses through a dictionary. `IsTrue` is the common bridge from a
+Boolean result to a proposition, and `bool_or` is deliberately a supporting
+definition for `Ord.total`'s law shape rather than an additional ordering
+operation. Carrier-specific operations below exist to define or realize those
+class fields; the public API and its compatibility posture are collected in
+Trust & derivation.
 
 `bool_or` is a REAL (transparent, match-based) `Bool` "or", used ONLY for
 `total`'s law-field TYPE (never for an operation field of any instance).
@@ -117,9 +134,17 @@ worked example: every one of its own fields is a `.`-projection off
 …), the same projection form a resolved `where Ord a` dictionary uses
 internally.
 
-## 4. Laws  proofs
+## 4. Laws & proofs
 
-**Canonical `Int` instances (`51 §6`).** `Int` is a K1 primitive: opaque to
+The public law shape lives in the three class declarations above; this section
+shows how each carrier inhabits it. Read the families in order when auditing the
+trust boundary: `Int` reuses one named certificate and visibly audited ordering
+laws, `Bool` proves finite cases in the kernel, and `Char` introduces no new
+assumption because it projects the already-existing `Int` dictionaries.
+
+### 4.1 Canonical `Int` instances
+
+`Int` is a K1 primitive: opaque to
 δ (`leq_int x x` on a variable `x` does not reduce — primitive reductions
 fire on literals only, `ken-kernel`'s `conv.rs::whnf` only unfolds
 `Decl::Transparent`, never `Decl::Primitive`) and has no induction
@@ -193,7 +218,9 @@ instance Ord Int {
 }
 ```
 
-**Canonical `Bool` instances — the ZERO-DELTA exemplar (`51 §6`).** `Bool`
+### 4.2 Canonical `Bool` instances — the zero-delta exemplar
+
+`Bool`
 is a real inductive (`data Bool = True | False`, ES2), so its laws ARE
 kernel-provable by finite case-split (`elim_Bool` into an `Omega`-motive, K4
 `3be0e30`). Every law field below is a REAL, kernel-checked proof
@@ -201,7 +228,9 @@ kernel-provable by finite case-split (`elim_Bool` into an `Omega`-motive, K4
 signature form described next) — NOT `Axiom`, anywhere in any of the three
 `Bool` instances.
 
-**The restructuring discipline (why these signatures look unusual).** A law
+#### Proof strategy: stage binders before case splits
+
+A law
 field bound as `(x:a)(y:a)(p:P x y)(q:Q x y) -> Concl` would check `p`/`q`
 against their DECLARED (unnarrowed) types even while case-splitting `x`/`y`
 inside the body — `match x {...}` only narrows the GOAL (via the `Elim`'s
@@ -217,7 +246,9 @@ hypothesis's binder-time type ALREADY concrete in the case-split variables
 directly, no ex-falso needed. This is *why* `refl`/`trans`/`total` are
 provable today without any further kernel capability.
 
-**`tt` vs. `Refl` in these proofs.** Every branch whose goal reduces to a
+#### Proof strategy: `tt` versus `Refl`
+
+Every branch whose goal reduces to a
 TRUE `IsTrue`/`Equal` equation (e.g. `IsTrue (bool_leq True True)`) is
 closed with `tt` (K5 `Top`-intro), not `Refl`: the goal is
 `Equal Bool (op x y) True` for an OPERATION (`bool_leq`/`bool_eq`/
@@ -238,7 +269,9 @@ kernel's `Top` proposition (`obs.rs::eq_at_inductive`, same-ctor nullary =>
 `Top`), closed by `tt` (K5 `Top`-introduction). `sound`/`complete`'s
 "consistent" branches close identically.
 
-**The swapped/contradictory branches — the K7 story.** These branches were
+#### K7: swapped and contradictory branches
+
+These branches were
 EXPECTED (per the Architect's per-obligation re-derivation) to reduce a
 HYPOTHESIS to a bare `Equal Bool True False`/`Equal Bool False True`,
 collapsing to `Bottom` and closed by `absurd`. THIS DID NOT HOLD ON THE
@@ -372,8 +405,11 @@ instance DecEq Bool {
 }
 ```
 
-**`Ord Char` — by TRANSPORT from `Ord Int`** (re-homed from the
-Decimal/Char DEMOTE, `docs/program/wp/lawful-classes-lane.md`). Under
+### 4.3 `Ord Char` — transport from `Ord Int`
+
+Re-homed from the Decimal/Char DEMOTE
+(`docs/program/wp/lawful-classes-lane.md`), this instance uses refinement
+erasure rather than a carrier-specific proof. Under
 refinement erasure `Char = { c : Int | isScalar c }` (`decimal_char.rs`),
 `Char.toInt` (`charToInt`) is the IDENTITY projection and
 `leqChar a b = leq_int a b` (same file) — so `Char`'s order IS `Int`'s
@@ -399,9 +435,10 @@ instance Ord Char {
 }
 ```
 
-**`DecEq Char` — rides free by the SAME transport** (`docs/adr/0013-int-
-decidable-equality-kernel-posture.md` Layer 1's stated consequence: "someone
-writes the trivial `instance DecEq Char`"). Identical shape to `Ord Char`
+### 4.4 `DecEq Char` — the same transport
+
+ADR 0013's Layer 1 states its intended consequence: "someone writes the
+trivial `instance DecEq Char`." The shape is identical to `Ord Char`
 above — every field is a direct `.`-projection off `DecEq_instance_Int`,
 zero-Char-specific kernel work, zero-NEW-delta (the projected fields
 themselves resolve to the shared `int_eq_sound`/`int_eq_complete`
@@ -417,7 +454,9 @@ instance DecEq Char {
 
 ## 5. Design notes
 
-**Why `Eq Bool`'s `sym`/`trans` needed a real correction, not just K7.** The
+### 5.1 Why `Eq Bool`'s `sym`/`trans` need a real correction, not only K7
+
+The
 ORIGINAL (never-shipped) proof attempt tried to REUSE a hypothesis
 `p : IsTrue (eq x y)` directly for the swapped goal `IsTrue (eq y x)`,
 WITHOUT case-splitting `x`/`y` — i.e. `p` itself, unchanged, as the answer.
@@ -452,8 +491,9 @@ exercised — no branch reuses a hypothesis across a swap; each computes its
 own concrete answer. Zero `conv.rs` diff, zero new capability,
 K6-independent.
 
-**Why `Ord Char` transports `leq` via `.`-projection, not the separately
-defined `leqChar` view.** `leq` is transported as `(Ord_instance_Int).leq`
+### 5.2 Why `Ord Char` transports `leq` via `.`-projection
+
+`leq` is transported as `(Ord_instance_Int).leq`
 — not `leqChar`, though both reduce to the identical `leq_int a b`
 (confirmed: `leqChar`/`int_leq` are both `Decl::Transparent` wrappers over
 the same `leq_int` primitive, so both fully whnf to the same normal form).
@@ -510,11 +550,17 @@ transport, still reduces via `leq_int` (through one more projection layer)
 
 ## 7. References
 
-None — this entry's design (the `IsTrue`-bridged Boolean/propositional
-split, the restructuring discipline) is Ken-native, not consulted from an
-external reference implementation.
+- **Type class — Wikipedia** — <https://en.wikipedia.org/wiki/Type_class> —
+  general orientation for the record-and-dictionary vocabulary used here.
+- **Order theory — Wikipedia** — <https://en.wikipedia.org/wiki/Order_theory>
+  — general orientation for reflexivity, antisymmetry, transitivity, and
+  totality before reading this entry's Boolean formulation.
 
-## 8. Trust  derivation
+These links are reader orientation only. The `IsTrue`-bridged
+Boolean/propositional split and the proof strategies in this entry are
+Ken-native; no external reference implementation informed its source.
+
+## 8. Trust & derivation
 
 1. **Spec / WP.** `spec/50-stdlib/51-lawful-classes.md`; `wp/ES4-classes-
    build` (Architect ruling `evt_68ppz77ysh5ne`), the ES4-lawproofs reopen
@@ -532,10 +578,13 @@ external reference implementation.
 
    | Task | Section |
    |---|---|
+   | Choose a class or inspect its public field shape | [Definition](#2-definition) |
    | See the three classes | [Definition](#2-definition) |
    | Project a field off a dictionary | [Using it](#3-using-it) |
-   | The `tt`-vs-`Refl`/K7 story, the restructuring discipline | [Laws  proofs](#4-laws--proofs) |
+   | Audit the `Int`, `Bool`, or `Char` proof family | [Laws & proofs](#4-laws--proofs) |
+   | The `tt`-vs-`Refl`/K7 story, the restructuring discipline | [Laws & proofs](#4-laws--proofs) |
    | Why `Eq Bool`/`Ord Char` needed the fixes they did | [Design notes](#5-design-notes) |
+   | Check assumptions, consumers, and validation evidence | [Trust & derivation](#8-trust--derivation) |
 
 4. **Derivation path.** The three classes are `class` declarations = record
    types (`33 §5.2`, right-nested Σ over `13 §3`), built from `Bool`
