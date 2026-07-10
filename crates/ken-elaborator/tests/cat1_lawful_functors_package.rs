@@ -4,19 +4,19 @@
 use ken_elaborator::ElabEnv;
 use ken_kernel::Term;
 
-const COLLECTIONS_KEN: &str = include_str!("../../../catalog/packages/collections/collections.ken");
-const TRANSPORT_KEN: &str = include_str!("../../../catalog/packages/transport/transport.ken");
+const COLLECTIONS_KEN: &str = include_str!("../../../catalog/packages/Data/Collections/Collections.ken");
+const TRANSPORT_KEN: &str = include_str!("../../../catalog/packages/Core/Transport.ken");
 const LAWFUL_FUNCTORS_KEN: &str =
-    include_str!("../../../catalog/packages/lawful-functors/lawful_functors.ken");
+    include_str!("../../../catalog/packages/Core/LawfulFunctors.ken");
 
 fn mk_env_with_lawful_functors() -> ElabEnv {
     let mut env = ElabEnv::new().expect("base env construction failed");
     env.elaborate_file(TRANSPORT_KEN)
-        .expect("catalog/packages/transport/transport.ken must elaborate");
+        .expect("catalog/packages/Core/Transport.ken must elaborate");
     env.elaborate_file(COLLECTIONS_KEN)
-        .expect("catalog/packages/collections/collections.ken must elaborate");
+        .expect("catalog/packages/Data/Collections/Collections.ken must elaborate");
     env.elaborate_file(LAWFUL_FUNCTORS_KEN)
-        .expect("catalog/packages/lawful-functors/lawful_functors.ken must elaborate");
+        .expect("catalog/packages/Core/LawfulFunctors.ken must elaborate");
     env
 }
 

@@ -137,6 +137,31 @@ impl Parser {
         (joined, Span::new(first_span.start, end))
     }
 
+    /// `ConId ('.' ConId)*` — a dotted **module path** (`33 §3.2`), shared by
+    /// `import`/`import … as`/selective `import`/`use`/`module`. Every
+    /// component is a `ConId` (uppercase-initial, `31 §1`: module names are
+    /// `conid`) — this mirrors the catalog taxonomy's path↔import identity
+    /// (`docs/program/07-catalog-style-guide.md`, N dotted components → N-1
+    /// directories + a leaf file). Distinct from `parse_dotted`, which also
+    /// accepts a trailing lowercase `.ident` (expression-position field
+    /// projection) — a module path never does: a bare `.` is never a valid
+    /// decl-start token, so it's consumed eagerly and `expect_con` fails
+    /// closed (rather than silently truncating the path) if what follows
+    /// isn't uppercase.
+    fn parse_dotted_module_path(&mut self) -> Result<(String, Span), ElabError> {
+        let (first, first_span) = self.expect_con()?;
+        let mut joined = first;
+        let mut end = first_span.end;
+        while matches!(self.peek(), Token::Dot) {
+            self.advance(); // consume '.'
+            let (seg, seg_span) = self.expect_con()?;
+            joined.push('.');
+            joined.push_str(&seg);
+            end = seg_span.end;
+        }
+        Ok((joined, Span::new(first_span.start, end)))
+    }
+
     // ----- declaration parsing -----
 
     pub fn parse_decls(&mut self) -> Result<Vec<Decl>, ElabError> {
@@ -806,10 +831,10 @@ impl Parser {
         })
     }
 
-    /// `module M { decl₁ … declₙ }` (`33 §3.1`).
+    /// `module M { decl₁ … declₙ }` | `module M.N { … }` (`33 §3.1`).
     fn parse_module_decl(&mut self, start: usize) -> Result<Decl, ElabError> {
         self.advance(); // consume 'module'
-        let (name, _) = self.expect_ident()?;
+        let (name, _) = self.parse_dotted_module_path()?;
         self.expect(&Token::LBrace)?;
         let mut decls = Vec::new();
         while !matches!(self.peek(), Token::RBrace | Token::Eof) {
@@ -824,10 +849,10 @@ impl Parser {
         })
     }
 
-    /// `import M` | `import M as N` | `import M (foo, Bar)` (`33 §3.2`).
+    /// `import M.N` | `import M.N as O` | `import M.N (foo, Bar)` (`33 §3.2`).
     fn parse_import_decl(&mut self, start: usize) -> Result<Decl, ElabError> {
         self.advance(); // consume 'import'
-        let (module, _) = self.expect_ident()?;
+        let (module, _) = self.parse_dotted_module_path()?;
         let kind = match self.peek().clone() {
             Token::Ident(s) if s == "as" => {
                 self.advance();
@@ -859,10 +884,10 @@ impl Parser {
         })
     }
 
-    /// `use M` — unqualified open import (`33 §3.2`).
+    /// `use M.N` — unqualified open import (`33 §3.2`).
     fn parse_use_decl(&mut self, start: usize) -> Result<Decl, ElabError> {
         self.advance(); // consume 'use'
-        let (module, _) = self.expect_ident()?;
+        let (module, _) = self.parse_dotted_module_path()?;
         let end = self.tokens[self.pos - 1].1.end;
         Ok(Decl::ImportDecl {
             module,

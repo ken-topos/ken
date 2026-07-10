@@ -90,7 +90,7 @@ preserve the spec shape without changing the public combinator names.
 The public names `subst`, `cong`, `cast`, `sym`, and `trans` are stable and are
 preserved by catalog refinement.
 
-`catalog/packages/lawful-functors` uses `cong`/`sym`/`trans` for inductive congruence
+`catalog/packages/Core/LawfulFunctors.ken` uses `cong`/`sym`/`trans` for inductive congruence
 steps. The map verified-laws work also depends on the transport package for the
 Gap-A route around stuck comparison transport. The `Equal`/`Eq` alias
 transparency means existing `Equal Bool (leq ...) True` order hypotheses remain
@@ -105,6 +105,6 @@ Refinement review also checks:
 
 - `git diff --check`;
 - no diff under `crates/ken-kernel`, `Cargo.lock`, or `conformance`;
-- trust-drift grep over `catalog/packages/transport` for trusted declarations,
+- trust-drift grep over `catalog/packages/Core/Transport.ken` for trusted declarations,
   primitive wrappers, and raw proof-relevant data declarations;
 - public-name availability for `subst`, `cong`, `cast`, `sym`, and `trans`.

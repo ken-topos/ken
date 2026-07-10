@@ -35,7 +35,7 @@ fn list_append (a : Type) (xs : List a) (ys : List a) : List a =
   }
 
 -- `cong` — lift equality of endpoints through a function
--- (`catalog/packages/transport/transport.ken`'s idiom, inlined so this
+-- (`catalog/packages/Core/Transport.ken`'s idiom, inlined so this
 -- strand's examples are self-contained).
 fn cong (ty : Type) (ty2 : Type) (x : ty) (y : ty) (f : ty → ty2)
          (p : Equal ty x y) : Equal ty2 (f x) (f y) =
@@ -172,7 +172,7 @@ case-split each variable through its **own** `match`-returning-a-function
 layer, and only introduce the hypothesis's `λ` *after* every relevant
 variable is already concrete — exactly the shape `boolEqSound`/
 `boolEqComplete` use in §3, and the shape every law field in
-`catalog/packages/lawful-classes/lawful_classes.ken` follows. Once the
+`catalog/packages/Core/LawfulClasses.ken` follows. Once the
 hypothesis's binder-time type is concrete, a branch whose hypothesis is
 *already* the goal (e.g. an "impossible" combination where the hypothesis
 and the goal are the same false equation) can reuse it directly — no
@@ -218,7 +218,7 @@ fn boolEqComplete (x : Bool) : (y : Bool) → Equal Bool x y → IsTrue (boolEq 
 An **audited-delta** carrier (a K1 primitive like `Int`, opaque to δ, with
 no induction principle) cannot follow this pattern — its `sound`/`complete`
 are not kernel-provable at all, and the honest spelling is the visible
-`Axiom` postulate (`catalog/packages/lawful-classes/lawful_classes.ken`'s
+`Axiom` postulate (`catalog/packages/Core/LawfulClasses.ken`'s
 `Int` instance), never a proof that only looks real.
 
 ## 4. `funext` is definitional

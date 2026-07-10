@@ -8,7 +8,7 @@
 //! re-classed `declare_primitive` here (still trusted, audited, item-2) —
 //! **superseded by Map-build** (`spec/50-stdlib/52-map.md`, VAL2 #8/OQ-A):
 //! the audited primitive is now **retired outright**, replaced by a proved,
-//! pure `Tree k v` (`catalog/packages/collections/map.ken`) that is derived Ken —
+//! pure `Tree k v` (`catalog/packages/Data/Collections/Map.ken`) that is derived Ken —
 //! `declare_inductive`/`declare_def`, never `declare_primitive`/
 //! `declare_postulate` — a **net-negative** `trusted_base()` delta (AC4
 //! below now pins the retirement, not the re-class).
@@ -22,9 +22,9 @@ use ken_elaborator::{foreign::trusted_base_delta, ElabEnv};
 use ken_kernel::env::Decl;
 use ken_kernel::{whnf, Term};
 
-const COLLECTIONS_KEN: &str = include_str!("../../../catalog/packages/collections/collections.ken");
-const TRANSPORT_KEN: &str = include_str!("../../../catalog/packages/transport/transport.ken");
-const MAP_KEN: &str = include_str!("../../../catalog/packages/collections/map.ken");
+const COLLECTIONS_KEN: &str = include_str!("../../../catalog/packages/Data/Collections/Collections.ken");
+const TRANSPORT_KEN: &str = include_str!("../../../catalog/packages/Core/Transport.ken");
+const MAP_KEN: &str = include_str!("../../../catalog/packages/Data/Collections/Map.ken");
 
 fn mk_env() -> ElabEnv {
     ElabEnv::new().expect("base env construction failed")
@@ -259,7 +259,7 @@ fn map_set_retired_not_prelude_primitives() {
     );
 }
 
-/// The replacement — `Tree k v` + its ops (`catalog/packages/collections/map.ken`)
+/// The replacement — `Tree k v` + its ops (`catalog/packages/Data/Collections/Map.ken`)
 /// — is derived, kernel-rechecked Ken: `Tree` is `Decl::Inductive`
 /// (`declare_inductive`), every op is `Decl::Transparent` (`declare_def`).
 /// Discriminating pair with the retirement test above: a build that adds the

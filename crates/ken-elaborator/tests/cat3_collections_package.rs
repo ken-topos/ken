@@ -8,15 +8,15 @@
 use ken_elaborator::{foreign::trusted_base_delta, ElabEnv};
 use ken_kernel::Decl;
 
-const TRANSPORT_KEN: &str = include_str!("../../../catalog/packages/transport/transport.ken");
-const COLLECTIONS_KEN: &str = include_str!("../../../catalog/packages/collections/collections.ken");
+const TRANSPORT_KEN: &str = include_str!("../../../catalog/packages/Core/Transport.ken");
+const COLLECTIONS_KEN: &str = include_str!("../../../catalog/packages/Data/Collections/Collections.ken");
 
 fn mk_env() -> ElabEnv {
     let mut env = ElabEnv::new().expect("base env");
     env.elaborate_file(TRANSPORT_KEN)
-        .expect("catalog/packages/transport/transport.ken must elaborate");
+        .expect("catalog/packages/Core/Transport.ken must elaborate");
     env.elaborate_file(COLLECTIONS_KEN)
-        .expect("catalog/packages/collections/collections.ken must elaborate");
+        .expect("catalog/packages/Data/Collections/Collections.ken must elaborate");
     env
 }
 

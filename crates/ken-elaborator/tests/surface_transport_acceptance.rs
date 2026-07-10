@@ -2,7 +2,7 @@
 //! former (`spec/30-surface/34-data-match.md §3.4`) + the `Eq`-at-any-level
 //! type-position spelling it needs to state its own combinators
 //! (`spec/50-stdlib/53-transport.md`), against the REAL
-//! `catalog/packages/transport/transport.ken` source (producer-grep: drives the
+//! `catalog/packages/Core/Transport.ken` source (producer-grep: drives the
 //! actual package file via `include_str!`).
 //!
 //! AC1 (soundness, load-bearing): the elaboration emits a real `Term::J`
@@ -16,7 +16,7 @@
 use ken_elaborator::ElabEnv;
 use ken_kernel::{GlobalId, Term};
 
-const TRANSPORT_KEN: &str = include_str!("../../../catalog/packages/transport/transport.ken");
+const TRANSPORT_KEN: &str = include_str!("../../../catalog/packages/Core/Transport.ken");
 
 fn mk_env() -> ElabEnv {
     ElabEnv::new().expect("base env construction failed")
@@ -25,7 +25,7 @@ fn mk_env() -> ElabEnv {
 fn mk_env_with_package() -> ElabEnv {
     let mut env = mk_env();
     env.elaborate_file(TRANSPORT_KEN)
-        .expect("catalog/packages/transport/transport.ken must elaborate");
+        .expect("catalog/packages/Core/Transport.ken must elaborate");
     env
 }
 
@@ -111,7 +111,7 @@ fn transport_package_adds_zero_trusted_base_delta() {
         env.env.trusted_base().into_iter().collect();
     assert_eq!(
         base_tb, with_pkg_tb,
-        "loading catalog/packages/transport/transport.ken must add ZERO trusted_base() entries \
+        "loading catalog/packages/Core/Transport.ken must add ZERO trusted_base() entries \
          (every combinator reduces through the already-trusted J/Cast)"
     );
 }
@@ -132,7 +132,7 @@ fn stuck_match_over_abstract_key_transports_via_hand_written_motive() {
     // is `tt` (Top-introduction), not `Refl`: `Equal Bool (stuck_of True)
     // True` observationally COLLAPSES to `Top` once the operand reduces
     // (K7), the same `Refl`/`tt`/`absurd` idiom documented in
-    // `catalog/packages/lawful-classes/lawful_classes.ken`.
+    // `catalog/packages/Core/LawfulClasses.ken`.
     let ids = env
         .elaborate_file(
             "fn stuck_of (k : Bool) : Bool = match k { True => True ; False => False }\n\
