@@ -263,6 +263,54 @@ abstracting it over the scrutinee and its indices:
   by higher-order pattern unification against the expected type (`39 §2.3`);
   genuine ambiguity is a surface error, never a guess (`39 §3`).
 
+#### 3.2.1 Peeled-field injectivity, sibling convoy, and goal refinement
+
+`§3.2`'s motive recovery refines the result type over the **scrutinee's own**
+index only. For an indexed family (`§2`), a branch's constructor equation —
+`target_ī ≡ scrut_ī` at the family's index type, e.g. `Suc m ≡ Suc n` for
+`vcons`'s branch of `Vec A (Suc n)` — additionally licenses two further
+re-typings, carried into the branch via the kernel's own `Eq`/`J`/`Cast`
+(`16`), **never postulated**:
+
+- **Constructor injectivity for a peeled recursive field.** When the
+  constructor equation itself reduces further by the kernel's own
+  same-constructor `Eq`-at-inductive case (`16 §2.2`) — e.g. `Suc m ≡ Suc n`
+  reduces to `m ≡ n` — a recursive field typed at the **un-peeled** local
+  variable (`xs : Vec A m` in `vcons`'s branch) may be re-typed to the goal's
+  index (`Vec A n`) by `cast`ing along the type-level congruence the reduced
+  equation licenses. This is what makes `tail : Vec A (Suc n) → Vec A n`
+  well-typed: the branch peels `Suc m ≡ Suc n` to `m ≡ n` and re-types the
+  tail field accordingly.
+- **Sibling convoy.** An **outer** binder already in scope — typically
+  another function parameter of the same indexed family sharing the
+  scrutinee's index (`w : Vec B n` alongside `v : Vec A n`) — is re-typed
+  the other direction (via the equation's symmetric form) so that a nested
+  match on it stays exhaustive without an impossible arm. Without this, an
+  omitted-constructor case on the sibling (`§2.4`) cannot discharge by
+  absurdity, because its own index premise is not yet known to be
+  constructor-headed.
+- **Goal refinement.** A branch whose body **constructs** a fresh value of
+  the family (rather than re-using an existing, now re-typed binding) has no
+  context variable for the above to redirect — its natural type uses the
+  constructor's own target index directly. Such a branch's checking goal is
+  refined the same way (substituting the scrutinee's un-refined index for the
+  constructor's own), and the checked result is `cast` back up to the
+  original goal.
+
+**Boundary.** These re-typings compose through **one** level of nesting (a
+convoy sibling, or a single peeled recursive field, re-used directly). A
+branch that both destructures a sibling through its **own** nested match
+*and* re-uses a field from the **enclosing** match's own destructuring in the
+same expression (e.g. a two-vector `zip`'s recursive step, which nests a
+match on the second vector while also passing the first vector's own tail
+into a recursive call) is a known gap — the sibling-convoy re-typing does not
+yet distinguish a genuine outer *parameter* from a field the **enclosing**
+match already bound, and can substitute the wrong (though never
+unsound — always kernel-proved) index there. `tail` and a single-level
+convoy (one sibling, one nested match, no further reuse of an enclosing
+field) are the pinned, tested boundary of this WP; the full two-vector `zip`
+recursive step is a follow-on.
+
 ### 3.3 Per-branch definitional refinement (the hypothesis)
 
 In the `cₖ` arm, after the `elim_D` split, the scrutinee is **definitionally**

@@ -318,6 +318,20 @@ struct ElabCtx<'e> {
     /// so a `where C a`-constrained body can project its resolved
     /// dictionary's fields.
     class_env: Option<&'e ClassEnv>,
+    /// DS-5b: per-branch index refinements for dependent match (constructor
+    /// injectivity + sibling convoy, `check_match_dependent`). Keyed by the
+    /// variable's stable bottom-relative context position (`ctx.len()-1-i`
+    /// at install time, invariant under later growth — mirrors how
+    /// `Context::lookup` itself is position-relative). Value is
+    /// `(raw_term, raw_ty, install_depth)`, both stored exactly as built at
+    /// `install_depth` (`ctx.len()` at insertion); a later read at a deeper
+    /// `ctx.len()` weakens by the difference, the same convention the `RVar`
+    /// `weaken(_, i+1)` call already uses for ordinary bindings.
+    /// Elaborator-only bookkeeping: the kernel's own `Context` (raw types)
+    /// is never touched, so a variable's real (kernel-checked) type never
+    /// changes — only which TERM an `RVar` reference resolves to (a
+    /// `Cast`-wrapped alias, never the bare `Var`) for one branch's body.
+    var_refinements: HashMap<usize, (Term, Term, usize)>,
 }
 
 impl<'e> ElabCtx<'e> {
@@ -337,6 +351,7 @@ impl<'e> ElabCtx<'e> {
             obligations: Vec::new(),
             obl_counter: 0,
             class_env: None,
+            var_refinements: HashMap::new(),
         }
     }
 
@@ -971,13 +986,136 @@ fn check_match_dependent(
             method_index_premises(&ind, &params_terms, &target_indices, &scrut_indices, n);
         let method = if let Some(arm_idx) = arm_idx {
             let arm = &arms[arm_idx];
-            let expected_here = if matches!(arm.body, RExpr::RLam(_, _, _)) {
-                expected_here
+            // DS-5b: install index-refinement `var_refinements` for this
+            // branch — constructor injectivity (peeled recursive fields)
+            // and sibling convoy — BEFORE checking the body, so the body's
+            // own elaboration can see through them. `cx.ctx` deliberately
+            // stays exactly `n`-deep here (fields only): `resolve.rs`
+            // pre-computed every `RVar` index in `arm.body` assuming
+            // exactly that depth (it has no notion of these
+            // elaborator-internal premises), so pushing the premises onto
+            // `cx.ctx` here would desync every OTHER reference in the arm.
+            // Each installed refinement's proof instead references its
+            // premise via a `DS5B_SENTINEL_BASE`-tagged placeholder `Var` —
+            // not yet a real binder — which `finalize_ds5b_body` relocates
+            // to its true, wrap-relative index once `check` returns (the
+            // premises only become real λ-binders afterward, via
+            // `wrap_premise_lams_from_full`).
+            let outer_scope_depth = cx.ctx.len() - n;
+            let premise_count = premise_domains.len();
+            let installed_refinements = install_ds5b_refinements(
+                cx,
+                &ind,
+                &params_terms,
+                &target_indices,
+                &scrut_indices,
+                n,
+                outer_scope_depth,
+            )?;
+            // Capability 3 (goal refinement) and capability 1/2 (var
+            // refinement) solve overlapping cases in OPPOSITE directions —
+            // capability 1 makes an existing field/sibling look like the
+            // ORIGINAL (unrefined) goal via `Cast`; capability 3 makes the
+            // GOAL itself look like the ctor-refined type. Both active at
+            // once on the same index is a guaranteed mismatch (confirmed:
+            // regressed `tail`, whose `ys` capability-1 already resolves
+            // the original goal). So try the cheap, unrefined path FIRST
+            // (covers any branch whose body only re-uses existing
+            // capability-1/2-refined bindings, e.g. `tail`); only a branch
+            // that constructs a FRESH value against an index-dependent goal
+            // (e.g. `zip`'s `VNil` base case) needs capability 3, and only
+            // reaches it here. `check` mutates `cx.obligations` before it
+            // can fail, so roll any partial obligations back before retrying
+            // — `cx.metas` gaining unused, never-referenced metavariables
+            // from the discarded attempt is harmless.
+            // Capability 3 (goal refinement) and capability 1/2 (var
+            // refinement) solve overlapping cases in OPPOSITE directions —
+            // capability 1 makes an existing field/sibling look like the
+            // ORIGINAL (unrefined) goal via `Cast`; capability 3 makes the
+            // GOAL itself look like the ctor-refined type. Both active at
+            // once on the same index is a guaranteed mismatch (confirmed:
+            // double-applying regressed `tail`, whose `ys` capability-1
+            // already resolves the original goal on its own). The
+            // discriminator: a branch body that is a bare existing binding
+            // (`ys`) is exactly capability 1/2's case — it never needs its
+            // own goal refined, only the reference re-typed. A branch body
+            // that CONSTRUCTS a fresh value of the family (`VNil Nat`,
+            // `VCons Nat m a (...)`, `zip`'s base *and* recursive cases)
+            // has no existing binding for capability 1/2 to redirect, so
+            // its NATURAL type uses the ctor's own (unrefined-in-the-
+            // caller's-frame) index — only capability 3 can bridge that.
+            let expected_here_unrefined = if matches!(arm.body, RExpr::RLam(_, _, _)) {
+                expected_here.clone()
             } else {
                 simplify_branch_goal(cx.env, &cx.ctx, &expected_here)
             };
-            let body_core = check(cx, &arm.body, &expected_here, &arm.span)?;
-            wrap_premise_lams(body_core, &premise_domains)
+            let obl_snapshot = cx.obligations.len();
+            // Try the UNREFINED goal first — sufficient whenever capability
+            // 1/2 already resolve every reference the body makes (`tail`,
+            // and (non-obviously) a NESTED branch whose own recursive call
+            // is rescued by the OUTER match's capability-1 refinement, e.g.
+            // `zip`'s inner `VCons` arm). `check`'s `Ok` alone is not proof
+            // — elaborator unification can defer a mismatch rather than
+            // reject it immediately — so probe eagerly: `finalize` +
+            // `wrap_premise_lams_from_full` the checked body (resolving
+            // every DS-5b sentinel into a real, self-contained binder) and
+            // `kernel_check` it against the equally `Pi`-wrapped goal. Only
+            // if THAT fails does a branch genuinely need its own goal
+            // refined (capability 3) — e.g. a branch that CONSTRUCTS a
+            // fresh family value (`VNil Nat`, `zip`'s base case) has no
+            // existing binding for capability 1/2 to redirect, so its
+            // natural type uses the ctor's own index directly.
+            let attempt = check(cx, &arm.body, &expected_here_unrefined, &arm.span).and_then(
+                |body_core_checked| {
+                    let finalized = finalize_ds5b_body(&body_core_checked, 0, premise_count);
+                    let wrapped = wrap_premise_lams_from_full(finalized, &premise_domains);
+                    let wrapped_ty =
+                        wrap_premise_pis(expected_here_unrefined.clone(), &premise_domains);
+                    let zonked_wrapped = cx.metas.zonk_term(&wrapped);
+                    let zonked_ty = cx.metas.zonk_term(&wrapped_ty);
+                    let zonked_ctx = Context {
+                        types: cx.ctx.types.iter().map(|t| cx.metas.zonk_term(t)).collect(),
+                    };
+                    kernel_check(cx.env, &zonked_ctx, &zonked_wrapped, &zonked_ty)
+                        .map(|()| body_core_checked)
+                        .map_err(|e| ElabError::KernelRejected {
+                            error: e,
+                            span: arm.span.clone(),
+                        })
+                },
+            );
+            let body_core = match attempt {
+                Ok(body_core_checked) => body_core_checked,
+                Err(_) => {
+                    cx.obligations.truncate(obl_snapshot);
+                    let (goal_refined, goal_casts) = refine_ds5b_goal(
+                        cx,
+                        &ind,
+                        &params_terms,
+                        &target_indices,
+                        &scrut_indices,
+                        n,
+                        &expected_here,
+                    )?;
+                    let expected_here_refined = if matches!(arm.body, RExpr::RLam(_, _, _)) {
+                        goal_refined
+                    } else {
+                        simplify_branch_goal(cx.env, &cx.ctx, &goal_refined)
+                    };
+                    let body_core_checked = check(cx, &arm.body, &expected_here_refined, &arm.span)?;
+                    let mut body_core = body_core_checked;
+                    for (src, tgt, e) in goal_casts.into_iter().rev() {
+                        body_core =
+                            Term::Cast(Box::new(src), Box::new(tgt), Box::new(e), Box::new(body_core));
+                    }
+                    body_core
+                }
+            };
+            for pos in installed_refinements {
+                cx.var_refinements.remove(&pos);
+            }
+            let finalized = finalize_ds5b_body(&body_core, 0, premise_count);
+            wrap_premise_lams_from_full(finalized, &premise_domains)
         } else {
             let expected_here = simplify_branch_goal(cx.env, &cx.ctx, &expected_here);
             let missing = ctor_name(cx, ctor.id);
@@ -1200,13 +1338,18 @@ fn ctor_target_indices(
         .collect()
 }
 
-fn method_index_premises(
+/// Per-index `(index_ty, target_index, actual_index)` triples for a
+/// constructor method — the same filter `method_index_premises` uses to
+/// build `Eq` premises, exposed separately (DS-5b) so the injectivity /
+/// convoy pass can inspect each index's own endpoints rather than only the
+/// wrapped `Eq` term.
+fn method_index_premise_pairs(
     ind: &InductiveDecl,
     params: &[Term],
     target_indices: &[Term],
     scrut_indices: &[Term],
     field_count: usize,
-) -> Vec<Term> {
+) -> Vec<(Term, Term, Term)> {
     (0..ind.indices.len())
         .filter_map(|j| {
             let raw_index_ty = subst_outer(&ind.indices[j], ind.params.len(), params, j);
@@ -1219,13 +1362,479 @@ fn method_index_premises(
                 ken_kernel::subst::shift(&raw_index_ty, field_count as i64, j);
             let index_ty = subst_tel(&index_ty_with_fields, &target_indices[..j]);
             let actual_index = weaken(&scrut_indices[j], field_count as i64);
-            Some(Term::Eq(
-                Box::new(index_ty),
-                Box::new(target_indices[j].clone()),
-                Box::new(actual_index),
-            ))
+            Some((index_ty, target_indices[j].clone(), actual_index))
         })
         .collect()
+}
+
+fn method_index_premises(
+    ind: &InductiveDecl,
+    params: &[Term],
+    target_indices: &[Term],
+    scrut_indices: &[Term],
+    field_count: usize,
+) -> Vec<Term> {
+    method_index_premise_pairs(ind, params, target_indices, scrut_indices, field_count)
+        .into_iter()
+        .map(|(ty, a, b)| Term::Eq(Box::new(ty), Box::new(a), Box::new(b)))
+        .collect()
+}
+
+/// `refl`'s argument for the base case of a `J` at `Eq ty a a` — the
+/// WHNF-peeled form of `a`, matching what `Eq ty a a` itself reduces to
+/// (e.g. `Eq Nat (Suc m) (Suc m)` peels one constructor layer to
+/// `Eq Nat m m`, via the kernel's own same-constructor `eq_at_inductive`
+/// case — so the witness must be `refl m`, not `refl (Suc m)`).
+/// `check`'s `Term::Refl` rule WHNFs the *expected type* but never the
+/// *supplied witness* (`ken-kernel/check.rs`), so handing it the unpeeled
+/// `a` is a silent, arity-invisible mismatch — caught only by the kernel's
+/// own recheck, never by elaboration itself (isolated via a direct
+/// `kernel_check` probe, `ds5b_isolated_debug`). `x == y` always holds
+/// here (both sides are literally `a`), so extracting either endpoint is
+/// safe regardless of how deep the peel goes.
+fn refl_base_arg(env: &GlobalEnv, ctx: &Context, ty: &Term, a: &Term) -> Term {
+    match whnf(
+        env,
+        ctx,
+        &Term::Eq(Box::new(ty.clone()), Box::new(a.clone()), Box::new(a.clone())),
+    ) {
+        Term::Eq(_, x, _) => *x,
+        _ => a.clone(),
+    }
+}
+
+/// `h : Eq idx_ty a b` ⇒ `sym h : Eq idx_ty b a`, derived via `J` — never
+/// postulated (DS-5b). Motive `λ(y:idx_ty)(_:Eq idx_ty a y). Eq idx_ty y a`,
+/// based at `a` (`base = refl a`); `J` gives the result at `y = b`.
+fn build_sym(env: &GlobalEnv, ctx: &Context, idx_ty: &Term, idx_level: Level, a: &Term, h: Term) -> Term {
+    let dom2 = Term::Eq(
+        Box::new(weaken(idx_ty, 1)),
+        Box::new(weaken(a, 1)),
+        Box::new(Term::var(0)),
+    );
+    let cod = Term::Eq(
+        Box::new(weaken(idx_ty, 2)),
+        Box::new(Term::var(1)),
+        Box::new(weaken(a, 2)),
+    );
+    let motive_body = Term::lam(idx_ty.clone(), Term::lam(dom2.clone(), cod));
+    // `J`'s motive is an introduction form (`Lam`) — `infer` can never
+    // accept one without an ascription, even under `check` (`infer_j` calls
+    // `infer(motive)` directly), so every motive we hand-build must be
+    // wrapped (`hand-built-elim-motive-and-method-gotchas`).
+    let motive_ty = Term::pi(idx_ty.clone(), Term::pi(dom2, Term::omega(idx_level)));
+    let motive = Term::Ascript(Box::new(motive_body), Box::new(motive_ty));
+    let base = Term::Refl(Box::new(refl_base_arg(env, ctx, idx_ty, a)));
+    Term::J(Box::new(motive), Box::new(base), Box::new(h))
+}
+
+/// Build `e : Eq Type cur_ty new_ty` where `new_ty = cur_ty[new_idx/old_idx]`,
+/// given `h : Eq idx_ty old_idx new_idx` — the type-level congruence a
+/// constructor-index equation licenses (DS-5b injectivity / convoy re-
+/// typing). Derived via `J`, never postulated: motive
+/// `λ(y:idx_ty)(_:Eq idx_ty old_idx y). Eq Type cur_ty cur_ty[y/old_idx]`,
+/// based at `old_idx` (`base = refl cur_ty`); `J` gives the result at
+/// `y = new_idx`. Returns `(e, new_ty)`.
+fn build_index_type_cong(
+    env: &GlobalEnv,
+    ctx: &Context,
+    idx_ty: &Term,
+    old_idx: &Term,
+    new_idx: &Term,
+    cur_ty: &Term,
+    type_level: Level,
+    h: Term,
+) -> (Term, Term) {
+    let new_ty = subst_term_generalize(cur_ty, old_idx, new_idx);
+    // Motive body, under the two new binders (`y`, `_ : Eq idx_ty old_idx y`):
+    // `cur_ty` with `old_idx` abstracted to `y` (= `Var(1)` at this depth).
+    let cur_ty_at_y = subst_term_generalize(&weaken(cur_ty, 2), &weaken(old_idx, 2), &Term::var(1));
+    let dom2 = Term::Eq(
+        Box::new(weaken(idx_ty, 1)),
+        Box::new(weaken(old_idx, 1)),
+        Box::new(Term::var(0)),
+    );
+    let cod = Term::Eq(
+        Box::new(Term::Type(type_level.clone())),
+        Box::new(weaken(cur_ty, 2)),
+        Box::new(cur_ty_at_y),
+    );
+    let motive_body = Term::lam(idx_ty.clone(), Term::lam(dom2.clone(), cod));
+    // Ascribed for the same reason `build_sym` is — `J`'s motive is a bare
+    // `Lam`, never inferrable on its own. Its own classifier is one level
+    // up: `Eq (Type l) _ _ : Omega (suc l)`.
+    let motive_ty = Term::pi(
+        idx_ty.clone(),
+        Term::pi(dom2, Term::omega(type_level.clone().suc())),
+    );
+    let motive = Term::Ascript(Box::new(motive_body), Box::new(motive_ty));
+    let base = Term::Refl(Box::new(refl_base_arg(
+        env,
+        ctx,
+        &Term::Type(type_level),
+        cur_ty,
+    )));
+    let e = Term::J(Box::new(motive), Box::new(base), Box::new(h));
+    (e, new_ty)
+}
+
+/// If `cur_ty` (a type at the branch's current context depth) literally
+/// mentions `old_idx`, build a `Cast` re-typing `value : cur_ty` to
+/// `cur_ty[new_idx/old_idx]` using `h : Eq idx_ty old_idx new_idx`. Returns
+/// `None` — never a spurious refinement (AC8) — if `cur_ty` does not depend
+/// on `old_idx` at all.
+fn try_reindex_cast(
+    env: &GlobalEnv,
+    ctx: &Context,
+    idx_ty: &Term,
+    old_idx: &Term,
+    new_idx: &Term,
+    cur_ty: &Term,
+    value: Term,
+    h: Term,
+) -> Result<Option<(Term, Term)>, ElabError> {
+    let candidate_new_ty = subst_term_generalize(cur_ty, old_idx, new_idx);
+    if &candidate_new_ty == cur_ty {
+        return Ok(None);
+    }
+    let level_ty = kernel_infer(env, ctx, cur_ty).map_err(|e| {
+        ElabError::Internal(format!(
+            "DS-5b: could not classify a re-indexed position's type: {e:?}"
+        ))
+    })?;
+    let level = match whnf(env, ctx, &level_ty) {
+        Term::Type(l) => l,
+        other => {
+            return Err(ElabError::Internal(format!(
+                "DS-5b: re-indexed position is not classified by a Type universe, found {other:?}"
+            )))
+        }
+    };
+    let (e, new_ty) = build_index_type_cong(env, ctx, idx_ty, old_idx, new_idx, cur_ty, level, h);
+    let cast = Term::Cast(
+        Box::new(cur_ty.clone()),
+        Box::new(new_ty.clone()),
+        Box::new(e),
+        Box::new(value),
+    );
+    Ok(Some((cast, new_ty)))
+}
+
+/// DS-5b, capability 3: does the branch's own CHECKING GOAL (not a context
+/// variable) depend on the scrutinee's un-refined outer index? A branch
+/// that constructs a FRESH value (e.g. `VNil Nat` against goal `Vec Nat n`,
+/// `zip`'s base case) needs the goal itself refined (each index's outer
+/// value substituted for the constructor's own target value) before
+/// `check` can succeed at all — capability 1/2 only re-type EXISTING
+/// context variables, never the goal `check` runs against, so a branch
+/// whose body never re-uses an existing field/sibling (like `tail`'s or
+/// `firstIsSecond`'s) never exercises this gap. Returns the (possibly
+/// more-refined) goal to check the body against, plus the `Cast`
+/// ingredients — `(source_ty, target_ty, proof)` — needed to bring the
+/// CHECKED result back up to the original `expected_here`, to be applied
+/// in REVERSE order (innermost/most-refined first).
+fn refine_ds5b_goal(
+    cx: &ElabCtx,
+    ind: &InductiveDecl,
+    params: &[Term],
+    target_indices: &[Term],
+    scrut_indices: &[Term],
+    n: usize,
+    expected_here: &Term,
+) -> Result<(Term, Vec<(Term, Term, Term)>), ElabError> {
+    let zonked_ctx = Context {
+        types: cx.ctx.types.iter().map(|t| cx.metas.zonk_term(t)).collect(),
+    };
+    let pairs = method_index_premise_pairs(ind, params, target_indices, scrut_indices, n);
+    let mut goal = expected_here.clone();
+    let mut casts = Vec::new();
+    for (slot, (idx_ty, target, scrut)) in pairs.iter().enumerate() {
+        let idx_ty = cx.metas.zonk_term(idx_ty);
+        let target = cx.metas.zonk_term(target);
+        let scrut = cx.metas.zonk_term(scrut);
+        let raw_eq = Term::Eq(
+            Box::new(idx_ty.clone()),
+            Box::new(target.clone()),
+            Box::new(scrut.clone()),
+        );
+        let reduced = whnf(cx.env, &zonked_ctx, &raw_eq);
+        let (peel_ty, a2, b2) = match &reduced {
+            Term::Eq(t, a, b) => ((**t).clone(), (**a).clone(), (**b).clone()),
+            _ => (idx_ty.clone(), target.clone(), scrut.clone()),
+        };
+        let candidate = subst_term_generalize(&goal, &b2, &a2);
+        if candidate == goal {
+            continue;
+        }
+        let level_ty = kernel_infer(cx.env, &zonked_ctx, &candidate).map_err(|e| {
+            ElabError::Internal(format!("DS-5b: could not classify the branch goal: {e:?}"))
+        })?;
+        let level = match whnf(cx.env, &zonked_ctx, &level_ty) {
+            Term::Type(l) => l,
+            other => {
+                return Err(ElabError::Internal(format!(
+                    "DS-5b: branch goal is not classified by a Type universe, found {other:?}"
+                )))
+            }
+        };
+        let h_sentinel = Term::var(DS5B_SENTINEL_BASE + slot);
+        let (e, restored) = build_index_type_cong(
+            cx.env,
+            &zonked_ctx,
+            &peel_ty,
+            &a2,
+            &b2,
+            &candidate,
+            level,
+            h_sentinel,
+        );
+        casts.push((candidate.clone(), restored, e));
+        goal = candidate;
+    }
+    Ok((goal, casts))
+}
+
+/// DS-5b: install `var_refinements` for one branch of a dependent match —
+/// constructor injectivity on the branch's own peeled recursive fields
+/// (capability 1), and sibling convoy on any outer binder sharing the
+/// refined index (capability 2). `cx.ctx` holds exactly this branch's `n`
+/// constructor fields (unchanged — see the caller's comment on why the
+/// premises themselves are never pushed); returns the installed
+/// bottom-relative positions so the caller can remove them once the
+/// branch body has been checked. Each proof embedded into a `var_refinements`
+/// entry references its premise via a `DS5B_SENTINEL_BASE`-tagged
+/// placeholder that `finalize_ds5b_body` resolves afterward.
+fn install_ds5b_refinements(
+    cx: &mut ElabCtx,
+    ind: &InductiveDecl,
+    params: &[Term],
+    target_indices: &[Term],
+    scrut_indices: &[Term],
+    n: usize,
+    outer_scope_depth: usize,
+) -> Result<Vec<usize>, ElabError> {
+    let mut installed = Vec::new();
+    // Zonk a throwaway copy of the context (and every term this function
+    // hands to the raw kernel): a bare surface `(a:Type)` parameter's own
+    // type may still carry an unresolved elaborator level metavariable
+    // here — the kernel has no notion of those (`gate-widening-exposes-
+    // latent-bugs`; the SAME zonk this function's caller already applies
+    // to its own `motive_ctx`, just re-derived at this branch's own,
+    // deeper context).
+    let zonked_ctx = Context {
+        types: cx.ctx.types.iter().map(|t| cx.metas.zonk_term(t)).collect(),
+    };
+    let pairs = method_index_premise_pairs(ind, params, target_indices, scrut_indices, n);
+    for (slot, (idx_ty, target, scrut)) in pairs.iter().enumerate() {
+        let idx_ty = cx.metas.zonk_term(idx_ty);
+        let target = cx.metas.zonk_term(target);
+        let scrut = cx.metas.zonk_term(scrut);
+        // Not yet a real binder — `finalize_ds5b_body` relocates this to
+        // its true wrap-relative index once `check` returns (see the
+        // caller's comment).
+        let h_sentinel = Term::var(DS5B_SENTINEL_BASE + slot);
+        // WHNF the raw premise ourselves to discover the kernel's own
+        // constructor no-confusion peeling (e.g. `Eq Nat (Suc m) (Suc n)`
+        // reduces to `Eq Nat m n` via `eq_at_inductive`'s same-constructor
+        // case) — never re-implemented, only observed, so this generalizes
+        // to any index type with injective constructors, not just `Nat`.
+        let raw_eq = Term::Eq(
+            Box::new(idx_ty.clone()),
+            Box::new(target.clone()),
+            Box::new(scrut.clone()),
+        );
+        let reduced = whnf(cx.env, &zonked_ctx, &raw_eq);
+        let (peel_ty, a2, b2) = match &reduced {
+            Term::Eq(t, a, b) => ((**t).clone(), (**a).clone(), (**b).clone()),
+            _ => (idx_ty.clone(), target.clone(), scrut.clone()),
+        };
+
+        // Capability 1: constructor injectivity for this branch's own
+        // peeled recursive fields — does a field's raw (declared) type
+        // mention `a2` (the constructor-local, possibly-peeled index)?
+        for field_j in 0..n {
+            let field_pos = n - 1 - field_j;
+            let field_ty = cx.metas.zonk_term(&weaken(
+                cx.ctx
+                    .lookup(field_pos)
+                    .expect("field position just pushed"),
+                (field_pos as i64) + 1,
+            ));
+            if let Some((cast, new_ty)) = try_reindex_cast(
+                cx.env,
+                &zonked_ctx,
+                &peel_ty,
+                &a2,
+                &b2,
+                &field_ty,
+                Term::var(field_pos),
+                h_sentinel.clone(),
+            )? {
+                let bottom_pos = cx.ctx.len() - 1 - field_pos;
+                cx.var_refinements
+                    .insert(bottom_pos, (cast, new_ty, cx.ctx.len()));
+                installed.push(bottom_pos);
+            }
+        }
+
+        // Capability 2: sibling convoy — does an OUTER (pre-existing)
+        // binder mention `b2` (the scrutinee's own actual index)? Refine
+        // it the other direction (b2 -> a2), via `sym`.
+        if outer_scope_depth > 0 {
+            let peel_level_ty = kernel_infer(cx.env, &zonked_ctx, &peel_ty).map_err(|e| {
+                ElabError::Internal(format!("DS-5b: could not classify an index type: {e:?}"))
+            })?;
+            let peel_level = match whnf(cx.env, &zonked_ctx, &peel_level_ty) {
+                Term::Type(l) => l,
+                other => {
+                    return Err(ElabError::Internal(format!(
+                        "DS-5b: index type is not classified by a Type universe, found {other:?}"
+                    )))
+                }
+            };
+            for abs_pos in 0..outer_scope_depth {
+                let outer_idx = cx.ctx.len() - 1 - abs_pos;
+                let outer_ty = cx.metas.zonk_term(&weaken(
+                    cx.ctx.lookup(outer_idx).expect("outer position in range"),
+                    (outer_idx as i64) + 1,
+                ));
+                let h_sym = build_sym(
+                    cx.env,
+                    &zonked_ctx,
+                    &peel_ty,
+                    peel_level.clone(),
+                    &a2,
+                    h_sentinel.clone(),
+                );
+                if let Some((cast, new_ty)) = try_reindex_cast(
+                    cx.env,
+                    &zonked_ctx,
+                    &peel_ty,
+                    &b2,
+                    &a2,
+                    &outer_ty,
+                    Term::var(outer_idx),
+                    h_sym,
+                )? {
+                    let bottom_pos = cx.ctx.len() - 1 - outer_idx;
+                    cx.var_refinements
+                        .insert(bottom_pos, (cast, new_ty, cx.ctx.len()));
+                    installed.push(bottom_pos);
+                }
+            }
+        }
+    }
+    Ok(installed)
+}
+
+/// A `Var` index in this range is a DS-5b sentinel — a placeholder for a
+/// premise binder that does not exist yet at the point it's embedded
+/// (`install_ds5b_refinements` runs before the branch's premises become
+/// real λs). `DS5B_SENTINEL_BASE + slot` is astronomically larger than any
+/// real nesting depth a Ken program could reach, so it can never collide
+/// with a genuine `Var`.
+const DS5B_SENTINEL_BASE: usize = 1 << 48;
+
+/// Resolve a checked branch body's DS-5b sentinels to their true index and
+/// shift every other free variable by `premise_count` — together
+/// replicating, in one binder-aware pass, what the (now premise-aware)
+/// `wrap_premise_lams_from_full` needs `body` to already satisfy. `depth`
+/// counts binders traversed so far from `body`'s own root (start at `0`);
+/// a `Var(v)` with `v < depth` is bound within the term itself (untouched);
+/// otherwise, if `v - depth` is a sentinel for slot `s`, replace it with
+/// `depth + premise_count - 1 - s` (a premise's true wrap-relative index,
+/// counted from wherever it's referenced); otherwise it is ordinary
+/// pre-existing content (a field/outer reference) and gets the standard
+/// `+premise_count` shift `wrap_premise_lams_from_full`'s callers used to
+/// apply via `weaken`. Exhaustive over every `Term` variant — no catch-all
+/// — so a future variant forces this traversal to be extended too.
+fn finalize_ds5b_body(term: &Term, depth: usize, premise_count: usize) -> Term {
+    let go = |t: &Term, d: usize| finalize_ds5b_body(t, d, premise_count);
+    match term {
+        Term::Var(v) => {
+            if *v < depth {
+                Term::Var(*v)
+            } else {
+                let canonical = *v - depth;
+                if canonical >= DS5B_SENTINEL_BASE {
+                    let slot = canonical - DS5B_SENTINEL_BASE;
+                    Term::var(depth + premise_count - 1 - slot)
+                } else {
+                    Term::var(*v + premise_count)
+                }
+            }
+        }
+        Term::Pi(a, b) => Term::pi(go(a, depth), go(b, depth + 1)),
+        Term::Lam(a, t) => Term::lam(go(a, depth), go(t, depth + 1)),
+        Term::Sigma(a, b) => Term::sigma(go(a, depth), go(b, depth + 1)),
+        Term::Let { ty, val, body } => Term::Let {
+            ty: Box::new(go(ty, depth)),
+            val: Box::new(go(val, depth)),
+            body: Box::new(go(body, depth + 1)),
+        },
+        Term::App(f, a) => Term::app(go(f, depth), go(a, depth)),
+        Term::Pair(a, b) => Term::pair(go(a, depth), go(b, depth)),
+        Term::Proj1(p) => Term::proj1(go(p, depth)),
+        Term::Proj2(p) => Term::proj2(go(p, depth)),
+        Term::Ascript(t, a) => Term::Ascript(Box::new(go(t, depth)), Box::new(go(a, depth))),
+        Term::Eq(a, t, u) => Term::Eq(
+            Box::new(go(a, depth)),
+            Box::new(go(t, depth)),
+            Box::new(go(u, depth)),
+        ),
+        Term::Cast(a, b, e, t) => Term::Cast(
+            Box::new(go(a, depth)),
+            Box::new(go(b, depth)),
+            Box::new(go(e, depth)),
+            Box::new(go(t, depth)),
+        ),
+        Term::J(ml, d2, e) => Term::J(
+            Box::new(go(ml, depth)),
+            Box::new(go(d2, depth)),
+            Box::new(go(e, depth)),
+        ),
+        Term::Quot(a, r) => Term::Quot(Box::new(go(a, depth)), Box::new(go(r, depth))),
+        Term::QuotClass(t) => Term::QuotClass(Box::new(go(t, depth))),
+        Term::Trunc(a) => Term::Trunc(Box::new(go(a, depth))),
+        Term::TruncProj(t) => Term::TruncProj(Box::new(go(t, depth))),
+        Term::Refl(t) => Term::Refl(Box::new(go(t, depth))),
+        Term::QuotElim {
+            motive,
+            method,
+            respect,
+            scrut,
+        } => Term::QuotElim {
+            motive: Box::new(go(motive, depth)),
+            method: Box::new(go(method, depth)),
+            respect: Box::new(go(respect, depth)),
+            scrut: Box::new(go(scrut, depth)),
+        },
+        Term::Elim {
+            fam,
+            level_args,
+            params,
+            motive,
+            methods,
+            indices,
+            scrut,
+        } => Term::Elim {
+            fam: *fam,
+            level_args: level_args.clone(),
+            params: params.iter().map(|p| go(p, depth)).collect(),
+            motive: Box::new(go(motive, depth)),
+            methods: methods.iter().map(|m| go(m, depth)).collect(),
+            indices: indices.iter().map(|i| go(i, depth)).collect(),
+            scrut: Box::new(go(scrut, depth)),
+        },
+        Term::Absurd(motive, proof) => {
+            Term::Absurd(Box::new(go(motive, depth)), Box::new(go(proof, depth)))
+        }
+        Term::Type(_)
+        | Term::Omega(_)
+        | Term::Const { .. }
+        | Term::IndFormer { .. }
+        | Term::Constructor { .. } => term.clone(),
+    }
 }
 
 fn index_domain_mentions_prior_index(term: &Term, prior_count: usize) -> bool {
@@ -1253,10 +1862,6 @@ fn wrap_premise_pis(body: Term, premises: &[Term]) -> Term {
         term = Term::pi(weaken(&premises[i], i as i64), term);
     }
     term
-}
-
-fn wrap_premise_lams(body: Term, premises: &[Term]) -> Term {
-    wrap_premise_lams_from_full(weaken(&body, premises.len() as i64), premises)
 }
 
 fn wrap_premise_lams_from_full(body: Term, premises: &[Term]) -> Term {
@@ -1309,6 +1914,19 @@ fn ctor_name(cx: &ElabCtx, id: GlobalId) -> String {
 fn infer(cx: &mut ElabCtx, expr: &RExpr) -> Result<(Term, Term), ElabError> {
     match expr {
         RExpr::RVar(i, _, _) => {
+            // DS-5b: an installed index refinement (constructor injectivity
+            // / sibling convoy) replaces the bare `Var` with its `Cast`-
+            // wrapped alias for the duration of one branch's body — see
+            // `ElabCtx::var_refinements`.
+            let pos = cx
+                .ctx
+                .len()
+                .checked_sub(1 + *i)
+                .ok_or_else(|| ElabError::Internal(format!("Var({}) out of range", i)))?;
+            if let Some((raw_term, raw_ty, install_depth)) = cx.var_refinements.get(&pos) {
+                let growth = (cx.ctx.len() - install_depth) as i64;
+                return Ok((weaken(raw_term, growth), weaken(raw_ty, growth)));
+            }
             let ty_stored = cx
                 .ctx
                 .lookup(*i)
@@ -5349,3 +5967,4 @@ pub fn elaborate_rexpr(
     })?;
     Ok((core, ty))
 }
+
