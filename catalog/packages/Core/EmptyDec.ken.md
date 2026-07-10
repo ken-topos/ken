@@ -294,9 +294,11 @@ fn absurd (C : Type) (e : Empty) : C = match e { }
   elaborated against the NEW declaration's unrelated signature). FR-2 makes
   this a resolve-time hard error (`resolve_decl`, guarding every declared
   name — and every `data` constructor name — against the reserved-sugar
-  set `{Refl, Axiom, absurd, J, Eq}`, `§5` above now demonstrates the
-  rejection). This entry's `Empty`-eliminator stays named `absurdEmpty`
-  regardless (the honest, reachable name).
+  set `{Refl, Axiom, absurd}`, `§5` above now demonstrates the rejection —
+  `J`/`Eq` are deliberately excluded, since their arity-3-gated sugar
+  coexists with a lower-arity type-former/class of the same name, e.g. the
+  landed `class Eq a`). This entry's `Empty`-eliminator stays named
+  `absurdEmpty` regardless (the honest, reachable name).
 - **Tooling candidate → Ergo (`ken-cli`):** `ken run` unconditionally
   executes the file's LAST declaration as an IO tree (`crates/ken-cli/src/
   main.rs`, `run_file`) — appropriate for a runnable program (the
