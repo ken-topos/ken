@@ -71,7 +71,7 @@ rejected, and a `proc` declared with no row that performs one is rejected
 `fn` carries no row at all:
 
 ```ken reject
-fn announceWrong (c : Color) : IO Unit = print_line "not allowed in fn"
+fn announce_wrong (c : Color) : IO Unit = print_line "not allowed in fn"
 ```
 
 ## 2. `def`: transparent definitions
@@ -127,7 +127,7 @@ that must be pattern-matched apart before its payload is usable —
 ```ken reject
 data Box = MkBox Int
 
-fn addYearsWrong (n : Int) (b : Box) : Int = add_int n b
+fn add_years_wrong (n : Int) (b : Box) : Int = add_int n b
 ```
 
 ## 3. `data` and `match`
@@ -157,7 +157,7 @@ Below, `Caution` and `Go` are left unhandled, so it rejects as non-exhaustive:
 ```ken reject
 data TrafficLight = Stop | Caution | Go
 
-fn isStop (t : TrafficLight) : Bool =
+fn is_stop (t : TrafficLight) : Bool =
   match t { Stop ⇒ True }
 ```
 
@@ -265,7 +265,7 @@ match omission is — the checker infers the body's real effects and compares.
 Below, the body performs Console but the declared row is empty:
 
 ```ken reject
-proc silentGreet (name : String) : IO Unit =
+proc silent_greet (name : String) : IO Unit =
   print_line name
 ```
 
