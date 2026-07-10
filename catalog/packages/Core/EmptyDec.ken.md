@@ -87,7 +87,7 @@ fn absurdEmpty (C : Type) (e : Empty) : C = match e { }
 fn yes (prp : Omega) (p : prp) : Dec prp = Yes prp p
 fn no (prp : Omega) (f : prp -> Empty) : Dec prp = No prp f
 
--- `DecEq` — inlined from `catalog/packages/lawful-classes/lawful_classes.ken`
+-- `DecEq` — inlined from `catalog/packages/Core/LawfulClasses.ken`
 -- (self-containment, same idiom `catalog/guide/proof-techniques.ken.md`
 -- uses for `cong`/`bool_and`: `ken run` on a standalone entry has no
 -- cross-package import mechanism today, `§6` Finding). `decEqDecides`
@@ -121,7 +121,7 @@ instance DecEq Bool {
 -- plain `match (d.eq x y) {...}` cannot do this itself (the scrutinee is
 -- an application, not a bound variable, so the dependent-motive machinery
 -- that lets `match` refine a hypothesis has nothing to bind); this is the
--- same combinator `catalog/packages/collections/map.ken` calls
+-- same combinator `catalog/packages/Data/Collections/Map.ken` calls
 -- `boolDichotomy`, inlined here for self-containment.
 fn boolDichotomy (b : Bool) : Or (Equal Bool b True) (Equal Bool b False) =
   match b {
@@ -129,7 +129,7 @@ fn boolDichotomy (b : Bool) : Or (Equal Bool b True) (Equal Bool b False) =
     False ⇒ Inr (Equal Bool False True) (Equal Bool False False) tt
   }
 
--- `sym`/`trans` — inlined from `catalog/packages/transport/transport.ken`
+-- `sym`/`trans` — inlined from `catalog/packages/Core/Transport.ken`
 -- (self-containment, same idiom `catalog/guide/proof-techniques.ken.md`
 -- uses for `cong`) for the No-branch contradiction below.
 fn sym (ty : Type) (x : ty) (y : ty) (p : Equal ty x y) : Equal ty y x =
@@ -168,7 +168,7 @@ fn decEqDecides (a : Type) (d : DecEq a) (x : a) (y : a) : Dec (Equal a x y) =
 -- `instance DecEq Bool { ... }` — every `instance C T { ... }` registers a
 -- real global `C_instance_T` (`crates/ken-elaborator/src/elab.rs:3386`),
 -- not just a `where`-resolved implicit dictionary. (The landed
--- `catalog/packages/lawful-classes/lawful_classes.ken` carries the SAME
+-- `catalog/packages/Core/LawfulClasses.ken` carries the SAME
 -- shape, independently — `§2`'s note on why this entry inlines its own.)
 const trueIsTrue : Dec (Equal Bool True True) =
   decEqDecides Bool DecEq_instance_Bool True True

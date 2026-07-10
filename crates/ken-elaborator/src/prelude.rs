@@ -860,7 +860,7 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     // `Map`/`Set` (`37 §6`) were RETIRED here (ES2's audited
     // `declare_primitive` OpaqueType re-class) — Map-build (`52-map.md`,
     // VAL2 #8 / OQ-A) supersedes that placeholder with a **proved, pure**
-    // ordered BST (`catalog/packages/collections/map.ken`'s `Tree k v` + `insert`/
+    // ordered BST (`catalog/packages/Data/Collections/Map.ken`'s `Tree k v` + `insert`/
     // `lookup`/`member`/`toList`/`fromList`/`fold`/`Set*`), a transparent
     // inductive admitted via `declare_inductive`/`declare_def` — kernel-
     // rechecked, not audited-opaque. Net-negative `trusted_base()` delta

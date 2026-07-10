@@ -71,10 +71,10 @@ over `f : Type -> Type`.
   endpoints reduce to a **neutral** application (`list_append a ys zs`) stays
   `Eq`-shaped — closed by `Refl`.
 - **Dependencies (reused, never re-defined — subsume-don't-proliferate):**
-  - `cong`/`sym`/`trans` — `catalog/packages/transport/transport.ken` (over the `J`
+  - `cong`/`sym`/`trans` — `catalog/packages/Core/Transport.ken` (over the `J`
     former), for the inductive congruence steps. Zero delta (transport is
     itself zero-delta).
-  - `list_append` — `catalog/packages/collections/collections.ken`, the List monoid
+  - `list_append` — `catalog/packages/Data/Collections/Collections.ken`, the List monoid
     operation. Reused, not re-defined (a second append would collide with
     the landed one and violate subsume-don't-proliferate).
   - `bool_and` — a **transparent** (match-based) `view` defined here, **not**

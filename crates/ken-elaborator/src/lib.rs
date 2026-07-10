@@ -47,7 +47,8 @@ use ken_kernel::{
 pub use elab::{elaborate_rdecl, elaborate_rexpr, ElabResult, Obligation, ObligationKind};
 pub use error::{ElabError, Span};
 pub use ast::{
-    BinOp, ConstructorSignature, ConstructorSignatureArg, Decl, ExplicitDataCtor, Expr, Type,
+    BinOp, ConstructorSignature, ConstructorSignatureArg, Decl, ExplicitDataCtor, Expr,
+    ImportKind, Type,
 };
 pub use extract::{
     v2_extract, ExtractionResult, ObligationId, ObligationTriple, ProvKind, Provenance,

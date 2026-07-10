@@ -107,7 +107,10 @@ flowchart TB
 - **Capability Section — focused competence Domains.** Parsing, cryptography, and
   the individual subject areas that build on solid data and algorithms; each is a
   **Domain** within this Section (Parsing Domain, Cryptography Domain, …). Today's
-  `parsing` and `transport` packages seed this Section.
+  `parsing` package seeds this Section (Parsing Domain); `transport` is **Core**
+  content (equality transport, not a capability), and the Capability "transport"
+  name is reserved for a future wire/serialization (encodings Domain) package
+  distinct from it (`docs/program/wp/catalog-taxonomy-paths-imports.md` P4).
 
 **Demand-pull (the operator's design principle).** The deeper Sections are
 *clarified by building the things that ought to sit on them*. Rather than
@@ -134,20 +137,21 @@ catalog/
   REFERENCES.md        catalog-wide reference conventions (per-entry refs live
                        in each entry — see the style guide)
   guide/               the authoring guide — "writing Ken" (see below)
-  packages/            light container: a README + one subdirectory per package
+  packages/            light container: a README + the Section/Domain tree
     README.md          package index / navigation
-    <package>/
-      <package>.ken.md  the literate entry (primary artifact; tangles to .ken)
-      ...
+    <Section>/[<Domain>/]<Pkg>.ken[.md]  the leaf package (identity-mapped
+                                          to `import <Section>.[<Domain>.]<Pkg>`,
+                                          `07-catalog-style-guide.md`)
 ```
 
 - `catalog/` root holds any *whole-catalog* detail (index, cross-package
   conventions, the pointer to this charter and to the style guide).
-- `catalog/packages/` is **just a container** — a README and the package
-  subdirectories, nothing heavier. Packages are physically **flat today**; the
-  Sections and Domains below are the *conceptual* spine and build order, and a
-  later rearrangement WP may group packages into Section (and, where subdivided,
-  Domain) subdirectories once the set is large enough to warrant it.
+- `catalog/packages/` is **just a container** — a README and the Section/Domain
+  tree, nothing heavier. Packages are filed by **Section, with a Domain
+  subdirectory where the Section is subdivided**
+  (`catalog-taxonomy-paths-imports`, landed) — the physical tree now mirrors the
+  Sections and Domains below directly, and the **path is the import**, by
+  construction (`07-catalog-style-guide.md` "Path ⇔ import").
 - Each package is a **literate `.ken.md` entry** whose `ken` code blocks tangle
   to a compilable module; the tangled `.ken` is a build artifact, not the
   source of truth.

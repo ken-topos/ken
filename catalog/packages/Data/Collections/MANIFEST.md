@@ -1,4 +1,12 @@
-# `collections` — the derived `List`/`Nat` combinator floor + string surface
+# `Data/Collections` — the derived `List`/`Nat` combinator floor + `Map`/`Set`
+
+This Domain directory holds two leaf packages (`catalog-taxonomy-paths-imports`
+WP, content-call — the two were already separate files, genuinely separable):
+`Collections.ken` (⇔ `import Data.Collections.Collections`, this MANIFEST's
+subject below) — the derived `List`/`Nat` combinator floor + string surface —
+and `Map.ken` (⇔ `import Data.Collections.Map`) — the proved `Map`/`Set` BST
+(`spec/50-stdlib/52-map.md`), which depends on `Collections.ken`'s
+`list_append`.
 
 **Spec catalog entry:** `spec/30-surface/37-strings-collections.md` §2.4/§2.5/
 §2.5.1/§4.1. Realizes the slice-2 half of the derived string surface (slice 1,
@@ -62,7 +70,7 @@
   structural folds keeps the audited primitive set small
   (subsume-don't-proliferate).
 - **Package dependency.** The CAT-3 proof terms use `cong`, so harnesses and
-  consumers load `catalog/packages/transport/transport.ken` before this file. The
+  consumers load `catalog/packages/Core/Transport.ken` before this file. The
   dependency is proof-only and adds no trusted-base delta.
 - **SCT sound zone.** Every recursive call is an applied call whose decreasing
   argument is a strict subterm of a matched argument (the `Cons` tail and/or

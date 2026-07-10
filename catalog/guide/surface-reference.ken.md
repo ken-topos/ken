@@ -198,7 +198,7 @@ refined too, the mirror case of a refined result:
 
 ```ken example
 -- A refined PARAMETER: only Booleans equal to `True` are accepted.
--- Equivalent shape to `catalog/packages/collections/collections.ken`'s
+-- Equivalent shape to `catalog/packages/Data/Collections/Collections.ken`'s
 -- `trueRefinementProject`.
 fn projectTrue (x : { b : Bool | Equal Bool b True }) : Bool = x
 ```
@@ -227,14 +227,14 @@ fn announceIt (b : Bool) : String = (Describe_instance_Bool).describe b
 ```
 
 A class field's own type may itself carry a law — the shape every entry in
-`catalog/packages/lawful-classes/` follows, covered in depth by the proof
+`catalog/packages/Core/` follows, covered in depth by the proof
 techniques strand:
 
 ```ken ignore
 class Eq a {
   eq   : a → a → Bool ;
   refl : (x : a) → IsTrue (eq x x)
-  -- … `sym`, `trans` — see catalog/packages/lawful-classes/lawful_classes.ken
+  -- … `sym`, `trans` — see catalog/packages/Core/LawfulClasses.ken
 }
 ```
 

@@ -24,15 +24,15 @@ use ken_interp::eval::{eval, EvalStore, EvalVal, ListCharIds};
 use ken_kernel::{Decl, GlobalId, Term};
 
 const COLLECTIONS_KEN: &str =
-    include_str!("../../../catalog/packages/collections/collections.ken");
-const TRANSPORT_KEN: &str = include_str!("../../../catalog/packages/transport/transport.ken");
+    include_str!("../../../catalog/packages/Data/Collections/Collections.ken");
+const TRANSPORT_KEN: &str = include_str!("../../../catalog/packages/Core/Transport.ken");
 
 fn mk_env() -> ElabEnv {
     let mut env = ElabEnv::new().expect("base env");
     env.elaborate_file(TRANSPORT_KEN)
-        .expect("catalog/packages/transport/transport.ken must elaborate");
+        .expect("catalog/packages/Core/Transport.ken must elaborate");
     env.elaborate_file(COLLECTIONS_KEN)
-        .expect("catalog/packages/collections/collections.ken must elaborate");
+        .expect("catalog/packages/Data/Collections/Collections.ken must elaborate");
     env
 }
 

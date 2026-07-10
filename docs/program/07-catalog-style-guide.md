@@ -290,3 +290,41 @@ entry · any file split preserves imports and consumers · the entry connects
 source order to spec chapters and acceptance criteria · a reviewer can find
 operations, laws, helpers, proofs, trust posture, references, and findings
 without reading the WP thread.
+
+## 13. Path ⇔ import — the normative rule
+
+(`docs/program/wp/catalog-taxonomy-paths-imports.md`, enclave-pinned, landed.)
+A package's file path and its dotted import specification are the **same
+thing**, spelled two ways — this is what lets a reader go from an import to a
+file, and back, without a lookup table.
+
+- **Identity map.** `import A.B.C` ⇔ `catalog/packages/A/B/C.ken[.md]`,
+  mechanically, at any depth: **N dotted components → (N−1) directories + a
+  leaf file.** The resolver never decodes whether a component is a Section, a
+  Domain, or the package itself — that is taxonomy metadata about *where a
+  file is filed* (`06-catalog-campaign.md` "Sections and Domains"), not
+  something the addressing rule reads.
+- **Casing.** Path/module components are **PascalCase `ConId`**
+  (uppercase-initial, `31-lexical.md §1`) — the leaf filename minus its
+  extension is *exactly* the final import component, zero transform. Kebab or
+  snake_case directory/file names are not valid module identifiers.
+- **Variable depth, no synthesized Domain level.** A Domain directory appears
+  only when its Section is actually subdivided (`06`); do not insert one to
+  force a fixed depth.
+- **Leaf-or-namespace, never both.** A name at a given level is either a
+  package (a `.ken`/`.ken.md` leaf file) or a Domain (a directory) — never
+  both at once (no `Data/Collections.ken` beside a `Data/Collections/`
+  directory).
+- **Module is path-inferred.** A file is an implicit module named by its path
+  (`33-declarations.md §3.1`) — there is **no mandatory in-file `module A.B.C`
+  header**; the directory path is the single source of truth. (An *optional*
+  checked header enforcing `header == path` is a future ergonomic add, not
+  part of this rule.)
+- **Import-availability honesty (must agree with the `write-ken` guide).**
+  This rule fixes *addressing* — it does **not** mean cross-file `import`
+  resolves. There is no disk loader yet (module path → file on disk is a
+  named follow-on capability); within one compilation unit, dotted module
+  refs already work, but a catalog entry that needs another package's helper
+  today still inlines it (the DS-1 pattern, `Core/EmptyDec.ken.md §6`), not
+  imports it. State this plainly in any entry or guide passage that
+  demonstrates the dotted syntax — don't imply cross-file import works.

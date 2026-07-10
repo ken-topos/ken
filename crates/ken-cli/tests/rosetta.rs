@@ -55,11 +55,11 @@ fn rosetta_dir() -> PathBuf {
 const NEEDS_COLLECTIONS: &[&str] = &["palindrome", "closures", "merge-sort", "tree-traversal"];
 
 fn collections_prelude() -> String {
-    let transport = fs::read_to_string(workspace_root().join("catalog/packages/transport/transport.ken"))
-        .expect("catalog/packages/transport/transport.ken must be readable");
+    let transport = fs::read_to_string(workspace_root().join("catalog/packages/Core/Transport.ken"))
+        .expect("catalog/packages/Core/Transport.ken must be readable");
     let collections =
-        fs::read_to_string(workspace_root().join("catalog/packages/collections/collections.ken"))
-            .expect("catalog/packages/collections/collections.ken must be readable");
+        fs::read_to_string(workspace_root().join("catalog/packages/Data/Collections/Collections.ken"))
+            .expect("catalog/packages/Data/Collections/Collections.ken must be readable");
     format!("{transport}\n{collections}")
 }
 

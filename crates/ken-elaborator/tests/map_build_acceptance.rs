@@ -6,8 +6,9 @@
 //! an abstract `Ord k` dictionary — no landed mechanism exists for that yet
 //! (confirmed empirically against `elab.rs`'s `instance_search`, escalated to
 //! Architect, `evt_1wd56hecqhm06`/`evt_64j01esqw86pf`/`evt_1wsk6dracp10r` in
-//! the Map-build thread). This file covers only what `catalog/packages/collections/
-//! map.ken` ships today: the `Tree k v` carrier, `empty`, `toList`, `fold`,
+//! the Map-build thread). This file covers only what
+//! `catalog/packages/Data/Collections/Map.ken` ships today: the `Tree k v`
+//! carrier, `empty`, `toList`, `fold`,
 //! and the `Pair`/`mkPair`/`pairFst`/`pairSnd` Σ-pair plumbing
 //! (`ken-elaborator/src/prelude.rs`) those two ops route through. Extended
 //! once the generic-dictionary gap resolves.
@@ -16,18 +17,18 @@ use ken_elaborator::{foreign::trusted_base_delta, ElabEnv, NumericLitVal};
 use ken_interp::eval::{eval, EvalStore, EvalVal, ListCharIds};
 use ken_kernel::{Decl, GlobalId};
 
-const COLLECTIONS_KEN: &str = include_str!("../../../catalog/packages/collections/collections.ken");
-const TRANSPORT_KEN: &str = include_str!("../../../catalog/packages/transport/transport.ken");
-const MAP_KEN: &str = include_str!("../../../catalog/packages/collections/map.ken");
+const COLLECTIONS_KEN: &str = include_str!("../../../catalog/packages/Data/Collections/Collections.ken");
+const TRANSPORT_KEN: &str = include_str!("../../../catalog/packages/Core/Transport.ken");
+const MAP_KEN: &str = include_str!("../../../catalog/packages/Data/Collections/Map.ken");
 
 fn mk_env() -> ElabEnv {
     let mut env = ElabEnv::new().expect("base env");
     env.elaborate_file(TRANSPORT_KEN)
-        .expect("catalog/packages/transport/transport.ken must elaborate");
+        .expect("catalog/packages/Core/Transport.ken must elaborate");
     env.elaborate_file(COLLECTIONS_KEN)
-        .expect("catalog/packages/collections/collections.ken must elaborate");
+        .expect("catalog/packages/Data/Collections/Collections.ken must elaborate");
     env.elaborate_file(MAP_KEN)
-        .expect("catalog/packages/collections/map.ken must elaborate");
+        .expect("catalog/packages/Data/Collections/Map.ken must elaborate");
     env
 }
 
