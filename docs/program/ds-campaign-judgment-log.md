@@ -208,19 +208,18 @@ bar.
   breadth over the tier is the operator's stated goal for the window.
 - **Reversibility:** easy.
 
-### RUN STATUS / resume point (2026-07-10, ~10:25 UTC)
+### RUN STATUS / resume point (2026-07-10, ~10:50 UTC)
 
 **Live checkpoint for lossless resume across compaction.** **CORE COMPLETE** —
 the constructor-class chain Functor → Applicative → Monad → Traversable is fully
-landed (**DS-8 Core merged, PR #440, `main @ 709c55d`, CI-green**). §60 erratum
-LANDED (PR #438); both capability builds (K1 DS-5b + K2 DS-8b) landed CI-green.
-**Data section OPEN: DS-4 (List combinators) FRAMED + KICKED to Foundation**
-(`evt_45g3r8fj0kver`) as the first Data item — build in flight through its ring.
-**DS-3 (Option/Result combinators + the `Either` ruling, `L4`) FRAMED shovel-
-ready but NOT yet kicked** (hold for DS-4 to clear, avoid Foundation contention).
-All rings idle except Foundation (DS-4 build). Next after DS-4: kick DS-3, then
-DS-6 (`DecEq Char` capstone, T1-design + candidate 2nd kernel-move, not yet
-framed).
+landed (**DS-8 Core merged, PR #440**). §60 erratum LANDED (PR #438); both
+capability builds (K1 DS-5b + K2 DS-8b) landed CI-green. **Data section OPEN and
+progressing: DS-4 (List combinators) LANDED** (PR #443, `main @ ab64104`, first
+Data item); **DS-3 (Option/Result combinators + the `Either` ruling, `L4`) KICKED
+to Foundation** (`evt_zpdcdwv8zkvr`, second Data item — build in flight). All
+rings idle except Foundation (DS-3 build). Next after DS-3: frame DS-6 (`DecEq
+Char` capstone, T1-design + candidate 2nd kernel-move, not yet framed) if
+window-time remains.
 
 **DS-8 — VALVE TAKEN (composition law deferred to DS-8c for SIZE):** the
 `traverse` composition coherence law (§5.3) turned out ~40-60 lemmas (not ~12-15)
@@ -283,20 +282,26 @@ traverse composition law both deferred to DS-8c.** Foundation transcribing into
   capability). See the VALVE section above for the 5 honesty pins + gate detail.
   `L3` (Compose in-scope) held. Retros in.
 - **DS-4** (`List` combinator completion) — ✅ **FRAMED + KICKED to Foundation**
-  (`evt_45g3r8fj0kver`); frame `wp/ds-4-list-combinators.md`. **First Data-section
-  item** (opens Data now Core is complete). Near-mechanical: extends
-  `Data/Collections/Collections.ken` with `reverse` (+ involutive law), `zip`
-  (non-dependent — NOT the DS-5c-gated Vector zip), `concatMap`, `range`, `foldl`
-  + length laws. Normal ring → foundation-qa → Architect → git_request → CI-gated.
-  Watch: drop any law needing an out-of-floor combinator (subsume-don't-
-  proliferate); don't conflate List `zip` with Vector `zip`.
-- **DS-3** (`Option`/`Result` combinators + `Either` ruling) — ✅ **FRAMED
-  shovel-ready, NOT yet kicked**; frame `wp/ds-3-sum-type-combinators.md`.
-  T1-design fork = the `Either` ruling (`L4`, Steward rec: **SUBSUME**, route to
-  Architect + spec). Combinator build (Option getOrElse/isSome/orElse; Result
-  mapErr/andThen/unwrapOr + laws) is mechanical + independent of the ruling. Hold
-  kicking until DS-4 clears (Foundation contention). Class-instance showcase
-  (Monad Option/Result) noted as a possible follow-on, not forced.
+  frame `wp/ds-4-list-combinators.md`. **LANDED** `main @ ab64104` (PR #443,
+  CI-green). Near-mechanical: `reverse` (+ involutive law via `reverse_snoc` —
+  the one real induction), `zip` (non-dependent — verified NOT the DS-5c-gated
+  Vector zip), `concatMap`/`foldl` (structural-only, dropped laws documented per
+  subsume-don't-proliferate), `range` appended to `Collections.ken`. Outer-ring,
+  zero Axiom, zero-`trusted_base` delta, foundation-qa + Architect gate. One
+  non-blocking nit (AC8 #1 reject also accepts `|| ParseError`) recorded for
+  next-touch, not folded (Architect ruling). Retros in. Proof-technique finding:
+  `Cons`-vs-`Cons` abstract-element base needs `cong` not bare `tt`/`Refl`
+  (memory saved).
+- **DS-3** (`Option`/`Result` combinators + `Either` ruling) — 🔨 **KICKED to
+  Foundation** (`evt_zpdcdwv8zkvr`); frame `wp/ds-3-sum-type-combinators.md`.
+  Two lanes: **(a)** mechanical combinator build (Option getOrElse/isSome/orElse;
+  Result mapErr/andThen/unwrapOr + laws; reuse existing `option_map`/`Functor
+  Option`; `Err`-first field-order caution) — proceeds now; **(b)** the `Either`
+  ruling (`L4`, Steward rec: **SUBSUME** — no distinct `Either`, `Result`
+  subsumes it) routed to @architect design-shape + spec fidelity, runs in
+  parallel, does NOT block lane (a). Package-home rec: one entry
+  `Data/Sums/Sums.ken`. Monad-instance showcase noted as possible follow-on, not
+  forced. Normal ring → foundation-qa → Architect → git_request.
 - **DS-8b** (pure-witness ⊆ `proc`-field widening) — ✅ **LANDED**
   `main @ 5c698dd` (PR #433, CI-green). The `Proc if !impure` arm purely deleted
   (dangerous `Const|Fn` arm byte-identical), zero kernel/prelude/spec/conformance
@@ -334,18 +339,20 @@ traverse composition law both deferred to DS-8c.** Foundation transcribing into
 - **`DS-5c`** (zip two-vector convoy + Fin-indexed `lookup`) — **named deferred
   WP**, NOT kicked this window (breadth over depth; would be a 3rd concurrent
   capability build). The §60 erratum + Vector package both point to it.
-- **Data section (DS-3/DS-4/DS-6)** — the breadth priority, now OPEN. DS-4
-  (List ext) **KICKED** (in flight); DS-3 (Option/Result + Either ruling)
-  **FRAMED shovel-ready**, kick when DS-4 clears; DS-6 (`DecEq Char` capstone,
-  candidate 2nd kernel-move) T1-design-needed, not yet framed.
-- Verify team idle in reserve. Kernel + Ergo freed. Foundation on DS-4.
-  All enclave WPs (DS-5/DS-5b/DS-8b/§60) closed; retros collected.
+- **Data section (DS-3/DS-4/DS-6)** — the breadth priority, progressing. DS-4
+  (List ext) **LANDED** (PR #443); DS-3 (Option/Result + Either ruling) **KICKED**
+  (in flight); DS-6 (`DecEq Char` capstone, candidate 2nd kernel-move)
+  T1-design-needed, not yet framed.
+- Verify team idle in reserve. Kernel + Ergo freed. Foundation on DS-3.
+  All enclave WPs (DS-5/DS-5b/DS-8b/§60) + DS-4 closed; retros collected.
 
-**Next-move triggers (event-driven):** DS-4 git_request → honesty-gate + merge
-(CI-gated) → **kick DS-3** to Foundation (frame ready). DS-8 retros → ack/close
-(foundation-leader collecting). If window-time remains after DS-3 kicks: frame
-DS-6 (`DecEq Char`, careful — candidate kernel-move, T1-design). Vector package +
-DS-5c + DS-8c are named/queued, not kicked this window (breadth over depth).
+**Next-move triggers (event-driven):** DS-3 git_request → honesty-gate + merge
+(CI-gated, lane-a build) + confirm the Architect ruled the `Either` lane-b (if
+SUBSUME, a spec-author/CV README:42 reconcile erratum follows). If window-time
+remains: frame DS-6 (`DecEq Char`, careful — candidate kernel-move, T1-design).
+Vector package + DS-5c + DS-8c are named/queued, not kicked this window (breadth
+over depth). **Operator returns ~11:30 UTC** — judgment log is the review
+artifact; keep it current.
 
 ### P3 · Foundation is the catalog-authoring home; parallelize only independent tracks
 - **Call:** Keep catalog authoring on the Foundation team (coherence — one
