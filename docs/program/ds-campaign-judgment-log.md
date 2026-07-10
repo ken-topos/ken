@@ -164,30 +164,41 @@ bar.
 - **Reversibility:** easy (a scope decision; the core lands either way, the
   composition boundary is a doc/gate note).
 
-### L4 · DS-3 `Either` ruling — SUBSUME (no distinct `Either`; `Result` is the binary sum) [recommendation → Architect confirms]
-- **Call:** Recommend the catalog carry **no distinct `Either`** —
-  `Result e a = Err e | Ok a` (prelude-declared, load-bearing) **subsumes** it.
-  `spec/50-stdlib/README.md:42` names both `Either e a` and `Result e a`, but only
-  `Result` is declared (`prelude.rs:193`); `Either` has no declaration or user.
-  **Routed to @architect (design-shape) + spec enclave (fidelity)** — a
-  recommendation with reasoning, NOT a unilateral land; framed in
-  `wp/ds-3-sum-type-combinators.md`. Shovel-ready, not yet kicked.
+### L4 · DS-3 `Either` ruling — SUBSUME (no distinct `Either`; `Result` is the binary sum) [✅ ARCHITECT CONFIRMED `evt_13583vpn9747r`]
+- **Call:** Catalog carries **no distinct `Either`** — `Result e a = Err e | Ok a`
+  (prelude-declared, load-bearing) **subsumes** it. Steward recommendation;
+  **@architect CONFIRMED** on the design axis (he owns shape). Framed in
+  `wp/ds-3-sum-type-combinators.md`.
 - **Why:** `Either e a = Left e | Right a` is **structurally isomorphic** to
-  `Result` — an isomorphic twin adding **zero capability** = the proliferation #7
-  (subsume-don't-proliferate) forbids. `Result` is already wired into the effect
-  layer (`fs_resp`, `prelude.rs:1077`) + the codec error path; `Either` is
-  vestigial. Trust levels are identical, so the coexist-when-trust-differs
-  exception does **not** apply. `Either`'s only offer — a "neutral" reading of a
-  binary sum — is naming intent, not capability (expressible as `Result` or a
-  user's local `data`). Honesty face: subsuming needs a **spec reconcile** on
-  README:42 (drop/annotate `Either`), a spec-author/CV erratum (DS-5 §60 pattern).
+  `Result` (constructor bijection, identical eliminator shape) — an isomorphic
+  twin adding **zero capability** = the proliferation #7 forbids. `Result` is
+  wired into the effect layer (`fs_resp`, `prelude.rs:1077`) + codec error path;
+  `Either` has zero declaration/user. Trust levels identical → coexist-when-trust-
+  differs does **not** apply. **Architect grounding that seals it:** the trust
+  root **already** carries a general parametric coproduct `Sum a b = InL a | InR b`
+  (`prelude.rs:157`, load-bearing for ITree `⊕`), so *both* of Either's roles —
+  error sum (`Result`) and neutral sum (`Sum`) — already have first-class homes;
+  `Either` would be a **third** spelling of a twice-existing shape.
+- **Spec reconcile — FOUR normative sites (Architect's whole-surface sweep, not
+  my cited one):** subsume makes false every "`Either` is a declared type" claim.
+  (1) `50-stdlib/README.md:42`; (2) `30-surface/34-data-match.md:5`; (3)
+  `34-data-match.md:56` ("Result, Option, Either are ordinary prelude data decls"
+  — **load-bearing false**); (4) `34-data-match.md:633` ("Result/Option/Either in
+  the prelude" — **load-bearing false**). **Exclude** `:540` ("Either way", English);
+  `_notes/` non-normative. **Erratum ROUTED to @spec-leader** (`evt_1qkfgg6p8dkam`,
+  spec-author + CV, DS-5 §60 pattern) — annotate `Either` "subsumed by `Result`;
+  no distinct type — neutral sum is `Result` or the `Sum a b` coproduct" at all
+  four sites. Correcting only one leaves the two `34-data-match` claims false
+  (correcting-scope-must-sweep-whole-doc — validated: the over-claim WAS restated).
 - **Coupled package-home call:** recommend one entry
   `catalog/packages/Data/Sums/Sums.ken` for both L2-sum combinator families
-  (Option + Result), not two — subsume-don't-proliferate on package count
-  (mirrors `Collections.ken`). Foundation confirms.
-- **Reversibility:** easy (a recommendation; if the Architect rules the other way,
-  a distinct `Either` is a small additive `data` + combinators, not a rework). The
-  combinator build (Option/Result) is independent and proceeds regardless.
+  (Option + Result), not two — subsume-don't-proliferate on package count.
+- **Named deferred (NOT this window):** whether to bless `Sum a b` as the
+  *user-facing* neutral coproduct (it's presently effect-framed only) is a
+  separate non-DS-3 question the Architect flagged — logged, not acted on.
+- **Reversibility:** easy (if ever reversed, a distinct `Either` is a small
+  additive `data` + combinators, not a rework). The DS-3 combinator build (lane a)
+  is independent and proceeds regardless.
 
 ### P1 · Sequence: DS-2 → DS-7 → DS-8 → (Data) DS-3 → DS-4 → DS-6; DS-5 spec-track in parallel
 - **Call:** Drive DS-2 (`Ord Nat` export) first, then the remaining Core toolkit
@@ -297,9 +308,9 @@ traverse composition law both deferred to DS-8c.** Foundation transcribing into
   Two lanes: **(a)** mechanical combinator build (Option getOrElse/isSome/orElse;
   Result mapErr/andThen/unwrapOr + laws; reuse existing `option_map`/`Functor
   Option`; `Err`-first field-order caution) — proceeds now; **(b)** the `Either`
-  ruling (`L4`, Steward rec: **SUBSUME** — no distinct `Either`, `Result`
-  subsumes it) routed to @architect design-shape + spec fidelity, runs in
-  parallel, does NOT block lane (a). Package-home rec: one entry
+  ruling (`L4`) — **Architect CONFIRMED SUBSUME** (`evt_13583vpn9747r`); the
+  four-site spec erratum is **ROUTED to the enclave** (`evt_1qkfgg6p8dkam`), runs
+  in parallel, does NOT block lane (a). Package-home rec: one entry
   `Data/Sums/Sums.ken`. Monad-instance showcase noted as possible follow-on, not
   forced. Normal ring → foundation-qa → Architect → git_request.
 - **DS-8b** (pure-witness ⊆ `proc`-field widening) — ✅ **LANDED**
