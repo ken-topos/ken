@@ -311,6 +311,33 @@ bar.
   mechanical, revert-clean, no semantic change) — PROMINENT because it's a
   language-surface convention binding all future catalog authoring.
 
+### D1 · OPEN DISCUSSION (operator) — Ken auto-formatter for `.ken`/`.ken.md`
+- **Raised by:** operator (Pat), 2026-07-10. **Not decided — on the discuss-list.**
+- **Proposal:** a **strict automatic formatter** for Ken source (`.ken` and
+  `.ken.md`), in the mold of `gofmt` / `rustfmt` / Python `black` — one canonical
+  style, mechanically enforced, no per-author bikeshedding. Operator's rationale:
+  strict auto-formatting has **proven to increase readability** across those
+  ecosystems.
+- **Trigger:** the operator noticed **exceptionally long single lines** in a
+  `.ken.md` file. Confirmed on survey: `EffectfulClasses.ken.md` has many 200+
+  column code lines; `catalog/guide/decomposition-abstraction.ken.md:129` is
+  ~295 columns. There is **no line-length discipline on Ken code today** (the
+  80-col rule is prose-only; Markdown code fences are exempt).
+- **Sequencing (operator ruling):** the formatter is **mechanical, so it does NOT
+  gate the literate transformation** — that WP proceeds now
+  (`wp/literate-transformation.md`) and the formatter reformats the whole catalog
+  (transformed files included) whenever it lands. The transformation pass is told
+  explicitly **not** to hand-reflow long lines (wasted + error-prone; the
+  formatter's job).
+- **Open questions for the discussion (not pre-decided):** build vs adopt (is
+  there prior art to reflect rather than write a bespoke tool? #6); scope (just
+  line-wrapping, or full canonical layout — indentation, spacing, alignment,
+  fence normalization); where it runs (CI check / pre-merge gate / editor); who
+  owns it (Librarian for catalog encoding, or a tooling track). Route to the
+  operator + Architect when we take it up.
+- **Reversibility:** N/A (a proposal). When built, a formatter is additive tooling
+  (revert-clean).
+
 ### P1 · Sequence: DS-2 → DS-7 → DS-8 → (Data) DS-3 → DS-4 → DS-6; DS-5 spec-track in parallel
 - **Call:** Drive DS-2 (`Ord Nat` export) first, then the remaining Core toolkit
   (DS-7 `Applicative`/`Monad`, DS-8 `Traversable`), then the Data Section
@@ -353,12 +380,22 @@ identifiers from production source (`refine_ds5b_goal`→`refine_branch_goal`, e
 — pure rename, 770 tests green. The leak had passed the entire Kernel ring
 undetected; added a WP-token screen to my honesty gate (memory saved).
 
+**🔨 IN FLIGHT — Literate transformation + L6 casing pass (operator-kicked
+~14:25):** `.ken → .ken.md` for the 8 remaining plain catalog files, carrying the
+L6 casing rename across all 14 files in the same pass. Frame
+`wp/literate-transformation.md`, kicked to **Librarian** (leads; owns encoding +
+L6 pass). Mechanical, zero-semantic-change; the acceptance bar is every file
+`ken check`/`ken run` green + full acceptance suite (proof-carrying code must keep
+checking; the rename must reach every reference site incl. spec examples + tests).
+
 **Named futures (operator sets direction):** (a) **core-data→packages migration**
 (Option/Result/Nat/List/Prod/Unit are prelude-declared but the spec models them as
 packages; `Either`-as-package is the first correct precedent — the larger
-architectural prize); (b) **`Data.Functor.Sum`** (owns the freed `Sum` name);
-(c) **casing-standard renaming pass (L6)** — PascalCase class-like / snake_case
-instance-like, riding the `.ken → .ken.md` literate transformation (deferred).
+architectural prize); (b) **`Data.Functor.Sum`** (owns the freed `Sum` name).
+**Open discussion (`D1`):** a **Ken auto-formatter** (`gofmt`/`black`-style) for
+`.ken`/`.ken.md` — operator flagged exceptionally long code lines (no line
+discipline on Ken code today); mechanical, so it does NOT gate the literate
+transformation; on the discuss-list.
 
 **DS-3 (Option/Result combinators) — ✅ LANDED PR #454, `main @ dd5dc51`.** New
 package `catalog/packages/Data/Sums/Sums.ken` (Option getOrElse/isSome/orElse;
@@ -368,13 +405,14 @@ gate. Retros closed. Real-kicked ~13:07 after my appended kick sat missed (idle
 10:45→13:07; lesson saved). **DS-6** (`DecEq Char`, candidate kernel-move) — not
 framed, held for operator input.
 
-**NOT HOLDING — all in-flight git_requests LANDED.** This cycle merged, each
-honesty-gated + CI-verified, sequenced to avoid moving-base races: DS-3 (#454),
-Runtime rename-only (#455), tracker (#456), elab.rs WP-name-strip (#457),
-Either-catalog (#458). L5 thread closed. Now **event-driven** for the next operator
-directive — no WP in flight. Named futures (a/b/c above) await operator direction;
-DS-6 held. Kick every future WP STANDALONE + mention-led (lesson
-from the DS-3 miss).
+**HOLDING (event-driven) for 1 git_request:** the **literate transformation +
+L6 casing pass** (Librarian-led, kicked ~14:25). Prior cycle all landed +
+honesty-gated: DS-3 (#454), Runtime rename-only (#455), elab.rs WP-name-strip
+(#457), Either-catalog (#458), L6 guidance fold (#460), trackers (#456/#459/#461).
+L5 thread closed. When the transformation git_requests → honesty-gate (mechanical
+re-encode + rename, zero `crates/src`/kernel/spec-prose delta, every file checks)
++ merge. Named futures (a/b) + `D1` formatter await operator direction; DS-6 held.
+Kick every future WP STANDALONE + mention-led (lesson from the DS-3 miss).
 
 **DS-8 — VALVE TAKEN (composition law deferred to DS-8c for SIZE):** the
 `traverse` composition coherence law (§5.3) turned out ~40-60 lemmas (not ~12-15)
