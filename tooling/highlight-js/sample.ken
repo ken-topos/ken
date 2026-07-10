@@ -1,0 +1,123 @@
+-- highlight.js fixture for the Ken language (tooling/highlight-js/ken.js).
+-- This file is a highlighting exercise, NOT a checked catalog entry -- it is
+-- shaped like real Ken (borrowing idiom from catalog/packages/core/
+-- empty-dec.ken.md, catalog/guide/surface-reference.ken.md, and the
+-- examples/rosetta/{gcd,merge-sort} oracles) and it does not need to
+-- elaborate.
+
+-- `module`/`import`/`use`/`pub` are reserved keywords whose full grammar is
+-- still DRAFT v0 / OQ-syntax (`spec/30-surface/32-grammar.md §1`) -- no
+-- landed catalog file opens a `module { }` block yet (every real entry is a
+-- bare, file-level implicit module, per that same grammar note). The two
+-- lines below are illustrative only, mirroring the sketched grammar
+-- (`import ModPath (name, ...)`, `use ModPath`) rather than a verified
+-- working example.
+import Collections.Map (insert, lookup)
+use Prelude
+
+-- Likewise `module`/`pub`, in the sketched `module ConId { ... }` shape --
+-- illustrative only, not a verified-elaborating form.
+module Sample {
+  pub const answer : Nat = Suc Zero
+}
+
+-- ── literals ─────────────────────────────────────────────────────────────
+
+const anInt     : Int     = 123
+const aFloat    : Float   = 3.14
+const anExp     : Float   = 1.0e-9
+const aDecimal  : Decimal = 0.1d
+const aFloat32  : Float32 = 1.5f32
+const aGreeting : String  = "hello, Ken -- not a comment inside a string"
+
+-- ── purity keywords: const / fn / proc ───────────────────────────────────
+
+data Color = Red | Green | Blue
+
+fn isRed (c : Color) : Bool =
+  match c { Red ⇒ True ; Green ⇒ False ; Blue ⇒ False }
+
+proc announce (c : Color) : IO Unit visits [Console] =
+  match c {
+    Red   ⇒ print_line "it's red" ;
+    Green ⇒ print_line "it's green" ;
+    Blue  ⇒ print_line "it's blue"
+  }
+
+-- ── data / match, primes on an identifier, ConIds ────────────────────────
+
+data OrdResult = Lt | Eq | Gt
+
+fn natCmp' (a : Nat) (b : Nat) : OrdResult =
+  match a {
+    Zero  ⇒ match b { Zero ⇒ Eq ; Suc n ⇒ Lt } ;
+    Suc m ⇒ match b { Zero ⇒ Gt ; Suc n ⇒ natCmp' m n }
+  }
+
+-- ── def: transparent alias / refinement ──────────────────────────────────
+
+def PosInt = { n : Int | Equal Bool (leq_int 0 n) True }
+
+const five : PosInt = 5
+
+-- ── class / instance, lambda + Unicode operators ────────────────────────
+
+class Eq a {
+  eq   : a -> a -> Bool ;
+  refl : (x : a) -> IsTrue (eq x x)
+}
+
+instance Eq Bool {
+  eq = \x. \y. match x { True ⇒ y ; False ⇒ match y { True ⇒ False ; False ⇒ True } } ;
+  refl = λx. tt
+}
+
+-- ── named proof claims: prop / lemma / proof ──────────────────────────────
+
+prop Trivial (a : Type) (x : a) : Omega where {
+  triv : Trivial a x
+}
+
+fn doubleIt (x : Int) : Int = x + x
+
+proof trivial for doubleIt (x : Int) : Trivial Int x = Trivial.triv Int x
+
+lemma trivialAny (a : Type) (x : a) : Trivial a x = Trivial.triv a x
+
+-- ── requires / ensures / prove / law / old / space, foreign, temporal ───
+
+foreign sqrt_f64 : Float -> Float = symbol "sqrt" library "libm" pure
+
+fn incrChecked (n : Nat)
+  requires Trivial Nat n
+  ensures  old n = n
+  : Nat = Suc n
+
+temporal law addComm : (a : Nat) -> (b : Nat) -> Equal Nat (a + b) (b + a)
+
+-- `space` (a stateful region, `36-effects.md §4`) -- illustrative only:
+-- `mut`/`becomes` are grammar-sketch tokens (`32-grammar.md`, `[OQ-syntax]`),
+-- not reserved lexer keywords, so they lex as plain identifiers here.
+space Counter {
+  mut count : Int = 0
+}
+
+-- ── operator-heavy line: arithmetic, comparisons, logic ──────────────────
+
+fn operatorSoup (a : Int) (b : Int) : Bool =
+  ((a <= b) ∧ (a /= b)) ∨ ((a >= b) ⊑ (a >< b)) ⊔ (a ⊓ b) ∈ Omega
+
+-- `Ω` is a single-codepoint Unicode alias the lexer folds directly to the
+-- ConId `Omega` -- interchangeable with spelling it out, same as real
+-- catalog comments write `Ω`-sorted (prose shorthand) alongside code that
+-- spells the type `Omega` (e.g. `catalog/packages/core/empty-dec.ken.md`'s
+-- `fn yes (prp : Omega) (p : prp) : Dec prp = ...`).
+fn yesUnicode (prp : Ω) (p : prp) : Dec prp = Yes prp p
+
+-- ── absurd (surface sugar, not a keyword) ────────────────────────────────
+
+fn refuteTrueFalse (p : Equal Bool True False) : Empty = absurd p
+
+-- ── Oracle ────────────────────────────────────────────────────────────────
+
+proc main : IO Unit visits [Console] = announce Blue
