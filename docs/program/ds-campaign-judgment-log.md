@@ -212,6 +212,10 @@ bar.
   is independent and proceeds regardless.
 
 ### L5 · ⚠ PROMINENT — coproduct family: `Either` (catalog package), rename effect `Sum`→`Coproduct` [OPERATOR-RULED]
+> **STATUS (2026-07-10 ~13:30):** WP (2) `Sum`→`Coproduct` rename **✅ LANDED**
+> (PR #455, `main @ 4943d63`, zero kernel delta). WP (1) `Either` catalog package
+> **pending Foundation kick** (`wp/either-catalog-package.md`; `Data/Sums/` home
+> landed with DS-3 PR #454). WP (3) `Sum` name now **freed**.
 - **Call (COEXIST by role — three distinct coproducts; SPLIT into two WPs after
   the placement ruling):** (1) **`Either a b = Left a | Right b`** — the
   user-facing value disjunction, defined as a **user-level CATALOG PACKAGE, NOT
@@ -290,31 +294,37 @@ bar.
 
 ### RUN STATUS / resume point (2026-07-10, ~10:50 UTC)
 
-**Live checkpoint for lossless resume across compaction.** **[~13:10 UTC —
+**Live checkpoint for lossless resume across compaction.** **[~13:30 UTC —
 operator BACK and actively directing; autonomous window over.]** **CORE COMPLETE**
 (DS-8 PR #440). §60 erratum (PR #438), K1 DS-5b, K2 DS-8b all landed. **DS-4
-(List) LANDED** (PR #443). **`main @ 28fd3d6`.**
+(List) LANDED** (PR #443). **`main @ 4943d63`.**
 
 **ACTIVE WORK — the `Either`/coproduct thread (L5, operator-driven, PROMINENT):**
 The operator reopened the `Either` question twice, converging on: (1) **`Either a
 b = Left a | Right b`** = user-facing value coproduct, **as a CATALOG PACKAGE, NOT
 prelude** (per spec's core-data-are-packages model) → **Foundation WP
-`wp/either-catalog-package.md` KICKED** (`evt_666yb8075gqxq`); (2) **rename effect
-`Sum`→`Coproduct`** (type-only, keep `InL`/`InR`) → **Runtime WP reworking to
-RENAME-ONLY** — I HELD their over-scoped approved build `ee168a3` (had Either in
-prelude), asked them to drop the Either bits, re-gate, re-git_request; (3) `Sum`
-freed for future `Data.Functor.Sum`. `Result` stays distinct. See L5 for the full
-trail. **Named futures:** core-data→packages migration; `Data.Functor.Sum`.
+`wp/either-catalog-package.md` — awaiting Foundation kick** (its `Data/Sums/` home
+just landed with DS-3, so unblocked; DS-3 retros closed); (2) **rename effect
+`Sum`→`Coproduct`** (type-only, keep `InL`/`InR`) → **✅ LANDED PR #455,
+`main @ 4943d63`** (rename-only, after I HELD their over-scoped `ee168a3` which had
+Either in prelude; verified on main: `declare_coproduct` present, `declare_sum`
+gone, zero kernel delta); (3) `Sum` now **freed** for future `Data.Functor.Sum`.
+`Result` stays distinct. See L5 for the full trail. **Named futures:**
+core-data→packages migration; `Data.Functor.Sum`.
 
-**DS-3 (Option/Result combinators) — real-kicked ~13:07** after my appended kick
-sat missed (idle 10:45→13:07; see the DS-3 entry). Pure lane-(a) build now;
-Either-lane moot. **DS-6** (`DecEq Char`, candidate kernel-move) — not framed,
-held for operator input.
+**DS-3 (Option/Result combinators) — ✅ LANDED PR #454, `main @ dd5dc51`.** New
+package `catalog/packages/Data/Sums/Sums.ken` (Option getOrElse/isSome/orElse;
+Result mapErr/andThen/unwrapOr + laws), outer-ring, zero kernel/Axiom/trusted_base
+delta, foundation-qa (Err-first hand-trace + tt-vs-Refl cross-check) + Architect
+gate. Retros closed. Real-kicked ~13:07 after my appended kick sat missed (idle
+10:45→13:07; lesson saved). **DS-6** (`DecEq Char`, candidate kernel-move) — not
+framed, held for operator input.
 
-**HOLDING for 3 git_requests:** (a) Runtime rename-only (`Sum`→`Coproduct`); (b)
-Foundation DS-3 (Option/Result combinators); (c) Foundation Either-catalog
-package. Each → honesty-gate + merge. Kick every future WP STANDALONE + mention-led
-(lesson from the DS-3 miss).
+**HOLDING for 1 git_request:** Foundation Either-catalog package (rides after
+DS-3, now unblocked — awaiting Foundation kick). Runtime rename-only (PR #455) and
+DS-3 (PR #454) both LANDED this cycle, each honesty-gated + CI-merged, sequenced to
+avoid a moving-base race. Kick every future WP STANDALONE + mention-led (lesson
+from the DS-3 miss).
 
 **DS-8 — VALVE TAKEN (composition law deferred to DS-8c for SIZE):** the
 `traverse` composition coherence law (§5.3) turned out ~40-60 lemmas (not ~12-15)
@@ -387,17 +397,21 @@ traverse composition law both deferred to DS-8c.** Foundation transcribing into
   next-touch, not folded (Architect ruling). Retros in. Proof-technique finding:
   `Cons`-vs-`Cons` abstract-element base needs `cong` not bare `tt`/`Refl`
   (memory saved).
-- **DS-3** (`Option`/`Result` combinators) — 🔨 **KICKED (for real) ~13:07**.
-  ⚠ **My first kick (`evt_zpdcdwv8zkvr`, 10:45) was APPENDED after the DS-4
-  merge/retro and foundation-leader missed it on a truncated preview — DS-3 sat
-  IDLE 10:45→13:07** (~2.3h; "in flight" in prior status was wrong). Caught +
-  owned by foundation-leader (`evt_728s356ja0x0`), re-kicked as a **pure lane-(a)
-  combinator build** (Option getOrElse/isSome/orElse; Result mapErr/andThen/
-  unwrapOr + laws; reuse `option_map`/`Functor Option`; `Err`-first caution; home
-  `Data/Sums/`). The **`Either` ruling lane is MOOT** — superseded by L5 (`Either`
-  is a separate catalog package, not subsumed into `Result`); nothing about
-  `Either` in DS-3. Lesson saved: kick each WP standalone + mention-led, never
-  appended. Normal ring → foundation-qa → Architect → git_request.
+- **DS-3** (`Option`/`Result` combinators) — ✅ **LANDED** `main @ dd5dc51`
+  (PR #454, CI-green). New package `catalog/packages/Data/Sums/Sums.ken` (Option
+  getOrElse/isSome/orElse; Result mapErr/andThen/unwrapOr + laws; reuses
+  `option_map`/`Functor Option`, neither type re-declared). Outer-ring, zero
+  kernel/`Axiom`/`trusted_base()` delta, foundation-qa APPROVE (Err-first field-
+  order hand-trace of all six Result laws + tt-vs-Refl cross-check against DS-4's
+  eq_at_inductive mechanism) + Architect fidelity+soundness. `orElse x None = x`
+  fell out cleanly; no laws dropped. AC8 3 discriminators, specific variant. Steward
+  honesty gate passed independently. Retros closed. ⚠ **My first kick
+  (`evt_zpdcdwv8zkvr`, 10:45) was APPENDED after the DS-4 merge/retro and
+  foundation-leader missed it on a truncated preview — DS-3 sat IDLE 10:45→13:07**
+  (~2.3h; "in flight" in prior status was wrong). Caught + owned both sides;
+  re-kicked ~13:07 as a **pure lane-(a) combinator build** (the `Either` ruling lane
+  MOOT per L5 — `Either` is a separate catalog package). Lesson saved: kick each WP
+  standalone + mention-led, never appended.
 - **DS-8b** (pure-witness ⊆ `proc`-field widening) — ✅ **LANDED**
   `main @ 5c698dd` (PR #433, CI-green). The `Proc if !impure` arm purely deleted
   (dangerous `Const|Fn` arm byte-identical), zero kernel/prelude/spec/conformance
