@@ -182,15 +182,46 @@ bar.
   breadth over the tier is the operator's stated goal for the window.
 - **Reversibility:** easy.
 
-### RUN STATUS / resume point (2026-07-10, ~07:4x UTC)
+### RUN STATUS / resume point (2026-07-10, ~09:35 UTC)
 
-**Live checkpoint for lossless resume across compaction.** **One build track
-live** — **DS-8** (Foundation, assembling final `Traversable` instances → lands
-whole, completes Core) — plus two enclave doc/conformance reconciles trailing
-(the DS-8b `∅⊆proc` fast-follow **LANDED** PR #435; the **DS-5 §60 erratum**
-in flight, spec-author + CV). **DS-5b LANDED** (PR #436) — both elaborator
-capability builds (K1 hard-class + K2 moderate) are now on main, CI-green.
-Kernel + Ergo rings freed. Next after DS-8: Data-section breadth.
+**Live checkpoint for lossless resume across compaction.** Everything landed
+except **DS-8 Core** (Foundation transcribing now → normal ring → git_request to
+me). §60 erratum LANDED (PR #438); both capability builds (K1 DS-5b + K2 DS-8b)
+landed CI-green. All rings idle except Foundation (DS-8 transcription).
+
+**DS-8 — VALVE TAKEN (composition law deferred to DS-8c for SIZE):** the
+`traverse` composition coherence law (§5.3) turned out ~40-60 lemmas (not ~12-15)
+— converging, **nothing walling, a SIZE trigger not a capability wall**. Per the
+Steward valve (Architect defers timing to me; blessed the shape), **DS-8 Core
+ships now**: `class Traversable` + `List`/`Option` instances + identity +
+naturality laws (proved) + `Compose` applicative (3/4 laws: `ap_id`/`ap_hom`/
+`ap_ich` + `map_coh` + Functor laws) + `ap_naturality` aux + `ap_cmp` LHS
+reductions (partial, honestly marked). **`ap_cmp` (Compose's 4th law) + the
+traverse composition law both deferred to DS-8c.** Foundation transcribing into
+`Core/EffectfulClasses.ken.md` now → foundation-qa → Architect gate → git_request.
+  - **Architect's 5 honesty pins bind DS-8 Core's entry + his gate**
+    (`evt_7an7q5pbztdr0`): (1) deferral is **SIZE not capability** — say
+    buildable-now/deferred-for-size, NOT "gated/capability-blocked" (unlike DS-5c
+    which IS capability-blocked); (2) TWO things deferred (`ap_cmp` = 1 of
+    Compose's 4 Applicative laws + the traverse composition law that consumes it)
+    — scope both; (3) scope the "lawful" claims to laws actually proved (identity
+    + naturality, NOT "fully lawful"); (4) **no `Axiom`/`Refl`-papering** on the
+    partial `ap_cmp` — he greps the tangled code at the gate; (5) DS-8c spec =
+    the implementer's concrete 4-stage closing plan.
+  - **When DS-8 Core git_request arrives:** honesty-gate (verify the 5 pins hold
+    in the entry, esp. no-Axiom-paper + scoped claims) + merge (CI-gated) →
+    **CORE COMPLETE** → kick DS-4 to open the Data section.
+- **DS-8c** (traverse composition coherence law) — **NAMED deferred WP, NOT
+  kicked this window** (breadth over depth, like DS-5c). Distinct from DS-5c:
+  DS-8c is **SIZE-deferred, buildable-now** (~40-60 lemmas, zero missing
+  capability); spec = the implementer's 4-stage plan (rewrite ψ5 pointwise via
+  `aph.map_coh` → triple-pointwise `aph.ap_cmp` via `eq_at_pi` → lift through the
+  3 nested `apg` apps → reconcile vs the free RHS).
+- **Pipeline-stall check (operator asked ~09:30):** NOT stalled. DS-8 implementer
+  was silent 07:24→09:29 (~2h) on the sole live track — a **coordination lapse
+  (no progress ping), not a hang**; responded promptly to foundation-leader's
+  direct ping with real progress. Lesson saved (anchor silence-duration on the
+  real clock, not last-event-seen — I under-reported 2h as 40min first).
 
 - **DS-2** (`Ord Nat`) — ✅ **LANDED** `main @ 971aaad` (PR #421). Retros in.
 - **DS-7** (`Applicative`/`Monad`) — ✅ **LANDED** `main @ 88dce79` (PR #428,
