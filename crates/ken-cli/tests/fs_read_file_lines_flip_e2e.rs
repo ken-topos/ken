@@ -12,9 +12,9 @@
 //!
 //! **effect-composition update (AC6 asterisk retirement):** `main` now
 //! genuinely composes `[FS]` and `[Console]` in ONE `bind`-sequenced,
-//! `injectL`/`injectR`-tagged `ITree (Sum (FSOp a) ConsoleOp) …` — the
+//! `injectL`/`injectR`-tagged `ITree (Coproduct (FSOp a) ConsoleOp) …` — the
 //! program itself prints each line via `[Console]` (`printLines`), not a
-//! CLI-side post-render. Also no test in this file hand-constructs a `Sum`/
+//! CLI-side post-render. Also no test in this file hand-constructs a `Coproduct`/
 //! `InL`/`InR` value (AC7's producer-grep, `effect-composition-conformance.md`
 //! §2) — `injectL`/`injectR` are elaborated from the surface `.ken` source
 //! above. On a denied/insufficient cap or a missing file, `main` does NOT
@@ -85,34 +85,34 @@ fn lines (s : String) : List String =
   mapListCharToString (dropTrailingEmpty (splitNL (string_to_list_char s)))
 
 const Compose (r : Type) : Type =
-  ITree (Sum (FSOp {auth}) ConsoleOp)
-        (resp_sum (FSOp {auth}) ConsoleOp (fs_resp {auth}) console_resp)
+  ITree (Coproduct (FSOp {auth}) ConsoleOp)
+        (resp_coproduct (FSOp {auth}) ConsoleOp (fs_resp {auth}) console_resp)
         r
 
 proc printLines (xs : List String) : Compose (Result IOError Unit) visits [Console] =
   match xs {{
     Nil =>
-      Ret (Sum (FSOp {auth}) ConsoleOp)
-          (resp_sum (FSOp {auth}) ConsoleOp (fs_resp {auth}) console_resp)
+      Ret (Coproduct (FSOp {auth}) ConsoleOp)
+          (resp_coproduct (FSOp {auth}) ConsoleOp (fs_resp {auth}) console_resp)
           (Result IOError Unit) (Ok IOError Unit MkUnit) ;
     Cons x xs' =>
-      bind (Sum (FSOp {auth}) ConsoleOp)
-           (resp_sum (FSOp {auth}) ConsoleOp (fs_resp {auth}) console_resp)
+      bind (Coproduct (FSOp {auth}) ConsoleOp)
+           (resp_coproduct (FSOp {auth}) ConsoleOp (fs_resp {auth}) console_resp)
            Unit (Result IOError Unit)
         (injectR (FSOp {auth}) ConsoleOp (fs_resp {auth}) console_resp Unit (print_line x))
         (\_ . printLines xs')
   }}
 
 proc main (cap : Cap {auth}) : Compose (Result IOError Unit) visits [FS, Console] =
-  bind (Sum (FSOp {auth}) ConsoleOp)
-       (resp_sum (FSOp {auth}) ConsoleOp (fs_resp {auth}) console_resp)
+  bind (Coproduct (FSOp {auth}) ConsoleOp)
+       (resp_coproduct (FSOp {auth}) ConsoleOp (fs_resp {auth}) console_resp)
        (Result IOError Bytes) (Result IOError Unit)
     (injectL (FSOp {auth}) ConsoleOp (fs_resp {auth}) console_resp (Result IOError Bytes)
       (read_bytes {auth} cap (bytes_encode "{path}")))
     (\r .
       match r {{
-        Err e    => Ret (Sum (FSOp {auth}) ConsoleOp)
-                        (resp_sum (FSOp {auth}) ConsoleOp (fs_resp {auth}) console_resp)
+        Err e    => Ret (Coproduct (FSOp {auth}) ConsoleOp)
+                        (resp_coproduct (FSOp {auth}) ConsoleOp (fs_resp {auth}) console_resp)
                         (Result IOError Unit) (Err IOError Unit e) ;
         Ok bytes => printLines (lines (bytes_decode bytes))
       }})

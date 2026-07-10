@@ -74,11 +74,11 @@ pub fn empty_prelude_env() -> PreludeEnv {
         state_op_id: z,
         get_id: z,
         put_id: z,
-        sum_id: z,
+        coproduct_id: z,
         inl_id: z,
         inr_id: z,
         resp_state_id: z,
-        resp_sum_id: z,
+        resp_coproduct_id: z,
         bind_id: z,
         run_state_id: z,
         get_fn_id: z,
@@ -154,26 +154,26 @@ pub struct PreludeEnv {
     pub state_op_id: GlobalId,
     pub get_id: GlobalId,
     pub put_id: GlobalId,
-    /// `Sum a b = InL a | InR b` — the effect-op container coproduct (`⊕`).
-    pub sum_id: GlobalId,
+    /// `Coproduct a b = InL a | InR b` — the effect-op container coproduct (`⊕`).
+    pub coproduct_id: GlobalId,
     pub inl_id: GlobalId,
     pub inr_id: GlobalId,
     /// `resp_state : (s:Type) -> StateOp s -> Type`.
     pub resp_state_id: GlobalId,
-    /// `resp_sum : (s f:Type) -> (RespF:f->Type) -> Sum (StateOp s) f -> Type`.
-    pub resp_sum_id: GlobalId,
+    /// `resp_coproduct : (s f:Type) -> (RespF:f->Type) -> Coproduct (StateOp s) f -> Type`.
+    pub resp_coproduct_id: GlobalId,
     /// `bind` over the lifted `ITree`.
     pub bind_id: GlobalId,
     /// `runState` — the `§4.2` `elim_ITree` fold at `F` (`36 §4.5.3`).
     pub run_state_id: GlobalId,
-    /// `get : Unit -> ITree (Sum (StateOp s) f) (resp_sum s f RespF) s`.
+    /// `get : Unit -> ITree (Coproduct (StateOp s) f) (resp_coproduct s f RespF) s`.
     pub get_fn_id: GlobalId,
-    /// `put : s -> ITree (Sum (StateOp s) f) (resp_sum s f RespF) Unit`.
+    /// `put : s -> ITree (Coproduct (StateOp s) f) (resp_coproduct s f RespF) Unit`.
     pub put_fn_id: GlobalId,
     /// `injectL : (g h:Type)(rg:g->Type)(rh:h->Type)(a:Type) -> ITree g rg a
-    ///   -> ITree (Sum g h) (resp_sum g h rg rh) a` (`effect-composition` D2).
+    ///   -> ITree (Coproduct g h) (resp_coproduct g h rg rh) a` (`effect-composition` D2).
     pub inject_l_id: GlobalId,
-    /// `injectR` — the mirror inclusion, `h ↪ Sum g h`.
+    /// `injectR` — the mirror inclusion, `h ↪ Coproduct g h`.
     pub inject_r_id: GlobalId,
 }
 
@@ -267,8 +267,8 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     elab.globals.insert("Get".to_string(), get_id);
     elab.globals.insert("Put".to_string(), put_id);
 
-    let (sum_id, inl_id, inr_id) = state_eff::declare_sum(&mut elab.env).map_err(ElabError::Internal)?;
-    elab.globals.insert("Sum".to_string(), sum_id);
+    let (coproduct_id, inl_id, inr_id) = state_eff::declare_coproduct(&mut elab.env).map_err(ElabError::Internal)?;
+    elab.globals.insert("Coproduct".to_string(), coproduct_id);
     elab.globals.insert("InL".to_string(), inl_id);
     elab.globals.insert("InR".to_string(), inr_id);
 
@@ -276,8 +276,8 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         .map_err(ElabError::Internal)?;
     elab.globals.insert("resp_state".to_string(), resp_state_id);
 
-    let resp_sum_id = state_eff::declare_resp_sum(&mut elab.env, sum_id).map_err(ElabError::Internal)?;
-    elab.globals.insert("resp_sum".to_string(), resp_sum_id);
+    let resp_coproduct_id = state_eff::declare_resp_coproduct(&mut elab.env, coproduct_id).map_err(ElabError::Internal)?;
+    elab.globals.insert("resp_coproduct".to_string(), resp_coproduct_id);
 
     let bind_id = state_eff::declare_bind(&mut elab.env, itree_id, vis_id).map_err(ElabError::Internal)?;
     elab.globals.insert("bind".to_string(), bind_id);
@@ -290,11 +290,11 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         state_op_id,
         get_id,
         put_id,
-        sum_id,
+        coproduct_id,
         inl_id,
         inr_id,
         resp_state_id,
-        resp_sum_id,
+        resp_coproduct_id,
         unit_id,
         mkunit_id,
     )
@@ -302,13 +302,13 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     elab.globals.insert("runState".to_string(), run_state_id);
 
     let get_fn_id = state_eff::declare_get(
-        &mut elab.env, itree_id, ret_id, vis_id, state_op_id, get_id, sum_id, inl_id, resp_sum_id, resp_state_id, unit_id,
+        &mut elab.env, itree_id, ret_id, vis_id, state_op_id, get_id, coproduct_id, inl_id, resp_coproduct_id, resp_state_id, unit_id,
     )
     .map_err(ElabError::Internal)?;
     elab.globals.insert("get".to_string(), get_fn_id);
 
     let put_fn_id = state_eff::declare_put(
-        &mut elab.env, itree_id, ret_id, vis_id, state_op_id, put_id, sum_id, inl_id, resp_sum_id, resp_state_id, unit_id, mkunit_id,
+        &mut elab.env, itree_id, ret_id, vis_id, state_op_id, put_id, coproduct_id, inl_id, resp_coproduct_id, resp_state_id, unit_id, mkunit_id,
     )
     .map_err(ElabError::Internal)?;
     elab.globals.insert("put".to_string(), put_fn_id);
@@ -318,13 +318,13 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     // `get`/`put`'s hand-baked `InL` (`state.rs::declare_get`/`declare_put`
     // stay unchanged — State's tagging is *subsumed*, not forked, §D2.5).
     let inject_l_id = state_eff::declare_inject_l(
-        &mut elab.env, itree_id, ret_id, vis_id, sum_id, resp_sum_id, inl_id,
+        &mut elab.env, itree_id, ret_id, vis_id, coproduct_id, resp_coproduct_id, inl_id,
     )
     .map_err(ElabError::Internal)?;
     elab.globals.insert("injectL".to_string(), inject_l_id);
 
     let inject_r_id = state_eff::declare_inject_r(
-        &mut elab.env, itree_id, ret_id, vis_id, sum_id, resp_sum_id, inr_id,
+        &mut elab.env, itree_id, ret_id, vis_id, coproduct_id, resp_coproduct_id, inr_id,
     )
     .map_err(ElabError::Internal)?;
     elab.globals.insert("injectR".to_string(), inject_r_id);
@@ -1163,11 +1163,11 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         state_op_id,
         get_id,
         put_id,
-        sum_id,
+        coproduct_id,
         inl_id,
         inr_id,
         resp_state_id,
-        resp_sum_id,
+        resp_coproduct_id,
         bind_id,
         run_state_id,
         get_fn_id,

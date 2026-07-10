@@ -175,7 +175,7 @@ fn ac2_ill_typed_wstyle_arm_stays_kernel_rejected() {
 #[test]
 fn ac1b_itree_vis_dependent_branch_domain_elaborates() {
     let mut env = mk_env();
-    // `[State]` effect surface registers ITree/Ret/Vis/StateOp/Sum/resp_sum/
+    // `[State]` effect surface registers ITree/Ret/Vis/StateOp/Coproduct/resp_coproduct/
     // get/put/bind/runState as ordinary surface globals (VAL2 #10) — reuse
     // the real prelude rather than hand-building a second ITree.
     let id = env

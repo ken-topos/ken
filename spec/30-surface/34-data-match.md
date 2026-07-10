@@ -60,8 +60,8 @@ be built **and** taken apart, and the eliminator reduces.
   not a distinct type** — it is **subsumed by `Result`** per #7
   subsume-don't-proliferate: `Either e a` is isomorphic to `Result e a = Err e |
   Ok a`, the committed binary sum; a *neutral*, non-error-biased binary sum is
-  the parametric coproduct `Sum a b = InL a | InR b` the trust root already
-  carries (`prelude`). No first-party `Either` is declared.)
+  the parametric coproduct `Coproduct a b = InL a | InR b` the trust root
+  already carries (`prelude`). No first-party `Either` is declared.)
 
 **What the elaborator builds vs. what the kernel admits (the K1/K1.5 line).**
 The elaborator lowers a `data` decl to a kernel `InductiveDecl` and relies on

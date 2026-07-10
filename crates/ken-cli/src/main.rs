@@ -182,12 +182,12 @@ fn run_file(path: Option<&str>) {
         tree = ken_interp::apply(tree, ken_interp::EvalVal::Cap(cap), &elab_env.env, &mut store);
     }
 
-    let sum_ids = ken_interp::SumIds {
+    let coproduct_ids = ken_interp::CoproductIds {
         inl_id: elab_env.prelude_env.inl_id,
         inr_id: elab_env.prelude_env.inr_id,
     };
 
-    match ken_interp::run_io(tree, &console_ids, fs_ids.as_ref(), Some(&sum_ids), &elab_env.env, &mut store) {
+    match ken_interp::run_io(tree, &console_ids, fs_ids.as_ref(), Some(&coproduct_ids), &elab_env.env, &mut store) {
         Ok(final_val) => {
             // fs-read-file-lines-flip D4 (Option 3, Steward/Architect
             // ruling `evt_5a6kr3sgsmzp0`): `main`'s `[FS]` computation is
