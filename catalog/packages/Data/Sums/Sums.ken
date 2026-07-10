@@ -1,0 +1,75 @@
+-- `Option`/`Result` combinator floor (DS-3, `wp/ds-3-sum-type-combinators.md`).
+-- Both types are prelude-declared (`Option a = None | Some a`, `Result e a =
+-- Err e | Ok a` -- `Err` is FIRST, `crates/ken-elaborator/src/prelude.rs`) --
+-- this entry does not re-declare either type, and reuses `option_map` +
+-- `instance Functor Option` (`Core/LawfulFunctors.ken`) rather than
+-- re-deriving them. One entry for both L2-sum families, not two, per
+-- subsume-don't-proliferate on package count (mirrors `Data/Collections/
+-- Collections.ken` holding the whole `List` floor).
+--
+-- Zero new kernel feature, zero `trusted_base()` delta: every combinator here
+-- is an ordinary structural case-split `fn`/`const` over the two declared
+-- sums, in the same style as the `List` floor. Proof terms use `cong` from
+-- `catalog/packages/Core/Transport.ken`, so load transport before this
+-- package.
+--
+-- The `Either` design fork the original frame carried is MOOT here: the
+-- operator later ruled (L5) that `Either` is a separate catalog package, not
+-- subsumed into `Result` -- that is a distinct WP, not part of this one.
+
+-- ===== `Option` =====
+
+fn getOrElse (a : Type) (d : a) (x : Option a) : a =
+  match x { None ⇒ d ; Some v ⇒ v }
+
+fn getOrElse_none (a : Type) (d : a) : Equal a (getOrElse a d (None a)) d = Refl
+
+fn getOrElse_some (a : Type) (d : a) (v : a) : Equal a (getOrElse a d (Some a v)) v = Refl
+
+fn isSome (a : Type) (x : Option a) : Bool =
+  match x { None ⇒ False ; Some v ⇒ True }
+
+const isSome_none (a : Type) : Equal Bool (isSome a (None a)) False = tt
+
+fn isSome_some (a : Type) (v : a) : Equal Bool (isSome a (Some a v)) True = tt
+
+-- `orElse` is left-biased: `x`'s own value wins whenever `x` is `Some`, `y`
+-- is only consulted when `x` is `None`.
+fn orElse (a : Type) (x : Option a) (y : Option a) : Option a =
+  match x { None ⇒ y ; Some v ⇒ Some a v }
+
+fn orElse_none (a : Type) (y : Option a) : Equal (Option a) (orElse a (None a) y) y = Refl
+
+fn orElse_some (a : Type) (v : a) (y : Option a) : Equal (Option a) (orElse a (Some a v) y) (Some a v) = Refl
+
+-- The RHS-`None` identity (`orElse x None = x`) does fall out cleanly, so it
+-- ships alongside the two defining equations above.
+fn orElse_none_rhs (a : Type) (x : Option a) : Equal (Option a) (orElse a x (None a)) x =
+  match x { None ⇒ tt ; Some v ⇒ Refl }
+
+-- ===== `Result` =====
+
+fn mapErr (e : Type) (f : Type) (a : Type) (g : e → f) (x : Result e a) : Result f a =
+  match x { Err u ⇒ Err f a (g u) ; Ok v ⇒ Ok f a v }
+
+fn mapErr_ok (e : Type) (f : Type) (a : Type) (g : e → f) (v : a)
+  : Equal (Result f a) (mapErr e f a g (Ok e a v)) (Ok f a v) = Refl
+
+fn mapErr_err (e : Type) (f : Type) (a : Type) (g : e → f) (u : e)
+  : Equal (Result f a) (mapErr e f a g (Err e a u)) (Err f a (g u)) = Refl
+
+fn andThen (e : Type) (a : Type) (b : Type) (k : a → Result e b) (x : Result e a) : Result e b =
+  match x { Err u ⇒ Err e b u ; Ok v ⇒ k v }
+
+fn andThen_ok (e : Type) (a : Type) (b : Type) (k : a → Result e b) (v : a)
+  : Equal (Result e b) (andThen e a b k (Ok e a v)) (k v) = Refl
+
+fn andThen_err (e : Type) (a : Type) (b : Type) (k : a → Result e b) (u : e)
+  : Equal (Result e b) (andThen e a b k (Err e a u)) (Err e b u) = Refl
+
+fn unwrapOr (e : Type) (a : Type) (d : a) (x : Result e a) : a =
+  match x { Err u ⇒ d ; Ok v ⇒ v }
+
+fn unwrapOr_ok (e : Type) (a : Type) (d : a) (v : a) : Equal a (unwrapOr e a d (Ok e a v)) v = Refl
+
+fn unwrapOr_err (e : Type) (a : Type) (d : a) (u : e) : Equal a (unwrapOr e a d (Err e a u)) d = Refl
