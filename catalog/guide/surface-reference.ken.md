@@ -227,6 +227,15 @@ instance Describe Bool {
 fn announceIt (b : Bool) : String = (Describe_instance_Bool).describe b
 ```
 
+**Referencing an instance as a value outside a `where`-resolved call** is
+the synthesized global `Describe_instance_Bool` above — not `(Describe
+Bool)`, which is the class **applied to its head**, i.e. the dictionary's
+*type*, not a value, so projecting a field off it fails immediately:
+
+```ken reject
+const wrong : String = (Describe Bool).describe True
+```
+
 A class field's own type may itself carry a law — the shape every entry in
 `catalog/packages/Core/` follows, covered in depth by the proof techniques
 strand. `Eq` below elides `sym`/`trans` for brevity; see
