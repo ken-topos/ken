@@ -26,7 +26,7 @@
 -- an abstract carrier). At a concrete call site the caller supplies these by
 -- projecting a landed `Ord` instance in TERM position (e.g.
 -- `(Ord_instance_Char).leq`), the same monomorphic-transport idiom already
--- in `catalog/packages/lawful-classes/lawful_classes.ken` -- ordinary projection,
+-- in `catalog/packages/Core/LawfulClasses.ken` -- ordinary projection,
 -- not `where`-resolution.
 
 data Tree k v = Leaf | Node (Tree k v) k v (Tree k v)
@@ -36,7 +36,7 @@ const empty (k : Type) (v : Type) : Tree k v = Leaf k v
 
 -- `toList` -- the in-order traversal (`52 §4.2`): `toList Leaf = Nil`,
 -- `toList (Node l k v r) = append (toList l) (Cons (k,v) (toList r))`,
--- reusing the landed `list_append` (`catalog/packages/collections/collections.ken`).
+-- reusing the landed `list_append` (`catalog/packages/Data/Collections/Collections.ken`).
 -- Over an `Ordered` tree the output keys are ascending (`52 §5.3`) -- the
 -- `Ordered`-preservation half of that claim needs `insert`, deferred above;
 -- `toList` itself is a plain flat two-sided structural recursion (the same
@@ -174,7 +174,7 @@ fn lookupEmptyIsNone (k : Type) (v : Type) (leq : k → k → Bool) (key : k) :
 -- ─────────────────────────────────────────────────────────────────────────
 -- `map-verified-laws` (Map-arc CAPSTONE, `spec/50-stdlib/54-map-verified-
 -- laws.md`) -- the 5 deferred inductive laws, built on the two now-landed
--- enabling capabilities: Gap A (`catalog/packages/transport/transport.ken`, the `J`
+-- enabling capabilities: Gap A (`catalog/packages/Core/Transport.ken`, the `J`
 -- former) and Gap B (the non-indexed dependent-match gate,
 -- `elab.rs::check_match_dependent`). Zero `trusted_base` delta throughout --
 -- every proof reduces through the existing `Term::J`/`Term::Cast`/
