@@ -98,21 +98,47 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >   `include_str!`. **FR-3 LANDED** (PR #407, `origin/main @ 7b3e0e6`) — `ken
 >   check` subcommand (peer arm, strict `ken run` unchanged, reuse
 >   `elaborate_ken_md_file`; behavior-preserving `elaborate_cli_file` extraction).
->   **FR-2 RELEASED** — the LAST FR (`absurd`-collision diagnostic: build (1)
->   doc-note + (2) resolve-time hard error over a shared `RESERVED_SUGAR`
->   const at `resolve_decl`, sweep ctor names too; DECLINE (3); zero-trust-delta,
->   Architect-pinned `evt_2pnr7674mqjka`). Ergo on `wp/FR-2-absurd-collision-hygiene`.
->   Serialized, RAM-capped (`-j 2`, scoped). **FR-3 AC-reconcile companion
->   ROUTED to Librarian** (evt_629ch5mdg24q6): entirely guide-lane (style guide
->   uses the fence-role table, no Steward-doc AC). Scoped: `surface-reference.ken.md`
->   has NO `proc main` (:10/:53 `ken run`→`ken check`); proof-techniques/
->   decomposition HAVE `proc main` (uniform `ken check` optional); guide AC1 →
->   "`ken check` exits 0 on all three strands"; leave `ken run` *behavior*
->   teaching (proof-techniques:322). git_request → Steward, docs-only.
-> - **Librarian** folds DS-1's retro lessons + the `--`-in-fences style rule +
->   the "cross-file import not yet available" honesty note into `write-ken`/the
->   guide + `07` AC5 language (`evt_57c6njjq90sbv`, `evt_2y14rfkncw8az`); enclave
->   fidelity-review; `git_request` to Steward.
+>   **FR-2 IN BUILD (Architect ruling CORRECTED the pin)** — the LAST FR
+>   (`absurd`-collision diagnostic). Original pin `evt_2pnr7674mqjka` had a
+>   grounding gap: it put `{Refl,Axiom,absurd,J,Eq}` in `RESERVED_SUGAR`, but a
+>   name-only guard rejected the landed `class Eq a` (`spec 51 §2.1`), breaking
+>   `landed_lawful_classes_package_still_elaborates_independently`. **Corrected
+>   ruling `evt_4p5a2xkqemnge` (arity-indexed):** `RESERVED_SUGAR = {Refl, Axiom,
+>   absurd}` only — Refl@462/Axiom@482 bare-`RCon` total intercept, absurd@499
+>   arity-1; J@1354/Eq@410(type)/@1364(expr) are `peel_named_app(_,name,3)`
+>   arity-3-ONLY, gated *by design* to coexist with a lower-arity class/former of
+>   the same name → NOT declaration-guarded (a ref-site arity check would be
+>   catastrophic). Build (1) doc-note + (2) resolve-time hard error at
+>   `resolve_decl` (decl head + data-ctor names) over the 3-name shared const;
+>   DECLINE (3); Cast/Ascript/`tt` excluded (no `RCon` arm). Ergo rebuilding
+>   `wp/FR-2-absurd-collision-hygiene` per ergo-leader `evt_206v67q5gycm9` (flip
+>   J/Eq tests reject→accept, positive `class Eq a` regression-guard). Comes back
+>   through ergo-qa → Architect (design author, close read) → git_request.
+>   **Steward FR-2 doc correction** `wp/fr2-doc-arity-correction @ 85ce17a`
+>   (rewrote the WP doc's FR-2 section open-options → the arity-indexed ruling;
+>   line numbers ground-truthed vs `origin/main` elab.rs) → routed to Architect
+>   fidelity-gate `evt_7mw56ak02wt37`, docs-only, merge on APPROVE.
+>   **FR-3 AC-reconcile companion ROUTED to Librarian** (evt_629ch5mdg24q6),
+>   bundled into the guide-update WP below.
+> - **Librarian guide-update WP ASSEMBLED** — `wp/ken-authoring-guide-ds1-retro @
+>   aef5093` (`dec_68pj9w955nxx6` proposed), bundling three Steward asks: DS-1's
+>   acted-on-retro (`evt_57c6njjq90sbv`), the `--`-comment-in-fence anti-pattern
+>   (`evt_2y14rfkncw8az`), and the FR-3 `ken check` AC-reconcile
+>   (`evt_629ch5mdg24q6`). Two commits: mechanical `--`-strip sweep of the three
+>   guide teaching strands (`aaffd43`), then the substantive fold (write-ken
+>   subsections, surface-reference §5 discriminator, `07 §3` `ken check` note).
+>   **Grounded correction to the reconcile premise:** all three guide strands DO
+>   carry a runnable `proc main` and pass `ken run` today, so their invocation
+>   claims stay `ken run` (strictly stronger); `ken check` targets genuine
+>   pure-library entries (EmptyDec). In spec-author (surface-ref lane) + Architect
+>   (methodology lane) review; git_request → Steward after both.
+>   **Steward reconciliation ruling** `evt_6jv6v1y6t34a2`: (a) `07 §8` in-fence-
+>   comment requirement (package entries, fences tangle to consumed source) does
+>   NOT conflict with prose-is-comment-layer (teaching strands, fences only
+>   checked) — discriminate on fence role; fold a one-line §8 scope-clarifier into
+>   the WP. (b) EmptyDec's in-fence `--` comments are §8-required (package entry),
+>   NOT debt — Steward retracts the earlier "strip `--`" framing; light-DS-1
+>   revisit will not touch them.
 >
 > **HOLD after DS-1.** DS-1 is the *only* WP before an operator process review —
 > a deliberate single vertical slice validating the full reframed machinery
