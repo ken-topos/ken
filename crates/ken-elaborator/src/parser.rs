@@ -922,7 +922,8 @@ impl Parser {
 
         // Parse constructor list: `C₁ τ… | C₂ τ… | …` — possibly empty
         // (`data D =` declares a zero-constructor type, e.g. `Empty`; the
-        // kernel already admits zero-constructor inductives, `34 §1`).
+        // kernel already admits zero-constructor inductives, `10-kernel/14
+        // §1`).
         let mut ctors = Vec::new();
         if matches!(self.peek(), Token::ConId(_)) {
             loop {
@@ -957,7 +958,7 @@ impl Parser {
         self.expect(&Token::LBrace)?;
         // The constructor list may be empty — `data D : Type where { }`
         // declares a zero-constructor type (the kernel already admits
-        // zero-constructor inductives, `34 §1`/`34 §2`).
+        // zero-constructor inductives, `10-kernel/14 §1`).
         let mut ctors = Vec::new();
         while !matches!(self.peek(), Token::RBrace | Token::Eof) {
             ctors.push(self.parse_explicit_data_ctor()?);
