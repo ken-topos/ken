@@ -47,6 +47,36 @@ bar.
 
 ## Language-surface / elaboration / functionality calls
 
+### K2 · ⚠ PROMINENT (elaborator completeness fix) — DS-8b pure-witness ⊆ `proc`-field widening
+- **Call:** **Land, this run,** a ~1-arm elaborator completeness fix — relax
+  `check_instance_field_purity`'s `Proc if !impure` arm (`elab.rs:3182`) to
+  **accept a pure/`∅` witness for a `proc` class field** (covariant subsumption
+  `∅ ⊆ open row`). Scoped WP **DS-8b**, kicked to the **Ergo team**
+  (`evt_7gfgqx5bbp48t`), Architect-gated. Unblocks DS-8's `instance Traversable
+  List/Option`.
+- **Trigger:** DS-8's `class Traversable` `proc traverse` field is inherently
+  row-polymorphic (must be `proc`), but every lawful witness is genuinely pure
+  (only calls DS-7's pure `ap`/`pure`), and the exact-match purity gate
+  over-rejects it → the class had **no possible inhabitants** (a completeness bug,
+  fail-closed). Architect ruling `evt_6vbgk65sj4jva`.
+- **Options:** (a) **land the widening** [chosen] — honest (accepts the witness's
+  true pure classification), minimal (~1 arm), safe-direction; (b) SURF-1 D1
+  `visits [e]` surface binder — **rejected**: would force a *false* effect
+  annotation on a pure fn, and is a deferred whole-surface-feature; (c) gate the
+  `Traversable` instances — **rejected**: leaves the class uninhabitable, gutting
+  the Core capstone.
+- **Why (a):** the textbook **completeness-bug-fixed-in-the-safe-direction** shape
+  — a valid program is fail-closed-rejected; the fix opens only `∅ ⊆ proc` and
+  leaves the dangerous `impure ⊄ pure` direction (`Const|Fn if impure`, `:3189`)
+  rejecting; the field stays `proc` (AC6 intact); **pre-kernel-erased, zero
+  TCB/kernel/sort delta** — genuinely lighter than DS-5b. Matches SURF-1 §1.6
+  do-not-optimize (a `proc` may instantiate to `∅`; a pure witness *is* that).
+  I corrected my own initial lean toward D1 on the Architect's grounding.
+- **Reversibility:** **moderate-class** (a landed elaborator completeness fix,
+  pre-kernel-erased, zero TCB delta) — lighter than K1's hard-class; revert-clean;
+  flagged for operator review. Gate net: AC8 dangerous-direction discriminator
+  (effectful witness on a pure field still rejects, specific variant).
+
 ### K1 · ⚠ PROMINENT (elaborator-capability land) — DS-5b dependent-match index refinement
 - **Call:** **Land, this run,** a new **elaborator capability** — dependent-`match`
   index refinement (constructor **injectivity** for peeled recursive fields +
@@ -152,10 +182,12 @@ bar.
   breadth over the tier is the operator's stated goal for the window.
 - **Reversibility:** easy.
 
-### RUN STATUS / resume point (2026-07-10, ~06:1x UTC)
+### RUN STATUS / resume point (2026-07-10, ~06:3x UTC)
 
-**Live checkpoint for lossless resume across compaction.** Core toolkit is
-landed-or-in-flight; two tracks live: **DS-8** (Foundation), **DS-5b** (Kernel).
+**Live checkpoint for lossless resume across compaction.** Core toolkit
+landed-or-in-flight; **three build tracks live** — **DS-8** (Foundation, core
+building; instances gated on DS-8b), **DS-5b** (Kernel), **DS-8b** (Ergo). All
+three gate through the Architect — saturation ceiling, do NOT fan out further.
 
 - **DS-2** (`Ord Nat`) — ✅ **LANDED** `main @ 971aaad` (PR #421). Retros in.
 - **DS-7** (`Applicative`/`Monad`) — ✅ **LANDED** `main @ 88dce79` (PR #428,
@@ -168,11 +200,20 @@ landed-or-in-flight; two tracks live: **DS-8** (Foundation), **DS-5b** (Kernel).
   (`evt_368s003ta85w3`); frame `wp/ds-8-traversable.md` (`main @ 229dcea`), design
   contract chapter 56 §5. **The last Core item.** Appends to
   `Core/EffectfulClasses.ken.md`. Prereqs all landed (DS-7; Functor/Foldable
-  instances; SURF-1/SURF-2). **Open scope decision (see L3):** §5.3's composition
-  law needs a `Compose g h` applicative that is NOT landed — frame scopes it as
-  build-core-unconditionally (identity+naturality) then probe building `Compose`
-  in-scope, else ship composition gated on a named follow-up; Architect rules the
-  boundary at the gate. Building.
+  instances; SURF-1/SURF-2). **Building the unblocked core** (class decl w/
+  `proc traverse`, `Compose`+`compose_*`+4 laws, List/Option `traverse` bodies,
+  identity+naturality) — the final **`instance Traversable List/Option` assembly
+  holds for DS-8b** (the `proc`-field purity blocker). When DS-8b merges,
+  Foundation rebases DS-8 + assembles instances → DS-8 lands **whole**. Compose
+  scope-decision (`L3`): Architect ruled `Compose` buildable in-scope
+  (`evt_37wddd1qb1pq9`), so composition law rides this WP.
+- **DS-8b** (pure-witness ⊆ `proc`-field widening) — 🔨 **BUILDING on Ergo**
+  (`evt_7gfgqx5bbp48t`); frame `wp/ds-8b-pure-into-proc-widening.md`
+  (`main @ 16fe2af`). The ~1-arm elab completeness fix (`elab.rs:3182`) unblocking
+  DS-8's Traversable instances — **second elaborator land of the run, see `K2`**
+  (moderate-class, lighter than DS-5b: pre-kernel-erased, zero TCB/sort delta).
+  Architect gate: safe-direction-only, AC6-preserved, AC8 dangerous-direction
+  discriminator.
 - **DS-5** (`Vector` spec chapter) — ✅ **LANDED** `main @ efdc09d` (PR #427,
   doc-only). Honest landed/gated split (head/`Fin` landed; tail/zip/lookup gated
   on DS-5b). Chapter `60-length-indexed-vectors.md`. Enclave stood down; CV has
