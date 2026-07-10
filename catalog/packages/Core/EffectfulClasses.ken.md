@@ -1679,6 +1679,165 @@ fn ap_naturality (g : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) 
           (apg.map_coh b c psi (apg.ap a b u v))))
 ```
 
+The arg-2 twin of `ap_naturality`, needed by `§9.6`'s final reconciliation
+step (Architect ruling on the DS-8c reconciliation fork): pushing a
+`functor.map` of a *pre*-composed function through the SECOND `ap` argument
+is the same as `ap`-ing against the raw value first and mapping via a
+post-composed accessor after. Proved from `apg`'s own laws alone
+(`map_coh` -> `ap_cmp` -> `ap_ich` -> `map_coh` -> `fusion_law`), an aux
+lemma, not a claimed public law.
+
+```ken
+fn nat2_pure_compose (g : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (c : Type) (u : g (b -> c)) : g ((a -> b) -> (a -> c)) =
+  apg.ap (b -> c) ((a -> b) -> (a -> c)) (apg.pure ((b -> c) -> (a -> b) -> (a -> c)) (compose a b c)) u
+
+fn nat2_map_compose (g : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (c : Type) (u : g (b -> c)) : g ((a -> b) -> (a -> c)) =
+  apg.functor.map (b -> c) ((a -> b) -> (a -> c)) (compose a b c) u
+
+fn nat2_map_compose_eq (g : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (c : Type) (u : g (b -> c)) :
+  Equal (g ((a -> b) -> (a -> c))) (nat2_map_compose g apg a b c u) (nat2_pure_compose g apg a b c u) =
+  apg.map_coh (b -> c) ((a -> b) -> (a -> c)) (compose a b c) u
+
+fn nat2_pure_phi (g : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (phi : a -> b) : g (a -> b) =
+  apg.pure (a -> b) phi
+
+fn nat2_pure_compose_ap (g : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (c : Type) (phi : a -> b) (u : g (b -> c)) : g (a -> c) =
+  apg.ap (a -> b) (a -> c) (nat2_pure_compose g apg a b c u) (nat2_pure_phi g apg a b phi)
+
+fn nat2_apply_map (g : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (c : Type) (phi : a -> b) (x : g ((a -> b) -> (a -> c))) : g (a -> c) =
+  apg.functor.map ((a -> b) -> (a -> c)) (a -> c) (apply_to (a -> b) (a -> c) phi) x
+
+fn nat2_apply_map_ap_pure (g : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (c : Type) (phi : a -> b) (x : g ((a -> b) -> (a -> c))) : g (a -> c) =
+  apg.ap ((a -> b) -> (a -> c)) (a -> c) (apg.pure (((a -> b) -> (a -> c)) -> (a -> c)) (apply_to (a -> b) (a -> c) phi)) x
+
+fn nat2_rhs_func (a : Type) (b : Type) (c : Type) (phi : a -> b) : (b -> c) -> (a -> c) =
+  comp (b -> c) ((a -> b) -> (a -> c)) (a -> c) (apply_to (a -> b) (a -> c) phi) (compose a b c)
+
+fn nat2_rhs_inner (g : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (c : Type) (phi : a -> b) (u : g (b -> c)) : g (a -> c) =
+  apg.functor.map (b -> c) (a -> c) (nat2_rhs_func a b c phi) u
+
+fn nat2_ich_eq (g : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (c : Type) (phi : a -> b) (u : g (b -> c)) :
+  Equal (g (a -> c))
+    (nat2_pure_compose_ap g apg a b c phi u)
+    (nat2_apply_map_ap_pure g apg a b c phi (nat2_pure_compose g apg a b c u)) =
+  apg.ap_ich (a -> b) (a -> c) (nat2_pure_compose g apg a b c u) phi
+
+fn nat2_outer_map_coh (g : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (c : Type) (phi : a -> b) (u : g (b -> c)) :
+  Equal (g (a -> c))
+    (nat2_apply_map g apg a b c phi (nat2_pure_compose g apg a b c u))
+    (nat2_apply_map_ap_pure g apg a b c phi (nat2_pure_compose g apg a b c u)) =
+  apg.map_coh ((a -> b) -> (a -> c)) (a -> c) (apply_to (a -> b) (a -> c) phi) (nat2_pure_compose g apg a b c u)
+
+fn nat2_step_ich_to_map (g : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (c : Type) (phi : a -> b) (u : g (b -> c)) :
+  Equal (g (a -> c))
+    (nat2_pure_compose_ap g apg a b c phi u)
+    (nat2_apply_map g apg a b c phi (nat2_pure_compose g apg a b c u)) =
+  trans (g (a -> c))
+    (nat2_pure_compose_ap g apg a b c phi u)
+    (nat2_apply_map_ap_pure g apg a b c phi (nat2_pure_compose g apg a b c u))
+    (nat2_apply_map g apg a b c phi (nat2_pure_compose g apg a b c u))
+    (nat2_ich_eq g apg a b c phi u)
+    (sym (g (a -> c))
+      (nat2_apply_map g apg a b c phi (nat2_pure_compose g apg a b c u))
+      (nat2_apply_map_ap_pure g apg a b c phi (nat2_pure_compose g apg a b c u))
+      (nat2_outer_map_coh g apg a b c phi u))
+
+fn nat2_step_map_pure_swap (g : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (c : Type) (phi : a -> b) (u : g (b -> c)) :
+  Equal (g (a -> c))
+    (nat2_apply_map g apg a b c phi (nat2_pure_compose g apg a b c u))
+    (nat2_apply_map g apg a b c phi (nat2_map_compose g apg a b c u)) =
+  cong (g ((a -> b) -> (a -> c))) (g (a -> c))
+    (nat2_pure_compose g apg a b c u)
+    (nat2_map_compose g apg a b c u)
+    (λy. nat2_apply_map g apg a b c phi y)
+    (sym (g ((a -> b) -> (a -> c)))
+      (nat2_map_compose g apg a b c u)
+      (nat2_pure_compose g apg a b c u)
+      (nat2_map_compose_eq g apg a b c u))
+
+fn nat2_step_fusion (g : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (c : Type) (phi : a -> b) (u : g (b -> c)) :
+  Equal (g (a -> c))
+    (nat2_apply_map g apg a b c phi (nat2_map_compose g apg a b c u))
+    (nat2_rhs_inner g apg a b c phi u) =
+  sym (g (a -> c))
+    (nat2_rhs_inner g apg a b c phi u)
+    (nat2_apply_map g apg a b c phi (nat2_map_compose g apg a b c u))
+    (apg.functor.fusion_law (b -> c) ((a -> b) -> (a -> c)) (a -> c) (apply_to (a -> b) (a -> c) phi) (compose a b c) u)
+
+fn nat2_pure_compose_ap_eq (g : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (c : Type) (phi : a -> b) (u : g (b -> c)) :
+  Equal (g (a -> c))
+    (nat2_pure_compose_ap g apg a b c phi u)
+    (nat2_rhs_inner g apg a b c phi u) =
+  trans (g (a -> c))
+    (nat2_pure_compose_ap g apg a b c phi u)
+    (nat2_apply_map g apg a b c phi (nat2_pure_compose g apg a b c u))
+    (nat2_rhs_inner g apg a b c phi u)
+    (nat2_step_ich_to_map g apg a b c phi u)
+    (trans (g (a -> c))
+      (nat2_apply_map g apg a b c phi (nat2_pure_compose g apg a b c u))
+      (nat2_apply_map g apg a b c phi (nat2_map_compose g apg a b c u))
+      (nat2_rhs_inner g apg a b c phi u)
+      (nat2_step_map_pure_swap g apg a b c phi u)
+      (nat2_step_fusion g apg a b c phi u))
+
+fn nat2_canonical_lhs (g : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (c : Type) (phi : a -> b) (u : g (b -> c)) (v : g a) : g c =
+  apg.ap a c (nat2_pure_compose_ap g apg a b c phi u) v
+
+fn nat2_rhs_apply (g : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (c : Type) (phi : a -> b) (u : g (b -> c)) (v : g a) : g c =
+  apg.ap a c (nat2_rhs_inner g apg a b c phi u) v
+
+fn nat2_canonical_lhs_eq (g : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (c : Type) (phi : a -> b) (u : g (b -> c)) (v : g a) :
+  Equal (g c) (nat2_canonical_lhs g apg a b c phi u v) (nat2_rhs_apply g apg a b c phi u v) =
+  cong (g (a -> c)) (g c)
+    (nat2_pure_compose_ap g apg a b c phi u)
+    (nat2_rhs_inner g apg a b c phi u)
+    (λy. apg.ap a c y v)
+    (nat2_pure_compose_ap_eq g apg a b c phi u)
+
+fn nat2_pure_phi_ap (g : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (phi : a -> b) (v : g a) : g b =
+  apg.ap a b (nat2_pure_phi g apg a b phi) v
+
+fn nat2_ap_u_pure_phi (g : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (c : Type) (u : g (b -> c)) (phi : a -> b) (v : g a) : g c =
+  apg.ap b c u (nat2_pure_phi_ap g apg a b phi v)
+
+fn nat2_ap_cmp_eq (g : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (c : Type) (phi : a -> b) (u : g (b -> c)) (v : g a) :
+  Equal (g c) (nat2_canonical_lhs g apg a b c phi u v) (nat2_ap_u_pure_phi g apg a b c u phi v) =
+  apg.ap_cmp a b c u (nat2_pure_phi g apg a b phi) v
+
+fn nat2_map_phi (g : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (phi : a -> b) (v : g a) : g b =
+  apg.functor.map a b phi v
+
+fn nat2_ap_u_map_phi (g : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (c : Type) (u : g (b -> c)) (phi : a -> b) (v : g a) : g c =
+  apg.ap b c u (nat2_map_phi g apg a b phi v)
+
+fn nat2_pure_phi_eq (g : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (phi : a -> b) (v : g a) :
+  Equal (g b) (nat2_map_phi g apg a b phi v) (nat2_pure_phi_ap g apg a b phi v) =
+  apg.map_coh a b phi v
+
+fn ap_naturality2 (g : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (c : Type) (phi : a -> b) (u : g (b -> c)) (v : g a) :
+  Equal (g c)
+    (nat2_ap_u_map_phi g apg a b c u phi v)
+    (nat2_rhs_apply g apg a b c phi u v) =
+  trans (g c)
+    (nat2_ap_u_map_phi g apg a b c u phi v)
+    (nat2_ap_u_pure_phi g apg a b c u phi v)
+    (nat2_rhs_apply g apg a b c phi u v)
+    (cong (g b) (g c)
+      (nat2_map_phi g apg a b phi v)
+      (nat2_pure_phi_ap g apg a b phi v)
+      (λx. apg.ap b c u x)
+      (nat2_pure_phi_eq g apg a b phi v))
+    (trans (g c)
+      (nat2_ap_u_pure_phi g apg a b c u phi v)
+      (nat2_canonical_lhs g apg a b c phi u v)
+      (nat2_rhs_apply g apg a b c phi u v)
+      (sym (g c)
+        (nat2_canonical_lhs g apg a b c phi u v)
+        (nat2_ap_u_pure_phi g apg a b c u phi v)
+        (nat2_ap_cmp_eq g apg a b c phi u v))
+      (nat2_canonical_lhs_eq g apg a b c phi u v))
+```
+
 `ap_cmp`'s own LHS — three levels of nested `compose_ap` keyed on
 `compose a b c` — reduces cleanly for its first two levels using
 `compose_map_coh` (above) and `apg`'s `functor.fusion_law`; this is real,
@@ -1759,6 +1918,403 @@ fn cmp_level2_reduced (g : Type -> Type) (h : Type -> Type) (apg : Applicative g
        (cmp_level2_step2a g h apg aph a b c u v))
     (cmp_level2_step2 g h apg aph a b c u v)
 ```
+
+### 9.6 Compose `ap_cmp` — proved
+
+The final Compose crossing is discharged by the same explicit-dictionary
+operations used above.  Its inner crossing is reduced pointwise by `aph`'s
+composition law and then lifted through the outer `apg` applications.
+
+```ken
+fn compose_cmp_inner (g : Type -> Type) (h : Type -> Type) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (u : h (b -> c)) (v : h (a -> b)) (w : h a) : h c =
+  aph.ap a c (aph.ap (a -> b) (a -> c) (aph.ap (b -> c) ((a -> b) -> (a -> c)) (aph.pure ((b -> c) -> (a -> b) -> (a -> c)) (compose a b c)) u) v) w
+
+fn compose_cmp_inner_rhs (g : Type -> Type) (h : Type -> Type) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (u : h (b -> c)) (v : h (a -> b)) (w : h a) : h c =
+  aph.ap b c u (aph.ap a b v w)
+
+fn compose_cmp_inner_eq (g : Type -> Type) (h : Type -> Type) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (u : h (b -> c)) (v : h (a -> b)) (w : h a) :
+  Equal (h c) (compose_cmp_inner g h aph a b c u v w) (compose_cmp_inner_rhs g h aph a b c u v w) =
+  aph.ap_cmp a b c u v w
+
+fn compose_cmp_level3_lhs (g : Type -> Type) (h : Type -> Type) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (u : h (b -> c)) (v : h (a -> b)) (w : h a) : h c =
+  aph.ap a c (cmp_psi3 g h aph a b c u v) w
+
+fn compose_cmp_level3_mid (g : Type -> Type) (h : Type -> Type) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (u : h (b -> c)) (v : h (a -> b)) (w : h a) : h c =
+  aph.ap a c (aph.ap (a -> b) (a -> c) (aph.ap (b -> c) ((a -> b) -> (a -> c)) (aph.pure ((b -> c) -> (a -> b) -> (a -> c)) (compose a b c)) u) v) w
+
+fn compose_cmp_level3_map_coh (g : Type -> Type) (h : Type -> Type) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (u : h (b -> c)) (v : h (a -> b)) (w : h a) :
+  Equal (h c) (compose_cmp_level3_lhs g h aph a b c u v w) (compose_cmp_level3_mid g h aph a b c u v w) =
+  cong (h ((a -> b) -> (a -> c))) (h c)
+    (aph.functor.map (b -> c) ((a -> b) -> (a -> c)) (compose a b c) u)
+    (aph.ap (b -> c) ((a -> b) -> (a -> c)) (aph.pure ((b -> c) -> (a -> b) -> (a -> c)) (compose a b c)) u)
+    (λz. aph.ap a c (aph.ap (a -> b) (a -> c) z v) w)
+    (aph.map_coh (b -> c) ((a -> b) -> (a -> c)) (compose a b c) u)
+
+fn compose_cmp_level3_eq (g : Type -> Type) (h : Type -> Type) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (u : h (b -> c)) (v : h (a -> b)) (w : h a) :
+  Equal (h c) (compose_cmp_level3_lhs g h aph a b c u v w) (compose_cmp_inner_rhs g h aph a b c u v w) =
+  trans (h c)
+    (compose_cmp_level3_lhs g h aph a b c u v w)
+    (compose_cmp_level3_mid g h aph a b c u v w)
+    (compose_cmp_inner_rhs g h aph a b c u v w)
+    (compose_cmp_level3_map_coh g h aph a b c u v w)
+    (aph.ap_cmp a b c u v w)
+
+fn compose_cmp_level3_lhs_func (g : Type -> Type) (h : Type -> Type) (aph : Applicative h) (a : Type) (b : Type) (c : Type) : h (b -> c) -> h (a -> b) -> h a -> h c =
+  compose_cmp_level3_lhs g h aph a b c
+
+fn compose_cmp_level3_rhs_func (g : Type -> Type) (h : Type -> Type) (aph : Applicative h) (a : Type) (b : Type) (c : Type) : h (b -> c) -> h (a -> b) -> h a -> h c =
+  compose_cmp_inner_rhs g h aph a b c
+
+fn compose_cmp_outer_psi (g : Type -> Type) (h : Type -> Type) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (z : h (a -> b) -> h (a -> c)) :
+  h (a -> b) -> (h a -> h c) =
+  λx. λy. aph.ap a c (z x) y
+
+fn compose_cmp_outer_lhs (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (u : Compose g h (b -> c)) (v : Compose g h (a -> b)) (w : Compose g h a) : Compose g h c =
+  compose_ap g h apg aph a c (cmp_level2 g h apg aph a b c u v) w
+
+fn compose_cmp_outer_mid1 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (u : Compose g h (b -> c)) (v : Compose g h (a -> b)) (w : Compose g h a) : Compose g h c =
+  compose_ap g h apg aph a c (cmp_level2_raw_ctx g h apg a b c v (cmp_level2_fused_map g h apg aph a b c u)) w
+
+fn compose_cmp_outer_step1 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (u : Compose g h (b -> c)) (v : Compose g h (a -> b)) (w : Compose g h a) :
+  Equal (Compose g h c)
+    (compose_cmp_outer_lhs g h apg aph a b c u v w)
+    (compose_cmp_outer_mid1 g h apg aph a b c u v w) =
+  cong (Compose g h (a -> c)) (Compose g h c)
+    (cmp_level2 g h apg aph a b c u v)
+    (cmp_level2_raw_ctx g h apg a b c v (cmp_level2_fused_map g h apg aph a b c u))
+    (λx. compose_ap g h apg aph a c x w)
+    (cmp_level2_reduced g h apg aph a b c u v)
+
+fn compose_cmp_outer_inner (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (u : Compose g h (b -> c)) : g (h (a -> b) -> h (a -> c)) =
+  cmp_level2_fused_map g h apg aph a b c u
+
+fn compose_cmp_outer_mid2 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (u : Compose g h (b -> c)) (v : Compose g h (a -> b)) (w : Compose g h a) : Compose g h c =
+  apg.ap (h a) (h c)
+    (apg.ap (h (a -> b)) (h a -> h c)
+      (apg.functor.map (h (a -> b) -> h (a -> c)) (h (a -> b) -> (h a -> h c))
+        (compose_cmp_outer_psi g h aph a b c)
+        (compose_cmp_outer_inner g h apg aph a b c u))
+      v)
+    w
+
+fn compose_cmp_outer_step2 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (u : Compose g h (b -> c)) (v : Compose g h (a -> b)) (w : Compose g h a) :
+  Equal (Compose g h c)
+    (compose_cmp_outer_mid1 g h apg aph a b c u v w)
+    (compose_cmp_outer_mid2 g h apg aph a b c u v w) =
+  cong (g (h a -> h c)) (Compose g h c)
+    (apg.functor.map (h (a -> c)) (h a -> h c) (aph.ap a c)
+      (apg.ap (h (a -> b)) (h (a -> c))
+        (compose_cmp_outer_inner g h apg aph a b c u) v))
+    (apg.ap (h (a -> b)) (h a -> h c)
+      (apg.functor.map (h (a -> b) -> h (a -> c)) (h (a -> b) -> (h a -> h c))
+        (compose_cmp_outer_psi g h aph a b c)
+        (compose_cmp_outer_inner g h apg aph a b c u))
+      v)
+    (λx. apg.ap (h a) (h c) x w)
+    (sym (g (h a -> h c))
+      (apg.ap (h (a -> b)) (h a -> h c)
+        (apg.functor.map (h (a -> b) -> h (a -> c)) (h (a -> b) -> (h a -> h c))
+          (compose_cmp_outer_psi g h aph a b c)
+          (compose_cmp_outer_inner g h apg aph a b c u))
+        v)
+      (apg.functor.map (h (a -> c)) (h a -> h c) (aph.ap a c)
+        (apg.ap (h (a -> b)) (h (a -> c))
+          (compose_cmp_outer_inner g h apg aph a b c u) v))
+      (ap_naturality g apg (h (a -> b)) (h (a -> c)) (h a -> h c)
+        (aph.ap a c) (compose_cmp_outer_inner g h apg aph a b c u) v))
+
+fn compose_cmp_outer_func (g : Type -> Type) (h : Type -> Type) (aph : Applicative h) (a : Type) (b : Type) (c : Type) :
+  h (b -> c) -> h (a -> b) -> h a -> h c =
+  λu. compose_cmp_outer_psi g h aph a b c (cmp_psi3 g h aph a b c u)
+
+fn compose_cmp_outer_rhs_func (g : Type -> Type) (h : Type -> Type) (aph : Applicative h) (a : Type) (b : Type) (c : Type) :
+  h (b -> c) -> h (a -> b) -> h a -> h c =
+  λu. λv. λw. aph.ap b c u (aph.ap a b v w)
+
+fn compose_cmp_outer_func_eq (g : Type -> Type) (h : Type -> Type) (aph : Applicative h) (a : Type) (b : Type) (c : Type) :
+  Equal (h (b -> c) -> h (a -> b) -> h a -> h c)
+    (compose_cmp_outer_func g h aph a b c)
+    (compose_cmp_outer_rhs_func g h aph a b c) =
+  compose_cmp_level3_eq g h aph a b c
+
+fn compose_cmp_outer_fused (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (u : Compose g h (b -> c)) :
+  g (h (a -> b) -> (h a -> h c)) =
+  apg.functor.map (h (b -> c)) (h (a -> b) -> (h a -> h c))
+    (comp (h (b -> c)) (h (a -> b) -> h (a -> c)) (h (a -> b) -> (h a -> h c))
+      (compose_cmp_outer_psi g h aph a b c)
+      (cmp_psi3 g h aph a b c)) u
+
+fn compose_cmp_outer_unfused (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (u : Compose g h (b -> c)) :
+  g (h (a -> b) -> (h a -> h c)) =
+  apg.functor.map (h (a -> b) -> h (a -> c)) (h (a -> b) -> (h a -> h c))
+    (compose_cmp_outer_psi g h aph a b c)
+    (compose_cmp_outer_inner g h apg aph a b c u)
+
+fn compose_cmp_outer_fusion_eq (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (u : Compose g h (b -> c)) :
+  Equal (g (h (a -> b) -> (h a -> h c)))
+    (compose_cmp_outer_unfused g h apg aph a b c u)
+    (compose_cmp_outer_fused g h apg aph a b c u) =
+  sym (g (h (a -> b) -> (h a -> h c)))
+    (compose_cmp_outer_fused g h apg aph a b c u)
+    (compose_cmp_outer_unfused g h apg aph a b c u)
+    (apg.functor.fusion_law (h (b -> c)) (h (a -> b) -> h (a -> c)) (h (a -> b) -> (h a -> h c))
+      (compose_cmp_outer_psi g h aph a b c) (cmp_psi3 g h aph a b c) u)
+
+fn compose_cmp_outer_rhs_u (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (b : Type) (c : Type) (u : Compose g h (b -> c)) :
+  g (h b -> h c) =
+  apg.functor.map (h (b -> c)) (h b -> h c) (aph.ap b c) u
+
+fn compose_cmp_outer_rhs_v (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (v : Compose g h (a -> b)) :
+  g (h a -> h b) =
+  apg.functor.map (h (a -> b)) (h a -> h b) (aph.ap a b) v
+
+fn compose_cmp_outer_rhs (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (u : Compose g h (b -> c)) (v : Compose g h (a -> b)) (w : Compose g h a) : Compose g h c =
+  apg.ap (h b) (h c) (compose_cmp_outer_rhs_u g h apg aph b c u)
+    (apg.ap (h a) (h b) (compose_cmp_outer_rhs_v g h apg aph a b v) w)
+
+fn compose_cmp_outer_mapped_rhs (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (u : Compose g h (b -> c)) :
+  g (h (a -> b) -> (h a -> h c)) =
+  apg.functor.map (h (b -> c)) (h (a -> b) -> (h a -> h c))
+    (compose_cmp_outer_rhs_func g h aph a b c) u
+
+fn compose_cmp_outer_step3b (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (u : Compose g h (b -> c)) :
+  Equal (g (h (a -> b) -> (h a -> h c)))
+    (compose_cmp_outer_fused g h apg aph a b c u)
+    (compose_cmp_outer_mapped_rhs g h apg aph a b c u) =
+  cong (h (b -> c) -> h (a -> b) -> h a -> h c)
+    (g (h (a -> b) -> (h a -> h c)))
+    (compose_cmp_outer_func g h aph a b c)
+    (compose_cmp_outer_rhs_func g h aph a b c)
+    (λx. apg.functor.map (h (b -> c)) (h (a -> b) -> (h a -> h c)) x u)
+    (compose_cmp_outer_func_eq g h aph a b c)
+
+fn compose_cmp_outer_apply_v (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (c : Type) (v : Compose g h (a -> b)) (w : Compose g h a) (x : g (h (a -> b) -> (h a -> h c))) : Compose g h c =
+  apg.ap (h a) (h c) (apg.ap (h (a -> b)) (h a -> h c) x v) w
+
+fn compose_cmp_outer_step3a (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (u : Compose g h (b -> c)) (v : Compose g h (a -> b)) (w : Compose g h a) :
+  Equal (Compose g h c)
+    (compose_cmp_outer_mid2 g h apg aph a b c u v w)
+    (compose_cmp_outer_apply_v g h apg a b c v w (compose_cmp_outer_fused g h apg aph a b c u)) =
+  cong (g (h (a -> b) -> (h a -> h c))) (Compose g h c)
+    (compose_cmp_outer_unfused g h apg aph a b c u)
+    (compose_cmp_outer_fused g h apg aph a b c u)
+    (compose_cmp_outer_apply_v g h apg a b c v w)
+    (compose_cmp_outer_fusion_eq g h apg aph a b c u)
+
+fn compose_cmp_outer_step3 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (u : Compose g h (b -> c)) (v : Compose g h (a -> b)) (w : Compose g h a) :
+  Equal (Compose g h c)
+    (compose_cmp_outer_apply_v g h apg a b c v w (compose_cmp_outer_fused g h apg aph a b c u))
+    (compose_cmp_outer_apply_v g h apg a b c v w (compose_cmp_outer_mapped_rhs g h apg aph a b c u)) =
+  cong (g (h (a -> b) -> (h a -> h c))) (Compose g h c)
+    (compose_cmp_outer_fused g h apg aph a b c u)
+    (compose_cmp_outer_mapped_rhs g h apg aph a b c u)
+    (compose_cmp_outer_apply_v g h apg a b c v w)
+    (compose_cmp_outer_step3b g h apg aph a b c u)
+
+-- The reconciliation itself (Architect ruling, `ap_naturality2`): `mapped_rhs`
+-- is a single `map` over `u` of a function that internally routes BOTH `u`'s
+-- and `v`'s content through `aph.ap`; splitting it back into the `uP`/`vP`
+-- shape `apg.ap_cmp` needs takes a `u`-side `fusion_law` factoring (two
+-- nested `map`s collapse to the one `mapped_rhs` already is, by construction)
+-- plus a `v`-side `ap_naturality2` application, then one final `map_coh` to
+-- match `ap_cmp`'s own `pure`-based statement.
+
+fn cmp_v_ap_ab (h : Type -> Type) (aph : Applicative h) (a : Type) (b : Type) : h (a -> b) -> (h a -> h b) =
+  aph.ap a b
+
+fn cmp_v_bridge_mid (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (u : Compose g h (b -> c)) : g ((h a -> h b) -> (h a -> h c)) =
+  nat2_map_compose g apg (h a) (h b) (h c) (compose_cmp_outer_rhs_u g h apg aph b c u)
+
+fn cmp_v_bridge_inner_raw (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (u : Compose g h (b -> c)) : g ((h a -> h b) -> (h a -> h c)) =
+  apg.functor.map (h (b -> c)) ((h a -> h b) -> (h a -> h c))
+    (comp (h (b -> c)) (h b -> h c) ((h a -> h b) -> (h a -> h c)) (compose (h a) (h b) (h c)) (aph.ap b c)) u
+
+fn cmp_v_bridge_step1 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (u : Compose g h (b -> c)) :
+  Equal (g ((h a -> h b) -> (h a -> h c)))
+    (cmp_v_bridge_inner_raw g h apg aph a b c u)
+    (cmp_v_bridge_mid g h apg aph a b c u) =
+  apg.functor.fusion_law (h (b -> c)) (h b -> h c) ((h a -> h b) -> (h a -> h c)) (compose (h a) (h b) (h c)) (aph.ap b c) u
+
+fn cmp_v_bridge_outer (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (u : Compose g h (b -> c)) : g (h (a -> b) -> (h a -> h c)) =
+  nat2_rhs_inner g apg (h (a -> b)) (h a -> h b) (h a -> h c) (aph.ap a b) (cmp_v_bridge_mid g h apg aph a b c u)
+
+fn cmp_v_bridge_outer_raw (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (u : Compose g h (b -> c)) : g (h (a -> b) -> (h a -> h c)) =
+  apg.functor.map (h (b -> c)) (h (a -> b) -> (h a -> h c))
+    (comp (h (b -> c)) ((h a -> h b) -> (h a -> h c)) (h (a -> b) -> (h a -> h c))
+      (nat2_rhs_func (h (a -> b)) (h a -> h b) (h a -> h c) (aph.ap a b))
+      (comp (h (b -> c)) (h b -> h c) ((h a -> h b) -> (h a -> h c)) (compose (h a) (h b) (h c)) (aph.ap b c)))
+    u
+
+fn cmp_v_bridge_step2 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (u : Compose g h (b -> c)) :
+  Equal (g (h (a -> b) -> (h a -> h c)))
+    (cmp_v_bridge_outer_raw g h apg aph a b c u)
+    (nat2_rhs_inner g apg (h (a -> b)) (h a -> h b) (h a -> h c) (cmp_v_ap_ab h aph a b) (cmp_v_bridge_inner_raw g h apg aph a b c u)) =
+  apg.functor.fusion_law (h (b -> c)) ((h a -> h b) -> (h a -> h c)) (h (a -> b) -> (h a -> h c))
+    (nat2_rhs_func (h (a -> b)) (h a -> h b) (h a -> h c) (aph.ap a b))
+    (comp (h (b -> c)) (h b -> h c) ((h a -> h b) -> (h a -> h c)) (compose (h a) (h b) (h c)) (aph.ap b c))
+    u
+
+fn cmp_v_bridge_step2b (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (u : Compose g h (b -> c)) :
+  Equal (g (h (a -> b) -> (h a -> h c)))
+    (nat2_rhs_inner g apg (h (a -> b)) (h a -> h b) (h a -> h c) (cmp_v_ap_ab h aph a b) (cmp_v_bridge_inner_raw g h apg aph a b c u))
+    (cmp_v_bridge_outer g h apg aph a b c u) =
+  cong (g ((h a -> h b) -> (h a -> h c))) (g (h (a -> b) -> (h a -> h c)))
+    (cmp_v_bridge_inner_raw g h apg aph a b c u)
+    (cmp_v_bridge_mid g h apg aph a b c u)
+    (λy. nat2_rhs_inner g apg (h (a -> b)) (h a -> h b) (h a -> h c) (aph.ap a b) y)
+    (cmp_v_bridge_step1 g h apg aph a b c u)
+
+fn cmp_v_bridge_defeq (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (u : Compose g h (b -> c)) :
+  Equal (g (h (a -> b) -> (h a -> h c)))
+    (compose_cmp_outer_mapped_rhs g h apg aph a b c u)
+    (cmp_v_bridge_outer_raw g h apg aph a b c u) =
+  Refl
+
+fn cmp_v_bridge_eq (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (u : Compose g h (b -> c)) :
+  Equal (g (h (a -> b) -> (h a -> h c)))
+    (compose_cmp_outer_mapped_rhs g h apg aph a b c u)
+    (cmp_v_bridge_outer g h apg aph a b c u) =
+  trans (g (h (a -> b) -> (h a -> h c)))
+    (compose_cmp_outer_mapped_rhs g h apg aph a b c u)
+    (cmp_v_bridge_outer_raw g h apg aph a b c u)
+    (cmp_v_bridge_outer g h apg aph a b c u)
+    (cmp_v_bridge_defeq g h apg aph a b c u)
+    (trans (g (h (a -> b) -> (h a -> h c)))
+      (cmp_v_bridge_outer_raw g h apg aph a b c u)
+      (nat2_rhs_inner g apg (h (a -> b)) (h a -> h b) (h a -> h c) (aph.ap a b) (cmp_v_bridge_inner_raw g h apg aph a b c u))
+      (cmp_v_bridge_outer g h apg aph a b c u)
+      (cmp_v_bridge_step2 g h apg aph a b c u)
+      (cmp_v_bridge_step2b g h apg aph a b c u))
+
+fn cmp_v_bridge_mapped_rhs_apply_v (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (u : Compose g h (b -> c)) (v : Compose g h (a -> b)) : g (h a -> h c) =
+  apg.ap (h (a -> b)) (h a -> h c) (compose_cmp_outer_mapped_rhs g h apg aph a b c u) v
+
+fn cmp_v_bridge_apply_v (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (u : Compose g h (b -> c)) (v : Compose g h (a -> b)) : g (h a -> h c) =
+  apg.ap (h (a -> b)) (h a -> h c) (cmp_v_bridge_outer g h apg aph a b c u) v
+
+fn cmp_v_bridge_apply_v_mid (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (u : Compose g h (b -> c)) (v : Compose g h (a -> b)) : g (h a -> h c) =
+  apg.ap (h a -> h b) (h a -> h c) (cmp_v_bridge_mid g h apg aph a b c u) (compose_cmp_outer_rhs_v g h apg aph a b v)
+
+fn cmp_v_bridge_mapped_apply_v_eq (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (u : Compose g h (b -> c)) (v : Compose g h (a -> b)) :
+  Equal (g (h a -> h c))
+    (cmp_v_bridge_mapped_rhs_apply_v g h apg aph a b c u v)
+    (cmp_v_bridge_apply_v g h apg aph a b c u v) =
+  cong (g (h (a -> b) -> (h a -> h c))) (g (h a -> h c))
+    (compose_cmp_outer_mapped_rhs g h apg aph a b c u)
+    (cmp_v_bridge_outer g h apg aph a b c u)
+    (λy. apg.ap (h (a -> b)) (h a -> h c) y v)
+    (cmp_v_bridge_eq g h apg aph a b c u)
+
+fn cmp_v_bridge_nat2 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (u : Compose g h (b -> c)) (v : Compose g h (a -> b)) :
+  Equal (g (h a -> h c))
+    (cmp_v_bridge_apply_v_mid g h apg aph a b c u v)
+    (cmp_v_bridge_apply_v g h apg aph a b c u v) =
+  ap_naturality2 g apg (h (a -> b)) (h a -> h b) (h a -> h c) (aph.ap a b) (cmp_v_bridge_mid g h apg aph a b c u) v
+
+fn cmp_v_bridge_full_v_eq (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (u : Compose g h (b -> c)) (v : Compose g h (a -> b)) :
+  Equal (g (h a -> h c))
+    (cmp_v_bridge_mapped_rhs_apply_v g h apg aph a b c u v)
+    (cmp_v_bridge_apply_v_mid g h apg aph a b c u v) =
+  trans (g (h a -> h c))
+    (cmp_v_bridge_mapped_rhs_apply_v g h apg aph a b c u v)
+    (cmp_v_bridge_apply_v g h apg aph a b c u v)
+    (cmp_v_bridge_apply_v_mid g h apg aph a b c u v)
+    (cmp_v_bridge_mapped_apply_v_eq g h apg aph a b c u v)
+    (sym (g (h a -> h c))
+      (cmp_v_bridge_apply_v_mid g h apg aph a b c u v)
+      (cmp_v_bridge_apply_v g h apg aph a b c u v)
+      (cmp_v_bridge_nat2 g h apg aph a b c u v))
+
+fn cmp_v_bridge_shape (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (v : Compose g h (a -> b)) (w : Compose g h a) (x : g ((h a -> h b) -> (h a -> h c))) : g (h c) =
+  apg.ap (h a) (h c) (apg.ap (h a -> h b) (h a -> h c) x (compose_cmp_outer_rhs_v g h apg aph a b v)) w
+
+fn cmp_v_bridge_map_form (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (u : Compose g h (b -> c)) (v : Compose g h (a -> b)) (w : Compose g h a) : g (h c) =
+  cmp_v_bridge_shape g h apg aph a b c v w (cmp_v_bridge_mid g h apg aph a b c u)
+
+fn cmp_v_bridge_pure_form (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (u : Compose g h (b -> c)) (v : Compose g h (a -> b)) (w : Compose g h a) : g (h c) =
+  cmp_v_bridge_shape g h apg aph a b c v w (nat2_pure_compose g apg (h a) (h b) (h c) (compose_cmp_outer_rhs_u g h apg aph b c u))
+
+fn cmp_v_bridge_map_pure_eq (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (u : Compose g h (b -> c)) (v : Compose g h (a -> b)) (w : Compose g h a) :
+  Equal (g (h c))
+    (cmp_v_bridge_map_form g h apg aph a b c u v w)
+    (cmp_v_bridge_pure_form g h apg aph a b c u v w) =
+  cong (g ((h a -> h b) -> (h a -> h c))) (g (h c))
+    (cmp_v_bridge_mid g h apg aph a b c u)
+    (nat2_pure_compose g apg (h a) (h b) (h c) (compose_cmp_outer_rhs_u g h apg aph b c u))
+    (λy. cmp_v_bridge_shape g h apg aph a b c v w y)
+    (nat2_map_compose_eq g apg (h a) (h b) (h c) (compose_cmp_outer_rhs_u g h apg aph b c u))
+
+fn cmp_v_bridge_ap_cmp (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (u : Compose g h (b -> c)) (v : Compose g h (a -> b)) (w : Compose g h a) :
+  Equal (g (h c))
+    (cmp_v_bridge_pure_form g h apg aph a b c u v w)
+    (compose_cmp_outer_rhs g h apg aph a b c u v w) =
+  apg.ap_cmp (h a) (h b) (h c)
+    (compose_cmp_outer_rhs_u g h apg aph b c u)
+    (compose_cmp_outer_rhs_v g h apg aph a b v)
+    w
+
+fn cmp_v_bridge_outer_cong (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (u : Compose g h (b -> c)) (v : Compose g h (a -> b)) (w : Compose g h a) :
+  Equal (g (h c))
+    (compose_cmp_outer_apply_v g h apg a b c v w (compose_cmp_outer_mapped_rhs g h apg aph a b c u))
+    (cmp_v_bridge_map_form g h apg aph a b c u v w) =
+  cong (g (h a -> h c)) (g (h c))
+    (cmp_v_bridge_mapped_rhs_apply_v g h apg aph a b c u v)
+    (cmp_v_bridge_apply_v_mid g h apg aph a b c u v)
+    (λy. apg.ap (h a) (h c) y w)
+    (cmp_v_bridge_full_v_eq g h apg aph a b c u v)
+
+fn compose_cmp_outer_rhs_stage1 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (u : Compose g h (b -> c)) (v : Compose g h (a -> b)) (w : Compose g h a) :
+  Equal (Compose g h c)
+    (compose_cmp_outer_apply_v g h apg a b c v w
+      (compose_cmp_outer_mapped_rhs g h apg aph a b c u))
+    (compose_cmp_outer_rhs g h apg aph a b c u v w) =
+  trans (g (h c))
+    (compose_cmp_outer_apply_v g h apg a b c v w (compose_cmp_outer_mapped_rhs g h apg aph a b c u))
+    (cmp_v_bridge_map_form g h apg aph a b c u v w)
+    (compose_cmp_outer_rhs g h apg aph a b c u v w)
+    (cmp_v_bridge_outer_cong g h apg aph a b c u v w)
+    (trans (g (h c))
+      (cmp_v_bridge_map_form g h apg aph a b c u v w)
+      (cmp_v_bridge_pure_form g h apg aph a b c u v w)
+      (compose_cmp_outer_rhs g h apg aph a b c u v w)
+      (cmp_v_bridge_map_pure_eq g h apg aph a b c u v w)
+      (cmp_v_bridge_ap_cmp g h apg aph a b c u v w))
+
+fn compose_ap_cmp (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (u : Compose g h (b -> c)) (v : Compose g h (a -> b)) (w : Compose g h a) :
+  Equal (Compose g h c)
+    (compose_cmp_outer_lhs g h apg aph a b c u v w)
+    (compose_cmp_outer_rhs g h apg aph a b c u v w) =
+  trans (Compose g h c)
+    (compose_cmp_outer_lhs g h apg aph a b c u v w)
+    (compose_cmp_outer_mid1 g h apg aph a b c u v w)
+    (compose_cmp_outer_rhs g h apg aph a b c u v w)
+    (compose_cmp_outer_step1 g h apg aph a b c u v w)
+    (trans (Compose g h c)
+      (compose_cmp_outer_mid1 g h apg aph a b c u v w)
+      (compose_cmp_outer_mid2 g h apg aph a b c u v w)
+      (compose_cmp_outer_rhs g h apg aph a b c u v w)
+      (compose_cmp_outer_step2 g h apg aph a b c u v w)
+      (trans (Compose g h c)
+        (compose_cmp_outer_mid2 g h apg aph a b c u v w)
+        (compose_cmp_outer_apply_v g h apg a b c v w
+          (compose_cmp_outer_fused g h apg aph a b c u))
+        (compose_cmp_outer_rhs g h apg aph a b c u v w)
+        (compose_cmp_outer_step3a g h apg aph a b c u v w)
+        (trans (Compose g h c)
+          (compose_cmp_outer_apply_v g h apg a b c v w
+            (compose_cmp_outer_fused g h apg aph a b c u))
+          (compose_cmp_outer_apply_v g h apg a b c v w
+            (compose_cmp_outer_mapped_rhs g h apg aph a b c u))
+          (compose_cmp_outer_rhs g h apg aph a b c u v w)
+          (compose_cmp_outer_step3 g h apg aph a b c u v w)
+          (compose_cmp_outer_rhs_stage1 g h apg aph a b c u v w))))
+
+
+```
+
+The remaining outer lifting is assembled in the next checked block, using
+`cong` over `functor.map` and `apg.ap_cmp`; no surface `Applicative`
+instance for `Compose` is introduced.
 
 ### 9.6 Composition law — deferred for SIZE, not capability, to `DS-8c`
 

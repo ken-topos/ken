@@ -85,26 +85,51 @@ fn trusted_base_delta_is_empty_across_the_entry() {
     );
 }
 
-// Honest-boundary check (Architect gate pin #4): the tangled/checked code
-// must not contain a stubbed `ap_cmp` under ANY name that claims to BE
-// Compose's fourth Applicative law or the composition coherence law —
-// only the honestly-partial Level1/Level2 reduction lemmas toward it.
+// Honest-boundary check (Architect gate pin #4), DS-8c-updated: `ap_cmp`
+// is now landed (below), but the real `instance Applicative (Compose g h)`
+// head must still be genuinely absent — that head stays blocked by the
+// parametric-instance-head kinding gap (elab.rs:3833-3851), independent of
+// ap_cmp being proved (DS-8c's scope guard: work within the `fn`-synonym
+// scaffolding, never assemble the real instance).
 #[test]
-fn ap_cmp_and_composition_law_are_genuinely_absent_not_stubbed() {
+fn compose_instance_head_still_genuinely_absent() {
     let extracted = ken_elaborator::literate::extract_ken_md(EFFECTFUL_CLASSES_KEN_MD)
         .expect("EffectfulClasses.ken.md must extract");
     assert!(
-        !extracted.source.contains("compose_ap_cmp"),
-        "Compose's own ap_cmp must be genuinely absent from the tangled code, not stubbed"
-    );
-    assert!(
         !extracted.source.contains("instance Applicative (Compose"),
-        "instance Applicative (Compose g h) must not be assembled — ap_cmp (one of its four required fields) is not yet proved"
+        "instance Applicative (Compose g h) must not be assembled — its head stays kinding-blocked independent of ap_cmp"
     );
+}
+
+// The traverse composition coherence law (§5.3, DS-8c piece 2) is still
+// pending as of this checkpoint — updated to a positive presence check
+// once it lands.
+#[test]
+fn traverse_composition_law_not_yet_landed() {
+    let extracted = ken_elaborator::literate::extract_ken_md(EFFECTFUL_CLASSES_KEN_MD)
+        .expect("EffectfulClasses.ken.md must extract");
     assert!(
         !extracted.source.contains("traverse_composition"),
-        "the traverse composition coherence law (§5.3) must be genuinely absent, not stubbed"
+        "the traverse composition coherence law (§5.3) is still pending in this checkpoint"
     );
+}
+
+// DS-8c positive counterpart: Compose's own `ap_cmp` (the 4th Applicative
+// law) must be a REAL, kernel-checked proof term in the tangled code, not
+// a stub — closed by the `trans`/`cong`/`ap_cmp`/`ap_naturality2` chain,
+// never a bare `Refl`/`Axiom` (Architect honesty pin #4).
+#[test]
+fn compose_ap_cmp_is_present_and_kernel_checked() {
+    let mut env = base_env();
+    env.elaborate_ken_md_file(EFFECTFUL_CLASSES_KEN_MD)
+        .expect("EffectfulClasses.ken.md must elaborate");
+    for name in ["compose_ap_cmp", "ap_naturality2"] {
+        assert!(
+            env.globals.contains_key(name),
+            "DS-8c claims `{}` is proved — it must be a real global after elaborating the entry",
+            name
+        );
+    }
 }
 
 // The positive counterpart to the absence check above: §9.4's claimed
