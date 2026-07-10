@@ -401,25 +401,109 @@ fn int_ord_instance_is_audited_delta_not_zero_delta() {
     );
 }
 
+/// DS-6a (ADR 0013 Layer 1): `Eq Int`/`DecEq Int` no longer mint per-package
+/// `Axiom`s. `DecEq Int`'s `sound`/`complete` reference the ONE named kernel
+/// decidable-equality certificate (still genuinely `Decl::Opaque` — the
+/// trust didn't vanish, it relocated to one kernel-audited line shared by
+/// every consumer, registered BEFORE this file is ever elaborated); `Eq
+/// Int`'s `refl`/`sym`/`trans` are real, kernel-checked `J`-derived proofs,
+/// not postulates at all. `Ord Int` is untouched (still audited-delta,
+/// covered by `int_ord_instance_is_audited_delta_not_zero_delta` above).
 #[test]
-fn eq_and_deceq_int_instances_are_also_audited_delta() {
+fn eq_and_deceq_int_instances_are_the_ds6a_certificate_posture() {
     let env = mk_env_with_package();
-    for (name, law_names) in [
-        ("Eq_instance_Int", ["refl", "sym", "trans"].as_slice()),
-        ("DecEq_instance_Int", ["sound", "complete"].as_slice()),
+
+    // `DecEq Int`: `eq` is not a postulate; `sound`/`complete` ARE opaque
+    // consts (the shared certificate), not fresh per-instance postulates —
+    // confirmed below by identity with the certificate ids themselves.
+    let dec_eq_id = env.globals["DecEq_instance_Int"];
+    let (_, dec_eq_body) = env
+        .env
+        .transparent_body(dec_eq_id)
+        .expect("DecEq_instance_Int must be transparent");
+    let eq_val = field_value(&env.env, &dec_eq_body, 0);
+    let sound_val = field_value(&env.env, &dec_eq_body, 1);
+    let complete_val = field_value(&env.env, &dec_eq_body, 2);
+    assert!(!is_opaque_const(&env.env, &eq_val), "DecEq Int: eq must not be a postulate");
+    assert!(
+        is_opaque_const(&env.env, &sound_val),
+        "DecEq Int: sound must reference a real Decl::Opaque (the shared certificate)"
+    );
+    assert!(
+        is_opaque_const(&env.env, &complete_val),
+        "DecEq Int: complete must reference a real Decl::Opaque (the shared certificate)"
+    );
+    let sound_id = env.globals["int_eq_sound"];
+    let complete_id = env.globals["int_eq_complete"];
+    assert_eq!(
+        sound_val,
+        Term::const_(sound_id, vec![]),
+        "DecEq Int's sound field must be exactly the shared int_eq_sound certificate, not a fresh postulate"
+    );
+    assert_eq!(
+        complete_val,
+        Term::const_(complete_id, vec![]),
+        "DecEq Int's complete field must be exactly the shared int_eq_complete certificate, not a fresh postulate"
+    );
+
+    // `Eq Int`: `refl`/`sym`/`trans` are now REAL proofs — the discriminating
+    // flip from the pre-DS-6a Axiom posture this test used to assert.
+    let eq_int_id = env.globals["Eq_instance_Int"];
+    let (_, eq_int_body) = env
+        .env
+        .transparent_body(eq_int_id)
+        .expect("Eq_instance_Int must be transparent");
+    let op_val = field_value(&env.env, &eq_int_body, 0);
+    assert!(!is_opaque_const(&env.env, &op_val), "Eq Int: eq must not be a postulate");
+    for (i, law_name) in ["refl", "sym", "trans"].iter().enumerate() {
+        let v = field_value(&env.env, &eq_int_body, i + 1);
+        assert!(
+            !is_opaque_const(&env.env, &v),
+            "Eq Int: law field '{}' must be a REAL kernel-checked proof (DS-6a J-derivation), \
+             not a postulate. Got {:?}",
+            law_name, v
+        );
+    }
+
+    // The certificate itself is exactly 2 kernel Decl::Opaque entries,
+    // already present in the BASELINE env (registered during numeric-tower
+    // bootstrap) — so elaborating this file's Eq/DecEq Int instances mints
+    // no NEW ones. `trusted_base_delta` is a dependency CONE (not a
+    // before/after diff), so `DecEq Int`/`Eq Int` legitimately reach exactly
+    // `{eq_int, int_eq_sound, int_eq_complete}` — the audited primitive plus
+    // the 2 certificate postulates the laws are honestly built from, nothing
+    // beyond that (in particular, no fresh per-instance postulate).
+    let base_tb: std::collections::HashSet<_> =
+        ElabEnv::new().unwrap().env.trusted_base().into_iter().collect();
+    assert!(
+        base_tb.contains(&sound_id) && base_tb.contains(&complete_id),
+        "the certificate must already be in trusted_base() before this file is elaborated"
+    );
+    let eq_int_prim_id = env.globals["eq_int"];
+    let base_expected: std::collections::HashSet<_> =
+        [eq_int_prim_id, sound_id, complete_id].into_iter().collect();
+    // `DecEq Int`'s fields are bare Const references (`eq_int`/`sound`/
+    // `complete`), so its cone is exactly those three. `Eq Int`'s `J`-built
+    // proofs additionally spell `Int` itself as the literal type argument in
+    // every `Equal Int _ _` motive/conclusion they construct, so `Int` (also
+    // a trusted `Decl::Primitive` — the opaque type itself) legitimately
+    // joins the cone too — an honest dependency, not a fresh postulate.
+    for (id, expected) in [
+        (dec_eq_id, base_expected.clone()),
+        (eq_int_id, {
+            let mut e = base_expected.clone();
+            e.insert(env.numeric_env.int_id);
+            e
+        }),
     ] {
-        let id = env.globals[name];
-        let (_, body) = env.env.transparent_body(id).unwrap_or_else(|| panic!("{} must be transparent", name));
-        let op_val = field_value(&env.env, &body, 0);
-        assert!(!is_opaque_const(&env.env, &op_val), "{}: op field must not be a postulate", name);
-        for (i, law_name) in law_names.iter().enumerate() {
-            let v = field_value(&env.env, &body, i + 1);
-            assert!(
-                is_opaque_const(&env.env, &v),
-                "{}: law field '{}' must be a real Decl::Opaque postulate",
-                name, law_name
-            );
-        }
+        let mut delta = ken_elaborator::trusted_base_delta(&env.env, id);
+        delta.remove(&env.class_env.record_nil_val_id);
+        assert_eq!(
+            delta, expected,
+            "instance {:?} must depend on EXACTLY the audited eq_int primitive + Int + the \
+             shared certificate — no fresh postulate of its own",
+            id
+        );
     }
 }
 

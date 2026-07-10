@@ -1113,6 +1113,82 @@ pub fn declare_primitive(
     Ok(id)
 }
 
+/// `declare_deceq_certificate` — register a decidable-equality certificate
+/// for an opaque primitive type
+/// (`docs/adr/0013-int-decidable-equality-kernel-posture.md` Layer 1): the
+/// kernel trusts `eq_op` to decide propositional equality at `prim_ty`,
+/// both directions.
+/// General, opt-in, per-primitive — `prim_ty` is the *first* registrant of
+/// this mechanism, not a special case of it; an unregistered primitive's
+/// `Eq` stays neutral exactly as before (`obs.rs`'s fail-safe default is
+/// untouched — this adds no reduction rule).
+///
+/// Builds and admits, via [`declare_postulate`] (each call `classify`s the
+/// constructed type before committing it, so registration fails closed on
+/// an incoherent registrant — e.g. an `eq_op` not shaped
+/// `prim_ty → prim_ty → bool_ty`, or a `bool_true` not of type `bool_ty`):
+///
+/// - `sound   : (x y : prim_ty) → Eq bool_ty (eq_op x y) bool_true → Eq prim_ty x y`
+/// - `complete: (x y : prim_ty) → Eq prim_ty x y → Eq bool_ty (eq_op x y) bool_true`
+///
+/// and records the pair in [`GlobalEnv::deceq_cert`] under `prim_ty`.
+pub fn declare_deceq_certificate(
+    env: &mut GlobalEnv,
+    prim_ty: GlobalId,
+    eq_op: GlobalId,
+    bool_ty: GlobalId,
+    bool_true: GlobalId,
+) -> KernelResult<crate::env::DecEqCert> {
+    let ty_const = Term::const_(prim_ty, vec![]);
+    let bool_const = Term::indformer(bool_ty, vec![]);
+    let true_const = Term::constructor(bool_true, vec![]);
+    let eq_op_const = Term::const_(eq_op, vec![]);
+
+    // Context depth 2 (x y : prim_ty bound, y=Var(0), x=Var(1)) — used for
+    // the premise, the domain of the third Π.
+    let eq_call_d2 = Term::app(Term::app(eq_op_const.clone(), Term::var(1)), Term::var(0));
+    let bool_eq_true_d2 = Term::Eq(
+        Box::new(bool_const.clone()),
+        Box::new(eq_call_d2),
+        Box::new(true_const.clone()),
+    );
+    let prim_eq_d2 = Term::Eq(
+        Box::new(ty_const.clone()),
+        Box::new(Term::var(1)),
+        Box::new(Term::var(0)),
+    );
+
+    // Context depth 3 (x y premise bound, x=Var(2), y=Var(1)) — used for the
+    // conclusion, the codomain of the third Π.
+    let eq_call_d3 = Term::app(Term::app(eq_op_const, Term::var(2)), Term::var(1));
+    let bool_eq_true_d3 = Term::Eq(
+        Box::new(bool_const),
+        Box::new(eq_call_d3),
+        Box::new(true_const),
+    );
+    let prim_eq_d3 = Term::Eq(Box::new(ty_const.clone()), Box::new(Term::var(2)), Box::new(Term::var(1)));
+
+    let sound_ty = Term::pi(
+        ty_const.clone(),
+        Term::pi(ty_const.clone(), Term::pi(bool_eq_true_d2, prim_eq_d3)),
+    );
+    let complete_ty = Term::pi(
+        ty_const.clone(),
+        Term::pi(ty_const, Term::pi(prim_eq_d2, bool_eq_true_d3)),
+    );
+
+    let sound = declare_postulate(env, vec![], sound_ty)?;
+    let complete = declare_postulate(env, vec![], complete_ty)?;
+
+    let cert = crate::env::DecEqCert {
+        eq_op,
+        sound,
+        complete,
+    };
+    env.register_deceq_cert(prim_ty, cert.clone());
+    Ok(cert)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
