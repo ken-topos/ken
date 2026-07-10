@@ -152,11 +152,15 @@ derives from, not per-instance duplicates).
 The `eq` field on both instances is `eq_int` DIRECTLY (the raw primitive),
 not a `fn`-wrapped alias: the certificate's own type is built kernel-side
 against `eq_int` literally (`crates/ken-elaborator/src/numbers.rs`, before
-any catalog wrapper exists to reference), so every law field's hypothesis
-must read `eq_int x y`, not a syntactically-different-but-semantically-
-equal wrapper — the exact `Ord Char` "same literal expression, not a second
-name that merely co-reduces" discipline `§5` documents below, applied here
-proactively rather than discovered by a K6-shaped failure.
+any catalog wrapper exists to reference). Spelling every law field's
+hypothesis as `eq_int x y` verbatim makes it match the certificate's own
+type on the nose, sidestepping any operand-congruence question entirely —
+the same "same literal expression" discipline `Ord Char` (`§5` below) uses
+for exactly this reason. (This is a SUFFICIENT choice, not a demonstrated
+NECESSARY one: whether a `fn`-wrapped alias like `int_eq` would actually
+fail here — the `§5`/K6 `conv_struct` gap — was not independently
+reproduced through this specific class-instance-record projection path;
+raw `eq_int` avoids the question rather than resolving it.)
 
 ```ken
 fn int_leq (x : Int) (y : Int) : Bool = leq_int x y
