@@ -109,14 +109,33 @@ fn surf2_d1_marked_instance_fields_and_projection_are_checked() {
         "bound dictionary proc projection must be visible to SURF-1 checking: {bad_bound}"
     );
 
+    // DS-8b (`docs/program/wp/ds-8b-pure-into-proc-widening.md`): a pure
+    // (`∅`-row) witness for a `proc` class field is now ACCEPTED — covariant
+    // subsumption `∅ ⊆ open row` (SURF-1 §1.6 do-not-optimize). This used to
+    // be a rejection (the exact-match `Proc if !impure` gate DS-8b removes);
+    // flipped here to the corrected behavior, not a stand-in for a new case.
     env.elaborate_decl("fn step_bool (x : Bool) : Bool = x")
         .expect("pure implementation helper itself is valid");
-    let bad_instance = err_text(env.elaborate_decl("instance Effectful Bool { step = step_bool }"));
+    env.elaborate_decl("instance Effectful Bool { step = step_bool }")
+        .expect(
+            "DS-8b: a pure witness for a `proc` class field must now be accepted \
+             (covariant ∅ ⊆ open-row subsumption)",
+        );
+
+    // AC6 (DS-8b hard bar): accepting a pure witness must not weaken the
+    // field's own classification — `d.step` still projects as `proc` at use
+    // sites, so a PURE caller still cannot use it directly (the projected
+    // field is still row-polymorphic/proc-shaped, regardless of which
+    // witness happens to inhabit it for this instance).
+    let bad_projection_bool = err_text(env.elaborate_decl(
+        "fn bad_use_bool (x : Bool) : Bool =
+                 (Effectful_instance_Bool).step x",
+    ));
     assert!(
-        bad_instance.contains("Effectful.step")
-            && bad_instance.contains("requires `proc`")
-            && bad_instance.contains("implementation is pure"),
-        "proc-marked class field must reject a pure implementation: {bad_instance}"
+        bad_projection_bool.contains("false purity or effect escape")
+            && bad_projection_bool.contains("EffectEscapes"),
+        "AC6: the proc field must still classify proc at the use site even \
+         though this instance's witness is pure: {bad_projection_bool}"
     );
 }
 
