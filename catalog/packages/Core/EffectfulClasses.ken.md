@@ -1840,10 +1840,10 @@ fn ap_naturality2 (g : Type -> Type) (apg : Applicative g) (a : Type) (b : Type)
 
 `ap_cmp`'s own LHS — three levels of nested `compose_ap` keyed on
 `compose a b c` — reduces cleanly for its first two levels using
-`compose_map_coh` (above) and `apg`'s `functor.fusion_law`; this is real,
-tested, reusable progress toward `DS-8c`, not a stub, but it is NOT
-`ap_cmp` itself (the third level's `aph.ap_cmp`-pointwise closing step,
-`§9.6`'s stage 2-4, is not built):
+`compose_map_coh` (above) and `apg`'s `functor.fusion_law`; this was the
+DS-8-era foundation for `ap_cmp`'s closing step, banked ahead of the third
+level's `aph.ap_cmp`-pointwise reconciliation, which `§9.6` (DS-8c) now
+completes:
 
 ```ken
 fn cmp_level1 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (u : Compose g h (b -> c)) : Compose g h ((a -> b) -> (a -> c)) =
@@ -2535,6 +2535,291 @@ fn option_traverse_composition (g : Type -> Type) (h : Type -> Type) (apg : Appl
   }
 ```
 
+**`List`** — by induction (mirrors `§9.2`'s `list_traverse_identity_law`/
+`list_traverse_naturality` shape). `Nil` closes the same way `Option`'s
+`None` does. `Cons` chains: unfold `compose_map`/`compose_ap`/
+`cmp_traverse_action` (free — all concrete, transparent `fn`s), THREE
+`fusion_law` steps to collapse the doubly-/triply-nested `map`s each
+introduces into a single `map` over `t1 hd`, the IH, `ap_naturality2`
+(the genuinely new content, pushing the recursive `map(traverse t2)(…)`
+result through the outer `ap`), and a closing match against
+`list_traverse`'s own `Cons`-arm reduction on both sides (definitional,
+no extra law — `list_traverse`/`option_traverse` are concrete recursive
+`fn`s, so THEIR unfolding is always free even though `apg`/`aph`'s own
+operations never are):
+
+```ken
+fn list_traverse_composed (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) (xs : List a) : Compose g h (List c) =
+  match xs {
+    Nil ⇒ compose_pure g h apg aph (List c) (Nil c) ;
+    Cons hd u ⇒ compose_ap g h apg aph (List c) (List c) (compose_map g h apg aph c (List c -> List c) (Cons c) (cmp_traverse_action g h apg a b c t1 t2 hd)) (list_traverse_composed g h apg aph a b c t1 t2 u)
+  }
+
+fn list_traverse_composed_rhs (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) (xs : List a) : Compose g h (List c) =
+  apg.functor.map (List b) (h (List c)) (list_traverse h aph b c t2) (list_traverse g apg a b t1 xs)
+
+fn ltc_nil_ap_pure_form (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) : Compose g h (List c) =
+  apg.ap (List b) (h (List c)) (apg.pure (List b -> h (List c)) (list_traverse h aph b c t2)) (apg.pure (List b) (Nil b))
+
+fn ltc_nil_step1 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) :
+  Equal (Compose g h (List c))
+    (list_traverse_composed_rhs g h apg aph a b c t1 t2 (Nil a))
+    (ltc_nil_ap_pure_form g h apg aph a b c t1 t2) =
+  apg.map_coh (List b) (h (List c)) (list_traverse h aph b c t2) (apg.pure (List b) (Nil b))
+
+fn ltc_nil_step2 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) :
+  Equal (Compose g h (List c))
+    (ltc_nil_ap_pure_form g h apg aph a b c t1 t2)
+    (list_traverse_composed g h apg aph a b c t1 t2 (Nil a)) =
+  apg.ap_hom (List b) (h (List c)) (list_traverse h aph b c t2) (Nil b)
+
+fn list_traverse_composition_nil (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) :
+  Equal (Compose g h (List c))
+    (list_traverse_composed g h apg aph a b c t1 t2 (Nil a))
+    (list_traverse_composed_rhs g h apg aph a b c t1 t2 (Nil a)) =
+  sym (Compose g h (List c))
+    (list_traverse_composed_rhs g h apg aph a b c t1 t2 (Nil a))
+    (list_traverse_composed g h apg aph a b c t1 t2 (Nil a))
+    (trans (Compose g h (List c))
+      (list_traverse_composed_rhs g h apg aph a b c t1 t2 (Nil a))
+      (ltc_nil_ap_pure_form g h apg aph a b c t1 t2)
+      (list_traverse_composed g h apg aph a b c t1 t2 (Nil a))
+      (ltc_nil_step1 g h apg aph a b c t1 t2)
+      (ltc_nil_step2 g h apg aph a b c t1 t2))
+
+fn ltc_x (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) (hd : a) : Compose g h (List c -> List c) =
+  compose_map g h apg aph c (List c -> List c) (Cons c) (cmp_traverse_action g h apg a b c t1 t2 hd)
+
+fn ltc_x_dbl (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) (hd : a) : g (h (List c -> List c)) =
+  apg.functor.map (h c) (h (List c -> List c)) (aph.functor.map c (List c -> List c) (Cons c)) (cmp_traverse_action g h apg a b c t1 t2 hd)
+
+fn ltc_x_step0 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) (hd : a) :
+  Equal (g (h (List c -> List c))) (ltc_x g h apg aph a b c t1 t2 hd) (ltc_x_dbl g h apg aph a b c t1 t2 hd) =
+  Refl
+
+fn ltc_x_raw (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) (hd : a) : g (h (List c -> List c)) =
+  apg.functor.map b (h (List c -> List c)) (comp b (h c) (h (List c -> List c)) (aph.functor.map c (List c -> List c) (Cons c)) t2) (t1 hd)
+
+fn ltc_x_step1 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) (hd : a) :
+  Equal (g (h (List c -> List c))) (ltc_x_dbl g h apg aph a b c t1 t2 hd) (ltc_x_raw g h apg aph a b c t1 t2 hd) =
+  sym (g (h (List c -> List c)))
+    (ltc_x_raw g h apg aph a b c t1 t2 hd)
+    (ltc_x_dbl g h apg aph a b c t1 t2 hd)
+    (apg.functor.fusion_law b (h c) (h (List c -> List c)) (aph.functor.map c (List c -> List c) (Cons c)) t2 (t1 hd))
+
+fn ltc_theta (h : Type -> Type) (aph : Applicative h) (b : Type) (c : Type) (t2 : b -> h c) (y : b) : h (List c) -> h (List c) =
+  aph.ap (List c) (List c) (aph.functor.map c (List c -> List c) (Cons c) (t2 y))
+
+fn ltc_xprime_raw1 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) (hd : a) : g (h (List c) -> h (List c)) =
+  apg.functor.map (h (List c -> List c)) (h (List c) -> h (List c)) (aph.ap (List c) (List c)) (ltc_x_raw g h apg aph a b c t1 t2 hd)
+
+fn ltc_xprime_fused (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) (hd : a) : g (h (List c) -> h (List c)) =
+  apg.functor.map b (h (List c) -> h (List c)) (comp b (h (List c -> List c)) (h (List c) -> h (List c)) (aph.ap (List c) (List c)) (comp b (h c) (h (List c -> List c)) (aph.functor.map c (List c -> List c) (Cons c)) t2)) (t1 hd)
+
+fn ltc_xprime_step (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) (hd : a) :
+  Equal (g (h (List c) -> h (List c))) (ltc_xprime_raw1 g h apg aph a b c t1 t2 hd) (ltc_xprime_fused g h apg aph a b c t1 t2 hd) =
+  sym (g (h (List c) -> h (List c)))
+    (ltc_xprime_fused g h apg aph a b c t1 t2 hd)
+    (ltc_xprime_raw1 g h apg aph a b c t1 t2 hd)
+    (apg.functor.fusion_law b (h (List c -> List c)) (h (List c) -> h (List c)) (aph.ap (List c) (List c)) (comp b (h c) (h (List c -> List c)) (aph.functor.map c (List c -> List c) (Cons c)) t2) (t1 hd))
+
+fn ltc_cons_raw (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) (hd : a) (u : List a) : Compose g h (List c) =
+  apg.ap (h (List c)) (h (List c)) (ltc_xprime_raw1 g h apg aph a b c t1 t2 hd) (list_traverse_composed g h apg aph a b c t1 t2 u)
+
+fn ltc_cons_raw0 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) (hd : a) (u : List a) : Compose g h (List c) =
+  apg.ap (h (List c)) (h (List c)) (apg.functor.map (h (List c -> List c)) (h (List c) -> h (List c)) (aph.ap (List c) (List c)) (ltc_x g h apg aph a b c t1 t2 hd)) (list_traverse_composed g h apg aph a b c t1 t2 u)
+
+fn ltc_cons_step0 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) (hd : a) (u : List a) :
+  Equal (Compose g h (List c)) (list_traverse_composed g h apg aph a b c t1 t2 (Cons a hd u)) (ltc_cons_raw0 g h apg aph a b c t1 t2 hd u) =
+  Refl
+
+fn ltc_x_full_eq (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) (hd : a) :
+  Equal (g (h (List c -> List c))) (ltc_x g h apg aph a b c t1 t2 hd) (ltc_x_raw g h apg aph a b c t1 t2 hd) =
+  trans (g (h (List c -> List c)))
+    (ltc_x g h apg aph a b c t1 t2 hd)
+    (ltc_x_dbl g h apg aph a b c t1 t2 hd)
+    (ltc_x_raw g h apg aph a b c t1 t2 hd)
+    (ltc_x_step0 g h apg aph a b c t1 t2 hd)
+    (ltc_x_step1 g h apg aph a b c t1 t2 hd)
+
+fn ltc_cons_step0b (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) (hd : a) (u : List a) :
+  Equal (Compose g h (List c)) (ltc_cons_raw0 g h apg aph a b c t1 t2 hd u) (ltc_cons_raw g h apg aph a b c t1 t2 hd u) =
+  cong (g (h (List c -> List c))) (Compose g h (List c))
+    (ltc_x g h apg aph a b c t1 t2 hd)
+    (ltc_x_raw g h apg aph a b c t1 t2 hd)
+    (λy. apg.ap (h (List c)) (h (List c)) (apg.functor.map (h (List c -> List c)) (h (List c) -> h (List c)) (aph.ap (List c) (List c)) y) (list_traverse_composed g h apg aph a b c t1 t2 u))
+    (ltc_x_full_eq g h apg aph a b c t1 t2 hd)
+
+fn ltc_cons_mid (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) (hd : a) (y : Compose g h (List c)) : Compose g h (List c) =
+  apg.ap (h (List c)) (h (List c)) (ltc_xprime_fused g h apg aph a b c t1 t2 hd) y
+
+fn ltc_cons_step1 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) (hd : a) (u : List a) :
+  Equal (Compose g h (List c))
+    (ltc_cons_raw g h apg aph a b c t1 t2 hd u)
+    (ltc_cons_mid g h apg aph a b c t1 t2 hd (list_traverse_composed g h apg aph a b c t1 t2 u)) =
+  cong (g (h (List c) -> h (List c))) (Compose g h (List c))
+    (ltc_xprime_raw1 g h apg aph a b c t1 t2 hd)
+    (ltc_xprime_fused g h apg aph a b c t1 t2 hd)
+    (λf. apg.ap (h (List c)) (h (List c)) f (list_traverse_composed g h apg aph a b c t1 t2 u))
+    (ltc_xprime_step g h apg aph a b c t1 t2 hd)
+
+fn ltc_cons_step2 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) (hd : a) (u : List a) (ih : Equal (Compose g h (List c)) (list_traverse_composed g h apg aph a b c t1 t2 u) (list_traverse_composed_rhs g h apg aph a b c t1 t2 u)) :
+  Equal (Compose g h (List c))
+    (ltc_cons_mid g h apg aph a b c t1 t2 hd (list_traverse_composed g h apg aph a b c t1 t2 u))
+    (ltc_cons_mid g h apg aph a b c t1 t2 hd (list_traverse_composed_rhs g h apg aph a b c t1 t2 u)) =
+  cong (Compose g h (List c)) (Compose g h (List c))
+    (list_traverse_composed g h apg aph a b c t1 t2 u)
+    (list_traverse_composed_rhs g h apg aph a b c t1 t2 u)
+    (λy. apg.ap (h (List c)) (h (List c)) (ltc_xprime_fused g h apg aph a b c t1 t2 hd) y)
+    ih
+
+fn ltc_step3_rhs (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) (hd : a) (u : List a) : Compose g h (List c) =
+  apg.ap (List b) (h (List c)) (nat2_rhs_inner g apg (List b) (h (List c)) (h (List c)) (list_traverse h aph b c t2) (ltc_xprime_fused g h apg aph a b c t1 t2 hd)) (list_traverse g apg a b t1 u)
+
+fn ltc_step3 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) (hd : a) (u : List a) :
+  Equal (Compose g h (List c))
+    (ltc_cons_mid g h apg aph a b c t1 t2 hd (list_traverse_composed_rhs g h apg aph a b c t1 t2 u))
+    (ltc_step3_rhs g h apg aph a b c t1 t2 hd u) =
+  ap_naturality2 g apg (List b) (h (List c)) (h (List c)) (list_traverse h aph b c t2) (ltc_xprime_fused g h apg aph a b c t1 t2 hd) (list_traverse g apg a b t1 u)
+
+fn ltc_nat2_fused (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) (hd : a) : g (List b -> h (List c)) =
+  apg.functor.map b (List b -> h (List c))
+    (comp b (h (List c) -> h (List c)) (List b -> h (List c))
+      (nat2_rhs_func (List b) (h (List c)) (h (List c)) (list_traverse h aph b c t2))
+      (comp b (h (List c -> List c)) (h (List c) -> h (List c)) (aph.ap (List c) (List c)) (comp b (h c) (h (List c -> List c)) (aph.functor.map c (List c -> List c) (Cons c)) t2)))
+    (t1 hd)
+
+fn ltc_step4 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) (hd : a) :
+  Equal (g (List b -> h (List c)))
+    (nat2_rhs_inner g apg (List b) (h (List c)) (h (List c)) (list_traverse h aph b c t2) (ltc_xprime_fused g h apg aph a b c t1 t2 hd))
+    (ltc_nat2_fused g h apg aph a b c t1 t2 hd) =
+  sym (g (List b -> h (List c)))
+    (ltc_nat2_fused g h apg aph a b c t1 t2 hd)
+    (nat2_rhs_inner g apg (List b) (h (List c)) (h (List c)) (list_traverse h aph b c t2) (ltc_xprime_fused g h apg aph a b c t1 t2 hd))
+    (apg.functor.fusion_law b (h (List c) -> h (List c)) (List b -> h (List c))
+      (nat2_rhs_func (List b) (h (List c)) (h (List c)) (list_traverse h aph b c t2))
+      (comp b (h (List c -> List c)) (h (List c) -> h (List c)) (aph.ap (List c) (List c)) (comp b (h c) (h (List c -> List c)) (aph.functor.map c (List c -> List c) (Cons c)) t2))
+      (t1 hd))
+
+fn ltc_xi_func (h : Type -> Type) (aph : Applicative h) (b : Type) (c : Type) (t2 : b -> h c) (y : b) : List b -> h (List c) =
+  λl. list_traverse h aph b c t2 (Cons b y l)
+
+fn ltc_target_fused (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) (hd : a) : g (List b -> h (List c)) =
+  apg.functor.map b (List b -> h (List c)) (ltc_xi_func h aph b c t2) (t1 hd)
+
+fn ltc_step5 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) (hd : a) :
+  Equal (g (List b -> h (List c))) (ltc_nat2_fused g h apg aph a b c t1 t2 hd) (ltc_target_fused g h apg aph a b c t1 t2 hd) =
+  Refl
+
+fn ltc_compose_u (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) (hd : a) : g (List b -> List b) =
+  apg.functor.map b (List b -> List b) (Cons b) (t1 hd)
+
+fn ltc_map_compose_u (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) (hd : a) : g (List b -> h (List c)) =
+  apg.functor.map (List b -> List b) (List b -> h (List c)) (compose (List b) (List b) (h (List c)) (list_traverse h aph b c t2)) (ltc_compose_u g h apg aph a b c t1 t2 hd)
+
+fn ltc_map_compose_u_raw (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) (hd : a) : g (List b -> h (List c)) =
+  apg.functor.map b (List b -> h (List c)) (comp b (List b -> List b) (List b -> h (List c)) (compose (List b) (List b) (h (List c)) (list_traverse h aph b c t2)) (Cons b)) (t1 hd)
+
+fn ltc_step7 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) (hd : a) :
+  Equal (g (List b -> h (List c))) (ltc_map_compose_u_raw g h apg aph a b c t1 t2 hd) (ltc_map_compose_u g h apg aph a b c t1 t2 hd) =
+  apg.functor.fusion_law b (List b -> List b) (List b -> h (List c)) (compose (List b) (List b) (h (List c)) (list_traverse h aph b c t2)) (Cons b) (t1 hd)
+
+fn ltc_step8 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) (hd : a) :
+  Equal (g (List b -> h (List c))) (ltc_target_fused g h apg aph a b c t1 t2 hd) (ltc_map_compose_u_raw g h apg aph a b c t1 t2 hd) =
+  Refl
+
+fn ltc_step9 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) (hd : a) :
+  Equal (g (List b -> h (List c))) (ltc_target_fused g h apg aph a b c t1 t2 hd) (ltc_map_compose_u g h apg aph a b c t1 t2 hd) =
+  trans (g (List b -> h (List c)))
+    (ltc_target_fused g h apg aph a b c t1 t2 hd)
+    (ltc_map_compose_u_raw g h apg aph a b c t1 t2 hd)
+    (ltc_map_compose_u g h apg aph a b c t1 t2 hd)
+    (ltc_step8 g h apg aph a b c t1 t2 hd)
+    (ltc_step7 g h apg aph a b c t1 t2 hd)
+
+fn ltc_ap_over_v (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) (u : List a) (f : g (List b -> h (List c))) : Compose g h (List c) =
+  apg.ap (List b) (h (List c)) f (list_traverse g apg a b t1 u)
+
+fn ltc_step10 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) (hd : a) (u : List a) :
+  Equal (Compose g h (List c))
+    (ltc_ap_over_v g h apg aph a b c t1 t2 u (ltc_target_fused g h apg aph a b c t1 t2 hd))
+    (ltc_ap_over_v g h apg aph a b c t1 t2 u (ltc_map_compose_u g h apg aph a b c t1 t2 hd)) =
+  cong (g (List b -> h (List c))) (Compose g h (List c))
+    (ltc_target_fused g h apg aph a b c t1 t2 hd)
+    (ltc_map_compose_u g h apg aph a b c t1 t2 hd)
+    (λf. apg.ap (List b) (h (List c)) f (list_traverse g apg a b t1 u))
+    (ltc_step9 g h apg aph a b c t1 t2 hd)
+
+fn ltc_step11 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) (hd : a) (u : List a) :
+  Equal (Compose g h (List c))
+    (ltc_ap_over_v g h apg aph a b c t1 t2 u (ltc_map_compose_u g h apg aph a b c t1 t2 hd))
+    (list_traverse_composed_rhs g h apg aph a b c t1 t2 (Cons a hd u)) =
+  ap_naturality g apg (List b) (List b) (h (List c)) (list_traverse h aph b c t2) (ltc_compose_u g h apg aph a b c t1 t2 hd) (list_traverse g apg a b t1 u)
+
+fn list_traverse_composition_cons (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) (hd : a) (u : List a) (ih : Equal (Compose g h (List c)) (list_traverse_composed g h apg aph a b c t1 t2 u) (list_traverse_composed_rhs g h apg aph a b c t1 t2 u)) :
+  Equal (Compose g h (List c))
+    (list_traverse_composed g h apg aph a b c t1 t2 (Cons a hd u))
+    (list_traverse_composed_rhs g h apg aph a b c t1 t2 (Cons a hd u)) =
+  trans (Compose g h (List c))
+    (list_traverse_composed g h apg aph a b c t1 t2 (Cons a hd u))
+    (ltc_cons_raw0 g h apg aph a b c t1 t2 hd u)
+    (list_traverse_composed_rhs g h apg aph a b c t1 t2 (Cons a hd u))
+    (ltc_cons_step0 g h apg aph a b c t1 t2 hd u)
+    (trans (Compose g h (List c))
+      (ltc_cons_raw0 g h apg aph a b c t1 t2 hd u)
+      (ltc_cons_raw g h apg aph a b c t1 t2 hd u)
+      (list_traverse_composed_rhs g h apg aph a b c t1 t2 (Cons a hd u))
+      (ltc_cons_step0b g h apg aph a b c t1 t2 hd u)
+      (trans (Compose g h (List c))
+        (ltc_cons_raw g h apg aph a b c t1 t2 hd u)
+      (apg.ap (h (List c)) (h (List c)) (ltc_xprime_fused g h apg aph a b c t1 t2 hd) (list_traverse_composed g h apg aph a b c t1 t2 u))
+      (list_traverse_composed_rhs g h apg aph a b c t1 t2 (Cons a hd u))
+      (ltc_cons_step1 g h apg aph a b c t1 t2 hd u)
+      (trans (Compose g h (List c))
+        (apg.ap (h (List c)) (h (List c)) (ltc_xprime_fused g h apg aph a b c t1 t2 hd) (list_traverse_composed g h apg aph a b c t1 t2 u))
+        (apg.ap (h (List c)) (h (List c)) (ltc_xprime_fused g h apg aph a b c t1 t2 hd) (list_traverse_composed_rhs g h apg aph a b c t1 t2 u))
+        (list_traverse_composed_rhs g h apg aph a b c t1 t2 (Cons a hd u))
+        (ltc_cons_step2 g h apg aph a b c t1 t2 hd u ih)
+        (trans (Compose g h (List c))
+          (apg.ap (h (List c)) (h (List c)) (ltc_xprime_fused g h apg aph a b c t1 t2 hd) (list_traverse_composed_rhs g h apg aph a b c t1 t2 u))
+          (apg.ap (List b) (h (List c)) (nat2_rhs_inner g apg (List b) (h (List c)) (h (List c)) (list_traverse h aph b c t2) (ltc_xprime_fused g h apg aph a b c t1 t2 hd)) (list_traverse g apg a b t1 u))
+          (list_traverse_composed_rhs g h apg aph a b c t1 t2 (Cons a hd u))
+          (ltc_step3 g h apg aph a b c t1 t2 hd u)
+          (trans (Compose g h (List c))
+            (apg.ap (List b) (h (List c)) (nat2_rhs_inner g apg (List b) (h (List c)) (h (List c)) (list_traverse h aph b c t2) (ltc_xprime_fused g h apg aph a b c t1 t2 hd)) (list_traverse g apg a b t1 u))
+            (apg.ap (List b) (h (List c)) (ltc_nat2_fused g h apg aph a b c t1 t2 hd) (list_traverse g apg a b t1 u))
+            (list_traverse_composed_rhs g h apg aph a b c t1 t2 (Cons a hd u))
+            (cong (g (List b -> h (List c))) (Compose g h (List c))
+              (nat2_rhs_inner g apg (List b) (h (List c)) (h (List c)) (list_traverse h aph b c t2) (ltc_xprime_fused g h apg aph a b c t1 t2 hd))
+              (ltc_nat2_fused g h apg aph a b c t1 t2 hd)
+              (λf. apg.ap (List b) (h (List c)) f (list_traverse g apg a b t1 u))
+              (ltc_step4 g h apg aph a b c t1 t2 hd))
+            (trans (Compose g h (List c))
+              (apg.ap (List b) (h (List c)) (ltc_nat2_fused g h apg aph a b c t1 t2 hd) (list_traverse g apg a b t1 u))
+              (apg.ap (List b) (h (List c)) (ltc_target_fused g h apg aph a b c t1 t2 hd) (list_traverse g apg a b t1 u))
+              (list_traverse_composed_rhs g h apg aph a b c t1 t2 (Cons a hd u))
+              (cong (g (List b -> h (List c))) (Compose g h (List c))
+                (ltc_nat2_fused g h apg aph a b c t1 t2 hd)
+                (ltc_target_fused g h apg aph a b c t1 t2 hd)
+                (λf. apg.ap (List b) (h (List c)) f (list_traverse g apg a b t1 u))
+                (sym (g (List b -> h (List c))) (ltc_nat2_fused g h apg aph a b c t1 t2 hd) (ltc_target_fused g h apg aph a b c t1 t2 hd) (ltc_step5 g h apg aph a b c t1 t2 hd)))
+              (trans (Compose g h (List c))
+                (apg.ap (List b) (h (List c)) (ltc_target_fused g h apg aph a b c t1 t2 hd) (list_traverse g apg a b t1 u))
+                (apg.ap (List b) (h (List c)) (ltc_map_compose_u g h apg aph a b c t1 t2 hd) (list_traverse g apg a b t1 u))
+                (list_traverse_composed_rhs g h apg aph a b c t1 t2 (Cons a hd u))
+                (ltc_step10 g h apg aph a b c t1 t2 hd u)
+                (ltc_step11 g h apg aph a b c t1 t2 hd u))))))))
+
+fn list_traverse_composition (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) (xs : List a) :
+  Equal (Compose g h (List c))
+    (list_traverse_composed g h apg aph a b c t1 t2 xs)
+    (list_traverse_composed_rhs g h apg aph a b c t1 t2 xs) =
+  match xs {
+    Nil ⇒ list_traverse_composition_nil g h apg aph a b c t1 t2 ;
+    Cons hd u ⇒ list_traverse_composition_cons g h apg aph a b c t1 t2 hd u (list_traverse_composition g h apg aph a b c t1 t2 u)
+  }
+```
+
 ### 9.8 Findings
 
 - **AC6 confirmed, with a landed-mechanism correction along the way.**
@@ -2570,6 +2855,27 @@ fn option_traverse_composition (g : Type -> Type) (h : Type -> Type) (apg : Appl
   at ~40-60 lemmas, not the ~12-15 initially estimated). Both are
   judgment calls for the operator's log, not unilateral scope changes —
   flagged to the ring at each step before acting.
+- **DS-8c closed both deferred pieces.** `Compose g h`'s `ap_cmp` (`§9.6`)
+  and the traverse composition law (`§9.7`) are proved, zero-Axiom,
+  zero-`trusted_base()`-delta. The final reconciliation step of `ap_cmp`
+  needed a SECOND general lemma beyond the original 4-stage plan —
+  `ap_naturality2`, the arg-2 naturality twin of `ap_naturality` — per a
+  live Architect consult on the reconciliation-shape fork (a `map` on the
+  ap ARGUMENT, not the ap FUNCTION, needs a distinct derivation:
+  `map_coh` → `ap_cmp` → `ap_ich` → `map_coh` → `fusion_law`, mirroring
+  `ap_naturality`'s own technique). Both `ap_naturality`/`ap_naturality2`
+  are now first-class reusable lemmas, not bespoke reroutes.
+- **Abstract dictionaries never collapse for free — the recurring build
+  trap on this WP.** `apg`/`aph` are opaque `Applicative` parameters, so
+  `map(f)(pure x)`, `ap(pure f)(x)`, and `map(f)(map(g)(x))` NEVER
+  simplify by mere unfolding — every such step needs an explicit
+  `map_coh`/`ap_hom`/`fusion_law` proof, even where the surrounding
+  computation (`list_traverse`/`option_traverse`'s own recursion on a
+  concrete `List`/`Option` scrutinee) genuinely IS free. Conflating the
+  two costs a real debugging cycle (a `Refl`-closed lemma the kernel
+  correctly rejected) before the fix: track exactly which layer of a
+  derivation is abstract-law-gated vs. concrete-and-free before reaching
+  for `Refl`.
 
 ### 9.9 References
 
