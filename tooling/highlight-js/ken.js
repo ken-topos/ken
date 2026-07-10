@@ -161,7 +161,12 @@ vs. free -- all of that requires the real elaborator.
 
     return {
       name: 'Ken',
-      aliases: ['ken'],
+      // `ken` plus Ken's literate `.ken.md` fence-role tags. A Markdown
+      // renderer that passes the *whole* fence info string to highlight.js
+      // (e.g. marked with a custom renderer) sees `ken example`, not `ken`,
+      // and highlight.js resolves a block by exact registered name/alias --
+      // so the role-suffixed tags must be aliases to highlight as Ken.
+      aliases: ['ken', 'ken example', 'ken reject', 'ken ignore'],
       case_insensitive: false,
       keywords: KEYWORDS,
       contains: [
