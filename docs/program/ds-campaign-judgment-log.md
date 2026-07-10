@@ -211,16 +211,27 @@ bar.
   additive `data` + combinators, not a rework). The DS-3 combinator build (lane a)
   is independent and proceeds regardless.
 
-### L5 · ⚠ PROMINENT (trust-root prelude type) — coproduct family: add `Either`, rename effect `Sum`→`Coproduct` [OPERATOR-RULED]
-- **Call (COEXIST by role — three distinct coproducts, corrected from the first
-  cut):** (1) **ADD `Either a b = Left a | Right b`** as the user-facing value
-  disjunction; (2) **RENAME the internal effect coproduct `Sum`→`Coproduct`**
-  (type name only, **keep `InL`/`InR`** — so `eval.rs`'s peel logic is untouched);
-  (3) **RESERVE the freed `Sum`** for a future `Data.Functor.Sum` (higher-kinded
-  functor coproduct, sibling to DS-8's `Compose`). `Result e a = Err e | Ok a`
-  stays a distinct named error type. Framed `wp/either-neutral-coproduct.md`,
-  **KICKED to Runtime** (bundled to avoid a `prelude.rs` clash), Architect-gated
-  + Spec-vote, CI-gated.
+### L5 · ⚠ PROMINENT — coproduct family: `Either` (catalog package), rename effect `Sum`→`Coproduct` [OPERATOR-RULED]
+- **Call (COEXIST by role — three distinct coproducts; SPLIT into two WPs after
+  the placement ruling):** (1) **`Either a b = Left a | Right b`** — the
+  user-facing value disjunction, defined as a **user-level CATALOG PACKAGE, NOT
+  the prelude** (operator arm 3, below) → **Foundation** WP
+  `wp/either-catalog-package.md`; (2) **RENAME the internal effect coproduct
+  `Sum`→`Coproduct`** (type name only, **keep `InL`/`InR`** — `eval.rs` peel
+  untouched) → **Runtime** WP `wp/either-neutral-coproduct.md`, which reworks to
+  **rename-only** (drop the prelude `Either` decl + the `34-data-match` Either
+  reconcile — those move to the Foundation WP); (3) **RESERVE the freed `Sum`** for
+  a future `Data.Functor.Sum`. `Result` stays a distinct named error type. Both
+  WPs Architect-gated + Spec-vote, CI-gated.
+- **Placement (operator, arm 3):** Pat asked whether `Either` needs to be built
+  in; I answered no (ordinary non-dependent sum; nothing depends on it) AND that
+  the spec's OWN model (`50-stdlib/README.md:42`) says core data are **packages,
+  not prelude** — the impl puts Option/Result in the prelude only as a bootstrap
+  shortcut (a spec-vs-impl gap). Runtime's first build had added `Either` to the
+  prelude (following the shortcut); I **held that merge** (`ee168a3`) pending this
+  ruling. Pat: **(B) user-level `Either` as a catalog package.** So `Either` is the
+  first core sum done per the stated model; the prelude→packages migration of its
+  siblings is a **named future** (see below).
 - **Decider:** **the operator (Pat), directly** — two-step. First: Pat asked if
   `Either` differs semantically from `Result`; I answered yes (Rust/F#/Elm keep a
   named `Result` distinct from a neutral `Either`/`Choice`) → *"Reopen, prefer
@@ -249,10 +260,14 @@ bar.
 - **Reversibility:** **moderate-class** (a trust-root prelude declared-type
   add+rename, pure/semantics-preserving, zero kernel-crate delta, revert-clean) —
   PROMINENT for operator review. Not soundness-adjacent.
-- **Downstream (named follow-ons, NOT this WP):** DS-3 (Option/Result combinators,
-  in flight) unaffected; **`Either` value combinators** (`either`/`mapLeft`/
-  `mapRight`) → Foundation, DS-3-adjacent; **`Data.Functor.Sum f g`** → a
-  functor-combinator WP alongside `Compose` when the catalog grows that family.
+- **Downstream (named follow-ons, NOT the two L5 WPs):** DS-3 (Option/Result
+  combinators, in flight) unaffected; `Either` type + combinators are the
+  Foundation catalog WP itself (`wp/either-catalog-package.md`). **Core-data →
+  packages migration:** `Option`/`Result`/`Nat`/`List`/`Prod`/`Unit` are
+  prelude-declared but the spec models them as packages — a standing spec-vs-impl
+  gap; aligning them is a **separate architectural WP** (operator sets direction);
+  `Either`-as-package is the first correct precedent. **`Data.Functor.Sum f g`** →
+  a functor-combinator WP alongside `Compose`, owning the freed `Sum` name.
 
 ### P1 · Sequence: DS-2 → DS-7 → DS-8 → (Data) DS-3 → DS-4 → DS-6; DS-5 spec-track in parallel
 - **Call:** Drive DS-2 (`Ord Nat` export) first, then the remaining Core toolkit
