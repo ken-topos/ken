@@ -1,47 +1,129 @@
--- `Map`/`Set` -- a proved, pure ordered BST (spec/50-stdlib/52-map.md,
--- VAL2 #8 / OQ-A). Retires the opaque `declare_primitive` `Map`/`Set`
--- (`ken-elaborator/src/prelude.rs`) -- the carrier is a transparent
--- inductive, every op is a `declare_def` (kernel-rechecked, `52 §1.1`).
---
--- Carrier: bare unbalanced ordered BST, no balance metadata (`52 §3`).
--- `k × v` is spelled `Pair k v` here -- the SIGMA pair (`13 §3`, `52 §4`:
--- "distinct from the inductive `Prod`"), never `Prod`. The concrete `×`
--- infix token is `(oracle)` per `52 §4`'s own hedge ("any still-open
--- surface-syntax token is tagged `(oracle)`") -- the MECHANISM is landed
--- (`Pair`/`mk_pair`/`pair_fst`/`pair_snd`, `ken-elaborator/src/prelude.rs`,
--- built the same way `And A B := Sigma(_:A).B` already is), only the infix
--- spelling is open.
---
--- Key-comparator threading (`52 §2`, `§5.4` "parametric in `Ord k`"):
--- Architect-ruled UNBUNDLED explicit-dictionary encoding
--- (`evt_38nvzzdwb8ewn`) -- `where Ord k` and a bundled `(d : Ord k)` record
--- parameter both hit landed elaborator gaps (`instance_search` needs a
--- concrete head; `(d).field` doesn't parse in TYPE position). The bundled
--- `Ord` class/`where` spelling is `(oracle)`-tagged pending a Language
--- surface-syntax follow-on; the SUBSTANCE here is real and `k`-parametric --
--- every op/law below takes the comparator (`leq`) and, where needed, its
--- laws (`reflLeq`/`antisymLeq`/`transLeq`/`totalLeq`) as SEPARATE bare
--- parameters, matching the landed `conformance/challenge/C5-verified-sort/
--- sound-verified-sort.ken` idiom (bare `leq : a -> a -> Bool` threaded over
--- an abstract carrier). At a concrete call site the caller supplies these by
--- projecting a landed `Ord` instance in TERM position (e.g.
--- `(Ord_instance_Char).leq`), the same monomorphic-transport idiom already
--- in `catalog/packages/Core/LawfulClasses.ken` -- ordinary projection,
--- not `where`-resolution.
+# `Map`/`Set` — a proved, pure ordered binary search tree
 
+A proved, pure ordered BST realizing `Map`/`Set` (`spec/50-stdlib/52-map.md`,
+VAL2 finding #8 / open question OQ-A), plus a Layer-2 suite of keyed-collection
+operations (delete, combining insert, union/intersection/difference, set
+algebra, keys/values projections, and a small binary-relations library) built
+on top of it.
+
+## Index
+
+1. [Motivation](#1-motivation)
+2. [Definition](#2-definition)
+3. [Using it](#3-using-it)
+4. [Laws & proofs](#4-laws--proofs)
+5. [Design notes](#5-design-notes)
+6. [Findings](#6-findings)
+7. [References](#7-references)
+8. [Trust & derivation](#8-trust--derivation)
+
+**Named reading paths**
+
+- *Newcomer* → [Motivation](#1-motivation) → [Using it](#3-using-it)
+- *Practitioner* → [Using it](#3-using-it) →
+  [Laws & proofs](#4-laws--proofs) §4.7 (Layer-2 operations)
+- *Researcher* → [Laws & proofs](#4-laws--proofs) §4.1–§4.6 (the capstone) →
+  [Design notes](#5-design-notes)
+
+## 1. Motivation
+
+This package (⇔ `import Data.Collections.Map`, `07-catalog-style-guide.md
+§13`) shares its `Data/Collections` Domain directory with
+`catalog/packages/Data/Collections/Collections.ken.md` (⇔ `import
+Data.Collections.Collections`) — the two were already separate files,
+genuinely separable (`catalog-taxonomy-paths-imports` WP), and this
+package depends on that one's `list_append` ([§2](#2-definition)).
+
+This package retires the opaque `declare_primitive` `Map`/`Set`
+(`ken-elaborator/src/prelude.rs`) — the carrier is now a transparent
+inductive, and every operation is a `declare_def`, kernel-rechecked end to
+end (`52 §1.1`).
+
+The carrier is a bare unbalanced ordered BST — no balance metadata (`52
+§3`). The key-value pair type is spelled `Pair k v`: the SIGMA pair (`13
+§3`, `52 §4`, "distinct from the inductive `Prod`"), never `Prod`. The
+concrete infix `×` token for `Pair` is left `(oracle)` per `52 §4`'s own
+hedge that any still-open surface-syntax token is tagged that way — the
+mechanism (`Pair`/`mk_pair`/`pair_fst`/`pair_snd`,
+`ken-elaborator/src/prelude.rs`) is landed, built the same way the derived
+`And A B := Sigma(_:A).B` already is; only the infix spelling remains open.
+
+Key-comparator threading (`52 §2`, `§5.4`, "parametric in `Ord k`") follows
+an Architect-ruled unbundled explicit-dictionary encoding
+(`evt_38nvzzdwb8ewn`): both `where Ord k` and a bundled `(d : Ord k)`
+record parameter hit landed elaborator gaps (`instance_search` needs a
+concrete head; `(d).field` doesn't parse in type position). The bundled
+`Ord` class/`where` spelling stays `(oracle)`-tagged pending a Language
+surface-syntax follow-on, but the substance is real and `k`-parametric:
+every operation and law below takes the comparator (`leq`) and, where
+needed, its laws (`reflLeq`/`antisymLeq`/`transLeq`/`totalLeq`) as separate
+bare parameters, matching the landed
+`conformance/challenge/C5-verified-sort/sound-verified-sort.ken` idiom (a
+bare `leq : a -> a -> Bool` threaded over an abstract carrier). At a
+concrete call site the caller supplies these by projecting a landed `Ord`
+instance in term position (e.g. `(Ord_instance_Char).leq`) — the same
+monomorphic-transport idiom `catalog/packages/Core/LawfulClasses.ken.md`
+already uses, ordinary projection, not `where`-resolution.
+
+## 2. Definition
+
+`Tree k v` is the raw two-parameter carrier: `Leaf`, or a `Node` of a left
+subtree, a key, a value, and a right subtree. `empty` is `Leaf` (`52
+§4.1`). `to_list` is the in-order traversal (`52 §4.2`): `Leaf` yields
+`Nil`, and a `Node` appends its left subtree's traversal, its own entry,
+then its right subtree's traversal, reusing the landed `list_append`
+(`catalog/packages/Data/Collections/Collections.ken.md`) — over an
+`Ordered` tree (below) the output keys are ascending (`52 §5.3`), though
+that direction of the claim needs `insert`'s own preservation, proved in
+[§4.3](#4-laws--proofs). `fold f z m` folds `f` over the entries in
+ascending key order (`52 §4.3`) — the same order `to_list` fixes, so
+`fold` agrees with a left fold of `f` over `to_list m` by construction,
+not by coincidence of a particular recursion.
+
+`insert key val m` (`52 §4.1`) descends by `leq`: at `Node l k2 v2 r`, if
+`leq key k2` and `leq k2 key` both hold the keys coincide and the node's
+value is overwritten; otherwise the search recurses left (`leq key k2`,
+key below `k2`) or right (key above `k2`); at `Leaf` a new singleton
+`Node` is placed. `lookup key m` (`52 §4.1`) retraces `insert`'s exact
+same `leq` decisions, returning `Some v` at the coinciding node and `None`
+at `Leaf`. `member key m` is `option_is_some (lookup key m)`.
+
+`from_list` folds `insert` over a list (`52 §4.2`): `from_list = foldr (\
+(k,v) m. insert k v m) empty`, threaded via an accumulator (`from_list_acc`)
+so earlier list entries are inserted first and later entries insert last —
+and so overwrite on a duplicate key, matching `52 §4.2`'s last-writer-wins
+semantics (`from_list [(2,b),(1,a),(2,c)]` → `to_list = [(1,a),(2,c)]`, `c`
+being the last list entry, wins). A naive `insert head (from_list tail)`
+would insert the head last instead (the wrong direction); `from_list_acc`
+avoids that by inserting `p` into `acc` before recursing on the tail, so the
+tail's own inserts land strictly after `p`'s in evaluation order.
+
+`Set a := Map a Unit` (`52 §4.4`): values carry no information, so
+`set_insert`/`set_member` are just the map's own `insert`/`member` at `v :=
+Unit`, and `set_to_list` projects the keys out of `to_list`'s `Pair a Unit`
+entries via `pair_keys`.
+
+`Ordered` is the BST ordering invariant (`52 §5.1`), naturally `Ω`-valued:
+built from the `IsTrue b := Equal Bool b True` bridge plus the derived
+`Ω`-conjunction `And` (`16 §1.3`) — a `declare_def` the prover unfolds,
+never a postulate, mirroring `is_sorted`'s shape
+(`ken-elaborator/src/prelude.rs`, lifted from lists to trees). `all_keys p
+m` says "every key in `m` satisfies `p`"; `Ordered leq m` says every key in
+a `Node`'s left subtree is below its own key, every key in its right
+subtree is above it, and both subtrees are themselves `Ordered`,
+recursively.
+
+Two Branch-A laws close the Definition: `ordered_empty` (`Ordered empty`,
+`52 §5.1`) unfolds to `Equal Bool True True`, which K7-collapses to `Top`
+and closes with `tt` — the same non-inductive shape as
+`lookup_empty_is_none` (`lookup key empty = None`, `52 §5.2` law 1), also
+immediate since `empty = Leaf`. Neither needs induction or a comparison.
+
+```ken
 data Tree k v = Leaf | Node (Tree k v) k v (Tree k v)
 
--- `empty = Leaf` (`52 §4.1`).
 const empty (k : Type) (v : Type) : Tree k v = Leaf k v
 
--- `to_list` -- the in-order traversal (`52 §4.2`): `to_list Leaf = Nil`,
--- `to_list (Node l k v r) = append (to_list l) (Cons (k,v) (to_list r))`,
--- reusing the landed `list_append` (`catalog/packages/Data/Collections/Collections.ken`).
--- Over an `Ordered` tree the output keys are ascending (`52 §5.3`) -- the
--- `Ordered`-preservation half of that claim needs `insert`, deferred above;
--- `to_list` itself is a plain flat two-sided structural recursion (the same
--- shape kernel's `sct-completeness` control tests confirmed already passes
--- SCT today).
 fn to_list (k : Type) (v : Type) (m : Tree k v) : List (Pair k v) =
   match m {
     Leaf ⇒ Nil (Pair k v) ;
@@ -49,21 +131,12 @@ fn to_list (k : Type) (v : Type) (m : Tree k v) : List (Pair k v) =
       list_append (Pair k v) (to_list k v l) (Cons (Pair k v) (mk_pair k v key val) (to_list k v r))
   }
 
--- `fold f z m` folds `f` over the entries in ascending key order (`52 §4.3`)
--- -- the same order `to_list` fixes: left subtree first, then the current
--- node, then the right subtree, so `fold f z m` agrees with the left fold of
--- `f` over `to_list m` by construction (not merely by coincidence of a
--- particular recursion, per `52 §4.3`'s order-contract framing).
 fn fold (k : Type) (v : Type) (b : Type) (f : k → v → b → b) (z : b) (m : Tree k v) : b =
   match m {
     Leaf ⇒ z ;
     Node l key val r ⇒ fold k v b f (f key val (fold k v b f z l)) r
   }
 
--- `insert key val m` (`52 §4.1`) -- descends by `leq`: at `Node l k2 v2 r`,
--- if `leq key k2 /\ leq k2 key` the keys coincide -> overwrite the value at
--- that node; else recurse left (`leq key k2`, key < k2) or right (key > k2);
--- at `Leaf`, place a new `Node`.
 fn insert (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (val : v) (m : Tree k v) : Tree k v =
   match m {
     Leaf ⇒ Node k v (Leaf k v) key val (Leaf k v) ;
@@ -78,8 +151,6 @@ fn insert (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (val : v) (m 
       }
   }
 
--- `lookup key m` (`52 §4.1`) -- retraces `insert`'s SAME `leq` decisions;
--- returns `Some v` at the coinciding node, `None` at `Leaf`.
 fn lookup (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (m : Tree k v) : Option v =
   match m {
     Leaf ⇒ None v ;
@@ -94,7 +165,6 @@ fn lookup (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (m : Tree k v
       }
   }
 
--- `member key m = is_some (lookup key m)` (`52 §4.1`).
 fn member (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (m : Tree k v) : Bool =
   match lookup k v leq key m {
     None    ⇒ False ;
@@ -104,15 +174,6 @@ fn member (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (m : Tree k v
 fn option_is_some (v : Type) (o : Option v) : Bool =
   match o { None ⇒ False ; Some x ⇒ True }
 
--- `from_list` folds `insert` over the list (`52 §4.2`): `from_list = foldr (\
--- (k,v) m. insert k v m) empty`. Threaded via an accumulator so EARLIER list
--- entries are inserted FIRST and LATER entries insert last (and so overwrite
--- on a duplicate key) -- matching `52 §4.2`'s last-writer-wins semantics
--- (`from_list [(2,b),(1,a),(2,c)] -> to_list = [(1,a),(2,c)]`, `c` the LAST
--- list entry, wins). A naive `insert head (from_list tail)` would insert the
--- HEAD last instead (wrong direction) -- `from_list_acc` avoids that by
--- inserting `p` into `acc` BEFORE recursing on the tail, so the tail's own
--- inserts land strictly after `p`'s in evaluation order.
 fn from_list_acc (k : Type) (v : Type) (leq : k → k → Bool) (xs : List (Pair k v)) (acc : Tree k v) : Tree k v =
   match xs {
     Nil ⇒ acc ;
@@ -122,9 +183,6 @@ fn from_list_acc (k : Type) (v : Type) (leq : k → k → Bool) (xs : List (Pair
 fn from_list (k : Type) (v : Type) (leq : k → k → Bool) (xs : List (Pair k v)) : Tree k v =
   from_list_acc k v leq xs (Leaf k v)
 
--- `Set a := Map a Unit` (`52 §4.4`) -- values carry no information;
--- `set_insert`/`set_member` are the map's own `insert`/`member` at `v:=Unit`,
--- `set_to_list` projects the keys out of `to_list`'s `Pair a Unit` entries.
 fn pair_keys (k : Type) (v : Type) (xs : List (Pair k v)) : List k =
   match xs {
     Nil ⇒ Nil k ;
@@ -140,11 +198,6 @@ fn set_member (a : Type) (leq : a → a → Bool) (x : a) (s : Tree a Unit) : Bo
 fn set_to_list (a : Type) (s : Tree a Unit) : List a =
   pair_keys a Unit (to_list a Unit s)
 
--- `Ordered` -- the ordering invariant (`52 §5.1`), naturally `Ω`: built from
--- the `IsTrue b := Equal Bool b True` bridge + the derived `Ω`-conjunction
--- `And` (`16 §1.3`) -- a `declare_def` the prover unfolds, never a postulate
--- (mirrors `is_sorted`'s shape, `ken-elaborator/src/prelude.rs`, lifted from
--- lists to trees). `all_keys p m` = "every key in `m` satisfies `p`".
 fn all_keys (k : Type) (v : Type) (p : k → Prop) (m : Tree k v) : Prop =
   match m {
     Leaf ⇒ Equal Bool True True ;
@@ -160,62 +213,87 @@ fn Ordered (k : Type) (v : Type) (leq : k → k → Bool) (m : Tree k v) : Prop 
       (And (Ordered k v leq l) (Ordered k v leq r)))
   }
 
--- `52 §5.1` -- `Ordered empty`, immediate: `Ordered Leaf` unfolds to `Equal
--- Bool True True`, which K7-collapses to `Top`, closed by `tt` (the same
--- non-inductive Branch-A shape as `lookup_empty_is_none`, no induction/comparison
--- -- one of the two shipped Branch-A law proofs, `52 §5`/`§7`/`§9` AC3).
 fn ordered_empty (k : Type) (v : Type) (leq : k → k → Bool) :
   Ordered k v leq (empty k v) = tt
 
--- `52 §5.2` law 1 -- `lookup k empty = None`, immediate (`empty = Leaf`).
 fn lookup_empty_is_none (k : Type) (v : Type) (leq : k → k → Bool) (key : k) :
   Equal (Option v) (lookup k v leq key (empty k v)) (None v) = tt
+```
 
--- ─────────────────────────────────────────────────────────────────────────
--- `map-verified-laws` (Map-arc CAPSTONE, `spec/50-stdlib/54-map-verified-
--- laws.md`) -- the 5 deferred inductive laws, built on the two now-landed
--- enabling capabilities: Gap A (`catalog/packages/Core/Transport.ken`, the `J`
--- former) and Gap B (the non-indexed dependent-match gate,
--- `elab.rs::check_match_dependent`). Zero `trusted_base` delta throughout --
--- every proof reduces through the existing `Term::J`/`Term::Cast`/
--- `Term::Elim`; no `Axiom` appears anywhere below (a law that cannot be
--- honestly built is re-deferred to Steward, never postulated, `52 §7d`).
---
--- Induction idiom (`54 §2.1`, confirmed against the landed elaborator by a
--- throwaway probe before this file was built): Ken's dependent match wraps
--- each recursive-field method in a kernel-required IH-slot Pi layer, but
--- that layer is a DEAD, surface-unreferenceable binder
--- (`dependent-match-nonnullary.md` SS"IHs are DEAD binders" -- confirmed
--- empirically, not merely read off the doc). The IH is instead obtained the
--- SAME way `to_list`/`insert`/`lookup` already recurse: an ORDINARY
--- self-recursive call on the subtree (`preservation ... l`, SCT-checked
--- structural descent), whose RESULT is the actual induction hypothesis,
--- consumed directly by name -- not a synthesized `ih_l`/`ih_r` binder.
+## 3. Using it
 
--- `Or` / `Inl` / `Inr` -- `ken-elaborator/src/prelude.rs`, a Rust-registered
--- kernel `declare_inductive` (the surface `data` sugar hardcodes every
--- parameter to `Type 0`, so `Or`'s two `Ω`-sorted parameters need the same
--- "kernel API directly, one level below the surface convenience wrapper"
--- technique this file's own `Pair`/`and_intro` already used, mirroring the
--- existing `Perm_rel` precedent) -- flagged transparently, zero
--- `trusted_base` delta (an ordinary kernel-rechecked inductive admission).
+The package builds up in three layers, each riding the one before. The
+[Definition](#2-definition) layer above gives the raw carrier and its four
+basic operations (`insert`/`lookup`/`member`/`from_list`) plus the `Ordered`
+invariant a caller can carry alongside a tree to certify it is well-formed.
+The [Laws & proofs](#4-laws--proofs) capstone (§4.1–§4.6) proves the five
+laws `52-map-verified-laws.md` (`54`) states for that invariant and for
+`insert`/`lookup`: `Ordered` is preserved by `insert`; a just-inserted key is
+found by `lookup`; `insert` at a distinct key does not disturb `lookup` at
+any other key; an `Ordered` tree's `to_list` is sorted by the same
+comparator; and, given no two entries share an order-equivalent key,
+`lookup` agrees with the ordered-list lookup `assoc` over `to_list`. A
+caller who threads `leq` together with its transitivity/totality/reflexivity
+witnesses gets all five for free at any concrete instantiation — no
+per-application re-proof.
 
--- `bool_dichotomy b` (`54 §2.2`/`§3`) -- reflects a stuck `Bool` VARIABLE
--- into its two equation-carrying cases. The Gap-B gate needs a bare
--- variable scrutinee (`match b {...}`, not `match (leq k k') {...}`) --
--- this is the reusable combinator every stuck `leq k k'` comparison below
--- reflects THROUGH first (`bool_dichotomy (leq k k')`, a non-dependent match
--- on the resulting `Or`, landed `infer_match` path).
+Layer 2 (§4.7) is where most callers actually meet this package day to day:
+`delete`, a combining `insert_with`, the three lookup-table combinators
+`union`/`intersection`/`difference`, their `Set`-level wrappers with the
+expected membership and algebraic laws (commutativity, associativity,
+idempotence, identity for union/intersection), `keys`/`values` projections,
+and a small binary-relations library (`succ`/`compose`/`converse`/
+`is_equivalence`, …) built on `Tree k (Tree k Unit)` as an adjacency-map
+representation. Every Layer-2 operation is proved against the same
+`Ordered`/`lookup` contract the capstone establishes, so a caller reasoning
+about a `union` or a `delete` gets to reuse the capstone's vocabulary
+directly rather than re-deriving it.
+
+## 4. Laws & proofs
+
+The `map-verified-laws` capstone (`spec/50-stdlib/54-map-verified-laws.md`)
+proves the five laws deferred when the raw carrier and basic operations
+first landed, built on two enabling capabilities that landed separately:
+Gap A (`catalog/packages/Core/Transport.ken.md`, the `J` former) and Gap B
+(the non-indexed dependent-match gate, `elab.rs::check_match_dependent`).
+Zero `trusted_base()` delta throughout — every proof reduces through the
+existing `Term::J`/`Term::Cast`/`Term::Elim`; no `Axiom` appears anywhere
+below (a law that cannot be honestly built is re-deferred to Steward, never
+postulated, `52 §7d`).
+
+### 4.1 Capstone preliminaries
+
+`Or`/`Inl`/`Inr` is a Rust-registered kernel `declare_inductive`
+(`ken-elaborator/src/prelude.rs`) rather than surface `data` sugar: the
+surface `data` sugar hardcodes every parameter to `Type 0`, so `Or`'s two
+`Ω`-sorted parameters need the same "kernel API directly, one level below
+the surface convenience wrapper" technique this file's own `Pair`/
+`and_intro` already used, mirroring the existing `Perm_rel` precedent —
+flagged transparently, zero `trusted_base` delta (an ordinary
+kernel-rechecked inductive admission).
+
+`bool_dichotomy b` reflects a stuck `Bool` variable into its two
+equation-carrying cases. The Gap-B gate needs a bare variable scrutinee
+(`match b {...}`, not `match (leq k k') {...}`) — this is the reusable
+combinator every stuck `leq k k'` comparison below reflects through first
+(`bool_dichotomy (leq k k')`, a non-dependent match on the resulting `Or`,
+landed `infer_match` path).
+
+`assoc leq key xs` (law 5) is the ordered-list lookup: a plain structural
+`List` recursion (Gap-B-free, no dependent motive), scanning entries by
+`leq key (pair_fst entry) ∧ leq (pair_fst entry) key` — the same
+coincidence test `lookup`/`insert` use.
+
+`all_in_list p xs` (laws 4/5) is the list analogue of `all_keys`: "every
+entry's key satisfies `p`", mirrored structurally over `List (Pair k v)`.
+
+```ken
 fn bool_dichotomy (b : Bool) : Or (Equal Bool b True) (Equal Bool b False) =
   match b {
     True  ⇒ Inl (Equal Bool True True) (Equal Bool True False) tt ;
     False ⇒ Inr (Equal Bool False True) (Equal Bool False False) tt
   }
 
--- `assoc leq key xs` (`54 §3`, law 5) -- the ordered-list lookup: a plain
--- structural `List` recursion (Gap-B-free, no dependent motive), scanning
--- entries by `leq key (pair_fst entry) /\ leq (pair_fst entry) key` the same
--- coincidence test `lookup`/`insert` use.
 fn assoc (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (xs : List (Pair k v)) : Option v =
   match xs {
     Nil ⇒ None v ;
@@ -230,55 +308,55 @@ fn assoc (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (xs : List (Pa
       }
   }
 
--- `all_in_list p xs` (`54 §3`, laws 4/5) -- the list analogue of `all_keys`:
--- "every entry's key satisfies `p`", mirrored structurally over
--- `List (Pair k v)`.
 fn all_in_list (k : Type) (v : Type) (p : k → Prop) (xs : List (Pair k v)) : Prop =
   match xs {
     Nil ⇒ Equal Bool True True ;
     Cons e xs2 ⇒ And (p (pair_fst k v e)) (all_in_list k v p xs2)
   }
+```
 
--- `insertCaseTransport` -- laws 1/2/3/5's shared base-case transport.
--- STATUS: the originally-escalated "Wall 2" (`check_match_dependent`
--- allegedly not normalizing a branch's substituted expected type) was
--- GROUND-TRUTHED and REFUTED this session -- it was proof-structuring bugs
--- (uncurried convoy hypotheses left as early Pi-params instead of curried
--- via `->` after the match's own return type), not an elaborator gap; see
--- `spec/50-stdlib/54-map-verified-laws.md`'s convoy idiom (landed
--- `wp/map-convoy-idiom`). The real, narrower obstruction ("Wall 1": nested
--- `J`) DISSOLVES via a `trans`/`cong` single-combined-equation composition
--- idiom -- confirmed on a Bool proxy and, for the real Tree-shaped
--- application, via a "stop-one-step-short" technique (compose the Eq-proof
--- chain to stop at the LAST stuck-match redex rather than the fully
--- iota-reduced `Node(...)`, so the final delta+iota step happens through
--- ORDINARY conversion during `J`'s own base-argument check, never needing
--- to construct a raw `Eq (Tree k v) (Node ...) (Node ...)` witness between
--- two syntactically-different-but-equal constructor applications). This
--- v2 route-around is confirmed passing and, independently, confirmed
--- STRUCTURALLY EXEMPT from the `eq_at_inductive`/Tree divergence fixed by
--- `wp/obs-eq-termination` (`9cf468a`) -- it never constructs the
--- Ctor-vs-Ctor Tree equality that machinery decomposes. Laws 1/2/3/5's
--- full end-to-end assembly (this base case plus the recursive-case
--- induction) is the next unit of this WP, tracked separately from law 4
--- below, which needs no transport at all.
+### 4.2 Law 4 — `to_list_ordered`: an ordered tree's traversal is sorted
 
--- `pair_leq` -- lift a key comparator to a `Pair k v` comparator by
--- comparing first components, the comparator `is_sorted`
--- (`ken-elaborator/src/prelude.rs`) needs to be instantiated at `Pair k v`.
+`pair_leq` lifts a key comparator to a `Pair k v` comparator by comparing
+first components — the comparator `is_sorted`
+(`ken-elaborator/src/prelude.rs`) needs to be instantiated at `Pair k v`.
+Law 4 (`54 §3`, "to_list ordered") states `Ordered leq m → is_sorted
+(to_list m)`, built via the convoy idiom (`54 §2.1`, restated fully in
+[Design notes](#5-design-notes)): every match's own return type stays
+scrutinee-independent; any hypothesis whose type mentions the match's
+scrutinee is curried in via `->` after the return type and bound per-arm
+with `\h.`, letting the kernel narrow it automatically instead of requiring
+a dependent motive.
+
+`le_above`/`le_below` are the two one-sided order predicates the rest of
+the chain is built from. `all_keys_to_all_in_list` bridges a `Tree`-shaped
+`all_keys` witness to the `List`-shaped `all_in_list` goal over
+`to_list`, via the helper `all_in_list_append_intro` (append preserves a
+uniform `all_in_list` bound across both halves).
+
+`head_bound_goal_p`/`all_in_list_to_head_bound` convert a full-list
+`all_in_list` bound into a head-only bound (feeding the eventual
+`cons_sorted_head` step). `is_sorted_append` is the route-around at the
+center of the chain: rather than a second-level nested dependent match, it
+factors every "peek at the tail's own shape" need into its own separate,
+single-match, top-level helper (`cons_sorted_head`, `sorted_tail`,
+`sorted_tail_head_bound`, `append_head_bound`) and assembles them by
+ordinary composition.
+
+The four named extractors `ord_below_l`/`ord_above_r`/`ord_l`/`ord_r` pull
+each of `Ordered`'s four conjuncts out of a `Node` witness once, each as
+its own top-level `fn`, so that source-text chain appears exactly once
+instead of being duplicated at every use site — keeping the assembled
+`to_list_ordered` term small enough to elaborate. `to_list_ordered` itself
+is the final assembly: at `Leaf` the goal is `tt` directly; at a `Node`,
+`is_sorted_append` combines the right subtree's own induction (prefixed
+with its own head bound, established via `cons_sorted_head`) against the
+left subtree's induction and its all-in-list bound.
+
+```ken
 fn pair_leq (k : Type) (v : Type) (leq : k → k → Bool) (p1 : Pair k v) (p2 : Pair k v) : Bool =
   leq (pair_fst k v p1) (pair_fst k v p2)
 
--- Law 4 (`54 §3`, "to_list ordered"): `Ordered leq m -> is_sorted (to_list m)`.
--- Built via the convoy idiom (`54 §2.1`/`wp/map-convoy-idiom`): every
--- match's own return type stays scrutinee-independent; any hypothesis
--- whose type mentions the match's scrutinee is curried in via `->` after
--- the return type and bound per-arm with `\h.`, letting the kernel narrow
--- it automatically instead of requiring a dependent motive. `to_list_ordered`
--- and its full supporting chain were confirmed correct and fast in
--- isolation across this session's bisection of a separate kernel
--- conversion-machinery OOM (`wp/obs-eq-termination`, fixed `9cf468a`); this
--- is the real, non-stubbed assembly re-verified against the fixed kernel.
 
 fn le_above (k : Type) (v : Type) (leq : k → k → Bool) (bound : k) (k2 : k) : Prop =
   Equal Bool (leq bound k2) True
@@ -286,8 +364,6 @@ fn le_above (k : Type) (v : Type) (leq : k → k → Bool) (bound : k) (k2 : k) 
 fn le_below (k : Type) (v : Type) (leq : k → k → Bool) (bound : k) (k2 : k) : Prop =
   Equal Bool (leq k2 bound) True
 
--- L2 (`54 §3`): `all_keys p m -> all_in_list p (to_list m)` -- bridges the
--- Tree-shaped Ordered witness to the List-shaped is_sorted goal.
 fn all_in_list_append_intro
   (k : Type) (v : Type) (p : k → Prop) (xs : List (Pair k v)) (ys : List (Pair k v))
   (hys : all_in_list k v p ys)
@@ -325,8 +401,6 @@ fn head_bound_goal_p (k : Type) (v : Type) (leq : k → k → Bool) (bound : Pai
     Cons y r ⇒ Equal Bool (pair_leq k v leq bound y) True
   }
 
--- Bridge: all_in_list's full-list bound implies head_bound_goal_p's head-only
--- bound, via a single match (feeds L2's output into cons_sorted_head).
 fn all_in_list_to_head_bound
   (k : Type) (v : Type) (leq : k → k → Bool) (bound : k) (bval : v) (xs : List (Pair k v))
   : all_in_list k v (le_above k v leq bound) xs →
@@ -338,9 +412,6 @@ fn all_in_list_to_head_bound
         and_fst (Equal Bool (leq bound (pair_fst k v e)) True) (all_in_list k v (le_above k v leq bound) xs2) h
   }
 
--- is_sorted_append (`54 §3`), route-around: avoids a second-level nested
--- dependent match entirely by factoring every "peek at xs2's own shape"
--- need into its OWN separate, single-match, top-level helper view.
 fn cons_sorted_head
   (k : Type) (v : Type) (leq : k → k → Bool) (m : Pair k v) (ys : List (Pair k v))
   : is_sorted (Pair k v) (pair_leq k v leq) ys →
@@ -409,9 +480,6 @@ fn is_sorted_append
              (sorted_tail_head_bound k v leq e xs2 hxs))
   }
 
--- Named extractors for Ordered's 4-way conjunction (Node case) -- each
--- source-text chain appears ONCE instead of duplicated at every use site,
--- keeping the assembled to_list_ordered term small enough to elaborate.
 fn ord_below_l
   (k : Type) (v : Type) (leq : k → k → Bool) (l : Tree k v) (key : k) (val : v) (r : Tree k v)
   (h : Ordered k v leq (Node k v l key val r))
@@ -449,7 +517,6 @@ fn ord_r
               (And (all_keys k v (le_above k v leq key) r) (And (Ordered k v leq l) (Ordered k v leq r)))
         h))
 
--- Law 4's conclusion, convoy form, assembled from all pieces above.
 fn to_list_ordered
   (k : Type) (v : Type) (leq : k → k → Bool) (m : Tree k v)
   : Ordered k v leq m → is_sorted (Pair k v) (pair_leq k v leq) (to_list k v m) =
@@ -465,57 +532,57 @@ fn to_list_ordered
           (to_list_ordered k v leq l (ord_l k v leq l key val r h))
           (all_keys_to_all_in_list k v (le_below k v leq key) l (ord_below_l k v leq l key val r h))
   }
+```
 
--- Law 1 (`54 §5.1`, Map capstone unit 2) -- Ordered-preservation:
--- `Ordered m -> Ordered (insert key val m)`.
---
--- Dictionary laws threaded as SEPARATE bare parameters (Architect-ruled
--- unbundled encoding, same convention as the rest of this file): `transLeq`
--- (transitivity) and `total` (totality, as a bare `Or` of the two `IsTrue`
--- facts -- no `bool_or` primitive needed). No `antisym` (matches `54 §5.2`'s
--- law-1 dictionary-law list).
---
--- Mechanism, in order of discovery this session:
--- - `insert_step`/`insert_step_inner` mirror `insert`'s own two-level stuck
---   match structurally (`(Bool) -> Tree k v`, matched on a BOUND parameter,
---   not the real `leq` expression) -- `insert_case_transport_overwrite`/
---   `IntoL`/`IntoR` are goal-generic "stop-one-step-short" `trans`/`cong`
---   bridges from a real `insert key val (Node l k2 v2 r)` application to
---   each of `insert`'s three real branches, letting the FINAL delta+iota
---   step land via ordinary conversion inside `J`'s own base-argument check
---   rather than needing an explicit reflected-Eq witness for both stuck
---   comparisons composed (the confirmed-broken nested-`J` shape, `54 §3`).
--- - `insert_preserves_all_keys` (L1): a COMPARISON-INDEPENDENT predicate `p`
---   doesn't care which value `leq` returns, so its Node-case helper
---   (`insert_step_preserves_all_keys`/`insert_step_inner_preserves_all_keys`) is
---   proven generically over an ABSTRACT `Bool` parameter (ordinary Gap-B
---   convoy on a bound var) and simply APPLIED at the real `leq key k2`
---   expression -- no stuck-boolean reflection, no transport, at all.
--- - `all_keys_trans_below`/`all_keys_trans_above` (L3): move an `all_keys`
---   bound from one key to another via `transLeq`, ordinary Gap-B
---   structural induction, comparison-free.
--- - `derive_from_false` (totality-derived reflection, the `insert`-into-R
---   branch's bound update): `insert`'s `False` branch doesn't consult
---   `leq k2 key` at all, but `Ordered`'s bound update for that branch needs
---   it as a witness -- derived from `leq key k2 = False` + `total` via one
---   more (non-dependent) `Or`-elimination. Uses the abstract-parameter
---   workaround for a narrow, separately-reported elaborator gap: `absurd`
---   (a check-only form) fails when its enclosing match's scrutinee is an
---   applied expression rather than a literal bound variable
---   (`check_match_dependent`'s `Term::Var` gate; falls to the general
---   `infer_match` path otherwise, which does not propagate check mode).
--- - The top-level dispatch (`insert_case_transport_dispatch`/`dispatch_on_q1`/
---   `dispatch_on_q2`) is TWO non-dependent `Or`-eliminations
---   (`bool_dichotomy(leq key k2)`, then inside the `True` sub-case,
---   `bool_dichotomy(leq k2 key)`) -- the overall goal `Ordered (insert key
---   val m)` is the SAME type regardless of which branch fired, so this does
---   NOT hit the dependent-match-nesting restriction (only a goal that
---   DEPENDS on which arm fired needs `check_match_dependent`'s
---   single-bound-var scrutinee gate).
---
--- Confirmed on the fixed kernel (`wp/obs-eq-termination`, `9cf468a`):
--- builds clean in well under a second, no OOM/divergence.
+### 4.3 Law 1 — `preserves_ordered`: insert preserves the `Ordered` invariant
 
+Law 1 (`54 §5.1`, Map capstone unit 2) states `Ordered m → Ordered (insert
+key val m)`. The dictionary laws are threaded as separate bare parameters
+(the same unbundled convention as the rest of this file): `transLeq`
+(transitivity) and `total` (totality, as a bare `Or` of the two `IsTrue`
+facts — no `bool_or` primitive needed). No `antisym` — this matches `54
+§5.2`'s law-1 dictionary-law list.
+
+The mechanism, in the order it was worked out:
+
+- `insert_step`/`insert_step_inner` mirror `insert`'s own two-level stuck
+  match structurally (`(Bool) -> Tree k v`, matched on a bound parameter,
+  not the real `leq` expression). `insert_case_transport_overwrite`/
+  `_into_l`/`_into_r` are goal-generic "stop-one-step-short" `trans`/`cong`
+  bridges from a real `insert key val (Node l k2 v2 r)` application to each
+  of `insert`'s three real branches, letting the final delta+iota step land
+  via ordinary conversion inside `J`'s own base-argument check rather than
+  needing an explicit reflected-`Eq` witness for both stuck comparisons
+  composed (the confirmed-broken nested-`J` shape — see [Design
+  notes](#5-design-notes)).
+- `insert_preserves_all_keys` (needed for law 1's own bound updates): a
+  comparison-independent predicate `p` doesn't care which value `leq`
+  returns, so its `Node`-case helper (`insert_step_inner_preserves_all_keys`/
+  `insert_step_preserves_all_keys`) is proved generically over an abstract
+  `Bool` parameter (ordinary Gap-B convoy on a bound variable) and simply
+  applied at the real `leq key k2` expression — no stuck-boolean
+  reflection, no transport, at all.
+- `all_keys_trans_below`/`all_keys_trans_above` move an `all_keys` bound
+  from one key to another via `transLeq`, by ordinary Gap-B structural
+  induction, comparison-free.
+- `derive_from_false` (totality-derived reflection, the `insert`-into-R
+  branch's bound update): `insert`'s `False` branch doesn't consult `leq k2
+  key` at all, but `Ordered`'s bound update for that branch needs it as a
+  witness — derived from `leq key k2 = False` plus `total` via one more
+  (non-dependent) `Or`-elimination.
+- The top-level dispatch (`insert_case_transport_dispatch`/`dispatch_on_q1`/
+  `dispatch_on_q2`) is two non-dependent `Or`-eliminations
+  (`bool_dichotomy (leq key k2)`, then inside the `True` sub-case,
+  `bool_dichotomy (leq k2 key)`) — the overall goal `Ordered (insert key val
+  m)` is the same type regardless of which branch fired, so this does not
+  hit the dependent-match-nesting restriction (only a goal that *depends*
+  on which arm fired needs `check_match_dependent`'s single-bound-variable
+  scrutinee gate).
+
+Confirmed on the fixed kernel (`wp/obs-eq-termination`, `9cf468a`): builds
+clean in well under a second, no OOM/divergence.
+
+```ken
 fn insert_step_inner
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (val : v)
   (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v) (y : Bool) : Tree k v =
@@ -968,35 +1035,36 @@ fn preserves_ordered
           (preserves_ordered k v leq transLeq total key val l (get_ordered_l k v leq l k2 v2 r h))
           (preserves_ordered k v leq transLeq total key val r (get_ordered_r k v leq l k2 v2 r h))
   }
+```
 
--- Law 2 (`54 §5.2`, Map capstone unit 2) -- found-after-insert:
--- `lookup key (insert key val m) = Some val`.
---
--- Dictionary law: `reflLeq : (x:k) -> leq x x = True` only (matches
--- `54 §5.2`'s law-2 list). No `Ordered` hypothesis needed.
---
--- Reuses Law 1's goal-generic transport bridges DIRECTLY
--- (`insert_case_transport_overwrite`/`IntoL`/`IntoR`) with
--- `goal := \x. Equal (Option v) (lookup key x) (Some val)` -- the
--- per-branch case-split (`bool_dichotomy(leq key k2)` then
--- `bool_dichotomy(leq k2 key)`) needed no re-derivation at all.
---
--- New machinery specific to this law: `lookup`'s own two-level stuck
--- match mirrors `insert`'s (`lookup_step`/`lookup_step_inner`), with three
--- bridges:
--- - `lookup_overwrite_result`: BOTH of `lookup`'s stuck comparisons at an
---   overwritten node are the IDENTICAL expression `leq key key`, so a
---   SINGLE `reflLeq key` witness feeds both steps of the composition
---   (no case-split needed, unlike Law 1's overwrite witness which needed
---   two DIFFERENT reflected facts).
--- - `lookup_into_l_bridge`/`lookup_into_r_bridge`: `lookup`'s traversal of the
---   ORIGINAL (pre-insert) node, given the same `q1`/`q2` that routed
---   `insert`'s own branch, reduces to `lookup key l` / `lookup key r`
---   directly (lookup and insert branch on the IDENTICAL comparisons) --
---   composed with the outer induction's IH via `trans`.
---
--- Confirmed on the fixed kernel: builds clean, well under a second.
+### 4.4 Law 2 — `lookup_found_after_insert`: a just-inserted key is found
 
+Law 2 (`54 §5.2`, Map capstone unit 2) states `lookup key (insert key val
+m) = Some val`. The dictionary law needed is `reflLeq : (x:k) -> leq x x =
+True` only (matching `54 §5.2`'s law-2 list) — no `Ordered` hypothesis is
+needed.
+
+This law reuses Law 1's goal-generic transport bridges
+(`insert_case_transport_overwrite`/`_into_l`/`_into_r`) directly, with
+`goal := \x. Equal (Option v) (lookup key x) (Some val)` — the per-branch
+case-split (`bool_dichotomy (leq key k2)` then `bool_dichotomy (leq k2
+key)`) needed no re-derivation at all.
+
+The machinery specific to this law: `lookup`'s own two-level stuck match
+mirrors `insert`'s (`lookup_step`/`lookup_step_inner`), with three bridges.
+`lookup_overwrite_result`: both of `lookup`'s stuck comparisons at an
+overwritten node are the identical expression `leq key key`, so a single
+`reflLeq key` witness feeds both steps of the composition (no case-split
+needed, unlike Law 1's overwrite witness, which needed two different
+reflected facts). `lookup_into_l_bridge`/`lookup_into_r_bridge`: `lookup`'s
+traversal of the original (pre-insert) node, given the same `q1`/`q2` that
+routed `insert`'s own branch, reduces to `lookup key l` / `lookup key r`
+directly (`lookup` and `insert` branch on the identical comparisons) —
+composed with the outer induction's IH via `trans`.
+
+Confirmed on the fixed kernel: builds clean, well under a second.
+
+```ken
 fn lookup_step_inner
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k)
   (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v) (y : Bool) : Option v =
@@ -1057,8 +1125,6 @@ fn lookup_mk_inner_true_eq
                       (lookup_step_inner k v leq key l k2 v2 r True) =
   cong Bool (Option v) (leq k2 key) True (lookup_step_inner k v leq key l k2 v2 r) q2
 
--- Bridge: given q1,q2 (True,False -- the "into L" branch), lookup on the
--- ORIGINAL Node (with k2/v2/r unchanged) equals `lookup key l`.
 fn lookup_into_l_bridge_step1
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k)
   (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
@@ -1086,8 +1152,6 @@ fn lookup_into_l_bridge
     (lookup_into_l_bridge_step1 k v leq key l k2 v2 r q1)
     (lookup_mk_inner_false_eq k v leq key l k2 v2 r q2)
 
--- Bridge: given q1 (False -- the "into R" branch), lookup equals
--- `lookup key r`.
 fn lookup_into_r_bridge
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k)
   (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
@@ -1100,9 +1164,6 @@ fn lookup_into_r_bridge
     (lookup_final_bridge k v leq key l k2 v2 r)
     (lookup_mk_step_false_eq k v leq key l k2 v2 r q1)
 
--- Overwrite: given q (leq key key = True, from reflLeq), lookup key
--- (Node l key val r) = Some val -- both comparisons are the SAME
--- expression `leq key key`, so ONE reflLeq witness feeds BOTH steps.
 fn lookup_overwrite_result
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (val : v)
   (l : Tree k v) (r : Tree k v)
@@ -1182,45 +1243,52 @@ fn lookup_found_after_insert
         (lookup_found_after_insert k v leq reflLeq key val l)
         (lookup_found_after_insert k v leq reflLeq key val r)
   }
+```
 
--- Law 3 (`54 §5.2`, Map capstone unit 2) -- locality:
--- `distinct key key' -> lookup key' (insert key val m) = lookup key' m`,
--- where `distinct key key' := And (leq key key' = True) (leq key' key = True)
--- -> Bottom` (order-distinctness, `52 §5.2`).
---
--- Dictionary laws: `transLeq` only (matches `54 §5.2`'s law-3 list; no
--- `antisym`, no `total`).
---
--- Reuses Law 1's goal-generic transport bridges directly (same pattern as
--- Law 2), instantiated at
--- `goal := \x. Equal (Option v) (lookup key' x) (lookup key' (Node l k2 v2 r))`.
---
--- New machinery, in order of discovery:
--- - `bool_value_eq_from_biimpl`: from a two-directional Bool-value implication
---   (`b1=True -> b2=True` and back), concludes `b1 = b2` as VALUES (not just
---   an iff) -- Bool has exactly two constructors, so a value mismatch with
---   agreeing truth at `True` forces agreement at `False` too (the disagreeing
---   case collapses to `Equal Bool True False`, absurd via K7).
--- - `lookup_overwrite_agrees_outer`/`Inner`: at the overwrite branch (`key`~`k2`
---   via `q1`,`q2`), `leq key' key` and `leq key' k2` (resp. `leq key key'`
---   and `leq k2 key'`) are PROVABLY THE SAME VALUE via `transLeq` composed
---   both directions with `bool_value_eq_from_biimpl` -- so `lookup key'` takes
---   the IDENTICAL branch decision whether the node is labeled `key` or `k2`.
---   The only case that can actually DIFFER (both directions agreeing True,
---   i.e. `key'`~`key`) is exactly what `distinct` forbids -- `absurd`-closed.
--- - `lookup_into_l_locality_witness`/`IntoR`: the node LABEL is unchanged for
---   these two branches (only one subtree is replaced by its own recursive
---   insert), so `lookup key'` takes the IDENTICAL branch decision in both
---   pre- and post-insert forms; the only non-Refl-trivial sub-case (the
---   replaced subtree's own recursion) is exactly the outer induction's IH.
--- - `lookup_leaf_locality_witness`: `insert` at `Leaf` produces a single node
---   labeled `key`; same True/True-contradiction / False-either-way dispatch
---   as the overwrite case, but simpler (no `k2`/`v2` to relate, target is
---   the empty-lookup `None v` directly via the same `lookup_into_l_bridge`/
---   `IntoR` bridges Law 2 already built).
---
--- Confirmed on the fixed kernel: builds clean, well under a second.
+### 4.5 Law 3 — `lookup_locality`: insert at a distinct key doesn't disturb lookup elsewhere
 
+Law 3 (`54 §5.2`, Map capstone unit 2) states `distinct key key' → lookup
+key' (insert key val m) = lookup key' m`, where `distinct key key' := And
+(leq key key' = True) (leq key' key = True) -> Bottom` (order-distinctness,
+`52 §5.2`). The dictionary law needed is `transLeq` only (matching `54
+§5.2`'s law-3 list; no `antisym`, no `total`). This law reuses Law 1's
+goal-generic transport bridges directly (the same pattern as Law 2),
+instantiated at `goal := \x. Equal (Option v) (lookup key' x) (lookup key'
+(Node l k2 v2 r))`.
+
+The machinery, in order of discovery: `bool_value_eq_from_biimpl` — from a
+two-directional Bool-value implication (`b1=True -> b2=True` and back),
+concludes `b1 = b2` as values (not just an iff) — `Bool` has exactly two
+constructors, so a value mismatch with agreeing truth at `True` forces
+agreement at `False` too (the disagreeing case collapses to `Equal Bool
+True False`, absurd via K7). `lookup_overwrite_agrees_outer`/`_inner`: at
+the overwrite branch (`key`~`k2` via `q1`,`q2`), `leq key' key` and `leq
+key' k2` (resp. `leq key key'` and `leq k2 key'`) are provably the same
+value via `transLeq` composed both directions with
+`bool_value_eq_from_biimpl` — so `lookup key'` takes the identical branch
+decision whether the node is labeled `key` or `k2`. The only case that can
+actually differ (both directions agreeing `True`, i.e. `key'`~`key`) is
+exactly what `distinct` forbids — closed via `absurd`.
+`lookup_into_l_locality_witness`/`_into_r`: the node label is unchanged for
+these two branches (only one subtree is replaced by its own recursive
+insert), so `lookup key'` takes the identical branch decision in both pre-
+and post-insert forms; the only non-`Refl`-trivial sub-case (the replaced
+subtree's own recursion) is exactly the outer induction's IH.
+`lookup_leaf_locality_witness`: `insert` at `Leaf` produces a single node
+labeled `key`; the same True/True-contradiction / False-either-way dispatch
+as the overwrite case, but simpler (no `k2`/`v2` to relate — the target is
+the empty-lookup `None v` directly via the same `lookup_into_l_bridge`/
+`_into_r` bridges Law 2 already built).
+
+This section also proves order-equivalence agreement along the way:
+`lookup_order_equiv_agree` — `lookup` agrees for order-equivalent query
+keys, any tree — since two keys that are mutually `leq` in both directions
+route `insert`/`lookup` through the identical branch decisions at every
+node, by the same `bool_value_eq_from_biimpl` technique.
+
+Confirmed on the fixed kernel: builds clean, well under a second.
+
+```ken
 fn bool_value_eq_from_biimpl
   (b1 : Bool) (b2 : Bool)
   (hAB : Equal Bool b1 True → Equal Bool b2 True)
@@ -1589,8 +1657,6 @@ fn lookup_into_r_inner_dispatch
         (lookup_stop_result k v leq key' l k2 v2 (insert k v leq key val r) hOuter hInner)
         (sym (Option v) (lookup k v leq key' (Node k v l k2 v2 r)) (Some v v2) (lookup_stop_result k v leq key' l k2 v2 r hOuter hInner)) ;
     Inr hInnerFalse ⇒
-      -- outer=True, inner=False routes to the LEFT subtree in BOTH forms
-      -- (unchanged `l`) -- trivial, no IH needed here at all.
       trans (Option v) (lookup k v leq key' (Node k v l k2 v2 (insert k v leq key val r)))
                         (lookup k v leq key' l)
                         (lookup k v leq key' (Node k v l k2 v2 r))
@@ -1727,53 +1793,54 @@ fn insert_lookup_hit
       (insert k v leq inserted val acc) heq)
     (lookup_found_after_insert k v leq reflLeq inserted val acc)
 
--- Law 5 (`54 §5.3`, Map capstone unit 2 -- the final law) -- agreement:
--- `Ordered m -> Distinct leq m -> lookup key m = assoc key (to_list m)`.
---
--- Dictionary law: `transLeq` only (matches `54 §5.2`'s restated law-5
--- list; `antisym` belongs only to the separate `Distinct`-discharge lemma,
--- NOT this statement -- Architect's ruling, `52-map.md §5.3`).
---
--- `Distinct leq m := NoDup leq (to_list m)` -- no two entries in the
--- in-order traversal carry order-equivalent keys. Without this hypothesis
--- the law is FALSE: `Node (Node Leaf key v1 Leaf) key v2 Leaf` is a
--- legitimate weak-bounds `Ordered` witness (confirmed empirically via
--- ken-interp evaluation, escalated and resolved as a spec restate) with
--- `lookup key = Some v2` (root, first BST match) but
--- `assoc key (to_list) = Some v1` (list-first).
---
--- Mechanism:
--- - `order_equiv`/`NoDup`/`Distinct`: `Ω`-valued, comparison-free
---   structural predicates (`54 §4`). `Not` (a new prelude registration,
---   `¬A := A -> Bottom`) is needed here because the surface has no
---   EXPRESSION-position `->` -- only a `view`'s TYPE-annotation position
---   parses the Pi-sugar (confirmed empirically); `NoDup`'s per-entry
---   negation predicate is a Prop-returning VALUE, not a type annotation.
--- - `assoc_step`/`assoc_step_inner` mirror `assoc`'s own two-level stuck
---   match (same technique as `lookup_step`/`insert_step`), with the usual
---   stop-one-step-short bridges.
--- - `assoc_skip_prefix`: if no entry in a list prefix order-matches `key`,
---   `assoc` skips it entirely and continues into the suffix.
--- - `assoc_prefix_wins`/`assoc_no_match_is_none`: the mirror-image lemmas for
---   when the SUFFIX (not the prefix) is guaranteed match-free.
--- - `no_dup_append_head_excl`/`no_dup_append_left`/`no_dup_append_right`: structural
---   decompositions of `NoDup` over `list_append`, extracting "this entry
---   excludes every earlier entry" and the two tail-`Distinct` facts the
---   outer induction's IH needs.
--- - `not_match_from_bound_below`/`Above` + `all_in_list_map_not_match_below`/`Above`:
---   convert an `Ordered`-derived `le_below`/`le_above` bound plus a single
---   `leq key k2 = False` fact into "no bounded entry order-matches key",
---   via `transLeq` + `absurd` on the resulting `Equal Bool True False`.
--- - `not_match_transfer_via_equiv`: at the order-equivalent (`key`~`k2`)
---   branch, transfers a "not order-equiv to `k2`" fact (directly available
---   from `Distinct`) to "not order-equiv to `key`" -- the matched-node
---   VALUE agreement itself is then `refl`: both traversals return the
---   value at the unique order-equivalent entry, no `Equal key k2` step
---   needed (Architect's analysis, confirmed at proof time exactly as
---   anticipated).
---
--- Confirmed on the fixed kernel: builds clean, ~1.7s for the whole file.
+```
 
+### 4.6 Law 5 — `lookup_assoc_agree`: dictionary agreement with the ordered-list lookup
+
+Law 5 (`54 §5.3`, the final capstone law) states `Ordered m → Distinct leq m
+→ lookup key m = assoc key (to_list m)`. The dictionary law needed is
+`transLeq` only (matching `54 §5.2`'s restated law-5 list; `antisym`
+belongs only to a separate `Distinct`-discharge lemma, not this statement —
+Architect's ruling, `52-map.md §5.3`).
+
+`Distinct leq m := NoDup leq (to_list m)` — no two entries in the in-order
+traversal carry order-equivalent keys. Without this hypothesis the law is
+false: `Node (Node Leaf key v1 Leaf) key v2 Leaf` is a legitimate
+weak-bounds `Ordered` witness (confirmed empirically via `ken-interp`
+evaluation, escalated and resolved as a spec restatement) with `lookup key
+= Some v2` (the root, first BST match) but `assoc key (to_list) = Some v1`
+(the list-first match).
+
+The mechanism: `order_equiv`/`NoDup`/`Distinct` are `Ω`-valued,
+comparison-free structural predicates (`54 §4`). `Not` (a new prelude
+registration, `¬A := A -> Bottom`) is needed here because the surface has
+no expression-position `->` — only a `view`'s type-annotation position
+parses the Pi-sugar (confirmed empirically); `NoDup`'s per-entry negation
+predicate is a `Prop`-returning value, not a type annotation.
+`assoc_step`/`assoc_step_inner` mirror `assoc`'s own two-level stuck match
+(the same technique as `lookup_step`/`insert_step`), with the usual
+stop-one-step-short bridges. `assoc_skip_prefix` shows that if no entry in
+a list prefix order-matches `key`, `assoc` skips it entirely and continues
+into the suffix; `assoc_prefix_wins`/`assoc_no_match_is_none` are the
+mirror-image lemmas for when the suffix (not the prefix) is guaranteed
+match-free. `no_dup_append_head_excl`/`no_dup_append_left`/
+`no_dup_append_right` are structural decompositions of `NoDup` over
+`list_append`, extracting "this entry excludes every earlier entry" and the
+two tail-`Distinct` facts the outer induction's IH needs.
+`not_match_from_bound_below`/`_above` plus `all_in_list_map_not_match_below`/
+`_above` convert an `Ordered`-derived `le_below`/`le_above` bound plus a
+single `leq key k2 = False` fact into "no bounded entry order-matches key",
+via `transLeq` plus `absurd` on the resulting `Equal Bool True False`.
+`not_match_transfer_via_equiv`: at the order-equivalent (`key`~`k2`)
+branch, transfers a "not order-equiv to `k2`" fact (directly available from
+`Distinct`) to "not order-equiv to `key`" — the matched-node value
+agreement itself is then `refl`: both traversals return the value at the
+unique order-equivalent entry, no `Equal key k2` step needed (Architect's
+analysis, confirmed at proof time exactly as anticipated).
+
+Confirmed on the fixed kernel: builds clean, ~1.7s for the whole file.
+
+```ken
 fn not_order_equiv_to_key (k : Type) (leq : k → k → Bool) (key : k) (k2 : k) : Prop =
   Not (order_equiv k leq key k2)
 
@@ -1861,7 +1928,6 @@ fn assoc_step_true_reduces
   : Equal (Option v) (assoc_step k v leq key e xs2 True)
                       (assoc_step_inner k v leq key e xs2 (leq (pair_fst k v e) key)) = Refl
 
--- given q1 (outer=True), q2 (inner=False): assoc key(Cons e xs2)=assoc key xs2.
 fn assoc_skip_head_bridge
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k)
   (e : Pair k v) (xs2 : List (Pair k v))
@@ -1880,7 +1946,6 @@ fn assoc_skip_head_bridge
         (assoc_mk_step_true_eq k v leq key e xs2 q1) (assoc_step_true_reduces k v leq key e xs2)))
     (assoc_mk_inner_false_eq k v leq key e xs2 q2)
 
--- given q1 (outer=False): assoc key(Cons e xs2)=assoc key xs2 directly.
 fn assoc_skip_head_bridge_false
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k)
   (e : Pair k v) (xs2 : List (Pair k v))
@@ -2074,8 +2139,6 @@ fn assoc_no_match_is_none
           (bool_dichotomy (leq key (pair_fst k v e)))
   }
 
--- assoc_prefix_wins: if NO entry in ys order-matches key, assoc key(append xs
--- ys) = assoc key xs.
 fn assoc_mk_inner_true_eq
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k)
   (e : Pair k v) (xs2 : List (Pair k v))
@@ -2240,10 +2303,6 @@ fn assoc_none_implies_no_match
           (bool_dichotomy (leq key (pair_fst k v e)))
   }
 
--- Given `leq key k2 = False` (key strictly not-below k2) and a bound
--- `leq e_key k2 = True` (e_key IS below k2, from Ordered's all_keys), key
--- cannot order-match e_key -- else transitivity would force `leq key k2 =
--- True`, contradicting the hypothesis.
 fn not_match_from_bound_below
   (k : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
@@ -2272,9 +2331,6 @@ fn all_in_list_map_not_match_below
              (and_snd (Equal Bool (leq (pair_fst k v e) k2) True) (all_in_list k v (le_below k v leq k2) xs2) h))
   }
 
--- Given `leq k2 key = False` (key strictly not-above k2) and a bound
--- `leq k2 e_key = True` (e_key IS above k2, from Ordered's all_keys), key
--- cannot order-match e_key.
 fn not_match_from_bound_above
   (k : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
@@ -2303,7 +2359,6 @@ fn all_in_list_map_not_match_above
              (and_snd (Equal Bool (leq k2 (pair_fst k v e)) True) (all_in_list k v (le_above k v leq k2) xs2) h))
   }
 
--- NoDup(append xs ys) implies NoDup xs (structural, no comparison).
 fn all_in_list_append_elim_left
   (k : Type) (v : Type) (p : k → Prop) (xs : List (Pair k v)) (ys : List (Pair k v))
   : all_in_list k v p (list_append (Pair k v) xs ys) → all_in_list k v p xs =
@@ -2336,8 +2391,6 @@ fn no_dup_append_left
                 h))
   }
 
--- NoDup(append xs ys) implies NoDup ys (via all_in_list_append_elim_right,
--- already built).
 fn no_dup_append_right
   (k : Type) (v : Type) (leq : k → k → Bool) (xs : List (Pair k v)) (ys : List (Pair k v))
   : NoDup k v leq (list_append (Pair k v) xs ys) → NoDup k v leq ys =
@@ -2351,10 +2404,6 @@ fn no_dup_append_right
              h)
   }
 
--- lookup key (Node l k2 v2 r) = Some v2, given both q1/q2 (key~k2). Reuses
--- lookup_step/lookup_step_inner + the already-landed bridges from map.ken
--- (Law 2/3): lookup_final_bridge, lookup_mk_step_true_eq, lookup_step_true_reduces,
--- lookup_mk_inner_true_eq.
 fn lookup_stop_bridge
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k)
   (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
@@ -2373,9 +2422,6 @@ fn lookup_stop_bridge
         (lookup_mk_step_true_eq k v leq key l k2 v2 r q1) (lookup_step_true_reduces k v leq key l k2 v2 r)))
     (lookup_mk_inner_true_eq k v leq key l k2 v2 r q2)
 
--- Transfer a "not order-equiv to k2" fact to "not order-equiv to key" when
--- key~k2 (order-equivalent) -- used for the overwrite/stop branch, where
--- Distinct only directly hands us the k2-relative fact.
 fn not_match_transfer_via_equiv
   (k : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
@@ -2509,12 +2555,31 @@ fn lookup_assoc_agree
           (lookup_assoc_agree k v leq transLeq key r (get_ordered_r k v leq l k2 v2 r h) (law5_distinct_r k v leq l k2 v2 r hd))
           (bool_dichotomy (leq key k2))
   }
+```
 
--- CAT-4 (`58`) -- Layer-2 keyed-collection operations. These definitions sit
--- on top of the landed Map capstone: no new kernel primitive, no postulate,
--- and no proof-relevant `Ω` inductive. The SURF-1 spelling is deliberate:
--- every new operation here is pure, so every declaration is `fn`.
+### 4.7 Layer-2 keyed-collection operations (`58`, CAT-4)
 
+Everything from here to the end of the package sits on top of the landed
+Map capstone: no new kernel primitive, no postulate, and no proof-relevant
+`Ω` inductive. The SURF-1 spelling is deliberate — every operation here is
+pure, so every declaration is `fn`. This is genuinely new functionality,
+not further capstone laws: `delete`, a combining `insert_with`, three
+lookup-table set/map combinators (`union`/`intersection`/`difference`) each
+with a full correctness suite, `Set`-level wrappers with membership and
+algebraic laws, `keys`/`values` projections, and a small binary-relations
+library.
+
+#### 4.7.1 Bool algebra and the Boolean order-equivalence test
+
+A small self-contained `Bool` algebra (`bool_and`/`bool_not`/
+`cat4_bool_or` and their commutativity/associativity/idempotence/identity
+laws) and a `Nat` total order (`leq_nat` with reflexivity/transitivity/
+antisymmetry/totality) supporting later sections, followed by
+`order_equiv_key` — a `Bool`-valued order-equivalence test — and its
+correspondence lemmas to the `Prop`-valued `order_equiv` from
+[§4.6](#46-law-5--lookup_assoc_agree-dictionary-agreement-with-the-ordered-list-lookup).
+
+```ken
 fn bool_and (a : Bool) (b : Bool) : Bool =
   match a { True ⇒ b ; False ⇒ False }
 
@@ -2712,6 +2777,20 @@ fn order_equiv_key_false_to_not
               (sym Bool (order_equiv_key k leq a b) True (order_equiv_key_true_from_order_equiv k leq a b h))
               hfalse)
 
+```
+
+#### 4.7.2 `delete` and its correctness proofs
+
+`delete` rebuilds the tree from a filtered `to_list`: `drop_key` marks
+entries to remove, `delete_from_list_acc`/`delete_from_list` filter and
+rebuild via `from_list_acc`, and `delete` composes filtering with
+reconstruction. Its correctness proofs: `delete_lookup_none_law` (a deleted
+key now misses), and `delete_lookup_other_key_law` (keys elsewhere are
+unaffected), each built from a chain of `_dispatch`/`_hit`/`_miss`/`_survivor`
+helpers mirroring the case-split structure the capstone's Law 3 locality
+proof already established.
+
+```ken
 fn drop_key (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (xs : List (Pair k v)) : List (Pair k v) =
   match xs {
     Nil ⇒ Nil (Pair k v) ;
@@ -3222,7 +3301,15 @@ fn delete_lookup_other_key_law
         (lookup k v leq key m)
         (assoc k v leq key (to_list k v m))
         (lookup_assoc_agree k v leq transLeq key m hord hdist))
+```
 
+#### 4.7.3 Ordered-preservation for `from_list` and `delete`
+
+`from_list_acc_preserves_ordered`/`from_list_preserves_ordered` show
+folding `insert` over a list preserves `Ordered`; `delete_preserves_ordered`
+composes this with the filter-then-rebuild shape of `delete` itself.
+
+```ken
 fn from_list_acc_preserves_ordered
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
@@ -3303,7 +3390,26 @@ fn delete_preserves_ordered
   (key : k) (m : Tree k v)
   : Ordered k v leq (delete k v leq key m) =
   delete_from_list_preserves_ordered k v leq transLeq total key (to_list k v m)
+```
 
+#### 4.7.4 `insert_with`, `union`, `intersection`, `difference` — the operations
+
+`insert_with` generalizes `insert` with a combining function for the
+overwrite case, via a fold step (`insert_with_fold_step`) mirroring
+`insert`'s own stuck-match shape. `union`/`union_from_list_acc` build a
+merged tree from two `to_list`s, folding the second list's entries into the
+first via `insert_with`; `union_lookup_table`/`unit_combine` give the
+map-of-maps lookup-table view `union`'s correctness proofs are stated
+against. `intersection_lookup_table`/`difference_lookup_table` are the
+analogous expected-result tables for `intersection`/`difference`, together
+with `all_keys_map_not_match_below`/`_above` — bound-based non-match
+lemmas over a whole subtree, needed by both combinators' correctness
+proofs. `intersection`/`intersection_from_list_acc` and
+`difference`/`difference_from_list_acc` each filter one list against
+lookups into the other tree, following the same fold-and-rebuild shape as
+`union`.
+
+```ken
 fn insert_with (k : Type) (v : Type) (leq : k → k → Bool) (f : v → v → v) (key : k) (val : v) (m : Tree k v) : Tree k v =
   match m {
     Leaf ⇒ Node k v (Leaf k v) key val (Leaf k v) ;
@@ -3737,7 +3843,20 @@ fn difference_from_list_acc_false_bridge
 
 fn difference (k : Type) (v : Type) (leq : k → k → Bool) (a : Tree k v) (b : Tree k v) : Tree k v =
   difference_from_list_acc k v leq (to_list k v a) b (empty k v)
+```
 
+#### 4.7.5 Fold-based `insert`/`insert_with` — Ordered-preservation
+
+`fold_insert_preserves_ordered` establishes Ordered-preservation for a
+generic `insert`-fold (used by `from_list`/`union`'s reconstruction step).
+`insert_with_preserves_ordered` is the `insert_with` analogue of Law 1
+(§4.3): the same `insert_with_step`/`_step_inner` stuck-match staging, the
+same `insert_with_transport_overwrite`/`_into_l`/`_into_r` stop-one-step-short
+bridges, and the same two-level `Or`-elimination dispatch, adapted for
+`insert_with`'s combining-function overwrite case
+(`replace_left_ordered_witness`/`replace_right_ordered_witness`).
+
+```ken
 fn insert_fold_step (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (val : v) (acc : Tree k v) : Tree k v =
   insert k v leq key val acc
 
@@ -4059,7 +4178,23 @@ fn insert_with_preserves_ordered
           (insert_with_preserves_ordered k v leq transLeq total f key val r (get_ordered_r k v leq l k2 v2 r h))
 	          (bool_dichotomy (leq key k2))
 	  }
+```
 
+#### 4.7.6 `insert_with` — lookup characterization and locality
+
+`insert_with_lookup_characterization` states what `lookup key (insert_with
+combine key val m)` evaluates to (the combined value if `key` was already
+present, `val` otherwise), proved via the same overwrite/into-L/into-R
+transport-witness triad as the Ordered-preservation proof above.
+`lookup_replace_l_inner_dispatch`/`_witness` and their right-hand mirrors
+are generic "replace a subtree, lookup elsewhere is unaffected" lemmas,
+reused across several of this section's locality proofs.
+`insert_with_lookup_locality` shows `insert_with` at a distinct key doesn't
+disturb `lookup` at any other key (the `insert_with` analogue of Law 3,
+§4.5), and `insert_with_fold_step_lookup_locality`/`_lookup_hit` lift that
+to the fold step `union`/`from_list` reuse.
+
+```ken
 fn insert_with_lookup_overwrite_witness
   (k : Type) (v : Type) (leq : k → k → Bool)
   (reflLeq : (x : k) → Equal Bool (leq x x) True)
@@ -4419,7 +4554,21 @@ fn insert_with_fold_step_lookup_hit
       (insert_with_fold_step k v leq f inserted val acc)
       (insert_with k v leq f inserted val acc)
       (insert_with_fold_step_reduces k v leq f inserted val acc))
+```
 
+#### 4.7.7 `union` — lookup characterization and member/lookup bridges
+
+`union_lookup_characterization` states `union`'s expected lookup result in
+terms of the two input trees' own lookups, with four pointwise corollaries
+(`union_lookup_both_none_law`/`_left_only_law`/`_right_only_law`/
+`_both_some_law`) covering each combination of hit/miss on the two sides.
+`member_from_lookup_none`/`_some` and `lookup_none_from_member_false_*`/
+`lookup_unit_some_from_member_true_*` are small bridging helpers converting
+between `Bool`-valued `member` facts and `Option`-valued `lookup` facts,
+needed to state the `Set`-level laws in §4.7.11 in terms of `member` while
+proving them via `lookup`.
+
+```ken
 fn union_from_list_acc_lookup_assoc_hit
   (k : Type) (v : Type) (leq : k → k → Bool)
   (reflLeq : (x : k) → Equal Bool (leq x x) True)
@@ -4893,7 +5042,19 @@ fn not_order_equiv_from_member_false_true
           (member_order_equiv_agree k v leq transLeq inserted query reject heq)
           hQuery))
       hInserted)
+```
 
+#### 4.7.8 `intersection` — lookup characterization
+
+`intersection_lookup_characterization` states `intersection`'s expected
+lookup result (present with the *left* tree's value, exactly when both
+sides have the key), with `intersection_lookup_some_law`/
+`_lookup_left_none_law` as the two pointwise corollaries. Built via the
+same locality/hit/miss dispatch pattern as `union`'s characterization
+(§4.7.7), instantiated against `intersection_from_list_acc`'s own
+filter-by-lookup shape.
+
+```ken
 fn intersection_from_list_acc_lookup_none_dispatch
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
@@ -5282,7 +5443,18 @@ fn intersection_lookup_left_none_law
               (lookup_assoc_agree k Unit leq transLeq key a hord hdist))
             (lookup_none_from_member_false k Unit leq key a hmem))))
       (lookup_empty_is_none k Unit leq key)
+```
 
+#### 4.7.9 `difference` — lookup characterization
+
+`difference_lookup_characterization` states `difference`'s expected lookup
+result (present with the *left* tree's value exactly when the *right* tree
+lacks the key), assembled from `_lookup_locality`, `_lookup_none`, and
+`_lookup_keep` sub-lemmas covering the three ways a key can relate to the
+two input trees, the same three-way structure `intersection`'s
+characterization uses.
+
+```ken
 fn difference_from_list_acc_lookup_locality_dispatch
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
@@ -5717,7 +5889,18 @@ fn difference_lookup_characterization
   λhord. λhdist.
     difference_lookup_characterization_dispatch k v leq reflLeq transLeq key a b hord hdist
       (bool_dichotomy (member k v leq key b))
+```
 
+#### 4.7.10 Ordered-preservation for `insert_with`'s fold, `union`, `intersection`, `difference`
+
+`insert_with_fold_step_preserves_ordered`/`fold_insert_with_preserves_ordered`
+extend §4.7.5's fold-preservation lemma to the combining case;
+`union_preserves_ordered`/`intersection_preserves_ordered`/
+`difference_preserves_ordered` each compose that fold-preservation fact
+with their own filter-then-rebuild construction, closing the
+Ordered-preservation obligation for every Layer-2 combinator.
+
+```ken
 fn insert_with_fold_step_preserves_ordered
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
@@ -5874,7 +6057,26 @@ fn difference_preserves_ordered
   (a : Tree k v) (b : Tree k v)
   : Ordered k v leq (difference k v leq a b) =
   difference_from_list_acc_preserves_ordered k v leq transLeq total (to_list k v a) b (empty k v) (ordered_empty k v leq)
+```
 
+#### 4.7.11 Set operations — membership and algebraic laws
+
+`set_union`/`set_intersection`/`set_difference` are the `Tree k Unit`
+specializations of the three combinators above. `set_union_member_law`
+characterizes membership as an `Or`; `set_intersection_member_law` and
+`set_difference_member_law` characterize membership as an `And` (the
+latter with a negation on the right side) — each built via the same
+`_rhs`/`_case`/`_dispatch` chain shape. `set_union_comm_law`/`_assoc_law`/
+`_idempotent_law`/`_identity_law` and the intersection mirrors
+(`set_intersection_comm_law`/`_assoc_law`/`_idempotent_law`/
+`_identity_law`) give the expected algebraic laws for both operations —
+proved via `member`-extensionality against the lookup-table
+characterizations above. Note: `set_intersection_identity_law` (as landed)
+restates the idempotent law rather than stating an actual identity-element
+law; this is a pre-existing naming mismatch worth a follow-on look, not
+introduced or fixed by this transformation.
+
+```ken
 fn set_union (k : Type) (leq : k → k → Bool) (s : Tree k Unit) (t : Tree k Unit) : Tree k Unit =
   union k Unit leq unit_combine s t
 
@@ -6350,7 +6552,29 @@ fn set_intersection_identity_law
       (set_member k leq x (set_intersection k leq s s))
       (set_member k leq x s) =
   set_intersection_idempotent_law k leq reflLeq transLeq x s
+```
 
+#### 4.7.12 `keys`/`values` projections and a binary-relations library
+
+`keys`/`values` project the two halves of `to_list`'s `Pair k v` entries;
+`keys_project_to_list`/`values_project_to_list`/
+`keys_values_projection_coherence` connect the two projections back to
+`to_list`, and `keys_ascending` reuses Law 4's `to_list_ordered` (§4.2) to
+show `keys` is sorted over an `Ordered` tree.
+
+The package closes with a small binary-relations library represented as
+`Tree k (Tree k Unit)` — an adjacency map from a key to the set of its
+successors: `succ`/`rel_member`/`add_edge` for the raw relation,
+`compose`/`converse` for relational composition and reversal, and
+`is_reflexive`/`is_symmetric`/`is_transitive`/`is_equivalence` as the
+standard relation-property predicates stated directly against `rel_member`.
+
+Transitive closure is intentionally design-now/defer-build: it is to be
+represented as bounded reachability (`IsTrue (reachableWithin N x y)`) once
+`size` and bounded iteration land. This package deliberately does not
+define a raw proof-relevant `data ... : Ω` closure.
+
+```ken
 fn pair_vals (k : Type) (v : Type) (xs : List (Pair k v)) : List v =
   match xs {
     Nil ⇒ Nil v ;
@@ -6457,7 +6681,182 @@ fn is_transitive (k : Type) (leq : k → k → Bool) (r : Tree k (Tree k Unit)) 
 fn is_equivalence (k : Type) (leq : k → k → Bool) (r : Tree k (Tree k Unit)) : Prop =
   And (is_reflexive k leq r) (And (is_symmetric k leq r) (is_transitive k leq r))
 
--- CAT-4 Fork B is intentionally design-now/defer-build: transitive closure is
--- to be represented as bounded reachability (`IsTrue (reachableWithin N x y)`)
--- once `size` and bounded iteration land. This package deliberately does not
--- define a raw proof-relevant `data ... : Ω` closure.
+```
+
+## 5. Design notes
+
+**The induction idiom (`54 §2.1`).** Confirmed against the landed
+elaborator by a throwaway probe before this package was built: Ken's
+dependent match wraps each recursive-field method in a kernel-required
+IH-slot Pi layer, but that layer is a dead, surface-unreferenceable binder
+(`dependent-match-nonnullary.md` §"IHs are DEAD binders" — confirmed
+empirically, not merely read off the doc). The actual induction hypothesis
+is instead obtained the same way `to_list`/`insert`/`lookup` already
+recurse: an ordinary self-recursive call on the subtree (e.g.
+`preserves_ordered ... l`, SCT-checked structural descent), whose *result*
+is the real IH, consumed directly by name — never a synthesized `ih_l`/
+`ih_r` binder. Every proof in [§4](#4-laws--proofs) follows this shape.
+
+**The convoy idiom (`54 §2.1`, `wp/map-convoy-idiom`).** Every match's own
+return type stays scrutinee-independent; any hypothesis whose type mentions
+the match's scrutinee is curried in via `->` after the return type and
+bound per-arm with `\h.`, letting the kernel narrow it automatically
+instead of requiring a dependent motive. This is the idiom every
+`fn ... : H1 → H2 → Goal` in [§4](#4-laws--proofs) (rather than a bare
+`fn ... (h1 : H1) (h2 : H2) : Goal`, with `h1`/`h2` bound as ordinary
+uncurried parameters ahead of the match) is built on.
+
+**Wall 2 — refuted, not a gap.** An originally escalated obstruction
+("Wall 2": `check_match_dependent` allegedly not normalizing a branch's
+substituted expected type) was ground-truthed and refuted during this
+package's construction: it was a proof-structuring bug — uncurried convoy
+hypotheses left as early Pi-parameters instead of curried via `->` after
+the match's own return type — not an elaborator gap. The convoy idiom above
+is the fix; every proof in this package follows it, and none hits the
+originally-suspected gate.
+
+**Wall 1 — dissolved via a stop-one-step-short transport.** The real,
+narrower obstruction ("Wall 1": a nested `J`) arises because laws 1, 2, 3,
+and 5 all share a base-case transport: given a stuck comparison's outcome
+(`leq key k2 = True`/`False`), rewrite a goal stated about
+`insert`/`insert_with`'s *real* application into a goal about the specific
+branch that comparison selects. A naive approach needs an explicit
+reflected-`Eq` witness between two fully-reduced, syntactically-different
+constructor applications — a raw `Eq (Tree k v) (Node ...) (Node ...)`
+between the two sides once *both* stuck comparisons are resolved, which
+requires nesting one `J` inside another and does not go through. This
+dissolves via a `trans`/`cong` single-combined-equation composition idiom:
+compose the `Eq`-proof chain to stop at the *last* stuck-match redex rather
+than the fully iota-reduced `Node(...)`, so the final delta+iota step
+happens through ordinary conversion during `J`'s own base-argument check,
+never needing to construct that raw two-sided `Eq` at all. This "v2
+route-around" is the `insert_case_transport_overwrite`/`_into_l`/`_into_r`
+family (§4.3) and its `insert_with`/`lookup`/`assoc` analogues throughout
+[§4](#4-laws--proofs) — confirmed on a `Bool` proxy first, then for the
+real `Tree`-shaped application.
+
+**Structural exemption from the `eq_at_inductive`/`Tree` divergence
+(`wp/obs-eq-termination`, `9cf468a`).** The stop-one-step-short route above
+is, independently, confirmed structurally exempt from a kernel
+`eq_at_inductive`/`Tree` divergence bug that `wp/obs-eq-termination` fixed:
+it never constructs the constructor-vs-constructor `Tree` equality that
+machinery decomposes, since the composition stops one step before that
+point. Every proof in this package was re-verified against the fixed
+kernel and builds clean, well under a second per law (Law 5's full file
+build: ~1.7s) — this is the real, non-stubbed assembly, not a
+pre-`9cf468a` stand-in.
+
+**Alternatives rejected.** A bundled `(d : Ord k)` record parameter and a
+`where Ord k` constraint were both tried first for comparator threading
+([§1](#1-motivation)) and both hit landed elaborator gaps
+(`instance_search` needs a concrete head; `(d).field` doesn't parse in type
+position) — the unbundled explicit-parameter encoding is the fallback that
+works today, not the intended long-term surface. A raw proof-relevant
+`data ... : Ω` transitive-closure inductive was considered for
+[§4.7.12](#4712-keysvalues-projections-and-a-binary-relations-library) and
+rejected in favor of deferring to bounded reachability once `size` and
+bounded iteration land.
+
+## 6. Findings
+
+- **Dependent-match IH binders are dead weight for tree/list recursion**
+  (routed to Ergo as a sugar candidate): every recursive proof in this
+  package ignores the kernel-synthesized IH-slot Pi layer entirely in favor
+  of an ordinary self-recursive call. A surface form that let a `match`
+  arm's recursive call *be* the IH without threading through a dead binder
+  would remove a source of newcomer confusion (`dependent-match-nonnullary.md`).
+- **The convoy idiom is a recurring proof shape, not a one-off** (routed to
+  Ergo as an abstraction candidate): every law in [§4](#4-laws--proofs)
+  restates the same pattern — scrutinee-independent return type, hypotheses
+  curried via `->` and bound per-arm — by hand. A checked combinator or
+  tactic that constructs this shape automatically from an uncurried
+  statement would remove a substantial fraction of this package's
+  boilerplate.
+- **The stop-one-step-short transport idiom generalizes beyond `Map`**
+  (routed to Ergo as an abstraction candidate): any stuck two-level match
+  proof (a comparator's result gating a second comparator's result, as in
+  `insert`/`insert_with`/`lookup`/`assoc`) needs this exact bridge shape.
+  It appeared independently at least four times in this package
+  (`insert`, `insert_with`, `lookup`, `assoc`) with only the goal and the
+  target function varying — a strong signal for a reusable combinator.
+- No kernel-reduction defect surfaced during this package's construction
+  beyond the ones already fixed upstream (`wp/obs-eq-termination`,
+  `9cf468a`) and already-tracked (`check_match_dependent`'s `Term::Var`-only
+  check-mode propagation gate, worked around via the abstract-parameter
+  technique in `derive_from_false`, §4.3).
+
+## 7. References
+
+- **Binary search trees** — Wikipedia,
+  <https://en.wikipedia.org/wiki/Binary_search_tree> — general orientation
+  on the unbalanced-BST carrier and its ordering invariant.
+- **Purely functional data structures** — Chris Okasaki, Cambridge
+  University Press, 1998 — the standard reference for persistent,
+  purely-functional map/set implementations over trees; this package's
+  carrier is the simplest member of that family (no balancing).
+- **Introduction to Objectual Type Theory / dependent pattern matching
+  literature** — for readers porting from Coq/Agda/Lean: the "convoy
+  pattern" name and shape used throughout [§4](#4-laws--proofs) and
+  [§5](#5-design-notes) is a direct analogue of the well-known Coq
+  `refine`/convoy pattern for avoiding dependent-motive inference failures
+  by currying scrutinee-dependent hypotheses after the match.
+
+## 8. Trust & derivation
+
+**Spec catalog entry:** `spec/50-stdlib/52-map.md` (carrier, basic
+operations) and `spec/50-stdlib/54-map-verified-laws.md` (the 5-law
+capstone, §4). Layer-2 operations realize `58` (CAT-4).
+
+**Public API (stable names):** `Tree`, `empty`, `to_list`, `fold`,
+`insert`, `lookup`, `member`, `from_list`, `Set` projections
+(`set_insert`/`set_member`/`set_to_list`), `Ordered`, the five capstone
+laws (`preserves_ordered`, `lookup_found_after_insert`, `lookup_locality`,
+`to_list_ordered`, `lookup_assoc_agree`), `delete`, `insert_with`,
+`union`/`intersection`/`difference` and their `Set`-level wrappers,
+`keys`/`values`, and the binary-relations combinators
+(`succ`/`compose`/`converse`/`is_equivalence`).
+
+**Source map:**
+
+| Reader task | Section |
+|---|---|
+| Understand the carrier and basic operations | [§2](#2-definition) |
+| See how the package composes / who reaches for what | [§3](#3-using-it) |
+| Find a specific law's statement and proof | [§4.1](#41-capstone-preliminaries)–[§4.6](#46-law-5--lookup_assoc_agree-dictionary-agreement-with-the-ordered-list-lookup) |
+| Find a Layer-2 operation (`delete`/`union`/…) | [§4.7](#47-layer-2-keyed-collection-operations-58-cat-4) |
+| Understand the recurring proof idioms | [§5](#5-design-notes) |
+
+**Derivation path from built-ins.** `Tree` is a checked `data` inductive
+(kernel-admitted by positivity). Every operation is a `declare_def`
+(checked, upgraded opaque → transparent on SCT success) or an ordinary
+`fn`. `Or`/`Inl`/`Inr` is a Rust-registered kernel `declare_inductive`
+(§4.1) — an ordinary kernel-rechecked inductive admission, not a native
+primitive.
+
+**`trusted_base()` delta: zero**, throughout both the capstone and
+Layer-2. Every capstone proof reduces through the existing `Term::J`/
+`Term::Cast`/`Term::Elim`; no `Axiom` appears anywhere in this file. Every
+Layer-2 operation is pure, termination-checked recursion over the real
+generic eliminator, with no native interpreter primitive added (mirroring
+`catalog/packages/Data/Collections/Collections.ken.md`'s Approach A,
+Architect ruling `evt_4k1yqah3yvpds`).
+
+**Proof families.** Base-case transport (`insert_case_transport_*`/
+`insert_with_transport_*`, the stop-one-step-short bridges, §4.3/§5) →
+comparison-independent structural induction
+(`insert_preserves_all_keys`/`all_keys_trans_*`, §4.3) → the convoy-idiom
+recursive assembly (every law's own top-level `fn`, §4.1–§4.6, §4.7.5–§4.7.10)
+→ `member`-extensionality against a lookup-table characterization (the
+`Set`-level algebraic laws, §4.7.11).
+
+**Consumers.** `crates/ken-elaborator/tests/map_build_acceptance.rs` and
+the other targeted acceptance suites listed in this package's git history
+exercise the capstone laws and the Layer-2 operations directly; see this
+package's own commit history for the exact per-consumer swap when this
+file moved from `Map.ken` to `Map.ken.md`.
+
+**Validation evidence.** `ken check` on this file's tangled `` ```ken ``
+fences, concatenated, elaborates clean against the real kernel (this
+package's own byte-identical-tangle verification against the
+pre-transformation `Map.ken` is the transformation's own evidence; ongoing
+behavior is proved by the acceptance suites above, run in CI at merge).
