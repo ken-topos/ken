@@ -394,6 +394,117 @@ prototype's stubbed sums and missing exhaustiveness.
   irrelevance before method checking contradicts AC6's dependent-motive
   discipline rather than extending it.
 
+## surface/data-match/dependent-match-refinement (DS-5b, `34 §3.2.1`)
+
+`§3.2.1` extends `§3.2` motive recovery so a branch's constructor index equation
+(e.g. `Suc m ≡ Suc n` in `VCons`'s arm of `Vec A (Suc n)`) is carried into the
+local context via the kernel's own `Eq`/`J`/`Cast` — **never postulated**. The
+positives below are **landed** (DS-5b, `origin/main`); the two-vector `zip`
+recursive step and `Fin`-indexed `lookup` are `(gated: DS-5c)` — the named
+follow-on `§3.2.1` scopes. Vocabulary matches the acceptance suite
+`ds5b_dependent_match_refinement_acceptance.rs` and the AC5/AC9 cases above:
+
+```ken
+data Vec (A : Type) : Nat -> Type where {
+  VNil  : Vec A 0 ;
+  VCons : (n : Nat) -> A -> Vec A n -> Vec A (n+1)
+}
+```
+
+### surface/data-match/dr-injectivity-and-over-refinement (DS-5b) (soundness) — TR-DR
+- spec: `spec/30-surface/34-data-match.md §3.2.1`; `10-kernel/16 §2.2`
+  (same-constructor `Eq`-at-inductive); the `J`/`Cast` discharge (`16`)
+- given: the peeled-recursive-field re-typing (`tail`), paired with the
+  over-refinement negative on the **same** match shape:
+
+  ```ken
+  fn tail (A : Type) (n : Nat) (xs : Vec A (Suc n)) : Vec A n =
+    match xs { VCons m y ys => ys }
+
+  fn wrongGoal (n : Nat) (xs : Vec Nat (Suc n)) : Vec Nat (Suc n) =
+    match xs { VCons m y ys => ys }
+  ```
+- expect:
+  - `tail` **accepts** — `VCons`'s equation `Suc m ≡ Suc n` reduces (kernel
+    same-constructor `Eq`) to `m ≡ n`, so the peeled field `ys : Vec A m` is
+    `cast` up to the goal `Vec A n`. The emitted body carries a real `J`-derived
+    `Cast`, and `trusted_base()` is **unchanged** (zero-`Axiom`).
+  - `wrongGoal` **rejects** — `KernelRejected { error: TypeMismatch { .. } }`
+    (assert the specific variant, not bare `is_err()`): the only equation
+    `Suc m ≡ Suc n` licenses is `m ≡ n`, never `m ≡ Suc n`, so `ys : Vec Nat m`
+    does **not** re-type to `Vec Nat (Suc n)`. No `Cast` is fabricated without a
+    real premise — the kernel is the arbiter.
+- why: the **non-degenerate discriminating pair** on a shared match shape — the
+  refinement is exactly what injectivity licenses, no more. A bug that
+  over-refines (fabricates a `Cast` to any goal) **accepts `wrongGoal`** (the
+  unsoundness vector); a bug that under-refines (never re-types the peeled field)
+  **rejects `tail`**. The pair flips in opposite directions on the same
+  `Suc m ≡ Suc n` premise. This is the load-bearing soundness net, and it stays
+  **live** while `zip`/`lookup` are gated below.
+
+### surface/data-match/dr-sibling-convoy-and-goal-refinement (DS-5b)
+- spec: `spec/30-surface/34-data-match.md §3.2.1`
+- given: the single-level sibling convoy and the base-case goal refinement:
+
+  ```ken
+  fn firstIsSecond (n : Nat) (v : Vec Nat n) (w : Vec Nat n) : Bool =
+    match v { VNil => True ; VCons m a xs => match w { VCons k b ys => True } }
+
+  fn firstIsVNil (n : Nat) (v : Vec Nat n) (w : Vec Nat n) : Vec Nat n =
+    match v { VNil => VNil Nat ; VCons m a xs => v }
+  ```
+- expect: both **accept**.
+  - `firstIsSecond` — matching `v` refines `n`; the **outer** sibling binder `w`
+    (a parameter sharing the index, never destructured by the outer match) is
+    re-typed in lockstep, so the nested `match w` is exhaustive with **no**
+    impossible `VNil` arm. Un-refined, this is `ExhaustivenessError` on the
+    omitted `VNil`.
+  - `firstIsVNil` — the `VNil` base-case arm **constructs** a fresh `VNil Nat`
+    (no context binding to redirect); its checking goal is refined and the result
+    `cast` back to the caller's goal.
+- why: covers convoy (capability 2) and goal refinement (capability 3) — the two
+  DS-5b forms beyond peeled-field injectivity. **Single-level** is load-bearing:
+  one sibling, one nested match, no reuse of an enclosing-match field (that reuse
+  is exactly the `zip` gap below).
+
+### surface/data-match/dr-zip-two-vector (gated: DS-5c)
+- spec: `spec/30-surface/34-data-match.md §3.2.1` (the named `DS-5c` boundary)
+- given: the full two-vector `zip` recursive step, which nests a match on the
+  second vector **and** reuses the first vector's own peeled tail in the
+  recursive call:
+
+  ```ken
+  fn zipNat (n : Nat) (v : Vec Nat n) (w : Vec Nat n) : Vec Nat n =
+    match v {
+      VNil => VNil Nat ;
+      VCons m a xs => match w { VCons k b ys => VCons m a (zipNat m xs ys) }
+    }
+  ```
+- expect: `(gated: DS-5c)` — **rejects today** (`KernelRejected`), expected to
+  **accept once `DS-5c` lands**. The gate is real: DS-5b's convoy handles **one**
+  sibling through **one** nested match with no further reuse; reusing the
+  enclosing match's `xs` in `zipNat m xs ys` hits `§3.2.1`'s named root cause
+  (sibling-convoy cannot yet distinguish a genuine outer parameter from a field
+  the enclosing match already bound). The rejection is fail-closed and
+  kernel-backstopped (a completeness gap, "never unsound").
+- why: **honest gate marker.** Un-stage to a positive accept when `DS-5c` lands;
+  until then the AC8 net above (`dr-injectivity-and-over-refinement`) stays the
+  live enforcer of the no-spurious-refinement posture. `(gated: DS-5c)`.
+
+### surface/data-match/dr-lookup-fin (gated: DS-5c)
+- spec: `spec/30-surface/34-data-match.md §3.2.1`; `50-stdlib/60 §3` (`Fin`)
+- given: `lookup : (A : Type) → (n : Nat) → Vec A n → Fin n → A`, the safe
+  positional accessor recursing through the vector's tail indexed by a bounded
+  `Fin n` (`60 §3`).
+- expect: `(gated: DS-5c)` — the `Fin`-indexed recursion into the tail is the
+  same follow-on capability as `zip`'s two-vector step; it does not elaborate on
+  the DS-5b elaborator and is staged to `DS-5c`. Design is total-by-construction
+  (a `Fin n` **is** an in-range witness, no side-proof); only its elaboration is
+  gated. Un-stage to a positive accept + its `§5` computation law when `DS-5c`
+  lands.
+- why: the second `DS-5c`-gated operation; kept design-stated + gated so the
+  chapter's `§4` table (`lookup` gated on `DS-5c`) has a conformance home.
+
 ## Subsumed upstream (one home per property)
 
 - `../seed-surface.md` `data-match/construct-then-eliminate`,
