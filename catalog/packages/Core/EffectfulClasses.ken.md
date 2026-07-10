@@ -1333,14 +1333,18 @@ fn compose_map_fusion_law (g : Type -> Type) (h : Type -> Type) (apg : Applicati
 
 `compose_map`/`compose_map_id_law`/`compose_map_fusion_law` are
 `Functor`'s three fields for `Compose g h` (a FIXED `g`/`h`) — no
-`instance Functor (Compose g h)` is declared: `Compose g h` (two
-explicit type ARGUMENTS applied to the 3-ary `Compose`) is itself a
-parametric instance head with free `g`/`h`, the CAT-1 `§6.1` gap
-(`elab_instance_decl` elaborates an instance head in an empty context;
-DS-7's `§2.5` documents the same wall for `ITree e resp`). Every use in
-this entry goes through the explicit-dictionary form directly
-(`apg`/`aph` threaded as ordinary parameters), never through instance
-search — the same Fork C shape `class Traversable`'s own `traverse`
+`instance Functor (Compose g h)` is declared: probed directly
+(`instance Box (Compose g h) { ... }` against a dict-free dummy class),
+the head RESOLVES (no `UnresolvedCon` — this is not the CAT-1 `§6.1`
+empty-context gap DS-7's `§2.5` documents for `ITree e resp`, which
+fails unresolved) but is then rejected with `KernelRejected(TypeMismatch
+{ expected: Type -> Type, found: Type })`: free `g`/`h` in an instance
+head are kinded `Type` by default, but `Compose` needs them kinded
+`Type -> Type` — a parametric-instance-head KINDING limitation,
+class-independent, distinct from the `§6.1` wall. Every use in this
+entry goes through the explicit-dictionary form directly (`apg`/`aph`
+threaded as ordinary parameters), never through instance search — the
+same Fork C shape `class Traversable`'s own `traverse`
 field uses.
 
 **`ap_ich`** (the interchange law — the deepest of the three proved laws:
@@ -1808,10 +1812,20 @@ scoped prerequisite, not an open "later":**
    `§9.4`'s `ap_ich` already uses) by splitting the triple application
    back into the `uP`/`vP` shape.
 
-Once `DS-8c` lands `Compose`'s `ap_cmp`, `instance Applicative (Compose g
-h)` assembles from pieces already in this entry, and the composition
-coherence law follows by the same `list_traverse`/`option_traverse`
-induction shape as `§9.2`'s identity/naturality proofs above.
+Once `DS-8c` lands `Compose`'s `ap_cmp` (a `compose_ap_cmp` lemma, the
+same explicit-dict shape as `compose_ap_id`/`compose_ap_hom`/
+`compose_ap_ich` above), the composition coherence law itself is proved
+the SAME way every other law in this entry is — over explicit
+`compose_pure`/`compose_ap` operations threaded with explicit `apg`/
+`aph` dicts, by the same `list_traverse`/`option_traverse` induction
+shape as `§9.2`'s identity/naturality proofs. It does NOT need, and
+DS-8c does NOT deliver, a surface `instance Applicative (Compose g h)`
+— that instance's head hits the identical free-`g`/`h` kinding wall
+`§9.4` documents for `Functor`, independent of whether `ap_cmp` is
+proved (landing `ap_cmp` does nothing to resolve a head-kinding issue).
+Every Compose-typed law in this entry, proved and deferred alike, is
+and will remain stated over the explicit-dictionary operations, never
+through instance search.
 
 **Scope the "lawful `Traversable`" claim precisely.** `List`/`Option`'s
 `Traversable` instances (`§9.1`) satisfy the **identity** and
