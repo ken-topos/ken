@@ -1,56 +1,78 @@
--- Derived string surface: the `List`/`Nat` combinator floor + 5 string ops
--- (spec/30-surface/37-strings-collections.md SS2.4/SS2.5/SS2.5.1/SS4.1, WP
--- L3-strings-surface -- slice 2/2 of the string surface; slice 1,
--- `L3-strings-roundtrip`, landed the real `string_to_list_char`/
--- `list_char_to_string` round-trip this rides).
---
--- Zero new kernel feature, zero `trusted_base()` delta: every combinator here
--- is a termination-checked recursive DERIVED def (`declare_recursive_group` +
--- `sct_check` + `declare_def`, upgrading opaque -> transparent on SCT
--- success) over the REAL generic eliminator (a `match` on `List`/`Nat`
--- lowers to `Term::Elim{fam}`, 34 SS3) -- there is no `elim_List`/`elim_Nat`
--- constant, and no native interp primitive is added for any of these
--- (Approach A, Architect ruling `evt_4k1yqah3yvpds`: a native prim would grow
--- the tested-not-trusted reduction surface for a trivially structural fold,
--- a subsume-don't-proliferate violation). `OrdResult` is a checked `data`
--- inductive (kernel-admitted by positivity), not a postulate/primitive --
--- also zero delta.
---
--- The floor is 7 combinators, not 6: the frame this WP started from assumed
--- a landed saturating `Nat` subtraction (`sub`) that does not exist (only
--- signed non-saturating `sub_int` is a primitive) -- `nat_sub` is the 7th,
--- derived here. `nat_sub`'s shape and the local `OrdResult` declaration both
--- mirror the landed precedent in
--- `crates/ken-elaborator/tests/val1_string_literals.rs:327`/`:334`
--- (`natCmp`'s own local `OrdResult`, with the ES2 sanction-comment "a
--- genuine 3-way comparison still gets one, declared locally").
+# `Collections` — the derived `List`/`Nat` combinator floor + string surface
 
--- `OrdResult` -- the 3-way comparison result (SS2.5.1). The landed `Ord Char`
--- (`catalog/packages/Core/LawfulClasses.ken`) is `leq`-only -- no
--- `compare` method, and no `Ordering`/`OrdResult` type exists anywhere else
--- on `main` (ES2 retired the prelude's `OrdResult` as un-referenced bloat,
--- but explicitly sanctions a LOCAL declaration where genuinely needed --
--- Architect ruling `evt_1stp9sspm6ag8`). Named `OrdResult`, matching the
--- `natCmp` precedent -- never a second name (`Ordering`) for the same
--- concept. Exported from this module (the string surface's `compare` needs
--- it bindable); NOT re-promoted to the prelude (that would reopen ES2's
--- retirement -- YAGNI until a second consumer, e.g. verified `sort`, is
--- real, per the Architect's forward note).
+The derived `List`/`Nat` combinator floor (`spec/30-surface/37-strings-collections.md
+§2.4/§2.5/§2.5.1/§4.1), the CAT-3 structural/verified-sort/projection-abstraction
+slices, and the 5 derived `String` ops built on top of the real
+`string_to_list_char`/`list_char_to_string` round trip. Every combinator here
+is a termination-checked recursive derived definition over the real generic
+eliminator — zero new kernel feature, zero `trusted_base()` delta anywhere in
+this file.
+
+## Index
+
+1. [Motivation](#1-motivation)
+2. [Definition](#2-definition)
+3. [Using it](#3-using-it)
+4. [Laws  proofs](#4-laws--proofs)
+5. [Design notes](#5-design-notes)
+6. [Findings](#6-findings)
+7. [References](#7-references)
+8. [Trust  derivation](#8-trust--derivation)
+
+**Named reading paths**
+
+- *Newcomer* → [Motivation](#1-motivation) → [Using it](#3-using-it)
+- *Practitioner* → [Using it](#3-using-it) →
+  [Laws  proofs](#4-laws--proofs)
+- *Researcher* →
+  [Laws  proofs](#4-laws--proofs) → [Design notes](#5-design-notes)
+
+## 1. Motivation
+
+`spec/30-surface/37-strings-collections.md §2.4/§2.5/§2.5.1/§4.1` (WP
+`L3-strings-surface`, slice 2/2 of the string surface — slice 1,
+`L3-strings-roundtrip`, landed the real `string_to_list_char`/
+`list_char_to_string` round trip this package rides) needs a `List`/`Nat`
+combinator floor and five derived `String` operations, stated once as
+ordinary checked Ken rather than re-derived per consumer. The floor is 7
+combinators, not 6: the WP's original frame assumed a landed saturating
+`Nat` subtraction (`sub`) that does not exist (only signed non-saturating
+`sub_int` is a primitive) — `nat_sub` is the 7th, derived in `§4.5` below.
+Every combinator, law, and string op is a termination-checked recursive
+`declare_def` (upgrading opaque to transparent on `sct_check` success) over
+the real generic eliminator — a `match` on `List`/`Nat` lowers to a real
+`Term::Elim{fam}` (`34 §3`); there is no `elim_List`/`elim_Nat` constant, and
+no native interpreter primitive is added for any of these combinators
+(Approach A, Architect ruling `evt_4k1yqah3yvpds`: a native primitive would
+grow the tested-not-trusted reduction surface for a trivially structural
+fold, a subsume-don't-proliferate violation).
+
+## 2. Definition
+
+`OrdResult` is the 3-way comparison result (`§2.5.1`). The landed `Ord Char`
+(`catalog/packages/Core/LawfulClasses.ken.md`) is `leq`-only — no `compare`
+method — and no `Ordering`/`OrdResult` type exists anywhere else on `main`
+(ES2 retired the prelude's `OrdResult` as un-referenced bloat, but explicitly
+sanctions a local declaration where genuinely needed — Architect ruling
+`evt_1stp9sspm6ag8`, the `natCmp` precedent,
+`crates/ken-elaborator/tests/val1_string_literals.rs:334`). Named
+`OrdResult`, matching that precedent — never a second name (`Ordering`) for
+the same concept; exported here since `compare`'s result type must be
+bindable, but not re-promoted to the prelude (that would reopen ES2's
+retirement — a second consumer, e.g. a verified `sort` over a richer
+carrier, would trigger that subsume decision later, not this package).
+
+The first four of the seven floor combinators follow: `list_append`
+(deliberately a distinct name from the landed `Bytes`-domain `append`,
+FS-effect, `crates/ken-elaborator/src/bytes.rs` — this is the pure
+`List a -> List a -> List a` op and must not shadow or be shadowed by it),
+`nth`, `take`, and `drop`. The remaining three (`nat_sub`, `list_eq`,
+`list_compare`) are declared in `§4.5`, next to the string ops that need
+them.
+
+```ken
 data OrdResult = Lt | Eq | Gt
 
--- The `List`/`Nat` combinator floor (SS4.1) plus the CAT-3 Layer-1
--- structural list ops/laws. Every recursive call below is an APPLIED call
--- whose decreasing argument is a strict subterm of a matched argument (the
--- `Cons` tail and/or the `Suc` predecessor) -- squarely in the SCT's sound
--- zone, never leaning on the SCT's unapplied-self-reference /
--- recursion-through-opaque-map over-accept hole
--- (`sct-unapplied-self-reference-over-accepts`). Proof terms use `cong` from
--- `catalog/packages/Core/Transport.ken`, so load transport before this package.
-
--- `list_append` -- a DISTINCT name from the landed `Bytes`-domain `append`
--- (FS-effect, `crates/ken-elaborator/src/bytes.rs`, symbol `"append"`); this
--- is the pure `List a -> List a -> List a` op and must not shadow or be
--- shadowed by it (AC6 / Architect brief-condition 2).
 fn list_append (a : Type) (xs : List a) (ys : List a) : List a =
   match xs {
     Nil ⇒ ys ;
@@ -83,9 +105,33 @@ fn drop (a : Type) (n : Nat) (xs : List a) : List a =
       Cons h t ⇒ drop a m t
     }
   }
+```
 
--- CAT-3 Layer-1 structural list operations. These are ordinary transparent
--- recursive definitions over `List`/`Nat`; no primitive or postulate is added.
+## 3. Using it
+
+This package builds up in four layers, each riding the one before: the
+floor above; `§4.1`'s structural ops (`map`/`filter`/`mem`/`length`/`min`);
+`§4.3`'s verified `List Bool` insertion sort, a caller-facing example of
+proving a concrete instantiation of the generic `sort`/`insert` sound and
+permutation-preserving; and `§4.6`'s 5 derived `String` ops
+(`concat`/`slice`/`char_at`/`eq`/`compare`), which every later catalog
+package that manipulates `String` values reaches for directly. Every proof
+term in `§4` uses `cong`/`sym`/`trans` from
+`catalog/packages/Core/Transport.ken.md`, so a consumer loads Transport
+before this file.
+
+## 4. Laws  proofs
+
+### 4.1 CAT-3 D1 — structural list operations
+
+Ordinary transparent recursive definitions over `List`/`Nat`; no primitive
+or postulated law is added. `take_drop_decomposition`, `map_length`, and
+`length_take_min` are the three proof-returning laws this slice ships. The
+`filter` membership characterization is deliberately held out until its
+comparator/Iff statement is pinned — no bare `Prop`-returning wrapper is
+shipped for it prematurely.
+
+```ken
 fn map (a : Type) (b : Type) (f : a → b) (xs : List a) : List b =
   match xs {
     Nil ⇒ Nil b ;
@@ -166,30 +212,42 @@ fn length_take_min (a : Type) (n : Nat) (xs : List a)
           (length_take_min a m t)
     }
   }
+```
 
--- DS-4: five more `List` combinators completing the SS4.1 floor
--- (`reverse`/`zip`/`concat_map`/`range`/`foldl`), each an ordinary
--- structural-recursion `fn` in the same style as the floor above --
--- zero new kernel feature, zero `trusted_base()` delta.
+### 4.2 DS-4 — five more `List` combinators completing the floor
 
--- `reverse` -- naive `append`-based (not an accumulator): this spelling
--- makes the involutive proof cleanest, needing only the standard
--- reverse-of-snoc helper lemma below, not a separate accumulator-
--- invariant lemma.
+`reverse`/`zip`/`concat_map`/`range`/`foldl`, each an ordinary
+structural-recursion `fn` in the same style as `§4.1` — zero new kernel
+feature, zero `trusted_base()` delta. `reverse` is naive, `list_append`-based
+(not an accumulator): this spelling makes the involutive proof cleanest,
+needing only the standard reverse-of-snoc helper lemma below, not a separate
+accumulator-invariant lemma. Both `Nil` branches of `reverse_snoc` close via
+`cong _ _ (Cons a y)` over the fully-collapsed `Nil = Nil` — a `Cons`-vs-`Cons`
+goal with an ABSTRACT shared element `y` does not itself collapse to bare
+`Top` (the kernel's own equality-at-inductive reduction produces a
+right-nested Σ pairing the stuck, `y`-abstract element equality with the
+collapsed tail equality, so `tt`/`Refl` alone both fail); lifting `tt`
+through `Cons` via `cong` is the direct, minimal proof. `zip` truncates at
+the shorter list (`Nil` on either empty), NOT the length-indexed `Vec` zip:
+this is ordinary non-dependent recursion carrying none of the
+sibling-convoy/dependent-match capability gate that a length-indexed zip
+would need — fully mechanical. `concat_map` ships with only its two
+structural (`Nil`/`Cons`) equations — no bespoke length law, since that
+would need a `sum` combinator not in this floor (subsume-don't-proliferate).
+`range n` produces `[0, 1, .., n-1]` via a `start`-threaded helper
+(`range_from`) so the recursion is structural on `n` while the contents
+count up. `foldl` similarly ships with only its two structural equations —
+no `foldl`/`foldr` relationship law, since `foldr` is not in this floor and
+inventing one solely to state a law here would be exactly the proliferation
+this package avoids elsewhere.
+
+```ken
 fn reverse (a : Type) (xs : List a) : List a =
   match xs {
     Nil ⇒ Nil a ;
     Cons h t ⇒ list_append a (reverse a t) (Cons a h (Nil a))
   }
 
--- Reverse-of-snoc: the helper `reverse_involutive` needs. Both `Nil`
--- branches below close via `cong _ _ (Cons a y)` over the fully-collapsed
--- `Nil = Nil` (a `Cons`-vs-`Cons` goal with an ABSTRACT shared element
--- `y` does not itself collapse to bare `Top` -- the kernel's own
--- `Eq`-at-inductive reduction produces a right-nested Sigma pairing the
--- (stuck, `y`-abstract) element equality with the (collapsed) tail
--- equality, so `tt`/`Refl` alone both fail; lifting `tt` through `Cons`
--- via `cong` is the direct, minimal proof).
 fn reverse_snoc (a : Type) (xs : List a) (y : a)
   : Equal (List a) (reverse a (list_append a xs (Cons a y (Nil a)))) (Cons a y (reverse a xs)) =
   match xs {
@@ -238,11 +296,6 @@ fn reverse_length (a : Type) (xs : List a) : Equal Nat (length a (reverse a xs))
         (cong Nat Nat (length a (reverse a t)) (length a t) Suc (reverse_length a t))
   }
 
--- `zip` -- truncating at the shorter list (`nil` on either empty), NOT
--- the length-indexed `Vec` `zip`: this is ordinary non-dependent
--- recursion with zero sibling-convoy/dependent-match involvement, so it
--- carries none of the DS-5c capability block that gates the `Vec` `zip`
--- -- fully mechanical.
 fn zip (a : Type) (b : Type) (xs : List a) (ys : List b) : List (Pair a b) =
   match xs {
     Nil ⇒ Nil (Pair a b) ;
@@ -267,18 +320,12 @@ fn zip_length (a : Type) (b : Type) (xs : List a) (ys : List b)
     }
   }
 
--- `concat_map` -- map then flatten via `list_append`. No bespoke length
--- law: a coherence law here would need a `sum` combinator not in this
--- floor -- shipped with its two structural (`Nil`/`Cons`) equations only,
--- per subsume-don't-proliferate.
 fn concat_map (a : Type) (b : Type) (f : a → List b) (xs : List a) : List b =
   match xs {
     Nil ⇒ Nil b ;
     Cons h t ⇒ list_append b (f h) (concat_map a b f t)
   }
 
--- `range n` -- `[0, 1, .., n-1]`, via a `start`-threaded helper (`range_from`)
--- so the recursion is structural on `n` while the CONTENTS count up.
 fn range_from (start : Nat) (n : Nat) : List Nat =
   match n {
     Zero ⇒ Nil Nat ;
@@ -301,20 +348,28 @@ fn range_from_length (start : Nat) (n : Nat) : Equal Nat (length Nat (range_from
 fn range_length (n : Nat) : Equal Nat (length Nat (range n)) n =
   range_from_length Zero n
 
--- `foldl` -- the left fold. No `foldl`/`foldr` relationship law: `foldr`
--- is not in this floor, and inventing one solely to state a law here
--- would be exactly the proliferation `§`-guidance rules out -- shipped
--- with its two structural equations only.
 fn foldl (a : Type) (b : Type) (f : b → a → b) (z : b) (xs : List a) : b =
   match xs {
     Nil ⇒ z ;
     Cons h t ⇒ foldl a b f (f z h) t
   }
+```
 
--- CAT-3 D2 verified insertion-sort slice. `Perm` is intentionally the
--- package-local count/multiset equality surface, not the older prelude
--- truncation relation; consumers that load this package get the executable
--- comparator-indexed form needed by the verified `List Bool` carrier.
+### 4.3 CAT-3 D2 — verified `List Bool` insertion sort
+
+`Perm` is intentionally the package-local count/multiset equality surface —
+an ordinary `Prop`-valued function over an explicit comparator, never a raw
+proof-relevant inductive family — not the older prelude truncation
+relation; a consumer that loads this package gets the executable
+comparator-indexed form the verified `List Bool` carrier needs. `insert`/
+`sort` are the ordinary transparent generic combinators; the proofs below
+specialize them to `List Bool` under `bool_leq`, showing the specialized
+`sort_bool` (a direct case-split implementation, not `sort` applied to
+`bool_leq`) is both order-preserving (`sort_bool_sorted`) and a genuine
+permutation of its input (`sort_bool_perm`, via the two count-preservation
+lemmas for `True`/`False`).
+
+```ken
 fn bool_and (p : Bool) (q : Bool) : Bool =
   match p { True ⇒ q ; False ⇒ False }
 
@@ -524,11 +579,19 @@ fn sort_bool_perm (xs : List Bool)
       True ⇒ sort_bool_count_true (Cons Bool h t)
     }
   }
+```
 
--- CAT-3 D3 projection abstraction. These are ordinary class records over the
--- landed right-nested Sigma record machinery. The concrete lens is intentionally
--- `Pair Bool Bool` only: polymorphic `Lens s a` / `Iso a b` and quotient-carrier
--- views need surface support that is not part of this slice.
+### 4.4 CAT-3 D3 — projection-abstraction classes
+
+Ordinary class records over the landed right-nested Σ record machinery.
+The concrete lens is intentionally over `Pair Bool Bool` only — a
+polymorphic `Lens s a` / `Iso a b` and quotient-carrier views need surface
+support that is not part of this slice. Every law field below closes by
+`Refl`, since each concrete operation (`fst_pair_bool_bool`,
+`set_fst_pair_bool_bool`, the two `Bool`-identity functions) reduces
+definitionally once applied.
+
+```ken
 class View A {
   project : A → A
 }
@@ -649,9 +712,23 @@ instance SetoidMorphism Unit {
   project = id_bool ;
   respects = id_bool_respects
 }
+```
 
--- Saturating `Nat` monus (never underflows) -- `slice`'s length. Identical
--- shape to the landed `val1_string_literals.rs:327` `nat_sub`.
+### 4.5 The remaining floor combinators
+
+`nat_sub` is saturating `Nat` monus (never underflows) — `§4.6`'s `slice`
+needs exactly this shape for its length computation, identical to the
+landed `val1_string_literals.rs:327` `nat_sub` precedent. `list_eq` and
+`list_compare` complete the seven-combinator floor from `§1`. `compare_char`
+is a faithful 3-way repackaging of the landed `leqChar`/`eqChar`
+(`crates/ken-elaborator/src/decimal_char.rs`, Rust-side primitives — not
+catalog declarations, so their own names are untouched by this catalog's
+casing convention), not a re-derivation of `Char` comparison (settled input
+#4, `docs/program/wp/L3-strings-surface.md §2`): `eqChar` decides equality
+directly; otherwise `Lt`/`Gt` follow from `leqChar`'s antisymmetry and
+totality (both landed `Ord Char` laws, by transport from `Ord Int`).
+
+```ken
 fn nat_sub (a : Nat) (b : Nat) : Nat =
   match b {
     Zero ⇒ a ;
@@ -686,48 +763,160 @@ fn list_compare (a : Type) (cmp : a → a → OrdResult) (xs : List a) (ys : Lis
     }
   }
 
--- `compare_char` -- a faithful 3-way REPACKAGING of the landed `leqChar`/
--- `eqChar` (`crates/ken-elaborator/src/decimal_char.rs`), NOT a re-derivation
--- of Char comparison (settled input #4, `docs/program/wp/L3-strings-surface.md`
--- SS2): `Eq` on `eqChar`; else `Lt`/`Gt` by `leqChar`'s antisymmetry +
--- totality (both landed `Ord Char` laws, by transport from `Ord Int`).
 fn compare_char (a : Char) (b : Char) : OrdResult =
   match eqChar a b {
     True ⇒ Eq ;
     False ⇒ match leqChar a b { True ⇒ Lt ; False ⇒ Gt }
   }
+```
 
--- The 5 derived string ops (SS2.5), routed through the real
--- `string_to_list_char` / `list_char_to_string` round-trip (slice 1). These
--- ship as plain FUNCTIONS -- `eq`/`compare` are tested-not-trusted
--- Boolean/decision ops, not lawful `DecEq String`/`Ord String` instances
--- (that transport needs a lawful `DecEq Char`, not yet landed -- a tracked
--- follow-on; filing these as proof-carrying instances would over-claim the
--- trust level).
+### 4.6 The 5 derived `String` ops
 
+Routed through the real `string_to_list_char`/`list_char_to_string` round
+trip (slice 1). These ship as plain functions — `eq`/`compare` are
+tested-not-trusted Boolean/decision ops, not lawful `DecEq String`/
+`Ord String` instances (that transport needs a lawful `DecEq Char`, not yet
+landed — a tracked follow-on; filing these as proof-carrying instances now
+would over-claim the trust level). `slice` clamps by construction: `drop`
+past the end yields `Nil`, `take` past the end stops at the end, and the
+length `nat_sub j i` saturates at `0` when `j < i` — never an underflow,
+never stuck. `char_at` is total and honest about absence — `Option Char`,
+never a sentinel or a partial index. `eq` is codepoint-wise equality over
+the scalar sequence, riding the landed `eqChar` — this is never
+NFC-normalization equality (ADR 0010 §3: that identifies distinct scalar
+sequences, so over the codepoint carrier it is non-canonical — a lawful
+`DecEq` for it would inhabit `Bottom`). `compare` is 3-way, codepoint-wise
+lexicographic order — the more fundamental op, subsuming `<=`/`<`/`==`
+(a `leq`-only interface cannot cheaply recover a 3-way result).
+
+```ken
 fn concat (a : String) (b : String) : String =
   list_char_to_string (list_append Char (string_to_list_char a) (string_to_list_char b))
 
--- `slice` clamps by construction: `drop` past the end yields `Nil`, `take`
--- past the end stops at the end, and the length `nat_sub j i` saturates at
--- `0` when `j < i` -- never an underflow, never stuck.
 fn slice (i : Nat) (j : Nat) (s : String) : String =
   list_char_to_string (take Char (nat_sub j i) (drop Char i (string_to_list_char s)))
 
--- `char_at` is total and honest about absence -- `Option Char`, never a
--- sentinel or a partial index.
 fn char_at (i : Nat) (s : String) : Option Char =
   nth Char i (string_to_list_char s)
 
--- Codepoint-wise equality over the scalar sequence -- rides the landed
--- `eqChar`. This is NEVER NFC-normalization equality (ADR 0010 SS3: that
--- identifies distinct scalar sequences, so over the codepoint carrier it is
--- non-canonical -- a lawful `DecEq` for it would inhabit `Bottom`).
 fn eq (a : String) (b : String) : Bool =
   list_eq Char eqChar (string_to_list_char a) (string_to_list_char b)
 
--- 3-way, codepoint-wise lexicographic order -- the more fundamental op,
--- subsuming `<=`/`<`/`==` (a `leq`-only interface cannot cheaply recover
--- 3-way).
 fn compare (a : String) (b : String) : OrdResult =
   list_compare Char compare_char (string_to_list_char a) (string_to_list_char b)
+```
+
+## 5. Design notes
+
+**Package dependency.** The CAT-3 proof terms in `§4.1`–`§4.3` use `cong`/
+`sym`/`trans`, so harnesses and consumers load
+`catalog/packages/Core/Transport.ken.md` before this file. The dependency is
+proof-only and adds no trusted-base delta.
+
+**SCT sound zone.** Every recursive call in this package is an applied call
+whose decreasing argument is a strict subterm of a matched argument (the
+`Cons` tail and/or the `Suc` predecessor) — squarely in the termination
+checker's sound zone, never leaning on its unapplied-self-reference /
+recursion-through-opaque-map over-accept hole.
+
+**Deliverability honesty.** `String` is canonical with respect to `List Char`
+(the `string_to_list_char`/`list_char_to_string` round trip is a bijection
+on scalar sequences, ADR 0010 §2), so `DecEq String`/`Ord String` instances
+are soundly deliverable later — but that transport additionally needs a
+lawful `DecEq Char`, not yet landed. Filing `eq`/`compare` as proof-carrying
+instances now would over-claim the trust level; this package ships the
+functions only, honestly.
+
+## 6. Findings
+
+- **Kernel-reduction defect:** none.
+- **Abstraction candidate:** `§4.1`'s `filter` membership characterization
+  is deliberately held out until its comparator/Iff statement is pinned —
+  not shipped as a premature wrapper.
+- **Runtime-performance characteristic (non-blocking, forward-tracked).**
+  `crates/ken-elaborator/tests/l3_strings_surface_acceptance.rs`'s
+  `derived_string_ops_reduce_over_real_roundtrip` test exercises the pinned
+  `slice 0 99 "abc"` equivalent-to-`"abc"` conformance case
+  (`conformance/surface/collections/seed-collections.md` DS-AC3). Evaluating
+  a `take`/`drop`-style structural recursion at a unary-`Nat` depth of ~99
+  costs noticeably more than linear time in the current `ken-interp`
+  evaluator (empirically ~O(n^3.5–4) in the recursion depth `n`, not
+  exponential — a correct value, just slow: this one test takes on the
+  order of a few CPU-minutes at `n = 99`, versus sub-millisecond at
+  `n <= 40`). This is a pre-existing characteristic of `ken-interp`'s
+  reduction strategy for deep unary-`Nat` recursion under nested `match` (no
+  prior test exercised `Nat` depths anywhere near this range), **not** a bug
+  introduced by this package's derived definitions (the combinators are
+  correct and match the spec's mandated shapes exactly), and **not** a
+  soundness concern (the interpreter is the tested-not-trusted ring — a
+  wrong value, never a false proof, and the value here is correct). Flagged
+  to the language-leader/Architect as a forward-tracked `ken-interp`
+  performance finding; not a blocker for this package.
+
+## 7. References
+
+None — this entry's design is Ken-native, not consulted from an external
+reference implementation.
+
+## 8. Trust  derivation
+
+1. **Spec / WP.** `spec/30-surface/37-strings-collections.md §2.4/§2.5/
+   §2.5.1/§4.1`; WP `L3-strings-surface` (this package, slice 2/2);
+   `L3-strings-roundtrip` (slice 1, the native round trip this rides).
+2. **Public API.** `OrdResult`, `list_append`, `nth`, `take`, `drop`,
+   `nat_sub`, `list_eq`, `list_compare` (the 7-combinator floor); `map`,
+   `filter`, `mem`, `length`, `min`, `take_drop_decomposition`,
+   `map_length`, `length_take_min` (CAT-3 D1); `reverse`, `reverse_involutive`,
+   `zip`, `concat_map`, `range`, `foldl` and their proofs (DS-4); `count`,
+   `Perm`, `insert`, `sort`, `sort_bool`, `sort_bool_sorted`,
+   `sort_bool_perm` (CAT-3 D2); `View`, `Lens`, `Iso`, `Representation`,
+   `RefinementView`, `IndexedView`, `SetoidMorphism` (CAT-3 D3);
+   `compare_char`, `concat`, `slice`, `char_at`, `eq`, `compare` (the 5
+   derived `String` ops).
+3. **Source map.**
+
+   | Task | Section |
+   |---|---|
+   | See the floor's first four combinators | [Definition](#2-definition) |
+   | See how the layers build on each other | [Using it](#3-using-it) |
+   | Structural laws, verified sort, projection classes, the string ops | [Laws  proofs](#4-laws--proofs) |
+   | Package dependency, SCT sound zone, deliverability honesty | [Design notes](#5-design-notes) |
+
+4. **Derivation path.** Every combinator, law, and string op is a
+   `declare_def` (checked, upgraded opaque to transparent on `sct_check`
+   success) or an ordinary `fn`; `OrdResult` is a checked `data` inductive
+   (kernel-admitted by positivity), never a primitive or postulated
+   declaration. No native interpreter primitive is added for any list
+   combinator/law or string op (Approach A, Architect ruling
+   `evt_4k1yqah3yvpds`) — deriving trivially structural folds keeps the
+   audited primitive set small (subsume-don't-proliferate).
+5. **`trusted_base()` delta.** **Zero.** Every proof in this package is a
+   genuine, kernel-checked term; no law field is postulated anywhere.
+6. **Proof families.** `§4.1`/`§4.2`: structural induction + `cong`/`trans`
+   lifting the tail IH under the head constructor, the same shape
+   throughout. `§4.3`: full case-split specialized to `List Bool`/`bool_leq`,
+   closing by `tt`/`Refl`/`cong`/`trans`/`sym` per branch — no postulate
+   anywhere in the verified-sort slice. `§4.4`: every law field closes by
+   `Refl` (each concrete operation reduces definitionally once applied, no
+   case-split needed).
+7. **Consumers.** `catalog/packages/Data/Collections/Map.ken` (the proved
+   `Map`/`Set` BST) depends on this package's `list_append`.
+   `crates/ken-elaborator/tests/cat1_lawful_functors_package.rs`,
+   `ds3_sum_combinators_acceptance.rs`, `ds4_list_combinators_acceptance.rs`,
+   `ds7_applicative_monad_acceptance.rs`, `ds8_traversable_acceptance.rs`,
+   `either_catalog_package_acceptance.rs`, `es2_acceptance.rs`,
+   `l3_strings_surface_acceptance.rs`, `map_build_acceptance.rs`, and
+   `cat3_collections_package.rs` all load this package as a cross-file
+   prerequisite for their own consuming packages; `crates/ken-cli/tests/rosetta.rs`
+   concatenates it (after `Transport.ken.md`'s tangled source) ahead of
+   several rosetta examples that reuse it per the DRY rule.
+8. **Validation evidence.**
+   `crates/ken-elaborator/tests/cat3_collections_package.rs` — confirms the
+   CAT-3 D1/D2/D3 surface elaborates with zero `trusted_base()` delta, that
+   every law is proof-returning (not a bare `Prop` wrapper) and postulates
+   nothing, and that `§4.4`'s classes stay capitalized (no stray lowercase
+   `View`-style declaration reintroduced).
+   `crates/ken-elaborator/tests/ds4_list_combinators_acceptance.rs` —
+   confirms the DS-4 combinators register as real globals and the file
+   postulates nothing. `crates/ken-elaborator/tests/l3_strings_surface_acceptance.rs` —
+   confirms the 5 derived `String` ops reduce over the real round trip.

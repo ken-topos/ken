@@ -72,7 +72,7 @@ This fails with `"Refl expects an `Eq`-shaped goal"` — the goal already
 collapsed to `Top` before `Refl` was checked against it:
 
 ```ken reject
-const withRefl : Equal Bool (bool_and True True) True = Refl
+const with_refl : Equal Bool (bool_and True True) True = Refl
 ```
 
 An abstract (neutral) variable never collapses, so the same shape flips:
@@ -85,7 +85,7 @@ This fails: the goal never reduced to `Top` (`x` is abstract), so there is
 nothing for `tt` (a `Top` introduction) to close:
 
 ```ken reject
-fn selfEqTt (x : Bool) : Equal Bool (bool_and x x) (bool_and x x) = tt
+fn self_eq_tt (x : Bool) : Equal Bool (bool_and x x) (bool_and x x) = tt
 ```
 
 ### 1.1 When neither closes: opaque primitives don't reduce under conversion
@@ -109,13 +109,13 @@ This fails with `"Refl: the two sides of the goal are not convertible"` —
 `five` is concrete and the two arguments are literally the same value:
 
 ```ken reject
-const primEqRefl : Equal Bool (eq_int five five) True = Refl
+const prim_eq_refl : Equal Bool (eq_int five five) True = Refl
 ```
 
 This fails too, for the same reason: the goal never reduced to `Top` either:
 
 ```ken reject
-const primEqTt : Equal Bool (eq_int five five) True = tt
+const prim_eq_tt : Equal Bool (eq_int five five) True = tt
 ```
 
 The honest closer is a VISIBLE postulate, the same audited-delta shape

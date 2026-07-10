@@ -10,12 +10,12 @@ use ken_kernel::Decl;
 use ken_kernel::GlobalId;
 use std::collections::HashSet;
 
-const PARSING_KEN: &str = include_str!("../../../catalog/packages/Capability/Parsing/Parsing.ken");
+const PARSING_KEN_MD: &str = include_str!("../../../catalog/packages/Capability/Parsing/Parsing.ken.md");
 
 fn mk_env() -> ElabEnv {
     let mut env = ElabEnv::new().expect("base env");
-    env.elaborate_file(PARSING_KEN)
-        .expect("catalog/packages/Capability/Parsing/Parsing.ken must elaborate");
+    env.elaborate_ken_md_file(PARSING_KEN_MD)
+        .expect("catalog/packages/Capability/Parsing/Parsing.ken.md must elaborate");
     env
 }
 
@@ -151,8 +151,8 @@ fn neutralize_fixture_proofs(env: &ElabEnv, store: &mut EvalStore, names: &[&str
 fn cat5_d1_source_span_package_elaborates_zero_delta() {
     let mut env = ElabEnv::new().expect("base env");
     let base_trusted: HashSet<GlobalId> = env.env.trusted_base().into_iter().collect();
-    env.elaborate_file(PARSING_KEN)
-        .expect("catalog/packages/Capability/Parsing/Parsing.ken must elaborate");
+    env.elaborate_ken_md_file(PARSING_KEN_MD)
+        .expect("catalog/packages/Capability/Parsing/Parsing.ken.md must elaborate");
     let after_trusted: HashSet<GlobalId> = env.env.trusted_base().into_iter().collect();
     let new_trusted: HashSet<_> = after_trusted.difference(&base_trusted).copied().collect();
     assert!(
@@ -269,43 +269,43 @@ fn cat5_d1_source_span_package_elaborates_zero_delta() {
 #[test]
 fn cat5_d2_parser_result_surface_is_total_and_located() {
     assert!(
-        PARSING_KEN.contains("data ParseError = MkParseError SourceId Span")
-            && PARSING_KEN.contains("fn error_source (err : ParseError) : SourceId =")
-            && PARSING_KEN.contains("fn error_span (err : ParseError) : Span ="),
+        PARSING_KEN_MD.contains("data ParseError = MkParseError SourceId Span")
+            && PARSING_KEN_MD.contains("fn error_source (err : ParseError) : SourceId =")
+            && PARSING_KEN_MD.contains("fn error_span (err : ParseError) : Span ="),
         "ParseError must carry source identity and a span with accessors"
     );
     assert!(
-        PARSING_KEN.contains("data ParseResult a =")
-            && PARSING_KEN.contains("Parsed a Span Nat")
-            && PARSING_KEN.contains("Failed ParseError"),
+        PARSING_KEN_MD.contains("data ParseResult a =")
+            && PARSING_KEN_MD.contains("Parsed a Span Nat")
+            && PARSING_KEN_MD.contains("Failed ParseError"),
         "ParseResult must be the total Parsed/Failed result surface"
     );
     assert!(
-        PARSING_KEN.contains("const Parser (a : Type) : Type =")
-            && PARSING_KEN
+        PARSING_KEN_MD.contains("const Parser (a : Type) : Type =")
+            && PARSING_KEN_MD
                 .contains("(s : Source) -> (start : Nat) -> LessEqNat start (source_length s)")
-            && PARSING_KEN.contains("-> ParseResult a"),
+            && PARSING_KEN_MD.contains("-> ParseResult a"),
         "Parser must be total over well-formed source/start inputs"
     );
     assert!(
-        PARSING_KEN.contains("fn ParsedValid")
-            && PARSING_KEN.contains("Equal Nat (span_start consumed) start")
-            && PARSING_KEN.contains("Equal Nat (span_end consumed) next")
-            && PARSING_KEN.contains("fn FailedValid")
-            && PARSING_KEN.contains("Equal SourceId (error_source err) (source_id s)")
-            && PARSING_KEN.contains("ValidSpan s (error_span err)")
-            && PARSING_KEN.contains("fn ParserLaws"),
+        PARSING_KEN_MD.contains("fn ParsedValid")
+            && PARSING_KEN_MD.contains("Equal Nat (span_start consumed) start")
+            && PARSING_KEN_MD.contains("Equal Nat (span_end consumed) next")
+            && PARSING_KEN_MD.contains("fn FailedValid")
+            && PARSING_KEN_MD.contains("Equal SourceId (error_source err) (source_id s)")
+            && PARSING_KEN_MD.contains("ValidSpan s (error_span err)")
+            && PARSING_KEN_MD.contains("fn ParserLaws"),
         "D2 laws must state success validity, failure validity, totality, and source locality"
     );
     assert!(
-        !PARSING_KEN.contains("fn repeatWithFuel")
-            && !PARSING_KEN.contains("fn parseResultNext")
-            && !PARSING_KEN.contains("fn repeat (")
-            && !PARSING_KEN.contains("fn many ("),
+        !PARSING_KEN_MD.contains("fn repeatWithFuel")
+            && !PARSING_KEN_MD.contains("fn parseResultNext")
+            && !PARSING_KEN_MD.contains("fn repeat (")
+            && !PARSING_KEN_MD.contains("fn many ("),
         "D2 repetition is deferred; the package must not export broken repeat/many helpers"
     );
     assert!(
-        !PARSING_KEN.contains("= Axiom"),
+        !PARSING_KEN_MD.contains("= Axiom"),
         "CAT-5 D2 package must not use Axiom"
     );
 }
@@ -313,37 +313,37 @@ fn cat5_d2_parser_result_surface_is_total_and_located() {
 #[test]
 fn cat5_d3_bool_expression_surface_is_package_owned() {
     assert!(
-        PARSING_KEN.contains("data BoolExpr =")
-            && PARSING_KEN.contains("BTrue")
-            && PARSING_KEN.contains("BFalse")
-            && PARSING_KEN.contains("BNot BoolExpr")
-            && PARSING_KEN.contains("BAnd BoolExpr BoolExpr"),
+        PARSING_KEN_MD.contains("data BoolExpr =")
+            && PARSING_KEN_MD.contains("BTrue")
+            && PARSING_KEN_MD.contains("BFalse")
+            && PARSING_KEN_MD.contains("BNot BoolExpr")
+            && PARSING_KEN_MD.contains("BAnd BoolExpr BoolExpr"),
         "D3 must expose the package-owned BoolExpr data surface"
     );
     assert!(
-        PARSING_KEN.contains("data Syntax a = MkSyntax (Located a) (List (Located a))")
-            && PARSING_KEN.contains("fn erase_spans (x : Syntax BoolExpr) : BoolExpr =")
-            && PARSING_KEN.contains("fn ValidSyntax"),
+        PARSING_KEN_MD.contains("data Syntax a = MkSyntax (Located a) (List (Located a))")
+            && PARSING_KEN_MD.contains("fn erase_spans (x : Syntax BoolExpr) : BoolExpr =")
+            && PARSING_KEN_MD.contains("fn ValidSyntax"),
         "D3 Syntax must be package-owned located syntax, not compiler AST"
     );
     assert!(
-        PARSING_KEN.contains("const parse_bool_expr : Parser (Syntax BoolExpr) =")
-            && PARSING_KEN.contains("fn print_bool_expr (e : BoolExpr) : Bytes =")
-            && PARSING_KEN.contains("fn format_bool_expr (s : Source) : Result ParseError Bytes ="),
+        PARSING_KEN_MD.contains("const parse_bool_expr : Parser (Syntax BoolExpr) =")
+            && PARSING_KEN_MD.contains("fn print_bool_expr (e : BoolExpr) : Bytes =")
+            && PARSING_KEN_MD.contains("fn format_bool_expr (s : Source) : Result ParseError Bytes ="),
         "D3 must export parser, printer, and formatter with the pinned types"
     );
     assert!(
-        PARSING_KEN.contains("bytes_at (source_bytes s)")
-            && PARSING_KEN.contains("bytes_encode \"true\"")
-            && PARSING_KEN.contains("bytes_encode \"false\"")
-            && PARSING_KEN.contains("bytes_encode \"(not \"")
-            && PARSING_KEN.contains("bytes_encode \"(and \""),
+        PARSING_KEN_MD.contains("bytes_at (source_bytes s)")
+            && PARSING_KEN_MD.contains("bytes_encode \"true\"")
+            && PARSING_KEN_MD.contains("bytes_encode \"false\"")
+            && PARSING_KEN_MD.contains("bytes_encode \"(not \"")
+            && PARSING_KEN_MD.contains("bytes_encode \"(and \""),
         "D3 must operate over Source bytes and canonical ASCII token bytes"
     );
     assert!(
-        !PARSING_KEN.contains("compiler")
-            && !PARSING_KEN.contains("AST")
-            && !PARSING_KEN.contains("= Axiom"),
+        !PARSING_KEN_MD.contains("compiler")
+            && !PARSING_KEN_MD.contains("AST")
+            && !PARSING_KEN_MD.contains("= Axiom"),
         "D3 package surface must not route through compiler ASTs or package axioms"
     );
 }
@@ -351,54 +351,54 @@ fn cat5_d3_bool_expression_surface_is_package_owned() {
 #[test]
 fn cat5_d1_source_span_surface_is_byte_artifact_and_source_explicit() {
     assert!(
-        PARSING_KEN.contains("fn IsUtf8 (bs : Bytes) : Prop =")
-            && PARSING_KEN.contains("bytes_encode (bytes_decode bs)")
-            && !PARSING_KEN.contains("Equal Bytes bs bs"),
+        PARSING_KEN_MD.contains("fn IsUtf8 (bs : Bytes) : Prop =")
+            && PARSING_KEN_MD.contains("bytes_encode (bytes_decode bs)")
+            && !PARSING_KEN_MD.contains("Equal Bytes bs bs"),
         "IsUtf8 must be round-trip evidence over the source bytes, not reflexive equality"
     );
     assert!(
-        PARSING_KEN.contains("fn byte_unit_nat_to_int (unit : Bytes) (n : Nat) : Int =")
-            && PARSING_KEN.contains("fn EmptyBytes (bs : Bytes) : Prop =")
-            && PARSING_KEN.contains("fn NonEmptyBytes (bs : Bytes) : Prop =")
-            && PARSING_KEN.contains("fn UnitByteLength (unit : Bytes) : Prop =")
-            && PARSING_KEN.contains("fn SourceLength (unit : Bytes) (bs : Bytes) (n : Nat) : Prop =")
-            && PARSING_KEN.contains("bytes_concat left right")
-            && PARSING_KEN.contains("NonEmptyBytes unit")
-            && PARSING_KEN.contains("bytes_length bs")
-            && PARSING_KEN.contains("byte_unit_nat_to_int unit n"),
+        PARSING_KEN_MD.contains("fn byte_unit_nat_to_int (unit : Bytes) (n : Nat) : Int =")
+            && PARSING_KEN_MD.contains("fn EmptyBytes (bs : Bytes) : Prop =")
+            && PARSING_KEN_MD.contains("fn NonEmptyBytes (bs : Bytes) : Prop =")
+            && PARSING_KEN_MD.contains("fn UnitByteLength (unit : Bytes) : Prop =")
+            && PARSING_KEN_MD.contains("fn SourceLength (unit : Bytes) (bs : Bytes) (n : Nat) : Prop =")
+            && PARSING_KEN_MD.contains("bytes_concat left right")
+            && PARSING_KEN_MD.contains("NonEmptyBytes unit")
+            && PARSING_KEN_MD.contains("bytes_length bs")
+            && PARSING_KEN_MD.contains("byte_unit_nat_to_int unit n"),
         "SourceLength must tie source_length to source_bytes through a non-empty byte-atomic unit witness"
     );
     assert!(
-        PARSING_KEN.contains("class Source {")
-            && PARSING_KEN.contains("source_bytes_field : Bytes")
-            && PARSING_KEN.contains("source_length_field : Nat")
-            && PARSING_KEN.contains("source_length_unit_field : Bytes")
-            && PARSING_KEN
+        PARSING_KEN_MD.contains("class Source {")
+            && PARSING_KEN_MD.contains("source_bytes_field : Bytes")
+            && PARSING_KEN_MD.contains("source_length_field : Nat")
+            && PARSING_KEN_MD.contains("source_length_unit_field : Bytes")
+            && PARSING_KEN_MD
                 .contains("source_length_unit_valid_field : UnitByteLength source_length_unit_field")
-            && PARSING_KEN.contains("source_utf8_field : IsUtf8 source_bytes_field")
-            && PARSING_KEN
+            && PARSING_KEN_MD.contains("source_utf8_field : IsUtf8 source_bytes_field")
+            && PARSING_KEN_MD
                 .contains("source_length_valid_field : SourceLength source_length_unit_field source_bytes_field source_length_field"),
         "Source must be a dependent record carrying bytes, length, and both proof fields"
     );
     assert!(
-        !PARSING_KEN.contains("data Source = MkSource"),
+        !PARSING_KEN_MD.contains("data Source = MkSource"),
         "Source must not expose the old unconstrained MkSource constructor"
     );
     assert!(
-        !PARSING_KEN.contains("source_bytes_field : String") && !PARSING_KEN.contains("String Nat"),
+        !PARSING_KEN_MD.contains("source_bytes_field : String") && !PARSING_KEN_MD.contains("String Nat"),
         "Source must not use normalized String as the offset basis"
     );
     assert!(
-        PARSING_KEN.contains("data Span = MkSpan Nat Nat"),
+        PARSING_KEN_MD.contains("data Span = MkSpan Nat Nat"),
         "Span must carry only byte endpoints"
     );
     assert!(
-        PARSING_KEN.contains("data Located a = MkLocated SourceId Span a")
-            && PARSING_KEN.contains("fn ValidLocated"),
+        PARSING_KEN_MD.contains("data Located a = MkLocated SourceId Span a")
+            && PARSING_KEN_MD.contains("fn ValidLocated"),
         "source identity must be supplied by Located/validity, not by bare Span"
     );
     assert!(
-        !PARSING_KEN.contains("= Axiom"),
+        !PARSING_KEN_MD.contains("= Axiom"),
         "CAT-5 D1 package must not use Axiom"
     );
 }

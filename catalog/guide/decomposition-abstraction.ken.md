@@ -104,7 +104,7 @@ every future change preserving a non-local invariant, instead of being true
 by the value's own shape:
 
 ```ken ignore
-fn capLevelReusingInt (level : Int) : Int = level
+fn cap_level_reusing_int (level : Int) : Int = level
 ```
 
 This is not a blanket "wrap everything" rule — it costs a real constructor

@@ -8,15 +8,15 @@
 use ken_elaborator::{foreign::trusted_base_delta, ElabEnv};
 use ken_kernel::Decl;
 
-const TRANSPORT_KEN: &str = include_str!("../../../catalog/packages/Core/Transport.ken");
-const COLLECTIONS_KEN: &str = include_str!("../../../catalog/packages/Data/Collections/Collections.ken");
+const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Transport.ken.md");
+const COLLECTIONS_KEN_MD: &str = include_str!("../../../catalog/packages/Data/Collections/Collections.ken.md");
 
 fn mk_env() -> ElabEnv {
     let mut env = ElabEnv::new().expect("base env");
-    env.elaborate_file(TRANSPORT_KEN)
+    env.elaborate_ken_md_file(TRANSPORT_KEN_MD)
         .expect("catalog/packages/Core/Transport.ken must elaborate");
-    env.elaborate_file(COLLECTIONS_KEN)
-        .expect("catalog/packages/Data/Collections/Collections.ken must elaborate");
+    env.elaborate_ken_md_file(COLLECTIONS_KEN_MD)
+        .expect("catalog/packages/Data/Collections/Collections.ken.md must elaborate");
     env
 }
 
@@ -102,58 +102,58 @@ fn cat3_d1_structural_collections_package_elaborates_zero_delta() {
 #[test]
 fn cat3_d1_law_surfaces_are_proof_returning_not_prop_wrappers() {
     assert!(
-        COLLECTIONS_KEN.contains("fn take_drop_decomposition")
-            && COLLECTIONS_KEN
+        COLLECTIONS_KEN_MD.contains("fn take_drop_decomposition")
+            && COLLECTIONS_KEN_MD
                 .contains(": Equal (List a) (list_append a (take a n xs) (drop a n xs)) xs"),
         "take/drop decomposition must be a proof-returning Equal surface"
     );
     assert!(
-        COLLECTIONS_KEN.contains("fn map_length")
-            && COLLECTIONS_KEN.contains(": Equal Nat (length b (map a b f xs)) (length a xs)"),
+        COLLECTIONS_KEN_MD.contains("fn map_length")
+            && COLLECTIONS_KEN_MD.contains(": Equal Nat (length b (map a b f xs)) (length a xs)"),
         "map length preservation must be a proof-returning Equal surface"
     );
     assert!(
-        COLLECTIONS_KEN.contains("fn length_take_min")
-            && COLLECTIONS_KEN
+        COLLECTIONS_KEN_MD.contains("fn length_take_min")
+            && COLLECTIONS_KEN_MD
                 .contains(": Equal Nat (length a (take a n xs)) (min n (length a xs))"),
         "take length/min law must be a proof-returning Equal surface"
     );
     assert!(
-        !COLLECTIONS_KEN.contains(": Prop = Equal"),
+        !COLLECTIONS_KEN_MD.contains(": Prop = Equal"),
         "CAT-3 D1 laws must not be `fn law : Prop = Equal ...` wrappers"
     );
     assert!(
-        !COLLECTIONS_KEN.contains("= Axiom"),
+        !COLLECTIONS_KEN_MD.contains("= Axiom"),
         "collections CAT-3 slice must not use Axiom"
     );
     assert!(
-        !COLLECTIONS_KEN.contains("data Perm"),
+        !COLLECTIONS_KEN_MD.contains("data Perm"),
         "CAT-3 D2 permutation must be count equality, not a raw proof-relevant data family"
     );
     assert!(
-        COLLECTIONS_KEN.contains("fn Perm (a : Type) (eqf : a → a → Bool)")
-            && COLLECTIONS_KEN.contains(
+        COLLECTIONS_KEN_MD.contains("fn Perm (a : Type) (eqf : a → a → Bool)")
+            && COLLECTIONS_KEN_MD.contains(
                 "(x : a) → Equal Nat (count a eqf x xs) (count a eqf x ys)"
             ),
         "CAT-3 D2 Perm must be the comparator-indexed count/multiset equality surface"
     );
     assert!(
-        COLLECTIONS_KEN.contains("fn eq_from_ord")
-            && COLLECTIONS_KEN.contains("bool_and (le x y) (le y x)"),
+        COLLECTIONS_KEN_MD.contains("fn eq_from_ord")
+            && COLLECTIONS_KEN_MD.contains("bool_and (le x y) (le y x)"),
         "eq_from_ord must be the pinned bool_and (le x y) (le y x) definition"
     );
     assert!(
-        COLLECTIONS_KEN.contains("class View A")
-            && COLLECTIONS_KEN.contains("class Lens A")
-            && COLLECTIONS_KEN.contains("class SetoidMorphism A")
-            && COLLECTIONS_KEN.contains("project : Bool → Bool"),
+        COLLECTIONS_KEN_MD.contains("class View A")
+            && COLLECTIONS_KEN_MD.contains("class Lens A")
+            && COLLECTIONS_KEN_MD.contains("class SetoidMorphism A")
+            && COLLECTIONS_KEN_MD.contains("project : Bool → Bool"),
         "CAT-3 D3 must expose capitalized View/Lens records and a setoid-morphism project field"
     );
     assert!(
-        !COLLECTIONS_KEN.contains("class view")
-            && !COLLECTIONS_KEN.contains("fn view")
-            && !COLLECTIONS_KEN.contains("const view")
-            && !COLLECTIONS_KEN.contains("\nview "),
+        !COLLECTIONS_KEN_MD.contains("class view")
+            && !COLLECTIONS_KEN_MD.contains("fn view")
+            && !COLLECTIONS_KEN_MD.contains("const view")
+            && !COLLECTIONS_KEN_MD.contains("\nview "),
         "CAT-3 D3 must not introduce a lowercase `view` identifier or retired view declaration"
     );
 }

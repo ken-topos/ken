@@ -4,19 +4,19 @@
 use ken_elaborator::ElabEnv;
 use ken_kernel::Term;
 
-const COLLECTIONS_KEN: &str = include_str!("../../../catalog/packages/Data/Collections/Collections.ken");
-const TRANSPORT_KEN: &str = include_str!("../../../catalog/packages/Core/Transport.ken");
-const LAWFUL_FUNCTORS_KEN: &str =
-    include_str!("../../../catalog/packages/Core/LawfulFunctors.ken");
+const COLLECTIONS_KEN_MD: &str = include_str!("../../../catalog/packages/Data/Collections/Collections.ken.md");
+const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Transport.ken.md");
+const LAWFUL_FUNCTORS_KEN_MD: &str =
+    include_str!("../../../catalog/packages/Core/LawfulFunctors.ken.md");
 
 fn mk_env_with_lawful_functors() -> ElabEnv {
     let mut env = ElabEnv::new().expect("base env construction failed");
-    env.elaborate_file(TRANSPORT_KEN)
+    env.elaborate_ken_md_file(TRANSPORT_KEN_MD)
         .expect("catalog/packages/Core/Transport.ken must elaborate");
-    env.elaborate_file(COLLECTIONS_KEN)
-        .expect("catalog/packages/Data/Collections/Collections.ken must elaborate");
-    env.elaborate_file(LAWFUL_FUNCTORS_KEN)
-        .expect("catalog/packages/Core/LawfulFunctors.ken must elaborate");
+    env.elaborate_ken_md_file(COLLECTIONS_KEN_MD)
+        .expect("catalog/packages/Data/Collections/Collections.ken.md must elaborate");
+    env.elaborate_ken_md_file(LAWFUL_FUNCTORS_KEN_MD)
+        .expect("catalog/packages/Core/LawfulFunctors.ken.md must elaborate");
     env
 }
 
@@ -67,47 +67,47 @@ fn lawful_functors_package_elaborates_with_parametric_list_monoid() {
 #[test]
 fn lawful_functors_source_cites_landed_laws_without_axiom() {
     assert!(
-        LAWFUL_FUNCTORS_KEN.contains("instance Monoid (List a)"),
+        LAWFUL_FUNCTORS_KEN_MD.contains("instance Monoid (List a)"),
         "package must use the parametric List Monoid instance head"
     );
     assert!(
-        !LAWFUL_FUNCTORS_KEN.contains("instance Monoid (List Nat)"),
+        !LAWFUL_FUNCTORS_KEN_MD.contains("instance Monoid (List Nat)"),
         "package must not leave the old closed List Nat Monoid instance"
     );
     assert!(
-        LAWFUL_FUNCTORS_KEN.contains("assoc      = list_assoc a")
-            && LAWFUL_FUNCTORS_KEN.contains("left_unit  = list_left_unit a")
-            && LAWFUL_FUNCTORS_KEN.contains("right_unit = list_right_unit a"),
+        LAWFUL_FUNCTORS_KEN_MD.contains("assoc      = list_assoc a")
+            && LAWFUL_FUNCTORS_KEN_MD.contains("left_unit  = list_left_unit a")
+            && LAWFUL_FUNCTORS_KEN_MD.contains("right_unit = list_right_unit a"),
         "law fields should cite the existing generic List proofs"
     );
     assert!(
-        !LAWFUL_FUNCTORS_KEN.contains("= Axiom"),
+        !LAWFUL_FUNCTORS_KEN_MD.contains("= Axiom"),
         "lawful-functors package must not fill laws with Axiom"
     );
     assert!(
-        LAWFUL_FUNCTORS_KEN.contains("class Functor (f : Type → Type)")
-            && LAWFUL_FUNCTORS_KEN.contains("id_law     : (a : Type) → (x : f a)")
-            && LAWFUL_FUNCTORS_KEN.contains("fusion_law : (a : Type) → (b : Type) → (c : Type)")
-            && LAWFUL_FUNCTORS_KEN.contains("(g : b → c) → (h : a → b) → (x : f a)"),
+        LAWFUL_FUNCTORS_KEN_MD.contains("class Functor (f : Type → Type)")
+            && LAWFUL_FUNCTORS_KEN_MD.contains("id_law     : (a : Type) → (x : f a)")
+            && LAWFUL_FUNCTORS_KEN_MD.contains("fusion_law : (a : Type) → (b : Type) → (c : Type)")
+            && LAWFUL_FUNCTORS_KEN_MD.contains("(g : b → c) → (h : a → b) → (x : f a)"),
         "Functor should use the settled single pointwise law fields"
     );
     assert!(
-        !LAWFUL_FUNCTORS_KEN.contains("map_id")
-            && !LAWFUL_FUNCTORS_KEN.contains("map_comp")
-            && !LAWFUL_FUNCTORS_KEN.contains("pointfree"),
+        !LAWFUL_FUNCTORS_KEN_MD.contains("map_id")
+            && !LAWFUL_FUNCTORS_KEN_MD.contains("map_comp")
+            && !LAWFUL_FUNCTORS_KEN_MD.contains("pointfree"),
         "Functor should not add a point-free duplicate law surface"
     );
     assert!(
-        LAWFUL_FUNCTORS_KEN.contains("instance Functor List")
-            && LAWFUL_FUNCTORS_KEN.contains("instance Functor Option")
-            && LAWFUL_FUNCTORS_KEN.contains("instance Foldable List")
-            && LAWFUL_FUNCTORS_KEN.contains("instance Foldable Option"),
+        LAWFUL_FUNCTORS_KEN_MD.contains("instance Functor List")
+            && LAWFUL_FUNCTORS_KEN_MD.contains("instance Functor Option")
+            && LAWFUL_FUNCTORS_KEN_MD.contains("instance Foldable List")
+            && LAWFUL_FUNCTORS_KEN_MD.contains("instance Foldable Option"),
         "D3 should provide List and Option Functor/Foldable instances"
     );
     assert!(
-        LAWFUL_FUNCTORS_KEN.contains("fold_map_coherence")
-            && LAWFUL_FUNCTORS_KEN.contains("fold_map_step")
-            && LAWFUL_FUNCTORS_KEN.contains("foldr_to_list"),
+        LAWFUL_FUNCTORS_KEN_MD.contains("fold_map_coherence")
+            && LAWFUL_FUNCTORS_KEN_MD.contains("fold_map_step")
+            && LAWFUL_FUNCTORS_KEN_MD.contains("foldr_to_list"),
         "Foldable should pin fold_map through the selected Monoid and to_list reconstruction laws"
     );
 }

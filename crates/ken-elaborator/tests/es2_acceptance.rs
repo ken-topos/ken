@@ -8,7 +8,7 @@
 //! re-classed `declare_primitive` here (still trusted, audited, item-2) —
 //! **superseded by Map-build** (`spec/50-stdlib/52-map.md`, VAL2 #8/OQ-A):
 //! the audited primitive is now **retired outright**, replaced by a proved,
-//! pure `Tree k v` (`catalog/packages/Data/Collections/Map.ken`) that is derived Ken —
+//! pure `Tree k v` (`catalog/packages/Data/Collections/Map.ken.md`) that is derived Ken —
 //! `declare_inductive`/`declare_def`, never `declare_primitive`/
 //! `declare_postulate` — a **net-negative** `trusted_base()` delta (AC4
 //! below now pins the retirement, not the re-class).
@@ -22,9 +22,9 @@ use ken_elaborator::{foreign::trusted_base_delta, ElabEnv};
 use ken_kernel::env::Decl;
 use ken_kernel::{whnf, Term};
 
-const COLLECTIONS_KEN: &str = include_str!("../../../catalog/packages/Data/Collections/Collections.ken");
-const TRANSPORT_KEN: &str = include_str!("../../../catalog/packages/Core/Transport.ken");
-const MAP_KEN: &str = include_str!("../../../catalog/packages/Data/Collections/Map.ken");
+const COLLECTIONS_KEN_MD: &str = include_str!("../../../catalog/packages/Data/Collections/Collections.ken.md");
+const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Transport.ken.md");
+const MAP_KEN_MD: &str = include_str!("../../../catalog/packages/Data/Collections/Map.ken.md");
 
 fn mk_env() -> ElabEnv {
     ElabEnv::new().expect("base env construction failed")
@@ -32,9 +32,9 @@ fn mk_env() -> ElabEnv {
 
 fn mk_env_with_map() -> ElabEnv {
     let mut env = ElabEnv::new().expect("base env construction failed");
-    env.elaborate_file(TRANSPORT_KEN).expect("transport.ken must elaborate");
-    env.elaborate_file(COLLECTIONS_KEN).expect("collections.ken must elaborate");
-    env.elaborate_file(MAP_KEN).expect("map.ken must elaborate");
+    env.elaborate_ken_md_file(TRANSPORT_KEN_MD).expect("transport.ken must elaborate");
+    env.elaborate_ken_md_file(COLLECTIONS_KEN_MD).expect("collections.ken.md must elaborate");
+    env.elaborate_ken_md_file(MAP_KEN_MD).expect("map.ken.md must elaborate");
     env
 }
 

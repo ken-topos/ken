@@ -7,7 +7,7 @@
 //! (confirmed empirically against `elab.rs`'s `instance_search`, escalated to
 //! Architect, `evt_1wd56hecqhm06`/`evt_64j01esqw86pf`/`evt_1wsk6dracp10r` in
 //! the Map-build thread). This file covers only what
-//! `catalog/packages/Data/Collections/Map.ken` ships today: the `Tree k v`
+//! `catalog/packages/Data/Collections/Map.ken.md` ships today: the `Tree k v`
 //! carrier, `empty`, `to_list`, `fold`,
 //! and the `Pair`/`mk_pair`/`pair_fst`/`pair_snd` Σ-pair plumbing
 //! (`ken-elaborator/src/prelude.rs`) those two ops route through. Extended
@@ -17,18 +17,18 @@ use ken_elaborator::{foreign::trusted_base_delta, ElabEnv, NumericLitVal};
 use ken_interp::eval::{eval, EvalStore, EvalVal, ListCharIds};
 use ken_kernel::{Decl, GlobalId};
 
-const COLLECTIONS_KEN: &str = include_str!("../../../catalog/packages/Data/Collections/Collections.ken");
-const TRANSPORT_KEN: &str = include_str!("../../../catalog/packages/Core/Transport.ken");
-const MAP_KEN: &str = include_str!("../../../catalog/packages/Data/Collections/Map.ken");
+const COLLECTIONS_KEN_MD: &str = include_str!("../../../catalog/packages/Data/Collections/Collections.ken.md");
+const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Transport.ken.md");
+const MAP_KEN_MD: &str = include_str!("../../../catalog/packages/Data/Collections/Map.ken.md");
 
 fn mk_env() -> ElabEnv {
     let mut env = ElabEnv::new().expect("base env");
-    env.elaborate_file(TRANSPORT_KEN)
+    env.elaborate_ken_md_file(TRANSPORT_KEN_MD)
         .expect("catalog/packages/Core/Transport.ken must elaborate");
-    env.elaborate_file(COLLECTIONS_KEN)
-        .expect("catalog/packages/Data/Collections/Collections.ken must elaborate");
-    env.elaborate_file(MAP_KEN)
-        .expect("catalog/packages/Data/Collections/Map.ken must elaborate");
+    env.elaborate_ken_md_file(COLLECTIONS_KEN_MD)
+        .expect("catalog/packages/Data/Collections/Collections.ken.md must elaborate");
+    env.elaborate_ken_md_file(MAP_KEN_MD)
+        .expect("catalog/packages/Data/Collections/Map.ken.md must elaborate");
     env
 }
 

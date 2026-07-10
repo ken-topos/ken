@@ -16,7 +16,7 @@
 use ken_elaborator::ElabEnv;
 use ken_kernel::{GlobalId, Term};
 
-const TRANSPORT_KEN: &str = include_str!("../../../catalog/packages/Core/Transport.ken");
+const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Transport.ken.md");
 
 fn mk_env() -> ElabEnv {
     ElabEnv::new().expect("base env construction failed")
@@ -24,7 +24,7 @@ fn mk_env() -> ElabEnv {
 
 fn mk_env_with_package() -> ElabEnv {
     let mut env = mk_env();
-    env.elaborate_file(TRANSPORT_KEN)
+    env.elaborate_ken_md_file(TRANSPORT_KEN_MD)
         .expect("catalog/packages/Core/Transport.ken must elaborate");
     env
 }
