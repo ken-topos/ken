@@ -18,4 +18,5 @@ to one team belongs in `teams/<team>`.
 | [ken-cargo-build-lock-wedge](ken-cargo-build-lock-wedge.md) | The ken-cargo + sccache build-lock wedge |
 | [named-floor-must-be-grepped-not-assumed](named-floor-must-be-grepped-not-assumed.md) | A named floor must be grepped, not assumed |
 | [probe-recursion-depth-before-writing-the-real-test](probe-recursion-depth-before-writing-the-real-test.md) | Probe recursion depth before writing the real test |
+| [rename-wp-needs-whole-workspace-basename-sweep](rename-wp-needs-whole-workspace-basename-sweep.md) | A rename/move WP needs a whole-workspace old-basename sweep, not just `include_str!` |
 | [timeout-does-not-kill-grandchild-cargo-test](timeout-does-not-kill-grandchild-cargo-test.md) | `timeout` doesn't kill a grandchild cargo test binary |
