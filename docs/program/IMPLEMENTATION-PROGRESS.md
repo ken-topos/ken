@@ -76,23 +76,33 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > - **DS-2…DS-9 remain HELD.** Refined gate/sequence (operator, 2026-07-09):
 >   1. **Ergo FR series COMPLETE** ✅ — FR-1 (PR #400) → taxonomy build (#403) →
 >      FR-3 (#407) → FR-2 (#413), plus the Librarian's DS-1 guide-update (#411).
->   2. **DS-1 revisit — LIGHT, NO-RETRO process** (operator explicitly waives the
->      normal catalog acted-on-retro here): (a) **comment cleanup** — the
->      operator's 2026-07-09 directive was "strip `--` from the entry's `ken`
->      fences into prose," **but this is now SCOPED DOWN by the §8 reconciliation
->      (`evt_6jv6v1y6t34a2`, landed PR #411):** DS-1's entry `EmptyDec.ken.md` is
->      a **package** entry, whose in-fence `--` comments are §8-*required*
->      proof-review annotations (they tangle to consumed `.ken` source) — NOT the
->      teaching-strand fences the strip rule targets. So step (a) largely
->      evaporates for EmptyDec: keep its §8 comments; at most the optional
->      micro-softening of FR-2's shared error-message wording. **Flagged to the
->      operator** (countermands their specific instruction — their call). (b)
->      **quick in-situ verification** — re-verify DS-1 where it now sits (new
->      taxonomy path after the move) and against the FR fixes (surface-declared
->      zero-ctor `Empty` via FR-1; validate via `ken check` now that FR-3 landed).
->      A touch-up pass, not a WP — keep it light.
->   3. **THEN Steward kicks DS-2** on the improved guide+tooling (next DS after
->      DS-1 per `catalog-data-structures-program.md` — reconfirm frontier then).
+>   2. **DS-1 revisit — DONE ✅ (subsumed by principle #14).** The comment-cleanup
+>      half became a charter matter: operator (Pat, 2026-07-10) ruled *"anything
+>      required in a comment is an anti-pattern; if truly required it belongs in
+>      the language proper."* This **reversed** my earlier §8 package-comment
+>      carve-out (the `evt_6jv6v1y6t34a2` reconciliation, PR #411) — the
+>      *requirement to comment* is itself the anti-pattern. Landed:
+>      **`PRINCIPLES.md #14`** "Nothing required lives in a comment" (PR #416,
+>      `a0e9572`); **`07 §8` rewritten** (kill the "comments required" list + the
+>      package exception → required facts go in the Ken construct: `requires`/
+>      `ensures`/refinement, `law`/`prop`/`lemma`+`prove`, `Axiom`+`trusted_base()`
+>      delta), **`write-ken` generalized**, **`EmptyDec.ken.md` swept**
+>      comment→prose with the `absurdEmpty` rationale updated to FR-2's
+>      hard-error state (PR #415, CI-green; `ken check` 0 + 6/6 acceptance). The
+>      **in-situ verification** half is covered: EmptyDec `ken check` exit 0 at
+>      its taxonomy path, FR-1 surface zero-ctor `Empty` + FR-3 `ken check` all
+>      landed.
+>      - **Deferred → #14-conformance audit WP** (Librarian blast-radius scan): 6
+>        pre-literate `.ken`+`.MANIFEST.md` package entries carry required-info in
+>        `--` comments with no prose layer (Map 357, LawfulClasses 221,
+>        LawfulFunctors 92, Collections 85, Transport 35, Parsing 5,
+>        ProofErasureBoundaryChecker 6). Most are likely redundant narrative atop
+>        real `law`/`Axiom` decls (already #14-conformant); any carrying a
+>        *required* fact only in a comment need promoting to a construct. Rides
+>        the future literate-migration of those entries, not a standalone pass.
+>   3. **THEN Steward kicks DS-2** ← **NOW THE NEXT ACTION.** On the improved
+>      guide+tooling (next DS after DS-1 per `catalog-data-structures-program.md`
+>      — reconfirm the frontier at kickoff).
 > - **Ergo** (state 2026-07-10): **FR-1 LANDED** (PR #400) — surface zero-ctor
 >   `data`; retro fold landed (checkout-first branch self-check →
 >   build-implementer playbook, PR #401). **Taxonomy build LANDED** (PR #403,
