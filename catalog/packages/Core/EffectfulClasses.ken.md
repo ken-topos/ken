@@ -1,4 +1,4 @@
-# `Applicative` and `Monad` — effectful constructor classes
+# `Applicative`, `Monad`, and `Traversable` — effectful constructor classes
 
 `Applicative` and `Monad` are the two constructor classes every effectful
 computation over a container (`List`, `Option`, and — separately, by
@@ -7,7 +7,11 @@ effect denotation `ITree`) ultimately builds on: `Applicative` sequences
 independent effectful values, `Monad` sequences effectful values where
 later steps depend on earlier results. This entry lands both classes,
 proves them lawfully for `List` and `Option`, and attests the third,
-already-landed instance without minting a duplicate.
+already-landed instance without minting a duplicate. `§9` extends the
+family with `Traversable`, the class that walks a container while
+threading an arbitrary `Applicative` effect — the last Core item of the
+`Functor → Applicative → Monad → Traversable` toolkit chain (kept in this
+one entry per judgment call `L1`, rather than a new file).
 
 ## Index
 
@@ -19,6 +23,7 @@ already-landed instance without minting a duplicate.
 6. [Findings](#6-findings)
 7. [References](#7-references)
 8. [Trust  derivation](#8-trust--derivation)
+9. [`Traversable`](#9-traversable)
 
 **Named reading paths**
 
@@ -772,3 +777,1106 @@ across this entry's `Option` and `List` proofs.
    discriminator), and elaborating this entry's `` ```ken ``/
    `` ```ken example ``/`` ```ken reject `` fences through the literate
    extractor.
+
+## 9. `Traversable`
+
+`Traversable` is the last item of the `Functor → Applicative → Monad →
+Traversable` toolkit chain: it walks a container while threading an
+arbitrary effectful (`Applicative`) action, producing the effect of "do
+this container's worth of work, but let the effect happen once, in
+order, and collect the results back into the same shape." `map` alone
+cannot do this — it has nowhere to put the effect; `traverse` is `map`
+generalized over an `Applicative` action.
+
+### 9.1 Definition
+
+`traverse`'s action argument returns an effectful value `g b` for an
+ABSTRACT `g` — the class field wires `Applicative g` as an ordinary
+EXPLICIT parameter (Fork C: an abstract `g` has no concrete head for
+implicit instance search, so the implicit-constraint form `traverse
+[Applicative g] ...` does not elaborate; the explicit-dictionary form
+does, riding the same mechanism `list_traverse`'s own `apg` parameter
+below uses). `functor`/`foldable` are WIRED superclass fields, supplied
+whole — this entry does not re-prove `Functor List`/`Foldable Option` and
+friends, all landed in `Core/LawfulFunctors.ken`.
+
+```ken
+class Traversable (f : Type -> Type) {
+  functor : Functor f ;
+  foldable : Foldable f ;
+  proc traverse : (g : Type -> Type) -> Applicative g -> (a : Type) -> (b : Type) -> (a -> g b) -> f a -> g (f b)
+}
+```
+
+`traverse`'s field carries SURF-2's `proc` marker: `g` is abstract, so
+SURF-1's row-variable mechanism classifies the field's action fail-closed
+as potentially effectful (`Unknown` codomain head → `RowVar` → `proc`,
+`36 §1.5`/`§1.6`). A CONCRETE instance's traversal (`list_traverse`/
+`option_traverse` below) is, for `List`/`Option`, a genuinely PURE
+function of its explicit `Applicative g` dictionary — no real effect ever
+fires. Assigning that pure `fn` into the `proc`-marked field needed the
+DS-8b `∅ ⊆ proc` widening (`36 §1.6.2`) landed alongside this entry: a
+class field's declared purity is an UPPER BOUND on what an instance may
+do, not a requirement that every instance actually do it.
+
+`List`'s traversal is the standard effect-sequencing fold — `pure Nil`
+for the base case, then `ap` combines each mapped `Cons` with the
+recursive traversal of the tail:
+
+```ken
+fn list_traverse (g : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (t : a -> g b) (xs : List a) : g (List b) =
+  match xs {
+    Nil ⇒ apg.pure (List b) (Nil b) ;
+    Cons h u ⇒ apg.ap (List b) (List b) (apg.functor.map b (List b -> List b) (Cons b) (t h)) (list_traverse g apg a b t u)
+  }
+
+instance Traversable List {
+  functor = Functor_instance_List ;
+  foldable = Foldable_instance_List ;
+  traverse = list_traverse
+}
+```
+
+`Option`'s traversal short-circuits: `None` needs no effect at all,
+`Some` runs the action once and re-wraps:
+
+```ken
+fn option_traverse (g : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (t : a -> g b) (mx : Option a) : g (Option b) =
+  match mx {
+    None ⇒ apg.pure (Option b) (None b) ;
+    Some x ⇒ apg.ap b (Option b) (apg.pure (b -> Option b) (Some b)) (t x)
+  }
+
+instance Traversable Option {
+  functor = Functor_instance_Option ;
+  foldable = Foldable_instance_Option ;
+  traverse = option_traverse
+}
+```
+
+### 9.2 Coherence laws — identity and naturality (proved)
+
+`§5.3`'s three coherence laws are stated and proved SEPARATELY from the
+class (the class record itself carries no law fields for `traverse` —
+unlike `Applicative`/`Monad` above, `§5.1`'s `class Traversable` shape has
+none; the laws are standalone lemmas about a concrete instance's
+`traverse`, not class-record obligations).
+
+**Identity** — traversing with the trivial (`Identity`) applicative
+changes nothing but the wrapper. `Identity` is built fresh (a bare
+one-constructor wrapper; every one of its eight `Functor`/`Applicative`
+laws closes immediately by the `tt`/`Refl` discriminator, no induction —
+there is no real computation content to a wrapper that only wraps and
+unwraps):
+
+```ken
+data Identity a = MkIdentity a
+
+fn identity_pure (a : Type) (x : a) : Identity a = MkIdentity a x
+
+fn identity_map (a : Type) (b : Type) (f : a -> b) (x : Identity a) : Identity b =
+  match x { MkIdentity v ⇒ MkIdentity b (f v) }
+
+fn identity_ap (a : Type) (b : Type) (mf : Identity (a -> b)) (mx : Identity a) : Identity b =
+  match mf { MkIdentity f ⇒ match mx { MkIdentity x ⇒ MkIdentity b (f x) } }
+
+fn identity_id_law (a : Type) (x : Identity a) : Equal (Identity a) (identity_map a a (idf a) x) x =
+  match x { MkIdentity v ⇒ Refl }
+
+fn identity_fusion_law (a : Type) (b : Type) (c : Type) (g : b -> c) (h : a -> b) (x : Identity a) :
+  Equal (Identity c) (identity_map a c (comp a b c g h) x) (identity_map b c g (identity_map a b h x)) =
+  match x { MkIdentity v ⇒ Refl }
+
+fn identity_ap_id (a : Type) (v : Identity a) : Equal (Identity a) (identity_ap a a (identity_pure (a -> a) (idf a)) v) v =
+  match v { MkIdentity x ⇒ Refl }
+
+fn identity_ap_hom (a : Type) (b : Type) (g : a -> b) (x : a) :
+  Equal (Identity b) (identity_ap a b (identity_pure (a -> b) g) (identity_pure a x)) (identity_pure b (g x)) =
+  Refl
+
+fn identity_ap_ich (a : Type) (b : Type) (u : Identity (a -> b)) (y : a) :
+  Equal (Identity b) (identity_ap a b u (identity_pure a y)) (identity_ap (a -> b) b (identity_pure ((a -> b) -> b) (applyTo a b y)) u) =
+  match u { MkIdentity f ⇒ Refl }
+
+fn identity_ap_cmp (a : Type) (b : Type) (c : Type) (u : Identity (b -> c)) (v : Identity (a -> b)) (w : Identity a) :
+  Equal (Identity c)
+    (identity_ap a c (identity_ap (a -> b) (a -> c) (identity_ap (b -> c) ((a -> b) -> (a -> c)) (identity_pure ((b -> c) -> (a -> b) -> (a -> c)) (compose a b c)) u) v) w)
+    (identity_ap b c u (identity_ap a b v w)) =
+  match u { MkIdentity g ⇒ match v { MkIdentity h ⇒ match w { MkIdentity x ⇒ Refl } } }
+
+fn identity_map_coh (a : Type) (b : Type) (g : a -> b) (x : Identity a) :
+  Equal (Identity b) (identity_map a b g x) (identity_ap a b (identity_pure (a -> b) g) x) =
+  match x { MkIdentity v ⇒ Refl }
+
+instance Functor Identity {
+  map = identity_map ;
+  id_law = identity_id_law ;
+  fusion_law = identity_fusion_law
+}
+
+instance Applicative Identity {
+  functor = Functor_instance_Identity ;
+  pure = identity_pure ;
+  ap = identity_ap ;
+  ap_id = identity_ap_id ;
+  ap_hom = identity_ap_hom ;
+  ap_ich = identity_ap_ich ;
+  ap_cmp = identity_ap_cmp ;
+  map_coh = identity_map_coh
+}
+```
+
+The identity law itself, for both instances, by induction on the carrier
+(the `List` case needs `cong` to push the IH under `Cons`; the `Option`
+case is a two-arm case-split, no induction):
+
+```ken
+fn list_traverse_identity_law (a : Type) (xs : List a) :
+  Equal (Identity (List a)) (list_traverse Identity Applicative_instance_Identity a a (identity_pure a) xs) (identity_pure (List a) xs) =
+  match xs {
+    Nil ⇒ tt ;
+    Cons h u ⇒ cong (Identity (List a)) (Identity (List a))
+      (list_traverse Identity Applicative_instance_Identity a a (identity_pure a) u)
+      (identity_pure (List a) u)
+      (identity_map (List a) (List a) (Cons a h))
+      (list_traverse_identity_law a u)
+  }
+
+fn option_traverse_identity_law (a : Type) (mx : Option a) :
+  Equal (Identity (Option a)) (option_traverse Identity Applicative_instance_Identity a a (identity_pure a) mx) (identity_pure (Option a) mx) =
+  match mx {
+    None ⇒ tt ;
+    Some x ⇒ Refl
+  }
+```
+
+**Naturality** — an `Applicative` MORPHISM `η : g ⇒ h` (a family
+`eta_map : (a:Type) → g a → h a` that commutes with `pure` and `ap`)
+commutes with `traverse`: `η(traverse g apg t xs) = traverse h aph (η∘t)
+xs`. `η`'s two defining properties are threaded as EXPLICIT parameters
+(the same Fork C shape as every dictionary in this entry) rather than a
+bundled morphism class — there is no landed `ApplicativeMorphism` class to
+wire, and bundling one is out of this WP's scope. A reusable lemma first:
+any such `η` also commutes with plain `functor.map` (derived from `η`'s
+own two properties plus `map_coh`, applied identically to close both
+instances' `Cons`/`Some` cases below):
+
+```ken
+fn applicativeApOf (g_ty : Type -> Type) (d : Applicative g_ty) (a : Type) (b : Type) (mf : g_ty (a -> b)) (mx : g_ty a) : g_ty b =
+  d.ap a b mf mx
+
+fn applicativeMapOf (g_ty : Type -> Type) (d : Applicative g_ty) (a : Type) (b : Type) (f : a -> b) (x : g_ty a) : g_ty b =
+  d.functor.map a b f x
+
+fn eta_natural_map_pure_term (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (eta_map : (a : Type) -> g a -> h a) (a : Type) (b : Type) (f : a -> b) : h (a -> b) =
+  eta_map (a -> b) (applicativePureOf g apg (a -> b) f)
+
+fn eta_natural_map_eq1 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (eta_map : (a : Type) -> g a -> h a)
+  (eta_pure : (a : Type) -> (x : a) -> Equal (h a) (eta_map a (applicativePureOf g apg a x)) (applicativePureOf h aph a x))
+  (a : Type) (b : Type) (f : a -> b) :
+  Equal (h (a -> b)) (eta_natural_map_pure_term g h apg eta_map a b f) (applicativePureOf h aph (a -> b) f) =
+  eta_pure (a -> b) f
+
+fn eta_natural_map (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (eta_map : (a : Type) -> g a -> h a)
+  (eta_pure : (a : Type) -> (x : a) -> Equal (h a) (eta_map a (applicativePureOf g apg a x)) (applicativePureOf h aph a x))
+  (eta_ap : (a : Type) -> (b : Type) -> (mf : g (a -> b)) -> (mx : g a) -> Equal (h b) (eta_map b (applicativeApOf g apg a b mf mx)) (applicativeApOf h aph a b (eta_map (a -> b) mf) (eta_map a mx)))
+  (a : Type) (b : Type) (f : a -> b) (x : g a) :
+  Equal (h b) (eta_map b (applicativeMapOf g apg a b f x)) (applicativeMapOf h aph a b f (eta_map a x)) =
+  trans (h b)
+    (eta_map b (apg.functor.map a b f x))
+    (aph.ap a b (eta_natural_map_pure_term g h apg eta_map a b f) (eta_map a x))
+    (aph.functor.map a b f (eta_map a x))
+    (trans (h b)
+       (eta_map b (apg.functor.map a b f x))
+       (eta_map b (apg.ap a b (apg.pure (a -> b) f) x))
+       (aph.ap a b (eta_natural_map_pure_term g h apg eta_map a b f) (eta_map a x))
+       (cong (g b) (h b)
+          (apg.functor.map a b f x)
+          (apg.ap a b (apg.pure (a -> b) f) x)
+          (eta_map b)
+          (apg.map_coh a b f x))
+       (eta_ap a b (apg.pure (a -> b) f) x))
+    (sym (h b)
+       (aph.functor.map a b f (eta_map a x))
+       (aph.ap a b (eta_natural_map_pure_term g h apg eta_map a b f) (eta_map a x))
+       (trans (h b)
+          (aph.functor.map a b f (eta_map a x))
+          (aph.ap a b (aph.pure (a -> b) f) (eta_map a x))
+          (aph.ap a b (eta_natural_map_pure_term g h apg eta_map a b f) (eta_map a x))
+          (aph.map_coh a b f (eta_map a x))
+          (cong (h (a -> b)) (h b)
+             (aph.pure (a -> b) f)
+             (eta_natural_map_pure_term g h apg eta_map a b f)
+             (λw. aph.ap a b w (eta_map a x))
+             (sym (h (a -> b)) (eta_natural_map_pure_term g h apg eta_map a b f) (aph.pure (a -> b) f) (eta_natural_map_eq1 g h apg aph eta_map eta_pure a b f)))))
+```
+
+And the naturality law itself, for both instances (`List`'s `Cons` case
+chains `eta_ap`, `eta_natural_map`, and the IH; `Option`'s `Some` case
+needs only `eta_ap` and `eta_pure`):
+
+```ken
+fn list_traverse_nat_action (g : Type -> Type) (h : Type -> Type) (eta_map : (a : Type) -> g a -> h a) (a : Type) (b : Type) (t : a -> g b) (x : a) : h b =
+  eta_map b (t x)
+
+fn list_traverse_naturality (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (eta_map : (a : Type) -> g a -> h a)
+  (eta_pure : (a : Type) -> (x : a) -> Equal (h a) (eta_map a (applicativePureOf g apg a x)) (applicativePureOf h aph a x))
+  (eta_ap : (a : Type) -> (b : Type) -> (mf : g (a -> b)) -> (mx : g a) -> Equal (h b) (eta_map b (applicativeApOf g apg a b mf mx)) (applicativeApOf h aph a b (eta_map (a -> b) mf) (eta_map a mx)))
+  (a : Type) (b : Type) (t : a -> g b) (xs : List a) :
+  Equal (h (List b)) (eta_map (List b) (list_traverse g apg a b t xs)) (list_traverse h aph a b (list_traverse_nat_action g h eta_map a b t) xs) =
+  match xs {
+    Nil ⇒ eta_pure (List b) (Nil b) ;
+    Cons hd u ⇒
+      trans (h (List b))
+        (eta_map (List b) (list_traverse g apg a b t (Cons a hd u)))
+        (aph.ap (List b) (List b) (eta_map (List b -> List b) (apg.functor.map b (List b -> List b) (Cons b) (t hd))) (eta_map (List b) (list_traverse g apg a b t u)))
+        (list_traverse h aph a b (list_traverse_nat_action g h eta_map a b t) (Cons a hd u))
+        (eta_ap (List b) (List b) (apg.functor.map b (List b -> List b) (Cons b) (t hd)) (list_traverse g apg a b t u))
+        (trans (h (List b))
+           (aph.ap (List b) (List b) (eta_map (List b -> List b) (apg.functor.map b (List b -> List b) (Cons b) (t hd))) (eta_map (List b) (list_traverse g apg a b t u)))
+           (aph.ap (List b) (List b) (aph.functor.map b (List b -> List b) (Cons b) (eta_map b (t hd))) (eta_map (List b) (list_traverse g apg a b t u)))
+           (list_traverse h aph a b (list_traverse_nat_action g h eta_map a b t) (Cons a hd u))
+           (cong (h (List b -> List b)) (h (List b))
+              (eta_map (List b -> List b) (apg.functor.map b (List b -> List b) (Cons b) (t hd)))
+              (aph.functor.map b (List b -> List b) (Cons b) (eta_map b (t hd)))
+              (λw. aph.ap (List b) (List b) w (eta_map (List b) (list_traverse g apg a b t u)))
+              (eta_natural_map g h apg aph eta_map eta_pure eta_ap b (List b -> List b) (Cons b) (t hd)))
+           (cong (h (List b)) (h (List b))
+              (eta_map (List b) (list_traverse g apg a b t u))
+              (list_traverse h aph a b (list_traverse_nat_action g h eta_map a b t) u)
+              (λw. aph.ap (List b) (List b) (aph.functor.map b (List b -> List b) (Cons b) (eta_map b (t hd))) w)
+              (list_traverse_naturality g h apg aph eta_map eta_pure eta_ap a b t u)))
+  }
+
+fn option_traverse_nat_action (g : Type -> Type) (h : Type -> Type) (eta_map : (a : Type) -> g a -> h a) (a : Type) (b : Type) (t : a -> g b) (x : a) : h b =
+  eta_map b (t x)
+
+fn option_traverse_naturality (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (eta_map : (a : Type) -> g a -> h a)
+  (eta_pure : (a : Type) -> (x : a) -> Equal (h a) (eta_map a (applicativePureOf g apg a x)) (applicativePureOf h aph a x))
+  (eta_ap : (a : Type) -> (b : Type) -> (mf : g (a -> b)) -> (mx : g a) -> Equal (h b) (eta_map b (applicativeApOf g apg a b mf mx)) (applicativeApOf h aph a b (eta_map (a -> b) mf) (eta_map a mx)))
+  (a : Type) (b : Type) (t : a -> g b) (mx : Option a) :
+  Equal (h (Option b)) (eta_map (Option b) (option_traverse g apg a b t mx)) (option_traverse h aph a b (option_traverse_nat_action g h eta_map a b t) mx) =
+  match mx {
+    None ⇒ eta_pure (Option b) (None b) ;
+    Some x ⇒
+      trans (h (Option b))
+        (eta_map (Option b) (option_traverse g apg a b t (Some a x)))
+        (aph.ap b (Option b) (eta_map (b -> Option b) (apg.pure (b -> Option b) (Some b))) (eta_map b (t x)))
+        (option_traverse h aph a b (option_traverse_nat_action g h eta_map a b t) (Some a x))
+        (eta_ap b (Option b) (apg.pure (b -> Option b) (Some b)) (t x))
+        (cong (h (b -> Option b)) (h (Option b))
+           (eta_map (b -> Option b) (apg.pure (b -> Option b) (Some b)))
+           (aph.pure (b -> Option b) (Some b))
+           (λw. aph.ap b (Option b) w (eta_map b (t x)))
+           (eta_pure (b -> Option b) (Some b)))
+  }
+```
+
+### 9.3 Using it
+
+```ken example
+const listTraverseIdentity : Identity (List Nat) =
+  list_traverse Identity Applicative_instance_Identity Nat Nat (identity_pure Nat) (Cons Nat Zero (Cons Nat (Suc Zero) (Nil Nat)))
+
+const optionTraverseSome : Identity (Option Nat) =
+  option_traverse Identity Applicative_instance_Identity Nat Nat (identity_pure Nat) (Some Nat Zero)
+```
+
+### 9.4 `Compose g h` — three of four `Applicative` laws, proved
+
+`Compose g h` is the instrument the composition coherence law (`§5.3`)
+needs. It lands cleanly as a `fn`-level type synonym, sidestepping
+`data`'s Type-0-only parameter hardcoding (`crates/ken-elaborator/src/
+data.rs:45` hardcodes every surface `data` parameter to `Type 0`
+unconditionally — a `fn` has no such restriction):
+
+```ken
+fn Compose (g : Type -> Type) (h : Type -> Type) (a : Type) : Type = g (h a)
+
+fn compose_pure (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (x : a) : Compose g h a =
+  apg.pure (h a) (aph.pure a x)
+
+fn compose_ap (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (mf : Compose g h (a -> b)) (mx : Compose g h a) : Compose g h b =
+  apg.ap (h a) (h b) (apg.functor.map (h (a -> b)) (h a -> h b) (aph.ap a b) mf) mx
+```
+
+**`ap_id`.** Every intermediate equality below needs a named accessor
+`fn` wrapping any `.field` projection or bare `λ` that would otherwise
+sit in a DECLARED type — the SAME parse restriction `§6`'s Finding
+already documents, hit here at much greater depth (this is the recurring
+shape throughout `§9.4`, not called out again per lemma):
+
+```ken
+fn compose_ap_id_ctx (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (a : Type) (v : Compose g h a) (w : g (h a -> h a)) : Compose g h a = apg.ap (h a) (h a) w v
+
+fn compose_ap_id_fmap_ctx (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (a : Type) (v : Compose g h a) (w : h a -> h a) : Compose g h a = apg.functor.map (h a) (h a) w v
+
+fn compose_ap_id_pure_pure (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) : g (h (a -> a)) =
+  apg.pure (h (a -> a)) (aph.pure (a -> a) (idf a))
+
+fn compose_ap_id_map_term (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) : g (h a -> h a) =
+  apg.functor.map (h (a -> a)) (h a -> h a) (aph.ap a a) (compose_ap_id_pure_pure g h apg aph a)
+
+fn compose_ap_id_ap_term (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) : g (h a -> h a) =
+  apg.ap (h (a -> a)) (h a -> h a) (apg.pure ((h (a -> a)) -> (h a -> h a)) (aph.ap a a)) (compose_ap_id_pure_pure g h apg aph a)
+
+fn compose_ap_id_pure_func (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) : g (h a -> h a) =
+  apg.pure (h a -> h a) (aph.ap a a (aph.pure (a -> a) (idf a)))
+
+fn compose_ap_id_func (g : Type -> Type) (h : Type -> Type) (aph : Applicative h) (a : Type) : h a -> h a =
+  aph.ap a a (aph.pure (a -> a) (idf a))
+
+fn compose_ap_id_eq1p (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (v : Compose g h a) :
+  Equal (Compose g h a)
+    (compose_ap_id_ctx g h apg a v (compose_ap_id_map_term g h apg aph a))
+    (compose_ap_id_ctx g h apg a v (compose_ap_id_ap_term g h apg aph a)) =
+  cong (g (h a -> h a)) (Compose g h a)
+    (compose_ap_id_map_term g h apg aph a)
+    (compose_ap_id_ap_term g h apg aph a)
+    (compose_ap_id_ctx g h apg a v)
+    (apg.map_coh (h (a -> a)) (h a -> h a) (aph.ap a a) (compose_ap_id_pure_pure g h apg aph a))
+
+fn compose_ap_id_eq2p (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (v : Compose g h a) :
+  Equal (Compose g h a)
+    (compose_ap_id_ctx g h apg a v (compose_ap_id_ap_term g h apg aph a))
+    (compose_ap_id_ctx g h apg a v (compose_ap_id_pure_func g h apg aph a)) =
+  cong (g (h a -> h a)) (Compose g h a)
+    (compose_ap_id_ap_term g h apg aph a)
+    (compose_ap_id_pure_func g h apg aph a)
+    (compose_ap_id_ctx g h apg a v)
+    (apg.ap_hom (h (a -> a)) (h a -> h a) (aph.ap a a) (aph.pure (a -> a) (idf a)))
+
+fn compose_ap_id_eq3 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (v : Compose g h a) :
+  Equal (Compose g h a)
+    (compose_ap_id_ctx g h apg a v (compose_ap_id_pure_func g h apg aph a))
+    (compose_ap_id_fmap_ctx g h apg a v (compose_ap_id_func g h aph a)) =
+  sym (Compose g h a)
+    (compose_ap_id_fmap_ctx g h apg a v (compose_ap_id_func g h aph a))
+    (compose_ap_id_ctx g h apg a v (compose_ap_id_pure_func g h apg aph a))
+    (apg.map_coh (h a) (h a) (compose_ap_id_func g h aph a) v)
+
+fn compose_ap_id_eq4 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (v : Compose g h a) :
+  Equal (Compose g h a)
+    (compose_ap_id_fmap_ctx g h apg a v (compose_ap_id_func g h aph a))
+    (compose_ap_id_fmap_ctx g h apg a v (idf (h a))) =
+  cong (h a -> h a) (Compose g h a)
+    (compose_ap_id_func g h aph a)
+    (idf (h a))
+    (compose_ap_id_fmap_ctx g h apg a v)
+    (aph.ap_id a)
+
+fn compose_ap_id (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (v : Compose g h a) : Equal (Compose g h a) (compose_ap g h apg aph a a (compose_pure g h apg aph (a -> a) (idf a)) v) v =
+  trans (Compose g h a)
+    (compose_ap g h apg aph a a (compose_pure g h apg aph (a -> a) (idf a)) v)
+    (compose_ap_id_ctx g h apg a v (compose_ap_id_pure_func g h apg aph a))
+    v
+    (trans (Compose g h a)
+       (compose_ap g h apg aph a a (compose_pure g h apg aph (a -> a) (idf a)) v)
+       (compose_ap_id_ctx g h apg a v (compose_ap_id_ap_term g h apg aph a))
+       (compose_ap_id_ctx g h apg a v (compose_ap_id_pure_func g h apg aph a))
+       (compose_ap_id_eq1p g h apg aph a v)
+       (compose_ap_id_eq2p g h apg aph a v))
+    (trans (Compose g h a)
+       (compose_ap_id_ctx g h apg a v (compose_ap_id_pure_func g h apg aph a))
+       (compose_ap_id_fmap_ctx g h apg a v (idf (h a)))
+       v
+       (trans (Compose g h a)
+          (compose_ap_id_ctx g h apg a v (compose_ap_id_pure_func g h apg aph a))
+          (compose_ap_id_fmap_ctx g h apg a v (compose_ap_id_func g h aph a))
+          (compose_ap_id_fmap_ctx g h apg a v (idf (h a)))
+          (compose_ap_id_eq3 g h apg aph a v)
+          (compose_ap_id_eq4 g h apg aph a v))
+       (apg.functor.id_law (h a) v))
+```
+
+**`ap_hom`** (a shorter, two-level bridge — both `ap` arguments start
+pure, so no `map_coh`-then-fusion detour is needed):
+
+```ken
+fn compose_ap_hom_ctx (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (x : a) (w : g (h a -> h b)) : Compose g h b =
+  apg.ap (h a) (h b) w (apg.pure (h a) (aph.pure a x))
+
+fn compose_ap_hom_map_term (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (f : a -> b) : g (h a -> h b) =
+  apg.functor.map (h (a -> b)) (h a -> h b) (aph.ap a b) (apg.pure (h (a -> b)) (aph.pure (a -> b) f))
+
+fn compose_ap_hom_ap_term (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (f : a -> b) : g (h a -> h b) =
+  apg.ap (h (a -> b)) (h a -> h b) (apg.pure ((h (a -> b)) -> (h a -> h b)) (aph.ap a b)) (apg.pure (h (a -> b)) (aph.pure (a -> b) f))
+
+fn compose_ap_hom_func (g : Type -> Type) (h : Type -> Type) (aph : Applicative h) (a : Type) (b : Type) (f : a -> b) : h a -> h b =
+  aph.ap a b (aph.pure (a -> b) f)
+
+fn compose_ap_hom_pure_term (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (f : a -> b) : g (h a -> h b) =
+  apg.pure (h a -> h b) (compose_ap_hom_func g h aph a b f)
+
+fn compose_ap_hom_eq1 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (x : a) (f : a -> b) :
+  Equal (Compose g h b)
+    (compose_ap_hom_ctx g h apg aph a b x (compose_ap_hom_map_term g h apg aph a b f))
+    (compose_ap_hom_ctx g h apg aph a b x (compose_ap_hom_ap_term g h apg aph a b f)) =
+  cong (g (h a -> h b)) (Compose g h b)
+    (compose_ap_hom_map_term g h apg aph a b f)
+    (compose_ap_hom_ap_term g h apg aph a b f)
+    (compose_ap_hom_ctx g h apg aph a b x)
+    (apg.map_coh (h (a -> b)) (h a -> h b) (aph.ap a b) (apg.pure (h (a -> b)) (aph.pure (a -> b) f)))
+
+fn compose_ap_hom_eq2 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (x : a) (f : a -> b) :
+  Equal (Compose g h b)
+    (compose_ap_hom_ctx g h apg aph a b x (compose_ap_hom_ap_term g h apg aph a b f))
+    (compose_ap_hom_ctx g h apg aph a b x (compose_ap_hom_pure_term g h apg aph a b f)) =
+  cong (g (h a -> h b)) (Compose g h b)
+    (compose_ap_hom_ap_term g h apg aph a b f)
+    (compose_ap_hom_pure_term g h apg aph a b f)
+    (compose_ap_hom_ctx g h apg aph a b x)
+    (apg.ap_hom (h (a -> b)) (h a -> h b) (aph.ap a b) (aph.pure (a -> b) f))
+
+fn compose_ap_hom_purex (g : Type -> Type) (h : Type -> Type) (aph : Applicative h) (a : Type) (x : a) : h a =
+  aph.pure a x
+
+fn compose_ap_hom_singlewrap (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (b : Type) (y : h b) : Compose g h b =
+  apg.pure (h b) y
+
+fn compose_ap_hom_eq3 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (x : a) (f : a -> b) :
+  Equal (Compose g h b)
+    (compose_ap_hom_ctx g h apg aph a b x (compose_ap_hom_pure_term g h apg aph a b f))
+    (compose_ap_hom_singlewrap g h apg b (compose_ap_hom_func g h aph a b f (compose_ap_hom_purex g h aph a x))) =
+  apg.ap_hom (h a) (h b) (compose_ap_hom_func g h aph a b f) (compose_ap_hom_purex g h aph a x)
+
+fn compose_ap_hom_eq4 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (x : a) (f : a -> b) :
+  Equal (Compose g h b)
+    (compose_ap_hom_singlewrap g h apg b (compose_ap_hom_func g h aph a b f (compose_ap_hom_purex g h aph a x)))
+    (compose_pure g h apg aph b (f x)) =
+  cong (h b) (Compose g h b)
+    (compose_ap_hom_func g h aph a b f (compose_ap_hom_purex g h aph a x))
+    (aph.pure b (f x))
+    (compose_ap_hom_singlewrap g h apg b)
+    (aph.ap_hom a b f x)
+
+fn compose_ap_hom (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (f : a -> b) (x : a) :
+  Equal (Compose g h b) (compose_ap g h apg aph a b (compose_pure g h apg aph (a -> b) f) (compose_pure g h apg aph a x)) (compose_pure g h apg aph b (f x)) =
+  trans (Compose g h b)
+    (compose_ap g h apg aph a b (compose_pure g h apg aph (a -> b) f) (compose_pure g h apg aph a x))
+    (compose_ap_hom_ctx g h apg aph a b x (compose_ap_hom_pure_term g h apg aph a b f))
+    (compose_pure g h apg aph b (f x))
+    (trans (Compose g h b)
+       (compose_ap g h apg aph a b (compose_pure g h apg aph (a -> b) f) (compose_pure g h apg aph a x))
+       (compose_ap_hom_ctx g h apg aph a b x (compose_ap_hom_ap_term g h apg aph a b f))
+       (compose_ap_hom_ctx g h apg aph a b x (compose_ap_hom_pure_term g h apg aph a b f))
+       (compose_ap_hom_eq1 g h apg aph a b x f)
+       (compose_ap_hom_eq2 g h apg aph a b x f))
+    (trans (Compose g h b)
+       (compose_ap_hom_ctx g h apg aph a b x (compose_ap_hom_pure_term g h apg aph a b f))
+       (compose_ap_hom_singlewrap g h apg b (compose_ap_hom_func g h aph a b f (compose_ap_hom_purex g h aph a x)))
+       (compose_pure g h apg aph b (f x))
+       (compose_ap_hom_eq3 g h apg aph a b x f)
+       (compose_ap_hom_eq4 g h apg aph a b x f))
+```
+
+**`Compose`'s full `Functor` instance** (`compose_map`, `id_law`,
+`fusion_law` — needed both in its own right and as `ap_ich`/`map_coh`'s
+supporting machinery below):
+
+```ken
+fn compose_map (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (f : a -> b) (x : Compose g h a) : Compose g h b =
+  apg.functor.map (h a) (h b) (aph.functor.map a b f) x
+
+fn compose_map_ctx (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (x : Compose g h a) (w : h a -> h b) : Compose g h b =
+  apg.functor.map (h a) (h b) w x
+
+fn compose_map_aph_idmap (g : Type -> Type) (h : Type -> Type) (aph : Applicative h) (a : Type) : h a -> h a =
+  aph.functor.map a a (idf a)
+
+fn compose_map_id_eq1 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (x : Compose g h a) :
+  Equal (Compose g h a)
+    (compose_map_ctx g h apg a a x (compose_map_aph_idmap g h aph a))
+    (compose_map_ctx g h apg a a x (idf (h a))) =
+  cong (h a -> h a) (Compose g h a)
+    (compose_map_aph_idmap g h aph a)
+    (idf (h a))
+    (compose_map_ctx g h apg a a x)
+    (aph.functor.id_law a)
+
+fn compose_map_id_law (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (x : Compose g h a) :
+  Equal (Compose g h a) (compose_map g h apg aph a a (idf a) x) x =
+  trans (Compose g h a)
+    (compose_map g h apg aph a a (idf a) x)
+    (compose_map_ctx g h apg a a x (idf (h a)))
+    x
+    (compose_map_id_eq1 g h apg aph a x)
+    (apg.functor.id_law (h a) x)
+
+fn compose_map_aph_compmap (g : Type -> Type) (h : Type -> Type) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (p : b -> c) (q : a -> b) : h a -> h c =
+  aph.functor.map a c (comp a b c p q)
+
+fn compose_map_aph_mapcomp (g : Type -> Type) (h : Type -> Type) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (p : b -> c) (q : a -> b) : h a -> h c =
+  comp (h a) (h b) (h c) (aph.functor.map b c p) (aph.functor.map a b q)
+
+fn compose_map_fusion_eq1 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (p : b -> c) (q : a -> b) (x : Compose g h a) :
+  Equal (Compose g h c)
+    (compose_map_ctx g h apg a c x (compose_map_aph_compmap g h aph a b c p q))
+    (compose_map_ctx g h apg a c x (compose_map_aph_mapcomp g h aph a b c p q)) =
+  cong (h a -> h c) (Compose g h c)
+    (compose_map_aph_compmap g h aph a b c p q)
+    (compose_map_aph_mapcomp g h aph a b c p q)
+    (compose_map_ctx g h apg a c x)
+    (aph.functor.fusion_law a b c p q)
+
+fn compose_map_fusion_law (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (p : b -> c) (q : a -> b) (x : Compose g h a) :
+  Equal (Compose g h c)
+    (compose_map g h apg aph a c (comp a b c p q) x)
+    (compose_map g h apg aph b c p (compose_map g h apg aph a b q x)) =
+  trans (Compose g h c)
+    (compose_map g h apg aph a c (comp a b c p q) x)
+    (compose_map_ctx g h apg a c x (comp (h a) (h b) (h c) (aph.functor.map b c p) (aph.functor.map a b q)))
+    (compose_map g h apg aph b c p (compose_map g h apg aph a b q x))
+    (compose_map_fusion_eq1 g h apg aph a b c p q x)
+    (apg.functor.fusion_law (h a) (h b) (h c) (aph.functor.map b c p) (aph.functor.map a b q) x)
+```
+
+`compose_map`/`compose_map_id_law`/`compose_map_fusion_law` are
+`Functor`'s three fields for `Compose g h` (a FIXED `g`/`h`) — no
+`instance Functor (Compose g h)` is declared: probed directly
+(`instance Box (Compose g h) { ... }` against a dict-free dummy class),
+the head RESOLVES (no `UnresolvedCon` — this is not the CAT-1 `§6.1`
+empty-context gap DS-7's `§2.5` documents for `ITree e resp`, which
+fails unresolved) but is then rejected with `KernelRejected(TypeMismatch
+{ expected: Type -> Type, found: Type })`: free `g`/`h` in an instance
+head are kinded `Type` by default, but `Compose` needs them kinded
+`Type -> Type` — a parametric-instance-head KINDING limitation,
+class-independent, distinct from the `§6.1` wall. Every use in this
+entry goes through the explicit-dictionary form directly (`apg`/`aph`
+threaded as ordinary parameters), never through instance search — the
+same Fork C shape `class Traversable`'s own `traverse`
+field uses.
+
+**`ap_ich`** (the interchange law — the deepest of the three proved laws:
+bridges `apg`'s own `ap_ich` at the outer level with `aph`'s own `ap_ich`
+at the inner level via `map_coh` + `fusion_law`, closing the inner
+bridge with `aph.ap_ich` applied POINTWISE and promoted to a
+function-level equality by the kernel's `Eq`-at-Pi unfold — `eq_at_pi`,
+`ken-kernel/src/obs.rs` — rather than a separate `funext` primitive: a
+pointwise law, partially applied one argument short of full, IS ALREADY,
+by kernel conversion, a term of the function-level equality type):
+
+```ken
+fn compose_ap_ich_uprime (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (mf : Compose g h (a -> b)) : g (h a -> h b) =
+  apg.functor.map (h (a -> b)) (h a -> h b) (aph.ap a b) mf
+
+fn compose_ap_ich_ctx (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (w1 : g (h a -> h b)) (w2 : h a) : Compose g h b =
+  apg.ap (h a) (h b) w1 (apg.pure (h a) w2)
+
+fn compose_ap_ich_mid1_ctx (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (w1 : g (h a -> h b)) (w2 : h a) : Compose g h b =
+  apg.ap (h a -> h b) (h b) (apg.pure ((h a -> h b) -> h b) (applyTo (h a) (h b) w2)) w1
+
+fn compose_ap_ich_eq1 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (w1 : g (h a -> h b)) (w2 : h a) :
+  Equal (Compose g h b) (compose_ap_ich_ctx g h apg a b w1 w2) (compose_ap_ich_mid1_ctx g h apg a b w1 w2) =
+  apg.ap_ich (h a) (h b) w1 w2
+
+fn compose_ap_ich_mapctx1 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (w1 : g (h a -> h b)) (w2 : h a) : Compose g h b =
+  apg.functor.map (h a -> h b) (h b) (applyTo (h a) (h b) w2) w1
+
+fn compose_ap_ich_eq2 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (w1 : g (h a -> h b)) (w2 : h a) :
+  Equal (Compose g h b) (compose_ap_ich_mid1_ctx g h apg a b w1 w2) (compose_ap_ich_mapctx1 g h apg a b w1 w2) =
+  sym (Compose g h b) (compose_ap_ich_mapctx1 g h apg a b w1 w2) (compose_ap_ich_mid1_ctx g h apg a b w1 w2)
+    (apg.map_coh (h a -> h b) (h b) (applyTo (h a) (h b) w2) w1)
+
+fn compose_ap_ich_compfuncfn (g : Type -> Type) (h : Type -> Type) (aph : Applicative h) (a : Type) (b : Type) (y : a) : h (a -> b) -> h b =
+  comp (h (a -> b)) (h a -> h b) (h b) (applyTo (h a) (h b) (compose_ap_hom_purex g h aph a y)) (aph.ap a b)
+
+fn compose_ap_ich_func3fn (g : Type -> Type) (h : Type -> Type) (aph : Applicative h) (a : Type) (b : Type) (y : a) : h (a -> b) -> h b =
+  aph.ap (a -> b) b (aph.pure ((a -> b) -> b) (applyTo a b y))
+
+fn compose_ap_ich_mapctx3 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (mf : Compose g h (a -> b)) (y : a) : Compose g h b =
+  apg.functor.map (h (a -> b)) (h b) (compose_ap_ich_compfuncfn g h aph a b y) mf
+
+fn compose_ap_ich_eq3 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (mf : Compose g h (a -> b)) (y : a) :
+  Equal (Compose g h b)
+    (compose_ap_ich_mapctx1 g h apg a b (compose_ap_ich_uprime g h apg aph a b mf) (compose_ap_hom_purex g h aph a y))
+    (compose_ap_ich_mapctx3 g h apg aph a b mf y) =
+  sym (Compose g h b)
+    (compose_ap_ich_mapctx3 g h apg aph a b mf y)
+    (compose_ap_ich_mapctx1 g h apg a b (compose_ap_ich_uprime g h apg aph a b mf) (compose_ap_hom_purex g h aph a y))
+    (apg.functor.fusion_law (h (a -> b)) (h a -> h b) (h b) (applyTo (h a) (h b) (compose_ap_hom_purex g h aph a y)) (aph.ap a b) mf)
+
+fn compose_ap_ich_pointwise (g : Type -> Type) (h : Type -> Type) (aph : Applicative h) (a : Type) (b : Type) (y : a) (q : h (a -> b)) :
+  Equal (h b) (compose_ap_ich_compfuncfn g h aph a b y q) (compose_ap_ich_func3fn g h aph a b y q) =
+  aph.ap_ich a b q y
+
+fn compose_ap_ich_funcs_eq (g : Type -> Type) (h : Type -> Type) (aph : Applicative h) (a : Type) (b : Type) (y : a) :
+  Equal (h (a -> b) -> h b) (compose_ap_ich_compfuncfn g h aph a b y) (compose_ap_ich_func3fn g h aph a b y) =
+  compose_ap_ich_pointwise g h aph a b y
+
+fn compose_ap_ich_fmapctx (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (mf : Compose g h (a -> b)) (w : h (a -> b) -> h b) : Compose g h b =
+  apg.functor.map (h (a -> b)) (h b) w mf
+
+fn compose_ap_ich_eq4 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (mf : Compose g h (a -> b)) (y : a) :
+  Equal (Compose g h b)
+    (compose_ap_ich_mapctx3 g h apg aph a b mf y)
+    (compose_ap_ich_fmapctx g h apg a b mf (compose_ap_ich_func3fn g h aph a b y)) =
+  cong (h (a -> b) -> h b) (Compose g h b)
+    (compose_ap_ich_compfuncfn g h aph a b y)
+    (compose_ap_ich_func3fn g h aph a b y)
+    (compose_ap_ich_fmapctx g h apg a b mf)
+    (compose_ap_ich_funcs_eq g h aph a b y)
+
+fn compose_ap_ich_innermap (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (y : a) : g (h (a -> b) -> h b) =
+  apg.functor.map (h ((a -> b) -> b)) (h (a -> b) -> h b) (aph.ap (a -> b) b) (apg.pure (h ((a -> b) -> b)) (aph.pure ((a -> b) -> b) (applyTo a b y)))
+
+fn compose_ap_ich_innerap (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (y : a) : g (h (a -> b) -> h b) =
+  apg.ap (h ((a -> b) -> b)) (h (a -> b) -> h b) (apg.pure ((h ((a -> b) -> b)) -> (h (a -> b) -> h b)) (aph.ap (a -> b) b)) (apg.pure (h ((a -> b) -> b)) (aph.pure ((a -> b) -> b) (applyTo a b y)))
+
+fn compose_ap_ich_innerpure (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (y : a) : g (h (a -> b) -> h b) =
+  apg.pure (h (a -> b) -> h b) (compose_ap_ich_func3fn g h aph a b y)
+
+fn compose_ap_ich_eq_inner1 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (y : a) :
+  Equal (g (h (a -> b) -> h b)) (compose_ap_ich_innermap g h apg aph a b y) (compose_ap_ich_innerap g h apg aph a b y) =
+  apg.map_coh (h ((a -> b) -> b)) (h (a -> b) -> h b) (aph.ap (a -> b) b) (apg.pure (h ((a -> b) -> b)) (aph.pure ((a -> b) -> b) (applyTo a b y)))
+
+fn compose_ap_ich_eq_inner2 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (y : a) :
+  Equal (g (h (a -> b) -> h b)) (compose_ap_ich_innerap g h apg aph a b y) (compose_ap_ich_innerpure g h apg aph a b y) =
+  apg.ap_hom (h ((a -> b) -> b)) (h (a -> b) -> h b) (aph.ap (a -> b) b) (aph.pure ((a -> b) -> b) (applyTo a b y))
+
+fn compose_ap_ich_target_ctx (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (mf : Compose g h (a -> b)) (w : g (h (a -> b) -> h b)) : Compose g h b =
+  apg.ap (h (a -> b)) (h b) w mf
+
+fn compose_ap_ich_eq_target1 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (mf : Compose g h (a -> b)) (y : a) :
+  Equal (Compose g h b)
+    (compose_ap_ich_target_ctx g h apg a b mf (compose_ap_ich_innermap g h apg aph a b y))
+    (compose_ap_ich_target_ctx g h apg a b mf (compose_ap_ich_innerap g h apg aph a b y)) =
+  cong (g (h (a -> b) -> h b)) (Compose g h b)
+    (compose_ap_ich_innermap g h apg aph a b y)
+    (compose_ap_ich_innerap g h apg aph a b y)
+    (compose_ap_ich_target_ctx g h apg a b mf)
+    (compose_ap_ich_eq_inner1 g h apg aph a b y)
+
+fn compose_ap_ich_eq_target2 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (mf : Compose g h (a -> b)) (y : a) :
+  Equal (Compose g h b)
+    (compose_ap_ich_target_ctx g h apg a b mf (compose_ap_ich_innerap g h apg aph a b y))
+    (compose_ap_ich_target_ctx g h apg a b mf (compose_ap_ich_innerpure g h apg aph a b y)) =
+  cong (g (h (a -> b) -> h b)) (Compose g h b)
+    (compose_ap_ich_innerap g h apg aph a b y)
+    (compose_ap_ich_innerpure g h apg aph a b y)
+    (compose_ap_ich_target_ctx g h apg a b mf)
+    (compose_ap_ich_eq_inner2 g h apg aph a b y)
+
+fn compose_ap_ich_eq_target3 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (mf : Compose g h (a -> b)) (y : a) :
+  Equal (Compose g h b)
+    (compose_ap_ich_target_ctx g h apg a b mf (compose_ap_ich_innerpure g h apg aph a b y))
+    (compose_ap_ich_fmapctx g h apg a b mf (compose_ap_ich_func3fn g h aph a b y)) =
+  sym (Compose g h b)
+    (compose_ap_ich_fmapctx g h apg a b mf (compose_ap_ich_func3fn g h aph a b y))
+    (compose_ap_ich_target_ctx g h apg a b mf (compose_ap_ich_innerpure g h apg aph a b y))
+    (apg.map_coh (h (a -> b)) (h b) (compose_ap_ich_func3fn g h aph a b y) mf)
+
+fn compose_ap_ich (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (mf : Compose g h (a -> b)) (y : a) :
+  Equal (Compose g h b)
+    (compose_ap g h apg aph a b mf (compose_pure g h apg aph a y))
+    (compose_ap g h apg aph (a -> b) b (compose_pure g h apg aph ((a -> b) -> b) (applyTo a b y)) mf) =
+  trans (Compose g h b)
+    (compose_ap g h apg aph a b mf (compose_pure g h apg aph a y))
+    (compose_ap_ich_mapctx3 g h apg aph a b mf y)
+    (compose_ap g h apg aph (a -> b) b (compose_pure g h apg aph ((a -> b) -> b) (applyTo a b y)) mf)
+    (trans (Compose g h b)
+       (compose_ap g h apg aph a b mf (compose_pure g h apg aph a y))
+       (compose_ap_ich_mapctx1 g h apg a b (compose_ap_ich_uprime g h apg aph a b mf) (compose_ap_hom_purex g h aph a y))
+       (compose_ap_ich_mapctx3 g h apg aph a b mf y)
+       (trans (Compose g h b)
+          (compose_ap g h apg aph a b mf (compose_pure g h apg aph a y))
+          (compose_ap_ich_mid1_ctx g h apg a b (compose_ap_ich_uprime g h apg aph a b mf) (compose_ap_hom_purex g h aph a y))
+          (compose_ap_ich_mapctx1 g h apg a b (compose_ap_ich_uprime g h apg aph a b mf) (compose_ap_hom_purex g h aph a y))
+          (compose_ap_ich_eq1 g h apg a b (compose_ap_ich_uprime g h apg aph a b mf) (compose_ap_hom_purex g h aph a y))
+          (compose_ap_ich_eq2 g h apg a b (compose_ap_ich_uprime g h apg aph a b mf) (compose_ap_hom_purex g h aph a y)))
+       (compose_ap_ich_eq3 g h apg aph a b mf y))
+    (trans (Compose g h b)
+       (compose_ap_ich_mapctx3 g h apg aph a b mf y)
+       (compose_ap_ich_fmapctx g h apg a b mf (compose_ap_ich_func3fn g h aph a b y))
+       (compose_ap g h apg aph (a -> b) b (compose_pure g h apg aph ((a -> b) -> b) (applyTo a b y)) mf)
+       (compose_ap_ich_eq4 g h apg aph a b mf y)
+       (trans (Compose g h b)
+          (compose_ap_ich_fmapctx g h apg a b mf (compose_ap_ich_func3fn g h aph a b y))
+          (compose_ap_ich_target_ctx g h apg a b mf (compose_ap_ich_innerpure g h apg aph a b y))
+          (compose_ap g h apg aph (a -> b) b (compose_pure g h apg aph ((a -> b) -> b) (applyTo a b y)) mf)
+          (sym (Compose g h b)
+             (compose_ap_ich_target_ctx g h apg a b mf (compose_ap_ich_innerpure g h apg aph a b y))
+             (compose_ap_ich_fmapctx g h apg a b mf (compose_ap_ich_func3fn g h aph a b y))
+             (compose_ap_ich_eq_target3 g h apg aph a b mf y))
+          (trans (Compose g h b)
+             (compose_ap_ich_target_ctx g h apg a b mf (compose_ap_ich_innerpure g h apg aph a b y))
+             (compose_ap_ich_target_ctx g h apg a b mf (compose_ap_ich_innerap g h apg aph a b y))
+             (compose_ap g h apg aph (a -> b) b (compose_pure g h apg aph ((a -> b) -> b) (applyTo a b y)) mf)
+             (sym (Compose g h b)
+                (compose_ap_ich_target_ctx g h apg a b mf (compose_ap_ich_innerap g h apg aph a b y))
+                (compose_ap_ich_target_ctx g h apg a b mf (compose_ap_ich_innerpure g h apg aph a b y))
+                (compose_ap_ich_eq_target2 g h apg aph a b mf y))
+             (sym (Compose g h b)
+                (compose_ap_ich_target_ctx g h apg a b mf (compose_ap_ich_innermap g h apg aph a b y))
+                (compose_ap_ich_target_ctx g h apg a b mf (compose_ap_ich_innerap g h apg aph a b y))
+                (compose_ap_ich_eq_target1 g h apg aph a b mf y)))))
+```
+
+**`map_coh`** (three steps: `apg`'s own `map_coh`, then `aph`'s `map_coh`
+lifted pointwise, then `apg`'s `ap_hom` reconciling the result):
+
+```ken
+fn compose_map_coh_ctx (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (x : Compose g h a) (w : g (h a -> h b)) : Compose g h b =
+  apg.ap (h a) (h b) w x
+
+fn compose_map_coh_aphmapf (g : Type -> Type) (h : Type -> Type) (aph : Applicative h) (a : Type) (b : Type) (f : a -> b) : h a -> h b =
+  aph.functor.map a b f
+
+fn compose_map_coh_pure1 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (f : a -> b) : g (h a -> h b) =
+  apg.pure (h a -> h b) (compose_map_coh_aphmapf g h aph a b f)
+
+fn compose_map_coh_func2 (g : Type -> Type) (h : Type -> Type) (aph : Applicative h) (a : Type) (b : Type) (f : a -> b) : h a -> h b =
+  aph.ap a b (aph.pure (a -> b) f)
+
+fn compose_map_coh_pure2 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (f : a -> b) : g (h a -> h b) =
+  apg.pure (h a -> h b) (compose_map_coh_func2 g h aph a b f)
+
+fn compose_map_coh_eq1 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (f : a -> b) (x : Compose g h a) :
+  Equal (Compose g h b)
+    (compose_map g h apg aph a b f x)
+    (compose_map_coh_ctx g h apg a b x (compose_map_coh_pure1 g h apg aph a b f)) =
+  apg.map_coh (h a) (h b) (compose_map_coh_aphmapf g h aph a b f) x
+
+fn compose_map_coh_eq_inner (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (f : a -> b) :
+  Equal (g (h a -> h b)) (compose_map_coh_pure1 g h apg aph a b f) (compose_map_coh_pure2 g h apg aph a b f) =
+  cong (h a -> h b) (g (h a -> h b))
+    (compose_map_coh_aphmapf g h aph a b f)
+    (compose_map_coh_func2 g h aph a b f)
+    (apg.pure (h a -> h b))
+    (aph.map_coh a b f)
+
+fn compose_map_coh_eq2 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (f : a -> b) (x : Compose g h a) :
+  Equal (Compose g h b)
+    (compose_map_coh_ctx g h apg a b x (compose_map_coh_pure1 g h apg aph a b f))
+    (compose_map_coh_ctx g h apg a b x (compose_map_coh_pure2 g h apg aph a b f)) =
+  cong (g (h a -> h b)) (Compose g h b)
+    (compose_map_coh_pure1 g h apg aph a b f)
+    (compose_map_coh_pure2 g h apg aph a b f)
+    (compose_map_coh_ctx g h apg a b x)
+    (compose_map_coh_eq_inner g h apg aph a b f)
+
+fn compose_map_coh_eq3_inner (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (f : a -> b) :
+  Equal (g (h a -> h b)) (compose_map_coh_pure2 g h apg aph a b f) (compose_ap_hom_map_term g h apg aph a b f) =
+  sym (g (h a -> h b))
+    (compose_ap_hom_map_term g h apg aph a b f)
+    (compose_map_coh_pure2 g h apg aph a b f)
+    (trans (g (h a -> h b))
+       (compose_ap_hom_map_term g h apg aph a b f)
+       (compose_ap_hom_ap_term g h apg aph a b f)
+       (compose_map_coh_pure2 g h apg aph a b f)
+       (apg.map_coh (h (a -> b)) (h a -> h b) (aph.ap a b) (apg.pure (h (a -> b)) (aph.pure (a -> b) f)))
+       (apg.ap_hom (h (a -> b)) (h a -> h b) (aph.ap a b) (aph.pure (a -> b) f)))
+
+fn compose_map_coh_eq3 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (f : a -> b) (x : Compose g h a) :
+  Equal (Compose g h b)
+    (compose_map_coh_ctx g h apg a b x (compose_map_coh_pure2 g h apg aph a b f))
+    (compose_ap g h apg aph a b (compose_pure g h apg aph (a -> b) f) x) =
+  cong (g (h a -> h b)) (Compose g h b)
+    (compose_map_coh_pure2 g h apg aph a b f)
+    (compose_ap_hom_map_term g h apg aph a b f)
+    (compose_map_coh_ctx g h apg a b x)
+    (compose_map_coh_eq3_inner g h apg aph a b f)
+
+fn compose_map_coh (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (f : a -> b) (x : Compose g h a) :
+  Equal (Compose g h b) (compose_map g h apg aph a b f x) (compose_ap g h apg aph a b (compose_pure g h apg aph (a -> b) f) x) =
+  trans (Compose g h b)
+    (compose_map g h apg aph a b f x)
+    (compose_map_coh_ctx g h apg a b x (compose_map_coh_pure2 g h apg aph a b f))
+    (compose_ap g h apg aph a b (compose_pure g h apg aph (a -> b) f) x)
+    (trans (Compose g h b)
+       (compose_map g h apg aph a b f x)
+       (compose_map_coh_ctx g h apg a b x (compose_map_coh_pure1 g h apg aph a b f))
+       (compose_map_coh_ctx g h apg a b x (compose_map_coh_pure2 g h apg aph a b f))
+       (compose_map_coh_eq1 g h apg aph a b f x)
+       (compose_map_coh_eq2 g h apg aph a b f x))
+    (compose_map_coh_eq3 g h apg aph a b f x)
+```
+
+### 9.5 `ap_naturality`, and `ap_cmp`'s Level1/Level2 reductions
+
+A general fact, provable ONCE from `apg`'s own laws alone (`map_coh` →
+`ap_hom` → `ap_cmp` → `map_coh` back — no `aph` involved), reused for
+several of the crossings above and cited by name in `§9.6`'s scope note:
+pushing a `functor.map` of a post-composed function through an `ap` is
+the same as `ap`-ing first and mapping after.
+
+```ken
+fn nat_aux_outer_ctx (g : Type -> Type) (apg : Applicative g) (a : Type) (c : Type) (v : g a) (w : g (a -> c)) : g c =
+  apg.ap a c w v
+
+fn nat_aux_lhs_inner (g : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (c : Type) (psi : b -> c) (u : g (a -> b)) : g (a -> c) =
+  apg.functor.map (a -> b) (a -> c) (compose a b c psi) u
+
+fn nat_aux_pure_composed (g : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (c : Type) (psi : b -> c) : g ((a -> b) -> (a -> c)) =
+  apg.pure ((a -> b) -> (a -> c)) (compose a b c psi)
+
+fn nat_aux_cmp_inner1b (g : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (c : Type) (psi : b -> c) (u : g (a -> b)) : g (a -> c) =
+  apg.ap (a -> b) (a -> c) (nat_aux_pure_composed g apg a b c psi) u
+
+fn nat_aux_cmp_inner1 (g : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (c : Type) (psi : b -> c) (u : g (a -> b)) : g (a -> c) =
+  apg.ap (a -> b) (a -> c) (apg.ap (b -> c) ((a -> b) -> (a -> c)) (apg.pure ((b -> c) -> (a -> b) -> (a -> c)) (compose a b c)) (apg.pure (b -> c) psi)) u
+
+fn nat_aux_eq_a (g : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (c : Type) (psi : b -> c) (u : g (a -> b)) :
+  Equal (g (a -> c)) (nat_aux_lhs_inner g apg a b c psi u) (nat_aux_cmp_inner1b g apg a b c psi u) =
+  apg.map_coh (a -> b) (a -> c) (compose a b c psi) u
+
+fn nat_aux_pure_composed_via_cmp (g : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (c : Type) (psi : b -> c) : g ((a -> b) -> (a -> c)) =
+  apg.ap (b -> c) ((a -> b) -> (a -> c)) (apg.pure ((b -> c) -> (a -> b) -> (a -> c)) (compose a b c)) (apg.pure (b -> c) psi)
+
+fn nat_aux_eq_b (g : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (c : Type) (psi : b -> c) :
+  Equal (g ((a -> b) -> (a -> c)))
+    (nat_aux_pure_composed g apg a b c psi)
+    (nat_aux_pure_composed_via_cmp g apg a b c psi) =
+  sym (g ((a -> b) -> (a -> c)))
+    (nat_aux_pure_composed_via_cmp g apg a b c psi)
+    (nat_aux_pure_composed g apg a b c psi)
+    (apg.ap_hom (b -> c) ((a -> b) -> (a -> c)) (compose a b c) psi)
+
+fn nat_aux_eq_c (g : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (c : Type) (psi : b -> c) (u : g (a -> b)) :
+  Equal (g (a -> c)) (nat_aux_cmp_inner1b g apg a b c psi u) (nat_aux_cmp_inner1 g apg a b c psi u) =
+  cong (g ((a -> b) -> (a -> c))) (g (a -> c))
+    (nat_aux_pure_composed g apg a b c psi)
+    (nat_aux_pure_composed_via_cmp g apg a b c psi)
+    (λw. apg.ap (a -> b) (a -> c) w u)
+    (nat_aux_eq_b g apg a b c psi)
+
+fn nat_aux_eq_lhs (g : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (c : Type) (psi : b -> c) (u : g (a -> b)) :
+  Equal (g (a -> c)) (nat_aux_lhs_inner g apg a b c psi u) (nat_aux_cmp_inner1 g apg a b c psi u) =
+  trans (g (a -> c))
+    (nat_aux_lhs_inner g apg a b c psi u)
+    (nat_aux_cmp_inner1b g apg a b c psi u)
+    (nat_aux_cmp_inner1 g apg a b c psi u)
+    (nat_aux_eq_a g apg a b c psi u)
+    (nat_aux_eq_c g apg a b c psi u)
+
+fn nat_aux_map_ap (g : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (c : Type) (psi : b -> c) (u : g (a -> b)) (v : g a) : g c =
+  apg.functor.map b c psi (apg.ap a b u v)
+
+fn nat_aux_ap_pure_ap (g : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (c : Type) (psi : b -> c) (u : g (a -> b)) (v : g a) : g c =
+  apg.ap b c (apg.pure (b -> c) psi) (apg.ap a b u v)
+
+fn ap_naturality (g : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (c : Type) (psi : b -> c) (u : g (a -> b)) (v : g a) :
+  Equal (g c)
+    (nat_aux_outer_ctx g apg a c v (nat_aux_lhs_inner g apg a b c psi u))
+    (nat_aux_map_ap g apg a b c psi u v) =
+  trans (g c)
+    (nat_aux_outer_ctx g apg a c v (nat_aux_lhs_inner g apg a b c psi u))
+    (nat_aux_outer_ctx g apg a c v (nat_aux_cmp_inner1 g apg a b c psi u))
+    (nat_aux_map_ap g apg a b c psi u v)
+    (cong (g (a -> c)) (g c)
+       (nat_aux_lhs_inner g apg a b c psi u)
+       (nat_aux_cmp_inner1 g apg a b c psi u)
+       (nat_aux_outer_ctx g apg a c v)
+       (nat_aux_eq_lhs g apg a b c psi u))
+    (trans (g c)
+       (nat_aux_outer_ctx g apg a c v (nat_aux_cmp_inner1 g apg a b c psi u))
+       (nat_aux_ap_pure_ap g apg a b c psi u v)
+       (nat_aux_map_ap g apg a b c psi u v)
+       (apg.ap_cmp a b c (apg.pure (b -> c) psi) u v)
+       (sym (g c)
+          (nat_aux_map_ap g apg a b c psi u v)
+          (nat_aux_ap_pure_ap g apg a b c psi u v)
+          (apg.map_coh b c psi (apg.ap a b u v))))
+```
+
+`ap_cmp`'s own LHS — three levels of nested `compose_ap` keyed on
+`compose a b c` — reduces cleanly for its first two levels using
+`compose_map_coh` (above) and `apg`'s `functor.fusion_law`; this is real,
+tested, reusable progress toward `DS-8c`, not a stub, but it is NOT
+`ap_cmp` itself (the third level's `aph.ap_cmp`-pointwise closing step,
+`§9.6`'s stage 2-4, is not built):
+
+```ken
+fn cmp_level1 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (u : Compose g h (b -> c)) : Compose g h ((a -> b) -> (a -> c)) =
+  compose_ap g h apg aph (b -> c) ((a -> b) -> (a -> c)) (compose_pure g h apg aph ((b -> c) -> (a -> b) -> (a -> c)) (compose a b c)) u
+
+fn cmp_level1_eq (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (u : Compose g h (b -> c)) :
+  Equal (Compose g h ((a -> b) -> (a -> c))) (cmp_level1 g h apg aph a b c u) (compose_map g h apg aph (b -> c) ((a -> b) -> (a -> c)) (compose a b c) u) =
+  sym (Compose g h ((a -> b) -> (a -> c)))
+    (compose_map g h apg aph (b -> c) ((a -> b) -> (a -> c)) (compose a b c) u)
+    (cmp_level1 g h apg aph a b c u)
+    (compose_map_coh g h apg aph (b -> c) ((a -> b) -> (a -> c)) (compose a b c) u)
+
+fn cmp_level2 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (u : Compose g h (b -> c)) (v : Compose g h (a -> b)) : Compose g h (a -> c) =
+  compose_ap g h apg aph (a -> b) (a -> c) (cmp_level1 g h apg aph a b c u) v
+
+fn cmp_level2_via_map (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (u : Compose g h (b -> c)) (v : Compose g h (a -> b)) : Compose g h (a -> c) =
+  compose_ap g h apg aph (a -> b) (a -> c) (compose_map g h apg aph (b -> c) ((a -> b) -> (a -> c)) (compose a b c) u) v
+
+fn cmp_level2_step1 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (u : Compose g h (b -> c)) (v : Compose g h (a -> b)) :
+  Equal (Compose g h (a -> c)) (cmp_level2 g h apg aph a b c u v) (cmp_level2_via_map g h apg aph a b c u v) =
+  cong (Compose g h ((a -> b) -> (a -> c))) (Compose g h (a -> c))
+    (cmp_level1 g h apg aph a b c u)
+    (compose_map g h apg aph (b -> c) ((a -> b) -> (a -> c)) (compose a b c) u)
+    (λw. compose_ap g h apg aph (a -> b) (a -> c) w v)
+    (cmp_level1_eq g h apg aph a b c u)
+
+fn cmp_psi1 (g : Type -> Type) (h : Type -> Type) (aph : Applicative h) (a : Type) (b : Type) (c : Type) : h (b -> c) -> h ((a -> b) -> (a -> c)) =
+  aph.functor.map (b -> c) ((a -> b) -> (a -> c)) (compose a b c)
+
+fn cmp_psi3 (g : Type -> Type) (h : Type -> Type) (aph : Applicative h) (a : Type) (b : Type) (c : Type) : h (b -> c) -> (h (a -> b) -> h (a -> c)) =
+  comp (h (b -> c)) (h ((a -> b) -> (a -> c))) (h (a -> b) -> h (a -> c)) (aph.ap (a -> b) (a -> c)) (cmp_psi1 g h aph a b c)
+
+fn cmp_level2_raw_ctx (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (c : Type) (v : Compose g h (a -> b)) (w : g (h (a -> b) -> h (a -> c))) : Compose g h (a -> c) =
+  apg.ap (h (a -> b)) (h (a -> c)) w v
+
+fn cmp_level2_double_map (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (u : Compose g h (b -> c)) : g (h (a -> b) -> h (a -> c)) =
+  apg.functor.map (h ((a -> b) -> (a -> c))) (h (a -> b) -> h (a -> c)) (aph.ap (a -> b) (a -> c)) (apg.functor.map (h (b -> c)) (h ((a -> b) -> (a -> c))) (cmp_psi1 g h aph a b c) u)
+
+fn cmp_level2_fused_map (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (u : Compose g h (b -> c)) : g (h (a -> b) -> h (a -> c)) =
+  apg.functor.map (h (b -> c)) (h (a -> b) -> h (a -> c)) (cmp_psi3 g h aph a b c) u
+
+fn cmp_level2_step2a (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (u : Compose g h (b -> c)) (v : Compose g h (a -> b)) :
+  Equal (Compose g h (a -> c)) (cmp_level2_via_map g h apg aph a b c u v) (cmp_level2_raw_ctx g h apg a b c v (cmp_level2_double_map g h apg aph a b c u)) =
+  Refl
+
+fn cmp_level2_step2b (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (u : Compose g h (b -> c)) :
+  Equal (g (h (a -> b) -> h (a -> c))) (cmp_level2_double_map g h apg aph a b c u) (cmp_level2_fused_map g h apg aph a b c u) =
+  sym (g (h (a -> b) -> h (a -> c)))
+    (cmp_level2_fused_map g h apg aph a b c u)
+    (cmp_level2_double_map g h apg aph a b c u)
+    (apg.functor.fusion_law (h (b -> c)) (h ((a -> b) -> (a -> c))) (h (a -> b) -> h (a -> c)) (aph.ap (a -> b) (a -> c)) (cmp_psi1 g h aph a b c) u)
+
+fn cmp_level2_step2 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (u : Compose g h (b -> c)) (v : Compose g h (a -> b)) :
+  Equal (Compose g h (a -> c)) (cmp_level2_raw_ctx g h apg a b c v (cmp_level2_double_map g h apg aph a b c u)) (cmp_level2_raw_ctx g h apg a b c v (cmp_level2_fused_map g h apg aph a b c u)) =
+  cong (g (h (a -> b) -> h (a -> c))) (Compose g h (a -> c))
+    (cmp_level2_double_map g h apg aph a b c u)
+    (cmp_level2_fused_map g h apg aph a b c u)
+    (cmp_level2_raw_ctx g h apg a b c v)
+    (cmp_level2_step2b g h apg aph a b c u)
+
+fn cmp_level2_reduced (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (u : Compose g h (b -> c)) (v : Compose g h (a -> b)) :
+  Equal (Compose g h (a -> c)) (cmp_level2 g h apg aph a b c u v) (cmp_level2_raw_ctx g h apg a b c v (cmp_level2_fused_map g h apg aph a b c u)) =
+  trans (Compose g h (a -> c))
+    (cmp_level2 g h apg aph a b c u v)
+    (cmp_level2_raw_ctx g h apg a b c v (cmp_level2_double_map g h apg aph a b c u))
+    (cmp_level2_raw_ctx g h apg a b c v (cmp_level2_fused_map g h apg aph a b c u))
+    (trans (Compose g h (a -> c))
+       (cmp_level2 g h apg aph a b c u v)
+       (cmp_level2_via_map g h apg aph a b c u v)
+       (cmp_level2_raw_ctx g h apg a b c v (cmp_level2_double_map g h apg aph a b c u))
+       (cmp_level2_step1 g h apg aph a b c u v)
+       (cmp_level2_step2a g h apg aph a b c u v))
+    (cmp_level2_step2 g h apg aph a b c u v)
+```
+
+### 9.6 Composition law — deferred for SIZE, not capability, to `DS-8c`
+
+**This is a scheduling deferral, not a capability gap.** The remaining
+work (below) is fully buildable TODAY with zero missing elaborator
+capability and zero `§6.1`-style fork — realistically another 40-60
+lemmas of ordinary proof engineering at this entry's own granularity
+(the ~97 lemmas across `§9.4`-`§9.5` give a concrete sense of the
+per-law scale), with a concrete, written closing plan (below), not an
+open-ended "later." It is deferred to a named follow-on, `DS-8c`
+(traverse composition coherence law), because holding the rest of
+`Traversable` — which does not depend on it — for one more law's worth
+of bookkeeping was the worse tradeoff, not because anything walls.
+
+**Two things are deferred, precisely — read both claims below exactly as
+scoped, not rounded up:**
+
+1. **`Compose g h` is NOT YET a fully-proven-lawful `Applicative`.**
+   `§9.4` proves its full `Functor` instance plus **three of
+   `Applicative`'s four laws** — `ap_id`, `ap_hom`, `ap_ich` — plus
+   `map_coh`. The FOURTH law, `ap_cmp` (associativity), is NOT proved —
+   `Compose`'s `Applicative` instance is therefore not assembled in this
+   entry, and no `instance Applicative (Compose g h)` is declared here.
+   `§9.5`'s Level1/Level2 reductions are real, tested progress toward it
+   — not `ap_cmp` itself.
+2. **`§5.3`'s composition coherence law itself — `traverse` composes
+   through `Compose g h` — is separately deferred**, because it
+   CONSUMES the missing `ap_cmp`. It is not claimed, asserted, or tested
+   anywhere in this entry.
+
+**Zero papering.** Every lemma in `§9.4`-`§9.5` (Level1/Level2's
+reductions included) is a real, fully-applied, kernel-checked proof term
+— no `Axiom`, no `Refl`/`tt` forced where the goal does not actually
+collapse, no stub. `ap_cmp` itself is simply absent — not declared with
+a postulated body, not present under any name.
+
+**`DS-8c`'s spec — the concrete closing plan, so the follow-on is a
+scoped prerequisite, not an open "later":**
+
+1. Rewrite the triple-composed crossing function (`cmp_level2_fused_map`
+   → a third level's fused `aph`-level composition) via `aph.map_coh`,
+   applied pointwise, into pure `ap`/`pure` form.
+2. Apply `aph.ap_cmp` itself as a TRIPLE-pointwise function equality
+   (the SAME `eq_at_pi` promotion `§9.4`/`§9.5` already use single- and
+   double-pointwise for `ap_ich`/`ap_naturality`, one level deeper).
+3. Lift that equality through three nested `apg` applications
+   (`functor.map`, then two `ap`s).
+4. Reconcile the result against the already-free RHS (`apg.ap_cmp`
+   instantiated at `uP`/`vP`/`W` — `uP := apg.functor.map (aph.ap b c)
+   U`, `vP := apg.functor.map (aph.ap a b) V`, the same "uprime" shape
+   `§9.4`'s `ap_ich` already uses) by splitting the triple application
+   back into the `uP`/`vP` shape.
+
+Once `DS-8c` lands `Compose`'s `ap_cmp` (a `compose_ap_cmp` lemma, the
+same explicit-dict shape as `compose_ap_id`/`compose_ap_hom`/
+`compose_ap_ich` above), the composition coherence law itself is proved
+the SAME way every other law in this entry is — over explicit
+`compose_pure`/`compose_ap` operations threaded with explicit `apg`/
+`aph` dicts, by the same `list_traverse`/`option_traverse` induction
+shape as `§9.2`'s identity/naturality proofs. It does NOT need, and
+DS-8c does NOT deliver, a surface `instance Applicative (Compose g h)`
+— that instance's head hits the identical free-`g`/`h` kinding wall
+`§9.4` documents for `Functor`, independent of whether `ap_cmp` is
+proved (landing `ap_cmp` does nothing to resolve a head-kinding issue).
+Every Compose-typed law in this entry, proved and deferred alike, is
+and will remain stated over the explicit-dictionary operations, never
+through instance search.
+
+**Scope the "lawful `Traversable`" claim precisely.** `List`/`Option`'s
+`Traversable` instances (`§9.1`) satisfy the **identity** and
+**naturality** coherence laws (`§9.2`, both proved) — they are not yet
+claimed "fully lawful `Traversable`" in the sense of all three `§5.3`
+laws; composition is the one outstanding law, tracked by `DS-8c`.
+
+### 9.7 Findings
+
+- **AC6 confirmed, with a landed-mechanism correction along the way.**
+  `traverse`'s `proc` classification and the `∅ ⊆ proc` instance-field
+  widening are two SEPARATE, both-necessary pieces — see DS-8b
+  (`docs/program/wp/ds-8b-pure-into-proc-widening.md`). Before DS-8b
+  landed, `proc traverse`'s class-field type parsed and classified fine,
+  but NO concrete List/Option implementation (necessarily, honestly pure)
+  could satisfy `check_instance_field_purity`'s then-strict `Proc`
+  requirement — a genuine, grounded elaborator gap, escalated and fixed
+  as its own WP rather than forced through with a workaround.
+- **Sugar candidate → Ergo (parser), reconfirmed.** The `.field`
+  projection / bare-`λ`-in-declared-type gap (`§6` above) recurred
+  constantly building `Traversable`'s and `Compose`'s law proofs — every
+  intermediate equality in a multi-step `trans`/`cong` chain needed a
+  named accessor `fn` wrapping any dotted/lambda expression that appears
+  in a DECLARED type (never in body position). Same gap, same workaround,
+  now confirmed at much greater depth (dozens of accessors per law).
+- **Reusable pattern → catalog/guide.** The `eq_at_pi`-promotion trick —
+  a pointwise law `(x:A) -> Equal B (f x) (g x)`, partially applied one
+  argument short of full, IS ALREADY (by kernel conversion, no extra
+  proof step) a term of the function-level type `Equal (A -> B) f g` —
+  closed every "lift a pointwise law to a `cong`-able function equality"
+  step in this entry's `Compose`/naturality proofs, extending to
+  MULTIPLE curried arguments at once (used for `aph.ap_ich`; the
+  `ap_cmp` follow-on will need it three deep). Worth promoting into
+  `catalog/guide/proof-techniques.ken.md` as a named technique — it
+  recurs and is not obvious from the spec alone.
+- **Proof-strategy consult, logged for the judgment log.** The `ap_cmp`
+  scope call (grind vs. gate) went through a live Architect consult
+  mid-build (the `ap_naturality` extraction) and a Steward-sanctioned
+  valve (gate on a named follow-on once the remaining size was measured
+  at ~40-60 lemmas, not the ~12-15 initially estimated). Both are
+  judgment calls for the operator's log, not unilateral scope changes —
+  flagged to the ring at each step before acting.
+
+### 9.8 References
+
+Same sources as `§7` (`Applicative`/`Monad`'s own references apply
+identically to `Traversable`, which is the same family); additionally:
+
+- **Haskell base** — `Data.Traversable`
+  (`GHC.Base`, part of the `base` package, BSD-3-Clause) —
+  <https://gitlab.haskell.org/ghc/ghc> — the canonical `traverse`/
+  `sequenceA` shapes and the three coherence laws (identity, naturality,
+  composition), consulted for shape only (`CLEAN-ROOM.md`, no source
+  copied).
