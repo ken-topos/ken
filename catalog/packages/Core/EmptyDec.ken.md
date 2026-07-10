@@ -76,7 +76,7 @@ What this entry *does* author, as real surface code.
 The general Type-sorted eliminator for `Empty` — an uninhabited type
 eliminates into anything — is deliberately not named `absurd`: that
 identifier is reserved checked-mode surface sugar for `Ω`-classified
-`Bottom`-elimination (`crates/ken-elaborator/src/elab.rs:499`), and
+`Bottom`-elimination (`crates/ken-elaborator/src/elab.rs:526`), and
 declaring a real global under the same name is now a resolve-time hard
 error (`§5`, `§6` Finding, landed via FR-2) rather than the silent,
 permanently-unreachable shadow it originally was. `absurdEmpty` is the
@@ -184,7 +184,7 @@ fn decEqDecides (a : Type) (d : DecEq a) (x : a) (y : a) : Dec (Equal a x y) =
 
 `DecEq_instance_Bool` is the synthesized dictionary value for `§2`'s
 `instance DecEq Bool { ... }` — every `instance C T { ... }` registers a
-real global `C_instance_T` (`crates/ken-elaborator/src/elab.rs:3386`), not
+real global `C_instance_T` (`crates/ken-elaborator/src/elab.rs:3403`), not
 just a `where`-resolved implicit dictionary. (The landed
 `catalog/packages/Core/LawfulClasses.ken` carries the SAME shape,
 independently — `§2`'s note on why this entry inlines its own.)
