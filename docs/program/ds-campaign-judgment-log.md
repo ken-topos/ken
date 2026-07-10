@@ -185,8 +185,9 @@ bar.
   `34-data-match.md:56` ("Result, Option, Either are ordinary prelude data decls"
   — **load-bearing false**); (4) `34-data-match.md:633` ("Result/Option/Either in
   the prelude" — **load-bearing false**). **Exclude** `:540` ("Either way", English);
-  `_notes/` non-normative. **Erratum ROUTED to @spec-leader** (`evt_1qkfgg6p8dkam`,
-  spec-author + CV, DS-5 §60 pattern) — annotate `Either` "subsumed by `Result`;
+  `_notes/` non-normative. **Erratum LANDED** `main @ dcc34ed` (PR #446, doc-only;
+  routed `evt_1qkfgg6p8dkam`, spec-author + CV, DS-5 §60 pattern) — annotated
+  `Either` "subsumed by `Result`;
   no distinct type — neutral sum is `Result` or the `Sum a b` coproduct" at all
   four sites. Correcting only one leaves the two `34-data-match` claims false
   (correcting-scope-must-sweep-whole-doc — validated: the over-claim WAS restated).
@@ -309,8 +310,8 @@ traverse composition law both deferred to DS-8c.** Foundation transcribing into
   Result mapErr/andThen/unwrapOr + laws; reuse existing `option_map`/`Functor
   Option`; `Err`-first field-order caution) — proceeds now; **(b)** the `Either`
   ruling (`L4`) — **Architect CONFIRMED SUBSUME** (`evt_13583vpn9747r`); the
-  four-site spec erratum is **ROUTED to the enclave** (`evt_1qkfgg6p8dkam`), runs
-  in parallel, does NOT block lane (a). Package-home rec: one entry
+  four-site spec erratum **LANDED** (PR #446, `main @ dcc34ed`) — lane (b) fully
+  closed. Package-home rec: one entry
   `Data/Sums/Sums.ken`. Monad-instance showcase noted as possible follow-on, not
   forced. Normal ring → foundation-qa → Architect → git_request.
 - **DS-8b** (pure-witness ⊆ `proc`-field widening) — ✅ **LANDED**
