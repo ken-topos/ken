@@ -2421,6 +2421,17 @@ fn elab_num_lit_infer(
     lit: &NumLit,
     span: &Span,
 ) -> Result<(Term, Term), ElabError> {
+    // `Int` (arbitrary-precision) emits a kernel-native `Term::IntLit`
+    // directly (`docs/adr/0013-int-decidable-equality-kernel-posture.md`
+    // Layer 2) — no opaque postulate, no `num_values` entry; the value
+    // lives in the term itself, which is what makes the kernel's
+    // `Eq`-at-registered-literal reduction surface-reachable. Fixed-width
+    // int / Float / Decimal / Float32 are untouched, below.
+    if let NumLit::Int(n) = lit {
+        let ty_term = Term::const_(cx.numeric_env.int_id, vec![]);
+        return Ok((Term::IntLit(num_bigint::BigInt::from(*n)), ty_term));
+    }
+
     let (val, type_id) = num_lit_default_type(lit, cx.numeric_env);
     let ty_term = Term::const_(type_id, vec![]);
     // A literal's value comes from checked surface syntax and is stored in the
@@ -2458,11 +2469,23 @@ fn elab_num_lit_checked(
     };
     if let Some(id) = const_or_indformer_id {
         let ty_id = id;
+
+        // `Int` (arbitrary-precision) emits `Term::IntLit` directly — same
+        // rewiring as `elab_num_lit_infer`, bypassing the shared postulate
+        // + `num_values` path below entirely. Fixed-width integer types
+        // (`Int8`..`UInt64`) are unaffected: the certificate/`IntLit`
+        // mechanism is registered for `Int` only.
+        if let NumLit::Int(n) = lit {
+            if ty_id == nenv.int_id {
+                return Ok(Term::IntLit(num_bigint::BigInt::from(*n)));
+            }
+        }
+
         let val_opt: Option<NumericLitVal> = match lit {
             NumLit::Int(n) => {
-                // Accept Int literals at any integer numeric type.
-                let is_int_type = [
-                    nenv.int_id,
+                // Fixed-width integer types only (`Int` itself is handled
+                // above); unchanged postulate + `num_values` path.
+                let is_fixed_int_type = [
                     nenv.int8_id,
                     nenv.int16_id,
                     nenv.int32_id,
@@ -2473,7 +2496,7 @@ fn elab_num_lit_checked(
                     nenv.uint64_id,
                 ]
                 .contains(&ty_id);
-                if is_int_type {
+                if is_fixed_int_type {
                     Some(crate::numbers::int_lit_val(*n, &exp_wh, nenv))
                 } else {
                     None
