@@ -363,6 +363,18 @@ transitively-inferred effects; a disagreement in **either** direction is a
 The signal is reliable **only if it cannot lie** — so no direction is a silent
 default; each mismatch is reported at the definition site.
 
+**Instance-field witnesses — covariant subsumption, not exact match (DS-8b).**
+The directions above govern a *definition's own* keyword; a class **instance**
+supplying a witness for a field (`33 §5.2`) is checked by **subsumption**. A
+**pure (`∅`-row) witness satisfies a `proc` field**: a `proc`'s contract is "may
+be effectful," it may instantiate to `∅` (the §1.4 headroom — declaring more
+than you use is legitimate), and a pure witness *is* that instantiation — a
+more-precise inhabitant, `∅ ⊆ ρ_field`. Only the set of admissible witnesses
+widens: the field's own classification is unchanged, and the Type/`Ω`
+discriminant is untouched (`33 §5.2` AC4). The covariance is **one-way** — an
+**effectful witness for a pure `fn`/`const` field still rejects** (a pure field
+demands a pure witness), unchanged from the definition-site gate above.
+
 ### 1.6.3 Pinned sub-decisions (SURF-1 §5)
 
 - **(a) Mismatch severity — HARD ERROR (pinned).** Every mismatch above — the
