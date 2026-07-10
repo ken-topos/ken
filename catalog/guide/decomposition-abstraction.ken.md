@@ -20,7 +20,8 @@ own terms.
 A `class` buys **dispatch**: the caller doesn't say which instance, the
 compiler resolves it from the type. That is worth its ceremony exactly when
 a component genuinely needs to work over more than one carrier chosen at
-different call sites:
+different call sites. Below, one generic function is dispatched per call
+site by the carrier type:
 
 ```ken example
 class Combine a { combine : a → a → a }
@@ -28,7 +29,6 @@ class Combine a { combine : a → a → a }
 instance Combine Bool { combine = λx y. match x { True ⇒ True ; False ⇒ y } }
 instance Combine Int  { combine = add_int }
 
--- One generic function, dispatched per call site by the carrier type.
 fn combineTwice (a : Type) (d : Combine a) (x : a) : a = (d).combine x x
 ```
 
@@ -37,11 +37,11 @@ ever have one instance in this component, skip the class and take the
 operation (and, if it has one, its law) as a **bare, explicit parameter** —
 the *unbundled* encoding, the same shape
 `conformance/challenge/C5-verified-sort/sound-verified-sort.ken` threads a
-comparator through:
+comparator through. No `class Ord` is needed here: `leq` and (if a law were
+required) its hypotheses are threaded as ordinary parameters, fully
+generic in `a`:
 
 ```ken example
--- No `class Ord` needed here: `leq` and (if a law were required) its
--- hypotheses are threaded as ordinary parameters, fully generic in `a`.
 fn maxOf (a : Type) (leq : a → a → Bool) (x : a) (y : a) : a =
   match leq x y { True ⇒ y ; False ⇒ x }
 ```
@@ -89,20 +89,21 @@ input is **self-evidencing** — structurally impossible to produce except by
 the legitimate path — over reusing a general-purpose type that merely
 *happens* to be sound today because of a non-local argument (a type-gate
 elsewhere, a reachability precondition, an absence of any other producer).
+Prefer a dedicated wrapper for an authority-carrying value:
 
 ```ken example
--- Prefer a dedicated wrapper for an authority-carrying value...
 data Cap = MkCap Int
 
 fn capLevel (c : Cap) : Int = match c { MkCap n ⇒ n }
 ```
 
+...over reusing the ambient `Int` type directly wherever "a capability
+level" is needed. Both are sound *today* if nothing else in the program can
+produce that Int in that position — but that soundness now depends on
+every future change preserving a non-local invariant, instead of being true
+by the value's own shape:
+
 ```ken ignore
--- ...over reusing the ambient `Int` type directly wherever "a capability
--- level" is needed. Both are sound *today* if nothing else in the program
--- can produce that Int in that position — but that soundness now depends
--- on every future change preserving a non-local invariant, instead of
--- being true by the value's own shape.
 fn capLevelReusingInt (level : Int) : Int = level
 ```
 
