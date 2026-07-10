@@ -47,7 +47,7 @@
 //! machinery is invoked or needed). Instead, the inner elim's MOTIVE is
 //! generalized to *produce a function expecting the exact ih-type for
 //! whichever branch is taken*, and the real `ih` is applied to the elim's
-//! result afterward: `(elim_Sum M inl_case inr_case op) ih`, where
+//! result afterward: `(elim_Coproduct M inl_case inr_case op) ih`, where
 //! `M := λo. (Resp(o) -> S -> ITree F RespF (Sigma A S)) -> (S -> ITree F RespF (Sigma A S))`.
 //! `M(op)` is exactly the type `ih` already has (by the outer elim's own
 //! `method_type` formula), so applying is always well-typed — ordinary motive
@@ -579,7 +579,7 @@ pub fn declare_bind(env: &mut GlobalEnv, itree_id: GlobalId, vis_id: GlobalId) -
 ///
 /// `state_result_ty(extra)` = `s -> ITree f RespF (Sigma a s)`, the
 /// state-passing motive's value — reused at THREE nesting depths (the outer
-/// `elim_ITree`'s motive, the `elim_Sum`'s generalized motive, the
+/// `elim_ITree`'s motive, the `elim_Coproduct`'s generalized motive, the
 /// `elim_StateOp`'s generalized motive) via the "generalize, then apply"
 /// trick documented at the top of this file.
 pub fn declare_run_state(
@@ -655,7 +655,7 @@ pub fn declare_run_state(
     };
 
     // method_vis = \(op:Op). \(cont:Resp op->ITree Op Resp a). \(ih:Resp op->state_result_ty).
-    //   (elim_Sum M_sum method_inl method_inr op) ih.
+    //   (elim_Coproduct M_coproduct method_inl method_inr op) ih.
     let method_vis = {
         // op domain, ctx len=6 (extra=0): Op = Coproduct (StateOp s) f.
         let op_dom = coproduct_ty(0);
@@ -673,9 +673,9 @@ pub fn declare_run_state(
         let op_var_9 = v(9, 6);
         let ih_var_9 = v(9, 8);
 
-        // ---- elim_Sum (peel State's own ops out of the coproduct) --------
+        // ---- elim_Coproduct (peel State's own ops out of the coproduct) --------
         // Placed at ctx9 (extra=3). Its own motive's binder `o` pushes to ctx10 (extra=4).
-        let m_sum = {
+        let m_coproduct = {
             let dom = coproduct_ty(3); // Coproduct (StateOp s) f, ctx9
             // body, ctx10 (extra=4): (resp_coproduct(o) -> state_result_ty(5)) -> state_result_ty(5).
             // local order to ctx10: ...,op,cont,ih,o -> o is newest = v(10,9).
@@ -683,7 +683,7 @@ pub fn declare_run_state(
             let domain_y = Term::pi(resp_coproduct_o, state_result_ty(5));
             Term::lam(dom, Term::pi(domain_y, state_result_ty(5)))
         };
-        let m_sum_ty = Term::pi(coproduct_ty(3), ty0());
+        let m_coproduct_ty = Term::pi(coproduct_ty(3), ty0());
 
         // method_inl = \(a':StateOp s). \(ih2:resp_state(s,a')->state_result_ty(5)).
         //     (elim_StateOp M_state method_get method_put a') ih2.
@@ -784,16 +784,16 @@ pub fn declare_run_state(
             Term::lam(oprime_dom, Term::lam(ih2pp_dom, Term::lam(sv_dom, vis_applied)))
         };
 
-        let elim_sum = Term::Elim {
+        let elim_coproduct = Term::Elim {
             fam: coproduct_id,
             level_args: vec![],
             params: vec![Term::app(Term::indformer(state_op_id, vec![]), v(9, 0)), v(9, 1)], // [StateOp s, f]
-            motive: Box::new(ascribed(m_sum, m_sum_ty)),
+            motive: Box::new(ascribed(m_coproduct, m_coproduct_ty)),
             methods: vec![method_inl, method_inr],
             indices: vec![],
             scrut: Box::new(op_var_9),
         };
-        let body = Term::app(elim_sum, ih_var_9);
+        let body = Term::app(elim_coproduct, ih_var_9);
         Term::lam(op_dom, Term::lam(cont_dom, Term::lam(ih_dom, body)))
     };
 

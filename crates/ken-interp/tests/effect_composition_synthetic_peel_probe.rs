@@ -121,7 +121,7 @@ fn nested_wrap_peels_through_multiple_layers_to_the_synthetic_base_tag() {
 /// `write_id` either, so this still surfaces `UnknownEffect`, but on the
 /// UNPEELED wrapper, not `Ping`) — proving the peel is opt-in, not always-on.
 #[test]
-fn no_sum_ids_disables_peeling() {
+fn no_coproduct_ids_disables_peeling() {
     let mut elab = ElabEnv::new().expect("env");
     let ping_id = declare_ping(&mut elab);
     let coproduct_ids = CoproductIds { inl_id: elab.prelude_env.inl_id, inr_id: elab.prelude_env.inr_id };

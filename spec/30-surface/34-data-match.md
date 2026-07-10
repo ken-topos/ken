@@ -57,7 +57,7 @@ be built **and** taken apart, and the eliminator reduces.
   (`../50-stdlib/`): fallibility and absence are **honest sum types**, not
   sentinel values. There is no `null` and no error code — `None`/`Err` are
   constructors the exhaustiveness checker (`§4`) forces every consumer to
-  handle. (**`Either e a = Left e | Right a` is a distinct declared type**
+  handle. (**`Either a b = Left a | Right b` is a distinct declared type**
   from `Result` — L5, operator-ruled COEXIST, correcting an earlier
   subsume-`Either`-into-`Result` erratum: the two carry different reader
   semantics even though both are binary sums. `Result e a = Err e | Ok a`
