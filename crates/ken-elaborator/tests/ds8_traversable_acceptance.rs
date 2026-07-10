@@ -106,6 +106,40 @@ fn ap_cmp_and_composition_law_are_genuinely_absent_not_stubbed() {
     );
 }
 
+// The positive counterpart to the absence check above: §9.4's claimed
+// partial `Compose` proof work (three of four Applicative laws +
+// map_coh + Functor + ap_naturality + the Level1/Level2 ap_cmp
+// reductions) must actually be PRESENT in the tangled code, kernel
+// re-checked here directly — not just described in prose (the exact
+// gap foundation-qa's BLOCKED verdict caught).
+#[test]
+fn compose_partial_law_set_is_actually_present_and_kernel_checked() {
+    let mut env = base_env();
+    env.elaborate_ken_md_file(EFFECTFUL_CLASSES_KEN_MD)
+        .expect("EffectfulClasses.ken.md must elaborate");
+    for name in [
+        "Compose",
+        "compose_pure",
+        "compose_ap",
+        "compose_ap_id",
+        "compose_ap_hom",
+        "compose_ap_ich",
+        "compose_map",
+        "compose_map_id_law",
+        "compose_map_fusion_law",
+        "compose_map_coh",
+        "ap_naturality",
+        "cmp_level1_eq",
+        "cmp_level2_reduced",
+    ] {
+        assert!(
+            env.globals.contains_key(name),
+            "§9.4/§9.5 claims `{}` is proved — it must be a real global after elaborating the entry, not just named in prose",
+            name
+        );
+    }
+}
+
 // AC7: the wired superclass fields (`functor`/`foldable`) are supplied
 // whole, not re-proved — both instances reuse the landed Functor/Foldable
 // instances directly.
