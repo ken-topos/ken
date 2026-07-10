@@ -2,7 +2,7 @@
 
 > Status: **impl-ready (L2)**. Normative and high-priority for the feature.
 > Sum types, real constructors and eliminators, `match` with exhaustiveness +
-> reachability, `Result`/`Option`/`Either`, indexed (GADT-like) families, and
+> reachability, `Result`/`Option`, indexed (GADT-like) families, and
 > refinement types are first-class and fully checked from day one — each `data`
 > declaration lowers to a genuine inductive type with real constructors and a
 > real eliminator, never an opaque base.
@@ -53,11 +53,15 @@ be built **and** taken apart, and the eliminator reduces.
   rejects negative or nested occurrences (`14 §8.3`/`§8.5`). The elaborator does
   **not** re-implement positivity — it is a kernel admission gate (`§4.4`, the
   trust boundary).
-- **`Result`, `Option`, `Either`** are ordinary prelude `data` decls
-  (`../50-stdlib/`): fallibility and absence are **honest sum types**, not
-  sentinel values. There is no `null` and no error code — `None`/`Err` are
-  constructors the exhaustiveness checker (`§4`) forces every consumer to
-  handle.
+- **`Result`, `Option`** are ordinary prelude `data` decls (`../50-stdlib/`):
+  fallibility and absence are **honest sum types**, not sentinel values. There
+  is no `null` and no error code — `None`/`Err` are constructors the
+  exhaustiveness checker (`§4`) forces every consumer to handle. (**`Either` is
+  not a distinct type** — it is **subsumed by `Result`** per #7
+  subsume-don't-proliferate: `Either e a` is isomorphic to `Result e a = Err e |
+  Ok a`, the committed binary sum; a *neutral*, non-error-biased binary sum is
+  the parametric coproduct `Sum a b = InL a | InR b` the trust root already
+  carries (`prelude`). No first-party `Either` is declared.)
 
 **What the elaborator builds vs. what the kernel admits (the K1/K1.5 line).**
 The elaborator lowers a `data` decl to a kernel `InductiveDecl` and relies on
@@ -630,7 +634,7 @@ index-aware coverage; `match` → `elim_D` with dependent-motive recovery and
 per-branch definitional refinement; proof-returning dependent motives whose
 `Equal`/`Ω` target mentions the scrutinee, with wrong-specialized-branch
 negatives; **exhaustiveness + reachability** checking with a named
-unmatched-pattern witness; `Result`/`Option`/`Either` in the prelude; and
+unmatched-pattern witness; `Result`/`Option` in the prelude; and
 refinement types with free forgetful coercion + obligation emission on
 introduction. Acceptance is part of **G6** (real sum types end-to-end). The
 whole layer is **untrusted**; the kernel re-checks every emitted `elim_D`
