@@ -21,14 +21,14 @@ the program.
 prior honesty asterisk).** `main` performs the `[FS]` read *and* the
 `[Console]` printing in **one** type-checked
 `ITree (Coproduct (FSOp APartial) ConsoleOp) (resp_coproduct ...) (Result IOError Unit)`,
-built at the surface via `injectL`/`injectR` (the general `g ↪ Coproduct g h` /
+built at the surface via `inject_l`/`inject_r` (the general `g ↪ Coproduct g h` /
 `h ↪ Coproduct g h` inclusions) sequenced with the ordinary homogeneous `bind` —
 no hand-fed coproduct anywhere. `run_io`'s coproduct-aware terminal driver
 strips the `InL`/`InR` tags and dispatches both effects through the same
 loop. What remains deferred (the honest residual, not a gap in this
 example): the row-directed auto-injection sugar (`visits [FS, Console]`
-inserting `injectL`/`injectR` automatically) is not yet landed — this
-example uses the explicit, `injectL`/`injectR`-named door, the floor under
+inserting `inject_l`/`inject_r` automatically) is not yet landed — this
+example uses the explicit, `inject_l`/`inject_r`-named door, the floor under
 that future sugar. On a denied/insufficient capability or a missing file,
 `main` does **not** print (fail-closed) and returns `Err e`, which
 `ken-cli` still surfaces as a non-zero exit with the exact `IOError`

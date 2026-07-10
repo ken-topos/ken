@@ -170,18 +170,18 @@ proof-relevant "which reordering" content into a decidable `Nat` count, and keep
 the law a value-equation. Same pattern, same soundness argument, already
 ratified on `main` — subsume, don't proliferate.
 
-### 3.3 `isSorted`
+### 3.3 `is_sorted`
 
-`isSorted` is a structural recursion into `Ω`, the `∧` of pairwise `le`
+`is_sorted` is a structural recursion into `Ω`, the `∧` of pairwise `le`
 (`16 §1.3`, no truncation):
 
 ```
-isSorted (a : Type) (le : a → a → Bool) (xs : List a) : Prop =
+is_sorted (a : Type) (le : a → a → Bool) (xs : List a) : Prop =
   match xs {
     Nil      => Top ;
     Cons h t => match t {
                   Nil       => Top ;
-                  Cons g _  => And (IsTrue (le h g)) (isSorted a le t)
+                  Cons g _  => And (IsTrue (le h g)) (is_sorted a le t)
                 }
   }
 ```
@@ -193,7 +193,7 @@ sort (a : Type) (le : a → a → Bool) (xs : List a) : List a   -- total, SCT-t
 
 -- ordering
 (a : Type) → (le : a → a → Bool) → (xs : List a) →
-  isSorted a le (sort a le xs)
+  is_sorted a le (sort a le xs)
 
 -- permutation
 (a : Type) → (le : a → a → Bool) → (xs : List a) →
@@ -251,9 +251,9 @@ Bool`:
   with CV, `§1 pt 3`, since `sort`/`count` are red-until-built); a dedup drops
   the count to `1`, so the goal is `Equal Nat 2 1`, uninhabited → **rejected at
   `perm`**.
-- **Non-ordering "sort" (identity on a descending list) fails `isSorted`.** A
+- **Non-ordering "sort" (identity on a descending list) fails `is_sorted`.** A
   descending pair leaves `IsTrue (le h g)` at `IsTrue False`, which is
-  uninhabited → **rejected at `isSorted`**; the honest sort reorders so the pair
+  uninhabited → **rejected at `is_sorted`**; the honest sort reorders so the pair
   reduces to `IsTrue True = Top`, closed by `tt` (constructor-headed, `§1 pt
   3`).
 
@@ -341,9 +341,9 @@ chapter ships every flavor **concrete** and states the polymorphic law form.
 ### 4.4 The lens coherence laws (proved over a concrete carrier)
 
 The shipped projection flavor is a lens onto the first component of a concrete
-product `Pair Bool Bool` — `get := pairFst Bool Bool` and `set s b := mkPair
-Bool Bool b (pairSnd Bool Bool s)`, over the landed prelude Σ-pair
-(`Pair`/`mkPair`/`pairFst`/`pairSnd`, `prelude.rs`; the negative Σ, `13 §6`) —
+product `Pair Bool Bool` — `get := pair_fst Bool Bool` and `set s b := mk_pair
+Bool Bool b (pair_snd Bool Bool s)`, over the landed prelude Σ-pair
+(`Pair`/`mk_pair`/`pair_fst`/`pair_snd`, `prelude.rs`; the negative Σ, `13 §6`) —
 with the three classic coherence laws, `Ω`-valued and proved by the `§1 pt 3`
 grammar:
 
@@ -359,12 +359,12 @@ grammar:
 
 All three close **definitionally** — and all three are `Refl`, **none `tt`**,
 precisely because the `Pair` head is **non-nullary with a neutral component**
-(`§1 pt 3`): `get-set` computes by Σ-β (`pairFst (mkPair b _) ⇝ b`) to the
+(`§1 pt 3`): `get-set` computes by Σ-β (`pair_fst (mk_pair b _) ⇝ b`) to the
 neutral `b` on both sides → `Refl`; `set-set` computes by Σ-β to the *identical*
-term `mkPair c (pairSnd s)` on both sides → `Refl` (the `mkPair` head does
-**not** collapse to `Top` — its component `pairSnd s` is neutral — so `tt : Top`
-would be ill-typed); `set-get` holds by **definitional Σ-η** (`mkPair (pairFst
-s) (pairSnd s) ≡ s`, `13 §6`), so the goal reduces to `Equal _ s s` → `Refl` —
+term `mk_pair c (pair_snd s)` on both sides → `Refl` (the `mk_pair` head does
+**not** collapse to `Top` — its component `pair_snd s` is neutral — so `tt : Top`
+would be ill-typed); `set-get` holds by **definitional Σ-η** (`mk_pair (pair_fst
+s) (pair_snd s) ≡ s`, `13 §6`), so the goal reduces to `Equal _ s s` → `Refl` —
 no `match` on the Σ-pair. No `DecEq`/`Ord` instance is needed (the lens laws are
 structural over
 `Pair`), so the `§3.4` carrier caveat does not bind here. The polymorphic
@@ -386,7 +386,7 @@ seam and stops** (frame §6): an obligation-producing view is a projection whose
 Every CAT-3 unit is **ordinary Ken over the built-ins**, with its derivation
 path stated (the catalog discipline, `README §intro`):
 
-- **D1/D2** — `map`/`filter`/`length`/`min`/`sort`/`insert`/`count`/`isSorted`
+- **D1/D2** — `map`/`filter`/`length`/`min`/`sort`/`insert`/`count`/`is_sorted`
   are Ken `view`s over `List`/`Nat`/`Bool` and the landed `collections` ops; the
   laws are Ken proofs over the kernel's `Eq`/`cong`/`match`. Append monoid
   **reuses** CAT-1's proofs. **Zero `trusted_base()` delta; zero `Axiom`** in
@@ -410,7 +410,7 @@ path stated (the catalog discipline, `README §intro`):
   multi-ctor `Ω` inductive, no truncation (`§3.1`, grounded on `16
   §1.4`/`§1.1`).
 - **AC4 — sort correctness flips.** Non-permuting → fails `Perm`; non-ordering →
-  fails `isSorted`; each at the named field, specific variant (`§3.7`).
+  fails `is_sorted`; each at the named field, specific variant (`§3.7`).
 - **AC5 — laws `Ω`, pointwise, one field.** All laws are `Ω`, stated pointwise,
   one canonical field (`§2.2`, `§3.4`, `§4.4`; `55 §4`/`§5.2`).
 - **AC6 — view mechanism grounded.** Enumerated per-flavor against landed

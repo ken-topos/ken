@@ -202,7 +202,7 @@ pub enum EvalVal {
     /// `EvalVal`, e.g. a `Vis` continuation `Closure`), so it can't be built
     /// as an ordinary `Term`-bodied `Closure`. Applying all `nb` branch args
     /// threads them into `rec_field`, then folds the result through
-    /// `elim_reduce` — the State-effect-build `runState`/`elim_ITree` fold
+    /// `elim_reduce` — the State-effect-build `run_state`/`elim_ITree` fold
     /// over `Vis` nodes (`36 §4.2`).
     IhClosure {
         rec_field: Rc<EvalVal>,

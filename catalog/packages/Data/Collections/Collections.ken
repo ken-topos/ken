@@ -248,7 +248,7 @@ fn zip (a : Type) (b : Type) (xs : List a) (ys : List b) : List (Pair a b) =
     Nil ⇒ Nil (Pair a b) ;
     Cons h t ⇒ match ys {
       Nil ⇒ Nil (Pair a b) ;
-      Cons h2 t2 ⇒ Cons (Pair a b) (mkPair a b h h2) (zip a b t t2)
+      Cons h2 t2 ⇒ Cons (Pair a b) (mk_pair a b h h2) (zip a b t t2)
     }
   }
 
@@ -364,26 +364,26 @@ fn false_head_leq (xs : List Bool) : bool_head_leq False xs =
   }
 
 fn bool_cons_sorted (x : Bool) (xs : List Bool)
-  : isSorted Bool bool_leq xs → bool_head_leq x xs →
-    isSorted Bool bool_leq (Cons Bool x xs) =
+  : is_sorted Bool bool_leq xs → bool_head_leq x xs →
+    is_sorted Bool bool_leq (Cons Bool x xs) =
   match xs {
     Nil ⇒ λh. λhb. tt ;
     Cons h t ⇒ λhxs. λhb.
-      andIntro
+      and_intro
         (Equal Bool (bool_leq x h) True)
-        (isSorted Bool bool_leq (Cons Bool h t))
+        (is_sorted Bool bool_leq (Cons Bool h t))
         hb
         hxs
   }
 
 fn bool_sorted_tail (x : Bool) (xs : List Bool)
-  : isSorted Bool bool_leq (Cons Bool x xs) → isSorted Bool bool_leq xs =
+  : is_sorted Bool bool_leq (Cons Bool x xs) → is_sorted Bool bool_leq xs =
   match xs {
     Nil ⇒ λh. tt ;
     Cons h t ⇒ λhCons.
-      andSnd
+      and_snd
         (Equal Bool (bool_leq x h) True)
-        (isSorted Bool bool_leq (Cons Bool h t))
+        (is_sorted Bool bool_leq (Cons Bool h t))
         hCons
   }
 
@@ -406,7 +406,7 @@ fn sort_bool (xs : List Bool) : List Bool =
   }
 
 fn sorted_insert_true_bool (xs : List Bool)
-  : isSorted Bool bool_leq xs → isSorted Bool bool_leq (insert_true_bool xs) =
+  : is_sorted Bool bool_leq xs → is_sorted Bool bool_leq (insert_true_bool xs) =
   match xs {
     Nil ⇒ λh. tt ;
     Cons h t ⇒ match h {
@@ -421,7 +421,7 @@ fn sorted_insert_true_bool (xs : List Bool)
     }
   }
 
-fn sort_bool_sorted (xs : List Bool) : isSorted Bool bool_leq (sort_bool xs) =
+fn sort_bool_sorted (xs : List Bool) : is_sorted Bool bool_leq (sort_bool xs) =
   match xs {
     Nil ⇒ tt ;
     Cons h t ⇒ match h {
@@ -574,10 +574,10 @@ class SetoidMorphism A {
 fn id_bool (x : Bool) : Bool = x
 
 fn fst_pair_bool_bool (p : Pair Bool Bool) : Bool =
-  pairFst Bool Bool p
+  pair_fst Bool Bool p
 
 fn set_fst_pair_bool_bool (a : Bool) (p : Pair Bool Bool) : Pair Bool Bool =
-  mkPair Bool Bool a (pairSnd Bool Bool p)
+  mk_pair Bool Bool a (pair_snd Bool Bool p)
 
 fn fst_lens_get_set (a : Bool) (s : Pair Bool Bool)
   : Equal Bool (fst_pair_bool_bool (set_fst_pair_bool_bool a s)) a =
@@ -633,8 +633,8 @@ instance RefinementView Unit {
 
 fn bool_pair_index_project (p : Pair Bool Bool) (ix : Bool) : Bool =
   match ix {
-    False ⇒ pairFst Bool Bool p ;
-    True ⇒ pairSnd Bool Bool p
+    False ⇒ pair_fst Bool Bool p ;
+    True ⇒ pair_snd Bool Bool p
   }
 
 instance IndexedView Unit {

@@ -48,7 +48,7 @@ permutation is the sole `Map` correctness law still deferred (§6).
 | 1 | preservation (`§5.1`) | `Ordered m → Ordered (insert leq key val m)` | A + B | **LANDED** (`preserves_ordered`) |
 | 2 | found-after-insert (`§5.2`) | `lookup leq key (insert leq key val m) = Some val` | A + B | **LANDED** (`lookup_found_after_insert`) |
 | 3 | locality (`§5.2`) | `distinct key key' → lookup leq key' (insert leq key val m) = lookup leq key' m` | A + B | **LANDED** (`lookup_locality`) |
-| 4 | `to_list`-ordered (`§5.3`) | `Ordered m → isSorted keyLeq (to_list m)` — **comparison-free** | **B only** | Unit 1 — **LANDED** (`to_list_ordered` built, kernel-rechecked) |
+| 4 | `to_list`-ordered (`§5.3`) | `Ordered m → is_sorted keyLeq (to_list m)` — **comparison-free** | **B only** | Unit 1 — **LANDED** (`to_list_ordered` built, kernel-rechecked) |
 | 5 | agreement (`§5.3`) | `Ordered m → Distinct leq m → lookup leq key m = assoc leq key (to_list m)` | A + B | **LANDED** (`lookup_assoc_agree`) |
 
 **Every law's own proof uses `refl`/`trans`/`total` only** — no `antisym →
@@ -158,14 +158,14 @@ in-order flattening: `all_keys p m -> all_in_list p (to_list m)`. The landed def
 all_keys p Leaf              ⇝ Equal Bool True True                 -- Top (K7)
 all_keys p (Node l key val r) ⇝ And (p key) (And (all_keys p l) (all_keys p r))
 to_list Leaf                 ⇝ Nil
-to_list (Node l key val r)   ⇝ list_append (to_list l) (Cons (mkPair key val) (to_list r))
+to_list (Node l key val r)   ⇝ list_append (to_list l) (Cons (mk_pair key val) (to_list r))
 all_in_list p Nil             ⇝ Equal Bool True True                 -- Top (K7)
-all_in_list p (Cons e xs)     ⇝ And (p (pairFst e)) (all_in_list p xs)
+all_in_list p (Cons e xs)     ⇝ And (p (pair_fst e)) (all_in_list p xs)
 ```
 
 **Proof term (convoy).** Generalize `all_keys p m` into the motive; match `m`;
 per-arm checked-mode `\h.`; self-recurse on `l` and `r` for the IH; assemble
-with the `And`-projections (`andFst`/`andSnd`), `andIntro`, and the append lemma
+with the `And`-projections (`and_fst`/`and_snd`), `and_intro`, and the append lemma
 `all_in_list_append_intro` (§4, a Gap-B-only structural induction on the left list):
 
 ```
@@ -176,20 +176,20 @@ view all_keys_to_all_in_list (k v : Type) (p : k -> Prop) (m : Tree k v)
     Node l key val r => \h.
       all_in_list_append_intro k v p
         (to_list k v l)
-        (Cons (Pair k v) (mkPair k v key val) (to_list k v r))
-        (all_keys_to_all_in_list k v p l (andFst _ _ (andSnd _ _ h)))     -- IH on l : all_in_list p (to_list l)
-        (andIntro (p key) (all_in_list k v p (to_list k v r))
-          (andFst _ _ h)                                             -- p key
-          (all_keys_to_all_in_list k v p r (andSnd _ _ (andSnd _ _ h))))  -- IH on r : all_in_list p (to_list r)
+        (Cons (Pair k v) (mk_pair k v key val) (to_list k v r))
+        (all_keys_to_all_in_list k v p l (and_fst _ _ (and_snd _ _ h)))     -- IH on l : all_in_list p (to_list l)
+        (and_intro (p key) (all_in_list k v p (to_list k v r))
+          (and_fst _ _ h)                                             -- p key
+          (all_keys_to_all_in_list k v p r (and_snd _ _ (and_snd _ _ h))))  -- IH on r : all_in_list p (to_list r)
   }
 ```
 
 The hypothesis threads structurally: `h : And (p key) (And (all_keys p l)
-(all_keys p r))`, so `andFst h : p key`, `andFst (andSnd h) : all_keys p l`, and
-`andSnd (andSnd h) : all_keys p r` feed the two self-recursive calls. The second
-`all_in_list_append_intro` argument's type `all_in_list p (Cons (mkPair key val)
+(all_keys p r))`, so `and_fst h : p key`, `and_fst (and_snd h) : all_keys p l`, and
+`and_snd (and_snd h) : all_keys p r` feed the two self-recursive calls. The second
+`all_in_list_append_intro` argument's type `all_in_list p (Cons (mk_pair key val)
 (to_list r))` reduces to `And (p key) (all_in_list p (to_list r))` (since
-`pairFst (mkPair key val) ⇝ key`), built by `andIntro`. (`And`'s two `Prop`
+`pair_fst (mk_pair key val) ⇝ key`), built by `and_intro`. (`And`'s two `Prop`
 arguments are elided as `_ _` for readability; spell them explicitly per the
 landed convention.) **No dictionary laws, no transport** — the load-bearing
 convoy shape (two recursive fields, nested-`And` destructuring, cross-function
@@ -283,10 +283,10 @@ and needs the `Not` combinator; a first-class expression-level `->` / `Not` is a
 
 ## 4. Reusable helpers to define (Foundation)
 
-Already **landed** on the held base: `list_append`, `isSorted` (`prelude.rs` —
-`isSorted a leq (Cons x (Cons y r)) = And (Equal Bool (leq x y) True) (isSorted
-a leq (Cons y r))`), `Pair`/`mkPair`/`pairFst`/`pairSnd`, `And`/`andIntro`/
-`andFst`/`andSnd` (`prelude.rs`, `And A B := Sigma(_:A).B`), `absurd`/`Bottom`,
+Already **landed** on the held base: `list_append`, `is_sorted` (`prelude.rs` —
+`is_sorted a leq (Cons x (Cons y r)) = And (Equal Bool (leq x y) True) (is_sorted
+a leq (Cons y r))`), `Pair`/`mk_pair`/`pair_fst`/`pair_snd`, `And`/`and_intro`/
+`and_fst`/`and_snd` (`prelude.rs`, `And A B := Sigma(_:A).B`), `absurd`/`Bottom`,
 `Equal`/`Refl`/`tt`, `all_keys`, `all_in_list`, `to_list`, `pair_leq`, and — added by
 the capstone build — **`Not : Ω → Ω := λA. A → Bottom`** (`prelude.rs`, an
 ordinary `declare_def` over `Π` + the existing `Bottom`, built like `And`/`Or`;
@@ -323,8 +323,8 @@ below are the remaining landed defs.
   (Gap-B-free — no dependent motive; `list_append`'s own recursion drives it).
   Comparison-free.
 - **`assoc`** (law 5, landed) — the ordered-list lookup: `assoc leq key : List
-  (Pair k v) → Option v`, scanning by the same `leq key (pairFst e) / leq
-  (pairFst e) key` coincidence test `lookup` uses. A plain structural `List`
+  (Pair k v) → Option v`, scanning by the same `leq key (pair_fst e) / leq
+  (pair_fst e) key` coincidence test `lookup` uses. A plain structural `List`
   recursion (Gap-B-free).
 - **`order_equiv` / `NoDup` / `Distinct`** (law 5's uniqueness precondition,
   landed) — all `Ω`-valued, all comparison-free structural recursions:
@@ -332,7 +332,7 @@ below are the remaining landed defs.
     are order-equivalent (each `≤` the other).
   - `NoDup leq (xs : List (Pair k v))` — no two entries carry order-equivalent
     keys: `NoDup leq Nil = ⊤`; `NoDup leq (Cons e xs) = And (all_in_list (\k'.
-    order_equiv leq k' (pairFst e) -> Bottom) xs) (NoDup leq xs)` (each head's
+    order_equiv leq k' (pair_fst e) -> Bottom) xs) (NoDup leq xs)` (each head's
     key is order-distinct from every tail key).
   - `Distinct leq m := NoDup leq (to_list m)` — **law 5's key-uniqueness
     precondition**, encoded over `to_list m`'s keys so it aligns with `assoc`'s
@@ -348,40 +348,40 @@ Notation: `G` is the current goal; `G[x]` is `G` with the named stuck `leq …`
 abstracted to `x`; `keyLeq := pair_leq leq` is law 4/5's element comparator over
 `Pair k v` (compares first components).
 
-### 5.1 Law 4 — `to_list`-ordered (`Ordered m → isSorted keyLeq (to_list m)`)
+### 5.1 Law 4 — `to_list`-ordered (`Ordered m → is_sorted keyLeq (to_list m)`)
 
 **Unit 1 — LANDED (Gap-B, comparison-free): law 4 builds end-to-end** as a
 real, non-stubbed, kernel-rechecked `to_list_ordered` (`map.ken`, §7). `to_list`
 never calls `leq`; every `leq` fact is a stored
 `IsTrue` witness threaded from `Ordered`'s `all_keys` conjuncts (themselves
-`Equal Bool (leq …) True`, the exact shape `isSorted`'s conjuncts want — they
+`Equal Bool (leq …) True`, the exact shape `is_sorted`'s conjuncts want — they
 thread **directly**, no transport). So this law clears Gap A and needs **only**
-the convoy induction (§2). Induct on `m`; motive `\m'. (Ordered … m' -> isSorted
+the convoy induction (§2). Induct on `m`; motive `\m'. (Ordered … m' -> is_sorted
 keyLeq (to_list m'))`.
 
-- **`Leaf`** — `to_list Leaf = Nil`; `isSorted … Nil ⇝ Top`. Base `\h. tt`.
+- **`Leaf`** — `to_list Leaf = Nil`; `is_sorted … Nil ⇝ Top`. Base `\h. tt`.
 - **`Node l k2 v2 r`** — `to_list (Node …) = list_append (to_list l) (Cons (k2,v2)
   (to_list r))`. Self-recurse (§2.1 step 4) for the IH on each subtree:
-  `to_list_ordered … l (Ordered l from h)` : `isSorted (to_list l)`, likewise for
+  `to_list_ordered … l (Ordered l from h)` : `is_sorted (to_list l)`, likewise for
   `r`. From `h`'s `all_keys` conjuncts, via the bridge lemma **L2** (§2.2,
   `all_keys_to_all_in_list`): every key in `to_list l` is `≤ k2`, and `k2 ≤` every key
   in `to_list r`. Assemble with the two append lemmas:
 
   ```
-  isSorted (to_list l) ->
-  isSorted (Cons (k2,v2) (to_list r)) ->   -- consSorted: from isSorted (to_list r) + k2 ≤ head r
+  is_sorted (to_list l) ->
+  is_sorted (Cons (k2,v2) (to_list r)) ->   -- consSorted: from is_sorted (to_list r) + k2 ≤ head r
   all_in_list (≤k2) (to_list l) ->           -- bridge L2 from all_keys
-  isSorted (list_append (to_list l) (Cons (k2,v2) (to_list r)))   -- is_sorted_append
+  is_sorted (list_append (to_list l) (Cons (k2,v2) (to_list r)))   -- is_sorted_append
   ```
 
   **No dictionary laws** beyond the stored witnesses; **no transport.** This is
   the load-bearing ordered-iteration law — proved as the naturally-`Ω`
-  `isSorted` form, **never** permutation (§6).
+  `is_sorted` form, **never** permutation (§6).
 
   > **Conclusion `to_list_ordered` is LANDED (§7).** The bridge **L2** and the
   > `consSorted`/`is_sorted_append` append lemmas assemble the `Node` step into a
   > real, kernel-rechecked `to_list_ordered`. The residual `TypeMismatch` that
-  > earlier blocked it — `isSorted`'s pair-indexed comparator vs. the bound
+  > earlier blocked it — `is_sorted`'s pair-indexed comparator vs. the bound
   > chain's key-indexed predicate not converging by a delta/iota step **inside
   > an `Eq` argument** — was a kernel conversion shortfall, now **fixed** by the
   > `(Eq, Eq)` `conv_struct` congruence arm shipped with a
@@ -389,7 +389,7 @@ keyLeq (to_list m'))`.
   > #262). (The arm's first, naive form triggered an eager-δ non-termination on
   > the *assembled* proof — the deeper root — which the fast-path re-land
   > resolved; the completeness arm alone was not enough.) The landed proof
-  > factors `isSorted`'s two-element lookahead into single-match helper `view`s
+  > factors `is_sorted`'s two-element lookahead into single-match helper `view`s
   > (the **nested-match-avoidance idiom**), to be canonicalized with the full
   > idiom set in a follow-on pass.
 
@@ -406,7 +406,7 @@ structure and the dictionary laws it uses.
 - **Law 1 — preservation** (`Ordered m → Ordered (insert key val m)`). Motive
   `\m'. (Ordered … m' -> Ordered … (insert … m'))`. `Leaf`: `insert Leaf = Node
   Leaf key val Leaf`; goal is the `And`-tree of `all_keys … Leaf ⇝ Top` /
-  `Ordered Leaf ⇝ Top`, base `\h.` the `andIntro` tree of `tt`s (comparison-
+  `Ordered Leaf ⇝ Top`, base `\h.` the `and_intro` tree of `tt`s (comparison-
   free). `Node`: subtrees by the IH (self-recursive calls); rebuilding the two
   `all_keys` bounds against the new label needs **L1** + **L3** and the reflected
   `leq` equations — aligned by the goal-generic transport bridges (§3).
@@ -477,9 +477,9 @@ Each is a small structural induction; all landed alongside the laws.
 - **L3 `all_keys`-under-a-transitive-step** (law 1 overwrite) — move an `all_keys
   (≤a)` bound to `all_keys (≤b)` given `IsTrue (leq a b)`, mapping `trans` over
   the subtree. Comparison-free (Gap-B), consumed by law 1. **Landed.**
-- **L4 `isSorted`-over-`++`** (law 4) — the `is_sorted_append`/`consSorted` pair
-  assembling law 4's `Node` step: `isSorted xs → isSorted (Cons m ys) →
-  all_in_list (keyLeq · m) xs → isSorted (list_append xs (Cons m ys))`. Induction
+- **L4 `is_sorted`-over-`++`** (law 4) — the `is_sorted_append`/`consSorted` pair
+  assembling law 4's `Node` step: `is_sorted xs → is_sorted (Cons m ys) →
+  all_in_list (keyLeq · m) xs → is_sorted (list_append xs (Cons m ys))`. Induction
   on `xs`, comparison-free (the `keyLeq` facts are supplied as `IsTrue`
   witnesses). **Landed** (the earlier residual `TypeMismatch` here was fixed by
   `obs-eq-termination` `9cf468a`; §5.1, §7); the landed proof routes the
@@ -493,7 +493,7 @@ Each is a small structural induction; all landed alongside the laws.
 
 ## 6. Ω-discipline (the load-bearing guardrail)
 
-- **`to_list`-ordered is the `Ω` `isSorted` form — never permutation.** The
+- **`to_list`-ordered is the `Ω` `is_sorted` form — never permutation.** The
   permutation law (`to_list` lists exactly the inserted entries once each) is
   **proof-relevant** (distinct interleavings are distinct derivations), so it
   **cannot** be `data Perm : Ω` directly
@@ -508,7 +508,7 @@ Each is a small structural induction; all landed alongside the laws.
   K7-workaround anti-pattern). Law 4 clears Gap A precisely **because** it is
   comparison-free: its `leq` facts are `Ordered`'s stored witnesses, not stuck
   reductions.
-- **All goals live in `Ω`.** `Ordered`/`all_keys`/`all_in_list`/`isSorted`/`Equal`/
+- **All goals live in `Ω`.** `Ordered`/`all_keys`/`all_in_list`/`is_sorted`/`Equal`/
   `And` — and law 5's `order_equiv`/`NoDup`/`Distinct` (built from
   `IsTrue`/`And`/`all_in_list`/`->Bottom`) — are `Ω`-valued (`52 §5.1`, `16 §1`);
   the `J` motives that transport them (laws 1/2/3/5, §3) are `Ω`-valued, which

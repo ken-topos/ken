@@ -75,7 +75,7 @@ be built **and** taken apart, and the eliminator reduces.
   decl, `elab.globals.insert`-registered like any other prelude type — an
   ordinary surface reference such as `InL a b x` elaborates). It is the
   effect-signature composition coproduct (`ITree`'s `resp_coproduct`/
-  `injectL`/`injectR`, effect-composition `D2`) — kept hand-built as a
+  `inject_l`/`inject_r`, effect-composition `D2`) — kept hand-built as a
   deliberate risk-reduction for effect-row plumbing, not deprecated or
   hidden. `Either` is the catalog-level neutral sum for ordinary user
   code; `Coproduct` is internal effect-signature plumbing most code never

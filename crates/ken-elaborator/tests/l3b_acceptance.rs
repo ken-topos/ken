@@ -9,7 +9,7 @@
 //! - AC2 (`user-ord-instance-drives-verified-sort`): user `instance Ord K`
 //!   → `const where Ord K` accepts; absence → `NoInstance`.
 //! - AC3 (`user-ord-sort-emits-both-conjuncts`, soundness): verified sort
-//!   under user `Ord K` emits the conjoined `isSorted ∧ Perm` obligation —
+//!   under user `Ord K` emits the conjoined `is_sorted ∧ Perm` obligation —
 //!   both conjuncts, `Perm` present (the untrusted-layer omission guard).
 //! - AC4 (`user-deceq-keyed-map-canonical-identity`): `Map K v` identity is
 //!   `DecEq`-keyed (byte-order canonical, `41 §3a`), NOT `Ord`-keyed — a
@@ -130,19 +130,19 @@ fn user_ord_instance_drives_verified_sort() {
 }
 
 // ============================================================================
-// AC3 — user-Ord sort emits conjoined isSorted ∧ Perm obligation (soundness)
+// AC3 — user-Ord sort emits conjoined is_sorted ∧ Perm obligation (soundness)
 // ============================================================================
 
 /// `surface/collections/user-ord-sort-emits-both-conjuncts` (AC3, soundness ★)
 ///
 /// A `sort`-shaped const with `where Ord K` (user instance) and the refinement
-/// `{ ys : List K | And (isSorted K ys) (Perm K ys xs) }` emits the conjoined
-/// Ensures obligation carrying BOTH `isSorted` AND the load-bearing `Perm`
+/// `{ ys : List K | And (is_sorted K ys) (Perm K ys xs) }` emits the conjoined
+/// Ensures obligation carrying BOTH `is_sorted` AND the load-bearing `Perm`
 /// conjunct on the user-`Ord` path.
 ///
 /// Discriminating: a build that drops `Perm` on the user-`Ord` path (while
 /// preserving it for built-in `Ord`, L3a AC6) passes L3a-AC6 but fails here.
-/// The `const Nil` degeneracy: `isSorted`-alone is met by `sort _ = Nil`
+/// The `const Nil` degeneracy: `is_sorted`-alone is met by `sort _ = Nil`
 /// (empty list is vacuously sorted); `Perm` forces `sort` to be a sort.
 /// The conjunct is never generated ⇒ never discharged ⇒ reads proved-by-default
 /// (the untrusted-layer omission: the kernel does not generate what we drop).
@@ -160,15 +160,15 @@ fn user_ord_sort_emits_both_conjuncts() {
     // `where Ord K`.  Body `Nil K` (the empty list) type-checks against
     // `List K` (the refinement carrier) and causes the elaborator to emit
     // the Ensures obligation
-    // `And (isSorted K (\_ _. True) (Nil K)) (Perm K (Nil K) xs)`.
+    // `And (is_sorted K (\_ _. True) (Nil K)) (Perm K (Nil K) xs)`.
     // The body does NOT need to be a correct sort — only the obligation
-    // emission is under test. `isSorted` (ES2-remainder, real def) now takes
+    // emission is under test. `is_sorted` (ES2-remainder, real def) now takes
     // an explicit comparator; `K = MkK` has a single value, so a constant
     // `True` comparator is a valid (if trivial) `K -> K -> Bool`.
     let res = env
         .elaborate_decl_v1(
             "fn sortK (xs : List K) : \
-             { ys : List K | And (isSorted K (\\_ _. True) ys) (Perm K ys xs) } \
+             { ys : List K | And (is_sorted K (\\_ _. True) ys) (Perm K ys xs) } \
              where Ord K = Nil K",
         )
         .expect(
@@ -183,7 +183,7 @@ fn user_ord_sort_emits_both_conjuncts() {
         .expect("AC3: Ensures (refinement) obligation must be emitted");
 
     let and_id = env.globals["And"];
-    let issorted_id = env.globals["isSorted"];
+    let issorted_id = env.globals["is_sorted"];
     let perm_id = env.globals["Perm"];
 
     assert!(
@@ -192,12 +192,12 @@ fn user_ord_sort_emits_both_conjuncts() {
     );
     assert!(
         term_mentions_const(&obl.goal_closed, issorted_id),
-        "AC3 (soundness): obligation must carry the isSorted conjunct"
+        "AC3 (soundness): obligation must carry the is_sorted conjunct"
     );
     assert!(
         term_mentions_const(&obl.goal_closed, perm_id),
         "AC3 (soundness ★): obligation must carry the load-bearing Perm \
-         conjunct (not isSorted-alone; the const-Nil degeneracy guard)"
+         conjunct (not is_sorted-alone; the const-Nil degeneracy guard)"
     );
 }
 

@@ -13,7 +13,7 @@ package.
 - `class DecEq a { eq; sound; complete }` — decides the kernel's
   propositional `Equal` (`51 §2.2`).
 - `class Ord a { leq; refl; antisym; trans; total }` — total order; `leq`
-  is the comparator `sort`/`isSorted` thread explicitly (`51 §2.3`/`§4`,
+  is the comparator `sort`/`is_sorted` thread explicitly (`51 §2.3`/`§4`,
   ES2-remainder `2358b4d`); `where Ord a` supplies it via the resolved
   dictionary's `d.leq` projection (`33 §5.4` implicit-instance desugaring).
 - `instance Eq Int`, `instance DecEq Int`, `instance Ord Int` — canonical
@@ -65,4 +65,4 @@ resolved dictionary is bound under the surface name `d` for the duration of
 that one declaration's elaboration (never leaks to sibling decls), so the
 body/refinement can project its fields (`d.leq`) exactly as the spec's own
 illustration shows — ordinary implicit-dictionary insertion, the *same*
-`sort`/`isSorted` view as the explicit-comparator form, no second mechanism.
+`sort`/`is_sorted` view as the explicit-comparator form, no second mechanism.

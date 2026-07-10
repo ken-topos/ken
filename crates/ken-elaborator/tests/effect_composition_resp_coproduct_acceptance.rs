@@ -1,7 +1,7 @@
 //! `effect-composition` D1 (BV2, the hinge) — `resp_coproduct` must be a REDUCING
 //! `declare_def`, never a postulate: `resp_coproduct g h rg rh (InL x)` fires the
 //! per-tag ι and reduces to `rg x` (not stuck), and symmetrically for `InR`.
-//! A postulate here would silently break `injectL`/`injectR`'s coercion-free
+//! A postulate here would silently break `inject_l`/`inject_r`'s coercion-free
 //! typing (doc §D1.1/§D2.2) — this is the discriminating test the doc
 //! demands ("not just 'it compiles'").
 

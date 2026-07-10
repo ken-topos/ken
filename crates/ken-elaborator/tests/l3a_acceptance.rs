@@ -4,7 +4,7 @@
 //! AC1 (String UTF-8 primitive), AC2 (List pattern-match via real `elim_List`),
 //! AC3 (functor law emits a real obligation; cross-decl ref resolves), AC4 (no
 //! coinduction + fuel-bounded `unfoldUpTo`), AC5-List (structural slot-id
-//! equality), AC6 (verified `sort` emits the conjoined `isSorted ∧ Perm`
+//! equality), AC6 (verified `sort` emits the conjoined `is_sorted ∧ Perm`
 //! obligation). Spec: `spec/30-surface/37-strings-collections.md`.
 //!
 //! The combinator / `unfoldUpTo` / `sort` views are declared here (driving the
@@ -401,7 +401,7 @@ fn structurally_equal_lists_share_slot() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// AC6 — verified `sort` emits the conjoined `isSorted ∧ Perm` obligation
+// AC6 — verified `sort` emits the conjoined `is_sorted ∧ Perm` obligation
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// `surface/collections/sort-emits-issorted-and-perm` (soundness)
@@ -409,14 +409,14 @@ fn structurally_equal_lists_share_slot() {
 fn sort_emits_issorted_and_perm() {
     let mut env = mk_env();
     setup_combinators(&mut env); // declares `insert` (the sort helper)
-                                 // `sort : (a → a → Bool) → List a → { ys | isSorted leq ys ∧ Perm ys xs }`.
+                                 // `sort : (a → a → Bool) → List a → { ys | is_sorted leq ys ∧ Perm ys xs }`.
                                  // `leq` is the buildable-now spelling of `Ord a` (the `where Ord a`
                                  // constraint + constraint resolution is L3b-gated, `37 §6`); ES2-remainder
-                                 // threads it through `isSorted` too (`isSorted a leq ys`, real def, `§6`).
+                                 // threads it through `is_sorted` too (`is_sorted a leq ys`, real def, `§6`).
     let res = env
         .elaborate_decl_v1(
             "fn sort (a : Type) (leq : a → a → Bool) (xs : List a) : \
-             { ys : List a | And (isSorted a leq ys) (Perm a ys xs) } = \
+             { ys : List a | And (is_sorted a leq ys) (Perm a ys xs) } = \
              match xs { Nil => Nil a ; Cons h t => insert a leq h (sort a leq t) }",
         )
         .expect("sort elaborates (recursive + refinement)");
@@ -435,11 +435,11 @@ fn sort_emits_issorted_and_perm() {
         .find(|o| matches!(o.kind, ObligationKind::Ensures))
         .expect("sort emits an Ensures (refinement) obligation");
 
-    // AC6 (soundness): the obligation carries BOTH conjuncts — `isSorted` AND
+    // AC6 (soundness): the obligation carries BOTH conjuncts — `is_sorted` AND
     // the load-bearing `Perm` (sortedness-alone is `const Nil`-vacuous; a
     // dropped `Perm` reads `proved`-by-default, the untrusted-layer omission).
     let (issorted_id, perm_id, and_id) = (
-        env.globals["isSorted"],
+        env.globals["is_sorted"],
         env.globals["Perm"],
         env.globals["And"],
     );
@@ -449,11 +449,11 @@ fn sort_emits_issorted_and_perm() {
     );
     assert!(
         term_mentions_const(&obl.goal_closed, issorted_id),
-        "obligation must carry the isSorted conjunct"
+        "obligation must carry the is_sorted conjunct"
     );
     assert!(
         term_mentions_const(&obl.goal_closed, perm_id),
-        "obligation must carry the load-bearing Perm conjunct (not isSorted-alone)"
+        "obligation must carry the load-bearing Perm conjunct (not is_sorted-alone)"
     );
 }
 

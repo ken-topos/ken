@@ -6,10 +6,10 @@
 -- total each time it is called.
 --
 -- Genuine hidden state, not a threaded parameter: built on the landed
--- `[State]` effect surface (VAL2 #10) -- `get`/`put`/`bind`/`runState` over
+-- `[State]` effect surface (VAL2 #10) -- `get`/`put`/`bind`/`run_state` over
 -- an `ITree`. Each "call" (`addTo n`) is one `get`-then-`put`-then-`Ret`
 -- step; the accumulator's running total is never a caller-visible
--- parameter anywhere in this program -- `runState` threads it internally,
+-- parameter anywhere in this program -- `run_state` threads it internally,
 -- exactly the point of using an algebraic effect instead of explicit
 -- parameter-passing (an explicitly-threaded `Acc` param would misrepresent
 -- the task, per this example's own retired KNOWN-GAP.md).
@@ -72,7 +72,7 @@ const program : ITree Op Resp Bool =
         (λr2. Ret Op Resp Bool (and_bool (eq_nat r1 two) (eq_nat r2 five))))
 
 const finalResult : ITree Eff RespEff (Pair Bool Nat) =
-  runState Nat Eff RespEff Bool Zero program
+  run_state Nat Eff RespEff Bool Zero program
 
 -- Observing `finalResult`: match-compiler W-style IH-slot support landed
 -- (`dependent-match-wstyle`) -- `match` on `ITree` (any instantiation, incl.
@@ -84,10 +84,10 @@ const finalResult : ITree Eff RespEff (Pair Bool Nat) =
 fn unwrapRet (r : ITree Eff RespEff (Pair Bool Nat)) : Pair Bool Nat =
   match r {
     Ret v ⇒ v ;
-    Vis op k ⇒ mkPair Bool Nat False Zero
+    Vis op k ⇒ mk_pair Bool Nat False Zero
   }
 
-const finalBool : Bool = pairFst Bool Nat (unwrapRet finalResult)
+const finalBool : Bool = pair_fst Bool Nat (unwrapRet finalResult)
 
 const finalCheck : String = match finalBool { True ⇒ "PASS" ; False ⇒ "FAIL" }
 

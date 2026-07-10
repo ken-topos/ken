@@ -9,7 +9,7 @@
 //! the Map-build thread). This file covers only what
 //! `catalog/packages/Data/Collections/Map.ken` ships today: the `Tree k v`
 //! carrier, `empty`, `to_list`, `fold`,
-//! and the `Pair`/`mkPair`/`pairFst`/`pairSnd` Σ-pair plumbing
+//! and the `Pair`/`mk_pair`/`pair_fst`/`pair_snd` Σ-pair plumbing
 //! (`ken-elaborator/src/prelude.rs`) those two ops route through. Extended
 //! once the generic-dictionary gap resolves.
 
@@ -188,7 +188,7 @@ fn tree_carrier_and_ops_are_not_primitive() {
         matches!(env.env.lookup(tree_id), Some(Decl::Inductive { .. })),
         "Tree k v must be Decl::Inductive"
     );
-    for name in ["empty", "to_list", "fold", "Pair", "mkPair", "pairFst", "pairSnd"] {
+    for name in ["empty", "to_list", "fold", "Pair", "mk_pair", "pair_fst", "pair_snd"] {
         let id = env.globals[name];
         assert!(
             matches!(env.env.lookup(id), Some(Decl::Transparent { .. })),
@@ -393,9 +393,9 @@ fn fromlist_last_writer_and_ordered() {
     // [(2,'b'),(1,'a'),(2,'c')] -> to_list must be [(1,'a'),(2,'c')]: ascending
     // AND the LAST list entry ('c') wins on the duplicate key 2.
     let list_expr = format!(
-        "Cons (Pair Char Char) (mkPair Char Char ({two}) ({b})) \
-           (Cons (Pair Char Char) (mkPair Char Char ({one}) ({a})) \
-             (Cons (Pair Char Char) (mkPair Char Char ({two}) ({c})) (Nil (Pair Char Char))))",
+        "Cons (Pair Char Char) (mk_pair Char Char ({two}) ({b})) \
+           (Cons (Pair Char Char) (mk_pair Char Char ({one}) ({a})) \
+             (Cons (Pair Char Char) (mk_pair Char Char ({two}) ({c})) (Nil (Pair Char Char))))",
         two = char_lit('2'),
         one = char_lit('1'),
         a = char_lit('a'),
@@ -585,7 +585,7 @@ fn lookup_empty_law_is_a_real_reducing_proof() {
 fn tolistordered_law4_is_a_real_general_proof_term() {
     let env = mk_env();
     // `to_list_ordered : (k v : Type) -> (leq : k -> k -> Bool) -> (m : Tree k v)
-    //   -> Ordered k v leq m -> isSorted (Pair k v) (pair_leq k v leq) (to_list k v m)`
+    //   -> Ordered k v leq m -> is_sorted (Pair k v) (pair_leq k v leq) (to_list k v m)`
     // must be admitted as a real Decl::Transparent proof term (never a
     // postulate/axiom) — this IS the whole-body `declare_def` kernel recheck
     // that used to OOM (~12 GB) before `wp/obs-eq-termination` (`9cf468a`)
@@ -998,9 +998,9 @@ fn cat4_delete_dropkey_filters_all_equivalent_keys() {
     let mut env = mk_env();
     let mut store = make_store(&env);
     let list_expr = format!(
-        "Cons (Pair Nat Nat) (mkPair Nat Nat ({one}) ({ten})) \
-           (Cons (Pair Nat Nat) (mkPair Nat Nat ({two}) ({twenty})) \
-             (Cons (Pair Nat Nat) (mkPair Nat Nat ({one}) ({thirty})) (Nil (Pair Nat Nat))))",
+        "Cons (Pair Nat Nat) (mk_pair Nat Nat ({one}) ({ten})) \
+           (Cons (Pair Nat Nat) (mk_pair Nat Nat ({two}) ({twenty})) \
+             (Cons (Pair Nat Nat) (mk_pair Nat Nat ({one}) ({thirty})) (Nil (Pair Nat Nat))))",
         one = nat(1),
         two = nat(2),
         ten = nat(10),
@@ -1157,7 +1157,7 @@ fn cat4_relations_compose_and_converse_over_adjacency_maps() {
 // always-true comparator) was tried here as a second smoke test, but
 // `Ordered`'s real Node case (`And (all_keys (\k2. ...) l) (And (all_keys
 // (\k2. ...) r) (And (Ordered l) (Ordered r)))`) needs an exactly-nested
-// `andIntro` witness matching that inline-lambda predicate spelling
+// `and_intro` witness matching that inline-lambda predicate spelling
 // precisely, not a re-derivation via `le_below`/`le_above` or a bare `tt` —
 // getting the by-hand nesting exactly right is its own small proof exercise
 // and not necessary evidence: `tolistordered_law4_is_a_real_general_proof_
@@ -1167,17 +1167,17 @@ fn cat4_relations_compose_and_converse_over_adjacency_maps() {
 // is wanted later.
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Pair (Σ-pair, `52 §4`) plumbing sanity — `mkPair`/`pairFst`/`pairSnd`
+// Pair (Σ-pair, `52 §4`) plumbing sanity — `mk_pair`/`pair_fst`/`pair_snd`
 // ─────────────────────────────────────────────────────────────────────────────
 
 #[test]
 fn pair_roundtrip() {
     let mut env = mk_env();
     let mut store = make_store(&env);
-    let v = eval_view(&mut env, &mut store, "t_fst", "Nat", &format!("pairFst Nat Nat (mkPair Nat Nat ({}) ({}))", nat(3), nat(4)));
-    assert_eq!(nat_count(&env, &v), 3, "pairFst (mkPair 3 4) must be 3, got {v:?}");
-    let v = eval_view(&mut env, &mut store, "t_snd", "Nat", &format!("pairSnd Nat Nat (mkPair Nat Nat ({}) ({}))", nat(3), nat(4)));
-    assert_eq!(nat_count(&env, &v), 4, "pairSnd (mkPair 3 4) must be 4, got {v:?}");
+    let v = eval_view(&mut env, &mut store, "t_fst", "Nat", &format!("pair_fst Nat Nat (mk_pair Nat Nat ({}) ({}))", nat(3), nat(4)));
+    assert_eq!(nat_count(&env, &v), 3, "pair_fst (mk_pair 3 4) must be 3, got {v:?}");
+    let v = eval_view(&mut env, &mut store, "t_snd", "Nat", &format!("pair_snd Nat Nat (mk_pair Nat Nat ({}) ({}))", nat(3), nat(4)));
+    assert_eq!(nat_count(&env, &v), 4, "pair_snd (mk_pair 3 4) must be 4, got {v:?}");
 }
 
 fn run_with_big_stack<F: FnOnce() + Send + 'static>(f: F) {

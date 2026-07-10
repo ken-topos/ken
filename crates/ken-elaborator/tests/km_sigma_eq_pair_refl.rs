@@ -8,14 +8,14 @@ fn mk_env() -> ElabEnv {
 
 const PAIR_LENS_SOURCE: &str = r#"
 fn setFstPairBoolBool (s : Pair Bool Bool) (b : Bool) : Pair Bool Bool =
-  mkPair Bool Bool b (pairSnd Bool Bool s)
+  mk_pair Bool Bool b (pair_snd Bool Bool s)
 
 fn pair_refl_fn (s : Pair Bool Bool) : Equal (Pair Bool Bool) s s =
   Refl
 
 fn fstLensSetGet (s : Pair Bool Bool)
   : Equal (Pair Bool Bool)
-      (setFstPairBoolBool s (pairFst Bool Bool s))
+      (setFstPairBoolBool s (pair_fst Bool Bool s))
       s =
   Refl
 
@@ -61,8 +61,8 @@ fn componentwise_proof_is_not_unrelated_full_pair_equality() {
            (s : Pair Bool Bool) \
            (t : Pair Bool Bool) \
            (p : And \
-             (Equal Bool (pairFst Bool Bool s) (pairFst Bool Bool s)) \
-             (Equal Bool (pairSnd Bool Bool s) (pairSnd Bool Bool s))) \
+             (Equal Bool (pair_fst Bool Bool s) (pair_fst Bool Bool s)) \
+             (Equal Bool (pair_snd Bool Bool s) (pair_snd Bool Bool s))) \
            : Equal (Pair Bool Bool) s t = \
            p",
     );

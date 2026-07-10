@@ -330,7 +330,7 @@ discriminating test (AC4) flips on **hole-present → `unknown`** vs **hole-abse
 Effectful evaluation is **two pieces, one of them already built.** (1) The
 denotation `⟦e⟧ : ITree ⟦ρ⟧ R` (`../30-surface/36 §2.4`) is an ordinary **pure**
 core term, so §3 **already evaluates it** — `Ret`/`Vis` are constructors (§3.1)
-and `bind`/`handle`/`runState` are `elim_ITree` folds that ι-reduce (§3.3). (2)
+and `bind`/`handle`/`run_state` are `elim_ITree` folds that ι-reduce (§3.3). (2)
 The **effect driver** forces the resulting `Vis`-tree against the runtime's
 real-world handlers, performing each world-interaction and resuming with the
 response. The agreement with L5 is therefore **definitional, not parallel**: X1
@@ -354,12 +354,12 @@ at the `Vis` nodes. (L5's `ITree` is admitted as of **K1.5**, `f037451`, `36
 Two classes of effect are discharged **here, purely**, with no world
 interaction, because their handler is itself an `elim_ITree` fold (`36 §5`):
 
-- a **`space`** operation: `runState s₀ ⟦body⟧` (`36 §4.2`) threads the state
+- a **`space`** operation: `run_state s₀ ⟦body⟧` (`36 §4.2`) threads the state
   through the tree and reduces to `(r, s_final) : R × S` (§3.3 ι). A program
   whose only effect is its `space` runs **entirely in pure §3** — no driver. The
   runtime *may* realize the fold with a real identity-bearing mutable cell (not
   content-addressed, `41 §2`) as an operational strategy (the §3 latitude),
-  provided the result agrees with `runState`.
+  provided the result agrees with `run_state`.
 - any **user handler** `handle ret ops` (`36 §5.1`) that discharges an effect
   `E` into another tree.
 
@@ -539,7 +539,7 @@ The **effect driver** `drive_H` (§6.2) parametric in the real-world handler `H`
 through the driver (§6.7); and the **X1 == L5 trace agreement** (§6.6) as the
 reference-correctness property — the ★★ load-bearing obligation. Built in
 `ken-interp`, **wrapping** the unchanged pure core (§7). Pure handlers (`space`
-via `runState`, user `handle`) discharge in §3; only the open row reaches the
+via `run_state`, user `handle`) discharge in §3; only the open row reaches the
 driver.
 
 Conformance: `../../conformance/runtime/effects/` — per-effect perform+resume;

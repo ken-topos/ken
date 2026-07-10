@@ -39,7 +39,7 @@ class DecEq a {
 fn bool_or (a : Bool) (b : Bool) : Bool = match a { True ⇒ True ; False ⇒ b }
 
 -- `Ord a` -- total order, supplies the comparator the verified `sort`/
--- `isSorted` thread explicitly (51 SS2.3/SS4, ES2-remainder). `total`'s
+-- `is_sorted` thread explicitly (51 SS2.3/SS4, ES2-remainder). `total`'s
 -- Bool-EQUATION form -- `IsTrue (bool_or (leq x y) (leq y x))`, the
 -- value-level `bool_or` lifted through `IsTrue` -- keeps the law
 -- Omega-clean with no truncation (51 SS3): a BARE propositional `x<=y or

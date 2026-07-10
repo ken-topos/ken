@@ -336,11 +336,11 @@ fn cap_two_distinct_caps_each_gated() {
 // EFF4 — `space` state + tail-resumptive handlers (type-level)
 // ============================================================
 //
-// The RUNTIME execution of `runState` (asserting final-state value `(2,2)`)
+// The RUNTIME execution of `run_state` (asserting final-state value `(2,2)`)
 // requires the `ITree` denotation and is K1.5-deferred. The K1-buildable
 // assertions are the **static row-level** properties:
 // - `becomes` desugars to a `State S` effect (the row contains `Counter`)
-// - `runState` eliminates `State S` from the row (type-level plumbing)
+// - `run_state` eliminates `State S` from the row (type-level plumbing)
 // - Cross-space aliasing is rejected (shared-nothing, §4.4)
 // - Multi-shot handlers are rejected (OQ-9, §5.2)
 
@@ -348,7 +348,7 @@ fn cap_two_distinct_caps_each_gated() {
 ///
 /// `inc` and `get` each carry row `[Counter]` (the `State Counter` effect).
 /// A compound expression calling both also has row `[Counter]`.
-/// `runState` eliminates `Counter` from the row → the residual row is ∅.
+/// `run_state` eliminates `Counter` from the row → the residual row is ∅.
 ///
 /// (The runtime result assertion `(2, 2)` is K1.5-deferred — requires ITree.)
 #[test]
@@ -373,14 +373,14 @@ fn space_becomes_threads_state_type_level() {
         "body row must be [Counter] (union of [Counter] × 3 = [Counter])"
     );
 
-    // runState eliminates Counter → residual row = ∅.
-    // Type-level: `runState` discharges the State effect (§4.2 row plumbing).
+    // run_state eliminates Counter → residual row = ∅.
+    // Type-level: `run_state` discharges the State effect (§4.2 row plumbing).
     let before_runstate = rows["body"].clone();
     let discharged = EffectRow::singleton("Counter");
     let after_runstate = before_runstate.minus(&discharged);
     assert!(
         after_runstate.is_empty(),
-        "runState must discharge Counter — residual row must be ∅"
+        "run_state must discharge Counter — residual row must be ∅"
     );
 }
 

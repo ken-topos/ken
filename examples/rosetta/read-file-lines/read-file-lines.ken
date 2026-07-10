@@ -16,7 +16,7 @@
 -- + pure-parse, NOT effect composition" asterisk): `main` performs the
 -- `[FS]` read AND the `[Console]` printing in ONE type-checked `ITree (Coproduct
 -- (FSOp APartial) ConsoleOp) (resp_coproduct ...) (Result IOError Unit)`, built at
--- the surface via `injectL`/`injectR` (the general `g ↪ Coproduct g h` / `h ↪ Coproduct
+-- the surface via `inject_l`/`inject_r` (the general `g ↪ Coproduct g h` / `h ↪ Coproduct
 -- g h` inclusions, `36 §2.4`'s `incl`) sequenced with the homogeneous
 -- `bind`. `run_io`'s coproduct-aware terminal driver (D3) strips the
 -- `InL`/`InR` tags down to each real base op and dispatches both effects
@@ -99,19 +99,19 @@ proc printLines (xs : List String) : Compose (Result IOError Unit) visits [Conso
       bind (Coproduct (FSOp APartial) ConsoleOp)
            (resp_coproduct (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp)
            Unit (Result IOError Unit)
-        (injectR (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp Unit (print_line x))
+        (inject_r (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp Unit (print_line x))
         (λ_ . printLines xs')
   }
 
 -- D2/D4: `main` declares `Cap APartial` (partial/read-level FS authority) on
--- its OWN signature -- the manifest. Reads the fixture via `injectL
--- (read_bytes ...)`, and on success prints each parsed line via `injectR
+-- its OWN signature -- the manifest. Reads the fixture via `inject_l
+-- (read_bytes ...)`, and on success prints each parsed line via `inject_r
 -- (print_line ...)` -- both effects composed in ONE `bind`-sequenced tree.
 proc main (cap : Cap APartial) : Compose (Result IOError Unit) visits [FS, Console] =
   bind (Coproduct (FSOp APartial) ConsoleOp)
        (resp_coproduct (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp)
        (Result IOError Bytes) (Result IOError Unit)
-    (injectL (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp (Result IOError Bytes)
+    (inject_l (FSOp APartial) ConsoleOp (fs_resp APartial) console_resp (Result IOError Bytes)
       (read_bytes APartial cap (bytes_encode "conformance/fs/fixtures/three-lines.txt")))
     (λr .
       match r {

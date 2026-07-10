@@ -2,12 +2,12 @@
 //!
 //! Team Runtime's `elim_reduce` K1.5 IH extension (`5c8dac0`, merged to
 //! `main`) is already present on this rebased branch, so the FULL fold —
-//! Team Language's lifted `ITree`/`runState` through Team Runtime's real
+//! Team Language's lifted `ITree`/`run_state` through Team Runtime's real
 //! `elim_reduce` — can be driven end-to-end here, ahead of the formal merge
 //! assembly. This is NOT a hand-fed oracle: `next` is built once as a
 //! real `bind (get ()) (\n. bind (put (Suc n)) (\_. Ret n))`-shaped term
 //! (using the prelude's registered `bind`/`get`/`put`/`Ret`, never a
-//! by-hand-constructed result), then `runState`'d and evaluated through
+//! by-hand-constructed result), then `run_state`'d and evaluated through
 //! `ken_interp::eval::eval` for real. Uses `Nat` (`Zero`/`Suc`) as the state
 //! type `s` (no numeric-literal machinery needed) and a fresh 0-constructor
 //! `Empty` type for `F` (no other effects) — an adaptation of AC2's `Int`
@@ -100,7 +100,7 @@ fn ac2_runstate_next_post_increment_through_real_interp() {
 
     // Since F = Empty (no other effects), `next` never performs an unhandled
     // Vis; the whole fold reduces directly to `Pair(old_n, new_n)` (a=Nat,
-    // s=Nat -- the Sigma pair `runState`/AC2 promise) once we thread `Zero`.
+    // s=Nat -- the Sigma pair `run_state`/AC2 promise) once we thread `Zero`.
     let run_state_app = apply_all(
         Term::const_(p.run_state_id, vec![]),
         &[
@@ -124,7 +124,7 @@ fn ac2_runstate_next_post_increment_through_real_interp() {
         }
     }
 
-    // `runState`'s codomain is `ITree F RespF (Sigma A S)` — since `F = Empty`
+    // `run_state`'s codomain is `ITree F RespF (Sigma A S)` — since `F = Empty`
     // is uninhabited, the ONLY possible value is `Ret (Pair result state)`
     // (a genuine `Vis` would require an impossible `Empty` op); unwrap the
     // `Ret` to reach the pair.
@@ -132,7 +132,7 @@ fn ac2_runstate_next_post_increment_through_real_interp() {
         ken_interp::eval::EvalVal::Ctor { id, args, .. } if *id == p.ret_id => {
             args.last().cloned().expect("Ret must carry its value")
         }
-        other => panic!("runState 0 next must reduce to Ret (Pair result state) (F=Empty admits no Vis), got {other:?}"),
+        other => panic!("run_state 0 next must reduce to Ret (Pair result state) (F=Empty admits no Vis), got {other:?}"),
     };
     match pair {
         ken_interp::eval::EvalVal::Pair { fst, snd, .. } => {

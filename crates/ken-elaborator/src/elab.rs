@@ -566,7 +566,7 @@ fn check(cx: &mut ElabCtx, expr: &RExpr, expected: &Term, _span: &Span) -> Resul
         // per-branch-varying `Ω`-goal (a structure-class law, `refl :
         // (x:a)->IsTrue (leq x x)`) be proved by case-split at all — the
         // pre-existing `infer_match`/`compile_match_matrix` path (used by
-        // `isSorted`/`Perm`, untouched by this) only ever built a CONSTANT
+        // `is_sorted`/`Perm`, untouched by this) only ever built a CONSTANT
         // motive derived from arm0's inferred type, which cannot express a
         // goal that differs per constructor.
         RExpr::RMatch { scrut, arms, span } => {
@@ -574,10 +574,10 @@ fn check(cx: &mut ElabCtx, expr: &RExpr, expected: &Term, _span: &Span) -> Resul
             // dependent` is correct whenever every arm's pattern is FLAT
             // (a constructor with only `Var`/`Wild` sub-patterns) —
             // whether or not `expected` actually mentions the scrutinee.
-            // A goal that doesn't mention it (`isSorted`/`Perm`/`sort`'s
+            // A goal that doesn't mention it (`is_sorted`/`Perm`/`sort`'s
             // `Prop`/carrier-typed returns) just yields a genuinely
             // constant motive (still correctly built and checked — no
-            // special-casing needed, verified against `isSorted`). A goal
+            // special-casing needed, verified against `is_sorted`). A goal
             // that mentions a DIFFERENT bound variable than the immediate
             // scrutinee (a hypothesis-driven case-split, e.g. `trans`'s
             // `match y {...}` where the CONCLUSION mentions `x`/`z` but

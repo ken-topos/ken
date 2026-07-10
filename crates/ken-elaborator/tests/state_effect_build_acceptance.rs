@@ -4,7 +4,7 @@
 //! Scope: the elaborator-only obligations `git diff -- crates/ken-elaborator/`
 //! actually discharges on its own — each hand-built kernel declaration
 //! (`effects::state`) type-checks in isolation. This is deliberately NOT the
-//! EFF6 conformance corpus (AC2-4): those require driving `runState` through
+//! EFF6 conformance corpus (AC2-4): those require driving `run_state` through
 //! the REAL interpreter, which only exists once Team Runtime's `elim_reduce`
 //! K1.5 IH lift (merged to `main`, `5c8dac0`) integrates with this lift on
 //! the shared `wp/State-effect-build` branch. AC1 (kernel-untouched) and AC5
@@ -51,7 +51,7 @@ fn full_state_prelude_declares_and_typechecks() {
         &mut env, itree_id, ret_id, vis_id, state_op_id, get_id, put_id, coproduct_id, inl_id, inr_id,
         resp_state_id, resp_coproduct_id, unit_id, mkunit_id,
     )
-    .expect("runState");
+    .expect("run_state");
 
     let ctx = Context::new();
     let get_ctor_id = env.inductive(state_op_id).unwrap().constructors[0].id;
@@ -95,7 +95,7 @@ fn full_state_prelude_declares_and_typechecks() {
     .expect("put");
 
     assert!(env.lookup(bind_id).is_some(), "bind should be registered as a real decl");
-    assert!(env.lookup(run_state_id).is_some(), "runState should be registered as a real decl");
+    assert!(env.lookup(run_state_id).is_some(), "run_state should be registered as a real decl");
     assert!(env.lookup(get_fn_id).is_some(), "get should be registered as a real decl");
     assert!(env.lookup(put_fn_id).is_some(), "put should be registered as a real decl");
     let _ = itree_id;

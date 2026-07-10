@@ -147,7 +147,7 @@ machine-consumable. Each shape is the wire serialization of the corresponding
 // 2. typed hole  (24 §2 — the TypedHole value)
 { "kind": "hole",
   "hole_id": "?h.7",                 // stable, deterministic (§6, 24 §6)
-  "goal":    "isSorted (insert x xs)",
+  "goal":    "is_sorted (insert x xs)",
   "context": [ Binding… ],           // Γ
   "origin":  { "span": "lib.ken:30:3-30:21", "clause": "ensures" },
   "runtime": "unknown" }             // operational face: evaluates to `unknown` (41 §6)
