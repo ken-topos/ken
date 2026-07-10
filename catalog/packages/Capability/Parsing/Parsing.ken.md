@@ -1,9 +1,53 @@
--- Source/span, parser-result, and Boolean syntax core.
---
--- This package models source identity as an immutable byte artifact. Spans
--- are only half-open byte endpoints; source identity is supplied by values
--- such as `Located` and by validity predicates, never by a bare `Span`.
+# `parsing` — source artifacts, spans, parsers, and a Boolean grammar
 
+The source/span core, a total parser-result surface, and a fully
+parenthesized Boolean-expression grammar built end to end on top of it. This
+package models source identity as an immutable byte artifact: spans are only
+half-open byte endpoints, and source identity is supplied by values such as
+`Located` and by validity predicates, never by a bare `Span`.
+
+## Index
+
+1. [Motivation](#1-motivation)
+2. [Definition](#2-definition)
+3. [Using it](#3-using-it)
+4. [Laws  proofs](#4-laws--proofs)
+5. [Design notes](#5-design-notes)
+6. [Findings](#6-findings)
+7. [References](#7-references)
+8. [Trust  derivation](#8-trust--derivation)
+
+**Named reading paths**
+
+- *Newcomer* → [Motivation](#1-motivation) → [Using it](#3-using-it)
+- *Practitioner* → [Using it](#3-using-it) →
+  [Laws  proofs](#4-laws--proofs)
+- *Researcher* →
+  [Laws  proofs](#4-laws--proofs) → [Design notes](#5-design-notes)
+
+## 1. Motivation
+
+`spec/50-stdlib/59-parsing-syntax-diagnostics.md` gives Ken the vocabulary
+every parser needs to state where in the source a value came from and
+whether a parse succeeded: a `SourceId` to disambiguate which source, `Bytes`
+(not codepoints) as the offset basis for a `Span`, and a `ParseResult` that
+is total — `Parsed` or `Failed`, never a partial function — with public
+validity predicates a caller can check rather than trust. This package
+states that vocabulary once, then exercises the whole stack end to end with
+one concrete parser: a fully parenthesized Boolean-expression grammar.
+
+## 2. Definition
+
+`Source` is a checked record carrying artifact identity, the original
+`Bytes`, UTF-8 evidence, a `Nat` byte length, a non-empty byte-atomic
+length-unit witness for converting that `Nat` count to an `Int` offset, and
+a proof that the converted recorded length is the byte length of the
+source's own bytes. `String` is deliberately not the offset basis anywhere
+in this package — every length and position is a `Bytes`/`Int` quantity,
+sidestepping UTF-8 boundary bugs entirely; `IsUtf8` is a proof the bytes
+*happen* to decode losslessly, not a requirement they must.
+
+```ken
 data SourceId = MkSourceId Nat
 
 fn IsUtf8 (bs : Bytes) : Prop =
@@ -66,7 +110,40 @@ fn source_length_unit_valid (s : Source) : UnitByteLength (source_length_unit s)
 fn source_length_valid (s : Source)
   : SourceLength (source_length_unit s) (source_bytes s) (source_length s) =
   s.source_length_valid_field
+```
 
+## 3. Using it
+
+A caller builds a `Source` once per artifact (supplying its own
+`source_length_unit`, `source_length_unit_valid`, `source_utf8`, and
+`source_length_valid` evidence — this package states the record shape, not a
+constructor helper, so every field is honest at the call site), then drives
+`§4.3`'s `parse_bool_expr : Parser (Syntax BoolExpr)` over it. `format_bool_expr`
+is the single-call entry point: it parses a `Source` end to end and, on
+success, prints the erased (span-free) tree back out — the worked round
+trip this package ships as its concrete example, in `§4.3` rather than a
+separate illustrative fence, since it is real, checked package content, not
+a demo.
+
+## 4. Laws  proofs
+
+### 4.1 Span validity and the zero-width-span proof
+
+`Span` carries only half-open byte endpoints — a bare `Span` never
+identifies a source artifact by itself. `ValidSpan s sp` requires
+`span_start sp <= span_end sp <= source_length s`, stated through
+`LessEqNat`, the same `Bool`-bridged pattern the lawful-classes packages use
+(`Equal Bool (nat_leq_bool m n) True`), here without a named `IsTrue` alias
+since this package has no `Eq`/`Ord`-style class to hang one on.
+`less_eq_nat_refl` is a genuine proof by induction on `n`; `less_eq_nat_zero_left`
+is definitional (`nat_leq_bool Zero n` reduces to `True` on its very first
+match arm, for any `n`). `valid_zero_width_span` is the one composite proof
+in this package: given a valid offset (`LessEqNat offset (source_length s)`),
+a zero-width span at that offset is valid, by pairing `less_eq_nat_refl`
+(the span's own `start <= end`, both `offset`) with the supplied hypothesis
+(`end <= source_length s`) via `and_intro`.
+
+```ken
 data Span = MkSpan Nat Nat
 
 fn span_start (sp : Span) : Nat =
@@ -103,7 +180,26 @@ fn valid_zero_width_span (s : Source) (offset : Nat)
       (LessEqNat offset (source_length s))
       (less_eq_nat_refl offset)
       h
+```
 
+### 4.2 Located values, parse errors, and the total `Parser` contract
+
+`Located a` pairs a value with a `SourceId` and `Span`; `ValidLocated`
+checks both the source id and span against a concrete `Source`. `ParseError`
+carries just enough to be checkable the same way — a `SourceId` and `Span`
+of its own. `Parser a` is total *by construction*: it always returns a
+`ParseResult a` (`Parsed` or `Failed`), never diverges or partial-applies,
+conditional on the caller supplying a proof the start position is in bounds
+(`LessEqNat start (source_length s)`). `ParserValid`/`ParserTotal`/
+`ParserSourceLocal` are the three public well-formedness *properties* a
+`Parser` should satisfy — plain predicates over a `Parser a`, not enforced
+by the `Parser` type itself, so a caller can state and check them per
+concrete parser (`§4.3`'s `parse_bool_expr` is exactly such a caller, via the
+acceptance suite). `parser_pure`/`parser_fail` are the two base combinators:
+the former always succeeds on a zero-width span at `start`, the latter
+always fails at `start` with a zero-width error span.
+
+```ken
 data Located a = MkLocated SourceId Span a
 
 fn located_source (a : Type) (x : Located a) : SourceId =
@@ -187,7 +283,35 @@ fn parser_pure (a : Type) (value : a) : Parser a =
 
 const parser_fail (a : Type) : Parser a =
   \s. \start. \h. Failed a (MkParseError (source_id s) (MkSpan start start))
+```
 
+### 4.3 A worked grammar: parenthesized Boolean expressions
+
+`BoolExpr` is fully parenthesized: `true`, `false`, `(not e)`, and
+`(and e1 e2)`. There is no precedence table — `true and false` rejects,
+deliberately; a real expression grammar with precedence is out of scope for
+this worked example. `Syntax a` pairs a `Located a` root with a `List` of
+`Located a` children, giving every parsed node its own span independent of
+its value's own recursive structure; `erase_spans` recovers the bare
+`BoolExpr` by walking back down to the root value.
+
+Token recognition is byte-by-byte through `source_byte_eq_at`, matching
+literal ASCII codepoints spelled as `Int` literals (`116` is `t`, `102` is
+`f`, `40` is `(`, `32` is space, and so on) — this package has no `Char`
+literal syntax of its own, so every fixed token is matched digit by digit
+against `bytes_at`. `parse_bool_expr_at_fuel` and `skip_spaces_fuel` are both
+fuel-bounded recursive descent: each takes an explicit `Nat` fuel parameter
+decremented on every recursive step and seeded from `source_length s` (an
+upper bound on how many bytes remain to consume), the standard
+structural-recursion-via-fuel pattern for a function whose real termination
+measure — unconsumed input — is not syntactically a subterm of the fuel
+itself. `list_append` here is a second, verbatim copy local to this
+package, not a re-export of `catalog/packages/Data/Collections/Collections.ken`'s
+combinator of the same name — a self-containment choice
+(`07-catalog-style-guide.md §13`) appropriate for a leaf capability package
+that otherwise takes no catalog dependency.
+
+```ken
 data BoolExpr =
   BTrue |
   BFalse |
@@ -450,3 +574,97 @@ fn format_bool_expr (s : Source) : Result ParseError Bytes =
     Parsed syntax consumed next => Ok ParseError Bytes (print_bool_expr (erase_spans syntax)) ;
     Failed err => Err ParseError Bytes err
   }
+```
+
+## 5. Design notes
+
+**Why `Bytes`, never `String`, as the offset basis.** Every position and
+length in this package is a `Bytes`/`Int` quantity; `IsUtf8` is carried as
+evidence the bytes happen to decode losslessly, never as a precondition
+positions are computed against. A codepoint-indexed offset would need a
+decode step (and a failure mode) just to compute `span_end - span_start`;
+a byte-indexed offset never does.
+
+**`ParseResultTotal`/`ParserTotal` are honestly weak.** Both match arms of
+`ParseResultTotal` reduce to the same `Equal Bool True True` — the only
+content this witnesses is that the `Parsed`/`Failed` case-split is
+exhaustive, not any deeper property of a particular parser. A reader should
+not over-read "Total" here as more than "this function always returns one
+of its two constructors," which the type checker already guarantees; see
+`§6`.
+
+**Why unguarded repetition is not exported.** An unguarded `many`-style
+combinator could loop forever on an inner parser that succeeds without
+consuming input; a fuel-bounded one would need its own checked
+progress/next-validity surface to be trustworthy. Neither is exported by
+this package — `§4.3`'s `parse_bool_expr_at_fuel`/`skip_spaces_fuel` are
+package-internal, fuel-bounded recursions over a syntactically-decreasing
+`Nat`, not a general combinator a caller could misuse.
+
+**Why the Boolean grammar has no precedence table.** `true`, `false`,
+`(not e)`, and `(and e1 e2)` are fully parenthesized on purpose — `true and
+false` rejects, deliberately, keeping this worked example small. A real
+expression grammar with precedence climbing is future package work, not
+attempted here.
+
+## 6. Findings
+
+- **Kernel-reduction defect:** none.
+- **Abstraction candidate:** `list_append` in `§4.3` duplicates
+  `catalog/packages/Data/Collections/Collections.ken`'s combinator of the
+  same name, verbatim — a deliberate self-containment choice
+  (`07-catalog-style-guide.md §13`) for a leaf capability package that
+  otherwise takes no catalog dependency, not flagged as a defect.
+- **Content note:** `ParseResultTotal`/`ParserTotal` (`§4.2`) are vacuous by
+  construction — see [Design notes](#5-design-notes).
+
+## 7. References
+
+None — this entry's design is Ken-native, not consulted from an external
+reference implementation.
+
+## 8. Trust  derivation
+
+1. **Spec / WP.** `spec/50-stdlib/59-parsing-syntax-diagnostics.md`.
+2. **Public API.** `SourceId`, `Source`, `IsUtf8`, `EmptyBytes`,
+   `NonEmptyBytes`, `UnitByteLength`, `SourceLength`, `source_id`,
+   `source_bytes`, `source_utf8`, `source_length`, `source_length_unit`,
+   `source_length_unit_valid`, `source_length_valid`, `Span`, `span_start`,
+   `span_end`, `LessEqNat`, `ValidSpan`, `Located`, `located_source`,
+   `located_span`, `located_value`, `ValidLocated`,
+   `valid_zero_width_span`, `ParseError`, `error_source`, `error_span`,
+   `ParseResult`, `Parser`, `ParsedValid`, `FailedValid`,
+   `ParseResultValid`, `ParserValid`, `ParserTotal`, `ParserSourceLocal`,
+   `ParserLaws`, `parser_pure`, `parser_fail`, `BoolExpr`, `Syntax`,
+   `syntax_root`, `syntax_children`, `erase_spans`, `ValidLocatedList`,
+   `ValidSyntax`, `parse_bool_expr`, `print_bool_expr`, `format_bool_expr`.
+3. **Source map.**
+
+   | Task | Section |
+   |---|---|
+   | See the source/span/parser vocabulary | [Definition](#2-definition) |
+   | Build a `Source`, drive the grammar | [Using it](#3-using-it) |
+   | The zero-width-span proof, the total `Parser` contract, the worked grammar | [Laws  proofs](#4-laws--proofs) |
+   | Why `Bytes` not `String`, why no unguarded repetition | [Design notes](#5-design-notes) |
+
+4. **Derivation path.** The package surface is ordinary Ken data, a
+   class-backed record, transparent functions, and proof-returning
+   definitions over `Nat`, `Bool`, `Bytes`, `Equal`, `And`, `List`, and
+   parser-result data. It adds no kernel primitive, no source-loader
+   behavior, and no language-semantics change.
+5. **`trusted_base()` delta.** **Zero.** Every proof in this package —
+   `less_eq_nat_refl`, `less_eq_nat_zero_left`, `valid_zero_width_span` — is
+   real and kernel-checked; no law or predicate is postulated.
+6. **Proof families.** `less_eq_nat_refl` — induction on `n`.
+   `less_eq_nat_zero_left` — definitional (first match arm). `valid_zero_width_span`
+   — direct composition of the two via `and_intro`, no case-split of its
+   own.
+7. **Consumers.** `crates/ken-elaborator/tests/cat5_parsing_package.rs` is
+   the sole consumer of this package.
+8. **Validation evidence.**
+   `crates/ken-elaborator/tests/cat5_parsing_package.rs` — confirms the
+   `Source`/`Span`/`Located`/`ParseResult`/`Parser` surface elaborates with
+   zero `trusted_base()` delta, confirms the Boolean grammar's constructors
+   and byte-token matching are present and exercised, and confirms no
+   unguarded repetition combinator (`many`/`repeat`/a fuel-threading helper
+   beyond this package's own internal ones) is exported.
