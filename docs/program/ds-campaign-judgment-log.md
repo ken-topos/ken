@@ -194,7 +194,8 @@ bar.
   (1) `50-stdlib/README.md:42`; (2) `30-surface/34-data-match.md:5`; (3)
   `34-data-match.md:56` ("Result, Option, Either are ordinary prelude data decls"
   — **load-bearing false**); (4) `34-data-match.md:633` ("Result/Option/Either in
-  the prelude" — **load-bearing false**). **Exclude** `:540` ("Either way", English);
+  the prelude" — **load-bearing false**). **Exclude** `:540` ("Either way",
+  English);
   `_notes/` non-normative. **Erratum LANDED** `main @ dcc34ed` (PR #446, doc-only;
   routed `evt_1qkfgg6p8dkam`, spec-author + CV, DS-5 §60 pattern) — annotated
   `Either` "subsumed by `Result`;
@@ -212,11 +213,12 @@ bar.
   is independent and proceeds regardless.
 
 ### L5 · ⚠ PROMINENT — coproduct family: `Either` (catalog package), rename effect `Sum`→`Coproduct` [OPERATOR-RULED]
-> **STATUS (2026-07-10 ~14:05): ✅ COMPLETE end-to-end.** WP (1) `Either` catalog
-> package **✅ LANDED** (PR #458, `main @ a78f3b7`; `Data/Sums/Sums.ken`, Either
-> verified absent from prelude — ruling B honored). WP (2) `Sum`→`Coproduct` rename
-> **✅ LANDED** (PR #455, zero kernel delta, `declare_sum` gone). WP (3) `Sum` name
-> now **freed** for `Data.Functor.Sum`.
+> **STATUS (2026-07-10 ~14:05): ✅ COMPLETE end-to-end.** WP (1)
+> `Either` catalog package **✅ LANDED** (PR #458, `main @ a78f3b7`;
+> `Data/Sums/Sums.ken`, Either verified absent from prelude — ruling
+> B honored). WP (2) `Sum`→`Coproduct` rename **✅ LANDED** (PR
+> #455, zero kernel delta, `declare_sum` gone). WP (3) `Sum` name now
+> **freed** for `Data.Functor.Sum`.
 - **Call (COEXIST by role — three distinct coproducts; SPLIT into two WPs after
   the placement ruling):** (1) **`Either a b = Left a | Right b`** — the
   user-facing value disjunction, defined as a **user-level CATALOG PACKAGE, NOT
@@ -275,12 +277,37 @@ bar.
   a functor-combinator WP alongside `Compose`, owning the freed `Sum` name.
 
 ### L6 · ⚠ PROMINENT — casing standard: PascalCase class-like, snake_case instance-like [OPERATOR-RULED]
-> **STATUS (2026-07-10 ~14:20): ADOPTED forward.** Operator ruled broadcast-now;
-> standard sent to Foundation + Librarian, **Foundation acknowledged** (new
-> authoring conforms), **Librarian folded it into authoritative guidance** —
-> `07-catalog-style-guide.md §9` + `write-ken.md` (PR #460, `main @ 16310f5`).
-> **Bulk renaming pass of landed code still DEFERRED** to ride the `.ken → .ken.md`
-> literate transformation (Librarian owns it). Forward-only from now.
+> **STATUS (2026-07-10 ~15:35): ADOPTED + WIRED SURFACE COMPLETE.** Standard
+> broadcast, **Foundation acknowledged**, **Librarian folded into authoritative
+> guidance** (`07-catalog-style-guide.md §9` + `write-ken.md`, PR #460). The bulk
+> rename of landed code has now LANDED in two arms:
+> - **Phase 1 — catalog rename** (Librarian, PR #463, `main @ f71abba`): all 594
+>   camelCase `fn`/`const`/`lemma`/`proof`/class-field declarations across the 14
+>   catalog files → snake_case; symmetric 4049 ins/4049 del across 36 files, zero
+>   `crates/src`+kernel delta, 123/123 workspace parity, Architect fidelity gate.
+> - **Prelude arm — prelude Ken-names** (Steward-dispatched, PR #464,
+>   `main @ 02374cbd`): the ~10 prelude-DECLARED camelCase Ken names
+>   (`isSorted`→`is_sorted`, `andIntro`/`andFst`/`andSnd`→`and_*`,
+>   `injectL`/`injectR`→`inject_l`/`inject_r`, `mkPair`→`mk_pair`,
+>   `pairFst`/`pairSnd`→`pair_*`, `runState`→`run_state`) → snake_case in
+>   `prelude.rs` + every reference across catalog/spec/tests/`examples/rosetta`;
+>   symmetric 1006 ins/1006 del across 42 files, zero kernel delta, Architect gate.
+>   (`mkPair` confirmed a `declare_def` helper fn, not the `Pair` former.)
+>
+> **L6 is now COMPLETE across the wired surface** (catalog Phase 1 + prelude).
+> **Honest remainder = a doc/conformance sweep** (NOT build-wired, deferred): stale
+> old names survive in `README.md`, `agent/memory|playbooks/**` (historical corpus,
+> deliberately not rewritten), `docs/program/**`, and **two `conformance/**`
+> fixtures** (`sound-verified-sort.ken`, `unsound-const-nil.ken` cite `isSorted`).
+> Per Architect: the doc/memory prose is fine to defer indefinitely, but the two
+> conformance fixtures are corpus meant to be elaborated — flag them to the
+> **CV/conformance lane to sweep before any conformance run wires them**, not
+> open-ended. **Precision note (Architect):** the accurate acceptance claim is
+> "zero orphaned camelCase in tangled + `example` code; `reject`/`ignore`
+> illustrative fences intentionally left as-authored" — ~10 camelCase survivors all
+> sit inside failure-demo fences by design, not a miss. Reject/ignore-fence
+> failure-demo identifiers are OUT of L6 scope; so are Rust-internal var/field names
+> (e.g. `issorted_id`, `mkpair_ty` in `prelude.rs`) — L6 governs the Ken surface.
 - **Call (operator, Pat):** adopt the **Python convention** for Ken-surface
   identifiers — **class-like → PascalCase, instance-like → snake_case**:
   - **PascalCase** (already conforms): types/type-constructors (`Either`,
@@ -357,17 +384,74 @@ bar.
   breadth over the tier is the operator's stated goal for the window.
 - **Reversibility:** easy.
 
-### RUN STATUS / resume point (2026-07-10, ~10:50 UTC)
+### RUN STATUS / resume point (2026-07-10, ~15:35 UTC)
 
-**Live checkpoint for lossless resume across compaction.** **[~14:05 UTC —
-operator BACK and actively directing; autonomous window over.]** **CORE COMPLETE**
-(DS-8 PR #440). §60 erratum (PR #438), K1 DS-5b, K2 DS-8b all landed. **DS-4
-(List) LANDED** (PR #443). **`main @ a78f3b7`.**
+**Live checkpoint for lossless resume across compaction.** **[operator BACK and
+actively directing; autonomous window over.]** **CORE COMPLETE** (DS-8 PR #440).
+§60 erratum (PR #438), K1 DS-5b, K2 DS-8b all landed. **DS-4 (List) LANDED**
+(PR #443). **`main @ 02374cbd`** (Phase 1 catalog rename #463 + prelude L6 #464).
+
+**✅ L6 casing — WIRED SURFACE COMPLETE.** Phase 1 catalog rename (PR #463,
+`f71abba`) + prelude Ken-name rename (PR #464, `02374cbd`) both landed + Architect
+fidelity-gated + honesty-gated. L6 complete across all build-wired Ken code; only
+a NON-wired doc/conformance sweep remains (see L6 for the flagged remainder + the
+CV-lane hand-off for the two conformance fixtures). Note the residual Rust-internal
+`issorted_id`/`mkpair_ty` names are out of L6 scope.
+
+**🔨 IN FLIGHT — Part 2 literate transformation (`.ken → .ken.md`),
+Librarian-led.**
+Progress **3/7** at last checkpoint: Transport (`a0bf8e2`), LawfulClasses,
+LawfulFunctors (`bfaa80a`) done; remaining **Parsing → Collections → Map →
+Sums**.
+**Scope RULED 7-not-8** (my call, blessing Architect's read):
+**`ProofErasure­Boundary­Checker.ken` EXCLUDED** — it's a
+production-consumed input (`include_str!`'d by
+`crates/ken-interp/src/proof_erasure_checker.rs`, driven via
+`elaborate_file` as the runtime NC9 checker), NOT a literate-doc
+entry; converting it needs a `crates/src` edit (outside the WP
+boundary) + misclassifies a non-doc input. Stays plain `.ken` in
+place. **Consumer loading-swaps BLESSED** (my call): each converted
+file's raw consumers swap `elaborate_file(X.ken)` →
+`elaborate_ken_md_file(X.ken.md)` + `include_str!` path — a
+necessary zero-semantic consequence (checked fences carry
+byte-identical code → identical `GlobalEnv`), tests-only,
+kernel/suite-caught. **Did NOT build** the extension-dispatching
+prerequisite-loader (new abstraction mid-mechanical-pass = wrong
+move) — named as a reflect-don't-extend future for the test
+harness. Librarian pinged to rebase Part 2 onto `02374cbd`
+before touching `Collections`/`Map` (their prelude refs are now
+snake_case upstream). Per-file-atomic, targeted cadence.
+
+**Named futures (2 new, from Part 2):** (c) **relocate
+`ProofErasureBoundary­Checker.ken`** out of `catalog/packages/` —
+it's a production input, not a package (Architect + Steward
+flagged; later); (d) **test-harness prerequisite-loader**
+(name→path→`.ken`/`.ken.md` dispatch) to localize future conversions
+— reflect-don't-extend, not now.
+
+**🖥 Infra (Steward, operator-directed):** freed ~100G disk (per-worktree `target/`
+cleanup after a disk-full condition); set up fleet-wide **sccache** + shared
+`SCCACHE_DIR` + **`CARGO_INCREMENTAL=0`** in `/usr/local/cargo/config.toml`
+(deps cache across the ~30 worktrees; incremental-off shrinks `target/`).
+**Deliberately did NOT set a shared `target/`-dir** (contention across worktrees +
+single-point-of-failure) — flagged the tradeoff to the operator, awaiting confirm.
+
+**⛔ STANDING RULE (operator-reaffirmed, fleet-wide, effective now):** **NO full
+local `cargo build`/`cargo test --workspace` or whole-repo baseline builds** —
+TARGETED only (`CARGO_BUILD_JOBS=2 cargo build -p <crate>` +
+`cargo test -p <crate> <filter>`). **GitHub CI does the full build+test at merge**
+(publisher path is CI-gated) — that's where whole-workspace green is proven, not
+locally. Full local builds waste CPU + bloat every worktree's `target/` (caused the
+disk-full). "Full suite green" in any WP frame now means **CI-verified at merge**.
+Broadcast to the Librarian (active on Part 2); memory saved. (I violated this
+myself telling a rename agent to run `--workspace` — killed the builds mid-run,
+corrected.)
 
 **✅ L5 `Either`/coproduct thread — COMPLETE end-to-end** (operator-driven,
 PROMINENT). All three arms landed: (1) **`Either a b = Left a | Right b` as a
-CATALOG PACKAGE, NOT prelude** (ruling B) → **✅ LANDED PR #458, `main @ a78f3b7`**
-(`Data/Sums/Sums.ken` — `either`/`mapLeft`/`mapRight`/`swap` + laws; spec reconcile
+CATALOG PACKAGE, NOT prelude** (ruling B) → **✅ LANDED PR #458,
+`main @ a78f3b7`** (`Data/Sums/Sums.ken` — `either`/`mapLeft`/`mapRight`/`swap`
++ laws; spec reconcile
 honestly frames it package-not-prelude; foundation-qa caught+fixed a real
 Coproduct-reachability defect; Either verified absent from prelude); (2) **rename
 effect `Sum`→`Coproduct`** (type-only, keep `InL`/`InR`) → **✅ LANDED PR #455**
@@ -380,13 +464,15 @@ identifiers from production source (`refine_ds5b_goal`→`refine_branch_goal`, e
 — pure rename, 770 tests green. The leak had passed the entire Kernel ring
 undetected; added a WP-token screen to my honesty gate (memory saved).
 
-**🔨 IN FLIGHT — Literate transformation + L6 casing pass (operator-kicked
-~14:25):** `.ken → .ken.md` for the 8 remaining plain catalog files, carrying the
-L6 casing rename across all 14 files in the same pass. Frame
-`wp/literate-transformation.md`, kicked to **Librarian** (leads; owns encoding +
-L6 pass). Mechanical, zero-semantic-change; the acceptance bar is every file
-`ken check`/`ken run` green + full acceptance suite (proof-carrying code must keep
-checking; the rename must reach every reference site incl. spec examples + tests).
+**🔨 IN FLIGHT — Part 2 literate transformation** (`.ken → .ken.md`,
+**7 files** after the 7-not-8 ruling), Librarian-led. **Phase 1 (bulk L6 catalog
+rename) split out + LANDED standalone** (PR #463) — Part 2 is now a pure-encode
+diff. See the
+RUN STATUS header above for live progress (3/7), the 7-not-8 scope ruling, and the
+blessed consumer loading-swaps. Frame `wp/literate-transformation.md`. Mechanical,
+zero-semantic; per-file bar = tangled-code byte-identical + targeted consumer tests
+(NOT full-workspace — CI proves whole-suite at merge). Architect fidelity gate per
+file-set → git_request → honesty-gate + merge.
 
 **Named futures (operator sets direction):** (a) **core-data→packages migration**
 (Option/Result/Nat/List/Prod/Unit are prelude-declared but the spec models them as
@@ -405,14 +491,19 @@ gate. Retros closed. Real-kicked ~13:07 after my appended kick sat missed (idle
 10:45→13:07; lesson saved). **DS-6** (`DecEq Char`, candidate kernel-move) — not
 framed, held for operator input.
 
-**HOLDING (event-driven) for 1 git_request:** the **literate transformation +
-L6 casing pass** (Librarian-led, kicked ~14:25). Prior cycle all landed +
-honesty-gated: DS-3 (#454), Runtime rename-only (#455), elab.rs WP-name-strip
-(#457), Either-catalog (#458), L6 guidance fold (#460), trackers (#456/#459/#461).
-L5 thread closed. When the transformation git_requests → honesty-gate (mechanical
-re-encode + rename, zero `crates/src`/kernel/spec-prose delta, every file checks)
-+ merge. Named futures (a/b) + `D1` formatter await operator direction; DS-6 held.
-Kick every future WP STANDALONE + mention-led (lesson from the DS-3 miss).
+**HOLDING (event-driven) for Part 2 git_request(s):** the **literate
+transformation** (Librarian-led, per-file-atomic, 7 files). Prior cycles all landed
++ honesty-gated: DS-3 (#454), Runtime rename-only (#455), elab.rs WP-name-strip
+(#457), Either-catalog (#458), L6 guidance fold (#460), Phase 1 catalog rename
+(#463), prelude L6 (#464), trackers (#456/#459/#461). L5 thread closed; L6 wired
+surface complete. When Part 2 git_requests → honesty-gate (mechanical re-encode,
+zero `crates/src`/kernel/spec-prose delta beyond blessed test-consumer loading-swaps,
+every file's tangled code byte-identical) + merge. **Discuss-list awaiting operator
+steer:** (a) core-data→packages migration, (b) `Data.Functor.Sum`, (c)
+DS-6 (`DecEq Char`), (d) `D1` formatter. Named futures (relocate
+ProofErasureBoundary­Checker, harness prerequisite-loader,
+doc/conformance L6 sweep) parked. Kick every future WP STANDALONE +
+mention-led (lesson from the DS-3 miss).
 
 **DS-8 — VALVE TAKEN (composition law deferred to DS-8c for SIZE):** the
 `traverse` composition coherence law (§5.3) turned out ~40-60 lemmas (not ~12-15)
@@ -422,8 +513,9 @@ ships now**: `class Traversable` + `List`/`Option` instances + identity +
 naturality laws (proved) + `Compose` applicative (3/4 laws: `ap_id`/`ap_hom`/
 `ap_ich` + `map_coh` + Functor laws) + `ap_naturality` aux + `ap_cmp` LHS
 reductions (partial, honestly marked). **`ap_cmp` (Compose's 4th law) + the
-traverse composition law both deferred to DS-8c.** Foundation transcribing into
-`Core/EffectfulClasses.ken.md` now → foundation-qa → Architect gate → git_request.
+traverse composition law both deferred to DS-8c.** Foundation
+transcribing into `Core/EffectfulClasses.ken.md` now → foundation-qa →
+Architect gate → git_request.
   - **Architect's 5 honesty pins bind DS-8 Core's entry + his gate**
     (`evt_7an7q5pbztdr0`): (1) deferral is **SIZE not capability** — say
     buildable-now/deferred-for-size, NOT "gated/capability-blocked" (unlike DS-5c
@@ -494,9 +586,10 @@ traverse composition law both deferred to DS-8c.** Foundation transcribing into
   eq_at_inductive mechanism) + Architect fidelity+soundness. `orElse x None = x`
   fell out cleanly; no laws dropped. AC8 3 discriminators, specific variant. Steward
   honesty gate passed independently. Retros closed. ⚠ **My first kick
-  (`evt_zpdcdwv8zkvr`, 10:45) was APPENDED after the DS-4 merge/retro and
-  foundation-leader missed it on a truncated preview — DS-3 sat IDLE 10:45→13:07**
-  (~2.3h; "in flight" in prior status was wrong). Caught + owned both sides;
+  (`evt_zpdcdwv8zkvr`, 10:45) was APPENDED after the DS-4 merge/retro
+  and foundation-leader missed it on a truncated preview — DS-3 sat IDLE
+  10:45→13:07** (~2.3h; "in flight" in prior status was wrong). Caught +
+  owned both sides;
   re-kicked ~13:07 as a **pure lane-(a) combinator build** (the `Either` ruling lane
   MOOT per L5 — `Either` is a separate catalog package). Lesson saved: kick each WP
   standalone + mention-led, never appended.
