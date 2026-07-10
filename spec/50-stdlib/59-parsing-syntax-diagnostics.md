@@ -41,10 +41,10 @@ SourceId : Type
 IsUtf8  : Bytes -> Prop
 
 Source : Type
-sourceId     : Source -> SourceId
-sourceBytes  : Source -> Bytes
-sourceUtf8   : (s : Source) -> IsUtf8 (sourceBytes s)
-sourceLength : Source -> Nat       -- byte length of sourceBytes s
+source_id     : Source -> SourceId
+source_bytes  : Source -> Bytes
+source_utf8   : (s : Source) -> IsUtf8 (source_bytes s)
+source_length : Source -> Nat       -- byte length of source_bytes s
 ```
 
 The canonical identity is the artifact identity and the bytes it names. `String`
@@ -82,32 +82,32 @@ A `Span` is a half-open byte interval:
 
 ```
 Span : Type
-spanStart : Span -> Nat
-spanEnd   : Span -> Nat
+span_start : Span -> Nat
+span_end   : Span -> Nat
 
 LessEqNat : Nat -> Nat -> Prop
 
 ValidSpan (s : Source) (sp : Span) : Prop =
-  And (LessEqNat (spanStart sp) (spanEnd sp))
-      (LessEqNat (spanEnd sp) (sourceLength s))
+  And (LessEqNat (span_start sp) (span_end sp))
+      (LessEqNat (span_end sp) (source_length s))
 ```
 
 `LessEqNat` is the package's ordinary decidable `Nat` order predicate. The
-representation may use the CAT-4 `leqNat` carrier once it lands, but the CAT-5
-contract is the proposition above: `0 <= start <= end <= sourceLength`.
+representation may use the CAT-4 `leq_nat` carrier once it lands, but the CAT-5
+contract is the proposition above: `0 <= start <= end <= source_length`.
 
 `Span` equality is equality of byte endpoints; source identity is supplied by
 the value that carries the span. A bare `Span` does not identify a source.
 
 ```
 Located (a : Type) : Type
-locatedSource : Located a -> SourceId
-locatedSpan   : Located a -> Span
-locatedValue  : Located a -> a
+located_source : Located a -> SourceId
+located_span   : Located a -> Span
+located_value  : Located a -> a
 
 ValidLocated (s : Source) (x : Located a) : Prop =
-  And (Equal SourceId (locatedSource x) (sourceId s))
-      (ValidSpan s (locatedSpan x))
+  And (Equal SourceId (located_source x) (source_id s))
+      (ValidSpan s (located_span x))
 ```
 
 Slicing is valid only when it preserves the span basis:
@@ -116,7 +116,7 @@ Slicing is valid only when it preserves the span basis:
 sliceBytes : (s : Source) -> (sp : Span) -> ValidSpan s sp -> Bytes
 ```
 
-`sliceBytes s sp h` returns bytes `sp.start .. sp.end` from `sourceBytes s`.
+`sliceBytes s sp h` returns bytes `sp.start .. sp.end` from `source_bytes s`.
 If a caller wants a `String` view of the slice, it must also prove the interval
 starts and ends on UTF-8 scalar boundaries; CAT-5 does not pretend every valid
 byte span is a valid standalone string.
@@ -137,8 +137,8 @@ A parser is total over well-formed inputs:
 
 ```
 ParseError : Type
-errorSource : ParseError -> SourceId
-errorSpan   : ParseError -> Span
+error_source : ParseError -> SourceId
+error_span   : ParseError -> Span
 
 ParseResult (a : Type) : Type
   = Parsed (value : a) (consumed : Span) (next : Nat)
@@ -146,17 +146,17 @@ ParseResult (a : Type) : Type
 
 Parser (a : Type) : Type =
   (s : Source) -> (start : Nat) ->
-  LessEqNat start (sourceLength s) ->
+  LessEqNat start (source_length s) ->
   ParseResult a
 ```
 
 The laws are:
 
 1. **Success validity.** If `p s i h = Parsed v consumed next`, then
-   `ValidSpan s consumed`, `spanStart consumed = i`, and
-   `spanEnd consumed = next`.
+   `ValidSpan s consumed`, `span_start consumed = i`, and
+   `span_end consumed = next`.
 2. **Failure validity.** If `p s i h = Failed e`, then
-   `errorSource e = sourceId s` and `ValidSpan s (errorSpan e)`.
+   `error_source e = source_id s` and `ValidSpan s (error_span e)`.
 3. **Totality.** Every well-typed parser call returns `Parsed` or `Failed`.
    It does not throw, panic, loop, or return an unlocated failure.
 4. **Source locality.** A parser reports spans in the source artifact it was
@@ -202,14 +202,14 @@ The package exposes a located tree:
 
 ```
 Syntax (a : Type) : Type
-eraseSpans : Syntax BoolExpr -> BoolExpr
+erase_spans : Syntax BoolExpr -> BoolExpr
 
-parseBoolExpr  : Parser (Syntax BoolExpr)
-printBoolExpr  : BoolExpr -> Bytes
-formatBoolExpr : Source -> Result ParseError Bytes
+parse_bool_expr  : Parser (Syntax BoolExpr)
+print_bool_expr  : BoolExpr -> Bytes
+format_bool_expr : Source -> Result ParseError Bytes
 ```
 
-`printBoolExpr` prints canonical ASCII bytes:
+`print_bool_expr` prints canonical ASCII bytes:
 
 ```
 BTrue      -> "true"
@@ -221,21 +221,21 @@ BAnd x y   -> "(and " ++ print x ++ " " ++ print y ++ ")"
 The v1 laws are:
 
 1. **Printer/parser round trip.**
-   `parseBoolExpr (sourceOf (printBoolExpr e)) 0 _` succeeds and the erased
+   `parse_bool_expr (sourceOf (print_bool_expr e)) 0 _` succeeds and the erased
    syntax tree is `e`.
-2. **Parse/format preservation.** If `parseBoolExpr s 0 _` succeeds with
-   erased tree `e` and `formatBoolExpr s = Ok bs`, then parsing
+2. **Parse/format preservation.** If `parse_bool_expr s 0 _` succeeds with
+   erased tree `e` and `format_bool_expr s = Ok bs`, then parsing
    `sourceOf bs` succeeds with erased tree `e`.
-3. **Formatter idempotence.** If `formatBoolExpr s = Ok bs`, then
-   `formatBoolExpr (sourceOf bs) = Ok bs`. If formatting fails, the
+3. **Formatter idempotence.** If `format_bool_expr s = Ok bs`, then
+   `format_bool_expr (sourceOf bs) = Ok bs`. If formatting fails, the
    `ParseError` has a valid span in `s`.
 4. **Span validity.** Every node span in a parsed `Syntax BoolExpr` is valid in
    the source used for that parse.
 
 The round-trip law is stated modulo span erasure because printing creates a new
 source artifact. A tree parsed from `original.ken` and a tree parsed from
-`printBoolExpr e` cannot have equal spans; their semantic equality is equality
-of `eraseSpans`.
+`print_bool_expr e` cannot have equal spans; their semantic equality is equality
+of `erase_spans`.
 
 ## 6. Diagnostics
 
@@ -266,7 +266,7 @@ Validity is structural:
 
 ```
 ValidDiagnostic (s : Source) (d : Diagnostic) : Prop =
-  And (Equal SourceId (diagSource d) (sourceId s))
+  And (Equal SourceId (diagSource d) (source_id s))
       (And (ValidSpan s (diagPrimary d))
            (All (ValidRelatedSpan s) (diagSecondaries d)))
 
@@ -284,8 +284,8 @@ Parse errors are diagnostics with a required primary span:
 ```
 parseErrorDiagnostic :
   (s : Source) -> (e : ParseError) ->
-  Equal SourceId (errorSource e) (sourceId s) ->
-  ValidSpan s (errorSpan e) ->
+  Equal SourceId (error_source e) (source_id s) ->
+  ValidSpan s (error_span e) ->
   Diagnostic
 ```
 
@@ -316,7 +316,7 @@ state whether spans are in the parent source or in a new generated artifact.
   structured `ParseError`, sequencing/choice, repetition with consumption proof
   or fuel, and span propagation.
 - **D3 -- Boolean expression grammar.** `BoolExpr`, located syntax,
-  `parseBoolExpr`, `printBoolExpr`, `formatBoolExpr`, and the round-trip /
+  `parse_bool_expr`, `print_bool_expr`, `format_bool_expr`, and the round-trip /
   idempotence laws.
 - **D4 -- diagnostics.** `Diagnostic`, `RelatedSpan`, `ValidDiagnostic`,
   parse-error diagnostics, and rejection of out-of-bounds primary or secondary
@@ -332,7 +332,7 @@ state whether spans are in the parent source or in a new generated artifact.
 2. **Byte artifact identity.** `Source` spans index the original source bytes,
    not a normalized `String` or a copied substring. Line/column is derived.
 3. **Valid spans.** Every located token, syntax node, parse error, and
-   diagnostic span satisfies `0 <= start <= end <= sourceLength`.
+   diagnostic span satisfies `0 <= start <= end <= source_length`.
 4. **Offset preservation.** Parsers over source views report original byte
    offsets when the view is offset-preserving; non-offset-preserving views are
    distinct source artifacts unless a future source map is explicit.
@@ -341,7 +341,7 @@ state whether spans are in the parent source or in a new generated artifact.
 6. **Small grammar boundary.** The v1 grammar is the package's Boolean
    expression grammar. It does not expose compiler-internal AST or parse all
    Ken syntax.
-7. **Parser/printer law.** Parsing `printBoolExpr e` succeeds and returns `e`
+7. **Parser/printer law.** Parsing `print_bool_expr e` succeeds and returns `e`
    after erasing spans.
 8. **Formatter law.** Formatting preserves the parsed tree modulo span erasure
    and is idempotent on successful output.

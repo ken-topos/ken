@@ -16,7 +16,7 @@
 
 ## 1. Why these lead the catalog
 
-`Semigroup`/`Monoid` are the value-level algebra `Foldable`'s `foldMap`
+`Semigroup`/`Monoid` are the value-level algebra `Foldable`'s `fold_map`
 consumes; `Functor`/`Foldable` are the first classes to **abstract a type
 constructor**, and their law form is the one **CAT-2's `Applicative`/`Monad`
 inherit verbatim**. Getting the pattern right here — the higher-kinded class
@@ -192,9 +192,9 @@ definitionally-equal restatement — so **do not proliferate a second law field*
 inherit; stating them pointwise keeps that inheritance a direct induction too.
 `idf`/`comp` are ordinary Ken views.
 
-`Foldable` supplies `foldr` (and/or `foldMap` via a `Monoid`, `§2`) with the
+`Foldable` supplies `foldr` (and/or `fold_map` via a `Monoid`, `§2`) with the
 fold laws + `Monoid` coherence; its instances (`List`/`Option`) are inductive ⇒
-proved, zero-delta. *(The `foldr`-vs-`foldMap`-primary choice + the exact fold
+proved, zero-delta. *(The `foldr`-vs-`fold_map`-primary choice + the exact fold
 laws are pinned with the build once the extension of `§6` lands.)*
 
 ## 6. The higher-kinded mechanism extension — bounded (AC1, hard)

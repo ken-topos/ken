@@ -7,7 +7,7 @@
 > shipped):
 >
 > - **The convoy idiom** (Gap-B dependent induction, §2) carries every law's
->   carrier induction. **Law 4** (`toList`-ordered) + the `allKeys`→`allInList`
+>   carrier induction. **Law 4** (`to_list`-ordered) + the `all_keys`→`all_in_list`
 >   bridge (L2) landed first — via the `obs-eq-termination` conversion fix
 >   (`9cf468a`, PR #262, §7). **Laws 1/2/3/5** (preservation,
 >   found-after-insert, locality, agreement) then landed via the
@@ -26,7 +26,7 @@
 >
 > Adds **nothing** to `trusted_base()`: every proof reduces through the existing
 > `Term::J`/`Term::Cast` (transport) and `Term::Elim` (dependent match); the
-> helper defs (`Or`/`boolDichotomy`/`Not`/`assoc`/`allInList`/L1–L5) are
+> helper defs (`Or`/`bool_dichotomy`/`Not`/`assoc`/`all_in_list`/L1–L5) are
 > ordinary `declare_def`/`declare_inductive` admissions — no
 > `declare_primitive`, no `declare_postulate`, **no `Axiom`** anywhere
 > (`catalog/packages/collections/map.ken`).
@@ -36,7 +36,7 @@
 `52-map.md §5` proves the `Map` invariant and operation-correctness laws as
 **real proof terms**. Two of the seven — `Ordered empty` and `lookup k empty =
 None` — are **non-inductive** (Branch A) and ship in `map.ken` already
-(`orderedEmpty = tt`, `lookupEmptyIsNone = tt`). The remaining **five inductive
+(`ordered_empty = tt`, `lookup_empty_is_none = tt`). The remaining **five inductive
 laws** (Branch B) each **induct over the non-nullary `Tree` carrier** via the
 **convoy idiom** (§2); four of them additionally **align a stuck `leq k k'`** by
 transport (§3). This doc elaborates the proof strategy behind those landed
@@ -45,11 +45,11 @@ permutation is the sole `Map` correctness law still deferred (§6).
 
 | # | Law (`52` ref) | Statement | Gap | Unit / status |
 |---|---|---|---|---|
-| 1 | preservation (`§5.1`) | `Ordered m → Ordered (insert leq key val m)` | A + B | **LANDED** (`preservesOrdered`) |
-| 2 | found-after-insert (`§5.2`) | `lookup leq key (insert leq key val m) = Some val` | A + B | **LANDED** (`lookupFoundAfterInsert`) |
-| 3 | locality (`§5.2`) | `distinct key key' → lookup leq key' (insert leq key val m) = lookup leq key' m` | A + B | **LANDED** (`lookupLocality`) |
-| 4 | `toList`-ordered (`§5.3`) | `Ordered m → isSorted keyLeq (toList m)` — **comparison-free** | **B only** | Unit 1 — **LANDED** (`toListOrdered` built, kernel-rechecked) |
-| 5 | agreement (`§5.3`) | `Ordered m → Distinct leq m → lookup leq key m = assoc leq key (toList m)` | A + B | **LANDED** (`lookupAssocAgree`) |
+| 1 | preservation (`§5.1`) | `Ordered m → Ordered (insert leq key val m)` | A + B | **LANDED** (`preserves_ordered`) |
+| 2 | found-after-insert (`§5.2`) | `lookup leq key (insert leq key val m) = Some val` | A + B | **LANDED** (`lookup_found_after_insert`) |
+| 3 | locality (`§5.2`) | `distinct key key' → lookup leq key' (insert leq key val m) = lookup leq key' m` | A + B | **LANDED** (`lookup_locality`) |
+| 4 | `to_list`-ordered (`§5.3`) | `Ordered m → isSorted keyLeq (to_list m)` — **comparison-free** | **B only** | Unit 1 — **LANDED** (`to_list_ordered` built, kernel-rechecked) |
+| 5 | agreement (`§5.3`) | `Ordered m → Distinct leq m → lookup leq key m = assoc leq key (to_list m)` | A + B | **LANDED** (`lookup_assoc_agree`) |
 
 **Every law's own proof uses `refl`/`trans`/`total` only** — no `antisym →
 Equal` in any of the five statements (`52 §5.2`/`§2.1`). Law 5 (agreement) takes
@@ -57,12 +57,12 @@ the extra hypothesis `Distinct leq m`, but its *proof* is **antisym-free and
 carrier-general**: given `Distinct`, the matched-node value agreement reduces to
 `refl` (both traversals return the value at the unique order-equivalent node —
 no `Equal key k2` step). `antisym` is load-bearing **only** in the separate
-**`Distinct`-discharge lemma** (`insert`/`fromList`-reachable ⟹ `Distinct`,
+**`Distinct`-discharge lemma** (`insert`/`from_list`-reachable ⟹ `Distinct`,
 Foundation's, *not* part of law 5's statement); *that* lemma, alongside the
 overwrite/uniqueness identity law, is what **inherits ADR 0010's
 canonical-carrier obligation** (`52 §2.1`/`§5.3`). Law 5 itself does not — it
 holds given `Distinct` even where `antisym` is false. (Architect's analysis
-`evt_9q7hkxnrt3fm`, **confirmed at proof time**: the built `lookupAssocAgree`
+`evt_9q7hkxnrt3fm`, **confirmed at proof time**: the built `lookup_assoc_agree`
 takes only `transLeq`, antisym-free.) The overwrite/uniqueness identity law
 stays the separate, canonicity-gated law under ADR 0010 (`52 §5.3`), out of
 this WP.
@@ -124,7 +124,7 @@ change — Architect probeC/probeD, `evt_3f1nzav3z4ab3`). Instead:
    per recursive field, and the elaborator emits them — but they are **dead,
    surface-unreferenceable binders** (`dependent-match-nonnullary.md`, "IHs are
    DEAD binders"; confirmed empirically, not merely read off the doc). The
-   actual induction hypothesis is obtained the **same way `toList`/`insert`
+   actual induction hypothesis is obtained the **same way `to_list`/`insert`
    already recurse**: an **ordinary self-recursive `view` call on each recursive
    field** — `f … l (project h to P l)` yielding `G l`, `f … r (project h to P
    r)` yielding `G r` — whose **result is** the IH, consumed directly by name.
@@ -142,53 +142,53 @@ witness is `tt`/`Refl` (§2.3).
 > axis]] rule — reconstruct each mechanism from the landed code, never a prior
 > artifact — applies to this doc's own prior version.
 
-### 2.2 Worked example — the `allKeys → allInList` bridge (L2)
+### 2.2 Worked example — the `all_keys → all_in_list` bridge (L2)
 
 This is the convoy idiom carried end-to-end on the **real held-branch helpers**;
 it **builds and kernel-checks clean on `4d4aaad`** in convoy form (Foundation's
 real-`Tree` confirmation — Steward `evt_jb3nbm008xq0`). It is
-**comparison-free** (no `leq`, no `J`, no `boolDichotomy`): pure Gap-B, the
+**comparison-free** (no `leq`, no `J`, no `bool_dichotomy`): pure Gap-B, the
 cleanest instance of the idiom.
 
-**Goal (L2).** A tree's `allKeys p` transfers to `allInList p` of its
-in-order flattening: `allKeys p m -> allInList p (toList m)`. The landed defs
+**Goal (L2).** A tree's `all_keys p` transfers to `all_in_list p` of its
+in-order flattening: `all_keys p m -> all_in_list p (to_list m)`. The landed defs
 (`map.ken`, `collections.ken`):
 
 ```
-allKeys p Leaf              ⇝ Equal Bool True True                 -- Top (K7)
-allKeys p (Node l key val r) ⇝ And (p key) (And (allKeys p l) (allKeys p r))
-toList Leaf                 ⇝ Nil
-toList (Node l key val r)   ⇝ list_append (toList l) (Cons (mkPair key val) (toList r))
-allInList p Nil             ⇝ Equal Bool True True                 -- Top (K7)
-allInList p (Cons e xs)     ⇝ And (p (pairFst e)) (allInList p xs)
+all_keys p Leaf              ⇝ Equal Bool True True                 -- Top (K7)
+all_keys p (Node l key val r) ⇝ And (p key) (And (all_keys p l) (all_keys p r))
+to_list Leaf                 ⇝ Nil
+to_list (Node l key val r)   ⇝ list_append (to_list l) (Cons (mkPair key val) (to_list r))
+all_in_list p Nil             ⇝ Equal Bool True True                 -- Top (K7)
+all_in_list p (Cons e xs)     ⇝ And (p (pairFst e)) (all_in_list p xs)
 ```
 
-**Proof term (convoy).** Generalize `allKeys p m` into the motive; match `m`;
+**Proof term (convoy).** Generalize `all_keys p m` into the motive; match `m`;
 per-arm checked-mode `\h.`; self-recurse on `l` and `r` for the IH; assemble
 with the `And`-projections (`andFst`/`andSnd`), `andIntro`, and the append lemma
-`allInListAppendIntro` (§4, a Gap-B-only structural induction on the left list):
+`all_in_list_append_intro` (§4, a Gap-B-only structural induction on the left list):
 
 ```
-view allKeysToAllInList (k v : Type) (p : k -> Prop) (m : Tree k v)
-  : allKeys k v p m -> allInList k v p (toList k v m) =
+view all_keys_to_all_in_list (k v : Type) (p : k -> Prop) (m : Tree k v)
+  : all_keys k v p m -> all_in_list k v p (to_list k v m) =
   match m {
-    Leaf => \h. tt ;                                   -- goal ⇝ allInList p Nil ⇝ Top
+    Leaf => \h. tt ;                                   -- goal ⇝ all_in_list p Nil ⇝ Top
     Node l key val r => \h.
-      allInListAppendIntro k v p
-        (toList k v l)
-        (Cons (Pair k v) (mkPair k v key val) (toList k v r))
-        (allKeysToAllInList k v p l (andFst _ _ (andSnd _ _ h)))     -- IH on l : allInList p (toList l)
-        (andIntro (p key) (allInList k v p (toList k v r))
+      all_in_list_append_intro k v p
+        (to_list k v l)
+        (Cons (Pair k v) (mkPair k v key val) (to_list k v r))
+        (all_keys_to_all_in_list k v p l (andFst _ _ (andSnd _ _ h)))     -- IH on l : all_in_list p (to_list l)
+        (andIntro (p key) (all_in_list k v p (to_list k v r))
           (andFst _ _ h)                                             -- p key
-          (allKeysToAllInList k v p r (andSnd _ _ (andSnd _ _ h))))  -- IH on r : allInList p (toList r)
+          (all_keys_to_all_in_list k v p r (andSnd _ _ (andSnd _ _ h))))  -- IH on r : all_in_list p (to_list r)
   }
 ```
 
-The hypothesis threads structurally: `h : And (p key) (And (allKeys p l)
-(allKeys p r))`, so `andFst h : p key`, `andFst (andSnd h) : allKeys p l`, and
-`andSnd (andSnd h) : allKeys p r` feed the two self-recursive calls. The second
-`allInListAppendIntro` argument's type `allInList p (Cons (mkPair key val)
-(toList r))` reduces to `And (p key) (allInList p (toList r))` (since
+The hypothesis threads structurally: `h : And (p key) (And (all_keys p l)
+(all_keys p r))`, so `andFst h : p key`, `andFst (andSnd h) : all_keys p l`, and
+`andSnd (andSnd h) : all_keys p r` feed the two self-recursive calls. The second
+`all_in_list_append_intro` argument's type `all_in_list p (Cons (mkPair key val)
+(to_list r))` reduces to `And (p key) (all_in_list p (to_list r))` (since
 `pairFst (mkPair key val) ⇝ key`), built by `andIntro`. (`And`'s two `Prop`
 arguments are elided as `_ _` for readability; spell them explicitly per the
 landed convention.) **No dictionary laws, no transport** — the load-bearing
@@ -198,13 +198,13 @@ composition) that Foundation confirmed builds.
 ### 2.3 Base-witness discipline — `tt` vs `Refl` (K7)
 
 Every terminal equality obligation is discharged by one of two witnesses,
-following the landed evidence (`lookupEmptyIsNone = tt`, `orderedEmpty = tt`;
+following the landed evidence (`lookup_empty_is_none = tt`, `ordered_empty = tt`;
 the
 `surface-transport` build retro):
 
 - **`tt`** when the goal is an `IsTrue`/`Equal`-shaped proposition wrapping an
   **operation** that has now reduced, so the goal **observationally collapses to
-  `Top`** (K7): `Equal Bool (op …) v` with `op … ⇝ v`, e.g. `allInList p Nil ⇝
+  `Top`** (K7): `Equal Bool (op …) v` with `op … ⇝ v`, e.g. `all_in_list p Nil ⇝
   Equal Bool True True ⇝ Top`, or `Ordered … Leaf ⇝ Equal Bool True True ⇝ Top`.
   This is the `Refl`/`tt`/`absurd` idiom `lawful_classes.ken` already documents.
 - **`Refl a`** when the goal is `Equal A a a` with both sides the **same
@@ -224,7 +224,7 @@ The **single-comparison** transport primitive is landed (`surface-transport`,
 
 **Reflect the stuck Boolean, then transport once.** The Gap-B gate needs a
 *variable* scrutinee, so `match (leq k k') { … }` does not narrow; reflect
-through `boolDichotomy` (§4) — a dependent match on a Bool **variable** — to get
+through `bool_dichotomy` (§4) — a dependent match on a Bool **variable** — to get
 `q : Equal Bool (leq k k') True` (resp. `False`) in each arm of a
 **non-dependent** `Or`-match, then fire one `J`:
 
@@ -246,7 +246,7 @@ elaborator change) by the **`trans`/`cong` route-around** — the same "avoid
 nested/multi-level constructs, route around via helper lemmas" discipline
 `lawful_classes.ken` documents. The as-built mechanism:
 
-- **Goal-generic transport bridges** — `insertCaseTransportOverwrite` /
+- **Goal-generic transport bridges** — `insert_case_transport_overwrite` /
   `…IntoL` / `…IntoR` compose the two `Eq` witnesses into **one** combined
   equation (a "stop-one-step-short" `trans`/`cong`), then fire a **single** `J`
   — never a `J` inside a `J`'s `base`. They are **goal-generic** (quantified
@@ -255,15 +255,15 @@ nested/multi-level constructs, route around via helper lemmas" discipline
   its own goal (preservation's `Ordered`; found-after-insert's `Equal … (Some
   val)`; locality's `Equal … (lookup …)`).
 - **Comparison-independent predicates need no Gap-A transport at all.** A
-  predicate like `allKeys p` over an *abstract* `p` (and `Ordered`'s subtree
+  predicate like `all_keys p` over an *abstract* `p` (and `Ordered`'s subtree
   conjuncts) is proven **generically** and applied by β — there is no stuck
   `leq`
   to transport. Only the per-node comparisons hit the bridges; the bulk of each
   proof is comparison-free convoy induction (§2).
-- **`deriveFromFalse`** — totality-derived reflection: `total`'s `IsTrue
+- **`derive_from_false`** — totality-derived reflection: `total`'s `IsTrue
   (bool_or (leq a b) (leq b a))` feeds a **non-dependent `Or`-elimination** that
   supplies the branch equation without a stuck match.
-- Law 3 additionally uses **`boolValueEqFromBiimpl`** (a two-way `Bool`
+- Law 3 additionally uses **`bool_value_eq_from_biimpl`** (a two-way `Bool`
   implication forces *value*-equality — `Bool` has exactly two constructors);
   law
   5 threads `NoDup`-over-`append` decompositions + `assoc`-side step mirrors
@@ -287,7 +287,7 @@ Already **landed** on the held base: `list_append`, `isSorted` (`prelude.rs` —
 `isSorted a leq (Cons x (Cons y r)) = And (Equal Bool (leq x y) True) (isSorted
 a leq (Cons y r))`), `Pair`/`mkPair`/`pairFst`/`pairSnd`, `And`/`andIntro`/
 `andFst`/`andSnd` (`prelude.rs`, `And A B := Sigma(_:A).B`), `absurd`/`Bottom`,
-`Equal`/`Refl`/`tt`, `allKeys`, `allInList`, `toList`, `pairLeq`, and — added by
+`Equal`/`Refl`/`tt`, `all_keys`, `all_in_list`, `to_list`, `pair_leq`, and — added by
 the capstone build — **`Not : Ω → Ω := λA. A → Bottom`** (`prelude.rs`, an
 ordinary `declare_def` over `Π` + the existing `Bottom`, built like `And`/`Or`;
 needed because the surface has no expression-position `->`, §3). The helpers
@@ -305,82 +305,82 @@ below are the remaining landed defs.
   `Type`-valued `Or` (whose payloads are `Ω`-equalities) into the `Ω`-valued map
   goal is an ordinary case analysis — the permitted `Type → Ω` motive direction,
   not the restricted large elimination.
-- **`boolDichotomy`** — the reflect combinator (§3), a one-line Gap-B dependent
+- **`bool_dichotomy`** — the reflect combinator (§3), a one-line Gap-B dependent
   match on a Bool **variable** (landed spelling — each arm's `b` is narrowed, so
   the payload types are `Equal Bool True True` etc., closed by `tt`):
 
   ```
-  view boolDichotomy (b : Bool) : Or (Equal Bool b True) (Equal Bool b False) =
+  view bool_dichotomy (b : Bool) : Or (Equal Bool b True) (Equal Bool b False) =
     match b {
       True  => Inl (Equal Bool True True) (Equal Bool True False) tt ;
       False => Inr (Equal Bool False True) (Equal Bool False False) tt
     }
   ```
 
-- **`allInListAppendIntro`** (Unit 1, used by L2/§2.2 and law 4) — the
-  `allInList`-over-`append` intro: `allInList p xs -> allInList p ys ->
-  allInList p (list_append xs ys)`. A plain structural induction on `xs`
+- **`all_in_list_append_intro`** (Unit 1, used by L2/§2.2 and law 4) — the
+  `all_in_list`-over-`append` intro: `all_in_list p xs -> all_in_list p ys ->
+  all_in_list p (list_append xs ys)`. A plain structural induction on `xs`
   (Gap-B-free — no dependent motive; `list_append`'s own recursion drives it).
   Comparison-free.
 - **`assoc`** (law 5, landed) — the ordered-list lookup: `assoc leq key : List
   (Pair k v) → Option v`, scanning by the same `leq key (pairFst e) / leq
   (pairFst e) key` coincidence test `lookup` uses. A plain structural `List`
   recursion (Gap-B-free).
-- **`orderEquiv` / `NoDup` / `Distinct`** (law 5's uniqueness precondition,
+- **`order_equiv` / `NoDup` / `Distinct`** (law 5's uniqueness precondition,
   landed) — all `Ω`-valued, all comparison-free structural recursions:
-  - `orderEquiv leq a b := And (IsTrue (leq a b)) (IsTrue (leq b a))` — two keys
+  - `order_equiv leq a b := And (IsTrue (leq a b)) (IsTrue (leq b a))` — two keys
     are order-equivalent (each `≤` the other).
   - `NoDup leq (xs : List (Pair k v))` — no two entries carry order-equivalent
-    keys: `NoDup leq Nil = ⊤`; `NoDup leq (Cons e xs) = And (allInList (\k'.
-    orderEquiv leq k' (pairFst e) -> Bottom) xs) (NoDup leq xs)` (each head's
+    keys: `NoDup leq Nil = ⊤`; `NoDup leq (Cons e xs) = And (all_in_list (\k'.
+    order_equiv leq k' (pairFst e) -> Bottom) xs) (NoDup leq xs)` (each head's
     key is order-distinct from every tail key).
-  - `Distinct leq m := NoDup leq (toList m)` — **law 5's key-uniqueness
-    precondition**, encoded over `toList m`'s keys so it aligns with `assoc`'s
+  - `Distinct leq m := NoDup leq (to_list m)` — **law 5's key-uniqueness
+    precondition**, encoded over `to_list m`'s keys so it aligns with `assoc`'s
     first-match scan (Architect's recommended encoding). It is the no-duplicate
-    invariant `insert`/`fromList` maintain by construction; a real
-    `fromList`/insert-built map **provably discharges** `Distinct` via `antisym`
+    invariant `insert`/`from_list` maintain by construction; a real
+    `from_list`/insert-built map **provably discharges** `Distinct` via `antisym`
     (order-equivalent ⟹ `Equal` ⟹ the overwrite branch never duplicates) — that
     discharge lemma is Foundation's, **not** part of law 5's statement.
 
 ## 5. Per-law skeletons
 
 Notation: `G` is the current goal; `G[x]` is `G` with the named stuck `leq …`
-abstracted to `x`; `keyLeq := pairLeq leq` is law 4/5's element comparator over
+abstracted to `x`; `keyLeq := pair_leq leq` is law 4/5's element comparator over
 `Pair k v` (compares first components).
 
-### 5.1 Law 4 — `toList`-ordered (`Ordered m → isSorted keyLeq (toList m)`)
+### 5.1 Law 4 — `to_list`-ordered (`Ordered m → isSorted keyLeq (to_list m)`)
 
 **Unit 1 — LANDED (Gap-B, comparison-free): law 4 builds end-to-end** as a
-real, non-stubbed, kernel-rechecked `toListOrdered` (`map.ken`, §7). `toList`
+real, non-stubbed, kernel-rechecked `to_list_ordered` (`map.ken`, §7). `to_list`
 never calls `leq`; every `leq` fact is a stored
-`IsTrue` witness threaded from `Ordered`'s `allKeys` conjuncts (themselves
+`IsTrue` witness threaded from `Ordered`'s `all_keys` conjuncts (themselves
 `Equal Bool (leq …) True`, the exact shape `isSorted`'s conjuncts want — they
 thread **directly**, no transport). So this law clears Gap A and needs **only**
 the convoy induction (§2). Induct on `m`; motive `\m'. (Ordered … m' -> isSorted
-keyLeq (toList m'))`.
+keyLeq (to_list m'))`.
 
-- **`Leaf`** — `toList Leaf = Nil`; `isSorted … Nil ⇝ Top`. Base `\h. tt`.
-- **`Node l k2 v2 r`** — `toList (Node …) = list_append (toList l) (Cons (k2,v2)
-  (toList r))`. Self-recurse (§2.1 step 4) for the IH on each subtree:
-  `toListOrdered … l (Ordered l from h)` : `isSorted (toList l)`, likewise for
-  `r`. From `h`'s `allKeys` conjuncts, via the bridge lemma **L2** (§2.2,
-  `allKeysToAllInList`): every key in `toList l` is `≤ k2`, and `k2 ≤` every key
-  in `toList r`. Assemble with the two append lemmas:
+- **`Leaf`** — `to_list Leaf = Nil`; `isSorted … Nil ⇝ Top`. Base `\h. tt`.
+- **`Node l k2 v2 r`** — `to_list (Node …) = list_append (to_list l) (Cons (k2,v2)
+  (to_list r))`. Self-recurse (§2.1 step 4) for the IH on each subtree:
+  `to_list_ordered … l (Ordered l from h)` : `isSorted (to_list l)`, likewise for
+  `r`. From `h`'s `all_keys` conjuncts, via the bridge lemma **L2** (§2.2,
+  `all_keys_to_all_in_list`): every key in `to_list l` is `≤ k2`, and `k2 ≤` every key
+  in `to_list r`. Assemble with the two append lemmas:
 
   ```
-  isSorted (toList l) ->
-  isSorted (Cons (k2,v2) (toList r)) ->   -- consSorted: from isSorted (toList r) + k2 ≤ head r
-  allInList (≤k2) (toList l) ->           -- bridge L2 from allKeys
-  isSorted (list_append (toList l) (Cons (k2,v2) (toList r)))   -- isSortedAppend
+  isSorted (to_list l) ->
+  isSorted (Cons (k2,v2) (to_list r)) ->   -- consSorted: from isSorted (to_list r) + k2 ≤ head r
+  all_in_list (≤k2) (to_list l) ->           -- bridge L2 from all_keys
+  isSorted (list_append (to_list l) (Cons (k2,v2) (to_list r)))   -- is_sorted_append
   ```
 
   **No dictionary laws** beyond the stored witnesses; **no transport.** This is
   the load-bearing ordered-iteration law — proved as the naturally-`Ω`
   `isSorted` form, **never** permutation (§6).
 
-  > **Conclusion `toListOrdered` is LANDED (§7).** The bridge **L2** and the
-  > `consSorted`/`isSortedAppend` append lemmas assemble the `Node` step into a
-  > real, kernel-rechecked `toListOrdered`. The residual `TypeMismatch` that
+  > **Conclusion `to_list_ordered` is LANDED (§7).** The bridge **L2** and the
+  > `consSorted`/`is_sorted_append` append lemmas assemble the `Node` step into a
+  > real, kernel-rechecked `to_list_ordered`. The residual `TypeMismatch` that
   > earlier blocked it — `isSorted`'s pair-indexed comparator vs. the bound
   > chain's key-indexed predicate not converging by a delta/iota step **inside
   > an `Eq` argument** — was a kernel conversion shortfall, now **fixed** by the
@@ -405,10 +405,10 @@ structure and the dictionary laws it uses.
 
 - **Law 1 — preservation** (`Ordered m → Ordered (insert key val m)`). Motive
   `\m'. (Ordered … m' -> Ordered … (insert … m'))`. `Leaf`: `insert Leaf = Node
-  Leaf key val Leaf`; goal is the `And`-tree of `allKeys … Leaf ⇝ Top` /
+  Leaf key val Leaf`; goal is the `And`-tree of `all_keys … Leaf ⇝ Top` /
   `Ordered Leaf ⇝ Top`, base `\h.` the `andIntro` tree of `tt`s (comparison-
   free). `Node`: subtrees by the IH (self-recursive calls); rebuilding the two
-  `allKeys` bounds against the new label needs **L1** + **L3** and the reflected
+  `all_keys` bounds against the new label needs **L1** + **L3** and the reflected
   `leq` equations — aligned by the goal-generic transport bridges (§3).
   Dictionary laws: `trans`,
   `total`; **no `antisym`.**
@@ -426,26 +426,26 @@ structure and the dictionary laws it uses.
   (leq key' key))) -> Bottom`; `absurd` eliminates the `Bottom`. Motive folds in
   both hypotheses. `Leaf`/`Node`: reflect the relevant comparisons; a spurious
   `True`/`True` contradicts `distinct` (discharged by `absurd`); the aligning
-  transport uses the route-around bridges + `boolValueEqFromBiimpl` (a two-way
+  transport uses the route-around bridges + `bool_value_eq_from_biimpl` (a two-way
   `Bool` implication forces value-equality, §3). Dictionary laws: `trans`,
   `total`; **no `antisym`.**
 - **Law 5 — agreement** (`Ordered m → Distinct leq m → lookup key m = assoc key
-  (toList m)`). **Requires the key-uniqueness precondition `Distinct leq m`**
-  (§4): `lookup`'s BST descent and `assoc`'s in-order scan of `toList` are two
+  (to_list m)`). **Requires the key-uniqueness precondition `Distinct leq m`**
+  (§4): `lookup`'s BST descent and `assoc`'s in-order scan of `to_list` are two
   *different* traversal orders that agree **iff** keys are unique. Without
   `Distinct` the law is **false** — `Ordered`'s weak `≤`/`≥` bounds admit
   duplicates, and `Node (Node Leaf key v1 Leaf) key v2 Leaf` (a legitimate
   `Ordered` witness) has `lookup key = Some v2` (root, first BST match) but
-  `assoc key (toList) = Some v1` (list-first). This holds even at a **fully
+  `assoc key (to_list) = Some v1` (list-first). This holds even at a **fully
   lawful `≤`** (e.g. `Int`: `0 ≤ 0` makes the tree `Ordered`) — which is exactly
   why adding `antisym` as a *hypothesis* cannot rescue it (the duplicate is the
   same key value, so `antisym` yields the vacuous `Equal key key`). The fix is a
   uniqueness *precondition*, not a stronger dictionary. `Ordered` is
   **unchanged** and `Distinct` is added, not folded into it.
   Motive `\m'. (Ordered … m' -> Distinct … m' -> Equal (Option v) (lookup … key
-  m') (assoc leq key (toList m')))`. `Leaf`: both `None`, base `tt`. `Node`:
-  align `lookup`'s descent with `assoc`'s scan of `list_append (toList l) (Cons
-  (k2,v2) (toList r))` via `Ordered`'s bounds + `trans` and an
+  m') (assoc leq key (to_list m')))`. `Leaf`: both `None`, base `tt`. `Node`:
+  align `lookup`'s descent with `assoc`'s scan of `list_append (to_list l) (Cons
+  (k2,v2) (to_list r))` via `Ordered`'s bounds + `trans` and an
   **`assoc`-over-`append`** lemma (**L5**); `Distinct` supplies the *unique*
   order-equivalent entry both traversals select, so the matched-node value
   agreement is **`refl`** — both return the value at that entry, no `Equal key
@@ -454,14 +454,14 @@ structure and the dictionary laws it uses.
   `assoc`-side step mirrors for the list scan. Dictionary laws: **`trans`,
   `total`** (antisym-free, matching laws 1–4). `antisym` enters only the
   separate
-  **`Distinct`-discharge lemma** (`insert`/`fromList`-reachable ⟹ `Distinct`,
+  **`Distinct`-discharge lemma** (`insert`/`from_list`-reachable ⟹ `Distinct`,
   Foundation's — not part of this statement), so **law 5's statement is
   carrier-general**: it holds given `Distinct` even where `antisym` is false
   (a non-canonical carrier — `Decimal`, many reps per value — has a false
   `antisym`, but `Distinct` forbids two order-equivalent entries, so lookup and
   assoc still agree). Only the discharge lemma inherits ADR 0010's
   canonical-carrier obligation (`52 §2.1`). (Architect's analysis
-  `evt_9q7hkxnrt3fm`, **confirmed at proof time**: the built `lookupAssocAgree`
+  `evt_9q7hkxnrt3fm`, **confirmed at proof time**: the built `lookup_assoc_agree`
   takes only `transLeq` — antisym-free, agreement is `refl` — Architect
   `evt_5rgg2g2wtg75b`, foundation-qa.)
 
@@ -469,17 +469,17 @@ structure and the dictionary laws it uses.
 
 Each is a small structural induction; all landed alongside the laws.
 
-- **L1 `allKeys`-preserved-by-insert** (law 1) — `allKeys p m → p key' → allKeys
+- **L1 `all_keys`-preserved-by-insert** (law 1) — `all_keys p m → p key' → all_keys
   p (insert … key' … m)`. Induction on `m`; reflects `insert`'s stuck `leq`
   (Gap A, via the route-around bridges §3). **Landed.**
-- **L2 `allKeys → allInList (toList)`** (laws 4, 5) — worked in §2.2
-  (`allKeysToAllInList`). Comparison-free (Gap-B only). **Landed.**
-- **L3 `allKeys`-under-a-transitive-step** (law 1 overwrite) — move an `allKeys
-  (≤a)` bound to `allKeys (≤b)` given `IsTrue (leq a b)`, mapping `trans` over
+- **L2 `all_keys → all_in_list (to_list)`** (laws 4, 5) — worked in §2.2
+  (`all_keys_to_all_in_list`). Comparison-free (Gap-B only). **Landed.**
+- **L3 `all_keys`-under-a-transitive-step** (law 1 overwrite) — move an `all_keys
+  (≤a)` bound to `all_keys (≤b)` given `IsTrue (leq a b)`, mapping `trans` over
   the subtree. Comparison-free (Gap-B), consumed by law 1. **Landed.**
-- **L4 `isSorted`-over-`++`** (law 4) — the `isSortedAppend`/`consSorted` pair
+- **L4 `isSorted`-over-`++`** (law 4) — the `is_sorted_append`/`consSorted` pair
   assembling law 4's `Node` step: `isSorted xs → isSorted (Cons m ys) →
-  allInList (keyLeq · m) xs → isSorted (list_append xs (Cons m ys))`. Induction
+  all_in_list (keyLeq · m) xs → isSorted (list_append xs (Cons m ys))`. Induction
   on `xs`, comparison-free (the `keyLeq` facts are supplied as `IsTrue`
   witnesses). **Landed** (the earlier residual `TypeMismatch` here was fixed by
   `obs-eq-termination` `9cf468a`; §5.1, §7); the landed proof routes the
@@ -493,8 +493,8 @@ Each is a small structural induction; all landed alongside the laws.
 
 ## 6. Ω-discipline (the load-bearing guardrail)
 
-- **`toList`-ordered is the `Ω` `isSorted` form — never permutation.** The
-  permutation law (`toList` lists exactly the inserted entries once each) is
+- **`to_list`-ordered is the `Ω` `isSorted` form — never permutation.** The
+  permutation law (`to_list` lists exactly the inserted entries once each) is
   **proof-relevant** (distinct interleavings are distinct derivations), so it
   **cannot** be `data Perm : Ω` directly
   ([[proof-relevant-inductive-cannot-be-declared-at-omega]]) — it needs
@@ -508,9 +508,9 @@ Each is a small structural induction; all landed alongside the laws.
   K7-workaround anti-pattern). Law 4 clears Gap A precisely **because** it is
   comparison-free: its `leq` facts are `Ordered`'s stored witnesses, not stuck
   reductions.
-- **All goals live in `Ω`.** `Ordered`/`allKeys`/`allInList`/`isSorted`/`Equal`/
-  `And` — and law 5's `orderEquiv`/`NoDup`/`Distinct` (built from
-  `IsTrue`/`And`/`allInList`/`->Bottom`) — are `Ω`-valued (`52 §5.1`, `16 §1`);
+- **All goals live in `Ω`.** `Ordered`/`all_keys`/`all_in_list`/`isSorted`/`Equal`/
+  `And` — and law 5's `order_equiv`/`NoDup`/`Distinct` (built from
+  `IsTrue`/`And`/`all_in_list`/`->Bottom`) — are `Ω`-valued (`52 §5.1`, `16 §1`);
   the `J` motives that transport them (laws 1/2/3/5, §3) are `Ω`-valued, which
   the landed `infer_j` admits (its codomain sort
   is unconstrained — `../30-surface/34 §3.4`). No sort-polymorphic `subst` is
@@ -520,11 +520,11 @@ Each is a small structural induction; all landed alongside the laws.
 
 **All five inductive laws are landed** as real, kernel-rechecked `view` proofs
 in `map.ken`, alongside the non-inductive laws
-(`orderedEmpty`/`lookupEmptyIsNone`) — via the convoy idiom (§2) + the
+(`ordered_empty`/`lookup_empty_is_none`) — via the convoy idiom (§2) + the
 `trans`/`cong` route-around (§3), zero elaborator/kernel change beyond the `Not`
 prelude def. The honest boundary:
 
-- **Law 4's conclusion `toListOrdered` (via `consSorted`/`isSortedAppend`, L4)
+- **Law 4's conclusion `to_list_ordered` (via `consSorted`/`is_sorted_append`, L4)
   is LANDED** — real, non-stubbed, kernel-rechecked. The kernel conversion
   shortfall that earlier blocked it (an `Eq` type whose argument needed a
   delta/iota step — the pair-indexed comparator vs. the key-indexed bound
@@ -547,8 +547,8 @@ prelude def. The honest boundary:
   `Axiom`.
 
 **Zero `trusted_base()` delta.** Every proof reduces through the **existing**
-`Term::J`/`Term::Cast` and `Term::Elim`; the helper defs (`Or`, `boolDichotomy`,
-`allInListAppendIntro`, `assoc`, L1–L5) are ordinary `declare_def`/
+`Term::J`/`Term::Cast` and `Term::Elim`; the helper defs (`Or`, `bool_dichotomy`,
+`all_in_list_append_intro`, `assoc`, L1–L5) are ordinary `declare_def`/
 `declare_inductive` admissions, kernel-rechecked. **Grep discipline for the
 build:** no `crates/ken-kernel/` file is touched, no new `Decl`/`Term` variant,
 no `declare_primitive`/`declare_postulate`, no `Axiom`. The true soundness net

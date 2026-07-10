@@ -263,12 +263,12 @@ while drafting. Resolved items move to an ADR (`../docs/adr/`).
   multi-ctor `data … : Ω` (the `Perm` inadmissibility,
   `10-kernel/16 §1.4`+§1.1).
   **C** — a relation is `Map K (Set K)` adjacency (`Tree K (Tree K Unit)`), not
-  `Set (Pair K K)` (the landed `pairLeq` is first-component-only, non-total).
-  **D** — `delete` is **rebuild-via-`fromList`** (`delete key m := fromList
-  (dropKey key (toList m))`, `dropKey` = filter so the None-law is
-  unconditional), reusing the landed `preservesOrdered` wholesale. Enclave
+  `Set (Pair K K)` (the landed `pair_leq` is first-component-only, non-total).
+  **D** — `delete` is **rebuild-via-`from_list`** (`delete key m := from_list
+  (drop_key key (to_list m))`, `drop_key` = filter so the None-law is
+  unconditional), reusing the landed `preserves_ordered` wholesale. Enclave
   sub-rulings: set laws are **membership-extensional** (never `Equal (Set K)`);
-  the discriminator carrier is **`Nat`** with a net-new `Axiom`-free `leqNat`+4
+  the discriminator carrier is **`Nat`** with a net-new `Axiom`-free `leq_nat`+4
   laws (the `Axiom`-holed `Ord Int`/`Ord Char` would make the accept-arm
   vacuous). Kernel-untouched, outer-ring, zero `trusted_base()` delta.
 - **Deferred follow-on (CAT-4 Fork B / C-scope, 2026-07-04) —

@@ -504,7 +504,7 @@ compiler-stage lowerability gaps, not for hiding semantic omissions.
   lowerability.
 - `catalog/packages/collections/collections.ken` demonstrates recursive groups,
   inductive metadata, proof-returning declarations, and proof terms such as
-  `sortBool` and `take_drop_decomposition`.
+  `sort_bool` and `take_drop_decomposition`.
 - An accepted recursive group records its group id, member symbols, checked
   bodies/types, SCC relation, structural or size-change admission, and
   lowerability status. A rejected or stage-deferred group remains explicit and

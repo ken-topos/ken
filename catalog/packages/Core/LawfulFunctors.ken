@@ -262,28 +262,28 @@ instance Functor Option {
 }
 
 -- ========================================================================
--- Foldable -- foldr-primary folds, with foldMap coherent through Monoid.
+-- Foldable -- foldr-primary folds, with fold_map coherent through Monoid.
 -- ========================================================================
 
 fn monoid_mempty (m : Type) (mon : Monoid m) : m = mon.mempty
 
-fn foldMap_step (a : Type) (m : Type) (mon : Monoid m) (g : a → m)
+fn fold_map_step (a : Type) (m : Type) (mon : Monoid m) (g : a → m)
   (y : a) (acc : m) : m =
   (mon.op) (g y) acc
 
 class Foldable (f : Type → Type) {
   foldr             : (a : Type) → (b : Type) → (a → b → b) → b → f a → b ;
-  foldMap           : (a : Type) → (m : Type) → Monoid m → (a → m) → f a → m ;
-  toList            : (a : Type) → f a → List a ;
-  foldr_toList      : (a : Type) → (x : f a) →
+  fold_map           : (a : Type) → (m : Type) → Monoid m → (a → m) → f a → m ;
+  to_list            : (a : Type) → f a → List a ;
+  foldr_to_list      : (a : Type) → (x : f a) →
                         Equal (List a)
                           (foldr a (List a) (Cons a) (Nil a) x)
-                          (toList a x) ;
-  foldMap_coherence : (a : Type) → (m : Type) → (mon : Monoid m) →
+                          (to_list a x) ;
+  fold_map_coherence : (a : Type) → (m : Type) → (mon : Monoid m) →
                         (g : a → m) → (x : f a) →
                         Equal m
-                          (foldMap a m mon g x)
-                          (foldr a m (foldMap_step a m mon g) (monoid_mempty m mon) x)
+                          (fold_map a m mon g x)
+                          (foldr a m (fold_map_step a m mon g) (monoid_mempty m mon) x)
 }
 
 fn list_foldr (a : Type) (b : Type) (k : a → b → b) (z : b) (xs : List a) : b =
@@ -292,40 +292,40 @@ fn list_foldr (a : Type) (b : Type) (k : a → b → b) (z : b) (xs : List a) : 
     Cons h t ⇒ k h (list_foldr a b k z t)
   }
 
-fn list_foldMap (a : Type) (m : Type) (mon : Monoid m) (g : a → m)
+fn list_fold_map (a : Type) (m : Type) (mon : Monoid m) (g : a → m)
   (xs : List a) : m =
   match xs {
     Nil ⇒ mon.mempty ;
-    Cons h t ⇒ (mon.op) (g h) (list_foldMap a m mon g t)
+    Cons h t ⇒ (mon.op) (g h) (list_fold_map a m mon g t)
   }
 
-fn list_toList (a : Type) (xs : List a) : List a = xs
+fn list_to_list (a : Type) (xs : List a) : List a = xs
 
-fn list_foldr_toList (a : Type) (xs : List a)
-  : Equal (List a) (list_foldr a (List a) (Cons a) (Nil a) xs) (list_toList a xs) =
+fn list_foldr_to_list (a : Type) (xs : List a)
+  : Equal (List a) (list_foldr a (List a) (Cons a) (Nil a) xs) (list_to_list a xs) =
   match xs {
     Nil ⇒ tt ;
     Cons h t ⇒
       cong (List a) (List a)
         (list_foldr a (List a) (Cons a) (Nil a) t)
-        (list_toList a t)
+        (list_to_list a t)
         (Cons a h)
-        (list_foldr_toList a t)
+        (list_foldr_to_list a t)
   }
 
-fn list_foldMap_coherence (a : Type) (m : Type) (mon : Monoid m)
+fn list_fold_map_coherence (a : Type) (m : Type) (mon : Monoid m)
   (g : a → m) (xs : List a)
   : Equal m
-      (list_foldMap a m mon g xs)
-      (list_foldr a m (foldMap_step a m mon g) (monoid_mempty m mon) xs) =
+      (list_fold_map a m mon g xs)
+      (list_foldr a m (fold_map_step a m mon g) (monoid_mempty m mon) xs) =
   match xs {
     Nil ⇒ Refl ;
     Cons h t ⇒
       cong m m
-        (list_foldMap a m mon g t)
-        (list_foldr a m (foldMap_step a m mon g) (monoid_mempty m mon) t)
+        (list_fold_map a m mon g t)
+        (list_foldr a m (fold_map_step a m mon g) (monoid_mempty m mon) t)
         ((mon.op) (g h))
-        (list_foldMap_coherence a m mon g t)
+        (list_fold_map_coherence a m mon g t)
   }
 
 fn option_foldr (a : Type) (b : Type) (k : a → b → b) (z : b) (x : Option a) : b =
@@ -334,39 +334,39 @@ fn option_foldr (a : Type) (b : Type) (k : a → b → b) (z : b) (x : Option a)
     Some v ⇒ k v z
   }
 
-fn option_foldMap (a : Type) (m : Type) (mon : Monoid m) (g : a → m)
+fn option_fold_map (a : Type) (m : Type) (mon : Monoid m) (g : a → m)
   (x : Option a) : m =
   match x {
     None ⇒ mon.mempty ;
     Some v ⇒ (mon.op) (g v) (mon.mempty)
   }
 
-fn option_toList (a : Type) (x : Option a) : List a =
+fn option_to_list (a : Type) (x : Option a) : List a =
   option_foldr a (List a) (Cons a) (Nil a) x
 
-fn option_foldr_toList (a : Type) (x : Option a)
-  : Equal (List a) (option_foldr a (List a) (Cons a) (Nil a) x) (option_toList a x) =
+fn option_foldr_to_list (a : Type) (x : Option a)
+  : Equal (List a) (option_foldr a (List a) (Cons a) (Nil a) x) (option_to_list a x) =
   Refl
 
-fn option_foldMap_coherence (a : Type) (m : Type) (mon : Monoid m)
+fn option_fold_map_coherence (a : Type) (m : Type) (mon : Monoid m)
   (g : a → m) (x : Option a)
   : Equal m
-      (option_foldMap a m mon g x)
-      (option_foldr a m (foldMap_step a m mon g) (monoid_mempty m mon) x) =
+      (option_fold_map a m mon g x)
+      (option_foldr a m (fold_map_step a m mon g) (monoid_mempty m mon) x) =
   match x { None ⇒ Refl ; Some v ⇒ Refl }
 
 instance Foldable List {
   foldr             = list_foldr ;
-  foldMap           = list_foldMap ;
-  toList            = list_toList ;
-  foldr_toList      = list_foldr_toList ;
-  foldMap_coherence = list_foldMap_coherence
+  fold_map           = list_fold_map ;
+  to_list            = list_to_list ;
+  foldr_to_list      = list_foldr_to_list ;
+  fold_map_coherence = list_fold_map_coherence
 }
 
 instance Foldable Option {
   foldr             = option_foldr ;
-  foldMap           = option_foldMap ;
-  toList            = option_toList ;
-  foldr_toList      = option_foldr_toList ;
-  foldMap_coherence = option_foldMap_coherence
+  fold_map           = option_fold_map ;
+  to_list            = option_to_list ;
+  foldr_to_list      = option_foldr_to_list ;
+  fold_map_coherence = option_fold_map_coherence
 }

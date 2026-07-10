@@ -158,7 +158,7 @@ fn reserved_sugar_still_works_when_undeclared() {
     env.elaborate_decl("fn reflBoolId (x : Bool) : Equal Bool x x = Refl")
         .expect("Refl sugar must still elaborate");
     // A real, syntactically valid absurd use (mirroring DS-1's own
-    // `absurdEmpty`): the sugar elaborates when the goal is Ω-classified.
+    // `absurd_empty`): the sugar elaborates when the goal is Ω-classified.
     env.elaborate_decl("fn absurdFromBottom (C : Type) (h : Bottom) : C = absurd h")
         .expect("absurd sugar must still elaborate over an Ω-classified goal");
 }

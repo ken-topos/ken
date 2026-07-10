@@ -42,29 +42,29 @@ exported `instance Ord Nat`, and collects the day-to-day `Nat` operations
 
 ## 2. Definition
 
-`leqNat` and its four laws are unchanged from
+`leq_nat` and its four laws are unchanged from
 `catalog/packages/Data/Collections/Map.ken:2571–2621` — same recursion
 shape, same proof terms. `refl`/`trans`/`antisym` slot into `class Ord`'s
 fields with **zero conversion code**: `IsTrue b` is *defined* as `Equal
-Bool b True` (`Core/LawfulClasses.ken`), so `reflLeqNat`/`transLeqNat`/
-`antisymLeqNat` — already stated as `Equal Bool … True` — satisfy the
+Bool b True` (`Core/LawfulClasses.ken`), so `refl_leq_nat`/`trans_leq_nat`/
+`antisym_leq_nat` — already stated as `Equal Bool … True` — satisfy the
 `IsTrue`-phrased fields by ordinary definitional unfolding, no bridge
 needed:
 
 ```ken
-fn leqNat (m : Nat) (n : Nat) : Bool =
+fn leq_nat (m : Nat) (n : Nat) : Bool =
   match m {
     Zero ⇒ True ;
-    Suc m2 ⇒ match n { Zero ⇒ False ; Suc n2 ⇒ leqNat m2 n2 }
+    Suc m2 ⇒ match n { Zero ⇒ False ; Suc n2 ⇒ leq_nat m2 n2 }
   }
 
-fn reflLeqNat (x : Nat) : Equal Bool (leqNat x x) True =
-  match x { Zero ⇒ tt ; Suc x2 ⇒ reflLeqNat x2 }
+fn refl_leq_nat (x : Nat) : Equal Bool (leq_nat x x) True =
+  match x { Zero ⇒ tt ; Suc x2 ⇒ refl_leq_nat x2 }
 
-fn transLeqNat
+fn trans_leq_nat
   (x : Nat)
-  : (y : Nat) -> (z : Nat) -> Equal Bool (leqNat x y) True ->
-    Equal Bool (leqNat y z) True -> Equal Bool (leqNat x z) True =
+  : (y : Nat) -> (z : Nat) -> Equal Bool (leq_nat x y) True ->
+    Equal Bool (leq_nat y z) True -> Equal Bool (leq_nat x z) True =
   match x {
     Zero ⇒ λy.λz.λp.λq. tt ;
     Suc x2 ⇒
@@ -73,15 +73,15 @@ fn transLeqNat
         Suc y2 ⇒
           λz. match z {
             Zero ⇒ λp.λq. absurd q ;
-            Suc z2 ⇒ λp.λq. transLeqNat x2 y2 z2 p q
+            Suc z2 ⇒ λp.λq. trans_leq_nat x2 y2 z2 p q
           }
       }
   }
 
-fn antisymLeqNat
+fn antisym_leq_nat
   (x : Nat)
-  : (y : Nat) -> Equal Bool (leqNat x y) True ->
-    Equal Bool (leqNat y x) True -> Equal Nat x y =
+  : (y : Nat) -> Equal Bool (leq_nat x y) True ->
+    Equal Bool (leq_nat y x) True -> Equal Nat x y =
   match x {
     Zero ⇒
       λy. match y {
@@ -91,38 +91,38 @@ fn antisymLeqNat
     Suc x2 ⇒
       λy. match y {
         Zero ⇒ λp.λq. absurd p ;
-        Suc y2 ⇒ λp.λq. cong Nat Nat x2 y2 Suc (antisymLeqNat x2 y2 p q)
+        Suc y2 ⇒ λp.λq. cong Nat Nat x2 y2 Suc (antisym_leq_nat x2 y2 p q)
       }
   }
 
-fn totalLeqNat (x : Nat) (y : Nat)
-  : Or (Equal Bool (leqNat x y) True) (Equal Bool (leqNat y x) True) =
+fn total_leq_nat (x : Nat) (y : Nat)
+  : Or (Equal Bool (leq_nat x y) True) (Equal Bool (leq_nat y x) True) =
   match x {
     Zero ⇒
-      Inl (Equal Bool (leqNat Zero y) True)
-          (Equal Bool (leqNat y Zero) True) tt ;
+      Inl (Equal Bool (leq_nat Zero y) True)
+          (Equal Bool (leq_nat y Zero) True) tt ;
     Suc x2 ⇒
       match y {
         Zero ⇒
-          Inr (Equal Bool (leqNat (Suc x2) Zero) True)
-              (Equal Bool (leqNat Zero (Suc x2)) True) tt ;
+          Inr (Equal Bool (leq_nat (Suc x2) Zero) True)
+              (Equal Bool (leq_nat Zero (Suc x2)) True) tt ;
         Suc y2 ⇒
-          match totalLeqNat x2 y2 {
+          match total_leq_nat x2 y2 {
             Inl h ⇒
-              Inl (Equal Bool (leqNat (Suc x2) (Suc y2)) True)
-                  (Equal Bool (leqNat (Suc y2) (Suc x2)) True) h ;
+              Inl (Equal Bool (leq_nat (Suc x2) (Suc y2)) True)
+                  (Equal Bool (leq_nat (Suc y2) (Suc x2)) True) h ;
             Inr h ⇒
-              Inr (Equal Bool (leqNat (Suc x2) (Suc y2)) True)
-                  (Equal Bool (leqNat (Suc y2) (Suc x2)) True) h
+              Inr (Equal Bool (leq_nat (Suc x2) (Suc y2)) True)
+                  (Equal Bool (leq_nat (Suc y2) (Suc x2)) True) h
           }
       }
   }
 ```
 
 `total`'s field, `IsTrue (bool_or (leq x y) (leq y x))`, is genuinely a
-different shape from `totalLeqNat`'s `Or`-of-equalities — `bool_or`
+different shape from `total_leq_nat`'s `Or`-of-equalities — `bool_or`
 (`Core/LawfulClasses.ken`) short-circuits on its first argument, so
-`orEqTrueToIsTrueBoolOr` case-splits on `p` once to compute `bool_or`'s
+`or_eq_true_to_is_true_bool_or` case-splits on `p` once to compute `bool_or`'s
 reduction, then discharges each side directly (the `Inl` branch needs
 `cong`/`trans` to carry the equality through `bool_or`'s first-argument
 position; the `Inr` branch's own case-split on `p` makes both `bool_or
@@ -130,7 +130,7 @@ True q` and `bool_or False q` reduce to a literal, so `tt`/the hypothesis
 itself close it):
 
 ```ken
-fn orEqTrueToIsTrueBoolOr
+fn or_eq_true_to_is_true_bool_or
   (p : Bool) (q : Bool)
   (h : Or (Equal Bool p True) (Equal Bool q True))
   : IsTrue (bool_or p q) =
@@ -142,17 +142,17 @@ fn orEqTrueToIsTrueBoolOr
   }
 
 instance Ord Nat {
-  leq     = leqNat ;
-  refl    = reflLeqNat ;
-  antisym = antisymLeqNat ;
-  trans   = transLeqNat ;
-  total   = λx.λy. orEqTrueToIsTrueBoolOr (leqNat x y) (leqNat y x) (totalLeqNat x y)
+  leq     = leq_nat ;
+  refl    = refl_leq_nat ;
+  antisym = antisym_leq_nat ;
+  trans   = trans_leq_nat ;
+  total   = λx.λy. or_eq_true_to_is_true_bool_or (leq_nat x y) (leq_nat y x) (total_leq_nat x y)
 }
 ```
 
-`min`/`max` follow `leqNat`'s own recursion directly; `sub` is the
+`min`/`max` follow `leq_nat`'s own recursion directly; `sub` is the
 existing saturating `Nat` monus (`Data/Collections/Collections.ken`,
-unchanged); `compare` is new, built from `leqNat`, and returns the
+unchanged); `compare` is new, built from `leq_nat`, and returns the
 existing three-way `OrdResult` (`Data/Collections/Collections.ken`,
 inlined here — self-containment, avoiding a dependency on the whole
 unrelated `Collections.ken` file for one three-constructor `data`):
@@ -179,8 +179,8 @@ fn sub (a : Nat) (b : Nat) : Nat =
   }
 
 fn compare (a : Nat) (b : Nat) : OrdResult =
-  match leqNat a b {
-    True ⇒ match leqNat b a { True ⇒ Eq ; False ⇒ Lt } ;
+  match leq_nat a b {
+    True ⇒ match leq_nat b a { True ⇒ Eq ; False ⇒ Lt } ;
     False ⇒ Gt
   }
 ```
@@ -188,13 +188,13 @@ fn compare (a : Nat) (b : Nat) : OrdResult =
 ## 3. Using it
 
 ```ken example
-const twoLeqThree : IsTrue (leqNat (Suc (Suc Zero)) (Suc (Suc (Suc Zero)))) = tt
+const two_leq_three : IsTrue (leq_nat (Suc (Suc Zero)) (Suc (Suc (Suc Zero)))) = tt
 
-const minOfTwoAndThree : Nat = min (Suc (Suc Zero)) (Suc (Suc (Suc Zero)))
-const maxOfTwoAndThree : Nat = max (Suc (Suc Zero)) (Suc (Suc (Suc Zero)))
+const min_of_two_and_three : Nat = min (Suc (Suc Zero)) (Suc (Suc (Suc Zero)))
+const max_of_two_and_three : Nat = max (Suc (Suc Zero)) (Suc (Suc (Suc Zero)))
 
-const compareTwoThree : OrdResult = compare (Suc (Suc Zero)) (Suc (Suc (Suc Zero)))
-const compareThreeThree : OrdResult =
+const compare_two_three : OrdResult = compare (Suc (Suc Zero)) (Suc (Suc (Suc Zero)))
+const compare_three_three : OrdResult =
   compare (Suc (Suc (Suc Zero))) (Suc (Suc (Suc Zero)))
 ```
 
@@ -202,11 +202,11 @@ const compareThreeThree : OrdResult =
 `instance Ord Nat { ... }`; `.leq`/`.total` project its fields directly in
 VALUE position (dot-projection inside a TYPE annotation is a separate,
 currently-unparseable surface gap, `§6` Finding — the type below spells
-`leqNat` directly instead, the same operation `.leq` is bound to):
+`leq_nat` directly instead, the same operation `.leq` is bound to):
 
 ```ken example
-const ordNatLeq : Bool = (Ord_instance_Nat).leq (Suc Zero) (Suc (Suc Zero))
-const ordNatTotal : IsTrue (bool_or (leqNat (Suc Zero) Zero) (leqNat Zero (Suc Zero))) =
+const ord_nat_leq : Bool = (Ord_instance_Nat).leq (Suc Zero) (Suc (Suc Zero))
+const ord_nat_total : IsTrue (bool_or (leq_nat (Suc Zero) Zero) (leq_nat Zero (Suc Zero))) =
   (Ord_instance_Nat).total (Suc Zero) Zero
 ```
 
@@ -216,24 +216,24 @@ const ordNatTotal : IsTrue (bool_or (leqNat (Suc Zero) Zero) (leqNat Zero (Suc Z
 relies on:
 
 ```ken example
-lemma minZeroLeft (n : Nat) : Equal Nat (min Zero n) Zero = tt
+lemma min_zero_left (n : Nat) : Equal Nat (min Zero n) Zero = tt
 
-lemma maxZeroLeft (n : Nat) : Equal Nat (max Zero n) n = Refl
+lemma max_zero_left (n : Nat) : Equal Nat (max Zero n) n = Refl
 
-lemma subZeroRight (a : Nat) : Equal Nat (sub a Zero) a = Refl
+lemma sub_zero_right (a : Nat) : Equal Nat (sub a Zero) a = Refl
 ```
 
-`minZeroLeft` closes with `tt`: `min Zero n` reduces to the literal `Zero`
+`min_zero_left` closes with `tt`: `min Zero n` reduces to the literal `Zero`
 regardless of `n` (both sides collapse to the same nullary constructor,
-`§1` of `catalog/guide/proof-techniques.ken.md`). `maxZeroLeft` and
-`subZeroRight` close with `Refl`: `max Zero n`'s recursive definition and
+`§1` of `catalog/guide/proof-techniques.ken.md`). `max_zero_left` and
+`sub_zero_right` close with `Refl`: `max Zero n`'s recursive definition and
 `sub`'s own `b = Zero` branch make `n`/`a` (an abstract, stuck variable)
 appear literally unchanged on the reduced side without any further
 constructor-level reduction — the goal stays `Eq`-shaped, not collapsed to
 `Top`.
 
 The companion fact `sub n n = Zero` (self-subtraction) is also true, but —
-unlike `subZeroRight` — needs induction on `n` (`sub`'s own structural
+unlike `sub_zero_right` — needs induction on `n` (`sub`'s own structural
 recursion doesn't reduce for an ABSTRACT `n` matched against itself), so
 `Refl` alone cannot close it; this entry deliberately doesn't prove that
 separately-inductive law, to keep scope small, and names the gap here
@@ -247,30 +247,30 @@ lemma subSelfIsZeroWrong (n : Nat) : Equal Nat (sub n n) Zero = Refl
 
 **Why `refl`/`trans`/`antisym` needed no conversion, but `total` did.**
 `class Ord`'s three "pointwise" fields are phrased directly over `IsTrue`,
-which unfolds to exactly the shape `leqNat`'s own proofs already carry
+which unfolds to exactly the shape `leq_nat`'s own proofs already carry
 (`Equal Bool … True`) — a byproduct of `IsTrue`'s own definition, not
 anything specific to `Nat`. `total`, by contrast, asks for a single
 `Bool`-valued disjunction (`bool_or`) rather than a disjoint sum
-(`totalLeqNat`'s `Or`) — a genuinely different STATEMENT shape (which side
+(`total_leq_nat`'s `Or`) — a genuinely different STATEMENT shape (which side
 holds is erased into one Bool, not carried as a tag), so a real conversion
 lemma is unavoidable there regardless of carrier. `Ord Bool`'s own `total`
 sidesteps this because `Bool`'s order is provable by direct case-split
 down to concrete constructors without ever building an intermediate `Or` —
 it isn't a template for the `Or`-to-`bool_or` bridge specifically, only
 for the overall proof STYLE (case-split to `tt`/`absurd`), which
-`orEqTrueToIsTrueBoolOr` also follows.
+`or_eq_true_to_is_true_bool_or` also follows.
 
 **Kept `Map.ken`'s private copy in place.** After this export, `Map.ken`'s
 capstone proofs could in principle consume `Ord_instance_Nat.leq` instead
-of their own private `leqNat`, eliminating the duplication. This entry
+of their own private `leq_nat`, eliminating the duplication. This entry
 does not attempt that: `Map.ken`'s five capstone laws are load-bearing,
 previously-gate-cleared proofs (`map-verified-laws`), and re-pointing them
-at a differently-sourced (if propositionally identical) `leqNat` risks
+at a differently-sourced (if propositionally identical) `leq_nat` risks
 touching definitional-equality-sensitive proof steps for a purely
 cosmetic win. Filed as a follow-up (`§6`), not attempted here, per the
 frame's explicit "de-dup only if safe" guardrail.
 
-**`Collections.ken`'s `min`/`natSub` also stay in place**, for the
+**`Collections.ken`'s `min`/`nat_sub` also stay in place**, for the
 identical reason — `length_take_min`/`slice` reference them by name
 in their own already-landed proofs, and this entry's `min`/`sub` are
 propositionally (not referentially) the same operations. Also a named
@@ -281,8 +281,8 @@ follow-up, not a risk taken here.
 - **Kernel-reduction defect:** none.
 - **Abstraction candidate → Ergo/catalog follow-up:** two safe-looking
   de-duplications are deferred rather than attempted in this WP —
-  `Map.ken`'s private `leqNat`/order family could consume this entry's
-  `Ord_instance_Nat`, and `Collections.ken`'s `min`/`natSub` could import
+  `Map.ken`'s private `leq_nat`/order family could consume this entry's
+  `Ord_instance_Nat`, and `Collections.ken`'s `min`/`nat_sub` could import
   this entry's copies — both behavior-preserving in principle, but each
   touches a file with its own already-landed, gate-cleared proofs
   (`Map.ken`'s capstone laws; `Collections.ken`'s `length_take_min`/
@@ -292,7 +292,7 @@ follow-up, not a risk taken here.
   parses in VALUE position (`§2`/`§3` use it freely) but NOT inside a TYPE
   annotation — `IsTrue (bool_or ((Ord_instance_Nat).leq x y) …)` as a
   written TYPE fails with `expected RParen, found Dot`. Confirmed
-  empirically (`§3`'s worked example was rewritten to spell `leqNat`
+  empirically (`§3`'s worked example was rewritten to spell `leq_nat`
   directly in the type position instead, the same operation `.leq` is
   bound to). Real but low-severity — the value-position path always has a
   workaround (name the underlying operation directly); worth fixing so a
@@ -314,8 +314,8 @@ follow-up, not a risk taken here.
 1. **Spec / WP.** `docs/program/wp/ds-2-ord-nat-export.md` (this entry's
    build WP); the order laws' contract is `class Ord`
    (`Core/LawfulClasses.ken`, `spec/50-stdlib/51-lawful-classes.md`).
-2. **Public API.** `leqNat`, `reflLeqNat`, `transLeqNat`, `antisymLeqNat`,
-   `totalLeqNat`, `orEqTrueToIsTrueBoolOr`, `Ord_instance_Nat` (via
+2. **Public API.** `leq_nat`, `refl_leq_nat`, `trans_leq_nat`, `antisym_leq_nat`,
+   `total_leq_nat`, `or_eq_true_to_is_true_bool_or`, `Ord_instance_Nat` (via
    `instance Ord Nat`), `min`, `max`, `sub`, `compare`.
 3. **Source map.**
 
@@ -326,9 +326,9 @@ follow-up, not a risk taken here.
    | Check the computation facts | [Laws  proofs](#4-laws--proofs) |
    | Why `total` needed a bridge, `refl`/`trans`/`antisym` didn't | [Design notes](#5-design-notes) |
 
-4. **Derivation path.** `leqNat`/`reflLeqNat`/`transLeqNat`/`antisymLeqNat`/
-   `totalLeqNat` — the SAME proof terms already kernel-checked in
-   `Map.ken:2571–2621` (copied, not re-derived). `orEqTrueToIsTrueBoolOr` —
+4. **Derivation path.** `leq_nat`/`refl_leq_nat`/`trans_leq_nat`/`antisym_leq_nat`/
+   `total_leq_nat` — the SAME proof terms already kernel-checked in
+   `Map.ken:2571–2621` (copied, not re-derived). `or_eq_true_to_is_true_bool_or` —
    this entry's own new proof, built from the landed `cong`/`trans`
    (`Core/Transport.ken`). `instance Ord Nat` — an ordinary `class`
    instance declaration (`elab_instance_decl`), the same mechanism
@@ -345,8 +345,8 @@ follow-up, not a risk taken here.
    environment).
 6. **Proof families.** `refl`/`trans`/`antisym` — direct reuse (zero new
    proof steps). `total` — one new case-split proof
-   (`orEqTrueToIsTrueBoolOr`), two branches, no induction beyond what
-   `totalLeqNat` already supplies.
+   (`or_eq_true_to_is_true_bool_or`), two branches, no induction beyond what
+   `total_leq_nat` already supplies.
 7. **Consumers.** None yet in this catalog; the two named follow-ups
    (`§5`, `§6`) are the natural next consumers (`Map.ken`,
    `Collections.ken`).

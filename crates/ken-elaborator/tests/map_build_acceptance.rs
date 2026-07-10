@@ -1,14 +1,14 @@
 //! `Map-build` acceptance tests (`docs/program/wp/Map-build.md`,
 //! `spec/50-stdlib/52-map.md`, `conformance/stdlib/map/seed-map.md`).
 //!
-//! **Partial-scope candidate.** `insert`/`lookup`/`member`/`fromList` and the
+//! **Partial-scope candidate.** `insert`/`lookup`/`member`/`from_list` and the
 //! `52 §5` proof obligations need a key comparator threaded generically over
 //! an abstract `Ord k` dictionary — no landed mechanism exists for that yet
 //! (confirmed empirically against `elab.rs`'s `instance_search`, escalated to
 //! Architect, `evt_1wd56hecqhm06`/`evt_64j01esqw86pf`/`evt_1wsk6dracp10r` in
 //! the Map-build thread). This file covers only what
 //! `catalog/packages/Data/Collections/Map.ken` ships today: the `Tree k v`
-//! carrier, `empty`, `toList`, `fold`,
+//! carrier, `empty`, `to_list`, `fold`,
 //! and the `Pair`/`mkPair`/`pairFst`/`pairSnd` Σ-pair plumbing
 //! (`ken-elaborator/src/prelude.rs`) those two ops route through. Extended
 //! once the generic-dictionary gap resolves.
@@ -161,11 +161,11 @@ fn bool_value(env: &ElabEnv, v: &EvalVal) -> bool {
 
 /// A hand-built 3-node `Tree Nat Nat`, deliberately inserted (constructed) in
 /// NON-ascending key order — `2`, then `1` under it, then `3` under it — so
-/// `toList`'s ascending-order claim is actually exercised (an
+/// `to_list`'s ascending-order claim is actually exercised (an
 /// insertion/construction-order-preserving bug would fail this even though
 /// it might pass a pre-sorted tree). `insert` isn't landed yet, so this is a
 /// hand-built `Node` tree, not a real `insert` sequence — honestly the
-/// non-`insert` half of AC2 (`toList`/`fold`'s own correctness), not a
+/// non-`insert` half of AC2 (`to_list`/`fold`'s own correctness), not a
 /// stand-in for the deferred `insert`-driven round-trip.
 fn tree_2_1_3() -> String {
     "Node Nat Nat \
@@ -188,7 +188,7 @@ fn tree_carrier_and_ops_are_not_primitive() {
         matches!(env.env.lookup(tree_id), Some(Decl::Inductive { .. })),
         "Tree k v must be Decl::Inductive"
     );
-    for name in ["empty", "toList", "fold", "Pair", "mkPair", "pairFst", "pairSnd"] {
+    for name in ["empty", "to_list", "fold", "Pair", "mkPair", "pairFst", "pairSnd"] {
         let id = env.globals[name];
         assert!(
             matches!(env.env.lookup(id), Some(Decl::Transparent { .. })),
@@ -198,14 +198,14 @@ fn tree_carrier_and_ops_are_not_primitive() {
     // Zero-NEW-delta: none of these mint a fresh trusted_base entry.
     let delta_empty = trusted_base_delta(&env.env, env.globals["empty"]);
     assert!(delta_empty.is_empty(), "empty must add zero trusted_base delta, got {delta_empty:?}");
-    let delta_tolist = trusted_base_delta(&env.env, env.globals["toList"]);
-    assert!(delta_tolist.is_empty(), "toList must add zero trusted_base delta, got {delta_tolist:?}");
+    let delta_tolist = trusted_base_delta(&env.env, env.globals["to_list"]);
+    assert!(delta_tolist.is_empty(), "to_list must add zero trusted_base delta, got {delta_tolist:?}");
     let delta_fold = trusted_base_delta(&env.env, env.globals["fold"]);
     assert!(delta_fold.is_empty(), "fold must add zero trusted_base delta, got {delta_fold:?}");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// AC2 (partial) — toList / fold correct end-to-end through the real interpreter
+// AC2 (partial) — to_list / fold correct end-to-end through the real interpreter
 // ─────────────────────────────────────────────────────────────────────────────
 
 #[test]
@@ -213,8 +213,8 @@ fn tolist_of_empty_is_nil() {
     let mut env = mk_env();
     let mut store = make_store(&env);
     let nil_id = env.globals["Nil"];
-    let v = eval_view(&mut env, &mut store, "t_empty_tolist", "List (Pair Nat Nat)", "toList Nat Nat (empty Nat Nat)");
-    assert!(matches!(v, EvalVal::Ctor { id, .. } if id == nil_id), "toList of empty must be Nil, got {v:?}");
+    let v = eval_view(&mut env, &mut store, "t_empty_tolist", "List (Pair Nat Nat)", "to_list Nat Nat (empty Nat Nat)");
+    assert!(matches!(v, EvalVal::Ctor { id, .. } if id == nil_id), "to_list of empty must be Nil, got {v:?}");
 }
 
 #[test]
@@ -227,13 +227,13 @@ fn tolist_ascending_by_key_on_hand_built_tree() {
             &mut store,
             "t_tolist",
             "List (Pair Nat Nat)",
-            &format!("toList Nat Nat ({})", tree_2_1_3()),
+            &format!("to_list Nat Nat ({})", tree_2_1_3()),
         );
         let out = list_pair_nat_nat(&env, &v);
         // The flip: a bug emitting construction/insertion order instead of
         // in-order-by-key traversal would yield [(2,2),(1,1),(3,3)] — this
         // asserts the ASCENDING list, not just the element set.
-        assert_eq!(out, vec![(1, 1), (2, 2), (3, 3)], "toList must be ascending by key, got {out:?}");
+        assert_eq!(out, vec![(1, 1), (2, 2), (3, 3)], "to_list must be ascending by key, got {out:?}");
     });
 }
 
@@ -243,7 +243,7 @@ fn fold_agrees_with_left_fold_over_tolist() {
         let mut env = mk_env();
         let mut store = make_store(&env);
         // Order-sensitive `f`: append the key onto an accumulator list, so a
-        // fold visiting a different order than toList's ascending order
+        // fold visiting a different order than to_list's ascending order
         // yields a different (non-commutative) result list.
         let fold_src = format!(
             "fold Nat Nat (List Nat) (\\k.\\v.\\acc. list_append Nat acc (Cons Nat k (Nil Nat))) (Nil Nat) ({})",
@@ -264,18 +264,18 @@ fn fold_agrees_with_left_fold_over_tolist() {
                 other => panic!("not a well-formed List chain: {other:?}"),
             }
         }
-        assert_eq!(out, vec![1, 2, 3], "fold must visit ascending key order, matching toList; got {out:?}");
+        assert_eq!(out, vec![1, 2, 3], "fold must visit ascending key order, matching to_list; got {out:?}");
     });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// AC1/AC5 (partial) — insert/lookup/member/fromList admitted, non-primitive
+// AC1/AC5 (partial) — insert/lookup/member/from_list admitted, non-primitive
 // ─────────────────────────────────────────────────────────────────────────────
 
 #[test]
 fn map_ops_full_api_not_primitive() {
     let env = mk_env();
-    for name in ["insert", "lookup", "member", "fromList", "fromListAcc", "setInsert", "setMember", "setToList", "Ordered", "allKeys", "lookupEmptyIsNone"] {
+    for name in ["insert", "lookup", "member", "from_list", "from_list_acc", "set_insert", "set_member", "set_to_list", "Ordered", "all_keys", "lookup_empty_is_none"] {
         let id = env.globals[name];
         assert!(
             matches!(env.env.lookup(id), Some(Decl::Transparent { .. })),
@@ -287,9 +287,9 @@ fn map_ops_full_api_not_primitive() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// AC2 — insert/lookup/member/fromList correct end-to-end (Char keys, `leqChar`
+// AC2 — insert/lookup/member/from_list correct end-to-end (Char keys, `leqChar`
 // computes — `52 §5.4` — never hand-fed: constructed via real `insert`, read
-// via real `lookup`/`toList`)
+// via real `lookup`/`to_list`)
 // ─────────────────────────────────────────────────────────────────────────────
 
 fn char_lit(c: char) -> String {
@@ -355,7 +355,7 @@ fn overwrite_last_writer_wins() {
         other => panic!("overwrite lookup must be Some '2'; got {other:?}"),
     }
     let tolist_expr = format!(
-        "toList Char Char (insert Char Char leqChar ({k}) ({v2}) (insert Char Char leqChar ({k}) ({v1}) (empty Char Char)))",
+        "to_list Char Char (insert Char Char leqChar ({k}) ({v2}) (insert Char Char leqChar ({k}) ({v1}) (empty Char Char)))",
         k = char_lit('k'),
         v1 = char_lit('1'),
         v2 = char_lit('2')
@@ -372,7 +372,7 @@ fn tolist_ascending_via_real_insert() {
     let mut env = mk_env();
     let mut store = make_store(&env);
     let expr = format!(
-        "toList Char Char (insert Char Char leqChar ({a}) ({a}) (insert Char Char leqChar ({c}) ({c}) (insert Char Char leqChar ({b}) ({b}) (empty Char Char))))",
+        "to_list Char Char (insert Char Char leqChar ({a}) ({a}) (insert Char Char leqChar ({c}) ({c}) (insert Char Char leqChar ({b}) ({b}) (empty Char Char))))",
         a = char_lit('a'),
         b = char_lit('b'),
         c = char_lit('c')
@@ -382,7 +382,7 @@ fn tolist_ascending_via_real_insert() {
     assert_eq!(
         out,
         vec![('a' as i64, 'a' as i64), ('b' as i64, 'b' as i64), ('c' as i64, 'c' as i64)],
-        "toList over a real b,c,a-order insert sequence must be ascending by key, got {out:?}"
+        "to_list over a real b,c,a-order insert sequence must be ascending by key, got {out:?}"
     );
 }
 
@@ -390,7 +390,7 @@ fn tolist_ascending_via_real_insert() {
 fn fromlist_last_writer_and_ordered() {
     let mut env = mk_env();
     let mut store = make_store(&env);
-    // [(2,'b'),(1,'a'),(2,'c')] -> toList must be [(1,'a'),(2,'c')]: ascending
+    // [(2,'b'),(1,'a'),(2,'c')] -> to_list must be [(1,'a'),(2,'c')]: ascending
     // AND the LAST list entry ('c') wins on the duplicate key 2.
     let list_expr = format!(
         "Cons (Pair Char Char) (mkPair Char Char ({two}) ({b})) \
@@ -402,13 +402,13 @@ fn fromlist_last_writer_and_ordered() {
         b = char_lit('b'),
         c = char_lit('c')
     );
-    let expr = format!("toList Char Char (fromList Char Char leqChar ({list_expr}))");
+    let expr = format!("to_list Char Char (from_list Char Char leqChar ({list_expr}))");
     let v = eval_view(&mut env, &mut store, "t_fromlist", "List (Pair Char Char)", &expr);
     let out = list_pair_char_char(&env, &v);
     assert_eq!(
         out,
         vec![('1' as i64, 'a' as i64), ('2' as i64, 'c' as i64)],
-        "fromList must be ascending AND last-writer-wins ('c' beats 'b' on key '2'), got {out:?}"
+        "from_list must be ascending AND last-writer-wins ('c' beats 'b' on key '2'), got {out:?}"
     );
 }
 
@@ -419,7 +419,7 @@ fn set_is_map_unit() {
     let true_id = env.globals["True"];
     let false_id = env.globals["False"];
     let expr = format!(
-        "setMember Char leqChar ({a}) (setInsert Char leqChar ({a}) (setInsert Char leqChar ({b}) (Leaf Char Unit)))",
+        "set_member Char leqChar ({a}) (set_insert Char leqChar ({a}) (set_insert Char leqChar ({b}) (Leaf Char Unit)))",
         a = char_lit('a'),
         b = char_lit('b')
     );
@@ -427,7 +427,7 @@ fn set_is_map_unit() {
     assert!(matches!(v, EvalVal::Ctor { id, .. } if id == true_id), "member of an inserted element must be True, got {v:?}");
 
     let expr_absent = format!(
-        "setMember Char leqChar ({z}) (setInsert Char leqChar ({a}) (Leaf Char Unit))",
+        "set_member Char leqChar ({z}) (set_insert Char leqChar ({a}) (Leaf Char Unit))",
         z = char_lit('z'),
         a = char_lit('a')
     );
@@ -435,7 +435,7 @@ fn set_is_map_unit() {
     assert!(matches!(v, EvalVal::Ctor { id, .. } if id == false_id), "member of an absent element must be False, got {v:?}");
 
     let tolist_expr = format!(
-        "setToList Char (setInsert Char leqChar ({a}) (setInsert Char leqChar ({c}) (setInsert Char leqChar ({b}) (Leaf Char Unit))))",
+        "set_to_list Char (set_insert Char leqChar ({a}) (set_insert Char leqChar ({c}) (set_insert Char leqChar ({b}) (Leaf Char Unit))))",
         a = char_lit('a'),
         b = char_lit('b'),
         c = char_lit('c')
@@ -451,14 +451,14 @@ fn set_is_map_unit() {
             EvalVal::Ctor { id, args, .. } if *id == cons_id => {
                 match &args[1] {
                     EvalVal::Int(n) => out.push(*n),
-                    other => panic!("setToList head must be Char-as-Int, got {other:?}"),
+                    other => panic!("set_to_list head must be Char-as-Int, got {other:?}"),
                 }
                 cur = args[2].clone();
             }
             other => panic!("not a well-formed List chain: {other:?}"),
         }
     }
-    assert_eq!(out, vec!['a' as i64, 'b' as i64, 'c' as i64], "setToList must be ascending, got {out:?}");
+    assert_eq!(out, vec!['a' as i64, 'b' as i64, 'c' as i64], "set_to_list must be ascending, got {out:?}");
 }
 
 #[test]
@@ -488,7 +488,7 @@ fn letter_frequency_shape() {
         a = char_lit('a'),
         n = char_lit('n')
     );
-    let expr = format!("toList Char Nat (countChars leqChar ({banana}) (empty Char Nat))");
+    let expr = format!("to_list Char Nat (countChars leqChar ({banana}) (empty Char Nat))");
     let v = eval_view(&mut env, &mut store, "t_letter_freq", "List (Pair Char Nat)", &expr);
     let nil_id = env.globals["Nil"];
     let cons_id = env.globals["Cons"];
@@ -552,22 +552,22 @@ fn list_pair_char_char(env: &ElabEnv, v: &EvalVal) -> Vec<(i64, i64)> {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // AC3 (partial) — the ordered-invariant law's own base case (trivial),
-// Ordered/allKeys admitted as declare_def (never a postulate)
+// Ordered/all_keys admitted as declare_def (never a postulate)
 // ─────────────────────────────────────────────────────────────────────────────
 
 #[test]
 fn lookup_empty_law_is_a_real_reducing_proof() {
     let mut env = mk_env();
-    // The stated law itself (`lookupEmptyIsNone`) must be admitted as a
+    // The stated law itself (`lookup_empty_is_none`) must be admitted as a
     // real Decl::Transparent proof term (never Decl::Opaque/Axiom).
-    let id = env.globals["lookupEmptyIsNone"];
+    let id = env.globals["lookup_empty_is_none"];
     assert!(
         matches!(env.env.lookup(id), Some(Decl::Transparent { .. })),
-        "lookupEmptyIsNone must be a real proof term, not a postulate"
+        "lookup_empty_is_none must be a real proof term, not a postulate"
     );
     // `Ordered` on an empty map is provable by `tt` — the invariant reduces
     // to a trivially-true Prop (Equal Bool True True) at Leaf, closable the
-    // same way `lookupEmptyIsNone` closes (K5 same-nullary-ctor collapse).
+    // same way `lookup_empty_is_none` closes (K5 same-nullary-ctor collapse).
     // This is a kernel CHECK (is the type inhabited), not an `eval` — the
     // Prop itself is a type, not a runtime data value.
     env.elaborate_decl(
@@ -578,14 +578,14 @@ fn lookup_empty_law_is_a_real_reducing_proof() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Law 4 (`54 §3`, "toList ordered") — `toListOrdered`
+// Law 4 (`54 §3`, "to_list ordered") — `to_list_ordered`
 // ─────────────────────────────────────────────────────────────────────────────
 
 #[test]
 fn tolistordered_law4_is_a_real_general_proof_term() {
     let env = mk_env();
-    // `toListOrdered : (k v : Type) -> (leq : k -> k -> Bool) -> (m : Tree k v)
-    //   -> Ordered k v leq m -> isSorted (Pair k v) (pairLeq k v leq) (toList k v m)`
+    // `to_list_ordered : (k v : Type) -> (leq : k -> k -> Bool) -> (m : Tree k v)
+    //   -> Ordered k v leq m -> isSorted (Pair k v) (pair_leq k v leq) (to_list k v m)`
     // must be admitted as a real Decl::Transparent proof term (never a
     // postulate/axiom) — this IS the whole-body `declare_def` kernel recheck
     // that used to OOM (~12 GB) before `wp/obs-eq-termination` (`9cf468a`)
@@ -593,11 +593,11 @@ fn tolistordered_law4_is_a_real_general_proof_term() {
     // elaborating `map.ken` at all is itself the completion proof, this just
     // pins the trust-level assertion on the specific declaration.
     for name in [
-        "toListOrdered",
-        "isSortedAppend",
-        "consSortedHead",
-        "allKeysToAllInList",
-        "allInListAppendIntro",
+        "to_list_ordered",
+        "is_sorted_append",
+        "cons_sorted_head",
+        "all_keys_to_all_in_list",
+        "all_in_list_append_intro",
     ] {
         let id = env.globals[name];
         assert!(
@@ -608,29 +608,29 @@ fn tolistordered_law4_is_a_real_general_proof_term() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Law 1 (`54 §5.1`, Map capstone unit 2) — `preservesOrdered`
+// Law 1 (`54 §5.1`, Map capstone unit 2) — `preserves_ordered`
 // ─────────────────────────────────────────────────────────────────────────────
 
 #[test]
 fn preservesordered_law1_is_a_real_general_proof_term() {
     let env = mk_env();
-    // `preservesOrdered : ... -> Ordered m -> Ordered (insert key val m)`
+    // `preserves_ordered : ... -> Ordered m -> Ordered (insert key val m)`
     // must be a real Decl::Transparent proof term (never a postulate) —
     // the whole-body `declare_def` kernel recheck for the top-level
     // induction plus every supporting transport bridge / comparison-
     // independent lemma / totality-derived reflection it composes.
     for name in [
-        "preservesOrdered",
-        "insertCaseTransportDispatch",
-        "dispatchOnQ1",
-        "dispatchOnQ2",
-        "insertCaseTransportOverwrite",
-        "insertCaseTransportIntoL",
-        "insertCaseTransportIntoR",
-        "insertPreservesAllKeys",
-        "allKeysTransBelow",
-        "allKeysTransAbove",
-        "deriveFromFalse",
+        "preserves_ordered",
+        "insert_case_transport_dispatch",
+        "dispatch_on_q1",
+        "dispatch_on_q2",
+        "insert_case_transport_overwrite",
+        "insert_case_transport_into_l",
+        "insert_case_transport_into_r",
+        "insert_preserves_all_keys",
+        "all_keys_trans_below",
+        "all_keys_trans_above",
+        "derive_from_false",
     ] {
         let id = env.globals[name];
         assert!(
@@ -641,24 +641,24 @@ fn preservesordered_law1_is_a_real_general_proof_term() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Law 2 (`54 §5.2`, Map capstone unit 2) — `lookupFoundAfterInsert`
+// Law 2 (`54 §5.2`, Map capstone unit 2) — `lookup_found_after_insert`
 // ─────────────────────────────────────────────────────────────────────────────
 
 #[test]
 fn lookupfoundafterinsert_law2_is_a_real_general_proof_term() {
     let env = mk_env();
-    // `lookupFoundAfterInsert : ... -> lookup key (insert key val m) =
+    // `lookup_found_after_insert : ... -> lookup key (insert key val m) =
     // Some val` must be a real Decl::Transparent proof term (never a
     // postulate) — reuses Law 1's goal-generic transport bridges directly
     // (asserted there), plus its own lookup-side step mirrors/bridges.
     for name in [
-        "lookupFoundAfterInsert",
-        "lookupFoundDispatch",
-        "lookupFoundDispatchQ1",
-        "lookupFoundDispatchQ2",
-        "lookupOverwriteResult",
-        "lookupIntoLBridge",
-        "lookupIntoRBridge",
+        "lookup_found_after_insert",
+        "lookup_found_dispatch",
+        "lookup_found_dispatch_q1",
+        "lookup_found_dispatch_q2",
+        "lookup_overwrite_result",
+        "lookup_into_l_bridge",
+        "lookup_into_r_bridge",
     ] {
         let id = env.globals[name];
         assert!(
@@ -669,27 +669,27 @@ fn lookupfoundafterinsert_law2_is_a_real_general_proof_term() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Law 3 (`54 §5.2`, Map capstone unit 2) — `lookupLocality`
+// Law 3 (`54 §5.2`, Map capstone unit 2) — `lookup_locality`
 // ─────────────────────────────────────────────────────────────────────────────
 
 #[test]
 fn lookuplocality_law3_is_a_real_general_proof_term() {
     let env = mk_env();
-    // `lookupLocality : distinct key key' -> lookup key' (insert key val m)
+    // `lookup_locality : distinct key key' -> lookup key' (insert key val m)
     // = lookup key' m` must be a real Decl::Transparent proof term — reuses
     // Law 1's goal-generic transport bridges directly (asserted there) and
-    // Law 2's lookupIntoLBridge/IntoRBridge, plus its own agreement lemmas.
+    // Law 2's lookup_into_l_bridge/IntoRBridge, plus its own agreement lemmas.
     for name in [
-        "lookupLocality",
-        "lookupLocalityNodeDispatch",
-        "lookupLocalityQ2Dispatch",
-        "lookupLeafLocalityWitness",
-        "lookupOverwriteLocalityWitness",
-        "lookupIntoLLocalityWitness",
-        "lookupIntoRLocalityWitness",
-        "boolValueEqFromBiimpl",
-        "lookupOverwriteAgreesOuter",
-        "lookupOverwriteAgreesInner",
+        "lookup_locality",
+        "lookup_locality_node_dispatch",
+        "lookup_locality_q2_dispatch",
+        "lookup_leaf_locality_witness",
+        "lookup_overwrite_locality_witness",
+        "lookup_into_l_locality_witness",
+        "lookup_into_r_locality_witness",
+        "bool_value_eq_from_biimpl",
+        "lookup_overwrite_agrees_outer",
+        "lookup_overwrite_agrees_inner",
     ] {
         let id = env.globals[name];
         assert!(
@@ -700,48 +700,48 @@ fn lookuplocality_law3_is_a_real_general_proof_term() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Law 5 (`54 §5.3`, Map capstone unit 2 — the final law) — `lookupAssocAgree`
+// Law 5 (`54 §5.3`, Map capstone unit 2 — the final law) — `lookup_assoc_agree`
 // ─────────────────────────────────────────────────────────────────────────────
 
 #[test]
 fn lookupassocagree_law5_is_a_real_general_proof_term() {
     let env = mk_env();
-    // `lookupAssocAgree : Ordered m -> Distinct leq m -> lookup key m =
-    // assoc key (toList m)` must be a real Decl::Transparent proof term —
+    // `lookup_assoc_agree : Ordered m -> Distinct leq m -> lookup key m =
+    // assoc key (to_list m)` must be a real Decl::Transparent proof term —
     // the restated statement (Distinct precondition added after the
     // original false statement was caught and escalated), reusing Law 1's
     // goal-generic transport bridges and Law 2's lookup-side bridges.
     for name in [
-        "lookupAssocAgree",
-        "law5NodeDispatch",
-        "law5NodeQ2Dispatch",
-        "law5DistinctL",
-        "law5DistinctR",
-        "orderEquiv",
+        "lookup_assoc_agree",
+        "law5_node_dispatch",
+        "law5_node_q2_dispatch",
+        "law5_distinct_l",
+        "law5_distinct_r",
+        "order_equiv",
         "NoDup",
         "Distinct",
-        "distinctEmpty",
-        "assocSkipPrefix",
-        "assocPrefixWins",
-        "assocNoneImpliesNoMatchInner",
-        "assocNoneImpliesNoMatchDispatch",
-        "assocNoneImpliesNoMatch",
-        "assocNoMatchIsNone",
-        "noDupAppendHeadExcl",
-        "noDupAppendLeft",
-        "noDupAppendRight",
-        "notMatchTransferViaEquiv",
-        "lookupStopBridge",
-        "lookupOrderEquivOuterAgree",
-        "lookupOrderEquivInnerAgree",
-        "lookupOrderEquivBothFalse",
-        "lookupOrderEquivBothInnerFalse",
-        "lookupOrderEquivBothStop",
-        "lookupOrderEquivInnerDispatch",
-        "lookupOrderEquivNodeDispatch",
-        "lookupOrderEquivAgree",
-        "memberOrderEquivAgree",
-        "setMemberOrderEquivAgree",
+        "distinct_empty",
+        "assoc_skip_prefix",
+        "assoc_prefix_wins",
+        "assoc_none_implies_no_match_inner",
+        "assoc_none_implies_no_match_dispatch",
+        "assoc_none_implies_no_match",
+        "assoc_no_match_is_none",
+        "no_dup_append_head_excl",
+        "no_dup_append_left",
+        "no_dup_append_right",
+        "not_match_transfer_via_equiv",
+        "lookup_stop_bridge",
+        "lookup_order_equiv_outer_agree",
+        "lookup_order_equiv_inner_agree",
+        "lookup_order_equiv_both_false",
+        "lookup_order_equiv_both_inner_false",
+        "lookup_order_equiv_both_stop",
+        "lookup_order_equiv_inner_dispatch",
+        "lookup_order_equiv_node_dispatch",
+        "lookup_order_equiv_agree",
+        "member_order_equiv_agree",
+        "set_member_order_equiv_agree",
     ] {
         let id = env.globals[name];
         assert!(
@@ -772,216 +772,216 @@ fn cat4_new_api_is_derived_and_axiom_free() {
         "bool_and_idempotent",
         "bool_and_left_identity",
         "bool_and_right_identity",
-        "leqNat",
-        "reflLeqNat",
-        "transLeqNat",
-        "antisymLeqNat",
-        "totalLeqNat",
-        "orderEquivKey",
-        "boolAndTrueIntro",
-        "orderEquivKeyTrueFromOrderEquiv",
-        "orderEquivFromOrderEquivKeyTrueInner",
-        "orderEquivFromOrderEquivKeyTrueDispatch",
-        "orderEquivFromOrderEquivKeyTrue",
-        "orderEquivKeyFalseToNot",
-        "notOrderEquivFromLeftFalse",
-        "notOrderEquivFromRightFalse",
-        "dropKey",
-        "deleteFromListAcc",
-        "deleteFromListAccStep",
-        "deleteFromListAccFinalBridge",
-        "deleteFromListAccStepTrueEq",
-        "deleteFromListAccStepFalseEq",
-        "deleteFromListAccStepTrueReduces",
-        "deleteFromListAccStepFalseReduces",
-        "deleteFromListAccTrueBridge",
-        "deleteFromListAccFalseBridge",
-        "deleteFromList",
+        "leq_nat",
+        "refl_leq_nat",
+        "trans_leq_nat",
+        "antisym_leq_nat",
+        "total_leq_nat",
+        "order_equiv_key",
+        "bool_and_true_intro",
+        "order_equiv_key_true_from_order_equiv",
+        "order_equiv_from_order_equiv_key_true_inner",
+        "order_equiv_from_order_equiv_key_true_dispatch",
+        "order_equiv_from_order_equiv_key_true",
+        "order_equiv_key_false_to_not",
+        "not_order_equiv_from_left_false",
+        "not_order_equiv_from_right_false",
+        "drop_key",
+        "delete_from_list_acc",
+        "delete_from_list_acc_step",
+        "delete_from_list_acc_final_bridge",
+        "delete_from_list_acc_step_true_eq",
+        "delete_from_list_acc_step_false_eq",
+        "delete_from_list_acc_step_true_reduces",
+        "delete_from_list_acc_step_false_reduces",
+        "delete_from_list_acc_true_bridge",
+        "delete_from_list_acc_false_bridge",
+        "delete_from_list",
         "delete",
-        "deleteFromListAccLookupNoneDispatch",
-        "deleteFromListAccLookupNone",
-        "deleteLookupNoneLaw",
-        "notOrderEquivFromDeletedMatch",
-        "deleteFromListAccLookupLocalityDispatch",
-        "deleteFromListAccLookupLocality",
-        "deleteFromListAccLookupOtherAssocDeletedHitAbsurd",
-        "deleteFromListAccLookupOtherAssocHitSurvivor",
-        "deleteFromListAccLookupOtherAssocHit",
-        "deleteFromListAccLookupOtherAssocMiss",
-        "deleteFromListAccLookupOtherAssocInner",
-        "deleteFromListAccLookupOtherAssocDispatch",
-        "deleteFromListAccLookupOtherAssoc",
-        "deleteLookupOtherKeyLaw",
-        "fromListAccPreservesOrdered",
-        "fromListPreservesOrdered",
-        "deleteFromListAccPreservesOrderedDispatch",
-        "deleteFromListAccPreservesOrdered",
-        "deleteFromListPreservesOrdered",
-        "deletePreservesOrdered",
-        "insertWith",
-        "insertWithFoldStep",
-        "insertWithFoldStepReduces",
-        "unionFromListAcc",
-        "unionFromListAccConsBridge",
+        "delete_from_list_acc_lookup_none_dispatch",
+        "delete_from_list_acc_lookup_none",
+        "delete_lookup_none_law",
+        "not_order_equiv_from_deleted_match",
+        "delete_from_list_acc_lookup_locality_dispatch",
+        "delete_from_list_acc_lookup_locality",
+        "delete_from_list_acc_lookup_other_assoc_deleted_hit_absurd",
+        "delete_from_list_acc_lookup_other_assoc_hit_survivor",
+        "delete_from_list_acc_lookup_other_assoc_hit",
+        "delete_from_list_acc_lookup_other_assoc_miss",
+        "delete_from_list_acc_lookup_other_assoc_inner",
+        "delete_from_list_acc_lookup_other_assoc_dispatch",
+        "delete_from_list_acc_lookup_other_assoc",
+        "delete_lookup_other_key_law",
+        "from_list_acc_preserves_ordered",
+        "from_list_preserves_ordered",
+        "delete_from_list_acc_preserves_ordered_dispatch",
+        "delete_from_list_acc_preserves_ordered",
+        "delete_from_list_preserves_ordered",
+        "delete_preserves_ordered",
+        "insert_with",
+        "insert_with_fold_step",
+        "insert_with_fold_step_reduces",
+        "union_from_list_acc",
+        "union_from_list_acc_cons_bridge",
         "union",
-        "unionLookupTable",
-        "optionIsSome",
-        "unitCombine",
-        "unionLookupTableMember",
-        "intersectionLookupTable",
-        "differenceLookupTable",
-        "differenceLookupTableFalseNoneNone",
-        "differenceLookupTableFalseNoneSome",
-        "differenceLookupTableFalseNone",
-        "differenceLookupExpected",
-        "differenceLookupExpectedTrue",
-        "differenceLookupExpectedFalse",
-        "differenceLookupExpectedMemberOption",
-        "differenceLookupExpectedMemberTable",
-        "differenceLookupExpectedMember",
-        "insertWithLookupResult",
-        "insertWithLookupResultFor",
-        "insertWithLookupOverwriteWitness",
-        "insertWithLookupIntoLWitness",
-        "insertWithLookupIntoRWitness",
-        "insertWithLookupDispatchQ2",
-        "insertWithLookupDispatchQ1",
-        "insertWithLookupCharacterization",
-        "lookupReplaceLInnerDispatch",
-        "lookupReplaceLDispatch",
-        "lookupReplaceLWitness",
-        "lookupReplaceRInnerDispatch",
-        "lookupReplaceRDispatch",
-        "lookupReplaceRWitness",
-        "insertLookupHit",
-        "insertWithLookupLocalityQ2Dispatch",
-        "insertWithLookupLocalityNodeDispatch",
-        "insertWithLookupLocality",
-        "insertWithFoldStepLookupLocality",
-        "insertWithFoldStepLookupHit",
-        "unionFromListAccLookupAssocHit",
-        "unionFromListAccLookupAssocMiss",
-        "unionFromListAccLookupAssocInner",
-        "unionFromListAccLookupAssocDispatch",
-        "unionFromListAccLookupAssoc",
-        "insertWithFoldStepPreservesOrdered",
-        "unionFromListAccPreservesOrdered",
-        "unionLookupCharacterization",
-        "unionLookupBothNoneLaw",
-        "unionLookupLeftOnlyLaw",
-        "unionLookupRightOnlyLaw",
-        "unionLookupBothSomeLaw",
-        "memberFromLookupNone",
-        "memberFromLookupSome",
-        "lookupNoneFromMemberFalseHit",
-        "lookupNoneFromMemberFalse",
-        "lookupUnitSomeFromMemberTrueLeaf",
-        "lookupUnitSomeFromMemberTrueHit",
-        "lookupUnitSomeFromMemberTrue",
-        "notOrderEquivFromMemberTrueFalse",
-        "notOrderEquivFromMemberFalseTrue",
-        "intersectionFromListAccLookupNoneDispatch",
-        "intersectionFromListAccLookupNone",
-        "intersectionFromListAccLookupLocalityDispatch",
-        "intersectionFromListAccLookupLocality",
-        "intersectionFromListAccLookupSomeHit",
-        "intersectionFromListAccLookupSomeMissDispatch",
-        "intersectionFromListAccLookupSomeInner",
-        "intersectionFromListAccLookupSomeDispatch",
-        "intersectionFromListAccLookupSome",
-        "intersectionLookupLeftNoneLaw",
-        "differenceFromListAccLookupLocalityDispatch",
-        "differenceFromListAccLookupLocality",
-        "differenceFromListAccLookupNoneDispatch",
-        "differenceFromListAccLookupNone",
-        "differenceFromListAccLookupKeepHit",
-        "differenceFromListAccLookupKeepMissDispatch",
-        "differenceFromListAccLookupKeepInner",
-        "differenceFromListAccLookupKeepDispatch",
-        "differenceFromListAccLookupKeep",
-        "differenceLookupCharacterizationReject",
-        "differenceLookupCharacterizationKeep",
-        "differenceLookupCharacterizationDispatch",
-        "allKeysMapNotMatchBelow",
-        "allKeysMapNotMatchAbove",
-        "intersectionFromListAcc",
-        "intersectionFromListAccStep",
-        "intersectionFromListAccFinalBridge",
-        "intersectionFromListAccStepTrueEq",
-        "intersectionFromListAccStepFalseEq",
-        "intersectionFromListAccStepTrueReduces",
-        "intersectionFromListAccStepFalseReduces",
-        "intersectionFromListAccTrueBridge",
-        "intersectionFromListAccFalseBridge",
+        "union_lookup_table",
+        "option_is_some",
+        "unit_combine",
+        "union_lookup_table_member",
+        "intersection_lookup_table",
+        "difference_lookup_table",
+        "difference_lookup_table_false_none_none",
+        "difference_lookup_table_false_none_some",
+        "difference_lookup_table_false_none",
+        "difference_lookup_expected",
+        "difference_lookup_expected_true",
+        "difference_lookup_expected_false",
+        "difference_lookup_expected_member_option",
+        "difference_lookup_expected_member_table",
+        "difference_lookup_expected_member",
+        "insert_with_lookup_result",
+        "insert_with_lookup_result_for",
+        "insert_with_lookup_overwrite_witness",
+        "insert_with_lookup_into_l_witness",
+        "insert_with_lookup_into_r_witness",
+        "insert_with_lookup_dispatch_q2",
+        "insert_with_lookup_dispatch_q1",
+        "insert_with_lookup_characterization",
+        "lookup_replace_l_inner_dispatch",
+        "lookup_replace_l_dispatch",
+        "lookup_replace_l_witness",
+        "lookup_replace_r_inner_dispatch",
+        "lookup_replace_r_dispatch",
+        "lookup_replace_r_witness",
+        "insert_lookup_hit",
+        "insert_with_lookup_locality_q2_dispatch",
+        "insert_with_lookup_locality_node_dispatch",
+        "insert_with_lookup_locality",
+        "insert_with_fold_step_lookup_locality",
+        "insert_with_fold_step_lookup_hit",
+        "union_from_list_acc_lookup_assoc_hit",
+        "union_from_list_acc_lookup_assoc_miss",
+        "union_from_list_acc_lookup_assoc_inner",
+        "union_from_list_acc_lookup_assoc_dispatch",
+        "union_from_list_acc_lookup_assoc",
+        "insert_with_fold_step_preserves_ordered",
+        "union_from_list_acc_preserves_ordered",
+        "union_lookup_characterization",
+        "union_lookup_both_none_law",
+        "union_lookup_left_only_law",
+        "union_lookup_right_only_law",
+        "union_lookup_both_some_law",
+        "member_from_lookup_none",
+        "member_from_lookup_some",
+        "lookup_none_from_member_false_hit",
+        "lookup_none_from_member_false",
+        "lookup_unit_some_from_member_true_leaf",
+        "lookup_unit_some_from_member_true_hit",
+        "lookup_unit_some_from_member_true",
+        "not_order_equiv_from_member_true_false",
+        "not_order_equiv_from_member_false_true",
+        "intersection_from_list_acc_lookup_none_dispatch",
+        "intersection_from_list_acc_lookup_none",
+        "intersection_from_list_acc_lookup_locality_dispatch",
+        "intersection_from_list_acc_lookup_locality",
+        "intersection_from_list_acc_lookup_some_hit",
+        "intersection_from_list_acc_lookup_some_miss_dispatch",
+        "intersection_from_list_acc_lookup_some_inner",
+        "intersection_from_list_acc_lookup_some_dispatch",
+        "intersection_from_list_acc_lookup_some",
+        "intersection_lookup_left_none_law",
+        "difference_from_list_acc_lookup_locality_dispatch",
+        "difference_from_list_acc_lookup_locality",
+        "difference_from_list_acc_lookup_none_dispatch",
+        "difference_from_list_acc_lookup_none",
+        "difference_from_list_acc_lookup_keep_hit",
+        "difference_from_list_acc_lookup_keep_miss_dispatch",
+        "difference_from_list_acc_lookup_keep_inner",
+        "difference_from_list_acc_lookup_keep_dispatch",
+        "difference_from_list_acc_lookup_keep",
+        "difference_lookup_characterization_reject",
+        "difference_lookup_characterization_keep",
+        "difference_lookup_characterization_dispatch",
+        "all_keys_map_not_match_below",
+        "all_keys_map_not_match_above",
+        "intersection_from_list_acc",
+        "intersection_from_list_acc_step",
+        "intersection_from_list_acc_final_bridge",
+        "intersection_from_list_acc_step_true_eq",
+        "intersection_from_list_acc_step_false_eq",
+        "intersection_from_list_acc_step_true_reduces",
+        "intersection_from_list_acc_step_false_reduces",
+        "intersection_from_list_acc_true_bridge",
+        "intersection_from_list_acc_false_bridge",
         "intersection",
-        "intersectionLookupCharacterization",
-        "intersectionLookupSomeLaw",
-        "differenceFromListAcc",
-        "differenceFromListAccStep",
-        "differenceFromListAccFinalBridge",
-        "differenceFromListAccStepTrueEq",
-        "differenceFromListAccStepFalseEq",
-        "differenceFromListAccStepTrueReduces",
-        "differenceFromListAccStepFalseReduces",
-        "differenceFromListAccTrueBridge",
-        "differenceFromListAccFalseBridge",
+        "intersection_lookup_characterization",
+        "intersection_lookup_some_law",
+        "difference_from_list_acc",
+        "difference_from_list_acc_step",
+        "difference_from_list_acc_final_bridge",
+        "difference_from_list_acc_step_true_eq",
+        "difference_from_list_acc_step_false_eq",
+        "difference_from_list_acc_step_true_reduces",
+        "difference_from_list_acc_step_false_reduces",
+        "difference_from_list_acc_true_bridge",
+        "difference_from_list_acc_false_bridge",
         "difference",
-        "differenceLookupCharacterization",
-        "insertFoldStep",
-        "foldInsertPreservesOrdered",
-        "insertWithPreservesOrdered",
-        "foldInsertWithPreservesOrdered",
-        "unionPreservesOrdered",
-        "intersectionFromListAccPreservesOrderedDispatch",
-        "intersectionFromListAccPreservesOrdered",
-        "intersectionPreservesOrdered",
-        "differenceFromListAccPreservesOrderedDispatch",
-        "differenceFromListAccPreservesOrdered",
-        "differencePreservesOrdered",
-        "setUnion",
-        "setIntersection",
-        "setDifference",
-        "setUnionMemberLaw",
-        "setIntersectionMemberLeftFalseRhs",
-        "setIntersectionMemberRightFalseRhs",
-        "setIntersectionMemberBothTrueRhs",
-        "setIntersectionMemberLeftFalseCase",
-        "setIntersectionMemberRightFalseCase",
-        "setIntersectionMemberBothTrueCase",
-        "setIntersectionMemberRightDispatch",
-        "setIntersectionMemberDispatch",
-        "setIntersectionMemberLaw",
-        "setDifferenceMemberLaw",
-        "setMemberEmptyFalse",
-        "setUnionCommLaw",
-        "setUnionAssocLaw",
-        "setUnionIdempotentLaw",
-        "setUnionIdentityLaw",
-        "setIntersectionCommLaw",
-        "setIntersectionAssocLaw",
-        "setIntersectionIdempotentLaw",
-        "setIntersectionIdentityLaw",
-        "pairVals",
-        "pairKeysPreservesSortedCons",
-        "pairKeysPreservesSorted",
+        "difference_lookup_characterization",
+        "insert_fold_step",
+        "fold_insert_preserves_ordered",
+        "insert_with_preserves_ordered",
+        "fold_insert_with_preserves_ordered",
+        "union_preserves_ordered",
+        "intersection_from_list_acc_preserves_ordered_dispatch",
+        "intersection_from_list_acc_preserves_ordered",
+        "intersection_preserves_ordered",
+        "difference_from_list_acc_preserves_ordered_dispatch",
+        "difference_from_list_acc_preserves_ordered",
+        "difference_preserves_ordered",
+        "set_union",
+        "set_intersection",
+        "set_difference",
+        "set_union_member_law",
+        "set_intersection_member_left_false_rhs",
+        "set_intersection_member_right_false_rhs",
+        "set_intersection_member_both_true_rhs",
+        "set_intersection_member_left_false_case",
+        "set_intersection_member_right_false_case",
+        "set_intersection_member_both_true_case",
+        "set_intersection_member_right_dispatch",
+        "set_intersection_member_dispatch",
+        "set_intersection_member_law",
+        "set_difference_member_law",
+        "set_member_empty_false",
+        "set_union_comm_law",
+        "set_union_assoc_law",
+        "set_union_idempotent_law",
+        "set_union_identity_law",
+        "set_intersection_comm_law",
+        "set_intersection_assoc_law",
+        "set_intersection_idempotent_law",
+        "set_intersection_identity_law",
+        "pair_vals",
+        "pair_keys_preserves_sorted_cons",
+        "pair_keys_preserves_sorted",
         "keys",
         "values",
-        "keysProjectToList",
-        "valuesProjectToList",
-        "keysValuesProjectionCoherence",
-        "keysAscending",
+        "keys_project_to_list",
+        "values_project_to_list",
+        "keys_values_projection_coherence",
+        "keys_ascending",
         "succ",
-        "relMember",
-        "addEdge",
-        "composeSuccStep",
-        "composeSucc",
+        "rel_member",
+        "add_edge",
+        "compose_succ_step",
+        "compose_succ",
         "compose",
-        "converseTargets",
+        "converse_targets",
         "converse",
-        "isReflexive",
-        "isSymmetric",
-        "isTransitive",
-        "isEquivalence",
+        "is_reflexive",
+        "is_symmetric",
+        "is_transitive",
+        "is_equivalence",
     ] {
         let id = env.globals[name];
         assert!(
@@ -1012,17 +1012,17 @@ fn cat4_delete_dropkey_filters_all_equivalent_keys() {
         &mut store,
         "t_cat4_dropkey_filter",
         "List (Pair Nat Nat)",
-        &format!("dropKey Nat Nat leqNat ({}) ({list_expr})", nat(1)),
+        &format!("drop_key Nat Nat leq_nat ({}) ({list_expr})", nat(1)),
     );
     assert_eq!(
         list_pair_nat_nat(&env, &v),
         vec![(2, 20)],
-        "dropKey must filter every order-equivalent key, not just the first match"
+        "drop_key must filter every order-equivalent key, not just the first match"
     );
 
     let m = format!(
-        "insert Nat Nat leqNat ({one}) ({ten}) \
-           (insert Nat Nat leqNat ({two}) ({twenty}) (empty Nat Nat))",
+        "insert Nat Nat leq_nat ({one}) ({ten}) \
+           (insert Nat Nat leq_nat ({two}) ({twenty}) (empty Nat Nat))",
         one = nat(1),
         two = nat(2),
         ten = nat(10),
@@ -1033,7 +1033,7 @@ fn cat4_delete_dropkey_filters_all_equivalent_keys() {
         &mut store,
         "t_cat4_delete_lookup",
         "Option Nat",
-        &format!("lookup Nat Nat leqNat ({}) (delete Nat Nat leqNat ({}) ({m}))", nat(1), nat(1)),
+        &format!("lookup Nat Nat leq_nat ({}) (delete Nat Nat leq_nat ({}) ({m}))", nat(1), nat(1)),
     );
     assert_eq!(option_nat(&env, &v), None, "deleted key must look up as None");
 }
@@ -1043,16 +1043,16 @@ fn cat4_union_intersection_difference_execute_over_nat() {
     let mut env = mk_env();
     let mut store = make_store(&env);
     let a = format!(
-        "insert Nat Nat leqNat ({one}) ({ten}) \
-           (insert Nat Nat leqNat ({two}) ({twenty}) (empty Nat Nat))",
+        "insert Nat Nat leq_nat ({one}) ({ten}) \
+           (insert Nat Nat leq_nat ({two}) ({twenty}) (empty Nat Nat))",
         one = nat(1),
         two = nat(2),
         ten = nat(10),
         twenty = nat(20)
     );
     let b = format!(
-        "insert Nat Nat leqNat ({one}) ({thirty}) \
-           (insert Nat Nat leqNat ({three}) ({forty}) (empty Nat Nat))",
+        "insert Nat Nat leq_nat ({one}) ({thirty}) \
+           (insert Nat Nat leq_nat ({three}) ({forty}) (empty Nat Nat))",
         one = nat(1),
         three = nat(3),
         thirty = nat(30),
@@ -1064,7 +1064,7 @@ fn cat4_union_intersection_difference_execute_over_nat() {
         &mut store,
         "t_cat4_union_orientation",
         "Option Nat",
-        &format!("lookup Nat Nat leqNat ({}) (union Nat Nat leqNat (λx.λy. x) ({a}) ({b}))", nat(1)),
+        &format!("lookup Nat Nat leq_nat ({}) (union Nat Nat leq_nat (λx.λy. x) ({a}) ({b}))", nat(1)),
     );
     assert_eq!(
         option_nat(&env, &v),
@@ -1077,7 +1077,7 @@ fn cat4_union_intersection_difference_execute_over_nat() {
         &mut store,
         "t_cat4_intersection",
         "List (Pair Nat Nat)",
-        &format!("toList Nat Nat (intersection Nat Nat leqNat ({a}) ({b}))"),
+        &format!("to_list Nat Nat (intersection Nat Nat leq_nat ({a}) ({b}))"),
     );
     assert_eq!(list_pair_nat_nat(&env, &v), vec![(1, 10)], "intersection keeps only shared keys with values from the left map");
 
@@ -1086,7 +1086,7 @@ fn cat4_union_intersection_difference_execute_over_nat() {
         &mut store,
         "t_cat4_difference",
         "List (Pair Nat Nat)",
-        &format!("toList Nat Nat (difference Nat Nat leqNat ({a}) ({b}))"),
+        &format!("to_list Nat Nat (difference Nat Nat leq_nat ({a}) ({b}))"),
     );
     assert_eq!(list_pair_nat_nat(&env, &v), vec![(2, 20)], "difference keeps left-only keys");
 }
@@ -1096,9 +1096,9 @@ fn cat4_keys_values_are_aligned_tolist_projections() {
     let mut env = mk_env();
     let mut store = make_store(&env);
     let m = format!(
-        "insert Nat Nat leqNat ({two}) ({twenty}) \
-           (insert Nat Nat leqNat ({one}) ({ten}) \
-             (insert Nat Nat leqNat ({three}) ({thirty}) (empty Nat Nat)))",
+        "insert Nat Nat leq_nat ({two}) ({twenty}) \
+           (insert Nat Nat leq_nat ({one}) ({ten}) \
+             (insert Nat Nat leq_nat ({three}) ({thirty}) (empty Nat Nat)))",
         one = nat(1),
         two = nat(2),
         three = nat(3),
@@ -1108,7 +1108,7 @@ fn cat4_keys_values_are_aligned_tolist_projections() {
     );
     let ks = eval_view(&mut env, &mut store, "t_cat4_keys", "List Nat", &format!("keys Nat Nat ({m})"));
     let vs = eval_view(&mut env, &mut store, "t_cat4_values", "List Nat", &format!("values Nat Nat ({m})"));
-    assert_eq!(list_nat(&env, &ks), vec![1, 2, 3], "keys must follow toList ascending key order");
+    assert_eq!(list_nat(&env, &ks), vec![1, 2, 3], "keys must follow to_list ascending key order");
     assert_eq!(list_nat(&env, &vs), vec![10, 20, 30], "values must stay positionally aligned with keys");
 }
 
@@ -1117,12 +1117,12 @@ fn cat4_relations_compose_and_converse_over_adjacency_maps() {
     let mut env = mk_env();
     let mut store = make_store(&env);
     let r = format!(
-        "addEdge Nat leqNat ({one}) ({two}) (empty Nat (Tree Nat Unit))",
+        "add_edge Nat leq_nat ({one}) ({two}) (empty Nat (Tree Nat Unit))",
         one = nat(1),
         two = nat(2)
     );
     let s = format!(
-        "addEdge Nat leqNat ({two}) ({three}) (empty Nat (Tree Nat Unit))",
+        "add_edge Nat leq_nat ({two}) ({three}) (empty Nat (Tree Nat Unit))",
         two = nat(2),
         three = nat(3)
     );
@@ -1132,7 +1132,7 @@ fn cat4_relations_compose_and_converse_over_adjacency_maps() {
         "t_cat4_compose_member",
         "Bool",
         &format!(
-            "setMember Nat leqNat ({three}) (succ Nat leqNat ({one}) (compose Nat leqNat ({r}) ({s})))",
+            "set_member Nat leq_nat ({three}) (succ Nat leq_nat ({one}) (compose Nat leq_nat ({r}) ({s})))",
             one = nat(1),
             three = nat(3)
         ),
@@ -1145,7 +1145,7 @@ fn cat4_relations_compose_and_converse_over_adjacency_maps() {
         "t_cat4_converse_member",
         "Bool",
         &format!(
-            "setMember Nat leqNat ({one}) (succ Nat leqNat ({two}) (converse Nat leqNat ({r})))",
+            "set_member Nat leq_nat ({one}) (succ Nat leq_nat ({two}) (converse Nat leq_nat ({r})))",
             one = nat(1),
             two = nat(2)
         ),
@@ -1155,10 +1155,10 @@ fn cat4_relations_compose_and_converse_over_adjacency_maps() {
 
 // A hand-built concrete-instance application (`tree_2_1_3` under a trivial
 // always-true comparator) was tried here as a second smoke test, but
-// `Ordered`'s real Node case (`And (allKeys (\k2. ...) l) (And (allKeys
+// `Ordered`'s real Node case (`And (all_keys (\k2. ...) l) (And (all_keys
 // (\k2. ...) r) (And (Ordered l) (Ordered r)))`) needs an exactly-nested
 // `andIntro` witness matching that inline-lambda predicate spelling
-// precisely, not a re-derivation via `leBelow`/`leAbove` or a bare `tt` —
+// precisely, not a re-derivation via `le_below`/`le_above` or a bare `tt` —
 // getting the by-hand nesting exactly right is its own small proof exercise
 // and not necessary evidence: `tolistordered_law4_is_a_real_general_proof_
 // term` above is the load-bearing check (the fully general, quantified

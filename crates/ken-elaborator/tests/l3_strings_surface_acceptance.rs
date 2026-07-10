@@ -6,7 +6,7 @@
 //! the actual package file via `include_str!` (never a hand-copied
 //! reimplementation, matching `es4_classes_acceptance.rs`'s discipline):
 //! - DS-AC1/AC5 `list-combinator-floor-derived-over-real-elim` — the 7-combinator
-//!   floor + `compareChar` are real derived defs over the generic `Term::Elim`,
+//!   floor + `compare_char` are real derived defs over the generic `Term::Elim`,
 //!   `OrdResult` a checked inductive, zero-TCB-delta.
 //! - DS-AC2 (soundness) `list-floor-recursion-in-sct-sound-zone` — the SCT
 //!   sound-zone accept/reject verdict-flip.
@@ -119,14 +119,14 @@ fn run_with_big_stack<F: FnOnce() + Send + 'static>(f: F) {
 fn list_combinator_floor_derived_over_real_elim() {
     let env = mk_env();
 
-    // The 7 floor combinators + `compareChar` are all Transparent (SCT
+    // The 7 floor combinators + `compare_char` are all Transparent (SCT
     // accepted, `declare_def`-upgraded) and their `match` lowers to the real
     // generic `Term::Elim` over the `List`/`Nat` family — never a bespoke
     // reducer, never a registered `elim_List`/`elim_Nat` constant.
     let list_id = env.globals["List"];
     let nat_id = env.globals["Nat"];
     let list_recursors = ["list_append", "nth", "list_eq", "list_compare"];
-    let nat_recursors = ["natSub"];
+    let nat_recursors = ["nat_sub"];
     // `take`/`drop` match on `Nat` outermost (the fuel), `List` innermost.
     let nat_outer = ["take", "drop"];
 
@@ -184,12 +184,12 @@ fn list_combinator_floor_derived_over_real_elim() {
             other => panic!("{name}'s body must be a Term::Elim; got {other:?}"),
         }
     }
-    // compareChar's own match (on eqChar's Bool result) is not List/Nat-elim
+    // compare_char's own match (on eqChar's Bool result) is not List/Nat-elim
     // shaped — it's checked separately: just confirm it's Transparent and not
     // an opaque postulate stand-in.
     assert!(
-        env.env.transparent_body(env.globals["compareChar"]).is_some(),
-        "compareChar must be a real (checked) def"
+        env.env.transparent_body(env.globals["compare_char"]).is_some(),
+        "compare_char must be a real (checked) def"
     );
 
     // `OrdResult` is a checked `data` inductive — NOT a postulate/primitive.
@@ -201,7 +201,7 @@ fn list_combinator_floor_derived_over_real_elim() {
 
     // Zero-TCB-delta: none of the floor combinators or OrdResult contribute
     // any new trusted_base() member (they are all declare_def/data, checked).
-    for name in ["list_append", "nth", "take", "drop", "natSub", "list_eq", "list_compare", "compareChar"] {
+    for name in ["list_append", "nth", "take", "drop", "nat_sub", "list_eq", "list_compare", "compare_char"] {
         let id = env.globals[name];
         let delta = trusted_base_delta(&env.env, id);
         assert!(
@@ -217,7 +217,7 @@ fn list_combinator_floor_derived_over_real_elim() {
 
 #[test]
 fn list_floor_recursion_in_sct_sound_zone() {
-    // Positive: every one of the 7 combinators (+ compareChar) elaborates —
+    // Positive: every one of the 7 combinators (+ compare_char) elaborates —
     // confirmed by `mk_env()` itself not panicking (each is SCT-accepted, an
     // applied call on a strict Cons-tail/Suc-pred subterm).
     let _env = mk_env();
@@ -289,28 +289,28 @@ fn derived_string_ops_reduce_over_real_roundtrip() {
         assert_eq!(
             v,
             EvalVal::Str("".into()),
-            "slice 2 1 \"abc\" must be \"\" (natSub saturates, no underflow)"
+            "slice 2 1 \"abc\" must be \"\" (nat_sub saturates, no underflow)"
         );
 
-        // charAt: Option Char, honest absence.
+        // char_at: Option Char, honest absence.
         let some_id = env.globals["Some"];
         let none_id = env.globals["None"];
-        let v = eval_view(&mut env, &mut store, "t_charat1", "Option Char", &format!("charAt ({}) \"abc\"", nat(1)));
+        let v = eval_view(&mut env, &mut store, "t_charat1", "Option Char", &format!("char_at ({}) \"abc\"", nat(1)));
         match v {
             EvalVal::Ctor { id, ref args, .. } if id == some_id => {
-                assert_eq!(args[1], EvalVal::Int('b' as i64), "charAt 1 \"abc\" must be Some 'b'");
+                assert_eq!(args[1], EvalVal::Int('b' as i64), "char_at 1 \"abc\" must be Some 'b'");
             }
-            other => panic!("charAt 1 \"abc\" must be Some 'b'; got {other:?}"),
+            other => panic!("char_at 1 \"abc\" must be Some 'b'; got {other:?}"),
         }
-        let v = eval_view(&mut env, &mut store, "t_charat_oob", "Option Char", &format!("charAt ({}) \"abc\"", nat(5)));
+        let v = eval_view(&mut env, &mut store, "t_charat_oob", "Option Char", &format!("char_at ({}) \"abc\"", nat(5)));
         assert!(
             matches!(v, EvalVal::Ctor { id, .. } if id == none_id),
-            "charAt 5 \"abc\" must be None"
+            "char_at 5 \"abc\" must be None"
         );
-        let v = eval_view(&mut env, &mut store, "t_charat_empty", "Option Char", &format!("charAt ({}) \"\"", nat(0)));
+        let v = eval_view(&mut env, &mut store, "t_charat_empty", "Option Char", &format!("char_at ({}) \"\"", nat(0)));
         assert!(
             matches!(v, EvalVal::Ctor { id, .. } if id == none_id),
-            "charAt 0 \"\" must be None"
+            "char_at 0 \"\" must be None"
         );
     });
 }
@@ -452,12 +452,12 @@ fn concat_slice_compose_and_floor_totality() {
             "list_append must not get stuck on well-typed input"
         );
 
-        // Totality: natSub saturates, nth/take/drop totalize out-of-range —
+        // Totality: nat_sub saturates, nth/take/drop totalize out-of-range —
         // none reduce to Neutral/stuck. Re-check the already-asserted DS-AC3
         // corpus values are all non-Neutral (they were asserted to concrete
         // values above; this call re-confirms the out-of-range/underflow
         // faces specifically).
-        let v = eval_view(&mut env, &mut store, "t_natsub_sat", "Nat", &format!("natSub ({}) ({})", nat(1), nat(2)));
-        assert!(!matches!(v, EvalVal::Neutral), "natSub 1 2 must not be stuck");
+        let v = eval_view(&mut env, &mut store, "t_natsub_sat", "Nat", &format!("nat_sub ({}) ({})", nat(1), nat(2)));
+        assert!(!matches!(v, EvalVal::Neutral), "nat_sub 1 2 must not be stuck");
     });
 }

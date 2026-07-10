@@ -71,11 +71,11 @@ canonical field per law, matched character-for-character against
 `spec/50-stdlib/56-effectful-classes.md` `§3.2`/`§4.2`:
 
 ```ken
-fn applyTo (a : Type) (b : Type) (y : a) (g : a -> b) : b = g y
+fn apply_to (a : Type) (b : Type) (y : a) (g : a -> b) : b = g y
 
 fn compose (a : Type) (b : Type) (c : Type) (g : b -> c) (h : a -> b) (x : a) : c = g (h x)
 
-fn functorMapOf (g_ty : Type -> Type) (d : Functor g_ty) (a : Type) (b : Type) (h : a -> b) (x : g_ty a) : g_ty b = d.map a b h x
+fn functor_map_of (g_ty : Type -> Type) (d : Functor g_ty) (a : Type) (b : Type) (h : a -> b) (x : g_ty a) : g_ty b = d.map a b h x
 
 class Applicative (f : Type -> Type) {
   functor : Functor f ;
@@ -83,30 +83,30 @@ class Applicative (f : Type -> Type) {
   ap : (a : Type) -> (b : Type) -> f (a -> b) -> f a -> f b ;
   ap_id : (a : Type) -> (v : f a) -> Equal (f a) (ap a a (pure (a -> a) (idf a)) v) v ;
   ap_hom : (a : Type) -> (b : Type) -> (g : a -> b) -> (x : a) -> Equal (f b) (ap a b (pure (a -> b) g) (pure a x)) (pure b (g x)) ;
-  ap_ich : (a : Type) -> (b : Type) -> (u : f (a -> b)) -> (y : a) -> Equal (f b) (ap a b u (pure a y)) (ap (a -> b) b (pure ((a -> b) -> b) (applyTo a b y)) u) ;
+  ap_ich : (a : Type) -> (b : Type) -> (u : f (a -> b)) -> (y : a) -> Equal (f b) (ap a b u (pure a y)) (ap (a -> b) b (pure ((a -> b) -> b) (apply_to a b y)) u) ;
   ap_cmp : (a : Type) -> (b : Type) -> (c : Type) -> (u : f (b -> c)) -> (v : f (a -> b)) -> (w : f a) ->
     Equal (f c)
       (ap a c (ap (a -> b) (a -> c) (ap (b -> c) ((a -> b) -> (a -> c)) (pure ((b -> c) -> (a -> b) -> (a -> c)) (compose a b c)) u) v) w)
       (ap b c u (ap a b v w)) ;
-  map_coh : (a : Type) -> (b : Type) -> (g : a -> b) -> (x : f a) -> Equal (f b) (functorMapOf f functor a b g x) (ap a b (pure (a -> b) g) x)
+  map_coh : (a : Type) -> (b : Type) -> (g : a -> b) -> (x : f a) -> Equal (f b) (functor_map_of f functor a b g x) (ap a b (pure (a -> b) g) x)
 }
 
-fn applicativePureOf (g_ty : Type -> Type) (d : Applicative g_ty) (a : Type) (x : a) : g_ty a = d.pure a x
+fn applicative_pure_of (g_ty : Type -> Type) (d : Applicative g_ty) (a : Type) (x : a) : g_ty a = d.pure a x
 
-fn composeKleisli (g_ty : Type -> Type) (bindfn : (a : Type) -> (b : Type) -> g_ty a -> (a -> g_ty b) -> g_ty b)
+fn compose_kleisli (g_ty : Type -> Type) (bindfn : (a : Type) -> (b : Type) -> g_ty a -> (a -> g_ty b) -> g_ty b)
   (a : Type) (b : Type) (c : Type) (k : a -> g_ty b) (h : b -> g_ty c) (x : a) : g_ty c = bindfn b c (k x) h
 
 class Monad (f : Type -> Type) {
   applicative : Applicative f ;
   bind : (a : Type) -> (b : Type) -> f a -> (a -> f b) -> f b ;
-  bind_lid : (a : Type) -> (b : Type) -> (x : a) -> (k : a -> f b) -> Equal (f b) (bind a b (applicativePureOf f applicative a x) k) (k x) ;
-  bind_rid : (a : Type) -> (m : f a) -> Equal (f a) (bind a a m (applicativePureOf f applicative a)) m ;
+  bind_lid : (a : Type) -> (b : Type) -> (x : a) -> (k : a -> f b) -> Equal (f b) (bind a b (applicative_pure_of f applicative a x) k) (k x) ;
+  bind_rid : (a : Type) -> (m : f a) -> Equal (f a) (bind a a m (applicative_pure_of f applicative a)) m ;
   bind_asc : (a : Type) -> (b : Type) -> (c : Type) -> (m : f a) -> (k : a -> f b) -> (h : b -> f c) ->
-    Equal (f c) (bind b c (bind a b m k) h) (bind a c m (composeKleisli f bind a b c k h))
+    Equal (f c) (bind b c (bind a b m k) h) (bind a c m (compose_kleisli f bind a b c k h))
 }
 ```
 
-`functorMapOf`/`applicativePureOf`/`composeKleisli` exist because a
+`functor_map_of`/`applicative_pure_of`/`compose_kleisli` exist because a
 `.field` projection and a bare `λ` both fail to parse inside a `fn`'s own
 declared TYPE (a genuine landed grammar gap, `§6` Finding) — `map_coh`
 needs `functor`'s `map` field and `bind_lid`/`bind_rid` need
@@ -149,13 +149,13 @@ fn option_ap_id (a : Type) (v : Option a) : Equal (Option a) (option_ap a a (opt
 fn option_ap_hom (a : Type) (b : Type) (g : a -> b) (x : a) : Equal (Option b) (option_ap a b (option_pure (a -> b) g) (option_pure a x)) (option_pure b (g x)) = Refl
 
 fn option_ap_ich_none (a : Type) (b : Type) (y : a) :
-  Equal (Option b) (option_ap a b (None (a -> b)) (option_pure a y)) (option_ap (a -> b) b (option_pure ((a -> b) -> b) (applyTo a b y)) (None (a -> b))) = tt
+  Equal (Option b) (option_ap a b (None (a -> b)) (option_pure a y)) (option_ap (a -> b) b (option_pure ((a -> b) -> b) (apply_to a b y)) (None (a -> b))) = tt
 
 fn option_ap_ich_some (a : Type) (b : Type) (g : a -> b) (y : a) :
-  Equal (Option b) (option_ap a b (Some (a -> b) g) (option_pure a y)) (option_ap (a -> b) b (option_pure ((a -> b) -> b) (applyTo a b y)) (Some (a -> b) g)) = Refl
+  Equal (Option b) (option_ap a b (Some (a -> b) g) (option_pure a y)) (option_ap (a -> b) b (option_pure ((a -> b) -> b) (apply_to a b y)) (Some (a -> b) g)) = Refl
 
 fn option_ap_ich (a : Type) (b : Type) (u : Option (a -> b)) (y : a) :
-  Equal (Option b) (option_ap a b u (option_pure a y)) (option_ap (a -> b) b (option_pure ((a -> b) -> b) (applyTo a b y)) u) =
+  Equal (Option b) (option_ap a b u (option_pure a y)) (option_ap (a -> b) b (option_pure ((a -> b) -> b) (apply_to a b y)) u) =
   match u { None ⇒ option_ap_ich_none a b y ; Some g ⇒ option_ap_ich_some a b g y }
 
 fn option_ap_cmp_none_u (a : Type) (b : Type) (c : Type) (v : Option (a -> b)) (w : Option a) :
@@ -194,13 +194,13 @@ fn option_ap_cmp (a : Type) (b : Type) (c : Type) (u : Option (b -> c)) (v : Opt
   }
 
 fn option_map_coh_none (a : Type) (b : Type) (g : a -> b) :
-  Equal (Option b) (functorMapOf Option Functor_instance_Option a b g (None a)) (option_ap a b (option_pure (a -> b) g) (None a)) = tt
+  Equal (Option b) (functor_map_of Option Functor_instance_Option a b g (None a)) (option_ap a b (option_pure (a -> b) g) (None a)) = tt
 
 fn option_map_coh_some (a : Type) (b : Type) (g : a -> b) (v : a) :
-  Equal (Option b) (functorMapOf Option Functor_instance_Option a b g (Some a v)) (option_ap a b (option_pure (a -> b) g) (Some a v)) = Refl
+  Equal (Option b) (functor_map_of Option Functor_instance_Option a b g (Some a v)) (option_ap a b (option_pure (a -> b) g) (Some a v)) = Refl
 
 fn option_map_coh (a : Type) (b : Type) (g : a -> b) (x : Option a) :
-  Equal (Option b) (functorMapOf Option Functor_instance_Option a b g x) (option_ap a b (option_pure (a -> b) g) x) =
+  Equal (Option b) (functor_map_of Option Functor_instance_Option a b g x) (option_ap a b (option_pure (a -> b) g) x) =
   match x { None ⇒ option_map_coh_none a b g ; Some v ⇒ option_map_coh_some a b g v }
 
 instance Applicative Option {
@@ -223,25 +223,25 @@ mechanism, `§2.1`) — every `instance C T { ... }` registers a real global
 
 ```ken
 fn option_bind_lid (a : Type) (b : Type) (x : a) (k : a -> Option b) :
-  Equal (Option b) (option_bind a b (applicativePureOf Option Applicative_instance_Option a x) k) (k x) = Refl
+  Equal (Option b) (option_bind a b (applicative_pure_of Option Applicative_instance_Option a x) k) (k x) = Refl
 
 const option_bind_rid_none : (a : Type) ->
-  Equal (Option a) (option_bind a a (None a) (applicativePureOf Option Applicative_instance_Option a)) (None a) = λa. tt
+  Equal (Option a) (option_bind a a (None a) (applicative_pure_of Option Applicative_instance_Option a)) (None a) = λa. tt
 
 fn option_bind_rid_some (a : Type) (x : a) :
-  Equal (Option a) (option_bind a a (Some a x) (applicativePureOf Option Applicative_instance_Option a)) (Some a x) = Refl
+  Equal (Option a) (option_bind a a (Some a x) (applicative_pure_of Option Applicative_instance_Option a)) (Some a x) = Refl
 
-fn option_bind_rid (a : Type) (m : Option a) : Equal (Option a) (option_bind a a m (applicativePureOf Option Applicative_instance_Option a)) m =
+fn option_bind_rid (a : Type) (m : Option a) : Equal (Option a) (option_bind a a m (applicative_pure_of Option Applicative_instance_Option a)) m =
   match m { None ⇒ option_bind_rid_none a ; Some x ⇒ option_bind_rid_some a x }
 
 fn option_bind_asc_none (a : Type) (b : Type) (c : Type) (k : a -> Option b) (h : b -> Option c) :
-  Equal (Option c) (option_bind b c (option_bind a b (None a) k) h) (option_bind a c (None a) (composeKleisli Option option_bind a b c k h)) = tt
+  Equal (Option c) (option_bind b c (option_bind a b (None a) k) h) (option_bind a c (None a) (compose_kleisli Option option_bind a b c k h)) = tt
 
 fn option_bind_asc_some (a : Type) (b : Type) (c : Type) (x : a) (k : a -> Option b) (h : b -> Option c) :
-  Equal (Option c) (option_bind b c (option_bind a b (Some a x) k) h) (option_bind a c (Some a x) (composeKleisli Option option_bind a b c k h)) = Refl
+  Equal (Option c) (option_bind b c (option_bind a b (Some a x) k) h) (option_bind a c (Some a x) (compose_kleisli Option option_bind a b c k h)) = Refl
 
 fn option_bind_asc (a : Type) (b : Type) (c : Type) (m : Option a) (k : a -> Option b) (h : b -> Option c) :
-  Equal (Option c) (option_bind b c (option_bind a b m k) h) (option_bind a c m (composeKleisli Option option_bind a b c k h)) =
+  Equal (Option c) (option_bind b c (option_bind a b m k) h) (option_bind a c m (compose_kleisli Option option_bind a b c k h)) =
   match m { None ⇒ option_bind_asc_none a b c k h ; Some x ⇒ option_bind_asc_some a b c x k h }
 
 instance Monad Option {
@@ -255,28 +255,28 @@ instance Monad Option {
 
 ### 2.3 `List` — the cartesian instance, induction throughout
 
-`pure x = [x]`; `ap` is the cartesian product-of-effects; `bind = concatMap`
+`pure x = [x]`; `ap` is the cartesian product-of-effects; `bind = concat_map`
 (chapter `§3.3`/`§4.4`, Fork D — the shape coherent with `Monad List`).
-`concatMap` itself is not landed anywhere in the catalog today (`§6`
+`concat_map` itself is not landed anywhere in the catalog today (`§6`
 Finding) — inlined here, a straightforward structural recursion off the
 landed `list_append`:
 
 ```ken
-fn concatMap (a : Type) (b : Type) (f : a -> List b) (xs : List a) : List b =
-  match xs { Nil ⇒ Nil b ; Cons h t ⇒ list_append b (f h) (concatMap a b f t) }
+fn concat_map (a : Type) (b : Type) (f : a -> List b) (xs : List a) : List b =
+  match xs { Nil ⇒ Nil b ; Cons h t ⇒ list_append b (f h) (concat_map a b f t) }
 
 fn list_pure (a : Type) (x : a) : List a = Cons a x (Nil a)
 
 fn list_ap (a : Type) (b : Type) (mf : List (a -> b)) (mx : List a) : List b =
-  concatMap (a -> b) b (λg. list_map a b g mx) mf
+  concat_map (a -> b) b (λg. list_map a b g mx) mf
 
-fn list_bind (a : Type) (b : Type) (m : List a) (k : a -> List b) : List b = concatMap a b k m
+fn list_bind (a : Type) (b : Type) (m : List a) (k : a -> List b) : List b = concat_map a b k m
 ```
 
-`list_bind` exists because `concatMap`'s own natural argument order
+`list_bind` exists because `concat_map`'s own natural argument order
 (function first, matching its `foldr`-shaped recursion) is the OPPOSITE
 of `bind`'s field order (container first, per the chapter's own `bind m k
-= concatMap k m`) — a real argument-order mismatch, not a cosmetic one
+= concat_map k m`) — a real argument-order mismatch, not a cosmetic one
 (`§6` Finding).
 
 `bind_lid`/`bind_rid`/`bind_asc` for `List`:
@@ -291,30 +291,30 @@ fn list_bind_rid (a : Type) (m : List a) : Equal (List a) (list_bind a a m (list
     Cons h t ⇒ cong (List a) (List a) (list_bind a a t (list_pure a)) t (Cons a h) (list_bind_rid a t)
   }
 
-fn concatMap_append_distrib (a : Type) (b : Type) (f : a -> List b) (xs : List a) (ys : List a) :
-  Equal (List b) (concatMap a b f (list_append a xs ys)) (list_append b (concatMap a b f xs) (concatMap a b f ys)) =
+fn concat_map_append_distrib (a : Type) (b : Type) (f : a -> List b) (xs : List a) (ys : List a) :
+  Equal (List b) (concat_map a b f (list_append a xs ys)) (list_append b (concat_map a b f xs) (concat_map a b f ys)) =
   match xs {
     Nil ⇒ Refl ;
     Cons h t ⇒
       trans (List b)
-        (list_append b (f h) (concatMap a b f (list_append a t ys)))
-        (list_append b (f h) (list_append b (concatMap a b f t) (concatMap a b f ys)))
-        (list_append b (list_append b (f h) (concatMap a b f t)) (concatMap a b f ys))
-        (cong (List b) (List b) (concatMap a b f (list_append a t ys)) (list_append b (concatMap a b f t) (concatMap a b f ys)) (list_append b (f h)) (concatMap_append_distrib a b f t ys))
-        (sym (List b) (list_append b (list_append b (f h) (concatMap a b f t)) (concatMap a b f ys)) (list_append b (f h) (list_append b (concatMap a b f t) (concatMap a b f ys))) (list_assoc b (f h) (concatMap a b f t) (concatMap a b f ys)))
+        (list_append b (f h) (concat_map a b f (list_append a t ys)))
+        (list_append b (f h) (list_append b (concat_map a b f t) (concat_map a b f ys)))
+        (list_append b (list_append b (f h) (concat_map a b f t)) (concat_map a b f ys))
+        (cong (List b) (List b) (concat_map a b f (list_append a t ys)) (list_append b (concat_map a b f t) (concat_map a b f ys)) (list_append b (f h)) (concat_map_append_distrib a b f t ys))
+        (sym (List b) (list_append b (list_append b (f h) (concat_map a b f t)) (concat_map a b f ys)) (list_append b (f h) (list_append b (concat_map a b f t) (concat_map a b f ys))) (list_assoc b (f h) (concat_map a b f t) (concat_map a b f ys)))
   }
 
 fn list_bind_asc (a : Type) (b : Type) (c : Type) (m : List a) (k : a -> List b) (h : b -> List c) :
-  Equal (List c) (list_bind b c (list_bind a b m k) h) (list_bind a c m (composeKleisli List list_bind a b c k h)) =
+  Equal (List c) (list_bind b c (list_bind a b m k) h) (list_bind a c m (compose_kleisli List list_bind a b c k h)) =
   match m {
     Nil ⇒ tt ;
     Cons h0 t ⇒
       trans (List c)
-        (concatMap b c h (list_append b (k h0) (concatMap a b k t)))
-        (list_append c (concatMap b c h (k h0)) (concatMap b c h (concatMap a b k t)))
-        (list_append c (composeKleisli List list_bind a b c k h h0) (list_bind a c t (composeKleisli List list_bind a b c k h)))
-        (concatMap_append_distrib b c h (k h0) (concatMap a b k t))
-        (cong (List c) (List c) (concatMap b c h (concatMap a b k t)) (list_bind a c t (composeKleisli List list_bind a b c k h)) (list_append c (concatMap b c h (k h0))) (list_bind_asc a b c t k h))
+        (concat_map b c h (list_append b (k h0) (concat_map a b k t)))
+        (list_append c (concat_map b c h (k h0)) (concat_map b c h (concat_map a b k t)))
+        (list_append c (compose_kleisli List list_bind a b c k h h0) (list_bind a c t (compose_kleisli List list_bind a b c k h)))
+        (concat_map_append_distrib b c h (k h0) (concat_map a b k t))
+        (cong (List c) (List c) (concat_map b c h (concat_map a b k t)) (list_bind a c t (compose_kleisli List list_bind a b c k h)) (list_append c (concat_map b c h (k h0))) (list_bind_asc a b c t k h))
   }
 ```
 
@@ -336,7 +336,7 @@ fn list_ap_hom (a : Type) (b : Type) (g : a -> b) (x : a) :
   list_right_unit b (Cons b (g x) (Nil b))
 
 fn list_map_coh (a : Type) (b : Type) (g : a -> b) (x : List a) :
-  Equal (List b) (functorMapOf List Functor_instance_List a b g x) (list_ap a b (list_pure (a -> b) g) x) =
+  Equal (List b) (functor_map_of List Functor_instance_List a b g x) (list_ap a b (list_pure (a -> b) g) x) =
   sym (List b) (list_append b (list_map a b g x) (Nil b)) (list_map a b g x) (list_right_unit b (list_map a b g x))
 ```
 
@@ -345,41 +345,41 @@ via `list_ap` does not typecheck at the recursive call (`list_ap`'s own
 unfolding to a `list_map` form needs `list_right_unit`, a PROOF, not a raw
 reduction, so the induction hypothesis's type does not definitionally
 match what `cong` needs at each step) — split into the true inductive
-content, phrased directly over `concatMap`/`list_map`, and the outer
+content, phrased directly over `concat_map`/`list_map`, and the outer
 `list_ap`-phrased lemma composing it with the one `list_right_unit` step:
 
 ```ken
 fn list_ap_inner (a : Type) (b : Type) (y : a) (g : a -> b) : List b = list_map a b g (list_pure a y)
 
 fn list_ap_ich_general (a : Type) (b : Type) (u : List (a -> b)) (y : a) :
-  Equal (List b) (concatMap (a -> b) b (list_ap_inner a b y) u) (list_map (a -> b) b (applyTo a b y) u) =
+  Equal (List b) (concat_map (a -> b) b (list_ap_inner a b y) u) (list_map (a -> b) b (apply_to a b y) u) =
   match u {
     Nil ⇒ tt ;
     Cons g0 t ⇒
       cong (List b) (List b)
-        (concatMap (a -> b) b (list_ap_inner a b y) t)
-        (list_map (a -> b) b (applyTo a b y) t)
+        (concat_map (a -> b) b (list_ap_inner a b y) t)
+        (list_map (a -> b) b (apply_to a b y) t)
         (Cons b (g0 y))
         (list_ap_ich_general a b t y)
   }
 
 fn list_ap_ich (a : Type) (b : Type) (u : List (a -> b)) (y : a) :
-  Equal (List b) (list_ap a b u (list_pure a y)) (list_ap (a -> b) b (list_pure ((a -> b) -> b) (applyTo a b y)) u) =
+  Equal (List b) (list_ap a b u (list_pure a y)) (list_ap (a -> b) b (list_pure ((a -> b) -> b) (apply_to a b y)) u) =
   trans (List b)
-    (concatMap (a -> b) b (list_ap_inner a b y) u)
-    (list_map (a -> b) b (applyTo a b y) u)
-    (list_append b (list_map (a -> b) b (applyTo a b y) u) (Nil b))
+    (concat_map (a -> b) b (list_ap_inner a b y) u)
+    (list_map (a -> b) b (apply_to a b y) u)
+    (list_append b (list_map (a -> b) b (apply_to a b y) u) (Nil b))
     (list_ap_ich_general a b u y)
-    (sym (List b) (list_append b (list_map (a -> b) b (applyTo a b y) u) (Nil b)) (list_map (a -> b) b (applyTo a b y) u) (list_right_unit b (list_map (a -> b) b (applyTo a b y) u)))
+    (sym (List b) (list_append b (list_map (a -> b) b (apply_to a b y) u) (Nil b)) (list_map (a -> b) b (apply_to a b y) u) (list_right_unit b (list_map (a -> b) b (apply_to a b y) u)))
 ```
 
 `ap_cmp` (composition) is the load-bearing law of the four — the standard
 "every combination of three lists" associativity fact. `pure f`'s own
 `ap` reduces to a plain `list_map` (a fact worth its own name,
 `list_ap_pure_left`, since it generalizes both `ap_hom` and the front of
-`ap_cmp`); the rest is three "fusion" facts relating `concatMap`/`list_map`
+`ap_cmp`); the rest is three "fusion" facts relating `concat_map`/`list_map`
 composition, plus the already-proved `list_bind_asc` for the one genuinely
-new inductive step (concatMap-after-concatMap):
+new inductive step (concat_map-after-concat_map):
 
 ```ken
 fn list_ap_pure_left (a : Type) (b : Type) (g : a -> b) (xs : List a) :
@@ -393,129 +393,129 @@ fn list_map_append_distrib (a : Type) (b : Type) (g : a -> b) (xs : List a) (ys 
     Cons h t ⇒ cong (List b) (List b) (list_map a b g (list_append a t ys)) (list_append b (list_map a b g t) (list_map a b g ys)) (Cons b (g h)) (list_map_append_distrib a b g t ys)
   }
 
-fn composeFG (a : Type) (b : Type) (c : Type) (f : b -> List c) (g : a -> b) (x : a) : List c = f (g x)
+fn compose_f_g (a : Type) (b : Type) (c : Type) (f : b -> List c) (g : a -> b) (x : a) : List c = f (g x)
 
-fn concatMap_map_fusion (a : Type) (b : Type) (c : Type) (f : b -> List c) (g : a -> b) (xs : List a) :
-  Equal (List c) (concatMap b c f (list_map a b g xs)) (concatMap a c (composeFG a b c f g) xs) =
+fn concat_map_map_fusion (a : Type) (b : Type) (c : Type) (f : b -> List c) (g : a -> b) (xs : List a) :
+  Equal (List c) (concat_map b c f (list_map a b g xs)) (concat_map a c (compose_f_g a b c f g) xs) =
   match xs {
     Nil ⇒ tt ;
-    Cons h t ⇒ cong (List c) (List c) (concatMap b c f (list_map a b g t)) (concatMap a c (composeFG a b c f g) t) (list_append c (f (g h))) (concatMap_map_fusion a b c f g t)
+    Cons h t ⇒ cong (List c) (List c) (concat_map b c f (list_map a b g t)) (concat_map a c (compose_f_g a b c f g) t) (list_append c (f (g h))) (concat_map_map_fusion a b c f g t)
   }
 
-fn mapAfter (a : Type) (b : Type) (c : Type) (g : b -> c) (f : a -> List b) (x : a) : List c = list_map b c g (f x)
+fn map_after (a : Type) (b : Type) (c : Type) (g : b -> c) (f : a -> List b) (x : a) : List c = list_map b c g (f x)
 
-fn list_map_concatMap_fusion (a : Type) (b : Type) (c : Type) (g : b -> c) (f : a -> List b) (xs : List a) :
-  Equal (List c) (list_map b c g (concatMap a b f xs)) (concatMap a c (mapAfter a b c g f) xs) =
+fn list_map_concat_map_fusion (a : Type) (b : Type) (c : Type) (g : b -> c) (f : a -> List b) (xs : List a) :
+  Equal (List c) (list_map b c g (concat_map a b f xs)) (concat_map a c (map_after a b c g f) xs) =
   match xs {
     Nil ⇒ tt ;
     Cons h t ⇒
       trans (List c)
-        (list_map b c g (list_append b (f h) (concatMap a b f t)))
-        (list_append c (list_map b c g (f h)) (list_map b c g (concatMap a b f t)))
-        (list_append c (mapAfter a b c g f h) (concatMap a c (mapAfter a b c g f) t))
-        (list_map_append_distrib b c g (f h) (concatMap a b f t))
-        (cong (List c) (List c) (list_map b c g (concatMap a b f t)) (concatMap a c (mapAfter a b c g f) t) (list_append c (list_map b c g (f h))) (list_map_concatMap_fusion a b c g f t))
+        (list_map b c g (list_append b (f h) (concat_map a b f t)))
+        (list_append c (list_map b c g (f h)) (list_map b c g (concat_map a b f t)))
+        (list_append c (map_after a b c g f h) (concat_map a c (map_after a b c g f) t))
+        (list_map_append_distrib b c g (f h) (concat_map a b f t))
+        (cong (List c) (List c) (list_map b c g (concat_map a b f t)) (concat_map a c (map_after a b c g f) t) (list_append c (list_map b c g (f h))) (list_map_concat_map_fusion a b c g f t))
   }
 
-fn concatMap_pointwise_eq (a : Type) (b : Type) (f : a -> List b) (g : a -> List b) (pf : (x : a) -> Equal (List b) (f x) (g x)) (xs : List a) :
-  Equal (List b) (concatMap a b f xs) (concatMap a b g xs) =
+fn concat_map_pointwise_eq (a : Type) (b : Type) (f : a -> List b) (g : a -> List b) (pf : (x : a) -> Equal (List b) (f x) (g x)) (xs : List a) :
+  Equal (List b) (concat_map a b f xs) (concat_map a b g xs) =
   match xs {
     Nil ⇒ tt ;
     Cons h t ⇒
       trans (List b)
-        (list_append b (f h) (concatMap a b f t))
-        (list_append b (g h) (concatMap a b f t))
-        (list_append b (g h) (concatMap a b g t))
-        (cong (List b) (List b) (f h) (g h) (λz. list_append b z (concatMap a b f t)) (pf h))
-        (cong (List b) (List b) (concatMap a b f t) (concatMap a b g t) (list_append b (g h)) (concatMap_pointwise_eq a b f g pf t))
+        (list_append b (f h) (concat_map a b f t))
+        (list_append b (g h) (concat_map a b f t))
+        (list_append b (g h) (concat_map a b g t))
+        (cong (List b) (List b) (f h) (g h) (λz. list_append b z (concat_map a b f t)) (pf h))
+        (cong (List b) (List b) (concat_map a b f t) (concat_map a b g t) (list_append b (g h)) (concat_map_pointwise_eq a b f g pf t))
   }
 ```
 
 Assembling `ap_cmp` itself needs three more named accessors (again, the
 lambda/`.field`-in-declared-type gap — `§6` Finding) and a three-part
 `trans` chain: the FRONT (unfold `pure(compose)` via `list_ap_pure_left`,
-lift through the outer `ap` via `cong`, fuse via `concatMap_map_fusion`),
-the MIDDLE (`list_bind_asc` for the outer `concatMap`-after-`concatMap`,
-`concatMap_map_fusion` again for the inner one), and the END (an inductive
-reconciliation of the two remaining `concatMap`/`list_map` orderings,
+lift through the outer `ap` via `cong`, fuse via `concat_map_map_fusion`),
+the MIDDLE (`list_bind_asc` for the outer `concat_map`-after-`concat_map`,
+`concat_map_map_fusion` again for the inner one), and the END (an inductive
+reconciliation of the two remaining `concat_map`/`list_map` orderings,
 needing `list_functor_fusion` — already landed — plus
 `list_map_append_distrib`):
 
 ```ken
-fn apMapV (a : Type) (b : Type) (c : Type) (v : List (a -> b)) (g1 : b -> c) : List (a -> c) = list_map (a -> b) (a -> c) (compose a b c g1) v
+fn ap_map_v (a : Type) (b : Type) (c : Type) (v : List (a -> b)) (g1 : b -> c) : List (a -> c) = list_map (a -> b) (a -> c) (compose a b c g1) v
 
-fn apMapW (a : Type) (c : Type) (w : List a) (h2 : a -> c) : List c = list_map a c h2 w
+fn ap_map_w (a : Type) (c : Type) (w : List a) (h2 : a -> c) : List c = list_map a c h2 w
 
 fn list_ap_cmp_front (a : Type) (b : Type) (c : Type) (u : List (b -> c)) (v : List (a -> b)) :
   Equal (List (a -> c))
     (list_ap (a -> b) (a -> c) (list_ap (b -> c) ((a -> b) -> (a -> c)) (list_pure ((b -> c) -> (a -> b) -> (a -> c)) (compose a b c)) u) v)
-    (concatMap (b -> c) (a -> c) (apMapV a b c v) u) =
+    (concat_map (b -> c) (a -> c) (ap_map_v a b c v) u) =
   trans (List (a -> c))
-    (concatMap ((a -> b) -> (a -> c)) (a -> c) (λh. list_map (a -> b) (a -> c) h v) (list_ap (b -> c) ((a -> b) -> (a -> c)) (list_pure ((b -> c) -> (a -> b) -> (a -> c)) (compose a b c)) u))
-    (concatMap ((a -> b) -> (a -> c)) (a -> c) (λh. list_map (a -> b) (a -> c) h v) (list_map (b -> c) ((a -> b) -> (a -> c)) (compose a b c) u))
-    (concatMap (b -> c) (a -> c) (λg1. list_map (a -> b) (a -> c) (compose a b c g1) v) u)
+    (concat_map ((a -> b) -> (a -> c)) (a -> c) (λh. list_map (a -> b) (a -> c) h v) (list_ap (b -> c) ((a -> b) -> (a -> c)) (list_pure ((b -> c) -> (a -> b) -> (a -> c)) (compose a b c)) u))
+    (concat_map ((a -> b) -> (a -> c)) (a -> c) (λh. list_map (a -> b) (a -> c) h v) (list_map (b -> c) ((a -> b) -> (a -> c)) (compose a b c) u))
+    (concat_map (b -> c) (a -> c) (λg1. list_map (a -> b) (a -> c) (compose a b c g1) v) u)
     (cong (List ((a -> b) -> (a -> c))) (List (a -> c))
        (list_ap (b -> c) ((a -> b) -> (a -> c)) (list_pure ((b -> c) -> (a -> b) -> (a -> c)) (compose a b c)) u)
        (list_map (b -> c) ((a -> b) -> (a -> c)) (compose a b c) u)
-       (λp. concatMap ((a -> b) -> (a -> c)) (a -> c) (λh. list_map (a -> b) (a -> c) h v) p)
+       (λp. concat_map ((a -> b) -> (a -> c)) (a -> c) (λh. list_map (a -> b) (a -> c) h v) p)
        (list_ap_pure_left (b -> c) ((a -> b) -> (a -> c)) (compose a b c) u))
-    (concatMap_map_fusion (b -> c) ((a -> b) -> (a -> c)) (a -> c) (λh. list_map (a -> b) (a -> c) h v) (compose a b c) u)
+    (concat_map_map_fusion (b -> c) ((a -> b) -> (a -> c)) (a -> c) (λh. list_map (a -> b) (a -> c) h v) (compose a b c) u)
 
-fn apCompH1 (a : Type) (b : Type) (c : Type) (v : List (a -> b)) (w : List a) (g1 : b -> c) : List c =
-  concatMap (a -> b) c (λh1. list_map a c (compose a b c g1 h1) w) v
+fn ap_comp_h1 (a : Type) (b : Type) (c : Type) (v : List (a -> b)) (w : List a) (g1 : b -> c) : List c =
+  concat_map (a -> b) c (λh1. list_map a c (compose a b c g1 h1) w) v
 
-fn apThenBind (a : Type) (b : Type) (c : Type) (v : List (a -> b)) (w : List a) (g1 : b -> c) : List c =
-  list_map b c g1 (concatMap (a -> b) b (λh1. list_map a b h1 w) v)
+fn ap_then_bind (a : Type) (b : Type) (c : Type) (v : List (a -> b)) (w : List a) (g1 : b -> c) : List c =
+  list_map b c g1 (concat_map (a -> b) b (λh1. list_map a b h1 w) v)
 
-fn pfProbe (a : Type) (b : Type) (c : Type) (v : List (a -> b)) (w : List a) (g1 : b -> c) :
-  Equal (List c) (apCompH1 a b c v w g1) (apThenBind a b c v w g1) =
+fn pf_probe (a : Type) (b : Type) (c : Type) (v : List (a -> b)) (w : List a) (g1 : b -> c) :
+  Equal (List c) (ap_comp_h1 a b c v w g1) (ap_then_bind a b c v w g1) =
   match v {
     Nil ⇒ tt ;
     Cons h0 t ⇒
       trans (List c)
-        (list_append c (list_map a c (compose a b c g1 h0) w) (apCompH1 a b c t w g1))
-        (list_append c (list_map b c g1 (list_map a b h0 w)) (apThenBind a b c t w g1))
-        (list_map b c g1 (list_append b (list_map a b h0 w) (concatMap (a -> b) b (λh1. list_map a b h1 w) t)))
+        (list_append c (list_map a c (compose a b c g1 h0) w) (ap_comp_h1 a b c t w g1))
+        (list_append c (list_map b c g1 (list_map a b h0 w)) (ap_then_bind a b c t w g1))
+        (list_map b c g1 (list_append b (list_map a b h0 w) (concat_map (a -> b) b (λh1. list_map a b h1 w) t)))
         (trans (List c)
-           (list_append c (list_map a c (compose a b c g1 h0) w) (apCompH1 a b c t w g1))
-           (list_append c (list_map b c g1 (list_map a b h0 w)) (apCompH1 a b c t w g1))
-           (list_append c (list_map b c g1 (list_map a b h0 w)) (apThenBind a b c t w g1))
-           (cong (List c) (List c) (list_map a c (compose a b c g1 h0) w) (list_map b c g1 (list_map a b h0 w)) (λz. list_append c z (apCompH1 a b c t w g1)) (list_functor_fusion a b c g1 h0 w))
-           (cong (List c) (List c) (apCompH1 a b c t w g1) (apThenBind a b c t w g1) (list_append c (list_map b c g1 (list_map a b h0 w))) (pfProbe a b c t w g1)))
+           (list_append c (list_map a c (compose a b c g1 h0) w) (ap_comp_h1 a b c t w g1))
+           (list_append c (list_map b c g1 (list_map a b h0 w)) (ap_comp_h1 a b c t w g1))
+           (list_append c (list_map b c g1 (list_map a b h0 w)) (ap_then_bind a b c t w g1))
+           (cong (List c) (List c) (list_map a c (compose a b c g1 h0) w) (list_map b c g1 (list_map a b h0 w)) (λz. list_append c z (ap_comp_h1 a b c t w g1)) (list_functor_fusion a b c g1 h0 w))
+           (cong (List c) (List c) (ap_comp_h1 a b c t w g1) (ap_then_bind a b c t w g1) (list_append c (list_map b c g1 (list_map a b h0 w))) (pf_probe a b c t w g1)))
         (sym (List c)
-           (list_map b c g1 (list_append b (list_map a b h0 w) (concatMap (a -> b) b (λh1. list_map a b h1 w) t)))
-           (list_append c (list_map b c g1 (list_map a b h0 w)) (list_map b c g1 (concatMap (a -> b) b (λh1. list_map a b h1 w) t)))
-           (list_map_append_distrib b c g1 (list_map a b h0 w) (concatMap (a -> b) b (λh1. list_map a b h1 w) t)))
+           (list_map b c g1 (list_append b (list_map a b h0 w) (concat_map (a -> b) b (λh1. list_map a b h1 w) t)))
+           (list_append c (list_map b c g1 (list_map a b h0 w)) (list_map b c g1 (concat_map (a -> b) b (λh1. list_map a b h1 w) t)))
+           (list_map_append_distrib b c g1 (list_map a b h0 w) (concat_map (a -> b) b (λh1. list_map a b h1 w) t)))
   }
 
 fn list_ap_cmp_mid1 (a : Type) (b : Type) (c : Type) (u : List (b -> c)) (v : List (a -> b)) (w : List a) :
   Equal (List c)
-    (concatMap (a -> c) c (apMapW a c w) (concatMap (b -> c) (a -> c) (apMapV a b c v) u))
-    (concatMap (b -> c) c (apCompH1 a b c v w) u) =
+    (concat_map (a -> c) c (ap_map_w a c w) (concat_map (b -> c) (a -> c) (ap_map_v a b c v) u))
+    (concat_map (b -> c) c (ap_comp_h1 a b c v w) u) =
   trans (List c)
-    (concatMap (a -> c) c (λh2. list_map a c h2 w) (concatMap (b -> c) (a -> c) (λg1. list_map (a -> b) (a -> c) (compose a b c g1) v) u))
-    (concatMap (b -> c) c (λg1. concatMap (a -> c) c (λh2. list_map a c h2 w) (list_map (a -> b) (a -> c) (compose a b c g1) v)) u)
-    (concatMap (b -> c) c (λg1. concatMap (a -> b) c (λh1. list_map a c (compose a b c g1 h1) w) v) u)
+    (concat_map (a -> c) c (λh2. list_map a c h2 w) (concat_map (b -> c) (a -> c) (λg1. list_map (a -> b) (a -> c) (compose a b c g1) v) u))
+    (concat_map (b -> c) c (λg1. concat_map (a -> c) c (λh2. list_map a c h2 w) (list_map (a -> b) (a -> c) (compose a b c g1) v)) u)
+    (concat_map (b -> c) c (λg1. concat_map (a -> b) c (λh1. list_map a c (compose a b c g1 h1) w) v) u)
     (list_bind_asc (b -> c) (a -> c) c u (λg1. list_map (a -> b) (a -> c) (compose a b c g1) v) (λh2. list_map a c h2 w))
-    (concatMap_pointwise_eq (b -> c) c
-       (λg1. concatMap (a -> c) c (λh2. list_map a c h2 w) (list_map (a -> b) (a -> c) (compose a b c g1) v))
-       (λg1. concatMap (a -> b) c (λh1. list_map a c (compose a b c g1 h1) w) v)
-       (λg1. concatMap_map_fusion (a -> b) (a -> c) c (λh2. list_map a c h2 w) (compose a b c g1) v)
+    (concat_map_pointwise_eq (b -> c) c
+       (λg1. concat_map (a -> c) c (λh2. list_map a c h2 w) (list_map (a -> b) (a -> c) (compose a b c g1) v))
+       (λg1. concat_map (a -> b) c (λh1. list_map a c (compose a b c g1 h1) w) v)
+       (λg1. concat_map_map_fusion (a -> b) (a -> c) c (λh2. list_map a c h2 w) (compose a b c g1) v)
        u)
 
 fn list_ap_cmp_mid2 (a : Type) (b : Type) (c : Type) (u : List (b -> c)) (v : List (a -> b)) (w : List a) :
   Equal (List c)
-    (concatMap (b -> c) c (apCompH1 a b c v w) u)
+    (concat_map (b -> c) c (ap_comp_h1 a b c v w) u)
     (list_ap b c u (list_ap a b v w)) =
-  concatMap_pointwise_eq (b -> c) c (apCompH1 a b c v w) (apThenBind a b c v w) (pfProbe a b c v w) u
+  concat_map_pointwise_eq (b -> c) c (ap_comp_h1 a b c v w) (ap_then_bind a b c v w) (pf_probe a b c v w) u
 
 fn list_ap_cmp_mid (a : Type) (b : Type) (c : Type) (u : List (b -> c)) (v : List (a -> b)) (w : List a) :
   Equal (List c)
-    (concatMap (a -> c) c (apMapW a c w) (concatMap (b -> c) (a -> c) (apMapV a b c v) u))
+    (concat_map (a -> c) c (ap_map_w a c w) (concat_map (b -> c) (a -> c) (ap_map_v a b c v) u))
     (list_ap b c u (list_ap a b v w)) =
   trans (List c)
-    (concatMap (a -> c) c (apMapW a c w) (concatMap (b -> c) (a -> c) (apMapV a b c v) u))
-    (concatMap (b -> c) c (apCompH1 a b c v w) u)
+    (concat_map (a -> c) c (ap_map_w a c w) (concat_map (b -> c) (a -> c) (ap_map_v a b c v) u))
+    (concat_map (b -> c) c (ap_comp_h1 a b c v w) u)
     (list_ap b c u (list_ap a b v w))
     (list_ap_cmp_mid1 a b c u v w)
     (list_ap_cmp_mid2 a b c u v w)
@@ -526,11 +526,11 @@ fn list_ap_cmp (a : Type) (b : Type) (c : Type) (u : List (b -> c)) (v : List (a
     (list_ap b c u (list_ap a b v w)) =
   trans (List c)
     (list_ap a c (list_ap (a -> b) (a -> c) (list_ap (b -> c) ((a -> b) -> (a -> c)) (list_pure ((b -> c) -> (a -> b) -> (a -> c)) (compose a b c)) u) v) w)
-    (concatMap (a -> c) c (λh2. list_map a c h2 w) (concatMap (b -> c) (a -> c) (λg1. list_map (a -> b) (a -> c) (compose a b c g1) v) u))
+    (concat_map (a -> c) c (λh2. list_map a c h2 w) (concat_map (b -> c) (a -> c) (λg1. list_map (a -> b) (a -> c) (compose a b c g1) v) u))
     (list_ap b c u (list_ap a b v w))
     (cong (List (a -> c)) (List c)
        (list_ap (a -> b) (a -> c) (list_ap (b -> c) ((a -> b) -> (a -> c)) (list_pure ((b -> c) -> (a -> b) -> (a -> c)) (compose a b c)) u) v)
-       (concatMap (b -> c) (a -> c) (λg1. list_map (a -> b) (a -> c) (compose a b c g1) v) u)
+       (concat_map (b -> c) (a -> c) (λg1. list_map (a -> b) (a -> c) (compose a b c g1) v) u)
        (λq. list_ap a c q w)
        (list_ap_cmp_front a b c u v))
     (list_ap_cmp_mid a b c u v w)
@@ -589,21 +589,21 @@ CONSTRUCTION, one denotation, not two.
 ## 3. Using it
 
 ```ken example
-const listPureTwo : List Nat = list_pure Nat (Suc (Suc Zero))
+const list_pure_two : List Nat = list_pure Nat (Suc (Suc Zero))
 
-const listApExample : List Nat =
+const list_ap_example : List Nat =
   list_ap Nat Nat (Cons (Nat -> Nat) (Suc) (Nil (Nat -> Nat))) (Cons Nat Zero (Cons Nat (Suc Zero) (Nil Nat)))
 
-const listBindExample : List Nat =
+const list_bind_example : List Nat =
   list_bind Nat Nat (Cons Nat Zero (Cons Nat (Suc Zero) (Nil Nat))) (λx. Cons Nat x (Cons Nat x (Nil Nat)))
 ```
 
 ```ken example
-const optionApSome : Option Nat = option_ap Nat Nat (Some (Nat -> Nat) Suc) (Some Nat Zero)
-const optionApNone : Option Nat = option_ap Nat Nat (None (Nat -> Nat)) (Some Nat Zero)
+const option_ap_some : Option Nat = option_ap Nat Nat (Some (Nat -> Nat) Suc) (Some Nat Zero)
+const option_ap_none : Option Nat = option_ap Nat Nat (None (Nat -> Nat)) (Some Nat Zero)
 
-const optionBindSome : Option Nat = option_bind Nat Nat (Some Nat Zero) (λx. Some Nat (Suc x))
-const optionBindNone : Option Nat = option_bind Nat Nat (None Nat) (λx. Some Nat (Suc x))
+const option_bind_some : Option Nat = option_bind Nat Nat (Some Nat Zero) (λx. Some Nat (Suc x))
+const option_bind_none : Option Nat = option_bind Nat Nat (None Nat) (λx. Some Nat (Suc x))
 ```
 
 ## 4. Laws  proofs
@@ -614,15 +614,15 @@ law-discharge mechanism, per the CAT-1/CAT-2 template. A handful of
 computation facts about the concrete instances round out the picture:
 
 ```ken example
-lemma listBindLidAtZero : Equal (List Nat) (list_bind Nat Nat (list_pure Nat Zero) (list_pure Nat)) (list_pure Nat Zero) = list_bind_lid Nat Nat Zero (list_pure Nat)
+lemma list_bind_lid_at_zero : Equal (List Nat) (list_bind Nat Nat (list_pure Nat Zero) (list_pure Nat)) (list_pure Nat Zero) = list_bind_lid Nat Nat Zero (list_pure Nat)
 
-lemma optionApNoneShortCircuits : Equal (Option Nat) (option_ap Nat Nat (None (Nat -> Nat)) (Some Nat Zero)) (None Nat) = tt
+lemma option_ap_none_short_circuits : Equal (Option Nat) (option_ap Nat Nat (None (Nat -> Nat)) (Some Nat Zero)) (None Nat) = tt
 ```
 
-`listBindLidAtZero` is `bind_lid` (already proved generically in `§2.3`)
+`list_bind_lid_at_zero` is `bind_lid` (already proved generically in `§2.3`)
 instantiated at a concrete `x`/`k` — a direct application, not a fresh
 proof; every catalog law is reusable this way at any concrete instance.
-`optionApNoneShortCircuits` closes with `tt`: `mf = None` collapses
+`option_ap_none_short_circuits` closes with `tt`: `mf = None` collapses
 `option_ap`'s match immediately to the literal `None` constructor on both
 sides.
 
@@ -641,7 +641,7 @@ lemma listApCmpIsNotJustRefl (a : Type) (b : Type) (c : Type) (u : List (b -> c)
 ## 5. Design notes
 
 **Why the `sym`-around-a-`trans` shape kept failing, and why direct
-induction was the fix.** The first attempt at the `pfProbe`-shaped
+induction was the fix.** The first attempt at the `pf_probe`-shaped
 reconciliation (`§2.3`) tried to state the fact as `sym(trans(...))`,
 composing already-proved fusion lemmas algebraically rather than
 inducting directly. It failed twice, both times with a genuine bug (a
@@ -659,7 +659,7 @@ A SELF-RECURSIVE proof whose match arms directly embed complex proof terms
 (rather than dispatching to separately-declared, non-recursive lemmas)
 repeatedly hit a kernel `TypeMismatch` that a structurally-identical
 DISPATCHED version did not — confirmed for both a non-recursive case
-(`option_ap_id`, `Option`'s laws) and a recursive one (`pfProbe`, `§2.3`).
+(`option_ap_id`, `Option`'s laws) and a recursive one (`pf_probe`, `§2.3`).
 The reliable shape throughout this entry: prove each match arm as its own
 top-level, directly-ascribed lemma, then dispatch to it from a thin outer
 `match`.
@@ -678,13 +678,13 @@ across this entry's `Option` and `List` proofs.
 - **Sugar candidate → Ergo (parser):** `.field` projection on a class
   record and a bare `λ` BOTH fail to parse inside a `fn`'s own declared
   TYPE (`parse_atom_type` has no dot-continuation or lambda arm) — only
-  in VALUE/body position. Hit repeatedly (`functorMapOf`,
-  `applicativePureOf`, `composeKleisli`, `apMapV`, `apMapW`, `apCompH1`,
-  `apThenBind`), each worked around with a named accessor function taking
+  in VALUE/body position. Hit repeatedly (`functor_map_of`,
+  `applicative_pure_of`, `compose_kleisli`, `ap_map_v`, `ap_map_w`, `ap_comp_h1`,
+  `ap_then_bind`), each worked around with a named accessor function taking
   the dictionary/composed-function explicitly. This is the SAME class of
   gap DS-2 found for instance-value projection in type position;
   confirmed here to extend to bare lambdas too.
-- **Abstraction candidate → Ergo/catalog follow-up:** `concatMap` is not
+- **Abstraction candidate → Ergo/catalog follow-up:** `concat_map` is not
   landed anywhere in the catalog (only named in the spec chapter's own
   prose) despite `list_append`, `list_map`, and the other `List`
   operations it naturally sits alongside all being landed. Inlined here
@@ -693,7 +693,7 @@ across this entry's `Option` and `List` proofs.
   second, unconsumed copy today) — once cross-file import lands, this
   should move to a real `Collections.ken` addition so it is genuinely
   shared.
-- **Naming hazard:** `concatMap`'s natural argument order (function
+- **Naming hazard:** `concat_map`'s natural argument order (function
   first, matching its own `foldr`-shaped recursion) is the OPPOSITE of
   `bind`'s field order (container first) — `list_bind` is the necessary
   order-adjusted wrapper, not a stylistic renaming.
@@ -763,7 +763,7 @@ across this entry's `Option` and `List` proofs.
    (the DS-2-established pattern), not just a source grep.
 6. **Proof families.** `Option` — finite case-split, no induction.
    `List` — structural induction throughout; `ap_cmp` is the deepest
-   (induction inside `pfProbe`, composed with three non-recursive fusion
+   (induction inside `pf_probe`, composed with three non-recursive fusion
    lemmas and the already-proved `list_bind_asc`).
 7. **Consumers.** None yet in this catalog; the ITree bridge (`§2.5`) is
    already a "consumer" in the sense that the effect system's `bind`
@@ -895,7 +895,7 @@ fn identity_ap_hom (a : Type) (b : Type) (g : a -> b) (x : a) :
   Refl
 
 fn identity_ap_ich (a : Type) (b : Type) (u : Identity (a -> b)) (y : a) :
-  Equal (Identity b) (identity_ap a b u (identity_pure a y)) (identity_ap (a -> b) b (identity_pure ((a -> b) -> b) (applyTo a b y)) u) =
+  Equal (Identity b) (identity_ap a b u (identity_pure a y)) (identity_ap (a -> b) b (identity_pure ((a -> b) -> b) (apply_to a b y)) u) =
   match u { MkIdentity f ⇒ Refl }
 
 fn identity_ap_cmp (a : Type) (b : Type) (c : Type) (u : Identity (b -> c)) (v : Identity (a -> b)) (w : Identity a) :
@@ -962,26 +962,26 @@ own two properties plus `map_coh`, applied identically to close both
 instances' `Cons`/`Some` cases below):
 
 ```ken
-fn applicativeApOf (g_ty : Type -> Type) (d : Applicative g_ty) (a : Type) (b : Type) (mf : g_ty (a -> b)) (mx : g_ty a) : g_ty b =
+fn applicative_ap_of (g_ty : Type -> Type) (d : Applicative g_ty) (a : Type) (b : Type) (mf : g_ty (a -> b)) (mx : g_ty a) : g_ty b =
   d.ap a b mf mx
 
-fn applicativeMapOf (g_ty : Type -> Type) (d : Applicative g_ty) (a : Type) (b : Type) (f : a -> b) (x : g_ty a) : g_ty b =
+fn applicative_map_of (g_ty : Type -> Type) (d : Applicative g_ty) (a : Type) (b : Type) (f : a -> b) (x : g_ty a) : g_ty b =
   d.functor.map a b f x
 
 fn eta_natural_map_pure_term (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (eta_map : (a : Type) -> g a -> h a) (a : Type) (b : Type) (f : a -> b) : h (a -> b) =
-  eta_map (a -> b) (applicativePureOf g apg (a -> b) f)
+  eta_map (a -> b) (applicative_pure_of g apg (a -> b) f)
 
 fn eta_natural_map_eq1 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (eta_map : (a : Type) -> g a -> h a)
-  (eta_pure : (a : Type) -> (x : a) -> Equal (h a) (eta_map a (applicativePureOf g apg a x)) (applicativePureOf h aph a x))
+  (eta_pure : (a : Type) -> (x : a) -> Equal (h a) (eta_map a (applicative_pure_of g apg a x)) (applicative_pure_of h aph a x))
   (a : Type) (b : Type) (f : a -> b) :
-  Equal (h (a -> b)) (eta_natural_map_pure_term g h apg eta_map a b f) (applicativePureOf h aph (a -> b) f) =
+  Equal (h (a -> b)) (eta_natural_map_pure_term g h apg eta_map a b f) (applicative_pure_of h aph (a -> b) f) =
   eta_pure (a -> b) f
 
 fn eta_natural_map (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (eta_map : (a : Type) -> g a -> h a)
-  (eta_pure : (a : Type) -> (x : a) -> Equal (h a) (eta_map a (applicativePureOf g apg a x)) (applicativePureOf h aph a x))
-  (eta_ap : (a : Type) -> (b : Type) -> (mf : g (a -> b)) -> (mx : g a) -> Equal (h b) (eta_map b (applicativeApOf g apg a b mf mx)) (applicativeApOf h aph a b (eta_map (a -> b) mf) (eta_map a mx)))
+  (eta_pure : (a : Type) -> (x : a) -> Equal (h a) (eta_map a (applicative_pure_of g apg a x)) (applicative_pure_of h aph a x))
+  (eta_ap : (a : Type) -> (b : Type) -> (mf : g (a -> b)) -> (mx : g a) -> Equal (h b) (eta_map b (applicative_ap_of g apg a b mf mx)) (applicative_ap_of h aph a b (eta_map (a -> b) mf) (eta_map a mx)))
   (a : Type) (b : Type) (f : a -> b) (x : g a) :
-  Equal (h b) (eta_map b (applicativeMapOf g apg a b f x)) (applicativeMapOf h aph a b f (eta_map a x)) =
+  Equal (h b) (eta_map b (applicative_map_of g apg a b f x)) (applicative_map_of h aph a b f (eta_map a x)) =
   trans (h b)
     (eta_map b (apg.functor.map a b f x))
     (aph.ap a b (eta_natural_map_pure_term g h apg eta_map a b f) (eta_map a x))
@@ -1020,8 +1020,8 @@ fn list_traverse_nat_action (g : Type -> Type) (h : Type -> Type) (eta_map : (a 
   eta_map b (t x)
 
 fn list_traverse_naturality (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (eta_map : (a : Type) -> g a -> h a)
-  (eta_pure : (a : Type) -> (x : a) -> Equal (h a) (eta_map a (applicativePureOf g apg a x)) (applicativePureOf h aph a x))
-  (eta_ap : (a : Type) -> (b : Type) -> (mf : g (a -> b)) -> (mx : g a) -> Equal (h b) (eta_map b (applicativeApOf g apg a b mf mx)) (applicativeApOf h aph a b (eta_map (a -> b) mf) (eta_map a mx)))
+  (eta_pure : (a : Type) -> (x : a) -> Equal (h a) (eta_map a (applicative_pure_of g apg a x)) (applicative_pure_of h aph a x))
+  (eta_ap : (a : Type) -> (b : Type) -> (mf : g (a -> b)) -> (mx : g a) -> Equal (h b) (eta_map b (applicative_ap_of g apg a b mf mx)) (applicative_ap_of h aph a b (eta_map (a -> b) mf) (eta_map a mx)))
   (a : Type) (b : Type) (t : a -> g b) (xs : List a) :
   Equal (h (List b)) (eta_map (List b) (list_traverse g apg a b t xs)) (list_traverse h aph a b (list_traverse_nat_action g h eta_map a b t) xs) =
   match xs {
@@ -1052,8 +1052,8 @@ fn option_traverse_nat_action (g : Type -> Type) (h : Type -> Type) (eta_map : (
   eta_map b (t x)
 
 fn option_traverse_naturality (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (eta_map : (a : Type) -> g a -> h a)
-  (eta_pure : (a : Type) -> (x : a) -> Equal (h a) (eta_map a (applicativePureOf g apg a x)) (applicativePureOf h aph a x))
-  (eta_ap : (a : Type) -> (b : Type) -> (mf : g (a -> b)) -> (mx : g a) -> Equal (h b) (eta_map b (applicativeApOf g apg a b mf mx)) (applicativeApOf h aph a b (eta_map (a -> b) mf) (eta_map a mx)))
+  (eta_pure : (a : Type) -> (x : a) -> Equal (h a) (eta_map a (applicative_pure_of g apg a x)) (applicative_pure_of h aph a x))
+  (eta_ap : (a : Type) -> (b : Type) -> (mf : g (a -> b)) -> (mx : g a) -> Equal (h b) (eta_map b (applicative_ap_of g apg a b mf mx)) (applicative_ap_of h aph a b (eta_map (a -> b) mf) (eta_map a mx)))
   (a : Type) (b : Type) (t : a -> g b) (mx : Option a) :
   Equal (h (Option b)) (eta_map (Option b) (option_traverse g apg a b t mx)) (option_traverse h aph a b (option_traverse_nat_action g h eta_map a b t) mx) =
   match mx {
@@ -1075,10 +1075,10 @@ fn option_traverse_naturality (g : Type -> Type) (h : Type -> Type) (apg : Appli
 ### 9.3 Using it
 
 ```ken example
-const listTraverseIdentity : Identity (List Nat) =
+const list_traverse_identity : Identity (List Nat) =
   list_traverse Identity Applicative_instance_Identity Nat Nat (identity_pure Nat) (Cons Nat Zero (Cons Nat (Suc Zero) (Nil Nat)))
 
-const optionTraverseSome : Identity (Option Nat) =
+const option_traverse_some : Identity (Option Nat) =
   option_traverse Identity Applicative_instance_Identity Nat Nat (identity_pure Nat) (Some Nat Zero)
 ```
 
@@ -1364,25 +1364,25 @@ fn compose_ap_ich_ctx (g : Type -> Type) (h : Type -> Type) (apg : Applicative g
   apg.ap (h a) (h b) w1 (apg.pure (h a) w2)
 
 fn compose_ap_ich_mid1_ctx (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (w1 : g (h a -> h b)) (w2 : h a) : Compose g h b =
-  apg.ap (h a -> h b) (h b) (apg.pure ((h a -> h b) -> h b) (applyTo (h a) (h b) w2)) w1
+  apg.ap (h a -> h b) (h b) (apg.pure ((h a -> h b) -> h b) (apply_to (h a) (h b) w2)) w1
 
 fn compose_ap_ich_eq1 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (w1 : g (h a -> h b)) (w2 : h a) :
   Equal (Compose g h b) (compose_ap_ich_ctx g h apg a b w1 w2) (compose_ap_ich_mid1_ctx g h apg a b w1 w2) =
   apg.ap_ich (h a) (h b) w1 w2
 
 fn compose_ap_ich_mapctx1 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (w1 : g (h a -> h b)) (w2 : h a) : Compose g h b =
-  apg.functor.map (h a -> h b) (h b) (applyTo (h a) (h b) w2) w1
+  apg.functor.map (h a -> h b) (h b) (apply_to (h a) (h b) w2) w1
 
 fn compose_ap_ich_eq2 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (w1 : g (h a -> h b)) (w2 : h a) :
   Equal (Compose g h b) (compose_ap_ich_mid1_ctx g h apg a b w1 w2) (compose_ap_ich_mapctx1 g h apg a b w1 w2) =
   sym (Compose g h b) (compose_ap_ich_mapctx1 g h apg a b w1 w2) (compose_ap_ich_mid1_ctx g h apg a b w1 w2)
-    (apg.map_coh (h a -> h b) (h b) (applyTo (h a) (h b) w2) w1)
+    (apg.map_coh (h a -> h b) (h b) (apply_to (h a) (h b) w2) w1)
 
 fn compose_ap_ich_compfuncfn (g : Type -> Type) (h : Type -> Type) (aph : Applicative h) (a : Type) (b : Type) (y : a) : h (a -> b) -> h b =
-  comp (h (a -> b)) (h a -> h b) (h b) (applyTo (h a) (h b) (compose_ap_hom_purex g h aph a y)) (aph.ap a b)
+  comp (h (a -> b)) (h a -> h b) (h b) (apply_to (h a) (h b) (compose_ap_hom_purex g h aph a y)) (aph.ap a b)
 
 fn compose_ap_ich_func3fn (g : Type -> Type) (h : Type -> Type) (aph : Applicative h) (a : Type) (b : Type) (y : a) : h (a -> b) -> h b =
-  aph.ap (a -> b) b (aph.pure ((a -> b) -> b) (applyTo a b y))
+  aph.ap (a -> b) b (aph.pure ((a -> b) -> b) (apply_to a b y))
 
 fn compose_ap_ich_mapctx3 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (mf : Compose g h (a -> b)) (y : a) : Compose g h b =
   apg.functor.map (h (a -> b)) (h b) (compose_ap_ich_compfuncfn g h aph a b y) mf
@@ -1394,7 +1394,7 @@ fn compose_ap_ich_eq3 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g
   sym (Compose g h b)
     (compose_ap_ich_mapctx3 g h apg aph a b mf y)
     (compose_ap_ich_mapctx1 g h apg a b (compose_ap_ich_uprime g h apg aph a b mf) (compose_ap_hom_purex g h aph a y))
-    (apg.functor.fusion_law (h (a -> b)) (h a -> h b) (h b) (applyTo (h a) (h b) (compose_ap_hom_purex g h aph a y)) (aph.ap a b) mf)
+    (apg.functor.fusion_law (h (a -> b)) (h a -> h b) (h b) (apply_to (h a) (h b) (compose_ap_hom_purex g h aph a y)) (aph.ap a b) mf)
 
 fn compose_ap_ich_pointwise (g : Type -> Type) (h : Type -> Type) (aph : Applicative h) (a : Type) (b : Type) (y : a) (q : h (a -> b)) :
   Equal (h b) (compose_ap_ich_compfuncfn g h aph a b y q) (compose_ap_ich_func3fn g h aph a b y q) =
@@ -1418,21 +1418,21 @@ fn compose_ap_ich_eq4 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g
     (compose_ap_ich_funcs_eq g h aph a b y)
 
 fn compose_ap_ich_innermap (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (y : a) : g (h (a -> b) -> h b) =
-  apg.functor.map (h ((a -> b) -> b)) (h (a -> b) -> h b) (aph.ap (a -> b) b) (apg.pure (h ((a -> b) -> b)) (aph.pure ((a -> b) -> b) (applyTo a b y)))
+  apg.functor.map (h ((a -> b) -> b)) (h (a -> b) -> h b) (aph.ap (a -> b) b) (apg.pure (h ((a -> b) -> b)) (aph.pure ((a -> b) -> b) (apply_to a b y)))
 
 fn compose_ap_ich_innerap (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (y : a) : g (h (a -> b) -> h b) =
-  apg.ap (h ((a -> b) -> b)) (h (a -> b) -> h b) (apg.pure ((h ((a -> b) -> b)) -> (h (a -> b) -> h b)) (aph.ap (a -> b) b)) (apg.pure (h ((a -> b) -> b)) (aph.pure ((a -> b) -> b) (applyTo a b y)))
+  apg.ap (h ((a -> b) -> b)) (h (a -> b) -> h b) (apg.pure ((h ((a -> b) -> b)) -> (h (a -> b) -> h b)) (aph.ap (a -> b) b)) (apg.pure (h ((a -> b) -> b)) (aph.pure ((a -> b) -> b) (apply_to a b y)))
 
 fn compose_ap_ich_innerpure (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (y : a) : g (h (a -> b) -> h b) =
   apg.pure (h (a -> b) -> h b) (compose_ap_ich_func3fn g h aph a b y)
 
 fn compose_ap_ich_eq_inner1 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (y : a) :
   Equal (g (h (a -> b) -> h b)) (compose_ap_ich_innermap g h apg aph a b y) (compose_ap_ich_innerap g h apg aph a b y) =
-  apg.map_coh (h ((a -> b) -> b)) (h (a -> b) -> h b) (aph.ap (a -> b) b) (apg.pure (h ((a -> b) -> b)) (aph.pure ((a -> b) -> b) (applyTo a b y)))
+  apg.map_coh (h ((a -> b) -> b)) (h (a -> b) -> h b) (aph.ap (a -> b) b) (apg.pure (h ((a -> b) -> b)) (aph.pure ((a -> b) -> b) (apply_to a b y)))
 
 fn compose_ap_ich_eq_inner2 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (y : a) :
   Equal (g (h (a -> b) -> h b)) (compose_ap_ich_innerap g h apg aph a b y) (compose_ap_ich_innerpure g h apg aph a b y) =
-  apg.ap_hom (h ((a -> b) -> b)) (h (a -> b) -> h b) (aph.ap (a -> b) b) (aph.pure ((a -> b) -> b) (applyTo a b y))
+  apg.ap_hom (h ((a -> b) -> b)) (h (a -> b) -> h b) (aph.ap (a -> b) b) (aph.pure ((a -> b) -> b) (apply_to a b y))
 
 fn compose_ap_ich_target_ctx (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (mf : Compose g h (a -> b)) (w : g (h (a -> b) -> h b)) : Compose g h b =
   apg.ap (h (a -> b)) (h b) w mf
@@ -1469,11 +1469,11 @@ fn compose_ap_ich_eq_target3 (g : Type -> Type) (h : Type -> Type) (apg : Applic
 fn compose_ap_ich (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (mf : Compose g h (a -> b)) (y : a) :
   Equal (Compose g h b)
     (compose_ap g h apg aph a b mf (compose_pure g h apg aph a y))
-    (compose_ap g h apg aph (a -> b) b (compose_pure g h apg aph ((a -> b) -> b) (applyTo a b y)) mf) =
+    (compose_ap g h apg aph (a -> b) b (compose_pure g h apg aph ((a -> b) -> b) (apply_to a b y)) mf) =
   trans (Compose g h b)
     (compose_ap g h apg aph a b mf (compose_pure g h apg aph a y))
     (compose_ap_ich_mapctx3 g h apg aph a b mf y)
-    (compose_ap g h apg aph (a -> b) b (compose_pure g h apg aph ((a -> b) -> b) (applyTo a b y)) mf)
+    (compose_ap g h apg aph (a -> b) b (compose_pure g h apg aph ((a -> b) -> b) (apply_to a b y)) mf)
     (trans (Compose g h b)
        (compose_ap g h apg aph a b mf (compose_pure g h apg aph a y))
        (compose_ap_ich_mapctx1 g h apg a b (compose_ap_ich_uprime g h apg aph a b mf) (compose_ap_hom_purex g h aph a y))
@@ -1488,12 +1488,12 @@ fn compose_ap_ich (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (a
     (trans (Compose g h b)
        (compose_ap_ich_mapctx3 g h apg aph a b mf y)
        (compose_ap_ich_fmapctx g h apg a b mf (compose_ap_ich_func3fn g h aph a b y))
-       (compose_ap g h apg aph (a -> b) b (compose_pure g h apg aph ((a -> b) -> b) (applyTo a b y)) mf)
+       (compose_ap g h apg aph (a -> b) b (compose_pure g h apg aph ((a -> b) -> b) (apply_to a b y)) mf)
        (compose_ap_ich_eq4 g h apg aph a b mf y)
        (trans (Compose g h b)
           (compose_ap_ich_fmapctx g h apg a b mf (compose_ap_ich_func3fn g h aph a b y))
           (compose_ap_ich_target_ctx g h apg a b mf (compose_ap_ich_innerpure g h apg aph a b y))
-          (compose_ap g h apg aph (a -> b) b (compose_pure g h apg aph ((a -> b) -> b) (applyTo a b y)) mf)
+          (compose_ap g h apg aph (a -> b) b (compose_pure g h apg aph ((a -> b) -> b) (apply_to a b y)) mf)
           (sym (Compose g h b)
              (compose_ap_ich_target_ctx g h apg a b mf (compose_ap_ich_innerpure g h apg aph a b y))
              (compose_ap_ich_fmapctx g h apg a b mf (compose_ap_ich_func3fn g h aph a b y))
@@ -1501,7 +1501,7 @@ fn compose_ap_ich (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (a
           (trans (Compose g h b)
              (compose_ap_ich_target_ctx g h apg a b mf (compose_ap_ich_innerpure g h apg aph a b y))
              (compose_ap_ich_target_ctx g h apg a b mf (compose_ap_ich_innerap g h apg aph a b y))
-             (compose_ap g h apg aph (a -> b) b (compose_pure g h apg aph ((a -> b) -> b) (applyTo a b y)) mf)
+             (compose_ap g h apg aph (a -> b) b (compose_pure g h apg aph ((a -> b) -> b) (apply_to a b y)) mf)
              (sym (Compose g h b)
                 (compose_ap_ich_target_ctx g h apg a b mf (compose_ap_ich_innerap g h apg aph a b y))
                 (compose_ap_ich_target_ctx g h apg a b mf (compose_ap_ich_innerpure g h apg aph a b y))

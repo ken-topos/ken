@@ -102,7 +102,7 @@ equations, so the truncation catch does not fire (`§1` pt 1).
 The frame names `map`/`filter` as the red ops; grounding sharpens it: **only
 decomposition #1 is provable now** — it uses only landed `take`/`drop`/
 `list_append`. Decomposition #2 needs **both** `length` **and** `min` (only
-`natSub`, saturating monus, is landed — neither `length` nor `min`), so it joins
+`nat_sub`, saturating monus, is landed — neither `length` nor `min`), so it joins
 `map`/`filter`/`mem` in red-until-built. Decomposition #1's proof is a standard
 induction on `n`/`xs` closing by the `§1 pt 3` grammar; the red laws are
 authored here and discharged when their ops land.
@@ -197,7 +197,7 @@ sort (a : Type) (le : a → a → Bool) (xs : List a) : List a   -- total, SCT-t
 
 -- permutation
 (a : Type) → (le : a → a → Bool) → (xs : List a) →
-  Perm a (eqFromOrd a le) xs (sort a le xs)
+  Perm a (eq_from_ord a le) xs (sort a le xs)
 ```
 
 **Proved carrier is `List Bool`, not `List Int`.** `DecEq Int`/`Ord Int` are
@@ -210,17 +210,17 @@ reject-vs-reject (green-vs-green vacuity). So **D2's proof obligations and D4's
 ACCEPT arm carry on `List Bool`**; `List Int`/generic appear only where a law is
 comparator-parametric and needs no concrete lawful instance.
 
-### 3.5 `eqFromOrd` — the capstone needs no separate `DecEq`
+### 3.5 `eq_from_ord` — the capstone needs no separate `DecEq`
 
 `count`'s comparator for the `Perm` law is derived from the **same `le` the sort
 uses** — no extra dictionary:
 
 ```
-eqFromOrd (a : Type) (le : a → a → Bool) (x : a) (y : a) : Bool =
+eq_from_ord (a : Type) (le : a → a → Bool) (x : a) (y : a) : Bool =
   bool_and (le x y) (le y x)
 ```
 
-For a lawful order this decides `Equal a`: `antisym` gives `eqFromOrd le x y =
+For a lawful order this decides `Equal a`: `antisym` gives `eq_from_ord le x y =
 True → Equal a x y`, and `refl` gives the converse. `DecEq`'s `sound`/`complete`
 fields (`lawful_classes.ken:25`) tie `eq` to kernel `Equal`, so `count` counts
 up to *the same* equality the law is about — no equality-mismatch hole (Fork A

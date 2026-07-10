@@ -35,12 +35,12 @@ fn either_and_combinators_are_real_globals() {
         "either",
         "either_left",
         "either_right",
-        "mapLeft",
-        "mapLeft_left",
-        "mapLeft_right",
-        "mapRight",
-        "mapRight_left",
-        "mapRight_right",
+        "map_left",
+        "map_left_left",
+        "map_left_right",
+        "map_right",
+        "map_right_left",
+        "map_right_right",
         "swap",
         "swap_involutive",
     ] {
@@ -119,18 +119,18 @@ fn ac8_non_involutive_swap_witness_rejected() {
     }
 }
 
-// AC8 discriminator 3: `mapLeft` does not touch the `Right` payload —
-// reusing `mapLeft_right`'s "untouched" proof to claim `g` was applied
+// AC8 discriminator 3: `map_left` does not touch the `Right` payload —
+// reusing `map_left_right`'s "untouched" proof to claim `g` was applied
 // must be rejected.
 #[test]
 fn ac8_mapleft_leaves_right_untouched() {
     let mut env = base_env();
     let r = env.elaborate_decl(
         "fn bad_mapLeft_touches_right (a : Type) (c : Type) (f : a -> c) (v : a) : \
-           Equal (Either c a) (mapLeft a a c f (Right a a v)) (Right c a (f v)) = mapLeft_right a a c f v",
+           Equal (Either c a) (map_left a a c f (Right a a v)) (Right c a (f v)) = map_left_right a a c f v",
     );
     match r {
-        Ok(_) => panic!("mapLeft_right proves Right v is left UNTOUCHED (Right c b v, not Right c b (f v)) — reusing it for a f-applied RHS must be rejected"),
+        Ok(_) => panic!("map_left_right proves Right v is left UNTOUCHED (Right c b v, not Right c b (f v)) — reusing it for a f-applied RHS must be rejected"),
         Err(e) => {
             let msg = format!("{:?}", e);
             assert!(
