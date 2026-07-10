@@ -182,12 +182,14 @@ bar.
   breadth over the tier is the operator's stated goal for the window.
 - **Reversibility:** easy.
 
-### RUN STATUS / resume point (2026-07-10, ~06:3x UTC)
+### RUN STATUS / resume point (2026-07-10, ~07:0x UTC)
 
-**Live checkpoint for lossless resume across compaction.** Core toolkit
-landed-or-in-flight; **three build tracks live** — **DS-8** (Foundation, core
-building; instances gated on DS-8b), **DS-5b** (Kernel), **DS-8b** (Ergo). All
-three gate through the Architect — saturation ceiling, do NOT fan out further.
+**Live checkpoint for lossless resume across compaction.** **Two build tracks
+live** — **DS-8** (Foundation, assembling final instances → lands whole) and
+**DS-5b** (Kernel) — plus the **spec `∅⊆proc` fast-follow** (spec-author,
+trailing DS-8b, now clear). Both tracks gate through the Architect; hold at the
+ceiling, do NOT fan out. **DS-8b-landing playbook executed:** merged → relayed
+Foundation (assemble) + released spec-author.
 
 - **DS-2** (`Ord Nat`) — ✅ **LANDED** `main @ 971aaad` (PR #421). Retros in.
 - **DS-7** (`Applicative`/`Monad`) — ✅ **LANDED** `main @ 88dce79` (PR #428,
@@ -202,18 +204,20 @@ three gate through the Architect — saturation ceiling, do NOT fan out further.
   `Core/EffectfulClasses.ken.md`. Prereqs all landed (DS-7; Functor/Foldable
   instances; SURF-1/SURF-2). **Building the unblocked core** (class decl w/
   `proc traverse`, `Compose`+`compose_*`+4 laws, List/Option `traverse` bodies,
-  identity+naturality) — the final **`instance Traversable List/Option` assembly
-  holds for DS-8b** (the `proc`-field purity blocker). When DS-8b merges,
-  Foundation rebases DS-8 + assembles instances → DS-8 lands **whole**. Compose
-  scope-decision (`L3`): Architect ruled `Compose` buildable in-scope
-  (`evt_37wddd1qb1pq9`), so composition law rides this WP.
-- **DS-8b** (pure-witness ⊆ `proc`-field widening) — 🔨 **BUILDING on Ergo**
-  (`evt_7gfgqx5bbp48t`); frame `wp/ds-8b-pure-into-proc-widening.md`
-  (`main @ 16fe2af`). The ~1-arm elab completeness fix (`elab.rs:3182`) unblocking
-  DS-8's Traversable instances — **second elaborator land of the run, see `K2`**
-  (moderate-class, lighter than DS-5b: pre-kernel-erased, zero TCB/sort delta).
-  Architect gate: safe-direction-only, AC6-preserved, AC8 dangerous-direction
-  discriminator.
+  identity+naturality). DS-8b (the `proc`-field purity blocker) **now landed**, so
+  Foundation is **assembling the final `instance Traversable List/Option`** on a
+  rebase → DS-8 lands **whole**. Compose scope (`L3`): Architect ruled `Compose`
+  buildable in-scope (`evt_37wddd1qb1pq9`), composition law rides this WP.
+  Watch: the recurring dot-projection/`λ`-in-type Finding (DS-7 Finding 1).
+- **DS-8b** (pure-witness ⊆ `proc`-field widening) — ✅ **LANDED**
+  `main @ 5c698dd` (PR #433, CI-green). The `Proc if !impure` arm purely deleted
+  (dangerous `Const|Fn` arm byte-identical), zero kernel/prelude/spec/conformance
+  delta, Architect terminal gate (full keyword×impure matrix; AC6 via a *separate
+  untouched* effect-escape mechanism `elab.rs:2581`; 110/110 purity suite). **K2**
+  (moderate-class). Retros in. **Spec fast-follow** (the `∅⊆proc` rule in
+  `36-effects.md`) released to spec-author, doc-only, trails this. Note:
+  ergo-implementer's lane-discipline (flag-don't-self-author the spec gap) let CV
+  catch a stale-conformance-fixture contradiction (CFP3) pre-ship — handled.
 - **DS-5** (`Vector` spec chapter) — ✅ **LANDED** `main @ efdc09d` (PR #427,
   doc-only). Honest landed/gated split (head/`Fin` landed; tail/zip/lookup gated
   on DS-5b). Chapter `60-length-indexed-vectors.md`. Enclave stood down; CV has
@@ -231,7 +235,13 @@ three gate through the Architect — saturation ceiling, do NOT fan out further.
 - **Data section (DS-3/DS-4/DS-6)** — next after Core. DS-4 (List ext) near-
   mechanical; DS-3 (Either/Result/Option) + DS-6 (`DecEq Char` capstone,
   candidate 2nd kernel-move) are T1-design-needed.
-- Verify team idle in reserve. Kernel on DS-5b; Foundation on DS-8; Spec/CV freed.
+- Verify team idle in reserve. Kernel on DS-5b; Foundation assembling DS-8; Ergo
+  freed (DS-8b closed); spec-author on the fast-follow.
+
+**Next-move triggers (event-driven):** DS-8 git_request → merge (CI-gated) →
+**Core complete** → open Data section (DS-4 first, near-mechanical). DS-5b
+git_request → merge → frame+kick the full `Vector` package (Foundation). Spec
+fast-follow git_request → merge (doc-only). Hold at ceiling until one clears.
 
 ### P3 · Foundation is the catalog-authoring home; parallelize only independent tracks
 - **Call:** Keep catalog authoring on the Foundation team (coherence — one
