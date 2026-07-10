@@ -72,6 +72,37 @@ _(none yet — appended as they arise)_
   breadth over the tier is the operator's stated goal for the window.
 - **Reversibility:** easy.
 
+### RUN STATUS / resume point (2026-07-10, ~04:xx UTC)
+
+**Live checkpoint for lossless resume across compaction.**
+
+- **DS-2** (`Ord Nat` export) — **KICKED to Foundation** (`evt_2axex7z2s0m77`),
+  frame `wp/ds-2-ord-nat-export.md`. Building; comes back through
+  foundation-qa → Architect (zero-new-`Axiom` gate) → git_request to Steward.
+- **DS-7** (`Applicative`/`Monad`) — **GROUNDED, next to frame+kick** (do this
+  after the pending compaction). Design is NOT just convo-recorded — it is a
+  full spec chapter **`spec/50-stdlib/56-effectful-classes.md` (DRAFT v0, CAT-2)**:
+  WIRE the superclass chain (`Applicative f` carries field `functor : Functor f`;
+  `Monad f` carries `applicative : Applicative f`); class sigs at §3.1 (Applicative:
+  `functor`,`pure`,`ap` + 4 laws `ap_id`/`ap_hom`/`ap_ich`/`ap_cmp` + `map_coh`)
+  and §4.1 (`Monad` bind-primary, Fork B); instances `List` (cartesian `ap`,
+  §3.3/§4.4) + `Option`, both **proved zero-delta** by induction; wired superclass
+  dict supplied whole (six Functor+Applicative proofs NOT re-proved). Explicit
+  wiring only — implicit-superclass-coercion sugar deferred (`OQ-syntax`), no new
+  elaborator capability. **Unblocked** (only DS-8 Traversable is gated). Landed
+  dep: `class Functor` (`LawfulFunctors.ken:188`). No Applicative/Monad package
+  yet. **Open before kick:** decide whether 56-ch DRAFT v0 needs an enclave
+  finalize-to-build-contract pass, or frame DS-7 straight to Foundation citing
+  the chapter (lean: it's detailed enough — frame to Foundation, Architect
+  fidelity-gates the build vs the chapter).
+- **DS-8** (`Traversable`) — **GATED** on SURF-1 row-var surface (landed
+  `main@ef791a3`) **+ SURF-2 class-field purity marker** (`33 §5.2`, `39 §6.0`)
+  — verify SURF-2 landed before sequencing DS-8.
+- **DS-5** (`Vector` spec chapter) — independent parallel Spec-enclave track,
+  queued (kick when convenient to keep Spec productive).
+- Kernel + Verify teams **freshly restarted** by operator (re-orienting) — in
+  reserve for any DS-6 kernel move.
+
 ### P3 · Foundation is the catalog-authoring home; parallelize only independent tracks
 - **Call:** Keep catalog authoring on the Foundation team (coherence — one
   author's hand across the tier); run genuinely-independent tracks in parallel
