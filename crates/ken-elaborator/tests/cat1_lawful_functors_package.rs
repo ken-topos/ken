@@ -105,9 +105,9 @@ fn lawful_functors_source_cites_landed_laws_without_axiom() {
         "D3 should provide List and Option Functor/Foldable instances"
     );
     assert!(
-        LAWFUL_FUNCTORS_KEN.contains("foldMap_coherence")
-            && LAWFUL_FUNCTORS_KEN.contains("foldMap_step")
-            && LAWFUL_FUNCTORS_KEN.contains("foldr_toList"),
-        "Foldable should pin foldMap through the selected Monoid and toList reconstruction laws"
+        LAWFUL_FUNCTORS_KEN.contains("fold_map_coherence")
+            && LAWFUL_FUNCTORS_KEN.contains("fold_map_step")
+            && LAWFUL_FUNCTORS_KEN.contains("foldr_to_list"),
+        "Foldable should pin fold_map through the selected Monoid and to_list reconstruction laws"
     );
 }

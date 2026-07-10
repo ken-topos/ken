@@ -114,7 +114,7 @@ structure by the coherence law (`§3.2`, `map_coh`).
 
 Each is an `Ω` value-equation, one canonical field, the exact `pure`/`ap`
 phrasing character-for-character (as `55 §5.2` did for `Functor`). `idf`/`comp`
-are ordinary Ken views (`55 §5.2`); `applyTo a b y := λ(g : a → b). g y` and
+are ordinary Ken views (`55 §5.2`); `apply_to a b y := λ(g : a → b). g y` and
 `compose a b c := λ(g : b → c)(h : a → b)(x : a). g (h x)`.
 
 ```
@@ -129,7 +129,7 @@ ap_hom : (a b : Type) → (g : a → b) → (x : a) →
 -- interchange:  u <*> pure y = pure ($ y) <*> u
 ap_ich : (a b : Type) → (u : f (a → b)) → (y : a) →
            Equal (f b) (ap a b u (pure a y))
-                       (ap (a → b) b (pure ((a → b) → b) (applyTo a b y)) u)
+                       (ap (a → b) b (pure ((a → b) → b) (apply_to a b y)) u)
 
 -- composition:  pure (∘) <*> u <*> v <*> w = u <*> (v <*> w)
 ap_cmp : (a b c : Type) → (u : f (b → c)) → (v : f (a → b)) → (w : f a) →
@@ -158,7 +158,7 @@ not fire.
 ### 3.3 Instances — proved, zero-delta
 
 - **`List` applicative — cartesian** (`§4.4` / Fork D): `pure a x = Cons a x
-  (Nil a)`; `ap` is the cartesian product-of-effects (`concatMap`-shaped),
+  (Nil a)`; `ap` is the cartesian product-of-effects (`concat_map`-shaped),
   forced by coherence with `Monad List` (`§4`). Every law by induction + `cong`
   (`55 §3.1`), `tt`-vs-`Refl` per endpoint (`55 §3.2`).
 - **`Option` applicative:** `pure = Some`; `ap (Some g) (Some x) = Some (g x)`,
@@ -240,7 +240,7 @@ parametric-instance-head gap**, still open with Steward. A *general* surface
 
 ### 4.4 Instances — proved, zero-delta
 
-- **`List` monad:** `bind m k = concatMap k m` (flatten-map); `pure = §3.3`.
+- **`List` monad:** `bind m k = concat_map k m` (flatten-map); `pure = §3.3`.
   Coherence forces the **cartesian** `Applicative List` (`§3.3` / Fork D):
   `ap mf mx = bind mf (λg. bind mx (λx. pure (g x)))` reduces to the cartesian
   product; ziplist `ap` is **not** `bind`-coherent and ziplist has no lawful
@@ -368,7 +368,7 @@ by induction on the carrier (`55 §3.1`).
   ITree-bridge (`§4.3`) mints no new definition — it attests the landed `bind`.
 - **Reused, never re-defined** (subsume-don't-proliferate): the wired `functor`/
   `applicative`/`foldable` fields are the already-built `55` dicts;
-  `cong`/`sym`/`trans` (`catalog/packages/transport`); `list_append`/`concatMap`
+  `cong`/`sym`/`trans` (`catalog/packages/transport`); `list_append`/`concat_map`
   (`catalog/packages/collections`); the landed `bind` (`ken-elaborator/effects/`).
 
 > **Build note (perishable).** The `.ken` source

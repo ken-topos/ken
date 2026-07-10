@@ -171,7 +171,7 @@ silently.
     is provable now (`tail` landed, §6), `lookup`'s lands with `lookup` (gated on
     `DS-5c`).
   - `zip` / `map` **naturality** and the `zip`-`unzip` round-trip.
-  - The **length / `toList` bridge** (`Vec A n → List A` and `length ∘ toList ≡ n`)
+  - The **length / `to_list` bridge** (`Vec A n → List A` and `length ∘ to_list ≡ n`)
     relating the indexed family to the unindexed `List`.
 
 ## 6. Dependent-`match` refinement — `tail` landed, `zip`/`lookup` on `DS-5c`

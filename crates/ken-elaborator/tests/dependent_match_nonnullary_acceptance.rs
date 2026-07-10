@@ -17,9 +17,9 @@
 //!   kernel-REJECTED; grep confirms zero `crates/ken-kernel/` touched and no
 //!   new `Decl` variant (`trusted_base()` unchanged).
 //!
-//! AC2b (SCT descent on the real `toList`-ordered lemma) and AC4 (workspace-
+//! AC2b (SCT descent on the real `to_list`-ordered lemma) and AC4 (workspace-
 //! wide regression) are covered by the existing full-suite run, not here —
-//! `toList`-ordered itself belongs to the separate, later `map-verified-laws`
+//! `to_list`-ordered itself belongs to the separate, later `map-verified-laws`
 //! WP this one unblocks.
 
 use ken_elaborator::ElabEnv;
@@ -238,7 +238,7 @@ fn ac2_mis_narrowed_cons_arm_stays_kernel_rejected() {
 /// `check_match_dependent` path only elaborates at all if SCT accepts its
 /// structural descent. `allTrue` (List, single recursive field, `AC1`'s own
 /// setup) already covers the one-IH case; this covers the harder `Tree`
-/// two-recursive-field shape (`toList`-ordered's own `toList l`/`toList r`
+/// two-recursive-field shape (`to_list`-ordered's own `to_list l`/`to_list r`
 /// dual-descent structure), self-recursing on BOTH `l` and `r` in one ctor.
 #[test]
 fn ac2b_tree_dual_recursive_descent_passes_sct() {

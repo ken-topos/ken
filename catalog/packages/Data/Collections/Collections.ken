@@ -18,8 +18,8 @@
 --
 -- The floor is 7 combinators, not 6: the frame this WP started from assumed
 -- a landed saturating `Nat` subtraction (`sub`) that does not exist (only
--- signed non-saturating `sub_int` is a primitive) -- `natSub` is the 7th,
--- derived here. `natSub`'s shape and the local `OrdResult` declaration both
+-- signed non-saturating `sub_int` is a primitive) -- `nat_sub` is the 7th,
+-- derived here. `nat_sub`'s shape and the local `OrdResult` declaration both
 -- mirror the landed precedent in
 -- `crates/ken-elaborator/tests/val1_string_literals.rs:327`/`:334`
 -- (`natCmp`'s own local `OrdResult`, with the ES2 sanction-comment "a
@@ -168,7 +168,7 @@ fn length_take_min (a : Type) (n : Nat) (xs : List a)
   }
 
 -- DS-4: five more `List` combinators completing the SS4.1 floor
--- (`reverse`/`zip`/`concatMap`/`range`/`foldl`), each an ordinary
+-- (`reverse`/`zip`/`concat_map`/`range`/`foldl`), each an ordinary
 -- structural-recursion `fn` in the same style as the floor above --
 -- zero new kernel feature, zero `trusted_base()` delta.
 
@@ -267,39 +267,39 @@ fn zip_length (a : Type) (b : Type) (xs : List a) (ys : List b)
     }
   }
 
--- `concatMap` -- map then flatten via `list_append`. No bespoke length
+-- `concat_map` -- map then flatten via `list_append`. No bespoke length
 -- law: a coherence law here would need a `sum` combinator not in this
 -- floor -- shipped with its two structural (`Nil`/`Cons`) equations only,
 -- per subsume-don't-proliferate.
-fn concatMap (a : Type) (b : Type) (f : a → List b) (xs : List a) : List b =
+fn concat_map (a : Type) (b : Type) (f : a → List b) (xs : List a) : List b =
   match xs {
     Nil ⇒ Nil b ;
-    Cons h t ⇒ list_append b (f h) (concatMap a b f t)
+    Cons h t ⇒ list_append b (f h) (concat_map a b f t)
   }
 
--- `range n` -- `[0, 1, .., n-1]`, via a `start`-threaded helper (`rangeFrom`)
+-- `range n` -- `[0, 1, .., n-1]`, via a `start`-threaded helper (`range_from`)
 -- so the recursion is structural on `n` while the CONTENTS count up.
-fn rangeFrom (start : Nat) (n : Nat) : List Nat =
+fn range_from (start : Nat) (n : Nat) : List Nat =
   match n {
     Zero ⇒ Nil Nat ;
-    Suc m ⇒ Cons Nat start (rangeFrom (Suc start) m)
+    Suc m ⇒ Cons Nat start (range_from (Suc start) m)
   }
 
-fn range (n : Nat) : List Nat = rangeFrom Zero n
+fn range (n : Nat) : List Nat = range_from Zero n
 
-fn rangeFrom_length (start : Nat) (n : Nat) : Equal Nat (length Nat (rangeFrom start n)) n =
+fn range_from_length (start : Nat) (n : Nat) : Equal Nat (length Nat (range_from start n)) n =
   match n {
     Zero ⇒ tt ;
     Suc m ⇒
       cong Nat Nat
-        (length Nat (rangeFrom (Suc start) m))
+        (length Nat (range_from (Suc start) m))
         m
         Suc
-        (rangeFrom_length (Suc start) m)
+        (range_from_length (Suc start) m)
   }
 
 fn range_length (n : Nat) : Equal Nat (length Nat (range n)) n =
-  rangeFrom_length Zero n
+  range_from_length Zero n
 
 -- `foldl` -- the left fold. No `foldl`/`foldr` relationship law: `foldr`
 -- is not in this floor, and inventing one solely to state a law here
@@ -318,10 +318,10 @@ fn foldl (a : Type) (b : Type) (f : b → a → b) (z : b) (xs : List a) : b =
 fn bool_and (p : Bool) (q : Bool) : Bool =
   match p { True ⇒ q ; False ⇒ False }
 
-fn boolLeq (x : Bool) (y : Bool) : Bool =
+fn bool_leq (x : Bool) (y : Bool) : Bool =
   match x { False ⇒ True ; True ⇒ y }
 
-fn eqFromOrd (a : Type) (le : a → a → Bool) (x : a) (y : a) : Bool =
+fn eq_from_ord (a : Type) (le : a → a → Bool) (x : a) (y : a) : Bool =
   bool_and (le x y) (le y x)
 
 fn count (a : Type) (eqf : a → a → Bool) (x : a) (xs : List a) : Nat =
@@ -351,177 +351,177 @@ fn sort (a : Type) (le : a → a → Bool) (xs : List a) : List a =
     Cons h t ⇒ insert a le h (sort a le t)
   }
 
-fn boolHeadLeq (x : Bool) (xs : List Bool) : Prop =
+fn bool_head_leq (x : Bool) (xs : List Bool) : Prop =
   match xs {
     Nil ⇒ Equal Bool True True ;
-    Cons h t ⇒ Equal Bool (boolLeq x h) True
+    Cons h t ⇒ Equal Bool (bool_leq x h) True
   }
 
-fn falseHeadLeq (xs : List Bool) : boolHeadLeq False xs =
+fn false_head_leq (xs : List Bool) : bool_head_leq False xs =
   match xs {
     Nil ⇒ tt ;
     Cons h t ⇒ tt
   }
 
-fn boolConsSorted (x : Bool) (xs : List Bool)
-  : isSorted Bool boolLeq xs → boolHeadLeq x xs →
-    isSorted Bool boolLeq (Cons Bool x xs) =
+fn bool_cons_sorted (x : Bool) (xs : List Bool)
+  : isSorted Bool bool_leq xs → bool_head_leq x xs →
+    isSorted Bool bool_leq (Cons Bool x xs) =
   match xs {
     Nil ⇒ λh. λhb. tt ;
     Cons h t ⇒ λhxs. λhb.
       andIntro
-        (Equal Bool (boolLeq x h) True)
-        (isSorted Bool boolLeq (Cons Bool h t))
+        (Equal Bool (bool_leq x h) True)
+        (isSorted Bool bool_leq (Cons Bool h t))
         hb
         hxs
   }
 
-fn boolSortedTail (x : Bool) (xs : List Bool)
-  : isSorted Bool boolLeq (Cons Bool x xs) → isSorted Bool boolLeq xs =
+fn bool_sorted_tail (x : Bool) (xs : List Bool)
+  : isSorted Bool bool_leq (Cons Bool x xs) → isSorted Bool bool_leq xs =
   match xs {
     Nil ⇒ λh. tt ;
     Cons h t ⇒ λhCons.
       andSnd
-        (Equal Bool (boolLeq x h) True)
-        (isSorted Bool boolLeq (Cons Bool h t))
+        (Equal Bool (bool_leq x h) True)
+        (isSorted Bool bool_leq (Cons Bool h t))
         hCons
   }
 
-fn insertTrueBool (xs : List Bool) : List Bool =
+fn insert_true_bool (xs : List Bool) : List Bool =
   match xs {
     Nil ⇒ Cons Bool True (Nil Bool) ;
     Cons h t ⇒ match h {
       True ⇒ Cons Bool True (Cons Bool True t) ;
-      False ⇒ Cons Bool False (insertTrueBool t)
+      False ⇒ Cons Bool False (insert_true_bool t)
     }
   }
 
-fn sortBool (xs : List Bool) : List Bool =
+fn sort_bool (xs : List Bool) : List Bool =
   match xs {
     Nil ⇒ Nil Bool ;
     Cons h t ⇒ match h {
-      False ⇒ Cons Bool False (sortBool t) ;
-      True ⇒ insertTrueBool (sortBool t)
+      False ⇒ Cons Bool False (sort_bool t) ;
+      True ⇒ insert_true_bool (sort_bool t)
     }
   }
 
-fn sortedInsertTrueBool (xs : List Bool)
-  : isSorted Bool boolLeq xs → isSorted Bool boolLeq (insertTrueBool xs) =
+fn sorted_insert_true_bool (xs : List Bool)
+  : isSorted Bool bool_leq xs → isSorted Bool bool_leq (insert_true_bool xs) =
   match xs {
     Nil ⇒ λh. tt ;
     Cons h t ⇒ match h {
       True ⇒ λhxs.
-        boolConsSorted True (Cons Bool True t) hxs tt ;
+        bool_cons_sorted True (Cons Bool True t) hxs tt ;
       False ⇒ λhxs.
-        boolConsSorted
+        bool_cons_sorted
           False
-          (insertTrueBool t)
-          (sortedInsertTrueBool t (boolSortedTail False t hxs))
-          (falseHeadLeq (insertTrueBool t))
+          (insert_true_bool t)
+          (sorted_insert_true_bool t (bool_sorted_tail False t hxs))
+          (false_head_leq (insert_true_bool t))
     }
   }
 
-fn sortBoolSorted (xs : List Bool) : isSorted Bool boolLeq (sortBool xs) =
+fn sort_bool_sorted (xs : List Bool) : isSorted Bool bool_leq (sort_bool xs) =
   match xs {
     Nil ⇒ tt ;
     Cons h t ⇒ match h {
       False ⇒
-        boolConsSorted
+        bool_cons_sorted
           False
-          (sortBool t)
-          (sortBoolSorted t)
-          (falseHeadLeq (sortBool t)) ;
-      True ⇒ sortedInsertTrueBool (sortBool t) (sortBoolSorted t)
+          (sort_bool t)
+          (sort_bool_sorted t)
+          (false_head_leq (sort_bool t)) ;
+      True ⇒ sorted_insert_true_bool (sort_bool t) (sort_bool_sorted t)
     }
   }
 
-fn insertTrueBoolCountFalse (xs : List Bool)
+fn insert_true_bool_count_false (xs : List Bool)
   : Equal Nat
-      (count Bool (eqFromOrd Bool boolLeq) False (insertTrueBool xs))
-      (count Bool (eqFromOrd Bool boolLeq) False xs) =
+      (count Bool (eq_from_ord Bool bool_leq) False (insert_true_bool xs))
+      (count Bool (eq_from_ord Bool bool_leq) False xs) =
   match xs {
     Nil ⇒ tt ;
     Cons h t ⇒ match h {
       True ⇒ Refl ;
       False ⇒
         cong Nat Nat
-          (count Bool (eqFromOrd Bool boolLeq) False (insertTrueBool t))
-          (count Bool (eqFromOrd Bool boolLeq) False t)
+          (count Bool (eq_from_ord Bool bool_leq) False (insert_true_bool t))
+          (count Bool (eq_from_ord Bool bool_leq) False t)
           Suc
-          (insertTrueBoolCountFalse t)
+          (insert_true_bool_count_false t)
     }
   }
 
-fn insertTrueBoolCountTrue (xs : List Bool)
+fn insert_true_bool_count_true (xs : List Bool)
   : Equal Nat
-      (count Bool (eqFromOrd Bool boolLeq) True (insertTrueBool xs))
-      (Suc (count Bool (eqFromOrd Bool boolLeq) True xs)) =
+      (count Bool (eq_from_ord Bool bool_leq) True (insert_true_bool xs))
+      (Suc (count Bool (eq_from_ord Bool bool_leq) True xs)) =
   match xs {
     Nil ⇒ tt ;
     Cons h t ⇒ match h {
       True ⇒ Refl ;
-      False ⇒ insertTrueBoolCountTrue t
+      False ⇒ insert_true_bool_count_true t
     }
   }
 
-fn sortBoolCountFalse (xs : List Bool)
+fn sort_bool_count_false (xs : List Bool)
   : Equal Nat
-      (count Bool (eqFromOrd Bool boolLeq) False xs)
-      (count Bool (eqFromOrd Bool boolLeq) False (sortBool xs)) =
+      (count Bool (eq_from_ord Bool bool_leq) False xs)
+      (count Bool (eq_from_ord Bool bool_leq) False (sort_bool xs)) =
   match xs {
     Nil ⇒ tt ;
     Cons h t ⇒ match h {
       False ⇒
         cong Nat Nat
-          (count Bool (eqFromOrd Bool boolLeq) False t)
-          (count Bool (eqFromOrd Bool boolLeq) False (sortBool t))
+          (count Bool (eq_from_ord Bool bool_leq) False t)
+          (count Bool (eq_from_ord Bool bool_leq) False (sort_bool t))
           Suc
-          (sortBoolCountFalse t) ;
+          (sort_bool_count_false t) ;
       True ⇒
         trans Nat
-          (count Bool (eqFromOrd Bool boolLeq) False t)
-          (count Bool (eqFromOrd Bool boolLeq) False (sortBool t))
-          (count Bool (eqFromOrd Bool boolLeq) False (insertTrueBool (sortBool t)))
-          (sortBoolCountFalse t)
+          (count Bool (eq_from_ord Bool bool_leq) False t)
+          (count Bool (eq_from_ord Bool bool_leq) False (sort_bool t))
+          (count Bool (eq_from_ord Bool bool_leq) False (insert_true_bool (sort_bool t)))
+          (sort_bool_count_false t)
           (sym Nat
-            (count Bool (eqFromOrd Bool boolLeq) False (insertTrueBool (sortBool t)))
-            (count Bool (eqFromOrd Bool boolLeq) False (sortBool t))
-            (insertTrueBoolCountFalse (sortBool t)))
+            (count Bool (eq_from_ord Bool bool_leq) False (insert_true_bool (sort_bool t)))
+            (count Bool (eq_from_ord Bool bool_leq) False (sort_bool t))
+            (insert_true_bool_count_false (sort_bool t)))
     }
   }
 
-fn sortBoolCountTrue (xs : List Bool)
+fn sort_bool_count_true (xs : List Bool)
   : Equal Nat
-      (count Bool (eqFromOrd Bool boolLeq) True xs)
-      (count Bool (eqFromOrd Bool boolLeq) True (sortBool xs)) =
+      (count Bool (eq_from_ord Bool bool_leq) True xs)
+      (count Bool (eq_from_ord Bool bool_leq) True (sort_bool xs)) =
   match xs {
     Nil ⇒ tt ;
     Cons h t ⇒ match h {
-      False ⇒ sortBoolCountTrue t ;
+      False ⇒ sort_bool_count_true t ;
       True ⇒
         trans Nat
-          (Suc (count Bool (eqFromOrd Bool boolLeq) True t))
-          (Suc (count Bool (eqFromOrd Bool boolLeq) True (sortBool t)))
-          (count Bool (eqFromOrd Bool boolLeq) True (insertTrueBool (sortBool t)))
+          (Suc (count Bool (eq_from_ord Bool bool_leq) True t))
+          (Suc (count Bool (eq_from_ord Bool bool_leq) True (sort_bool t)))
+          (count Bool (eq_from_ord Bool bool_leq) True (insert_true_bool (sort_bool t)))
           (cong Nat Nat
-            (count Bool (eqFromOrd Bool boolLeq) True t)
-            (count Bool (eqFromOrd Bool boolLeq) True (sortBool t))
+            (count Bool (eq_from_ord Bool bool_leq) True t)
+            (count Bool (eq_from_ord Bool bool_leq) True (sort_bool t))
             Suc
-            (sortBoolCountTrue t))
+            (sort_bool_count_true t))
           (sym Nat
-            (count Bool (eqFromOrd Bool boolLeq) True (insertTrueBool (sortBool t)))
-            (Suc (count Bool (eqFromOrd Bool boolLeq) True (sortBool t)))
-            (insertTrueBoolCountTrue (sortBool t)))
+            (count Bool (eq_from_ord Bool bool_leq) True (insert_true_bool (sort_bool t)))
+            (Suc (count Bool (eq_from_ord Bool bool_leq) True (sort_bool t)))
+            (insert_true_bool_count_true (sort_bool t)))
     }
   }
 
-fn sortBoolPerm (xs : List Bool)
-  : Perm Bool (eqFromOrd Bool boolLeq) xs (sortBool xs) =
+fn sort_bool_perm (xs : List Bool)
+  : Perm Bool (eq_from_ord Bool bool_leq) xs (sort_bool xs) =
   match xs {
     Nil ⇒ λq. match q { False ⇒ tt ; True ⇒ tt } ;
     Cons h t ⇒ λq. match q {
-      False ⇒ sortBoolCountFalse (Cons Bool h t) ;
-      True ⇒ sortBoolCountTrue (Cons Bool h t)
+      False ⇒ sort_bool_count_false (Cons Bool h t) ;
+      True ⇒ sort_bool_count_true (Cons Bool h t)
     }
   }
 
@@ -571,93 +571,93 @@ class SetoidMorphism A {
     (Equal Bool x y) → Equal Bool (project x) (project y)
 }
 
-fn idBool (x : Bool) : Bool = x
+fn id_bool (x : Bool) : Bool = x
 
-fn fstPairBoolBool (p : Pair Bool Bool) : Bool =
+fn fst_pair_bool_bool (p : Pair Bool Bool) : Bool =
   pairFst Bool Bool p
 
-fn setFstPairBoolBool (a : Bool) (p : Pair Bool Bool) : Pair Bool Bool =
+fn set_fst_pair_bool_bool (a : Bool) (p : Pair Bool Bool) : Pair Bool Bool =
   mkPair Bool Bool a (pairSnd Bool Bool p)
 
-fn fstLensGetSet (a : Bool) (s : Pair Bool Bool)
-  : Equal Bool (fstPairBoolBool (setFstPairBoolBool a s)) a =
+fn fst_lens_get_set (a : Bool) (s : Pair Bool Bool)
+  : Equal Bool (fst_pair_bool_bool (set_fst_pair_bool_bool a s)) a =
   Refl
 
-fn fstLensSetGet (s : Pair Bool Bool)
-  : Equal (Pair Bool Bool) (setFstPairBoolBool (fstPairBoolBool s) s) s =
+fn fst_lens_set_get (s : Pair Bool Bool)
+  : Equal (Pair Bool Bool) (set_fst_pair_bool_bool (fst_pair_bool_bool s) s) s =
   Refl
 
-fn fstLensSetSet (a : Bool) (b : Bool) (s : Pair Bool Bool)
+fn fst_lens_set_set (a : Bool) (b : Bool) (s : Pair Bool Bool)
   : Equal (Pair Bool Bool)
-      (setFstPairBoolBool b (setFstPairBoolBool a s))
-      (setFstPairBoolBool b s) =
+      (set_fst_pair_bool_bool b (set_fst_pair_bool_bool a s))
+      (set_fst_pair_bool_bool b s) =
   Refl
 
 instance View Bool {
-  project = idBool
+  project = id_bool
 }
 
 instance Lens Unit {
-  get = fstPairBoolBool ;
-  set = setFstPairBoolBool ;
-  get_set = fstLensGetSet ;
-  set_get = fstLensSetGet ;
-  set_set = fstLensSetSet
+  get = fst_pair_bool_bool ;
+  set = set_fst_pair_bool_bool ;
+  get_set = fst_lens_get_set ;
+  set_get = fst_lens_set_get ;
+  set_set = fst_lens_set_set
 }
 
-fn boolIsoTo (x : Bool) : Bool = x
-fn boolIsoFrom (x : Bool) : Bool = x
-fn boolIsoToFrom (x : Bool) : Equal Bool (boolIsoTo (boolIsoFrom x)) x =
+fn bool_iso_to (x : Bool) : Bool = x
+fn bool_iso_from (x : Bool) : Bool = x
+fn bool_iso_to_from (x : Bool) : Equal Bool (bool_iso_to (bool_iso_from x)) x =
   Refl
-fn boolIsoFromTo (x : Bool) : Equal Bool (boolIsoFrom (boolIsoTo x)) x =
+fn bool_iso_from_to (x : Bool) : Equal Bool (bool_iso_from (bool_iso_to x)) x =
   Refl
 
 instance Iso Unit {
-  to = boolIsoTo ;
-  from = boolIsoFrom ;
-  to_from = boolIsoToFrom ;
-  from_to = boolIsoFromTo
+  to = bool_iso_to ;
+  from = bool_iso_from ;
+  to_from = bool_iso_to_from ;
+  from_to = bool_iso_from_to
 }
 
 instance Representation Unit {
-  encode = boolIsoTo ;
-  decode = boolIsoFrom ;
-  roundtrip = boolIsoFromTo
+  encode = bool_iso_to ;
+  decode = bool_iso_from ;
+  roundtrip = bool_iso_from_to
 }
 
-fn trueRefinementProject (x : { b : Bool | Equal Bool b True }) : Bool = x
+fn true_refinement_project (x : { b : Bool | Equal Bool b True }) : Bool = x
 
 instance RefinementView Unit {
-  project = trueRefinementProject
+  project = true_refinement_project
 }
 
-fn boolPairIndexProject (p : Pair Bool Bool) (ix : Bool) : Bool =
+fn bool_pair_index_project (p : Pair Bool Bool) (ix : Bool) : Bool =
   match ix {
     False ⇒ pairFst Bool Bool p ;
     True ⇒ pairSnd Bool Bool p
   }
 
 instance IndexedView Unit {
-  project = boolPairIndexProject
+  project = bool_pair_index_project
 }
 
-fn idBoolRespects (x : Bool) (y : Bool)
-  : Equal Bool x y → Equal Bool (idBool x) (idBool y) =
+fn id_bool_respects (x : Bool) (y : Bool)
+  : Equal Bool x y → Equal Bool (id_bool x) (id_bool y) =
   λp. p
 
 instance SetoidMorphism Unit {
-  project = idBool ;
-  respects = idBoolRespects
+  project = id_bool ;
+  respects = id_bool_respects
 }
 
 -- Saturating `Nat` monus (never underflows) -- `slice`'s length. Identical
--- shape to the landed `val1_string_literals.rs:327` `natSub`.
-fn natSub (a : Nat) (b : Nat) : Nat =
+-- shape to the landed `val1_string_literals.rs:327` `nat_sub`.
+fn nat_sub (a : Nat) (b : Nat) : Nat =
   match b {
     Zero ⇒ a ;
     Suc n ⇒ match a {
       Zero ⇒ Zero ;
-      Suc m ⇒ natSub m n
+      Suc m ⇒ nat_sub m n
     }
   }
 
@@ -686,12 +686,12 @@ fn list_compare (a : Type) (cmp : a → a → OrdResult) (xs : List a) (ys : Lis
     }
   }
 
--- `compareChar` -- a faithful 3-way REPACKAGING of the landed `leqChar`/
+-- `compare_char` -- a faithful 3-way REPACKAGING of the landed `leqChar`/
 -- `eqChar` (`crates/ken-elaborator/src/decimal_char.rs`), NOT a re-derivation
 -- of Char comparison (settled input #4, `docs/program/wp/L3-strings-surface.md`
 -- SS2): `Eq` on `eqChar`; else `Lt`/`Gt` by `leqChar`'s antisymmetry +
 -- totality (both landed `Ord Char` laws, by transport from `Ord Int`).
-fn compareChar (a : Char) (b : Char) : OrdResult =
+fn compare_char (a : Char) (b : Char) : OrdResult =
   match eqChar a b {
     True ⇒ Eq ;
     False ⇒ match leqChar a b { True ⇒ Lt ; False ⇒ Gt }
@@ -709,14 +709,14 @@ fn concat (a : String) (b : String) : String =
   list_char_to_string (list_append Char (string_to_list_char a) (string_to_list_char b))
 
 -- `slice` clamps by construction: `drop` past the end yields `Nil`, `take`
--- past the end stops at the end, and the length `natSub j i` saturates at
+-- past the end stops at the end, and the length `nat_sub j i` saturates at
 -- `0` when `j < i` -- never an underflow, never stuck.
 fn slice (i : Nat) (j : Nat) (s : String) : String =
-  list_char_to_string (take Char (natSub j i) (drop Char i (string_to_list_char s)))
+  list_char_to_string (take Char (nat_sub j i) (drop Char i (string_to_list_char s)))
 
--- `charAt` is total and honest about absence -- `Option Char`, never a
+-- `char_at` is total and honest about absence -- `Option Char`, never a
 -- sentinel or a partial index.
-fn charAt (i : Nat) (s : String) : Option Char =
+fn char_at (i : Nat) (s : String) : Option Char =
   nth Char i (string_to_list_char s)
 
 -- Codepoint-wise equality over the scalar sequence -- rides the landed
@@ -730,4 +730,4 @@ fn eq (a : String) (b : String) : Bool =
 -- subsuming `<=`/`<`/`==` (a `leq`-only interface cannot cheaply recover
 -- 3-way).
 fn compare (a : String) (b : String) : OrdResult =
-  list_compare Char compareChar (string_to_list_char a) (string_to_list_char b)
+  list_compare Char compare_char (string_to_list_char a) (string_to_list_char b)

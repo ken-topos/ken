@@ -276,7 +276,7 @@ fn map_replacement_is_derived_not_primitive() {
         matches!(env.env.lookup(tree_id), Some(Decl::Inductive { .. })),
         "AC1(b): the replacement carrier 'Tree' must be Decl::Inductive (declare_inductive), never a primitive"
     );
-    for name in ["insert", "lookup", "member", "toList", "fromList", "setInsert", "setMember", "setToList"] {
+    for name in ["insert", "lookup", "member", "to_list", "from_list", "set_insert", "set_member", "set_to_list"] {
         let id = env.globals[name];
         assert!(
             matches!(env.env.lookup(id), Some(Decl::Transparent { .. })),

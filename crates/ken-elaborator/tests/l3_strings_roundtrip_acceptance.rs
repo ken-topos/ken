@@ -313,7 +313,7 @@ fn ac4_l2s_totality_on_nontrivial_list() {
 
 // ── Out-of-scope guard (verify by absence) ──────────────────────────────────
 
-/// The derived surface (`concat`/`slice`/`charAt`/`eq`/`compare` over `List
+/// The derived surface (`concat`/`slice`/`char_at`/`eq`/`compare` over `List
 /// Char`) is slice 2 (Team Language), gated on this WP — out of scope here.
 /// Pin that it is NOT yet callable, so a future slice-2 landing is a visible
 /// diff rather than a silent no-op.

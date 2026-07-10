@@ -109,7 +109,7 @@ the packed NFC buffer). A primitive op carries a **registered reduction**
 (`41`), so e.g. `byteLength "abc" ≡ 3` holds definitionally and proofs can
 compute over string literals.
 
-**The string *surface* — `concat` / `slice` / `charAt` / `eq` / the ordering op
+**The string *surface* — `concat` / `slice` / `char_at` / `eq` / the ordering op
 — is `derived`, not primitive (`§2.5`).** These lower to ordinary prelude
 `view`s over the `List Char` view (`§2.3`), routed through the native round-trip
 — **not** registered native primitives. This is the settled slice-2 approach
@@ -124,7 +124,7 @@ Non-definitional string laws (e.g. `byteLength (s ++ t) ≡ byteLength s +
 byteLength t`) are **prelude propositions** (`14 §5`, `35 §6.2`), not kernel
 reductions.
 
-### 2.5 The derived string surface (`concat` / `slice` / `charAt` / `eq` / …)
+### 2.5 The derived string surface (`concat` / `slice` / `char_at` / `eq` / …)
 
 The everyday string operations are **derived** — ordinary prelude `view`s over
 the `List Char` view (`§2.3`), routed through the native `string_to_list_char`
@@ -136,18 +136,18 @@ unfolding to the `§4.1` `List Char` combinator floor over the real `elim_List` 
 
 ```
 concat a b   =  l2s (list_append (s2l a) (s2l b))
-slice  i j s =  l2s (take (natSub j i) (drop i (s2l s)))
-charAt i s   =  nth i (s2l s)                        -- : Option Char
+slice  i j s =  l2s (take (nat_sub j i) (drop i (s2l s)))
+char_at i s   =  nth i (s2l s)                        -- : Option Char
 eq     a b   =  list_eq eqChar (s2l a) (s2l b)       -- : Bool
 ```
 
-- **`charAt` is total and honest about absence.** `nth` returns `None` on an
-  out-of-range index and on the empty string — `charAt i "" ≡ None` and
-  `charAt 5 "abc" ≡ None` — so the result type is `Option Char`, never a partial
+- **`char_at` is total and honest about absence.** `nth` returns `None` on an
+  out-of-range index and on the empty string — `char_at i "" ≡ None` and
+  `char_at 5 "abc" ≡ None` — so the result type is `Option Char`, never a partial
   index (`34 §1` honest sum, not a sentinel).
 - **`slice` clamps by construction.** `drop i` past the end yields `Nil` and
   `take n` past the end stops at the end, so an out-of-range `slice` returns the
-  available sub-view, never stuck. The length is `natSub j i` — **saturating**
+  available sub-view, never stuck. The length is `nat_sub j i` — **saturating**
   `Nat` monus (`§4.1`): when `j < i` it is `0`, so `take 0 _ ≡ Nil` and
   `slice j i s ≡ ""` (an empty slice, never an underflow). Indices are
   **code-point** positions (over the `List Char` view), never byte offsets — a
@@ -164,9 +164,9 @@ eq     a b   =  list_eq eqChar (s2l a) (s2l b)       -- : Bool
   separately-named `Eq`/setoid in a later WP, **never** a `DecEq`/`Ord` here.
 - **`compare` is 3-way, codepoint-wise (`§2.5.1`).** `compare a b : OrdResult`
   (`Lt` / `Eq` / `Gt`) is the lexicographic order of the two scalar sequences
-  via `list_compare` threading `compareChar`. The landed `Ord Char` is
+  via `list_compare` threading `compare_char`. The landed `Ord Char` is
   `leq`-only (no `compare` method, no `Ordering`/`OrdResult` type on `main`), so
-  `compareChar` **repackages** the landed `leqChar`/`eqChar` into 3-way and
+  `compare_char` **repackages** the landed `leqChar`/`eqChar` into 3-way and
   `OrdResult` is a locally-declared, string-surface-**exported** checked
   inductive — zero-TCB-delta (Architect ruling `evt_1stp9sspm6ag8`).
 
@@ -195,13 +195,13 @@ recover 3-way). The landed `Ord Char` is `leq`-valued only (`= leq_int`, no
 ```
 data OrdResult = Lt | Eq | Gt              -- exported from the string surface
 
-compareChar a b =                          -- 3-way from landed leqChar / eqChar
+compare_char a b =                          -- 3-way from landed leqChar / eqChar
   match eqChar a b {
     True  => Eq
     False => match leqChar a b { True => Lt ; False => Gt }
   }
 
-compare a b = list_compare compareChar (s2l a) (s2l b)   -- : OrdResult
+compare a b = list_compare compare_char (s2l a) (s2l b)   -- : OrdResult
 ```
 
 Three normative points (Architect ruling `evt_1stp9sspm6ag8`):
@@ -218,13 +218,13 @@ Three normative points (Architect ruling `evt_1stp9sspm6ag8`):
   WP):** when a *second* consumer lands (verified `sort` / `Map`/`Set` ordering
   will want the same type), that WP raises "≥2 consumers → promote `OrdResult`
   to a shared location" as a subsume decision to the Steward.
-- **`compareChar` repackages, it does not re-derive.** Settled input #4 forbids
-  re-*deriving* a Char comparison; `compareChar` reuses the landed `leqChar` /
+- **`compare_char` repackages, it does not re-derive.** Settled input #4 forbids
+  re-*deriving* a Char comparison; `compare_char` reuses the landed `leqChar` /
   `eqChar` verbatim and only wraps their results 3-way. It is a faithful 3-way
   of the landed total order (`Eq` on `eqChar`; else `Lt` / `Gt` by `Ord Char`'s
   antisymmetry + totality) and a `declare_def` — a bug is a wrong value, never a
   false proof. **Zero-TCB-delta:** `OrdResult` is a **checked inductive**
-  (kernel-admitted by positivity, not a postulate/primitive), and `compareChar`
+  (kernel-admitted by positivity, not a postulate/primitive), and `compare_char`
   / `list_compare` are `declare_def`s.
 
 ## 3. The core collection types
@@ -233,8 +233,8 @@ Three normative points (Architect ruling `evt_1stp9sspm6ag8`):
 |---|---|---|---|
 | `List a` | transparent inductive `data` (L2) | `data List a = Nil \| Cons a (List a)` (`34 §1`) | structural, O(1) (`41 §4`) |
 | `Array a` | abstract (persistent index tree) | content-addressed, kind `0x06` (`41 §3a`) | structural, O(1) |
-| `Map k v` | proved package (`Ord k`-keyed) | ordered BST `data Tree k v` over `Ord k` (`50-stdlib/52`) | extensional, via ordered `toList` |
-| `Set a` | proved package (`Ord a`-keyed) | `Map a Unit` (`50-stdlib/52`) | extensional, via ordered `toList` |
+| `Map k v` | proved package (`Ord k`-keyed) | ordered BST `data Tree k v` over `Ord k` (`50-stdlib/52`) | extensional, via ordered `to_list` |
+| `Set a` | proved package (`Ord a`-keyed) | `Map a Unit` (`50-stdlib/52`) | extensional, via ordered `to_list` |
 | `Option a` | transparent inductive `data` (L2) | `data Option a = None \| Some a` (`34 §1`) | structural, O(1) |
 | `Result e a` | transparent inductive `data` (L2) | `data Result e a = Err e \| Ok a` (`34 §1`) | structural, O(1) |
 
@@ -256,7 +256,7 @@ here, not re-declared.)
 
 `Array a` is an **abstract type** (`33 §4` module abstraction): an opaque
 carrier plus a lawful interface (`get`, `set`, `push`, `length`,
-`fromList`/`toList`). The carrier is a **persistent index tree** (a chunked /
+`from_list`/`to_list`). The carrier is a **persistent index tree** (a chunked /
 radix-balanced tree), each node content-addressed (`41 §3a`, kind `0x06`). This
 reconciles the two requirements the frame pins together — they are in tension
 for a flat buffer:
@@ -286,7 +286,7 @@ pure + zero-TCB* over the runtime-O(1) heap form:
 
 - **Proved, out of `trusted_base()`.** The carrier is an ordinary inductive
   `data Tree k v = Leaf | Node …` and every correctness law (`Ordered`
-  invariant, `lookup`-after-`insert`, ordered `toList`) is a **real kernel
+  invariant, `lookup`-after-`insert`, ordered `to_list`) is a **real kernel
   proof** — so `Map` is derived Ken, **not** the `declare_primitive` audited
   primitive it was (retired, `30 §6`). "Proved" *requires* this: an opaque
   primitive has no eliminator, so its laws could only be `Axiom` (`50-stdlib/52
@@ -300,7 +300,7 @@ pure + zero-TCB* over the runtime-O(1) heap form:
   §2.1`).
 - **Identity is extensional, not insertion-order-canonical.** A program-level
   tree is not interned by byte-order, so two maps are equal via their ordered
-  `toList`, not by O(1) slot-id (`50-stdlib/52 §5.3`). The insertion-order-
+  `to_list`, not by O(1) slot-id (`50-stdlib/52 §5.3`). The insertion-order-
   independent content-addressed heap form is **parked** as a possible later
   fast-map (the "HAMT-later" analog, `§3.2`), also proved if it lands.
 
@@ -365,7 +365,7 @@ Because they are `declare_def`s (checked), the floor adds **zero**
 
 Every recursion shape here already elaborates + SCT-passes on `main` — the
 de-risking precedent is in `crates/ken-elaborator/tests/l3a_acceptance.rs` (and,
-for `natSub`, `crates/ken-elaborator/tests/val1_string_literals.rs`), per the
+for `nat_sub`, `crates/ken-elaborator/tests/val1_string_literals.rs`), per the
 Architect capability confirm (`evt_4k1yqah3yvpds`):
 
 | Combinator | Signature | Recursion (decreasing arg) | Landed precedent |
@@ -374,11 +374,11 @@ Architect capability confirm (`evt_4k1yqah3yvpds`):
 | `nth` | `{a} → Nat → List a → Option a` | `Cons` tail + `Suc` pred | `map` |
 | `take` | `{a} → Nat → List a → List a` | `Suc` pred (`Nat` fuel) | `unfoldUpTo` |
 | `drop` | `{a} → Nat → List a → List a` | `Suc` pred (`Nat` fuel) | `unfoldUpTo` |
-| `natSub` | `Nat → Nat → Nat` | `Suc` preds (saturating) | `natSub` (val1) |
+| `nat_sub` | `Nat → Nat → Nat` | `Suc` preds (saturating) | `nat_sub` (val1) |
 | `list_eq` | `{a} → (a→a→Bool) → List a → List a → Bool` | both `Cons` tails | `zip` |
 | `list_compare` | `{a} → (a→a→OrdResult) → List a → List a → OrdResult` | both `Cons` tails | `zip` / `insert` |
 
-The frame named **6** combinators; this is **7** — `natSub` (the saturating
+The frame named **6** combinators; this is **7** — `nat_sub` (the saturating
 `Nat` monus `slice` needs, `§2.5`; the frame assumed a landed `sub` that does
 not exist) and `list_compare` over the locally-declared `OrdResult` (`§2.5.1`;
 `list_compare` replaces the frame's `list_compare : … → Ordering`, which named a
@@ -408,9 +408,9 @@ drop Zero    xs           = xs
 drop _       Nil          = Nil
 drop (Suc n) (Cons _ xs)  = drop n xs
 
-natSub a        Zero      = a
-natSub Zero     (Suc _)   = Zero
-natSub (Suc m)  (Suc n)   = natSub m n
+nat_sub a        Zero      = a
+nat_sub Zero     (Suc _)   = Zero
+nat_sub (Suc m)  (Suc n)   = nat_sub m n
 
 list_eq eq Nil         Nil         = True
 list_eq eq Nil         (Cons _ _)  = False
@@ -434,7 +434,7 @@ list_compare cmp (Cons x xs) (Cons y ys) = match cmp x y {
   per-combinator that the recursive call is an **applied** call decreasing on a
   strict subterm — the `Cons` tail (`list_append` / `nth` / `take` / `drop` /
   `list_eq` / `list_compare`) or the `Suc` predecessor (`nth` / `take` / `drop`
-  / `natSub`). The floor does **not** lean on the SCT to bless *unapplied*
+  / `nat_sub`). The floor does **not** lean on the SCT to bless *unapplied*
   self-reference or recursion-through-an-opaque type, where the SCT
   over-accepts (a bare self-`Const` is modelled all-`Unknown` and **rejected**;
   certification requires an applied call carrying a `Down` argument,
@@ -446,9 +446,9 @@ list_compare cmp (Cons x xs) (Cons y ys) = match cmp x y {
   (FS-effect — `append : Bytes → Bytes → Bytes visits [FS]`,
   `crates/ken-elaborator/src/bytes.rs`). Module-qualify if the surface would
   otherwise resolve the wrong op. The other floor names are currently free —
-  `nth` / `take` / `drop` / `natSub` / `list_eq` / `list_compare` do not collide
+  `nth` / `take` / `drop` / `nat_sub` / `list_eq` / `list_compare` do not collide
   with landed globals (grep-verified at authoring; re-verify at build).
-- **Totality (AC7).** Each combinator is total on well-typed input — `natSub`
+- **Totality (AC7).** Each combinator is total on well-typed input — `nat_sub`
   **saturates** at `0` (never underflows), `nth` totalizes out-of-range to
   `None`, `take` / `drop` totalize out-of-range to `Nil` / the remainder. No
   well-typed application reduces to `Neutral` / stuck.
@@ -715,16 +715,16 @@ to the full lawful stdlib; L3 **unblocks T3** (the test/property framework).
 impl-ready).** The floor + 5 string ops, mapping the WP frame's AC1–AC7:
 
 - **DS-AC1/AC5 (floor registered, zero-TCB-delta).** All **7** floor combinators
-  (`§4.1`) and `compareChar` **producer-grep** as `declare_recursive_group` /
+  (`§4.1`) and `compare_char` **producer-grep** as `declare_recursive_group` /
   `declare_def` members over the real `Term::Elim` (not hand-fed, not a bespoke
   reducer); `OrdResult` grep as a **checked inductive** (`data`, not a
   `declare_primitive` / `declare_postulate` / `declare_opaque`). `git diff
   origin/main -- crates/ken-kernel/` is **empty**; `trusted_base()` unchanged.
 - **DS-AC2 (SCT sound-zone).** Each combinator's recursive call is an applied
   call on a strict subterm (`§4.1`) — not leaning on the SCT's over-accept zone.
-- **DS-AC3 (5 ops reduce correct).** `concat` / `slice` / `charAt` / `eq` /
+- **DS-AC3 (5 ops reduce correct).** `concat` / `slice` / `char_at` / `eq` /
   `compare` reduce to the **correct value** on a multi-byte corpus (reuse slice
-  1's boundary corpus, through the real `s2l`/`l2s`): `charAt` → `None` on
+  1's boundary corpus, through the real `s2l`/`l2s`): `char_at` → `None` on
   out-of-range **and** empty; `slice` clamps, incl. `j < i → ""`.
 - **DS-AC4 (`eq`/`compare` codepoint-wise, discriminating PAIR).** A
   **non-degenerate pair**: `eq` **accepts** two equal scalar sequences **and

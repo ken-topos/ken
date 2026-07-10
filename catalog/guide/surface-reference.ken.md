@@ -45,7 +45,7 @@ data Color = Red | Green | Blue
 
 const favorite : Color = Blue
 
-fn isRed (c : Color) : Bool =
+fn is_red (c : Color) : Bool =
   match c { Red ⇒ True ; Green ⇒ False ; Blue ⇒ False }
 
 proc announce (c : Color) : IO Unit visits [Console] =
@@ -98,9 +98,9 @@ def PosInt = { n : Int | Equal Bool (leq_int 0 n) True }
 
 const five : PosInt = 5
 
-fn addToPosInt (n : Int) (p : PosInt) : Int = add_int n p
+fn add_to_pos_int (n : Int) (p : PosInt) : Int = add_int n p
 
-const ten : Int = addToPosInt five five
+const ten : Int = add_to_pos_int five five
 ```
 
 A plain, zero-condition `def` is just a name for an existing type — still
@@ -109,11 +109,11 @@ transparent, so it changes nothing about how the underlying values behave:
 ```ken example
 def Age = Int
 
-const myAge : Age = 30
+const my_age : Age = 30
 
-fn addYears (n : Int) (a : Age) : Int = add_int n a
+fn add_years (n : Int) (a : Age) : Int = add_int n a
 
-const later : Int = addYears 5 myAge
+const later : Int = add_years 5 my_age
 ```
 
 Contrast this with `data` (§3): an inductive type former **never**
@@ -165,7 +165,7 @@ fn isStop (t : TrafficLight) : Bool =
 special-cased sum type:
 
 ```ken example
-fn safeHead (a : Type) (xs : List a) : Option a =
+fn safe_head (a : Type) (xs : List a) : Option a =
   match xs {
     Nil      ⇒ None a ;
     Cons x _ ⇒ Some a x
@@ -179,12 +179,12 @@ to `A` plus an emitted proof obligation, never a new kernel type former
 (`spec/30-surface/34-data-match.md §5`) — a refined value is, at runtime,
 just an `A`. This is the mechanism a `fn`'s return type uses to state a real
 postcondition instead of describing it only in a comment. Below, the
-refinement is the postcondition: `absInt` really does return a non-negative
+refinement is the postcondition: `abs_int` really does return a non-negative
 Int, and `leq_int 0 y` is the same `Bool`-valued comparator the
 lawful-classes package builds `Ord` on top of:
 
 ```ken example
-fn absInt (x : Int) : { y : Int | Equal Bool (leq_int 0 y) True } =
+fn abs_int (x : Int) : { y : Int | Equal Bool (leq_int 0 y) True } =
   match leq_int 0 x {
     True  ⇒ x ;
     False ⇒ sub_int 0 x
@@ -197,11 +197,11 @@ A refinement can conjoin more than one property with the prelude's `And`
 permutation of the input, in one refinement). A function parameter can be
 refined too, the mirror case of a refined result — a refined PARAMETER, here
 accepting only Booleans equal to `True`, the same shape
-`catalog/packages/Data/Collections/Collections.ken`'s `trueRefinementProject`
+`catalog/packages/Data/Collections/Collections.ken`'s `true_refinement_project`
 uses:
 
 ```ken example
-fn projectTrue (x : { b : Bool | Equal Bool b True }) : Bool = x
+fn project_true (x : { b : Bool | Equal Bool b True }) : Bool = x
 ```
 
 ## 5. `class` and `instance`
@@ -224,7 +224,7 @@ instance Describe Bool {
   describe = λb. match b { True ⇒ "true" ; False ⇒ "false" }
 }
 
-fn announceIt (b : Bool) : String = (Describe_instance_Bool).describe b
+fn announce_it (b : Bool) : String = (Describe_instance_Bool).describe b
 ```
 
 **Referencing an instance as a value outside a `where`-resolved call** is
@@ -308,9 +308,9 @@ prop Trivial (a : Type) (x : a) : Omega where {
   triv : Trivial a x
 }
 
-const sampleInt : Int = 42
+const sample_int : Int = 42
 
-const trivialSample : Trivial Int sampleInt = Trivial.triv Int sampleInt
+const trivial_sample : Trivial Int sample_int = Trivial.triv Int sample_int
 ```
 
 Outside the seed shape: below, `nil`'s conclusion applies `AppendsTo` to
@@ -331,20 +331,20 @@ public call telescope exactly, and the canonical path to use it is
 `subject::proof_name`:
 
 ```ken example
-fn doubleIt (x : Int) : Int = add_int x x
+fn double_it (x : Int) : Int = add_int x x
 
-proof trivial for doubleIt (x : Int) : Trivial Int x = Trivial.triv Int x
+proof trivial for double_it (x : Int) : Trivial Int x = Trivial.triv Int x
 
-const attachedSample : Trivial Int sampleInt = doubleIt::trivial sampleInt
+const attached_sample : Trivial Int sample_int = double_it::trivial sample_int
 ```
 
 `lemma` is the standalone form — parameterized like a function, instantiated
 by ordinary application, no attachment to a subject:
 
 ```ken example
-lemma trivialAny (a : Type) (x : a) : Trivial a x = Trivial.triv a x
+lemma trivial_any (a : Type) (x : a) : Trivial a x = Trivial.triv a x
 
-const lemmaSample : Trivial Int sampleInt = trivialAny Int sampleInt
+const lemma_sample : Trivial Int sample_int = trivial_any Int sample_int
 ```
 
 **A `lemma` body cannot call itself.** `lemma`'s elaboration resolves its
@@ -361,14 +361,14 @@ strand's non-termination-hazards section covers the gate itself); the
 the recursion, so it resolves cleanly:
 
 ```ken example
-fn trivialByList (a : Type) (x : a) (b : Type) (ys : List b) : Trivial a x =
+fn trivial_by_list (a : Type) (x : a) (b : Type) (ys : List b) : Trivial a x =
   match ys {
     Nil      ⇒ Trivial.triv a x ;
-    Cons _ t ⇒ trivialByList a x b t
+    Cons _ t ⇒ trivial_by_list a x b t
   }
 
-lemma trivialByListLemma (a : Type) (x : a) (b : Type) (ys : List b) : Trivial a x =
-  trivialByList a x b ys
+lemma trivial_by_list_lemma (a : Type) (x : a) (b : Type) (ys : List b) : Trivial a x =
+  trivial_by_list a x b ys
 ```
 
 ## 8. The `.ken.md` literate format
@@ -423,7 +423,7 @@ type signature, a snippet missing its surrounding declarations).
     ```
 
     Pick a different name for the same idea — DS-1's `Empty` eliminator,
-    for example, is named `absurdEmpty`, not `absurd`.
+    for example, is named `absurd_empty`, not `absurd`.
   - `J` and `Eq`, by contrast, only intercept a **3-argument** application
     (`Eq A a b`, `J motive base eq`) — the kernel equality/`J` sugar. A
     lower-arity type-former or `class` of the same name **coexists

@@ -5,7 +5,7 @@
 > `keys`/`values`), the **set algebra** that rides `Set = Map Unit`, and the
 > **relations frontier** (composition, converse, the property predicates, and
 > transitive closure). It **builds on the landed Map capstone** (`54`/`52`,
-> `catalog/packages/collections/map.ken`) — laws 1/2/3/5 + `toList`-ordered are proved
+> `catalog/packages/collections/map.ken`) — laws 1/2/3/5 + `to_list`-ordered are proved
 > there and are **reused, not re-derived** (frame §2 pin 2). It inherits `55`/
 > `57`'s lawful-class template: laws are `Ω` propositions **proved over the
 > landed carriers, zero `Axiom`, zero `trusted_base()` delta**, by the convoy
@@ -17,9 +17,9 @@
 > **B** transitive closure is **bounded-reachability `IsTrue`** (`Ω`-native, the
 > `Perm` move — never a raw multi-ctor `data … : Ω`); **C** a relation is
 > `Map K (Set K)` (adjacency), with an explicit **land-now / defer-build** scope
-> split; **D** `delete` is **rebuild-via-`fromList`**. Two enclave sub-rulings:
+> split; **D** `delete` is **rebuild-via-`from_list`**. Two enclave sub-rulings:
 > set laws are stated **membership-extensionally** (never `Equal (Set K)`), and
-> **`leqNat` + its four order laws are a D0 carrier prerequisite** (`Nat`, not
+> **`leq_nat` + its four order laws are a D0 carrier prerequisite** (`Nat`, not
 > the `Axiom`-holed `Ord Int`/`Ord Char`). The `.ken` proofs are the **Runtime
 > build** (Map was its substrate), held for the GPT window; this chapter is the
 > elaboration.
@@ -39,7 +39,7 @@ re-litigated:
    same move CAT-3 made for `Perm`.
 2. **Proved by the convoy idiom + the Gap-A route-around** (`54 §2`/`§3`): a law
    over the `Tree` carrier is a recursive `view` that reflects each stuck `leq k
-   k'` through `boolDichotomy` (a Gap-B dependent match on a `Bool`
+   k'` through `bool_dichotomy` (a Gap-B dependent match on a `Bool`
    **variable**)
    and transports once with `J` (`53 §3`). The IH is an **ordinary
    self-recursive call on the subtree** (`54 §2.1` — the kernel's IH-slot binder
@@ -50,16 +50,16 @@ re-litigated:
    components all collapse — going to `Top` (K7); and with `Refl` when they
    reduce to a **neutral**, *including a non-nullary head with any neutral
    component* (it stays `Eq`-shaped, and `tt : Top` would be ill-typed there).
-   The landed capstone bases are the template: `orderedEmpty`/`lookupEmptyIsNone
+   The landed capstone bases are the template: `ordered_empty`/`lookup_empty_is_none
    → tt` (operation reduced into a collapsing `Equal Bool True True`); a
-   `fromListAcc Nil acc` base is a **passthrough** (the accumulator's own
+   `from_list_acc Nil acc` base is a **passthrough** (the accumulator's own
    `Ordered`, not `tt`).
 4. **Reuse, don't re-derive, the Map capstone** (frame §2 pin 2). `delete`/
    `union`/`intersection`/`difference` build **on** the landed
    `insert`/`lookup`/
-   `toList`/`fold`/`fromList`/`member` + `preservesOrdered` (law 1) +
-   `lookupAssocAgree` (law 5) + `assoc`. **`Set a = Map a Unit`** (landed
-   `setInsert`/`setMember`/`setToList`, spelled `Tree a Unit` directly — no
+   `to_list`/`fold`/`from_list`/`member` + `preserves_ordered` (law 1) +
+   `lookup_assoc_agree` (law 5) + `assoc`. **`Set a = Map a Unit`** (landed
+   `set_insert`/`set_member`/`set_to_list`, spelled `Tree a Unit` directly — no
    `Set` type alias is landed); the set-algebra laws ride that identity.
 5. **Surface spelling.** SURF-1's `view → const`/`fn`/`proc` migration is a
    **deferred build** — on `main` the lexer recognizes only `view`, and
@@ -68,7 +68,7 @@ re-litigated:
    uniformly when SURF-1's build lands. (`Nat`'s successor is `Suc`, not `Succ`
    — `prelude.rs`, `data Nat = Zero | Suc Nat`.)
 
-## 2. D0 — the `leqNat` carrier prerequisite (the vacuity guard)
+## 2. D0 — the `leq_nat` carrier prerequisite (the vacuity guard)
 
 Before any law can be *discriminated* (a conformance flip that fails on the
 wrong proof), CAT-4 needs a carrier with **≥ 3 distinct keys under an
@@ -82,17 +82,17 @@ proved accept-arm is only load-bearing if the carrier's order laws are
 - `Ord Bool` is `Axiom`-free but has **only 2 keys** — it **cannot** exhibit a
   three-node transitivity witness (`a → b → c`: is `a → c` in the closure?),
   which the relation/closure discriminators require.
-- **`Nat` is the carrier.** `leqNat` + its four order laws are **net-new,
+- **`Nat` is the carrier.** `leq_nat` + its four order laws are **net-new,
   ordinary total Ken, zero `Axiom`, kernel-untouched** — provable by structural
-  induction on `Nat` (`data Nat = Zero | Suc Nat`, prelude). No `leqNat`/`Ord
-  Nat`/`natSub`-comparator exists on `main` today (grepped); this is the D0
+  induction on `Nat` (`data Nat = Zero | Suc Nat`, prelude). No `leq_nat`/`Ord
+  Nat`/`nat_sub`-comparator exists on `main` today (grepped); this is the D0
   build item, within AC1/AC2, **not** a Steward re-fork.
 
 ```
-view leqNat (m : Nat) (n : Nat) : Bool =
+view leq_nat (m : Nat) (n : Nat) : Bool =
   match m {
     Zero  => True ;
-    Suc m2 => match n { Zero => False ; Suc n2 => leqNat m2 n2 }
+    Suc m2 => match n { Zero => False ; Suc n2 => leq_nat m2 n2 }
   }
 ```
 
@@ -100,28 +100,28 @@ The four laws are the **unbundled bare-parameter dictionary** the capstone
 already threads (`52 §2` Architect-ruled encoding — `reflLeq`/`transLeq`/`total`
 supplied as separate parameters, projected from a landed instance at the call
 site). Proof shapes, all `Nat`-structural, comparison-driven only through
-`leqNat`'s own recursion:
+`leq_nat`'s own recursion:
 
-- **`reflLeq : (x:Nat) → IsTrue (leqNat x x)`** — induction on `x`: `Zero` base
-  `leqNat Zero Zero ⇝ True`, goal `Equal Bool True True → Top`, closed **`tt`**;
-  `Suc m` step `leqNat (Suc m)(Suc m) ⇝ leqNat m m`, closed by the self-call IH
+- **`reflLeq : (x:Nat) → IsTrue (leq_nat x x)`** — induction on `x`: `Zero` base
+  `leq_nat Zero Zero ⇝ True`, goal `Equal Bool True True → Top`, closed **`tt`**;
+  `Suc m` step `leq_nat (Suc m)(Suc m) ⇝ leq_nat m m`, closed by the self-call IH
   `reflLeq m` (**neutral** result → the equality is carried, not collapsed).
-- **`transLeq : (x y z:Nat) → IsTrue (leqNat x y) → IsTrue (leqNat y z) →
-  IsTrue (leqNat x z)`** — induction on all three; the `x = Zero` base is
-  **live** and closes by `tt` (`leqNat Zero z ⇝ True → IsTrue True → Top`, no
+- **`transLeq : (x y z:Nat) → IsTrue (leq_nat x y) → IsTrue (leq_nat y z) →
+  IsTrue (leq_nat x z)`** — induction on all three; the `x = Zero` base is
+  **live** and closes by `tt` (`leq_nat Zero z ⇝ True → IsTrue True → Top`, no
   false
-  hypothesis); the `Suc/Suc/Suc → leqNat m m' m''` arm lifts the IH; every
+  hypothesis); the `Suc/Suc/Suc → leq_nat m m' m''` arm lifts the IH; every
   remaining `Zero`/`Suc` mismatch arm discharges from a `False` hypothesis by
   `absurd` (`prelude.rs`, `Bottom`).
-- **`antisymLeq : (x y:Nat) → IsTrue (leqNat x y) → IsTrue (leqNat y x) →
+- **`antisymLeq : (x y:Nat) → IsTrue (leq_nat x y) → IsTrue (leq_nat y x) →
   Equal Nat x y`** — the load-bearing one; induction on both, `Zero/Zero → tt`
   (goal `Equal Nat Zero Zero` — two occurrences of the **nullary** ctor `Zero`,
-  K7-collapses to `Top`, exactly like `orderedEmpty`/`lookupEmptyIsNone`; `Refl`
+  K7-collapses to `Top`, exactly like `ordered_empty`/`lookup_empty_is_none`; `Refl`
   fails on the collapsed goal), `Suc/Suc → cong Suc` of the IH (non-nullary
   head, neutral components → stays `Eq`-shaped), the two mixed arms `absurd`
   from a
   `False` premise.
-- **`totalLeq : (x y:Nat) → Or (IsTrue (leqNat x y)) (IsTrue (leqNat y x))`** —
+- **`totalLeq : (x y:Nat) → Or (IsTrue (leq_nat x y)) (IsTrue (leq_nat y x))`** —
   induction on both; `Zero` on either side gives the corresponding `Inl`/`Inr`
   with `tt`; `Suc/Suc` lifts the IH's `Or` unchanged.
 
@@ -129,14 +129,14 @@ site). Proof shapes, all `Nat`-structural, comparison-driven only through
 0010-gated, **out of scope**); `delete`/`union` invariant-preservation uses only
 `transLeq`/`total`, matching the landed law-1 dictionary.
 
-Two trivial net-new `Bool` combinators ride alongside `leqNat` as **D0
-prerequisites** (needed from D1 onward — `dropKey`'s decision (`§3`) and the set
+Two trivial net-new `Bool` combinators ride alongside `leq_nat` as **D0
+prerequisites** (needed from D1 onward — `drop_key`'s decision (`§3`) and the set
 membership algebra (`§5`) — so they must be in scope before D1 in the build
 order), transparent and match-based like the landed `bool_or`
 (`lawful_classes.ken:39`): `bool_and a b := match a { True => b ; False => False
 }` and `bool_not b := match b { True => False ; False => True }`.
 
-## 3. D1 — `delete` (rebuild-via-`fromList`, Fork D)
+## 3. D1 — `delete` (rebuild-via-`from_list`, Fork D)
 
 `delete`'s equal-key case has **no analog in `insert`**: `insert` overwrites in
 place (one path, structure-preserving), but `delete` must **remove** the node
@@ -146,73 +146,73 @@ invariant apparatus — `glue`/`deleteMin` + a cross-subtree-bound transport wit
 no analog in the landed corpus):
 
 ```
-view dropKey (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k) (xs : List (Pair k v)) : List (Pair k v) =
+view drop_key (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k) (xs : List (Pair k v)) : List (Pair k v) =
   match xs {
     Nil => Nil (Pair k v) ;
     Cons e xs2 =>
-      match orderEquivKey k v leq key (pairFst k v e) {
-        True  => dropKey k v leq key xs2 ;                       -- drop ALL matches (filter)
-        False => Cons (Pair k v) e (dropKey k v leq key xs2)
+      match order_equiv_key k v leq key (pairFst k v e) {
+        True  => drop_key k v leq key xs2 ;                       -- drop ALL matches (filter)
+        False => Cons (Pair k v) e (drop_key k v leq key xs2)
       }
   }
 
 view delete (k : Type) (v : Type) (leq : k -> k -> Bool) (key : k) (m : Tree k v) : Tree k v =
-  fromList k v leq (dropKey k v leq key (toList k v m))
+  from_list k v leq (drop_key k v leq key (to_list k v m))
 ```
 
-- **`dropKey` is FILTER (remove **all** order-equivalent entries), not
+- **`drop_key` is FILTER (remove **all** order-equivalent entries), not
   drop-first** (Fork D build-pin). The order-equivalence **decision** is
   **Bool-valued** —
-  `orderEquivKey leq a b : Bool = bool_and (leq a b) (leq b a)`
-  (§2's `bool_and`) — so `dropKey`'s `match … { True => … ; False => … }` has a
+  `order_equiv_key leq a b : Bool = bool_and (leq a b) (leq b a)`
+  (§2's `bool_and`) — so `drop_key`'s `match … { True => … ; False => … }` has a
   `Bool` scrutinee, exactly as `insert`/`lookup` branch on `leq key k2 : Bool`.
-  (This is the *decision*; the landed **Prop**-valued `orderEquiv`,
+  (This is the *decision*; the landed **Prop**-valued `order_equiv`,
   `map.ken:1600`, is its `Ω` counterpart — used in the *laws*, never as an
-  executable-`match` scrutinee.) `dropKey` is a plain `List` recursion
-  (Gap-B-free, like `pairKeys`/`assoc`).
+  executable-`match` scrutinee.) `drop_key` is a plain `List` recursion
+  (Gap-B-free, like `pair_keys`/`assoc`).
 - **`delete` is NON-recursive** — a pipeline of landed structural ops
-  (`toList → dropKey → fromList`), so it carries **zero SCT obligation of its
+  (`to_list → drop_key → from_list`), so it carries **zero SCT obligation of its
   own** (one less thing to check than a self-recursive `glue`-`delete`).
 
 ### 3.1 `Ordered`-preservation
 
-`delete` produces `fromList … (…)`, and `fromList` of **any** list is `Ordered`
+`delete` produces `from_list … (…)`, and `from_list` of **any** list is `Ordered`
 by construction, so preservation needs one new lemma and no `delete`-specific
 induction:
 
 ```
-view fromListPreservesOrdered
+view from_list_preserves_ordered
   (k : Type) (v : Type) (leq : k -> k -> Bool)
   (transLeq : …) (total : …)
   (xs : List (Pair k v))
-  : Ordered k v leq (fromList k v leq xs) = …          -- List-induction; each step = landed preservesOrdered
+  : Ordered k v leq (from_list k v leq xs) = …          -- List-induction; each step = landed preserves_ordered
 ```
 
-- **List-induction over `xs`** (the `fromListAcc` accumulator): base `Nil` is a
+- **List-induction over `xs`** (the `from_list_acc` accumulator): base `Nil` is a
   **passthrough** to the accumulator's `Ordered` (the initial `Leaf`, i.e.
-  `orderedEmpty → tt`); step inserts one entry, closed by the **landed**
-  `preservesOrdered` (law 1) applied to the accumulator's `Ordered`. Nothing
+  `ordered_empty → tt`); step inserts one entry, closed by the **landed**
+  `preserves_ordered` (law 1) applied to the accumulator's `Ordered`. Nothing
   new about `insert` is proved — it is reused wholesale.
-- `deletePreservesOrdered` is then `fromListPreservesOrdered … (dropKey …
-  (toList
-  … m))` — immediate, `dropKey`/`toList` are irrelevant to the conclusion (any
+- `delete_preserves_ordered` is then `from_list_preserves_ordered … (drop_key …
+  (to_list
+  … m))` — immediate, `drop_key`/`to_list` are irrelevant to the conclusion (any
   list input suffices).
 
 ### 3.2 The two lookup laws
 
 - **None-law (UNCONDITIONAL):** `lookup key (delete key m) ≡ None`. Because
-  `dropKey` is **filter**, no entry order-equivalent to `key` survives into the
+  `drop_key` is **filter**, no entry order-equivalent to `key` survives into the
   rebuilt tree, so `lookup` finds nothing — **no `Ordered`/`Distinct`
-  hypothesis** (a drop-first `dropKey` would let a duplicate survive if the
+  hypothesis** (a drop-first `drop_key` would let a duplicate survive if the
   input weren't distinct; filter closes that off structurally). Routes through
-  the `fromList`/`assoc` dual: `lookup key (fromList xs) ≡ assoc key xs`, and
-  `assoc key (dropKey key ys) ≡ None` (a `List`-level lemma: filtering out
+  the `from_list`/`assoc` dual: `lookup key (from_list xs) ≡ assoc key xs`, and
+  `assoc key (drop_key key ys) ≡ None` (a `List`-level lemma: filtering out
   `key` leaves nothing for `assoc` to match).
-- **Other-key law:** `Not (orderEquivKey leq k key) → lookup k (delete key m) ≡
+- **Other-key law:** `Not (order_equiv_key leq k key) → lookup k (delete key m) ≡
   lookup k m`. This one **threads `Ordered`+`Distinct`** through the landed
-  **law 5** (`lookupAssocAgree`, `map.ken:2212` — `lookup k m ≡ assoc k (toList
-  m)` under `Ordered`+`Distinct`) + its `fromList` dual + a `dropKey`/`assoc`
-  lemma (`k ≠ key → assoc k (dropKey key ys) ≡ assoc k ys` — dropping a
+  **law 5** (`lookup_assoc_agree`, `map.ken:2212` — `lookup k m ≡ assoc k (to_list
+  m)` under `Ordered`+`Distinct`) + its `from_list` dual + a `drop_key`/`assoc`
+  lemma (`k ≠ key → assoc k (drop_key key ys) ≡ assoc k ys` — dropping a
   *different* key doesn't disturb `k`'s first-match). All `List`-level, reusing
   the landed `assoc`.
 
@@ -224,11 +224,11 @@ y. y)`; a biased-only op forces a second op the first time anyone merges
 values). Orientation `f (from-a) (from-b)`, matching `unionWith`:
 
 ```
-view insertWith (k : Type) (v : Type) (leq : k -> k -> Bool) (f : v -> v -> v) (key : k) (val : v) (m : Tree k v) : Tree k v =
+view insert_with (k : Type) (v : Type) (leq : k -> k -> Bool) (f : v -> v -> v) (key : k) (val : v) (m : Tree k v) : Tree k v =
   …                                                    -- like `insert`, but on key-collision store `f val old`
 
 view union (k : Type) (v : Type) (leq : k -> k -> Bool) (f : v -> v -> v) (a : Tree k v) (b : Tree k v) : Tree k v =
-  fold k v (Tree k v) (\key val acc. insertWith k v leq f key val acc) b a
+  fold k v (Tree k v) (\key val acc. insert_with k v leq f key val acc) b a
 ```
 
 `intersection`/`difference` are the same fold-into-a-fresh-accumulator shape
@@ -250,7 +250,7 @@ view difference … (a : Tree k v) (b : Tree k v) : Tree k v =
 - **`Ordered`-preservation is `f`-independent** and rides **one** shared
   `foldPreservesOrdered`-shaped lemma: each of the three ops is a fold whose
   step
-  either `insert`s (landed `preservesOrdered`) into an `Ordered` accumulator or
+  either `insert`s (landed `preserves_ordered`) into an `Ordered` accumulator or
   returns it unchanged; the fold therefore preserves `Ordered` (base = the
   initial `Ordered` accumulator, `b` or `empty`). `f` touches **only values**;
   `Ordered` is about **keys**, so it never enters this proof.
@@ -262,7 +262,7 @@ view difference … (a : Tree k v) (b : Tree k v) : Tree k v =
 
 ## 5. Set algebra (`Set = Map Unit`)
 
-Set ops are the map ops at `v := Unit` (`setUnion s t := union … (\_ _. MkUnit)
+Set ops are the map ops at `v := Unit` (`set_union s t := union … (\_ _. MkUnit)
 s t`, etc. — at `Unit` every combining policy coincides, so Fork A's choice is a
 **no-op** here). The set membership algebra uses the landed `bool_or`
 (`lawful_classes.ken:39`) together with the `bool_and`/`bool_not` introduced as
@@ -273,46 +273,46 @@ load-bearing soundness):
 
 ```
 setUnionComm :  (k : Type) (leq : …) (s : Tree k Unit) (t : Tree k Unit) (x : k)
-             -> Equal Bool (setMember k leq x (setUnion k leq s t))
-                           (setMember k leq x (setUnion k leq t s))
+             -> Equal Bool (set_member k leq x (set_union k leq s t))
+                           (set_member k leq x (set_union k leq t s))
 ```
 
-— **never** `Equal (Set K) (setUnion s t) (setUnion t s)`. **Tree-`Equal` set
+— **never** `Equal (Set K) (set_union s t) (set_union t s)`. **Tree-`Equal` set
 laws are FALSE, not merely unprovable:** `union a b` and `union b a` are
 built by
 `fold`+`insert` and produce **shape-different trees with the same key-set**.
-Extensional (`∀x. setMember x lhs ≡ setMember x rhs`) is the only sound
+Extensional (`∀x. set_member x lhs ≡ set_member x rhs`) is the only sound
 formulation — and it is exactly what makes the laws **corollaries** rather than
 fresh `Tree` inductions:
 
 - A **membership-homomorphism** lemma reduces each op to Bool algebra:
-  `setMember x (setUnion s t) ≡ bool_or (setMember x s) (setMember x t)`
+  `set_member x (set_union s t) ≡ bool_or (set_member x s) (set_member x t)`
   (from the D2 lookup characterization at `v = Unit`), and likewise
   `bool_and` for `∩`, `bool_and _ (bool_not _)` for `∖`.
 - Then **commutativity / associativity / idempotence / identity** of `∪`/`∩`
   follow from the same properties of `bool_or`/`bool_and` — a **finite 2×2**
-  discharged via the landed `boolDichotomy` (no induction over the tree at all).
-- **`difference` membership:** `setMember x (setDiff s t) ≡ bool_and (setMember
-  x s) (bool_not (setMember x t))`, the same shape.
+  discharged via the landed `bool_dichotomy` (no induction over the tree at all).
+- **`difference` membership:** `set_member x (setDiff s t) ≡ bool_and (set_member
+  x s) (bool_not (set_member x t))`, the same shape.
 
 ## 6. D3 — `keys` / `values` coherence
 
-- **`keys`** reuses the landed `pairKeys` + `toList` (it is literally
-  `setToList` generalized off `Unit`): `keys k v m := pairKeys k v (toList k v
+- **`keys`** reuses the landed `pair_keys` + `to_list` (it is literally
+  `set_to_list` generalized off `Unit`): `keys k v m := pair_keys k v (to_list k v
   m)`. Net-new = just the named binding.
-- **`values`** needs one **net-new** projection, the exact mirror of `pairKeys`
-  with `pairSnd` for `pairFst`: `pairVals k v xs := match xs { Nil => Nil v ;
-  Cons p xs2 => Cons v (pairSnd k v p) (pairVals k v xs2) }`, then `values k v m
-  := pairVals k v (toList k v m)`.
+- **`values`** needs one **net-new** projection, the exact mirror of `pair_keys`
+  with `pairSnd` for `pairFst`: `pair_vals k v xs := match xs { Nil => Nil v ;
+  Cons p xs2 => Cons v (pairSnd k v p) (pair_vals k v xs2) }`, then `values k v m
+  := pair_vals k v (to_list k v m)`.
 - **Coherence with ordering:** `keys` are **ascending** under `Ordered m` —
-  `isSorted leq (keys m)` — off the landed **`toListOrdered`** (which gives
-  `isSorted (pairLeq leq) (toList m)`) + a small `pairKeys`-preserves-sortedness
-  lemma (`pairLeq` compares first components, i.e. keys, so projecting keeps the
+  `isSorted leq (keys m)` — off the landed **`to_list_ordered`** (which gives
+  `isSorted (pair_leq leq) (to_list m)`) + a small `pair_keys`-preserves-sortedness
+  lemma (`pair_leq` compares first components, i.e. keys, so projecting keeps the
   order). `values` carry **no** ordering claim (values are unordered).
-- **Coherence with `toList`:** `keys`/`values` are the two **componentwise
-  projections** of `toList` — same length, positionally aligned (`keys` reads
+- **Coherence with `to_list`:** `keys`/`values` are the two **componentwise
+  projections** of `to_list` — same length, positionally aligned (`keys` reads
   `pairFst` where `values` reads `pairSnd` of the same entry). Stated
-  structurally over the shared `toList m` traversal (no `length`/`zip` primitive
+  structurally over the shared `to_list m` traversal (no `length`/`zip` primitive
   needed — those are CAT-3/List-level and out of this chapter).
 
 ## 7. D4 — Relations (the frontier; Fork C)
@@ -321,7 +321,7 @@ fresh `Tree` inductions:
 Unit)`**, a plain instantiation of the landed `Tree` carrier at `v := Set K`, so
 every landed parametric op works at that `v` with **zero new machinery**. Rides
 **`Ord K` only** (outer map + inner set both keyed by `K`). *Not* `Set (Pair K
-K)`: the landed `pairLeq` compares **first components only** (a partial,
+K)`: the landed `pair_leq` compares **first components only** (a partial,
 non-total order) so it cannot even key a `Set (Pair K K)`, and a proper pair-set
 would force a lexicographic pair-comparator + its four order laws as a whole
 extra bundle; and composition over `Set (Pair K K)` is a quadratic nested scan.
@@ -330,8 +330,8 @@ extra bundle; and composition over `Set (Pair K K)` is a quadratic nested scan.
 view succ (k : Type) (leq : k -> k -> Bool) (x : k) (r : Tree k (Tree k Unit)) : Tree k Unit =
   match lookup k (Tree k Unit) leq x r { None => empty k Unit ; Some s => s }
 
-view relMember (k : Type) (leq : …) (x : k) (y : k) (r : Tree k (Tree k Unit)) : Prop =
-  IsTrue (setMember k leq y (succ k leq x r))          -- Ω-native membership
+view rel_member (k : Type) (leq : …) (x : k) (y : k) (r : Tree k (Tree k Unit)) : Prop =
+  IsTrue (set_member k leq y (succ k leq x r))          -- Ω-native membership
 ```
 
 **C-scope — the land-now / defer-build split, stated explicitly (no silent
@@ -343,10 +343,10 @@ truncation):**
   a `fold` over `succ x R` unioning the `S`-images (rides landed `fold`/`union`/
   `member`). **`converse`** `R˘`: `y ∈ succ x R ⇔ x ∈ succ y R˘`.
 - The **property predicates as `Π`-into-`Ω`** (`16 §1.1`, fine — properties are
-  **not** proof-relevant): `isReflexive`/`isSymmetric`/`isTransitive`/
-  `isEquivalence`, e.g. `isTransitive r := (x y z:k) → relMember x y r →
-  relMember y z r → relMember x z r`. **Discriminator:** a non-transitive
-  relation (`a → b`, `b → c`, no `a → c`) **fails** `isTransitive` — the ≥3-key
+  **not** proof-relevant): `is_reflexive`/`is_symmetric`/`is_transitive`/
+  `is_equivalence`, e.g. `is_transitive r := (x y z:k) → rel_member x y r →
+  rel_member y z r → rel_member x z r`. **Discriminator:** a non-transitive
+  relation (`a → b`, `b → c`, no `a → c`) **fails** `is_transitive` — the ≥3-key
   witness that mandates the `Nat` carrier (`§2`; `Bool` cannot exhibit it).
 
 **DESIGN-NOW / DEFER-BUILD** (representation pinned, proof is the fast-follow):
@@ -379,38 +379,38 @@ truncation):**
 ## 8. Derivation paths and build sequencing
 
 Everything bottoms out in landed built-ins + the Map capstone: `Nat` (prelude
-`Zero`/`Suc`); `Tree`/`empty`/`insert`/`lookup`/`member`/`toList`/`fold`/
-`fromList`/`pairKeys`/`setInsert`/`setMember`/`setToList`/`allKeys`/`Ordered`/
-`orderEquiv`/`assoc` + laws `preservesOrdered`(1)/`lookupAssocAgree`(5)/
-`toListOrdered`(4) (`map.ken`, all landed); `IsTrue`/`And`/`andIntro`/`Or`/
-`Inl`/`Inr`/`Not`/`absurd`/`bool_or`/`boolDichotomy` (`prelude.rs` +
-`lawful_classes.ken`). **Net-new (this WP):** `leqNat`+4 laws (D0);
-`bool_and`/`bool_not`; `dropKey`/`delete`+`fromListPreservesOrdered`+None-/
-other-key laws (D1); `insertWith`/`union`/`intersection`/`difference`+
+`Zero`/`Suc`); `Tree`/`empty`/`insert`/`lookup`/`member`/`to_list`/`fold`/
+`from_list`/`pair_keys`/`set_insert`/`set_member`/`set_to_list`/`all_keys`/`Ordered`/
+`order_equiv`/`assoc` + laws `preserves_ordered`(1)/`lookup_assoc_agree`(5)/
+`to_list_ordered`(4) (`map.ken`, all landed); `IsTrue`/`And`/`andIntro`/`Or`/
+`Inl`/`Inr`/`Not`/`absurd`/`bool_or`/`bool_dichotomy` (`prelude.rs` +
+`lawful_classes.ken`). **Net-new (this WP):** `leq_nat`+4 laws (D0);
+`bool_and`/`bool_not`; `drop_key`/`delete`+`from_list_preserves_ordered`+None-/
+other-key laws (D1); `insert_with`/`union`/`intersection`/`difference`+
 `foldPreservesOrdered`+lookup characterizations (D2);
-`setUnion`/`setIntersection`/
-`setDifference`+membership-homomorphism + extensional algebra laws (§5);
-`pairVals`/`keys`/`values`+coherence (D3); `succ`/`relMember`/`compose`/
+`set_union`/`set_intersection`/
+`set_difference`+membership-homomorphism + extensional algebra laws (§5);
+`pair_vals`/`keys`/`values`+coherence (D3); `succ`/`rel_member`/`compose`/
 `converse`+property predicates (D4 land-half). **Deferred fast-follow:** `size`,
 `reachableWithin`, the closure faithfulness/saturation laws.
 
-**Build order** (Runtime-owned, GPT window): **D0 (`leqNat`) → D1 (`delete`) →
+**Build order** (Runtime-owned, GPT window): **D0 (`leq_nat`) → D1 (`delete`) →
 D2 (`union`/…) → D3 (`keys`/`values`) → D4 (land-half)**. Architect re-certifies
 **AC1** (kernel-untouched) and **AC5** (relation `Ω`-soundness) on the built
 diff. Conformance: `../../conformance/stdlib/collections/` (D5 seed, authored
-with CV — discriminators on the `Nat` carrier with the real `leqNat` dictionary,
+with CV — discriminators on the `Nat` carrier with the real `leq_nat` dictionary,
 never `Int`).
 
 ## 9. Acceptance
 
 - **AC1 — Kernel-untouched.** No `crates/ken-kernel/` change; no new `Term`/
   `Decl`; no `declare_primitive`/`declare_postulate`; **no `Axiom`** anywhere.
-  The two surfaced build items (`size` for the closure bound; `leqNat`+laws for
+  The two surfaced build items (`size` for the closure bound; `leq_nat`+laws for
   the carrier) are ordinary total Ken, kernel-untouched.
 - **AC2 — Reuse, not re-derive.** `delete`/`union`/`intersection`/`difference`
-  build on the landed `insert`/`lookup`/`toList`/`fold`/`fromList`+
-  `preservesOrdered`+law 5; `leqNat`+4 laws are `Axiom`-free.
-- **AC3 — `Ordered`-preservation** for `delete` (via `fromListPreservesOrdered`)
+  build on the landed `insert`/`lookup`/`to_list`/`fold`/`from_list`+
+  `preserves_ordered`+law 5; `leq_nat`+4 laws are `Axiom`-free.
+- **AC3 — `Ordered`-preservation** for `delete` (via `from_list_preserves_ordered`)
   and `union`/`intersection`/`difference` (via one shared
   `foldPreservesOrdered`,
   `f`-independent).
@@ -421,9 +421,9 @@ never `Int`).
   transitive closure is **bounded-reachability `IsTrue`**, **never** a raw
   `data … : Ω`; the deferred faithfulness split is stated (no silent
   truncation).
-- **AC6 — Set laws are membership-EXTENSIONAL** (`∀x. setMember x lhs ≡
-  setMember x rhs`), **never** `Equal (Set K)`; discharged as `bool_or`/
-  `bool_and` corollaries via `boolDichotomy`, not fresh `Tree` inductions.
+- **AC6 — Set laws are membership-EXTENSIONAL** (`∀x. set_member x lhs ≡
+  set_member x rhs`), **never** `Equal (Set K)`; discharged as `bool_or`/
+  `bool_and` corollaries via `bool_dichotomy`, not fresh `Tree` inductions.
 - **AC7 — Carrier vacuity guard.** Discriminators run on the **`Nat`** carrier
-  with the real `leqNat` dictionary (≥ 3 distinct keys for transitivity/
+  with the real `leq_nat` dictionary (≥ 3 distinct keys for transitivity/
   closure), **never** the `Axiom`-holed `Ord Int`/`Ord Char`.

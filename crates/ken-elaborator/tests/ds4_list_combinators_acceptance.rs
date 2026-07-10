@@ -32,10 +32,10 @@ fn all_five_combinators_and_their_laws_are_real_globals() {
         "reverse_length",
         "zip",
         "zip_length",
-        "concatMap",
-        "rangeFrom",
+        "concat_map",
+        "range_from",
         "range",
-        "rangeFrom_length",
+        "range_from_length",
         "range_length",
         "foldl",
     ] {

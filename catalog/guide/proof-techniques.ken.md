@@ -40,11 +40,11 @@ fn cong (ty : Type) (ty2 : Type) (x : ty) (y : ty) (f : ty → ty2)
          (p : Equal ty x y) : Equal ty2 (f x) (f y) =
   J (λy' _. Equal ty2 (f x) (f y')) Refl p
 
-fn boolEq (a : Bool) (b : Bool) : Bool =
+fn bool_eq (a : Bool) (b : Bool) : Bool =
   match a { True ⇒ b ; False ⇒ match b { True ⇒ False ; False ⇒ True } }
 
-fn notBool (b : Bool) : Bool = match b { True ⇒ False ; False ⇒ True }
-fn flipBool (b : Bool) : Bool = match b { False ⇒ True ; True ⇒ False }
+fn not_bool (b : Bool) : Bool = match b { True ⇒ False ; False ⇒ True }
+fn flip_bool (b : Bool) : Bool = match b { False ⇒ True ; True ⇒ False }
 ```
 
 ## 1. `tt` vs. `Refl`: the two-way discriminator
@@ -65,7 +65,7 @@ covers the case where neither applies.
 True` collapses all the way to `Top`:
 
 ```ken example
-const withTt : Equal Bool (bool_and True True) True = tt
+const with_tt : Equal Bool (bool_and True True) True = tt
 ```
 
 This fails with `"Refl expects an `Eq`-shaped goal"` — the goal already
@@ -78,7 +78,7 @@ const withRefl : Equal Bool (bool_and True True) True = Refl
 An abstract (neutral) variable never collapses, so the same shape flips:
 
 ```ken example
-fn selfEqRefl (x : Bool) : Equal Bool (bool_and x x) (bool_and x x) = Refl
+fn self_eq_refl (x : Bool) : Equal Bool (bool_and x x) (bool_and x x) = Refl
 ```
 
 This fails: the goal never reduced to `Top` (`x` is abstract), so there is
@@ -90,7 +90,7 @@ fn selfEqTt (x : Bool) : Equal Bool (bool_and x x) (bool_and x x) = tt
 
 ### 1.1 When neither closes: opaque primitives don't reduce under conversion
 
-`selfEqRefl` above works because its goal's two sides are the **identical**
+`self_eq_refl` above works because its goal's two sides are the **identical**
 term (`bool_and x x` on both sides) — trivially convertible, no reduction
 needed. A goal whose two sides are only *equal at runtime*, not the same
 term, needs one of them to actually **reduce** to the other during
@@ -123,7 +123,7 @@ The honest closer is a VISIBLE postulate, the same audited-delta shape
 kernel-reducible at this layer:
 
 ```ken example
-const primEqAxiom : Equal Bool (eq_int five five) True = Axiom
+const prim_eq_axiom : Equal Bool (eq_int five five) True = Axiom
 ```
 
 This is not a corner case to memorize and forget: **any law whose operation
@@ -155,14 +155,14 @@ for `list_append`: the base case has both sides reduce to the constructor
 result (the induction hypothesis) is lifted under `Cons x` by `cong`:
 
 ```ken example
-fn listRightUnit (a : Type) (xs : List a)
+fn list_right_unit (a : Type) (xs : List a)
   : Equal (List a) (list_append a xs (Nil a)) xs =
   match xs {
     Nil      ⇒ tt ;
     Cons x t ⇒ cong (List a) (List a)
                      (list_append a t (Nil a)) t
                      (λl. Cons a x l)
-                     (listRightUnit a t)
+                     (list_right_unit a t)
   }
 ```
 
@@ -174,8 +174,8 @@ binder's already-fixed type, so `p` stays symbolic in `x`/`y` inside every
 branch and can't be reused where a branch needs it concretely. Instead,
 case-split each variable through its **own** `match`-returning-a-function
 layer, and only introduce the hypothesis's `λ` *after* every relevant
-variable is already concrete — exactly the shape `boolEqSound`/
-`boolEqComplete` use in §3, and the shape every law field in
+variable is already concrete — exactly the shape `bool_eq_sound`/
+`bool_eq_complete` use in §3, and the shape every law field in
 `catalog/packages/Core/LawfulClasses.ken` follows. Once the
 hypothesis's binder-time type is concrete, a branch whose hypothesis is
 *already* the goal (e.g. an "impossible" combination where the hypothesis
@@ -194,7 +194,7 @@ constructor combinations with `tt` (matching endpoints) or `absurd`
 between different nullary constructors, which collapses to `Bottom`, K5):
 
 ```ken example
-fn boolEqSound (x : Bool) : (y : Bool) → IsTrue (boolEq x y) → Equal Bool x y =
+fn bool_eq_sound (x : Bool) : (y : Bool) → IsTrue (bool_eq x y) → Equal Bool x y =
   match x {
     True  ⇒ λy. match y {
               True  ⇒ λh. tt ;
@@ -206,7 +206,7 @@ fn boolEqSound (x : Bool) : (y : Bool) → IsTrue (boolEq x y) → Equal Bool x 
             }
   }
 
-fn boolEqComplete (x : Bool) : (y : Bool) → Equal Bool x y → IsTrue (boolEq x y) =
+fn bool_eq_complete (x : Bool) : (y : Bool) → Equal Bool x y → IsTrue (bool_eq x y) =
   match x {
     True  ⇒ λy. match y {
               True  ⇒ λp. tt ;
@@ -233,13 +233,13 @@ Ken's equality at a function type **reduces to the pointwise family**:
 computation rule for `Π`). Function extensionality therefore needs **no
 axiom and no lemma** — a bare pointwise proof checks directly against a
 function-equality goal, because the goal *is* that pointwise type after one
-reduction step. `notBool` and `flipBool` below are two syntactically
+reduction step. `not_bool` and `flip_bool` below are two syntactically
 different functions; proving them equal AS FUNCTIONS needs no `funext`
 call, only a pointwise proof, because `Equal (Bool -> Bool) f g`
 whnf-reduces to exactly that pointwise Pi type:
 
 ```ken example
-const notFunctionsEqual : Equal (Bool → Bool) notBool flipBool =
+const not_functions_equal : Equal (Bool → Bool) not_bool flip_bool =
   λb. match b { True ⇒ tt ; False ⇒ tt }
 ```
 
@@ -256,7 +256,7 @@ it passes the kernel's **size-change termination (SCT)** gate at definition
 time (`spec/10-kernel/17-conversion.md §4`) — this is the *sole*
 termination guarantee; there is no fuel or cycle guard on δ-unfolding
 itself, so a definition that slips past SCT does not merely run slowly, it
-makes conversion (and therefore type-checking) **loop**. `listRightUnit`
+makes conversion (and therefore type-checking) **loop**. `list_right_unit`
 above passes because its recursive call is on the strictly smaller tail
 `t`. A self-reference with no strictly-decreasing argument is rejected,
 whatever form it takes — a bare, unapplied self-reference is the minimal

@@ -29,7 +29,7 @@ class Combine a { combine : a → a → a }
 instance Combine Bool { combine = λx y. match x { True ⇒ True ; False ⇒ y } }
 instance Combine Int  { combine = add_int }
 
-fn combineTwice (a : Type) (d : Combine a) (x : a) : a = (d).combine x x
+fn combine_twice (a : Type) (d : Combine a) (x : a) : a = (d).combine x x
 ```
 
 When there is exactly **one** carrier in view, or the "class" would only
@@ -42,7 +42,7 @@ required) its hypotheses are threaded as ordinary parameters, fully
 generic in `a`:
 
 ```ken example
-fn maxOf (a : Type) (leq : a → a → Bool) (x : a) (y : a) : a =
+fn max_of (a : Type) (leq : a → a → Bool) (x : a) (y : a) : a =
   match leq x y { True ⇒ y ; False ⇒ x }
 ```
 
@@ -94,7 +94,7 @@ Prefer a dedicated wrapper for an authority-carrying value:
 ```ken example
 data Cap = MkCap Int
 
-fn capLevel (c : Cap) : Int = match c { MkCap n ⇒ n }
+fn cap_level (c : Cap) : Int = match c { MkCap n ⇒ n }
 ```
 
 ...over reusing the ambient `Int` type directly wherever "a capability

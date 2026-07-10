@@ -33,25 +33,25 @@ fn base_env() -> ElabEnv {
 fn all_combinators_and_laws_are_real_globals() {
     let env = base_env();
     for name in [
-        "getOrElse",
-        "getOrElse_none",
-        "getOrElse_some",
-        "isSome",
-        "isSome_none",
-        "isSome_some",
-        "orElse",
-        "orElse_none",
-        "orElse_some",
-        "orElse_none_rhs",
-        "mapErr",
-        "mapErr_ok",
-        "mapErr_err",
-        "andThen",
-        "andThen_ok",
-        "andThen_err",
-        "unwrapOr",
-        "unwrapOr_ok",
-        "unwrapOr_err",
+        "get_or_else",
+        "get_or_else_none",
+        "get_or_else_some",
+        "is_some",
+        "is_some_none",
+        "is_some_some",
+        "or_else",
+        "or_else_none",
+        "or_else_some",
+        "or_else_none_rhs",
+        "map_err",
+        "map_err_ok",
+        "map_err_err",
+        "and_then",
+        "and_then_ok",
+        "and_then_err",
+        "unwrap_or",
+        "unwrap_or_ok",
+        "unwrap_or_err",
     ] {
         assert!(
             env.globals.contains_key(name),
@@ -82,17 +82,17 @@ fn trusted_base_delta_is_empty_across_the_file() {
     );
 }
 
-// AC8 discriminator 1: `getOrElse` returns the CONTAINED value on `Some`,
+// AC8 discriminator 1: `get_or_else` returns the CONTAINED value on `Some`,
 // not the default — reusing the `None`-case proof for the `Some` case
 // must be rejected.
 #[test]
 fn ac8_getorelse_returns_contained_value_not_default() {
     let mut env = base_env();
     let r = env.elaborate_decl(
-        "fn bad_getOrElse_some_returns_default (a : Type) (d : a) (v : a) : Equal a (getOrElse a d (Some a v)) d = getOrElse_none a d",
+        "fn bad_getOrElse_some_returns_default (a : Type) (d : a) (v : a) : Equal a (get_or_else a d (Some a v)) d = get_or_else_none a d",
     );
     match r {
-        Ok(_) => panic!("getOrElse_none proves the None case (=d); reusing it for Some (=v) must be rejected"),
+        Ok(_) => panic!("get_or_else_none proves the None case (=d); reusing it for Some (=v) must be rejected"),
         Err(e) => {
             let msg = format!("{:?}", e);
             assert!(
@@ -104,17 +104,17 @@ fn ac8_getorelse_returns_contained_value_not_default() {
     }
 }
 
-// AC8 discriminator 2: `mapErr` maps the ERROR side, not the OK side —
+// AC8 discriminator 2: `map_err` maps the ERROR side, not the OK side —
 // applying `g` under `Ok` must be rejected (field-order/constructor-role
 // discriminator, directly testing the frame's Err-is-first caution).
 #[test]
 fn ac8_maperr_does_not_touch_ok_payload() {
     let mut env = base_env();
     let r = env.elaborate_decl(
-        "fn bad_mapErr_touches_ok (e : Type) (f : Type) (g : e -> f) (v : e) : Equal (Result f e) (mapErr e f e g (Ok e e v)) (Ok f e (g v)) = mapErr_ok e f e g v",
+        "fn bad_mapErr_touches_ok (e : Type) (f : Type) (g : e -> f) (v : e) : Equal (Result f e) (map_err e f e g (Ok e e v)) (Ok f e (g v)) = map_err_ok e f e g v",
     );
     match r {
-        Ok(_) => panic!("mapErr_ok proves Ok v is left UNTOUCHED (Ok f a v, not Ok f a (g v)) — reusing it for a g-applied RHS must be rejected"),
+        Ok(_) => panic!("map_err_ok proves Ok v is left UNTOUCHED (Ok f a v, not Ok f a (g v)) — reusing it for a g-applied RHS must be rejected"),
         Err(e) => {
             let msg = format!("{:?}", e);
             assert!(
@@ -126,7 +126,7 @@ fn ac8_maperr_does_not_touch_ok_payload() {
     }
 }
 
-// AC8 discriminator 3: `andThen` short-circuits on `Err`, never calling
+// AC8 discriminator 3: `and_then` short-circuits on `Err`, never calling
 // `k` — reusing the `Ok`-case proof (which DOES call `k`) for the `Err`
 // case must be rejected.
 #[test]
@@ -134,10 +134,10 @@ fn ac8_andthen_short_circuits_on_err() {
     let mut env = base_env();
     let r = env.elaborate_decl(
         "fn bad_andThen_err_calls_k (e : Type) (a : Type) (b : Type) (k : a -> Result e b) (u : e) (v : a) : \
-           Equal (Result e b) (andThen e a b k (Err e a u)) (k v) = andThen_ok e a b k v",
+           Equal (Result e b) (and_then e a b k (Err e a u)) (k v) = and_then_ok e a b k v",
     );
     match r {
-        Ok(_) => panic!("andThen_ok proves the Ok case calls k; reusing it to claim the Err case also calls k must be rejected"),
+        Ok(_) => panic!("and_then_ok proves the Ok case calls k; reusing it to claim the Err case also calls k must be rejected"),
         Err(e) => {
             let msg = format!("{:?}", e);
             assert!(
@@ -149,13 +149,13 @@ fn ac8_andthen_short_circuits_on_err() {
     }
 }
 
-// Functional sanity: `orElse` is genuinely left-biased on a concrete
+// Functional sanity: `or_else` is genuinely left-biased on a concrete
 // example (Some wins over Some, not just Some wins over None).
 #[test]
 fn orelse_left_biased_concrete_example() {
     let mut env = base_env();
     env.elaborate_decl(
-        "const orElseLeftBiasedExample : Equal (Option Nat) (orElse Nat (Some Nat Zero) (Some Nat (Suc Zero))) (Some Nat Zero) = orElse_some Nat Zero (Some Nat (Suc Zero))",
+        "const orElseLeftBiasedExample : Equal (Option Nat) (or_else Nat (Some Nat Zero) (Some Nat (Suc Zero))) (Some Nat Zero) = or_else_some Nat Zero (Some Nat (Suc Zero))",
     )
-    .expect("orElse must prefer the left Some over a competing right Some");
+    .expect("or_else must prefer the left Some over a competing right Some");
 }

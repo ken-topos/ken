@@ -110,12 +110,12 @@ subsuming both biases), `keys`/`values` coherence — plus the **set algebra**
 same-key-set trees
 differ in shape) and the **relations frontier** (composition, converse, the
 reflexive/symmetric/transitive predicates, transitive closure) are pinned in
-**`58-maps-sets-relations.md`** (CAT-4). `delete` is **rebuild-via-`fromList`**
-(reusing the landed `preservesOrdered`); a relation is `Map K (Set K)`
+**`58-maps-sets-relations.md`** (CAT-4). `delete` is **rebuild-via-`from_list`**
+(reusing the landed `preserves_ordered`); a relation is `Map K (Set K)`
 adjacency; and the transitive closure is **bounded-reachability `IsTrue`** —
 `Ω`-native, the `Perm` move again, never a raw proof-relevant inductive
 (`58 §7`), its faithfulness proof + `size` a designed-and-deferred fast-follow.
-The `Nat` carrier (a net-new `Axiom`-free `leqNat`) is the discriminator floor,
+The `Nat` carrier (a net-new `Axiom`-free `leq_nat`) is the discriminator floor,
 not the `Axiom`-holed `Ord Int`/`Ord Char`.
 
 The **Layer-3 parsing/syntax/diagnostics contract** — source artifacts as byte

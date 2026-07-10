@@ -79,11 +79,11 @@ identifier is reserved checked-mode surface sugar for `Ω`-classified
 `Bottom`-elimination (`crates/ken-elaborator/src/elab.rs:526`), and
 declaring a real global under the same name is now a resolve-time hard
 error (`§5`, `§6` Finding, landed via FR-2) rather than the silent,
-permanently-unreachable shadow it originally was. `absurdEmpty` is the
+permanently-unreachable shadow it originally was. `absurd_empty` is the
 honest, reachable name this entry uses instead:
 
 ```ken
-fn absurdEmpty (C : Type) (e : Empty) : C = match e { }
+fn absurd_empty (C : Type) (e : Empty) : C = match e { }
 ```
 
 `Yes`/`No` already work directly as constructors; the lowercase `yes`/`no`
@@ -99,7 +99,7 @@ fn no (prp : Omega) (f : prp -> Empty) : Dec prp = No prp f
 `DecEq` is inlined from `catalog/packages/Core/LawfulClasses.ken`
 (self-containment, the same idiom `catalog/guide/proof-techniques.ken.md`
 uses for `cong`/`bool_and`: `ken run` on a standalone entry has no
-cross-package import mechanism today, `§6` Finding). `decEqDecides` below
+cross-package import mechanism today, `§6` Finding). `dec_eq_decides` below
 is fully generic over ANY `DecEq a` instance, landed or local — only the
 `§3` worked example needs a concrete one in scope:
 
@@ -128,16 +128,16 @@ instance DecEq Bool {
 }
 ```
 
-`boolDichotomy` reflects a stuck `Bool` value into an equation-carrying
+`bool_dichotomy` reflects a stuck `Bool` value into an equation-carrying
 `Or`, so a computed `Bool` result can be USED as a proof, not just branched
 on — a plain `match (d.eq x y) {...}` cannot do this itself (the scrutinee
 is an application, not a bound variable, so the dependent-motive machinery
 that lets `match` refine a hypothesis has nothing to bind); this is the
 same combinator `catalog/packages/Data/Collections/Map.ken` calls
-`boolDichotomy`, inlined here for self-containment:
+`bool_dichotomy`, inlined here for self-containment:
 
 ```ken
-fn boolDichotomy (b : Bool) : Or (Equal Bool b True) (Equal Bool b False) =
+fn bool_dichotomy (b : Bool) : Or (Equal Bool b True) (Equal Bool b False) =
   match b {
     True  ⇒ Inl (Equal Bool True True) (Equal Bool True False) tt ;
     False ⇒ Inr (Equal Bool False True) (Equal Bool False False) tt
@@ -166,11 +166,11 @@ Equal Bool (d.eq x y) True`; combined with `q` via `sym`/`trans`, that is
 makes THAT proposition definitionally `Bottom`, so the landed `absurd`
 sugar (Bottom → any goal, INCLUDING a `Type`-sorted one, `16 §1`
 Bottom-Elim) discharges it into `Empty` directly — no new mechanism, and no
-need for `absurdEmpty` here (this bridge is Ω → Type, not Empty → C):
+need for `absurd_empty` here (this bridge is Ω → Type, not Empty → C):
 
 ```ken
-fn decEqDecides (a : Type) (d : DecEq a) (x : a) (y : a) : Dec (Equal a x y) =
-  match boolDichotomy (d.eq x y) {
+fn dec_eq_decides (a : Type) (d : DecEq a) (x : a) (y : a) : Dec (Equal a x y) =
+  match bool_dichotomy (d.eq x y) {
     Inl p ⇒ Yes (Equal a x y) (d.sound x y p) ;
     Inr q ⇒
       No (Equal a x y)
@@ -190,37 +190,37 @@ just a `where`-resolved implicit dictionary. (The landed
 independently — `§2`'s note on why this entry inlines its own.)
 
 ```ken example
-const trueIsTrue : Dec (Equal Bool True True) =
-  decEqDecides Bool DecEq_instance_Bool True True
+const true_is_true : Dec (Equal Bool True True) =
+  dec_eq_decides Bool DecEq_instance_Bool True True
 
-const trueIsNotFalse : Dec (Equal Bool True False) =
-  decEqDecides Bool DecEq_instance_Bool True False
+const true_is_not_false : Dec (Equal Bool True False) =
+  dec_eq_decides Bool DecEq_instance_Bool True False
 ```
 
 `decide` recovers just the `Bool` tag, e.g. for an ordinary conditional:
 
 ```ken example
-const trueIsTrueTag : Bool = decide (Equal Bool True True) trueIsTrue
-const trueIsNotFalseTag : Bool = decide (Equal Bool True False) trueIsNotFalse
+const true_is_true_tag : Bool = decide (Equal Bool True True) true_is_true
+const true_is_not_false_tag : Bool = decide (Equal Bool True False) true_is_not_false
 ```
 
 `yes`/`no` construct `Dec` values directly when you already have the proof
 or refutation in hand — no `DecEq` needed:
 
 ```ken example
-const anyProofDecides : Dec (Equal Bool True True) = yes (Equal Bool True True) tt
+const any_proof_decides : Dec (Equal Bool True True) = yes (Equal Bool True True) tt
 
-fn refuteTrueFalse (p : Equal Bool True False) : Empty = absurd p
+fn refute_true_false (p : Equal Bool True False) : Empty = absurd p
 
-const refutationDecides : Dec (Equal Bool True False) =
-  no (Equal Bool True False) refuteTrueFalse
+const refutation_decides : Dec (Equal Bool True False) =
+  no (Equal Bool True False) refute_true_false
 ```
 
-`absurdEmpty` — an inhabitant of `Empty`, however obtained, discharges ANY
+`absurd_empty` — an inhabitant of `Empty`, however obtained, discharges ANY
 goal:
 
 ```ken example
-fn contradictionImpliesAnything (e : Empty) : Bool = absurdEmpty Bool e
+fn contradiction_implies_anything (e : Empty) : Bool = absurd_empty Bool e
 ```
 
 ## 4. Laws  proofs
@@ -232,12 +232,12 @@ over the concrete `DecEq Bool` instance from `§3` (the guide's `§7` named-
 proof-claims form):
 
 ```ken example
-lemma decideYesIsTrue : Equal Bool (decide (Equal Bool True True) trueIsTrue) True = tt
+lemma decide_yes_is_true : Equal Bool (decide (Equal Bool True True) true_is_true) True = tt
 
-lemma decideNoIsFalse : Equal Bool (decide (Equal Bool True False) trueIsNotFalse) False = tt
+lemma decide_no_is_false : Equal Bool (decide (Equal Bool True False) true_is_not_false) False = tt
 ```
 
-Both close with `tt`: `decide`/`trueIsTrue`/`trueIsNotFalse` are all closed,
+Both close with `tt`: `decide`/`true_is_true`/`true_is_not_false` are all closed,
 fully-applied terms, so both sides reduce to the same nullary `Bool`
 constructor and the equality collapses to `Top` before `tt` is even checked
 (the guide's `§1` `tt`-vs-`Refl` discriminator) — not `Refl`, since neither
@@ -257,7 +257,7 @@ family, `spec/10-kernel/13-pi-sigma.md:133`) — `Dec` has precedent, not a
 new capability class.
 
 **The `DecEq Int` caveat.** `DecEq Int.sound` is `Axiom`-backed (`Int` is
-an opaque primitive, no induction) — `decEqDecides Int (DecEq Int) x y`
+an opaque primitive, no induction) — `dec_eq_decides Int (DecEq Int) x y`
 type-checks and is *usable*, but its `Yes` branch's proof rides that
 `Axiom`, not a kernel-checked derivation. `§3`'s worked examples
 deliberately use `DecEq Bool` (an inductive carrier, honest via K7/no-
@@ -274,7 +274,7 @@ independently-declared type, distinct from the prelude's `Empty`:
 ```ken example
 data EmptyAttempt : Type where { }
 
-fn absurdEmptyAttempt (C : Type) (e : EmptyAttempt) : C = match e { }
+fn absurd_empty_attempt (C : Type) (e : EmptyAttempt) : C = match e { }
 ```
 
 The literal `Type0 =` spelling (`§2`'s `` ```ken ignore `` block) still
@@ -285,7 +285,7 @@ the explicit-family `where { }` spelling above is the real one.
 **A user-declared `absurd` is now a resolve-time hard error (FR-2,
 landed).** Declaring `fn absurd (C : Type) (e : Empty) : C = match e { }`
 used to elaborate successfully with the collision entirely silent — this
-entry still uses `absurdEmpty` instead (the honest, reachable name), but
+entry still uses `absurd_empty` instead (the honest, reachable name), but
 the footgun itself is now caught, not merely worked around. Fails:
 `'absurd' collides with a reserved surface sugar identifier`.
 
@@ -323,7 +323,7 @@ fn absurd (C : Type) (e : Empty) : C = match e { }
   `J`/`Eq` are deliberately excluded, since their arity-3-gated sugar
   coexists with a lower-arity type-former/class of the same name, e.g. the
   landed `class Eq a`). This entry's `Empty`-eliminator stays named
-  `absurdEmpty` regardless (the honest, reachable name).
+  `absurd_empty` regardless (the honest, reachable name).
 - **Tooling candidate → Ergo (`ken-cli`):** `ken run` unconditionally
   executes the file's LAST declaration as an IO tree (`crates/ken-cli/src/
   main.rs`, `run_file`) — appropriate for a runnable program (the
@@ -360,8 +360,8 @@ fn absurd (C : Type) (e : Empty) : C = match e { }
 1. **Spec / WP.** `docs/program/wp/catalog-ds-1-empty-dec.md` (this entry's
    build WP); no dedicated spec chapter yet — `Dec`'s reflective-decision
    role is described at `spec/20-verification/23-prover.md §3`.
-2. **Public API.** `Empty`, `absurdEmpty`, `Dec`, `Yes`, `No`, `decide`,
-   `yes`, `no`, `decEqDecides`.
+2. **Public API.** `Empty`, `absurd_empty`, `Dec`, `Yes`, `No`, `decide`,
+   `yes`, `no`, `dec_eq_decides`.
 3. **Source map.**
 
    | Task | Section |
@@ -376,7 +376,7 @@ fn absurd (C : Type) (e : Empty) : C = match e { }
    other prelude `data` uses. `Dec`/`Yes`/`No` — `declare_inductive`
    directly (kernel-direct, `Ω`-sorted param), the same technique already
    landed for `Or`/`Perm_rel`. `decide` — ordinary surface `match` over the
-   now-global `Dec`/`Yes`/`No`. `absurdEmpty`/`yes`/`no`/`decEqDecides` —
+   now-global `Dec`/`Yes`/`No`. `absurd_empty`/`yes`/`no`/`dec_eq_decides` —
    ordinary surface `fn`, this entry's own code.
 5. **`trusted_base()` delta.** Exactly two new inductive admissions
    (`Empty`, `Dec`), each an ordinary `declare_inductive` kernel recheck —
@@ -385,11 +385,11 @@ fn absurd (C : Type) (e : Empty) : C = match e { }
    'declare_inductive\|declare_primitive\|declare_postulate' \
    crates/ken-elaborator/src/prelude.rs` shows `Empty`/`Dec` alongside
    every pre-existing prelude inductive, and neither appears in a
-   `declare_primitive`/`declare_postulate` call. `decEqDecides Int`'s
+   `declare_primitive`/`declare_postulate` call. `dec_eq_decides Int`'s
    `Yes`-branch proof (when instantiated at `Int`) carries the
    pre-existing `DecEq Int.sound` `Axiom` delta — not a new one this entry
    introduces (`§5`).
-6. **Proof families.** `decEqDecides` — one case-split on `d.eq x y`, two
+6. **Proof families.** `dec_eq_decides` — one case-split on `d.eq x y`, two
    branches (`sound`-direct / K7-then-`Bottom`-elim), no induction.
 7. **Consumers.** None yet — DS-1 is the pilot; later catalog entries
    (decidable-order-driven sorting, checked key comparison) are the
