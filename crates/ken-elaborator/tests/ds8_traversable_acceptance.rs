@@ -1,12 +1,15 @@
-//! DS-8 (`Traversable` constructor class) acceptance —
-//! `docs/program/wp/ds-8-traversable.md`, design contract
+//! DS-8 (`Traversable` constructor class) acceptance, extended by DS-8c —
+//! `docs/program/wp/ds-8-traversable.md` +
+//! `docs/program/wp/ds-8c-traverse-composition-law.md`, design contract
 //! `spec/50-stdlib/56-effectful-classes.md` (CAT-2, `§5`).
 //!
-//! Composition coherence (`§5.3`) and `Compose`'s own `ap_cmp` are
-//! deferred to the named follow-on `DS-8c` — see
-//! `catalog/packages/Core/EffectfulClasses.ken.md §9.4` for the honest
-//! landed/deferred split. This acceptance test covers exactly what DS-8
-//! lands: the class, both instances, and the identity + naturality laws.
+//! DS-8 landed the class, both instances, and the identity + naturality
+//! laws. DS-8c closes the two pieces DS-8 honestly size-deferred: `Compose
+//! g h`'s own `ap_cmp` (its 4th `Applicative` law) and the `§5.3`
+//! composition coherence law that consumes it — see
+//! `catalog/packages/Core/EffectfulClasses.ken.md §9.6`-`§9.7`. All three
+//! `§5.3` coherence laws (identity, naturality, composition) are now
+//! proved for both instances; the `Traversable` showcase is complete.
 //!
 //! - **AC1** — kernel-untouched, zero new elaborator capability, zero
 //!   `trusted_base()` delta (structural before/after set-diff).
@@ -85,26 +88,62 @@ fn trusted_base_delta_is_empty_across_the_entry() {
     );
 }
 
-// Honest-boundary check (Architect gate pin #4): the tangled/checked code
-// must not contain a stubbed `ap_cmp` under ANY name that claims to BE
-// Compose's fourth Applicative law or the composition coherence law —
-// only the honestly-partial Level1/Level2 reduction lemmas toward it.
+// Honest-boundary check (Architect gate pin #4), DS-8c-updated: `ap_cmp`
+// is now landed (below), but the real `instance Applicative (Compose g h)`
+// head must still be genuinely absent — that head stays blocked by the
+// parametric-instance-head kinding gap (elab.rs:3833-3851), independent of
+// ap_cmp being proved (DS-8c's scope guard: work within the `fn`-synonym
+// scaffolding, never assemble the real instance).
 #[test]
-fn ap_cmp_and_composition_law_are_genuinely_absent_not_stubbed() {
+fn compose_instance_head_still_genuinely_absent() {
     let extracted = ken_elaborator::literate::extract_ken_md(EFFECTFUL_CLASSES_KEN_MD)
         .expect("EffectfulClasses.ken.md must extract");
     assert!(
-        !extracted.source.contains("compose_ap_cmp"),
-        "Compose's own ap_cmp must be genuinely absent from the tangled code, not stubbed"
-    );
-    assert!(
         !extracted.source.contains("instance Applicative (Compose"),
-        "instance Applicative (Compose g h) must not be assembled — ap_cmp (one of its four required fields) is not yet proved"
+        "instance Applicative (Compose g h) must not be assembled — its head stays kinding-blocked independent of ap_cmp"
     );
-    assert!(
-        !extracted.source.contains("traverse_composition"),
-        "the traverse composition coherence law (§5.3) must be genuinely absent, not stubbed"
-    );
+}
+
+// DS-8c piece 2: the traverse composition coherence law (§5.3) — proved
+// for both instances (List by induction, Option by case split), stated
+// over the explicit compose_pure/compose_ap operations (never through
+// instance search), consuming Compose's ap_cmp via ap_naturality/
+// ap_naturality2. Real, kernel-checked globals, not just named in prose.
+#[test]
+fn traverse_composition_law_is_present_and_kernel_checked() {
+    let mut env = base_env();
+    env.elaborate_ken_md_file(EFFECTFUL_CLASSES_KEN_MD)
+        .expect("EffectfulClasses.ken.md must elaborate");
+    for name in [
+        "list_traverse_composed",
+        "list_traverse_composition",
+        "option_traverse_composed",
+        "option_traverse_composition",
+    ] {
+        assert!(
+            env.globals.contains_key(name),
+            "DS-8c claims `{}` is proved — it must be a real global after elaborating the entry",
+            name
+        );
+    }
+}
+
+// DS-8c positive counterpart: Compose's own `ap_cmp` (the 4th Applicative
+// law) must be a REAL, kernel-checked proof term in the tangled code, not
+// a stub — closed by the `trans`/`cong`/`ap_cmp`/`ap_naturality2` chain,
+// never a bare `Refl`/`Axiom` (Architect honesty pin #4).
+#[test]
+fn compose_ap_cmp_is_present_and_kernel_checked() {
+    let mut env = base_env();
+    env.elaborate_ken_md_file(EFFECTFUL_CLASSES_KEN_MD)
+        .expect("EffectfulClasses.ken.md must elaborate");
+    for name in ["compose_ap_cmp", "ap_naturality2"] {
+        assert!(
+            env.globals.contains_key(name),
+            "DS-8c claims `{}` is proved — it must be a real global after elaborating the entry",
+            name
+        );
+    }
 }
 
 // The positive counterpart to the absence check above: §9.4's claimed
