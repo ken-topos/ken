@@ -212,10 +212,11 @@ bar.
   is independent and proceeds regardless.
 
 ### L5 · ⚠ PROMINENT — coproduct family: `Either` (catalog package), rename effect `Sum`→`Coproduct` [OPERATOR-RULED]
-> **STATUS (2026-07-10 ~13:30):** WP (2) `Sum`→`Coproduct` rename **✅ LANDED**
-> (PR #455, `main @ 4943d63`, zero kernel delta). WP (1) `Either` catalog package
-> **pending Foundation kick** (`wp/either-catalog-package.md`; `Data/Sums/` home
-> landed with DS-3 PR #454). WP (3) `Sum` name now **freed**.
+> **STATUS (2026-07-10 ~14:05): ✅ COMPLETE end-to-end.** WP (1) `Either` catalog
+> package **✅ LANDED** (PR #458, `main @ a78f3b7`; `Data/Sums/Sums.ken`, Either
+> verified absent from prelude — ruling B honored). WP (2) `Sum`→`Coproduct` rename
+> **✅ LANDED** (PR #455, zero kernel delta, `declare_sum` gone). WP (3) `Sum` name
+> now **freed** for `Data.Functor.Sum`.
 - **Call (COEXIST by role — three distinct coproducts; SPLIT into two WPs after
   the placement ruling):** (1) **`Either a b = Left a | Right b`** — the
   user-facing value disjunction, defined as a **user-level CATALOG PACKAGE, NOT
@@ -273,6 +274,40 @@ bar.
   `Either`-as-package is the first correct precedent. **`Data.Functor.Sum f g`** →
   a functor-combinator WP alongside `Compose`, owning the freed `Sum` name.
 
+### L6 · ⚠ PROMINENT — casing standard: PascalCase class-like, snake_case instance-like [OPERATOR-RULED]
+> **STATUS (2026-07-10 ~14:05):** standard DECIDED (operator); **renaming pass
+> DEFERRED** to ride the `.ken → .ken.md` literate transformation (one touch per
+> file). Broadcast-to-fleet-now vs hold-until-pass: **pending operator answer.**
+- **Call (operator, Pat):** adopt the **Python convention** for Ken-surface
+  identifiers — **class-like → PascalCase, instance-like → snake_case**:
+  - **PascalCase** (already conforms): types/type-constructors (`Either`,
+    `Option`, `Result`, `Nat`, `List`, `Vec`), type classes (`Functor`,
+    `Applicative`, `Monad`, `Traversable`, `Semigroup`, `Monoid`, `Foldable`),
+    **data constructors** (`Left`/`Right`/`Some`/`None`/`Ok`/`Err`/`Cons`/`Suc`
+    — "class-ilk", they construct values of a type).
+  - **snake_case** (the change — currently **camelCase** in the catalog):
+    functions/combinators (`getOrElse→get_or_else`, `isSome→is_some`,
+    `orElse→or_else`, `mapErr→map_err`, `andThen→and_then`,
+    `unwrapOr→unwrap_or`, `mapLeft→map_left`, `mapRight→map_right`,
+    `concatMap→concat_map`, `rangeFrom→range_from`; single-word `either`/`swap`/
+    `reverse`/`zip`/`foldl` already fine; `option_map` already conforms) AND
+    **class methods / record fields** (instance-like → snake_case).
+  - **Boundary calls (Steward-resolved, operator to correct if wrong):** data
+    constructors follow types (Pascal); class *methods* follow functions (snake).
+- **Why (operator):** more readable than the FP-common all-camelCase — it
+  **distinguishes class-like from instance-like at a glance**, and reads better
+  for the **far more common instance identifiers**. Deliberately diverges from
+  Haskell/FP convention on the operator's explicit readability judgment.
+- **Scope:** Ken-surface identifiers only — catalog `.ken`/`.ken.md` + Ken code in
+  spec examples. **The Rust crates already conform** (Rust *is* this standard:
+  snake_case fns, Pascal types), so the implementation is untouched.
+- **Sequencing:** the **complete renaming pass rides the `.ken → .ken.md` literate
+  transformation** (operator directive) — each file touched once, casing + literate
+  encoding together. NOT done now.
+- **Reversibility:** **moderate-class** (a catalog-wide identifier rename; pure
+  mechanical, revert-clean, no semantic change) — PROMINENT because it's a
+  language-surface convention binding all future catalog authoring.
+
 ### P1 · Sequence: DS-2 → DS-7 → DS-8 → (Data) DS-3 → DS-4 → DS-6; DS-5 spec-track in parallel
 - **Call:** Drive DS-2 (`Ord Nat` export) first, then the remaining Core toolkit
   (DS-7 `Applicative`/`Monad`, DS-8 `Traversable`), then the Data Section
@@ -294,23 +329,33 @@ bar.
 
 ### RUN STATUS / resume point (2026-07-10, ~10:50 UTC)
 
-**Live checkpoint for lossless resume across compaction.** **[~13:30 UTC —
+**Live checkpoint for lossless resume across compaction.** **[~14:05 UTC —
 operator BACK and actively directing; autonomous window over.]** **CORE COMPLETE**
 (DS-8 PR #440). §60 erratum (PR #438), K1 DS-5b, K2 DS-8b all landed. **DS-4
-(List) LANDED** (PR #443). **`main @ 4943d63`.**
+(List) LANDED** (PR #443). **`main @ a78f3b7`.**
 
-**ACTIVE WORK — the `Either`/coproduct thread (L5, operator-driven, PROMINENT):**
-The operator reopened the `Either` question twice, converging on: (1) **`Either a
-b = Left a | Right b`** = user-facing value coproduct, **as a CATALOG PACKAGE, NOT
-prelude** (per spec's core-data-are-packages model) → **Foundation WP
-`wp/either-catalog-package.md` — awaiting Foundation kick** (its `Data/Sums/` home
-just landed with DS-3, so unblocked; DS-3 retros closed); (2) **rename effect
-`Sum`→`Coproduct`** (type-only, keep `InL`/`InR`) → **✅ LANDED PR #455,
-`main @ 4943d63`** (rename-only, after I HELD their over-scoped `ee168a3` which had
-Either in prelude; verified on main: `declare_coproduct` present, `declare_sum`
-gone, zero kernel delta); (3) `Sum` now **freed** for future `Data.Functor.Sum`.
-`Result` stays distinct. See L5 for the full trail. **Named futures:**
-core-data→packages migration; `Data.Functor.Sum`.
+**✅ L5 `Either`/coproduct thread — COMPLETE end-to-end** (operator-driven,
+PROMINENT). All three arms landed: (1) **`Either a b = Left a | Right b` as a
+CATALOG PACKAGE, NOT prelude** (ruling B) → **✅ LANDED PR #458, `main @ a78f3b7`**
+(`Data/Sums/Sums.ken` — `either`/`mapLeft`/`mapRight`/`swap` + laws; spec reconcile
+honestly frames it package-not-prelude; foundation-qa caught+fixed a real
+Coproduct-reachability defect; Either verified absent from prelude); (2) **rename
+effect `Sum`→`Coproduct`** (type-only, keep `InL`/`InR`) → **✅ LANDED PR #455**
+(after I HELD their over-scoped `ee168a3` which had Either in prelude; zero kernel
+delta; `declare_sum` gone); (3) `Sum` now **freed** for `Data.Functor.Sum`.
+`Result` stays distinct. See L5 for the full trail.
+
+**Hygiene fix (operator-directed, PR #457, `elab.rs`):** stripped leaked DS-5b WP
+identifiers from production source (`refine_ds5b_goal`→`refine_branch_goal`, etc.)
+— pure rename, 770 tests green. The leak had passed the entire Kernel ring
+undetected; added a WP-token screen to my honesty gate (memory saved).
+
+**Named futures (operator sets direction):** (a) **core-data→packages migration**
+(Option/Result/Nat/List/Prod/Unit are prelude-declared but the spec models them as
+packages; `Either`-as-package is the first correct precedent — the larger
+architectural prize); (b) **`Data.Functor.Sum`** (owns the freed `Sum` name);
+(c) **casing-standard renaming pass (L6)** — PascalCase class-like / snake_case
+instance-like, riding the `.ken → .ken.md` literate transformation (deferred).
 
 **DS-3 (Option/Result combinators) — ✅ LANDED PR #454, `main @ dd5dc51`.** New
 package `catalog/packages/Data/Sums/Sums.ken` (Option getOrElse/isSome/orElse;
@@ -320,10 +365,12 @@ gate. Retros closed. Real-kicked ~13:07 after my appended kick sat missed (idle
 10:45→13:07; lesson saved). **DS-6** (`DecEq Char`, candidate kernel-move) — not
 framed, held for operator input.
 
-**HOLDING for 1 git_request:** Foundation Either-catalog package (rides after
-DS-3, now unblocked — awaiting Foundation kick). Runtime rename-only (PR #455) and
-DS-3 (PR #454) both LANDED this cycle, each honesty-gated + CI-merged, sequenced to
-avoid a moving-base race. Kick every future WP STANDALONE + mention-led (lesson
+**NOT HOLDING — all in-flight git_requests LANDED.** This cycle merged, each
+honesty-gated + CI-verified, sequenced to avoid moving-base races: DS-3 (#454),
+Runtime rename-only (#455), tracker (#456), elab.rs WP-name-strip (#457),
+Either-catalog (#458). L5 thread closed. Now **event-driven** for the next operator
+directive — no WP in flight. Named futures (a/b/c above) await operator direction;
+DS-6 held. Kick every future WP STANDALONE + mention-led (lesson
 from the DS-3 miss).
 
 **DS-8 — VALVE TAKEN (composition law deferred to DS-8c for SIZE):** the
