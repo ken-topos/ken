@@ -145,6 +145,7 @@ impl MetaCtx {
             Term::Type(l) => Term::ty(self.zonk_level(l)),
             Term::Omega(l) => Term::omega(self.zonk_level(l)),
             Term::Var(i) => Term::var(*i),
+            Term::IntLit(n) => Term::IntLit(n.clone()),
             Term::Pi(a, b) => Term::pi(self.zonk_term(a), self.zonk_term(b)),
             Term::Lam(a, body) => Term::lam(self.zonk_term(a), self.zonk_term(body)),
             Term::App(f, a) => Term::app(self.zonk_term(f), self.zonk_term(a)),
@@ -788,7 +789,8 @@ fn subst_term_generalize(term: &Term, target: &Term, u: &Term) -> Term {
         | Term::Var(_)
         | Term::Const { .. }
         | Term::IndFormer { .. }
-        | Term::Constructor { .. } => term.clone(),
+        | Term::Constructor { .. }
+        | Term::IntLit(_) => term.clone(),
     }
 }
 
@@ -1837,7 +1839,8 @@ fn finalize_refined_body(term: &Term, depth: usize, premise_count: usize) -> Ter
         | Term::Omega(_)
         | Term::Const { .. }
         | Term::IndFormer { .. }
-        | Term::Constructor { .. } => term.clone(),
+        | Term::Constructor { .. }
+        | Term::IntLit(_) => term.clone(),
     }
 }
 

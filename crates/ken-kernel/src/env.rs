@@ -242,6 +242,12 @@ pub struct GlobalEnv {
     /// `Eq` stays neutral exactly as before (`obs.rs`'s fail-safe default is
     /// untouched by this registry).
     deceq_certs: HashMap<GlobalId, DecEqCert>,
+    /// The primitive type `Term::IntLit` terms belong to
+    /// (`docs/adr/0013-int-decidable-equality-kernel-posture.md` Layer 2),
+    /// set once by [`GlobalEnv::register_int_lit_type`]. `None` until
+    /// registered — bookkeeping metadata (like `deceq_certs`), never a
+    /// `trusted_base()` member.
+    int_lit_ty: Option<GlobalId>,
 }
 
 impl GlobalEnv {
@@ -436,6 +442,20 @@ impl GlobalEnv {
     /// unchanged.
     pub fn deceq_cert(&self, prim_ty: GlobalId) -> Option<&DecEqCert> {
         self.deceq_certs.get(&prim_ty)
+    }
+
+    /// Record that `Term::IntLit` terms have type `id` (ADR 0013 Layer 2).
+    /// Set once by the elaborator, alongside the primitive's own
+    /// `declare_deceq_certificate` call.
+    pub fn register_int_lit_type(&mut self, id: GlobalId) {
+        self.int_lit_ty = Some(id);
+    }
+
+    /// The primitive type `Term::IntLit` terms belong to, if registered.
+    /// `None` before registration — callers (`infer`) must fail closed
+    /// rather than assume a default.
+    pub fn int_lit_type(&self) -> Option<GlobalId> {
+        self.int_lit_ty
     }
 
     /// The postulates and real primitives in `Σ` — the unchecked assumptions a

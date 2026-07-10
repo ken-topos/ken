@@ -2217,6 +2217,10 @@ fn encode_term(
             out.tag("var");
             out.u64(*index as u64);
         }
+        Term::IntLit(value) => {
+            out.tag("int_lit");
+            out.bytes(&value.to_signed_bytes_be());
+        }
         Term::Const { id, level_args } => {
             out.tag("const");
             encode_global(*id, symbols, out)?;
@@ -4309,6 +4313,11 @@ fn skip_term(cursor: &mut CanonicalCursor<'_>) -> Result<(), String> {
         "type" | "omega" => skip_level(cursor),
         "var" => {
             cursor.read_u64()?;
+            Ok(())
+        }
+        "int_lit" => {
+            let len = cursor.read_len()?;
+            cursor.read_exact(len)?;
             Ok(())
         }
         "const" | "ind_former" | "constructor_ref" => {

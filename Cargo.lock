@@ -538,6 +538,9 @@ dependencies = [
 [[package]]
 name = "ken-kernel"
 version = "0.0.0"
+dependencies = [
+ "num-bigint",
+]
 
 [[package]]
 name = "ken-runtime"

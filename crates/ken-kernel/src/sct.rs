@@ -540,7 +540,8 @@ fn collect_calls(
         | Term::Type(_)
         | Term::Omega(_)
         | Term::IndFormer { .. }
-        | Term::Constructor { .. } => {}
+        | Term::Constructor { .. }
+        | Term::IntLit(_) => {}
     }
 }
 

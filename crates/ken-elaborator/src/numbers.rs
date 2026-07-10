@@ -323,6 +323,14 @@ pub fn register_numeric_env(
     globals.insert("int_eq_sound".to_string(), int_eq_cert.sound);
     globals.insert("int_eq_complete".to_string(), int_eq_cert.complete);
 
+    // Register `Int` as the home type of kernel-native `Term::IntLit`
+    // values (`docs/adr/0013-int-decidable-equality-kernel-posture.md`
+    // Layer 2). Harmless to land ahead of literal emission: no surface
+    // `Int` literal constructs an `IntLit` yet (that wiring is a separate,
+    // committed follow-up), so this registration is inert until then —
+    // `infer`/`eq_reduce`'s new `IntLit` arms simply have nothing to see.
+    env.register_int_lit_type(int_id);
+
     // `Int`'s ordering comparison (`30-taxonomy.md §4`'s "comparison
     // primitives `Int → Int → Bool`" — plural, already assumed to justify
     // `Bool`'s prelude membership — but only `eq_int` had actually been

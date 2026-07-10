@@ -81,8 +81,39 @@ pub fn eq_reduce(env: &GlobalEnv, ctx: &Context, ty: &Term, a: &Term, b: &Term) 
         Term::Trunc(_) => Some(top_term(env)),
         Term::Quot(_, r) => eq_at_quot(r, a, b),
         Term::App(_, _) | Term::IndFormer { .. } => eq_at_inductive(env, ctx, ty, a, b),
+        // A primitive type with a registered decidable-equality certificate
+        // (ADR 0013 Layer 2) decides `Eq` between two checked literals by
+        // value; general opt-in gate (`GlobalEnv::deceq_cert`), not
+        // hardcoded to any specific primitive. An unregistered primitive
+        // type falls through to the neutral default below, unchanged.
+        Term::Const { id, .. } if env.deceq_cert(*id).is_some() => {
+            eq_at_registered_literal(env, ctx, a, b)
+        }
         // Primitive types enter as global declarations (`11 §1`); K2 defines no
         // `primEq` reduction yet — `Eq` at a primitive type stays neutral.
+        _ => None,
+    }
+}
+
+/// `Eq ty (IntLit m) (IntLit n) ⇝ Top if m == n else Bottom` for a `ty` with
+/// a registered decidable-equality certificate (ADR 0013 Layer 2, `docs/adr/
+/// 0013-int-decidable-equality-kernel-posture.md`). Neutral if either
+/// operand is not (already, or after `whnf`) a literal — covers abstract
+/// variables at any binder depth, and any other non-canonical operand
+/// shape, with the same `None` default every other reduction arm uses.
+///
+/// `m == n` decides `num_bigint::BigInt` value equality — the SAME
+/// crate/type/operator the registered primitive's runtime decider computes
+/// (e.g. `eq_int`'s interp-side implementation), not a second,
+/// independently-written comparison; pinned by a cross-layer test, not left
+/// as an inspection-only claim.
+fn eq_at_registered_literal(env: &GlobalEnv, ctx: &Context, a: &Term, b: &Term) -> Option<Term> {
+    let a_w = whnf(env, ctx, a);
+    let b_w = whnf(env, ctx, b);
+    match (&a_w, &b_w) {
+        (Term::IntLit(m), Term::IntLit(n)) => {
+            Some(if m == n { top_term(env) } else { bottom_term(env) })
+        }
         _ => None,
     }
 }

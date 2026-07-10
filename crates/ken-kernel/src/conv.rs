@@ -314,7 +314,8 @@ pub fn normalize(env: &GlobalEnv, ctx: &Context, t: &Term) -> Term {
         | Term::Var(_)
         | Term::Const { .. }
         | Term::IndFormer { .. }
-        | Term::Constructor { .. } => h,
+        | Term::Constructor { .. }
+        | Term::IntLit(_) => h,
     }
 }
 
@@ -567,6 +568,13 @@ fn conv_struct(env: &GlobalEnv, ctx: &Context, a: &Term, b: &Term) -> bool {
                 && conv_struct(env, ctx, a1, a2)
                 && conv_struct(env, ctx, b1, b2)
         }
+        // `IntLit` definitional equality: by `BigInt` value, matching the
+        // observational `Eq`-at-registered-literal reduction (`obs.rs`).
+        // Redundant with the `a == b` fast path above (canonical `BigInt`
+        // representation makes derived `PartialEq` already correct here) —
+        // kept explicit for auditability and defense-in-depth rather than
+        // relying solely on the fast path.
+        (Term::IntLit(m), Term::IntLit(n)) => m == n,
         _ => false,
     }
 }

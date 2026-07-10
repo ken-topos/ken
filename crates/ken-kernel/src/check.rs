@@ -113,7 +113,8 @@ fn raw_wf(ctx: &Context, t: &Term, offset: usize) -> KernelResult<()> {
         | Term::Omega(_)
         | Term::Const { .. }
         | Term::IndFormer { .. }
-        | Term::Constructor { .. } => Ok(()),
+        | Term::Constructor { .. }
+        | Term::IntLit(_) => Ok(()),
     }
 }
 
@@ -220,6 +221,12 @@ pub fn infer(env: &GlobalEnv, ctx: &Context, t: &Term) -> KernelResult<Term> {
                 .ok_or_else(|| KernelError::Msg(format!("unknown constant {:?}", id)))?;
             check_level_arity(params, level_args)?;
             Ok(subst_levels(&ty, params, level_args))
+        }
+        Term::IntLit(_) => {
+            let id = env.int_lit_type().ok_or_else(|| {
+                KernelError::Msg("Int-literal type not registered".into())
+            })?;
+            Ok(Term::const_(id, Vec::new()))
         }
         Term::IndFormer { id, level_args } => {
             let (params, ty) = env
