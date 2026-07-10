@@ -74,15 +74,23 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >   (incl. reconciling `06`'s `transport` Core-vs-Capability inconsistency) →
 >   Ergo builds (moves + dotted-import parser/resolver, CI-gated).
 > - **DS-2…DS-9 remain HELD.** Refined gate/sequence (operator, 2026-07-09):
->   1. **Ergo FR series lands** — FR-1 → taxonomy build → FR-3 → FR-2 (the
->      ergo-leader's serialized order), plus the Librarian's DS-1 guide-update.
+>   1. **Ergo FR series COMPLETE** ✅ — FR-1 (PR #400) → taxonomy build (#403) →
+>      FR-3 (#407) → FR-2 (#413), plus the Librarian's DS-1 guide-update (#411).
 >   2. **DS-1 revisit — LIGHT, NO-RETRO process** (operator explicitly waives the
->      normal catalog acted-on-retro here): (a) **comment cleanup** — strip the
->      `--` annotations from the entry's `ken` fences into prose (the operator's
->      `.ken.md` style rule); (b) **quick in-situ verification** — re-verify DS-1
->      where it now sits (new taxonomy path after the move) and against the FR
->      fixes (surface-declared zero-ctor `Empty` via FR-1; validate via `ken
->      check` once FR-3 lands). A touch-up pass, not a WP — keep it light.
+>      normal catalog acted-on-retro here): (a) **comment cleanup** — the
+>      operator's 2026-07-09 directive was "strip `--` from the entry's `ken`
+>      fences into prose," **but this is now SCOPED DOWN by the §8 reconciliation
+>      (`evt_6jv6v1y6t34a2`, landed PR #411):** DS-1's entry `EmptyDec.ken.md` is
+>      a **package** entry, whose in-fence `--` comments are §8-*required*
+>      proof-review annotations (they tangle to consumed `.ken` source) — NOT the
+>      teaching-strand fences the strip rule targets. So step (a) largely
+>      evaporates for EmptyDec: keep its §8 comments; at most the optional
+>      micro-softening of FR-2's shared error-message wording. **Flagged to the
+>      operator** (countermands their specific instruction — their call). (b)
+>      **quick in-situ verification** — re-verify DS-1 where it now sits (new
+>      taxonomy path after the move) and against the FR fixes (surface-declared
+>      zero-ctor `Empty` via FR-1; validate via `ken check` now that FR-3 landed).
+>      A touch-up pass, not a WP — keep it light.
 >   3. **THEN Steward kicks DS-2** on the improved guide+tooling (next DS after
 >      DS-1 per `catalog-data-structures-program.md` — reconfirm frontier then).
 > - **Ergo** (state 2026-07-10): **FR-1 LANDED** (PR #400) — surface zero-ctor
@@ -98,22 +106,28 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >   `include_str!`. **FR-3 LANDED** (PR #407, `origin/main @ 7b3e0e6`) — `ken
 >   check` subcommand (peer arm, strict `ken run` unchanged, reuse
 >   `elaborate_ken_md_file`; behavior-preserving `elaborate_cli_file` extraction).
->   **FR-2 IN BUILD (Architect ruling CORRECTED the pin)** — the LAST FR
->   (`absurd`-collision diagnostic). Original pin `evt_2pnr7674mqjka` had a
->   grounding gap: it put `{Refl,Axiom,absurd,J,Eq}` in `RESERVED_SUGAR`, but a
->   name-only guard rejected the landed `class Eq a` (`spec 51 §2.1`), breaking
->   `landed_lawful_classes_package_still_elaborates_independently`. **Corrected
->   ruling `evt_4p5a2xkqemnge` (arity-indexed):** `RESERVED_SUGAR = {Refl, Axiom,
->   absurd}` only — Refl@462/Axiom@482 bare-`RCon` total intercept, absurd@499
->   arity-1; J@1354/Eq@410(type)/@1364(expr) are `peel_named_app(_,name,3)`
->   arity-3-ONLY, gated *by design* to coexist with a lower-arity class/former of
->   the same name → NOT declaration-guarded (a ref-site arity check would be
->   catastrophic). Build (1) doc-note + (2) resolve-time hard error at
->   `resolve_decl` (decl head + data-ctor names) over the 3-name shared const;
->   DECLINE (3); Cast/Ascript/`tt` excluded (no `RCon` arm). Ergo rebuilding
->   `wp/FR-2-absurd-collision-hygiene` per ergo-leader `evt_206v67q5gycm9` (flip
->   J/Eq tests reject→accept, positive `class Eq a` regression-guard). Comes back
->   through ergo-qa → Architect (design author, close read) → git_request.
+>   **FR-2 LANDED** (PR #413, `origin/main @ c387ede`, CI green) — the LAST FR
+>   (`absurd`-collision diagnostic), **FR series now COMPLETE**. Original pin
+>   `evt_2pnr7674mqjka` had a grounding gap: it put `{Refl,Axiom,absurd,J,Eq}` in
+>   `RESERVED_SUGAR`, but a name-only guard rejected the landed `class Eq a`
+>   (`spec 51 §2.1`), breaking `landed_lawful_classes_package_still_elaborates_
+>   independently`. **Corrected ruling `evt_4p5a2xkqemnge` (arity-indexed):**
+>   landed `RESERVED_SUGAR = {SUGAR_REFL, SUGAR_AXIOM, SUGAR_ABSURD}` only
+>   (`resolve.rs:567`) — Refl/Axiom bare-`RCon` total intercept, absurd arity-1;
+>   J/Eq are `peel_named_app(_,name,3)` arity-3-ONLY, gated *by design* to coexist
+>   with a lower-arity class/former of the same name → NOT declaration-guarded (a
+>   ref-site arity check would be catastrophic). Shipped: (1) doc-note + (2)
+>   fail-closed `check_no_reserved_sugar_collision` at the single `resolve_decl`
+>   funnel + both data-ctor-sweep sites (structurally can't drift); DECLINE (3);
+>   `elab.rs` is a pure `"Eq"→SUGAR_EQ` string→const rename (sugar interception
+>   byte-identical); Cast/Ascript/`tt` excluded. **Ring recovery on the arity
+>   fork:** implementer stopped at the boundary rather than picking a fork;
+>   ergo-qa (126/126 recount) caught a stale 5-name `{Refl,Axiom,absurd,J,Eq}`
+>   set in `EmptyDec.ken.md §6` that would have re-introduced the exact overclaim
+>   the correction fixes; Architect close-read as design author + independent
+>   `merge-tree` conflict-free confirm (Steward re-verified). Non-blocking nit
+>   deferred (the shared error message flattens absurd's arity-1 distinction) —
+>   optional micro-softening can ride the light-DS-1 revisit.
 >   **Steward FR-2 doc correction MERGED** (PR #410, main `08c7589`) — rewrote
 >   the WP doc's FR-2 section open-options → the arity-indexed ruling, line
 >   numbers ground-truthed vs `elab.rs`; Architect fidelity-gate APPROVE.
