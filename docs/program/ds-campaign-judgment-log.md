@@ -290,16 +290,31 @@ bar.
 
 ### RUN STATUS / resume point (2026-07-10, ~10:50 UTC)
 
-**Live checkpoint for lossless resume across compaction.** **CORE COMPLETE** —
-the constructor-class chain Functor → Applicative → Monad → Traversable is fully
-landed (**DS-8 Core merged, PR #440**). §60 erratum LANDED (PR #438); both
-capability builds (K1 DS-5b + K2 DS-8b) landed CI-green. **Data section OPEN and
-progressing: DS-4 (List combinators) LANDED** (PR #443, `main @ ab64104`, first
-Data item); **DS-3 (Option/Result combinators + the `Either` ruling, `L4`) KICKED
-to Foundation** (`evt_zpdcdwv8zkvr`, second Data item — build in flight). All
-rings idle except Foundation (DS-3 build). Next after DS-3: frame DS-6 (`DecEq
-Char` capstone, T1-design + candidate 2nd kernel-move, not yet framed) if
-window-time remains.
+**Live checkpoint for lossless resume across compaction.** **[~13:10 UTC —
+operator BACK and actively directing; autonomous window over.]** **CORE COMPLETE**
+(DS-8 PR #440). §60 erratum (PR #438), K1 DS-5b, K2 DS-8b all landed. **DS-4
+(List) LANDED** (PR #443). **`main @ 28fd3d6`.**
+
+**ACTIVE WORK — the `Either`/coproduct thread (L5, operator-driven, PROMINENT):**
+The operator reopened the `Either` question twice, converging on: (1) **`Either a
+b = Left a | Right b`** = user-facing value coproduct, **as a CATALOG PACKAGE, NOT
+prelude** (per spec's core-data-are-packages model) → **Foundation WP
+`wp/either-catalog-package.md` KICKED** (`evt_666yb8075gqxq`); (2) **rename effect
+`Sum`→`Coproduct`** (type-only, keep `InL`/`InR`) → **Runtime WP reworking to
+RENAME-ONLY** — I HELD their over-scoped approved build `ee168a3` (had Either in
+prelude), asked them to drop the Either bits, re-gate, re-git_request; (3) `Sum`
+freed for future `Data.Functor.Sum`. `Result` stays distinct. See L5 for the full
+trail. **Named futures:** core-data→packages migration; `Data.Functor.Sum`.
+
+**DS-3 (Option/Result combinators) — real-kicked ~13:07** after my appended kick
+sat missed (idle 10:45→13:07; see the DS-3 entry). Pure lane-(a) build now;
+Either-lane moot. **DS-6** (`DecEq Char`, candidate kernel-move) — not framed,
+held for operator input.
+
+**HOLDING for 3 git_requests:** (a) Runtime rename-only (`Sum`→`Coproduct`); (b)
+Foundation DS-3 (Option/Result combinators); (c) Foundation Either-catalog
+package. Each → honesty-gate + merge. Kick every future WP STANDALONE + mention-led
+(lesson from the DS-3 miss).
 
 **DS-8 — VALVE TAKEN (composition law deferred to DS-8c for SIZE):** the
 `traverse` composition coherence law (§5.3) turned out ~40-60 lemmas (not ~12-15)
