@@ -1365,6 +1365,12 @@ pub fn eval(env: &[EvalVal], term: &Term, globals: &GlobalEnv, store: &mut EvalS
         Term::Type(l) => EvalVal::TypeUniverse(l.clone()),
         Term::Omega(l) => EvalVal::OmegaUniverse(l.clone()),
 
+        // --- IntLit: a checked, already-canonical Int value
+        // (`docs/adr/0013-int-decidable-equality-kernel-posture.md`
+        // Layer 2) — narrows to the `Int`/`BigInt` fast-path split exactly
+        // like every other BigInt-producing arithmetic result.
+        Term::IntLit(n) => bigint_to_int_val(n.clone()),
+
         // --- Lambda: form a closure (body NOT reduced under binder) ---
         Term::Lam(_dom, body) => make_closure(Rc::new(*body.clone()), Rc::new(env.to_vec()), store),
 

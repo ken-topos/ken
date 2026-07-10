@@ -107,15 +107,16 @@ fn ac1_nil_arm_reduces_to_default() {
     let ctx = Context::new();
     let reduced = whnf(&env.env, &ctx, &body);
 
-    // ι-rule: elim_MaybeInt M [0; λx.x] NoInt ⇝ 0 (the postulate for 0)
+    // ι-rule: elim_MaybeInt M [0; λx.x] NoInt ⇝ 0
     assert!(
         !matches!(reduced, Term::Elim { .. }),
         "AC1: elim_MaybeInt on NoInt did not ι-reduce"
     );
-    // The result is a Const (the opaque literal 0).
+    // The result is a kernel-native IntLit (DS-6c: `0`'s literal emission
+    // no longer produces an opaque Const postulate reference).
     assert!(
-        matches!(reduced, Term::Const { .. }),
-        "AC1: expected numeric literal Const after ι-reduction, got {:?}",
+        matches!(reduced, Term::IntLit(_)),
+        "AC1: expected a kernel-native IntLit after ι-reduction, got {:?}",
         reduced
     );
 }
@@ -249,10 +250,12 @@ fn ac3_exhaustive_elim_reduces_on_blue() {
     let ctx = Context::new();
     let reduced = whnf(&env.env, &ctx, &body);
 
-    // elim_Color M [0; 1; 2] Blue ⇝ 2 (ι on Blue ctor)
-    assert!(
-        matches!(reduced, Term::Const { .. }),
-        "AC3: elim_Color on Blue should reduce to Const(2), got {:?}",
+    // elim_Color M [0; 1; 2] Blue ⇝ 2 (ι on Blue ctor) — a kernel-native
+    // IntLit (DS-6c), not an opaque Const postulate reference.
+    assert_eq!(
+        reduced,
+        Term::IntLit(num_bigint::BigInt::from(2)),
+        "AC3: elim_Color on Blue should reduce to IntLit(2), got {:?}",
         reduced
     );
 }
@@ -324,9 +327,10 @@ fn nested_ctor_pattern_accepted_and_reduces() {
 
     let ctx = Context::new();
     let reduced = whnf(&env.env, &ctx, &body);
-    assert!(
-        matches!(reduced, Term::Const { .. }),
-        "Succ (Succ Zero) should select the Succ (Succ m) arm and ι-reduce to Const(2), \
+    assert_eq!(
+        reduced,
+        Term::IntLit(num_bigint::BigInt::from(2)),
+        "Succ (Succ Zero) should select the Succ (Succ m) arm and ι-reduce to IntLit(2), \
          got {:?}",
         reduced
     );
@@ -348,10 +352,14 @@ fn nested_ctor_pattern_selects_the_right_arm_at_succ_zero() {
     let body = body_of(&env, id);
     let ctx = Context::new();
     let reduced = whnf(&env.env, &ctx, &body);
-    match reduced {
-        Term::Const { .. } => {}
-        other => panic!("expected Succ Zero arm to ι-reduce to a literal, got {:?}", other),
-    }
+    // Kernel-native IntLit (DS-6c); assert the VALUE too (7, not 9) so
+    // this stays the discriminating test its own comment describes.
+    assert_eq!(
+        reduced,
+        Term::IntLit(num_bigint::BigInt::from(7)),
+        "expected the Succ Zero arm (7) to ι-reduce to IntLit(7), got {:?}",
+        reduced
+    );
 }
 
 #[test]
@@ -766,9 +774,11 @@ fn data_recursive_type_accepts() {
     // ι-reduces on Zero.
     let ctx = Context::new();
     let reduced = whnf(&env.env, &ctx, &body);
-    assert!(
-        matches!(reduced, Term::Const { .. }),
-        "recursive type match on Zero should ι-reduce to literal 1"
+    assert_eq!(
+        reduced,
+        Term::IntLit(num_bigint::BigInt::from(1)),
+        "recursive type match on Zero should ι-reduce to IntLit(1), got {:?}",
+        reduced
     );
 }
 
