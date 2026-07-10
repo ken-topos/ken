@@ -537,12 +537,12 @@ external reference implementation.
    types (`33 §5.2`, right-nested Σ over `13 §3`), built from `Bool`
    (prelude, `30 §4`) + the kernel's `Eq`/logic vocabulary (`15`/`16`) + the
    Σ/record machinery. No new kernel former. `Ord Int` wraps the audited
-   `leq_int` primitive with visible `Axiom` law fields (untouched by
-   DS-6a, out of scope). `Eq Int`/`DecEq Int` wrap `eq_int` and derive
-   their laws from the ONE named kernel decidable-equality certificate
-   (`ken-kernel::declare_deceq_certificate`, registered once against
-   `eq_int` in `crates/ken-elaborator/src/numbers.rs`, ADR 0013 Layer 1) —
-   `DecEq Int`'s `sound`/`complete` reference the certificate directly;
+   `leq_int` primitive with visible `Axiom` law fields (untouched by the
+   Int-equality certificate below, out of scope). `Eq Int`/`DecEq Int` wrap
+   `eq_int` and derive their laws from the ONE named kernel decidable-equality
+   certificate (`ken-kernel::declare_deceq_certificate`, registered once
+   against `eq_int` in `crates/ken-elaborator/src/numbers.rs`, ADR 0013 Layer
+   1) — `DecEq Int`'s `sound`/`complete` reference the certificate directly;
    `Eq Int`'s `refl`/`sym`/`trans` are real `J`-derived proofs built FROM
    it, no postulate of their own. `Bool` instances are real
    `elim_Bool`-into-`Omega` case-split proofs (K4), using `tt`/`absurd` (K5)
@@ -551,8 +551,9 @@ external reference implementation.
    `.`-projection off `Ord_instance_Int`/`DecEq_instance_Int`.
 5. **`trusted_base()` delta.** `Ord Int`: 4 `Axiom` entries (`refl`/
    `antisym`/`trans`/`total`), each a real, grep-able `Decl::Opaque` —
-   illustrative-only, not claimed zero-delta, untouched by DS-6a. `Eq Int`/
-   `DecEq Int`: **zero catalog `Axiom`** — `sound`/`complete` reference the
+   illustrative-only, not claimed zero-delta, untouched by the Int-equality
+   certificate. `Eq Int`/`DecEq Int`: **zero catalog `Axiom`** — `sound`/
+   `complete` reference the
    pre-existing kernel certificate (registered once during numeric-tower
    bootstrap, BEFORE this file is ever elaborated, so elaborating this file
    contributes nothing new to `trusted_base()` for either instance);
