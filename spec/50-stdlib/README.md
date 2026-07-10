@@ -126,6 +126,17 @@ and no `.ken.md` implementation work. A derived input such as a blanked
 `.ken.md` compiled view is only an offset-preserving view of the original
 source artifact; the original artifact owns diagnostic identity.
 
+The **length-indexed vector** `Vec (A : Type) : Nat → Type` — a **fresh
+dependent inductive family** (not a built-in/prelude carrier), the canonical
+dependent-types totality showcase — is pinned in
+**`60-length-indexed-vectors.md`** (DS-5). The length index rules the empty case
+out *at the type level*, so `head : Vec A (Suc n) → A` is total with no
+`Option`; the family, `vnil`/`vcons`, and `head` are landed (the acceptance
+suite `explicit_data_elaboration.rs`), while `tail`/`zip`/`lookup` and the `Fin`
+bounded index's *use* are gated on the dependent-`match` refinement enhancement
+landing this run as `DS-5b` (Kernel ring). Zero `Axiom`, zero `trusted_base()`
+delta — `Vec` is an ordinary inductive with a real eliminator.
+
 ## 4. I/O, effects, serialization
 
 - Effect interfaces (`../30-surface/36`):
