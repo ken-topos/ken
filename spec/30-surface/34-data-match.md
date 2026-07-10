@@ -68,7 +68,21 @@ be built **and** taken apart, and the eliminator reduces.
   non-error-biased sibling — the two coexist, neither subsumes the other
   (judgment call L5, 2026-07-10; an earlier erratum subsumed `Either` into
   `Result` while `Either` had no declaration or user — that condition no
-  longer holds now that `Either` is landed).
+  longer holds now that `Either` is landed). **A third, structurally
+  isomorphic neutral sum is also prelude-declared and user-reachable:**
+  `Coproduct a b = InL a | InR b` (`crates/ken-elaborator/src/effects/
+  state.rs`'s `declare_coproduct`, hand-built rather than a surface `data`
+  decl, `elab.globals.insert`-registered like any other prelude type — an
+  ordinary surface reference such as `InL a b x` elaborates). It is the
+  effect-signature composition coproduct (`ITree`'s `resp_coproduct`/
+  `injectL`/`injectR`, effect-composition `D2`) — kept hand-built as a
+  deliberate risk-reduction for effect-row plumbing, not deprecated or
+  hidden. `Either` is the catalog-level neutral sum for ordinary user
+  code; `Coproduct` is internal effect-signature plumbing most code never
+  names directly. The two are not reconciled into one declaration here —
+  that is a reflect-don't-extend opportunity the implementation's own
+  comment leaves explicitly open for the Architect to take up, not a
+  decision this WP makes.
 
 **What the elaborator builds vs. what the kernel admits (the K1/K1.5 line).**
 The elaborator lowers a `data` decl to a kernel `InductiveDecl` and relies on
