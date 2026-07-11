@@ -82,12 +82,12 @@ fn refl_trans_antisym_need_no_conversion() {
     )
     .expect("leqNat");
     env.elaborate_decl(
-        "fn reflLeqNat (x : Nat) : Equal Bool (leqNat x x) True = match x { Zero ⇒ tt ; Suc x2 ⇒ reflLeqNat x2 }",
+        "lemma reflLeqNat (x : Nat) : Equal Bool (leqNat x x) True = match x { Zero ⇒ Proved ; Suc x2 ⇒ reflLeqNat x2 }",
     )
     .expect("reflLeqNat");
 
     // The SAME term, reflLeqNat, satisfies the IsTrue-phrased signature
     // directly — zero adaptation.
-    env.elaborate_decl("fn probeRefl (x : Nat) : IsTrue (leqNat x x) = reflLeqNat x")
+    env.elaborate_decl("lemma probeRefl (x : Nat) : IsTrue (leqNat x x) = reflLeqNat x")
         .expect("reflLeqNat must satisfy IsTrue (leqNat x x) with zero conversion code");
 }

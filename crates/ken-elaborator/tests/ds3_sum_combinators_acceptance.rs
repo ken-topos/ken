@@ -97,7 +97,7 @@ fn trusted_base_delta_is_empty_across_the_file() {
 fn ac8_getorelse_returns_contained_value_not_default() {
     let mut env = base_env();
     let r = env.elaborate_decl(
-        "fn bad_getOrElse_some_returns_default (a : Type) (d : a) (v : a) : Equal a (get_or_else a d (Some a v)) d = get_or_else_none a d",
+        "lemma bad_getOrElse_some_returns_default (a : Type) (d : a) (v : a) : Equal a (get_or_else a d (Some a v)) d = get_or_else_none a d",
     );
     match r {
         Ok(_) => panic!("get_or_else_none proves the None case (=d); reusing it for Some (=v) must be rejected"),
@@ -119,7 +119,7 @@ fn ac8_getorelse_returns_contained_value_not_default() {
 fn ac8_maperr_does_not_touch_ok_payload() {
     let mut env = base_env();
     let r = env.elaborate_decl(
-        "fn bad_mapErr_touches_ok (e : Type) (f : Type) (g : e -> f) (v : e) : Equal (Result f e) (map_err e f e g (Ok e e v)) (Ok f e (g v)) = map_err_ok e f e g v",
+        "lemma bad_mapErr_touches_ok (e : Type) (f : Type) (g : e -> f) (v : e) : Equal (Result f e) (map_err e f e g (Ok e e v)) (Ok f e (g v)) = map_err_ok e f e g v",
     );
     match r {
         Ok(_) => panic!("map_err_ok proves Ok v is left UNTOUCHED (Ok f a v, not Ok f a (g v)) — reusing it for a g-applied RHS must be rejected"),
@@ -163,7 +163,7 @@ fn ac8_andthen_short_circuits_on_err() {
 fn orelse_left_biased_concrete_example() {
     let mut env = base_env();
     env.elaborate_decl(
-        "const orElseLeftBiasedExample : Equal (Option Nat) (or_else Nat (Some Nat Zero) (Some Nat (Suc Zero))) (Some Nat Zero) = or_else_some Nat Zero (Some Nat (Suc Zero))",
+        "lemma orElseLeftBiasedExample : Equal (Option Nat) (or_else Nat (Some Nat Zero) (Some Nat (Suc Zero))) (Some Nat Zero) = or_else_some Nat Zero (Some Nat (Suc Zero))",
     )
     .expect("or_else must prefer the left Some over a competing right Some");
 }

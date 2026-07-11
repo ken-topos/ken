@@ -565,16 +565,16 @@ fn lookup_empty_law_is_a_real_reducing_proof() {
         matches!(env.env.lookup(id), Some(Decl::Transparent { .. })),
         "lookup_empty_is_none must be a real proof term, not a postulate"
     );
-    // `Ordered` on an empty map is provable by `tt` — the invariant reduces
+    // `Ordered` on an empty map is provable by `Proved` — the invariant reduces
     // to a trivially-true Prop (Equal Bool True True) at Leaf, closable the
     // same way `lookup_empty_is_none` closes (K5 same-nullary-ctor collapse).
     // This is a kernel CHECK (is the type inhabited), not an `eval` — the
     // Prop itself is a type, not a runtime data value.
     env.elaborate_decl(
-        "fn orderedEmptyProof (k : Type) (v : Type) (leq : k -> k -> Bool) : \
-         Ordered k v leq (empty k v) = tt",
+        "lemma orderedEmptyProof (k : Type) (v : Type) (leq : k -> k -> Bool) : \
+         Ordered k v leq (empty k v) = Proved",
     )
-    .expect("Ordered on an empty map must be provable by tt");
+    .expect("Ordered on an empty map must be provable by Proved");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1158,7 +1158,7 @@ fn cat4_relations_compose_and_converse_over_adjacency_maps() {
 // `Ordered`'s real Node case (`And (all_keys (\k2. ...) l) (And (all_keys
 // (\k2. ...) r) (And (Ordered l) (Ordered r)))`) needs an exactly-nested
 // `and_intro` witness matching that inline-lambda predicate spelling
-// precisely, not a re-derivation via `le_below`/`le_above` or a bare `tt` —
+// precisely, not a re-derivation via `le_below`/`le_above` or a bare `Proved` —
 // getting the by-hand nesting exactly right is its own small proof exercise
 // and not necessary evidence: `tolistordered_law4_is_a_real_general_proof_
 // term` above is the load-bearing check (the fully general, quantified

@@ -102,18 +102,18 @@ fn cat3_d1_structural_collections_package_elaborates_zero_delta() {
 #[test]
 fn cat3_d1_law_surfaces_are_proof_returning_not_prop_wrappers() {
     assert!(
-        COLLECTIONS_KEN_MD.contains("fn take_drop_decomposition")
+        COLLECTIONS_KEN_MD.contains("lemma take_drop_decomposition")
             && COLLECTIONS_KEN_MD
                 .contains(": Equal (List a) (list_append a (take a n xs) (drop a n xs)) xs"),
         "take/drop decomposition must be a proof-returning Equal surface"
     );
     assert!(
-        COLLECTIONS_KEN_MD.contains("fn map_length")
+        COLLECTIONS_KEN_MD.contains("lemma map_length")
             && COLLECTIONS_KEN_MD.contains(": Equal Nat (length b (map a b f xs)) (length a xs)"),
         "map length preservation must be a proof-returning Equal surface"
     );
     assert!(
-        COLLECTIONS_KEN_MD.contains("fn length_take_min")
+        COLLECTIONS_KEN_MD.contains("lemma length_take_min")
             && COLLECTIONS_KEN_MD
                 .contains(": Equal Nat (length a (take a n xs)) (min n (length a xs))"),
         "take length/min law must be a proof-returning Equal surface"
@@ -167,7 +167,7 @@ fn cat3_d1_positive_surfaces_check_against_real_package_defs() {
         .expect("helper equality predicate should elaborate");
 
     env.elaborate_decl(
-        "const cat3_take_drop_sample \
+        "lemma cat3_take_drop_sample \
            : Equal (List Bool) \
               (list_append Bool \
                 (take Bool (Suc Zero) (Cons Bool True (Cons Bool False (Nil Bool)))) \
@@ -178,7 +178,7 @@ fn cat3_d1_positive_surfaces_check_against_real_package_defs() {
     .expect("take/drop decomposition proof should check on a concrete list");
 
     env.elaborate_decl(
-        "const cat3_map_length_sample \
+        "lemma cat3_map_length_sample \
            : Equal Nat \
               (length Bool (map Nat Bool cat3_to_true (Cons Nat Zero (Cons Nat (Suc Zero) (Nil Nat))))) \
               (length Nat (Cons Nat Zero (Cons Nat (Suc Zero) (Nil Nat)))) \
@@ -187,7 +187,7 @@ fn cat3_d1_positive_surfaces_check_against_real_package_defs() {
     .expect("map length proof should check on a concrete list");
 
     env.elaborate_decl(
-        "const cat3_length_take_min_sample \
+        "lemma cat3_length_take_min_sample \
            : Equal Nat \
               (length Nat (take Nat (Suc Zero) (Cons Nat Zero (Cons Nat (Suc Zero) (Nil Nat))))) \
               (min (Suc Zero) (length Nat (Cons Nat Zero (Cons Nat (Suc Zero) (Nil Nat))))) \
@@ -196,11 +196,11 @@ fn cat3_d1_positive_surfaces_check_against_real_package_defs() {
     .expect("length/take/min proof should check on a concrete list");
 
     env.elaborate_decl(
-        "const cat3_filter_mem_sample \
+        "lemma cat3_filter_mem_sample \
            : Equal Bool \
               (mem Nat cat3_nat_eq_all Zero (filter Nat cat3_to_true (Cons Nat (Suc Zero) (Nil Nat)))) \
               True \
-           = tt",
+           = Proved",
     )
     .expect("filter and mem operations should reduce on concrete Bool decisions");
 }
@@ -211,13 +211,13 @@ fn cat3_d2_bool_sort_surfaces_check_against_real_package_defs() {
     let sample = "(Cons Bool True (Cons Bool False (Cons Bool True (Nil Bool))))";
 
     env.elaborate_decl(&format!(
-        "const cat3_sort_bool_sorted_sample \
+        "lemma cat3_sort_bool_sorted_sample \
            : is_sorted Bool bool_leq (sort_bool {sample}) = sort_bool_sorted {sample}"
     ))
     .expect("sort_bool_sorted should prove the sortedness surface");
 
     env.elaborate_decl(&format!(
-        "const cat3_sort_bool_perm_sample \
+        "lemma cat3_sort_bool_perm_sample \
            : Perm Bool (eq_from_ord Bool bool_leq) {sample} (sort_bool {sample}) = \
              sort_bool_perm {sample}"
     ))
@@ -229,13 +229,13 @@ fn cat3_d1_wrong_take_drop_witness_rejected() {
     let mut env = mk_env();
     let err = env
         .elaborate_decl(
-            "const cat3_bad_take_drop \
+            "lemma cat3_bad_take_drop \
                : Equal (List Bool) \
                   (list_append Bool \
                     (take Bool (Suc Zero) (Cons Bool True (Nil Bool))) \
                     (drop Bool (Suc Zero) (Cons Bool True (Nil Bool)))) \
                   (Nil Bool) \
-               = tt",
+               = Proved",
         )
         .expect_err("wrong take/drop endpoint must not typecheck");
     let msg = format!("{err}");
@@ -253,8 +253,8 @@ fn cat3_d2_bad_sorted_and_bad_perm_witnesses_rejected() {
 
     let err = env
         .elaborate_decl(
-            "const cat3_bad_sorted_bool \
-               : is_sorted Bool bool_leq (Cons Bool True (Cons Bool False (Nil Bool))) = tt",
+            "lemma cat3_bad_sorted_bool \
+               : is_sorted Bool bool_leq (Cons Bool True (Cons Bool False (Nil Bool))) = Proved",
         )
         .expect_err("descending Bool list must not satisfy is_sorted");
     let msg = format!("{err}");
@@ -267,11 +267,11 @@ fn cat3_d2_bad_sorted_and_bad_perm_witnesses_rejected() {
 
     let err = env
         .elaborate_decl(
-            "const cat3_bad_perm_bool \
+            "lemma cat3_bad_perm_bool \
                : Perm Bool (eq_from_ord Bool bool_leq) \
                    (Cons Bool True (Nil Bool)) \
                    (Nil Bool) = \
-                 \\q. match q { False => tt ; True => tt }",
+                 \\q. match q { False => Proved ; True => Proved }",
         )
         .expect_err("dropping True must not satisfy count-based Perm");
     let msg = format!("{err}");
@@ -310,7 +310,7 @@ fn cat3_d3_view_lens_records_and_flavors_check_against_real_package_defs() {
     );
 
     env.elaborate_decl(
-        "const cat3_d3_get_set_sample \
+        "lemma cat3_d3_get_set_sample \
            : Equal Bool \
                (fst_pair_bool_bool (set_fst_pair_bool_bool False (mk_pair Bool Bool True True))) \
                False \
@@ -319,7 +319,7 @@ fn cat3_d3_view_lens_records_and_flavors_check_against_real_package_defs() {
     .expect("get-set lens law should be proof-returning and check");
 
     env.elaborate_decl(
-        "const cat3_d3_set_get_sample \
+        "lemma cat3_d3_set_get_sample \
            : Equal (Pair Bool Bool) \
               (set_fst_pair_bool_bool (fst_pair_bool_bool (mk_pair Bool Bool True False)) (mk_pair Bool Bool True False)) \
               (mk_pair Bool Bool True False) \
@@ -328,7 +328,7 @@ fn cat3_d3_view_lens_records_and_flavors_check_against_real_package_defs() {
     .expect("set-get lens law should be proof-returning and check as full pair equality");
 
     env.elaborate_decl(
-        "const cat3_d3_set_set_sample \
+        "lemma cat3_d3_set_set_sample \
            : Equal (Pair Bool Bool) \
               (set_fst_pair_bool_bool False (set_fst_pair_bool_bool True (mk_pair Bool Bool True False))) \
               (set_fst_pair_bool_bool False (mk_pair Bool Bool True False)) \
@@ -337,18 +337,18 @@ fn cat3_d3_view_lens_records_and_flavors_check_against_real_package_defs() {
     .expect("set-set lens law should be proof-returning and check as full pair equality");
 
     env.elaborate_decl(
-        "const cat3_d3_indexed_project_sample \
+        "lemma cat3_d3_indexed_project_sample \
            : Equal Bool \
                (bool_pair_index_project (mk_pair Bool Bool True False) True) \
                False \
-           = tt",
+           = Proved",
     )
     .expect("indexed flavor should expose a concrete project operation");
 
     env.elaborate_decl(
-        "const cat3_d3_setoid_project_sample \
+        "lemma cat3_d3_setoid_project_sample \
            : Equal Bool (id_bool True) (id_bool True) = \
-             id_bool_respects True True tt",
+             id_bool_respects True True Proved",
     )
     .expect("setoid-morphism respects law should check through project");
 }
@@ -358,7 +358,7 @@ fn cat3_d3_wrong_lens_endpoint_rejected() {
     let mut env = mk_env();
     let err = env
         .elaborate_decl(
-            "const cat3_bad_lens_get_set \
+            "lemma cat3_bad_lens_get_set \
                : Equal Bool \
                    (fst_pair_bool_bool (set_fst_pair_bool_bool False (mk_pair Bool Bool True True))) \
                    True \

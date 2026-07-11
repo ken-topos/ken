@@ -14,8 +14,8 @@ reader recognizes it when they hit it themselves.
 
 ## Index
 
-1. [`tt` vs. `Refl`: the two-way
-   discriminator](#1-tt-vs-refl-the-two-way-discriminator) (§1.1: when
+1. [`Proved` vs. `Refl`: the two-way
+   discriminator](#1-Proved-vs-refl-the-two-way-discriminator) (§1.1: when
    neither closes)
 2. [Induction and motive construction](#2-induction-and-motive-construction)
 3. [Decidable equality: the `sound`/`complete`
@@ -36,7 +36,7 @@ fn list_append (a : Type) (xs : List a) (ys : List a) : List a =
     Cons x t  ⇒ Cons a x (list_append a t ys)
   }
 
-fn cong (ty : Type) (ty2 : Type) (x : ty) (y : ty) (f : ty → ty2)
+lemma cong (ty : Type) (ty2 : Type) (x : ty) (y : ty) (f : ty → ty2)
          (p : Equal ty x y) : Equal ty2 (f x) (f y) =
   J (λy' _. Equal ty2 (f x) (f y')) Refl p
 
@@ -47,9 +47,9 @@ fn not_bool (b : Bool) : Bool = match b { True ⇒ False ; False ⇒ True }
 fn flip_bool (b : Bool) : Bool = match b { False ⇒ True ; True ⇒ False }
 ```
 
-## 1. `tt` vs. `Refl`: the two-way discriminator
+## 1. `Proved` vs. `Refl`: the two-way discriminator
 
-A proof's terminal step at an equation goal is **`tt` or `Refl` depending on
+A proof's terminal step at an equation goal is **`Proved` or `Refl` depending on
 what the two endpoints reduce to — never a uniform choice**. Ken's
 observational equality collapses two occurrences of the **same nullary
 constructor** to `Top` (`spec/10-kernel/16-observational.md`, the K7 rule):
@@ -65,27 +65,27 @@ covers the case where neither applies.
 True` collapses all the way to `Top`:
 
 ```ken example
-const with_tt : Equal Bool (bool_and True True) True = tt
+lemma with_tt : Equal Bool (bool_and True True) True = Proved
 ```
 
 This fails with `"Refl expects an `Eq`-shaped goal"` — the goal already
 collapsed to `Top` before `Refl` was checked against it:
 
 ```ken reject
-const with_refl : Equal Bool (bool_and True True) True = Refl
+lemma with_refl : Equal Bool (bool_and True True) True = Refl
 ```
 
 An abstract (neutral) variable never collapses, so the same shape flips:
 
 ```ken example
-fn self_eq_refl (x : Bool) : Equal Bool (bool_and x x) (bool_and x x) = Refl
+lemma self_eq_refl (x : Bool) : Equal Bool (bool_and x x) (bool_and x x) = Refl
 ```
 
 This fails: the goal never reduced to `Top` (`x` is abstract), so there is
-nothing for `tt` (a `Top` introduction) to close:
+nothing for `Proved` (a `Top` introduction) to close:
 
 ```ken reject
-fn self_eq_tt (x : Bool) : Equal Bool (bool_and x x) (bool_and x x) = tt
+lemma self_eq_tt (x : Bool) : Equal Bool (bool_and x x) (bool_and x x) = Proved
 ```
 
 ### 1.1 When neither closes: opaque primitives don't reduce under conversion
@@ -109,13 +109,13 @@ This fails with `"Refl: the two sides of the goal are not convertible"` —
 `five` is concrete and the two arguments are literally the same value:
 
 ```ken reject
-const prim_eq_refl : Equal Bool (eq_int five five) True = Refl
+lemma prim_eq_refl : Equal Bool (eq_int five five) True = Refl
 ```
 
 This fails too, for the same reason: the goal never reduced to `Top` either:
 
 ```ken reject
-const prim_eq_tt : Equal Bool (eq_int five five) True = tt
+lemma prim_eq_tt : Equal Bool (eq_int five five) True = Proved
 ```
 
 The honest closer is a VISIBLE postulate, the same audited-delta shape
@@ -123,17 +123,17 @@ The honest closer is a VISIBLE postulate, the same audited-delta shape
 kernel-reducible at this layer:
 
 ```ken example
-const prim_eq_axiom : Equal Bool (eq_int five five) True = Axiom
+lemma prim_eq_axiom : Equal Bool (eq_int five five) True = Axiom
 ```
 
 This is not a corner case to memorize and forget: **any law whose operation
 bottoms out in a primitive, applied to values that are not already literal
 constants in the goal itself, needs this same honest `Axiom` treatment** —
-`tt`/`Refl` are not a fallback pair that always covers a stuck goal.
+`Proved`/`Refl` are not a fallback pair that always covers a stuck goal.
 
 **The check, in order:** reduce both endpoints. Same nullary constructor (or
 a non-nullary constructor whose every component also collapses) → `Top` →
-`tt`. The identical term on both sides (or otherwise genuinely convertible,
+`Proved`. The identical term on both sides (or otherwise genuinely convertible,
 e.g. via a **transparent** `fn`'s own ι-reduction) → `Refl`. Stuck on an
 **opaque primitive** with no further reduction available on either side →
 neither closes — the honest move is a visible `Axiom` (§1.1). Never assume a
@@ -144,21 +144,21 @@ reduced endpoints and what kind of operation they're stuck on, every time.
 
 Ken has no separate induction tactic: an inductive proof is an ordinary
 **structurally recursive `fn`**, SCT-checked exactly like any other
-recursive definition (§5). The base case typically closes with `tt`
+recursive definition (§5). The base case typically closes with `Proved`
 (constructor endpoints collapse); the step case typically needs `cong` to
 lift the induction hypothesis under the outer constructor, because the two
 sides of the step's goal are **neutral** (an abstract tail `t` never
 reduces further) and so never collapse on their own. Below is the right unit
 for `list_append`: the base case has both sides reduce to the constructor
-`Nil a` → `tt`; the step case's goal is `Cons x (list_append t Nil)` vs.
+`Nil a` → `Proved`; the step case's goal is `Cons x (list_append t Nil)` vs.
 `Cons x t` — neutral in the abstract tail `t`, so the recursive call's
 result (the induction hypothesis) is lifted under `Cons x` by `cong`:
 
 ```ken example
-fn list_right_unit (a : Type) (xs : List a)
+lemma list_right_unit (a : Type) (xs : List a)
   : Equal (List a) (list_append a xs (Nil a)) xs =
   match xs {
-    Nil      ⇒ tt ;
+    Nil      ⇒ Proved ;
     Cons x t ⇒ cong (List a) (List a)
                      (list_append a t (Nil a)) t
                      (λl. Cons a x l)
@@ -189,7 +189,7 @@ branches where the hypothesis genuinely is impossible (§3).
 for a `Bool`-valued `eq`: `sound` (`eq x y = True` implies the real,
 propositional `Equal a x y`) and `complete` (the reverse). Both directions
 follow the §2 case-split-then-lambda shape, closing each of the four
-constructor combinations with `tt` (matching endpoints) or `absurd`
+constructor combinations with `Proved` (matching endpoints) or `absurd`
 (mismatched endpoints — the hypothesis, once concrete, is a false equation
 between different nullary constructors, which collapses to `Bottom`, K5):
 
@@ -197,24 +197,24 @@ between different nullary constructors, which collapses to `Bottom`, K5):
 fn bool_eq_sound (x : Bool) : (y : Bool) → IsTrue (bool_eq x y) → Equal Bool x y =
   match x {
     True  ⇒ λy. match y {
-              True  ⇒ λh. tt ;
+              True  ⇒ λh. Proved ;
               False ⇒ λh. absurd h
             } ;
     False ⇒ λy. match y {
               True  ⇒ λh. absurd h ;
-              False ⇒ λh. tt
+              False ⇒ λh. Proved
             }
   }
 
 fn bool_eq_complete (x : Bool) : (y : Bool) → Equal Bool x y → IsTrue (bool_eq x y) =
   match x {
     True  ⇒ λy. match y {
-              True  ⇒ λp. tt ;
+              True  ⇒ λp. Proved ;
               False ⇒ λp. absurd p
             } ;
     False ⇒ λy. match y {
               True  ⇒ λp. absurd p ;
-              False ⇒ λp. tt
+              False ⇒ λp. Proved
             }
   }
 ```
@@ -239,8 +239,8 @@ call, only a pointwise proof, because `Equal (Bool -> Bool) f g`
 whnf-reduces to exactly that pointwise Pi type:
 
 ```ken example
-const not_functions_equal : Equal (Bool → Bool) not_bool flip_bool =
-  λb. match b { True ⇒ tt ; False ⇒ tt }
+lemma not_functions_equal : Equal (Bool → Bool) not_bool flip_bool =
+  λb. match b { True ⇒ Proved ; False ⇒ Proved }
 ```
 
 **Do not proliferate a second, function-level law field when a class's
@@ -266,7 +266,7 @@ This fails with `"SCT: idempotent self-loop has no strictly-decreasing
 parameter"`:
 
 ```ken reject
-const bad : Bottom = bad
+lemma bad : Bottom = bad
 ```
 
 **Every occurrence of a recursive definition inside its own body counts**,
@@ -301,7 +301,7 @@ exactly the definitions that would make the kernel unsound if admitted.
   fixture-fidelity bug. **Correction, via CV's own differential
   investigation:** the fix is not simply "use bare `Refl`" — bare `Refl`
   *also* fails there (`"the two sides of the goal are not convertible"`),
-  and so does `tt`, because `decimalEq` bottoms out in the opaque
+  and so does `Proved`, because `decimalEq` bottoms out in the opaque
   primitives `eq_int`/`and_bool`, which never reduce under conversion
   (§1.1 — this Finding is exactly what §1.1 now teaches, added because of
   it). The honest witness is `Axiom`. This is the campaign's own retro loop

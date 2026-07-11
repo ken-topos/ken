@@ -97,16 +97,16 @@ fn source_bytes (s : Source) : Bytes =
 fn source_length (s : Source) : Nat =
   s.source_length_field
 
-fn source_utf8 (s : Source) : IsUtf8 (source_bytes s) =
+lemma source_utf8 (s : Source) : IsUtf8 (source_bytes s) =
   s.source_utf8_field
 
 fn source_length_unit (s : Source) : Bytes =
   s.source_length_unit_field
 
-fn source_length_unit_valid (s : Source) : UnitByteLength (source_length_unit s) =
+lemma source_length_unit_valid (s : Source) : UnitByteLength (source_length_unit s) =
   s.source_length_unit_valid_field
 
-fn source_length_valid (s : Source)
+lemma source_length_valid (s : Source)
   : SourceLength (source_length_unit s) (source_bytes s) (source_length s) =
   s.source_length_valid_field
 ```
@@ -160,18 +160,18 @@ fn nat_leq_bool (m : Nat) (n : Nat) : Bool =
 fn LessEqNat (m : Nat) (n : Nat) : Prop =
   Equal Bool (nat_leq_bool m n) True
 
-fn less_eq_nat_refl (n : Nat) : LessEqNat n n =
-  match n { Zero => tt ; Suc n2 => less_eq_nat_refl n2 }
+lemma less_eq_nat_refl (n : Nat) : LessEqNat n n =
+  match n { Zero => Proved ; Suc n2 => less_eq_nat_refl n2 }
 
-fn less_eq_nat_zero_left (n : Nat) : LessEqNat Zero n =
-  tt
+lemma less_eq_nat_zero_left (n : Nat) : LessEqNat Zero n =
+  Proved
 
 fn ValidSpan (s : Source) (sp : Span) : Prop =
   And
     (LessEqNat (span_start sp) (span_end sp))
     (LessEqNat (span_end sp) (source_length s))
 
-fn valid_zero_width_span (s : Source) (offset : Nat)
+lemma valid_zero_width_span (s : Source) (offset : Nat)
   : LessEqNat offset (source_length s) -> ValidSpan s (MkSpan offset offset) =
   \h.
     and_intro
@@ -253,8 +253,8 @@ fn ParserValid (a : Type) (p : Parser a) : Prop =
 
 fn ParseResultTotal (a : Type) (r : ParseResult a) : Prop =
   match r {
-    Parsed value consumed next => Equal Bool True True ;
-    Failed err => Equal Bool True True
+    Parsed value consumed next => Top ;
+    Failed err => Top
   }
 
 fn ParserTotal (a : Type) (p : Parser a) : Prop =
@@ -335,7 +335,7 @@ fn list_append (a : Type) (xs : List a) (ys : List a) : List a =
 
 fn ValidLocatedList (a : Type) (s : Source) (xs : List (Located a)) : Prop =
   match xs {
-    Nil => Equal Bool True True ;
+    Nil => Top ;
     Cons x rest =>
       And
         (ValidLocated a s x)
@@ -584,7 +584,7 @@ decode step (and a failure mode) just to compute `span_end - span_start`;
 a byte-indexed offset never does.
 
 **`ParseResultTotal`/`ParserTotal` are honestly weak.** Both match arms of
-`ParseResultTotal` reduce to the same `Equal Bool True True` — the only
+`ParseResultTotal` reduce to the same `Top` — the only
 content this witnesses is that the `Parsed`/`Failed` case-split is
 exhaustive, not any deeper property of a particular parser. A reader should
 not over-read "Total" here as more than "this function always returns one

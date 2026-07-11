@@ -493,9 +493,9 @@ fn ac8_proof_returning_match_through_transparent_scrutinee_elaborates() {
 
     let id = elab_ok(
         &mut env,
-        "fn km_proof_motive_positive (b : Bool) \
+        "lemma km_proof_motive_positive (b : Bool) \
            : Equal Bool (km_scrutinee b) (km_scrutinee b) = \
-           match km_scrutinee b { True => tt ; False => tt }",
+           match km_scrutinee b { True => Proved ; False => Proved }",
     );
 
     let body = body_of(&env, id);
@@ -556,9 +556,9 @@ fn ac8_wrong_specialized_branch_still_rejects() {
 
     let err = elab(
         &mut env,
-        "fn km_proof_motive_negative (b : Bool) \
+        "lemma km_proof_motive_negative (b : Bool) \
            : Equal Bool (km_scrutinee b) True -> Equal Bool (km_scrutinee b) True = \
-           match km_scrutinee b { True => \\p. p ; False => \\p. tt }",
+           match km_scrutinee b { True => \\p. p ; False => \\p. Proved }",
     )
     .expect_err("AC8 negative must reject");
 
@@ -597,7 +597,7 @@ fn ac8_option_table_branch_motive_elaborates() {
     );
     elab_ok(
         &mut env,
-        "fn km_option_refl (o : Option Unit) : Equal (Option Unit) o o = Refl",
+        "lemma km_option_refl (o : Option Unit) : Equal (Option Unit) o o = Refl",
     );
 
     // Mechanical CAT-4 D3 reconstruction from the Ken-owned trigger: a nested
@@ -605,7 +605,7 @@ fn ac8_option_table_branch_motive_elaborates() {
     // the lookup scrutinee and a reducible membership test.
     elab_ok(
         &mut env,
-        "fn intersectionLookupMemberCharacterization (b : Bool) \
+        "lemma intersectionLookupMemberCharacterization (b : Bool) \
            : Equal (Option Unit) \
                (km_intersection_table (km_lookup b) \
                  (km_member_from_lookup (km_lookup b)) (None Unit)) \
@@ -651,12 +651,12 @@ fn ac8_option_table_wrong_constructor_argument_still_rejects() {
     );
     elab_ok(
         &mut env,
-        "fn km_option_refl (o : Option Unit) : Equal (Option Unit) o o = Refl",
+        "lemma km_option_refl (o : Option Unit) : Equal (Option Unit) o o = Refl",
     );
 
     let err = elab(
         &mut env,
-        "fn intersectionLookupMemberCharacterizationBad (b : Bool) \
+        "lemma intersectionLookupMemberCharacterizationBad (b : Bool) \
            : Equal (Option Unit) \
                (km_intersection_table (km_lookup b) \
                  (km_member_from_lookup (km_lookup b)) (None Unit)) \
@@ -726,20 +726,20 @@ fn ac8_direct_lookup_member_reflection_helper_elaborates() {
     );
     elab_ok(
         &mut env,
-        "fn mini_lookup_none_from_member_false_hit (v : Type) (val : v) \
+        "lemma mini_lookup_none_from_member_false_hit (v : Type) (val : v) \
            (h : Equal Bool True False) \
            : Equal (Option v) (Some v val) (None v) = \
            absurd h",
     );
     elab_ok(
         &mut env,
-        "fn mini_lookup_none_from_member_false \
+        "lemma mini_lookup_none_from_member_false \
            (k : Type) (v : Type) (leq : k -> k -> Bool) \
            (key : k) (m : MiniTree k v) \
            : Equal Bool (mini_member k v leq key m) False -> \
              Equal (Option v) (mini_lookup k v leq key m) (None v) = \
            match m { \
-             MiniLeaf => \\h. tt ; \
+             MiniLeaf => \\h. Proved ; \
              MiniNode l k2 v2 r => match leq key k2 { \
                True => match leq k2 key { \
                  True => mini_lookup_none_from_member_false_hit v v2 ; \

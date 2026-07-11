@@ -91,7 +91,7 @@ fn landed_class_eq_shape_elaborates_cleanly_with_the_guard_active() {
 fn arity_three_eq_and_j_sugar_still_intercept_normally() {
     let mut env = ElabEnv::new().expect("base env");
     // `Eq A a b` at type position (the kernel equality-type sugar).
-    env.elaborate_decl("fn eqRefl (a : Type) (x : a) : Eq a x x = Refl")
+    env.elaborate_decl("lemma eqRefl (a : Type) (x : a) : Eq a x x = Refl")
         .expect("arity-3 Eq sugar must still elaborate at type position");
 }
 
@@ -155,7 +155,7 @@ fn cast_and_ascript_are_not_reserved_and_elaborate_fine() {
 #[test]
 fn reserved_sugar_still_works_when_undeclared() {
     let mut env = ElabEnv::new().expect("base env");
-    env.elaborate_decl("fn reflBoolId (x : Bool) : Equal Bool x x = Refl")
+    env.elaborate_decl("lemma reflBoolId (x : Bool) : Equal Bool x x = Refl")
         .expect("Refl sugar must still elaborate");
     // A real, syntactically valid absurd use (mirroring DS-1's own
     // `absurd_empty`): the sugar elaborates when the goal is Ω-classified.

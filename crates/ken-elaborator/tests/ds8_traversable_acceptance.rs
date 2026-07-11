@@ -237,18 +237,18 @@ fn ac8_identity_law_witness_swap_is_rejected() {
 
     // A deliberately-wrong witness: claims the Nil case closes with the
     // SAME proof term as the Cons/recursive case (ill-typed — a `cong`
-    // application, not `tt`, cannot inhabit the Nil case's collapsed
+    // application, not `Proved`, cannot inhabit the Nil case's collapsed
     // Equal goal).
     let r = env.elaborate_decl(
         "fn bad_list_traverse_identity_law (a : Type) (xs : List a) : \
            Equal (Identity (List a)) (list_traverse Identity Applicative_instance_Identity a a (identity_pure a) xs) (identity_pure (List a) xs) = \
            match xs { \
-             Nil ⇒ cong (Identity (List a)) (Identity (List a)) (identity_pure (List a) xs) (identity_pure (List a) xs) (identity_map (List a) (List a) (idf (List a))) tt ; \
-             Cons h u ⇒ tt \
+             Nil ⇒ cong (Identity (List a)) (Identity (List a)) (identity_pure (List a) xs) (identity_pure (List a) xs) (identity_map (List a) (List a) (idf (List a))) Proved ; \
+             Cons h u ⇒ Proved \
            }",
     );
     match r {
-        Ok(_) => panic!("a witness with swapped tt/cong endpoints must be rejected, not silently accepted"),
+        Ok(_) => panic!("a witness with swapped Proved/cong endpoints must be rejected, not silently accepted"),
         Err(e) => {
             let msg = format!("{:?}", e);
             assert!(

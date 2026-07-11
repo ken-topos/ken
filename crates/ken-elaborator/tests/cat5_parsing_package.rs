@@ -410,7 +410,7 @@ fn cat5_d1_valid_half_open_bounds_and_zero_width_offsets_check() {
         r#"
         fn zero_width_span_at_start (s : Source) : Span = MkSpan Zero Zero
 
-        fn valid_zero_width_span_at_start (s : Source) : ValidSpan s (zero_width_span_at_start s) =
+        lemma valid_zero_width_span_at_start (s : Source) : ValidSpan s (zero_width_span_at_start s) =
           and_intro
             (LessEqNat (span_start (zero_width_span_at_start s)) (span_end (zero_width_span_at_start s)))
             (LessEqNat (span_end (zero_width_span_at_start s)) (source_length s))
@@ -419,21 +419,21 @@ fn cat5_d1_valid_half_open_bounds_and_zero_width_offsets_check() {
 
         fn zero_width_span_at_offset (offset : Nat) : Span = MkSpan offset offset
 
-        fn valid_zero_width_span_at_offset (s : Source) (offset : Nat)
+        lemma valid_zero_width_span_at_offset (s : Source) (offset : Nat)
           : LessEqNat offset (source_length s) -> ValidSpan s (zero_width_span_at_offset offset) =
           \h. valid_zero_width_span s offset h
 
-        fn source_utf8_projects (s : Source) : IsUtf8 (source_bytes s) =
+        lemma source_utf8_projects (s : Source) : IsUtf8 (source_bytes s) =
           source_utf8 s
 
-        fn source_length_valid_projects (s : Source)
+        lemma source_length_valid_projects (s : Source)
           : SourceLength (source_length_unit s) (source_bytes s) (source_length s) =
           source_length_valid s
 
         fn located_true_value (s : Source) : Located Bool =
           MkLocated Bool (source_id s) (zero_width_span_at_start s) True
 
-        fn valid_located_true_value (s : Source) : ValidLocated Bool s (located_true_value s) =
+        lemma valid_located_true_value (s : Source) : ValidLocated Bool s (located_true_value s) =
           and_intro
             (Equal SourceId (located_source Bool (located_true_value s)) (source_id s))
             (ValidSpan s (located_span Bool (located_true_value s)))
@@ -453,9 +453,9 @@ fn cat5_d1_concrete_nonempty_source_constructs_and_projects() {
 
         const source_unit_byte : Bytes = bytes_encode "x"
         const sample_abc_bytes : Bytes = bytes_encode "abc"
-        const source_unit_valid : UnitByteLength source_unit_byte = Axiom
-        const sample_utf8_valid : IsUtf8 sample_abc_bytes = Axiom
-        const sample_length3_valid
+        lemma source_unit_valid : UnitByteLength source_unit_byte = Axiom
+        lemma sample_utf8_valid : IsUtf8 sample_abc_bytes = Axiom
+        lemma sample_length3_valid
           : SourceLength source_unit_byte sample_abc_bytes (Suc (Suc (Suc Zero))) =
           Axiom
 
@@ -473,14 +473,14 @@ fn cat5_d1_concrete_nonempty_source_constructs_and_projects() {
 
         const projected_bytes : Bytes = source_bytes sample_source
         const projected_length : Nat = source_length sample_source
-        const projected_utf8 : IsUtf8 (source_bytes sample_source) =
+        lemma projected_utf8 : IsUtf8 (source_bytes sample_source) =
           source_utf8 sample_source
-        const projected_length_valid
+        lemma projected_length_valid
           : SourceLength (source_length_unit sample_source) (source_bytes sample_source) (source_length sample_source) =
           source_length_valid sample_source
 
         const full_source_span : Span = MkSpan Zero (source_length sample_source)
-        const full_source_span_valid : ValidSpan sample_source full_source_span =
+        lemma full_source_span_valid : ValidSpan sample_source full_source_span =
           and_intro
             (LessEqNat (span_start full_source_span) (span_end full_source_span))
             (LessEqNat (span_end full_source_span) (source_length sample_source))
@@ -523,9 +523,9 @@ fn cat5_d1_concrete_mismatched_source_length_rejected() {
 
             const source_unit_byte : Bytes = bytes_encode "x"
             const sample_abc_bytes : Bytes = bytes_encode "abc"
-            const source_unit_valid : UnitByteLength source_unit_byte = Axiom
-            const sample_utf8_valid : IsUtf8 sample_abc_bytes = Axiom
-            const sample_length3_valid
+            lemma source_unit_valid : UnitByteLength source_unit_byte = Axiom
+            lemma sample_utf8_valid : IsUtf8 sample_abc_bytes = Axiom
+            lemma sample_length3_valid
               : SourceLength source_unit_byte sample_abc_bytes (Suc (Suc (Suc Zero))) =
               Axiom
 
@@ -561,9 +561,9 @@ fn cat5_d1_multibyte_unit_cannot_make_three_bytes_report_one() {
             data MultiByteUnitSource = MkMultiByteUnitSource
 
             const sample_abc_bytes : Bytes = bytes_encode "abc"
-            const invalid_unit_valid : UnitByteLength sample_abc_bytes = Refl
-            const sample_utf8_valid : IsUtf8 sample_abc_bytes = Axiom
-            const invalid_length_valid
+            lemma invalid_unit_valid : UnitByteLength sample_abc_bytes = Refl
+            lemma sample_utf8_valid : IsUtf8 sample_abc_bytes = Axiom
+            lemma invalid_length_valid
               : SourceLength sample_abc_bytes sample_abc_bytes (Suc Zero) =
               Refl
 
@@ -597,12 +597,12 @@ fn cat5_d1_end_past_source_length_rejected() {
         .elaborate_file(
             r#"
             const invalid_span : Span = MkSpan Zero (Suc (Suc (Suc Zero)))
-            fn invalid_span_valid (s : Source) : ValidSpan s invalid_span =
+            lemma invalid_span_valid (s : Source) : ValidSpan s invalid_span =
               and_intro
                 (LessEqNat (span_start invalid_span) (span_end invalid_span))
                 (LessEqNat (span_end invalid_span) (source_length s))
-                tt
-                tt
+                Proved
+                Proved
             "#,
         )
         .expect_err("end > source_length must not typecheck as a ValidSpan");
@@ -622,12 +622,12 @@ fn cat5_d1_start_after_end_rejected() {
         .elaborate_file(
             r#"
             const invalid_span : Span = MkSpan (Suc (Suc Zero)) (Suc Zero)
-            fn invalid_span_valid (s : Source) : ValidSpan s invalid_span =
+            lemma invalid_span_valid (s : Source) : ValidSpan s invalid_span =
               and_intro
                 (LessEqNat (span_start invalid_span) (span_end invalid_span))
                 (LessEqNat (span_end invalid_span) (source_length s))
-                tt
-                tt
+                Proved
+                Proved
             "#,
         )
         .expect_err("start > end must not typecheck as a ValidSpan");
@@ -668,7 +668,7 @@ fn cat5_d1_reflexive_utf8_and_length_proofs_rejected() {
         .elaborate_file(
             r#"
             const sample_bytes : Bytes = bytes_encode "abc"
-            const fake_utf8 : IsUtf8 sample_bytes = Refl
+            lemma fake_utf8 : IsUtf8 sample_bytes = Refl
             "#,
         )
         .expect_err("IsUtf8 must not be provable by reflexive equality over arbitrary bytes");
@@ -687,7 +687,7 @@ fn cat5_d1_reflexive_utf8_and_length_proofs_rejected() {
             r#"
             const sample_bytes : Bytes = bytes_encode "abc"
             const sample_unit : Bytes = bytes_encode "x"
-            const fake_length : SourceLength sample_unit sample_bytes Zero = Refl
+            lemma fake_length : SourceLength sample_unit sample_bytes Zero = Refl
             "#,
         )
         .expect_err(
@@ -711,7 +711,7 @@ fn cat5_d2_success_parser_carries_valid_consumed_span_from_start() {
         const success_parser : Parser Bool =
           parser_pure Bool True
 
-        const success_parser_valid : ParserValid Bool success_parser =
+        lemma success_parser_valid : ParserValid Bool success_parser =
           \s. \start. \h.
             and_intro
               (ValidSpan s (MkSpan start start))
@@ -725,7 +725,7 @@ fn cat5_d2_success_parser_carries_valid_consumed_span_from_start() {
                 Refl
                 Refl)
 
-        const success_parser_laws : ParserLaws Bool success_parser =
+        lemma success_parser_laws : ParserLaws Bool success_parser =
           and_intro
             (ParserValid Bool success_parser)
             (And (ParserTotal Bool success_parser) (ParserSourceLocal Bool success_parser))
@@ -733,7 +733,7 @@ fn cat5_d2_success_parser_carries_valid_consumed_span_from_start() {
             (and_intro
               (ParserTotal Bool success_parser)
               (ParserSourceLocal Bool success_parser)
-              (\s. \start. \h. tt)
+              (\s. \start. \h. Proved)
               (\s. \start. \h. valid_zero_width_span s start h))
         "#,
     )
@@ -748,7 +748,7 @@ fn cat5_d2_failed_parser_carries_same_source_valid_span() {
         const failed_parser : Parser Bool =
           parser_fail Bool
 
-        const failed_parser_valid : ParserValid Bool failed_parser =
+        lemma failed_parser_valid : ParserValid Bool failed_parser =
           \s. \start. \h.
             and_intro
               (Equal SourceId (error_source (MkParseError (source_id s) (MkSpan start start))) (source_id s))
@@ -756,7 +756,7 @@ fn cat5_d2_failed_parser_carries_same_source_valid_span() {
               Refl
               (valid_zero_width_span s start h)
 
-        const failed_parser_source_local : ParserSourceLocal Bool failed_parser =
+        lemma failed_parser_source_local : ParserSourceLocal Bool failed_parser =
           \s. \start. \h. Refl
         "#,
     )
@@ -773,7 +773,7 @@ fn cat5_d2_failure_with_wrong_source_rejected_by_law() {
               \s. \start. \h.
                 Failed Bool (MkParseError (MkSourceId (Suc Zero)) (MkSpan start start))
 
-            const wrong_source_failed_parser_valid : ParserValid Bool wrong_source_failed_parser =
+            lemma wrong_source_failed_parser_valid : ParserValid Bool wrong_source_failed_parser =
               \s. \start. \h.
                 and_intro
                   (Equal SourceId (error_source (MkParseError (MkSourceId (Suc Zero)) (MkSpan start start))) (source_id s))
@@ -804,7 +804,7 @@ fn cat5_d2_failure_with_invalid_span_rejected_by_law() {
               \s. \start. \h.
                 Failed Bool (MkParseError (source_id s) (MkSpan (Suc (Suc Zero)) (Suc Zero)))
 
-            const invalid_span_failed_parser_valid : ParserValid Bool invalid_span_failed_parser =
+            lemma invalid_span_failed_parser_valid : ParserValid Bool invalid_span_failed_parser =
               \s. \start. \h.
                 and_intro
                   (Equal SourceId (error_source (MkParseError (source_id s) (MkSpan (Suc (Suc Zero)) (Suc Zero)))) (source_id s))
@@ -813,7 +813,7 @@ fn cat5_d2_failure_with_invalid_span_rejected_by_law() {
                   (and_intro
                     (LessEqNat (span_start (MkSpan (Suc (Suc Zero)) (Suc Zero))) (span_end (MkSpan (Suc (Suc Zero)) (Suc Zero))))
                     (LessEqNat (span_end (MkSpan (Suc (Suc Zero)) (Suc Zero))) (source_length s))
-                    tt
+                    Proved
                     (less_eq_nat_zero_left (source_length s)))
             "#,
         )
@@ -886,7 +886,7 @@ fn cat5_d3_bool_parser_printer_formatter_roundtrip_on_source_bytes() {
         data InfixBoolExprSource = MkInfixBoolExprSource
 
         const bool_expr_source_unit : Bytes = bytes_encode "x"
-        const bool_expr_unit_valid : UnitByteLength bool_expr_source_unit = Axiom
+        lemma bool_expr_unit_valid : UnitByteLength bool_expr_source_unit = Axiom
 
         const representative_bool_expr : BoolExpr =
           BAnd BTrue (BNot BFalse)
@@ -894,8 +894,8 @@ fn cat5_d3_bool_parser_printer_formatter_roundtrip_on_source_bytes() {
         const printed_bool_expr_bytes : Bytes =
           print_bool_expr representative_bool_expr
 
-        const printed_bool_expr_utf8 : IsUtf8 printed_bool_expr_bytes = Axiom
-        const printed_bool_expr_length_valid
+        lemma printed_bool_expr_utf8 : IsUtf8 printed_bool_expr_bytes = Axiom
+        lemma printed_bool_expr_length_valid
           : SourceLength bool_expr_source_unit printed_bool_expr_bytes ({printed_len}) =
           Axiom
 
@@ -935,8 +935,8 @@ fn cat5_d3_bool_parser_printer_formatter_roundtrip_on_source_bytes() {
             Err err => bytes_encode "ERR"
           }}
 
-        const formatted_bool_expr_utf8 : IsUtf8 formatted_bool_expr_bytes = Axiom
-        const formatted_bool_expr_length_valid
+        lemma formatted_bool_expr_utf8 : IsUtf8 formatted_bool_expr_bytes = Axiom
+        lemma formatted_bool_expr_length_valid
           : SourceLength bool_expr_source_unit formatted_bool_expr_bytes ({printed_len}) =
           Axiom
 
@@ -962,8 +962,8 @@ fn cat5_d3_bool_parser_printer_formatter_roundtrip_on_source_bytes() {
           }}
 
         const infix_bool_expr_bytes : Bytes = bytes_encode "true and false"
-        const infix_bool_expr_utf8 : IsUtf8 infix_bool_expr_bytes = Axiom
-        const infix_bool_expr_length_valid
+        lemma infix_bool_expr_utf8 : IsUtf8 infix_bool_expr_bytes = Axiom
+        lemma infix_bool_expr_length_valid
           : SourceLength bool_expr_source_unit infix_bool_expr_bytes ({bad_len}) =
           Axiom
 

@@ -46,15 +46,15 @@ fn is_even_is_odd_compute_correct_values() {
     // `Equal Bool (op ...) True/False`, once the operand reduces to a
     // concrete `Bool` constructor, observationally COLLAPSES to `Top`
     // (K7) — the goal is no longer `Eq`-shaped, so the right closing form
-    // is `tt` (Top-introduction), not `Refl` (the same idiom documented in
+    // is `Proved` (Top-introduction), not `Refl` (the same idiom documented in
     // `catalog/packages/Core/LawfulClasses.ken`). Elaborating only
     // succeeds if the operand genuinely reduced to the SAME concrete
     // constructor as the right-hand side — a real correctness check.
-    env.elaborate_decl("const checkOdd3 : Equal Bool (isEven three) False = tt")
+    env.elaborate_decl("lemma checkOdd3 : Equal Bool (isEven three) False = Proved")
         .expect("isEven 3 must reduce to False (3 is odd)");
-    env.elaborate_decl("const checkEven4 : Equal Bool (isEven four) True = tt")
+    env.elaborate_decl("lemma checkEven4 : Equal Bool (isEven four) True = Proved")
         .expect("isEven 4 must reduce to True (4 is even)");
-    env.elaborate_decl("const checkOdd3b : Equal Bool (isOdd three) True = tt")
+    env.elaborate_decl("lemma checkOdd3b : Equal Bool (isOdd three) True = Proved")
         .expect("isOdd 3 must reduce to True (3 is odd)");
 }
 

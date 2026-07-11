@@ -49,49 +49,23 @@ fn leq_nat (m : Nat) (n : Nat) : Bool =
     Suc m2 ⇒ match n { Zero ⇒ False ; Suc n2 ⇒ leq_nat m2 n2 }
   }
 
-fn refl_leq_nat_ind (x : Nat) : Equal Bool (leq_nat x x) True =
-  match x { Zero ⇒ tt ; Suc x2 ⇒ refl_leq_nat_ind x2 }
-
 lemma refl_leq_nat (x : Nat) : Equal Bool (leq_nat x x) True =
-  refl_leq_nat_ind x
+  match x { Zero ⇒ Proved ; Suc x2 ⇒ refl_leq_nat x2 }
 
-fn trans_leq_nat_ind
+lemma trans_leq_nat
   (x : Nat)
   : (y : Nat) -> (z : Nat) -> Equal Bool (leq_nat x y) True ->
     Equal Bool (leq_nat y z) True -> Equal Bool (leq_nat x z) True =
   match x {
-    Zero ⇒ λy.λz.λp.λq. tt ;
+    Zero ⇒ λy.λz.λp.λq. Proved ;
     Suc x2 ⇒
       λy. match y {
         Zero ⇒ λz.λp.λq. absurd p ;
         Suc y2 ⇒
           λz. match z {
             Zero ⇒ λp.λq. absurd q ;
-            Suc z2 ⇒ λp.λq. trans_leq_nat_ind x2 y2 z2 p q
+            Suc z2 ⇒ λp.λq. trans_leq_nat x2 y2 z2 p q
           }
-      }
-  }
-
-lemma trans_leq_nat
-  (x : Nat)
-  : (y : Nat) -> (z : Nat) -> Equal Bool (leq_nat x y) True ->
-    Equal Bool (leq_nat y z) True -> Equal Bool (leq_nat x z) True =
-  trans_leq_nat_ind x
-
-fn antisym_leq_nat_ind
-  (x : Nat)
-  : (y : Nat) -> Equal Bool (leq_nat x y) True ->
-    Equal Bool (leq_nat y x) True -> Equal Nat x y =
-  match x {
-    Zero ⇒
-      λy. match y {
-        Zero ⇒ λp.λq. tt ;
-        Suc y2 ⇒ λp.λq. absurd q
-      } ;
-    Suc x2 ⇒
-      λy. match y {
-        Zero ⇒ λp.λq. absurd p ;
-        Suc y2 ⇒ λp.λq. cong Nat Nat x2 y2 Suc (antisym_leq_nat_ind x2 y2 p q)
       }
   }
 
@@ -99,19 +73,30 @@ lemma antisym_leq_nat
   (x : Nat)
   : (y : Nat) -> Equal Bool (leq_nat x y) True ->
     Equal Bool (leq_nat y x) True -> Equal Nat x y =
-  antisym_leq_nat_ind x
+  match x {
+    Zero ⇒
+      λy. match y {
+        Zero ⇒ λp.λq. Proved ;
+        Suc y2 ⇒ λp.λq. absurd q
+      } ;
+    Suc x2 ⇒
+      λy. match y {
+        Zero ⇒ λp.λq. absurd p ;
+        Suc y2 ⇒ λp.λq. cong Nat Nat x2 y2 Suc (antisym_leq_nat x2 y2 p q)
+      }
+  }
 
 fn total_leq_nat (x : Nat) (y : Nat)
   : Or (Equal Bool (leq_nat x y) True) (Equal Bool (leq_nat y x) True) =
   match x {
     Zero ⇒
       Inl (Equal Bool (leq_nat Zero y) True)
-          (Equal Bool (leq_nat y Zero) True) tt ;
+          (Equal Bool (leq_nat y Zero) True) Proved ;
     Suc x2 ⇒
       match y {
         Zero ⇒
           Inr (Equal Bool (leq_nat (Suc x2) Zero) True)
-              (Equal Bool (leq_nat Zero (Suc x2)) True) tt ;
+              (Equal Bool (leq_nat Zero (Suc x2)) True) Proved ;
         Suc y2 ⇒
           match total_leq_nat x2 y2 {
             Inl h ⇒
@@ -132,7 +117,7 @@ short-circuits on its first argument, so
 reduction, then discharges each side directly (the `Inl` branch needs
 `cong`/`trans` to carry the equality through `bool_or`'s first-argument
 position; the `Inr` branch's own case-split on `p` makes both `bool_or
-True q` and `bool_or False q` reduce to a literal, so `tt`/the hypothesis
+True q` and `bool_or False q` reduce to a literal, so `Proved`/the hypothesis
 itself close it):
 
 ```ken
@@ -143,8 +128,8 @@ lemma or_eq_true_to_is_true_bool_or
   match h {
     Inl hp ⇒
       trans Bool (bool_or p q) (bool_or True q) True
-            (cong Bool Bool p True (λv. bool_or v q) hp) tt ;
-    Inr hq ⇒ match p { True ⇒ tt ; False ⇒ hq }
+            (cong Bool Bool p True (λv. bool_or v q) hp) Proved ;
+    Inr hq ⇒ match p { True ⇒ Proved ; False ⇒ hq }
   }
 
 instance Ord Nat {
@@ -191,7 +176,7 @@ fn compare (a : Nat) (b : Nat) : OrdResult =
 ## 3. Using it
 
 ```ken example
-lemma two_leq_three : IsTrue (leq_nat (Suc (Suc Zero)) (Suc (Suc (Suc Zero)))) = tt
+lemma two_leq_three : IsTrue (leq_nat (Suc (Suc Zero)) (Suc (Suc (Suc Zero)))) = Proved
 
 const min_of_two_and_three : Nat = min (Suc (Suc Zero)) (Suc (Suc (Suc Zero)))
 const max_of_two_and_three : Nat = max (Suc (Suc Zero)) (Suc (Suc (Suc Zero)))
@@ -218,14 +203,14 @@ lemma ord_nat_total : IsTrue (bool_or (leq_nat (Suc Zero) Zero) (leq_nat Zero (S
 relies on:
 
 ```ken example
-lemma min_zero_left (n : Nat) : Equal Nat (min Zero n) Zero = tt
+lemma min_zero_left (n : Nat) : Equal Nat (min Zero n) Zero = Proved
 
 lemma max_zero_left (n : Nat) : Equal Nat (max Zero n) n = Refl
 
 lemma sub_zero_right (a : Nat) : Equal Nat (sub a Zero) a = Refl
 ```
 
-`min_zero_left` closes with `tt`: `min Zero n` reduces to the literal `Zero`
+`min_zero_left` closes with `Proved`: `min Zero n` reduces to the literal `Zero`
 regardless of `n` (both sides collapse to the same nullary constructor,
 `§1` of `catalog/guide/proof-techniques.ken.md`). `max_zero_left` and
 `sub_zero_right` close with `Refl`: `max Zero n`'s recursive definition and
@@ -259,7 +244,7 @@ lemma is unavoidable there regardless of carrier. `Ord Bool`'s own `total`
 sidesteps this because `Bool`'s order is provable by direct case-split
 down to concrete constructors without ever building an intermediate `Or` —
 it isn't a template for the `Or`-to-`bool_or` bridge specifically, only
-for the overall proof STYLE (case-split to `tt`/`absurd`), which
+for the overall proof STYLE (case-split to `Proved`/`absurd`), which
 `or_eq_true_to_is_true_bool_or` also follows.
 
 **Local definitions keep proof terms direct.** The order and arithmetic

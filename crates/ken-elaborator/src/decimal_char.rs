@@ -10,7 +10,7 @@
 //! deliberately-never-reducing internal marker, not a Decimal/Char-facing
 //! primitive (see its doc comment).
 //!
-//! Called from `prelude::register_prelude`, after `Equal`/`And`/`Prop`/`tt`
+//! Called from `prelude::register_prelude`, after `Equal`/`And`/`Prop`/`Proved`
 //! are declared (needed for `IsTrue`) and before the later `Char`-dependent
 //! String-ops registration in that same function.
 

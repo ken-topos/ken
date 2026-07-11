@@ -224,7 +224,7 @@ instance Ord Int {
 is a real inductive (`data Bool = True | False`, ES2), so its laws ARE
 kernel-provable by finite case-split (`elim_Bool` into an `Omega`-motive, K4
 `3be0e30`). Every law field below is a REAL, kernel-checked proof
-(`tt`/`Refl`/`absurd`/direct hypothesis reuse under the restructured
+(`Proved`/`Refl`/`absurd`/direct hypothesis reuse under the restructured
 signature form described next) — NOT `Axiom`, anywhere in any of the three
 `Bool` instances.
 
@@ -246,17 +246,17 @@ hypothesis's binder-time type ALREADY concrete in the case-split variables
 directly, no ex-falso needed. This is *why* `refl`/`trans`/`total` are
 provable today without any further kernel capability.
 
-#### Proof strategy: `tt` versus `Refl`
+#### Proof strategy: `Proved` versus `Refl`
 
 Every branch whose goal reduces to a
 TRUE `IsTrue`/`Equal` equation (e.g. `IsTrue (bool_leq True True)`) is
-closed with `tt` (K5 `Top`-intro), not `Refl`: the goal is
+closed with `Proved` (K5 `Top`-intro), not `Refl`: the goal is
 `Equal Bool (op x y) True` for an OPERATION (`bool_leq`/`bool_eq`/
 `bool_or`), a redex — `eq_at_inductive` must `whnf` it to the literal `True`
 before the same-nullary-constructor collapse to `Top` fires (K7, `obs.rs`).
 `Refl` checks against a goal whose whnf is *still* `Eq`-shaped
 (`ken-elaborator/src/elab.rs`); once the operand is reduced the goal is
-`Top`, not `Eq`, so `Refl` no longer applies there — `tt` is the
+`Top`, not `Eq`, so `Refl` no longer applies there — `Proved` is the
 textbook-correct introduction for a `Top`-classified goal. Only genuine
 hypothesis-reuse branches (the goal is syntactically a bound hypothesis's
 own type, e.g. `q`/`p` in `trans` below) stay untouched by K7; they never
@@ -266,7 +266,7 @@ went through `Refl` at all.
 (`Equal a x x`) past a live application into a BARE `Equal Bool True True`/
 `Equal Bool False False` — which observationally collapses straight to the
 kernel's `Top` proposition (`obs.rs::eq_at_inductive`, same-ctor nullary =>
-`Top`), closed by `tt` (K5 `Top`-introduction). `sound`/`complete`'s
+`Top`), closed by `Proved` (K5 `Top`-introduction). `sound`/`complete`'s
 "consistent" branches close identically.
 
 #### K7: swapped and contradictory branches
@@ -309,7 +309,7 @@ explicitly NOT an elaborator-side transport/`cast` workaround (rejected:
 that would have grown the TCB to route around a kernel-completeness gap
 that belongs in the kernel). K7 is now on `main`, and this entry wires
 `Ord Bool`'s `antisym` and `DecEq Bool`'s `sound`/`complete` (below) as
-REAL, kernel-checked, zero-delta proofs — `tt` on the equal-value branches,
+REAL, kernel-checked, zero-delta proofs — `Proved` on the equal-value branches,
 `absurd` on the contradictory branches (whose hypothesis now genuinely
 collapses to `Bottom` under K7). No `Axiom` remains in either instance.
 
@@ -324,56 +324,56 @@ fn bool_eq (a : Bool) (b : Bool) : Bool = match a { True ⇒ b ; False ⇒ match
 
 instance Ord Bool {
   leq = bool_leq ;
-  refl = λx. match x { True ⇒ tt ; False ⇒ tt } ;
+  refl = λx. match x { True ⇒ Proved ; False ⇒ Proved } ;
   antisym =
     λx. match x {
       True ⇒ λy. match y {
-        True ⇒ λp.λq. tt ;
+        True ⇒ λp.λq. Proved ;
         False ⇒ λp.λq. absurd p
       } ;
       False ⇒ λy. match y {
         True ⇒ λp.λq. absurd q ;
-        False ⇒ λp.λq. tt
+        False ⇒ λp.λq. Proved
       }
     } ;
   trans =
     λx. match x {
       True ⇒ λy. match y {
-        True ⇒ λz. match z { True ⇒ λp.λq. tt ; False ⇒ λp.λq. q } ;
-        False ⇒ λz. match z { True ⇒ λp.λq. tt ; False ⇒ λp.λq. p }
+        True ⇒ λz. match z { True ⇒ λp.λq. Proved ; False ⇒ λp.λq. q } ;
+        False ⇒ λz. match z { True ⇒ λp.λq. Proved ; False ⇒ λp.λq. p }
       } ;
-      False ⇒ λy.λz.λp.λq. tt
+      False ⇒ λy.λz.λp.λq. Proved
     } ;
   total =
     λx.λy. match x {
-      True ⇒ match y { True ⇒ tt ; False ⇒ tt } ;
-      False ⇒ match y { True ⇒ tt ; False ⇒ tt }
+      True ⇒ match y { True ⇒ Proved ; False ⇒ Proved } ;
+      False ⇒ match y { True ⇒ Proved ; False ⇒ Proved }
     }
 }
 
 instance Eq Bool {
   eq = bool_eq ;
-  refl = λx. match x { True ⇒ tt ; False ⇒ tt } ;
+  refl = λx. match x { True ⇒ Proved ; False ⇒ Proved } ;
   sym =
     λx. match x {
       True ⇒ λy. match y {
-        True ⇒ λp. tt ;
+        True ⇒ λp. Proved ;
         False ⇒ λp. absurd p
       } ;
       False ⇒ λy. match y {
         True ⇒ λp. absurd p ;
-        False ⇒ λp. tt
+        False ⇒ λp. Proved
       }
     } ;
   trans =
     λx. match x {
       True ⇒ λy. match y {
-        True ⇒ λz. match z { True ⇒ λp.λq. tt ; False ⇒ λp.λq. absurd q } ;
+        True ⇒ λz. match z { True ⇒ λp.λq. Proved ; False ⇒ λp.λq. absurd q } ;
         False ⇒ λz. match z { True ⇒ λp.λq. absurd p ; False ⇒ λp.λq. absurd p }
       } ;
       False ⇒ λy. match y {
         True ⇒ λz. match z { True ⇒ λp.λq. absurd p ; False ⇒ λp.λq. absurd p } ;
-        False ⇒ λz. match z { True ⇒ λp.λq. absurd q ; False ⇒ λp.λq. tt }
+        False ⇒ λz. match z { True ⇒ λp.λq. absurd q ; False ⇒ λp.λq. Proved }
       }
     }
 }
@@ -383,23 +383,23 @@ instance DecEq Bool {
   sound =
     λx. match x {
       True ⇒ λy. match y {
-        True ⇒ λp. tt ;
+        True ⇒ λp. Proved ;
         False ⇒ λp. absurd p
       } ;
       False ⇒ λy. match y {
         True ⇒ λp. absurd p ;
-        False ⇒ λp. tt
+        False ⇒ λp. Proved
       }
     } ;
   complete =
     λx. match x {
       True ⇒ λy. match y {
-        True ⇒ λp. tt ;
+        True ⇒ λp. Proved ;
         False ⇒ λp. absurd p
       } ;
       False ⇒ λy. match y {
         True ⇒ λp. absurd p ;
-        False ⇒ λp. tt
+        False ⇒ λp. Proved
       }
     }
 }
@@ -464,21 +464,21 @@ rather than treating a dictionary operation as if it reduced by itself.
 fn bool_and (a : Bool) (b : Bool) : Bool =
   match a { True ⇒ b ; False ⇒ False }
 
-fn bool_and_intro (a : Bool) (b : Bool)
+lemma bool_and_intro (a : Bool) (b : Bool)
   : IsTrue a → IsTrue b → IsTrue (bool_and a b) =
   match a {
     True ⇒ λha.λhb. hb ;
     False ⇒ λha.λhb. absurd ha
   }
 
-fn bool_and_left (a : Bool) (b : Bool)
+lemma bool_and_left (a : Bool) (b : Bool)
   : IsTrue (bool_and a b) → IsTrue a =
   match a {
-    True ⇒ λh. tt ;
+    True ⇒ λh. Proved ;
     False ⇒ λh. absurd h
   }
 
-fn bool_and_right (a : Bool) (b : Bool)
+lemma bool_and_right (a : Bool) (b : Bool)
   : IsTrue (bool_and a b) → IsTrue b =
   match a {
     True ⇒ λh. h ;
@@ -487,8 +487,8 @@ fn bool_and_right (a : Bool) (b : Bool)
 
 fn compare_bool_cases (b : Bool) : Or (Equal Bool b True) (Equal Bool b False) =
   match b {
-    True ⇒ Inl (Equal Bool True True) (Equal Bool True False) tt ;
-    False ⇒ Inr (Equal Bool False True) (Equal Bool False False) tt
+    True ⇒ Inl (Equal Bool True True) (Equal Bool True False) Proved ;
+    False ⇒ Inr (Equal Bool False True) (Equal Bool False False) Proved
   }
 
 fn compare_second_result (b : Bool) : OrdResult =
@@ -506,18 +506,18 @@ fn compare_with (a : Type) (d : Ord a) (x : a) (y : a) : OrdResult =
 fn compare (a : Type) (d : Ord a) (x : a) (y : a) : OrdResult =
   compare_with a d x y
 
-fn compare_eq_sound_raw_second_true (a : Type) (leq : a → a → Bool)
+lemma compare_eq_sound_raw_second_true (a : Type) (leq : a → a → Bool)
   (antisym_law : (x : a) → (y : a) → Equal Bool (leq x y) True → Equal Bool (leq y x) True → Equal a x y)
   (x : a) (y : a) (hxy : Equal Bool (leq x y) True) (hyx : Equal Bool (leq y x) True)
   : Equal OrdResult (compare_second_result (leq y x)) ord_eq → Equal a x y =
   λp. antisym_law x y hxy hyx
 
-fn compare_eq_sound_raw_second_false (a : Type) (leq : a → a → Bool)
+lemma compare_eq_sound_raw_second_false (a : Type) (leq : a → a → Bool)
   (x : a) (y : a) (hyx : Equal Bool (leq y x) False)
   : Equal OrdResult (compare_second_result (leq y x)) ord_eq → Equal a x y =
   λp. absurd (J (λb _. Equal OrdResult (compare_second_result b) ord_eq) p hyx)
 
-fn compare_eq_sound_raw_second_dispatch (a : Type) (leq : a → a → Bool)
+lemma compare_eq_sound_raw_second_dispatch (a : Type) (leq : a → a → Bool)
   (antisym_law : (x : a) → (y : a) → Equal Bool (leq x y) True → Equal Bool (leq y x) True → Equal a x y)
   (x : a) (y : a) (hxy : Equal Bool (leq x y) True)
   (choice : Or (Equal Bool (leq y x) True) (Equal Bool (leq y x) False))
@@ -527,7 +527,7 @@ fn compare_eq_sound_raw_second_dispatch (a : Type) (leq : a → a → Bool)
     Inr hyx ⇒ compare_eq_sound_raw_second_false a leq x y hyx
   }
 
-fn compare_eq_sound_raw_first_true (a : Type) (leq : a → a → Bool)
+lemma compare_eq_sound_raw_first_true (a : Type) (leq : a → a → Bool)
   (antisym_law : (x : a) → (y : a) → Equal Bool (leq x y) True → Equal Bool (leq y x) True → Equal a x y)
   (x : a) (y : a) (hxy : Equal Bool (leq x y) True)
   : Equal OrdResult (compare_result_of (leq x y) (leq y x)) ord_eq → Equal a x y =
@@ -535,12 +535,12 @@ fn compare_eq_sound_raw_first_true (a : Type) (leq : a → a → Bool)
     (compare_eq_sound_raw_second_dispatch a leq antisym_law x y hxy (compare_bool_cases (leq y x)))
     (sym Bool (leq x y) True hxy)
 
-fn compare_eq_sound_raw_first_false (a : Type) (leq : a → a → Bool)
+lemma compare_eq_sound_raw_first_false (a : Type) (leq : a → a → Bool)
   (x : a) (y : a) (hxy : Equal Bool (leq x y) False)
   : Equal OrdResult (compare_result_of (leq x y) (leq y x)) ord_eq → Equal a x y =
   λp. absurd (J (λb _. Equal OrdResult (compare_result_of b (leq y x)) ord_eq) p hxy)
 
-fn compare_eq_sound_raw_dispatch (a : Type) (leq : a → a → Bool)
+lemma compare_eq_sound_raw_dispatch (a : Type) (leq : a → a → Bool)
   (antisym_law : (x : a) → (y : a) → Equal Bool (leq x y) True → Equal Bool (leq y x) True → Equal a x y)
   (x : a) (y : a)
   (choice : Or (Equal Bool (leq x y) True) (Equal Bool (leq x y) False))
@@ -550,25 +550,25 @@ fn compare_eq_sound_raw_dispatch (a : Type) (leq : a → a → Bool)
     Inr hxy ⇒ compare_eq_sound_raw_first_false a leq x y hxy
   }
 
-fn compare_eq_sound_raw (a : Type) (leq : a → a → Bool)
+lemma compare_eq_sound_raw (a : Type) (leq : a → a → Bool)
   (antisym_law : (x : a) → (y : a) → Equal Bool (leq x y) True → Equal Bool (leq y x) True → Equal a x y)
   (x : a) (y : a)
   : Equal OrdResult (compare_raw a leq x y) ord_eq → Equal a x y =
   compare_eq_sound_raw_dispatch a leq antisym_law x y (compare_bool_cases (leq x y))
 
-fn compare_eq_complete_raw (a : Type) (leq : a → a → Bool) (x : a) (y : a)
+lemma compare_eq_complete_raw (a : Type) (leq : a → a → Bool) (x : a) (y : a)
   (hxy : Equal Bool (leq x y) True) (hyx : Equal Bool (leq y x) True)
   : Equal OrdResult (compare_raw a leq x y) ord_eq =
   J (λb _. Equal OrdResult (compare_result_of b (leq y x)) ord_eq)
-    (J (λc _. Equal OrdResult (compare_second_result c) ord_eq) tt
+    (J (λc _. Equal OrdResult (compare_second_result c) ord_eq) Proved
       (sym Bool (leq y x) True hyx))
     (sym Bool (leq x y) True hxy)
 
-fn compare_eq_sound (a : Type) (d : Ord a) (x : a) (y : a)
+lemma compare_eq_sound (a : Type) (d : Ord a) (x : a) (y : a)
   : Equal OrdResult (compare_with a d x y) ord_eq → Equal a x y =
   compare_eq_sound_raw a (d.leq) (d.antisym) x y
 
-fn compare_lt_sound_raw (a : Type) (leq : a → a → Bool) (x : a) (y : a)
+lemma compare_lt_sound_raw (a : Type) (leq : a → a → Bool) (x : a) (y : a)
   : Equal OrdResult (compare_raw a leq x y) ord_lt → Equal Bool (leq x y) True =
   match compare_bool_cases (leq x y) {
     Inl hxy ⇒ λp. hxy ;
@@ -576,7 +576,7 @@ fn compare_lt_sound_raw (a : Type) (leq : a → a → Bool) (x : a) (y : a)
       absurd (J (λb _. Equal OrdResult (compare_result_of b (leq y x)) ord_lt) p hxy)
   }
 
-fn compare_lt_reverse_false_when_first_true (a : Type) (leq : a → a → Bool)
+lemma compare_lt_reverse_false_when_first_true (a : Type) (leq : a → a → Bool)
   (x : a) (y : a)
   (choice : Or (Equal Bool (leq y x) True) (Equal Bool (leq y x) False))
   : Equal OrdResult (compare_second_result (leq y x)) ord_lt → Equal Bool (leq y x) False =
@@ -586,7 +586,7 @@ fn compare_lt_reverse_false_when_first_true (a : Type) (leq : a → a → Bool)
     Inr hyx ⇒ λp. hyx
   }
 
-fn compare_lt_reverse_false_raw (a : Type) (leq : a → a → Bool)
+lemma compare_lt_reverse_false_raw (a : Type) (leq : a → a → Bool)
   (x : a) (y : a)
   : Equal OrdResult (compare_raw a leq x y) ord_lt → Equal Bool (leq y x) False =
   match compare_bool_cases (leq x y) {
@@ -598,12 +598,12 @@ fn compare_lt_reverse_false_raw (a : Type) (leq : a → a → Bool)
       absurd (J (λb _. Equal OrdResult (compare_result_of b (leq y x)) ord_lt) p hxy)
   }
 
-fn bool_or_left_false_elim (a : Bool) (b : Bool)
+lemma bool_or_left_false_elim (a : Bool) (b : Bool)
   (ha : Equal Bool a False) (hor : Equal Bool (bool_or a b) True)
   : Equal Bool b True =
   J (λw _. Equal Bool (bool_or w b) True) hor ha
 
-fn compare_gt_sound_raw_first_true (a : Type) (leq : a → a → Bool)
+lemma compare_gt_sound_raw_first_true (a : Type) (leq : a → a → Bool)
   (x : a) (y : a)
   (choice : Or (Equal Bool (leq y x) True) (Equal Bool (leq y x) False))
   : Equal OrdResult (compare_second_result (leq y x)) ord_gt → Equal Bool (leq y x) True =
@@ -613,7 +613,7 @@ fn compare_gt_sound_raw_first_true (a : Type) (leq : a → a → Bool)
       absurd (J (λb _. Equal OrdResult (compare_second_result b) ord_gt) p hyx)
   }
 
-fn compare_gt_sound_raw (a : Type) (leq : a → a → Bool)
+lemma compare_gt_sound_raw (a : Type) (leq : a → a → Bool)
   (total_law : (x : a) → (y : a) → Equal Bool (bool_or (leq x y) (leq y x)) True)
   (x : a) (y : a)
   : Equal OrdResult (compare_raw a leq x y) ord_gt → Equal Bool (leq y x) True =
@@ -626,19 +626,19 @@ fn compare_gt_sound_raw (a : Type) (leq : a → a → Bool)
       bool_or_left_false_elim (leq x y) (leq y x) hxy (total_law x y)
   }
 
-fn compare_second_result_not_gt (b : Bool)
+lemma compare_second_result_not_gt (b : Bool)
   (p : Equal OrdResult (compare_second_result b) ord_gt) : Bottom =
   match compare_bool_cases b {
     Inl h ⇒ absurd (J (λc _. Equal OrdResult (compare_second_result c) ord_gt) p h) ;
     Inr h ⇒ absurd (J (λc _. Equal OrdResult (compare_second_result c) ord_gt) p h)
   }
 
-fn compare_gt_forward_false_when_true (a : Type) (leq : a → a → Bool)
+lemma compare_gt_forward_false_when_true (a : Type) (leq : a → a → Bool)
   (x : a) (y : a)
   : Equal OrdResult (compare_result_of True (leq y x)) ord_gt → Equal Bool (leq x y) False =
   λp. absurd (compare_second_result_not_gt (leq y x) p)
 
-fn compare_gt_forward_false_raw (a : Type) (leq : a → a → Bool)
+lemma compare_gt_forward_false_raw (a : Type) (leq : a → a → Bool)
   (x : a) (y : a)
   : Equal OrdResult (compare_raw a leq x y) ord_gt → Equal Bool (leq x y) False =
   match compare_bool_cases (leq x y) {
@@ -649,7 +649,7 @@ fn compare_gt_forward_false_raw (a : Type) (leq : a → a → Bool)
     Inr hxy ⇒ λp. hxy
   }
 
-fn compare_leq_sound_raw (a : Type) (leq : a → a → Bool)
+lemma compare_leq_sound_raw (a : Type) (leq : a → a → Bool)
   (x : a) (y : a)
   : IsTrue (ord_result_leq (compare_raw a leq x y)) →
     Equal Bool (leq x y) True =
@@ -661,20 +661,20 @@ fn compare_leq_sound_raw (a : Type) (leq : a → a → Bool)
           p hxy)
   }
 
-fn compare_leq_complete_when_true (a : Type) (leq : a → a → Bool)
+lemma compare_leq_complete_when_true (a : Type) (leq : a → a → Bool)
   (x : a) (y : a)
   (choice : Or (Equal Bool (leq y x) True) (Equal Bool (leq y x) False))
   : IsTrue (ord_result_leq (compare_result_of True (leq y x))) =
   match choice {
     Inl hyx ⇒
-      J (λb _. IsTrue (ord_result_leq (compare_second_result b))) tt
+      J (λb _. IsTrue (ord_result_leq (compare_second_result b))) Proved
         (sym Bool (leq y x) True hyx) ;
     Inr hyx ⇒
-      J (λb _. IsTrue (ord_result_leq (compare_second_result b))) tt
+      J (λb _. IsTrue (ord_result_leq (compare_second_result b))) Proved
         (sym Bool (leq y x) False hyx)
   }
 
-fn compare_leq_complete_raw (a : Type) (leq : a → a → Bool)
+lemma compare_leq_complete_raw (a : Type) (leq : a → a → Bool)
   (x : a) (y : a) (hxy : Equal Bool (leq x y) True)
   : IsTrue (ord_result_leq (compare_raw a leq x y)) =
   J (λb _. IsTrue (ord_result_leq (compare_result_of b (leq y x))))
@@ -684,23 +684,23 @@ fn compare_leq_complete_raw (a : Type) (leq : a → a → Bool)
 fn ord_leq_at (a : Type) (d : Ord a) (x : a) (y : a) : Bool =
   d.leq x y
 
-fn ord_leq_true_of_equal (a : Type) (d : Ord a) (x : a) (y : a)
+lemma ord_leq_true_of_equal (a : Type) (d : Ord a) (x : a) (y : a)
   (p : Equal a x y) : Equal Bool (ord_leq_at a d x y) True =
   J (λy2 _. Equal Bool (ord_leq_at a d x y2) True) (d.refl x) p
 
-fn bool_true_false_absurd (z : Bool)
+lemma bool_true_false_absurd (z : Bool)
   (ht : Equal Bool z True) (hf : Equal Bool z False) : Bottom =
   absurd (J (λw _. Equal Bool w True) ht hf)
 
-fn bool_or_left_true_intro (x : Bool) (y : Bool)
+lemma bool_or_left_true_intro (x : Bool) (y : Bool)
   (hx : Equal Bool x True) : Equal Bool (bool_or x y) True =
-  J (λw _. Equal Bool (bool_or w y) True) tt
+  J (λw _. Equal Bool (bool_or w y) True) Proved
     (sym Bool x True hx)
 
-fn bool_or_right_true_intro (x : Bool) (y : Bool)
+lemma bool_or_right_true_intro (x : Bool) (y : Bool)
   (hy : Equal Bool y True) : Equal Bool (bool_or x y) True =
   match compare_bool_cases x {
-    Inl hx ⇒ J (λw _. Equal Bool (bool_or w y) True) tt
+    Inl hx ⇒ J (λw _. Equal Bool (bool_or w y) True) Proved
       (sym Bool x True hx) ;
     Inr hx ⇒ J (λw _. Equal Bool (bool_or w y) True) hy
       (sym Bool x False hx)
@@ -713,9 +713,9 @@ fn pair_ord_leq (a : Type) (b : Type) (da : Ord a) (db : Ord b)
       (compare a da) (compare b db)
       x y)
 
-fn pair_ord_refl (a : Type) (b : Type) (da : Ord a) (db : Ord b)
+lemma pair_ord_refl (a : Type) (b : Type) (da : Ord a) (db : Ord b)
   (x : Pair a b) : IsTrue (pair_ord_leq a b da db x x) =
-  J (λr _. IsTrue (ord_result_leq r)) tt
+  J (λr _. IsTrue (ord_result_leq r)) Proved
     (sym OrdResult
       (pair_compare a b (compare a da) (compare b db) x x)
       ord_eq
@@ -731,7 +731,7 @@ fn pair_ord_refl (a : Type) (b : Type) (da : Ord a) (db : Ord b)
         (db.refl (pair_snd a b x))
         (db.refl (pair_snd a b x)))))
 
-fn pair_ord_leq_transport_head (a : Type) (b : Type)
+lemma pair_ord_leq_transport_head (a : Type) (b : Type)
   (da : Ord a) (db : Ord b) (x : Pair a b) (y : Pair a b)
   (r : OrdResult)
   (p : Equal OrdResult
@@ -748,7 +748,7 @@ fn pair_ord_leq_transport_head (a : Type) (b : Type)
             (compare b db (pair_snd a b x) (pair_snd a b y)) q)))
     h p
 
-fn pair_ord_leq_untransport_head (a : Type) (b : Type)
+lemma pair_ord_leq_untransport_head (a : Type) (b : Type)
   (da : Ord a) (db : Ord b) (x : Pair a b) (y : Pair a b)
   (r : OrdResult)
   (p : Equal OrdResult
@@ -767,7 +767,7 @@ fn pair_ord_leq_untransport_head (a : Type) (b : Type)
     (sym OrdResult
       (compare a da (pair_fst a b x) (pair_fst a b y)) r p)
 
-fn pair_ord_head_sound (a : Type) (b : Type) (da : Ord a) (db : Ord b)
+lemma pair_ord_head_sound (a : Type) (b : Type) (da : Ord a) (db : Ord b)
   (x : Pair a b) (y : Pair a b)
   (h : IsTrue (pair_ord_leq a b da db x y))
   : Equal Bool
@@ -787,7 +787,7 @@ fn pair_ord_head_sound (a : Type) (b : Type) (da : Ord a) (db : Ord b)
     (λp. absurd (pair_ord_leq_transport_head a b da db x y ord_gt p h))
     Refl
 
-fn pair_ord_tail_sound (a : Type) (b : Type) (da : Ord a) (db : Ord b)
+lemma pair_ord_tail_sound (a : Type) (b : Type) (da : Ord a) (db : Ord b)
   (x : Pair a b) (y : Pair a b)
   (hyx : Equal Bool
     (ord_leq_at a da (pair_fst a b y) (pair_fst a b x)) True)
@@ -813,7 +813,7 @@ fn pair_ord_tail_sound (a : Type) (b : Type) (da : Ord a) (db : Ord b)
     (λp. absurd (pair_ord_leq_transport_head a b da db x y ord_gt p h))
     Refl
 
-fn pair_ord_complete_head_strict (a : Type) (b : Type)
+lemma pair_ord_complete_head_strict (a : Type) (b : Type)
   (da : Ord a) (db : Ord b) (x : Pair a b) (y : Pair a b)
   (hxy : Equal Bool
     (ord_leq_at a da (pair_fst a b x) (pair_fst a b y)) True)
@@ -826,7 +826,7 @@ fn pair_ord_complete_head_strict (a : Type) (b : Type)
         (compare a da (pair_fst a b x) (pair_fst a b y)) r →
       IsTrue (pair_ord_leq a b da db x y))
     (compare a da (pair_fst a b x) (pair_fst a b y))
-    (λp. pair_ord_leq_untransport_head a b da db x y ord_lt p tt)
+    (λp. pair_ord_leq_untransport_head a b da db x y ord_lt p Proved)
     (λp. absurd
       (bool_true_false_absurd
         (ord_leq_at a da (pair_fst a b y) (pair_fst a b x))
@@ -844,7 +844,7 @@ fn pair_ord_complete_head_strict (a : Type) (b : Type)
           (pair_fst a b x) (pair_fst a b y) p)))
     Refl
 
-fn pair_ord_complete_tail (a : Type) (b : Type)
+lemma pair_ord_complete_tail (a : Type) (b : Type)
   (da : Ord a) (db : Ord b) (x : Pair a b) (y : Pair a b)
   (hxy : Equal Bool
     (ord_leq_at a da (pair_fst a b x) (pair_fst a b y)) True)
@@ -859,7 +859,7 @@ fn pair_ord_complete_tail (a : Type) (b : Type)
         (compare a da (pair_fst a b x) (pair_fst a b y)) r →
       IsTrue (pair_ord_leq a b da db x y))
     (compare a da (pair_fst a b x) (pair_fst a b y))
-    (λp. pair_ord_leq_untransport_head a b da db x y ord_lt p tt)
+    (λp. pair_ord_leq_untransport_head a b da db x y ord_lt p Proved)
     (λp. pair_ord_leq_untransport_head a b da db x y ord_eq p
       (compare_leq_complete_raw b (db.leq)
         (pair_snd a b x) (pair_snd a b y) htail))
@@ -876,7 +876,7 @@ fn pair_deceq_eq (a : Type) (b : Type) (da : DecEq a) (db : DecEq b)
   bool_and (da.eq (pair_fst a b x) (pair_fst a b y))
            (db.eq (pair_snd a b x) (pair_snd a b y))
 
-fn pair_deceq_cong (a : Type) (b : Type)
+lemma pair_deceq_cong (a : Type) (b : Type)
   (x1 : a) (x2 : a) (y1 : b) (y2 : b)
   (p : Equal a x1 x2) (q : Equal b y1 y2)
   : Equal (Pair a b) (mk_pair a b x1 y1) (mk_pair a b x2 y2) =
@@ -884,28 +884,28 @@ fn pair_deceq_cong (a : Type) (b : Type)
     (cong b (Pair a b) y1 y2 (mk_pair a b x1) q)
     p
 
-fn compare_lt_lt_absurd (a : Type) (d : Ord a) (x : a) (y : a)
+lemma compare_lt_lt_absurd (a : Type) (d : Ord a) (x : a) (y : a)
   (hxy : Equal OrdResult (compare a d x y) ord_lt)
   (hyx : Equal OrdResult (compare a d y x) ord_lt) : Bottom =
   bool_true_false_absurd (ord_leq_at a d x y)
     (compare_lt_sound_raw a (d.leq) x y hxy)
     (compare_lt_reverse_false_raw a (d.leq) y x hyx)
 
-fn compare_lt_eq_absurd (a : Type) (d : Ord a) (x : a) (y : a)
+lemma compare_lt_eq_absurd (a : Type) (d : Ord a) (x : a) (y : a)
   (hxy : Equal OrdResult (compare a d x y) ord_lt)
   (hyx : Equal OrdResult (compare a d y x) ord_eq) : Bottom =
   bool_true_false_absurd (ord_leq_at a d y x)
     (ord_leq_true_of_equal a d y x (compare_eq_sound a d y x hyx))
     (compare_lt_reverse_false_raw a (d.leq) x y hxy)
 
-fn compare_eq_lt_absurd (a : Type) (d : Ord a) (x : a) (y : a)
+lemma compare_eq_lt_absurd (a : Type) (d : Ord a) (x : a) (y : a)
   (hxy : Equal OrdResult (compare a d x y) ord_eq)
   (hyx : Equal OrdResult (compare a d y x) ord_lt) : Bottom =
   bool_true_false_absurd (ord_leq_at a d x y)
     (ord_leq_true_of_equal a d x y (compare_eq_sound a d x y hxy))
     (compare_lt_reverse_false_raw a (d.leq) y x hyx)
 
-fn pair_ord_eq_sound (a : Type) (b : Type) (da : Ord a) (db : Ord b)
+lemma pair_ord_eq_sound (a : Type) (b : Type) (da : Ord a) (db : Ord b)
   (x : Pair a b) (y : Pair a b)
   (h : Equal OrdResult
     (pair_compare a b (compare a da) (compare b db) x y) ord_eq)
@@ -924,7 +924,7 @@ fn pair_ord_eq_sound (a : Type) (b : Type) (da : Ord a) (db : Ord b)
         (Equal OrdResult (compare b db (pair_snd a b x) (pair_snd a b y)) ord_eq)
         (pair_compare_eq_cases a b (compare a da) (compare b db) x y h)))
 
-fn pair_ord_lt_asym (a : Type) (b : Type) (da : Ord a) (db : Ord b)
+lemma pair_ord_lt_asym (a : Type) (b : Type) (da : Ord a) (db : Ord b)
   (x : Pair a b) (y : Pair a b)
   (hxy : Equal OrdResult
     (pair_compare a b (compare a da) (compare b db) x y) ord_lt)
@@ -965,7 +965,7 @@ fn pair_ord_lt_asym (a : Type) (b : Type) (da : Ord a) (db : Ord b)
       }
   }
 
-fn pair_ord_antisym (a : Type) (b : Type) (da : Ord a) (db : Ord b)
+lemma pair_ord_antisym (a : Type) (b : Type) (da : Ord a) (db : Ord b)
   (x : Pair a b) (y : Pair a b)
   : IsTrue (pair_ord_leq a b da db x y) →
     IsTrue (pair_ord_leq a b da db y x) →
@@ -992,7 +992,7 @@ fn pair_ord_antisym (a : Type) (b : Type) (da : Ord a) (db : Ord b)
     (λpx.λpy.λhx.λhy. absurd hx)
     Refl Refl
 
-fn pair_ord_trans_with_heads (a : Type) (b : Type)
+lemma pair_ord_trans_with_heads (a : Type) (b : Type)
   (da : Ord a) (db : Ord b)
   (x : Pair a b) (y : Pair a b) (z : Pair a b)
   (hxy : IsTrue (pair_ord_leq a b da db x y))
@@ -1023,7 +1023,7 @@ fn pair_ord_trans_with_heads (a : Type) (b : Type)
     Inr hazx ⇒ pair_ord_complete_head_strict a b da db x z haxz hazx
   }
 
-fn pair_ord_trans (a : Type) (b : Type) (da : Ord a) (db : Ord b)
+lemma pair_ord_trans (a : Type) (b : Type) (da : Ord a) (db : Ord b)
   (x : Pair a b) (y : Pair a b) (z : Pair a b)
   (hxy : IsTrue (pair_ord_leq a b da db x y))
   (hyz : IsTrue (pair_ord_leq a b da db y z))
@@ -1036,7 +1036,7 @@ fn pair_ord_trans (a : Type) (b : Type) (da : Ord a) (db : Ord b)
       (pair_ord_head_sound a b da db x y hxy)
       (pair_ord_head_sound a b da db y z hyz))
 
-fn pair_ord_total_head_both (a : Type) (b : Type)
+lemma pair_ord_total_head_both (a : Type) (b : Type)
   (da : Ord a) (db : Ord b) (x : Pair a b) (y : Pair a b)
   (haxy : Equal Bool
     (ord_leq_at a da (pair_fst a b x) (pair_fst a b y)) True)
@@ -1065,7 +1065,7 @@ fn pair_ord_total_head_both (a : Type) (b : Type)
             (db.total (pair_snd a b x) (pair_snd a b y))))
   }
 
-fn pair_ord_total_head_forward (a : Type) (b : Type)
+lemma pair_ord_total_head_forward (a : Type) (b : Type)
   (da : Ord a) (db : Ord b) (x : Pair a b) (y : Pair a b)
   (haxy : Equal Bool
     (ord_leq_at a da (pair_fst a b x) (pair_fst a b y)) True)
@@ -1083,7 +1083,7 @@ fn pair_ord_total_head_forward (a : Type) (b : Type)
         (pair_ord_complete_head_strict a b da db x y haxy hayx)
   }
 
-fn pair_ord_total (a : Type) (b : Type) (da : Ord a) (db : Ord b)
+lemma pair_ord_total (a : Type) (b : Type) (da : Ord a) (db : Ord b)
   (x : Pair a b) (y : Pair a b)
   : IsTrue
       (bool_or
@@ -1113,7 +1113,7 @@ instance Ord (Pair a b) where Ord a, Ord b {
   total   = pair_ord_total a b da db
 }
 
-fn pair_deceq_sound (a : Type) (b : Type) (da : DecEq a) (db : DecEq b)
+lemma pair_deceq_sound (a : Type) (b : Type) (da : DecEq a) (db : DecEq b)
   (x : Pair a b) (y : Pair a b)
   : IsTrue (pair_deceq_eq a b da db x y) → Equal (Pair a b) x y =
   λp.
@@ -1127,7 +1127,7 @@ fn pair_deceq_sound (a : Type) (b : Type) (da : DecEq a) (db : DecEq b)
         (bool_and_right (da.eq (pair_fst a b x) (pair_fst a b y))
           (db.eq (pair_snd a b x) (pair_snd a b y)) p))
 
-fn pair_deceq_complete (a : Type) (b : Type) (da : DecEq a) (db : DecEq b)
+lemma pair_deceq_complete (a : Type) (b : Type) (da : DecEq a) (db : DecEq b)
   (x : Pair a b) (y : Pair a b)
   : Equal (Pair a b) x y → IsTrue (pair_deceq_eq a b da db x y) =
   λp.
@@ -1154,20 +1154,20 @@ instance DecEq (Pair a b) where DecEq a, DecEq b {
 fn lex_result_leq (tail : OrdResult) (head : OrdResult) : Bool =
   ord_result_leq (pair_compare_result_of tail head)
 
-fn lex_transport_head (tail : OrdResult) (head : OrdResult)
+lemma lex_transport_head (tail : OrdResult) (head : OrdResult)
   (r : OrdResult) (p : Equal OrdResult head r)
   (h : IsTrue (lex_result_leq tail head))
   : IsTrue (lex_result_leq tail r) =
   J (λq _. IsTrue (lex_result_leq tail q)) h p
 
-fn lex_untransport_head (tail : OrdResult) (head : OrdResult)
+lemma lex_untransport_head (tail : OrdResult) (head : OrdResult)
   (r : OrdResult) (p : Equal OrdResult head r)
   (h : IsTrue (lex_result_leq tail r))
   : IsTrue (lex_result_leq tail head) =
   J (λq _. IsTrue (lex_result_leq tail q)) h
     (sym OrdResult head r p)
 
-fn lex_head_sound (a : Type) (d : Ord a) (x : a) (y : a)
+lemma lex_head_sound (a : Type) (d : Ord a) (x : a) (y : a)
   (tail : OrdResult)
   (h : IsTrue (lex_result_leq tail (compare a d x y)))
   : Equal Bool (ord_leq_at a d x y) True =
@@ -1181,7 +1181,7 @@ fn lex_head_sound (a : Type) (d : Ord a) (x : a) (y : a)
     (λp. absurd (lex_transport_head tail (compare a d x y) ord_gt p h))
     Refl
 
-fn lex_tail_sound (a : Type) (d : Ord a) (x : a) (y : a)
+lemma lex_tail_sound (a : Type) (d : Ord a) (x : a) (y : a)
   (tail : OrdResult)
   (hyx : Equal Bool (ord_leq_at a d y x) True)
   (h : IsTrue (lex_result_leq tail (compare a d x y)))
@@ -1197,7 +1197,7 @@ fn lex_tail_sound (a : Type) (d : Ord a) (x : a) (y : a)
     (λp. absurd (lex_transport_head tail (compare a d x y) ord_gt p h))
     Refl
 
-fn lex_complete_head_strict (a : Type) (d : Ord a) (x : a) (y : a)
+lemma lex_complete_head_strict (a : Type) (d : Ord a) (x : a) (y : a)
   (tail : OrdResult)
   (hxy : Equal Bool (ord_leq_at a d x y) True)
   (hyx : Equal Bool (ord_leq_at a d y x) False)
@@ -1206,7 +1206,7 @@ fn lex_complete_head_strict (a : Type) (d : Ord a) (x : a) (y : a)
     (λr. Equal OrdResult (compare a d x y) r →
       IsTrue (lex_result_leq tail (compare a d x y)))
     (compare a d x y)
-    (λp. lex_untransport_head tail (compare a d x y) ord_lt p tt)
+    (λp. lex_untransport_head tail (compare a d x y) ord_lt p Proved)
     (λp. absurd
       (bool_true_false_absurd (ord_leq_at a d y x)
         (ord_leq_true_of_equal a d y x
@@ -1217,7 +1217,7 @@ fn lex_complete_head_strict (a : Type) (d : Ord a) (x : a) (y : a)
         (compare_gt_forward_false_raw a (d.leq) x y p)))
     Refl
 
-fn lex_complete_tail (a : Type) (d : Ord a) (x : a) (y : a)
+lemma lex_complete_tail (a : Type) (d : Ord a) (x : a) (y : a)
   (tail : OrdResult)
   (hxy : Equal Bool (ord_leq_at a d x y) True)
   (hyx : Equal Bool (ord_leq_at a d y x) True)
@@ -1227,7 +1227,7 @@ fn lex_complete_tail (a : Type) (d : Ord a) (x : a) (y : a)
     (λr. Equal OrdResult (compare a d x y) r →
       IsTrue (lex_result_leq tail (compare a d x y)))
     (compare a d x y)
-    (λp. lex_untransport_head tail (compare a d x y) ord_lt p tt)
+    (λp. lex_untransport_head tail (compare a d x y) ord_lt p Proved)
     (λp. lex_untransport_head tail (compare a d x y) ord_eq p htail)
     (λp. absurd
       (bool_true_false_absurd (ord_leq_at a d x y) hxy
@@ -1238,17 +1238,17 @@ fn list_ord_leq (a : Type) (d : Ord a)
   (xs : List a) (ys : List a) : Bool =
   ord_result_leq (list_compare a (compare a d) xs ys)
 
-fn list_ord_refl (a : Type) (d : Ord a)
+lemma list_ord_refl (a : Type) (d : Ord a)
   (xs : List a) : IsTrue (list_ord_leq a d xs xs) =
   match xs {
-    Nil ⇒ tt ;
+    Nil ⇒ Proved ;
     Cons x xs2 ⇒
       lex_complete_tail a d x x
         (list_compare a (compare a d) xs2 xs2)
         (d.refl x) (d.refl x) (list_ord_refl a d xs2)
   }
 
-fn list_ord_cons_cong (a : Type)
+lemma list_ord_cons_cong (a : Type)
   (x : a) (y : a) (xs : List a) (ys : List a)
   (ph : Equal a x y) (pt : Equal (List a) xs ys)
   : Equal (List a) (Cons a x xs) (Cons a y ys) =
@@ -1256,14 +1256,14 @@ fn list_ord_cons_cong (a : Type)
     (cong (List a) (List a) xs ys (Cons a x) pt)
     ph
 
-fn list_ord_antisym (a : Type) (d : Ord a)
+lemma list_ord_antisym (a : Type) (d : Ord a)
   (xs : List a) : (ys : List a) →
     IsTrue (list_ord_leq a d xs ys) →
     IsTrue (list_ord_leq a d ys xs) →
     Equal (List a) xs ys =
   match xs {
     Nil ⇒ λys. match ys {
-      Nil ⇒ λhxy.λhyx. tt ;
+      Nil ⇒ λhxy.λhyx. Proved ;
       Cons y ys2 ⇒ λhxy.λhyx. absurd hyx
     } ;
     Cons x xs2 ⇒ λys. match ys {
@@ -1289,7 +1289,7 @@ fn list_ord_antisym (a : Type) (d : Ord a)
     }
   }
 
-fn list_ord_trans_cons (a : Type) (d : Ord a)
+lemma list_ord_trans_cons (a : Type) (d : Ord a)
   (x : a) (xs : List a) (y : a) (ys : List a)
   (z : a) (zs : List a)
   (ih : (ys2 : List a) → (zs2 : List a) →
@@ -1318,15 +1318,15 @@ fn list_ord_trans_cons (a : Type) (d : Ord a)
         (list_compare a (compare a d) xs zs) haxz hazx
   }
 
-fn list_ord_trans (a : Type) (d : Ord a)
+lemma list_ord_trans (a : Type) (d : Ord a)
   (xs : List a) : (ys : List a) → (zs : List a) →
     IsTrue (list_ord_leq a d xs ys) →
     IsTrue (list_ord_leq a d ys zs) →
     IsTrue (list_ord_leq a d xs zs) =
   match xs {
     Nil ⇒ λys.λzs. match zs {
-      Nil ⇒ λhxy.λhyz. tt ;
-      Cons z zs2 ⇒ λhxy.λhyz. tt
+      Nil ⇒ λhxy.λhyz. Proved ;
+      Cons z zs2 ⇒ λhxy.λhyz. Proved
     } ;
     Cons x xs2 ⇒ λys. match ys {
       Nil ⇒ λzs.λhxy.λhyz. absurd hxy ;
@@ -1348,7 +1348,7 @@ fn list_ord_trans (a : Type) (d : Ord a)
     }
   }
 
-fn list_ord_total_cons_head_both (a : Type) (d : Ord a)
+lemma list_ord_total_cons_head_both (a : Type) (d : Ord a)
   (x : a) (xs : List a) (y : a) (ys : List a)
   (ih : IsTrue
     (bool_or (list_ord_leq a d xs ys) (list_ord_leq a d ys xs)))
@@ -1376,7 +1376,7 @@ fn list_ord_total_cons_head_both (a : Type) (d : Ord a)
             htxy ih))
   }
 
-fn list_ord_total_cons_head_forward (a : Type) (d : Ord a)
+lemma list_ord_total_cons_head_forward (a : Type) (d : Ord a)
   (x : a) (xs : List a) (y : a) (ys : List a)
   (ih : IsTrue
     (bool_or (list_ord_leq a d xs ys) (list_ord_leq a d ys xs)))
@@ -1395,7 +1395,7 @@ fn list_ord_total_cons_head_forward (a : Type) (d : Ord a)
           (list_compare a (compare a d) xs ys) hxy hyx)
   }
 
-fn list_ord_total_cons (a : Type) (d : Ord a)
+lemma list_ord_total_cons (a : Type) (d : Ord a)
   (x : a) (xs : List a) (y : a) (ys : List a)
   (ih : IsTrue
     (bool_or (list_ord_leq a d xs ys) (list_ord_leq a d ys xs)))
@@ -1417,22 +1417,22 @@ fn list_ord_total_cons (a : Type) (d : Ord a)
           hxy)
   }
 
-fn list_ord_total (a : Type) (d : Ord a)
+lemma list_ord_total (a : Type) (d : Ord a)
   (xs : List a) : (ys : List a) →
     IsTrue (bool_or (list_ord_leq a d xs ys) (list_ord_leq a d ys xs)) =
   match xs {
     Nil ⇒ λys. match ys {
       Nil ⇒ bool_or_left_true_intro
         (list_ord_leq a d (Nil a) (Nil a))
-        (list_ord_leq a d (Nil a) (Nil a)) tt ;
+        (list_ord_leq a d (Nil a) (Nil a)) Proved ;
       Cons y ys2 ⇒ bool_or_left_true_intro
         (list_ord_leq a d (Nil a) (Cons a y ys2))
-        (list_ord_leq a d (Cons a y ys2) (Nil a)) tt
+        (list_ord_leq a d (Cons a y ys2) (Nil a)) Proved
     } ;
     Cons x xs2 ⇒ λys. match ys {
       Nil ⇒ bool_or_right_true_intro
         (list_ord_leq a d (Cons a x xs2) (Nil a))
-        (list_ord_leq a d (Nil a) (Cons a x xs2)) tt ;
+        (list_ord_leq a d (Nil a) (Cons a x xs2)) Proved ;
       Cons y ys2 ⇒ list_ord_total_cons a d x xs2 y ys2
         (list_ord_total a d xs2 ys2)
     }
@@ -1456,7 +1456,7 @@ fn list_deceq_cons_result (a : Type) (da : DecEq a) (xs : List a) (ys : List a)
   (b : Bool) : Prop =
   IsTrue (match b { True ⇒ list_eq a da.eq xs ys ; False ⇒ False })
 
-fn list_deceq_sound_cons (a : Type) (da : DecEq a)
+lemma list_deceq_sound_cons (a : Type) (da : DecEq a)
   (x : a) (xs : List a) (y : a) (ys : List a)
   (ih : (ys : List a) → IsTrue (list_deceq_eq a da xs ys) → Equal (List a) xs ys)
   : list_deceq_cons_result a da xs ys (list_deceq_head_eq a da x y)
@@ -1469,7 +1469,7 @@ fn list_deceq_sound_cons (a : Type) (da : DecEq a)
     False ⇒ λp. absurd p
   }
 
-fn list_deceq_complete_cons (a : Type) (da : DecEq a)
+lemma list_deceq_complete_cons (a : Type) (da : DecEq a)
   (x : a) (xs : List a) (y : a) (ys : List a)
   (head_true : IsTrue (list_deceq_head_eq a da x y))
   (tail_true : IsTrue (list_deceq_eq a da xs ys))
@@ -1478,11 +1478,11 @@ fn list_deceq_complete_cons (a : Type) (da : DecEq a)
     tail_true
     (sym Bool (list_deceq_head_eq a da x y) True head_true)
 
-fn list_deceq_sound (a : Type) (da : DecEq a)
+lemma list_deceq_sound (a : Type) (da : DecEq a)
   (xs : List a) : (ys : List a) → IsTrue (list_deceq_eq a da xs ys) → Equal (List a) xs ys =
   match xs {
     Nil ⇒ λys. match ys {
-      Nil ⇒ λp. tt ;
+      Nil ⇒ λp. Proved ;
       Cons y ys2 ⇒ λp. absurd p
     } ;
     Cons x xs2 ⇒ λys. match ys {
@@ -1492,11 +1492,11 @@ fn list_deceq_sound (a : Type) (da : DecEq a)
     }
   }
 
-fn list_deceq_complete_nil (a : Type) (da : DecEq a)
+lemma list_deceq_complete_nil (a : Type) (da : DecEq a)
   : IsTrue (list_deceq_eq a da (Nil a) (Nil a)) =
-  tt
+  Proved
 
-fn list_deceq_complete_refl_cons (a : Type) (da : DecEq a)
+lemma list_deceq_complete_refl_cons (a : Type) (da : DecEq a)
   (x : a) (xs : List a)
   (ih : IsTrue (list_deceq_eq a da xs xs))
   : IsTrue (list_deceq_eq a da (Cons a x xs) (Cons a x xs)) =
@@ -1504,7 +1504,7 @@ fn list_deceq_complete_refl_cons (a : Type) (da : DecEq a)
     (da.complete x x Refl)
     ih
 
-fn list_deceq_complete_refl (a : Type) (da : DecEq a)
+lemma list_deceq_complete_refl (a : Type) (da : DecEq a)
   (xs : List a) : IsTrue (list_deceq_eq a da xs xs) =
   match xs {
     Nil ⇒ list_deceq_complete_nil a da ;
@@ -1512,7 +1512,7 @@ fn list_deceq_complete_refl (a : Type) (da : DecEq a)
       (list_deceq_complete_refl a da xs2)
   }
 
-fn list_deceq_complete (a : Type) (da : DecEq a)
+lemma list_deceq_complete (a : Type) (da : DecEq a)
   (xs : List a) : (ys : List a) → Equal (List a) xs ys → IsTrue (list_deceq_eq a da xs ys) =
   λys.λp.
     J (λys' _. IsTrue (list_deceq_eq a da xs ys'))
@@ -1559,7 +1559,7 @@ lands.
 already use. Case-splitting `x` then `y` down to concrete constructors makes
 `bool_eq`'s application a REDEX that K7 whnfs before the constructor-head
 check — each of the 4 (`sym`)/8 (`trans`) branches then independently closes
-with `tt` (both sides reduce to the same literal) or `absurd` (a hypothesis
+with `Proved` (both sides reduce to the same literal) or `absurd` (a hypothesis
 reduces to `Bottom`). The swap-congruence K6 would have supplied is never
 exercised — no branch reuses a hypothesis across a swap; each computes its
 own concrete answer. Zero `conv.rs` diff, zero new capability,
@@ -1656,7 +1656,7 @@ Ken-native; no external reference implementation informed its source.
    | See the three classes | [Definition](#2-definition) |
    | Project a field off a dictionary | [Using it](#3-using-it) |
    | Audit the `Int`, `Bool`, or `Char` proof family | [Laws & proofs](#4-laws--proofs) |
-   | The `tt`-vs-`Refl`/K7 story, the restructuring discipline | [Laws & proofs](#4-laws--proofs) |
+   | The `Proved`-vs-`Refl`/K7 story, the restructuring discipline | [Laws & proofs](#4-laws--proofs) |
    | Why `Eq Bool`/`Ord Char` needed the fixes they did | [Design notes](#5-design-notes) |
    | Check assumptions, consumers, and validation evidence | [Trust & derivation](#8-trust--derivation) |
 
@@ -1672,7 +1672,7 @@ Ken-native; no external reference implementation informed its source.
    1) — `DecEq Int`'s `sound`/`complete` reference the certificate directly;
    `Eq Int`'s `refl`/`sym`/`trans` are real `J`-derived proofs built FROM
    it, no postulate of their own. `Bool` instances are real
-   `elim_Bool`-into-`Omega` case-split proofs (K4), using `tt`/`absurd` (K5)
+   `elim_Bool`-into-`Omega` case-split proofs (K4), using `Proved`/`absurd` (K5)
    over operation-wrapped equations that require K7's operand-whnf to
    collapse. `Ord Char`/`DecEq Char` transport every field via
    `.`-projection off `Ord_instance_Int`/`DecEq_instance_Int`.
@@ -1695,7 +1695,7 @@ Ken-native; no external reference implementation informed its source.
    `Axiom`s / `DecEq Int`'s certificate reference via projection.
 6. **Proof families.** `Bool` instances: full case-split on every
    quantified variable (`x`, `y`, and for `trans`, `z`), 4–8 branches per
-   law field depending on arity, each closing with `tt` (collapsed-`Top`
+   law field depending on arity, each closing with `Proved` (collapsed-`Top`
    branches) or `absurd` (collapsed-`Bottom`, contradictory branches) —
    `§4`'s restructuring discipline is why each hypothesis stays reusable
    at binder time. `Eq Int`: `J`-eliminator composition over `Equal Int`,
