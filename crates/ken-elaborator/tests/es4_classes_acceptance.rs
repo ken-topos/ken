@@ -85,9 +85,14 @@ use ken_kernel::Term;
 
 const LAWFUL_CLASSES_KEN_MD: &str =
     include_str!("../../../catalog/packages/Core/LawfulClasses.ken.md");
+const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Transport.ken.md");
+const COLLECTIONS_KEN_MD: &str =
+    include_str!("../../../catalog/packages/Data/Collections/Collections.ken.md");
 
 fn mk_env_with_package() -> ElabEnv {
     let mut env = ElabEnv::new().expect("base env construction failed");
+    env.elaborate_ken_md_file(TRANSPORT_KEN_MD).expect("catalog/packages/Core/Transport.ken must elaborate");
+    env.elaborate_ken_md_file(COLLECTIONS_KEN_MD).expect("catalog/packages/Data/Collections/Collections.ken must elaborate");
     env.elaborate_ken_md_file(LAWFUL_CLASSES_KEN_MD).expect("catalog/packages/Core/LawfulClasses.ken must elaborate");
     env
 }
@@ -608,8 +613,8 @@ fn where_ord_supplies_same_comparator_as_explicit_form() {
     // (a) explicit comparator form (ES2-remainder's landed shape).
     let explicit_id = env
         .elaborate_decl(
-            "fn sortObligationExplicit (leq : Int -> Int -> Bool) (ys : List Int) (xs : List Int) : Prop = \
-             And (is_sorted Int leq ys) (Perm Int ys xs)",
+            "fn sortObligationExplicit (cmp : Int -> Int -> Bool) (ys : List Int) (xs : List Int) : Prop = \
+             And (is_sorted Int cmp ys) (Perm Int cmp ys xs)",
         )
         .expect("explicit-comparator obligation elaborates");
 
@@ -618,12 +623,12 @@ fn where_ord_supplies_same_comparator_as_explicit_form() {
     let via_dict_id = env
         .elaborate_decl(
             "fn sortObligationViaDict (ys : List Int) (xs : List Int) : Prop where Ord Int = \
-             And (is_sorted Int (d.leq) ys) (Perm Int ys xs)",
+             And (is_sorted Int (d.leq) ys) (Perm Int (d.leq) ys xs)",
         )
         .expect("`where Ord Int` obligation elaborates — d.leq must project the resolved dictionary's leq field");
 
     // Discriminating: both must produce a body of the SAME STRUCTURAL shape
-    // (`And (is_sorted Int <cmp> ys) (Perm Int ys xs)`) — not merely "both
+    // (`And (is_sorted Int <cmp> ys) (Perm Int <cmp> ys xs)`) — not merely "both
     // type-check". Peel the two param-lambdas (leq/none, ys, xs) down to the
     // inner body and compare modulo the substituted comparator.
     let (_, explicit_body) = env.env.transparent_body(explicit_id).unwrap();

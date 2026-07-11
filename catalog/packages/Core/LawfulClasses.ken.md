@@ -452,6 +452,191 @@ instance DecEq Char {
 }
 ```
 
+### 4.5 Structural `DecEq` liftings for `Pair` and `List`
+
+`Pair` and `List` are prelude carriers, so their canonical `DecEq` instances
+home with the `DecEq` class. Both lift the supplied element dictionaries
+directly: their comparisons remain neutral at abstract elements, and their
+proofs therefore route through the supplied `sound` and `complete` fields
+rather than treating a dictionary operation as if it reduced by itself.
+
+```ken
+fn bool_and (a : Bool) (b : Bool) : Bool =
+  match a { True ⇒ b ; False ⇒ False }
+
+fn bool_and_intro (a : Bool) (b : Bool)
+  : IsTrue a → IsTrue b → IsTrue (bool_and a b) =
+  match a {
+    True ⇒ λha.λhb. hb ;
+    False ⇒ λha.λhb. absurd ha
+  }
+
+fn bool_and_left (a : Bool) (b : Bool)
+  : IsTrue (bool_and a b) → IsTrue a =
+  match a {
+    True ⇒ λh. tt ;
+    False ⇒ λh. absurd h
+  }
+
+fn bool_and_right (a : Bool) (b : Bool)
+  : IsTrue (bool_and a b) → IsTrue b =
+  match a {
+    True ⇒ λh. h ;
+    False ⇒ λh. absurd h
+  }
+
+fn bool_dichotomy (b : Bool) : Or (Equal Bool b True) (Equal Bool b False) =
+  match b {
+    True ⇒ Inl (Equal Bool True True) (Equal Bool True False) tt ;
+    False ⇒ Inr (Equal Bool False True) (Equal Bool False False) tt
+  }
+
+fn pair_deceq_eq (a : Type) (b : Type) (da : DecEq a) (db : DecEq b)
+  (x : Pair a b) (y : Pair a b) : Bool =
+  bool_and (da.eq (pair_fst a b x) (pair_fst a b y))
+           (db.eq (pair_snd a b x) (pair_snd a b y))
+
+fn pair_deceq_cong (a : Type) (b : Type)
+  (x1 : a) (x2 : a) (y1 : b) (y2 : b)
+  (p : Equal a x1 x2) (q : Equal b y1 y2)
+  : Equal (Pair a b) (mk_pair a b x1 y1) (mk_pair a b x2 y2) =
+  J (λx2' _. Equal (Pair a b) (mk_pair a b x1 y1) (mk_pair a b x2' y2))
+    (cong b (Pair a b) y1 y2 (mk_pair a b x1) q)
+    p
+
+fn pair_deceq_sound (a : Type) (b : Type) (da : DecEq a) (db : DecEq b)
+  (x : Pair a b) (y : Pair a b)
+  : IsTrue (pair_deceq_eq a b da db x y) → Equal (Pair a b) x y =
+  λp.
+    pair_deceq_cong a b
+      (pair_fst a b x) (pair_fst a b y)
+      (pair_snd a b x) (pair_snd a b y)
+      (da.sound (pair_fst a b x) (pair_fst a b y)
+        (bool_and_left (da.eq (pair_fst a b x) (pair_fst a b y))
+          (db.eq (pair_snd a b x) (pair_snd a b y)) p))
+      (db.sound (pair_snd a b x) (pair_snd a b y)
+        (bool_and_right (da.eq (pair_fst a b x) (pair_fst a b y))
+          (db.eq (pair_snd a b x) (pair_snd a b y)) p))
+
+fn pair_deceq_complete (a : Type) (b : Type) (da : DecEq a) (db : DecEq b)
+  (x : Pair a b) (y : Pair a b)
+  : Equal (Pair a b) x y → IsTrue (pair_deceq_eq a b da db x y) =
+  λp.
+    bool_and_intro
+      (da.eq (pair_fst a b x) (pair_fst a b y))
+      (db.eq (pair_snd a b x) (pair_snd a b y))
+      (da.complete (pair_fst a b x) (pair_fst a b y)
+        (and_fst
+          (Equal a (pair_fst a b x) (pair_fst a b y))
+          (Equal b (pair_snd a b x) (pair_snd a b y))
+          p))
+      (db.complete (pair_snd a b x) (pair_snd a b y)
+        (and_snd
+          (Equal a (pair_fst a b x) (pair_fst a b y))
+          (Equal b (pair_snd a b x) (pair_snd a b y))
+          p))
+
+instance DecEq (Pair a b) where DecEq a, DecEq b {
+  eq       = pair_deceq_eq a b da db ;
+  sound    = pair_deceq_sound a b da db ;
+  complete = pair_deceq_complete a b da db
+}
+
+fn list_deceq_eq (a : Type) (da : DecEq a) (xs : List a) (ys : List a) : Bool =
+  list_eq a da.eq xs ys
+
+fn list_deceq_head_eq (a : Type) (da : DecEq a) (x : a) (y : a) : Bool =
+  da.eq x y
+
+fn list_deceq_sound_cons_true (a : Type) (da : DecEq a)
+  (x : a) (xs : List a) (y : a) (ys : List a)
+  (ih : (ys : List a) → IsTrue (list_deceq_eq a da xs ys) → Equal (List a) xs ys)
+  (peq : Equal Bool (list_deceq_head_eq a da x y) True)
+  (h : IsTrue (list_deceq_eq a da (Cons a x xs) (Cons a y ys)))
+  : Equal (List a) (Cons a x xs) (Cons a y ys) =
+  J (λy' _. Equal (List a) (Cons a x xs) (Cons a y' ys))
+    (cong (List a) (List a) xs ys (Cons a x)
+      (ih ys
+        (J (λb _. IsTrue (match b { True ⇒ list_eq a da.eq xs ys ; False ⇒ False })) h peq)))
+    (da.sound x y peq)
+
+fn list_deceq_sound_cons_false (a : Type) (da : DecEq a)
+  (x : a) (xs : List a) (y : a) (ys : List a)
+  (qeq : Equal Bool (list_deceq_head_eq a da x y) False)
+  (h : IsTrue (list_deceq_eq a da (Cons a x xs) (Cons a y ys)))
+  : Equal (List a) (Cons a x xs) (Cons a y ys) =
+  absurd
+    (J (λb _. IsTrue (match b { True ⇒ list_eq a da.eq xs ys ; False ⇒ False })) h qeq)
+
+fn list_deceq_sound_cons_dispatch (a : Type) (da : DecEq a)
+  (x : a) (xs : List a) (y : a) (ys : List a)
+  (ih : (ys : List a) → IsTrue (list_deceq_eq a da xs ys) → Equal (List a) xs ys)
+  (h : IsTrue (list_deceq_eq a da (Cons a x xs) (Cons a y ys)))
+  (choice : Or (Equal Bool (list_deceq_head_eq a da x y) True) (Equal Bool (list_deceq_head_eq a da x y) False))
+  : Equal (List a) (Cons a x xs) (Cons a y ys) =
+  match choice {
+    Inl peq ⇒ list_deceq_sound_cons_true a da x xs y ys ih peq h ;
+    Inr qeq ⇒ list_deceq_sound_cons_false a da x xs y ys qeq h
+  }
+
+fn list_deceq_complete_cons (a : Type) (da : DecEq a)
+  (x : a) (xs : List a) (y : a) (ys : List a)
+  (head_true : IsTrue (list_deceq_head_eq a da x y))
+  (tail_true : IsTrue (list_deceq_eq a da xs ys))
+  : IsTrue (list_deceq_eq a da (Cons a x xs) (Cons a y ys)) =
+  J (λb _. IsTrue (match b { True ⇒ list_eq a da.eq xs ys ; False ⇒ False }))
+    tail_true
+    (sym Bool (list_deceq_head_eq a da x y) True head_true)
+
+fn list_deceq_sound (a : Type) (da : DecEq a)
+  (xs : List a) : (ys : List a) → IsTrue (list_deceq_eq a da xs ys) → Equal (List a) xs ys =
+  match xs {
+    Nil ⇒ λys. match ys {
+      Nil ⇒ λp. tt ;
+      Cons y ys2 ⇒ λp. absurd p
+    } ;
+    Cons x xs2 ⇒ λys. match ys {
+      Nil ⇒ λp. absurd p ;
+      Cons y ys2 ⇒ λp.
+        list_deceq_sound_cons_dispatch a da x xs2 y ys2 (list_deceq_sound a da xs2) p
+          (bool_dichotomy (da.eq x y))
+    }
+  }
+
+fn list_deceq_complete_nil (a : Type) (da : DecEq a)
+  : IsTrue (list_deceq_eq a da (Nil a) (Nil a)) =
+  tt
+
+fn list_deceq_complete_refl_cons (a : Type) (da : DecEq a)
+  (x : a) (xs : List a)
+  (ih : IsTrue (list_deceq_eq a da xs xs))
+  : IsTrue (list_deceq_eq a da (Cons a x xs) (Cons a x xs)) =
+  list_deceq_complete_cons a da x xs x xs
+    (da.complete x x Refl)
+    ih
+
+fn list_deceq_complete_refl (a : Type) (da : DecEq a)
+  (xs : List a) : IsTrue (list_deceq_eq a da xs xs) =
+  match xs {
+    Nil ⇒ list_deceq_complete_nil a da ;
+    Cons x xs2 ⇒ list_deceq_complete_refl_cons a da x xs2
+      (list_deceq_complete_refl a da xs2)
+  }
+
+fn list_deceq_complete (a : Type) (da : DecEq a)
+  (xs : List a) : (ys : List a) → Equal (List a) xs ys → IsTrue (list_deceq_eq a da xs ys) =
+  λys.λp.
+    J (λys' _. IsTrue (list_deceq_eq a da xs ys'))
+      (list_deceq_complete_refl a da xs)
+      p
+
+instance DecEq (List a) where DecEq a {
+  eq       = list_deceq_eq a da ;
+  sound    = list_deceq_sound a da ;
+  complete = list_deceq_complete a da
+}
+```
+
 ## 5. Design notes
 
 ### 5.1 Why `Eq Bool`'s `sym`/`trans` need a real correction, not only K7

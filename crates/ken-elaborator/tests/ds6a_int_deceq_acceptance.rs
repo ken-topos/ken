@@ -16,9 +16,16 @@ use ken_kernel::{check, whnf, KernelError};
 
 const LAWFUL_CLASSES_KEN_MD: &str =
     include_str!("../../../catalog/packages/Core/LawfulClasses.ken.md");
+const COLLECTIONS_KEN_MD: &str =
+    include_str!("../../../catalog/packages/Data/Collections/Collections.ken.md");
+const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Transport.ken.md");
 
 fn mk_env_with_package() -> ElabEnv {
     let mut env = ElabEnv::new().expect("base env construction failed");
+    env.elaborate_ken_md_file(TRANSPORT_KEN_MD)
+        .expect("catalog/packages/Core/Transport.ken must elaborate");
+    env.elaborate_ken_md_file(COLLECTIONS_KEN_MD)
+        .expect("catalog/packages/Data/Collections/Collections.ken must elaborate");
     env.elaborate_ken_md_file(LAWFUL_CLASSES_KEN_MD)
         .expect("catalog/packages/Core/LawfulClasses.ken must elaborate");
     env
