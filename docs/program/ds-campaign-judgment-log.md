@@ -734,8 +734,43 @@ the shape to the Architect ([[second-occurrence-of-idiom-is-a-language-feature-s
   soundness gate; the Architect gates the algorithm). NOT a prerequisite — the
   unbundled idiom routes around it. Frame to Kernel only if it keeps forcing
   unbundling across enough proofs to justify a trust-root change.
+- **[Language] type/class-vs-term/constructor namespace separation** — Ken has a
+  single flat `globals: HashMap<String, GlobalId>`, so `class Eq` (LawfulClasses:60)
+  **shadows** the `OrdResult` constructor `Eq` (Collections:74) for every
+  declaration loaded after it; no type-qualified constructor spelling
+  (`OrdResult.Eq`) exists (parser dotted-refs are module-qualification only).
+  **Occurrence #1**
+  (Architect `evt_3vygqece6p4ax`, concurs). Proper fix: separate namespaces
+  (Haskell-style — the `Eq` class and an `Eq` ctor coexist) **or** a type-qualified
+  constructor spelling — a Language/resolver WP, name-resolution-soundness-adjacent,
+  the Architect gates the algorithm. Reflect-don't-extend keeps compare-ord on the
+  zero-language fix (additive `const ord_eq/ord_lt/ord_gt : OrdResult` value aliases
+  in Collections before `class Eq`, consumed downward). Frame to Language if it
+  recurs.
+
+**Arc note — compare-ord as a language-surface stress test.** Brick 1 surfaced
+**three distinct gaps, every one routed around at the catalog level with zero
+kernel/language change** (parser `.field`-in-declared-type → unbundled interface; K6
+`conv_struct` Eq-operand congruence → raw-`leq` params; flat-namespace collision →
+value aliases). This is the reflect-don't-extend discipline working as intended — the
+outer-ring catalog exercises the language surface and each gap is met with a local,
+zero-TCB idiom, not a mid-WP kernel/parser patch. All three are tracked candidates,
+none blocking; the pattern to watch is whether any recurs enough to justify its
+lane's WP (Kernel for K6, Language for the modifier-unfold and the namespace split).
 
 ### Coordination faults (this window)
+- **Foundation escalation #3 (`compare-ord` brick 1) was a branch-local
+  misattribution** — the implementer/leader escalated a full-catalog-load
+  `KernelRejected` as "raw law application is not admitted / capability
+  prerequisite"; the Architect **reproduced the exact declaration shape green** in
+  an isolated base env and localized it to a branch-only `class Eq`/`OrdResult.Eq`
+  namespace shadow. Escalations #1 (parser gap) and #2 (K6) were legitimate, so this
+  is not a crying-wolf pattern, and Foundation's refusal to paper atop a red probe is
+  correct discipline — **but the lesson stands: isolate/diff against a known-green
+  reference before attributing a red to a capability gap and pulling in the
+  Architect** (the most expensive unit). Watch for a 4th misattribution → then coach
+  isolate-before-escalate directly.
+- **foundation-implementer §10 retro DROPPED** on `message_type:"handoff"` then
 - **foundation-implementer §10 retro DROPPED** on `message_type:"handoff"` then
   `"retrospective"` (both 400 — closed enum); seat idle believing it posted. I
   **relayed it** (attributed) to close the ring. Every kickoff this window now
