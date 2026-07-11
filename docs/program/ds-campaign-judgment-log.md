@@ -698,19 +698,63 @@ the shape to the Architect ([[second-occurrence-of-idiom-is-a-language-feature-s
   ≥0.129 + one-time `/hooks` trust; activates per-seat on next session (re)start.
 - **Reversibility:** easy (additive config, revert-clean).
 
+### D6 · Brick-1 proof shape — UNBUNDLED raw-`leq` interface (Architect, folded)
+- **Call:** compare-ord brick 1's soundness lemmas land on the **unbundled
+  raw-`leq` + explicit-law-argument** interface (Architect `evt_7v4argg2kp0b`),
+  after two mid-flight rulings died on landed gaps: (a) the `.field`-in-declared-
+  type **parser** gap killed inline `d.leq` in types → named-accessor `ord_leq_of`
+  wrapper; (b) the K6 `conv_struct` **Eq-operand-congruence** gap (`LawfulClasses
+  :689–723`) then killed the accessor path too (`Eq Bool (ord_leq_of…) True` won't
+  δ-bridge to `Eq Bool (d.leq…) True`; both stuck neutrals, syntactically
+  distinct). The unbundled shape (soundness over a raw `leq` param + explicit law
+  args; the `Ord` forms thin δ-wrappers) sidesteps BOTH — every hypothesis + supplied
+  law shares the literal `leq` term. Explicit-`J` for the soundness lemmas;
+  `case_eq` only inside `compare_raw`'s own def. Theorems **unweakened** (raw form
+  is strictly more general; the dict `Ord` version is a strict instance).
+  Transcribed into the frame (brick 1 + AC1) — a stale "use `case_eq` for the
+  dispatch" line would misdirect a post-compaction pickup to rebuild the rejected
+  shape.
+- **Reversibility:** N/A (following the landed capability envelope).
+
+### Forward candidates (tracked; NOT compare-ord blockers — Architect-flagged)
+- **[Language] modifier whnf-unfold before generalize** — `check_match_dependent`
+  generalizes only *syntactic* scrutinee occurrences in the expected type; a
+  scrutinee behind a transparent wrapper (compare's `compare_with`) is missed, so
+  the `case_eq` sugar can't reach wrapper-soundness goals. **Occurrence #1** of the
+  modifier's transparent-wrapper limitation (Architect `evt_7v4argg2kp0b`). A future
+  Language item could whnf-unfold the expected type before generalizing (open design
+  Q: which/how-deep to unfold, over-generalization risk). Reflect-don't-extend: NOT
+  a mid-WP extension. Route to Architect when framed; **watch for occurrence #2.**
+- **[Kernel] K6 `conv_struct` positional Eq-operand congruence** —
+  `Eq Bool <neutral₁> True` won't δ-bridge to `Eq Bool <neutral₂> True` when the
+  neutrals are syntactically distinct (`LawfulClasses :689–723`). **Now forced
+  unbundling at ≥2 sites** (Ord Char documented it first; compare-ord brick 1 is the
+  2nd). Per the standing recurring-idiom directive this crosses the **#2 threshold**
+  → **tracked as a candidate Kernel WP** (trust-root: needs its own pseudocode/
+  soundness gate; the Architect gates the algorithm). NOT a prerequisite — the
+  unbundled idiom routes around it. Frame to Kernel only if it keeps forcing
+  unbundling across enough proofs to justify a trust-root change.
+
 ### Coordination faults (this window)
 - **foundation-implementer §10 retro DROPPED** on `message_type:"handoff"` then
   `"retrospective"` (both 400 — closed enum); seat idle believing it posted. I
   **relayed it** (attributed) to close the ring. Every kickoff this window now
   carries an explicit `message_type`-enum warning.
 
-### Run status / next triggers (event-driven)
-- **KICKED & MOVING:** Ergo (`case-eq-adoption` — leader kicked ring, qa at
-  review gate); Language (`def-path binder` — roused).
-- **PENDING kick:** Foundation Track A — frame on `main`; compact+kick once the
-  leader posts its coordination retro + signals "retros in" (implementer retro
-  relayed; qa in).
-- **Queued (not kicked):** Nat laws (frame TBD), DS-8c (framed) — Ergo serial,
-  after case_eq adoption.
+### Run status / next triggers (event-driven) — updated post-compact
+- **MERGED:** Language `def-path-constraint-binder-unification` (`main @ 41df4e62`);
+  ring §10 retros in (impl + qa posted). Enclave still holds the spec parity clause
+  (`32`/`33`) → CV verdict → `git_request`.
+- **KICKED & MOVING:** Ergo `case-eq-adoption` (79-site Map is the long pole; leader
+  active, qa gate armed). Foundation Track A `compare-ord-lexicographic` (bricks
+  1+3; brick-1 unbundled raw-`leq` shape ruled & transcribed — D6; qa gate armed,
+  awaiting impl SHA).
+- **Queued (framed, not kicked):** Nat laws (`main`, Ergo serial — queues behind
+  case-eq-adoption), DS-8c (Ergo serial, last).
+- **Next gate events:** Ergo case-eq-adoption `git_request`; Foundation bricks-1+3
+  `git_request`; Language spec-clause CV verdict → `git_request`. **Merge order:**
+  case-eq-adoption lands first; Track A rebases onto it (non-overlapping
+  LawfulClasses regions — new `Ord` instances section vs the `§4.5`
+  deceq-dispatch rewrite).
 - Watchdog armed (branch tips + main advances). **Formatter HELD.** Operator back
   ~11:00 UTC — this log is the review artifact.

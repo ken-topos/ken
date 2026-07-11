@@ -25,14 +25,32 @@ on the `Bool`/`OrdResult` comparisons — no new capability needed.
 
 ## Goal — three bricks, in order
 
-1. **Lawful generic `compare`.** A `compare` **derived from `Ord a`**
-   (`where Ord a`, resolving `{d : Ord a}`): `compare x y = Eq` when
-   `leq x y ∧ leq y x`, `Lt` when `leq x y ∧ ¬leq y x`, else `Gt` — reflecting
-   `OrdNat.ken.md:181`'s shape, generalized over the dictionary. Carry its
-   **soundness lemmas** relating `compare` to the order: at least
-   `compare x y = Eq → Equal a x y` (via `d.antisym`) and the `Lt`/`Gt` arms'
-   agreement with `leq` — the dependent case-analysis on the two stuck `leq`
-   `Bool`s is exactly the `case_eq` modifier's job (`match (d.leq x y) eqn: h …`).
+1. **Lawful generic `compare` — UNBUNDLED raw-`leq` core + thin `Ord` wrappers
+   (Architect ruling `evt_7v4argg2kp0b`, 2026-07-11 — the sanctioned shape;
+   supersedes the earlier dict-projection / `case_eq`-for-soundness reading).**
+   State the generic `compare_raw` **and its soundness lemmas over a raw
+   `leq : a → a → Bool` parameter + explicit law arguments** (`antisym_law`/
+   `trans_law`/… as ordinary `fn` parameters, never `d.leq`/dict projections):
+   `compare x y = Eq` when `leq x y ∧ leq y x`, `Lt` when `leq x y ∧ ¬leq y x`,
+   else `Gt` (reflecting `OrdNat.ken.md:181`). Public `Ord`-derived forms are
+   **thin wrappers** (`compare_with a d := compare_raw a (d.leq)`,
+   `compare_eq_sound a d … := compare_eq_sound_raw a (d.leq) (d.antisym) …`) —
+   instantiation is pure application/δ. This is the catalog's established
+   explicit-comparator idiom (`list_eq`/`list_compare`/`sort` already take raw
+   `eqf`/`cmp`/`leq`); unbundling the **laws** the same way the **operations**
+   already are is the coherent completion, and it routes around BOTH the
+   `.field`-in-declared-type **parser** gap and the documented **K6 `conv_struct`
+   Eq-operand-congruence** gap (`LawfulClasses.ken.md:689–723`) — every hypothesis
+   type and supplied law shares the *literally identical* raw `leq` term, so no
+   Eq-operand congruence is ever required. **Soundness lemmas use explicit
+   fresh-`Bool` `J`** — `bool_dichotomy (leq x y)` + nested `bool_dichotomy
+   (leq y x)`, motive spelling `compare_raw`'s reduced form, `antisym_law x y hxy
+   hyx` in the `True/True` arm, `absurd` on transported `Bottom` (the landed
+   deceq-List technique, `LawfulClasses.ken.md:558–589`, one dispatch deeper).
+   `case_eq` (`match … eqn: h`) is used **only inside `compare_raw`'s own
+   definition** (scrutinee occurs syntactically in its own return-type dispatch —
+   the sugar's home turf), **NOT** in the soundness lemmas (transparent-wrapper
+   case the modifier can't reach; see forward note in the judgment log).
 2. **Rework Collections onto `compare` — RESOLVED acyclic (Architect ruling
    `evt_4p2683wvtwwcc`, 2026-07-11): no cycle, no relocation, absorbed into brick
    3.** The earlier cycle worry was the wrong reading: `list_compare`
@@ -97,9 +115,13 @@ on the `Bool`/`OrdResult` comparisons — no new capability needed.
 
 ## Acceptance criteria
 
-- **AC1 — lawful generic `compare`.** Derived `compare` + its soundness lemmas
-  (`= Eq → Equal`, `Lt`/`Gt` vs `leq`) elaborate + kernel-check; real proof
-  terms, no `Axiom`/`Refl`-paper on a general statement.
+- **AC1 — lawful generic `compare` (unbundled).** `compare_raw` (over raw `leq`
+  + explicit law args) + its soundness lemmas (`= Eq → Equal`, `Lt`/`Gt` vs `leq`)
+  elaborate + kernel-check as **real explicit-`J` proof terms** (fresh-`Bool`
+  motives never inferred, law args applied on neutral `leq` comparisons sharing
+  literal terms, `absurd` on genuinely-transported `Bottom`); the public `Ord`
+  `compare`/soundness forms are thin δ-wrappers. No `Axiom`/`Refl`-paper on any
+  general statement. (Architect `evt_7v4argg2kp0b`.)
 - **AC2 — canonical `compare` single-sourced, acyclic (instance-threaded).** The
   canonical `compare` (in LawfulClasses) is the single source of truth; `Ord
   (List a)` threads it into the **unchanged** raw-`cmp` `list_compare` — no
