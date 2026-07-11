@@ -701,9 +701,11 @@ matters more than the second:
    role-named window — the tmux windows are named `moot-<role>`:
 
    ```bash
-   tmux send-keys -t moot-steward "/compact" ; sleep 2 ; tmux send-keys -t moot-steward Enter
-   # immediately queue a resume so the seat auto-continues after compaction:
-   tmux send-keys -t moot-steward "resume" ; sleep 2 ; tmux send-keys -t moot-steward Enter
+   # 1) Launch the DETACHED resume watcher FIRST — it outlives this turn AND the
+   #    compaction, waits for `/compact` to finish, then sends the `resume`:
+   nohup scripts/postcompact-resume.sh moot-steward >/tmp/pcr-steward.log 2>&1 & disown
+   # 2) THEN queue your own /compact (fires at turn end) — this is your LAST action:
+   tmux send-keys -t moot-steward -l '/compact' ; sleep 2 ; tmux send-keys -t moot-steward Enter
    ```
 
    The two-step (type `/compact`, wait ~2s, then a **separate** `Enter`) is the
@@ -713,26 +715,31 @@ matters more than the second:
    take — finish all durable checkpointing (§2a tracker commit, any pending
    post) **before** sending it, exactly as you would before delivering a WP.
 
-   **★ Queue the `resume` (operator, 2026-07-11) — a self-compact leaves you
-   IDLE, not resumed.** `/compact` returns the seat to an empty `❯` prompt and
-   **nothing re-invokes it** — a self-compacted singleton sits idle until
-   something rouses it (the operator had to type `resume` by hand to wake this
-   seat after a compaction). So, in the **same** last action, immediately queue a
-   `resume` line after the `/compact` (second `send-keys` pair above). Because the
-   `resume` text is typed *while `/compact` is still processing*, the host
-   **buffers** it (Claude Code shows "Press up to edit queued messages"; Codex
-   queues likewise) and fires it the instant compaction returns to the prompt.
-   The post-compact re-orient hook (`scripts/hooks/reorient-post-compact.sh`)
-   then re-injects orientation and you continue your own in-flight work
-   autonomously — no external rouse needed. *A hook alone cannot do this:* a
+   **★ The `resume` is fired by a DETACHED watcher, not a buffered message
+   (operator, 2026-07-11) — a self-compact leaves you IDLE, not resumed.**
+   `/compact` returns the seat to an empty `❯` prompt and **nothing re-invokes
+   it** — a self-compacted singleton sits idle until something rouses it. The
+   *original* fix — type `resume` right after `/compact` and rely on the host
+   buffering it behind the compaction — proved a **race**: the `resume` is sent
+   while your turn is still active (the queued `/compact` fires only at turn
+   end), so it can land as its own live turn *before* compaction rather than
+   after. The reliable fix **decouples** the resume from your turn lifecycle:
+   `scripts/postcompact-resume.sh`, launched **detached** (step 1 above, *before*
+   you send `/compact`), keeps polling your pane, waits for the `Compacting…`
+   window to appear and then clear, and only **then** sends `resume`. As a
+   separate process it is immune to the turn/compaction lifecycle, so the resume
+   reliably lands *after* compaction. The post-compact re-orient hook
+   (`scripts/hooks/reorient-post-compact.sh`) then re-injects orientation and you
+   continue your own in-flight work autonomously. *A hook alone cannot do this:* a
    SessionStart hook only shapes the **context** of the next turn; it cannot send
-   the keystroke that **triggers** one. The queued `resume` is that trigger; the
-   hook is the re-orient half. **Self-compaction only** — do **NOT** queue a
-   `resume` when Handoff-Gate-compacting a receiving team/enclave (§2c): there the
-   *kickoff mention* is the resume trigger, and a premature `resume` would fire
-   before the kickoff lands, waking the unit into "no new work." (Steward,
-   Architect, Librarian all self-compact — this applies to each; see
-   `architect.md` §3 and the fleet memory.)
+   the keystroke that **triggers** one — that is why the external watcher is
+   required. **Self-compaction only** — do **NOT** run the watcher when
+   Handoff-Gate-compacting a receiving team/enclave (§2c): there the *kickoff
+   mention* is the resume trigger, and a premature `resume` would fire before the
+   kickoff lands, waking the unit into "no new work." (Steward, Architect,
+   Librarian all self-compact — this applies to each; see `architect.md` §3 and
+   the fleet memory. The watcher self-bails if it never sees a `Compacting…`
+   window, so a mistaken launch can't fire a premature resume.)
 
 The signal in one line: **checkpoint continuously, compact at your own
 boundary, let autocompact be a safe backstop — never a feared one.** This same
