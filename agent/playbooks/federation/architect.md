@@ -132,9 +132,11 @@ more:
    (yours is `moot-architect`):
 
    ```bash
-   tmux send-keys -t moot-architect "/compact" ; sleep 2 ; tmux send-keys -t moot-architect Enter
-   # immediately queue a resume so the seat auto-continues after compaction:
-   tmux send-keys -t moot-architect "resume" ; sleep 2 ; tmux send-keys -t moot-architect Enter
+   # 1) Launch the DETACHED resume watcher FIRST — it outlives this turn AND the
+   #    compaction, waits for `/compact` to finish, then sends the `resume`:
+   nohup scripts/postcompact-resume.sh moot-architect >/tmp/pcr-architect.log 2>&1 & disown
+   # 2) THEN queue your own /compact (fires at turn end) and make it your LAST action:
+   tmux send-keys -t moot-architect -l '/compact' ; sleep 2 ; tmux send-keys -t moot-architect Enter
    ```
 
    The two-step (type `/compact`, wait ~2s, then a **separate** `Enter`) avoids
@@ -144,16 +146,22 @@ more:
    self-compact only; you never compact another agent (that is the Steward's
    job, via the same `moot-<role>` tmux path — `moot compact` is no-op-prone).
 
-   **★ Queue the `resume` (operator, 2026-07-11) — a self-compact leaves you
-   IDLE, not resumed.** `/compact` returns your seat to an empty `❯` prompt and
-   **nothing re-invokes it**; you would sit idle until roused. So, as part of the
-   same last action, immediately queue a `resume` line after the `/compact`
-   (second `send-keys` pair above). Typed while `/compact` is still processing, it
-   is **buffered** by the host ("Press up to edit queued messages") and fires the
-   instant the prompt returns; the post-compact re-orient hook
-   (`scripts/hooks/reorient-post-compact.sh`) then re-orients you and you continue
-   your in-flight review autonomously. A hook alone cannot trigger the resume — it
-   only shapes the next turn's context, not whether one happens. This is
+   **★ The `resume` is fired by a DETACHED watcher, not a buffered message
+   (operator, 2026-07-11) — a self-compact leaves you IDLE, not resumed.**
+   `/compact` returns your seat to an empty `❯` prompt and **nothing re-invokes
+   it**; you would sit idle until roused. The old fix — type `resume` right after
+   `/compact` and hope the host buffers it behind the compaction — is a **race**:
+   the `resume` is sent while your turn is still active (the queued `/compact`
+   fires only at turn end), so it can land as its own live turn instead of
+   post-compaction. The reliable fix **decouples** the resume-send from your turn
+   lifecycle: `scripts/postcompact-resume.sh` launched **detached** (step 1 above,
+   *before* you send `/compact`) keeps polling your pane, catches the
+   `Compacting…` window, waits for it to clear, and only **then** sends `resume`.
+   Because it is a separate process it is immune to the turn/compaction lifecycle.
+   The post-compact re-orient hook (`scripts/hooks/reorient-post-compact.sh`) then
+   re-orients you and you continue your in-flight review autonomously. (A hook
+   alone cannot trigger the resume — it only shapes the next turn's context, not
+   whether one happens; that is why an external sender is required.) This is
    self-compaction only.
 
 ## 4. Stay in your lane

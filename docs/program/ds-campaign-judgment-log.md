@@ -658,11 +658,12 @@ artifact; keep it current.
 
 ## Autonomous window 2 — 2026-07-11 (~04:20 UTC → operator back ~11:00 UTC)
 
-**Operator direction (locked):** two tracks; Track 1 (case_eq cleanup) sequenced
-in front of Track 3 (Nat laws + DS-8c) as **Track B**; **Track A** (compare/Ord)
-as-is; **formatter FULLY HELD** until the operator returns; maintain this decision
-log; watch for a **2nd occurrence of any hand-rolled idiom** → track it + route
-the shape to the Architect ([[second-occurrence-of-idiom-is-a-language-feature-signal]]).
+**Operator direction (locked):** two tracks; Track 1 (case_eq cleanup)
+sequenced in front of Track 3 (Nat laws + DS-8c) as **Track B**; **Track A**
+(compare/Ord) as-is; **formatter FULLY HELD** until the operator returns;
+maintain this decision log; watch for a **2nd occurrence of any hand-rolled
+idiom** → track it + route the shape to the Architect
+([[second-occurrence-of-idiom-is-a-language-feature-signal]]).
 
 ### D2 · Two-track allocation across three teams (Steward)
 - **Track A → Foundation:** `compare-ord-lexicographic` (PR #491) — lawful 3-way
@@ -703,17 +704,17 @@ the shape to the Architect ([[second-occurrence-of-idiom-is-a-language-feature-s
   raw-`leq` + explicit-law-argument** interface (Architect `evt_7v4argg2kp0b`),
   after two mid-flight rulings died on landed gaps: (a) the `.field`-in-declared-
   type **parser** gap killed inline `d.leq` in types → named-accessor `ord_leq_of`
-  wrapper; (b) the K6 `conv_struct` **Eq-operand-congruence** gap (`LawfulClasses
-  :689–723`) then killed the accessor path too (`Eq Bool (ord_leq_of…) True` won't
-  δ-bridge to `Eq Bool (d.leq…) True`; both stuck neutrals, syntactically
-  distinct). The unbundled shape (soundness over a raw `leq` param + explicit law
-  args; the `Ord` forms thin δ-wrappers) sidesteps BOTH — every hypothesis + supplied
-  law shares the literal `leq` term. Explicit-`J` for the soundness lemmas;
-  `case_eq` only inside `compare_raw`'s own def. Theorems **unweakened** (raw form
-  is strictly more general; the dict `Ord` version is a strict instance).
-  Transcribed into the frame (brick 1 + AC1) — a stale "use `case_eq` for the
-  dispatch" line would misdirect a post-compaction pickup to rebuild the rejected
-  shape.
+  wrapper; (b) the K6 `conv_struct` **Eq-operand-congruence** gap
+  (`LawfulClasses :689–723`) then killed the accessor path too (`Eq Bool
+  (ord_leq_of…) True` won't δ-bridge to `Eq Bool (d.leq…) True`; both stuck
+  neutrals, syntactically distinct). The unbundled shape (soundness over a raw
+  `leq` param + explicit law args; the `Ord` forms thin δ-wrappers) sidesteps
+  BOTH — every hypothesis + supplied law shares the literal `leq` term.
+  Explicit-`J` for the soundness lemmas; `case_eq` only inside `compare_raw`'s
+  own def. Theorems **unweakened** (raw form is strictly more general; the dict
+  `Ord` version is a strict instance). Transcribed into the frame (brick 1 + AC1)
+  — a stale "use `case_eq` for the dispatch" line would misdirect a
+  post-compaction pickup to rebuild the rejected shape.
 - **Reversibility:** N/A (following the landed capability envelope).
 
 ### Forward candidates (tracked; NOT compare-ord blockers — Architect-flagged)
@@ -762,13 +763,14 @@ the shape to the Architect ([[second-occurrence-of-idiom-is-a-language-feature-s
 
 **Arc note — compare-ord as a language-surface stress test.** Brick 1 surfaced
 **three distinct gaps, every one routed around at the catalog level with zero
-kernel/language change** (parser `.field`-in-declared-type → unbundled interface; K6
-`conv_struct` Eq-operand congruence → raw-`leq` params; flat-namespace collision →
-value aliases). This is the reflect-don't-extend discipline working as intended — the
-outer-ring catalog exercises the language surface and each gap is met with a local,
-zero-TCB idiom, not a mid-WP kernel/parser patch. All three are tracked candidates,
-none blocking; the pattern to watch is whether any recurs enough to justify its
-lane's WP (Kernel for K6, Language for the modifier-unfold and the namespace split).
+kernel/language change** (parser `.field`-in-declared-type → unbundled interface;
+K6 `conv_struct` Eq-operand congruence → raw-`leq` params; flat-namespace
+collision → value aliases). This is the reflect-don't-extend discipline working
+as intended — the outer-ring catalog exercises the language surface and each gap
+is met with a local, zero-TCB idiom, not a mid-WP kernel/parser patch. All three
+are tracked candidates, none blocking; the pattern to watch is whether any recurs
+enough to justify its lane's WP (Kernel for K6, Language for the modifier-unfold
+and the namespace split).
 
 ### D7 · case-eq-adoption re-scoped — Map DROPPED, ship the two small sites (Architect + Steward)
 - **Call:** the case-eq-adoption Map bulk (originally "79 uses — the bulk," 64
@@ -836,19 +838,20 @@ no modifier/kernel work for Map.
   `Eq`/`Lt`/`Gt` alias discipline (`evt_3vygqece6p4ax`) not applied. Candidate #2
   (K6) **unchanged** — routes around cleanly, no Kernel trigger.
   **RESOLVED (`evt_40ydcv9a45yjd`, reproduced red→green):** neither lead — the
-  Architect's own bisection (helper+aliases green; first flip = `compare_gt_sound_raw`)
-  localized it to a **local incomplete-discrimination proof bug** (the `Inl` arm
-  left `compare_second_result (leq y x)` stuck; fix = nested `bool_dichotomy`, the
-  Eq lemma's own idiom). **The pattern is now 3-for-3: every assembled-load red on
-  compare-ord brick 1 was LOCAL — namespace shadow (esc #3), offset-drift span
-  misread, incomplete-discrimination proof bug — and ZERO were the kernel.** The
-  standing coaching for this class of catalog-proof WP: a full-`.md`-load
-  `KernelRejected` is almost never a capability/K6 gap; **reproduce + bisect
-  locally against the green base ref FIRST** (the Architect did each time and the
-  helper/kernel was always innocent), and treat a byte-span into base-green code as
-  offset drift, not the cause. Foundation's refusal-to-paper discipline stayed
-  correct throughout; the lever is cheaper self-triage before pulling the Architect
-  (the most expensive unit) — the isolate-before-escalate lesson, now well-earned.
+  Architect's own bisection (helper+aliases green; first flip =
+  `compare_gt_sound_raw`) localized it to a **local incomplete-discrimination
+  proof bug** (the `Inl` arm left `compare_second_result (leq y x)` stuck; fix =
+  nested `bool_dichotomy`, the Eq lemma's own idiom). **The pattern is now
+  3-for-3: every assembled-load red on compare-ord brick 1 was LOCAL — namespace
+  shadow (esc #3), offset-drift span misread, incomplete-discrimination proof bug
+  — and ZERO were the kernel.** The standing coaching for this class of
+  catalog-proof WP: a full-`.md`-load `KernelRejected` is almost never a
+  capability/K6 gap; **reproduce + bisect locally against the green base ref
+  FIRST** (the Architect did each time and the helper/kernel was always
+  innocent), and treat a byte-span into base-green code as offset drift, not the
+  cause. Foundation's refusal-to-paper discipline stayed correct throughout; the
+  lever is cheaper self-triage before pulling the Architect (the most expensive
+  unit) — the isolate-before-escalate lesson, now well-earned.
 - **DS-8c kicked on already-delivered work — my stale-tracker error.** I ran the
   full release process (frame reconcile PR #505 + Handoff Gate ergo-ring compaction
   + kick `evt_7r0wkgsav5b62`) on a WP that had **already landed** (`a3a3a39d`,
@@ -870,10 +873,10 @@ no modifier/kernel work for Map.
 - **MERGED:** Language `def-path-constraint-binder-unification` (`main @ 41df4e62`);
   ring §10 retros in. Enclave still holds the spec parity clause (`32`/`33`) → CV
   verdict → `git_request`. Playbook watchdog hardening (`main @ bc1c0643`).
-- **CLOSED — Ergo `case-eq-adoption`:** MERGED `main @ 9b09124d` (PR #501, CI-green);
-  **all three §10 retros IN** (leader/qa/implementer). Track-A merge **anchor**
-  landed. Rebased approved `18bd3ff6` via cherry-pick (it had drifted behind my
-  re-scope doc merges); tracker synced `main @ 1082ef89`. WP done.
+- **CLOSED — Ergo `case-eq-adoption`:** MERGED `main @ 9b09124d` (PR #501,
+  CI-green); **all three §10 retros IN** (leader/qa/implementer). Track-A merge
+  **anchor** landed. Rebased approved `18bd3ff6` via cherry-pick (it had drifted
+  behind my re-scope doc merges); tracker synced `main @ 1082ef89`. WP done.
 - **CLOSED — Ergo `nat-arithmetic-laws`:** `main @ d762c99b` (PR #503, CI-green);
   **all three §10 retros IN** (leader `evt_kqb95k8m9t7j` / qa `evt_20trnmaps63mf` /
   implementer `evt_2cx4ynftx916j`) — WP done. Kicked after the full Handoff Gate
@@ -937,9 +940,10 @@ no modifier/kernel work for Map.
   (`evt_7r0wkgsav5b62`, PR #505 frame reconcile) on already-done work** — cost: one
   ergo-ring compaction + a brief aborted stale-branch rebase. No duplicate authored
   (ring caught it). Assignment CLOSED as delivered (`evt_2r36ystyfz326`).
-- **TRACK B (Ergo lane) COMPLETE:** `case-eq-adoption` (#501) → `nat-arithmetic-laws`
-  (#503) → DS-8c (`a3a3a39d`) all delivered. Ergo idle, awaiting operator direction
-  (~11:00 UTC) — no locked-plan work remains on its lane; do NOT invent work.
+- **TRACK B (Ergo lane) COMPLETE:** `case-eq-adoption` (#501) →
+  `nat-arithmetic-laws` (#503) → DS-8c (`a3a3a39d`) all delivered. Ergo idle,
+  awaiting operator direction (~11:00 UTC) — no locked-plan work remains on its
+  lane; do NOT invent work.
 - **Next gate events:** Foundation compare-ord `git_request` (post rebase + lex +
   Architect gate) — the sole remaining locked-plan build; Language spec-clause CV
   verdict.
@@ -951,3 +955,183 @@ no modifier/kernel work for Map.
 - **Watchdog: CronCreate job `1236a1cd`** (15-min, pane stall-sweep + git/gates +
   mentions) — replaced the codex-era bash loop. **Formatter HELD.** Operator back
   ~11:00 UTC — this log is the review artifact.
+
+### D8 · Operator greenlights all three forward candidates (2026-07-11, ~11:25 UTC)
+
+Operator reviewed the forward-candidate register and directed action on each, at
+three different depths. All three route to the **Architect first** (design
+before build); I posted the coordinated ask `evt_2m4msq65kwkjp`. **None is a WP
+kickoff yet** — design consultations within the active campaign, so **no Handoff
+Gate** (consistent with campaign practice of consulting the Architect on forks;
+the Handoff Gate fires when a WP later kicks to the **kernel/language ring**).
+
+- **① K6 conv_struct → "prepare a WP" (operator).** Frame drafted at
+  `docs/program/wp/K6-conv-struct-eq-operand-congruence.md`. **STALE-PREMISE
+  CATCH (my own tracker):** I carried K6 as *"conv_struct has no `Eq`
+  congruence arm"* — grounding against current `origin/main` shows the positional
+  arm **LANDED** at `conv.rs:566` (`(Eq ty1 a1 b1, Eq ty2 a2 b2) => conv_struct
+  ×3`, via `obs-eq-termination`), plus the congruence-first fast path at `:419`.
+  So the WP is **NOT "add the missing arm"** (that would misdirect the kernel
+  ring into rebuilding present code — the K2c-s2 stale-"what's-broken" failure
+  mode). The **residual** gap: two defeq-but-syntactically-distinct **neutral
+  operands** (`ord_leq_of x y` vs `d.leq x y`) don't **converge** under the
+  landed arm. Frame pins verified facts + the fail-closed / no-cross-wise-arm
+  soundness bar, and **stops at the algorithm seam** (Architect-owned). **I will
+  NOT finalize the frame until the Architect re-grounds** the exact current
+  failing term and returns **(a)** genuine completeness gap + sound algorithm, or
+  **(b)** correct rejection → K6 closes **won't-fix** (unbundling is right; do not
+  manufacture a TCB change to avoid (b)). Recurrence of my own
+  [[my-own-tracker-capability-landed-line-can-be-stale]] +
+  [[kernel-backed-claim-grep-the-emission-not-the-name]] — grep the kernel, not
+  the tracker's model, before framing a trust-root WP.
+- **② check_match_dependent (Language) → deeper investigation + likely fix
+  (operator).** Operator's read: two **opposite-valence** failures at ONE site
+  (`elab.rs:874`) — under-reach (`evt_7v4argg2kp0b`) AND over-transport
+  (`evt_6bk169gj8d0kz`, the Map dispatcher) — is a **root-cause signal, not two
+  coincidences.** This **supersedes** the prior "Map did NOT bump the modifier
+  candidate / stays #1" disposition: the operator wants the two valences
+  investigated **together** as likely one motive-construction root, with a Language
+  WP shape recommended. Architect-led investigation; not yet a WP I author.
+- **③ Flat-namespace class/ctor collision (Language/resolver) → design discussion
+  first (operator).** `class Eq` shadows `OrdResult` ctor `Eq` in the flat
+  `globals` map (`evt_3vygqece6p4ax`, occ. #1). Operator wants a **design
+  discussion** on approach (separate namespaces vs type-qualified ctor spelling vs
+  other) **before** a WP, and **wants to be in the loop** on the direction —
+  Architect frames the forks, I convene the operator. **Distinct** from
+  `wp/L-resolver-globals` (lowercase globals in expr position — adjacent in
+  `resolve.rs`, not the same gap; do not conflate).
+- **Candidate-count semantics:** the register is no longer "3 tracked/watch" — it
+  is **3 operator-directed, all Architect-gated at the design step.** K6 may still
+  resolve to won't-fix (b); the modifier + namespace are now active design work.
+
+### D8 outcome · Architect delivered all three verdicts (2026-07-11, ~11:35–11:39)
+
+Architect posted the three verdicts to the space (`evt_58affwcy3arx9` / `_5scf1`
+/ `_1qxzp`) — **without @mentioning me**, so `get_mentions` missed them; caught
+via a `get_recent_context` sweep + the pane. (Recurrence of the "get_mentions
+misses non-@ posts" trap — sweep recent_context, don't rely on mentions alone.)
+
+- **① K6 → VERDICT (b), FRAME RETIRED** (`evt_58affwcy3arx9`). Stronger than
+  "correct rejection": the completeness case is **already closed** by
+  `obs-eq-termination`. Architect probed the landed kernel (probes deleted): the
+  defeq wrapper-vs-direct neutral shape (`ord_leq_of`-vs-`d.leq`) **converges
+  green** under `conv.rs:404` fast path + `:565` `Eq×Eq` arm + whnf δ-unfold;
+  **no live customer** (`ord_leq_of` absent on main; `Ord Char` transports from
+  `Ord Int` via same-literal discipline, not `leqChar`); the only residual
+  rejection is the cross-wise merely-propositional case, **soundly rejected** —
+  "fixing" it = the unsound cross-wise arm the frame forbids. **No kernel
+  change.** Frame `docs/program/wp/K6-conv-struct-eq-operand-congruence.md`
+  banner-retired (won't-fix, provenance kept). Tracker note: *K6 completeness
+  closed by obs-eq-termination (conv.rs:404 + :565); cross-wise defeq correctly
+  rejected by design.* Falsifiable re-open: a real **defeq** (not merely
+  propositional) rejected `Eq`-operand pair. **My "prepare a WP" turned into
+  "already fixed" — the right outcome; no TCB change manufactured to avoid (b),
+  exactly as pre-flagged.**
+- **② check_match_dependent → NO single fix; OPERATOR DECISION A vs B**
+  (`evt_5scf1rj4sfmss`). Shared root **confirmed** (`subst_term_generalize` on
+  the RAW `expected`, syntactic-occurrence match, `elab.rs ~939`) — but the
+  operator's "one principled fix" instinct **does not hold**: under-reach and
+  over-transport pull the **same normalize/generalize knob in OPPOSITE
+  directions** (under-reach wants more reach; over-transport wants less), so no
+  silent default fixes both. Over-transport is "wrong tool, correct behavior"
+  (Map isn't a case-eq customer, `evt_6bk169gj8d0kz`); **only under-reach is a
+  genuine latent gap.** Options: **A** = document the coexisting idioms
+  (dispatch-to-helper = plain match + named helper; wrapper-hidden = explicit-J),
+  zero code (Architect's lean, no live pain); **B** = author-controlled opt-in
+  generalization running the existing `simplify_branch_goal` on `expected` before
+  generalizing (fixes under-reach without touching the default, so can't
+  aggravate over-transport). **Pending operator A/B call.**
+- **③ namespace collision → FORKS FRAMED; OPERATOR DISCUSSION B vs C**
+  (`evt_1qxzp8m02hyj3`). **A** (Haskell separate namespaces) = **cautionary**:
+  Ken is dependently typed, **types ARE terms**, so "disambiguate by position"
+  has no clean type/term boundary (`Eq`-as-value vs ctor genuinely ambiguous) —
+  an ambiguity benign in Haskell, **not** here. **B** (type-qualified ctor
+  `OrdResult.Eq`) = cleanest dependent fit, explicit/position-independent,
+  bounded parser+resolver change (`parser.rs:111-147` treats dotted names as
+  module-qual only), soundness clean. **C** (alias discipline `ord_eq/…`, status
+  quo) = zero language change, cost is aliasing at every future clash. **B/C
+  live, A cautionary. Pending operator discussion** (they want to be in the loop
+  on direction). **Live second customer:** foundation-implementer hit this exact
+  shadow on compare-ord Pair antisym (11:52) — routed around via the frame's
+  Fork-C AC2 (aliases + OrdResult eliminator / generic Collections helper), so
+  compare-ord is **not** blocked on #3, but it concretizes the discussion.
+- **Net:** #1 closed (retired, no code). #2 + #3 are **operator decisions** —
+  teed up for Pat. No kernel/language WP kicked; the Architect gate did its job
+  (K6 would have been wasted kernel effort; the "fix" was already landed).
+
+### D9 · Operator: document the 3 techniques in write-ken (technique, not defect)
+
+Operator (2026-07-11, ~12:20) reviewed the Architect analyses and directed that
+K6-conv-convergence, `check_match_dependent` idiom-scoping, and the namespace
+collision be **documented in the write-ken skill + supporting materials** — as
+**technique, not defect**. Target = `catalog/guide/` strands (proof-techniques
+for #1/#2; surface-reference for #3), the literate `.ken.md` corpus the
+`write-ken` skill (`agent/playbooks/tools/write-ken.md`) points at; **every guide
+example must be real checked Ken**, so entries reference landed catalog code.
+Plan (task #9): **Librarian doc-pass, Architect fidelity-gate**, sourced from the
+three analysis evts; **run as the compare-ord as-built pass at merge** (that's
+when #3's canonical example — the dependent eliminator — lands as real code).
+This is effectively the operator choosing the **document-the-idioms path** for #2
+(≈ Architect's Option A) and the **alias/eliminator route** for #3 (≈ Fork C
+made canonical) — B-for-#2 (opt-in surface) and B-for-#3 (qualified-ctor
+language change) are **not** foreclosed, just not what's being documented now.
+
+### D10 · compare-ord Pair-antisym boundary — resolved in-envelope (2026-07-11)
+
+Foundation isolated a **genuine** Pair-antisym boundary (`evt_5afteqshs8r88`):
+branch-varying dependent obligations (Eq/Eq → component antisym; Lt/Gt →
+contradiction) that the non-dependent `ord_result_dispatch2` can't carry — with
+three constraints converging (Collections load-order, Lawful ctor-shadow,
+`case_eq` under-reach). Correctly **refused to improvise**; asked for an
+Architect/Steward ruling. I split it (`evt_2pfnp11qvc6fz`): technique = Architect;
+scope = mine (proceed-if-in-envelope else size-defer+split), with a **hypothesis**
+— a motive-parameterized *dependent* generalization of the Collections helper.
+**Architect ruled it in-envelope** (`evt_bp56czcsyvem`), proven green: add
+`ord_result_elim (P : OrdResult → Prop) (r) (pLt)(pEq)(pGt) : P r = match r {…}`
++ the 9-branch 2-ary analog in Collections (ctors nameable there); Lawful applies
+it **positionally** (no bare ctor pattern → shadow never bites), abstract motive
+`P` keeps Collections acyclic (raw-mechanism-downward / proof-upward, like
+`list_compare` taking a raw cmp), and the explicit motive sidesteps the `case_eq`
+under-reach. ~5–15 lines; the ~40–60-lemma Pair/List work buildable NOW, **no
+defer**. Steward scope concurred (`evt_560641n32japv`): proceed, no split. This
+is the same generic-helper-consumed-downward shape lifted to a dependent motive —
+and the **canonical write-ken #3 example** (D9). Lessons: (a) three surfaced gaps
+can converge at one proof site — the fix was one clean interface, not three; (b)
+my "hypothesis, you rule" split let the Architect confirm-or-refute a concrete
+shape fast rather than design from scratch; (c) implementer's refuse-to-improvise
++ isolate-the-boundary is exactly the discipline that makes a terra seat safe.
+
+### D11 · Coding-style initiative (operator, 2026-07-11 ~14:00) + parser-gap elevation
+
+Operator directed a coding-style revisit ("modest body of code"). Three
+observations, all serving agents-write/humans-read (catalog = outsider-facing
+product). State:
+- **(3) Insider prose — RUNNING.** Systemic: 14/14 catalog `.ken.md` carry WP/DS-N
+  IDs, internal history, crate paths. Style-guide §8 rule added (prose is
+  outsider-facing) + **§5 Findings RETIRED** (my team-tactics call — migrated to
+  live gap-escalation; harvest-before-strip). Committed `steward/work` `2e4df000`.
+  **Librarian kicked** (`evt_6yhyfntc91jsn`), PROSE-ONLY, SKIP in-flight
+  LawfulClasses+Collections, small-files-first, harvest-before-strip. On delivery:
+  bundle rule+swept files → Architect fidelity gate → doc-only merge. Task #10.
+- **(2) Keyword adoption — PILOT.** ~2.5% adoption (fn 1032/const 50 vs lemma
+  13/proof 10/def 2/prop 2). Pilot = `Core/NatArith.ken.md` (small, all law
+  lemmas, stable). Prereq: pin def/lemma/proof/prop semantics (Architect/spec-author
+  consult). Folds into write-ken #9. Task #12.
+- **(1) Presentation-order independence — SEQUENCED, NOT HANDED.** Operator: send
+  the source-order question to the enclave. Decouple presentation from evaluation
+  order (parse → reference DAG → elaborate leaf-to-root; SCT already does SCC
+  analysis; likely TCB-neutral). Spec-semantics change → enclave owns → design →
+  spec → Language WP. **NOT yet handed:** enclave has in-flight def-path §32/§33
+  clause (spec-leader→CV, CV 79% ctx); must drive to closure + Handoff-Gate-compact
+  the triple, then hand the brief (still to author). Task #11. **Operator asked
+  14:22 if enclave is reviewing it — answer: no, not yet; this is the next action
+  post-compact.**
+- **Parser `.field`-in-declared-type gap ELEVATED to tracked candidate** (Librarian
+  harvest from OrdNat's Findings, `evt_5hbzzkt3bdw3m`): `(instance).field`
+  projection works in value position but is rejected in a type annotation
+  (`IsTrue ((Ord_instance_Nat).leq x y)`), forcing named-accessor/spelled-out
+  workarounds. Was noted in D6 ("escalation #1") + the Arc note but NOT in the
+  formal register. ≥2 occurrences (compare-ord brick 1, OrdNat). Same parser
+  dotted-name subsystem (`parser.rs:111-147`) as the namespace #3 qualified-ctor
+  fork — **may share a fix**; fold into that discussion. Not yet operator-directed
+  as its own WP.
