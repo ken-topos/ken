@@ -16,6 +16,7 @@ to one team belongs in `teams/<team>`.
 | [general-fix-can-conflate-similar-shaped-different-cases](general-fix-can-conflate-similar-shaped-different-cases.md) | A general fix can conflate similar-shaped but different cases |
 | [green-vs-green-does-not-confirm-a-fix](green-vs-green-does-not-confirm-a-fix.md) | Green-vs-green does not confirm a fix |
 | [ken-cargo-build-lock-wedge](ken-cargo-build-lock-wedge.md) | The ken-cargo + sccache build-lock wedge |
+| [lawful-instance-needs-three-axis-acceptance-net](lawful-instance-needs-three-axis-acceptance-net.md) | A new lawful instance needs a 3-axis acceptance net (provenance + concrete compute + each law field), from brick 1 |
 | [mid-branch-correction-regrep-whole-branch-for-stale-claims](mid-branch-correction-regrep-whole-branch-for-stale-claims.md) | A mid-branch design correction must re-grep every file the branch touches for the old claim's substance |
 | [named-floor-must-be-grepped-not-assumed](named-floor-must-be-grepped-not-assumed.md) | A named floor must be grepped, not assumed |
 | [probe-recursion-depth-before-writing-the-real-test](probe-recursion-depth-before-writing-the-real-test.md) | Probe recursion depth before writing the real test |

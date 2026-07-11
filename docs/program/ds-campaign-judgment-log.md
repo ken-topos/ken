@@ -1174,3 +1174,47 @@ wrong):** a model swap does **NOT** reset the seat — it only changes the
 completion-call model param; context is intact, no re-orient/re-read needed. I
 mis-roused the implementer with a "your session reset" preamble; operator
 corrected; I re-roused clean. Filed `fleet/model-swap-does-not-reset-the-seat`.
+
+### D13 · compare-ord-lexicographic MERGED — Track A COMPLETE (2026-07-11 ~17:00 UTC)
+
+**MERGED** `origin/main @ d2cf7409` (PR #516, CI green — not doc-only, carries a
+real `.rs` acceptance test). Honesty gate clean at the exact QA/Architect SHA
+`295e9392`: base `704b656d` a direct ancestor, exactly 3 sanctioned files
+(LawfulClasses +910 / Collections +191 / focused test +244), **+1345/−0 purely
+additive**, trust-surface clean (only `trusted_base_delta` — the test asserting a
+zero delta), no WP-token leakage. This lands the whole of **Foundation Track A**:
+canonical leq-primary `Ord (Pair a b)` / `Ord (List a)` with real kernel-checked
+refl/antisym/trans/total, zero-TCB.
+
+**Gate chain (worth remembering — the QA block was load-bearing):** implementer
+handoff `7facab5a` (2 files) → **QA BLOCKED**: catalog-load test
+(`structural_deceq_acceptance` 3/3) only exercised prior `DecEq`; repo-wide
+search found zero refs to `compare_raw`/`Ord_instance_Pair`/`Ord_instance_List`
+→ implementer added the focused acceptance binary `295e9392` (+test) → **QA
+APPROVED 41/41** → **Architect terminal fidelity APPROVE** (outer-ring, no
+CV/Spec lane) → Steward honesty gate + merge. Retros in: impl `evt_32wmwf6t56sdw`,
+qa `evt_7rtjp70e8hn9p`, coord `evt_bkbn15dpv0hz`.
+
+**Harvested carries:**
+- **THREE-AXIS ACCEPTANCE NET (QA + implementer converged → PROMOTED to
+  `build/lawful-instance-needs-three-axis-acceptance-net`).** A new lawful
+  catalog instance needs one focused acceptance binary jointly asserting (1)
+  transparent/zero-delta provenance, (2) nontrivial concrete computation, (3)
+  each law field at its literal spec type — **built with the first brick, not at
+  handoff.** A "package loads / type-checks" test is a compile net, never
+  sufficient AC evidence. This is the exact gap the QA block caught.
+- **Reducer-first dependent-proof technique (impl, node-internal).** Start from
+  the reducer: name the neutral scrutinee, capture its dispatch equation, write
+  the fresh-variable `J` motive to mirror the actual body byte-for-byte, and
+  factor branch-local scrutinee-parameterized helpers *before* growing the
+  theorem; when a failure moves to an older decl, bisect decl chunks before
+  escalating capability. Reinforces [[expose-dispatch-in-motive-leave-scrutinee-folded]].
+- **Leader-owns-rousing landed (coord carry).** The leader independently applied
+  the capture-pane→send-keys→verify-Working discipline for its no-poll worker —
+  the codex-stall practice package (#14) is in use, not just written.
+
+**Next:** #11 pedagogic catalog rewrite. Foundation ring clear + quiescent (no
+new work started). Prereq before kicking: Architect consult on whether
+`def`/`prop`/`lemma`/`proof` are new surface forms or conventions over `def`.
+Handoff-Gate-compact the Foundation ring when the brief is ready (the ring is at
+a clean seam now, but compaction pairs with the kickoff, not before it).
