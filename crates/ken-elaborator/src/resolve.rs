@@ -200,6 +200,8 @@ pub enum RExpr {
     /// `match scrut { P₁ => body₁ ; … }` — pattern match (`34 §3`).
     RMatch {
         scrut: Box<RExpr>,
+        /// Optional equation binder from `match e eqn: h { ... }`.
+        equation: Option<String>,
         arms: Vec<RMatchArm>,
         span: Span,
     },
@@ -1380,7 +1382,12 @@ fn resolve_expr_ctx(scope: &mut Scope, expr: &Expr, ctx: PropCtx) -> Result<RExp
             span: span.clone(),
         }),
 
-        Expr::EMatch { scrut, arms, span } => {
+        Expr::EMatch {
+            scrut,
+            equation,
+            arms,
+            span,
+        } => {
             let rscrut = resolve_expr_ctx(scope, scrut, ctx)?;
             let mut rarms = Vec::new();
             for arm in arms {
@@ -1389,7 +1396,13 @@ fn resolve_expr_ctx(scope: &mut Scope, expr: &Expr, ctx: PropCtx) -> Result<RExp
                 for n in &bound_names {
                     scope.push(n);
                 }
+                if let Some(equation) = equation {
+                    scope.push(equation);
+                }
                 let rbody = resolve_expr_ctx(scope, &arm.body, ctx)?;
+                if equation.is_some() {
+                    scope.pop();
+                }
                 for _ in &bound_names {
                     scope.pop();
                 }
@@ -1402,6 +1415,7 @@ fn resolve_expr_ctx(scope: &mut Scope, expr: &Expr, ctx: PropCtx) -> Result<RExp
             }
             Ok(RExpr::RMatch {
                 scrut: Box::new(rscrut),
+                equation: equation.clone(),
                 arms: rarms,
                 span: span.clone(),
             })

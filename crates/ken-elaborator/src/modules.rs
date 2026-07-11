@@ -475,7 +475,12 @@ fn rewrite_rexpr(
             Box::new(rewrite_rexpr(scope, exports, *r)?),
             s,
         ),
-        RExpr::RMatch { scrut, arms, span } => {
+        RExpr::RMatch {
+            scrut,
+            equation,
+            arms,
+            span,
+        } => {
             let scrut = Box::new(rewrite_rexpr(scope, exports, *scrut)?);
             let arms = arms
                 .into_iter()
@@ -487,7 +492,12 @@ fn rewrite_rexpr(
                     })
                 })
                 .collect::<Result<Vec<_>, ElabError>>()?;
-            RExpr::RMatch { scrut, arms, span }
+            RExpr::RMatch {
+                scrut,
+                equation,
+                arms,
+                span,
+            }
         }
         RExpr::RProj(e, field, s) => {
             RExpr::RProj(Box::new(rewrite_rexpr(scope, exports, *e)?), field, s)
