@@ -30,9 +30,9 @@ pub enum Token {
     KwOld,
     KwSpace,
     // L2 keywords
-    KwData,  // "data" — inductive type declaration
-    KwMatch, // "match" — pattern matching
-    KwDef,   // "def"   — surface definition (refinement/alias); was "type"
+    KwData,         // "data" — inductive type declaration
+    KwMatch,        // "match" — pattern matching
+    KwDef,          // "def"   — surface definition (refinement/alias); was "type"
     KwTypeReserved, // "type" — reserved (SURF-def-refinement); not a decl keyword, not an identifier
     // L7 keywords (`38 §2.1`, spellings are `(oracle)`)
     KwForeign,
@@ -414,6 +414,7 @@ impl<'s> Lexer<'s> {
                 s.push(self.advance().unwrap());
             }
             let tok = match s.as_str() {
+                "view" => Token::KwView,
                 "const" => Token::KwConst,
                 "fn" => Token::KwFn,
                 "proc" => Token::KwProc,

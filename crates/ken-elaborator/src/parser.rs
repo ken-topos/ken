@@ -176,6 +176,7 @@ impl Parser {
         let start = self.peek_span().start;
         match self.peek().clone() {
             Token::KwSpace => self.parse_space_view_decl(start),
+            Token::KwView => self.parse_view_decl(start, false, DefKeyword::View),
             Token::KwConst => self.parse_view_decl(start, false, DefKeyword::Const),
             Token::KwFn => self.parse_view_decl(start, false, DefKeyword::Fn),
             Token::KwProc => self.parse_view_decl(start, false, DefKeyword::Proc),
@@ -204,7 +205,7 @@ impl Parser {
             Token::KwPub => self.parse_pub_decl(start),
             other => Err(ElabError::ParseError {
                 msg: format!(
-                    "expected 'const', 'fn', 'proc', 'let', 'prove', 'prop', 'lemma', 'proof', \
+                    "expected 'view', 'const', 'fn', 'proc', 'let', 'prove', 'prop', 'lemma', 'proof', \
                      'law', 'data', 'def', 'foreign', 'temporal', 'class', 'instance', \
                      'derive', 'module', 'import', 'use', \
                      'pub', or 'space proc', found {:?}",
@@ -269,21 +270,10 @@ impl Parser {
             ensures.push(self.parse_prop_expr()?);
         }
 
-        // L3b: optional `where C₁ T₁ ; C₂ T₂` class constraints (`37 §6`).
-        // Parsed between the contract clauses and the `=` body.
-        let mut constraints = Vec::new();
-        if matches!(self.peek(), Token::KwWhere) {
-            self.advance(); // consume 'where'
-            loop {
-                let (cname, _) = self.expect_ident()?;
-                let cty = self.parse_type()?;
-                constraints.push((cname, cty));
-                if !matches!(self.peek(), Token::Semicolon) {
-                    break;
-                }
-                self.advance(); // consume ';' (Semicolon)
-            }
-        }
+        // Def-path constraints share the instance parser and representation.
+        // Keep `;` accepted for landed declarations while comma is the unified
+        // spelling.
+        let constraints = self.parse_instance_constraints(true, false)?;
 
         let visits = if self.is_contextual_ident("visits") {
             self.advance(); // consume contextual 'visits'
@@ -765,40 +755,7 @@ impl Parser {
         self.advance(); // consume 'instance'
         let (class_name, _) = self.expect_ident()?;
         let head_type = self.parse_atom_type_app()?;
-        // Optional comma-separated constraint list. A parenthesized entry
-        // explicitly names its dictionary: `(da : DecEq a)`.
-        let mut constraints = Vec::new();
-        if matches!(self.peek(), Token::KwWhere) {
-            self.advance(); // consume 'where'
-            loop {
-                let (binder, cname, cty) = if matches!(self.peek(), Token::LParen) {
-                    self.advance();
-                    let (binder, _) = self.expect_ident()?;
-                    self.expect(&Token::Colon)?;
-                    let (cname, _) = self.expect_ident()?;
-                    let cty = self.parse_type()?;
-                    self.expect(&Token::RParen)?;
-                    (Some(binder), cname, cty)
-                } else {
-                    let (cname, _) = self.expect_ident()?;
-                    let cty = self.parse_type_app()?;
-                    (None, cname, cty)
-                };
-                constraints.push(crate::ast::InstanceConstraint {
-                    class_name: cname,
-                    head_type: cty,
-                    binder,
-                });
-                if matches!(self.peek(), Token::Comma) {
-                    self.advance();
-                    if matches!(self.peek(), Token::LBrace) {
-                        break;
-                    }
-                } else {
-                    break;
-                }
-            }
-        }
+        let constraints = self.parse_instance_constraints(false, true)?;
         self.expect(&Token::LBrace)?;
         let mut fields = Vec::new();
         while !matches!(self.peek(), Token::RBrace | Token::Eof) {
@@ -819,6 +776,53 @@ impl Parser {
             fields,
             span: Span::new(start, end),
         })
+    }
+
+    /// Parse the shared def/instance `where` grammar. Def declarations retain
+    /// semicolon compatibility; instances retain their historical optional
+    /// trailing comma before `{`.
+    fn parse_instance_constraints(
+        &mut self,
+        accept_semicolon: bool,
+        accept_trailing_comma: bool,
+    ) -> Result<Vec<crate::ast::InstanceConstraint>, ElabError> {
+        let mut constraints = Vec::new();
+        if !matches!(self.peek(), Token::KwWhere) {
+            return Ok(constraints);
+        }
+        self.advance(); // consume 'where'
+        loop {
+            let (binder, cname, cty) = if matches!(self.peek(), Token::LParen) {
+                self.advance();
+                let (binder, _) = self.expect_ident()?;
+                self.expect(&Token::Colon)?;
+                let (cname, _) = self.expect_ident()?;
+                let cty = self.parse_type()?;
+                self.expect(&Token::RParen)?;
+                (Some(binder), cname, cty)
+            } else {
+                let (cname, _) = self.expect_ident()?;
+                let cty = self.parse_type_app()?;
+                (None, cname, cty)
+            };
+            constraints.push(crate::ast::InstanceConstraint {
+                class_name: cname,
+                head_type: cty,
+                binder,
+            });
+
+            let is_separator = matches!(self.peek(), Token::Comma)
+                || (accept_semicolon && matches!(self.peek(), Token::Semicolon));
+            if !is_separator {
+                break;
+            }
+            let was_comma = matches!(self.peek(), Token::Comma);
+            self.advance();
+            if accept_trailing_comma && was_comma && matches!(self.peek(), Token::LBrace) {
+                break;
+            }
+        }
+        Ok(constraints)
     }
 
     /// `derive ClassName for DataName` (`33 §5.6`, `39 §6.6`).

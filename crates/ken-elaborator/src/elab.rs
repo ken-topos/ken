@@ -321,7 +321,7 @@ struct ElabCtx<'e> {
     class_env: Option<&'e ClassEnv>,
     /// Fully applied dictionaries introduced by a declaration's `where`
     /// clause.  They are elaborator-local terms, never synthetic globals.
-    local_dicts: HashMap<String, (Term, Term)>,
+    local_dicts: HashMap<String, (Term, Term, usize)>,
     /// Per-branch index refinements for dependent match (constructor
     /// injectivity + sibling convoy, `check_match_dependent`). Keyed by the
     /// variable's stable bottom-relative context position (`ctx.len()-1-i`
@@ -365,7 +365,7 @@ impl<'e> ElabCtx<'e> {
         self
     }
 
-    fn with_local_dicts(mut self, local_dicts: &HashMap<String, (Term, Term)>) -> Self {
+    fn with_local_dicts(mut self, local_dicts: &HashMap<String, (Term, Term, usize)>) -> Self {
         self.local_dicts = local_dicts.clone();
         self
     }
@@ -2025,8 +2025,13 @@ fn infer(cx: &mut ElabCtx, expr: &RExpr) -> Result<(Term, Term), ElabError> {
         }
 
         RExpr::RCon(name, span) => {
-            if let Some((term, ty)) = cx.local_dicts.get(name) {
-                return Ok((term.clone(), ty.clone()));
+            if let Some((term, ty, install_depth)) = cx.local_dicts.get(name) {
+                let growth = cx.ctx.len().checked_sub(*install_depth).ok_or_else(|| {
+                    ElabError::Internal(format!(
+                        "dictionary '{name}' used outside its declaration context"
+                    ))
+                })? as i64;
+                return Ok((weaken(term, growth), weaken(ty, growth)));
             }
             let id = cx
                 .globals
@@ -2951,6 +2956,7 @@ fn resolve_instance_dictionary(
     num_values: &mut HashMap<GlobalId, NumericLitVal>,
     numeric_env: &NumericEnv,
     class_env: &ClassEnv,
+    ctx: &Context,
     class_name: &str,
     requested: &RType,
     span: &Span,
@@ -2993,6 +2999,9 @@ fn resolve_instance_dictionary(
     };
     let core_args = {
         let mut cx = ElabCtx::new(env, globals, num_values, numeric_env);
+        for ty in &ctx.types {
+            cx.ctx.push(ty.clone());
+        }
         let mut args = Vec::with_capacity(type_args.len());
         for arg in &type_args {
             let core = elab_type(&mut cx, arg)?;
@@ -3011,17 +3020,16 @@ fn resolve_instance_dictionary(
             num_values,
             numeric_env,
             class_env,
+            ctx,
             &constraint.class_name,
             &required_head,
             span,
         )?;
         candidate = Term::app(candidate, dictionary);
     }
-    let ty = kernel_infer(env, &Context::new(), &candidate).map_err(|error| {
-        ElabError::KernelRejected {
-            error,
-            span: span.clone(),
-        }
+    let ty = kernel_infer(env, ctx, &candidate).map_err(|error| ElabError::KernelRejected {
+        error,
+        span: span.clone(),
     })?;
     Ok((candidate, ty))
 }
@@ -3294,7 +3302,7 @@ fn decl_eval_body(expr: &RExpr) -> &RExpr {
 struct ProjectionPurityCtx<'a> {
     globals: &'a HashMap<String, GlobalId>,
     class_env: &'a ClassEnv,
-    local_constraints: &'a [(String, RType)],
+    local_constraints: &'a [RInstanceConstraint],
     bound_dict_classes: &'a [(String, String)],
 }
 
@@ -3311,12 +3319,30 @@ fn instance_class_for_global<'a>(
 
 fn projected_instance_id(base: &RExpr, ctx: &ProjectionPurityCtx<'_>) -> Option<GlobalId> {
     match base {
-        RExpr::RCon(name, _) if name == "d" && ctx.local_constraints.len() == 1 => {
-            let (class_name, head_ty) = &ctx.local_constraints[0];
-            ctx.class_env
-                .instance_search(class_name, &rtype_head_name(head_ty))
+        RExpr::RCon(name, _)
+            if ctx.local_constraints.len() == 1
+                && (name == "d" || name == &ctx.local_constraints[0].binder) =>
+        {
+            let constraint = &ctx.local_constraints[0];
+            ctx.class_env.instance_search(
+                &constraint.class_name,
+                &rtype_head_name(&constraint.head_type),
+            )
         }
-        RExpr::RCon(name, _) => ctx.globals.get(name).copied(),
+        RExpr::RCon(name, _) => {
+            if let Some(constraint) = ctx
+                .local_constraints
+                .iter()
+                .find(|constraint| constraint.binder == *name)
+            {
+                ctx.class_env.instance_search(
+                    &constraint.class_name,
+                    &rtype_head_name(&constraint.head_type),
+                )
+            } else {
+                ctx.globals.get(name).copied()
+            }
+        }
         _ => None,
     }
 }
@@ -3585,6 +3611,26 @@ pub fn elaborate_rdecl_v1(
     )
 }
 
+/// Rebuild just a declaration's explicit parameter context. Constraint terms
+/// are installed at this depth, so generic dictionaries can mention the same
+/// type/value parameters as the declaration without changing its telescope.
+fn declaration_param_context(
+    env: &mut GlobalEnv,
+    globals: &HashMap<String, GlobalId>,
+    num_values: &mut HashMap<GlobalId, NumericLitVal>,
+    numeric_env: &NumericEnv,
+    rdecl: &RDecl,
+) -> Result<Context, ElabError> {
+    let mut cx = ElabCtx::new(env, globals, num_values, numeric_env);
+    let mut current = rdecl.ty.as_ref();
+    while let Some(RType::RPi(_, domain, codomain, _)) = current {
+        let domain_core = elab_type(&mut cx, domain)?;
+        cx.ctx.push(cx.metas.zonk_term(&domain_core));
+        current = Some(codomain);
+    }
+    Ok(cx.ctx)
+}
+
 pub fn elaborate_rdecl_v1_with_effect_rows(
     env: &mut GlobalEnv,
     globals: &mut HashMap<String, GlobalId>,
@@ -3597,24 +3643,36 @@ pub fn elaborate_rdecl_v1_with_effect_rows(
     match &rdecl.kind {
         RDeclKind::View { constraints, .. } => {
             let effect_row_type = check_view_visits_row(rdecl)?;
+            let dictionary_ctx =
+                declaration_param_context(env, globals, num_values, numeric_env, rdecl)?;
             // Resolve each constraint into its fully applied dictionary term.
             // A generic instance is not a bare global: its type arguments and
             // recursively-required dictionaries must be applied at this use
             // site before the kernel checks the candidate.
             let mut local_dicts = HashMap::new();
-            for (class_name, head_ty) in constraints {
+            for constraint in constraints {
                 let dictionary = resolve_instance_dictionary(
                     env,
                     globals,
                     num_values,
                     numeric_env,
                     class_env,
-                    class_name,
-                    head_ty,
+                    &dictionary_ctx,
+                    &constraint.class_name,
+                    &constraint.head_type,
                     &rdecl.span,
                 )?;
-                // The established View surface exposes its sole dictionary as
-                // `d`; retain its historical last-constraint behavior.
+                local_dicts.insert(
+                    constraint.binder.clone(),
+                    (dictionary.0, dictionary.1, dictionary_ctx.len()),
+                );
+            }
+            // The shared naming rule retains `d` as the sole-constraint alias.
+            if constraints.len() == 1 && constraints[0].binder != "d" {
+                let dictionary = local_dicts
+                    .get(&constraints[0].binder)
+                    .cloned()
+                    .expect("resolved sole constraint must have its binder");
                 local_dicts.insert("d".to_string(), dictionary);
             }
             let mut result = elaborate_view_or_let(
@@ -4559,7 +4617,7 @@ fn elaborate_view_or_let(
     numeric_env: &NumericEnv,
     class_env: &ClassEnv,
     rdecl: &RDecl,
-    local_dicts: &HashMap<String, (Term, Term)>,
+    local_dicts: &HashMap<String, (Term, Term, usize)>,
 ) -> Result<ElabResult, ElabError> {
     // Check for implicit ensures from a return-type refinement (`22 §2.1`).
     let has_refine_return = rdecl
@@ -4580,7 +4638,15 @@ fn elaborate_view_or_let(
         );
     }
     // V1 path: has requires/ensures or implicit return-type refinement obligation
-    elaborate_view_with_spec(env, globals, num_values, numeric_env, class_env, rdecl)
+    elaborate_view_with_spec(
+        env,
+        globals,
+        num_values,
+        numeric_env,
+        class_env,
+        rdecl,
+        local_dicts,
+    )
 }
 
 /// Extract the predicate from the innermost refinement in a resolved type.
@@ -4604,7 +4670,7 @@ fn elaborate_v0(
     numeric_env: &NumericEnv,
     class_env: &ClassEnv,
     rdecl: &RDecl,
-    local_dicts: &HashMap<String, (Term, Term)>,
+    local_dicts: &HashMap<String, (Term, Term, usize)>,
 ) -> Result<ElabResult, ElabError> {
     // A self-recursive view/let (body mentions its own name) must be admitted
     // through the SCT gate with the name pre-bound, so the body's self-call
@@ -4932,6 +4998,7 @@ fn elaborate_view_with_spec(
     numeric_env: &NumericEnv,
     class_env: &ClassEnv,
     rdecl: &RDecl,
+    local_dicts: &HashMap<String, (Term, Term, usize)>,
 ) -> Result<ElabResult, ElabError> {
     let omega = Term::omega(Level::Zero);
 
@@ -4946,8 +5013,9 @@ fn elaborate_view_with_spec(
     let (body_raw, carrier_ty_raw, pre_admit_id): (Term, Term, Option<GlobalId>) = if is_recursive {
         // Recursive: elab the carrier type, pre-admit, then elab the body.
         let carrier_ty = {
-            let mut cx =
-                ElabCtx::new(env, globals, num_values, numeric_env).with_classes(class_env);
+            let mut cx = ElabCtx::new(env, globals, num_values, numeric_env)
+                .with_classes(class_env)
+                .with_local_dicts(local_dicts);
             let ty = rdecl.ty.as_ref().ok_or_else(|| {
                 ElabError::Internal(
                     "recursive const with spec clauses requires a type annotation".into(),
@@ -4964,15 +5032,18 @@ fn elaborate_view_with_spec(
         });
         globals.insert(rdecl.name.clone(), id);
         let body = {
-            let mut cx =
-                ElabCtx::new(env, globals, num_values, numeric_env).with_classes(class_env);
+            let mut cx = ElabCtx::new(env, globals, num_values, numeric_env)
+                .with_classes(class_env)
+                .with_local_dicts(local_dicts);
             let body_c = check(&mut cx, &rdecl.body, &carrier_ty, &rdecl.span)?;
             cx.metas.zonk_term(&body_c)
         };
         (body, carrier_ty, Some(id))
     } else {
         // Non-recursive: original one-context flow.
-        let mut cx = ElabCtx::new(env, globals, num_values, numeric_env).with_classes(class_env);
+        let mut cx = ElabCtx::new(env, globals, num_values, numeric_env)
+            .with_classes(class_env)
+            .with_local_dicts(local_dicts);
         if let Some(ty) = &rdecl.ty {
             let ty_c = elab_type(&mut cx, ty)?;
             let body_c = check(&mut cx, &rdecl.body, &ty_c, &rdecl.span)?;
@@ -5000,6 +5071,7 @@ fn elaborate_view_with_spec(
             num_values,
             numeric_env,
             class_env,
+            local_dicts,
             &param_ctx,
             req,
             &omega,
@@ -5033,6 +5105,7 @@ fn elaborate_view_with_spec(
             num_values,
             numeric_env,
             class_env,
+            local_dicts,
             &ens_ctx,
             ens,
             &omega,
@@ -5679,12 +5752,15 @@ fn elab_in_ctx_at_omega(
     num_values: &mut HashMap<GlobalId, NumericLitVal>,
     numeric_env: &NumericEnv,
     class_env: &ClassEnv,
+    local_dicts: &HashMap<String, (Term, Term, usize)>,
     ctx: &Context,
     expr: &RExpr,
     omega: &Term,
     span: &Span,
 ) -> Result<Term, ElabError> {
-    let mut cx = ElabCtx::new(env, globals, num_values, numeric_env).with_classes(class_env);
+    let mut cx = ElabCtx::new(env, globals, num_values, numeric_env)
+        .with_classes(class_env)
+        .with_local_dicts(local_dicts);
     // Populate cx.ctx from the snapshot
     for ty in &ctx.types {
         cx.ctx.push(ty.clone());
