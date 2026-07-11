@@ -485,6 +485,117 @@ fn bool_and_right (a : Bool) (b : Bool)
     False ⇒ λh. absurd h
   }
 
+fn bool_dichotomy (b : Bool) : Or (Equal Bool b True) (Equal Bool b False) =
+  match b {
+    True ⇒ Inl (Equal Bool True True) (Equal Bool True False) tt ;
+    False ⇒ Inr (Equal Bool False True) (Equal Bool False False) tt
+  }
+
+fn compare_second_result (b : Bool) : OrdResult =
+  match b { True ⇒ ord_eq ; False ⇒ ord_lt }
+
+fn compare_result_of (a : Bool) (b : Bool) : OrdResult =
+  match a { True ⇒ compare_second_result b ; False ⇒ ord_gt }
+
+fn compare_raw (a : Type) (leq : a → a → Bool) (x : a) (y : a) : OrdResult =
+  compare_result_of (leq x y) (leq y x)
+
+fn compare_with (a : Type) (d : Ord a) (x : a) (y : a) : OrdResult =
+  compare_raw a (d.leq) x y
+
+fn compare (a : Type) (d : Ord a) (x : a) (y : a) : OrdResult =
+  compare_with a d x y
+
+fn compare_eq_sound_raw_second_true (a : Type) (leq : a → a → Bool)
+  (antisym_law : (x : a) → (y : a) → Equal Bool (leq x y) True → Equal Bool (leq y x) True → Equal a x y)
+  (x : a) (y : a) (hxy : Equal Bool (leq x y) True) (hyx : Equal Bool (leq y x) True)
+  : Equal OrdResult (compare_second_result (leq y x)) ord_eq → Equal a x y =
+  λp. antisym_law x y hxy hyx
+
+fn compare_eq_sound_raw_second_false (a : Type) (leq : a → a → Bool)
+  (x : a) (y : a) (hyx : Equal Bool (leq y x) False)
+  : Equal OrdResult (compare_second_result (leq y x)) ord_eq → Equal a x y =
+  λp. absurd (J (λb _. Equal OrdResult (compare_second_result b) ord_eq) p hyx)
+
+fn compare_eq_sound_raw_second_dispatch (a : Type) (leq : a → a → Bool)
+  (antisym_law : (x : a) → (y : a) → Equal Bool (leq x y) True → Equal Bool (leq y x) True → Equal a x y)
+  (x : a) (y : a) (hxy : Equal Bool (leq x y) True)
+  (choice : Or (Equal Bool (leq y x) True) (Equal Bool (leq y x) False))
+  : Equal OrdResult (compare_second_result (leq y x)) ord_eq → Equal a x y =
+  match choice {
+    Inl hyx ⇒ compare_eq_sound_raw_second_true a leq antisym_law x y hxy hyx ;
+    Inr hyx ⇒ compare_eq_sound_raw_second_false a leq x y hyx
+  }
+
+fn compare_eq_sound_raw_first_true (a : Type) (leq : a → a → Bool)
+  (antisym_law : (x : a) → (y : a) → Equal Bool (leq x y) True → Equal Bool (leq y x) True → Equal a x y)
+  (x : a) (y : a) (hxy : Equal Bool (leq x y) True)
+  : Equal OrdResult (compare_result_of (leq x y) (leq y x)) ord_eq → Equal a x y =
+  J (λb _. Equal OrdResult (compare_result_of b (leq y x)) ord_eq → Equal a x y)
+    (compare_eq_sound_raw_second_dispatch a leq antisym_law x y hxy (bool_dichotomy (leq y x)))
+    (sym Bool (leq x y) True hxy)
+
+fn compare_eq_sound_raw_first_false (a : Type) (leq : a → a → Bool)
+  (x : a) (y : a) (hxy : Equal Bool (leq x y) False)
+  : Equal OrdResult (compare_result_of (leq x y) (leq y x)) ord_eq → Equal a x y =
+  λp. absurd (J (λb _. Equal OrdResult (compare_result_of b (leq y x)) ord_eq) p hxy)
+
+fn compare_eq_sound_raw_dispatch (a : Type) (leq : a → a → Bool)
+  (antisym_law : (x : a) → (y : a) → Equal Bool (leq x y) True → Equal Bool (leq y x) True → Equal a x y)
+  (x : a) (y : a)
+  (choice : Or (Equal Bool (leq x y) True) (Equal Bool (leq x y) False))
+  : Equal OrdResult (compare_raw a leq x y) ord_eq → Equal a x y =
+  match choice {
+    Inl hxy ⇒ compare_eq_sound_raw_first_true a leq antisym_law x y hxy ;
+    Inr hxy ⇒ compare_eq_sound_raw_first_false a leq x y hxy
+  }
+
+fn compare_eq_sound_raw (a : Type) (leq : a → a → Bool)
+  (antisym_law : (x : a) → (y : a) → Equal Bool (leq x y) True → Equal Bool (leq y x) True → Equal a x y)
+  (x : a) (y : a)
+  : Equal OrdResult (compare_raw a leq x y) ord_eq → Equal a x y =
+  compare_eq_sound_raw_dispatch a leq antisym_law x y (bool_dichotomy (leq x y))
+
+fn compare_eq_sound (a : Type) (d : Ord a) (x : a) (y : a)
+  : Equal OrdResult (compare_with a d x y) ord_eq → Equal a x y =
+  compare_eq_sound_raw a (d.leq) (d.antisym) x y
+
+fn compare_lt_sound_raw (a : Type) (leq : a → a → Bool) (x : a) (y : a)
+  : Equal OrdResult (compare_raw a leq x y) ord_lt → Equal Bool (leq x y) True =
+  match bool_dichotomy (leq x y) {
+    Inl hxy ⇒ λp. hxy ;
+    Inr hxy ⇒ λp.
+      absurd (J (λb _. Equal OrdResult (compare_result_of b (leq y x)) ord_lt) p hxy)
+  }
+
+fn bool_or_left_false_elim (a : Bool) (b : Bool)
+  (ha : Equal Bool a False) (hor : Equal Bool (bool_or a b) True)
+  : Equal Bool b True =
+  J (λw _. Equal Bool (bool_or w b) True) hor ha
+
+fn compare_gt_sound_raw_first_true (a : Type) (leq : a → a → Bool)
+  (x : a) (y : a)
+  (choice : Or (Equal Bool (leq y x) True) (Equal Bool (leq y x) False))
+  : Equal OrdResult (compare_second_result (leq y x)) ord_gt → Equal Bool (leq y x) True =
+  match choice {
+    Inl hyx ⇒ λp. hyx ;
+    Inr hyx ⇒ λp.
+      absurd (J (λb _. Equal OrdResult (compare_second_result b) ord_gt) p hyx)
+  }
+
+fn compare_gt_sound_raw (a : Type) (leq : a → a → Bool)
+  (total_law : (x : a) → (y : a) → Equal Bool (bool_or (leq x y) (leq y x)) True)
+  (x : a) (y : a)
+  : Equal OrdResult (compare_raw a leq x y) ord_gt → Equal Bool (leq y x) True =
+  match bool_dichotomy (leq x y) {
+    Inl hxy ⇒
+      J (λb _. Equal OrdResult (compare_result_of b (leq y x)) ord_gt → Equal Bool (leq y x) True)
+        (compare_gt_sound_raw_first_true a leq x y (bool_dichotomy (leq y x)))
+        (sym Bool (leq x y) True hxy) ;
+    Inr hxy ⇒ λp.
+      bool_or_left_false_elim (leq x y) (leq y x) hxy (total_law x y)
+  }
+
 fn pair_deceq_eq (a : Type) (b : Type) (da : DecEq a) (db : DecEq b)
   (x : Pair a b) (y : Pair a b) : Bool =
   bool_and (da.eq (pair_fst a b x) (pair_fst a b y))

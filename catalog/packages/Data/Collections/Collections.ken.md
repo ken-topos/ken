@@ -73,6 +73,10 @@ them.
 ```ken
 data OrdResult = Lt | Eq | Gt
 
+const ord_eq : OrdResult = Eq
+const ord_lt : OrdResult = Lt
+const ord_gt : OrdResult = Gt
+
 fn list_append (a : Type) (xs : List a) (ys : List a) : List a =
   match xs {
     Nil ⇒ ys ;
