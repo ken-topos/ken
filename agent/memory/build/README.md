@@ -12,6 +12,7 @@ to one team belongs in `teams/<team>`.
 |---|---|
 | [assert-specific-error-variant-not-is-err](assert-specific-error-variant-not-is-err.md) | Assert the specific error variant, not a bare `is_err()` |
 | [bundled-changes-need-per-mechanism-isolation-flip](bundled-changes-need-per-mechanism-isolation-flip.md) | Bundled changes need a per-mechanism isolation-flip |
+| [declaration-order-claim-needs-three-probe-net](declaration-order-claim-needs-three-probe-net.md) | A load-bearing declaration-order claim needs a 3-probe net (acyclic-forward / backward / mutual-cycle) before it becomes authoring guidance |
 | [eval-only-harness-cant-detect-phantom-arg-staleness](eval-only-harness-cant-detect-phantom-arg-staleness.md) | An eval-only harness can't detect phantom-arg staleness |
 | [general-fix-can-conflate-similar-shaped-different-cases](general-fix-can-conflate-similar-shaped-different-cases.md) | A general fix can conflate similar-shaped but different cases |
 | [green-vs-green-does-not-confirm-a-fix](green-vs-green-does-not-confirm-a-fix.md) | Green-vs-green does not confirm a fix |
