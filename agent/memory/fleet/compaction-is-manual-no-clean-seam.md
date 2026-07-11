@@ -32,6 +32,19 @@ this harness (hunts for a nonexistent `convo-<role>` session; its error message
 tripped on exactly this 2026-07-11). Full mechanics in
 `playbooks/federation/steward.md` + `architect.md` self-compact sections.
 
+**Queue a `resume` after the `/compact` (operator, 2026-07-11).** A self-compact
+returns the seat to an idle `❯` and **nothing re-invokes it** — it sits idle
+until roused (the operator had to type `resume` by hand to wake a self-compacted
+seat). So in the same last action, immediately queue a second `tmux send-keys -t
+moot-<role> "resume"` + `Enter`: typed while `/compact` is still processing, the
+host **buffers** it and fires it the instant the prompt returns, and the
+post-compact re-orient hook then carries the seat back into its own in-flight
+work autonomously. **A hook cannot substitute** — a SessionStart hook only
+shapes the next turn's *context*, it cannot send the keystroke that *triggers*
+one; the queued `resume` is that trigger. **Self-compaction only** — never queue
+`resume` for a Handoff-Gate team/enclave compaction, where the kickoff mention
+is the resume trigger and a premature `resume` wakes the unit into "no new work."
+
 **The error this corrects:** I over-read the singleton comment as a *team*
 statement and **skipped compacting Team Verify before releasing Sec1-build** (a
 domain switch, with T1-build retros already in) — a real miss under §2c. Going
