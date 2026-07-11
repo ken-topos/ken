@@ -13890,3 +13890,18 @@ tip). Mention IFF question-or-action.
 > initiative: #11 pedagogic catalog rewrite (def/prop/lemma/proof, top-down) —
 > prereq Architect vocab consult; Handoff-Gate-compact the ring at kickoff.** See
 > judgment-log D13.
+
+> **▶ pedagogic-catalog-prototype ACTIVE — Foundation (kicked 2026-07-11
+> ~17:35).** Brief merged `origin/main @ 50d949bb` (PR #519, doc-only) at
+> `docs/program/wp/pedagogic-catalog-prototype.md`; branch
+> `wp/pedagogic-catalog-prototype` off `origin/main`. Rewrite mid-complexity
+> catalog `.ken.md` sources as pedagogic top-down documents using
+> `def`/`prop`/`lemma`/`proof` per the §7.1 authoring convention (merged
+> `9a2cf746`, PR #518). Targets: NatArith (flagship; subsumes the #12 keyword
+> pilot) + OrdNat, EmptyDec optional. Prototype — product is the authoring
+> pattern + surfaced gaps. Prereq met: Architect vocab ruling
+> (evt_261s6784m3y48, HYBRID/no-prereq) + §7.1 note landed. Ring
+> Handoff-Gate-compacted onto 50d949bb (all 3 seats `Context compacted`;
+> foundation-qa's stale compare-ord branch preserved). Kickoff evt_2rnckwxjzyyp2
+> → foundation-leader Working. Watch-item (not blocker): no proof-relevant
+> `lemma` form. See judgment-log D14.
