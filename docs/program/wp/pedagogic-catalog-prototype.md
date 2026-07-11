@@ -24,23 +24,34 @@ These are decided. Treat them as ground, not as questions to relitigate.
 1. **The `def`/`prop`/`lemma`/`proof` semantics and when to use each** are pinned
    in `catalog/guide/surface-reference.ken.md` **§7.1 "Choosing a form"** (the
    decision table + the Ω-vs-Type rule + `lemma`-vs-`proof … for` ownership + the
-   top-down enabler). **§7.1 is your authoring contract — follow it; do not
-   invent a per-file convention.**
+   bottom-up code-order rule). **§7.1 is your authoring contract — follow it; do
+   not invent a per-file convention.**
 2. **The load-bearing rule: `lemma`/`proof` require an `Omega` statement**
    (`ensure_omega_type`, elab.rs). `Equal`/`IsTrue`-typed laws and `And`-of-Ω are
    Ω → `lemma`/`proof`. **Proof-relevant** conclusions (`Or : Ω→Ω→Type`, `Σ` with
    a `Type` component, disjunction/eliminator helpers that carry a branch *as
    data*) stay `const`/`fn`. Promoting one of those to a `lemma` is **not** a bug
    to fight — it is the wrong side of the proof-irrelevance line.
-3. **Top-down is supported.** Order-independent top-level resolution is decided
-   (spec §33 mutual recursion) and built (the elaborator name pre-pass +
-   call-graph SCC grouping in `crates/ken-elaborator/src/modules.rs`). A `lemma`
-   may be *stated above* the `fn`/`const`/`lemma` it invokes. **Do not touch or
-   re-investigate evaluation/declaration order** — it is done.
+3. **Code order is BOTTOM-UP — for every decl kind. "Top-down" lives in the
+   prose, not the code.** The Architect probed the elaborator on `origin/main`
+   (evt_24abrtp41hz9e, ground truth — two earlier reads were wrong): each decl
+   resolves only against names elaborated *above* it. An acyclic forward
+   reference fails (`UnresolvedCon`) — for `fn`/`const` **and**
+   `lemma`/`prop`/`proof` alike. The **only** order-free construct is a genuinely
+   mutually-recursive `fn`/`const` **cycle** (auto-detected, elaborated together
+   under one SCT check). So: **write every decl's dependencies above it** — the
+   recursive helper `fn` directly above its thin `lemma`/`proof` wrapper, each
+   `fn` above its callers. The pedagogic **top-down reading is achieved in the
+   `.ken.md` prose**: open each section with a Markdown lede + the statement of
+   what it establishes, then give the code bottom-up below — the *document* reads
+   top-down even though the *code* elaborates dependencies-first. **Do not
+   re-investigate declaration order** — this is probed, settled behavior; true
+   order-independent *code* is the separately queued language WP
+   (`acyclic-forward-reference-elaboration`), not a prototype change.
 4. **The self-reference caveat.** A `lemma` body still cannot call *itself*. A
-   proof that needs induction stays an ordinary **recursive `fn`** behind a
-   **thin non-recursive `lemma` wrapper** (§7.1). Expect this for the recursive
-   arithmetic proofs (see Scope).
+   proof that needs induction stays an ordinary **recursive `fn`** (placed
+   directly above, per settled input 3) behind a **thin non-recursive `lemma`
+   wrapper** (§7.1). Expect this for the recursive arithmetic proofs (see Scope).
 5. **Clean-room** (CLAUDE.md / CLEAN-ROOM.md): build from `/spec` + §7.1, never
    from `local/refs/`.
 
@@ -76,9 +87,12 @@ Each rewritten source should end up as a readable top-down document:
 
 1. **A lede** — 2–5 lines up top stating what the module establishes and why it
    matters (the motivation), before any declaration.
-2. **Statement-first ordering** — headline results (the laws/props) stated near
-   the top; supporting `fn`/`const` machinery below. Use the order-independent
-   resolver (settled input 3) — do not reorder for the elaborator's sake.
+2. **Statement-first in the PROSE; code bottom-up.** Open each section with a
+   Markdown lede + the statement of what it establishes, so the *document* reads
+   top-down. The *code* below is ordered bottom-up — every decl's dependencies
+   above it (settled input 3), the recursive helper `fn` directly above its thin
+   `lemma`/`proof` wrapper. Don't fight the elaborator for top-down code; carry
+   the top-down reading in the prose.
 3. **Vocabulary applied per §7.1** — every Ω-typed law becomes a `lemma` (or
    `proof … for <subject>` when it is *about* one definition and should travel
    with it); computation stays `fn`/`const`; use `prop` where a proposition
@@ -115,8 +129,12 @@ top-down authoring pattern is, and every gap surfaced.
 
 ## Do-not-reopen guardrails
 
-- Order-independence (settled input 3) is **done** — do not re-open or re-test
-  it; just rely on it.
+- Declaration-order behavior (settled input 3) is **settled** — code is
+  bottom-up for every decl kind; write dependencies above their users. Do not
+  re-open or re-test it. If bottom-up code order genuinely limits the pedagogic
+  goal (it should not — the top-down reading lives in the prose), that is the
+  separately queued language WP `acyclic-forward-reference-elaboration`, **not** a
+  prototype change — record it as the prototype gap and move on.
 - The Ω-vs-Type boundary (settled input 2) is **fixed** — do not attempt to make
   a `Type`-level term (`Or`, `Σ`-witness, eliminator helper) into a `lemma`.
 - **No TCB / kernel / spec / prelude / Cargo change.** This is a catalog-source
@@ -126,6 +144,14 @@ top-down authoring pattern is, and every gap surfaced.
 
 ## Gaps to surface (route back to Steward → Architect; do NOT block on them)
 
+- **Acyclic forward references fail (any decl) — KNOWN, handled (a).** A decl's
+  body or type cannot reference a decl defined *below* it; only a mutually-
+  recursive `fn`/`const` cycle is order-free (probed, evt_24abrtp41hz9e). The
+  prototype surfaced this immediately (NatArith `add_zero_l` → `add_zero_l_ind`);
+  Architect ruled (evt_2zr1ej07ver2v/evt_24abrtp41hz9e): write code bottom-up,
+  recursive helper directly above its wrapper (settled input 3), record as the
+  prototype gap. The principled fix is the queued language WP
+  `acyclic-forward-reference-elaboration` — do **not** block on it.
 - **No proof-relevant `lemma` form** — a named checked theorem whose conclusion
   is at `Type` is honestly `const : φ = proof` today. The Architect flagged this
   as the one candidate follow-up (not a blocker). If it hurts readability at

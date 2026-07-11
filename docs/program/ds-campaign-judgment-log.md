@@ -1218,3 +1218,97 @@ new work started). Prereq before kicking: Architect consult on whether
 `def`/`prop`/`lemma`/`proof` are new surface forms or conventions over `def`.
 Handoff-Gate-compact the Foundation ring when the brief is ready (the ring is at
 a clean seam now, but compaction pairs with the kickoff, not before it).
+
+### D14 · #11 pedagogic initiative LAUNCHED — vocab ruling → §7.1 → brief (2026-07-11 ~17:30 UTC)
+
+**Resume-fix verified in production.** Self-compacted at the compare-ord seam as
+the live test of the detached resume watcher (`scripts/postcompact-resume.sh`,
+PR #514). Log confirmed the correct sequence: waited for compaction to *start*
+(no early-fire), waited for *completion*, then sent `resume`. The old
+buffered-resume race is closed. Operator's explicit fix request (#18) done.
+
+**Architect vocabulary ruling (evt_261s6784m3y48) — HYBRID, no prereq WP.**
+Grounded on a live `origin/main` read (lexer, parse fns, resolve.rs, elab.rs,
+prelude), not memory. The four forms are **distinct + kernel-backed today**:
+`def` (type alias/refinement) · `prop` (Ω-valued proposition family) · `lemma`
+(module-level checked Ω-theorem) · `proof … for` (same, namespaced `subject::p`,
+telescope-validated, no sibling-proof dependency). **Load-bearing rule:**
+`lemma`/`proof` enforce Ω via `ensure_omega_type` — `Equal`/`IsTrue`-typed laws
+convert cleanly; proof-**relevant** conclusions (`Or : Ω→Ω→Type`, `Σ`-witness,
+eliminator helpers carrying a branch as data) stay `const`/`fn`. The vocabulary
+tracks the proof-irrelevance line on purpose. Low adoption (lemma 13 / proof 10)
+is under-USE not under-SPEC → nothing to build first. One flagged follow-up (NOT
+a blocker): no proof-relevant `lemma` form (Type-level checked theorem stays
+`const : φ = proof`) — watch during prototype, escalate only if it hurts.
+
+**§7.1 convention note MERGED** `origin/main @ 9a2cf746` (PR #518, doc-only).
+Architect-authored subsection "Choosing a form" in `surface-reference.ken.md`:
+decision table + the Ω-vs-Type rule + `lemma`-vs-`proof … for` ownership + the
+top-down enabler. +56/−0, no ken fences (pure prose+table → nothing new
+elaborates). This is the ring's authoring contract.
+
+**Foundation brief MERGED** `origin/main @ 50d949bb` (PR #519, doc-only) at
+`docs/program/wp/pedagogic-catalog-prototype.md`. Pins settled inputs (§7.1,
+Ω-vs-Type, order-independence decided §33 + built, self-reference caveat,
+clean-room), targets (NatArith flagship — doubles as the #12 keyword pilot; +
+OrdNat; EmptyDec optional boundary-exerciser), mandated per-file outline,
+testable AC (re-elaborates green / behavior-preserving / §7.1-faithful /
+top-down+motivated / discovery captured), do-not-reopen guardrails, gaps-to-
+surface list. Framed as a **prototype** whose product is the *pattern* +
+surfaced gaps, per the Architect's hybrid verdict.
+
+**Handoff-Gate compaction of the Foundation ring in progress** (leader /
+implementer / sol-swapped impl / qa) — gate preconditions all met: retros in,
+no in-flight obligation, quiescent, branch-check clean (qa's
+`wp/compare-ord-lexicographic` ahead-by-6 verified as stale squash-merge
+leftover — diff vs main is deletions-only, compare-ord content fully on main).
+Kickoff pairs with the compaction (drops verified → mention → send-keys rouse).
+
+### D15 · Prototype falsified the "top-down code" premise — code is bottom-up (2026-07-11 ~18:05 UTC)
+
+**The initiative's founding premise was wrong, and the prototype caught it in
+minutes.** My brief (and §7.1) claimed "top-down elaboration is supported (§33
+mutual recursion + `expand_scope`)" so a `lemma` could be stated above the `fn`
+it invokes. The foundation-implementer's first NatArith rewrite immediately
+falsified it: `lemma add_zero_l = add_zero_l_ind a` with the helper below →
+`UnresolvedCon`. It committed WIP `77ebd1b3`, paused, and asked (a) local-order
+vs (b) hold-for-language-fix (evt_6xmatefj8cptx). Exactly the
+[[held-branch-scaffolding-is-load-bearing-evidence]] value of building the real
+thing.
+
+**Architect corrected itself TWICE, then PROBED (ground truth):**
+- 1st (evt_2zr1ej07ver2v): SCC auto-grouping gated to view/let; proofs sequential
+  → "proofs need deps above, but `fn`/`const` keep full order-independence." Ruled
+  **(a)**: recursive helper above its wrapper; §7.1 correction + language WP to me.
+- 2nd (evt_24abrtp41hz9e): retracted the `fn`/`const` claim after a **minimal
+  elaborator probe** — acyclic forward `fn`→`fn` also `UnresolvedCon`; only a
+  mutually-recursive **cycle** is order-free. **True model: code order is
+  bottom-up for EVERY decl kind;** the sole order-free construct is an
+  auto-detected `fn`/`const` cycle. The "state the theorem above its helpers"
+  framing was backwards. Two reads were wrong; the probe is the net
+  ([[mechanism-citation-needs-own-empirical-probe]] — reading resolve-phase
+  deferral missed the elaboration-phase GlobalId ordering).
+
+**The initiative survives — top-down moves to the PROSE.** (a) is now simply THE
+rule (not a proof special-case): write code bottom-up, deps above their users.
+The pedagogic "reads top-down" goal is achieved at the `.ken.md` **Markdown**
+level — open a section with a lede + statement, code bottom-up below; the
+*document* reads top-down even though the *code* is dependencies-first. The brief
+already mandated prose ledes, so the ring's (a) output lands the goal
+regardless.
+
+**Steward actions:** (1) unblocked the ring via leader-relay of (a) — implementer
+resumed Working; (2) **twice-corrected** the brief's settled-input-3 / outline /
+guardrail / gaps to the probed bottom-up model + prose reframing (my first
+correction repeated the Architect's 1st over-claim before the probe landed —
+[[dont-flip-a-just-sent-ruling-without-checking-for-crossed-reply]]: I caught the
+2nd correction before publishing, so no wrong doc shipped); (3) publishing the
+Architect's §7.1 fix (`wp/pedagogic-vocabulary-forward-ref-fix @ 8dd19610`,
+doc-only); (4) **rescoped the queued language WP**
+`proof-forward-reference` → `acyclic-forward-reference-elaboration` (broader:
+generalize signature-first/topological elaboration to ALL top-level decls so any
+*acyclic* forward ref resolves; keep SCT for `fn` cycles; **REJECT proof-decl
+cycles** — circular reasoning = unsound, the load-bearing soundness guard — and
+the existing self-reference rejection; a §33 spec touch). Sequenced after the
+prototype; flagged to operator. Net: prototype proceeds under (a); the principled
+order-independence fix is the real higher-value follow-up.
