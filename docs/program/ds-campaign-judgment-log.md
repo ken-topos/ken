@@ -1058,3 +1058,45 @@ misses non-@ posts" trap — sweep recent_context, don't rely on mentions alone.
 - **Net:** #1 closed (retired, no code). #2 + #3 are **operator decisions** —
   teed up for Pat. No kernel/language WP kicked; the Architect gate did its job
   (K6 would have been wasted kernel effort; the "fix" was already landed).
+
+### D9 · Operator: document the 3 techniques in write-ken (technique, not defect)
+
+Operator (2026-07-11, ~12:20) reviewed the Architect analyses and directed that
+K6-conv-convergence, `check_match_dependent` idiom-scoping, and the namespace
+collision be **documented in the write-ken skill + supporting materials** — as
+**technique, not defect**. Target = `catalog/guide/` strands (proof-techniques
+for #1/#2; surface-reference for #3), the literate `.ken.md` corpus the
+`write-ken` skill (`agent/playbooks/tools/write-ken.md`) points at; **every guide
+example must be real checked Ken**, so entries reference landed catalog code.
+Plan (task #9): **Librarian doc-pass, Architect fidelity-gate**, sourced from the
+three analysis evts; **run as the compare-ord as-built pass at merge** (that's
+when #3's canonical example — the dependent eliminator — lands as real code).
+This is effectively the operator choosing the **document-the-idioms path** for #2
+(≈ Architect's Option A) and the **alias/eliminator route** for #3 (≈ Fork C
+made canonical) — B-for-#2 (opt-in surface) and B-for-#3 (qualified-ctor
+language change) are **not** foreclosed, just not what's being documented now.
+
+### D10 · compare-ord Pair-antisym boundary — resolved in-envelope (2026-07-11)
+
+Foundation isolated a **genuine** Pair-antisym boundary (`evt_5afteqshs8r88`):
+branch-varying dependent obligations (Eq/Eq → component antisym; Lt/Gt →
+contradiction) that the non-dependent `ord_result_dispatch2` can't carry — with
+three constraints converging (Collections load-order, Lawful ctor-shadow,
+`case_eq` under-reach). Correctly **refused to improvise**; asked for an
+Architect/Steward ruling. I split it (`evt_2pfnp11qvc6fz`): technique = Architect;
+scope = mine (proceed-if-in-envelope else size-defer+split), with a **hypothesis**
+— a motive-parameterized *dependent* generalization of the Collections helper.
+**Architect ruled it in-envelope** (`evt_bp56czcsyvem`), proven green: add
+`ord_result_elim (P : OrdResult → Prop) (r) (pLt)(pEq)(pGt) : P r = match r {…}`
++ the 9-branch 2-ary analog in Collections (ctors nameable there); Lawful applies
+it **positionally** (no bare ctor pattern → shadow never bites), abstract motive
+`P` keeps Collections acyclic (raw-mechanism-downward / proof-upward, like
+`list_compare` taking a raw cmp), and the explicit motive sidesteps the `case_eq`
+under-reach. ~5–15 lines; the ~40–60-lemma Pair/List work buildable NOW, **no
+defer**. Steward scope concurred (`evt_560641n32japv`): proceed, no split. This
+is the same generic-helper-consumed-downward shape lifted to a dependent motive —
+and the **canonical write-ken #3 example** (D9). Lessons: (a) three surfaced gaps
+can converge at one proof site — the fix was one clean interface, not three; (b)
+my "hypothesis, you rule" split let the Architect confirm-or-refute a concrete
+shape fast rather than design from scratch; (c) implementer's refuse-to-improvise
++ isolate-the-boundary is exactly the discipline that makes a terra seat safe.
