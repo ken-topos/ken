@@ -59,7 +59,7 @@ fn structural_instances_compute_positive_and_negative_bool_examples() {
 }
 
 #[test]
-fn list_neutral_path_is_named_dictionary_dispatch_not_a_postulate() {
+fn list_neutral_path_uses_case_eq_not_a_postulate() {
     let start = LAWFUL_CLASSES_KEN_MD
         .find("### 4.5 Structural `DecEq` liftings")
         .expect("structural lifting section must remain present");
@@ -71,13 +71,16 @@ fn list_neutral_path_is_named_dictionary_dispatch_not_a_postulate() {
         + fence_start;
     let code = &section[fence_start..code_end];
     for required in [
-        "bool_dichotomy (da.eq x y)",
-        "fn list_deceq_sound_cons_dispatch",
-        "da.sound x y peq",
+        "match (list_deceq_head_eq a da x y) eqn: h",
+        "fn list_deceq_sound_cons",
+        "da.sound x y h",
         "da.complete x x Refl",
-        "J (λb _. IsTrue",
+        "λp. absurd p",
     ] {
         assert!(code.contains(required), "missing required neutral-proof route: {required}");
+    }
+    for removed in ["bool_dichotomy", "list_deceq_sound_cons_dispatch"] {
+        assert!(!code.contains(removed), "removed hand-written scaffolding remains: {removed}");
     }
     for forbidden in ["Axiom", "postulate", "sorry"] {
         assert!(!code.contains(forbidden), "structural lifting code must not contain {forbidden}");

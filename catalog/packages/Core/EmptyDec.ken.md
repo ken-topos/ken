@@ -128,21 +128,8 @@ instance DecEq Bool {
 }
 ```
 
-`bool_dichotomy` reflects a stuck `Bool` value into an equation-carrying
-`Or`, so a computed `Bool` result can be USED as a proof, not just branched
-on — a plain `match (d.eq x y) {...}` cannot do this itself (the scrutinee
-is an application, not a bound variable, so the dependent-motive machinery
-that lets `match` refine a hypothesis has nothing to bind); this is the
-same combinator `catalog/packages/Data/Collections/Map.ken` calls
-`bool_dichotomy`, inlined here for self-containment:
-
-```ken
-fn bool_dichotomy (b : Bool) : Or (Equal Bool b True) (Equal Bool b False) =
-  match b {
-    True  ⇒ Inl (Equal Bool True True) (Equal Bool True False) tt ;
-    False ⇒ Inr (Equal Bool False True) (Equal Bool False False) tt
-  }
-```
+The `match e eqn: h` modifier retains the equation between a computed `Bool`
+and its branch constructor, so the equation can be used as a proof directly.
 
 `sym`/`trans` are inlined from `catalog/packages/Core/Transport.ken`
 (self-containment, the same idiom `catalog/guide/proof-techniques.ken.md`
@@ -170,12 +157,12 @@ need for `absurd_empty` here (this bridge is Ω → Type, not Empty → C):
 
 ```ken
 fn dec_eq_decides (a : Type) (d : DecEq a) (x : a) (y : a) : Dec (Equal a x y) =
-  match bool_dichotomy (d.eq x y) {
-    Inl p ⇒ Yes (Equal a x y) (d.sound x y p) ;
-    Inr q ⇒
+  match (d.eq x y) eqn: h {
+    True ⇒ Yes (Equal a x y) (d.sound x y h) ;
+    False ⇒
       No (Equal a x y)
          (λpxy. absurd (trans Bool False (d.eq x y) True
-                              (sym Bool (d.eq x y) False q)
+                              (sym Bool (d.eq x y) False h)
                               (d.complete x y pxy)))
   }
 ```

@@ -485,12 +485,6 @@ fn bool_and_right (a : Bool) (b : Bool)
     False ⇒ λh. absurd h
   }
 
-fn bool_dichotomy (b : Bool) : Or (Equal Bool b True) (Equal Bool b False) =
-  match b {
-    True ⇒ Inl (Equal Bool True True) (Equal Bool True False) tt ;
-    False ⇒ Inr (Equal Bool False True) (Equal Bool False False) tt
-  }
-
 fn pair_deceq_eq (a : Type) (b : Type) (da : DecEq a) (db : DecEq b)
   (x : Pair a b) (y : Pair a b) : Bool =
   bool_and (da.eq (pair_fst a b x) (pair_fst a b y))
@@ -548,35 +542,21 @@ fn list_deceq_eq (a : Type) (da : DecEq a) (xs : List a) (ys : List a) : Bool =
 fn list_deceq_head_eq (a : Type) (da : DecEq a) (x : a) (y : a) : Bool =
   da.eq x y
 
-fn list_deceq_sound_cons_true (a : Type) (da : DecEq a)
+fn list_deceq_cons_result (a : Type) (da : DecEq a) (xs : List a) (ys : List a)
+  (b : Bool) : Prop =
+  IsTrue (match b { True ⇒ list_eq a da.eq xs ys ; False ⇒ False })
+
+fn list_deceq_sound_cons (a : Type) (da : DecEq a)
   (x : a) (xs : List a) (y : a) (ys : List a)
   (ih : (ys : List a) → IsTrue (list_deceq_eq a da xs ys) → Equal (List a) xs ys)
-  (peq : Equal Bool (list_deceq_head_eq a da x y) True)
-  (h : IsTrue (list_deceq_eq a da (Cons a x xs) (Cons a y ys)))
-  : Equal (List a) (Cons a x xs) (Cons a y ys) =
-  J (λy' _. Equal (List a) (Cons a x xs) (Cons a y' ys))
-    (cong (List a) (List a) xs ys (Cons a x)
-      (ih ys
-        (J (λb _. IsTrue (match b { True ⇒ list_eq a da.eq xs ys ; False ⇒ False })) h peq)))
-    (da.sound x y peq)
-
-fn list_deceq_sound_cons_false (a : Type) (da : DecEq a)
-  (x : a) (xs : List a) (y : a) (ys : List a)
-  (qeq : Equal Bool (list_deceq_head_eq a da x y) False)
-  (h : IsTrue (list_deceq_eq a da (Cons a x xs) (Cons a y ys)))
-  : Equal (List a) (Cons a x xs) (Cons a y ys) =
-  absurd
-    (J (λb _. IsTrue (match b { True ⇒ list_eq a da.eq xs ys ; False ⇒ False })) h qeq)
-
-fn list_deceq_sound_cons_dispatch (a : Type) (da : DecEq a)
-  (x : a) (xs : List a) (y : a) (ys : List a)
-  (ih : (ys : List a) → IsTrue (list_deceq_eq a da xs ys) → Equal (List a) xs ys)
-  (h : IsTrue (list_deceq_eq a da (Cons a x xs) (Cons a y ys)))
-  (choice : Or (Equal Bool (list_deceq_head_eq a da x y) True) (Equal Bool (list_deceq_head_eq a da x y) False))
-  : Equal (List a) (Cons a x xs) (Cons a y ys) =
-  match choice {
-    Inl peq ⇒ list_deceq_sound_cons_true a da x xs y ys ih peq h ;
-    Inr qeq ⇒ list_deceq_sound_cons_false a da x xs y ys qeq h
+  : list_deceq_cons_result a da xs ys (list_deceq_head_eq a da x y)
+    → Equal (List a) (Cons a x xs) (Cons a y ys) =
+  match (list_deceq_head_eq a da x y) eqn: h {
+    True ⇒ λp.
+      J (λy' _. Equal (List a) (Cons a x xs) (Cons a y' ys))
+        (cong (List a) (List a) xs ys (Cons a x) (ih ys p))
+        (da.sound x y h) ;
+    False ⇒ λp. absurd p
   }
 
 fn list_deceq_complete_cons (a : Type) (da : DecEq a)
@@ -597,9 +577,8 @@ fn list_deceq_sound (a : Type) (da : DecEq a)
     } ;
     Cons x xs2 ⇒ λys. match ys {
       Nil ⇒ λp. absurd p ;
-      Cons y ys2 ⇒ λp.
-        list_deceq_sound_cons_dispatch a da x xs2 y ys2 (list_deceq_sound a da xs2) p
-          (bool_dichotomy (da.eq x y))
+      Cons y ys2 ⇒ list_deceq_sound_cons a da x xs2 y ys2
+        (list_deceq_sound a da xs2)
     }
   }
 
