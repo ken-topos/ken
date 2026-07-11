@@ -77,6 +77,193 @@ const ord_eq : OrdResult = Eq
 const ord_lt : OrdResult = Lt
 const ord_gt : OrdResult = Gt
 
+fn ord_result_leq (r : OrdResult) : Bool =
+  match r { Lt ⇒ True ; Eq ⇒ True ; Gt ⇒ False }
+
+fn ord_result_dispatch2 (c : Type)
+  (ll : c) (le : c) (lg : c)
+  (el : c) (ee : c) (eg : c)
+  (gl : c) (ge : c) (gg : c)
+  (r : OrdResult) (s : OrdResult) : c =
+  match r {
+    Lt ⇒ match s { Lt ⇒ ll ; Eq ⇒ le ; Gt ⇒ lg } ;
+    Eq ⇒ match s { Lt ⇒ el ; Eq ⇒ ee ; Gt ⇒ eg } ;
+    Gt ⇒ match s { Lt ⇒ gl ; Eq ⇒ ge ; Gt ⇒ gg }
+  }
+
+fn ord_result_elim (P : OrdResult → Prop) (r : OrdResult)
+  (pLt : P Lt) (pEq : P Eq) (pGt : P Gt) : P r =
+  match r { Lt ⇒ pLt ; Eq ⇒ pEq ; Gt ⇒ pGt }
+
+fn ord_result_elim2 (P : OrdResult → OrdResult → Prop)
+  (r : OrdResult) (s : OrdResult)
+  (pLL : P Lt Lt) (pLE : P Lt Eq) (pLG : P Lt Gt)
+  (pEL : P Eq Lt) (pEE : P Eq Eq) (pEG : P Eq Gt)
+  (pGL : P Gt Lt) (pGE : P Gt Eq) (pGG : P Gt Gt)
+  : P r s =
+  match r {
+    Lt ⇒ match s { Lt ⇒ pLL ; Eq ⇒ pLE ; Gt ⇒ pLG } ;
+    Eq ⇒ match s { Lt ⇒ pEL ; Eq ⇒ pEE ; Gt ⇒ pEG } ;
+    Gt ⇒ match s { Lt ⇒ pGL ; Eq ⇒ pGE ; Gt ⇒ pGG }
+  }
+
+fn pair_compare (a : Type) (b : Type)
+  (cmpa : a → a → OrdResult) (cmpb : b → b → OrdResult)
+  (x : Pair a b) (y : Pair a b) : OrdResult =
+  match cmpa (pair_fst a b x) (pair_fst a b y) {
+    Lt ⇒ Lt ;
+    Eq ⇒ cmpb (pair_snd a b x) (pair_snd a b y) ;
+    Gt ⇒ Gt
+  }
+
+fn pair_compare_result_of (tail : OrdResult) (head : OrdResult) : OrdResult =
+  match head { Lt ⇒ Lt ; Eq ⇒ tail ; Gt ⇒ Gt }
+
+fn pair_compare_eq (a : Type) (b : Type)
+  (cmpa : a → a → OrdResult) (cmpb : b → b → OrdResult)
+  (x : Pair a b) (y : Pair a b)
+  (ha : Equal OrdResult (cmpa (pair_fst a b x) (pair_fst a b y)) ord_eq)
+  (hb : Equal OrdResult (cmpb (pair_snd a b x) (pair_snd a b y)) ord_eq)
+  : Equal OrdResult (pair_compare a b cmpa cmpb x y) ord_eq =
+  J (λr _. Equal OrdResult (match r { Lt ⇒ Lt ; Eq ⇒ cmpb (pair_snd a b x) (pair_snd a b y) ; Gt ⇒ Gt }) ord_eq)
+    hb
+    (sym OrdResult (cmpa (pair_fst a b x) (pair_fst a b y)) ord_eq ha)
+
+fn pair_compare_lt_cases_eq_at
+  (b : Type) (cmpb : b → b → OrdResult) (sndx : b) (sndy : b)
+  (s : OrdResult)
+  (peq : Equal OrdResult s ord_eq)
+  (ptail : Equal OrdResult (cmpb sndx sndy) ord_lt)
+  : Or (Equal OrdResult s ord_lt)
+       (And (Equal OrdResult s ord_eq) (Equal OrdResult (cmpb sndx sndy) ord_lt)) =
+  Inr (Equal OrdResult s ord_lt)
+    (And (Equal OrdResult s ord_eq) (Equal OrdResult (cmpb sndx sndy) ord_lt))
+    (and_intro (Equal OrdResult s ord_eq)
+      (Equal OrdResult (cmpb sndx sndy) ord_lt) peq ptail)
+
+fn pair_compare_lt_cases_lt_at
+  (b : Type) (cmpb : b → b → OrdResult) (sndx : b) (sndy : b)
+  (s : OrdResult) (plt : Equal OrdResult s ord_lt)
+  : Or (Equal OrdResult s ord_lt)
+       (And (Equal OrdResult s ord_eq) (Equal OrdResult (cmpb sndx sndy) ord_lt)) =
+  Inl (Equal OrdResult s ord_lt)
+    (And (Equal OrdResult s ord_eq) (Equal OrdResult (cmpb sndx sndy) ord_lt))
+    plt
+
+fn pair_compare_lt_cases_gt_at
+  (b : Type) (cmpb : b → b → OrdResult) (sndx : b) (sndy : b)
+  (s : OrdResult) (pgt : Equal OrdResult s ord_gt)
+  (plt : Equal OrdResult s ord_lt)
+  : Or (Equal OrdResult s ord_lt)
+       (And (Equal OrdResult s ord_eq) (Equal OrdResult (cmpb sndx sndy) ord_lt)) =
+  absurd (J (λr _. Equal OrdResult r ord_lt) plt pgt)
+
+fn pair_compare_lt_cases (a : Type) (b : Type)
+  (cmpa : a → a → OrdResult) (cmpb : b → b → OrdResult)
+  (x : Pair a b) (y : Pair a b)
+  (h : Equal OrdResult (pair_compare a b cmpa cmpb x y) ord_lt)
+  : Or
+      (Equal OrdResult (cmpa (pair_fst a b x) (pair_fst a b y)) ord_lt)
+      (And
+        (Equal OrdResult (cmpa (pair_fst a b x) (pair_fst a b y)) ord_eq)
+        (Equal OrdResult (cmpb (pair_snd a b x) (pair_snd a b y)) ord_lt)) =
+  match (cmpa (pair_fst a b x) (pair_fst a b y)) eqn: ha {
+    Lt ⇒ pair_compare_lt_cases_lt_at b cmpb (pair_snd a b x) (pair_snd a b y) Lt tt ;
+    Eq ⇒ pair_compare_lt_cases_eq_at b cmpb (pair_snd a b x) (pair_snd a b y) Eq tt
+        (J (λr _. Equal OrdResult (match r { Lt ⇒ Lt ; Eq ⇒ cmpb (pair_snd a b x) (pair_snd a b y) ; Gt ⇒ Gt }) ord_lt)
+          h ha) ;
+    Gt ⇒ pair_compare_lt_cases_gt_at b cmpb (pair_snd a b x) (pair_snd a b y) Gt tt
+      (J (λr _. Equal OrdResult (match r { Lt ⇒ Lt ; Eq ⇒ cmpb (pair_snd a b x) (pair_snd a b y) ; Gt ⇒ Gt }) ord_lt) h ha)
+  }
+
+fn pair_compare_gt_cases_eq_at
+  (b : Type) (cmpb : b → b → OrdResult) (sndx : b) (sndy : b)
+  (s : OrdResult)
+  (peq : Equal OrdResult s ord_eq)
+  (ptail : Equal OrdResult (cmpb sndx sndy) ord_gt)
+  : Or (Equal OrdResult s ord_gt)
+       (And (Equal OrdResult s ord_eq) (Equal OrdResult (cmpb sndx sndy) ord_gt)) =
+  Inr (Equal OrdResult s ord_gt)
+    (And (Equal OrdResult s ord_eq) (Equal OrdResult (cmpb sndx sndy) ord_gt))
+    (and_intro (Equal OrdResult s ord_eq)
+      (Equal OrdResult (cmpb sndx sndy) ord_gt) peq ptail)
+
+fn pair_compare_gt_cases_gt_at
+  (b : Type) (cmpb : b → b → OrdResult) (sndx : b) (sndy : b)
+  (s : OrdResult) (pgt : Equal OrdResult s ord_gt)
+  : Or (Equal OrdResult s ord_gt)
+       (And (Equal OrdResult s ord_eq) (Equal OrdResult (cmpb sndx sndy) ord_gt)) =
+  Inl (Equal OrdResult s ord_gt)
+    (And (Equal OrdResult s ord_eq) (Equal OrdResult (cmpb sndx sndy) ord_gt))
+    pgt
+
+fn pair_compare_gt_cases_lt_at
+  (b : Type) (cmpb : b → b → OrdResult) (sndx : b) (sndy : b)
+  (s : OrdResult) (plt : Equal OrdResult s ord_lt)
+  (pgt : Equal OrdResult s ord_gt)
+  : Or (Equal OrdResult s ord_gt)
+       (And (Equal OrdResult s ord_eq) (Equal OrdResult (cmpb sndx sndy) ord_gt)) =
+  absurd (J (λr _. Equal OrdResult r ord_gt) pgt plt)
+
+fn pair_compare_gt_cases (a : Type) (b : Type)
+  (cmpa : a → a → OrdResult) (cmpb : b → b → OrdResult)
+  (x : Pair a b) (y : Pair a b)
+  (h : Equal OrdResult (pair_compare a b cmpa cmpb x y) ord_gt)
+  : Or
+      (Equal OrdResult (cmpa (pair_fst a b x) (pair_fst a b y)) ord_gt)
+      (And
+        (Equal OrdResult (cmpa (pair_fst a b x) (pair_fst a b y)) ord_eq)
+        (Equal OrdResult (cmpb (pair_snd a b x) (pair_snd a b y)) ord_gt)) =
+  match (cmpa (pair_fst a b x) (pair_fst a b y)) eqn: ha {
+    Lt ⇒ pair_compare_gt_cases_lt_at b cmpb (pair_snd a b x) (pair_snd a b y) Lt tt
+      (J (λr _. Equal OrdResult (match r { Lt ⇒ Lt ; Eq ⇒ cmpb (pair_snd a b x) (pair_snd a b y) ; Gt ⇒ Gt }) ord_gt) h ha) ;
+    Eq ⇒ pair_compare_gt_cases_eq_at b cmpb (pair_snd a b x) (pair_snd a b y) Eq tt
+      (J (λr _. Equal OrdResult (match r { Lt ⇒ Lt ; Eq ⇒ cmpb (pair_snd a b x) (pair_snd a b y) ; Gt ⇒ Gt }) ord_gt) h ha) ;
+    Gt ⇒ pair_compare_gt_cases_gt_at b cmpb (pair_snd a b x) (pair_snd a b y) Gt tt
+  }
+
+fn pair_compare_eq_cases_eq_at
+  (b : Type) (cmpb : b → b → OrdResult) (sndx : b) (sndy : b)
+  (s : OrdResult)
+  (peq : Equal OrdResult s ord_eq)
+  (ptail : Equal OrdResult (cmpb sndx sndy) ord_eq)
+  : And (Equal OrdResult s ord_eq)
+      (Equal OrdResult (cmpb sndx sndy) ord_eq) =
+  and_intro (Equal OrdResult s ord_eq)
+    (Equal OrdResult (cmpb sndx sndy) ord_eq) peq ptail
+
+fn pair_compare_eq_cases_lt_at
+  (b : Type) (cmpb : b → b → OrdResult) (sndx : b) (sndy : b)
+  (s : OrdResult) (plt : Equal OrdResult s ord_lt)
+  (peq : Equal OrdResult s ord_eq)
+  : And (Equal OrdResult s ord_eq)
+      (Equal OrdResult (cmpb sndx sndy) ord_eq) =
+  absurd (J (λr _. Equal OrdResult r ord_eq) peq plt)
+
+fn pair_compare_eq_cases_gt_at
+  (b : Type) (cmpb : b → b → OrdResult) (sndx : b) (sndy : b)
+  (s : OrdResult) (pgt : Equal OrdResult s ord_gt)
+  (peq : Equal OrdResult s ord_eq)
+  : And (Equal OrdResult s ord_eq)
+      (Equal OrdResult (cmpb sndx sndy) ord_eq) =
+  absurd (J (λr _. Equal OrdResult r ord_eq) peq pgt)
+
+fn pair_compare_eq_cases (a : Type) (b : Type)
+  (cmpa : a → a → OrdResult) (cmpb : b → b → OrdResult)
+  (x : Pair a b) (y : Pair a b)
+  (h : Equal OrdResult (pair_compare a b cmpa cmpb x y) ord_eq)
+  : And
+      (Equal OrdResult (cmpa (pair_fst a b x) (pair_fst a b y)) ord_eq)
+      (Equal OrdResult (cmpb (pair_snd a b x) (pair_snd a b y)) ord_eq) =
+  match (cmpa (pair_fst a b x) (pair_fst a b y)) eqn: ha {
+    Lt ⇒ pair_compare_eq_cases_lt_at b cmpb (pair_snd a b x) (pair_snd a b y) Lt tt
+      (J (λr _. Equal OrdResult (match r { Lt ⇒ Lt ; Eq ⇒ cmpb (pair_snd a b x) (pair_snd a b y) ; Gt ⇒ Gt }) ord_eq) h ha) ;
+    Eq ⇒ pair_compare_eq_cases_eq_at b cmpb (pair_snd a b x) (pair_snd a b y) Eq tt
+      (J (λr _. Equal OrdResult (match r { Lt ⇒ Lt ; Eq ⇒ cmpb (pair_snd a b x) (pair_snd a b y) ; Gt ⇒ Gt }) ord_eq) h ha) ;
+    Gt ⇒ pair_compare_eq_cases_gt_at b cmpb (pair_snd a b x) (pair_snd a b y) Gt tt
+      (J (λr _. Equal OrdResult (match r { Lt ⇒ Lt ; Eq ⇒ cmpb (pair_snd a b x) (pair_snd a b y) ; Gt ⇒ Gt }) ord_eq) h ha)
+  }
+
 fn list_append (a : Type) (xs : List a) (ys : List a) : List a =
   match xs {
     Nil ⇒ ys ;
