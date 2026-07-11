@@ -77,8 +77,12 @@ publisher path owns `main` mechanics and the Architect owns design judgment. Rea
 Workers are event-driven and never poll; you run the watchdog. **Arm it with a
 private `CronCreate` timer — NOT the convo `schedule_call`** (COORDINATION §13):
 `CronCreate(cron="7,17,27,37,47,57 * * * *", prompt="Watchdog tick: pull recent
-context, scan the stall patterns, mention only a blocked agent; if clear, do
-nothing", recurring=true)` while your ring has open work. `CronCreate` enqueues a
+context, scan the stall patterns, AND capture-pane each worker for
+idle-vs-Working (a kicked seat that never engaged emits no convo signal), mention
+or re-rouse only a stalled agent; if clear, do nothing", recurring=true)` while
+your ring has open work. (Use `CronCreate`, **not** a bash `while`-loop or the
+`Monitor` tool — those only watch git refs and miss the pane-level stall below.)
+`CronCreate` enqueues a
 prompt into **your own session** and posts **nothing** to the space; on each fire
 you run your *own* `get_recent_context`/`get_space_status` read (private) and
 message the space only when there's a real stall to nudge. **Never use the convo
@@ -101,7 +105,12 @@ because a leader that wasn't watching let a QA-approved WP sit unmerged (operato
 caught). Each wake, check the stall patterns — the prompt **enumerates each
 explicitly**: handed-off-but-silent, merge-Decision-open-but-no-reviewer,
 blocked-without-a-blocker-mention, QA-approved-but-no-merge-request,
-idle-with-ready-work, **stale-retro** (you are awaiting a member's retro whose
+idle-with-ready-work, **kicked-but-never-engaged** (you posted a correct kickoff
+but the worker never picked it up — a threaded mention did not wake the no-poll
+seat, or it compacted and dropped the assignment; it emits **no** convo signal,
+so only a `capture-pane` idle-check finds it — 2026-07-11, a leader held a
+"producing the SHA" belief for ~75 min while its implementer sat idle),
+**stale-retro** (you are awaiting a member's retro whose
 notification **dropped though it was already posted** — the dropped-handoff
 wedge in the *retro* phase, undetectable without the backstop; this is *why* the
 watchdog stays armed til retros-in. Promoted T1-build, where two leaders
@@ -122,6 +131,19 @@ real wedge — and a **modal-wedged** session can't be reached by mention at all
 (`EnterPlanMode`/`schedule_call` prompts freeze it; recovery is a Steward `tmux
 send-keys` or an operator restart), so escalate **that** with the capture-pane
 evidence, not a guess from the status line.
+
+**Verify pickup after you kick — delivery ≠ engagement (2026-07-11).** Posting a
+correct kickoff/handoff mention is **not** confirmation the worker started: a
+threaded mention often does **not** wake a no-poll seat, and a seat that
+compacts right after re-orients to "awaiting kickoff" and silently drops the
+assignment. So after every kickoff, **confirm the worker actually engaged** —
+`capture-pane` shows `Working`, or it acks/posts — before you hold a
+"building / producing the SHA" belief; if it parked, **re-rouse it directly**
+(`tmux send-keys -t moot-<role> -l '<continue/pickup text>'`, then a separate
+`Enter` — a fresh mention alone won't wake it) and re-verify the flip to
+`Working`. A leader that assumes pickup leaves its whole WP stalled invisibly
+(the `kicked-but-never-engaged` pattern above) — the Steward's top-layer sweep is
+the only backstop, and it should not have to be.
 
 **You do not touch GitHub or CI** — that is the publisher path's
 (COORDINATION §14). After you hand a WP off for merge handling, CI status comes

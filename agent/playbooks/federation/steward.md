@@ -905,15 +905,53 @@ The patterns above are *what* to catch; this is *how*. State the mechanism,
 because a compacted (or a lower-tier successor) Steward will otherwise
 improvise it wrong.
 
-**Arm the watchdog as a private `CronCreate`, never the convo `schedule_call`.**
-`CronCreate(cron="11,31,51 * * * *", prompt="[Steward watchdog tick] …",
+**Arm the watchdog as a private `CronCreate`, never the convo `schedule_call`,
+and never a hand-rolled bash `while`-loop / `Monitor`-tool poll.**
+`CronCreate(cron="7,22,37,52 * * * *", prompt="[Steward watchdog tick] …",
 recurring=true)` enqueues a tick into your *own* session and posts nothing; on
-each fire you run a private `get_recent_context` read and message the space
-**only** when there is a real stall to nudge — **post nothing on a clear tick.**
-The convo `schedule_call` broadcasts its read into the space as a System event
-everyone sees (noise + orphan risk) — never use it for the watchdog.
-`durable:false` dies on session exit, so re-arm at session start.
-(COORDINATION §13.)
+each fire you run a private `get_recent_context` read (+ the pane sweep below) and
+message the space **only** when there is a real stall to nudge — **post nothing on
+a clear tick.** The convo `schedule_call` broadcasts its read into the space as a
+System event everyone sees (noise + orphan risk) — never use it for the watchdog.
+A bash `while true; do sleep …; git … done` loop or the `Monitor` tool is a
+**codex-era improvisation** from before this seat had `CronCreate` — it only
+watches git refs, so it is **blind to the pane-level stalls below** and leaks a
+CPU-spinning orphan; `CronCreate` is the sanctioned mechanism, so do **not**
+resurrect a script (operator, 2026-07-11). Cadence is tunable — **~15 min**
+(operator preference, 2026-07-11); avoid the `:00`/`:30` marks. `durable:false`
+dies on session exit, so re-arm at session start, and `CronDelete` any stale job
+(`CronList` shows yours). (COORDINATION §13.)
+
+**★ EVERY tick proactively sweeps the active seats' panes for idle — not only
+reactively after a convo signal (operator-grounded, 2026-07-11: an implementer
+kicked-but-never-engaged sat idle ~75 min, invisibly).** The §7 stall patterns
+mostly fire off *convo* reads (status, `get_recent_context`) and the git-ref
+check keys off pushed branches — but the worst stall emits **no convo signal and
+no branch at all**: a seat whose threaded-mention kickoff never woke it, or one
+that compacted and re-oriented to "awaiting kickoff," silently dropping its
+assignment. It posts nothing and pushes nothing, so *both* the git check and the
+context read come back "all clear" while it burns wall-clock parked. **Only a
+direct pane sweep catches it.** You already `capture-pane` every active seat each
+tick for the ctx%-scan (§ the context-budget rule — the MANDATORY-first-step
+capture) — on that **same** capture, also read **idle-vs-Working**: a seat at an
+empty `❯`/`›` input prompt (model + cwd on the line below, no `esc to interrupt`
+spinner) while it **holds an active assignment**, or one showing `Context
+compacted` / `awaiting kickoff` **after** it was already kicked, is STALLED.
+Re-rouse it directly — `tmux send-keys -t moot-<role> -l '<pickup/continue text
+pointing at its durable in-thread assignment>'`, then a **separate** `Enter` — and
+confirm the pane flips to `Working`. A fresh convo mention alone will **not** wake
+a no-poll idle seat; the `send-keys` rouse is what wakes it. (The `›` suggestion
+placeholder is not state — judge Working-vs-idle-input only, per the stale-status
+discount below.)
+
+**Verify pickup after EVERY kickoff/handoff — delivery ≠ engagement.** The same
+2026-07-11 miss upstream: a build leader posted a correct threaded kickoff and
+held a "producing the SHA" belief while its implementer had never engaged. So
+after any kickoff/handoff mention — yours or a leader's you are backstopping —
+**confirm the target actually engaged** (pane flips to `Working`, or it acks/
+posts) before treating the work as in-flight; if it parked, re-rouse. Never carry
+a "producing X" belief on the strength of the mention merely having been posted.
+This binds the kicking leader too (build/leader `## Own the watchdog`).
 
 **The comms-drop backstop — `capture-pane` → `git`-verify → relay.** The
 federation's recurring defect is dropped notifications: a handoff / retro /
