@@ -128,22 +128,26 @@ relevant here. Catalog-wide reference conventions (link hygiene, preferred
 sources, citation shape, license labelling) live in `catalog/REFERENCES.md`;
 per-entry references live in the entry.
 
-## 5. Findings (required — the inward purpose)
+## 5. Findings — RETIRED from the catalog entry (2026-07-11)
 
-Writing real Ken is the fleet's dogfooding instrument. Every entry carries a
-Findings section recording what authoring it taught us about the language, each
-item routed (`06-catalog-campaign.md`, teaming):
+Writing real Ken is still the fleet's dogfooding instrument, but the **Findings
+section is retired from the outsider-facing catalog entry.** Its function —
+recording language gaps discovered while authoring — has migrated to the **live
+gap-escalation flow**: an author who hits a gap escalates it in the moment, the
+Architect rules, and the durable ones are captured in the campaign's
+forward-candidates register and the `write-ken` technique corpus. A per-entry
+Findings section is now both a **stale duplicate** of that live channel and
+**inward-facing content in a reader-facing product** — the exact class §8 forbids.
 
-- **Kernel-reduction defect** → Kernel (via the enclave). The highest-value
-  Finding an entry can produce.
-- **Sugar candidate** — a recurring implementation shape the surface should
-  collapse → Ergo.
-- **Abstraction candidate** — a recurring shape that should become a general
-  `def`/`lemma`/`prop` → Ergo, or grown in-catalog as a shared package.
+- **Do not add a Findings section to new entries.**
+- **Existing Findings sections are removed** in the outsider-prose sweep. Before
+  removing one, **harvest any gap it records that is not already captured** in the
+  live channel (route it to the Steward for the forward-candidates register); then
+  delete the section. The dogfooding signal is preserved by the channel, not the
+  section.
 
-An empty Findings section is allowed (nothing surfaced); omitting the section is
-not. Record the concrete shape, not a vague impression, so the receiving team can
-act.
+(Kernel-reduction defects, sugar candidates, and abstraction candidates are still
+the high-value signals — they just route live, not through a catalog section.)
 
 ## 6. Proof presentation
 
@@ -201,8 +205,25 @@ belongs in the entry's Ken proper, in the construct built to check it:
   derivation section as a `trusted_base()` delta (§7).
 
 When a required fact has no home in one of these, that is a signal to extend
-the language (file a Finding, §5) — never to enshrine the fact in a comment
-instead.
+the language (escalate the gap live, §5) — never to enshrine the fact in a
+comment instead.
+
+**Prose is written for an outsider.** The catalog is the project's public face —
+a curious engineer reads it with **no visibility into the fleet's internal
+process.** So all prose (motivation, narrative, `-- ` comments) reads as ordinary
+standard-library documentation and carries **no insider references:** no WP IDs
+or `wp/…` paths, no campaign or `DS-N` codenames, no internal decision history
+("erratum", "reversed", "operator ruling", "judgment call L5"), no mention of the
+agent team / moot / convo, and no crate-internal source paths (`crates/…`,
+`prelude.rs`) **unless** the path is genuinely part of the public contract the
+reader must know — and then name the contract, not the file. State motivation as
+**timeless design rationale** the reader can use: *why* a construct exists and how
+it relates to its neighbours, never the history of how the fleet arrived at it.
+(§9 already bars WP-encoding in identifiers; this is the same discipline for
+prose.) For two coexisting sums, *"`Result` is the error-biased sum wired into the
+effect system; `Either` is the neutral one — both coexist"* is good motivation;
+*"an earlier DS-3-era spec erratum subsumed `Either` into `Result`… the operator's
+later L5 ruling reversed that"* is insider history to cut.
 
 Comments and the surrounding Markdown prose carry only **genuine
 narrative** — proof strategy, naming rationale, why a thing exists the way it
