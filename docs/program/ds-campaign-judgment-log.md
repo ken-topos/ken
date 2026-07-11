@@ -1100,3 +1100,38 @@ can converge at one proof site — the fix was one clean interface, not three; (
 my "hypothesis, you rule" split let the Architect confirm-or-refute a concrete
 shape fast rather than design from scratch; (c) implementer's refuse-to-improvise
 + isolate-the-boundary is exactly the discipline that makes a terra seat safe.
+
+### D11 · Coding-style initiative (operator, 2026-07-11 ~14:00) + parser-gap elevation
+
+Operator directed a coding-style revisit ("modest body of code"). Three
+observations, all serving agents-write/humans-read (catalog = outsider-facing
+product). State:
+- **(3) Insider prose — RUNNING.** Systemic: 14/14 catalog `.ken.md` carry WP/DS-N
+  IDs, internal history, crate paths. Style-guide §8 rule added (prose is
+  outsider-facing) + **§5 Findings RETIRED** (my team-tactics call — migrated to
+  live gap-escalation; harvest-before-strip). Committed `steward/work` `2e4df000`.
+  **Librarian kicked** (`evt_6yhyfntc91jsn`), PROSE-ONLY, SKIP in-flight
+  LawfulClasses+Collections, small-files-first, harvest-before-strip. On delivery:
+  bundle rule+swept files → Architect fidelity gate → doc-only merge. Task #10.
+- **(2) Keyword adoption — PILOT.** ~2.5% adoption (fn 1032/const 50 vs lemma
+  13/proof 10/def 2/prop 2). Pilot = `Core/NatArith.ken.md` (small, all law
+  lemmas, stable). Prereq: pin def/lemma/proof/prop semantics (Architect/spec-author
+  consult). Folds into write-ken #9. Task #12.
+- **(1) Presentation-order independence — SEQUENCED, NOT HANDED.** Operator: send
+  the source-order question to the enclave. Decouple presentation from evaluation
+  order (parse → reference DAG → elaborate leaf-to-root; SCT already does SCC
+  analysis; likely TCB-neutral). Spec-semantics change → enclave owns → design →
+  spec → Language WP. **NOT yet handed:** enclave has in-flight def-path §32/§33
+  clause (spec-leader→CV, CV 79% ctx); must drive to closure + Handoff-Gate-compact
+  the triple, then hand the brief (still to author). Task #11. **Operator asked
+  14:22 if enclave is reviewing it — answer: no, not yet; this is the next action
+  post-compact.**
+- **Parser `.field`-in-declared-type gap ELEVATED to tracked candidate** (Librarian
+  harvest from OrdNat's Findings, `evt_5hbzzkt3bdw3m`): `(instance).field`
+  projection works in value position but is rejected in a type annotation
+  (`IsTrue ((Ord_instance_Nat).leq x y)`), forcing named-accessor/spelled-out
+  workarounds. Was noted in D6 ("escalation #1") + the Arc note but NOT in the
+  formal register. ≥2 occurrences (compare-ord brick 1, OrdNat). Same parser
+  dotted-name subsystem (`parser.rs:111-147`) as the namespace #3 qualified-ctor
+  fork — **may share a fix**; fold into that discussion. Not yet operator-directed
+  as its own WP.
