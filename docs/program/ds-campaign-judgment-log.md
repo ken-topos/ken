@@ -1135,3 +1135,42 @@ product). State:
   dotted-name subsystem (`parser.rs:111-147`) as the namespace #3 qualified-ctor
   fork — **may share a fix**; fold into that discussion. Not yet operator-directed
   as its own WP.
+
+### D12 · Pedagogic catalog rewrite = Foundation initiative + foundation-implementer→sol (operator, 2026-07-11 ~16:15 UTC)
+
+Operator **consolidated and re-owned** D11's items (1)+(2): presentation-order
+independence + def/prop/lemma/proof adoption are **one larger readability goal —
+"characterize the catalog source as pedagogic documents"** — and it is
+**properly the Foundation team's**, *not* a Librarian task and *not* an
+enclave-only design question. Foundation's **next** task after compare-ord:
+*discover how to represent Ken code using def/prop/lemma/proof to structure,
+document, and motivate; write top-down; on a few of the **simpler** `.ken.md`
+files but **not the simplest*** (little to do there). Exploratory ("discover
+how"), so scope it as a prototype/design WP, not a mechanical sweep. Task #11
+reframed; blocked by #1.
+
+**Grounding correction to my D11 framing of #11.** I had queued "send the
+source-order question to the enclave." That was **mis-framed**:
+order-independence is **already decided** — `spec/30-surface/33-declarations.md`
+§1: "all top-level definitions are mutually recursive within a module if the SCT
+check accepts the group" — **and already built**: `expand_scope`
+(`ken-elaborator/src/modules.rs:829`) runs a name-binding pre-pass ("regardless
+of textual order") + auto-groups mutually-recursive runs by call-graph SCC.
+compare-ord never hit an order wall (its 4 surfaced gaps — `.field`-in-type,
+`match`-in-type, namespace, `Axiom`-`VarOutOfScope` — are parser/surface,
+orthogonal). Coverage edge: SCC grouping is **view/let-only** (fn/const/proc true
+cycles + contract-bearing members explicitly scoped out, fail clearly). So
+handing this to the enclave as a fresh design question would **relitigate a
+decided point** — do NOT. OPEN sub-question for the eventual brief: are
+prop/lemma/proof **new** surface forms (keyword/sugar) or conventions over `def`?
+→ Architect/spec-author consult when authoring.
+
+**Model: foundation-implementer terra→gpt-5.6-sol (high), operator-manual,
+mid-task, EARLY.** Operator connected to the pane and swapped it directly — the
+most demanding impl role (novel language + proof construction); terra is
+**strictly weaker than Opus 4.8** (evidenced by the 9-hr guidance the compare-ord
+thread required). Leader/QA stay terra. Task #15 closed. **Lesson (I got it
+wrong):** a model swap does **NOT** reset the seat — it only changes the
+completion-call model param; context is intact, no re-orient/re-read needed. I
+mis-roused the implementer with a "your session reset" preamble; operator
+corrected; I re-roused clean. Filed `fleet/model-swap-does-not-reset-the-seat`.
