@@ -91,33 +91,29 @@ event-by-ID retrieval is unreliable; a pointer strands them and forces a
 re-ask round-trip (2026-07-11). Hand the mechanism, not a reference to it (the
 Architect delivers to you the same way).
 
-**Running on Codex (no `CronCreate`)?** A terra/Codex leader seat may not have
-the `CronCreate` tool; its watchdog is instead driven by the operator-wired
-**external watchdog script** that ticks the seat on a timer. The tick
-*discipline* below is identical — on each fire, run the private
-context read + `capture-pane` sweep and rouse only real stalls. You don't
-self-arm `CronCreate`; you execute the tick each time the script wakes you. (If
-your seat *does* have `CronCreate`, arm it as below.)
+**Your watchdog is driven by the external watchdog-wake SCRIPT, not
+`CronCreate` (operator, 2026-07-11).** A terra/Codex leader seat doesn't
+self-arm an in-session timer — `CronCreate` is a Claude-Code-only tool your seat
+doesn't have. Instead a managed wake script written for your seat (the reference
+implementation is `local/steward-watchdog-wake.sh` — a pid-tracked
+`start`/`stop`/`status`/`restart` loop that `send-keys` a watchdog-tick prompt
+to a `TARGET` pane every `INTERVAL_SECONDS`) ticks **your own** pane on a
+cadence. On each wake you run the tick and **nothing posts to the space**. Do
+**not** reach for `CronCreate` (unavailable on your seat), the convo
+`schedule_call` (it broadcasts its read into the space as a System event
+everyone sees — noise + orphan risk), or a hand-rolled bash `while`-loop / the
+`Monitor` tool (git-refs only — they miss the pane-level stalls below). *(A
+uniform convo-MCP watchdog command with `CronCreate`-parity is in progress so
+every seat — terra or Claude-Code — converges on one mechanism; until it lands,
+the wake script is the leader watchdog, and the tick discipline below is
+identical regardless of what fires it.)*
 
-Workers are event-driven and never poll; you run the watchdog. **Arm it with a
-private `CronCreate` timer — NOT the convo `schedule_call`** (COORDINATION §13):
-`CronCreate(cron="7,17,27,37,47,57 * * * *", prompt="Watchdog tick: pull recent
-context, scan the stall patterns, AND capture-pane each worker for
-idle-vs-Working (a kicked seat that never engaged emits no convo signal), mention
-or re-rouse only a stalled agent; if clear, do nothing", recurring=true)` while
-your ring has open work. (Use `CronCreate`, **not** a bash `while`-loop or the
-`Monitor` tool — those only watch git refs and miss the pane-level stall below.)
-`CronCreate` enqueues a
-prompt into **your own session** and posts **nothing** to the space; on each fire
-you run your *own* `get_recent_context`/`get_space_status` read (private) and
-message the space only when there's a real stall to nudge. **Never use the convo
-`schedule_call`** — it posts its read result into the space as a System event
-every participant sees (broadcast noise; the `get_recent_context` variant
-self-nests). A `durable:false` cron dies on session exit, so **re-arm at session
-start** and `CronDelete` it when your ring closes (`CronList` shows your jobs) —
-this is why it can't orphan the way the convo timer did. **"Ring closes" =
-retros-in, NOT an intermediate milestone — keep the watchdog armed the WHOLE ring
-lifetime (promoted T1).** Killing it when *your* setup step finishes (frame
+Workers are event-driven and never poll; the wake keeps **you** the only poller
+on the team. On each fire, run your *own* `get_recent_context`/`get_space_status`
+read (private) plus the `capture-pane` sweep, and message the space only when
+there's a real stall to nudge. **Keep the watchdog running the WHOLE ring
+lifetime — stop it only once retros are in, NOT at an intermediate milestone
+(promoted T1).** Killing it when *your* setup step finishes (frame
 landed, branch cut, kickoff posted) while members are still authoring/building
 leaves the ring **unbacked precisely when the comms-drop defect bites** — the
 watchdog is the *only* backstop for a handoff whose notification dropped
