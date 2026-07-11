@@ -485,12 +485,6 @@ fn bool_and_right (a : Bool) (b : Bool)
     False ⇒ λh. absurd h
   }
 
-fn bool_dichotomy (b : Bool) : Or (Equal Bool b True) (Equal Bool b False) =
-  match b {
-    True ⇒ Inl (Equal Bool True True) (Equal Bool True False) tt ;
-    False ⇒ Inr (Equal Bool False True) (Equal Bool False False) tt
-  }
-
 fn compare_bool_dichotomy (b : Bool) : Or (Equal Bool b True) (Equal Bool b False) =
   match b {
     True ⇒ Inl (Equal Bool True True) (Equal Bool True False) tt ;
