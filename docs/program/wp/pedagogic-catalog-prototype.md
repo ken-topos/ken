@@ -24,29 +24,30 @@ These are decided. Treat them as ground, not as questions to relitigate.
 1. **The `def`/`prop`/`lemma`/`proof` semantics and when to use each** are pinned
    in `catalog/guide/surface-reference.ken.md` **§7.1 "Choosing a form"** (the
    decision table + the Ω-vs-Type rule + `lemma`-vs-`proof … for` ownership + the
-   top-down enabler). **§7.1 is your authoring contract — follow it; do not
-   invent a per-file convention.**
+   bottom-up code-order rule). **§7.1 is your authoring contract — follow it; do
+   not invent a per-file convention.**
 2. **The load-bearing rule: `lemma`/`proof` require an `Omega` statement**
    (`ensure_omega_type`, elab.rs). `Equal`/`IsTrue`-typed laws and `And`-of-Ω are
    Ω → `lemma`/`proof`. **Proof-relevant** conclusions (`Or : Ω→Ω→Type`, `Σ` with
    a `Type` component, disjunction/eliminator helpers that carry a branch *as
    data*) stay `const`/`fn`. Promoting one of those to a `lemma` is **not** a bug
    to fight — it is the wrong side of the proof-irrelevance line.
-3. **Top-down holds for `fn`/`const`; a proof needs its dependencies ABOVE it.**
-   `fn`/`const` are order-independent — the elaborator auto-groups a maximal
-   view/let run by call-graph SCC (`crates/ken-elaborator/src/modules.rs:879`),
-   so ordinary computation may be stated in any order. **But `lemma`/`prop`/`proof`
-   are NOT in that grouping** (they take the per-decl sequential path; the name
-   pre-pass even `continue`s past `AttachedProofDecl`): a proof decl's body *and
-   its stated type* resolve only against decls elaborated *earlier*. So a proof's
-   dependencies — especially its recursive helper `fn` — **must sit directly above
-   it**, a small local bottom-up island. Headline `prop`/`def` and non-recursive
-   statements still lead the file; only a proof's own machinery must precede it.
-   This is the **Architect's corrected rule** (evt_2zr1ej07ver2v — it supersedes
-   the original §7.1 top-down claim, which was wrong for proof decls; §7.1 is
-   being corrected to match). **Do not re-investigate declaration order** — this
-   is the settled behavior; restoring full top-down for proofs is the separately
-   queued language WP `proof-forward-reference`, not a prototype change.
+3. **Code order is BOTTOM-UP — for every decl kind. "Top-down" lives in the
+   prose, not the code.** The Architect probed the elaborator on `origin/main`
+   (evt_24abrtp41hz9e, ground truth — two earlier reads were wrong): each decl
+   resolves only against names elaborated *above* it. An acyclic forward
+   reference fails (`UnresolvedCon`) — for `fn`/`const` **and**
+   `lemma`/`prop`/`proof` alike. The **only** order-free construct is a genuinely
+   mutually-recursive `fn`/`const` **cycle** (auto-detected, elaborated together
+   under one SCT check). So: **write every decl's dependencies above it** — the
+   recursive helper `fn` directly above its thin `lemma`/`proof` wrapper, each
+   `fn` above its callers. The pedagogic **top-down reading is achieved in the
+   `.ken.md` prose**: open each section with a Markdown lede + the statement of
+   what it establishes, then give the code bottom-up below — the *document* reads
+   top-down even though the *code* elaborates dependencies-first. **Do not
+   re-investigate declaration order** — this is probed, settled behavior; true
+   order-independent *code* is the separately queued language WP
+   (`acyclic-forward-reference-elaboration`), not a prototype change.
 4. **The self-reference caveat.** A `lemma` body still cannot call *itself*. A
    proof that needs induction stays an ordinary **recursive `fn`** (placed
    directly above, per settled input 3) behind a **thin non-recursive `lemma`
@@ -86,12 +87,12 @@ Each rewritten source should end up as a readable top-down document:
 
 1. **A lede** — 2–5 lines up top stating what the module establishes and why it
    matters (the motivation), before any declaration.
-2. **Statement-first ordering** — headline `prop`/`def` and non-recursive law
-   statements lead; supporting `fn`/`const` machinery below (order-independent for
-   `fn`/`const`, settled input 3). The one exception: a `lemma`/`proof` that
-   depends on a helper — especially a recursive one — must have that helper
-   *directly above* it (settled input 3), a small local bottom-up island inside
-   an otherwise top-down file.
+2. **Statement-first in the PROSE; code bottom-up.** Open each section with a
+   Markdown lede + the statement of what it establishes, so the *document* reads
+   top-down. The *code* below is ordered bottom-up — every decl's dependencies
+   above it (settled input 3), the recursive helper `fn` directly above its thin
+   `lemma`/`proof` wrapper. Don't fight the elaborator for top-down code; carry
+   the top-down reading in the prose.
 3. **Vocabulary applied per §7.1** — every Ω-typed law becomes a `lemma` (or
    `proof … for <subject>` when it is *about* one definition and should travel
    with it); computation stays `fn`/`const`; use `prop` where a proposition
@@ -128,12 +129,12 @@ top-down authoring pattern is, and every gap surfaced.
 
 ## Do-not-reopen guardrails
 
-- Declaration-order behavior (settled input 3) is **settled** — `fn`/`const` are
-  order-independent; a proof needs its dependencies (esp. its recursive helper)
-  directly above it. Do not re-open or re-test it. If the proof-ordering
-  constraint genuinely limits the top-down goal, that is the separately queued
-  language WP `proof-forward-reference`, **not** a prototype change — record it as
-  the prototype gap and move on.
+- Declaration-order behavior (settled input 3) is **settled** — code is
+  bottom-up for every decl kind; write dependencies above their users. Do not
+  re-open or re-test it. If bottom-up code order genuinely limits the pedagogic
+  goal (it should not — the top-down reading lives in the prose), that is the
+  separately queued language WP `acyclic-forward-reference-elaboration`, **not** a
+  prototype change — record it as the prototype gap and move on.
 - The Ω-vs-Type boundary (settled input 2) is **fixed** — do not attempt to make
   a `Type`-level term (`Or`, `Σ`-witness, eliminator helper) into a `lemma`.
 - **No TCB / kernel / spec / prelude / Cargo change.** This is a catalog-source
@@ -143,13 +144,14 @@ top-down authoring pattern is, and every gap surfaced.
 
 ## Gaps to surface (route back to Steward → Architect; do NOT block on them)
 
-- **Forward references from proof decls — KNOWN, handled (a).** A `lemma`/`proof`
-  body or type cannot reference a decl defined *below* it (only `fn`/`const` are
-  order-independent). The prototype surfaced this immediately (NatArith
-  `add_zero_l` → `add_zero_l_ind`); Architect ruled (evt_2zr1ej07ver2v): put the
+- **Acyclic forward references fail (any decl) — KNOWN, handled (a).** A decl's
+  body or type cannot reference a decl defined *below* it; only a mutually-
+  recursive `fn`/`const` cycle is order-free (probed, evt_24abrtp41hz9e). The
+  prototype surfaced this immediately (NatArith `add_zero_l` → `add_zero_l_ind`);
+  Architect ruled (evt_2zr1ej07ver2v/evt_24abrtp41hz9e): write code bottom-up,
   recursive helper directly above its wrapper (settled input 3), record as the
   prototype gap. The principled fix is the queued language WP
-  `proof-forward-reference` — do **not** block on it.
+  `acyclic-forward-reference-elaboration` — do **not** block on it.
 - **No proof-relevant `lemma` form** — a named checked theorem whose conclusion
   is at `Type` is honestly `const : φ = proof` today. The Architect flagged this
   as the one candidate follow-up (not a blocker). If it hurts readability at
