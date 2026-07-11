@@ -2,15 +2,15 @@
 
 Natural-number addition and multiplication compute by structural recursion.
 Their familiar identity, commutativity, associativity, and distributivity laws
-are stated before their induction machinery, so readers meet the algebraic
-interface before the proof implementation.
+are introduced in prose before the dependency-first checked definitions and
+proof terms that establish them.
 
 ## Operations and laws
 
 The two computational names are introduced first because they occur in every
-law's type. The headline laws follow immediately; proofs that need induction
-are thin wrappers around recursive helpers collected later in the declaration
-group.
+law's type. The checked declarations remain dependency-first: each proof that
+needs induction places its recursive helper immediately before the thin lemma
+wrapper it establishes.
 
 ```ken
 fn add (a : Nat) (b : Nat) : Nat =
@@ -255,7 +255,7 @@ lemma mul_assoc (a : Nat) (b : Nat) (c : Nat)
 `add` and `mul` recurse on their second argument and remain the only
 value-producing definitions. Each `_ind` helper contains exactly the structural
 recursion needed by its headline lemma; the public theorem itself stays
-non-recursive and statement-first.
+non-recursive and keeps its original public name.
 
 ## Using it
 
