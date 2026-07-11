@@ -486,6 +486,119 @@ not-yet-implemented recovery shape, but it must not silently fall back to a
 constant motive that ignores the dependency, and it must not accept all proof
 branches by proof irrelevance.
 
+### 3.6 The `eqn:` modifier — dependent case-analysis on a stuck scrutinee
+
+A `match e { … }` on a **stuck/neutral** scrutinee — a comparison like
+`da.eq x y` that does not reduce under abstract `x`/`y` — discards the
+connection between `e` and the constructor each branch matched. A proof that
+needs "`e` **is** `True` in the `True` branch" then cannot be written directly,
+and authors hand-roll a `bool_dichotomy` + named dispatcher + explicit `J`-motive
+(the `§3.4` transport, spelled out by hand: ~15–30 lines, re-paid at every
+`DecEq`/`Ord` proof). The **`eqn:` modifier** is the sugar that collapses that
+idiom. It is **`match` plus one modifier — not a new keyword** (`32 §3`):
+
+```ken
+match e eqn: h { C1 ⇒ … ; … ; CN ⇒ … }
+```
+
+In the branch for constructor `Cₖ` it **binds** `h : Equal T e Cₖ` — the proof
+that the scrutinee *is* the matched constructor — and **generalizes `e`'s
+occurrences in the expected goal**, so the body is checked at the
+constructor-specialized goal and transported back (below). The semantics are
+uniform whether `e` is a stuck application or a bound variable — no special case.
+
+**Token — `eqn: h`.** From Coq's `destruct … eqn:` lineage, familiar to the
+dependent-types audience, and self-documenting: `eqn` names exactly what `h` is,
+the scrutinee=constructor **eq**uatio**n**. It is a **contextual modifier
+keyword** in the scrutinee slot — the same shape as `visits`/`requires`/`where`
+(`32`), not a new declaration or `match` keyword. *Rejected:* `as h` — `as`
+already binds a **value** (import-aliasing `import M as N`, `33 §3`; as-patterns,
+`§3.1`), so `e as h` misreads as binding the scrutinee *value* rather than the
+equation; and `with h` — no Ken precedent and not self-documenting. The modifier
+applies to a **single-scrutinee** `match` (as shipped); a branch **must** bind
+the named `h` (always available even if unused), and the modifier generalizes
+**all** occurrences of `e` (no partial-occurrence control). Per-scrutinee `eqn:`
+on a *multi*-scrutinee `match` is not shipped — the pre-existing multi-scrutinee
+`match e1, e2 { … }` grammar-vs-parser gap (`§3.1`) is not this clause's to
+resolve.
+
+**Scope — finite nullary-constructor enumerations only.** The scrutinee type `T`
+must be an inductive **all of whose constructors are nullary**: `Bool`;
+`OrdResult = Lt | Eq | Gt` (`../50-stdlib/`); and any future all-nullary enum.
+This is one deliberate step past `Bool` — the near-term `compare`/`Ord` path
+scrutinizes the 3-way `OrdResult`, which a `Bool`-only form would **not**
+subsume (re-framing for `OrdResult` a brick later is exactly the proliferation
+this construct exists to kill). It does **not** cover general dependent matching
+over inductives **with fields** — constructor fields introduce fresh existentials
+in the branch equation plus index unification, a separate and larger capability
+that neither the current sites nor the `Ord` path needs. The elaboration
+machinery is identical for two versus N nullary constructors, so `all-nullary-
+ctor`, not `Bool`, is the natural boundary.
+
+**Elaboration — pure sugar over existing primitives (`§3.4`), empty
+`trusted_base()` delta.** For scrutinee `e : T`:
+
+1. **Generalize** the occurrences of `e` in the **expected goal** `G` to a fresh
+   `v : T` (higher-order pattern abstraction, `§3.2`, `39 §2.3`), and form the
+   scrutinee's own eliminator with a motive that **returns a function over the
+   branch equation**: `M := λ (v : T). Equal T e v → G[e := v]`.
+2. **Check each branch** for constructor `Cₖ` as a `λ` binding the `eqn:` name
+   `h : Equal T e Cₖ`, its body the branch expression at the specialized goal
+   `G[e := Cₖ]`.
+3. **Recover the goal** by applying the completed eliminator — at the scrutinee
+   its type is `M e = Equal T e e → G` — to **`Refl : Equal T e e`**, yielding
+   `G`. The equation-returning motive plus the `Refl` application **is** the
+   `§3.4` `J`-style transport, realized directly through `T`'s own eliminator; no
+   separate dichotomy term or materialized `J` former is built.
+
+The construct is assembled from **only** `T`'s eliminator (`Term::Elim`), `Equal`
+(`Term::Eq`), and `Refl` (`Term::Refl`) — the landed `bool_dichotomy : (b : Bool)
+→ Or (Equal Bool b True) (Equal Bool b False)` is the **precedent** that such a
+per-branch-`Refl` equation construction is *derived, never a postulate* (the
+modifier builds the tighter eliminator-with-equation-motive form rather than
+materializing a dichotomy). It adds no new `Decl::Opaque`, no `postulate`;
+`../10-kernel` is untouched and the **`trusted_base()` delta is empty**. Pure
+elaboration sugar (`39 §1`, untrusted).
+
+**Fail-closed — the soundness backstop.** The elaborator is **untrusted**: it
+assembles the transported term and submits the **whole** term to the kernel
+(`kernel_infer`, the same discipline as `39`'s instance resolution). A wrong or
+under-general motive can only make the assembled transport **ill-typed** →
+**kernel-rejected**; the output's type is pinned to the author-declared goal `G`
+and re-checked, so the construct can **never** admit a wrong-but-accepted proof.
+If a **well-typed** motive cannot be formed (occurrences ill-typed to abstract),
+the elaborator **errors explicitly** (fail-closed) — it must not silently pick a
+partial abstraction.
+
+**The reverted-hypothesis pattern (where the token payoff is largest).** The
+common sound-direction sites case-split to transport a **hypothesis** whose type
+mentions `e` (`ph : IsTrue (list_eq … (Cons …) (Cons …))`), while the **goal**
+itself does not mention `e`. The clean subsumption: the author **π-abstracts the
+hypothesis into the goal** — writes the helper to *return a function*
+`IsTrue (e …) → Equal …` — so `e`'s occurrences live in the goal's **domain** and
+the modifier transports them automatically:
+
+```ken
+-- e = `list_eq a da.eq (Cons a x xs) (Cons a y ys)`, which reduces to
+-- `da.eq x y && list_eq a da.eq xs ys`; the scrutinee is the head test `da.eq x y`.
+fn list_deceq_sound_cons (a : Type) (da : DecEq a) (x y : a) (xs ys : List a)
+  :   IsTrue (list_eq a da.eq (Cons a x xs) (Cons a y ys))
+    → Equal (List a) (Cons a x xs) (Cons a y ys) =
+  match (da.eq x y) eqn: h {
+    True  ⇒ λ ph. … da.sound x y h : Equal a x y, the IH on xs/ys, and Cons-cong … ;
+    False ⇒ λ ph. absurd ph   -- domain reduced to `Bottom` (list_eq → False, K7)
+  }
+```
+
+In the `True` arm the domain reduces to `IsTrue (list_eq a da.eq xs ys) → …` (the
+recursive comparison, discharged by the induction hypothesis) and `h : Equal
+Bool (da.eq x y) True` feeds `da.sound x y h`. In the `False` arm it reduces to
+`Bottom → …`, i.e. `λ ph. absurd ph` — a **genuinely-transported** `Bottom`
+(`list_eq` computes to `False`, closed by `16`'s `K7`), **never** a papered
+`Refl`. This is what collapses the hand-rolled `§3.4` dispatch to a direct
+`match`; the normative payoff is the reverted-hypothesis form, not the
+goal-side-only case.
+
 ## 4. Exhaustiveness and reachability (required — the headline safety)
 
 Ken requires this from day one. The checker is a **surface algorithm** (not a
