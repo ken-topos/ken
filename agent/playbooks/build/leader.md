@@ -74,6 +74,31 @@ publisher path owns `main` mechanics and the Architect owns design judgment. Rea
 
 ## Own the watchdog (the only poll on your team)
 
+**Rousing your ring is YOUR job, not the Steward's.** The Steward watchdog is a
+fleet-level *backstop* — it catches a stalled *leader*, an open gate, a
+cross-ring dependency — and it runs on the single most expensive model in the
+fleet, so every time the Steward has to rouse *your* implementer or QA it burns
+premium credit doing work you own. Drive your own ring: when an Architect/Spec
+ruling your member is waiting on lands, **you** relay it and rouse the member;
+when your implementer hands off, **you** rouse QA; when a member sits idle
+between batched items, **you** nudge it. If the Steward is rousing your workers,
+your watchdog isn't running — fix that, don't lean on the backstop.
+
+**Relay a ruling/handoff SELF-CONTAINED.** When you pass an Architect/Spec
+ruling down to a member, **paste the verbatim artifact in-thread** — never
+"apply the helper from evt_XXXX." Your members are terra seats whose
+event-by-ID retrieval is unreliable; a pointer strands them and forces a
+re-ask round-trip (2026-07-11). Hand the mechanism, not a reference to it (the
+Architect delivers to you the same way).
+
+**Running on Codex (no `CronCreate`)?** A terra/Codex leader seat may not have
+the `CronCreate` tool; its watchdog is instead driven by the operator-wired
+**external watchdog script** that ticks the seat on a timer. The tick
+*discipline* below is identical — on each fire, run the private
+context read + `capture-pane` sweep and rouse only real stalls. You don't
+self-arm `CronCreate`; you execute the tick each time the script wakes you. (If
+your seat *does* have `CronCreate`, arm it as below.)
+
 Workers are event-driven and never poll; you run the watchdog. **Arm it with a
 private `CronCreate` timer — NOT the convo `schedule_call`** (COORDINATION §13):
 `CronCreate(cron="7,17,27,37,47,57 * * * *", prompt="Watchdog tick: pull recent

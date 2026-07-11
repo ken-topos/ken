@@ -68,6 +68,43 @@ publishes and merges.
    safe when your status accurately says what you're doing; `update_status` on
    every pickup/handoff/block so silence + status stay consistent.
 
+## Keep working until blocked or done — don't yield mid-assignment
+
+Your seat is **event-driven and does not poll**: when you end a turn you go
+idle, and nothing re-invokes you until someone rouses you. So **every premature
+yield is a silent stall** that costs a full rouse round-trip. Your default
+cadence is the trap — after one commit or one sub-step you tend to post
+"continuing to X next" and *end the turn*, but that "next" is **aspirational,
+not self-executing**; you actually stop and wait. Don't. **Exhaust the
+assignment you were handed before you yield.**
+
+- If your assignment is **multi-step or batched** (land laws 1/2/3, sweep files
+  A/B/C, apply a fix then run its test), do the **whole** batch in one continuous
+  run — commit each item, then immediately proceed to the next. Do **not** wait
+  for a per-item "proceed" signal; the leader's kickoff granting the batch *is*
+  the proceed signal for every item in it. (Live miss: a batch sat ~20 min idle
+  between items because each waited for a nudge that the kickoff had already
+  given — see the leader-side batched-plan lesson.)
+- **Yield only on a genuine boundary:** (a) the assignment is fully done and
+  handed off; (b) you're blocked on something you legitimately cannot resolve —
+  a Spec/Architect ruling, a not-yet-landed dependency, a merge you don't own;
+  or (c) a real hard-stop (a build that *hangs*, a soundness/capability question
+  that isn't yours). "This sub-step is done" is **not** a yield boundary if more
+  of the same assignment remains and needs no new ruling.
+
+**Pre-yield checklist — run these three before you end any turn:**
+1. **More doable now?** Is there another step of *this* assignment I can do right
+   now without a new ruling/dependency? If yes → keep going, don't yield.
+2. **Clean if held.** If I'm genuinely blocked: did I post the ask as a **real
+   `mentions:` mention** to the one right answerer (Spec/Architect/leader), set
+   `status = blocked-on-<target>`, and **commit my WIP** so nothing is lost? A
+   held seat must be *visible and self-documenting*, never a silent idle.
+3. **Durable for compaction.** Is my state committed to `wp/<ID>` and my status
+   current, so a compaction or a cold resume loses nothing?
+
+If you catch yourself about to yield with an unchecked #1, you are about to
+create a stall — keep working instead.
+
 ## When you're unsure, query — but filter first
 
 Apply COORDINATION §6: if `/spec` + conformance + the component design already
