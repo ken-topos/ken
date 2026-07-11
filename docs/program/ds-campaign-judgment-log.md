@@ -1003,3 +1003,58 @@ the Handoff Gate fires when a WP later kicks to the **kernel/language ring**).
 - **Candidate-count semantics:** the register is no longer "3 tracked/watch" — it
   is **3 operator-directed, all Architect-gated at the design step.** K6 may still
   resolve to won't-fix (b); the modifier + namespace are now active design work.
+
+### D8 outcome · Architect delivered all three verdicts (2026-07-11, ~11:35–11:39)
+
+Architect posted the three verdicts to the space (`evt_58affwcy3arx9` / `_5scf1`
+/ `_1qxzp`) — **without @mentioning me**, so `get_mentions` missed them; caught
+via a `get_recent_context` sweep + the pane. (Recurrence of the "get_mentions
+misses non-@ posts" trap — sweep recent_context, don't rely on mentions alone.)
+
+- **① K6 → VERDICT (b), FRAME RETIRED** (`evt_58affwcy3arx9`). Stronger than
+  "correct rejection": the completeness case is **already closed** by
+  `obs-eq-termination`. Architect probed the landed kernel (probes deleted): the
+  defeq wrapper-vs-direct neutral shape (`ord_leq_of`-vs-`d.leq`) **converges
+  green** under `conv.rs:404` fast path + `:565` `Eq×Eq` arm + whnf δ-unfold;
+  **no live customer** (`ord_leq_of` absent on main; `Ord Char` transports from
+  `Ord Int` via same-literal discipline, not `leqChar`); the only residual
+  rejection is the cross-wise merely-propositional case, **soundly rejected** —
+  "fixing" it = the unsound cross-wise arm the frame forbids. **No kernel
+  change.** Frame `docs/program/wp/K6-conv-struct-eq-operand-congruence.md`
+  banner-retired (won't-fix, provenance kept). Tracker note: *K6 completeness
+  closed by obs-eq-termination (conv.rs:404 + :565); cross-wise defeq correctly
+  rejected by design.* Falsifiable re-open: a real **defeq** (not merely
+  propositional) rejected `Eq`-operand pair. **My "prepare a WP" turned into
+  "already fixed" — the right outcome; no TCB change manufactured to avoid (b),
+  exactly as pre-flagged.**
+- **② check_match_dependent → NO single fix; OPERATOR DECISION A vs B**
+  (`evt_5scf1rj4sfmss`). Shared root **confirmed** (`subst_term_generalize` on
+  the RAW `expected`, syntactic-occurrence match, `elab.rs ~939`) — but the
+  operator's "one principled fix" instinct **does not hold**: under-reach and
+  over-transport pull the **same normalize/generalize knob in OPPOSITE
+  directions** (under-reach wants more reach; over-transport wants less), so no
+  silent default fixes both. Over-transport is "wrong tool, correct behavior"
+  (Map isn't a case-eq customer, `evt_6bk169gj8d0kz`); **only under-reach is a
+  genuine latent gap.** Options: **A** = document the coexisting idioms
+  (dispatch-to-helper = plain match + named helper; wrapper-hidden = explicit-J),
+  zero code (Architect's lean, no live pain); **B** = author-controlled opt-in
+  generalization running the existing `simplify_branch_goal` on `expected` before
+  generalizing (fixes under-reach without touching the default, so can't
+  aggravate over-transport). **Pending operator A/B call.**
+- **③ namespace collision → FORKS FRAMED; OPERATOR DISCUSSION B vs C**
+  (`evt_1qxzp8m02hyj3`). **A** (Haskell separate namespaces) = **cautionary**:
+  Ken is dependently typed, **types ARE terms**, so "disambiguate by position"
+  has no clean type/term boundary (`Eq`-as-value vs ctor genuinely ambiguous) —
+  an ambiguity benign in Haskell, **not** here. **B** (type-qualified ctor
+  `OrdResult.Eq`) = cleanest dependent fit, explicit/position-independent,
+  bounded parser+resolver change (`parser.rs:111-147` treats dotted names as
+  module-qual only), soundness clean. **C** (alias discipline `ord_eq/…`, status
+  quo) = zero language change, cost is aliasing at every future clash. **B/C
+  live, A cautionary. Pending operator discussion** (they want to be in the loop
+  on direction). **Live second customer:** foundation-implementer hit this exact
+  shadow on compare-ord Pair antisym (11:52) — routed around via the frame's
+  Fork-C AC2 (aliases + OrdResult eliminator / generic Collections helper), so
+  compare-ord is **not** blocked on #3, but it concretizes the discussion.
+- **Net:** #1 closed (retired, no code). #2 + #3 are **operator decisions** —
+  teed up for Pat. No kernel/language WP kicked; the Architect gate did its job
+  (K6 would have been wasted kernel effort; the "fix" was already landed).

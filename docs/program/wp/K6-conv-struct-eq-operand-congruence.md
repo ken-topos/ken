@@ -1,5 +1,27 @@
 # WP K6 — `conv_struct` Eq-operand convergence (kernel completeness)
 
+> **🗑 RETIRED — WON'T-FIX / already closed (Architect verdict (b),
+> `evt_58affwcy3arx9`, 2026-07-11). NO kernel change. DO NOT KICK.**
+> The Architect re-grounded against current `origin/main` (probes against the
+> landed kernel, deleted): **the completeness case is already closed** by
+> `obs-eq-termination` — the defeq wrapper-vs-direct neutral shape (the
+> `ord_leq_of`-vs-`d.leq` case that motivated the frame) **converges green**
+> under `conv.rs:404` (congruence-first fast path) + `:565` (`Eq×Eq` arm) +
+> whnf δ-unfold. There is **no live customer** (`ord_leq_of` is absent on main
+> post-unbundling; `Ord Char` transports from `Ord Int` via the same-literal
+> discipline, not a separate `leqChar` view). The only residual `conv` rejection
+> is the **cross-wise, merely-propositionally-equal** case (`bor x y` vs
+> `bor y x`), which is **correctly rejected** — "fixing" it is exactly the
+> unsound cross-wise arm this frame's own soundness bar forbids. So a
+> `conv_struct`/whnf extension would have no customer and could only move toward
+> unsoundness. **Tracker note (Architect-recommended):** *K6 completeness closed
+> by `obs-eq-termination` (`conv.rs:404` fast path + `:565` `Eq×Eq` arm);
+> cross-wise defeq is correctly rejected by design.* **Falsifiable re-open:** if
+> any real customer ever produces a **defeq** (not merely propositionally-equal)
+> `Eq`-operand pair that `conv` rejects, re-open with that exact term. The body
+> below is the historical frame, retained for provenance.
+
+
 **Owner:** Kernel team. **Steward-framed** (2026-07-11), operator-directed
 (forward-candidate #2 greenlit). **TRUST-ROOT / TCB change** — this edits
 `ken-kernel/src/conv.rs`, the conversion checker. The **Architect designs the
