@@ -734,9 +734,13 @@ context. Who triggers a compaction is fixed (operator, 2026-06-29):
   done → leader calls for retros in-thread → members post → leader signals the
   Steward "retros in" → Steward reviews → Steward compacts → next WP.
 - **Singletons self-compact.** Agents with no team/leader — **Steward,
-  Architect, Librarian** — call `request_context_reset` at their own task
-  boundaries (Architect after a review, Librarian after a pass, Steward after a
-  directing cycle).
+  Architect, Librarian** — self-compact at their own task boundaries (Architect
+  after a review, Librarian after a pass, Steward after a directing cycle) via
+  the `tmux send-keys -t moot-<role> "/compact"` path (two-step: `/compact`,
+  ~2s, then a **separate** `Enter`). Do **not** use `request_context_reset` — it
+  is broken in this harness (it looks for a nonexistent `convo-<role>` session
+  and its error message *names* `convo-<role>`, which is the bug, not a target
+  to retry). Full mechanics: `playbooks/federation/steward.md` (self-compact).
 - **Never mid-reasoning.** Compact only at a clean boundary; it summarizes away
   in-flight work.
 - **Start new work from current `origin/main` (operator, 2026-06-29).** A WP

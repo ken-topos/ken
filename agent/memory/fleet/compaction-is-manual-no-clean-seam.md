@@ -18,11 +18,19 @@ The earlier "I know we don't have a good way to manage this yet… benefit to
 continuity between spec approval and later PR review… no clean place to compact"
 was about a **singleton (the Architect)**, not teams: the operator compacts a
 singleton by attaching to its `moot-<role>` tmux session, checking `/context`,
-and `/compact` by hand. The playbook says singletons self-compact via
-`request_context_reset`, but in practice that isn't a smooth process — and
-singleton work spans many teams (the Architect reviews everyone), so there's no
-clean idle seam and continuity has real value (a spec-approver reviews the impl
-PR better with that context).
+and `/compact` by hand. What's genuinely hard is the **seam** (singleton work
+spans many teams — the Architect reviews everyone — so there's no clean idle
+point, and continuity has real value: a spec-approver reviews the impl PR better
+with that context).
+
+**The MECHANISM is solved (operator, 2026-07-02), do not re-cite the broken
+one:** a singleton self-compacts with `tmux send-keys -t moot-<role> "/compact"`
+(two-step: `/compact`, ~2s, separate `Enter`) — pointed at its own
+`moot-<role>` window. Do **NOT** use `request_context_reset`: it is broken in
+this harness (hunts for a nonexistent `convo-<role>` session; its error message
+*names* `convo-<role>`, which is the bug, not a retry target — the Architect
+tripped on exactly this 2026-07-11). Full mechanics in
+`playbooks/federation/steward.md` + `architect.md` self-compact sections.
 
 **The error this corrects:** I over-read the singleton comment as a *team*
 statement and **skipped compacting Team Verify before releasing Sec1-build** (a
