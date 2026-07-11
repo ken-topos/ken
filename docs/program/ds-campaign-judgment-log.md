@@ -725,6 +725,18 @@ the shape to the Architect ([[second-occurrence-of-idiom-is-a-language-feature-s
   Language item could whnf-unfold the expected type before generalizing (open design
   Q: which/how-deep to unfold, over-generalization risk). Reflect-don't-extend: NOT
   a mid-WP extension. Route to Architect when framed; **watch for occurrence #2.**
+  **CORRECTION (Architect `evt_6bk169gj8d0kz`, 2026-07-11): the case-eq-adoption
+  Map reject is NOT occurrence #2 — stays at #1.** I initially framed the Map
+  dispatcher failure as a recurrence, but the Architect ground-truthed it as the
+  **inverse**: the modifier *over*-transports (`set_intersection_member` goal has
+  the scrutinee syntactically → motive substitutes `False` → arm goal becomes
+  `bool_and … False` while the retained fixed-goal helper supplies the original →
+  reject), whereas the whnf-unfold candidate is about *under*-reach (constant
+  motive on a non-syntactic scrutinee). The reject direction proves it: an
+  under-reach would have **accepted**. The whnf-unfold enhancement would fix only
+  the insert/lookup under-reach half and would NOT rescue the over-transport half,
+  so **Map is not demand for it** — see the case-eq applicability-boundary note
+  below.
 - **[Kernel] K6 `conv_struct` positional Eq-operand congruence** —
   `Eq Bool <neutral₁> True` won't δ-bridge to `Eq Bool <neutral₂> True` when the
   neutrals are syntactically distinct (`LawfulClasses :689–723`). **Now forced
@@ -758,6 +770,36 @@ zero-TCB idiom, not a mid-WP kernel/parser patch. All three are tracked candidat
 none blocking; the pattern to watch is whether any recurs enough to justify its
 lane's WP (Kernel for K6, Language for the modifier-unfold and the namespace split).
 
+### D7 · case-eq-adoption re-scoped — Map DROPPED, ship the two small sites (Architect + Steward)
+- **Call:** the case-eq-adoption Map bulk (originally "79 uses — the bulk," 64
+  dispatchers) is **dropped**; the WP re-scopes to the two small sites (EmptyDec 4
+  + LawfulClasses `list_deceq`). Grounding (Architect `evt_6bk169gj8d0kz`): Map's
+  dispatchers are **not** the inline-explicit-`J` idiom the frame assumed — they're
+  a distinct, legitimate **precomputed-`Or` → plain-`match` → named-helper** idiom
+  where the per-branch transport lives in named helpers, not a modifier-synth motive.
+  case-eq can't subsume it (two sub-families fail **oppositely**: insert/lookup
+  under-reaches to a constant motive; `set_intersection_member` over-transports and
+  fail-closed rejects). **Not a defect, not an alt-form, not a modifier prerequisite
+  to wait on — coexistence.** ergo restored the branch clean (no commit); nothing to
+  unwind. WP stays **standalone** (its LawfulClasses edit is the Track-A merge
+  anchor — lands first, Track A rebases its non-overlapping `Ord`-instances hunk
+  onto it). AC1/byte-reduction re-scoped honestly to the two sites (no papering).
+  Frame updated (RE-SCOPED banner + site list).
+- **Reversibility:** N/A (following landed capability + Architect fidelity read).
+
+**Insight — the case-eq modifier's genuine applicability boundary.** case-eq
+subsumes **only** inline-transport of a **syntactically-present** scrutinee where
+the branch proves the transported goal **in-place** (EmptyDec + LawfulClasses
+`list_deceq` — the sites that succeeded). It does **not** fit the
+**dispatch-to-explicit-motive/fixed-goal named-helper** idiom used for large
+factored proofs (Map): under-reach where the scrutinee is non-syntactic, or
+over-transport where it is but the goal is proven by a retained fixed-goal helper.
+That named-helper idiom is a **legitimate coexisting pattern, NOT a hand-rolled
+idiom to eliminate** — so it does **not** trigger the standing recurring-idiom /
+subsume directive, and it is **not** demand for the modifier-whnf-unfold
+enhancement (which addresses only the under-reach half). Reflect-don't-extend:
+no modifier/kernel work for Map.
+
 ### Coordination faults (this window)
 - **Foundation escalation #3 (`compare-ord` brick 1) was a branch-local
   misattribution** — the implementer/leader escalated a full-catalog-load
@@ -771,25 +813,31 @@ lane's WP (Kernel for K6, Language for the modifier-unfold and the namespace spl
   Architect** (the most expensive unit). Watch for a 4th misattribution → then coach
   isolate-before-escalate directly.
 - **foundation-implementer §10 retro DROPPED** on `message_type:"handoff"` then
-- **foundation-implementer §10 retro DROPPED** on `message_type:"handoff"` then
   `"retrospective"` (both 400 — closed enum); seat idle believing it posted. I
   **relayed it** (attributed) to close the ring. Every kickoff this window now
   carries an explicit `message_type`-enum warning.
 
-### Run status / next triggers (event-driven) — updated post-compact
+### Run status / next triggers (event-driven) — updated ~09:20 UTC
 - **MERGED:** Language `def-path-constraint-binder-unification` (`main @ 41df4e62`);
-  ring §10 retros in (impl + qa posted). Enclave still holds the spec parity clause
-  (`32`/`33`) → CV verdict → `git_request`.
-- **KICKED & MOVING:** Ergo `case-eq-adoption` (79-site Map is the long pole; leader
-  active, qa gate armed). Foundation Track A `compare-ord-lexicographic` (bricks
-  1+3; brick-1 unbundled raw-`leq` shape ruled & transcribed — D6; qa gate armed,
-  awaiting impl SHA).
-- **Queued (framed, not kicked):** Nat laws (`main`, Ergo serial — queues behind
-  case-eq-adoption), DS-8c (Ergo serial, last).
-- **Next gate events:** Ergo case-eq-adoption `git_request`; Foundation bricks-1+3
-  `git_request`; Language spec-clause CV verdict → `git_request`. **Merge order:**
-  case-eq-adoption lands first; Track A rebases onto it (non-overlapping
-  LawfulClasses regions — new `Ord` instances section vs the `§4.5`
-  deceq-dispatch rewrite).
-- Watchdog armed (branch tips + main advances). **Formatter HELD.** Operator back
+  ring §10 retros in. Enclave still holds the spec parity clause (`32`/`33`) → CV
+  verdict → `git_request`. Playbook watchdog hardening (`main @ bc1c0643`).
+- **ACTIVE — Ergo `case-eq-adoption`:** **RE-SCOPED to the two small sites, Map
+  dropped (D7).** ergo-implementer re-applying EmptyDec + LawfulClasses migrations
+  on the clean branch → SHA to qa + built-head gate. This WP is the **Track-A merge
+  anchor** (lands first).
+- **ACTIVE — Foundation `compare-ord-lexicographic` (bricks 1+3):** brick 1 on the
+  unbundled raw-`leq` shape (D6) — raw Eq/Lt green; implementer working the **Gt
+  totality-transport** (a kernel-reject it's isolating; leader driving, assessing
+  local-fix vs escalate). Then lex Pair/List instances. qa gate armed.
+- **Queued (framed, not kicked):** Nat laws (`main`, Ergo — case_eq-INDEPENDENT, so
+  releasable if case-eq-adoption stalls; else serial after it), DS-8c (Ergo, last).
+- **Next gate events:** Ergo case-eq-adoption `git_request` (2 small sites);
+  Foundation bricks-1+3 `git_request`; Language spec-clause CV verdict. **Merge
+  order:** case-eq-adoption lands first; Track A rebases its non-overlapping `Ord`
+  -instances hunk onto it.
+- **Forward candidates: 3** (Kernel K6 #2; Language modifier-whnf #1 — Map did NOT
+  bump it, see correction; Language namespace-split #1). Map named-helper idiom
+  logged as legitimate coexistence, not an elaborator-feature candidate.
+- **Watchdog: CronCreate job `1236a1cd`** (15-min, pane stall-sweep + git/gates +
+  mentions) — replaced the codex-era bash loop. **Formatter HELD.** Operator back
   ~11:00 UTC — this log is the review artifact.
