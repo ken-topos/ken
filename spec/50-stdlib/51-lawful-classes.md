@@ -131,10 +131,11 @@ case-analyses the decidable `leq x y : Bool` directly (matchable); the `Ω`-law
 The verified `sort` (`37 §6`) threads an **explicit** `leq : a → a → Bool`. A
 constraint `where Ord a` **provides that same `leq`** from the resolved
 dictionary: `where Ord a` desugars to an implicit instance argument
-`{d : Ord a}` (`33 §5.4`), and inside the body `leq` is `d.leq` (projection). (On
-the definition/`view` path a single constraint binds the reserved `d` (`37 §6`,
-L3b); the `d<v>`/named-binder/comma generalization is the shipped **instance**
-surface (`33 §5.4`), with def-path unification pending.) So
+`{d : Ord a}` (`33 §5.4`), and inside the body `leq` is `d.leq` (projection). (A
+single constraint binds the reserved `d` (`37 §6`, L3b); the `d<v>`/named-binder/
+comma form is now **shared** across the definition path — `const`/`fn`/`proc`,
+and the legacy `view` — and instances alike (`33 §5.4`, landed def-path
+constraint-binder unification).) So
 the `Ord`-constrained `sort` and the explicit-comparator `sort` are the **same
 view** — one `sort`, whose comparator is either passed explicitly or supplied by
 the dictionary:
