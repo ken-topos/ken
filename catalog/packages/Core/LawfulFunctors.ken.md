@@ -1,16 +1,11 @@
 # `lawful-functors` — `Semigroup`, `Monoid`, `Functor`, `Foldable`
 
-The first WP of the catalog campaign (`docs/program/06-catalog-campaign.md`,
-CAT-1) and the pattern-setter for every later constructor-class layer. This
-package carries the **value-level algebra** classes `Semigroup`/`Monoid`
+This package carries the **value-level algebra** classes `Semigroup`/`Monoid`
 alongside the **constructor classes** `Functor`/`Foldable` over
 `f : Type → Type`.
 
-**Naming.** Despite the package name, this tranche carries the value-level
-algebra companions (`Semigroup`/`Monoid`) alongside the functor classes,
-because `Foldable`'s `fold_map` consumes a `Monoid`. Open to a rename/split
-(e.g. `lawful-algebra` + `lawful-functors`) if `06`'s `ken.*` layer shape
-prefers it — flagged to the enclave leader, not load-bearing.
+**Naming.** The value-level algebra companions belong here because
+`Foldable`'s `fold_map` consumes a `Monoid`.
 
 ## Index
 
@@ -19,9 +14,8 @@ prefers it — flagged to the enclave leader, not load-bearing.
 3. [Using it](#3-using-it)
 4. [Laws  proofs](#4-laws--proofs)
 5. [Design notes](#5-design-notes)
-6. [Findings](#6-findings)
-7. [References](#7-references)
-8. [Trust  derivation](#8-trust--derivation)
+6. [References](#6-references)
+7. [Trust  derivation](#7-trust--derivation)
 
 **Named reading paths**
 
@@ -33,20 +27,18 @@ prefers it — flagged to the enclave leader, not load-bearing.
 
 ## 1. Motivation
 
-`spec/50-stdlib/55-lawful-functors.md` gives Ken an associative operation
-(`Semigroup`), a monoid over it (`Monoid`), a structure-preserving map over a
+Ken provides an associative operation (`Semigroup`), a monoid over it
+(`Monoid`), a structure-preserving map over a
 type constructor (`Functor`), and a fold that is coherent with a chosen
 `Monoid` (`Foldable`) — the vocabulary every later constructor-class layer
-(`Applicative`, `Monad`, `Traversable`, …) builds on. Every class here stays
-in the elaborator/package layer: no kernel feature, no new `Term`/`Decl`.
+(`Applicative`, `Monad`, `Traversable`, …) builds on. Every class here is an
+ordinary package-level definition; no new kernel feature is required.
 
 ## 2. Definition
 
 `Semigroup a` is an associative binary operation on `a`. `op` is the
-ergonomic `<>`/mappend, a plain identifier field (not an infix token: a
-surface `<>` operator is deferred sugar, OQ-syntax — exactly as `36 §4.5`'s
-`get`/`put` name the effect ops rather than minting operators). `assoc` is a
-propositional equation in `Omega`.
+ergonomic mappend operation, written as a plain identifier field. `assoc` is
+a propositional equation in `Omega`.
 
 ```ken
 class Semigroup a {
@@ -55,15 +47,10 @@ class Semigroup a {
 }
 ```
 
-`Monoid a` is a `Semigroup` with a two-sided identity `mempty`. Following the
-`DecEq`-subsumes-`Eq` precedent (`51 §2.2`): the STRONGER class RESTATES the
-weaker one's operation + law rather than wiring a superclass field, and the
-subsumption — "a `Monoid` yields a `Semigroup` by forgetting `mempty`/
-`left_unit`/`right_unit`, keeping `op`/`assoc`" — is recorded as a FACT here,
-not a `where`-constraint. Same shape as `Eq`/`Ord`, no new kind machinery.
-(Whether the CONSTRUCTOR-class chain of CAT-2 — `Functor → Applicative →
-Monad` — should instead WIRE superclass fields is a template question for the
-Architect's higher-kinded lane, flagged there, not decided here.)
+`Monoid a` is a `Semigroup` with a two-sided identity `mempty`. It restates
+the operation and associativity law: a `Monoid` yields a `Semigroup` by
+forgetting `mempty`, `left_unit`, and `right_unit`, while keeping `op` and
+`assoc`. This keeps the class records direct and independent.
 
 ```ken
 class Monoid a {
@@ -84,9 +71,8 @@ original package source uses.
 ## 3. Using it
 
 Once a concrete instance is registered, its fields project directly off the
-synthesized `C_instance_T` dictionary, the same projection form
-`catalog/packages/Core/LawfulClasses.ken.md §3` documents for `Eq`/`Ord`. §4's
-`instance Monoid Bool` and `instance Monoid (List a)` are the two worked
+synthesized `C_instance_T` dictionary. `instance Monoid Bool` and
+`instance Monoid (List a)` are the two worked
 examples here: `Monoid_instance_Bool` restates the *same* `op`/`assoc`
 definitions (`bool_and`/`band_assoc`) that `Semigroup_instance_Bool` uses, and
 `Monoid_instance_List`'s dictionary is genuinely generic in the element type
@@ -99,10 +85,9 @@ parametric-head instance.
 ### 4.1 The `List` append monoid — the canonical inductive carrier
 
 `op = list_append`, `mempty = Nil`. The three laws and the `Monoid` instance
-are GENERIC in `a`: the CAT-1 D1 parametric-instance-head path elaborates
-`instance Monoid (List a)` as `(a : Type) → Monoid (List a)`, and the law
-fields cite the existing generic `list_*` proofs rather than re-proving them
-at a closed carrier.
+are generic in `a`: `instance Monoid (List a)` elaborates as
+`(a : Type) → Monoid (List a)`, and its law fields use generic list proofs
+rather than re-proving them at a closed carrier.
 
 Left unit is DEFINITIONAL: `list_append Nil x` iota-reduces to `x` by
 append's first match arm, so the goal `Equal (List a) x x` stays `Eq`-shaped
@@ -111,11 +96,11 @@ first list: base (`Nil`) both sides reduce to the NEUTRAL
 `list_append a ys zs`, still `Eq`-shaped, `Refl`; step (`Cons h t`) lifts the
 tail IH under `Cons a h` with `cong`. Right unit is proved by induction on
 the list: base (`Nil`) both sides reduce to the CONSTRUCTOR `Nil a`, which
-observationally collapses to `Top` (same nullary ctor, `16 §8.1` / K7) — so
+observationally collapses to `Top` (the same nullary constructor) — so
 the goal is no longer `Eq`-shaped and `Refl` does not apply; it is
 `Top`-introduced by `tt` (the exact `tt`-vs-`Refl` discrimination
-`catalog/packages/Core/LawfulClasses.ken.md §4` documents: constructor-headed
-endpoints → `Top` → `tt`; neutral endpoints → stuck `Eq` → `Refl`); step
+constructor-headed endpoints give `Top` and `tt`, while neutral endpoints
+remain stuck `Eq` goals and use `Refl`; step
 (`Cons h t`) is `cong` under `Cons a h` on the tail IH.
 
 ```ken
@@ -166,13 +151,9 @@ instance Monoid (List a) {
 
 Complements the `List` monoid's inductive style with the FINITE case-split
 style: no induction / no IH, every branch closes by `tt` or `Refl` directly.
-`bool_and` is a transparent (match-based) view, NOT the `and_bool`
-primitive — deliberately, for the same reason
-`catalog/packages/Core/LawfulClasses.ken.md` defines its own transparent
-`bool_or`: a primitive never reduces on a symbolic argument (K1 `whnf` only
-unfolds `Decl::Transparent`), which would make the laws unprovable; a
-transparent `bool_and` reduces on each concrete constructor at zero kernel
-cost.
+`bool_and` is a transparent match-based definition rather than a primitive.
+It reduces on each concrete constructor, which lets the laws compute directly
+even when an argument is initially symbolic.
 
 Associativity is a full 2×2×2 case-split; each concrete branch reduces both
 sides to the same literal, collapsing to `Top` → `tt`. Left unit is
@@ -220,14 +201,12 @@ instance Monoid Bool {
 
 ### 4.3 `Functor` — structure-preserving map over a type constructor
 
-`class Functor (f : Type → Type)` uses the CAT-1 higher-kinded
-class-parameter extension (§5). Its laws use the settled single pointwise
-field form only: identity quantifies over `(x : f a)`, and fusion quantifies
-over `(x : f a)`; there is no point-free duplicate law surface. `List`'s
-instance is proved by induction + `cong` (the same `tt`-vs-`Refl` shape as
-§4.1); `Option`'s instance closes by finite case-split / definitional
-equality — `None` collapses to `Top` (`tt`), `Some v` stays `Eq`-shaped
-(`Refl`, since `map` reduces on the concrete `Some` head either way).
+`class Functor (f : Type → Type)` takes a higher-kinded constructor parameter.
+Its laws use a pointwise form: identity and fusion both quantify over
+`(x : f a)`. `List`'s instance is proved by induction and `cong`; `Option`'s
+instance closes by finite case split and definitional equality. `None`
+collapses to `Top` and uses `tt`, while `Some v` remains an `Eq`-shaped goal
+and uses `Refl`.
 
 ```ken
 fn idf (a : Type) (x : a) : a = x
@@ -430,101 +409,62 @@ instance Foldable Option {
 
 ## 5. Design notes
 
-**No new kernel feature (AC1).** A class is a record (`33 §5.2`, right-nested
-Σ over `13 §3`); a law is an `Omega` proposition (`16 §1`). Unlike `Eq`/`Ord`
-(whose ops are `Bool`-valued, so their laws ride the
-`IsTrue b := Equal Bool b True` bridge, `51 §2`), a `Semigroup`/`Monoid`
-operation RETURNS an `a`, so its laws are the kernel's OWN propositional
-equality `Equal a u v : Omega` directly — an equation between `a`-values,
-proof-irrelevant, no truncation (the `51 §3` truncation catch never fires:
-these are value equations, not a bare `∨`/`∃`).
+**No new kernel feature.** A class is a record and a law is an `Omega`
+proposition. `Semigroup` and `Monoid` operations return values of their
+carrier, so their laws use propositional equality `Equal a u v : Omega`
+directly.
 
-**Laws PROVED over inductive carriers, never postulated (AC3).** The
-`List a` append monoid and `List` `Functor`/`Foldable` laws go by induction +
-`cong` (`catalog/packages/Core/Transport.ken.md`); `Bool`'s conjunction
-monoid and `Option` `Functor`/`Foldable` laws go by finite case-split /
-definitional equality. Zero `Axiom`, zero `trusted_base()` delta — every
-instance is a real `declare_def` record value, kernel-re-checked. This is the
-same inductive-carrier zero-delta exemplar
-`catalog/packages/Core/LawfulClasses.ken.md §6` names for `Bool` — here it
-covers every instance in the package, not just one.
+**Laws are proved over ordinary carriers.** The `List a` append monoid and
+`List` `Functor`/`Foldable` laws use induction and `cong`; the corresponding
+`Bool` and `Option` laws use finite case splits and definitional equality.
+Every instance has a zero `trusted_base()` delta.
 
-**Dependencies (reused, never re-defined — subsume-don't-proliferate).**
-`cong`/`sym`/`trans` (`catalog/packages/Core/Transport.ken.md`, over the `J`
-former) for the inductive congruence steps; `list_append`
-(`catalog/packages/Data/Collections/Collections.ken`) as the `List` monoid
-operation, reused rather than re-defined (a second append would collide with
-the landed one).
+**Shared building blocks.** `cong`, `sym`, and `trans` support inductive
+congruence steps, while `list_append` supplies the `List` monoid operation.
+Reusing these names keeps the common operations and proof idioms consistent.
 
-**Two pinned sub-deliverables (outer-ring elaborator extensions,
-kernel-untouched).** Both landed as `ken-elaborator`-only work, zero
-`ken-kernel` diff, no new `Term`/`Decl`:
+**Higher-kinded and parametric declarations.** `Functor` and `Foldable` take
+a constructor parameter `f : Type → Type`, while `instance Monoid (List a)`
+is generic in `a` and produces a dictionary of type
+`(a : Type) → Monoid (List a)`. These forms let the classes describe a whole
+family of carriers without duplicating declarations for each element type.
 
-1. **Higher-kinded class parameter** — `class Functor (f : Type → Type)`.
-   CAT-1 D1 landed the bounded elaborator extension (AST param-kind field,
-   parser binder form, the `elab_class_decl` kind substitution, and
-   bare-indformer instance-head verification). CAT-1 D3 uses it for
-   `Functor`/`Foldable`.
-2. **Parametric instance head** — `instance Monoid (List a)` (a value class
-   over a *parametric* carrier). CAT-1 D1 landed the free-head-variable
-   generalizer, and CAT-1 D2 uses it here: the dictionary is elaborated as
-   `(a : Type) → Monoid (List a)`.
-
-## 6. Findings
-
-- **Kernel-reduction defect:** none.
-- **Abstraction candidate:** none beyond what §2/§4 already provide — the two
-  elaborator extensions above are pinned sub-deliverables, not open gaps.
-
-## 7. References
+## 6. References
 
 None — this entry's design (the `Semigroup`/`Monoid` restatement pattern,
 the higher-kinded constructor classes) is Ken-native, not consulted from an
 external reference implementation.
 
-## 8. Trust  derivation
+## 7. Trust  derivation
 
-1. **Spec / WP.** `spec/50-stdlib/55-lawful-functors.md`;
-   `docs/program/06-catalog-campaign.md` (CAT-1, the catalog campaign's first
-   WP, D1/D2/D3 sub-deliverables).
-2. **Public API.** `class Semigroup`, `class Monoid`,
+1. **Public API.** `class Semigroup`, `class Monoid`,
    `instance Semigroup (List Nat)`, `instance Monoid (List a)`,
    `instance Semigroup Bool`, `instance Monoid Bool`, `class Functor`,
    `instance Functor List`, `instance Functor Option`, `class Foldable`,
    `instance Foldable List`, `instance Foldable Option`.
-3. **Source map.**
+2. **Source map.**
 
    | Task | Section |
    |---|---|
    | See the four classes | [Definition](#2-definition), [Laws  proofs](#4-laws--proofs) |
    | Project a field off a dictionary | [Using it](#3-using-it) |
    | The `List`/`Bool`/`Option` proofs | [Laws  proofs](#4-laws--proofs) |
-   | Why value-level laws skip the `IsTrue` bridge, the two pinned sub-deliverables | [Design notes](#5-design-notes) |
+   | Why value-level laws use `Equal`, and how generic declarations work | [Design notes](#5-design-notes) |
 
-4. **Derivation path.** All four classes are `class` declarations = record
-   types (`33 §5.2`, right-nested Σ over `13 §3`), built from the kernel's
-   `Equal`/`Omega` vocabulary (`15`/`16`, prelude) + the Σ/record machinery.
-   No new kernel former. Every instance reduces through ordinary induction
-   (`elim_List`) or finite case-split (`elim_Bool`/`elim_Option`) into an
-   `Omega`-motive, closing with `tt`/`Refl`/`cong` — no `Axiom`.
-5. **`trusted_base()` delta.** **Zero.** Every instance in this package —
+3. **Derivation path.** All four classes are record declarations built from
+   `Equal`, `Omega`, and record machinery. Every instance reduces through
+   ordinary induction or finite case splitting, closing with `tt`, `Refl`,
+   or `cong`; no `Axiom` is needed.
+4. **`trusted_base()` delta.** **Zero.** Every instance in this package —
    `List`, `Bool`, and `Option` alike — is a real, kernel-checked proof; no
    law field is postulated anywhere.
-6. **Proof families.** `List` instances: structural induction + `cong`
+5. **Proof families.** `List` instances: structural induction + `cong`
    lifting the tail IH under the head constructor (`§4.1`, `§4.3`, `§4.4`).
    `Bool` instances: full finite case-split, every branch closing by `tt` or
    `Refl` directly, no IH (`§4.2`). `Option` instances: single-level
    case-split / definitional equality (`§4.3`, `§4.4`).
-7. **Consumers.** `crates/ken-elaborator/tests/cat1_lawful_functors_package.rs`
-   loads this package directly; `ds3_sum_combinators_acceptance.rs`,
-   `ds7_applicative_monad_acceptance.rs`, `ds8_traversable_acceptance.rs`, and
-   `either_catalog_package_acceptance.rs` load it as a cross-file
-   prerequisite for their own `Functor`/`Foldable`/`Monoid`-consuming
-   packages.
-8. **Validation evidence.**
-   `crates/ken-elaborator/tests/cat1_lawful_functors_package.rs` — confirms
-   the parametric `Monoid (List a)` dictionary elaborates as a `Pi`-typed
-   generic instance keyed by the bare `List` head (not a closed element
-   type), confirms all four `Functor`/`Foldable` instances register under
-   their class/head coherence keys, and confirms the package source cites
-   the landed laws with no law field postulated.
+6. **Consumers.** `Functor`, `Foldable`, and `Monoid`-using packages build on
+   these class declarations and instances.
+7. **Validation evidence.** The catalog checks the parametric
+   `Monoid (List a)` dictionary, all four `Functor`/`Foldable` instance
+   registrations, and the absence of postulated law fields.

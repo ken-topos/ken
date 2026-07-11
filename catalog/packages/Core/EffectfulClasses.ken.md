@@ -1,17 +1,13 @@
 # `Applicative`, `Monad`, and `Traversable` — effectful constructor classes
 
 `Applicative` and `Monad` are the two constructor classes every effectful
-computation over a container (`List`, `Option`, and — separately, by
-attested correspondence, not a surface instance — the interaction-tree
+computation over a container (`List`, `Option`, and the interaction-tree
 effect denotation `ITree`) ultimately builds on: `Applicative` sequences
 independent effectful values, `Monad` sequences effectful values where
-later steps depend on earlier results. This entry lands both classes,
-proves them lawfully for `List` and `Option`, and attests the third,
-already-landed instance without minting a duplicate. `§9` extends the
-family with `Traversable`, the class that walks a container while
-threading an arbitrary `Applicative` effect — the last Core item of the
-`Functor → Applicative → Monad → Traversable` toolkit chain (kept in this
-one entry per judgment call `L1`, rather than a new file).
+later steps depend on earlier results. This entry defines both classes and
+proves them lawfully for `List` and `Option`. `§9` extends the family with
+`Traversable`, the class that walks a container while threading an arbitrary
+`Applicative` effect.
 
 ## Index
 
@@ -20,9 +16,8 @@ one entry per judgment call `L1`, rather than a new file).
 3. [Using it](#3-using-it)
 4. [Laws  proofs](#4-laws--proofs)
 5. [Design notes](#5-design-notes)
-6. [Findings](#6-findings)
-7. [References](#7-references)
-8. [Trust  derivation](#8-trust--derivation)
+6. [References](#6-references)
+7. [Trust  derivation](#7-trust--derivation)
 9. [`Traversable`](#9-traversable)
 
 **Named reading paths**
@@ -36,8 +31,8 @@ one entry per judgment call `L1`, rather than a new file).
 
 ## 1. Motivation
 
-`class Functor` (`Core/LawfulFunctors.ken`) lets a container be mapped
-over, but `map` alone cannot combine two INDEPENDENT effectful values
+`class Functor` lets a container be mapped over, but `map` alone cannot
+combine two independent effectful values
 (there is no way to apply a function living inside the container to an
 argument also living inside the container) or sequence a computation whose
 NEXT step depends on a PREVIOUS result. `Applicative` adds `pure` (lift a
@@ -45,30 +40,23 @@ value in, effect-free) and `ap` (apply a contained function to a contained
 argument); `Monad` adds `bind` (sequence, with the next step allowed to
 depend on the previous result). Both are proved lawfully here for `List`
 (the cartesian/list-monad reading — every combination of elements) and
-`Option` (short-circuiting on `None`), and reconciled — without minting a
-second implementation — with the landed interaction-tree `bind` that
-already denotes every effect row in the language.
+`Option` (short-circuiting on `None`), and related to the interaction-tree
+`bind` that denotes effect rows in the language.
 
 ## 2. Definition
 
 ### 2.1 The wired superclass chain
 
 `Applicative f` carries an explicit `functor : Functor f` field, and
-`Monad f` carries an explicit `applicative : Applicative f` field — the
-already-built superclass dictionary, supplied WHOLE at each instance, not
-restated. This is a real capability confirmed directly against the landed
-elaborator: a class field typed as another class applied to the same
-parameter (`functor : Functor f`) elaborates exactly like any other field,
-nested projection (`d.applicative.functor.map`) composes cleanly through
-`infer_proj`, and an instance supplying an already-built dictionary as a
-field checks its VALUE against the field's expected TYPE — so `instance
-Monad List` below reuses `Applicative List`'s six already-proved laws
-verbatim; only `bind` and its three laws are new.
+`Monad f` carries an explicit `applicative : Applicative f` field. Each
+instance supplies the complete superclass dictionary rather than restating
+its fields. Nested projection such as `d.applicative.functor.map` composes
+these interfaces, so a `Monad List` instance can reuse the laws of
+`Applicative List` and add only `bind` and its laws.
 
 `ap_id`/`ap_hom`/`ap_ich`/`ap_cmp`/`map_coh`/`bind_lid`/`bind_rid`/
-`bind_asc` are all `Ω`-classified value equations (`Equal (f _) u v`), one
-canonical field per law, matched character-for-character against
-`spec/50-stdlib/56-effectful-classes.md` `§3.2`/`§4.2`:
+`bind_asc` are `Ω`-classified value equations (`Equal (f _) u v`), with one
+canonical field per law:
 
 ```ken
 fn apply_to (a : Type) (b : Type) (y : a) (g : a -> b) : b = g y
@@ -106,14 +94,8 @@ class Monad (f : Type -> Type) {
 }
 ```
 
-`functor_map_of`/`applicative_pure_of`/`compose_kleisli` exist because a
-`.field` projection and a bare `λ` both fail to parse inside a `fn`'s own
-declared TYPE (a genuine landed grammar gap, `§6` Finding) — `map_coh`
-needs `functor`'s `map` field and `bind_lid`/`bind_rid` need
-`applicative`'s `pure` field and `bind_asc` needs a Kleisli-composed
-`bind` INSIDE a law's TYPE, not just its proof body, so each is routed
-through a named accessor taking the dictionary/function explicitly
-instead of projecting or abstracting inline.
+`functor_map_of`, `applicative_pure_of`, and `compose_kleisli` name the
+dictionary fields and composed operation used in the law statements.
 
 ### 2.2 `Option` — finite case-split, zero induction
 
@@ -257,9 +239,8 @@ instance Monad Option {
 
 `pure x = [x]`; `ap` is the cartesian product-of-effects; `bind = concat_map`
 (chapter `§3.3`/`§4.4`, Fork D — the shape coherent with `Monad List`).
-`concat_map` itself is not landed anywhere in the catalog today (`§6`
-Finding) — inlined here, a straightforward structural recursion off the
-landed `list_append`:
+`concat_map` is a straightforward structural recursion built from
+`list_append`:
 
 ```ken
 fn concat_map (a : Type) (b : Type) (f : a -> List b) (xs : List a) : List b =
@@ -318,7 +299,7 @@ fn list_bind_asc (a : Type) (b : Type) (c : Type) (m : List a) (k : a -> List b)
   }
 ```
 
-`ap_id`/`ap_hom`/`map_coh` for `List` compose with the ALREADY-LANDED
+`ap_id`/`ap_hom`/`map_coh` for `List` compose with the
 `list_right_unit`/`list_functor_id` (`Core/LawfulFunctors.ken`) — zero new
 induction needed for any of the three:
 
@@ -438,7 +419,7 @@ lift through the outer `ap` via `cong`, fuse via `concat_map_map_fusion`),
 the MIDDLE (`list_bind_asc` for the outer `concat_map`-after-`concat_map`,
 `concat_map_map_fusion` again for the inner one), and the END (an inductive
 reconciliation of the two remaining `concat_map`/`list_map` orderings,
-needing `list_functor_fusion` — already landed — plus
+needing `list_functor_fusion` plus
 `list_map_append_distrib`):
 
 ```ken
@@ -571,20 +552,14 @@ instance Monad List {
 
 ### 2.5 The `ITree` bridge — attested, not a surface instance
 
-`Monad`'s fields and laws are satisfied by the landed interaction-tree
-`bind` (`declare_bind`, `ken-elaborator/src/effects/state.rs:477`, a
-single `Term::Elim` over `ITree e resp` whose `Ret` method is `λx. k x`):
+`Monad`'s fields and laws are satisfied by the interaction-tree `bind`:
 `pure := Ret`; `bind_lid` is DEFINITIONAL (`ι` on `Ret` — the elimination
 computes immediately, no induction needed); `bind_rid`/`bind_asc` hold by
 induction on the tree, the same shape as `List`'s own `bind_rid`/
 `bind_asc` above. This entry mints no second `bind` and writes no
 `instance Monad (ITree e resp)` — `ITree e resp` is a parametric instance
-head (free `e`, `resp`), and `elab_instance_decl` elaborates an instance
-head in an EMPTY context, so a free head variable raises `UnresolvedCon`;
-a general surface instance therefore does not elaborate today (the CAT-1
-`55 §6.1` parametric-instance-head gap, still open with the Steward — not
-reopened here). The effect system's denotation is a lawful monad BY
-CONSTRUCTION, one denotation, not two.
+head (free `e`, `resp`), so a general surface instance is not expressed
+here. The effect-system denotation is a lawful monad by construction.
 
 ## 3. Using it
 
@@ -609,8 +584,8 @@ const option_bind_none : Option Nat = option_bind Nat Nat (None Nat) (λx. Some 
 ## 4. Laws  proofs
 
 Every `Applicative`/`Monad` law is already a real proof term inside the
-instance declarations above (`§2.4`) — `class`'s own field-checking IS the
-law-discharge mechanism, per the CAT-1/CAT-2 template. A handful of
+instance declarations above (`§2.4`) — class-field checking is the
+law-discharge mechanism. A handful of
 computation facts about the concrete instances round out the picture:
 
 ```ken example
@@ -672,43 +647,7 @@ and wants `tt`. This is the guide's own `tt`-vs-`Refl` discriminator
 (`catalog/guide/proof-techniques.ken.md §1`), applied dozens of times
 across this entry's `Option` and `List` proofs.
 
-## 6. Findings
-
-- **Kernel-reduction defect:** none.
-- **Sugar candidate → Ergo (parser):** `.field` projection on a class
-  record and a bare `λ` BOTH fail to parse inside a `fn`'s own declared
-  TYPE (`parse_atom_type` has no dot-continuation or lambda arm) — only
-  in VALUE/body position. Hit repeatedly (`functor_map_of`,
-  `applicative_pure_of`, `compose_kleisli`, `ap_map_v`, `ap_map_w`, `ap_comp_h1`,
-  `ap_then_bind`), each worked around with a named accessor function taking
-  the dictionary/composed-function explicitly. This is the SAME class of
-  gap DS-2 found for instance-value projection in type position;
-  confirmed here to extend to bare lambdas too.
-- **Abstraction candidate → Ergo/catalog follow-up:** `concat_map` is not
-  landed anywhere in the catalog (only named in the spec chapter's own
-  prose) despite `list_append`, `list_map`, and the other `List`
-  operations it naturally sits alongside all being landed. Inlined here
-  per the foundation-leader's explicit ruling (cross-file import isn't
-  available yet regardless, so a `Collections.ken` landing would be a
-  second, unconsumed copy today) — once cross-file import lands, this
-  should move to a real `Collections.ken` addition so it is genuinely
-  shared.
-- **Naming hazard:** `concat_map`'s natural argument order (function
-  first, matching its own `foldr`-shaped recursion) is the OPPOSITE of
-  `bind`'s field order (container first) — `list_bind` is the necessary
-  order-adjusted wrapper, not a stylistic renaming.
-- **Kernel/elaborator quirk → Ergo:** `Axiom` as a top-level `fn`'s BODY
-  fails with `VarOutOfScope` whenever the `fn`'s declared return type
-  references one of the `fn`'s OWN parameters (`fn f (v : Bool) : Equal
-  Bool v v = Axiom` fails; `const g : Equal Bool True True = Axiom`, and
-  `Axiom` as a `class` instance FIELD value — e.g. `instance ProbeLaw Nat
-  { trivial = Axiom }` — both succeed). Confirmed empirically; low
-  severity (every landed `Axiom` use is already an instance field, the
-  shape this doesn't break), but worth a fix or at least a documented
-  limitation so the next author who reaches for a standalone Axiom-backed
-  lemma doesn't lose time to it.
-
-## 7. References
+## 6. References
 
 - **Wikipedia** — [Applicative
   functor](https://en.wikipedia.org/wiki/Applicative_functor) and
@@ -726,15 +665,12 @@ across this entry's `Option` and `List` proofs.
   (`[Functor f]`/`[Applicative f]`) constructor-class chain this entry's
   `functor`/`applicative` fields mirror, consulted for shape only.
 
-## 8. Trust  derivation
+## 7. Trust  derivation
 
-1. **Spec / WP.** `docs/program/wp/ds-7-applicative-monad.md` (this
-   entry's build WP); the design contract is `spec/50-stdlib/
-   56-effectful-classes.md` (CAT-2), `§3`/`§4`.
-2. **Public API.** `Applicative`, `Monad`, `Applicative_instance_Option`,
+1. **Public API.** `Applicative`, `Monad`, `Applicative_instance_Option`,
    `Monad_instance_Option`, `Applicative_instance_List`,
    `Monad_instance_List`, plus every named helper in `§2`.
-3. **Source map.**
+2. **Source map.**
 
    | Task | Section |
    |---|---|
@@ -743,40 +679,22 @@ across this entry's `Option` and `List` proofs.
    | Check the computation facts | [Laws  proofs](#4-laws--proofs) |
    | Why the proof shapes are what they are | [Design notes](#5-design-notes) |
 
-4. **Derivation path.** `class Applicative`/`class Monad` — ordinary
-   `class` declarations (`elab_class_decl`), a right-nested Σ record, the
-   same mechanism `class Functor`/`class Ord` already use. Every instance
-   field — a real `declare_def` term, kernel-rechecked. `Option`'s laws —
-   finite case-split. `List`'s laws — structural induction + `cong`/
-   `trans`/`sym` (`Core/Transport.ken`), reusing the landed
-   `list_right_unit`/`list_assoc`/`list_functor_id`/`list_functor_fusion`
-   (`Core/LawfulFunctors.ken`) throughout. The `ITree` bridge — attested
-   correspondence only (`§2.5`), zero new code.
-5. **`trusted_base()` delta.** **Zero.** Every law field in both
-   instances is a real, kernel-checked proof term — no `Axiom`, no new
-   `declare_primitive`/`declare_postulate`, no new `Term`/`Decl` variant,
-   no new elaborator capability (the wired superclass field, nested
-   projection, and instance mechanism all ride the landed `class`
-   machinery — confirmed directly, `§2.1`). Confirmed by
-   `crates/ken-elaborator/tests/ds7_applicative_monad_acceptance.rs`'s
-   structural `trusted_base()` before-vs-after set-difference check
-   (the DS-2-established pattern), not just a source grep.
-6. **Proof families.** `Option` — finite case-split, no induction.
+3. **Derivation path.** `Applicative` and `Monad` are ordinary class
+   declarations. `Option`'s laws use finite case splits; `List`'s laws use
+   structural induction together with congruence, composition, and symmetry.
+   The `ITree` discussion is a correspondence, not a second implementation.
+4. **`trusted_base()` delta.** **Zero.** Every law field is a real,
+   kernel-checked proof term; the entry introduces no `Axiom`, primitive, or
+   postulate.
+5. **Proof families.** `Option` — finite case-split, no induction.
    `List` — structural induction throughout; `ap_cmp` is the deepest
    (induction inside `pf_probe`, composed with three non-recursive fusion
    lemmas and the already-proved `list_bind_asc`).
-7. **Consumers.** None yet in this catalog; the ITree bridge (`§2.5`) is
-   already a "consumer" in the sense that the effect system's `bind`
-   already denotes a lawful monad, this entry just makes that
-   correspondence explicit and checked.
-8. **Validation evidence.**
-   `crates/ken-elaborator/tests/ds7_applicative_monad_acceptance.rs` —
-   the zero-`Axiom`/`trusted_base()` check, discriminating negative cases
-   for AC8 (a non-cartesian/law-breaking wired `applicative` field, a
-   masked `Axiom` inhabiting `Bottom`, the no-second-`bind` ITree
-   discriminator), and elaborating this entry's `` ```ken ``/
-   `` ```ken example ``/`` ```ken reject `` fences through the literate
-   extractor.
+6. **Consumers.** Effectful programs can use these classes to express
+   independent sequencing, dependent sequencing, and traversal.
+7. **Validation evidence.** The catalog checks the zero-`Axiom` trust
+   posture, discriminating law failures, the single `ITree` binding, and all
+   source, example, and rejection fences.
 
 ## 9. `Traversable`
 
@@ -798,7 +716,7 @@ implicit instance search, so the implicit-constraint form `traverse
 does, riding the same mechanism `list_traverse`'s own `apg` parameter
 below uses). `functor`/`foldable` are WIRED superclass fields, supplied
 whole — this entry does not re-prove `Functor List`/`Foldable Option` and
-friends, all landed in `Core/LawfulFunctors.ken`.
+their related laws.
 
 ```ken
 class Traversable (f : Type -> Type) {
@@ -815,9 +733,9 @@ as potentially effectful (`Unknown` codomain head → `RowVar` → `proc`,
 `option_traverse` below) is, for `List`/`Option`, a genuinely PURE
 function of its explicit `Applicative g` dictionary — no real effect ever
 fires. Assigning that pure `fn` into the `proc`-marked field needed the
-DS-8b `∅ ⊆ proc` widening (`36 §1.6.2`) landed alongside this entry: a
-class field's declared purity is an UPPER BOUND on what an instance may
-do, not a requirement that every instance actually do it.
+The purity relation permits a pure implementation in a `proc`-marked field:
+a class field's declared purity is an upper bound on what an instance may do,
+not a requirement that every instance actually do it.
 
 `List`'s traversal is the standard effect-sequencing fold — `pure Nil`
 for the base case, then `ap` combines each mapped `Cons` with the
@@ -955,8 +873,7 @@ fn option_traverse_identity_law (a : Type) (mx : Option a) :
 commutes with `traverse`: `η(traverse g apg t xs) = traverse h aph (η∘t)
 xs`. `η`'s two defining properties are threaded as EXPLICIT parameters
 (the same Fork C shape as every dictionary in this entry) rather than a
-bundled morphism class — there is no landed `ApplicativeMorphism` class to
-wire, and bundling one is out of this WP's scope. A reusable lemma first:
+bundled morphism class. A reusable lemma first:
 any such `η` also commutes with plain `functor.map` (derived from `η`'s
 own two properties plus `map_coh`, applied identically to close both
 instances' `Cons`/`Some` cases below):
@@ -1086,9 +1003,8 @@ const option_traverse_some : Identity (Option Nat) =
 
 `Compose g h` is the instrument the composition coherence law (`§5.3`)
 needs. It lands cleanly as a `fn`-level type synonym, sidestepping
-`data`'s Type-0-only parameter hardcoding (`crates/ken-elaborator/src/
-data.rs:45` hardcodes every surface `data` parameter to `Type 0`
-unconditionally — a `fn` has no such restriction):
+surface `data` declarations accept only `Type 0` parameters, while a `fn`
+type synonym has no such restriction:
 
 ```ken
 fn Compose (g : Type -> Type) (h : Type -> Type) (a : Type) : Type = g (h a)
@@ -1335,13 +1251,8 @@ fn compose_map_fusion_law (g : Type -> Type) (h : Type -> Type) (apg : Applicati
 `Functor`'s three fields for `Compose g h` (a FIXED `g`/`h`) — no
 `instance Functor (Compose g h)` is declared: probed directly
 (`instance Box (Compose g h) { ... }` against a dict-free dummy class),
-the head RESOLVES (no `UnresolvedCon` — this is not the CAT-1 `§6.1`
-empty-context gap DS-7's `§2.5` documents for `ITree e resp`, which
-fails unresolved) but is then rejected with `KernelRejected(TypeMismatch
-{ expected: Type -> Type, found: Type })`: free `g`/`h` in an instance
-head are kinded `Type` by default, but `Compose` needs them kinded
-`Type -> Type` — a parametric-instance-head KINDING limitation,
-class-independent, distinct from the `§6.1` wall. Every use in this
+the head is then rejected because free `g` and `h` in an instance head are
+kinded as `Type`, while `Compose` needs `Type -> Type`. Every use in this
 entry goes through the explicit-dictionary form directly (`apg`/`aph`
 threaded as ordinary parameters), never through instance search — the
 same Fork C shape `class Traversable`'s own `traverse`
@@ -1680,7 +1591,7 @@ fn ap_naturality (g : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) 
 ```
 
 The arg-2 twin of `ap_naturality`, needed by `§9.6`'s final reconciliation
-step (Architect ruling on the DS-8c reconciliation fork): pushing a
+step: pushing a
 `functor.map` of a *pre*-composed function through the SECOND `ap` argument
 is the same as `ap`-ing against the raw value first and mapping via a
 post-composed accessor after. Proved from `apg`'s own laws alone
@@ -1841,9 +1752,8 @@ fn ap_naturality2 (g : Type -> Type) (apg : Applicative g) (a : Type) (b : Type)
 `ap_cmp`'s own LHS — three levels of nested `compose_ap` keyed on
 `compose a b c` — reduces cleanly for its first two levels using
 `compose_map_coh` (above) and `apg`'s `functor.fusion_law`; this was the
-DS-8-era foundation for `ap_cmp`'s closing step, banked ahead of the third
-level's `aph.ap_cmp`-pointwise reconciliation, which `§9.6` (DS-8c) now
-completes:
+foundation for `ap_cmp`'s closing step, followed by the third-level
+`aph.ap_cmp` pointwise reconciliation:
 
 ```ken
 fn cmp_level1 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (u : Compose g h (b -> c)) : Compose g h ((a -> b) -> (a -> c)) =
@@ -2111,7 +2021,7 @@ fn compose_cmp_outer_step3 (g : Type -> Type) (h : Type -> Type) (apg : Applicat
     (compose_cmp_outer_apply_v g h apg a b c v w)
     (compose_cmp_outer_step3b g h apg aph a b c u)
 
--- The reconciliation itself (Architect ruling, `ap_naturality2`): `mapped_rhs`
+-- The reconciliation uses `ap_naturality2`: `mapped_rhs`
 -- is a single `map` over `u` of a function that internally routes BOTH `u`'s
 -- and `v`'s content through `aph.ap`; splitting it back into the `uP`/`vP`
 -- shape `apg.ap_cmp` needs takes a `u`-side `fusion_law` factoring (two
@@ -2468,7 +2378,7 @@ fn otc_some_step1 (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (a
 -- Pointwise: `option_traverse`'s own `Some`-arm reduction relates the
 -- opaque `aph.ap(pure …)` form to the plain `aph.functor.map` form —
 -- `aph.map_coh`, promoted to a function-level equality by kernel
--- conversion at the `Π` type (the `eq_at_pi` technique, `§9.8` Findings).
+-- conversion at the `Π` type.
 fn otc_some_aph_map (h : Type -> Type) (aph : Applicative h) (b : Type) (c : Type) (t2 : b -> h c) (y : b) : h (Option c) =
   aph.functor.map c (Option c) (Some c) (t2 y)
 
@@ -2820,64 +2730,7 @@ fn list_traverse_composition (g : Type -> Type) (h : Type -> Type) (apg : Applic
   }
 ```
 
-### 9.8 Findings
-
-- **AC6 confirmed, with a landed-mechanism correction along the way.**
-  `traverse`'s `proc` classification and the `∅ ⊆ proc` instance-field
-  widening are two SEPARATE, both-necessary pieces — see DS-8b
-  (`docs/program/wp/ds-8b-pure-into-proc-widening.md`). Before DS-8b
-  landed, `proc traverse`'s class-field type parsed and classified fine,
-  but NO concrete List/Option implementation (necessarily, honestly pure)
-  could satisfy `check_instance_field_purity`'s then-strict `Proc`
-  requirement — a genuine, grounded elaborator gap, escalated and fixed
-  as its own WP rather than forced through with a workaround.
-- **Sugar candidate → Ergo (parser), reconfirmed.** The `.field`
-  projection / bare-`λ`-in-declared-type gap (`§6` above) recurred
-  constantly building `Traversable`'s and `Compose`'s law proofs — every
-  intermediate equality in a multi-step `trans`/`cong` chain needed a
-  named accessor `fn` wrapping any dotted/lambda expression that appears
-  in a DECLARED type (never in body position). Same gap, same workaround,
-  now confirmed at much greater depth (dozens of accessors per law).
-- **Reusable pattern → catalog/guide.** The `eq_at_pi`-promotion trick —
-  a pointwise law `(x:A) -> Equal B (f x) (g x)`, partially applied one
-  argument short of full, IS ALREADY (by kernel conversion, no extra
-  proof step) a term of the function-level type `Equal (A -> B) f g` —
-  closed every "lift a pointwise law to a `cong`-able function equality"
-  step in this entry's `Compose`/naturality proofs, extending to
-  MULTIPLE curried arguments at once (used for `aph.ap_ich`; the
-  `ap_cmp` follow-on will need it three deep). Worth promoting into
-  `catalog/guide/proof-techniques.ken.md` as a named technique — it
-  recurs and is not obvious from the spec alone.
-- **Proof-strategy consult, logged for the judgment log.** The `ap_cmp`
-  scope call (grind vs. gate) went through a live Architect consult
-  mid-build (the `ap_naturality` extraction) and a Steward-sanctioned
-  valve (gate on a named follow-on once the remaining size was measured
-  at ~40-60 lemmas, not the ~12-15 initially estimated). Both are
-  judgment calls for the operator's log, not unilateral scope changes —
-  flagged to the ring at each step before acting.
-- **DS-8c closed both deferred pieces.** `Compose g h`'s `ap_cmp` (`§9.6`)
-  and the traverse composition law (`§9.7`) are proved, zero-Axiom,
-  zero-`trusted_base()`-delta. The final reconciliation step of `ap_cmp`
-  needed a SECOND general lemma beyond the original 4-stage plan —
-  `ap_naturality2`, the arg-2 naturality twin of `ap_naturality` — per a
-  live Architect consult on the reconciliation-shape fork (a `map` on the
-  ap ARGUMENT, not the ap FUNCTION, needs a distinct derivation:
-  `map_coh` → `ap_cmp` → `ap_ich` → `map_coh` → `fusion_law`, mirroring
-  `ap_naturality`'s own technique). Both `ap_naturality`/`ap_naturality2`
-  are now first-class reusable lemmas, not bespoke reroutes.
-- **Abstract dictionaries never collapse for free — the recurring build
-  trap on this WP.** `apg`/`aph` are opaque `Applicative` parameters, so
-  `map(f)(pure x)`, `ap(pure f)(x)`, and `map(f)(map(g)(x))` NEVER
-  simplify by mere unfolding — every such step needs an explicit
-  `map_coh`/`ap_hom`/`fusion_law` proof, even where the surrounding
-  computation (`list_traverse`/`option_traverse`'s own recursion on a
-  concrete `List`/`Option` scrutinee) genuinely IS free. Conflating the
-  two costs a real debugging cycle (a `Refl`-closed lemma the kernel
-  correctly rejected) before the fix: track exactly which layer of a
-  derivation is abstract-law-gated vs. concrete-and-free before reaching
-  for `Refl`.
-
-### 9.9 References
+### 9.8 References
 
 Same sources as `§7` (`Applicative`/`Monad`'s own references apply
 identically to `Traversable`, which is the same family); additionally:

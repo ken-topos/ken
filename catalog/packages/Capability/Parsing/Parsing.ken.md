@@ -13,9 +13,8 @@ half-open byte endpoints, and source identity is supplied by values such as
 3. [Using it](#3-using-it)
 4. [Laws  proofs](#4-laws--proofs)
 5. [Design notes](#5-design-notes)
-6. [Findings](#6-findings)
-7. [References](#7-references)
-8. [Trust  derivation](#8-trust--derivation)
+6. [References](#6-references)
+7. [Trust  derivation](#7-trust--derivation)
 
 **Named reading paths**
 
@@ -27,8 +26,8 @@ half-open byte endpoints, and source identity is supplied by values such as
 
 ## 1. Motivation
 
-`spec/50-stdlib/59-parsing-syntax-diagnostics.md` gives Ken the vocabulary
-every parser needs to state where in the source a value came from and
+Every parser needs vocabulary to state where in the source a value came from
+and
 whether a parse succeeded: a `SourceId` to disambiguate which source, `Bytes`
 (not codepoints) as the offset basis for a `Span`, and a `ParseResult` that
 is total — `Parsed` or `Failed`, never a partial function — with public
@@ -194,8 +193,7 @@ conditional on the caller supplying a proof the start position is in bounds
 `ParserSourceLocal` are the three public well-formedness *properties* a
 `Parser` should satisfy — plain predicates over a `Parser a`, not enforced
 by the `Parser` type itself, so a caller can state and check them per
-concrete parser (`§4.3`'s `parse_bool_expr` is exactly such a caller, via the
-acceptance suite). `parser_pure`/`parser_fail` are the two base combinators:
+concrete parser. `parser_pure` and `parser_fail` are the two base combinators:
 the former always succeeds on a zero-width span at `start`, the latter
 always fails at `start` with a zero-width error span.
 
@@ -607,26 +605,14 @@ false` rejects, deliberately, keeping this worked example small. A real
 expression grammar with precedence climbing is future package work, not
 attempted here.
 
-## 6. Findings
-
-- **Kernel-reduction defect:** none.
-- **Abstraction candidate:** `list_append` in `§4.3` duplicates
-  `catalog/packages/Data/Collections/Collections.ken`'s combinator of the
-  same name, verbatim — a deliberate self-containment choice
-  (`07-catalog-style-guide.md §13`) for a leaf capability package that
-  otherwise takes no catalog dependency, not flagged as a defect.
-- **Content note:** `ParseResultTotal`/`ParserTotal` (`§4.2`) are vacuous by
-  construction — see [Design notes](#5-design-notes).
-
-## 7. References
+## 6. References
 
 None — this entry's design is Ken-native, not consulted from an external
 reference implementation.
 
-## 8. Trust  derivation
+## 7. Trust  derivation
 
-1. **Spec / WP.** `spec/50-stdlib/59-parsing-syntax-diagnostics.md`.
-2. **Public API.** `SourceId`, `Source`, `IsUtf8`, `EmptyBytes`,
+1. **Public API.** `SourceId`, `Source`, `IsUtf8`, `EmptyBytes`,
    `NonEmptyBytes`, `UnitByteLength`, `SourceLength`, `source_id`,
    `source_bytes`, `source_utf8`, `source_length`, `source_length_unit`,
    `source_length_unit_valid`, `source_length_valid`, `Span`, `span_start`,
@@ -638,7 +624,7 @@ reference implementation.
    `ParserLaws`, `parser_pure`, `parser_fail`, `BoolExpr`, `Syntax`,
    `syntax_root`, `syntax_children`, `erase_spans`, `ValidLocatedList`,
    `ValidSyntax`, `parse_bool_expr`, `print_bool_expr`, `format_bool_expr`.
-3. **Source map.**
+2. **Source map.**
 
    | Task | Section |
    |---|---|
@@ -647,24 +633,21 @@ reference implementation.
    | The zero-width-span proof, the total `Parser` contract, the worked grammar | [Laws  proofs](#4-laws--proofs) |
    | Why `Bytes` not `String`, why no unguarded repetition | [Design notes](#5-design-notes) |
 
-4. **Derivation path.** The package surface is ordinary Ken data, a
+3. **Derivation path.** The package surface is ordinary Ken data, a
    class-backed record, transparent functions, and proof-returning
    definitions over `Nat`, `Bool`, `Bytes`, `Equal`, `And`, `List`, and
    parser-result data. It adds no kernel primitive, no source-loader
    behavior, and no language-semantics change.
-5. **`trusted_base()` delta.** **Zero.** Every proof in this package —
+4. **`trusted_base()` delta.** **Zero.** Every proof in this package —
    `less_eq_nat_refl`, `less_eq_nat_zero_left`, `valid_zero_width_span` — is
    real and kernel-checked; no law or predicate is postulated.
-6. **Proof families.** `less_eq_nat_refl` — induction on `n`.
+5. **Proof families.** `less_eq_nat_refl` — induction on `n`.
    `less_eq_nat_zero_left` — definitional (first match arm). `valid_zero_width_span`
    — direct composition of the two via `and_intro`, no case-split of its
    own.
-7. **Consumers.** `crates/ken-elaborator/tests/cat5_parsing_package.rs` is
-   the sole consumer of this package.
-8. **Validation evidence.**
-   `crates/ken-elaborator/tests/cat5_parsing_package.rs` — confirms the
-   `Source`/`Span`/`Located`/`ParseResult`/`Parser` surface elaborates with
-   zero `trusted_base()` delta, confirms the Boolean grammar's constructors
-   and byte-token matching are present and exercised, and confirms no
-   unguarded repetition combinator (`many`/`repeat`/a fuel-threading helper
-   beyond this package's own internal ones) is exported.
+6. **Consumers.** Source-aware parser implementations can use this package's
+   source, span, result, and validity vocabulary.
+7. **Validation evidence.** The catalog checks the
+   `Source`/`Span`/`Located`/`ParseResult`/`Parser` surface, its zero
+   `trusted_base()` delta, the Boolean grammar's constructors and byte-token
+   matching, and the absence of an exported unguarded repetition combinator.

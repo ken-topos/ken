@@ -1,10 +1,9 @@
 # `Map`/`Set` — a proved, pure ordered binary search tree
 
-A proved, pure ordered BST realizing `Map`/`Set` (`spec/50-stdlib/52-map.md`,
-VAL2 finding #8 / open question OQ-A), plus a Layer-2 suite of keyed-collection
-operations (delete, combining insert, union/intersection/difference, set
-algebra, keys/values projections, and a small binary-relations library) built
-on top of it.
+A proved, pure ordered binary search tree realizing `Map` and `Set`, plus
+keyed-collection operations: deletion, combining insertion, union,
+intersection, difference, set algebra, key/value projections, and a small
+binary-relations library.
 
 ## Index
 
@@ -13,9 +12,8 @@ on top of it.
 3. [Using it](#3-using-it)
 4. [Laws & proofs](#4-laws--proofs)
 5. [Design notes](#5-design-notes)
-6. [Findings](#6-findings)
-7. [References](#7-references)
-8. [Trust & derivation](#8-trust--derivation)
+6. [References](#6-references)
+7. [Trust & derivation](#7-trust--derivation)
 
 **Named reading paths**
 
@@ -27,43 +25,13 @@ on top of it.
 
 ## 1. Motivation
 
-This package (⇔ `import Data.Collections.Map`, `07-catalog-style-guide.md
-§13`) shares its `Data/Collections` Domain directory with
-`catalog/packages/Data/Collections/Collections.ken.md` (⇔ `import
-Data.Collections.Collections`) — the two were already separate files,
-genuinely separable (`catalog-taxonomy-paths-imports` WP), and this
-package depends on that one's `list_append` ([§2](#2-definition)).
+`Map` is a transparent inductive tree. Its operations are ordinary checked
+definitions, so their behavior and proofs remain visible to the reader.
 
-This package retires the opaque `declare_primitive` `Map`/`Set`
-(`ken-elaborator/src/prelude.rs`) — the carrier is now a transparent
-inductive, and every operation is a `declare_def`, kernel-rechecked end to
-end (`52 §1.1`).
-
-The carrier is a bare unbalanced ordered BST — no balance metadata (`52
-§3`). The key-value pair type is spelled `Pair k v`: the SIGMA pair (`13
-§3`, `52 §4`, "distinct from the inductive `Prod`"), never `Prod`. The
-concrete infix `×` token for `Pair` is left `(oracle)` per `52 §4`'s own
-hedge that any still-open surface-syntax token is tagged that way — the
-mechanism (`Pair`/`mk_pair`/`pair_fst`/`pair_snd`,
-`ken-elaborator/src/prelude.rs`) is landed, built the same way the derived
-`And A B := Sigma(_:A).B` already is; only the infix spelling remains open.
-
-Key-comparator threading (`52 §2`, `§5.4`, "parametric in `Ord k`") follows
-an Architect-ruled unbundled explicit-dictionary encoding
-(`evt_38nvzzdwb8ewn`): both `where Ord k` and a bundled `(d : Ord k)`
-record parameter hit landed elaborator gaps (`instance_search` needs a
-concrete head; `(d).field` doesn't parse in type position). The bundled
-`Ord` class/`where` spelling stays `(oracle)`-tagged pending a Language
-surface-syntax follow-on, but the substance is real and `k`-parametric:
-every operation and law below takes the comparator (`leq`) and, where
-needed, its laws (`reflLeq`/`antisymLeq`/`transLeq`/`totalLeq`) as separate
-bare parameters, matching the landed
-`conformance/challenge/C5-verified-sort/sound-verified-sort.ken` idiom (a
-bare `leq : a -> a -> Bool` threaded over an abstract carrier). At a
-concrete call site the caller supplies these by projecting a landed `Ord`
-instance in term position (e.g. `(Ord_instance_Char).leq`) — the same
-monomorphic-transport idiom `catalog/packages/Core/LawfulClasses.ken.md`
-already uses, ordinary projection, not `where`-resolution.
+The carrier is a bare, unbalanced ordered binary search tree. Entries use
+`Pair k v`, and every operation is parametric in a comparator `leq`. Laws that
+need ordering evidence take reflexivity, antisymmetry, transitivity, and
+totality as explicit parameters, making the assumptions visible at each use.
 
 ## 2. Definition
 
@@ -71,8 +39,7 @@ already uses, ordinary projection, not `where`-resolution.
 subtree, a key, a value, and a right subtree. `empty` is `Leaf` (`52
 §4.1`). `to_list` is the in-order traversal (`52 §4.2`): `Leaf` yields
 `Nil`, and a `Node` appends its left subtree's traversal, its own entry,
-then its right subtree's traversal, reusing the landed `list_append`
-(`catalog/packages/Data/Collections/Collections.ken.md`) — over an
+then its right subtree's traversal, reusing `list_append` — over an
 `Ordered` tree (below) the output keys are ascending (`52 §5.3`), though
 that direction of the claim needs `insert`'s own preservation, proved in
 [§4.3](#4-laws--proofs). `fold f z m` folds `f` over the entries in
@@ -103,18 +70,16 @@ tail's own inserts land strictly after `p`'s in evaluation order.
 Unit`, and `set_to_list` projects the keys out of `to_list`'s `Pair a Unit`
 entries via `pair_keys`.
 
-`Ordered` is the BST ordering invariant (`52 §5.1`), naturally `Ω`-valued:
-built from the `IsTrue b := Equal Bool b True` bridge plus the derived
-`Ω`-conjunction `And` (`16 §1.3`) — a `declare_def` the prover unfolds,
-never a postulate, mirroring `is_sorted`'s shape
-(`ken-elaborator/src/prelude.rs`, lifted from lists to trees). `all_keys p
+`Ordered` is the BST ordering invariant, naturally `Ω`-valued: built from
+the `IsTrue b := Equal Bool b True` bridge and the derived conjunction
+`And`. `all_keys p
 m` says "every key in `m` satisfies `p`"; `Ordered leq m` says every key in
 a `Node`'s left subtree is below its own key, every key in its right
 subtree is above it, and both subtrees are themselves `Ordered`,
 recursively.
 
-Two Branch-A laws close the Definition: `ordered_empty` (`Ordered empty`,
-`52 §5.1`) unfolds to `Equal Bool True True`, which K7-collapses to `Top`
+Two base laws close the Definition: `ordered_empty` (`Ordered empty`)
+unfolds to `Equal Bool True True`, which collapses to `Top`
 and closes with `tt` — the same non-inductive shape as
 `lookup_empty_is_none` (`lookup key empty = None`, `52 §5.2` law 1), also
 immediate since `empty = Leaf`. Neither needs induction or a comparison.
@@ -251,33 +216,19 @@ directly rather than re-deriving it.
 
 ## 4. Laws & proofs
 
-The `map-verified-laws` capstone (`spec/50-stdlib/54-map-verified-laws.md`)
-proves the five laws deferred when the raw carrier and basic operations
-first landed, built on two enabling capabilities that landed separately:
-Gap A (`catalog/packages/Core/Transport.ken.md`, the `J` former) and Gap B
-(the non-indexed dependent-match gate, `elab.rs::check_match_dependent`).
-Zero `trusted_base()` delta throughout — every proof reduces through the
-existing `Term::J`/`Term::Cast`/`Term::Elim`; no `Axiom` appears anywhere
-below (a law that cannot be honestly built is re-deferred to Steward, never
-postulated, `52 §7d`).
+The five capstone laws establish ordering preservation and lookup behavior.
+They use equality transport and structural proof techniques while retaining a
+zero `trusted_base()` delta: every proof is checked, and no `Axiom` appears.
 
 ### 4.1 Capstone preliminaries
 
-`Or`/`Inl`/`Inr` is a Rust-registered kernel `declare_inductive`
-(`ken-elaborator/src/prelude.rs`) rather than surface `data` sugar: the
-surface `data` sugar hardcodes every parameter to `Type 0`, so `Or`'s two
-`Ω`-sorted parameters need the same "kernel API directly, one level below
-the surface convenience wrapper" technique this file's own `Pair`/
-`and_intro` already used, mirroring the existing `Perm_rel` precedent —
-flagged transparently, zero `trusted_base` delta (an ordinary
-kernel-rechecked inductive admission).
+`Or`, `Inl`, and `Inr` provide the disjoint alternatives used by the
+comparison proofs. They are ordinary kernel-checked inductive data with no
+additional trust category.
 
-`bool_dichotomy b` reflects a stuck `Bool` variable into its two
-equation-carrying cases. The Gap-B gate needs a bare variable scrutinee
-(`match b {...}`, not `match (leq k k') {...}`) — this is the reusable
-combinator every stuck `leq k k'` comparison below reflects through first
-(`bool_dichotomy (leq k k')`, a non-dependent match on the resulting `Or`,
-landed `infer_match` path).
+`bool_dichotomy b` reflects a `Bool` expression into its two
+equation-carrying cases. The comparison proofs use it to expose the exact
+branch selected by a stuck comparator.
 
 `assoc leq key xs` (law 5) is the ordered-list lookup: a plain structural
 `List` recursion (Gap-B-free, no dependent motive), scanning entries by
@@ -318,8 +269,7 @@ fn all_in_list (k : Type) (v : Type) (p : k → Prop) (xs : List (Pair k v)) : P
 ### 4.2 Law 4 — `to_list_ordered`: an ordered tree's traversal is sorted
 
 `pair_leq` lifts a key comparator to a `Pair k v` comparator by comparing
-first components — the comparator `is_sorted`
-(`ken-elaborator/src/prelude.rs`) needs to be instantiated at `Pair k v`.
+first components — `is_sorted` is instantiated at `Pair k v`.
 Law 4 (`54 §3`, "to_list ordered") states `Ordered leq m → is_sorted
 (to_list m)`, built via the convoy idiom (`54 §2.1`, restated fully in
 [Design notes](#5-design-notes)): every match's own return type stays
@@ -579,8 +529,7 @@ The mechanism, in the order it was worked out:
   on which arm fired needs `check_match_dependent`'s single-bound-variable
   scrutinee gate).
 
-Confirmed on the fixed kernel (`wp/obs-eq-termination`, `9cf468a`): builds
-clean in well under a second, no OOM/divergence.
+The resulting proof families remain structural and total.
 
 ```ken
 fn insert_step_inner
@@ -1800,8 +1749,7 @@ fn insert_lookup_hit
 Law 5 (`54 §5.3`, the final capstone law) states `Ordered m → Distinct leq m
 → lookup key m = assoc key (to_list m)`. The dictionary law needed is
 `transLeq` only (matching `54 §5.2`'s restated law-5 list; `antisym`
-belongs only to a separate `Distinct`-discharge lemma, not this statement —
-Architect's ruling, `52-map.md §5.3`).
+belongs only to a separate `Distinct`-discharge lemma, not this statement.
 
 `Distinct leq m := NoDup leq (to_list m)` — no two entries in the in-order
 traversal carry order-equivalent keys. Without this hypothesis the law is
@@ -1835,10 +1783,7 @@ via `transLeq` plus `absurd` on the resulting `Equal Bool True False`.
 branch, transfers a "not order-equiv to `k2`" fact (directly available from
 `Distinct`) to "not order-equiv to `key`" — the matched-node value
 agreement itself is then `refl`: both traversals return the value at the
-unique order-equivalent entry, no `Equal key k2` step needed (Architect's
-analysis, confirmed at proof time exactly as anticipated).
-
-Confirmed on the fixed kernel: builds clean, ~1.7s for the whole file.
+unique order-equivalent entry, so no `Equal key k2` step is needed.
 
 ```ken
 fn not_order_equiv_to_key (k : Type) (leq : k → k → Bool) (key : k) (k2 : k) : Prop =
@@ -2557,12 +2502,12 @@ fn lookup_assoc_agree
   }
 ```
 
-### 4.7 Layer-2 keyed-collection operations (`58`, CAT-4)
+### 4.7 Layer-2 keyed-collection operations
 
-Everything from here to the end of the package sits on top of the landed
-Map capstone: no new kernel primitive, no postulate, and no proof-relevant
-`Ω` inductive. The SURF-1 spelling is deliberate — every operation here is
-pure, so every declaration is `fn`. This is genuinely new functionality,
+Everything from here to the end of the package sits on top of the map
+capstone: no new kernel primitive, postulate, or proof-relevant `Ω`
+inductive. Every operation is pure and declared as a `fn`. This is
+additional functionality,
 not further capstone laws: `delete`, a combining `insert_with`, three
 lookup-table set/map combinators (`union`/`intersection`/`difference`) each
 with a full correctness suite, `Set`-level wrappers with membership and
@@ -3397,7 +3342,7 @@ fn delete_preserves_ordered
 `insert_with` generalizes `insert` with a combining function for the
 overwrite case, via a fold step (`insert_with_fold_step`) mirroring
 `insert`'s own stuck-match shape. `union`/`union_from_list_acc` build a
-merged tree from two `to_list`s, folding the second list's entries into the
+combined tree from two `to_list`s, folding the second list's entries into the
 first via `insert_with`; `union_lookup_table`/`unit_combine` give the
 map-of-maps lookup-table view `union`'s correctness proofs are stated
 against. `intersection_lookup_table`/`difference_lookup_table` are the
@@ -6071,10 +6016,9 @@ latter with a negation on the right side) — each built via the same
 (`set_intersection_comm_law`/`_assoc_law`/`_idempotent_law`/
 `_identity_law`) give the expected algebraic laws for both operations —
 proved via `member`-extensionality against the lookup-table
-characterizations above. Note: `set_intersection_identity_law` (as landed)
-restates the idempotent law rather than stating an actual identity-element
-law; this is a pre-existing naming mismatch worth a follow-on look, not
-introduced or fixed by this transformation.
+characterizations above. `set_intersection_identity_law` states the same
+idempotence property as its companion law; its name should not be read as an
+identity-element claim.
 
 ```ken
 fn set_union (k : Type) (leq : k → k → Bool) (s : Tree k Unit) (t : Tree k Unit) : Tree k Unit =
@@ -6685,107 +6629,28 @@ fn is_equivalence (k : Type) (leq : k → k → Bool) (r : Tree k (Tree k Unit))
 
 ## 5. Design notes
 
-**The induction idiom (`54 §2.1`).** Confirmed against the landed
-elaborator by a throwaway probe before this package was built: Ken's
-dependent match wraps each recursive-field method in a kernel-required
-IH-slot Pi layer, but that layer is a dead, surface-unreferenceable binder
-(`dependent-match-nonnullary.md` §"IHs are DEAD binders" — confirmed
-empirically, not merely read off the doc). The actual induction hypothesis
-is instead obtained the same way `to_list`/`insert`/`lookup` already
-recurse: an ordinary self-recursive call on the subtree (e.g.
-`preserves_ordered ... l`, SCT-checked structural descent), whose *result*
-is the real IH, consumed directly by name — never a synthesized `ih_l`/
-`ih_r` binder. Every proof in [§4](#4-laws--proofs) follows this shape.
+**Structural induction.** Recursive proofs call themselves on the relevant
+subtree; that returned proof is the induction hypothesis used by the parent
+case. This follows the tree's own structural recursion and keeps each proof
+local to the operation it justifies.
 
-**The convoy idiom (`54 §2.1`, `wp/map-convoy-idiom`).** Every match's own
-return type stays scrutinee-independent; any hypothesis whose type mentions
-the match's scrutinee is curried in via `->` after the return type and
-bound per-arm with `\h.`, letting the kernel narrow it automatically
-instead of requiring a dependent motive. This is the idiom every
-`fn ... : H1 → H2 → Goal` in [§4](#4-laws--proofs) (rather than a bare
-`fn ... (h1 : H1) (h2 : H2) : Goal`, with `h1`/`h2` bound as ordinary
-uncurried parameters ahead of the match) is built on.
+**Convoy-style hypotheses.** A match's return type remains independent of
+its scrutinee. Hypotheses whose types mention the scrutinee are curried after
+the result type and bound inside each arm, allowing the selected constructor
+to refine them without a separate dependent motive.
 
-**Wall 2 — refuted, not a gap.** An originally escalated obstruction
-("Wall 2": `check_match_dependent` allegedly not normalizing a branch's
-substituted expected type) was ground-truthed and refuted during this
-package's construction: it was a proof-structuring bug — uncurried convoy
-hypotheses left as early Pi-parameters instead of curried via `->` after
-the match's own return type — not an elaborator gap. The convoy idiom above
-is the fix; every proof in this package follows it, and none hits the
-originally-suspected gate.
+**Transport through comparison dispatch.** Insertion and lookup make nested
+decisions from comparator results. Their proofs transport the goal to the
+branch selected by a comparison, stopping at the last still-stuck match
+redex. This lets ordinary conversion finish the final reduction and avoids
+constructing unnecessary equalities between fully expanded tree nodes.
 
-**Wall 1 — dissolved via a stop-one-step-short transport.** The real,
-narrower obstruction ("Wall 1": a nested `J`) arises because laws 1, 2, 3,
-and 5 all share a base-case transport: given a stuck comparison's outcome
-(`leq key k2 = True`/`False`), rewrite a goal stated about
-`insert`/`insert_with`'s *real* application into a goal about the specific
-branch that comparison selects. A naive approach needs an explicit
-reflected-`Eq` witness between two fully-reduced, syntactically-different
-constructor applications — a raw `Eq (Tree k v) (Node ...) (Node ...)`
-between the two sides once *both* stuck comparisons are resolved, which
-requires nesting one `J` inside another and does not go through. This
-dissolves via a `trans`/`cong` single-combined-equation composition idiom:
-compose the `Eq`-proof chain to stop at the *last* stuck-match redex rather
-than the fully iota-reduced `Node(...)`, so the final delta+iota step
-happens through ordinary conversion during `J`'s own base-argument check,
-never needing to construct that raw two-sided `Eq` at all. This "v2
-route-around" is the `insert_case_transport_overwrite`/`_into_l`/`_into_r`
-family (§4.3) and its `insert_with`/`lookup`/`assoc` analogues throughout
-[§4](#4-laws--proofs) — confirmed on a `Bool` proxy first, then for the
-real `Tree`-shaped application.
+**Explicit ordering evidence.** Comparator operations and their laws are
+passed as parameters. This preserves genericity while keeping the exact
+ordering assumptions visible in every theorem that needs them. Bounded
+reachability is intentionally left to a future bounded-iteration interface.
 
-**Structural exemption from the `eq_at_inductive`/`Tree` divergence
-(`wp/obs-eq-termination`, `9cf468a`).** The stop-one-step-short route above
-is, independently, confirmed structurally exempt from a kernel
-`eq_at_inductive`/`Tree` divergence bug that `wp/obs-eq-termination` fixed:
-it never constructs the constructor-vs-constructor `Tree` equality that
-machinery decomposes, since the composition stops one step before that
-point. Every proof in this package was re-verified against the fixed
-kernel and builds clean, well under a second per law (Law 5's full file
-build: ~1.7s) — this is the real, non-stubbed assembly, not a
-pre-`9cf468a` stand-in.
-
-**Alternatives rejected.** A bundled `(d : Ord k)` record parameter and a
-`where Ord k` constraint were both tried first for comparator threading
-([§1](#1-motivation)) and both hit landed elaborator gaps
-(`instance_search` needs a concrete head; `(d).field` doesn't parse in type
-position) — the unbundled explicit-parameter encoding is the fallback that
-works today, not the intended long-term surface. A raw proof-relevant
-`data ... : Ω` transitive-closure inductive was considered for
-[§4.7.12](#4712-keysvalues-projections-and-a-binary-relations-library) and
-rejected in favor of deferring to bounded reachability once `size` and
-bounded iteration land.
-
-## 6. Findings
-
-- **Dependent-match IH binders are dead weight for tree/list recursion**
-  (routed to Ergo as a sugar candidate): every recursive proof in this
-  package ignores the kernel-synthesized IH-slot Pi layer entirely in favor
-  of an ordinary self-recursive call. A surface form that let a `match`
-  arm's recursive call *be* the IH without threading through a dead binder
-  would remove a source of newcomer confusion (`dependent-match-nonnullary.md`).
-- **The convoy idiom is a recurring proof shape, not a one-off** (routed to
-  Ergo as an abstraction candidate): every law in [§4](#4-laws--proofs)
-  restates the same pattern — scrutinee-independent return type, hypotheses
-  curried via `->` and bound per-arm — by hand. A checked combinator or
-  tactic that constructs this shape automatically from an uncurried
-  statement would remove a substantial fraction of this package's
-  boilerplate.
-- **The stop-one-step-short transport idiom generalizes beyond `Map`**
-  (routed to Ergo as an abstraction candidate): any stuck two-level match
-  proof (a comparator's result gating a second comparator's result, as in
-  `insert`/`insert_with`/`lookup`/`assoc`) needs this exact bridge shape.
-  It appeared independently at least four times in this package
-  (`insert`, `insert_with`, `lookup`, `assoc`) with only the goal and the
-  target function varying — a strong signal for a reusable combinator.
-- No kernel-reduction defect surfaced during this package's construction
-  beyond the ones already fixed upstream (`wp/obs-eq-termination`,
-  `9cf468a`) and already-tracked (`check_match_dependent`'s `Term::Var`-only
-  check-mode propagation gate, worked around via the abstract-parameter
-  technique in `derive_from_false`, §4.3).
-
-## 7. References
+## 6. References
 
 - **Binary search trees** — Wikipedia,
   <https://en.wikipedia.org/wiki/Binary_search_tree> — general orientation
@@ -6801,11 +6666,7 @@ bounded iteration land.
   `refine`/convoy pattern for avoiding dependent-motive inference failures
   by currying scrutinee-dependent hypotheses after the match.
 
-## 8. Trust & derivation
-
-**Spec catalog entry:** `spec/50-stdlib/52-map.md` (carrier, basic
-operations) and `spec/50-stdlib/54-map-verified-laws.md` (the 5-law
-capstone, §4). Layer-2 operations realize `58` (CAT-4).
+## 7. Trust & derivation
 
 **Public API (stable names):** `Tree`, `empty`, `to_list`, `fold`,
 `insert`, `lookup`, `member`, `from_list`, `Set` projections
@@ -6823,23 +6684,16 @@ laws (`preserves_ordered`, `lookup_found_after_insert`, `lookup_locality`,
 | Understand the carrier and basic operations | [§2](#2-definition) |
 | See how the package composes / who reaches for what | [§3](#3-using-it) |
 | Find a specific law's statement and proof | [§4.1](#41-capstone-preliminaries)–[§4.6](#46-law-5--lookup_assoc_agree-dictionary-agreement-with-the-ordered-list-lookup) |
-| Find a Layer-2 operation (`delete`/`union`/…) | [§4.7](#47-layer-2-keyed-collection-operations-58-cat-4) |
+| Find a keyed-collection operation (`delete`/`union`/…) | [§4.7](#47-layer-2-keyed-collection-operations) |
 | Understand the recurring proof idioms | [§5](#5-design-notes) |
 
-**Derivation path from built-ins.** `Tree` is a checked `data` inductive
-(kernel-admitted by positivity). Every operation is a `declare_def`
-(checked, upgraded opaque → transparent on SCT success) or an ordinary
-`fn`. `Or`/`Inl`/`Inr` is a Rust-registered kernel `declare_inductive`
-(§4.1) — an ordinary kernel-rechecked inductive admission, not a native
-primitive.
+**Derivation path from built-ins.** `Tree` is a checked inductive data type.
+Every operation is an ordinary checked definition; `Or`/`Inl`/`Inr` are
+kernel-checked inductive data, not native primitives.
 
-**`trusted_base()` delta: zero**, throughout both the capstone and
-Layer-2. Every capstone proof reduces through the existing `Term::J`/
-`Term::Cast`/`Term::Elim`; no `Axiom` appears anywhere in this file. Every
-Layer-2 operation is pure, termination-checked recursion over the real
-generic eliminator, with no native interpreter primitive added (mirroring
-`catalog/packages/Data/Collections/Collections.ken.md`'s Approach A,
-Architect ruling `evt_4k1yqah3yvpds`).
+**`trusted_base()` delta: zero**, throughout the capstone and the keyed
+operations. No `Axiom` appears in this file; every recursive operation is
+pure and termination checked.
 
 **Proof families.** Base-case transport (`insert_case_transport_*`/
 `insert_with_transport_*`, the stop-one-step-short bridges, §4.3/§5) →
@@ -6849,14 +6703,8 @@ recursive assembly (every law's own top-level `fn`, §4.1–§4.6, §4.7.5–§4
 → `member`-extensionality against a lookup-table characterization (the
 `Set`-level algebraic laws, §4.7.11).
 
-**Consumers.** `crates/ken-elaborator/tests/map_build_acceptance.rs` and
-the other targeted acceptance suites listed in this package's git history
-exercise the capstone laws and the Layer-2 operations directly; see this
-package's own commit history for the exact per-consumer swap when this
-file moved from `Map.ken` to `Map.ken.md`.
+**Consumers.** Programs that need ordered maps, sets, or finite relations
+can use the capstone laws and keyed operations directly.
 
-**Validation evidence.** `ken check` on this file's tangled `` ```ken ``
-fences, concatenated, elaborates clean against the real kernel (this
-package's own byte-identical-tangle verification against the
-pre-transformation `Map.ken` is the transformation's own evidence; ongoing
-behavior is proved by the acceptance suites above, run in CI at merge).
+**Validation evidence.** `ken check` elaborates this entry's tangled source
+fences; the catalog checks its capstone laws and keyed operations.

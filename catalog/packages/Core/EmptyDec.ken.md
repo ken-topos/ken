@@ -12,9 +12,8 @@ the way it already case-splits on a `Bool`, without losing the proof.
 3. [Using it](#3-using-it)
 4. [Laws  proofs](#4-laws--proofs)
 5. [Design notes](#5-design-notes)
-6. [Findings](#6-findings)
-7. [References](#7-references)
-8. [Trust  derivation](#8-trust--derivation)
+6. [References](#6-references)
+7. [Trust  derivation](#7-trust--derivation)
 
 **Named reading paths**
 
@@ -45,20 +44,14 @@ keys, checked pattern-refinement — builds on this pair.
 
 ## 2. Definition
 
-`Empty` and the kernel-direct `Dec`/`Yes`/`No`/`decide` are Ken **prelude**
-primitives (`crates/ken-elaborator/src/prelude.rs`), not declared by this
-entry — surface `data` hardcodes every type parameter to `Type 0`
-(`crates/ken-elaborator/src/data.rs:45`), so `Dec`'s `Ω`-sorted parameter
-`P` cannot be spelled in surface syntax at all (`§5`, `§8`); both are
-bootstrapped the same way `Nat`/`List`/`Bool` already are, so they are
-globally available before this entry (or any `.ken` program) loads. (A
-zero-constructor `data` — `Empty`'s own shape — now has a real surface
-spelling, `data Empty : Type0 where { }`, landed by FR-1, `§6`; the
-literal `Type0 =` legacy spelling below is still illustrative, since the
-legacy `data D = …` form doesn't take a `:`-ascribed family type.)
-Conceptually, as if spelled at the surface — illustrative only, since
-`Empty` and `Dec` are already global prelude names by the time this entry
-elaborates (`§8`) and are not re-declared here:
+`Empty`, `Dec`, `Yes`, `No`, and `decide` are standard names, available to
+every Ken program rather than declared by this entry. `Dec` accepts a
+proposition-valued parameter, a generality not yet expressible in an ordinary
+surface `data` declaration. A zero-constructor data type can be declared with
+the explicit-family form `data Empty : Type0 where { }`; the legacy
+`data D = …` form shown below remains illustrative.
+
+Conceptually, the standard declarations have this shape:
 
 ```ken ignore
 data Empty : Type0 =
@@ -76,11 +69,8 @@ What this entry *does* author, as real surface code.
 The general Type-sorted eliminator for `Empty` — an uninhabited type
 eliminates into anything — is deliberately not named `absurd`: that
 identifier is reserved checked-mode surface sugar for `Ω`-classified
-`Bottom`-elimination (`crates/ken-elaborator/src/elab.rs:526`), and
-declaring a real global under the same name is now a resolve-time hard
-error (`§5`, `§6` Finding, landed via FR-2) rather than the silent,
-permanently-unreachable shadow it originally was. `absurd_empty` is the
-honest, reachable name this entry uses instead:
+`Bottom`-elimination. A declaration named `absurd` is rejected, so
+`absurd_empty` is the clear, reachable name this entry uses instead:
 
 ```ken
 fn absurd_empty (C : Type) (e : Empty) : C = match e { }
@@ -89,19 +79,16 @@ fn absurd_empty (C : Type) (e : Empty) : C = match e { }
 `Yes`/`No` already work directly as constructors; the lowercase `yes`/`no`
 pair below is a purely ergonomic smart-constructor wrapper that reads
 better at call sites and mirrors `yes`/`no` on the referenced Lean/Agda
-`Decidable`/`Dec` (`§7`):
+`Decidable`/`Dec`:
 
 ```ken
 fn yes (prp : Omega) (p : prp) : Dec prp = Yes prp p
 fn no (prp : Omega) (f : prp -> Empty) : Dec prp = No prp f
 ```
 
-`DecEq` is inlined from `catalog/packages/Core/LawfulClasses.ken`
-(self-containment, the same idiom `catalog/guide/proof-techniques.ken.md`
-uses for `cong`/`bool_and`: `ken run` on a standalone entry has no
-cross-package import mechanism today, `§6` Finding). `dec_eq_decides` below
-is fully generic over ANY `DecEq a` instance, landed or local — only the
-`§3` worked example needs a concrete one in scope:
+`DecEq` is stated here so the entry is self-contained. `dec_eq_decides`
+works for any `DecEq a` instance; only the worked example needs a concrete
+instance in scope:
 
 ```ken
 class DecEq a {
@@ -149,11 +136,9 @@ The bridge: any `DecEq a` instance decides propositional equality.
 hands back the proof directly. `d.eq x y = False` (`Inr q`) → assuming a
 proof `pxy : Equal a x y` gives `d.complete x y pxy : IsTrue (d.eq x y) =
 Equal Bool (d.eq x y) True`; combined with `q` via `sym`/`trans`, that is
-`Equal Bool False True` — K7 (`spec/10-kernel/16-observational.md §1`)
-makes THAT proposition definitionally `Bottom`, so the landed `absurd`
-sugar (Bottom → any goal, INCLUDING a `Type`-sorted one, `16 §1`
-Bottom-Elim) discharges it into `Empty` directly — no new mechanism, and no
-need for `absurd_empty` here (this bridge is Ω → Type, not Empty → C):
+`Equal Bool False True`, which reduces to `Bottom`. The `absurd` sugar then
+discharges it into `Empty` directly; this bridge is `Ω → Type`, not
+`Empty → C`:
 
 ```ken
 fn dec_eq_decides (a : Type) (d : DecEq a) (x : a) (y : a) : Dec (Equal a x y) =
@@ -169,12 +154,9 @@ fn dec_eq_decides (a : Type) (d : DecEq a) (x : a) (y : a) : Dec (Equal a x y) =
 
 ## 3. Using it
 
-`DecEq_instance_Bool` is the synthesized dictionary value for `§2`'s
-`instance DecEq Bool { ... }` — every `instance C T { ... }` registers a
-real global `C_instance_T` (`crates/ken-elaborator/src/elab.rs:3403`), not
-just a `where`-resolved implicit dictionary. (The landed
-`catalog/packages/Core/LawfulClasses.ken` carries the SAME shape,
-independently — `§2`'s note on why this entry inlines its own.)
+`DecEq_instance_Bool` is the dictionary value generated by the
+`instance DecEq Bool { ... }` declaration. An instance declaration registers
+a global value named after its class and carrier.
 
 ```ken example
 const true_is_true : Dec (Equal Bool True True) =
@@ -238,7 +220,7 @@ procedure must be able to *large-eliminate* on which disjunct holds — `Or`
 and a homogeneous `Sum a b : Type` cannot mix an `Ω`-sorted proof payload
 with a `Type`-sorted refutation payload (Ken is non-cumulative — `Ω` does
 not inject into `Type 0`). `Dec`'s two constructors fix each payload's sort
-independently, which is exactly the same move the landed refinement type
+independently, which is exactly the same move the refinement type
 `{x : A | φ} = (x : A) × φ` already makes (an `Ω` field on a `Type`-sorted
 family, `spec/10-kernel/13-pi-sigma.md:133`) — `Dec` has precedent, not a
 new capability class.
@@ -247,16 +229,14 @@ new capability class.
 an opaque primitive, no induction) — `dec_eq_decides Int (DecEq Int) x y`
 type-checks and is *usable*, but its `Yes` branch's proof rides that
 `Axiom`, not a kernel-checked derivation. `§3`'s worked examples
-deliberately use `DecEq Bool` (an inductive carrier, honest via K7/no-
-confusion, zero trusted-base delta) so the showcase is not vacuous — see
+deliberately use `DecEq Bool` (an inductive carrier, honest by the
+no-confusion principle — an inductive type's constructors are disjoint and
+injective — with zero trusted-base delta) so the showcase is not vacuous — see
 `catalog/guide/` `§1.1` for the general opaque-primitive/`Axiom` pattern.
 
-**Zero-constructor `data` now parses (FR-1, landed)** and **`absurd` is
-reserved sugar** (still real, routed as a Finding, `§6`) — this entry's
-own `Empty`/`Dec` remain the prelude-bootstrapped globals (`§2`), not
-re-declared here, but the surface gap that forced that bootstrap is
-closed: an explicit-family zero-constructor block now elaborates over an
-independently-declared type, distinct from the prelude's `Empty`:
+**Zero-constructor `data` declarations** use an explicit-family form, and
+**`absurd` is reserved sugar.** An explicit-family zero-constructor block declares an
+independently named uninhabited type:
 
 ```ken example
 data EmptyAttempt : Type where { }
@@ -264,70 +244,18 @@ data EmptyAttempt : Type where { }
 fn absurd_empty_attempt (C : Type) (e : EmptyAttempt) : C = match e { }
 ```
 
-The literal `Type0 =` spelling (`§2`'s `` ```ken ignore `` block) still
-isn't real surface syntax — the legacy `data D = …` form doesn't take a
-`:`-ascribed family type, so that combination remains illustrative only;
-the explicit-family `where { }` spelling above is the real one.
+The legacy `data D = …` form does not take a `:`-ascribed family type, so the
+explicit-family `where { }` spelling is the usable form here.
 
-**A user-declared `absurd` is now a resolve-time hard error (FR-2,
-landed).** Declaring `fn absurd (C : Type) (e : Empty) : C = match e { }`
-used to elaborate successfully with the collision entirely silent — this
-entry still uses `absurd_empty` instead (the honest, reachable name), but
-the footgun itself is now caught, not merely worked around. Fails:
+**`absurd` is reserved.** Declaring
+`fn absurd (C : Type) (e : Empty) : C = match e { }` fails:
 `'absurd' collides with a reserved surface sugar identifier`.
 
 ```ken reject
 fn absurd (C : Type) (e : Empty) : C = match e { }
 ```
 
-## 6. Findings
-
-- **Kernel-reduction defect:** none.
-- **Sugar candidate → Ergo — landed (FR-1):** the surface originally had
-  no way to write a zero-constructor `data` declaration (`parse_data_decl`/
-  `parse_explicit_data_decl` in `crates/ken-elaborator/src/parser.rs` both
-  required at least one constructor), so `Empty` had to be bootstrapped via
-  `data::elab_data_decl` called directly (the same technique
-  `ElabEnv::empty()` already uses to bootstrap `Bool`), bypassing the
-  parser entirely rather than the ordinary `elaborate_decl` source-text
-  path every other prelude `data` uses. `docs/program/wp/
-  ds-1-findings-remediation.md` FR-1 relaxed both parser gates for the
-  zero-constructor case (`§5` now demonstrates it); `Empty`'s own literal
-  pinned spelling (`data Empty : Type0 =`) still doesn't parse, since the
-  legacy `data D = …` arm doesn't take a `:`-ascribed family type — the
-  explicit-family `where { }` spelling is the real one.
-- **Naming hazard — landed (FR-2):** `absurd` is checked-mode surface sugar
-  keyed on the bare identifier (`elab.rs`, resolver emits `RCon` on scope
-  miss) for `Ω`-classified `Bottom`-elimination. Declaring a real global
-  named `absurd` used to elaborate with the collision entirely silent — a
-  user-declared `absurd` became permanently unreachable via ordinary call
-  syntax with no error at all (confirmed empirically: a probe declaring
-  `fn absurd` then re-using the OLD `absurd h : Bottom` sugar shape still
-  elaborated against the NEW declaration's unrelated signature). FR-2 makes
-  this a resolve-time hard error (`resolve_decl`, guarding every declared
-  name — and every `data` constructor name — against the reserved-sugar
-  set `{Refl, Axiom, absurd}`, `§5` above now demonstrates the rejection —
-  `J`/`Eq` are deliberately excluded, since their arity-3-gated sugar
-  coexists with a lower-arity type-former/class of the same name, e.g. the
-  landed `class Eq a`). This entry's `Empty`-eliminator stays named
-  `absurd_empty` regardless (the honest, reachable name).
-- **Tooling candidate → Ergo (`ken-cli`):** `ken run` unconditionally
-  executes the file's LAST declaration as an IO tree (`crates/ken-cli/src/
-  main.rs`, `run_file`) — appropriate for a runnable program (the
-  `examples/rosetta/*` entries), but a pure-library catalog entry like this
-  one has no natural IO `main`, so `ken run` on it fails post-elaboration
-  ("last definition is not an IO tree") even though every fence checks
-  correctly. This entry's `` ```ken ``/`` ```ken example ``/`` ```ken
-  reject `` fences are verified via `ElabEnv::elaborate_ken_md_file`
-  directly (`crates/ken-elaborator/tests/ds1_empty_dec_acceptance.rs`) —
-  the IDENTICAL fence-checking code `ken run` itself calls before its
-  separate (and here, inapplicable) IO-execution step. `ken-cli` would
-  benefit from a check-only mode (elaborate + verify fences, skip
-  IO-execution when the last declaration isn't IO-shaped) for library
-  entries.
-- **Abstraction candidate:** none beyond what §2 already provides.
-
-## 7. References
+## 6. References
 
 - **Wikipedia** —
   [Decidability (logic)](https://en.wikipedia.org/wiki/Decidability_(logic))
@@ -342,14 +270,11 @@ fn absurd (C : Type) (e : Empty) : C = match e { }
   same `yes`/`no`-tagged decision shape, with Agda's `⊥` as the `Type`-
   sorted false this entry's `Empty` mirrors.
 
-## 8. Trust  derivation
+## 7. Trust  derivation
 
-1. **Spec / WP.** `docs/program/wp/catalog-ds-1-empty-dec.md` (this entry's
-   build WP); no dedicated spec chapter yet — `Dec`'s reflective-decision
-   role is described at `spec/20-verification/23-prover.md §3`.
-2. **Public API.** `Empty`, `absurd_empty`, `Dec`, `Yes`, `No`, `decide`,
+1. **Public API.** `Empty`, `absurd_empty`, `Dec`, `Yes`, `No`, `decide`,
    `yes`, `no`, `dec_eq_decides`.
-3. **Source map.**
+2. **Source map.**
 
    | Task | Section |
    |---|---|
@@ -358,32 +283,18 @@ fn absurd (C : Type) (e : Empty) : C = match e { }
    | Check the computation facts | [Laws  proofs](#4-laws--proofs) |
    | Why this shape, not `Or`/`Sum` | [Design notes](#5-design-notes) |
 
-4. **Derivation path.** `Empty` — `declare_inductive` via
-   `data::elab_data_decl` (zero ctors), the same admission machinery every
-   other prelude `data` uses. `Dec`/`Yes`/`No` — `declare_inductive`
-   directly (kernel-direct, `Ω`-sorted param), the same technique already
-   landed for `Or`/`Perm_rel`. `decide` — ordinary surface `match` over the
-   now-global `Dec`/`Yes`/`No`. `absurd_empty`/`yes`/`no`/`dec_eq_decides` —
-   ordinary surface `fn`, this entry's own code.
-5. **`trusted_base()` delta.** Exactly two new inductive admissions
-   (`Empty`, `Dec`), each an ordinary `declare_inductive` kernel recheck —
-   **zero new trust category** (no `Axiom`, no `declare_primitive`, no new
-   `Term`/`Decl` variant). Confirmed on the Rust emission: `git grep -n
-   'declare_inductive\|declare_primitive\|declare_postulate' \
-   crates/ken-elaborator/src/prelude.rs` shows `Empty`/`Dec` alongside
-   every pre-existing prelude inductive, and neither appears in a
-   `declare_primitive`/`declare_postulate` call. `dec_eq_decides Int`'s
-   `Yes`-branch proof (when instantiated at `Int`) carries the
-   pre-existing `DecEq Int.sound` `Axiom` delta — not a new one this entry
-   introduces (`§5`).
-6. **Proof families.** `dec_eq_decides` — one case-split on `d.eq x y`, two
-   branches (`sound`-direct / K7-then-`Bottom`-elim), no induction.
-7. **Consumers.** None yet — DS-1 is the pilot; later catalog entries
-   (decidable-order-driven sorting, checked key comparison) are the
-   intended consumers.
-8. **Validation evidence.**
-   `crates/ken-elaborator/tests/ds1_empty_dec_acceptance.rs` — the smoke
-   test (`Dec` admits, `elim_Dec` large-eliminates into `Type0`), the
-   `trusted_base()`-delta grep (AC3), and elaborating this entry's
-   `` ```ken ``/`` ```ken example ``/`` ```ken reject `` fences through the
-   literate extractor (AC5).
+3. **Derivation path.** `Empty`, `Dec`, `Yes`, and `No` are standard
+   inductive declarations. `decide` is an ordinary match over `Dec`, and
+   `absurd_empty`, `yes`, `no`, and `dec_eq_decides` are ordinary functions.
+4. **`trusted_base()` delta.** **Zero new trust category.** The standard
+   inductives are kernel-checked; this entry adds no postulate or primitive.
+   Instantiating `dec_eq_decides` at a carrier whose `DecEq` instance has an
+   audited assumption retains that instance's declared delta.
+5. **Proof families.** `dec_eq_decides` case-splits on `d.eq x y`: its true
+   branch uses `sound`, and its false branch turns `complete` into a
+   contradiction. No induction is required.
+6. **Consumers.** Decision procedures for ordering, key comparison, and
+   checked pattern refinement build on this pair.
+7. **Validation evidence.** The catalog checks that `Dec` eliminates into
+   `Type0`, preserves the stated trust posture, and elaborates every source,
+   example, and rejection fence.

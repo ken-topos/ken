@@ -1,8 +1,8 @@
 # `Sums` — the `Option`/`Result`/`Either` combinator floor
 
 The `Option`/`Result`/`Either` combinator floor: one entry for all three
-L2-sum families, each combinator paired with its defining equation(s) as a
-real proof term.
+sum families, each combinator paired with its defining equation(s) as a real
+proof term.
 
 ## Index
 
@@ -11,9 +11,8 @@ real proof term.
 3. [Using it](#3-using-it)
 4. [Laws & proofs](#4-laws--proofs)
 5. [Design notes](#5-design-notes)
-6. [Findings](#6-findings)
-7. [References](#7-references)
-8. [Trust & derivation](#8-trust--derivation)
+6. [References](#6-references)
+7. [Trust & derivation](#7-trust--derivation)
 
 **Named reading paths**
 
@@ -25,30 +24,17 @@ real proof term.
 
 ## 1. Motivation
 
-DS-3 (`wp/ds-3-sum-type-combinators.md`; `Either`,
-`wp/either-catalog-package.md`) needs a combinator floor for the three
-binary-sum families the surface already has: `Option`, `Result`, and
-`Either`. `Option`/`Result` are prelude-declared (`Option a = None | Some
-a`, `Result e a = Err e | Ok a` — `Err` is first,
-`crates/ken-elaborator/src/prelude.rs`) — this entry does not re-declare
-either type, and reuses `option_map` + `instance Functor Option`
-(`catalog/packages/Core/LawfulFunctors.ken.md`) rather than re-deriving
-them. `Either a b = Left a | Right b` is declared here, at the catalog
-level — unlike `Option`/`Result`, it needs zero built-in/prelude support
-(an ordinary non-dependent sum), matching the spec's own model of core
-data as packages (`50-stdlib/README.md:42`; judgment call L5). One entry
-holds all three L2-sum families, not three separate ones, per
-subsume-don't-proliferate on package count — mirroring
-`catalog/packages/Data/Collections/Collections.ken.md` holding the whole
-`List` floor in one entry.
+This entry gives the three standard binary-sum families a common combinator
+floor: `Option`, `Result`, and `Either`. `Option` and `Result` are standard
+types (`Option a = None | Some a`; `Result e a = Err e | Ok a`), so this
+entry reuses them and their existing functor operations. `Either a b = Left a
+| Right b` is declared here as the ordinary, neutral binary sum.
 
-`Either` is not a re-derivation of `Result`: an earlier DS-3-era spec
-erratum subsumed `Either` into `Result` (isomorphic-twin proliferation —
-`Either` had no declaration or user at the time). The operator's later L5
-ruling reversed that, landing `Either` as a distinct declared package per
-the spec's own core-data-as-packages model. `Result` remains the
-error-biased sum wired into the effect system; `Either` is the neutral
-one, and both coexist.
+`Result` is the error-biased sum used for computations that can fail;
+`Either` is the neutral sum for a choice between two values. Both are useful
+and both coexist. Keeping their combinators together lets a reader compare
+the closely related elimination and mapping patterns without navigating three
+separate packages.
 
 ## 2. Definition
 
@@ -72,10 +58,9 @@ transport machinery needed anywhere in this package.
 
 ## 4. Laws & proofs
 
-Every combinator here is an ordinary structural case-split `fn`/`const`
-over the declared sums, in the same style as the `List` floor
-(`catalog/packages/Data/Collections/Collections.ken.md`). Zero new kernel
-feature, zero `trusted_base()` delta.
+Every combinator here is an ordinary structural case-split `fn`/`const` over
+one of the three sums. The entry introduces no new kernel feature and has a
+zero `trusted_base()` delta.
 
 ### 4.1 `Option`
 
@@ -148,13 +133,9 @@ fn unwrap_or_err (e : Type) (a : Type) (d : a) (u : e) : Equal a (unwrap_or e a 
 
 ### 4.3 `Either`
 
-`Either` is a user-level catalog package, not a prelude type (judgment
-call L5): an ordinary non-dependent sum needs zero built-in support,
-matching the spec's own model of core data as packages
-(`50-stdlib/README.md:42`). `Option`/`Result` sit in the prelude today only
-as a bootstrap shortcut — a named spec-vs-implementation gap this package
-does not resolve (`docs/program/wp/either-catalog-package.md`, "Named
-future").
+`Either` is an ordinary user-defined non-dependent sum. Unlike the standard
+`Option` and `Result` types, it needs no special support beyond a `data`
+declaration.
 
 `either f g x` is the eliminator: `f` on `Left`, `g` on `Right`.
 `map_left`/`map_right` apply a function to one side only, leaving the
@@ -202,39 +183,21 @@ fn swap_involutive (a : Type) (b : Type) (x : Either a b) : Equal (Either a b) (
 
 ## 5. Design notes
 
-**One entry, not three.** DS-3's frame considered a separate package per
-sum family; this entry holds all three per subsume-don't-proliferate on
-package count, mirroring `Collections.ken.md`'s single-entry `List` floor.
-The three families are similar enough in shape (a binary sum, an
-eliminator or direct case-split, defining equations by `Refl`) that
-splitting them would triple boilerplate without adding reader clarity —
-the three-part `Using it`/`Laws & proofs` subsection split already gives a
-reader who only cares about one family a direct path to it.
+**One entry, not three.** The three families share a binary-sum shape, an
+eliminator or direct case split, and defining equations proved by `Refl`.
+Presenting them together makes the common structure visible while the
+subsections give readers a direct route to the family they need.
 
-**`Either`'s independence from `Result` is a reversed ruling, not an
-original design.** An earlier spec erratum folded `Either` into `Result`
-as an isomorphic twin, reasoning that a package with no declaration and no
-consumer yet was dead weight. The operator's later L5 ruling reversed
-this once a genuine neutral-sum need (not error-biased) was identified —
-`Result` keeps its effect-system wiring, `Either` is the general-purpose
-sum, and the two are declared independently rather than one being defined
-in terms of the other.
+**`Either` is independent from `Result`.** `Result` records the conventional
+error-or-value interpretation; `Either` records an uncommitted choice between
+two values. Declaring them independently keeps each interpretation explicit
+at use sites.
 
-**Every proof reduces by `Refl`.** Unlike the `Map`/`Collections` capstone
-proofs (which need `cong`/`trans`/`J` transport machinery for inductive
-recursive carriers), every law in this package is a direct consequence of
-one pattern match reducing by computation — there is no induction anywhere
-in this file, since none of `Option`/`Result`/`Either`'s combinators
-recurse.
+**Every proof reduces by `Refl`.** Every law in this package is a direct
+consequence of one pattern match reducing by computation. None of these
+combinators recurses, so no induction or transport machinery is needed.
 
-## 6. Findings
-
-No kernel-reduction defect, sugar candidate, or abstraction candidate
-surfaced while authoring this package — every combinator and its defining
-equations follow the same direct case-split-and-`Refl` shape already
-established by the `List` floor, with no new proof technique needed.
-
-## 7. References
+## 6. References
 
 - **Option type** — Wikipedia,
   <https://en.wikipedia.org/wiki/Option_type> — general orientation on the
@@ -245,11 +208,7 @@ established by the `List` floor, with no new proof technique needed.
   the canonical neutral binary sum this package's `Either` mirrors in
   shape (left-biased `either` eliminator, `Left`/`Right` naming).
 
-## 8. Trust & derivation
-
-**Spec catalog entry:** `docs/program/wp/ds-3-sum-type-combinators.md`
-(`Option`/`Result` combinators) and `docs/program/wp/either-catalog-package.md`
-(`Either`).
+## 7. Trust & derivation
 
 **Public API (stable names):** `get_or_else`/`is_some`/`or_else` and their
 defining equations (`Option`); `map_err`/`and_then`/`unwrap_or` and their
@@ -260,7 +219,7 @@ defining equations (`Result`); `Either`, `either`, `map_left`/`map_right`,
 
 | Reader task | Section |
 |---|---|
-| Understand why this package exists / the `Either`-vs-`Result` history | [§1](#1-motivation), [§5](#5-design-notes) |
+| Understand why this package exists / choose `Either` or `Result` | [§1](#1-motivation), [§5](#5-design-notes) |
 | Find `Either`'s raw declaration | [§2](#2-definition) |
 | Find a specific combinator and its defining equation | [§4.1](#41-option)–[§4.3](#43-either) |
 
@@ -281,13 +240,9 @@ case-split: state the combinator, then its defining equation(s), one per
 constructor case — no shared proof machinery across combinators, and no
 induction (§5).
 
-**Consumers.** `crates/ken-elaborator/tests/ds3_sum_combinators_acceptance.rs`
-(`Option`/`Result`) and
-`crates/ken-elaborator/tests/either_catalog_package_acceptance.rs`
-(`Either`) exercise every combinator and law directly, plus AC8
-discriminators confirming each law's specific claim (not a weaker one) is
-what's actually proved.
+**Consumers.** The catalog's executable checks exercise every combinator and
+law directly, including discriminators for the distinct constructor cases.
 
 **Validation evidence.** `ken check` on this file's tangled `` ```ken ``
-fence elaborates clean; the two acceptance suites above (run in CI at
-merge) are this package's behavioral proof.
+fence elaborates clean; the catalog checks provide behavioral evidence for the
+constructor cases and defining equations.
