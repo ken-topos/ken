@@ -22,6 +22,7 @@ some roles need belongs in a narrower scope.
 | [live-review-candidate-goes-stale-reanchor-sha](live-review-candidate-goes-stale-reanchor-sha.md) | A live review candidate can go stale; re-anchor the SHA |
 | [markdown-80col-reflow](markdown-80col-reflow.md) | 80-column markdown reflow: the recurring gotchas |
 | [mention-discipline](mention-discipline.md) | Mention IFF question or next-action; grep the participant-id; the `mentions` array is reliable |
+| [model-swap-does-not-reset-the-seat](model-swap-does-not-reset-the-seat.md) | A model swap keeps the seat's context; rouse to continue, don't tell it to re-orient |
 | [mootup-posting-from-agent](mootup-posting-from-agent.md) | How a build-tier agent posts to mootup |
 | [multi-worktree-cwd-drift-phantom-diff](multi-worktree-cwd-drift-phantom-diff.md) | Multi-worktree cwd drift produces a phantom diff |
 | [orphaned-background-task-loops-leak-cpu](orphaned-background-task-loops-leak-cpu.md) | Hand-rolled background bash loops can orphan and leak CPU |
