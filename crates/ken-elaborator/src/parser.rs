@@ -1630,6 +1630,12 @@ impl Parser {
             _ => {
                 let mut f = self.parse_atom_expr()?;
                 loop {
+                    // `eqn:` is a contextual modifier of the surrounding
+                    // `match`, not an application argument to its scrutinee.
+                    if self.is_contextual_ident("eqn") && matches!(self.lookahead(1), Token::Colon)
+                    {
+                        break;
+                    }
                     if !self.can_start_atom_expr() {
                         break;
                     }
@@ -1717,11 +1723,18 @@ impl Parser {
         ))
     }
 
-    /// `match scrut { P₁ => body₁ ; P₂ => body₂ }` — pattern match (`34 §3`).
+    /// `match scrut [eqn: h] { P₁ => body₁ ; P₂ => body₂ }`.
     fn parse_match_expr(&mut self) -> Result<Expr, ElabError> {
         let start = self.peek_span().start;
         self.advance(); // consume 'match'
         let scrut = self.parse_app_expr()?;
+        let equation = if self.is_contextual_ident("eqn") {
+            self.advance();
+            self.expect(&Token::Colon)?;
+            Some(self.expect_ident()?.0)
+        } else {
+            None
+        };
         self.expect(&Token::LBrace)?;
         let mut arms = Vec::new();
         while !matches!(self.peek(), Token::RBrace | Token::Eof) {
@@ -1743,6 +1756,7 @@ impl Parser {
         self.expect(&Token::RBrace)?;
         Ok(Expr::EMatch {
             scrut: Box::new(scrut),
+            equation,
             arms,
             span: Span::new(start, end),
         })
@@ -1977,9 +1991,15 @@ impl Parser {
                         Expr::EBinOp(op, l, r, _) => Expr::EBinOp(op, l, r, span),
                         Expr::EMatch {
                             scrut,
+                            equation,
                             arms,
                             span: _,
-                        } => Expr::EMatch { scrut, arms, span },
+                        } => Expr::EMatch {
+                            scrut,
+                            equation,
+                            arms,
+                            span,
+                        },
                         Expr::EProj(e, field, _) => Expr::EProj(e, field, span),
                         Expr::EPi(x, a, b, _) => Expr::EPi(x, a, b, span),
                         Expr::EArrow(a, b, _) => Expr::EArrow(a, b, span),

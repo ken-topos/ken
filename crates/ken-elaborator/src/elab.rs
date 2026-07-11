@@ -548,7 +548,8 @@ fn check(cx: &mut ElabCtx, expr: &RExpr, expected: &Term, _span: &Span) -> Resul
         //   Eq`). A user-declared arity-3 type-former literally named
         //   `Eq`/`J` remains a real but deliberately out-of-scope
         //   reservation, not a bug this guard closes.
-        RExpr::RApp(f, arg, rspan) if matches!(f.as_ref(), RExpr::RCon(n, _) if n == SUGAR_ABSURD) => {
+        RExpr::RApp(f, arg, rspan) if matches!(f.as_ref(), RExpr::RCon(n, _) if n == SUGAR_ABSURD) =>
+        {
             let bottom = Term::const_(cx.env.bottom_id(), vec![]);
             let proof_core = check(cx, arg, &bottom, rspan)?;
             Ok(Term::Absurd(
@@ -579,7 +580,12 @@ fn check(cx: &mut ElabCtx, expr: &RExpr, expected: &Term, _span: &Span) -> Resul
         // `is_sorted`/`Perm`, untouched by this) only ever built a CONSTANT
         // motive derived from arm0's inferred type, which cannot express a
         // goal that differs per constructor.
-        RExpr::RMatch { scrut, arms, span } => {
+        RExpr::RMatch {
+            scrut,
+            equation,
+            arms,
+            span,
+        } => {
             // Gate on PATTERN SHAPE, not goal-dependence: `check_match_
             // dependent` is correct whenever every arm's pattern is FLAT
             // (a constructor with only `Var`/`Wild` sub-patterns) —
@@ -616,7 +622,13 @@ fn check(cx: &mut ElabCtx, expr: &RExpr, expected: &Term, _span: &Span) -> Resul
                 matches!(head, Term::IndFormer { .. })
             };
             if dependent_eligible {
-                check_match_dependent(cx, scrut, arms, expected, span)
+                check_match_dependent(cx, scrut, equation.as_deref(), arms, expected, span)
+            } else if equation.is_some() {
+                Err(ElabError::TypeMismatch {
+                    span: span.clone(),
+                    reason: "`match ... eqn:` requires a finite enum scrutinee with flat arms"
+                        .into(),
+                })
             } else {
                 let (core, inferred_ty) = infer_match(cx, scrut, arms, span)?;
                 unify_types(&mut cx.metas, expected, &inferred_ty);
@@ -862,6 +874,7 @@ fn simplify_branch_goal(env: &GlobalEnv, ctx: &Context, term: &Term) -> Term {
 fn check_match_dependent(
     cx: &mut ElabCtx,
     scrut: &RExpr,
+    equation: Option<&str>,
     arms: &[RMatchArm],
     expected: &Term,
     span: &Span,
@@ -899,6 +912,14 @@ fn check_match_dependent(
         .inductive(d_id)
         .ok_or_else(|| ElabError::Internal(format!("inductive {:?} not found", d_id)))?
         .clone();
+    if equation.is_some()
+        && (ind.indices.len() != 0 || ind.constructors.iter().any(|ctor| !ctor.args.is_empty()))
+    {
+        return Err(ElabError::TypeMismatch {
+            span: span.clone(),
+            reason: "`match ... eqn:` only supports finite enums with nullary constructors".into(),
+        });
+    }
     let m = ind.params.len();
     let n_i = ind.indices.len();
     if scrut_args.len() != m + n_i {
@@ -915,11 +936,22 @@ fn check_match_dependent(
     // of branch-local equalities `Eq I_j i_j i0_j -> ...`; the completed elim is
     // applied to `Refl` at the actual scrutinee indices after construction.
     let motive_base_depth = n_i + 1;
-    let motive_user_body = subst_term_generalize(
+    let mut motive_user_body = subst_term_generalize(
         &weaken(expected, motive_base_depth as i64),
         &weaken(&scrut_core, motive_base_depth as i64),
         &Term::var(0),
     );
+    if equation.is_some() {
+        // The eliminator returns a function over the branch equation.  Its
+        // methods can therefore bind the surface `eqn:` name, while applying
+        // the completed eliminator to `Refl` recovers the author's goal.
+        let eq_dom = Term::Eq(
+            Box::new(weaken(&scrut_ty, 1)),
+            Box::new(weaken(&scrut_core, 1)),
+            Box::new(Term::var(0)),
+        );
+        motive_user_body = Term::pi(eq_dom, weaken(&motive_user_body, 1));
+    }
     let motive_premises = motive_index_premises(&ind, &params_terms, &scrut_indices);
     let motive_body = wrap_premise_pis(motive_user_body, &motive_premises);
     // `expected` is already zonked (above); the CONTEXT itself may still
@@ -997,136 +1029,153 @@ fn check_match_dependent(
             method_index_premises(&ind, &params_terms, &target_indices, &scrut_indices, n);
         let method = if let Some(arm_idx) = arm_idx {
             let arm = &arms[arm_idx];
-            // Install index-refinement `var_refinements` for this
-            // branch — constructor injectivity (peeled recursive fields)
-            // and sibling convoy — BEFORE checking the body, so the body's
-            // own elaboration can see through them. `cx.ctx` deliberately
-            // stays exactly `n`-deep here (fields only): `resolve.rs`
-            // pre-computed every `RVar` index in `arm.body` assuming
-            // exactly that depth (it has no notion of these
-            // elaborator-internal premises), so pushing the premises onto
-            // `cx.ctx` here would desync every OTHER reference in the arm.
-            // Each installed refinement's proof instead references its
-            // premise via an `INDEX_REFINEMENT_SENTINEL_BASE`-tagged
-            // placeholder `Var` — not yet a real binder — which
-            // `finalize_refined_body` relocates to its true, wrap-relative
-            // index once `check` returns (the premises only become real
-            // λ-binders afterward, via `wrap_premise_lams_from_full`).
-            let outer_scope_depth = cx.ctx.len() - n;
-            let premise_count = premise_domains.len();
-            let installed_refinements = install_index_refinements(
-                cx,
-                &ind,
-                &params_terms,
-                &target_indices,
-                &scrut_indices,
-                n,
-                outer_scope_depth,
-            )?;
-            // Capability 3 (goal refinement) and capability 1/2 (var
-            // refinement) solve overlapping cases in OPPOSITE directions —
-            // capability 1 makes an existing field/sibling look like the
-            // ORIGINAL (unrefined) goal via `Cast`; capability 3 makes the
-            // GOAL itself look like the ctor-refined type. Both active at
-            // once on the same index is a guaranteed mismatch (confirmed:
-            // regressed `tail`, whose `ys` capability-1 already resolves
-            // the original goal). So try the cheap, unrefined path FIRST
-            // (covers any branch whose body only re-uses existing
-            // capability-1/2-refined bindings, e.g. `tail`); only a branch
-            // that constructs a FRESH value against an index-dependent goal
-            // (e.g. `zip`'s `VNil` base case) needs capability 3, and only
-            // reaches it here. `check` mutates `cx.obligations` before it
-            // can fail, so roll any partial obligations back before retrying
-            // — `cx.metas` gaining unused, never-referenced metavariables
-            // from the discarded attempt is harmless.
-            // Capability 3 (goal refinement) and capability 1/2 (var
-            // refinement) solve overlapping cases in OPPOSITE directions —
-            // capability 1 makes an existing field/sibling look like the
-            // ORIGINAL (unrefined) goal via `Cast`; capability 3 makes the
-            // GOAL itself look like the ctor-refined type. Both active at
-            // once on the same index is a guaranteed mismatch (confirmed:
-            // double-applying regressed `tail`, whose `ys` capability-1
-            // already resolves the original goal on its own). The
-            // discriminator: a branch body that is a bare existing binding
-            // (`ys`) is exactly capability 1/2's case — it never needs its
-            // own goal refined, only the reference re-typed. A branch body
-            // that CONSTRUCTS a fresh value of the family (`VNil Nat`,
-            // `VCons Nat m a (...)`, `zip`'s base *and* recursive cases)
-            // has no existing binding for capability 1/2 to redirect, so
-            // its NATURAL type uses the ctor's own (unrefined-in-the-
-            // caller's-frame) index — only capability 3 can bridge that.
-            let expected_here_unrefined = if matches!(arm.body, RExpr::RLam(_, _, _)) {
-                expected_here.clone()
+            if equation.is_some() {
+                let eq_dom = Term::Eq(
+                    Box::new(weaken(&scrut_ty, n as i64)),
+                    Box::new(weaken(&scrut_core, n as i64)),
+                    Box::new(concrete.clone()),
+                );
+                cx.ctx.push(eq_dom.clone());
+                let body = check(cx, &arm.body, &weaken(&expected_here, 1), &arm.span)?;
+                cx.ctx.pop();
+                Term::lam(eq_dom, body)
             } else {
-                simplify_branch_goal(cx.env, &cx.ctx, &expected_here)
-            };
-            let obl_snapshot = cx.obligations.len();
-            // Try the UNREFINED goal first — sufficient whenever capability
-            // 1/2 already resolve every reference the body makes (`tail`,
-            // and (non-obviously) a NESTED branch whose own recursive call
-            // is rescued by the OUTER match's capability-1 refinement, e.g.
-            // `zip`'s inner `VCons` arm). `check`'s `Ok` alone is not proof
-            // — elaborator unification can defer a mismatch rather than
-            // reject it immediately — so probe eagerly: `finalize` +
-            // `wrap_premise_lams_from_full` the checked body (resolving
-            // every index-refinement sentinel into a real, self-contained
-            // binder) and `kernel_check` it against the equally `Pi`-wrapped
-            // goal. Only if THAT fails does a branch genuinely need its own
-            // goal refined (capability 3) — e.g. a branch that CONSTRUCTS a
-            // fresh family value (`VNil Nat`, `zip`'s base case) has no
-            // existing binding for capability 1/2 to redirect, so its
-            // natural type uses the ctor's own index directly.
-            let attempt = check(cx, &arm.body, &expected_here_unrefined, &arm.span).and_then(
-                |body_core_checked| {
-                    let finalized = finalize_refined_body(&body_core_checked, 0, premise_count);
-                    let wrapped = wrap_premise_lams_from_full(finalized, &premise_domains);
-                    let wrapped_ty =
-                        wrap_premise_pis(expected_here_unrefined.clone(), &premise_domains);
-                    let zonked_wrapped = cx.metas.zonk_term(&wrapped);
-                    let zonked_ty = cx.metas.zonk_term(&wrapped_ty);
-                    let zonked_ctx = Context {
-                        types: cx.ctx.types.iter().map(|t| cx.metas.zonk_term(t)).collect(),
-                    };
-                    kernel_check(cx.env, &zonked_ctx, &zonked_wrapped, &zonked_ty)
-                        .map(|()| body_core_checked)
-                        .map_err(|e| ElabError::KernelRejected {
-                            error: e,
-                            span: arm.span.clone(),
-                        })
-                },
-            );
-            let body_core = match attempt {
-                Ok(body_core_checked) => body_core_checked,
-                Err(_) => {
-                    cx.obligations.truncate(obl_snapshot);
-                    let (goal_refined, goal_casts) = refine_branch_goal(
-                        cx,
-                        &ind,
-                        &params_terms,
-                        &target_indices,
-                        &scrut_indices,
-                        n,
-                        &expected_here,
-                    )?;
-                    let expected_here_refined = if matches!(arm.body, RExpr::RLam(_, _, _)) {
-                        goal_refined
-                    } else {
-                        simplify_branch_goal(cx.env, &cx.ctx, &goal_refined)
-                    };
-                    let body_core_checked = check(cx, &arm.body, &expected_here_refined, &arm.span)?;
-                    let mut body_core = body_core_checked;
-                    for (src, tgt, e) in goal_casts.into_iter().rev() {
-                        body_core =
-                            Term::Cast(Box::new(src), Box::new(tgt), Box::new(e), Box::new(body_core));
+                // Install index-refinement `var_refinements` for this
+                // branch — constructor injectivity (peeled recursive fields)
+                // and sibling convoy — BEFORE checking the body, so the body's
+                // own elaboration can see through them. `cx.ctx` deliberately
+                // stays exactly `n`-deep here (fields only): `resolve.rs`
+                // pre-computed every `RVar` index in `arm.body` assuming
+                // exactly that depth (it has no notion of these
+                // elaborator-internal premises), so pushing the premises onto
+                // `cx.ctx` here would desync every OTHER reference in the arm.
+                // Each installed refinement's proof instead references its
+                // premise via an `INDEX_REFINEMENT_SENTINEL_BASE`-tagged
+                // placeholder `Var` — not yet a real binder — which
+                // `finalize_refined_body` relocates to its true, wrap-relative
+                // index once `check` returns (the premises only become real
+                // λ-binders afterward, via `wrap_premise_lams_from_full`).
+                let outer_scope_depth = cx.ctx.len() - n;
+                let premise_count = premise_domains.len();
+                let installed_refinements = install_index_refinements(
+                    cx,
+                    &ind,
+                    &params_terms,
+                    &target_indices,
+                    &scrut_indices,
+                    n,
+                    outer_scope_depth,
+                )?;
+                // Capability 3 (goal refinement) and capability 1/2 (var
+                // refinement) solve overlapping cases in OPPOSITE directions —
+                // capability 1 makes an existing field/sibling look like the
+                // ORIGINAL (unrefined) goal via `Cast`; capability 3 makes the
+                // GOAL itself look like the ctor-refined type. Both active at
+                // once on the same index is a guaranteed mismatch (confirmed:
+                // regressed `tail`, whose `ys` capability-1 already resolves
+                // the original goal). So try the cheap, unrefined path FIRST
+                // (covers any branch whose body only re-uses existing
+                // capability-1/2-refined bindings, e.g. `tail`); only a branch
+                // that constructs a FRESH value against an index-dependent goal
+                // (e.g. `zip`'s `VNil` base case) needs capability 3, and only
+                // reaches it here. `check` mutates `cx.obligations` before it
+                // can fail, so roll any partial obligations back before retrying
+                // — `cx.metas` gaining unused, never-referenced metavariables
+                // from the discarded attempt is harmless.
+                // Capability 3 (goal refinement) and capability 1/2 (var
+                // refinement) solve overlapping cases in OPPOSITE directions —
+                // capability 1 makes an existing field/sibling look like the
+                // ORIGINAL (unrefined) goal via `Cast`; capability 3 makes the
+                // GOAL itself look like the ctor-refined type. Both active at
+                // once on the same index is a guaranteed mismatch (confirmed:
+                // double-applying regressed `tail`, whose `ys` capability-1
+                // already resolves the original goal on its own). The
+                // discriminator: a branch body that is a bare existing binding
+                // (`ys`) is exactly capability 1/2's case — it never needs its
+                // own goal refined, only the reference re-typed. A branch body
+                // that CONSTRUCTS a fresh value of the family (`VNil Nat`,
+                // `VCons Nat m a (...)`, `zip`'s base *and* recursive cases)
+                // has no existing binding for capability 1/2 to redirect, so
+                // its NATURAL type uses the ctor's own (unrefined-in-the-
+                // caller's-frame) index — only capability 3 can bridge that.
+                let expected_here_unrefined = if matches!(arm.body, RExpr::RLam(_, _, _)) {
+                    expected_here.clone()
+                } else {
+                    simplify_branch_goal(cx.env, &cx.ctx, &expected_here)
+                };
+                let obl_snapshot = cx.obligations.len();
+                // Try the UNREFINED goal first — sufficient whenever capability
+                // 1/2 already resolve every reference the body makes (`tail`,
+                // and (non-obviously) a NESTED branch whose own recursive call
+                // is rescued by the OUTER match's capability-1 refinement, e.g.
+                // `zip`'s inner `VCons` arm). `check`'s `Ok` alone is not proof
+                // — elaborator unification can defer a mismatch rather than
+                // reject it immediately — so probe eagerly: `finalize` +
+                // `wrap_premise_lams_from_full` the checked body (resolving
+                // every index-refinement sentinel into a real, self-contained
+                // binder) and `kernel_check` it against the equally `Pi`-wrapped
+                // goal. Only if THAT fails does a branch genuinely need its own
+                // goal refined (capability 3) — e.g. a branch that CONSTRUCTS a
+                // fresh family value (`VNil Nat`, `zip`'s base case) has no
+                // existing binding for capability 1/2 to redirect, so its
+                // natural type uses the ctor's own index directly.
+                let attempt = check(cx, &arm.body, &expected_here_unrefined, &arm.span).and_then(
+                    |body_core_checked| {
+                        let finalized = finalize_refined_body(&body_core_checked, 0, premise_count);
+                        let wrapped = wrap_premise_lams_from_full(finalized, &premise_domains);
+                        let wrapped_ty =
+                            wrap_premise_pis(expected_here_unrefined.clone(), &premise_domains);
+                        let zonked_wrapped = cx.metas.zonk_term(&wrapped);
+                        let zonked_ty = cx.metas.zonk_term(&wrapped_ty);
+                        let zonked_ctx = Context {
+                            types: cx.ctx.types.iter().map(|t| cx.metas.zonk_term(t)).collect(),
+                        };
+                        kernel_check(cx.env, &zonked_ctx, &zonked_wrapped, &zonked_ty)
+                            .map(|()| body_core_checked)
+                            .map_err(|e| ElabError::KernelRejected {
+                                error: e,
+                                span: arm.span.clone(),
+                            })
+                    },
+                );
+                let body_core = match attempt {
+                    Ok(body_core_checked) => body_core_checked,
+                    Err(_) => {
+                        cx.obligations.truncate(obl_snapshot);
+                        let (goal_refined, goal_casts) = refine_branch_goal(
+                            cx,
+                            &ind,
+                            &params_terms,
+                            &target_indices,
+                            &scrut_indices,
+                            n,
+                            &expected_here,
+                        )?;
+                        let expected_here_refined = if matches!(arm.body, RExpr::RLam(_, _, _)) {
+                            goal_refined
+                        } else {
+                            simplify_branch_goal(cx.env, &cx.ctx, &goal_refined)
+                        };
+                        let body_core_checked =
+                            check(cx, &arm.body, &expected_here_refined, &arm.span)?;
+                        let mut body_core = body_core_checked;
+                        for (src, tgt, e) in goal_casts.into_iter().rev() {
+                            body_core = Term::Cast(
+                                Box::new(src),
+                                Box::new(tgt),
+                                Box::new(e),
+                                Box::new(body_core),
+                            );
+                        }
+                        body_core
                     }
-                    body_core
+                };
+                for pos in installed_refinements {
+                    cx.var_refinements.remove(&pos);
                 }
-            };
-            for pos in installed_refinements {
-                cx.var_refinements.remove(&pos);
+                let finalized = finalize_refined_body(&body_core, 0, premise_count);
+                wrap_premise_lams_from_full(finalized, &premise_domains)
             }
-            let finalized = finalize_refined_body(&body_core, 0, premise_count);
-            wrap_premise_lams_from_full(finalized, &premise_domains)
         } else {
             let expected_here = simplify_branch_goal(cx.env, &cx.ctx, &expected_here);
             let missing = ctor_name(cx, ctor.id);
@@ -1252,11 +1301,24 @@ fn check_match_dependent(
         motive: Box::new(motive),
         methods,
         indices: scrut_indices.clone(),
-        scrut: Box::new(scrut_core),
+        scrut: Box::new(scrut_core.clone()),
     };
     for premise in &top_premises {
         let proof = synth_generated_index_evidence(cx.env, &cx.ctx, premise, span)?;
         elim = Term::app(elim, proof);
+    }
+    if equation.is_some() {
+        elim = Term::app(elim, Term::Refl(Box::new(scrut_core.clone())));
+        let zonked_ctx = Context {
+            types: cx.ctx.types.iter().map(|t| cx.metas.zonk_term(t)).collect(),
+        };
+        let zonked_elim = cx.metas.zonk_term(&elim);
+        kernel_infer(cx.env, &zonked_ctx, &zonked_elim).map_err(|error| {
+            ElabError::KernelRejected {
+                error,
+                span: span.clone(),
+            }
+        })?;
     }
     Ok(elim)
 }
@@ -1407,7 +1469,11 @@ fn refl_base_arg(env: &GlobalEnv, ctx: &Context, ty: &Term, a: &Term) -> Term {
     match whnf(
         env,
         ctx,
-        &Term::Eq(Box::new(ty.clone()), Box::new(a.clone()), Box::new(a.clone())),
+        &Term::Eq(
+            Box::new(ty.clone()),
+            Box::new(a.clone()),
+            Box::new(a.clone()),
+        ),
     ) {
         Term::Eq(_, x, _) => *x,
         _ => a.clone(),
@@ -1417,7 +1483,14 @@ fn refl_base_arg(env: &GlobalEnv, ctx: &Context, ty: &Term, a: &Term) -> Term {
 /// `h : Eq idx_ty a b` ⇒ `sym h : Eq idx_ty b a`, derived via `J` — never
 /// postulated. Motive `λ(y:idx_ty)(_:Eq idx_ty a y). Eq idx_ty y a`,
 /// based at `a` (`base = refl a`); `J` gives the result at `y = b`.
-fn build_sym(env: &GlobalEnv, ctx: &Context, idx_ty: &Term, idx_level: Level, a: &Term, h: Term) -> Term {
+fn build_sym(
+    env: &GlobalEnv,
+    ctx: &Context,
+    idx_ty: &Term,
+    idx_level: Level,
+    a: &Term,
+    h: Term,
+) -> Term {
     let dom2 = Term::Eq(
         Box::new(weaken(idx_ty, 1)),
         Box::new(weaken(a, 1)),
@@ -2088,7 +2161,22 @@ fn infer(cx: &mut ElabCtx, expr: &RExpr) -> Result<(Term, Term), ElabError> {
 
         RExpr::RBinOp(op, lhs, rhs, span) => elab_binop(cx, op, lhs, rhs, span),
 
-        RExpr::RMatch { scrut, arms, span } => infer_match(cx, scrut, arms, span),
+        RExpr::RMatch {
+            scrut: _,
+            equation: Some(_),
+            span,
+            ..
+        } => Err(ElabError::TypeMismatch {
+            span: span.clone(),
+            reason: "`match ... eqn:` requires a declared expected type".into(),
+        }),
+
+        RExpr::RMatch {
+            scrut,
+            equation: None,
+            arms,
+            span,
+        } => infer_match(cx, scrut, arms, span),
 
         RExpr::RProj(base, field, span) => infer_proj(cx, base, field, span),
 
@@ -2818,7 +2906,9 @@ fn rtypes_match(left: &RType, right: &RType) -> bool {
         (
             RType::REffectArr(left_a, left_row, left_b, _),
             RType::REffectArr(right_a, right_row, right_b, _),
-        ) => left_row == right_row && rtypes_match(left_a, right_a) && rtypes_match(left_b, right_b),
+        ) => {
+            left_row == right_row && rtypes_match(left_a, right_a) && rtypes_match(left_b, right_b)
+        }
         _ => false,
     }
 }

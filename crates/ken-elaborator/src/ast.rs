@@ -467,6 +467,8 @@ pub enum Expr {
     /// `match scrut { P₁ => body₁ ; … }` — pattern matching (`34 §3`).
     EMatch {
         scrut: Box<Expr>,
+        /// Optional `eqn: h` dependent-match modifier.
+        equation: Option<String>,
         arms: Vec<MatchArm>,
         span: Span,
     },
