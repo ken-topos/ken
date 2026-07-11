@@ -1,9 +1,15 @@
 # WP DS-8c — Traversable composition coherence law (+ Compose `ap_cmp`)
 
-**Owner:** Foundation team. **Steward-framed** from the DS-8 Core valve
-(2026-07-10) — the composition law was SIZE-deferred out of DS-8, not
-capability-blocked. Buildable immediately; independent follow-on to DS-8 Core
-(`main @ 709c55d`, PR #440). **Outer-ring, no kernel/spec/elaborator-src touch.**
+**Owner:** **Ergo team** (reassigned Foundation→Ergo, Steward decision **D3**:
+DS-8c is a Track-B serial item — `case-eq-adoption` → `nat-arithmetic-laws` →
+**DS-8c** — while Foundation holds Track A / `compare-ord`. The **DS-8 lineage is
+Foundation's**, but this WP is Ergo's; it works entirely within the *landed*
+`fn`-synonym scaffolding in `EffectfulClasses.ken.md`, needing no Foundation
+tacit context beyond what this frame + the code carry). **Steward-framed** from
+the DS-8 Core valve (2026-07-10) — the composition law was SIZE-deferred out of
+DS-8, not capability-blocked. Buildable immediately; independent follow-on to
+DS-8 Core (`main @ 709c55d`, PR #440). **Outer-ring, no kernel/spec/elaborator-src
+touch.**
 
 ## Goal
 
@@ -83,7 +89,7 @@ no `ken-kernel`, no `Cargo.lock`** delta.
 
 ## Gate
 
-Foundation ring (foundation-leader → foundation-implementer → foundation-qa) →
+Ergo ring (ergo-leader → ergo-implementer → ergo-qa) →
 **@architect fidelity gate** (chapter 56 §5.3 char-for-char on the law
 statements + the tangled-code `Axiom`/`Refl`-paper grep, pins 1–5) →
 `git_request` to Steward → **CI-gated** merge (real catalog code + acceptance
