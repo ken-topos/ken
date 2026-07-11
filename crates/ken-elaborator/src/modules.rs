@@ -870,18 +870,29 @@ fn expand_scope(
                     .insert(child_prefix, child_exports);
                 i += 1;
             }
-            // A maximal run of non-`pub` `view`/`let` decls (VAL2 #3, mutual
-            // recursion) — auto-grouped by call-graph SCC (`33 §1`: "All
+            // A maximal run of non-`pub` definitions — auto-grouped by
+            // call-graph SCC (`33 §1`: "All
             // top-level definitions are mutually recursive within a module
             // if the SCT check accepts the group"). A run with no actual
             // cycle degenerates to today's one-decl-at-a-time path, member
             // by member, byte-identical (AC3).
-            Decl::ViewDecl { .. } | Decl::LetDecl { .. } if !decl.is_pub() => {
+            Decl::ViewDecl { .. }
+            | Decl::LetDecl { .. }
+            | Decl::LemmaDecl { .. }
+            | Decl::AttachedProofDecl { .. }
+                if !decl.is_pub() =>
+            {
                 let run_end = {
                     let mut e = i;
                     while e < decls.len()
                         && !decls[e].is_pub()
-                        && matches!(decls[e], Decl::ViewDecl { .. } | Decl::LetDecl { .. })
+                        && matches!(
+                            decls[e],
+                            Decl::ViewDecl { .. }
+                                | Decl::LetDecl { .. }
+                                | Decl::LemmaDecl { .. }
+                                | Decl::AttachedProofDecl { .. }
+                        )
                     {
                         e += 1;
                     }
@@ -912,23 +923,22 @@ fn expand_scope(
                     .map(|a| {
                         (0..n)
                             .filter(|&b| {
-                                a != b
-                                    && crate::elab::rexpr_mentions_name(
-                                        &rdecls[a].body,
-                                        &bare_names[b],
-                                    )
+                                crate::elab::rexpr_mentions_name(&rdecls[a].body, &bare_names[b])
+                                    || rdecls[a].ty.as_ref().is_some_and(|ty| {
+                                        crate::elab::rtype_mentions_name(ty, &bare_names[b])
+                                    })
                             })
                             .collect()
                     })
                     .collect();
                 let sccs = scc_membership(&adj);
 
-                // Walk the run in original order; on first encounter of an
-                // unconsumed SCC, process the WHOLE SCC together (size 1:
-                // the existing per-decl path; size > 1: the new group path,
-                // one `sct_check` over the whole cycle).
+                // Process the SCC condensation dependency-first: a caller's
+                // body is checked only after every acyclic callee body is
+                // available for delta reduction.  The signature pre-pass in
+                // a recursive SCC still admits every member before any body.
                 let mut consumed = vec![false; n];
-                for k in 0..n {
+                for k in scc_dependency_order(&adj, &sccs) {
                     if consumed[k] {
                         continue;
                     }
@@ -936,13 +946,39 @@ fn expand_scope(
                     for &m in scc {
                         consumed[m] = true;
                     }
-                    if scc.len() == 1 {
+                    // Existing singleton view/let recursion has its own
+                    // spec-aware elaboration path.  Self edges are newly
+                    // routed through the group/SCT seam only for proof
+                    // declarations; multi-member SCCs remain shared.
+                    let recursive = scc.len() > 1
+                        || (adj[k].contains(&k)
+                            && matches!(
+                                rdecls[k].kind,
+                                RDeclKind::Lemma | RDeclKind::AttachedProof { .. }
+                            ));
+                    if !recursive {
                         let rdecl = &rdecls[k];
                         let result = elaborate_checked(elab, rdecl)?;
                         ids.push(result);
                     } else {
                         let members: Vec<crate::resolve::RDecl> =
                             scc.iter().map(|&m| rdecls[m].clone()).collect();
+                        let has_proof = members.iter().any(|rdecl| {
+                            matches!(
+                                rdecl.kind,
+                                RDeclKind::Lemma | RDeclKind::AttachedProof { .. }
+                            )
+                        });
+                        let has_computational = members.iter().any(|rdecl| {
+                            matches!(rdecl.kind, RDeclKind::Let | RDeclKind::View { .. })
+                        });
+                        if has_proof && has_computational {
+                            return Err(ElabError::TypeMismatch {
+                                span: members[0].span.clone(),
+                                reason: "mixed fn/const and proof recursive cycle is not supported"
+                                    .to_string(),
+                            });
+                        }
                         let mut group_effect_rows = elab.effect_rows.clone();
                         for rdecl in &members {
                             if let Some(row) = crate::elab::surface_declared_row_type(rdecl)? {
@@ -956,12 +992,14 @@ fn expand_scope(
                         // is out of this WP's scope; fail clearly rather
                         // than silently dropping its obligation.
                         for rdecl in &members {
-                            let simple_kind = matches!(&rdecl.kind, RDeclKind::Let)
-                                || matches!(
-                                    &rdecl.kind,
-                                    RDeclKind::View { constraints, is_space_op, .. }
-                                        if constraints.is_empty() && !is_space_op
-                                );
+                            let simple_kind = matches!(
+                                &rdecl.kind,
+                                RDeclKind::Let | RDeclKind::Lemma | RDeclKind::AttachedProof { .. }
+                            ) || matches!(
+                                &rdecl.kind,
+                                RDeclKind::View { constraints, is_space_op, .. }
+                                    if constraints.is_empty() && !is_space_op
+                            );
                             let has_refine_return = rdecl
                                 .ty
                                 .as_ref()
@@ -1153,6 +1191,41 @@ fn scc_membership(adj: &[Vec<usize>]) -> Vec<Vec<usize>> {
             members
         })
         .collect()
+}
+
+/// Return one representative per SCC in dependency-first order.  An edge
+/// `a -> b` means that `a`'s body uses `b`, so `b` must be elaborated first.
+/// Members of an SCC are still elaborated together by the SCT path.
+fn scc_dependency_order(adj: &[Vec<usize>], sccs: &[Vec<usize>]) -> Vec<usize> {
+    let mut representatives = Vec::new();
+    for (node, scc) in sccs.iter().enumerate() {
+        if scc[0] == node {
+            representatives.push(node);
+        }
+    }
+    let mut order = Vec::new();
+    let mut seen = vec![false; adj.len()];
+    fn visit(
+        node: usize,
+        adj: &[Vec<usize>],
+        sccs: &[Vec<usize>],
+        seen: &mut [bool],
+        order: &mut Vec<usize>,
+    ) {
+        let rep = sccs[node][0];
+        if seen[rep] {
+            return;
+        }
+        seen[rep] = true;
+        for &dep in &adj[node] {
+            visit(dep, adj, sccs, seen, order);
+        }
+        order.push(rep);
+    }
+    for node in representatives {
+        visit(node, adj, sccs, &mut seen, &mut order);
+    }
+    order
 }
 
 /// Entry point: expand + elaborate one `elaborate_*` call's raw decls
