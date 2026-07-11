@@ -33,22 +33,20 @@ on the `Bool`/`OrdResult` comparisons — no new capability needed.
    `compare x y = Eq → Equal a x y` (via `d.antisym`) and the `Lt`/`Gt` arms'
    agreement with `leq` — the dependent case-analysis on the two stuck `leq`
    `Bool`s is exactly the `case_eq` modifier's job (`match (d.leq x y) eqn: h …`).
-2. **Rework Collections onto `compare` — ⚠ CONDITIONAL / DEFERRED (Steward scope
-   ruling, 2026-07-11; `evt_51tab3rqj126s`).** On grounded pickup Foundation found
-   this **inverts the load order**: Collections sits *below* LawfulClasses (Lawful
-   consumes Collections' `OrdResult`/`list_eq`), so routing Collections' own
-   comparators through an `Ord`-dict-derived `compare` that lives in Lawful creates
-   a **dependency cycle**. **Ruling: ship bricks 1 + 3 without brick 2** (neither
-   needs it). Brick 2 **waits on the Architect's topology ruling** on the home of
-   `OrdResult`/`Ord`/derived-`compare`: if a cheap base-module home both files can
-   depend on exists, fold it back in; if it needs a module relocation, brick 2
-   becomes a **separate follow-on WP** (Steward-framed) — never weakened, never
-   papered, never forced into a cycle. **Do not attempt the Collections routing
-   until the Architect rules.** _Original intent (deferred):_ route `list_compare`
-   (`Collections.ken.md:753`) and `String.compare` (`:805`) through the canonical
-   derived `compare` where a dictionary is available, so the 3-way comparison is
-   *one* operation; `compare_char` (`:766`) stays the `Char` primitive;
-   behavior-preserving.
+2. **Rework Collections onto `compare` — RESOLVED acyclic (Architect ruling
+   `evt_4p2683wvtwwcc`, 2026-07-11): no cycle, no relocation, absorbed into brick
+   3.** The earlier cycle worry was the wrong reading: `list_compare`
+   (`Collections.ken.md:753`) is **already raw-`cmp`-parameterized**
+   (`cmp : a → a → OrdResult`), exactly as `list_eq` takes a raw `eqf` and never
+   calls `DecEq`. So the canonical routing happens at the **instance layer** —
+   `Ord (List a)` builds its element-comparator from the canonical `compare` and
+   **threads it into the unchanged `list_compare`** (single source of truth, **zero
+   Collections→Lawful edge**). **Collections' bodies are NOT edited** — a Collections
+   body calling the Lawful `compare` is the one forbidden shape. `String.compare`
+   keeps `compare_char` (`:766`) local; the canonical-String equivalence lemma is
+   **out of scope** (unneeded without lawful `Ord String` — the DecEq-Char caveat).
+   Brick 2 is therefore **not a separate follow-on** — its substance is the
+   instance-threading in brick 3.
 3. **Lexicographic `Ord (Pair a b)` and `Ord (List a)`.** The flagship: real
    `instance Ord (Pair a b)` and `instance Ord (List a)` (lexicographic order
    from the component/element `Ord` dictionaries), each with **all four laws**
@@ -102,11 +100,11 @@ on the `Bool`/`OrdResult` comparisons — no new capability needed.
 - **AC1 — lawful generic `compare`.** Derived `compare` + its soundness lemmas
   (`= Eq → Equal`, `Lt`/`Gt` vs `leq`) elaborate + kernel-check; real proof
   terms, no `Axiom`/`Refl`-paper on a general statement.
-- **AC2 — Collections unified (CONDITIONAL — deferred pending Architect topology
-  ruling; see brick 2).** *If* the Architect rules a cycle-free home for the
-  canonical `compare`: `list_compare`/`String.compare` route through it, behavior
-  unchanged (green suites). Otherwise AC2 moves to a follow-on WP — not a Track-A
-  blocker; bricks 1 + 3 (AC1, AC3–AC5) are the committed deliverables.
+- **AC2 — canonical `compare` single-sourced, acyclic (instance-threaded).** The
+  canonical `compare` (in LawfulClasses) is the single source of truth; `Ord
+  (List a)` threads it into the **unchanged** raw-`cmp` `list_compare` — no
+  Collections body edit, no cycle. `list_compare`/`String.compare` stay
+  comparator-parameterized (`compare_char` local). (Architect `evt_4p2683wvtwwcc`.)
 - **AC3 — lexicographic `Ord` instances.** `instance Ord (Pair a b)` and
   `instance Ord (List a)` with **all four laws** proved as real terms (the
   Architect greps the tangled code for `Axiom`/`Refl`-paper). Any law that hits a
