@@ -704,7 +704,13 @@ fn rewrite_rdecl(
             head_type: rewrite_rtype(scope, exports, head_type)?,
             constraints: constraints
                 .into_iter()
-                .map(|(c, t)| Ok((c, rewrite_rtype(scope, exports, t)?)))
+                .map(|constraint| {
+                    Ok(crate::resolve::RInstanceConstraint {
+                        class_name: constraint.class_name,
+                        head_type: rewrite_rtype(scope, exports, constraint.head_type)?,
+                        binder: constraint.binder,
+                    })
+                })
                 .collect::<Result<Vec<_>, ElabError>>()?,
             fields: fields
                 .into_iter()

@@ -84,6 +84,14 @@ pub struct RClassField {
     pub ty: RType,
 }
 
+/// A resolved prerequisite dictionary on an instance declaration.
+#[derive(Clone, Debug)]
+pub struct RInstanceConstraint {
+    pub class_name: String,
+    pub head_type: RType,
+    pub binder: String,
+}
+
 /// Discriminates the declaration kind for elaboration dispatch.
 #[derive(Clone, Debug)]
 pub enum RDeclKind {
@@ -155,8 +163,8 @@ pub enum RDeclKind {
         /// Each is implicitly bound at `Type0`.
         head_params: Vec<String>,
         head_type: RType,
-        /// Resolved constraint list: (class_name, head_type).
-        constraints: Vec<(String, RType)>,
+        /// Resolved constraint list, in source order.
+        constraints: Vec<RInstanceConstraint>,
         /// Resolved field implementations: (name, expr).
         fields: Vec<(String, RExpr)>,
     },
@@ -270,7 +278,7 @@ impl RType {
 // ----- scope -----
 
 #[derive(Clone)]
-struct Scope(Vec<String>);
+struct Scope(Vec<Vec<String>>);
 
 impl Scope {
     fn new() -> Self {
@@ -278,7 +286,18 @@ impl Scope {
     }
 
     fn push(&mut self, name: &str) {
-        self.0.push(name.to_string());
+        self.0.push(vec![name.to_string()]);
+    }
+
+    fn push_alias(&mut self, alias: &str, name: &str) {
+        if let Some(names) = self
+            .0
+            .iter_mut()
+            .rev()
+            .find(|names| names.iter().any(|n| n == name))
+        {
+            names.push(alias.to_string());
+        }
     }
 
     fn pop(&mut self) {
@@ -286,7 +305,10 @@ impl Scope {
     }
 
     fn index_of(&self, name: &str) -> Option<usize> {
-        self.0.iter().rev().position(|n| n == name)
+        self.0
+            .iter()
+            .rev()
+            .position(|names| names.iter().any(|n| n == name))
     }
 
     fn depth(&self) -> usize {
@@ -299,6 +321,13 @@ fn is_instance_head_param(name: &str) -> bool {
         .next()
         .map(|c| c == '_' || c.is_ascii_lowercase())
         .unwrap_or(false)
+}
+
+fn auto_instance_constraint_binder(ty: &Type) -> Option<String> {
+    match ty {
+        Type::TVar(name, _) if is_instance_head_param(name) => Some(format!("d{name}")),
+        _ => None,
+    }
 }
 
 fn collect_instance_head_params(ty: &Type, out: &mut Vec<String>) {
@@ -1101,13 +1130,39 @@ pub fn resolve_decl(decl: &Decl) -> Result<RDecl, ElabError> {
                 scope.push(param);
             }
             let rhead = resolve_type(&mut scope, head_type)?;
-            let rconstraints = constraints
-                .iter()
-                .map(|(cname, cty)| {
-                    let rty = resolve_type(&mut scope, cty)?;
-                    Ok((cname.clone(), rty))
-                })
-                .collect::<Result<Vec<_>, _>>()?;
+            let mut rconstraints = Vec::with_capacity(constraints.len());
+            let mut binder_names = std::collections::HashSet::new();
+            for constraint in constraints {
+                let rty = resolve_type(&mut scope, &constraint.head_type)?;
+                let binder = match &constraint.binder {
+                    Some(name) => name.clone(),
+                    None => auto_instance_constraint_binder(&constraint.head_type).ok_or_else(|| {
+                        ElabError::ParseError {
+                            msg: "an instance constraint whose argument is not a single type variable requires an explicit named binder".to_string(),
+                            span: constraint.head_type.span().clone(),
+                        }
+                    })?,
+                };
+                if !binder_names.insert(binder.clone()) {
+                    return Err(ElabError::ParseError {
+                        msg: format!(
+                            "duplicate or ambiguous instance dictionary binder '{binder}'"
+                        ),
+                        span: constraint.head_type.span().clone(),
+                    });
+                }
+                rconstraints.push(RInstanceConstraint {
+                    class_name: constraint.class_name.clone(),
+                    head_type: rty,
+                    binder,
+                });
+            }
+            for constraint in &rconstraints {
+                scope.push(&constraint.binder);
+            }
+            if rconstraints.len() == 1 && rconstraints[0].binder != "d" {
+                scope.push_alias("d", &rconstraints[0].binder);
+            }
             let rfields = fields
                 .iter()
                 .map(|(fname, expr)| {

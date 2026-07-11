@@ -165,6 +165,9 @@ fn ac3_overlap_check_first_ok_second_errors() {
             class_name: "Eq2".to_string(),
             field_effect_rows: vec![],
             module_id: 0,
+            head_param_count: 0,
+            head_type: None,
+            constraints: vec![],
         },
     );
     // Now try to declare a second instance for (Eq2, Int) → OverlappingInstances.
@@ -231,6 +234,9 @@ fn ac4_property_vs_structure_sort_discriminant() {
             class_name: "Count2".to_string(),
             field_effect_rows: vec![],
             module_id: 0,
+            head_param_count: 0,
+            head_type: None,
+            constraints: vec![],
         },
     );
     let r4 = env_str.elaborate_decl("instance Count2 Int { n = n }");
@@ -326,14 +332,17 @@ fn ac5_explicit_bypasses_implicit_canonical() {
 fn ac6_sct_wellfounded_accepted_cyclic_rejected() {
     // (a) Non-self-ref constrained chain → real sct_check ACCEPTS.
     //
-    // instance SCTClass Bool where SCTClass Int { }
+    // instance SCTClass Bool where (d : SCTClass Int) { }
     //   constraint head (Int) ≠ instance head (Bool) → not direct-self-ref
     //   routes through declare_recursive_group (non-self-ref constrained path)
     //   body = pair-chain, no App(Const(own_id),...) → edges.is_empty() → accepts
     let mut env_a = mk_env();
     elab(&mut env_a, "class SCTClass A { }").unwrap();
     elab(&mut env_a, "instance SCTClass Int { }").unwrap();
-    let r_a = elab(&mut env_a, "instance SCTClass Bool where SCTClass Int { }");
+    let r_a = elab(
+        &mut env_a,
+        "instance SCTClass Bool where (d : SCTClass Int) { }",
+    );
     assert!(
         r_a.is_ok(),
         "AC6(a): non-self-ref constrained instance must be admitted via sct_check accept; got {:?}",
@@ -345,7 +354,7 @@ fn ac6_sct_wellfounded_accepted_cyclic_rejected() {
     // M=[[?]] self-loop → sct_check rejects.
     let mut env_b = mk_env();
     elab(&mut env_b, "class Recurse A { }").unwrap();
-    let r_b = env_b.elaborate_decl("instance Recurse Int where Recurse Int { }");
+    let r_b = env_b.elaborate_decl("instance Recurse Int where (d : Recurse Int) { }");
     assert!(
         matches!(r_b, Err(ElabError::NonTerminatingInstances { .. })),
         "AC6(b): direct self-referential instance must be rejected by sct_check; got {:?}",
