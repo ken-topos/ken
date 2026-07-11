@@ -772,6 +772,16 @@ fn is_qualifiable(decl: &Decl) -> bool {
     )
 }
 
+fn is_recursive_candidate(decl: &Decl) -> bool {
+    matches!(
+        decl,
+        Decl::ViewDecl { .. }
+            | Decl::LetDecl { .. }
+            | Decl::LemmaDecl { .. }
+            | Decl::AttachedProofDecl { .. }
+    )
+}
+
 fn register_effect_row(elab: &mut ElabEnv, result: &crate::elab::ElabResult) {
     if let Some(row) = &result.effect_row_type {
         elab.effect_rows.insert(result.name.clone(), row.clone());
@@ -876,24 +886,10 @@ fn expand_scope(
             // if the SCT check accepts the group"). A run with no actual
             // cycle degenerates to today's one-decl-at-a-time path, member
             // by member, byte-identical (AC3).
-            Decl::ViewDecl { .. }
-            | Decl::LetDecl { .. }
-            | Decl::LemmaDecl { .. }
-            | Decl::AttachedProofDecl { .. }
-                if !decl.is_pub() =>
-            {
+            _ if is_recursive_candidate(decl.unwrap_pub()) => {
                 let run_end = {
                     let mut e = i;
-                    while e < decls.len()
-                        && !decls[e].is_pub()
-                        && matches!(
-                            decls[e],
-                            Decl::ViewDecl { .. }
-                                | Decl::LetDecl { .. }
-                                | Decl::LemmaDecl { .. }
-                                | Decl::AttachedProofDecl { .. }
-                        )
-                    {
+                    while e < decls.len() && is_recursive_candidate(decls[e].unwrap_pub()) {
                         e += 1;
                     }
                     e
@@ -907,11 +903,11 @@ fn expand_scope(
                 let mut bare_names: Vec<String> = Vec::with_capacity(run.len());
                 let mut rdecls: Vec<crate::resolve::RDecl> = Vec::with_capacity(run.len());
                 for d in run {
-                    let bare = d.name().to_string();
-                    let renamed = qualify_decl_name(d, prefix);
+                    let inner = d.unwrap_pub();
+                    let renamed = qualify_decl_name(inner, prefix);
                     let rdecl = resolve::resolve_decl(&renamed)?;
                     let rdecl = rewrite_rdecl(scope, &elab.module_state.exports, rdecl)?;
-                    bare_names.push(bare);
+                    bare_names.push(rdecl.name.clone());
                     rdecls.push(rdecl);
                 }
 
@@ -1037,6 +1033,36 @@ fn expand_scope(
                             register_declared_effect_row(elab, rdecl)?;
                             ids.push(result);
                         }
+                    }
+                }
+                // Public definitions participate in the same scope-wide
+                // admission run; publish their already-elaborated canonical
+                // names only after the run succeeds, preserving the module
+                // export boundary while allowing forward references.
+                for (d, rdecl) in run.iter().zip(&rdecls) {
+                    if !d.is_pub() {
+                        continue;
+                    }
+                    let inner = d.unwrap_pub();
+                    if let Decl::AttachedProofDecl {
+                        subject,
+                        proof_name,
+                        ..
+                    } = inner
+                    {
+                        let subject_is_public = exports_here.contains_key(subject)
+                            || run.iter().any(|candidate| {
+                                candidate.is_pub() && candidate.unwrap_pub().name() == subject
+                            });
+                        if !subject_is_public {
+                            return Err(ElabError::UnboundName {
+                                name: subject.clone(),
+                                span: inner.span().clone(),
+                            });
+                        }
+                        exports_here.insert(format!("{subject}::{proof_name}"), rdecl.name.clone());
+                    } else {
+                        exports_here.insert(inner.name().to_string(), rdecl.name.clone());
                     }
                 }
                 i = run_end;

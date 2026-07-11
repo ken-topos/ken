@@ -29,6 +29,24 @@ fn structural_and_forward_proof_definitions_elaborate() {
 }
 
 #[test]
+fn public_module_definitions_receive_the_same_forward_admission() {
+    let mut elab = env();
+    elab.elaborate_file(
+        r#"
+        module M {
+          pub lemma use_later (x : Int) : Equal Int (later x) x = later_refl x
+          pub fn later (x : Int) : Int = x
+          pub lemma later_refl (x : Int) : Equal Int (later x) x = Refl
+        }
+        "#,
+    )
+    .expect("public definitions must use scope-wide forward admission");
+    assert!(elab.globals.contains_key("M.use_later"));
+    assert!(elab.globals.contains_key("M.later"));
+    assert!(elab.globals.contains_key("M.later_refl"));
+}
+
+#[test]
 fn homogeneous_mutual_proofs_admit_but_non_descending_proofs_fail_at_sct() {
     let mut elab = env();
     elab.elaborate_file(
