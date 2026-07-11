@@ -125,8 +125,18 @@ on the `Bool`/`OrdResult` comparisons — no new capability needed.
 - **AC2 — canonical `compare` single-sourced, acyclic (instance-threaded).** The
   canonical `compare` (in LawfulClasses) is the single source of truth; `Ord
   (List a)` threads it into the **unchanged** raw-`cmp` `list_compare` — no
-  Collections body edit, no cycle. `list_compare`/`String.compare` stay
-  comparator-parameterized (`compare_char` local). (Architect `evt_4p2683wvtwwcc`.)
+  Collections **comparator-body** edit, no cycle. `list_compare`/`String.compare`
+  stay comparator-parameterized (`compare_char` local). **Permitted additive
+  exception (Architect `evt_3vygqece6p4ax`):** because Ken's flat namespace lets
+  `class Eq` (LawfulClasses) shadow the `OrdResult` constructor `Eq` (Collections)
+  downstream, add `const ord_eq/ord_lt/ord_gt : OrdResult` value aliases in
+  Collections **before `class Eq`** and consume them **downward** from
+  LawfulClasses. These are pure `const … = <ctor>` (zero-TCB, no rename, no
+  Collections→Lawful edge — opposite direction from the forbidden cycle), so the
+  "no comparator-body edit" pin is intact. `OrdResult` **pattern-matching stays in
+  Collections**; LawfulClasses reasons at the **value** level (`compare_raw … =
+  ord_eq`), using `OrdResult`'s eliminator (never a bare `Eq` pattern) if it must
+  dispatch. (Architect `evt_4p2683wvtwwcc`, `evt_3vygqece6p4ax`.)
 - **AC3 — lexicographic `Ord` instances.** `instance Ord (Pair a b)` and
   `instance Ord (List a)` with **all four laws** proved as real terms (the
   Architect greps the tangled code for `Axiom`/`Refl`-paper). Any law that hits a
