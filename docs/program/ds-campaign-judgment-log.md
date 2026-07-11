@@ -653,3 +653,64 @@ artifact; keep it current.
 - **Why:** `06`/program-doc home the catalog at Foundation; fragmenting
   authoring across idle teams would cost coherence for throughput.
 - **Reversibility:** easy.
+
+---
+
+## Autonomous window 2 — 2026-07-11 (~04:20 UTC → operator back ~11:00 UTC)
+
+**Operator direction (locked):** two tracks; Track 1 (case_eq cleanup) sequenced
+in front of Track 3 (Nat laws + DS-8c) as **Track B**; **Track A** (compare/Ord)
+as-is; **formatter FULLY HELD** until the operator returns; maintain this decision
+log; watch for a **2nd occurrence of any hand-rolled idiom** → track it + route
+the shape to the Architect ([[second-occurrence-of-idiom-is-a-language-feature-signal]]).
+
+### D2 · Two-track allocation across three teams (Steward)
+- **Track A → Foundation:** `compare-ord-lexicographic` (PR #491) — lawful 3-way
+  derived `compare`, rework Collections onto it, lexicographic `Ord (Pair)/(List)`
+  + 4 laws.
+- **Track B / Ergo (serial, operator order):** `case-eq-adoption` (PR #489,
+  **KICKED**) → Nat arithmetic-laws package (to frame) → **DS-8c** (framed).
+- **Track B / Language (parallel):** `def-path-constraint-binder-unification`
+  (PR #490, **KICKED**).
+- **Reversibility:** easy (re-sequenceable).
+
+### D3 · DS-8c reassigned Foundation → Ergo (Steward)
+- **Call:** DS-8c's frame says Owner=Foundation (its DS-8 context), but Foundation
+  carries Track A. To honor the Track-B serial sequencing (case_eq → Nat → DS-8c
+  on ONE lane) AND keep Foundation on the flagship, DS-8c moves to **Ergo** as its
+  3rd serial item (within landed `fn`-synonym scaffolding; frame unchanged).
+- **Reversibility:** easy (only the owning ring differs).
+
+### D4 · Track A needs NO Architect pre-shape — `class Ord` is spec-settled (Steward)
+- **Call:** `compare`-vs-`leq` primacy is **not open** — spec `51 §2.3` rules
+  `leq` primitive, 3-way `cmp` "a derivable convenience." So Track A is
+  **additive** (lexicographic `leq`-based `Ord` instances + derived `compare`),
+  framed with that pinned; the Architect gates the lex-law **proofs** at merge,
+  not the class shape. (Corrected an earlier instinct to route a shaping pass —
+  that would have relitigated a decided fork.)
+- **Reversibility:** N/A (following landed spec).
+
+### D5 · Post-compact re-orient hook — discipline → machinery (operator-requested)
+- **Call:** built + landed (`main @ 7b8ec13b`) a fleet-wide `SessionStart` hook
+  (Claude Code `.claude/settings.json` + Codex `.codex/hooks.json` + shared
+  `scripts/hooks/reorient-post-compact.sh`) re-injecting the CLAUDE.md re-orient
+  directive after every compaction. Per-seat prereqs (NOT repo-shippable): Codex
+  ≥0.129 + one-time `/hooks` trust; activates per-seat on next session (re)start.
+- **Reversibility:** easy (additive config, revert-clean).
+
+### Coordination faults (this window)
+- **foundation-implementer §10 retro DROPPED** on `message_type:"handoff"` then
+  `"retrospective"` (both 400 — closed enum); seat idle believing it posted. I
+  **relayed it** (attributed) to close the ring. Every kickoff this window now
+  carries an explicit `message_type`-enum warning.
+
+### Run status / next triggers (event-driven)
+- **KICKED & MOVING:** Ergo (`case-eq-adoption` — leader kicked ring, qa at
+  review gate); Language (`def-path binder` — roused).
+- **PENDING kick:** Foundation Track A — frame on `main`; compact+kick once the
+  leader posts its coordination retro + signals "retros in" (implementer retro
+  relayed; qa in).
+- **Queued (not kicked):** Nat laws (frame TBD), DS-8c (framed) — Ergo serial,
+  after case_eq adoption.
+- Watchdog armed (branch tips + main advances). **Formatter HELD.** Operator back
+  ~11:00 UTC — this log is the review artifact.
