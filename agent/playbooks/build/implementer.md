@@ -51,9 +51,9 @@ publishes and merges.
    an un-invoked `check_respect` admitted a closed `Empty`). Either **gate the
    reduction** on the check or **reject the case** (return stuck/`Err`) — and add
    the adversarial test that the gap would mis-accept. **Test the boundaries, not
-   just typical magnitudes** — at-limit, limit±1, empty, and oversized inputs (K3:
-   a `>4 MiB` value underflowed the arena, untested because the max test value was
-   8 KiB; the Architect caught it). Keep the change small.
+   just typical magnitudes** — at-limit, limit±1, empty, and oversized inputs
+   (K3: a `>4 MiB` value underflowed the arena, untested because the max test
+   value was 8 KiB; the Architect caught it). Keep the change small.
 5. **Commit to `wp/<ID>` before you hand off** — never hand off uncommitted work
    (the next agent and the publisher path only see committed state). Cite the WP ID,
    acceptance criteria met, and your spec sources in the commit/handoff.
@@ -61,12 +61,13 @@ publishes and merges.
    can't hold one branch), then **hand off and stop** (template below). Set
    status, wait for notification. **Keep your status *current* — update it the
    moment you change state (promoted V2-build).** A status left stale on a
-   *finished* WP while you work silently on the next makes a stall **undiagnosable**:
-   your leader's watchdog sees "silent + status says old-WP" and can't tell
-   deep-work from wedged (V2-build: an implementer silent 27 min with a status
-   still showing V1 — the leader had to nudge to disambiguate). Silence is only
-   safe when your status accurately says what you're doing; `update_status` on
-   every pickup/handoff/block so silence + status stay consistent.
+   *finished* WP while you work silently on the next makes a stall
+   **undiagnosable**: your leader's watchdog sees "silent + status says old-WP"
+   and can't tell deep-work from wedged (V2-build: an implementer silent 27 min
+   with a status still showing V1 — the leader had to nudge to disambiguate).
+   Silence is only safe when your status accurately says what you're doing;
+   `update_status` on every pickup/handoff/block so silence + status stay
+   consistent.
 
 ## Keep working until blocked or done — don't yield mid-assignment
 
@@ -78,13 +79,24 @@ cadence is the trap — after one commit or one sub-step you tend to post
 not self-executing**; you actually stop and wait. Don't. **Exhaust the
 assignment you were handed before you yield.**
 
+**The operative framing (operator-validated 2026-07-11):** keep **this turn
+active** through the *entire* assignment chain — migrate → validate → rebase
+→ commit → hand off — and do **not** *end the turn* until that final handoff.
+Naming the whole chain and holding one continuous turn across it is what
+prevents the premature stop. Asked "why do you keep stopping?", a seat that had
+been ending turns early answered: *"I ended turns before completing the handoff
+— I'll keep this turn active through the remaining migration, validation,
+rebase, commit, and QA handoff."* That is the correct posture. Treat "end the
+turn" as an action you take **only at the handoff boundary**, never after a
+sub-step.
+
 - If your assignment is **multi-step or batched** (land laws 1/2/3, sweep files
-  A/B/C, apply a fix then run its test), do the **whole** batch in one continuous
-  run — commit each item, then immediately proceed to the next. Do **not** wait
-  for a per-item "proceed" signal; the leader's kickoff granting the batch *is*
-  the proceed signal for every item in it. (Live miss: a batch sat ~20 min idle
-  between items because each waited for a nudge that the kickoff had already
-  given — see the leader-side batched-plan lesson.)
+  A/B/C, apply a fix then run its test), do the **whole** batch in one
+  continuous run — commit each item, then immediately proceed to the next. Do
+  **not** wait for a per-item "proceed" signal; the leader's kickoff granting
+  the batch *is* the proceed signal for every item in it. (Live miss: a batch
+  sat ~20 min idle between items because each waited for a nudge that the
+  kickoff had already given — see the leader-side batched-plan lesson.)
 - **Yield only on a genuine boundary:** (a) the assignment is fully done and
   handed off; (b) you're blocked on something you legitimately cannot resolve —
   a Spec/Architect ruling, a not-yet-landed dependency, a merge you don't own;
@@ -169,9 +181,9 @@ lessons to the other teams.
   prose may over-state. (ES2: `isSorted`/`Perm`'s landed call sites thread a
   2-arg no-comparator surface, while `§37` sketched a future `Π{a}. Ord a => …`
   shape — grepping the call sites turned "guess the signature" into a fast,
-  unambiguous escalation of the *real* fork instead of a unilateral break of two
-  landed tests.) When the call-site signature and the spec's aspirational shape
-  diverge, the call sites win — or escalate the fork, don't guess. The
+  unambiguous escalation of the *real* fork instead of a unilateral break of
+  two landed tests.) When the call-site signature and the spec's aspirational
+  shape diverge, the call sites win — or escalate the fork, don't guess. The
   postulate→def direction of the grep-init-sites rule above.
 - **A special code path does NOT inherit the invariants that hold on the generic
   path for free — re-derive each one against the special path explicitly
@@ -179,28 +191,30 @@ lessons to the other teams.
   case (not routed through the shared/generic logic), an invariant you got right
   everywhere else does **not** automatically transfer to it. (ES3: abstract-export
   declared `T` as `Decl::Opaque` via a **new** branch that bypassed the generic
-  `_root_exports` machinery — so "pub is inert at the true file root," correct for
-  every other decl kind, silently didn't apply → a top-level `pub data T = MkT`
-  reinterpreted `T` as an opaque constant and **dropped `MkT` with zero
-  diagnostic**, a silent data loss reachable by ordinary syntax and invisible to a
-  seed suite that only exercised `data` *inside* a module.) For each special-cased
-  branch, **enumerate the invariants the generic path enforces and check each one
-  holds on the special path** — don't assume "I got the rule right elsewhere."
+  `_root_exports` machinery — so "pub is inert at the true file root," correct
+  for every other decl kind, silently didn't apply → a top-level
+  `pub data T = MkT` reinterpreted `T` as an opaque constant and **dropped `MkT`
+  with zero diagnostic**, a silent data loss reachable by ordinary syntax and
+  invisible to a seed suite that only exercised `data` *inside* a module.) For
+  each special-cased branch, **enumerate the invariants the generic path
+  enforces and check each one holds on the special path** — don't assume "I got
+  the rule right elsewhere."
 - **An existing landed feature that LOOKS like precedent may be a different
   kernel mechanism underneath — try the smallest repro of the NEW shape before
-  assuming a pattern generalizes (promoted ES4-classes-build; the Ω-motive gap).**
-  Before building law-proofs, "`isSorted`/`Perm` already case-split into Ω, so
-  this is supported" *looked* right but was subtly false: they eliminate into
-  `Type(1)` with a **type-selecting constant motive** ("compute *which* prop") —
-  never a **per-branch-varying** proof motive (`D → Ω_l`), which the kernel's
-  `infer_motive_level` rejected outright. A surface resemblance ("also involves
-  match + Ω") hid a completely different, non-transferable mechanism. **Don't read
-  "the kernel can('t) do X" off a doc comment or an analogy — prove it with a
-  minimal empirical repro of the exact new shape**, and trace the real rejection
-  message line-by-line. Cheap, and it's what turned a vague "seems supported" into
-  a precise, falsifiable escalation the Architect could rule on fast.
-- **Flag-vs-block calibration: routine completion of an already-assumed mechanism
-  is flag-and-continue; a genuine capability/soundness question is
+  assuming a pattern generalizes (promoted ES4-classes-build; the Ω-motive
+  gap).** Before building law-proofs, "`isSorted`/`Perm` already case-split into
+  Ω, so this is supported" *looked* right but was subtly false: they eliminate
+  into `Type(1)` with a **type-selecting constant motive** ("compute *which*
+  prop") — never a **per-branch-varying** proof motive (`D → Ω_l`), which the
+  kernel's `infer_motive_level` rejected outright. A surface resemblance ("also
+  involves match + Ω") hid a completely different, non-transferable mechanism.
+  **Don't read "the kernel can('t) do X" off a doc comment or an analogy — prove
+  it with a minimal empirical repro of the exact new shape**, and trace the real
+  rejection message line-by-line. Cheap, and it's what turned a vague "seems
+  supported" into a precise, falsifiable escalation the Architect could rule on
+  fast.
+- **Flag-vs-block calibration: routine completion of an already-assumed
+  mechanism is flag-and-continue; a genuine capability/soundness question is
   stop-and-escalate (promoted ES4-classes-build).** Adding `leq_int` (the spec
   already assumed an Int ordering primitive; only `eq_int` was wired) mirroring
   the existing pattern and **flagging it clearly in `merge_ready`** was right —

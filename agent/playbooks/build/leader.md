@@ -35,7 +35,8 @@ publisher path owns `main` mechanics and the Architect owns design judgment. Rea
   shortcut. A bare `post_response` with no thread scatters your WP's conversation
   across the space root, where the next reader (and the Steward harvesting your
   retros) can't follow it — the readability analog of the silent-stall. If your
-  own kickoff was unthreaded, open a WP thread on pickup and keep the ring in it.
+  own kickoff was unthreaded, open a WP thread on pickup and keep the ring in
+  it.
 - **Pipeline-ready predicate:** when a WP finishes, auto-start the next *ready*
   WP without waiting on the operator. Ready = scope/spec exists, open questions
   resolved, dependencies merged to `main`, no operator pause.
@@ -90,6 +91,18 @@ ruling down to a member, **paste the verbatim artifact in-thread** — never
 event-by-ID retrieval is unreliable; a pointer strands them and forces a
 re-ask round-trip (2026-07-11). Hand the mechanism, not a reference to it (the
 Architect delivers to you the same way).
+
+**Phrase a multi-step handoff to keep the turn ACTIVE (operator-validated
+2026-07-11).** Terra/Codex implementer and QA seats read turn/handoff framing as
+license to *end the turn* after one sub-step, then sit idle waiting for a rouse.
+So when you hand off a multi-step assignment (a migration, a batch, a
+fix-then-test), phrase it to hold **one continuous turn**: *"keep your turn active
+through completion — do not end your turn until you've migrated, validated,
+rebased, committed, and handed back the SHA."* Name the whole chain and forbid
+ending the turn before the final handoff; that one framing is what keeps a Codex
+seat working straight through instead of stalling every sub-step onto your (or
+the Steward's) watchdog. Mirror of the build-implementer "keep this turn active"
+discipline.
 
 **Your watchdog is driven by the external watchdog-wake SCRIPT, not
 `CronCreate` (operator, 2026-07-11).** A terra/Codex leader seat doesn't
@@ -204,9 +217,9 @@ merge + ship Event. You never run `gh` or read checks yourself.
     a **crates-only** build WP (it *implements* an already-merged spec without
     changing it) is **Architect + CI, no Spec vote** (the K3/V0 ruling; the kernel
     re-checks anything it produces). Requesting a Spec vote you don't need invites
-    a stall — the reviewer may be compacted onto its next WP — and the Steward had
-    to correct exactly this post-hoc on **both K3 and V0**. The one-line check at
-    Decision time removes that window.
+    a stall — the reviewer may be compacted onto its next WP — and the Steward
+    had to correct exactly this post-hoc on **both K3 and V0**. The one-line check
+    at Decision time removes that window.
   The publisher path pushes, gates, and merges. **Relay any change-request or
   CI-red back to your implementer as a mootup mention** — they never see GitHub
   (COORDINATION §14). You do **not** push or merge.
