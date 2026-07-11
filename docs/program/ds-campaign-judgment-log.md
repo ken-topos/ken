@@ -816,32 +816,102 @@ no modifier/kernel work for Map.
   `"retrospective"` (both 400 — closed enum); seat idle believing it posted. I
   **relayed it** (attributed) to close the ring. Every kickoff this window now
   carries an explicit `message_type`-enum warning.
+- **Gt "falsification" was an offset-drift span mis-attribution (2nd attribution
+  artifact in compare-ord brick 1).** The Architect set a falsifiable condition
+  ("if my exact bound-var helper still red-lines in the full load, THAT is K6
+  evidence"); Foundation applied the helper verbatim, the full
+  `structural_deceq_acceptance` still `KernelRejected TypeMismatch`, byte-span
+  `25526–26012` → the pre-existing **Pair** section. Foundation correctly
+  re-escalated per the Architect's own directive (NOT a crying-wolf fault). The
+  Architect then dissolved it (`evt_5qht368tv6g0`): the baseline suite is **green
+  at `9b09124d` WITHOUT** the new compare/Ord/Gt section, so the red is the
+  **uncommitted new section**, and the Pair-section span is **offset drift** —
+  inserting a new block *before* a section shifts every downstream byte offset, so
+  the kernel's reported span lands in innocent (green-on-main) bytes. **Reusable
+  diagnostic for a full-`.md`-load red: (1) is the baseline green without the new
+  section? then the new section is the cause regardless of the span; (2) bisect the
+  new section; (3) never trust a byte-span that points into code that was green on
+  the base ref.** Concrete lead the Architect flagged: flat-namespace collision
+  (candidate #1 class — redefined `bool_or`/`bool_or_false_total`) or the OrdResult
+  `Eq`/`Lt`/`Gt` alias discipline (`evt_3vygqece6p4ax`) not applied. Candidate #2
+  (K6) **unchanged** — routes around cleanly, no Kernel trigger.
+  **RESOLVED (`evt_40ydcv9a45yjd`, reproduced red→green):** neither lead — the
+  Architect's own bisection (helper+aliases green; first flip = `compare_gt_sound_raw`)
+  localized it to a **local incomplete-discrimination proof bug** (the `Inl` arm
+  left `compare_second_result (leq y x)` stuck; fix = nested `bool_dichotomy`, the
+  Eq lemma's own idiom). **The pattern is now 3-for-3: every assembled-load red on
+  compare-ord brick 1 was LOCAL — namespace shadow (esc #3), offset-drift span
+  misread, incomplete-discrimination proof bug — and ZERO were the kernel.** The
+  standing coaching for this class of catalog-proof WP: a full-`.md`-load
+  `KernelRejected` is almost never a capability/K6 gap; **reproduce + bisect
+  locally against the green base ref FIRST** (the Architect did each time and the
+  helper/kernel was always innocent), and treat a byte-span into base-green code as
+  offset drift, not the cause. Foundation's refusal-to-paper discipline stayed
+  correct throughout; the lever is cheaper self-triage before pulling the Architect
+  (the most expensive unit) — the isolate-before-escalate lesson, now well-earned.
 
-### Run status / next triggers (event-driven) — updated ~09:45 UTC
-- **MERGED:** Language `def-path-constraint-binder-unification` (`41df4e62`, retros
-  in); playbook watchdog hardening (`bc1c0643`); **Ergo `case-eq-adoption`
-  (`9b09124d`, PR #501, CI-green)** — the 2 small sites (EmptyDec + LawfulClasses
-  `list_deceq`), Map dropped (D7); **Track-A merge anchor now landed.** Rebased the
-  approved `18bd3ff6` onto current main via cherry-pick (it had drifted behind my
-  re-scope doc merges — honesty gate caught it). **Retro pending** → chasing
-  ergo-leader to close. Enclave still holds the Language spec parity clause
-  (`32`/`33`) → CV verdict → `git_request`.
-- **ACTIVE — Foundation `compare-ord-lexicographic` (bricks 1+3):** brick 1 on the
-  unbundled raw-`leq` shape (D6) — raw **Eq/Lt green**; **Gt totality-transport
-  ESCALATED to Architect** (`evt_1zhr1kb4yyddr`): the outer fresh-`Bool` `J` fails
-  at the final neutral-equality composition (`leq x y = False`), K6-adjacent, local
-  techniques exhausted. Awaiting Architect ruling: shape-that-avoids vs genuine-K6
-  → size-defer Gt+lex vs prioritize the K6 Kernel WP. Foundation holds Eq/Lt green.
-- **NEXT — release Nat-arithmetic-laws to Ergo:** framed on `main`,
-  case_eq-INDEPENDENT; Ergo is now free (case-eq-adoption merged). Gated on the
-  **ergo retro in** → then Handoff Gate (compact ergo ring) → kick. DS-8c (Ergo,
-  last) after.
-- **Next gate events:** ergo case-eq-adoption **retro** (close); Architect **Gt
-  ruling**; Foundation bricks-1+3 `git_request` (Track A rebases its `Ord`-instances
-  hunk onto `9b09124d`); Language spec-clause CV verdict.
-- **Forward candidates: 3** (Kernel K6 #2; Language modifier-whnf #1 — Map did NOT
-  bump it, see correction; Language namespace-split #1). Map named-helper idiom
-  logged as legitimate coexistence, not an elaborator-feature candidate.
+### Run status / next triggers (event-driven) — updated ~10:16 UTC
+- **MERGED:** Language `def-path-constraint-binder-unification` (`main @ 41df4e62`);
+  ring §10 retros in. Enclave still holds the spec parity clause (`32`/`33`) → CV
+  verdict → `git_request`. Playbook watchdog hardening (`main @ bc1c0643`).
+- **CLOSED — Ergo `case-eq-adoption`:** MERGED `main @ 9b09124d` (PR #501, CI-green);
+  **all three §10 retros IN** (leader/qa/implementer). Track-A merge **anchor**
+  landed. Rebased approved `18bd3ff6` via cherry-pick (it had drifted behind my
+  re-scope doc merges); tracker synced `main @ 1082ef89`. WP done.
+- **MERGED — Ergo `nat-arithmetic-laws`:** `main @ d762c99b` (PR #503, CI-green).
+  Kicked after the full Handoff Gate (ergo ring compacted + drops verified);
+  honesty gate clean (2-file outer-ring: `Core/NatArith.ken.md` + acceptance test;
+  ancestry no-drift on `1082ef89`; trust-surface hits all benign test guards).
+  QA (`evt_74gcd6am9pnk3`) + Architect fidelity (`evt_2j0f33gh09f64`) green —
+  Architect walked every law (definitional Refl bases vs real-induction hard laws
+  correctly discriminated; `mul_add_distrib_l`/`mul_one_r` honestly derived; zero
+  papering, nothing size-deferred). **§10 retro chased** (`evt_3kd9vshyrvr9g`) →
+  close on retro-in, then DS-8c. Placement = **new `Core/NatArith.ken.md`**
+  (separated from OrdNat export). **Parsing `nat_add` unification DEFERRED** to a
+  follow-up de-dup seam —
+  ergo-implementer's grounded finding: **catalog entries have no import/load
+  mechanism**, so replacing Parsing's local `nat_add` with the canonical `add`
+  would make the Parsing entry non-self-contained rather than a clean green
+  unification. Correct per frame seam-1 ("unify only if clean/green, else flag").
+  **Tracked candidate follow-on: a catalog de-dup pass** once/if a load mechanism
+  exists (NOT a blocker, NOT a 2nd-occurrence-idiom escalation — a known
+  duplicate-definition seam). Frame on `main`, case_eq-INDEPENDENT. DS-8c after.
+- **ACTIVE — Foundation `compare-ord-lexicographic` (bricks 1+3):** Eq/Lt raw
+  soundness green (unbundled D6). **Gt totality-transport RESOLVED — a local
+  incomplete-discrimination PROOF BUG, definitively NOT K6, NOT the helper, NOT a
+  name collision, NOT size-defer** (Architect `evt_40ydcv9a45yjd`, reproduced
+  red→green). Root: `compare_gt_sound_raw`'s `Inl` arm (`leq x y = True`)
+  transported only `leq x y → True`, leaving `compare_second_result (leq y x)`
+  **stuck** on the neutral `leq y x`, so the Ω-`absurd` (elab.rs:526) got a stuck
+  `Equal` instead of `Bottom` → `TypeMismatch { expected: g0, … }`. Lt was green
+  only because its arm reduced to a canonical ctor (`ord_gt`); Gt's didn't — that
+  asymmetry was the whole bug. **Fix (catalog-only, Architect-verified green):**
+  nest a second `bool_dichotomy (leq y x)` in the `Inl` arm — the **Eq lemma's own
+  two-level dispatch idiom** (`LawfulClasses:515-528`), transporting
+  `compare_second_result b` (the inner reducer). **Gt now GREEN** (`7ed10f1`,
+  `structural_deceq_acceptance` passed after named dispatcher + outer-J bridge —
+  each step a local proof-shape iteration, `KernelRejected`→`NotAFunction`→bridge,
+  no kernel escalation). **REBASE onto Track-B anchor in recovery:** replaying the
+  scratch history hit the LawfulClasses conflict, and a `reset --soft` produced an
+  over-scoped 9-file diff (`d351072a`, rejected). **Steward rebase ruling
+  (`evt_1sy6r96120vab`):** DROP the scratch red artifacts (`6f84e07`/`346a732b`)
+  and `d351072a` — land only the final green tree onto `9b09124d`; the LawfulClasses
+  conflict is **Foundation's to resolve, NOT cross-WP arbitration** (Track-B
+  `list_deceq` at `9b09124d` is merged/authoritative → take it verbatim, layer the
+  compare/Ord/Gt section in its own region, seam-2 different regions). foundation-
+  leader executing the clean-transplant → rebased green SHA → lex Pair/List →
+  Architect fidelity gate (assembled Eq/Lt/Gt + lex head) → `git_request`.
+  (Push-credential watch **cleared** — scratch ref pushed fine.)
+- **Queued (framed, not kicked):** DS-8c (Ergo, last Track-B item, after the
+  Nat-laws retro closes).
+- **Next gate events:** Foundation compare-ord `git_request` (post rebase + lex +
+  Architect gate); Ergo Nat-laws retro (then DS-8c handoff); Language spec-clause
+  CV verdict.
+- **Forward candidates: 3, count UNCHANGED** (Kernel K6 conv_struct #2 — the Gt
+  "falsification" did **not** increment it, Architect ruled it route-aroundable;
+  Language modifier-whnf #1 — Map did NOT bump it; Language namespace-split #1). Map
+  named-helper idiom logged as legitimate coexistence, not an elaborator-feature
+  candidate.
 - **Watchdog: CronCreate job `1236a1cd`** (15-min, pane stall-sweep + git/gates +
   mentions) — replaced the codex-era bash loop. **Formatter HELD.** Operator back
   ~11:00 UTC — this log is the review artifact.
