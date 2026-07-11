@@ -4,7 +4,7 @@
 //! `declare_postulate`, honesty guard via `GlobalEnv::trusted_base()`, refinement
 //! lowering to carrier, `prove`/`law` declaration elaboration, `old` elaboration.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use ken_kernel::{
     check as kernel_check, convert, declare_def, declare_postulate, declare_primitive,
@@ -4868,6 +4868,43 @@ pub fn elaborate_mutual_group(
         ids.push(id);
     }
 
+    // Proof declarations share the same signature-first admission path as
+    // computations, but retain their existing Ω and attached-subject guards
+    // before any recursive body is checked.
+    let proof_validation = (|| -> Result<(), ElabError> {
+        for ((rdecl, ty_core), id) in members.iter().zip(&ty_cores).zip(&ids) {
+            match &rdecl.kind {
+                RDeclKind::Lemma => ensure_omega_type(env, &Context::new(), ty_core, &rdecl.span)?,
+                RDeclKind::AttachedProof { subject, .. } => {
+                    ensure_omega_type(env, &Context::new(), ty_core, &rdecl.span)?;
+                    validate_attached_subject_occurs_applied(
+                        env,
+                        globals,
+                        subject,
+                        ty_core,
+                        &rdecl.span,
+                    )?;
+                    debug_assert_eq!(globals.get(&rdecl.name), Some(id));
+                }
+                _ => {}
+            }
+        }
+        Ok(())
+    })();
+    if let Err(e) = proof_validation {
+        for id in ids.iter().rev() {
+            while let Some(decl) = env.remove_last() {
+                if decl.id() == *id {
+                    break;
+                }
+            }
+        }
+        for rdecl in members {
+            globals.remove(&rdecl.name);
+        }
+        return Err(e);
+    }
+
     // 3. Elaborate each body checked against its own type (every sibling
     // name, including self, already resolves via `globals` from step 2).
     let mut bodies: Vec<Term> = Vec::with_capacity(members.len());
@@ -4987,6 +5024,25 @@ pub(crate) fn rexpr_mentions_name(expr: &RExpr, name: &str) -> bool {
         RExpr::RPi(_, _, b, _) => rexpr_mentions_name(b, name),
         RExpr::RArrow(a, b, _) => rexpr_mentions_name(a, name) || rexpr_mentions_name(b, name),
         RExpr::RAttachedProofRef { .. } => false,
+    }
+}
+
+/// Type-side counterpart to [`rexpr_mentions_name`].  Scope dependency order
+/// must account for a declaration used only in another declaration's theorem
+/// or result type, not merely direct calls in bodies.
+pub(crate) fn rtype_mentions_name(ty: &RType, name: &str) -> bool {
+    match ty {
+        RType::RCon(n, _) => n == name,
+        RType::RPi(_, domain, codomain, _)
+        | RType::RArr(domain, codomain, _)
+        | RType::REffectArr(domain, _, codomain, _)
+        | RType::RApp(domain, codomain, _) => {
+            rtype_mentions_name(domain, name) || rtype_mentions_name(codomain, name)
+        }
+        RType::RRefine(_, carrier, predicate, _) => {
+            rtype_mentions_name(carrier, name) || rexpr_mentions_name(predicate, name)
+        }
+        RType::RUniv(_, _) | RType::RVarTy(_, _, _) => false,
     }
 }
 
@@ -5337,7 +5393,7 @@ fn elaborate_checked_theorem(
         let ty_core = cx.metas.zonk_term(&ty_core);
         ensure_omega_type(cx.env, &Context::new(), &ty_core, &rdecl.span)?;
         if let Some(subject) = attached_subject {
-            validate_attached_subject_telescope(
+            validate_attached_subject_occurs_applied(
                 cx.env,
                 cx.globals,
                 subject,
@@ -5353,30 +5409,6 @@ fn elaborate_checked_theorem(
             obligations,
         )
     };
-    if let Some(subject) = attached_subject {
-        let attached_subject_ids = globals
-            .iter()
-            .filter_map(|(name, id)| {
-                if name.starts_with(&format!("{subject}::")) {
-                    Some(*id)
-                } else {
-                    None
-                }
-            })
-            .collect::<HashSet<_>>();
-        let mut visited = HashSet::new();
-        if term_mentions_any_of(env, &ty_core, &attached_subject_ids, &mut visited)
-            || term_mentions_any_of(env, &body_core, &attached_subject_ids, &mut visited)
-        {
-            return Err(ElabError::TypeMismatch {
-                span: rdecl.span.clone(),
-                reason: format!(
-                    "attached proof '{}' may not depend on another proof for subject '{}'",
-                    rdecl.name, subject
-                ),
-            });
-        }
-    }
     let id =
         declare_def(env, vec![], ty_core, body_core).map_err(|e| ElabError::KernelRejected {
             error: e,
@@ -5412,7 +5444,7 @@ fn ensure_omega_type(
     }
 }
 
-fn validate_attached_subject_telescope(
+fn validate_attached_subject_occurs_applied(
     env: &GlobalEnv,
     globals: &HashMap<String, GlobalId>,
     subject: &str,
@@ -5426,90 +5458,37 @@ fn validate_attached_subject_telescope(
             name: subject.to_string(),
             span: span.clone(),
         })?;
-    let (_, subject_ty) = env
-        .const_type(subject_id)
+    env.const_type(subject_id)
         .ok_or_else(|| ElabError::TypeMismatch {
             span: span.clone(),
             reason: format!("attached proof subject '{}' is not a definition", subject),
         })?;
-    let mut ctx = Context::new();
-    let mut s_cur = subject_ty.clone();
-    let mut p_cur = proof_ty.clone();
-    loop {
-        match (whnf(env, &ctx, &s_cur), whnf(env, &ctx, &p_cur)) {
-            (Term::Pi(s_dom, s_cod), Term::Pi(p_dom, p_cod)) => {
-                let dom_sort =
-                    kernel_infer(env, &ctx, &s_dom).map_err(|e| ElabError::KernelRejected {
-                        error: e,
-                        span: span.clone(),
-                    })?;
-                if !convert(env, &ctx, &dom_sort, &s_dom, &p_dom) {
-                    return Err(ElabError::TypeMismatch {
-                        span: span.clone(),
-                        reason: format!(
-                            "attached proof telescope for '{:?}' does not match subject '{}'",
-                            proof_ty, subject
-                        ),
-                    });
-                }
-                ctx.push(*s_dom.clone());
-                s_cur = *s_cod;
-                p_cur = *p_cod;
-            }
-            (Term::Pi(_, _), _) => {
-                return Err(ElabError::TypeMismatch {
-                    span: span.clone(),
-                    reason: format!(
-                        "attached proof for '{:?}' omits part of subject '{}'s telescope",
-                        proof_ty, subject
-                    ),
-                })
-            }
-            (_, Term::Pi(_, _)) => {
-                return Err(ElabError::TypeMismatch {
-                    span: span.clone(),
-                    reason: format!(
-                        "attached proof for '{:?}' has binders beyond subject '{}'s telescope",
-                        proof_ty, subject
-                    ),
-                })
-            }
-            _ => return Ok(()),
-        }
+    if term_contains_applied_global(proof_ty, subject_id) {
+        Ok(())
+    } else {
+        Err(ElabError::TypeMismatch {
+            span: span.clone(),
+            reason: format!(
+                "attached proof for '{}' must mention that subject applied in its claim",
+                subject
+            ),
+        })
     }
 }
 
-fn term_mentions_any_of(
-    env: &GlobalEnv,
-    term: &Term,
-    targets: &HashSet<GlobalId>,
-    visited: &mut HashSet<GlobalId>,
-) -> bool {
-    match term {
-        Term::Const { id, .. } => {
-            if targets.contains(id) {
-                return true;
-            }
-            if !visited.insert(*id) {
-                return false;
-            }
-            if let Some((_, ty)) = env.const_type(*id) {
-                if term_mentions_any_of(env, &ty, targets, visited) {
-                    return true;
-                }
-            }
-            if let Some((_, body)) = env.transparent_body(*id) {
-                if term_mentions_any_of(env, &body, targets, visited) {
-                    return true;
-                }
-            }
-            false
+fn term_contains_applied_global(term: &Term, target: GlobalId) -> bool {
+    if let Term::App(fun, _) = term {
+        let mut head = fun.as_ref();
+        while let Term::App(next, _) = head {
+            head = next;
         }
-        _ => term
-            .children()
-            .into_iter()
-            .any(|child| term_mentions_any_of(env, child, targets, visited)),
+        if matches!(head, Term::Const { id, .. } if *id == target) {
+            return true;
+        }
     }
+    term.children()
+        .into_iter()
+        .any(|child| term_contains_applied_global(child, target))
 }
 
 fn top_body_for_prop_type(env: &GlobalEnv, ty: &Term, span: &Span) -> Result<Term, ElabError> {

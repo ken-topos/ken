@@ -14,6 +14,33 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
+> ### proof-vocabulary A/B/C PUBLISHING (combined code + §33 spec) — 2026-07-11
+>
+> **Both A+C gates cleared; landing now via a Steward combined publication.**
+> - **Code** `wp/proof-vocabulary @ 68c0a8bf` (Language) — recursive
+>   `lemma`/`proof` under SCT + forward refs via dependency-ordered SCC (union of
+>   all members' out-edges) + attached-proof occurs-applied-in-φ + no-sibling
+>   deletion. Architect algorithm review APPROVE (soundness + the SCC-ordering
+>   should-fix landed, verdict flipped); QA 24/24; 4 elaborator files, zero
+>   kernel/Cargo/TCB.
+> - **Spec** `wp/proof-vocabulary-spec @ f60c23cd` (enclave) — §33 §8.4
+>   normative admission/soundness statement, CV code↔spec APPROVE
+>   (`evt_5nqy0ptmmkdrw`) + one-line precision fold (SCT bypassed only for a
+>   singleton with no self-edge at all).
+> - Honesty gate passed on both (clean descendants of `7a92efde`; trust-surface
+>   clean). Publishing as one integration SHA. On merge → mark MERGED, collect
+>   retros, close #19.
+>
+> **Follow-on HELD:** `fn-lemma-partition` WP authored (`steward/work @
+> 2e79f1cd`), **gated on proof-vocab A landing** — releases once this merges.
+> Architect ENDORSE (`evt_6eyh27x6p7h0x`); `tt`→`Proved` + surface-`Top` WP still
+> to author.
+>
+> **#20 corrected:** codex build seats DO wake on mentions via the per-seat
+> `channel_runner` tmux delivery (daemon log = ground truth); the real
+> dropped-comms bug is `reply_to` rejecting the event_id (platform/moot-owned).
+> The COORDINATION §2 empty-mentions fix (`1e0c3bfa`) stands.
+
 > ### DS-1 MERGED → HOLD campaign for operator process review (2026-07-09 ~21:40 UTC)
 >
 > **DS-1 (`Empty`+`Dec`) is MERGED — `origin/main @ a83060e` (PR #393, CI-green).**

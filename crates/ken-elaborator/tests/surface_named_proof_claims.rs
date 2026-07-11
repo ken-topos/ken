@@ -151,8 +151,8 @@ fn attached_proof_subject_telescope_must_match() {
 }
 
 #[test]
-fn attached_proof_cannot_depend_on_same_subject_attached_proof() {
-    let err = elaborate_err(
+fn attached_proof_can_depend_on_same_subject_attached_proof() {
+    let env = elaborate_ok(
         r#"
         fn id (x : Int) : Int = x
         proof p1 for id (x : Int) : Equal Int (id x) x = Refl
@@ -160,15 +160,8 @@ fn attached_proof_cannot_depend_on_same_subject_attached_proof() {
         "#,
     );
 
-    match err {
-        ElabError::TypeMismatch { reason, .. } => {
-            assert!(
-                reason.contains("depend"),
-                "diagnostic should explain same-subject dependency, got {reason}"
-            );
-        }
-        other => panic!("expected same-subject dependency rejection, got {other:?}"),
-    }
+    assert!(env.globals.contains_key("id::p1"));
+    assert!(env.globals.contains_key("id::p2"));
 }
 
 #[test]
@@ -193,8 +186,8 @@ fn duplicate_attached_proof_name_on_same_subject_is_rejected() {
 }
 
 #[test]
-fn helper_lemma_cannot_launder_same_subject_dependency() {
-    let err = elaborate_err(
+fn helper_lemma_can_bridge_same_subject_attached_proofs() {
+    let env = elaborate_ok(
         r#"
         fn id (x : Int) : Int = x
         proof p1 for id (x : Int) : Equal Int (id x) x = Refl
@@ -203,15 +196,9 @@ fn helper_lemma_cannot_launder_same_subject_dependency() {
         "#,
     );
 
-    match err {
-        ElabError::TypeMismatch { reason, .. } => {
-            assert!(
-                reason.contains("depend"),
-                "helper-closure rejection should explain the dependency, got {reason}"
-            );
-        }
-        other => panic!("expected helper-closure dependency rejection, got {other:?}"),
-    }
+    assert!(env.globals.contains_key("id::p1"));
+    assert!(env.globals.contains_key("helper"));
+    assert!(env.globals.contains_key("id::p2"));
 }
 
 #[test]

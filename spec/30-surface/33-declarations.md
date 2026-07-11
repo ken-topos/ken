@@ -33,7 +33,13 @@ and arity:
   `type` is now reserved, not a declaration keyword.
 - All top-level definitions are **mutually recursive within a module** if the
   SCT check accepts the group; otherwise the offending recursion is reported
-  (`17`).
+  (`17`). This grouping **includes `lemma` and attached `proof`** declarations
+  (`§8`), not only `const`/`fn`: proof declarations enter the **same**
+  signatures-first, dependency-ordered SCC + SCT admission run, so a recursive
+  or mutually-recursive proof is admitted **iff SCT accepts** it, on identical
+  terms to `const`/`fn` (`§8.4`). A recursive cycle that **mixes** a proof
+  declaration with a `const`/`fn` is **rejected** (`§8.4`, out of scope this
+  iteration).
 - Definitions may be **generic** (implicit type/level parameters, `39`): `fn id
   {A : Type} (x : A) : A = x`.
 
@@ -538,11 +544,18 @@ The canonical path is `subject::proof_name` - for example
 resolution runs first; attached lookup runs only after the subject is
 resolved. A bare `appends` never resolves to the attached proof.
 
-For generic attached proofs, the proof telescope must repeat the subject's
-public call telescope exactly, preserving binder order and explicit/implicit
-shape up to alpha-renaming. A mismatch rejects before the proof is used.
-Duplicate proof names on the same resolved subject reject. The same proof name
-may appear on different subjects because the canonical paths differ.
+An attached `proof p for s` is well-formed iff the subject `s` **occurs
+applied** somewhere in the proof's claim type φ — in a hypothesis or the
+conclusion. The reading is broad: `proof p for s` names "a checked property
+**of** `s`," not a proof whose telescope mirrors the subject's. A claim φ that
+never mentions `s` applied is rejected before the proof is used. This is a
+**surface well-formedness** condition only: attachment is namespacing over an
+already-checked theorem (`§8.4`), so the theorem is checked identically whether
+or not the condition holds — it carries **zero soundness weight**. The subject
+must still be an **already-resolved definition** (a real precondition; a bare
+or unresolved subject rejects). Duplicate proof names on the same resolved
+subject reject. The same proof name may appear on different subjects because
+the canonical paths differ.
 
 Attached proofs are private by default, just like other declarations. `pub
 proof p for s` is exportable only if `s` is exported. Importing an exported
@@ -550,12 +563,16 @@ subject makes its exported attached proofs available only through the explicit
 attached path (`s::p`, or `M.s::p` under qualified import); it does not
 ambiently import `p` as a bare value.
 
-Same-subject attached proofs are unordered and independent. An attached proof
-must reject if its dependency graph mentions another attached proof for the
-same resolved subject, directly or through a helper. Standalone lemmas are the
-factoring point: `subject::p1` and `subject::p2` may both depend on
-`append_nil_right`, but `append_nil_right` itself must not depend on either
-attached proof if either attached proof uses it.
+Same-subject attached proofs are **ordinary dependencies of one another**. An
+attached proof **may** reference a sibling `subject::q` (directly or through a
+helper): proving `s::antisym` via `s::trans`, or a mutually-recursive sibling
+pair, is natural and admitted. Because proof declarations now go through the
+shared SCC + SCT admission run (`§8.4`), a sibling reference is just an edge in
+the dependency graph — an acyclic reference resolves in dependency order, a
+mutual sibling cycle is admitted **iff SCT accepts** it, and a non-terminating
+one **fails closed** with the SCT diagnostic. (The earlier blanket
+no-sibling-dependency rejection is **withdrawn**: under the SCC + SCT run it
+was both redundant and wrong.)
 
 ### 8.3 Standalone lemmas — `lemma`
 
@@ -574,6 +591,15 @@ ordinary checked proof term; `lemma` is not a bundled `prop + proof`, not an
 attached proof, and not a new kernel concept. If authors want an open
 obligation, the existing `prove` path remains the status-bearing form.
 
+A `lemma` (or attached `proof`) body **may self-recurse** — structural
+induction on an argument — **and may mutually recurse** with other proof
+declarations, **iff the recursion passes SCT** (`../10-kernel/17 §4`), on
+identical terms to a recursive `const`/`fn`. Recursion is admitted **iff SCT
+accepts**; an SCT-rejected proof recursion — a non-descending self-reference
+such as `lemma bad : φ = bad`, or a mutual proof cycle with no decreasing
+measure — **fails closed** with the SCT diagnostic, and no such body is ever
+declared. The admission run and its soundness are stated in `§8.4`.
+
 `lemma` obeys ordinary module visibility: private by default, `pub lemma` to
 export, and imports/shadowing/ambiguity follow the `33 §3-4` module rules. A
 lemma is never addressed as `subject::name` unless it is separately declared as
@@ -588,3 +614,94 @@ let h2 = (proof appends for list_append) A xs ys
 
 Both are ordinary proof terms after resolution, so they can be passed to
 transport, rewrite, congruence, induction, or class-law fields.
+
+### 8.4 Admission and soundness of recursive proof claims
+
+Wiring `lemma`/`proof` into the recursive-definition machinery is an
+**elaborator admission** change only. It adds **no kernel rule, no trusted
+proof table, no ambient proof search, and no `trusted_base()` entry** —
+recursive `lemma`/`proof` declarations are admitted by the *same* checks a
+recursive `const`/`fn` already passes. This section states the soundness of
+that admission normatively; each claim is a property of the admission path, not
+of any test.
+
+**The admission path.** All top-level declarations in a scope — `const`/`fn`
+and `lemma`/`proof` alike — are admitted through one shared, dependency-ordered
+call-graph pass (`§1`):
+
+1. **Dependency-ordered components deliver forward references.** The scope's
+   declarations form a call graph — an edge is "the body **or type** of A
+   mentions B" — condensed to strongly-connected **components** and processed in
+   **dependency order**: every callee component before the callers that depend on
+   it, where a component's dependencies are taken as the **union of all its
+   members'** out-edges (so a dependency named only by a *non-entry* member of a
+   mutual cycle is still ordered first). This ordering — not a scope-wide
+   signature pre-pass — is what lets a declaration reference a sibling defined
+   **later in source** (a **forward reference**): the sibling's component is
+   fully elaborated first. A `lemma`/attached-`proof` type is required to classify
+   at `Omega`, and an attached proof's subject must occur applied in its claim
+   (`§8.2`); these gates run before that declaration's body in either branch
+   below.
+2. **SCT is bypassed only for a singleton with no self-edge at all.** A singleton
+   component with **no self-edge** is genuinely non-recursive: its signature and
+   body elaborate in one step and SCT is **not** consulted. A singleton *with* a
+   self-edge is self-recursive and **is** SCT-gated — a **computational**
+   (`const`/`fn`) self-recursion takes the **pre-existing singleton recursive
+   path**, which SCT-gates it there; a **proof** self-recursion is newly routed
+   to the group/SCT seam of point 3. Only the truly acyclic singleton skips SCT.
+3. **A recursive component is signatures-first, then SCT-gated, before any body
+   is committed.** A component that is a genuine cycle (size > 1) or a proof
+   self-reference is **recursive**: **all** its members' signatures are
+   pre-admitted **before any member body** — this is the signatures-first step,
+   and it is what lets self- and mutual references *within the cycle* resolve —
+   then the member bodies are elaborated and kernel-checked against their declared
+   types, then **SCT is run on the whole component as one termination problem**.
+   Only if SCT **accepts** are the bodies committed (made available for
+   reduction); if SCT **rejects**, or any member fails its kernel check, the
+   **entire component is rolled back and the declaration is rejected** — no
+   recursive proof body is ever committed without passing SCT.
+
+The four soundness properties this preserves:
+
+- **(a) SCT is result-sort-agnostic.** The termination check is the *same*
+  check `const`/`fn` use; it reasons about the call graph and structural descent
+  of the bodies and **does not branch on whether a definition's codomain is
+  `Type` or `Omega`**. An Ω-valued proof is admitted on exactly the termination
+  obligation a `Type`-valued function of the same recursive shape would face.
+- **(b) An SCT-accepted Ω definition is a valid proof.** For a total type
+  theory, the whole obligation on a recursive inhabitant of an `Omega`
+  proposition is that it be **strongly normalizing**; SCT-acceptance is that
+  guarantee. There is no additional burden from the `Omega` codomain, so an
+  SCT-accepted recursive `lemma`/`proof` is a sound proof of its proposition —
+  and, conversely, the fail-closed SCT rejection is what keeps a **looping
+  "proof"** of a false proposition (`lemma bad : φ = bad`) out.
+- **(c) Proof-irrelevance is preserved — Ω proofs are never δ-unfolded in
+  conversion.** Admitting recursive Ω-proofs imposes **no new conversion or
+  reduction burden**, because the kernel's conversion check short-circuits on
+  `Omega` by proof-irrelevance (`../10-kernel/16 §1`): two proofs of the same
+  proposition are already convertible without unfolding either. This is
+  unchanged by this iteration — the kernel is untouched — so a recursive proof
+  body is never δ-unfolded during `conv`, and its recursion introduces no
+  non-termination risk into conversion.
+- **(d) Erasure and extraction are unchanged.** A proof at `Omega` carries no
+  computational content and is erased at its use sites exactly as before;
+  admitting proof recursion adds nothing an extractor must handle. This
+  iteration touches no erasure or extraction path.
+
+**Explicit out-of-scope boundary — mixed cycles fail closed.** A recursive
+component that **mixes** a proof declaration with a computational (`const`/`fn`)
+declaration is **rejected explicitly**, never silently admitted. Such a cycle
+would couple a δ-unfolded, `Type`-relevant definition with a proof-irrelevant
+Ω partner across the same termination measure — a nontrivial interaction
+deferred out of this iteration; the boundary is made fail-closed so a program
+that reaches for it gets a clear rejection rather than an unchecked admission.
+(Homogeneous proof↔proof and computation↔computation cycles are the admitted
+cases.)
+
+**Precise boundary.** Everything above is realized in the elaborator's
+admission path; the kernel, its conversion/erasure rules, and the trusted base
+are untouched. The SCT check, the `Omega`-classification gate, and the per-body
+kernel check are **pre-existing** kernel-and-elaborator machinery — this
+iteration only routes proof declarations through the same dependency-ordered
+SCC + SCT admission path `const`/`fn` already use. No claim here rests on a
+test; the tests witness these properties but do not establish them.
