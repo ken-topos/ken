@@ -333,9 +333,72 @@ The `{d : C A}` binder is threaded like any implicit (`39 §2.2`): at a **use
 site** the elaborator inserts a metavariable for `d` and **discharges it by
 instance search** (`39 §6`). Inside the body, a class operation `eq x y` is
 `d.eq x y` (projection from the resolved dictionary). Multiple constraints
-`where C A, D B` insert one implicit each, left to right. The concept is
-ordinary dependent-implicit insertion — the *resolution* of `d` is the only new
-step, and it lives in `39 §6`.
+`where C A, D B` (comma-separated, `32 §1`) insert one implicit each, left to
+right. The concept is ordinary dependent-implicit insertion — the *resolution*
+of `d` is the only new step, and it lives in `39 §6`.
+
+**Multiple constraints — one dictionary per constraint, deterministically
+named.** The example above binds a single dictionary `d`; with more than one
+constraint each dictionary needs a distinct, deterministic name, and the
+singular `d` generalizes. A constraint **of the form `C v`** — a class applied
+to a **single type variable** `v` (`32 §1`: `constraint ::= ConId atype+`) —
+binds its dictionary as **`d<v>`**, the reserved prefix `d` immediately followed
+by that variable's identifier, projected by explicit `.field`:
+
+```
+fn eqPair {a b : Type} (p q : Pair a b) : Bool  where DecEq a, DecEq b = …
+   ⟶  {a b : Type} → {da : DecEq a} → {db : DecEq b}
+        → Pair a b → Pair a b → Bool        -- body: da.eq / db.eq,
+                                            -- da.sound / db.complete
+```
+
+- **Uniform, deterministic, projection-preserving.** The name is a pure
+  function of the constraint's type argument — `DecEq a → da`, `DecEq b → db`,
+  `Ord a → da` — identical for one or many constraints and across every `where`
+  path (`fn`/`proc`/`const` here, `instance … where`, and `def`/`view`,
+  `51 §4`). Explicit `.field` projection is unchanged (`da.eq`, `db.complete`);
+  only the *name* generalizes. This is the coherent completion of the singular
+  model — a named dictionary per constraint, **not** one reserved `d` for many,
+  and **not** type-directed member resolution (a distinct, implicit paradigm;
+  reflect-don't-extend).
+- **Source-order binding (the contract).** Constraints bind **left to right**:
+  the i-th `where` constraint is the i-th implicit `Π` position, and `d<v>`
+  denotes exactly that one dictionary at that one position. The field body's
+  `d<v>` and the elaborated type's `Π`-position must agree by this order; a
+  mismatch elaborates a `Σ`-dictionary that fails its declared type and the
+  **kernel rejects it** — the elaborator is untrusted, so a naming/position bug
+  is **fail-closed** (rejects a good dictionary, never admits a bad one).
+- **Singular reconciliation — `d<v>` canonical, bare `d` a retained
+  sole-constraint alias.** The uniform rule makes the single-constraint case
+  `d<v>` too (`where Ord a` → `da`, `da.leq`). The previously-reserved bare `d`
+  (above; `51 §4`) is **retained as an accepted alias in the sole-constraint
+  case only**, where it is unambiguous — landed catalog proofs project it
+  (`Core/EmptyDec`'s `d.eq`/`d.sound`/`d.complete`, `Core/LawfulClasses`'s
+  `d.leq`), so it stays valid; new code uses `d<v>`. With **two or more**
+  constraints, bare `d` is not bound — every dictionary is `d<v>`.
+- **Explicit named binders — required wherever the auto-name is unavailable.**
+  The `d<v>` auto-name is defined **only** for the single-type-variable form
+  `C v`. **Any other grammatical constraint (`32 §1`) takes no auto-name and
+  requires an explicit binder** `where (name : C τ)`. Two cases arise:
+  - a **compound- or multi-argument** constraint — `where DecEq (List a)`,
+    `where C a b` — has no single variable `v` to key on;
+  - a **same-variable collision** — `where DecEq a, Ord a`, where two
+    constraints would both auto-name `da`.
+  In each, the surface **requires** the explicit form — `where (dla : DecEq
+  (List a))`; `where (da : DecEq a), (oa : Ord a)` — projected by the same
+  explicit `.field` (`dla.sound`, `oa.leq`); a **bare** `where` in these cases is
+  a **surface error** (no auto-name exists, or an ambiguous one). The
+  named-binder form `where (name : C τ)` is available generally — any dictionary
+  may be user-named — and explicit binder names must be **pairwise distinct** (a
+  duplicate is a surface error); an unnamed single-type-variable constraint takes
+  the deterministic `d<v>`. So the common `d<v>` names stay stable: reaching for
+  a compound/multi-arg or a same-variable constraint is a deliberate move to
+  explicit names, never a silent rename of an existing `d<v>`.
+
+(This is the `33 §5.4` naming contract the `constrained-instance-elaboration`
+capability co-lands against: the Architect ruled the model — deterministic
+named per-constraint projection — and deferred this user-visible spelling to
+Spec.)
 
 ### 5.5 Coherence policy (`OQ-classes`, ADR 0008 — do not reopen)
 
