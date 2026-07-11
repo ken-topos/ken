@@ -137,7 +137,7 @@ expr ::=
   | expr "->" expr  -- non-dependent function type (arrow); elaborates to kernel Pi
   | "let" ident (":" type)? "=" expr "in" expr  -- local binding
   | "if" expr "then" expr "else" expr  -- = match on Bool
-  | "match" expr ("," expr)* "{" arm+ "}"  -- pattern match (34)
+  | "match" expr ("eqn:" ident)? ("," expr)* "{" arm+ "}"  -- pattern match (34); single-scrutinee eqn: modifier (34 §3.6)
   | expr "." ident | expr ".1" | expr ".2"  -- field / projection
   | path "::" ident  -- canonical attached-proof path
   | "(" "proof" ident "for" path ")"  -- attached-proof selector expression
