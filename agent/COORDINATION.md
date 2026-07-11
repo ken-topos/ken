@@ -66,6 +66,19 @@ git only.
 - **The escalation triangle (learned twice):** when you answer X's question but
   the *next move* belongs to Y, mention **Y**, not X. Naming Y in prose without
   a real mention is the classic silent stall.
+- **Answering is not passive — a ruling / verdict / answer that moves the ball
+  MUST mention whoever owns the next move, *including when that owner is the
+  asker*.** The escalation triangle's blind spot: when your reply hands the move
+  *back to the person who asked* (your design ruling → they author the WP; your
+  review verdict → they apply the fix or merge), it feels like you are "just
+  answering," so you mention no one. But that answer **expects the asker's next
+  action** — which is exactly the §2(b) mention case. Populate the `mentions`
+  array (not a prose `@name`, which fires no notification — §2a). Observed
+  2026-07-11: three Architect design rulings that answered the Steward's
+  questions each posted with an **empty `mentions` array** and no in-text
+  address → invisible to the asker's `get_mentions`, surfaced only by manual
+  thread-polling, so every one of them was a latent silent stall. **If your post
+  moves the ball to anyone — asker or third party — mention them.**
 - **Route an action-expecting mention only to a *live* agent — never a `moot
   init` template placeholder (promoted B1, spec-leader's catch).** The space
   carries dead template participants (`Spec`, `Leader`, `QA`, `Implementation`,
