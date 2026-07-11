@@ -417,15 +417,27 @@ Reach for `proof … for` when the fact is *about* one definition and should
 travel with it; reach for `lemma` when it is a reusable stepping-stone in its
 own right.
 
-**Top-down is real: state the theorem above the helpers it uses.** Ken
-resolves top-level names order-independently (`33` mutual recursion; the
-elaborator's name pre-pass registers every top-level name before checking any
-body), so a `lemma` stated *first* may call a `fn`/`const`/`lemma` defined
-*later* in the same file. That is what lets a source read like a paper —
-headline result up top, supporting machinery below. The one exception is the
-self-reference caveat above: a `lemma` body still cannot call *itself*, so a
-proof that needs induction stays an ordinary recursive `fn` behind a thin
-non-recursive `lemma` wrapper.
+**Declaration order is bottom-up, with mutual recursion the one exception —
+lede-first reads come from the prose, not the code order.** The elaborator
+processes a file top to bottom, and each declaration resolves only against
+names *already elaborated above it*, so in general a definition's dependencies
+must appear before it (a forward reference fails with `UnresolvedCon`). The one
+exception is a genuinely **mutually-recursive `fn`/`const` group**: a
+call-graph *cycle* is auto-detected and elaborated together (`33 §1`, under one
+`SCT` termination check over the whole group), so its members may reference
+each other in any internal order. That exception does **not** cover an
+*acyclic* forward reference — a `fn` calling a `fn` written below it when they
+do not form a cycle still fails — and it never covers `lemma`/`prop`/`proof`,
+which are never part of the recursive grouping. So a proof decl must sit
+*below* everything its statement and its body mention: the recursive helper
+`fn` goes **above** the thin non-recursive `lemma`/`proof` wrapper that exposes
+it (the induction idiom above; a `lemma` body also cannot call *itself*).
+
+The top-down, statement-first reading a math document wants comes from the
+**prose**, not from reordering the code: in the `.ken.md` format (§8) open a
+section with the motivation and the claim in Markdown, then give the
+definitions and proof bottom-up in the code blocks below. The document reads
+lede-first even though the code still elaborates dependencies-first.
 
 ## 8. The `.ken.md` literate format
 
