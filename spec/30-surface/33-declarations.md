@@ -338,25 +338,36 @@ right. The concept is ordinary dependent-implicit insertion — the *resolution*
 of `d` is the only new step, and it lives in `39 §6`.
 
 **Multiple constraints — one dictionary per constraint, deterministically
-named.** The example above binds a single dictionary `d`; with more than one
-constraint each dictionary needs a distinct, deterministic name, and the
-singular `d` generalizes. A constraint **of the form `C v`** — a class applied
-to a **single type variable** `v` (`32 §1`: `constraint ::= ConId atype+`) —
-binds its dictionary as **`d<v>`**, the reserved prefix `d` immediately followed
-by that variable's identifier, projected by explicit `.field`:
+named (instance `where`-clause; def-path unification pending).** This
+multi-constraint contract — the deterministic `d<v>` naming, explicit named
+binders, and comma-separated list below — is the **shipped surface of the
+instance `where`-clause** (`instance C Head where …`; the comma/named grammar is
+`32 §1`'s `instance_constraints`). The **definition path** (`fn`/`proc`/`const`/
+`def`/`view`) currently binds only a **single** constraint `where C a` as `d`
+(`37 §6`/`51 §4`, L3b), **semicolon-separated and bare** for multiples
+(`32 §1`'s `constraints`); unifying it to the `d<v>`/named-binder/comma form is a
+**pending def-path reconciliation**, not yet shipped — so the multi-constraint
+and explicit-binder cases below are expressible on **instances** today.
+
+On an instance, with more than one constraint each dictionary needs a distinct,
+deterministic name, and the singular `d` generalizes. A constraint **of the form
+`C v`** — a class applied to a **single type variable** `v` (`32 §1`:
+`constraint ::= ConId atype+`) — binds its dictionary as **`d<v>`**, the reserved
+prefix `d` immediately followed by that variable's identifier, projected by
+explicit `.field`:
 
 ```
-fn eqPair {a b : Type} (p q : Pair a b) : Bool  where DecEq a, DecEq b = …
-   ⟶  {a b : Type} → {da : DecEq a} → {db : DecEq b}
-        → Pair a b → Pair a b → Bool        -- body: da.eq / db.eq,
-                                            -- da.sound / db.complete
+instance DecEq (Pair a b) where DecEq a, DecEq b { … }
+   ⟶  {a b : Type} → {da : DecEq a} → {db : DecEq b} → DecEq (Pair a b)
+      -- fields project da.eq / db.eq, da.sound / db.complete
 ```
 
 - **Uniform, deterministic, projection-preserving.** The name is a pure
   function of the constraint's type argument — `DecEq a → da`, `DecEq b → db`,
-  `Ord a → da` — identical for one or many constraints and across every `where`
-  path (`fn`/`proc`/`const` here, `instance … where`, and `def`/`view`,
-  `51 §4`). Explicit `.field` projection is unchanged (`da.eq`, `db.complete`);
+  `Ord a → da` — identical for one or many constraints on the instance
+  `where`-clause (the def-path uses the older single-`d` form until the pending
+  reconciliation above). Explicit `.field` projection is unchanged (`da.eq`,
+  `db.complete`);
   only the *name* generalizes. This is the coherent completion of the singular
   model — a named dictionary per constraint, **not** one reserved `d` for many,
   and **not** type-directed member resolution (a distinct, implicit paradigm;
@@ -368,13 +379,14 @@ fn eqPair {a b : Type} (p q : Pair a b) : Bool  where DecEq a, DecEq b = …
   mismatch elaborates a `Σ`-dictionary that fails its declared type and the
   **kernel rejects it** — the elaborator is untrusted, so a naming/position bug
   is **fail-closed** (rejects a good dictionary, never admits a bad one).
-- **Singular reconciliation — `d<v>` canonical, bare `d` a retained
-  sole-constraint alias.** The uniform rule makes the single-constraint case
-  `d<v>` too (`where Ord a` → `da`, `da.leq`). The previously-reserved bare `d`
-  (above; `51 §4`) is **retained as an accepted alias in the sole-constraint
-  case only**, where it is unambiguous — landed catalog proofs project it
-  (`Core/EmptyDec`'s `d.eq`/`d.sound`/`d.complete`, `Core/LawfulClasses`'s
-  `d.leq`), so it stays valid; new code uses `d<v>`. With **two or more**
+- **Singular reconciliation — `d<v>` canonical on an instance, bare `d` the
+  retained sole-constraint spelling.** On an instance the uniform rule makes the
+  single-constraint case `d<v>` too (`instance … where DecEq a` → `da`,
+  `da.eq`). The reserved bare `d` is **retained for the sole-constraint case** —
+  it is the definition-path's single-constraint dictionary name (`37 §6`/`51 §4`,
+  L3b) and an accepted instance-path alias — so landed catalog proofs that
+  project it (`Core/EmptyDec`'s `d.eq`/`d.sound`/`d.complete`,
+  `Core/LawfulClasses`'s `d.leq`) stay valid. With **two or more** instance
   constraints, bare `d` is not bound — every dictionary is `d<v>`.
 - **Explicit named binders — required wherever the auto-name is unavailable.**
   The `d<v>` auto-name is defined **only** for the single-type-variable form

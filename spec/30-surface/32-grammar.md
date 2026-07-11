@@ -22,7 +22,7 @@ decl ::=
   | "data" ConId tyvar* "=" simple_ctor ("|" simple_ctor)* derive?  -- simple sum sugar
   | "data" ConId data_param* ":" data_family data_block derive?  -- inductive family
   | "class" ConId binder* "{" class_field ("," class_field)* "}"  -- typeclass (33 §5, ADR 0008)
-  | "instance" ConId atype* "{" field_assign ("," field_assign)* "}"  -- instance (33 §5)
+  | "instance" ConId atype* instance_constraints? "{" field_assign ("," field_assign)* "}"  -- instance (33 §5, §5.4)
   | "prop" ConId tyvar* binder* ":" type prop_block?  -- proposition family / claim shape
   | "lemma" ident binder* ":" type "=" expr  -- standalone checked proof theorem
   | "proof" ident "for" path binder* ":" type "=" expr  -- attached proof theorem
@@ -34,7 +34,10 @@ decl ::=
 
 cell    ::= "mut" ident ":" type "=" expr           -- mutable space cell (36 §4)
 becomes ::= ident "becomes" expr  -- space cell update (36 §4) [OQ-syntax]
-constraints ::= "where" constraint ("," constraint)*  -- instance constraints (33 §5)
+constraints ::= "where" constraint (";" constraint)*  -- def-path (fn/proc/const): bare, semicolon (37 §6 L3b)
+instance_constraints ::= "where" constraint_bind ("," constraint_bind)*  -- instance: comma, bare | named (33 §5.4)
+constraint_bind ::= constraint                        -- bare: auto-named `d<v>` (33 §5.4)
+                  | "(" ident ":" constraint ")"      -- explicit named binder, e.g. `(da : DecEq a)`
 constraint  ::= ConId atype+                          -- e.g.  DecEq A
 binder  ::= "(" ident+ ":" type ")" | "{" ident+ ":" type "}"   -- {…} implicit
 field   ::= ident ":" type
