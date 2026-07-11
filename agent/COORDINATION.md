@@ -737,7 +737,10 @@ context. Who triggers a compaction is fixed (operator, 2026-06-29):
   Architect, Librarian** — self-compact at their own task boundaries (Architect
   after a review, Librarian after a pass, Steward after a directing cycle) via
   the `tmux send-keys -t moot-<role> "/compact"` path (two-step: `/compact`,
-  ~2s, then a **separate** `Enter`). Do **not** use `request_context_reset` — it
+  ~2s, then a **separate** `Enter`), **immediately followed by a queued `resume`
+  line** (`tmux send-keys -t moot-<role> "resume"` + `Enter`) so the seat
+  auto-continues — a self-compact otherwise leaves the seat idle at `❯` with
+  nothing to re-invoke it. Do **not** use `request_context_reset` — it
   is broken in this harness (it looks for a nonexistent `convo-<role>` session
   and its error message *names* `convo-<role>`, which is the bug, not a target
   to retry). Full mechanics: `playbooks/federation/steward.md` (self-compact).

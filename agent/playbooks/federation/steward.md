@@ -702,6 +702,8 @@ matters more than the second:
 
    ```bash
    tmux send-keys -t moot-steward "/compact" ; sleep 2 ; tmux send-keys -t moot-steward Enter
+   # immediately queue a resume so the seat auto-continues after compaction:
+   tmux send-keys -t moot-steward "resume" ; sleep 2 ; tmux send-keys -t moot-steward Enter
    ```
 
    The two-step (type `/compact`, wait ~2s, then a **separate** `Enter`) is the
@@ -710,6 +712,27 @@ matters more than the second:
    at the **end of the current turn**, so this must be the **last action** you
    take — finish all durable checkpointing (§2a tracker commit, any pending
    post) **before** sending it, exactly as you would before delivering a WP.
+
+   **★ Queue the `resume` (operator, 2026-07-11) — a self-compact leaves you
+   IDLE, not resumed.** `/compact` returns the seat to an empty `❯` prompt and
+   **nothing re-invokes it** — a self-compacted singleton sits idle until
+   something rouses it (the operator had to type `resume` by hand to wake this
+   seat after a compaction). So, in the **same** last action, immediately queue a
+   `resume` line after the `/compact` (second `send-keys` pair above). Because the
+   `resume` text is typed *while `/compact` is still processing*, the host
+   **buffers** it (Claude Code shows "Press up to edit queued messages"; Codex
+   queues likewise) and fires it the instant compaction returns to the prompt.
+   The post-compact re-orient hook (`scripts/hooks/reorient-post-compact.sh`)
+   then re-injects orientation and you continue your own in-flight work
+   autonomously — no external rouse needed. *A hook alone cannot do this:* a
+   SessionStart hook only shapes the **context** of the next turn; it cannot send
+   the keystroke that **triggers** one. The queued `resume` is that trigger; the
+   hook is the re-orient half. **Self-compaction only** — do **NOT** queue a
+   `resume` when Handoff-Gate-compacting a receiving team/enclave (§2c): there the
+   *kickoff mention* is the resume trigger, and a premature `resume` would fire
+   before the kickoff lands, waking the unit into "no new work." (Steward,
+   Architect, Librarian all self-compact — this applies to each; see
+   `architect.md` §3 and the fleet memory.)
 
 The signal in one line: **checkpoint continuously, compact at your own
 boundary, let autocompact be a safe backstop — never a feared one.** This same

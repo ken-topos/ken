@@ -119,6 +119,8 @@ more:
 
    ```bash
    tmux send-keys -t moot-architect "/compact" ; sleep 2 ; tmux send-keys -t moot-architect Enter
+   # immediately queue a resume so the seat auto-continues after compaction:
+   tmux send-keys -t moot-architect "resume" ; sleep 2 ; tmux send-keys -t moot-architect Enter
    ```
 
    The two-step (type `/compact`, wait ~2s, then a **separate** `Enter`) avoids
@@ -127,6 +129,18 @@ more:
    **last action** — finish refreshing `ARCHITECT-STATE.md` first. You
    self-compact only; you never compact another agent (that is the Steward's
    job, via the same `moot-<role>` tmux path — `moot compact` is no-op-prone).
+
+   **★ Queue the `resume` (operator, 2026-07-11) — a self-compact leaves you
+   IDLE, not resumed.** `/compact` returns your seat to an empty `❯` prompt and
+   **nothing re-invokes it**; you would sit idle until roused. So, as part of the
+   same last action, immediately queue a `resume` line after the `/compact`
+   (second `send-keys` pair above). Typed while `/compact` is still processing, it
+   is **buffered** by the host ("Press up to edit queued messages") and fires the
+   instant the prompt returns; the post-compact re-orient hook
+   (`scripts/hooks/reorient-post-compact.sh`) then re-orients you and you continue
+   your in-flight review autonomously. A hook alone cannot trigger the resume — it
+   only shapes the next turn's context, not whether one happens. This is
+   self-compaction only.
 
 ## 4. Stay in your lane
 
