@@ -371,6 +371,62 @@ lemma trivial_by_list_lemma (a : Type) (x : a) (b : Type) (ys : List b) : Trivia
   trivial_by_list a x b ys
 ```
 
+### 7.1 Choosing a form — the authoring convention
+
+Writing a source top-down (state the result, prove it below) means reaching
+for the right keyword line by line. The rule of thumb:
+
+| You are writing…                                        | Reach for          | Classifies at   |
+| ------------------------------------------------------- | ------------------ | --------------- |
+| a type abbreviation / refinement / `Σ`/`Π` shorthand    | `def` (§2)         | — (type-level)  |
+| the *statement* of a proposition family to reason about | `prop`             | `Omega`         |
+| a reusable, module-level checked theorem                | `lemma`            | `Omega`         |
+| a checked proof that belongs to one subject             | `proof … for`      | `Omega`         |
+| a value or computation (incl. a proof-relevant witness) | `const`/`fn` (§1)  | `Type` or `Omega` |
+| a goal to hand the prover, no inline proof              | `prove` (`21 §3`)  | `Omega`         |
+
+**The load-bearing rule: `lemma` and `proof` require an `Omega` statement.**
+Their elaboration checks that the stated `φ` classifies at `Omega`
+(proof-irrelevant); a term whose type lands in `Type` is rejected there, not
+silently accepted. So the choice between `lemma`/`proof` and `const`/`fn` is
+not stylistic — it follows the `Omega`/`Type` line:
+
+- **`Equal`-typed and `IsTrue`-typed statements are `Omega`** (`Equal : Π(A :
+  Type). A → A → Omega`; `IsTrue b` unfolds to `Equal Bool b True`), and so is
+  an `And` of two `Omega`s. These are the bread-and-butter law statements —
+  refl/antisym/trans/totality, reduction equations — and each goes in a
+  `lemma` or `proof` cleanly.
+- **Proof-*relevant* conclusions classify at `Type`** — `Or a b` (`Or : Omega
+  → Omega → Type`), a `Σ` with a `Type` component, and the disjunction- or
+  eliminator-helper terms that carry a chosen branch *as data*. These are
+  genuine computation, so they stay `const`/`fn`. Promoting one to a `lemma`
+  is not fighting a bug — it is landing on the wrong side of the
+  proof-irrelevance boundary; `ensure_omega_type` is doing its job.
+
+In one line: `lemma`/`proof` = irrelevant propositions you *prove*;
+`const`/`fn` = data you *compute*. The vocabulary tracks the `Omega`/`Type`
+line on purpose.
+
+**`lemma` vs `proof … for <subject>`.** Same checked-theorem elaboration; the
+difference is *ownership*. A `lemma` lives in the ordinary module namespace
+and is applied by name. A `proof p for s` is exported only as `s::p`, its
+telescope must repeat the subject's public telescope exactly (above), and it
+**may not depend on another proof attached to the same subject** — a sibling
+`s::q` is out of scope inside `s::p`, so each attached proof stands alone.
+Reach for `proof … for` when the fact is *about* one definition and should
+travel with it; reach for `lemma` when it is a reusable stepping-stone in its
+own right.
+
+**Top-down is real: state the theorem above the helpers it uses.** Ken
+resolves top-level names order-independently (`33` mutual recursion; the
+elaborator's name pre-pass registers every top-level name before checking any
+body), so a `lemma` stated *first* may call a `fn`/`const`/`lemma` defined
+*later* in the same file. That is what lets a source read like a paper —
+headline result up top, supporting machinery below. The one exception is the
+self-reference caveat above: a `lemma` body still cannot call *itself*, so a
+proof that needs induction stays an ordinary recursive `fn` behind a thin
+non-recursive `lemma` wrapper.
+
 ## 8. The `.ken.md` literate format
 
 This guide (and every catalog package) is itself written in `.ken.md`: an
