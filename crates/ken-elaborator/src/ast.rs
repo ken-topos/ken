@@ -164,10 +164,10 @@ pub enum Decl {
         requires: Vec<Expr>,
         /// `ensures ψ` clauses (V1; empty in V0 programs).
         ensures: Vec<Expr>,
-        /// `where C₁ T₁ ; C₂ T₂` class constraints (`37 §6`, L3b).
-        /// Each pair is `(class_name, head_type)`. Checked by the
-        /// elaborator via `instance_search` (`classes.rs:91`).
-        constraints: Vec<(String, Type)>,
+        /// `where C₁ T₁, (d₂ : C₂ T₂)` class constraints (`37 §6`, L3b).
+        /// This deliberately shares the instance-path representation so
+        /// naming, binding, and use-site resolution cannot diverge.
+        constraints: Vec<InstanceConstraint>,
         /// Optional `visits [...]` row annotation. D1 wires the row-variable
         /// surface (`[e]`, `[E | e]`) without changing the `view` keyword yet.
         visits: Option<EffectRowSyntax>,

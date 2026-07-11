@@ -8,7 +8,7 @@
 
 use crate::ast::{
     BinOp, ClassField, ConstructorSignatureArg, Decl, DefKeyword, EffectRowSyntax,
-    ExplicitDataCtor, Expr, NumLit, PatKind, Type,
+    ExplicitDataCtor, Expr, InstanceConstraint, NumLit, PatKind, Type,
 };
 use crate::error::{ElabError, Span};
 
@@ -96,12 +96,12 @@ pub struct RInstanceConstraint {
 #[derive(Clone, Debug)]
 pub enum RDeclKind {
     /// A definition using legacy `view` or SURF-1 `const`/`fn`/`proc`.
-    /// `constraints` = `where C T` list resolved from the surface `where`
-    /// clause; checked against `instance_search` in `elaborate_rdecl_v1`.
+    /// `constraints` shares the instance-path binder representation and is
+    /// checked against `instance_search` in `elaborate_rdecl_v1`.
     View {
         keyword: DefKeyword,
         is_space_op: bool,
-        constraints: Vec<(String, RType)>,
+        constraints: Vec<RInstanceConstraint>,
         visits: Option<EffectRowSyntax>,
     },
     /// A `let` binding.
@@ -280,20 +280,30 @@ impl RType {
 // ----- scope -----
 
 #[derive(Clone)]
-struct Scope(Vec<Vec<String>>);
+struct Scope {
+    bindings: Vec<Vec<String>>,
+    /// Dictionary names on a def path resolve as elaborator-local constants,
+    /// rather than core binders. This keeps existing definition telescopes
+    /// unchanged while letting the shared constraints scope over contracts and
+    /// bodies.
+    local_dictionaries: std::collections::HashSet<String>,
+}
 
 impl Scope {
     fn new() -> Self {
-        Self(Vec::new())
+        Self {
+            bindings: Vec::new(),
+            local_dictionaries: std::collections::HashSet::new(),
+        }
     }
 
     fn push(&mut self, name: &str) {
-        self.0.push(vec![name.to_string()]);
+        self.bindings.push(vec![name.to_string()]);
     }
 
     fn push_alias(&mut self, alias: &str, name: &str) {
         if let Some(names) = self
-            .0
+            .bindings
             .iter_mut()
             .rev()
             .find(|names| names.iter().any(|n| n == name))
@@ -303,18 +313,26 @@ impl Scope {
     }
 
     fn pop(&mut self) {
-        self.0.pop();
+        self.bindings.pop();
     }
 
     fn index_of(&self, name: &str) -> Option<usize> {
-        self.0
+        self.bindings
             .iter()
             .rev()
             .position(|names| names.iter().any(|n| n == name))
     }
 
     fn depth(&self) -> usize {
-        self.0.len()
+        self.bindings.len()
+    }
+
+    fn bind_local_dictionary(&mut self, name: &str) {
+        self.local_dictionaries.insert(name.to_string());
+    }
+
+    fn is_local_dictionary(&self, name: &str) -> bool {
+        self.local_dictionaries.contains(name)
     }
 }
 
@@ -330,6 +348,60 @@ fn auto_instance_constraint_binder(ty: &Type) -> Option<String> {
         Type::TVar(name, _) if is_instance_head_param(name) => Some(format!("d{name}")),
         _ => None,
     }
+}
+
+/// Resolve and name a shared constraint list. Instance fields need real core
+/// binders; def-path dictionaries remain elaborator-local resolved terms. The
+/// naming and collision policy is intentionally one implementation for both.
+fn resolve_instance_constraints(
+    scope: &mut Scope,
+    constraints: &[InstanceConstraint],
+    bind_as_core_variables: bool,
+    allow_legacy_sole_bare_d: bool,
+) -> Result<Vec<RInstanceConstraint>, ElabError> {
+    let mut resolved = Vec::with_capacity(constraints.len());
+    let mut binder_names = std::collections::HashSet::new();
+    for constraint in constraints {
+        let rty = resolve_type(scope, &constraint.head_type)?;
+        let binder = match &constraint.binder {
+            Some(name) => name.clone(),
+            None => auto_instance_constraint_binder(&constraint.head_type)
+                .or_else(|| {
+                    (allow_legacy_sole_bare_d && constraints.len() == 1).then(|| "d".to_string())
+                })
+                .ok_or_else(|| ElabError::ParseError {
+                    msg: "an instance constraint whose argument is not a single type variable requires an explicit named binder".to_string(),
+                    span: constraint.head_type.span().clone(),
+                })?,
+        };
+        if !binder_names.insert(binder.clone()) {
+            return Err(ElabError::ParseError {
+                msg: format!("duplicate or ambiguous instance dictionary binder '{binder}'"),
+                span: constraint.head_type.span().clone(),
+            });
+        }
+        resolved.push(RInstanceConstraint {
+            class_name: constraint.class_name.clone(),
+            head_type: rty,
+            binder,
+        });
+    }
+
+    for constraint in &resolved {
+        if bind_as_core_variables {
+            scope.push(&constraint.binder);
+        } else {
+            scope.bind_local_dictionary(&constraint.binder);
+        }
+    }
+    if resolved.len() == 1 && resolved[0].binder != "d" {
+        if bind_as_core_variables {
+            scope.push_alias("d", &resolved[0].binder);
+        } else {
+            scope.bind_local_dictionary("d");
+        }
+    }
+    Ok(resolved)
 }
 
 fn collect_instance_head_params(ty: &Type, out: &mut Vec<String>) {
@@ -675,6 +747,12 @@ pub fn resolve_decl(decl: &Decl) -> Result<RDecl, ElabError> {
                 }
             }
 
+            // Resolve and bind the shared `where` constraints before every
+            // declaration-local expression. Def-path names resolve as local
+            // dictionary constants, so they do not alter parameter indices.
+            let resolved_constraints =
+                resolve_instance_constraints(&mut scope, constraints, false, true)?;
+
             // Resolve `requires` clauses — `result` and `old` are NOT in scope
             let resolved_requires = requires
                 .iter()
@@ -723,18 +801,6 @@ pub fn resolve_decl(decl: &Decl) -> Result<RDecl, ElabError> {
                 )),
                 None => None,
             };
-
-            // Resolve `where C T` constraints — types resolved in param scope
-            // (so type vars from params are in scope, `39 §6`).
-            let resolved_constraints = constraints
-                .iter()
-                .map(|(cname, cty)| {
-                    // Use a fresh scope per constraint (each C T is standalone).
-                    let mut cscope = Scope::new();
-                    let rty = resolve_type(&mut cscope, cty)?;
-                    Ok((cname.clone(), rty))
-                })
-                .collect::<Result<Vec<_>, ElabError>>()?;
 
             Ok(RDecl {
                 name: name.clone(),
@@ -1132,39 +1198,7 @@ pub fn resolve_decl(decl: &Decl) -> Result<RDecl, ElabError> {
                 scope.push(param);
             }
             let rhead = resolve_type(&mut scope, head_type)?;
-            let mut rconstraints = Vec::with_capacity(constraints.len());
-            let mut binder_names = std::collections::HashSet::new();
-            for constraint in constraints {
-                let rty = resolve_type(&mut scope, &constraint.head_type)?;
-                let binder = match &constraint.binder {
-                    Some(name) => name.clone(),
-                    None => auto_instance_constraint_binder(&constraint.head_type).ok_or_else(|| {
-                        ElabError::ParseError {
-                            msg: "an instance constraint whose argument is not a single type variable requires an explicit named binder".to_string(),
-                            span: constraint.head_type.span().clone(),
-                        }
-                    })?,
-                };
-                if !binder_names.insert(binder.clone()) {
-                    return Err(ElabError::ParseError {
-                        msg: format!(
-                            "duplicate or ambiguous instance dictionary binder '{binder}'"
-                        ),
-                        span: constraint.head_type.span().clone(),
-                    });
-                }
-                rconstraints.push(RInstanceConstraint {
-                    class_name: constraint.class_name.clone(),
-                    head_type: rty,
-                    binder,
-                });
-            }
-            for constraint in &rconstraints {
-                scope.push(&constraint.binder);
-            }
-            if rconstraints.len() == 1 && rconstraints[0].binder != "d" {
-                scope.push_alias("d", &rconstraints[0].binder);
-            }
+            let rconstraints = resolve_instance_constraints(&mut scope, constraints, true, false)?;
             let rfields = fields
                 .iter()
                 .map(|(fname, expr)| {
@@ -1265,6 +1299,9 @@ fn resolve_expr_ctx(scope: &mut Scope, expr: &Expr, ctx: PropCtx) -> Result<RExp
                     name: name.clone(),
                     span: span.clone(),
                 });
+            }
+            if scope.is_local_dictionary(name) {
+                return Ok(RExpr::RCon(name.clone(), span.clone()));
             }
             if let Some(i) = scope.index_of(name) {
                 Ok(RExpr::RVar(i, name.clone(), span.clone()))
