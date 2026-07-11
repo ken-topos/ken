@@ -13878,3 +13878,15 @@ tip). Mention IFF question-or-action.
 > pickup and D0 audit/classification, then implementation/QA. CAT-4 remains clean
 > and parked at
 > `runtime-implementer/CAT-4-G4G6-proofs @ db5ae3e`.
+
+> **✅ compare-ord-lexicographic MERGED — `origin/main @ d2cf7409` (PR #516, CI
+> green, 2026-07-11 ~17:00). TRACK A COMPLETE.** Canonical leq-primary
+> `Ord (Pair a b)` / `Ord (List a)` with real kernel-checked
+> refl/antisym/trans/total; zero-TCB; discriminating acceptance binary
+> (`compare_ord_lexicographic_acceptance.rs`). 3 files, +1345/−0 additive. Gate
+> chain: QA blocked once for a missing AC net → focused binary added → QA 41/41 →
+> Architect terminal fidelity APPROVE → Steward honesty gate + merge. All 3 §10
+> retros in; WP CLOSED. Foundation ring clear + quiescent. **Next Foundation
+> initiative: #11 pedagogic catalog rewrite (def/prop/lemma/proof, top-down) —
+> prereq Architect vocab consult; Handoff-Gate-compact the ring at kickoff.** See
+> judgment-log D13.
