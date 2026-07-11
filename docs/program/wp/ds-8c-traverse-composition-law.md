@@ -1,5 +1,14 @@
 # WP DS-8c — Traversable composition coherence law (+ Compose `ap_cmp`)
 
+> **✅ DELIVERED — `origin/main @ a3a3a39d` (2026-07-10). DO NOT RE-KICK.**
+> Both deliverables landed and are kernel-checked: `compose_ap_cmp` (§9.6) and the
+> `traverse` composition law (§9.7 = spec `56 §5.3`) in
+> `catalog/packages/Core/EffectfulClasses.ken.md`, with
+> `ds8_traversable_acceptance.rs` asserting both. This WP closed in a prior window;
+> the 2026-07-11 owner-reconcile/kick was a Steward stale-tracker error (the work
+> was already on `main`). The body below is the historical frame, retained for
+> provenance. **Track B (Ergo) is complete with this.**
+
 **Owner:** **Ergo team** (reassigned Foundation→Ergo, Steward decision **D3**:
 DS-8c is a Track-B serial item — `case-eq-adoption` → `nat-arithmetic-laws` →
 **DS-8c** — while Foundation holds Track A / `compare-ord`. The **DS-8 lineage is
