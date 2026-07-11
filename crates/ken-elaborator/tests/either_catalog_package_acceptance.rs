@@ -19,8 +19,8 @@ const SUMS_KEN_MD: &str = include_str!("../../../catalog/packages/Data/Sums/Sums
 fn base_env() -> ElabEnv {
     let mut env = ElabEnv::empty().expect("prelude bootstrap");
     env.elaborate_ken_md_file(TRANSPORT_KEN_MD).expect("Core/Transport.ken must elaborate");
-    env.elaborate_ken_md_file(LAWFUL_CLASSES_KEN_MD).expect("Core/LawfulClasses.ken must elaborate");
     env.elaborate_ken_md_file(COLLECTIONS_KEN_MD).expect("Data/Collections/Collections.ken.md must elaborate");
+    env.elaborate_ken_md_file(LAWFUL_CLASSES_KEN_MD).expect("Core/LawfulClasses.ken must elaborate");
     env.elaborate_ken_md_file(LAWFUL_FUNCTORS_KEN_MD).expect("Core/LawfulFunctors.ken.md must elaborate");
     env.elaborate_ken_md_file(SUMS_KEN_MD).expect("Data/Sums/Sums.ken.md must elaborate");
     env
@@ -69,8 +69,8 @@ fn zero_axiom_in_sums_ken() {
 fn trusted_base_delta_is_empty_across_the_file() {
     let mut env = ElabEnv::empty().expect("prelude bootstrap");
     env.elaborate_ken_md_file(TRANSPORT_KEN_MD).expect("Core/Transport.ken must elaborate");
-    env.elaborate_ken_md_file(LAWFUL_CLASSES_KEN_MD).expect("Core/LawfulClasses.ken must elaborate");
     env.elaborate_ken_md_file(COLLECTIONS_KEN_MD).expect("Data/Collections/Collections.ken.md must elaborate");
+    env.elaborate_ken_md_file(LAWFUL_CLASSES_KEN_MD).expect("Core/LawfulClasses.ken must elaborate");
     env.elaborate_ken_md_file(LAWFUL_FUNCTORS_KEN_MD).expect("Core/LawfulFunctors.ken.md must elaborate");
     let before: std::collections::BTreeSet<_> = env.env.trusted_base().into_iter().collect();
     env.elaborate_ken_md_file(SUMS_KEN_MD).expect("Data/Sums/Sums.ken.md must elaborate");

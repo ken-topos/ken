@@ -823,9 +823,9 @@ recursion-through-opaque-map over-accept hole.
 (the `string_to_list_char`/`list_char_to_string` round trip is a bijection
 on scalar sequences, ADR 0010 §2), so `DecEq String`/`Ord String` instances
 are soundly deliverable later — but that transport additionally needs a
-lawful `DecEq Char`, not yet landed. Filing `eq`/`compare` as proof-carrying
-instances now would over-claim the trust level; this package ships the
-functions only, honestly.
+lawful `DecEq Char`, which is now landed in `Core/LawfulClasses`. Filing
+`eq`/`compare` as proof-carrying instances here would still over-claim the
+trust level; this package ships the functions only, honestly.
 
 ## 6. Findings
 
