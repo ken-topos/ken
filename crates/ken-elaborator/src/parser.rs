@@ -759,24 +759,39 @@ impl Parser {
         })
     }
 
-    /// `instance C HeadType [where C1 T1 ; C2 T2] { field = expr ; … }`
+    /// `instance C HeadType [where C1 T1, C2 T2] { field = expr ; … }`
     /// (`33 §5`, `39 §6`).
     fn parse_instance_decl(&mut self, start: usize) -> Result<Decl, ElabError> {
         self.advance(); // consume 'instance'
         let (class_name, _) = self.expect_ident()?;
         let head_type = self.parse_atom_type_app()?;
-        // Optional `where C1 T1 ; C2 T2` constraint list
+        // Optional comma-separated constraint list. A parenthesized entry
+        // explicitly names its dictionary: `(da : DecEq a)`.
         let mut constraints = Vec::new();
         if matches!(self.peek(), Token::KwWhere) {
             self.advance(); // consume 'where'
             loop {
-                let (cname, _) = self.expect_ident()?;
-                let cty = self.parse_atom_type_app()?;
-                constraints.push((cname, cty));
-                if matches!(self.peek(), Token::Semicolon) {
+                let (binder, cname, cty) = if matches!(self.peek(), Token::LParen) {
                     self.advance();
-                    // Continue if next is an ident (another constraint) not LBrace
-                    if !matches!(self.peek(), Token::Ident(_) | Token::ConId(_)) {
+                    let (binder, _) = self.expect_ident()?;
+                    self.expect(&Token::Colon)?;
+                    let (cname, _) = self.expect_ident()?;
+                    let cty = self.parse_type()?;
+                    self.expect(&Token::RParen)?;
+                    (Some(binder), cname, cty)
+                } else {
+                    let (cname, _) = self.expect_ident()?;
+                    let cty = self.parse_type_app()?;
+                    (None, cname, cty)
+                };
+                constraints.push(crate::ast::InstanceConstraint {
+                    class_name: cname,
+                    head_type: cty,
+                    binder,
+                });
+                if matches!(self.peek(), Token::Comma) {
+                    self.advance();
+                    if matches!(self.peek(), Token::LBrace) {
                         break;
                     }
                 } else {

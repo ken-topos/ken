@@ -118,6 +118,14 @@ pub struct ClassField {
     pub ty: Type,
 }
 
+/// A prerequisite dictionary on an instance declaration.
+#[derive(Clone, Debug)]
+pub struct InstanceConstraint {
+    pub class_name: String,
+    pub head_type: Type,
+    pub binder: Option<String>,
+}
+
 /// A constructor-style intro helper inside a `prop ... where { ... }` block.
 #[derive(Clone, Debug)]
 pub struct PropIntro {
@@ -286,8 +294,8 @@ pub enum Decl {
         class_name: String,
         /// Head type expression (may be a type constructor application).
         head_type: Type,
-        /// Sub-constraints: [(class_name, head_type)] (`39 §6.4`).
-        constraints: Vec<(String, Type)>,
+        /// Sub-constraints and their optional explicit dictionary binders.
+        constraints: Vec<InstanceConstraint>,
         /// Field implementations: (name, expr).
         fields: Vec<(String, Expr)>,
         span: Span,

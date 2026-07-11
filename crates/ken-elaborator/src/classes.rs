@@ -5,9 +5,10 @@
 //! `ElabCtx` type. This module exports only the data structures that `elab.rs`
 //! populates and `ElabEnv` carries.
 
-use std::collections::HashMap;
-use ken_kernel::{GlobalId, Term};
 use crate::ast::DefKeyword;
+use crate::resolve::RType;
+use ken_kernel::{GlobalId, Term};
+use std::collections::HashMap;
 
 /// Whether a class is a property class (Ω-sorted Σ-chain, coherence-free via
 /// Ω-PI) or a structure class (Type-sorted, canonical-one-per-head rule).
@@ -52,6 +53,7 @@ pub struct ClassInfo {
 }
 
 /// Per-instance metadata.
+#[derive(Clone)]
 pub struct InstanceInfo {
     /// Kernel `GlobalId` of the instance's Σ-record value.
     pub instance_id: GlobalId,
@@ -61,6 +63,26 @@ pub struct InstanceInfo {
     pub field_effect_rows: Vec<crate::effects::RowType>,
     /// Module where this instance was declared (for orphan check).
     pub module_id: u32,
+    /// Type parameters abstracted by the instance head, in source order.
+    pub head_param_count: usize,
+    /// The resolved instance-head pattern.  It selects which concrete type
+    /// arguments are applied at a use site (e.g. `Pair a Bool` abstracts only
+    /// `a`, not the fixed `Bool` slot).
+    pub head_type: Option<RType>,
+    /// Prerequisite dictionaries, retained so use-site resolution can build
+    /// their recursive applications rather than merely returning the head id.
+    pub constraints: Vec<InstanceConstraintInfo>,
+}
+
+/// A prerequisite dictionary required by a polymorphic instance.
+#[derive(Clone)]
+pub struct InstanceConstraintInfo {
+    pub class_name: String,
+    /// Surface-resolved shape, used to select the recursively required head.
+    pub head_type: RType,
+    /// Kernel type in the instance-head parameter context, used to close the
+    /// instance Pi/lambda telescope and to kernel-check applications.
+    pub core_type: Term,
 }
 
 /// The typeclass environment: class registry, canonical instance registry,
@@ -106,11 +128,7 @@ impl ClassEnv {
     }
 
     /// Look up the canonical instance for `(class_name, head_type_name)`.
-    pub fn instance_search(
-        &self,
-        class_name: &str,
-        head_name: &str,
-    ) -> Option<GlobalId> {
+    pub fn instance_search(&self, class_name: &str, head_name: &str) -> Option<GlobalId> {
         self.instances
             .get(&(class_name.to_string(), head_name.to_string()))
             .map(|i| i.instance_id)
