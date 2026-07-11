@@ -1243,8 +1243,13 @@ fn scc_dependency_order(adj: &[Vec<usize>], sccs: &[Vec<usize>]) -> Vec<usize> {
             return;
         }
         seen[rep] = true;
-        for &dep in &adj[node] {
-            visit(dep, adj, sccs, seen, order);
+        // Condensation edges are the union of every member's edges.  Looking
+        // only at the representative skips dependencies mentioned solely by
+        // a later member of a mutual SCC.
+        for &member in &sccs[rep] {
+            for &dep in &adj[member] {
+                visit(dep, adj, sccs, seen, order);
+            }
         }
         order.push(rep);
     }

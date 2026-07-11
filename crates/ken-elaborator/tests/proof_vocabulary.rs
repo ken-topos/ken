@@ -47,6 +47,22 @@ fn public_module_definitions_receive_the_same_forward_admission() {
 }
 
 #[test]
+fn mutual_scc_orders_dependencies_from_non_entry_members() {
+    let mut elab = env();
+    elab.elaborate_file(
+        r#"
+        fn a (n : Nat) : Nat = match n { Zero => Zero ; Suc m => b m }
+        fn b (n : Nat) : Nat = match n { Zero => w ; Suc m => a m }
+        const w : Nat = Zero
+        "#,
+    )
+    .expect("a non-entry SCC member's forward dependency must be elaborated first");
+    assert!(elab.globals.contains_key("a"));
+    assert!(elab.globals.contains_key("b"));
+    assert!(elab.globals.contains_key("w"));
+}
+
+#[test]
 fn homogeneous_mutual_proofs_admit_but_non_descending_proofs_fail_at_sct() {
     let mut elab = env();
     elab.elaborate_file(
