@@ -14,27 +14,26 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### proof-vocabulary A/B/C PUBLISHING (combined code + §33 spec) — 2026-07-11
+> ### proof-vocabulary A/B/C — MERGED + CLOSED (#19) — 2026-07-11
 >
-> **Both A+C gates cleared; landing now via a Steward combined publication.**
-> - **Code** `wp/proof-vocabulary @ 68c0a8bf` (Language) — recursive
->   `lemma`/`proof` under SCT + forward refs via dependency-ordered SCC (union of
->   all members' out-edges) + attached-proof occurs-applied-in-φ + no-sibling
->   deletion. Architect algorithm review APPROVE (soundness + the SCC-ordering
->   should-fix landed, verdict flipped); QA 24/24; 4 elaborator files, zero
->   kernel/Cargo/TCB.
-> - **Spec** `wp/proof-vocabulary-spec @ f60c23cd` (enclave) — §33 §8.4
->   normative admission/soundness statement, CV code↔spec APPROVE
->   (`evt_5nqy0ptmmkdrw`) + one-line precision fold (SCT bypassed only for a
->   singleton with no self-edge at all).
-> - Honesty gate passed on both (clean descendants of `7a92efde`; trust-surface
->   clean). Publishing as one integration SHA. On merge → mark MERGED, collect
->   retros, close #19.
+> **MERGED `origin/main @ c755837f`** (PR #528, CI green) — combined publication:
+> code `68c0a8bf` + §33 §8.4 spec `f60c23cd` + tracker. Recursive `lemma`/`proof`
+> under SCT; forward refs via dependency-ordered SCC (union of all members'
+> out-edges); attached-proof occurs-applied-in-φ; no-sibling deletion. Zero
+> kernel/Cargo/TCB. Gates: Architect algorithm APPROVE (SCC-ordering should-fix
+> landed pre-merge, verdict flipped) + Language QA 24/24 + CV code↔spec APPROVE
+> (`evt_5nqy0ptmmkdrw`, pt2 precision fold). **Retros in** (impl
+> `evt_6epfn010dgqh0` + QA `evt_57y0anf8b6sq7` + spec-author `evt_1ee5h9z856s6k`
+> + CV `evt_3hzrwceb9acen` + spec-leader coord; language-leader coordination
+> retro waived — restart context loss, per operator). **#19 CLOSED.**
+> Cross-run carry: ground §-mechanism prose on the landed producer, not frame
+> pseudocode (`frame-pseudocode-diverges-from-landed-mechanism`, 2nd occurrence);
+> verify each category of a cross-category generalization independently.
 >
-> **Follow-on HELD:** `fn-lemma-partition` WP authored (`steward/work @
-> 2e79f1cd`), **gated on proof-vocab A landing** — releases once this merges.
-> Architect ENDORSE (`evt_6eyh27x6p7h0x`); `tt`→`Proved` + surface-`Top` WP still
-> to author.
+> **NOW UNBLOCKED → awaiting operator sequencing:** `fn-lemma-partition` WP
+> authored + held (`steward/work @ 2e79f1cd`), gated on exactly this A landing —
+> ready to release/kick (Architect ENDORSE `evt_6eyh27x6p7h0x`). Also to author:
+> `tt`→`Proved` + surface-`Top` WP.
 >
 > **#20 corrected:** codex build seats DO wake on mentions via the per-seat
 > `channel_runner` tmux delivery (daemon log = ground truth); the real
