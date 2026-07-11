@@ -850,7 +850,7 @@ no modifier/kernel work for Map.
   correct throughout; the lever is cheaper self-triage before pulling the Architect
   (the most expensive unit) — the isolate-before-escalate lesson, now well-earned.
 
-### Run status / next triggers (event-driven) — updated ~10:16 UTC
+### Run status / next triggers (event-driven) — updated ~10:32 UTC
 - **MERGED:** Language `def-path-constraint-binder-unification` (`main @ 41df4e62`);
   ring §10 retros in. Enclave still holds the spec parity clause (`32`/`33`) → CV
   verdict → `git_request`. Playbook watchdog hardening (`main @ bc1c0643`).
@@ -858,15 +858,16 @@ no modifier/kernel work for Map.
   **all three §10 retros IN** (leader/qa/implementer). Track-A merge **anchor**
   landed. Rebased approved `18bd3ff6` via cherry-pick (it had drifted behind my
   re-scope doc merges); tracker synced `main @ 1082ef89`. WP done.
-- **MERGED — Ergo `nat-arithmetic-laws`:** `main @ d762c99b` (PR #503, CI-green).
-  Kicked after the full Handoff Gate (ergo ring compacted + drops verified);
-  honesty gate clean (2-file outer-ring: `Core/NatArith.ken.md` + acceptance test;
-  ancestry no-drift on `1082ef89`; trust-surface hits all benign test guards).
+- **CLOSED — Ergo `nat-arithmetic-laws`:** `main @ d762c99b` (PR #503, CI-green);
+  **all three §10 retros IN** (leader `evt_kqb95k8m9t7j` / qa `evt_20trnmaps63mf` /
+  implementer `evt_2cx4ynftx916j`) — WP done. Kicked after the full Handoff Gate
+  (ergo ring compacted + drops verified); honesty gate clean (2-file outer-ring:
+  `Core/NatArith.ken.md` + acceptance test; ancestry no-drift on `1082ef89`;
+  trust-surface hits all benign test guards).
   QA (`evt_74gcd6am9pnk3`) + Architect fidelity (`evt_2j0f33gh09f64`) green —
   Architect walked every law (definitional Refl bases vs real-induction hard laws
   correctly discriminated; `mul_add_distrib_l`/`mul_one_r` honestly derived; zero
-  papering, nothing size-deferred). **§10 retro chased** (`evt_3kd9vshyrvr9g`) →
-  close on retro-in, then DS-8c. Placement = **new `Core/NatArith.ken.md`**
+  papering, nothing size-deferred). Placement = **new `Core/NatArith.ken.md`**
   (separated from OrdNat export). **Parsing `nat_add` unification DEFERRED** to a
   follow-up de-dup seam —
   ergo-implementer's grounded finding: **catalog entries have no import/load
@@ -899,14 +900,26 @@ no modifier/kernel work for Map.
   conflict is **Foundation's to resolve, NOT cross-WP arbitration** (Track-B
   `list_deceq` at `9b09124d` is merged/authoritative → take it verbatim, layer the
   compare/Ord/Gt section in its own region, seam-2 different regions). foundation-
-  leader executing the clean-transplant → rebased green SHA → lex Pair/List →
-  Architect fidelity gate (assembled Eq/Lt/Gt + lex head) → `git_request`.
-  (Push-credential watch **cleared** — scratch ref pushed fine.)
-- **Queued (framed, not kicked):** DS-8c (Ergo, last Track-B item, after the
-  Nat-laws retro closes).
+  implementer executing the clean-transplant. **STEWARD RE-ANCHOR:** the leader's
+  recovery cited base `1082ef89`, but I've since advanced `origin/main` to
+  `2f09d625` (Nat-laws + docs — none touch LawfulClasses/Collections); told the
+  implementer to base on **current** `origin/main` so the honesty-gate ancestry
+  stays clean. **Implementer stalled TWICE mid-transplant** (no-poll terra seat
+  ends its turn per step; re-roused both times) — watch for repeat; next: rebased
+  green SHA → lex Pair/List → Architect fidelity gate → `git_request`.
+  (Push-credential watch cleared.)
+- **ACTIVE — Ergo `ds-8c-traverse-composition-law` (KICKED `evt_7r0wkgsav5b62`):**
+  Track-B's **final** item. Full Handoff Gate run (ergo ring compacted + 3 drops
+  verified). Frame **reconciled Foundation→Ergo on `main @ 2f09d625`** (PR #505,
+  decision D3 — owner + gate ring; DS-8 lineage is Foundation's but the WP is
+  Ergo's, within landed `fn`-synonym scaffolding). Two deliverables: Compose
+  `ap_cmp` (assemble first) → traverse composition law (spec `56 §5.3`), per the
+  4-stage plan. SIZE-not-capability (~40–60 lemmas); do NOT attempt the real
+  higher-kinded instance (separate Language WP). Kickoff points ergo at the DS-8
+  scaffolding to mitigate the cross-team cold pickup.
 - **Next gate events:** Foundation compare-ord `git_request` (post rebase + lex +
-  Architect gate); Ergo Nat-laws retro (then DS-8c handoff); Language spec-clause
-  CV verdict.
+  Architect gate); Ergo DS-8c `git_request` (post ring + Architect gate); Language
+  spec-clause CV verdict.
 - **Forward candidates: 3, count UNCHANGED** (Kernel K6 conv_struct #2 — the Gt
   "falsification" did **not** increment it, Architect ruled it route-aroundable;
   Language modifier-whnf #1 — Map did NOT bump it; Language namespace-split #1). Map
