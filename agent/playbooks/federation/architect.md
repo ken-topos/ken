@@ -23,6 +23,20 @@ Build teams route **component-design questions** to you (§9). You:
   same artifact-improving instinct that keeps the query rate decaying.
 - Route a genuine fork to a **Decision**; route scope questions to the Steward.
 
+**Deliver a technique ruling SELF-CONTAINED — paste the verbatim artifact
+in-thread; never make the recipient fetch a prior event by ID.** Your
+consumers are event-driven terra seats whose event-by-ID retrieval is
+unreliable: a ruling that says *"apply the helper from evt_XXXX"* strands a
+seat that cannot pull `evt_XXXX` — it must then re-ask, and you re-paste,
+burning two round-trips on a no-poll loop (observed 2026-07-11: an implementer
+held for a helper it could not fetch by ID until the text was re-posted
+verbatim). So when a ruling hands over code or a spelling: put the **exact,
+probe-verified signature + body** directly in the message, plus the precise
+call site and the byte-for-byte spots the implementer must reconcile. The seat
+should be able to apply it from the single message with **zero** further
+lookups. (Same failure family as [[playbooks-state-mechanism-not-intent]] —
+hand the mechanism, not a pointer to it.)
+
 For teams with a large design surface (Kernel, Verify) you may engage early and
 proactively; for smaller surfaces (Runtime, Language, Ergo) you are on-demand.
 

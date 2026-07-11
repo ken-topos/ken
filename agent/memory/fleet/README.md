@@ -29,6 +29,7 @@ some roles need belongs in a narrower scope.
 | [re-read-latest-events-immediately-before-a-stall-nudge](re-read-latest-events-immediately-before-a-stall-nudge.md) | Re-read latest events immediately before a stall-nudge |
 | [reason-in-agent-team-hours-not-human-days](reason-in-agent-team-hours-not-human-days.md) | Reason in agent-team wall-clock hours, never human work-days |
 | [reviewers-review-branches-not-prs](reviewers-review-branches-not-prs.md) | Federation reviewers review branches, not PRs |
+| [self-contained-handoff-paste-verbatim-no-event-id](self-contained-handoff-paste-verbatim-no-event-id.md) | Hand a ruling/artifact verbatim in-thread; never make a seat fetch it by event-ID |
 | [surface-the-seam-need-not-your-preferred-mechanism](surface-the-seam-need-not-your-preferred-mechanism.md) | Surface a cross-author need; leave the mechanism to the owner |
 | [terminal-gate-resolve-race-resolving-on-cast](terminal-gate-resolve-race-resolving-on-cast.md) | A terminal-gate resolve can race the last voter's own resolve |
 | [thin-flow-directive-dont-cc-the-room](thin-flow-directive-dont-cc-the-room.md) | Thin-flow directive: one reviewer per lane, don't cc the room |
