@@ -27,5 +27,7 @@
 # Keep Cargo.lock committed (this workspace ships a binary).
 
 # Claude Code: ignore per-session state, but keep the role-skill corpus tracked
+# and the shared project settings (fleet-wide hooks — see .claude/settings.json).
 .claude/*
 !.claude/skills/
+!.claude/settings.json
