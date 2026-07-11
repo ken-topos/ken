@@ -338,16 +338,17 @@ right. The concept is ordinary dependent-implicit insertion — the *resolution*
 of `d` is the only new step, and it lives in `39 §6`.
 
 **Multiple constraints — one dictionary per constraint, deterministically
-named (instance `where`-clause; def-path unification pending).** This
-multi-constraint contract — the deterministic `d<v>` naming, explicit named
-binders, and comma-separated list below — is the **shipped surface of the
-instance `where`-clause** (`instance C Head where …`; the comma/named grammar is
-`32 §1`'s `instance_constraints`). The **definition path** (`fn`/`proc`/`const`/
-`def`/`view`) currently binds only a **single** constraint `where C a` as `d`
-(`37 §6`/`51 §4`, L3b), **semicolon-separated and bare** for multiples
-(`32 §1`'s `constraints`); unifying it to the `d<v>`/named-binder/comma form is a
-**pending def-path reconciliation**, not yet shipped — so the multi-constraint
-and explicit-binder cases below are expressible on **instances** today.
+named (shared by the definition path and instances).** This multi-constraint
+contract — the deterministic `d<v>` naming, explicit named binders, and
+comma-separated list below — is the **shipped surface of every `where`-clause**:
+both the **definition path** (`const`/`fn`/`proc`, and the legacy `view`) and the
+**instance** `where`-clause (`instance C Head where …`) parse through the **one
+shared production** (`32 §1`'s `constraint_clause`; the landed def-path
+constraint-binder unification). The definition path additionally retains `;` as a
+separator for existing declarations (`37 §6`, L3b) and instances additionally
+tolerate a trailing `,` before `{` — spelling compatibilities, not distinct
+grammars. The multi-constraint, `d<v>`, and explicit-binder cases below therefore
+hold **uniformly on definitions and instances alike**.
 
 On an instance, with more than one constraint each dictionary needs a distinct,
 deterministic name, and the singular `d` generalizes. A constraint **of the form
@@ -364,10 +365,9 @@ instance DecEq (Pair a b) where DecEq a, DecEq b { … }
 
 - **Uniform, deterministic, projection-preserving.** The name is a pure
   function of the constraint's type argument — `DecEq a → da`, `DecEq b → db`,
-  `Ord a → da` — identical for one or many constraints on the instance
-  `where`-clause (the def-path uses the older single-`d` form until the pending
-  reconciliation above). Explicit `.field` projection is unchanged (`da.eq`,
-  `db.complete`);
+  `Ord a → da` — identical for one or many constraints, and identical on the
+  definition path and the instance `where`-clause (the shared production above).
+  Explicit `.field` projection is unchanged (`da.eq`, `db.complete`);
   only the *name* generalizes. This is the coherent completion of the singular
   model — a named dictionary per constraint, **not** one reserved `d` for many,
   and **not** type-directed member resolution (a distinct, implicit paradigm;
@@ -379,15 +379,16 @@ instance DecEq (Pair a b) where DecEq a, DecEq b { … }
   mismatch elaborates a `Σ`-dictionary that fails its declared type and the
   **kernel rejects it** — the elaborator is untrusted, so a naming/position bug
   is **fail-closed** (rejects a good dictionary, never admits a bad one).
-- **Singular reconciliation — `d<v>` canonical on an instance, bare `d` the
-  retained sole-constraint spelling.** On an instance the uniform rule makes the
-  single-constraint case `d<v>` too (`instance … where DecEq a` → `da`,
-  `da.eq`). The reserved bare `d` is **retained for the sole-constraint case** —
-  it is the definition-path's single-constraint dictionary name (`37 §6`/`51 §4`,
-  L3b) and an accepted instance-path alias — so landed catalog proofs that
+- **Singular reconciliation — `d<v>` canonical, bare `d` the retained
+  sole-constraint spelling.** The uniform rule makes the single-constraint case
+  `d<v>` on **both** paths (`where DecEq a` → `da`, `da.eq`). The reserved bare
+  `d` is **retained for the sole-constraint case on the definition path and on
+  instances alike** (`37 §6`/`51 §4`, L3b) — so landed catalog proofs that
   project it (`Core/EmptyDec`'s `d.eq`/`d.sound`/`d.complete`,
-  `Core/LawfulClasses`'s `d.leq`) stay valid. With **two or more** instance
-  constraints, bare `d` is not bound — every dictionary is `d<v>`.
+  `Core/LawfulClasses`'s `d.leq`) stay valid — and it stays available even when
+  that sole constraint is written with an explicit named binder (`where (chosen :
+  Flag Int)` still admits `d`). With **two or more** constraints, bare `d` is not
+  bound — every dictionary is its `d<v>` auto-name or explicit name.
 - **Explicit named binders — required wherever the auto-name is unavailable.**
   The `d<v>` auto-name is defined **only** for the single-type-variable form
   `C v`. **Any other grammatical constraint (`32 §1`) takes no auto-name and

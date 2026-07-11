@@ -14,15 +14,15 @@ import ::= "import" ModPath ("as" ConId)? ("(" name ("," name)* ")")?
         |  "use" ModPath  -- bring names into scope unqualified
 
 decl ::=
-    "const" ident binder* (":" type)? contract* constraints? "=" expr  -- pure value (36 §1.6)
-  | "fn"    ident binder* (":" type)? contract* constraints? "=" expr  -- pure function
-  | "proc"  ident binder* (":" type)? effects? contract* constraints? "=" expr  -- effectful / imperative
+    "const" ident binder* (":" type)? contract* constraint_clause? "=" expr  -- pure value (36 §1.6)
+  | "fn"    ident binder* (":" type)? contract* constraint_clause? "=" expr  -- pure function
+  | "proc"  ident binder* (":" type)? effects? contract* constraint_clause? "=" expr  -- effectful / imperative
   | "def" ConId tyvar* "=" type  -- definition: alias / refinement ("type" reserved)
   | "record" ConId tyvar* "{" field ("," field)* "}" derive?  -- product
   | "data" ConId tyvar* "=" simple_ctor ("|" simple_ctor)* derive?  -- simple sum sugar
   | "data" ConId data_param* ":" data_family data_block derive?  -- inductive family
   | "class" ConId binder* "{" class_field ("," class_field)* "}"  -- typeclass (33 §5, ADR 0008)
-  | "instance" ConId atype* instance_constraints? "{" field_assign ("," field_assign)* "}"  -- instance (33 §5, §5.4)
+  | "instance" ConId atype* constraint_clause? "{" field_assign ("," field_assign)* "}"  -- instance (33 §5, §5.4)
   | "prop" ConId tyvar* binder* ":" type prop_block?  -- proposition family / claim shape
   | "lemma" ident binder* ":" type "=" expr  -- standalone checked proof theorem
   | "proof" ident "for" path binder* ":" type "=" expr  -- attached proof theorem
@@ -34,11 +34,10 @@ decl ::=
 
 cell    ::= "mut" ident ":" type "=" expr           -- mutable space cell (36 §4)
 becomes ::= ident "becomes" expr  -- space cell update (36 §4) [OQ-syntax]
-constraints ::= "where" constraint (";" constraint)*  -- def-path (fn/proc/const): bare, semicolon (37 §6 L3b)
-instance_constraints ::= "where" constraint_bind ("," constraint_bind)*  -- instance: comma, bare | named (33 §5.4)
-constraint_bind ::= constraint                        -- bare: auto-named `d<v>` (33 §5.4)
+constraint_clause ::= "where" constraint_bind ("," constraint_bind)*  -- shared def-path + instance (33 §5.4)
+constraint_bind ::= constraint                        -- bare: auto-named `d<v>` (single tyvar); sole-constraint `d` alias
                   | "(" ident ":" constraint ")"      -- explicit named binder, e.g. `(da : DecEq a)`
-constraint  ::= ConId atype+                          -- e.g.  DecEq A
+constraint  ::= ConId atype+                          -- e.g.  DecEq a
 binder  ::= "(" ident+ ":" type ")" | "{" ident+ ":" type "}"   -- {…} implicit
 field   ::= ident ":" type
 class_field ::= field_purity? ident ":" type
@@ -102,6 +101,20 @@ argument types and by the result indices. The named-record constructor shorthand
 `C { f : A, g : B }` stays sugar for the simple default-result form; record-style
 field labels inside an explicit dependent constructor signature are a later
 surface refinement, not part of this production.
+
+**Constraint `where` clauses are one shared production (`33 §5.4`).** The
+definition path (`const`/`fn`/`proc`) and `instance` share `constraint_clause`
+(landed: both routes parse through the one constraint parser). A constraint is
+either **bare** — a single-type-variable `C v` auto-named `d<v>`, with the
+reserved bare `d` as the sole-constraint alias — or an **explicit named binder**
+`(name : C τ)`, required wherever no auto-name exists (compound/multi-argument
+constraints, or a same-variable collision that would auto-name twice, which is
+**rejected**); the naming contract is normatively `33 §5.4`. Comma is the unified
+separator on both paths. Two spelling compatibilities are retained, not new
+grammar: the def-path additionally accepts `;` as a separator (legacy, `37 §6`
+L3b), and `instance` additionally tolerates one trailing `,` before `{`. The
+clause scopes over the declaration's `requires`/`ensures`, its result refinement,
+and its body, but not sibling declarations.
 
 ## 2. Types
 
