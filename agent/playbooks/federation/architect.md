@@ -104,11 +104,29 @@ more:
 2. **Self-compact at your work-unit seam.** Your WP-equivalent is one
    **review**. Clean seam = verdict delivered, no Decision mid-verdict. After
    delivering a verdict, refresh `ARCHITECT-STATE.md`; if the session has run
-   long, call `request_context_reset` (self-only) **then** — between reviews
-   you hold almost nothing not reconstructable from the Decision queue +
-   `main`, so a self-chosen seam preserves more than a random autocompact
-   point. `request_context_reset` resets only you; you never compact another
-   agent (that is the Steward's `moot compact`).
+   long, self-compact **then** — between reviews you hold almost nothing not
+   reconstructable from the Decision queue + `main`, so a self-chosen seam
+   preserves more than a random autocompact point.
+
+   **★ Mechanics (operator, 2026-07-02) — do NOT use `request_context_reset`.**
+   It is **broken in this local harness**: it hunts for a moot-managed
+   `convo-<role>` session that does not exist here and fails with *"No tmux
+   session 'convo-architect' found."* **That error message is naming the bug,
+   not a target** — do **not** then retry `tmux … -t convo-architect`; there is
+   no such window. The **only** reliable self-compact is the `tmux send-keys`
+   path pointed at **your own** window, and the windows are named `moot-<role>`
+   (yours is `moot-architect`):
+
+   ```bash
+   tmux send-keys -t moot-architect "/compact" ; sleep 2 ; tmux send-keys -t moot-architect Enter
+   ```
+
+   The two-step (type `/compact`, wait ~2s, then a **separate** `Enter`) avoids
+   the fused-keystroke race that leaves `❯ /compact` sitting unsent on the input
+   line. `/compact` fires at the **end of the current turn**, so make it your
+   **last action** — finish refreshing `ARCHITECT-STATE.md` first. You
+   self-compact only; you never compact another agent (that is the Steward's
+   job, via the same `moot-<role>` tmux path — `moot compact` is no-op-prone).
 
 ## 4. Stay in your lane
 
