@@ -849,8 +849,24 @@ no modifier/kernel work for Map.
   offset drift, not the cause. Foundation's refusal-to-paper discipline stayed
   correct throughout; the lever is cheaper self-triage before pulling the Architect
   (the most expensive unit) — the isolate-before-escalate lesson, now well-earned.
+- **DS-8c kicked on already-delivered work — my stale-tracker error.** I ran the
+  full release process (frame reconcile PR #505 + Handoff Gate ergo-ring compaction
+  + kick `evt_7r0wkgsav5b62`) on a WP that had **already landed** (`a3a3a39d`,
+  2026-07-10) in a prior window. Root: I verified the **frame** was on `main` and
+  shovel-ready, but **never grepped `main` for the WORK itself** — a frame's
+  presence ≠ the deliverable being undone. My D3 reassignment and run-status both
+  carried DS-8c as "queued/framed," a line stale by a full window. **RULE (new): a
+  WP framed in a prior window is presumed-suspect — before ANY kickoff/Handoff
+  Gate, grep `origin/main` for the deliverable's artifacts (the committed
+  file/fn/law, not the frame doc) and confirm it is genuinely absent.** Sibling of
+  [[my-own-tracker-capability-landed-line-can-be-stale]] applied to WP-kicking. The
+  ergo ring did exactly this (ground-truthed the frame against main before writing)
+  and caught it — the cheap check I skipped. Cost was one compaction + an aborted
+  rebase; no duplicate authored. Also: the frame's "buildable-now" language, itself
+  authored the same day the work landed, is what made the staleness invisible —
+  perishable "current state" in a frame ([[wp-frame-stale-vs-landed-kernel]] class).
 
-### Run status / next triggers (event-driven) — updated ~10:32 UTC
+### Run status / next triggers (event-driven) — updated ~10:39 UTC
 - **MERGED:** Language `def-path-constraint-binder-unification` (`main @ 41df4e62`);
   ring §10 retros in. Enclave still holds the spec parity clause (`32`/`33`) → CV
   verdict → `git_request`. Playbook watchdog hardening (`main @ bc1c0643`).
@@ -908,18 +924,25 @@ no modifier/kernel work for Map.
   ends its turn per step; re-roused both times) — watch for repeat; next: rebased
   green SHA → lex Pair/List → Architect fidelity gate → `git_request`.
   (Push-credential watch cleared.)
-- **ACTIVE — Ergo `ds-8c-traverse-composition-law` (KICKED `evt_7r0wkgsav5b62`):**
-  Track-B's **final** item. Full Handoff Gate run (ergo ring compacted + 3 drops
-  verified). Frame **reconciled Foundation→Ergo on `main @ 2f09d625`** (PR #505,
-  decision D3 — owner + gate ring; DS-8 lineage is Foundation's but the WP is
-  Ergo's, within landed `fn`-synonym scaffolding). Two deliverables: Compose
-  `ap_cmp` (assemble first) → traverse composition law (spec `56 §5.3`), per the
-  4-stage plan. SIZE-not-capability (~40–60 lemmas); do NOT attempt the real
-  higher-kinded instance (separate Language WP). Kickoff points ergo at the DS-8
-  scaffolding to mitigate the cross-team cold pickup.
+- **ALREADY DELIVERED — `ds-8c-traverse-composition-law` (`a3a3a39d`, 2026-07-10;
+  my kick was a STALE-TRACKER ERROR).** ergo-leader ground-truthed the frame
+  against `origin/main` before writing a line and found DS-8c **already landed**
+  (`evt_5f9ee9rgahcv9`), which I independently confirmed: `compose_ap_cmp` proved
+  (§9.6, `EffectfulClasses.ken.md:2283`); the traverse composition law proved (§9.7
+  = spec `56 §5.3`); `ds8_traversable_acceptance.rs` asserts both
+  (`traverse_composition_law_is_present_and_kernel_checked` +
+  `compose_instance_head_still_genuinely_absent`); zero-`Axiom`/empty-`trusted_base`
+  guards pass; `a3a3a39d` ("closes DS-8 deferred split") is an ancestor of main and
+  EffectfulClasses is byte-unchanged since. **I ran a Handoff Gate + kick
+  (`evt_7r0wkgsav5b62`, PR #505 frame reconcile) on already-done work** — cost: one
+  ergo-ring compaction + a brief aborted stale-branch rebase. No duplicate authored
+  (ring caught it). Assignment CLOSED as delivered (`evt_2r36ystyfz326`).
+- **TRACK B (Ergo lane) COMPLETE:** `case-eq-adoption` (#501) → `nat-arithmetic-laws`
+  (#503) → DS-8c (`a3a3a39d`) all delivered. Ergo idle, awaiting operator direction
+  (~11:00 UTC) — no locked-plan work remains on its lane; do NOT invent work.
 - **Next gate events:** Foundation compare-ord `git_request` (post rebase + lex +
-  Architect gate); Ergo DS-8c `git_request` (post ring + Architect gate); Language
-  spec-clause CV verdict.
+  Architect gate) — the sole remaining locked-plan build; Language spec-clause CV
+  verdict.
 - **Forward candidates: 3, count UNCHANGED** (Kernel K6 conv_struct #2 — the Gt
   "falsification" did **not** increment it, Architect ruled it route-aroundable;
   Language modifier-whnf #1 — Map did NOT bump it; Language namespace-split #1). Map
