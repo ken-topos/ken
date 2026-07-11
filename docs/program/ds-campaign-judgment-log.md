@@ -1218,3 +1218,48 @@ new work started). Prereq before kicking: Architect consult on whether
 `def`/`prop`/`lemma`/`proof` are new surface forms or conventions over `def`.
 Handoff-Gate-compact the Foundation ring when the brief is ready (the ring is at
 a clean seam now, but compaction pairs with the kickoff, not before it).
+
+### D14 · #11 pedagogic initiative LAUNCHED — vocab ruling → §7.1 → brief (2026-07-11 ~17:30 UTC)
+
+**Resume-fix verified in production.** Self-compacted at the compare-ord seam as
+the live test of the detached resume watcher (`scripts/postcompact-resume.sh`,
+PR #514). Log confirmed the correct sequence: waited for compaction to *start*
+(no early-fire), waited for *completion*, then sent `resume`. The old
+buffered-resume race is closed. Operator's explicit fix request (#18) done.
+
+**Architect vocabulary ruling (evt_261s6784m3y48) — HYBRID, no prereq WP.**
+Grounded on a live `origin/main` read (lexer, parse fns, resolve.rs, elab.rs,
+prelude), not memory. The four forms are **distinct + kernel-backed today**:
+`def` (type alias/refinement) · `prop` (Ω-valued proposition family) · `lemma`
+(module-level checked Ω-theorem) · `proof … for` (same, namespaced `subject::p`,
+telescope-validated, no sibling-proof dependency). **Load-bearing rule:**
+`lemma`/`proof` enforce Ω via `ensure_omega_type` — `Equal`/`IsTrue`-typed laws
+convert cleanly; proof-**relevant** conclusions (`Or : Ω→Ω→Type`, `Σ`-witness,
+eliminator helpers carrying a branch as data) stay `const`/`fn`. The vocabulary
+tracks the proof-irrelevance line on purpose. Low adoption (lemma 13 / proof 10)
+is under-USE not under-SPEC → nothing to build first. One flagged follow-up (NOT
+a blocker): no proof-relevant `lemma` form (Type-level checked theorem stays
+`const : φ = proof`) — watch during prototype, escalate only if it hurts.
+
+**§7.1 convention note MERGED** `origin/main @ 9a2cf746` (PR #518, doc-only).
+Architect-authored subsection "Choosing a form" in `surface-reference.ken.md`:
+decision table + the Ω-vs-Type rule + `lemma`-vs-`proof … for` ownership + the
+top-down enabler. +56/−0, no ken fences (pure prose+table → nothing new
+elaborates). This is the ring's authoring contract.
+
+**Foundation brief MERGED** `origin/main @ 50d949bb` (PR #519, doc-only) at
+`docs/program/wp/pedagogic-catalog-prototype.md`. Pins settled inputs (§7.1,
+Ω-vs-Type, order-independence decided §33 + built, self-reference caveat,
+clean-room), targets (NatArith flagship — doubles as the #12 keyword pilot; +
+OrdNat; EmptyDec optional boundary-exerciser), mandated per-file outline,
+testable AC (re-elaborates green / behavior-preserving / §7.1-faithful /
+top-down+motivated / discovery captured), do-not-reopen guardrails, gaps-to-
+surface list. Framed as a **prototype** whose product is the *pattern* +
+surfaced gaps, per the Architect's hybrid verdict.
+
+**Handoff-Gate compaction of the Foundation ring in progress** (leader /
+implementer / sol-swapped impl / qa) — gate preconditions all met: retros in,
+no in-flight obligation, quiescent, branch-check clean (qa's
+`wp/compare-ord-lexicographic` ahead-by-6 verified as stale squash-merge
+leftover — diff vs main is deletions-only, compare-ord content fully on main).
+Kickoff pairs with the compaction (drops verified → mention → send-keys rouse).
