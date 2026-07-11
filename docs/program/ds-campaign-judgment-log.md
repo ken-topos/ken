@@ -1312,3 +1312,43 @@ cycles** — circular reasoning = unsound, the load-bearing soundness guard — 
 the existing self-reference rejection; a §33 spec touch). Sequenced after the
 prototype; flagged to operator. Net: prototype proceeds under (a); the principled
 order-independence fix is the real higher-value follow-up.
+
+### D16 · Pedagogic prototype MERGED — pattern validated + PR-discipline restored (2026-07-11 ~18:30 UTC)
+
+**MERGED** `origin/main @ 288b3979` (PR #522, CI green — NOT doc-only, catalog
+`.ken.md` with elaborating fences). Honesty gate clean at QA/Architect-approved
+`ce4dc736`: exactly NatArith (+76/−36) + OrdNat (+33/−15); base `50d949bb` behind
+current main only by **disjoint** doc PRs (#520 §7.1, #521 brief/log/tracker) that
+never touch the two catalog files → non-conflicting/non-regressive, CI-validated.
+Trust-surface + WP-token screens clean; preservation rigorously verified by QA
+**and** Architect (every proof body diffed: name+signature+proof-term preserved,
+SCT unchanged, zero new TCB).
+
+**Pattern validated end-to-end.** NatArith + OrdNat now read top-down in the
+PROSE (lede → statement → checked code) with every Ω-typed law an original-name
+`lemma`, computation + proof-relevant `Or`-witnesses as `fn`, recursive proofs as
+`_ind` helpers behind thin wrappers. Gate chain: implementer merge_ready
+`evt_4bg42af5zwmhc` → QA APPROVED `evt_5e5s721n5pt34` (folded a prose correction)
+→ Architect terminal fidelity APPROVE `evt_2z83afphfersn` → Steward honesty gate +
+merge. Remarkably fast (whole rewrite+gates in ~one agent-hour) *because* the
+brief was shovel-ready and the ring self-corrected on the surfaced gap. #12
+(NatArith keyword pilot) delivered inside this. Retros collecting; close #11 when
+in.
+
+**Operator feedback — PR-description discipline restored.** Operator: "we lost
+the PR description discipline when we retired the integrator role." Correct — with
+the integrator gone, PR bodies come from the Steward's `--description-file`, and I
+had regressed to what/why prose, dropping the integrator's structured provenance.
+Fixed: codified a **Steward-owned PR description standard** as §3.2 of
+`04-git-and-integration.md` (Summary / Scope+trust-surface / Provenance = WP +
+every gate's event-ID &
+SHA + honesty-gate result / Test evidence / Follow-ups), and applied it to the
+#522 body immediately. The test: a reader of `origin/main` history reconstructs
+the full review chain from the PR alone. Keep the git_request terse; put fullness
+in the PR body — it outlives the thread. [[reviewers-review-branches-not-prs]]
+sibling: the PR body is the durable review record, mootup is the live one.
+
+**Next:** collect Foundation retros → close #11. Language WP #19
+(`acyclic-forward-reference-elaboration`) queued for operator priority. EmptyDec
+(the optional third prototype file) deliberately not taken — the two required
+files proved the pattern.

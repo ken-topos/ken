@@ -154,6 +154,35 @@ mootup remains the coordination/review record. The script replaces the model
 tokens previously spent on mechanical PR polling and approval, not the upstream
 review decision.
 
+### 3.2 PR description standard (Steward-owned; restored 2026-07-11)
+
+With the integrator role retired, the Steward authors every PR body via
+`--description-file`. A PR description is **not** a one-line what/why — it is the
+**self-contained provenance record** for the permanent GitHub history, carrying
+what the mootup coordination thread holds so the PR stands on its own once the
+thread scrolls away. The discipline (which the integrator used to enforce and
+which must not lapse) is a fixed structure for every non-trivial PR body:
+
+- **`## Summary`** — what changed and why, 1–3 sentences.
+- **`## Scope`** — files with per-file `+ins/−del`, additive-vs-rewrite, and the
+  trust-surface statement (kernel / spec / prelude / Cargo / TCB touched, or
+  explicitly none).
+- **`## Provenance (mootup review record)`** — the WP (+ brief path); **each gate
+  that approved it, with its event-ID and the exact SHA** (implementer handoff,
+  Foundation/team QA, Architect fidelity/soundness, CV/Spec when in-lane); and
+  the **Steward honesty-gate result** (ancestry, scope, trust-surface grep,
+  WP-token screen).
+- **`## Test evidence`** — the suites run with pass counts and the
+  trusted-base-delta result.
+- **`## Follow-ups / surfaced`** — surfaced gaps, queued follow-up WPs, and any
+  non-blocking nit explicitly deferred (so it is not silently lost).
+
+A doc-only PR may compress Test evidence to "docs only — nothing elaborates" but
+still carries Summary / Scope / Provenance / Follow-ups. The test: a reader of
+`origin/main`'s history can reconstruct the full review chain from the PR body
+alone. Keep the mootup git_request terse (it points at the durable record); put
+the **fullness in the PR body**, because that is what outlives the thread.
+
 ---
 
 ## 4. Review & merge — in mootup, gated by CI

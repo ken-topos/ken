@@ -13905,3 +13905,15 @@ tip). Mention IFF question-or-action.
 > foundation-qa's stale compare-ord branch preserved). Kickoff evt_2rnckwxjzyyp2
 > → foundation-leader Working. Watch-item (not blocker): no proof-relevant
 > `lemma` form. See judgment-log D14.
+
+> **✅ pedagogic-catalog-prototype MERGED — `origin/main @ 288b3979` (PR #522, CI
+> green, 2026-07-11 ~18:30).** NatArith + OrdNat rewritten as checked pedagogic
+> documents: Ω-typed laws → original-name `lemma`, computation/proof-relevant
+> `Or`-witnesses stay `fn`, recursive proofs as `_ind` helpers behind thin
+> wrappers; every public law preserved by name/signature/proof-term, zero new
+> TCB, 24/24 acceptance. Validates the def/prop/lemma/proof pedagogic pattern
+> (top-down in prose, code dependency-first). #12 (NatArith keyword pilot)
+> delivered here. Retros collecting → close #11. Surfaced: general acyclic
+> forward references unsupported (only fn/const cycles group) → queued language
+> WP `acyclic-forward-reference-elaboration` (#19, operator priority). PR-body
+> provenance discipline restored (§3.2 git-integration doc). See judgment-log D16.
