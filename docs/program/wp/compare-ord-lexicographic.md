@@ -33,13 +33,22 @@ on the `Bool`/`OrdResult` comparisons — no new capability needed.
    `compare x y = Eq → Equal a x y` (via `d.antisym`) and the `Lt`/`Gt` arms'
    agreement with `leq` — the dependent case-analysis on the two stuck `leq`
    `Bool`s is exactly the `case_eq` modifier's job (`match (d.leq x y) eqn: h …`).
-2. **Rework Collections onto `compare`.** Route `list_compare`
+2. **Rework Collections onto `compare` — ⚠ CONDITIONAL / DEFERRED (Steward scope
+   ruling, 2026-07-11; `evt_51tab3rqj126s`).** On grounded pickup Foundation found
+   this **inverts the load order**: Collections sits *below* LawfulClasses (Lawful
+   consumes Collections' `OrdResult`/`list_eq`), so routing Collections' own
+   comparators through an `Ord`-dict-derived `compare` that lives in Lawful creates
+   a **dependency cycle**. **Ruling: ship bricks 1 + 3 without brick 2** (neither
+   needs it). Brick 2 **waits on the Architect's topology ruling** on the home of
+   `OrdResult`/`Ord`/derived-`compare`: if a cheap base-module home both files can
+   depend on exists, fold it back in; if it needs a module relocation, brick 2
+   becomes a **separate follow-on WP** (Steward-framed) — never weakened, never
+   papered, never forced into a cycle. **Do not attempt the Collections routing
+   until the Architect rules.** _Original intent (deferred):_ route `list_compare`
    (`Collections.ken.md:753`) and `String.compare` (`:805`) through the canonical
    derived `compare` where a dictionary is available, so the 3-way comparison is
-   *one* operation rather than ad-hoc per-type spellings. `compare_char`
-   (`:766`) stays the `Char` primitive. **Behavior-preserving**: the string/list
-   comparison results are unchanged; only the internal comparator is unified.
-   Any unavoidable signature change is `log`-noted and justified.
+   *one* operation; `compare_char` (`:766`) stays the `Char` primitive;
+   behavior-preserving.
 3. **Lexicographic `Ord (Pair a b)` and `Ord (List a)`.** The flagship: real
    `instance Ord (Pair a b)` and `instance Ord (List a)` (lexicographic order
    from the component/element `Ord` dictionaries), each with **all four laws**
@@ -93,8 +102,11 @@ on the `Bool`/`OrdResult` comparisons — no new capability needed.
 - **AC1 — lawful generic `compare`.** Derived `compare` + its soundness lemmas
   (`= Eq → Equal`, `Lt`/`Gt` vs `leq`) elaborate + kernel-check; real proof
   terms, no `Axiom`/`Refl`-paper on a general statement.
-- **AC2 — Collections unified.** `list_compare`/`String.compare` route through the
-  canonical `compare`; string/list comparison behavior unchanged (green suites).
+- **AC2 — Collections unified (CONDITIONAL — deferred pending Architect topology
+  ruling; see brick 2).** *If* the Architect rules a cycle-free home for the
+  canonical `compare`: `list_compare`/`String.compare` route through it, behavior
+  unchanged (green suites). Otherwise AC2 moves to a follow-on WP — not a Track-A
+  blocker; bricks 1 + 3 (AC1, AC3–AC5) are the committed deliverables.
 - **AC3 — lexicographic `Ord` instances.** `instance Ord (Pair a b)` and
   `instance Ord (List a)` with **all four laws** proved as real terms (the
   Architect greps the tangled code for `Axiom`/`Refl`-paper). Any law that hits a
