@@ -817,24 +817,28 @@ no modifier/kernel work for Map.
   **relayed it** (attributed) to close the ring. Every kickoff this window now
   carries an explicit `message_type`-enum warning.
 
-### Run status / next triggers (event-driven) — updated ~09:20 UTC
-- **MERGED:** Language `def-path-constraint-binder-unification` (`main @ 41df4e62`);
-  ring §10 retros in. Enclave still holds the spec parity clause (`32`/`33`) → CV
-  verdict → `git_request`. Playbook watchdog hardening (`main @ bc1c0643`).
-- **ACTIVE — Ergo `case-eq-adoption`:** **RE-SCOPED to the two small sites, Map
-  dropped (D7).** ergo-implementer re-applying EmptyDec + LawfulClasses migrations
-  on the clean branch → SHA to qa + built-head gate. This WP is the **Track-A merge
-  anchor** (lands first).
+### Run status / next triggers (event-driven) — updated ~09:45 UTC
+- **MERGED:** Language `def-path-constraint-binder-unification` (`41df4e62`, retros
+  in); playbook watchdog hardening (`bc1c0643`); **Ergo `case-eq-adoption`
+  (`9b09124d`, PR #501, CI-green)** — the 2 small sites (EmptyDec + LawfulClasses
+  `list_deceq`), Map dropped (D7); **Track-A merge anchor now landed.** Rebased the
+  approved `18bd3ff6` onto current main via cherry-pick (it had drifted behind my
+  re-scope doc merges — honesty gate caught it). **Retro pending** → chasing
+  ergo-leader to close. Enclave still holds the Language spec parity clause
+  (`32`/`33`) → CV verdict → `git_request`.
 - **ACTIVE — Foundation `compare-ord-lexicographic` (bricks 1+3):** brick 1 on the
-  unbundled raw-`leq` shape (D6) — raw Eq/Lt green; implementer working the **Gt
-  totality-transport** (a kernel-reject it's isolating; leader driving, assessing
-  local-fix vs escalate). Then lex Pair/List instances. qa gate armed.
-- **Queued (framed, not kicked):** Nat laws (`main`, Ergo — case_eq-INDEPENDENT, so
-  releasable if case-eq-adoption stalls; else serial after it), DS-8c (Ergo, last).
-- **Next gate events:** Ergo case-eq-adoption `git_request` (2 small sites);
-  Foundation bricks-1+3 `git_request`; Language spec-clause CV verdict. **Merge
-  order:** case-eq-adoption lands first; Track A rebases its non-overlapping `Ord`
-  -instances hunk onto it.
+  unbundled raw-`leq` shape (D6) — raw **Eq/Lt green**; **Gt totality-transport
+  ESCALATED to Architect** (`evt_1zhr1kb4yyddr`): the outer fresh-`Bool` `J` fails
+  at the final neutral-equality composition (`leq x y = False`), K6-adjacent, local
+  techniques exhausted. Awaiting Architect ruling: shape-that-avoids vs genuine-K6
+  → size-defer Gt+lex vs prioritize the K6 Kernel WP. Foundation holds Eq/Lt green.
+- **NEXT — release Nat-arithmetic-laws to Ergo:** framed on `main`,
+  case_eq-INDEPENDENT; Ergo is now free (case-eq-adoption merged). Gated on the
+  **ergo retro in** → then Handoff Gate (compact ergo ring) → kick. DS-8c (Ergo,
+  last) after.
+- **Next gate events:** ergo case-eq-adoption **retro** (close); Architect **Gt
+  ruling**; Foundation bricks-1+3 `git_request` (Track A rebases its `Ord`-instances
+  hunk onto `9b09124d`); Language spec-clause CV verdict.
 - **Forward candidates: 3** (Kernel K6 #2; Language modifier-whnf #1 — Map did NOT
   bump it, see correction; Language namespace-split #1). Map named-helper idiom
   logged as legitimate coexistence, not an elaborator-feature candidate.
