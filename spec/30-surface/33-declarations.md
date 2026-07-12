@@ -43,6 +43,16 @@ and arity:
 - Definitions may be **generic** (implicit type/level parameters, `39`): `fn id
   {A : Type} (x : A) : A = x`.
 
+Every top-level definition name in one compilation unit occupies the same flat
+namespace, independent of the role that introduced it. A second top-level
+definition of a name already defined in that unit is a **hard surface error**
+(ADR 0014, MRES-5/MRES-8). Thus `class Eq` and a data constructor named `Eq`
+collide and are rejected by the same rule: types are terms, so class and
+constructor names do not inhabit separate namespaces (D8-③; MRES-7).
+Arity-gated surface sugar remains outside this duplicate-definition rule: the
+established `Eq`/`J` sugar may coexist with lower-arity definitions of those
+names (MRES-8).
+
 The keyword is **checked bidirectionally** against the signature and the body's
 inferred effects (`36 §1.6.2`); a mismatch — an `fn` that performs an effect, a
 `proc` that is provably pure, a `const`/`fn` at the wrong arity — is a **hard

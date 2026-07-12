@@ -14,6 +14,29 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
+> ### ⚠️ OPEN DESIGN ISSUE — 4b vs library-with-deps testing — 2026-07-12 ~16:0x
+>
+> **Operator raised (against MRES-4b):** a catalog package that imports a second
+> package needs, to be tested, a synthesized `program` admitting the used
+> instances/classes → impacts **test strategy + catalog** (catalog must gain
+> explicit imports; today cross-package use is implicit). **My decomposition:**
+> (1) *explicit imports* = inherent to the N2 loader, aligned w/ explicit-over-
+> implicit — scope catalog import-enrichment into/alongside N2; (2) *program-to-
+> admit-instances-for-test* = the new N4 consequence — **4b's "single package
+> self-admits" only covers a truly standalone package; a library WITH deps
+> (the common case) is neither standalone nor a composed application.**
+> **Fork (refines 4b):** (A) test target IS a program (harness synthesizes a
+> `program` admitting the dep closure — how every lang tests a library; keeps
+> admission explicit); (B) a package **self-admits its DECLARED deps** (import =
+> the explicit act; full `admits` program only to compose *independent* packages
+> where coherence is a real cross-pkg question) — my lean, principled not just
+> ergonomic, but must check 4c source==compiled invariant; (C) package-level
+> `admits` manifest. **Does NOT block N1** (one unit, no loader/program — running).
+> Shapes N2 catalog scope; load-bearing for N4 (round 3, runway exists).
+> **⏭ Proposed to operator: route an Architect design-framing pass (A/B/C +
+> 4c-check + test-harness/catalog-migration design) → operator ruling. Awaiting
+> operator: route now vs direct direction.**
+>
 > ### ▶ F3b + FAIL-CLOSED DESIGN ARC OPENED — 2026-07-12 ~13:3x UTC (operator)
 >
 > Operator reviewed the #8 namespacing brief and **greenlit F3b (cross-package
@@ -110,7 +133,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >
 > | WP | MRES | Deps | Size | Round | State |
 > |----|------|------|------|-------|-------|
-> | **N1** fail-closed dup-def | 5/7/8 | none | S | 1 | **▶ Lane A kicking (enclave)** |
+> | **N1** fail-closed dup-def | 5/7/8 | none | S | 1 | **▶ Lane A MERGING; Lane B → Language next** |
 > | **N2** in-repo loader (spine) | 1/2/3a | — | M | 2 | queued |
 > | **N3** import-exclusion + clash-err | 6 | N2 | M | 2 f-f | queued |
 > | **N4** program abstraction / `admits` | 4/4a/b/c | N2 | M/L | 3 | queued |
