@@ -127,8 +127,9 @@ units already being compiled; it does not scan a catalog tree eagerly. Each
 unit is loaded and elaborated at most once in a compilation run, and later
 imports reuse the per-run cached result. An import edge to a unit already on
 the active import chain is the hard surface error **`ImportCycle`**. The
-diagnostic names the closed cycle in edge order, for example
-`A → B → A`; cycles are not accepted as recursive module groups (MRES-2).
+diagnostic names the closed cycle in edge order rooted at the entry unit. The
+conformance harness elaborates `A` as its entry unit, so its cycle payload is
+`A → B → A`. Cycles are not accepted as recursive module groups (MRES-2).
 
 This in-repo loader does not change instance visibility: instances remain
 ambient under the existing coherence rules (MRES-4A). Instance manifests,
