@@ -42,6 +42,13 @@ cat > /home/node/.codex/config.toml <<CODEX_CONFIG
 approval_policy = "never"
 sandbox_mode = "danger-full-access"
 
+# Codex memory feature (off by default upstream). Enabled fleet-wide so Codex
+# build seats generate + reuse their own per-seat memories. NOTE: this is
+# SUPPLEMENTAL to the curated agent/memory/ corpus, which stays canonical
+# (CLAUDE.md). Read at codex startup — a restart is required to take effect.
+[features]
+memories = true
+
 # Optional: uncomment when using the Ken LLM proxy as Codex model provider.
 # The proxy expects LLM_PROXY_SHARED_SECRET in the Codex process environment.
 # model_provider = "moot-llm-proxy"
