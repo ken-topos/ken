@@ -21,6 +21,7 @@
 //! references via the active import scope) → `elaborate_rdecl_v1` (unchanged).
 
 use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
 
 use crate::ast::{CtorDecl, Decl, ExplicitDataCtor, ImportKind};
 use crate::error::{ElabError, Span};
@@ -45,6 +46,19 @@ pub struct ModuleState {
     /// enforcement point for private-by-default (`§4.1`) and abstract
     /// export (`§4.2`): a name simply isn't here if it wasn't exported.
     exports: HashMap<String, HashMap<String, String>>,
+    /// Plural resolver input for this run. N2 accepts exactly one populated
+    /// root; retaining the list here makes later roots a data change.
+    catalog_roots: Vec<PathBuf>,
+    /// Successfully elaborated file units, keyed by dotted module path.
+    loaded_units: HashMap<String, Vec<ken_kernel::GlobalId>>,
+    /// Units currently being discovered/elaborated, in entry-rooted edge order.
+    active_imports: Vec<String>,
+}
+
+impl ModuleState {
+    pub(crate) fn loaded_unit_count(&self) -> usize {
+        self.loaded_units.len()
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -142,32 +156,28 @@ fn resolve_ref(
                 }),
             };
         }
-        if prefix_part.contains('.') {
-            let resolved_prefix = resolve_ref(scope, exports, prefix_part, span)?;
-            return Ok(format!("{resolved_prefix}.{leaf}"));
-        }
         let canonical_module = scope
             .prefixes
             .get(prefix_part)
             .cloned()
             .unwrap_or_else(|| prefix_part.to_string());
-        match exports.get(&canonical_module) {
-            Some(pubmap) => match pubmap.get(leaf) {
-                Some(q) => Ok(q.clone()),
-                // Either private (module-private by default, `§4.1`) or
-                // simply not a declared name — both are the identical
-                // surface diagnostic: not in scope, never reaching the
-                // kernel.
-                None => Err(ElabError::UnboundName {
+        if let Some(pubmap) = exports.get(&canonical_module) {
+            return pubmap
+                .get(leaf)
+                .cloned()
+                .ok_or_else(|| ElabError::UnboundName {
                     name: name.to_string(),
                     span: span.clone(),
-                }),
-            },
-            None => Err(ElabError::UnboundName {
-                name: name.to_string(),
-                span: span.clone(),
-            }),
+                });
         }
+        if prefix_part.contains('.') {
+            let resolved_prefix = resolve_ref(scope, exports, prefix_part, span)?;
+            return Ok(format!("{resolved_prefix}.{leaf}"));
+        }
+        Err(ElabError::UnboundName {
+            name: name.to_string(),
+            span: span.clone(),
+        })
     } else {
         match scope.bindings.get(name) {
             Some(Binding::One(q)) => Ok(q.clone()),
@@ -244,6 +254,185 @@ fn apply_import(
         }
     }
     Ok(())
+}
+
+fn declared_module_paths(decls: &[Decl], prefix: &str, out: &mut HashSet<String>) {
+    for decl in decls {
+        if let Decl::ModuleDecl {
+            name, decls: inner, ..
+        } = decl.unwrap_pub()
+        {
+            let path = qualify(prefix, name);
+            out.insert(path.clone());
+            declared_module_paths(inner, &path, out);
+        }
+    }
+}
+
+fn imported_module_paths(decls: &[Decl], out: &mut Vec<(String, Span)>) {
+    for decl in decls {
+        match decl.unwrap_pub() {
+            Decl::ImportDecl { module, span, .. } => {
+                out.push((module.clone(), span.clone()));
+            }
+            Decl::ModuleDecl { decls: inner, .. } => imported_module_paths(inner, out),
+            _ => {}
+        }
+    }
+}
+
+fn source_path(root: &Path, module: &str, span: &Span) -> Result<PathBuf, ElabError> {
+    let valid_component = |component: &str| {
+        let mut chars = component.chars();
+        chars.next().is_some_and(|first| first.is_ascii_uppercase())
+            && chars.all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '\'')
+    };
+    if module.is_empty() || !module.split('.').all(valid_component) {
+        return Err(ElabError::ParseError {
+            msg: format!("invalid dotted module path '{module}'"),
+            span: span.clone(),
+        });
+    }
+    let mut stem = root.to_path_buf();
+    for component in module.split('.') {
+        stem.push(component);
+    }
+
+    // The strict bijection makes a path position a leaf or a directory, never
+    // both. It also permits exactly one source spelling for the leaf.
+    let ken = stem.with_extension("ken");
+    let ken_md = stem.with_extension("ken.md");
+    let existing: Vec<PathBuf> = [ken, ken_md]
+        .into_iter()
+        .filter(|path| path.is_file())
+        .collect();
+    if stem.is_dir() && !existing.is_empty() {
+        return Err(ElabError::ParseError {
+            msg: format!("module path '{module}' is both a source leaf and a directory"),
+            span: span.clone(),
+        });
+    }
+    match existing.as_slice() {
+        [path] => Ok(path.clone()),
+        [] => Err(ElabError::UnboundName {
+            name: module.to_string(),
+            span: span.clone(),
+        }),
+        _ => Err(ElabError::ParseError {
+            msg: format!("module path '{module}' has both .ken and .ken.md source leaves"),
+            span: span.clone(),
+        }),
+    }
+}
+
+fn parse_unit_source(path: &Path, span: &Span) -> Result<Vec<Decl>, ElabError> {
+    let source = std::fs::read_to_string(path).map_err(|error| ElabError::ParseError {
+        msg: format!("failed to read module source '{}': {error}", path.display()),
+        span: span.clone(),
+    })?;
+    if path.to_string_lossy().ends_with(".ken.md") {
+        let extracted = crate::literate::extract_ken_md(&source)?;
+        crate::literate::validate_ken_md_fences(&extracted)?;
+        crate::parser::parse_decls(&extracted.source)
+    } else {
+        crate::parser::parse_decls(&source)
+    }
+}
+
+/// Load one file unit through the active-stack gate. Import edges are
+/// discovered before `expand_scope`, so a cyclic unit is rejected before any
+/// of that unit's declarations are admitted to the flat kernel environment.
+fn load_unit(
+    elab: &mut ElabEnv,
+    module: &str,
+    span: &Span,
+) -> Result<Vec<ken_kernel::GlobalId>, ElabError> {
+    if let Some(start) = elab
+        .module_state
+        .active_imports
+        .iter()
+        .position(|active| active == module)
+    {
+        let mut cycle = elab.module_state.active_imports[start..].to_vec();
+        cycle.push(module.to_string());
+        return Err(ElabError::ImportCycle {
+            cycle,
+            span: span.clone(),
+        });
+    }
+    if let Some(ids) = elab.module_state.loaded_units.get(module) {
+        return Ok(ids.clone());
+    }
+
+    let root = elab
+        .module_state
+        .catalog_roots
+        .first()
+        .expect("N2 root count is checked at the public entry point")
+        .clone();
+    let path = source_path(&root, module, span)?;
+    let decls = parse_unit_source(&path, span)?;
+
+    elab.module_state.active_imports.push(module.to_string());
+    let result = (|| {
+        let mut local_modules = HashSet::new();
+        declared_module_paths(&decls, "", &mut local_modules);
+        let mut imports = Vec::new();
+        imported_module_paths(&decls, &mut imports);
+        for (dependency, import_span) in imports {
+            if local_modules.contains(&dependency)
+                || elab.module_state.exports.contains_key(&dependency)
+            {
+                continue;
+            }
+            load_unit(elab, &dependency, &import_span)?;
+        }
+
+        let mut scope = Scope::default();
+        let mut unit_definitions = HashSet::new();
+        let (results, exports) =
+            expand_scope(elab, &decls, module, &mut scope, &mut unit_definitions)?;
+        let ids: Vec<ken_kernel::GlobalId> =
+            results.into_iter().map(|result| result.def_id).collect();
+        elab.module_state
+            .exports
+            .insert(module.to_string(), exports);
+        Ok(ids)
+    })();
+    let popped = elab.module_state.active_imports.pop();
+    debug_assert_eq!(popped.as_deref(), Some(module));
+
+    let ids = result?;
+    elab.module_state
+        .loaded_units
+        .insert(module.to_string(), ids.clone());
+    Ok(ids)
+}
+
+/// Plural-root entry point for the N2 in-repo loader (`33 §3.2`).
+pub fn elaborate_module_from_roots(
+    elab: &mut ElabEnv,
+    roots: &[PathBuf],
+    entry: &str,
+) -> Result<Vec<ken_kernel::GlobalId>, ElabError> {
+    if roots.len() != 1 {
+        return Err(ElabError::ParseError {
+            msg: format!(
+                "N2 requires exactly one populated catalog root, found {}",
+                roots.len()
+            ),
+            span: Span::zero(),
+        });
+    }
+    if elab.module_state.catalog_roots.is_empty() {
+        elab.module_state.catalog_roots = roots.to_vec();
+    } else if elab.module_state.catalog_roots != roots {
+        return Err(ElabError::ParseError {
+            msg: "catalog roots cannot change during one elaboration run".to_string(),
+            span: Span::zero(),
+        });
+    }
+    load_unit(elab, entry, &Span::zero())
 }
 
 /// Rename the declared name(s) of a raw surface `Decl` to their fully
