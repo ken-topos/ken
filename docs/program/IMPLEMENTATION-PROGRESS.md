@@ -16,6 +16,13 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 > ### ⏭ 2026-07-12 ~19:4x — LIVE STATE (read this first) · `origin/main @ 5674cb88`
 >
+> **★ POST-COMPACT: operator wants to discuss `kenfmt`** (a Ken analog of gofmt /
+> Python black — a canonical auto-formatter) after this compaction. That is the
+> FIRST thing to engage on resume (operator-driven — they'll raise it). The N3
+> frontier below is the autonomous fallback if the operator is idle. Steward
+> self-compacted here per operator instruction at a clean seam (all merged,
+> nothing mid-flight).
+>
 > **All merged this burst:** **N2 CLOSED** (in-repo loader LIVE — Lane A
 > `fbc4d3e1` + Lane B `575f43d2`, CI green). **ADR 0015 DONE in spec/conformance**
 > — `use M` open-import removed (ADR `3a5cd323`, spec/conf `5674cb88`, sweep
@@ -23,9 +30,9 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > prelude-unshadowable under operator opt-(A). ADR 0014 fully settled.
 >
 > **PENDING (event-driven):**
-> 1. **Language N2 retro** — nudged (`evt_js2ddeaszhx`); on "retros in" mark N2
->    fully closed (task #33).
-> 2. **NEW WP to queue — ADR 0015 build fast-follow:** retire the `use` keyword
+> 1. **✅ N2 FULLY CLOSED** — Language ring retros in (`evt_5w74mahghmf6s`: leader/
+>    QA/implementer). Task #33 done.
+> 2. **NEW WP to queue — ADR 0015 build fast-follow (task #37):** retire the `use` keyword
 >    from grammar/lexer (`KwUse`/parser) — a small **Language** build WP
 >    (explicitly deferred by the 0015 spec WP). Frame + kick after N2 retro.
 >
