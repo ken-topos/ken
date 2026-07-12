@@ -529,12 +529,13 @@ sets:
 
 - The **coherence set** is the unfiltered transitive closure of the boundary's
   complete source graph, seeded by its own units and admitted roots. Every
-  structure instance in this closure participates in the one-canonical-instance
-  check of §5.5; property-class instances remain proof-irrelevant and do not
-  conflict. The closure is total: neither selective import nor any other
-  name-resolution form removes a package from it. Coherence is checked by one
-  keyed collision test per structure instance, so its cost is linear in the
-  number of instances in the closure, not quadratic in the number of packages.
+  structure instance in this closure remains subject to §5.5; property-class
+  instances remain proof-irrelevant and do not conflict. The closure is total:
+  neither selective import nor any other name-resolution form removes a package
+  from it. In one acyclic source graph, the orphan rule constructively ensures
+  that at most one package may legally define a given `(class, head-type)` key.
+  The existing §5.5 overlap check retains its intra-package duplicate coverage;
+  no separate source-world cross-package collision can arise.
 - The **direct-use set** contains the boundary's self-admitted package, when
   applicable, plus the packages named by its explicit `admits` section. An
   instance that one of the boundary's own units dispatches must be defined by a
@@ -549,11 +550,10 @@ only because an admitted dependency used it makes its provider a direct
 instance dependency that must itself be listed in `admits`.
 
 This admission check is additive to the existing rules. The orphan check still
-runs at the instance declaration (§5.3), and the overlap/coherence check still
-rejects a second canonical structure instance for one `(class, head-type)`
-(§5.5). Admission cannot make an orphan or overlapping instance acceptable;
-conversely, passing orphan and overlap checks does not admit an instance for
-direct use.
+runs at the instance declaration (§5.3), and the §5.5 overlap check still
+rejects a second canonical structure instance within the defining package.
+Admission cannot make an orphan or overlapping instance acceptable; conversely,
+passing orphan and overlap checks does not admit an instance for direct use.
 
 **Self-admission and when a root is required.** A single package implicitly
 self-admits its own instances, so single-package and catalog development need
@@ -568,10 +568,11 @@ in the parent's `admits` list.
 
 **Provenance is observable.** A successful implicit resolution reports the
 defining package alongside the selected instance. `UnadmittedInstance` reports
-the unlisted defining package and instance. A canonical-instance collision
-reports both defining packages as well as the conflicting `(class,
-head-type)`. Diagnostics must retain this provenance through source loading;
-package identity is the dotted path fixed by §3.2.1, never a header label.
+the unlisted defining package and instance. Diagnostics must retain this
+provenance through source loading; package identity is the dotted path fixed by
+§3.2.1, never a header label. Both-package collision provenance belongs to the
+compiled-manifest/package-manager boundary specified below, where such a
+collision can genuinely arise.
 
 **SPEC-NOW / BUILD-LATER package rules.**
 
@@ -594,6 +595,9 @@ The following rules are normative forward-compatibility requirements, but are
   delivery is source or compiled; authors do not select a delivery form.
 - A parent trusts an admitted compiled package's manifest for that package's
   internally checked commitments and re-checks only cross-boundary coherence.
+  At this admission boundary, a genuine canonical-instance collision across
+  packages is a hard error that names both defining packages and the conflicting
+  `(class, head-type)` key.
   The kernel still re-checks every instance dictionary value, so there is no
   new TCB. Signed or attested manifest validation belongs to the package-manager
   and supply-chain round.
@@ -641,10 +645,12 @@ subsume-don't-proliferate.
 
 The program/package admission gate of §5.5.1 is a net-new source/elaboration
 layer over the N2 loader graph. Its current build contract stops at anonymous
-headers, source-closure coherence, direct-use admission, self-admission, and
-provenance. Explicit package membership, compiled manifests, public re-export
-propagation, registries, lockfiles, and test-scoped admission remain the clearly
-marked SPEC-NOW / BUILD-LATER rules above.
+headers, the constructive source-coherence invariant, direct-use admission,
+self-admission, and resolution/admission provenance. Explicit package
+membership, compiled manifests, cross-package collision detection and
+both-package provenance, public re-export propagation, registries, lockfiles,
+and test-scoped admission remain the clearly marked SPEC-NOW / BUILD-LATER rules
+above.
 
 ## 6. Fixity and operators
 
