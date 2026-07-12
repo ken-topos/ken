@@ -10,8 +10,9 @@ constant "is how axioms, FFI signatures, and **abstract interfaces** are
 represented"). **Zero new kernel feature, zero `trusted_base()` delta** — the
 ES1 minimality invariant (surface built-in set ≡ `trusted_base()` delta,
 `../taxonomy/minimality.md`) carries verbatim. N2 extends this same surface
-substrate with an **in-repo cross-file loader**. The package manager and
-cross-package imports remain out of scope.
+substrate with an **in-repo cross-file loader**. N4 adds the source-world
+`program` / `package` admission boundary over that loader. The
+content-addressed package manager remains out of scope.
 
 **Build state — RED UNTIL N2 LANE B.** The cross-file accept arm in §D states
 the N2 Lane-B target and currently fails because no loader follows an import
@@ -24,6 +25,13 @@ The original ES3 module resolver and the kernel mechanisms it rides — the flat
 file-discovery producer without changing those mechanisms. The cases therefore
 retain the ES3 design discriminants and add a controlled cross-file
 accept↔cycle-reject pair for Lane B.
+
+**Build state — RED UNTIL N4 LANE B.** The §E source-world cases state N4's
+anonymous boundary headers, direct-use admission gate, self-admission,
+closure-wide coherence, and provenance contract. No current parser accepts the
+new headers, so every §E case is red at N4's surface before Lane B. Compiled
+instance manifests and re-export-carried instance surfaces are deliberately not
+asserted as live: they remain package-manager/post-MRES-9 work.
 
 Grounding (landed `§`-bodies + landed code, content-reconciled — not the
 plan): `33 §3`
@@ -323,6 +331,209 @@ fixture's payload as `A → B → A`.
   fixture-syntax rejection: identical `A`, root input, and `B.value` accept
   when the sole back-edge is absent.
 
+## E. Source-world program/package admission (N4; RED UNTIL LANE B)
+
+These fixtures use packages delivered from source through the N2 loader. This
+describes their delivery form, not ADR 0014's boundary-less “source package.”
+A package path is the defining-package identity reported by the oracle.
+`import` remains the ordinary-name channel; `admits` is independently the
+instance channel. The class and head declarations named below are ordinary
+valid §5 declarations, and every non-collision provider satisfies the existing
+orphan rule before the N4 gate is exercised.
+
+For each successful dictionary lookup, the harness records the resolved
+dictionary `GlobalId`, canonical `(class, head)` key, and defining package. The
+literal harness field names are not pinned. Where N4 locks diagnostic
+provenance, the harness inspects structured package paths and the canonical key;
+matching only rendered prose is insufficient. Every case in this section is
+**RED UNTIL N4 LANE B** unless stated otherwise.
+
+### surface/modules/two-explicit-admits-resolve-ambient-with-provenance
+
+- spec: ADR 0014 MRES-4/MRES-4c; WP N4 AC2 (source-world admission and
+  provenance)
+- fixture: package `P`, delivered from source, defines class `Render`, head
+  `PItem`, and the sole canonical `instance Render PItem`. Package `Q`, also
+  delivered from source, defines head `QItem`; its instance unit explicitly
+  writes `import P (Render)` before declaring the sole canonical
+  `instance Render QItem`. This is the only inter-package edge, **`Q → P`**;
+  `P` has no edge to `Q`. Together with the program-to-provider imports below,
+  the complete ordinary import graph is acyclic. The program unit is:
+
+  ```ken
+  program
+  admits P, Q
+
+  import P (Render, PItem)
+  import Q (QItem)
+  ```
+
+  Two ordinary declarations in that unit independently require
+  `Render PItem` and `Render QItem`, forcing both real instance-search paths.
+- expect: **accepted**. Both lookups are ambient—no per-use instance import is
+  present—and return the unique canonical dictionary. The first lookup records
+  `defining_package = P`; the second records `defining_package = Q`. Their
+  `GlobalId`s are distinct and both provenance fields are present.
+- why: this is the admitted success anchor. Removing `Q` from only the
+  `admits` line must not silently keep the second success merely because
+  `import Q` makes `QItem` nameable. Conversely, removing `import Q` may make
+  the name unavailable but does not change which instances the boundary admits.
+
+### surface/modules/transitive-coherence-does-not-grant-direct-dispatch
+
+- spec: ADR 0014 MRES-4c (coherence set versus direct-use set); WP N4 AC2
+- fixture: package `Q` defines the sole canonical `instance QMark QItem`.
+  Package `P` is also delivered from source, declares its own boundary, and has
+  this anonymous package file:
+
+  ```ken
+  package
+  admits Q
+  ```
+
+  One of `P`'s units explicitly writes `import Q (QMark, QItem)` and dispatches
+  that instance. This is the only provider edge, **`P → Q`**; `Q` has no edge
+  to `P`. Together with the program unit's import below, the complete ordinary
+  import graph is acyclic and `Q` is genuinely transitive from the program's
+  admitted root.
+
+  The program admits only `P`, while its own unit imports the ordinary names
+  from `Q` and directly dispatches `QMark QItem`:
+
+  ```ken
+  program
+  admits P
+
+  import Q (QMark, QItem)
+  ```
+
+- expect: **rejected** at instance dispatch with the specific
+  `UnadmittedInstance` variant carrying
+  `defining_package = Q` and `instance = (QMark, QItem)`. `Q` is nevertheless
+  present in the full coherence closure through `P`; the diagnostic is not
+  `UnboundName`, `MissingInstance`, `OrphanInstance`, or an overlap error.
+- why: this is the two-set discriminator. A buggy gate keyed on the transitive
+  coherence closure accepts; a buggy coherence pass filtered to the explicit
+  root never observes `Q`. The correct implementation observes `Q` for total
+  coherence but rejects the program unit's direct dispatch because `Q` is not
+  in the explicit root. As the controlled accept arm, changing only the program
+  line to `admits P, Q` accepts and records `defining_package = Q`.
+
+### surface/modules/single-package-self-admits-without-program
+
+- spec: ADR 0014 MRES-4b and package extension; WP N4 AC2
+- fixture: one package `Solo`, delivered from source, contains class `SoloMark`,
+  head `SoloItem`, its valid canonical instance, and an ordinary declaration
+  that dispatches `SoloMark SoloItem`. There is **no program file**, no synthetic
+  `admits Solo`, and no second instance-providing package in the source graph.
+- expect: **accepted**. The lookup returns the canonical dictionary with
+  `defining_package = Solo`; absence of a program header is not an error.
+- why: this pins zero-ceremony self-admission. An implementation that requires a
+  program for every build rejects; one that disables admission checking
+  globally cannot also satisfy the transitive-unadmitted reject above.
+
+### surface/modules/intra-package-duplicate-canonical-rejected
+
+- spec: ADR 0014 MRES-4/MRES-4f (source coherence by construction still
+  retains intra-package overlap); `33 §5.3`/`§5.5`
+- fixture: one package `P` owns both structure class `Render` and head `PItem`.
+  In the same owning module, two declaration sites each define
+  `instance Render PItem`; each declaration separately satisfies the orphan
+  predicate. An anonymous `package` boundary contains the module, with no
+  inter-package import edge.
+- expect: the first canonical instance registers; the second rejects at the
+  existing `OverlappingInstances` gate for `(Render, PItem)`, carrying both
+  declaration spans. Both declarations are in package `P`; no later dispatch or
+  import order chooses one silently.
+- why: this is the source-constructible §5.5 control after MRES-4f. It reaches
+  registration without `UnboundName`, `ImportCycle`, or `OrphanInstance`, then
+  flips on only the second same-key declaration. Admission does not replace the
+  intra-package overlap gate.
+
+### surface/modules/cross-package-overlap-attempt-is-import-cycle
+
+- spec: ADR 0014 MRES-4f; `33 §3.2` (N2 cycle gate), `§5.3`
+- fixture: module `P.Class` owns structure class `Render`; module `R.Head` owns
+  head `RItem`. `P.Class` imports `R.Head` to name `RItem` for its candidate,
+  while `R.Head` imports `P.Class` to name `Render` for its candidate. The
+  harness designates `P.Class` as the entry unit. Both packages are listed by
+  the anonymous program boundary, but the ordinary source graph necessarily is
+  **`P.Class → R.Head → P.Class`**.
+- expect: **rejected upstream** with the specific `ImportCycle` diagnostic and
+  closed payload `P.Class → R.Head → P.Class`. Neither candidate registers, so
+  the source run does not emit `OverlappingInstances` or a both-package
+  collision diagnostic.
+- why: this positively asserts MRES-4f's constructive guarantee. The two legal
+  orphan loci force opposite import edges; deleting either edge changes the
+  failure to `UnboundName`, and accepting both edges would violate N2. Thus at
+  most one package can legally define a `(class, head-constructor)` key in one
+  acyclic source graph.
+
+### surface/modules/admission-does-not-waive-orphan-rejection
+
+- spec: ADR 0014 MRES-4 (admission composes with orphan and overlap);
+  `33 §5.3`
+- fixture: the program explicitly admits package `Bad`, but `Bad` declares
+  `instance Render RItem` in module `Bad.Orphan`, which owns neither name.
+  `Bad.Orphan` explicitly imports `P.Class` for `Render` and `R.Head` for
+  `RItem`: edges **`Bad.Orphan → P.Class`** and
+  **`Bad.Orphan → R.Head`**. Neither owner imports `Bad.Orphan`, so the complete
+  ordinary import graph is acyclic and both names resolve before the orphan
+  check. The control relocates the declaration to the module owning `RItem` and
+  leaves the program's `admits Bad` line unchanged.
+- expect: the first arm rejects at declaration with the specific
+  `OrphanInstance` variant and its class/head/declaration provenance; it never
+  becomes a registered candidate. The relocated control passes the orphan gate
+  and is eligible for registration. It makes no claim that later direct-use
+  admission succeeds, because the relocated declaration is not defined by
+  package `Bad`.
+- why: admission is additive, not a replacement coherence policy. The pair
+  changes the declaration locus after the class and head have resolved. The
+  explicit one-way edges disconfirm an earlier `UnboundName` or `ImportCycle`;
+  an implementation treating `admits` as permission to register an orphan
+  flips the wrong arm to registration.
+
+### surface/modules/boundary-headers-are-anonymous
+
+- spec: ADR 0014 MRES-4e/MRES-4a; WP N4 AC2
+- fixture: parse two controlled pairs with the same following `admits` section:
+  bare `program` versus `program App`, and bare `package` versus `package Lib`.
+  No arm contains or implies an entry-point declaration.
+- expect: each bare header reaches its `admits` list. `program App` rejects with
+  the specific `ParseError` variant at `App`; `package Lib` rejects with
+  `ParseError` at `Lib`, both before package lookup, admission, or instance
+  search. Neither `App` nor `Lib` becomes an identity or provenance label.
+- why: the only identity is the file/package path and the header's presence is
+  the role marker. A parser accepting documentary names creates a second,
+  divergent identity source. The bare controls disconfirm a parser that simply
+  rejects both new keywords.
+
+## F. Compiled-manifest collision (RED UNTIL PACKAGE-MANAGER ROUND)
+
+This forward oracle is normative but **not live in N4 Lane B**. Unlike the
+source cases, independently compiled manifests meet at an admission boundary
+without sharing one N2 import graph; MRES-4f's source-cycle theorem therefore
+does not preclude a genuine cross-package collision here.
+
+### surface/modules/compiled-manifest-collision-names-both-packages
+
+- spec: ADR 0014 MRES-4c/MRES-4f and PKG-3
+- fixture: independently compiled package manifests for `P` and `R` each commit
+  a canonical structure instance under the same `(Render, RItem)` key. A parent
+  boundary admits both manifests and performs PKG-3 cross-boundary coherence
+  re-checking. No source import edge connects the two already-compiled packages.
+- expect: **rejected** at manifest admission with the canonical-instance
+  collision diagnostic carrying key `(Render, RItem)` and both
+  `defining_package = P` and `defining_package = R`. Neither manifest order nor
+  parent import order may choose a winner. **RED UNTIL the compiled-manifest /
+  package-manager round:** N4 Lane B has no manifest input and cannot run this
+  oracle.
+- why: this is the genuine home of both-package collision provenance. A
+  package manager that trusts internal commitments but omits PKG-3's
+  cross-boundary re-check silently composes two canonical dictionaries and
+  fails this case. The kernel's later dictionary re-check cannot restore
+  coherence, so this remains a required package-manager diagnostic.
+
 ## Coverage map (AC → cases)
 
 - **AC1** (modules add zero to the TCB):
@@ -347,6 +558,17 @@ fixture's payload as `A → B → A`.
   `prelude-clash-rejected-rename-local-resolves`,
   `per-name-rename-parses-hiding-is-syntax-error`, and the renamed arm of
   `import-spellings-resolve-to-one-binding`.
+- **N4** (source-world admission boundary):
+  `two-explicit-admits-resolve-ambient-with-provenance`,
+  `transitive-coherence-does-not-grant-direct-dispatch`,
+  `single-package-self-admits-without-program`,
+  `intra-package-duplicate-canonical-rejected`,
+  `cross-package-overlap-attempt-is-import-cycle`,
+  `admission-does-not-waive-orphan-rejection`, and
+  `boundary-headers-are-anonymous`.
+- **N4 forward / package-manager gate** (compiled collision + both-package
+  provenance): `compiled-manifest-collision-names-both-packages` (**RED UNTIL
+  the compiled-manifest/package-manager round**).
 
 ## Cross-case consistency sweep
 
@@ -384,6 +606,23 @@ fixture's payload as `A → B → A`.
   appear in both arms. With no `B → A` edge, `B.value` resolves and accepts;
   with that sole edge, the active stack closes `A → B → A` and the specific
   cycle gate rejects. No other case in this seed changes that verdict.
+- **N4 keeps names, admission, and coherence as three distinct gates.**
+  `import` makes a package's exported names available; it does not admit the
+  package's instances. The explicit root grants direct dispatch; it does not
+  filter the transitive coherence closure or waive orphan/overlap. The
+  transitive reject and its one-line accept control prove the two N4 sets are
+  neither conflated nor disconnected.
+- **N4 provenance follows the defining declaration, never the importing unit.**
+  Both admitted successes name their distinct provider packages; the
+  unadmitted error names `Q`. The deferred manifest collision enumerates `P`
+  and `R`. These observations use structured package-path fields rather than
+  import aliases or header labels; the live intra-package overlap retains its
+  established both-declaration-span payload.
+- **MRES-4f separates a source theorem from manifest defense-in-depth.** In one
+  source graph, opposite class-owner/head-owner edges reject at `ImportCycle`
+  before a cross-package duplicate can register; the same package still reaches
+  `OverlappingInstances`. Independently compiled manifests have no shared N2
+  graph, so their both-package collision remains a required deferred check.
 
 ## Subsumed / not-duplicated (one home per property)
 
@@ -395,10 +634,17 @@ fixture's payload as `A → B → A`.
   **kernel's** (`11 §4`; `../taxonomy/minimality.md` for the delta). ES3
   observes abstract export **as** the opaque constant and modules **as**
   transparent over the flat `Σ`; the mechanisms are the kernel's home.
-- **The package manager / cross-package imports / registry** remain a later
-  round (`63` supply-chain). N2 resolves only in-repo units under its supplied
-  roots. `program` / `package` / `admits`, instance manifests, package-kind
-  detection, and instance visibility are N4 and are not asserted here.
+- **The content-addressed package manager / registry / persisted manifests**
+  remain a later round (`63` supply-chain). N4 asserts only source-world
+  `program` / `package` / `admits`, instance visibility, and provenance.
+  Section F records one explicit RED-UNTIL forward oracle for cross-manifest
+  collision provenance; it does not claim a live manifest input. Compiled-
+  manifest source-equivalence remains normative forward compatibility.
+- **Re-export-carried instance surfaces** remain post-MRES-9/N5. No N4 fixture
+  uses `pub use` or treats a transitive provider as direct through re-export;
+  adding that case before the syntax exists would be a vacuous red.
+- **Runtime entry selection** is separate from admission (MRES-4a). No fixture
+  invents an entry declaration or treats a `program` header as one.
 - **The N3 clash/rename suite does not re-pin the loader.** Its fixtures use
   loaded module interfaces but assert only binding-time diagnostics and target
   identities. The N2 pair remains the sole home for root/path traversal and
@@ -424,3 +670,18 @@ arm and replaces `bind_import`'s silent local-wins behavior with the specific
 binding-time clash error, including latent clashes and the fixed prelude floor.
 It must not change narrower lexical resolution. No N3 case reaches the kernel,
 adds a declaration to `Σ`, or changes `trusted_base()`.
+
+## Build-forward (N4 Lane B)
+
+N4 Lane B implements only the source-world boundary. It parses anonymous
+headers, forms the explicit direct-use set, retains the unfiltered transitive
+coherence closure, applies one package-membership check after real instance
+search, and reports defining-package provenance. It retains §5.5's
+intra-package `OverlappingInstances` gate. Cross-package duplicate candidates in
+one source graph reject earlier at N2 `ImportCycle` by MRES-4f; Lane B does not
+promise an unreachable both-package collision diagnostic. All §E rejects are
+surface/elaboration diagnostics and add nothing to the flat `Σ` or
+`trusted_base()`. Section F's both-package diagnostic remains RED UNTIL compiled
+manifests meet at the package-manager admission boundary. Registries, lockfiles,
+content addressing, re-export instance surfaces, and test-scoped admission stay
+unbuilt.

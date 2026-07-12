@@ -79,6 +79,13 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >     sentence + orphan-fixture imports. **NEXT: publish frame; await enclave
 >     re-spin + final CV vote → Architect-terminal → doc-only publish Lane A → Lane
 >     B (Language).**
+>     - **★ N4 Lane A → MERGING** (`590c6610`): CV FINAL APPROVE + **Architect-
+>       terminal APPROVE** (`evt_5b6q3j7f9f1yf`). Honesty-gated clean (FF; 4 files
+>       §32/§33 + conf README/seed-modules, +425/−20; diff --check clean; zero TCB;
+>       doc-only). MRES-4f reconciled across frame/spec/golden. Publishing doc-only.
+>       **NEXT: confirm merge → drive Lane A retros → release N4 Lane B (Language
+>       build: parser anon headers + admits, admission gate at instance_search,
+>       O(total) source-closure coherence, intra-pkg overlap; NO manifest code).**
 > - **N3 Lane A → ENCLAVE — GATED, PUBLISHING.** Candidate `8204e727` (linear
 >   `ba514aac → 27e56a79 spec → e31f3259 conf → 8204e727 prelude-carrier fix`);
 >   CV combined APPROVE + **Architect-terminal APPROVE** (merge-Decision vote,

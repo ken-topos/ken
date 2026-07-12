@@ -3,7 +3,8 @@
 > Status: **normative for the features**; the concrete syntax spelling is
 > `OQ-syntax` (proposal-level). §3 modules / imports / name-resolution and §4
 > visibility (**private-by-default, settled**) + abstract-export are
-> **normative** (ES3); §5 is the landed constraint mechanism —
+> **normative** (ES3); §5's class/constraint core is landed, and §5.5.1 is the
+> normative N4 source-world admission contract —
 > **typeclasses-as-subobjects-of-the-universe** (Lc). The module system
 > **elaborates away** to the kernel's flat append-only `Σ`: **zero
 > `trusted_base()` delta** (`30-taxonomy.md §1.1`, the ES1 minimality
@@ -134,13 +135,35 @@ diagnostic names the closed cycle in edge order rooted at the entry unit. The
 conformance harness elaborates `A` as its entry unit, so its cycle payload is
 `A → B → A`. Cycles are not accepted as recursive module groups (MRES-2).
 
-This in-repo loader does not change instance visibility: instances remain
-ambient under the existing coherence rules (MRES-4A). Instance manifests,
-package-kind detection, and the `admits` / `program` /
-`package` boundary are deferred to N4; the content-addressed package manager
-remains a later round. Multi-root precedence is likewise deferred. The
-module-level clash and narrower lexical-shadowing rules are specified in §3.3;
-the loader does not alter either rule.
+The in-repo loader discovers the source graph; the `admits` / `program` /
+`package` boundary below adds the instance-admission rule over that graph. The
+compiled-package manifest and content-addressed package manager remain a later
+round. Multi-root precedence is likewise deferred. The module-level clash and
+narrower lexical-shadowing rules are specified in §3.3; neither the loader nor
+the admission boundary alters either rule.
+
+#### 3.2.1 Admission-boundary headers
+
+An anonymous **`program`** header marks its file as the admission root for a
+multi-package build. An anonymous **`package`** header marks its file as a
+package admission boundary. The only payload either header may carry in this
+round is an `admits` section listing dotted package paths using the same
+role-blind path identity as `import`:
+
+```ken
+program
+admits Core.LawfulClasses, Data.Collections.Map
+```
+
+Neither header takes a name token. The file path is the single identity of the
+program or package boundary; a spelling such as `program App` or `package Lib`
+is a syntax error. The header's presence is the signal, and an ordinary comment
+may carry documentary intent without creating a second identity.
+
+`program` and `package` establish elaboration-time instance-admission
+boundaries only. They neither designate nor declare a runtime entry point. An
+entry declaration is a separate construct that a program file may eventually
+co-host; this section defines no entry syntax (MRES-4a/4e).
 
 ### 3.3 Name resolution (surface-only; never reaches the kernel)
 
@@ -498,6 +521,103 @@ type, *implicit* `where Ord String` still resolves to the **canonical**
 `Ord String`. The resolver may pick only one canonical thing silently; you may
 deliberately use any value. That split is the whole point.
 
+#### 5.5.1 Program/package admission and cross-package coherence
+
+Instance resolution is ambient only inside an explicit admission boundary. For
+each `program` or `package` boundary, the elaborator computes two distinct
+sets:
+
+- The **coherence set** is the unfiltered transitive closure of the boundary's
+  complete source graph, seeded by its own units and admitted roots. Every
+  structure instance in this closure remains subject to §5.5; property-class
+  instances remain proof-irrelevant and do not conflict. The closure is total:
+  neither selective import nor any other name-resolution form removes a package
+  from it. In one acyclic source graph, the orphan rule constructively ensures
+  that at most one package may legally define a given `(class, head-type)` key.
+  The existing §5.5 overlap check retains its intra-package duplicate coverage;
+  no separate source-world cross-package collision can arise. The source-closure
+  coherence pass nevertheless performs one keyed collision test per structure
+  instance: O(total instances in the closure), not O(packages²).
+- The **direct-use set** contains the boundary's self-admitted package, when
+  applicable, plus the packages named by its explicit `admits` section. An
+  instance that one of the boundary's own units dispatches must be defined by a
+  package in this set. Transitive membership in the coherence set does not grant
+  dispatch rights.
+
+After implicit search selects an instance, the elaborator checks its defining
+package against the current boundary's direct-use set. A miss is the hard
+surface error **`UnadmittedInstance`** and names both the defining package and
+the selected instance. Thus reaching directly for an instance that was present
+only because an admitted dependency used it makes its provider a direct
+instance dependency that must itself be listed in `admits`.
+
+This admission check is additive to the existing rules. The orphan check still
+runs at the instance declaration (§5.3), and the §5.5 overlap check still
+rejects a second canonical structure instance within the defining package.
+Admission cannot make an orphan or overlapping instance acceptable; conversely,
+passing orphan and overlap checks does not admit an instance for direct use.
+
+**Self-admission and when a root is required.** A single package implicitly
+self-admits its own instances, so single-package and catalog development need
+no `program` file. A `package` boundary also self-admits its own package and
+uses its `admits` roots as its direct instance dependencies, so a
+library-with-dependencies is buildable and testable in isolation. A build that
+combines two or more instance-providing packages across unit boundaries and is
+not already rooted at a `package` boundary requires a `program` file to make
+the direct-use choice explicit. Transitive dependencies used only inside an
+admitted package flow into the coherence set automatically and are not repeated
+in the parent's `admits` list.
+
+**Provenance is observable.** A successful implicit resolution reports the
+defining package alongside the selected instance. `UnadmittedInstance` reports
+the unlisted defining package and instance. Diagnostics must retain this
+provenance through source loading; package identity is the dotted path fixed by
+§3.2.1, never a header label. Both-package collision provenance belongs to the
+compiled-manifest/package-manager boundary specified below, where such a
+collision can genuinely arise.
+
+**SPEC-NOW / BUILD-LATER package rules.**
+
+The following rules are normative forward-compatibility requirements, but are
+**not part of the current source-world implementation round**:
+
+- A package file explicitly enumerates its member modules. Membership is
+  explicit, while package identity and its root remain path-inferred
+  (MRES-4e/MRES-2b). The concrete member-list grammar and spelling, and the
+  corresponding build, are deferred to the package-manager round. Until that
+  round, the admission gate operates over the existing N2 path-based source
+  graph; no member-list keyword or production is introduced here.
+- In the package-manager round, a compiled package records an instance manifest
+  containing the canonical instances its own boundary commits to. Loading that
+  compiled package and rebuilding it from source must contribute the same
+  instance environment and produce the same admission and coherence outcomes.
+  The manifest is generated from the package's own `admits`; delivery from
+  source never substitutes the parent's boundary for that declared boundary.
+  The one `admits` relation targets the package regardless of whether its
+  delivery is source or compiled; authors do not select a delivery form.
+- A parent trusts an admitted compiled package's manifest for that package's
+  internally checked commitments and re-checks only cross-boundary coherence.
+  At this admission boundary, a genuine canonical-instance collision across
+  packages is a hard error that names both defining packages and the conflicting
+  `(class, head-type)` key.
+  The kernel still re-checks every instance dictionary value, so there is no
+  new TCB. Signed or attested manifest validation belongs to the package-manager
+  and supply-chain round.
+- When public re-export lands after MRES-9, re-exporting a name also carries the
+  instance surface that the re-exported name's public API commits to. Those
+  carried instances enter the admitting consumer's direct-use set. A transitive
+  instance not carried by a re-export remains coherence-only; direct dispatch
+  still requires admitting its defining package.
+- Persisted content-addressed manifests, registries, lockfiles, and
+  supply-chain validation are package-manager concerns. Test-scoped admission
+  is likewise deferred; the package's ordinary `admits` section is the only
+  test boundary specified in this round.
+
+No compiled manifest, registry, lockfile, re-export handling, or test-only
+admission syntax is required by the current source-world build. These deferred
+rules do not widen the direct-use set until their respective surface and
+package-manager mechanisms exist.
+
 ### 5.6 `derive` — an untrusted, kernel-re-checked candidate
 
 `derive (DecEq, Show)` on a `data`/`record` (grammar `32 §1`) requests an
@@ -524,6 +644,15 @@ the **`declare_def` re-check path** (`check.rs`) every instance — and every
 bounds recursive-instance resolution once it is reified as a dictionary
 definition (`39 §6.4`, `AC6`). **No new kernel rule, judgment, or former** —
 subsume-don't-proliferate.
+
+The program/package admission gate of §5.5.1 is a net-new source/elaboration
+layer over the N2 loader graph. Its current build contract stops at anonymous
+headers, the constructive source-coherence invariant, direct-use admission,
+self-admission, and resolution/admission provenance. Explicit package
+membership, compiled manifests, cross-package collision detection and
+both-package provenance, public re-export propagation, registries, lockfiles,
+and test-scoped admission remain the clearly marked SPEC-NOW / BUILD-LATER rules
+above.
 
 ## 6. Fixity and operators
 
