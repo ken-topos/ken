@@ -4,8 +4,10 @@ Owner: **spec enclave** (Lane A: spec + conformance) → **Language team**
 (Lane B: build). Two lanes, **Lane A first**, Lane B gated on Lane A landing.
 Design source of truth: **`docs/adr/0014-cross-package-resolution-and-fail-
 closed-collision.md`** — MRES-4 (the `program` abstraction refinement, ~L221–
-262), sub-forks **MRES-4a–4e** (~L286–404), the **`package` extension** (~L406–
-496), and **PKG-1..4** (~L498+). Prereqs landed: N2 loader (`import` graph live)
+262), sub-forks **MRES-4a–4f** (~L286–460; **MRES-4f** — cross-package
+collision impossible in source, the constructive-coherence theorem), the
+**`package` extension** (~L406–496), and **PKG-1..4** (~L498+). Prereqs landed:
+N2 loader (`import` graph live)
 + N3 Lane A (unqualified-name resolution normative). Normative surface today:
 `spec/30-surface/33-declarations.md` §3–§5 + `30-taxonomy`. Size **L**. Base:
 `origin/main` (re-verify cites at pickup).
@@ -82,8 +84,25 @@ ship **no** manifest/registry/lockfile code.
   author does **not** list transitive providers.
 - **Provenance is a REQUIRED deliverable (MRES-4).** On resolution, report the
   admitted package an instance came from; on `UnadmittedInstance`, name the
-  unadmitted package + the instance; on a coherence collision, name **both**
-  defining packages.
+  unadmitted package + the instance. **The two build-now provenance messages are
+  resolution-provenance + `UnadmittedInstance`.** (The "name **both** defining
+  packages" collision message is **not build-now** — see MRES-4f below; it is a
+  compiled-manifest/package-manager-round deliverable.)
+- **★ Cross-package collision is impossible in source (MRES-4f — ACCEPTED
+  theorem, `origin/main` ADR 0014).** Under §5.3 orphan locality + N2 acyclic
+  import + disjoint PKG-1 membership, **at most one package can legally define a
+  given `(class, head)` in any single source import graph** (two defining
+  packages force `owner(C)→owner(T)→owner(C)`, an `ImportCycle` N2 rejects before
+  both register; generalizes to any `(class, head-constructor)` overlap). Source
+  coherence is therefore **by construction**. Consequences for this WP: the
+  build-now overlap gate is exercised **intra-package** (two `instance C T` in one
+  package → §5.5 `OverlappingInstances`); the **two-package** collision + its
+  both-package provenance is **removed from the source AC** and **staged to the
+  compiled-manifest / package-manager round** (where two independently-compiled
+  manifests can collide with no shared acyclic import graph — the PKG-3
+  cross-boundary re-check surface). The source suite instead asserts the
+  **constructive `ImportCycle` witness** (the two-package same-head attempt
+  rejects upstream) as a positive coherence-by-construction case.
 - **Scaling is O(total instances), not O(packages²)** (validated on the code:
   `instance_search` = one `HashMap.get` on `(class, head)`, `classes.rs:131/98`;
   overlap = O(1) key test, `elab.rs:4266`). The admission gate adds one O(1)
@@ -107,9 +126,15 @@ ship **no** manifest/registry/lockfile code.
    total; direct-use set = explicit admits). Pin **self-admission** (single
    package / `package` file) and the **≥2-package** requirement for a `program`
    file.
-3. **Provenance diagnostics** normative — the three required messages (resolution
-   provenance; `UnadmittedInstance` names package+instance; collision names both
-   packages).
+3. **Provenance diagnostics** normative — the **two build-now** messages
+   (resolution provenance; `UnadmittedInstance` names package+instance). State the
+   **MRES-4f** constructive invariant (source coherence is by construction; at
+   most one package defines a `(class, head)` in an acyclic source graph) and mark
+   the **both-package collision** message as compiled-manifest/package-manager
+   round (not build-now). **Restore/retain the locked O(total-instances) scaling
+   statement** — the coherence pass is one keyed collision test per structure
+   instance, linear in closure instances, **not** O(packages²) (MRES-4f changes
+   reachability, not scaling).
 4. **Forward-compat rules (SPEC ONLY, mark clearly as package-manager-round /
    post-MRES-9):** the compiled-package **instance manifest** + source==compiled
    equivalence (MRES-4c point 4); **MRES-4d** re-export-carries-instance-surface
@@ -129,8 +154,20 @@ ship **no** manifest/registry/lockfile code.
      explicit `admits` root (even if transitively present for coherence) →
      `UnadmittedInstance` naming that package + instance.
    - Single package → **self-admits**, zero program file, resolution succeeds.
-   - Coherence collision (two canonical instances for one `(class, head)` across
-     the admitted closure) → hard error naming **both** packages.
+   - **Intra-package overlap** (two canonical `instance C T` in **one** package)
+     → §5.5 `OverlappingInstances`; first registers, second rejects with both
+     spans. (This is the source-constructible overlap coverage.)
+   - **MRES-4f constructive witness (positive):** a two-package same-`(class,
+     head)` attempt forces the closed graph `owner(C)→owner(T)→owner(C)` and
+     rejects **upstream** as a specific `ImportCycle` — neither candidate
+     registers. Asserts source coherence-by-construction.
+   - **Both-package cross-package collision + provenance is RED-UNTIL the
+     package-manager / compiled-manifest round** (re-homed there, tied to PKG-3
+     cross-boundary re-check); do **not** assert it as a live source case.
+   - Admitted-orphan control (admission ≠ orphan gate): pin an **acyclic** source
+     graph giving the orphan module the ordinary edges it needs to name the
+     external class + head (so it reaches `OrphanInstance`, not `UnboundName`),
+     with neither owner importing it back.
    - Anonymous-header discipline: a `program`/`package` header with a name token
      is a **syntax** reject.
    - Mark forward-compat (compiled-manifest / re-export) cases **RED-UNTIL** the
@@ -154,7 +191,11 @@ cited code sites at pickup.
 4. **Coherence over the source closure** — the coherence check spans the full
    transitive **source** graph (already in the N2 loader's compilation graph);
    one canonical instance per `(class, head)`; O(total instances).
-5. **Provenance diagnostics** — implement the three required messages.
+5. **Provenance diagnostics** — implement the **two build-now** messages
+   (resolution provenance; `UnadmittedInstance` names package+instance). The
+   both-package collision message is **not** built here (MRES-4f: unreachable in
+   source; deferred to the package-manager round). Intra-package overlap uses the
+   existing §5.5 `OverlappingInstances`.
 6. **NO manifest/registry/lockfile code** — the compiled-package path is
    deferred. Source packages are transparent (units join the parent graph); a
    `package` header marks a compiled-package boundary in spec, but the compiled
@@ -169,13 +210,19 @@ cited code sites at pickup.
   unbuilt**.
 - **AC2 (golden).** The suite asserts: admitted → ambient success with
   provenance; unadmitted direct-use → `UnadmittedInstance` (named); self-admit
-  single package → success; coherence collision → both-package error; named
-  header → syntax reject. Specific variants, not bare accept/reject.
+  single package → success; **intra-package overlap → `OverlappingInstances`
+  (both spans)**; **the two-package same-head attempt → upstream `ImportCycle`
+  (MRES-4f constructive witness)**; named header → syntax reject. Specific
+  variants, not bare accept/reject. **The both-package cross-package collision +
+  provenance case is RED-UNTIL the package-manager round** (not a live source
+  assertion).
 - **AC3 (build, Lane B).** Parser accepts anonymous headers + `admits`, rejects
   named headers; admission gate raises `UnadmittedInstance` with provenance and
   composes with orphan/overlap; self-admission keeps single-package green;
-  coherence spans the source closure O(total instances). `scripts/ken-cargo test
-  -p ken-elaborator` green **and** literal `cargo build --workspace --locked &&
+  coherence spans the source closure **O(total instances)** (one keyed test per
+  instance, not O(packages²)); intra-package overlap reaches §5.5.
+  `scripts/ken-cargo test -p ken-elaborator` green **and** literal
+  `cargo build --workspace --locked &&
   cargo test --workspace --locked` green.
 - **AC4 (boundary).** Lane A: spec + conformance only. Lane B:
   `crates/ken-elaborator` (+ tests) only. **Zero** kernel/prelude/Cargo/lock/
@@ -201,6 +248,11 @@ publishes (Lane A doc-only; Lane B code → CI-polled).
 - **Two-set distinction** — coherence = transitive closure (total); admission
   gate keys on the explicit direct-use set. Do not filter the coherence set.
 - **Compose, don't replace** — the admission gate is additive to orphan/overlap.
+- **MRES-4f — cross-package collision is impossible in source** — do NOT restore
+  a source-world two-package `OverlappingInstances`/both-package-provenance
+  fixture or AC; source coherence is by construction (the `ImportCycle` witness),
+  overlap coverage is intra-package, both-package collision is
+  package-manager-round only. Keep the O(total-instances) scaling statement.
 - **No compiled-package build** — manifest/registry/lockfile and MRES-4d
   re-export-instance-surface are forward-compat spec only (package-manager round
   / post-MRES-9). No code.
