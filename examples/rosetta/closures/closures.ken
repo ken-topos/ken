@@ -36,8 +36,8 @@
 -- (SCT sound zone, same shape as the landed floor combinators).
 fn map (a b : Type) (f : a → b) (xs : List a) : List b =
   match xs {
-    Nil ⇒ Nil b ;
-    Cons h t ⇒ Cons b (f h) (map a b f t)
+    Nil ↦ Nil b ;
+    Cons h t ↦ Cons b (f h) (map a b f t)
   }
 
 -- Boxes a `String -> String` so it can be a `List` element (GAP-arrow-
@@ -45,7 +45,7 @@ fn map (a b : Type) (f : a → b) (xs : List a) : List b =
 data StrFn = MkStrFn (String → String)
 
 fn applyStrFn (box : StrFn) (s : String) : String =
-  match box { MkStrFn f ⇒ f s }
+  match box { MkStrFn f ↦ f s }
 
 -- Each closure captures its own `p` independently -- the defining property
 -- Closures/Value_capture probes (a naive shared-mutable-capture bug would
@@ -70,8 +70,8 @@ const expected : List String =
 
 const finalCheck : String =
   match list_eq String eq greetings expected {
-    True ⇒ "PASS" ;
-    False ⇒ "FAIL"
+    True ↦ "PASS" ;
+    False ↦ "FAIL"
   }
 
 proc main : IO Unit visits [Console] = print_line finalCheck

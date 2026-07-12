@@ -6,7 +6,7 @@
 -- as a helper assumption in any report that uses this checker as evidence.
 
 fn nc9_and (left : Bool) (right : Bool) : Bool =
-  match left { True => right ; False => False }
+  match left { True |-> right ; False |-> False }
 
 fn nc9_proof_erasure_boundary_check
   (artifact_identity : Bool)

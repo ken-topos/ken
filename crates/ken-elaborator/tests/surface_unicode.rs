@@ -35,10 +35,10 @@ fn surf1_d3_unicode_and_ascii_lex_to_same_tokens() {
 
 #[test]
 fn surf1_d3_formatter_emits_canonical_unicode() {
-    let src = "fn f : Omega -> Sigma = \\x . x\nmatch x { A => B }\nlet x = 1 in x\nnot level l === <= >= /= /\\ \\/ <: ><\n-- keep -> and => not in level in comments\n\"keep -> and \\\"=>\\\" not in level in strings\"";
+    let src = "fn f : Omega -> Sigma = \\x . x\nmatch x { A |-> B }\nlet x = 1 in x\nnot level l === <= >= /= /\\ \\/ <: ><\n-- keep -> and => not in level in comments\n\"keep -> and \\\"=>\\\" not in level in strings\"";
     let formatted = canonical_unicode(src);
     assert!(formatted.contains("fn f : Ω → Σ = λx . x"));
-    assert!(formatted.contains("match x { A ⇒ B }"));
+    assert!(formatted.contains("match x { A ↦ B }"));
     assert!(formatted.contains("let x = 1 in x"));
     assert!(formatted.contains("¬ ℓ ℓ ≡ ≤ ≥ ≠ ∧ ∨ ⊑ ×"));
     assert!(formatted.contains("-- keep -> and => not in level in comments"));

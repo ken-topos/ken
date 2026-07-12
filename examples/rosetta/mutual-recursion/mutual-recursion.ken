@@ -8,8 +8,8 @@
 -- write the two `view`s adjacent, and the elaborator submits the whole
 -- cycle to `sct_check` as one termination problem.
 
-fn isEven (n : Nat) : Bool = match n { Zero ⇒ True  ; Suc m ⇒ isOdd m }
-fn isOdd  (n : Nat) : Bool = match n { Zero ⇒ False ; Suc m ⇒ isEven m }
+fn isEven (n : Nat) : Bool = match n { Zero ↦ True  ; Suc m ↦ isOdd m }
+fn isOdd  (n : Nat) : Bool = match n { Zero ↦ False ; Suc m ↦ isEven m }
 
 const five : Nat = Suc (Suc (Suc (Suc (Suc Zero))))
 
@@ -18,8 +18,8 @@ const five : Nat = Suc (Suc (Suc (Suc (Suc Zero))))
 -- oracle style).
 const finalCheck : String =
   match isEven five {
-    False ⇒ match isOdd five { True ⇒ "PASS" ; False ⇒ "FAIL" } ;
-    True  ⇒ "FAIL"
+    False ↦ match isOdd five { True ↦ "PASS" ; False ↦ "FAIL" } ;
+    True  ↦ "FAIL"
   }
 
 proc main : IO Unit visits [Console] = print_line finalCheck
