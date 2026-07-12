@@ -203,16 +203,16 @@ rules**, and the `Σ`/`trusted_base()` identity against the **landed** kernel.
 
 ### surface/modules/prelude-clash-rejected-rename-local-resolves
 - spec: `33 §3.3`/`§4` (prelude is an unshadowable primitive floor)
-- given: paired clients: (a) declare `def Nat : Type := Bool`; (b) instead
-  declare `def LocalNat : Type := Nat`, leaving the registered prelude `Nat`
+- given: paired clients: (a) declare `def Bool = Nat`; (b) instead declare
+  `def LocalBool = Bool`, leaving the registered prelude `Bool`
   untouched
-- expect: (a) rejects at the surface with **`AmbiguousReference`** for `Nat`,
-  identifying the local and prelude sources; (b) accepts, with `LocalNat` and
-  the prelude `Nat` resolving to distinct `GlobalId`s. There is no prelude
+- expect: (a) rejects at the surface with **`AmbiguousReference`** for `Bool`,
+  identifying the local and prelude sources; (b) accepts, with `LocalBool` and
+  the prelude `Bool` resolving to distinct `GlobalId`s. There is no prelude
   exclusion input or positive opt-out arm.
 - why: N3 AC2. Renaming only the local changes reject to accept while the
   prelude environment is fixed. A warn-and-allow policy, silent local win, or
-  resolver that aliases `LocalNat` to prelude `Nat` fails. **RED UNTIL N3 LANE
+  resolver that aliases `LocalBool` to prelude `Bool` fails. **RED UNTIL N3 LANE
   B.**
 
 ### surface/modules/per-name-rename-parses-hiding-is-syntax-error
@@ -377,7 +377,7 @@ fixture's payload as `A → B → A`.
   leaves local `foo` and imported `bar` as two names for two distinct target
   IDs. Both agree with import-as-renaming and the flat-`Σ` invariant.
 - **Prelude remains present in both prelude arms.** The reject arm conflicts
-  with the fixed prelude `Nat`; the accept arm changes only the local spelling.
+  with the fixed prelude `Bool`; the accept arm changes only the local spelling.
   No import list, `hiding` form, or prelude opt-out participates.
 - **The N2 pair differs only by one import edge.** The same one-entry root
   list, `A` source, `B.value` declaration, strict bijection, and qualified use
