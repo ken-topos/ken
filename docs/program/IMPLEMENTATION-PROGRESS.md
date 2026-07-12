@@ -71,8 +71,14 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >     **Enclave repairing golden NOW** (spec-leader dispatched both amendments:
 >     spec on top of `4ea38061`, conformance on top of `85e35e2b`) → re-spun
 >     combined `wp/n4-program-admits` SHA → Architect-terminal (MRES-4/4a–4f +
->     PKG-1..4). **NEXT: publish MRES-4f ADR doc-only; await re-spun+approved Lane
->     A SHA → doc-only publish → Lane B (Language).**
+>     PKG-1..4). **MRES-4f ADR PUBLISHED** (`main @ 39504291`, PR #585). CV's
+>     fresh vote on re-spun `5702cf0f` found 3 corrections: (#1, MINE) the N4 WP
+>     frame was stale vs MRES-4f — **reconciled + publishing doc-only** (cite 4f;
+>     both-package collision → package-manager-round; intra-package overlap +
+>     `ImportCycle` witness live; O(total) restored); (#2/#3, enclave) §33 O(total)
+>     sentence + orphan-fixture imports. **NEXT: publish frame; await enclave
+>     re-spin + final CV vote → Architect-terminal → doc-only publish Lane A → Lane
+>     B (Language).**
 > - **N3 Lane A → ENCLAVE — GATED, PUBLISHING.** Candidate `8204e727` (linear
 >   `ba514aac → 27e56a79 spec → e31f3259 conf → 8204e727 prelude-carrier fix`);
 >   CV combined APPROVE + **Architect-terminal APPROVE** (merge-Decision vote,
