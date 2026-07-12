@@ -6,6 +6,8 @@
 //! L2 additions: `data` declarations, `type` aliases, `match` expressions,
 //! type application (`T a b`).
 
+use std::collections::HashSet;
+
 use crate::ast::{
     BinOp, ClassField, ConstructorSignatureArg, Decl, DefKeyword, EffectRowSyntax,
     ExplicitDataCtor, Expr, InstanceConstraint, NumLit, PatKind, Type,
@@ -674,17 +676,30 @@ pub(crate) const RESERVED_SUGAR: &[&str] = &[SUGAR_REFL, SUGAR_AXIOM, SUGAR_ABSU
 /// in place of DS-1's silent-shadow footgun. Grep-confirmed none of
 /// `RESERVED_SUGAR` is a prelude global, so this can never reject the
 /// bootstrap.
-fn check_no_reserved_sugar_collision(name: &str, span: &Span) -> Result<(), ElabError> {
-    if RESERVED_SUGAR.contains(&name) {
+pub(crate) fn check_no_definition_collision(
+    surface_name: &str,
+    definition_name: &str,
+    span: &Span,
+    unit_definitions: Option<&mut HashSet<String>>,
+) -> Result<(), ElabError> {
+    if RESERVED_SUGAR.contains(&surface_name) {
         return Err(ElabError::ParseError {
             msg: format!(
-                "'{name}' collides with a reserved surface sugar identifier — \
-                 checked-mode sugar intercepts every syntactic '{name}' \
+                "'{surface_name}' collides with a reserved surface sugar identifier — \
+                 checked-mode sugar intercepts every syntactic '{surface_name}' \
                  regardless of this declaration, leaving it permanently \
                  unreachable; choose a different name"
             ),
             span: span.clone(),
         });
+    }
+    if let Some(definitions) = unit_definitions {
+        if !definitions.insert(definition_name.to_string()) {
+            return Err(ElabError::DuplicateDefinition {
+                name: definition_name.to_string(),
+                span: span.clone(),
+            });
+        }
     }
     Ok(())
 }
@@ -693,13 +708,22 @@ fn check_no_reserved_sugar_collision(name: &str, span: &Span) -> Result<(), Elab
 
 pub fn resolve_decls(decls: &[Decl]) -> Result<Vec<RDecl>, ElabError> {
     let mut out = Vec::new();
+    let mut unit_definitions = HashSet::new();
     for d in decls {
-        out.push(resolve_decl(d)?);
+        out.push(resolve_decl_in_unit(d, &mut unit_definitions, None)?);
     }
     Ok(out)
 }
 
 pub fn resolve_decl(decl: &Decl) -> Result<RDecl, ElabError> {
+    resolve_decl_in_unit(decl, &mut HashSet::new(), None)
+}
+
+pub(crate) fn resolve_decl_in_unit(
+    decl: &Decl,
+    unit_definitions: &mut HashSet<String>,
+    definition_name: Option<&str>,
+) -> Result<RDecl, ElabError> {
     // The single decl-kind-uniform funnel every fn/const/proc/def/data/class/
     // instance declaration passes through — guard the produced decl's own
     // name here, not at the ~12 downstream `globals.insert` call sites or a
@@ -710,7 +734,28 @@ pub fn resolve_decl(decl: &Decl) -> Result<RDecl, ElabError> {
         decl,
         Decl::ModuleDecl { .. } | Decl::ImportDecl { .. } | Decl::Pub(_)
     ) {
-        check_no_reserved_sugar_collision(decl.name(), decl.span())?;
+        let records_definition =
+            !matches!(decl, Decl::InstanceDecl { .. } | Decl::DeriveDecl { .. });
+        let default_definition_name;
+        let definition_name = if let Some(name) = definition_name {
+            name
+        } else if let Decl::AttachedProofDecl {
+            subject,
+            proof_name,
+            ..
+        } = decl
+        {
+            default_definition_name = format!("{subject}::{proof_name}");
+            &default_definition_name
+        } else {
+            decl.name()
+        };
+        check_no_definition_collision(
+            decl.name(),
+            definition_name,
+            decl.span(),
+            records_definition.then_some(&mut *unit_definitions),
+        )?;
     }
     match decl {
         // `module`/`import`/`use`/`pub` are resolved away entirely by
@@ -996,7 +1041,12 @@ pub fn resolve_decl(decl: &Decl) -> Result<RDecl, ElabError> {
                 // A constructor resolves as an `RCon` too (`33 §4.2`) — a
                 // `data … = Eq | …` ctor collides with the reserved sugar
                 // identically to a decl head bearing the same name.
-                check_no_reserved_sugar_collision(&c.name, &c.span)?;
+                check_no_definition_collision(
+                    &c.name,
+                    &c.name,
+                    &c.span,
+                    Some(unit_definitions),
+                )?;
                 let rargs = c
                     .args
                     .iter()
@@ -1047,7 +1097,12 @@ pub fn resolve_decl(decl: &Decl) -> Result<RDecl, ElabError> {
             for ctor in ctors {
                 // Same collision as the legacy-form sweep above — an
                 // explicit-family ctor resolves as an `RCon` too.
-                check_no_reserved_sugar_collision(ctor.name(), ctor.span())?;
+                check_no_definition_collision(
+                    ctor.name(),
+                    ctor.name(),
+                    ctor.span(),
+                    Some(unit_definitions),
+                )?;
             }
             let rctors = ctors
                 .iter()
