@@ -47,22 +47,33 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > braces-now / lambda-Unicode+dot / type-app-preserve, folds P0's EBNF fix, + CV
 > golden for the 8 gates. Spec+conformance only. **B1 note bumped Accepted**
 > (architect/work `5a430c32`) — ready for doc-only publish so B2–B4 inherit.
-> **★ WP S — Architect-terminal APPROVE pending ONE doc-only fold.** Enclave ran
-> fast (kickoff 20:27 → terminal 20:41): spec-author `afac6495` (§31/§32), CV
-> golden `fab18643` (8 gates, 17 cases red-until-built), CV independent APPROVE,
-> spec-leader combined `54c023ce` (linear `320e24ec→afac6495→54c023ce`, 4 md files
-> +521/−8), Architect-terminal **APPROVE** — with **one required fold**: §1d
-> redundant-parens rule said parens "need not be preserved" (permission → two
-> printers diverge; invisible to gates since parse-preservation is modulo-parens).
-> Ruling **removed** (gofmt-analog, parse-preserving). **FOLD LANDED + verified:**
-> re-spun `d1d36a5d` (ancestry `320e24ec→afac6495→10c5565a spec-fold→1c732faf→
-> d1d36a5d oracle-pin`); Steward-confirmed the `54c023ce→d1d36a5d` delta is
-> EXACTLY the §1d wording mandate + one oracle case (`redundant-grouping-parens-
-> are-removed`, pins BOTH orientations, red-until-built), +15/−2, nothing else.
-> Architect pre-authorized Steward confirm → **PUBLISHING doc-only** → **B1
-> (Accepted, AST+trivia) releases to Language.** S terminal-clean otherwise
-> (token-kind closure, protected payloads, no-refactor, braces/λ/type-app, P0
-> four-only `;`, 8 gates red-until-built).
+> **★ WP S CLOSED** — merged `origin/main` (PR #576, doc-only) + **retros in**
+> (`evt_2m4rdt77d1hxb`; shared carry → memory
+> `canonicalizer-determinism-needs-explicit-convergence-direction`). kenfmt
+> canonical form (`31 §1d` + P0 `§32` + 8-gate golden) is normative. Steward
+> self-compacted here at a CLEAN SEAM (S closed, B1 frame landed, nothing
+> mid-flight).
+>
+> **★★ RESUME HERE — two unblocked threads, both READY TO RELEASE (parallel,
+> different teams):**
+> 1. **B1 (kenfmt build) → LANGUAGE.** Frame landed:
+>    `docs/program/wp/kenfmt-b1-lossless-layer.md` (architecture Accepted, AST+
+>    trivia, 4-item contract in `docs/program/kenfmt-b1-source-representation.md`).
+>    Language ring IDLE, N2 retros IN → **Handoff-Gate compact Language
+>    (language-leader/implementer/qa) → kick B1** (Architect-terminal reviews).
+>    Operator priority. B2/B3/B4 follow; capstone C needs catalog freeze.
+> 2. **N3 (module program) → ENCLAVE.** Enclave FREE (S retros in). **Frame
+>    `docs/program/wp/n3-import-exclusion.md`** at reduced opt-A scope (§3.3 local-
+>    vs-import clash reversal + per-name rename `import M (foo as bar)`; positive
+>    de-selection = default exclusion; NO `hiding`; prelude names UNSHADOWABLE;
+>    lexical binder shadowing untouched) → publish doc-only → **Handoff-Gate
+>    enclave → kick N3 Lane A** (spec+golden) → Lane B (Language). Then task #37
+>    (`use`-keyword retirement, Language), N4 (program/admits), N5 (re-export,
+>    non-`use` spelling).
+>
+> Both kicks require the Handoff-Gate (compact receiving unit BEFORE kickoff).
+> honesty-gate every publish; `--target wp/<branch>` never main; doc-only merges
+> instant. Operator said "proceed with S, etc." — clear to run both.
 >
 > **QUEUED behind S** (enclave serializes spec): **N3** (import-exclusion, reduced
 > opt-A scope) spec lane. Also **task #37** (retire `use` keyword — Language). N4
