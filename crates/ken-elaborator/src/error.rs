@@ -35,6 +35,9 @@ pub enum ElabError {
     UnboundName { name: String, span: Span },
     /// A `ConId` with no global declaration.
     UnresolvedCon { name: String, span: Span },
+    /// A second top-level definition of a name already defined in the same
+    /// compilation unit (`33 §3`, ADR 0014 MRES-5/MRES-7).
+    DuplicateDefinition { name: String, span: Span },
     /// The elaborator surfaced a kernel type-mismatch (`39 §5.6`).
     TypeMismatch { span: Span, reason: String },
     /// A λ was checked against a non-Π type — V0 structural rejection (`39 §5.6`).
@@ -86,6 +89,11 @@ impl fmt::Display for ElabError {
             ElabError::UnresolvedCon { name, span } => {
                 write!(f, "unresolved type '{}' at {}-{}", name, span.start, span.end)
             }
+            ElabError::DuplicateDefinition { name, span } => write!(
+                f,
+                "duplicate definition '{}' at {}-{}: name already defined in this compilation unit",
+                name, span.start, span.end,
+            ),
             ElabError::TypeMismatch { span, reason } => {
                 write!(f, "type mismatch at {}-{}: {}", span.start, span.end, reason)
             }
