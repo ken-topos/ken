@@ -14,6 +14,27 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
+> ### proof-vocab-completion ACTIVE (Language) — 2026-07-11
+>
+> **Bundled WP framed + merged to main** (`76d74621`, PR #529): `fn`⊥Ω gate +
+> `tt`→`Proved` + surface `Top` + one-pass 520-site Ω-`fn`→`lemma` catalog
+> migration. Absorbs the old `fn-lemma-partition` (task #21) + the `_ind` collapse.
+> **Owner Language, single atomic branch** `wp/proof-vocab-completion`.
+> - **Implementer (now gpt-5.6-sol, operator-upgraded) Working**, committed at
+>   **`fb64c9cc`** ("complete proof vocabulary migration"), rebased on `76d74621`;
+>   catalog + focused gate paths green; finishing legacy `ken-elaborator`
+>   **test-fixture** `fn`→`lemma` migration until the full suite is green.
+> - **Blocker resolved:** `pair_compare_eq` — Architect ruled (`evt_4eantd6r4s8hh`)
+>   the partition holds, no exception, no gate change (Π-into-Ω is impredicative,
+>   `sort_pi`); it was a migration-execution artifact. Frame guardrail stands.
+> - **NEXT:** when the full suite is green, implementer rebases + hands the SHA to
+>   the leader → QA → Architect surface/fidelity + conformance (spec-author now
+>   gpt-5.6-sol, Opus Architect+CV backstop). Then Steward honesty gate + publisher
+>   (non-doc → CI; atomic migrate-then-enforce). Watch for the git_request.
+> - Practice: codified "keep the turn active through completion" for Codex seats
+>   (`9a153c88`, playbooks); #20 corrected (codex tmux delivery works; real gap =
+>   platform `reply_to` event_id, moot-owned).
+
 > ### proof-vocabulary A/B/C — MERGED + CLOSED (#19) — 2026-07-11
 >
 > **MERGED `origin/main @ c755837f`** (PR #528, CI green) — combined publication:
