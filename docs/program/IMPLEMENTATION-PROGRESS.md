@@ -73,10 +73,28 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > `l`/`level`→`ℓ`, ship operator/symbol glyphs only** (~865 lines). Re-run from
 > base `d26270e2` with the two ident-mappings suppressed in the throwaway runner
 > (NOT a `format.rs` edit); output must have ZERO `ℓ` in catalog; CAT5 assertion
-> sync + everything else stays. QA + Architect re-clear → new SHA. **⏭ RESUME
-> ACTION: await #26 RE-RUN SHA handoff → honesty-gate (catalog fences + coupled
-> `crates/**/tests` CAT5 assertion delta, NO impl/spec/kernel, zero `ℓ`) + publish
-> → on merge, fleet quiescent → cancel watchdog.**
+> sync + everything else stays. Re-run candidate `eae5d0af` (8 catalog/example
+> files + CAT5, zero `ℓ`) QA re-APPROVE + Architect re-clear (`evt_2nbhxjdqwz1ex`);
+> honesty gate clean. **#26 MERGED @ `origin/main 5e1ab924`** (PR #548, CI passed).
+> **✅ #26 CLOSED** (light — no retro). Formatter over-fire finding preserved below
+> for the parked canonical-formatter WP.
+>
+> ### IN FLIGHT — #28 attached-proof reference style (`::`→selector) — 2026-07-12
+>
+> **Operator style ruling: catalog CODE should reference attached proofs via the
+> readable `(proof name for subject)` selector, NOT the desugared `subject::name`
+> `::` path.** Probed feasible — both forms already valid surface, resolve to the
+> identical term (spec §8.2 `33-declarations.md:541-545`; parser
+> `Expr::EAttachedProofRef`) — **pure catalog rewrite, no elaborator/spec change.**
+> Frame `docs/program/wp/attached-proof-selector-style.md`. **Scope = CODE refs
+> only** (instance fields, applied selectors [parenthesized: `(proof P for s) a b`],
+> bare refs); **`::`-documenting PROSE stays** (surface-reference guide, README,
+> path-convention narration); proof-body recursive self-refs = Architect judgment
+> (convert if green + clearer, report if selector won't resolve in self-ref
+> position). Foundation, Architect-terminal, LIGHT. **⏭ RESUME ACTION: Handoff-Gate
+> compact Foundation → publish #28 frame+tracker doc-only → kick @foundation-leader
+> base `5e1ab924` → drive gate → honesty-gate + publish → on merge, fleet
+> quiescent → cancel watchdog.**
 >
 > **↳ SURFACED FORMATTER BUG (for parked `ken-formatter-canonical` WP):**
 > `format.rs::canonical_unicode`'s `canonical_ident` maps `l`/`level`→`ℓ` on ANY
