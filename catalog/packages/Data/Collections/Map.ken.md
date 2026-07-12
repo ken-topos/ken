@@ -1980,7 +1980,7 @@ proof not_swap for order_equiv
   (k : Type) (leq : k → k → Bool) (a : k) (b : k)
   (hnot : Not (order_equiv k leq a b))
   : Not (order_equiv k leq b a) =
-  λh. hnot (order_equiv::sym k leq b a h)
+  λh. hnot ((proof sym for order_equiv) k leq b a h)
 
 lemma all_in_list_append_elim_right
   (k : Type) (v : Type) (p : k → Prop) (xs : List (Pair k v)) (ys : List (Pair k v))
@@ -1999,7 +1999,7 @@ lemma no_dup_append_head_excl_head_fact
   (h : And (all_in_list k v (not_order_equiv_to_key k leq (pair_fst k v e2)) (list_append (Pair k v) xs2 (Cons (Pair k v) e ys)))
            (NoDup k v leq (list_append (Pair k v) xs2 (Cons (Pair k v) e ys))))
   : not_order_equiv_to_key k leq (pair_fst k v e) (pair_fst k v e2) =
-  order_equiv::not_swap k leq (pair_fst k v e2) (pair_fst k v e)
+  proof not_swap for order_equiv k leq (pair_fst k v e2) (pair_fst k v e)
     (and_fst (not_order_equiv_to_key k leq (pair_fst k v e2) (pair_fst k v e))
             (all_in_list k v (not_order_equiv_to_key k leq (pair_fst k v e2)) ys)
        (all_in_list_append_elim_right k v (not_order_equiv_to_key k leq (pair_fst k v e2)) xs2 (Cons (Pair k v) e ys)
@@ -2585,7 +2585,7 @@ fn leq_nat (m : Nat) (n : Nat) : Bool =
   }
 
 proof refl for leq_nat (x : Nat) : Equal Bool (leq_nat x x) True =
-  match x { Zero ↦ Proved ; Suc x2 ↦ leq_nat::refl x2 }
+  match x { Zero ↦ Proved ; Suc x2 ↦ proof refl for leq_nat x2 }
 
 proof trans for leq_nat
   (x : Nat)
@@ -2598,7 +2598,7 @@ proof trans for leq_nat
         Suc y2 ↦
           λz. match z {
             Zero ↦ λp.λq. absurd q ;
-            Suc z2 ↦ λp.λq. leq_nat::trans x2 y2 z2 p q
+            Suc z2 ↦ λp.λq. proof trans for leq_nat x2 y2 z2 p q
           }
       }
   }
@@ -2615,7 +2615,7 @@ proof antisym for leq_nat
     Suc x2 ↦
       λy. match y {
         Zero ↦ λp.λq. absurd p ;
-        Suc y2 ↦ λp.λq. cong Nat Nat x2 y2 Suc (leq_nat::antisym x2 y2 p q)
+        Suc y2 ↦ λp.λq. cong Nat Nat x2 y2 Suc ((proof antisym for leq_nat) x2 y2 p q)
       }
   }
 
@@ -2648,7 +2648,7 @@ lemma order_equiv_key_true_from_order_equiv
   (k : Type) (leq : k → k → Bool) (a : k) (b : k)
   : order_equiv k leq a b → Equal Bool (order_equiv_key k leq a b) True =
   λh.
-    bool_and::true_intro (leq a b) (leq b a)
+    proof true_intro for bool_and (leq a b) (leq b a)
       (and_fst (Equal Bool (leq a b) True) (Equal Bool (leq b a) True) h)
       (and_snd (Equal Bool (leq a b) True) (Equal Bool (leq b a) True) h)
 
@@ -2874,7 +2874,7 @@ lemma delete_from_list_acc_lookup_none_dispatch
             (lookup k v leq key acc)
             (None v)
             (lookup_locality k v leq transLeq (pair_fst k v e) key (pair_snd k v e) acc
-              (order_equiv::not_swap k leq key (pair_fst k v e)
+              ((proof not_swap for order_equiv) k leq key (pair_fst k v e)
                 (order_equiv_key_false_to_not k leq key (pair_fst k v e) q)))
             hacc))
         (sym (Tree k v)
@@ -2947,7 +2947,7 @@ lemma delete_from_list_acc_lookup_locality_dispatch
               (not_order_equiv_to_key k leq query (pair_fst k v e))
               (all_in_list k v (not_order_equiv_to_key k leq query) xs2) hskip))
           (lookup_locality k v leq transLeq (pair_fst k v e) query (pair_snd k v e) acc
-            (order_equiv::not_swap k leq query (pair_fst k v e)
+            ((proof not_swap for order_equiv) k leq query (pair_fst k v e)
               (and_fst
                 (not_order_equiv_to_key k leq query (pair_fst k v e))
                 (all_in_list k v (not_order_equiv_to_key k leq query) xs2) hskip))))
@@ -2986,9 +2986,9 @@ lemma not_order_equiv_from_deleted_match
   : not_order_equiv_to_key k leq query entryKey =
   λhQueryEntry.
     hnotDeletedQuery
-      (order_equiv::trans k leq transLeq deleted entryKey query
+      ((proof trans for order_equiv) k leq transLeq deleted entryKey query
         (order_equiv_from_order_equiv_key_true k leq deleted entryKey hDeletedEntry)
-        (order_equiv::sym k leq query entryKey hQueryEntry))
+        ((proof sym for order_equiv) k leq query entryKey hQueryEntry))
 
 lemma delete_from_list_acc_lookup_other_assoc_deleted_hit_absurd
   (k : Type) (v : Type) (leq : k → k → Bool)
@@ -3003,7 +3003,7 @@ lemma delete_from_list_acc_lookup_other_assoc_deleted_hit_absurd
       (assoc k v leq query (Cons (Pair k v) e xs2)) =
   absurd
     (hnotDeletedQuery
-      (order_equiv::trans k leq transLeq deleted (pair_fst k v e) query
+      ((proof trans for order_equiv) k leq transLeq deleted (pair_fst k v e) query
         (order_equiv_from_order_equiv_key_true k leq deleted (pair_fst k v e) hDeletedEntry)
         (and_intro (Equal Bool (leq (pair_fst k v e) query) True)
           (Equal Bool (leq query (pair_fst k v e)) True) q2 q1)))
@@ -3142,7 +3142,7 @@ lemma delete_from_list_acc_lookup_other_assoc_miss
               (lookup k v leq query acc)
               (None v)
               (lookup_locality k v leq transLeq (pair_fst k v e) query (pair_snd k v e) acc
-                (order_equiv::not_swap k leq query (pair_fst k v e) hnotQueryEntry))
+                ((proof not_swap for order_equiv) k leq query (pair_fst k v e) hnotQueryEntry))
               hacc))
           (sym (Option v)
             (assoc k v leq query (Cons (Pair k v) e xs2))
@@ -5111,7 +5111,7 @@ lemma intersection_from_list_acc_lookup_locality_dispatch
               (not_order_equiv_to_key k leq key (pair_fst k v e))
               (all_in_list k v (not_order_equiv_to_key k leq key) xs2) hskip))
           (lookup_locality k v leq transLeq (pair_fst k v e) key (pair_snd k v e) acc
-            (order_equiv::not_swap k leq key (pair_fst k v e)
+            ((proof not_swap for order_equiv) k leq key (pair_fst k v e)
               (and_fst
                 (not_order_equiv_to_key k leq key (pair_fst k v e))
                 (all_in_list k v (not_order_equiv_to_key k leq key) xs2) hskip)))) ;
@@ -5451,7 +5451,7 @@ lemma difference_from_list_acc_lookup_locality_dispatch
               (not_order_equiv_to_key k leq key (pair_fst k v e))
               (all_in_list k v (not_order_equiv_to_key k leq key) xs2) hskip))
           (lookup_locality k v leq transLeq (pair_fst k v e) key (pair_snd k v e) acc
-            (order_equiv::not_swap k leq key (pair_fst k v e)
+            ((proof not_swap for order_equiv) k leq key (pair_fst k v e)
               (and_fst
                 (not_order_equiv_to_key k leq key (pair_fst k v e))
                 (all_in_list k v (not_order_equiv_to_key k leq key) xs2) hskip))))
@@ -6278,7 +6278,7 @@ lemma set_union_comm_law
         (cat4_bool_or (set_member k leq x s) (set_member k leq x t))
         (cat4_bool_or (set_member k leq x t) (set_member k leq x s))
         (set_member k leq x (set_union k leq t s))
-        (cat4_bool_or::comm (set_member k leq x s) (set_member k leq x t))
+        ((proof comm for cat4_bool_or) (set_member k leq x s) (set_member k leq x t))
         (sym Bool
           (set_member k leq x (set_union k leq t s))
           (cat4_bool_or (set_member k leq x t) (set_member k leq x s))
@@ -6314,7 +6314,7 @@ lemma set_union_assoc_law
           (cat4_bool_or (cat4_bool_or (set_member k leq x a) (set_member k leq x b)) (set_member k leq x c))
           (cat4_bool_or (set_member k leq x a) (cat4_bool_or (set_member k leq x b) (set_member k leq x c)))
           (set_member k leq x (set_union k leq a (set_union k leq b c)))
-          (cat4_bool_or::assoc (set_member k leq x a) (set_member k leq x b) (set_member k leq x c))
+          ((proof assoc for cat4_bool_or) (set_member k leq x a) (set_member k leq x b) (set_member k leq x c))
           (trans Bool
             (cat4_bool_or (set_member k leq x a) (cat4_bool_or (set_member k leq x b) (set_member k leq x c)))
             (cat4_bool_or (set_member k leq x a) (set_member k leq x (set_union k leq b c)))
@@ -6347,7 +6347,7 @@ lemma set_union_idempotent_law
       (cat4_bool_or (set_member k leq x s) (set_member k leq x s))
       (set_member k leq x s)
       (set_union_member_law k leq reflLeq transLeq x s s hord hdist)
-      (cat4_bool_or::idempotent (set_member k leq x s))
+      ((proof idempotent for cat4_bool_or) (set_member k leq x s))
 
 lemma set_union_identity_law
   (k : Type) (leq : k → k → Bool)
@@ -6378,7 +6378,7 @@ lemma set_union_identity_law
             False
             (λleft. cat4_bool_or left (set_member k leq x s))
             (set_member_empty_false k leq x))
-          (cat4_bool_or::left_identity (set_member k leq x s))))
+          ((proof left_identity for cat4_bool_or) (set_member k leq x s))))
       (trans Bool
         (set_member k leq x (set_union k leq s (empty k Unit)))
         (cat4_bool_or (set_member k leq x s) (set_member k leq x (empty k Unit)))
@@ -6393,7 +6393,7 @@ lemma set_union_identity_law
             False
             (λright. cat4_bool_or (set_member k leq x s) right)
             (set_member_empty_false k leq x))
-          (cat4_bool_or::right_identity (set_member k leq x s))))
+          ((proof right_identity for cat4_bool_or) (set_member k leq x s))))
 
 lemma set_intersection_comm_law
   (k : Type) (leq : k → k → Bool)
@@ -6415,7 +6415,7 @@ lemma set_intersection_comm_law
         (bool_and (set_member k leq x s) (set_member k leq x t))
         (bool_and (set_member k leq x t) (set_member k leq x s))
         (set_member k leq x (set_intersection k leq t s))
-        (bool_and::comm (set_member k leq x s) (set_member k leq x t))
+        ((proof comm for bool_and) (set_member k leq x s) (set_member k leq x t))
         (sym Bool
           (set_member k leq x (set_intersection k leq t s))
           (bool_and (set_member k leq x t) (set_member k leq x s))
@@ -6451,7 +6451,7 @@ lemma set_intersection_assoc_law
           (bool_and (bool_and (set_member k leq x a) (set_member k leq x b)) (set_member k leq x c))
           (bool_and (set_member k leq x a) (bool_and (set_member k leq x b) (set_member k leq x c)))
           (set_member k leq x (set_intersection k leq a (set_intersection k leq b c)))
-          (bool_and::assoc (set_member k leq x a) (set_member k leq x b) (set_member k leq x c))
+          ((proof assoc for bool_and) (set_member k leq x a) (set_member k leq x b) (set_member k leq x c))
           (trans Bool
             (bool_and (set_member k leq x a) (bool_and (set_member k leq x b) (set_member k leq x c)))
             (bool_and (set_member k leq x a) (set_member k leq x (set_intersection k leq b c)))
@@ -6484,7 +6484,7 @@ lemma set_intersection_idempotent_law
       (bool_and (set_member k leq x s) (set_member k leq x s))
       (set_member k leq x s)
       (set_intersection_member_law k leq reflLeq transLeq x s s hord hdist)
-      (bool_and::idempotent (set_member k leq x s))
+      ((proof idempotent for bool_and) (set_member k leq x s))
 
 lemma set_intersection_identity_law
   (k : Type) (leq : k → k → Bool)

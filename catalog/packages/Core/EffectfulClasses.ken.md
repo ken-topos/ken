@@ -231,7 +231,7 @@ instance Monad Option {
   bind = option_bind ;
   bind_lid = option_bind_lid ;
   bind_rid = option_bind_rid ;
-  bind_asc = option_bind::assoc
+  bind_asc = proof assoc for option_bind
 }
 ```
 
@@ -264,7 +264,7 @@ of `bind`'s field order (container first, per the chapter's own `bind m k
 
 ```ken
 lemma list_bind_lid (a : Type) (b : Type) (x : a) (k : a → List b) :
-  Equal (List b) (list_bind a b (list_pure a x) k) (k x) = list_append::right_unit b (k x)
+  Equal (List b) (list_bind a b (list_pure a x) k) (k x) = proof right_unit for list_append b (k x)
 
 lemma list_bind_rid (a : Type) (m : List a) : Equal (List a) (list_bind a a m (list_pure a)) m =
   match m {
@@ -282,7 +282,7 @@ lemma concat_map_append_distrib (a : Type) (b : Type) (f : a → List b) (xs : L
         (list_append b (f h) (list_append b (concat_map a b f t) (concat_map a b f ys)))
         (list_append b (list_append b (f h) (concat_map a b f t)) (concat_map a b f ys))
         (cong (List b) (List b) (concat_map a b f (list_append a t ys)) (list_append b (concat_map a b f t) (concat_map a b f ys)) (list_append b (f h)) (concat_map_append_distrib a b f t ys))
-        (sym (List b) (list_append b (list_append b (f h) (concat_map a b f t)) (concat_map a b f ys)) (list_append b (f h) (list_append b (concat_map a b f t) (concat_map a b f ys))) (list_append::assoc b (f h) (concat_map a b f t) (concat_map a b f ys)))
+        (sym (List b) (list_append b (list_append b (f h) (concat_map a b f t)) (concat_map a b f ys)) (list_append b (f h) (list_append b (concat_map a b f t) (concat_map a b f ys))) ((proof assoc for list_append) b (f h) (concat_map a b f t) (concat_map a b f ys)))
   }
 
 proof assoc for list_bind (a : Type) (b : Type) (c : Type) (m : List a) (k : a → List b) (h : b → List c) :
@@ -295,7 +295,7 @@ proof assoc for list_bind (a : Type) (b : Type) (c : Type) (m : List a) (k : a �
         (list_append c (concat_map b c h (k h0)) (concat_map b c h (concat_map a b k t)))
         (list_append c (compose_kleisli List list_bind a b c k h h0) (list_bind a c t (compose_kleisli List list_bind a b c k h)))
         (concat_map_append_distrib b c h (k h0) (concat_map a b k t))
-        (cong (List c) (List c) (concat_map b c h (concat_map a b k t)) (list_bind a c t (compose_kleisli List list_bind a b c k h)) (list_append c (concat_map b c h (k h0))) (list_bind::assoc a b c t k h))
+        (cong (List c) (List c) (concat_map b c h (concat_map a b k t)) (list_bind a c t (compose_kleisli List list_bind a b c k h)) (list_append c (concat_map b c h (k h0))) ((proof assoc for list_bind) a b c t k h))
   }
 ```
 
@@ -309,16 +309,16 @@ lemma list_ap_id (a : Type) (v : List a) : Equal (List a) (list_ap a a (list_pur
     (list_append a (list_map a a (idf a) v) (Nil a))
     (list_map a a (idf a) v)
     v
-    (list_append::right_unit a (list_map a a (idf a) v))
-    (list_map::id a v)
+    ((proof right_unit for list_append) a (list_map a a (idf a) v))
+    ((proof id for list_map) a v)
 
 lemma list_ap_hom (a : Type) (b : Type) (g : a → b) (x : a) :
   Equal (List b) (list_ap a b (list_pure (a → b) g) (list_pure a x)) (list_pure b (g x)) =
-  list_append::right_unit b (Cons b (g x) (Nil b))
+  proof right_unit for list_append b (Cons b (g x) (Nil b))
 
 lemma list_map_coh (a : Type) (b : Type) (g : a → b) (x : List a) :
   Equal (List b) (functor_map_of List Functor_instance_List a b g x) (list_ap a b (list_pure (a → b) g) x) =
-  sym (List b) (list_append b (list_map a b g x) (Nil b)) (list_map a b g x) (list_append::right_unit b (list_map a b g x))
+  sym (List b) (list_append b (list_map a b g x) (Nil b)) (list_map a b g x) ((proof right_unit for list_append) b (list_map a b g x))
 ```
 
 `ap_ich` needs one real induction. A self-recursive proof stated directly
@@ -351,7 +351,7 @@ lemma list_ap_ich (a : Type) (b : Type) (u : List (a → b)) (y : a) :
     (list_map (a → b) b (apply_to a b y) u)
     (list_append b (list_map (a → b) b (apply_to a b y) u) (Nil b))
     (list_ap_ich_general a b u y)
-    (sym (List b) (list_append b (list_map (a → b) b (apply_to a b y) u) (Nil b)) (list_map (a → b) b (apply_to a b y) u) (list_append::right_unit b (list_map (a → b) b (apply_to a b y) u)))
+    (sym (List b) (list_append b (list_map (a → b) b (apply_to a b y) u) (Nil b)) (list_map (a → b) b (apply_to a b y) u) ((proof right_unit for list_append) b (list_map (a → b) b (apply_to a b y) u)))
 ```
 
 `ap_cmp` (composition) is the load-bearing law of the four — the standard
@@ -365,7 +365,7 @@ new inductive step (concat_map-after-concat_map):
 ```ken
 lemma list_ap_pure_left (a : Type) (b : Type) (g : a → b) (xs : List a) :
   Equal (List b) (list_ap a b (list_pure (a → b) g) xs) (list_map a b g xs) =
-  list_append::right_unit b (list_map a b g xs)
+  proof right_unit for list_append b (list_map a b g xs)
 
 lemma list_map_append_distrib (a : Type) (b : Type) (g : a → b) (xs : List a) (ys : List a) :
   Equal (List b) (list_map a b g (list_append a xs ys)) (list_append b (list_map a b g xs) (list_map a b g ys)) =
@@ -408,7 +408,7 @@ proof pointwise_eq for concat_map (a : Type) (b : Type) (f : a → List b) (g : 
         (list_append b (g h) (concat_map a b f t))
         (list_append b (g h) (concat_map a b g t))
         (cong (List b) (List b) (f h) (g h) (λz. list_append b z (concat_map a b f t)) (pf h))
-        (cong (List b) (List b) (concat_map a b f t) (concat_map a b g t) (list_append b (g h)) (concat_map::pointwise_eq a b f g pf t))
+        (cong (List b) (List b) (concat_map a b f t) (concat_map a b g t) (list_append b (g h)) ((proof pointwise_eq for concat_map) a b f g pf t))
   }
 ```
 
@@ -461,7 +461,7 @@ lemma pf_probe (a : Type) (b : Type) (c : Type) (v : List (a → b)) (w : List a
            (list_append c (list_map a c (compose a b c g1 h0) w) (ap_comp_h1 a b c t w g1))
            (list_append c (list_map b c g1 (list_map a b h0 w)) (ap_comp_h1 a b c t w g1))
            (list_append c (list_map b c g1 (list_map a b h0 w)) (ap_then_bind a b c t w g1))
-           (cong (List c) (List c) (list_map a c (compose a b c g1 h0) w) (list_map b c g1 (list_map a b h0 w)) (λz. list_append c z (ap_comp_h1 a b c t w g1)) (list_map::fusion a b c g1 h0 w))
+           (cong (List c) (List c) (list_map a c (compose a b c g1 h0) w) (list_map b c g1 (list_map a b h0 w)) (λz. list_append c z (ap_comp_h1 a b c t w g1)) ((proof fusion for list_map) a b c g1 h0 w))
            (cong (List c) (List c) (ap_comp_h1 a b c t w g1) (ap_then_bind a b c t w g1) (list_append c (list_map b c g1 (list_map a b h0 w))) (pf_probe a b c t w g1)))
         (sym (List c)
            (list_map b c g1 (list_append b (list_map a b h0 w) (concat_map (a → b) b (λh1. list_map a b h1 w) t)))
@@ -477,8 +477,8 @@ lemma list_ap_cmp_mid1 (a : Type) (b : Type) (c : Type) (u : List (b → c)) (v 
     (concat_map (a → c) c (λh2. list_map a c h2 w) (concat_map (b → c) (a → c) (λg1. list_map (a → b) (a → c) (compose a b c g1) v) u))
     (concat_map (b → c) c (λg1. concat_map (a → c) c (λh2. list_map a c h2 w) (list_map (a → b) (a → c) (compose a b c g1) v)) u)
     (concat_map (b → c) c (λg1. concat_map (a → b) c (λh1. list_map a c (compose a b c g1 h1) w) v) u)
-    (list_bind::assoc (b → c) (a → c) c u (λg1. list_map (a → b) (a → c) (compose a b c g1) v) (λh2. list_map a c h2 w))
-    (concat_map::pointwise_eq (b → c) c
+    ((proof assoc for list_bind) (b → c) (a → c) c u (λg1. list_map (a → b) (a → c) (compose a b c g1) v) (λh2. list_map a c h2 w))
+    ((proof pointwise_eq for concat_map) (b → c) c
        (λg1. concat_map (a → c) c (λh2. list_map a c h2 w) (list_map (a → b) (a → c) (compose a b c g1) v))
        (λg1. concat_map (a → b) c (λh1. list_map a c (compose a b c g1 h1) w) v)
        (λg1. concat_map_map_fusion (a → b) (a → c) c (λh2. list_map a c h2 w) (compose a b c g1) v)
@@ -488,7 +488,7 @@ lemma list_ap_cmp_mid2 (a : Type) (b : Type) (c : Type) (u : List (b → c)) (v 
   Equal (List c)
     (concat_map (b → c) c (ap_comp_h1 a b c v w) u)
     (list_ap b c u (list_ap a b v w)) =
-  concat_map::pointwise_eq (b → c) c (ap_comp_h1 a b c v w) (ap_then_bind a b c v w) (pf_probe a b c v w) u
+  proof pointwise_eq for concat_map (b → c) c (ap_comp_h1 a b c v w) (ap_then_bind a b c v w) (pf_probe a b c v w) u
 
 lemma list_ap_cmp_mid (a : Type) (b : Type) (c : Type) (u : List (b → c)) (v : List (a → b)) (w : List a) :
   Equal (List c)
@@ -541,7 +541,7 @@ instance Monad List {
   bind = list_bind ;
   bind_lid = list_bind_lid ;
   bind_rid = list_bind_rid ;
-  bind_asc = list_bind::assoc
+  bind_asc = proof assoc for list_bind
 }
 ```
 
@@ -828,8 +828,8 @@ lemma identity_map_coh (a : Type) (b : Type) (g : a → b) (x : Identity a) :
 
 instance Functor Identity {
   map = identity_map ;
-  id_law = identity_map::id ;
-  fusion_law = identity_map::fusion
+  id_law = proof id for identity_map ;
+  fusion_law = proof fusion for identity_map
 }
 
 instance Applicative Identity {
