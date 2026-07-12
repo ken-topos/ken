@@ -72,21 +72,33 @@ independent of the loader and therefore first.
 ### N3 — Import-exclusion + local/import clash error (round 2 fast-follow) · size M
 
 - **MRES:** 6 (operator override). **Deps:** N2 (needs cross-file imports live).
+  **⚠ Scope reduced by ADR 0015 (2026-07-12) — see note below; `hiding` dropped.**
 - **Objective.** A top-level local definition and an imported name with the same
   spelling is a **clash error** (reversing §3.3's silent local-win), resolvable
-  by positive selection, `hiding`, or rename. Order-independent, raised whether
-  or not the name is used (fail-closed, like N1). **Ordinary lexical binder
-  shadowing (params / `let` / `λ`, innermost-wins) is untouched** — only the
-  module-level definition-vs-import clause reverses.
-- **Spec lane.** `spec/30-surface/33` §3.2 import-exclusion grammar
-  (`import M hiding (…)`, per-name `import M (foo as bar)` rename; positive
-  selection already exists); §3.3 clause reversal (definition-vs-import clash =
-  error). Conformance golden: unresolved clash rejected; `hiding`/rename resolves
-  it (reject→accept flip); lexical binder shadowing still accepted.
+  by **positive de-selection** (drop the name from the selective import list) or
+  **rename** (`import M (foo as bar)`). Order-independent, raised whether or not
+  the name is used (fail-closed, like N1). **Ordinary lexical binder shadowing
+  (params / `let` / `λ`, innermost-wins) is untouched** — only the module-level
+  definition-vs-import clause reverses.
+- **Spec lane.** `spec/30-surface/33` §3.2 per-name rename grammar
+  (`import M (foo as bar)`; positive selection / de-selection already exist);
+  §3.3 clause reversal (definition-vs-import clash = error). Conformance golden:
+  unresolved clash rejected; rename (or de-selection) resolves it (reject→accept
+  flip); lexical binder shadowing still accepted.
 - **Build lane.** Clash detection in the import-binding path (today `bind_import`
-  silently refuses to touch a `locals` name); new `hiding`/rename grammar.
-- **AC.** latent clash rejected; explicit exclusion/rename resolves; lexical
-  shadowing unaffected; full workspace green.
+  silently refuses to touch a `locals` name); new **rename** grammar (no
+  `hiding`).
+- **AC.** latent clash rejected; rename/de-selection resolves; lexical shadowing
+  unaffected; full workspace green.
+- **★ ADR 0015 reconciliation (2026-07-12).** ADR 0015 removes the open-import
+  `use M`. After that, **every unqualified imported name comes from a selective
+  `import M (…)`** — so a local/import clash is resolved by simply **not
+  selecting** the name (or renaming it). The `import M hiding (…)` grammar
+  originally planned here is *exclusion from an open import*; with no open form
+  left, it has **no "bring-all" baseline to subtract from** and is **moot** —
+  **dropped from N3.** This shrinks N3 to the §3.3 clash-reversal + the rename
+  grammar. (Sequencing: the ADR-0015 spec removal lands **before** N3, so N3
+  reverses §3.3 on the already-simplified three-form surface.)
 
 ### N4 — Program abstraction / `admits` (round 3) · size M/L
 
@@ -118,6 +130,12 @@ independent of the loader and therefore first.
   **canonical-identity invariant is recorded now** so the later form is cheap and
   API-drift is prevented. Sequenced last; scope confirmed when public package
   topologies actually need it.
+- **★ ADR 0015 note (2026-07-12).** The placeholder spelling `pub use` reuses the
+  `use` keyword that ADR 0015 **retires** (grammar/keyword retirement is 0015's
+  build fast-follow). Since N5's surface form is **already deferred**, this is a
+  **naming constraint, not rework**: when the re-export form is chosen, spell it
+  **without `use`** (e.g. `pub import …` / a dedicated re-export form). The
+  canonical-identity invariant is spelling-independent and stands regardless.
 
 ## Deferred — forward-compat only (NOT built in this program)
 

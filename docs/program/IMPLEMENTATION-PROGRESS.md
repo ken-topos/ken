@@ -32,6 +32,17 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > doc round). **PLAN:** publish ADR doc-only → frame `docs/program/wp/
 > adr0015-remove-use-open.md` → Handoff-Gate enclave → kick 0015 spec lane.
 >
+> **★ ADR 0014↔0015 WP reconciliation (operator directive 2026-07-12 "update WPs
+> at your discretion to minimize work").** Removing `use M` (open import) shrinks
+> **N3**: `import M hiding (…)` is exclusion-from-open-import → with no open form,
+> no "bring-all" baseline → **moot, DROPPED**. Post-0015 every unqualified import
+> is a selective `import M (…)`, so a local/import clash resolves by de-selecting
+> or renaming (`import M (foo as bar)`). N3 = §3.3 clash-reversal + rename only.
+> **N5**: `pub use` spelling collides with the retiring `use` keyword — form
+> already deferred, so a naming constraint (pick non-`use`), not rework. N2/N4
+> unaffected. Updated `docs/program/wp/adr0014-work-program.md` (N3 + N5); routing
+> the `hiding`-moot grammar call to @architect to confirm (his lane; low risk).
+>
 > ### ⏭ 2026-07-12 ~18:0x — ADR 0014 FULLY SETTLED; N1 CLOSED; N2 FRAMED (pending 1 Architect scope-confirm)
 >
 > **State.** `origin/main @ 9750726e` — ADR 0014 has **no open forks** (PKG-1..4
@@ -84,6 +95,15 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > cache, plural-ready root API). **AC emphasizes the literal `cargo build/test
 > --workspace --locked` oracle** (their own N1 carry: wrapper-green ≠ CI-green).
 >
+> **✅✅ N2 CLOSED — Lane B MERGED → `origin/main 575f43d2` (PR #570, CI green).**
+> The in-repo cross-file loader is LIVE. N2 (round 2, the spine) is done pending
+> the Language N2 retro (chasing). **N3 now UNBLOCKED** (loader live) — the
+> ADR-0014 frontier, but sequenced after the ADR-0015 spec removal (which clears
+> §3.3). Publishing the ADR 0014↔0015 reconciliation doc now (safe — N2 merge
+> done, no concurrent tracker bundle).
+>
+> <details><summary>N2 Lane B publish detail</summary>
+>
 > **✅ N2 Lane B gates IN + PUBLISHING (non-doc).** Candidate `3f9cff6c` (4
 > `crates/ken-elaborator` files +392/−18): QA APPROVED exact SHA + **literal
 > `cargo build/test --workspace --locked` green**; Architect-terminal APPROVE
@@ -100,6 +120,8 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > `use M`) — requested N2 Lane A retros from enclave (`evt_18ajgevxqtwwc`); on
 > retros-in → Handoff-Gate enclave → kick ADR 0015 spec lane (fills enclave window
 > before N3). Watchdog `c4c9e87c`.
+>
+> </details>
 >
 > ### ✅ 4b ISSUE RESOLVED — PACKAGE ABSTRACTION (operator ruled C) — 2026-07-12 ~16:2x
 >
