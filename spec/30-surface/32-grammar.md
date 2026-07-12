@@ -159,7 +159,7 @@ expr ::=
   | "temporal" "{" expr "}"  -- temporal obligation → Temporal data (72) [OQ-syntax]
   | literal | ident | ConId | "(" operator ")"
   | "(" expr ":" type ")"  -- type ascription
-arm  ::= pattern ("if" expr)? "=>" expr  -- guard optional
+arm  ::= pattern ("if" expr)? ("↦" | "|->") expr  -- guard optional
 field_assign ::= ident "=" expr | ident  -- punning allowed
 ```
 

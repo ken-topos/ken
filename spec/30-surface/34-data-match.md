@@ -498,7 +498,7 @@ and authors hand-roll a `bool_dichotomy` + named dispatcher + explicit `J`-motiv
 idiom. It is **`match` plus one modifier — not a new keyword** (`32 §3`):
 
 ```ken
-match e eqn: h { C1 ⇒ … ; … ; CN ⇒ … }
+match e eqn: h { C1 ↦ … ; … ; CN ↦ … }
 ```
 
 In the branch for constructor `Cₖ` it **binds** `h : Equal T e Cₖ` — the proof
@@ -585,8 +585,8 @@ fn list_deceq_sound_cons (a : Type) (da : DecEq a) (x y : a) (xs ys : List a)
   :   IsTrue (list_eq a da.eq (Cons a x xs) (Cons a y ys))
     → Equal (List a) (Cons a x xs) (Cons a y ys) =
   match (da.eq x y) eqn: h {
-    True  ⇒ λ ph. … da.sound x y h : Equal a x y, the IH on xs/ys, and Cons-cong … ;
-    False ⇒ λ ph. absurd ph   -- domain reduced to `Bottom` (list_eq → False, K7)
+    True  ↦ λ ph. … da.sound x y h : Equal a x y, the IH on xs/ys, and Cons-cong … ;
+    False ↦ λ ph. absurd ph   -- domain reduced to `Bottom` (list_eq → False, K7)
   }
 ```
 
