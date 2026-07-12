@@ -171,8 +171,9 @@ proof term, or the entry must disclose the trusted-base delta.
 Use the proof keyword to record **membership**, not an informal proof role.
 When a named theorem belongs to one subject's public theory, write
 `proof name for S`; the declaration is bound and referenced as `S::name`,
-including recursive self-references. If exactly one owning subject can be named,
-attach the proof to it. Use `lemma` only when no single subject owns the theorem:
+including recursive self-references. If exactly one owning subject can be
+named, attach the proof to it. Use `lemma` only when no single subject owns the
+theorem:
 for an interior step, or for a cross-cutting law about several definitions in
 interaction. Reuse is orthogonal to membership: citing a subject-owned law from
 another proof does not demote it to `lemma`. This convention refines which proof

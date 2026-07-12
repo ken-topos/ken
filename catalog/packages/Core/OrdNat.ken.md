@@ -210,7 +210,8 @@ proof zero_left for max (n : Nat) : Equal Nat (max Zero n) n = Refl
 proof zero_right for sub (a : Nat) : Equal Nat (sub a Zero) a = Refl
 ```
 
-`min::zero_left` closes with `Proved`: `min Zero n` reduces to the literal `Zero`
+`min::zero_left` closes with `Proved`: `min Zero n` reduces to the literal
+`Zero`
 regardless of `n` (both sides collapse to the same nullary constructor,
 `§1` of `catalog/guide/proof-techniques.ken.md`). `max::zero_left` and
 `sub::zero_right` close with `Refl`: `max Zero n`'s recursive definition and
@@ -265,8 +266,8 @@ rules remain visible beside the laws that use them.
 ## 7. Trust  derivation
 
 1. **Public API.** `leq_nat`, `leq_nat::refl`, `leq_nat::trans`,
-   `leq_nat::antisym`, `total_leq_nat`, `bool_or::eq_true_of_or`, `Ord_instance_Nat` (via
-   `instance Ord Nat`), `min`, `max`, `sub`, `compare`.
+   `leq_nat::antisym`, `total_leq_nat`, `bool_or::eq_true_of_or`,
+   `Ord_instance_Nat` (via `instance Ord Nat`), `min`, `max`, `sub`, `compare`.
 2. **Source map.**
 
    | Task | Section |
