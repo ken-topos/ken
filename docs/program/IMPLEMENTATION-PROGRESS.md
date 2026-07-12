@@ -29,15 +29,23 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > C needs the catalog freeze; **B1–B4 run in parallel with N3/N4/N5** (inner-ring,
 > catalog read-only). Task #38.
 > **DONE this burst:** backbone + review published doc-only (PR #574 →
-> `172e5f36`); **CST-vs-AST fork routed to Architect** (`evt_20fh7xg0wehs2`,
-> operator-review-before-merge). **P0 frame authored + grounded** —
-> `docs/program/wp/kenfmt-p0-separator-reconciliation.md`. **★ P0 shrank on
-> grounding:** parser (`parser.rs:737/766`) + corpus already use SEMICOLONS; only
-> the EBNF is stale (comma). P0 = **spec-only** EBNF fix (comma→`;` for
-> record/class/instance/law field-decl blocks), no parser/corpus change. Frame
-> ready; **HOLDING publish + enclave kickoff for operator go/hold** (asked:
-> release P0 now, or hold for CST sign-off; Steward leans go-now — P0 ⟂ CST).
-> **THEN:** **S** canonical-form spec clause (`31 §1a/b/c`).
+> `172e5f36`). **B1 architecture DECIDED + operator-signed-off:** Architect ruled
+> **(2) AST + token/trivia stream + deterministic attachment** (overriding the
+> review's CST lean); operator approved (2026-07-12). Durable note
+> `docs/program/kenfmt-b1-source-representation.md` (architect/work `daa85c12` →
+> Accepted; Architect to bump status + hand SHA for doc-only publish). B1
+> contract = the note's 4 items (gapless trivia stream / total comment-attachment
+> / typed-views=AST / lossless-layer-as-interface). **P0 frame authored + grounded
+> + HELD** (`kenfmt-p0-separator-reconciliation.md`): parser (`parser.rs:737/766`)
+> + corpus already SEMICOLONS; only EBNF stale (comma) → P0 = spec-only EBNF fix;
+> **operator held P0 to bundle with S** (2026-07-12).
+> **NEXT:** frame **S — canonical-form spec clause `31 §1a/b/c`** (transcribe the
+> review's 12 rule sections; resolve S-owned open points: braces-now, lambda
+> Unicode+dot, literate ignore/reject narrow-exemption, type-app preserve-as-
+> parsed); **bundle P0 into the S release**. Then release S+P0 to enclave
+> (Handoff-Gate) → B1 releases to Language after S lands. B2/B3/B4/C follow.
+> Sequencing: B-series runs parallel with N3/N4/N5; only capstone C needs the
+> catalog freeze.
 >
 > **All merged prior burst:** **N2 CLOSED** (in-repo loader LIVE — Lane A
 > `fbc4d3e1` + Lane B `575f43d2`, CI green). **ADR 0015 DONE in spec/conformance**
