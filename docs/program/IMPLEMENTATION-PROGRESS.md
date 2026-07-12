@@ -88,30 +88,10 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > `d26270e2..7fc800fc` ff (no `+`) restored everything + landed the fold in one
 > move. Root worktree reset --hard to 7fc800fc, moot.toml preserved. Lesson saved
 > (publisher `--target` = candidate branch, NEVER `main`). No data lost.
-> **↳ OPERATOR RULED THE 4a/b/c SUB-ROUND DIRECTLY (w/ Architect) — 2026-07-12
-> ~15:2x UTC. DESIGN NOW FULLY ACCEPTED (`architect/work 0a8d9308`).**
-> - **Surface keyword = `admits`** (operator rejected "bless"). `bless*`→`admit*`
->   throughout: list keyword `admits`, gate = admission check, error =
->   `UnadmittedInstance`. Zero residual "bless".
-> - **MRES-4a ACCEPTED separable-but-co-locatable** (admission=elab-time, entry=
->   runtime; distinct decls a `program` file may both host).
-> - **MRES-4b ACCEPTED only-multi-package** (single pkg self-admits; `program`
->   file required exactly when ≥2 pkgs contribute instances across units).
-> - **MRES-4c ACCEPTED direct-explicit + transitive-auto** — REVISED Architect's
->   explicit-only lean; operator's least-surprise argument won: a *source* import
->   of P joins P's units to the compile graph → P's `Q.Bar` use must resolve → Q's
->   instances must be ambient; a *compiled* import bakes it in. source==compiled
->   ⟹ **transitive instance-flow is semantically FORCED**. Model: program names
->   DIRECT instance deps, transitive flows automatically, coherence over full
->   closure (still O(instances), orphan-bounded). **NEW INVARIANT:** a compiled
->   package must carry an **instance-manifest** so compiled imports feed coherence
->   identically to source — forward-compat requirement on the pkg-mgr round
->   (recorded, same pattern as multi-catalog).
-> **⏭ RESUME: publish updated ADR `0a8d9308` (design fully Accepted) over main
-> @ 7fc800fc via `--target wp/adr0014-4abc` (NOT `main`) → then Round-1
-> (fail-closed MRES-5/7/8) is kickable whenever operator clears. Loader/program
-> round scopes after. MRES-6 fast-follow on loader; instance-manifest on pkg-mgr.
-> Absorbs #8.**
+> **⏭ RESUME: ADR published; SURFACE MRES-4a/b/c to operator for the quick round
+> (Architect recs: 4a separable-but-co-locatable; 4b only-multi-package; 4c
+> explicit-only-in-checked-artifact — 4c genuinely open, couples to pkg-mgr).
+> Round-1 (fail-closed MRES-5/7/8) kickable whenever operator clears. Absorbs #8.**
 
 
 > ### ✅ BOTH AWAY-WINDOW WPs CLOSED — FLEET QUIESCENT — 2026-07-12 ~07:26 UTC
