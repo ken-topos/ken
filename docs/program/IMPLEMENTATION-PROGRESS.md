@@ -88,10 +88,47 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > `d26270e2..7fc800fc` ff (no `+`) restored everything + landed the fold in one
 > move. Root worktree reset --hard to 7fc800fc, moot.toml preserved. Lesson saved
 > (publisher `--target` = candidate branch, NEVER `main`). No data lost.
-> **⏭ RESUME: ADR published; SURFACE MRES-4a/b/c to operator for the quick round
-> (Architect recs: 4a separable-but-co-locatable; 4b only-multi-package; 4c
-> explicit-only-in-checked-artifact — 4c genuinely open, couples to pkg-mgr).
-> Round-1 (fail-closed MRES-5/7/8) kickable whenever operator clears. Absorbs #8.**
+> **↳ OPERATOR RULED 4a/b/c DIRECTLY (w/ Architect); DESIGN FULLY ACCEPTED +
+> PUBLISHED @ `origin/main 3e470333`** (PR #557, doc-only). Surface keyword =
+> **`admits`** (operator rejected "bless"; error `UnadmittedInstance`). 4a
+> separable-but-co-locatable; 4b only-multi-package (single self-admits); **4c
+> direct-explicit + transitive-auto** (REVISED Architect's explicit-only lean —
+> source==compiled forces transitive instance-flow; program names DIRECT deps,
+> transitive auto, coherence over full closure O(instances)). NEW INVARIANT:
+> compiled package carries an instance-manifest (forward-compat on pkg-mgr round).
+> F3b design phase CLOSED.
+>
+> ### ▶ ADR 0014 WORK PROGRAM — OPERATOR AUTHORIZED FULL BUILD — 2026-07-12 ~15:4x
+>
+> Operator: "prepare the work program for ADR 0014. Run the WPs of the program
+> through the fleet, the order at your discretion." Program authored at
+> `docs/program/wp/adr0014-work-program.md`. **Steward owns this to completion
+> (run-until-complete).** Every WP is surface/elaboration — ZERO `trusted_base()`
+> delta; predominantly `crates/ken-elaborator` (Language build) + enclave spec.
+> Template per round = **Lane A spec+golden (enclave, merges first) → Lane B build
+> (Language, merges second) → CV conformance tail** (the proven #29 shape).
+>
+> | WP | MRES | Deps | Size | Round | State |
+> |----|------|------|------|-------|-------|
+> | **N1** fail-closed dup-def | 5/7/8 | none | S | 1 | **▶ Lane A kicking (enclave)** |
+> | **N2** in-repo loader (spine) | 1/2/3a | — | M | 2 | queued |
+> | **N3** import-exclusion + clash-err | 6 | N2 | M | 2 f-f | queued |
+> | **N4** program abstraction / `admits` | 4/4a/b/c | N2 | M/L | 3 | queued |
+> | **N5** re-export `pub use` | 9 | N2 | S | 4 | queued (may defer form) |
+>
+> Deferred forward-compat (NOT built here; future pkg-mgr round): multi-catalog
+> roots (N2 plural-ready); compiled-package instance-manifest (feeds N4 coherence).
+> Sequencing (Steward discretion): N1→N2→N3→N4→N5 — N1 independent+shovel-ready
+> first; N2 is the spine N3/N4 need; N5 last. Enclave serializes spec lanes; loader
+> gates N3/N4 → practical cadence round-by-round.
+>
+> **⏭ RESUME (N1): frame `docs/program/wp/n1-fail-closed-dup-def.md` (2-lane).
+> Enclave Handoff-Gate-compacting (spec-leader/spec-author/CV — latter two are
+> gpt-5.6-sol GPT seats, need post-compact rouse). On verified drops → kick N1
+> Lane A (spec rule §33 + golden: dup-def reject, class/ctor reject, arity-gated
+> Eq/J accept = reject/accept flip) to spec-leader. Lane A merges → publish → kick
+> N1 Lane B (generalize `resolve_decl` `check_no_reserved_sugar_collision` over
+> globals, preserve arity-gated exclusion) to Language. Absorbs #8.**
 
 
 > ### ✅ BOTH AWAY-WINDOW WPs CLOSED — FLEET QUIESCENT — 2026-07-12 ~07:26 UTC
