@@ -56,7 +56,7 @@ fn eval_view(src: &str) -> EvalVal {
 #[test]
 fn computed_bool_true_dispatches_to_first_method() {
     let result = eval_view(
-        "const t = match (eq_int 5 5) { True => 1 ; False => 2 }",
+        "const t = match (eq_int 5 5) { True |-> 1 ; False |-> 2 }",
     );
     assert_eq!(result, EvalVal::Int(1), "eq_int 5 5 is True — must select methods[0]");
 }
@@ -69,7 +69,7 @@ fn computed_bool_true_dispatches_to_first_method() {
 #[test]
 fn computed_bool_false_dispatches_to_second_method() {
     let result = eval_view(
-        "const t = match (eq_int 5 6) { True => 1 ; False => 2 }",
+        "const t = match (eq_int 5 6) { True |-> 1 ; False |-> 2 }",
     );
     assert_eq!(result, EvalVal::Int(2), "eq_int 5 6 is False — must select methods[1]");
 }
@@ -82,12 +82,12 @@ fn computed_bool_false_dispatches_to_second_method() {
 /// that it happens to produce SOME value.
 #[test]
 fn computed_bool_agrees_with_literal_bool_dispatch() {
-    let computed_true = eval_view("const t = match (eq_int 5 5) { True => 1 ; False => 2 }");
-    let literal_true = eval_view("const t = match True { True => 1 ; False => 2 }");
+    let computed_true = eval_view("const t = match (eq_int 5 5) { True |-> 1 ; False |-> 2 }");
+    let literal_true = eval_view("const t = match True { True |-> 1 ; False |-> 2 }");
     assert_eq!(computed_true, literal_true, "computed True and literal True must agree");
 
-    let computed_false = eval_view("const t = match (eq_int 5 6) { True => 1 ; False => 2 }");
-    let literal_false = eval_view("const t = match False { True => 1 ; False => 2 }");
+    let computed_false = eval_view("const t = match (eq_int 5 6) { True |-> 1 ; False |-> 2 }");
+    let literal_false = eval_view("const t = match False { True |-> 1 ; False |-> 2 }");
     assert_eq!(computed_false, literal_false, "computed False and literal False must agree");
 }
 
@@ -97,8 +97,8 @@ fn computed_bool_agrees_with_literal_bool_dispatch() {
 /// specific to one prim symbol's `EvalVal::Bool` output.
 #[test]
 fn computed_bool_via_leq_int_dispatches_correctly() {
-    let le = eval_view("const t = match (leq_int 3 5) { True => 1 ; False => 2 }");
+    let le = eval_view("const t = match (leq_int 3 5) { True |-> 1 ; False |-> 2 }");
     assert_eq!(le, EvalVal::Int(1), "leq_int 3 5 is True — must select methods[0]");
-    let gt = eval_view("const t = match (leq_int 5 3) { True => 1 ; False => 2 }");
+    let gt = eval_view("const t = match (leq_int 5 3) { True |-> 1 ; False |-> 2 }");
     assert_eq!(gt, EvalVal::Int(2), "leq_int 5 3 is False — must select methods[1]");
 }

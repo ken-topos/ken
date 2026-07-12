@@ -46,13 +46,13 @@ data Color = Red | Green | Blue
 const favorite : Color = Blue
 
 fn is_red (c : Color) : Bool =
-  match c { Red ⇒ True ; Green ⇒ False ; Blue ⇒ False }
+  match c { Red ↦ True ; Green ↦ False ; Blue ↦ False }
 
 proc announce (c : Color) : IO Unit visits [Console] =
   match c {
-    Red   ⇒ print_line "it's red" ;
-    Green ⇒ print_line "it's green" ;
-    Blue  ⇒ print_line "it's blue"
+    Red   ↦ print_line "it's red" ;
+    Green ↦ print_line "it's green" ;
+    Blue  ↦ print_line "it's blue"
   }
 
 proc main : IO Unit visits [Console] = announce favorite
@@ -145,8 +145,8 @@ data Shape = Circle Int | Rectangle Int Int
 
 fn area (s : Shape) : Int =
   match s {
-    Circle r      ⇒ mul_int r r ;
-    Rectangle w h ⇒ mul_int w h
+    Circle r      ↦ mul_int r r ;
+    Rectangle w h ↦ mul_int w h
   }
 ```
 
@@ -158,7 +158,7 @@ Below, `Caution` and `Go` are left unhandled, so it rejects as non-exhaustive:
 data TrafficLight = Stop | Caution | Go
 
 fn is_stop (t : TrafficLight) : Bool =
-  match t { Stop ⇒ True }
+  match t { Stop ↦ True }
 ```
 
 `Option`/`Result` are ordinary `data` declarations built the same way — no
@@ -167,8 +167,8 @@ special-cased sum type:
 ```ken example
 fn safe_head (a : Type) (xs : List a) : Option a =
   match xs {
-    Nil      ⇒ None a ;
-    Cons x _ ⇒ Some a x
+    Nil      ↦ None a ;
+    Cons x _ ↦ Some a x
   }
 ```
 
@@ -186,8 +186,8 @@ lawful-classes package builds `Ord` on top of:
 ```ken example
 fn abs_int (x : Int) : { y : Int | Equal Bool (leq_int 0 y) True } =
   match leq_int 0 x {
-    True  ⇒ x ;
-    False ⇒ sub_int 0 x
+    True  ↦ x ;
+    False ↦ sub_int 0 x
   }
 ```
 
@@ -221,7 +221,7 @@ class Describe a {
 }
 
 instance Describe Bool {
-  describe = λb. match b { True ⇒ "true" ; False ⇒ "false" }
+  describe = λb. match b { True ↦ "true" ; False ↦ "false" }
 }
 
 fn announce_it (b : Bool) : String = (Describe_instance_Bool).describe b
@@ -363,8 +363,8 @@ the recursion, so it resolves cleanly:
 ```ken example
 fn trivial_by_list (a : Type) (x : a) (b : Type) (ys : List b) : Trivial a x =
   match ys {
-    Nil      ⇒ Trivial.triv a x ;
-    Cons _ t ⇒ trivial_by_list a x b t
+    Nil      ↦ Trivial.triv a x ;
+    Cons _ t ↦ trivial_by_list a x b t
   }
 
 lemma trivial_by_list_lemma (a : Type) (x : a) (b : Type) (ys : List b) : Trivial a x =

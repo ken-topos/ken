@@ -19,7 +19,7 @@ fn write_fixture(name: &str, contents: &str) -> PathBuf {
 const PURE_LIBRARY_KEN_MD: &str = r#"A pure-library entry, no IO `main`.
 
 ```ken
-fn notBool (b : Bool) : Bool = match b { True => False ; False => True }
+fn notBool (b : Bool) : Bool = match b { True |-> False ; False |-> True }
 ```
 
 ```ken example
@@ -30,12 +30,12 @@ const notTrue : Bool = notBool True
 const FAILING_FENCE_KEN_MD: &str = r#"An entry whose `ken reject` fence is stale.
 
 ```ken
-fn notBool (b : Bool) : Bool = match b { True => False ; False => True }
+fn notBool (b : Bool) : Bool = match b { True |-> False ; False |-> True }
 ```
 
 ```ken reject
 -- This is claimed to fail but actually elaborates fine — a stale negative.
-fn notBool2 (b : Bool) : Bool = match b { True => False ; False => True }
+fn notBool2 (b : Bool) : Bool = match b { True |-> False ; False |-> True }
 ```
 "#;
 

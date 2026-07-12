@@ -62,7 +62,7 @@ fn tail_constructor_injectivity_retypes_peeled_recursive_field() {
     elab_ok(
         &mut env,
         "fn tail (A : Type) (n : Nat) (xs : Vec A (Suc n)) : Vec A n = \
-         match xs { VCons m y ys => ys }",
+         match xs { VCons m y ys |-> ys }",
     );
 }
 
@@ -78,8 +78,8 @@ fn sibling_convoy_retypes_outer_binder_through_nested_match() {
         &mut env,
         "fn firstIsSecond (n : Nat) (v : Vec Nat n) (w : Vec Nat n) : Bool = \
          match v { \
-           VNil => True; \
-           VCons m a xs => match w { VCons _ b ys => True } \
+           VNil |-> True; \
+           VCons m a xs |-> match w { VCons _ b ys |-> True } \
          }",
     );
 }
@@ -96,7 +96,7 @@ fn base_case_construction_retypes_the_checking_goal() {
     elab_ok(
         &mut env,
         "fn firstIsVNil (n : Nat) (v : Vec Nat n) (w : Vec Nat n) : Vec Nat n = \
-         match v { VNil => VNil Nat; VCons m a xs => v }",
+         match v { VNil |-> VNil Nat; VCons m a xs |-> v }",
     );
 }
 
@@ -112,7 +112,7 @@ fn over_refinement_stays_kernel_rejected() {
     let err = expect_err_val(
         &mut env,
         "fn wrongGoal (n : Nat) (xs : Vec Nat (Suc n)) : Vec Nat (Suc n) = \
-         match xs { VCons m y ys => ys }",
+         match xs { VCons m y ys |-> ys }",
     );
     assert!(
         matches!(
@@ -143,20 +143,20 @@ fn trusted_base_delta_is_empty_across_all_three_capabilities() {
     elab_ok(
         &mut env,
         "fn tail (A : Type) (n : Nat) (xs : Vec A (Suc n)) : Vec A n = \
-         match xs { VCons m y ys => ys }",
+         match xs { VCons m y ys |-> ys }",
     );
     elab_ok(
         &mut env,
         "fn firstIsSecond (n : Nat) (v : Vec Nat n) (w : Vec Nat n) : Bool = \
          match v { \
-           VNil => True; \
-           VCons m a xs => match w { VCons _ b ys => True } \
+           VNil |-> True; \
+           VCons m a xs |-> match w { VCons _ b ys |-> True } \
          }",
     );
     elab_ok(
         &mut env,
         "fn firstIsVNil (n : Nat) (v : Vec Nat n) (w : Vec Nat n) : Vec Nat n = \
-         match v { VNil => VNil Nat; VCons m a xs => v }",
+         match v { VNil |-> VNil Nat; VCons m a xs |-> v }",
     );
     let after: BTreeSet<_> = env.env.trusted_base().into_iter().collect();
     assert_eq!(
@@ -178,7 +178,7 @@ fn non_indexed_match_stays_unaffected() {
     elab_ok(
         &mut env,
         "fn allTrue (xs : List Bool) : Prop = \
-         match xs { Nil => Equal Bool True True ; \
-                    Cons b bs => And (Equal Bool b True) (allTrue bs) }",
+         match xs { Nil |-> Equal Bool True True ; \
+                    Cons b bs |-> And (Equal Bool b True) (allTrue bs) }",
     );
 }

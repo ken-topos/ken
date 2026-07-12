@@ -66,7 +66,7 @@ fn pow10_cascade_body(max_shift: u32, unbounded_name: &str) -> String {
             format!("{unbounded_name} k")
         } else {
             format!(
-                "match (eq_int k {k}) {{ True => {lit} ; False => {rest} }}",
+                "match (eq_int k {k}) {{ True |-> {lit} ; False |-> {rest} }}",
                 k = k,
                 lit = pow10_literal(k),
                 rest = rec(k + 1, max_shift, unbounded_name),
@@ -138,30 +138,30 @@ pub fn register_decimal_char(elab: &mut ElabEnv) -> Result<DecimalCharEnv, ElabE
     // `sub_int`/`eq_int`.
     elab.elaborate_decl(
         "fn decimalAdd (d1 : Decimal) (d2 : Decimal) : Decimal = \
-         match d1 { MkDecimalPair ca ea => \
-         match d2 { MkDecimalPair cb eb => \
+         match d1 { MkDecimalPair ca ea |-> \
+         match d2 { MkDecimalPair cb eb |-> \
            match (leq_int ea eb) { \
-             True => MkDecimalPair (add_int ca (mul_int cb (decimalPow10 (sub_int eb ea)))) ea ; \
-             False => MkDecimalPair (add_int (mul_int ca (decimalPow10 (sub_int ea eb))) cb) eb \
+             True |-> MkDecimalPair (add_int ca (mul_int cb (decimalPow10 (sub_int eb ea)))) ea ; \
+             False |-> MkDecimalPair (add_int (mul_int ca (decimalPow10 (sub_int ea eb))) cb) eb \
            } } }",
     )
     .map_err(|e| ElabError::Internal(format!("decimalAdd failed: {}", e)))?;
 
     elab.elaborate_decl(
         "fn decimalSub (d1 : Decimal) (d2 : Decimal) : Decimal = \
-         match d1 { MkDecimalPair ca ea => \
-         match d2 { MkDecimalPair cb eb => \
+         match d1 { MkDecimalPair ca ea |-> \
+         match d2 { MkDecimalPair cb eb |-> \
            match (leq_int ea eb) { \
-             True => MkDecimalPair (sub_int ca (mul_int cb (decimalPow10 (sub_int eb ea)))) ea ; \
-             False => MkDecimalPair (sub_int (mul_int ca (decimalPow10 (sub_int ea eb))) cb) eb \
+             True |-> MkDecimalPair (sub_int ca (mul_int cb (decimalPow10 (sub_int eb ea)))) ea ; \
+             False |-> MkDecimalPair (sub_int (mul_int ca (decimalPow10 (sub_int ea eb))) cb) eb \
            } } }",
     )
     .map_err(|e| ElabError::Internal(format!("decimalSub failed: {}", e)))?;
 
     elab.elaborate_decl(
         "fn decimalMul (d1 : Decimal) (d2 : Decimal) : Decimal = \
-         match d1 { MkDecimalPair ca ea => \
-         match d2 { MkDecimalPair cb eb => \
+         match d1 { MkDecimalPair ca ea |-> \
+         match d2 { MkDecimalPair cb eb |-> \
            MkDecimalPair (mul_int ca cb) (add_int ea eb) \
          } }",
     )
@@ -169,11 +169,11 @@ pub fn register_decimal_char(elab: &mut ElabEnv) -> Result<DecimalCharEnv, ElabE
 
     elab.elaborate_decl(
         "fn decimalEq (d1 : Decimal) (d2 : Decimal) : Bool = \
-         match d1 { MkDecimalPair ca ea => \
-         match d2 { MkDecimalPair cb eb => \
+         match d1 { MkDecimalPair ca ea |-> \
+         match d2 { MkDecimalPair cb eb |-> \
            match (leq_int ea eb) { \
-             True => eq_int ca (mul_int cb (decimalPow10 (sub_int eb ea))) ; \
-             False => eq_int (mul_int ca (decimalPow10 (sub_int ea eb))) cb \
+             True |-> eq_int ca (mul_int cb (decimalPow10 (sub_int eb ea))) ; \
+             False |-> eq_int (mul_int ca (decimalPow10 (sub_int ea eb))) cb \
            } } }",
     )
     .map_err(|e| ElabError::Internal(format!("decimalEq failed: {}", e)))?;
@@ -250,7 +250,7 @@ pub fn register_decimal_char(elab: &mut ElabEnv) -> Result<DecimalCharEnv, ElabE
     // `leq_int`), so this is not a stuck neutral on rejection (AC-C3).
     elab.elaborate_decl(
         "fn intToChar (n : Int) : Option Char = \
-         match (inRangeBool n) { True => Some Char n ; False => None Char }",
+         match (inRangeBool n) { True |-> Some Char n ; False |-> None Char }",
     )
     .map_err(|e| ElabError::Internal(format!("intToChar failed: {}", e)))?;
 

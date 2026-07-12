@@ -1744,7 +1744,7 @@ impl Parser {
         while !matches!(self.peek(), Token::RBrace | Token::Eof) {
             let arm_start = self.peek_span().start;
             let pat = self.parse_pattern()?;
-            self.expect(&Token::FatArrow)?;
+            self.expect(&Token::MapsTo)?;
             let body = self.parse_expr()?;
             let arm_end = body.span().end;
             arms.push(MatchArm {
@@ -1810,7 +1810,7 @@ impl Parser {
         matches!(
             self.peek(),
             Token::Ident(_) | Token::ConId(_) | Token::LParen
-        ) && !matches!(self.peek(), Token::FatArrow)
+        ) && !matches!(self.peek(), Token::MapsTo)
     }
 
     fn parse_atom_pattern(&mut self) -> Result<Pattern, ElabError> {

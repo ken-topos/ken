@@ -28,26 +28,26 @@ fn setup_combinators(env: &mut ElabEnv) {
     // `map : (a → b) → List a → List b` — functor.
     env.elaborate_decl(
         "fn map (a b : Type) (f : a → b) (xs : List a) : List b = \
-         match xs { Nil => Nil b ; Cons h t => Cons b (f h) (map a b f t) }",
+         match xs { Nil |-> Nil b ; Cons h t |-> Cons b (f h) (map a b f t) }",
     )
     .expect("map elaborates");
     // `fold : (a → b → b) → b → List a → b` — foldr.
     env.elaborate_decl(
         "fn fold (a b : Type) (f : a → b → b) (z : b) (xs : List a) : b = \
-         match xs { Nil => z ; Cons h t => f h (fold a b f z t) }",
+         match xs { Nil |-> z ; Cons h t |-> f h (fold a b f z t) }",
     )
     .expect("fold elaborates");
     // `zip : List a → List b → List (Prod a b)`.
     env.elaborate_decl(
         "fn zip (a b : Type) (xs : List a) (ys : List b) : List (Prod a b) = \
-         match xs { Nil => Nil (Prod a b) ; Cons h t => match ys { Nil => Nil (Prod a b) ; Cons k u => Cons (Prod a b) (MkProd a b h k) (zip a b t u) } }",
+         match xs { Nil |-> Nil (Prod a b) ; Cons h t |-> match ys { Nil |-> Nil (Prod a b) ; Cons k u |-> Cons (Prod a b) (MkProd a b h k) (zip a b t u) } }",
     )
     .expect("zip elaborates");
     // `unfoldUpTo : (s → Option (Prod a s)) → Nat → s → List a` — fuel-bounded
     // inductive unfold (the no-coinduction infinitude demo, `37 §5`).
     env.elaborate_decl(
         "fn unfoldUpTo (a s : Type) (step : s → Option (Prod a s)) (n : Nat) (seed : s) : List a = \
-         match n { Zero => Nil a ; Suc m => match step seed { None => Nil a ; Some p => match p { MkProd x y => Cons a x (unfoldUpTo a s step m y) } } }",
+         match n { Zero |-> Nil a ; Suc m |-> match step seed { None |-> Nil a ; Some p |-> match p { MkProd x y |-> Cons a x (unfoldUpTo a s step m y) } } }",
     )
     .expect("unfoldUpTo elaborates");
     // `insert : (a → a → Bool) → a → List a → List a` — insertion helper.
@@ -56,7 +56,7 @@ fn setup_combinators(env: &mut ElabEnv) {
     // 3-way branch workaround is retired, `30 §6`/ES2).
     env.elaborate_decl(
         "fn insert (a : Type) (leq : a → a → Bool) (x : a) (xs : List a) : List a = \
-         match xs { Nil => Cons a x (Nil a) ; Cons h t => match leq x h { True => Cons a x (Cons a h t) ; False => Cons a h (insert a leq x t) } }",
+         match xs { Nil |-> Cons a x (Nil a) ; Cons h t |-> match leq x h { True |-> Cons a x (Cons a h t) ; False |-> Cons a h (insert a leq x t) } }",
     )
     .expect("insert elaborates");
 }
@@ -72,7 +72,7 @@ fn list_pattern_matches_via_real_elim() {
     let id = env
         .elaborate_decl(
             "fn head (a : Type) (xs : List a) : Option a = \
-             match xs { Nil => None a ; Cons h t => Some a h }",
+             match xs { Nil |-> None a ; Cons h t |-> Some a h }",
         )
         .expect("head elaborates");
     let body = env.env.transparent_body(id).expect("head is transparent").1;
@@ -417,7 +417,7 @@ fn sort_emits_issorted_and_perm() {
         .elaborate_decl_v1(
             "fn sort (a : Type) (leq : a → a → Bool) (xs : List a) : \
              { ys : List a | And (is_sorted a leq ys) (Perm a ys xs) } = \
-             match xs { Nil => Nil a ; Cons h t => insert a leq h (sort a leq t) }",
+             match xs { Nil |-> Nil a ; Cons h t |-> insert a leq h (sort a leq t) }",
         )
         .expect("sort elaborates (recursive + refinement)");
     // SCT accepted: `sort` upgraded to transparent (recursion on `t`, a sub-term

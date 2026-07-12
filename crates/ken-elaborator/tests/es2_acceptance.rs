@@ -113,15 +113,15 @@ fn sort_refinement_unfolds_issorted_and_perm() {
     let mut env = mk_env();
     env.elaborate_decl(
         "fn insert (a : Type) (leq : a -> a -> Bool) (x : a) (xs : List a) : List a = \
-         match xs { Nil => Cons a x (Nil a) ; \
-           Cons h t => match leq x h { True => Cons a x (Cons a h t) ; \
-                                        False => Cons a h (insert a leq x t) } }",
+         match xs { Nil |-> Cons a x (Nil a) ; \
+           Cons h t |-> match leq x h { True |-> Cons a x (Cons a h t) ; \
+                                        False |-> Cons a h (insert a leq x t) } }",
     )
     .expect("insert elaborates");
     env.elaborate_decl_v1(
         "fn sort (a : Type) (leq : a -> a -> Bool) (xs : List a) : \
          { ys : List a | And (is_sorted a leq ys) (Perm a ys xs) } = \
-         match xs { Nil => Nil a ; Cons h t => insert a leq h (sort a leq t) }",
+         match xs { Nil |-> Nil a ; Cons h t |-> insert a leq h (sort a leq t) }",
     )
     .expect("smoke check: sort refinement must at least type-check");
 }
@@ -229,7 +229,7 @@ fn match_on_comparison_result_elaborates() {
     let id = env
         .elaborate_decl(
             "fn isZero (a : Int) (b : Int) : Int = \
-             match eq_int a b { True => 1 ; False => 0 }",
+             match eq_int a b { True |-> 1 ; False |-> 0 }",
         )
         .expect("AC3: match on eq_int's Bool result must elaborate");
     assert!(env.env.const_type(id).is_some(), "isZero registered with a type");

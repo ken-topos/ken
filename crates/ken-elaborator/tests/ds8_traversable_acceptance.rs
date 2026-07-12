@@ -243,8 +243,8 @@ fn ac8_identity_law_witness_swap_is_rejected() {
         "fn bad_list_traverse_identity_law (a : Type) (xs : List a) : \
            Equal (Identity (List a)) (list_traverse Identity Applicative_instance_Identity a a (identity_pure a) xs) (identity_pure (List a) xs) = \
            match xs { \
-             Nil ⇒ cong (Identity (List a)) (Identity (List a)) (identity_pure (List a) xs) (identity_pure (List a) xs) (identity_map (List a) (List a) (idf (List a))) Proved ; \
-             Cons h u ⇒ Proved \
+             Nil ↦ cong (Identity (List a)) (Identity (List a)) (identity_pure (List a) xs) (identity_pure (List a) xs) (identity_map (List a) (List a) (idf (List a))) Proved ; \
+             Cons h u ↦ Proved \
            }",
     );
     match r {

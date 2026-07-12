@@ -50,10 +50,10 @@ fn ac8_positive_pure_witness_satisfies_traversable_proc_field() {
 
     env.elaborate_file(
         "fn map_option (a : Type) (b : Type) (f : a -> b) (o : Option a) : Option b =
-             match o { None => None b ; Some x => Some b (f x) }
+             match o { None |-> None b ; Some x |-> Some b (f x) }
 
          fn foldr_option (a : Type) (b : Type) (f : a -> b -> b) (z : b) (o : Option a) : b =
-             match o { None => z ; Some x => f x z }
+             match o { None |-> z ; Some x |-> f x z }
 
          instance Functor Option { map = map_option }
          instance Foldable Option { foldr = foldr_option }
@@ -62,8 +62,8 @@ fn ac8_positive_pure_witness_satisfies_traversable_proc_field() {
            (g : (Type -> Type)) (apg : Applicative g) (a : Type) (b : Type)
            (f : a -> g b) (o : Option a) : g (Option b) =
              match o {
-               None    => apg.pure (Option b) (None b) ;
-               Some x  => apg.ap b (Option b)
+               None    |-> apg.pure (Option b) (None b) ;
+               Some x  |-> apg.ap b (Option b)
                             (apg.pure (b -> Option b) (Some b))
                             (f x)
              }",
@@ -193,10 +193,10 @@ fn zero_sort_delta_class_record_kind_unchanged_by_pure_instance_registration() {
 
     env.elaborate_file(
         "fn map_option (a : Type) (b : Type) (f : a -> b) (o : Option a) : Option b =
-             match o { None => None b ; Some x => Some b (f x) }
+             match o { None |-> None b ; Some x |-> Some b (f x) }
 
          fn foldr_option (a : Type) (b : Type) (f : a -> b -> b) (z : b) (o : Option a) : b =
-             match o { None => z ; Some x => f x z }
+             match o { None |-> z ; Some x |-> f x z }
 
          instance Functor Option { map = map_option }
          instance Foldable Option { foldr = foldr_option }
@@ -205,8 +205,8 @@ fn zero_sort_delta_class_record_kind_unchanged_by_pure_instance_registration() {
            (g : (Type -> Type)) (apg : Applicative g) (a : Type) (b : Type)
            (f : a -> g b) (o : Option a) : g (Option b) =
              match o {
-               None    => apg.pure (Option b) (None b) ;
-               Some x  => apg.ap b (Option b)
+               None    |-> apg.pure (Option b) (None b) ;
+               Some x  |-> apg.ap b (Option b)
                             (apg.pure (b -> Option b) (Some b))
                             (f x)
              }

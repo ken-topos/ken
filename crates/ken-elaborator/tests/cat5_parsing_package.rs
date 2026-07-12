@@ -916,14 +916,14 @@ fn cat5_d3_bool_parser_printer_formatter_roundtrip_on_source_bytes() {
 
         const parse_printed_bool_expr_erases : Bool =
           match parse_printed_bool_expr {{
-            Parsed syntax consumed next => bool_expr_eq (erase_spans syntax) representative_bool_expr ;
-            Failed err => False
+            Parsed syntax consumed next |-> bool_expr_eq (erase_spans syntax) representative_bool_expr ;
+            Failed err |-> False
           }}
 
         const parsed_bool_expr_syntax : Syntax BoolExpr =
           match parse_printed_bool_expr {{
-            Parsed syntax consumed next => syntax ;
-            Failed err => syntax_leaf printed_bool_expr_source Zero Zero BFalse
+            Parsed syntax consumed next |-> syntax ;
+            Failed err |-> syntax_leaf printed_bool_expr_source Zero Zero BFalse
           }}
 
         const format_printed_bool_expr : Result ParseError Bytes =
@@ -931,8 +931,8 @@ fn cat5_d3_bool_parser_printer_formatter_roundtrip_on_source_bytes() {
 
         const formatted_bool_expr_bytes : Bytes =
           match format_printed_bool_expr {{
-            Ok bs => bs ;
-            Err err => bytes_encode "ERR"
+            Ok bs |-> bs ;
+            Err err |-> bytes_encode "ERR"
           }}
 
         lemma formatted_bool_expr_utf8 : IsUtf8 formatted_bool_expr_bytes = Axiom
@@ -957,8 +957,8 @@ fn cat5_d3_bool_parser_printer_formatter_roundtrip_on_source_bytes() {
 
         const reformatted_bool_expr_bytes : Bytes =
           match reformat_bool_expr {{
-            Ok bs => bs ;
-            Err err => bytes_encode "ERR"
+            Ok bs |-> bs ;
+            Err err |-> bytes_encode "ERR"
           }}
 
         const infix_bool_expr_bytes : Bytes = bytes_encode "true and false"

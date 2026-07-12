@@ -26,7 +26,7 @@ fn all_def_keywords_share_named_auto_and_sole_dictionary_bindings() {
 
     let auto = elab(
         &mut env,
-        "fn auto_names (a : Type) (b : Type) (x : Bool) : Bool where Flag a, Flag b = match da.tag { True => db.tag ; False => db.tag }",
+        "fn auto_names (a : Type) (b : Type) (x : Bool) : Bool where Flag a, Flag b = match da.tag { True |-> db.tag ; False |-> db.tag }",
     );
     assert!(
         auto.is_ok(),

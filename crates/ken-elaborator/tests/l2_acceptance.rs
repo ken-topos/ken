@@ -80,7 +80,7 @@ fn ac1_construct_then_eliminate_reduces() {
     // `SomeInt 3` is the scrutinee inline — no separate binding needed.
     let id = elab_ok(
         &mut env,
-        "let answer : Int = match SomeInt 3 { SomeInt x => x ; NoInt => 0 }",
+        "let answer : Int = match SomeInt 3 { SomeInt x |-> x ; NoInt |-> 0 }",
     );
     let body = body_of(&env, id);
     let ctx = Context::new();
@@ -101,7 +101,7 @@ fn ac1_nil_arm_reduces_to_default() {
 
     let id = elab_ok(
         &mut env,
-        "let answer : Int = match NoInt { SomeInt x => x ; NoInt => 0 }",
+        "let answer : Int = match NoInt { SomeInt x |-> x ; NoInt |-> 0 }",
     );
     let body = body_of(&env, id);
     let ctx = Context::new();
@@ -134,7 +134,7 @@ fn ac2_match_head_is_term_elim() {
 
     let id = elab_ok(
         &mut env,
-        "let r : Int = match Circle 2 { Circle x => x ; Rect w h => w }",
+        "let r : Int = match Circle 2 { Circle x |-> x ; Rect w h |-> w }",
     );
     let body = body_of(&env, id);
 
@@ -152,7 +152,7 @@ fn ac2_elim_computes_on_circle() {
 
     let id = elab_ok(
         &mut env,
-        "let r : Int = match Circle 2 { Circle x => x ; Rect w h => w }",
+        "let r : Int = match Circle 2 { Circle x |-> x ; Rect w h |-> w }",
     );
     let body = body_of(&env, id);
     let ctx = Context::new();
@@ -172,7 +172,7 @@ fn ac2_nested_match_produces_nested_elim() {
 
     let id = elab_ok(
         &mut env,
-        "let v : Int = match A { A => match B { A => 1 ; B => 2 } ; B => 0 }",
+        "let v : Int = match A { A |-> match B { A |-> 1 ; B |-> 2 } ; B |-> 0 }",
     );
     let body = body_of(&env, id);
 
@@ -208,7 +208,7 @@ fn ac3_missing_arm_names_blue() {
     // Match on a constructor directly to avoid binding issues.
     let result = elab(
         &mut env,
-        "let bad : Int = match Red { Red => 0 ; Green => 1 }",
+        "let bad : Int = match Red { Red |-> 0 ; Green |-> 1 }",
     );
 
     match result {
@@ -231,7 +231,7 @@ fn ac3_exhaustive_match_accepts() {
 
     let id = elab_ok(
         &mut env,
-        "let result : Int = match Blue { Red => 0 ; Green => 1 ; Blue => 2 }",
+        "let result : Int = match Blue { Red |-> 0 ; Green |-> 1 ; Blue |-> 2 }",
     );
     let body = body_of(&env, id);
     assert!(matches!(body, Term::Elim { .. }), "AC3: accepted match should produce Elim");
@@ -244,7 +244,7 @@ fn ac3_exhaustive_elim_reduces_on_blue() {
 
     let id = elab_ok(
         &mut env,
-        "let result : Int = match Blue { Red => 0 ; Green => 1 ; Blue => 2 }",
+        "let result : Int = match Blue { Red |-> 0 ; Green |-> 1 ; Blue |-> 2 }",
     );
     let body = body_of(&env, id);
     let ctx = Context::new();
@@ -274,7 +274,7 @@ fn ac4_duplicate_arm_is_reachability_error() {
 
     let result = elab(
         &mut env,
-        "let bad : Int = match Red { Red => 0 ; Green => 1 ; Blue => 2 ; Red => 9 }",
+        "let bad : Int = match Red { Red |-> 0 ; Green |-> 1 ; Blue |-> 2 ; Red |-> 9 }",
     );
 
     match result {
@@ -291,7 +291,7 @@ fn ac4_all_distinct_arms_accept() {
 
     let id = elab_ok(
         &mut env,
-        "let result : Int = match Green { Red => 0 ; Green => 1 ; Blue => 2 }",
+        "let result : Int = match Green { Red |-> 0 ; Green |-> 1 ; Blue |-> 2 }",
     );
     let body = body_of(&env, id);
     assert!(matches!(body, Term::Elim { .. }), "AC4: all-distinct match should produce Elim");
@@ -320,7 +320,7 @@ fn nested_ctor_pattern_accepted_and_reduces() {
     let id = elab_ok(
         &mut env,
         "let result : Int = match Succ (Succ Zero) { \
-         Zero => 0 ; Succ Zero => 1 ; Succ (Succ m) => 2 }",
+         Zero |-> 0 ; Succ Zero |-> 1 ; Succ (Succ m) |-> 2 }",
     );
     let body = body_of(&env, id);
     assert!(matches!(body, Term::Elim { .. }), "nested match should produce Elim");
@@ -347,7 +347,7 @@ fn nested_ctor_pattern_selects_the_right_arm_at_succ_zero() {
     let id = elab_ok(
         &mut env,
         "let result : Int = match Succ Zero { \
-         Zero => 0 ; Succ Zero => 7 ; Succ (Succ m) => 9 }",
+         Zero |-> 0 ; Succ Zero |-> 7 ; Succ (Succ m) |-> 9 }",
     );
     let body = body_of(&env, id);
     let ctx = Context::new();
@@ -371,7 +371,7 @@ fn nested_ctor_pattern_missing_case_is_exhaustiveness_error() {
     // nested-`Succ` sub-case, leaving the nested-`Zero` sub-case missing.
     let result = elab(
         &mut env,
-        "let bad : Int = match Zero { Zero => 0 ; Succ (Succ m) => 2 }",
+        "let bad : Int = match Zero { Zero |-> 0 ; Succ (Succ m) |-> 2 }",
     );
 
     match result {
@@ -392,7 +392,7 @@ fn nested_ctor_pattern_shadowed_by_earlier_flat_arm_is_reachability_error() {
     let result = elab(
         &mut env,
         "let bad : Int = match Zero { \
-         Zero => 0 ; Succ n => 1 ; Succ (Succ m) => 2 }",
+         Zero |-> 0 ; Succ n |-> 1 ; Succ (Succ m) |-> 2 }",
     );
 
     match result {
@@ -495,7 +495,7 @@ fn ac8_proof_returning_match_through_transparent_scrutinee_elaborates() {
         &mut env,
         "lemma km_proof_motive_positive (b : Bool) \
            : Equal Bool (km_scrutinee b) (km_scrutinee b) = \
-           match km_scrutinee b { True => Proved ; False => Proved }",
+           match km_scrutinee b { True |-> Proved ; False |-> Proved }",
     );
 
     let body = body_of(&env, id);
@@ -558,7 +558,7 @@ fn ac8_wrong_specialized_branch_still_rejects() {
         &mut env,
         "lemma km_proof_motive_negative (b : Bool) \
            : Equal Bool (km_scrutinee b) True -> Equal Bool (km_scrutinee b) True = \
-           match km_scrutinee b { True => \\p. p ; False => \\p. Proved }",
+           match km_scrutinee b { True |-> \\p. p ; False |-> \\p. Proved }",
     )
     .expect_err("AC8 negative must reject");
 
@@ -581,19 +581,19 @@ fn ac8_option_table_branch_motive_elaborates() {
         "fn km_intersection_table (left : Option Unit) (keep : Bool) (prior : Option Unit) \
            : Option Unit = \
            match left { \
-             None => prior ; \
-             Some x => match keep { True => Some Unit x ; False => prior } \
+             None |-> prior ; \
+             Some x |-> match keep { True |-> Some Unit x ; False |-> prior } \
            }",
     );
     elab_ok(
         &mut env,
         "fn km_member_from_lookup (left : Option Unit) : Bool = \
-           match left { None => False ; Some x => True }",
+           match left { None |-> False ; Some x |-> True }",
     );
     elab_ok(
         &mut env,
         "fn km_lookup (b : Bool) : Option Unit = \
-           match b { True => Some Unit MkUnit ; False => None Unit }",
+           match b { True |-> Some Unit MkUnit ; False |-> None Unit }",
     );
     elab_ok(
         &mut env,
@@ -612,14 +612,14 @@ fn ac8_option_table_branch_motive_elaborates() {
                (km_intersection_table (km_lookup b) \
                  (km_member_from_lookup (km_lookup b)) (None Unit)) = \
            match km_lookup b { \
-             None => km_option_refl \
+             None |-> km_option_refl \
                (km_intersection_table (None Unit) \
                  (km_member_from_lookup (None Unit)) (None Unit)) ; \
-             Some x => match km_member_from_lookup (Some Unit x) { \
-               True => km_option_refl \
+             Some x |-> match km_member_from_lookup (Some Unit x) { \
+               True |-> km_option_refl \
                  (km_intersection_table (Some Unit x) \
                    (km_member_from_lookup (Some Unit x)) (None Unit)) ; \
-               False => km_option_refl \
+               False |-> km_option_refl \
                  (km_intersection_table (Some Unit x) \
                    (km_member_from_lookup (Some Unit x)) (None Unit)) \
              } \
@@ -635,19 +635,19 @@ fn ac8_option_table_wrong_constructor_argument_still_rejects() {
         "fn km_intersection_table (left : Option Unit) (keep : Bool) (prior : Option Unit) \
            : Option Unit = \
            match left { \
-             None => prior ; \
-             Some x => match keep { True => Some Unit x ; False => prior } \
+             None |-> prior ; \
+             Some x |-> match keep { True |-> Some Unit x ; False |-> prior } \
            }",
     );
     elab_ok(
         &mut env,
         "fn km_member_from_lookup (left : Option Unit) : Bool = \
-           match left { None => False ; Some x => True }",
+           match left { None |-> False ; Some x |-> True }",
     );
     elab_ok(
         &mut env,
         "fn km_lookup (b : Bool) : Option Unit = \
-           match b { True => Some Unit MkUnit ; False => None Unit }",
+           match b { True |-> Some Unit MkUnit ; False |-> None Unit }",
     );
     elab_ok(
         &mut env,
@@ -663,12 +663,12 @@ fn ac8_option_table_wrong_constructor_argument_still_rejects() {
                (km_intersection_table (km_lookup b) \
                  (km_member_from_lookup (km_lookup b)) (None Unit)) = \
            match km_lookup b { \
-             None => km_option_refl \
+             None |-> km_option_refl \
                (km_intersection_table (None Unit) \
                  (km_member_from_lookup (None Unit)) (None Unit)) ; \
-             Some x => match km_member_from_lookup (Some Unit x) { \
-               True => km_option_refl (None Unit) ; \
-               False => km_option_refl \
+             Some x |-> match km_member_from_lookup (Some Unit x) { \
+               True |-> km_option_refl (None Unit) ; \
+               False |-> km_option_refl \
                  (km_intersection_table (Some Unit x) \
                    (km_member_from_lookup (Some Unit x)) (None Unit)) \
              } \
@@ -708,13 +708,13 @@ fn ac8_direct_lookup_member_reflection_helper_elaborates() {
         "fn mini_lookup (k : Type) (v : Type) (leq : k -> k -> Bool) \
            (key : k) (m : MiniTree k v) : Option v = \
            match m { \
-             MiniLeaf => None v ; \
-             MiniNode l k2 v2 r => match leq key k2 { \
-               True => match leq k2 key { \
-                 True => Some v v2 ; \
-                 False => mini_lookup k v leq key l \
+             MiniLeaf |-> None v ; \
+             MiniNode l k2 v2 r |-> match leq key k2 { \
+               True |-> match leq k2 key { \
+                 True |-> Some v v2 ; \
+                 False |-> mini_lookup k v leq key l \
                } ; \
-               False => mini_lookup k v leq key r \
+               False |-> mini_lookup k v leq key r \
              } \
            }",
     );
@@ -722,7 +722,7 @@ fn ac8_direct_lookup_member_reflection_helper_elaborates() {
         &mut env,
         "fn mini_member (k : Type) (v : Type) (leq : k -> k -> Bool) \
            (key : k) (m : MiniTree k v) : Bool = \
-           match mini_lookup k v leq key m { None => False ; Some x => True }",
+           match mini_lookup k v leq key m { None |-> False ; Some x |-> True }",
     );
     elab_ok(
         &mut env,
@@ -739,13 +739,13 @@ fn ac8_direct_lookup_member_reflection_helper_elaborates() {
            : Equal Bool (mini_member k v leq key m) False -> \
              Equal (Option v) (mini_lookup k v leq key m) (None v) = \
            match m { \
-             MiniLeaf => \\h. Proved ; \
-             MiniNode l k2 v2 r => match leq key k2 { \
-               True => match leq k2 key { \
-                 True => mini_lookup_none_from_member_false_hit v v2 ; \
-                 False => mini_lookup_none_from_member_false k v leq key l \
+             MiniLeaf |-> \\h. Proved ; \
+             MiniNode l k2 v2 r |-> match leq key k2 { \
+               True |-> match leq k2 key { \
+                 True |-> mini_lookup_none_from_member_false_hit v v2 ; \
+                 False |-> mini_lookup_none_from_member_false k v leq key l \
                } ; \
-               False => mini_lookup_none_from_member_false k v leq key r \
+               False |-> mini_lookup_none_from_member_false k v leq key r \
              } \
            }",
     );
@@ -766,7 +766,7 @@ fn data_recursive_type_accepts() {
     // Simple match on Zero inline.
     let id = elab_ok(
         &mut env,
-        "let is_zero : Int = match Zero { Zero => 1 ; Succ n => 0 }",
+        "let is_zero : Int = match Zero { Zero |-> 1 ; Succ n |-> 0 }",
     );
     let body = body_of(&env, id);
     assert!(matches!(body, Term::Elim { .. }));
@@ -789,7 +789,7 @@ fn unknown_ctor_in_pattern_is_error() {
 
     let result = elab(
         &mut env,
-        "let bad : Int = match Red { Red => 0 ; Green => 1 ; Purple => 2 }",
+        "let bad : Int = match Red { Red |-> 0 ; Green |-> 1 ; Purple |-> 2 }",
     );
     assert!(result.is_err(), "unknown ctor 'Purple' should produce an error");
 }
@@ -801,7 +801,7 @@ fn data_two_arg_ctor_match_accepted() {
 
     let id = elab_ok(
         &mut env,
-        "let fst : Int = match P 1 2 { P x y => x }",
+        "let fst : Int = match P 1 2 { P x y |-> x }",
     );
     let body = body_of(&env, id);
     assert!(matches!(body, Term::Elim { .. }));

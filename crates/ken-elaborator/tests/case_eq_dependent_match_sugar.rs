@@ -29,8 +29,8 @@ fn stuck_bool_scrutinee_binds_a_usable_equation_and_kernel_checks() {
         .elaborate_file(
             "fn da_eq (x : Bool) (y : Bool) : Bool = x\n\
              lemma stuck_eq (x : Bool) (y : Bool) : Equal Bool (da_eq x y) (da_eq x y) = match (da_eq x y) eqn: h {
-               True => J (\\b' _. Equal Bool b' b') Refl h ;
-               False => J (\\b' _. Equal Bool b' b') Refl h }",
+               True |-> J (\\b' _. Equal Bool b' b') Refl h ;
+               False |-> J (\\b' _. Equal Bool b' b') Refl h }",
         )
         .expect("the equation binder must transport a stuck Bool application");
     let (_, body) = env
@@ -49,9 +49,9 @@ fn three_constructor_enum_is_not_bool_hardcoded() {
     env.elaborate_file(
         "data OrdResult = Lt | Eq | Gt\n\
          lemma ord_self (o : OrdResult) : Equal OrdResult o o = match o eqn: h {
-           Lt => J (\\b' _. Equal OrdResult b' b') Refl h ;
-           Eq => J (\\b' _. Equal OrdResult b' b') Refl h ;
-           Gt => J (\\b' _. Equal OrdResult b' b') Refl h }",
+           Lt |-> J (\\b' _. Equal OrdResult b' b') Refl h ;
+           Eq |-> J (\\b' _. Equal OrdResult b' b') Refl h ;
+           Gt |-> J (\\b' _. Equal OrdResult b' b') Refl h }",
     )
     .expect("the modifier must support all three OrdResult constructors");
 }
@@ -66,8 +66,8 @@ fn reverted_hypothesis_shape_elaborates_with_a_real_byte_reduction() {
         fn IsTrueLike (b : Bool) : Prop = Equal Bool b True\n\
         lemma cons_sound (x : Bool) (y : Bool) : IsTrueLike (cons_eq x y) -> Equal Bool x x = \
         match (cons_eq x y) eqn: h {
-          True => \\p. Refl ;
-          False => \\p. absurd p }";
+          True |-> \\p. Refl ;
+          False |-> \\p. absurd p }";
     // The previous required idiom contains a dichotomy, a named dispatch
     // helper, and an explicit J motive. It is deliberately kept as source
     // text, so this is a byte-count assertion over author-facing programs.
@@ -75,8 +75,8 @@ fn reverted_hypothesis_shape_elaborates_with_a_real_byte_reduction() {
         bool_dichotomy (cons_eq x y) |> dispatch_cons_eq x y where \
         lemma dispatch_cons_eq (x : Bool) (y : Bool) (d : Or (Equal Bool (cons_eq x y) True) (Equal Bool (cons_eq x y) False)) \
           : IsTrueLike (cons_eq x y) -> Equal Bool x x = \
-          match d { Inl q => J (\\b' _. IsTrueLike b' -> Equal Bool x x) (\\p. Refl) q ; \
-                    Inr q => J (\\b' _. IsTrueLike b' -> Equal Bool x x) (\\p. absurd p) q }";
+          match d { Inl q |-> J (\\b' _. IsTrueLike b' -> Equal Bool x x) (\\p. Refl) q ; \
+                    Inr q |-> J (\\b' _. IsTrueLike b' -> Equal Bool x x) (\\p. absurd p) q }";
     env.elaborate_file(SUGAR)
         .expect("reverted hypothesis occurrence must be generalized and transported");
     assert!(
@@ -90,7 +90,7 @@ fn non_nullary_constructors_are_rejected_at_the_modifier_boundary() {
     let mut env = mk_env();
     let result = env.elaborate_file(
         "data Parcel = Wrap Bool\n\
-         lemma no_fields (b : Parcel) : Equal Parcel b b = match b eqn: h { Wrap x => Refl }",
+         lemma no_fields (b : Parcel) : Equal Parcel b b = match b eqn: h { Wrap x |-> Refl }",
     );
     assert!(
         matches!(result, Err(ElabError::TypeMismatch { ref reason, .. })
@@ -103,7 +103,7 @@ fn non_nullary_constructors_are_rejected_at_the_modifier_boundary() {
 fn mismatched_equation_branch_is_kernel_rejected() {
     let mut env = mk_env();
     let result = env.elaborate_file(
-        "lemma wrong (b : Bool) : Equal Bool b b = match b eqn: h { True => h ; False => h }",
+        "lemma wrong (b : Bool) : Equal Bool b b = match b eqn: h { True |-> h ; False |-> h }",
     );
     assert!(
         matches!(result, Err(ElabError::KernelRejected { .. })),
@@ -122,8 +122,8 @@ fn modifier_has_zero_trusted_base_delta() {
     let mut env = mk_env();
     env.elaborate_file(
         "lemma eqn_tb (b : Bool) : Equal Bool b b = match b eqn: h {
-           True => J (\\b' _. Equal Bool b' b') Refl h ;
-           False => J (\\b' _. Equal Bool b' b') Refl h }",
+           True |-> J (\\b' _. Equal Bool b' b') Refl h ;
+           False |-> J (\\b' _. Equal Bool b' b') Refl h }",
     )
     .expect("bounded dependent match elaborates");
     let after: std::collections::HashSet<GlobalId> = env.env.trusted_base().into_iter().collect();

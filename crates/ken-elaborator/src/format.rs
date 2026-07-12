@@ -74,7 +74,9 @@ pub fn canonical_unicode(src: &str) -> String {
             continue;
         }
 
-        let replacement = if rest.starts_with("->") {
+        let replacement = if rest.starts_with("|->") {
+            Some(("↦", 3))
+        } else if rest.starts_with("->") {
             Some(("→", 2))
         } else if rest.starts_with("=>") {
             Some(("⇒", 2))

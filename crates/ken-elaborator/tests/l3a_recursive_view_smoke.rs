@@ -31,7 +31,7 @@ fn recursive_view_self_ref_resolves_and_sct_accepts() {
     // Structural descent on `m` (sub-term of `S m`). SCT must accept.
     let id = elab_ok(
         &mut env,
-        "fn double (n : Peano) : Peano = match n { Z => Z ; S m => S (S (double m)) }",
+        "fn double (n : Peano) : Peano = match n { Z |-> Z ; S m |-> S (S (double m)) }",
     );
 
     // The def must be transparent (upgraded after SCT), not an open hole.
@@ -52,12 +52,12 @@ fn recursive_view_reduces_on_constructor() {
     // `pred n = match n { Z => Z ; S m => m }` — non-recursive baseline (sanity).
     elab_ok(
         &mut env,
-        "fn pred (n : Peano) : Peano = match n { Z => Z ; S m => m }",
+        "fn pred (n : Peano) : Peano = match n { Z |-> Z ; S m |-> m }",
     );
     // `count n = match n { Z => Z ; S m => S (count m) }` — recursive.
     let id = elab_ok(
         &mut env,
-        "fn count (n : Peano) : Peano = match n { Z => Z ; S m => S (count m) }",
+        "fn count (n : Peano) : Peano = match n { Z |-> Z ; S m |-> S (count m) }",
     );
     // Apply count to (S Z) and whnf: count (S Z) ⇝ S (count Z) ⇝ S Z.
     let body = env.env.transparent_body(id).expect("count body").1;
@@ -134,7 +134,7 @@ fn poly_match_return_elaborates() {
     // exposed the IH-domain weakening bug.
     let mut env = mk_env();
     let r = env.elaborate_decl(
-        "fn head (a : Type) (xs : List a) : Option a = match xs { Nil => None a ; Cons h t => Some a h }",
+        "fn head (a : Type) (xs : List a) : Option a = match xs { Nil |-> None a ; Cons h t |-> Some a h }",
     );
     assert!(
         r.is_ok(),

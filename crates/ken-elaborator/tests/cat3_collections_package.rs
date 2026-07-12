@@ -271,7 +271,7 @@ fn cat3_d2_bad_sorted_and_bad_perm_witnesses_rejected() {
                : Perm Bool (eq_from_ord Bool bool_leq) \
                    (Cons Bool True (Nil Bool)) \
                    (Nil Bool) = \
-                 \\q. match q { False => Proved ; True => Proved }",
+                 \\q. match q { False |-> Proved ; True |-> Proved }",
         )
         .expect_err("dropping True must not satisfy count-based Perm");
     let msg = format!("{err}");

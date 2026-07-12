@@ -14,7 +14,7 @@ fn structural_and_forward_proof_definitions_elaborate() {
     elab.elaborate_file(
         r#"
         lemma self_refl (x : Nat) : Equal Nat x x =
-          match x { Zero => Proved ; Suc x2 => self_refl x2 }
+          match x { Zero |-> Proved ; Suc x2 |-> self_refl x2 }
         lemma use_later (x : Int) : Equal Int (later x) x = later_refl x
         fn later (x : Int) : Int = x
         lemma later_refl (x : Int) : Equal Int (later x) x = Refl
@@ -51,8 +51,8 @@ fn mutual_scc_orders_dependencies_from_non_entry_members() {
     let mut elab = env();
     elab.elaborate_file(
         r#"
-        fn a (n : Nat) : Nat = match n { Zero => Zero ; Suc m => b m }
-        fn b (n : Nat) : Nat = match n { Zero => w ; Suc m => a m }
+        fn a (n : Nat) : Nat = match n { Zero |-> Zero ; Suc m |-> b m }
+        fn b (n : Nat) : Nat = match n { Zero |-> w ; Suc m |-> a m }
         const w : Nat = Zero
         "#,
     )
@@ -68,9 +68,9 @@ fn homogeneous_mutual_proofs_admit_but_non_descending_proofs_fail_at_sct() {
     elab.elaborate_file(
         r#"
         lemma left (n : Nat) : Equal Nat n n =
-          match n { Zero => Proved ; Suc m => right m }
+          match n { Zero |-> Proved ; Suc m |-> right m }
         lemma right (n : Nat) : Equal Nat n n =
-          match n { Zero => Proved ; Suc m => left m }
+          match n { Zero |-> Proved ; Suc m |-> left m }
         "#,
     )
     .expect("homogeneous descending proof SCC must pass SCT");

@@ -232,7 +232,7 @@ fn list_floor_recursion_in_sct_sound_zone() {
     let mut env2 = mk_env();
     let result = env2.elaborate_decl(
         "fn bad (a : Type) (xs : List a) : List a = \
-         match xs { Nil => Nil a ; Cons x xs2 => bad a (Cons a x xs2) }",
+         match xs { Nil |-> Nil a ; Cons x xs2 |-> bad a (Cons a x xs2) }",
     );
     assert!(
         result.is_err(),

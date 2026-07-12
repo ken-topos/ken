@@ -47,7 +47,7 @@ fn control_flat_single_sibling_recurses() {
         .expect("Tree should declare");
     env.elaborate_decl(
         "fn countR (t : Tree) : Nat = \
-         match t { Leaf => Zero ; Node l c r => countR r }",
+         match t { Leaf |-> Zero ; Node l c r |-> countR r }",
     )
     .expect("flat single-sibling recursion must be accepted (control)");
 }
@@ -62,14 +62,14 @@ fn control_flat_both_siblings_recurse() {
         .expect("Tree should declare");
     env.elaborate_decl(
         "fn natAdd (a : Nat) (b : Nat) : Nat = \
-         match a { Zero => b ; Suc m => Suc (natAdd m b) }",
+         match a { Zero |-> b ; Suc m |-> Suc (natAdd m b) }",
     )
     .expect("natAdd should declare");
     env.elaborate_decl(
         "fn countBoth (t : Tree) : Nat = \
          match t { \
-           Leaf => Zero ; \
-           Node l c r => Suc (natAdd (countBoth l) (countBoth r)) \
+           Leaf |-> Zero ; \
+           Node l c r |-> Suc (natAdd (countBoth l) (countBoth r)) \
          }",
     )
     .expect("flat both-siblings recursion must be accepted (control)");
@@ -87,9 +87,9 @@ fn shape_a_val2_12_nested_split_flat_sibling_recursion_accepts() {
     env.elaborate_decl(
         "fn countR (t : Tree) : Nat = \
          match t { \
-           Leaf => Zero ; \
-           Node (Node ll lc lr) c r => countR r ; \
-           Node Leaf c r => countR r \
+           Leaf |-> Zero ; \
+           Node (Node ll lc lr) c r |-> countR r ; \
+           Node Leaf c r |-> countR r \
          }",
     )
     .expect("nested-split + flat-sibling recursion must now be accepted (AC2)");
@@ -113,9 +113,9 @@ fn shape_a_accepts_and_evaluates_correctly() {
     env.elaborate_decl(
         "fn rightDepth (t : Tree) : Nat = \
          match t { \
-           Leaf => Zero ; \
-           Node (Node ll lc lr) c r => Suc (rightDepth r) ; \
-           Node Leaf c r => Suc (rightDepth r) \
+           Leaf |-> Zero ; \
+           Node (Node ll lc lr) c r |-> Suc (rightDepth r) ; \
+           Node Leaf c r |-> Suc (rightDepth r) \
          }",
     )
     .expect("must accept (AC2)");
@@ -173,9 +173,9 @@ fn shape_a_near_miss_recurses_on_unchanged_scrutinee_stays_rejected() {
     let res = env.elaborate_decl(
         "fn bad (t : Tree) : Nat = \
          match t { \
-           Leaf => Zero ; \
-           Node (Node ll lc lr) c r => bad t ; \
-           Node Leaf c r => bad r \
+           Leaf |-> Zero ; \
+           Node (Node ll lc lr) c r |-> bad t ; \
+           Node Leaf c r |-> bad r \
          }",
     );
     assert!(

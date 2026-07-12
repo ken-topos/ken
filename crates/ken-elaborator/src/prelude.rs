@@ -591,10 +591,10 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     elab.elaborate_decl(
         "fn is_sorted (a : Type) (leq : a -> a -> Bool) (xs : List a) : Prop = \
          match xs { \
-           Nil => Top ; \
-           Cons x xs2 => match xs2 { \
-             Nil => Top ; \
-             Cons y r => And (Equal Bool (leq x y) True) (is_sorted a leq xs2) \
+           Nil |-> Top ; \
+           Cons x xs2 |-> match xs2 { \
+             Nil |-> Top ; \
+             Cons y r |-> And (Equal Bool (leq x y) True) (is_sorted a leq xs2) \
            } \
          }",
     )
@@ -836,7 +836,7 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     // on the kernel-direct `Or`/`Inl`/`Inr` immediately above) — no raw
     // `Term::Elim` construction needed.
     elab.elaborate_decl(
-        "fn decide (P : Omega) (d : Dec P) : Bool = match d { Yes p ⇒ True ; No f ⇒ False }",
+        "fn decide (P : Omega) (d : Dec P) : Bool = match d { Yes p ↦ True ; No f ↦ False }",
     )
     .map_err(|e| ElabError::Internal(format!("prelude decide failed: {}", e)))?;
 

@@ -78,11 +78,11 @@ fn trusted_base_delta_is_empty_across_the_entry() {
 fn refl_trans_antisym_need_no_conversion() {
     let mut env = base_env();
     env.elaborate_decl(
-        "fn leqNat (m : Nat) (n : Nat) : Bool = match m { Zero ⇒ True ; Suc m2 ⇒ match n { Zero ⇒ False ; Suc n2 ⇒ leqNat m2 n2 } }",
+        "fn leqNat (m : Nat) (n : Nat) : Bool = match m { Zero ↦ True ; Suc m2 ↦ match n { Zero ↦ False ; Suc n2 ↦ leqNat m2 n2 } }",
     )
     .expect("leqNat");
     env.elaborate_decl(
-        "lemma reflLeqNat (x : Nat) : Equal Bool (leqNat x x) True = match x { Zero ⇒ Proved ; Suc x2 ⇒ reflLeqNat x2 }",
+        "lemma reflLeqNat (x : Nat) : Equal Bool (leqNat x x) True = match x { Zero ↦ Proved ; Suc x2 ↦ reflLeqNat x2 }",
     )
     .expect("reflLeqNat");
 

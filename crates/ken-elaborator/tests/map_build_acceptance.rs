@@ -469,16 +469,16 @@ fn letter_frequency_shape() {
     env.elaborate_decl(
         "fn bumpCount (leq : Char -> Char -> Bool) (key : Char) (m : Tree Char Nat) : Tree Char Nat = \
          match lookup Char Nat leq key m { \
-           None => insert Char Nat leq key (Suc Zero) m ; \
-           Some n => insert Char Nat leq key (Suc n) m \
+           None |-> insert Char Nat leq key (Suc Zero) m ; \
+           Some n |-> insert Char Nat leq key (Suc n) m \
          }",
     )
     .expect("bumpCount should elaborate");
     env.elaborate_decl(
         "fn countChars (leq : Char -> Char -> Bool) (cs : List Char) (m : Tree Char Nat) : Tree Char Nat = \
          match cs { \
-           Nil => m ; \
-           Cons c cs2 => countChars leq cs2 (bumpCount leq c m) \
+           Nil |-> m ; \
+           Cons c cs2 |-> countChars leq cs2 (bumpCount leq c m) \
          }",
     )
     .expect("countChars should elaborate");

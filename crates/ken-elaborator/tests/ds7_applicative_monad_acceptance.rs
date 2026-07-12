@@ -126,7 +126,7 @@ fn ac8_noncartesian_applicative_cannot_wire_into_monad() {
     // for a LAW FIELD it was never proved for must be rejected.
     let r = env.elaborate_decl(
         "fn zip_ap (a : Type) (b : Type) (mf : List (a -> b)) (mx : List a) : List b = \
-           match mf { Nil ⇒ Nil b ; Cons g fs ⇒ match mx { Nil ⇒ Nil b ; Cons x xs ⇒ Cons b (g x) (zip_ap a b fs xs) } }",
+           match mf { Nil ↦ Nil b ; Cons g fs ↦ match mx { Nil ↦ Nil b ; Cons x xs ↦ Cons b (g x) (zip_ap a b fs xs) } }",
     );
     r.expect("zip_ap itself is a well-typed function (the point: it exists, just isn't the proved cartesian ap)");
 
