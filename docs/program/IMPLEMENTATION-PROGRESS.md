@@ -23,17 +23,27 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >   preserve the three lossless gates downstream (contiguous single-ownership of
 >   every byte / exactly-one comment home / whole-catalog byte-exact reparse) +
 >   literal-locked oracle. **★ UNBLOCKS B2/B3/B4.**
-> - **B2 → LANGUAGE — frame authored** (`docs/program/wp/kenfmt-b2-token-kind-
->   canon.md`). Replaces raw-byte `canonical_unicode` (format.rs:36) with
->   token-kind dispatch over B1's stream; fixes the `l`/`level`→`ℓ` over-fire;
->   flips WP S token-kind golden GREEN; no layout (B3). Single build lane,
->   Architect-terminal. Publishing doc-only → **Handoff-Gate Language → kick B2**
->   (ring free, B1 retros in). N3 Lane B queues behind B2.
-> - **N4 → ENCLAVE — frame MERGED** (`origin/main @ fcc0dca6`, PR #581). Enclave
->   Handoff-Gate LAUNCHED (bg, compacting). **NEXT: verify enclave drops → kick
->   N4 Lane A** (spec §33/§32 program/admits grammar + admission gate + golden;
->   buildable-now core, compiled-manifest/MRES-4d/pkg-mgr DEFERRED). Parallel to
->   the Language kenfmt track.
+> - **B2 → LANGUAGE — RELEASED** (`evt_7a2tcvy28a1ny`). Frame merged (PR #582).
+>   Language Handoff-Gate DONE (all 3 compacted @ 05726850, WIDE-verified). B2
+>   kickoff posted + language-leader roused. Replaces raw-byte `canonical_unicode`
+>   (format.rs:36) with token-kind dispatch over B1's stream; fixes `l`/`level`→
+>   `ℓ` over-fire; flips WP S token-kind golden GREEN; no layout (B3). Single
+>   build lane, Architect-terminal. **NEXT: await candidate SHA → honesty-gate +
+>   CI-polled publish. Unblocks B3.** N3 Lane B queues behind B2.
+> - **N4 Lane A → ENCLAVE — RELEASED** (`evt_3gb5zjq75x388`). Frame merged
+>   (`fcc0dca6`, PR #581). Enclave Handoff-Gate DONE (all 3 compacted @ fcc0dca6,
+>   WIDE-verified; N3 spec squash leftover auto-preserved). Lane A kickoff posted
+>   + spec-leader roused (spec §32/§33 program/admits grammar + admission gate +
+>   two-set + self-admission + provenance + CV golden; buildable-now core,
+>   compiled-manifest/MRES-4d/pkg-mgr DEFERRED; Architect-terminal). **NEXT:
+>   await Lane A SHA → doc-only publish → Lane B (Language).**
+>   - **PKG-1 scope seam RESOLVED** (`evt_vyqbdvaejp00`): spec-author flagged the
+>     frame's grammar omits PKG-1's explicit package member-module list. Ruling
+>     **(a) defer spelling, not concept** — record PKG-1 membership semantics
+>     normatively in the deferred bucket (a package file enumerates its members;
+>     concrete grammar → package-manager round; no minted keyword); buildable-now
+>     admission runs over the source graph / path-implicit membership (N2 MRES-3a).
+>     Frame reconciled to slot PKG-1 into the deferred bucket.
 > - **N3 Lane A → ENCLAVE — GATED, PUBLISHING.** Candidate `8204e727` (linear
 >   `ba514aac → 27e56a79 spec → e31f3259 conf → 8204e727 prelude-carrier fix`);
 >   CV combined APPROVE + **Architect-terminal APPROVE** (merge-Decision vote,
