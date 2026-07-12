@@ -37,13 +37,22 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >   Architect SURFACE/FIDELITY APPROVE (`evt_3tnmwqvzsra9z` — FatArrow→MapsTo,
 >   4-spelling lexer, formatter `|->`-before-`->`, AST unchanged, no
 >   arrow/prose/Rust corruption); honesty gate clean (zero trust/spec/conf/Cargo
->   delta). Publishing (CI-poll). PR2 (removal of `⇒`/`=>`) is Steward-gated on
->   PR1 + the spec lane.
+>   delta). **PR1 MERGED @ `670f0804`** (PR #539, CI green; lexer `MapsTo`
+>   4-spelling + `|` lookahead; catalog fully migrated to `↦`). PR2 (removal of
+>   `⇒`/`=>`) is Steward-gated on PR1 + the spec lane.
 > - **`match-arm-glyph-spec` (Spec enclave: spec-author grammar + CV conformance
->   fixtures)** — starts AFTER lang-PR1 merges (needs additive lexer). ~38 sites.
-> - **Steward gates** lang-PR2 (removal) on lang-PR1 + spec-lane merged →
->   single honest surface. Frames: `docs/program/wp/match-arm-glyph-lang.md`,
->   `…-spec.md`. Task #24.
+>   fixtures)** — **MERGING @ `d96f7666`** (base `670f0804`; 12 files spec(2)+
+>   conformance(10), +43/−43 pure substitution). Grammar production now
+>   `arm ::= pattern ("if" expr)? ("↦" | "|->") expr`; 4 spec examples + 50
+>   conformance separators migrated; 321 implication-prose `⇒` + all `→`
+>   preserved. CV APPROVE + Architect SURFACE/FIDELITY APPROVE
+>   (`evt_2sp5nfp8814g7`, reverse-normalization 11/12 byte-identical). Honesty
+>   gate clean (no crates/kernel/Cargo/TCB). doc-only (no cargo harness loads
+>   these fixtures; additive lexer accepts both spellings).
+> - **Steward gates** lang-PR2 (removal) on lang-PR1 + spec-lane merged → single
+>   honest surface. **BOTH NOW MERGED ⇒ PR2 UNBLOCKED** — next: kick Language
+>   PR2 (remove `⇒`/`=>` from lexer + `format.rs` `=>` arm). Frames:
+>   `docs/program/wp/match-arm-glyph-lang.md`, `…-spec.md`. Task #24.
 >
 > ### proof-attachment membership convention — ADOPTED (Architect + operator) — 2026-07-12
 >

@@ -7,15 +7,15 @@
 data DPair = MkDPair Int Int
 
 fn denoteEq (x : DPair) (y : DPair) : Prop =
-  match x { MkDPair cx ex ⇒
-    match y { MkDPair cy ey ⇒
+  match x { MkDPair cx ex ↦
+    match y { MkDPair cy ey ↦
       Equal Bool (and_bool (eq_int (add_int ex 1) ey) (eq_int cx (mul_int cy 10))) True } }
 
 const Decimal : Type = DPair / denoteEq
 
 -- coeffPair does NOT respect denoteEq: MkDPair 10 (-1) and MkDPair 1 0 satisfy
 -- denoteEq (both denote 1) but coeffPair gives 10 vs 1.
-fn coeffPair (p : DPair) : Int = match p { MkDPair c e ⇒ c }
+fn coeffPair (p : DPair) : Int = match p { MkDPair c e ↦ c }
 
 -- The respect obligation `(x y) -> denoteEq x y -> Equal Int (coeffPair x)
 -- (coeffPair y)` is UNPROVABLE: at x=(10,-1), y=(1,0) it demands Equal Int 10 1

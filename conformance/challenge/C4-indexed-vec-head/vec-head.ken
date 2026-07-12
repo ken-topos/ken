@@ -13,7 +13,7 @@ data Vec (a : Type) : Nat → Type =
 -- omitted by absurdity — no default, no sentinel, no Option.
 fn head (a : Type) (n : Nat) (v : Vec a (Suc n)) : a =
   match v {
-    VCons m x xs ⇒ x
+    VCons m x xs ↦ x
     -- VNil arm intentionally OMITTED: impossible by index (needs `34 §4.3`
     -- absurdity fill — DEFERRED per l2 AC5). Expected today: rejected as
     -- non-exhaustive / cannot-discharge-VNil. If it elaborates, absurdity fill

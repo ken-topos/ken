@@ -15,8 +15,8 @@ data Decimal = MkDecimalPair Int Int
 -- coefficients to a common exponent and compares. For x=(10,-1), y=(1,0):
 -- exponents differ by 1, so scale y's coefficient by 10 → compare 10 vs 10.
 fn decimalEq (x : Decimal) (y : Decimal) : Bool =
-  match x { MkDecimalPair cx ex ⇒
-    match y { MkDecimalPair cy ey ⇒
+  match x { MkDecimalPair cx ex ↦
+    match y { MkDecimalPair cy ey ↦
       and_bool (eq_int (add_int ex 1) ey) (eq_int cx (mul_int cy 10)) } }
 
 -- The lawful instance. `eq` is a fine Bool operation; `sound`/`complete` are
