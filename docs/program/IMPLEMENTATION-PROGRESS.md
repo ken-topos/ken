@@ -14,7 +14,19 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⏭ 2026-07-12 ~20:xx — LIVE STATE (read this first) · `origin/main @ 5674cb88`
+> ### ⏭ 2026-07-12 ~21:xx — LIVE STATE (read this first) · `origin/main @ a3690cb8`
+>
+> **★ RESUMING the two parallel releases (operator "resume").**
+> - **B1 → LANGUAGE (in flight):** Language ring Handoff-Gate compaction LAUNCHED
+>   (`handoff-gate-compact.sh language-leader/implementer/qa`, bg 300s). Branches
+>   were clean (0 ahead of main). **NEXT: verify drops (WIDE capture-pane) → post
+>   B1 kickoff to language-leader** (frame `docs/program/wp/kenfmt-b1-lossless-
+>   layer.md`, on main). Architect-terminal reviews.
+> - **N3 → ENCLAVE (in flight):** frame `docs/program/wp/n3-import-exclusion.md`
+>   AUTHORED (grounded on ADR 0014 MRES-6 lines ~574–623 + §33 §3.2/§3.3;
+>   two-lane: A=enclave spec+golden, B=Language build; cites build site
+>   `bind_import` modules.rs:75-77). **NEXT: publish frame doc-only → Handoff-Gate
+>   enclave (spec-leader/spec-author/CV) → kick N3 Lane A → Lane B.**
 >
 > **★ ACTIVE = kenfmt work program (operator-driven).** Operator wants Ken's
 > gofmt/black. Designed from `local/kenfmt-readability-review.md` (promoted →
