@@ -474,16 +474,24 @@ matching only rendered prose is insufficient. Every case in this section is
 - spec: ADR 0014 MRES-4 (admission composes with orphan and overlap);
   `33 §5.3`
 - fixture: the program explicitly admits package `Bad`, but `Bad` declares
-  `instance Render RItem` in a module that owns neither `Render` nor `RItem`.
-  The otherwise-identical control moves that declaration to the module owning
-  `RItem` and leaves the program's `admits Bad` line unchanged.
+  `instance Render RItem` in module `Bad.Orphan`, which owns neither name.
+  `Bad.Orphan` explicitly imports `P.Class` for `Render` and `R.Head` for
+  `RItem`: edges **`Bad.Orphan → P.Class`** and
+  **`Bad.Orphan → R.Head`**. Neither owner imports `Bad.Orphan`, so the complete
+  ordinary import graph is acyclic and both names resolve before the orphan
+  check. The control relocates the declaration to the module owning `RItem` and
+  leaves the program's `admits Bad` line unchanged.
 - expect: the first arm rejects at declaration with the specific
   `OrphanInstance` variant and its class/head/declaration provenance; it never
   becomes a registered candidate. The relocated control passes the orphan gate
-  and is eligible for N4 admission/resolution.
+  and is eligible for registration. It makes no claim that later direct-use
+  admission succeeds, because the relocated declaration is not defined by
+  package `Bad`.
 - why: admission is additive, not a replacement coherence policy. The pair
-  changes only the declaration locus, so an implementation treating `admits`
-  as permission to register an orphan flips the wrong arm to acceptance.
+  changes the declaration locus after the class and head have resolved. The
+  explicit one-way edges disconfirm an earlier `UnboundName` or `ImportCycle`;
+  an implementation treating `admits` as permission to register an orphan
+  flips the wrong arm to registration.
 
 ### surface/modules/boundary-headers-are-anonymous
 
