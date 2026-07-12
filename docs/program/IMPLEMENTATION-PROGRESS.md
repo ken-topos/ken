@@ -36,9 +36,49 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > option). **Report: Ken substantially aligned** (static namespaces, single-flat-
 > because-types-are-terms, qualified-by-default, positive opens, file-topology
 > bijection, hard use-open ambiguity); 3 gaps = P9 fail-closed / P4 instances / P5
-> re-export. Task #31. **⏭ RESUME: await Architect design + open-decisions register →
-> route operator review of open decisions (esp. P4) → scope round 1 → enclave → build.
-> Absorbs #8.**
+> re-export. Task #31. **ADR 0014 (Proposed) delivered + published @ `10c36a07`
+> (PR #555)** — 10-fork register MRES-1..10.
+>
+> **↳ OPERATOR FORK REVIEW COMPLETE — 2026-07-12 ~14:1x UTC (routed to Architect
+> `evt_rpvfvdqp7mcq` to fold).** Decisions:
+> - **Concur w/ rec:** MRES-1 (in-repo loader first), MRES-2, **MRES-3 (a) strict**
+>   bijection, MRES-5 (dup name=error), MRES-7, MRES-8, MRES-9, MRES-10 (order only).
+> - **MRES-4 = (A) ambient-with-coherence, REFINED → new PROGRAM ABSTRACTION:** a
+>   distinguished source file defining a `program` that EXPLICITLY lists blessed
+>   instance-providing packages; ambient within the blessed set; **error to use an
+>   instance from an unblessed package.** Ambient resolution inside an explicit
+>   boundary. Scaling OK: O(1) resolve, orphan-ban bounds coherence to ≤2
+>   modules/pair (linear); provenance diagnostics REQUIRED. Program abstraction now
+>   part of the design.
+> - **MRES-6 = OPERATOR OVERRODE:** local-def vs import-def same name = ERROR;
+>   explicit import-exclusion language. Reverses §3.3 shadowing-is-a-feature.
+> - **MRES-10 shadowing folds under MRES-6** (prelude-shadow explicit/error).
+> - **Multi-catalog future-proofing:** loader plural-catalog-ready (standard+org+
+>   vendor); multi-root resolution deferred, not precluded.
+> - **CV now gpt-5.6-sol** (Codex seat).
+> **↳ ARCHITECT FOLD DELIVERED — 2026-07-12 ~15:0x UTC (`architect/work 968530ce`;
+> his branch never merges — I publish).** ADR 0014 now **Partially Accepted**:
+> concurred forks (MRES-1/2/3a/5/7/8/9/10-order) graduated to **Accepted**;
+> MRES-10 warn-softening removed (folds under MRES-6); multi-catalog plural-root
+> forward-compat folded into MRES-1/2. **MRES-4 program abstraction designed**
+> (`program` file w/ `blesses` package list; `UnblessedInstance` error; scaling
+> VALIDATED against code — O(1) `instance_search` HashMap.get, coherence
+> orphan-ban-bounded O(total instances) not O(packages²); provenance diagnostics
+> REQUIRED). **MRES-6 override folded** (local/import clash=error + `hiding`/rename
+> grammar; §3.3 reversal scoped precisely to top-level def-vs-import — lexical
+> binder shadowing untouched).
+> **THREE NEW SUB-FORKS → quick operator round (Architect recs):** MRES-4a
+> program-file=entry-point? rec *separable-but-co-locatable*; MRES-4b required only
+> for multi-package builds? rec *only-multi-package (single self-blesses)*; MRES-4c
+> blessing cascades transitively? rec *explicit-only-in-checked-artifact +
+> tooling-assisted* — **genuinely open, couples to pkg-mgr**.
+> **ROUND PLAN (Architect):** Round 1 = fail-closed dup-def slice **MRES-5/7/8**
+> (generalize `resolve_decl` guard; no loader/import dep; cleanly separable).
+> **MRES-6 = FAST-FOLLOW (round 2, rides loader)** — couples to import system.
+> Program abstraction builds with loader round; needs 4a/b/c settled first.
+> **⏭ RESUME: publishing updated ADR `968530ce` → main now (doc-only) → then
+> surface MRES-4a/b/c to operator for quick round. Round-1 (MRES-5/7/8)
+> kickable whenever. Absorbs #8.**
 
 
 > ### ✅ BOTH AWAY-WINDOW WPs CLOSED — FLEET QUIESCENT — 2026-07-12 ~07:26 UTC
@@ -106,7 +146,15 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > **✅ #26 CLOSED** (light — no retro). Formatter over-fire finding preserved below
 > for the parked canonical-formatter WP.
 >
-> ### IN FLIGHT — #28 attached-proof reference style (`::`→selector) — 2026-07-12
+> ### ✅ CLOSED — #28 attached-proof reference style (`::`→bare selector) — 2026-07-12
+
+> **✅ #28 MERGED @ `origin/main f24519f5`** (PR #556, CI passed). Bare
+> `proof name for subject` selectors catalog-wide (8 packages + authorized CAT1
+> assertion sync, +171/−169). Architect-terminal APPROVE (reverse-normalization
+> fidelity proof: all 3 spellings collapse identical) + honesty gate clean; zero
+> spec/parser/kernel. The `::`→bare arc (style ruling → #29 parser ext → #28
+> rewrite) is COMPLETE. Foundation released; light process (no retro, per #26
+> precedent). **#8 idiom note is now moot — bare form is the catalog style.**
 
 > **↻ #28 RE-KICKED IN BARE FORM — 2026-07-12 ~13:4x UTC.** #29 parser landed
 > (`69570b26`) → bare `proof name for subject` now parses/elaborates. Frame

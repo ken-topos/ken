@@ -1,12 +1,30 @@
 # ADR 0014 — Cross-package module resolution (F3b) and fail-closed single-namespace collision
 
-- **Status:** Proposed — design-framing pass; the register below is for the
-  operator's fork review **before** any spec-normative elaboration or build.
-- **Date:** 2026-07-12
-- **Deciders:** the operator (pending); framed by the Architect.
+- **Status:** Partially Accepted — operator fork review complete 2026-07-12
+  (concurred forks Accepted; MRES-4 and MRES-6 refined into new design; three
+  new sub-forks MRES-4a/b/c are Open pending a quick operator round).
+- **Date:** 2026-07-12 (framed); 2026-07-12 (operator review folded).
+- **Deciders:** the operator (fork review 2026-07-12); framed by the Architect.
 - **Relates to:** ADR 0008 (typeclass/instance coherence), ADR 0011
   (platform-dependent code / manifest ABI), spec `30-surface/33 §3`–`§5`,
   `docs/program/wp/catalog-taxonomy-paths-imports.md` (the addressing WP).
+
+## Operator fork review — disposition (2026-07-12)
+
+| Fork | Disposition |
+|---|---|
+| MRES-1, MRES-2 | **Accepted** + multi-catalog forward-compat added (plural-ready roots) |
+| MRES-3 | **Accepted (a) strict** |
+| MRES-4 | **Accepted (A) ambient-with-coherence**, refined into the **program abstraction** (blessed-package boundary); scaling validated; provenance diagnostics now **required**; opens new sub-forks **MRES-4a/b/c (Open)** |
+| MRES-5, MRES-7, MRES-8 | **Accepted** — the fail-closed duplicate-definition slice (round-1 candidate) |
+| MRES-6 | **Operator OVERRODE** the recommendation — local/import name clash is now an **error**, with **explicit import-exclusion language**; reverses §3.3's local-over-imported shadowing |
+| MRES-9 | **Accepted** — defer the form, fix the canonical-identity invariant now |
+| MRES-10 | **Accepted (precedence order)**; the prelude-shadow warn-and-allow softening is **overridden** — folds under MRES-6's explicit-not-implicit discipline |
+
+Cross-cutting: **multi-catalog** (standard + org + vendor roots) is not built
+now but the loader/addressing must not preclude it (MRES-1/2). Below, each
+entry is updated to its post-review state; superseded recommendation prose is
+retained only where it still grounds the accepted decision.
 
 ## Context
 
@@ -124,8 +142,8 @@ Four load-bearing recommendations, each expanded in the register:
 
 ## Open-decisions register
 
-Format per entry: **Fork** · **Options** · **Recommendation** · **Disposition**
-(decide-now / defer) · **Operator-flag**. Stable tags `MRES-n`.
+Format per entry: **Fork** · **Options** · **Recommendation** · **Status**
+(post-operator-review). Stable tags `MRES-n`; sub-forks `MRES-na/b/c`.
 
 ### MRES-1 — Loader scope: in-repo loader vs package manager
 - **Fork.** Is round one an **in-repo cross-file loader** only, or coupled from
@@ -135,7 +153,12 @@ Format per entry: **Fork** · **Options** · **Recommendation** · **Disposition
 - **Recommendation.** (a). The catalog WP already carved the in-repo loader as a
   standalone follow-on; the content-addressed layer couples to supply-chain `63`
   and should not gate the far simpler in-repo capability.
-- **Disposition.** Decide now (scopes round one).
+- **Status: ACCEPTED (a)** — in-repo loader first, package manager later.
+- **Multi-catalog forward-compat (operator, cross-cutting).** Not built now, but
+  the addressing must **not preclude** multiple catalog roots (standard + org +
+  vendor). The package-manager round carries multi-root resolution/precedence;
+  the in-repo loader must be written so a single root is one entry of a
+  plural-ready root list, never a hard-coded singleton.
 
 ### MRES-2 — Loader mechanism
 - **Fork.** Path→file anchoring, discovery, cycle detection, caching for the
@@ -146,7 +169,11 @@ Format per entry: **Fork** · **Options** · **Recommendation** · **Disposition
 - **Recommendation.** Reuse the pinned bijection; **cycle = hard error**
   (simplest, matches the surface-diagnostic posture); lazy discovery from import
   edges; cache on `ElabEnv`. No kernel/`trusted_base()` delta (surface layer).
-- **Disposition.** Decide the posture now; mechanics are round-one build detail.
+- **Status: ACCEPTED** — posture as above. **Multi-catalog:** the catalog-root
+  anchor is a **root list** (a resolver walks roots in a to-be-defined
+  precedence), not a single path; round one populates it with one root but the
+  resolution API takes the plural form so multi-root is a data change, not a
+  rewrite.
 
 ### MRES-3 — File-topology bijection strictness *(genuine tension)*
 - **Fork.** Keep the catalog WP's **strict** path↔import identity, or relax
@@ -158,9 +185,8 @@ Format per entry: **Fork** · **Options** · **Recommendation** · **Disposition
   role-blind rule are worth more than layout flexibility while the surface is
   small. Record (b) as a possible later relaxation once nested-namespace
   ergonomics bite.
-- **Disposition.** Decide now (the loader is built against one or the other).
-- **Operator-flag.** A real design tension between two in-tree artifacts;
-  worth a conscious call.
+- **Status: ACCEPTED (a) strict** — keep the total, role-blind bijection;
+  relaxation (b) recorded for a later round if nested-namespace ergonomics bite.
 
 ### MRES-4 — Cross-package instance visibility *(THE deep question)*
 - **Fork.** How do class/instance dictionaries cross package boundaries?
@@ -187,10 +213,103 @@ Format per entry: **Fork** · **Options** · **Recommendation** · **Disposition
   *import-gating* half. ADR 0008's own "Revisit if" pre-authorizes the
   registry-level ownership check as a supply-chain concern, not a language
   change.
-- **Disposition.** Decide now — it shapes every later round.
-- **Operator-flag. THE flagged decision.** (A) is a real position, not a
-  default; it deliberately declines the survey's separate-channel
-  recommendation on a soundness-of-coherence argument. Confirm or override.
+- **Status: ACCEPTED (A) — refined into the program abstraction (below).**
+
+#### MRES-4 refinement — the `program` abstraction (operator, 2026-07-12)
+
+The operator's sharpening: **"program-wide stable" presupposes a "program"**,
+which Ken has not defined — it has compilation units and packages, no closed
+boundary over which "program-wide" is meaningful. Define one, and use it to
+dissolve the ambient-vs-explicit tension.
+
+- **The `program` file.** A distinguished source file declares a `program` and
+  **explicitly lists the packages whose instances are blessed** for use across
+  the program's other compilation units. Within the blessed set, instance
+  resolution is **ambient** (canonical, program-wide-stable per ADR 0008 — now
+  "program" is a defined boundary). Using or importing an instance from a
+  package **not** blessed at the program level is a **hard error**.
+- **Why this is the honest resolution.** Ambient *resolution* (the soundness
+  property — one canonical dict per `(class, head)`) operates **inside** an
+  **explicitly declared** boundary. Explicit-over-implicit is honored where it
+  matters — at the *boundary* (you declare which packages' instances are in
+  play, the load-bearing implicit channel) — while resolution stays canonical
+  *inside*, preserving ADR 0008's soundness. It is neither Haskell's
+  unrestricted ambient transport nor Scala's per-use import-gating.
+- **Shape (design; spelling deferred to the enclave).** A `program` header plus
+  a `blesses` list of package paths (reusing the MRES-2 dotted addressing):
+  `program App` / `blesses Core.LawfulClasses, Data.Collections.Map, …`. The
+  **blessing check** is a new elaborator gate: when `instance_search` resolves
+  an instance, verify its defining package ∈ the program's blessed set;
+  unblessed ⇒ `UnblessedInstance` error. It composes with (does not replace) the
+  existing orphan + overlap checks.
+- **Relation to the rest.** (a) *Loader/dependency:* declaring a dependency
+  makes a package's `pub` names importable; **blessing is a separate, explicit
+  opt-in** that additionally admits its instances into ambient resolution — the
+  ordinary-name channel stays the normal import system, the load-bearing
+  instance channel is explicit. (b) *Package manager:* the manager
+  resolves/content-addresses the dependency graph; the blessed set is the
+  language-level projection "which of those provide ambient instances", and the
+  manager can generate or validate the list. (c) *Multi-catalog:* blessed
+  packages are addressed by path, so an org- or vendor-catalog package is
+  blessed identically — multi-catalog is accommodated for free.
+
+**Scaling — validated against the code (the operator's decision-blocker).**
+Confirmed, not asserted:
+- **Ambient resolution is O(1).** `instance_search` (`classes.rs:131`) is a
+  single `HashMap` `.get()` on key `(class_name, head_type_name)`
+  (`classes.rs:98`).
+- **The cross-package coherence check is orphan-ban-bounded — linear in
+  instances, NOT quadratic in packages.** The orphan check (§5.3) guarantees the
+  canonical instance for a `(class, head)` pair is co-located with its class- or
+  head-module — "discoverable from those two modules alone." Detecting a
+  competing instance is an **O(1) key-collision test per instance**
+  (`instances.contains_key(&instance_key)`, the overlap check `elab.rs:4266`),
+  so across the blessed set the coherence pass is **O(total instances
+  declared)**, never a pairwise O(packages²) comparison. The blessing check adds
+  one O(1) set-membership test per resolved instance. This directly retires the
+  quadratic-scaling fear.
+- **Provenance diagnostics are a REQUIRED deliverable** (not optional): on
+  resolution, report the blessed package an instance came from; on an
+  `UnblessedInstance` error, name the unblessed package + the instance; on a
+  coherence collision, name both defining packages.
+
+**New sub-forks the program abstraction opens — Open, for a quick operator
+round (surfaced per the operator's instruction):**
+
+##### MRES-4a — Is the `program` file also the entry point? — **OPEN**
+- **Fork.** Does `program App` also designate the runtime entry (`main`), or is
+  entry a separate declaration?
+- **Recommendation.** **Separable but co-locatable.** Blessing is an
+  *elaboration-time instance-boundary* concern; an entry point is a *runtime*
+  concern. Keep them distinct declarations that a program file may both host.
+  Confirm.
+
+##### MRES-4b — Program file required only for multi-package builds? — **OPEN**
+- **Fork.** Must every build have a program file, or only builds spanning ≥2
+  instance-providing packages?
+- **Recommendation.** **Only multi-package.** A single package implicitly
+  **self-blesses** (its own instances are always in play), so single-package /
+  catalog-dev stays zero-ceremony; the program file becomes required exactly
+  when ≥2 packages contribute instances across unit boundaries — which is
+  precisely when "whose instances are blessed" is a real question. Confirm.
+
+##### MRES-4c — Does blessing cascade transitively? — **OPEN**
+- **Fork.** Blessing package `P` — does it bless the instances of `P`'s
+  transitive dependencies, or must each instance-providing package be listed?
+  (Genuinely open; couples to the package manager.)
+- **Options.** (i) **Explicit-only** (no cascade) — every instance-providing
+  package, including transitive, is named; maximally explicit but verbose and
+  brittle. (ii) **Transitive cascade** — blessing `P` blesses its deps'
+  instances; less verbose but re-introduces the implicitness the whole
+  abstraction fights.
+- **Recommendation.** **Explicit-only in the *checked artifact* (i), with
+  tooling-assisted authoring.** The source-of-truth blessed set stays an
+  explicit list (honoring explicit-over-implicit and keeping the check local);
+  the future package manager provides a "bless the transitive closure of my
+  direct deps" convenience that **expands to the explicit list**. Honest
+  resolution: explicit where it is checked, ergonomic where it is written.
+  Flagged as genuinely open — it couples to the package-manager round; confirm
+  the direction.
 
 ### MRES-5 — Fail-closed: is a duplicate top-level name an error?
 - **Fork.** Is a second top-level *definition* of the same single-namespace
@@ -201,21 +320,46 @@ Format per entry: **Fork** · **Options** · **Recommendation** · **Disposition
   redeeming use; fail-closed matches the surface-diagnostic posture and the
   already-fail-closed *open* path. This is the **minimal early slice** — bounded
   and near-shovel-ready.
-- **Disposition.** Decide now; buildable ahead of the loader.
+- **Status: ACCEPTED (a)** — duplicate top-level definition in one unit is a
+  hard error. Round-1 candidate (with MRES-7/8).
 
-### MRES-6 — Fail-closed scope: definition-vs-definition vs shadowing
-- **Fork.** Does fail-closed also forbid a definition **shadowing** an
-  imported/prelude name, or only two definitions of the same name in one unit?
-- **Options.** (a) Error only on **duplicate definition** in one unit; keep
-  §3.3's documented local-over-imported shadowing; (b) also error on
-  shadowing an import/prelude.
-- **Recommendation.** **(a).** §3.3 already makes local-over-imported a
-  *feature* ("never an error"); a blanket shadow-reject contradicts it and (per
-  the guard's own caveat) over-rejects legitimate arity-gated `Eq`/`J`
-  coexistence. Distinguish sharply: **two definitions of one name = error**; **a
-  definition shadowing an import = allowed** (§3.3). Optionally warn on
-  prelude-shadow (see MRES-10).
-- **Disposition.** Decide now (pairs with MRES-5).
+### MRES-6 — Local/import name clash: error + explicit import-exclusion
+- **Fork.** When a top-level **local definition** and an **imported** name
+  collide, is it silent local-wins (my original rec (a)) or an error?
+- **Status: OPERATOR OVERRODE (a) — it is an ERROR.** The operator ruled that
+  implicit shadowing is unacceptable for agents and humans alike: a local
+  definition and an imported definition with the same name is a **clash error**,
+  and Ken must provide **explicit import-specification language to
+  exclude/block** a conflicting name so that any surviving name is intentional.
+  **This reverses §3.3's "Local over imported … never an error."**
+- **Design (mine, to hand the enclave).**
+  - **Error-on-clash rule.** A name bound both by a top-level local definition
+    **and** by an import is an `AmbiguousReference`/clash error **unless** the
+    import explicitly drops (or renames) that name, leaving a single binding.
+    Order-independent; raised whether or not the name is used (a latent clash is
+    still a clash — it is fail-closed, like MRES-5).
+  - **Scope the reversal precisely.** This governs **top-level definition vs
+    import** clashes only. **Ordinary lexical shadowing is untouched** — a
+    function parameter, `let`, or `λ` binder in a narrower scope still shadows
+    an outer/imported name (innermost wins); that is the term language, not a
+    module-name clash. §3.3's "narrower scope, innermost wins" survives for
+    lexical binders; only its *module-level local-over-import* clause reverses.
+  - **Import-exclusion grammar** (the Haskell-`hiding` / Agda-`using`/`hiding`
+    family; extends §3.2's forms — spelling deferred to the enclave):
+    - `import M hiding (foo, Bar)` — all of `M` except `foo`, `Bar` (negative).
+    - `import M (foo, Bar)` — positive selection already exists (§3.2).
+    - Per-name rename `import M (foo as myFoo)` — resolves a clash by renaming
+      (new form; `import M as N` today aliases the *module*, not a name).
+  - **Reconcile §3.3.** The "Local over imported" bullet changes to: *a name
+    bound both locally and by an import is a **clash error**; resolve it by
+    positively selecting, `hiding`, or renaming — silent local-win is not
+    permitted.* (Normative §3.3 edit — the enclave elaborates it; I flag the
+    clause change.)
+- **Round placement.** MRES-6 **couples to the import system** (the clash
+  detection lives in the import-binding path — today `bind_import` silently
+  refuses to touch a `locals` name, `modules.rs:75-77` — and the `hiding`/rename
+  grammar is new). It is therefore **heavier than the minimal MRES-5/7/8 slice**
+  and rides the loader/import round, **not** round one (see Consequences).
 
 ### MRES-7 — class/ctor cross-namespace collision (`class Eq` vs ctor `Eq`)
 - **Fork.** Under Ken's single-flat-namespace (types-are-terms, the D8-③
@@ -231,10 +375,9 @@ Format per entry: **Fork** · **Options** · **Recommendation** · **Disposition
   an *error*; qualified constructors are the *escape* that resolves it. Whether
   to build qualified-constructor disambiguation *now* or let users rename is a
   separable investment.
-- **Disposition.** Decide the rejection now; the qualified-ctor escape is a
-  scope call.
-- **Operator-flag.** Interaction with the prior #8 disambiguation forks —
-  confirm fail-closed as the 4th option (hard error) that complements them.
+- **Status: ACCEPTED (a)** — fail-closed rejects the collision (the 4th option,
+  complementing the #8 disambiguation forks); qualified-ctor escape is a
+  separable scope call. Round-1 candidate (with MRES-5/8).
 
 ### MRES-8 — Fail-closed mechanism: generalize the choke-point guard
 - **Fork.** Where does the duplicate-definition check live?
@@ -247,7 +390,7 @@ Format per entry: **Fork** · **Options** · **Recommendation** · **Disposition
   comment). Extend it to a duplicate-definition check, **preserving** the
   arity-gated-sugar exclusion. Bounded, single-funnel, near-shovel-ready — the
   concrete early-slice mechanism.
-- **Disposition.** Decide now (round-one build shape for MRES-5).
+- **Status: ACCEPTED (a)** — round-1 build mechanism for MRES-5/7.
 
 ### MRES-9 — Re-export / facade (`pub use`)
 - **Fork.** Add an explicit re-export form for public package topologies?
@@ -258,7 +401,8 @@ Format per entry: **Fork** · **Options** · **Recommendation** · **Disposition
   and re-export must be collision-checked with "defined at" vs "re-exported as"
   diagnostics (survey P5). Designing the invariant now keeps the later form
   cheap and prevents API-drift.
-- **Disposition.** Defer the form; record the invariant now.
+- **Status: ACCEPTED** — defer the `pub use` form to a post-loader round; the
+  canonical-identity invariant is recorded now.
 
 ### MRES-10 — Cross-package + prelude shadowing precedence
 - **Fork.** §3.3 specs intra-unit local-over-imported; cross-package + prelude
@@ -267,19 +411,36 @@ Format per entry: **Fork** · **Options** · **Recommendation** · **Disposition
 - **Options.** Precedence **local > selective/qualified import > open import >
   prelude**; user-shadows-prelude either (a) allowed with a warning or
   (b) allowed silently or (c) error.
-- **Recommendation.** Adopt that total precedence (extends §3.3's innermost-wins
-  monotonically); **(a) allow prelude-shadow with a warning** — consistent with
-  local-over-imported being a feature, but the prelude is special enough to
-  surface. Cross-package duplicate *definitions* remain an error (MRES-5); this
-  entry is only about *resolution precedence* when spellings legitimately layer.
-- **Disposition.** Decide the precedence now; warn-vs-silent is a small call.
+- **Status: ACCEPTED (precedence order); warn-and-allow OVERRIDDEN.** The total
+  precedence **local > selective/qualified import > open import > prelude** is
+  accepted for *resolution of legitimately-distinct layered names*. But the
+  operator overrode the "allow prelude-shadow with a warning" softening:
+  **prelude-shadow is governed by the same explicit-not-implicit discipline as
+  MRES-6** — a genuine *clash* (same name, different declaration) against the
+  prelude is an **error**, resolved by explicit exclusion (`hiding` the prelude
+  name), never warn-and-allow. Note the coupling this creates: error-on-prelude-
+  clash is ergonomic **only if the prelude is deliberately small** (the clash
+  surface is bounded) — which reinforces the small-prelude / small-auditable
+  direction. Recorded as a design constraint on the prelude.
 
 ## Consequences
 
-- **Splittability.** MRES-5/6/7/8 (fail-closed) form a **self-contained early
-  round** with no loader dependency — the operator's requested splittable slice.
-  MRES-1/2/3 (loader) are round two; MRES-4 (instances) is decided early but
-  built with the loader; MRES-9 (re-export) is latest.
+- **Splittability / round plan (post-review).**
+  - **Round 1 — fail-closed duplicate-definition slice: MRES-5 + MRES-7 +
+    MRES-8.** "Two top-level definitions of one name in a single unit = error"
+    (incl. the `class Eq`/ctor `Eq` case), implemented by generalizing the
+    `resolve_decl` choke-point guard. **No loader and no import-system
+    dependency** — it acts on one unit's own globals. Cleanly separable and
+    near-shovel-ready, exactly the operator's requested early slice.
+  - **MRES-6 (local/import clash + import-exclusion) is a FAST-FOLLOW, not round
+    1.** It couples to the import system (clash detection in the import-binding
+    path + new `hiding`/rename grammar), heavier than the minimal slice, and it
+    *matters* most once cross-file imports exist — so it rides the loader round
+    (MRES-1/2/3), naturally alongside where imports become load-bearing.
+  - **Round 2 — loader** (MRES-1/2/3, plural-ready roots) **+ MRES-6**.
+  - **The program abstraction (MRES-4)** is built with the loader round (it
+    needs the multi-package boundary); MRES-4a/b/c must be settled first (quick
+    operator round). **MRES-9 (re-export)** is latest.
 - **No kernel/TCB delta.** Every mechanism here is a **surface/elaboration**
   concern — the module system elaborates away to the flat `Σ` with zero
   `trusted_base()` delta (§3 status). Fail-closed is an *elaborator* check;
