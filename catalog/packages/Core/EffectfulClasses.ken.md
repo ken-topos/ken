@@ -222,7 +222,7 @@ lemma option_bind_asc_none (a : Type) (b : Type) (c : Type) (k : a -> Option b) 
 lemma option_bind_asc_some (a : Type) (b : Type) (c : Type) (x : a) (k : a -> Option b) (h : b -> Option c) :
   Equal (Option c) (option_bind b c (option_bind a b (Some a x) k) h) (option_bind a c (Some a x) (compose_kleisli Option option_bind a b c k h)) = Refl
 
-lemma option_bind_asc (a : Type) (b : Type) (c : Type) (m : Option a) (k : a -> Option b) (h : b -> Option c) :
+proof assoc for option_bind (a : Type) (b : Type) (c : Type) (m : Option a) (k : a -> Option b) (h : b -> Option c) :
   Equal (Option c) (option_bind b c (option_bind a b m k) h) (option_bind a c m (compose_kleisli Option option_bind a b c k h)) =
   match m { None ↦ option_bind_asc_none a b c k h ; Some x ↦ option_bind_asc_some a b c x k h }
 
@@ -231,7 +231,7 @@ instance Monad Option {
   bind = option_bind ;
   bind_lid = option_bind_lid ;
   bind_rid = option_bind_rid ;
-  bind_asc = option_bind_asc
+  bind_asc = option_bind::assoc
 }
 ```
 
@@ -285,7 +285,7 @@ lemma concat_map_append_distrib (a : Type) (b : Type) (f : a -> List b) (xs : Li
         (sym (List b) (list_append b (list_append b (f h) (concat_map a b f t)) (concat_map a b f ys)) (list_append b (f h) (list_append b (concat_map a b f t) (concat_map a b f ys))) (list_append::assoc b (f h) (concat_map a b f t) (concat_map a b f ys)))
   }
 
-lemma list_bind_asc (a : Type) (b : Type) (c : Type) (m : List a) (k : a -> List b) (h : b -> List c) :
+proof assoc for list_bind (a : Type) (b : Type) (c : Type) (m : List a) (k : a -> List b) (h : b -> List c) :
   Equal (List c) (list_bind b c (list_bind a b m k) h) (list_bind a c m (compose_kleisli List list_bind a b c k h)) =
   match m {
     Nil ↦ Proved ;
@@ -295,7 +295,7 @@ lemma list_bind_asc (a : Type) (b : Type) (c : Type) (m : List a) (k : a -> List
         (list_append c (concat_map b c h (k h0)) (concat_map b c h (concat_map a b k t)))
         (list_append c (compose_kleisli List list_bind a b c k h h0) (list_bind a c t (compose_kleisli List list_bind a b c k h)))
         (concat_map_append_distrib b c h (k h0) (concat_map a b k t))
-        (cong (List c) (List c) (concat_map b c h (concat_map a b k t)) (list_bind a c t (compose_kleisli List list_bind a b c k h)) (list_append c (concat_map b c h (k h0))) (list_bind_asc a b c t k h))
+        (cong (List c) (List c) (concat_map b c h (concat_map a b k t)) (list_bind a c t (compose_kleisli List list_bind a b c k h)) (list_append c (concat_map b c h (k h0))) (list_bind::assoc a b c t k h))
   }
 ```
 
@@ -359,7 +359,7 @@ lemma list_ap_ich (a : Type) (b : Type) (u : List (a -> b)) (y : a) :
 `ap` reduces to a plain `list_map` (a fact worth its own name,
 `list_ap_pure_left`, since it generalizes both `ap_hom` and the front of
 `ap_cmp`); the rest is three "fusion" facts relating `concat_map`/`list_map`
-composition, plus the already-proved `list_bind_asc` for the one genuinely
+composition, plus the already-proved `list_bind::assoc` for the one genuinely
 new inductive step (concat_map-after-concat_map):
 
 ```ken
@@ -398,7 +398,7 @@ lemma list_map_concat_map_fusion (a : Type) (b : Type) (c : Type) (g : b -> c) (
         (cong (List c) (List c) (list_map b c g (concat_map a b f t)) (concat_map a c (map_after a b c g f) t) (list_append c (list_map b c g (f h))) (list_map_concat_map_fusion a b c g f t))
   }
 
-lemma concat_map_pointwise_eq (a : Type) (b : Type) (f : a -> List b) (g : a -> List b) (pf : (x : a) -> Equal (List b) (f x) (g x)) (xs : List a) :
+proof pointwise_eq for concat_map (a : Type) (b : Type) (f : a -> List b) (g : a -> List b) (pf : (x : a) -> Equal (List b) (f x) (g x)) (xs : List a) :
   Equal (List b) (concat_map a b f xs) (concat_map a b g xs) =
   match xs {
     Nil ↦ Proved ;
@@ -408,7 +408,7 @@ lemma concat_map_pointwise_eq (a : Type) (b : Type) (f : a -> List b) (g : a -> 
         (list_append b (g h) (concat_map a b f t))
         (list_append b (g h) (concat_map a b g t))
         (cong (List b) (List b) (f h) (g h) (λz. list_append b z (concat_map a b f t)) (pf h))
-        (cong (List b) (List b) (concat_map a b f t) (concat_map a b g t) (list_append b (g h)) (concat_map_pointwise_eq a b f g pf t))
+        (cong (List b) (List b) (concat_map a b f t) (concat_map a b g t) (list_append b (g h)) (concat_map::pointwise_eq a b f g pf t))
   }
 ```
 
@@ -416,7 +416,7 @@ Assembling `ap_cmp` itself needs three more named accessors (again, the
 lambda/`.field`-in-declared-type gap — `§6` Finding) and a three-part
 `trans` chain: the FRONT (unfold `pure(compose)` via `list_ap_pure_left`,
 lift through the outer `ap` via `cong`, fuse via `concat_map_map_fusion`),
-the MIDDLE (`list_bind_asc` for the outer `concat_map`-after-`concat_map`,
+the MIDDLE (`list_bind::assoc` for the outer `concat_map`-after-`concat_map`,
 `concat_map_map_fusion` again for the inner one), and the END (an inductive
 reconciliation of the two remaining `concat_map`/`list_map` orderings,
 needing `list_map::fusion` plus
@@ -477,8 +477,8 @@ lemma list_ap_cmp_mid1 (a : Type) (b : Type) (c : Type) (u : List (b -> c)) (v :
     (concat_map (a -> c) c (λh2. list_map a c h2 w) (concat_map (b -> c) (a -> c) (λg1. list_map (a -> b) (a -> c) (compose a b c g1) v) u))
     (concat_map (b -> c) c (λg1. concat_map (a -> c) c (λh2. list_map a c h2 w) (list_map (a -> b) (a -> c) (compose a b c g1) v)) u)
     (concat_map (b -> c) c (λg1. concat_map (a -> b) c (λh1. list_map a c (compose a b c g1 h1) w) v) u)
-    (list_bind_asc (b -> c) (a -> c) c u (λg1. list_map (a -> b) (a -> c) (compose a b c g1) v) (λh2. list_map a c h2 w))
-    (concat_map_pointwise_eq (b -> c) c
+    (list_bind::assoc (b -> c) (a -> c) c u (λg1. list_map (a -> b) (a -> c) (compose a b c g1) v) (λh2. list_map a c h2 w))
+    (concat_map::pointwise_eq (b -> c) c
        (λg1. concat_map (a -> c) c (λh2. list_map a c h2 w) (list_map (a -> b) (a -> c) (compose a b c g1) v))
        (λg1. concat_map (a -> b) c (λh1. list_map a c (compose a b c g1 h1) w) v)
        (λg1. concat_map_map_fusion (a -> b) (a -> c) c (λh2. list_map a c h2 w) (compose a b c g1) v)
@@ -488,7 +488,7 @@ lemma list_ap_cmp_mid2 (a : Type) (b : Type) (c : Type) (u : List (b -> c)) (v :
   Equal (List c)
     (concat_map (b -> c) c (ap_comp_h1 a b c v w) u)
     (list_ap b c u (list_ap a b v w)) =
-  concat_map_pointwise_eq (b -> c) c (ap_comp_h1 a b c v w) (ap_then_bind a b c v w) (pf_probe a b c v w) u
+  concat_map::pointwise_eq (b -> c) c (ap_comp_h1 a b c v w) (ap_then_bind a b c v w) (pf_probe a b c v w) u
 
 lemma list_ap_cmp_mid (a : Type) (b : Type) (c : Type) (u : List (b -> c)) (v : List (a -> b)) (w : List a) :
   Equal (List c)
@@ -541,12 +541,12 @@ instance Monad List {
   bind = list_bind ;
   bind_lid = list_bind_lid ;
   bind_rid = list_bind_rid ;
-  bind_asc = list_bind_asc
+  bind_asc = list_bind::assoc
 }
 ```
 
 (`option_ap_id`/`option_ap_ich`/`option_ap_cmp`/`option_map_coh`/
-`option_bind_rid`/`option_bind_asc` each dispatch, via a thin outer
+`option_bind_rid`/`option_bind::assoc` each dispatch, via a thin outer
 `match`, to per-branch top-level lemmas rather than inlining the proof —
 `§5` explains why.)
 
@@ -591,13 +591,13 @@ computation facts about the concrete instances round out the picture:
 ```ken example
 lemma list_bind_lid_at_zero : Equal (List Nat) (list_bind Nat Nat (list_pure Nat Zero) (list_pure Nat)) (list_pure Nat Zero) = list_bind_lid Nat Nat Zero (list_pure Nat)
 
-lemma option_ap_none_short_circuits : Equal (Option Nat) (option_ap Nat Nat (None (Nat -> Nat)) (Some Nat Zero)) (None Nat) = Proved
+proof none_short_circuits for option_ap : Equal (Option Nat) (option_ap Nat Nat (None (Nat -> Nat)) (Some Nat Zero)) (None Nat) = Proved
 ```
 
 `list_bind_lid_at_zero` is `bind_lid` (already proved generically in `§2.3`)
 instantiated at a concrete `x`/`k` — a direct application, not a fresh
 proof; every catalog law is reusable this way at any concrete instance.
-`option_ap_none_short_circuits` closes with `Proved`: `mf = None` collapses
+`option_ap::none_short_circuits` closes with `Proved`: `mf = None` collapses
 `option_ap`'s match immediately to the literal `None` constructor on both
 sides.
 
@@ -689,7 +689,7 @@ across this entry's `Option` and `List` proofs.
 5. **Proof families.** `Option` — finite case-split, no induction.
    `List` — structural induction throughout; `ap_cmp` is the deepest
    (induction inside `pf_probe`, composed with three non-recursive fusion
-   lemmas and the already-proved `list_bind_asc`).
+   lemmas and the already-proved `list_bind::assoc`).
 6. **Consumers.** Effectful programs can use these classes to express
    independent sequencing, dependent sequencing, and traversal.
 7. **Validation evidence.** The catalog checks the zero-`Axiom` trust
@@ -798,10 +798,10 @@ fn identity_map (a : Type) (b : Type) (f : a -> b) (x : Identity a) : Identity b
 fn identity_ap (a : Type) (b : Type) (mf : Identity (a -> b)) (mx : Identity a) : Identity b =
   match mf { MkIdentity f ↦ match mx { MkIdentity x ↦ MkIdentity b (f x) } }
 
-lemma identity_id_law (a : Type) (x : Identity a) : Equal (Identity a) (identity_map a a (idf a) x) x =
+proof id for identity_map (a : Type) (x : Identity a) : Equal (Identity a) (identity_map a a (idf a) x) x =
   match x { MkIdentity v ↦ Refl }
 
-lemma identity_fusion_law (a : Type) (b : Type) (c : Type) (g : b -> c) (h : a -> b) (x : Identity a) :
+proof fusion for identity_map (a : Type) (b : Type) (c : Type) (g : b -> c) (h : a -> b) (x : Identity a) :
   Equal (Identity c) (identity_map a c (comp a b c g h) x) (identity_map b c g (identity_map a b h x)) =
   match x { MkIdentity v ↦ Refl }
 
@@ -828,8 +828,8 @@ lemma identity_map_coh (a : Type) (b : Type) (g : a -> b) (x : Identity a) :
 
 instance Functor Identity {
   map = identity_map ;
-  id_law = identity_id_law ;
-  fusion_law = identity_fusion_law
+  id_law = identity_map::id ;
+  fusion_law = identity_map::fusion
 }
 
 instance Applicative Identity {
@@ -1210,7 +1210,7 @@ lemma compose_map_id_eq1 (g : Type -> Type) (h : Type -> Type) (apg : Applicativ
     (compose_map_ctx g h apg a a x)
     (aph.functor.id_law a)
 
-lemma compose_map_id_law (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (x : Compose g h a) :
+proof id for compose_map (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (x : Compose g h a) :
   Equal (Compose g h a) (compose_map g h apg aph a a (idf a) x) x =
   trans (Compose g h a)
     (compose_map g h apg aph a a (idf a) x)
@@ -1235,7 +1235,7 @@ lemma compose_map_fusion_eq1 (g : Type -> Type) (h : Type -> Type) (apg : Applic
     (compose_map_ctx g h apg a c x)
     (aph.functor.fusion_law a b c p q)
 
-lemma compose_map_fusion_law (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (p : b -> c) (q : a -> b) (x : Compose g h a) :
+proof fusion for compose_map (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (p : b -> c) (q : a -> b) (x : Compose g h a) :
   Equal (Compose g h c)
     (compose_map g h apg aph a c (comp a b c p q) x)
     (compose_map g h apg aph b c p (compose_map g h apg aph a b q x)) =
@@ -1247,7 +1247,7 @@ lemma compose_map_fusion_law (g : Type -> Type) (h : Type -> Type) (apg : Applic
     (apg.functor.fusion_law (h a) (h b) (h c) (aph.functor.map b c p) (aph.functor.map a b q) x)
 ```
 
-`compose_map`/`compose_map_id_law`/`compose_map_fusion_law` are
+`compose_map`/`compose_map::id`/`compose_map::fusion` are
 `Functor`'s three fields for `Compose g h` (a FIXED `g`/`h`) — no
 `instance Functor (Compose g h)` is declared: probed directly
 (`instance Box (Compose g h) { ... }` against a dict-free dummy class),

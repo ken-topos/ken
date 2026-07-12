@@ -119,7 +119,7 @@ fn ac8_noncartesian_applicative_cannot_wire_into_monad() {
     // A deliberately-wrong "zipWith"-shaped ap for List (pairs elements
     // positionally instead of the cartesian product) -- structurally
     // valid as a FUNCTION, but not what `Monad List`'s `bind`-coherence
-    // requires; the discriminator is that `list_bind_asc` (proved against
+    // requires; the discriminator is that `list_bind::assoc` (proved against
     // the REAL cartesian `list_ap`) does not typecheck when the instance
     // is reassembled with this swapped-in `ap`, because it is a
     // different, unrelated function -- attempting to use it as evidence
