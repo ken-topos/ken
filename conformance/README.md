@@ -195,6 +195,11 @@ claim with no conformance case is a claim no one can rely on
   the discriminating negative (`type` no longer parses as a declaration),
   `type` reserved as a free identifier too, and the should-have value-position
   steering diagnostic.
+- `surface/declarations/seed-declaration-collisions.md` — N1 fail-closed
+  top-level declaration collisions (ADR 0014 MRES-5/7/8): an ordinary duplicate
+  and a class/constructor same-name collision hard-reject through one specific
+  diagnostic, paired with the live arity-gated `Eq`/`J` sugar coexistence
+  control. The reject arms are explicitly red until N1 Lane B.
 - `surface/modules/seed-modules.md` — ES3 minimal modules/imports (`33 §3-4`,
   the bounded L4 slice): `module`/`import`/`pub`/abstract-export **elaborate
   away** to the kernel's single flat append-only `Σ` (`11 §4`) — **zero new
