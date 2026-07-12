@@ -7,9 +7,8 @@
 -- `mkPrefixer p` returns a `String -> String` closure that captures `p` and
 -- prepends it to its argument. Three closures (capturing "Hello, "/"Bye, "/
 -- "Hey, ") are built into a list of functions -- functions as first-class
--- list elements -- and applied to a common name via a local `map` (not in
--- the landed `catalog/packages/collections` floor; a one-off, same precedent as
--- `crates/ken-elaborator/tests/l3a_acceptance.rs`'s own local `map`).
+-- list elements -- and applied to a common name via the `map` supplied by
+-- the catalog Collections source that the Rosetta runner prepends.
 --
 -- GAP-arrow-type-as-type-arg (non-blocking, worked around): `A -> B`
 -- (`Expr::EPi`/arrow) has no term-level expression form in the parser --
@@ -31,14 +30,6 @@
 -- Output steers around the tracked `natToDecimal` exponential-blowup gap
 -- (VAL2 finding): the oracle is a PASS/FAIL `String`, never a printed
 -- `Nat`/`Int`.
-
--- `map` -- a functor over `List`, structural recursion on the `Cons` tail
--- (SCT sound zone, same shape as the landed floor combinators).
-fn map (a b : Type) (f : a → b) (xs : List a) : List b =
-  match xs {
-    Nil ↦ Nil b ;
-    Cons h t ↦ Cons b (f h) (map a b f t)
-  }
 
 -- Boxes a `String -> String` so it can be a `List` element (GAP-arrow-
 -- type-as-type-arg workaround, see above).
