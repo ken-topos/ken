@@ -16,17 +16,28 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 > ### ⏭ 2026-07-12 ~21:xx — LIVE STATE (read this first) · `origin/main @ a3690cb8`
 >
-> **★ RESUMING the two parallel releases (operator "resume").**
-> - **B1 → LANGUAGE (in flight):** Language ring Handoff-Gate compaction LAUNCHED
->   (`handoff-gate-compact.sh language-leader/implementer/qa`, bg 300s). Branches
->   were clean (0 ahead of main). **NEXT: verify drops (WIDE capture-pane) → post
->   B1 kickoff to language-leader** (frame `docs/program/wp/kenfmt-b1-lossless-
->   layer.md`, on main). Architect-terminal reviews.
-> - **N3 → ENCLAVE (in flight):** frame `docs/program/wp/n3-import-exclusion.md`
->   AUTHORED (grounded on ADR 0014 MRES-6 lines ~574–623 + §33 §3.2/§3.3;
->   two-lane: A=enclave spec+golden, B=Language build; cites build site
->   `bind_import` modules.rs:75-77). **NEXT: publish frame doc-only → Handoff-Gate
->   enclave (spec-leader/spec-author/CV) → kick N3 Lane A → Lane B.**
+> **★ TWO PARALLEL RELEASES (operator "resume").**
+> - **B1 → LANGUAGE — RELEASED** (`evt_2nsfqnte48kht`). Language ring
+>   Handoff-Gate DONE (all 3 compacted @ a3690cb8, WIDE-verified), B1 kickoff
+>   posted + language-leader roused. Frame `docs/program/wp/kenfmt-b1-lossless-
+>   layer.md`; architecture Accepted (AST+trivia, 4-item contract);
+>   Architect-terminal reviews; QA runs literal locked CI. **NEXT: await
+>   candidate SHA → honesty-gate + CI-polled publish (code, not doc-only).**
+> - **N3 Lane A → ENCLAVE — GATED, PUBLISHING.** Candidate `8204e727` (linear
+>   `ba514aac → 27e56a79 spec → e31f3259 conf → 8204e727 prelude-carrier fix`);
+>   CV combined APPROVE + **Architect-terminal APPROVE** (merge-Decision vote,
+>   `evt_7sx5cqh8511c9`); FINAL handoff `evt_18mjjg50qvpc2`. Honesty-gated clean
+>   (4 files: §32, §33, conf README + seed-modules; +164/−52; diff --check clean;
+>   zero TCB delta). Doc-only publish in progress. **NEXT: confirm merge → drive
+>   Lane A retros → release N3 Lane B (Language build at `bind_import`
+>   modules.rs:75-77) after B1 or alongside.**
+>   - **Architect follow-on (NON-BLOCKING, captured):** §3.3 now specs
+>     local×import + local×prelude clashes but is SILENT on **import×import** and
+>     **import×prelude** (two unqualified imports binding one name). Outside
+>     MRES-6 charter, behavior untouched by N3 → not a defect. Architect will
+>     extend MRES-6 in ADR 0014 to the general rule (>1 of {local, selective/
+>     renamed import, prelude} binds same unqualified name → `AmbiguousReference`)
+>     as a **small follow-on round**, not an N3 re-spin. Task #39.
 >
 > **★ ACTIVE = kenfmt work program (operator-driven).** Operator wants Ken's
 > gofmt/black. Designed from `local/kenfmt-readability-review.md` (promoted →
