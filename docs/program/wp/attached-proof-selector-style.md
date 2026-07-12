@@ -1,16 +1,35 @@
 # WP #28: attached-proof reference style — `::` → `(proof name for subject)`
 
 **Owner:** Foundation (catalog authoring). **Size:** S/M — judgment pass over
-catalog source. **Risk:** low — pure surface; both spellings already elaborate
-to the identical proof term (spec §8.2). **Base:** `origin/main @ 5e1ab924`
-(fetch + re-verify at pickup). **Process (operator ruling): LIGHT — no spec
-enclave.** Review = Architect-terminal (surface + fidelity + the
+catalog source. **Risk:** low — pure surface; all spellings elaborate to the
+identical proof term (spec §8.2 / §32-§33). **Base:** `origin/main @ 69570b26`
+(post-#29; fetch + re-verify at pickup). **Process (operator ruling): LIGHT — no
+spec enclave.** Review = Architect-terminal (surface + fidelity + the
 recursive-position judgment call). Steward honesty-gates + merges.
+
+> ### ↻ DISPOSITION (2026-07-12): BARE FORM — the #29 parser extension has landed
+>
+> The operator ruled **Option B**: extend the parser to admit `proof name for
+> subject` as a **bare expression atom**, then do this rewrite in that clean bare
+> form (**not** the mandatory-parens `(proof refl for leq_nat)` the first pass
+> produced). **WP #29 landed that atom** (spec `proof_ref` @ `f64c788b`; parser
+> @ `69570b26`) — so the bare form now parses and elaborates. This WP re-runs on
+> the bare form.
+> - **The parked candidate `29094048` (168 sites, all parenthesized) is
+>   SUPERSEDED but its inventory is the starting point.** Re-run = **strip the
+>   grouping parens** off the simple/bare occurrences → `proof name for subject`;
+>   **keep** parens only where they aid readability of an **applied** selector in
+>   a dense expression (now *optional grouping*, not required — the atom makes
+>   `proof p for s a b` parse as `((proof p for s) a) b`).
+> - **The operator's example instance below is the north star**: bare for the
+>   simple fields (`refl = proof refl for leq_nat`), grouped only for the dense
+>   applied `total`. Match that texture.
 
 ## Objective
 
 Operator style ruling (2026-07-12): in catalog **code**, attached-proof
-references should use the **readable selector form `(proof name for subject)`**,
+references should use the **readable bare selector form `proof name for
+subject`** (grouping parens optional, kept only for dense applied readability),
 **not** the desugared double-colon path `subject::name`. The `::` form is valid
 surface but "really a way to communicate a desugared identifier to the kernel" —
 it should not be the authored catalog style.
@@ -29,13 +48,15 @@ instance Ord Nat {
 
 ## Fixed inputs (settled — do NOT reopen)
 
-- **Both forms are already valid surface and resolve to the same term.** Spec
-  §8.2 (`spec/30-surface/33-declarations.md:541-545`): *"The canonical path is
-  `subject::proof_name` … The selector syntax `(proof appends for list_append)`
-  resolves to that same proof term."* Parser: `Expr::EAttachedProofRef`. **No
-  elaborator/parser/spec change — this is a catalog source rewrite only.**
-- **Direction:** `subject::name` → `(proof name for subject)` in authored
-  catalog **code**. Do not touch declaration heads (already `proof … for …`),
+- **All three spellings resolve to the identical term.** After #29, `proof name
+  for subject` is a **bare expression atom** (spec §32-grammar `proof_ref`,
+  §33-declarations), equal-AST to the grouped `(proof name for subject)` and to
+  the `subject::name` path — all desugar to the same `Expr::EAttachedProofRef` /
+  `subject::name` global. **No elaborator/parser/spec change — this is a catalog
+  source rewrite only** (the parser/spec work was #29, now merged).
+- **Direction:** `subject::name` → **bare** `proof name for subject` in authored
+  catalog **code** (grouping parens optional — keep only for dense applied
+  readability). Do not touch declaration heads (already `proof … for …`),
   `fn`/`const`, glyphs, or the Ω-partition.
 
 ## Scope — CODE references only; the `::`-documenting prose STAYS
@@ -45,12 +66,15 @@ Classify and convert **only code**:
 
 - **IN scope (convert):**
   - **Instance field values** — `refl = leq_nat::refl` →
-    `refl = proof refl for leq_nat`. (The operator's explicit locus.)
-  - **Applied selectors in term position** — parenthesize:
-    `bool_or::eq_true_of_or (leq_nat x y) …` →
-    `(proof eq_true_of_or for bool_or) (leq_nat x y) …`.
-  - **Bare references** (whole RHS / argument position) — no parens needed:
+    `refl = proof refl for leq_nat` (bare). (The operator's explicit locus.)
+  - **Bare references** (whole RHS / argument position) — bare, no parens:
     `= leq_nat::refl` → `= proof refl for leq_nat`.
+  - **Applied selectors in term position** — the atom binds tightest, so parens
+    are **optional grouping**: `bool_or::eq_true_of_or (leq_nat x y) …` may be
+    written bare `proof eq_true_of_or for bool_or (leq_nat x y) …` **or** grouped
+    `(proof eq_true_of_or for bool_or) (leq_nat x y) …`. **Keep the grouping
+    parens where they aid readability in a dense applied expression** (the
+    operator's `total` field is the model); drop them for simple cases.
 - **ARCHITECT JUDGMENT (verify, then convert-or-keep):**
   - **Proof-body sibling/self references** — e.g. inside `leq_nat::refl`'s body,
     `leq_nat::refl x2` (recursive) or `leq_nat::trans` (sibling). These are code
@@ -67,25 +91,28 @@ Classify and convert **only code**:
     docs must keep showing `::` to teach that the path exists.
   - `spec/`, `conformance/`, `crates/**` source, prelude, kernel — untouched.
 
-## Parenthesization rule (load-bearing)
+## Application-boundary rule (post-#29 — the grammar is now the atom)
 
-`proof p for s` used in **application position greedily absorbs the arguments
-into the subject** unless parenthesized: `proof P for s a b` parses as
-`proof P for (s a b)`, not `(proof P for s) a b`. So **every applied selector
-must be wrapped**: `(proof P for s) a b …`. Bare (non-applied) occurrences need
-no parens. The implementer verifies the exact parse; green elaboration is the
-proof.
+`proof p for s` is a **primary atom that binds tightest**; the subject is a
+single `path`, so **application binds OUTSIDE the selector**: `proof p for s a b`
+parses as `((proof p for s) a) b` (NOT the retired "greedy absorb" reading
+`proof p for (s a b)`). So an applied selector is **correct bare** — the parens
+are optional grouping, kept only for readability. Green elaboration + the #29
+crate tests (which pin exactly this nesting) are the proof. The implementer
+confirms the parse per site.
 
 ## Acceptance criteria (testable)
 
-1. Every in-scope code `subject::name` attached-proof reference is the selector
-   form; applied ones parenthesized; `::`-documenting prose unchanged.
+1. Every in-scope code `subject::name` attached-proof reference is the **bare**
+   selector form `proof name for subject` (grouping parens only where they aid
+   dense-applied readability, per the `total` model); `::`-documenting prose
+   unchanged.
 2. **Semantics-preserving:** each converted reference elaborates to the same
    proof term (same instance/proof checks); no proposition/proof-term/`fn`/
    `const`/glyph change. All touched packages elaborate green.
 3. **Structural completeness proof:** full `scripts/ken-cargo test --workspace`
-   green + catalog acceptance nets green (a mis-parenthesized or mis-resolved
-   selector fails to elaborate).
+   green + catalog acceptance nets green (a mis-resolved selector fails to
+   elaborate).
 4. **Whole-harness check:** if any exact-source assertion pins a converted
    reference's `::` spelling (as CAT5 pinned a glyph in #26), migrate the coupled
    assertion in the same branch (Steward-authorized, assertion-literal only) and
@@ -96,8 +123,8 @@ proof.
 
 ## Do-not-reopen guardrails
 
-- Both forms are already valid (spec §8.2) — this is style, not a feature. Don't
-  touch the parser/spec/elaborator.
+- All spellings are already valid (spec §32-§33, #29 merged) — this is style,
+  not a feature. Don't touch the parser/spec/elaborator.
 - Don't convert `::`-documenting prose; don't touch declaration heads, glyphs,
   `fn`/`const`, or the Ω-partition.
 - Report (don't force) any proof-body self-reference that won't take the selector
