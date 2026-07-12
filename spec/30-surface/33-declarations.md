@@ -592,6 +592,11 @@ The following rules are normative forward-compatibility requirements, but are
   source never substitutes the parent's boundary for that declared boundary.
   The one `admits` relation targets the package regardless of whether its
   delivery is source or compiled; authors do not select a delivery form.
+- A parent trusts an admitted compiled package's manifest for that package's
+  internally checked commitments and re-checks only cross-boundary coherence.
+  The kernel still re-checks every instance dictionary value, so there is no
+  new TCB. Signed or attested manifest validation belongs to the package-manager
+  and supply-chain round.
 - When public re-export lands after MRES-9, re-exporting a name also carries the
   instance surface that the re-exported name's public API commits to. Those
   carried instances enter the admitting consumer's direct-use set. A transitive
