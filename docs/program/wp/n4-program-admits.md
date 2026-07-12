@@ -37,8 +37,15 @@ ship **no** manifest/registry/lockfile code.
   instance manifest** (MRES-4c point 4 — package-manager round); **source==
   compiled** equivalence as it pertains to compiled artifacts; **MRES-4d**
   re-export-carries-instance-surface (**cannot arise until MRES-9/N5 `pub use`
-  lands** — record the rule, no build); content-addressed manifest/lockfile/
-  registry; **test-scoped admission (PKG-4 deferred)**.
+  lands** — record the rule, no build); **PKG-1 explicit package member-module
+  list** — record the *semantics* normatively (a package file explicitly
+  enumerates its members; identity/root stay path-inferred, MRES-4e/2b) but
+  **defer the concrete member-list grammar/spelling** to the package-manager
+  round (do NOT mint a member-list keyword; the buildable-now admission gate runs
+  over the existing **source graph / path-implicit membership** — N2's MRES-3a
+  bijection — which PKG-1's explicit list later refines); content-addressed
+  manifest/lockfile/registry; **test-scoped admission (PKG-4 deferred)**.
+  (Steward ruling `evt_vyqbdvaejp00` — defer spelling, not concept.)
 
 ## Fixed inputs — SETTLED (operator 2026-07-12), do NOT reopen
 
