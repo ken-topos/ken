@@ -23,12 +23,18 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > subject-owned law cited elsewhere is NOT demoted). Recursion + attachment
 > already compose (Architect probed `6ec4577e`) — **no elaborator work**. Ruling
 > `evt_5ae24zwdjratp` + precision `evt_1h6ez7mx5024t`.
-> - **Track 1 — Foundation WP `proof-attachment-membership-pilot`** (frame
->   authored, Architect-terminal like the pedagogic prototype): update
->   `07-catalog-style-guide.md` §6/§9 + rework **NatArith + OrdNat** (subject-owned
->   laws → `proof name for S`/`S::name`; `lemma` only where ownerless). Scoped to
->   the pilot pair, not a fleet-wide sweep. Fidelity = rename+keyword swap only.
->   **NEXT: publish frame → Handoff-Gate compact Foundation → kick.**
+> - **Track 1 — Foundation WP `proof-attachment-membership-pilot` — MERGED @
+>   `900c135f`** (PR #536, CI green). Style-guide §6/§9 states membership-not-role
+>   + single-owning-subject procedure + `S::name`; NatArith/OrdNat subject-owned
+>   laws → `proof name for S` (`add::comm`, `leq_nat::refl`, `bool_or::eq_true_of_or`,
+>   …); interaction laws (`mul_add_distrib_*`, `ord_nat_total`) stayed `lemma`;
+>   `total_leq_nat` stayed `fn`. Coupled test-assertion migration (4th file,
+>   names-only) per scope-amendment `evt_4gg2d89k32kde`. Architect-terminal
+>   `dec_1wjhfngfpy4tn` APPROVE; QA 24/24; honesty gate clean @ `c7ab5e5f` (zero
+>   trusted-base growth, fidelity = rename+swap only). **RETROS pending** — chase
+>   Foundation ring. **Forward note (catalog-wide pass, operator to decide):**
+>   whether pedagogical-showcase decls (`sub::self_is_zero_wrong`) attach vs stay
+>   `lemma` — Architect leans "non-API showcases stay `lemma`."
 > - **Track 2 — Spec enclave** (companion): normative spec convention clause
 >   (spec-author) + `tt`→`Proved` errata (`spec/` 70 + `conformance/` 143, CV).
 >   Frame `tt-proved-errata.md` on main; enclave holding for kickoff.
