@@ -14,7 +14,30 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### IN FLIGHT — 2 WPs kicked in parallel (operator away ~until 08:00–09:00 UTC) — 2026-07-12
+> ### ✅ BOTH AWAY-WINDOW WPs CLOSED — FLEET QUIESCENT — 2026-07-12 ~07:26 UTC
+>
+> Both operator-approved parallel WPs driven to full close during the away
+> window (operator back ~08:00–09:00 UTC):
+> - **#22 `tt`→`Proved` errata** — CLOSED @ `origin/main 7f3bb85f` (PR #544,
+>   doc-only). Retros in (spec-author `evt_67qzq3tytw3dc` + CV `evt_76z0vg2b3an49`
+>   + coordination `evt_7n2k1ectkjv7r`).
+> - **#25 catalog membership-convention rollout — PROGRAM COMPLETE** — PR-A 74
+>   (`6de39e0a`) + PR-B 8 (`8130f237`) + PR-C 17 (`6234888a`, PR #546). All three
+>   Architect-terminal-reviewed on the whole-proposition single-applied-owner
+>   criterion; selectivity gradient 74→8→17 tracked real ownership structure.
+>   Foundation retros in (impl `evt_645bfma1jd75w` + QA `evt_62kdf1pdxjbb3` +
+>   coord `evt_1b0s6e9xzp2yb`). Carry: exported-name migration ledger (ownership
+>   rationale + old→canonical manifest + reverse-normalization + whole-workspace
+>   consumer sweep) as a required acceptance artifact.
+>
+> **Fleet quiescent → watchdog cron CANCELLED** (standing operator rule
+> [[cancel-watchdog-cron-when-fleet-quiescent]]). **NEXT (ready, pending operator
+> go on return):** #26 glyph-consistency housecleaning (operator-approved: light,
+> no retro/enclave — now unblocked since rollout merged; open axis = canonical
+> glyph direction). PARKED for operator return: #8 namespacing,
+> `ken-formatter-canonical`. #27 List/Int (queued, not urgent).
+>
+> ### [historical] IN FLIGHT — 2 WPs kicked in parallel — 2026-07-12
 >
 > origin/main @ `27e62fd1`. Match-arm glyph migration ✅ COMPLETE+CLOSED. Both
 > operator-approved; enclave + Foundation Handoff-Gate-compacted (verified) + kicked:
@@ -41,10 +64,14 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >   cat4_bool_or/bool_and/leq_nat pure algebraic+order laws; 321 interaction laws
 >   stay lemma; QA APPROVE + Architect-terminal APPROVE `evt_6wk9e45h3ykfw`,
 >   reverse-norm byte-identical, fn 81/const 1/Ω 4 unchanged; 2 files Map.ken.md
->   + map_build_acceptance.rs, 53+/53−). Honesty gate CLEAN (ancestry/scope/
->   trust-grep/WP-token/decl-head all pass). **⏭ RESUME ACTION: publish via CI
->   (touches test file → NOT doc-only) → on merge, rollout WP #25 CLOSES on the
->   Foundation ring's retros → then #26 glyph housecleaning.**
+>   + map_build_acceptance.rs, 53+/53−). Honesty gate CLEAN. **PR-C MERGED @
+>   `origin/main 6234888a`** (PR #546, CI passed). **★ MEMBERSHIP ROLLOUT
+>   PROGRAM COMPLETE** — PR-A 74 (`6de39e0a`) + PR-B 8 (`8130f237`) + PR-C 17
+>   (`6234888a`), all Architect-terminal-reviewed on the whole-proposition
+>   single-applied-owner criterion. **⏭ RESUME ACTION: Foundation ring retros
+>   requested → close WP #25. Then #26 glyph housecleaning is next up (light, no
+>   retro/enclave). Also awaiting spec-leader "retros in" to close #22
+>   tt→Proved.**
 >   Frame `docs/program/wp/catalog-membership-rollout.md`. **PR-A (Tier A):**
 >   EmptyDec/Transport/Sums/LawfulFunctors/Parsing/Collections + finish
 >   LawfulClasses → then PR-B EffectfulClasses → PR-C Map. Judgment pass
