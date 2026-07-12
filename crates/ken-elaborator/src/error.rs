@@ -38,6 +38,10 @@ pub enum ElabError {
     /// A second top-level definition of a name already defined in the same
     /// compilation unit (`33 §3`, ADR 0014 MRES-5/MRES-7).
     DuplicateDefinition { name: String, span: Span },
+    /// A cross-file import revisited a unit on the active import stack
+    /// (`33 §3.2`, ADR 0014 MRES-2). `cycle` is the closed path in import-edge
+    /// order, rooted at the entry unit (for example, `A`, `B`, `A`).
+    ImportCycle { cycle: Vec<String>, span: Span },
     /// The elaborator surfaced a kernel type-mismatch (`39 §5.6`).
     TypeMismatch { span: Span, reason: String },
     /// A λ was checked against a non-Π type — V0 structural rejection (`39 §5.6`).
@@ -93,6 +97,13 @@ impl fmt::Display for ElabError {
                 f,
                 "duplicate definition '{}' at {}-{}: name already defined in this compilation unit",
                 name, span.start, span.end,
+            ),
+            ElabError::ImportCycle { cycle, span } => write!(
+                f,
+                "import cycle at {}-{}: {}",
+                span.start,
+                span.end,
+                cycle.join(" → "),
             ),
             ElabError::TypeMismatch { span, reason } => {
                 write!(f, "type mismatch at {}-{}: {}", span.start, span.end, reason)

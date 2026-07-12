@@ -39,6 +39,7 @@ pub mod resolve;
 pub mod temporal;
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 use ken_kernel::{
     check as kernel_check, declare_postulate, Context, GlobalEnv, GlobalId, Term,
@@ -250,6 +251,25 @@ impl ElabEnv {
         let decls = parser::parse_decls(src)?;
         let results = modules::expand_and_elaborate(self, &decls)?;
         Ok(results.into_iter().map(|r| r.def_id).collect())
+    }
+
+    /// Elaborate the in-repo compilation unit named by `entry` under the
+    /// plural catalog-root input (`33 §3.2`, ADR 0014 MRES-1/2/3a).
+    ///
+    /// N2 populates exactly one root. The plural slice is the stable API shape;
+    /// multi-root precedence remains deliberately deferred.
+    pub fn elaborate_module_from_roots(
+        &mut self,
+        roots: &[PathBuf],
+        entry: &str,
+    ) -> Result<Vec<GlobalId>, ElabError> {
+        modules::elaborate_module_from_roots(self, roots, entry)
+    }
+
+    /// Number of successfully loaded cross-file units in this elaboration run.
+    /// Exposed so acceptance tests and drivers can verify at-most-once loading.
+    pub fn loaded_module_count(&self) -> usize {
+        self.module_state.loaded_unit_count()
     }
 
     /// Elaborate a single `.ken.md` source artifact.
