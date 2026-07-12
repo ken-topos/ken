@@ -22,10 +22,13 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > naming note).
 >
 > **In flight (3):**
-> 1. **ADR 0015 spec lane — KICKED** (`evt_6tavqrkq6frwn`), enclave compacted +
->    roused, re-orienting. Single lane (spec+conf, no build); frame
->    `docs/program/wp/adr0015-remove-use-open.md`. Awaiting their SHA → honesty-gate
->    → publish doc-only.
+> 1. **✅ ADR 0015 spec lane — Architect-APPROVED + PUBLISHING.** Candidate
+>    `4f9ac778` (§33 + conformance seed, +29/−54); **removal-precondition sweep
+>    EMPTY**; enclave gates + Architect-terminal APPROVE. Honesty gate PASSED
+>    (spec/+conformance only; byte-identical; no trust/WP-token). Cherry-picked
+>    onto current main (86e0ef34; MRES-6 fold moved main, disjoint ADR file →
+>    trees byte-identical). Publishing doc-only. `use M` gone from the surface;
+>    `KwUse`/parser retirement = explicitly-deferred build fast-follow.
 > 2. **✅ Prelude carve-out RULED — operator chose (A)** (`evt_61ymxdwpehdr2`).
 >    Prelude names = primitive floor, **not shadowable**; local-vs-prelude clash =
 >    clash error resolved by **renaming your own def**; **no opt-out grammar** →
