@@ -188,7 +188,8 @@ claim with no conformance case is a claim no one can rely on
   AC4 Type/Omega sort discriminant. Pins the `proc traverse` unblock for CAT-2
   D3 while keeping zero kernel/Cargo.lock/trusted-base delta.
 - `surface/declarations/seed-named-proof-claims.md` — `prop` families,
-  `lemma` theorems, attached `proof` canonicalization, and bare-name rejection.
+  `lemma` theorems, attached `proof` canonicalization, explicit bare/grouped/
+  canonical selector identity, and the bare-name-rejects/selector-resolves pair.
 - `surface/declarations/seed-def-refinement.md` — SURF-def-refinement: the
   `type` → `def` declaration-keyword rename (refinement + alias RHS forms),
   the discriminating negative (`type` no longer parses as a declaration),
