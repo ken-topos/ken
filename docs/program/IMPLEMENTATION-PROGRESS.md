@@ -14,6 +14,25 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
+> ### proof-attachment membership convention — ADOPTED (Architect + operator) — 2026-07-12
+>
+> **Design ruled + operator-concurred.** `proof name for S` encodes **MEMBERSHIP**
+> (a named theorem in S's public theory, checked by occurs-applied-in-φ, bound
+> `S::name`), **not role**; `lemma` = no single owning subject. Tie-breaker: name
+> exactly one owning subject → attach, else `lemma`; reuse is orthogonal (a
+> subject-owned law cited elsewhere is NOT demoted). Recursion + attachment
+> already compose (Architect probed `6ec4577e`) — **no elaborator work**. Ruling
+> `evt_5ae24zwdjratp` + precision `evt_1h6ez7mx5024t`.
+> - **Track 1 — Foundation WP `proof-attachment-membership-pilot`** (frame
+>   authored, Architect-terminal like the pedagogic prototype): update
+>   `07-catalog-style-guide.md` §6/§9 + rework **NatArith + OrdNat** (subject-owned
+>   laws → `proof name for S`/`S::name`; `lemma` only where ownerless). Scoped to
+>   the pilot pair, not a fleet-wide sweep. Fidelity = rename+keyword swap only.
+>   **NEXT: publish frame → Handoff-Gate compact Foundation → kick.**
+> - **Track 2 — Spec enclave** (companion): normative spec convention clause
+>   (spec-author) + `tt`→`Proved` errata (`spec/` 70 + `conformance/` 143, CV).
+>   Frame `tt-proved-errata.md` on main; enclave holding for kickoff.
+>
 > ### proof-vocab-completion — MERGED @ `97c31b3f` (PR #531, CI green) — 2026-07-12
 >
 > **MERGED `origin/main @ 97c31b3f`** (PR #531, CI passed): `fn`⊥Ω partition gate +
