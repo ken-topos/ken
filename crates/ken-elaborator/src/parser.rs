@@ -1960,6 +1960,18 @@ impl Parser {
                 let end = arg.span().end;
                 Ok(Expr::EOld(Box::new(arg), Span::new(start, end)))
             }
+            Token::KwProof => {
+                self.advance();
+                let (proof_name, _) = self.expect_ident()?;
+                self.expect_contextual_ident("for")?;
+                let subject = self.parse_path()?;
+                let end = self.tokens[self.pos - 1].1.end;
+                Ok(Expr::EAttachedProofRef {
+                    subject,
+                    proof_name,
+                    span: Span::new(start, end),
+                })
+            }
             Token::LParen => {
                 self.advance();
                 if matches!(self.peek(), Token::KwProof) {

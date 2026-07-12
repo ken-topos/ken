@@ -152,7 +152,32 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > tokens, `diff --check` clean, descends from main; content faithfully transcribes
 > the locked grammar (`proof_ref` atom, app-boundary, identical EAttachedProofRef
 > desugar, decl-vs-expr note). **Architect fidelity gate PINGED
-> (`evt_7yd7ddpv9kp73`) — publish HELD on his APPROVE** (named Lane A gate).
+> (`evt_7yd7ddpv9kp73`) — APPROVE (`evt_3np868v9666qd`).** ✅ **LANE A MERGED @
+> `origin/main f64c788b`** (PR #551, doc-only).
+>
+> **↳ LANE B KICKED — 2026-07-12 ~13:2x UTC.** Language ring Handoff-Gate-compacted
+> @ `f64c788b` (leader + implementer + QA all verified "Context compacted").
+> **Lane B KICKED @ `evt_6gwdg9bfknt44`** → @language-leader (`agt_37reqqy6pjm00`),
+> base `f64c788b`, branch `wp/bare-proof-selector-atom-parser`. One code change:
+> `parser.rs` single `KwProof` arm in `parse_atom_expr` (= ~1965 `LParen` block
+> body minus parens; leave that block). Hard acceptance = crate-test coverage for
+> 4 cases (bare / applied `((proof p for s) a) b` / recursive self-ref / decl-vs-expr
+> no-cross-talk) elaborating identical to `::`; full workspace green; conformance
+> seed extension IF one exists else CV-judged follow-on (CV reviewer sign-off).
+> Architect-terminal. Roused language-leader via send-keys.
+> **CV conformance determination (`evt_7vks88m4mm595`, accepted `evt_1na4d5t635wdj`):**
+> the 4 crate tests ARE the Lane B conformance gate, but must use
+> DISCRIMINATING/STRUCTURAL assertions (not green-vs-green): bare≡grouped≡`::` →
+> byte-identical `EAttachedProofRef` AST; applied → pinned `((proof p for s) a) b`
+> nesting (greedy-absorb bug must fail); recursive → green; decl-vs-expr → both
+> halves asserted independently. **Formal conformance golden = CV POST-MERGE
+> follow-on** (extend `seed-named-proof-claims.md`); #29 parser merge NOT gated on
+> it (tracked as #29 conformance tail).
+> **⏭ RESUME ACTION: await Lane B parser SHA → honesty-gate (parser.rs arm + tests
+> + any conformance seed; NO kernel/prelude/elaborator-semantics) → publish (NON-doc:
+> parser code → CI poll ~216s) → merge #29 → re-kick #28 bare-form catalog rewrite
+> (168-site `29094048` inventory WITHOUT parens, Foundation) from #29 merged base.
+> Watchdog live.**
 > **RESUME ACTION: on Architect APPROVE, publish `8e1faef9` doc-only (fresh
 > wp/pr-publish branch off main + tracker sync), then kick Lane B (Language parser
 > build: `parser.rs` KwProof atom arm in parse_atom_expr = ~1965 LParen block body
