@@ -168,6 +168,17 @@ entry does not present the instance as zero-delta. Do not replace a hard proof
 with a more literate *statement* of the law — the source must still carry the
 proof term, or the entry must disclose the trusted-base delta.
 
+Use the proof keyword to record **membership**, not an informal proof role.
+When a named theorem belongs to one subject's public theory, write
+`proof name for S`; the declaration is bound and referenced as `S::name`,
+including recursive self-references. If exactly one owning subject can be
+named, attach the proof to it. Use `lemma` only when no single subject owns the
+theorem:
+for an interior step, or for a cross-cutting law about several definitions in
+interaction. Reuse is orthogonal to membership: citing a subject-owned law from
+another proof does not demote it to `lemma`. This convention refines which proof
+keyword to use; it does not change the existing `fn` versus Ω-proof partition.
+
 ## 7. Trust, derivation & navigation
 
 The Trust & derivation section carries what the old `MANIFEST.md` did:
@@ -286,8 +297,12 @@ for that pass, not a defect to fix on sight.
   this `compare_char`).
 - Class fields: short and conventional when the class gives context (`map`,
   `foldr`, `assoc`, `left_unit`).
-- Public law proofs: subject plus law (`list_assoc`, `list_right_unit`,
-  `band_left_unit`).
+- Public law proofs with one owning subject: attach the law as
+  `proof name for subject` and refer to it as `subject::name` (`add::assoc`,
+  `leq_nat::refl`). Do not encode this membership in a flat
+  `name_subject`/`subject_name` identifier.
+- Ownerless interaction laws and interior proof steps: descriptive `lemma`
+  names that make the several definitions or local role clear.
 - Private helpers: a role suffix, sitting near the proof family they serve.
 - Avoid opaque sequence names (`lemma1`, `helper2`, `d3_case`) and overclaiming
   names (a tested function named as if it were a proof-carrying theorem).

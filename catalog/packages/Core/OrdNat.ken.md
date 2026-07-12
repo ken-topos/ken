@@ -39,8 +39,8 @@ operations `min`, `max`, `sub`, and `compare`.
 and antisymmetry proofs have the same shape as the corresponding `Ord`
 fields. Because `IsTrue b` is defined as `Equal Bool b True`, these proofs
 fit those fields by ordinary unfolding; no conversion is needed. Each
-recursive proof uses a small dependency-first island: the structural helper is
-immediately followed by the original-name checked lemma it establishes.
+recursive law is attached to `leq_nat` and uses its `leq_nat::name` path for
+self-reference.
 
 ```ken
 fn leq_nat (m : Nat) (n : Nat) : Bool =
@@ -49,10 +49,10 @@ fn leq_nat (m : Nat) (n : Nat) : Bool =
     Suc m2 ⇒ match n { Zero ⇒ False ; Suc n2 ⇒ leq_nat m2 n2 }
   }
 
-lemma refl_leq_nat (x : Nat) : Equal Bool (leq_nat x x) True =
-  match x { Zero ⇒ Proved ; Suc x2 ⇒ refl_leq_nat x2 }
+proof refl for leq_nat (x : Nat) : Equal Bool (leq_nat x x) True =
+  match x { Zero ⇒ Proved ; Suc x2 ⇒ leq_nat::refl x2 }
 
-lemma trans_leq_nat
+proof trans for leq_nat
   (x : Nat)
   : (y : Nat) -> (z : Nat) -> Equal Bool (leq_nat x y) True ->
     Equal Bool (leq_nat y z) True -> Equal Bool (leq_nat x z) True =
@@ -64,12 +64,12 @@ lemma trans_leq_nat
         Suc y2 ⇒
           λz. match z {
             Zero ⇒ λp.λq. absurd q ;
-            Suc z2 ⇒ λp.λq. trans_leq_nat x2 y2 z2 p q
+            Suc z2 ⇒ λp.λq. leq_nat::trans x2 y2 z2 p q
           }
       }
   }
 
-lemma antisym_leq_nat
+proof antisym for leq_nat
   (x : Nat)
   : (y : Nat) -> Equal Bool (leq_nat x y) True ->
     Equal Bool (leq_nat y x) True -> Equal Nat x y =
@@ -82,7 +82,7 @@ lemma antisym_leq_nat
     Suc x2 ⇒
       λy. match y {
         Zero ⇒ λp.λq. absurd p ;
-        Suc y2 ⇒ λp.λq. cong Nat Nat x2 y2 Suc (antisym_leq_nat x2 y2 p q)
+        Suc y2 ⇒ λp.λq. cong Nat Nat x2 y2 Suc (leq_nat::antisym x2 y2 p q)
       }
   }
 
@@ -113,7 +113,7 @@ fn total_leq_nat (x : Nat) (y : Nat)
 `total`'s field, `IsTrue (bool_or (leq x y) (leq y x))`, is genuinely a
 different shape from `total_leq_nat`'s `Or`-of-equalities — `bool_or`
 short-circuits on its first argument, so
-`or_eq_true_to_is_true_bool_or` case-splits on `p` once to compute `bool_or`'s
+`bool_or::eq_true_of_or` case-splits on `p` once to compute `bool_or`'s
 reduction, then discharges each side directly (the `Inl` branch needs
 `cong`/`trans` to carry the equality through `bool_or`'s first-argument
 position; the `Inr` branch's own case-split on `p` makes both `bool_or
@@ -121,7 +121,7 @@ True q` and `bool_or False q` reduce to a literal, so `Proved`/the hypothesis
 itself close it):
 
 ```ken
-lemma or_eq_true_to_is_true_bool_or
+proof eq_true_of_or for bool_or
   (p : Bool) (q : Bool)
   (h : Or (Equal Bool p True) (Equal Bool q True))
   : IsTrue (bool_or p q) =
@@ -134,10 +134,10 @@ lemma or_eq_true_to_is_true_bool_or
 
 instance Ord Nat {
   leq     = leq_nat ;
-  refl    = refl_leq_nat ;
-  antisym = antisym_leq_nat ;
-  trans   = trans_leq_nat ;
-  total   = λx.λy. or_eq_true_to_is_true_bool_or (leq_nat x y) (leq_nat y x) (total_leq_nat x y)
+  refl    = leq_nat::refl ;
+  antisym = leq_nat::antisym ;
+  trans   = leq_nat::trans ;
+  total   = λx.λy. bool_or::eq_true_of_or (leq_nat x y) (leq_nat y x) (total_leq_nat x y)
 }
 ```
 
@@ -176,7 +176,7 @@ fn compare (a : Nat) (b : Nat) : OrdResult =
 ## 3. Using it
 
 ```ken example
-lemma two_leq_three : IsTrue (leq_nat (Suc (Suc Zero)) (Suc (Suc (Suc Zero)))) = Proved
+proof two_leq_three for leq_nat : IsTrue (leq_nat (Suc (Suc Zero)) (Suc (Suc (Suc Zero)))) = Proved
 
 const min_of_two_and_three : Nat = min (Suc (Suc Zero)) (Suc (Suc (Suc Zero)))
 const max_of_two_and_three : Nat = max (Suc (Suc Zero)) (Suc (Suc (Suc Zero)))
@@ -203,31 +203,32 @@ lemma ord_nat_total : IsTrue (bool_or (leq_nat (Suc Zero) Zero) (leq_nat Zero (S
 relies on:
 
 ```ken example
-lemma min_zero_left (n : Nat) : Equal Nat (min Zero n) Zero = Proved
+proof zero_left for min (n : Nat) : Equal Nat (min Zero n) Zero = Proved
 
-lemma max_zero_left (n : Nat) : Equal Nat (max Zero n) n = Refl
+proof zero_left for max (n : Nat) : Equal Nat (max Zero n) n = Refl
 
-lemma sub_zero_right (a : Nat) : Equal Nat (sub a Zero) a = Refl
+proof zero_right for sub (a : Nat) : Equal Nat (sub a Zero) a = Refl
 ```
 
-`min_zero_left` closes with `Proved`: `min Zero n` reduces to the literal `Zero`
+`min::zero_left` closes with `Proved`: `min Zero n` reduces to the literal
+`Zero`
 regardless of `n` (both sides collapse to the same nullary constructor,
-`§1` of `catalog/guide/proof-techniques.ken.md`). `max_zero_left` and
-`sub_zero_right` close with `Refl`: `max Zero n`'s recursive definition and
+`§1` of `catalog/guide/proof-techniques.ken.md`). `max::zero_left` and
+`sub::zero_right` close with `Refl`: `max Zero n`'s recursive definition and
 `sub`'s own `b = Zero` branch make `n`/`a` (an abstract, stuck variable)
 appear literally unchanged on the reduced side without any further
 constructor-level reduction — the goal stays `Eq`-shaped, not collapsed to
 `Top`.
 
 The companion fact `sub n n = Zero` (self-subtraction) is also true, but —
-unlike `sub_zero_right` — needs induction on `n` (`sub`'s own structural
+unlike `sub::zero_right` — needs induction on `n` (`sub`'s own structural
 recursion doesn't reduce for an ABSTRACT `n` matched against itself), so
 `Refl` alone cannot close it; this entry deliberately doesn't prove that
 separately-inductive law, to keep scope small, and names the gap here
 rather than carrying an unproved claim:
 
 ```ken reject
-lemma subSelfIsZeroWrong (n : Nat) : Equal Nat (sub n n) Zero = Refl
+proof self_is_zero_wrong for sub (n : Nat) : Equal Nat (sub n n) Zero = Refl
 ```
 
 ## 5. Design notes
@@ -245,7 +246,7 @@ sidesteps this because `Bool`'s order is provable by direct case-split
 down to concrete constructors without ever building an intermediate `Or` —
 it isn't a template for the `Or`-to-`bool_or` bridge specifically, only
 for the overall proof STYLE (case-split to `Proved`/`absurd`), which
-`or_eq_true_to_is_true_bool_or` also follows.
+`bool_or::eq_true_of_or` also follows.
 
 **Local definitions keep proof terms direct.** The order and arithmetic
 operations are written here as structural definitions, so their computation
@@ -264,9 +265,9 @@ rules remain visible beside the laws that use them.
 
 ## 7. Trust  derivation
 
-1. **Public API.** `leq_nat`, `refl_leq_nat`, `trans_leq_nat`, `antisym_leq_nat`,
-   `total_leq_nat`, `or_eq_true_to_is_true_bool_or`, `Ord_instance_Nat` (via
-   `instance Ord Nat`), `min`, `max`, `sub`, `compare`.
+1. **Public API.** `leq_nat`, `leq_nat::refl`, `leq_nat::trans`,
+   `leq_nat::antisym`, `total_leq_nat`, `bool_or::eq_true_of_or`,
+   `Ord_instance_Nat` (via `instance Ord Nat`), `min`, `max`, `sub`, `compare`.
 2. **Source map.**
 
    | Task | Section |
@@ -277,7 +278,7 @@ rules remain visible beside the laws that use them.
    | Why `total` needed a bridge, `refl`/`trans`/`antisym` didn't | [Design notes](#5-design-notes) |
 
 3. **Derivation path.** `leq_nat` and its order laws are structural
-   definitions and proofs over `Nat`. `or_eq_true_to_is_true_bool_or`
+   definitions and proofs over `Nat`. `bool_or::eq_true_of_or`
    converts the disjoint totality result into the Boolean form required by
    `Ord`. `min`, `max`, `sub`, and `compare` are ordinary recursive
    functions.
