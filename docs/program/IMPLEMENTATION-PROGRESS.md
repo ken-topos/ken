@@ -91,10 +91,52 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > bare refs); **`::`-documenting PROSE stays** (surface-reference guide, README,
 > path-convention narration); proof-body recursive self-refs = Architect judgment
 > (convert if green + clearer, report if selector won't resolve in self-ref
-> position). Foundation, Architect-terminal, LIGHT. **⏭ RESUME ACTION: Handoff-Gate
-> compact Foundation → publish #28 frame+tracker doc-only → kick @foundation-leader
-> base `5e1ab924` → drive gate → honesty-gate + publish → on merge, fleet
-> quiescent → cancel watchdog.**
+> position). Foundation, Architect-terminal, LIGHT. Frame+tracker published
+> doc-only (PR #549, main @ `4435216c`). **KICKED @ `evt_45bqdz8ks3y5z`** →
+> @foundation-leader (`agt_37reqsbs5b000`), Foundation Handoff-Gate-compacted
+> (all 3 verified @ `4435216c`) + roused, base `origin/main 4435216c`, branch
+> `wp/attached-proof-selector-style`. Watchdog cron refreshed → `05ac41f4`.
+>
+> **↻ DISPOSITION FLIPPED — 2026-07-12 ~12:42 UTC — parser reality surfaced,
+> operator ruled Option B (parser extension FIRST, then bare form).** During the
+> #28 build, foundation-leader + Architect found the frame's assumed BARE spelling
+> `refl = proof refl for leq_nat` **does not parse** — `proof … for …` is not an
+> expression atom; the parser only recognizes it after `LParen`, so the ONLY valid
+> form today is the heavier parenthesized `refl = (proof refl for leq_nat)` (parens
+> on bare AND applied). Architect routed this as a #26-pattern operator design
+> flag: with parens-everywhere the actual cost, is the restyle still wanted over
+> `::`? **Operator chose Option B: extend the parser to admit the bare atom, then
+> do the catalog rewrite in the clean bare form (the exact spelling the ruling
+> wrote).** Consequences:
+> - Parenthesized candidate **`29094048` SUPERSEDED — NOT merged.** Foundation
+>   parks the branch; its **168-site selector inventory + byte-identical
+>   reverse-substitution proof** are reusable evidence for the eventual bare-form
+>   rewrite. Implementer stood down from the #28 catalog rewrite.
+> - **New WP #29 (parser extension) inserted FIRST** — admit `proof name for
+>   subject` as a bare expression atom, resolve the application boundary (subject =
+>   single `parse_path` → `proof p for s a b` = `(proof p for s) a b`;
+>   parenthesized form stays valid as equivalent). Surfaces: `parser.rs` atom +
+>   spec §8.2 canonical-path/§33 declarations + conformance fixtures. **NOT light —
+>   surface-grammar + spec change → enclave + build team + Architect terminal.**
+> - **#28 catalog rewrite now GATED on #29 landing**, re-run in bare form after.
+> **↳ #29 GRAMMAR DESIGN LANDED + FRAME AUTHORED — 2026-07-12 ~12:53 UTC.**
+> Architect delivered the locked grammar (`evt_6ta5b68mjjy6x`): `proof_ref ::=
+> "proof" ident "for" path` as a **primary/atom** (binds tightest; application
+> binds OUTSIDE — `proof p for s a b` = `((proof p for s) a) b`; subject = single
+> `parse_path`; bare + parenthesized = identical `EAttachedProofRef` AST / same
+> `subject::name` desugar). **ZERO trust/kernel/elaborator/prelude delta.**
+> Surfaces: (1) `parser.rs` one `KwProof` atom arm in `parse_atom_expr` (same body
+> as the ~1965 `LParen`-gated block, minus the parens; leave that block) —
+> **Language build**; (2) spec §8.2/§33 production + app-boundary rule —
+> **enclave** (spec-author, doc-only); (3) conformance fixtures
+> (bare/applied/recursive/decl-vs-expr) — **CV**, land green with Lane B; (4) frame
+> corrections folded in. Frame authored: `docs/program/wp/bare-proof-selector-atom.md`.
+> **Sequence: Lane A enclave spec production (doc-only) FIRST → Lane B Language
+> parser atom + conformance fixtures (Architect-terminal) → merge #29 → re-kick #28
+> bare-form catalog rewrite (168-site `29094048` inventory re-run without parens).**
+> **⏭ RESUME ACTION: publish #29 frame doc-only → Handoff-Gate enclave (spec-leader
+> + spec-author + CV; quiescent, retros in per orientation) → kick Lane A spec
+> production. Watchdog stays live (fleet NOT quiescent — #29 launching).**
 >
 > **↳ SURFACED FORMATTER BUG (for parked `ken-formatter-canonical` WP):**
 > `format.rs::canonical_unicode`'s `canonical_ident` maps `l`/`level`→`ℓ` on ANY
