@@ -49,10 +49,18 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >   (`evt_2sp5nfp8814g7`, reverse-normalization 11/12 byte-identical). Honesty
 >   gate clean (no crates/kernel/Cargo/TCB). doc-only (no cargo harness loads
 >   these fixtures; additive lexer accepts both spellings).
-> - **Steward gates** lang-PR2 (removal) on lang-PR1 + spec-lane merged → single
->   honest surface. **BOTH NOW MERGED ⇒ PR2 UNBLOCKED** — next: kick Language
->   PR2 (remove `⇒`/`=>` from lexer + `format.rs` `=>` arm). Frames:
->   `docs/program/wp/match-arm-glyph-lang.md`, `…-spec.md`. Task #24.
+> - **PR2 (removal, Language)** — **MERGING @ `a1a9c076`** (base `f404e486`;
+>   24 files +330/−329): lexer removes `⇒`/`=>`→`MapsTo` (keeps `↦`/`|->`, bare
+>   `|`→`Pipe`); `format.rs` drops the `=>`→`⇒` arm. Behavioral verdict-FLIP —
+>   retired spellings now **reject** (QA + Architect confirmed, not green-vs-green).
+>   PR2's precondition audit caught residuals PR1's sweep **missed**
+>   (`examples/rosetta/*.ken` ×16 + ProofErasure catalog + highlighter `sample.ken`)
+>   and migrated them; highlighter (`ken.js`/README) updated. QA 940/940 workspace
+>   green (completeness proof) + Architect APPROVE (`evt_ybbhf6032wv3`); honesty
+>   gate clean (no spec/conf/kernel/parser/Cargo/trust). **⇒ MATCH-ARM GLYPH
+>   MIGRATION SURFACE-COMPLETE** (PR1 + spec lane + PR2). Single honest surface:
+>   `↦`/`|->`. Task #24 closes on retros. Frames:
+>   `docs/program/wp/match-arm-glyph-lang.md`, `…-spec.md`.
 >
 > ### proof-attachment membership convention — ADOPTED (Architect + operator) — 2026-07-12
 >
