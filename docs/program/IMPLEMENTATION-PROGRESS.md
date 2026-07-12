@@ -14,6 +14,33 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
+> ### ▶ F3b + FAIL-CLOSED DESIGN ARC OPENED — 2026-07-12 ~13:3x UTC (operator)
+>
+> Operator reviewed the #8 namespacing brief and **greenlit F3b (cross-package
+> module resolution) + fail-closed single-namespace collision behavior**, choosing
+> **Option 1: Architect design-framing FIRST** (design + open-decisions register
+> before any build; operator reviews open decisions — esp. cross-package instance
+> visibility — then scope round 1; fail-closed splittable as an early bounded WP).
+> **Design-framing routed to @architect `evt_1x8adf1fsgcd2`** + roused (architect
+> fresh @ ctx 0%). Register must cover: (1) loader mechanism (path→file, discovery,
+> cycle detection, caching; in-repo-only vs manifest/lockfile/registry `63`);
+> (2) **cross-package instance/class visibility — DEEPEST open question** (currently
+> flat/unqualified/outside import-pub channel = Haskell implicit-instance
+> anti-pattern, report P4; separate `given`/`open scoped` channel vs ambient?);
+> (3) fail-closed collision policy (duplicate globals key = error? which wins?
+> generalize `check_no_reserved_sugar_collision` resolve.rs:677; interaction w/ #8
+> Fork-B `OrdResult.Eq`; minimal early slice); (4) re-export/facade `pub use`
+> (report P5 absent); (5) cross-package shadowing precedence. **Maturity:** intra-unit
+> resolution §3.3 mature+built; addressing half pinned (catalog-taxonomy WP); loader
+> half ZERO design; fail-closed framed-not-built (NOT one of #8's A/B/C forks — a 4th
+> option). **Report: Ken substantially aligned** (static namespaces, single-flat-
+> because-types-are-terms, qualified-by-default, positive opens, file-topology
+> bijection, hard use-open ambiguity); 3 gaps = P9 fail-closed / P4 instances / P5
+> re-export. Task #31. **⏭ RESUME: await Architect design + open-decisions register →
+> route operator review of open decisions (esp. P4) → scope round 1 → enclave → build.
+> Absorbs #8.**
+
+
 > ### ✅ BOTH AWAY-WINDOW WPs CLOSED — FLEET QUIESCENT — 2026-07-12 ~07:26 UTC
 >
 > Both operator-approved parallel WPs driven to full close during the away
@@ -165,6 +192,12 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > no-cross-talk) elaborating identical to `::`; full workspace green; conformance
 > seed extension IF one exists else CV-judged follow-on (CV reviewer sign-off).
 > Architect-terminal. Roused language-leader via send-keys.
+> **✅ LANE B MERGED @ `origin/main 69570b26`** (PR #552, CI passed) — Architect-terminal
+> APPROVE `f25159d7`, honesty gate clean (parser.rs +12 + test +136; zero
+> kernel/prelude/semantics), tests verified at CV structural bar. **✅ #29 COMPLETE**
+> (spec `proof_ref` atom + parser + tests all landed). CV conformance golden = #30
+> post-merge tail (now UNBLOCKED — parser landed). **⏭ RESUME: re-kick #28 bare-form
+> catalog rewrite from `69570b26`.**
 > **CV conformance determination (`evt_7vks88m4mm595`, accepted `evt_1na4d5t635wdj`):**
 > the 4 crate tests ARE the Lane B conformance gate, but must use
 > DISCRIMINATING/STRUCTURAL assertions (not green-vs-green): bare≡grouped≡`::` →
