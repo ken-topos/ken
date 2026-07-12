@@ -34,16 +34,33 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >   their Ω consumers. **No `ken-kernel/**`/Cargo/lockfile/TCB delta**;
 >   `git diff --check` clean. 41 focused targets green; post-rebase 17-target rerun
 >   green (`proof_vocabulary` 6/6, `map_build_acceptance` 24/24, DS7/8, CAT5/3, …).
-> - **NOW: QA (terra) Working** — independently verifying counts/partition, exact
->   diagnostic on annotated+inferred, the 9 `Top` sites, prop-intro emission,
->   no-kernel/Cargo scope. Leader parked awaiting QA verdict.
+> - **ALL GATES CLEARED @ `8c65aaed`:** QA APPROVE (`evt_2t179v5yjpv8q`);
+>   Architect surface/fidelity/partition APPROVE (`evt_4mkjwwtpr6kh5`); CV
+>   conformance/spec-axis APPROVE (`evt_6yspgfbr70znj`); decision
+>   `dec_y3svzskyybpm` resolved APPROVE by language-leader (`evt_zxrnh3ex19z9`).
+> - **Steward honesty gate PASSED @ `8c65aaed`:** origin/main direct ancestor;
+>   36 files +1220/−1170; scope clean (no spec/conformance/kernel/Cargo/lock);
+>   every `= Axiom` added line is a paired `const`→`lemma` keyword flip of a
+>   pre-existing catalog/test demo (no net-new trust surface); no WP-tokens.
+> - **CI-safe confirmed:** the CI `conformance` job is the WP-F2 stub (`echo …not
+>   yet implemented`); no crate loads the challenge corpus, so `cargo test
+>   --workspace` never elaborates the `tt`-stranded fixture. Merge does not break
+>   main/CI.
+> - **PUBLISHER RUNNING** (bg `b14jx9h5g`, non-doc → CI poll) on `8c65aaed` exactly
+>   (chain-of-custody preserved; tracker + fast-follow sequencing land as a trailing
+>   doc-only merge).
+> - **TWO REQUIRED tracked fast-follows** (CV `evt_6yspgfbr70znj`; NOT changes to
+>   the merged diff — the `tt`→`Proved` surface rename strands two corpora this WP
+>   didn't touch, both doc/fixture fidelity, neither CI-blocking):
+>   1. **Spec erratum (Steward-sequenced → spec enclave):** 70 `tt` refs in `spec/`
+>      (`16-observational`, `54/55/56`, `34/39` sugar) now spell a removed surface
+>      term. Sequence with Handoff-Gate compaction.
+>   2. **Conformance reconcile (CV-owned):** 143 `tt` refs incl. latently-broken
+>      `conformance/challenge/C6-lawful-ord-vs-stub/sound-ord-proved.ken` +
+>      `seed-k5-omega-fragment`. CV picks up on merge.
 > - **Blocker resolved:** `pair_compare_eq` — Architect ruled (`evt_4eantd6r4s8hh`)
 >   the partition holds, no exception, no gate change (Π-into-Ω is impredicative,
->   `sort_pi`); it was a migration-execution artifact. Frame guardrail stands.
-> - **NEXT:** QA green → leader routes to Architect surface/fidelity + soundness →
->   enclave conformance (spec-author gpt-5.6-sol, Opus Architect+CV backstop) →
->   Steward honesty gate @ `8c65aaed` + publisher (non-doc → CI; atomic
->   migrate-then-enforce). Watch for the leader's git_request to me.
+>   `sort_pi`); it was a migration-execution artifact.
 > - Practice: codified "keep the turn active through completion" for Codex seats
 >   (`9a153c88`, playbooks); #20 corrected (codex tmux delivery works; real gap =
 >   platform `reply_to` event_id, moot-owned).
