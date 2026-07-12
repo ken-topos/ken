@@ -16,8 +16,8 @@ data Tree = Leaf | Node Tree Char Tree
 
 fn inorder (t : Tree) : List Char =
   match t {
-    Leaf ⇒ Nil Char ;
-    Node l c r ⇒ list_append Char (inorder l) (Cons Char c (inorder r))
+    Leaf ↦ Nil Char ;
+    Node l c r ↦ list_append Char (inorder l) (Cons Char c (inorder r))
   }
 
 const sampleTree : Tree =
@@ -29,6 +29,6 @@ const sampleTree : Tree =
 const traversalResult : String = list_char_to_string (inorder sampleTree)
 
 const finalCheck : String =
-  match eq traversalResult "abcdefg" { True ⇒ "PASS" ; False ⇒ "FAIL" }
+  match eq traversalResult "abcdefg" { True ↦ "PASS" ; False ↦ "FAIL" }
 
 proc main : IO Unit visits [Console] = print_line finalCheck

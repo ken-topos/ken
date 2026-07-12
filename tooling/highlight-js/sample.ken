@@ -35,13 +35,13 @@ const aGreeting : String  = "hello, Ken -- not a comment inside a string"
 data Color = Red | Green | Blue
 
 fn isRed (c : Color) : Bool =
-  match c { Red ⇒ True ; Green ⇒ False ; Blue ⇒ False }
+  match c { Red ↦ True ; Green ↦ False ; Blue ↦ False }
 
 proc announce (c : Color) : IO Unit visits [Console] =
   match c {
-    Red   ⇒ print_line "it's red" ;
-    Green ⇒ print_line "it's green" ;
-    Blue  ⇒ print_line "it's blue"
+    Red   ↦ print_line "it's red" ;
+    Green ↦ print_line "it's green" ;
+    Blue  ↦ print_line "it's blue"
   }
 
 -- ── data / match, primes on an identifier, ConIds ────────────────────────
@@ -50,8 +50,8 @@ data OrdResult = Lt | Eq | Gt
 
 fn natCmp' (a : Nat) (b : Nat) : OrdResult =
   match a {
-    Zero  ⇒ match b { Zero ⇒ Eq ; Suc n ⇒ Lt } ;
-    Suc m ⇒ match b { Zero ⇒ Gt ; Suc n ⇒ natCmp' m n }
+    Zero  ↦ match b { Zero ↦ Eq ; Suc n ↦ Lt } ;
+    Suc m ↦ match b { Zero ↦ Gt ; Suc n ↦ natCmp' m n }
   }
 
 -- ── def: transparent alias / refinement ──────────────────────────────────
@@ -68,7 +68,7 @@ class Eq a {
 }
 
 instance Eq Bool {
-  eq = \x. \y. match x { True ⇒ y ; False ⇒ match y { True ⇒ False ; False ⇒ True } } ;
+  eq = \x. \y. match x { True ↦ y ; False ↦ match y { True ↦ False ; False ↦ True } } ;
   refl = λx. tt
 }
 

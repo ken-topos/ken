@@ -19,8 +19,8 @@
 -- `Cons` tail (`xs2`) -- same sound-zone shape as the landed floor.
 fn reverseListChar (a : Type) (xs : List a) : List a =
   match xs {
-    Nil ⇒ Nil a ;
-    Cons x xs2 ⇒ list_append a (reverseListChar a xs2) (Cons a x (Nil a))
+    Nil ↦ Nil a ;
+    Cons x xs2 ↦ list_append a (reverseListChar a xs2) (Cons a x (Nil a))
   }
 
 fn reverseString (s : String) : String =
@@ -37,17 +37,17 @@ fn palindrome (s : String) : Bool = eq s (reverseString s)
 -- wrong flips the result to "FAIL".
 const finalCheck : String =
   match palindrome "racecar" {
-    True ⇒ match palindrome "hello" {
-      False ⇒ match palindrome "" {
-        True ⇒ match palindrome "a" {
-          True ⇒ "PASS" ;
-          False ⇒ "FAIL"
+    True ↦ match palindrome "hello" {
+      False ↦ match palindrome "" {
+        True ↦ match palindrome "a" {
+          True ↦ "PASS" ;
+          False ↦ "FAIL"
         } ;
-        False ⇒ "FAIL"
+        False ↦ "FAIL"
       } ;
-      True ⇒ "FAIL"
+      True ↦ "FAIL"
     } ;
-    False ⇒ "FAIL"
+    False ↦ "FAIL"
   }
 
 proc main : IO Unit visits [Console] = print_line finalCheck

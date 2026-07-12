@@ -27,39 +27,39 @@ const empty (k : Type) (v : Type) : Tree k v = Leaf k v
 
 fn insert (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (val : v) (m : Tree k v) : Tree k v =
   match m {
-    Leaf ⇒ Node k v (Leaf k v) key val (Leaf k v) ;
-    Node l k2 v2 r ⇒
+    Leaf ↦ Node k v (Leaf k v) key val (Leaf k v) ;
+    Node l k2 v2 r ↦
       match leq key k2 {
-        True ⇒
+        True ↦
           match leq k2 key {
-            True  ⇒ Node k v l key val r ;
-            False ⇒ Node k v (insert k v leq key val l) k2 v2 r
+            True  ↦ Node k v l key val r ;
+            False ↦ Node k v (insert k v leq key val l) k2 v2 r
           } ;
-        False ⇒ Node k v l k2 v2 (insert k v leq key val r)
+        False ↦ Node k v l k2 v2 (insert k v leq key val r)
       }
   }
 
 fn lookup (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (m : Tree k v) : Option v =
   match m {
-    Leaf ⇒ None v ;
-    Node l k2 v2 r ⇒
+    Leaf ↦ None v ;
+    Node l k2 v2 r ↦
       match leq key k2 {
-        True ⇒
+        True ↦
           match leq k2 key {
-            True  ⇒ Some v v2 ;
-            False ⇒ lookup k v leq key l
+            True  ↦ Some v v2 ;
+            False ↦ lookup k v leq key l
           } ;
-        False ⇒ lookup k v leq key r
+        False ↦ lookup k v leq key r
       }
   }
 
 fn countLetters (xs : List Char) (m : Tree Char Nat) : Tree Char Nat =
   match xs {
-    Nil ⇒ m ;
-    Cons c cs ⇒
+    Nil ↦ m ;
+    Cons c cs ↦
       match lookup Char Nat leq_int c m {
-        None ⇒ countLetters cs (insert Char Nat leq_int c (Suc Zero) m) ;
-        Some n ⇒ countLetters cs (insert Char Nat leq_int c (Suc n) m)
+        None ↦ countLetters cs (insert Char Nat leq_int c (Suc Zero) m) ;
+        Some n ↦ countLetters cs (insert Char Nat leq_int c (Suc n) m)
       }
   }
 
@@ -67,31 +67,31 @@ const frequencies : Tree Char Nat =
   countLetters (string_to_list_char "mississippi") (empty Char Nat)
 
 fn countOf (c : Char) : Nat =
-  match lookup Char Nat leq_int c frequencies { None ⇒ Zero ; Some n ⇒ n }
+  match lookup Char Nat leq_int c frequencies { None ↦ Zero ; Some n ↦ n }
 
 const two   : Nat = Suc (Suc Zero)
 const four  : Nat = Suc (Suc two)
 
 fn eq_nat (a : Nat) (b : Nat) : Bool =
   match a {
-    Zero ⇒ match b { Zero ⇒ True ; Suc _ ⇒ False } ;
-    Suc a2 ⇒ match b { Zero ⇒ False ; Suc b2 ⇒ eq_nat a2 b2 }
+    Zero ↦ match b { Zero ↦ True ; Suc _ ↦ False } ;
+    Suc a2 ↦ match b { Zero ↦ False ; Suc b2 ↦ eq_nat a2 b2 }
   }
 
 -- "mississippi": m=1, i=4, s=4, p=2 (11 letters total).
 const finalCheck : String =
   match eq_nat (countOf 109) (Suc Zero) {
-    True ⇒ match eq_nat (countOf 105) four {
-      True ⇒ match eq_nat (countOf 115) four {
-        True ⇒ match eq_nat (countOf 112) two {
-          True ⇒ "PASS" ;
-          False ⇒ "FAIL"
+    True ↦ match eq_nat (countOf 105) four {
+      True ↦ match eq_nat (countOf 115) four {
+        True ↦ match eq_nat (countOf 112) two {
+          True ↦ "PASS" ;
+          False ↦ "FAIL"
         } ;
-        False ⇒ "FAIL"
+        False ↦ "FAIL"
       } ;
-      False ⇒ "FAIL"
+      False ↦ "FAIL"
     } ;
-    False ⇒ "FAIL"
+    False ↦ "FAIL"
   }
 
 proc main : IO Unit visits [Console] = print_line finalCheck

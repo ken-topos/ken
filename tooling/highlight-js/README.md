@@ -66,7 +66,7 @@ run once at startup — no per-fence configuration.
 | Decimal literals (`0.1d`, `5d`) | yes | `number` |
 | Float32 literals (`1.5f32`, `5f32`) | yes | `number` |
 | String literals (`"..."`) | yes | `string`, single-line, no escape handling (matches the lexer) |
-| Arrows (`->`/`→`, `=>`/`⇒`) | yes | `operator` |
+| Arrows (`->`/`→`, `|->`/`↦`) | yes | `operator` |
 | `::` `:` `=` `==` `===`/`≡` `\|` `;` `.` `,` | yes | `operator` |
 | Lambda (`\`/`λ`), logic (`/\`/`∧`, `\/`/`∨`) | yes | `operator` |
 | Comparisons (`<=`/`≤`, `>=`/`≥`, `/=`/`≠`, `<:`/`⊑`, `⊔`, `⊓`, `><`/`×`) | yes | `operator` |
@@ -112,7 +112,7 @@ re-sync after the lexer changes:
    update the `keyword` list in `ken.js` verbatim — do not add or drop a word
    without a corresponding lexer change.
 2. Re-grep the single-character Unicode-alias arms (`Ω`, `Σ`, `Π`, `∀`, `∃`,
-   `¬`, `ℓ`, and the operator aliases like `→`, `⇒`, `≡`, …) and update the
+   `¬`, `ℓ`, and the operator aliases like `→`, `↦`, `≡`, …) and update the
    `title.class`/`operator` regexes.
 3. Re-grep `lex_numeric` for the literal suffix set (currently `d`,
    `f32`) and the dot/exponent rule, and update the `number` regex.

@@ -34,7 +34,7 @@ const Op : Type = Coproduct (StateOp Nat) Eff
 const Resp : Op → Type = resp_coproduct (StateOp Nat) Eff (resp_state Nat) RespEff
 
 fn addNat (a : Nat) (b : Nat) : Nat =
-  match a { Zero ⇒ b ; Suc a2 ⇒ Suc (addNat a2 b) }
+  match a { Zero ↦ b ; Suc a2 ↦ Suc (addNat a2 b) }
 
 -- one "call": read the running total, add `n`, store it back, return the
 -- NEW total (the task's own semantics: "returns the current total").
@@ -48,12 +48,12 @@ fn addTo (n : Nat) : ITree Op Resp Nat =
 
 fn eq_nat (a : Nat) (b : Nat) : Bool =
   match a {
-    Zero ⇒ match b { Zero ⇒ True ; Suc _ ⇒ False } ;
-    Suc a2 ⇒ match b { Zero ⇒ False ; Suc b2 ⇒ eq_nat a2 b2 }
+    Zero ↦ match b { Zero ↦ True ; Suc _ ↦ False } ;
+    Suc a2 ↦ match b { Zero ↦ False ; Suc b2 ↦ eq_nat a2 b2 }
   }
 
 fn and_bool (a : Bool) (b : Bool) : Bool =
-  match a { True ⇒ b ; False ⇒ False }
+  match a { True ↦ b ; False ↦ False }
 
 const two   : Nat = Suc (Suc Zero)
 const three : Nat = Suc (Suc (Suc Zero))
@@ -83,12 +83,12 @@ const finalResult : ITree Eff RespEff (Pair Bool Nat) =
 -- path.
 fn unwrapRet (r : ITree Eff RespEff (Pair Bool Nat)) : Pair Bool Nat =
   match r {
-    Ret v ⇒ v ;
-    Vis op k ⇒ mk_pair Bool Nat False Zero
+    Ret v ↦ v ;
+    Vis op k ↦ mk_pair Bool Nat False Zero
   }
 
 const finalBool : Bool = pair_fst Bool Nat (unwrapRet finalResult)
 
-const finalCheck : String = match finalBool { True ⇒ "PASS" ; False ⇒ "FAIL" }
+const finalCheck : String = match finalBool { True ↦ "PASS" ; False ↦ "FAIL" }
 
 proc main : IO Unit visits [Console] = print_line finalCheck

@@ -29,28 +29,28 @@ data RpnOp = Push Int | Add | Sub | Mul
 -- own `natCmp`).
 fn rpnStep (stack : List Int) (op : RpnOp) : Option (List Int) =
   match op {
-    Push n ⇒ Some (List Int) (Cons Int n stack) ;
-    Add ⇒ match stack {
-      Nil ⇒ None (List Int) ;
-      Cons a rest1 ⇒ match rest1 {
-        Nil ⇒ None (List Int) ;
-        Cons b rest2 ⇒ Some (List Int) (Cons Int (a + b) rest2)
+    Push n ↦ Some (List Int) (Cons Int n stack) ;
+    Add ↦ match stack {
+      Nil ↦ None (List Int) ;
+      Cons a rest1 ↦ match rest1 {
+        Nil ↦ None (List Int) ;
+        Cons b rest2 ↦ Some (List Int) (Cons Int (a + b) rest2)
       }
     } ;
-    Sub ⇒ match stack {
-      Nil ⇒ None (List Int) ;
-      Cons a rest1 ⇒ match rest1 {
-        Nil ⇒ None (List Int) ;
+    Sub ↦ match stack {
+      Nil ↦ None (List Int) ;
+      Cons a rest1 ↦ match rest1 {
+        Nil ↦ None (List Int) ;
         -- RPN order: second-from-top minus top (`b - a` for stack
         -- `a::b::rest`).
-        Cons b rest2 ⇒ Some (List Int) (Cons Int (b - a) rest2)
+        Cons b rest2 ↦ Some (List Int) (Cons Int (b - a) rest2)
       }
     } ;
-    Mul ⇒ match stack {
-      Nil ⇒ None (List Int) ;
-      Cons a rest1 ⇒ match rest1 {
-        Nil ⇒ None (List Int) ;
-        Cons b rest2 ⇒ Some (List Int) (Cons Int (a * b) rest2)
+    Mul ↦ match stack {
+      Nil ↦ None (List Int) ;
+      Cons a rest1 ↦ match rest1 {
+        Nil ↦ None (List Int) ;
+        Cons b rest2 ↦ Some (List Int) (Cons Int (a * b) rest2)
       }
     }
   }
@@ -61,10 +61,10 @@ fn rpnStep (stack : List Int) (op : RpnOp) : Option (List Int) =
 -- sub-term.
 fn rpnEvalList (stack : List Int) (ops : List RpnOp) : Option (List Int) =
   match ops {
-    Nil ⇒ Some (List Int) stack ;
-    Cons op ops2 ⇒ match rpnStep stack op {
-      None ⇒ None (List Int) ;
-      Some stack2 ⇒ rpnEvalList stack2 ops2
+    Nil ↦ Some (List Int) stack ;
+    Cons op ops2 ↦ match rpnStep stack op {
+      None ↦ None (List Int) ;
+      Some stack2 ↦ rpnEvalList stack2 ops2
     }
   }
 
@@ -72,12 +72,12 @@ fn rpnEvalList (stack : List Int) (ops : List RpnOp) : Option (List Int) =
 -- exactly one value (empty or leftover operands -- also an error case).
 fn top (stack : List Int) : Option Int =
   match stack {
-    Nil ⇒ None Int ;
-    Cons v rest ⇒ match rest { Nil ⇒ Some Int v ; Cons w rest2 ⇒ None Int }
+    Nil ↦ None Int ;
+    Cons v rest ↦ match rest { Nil ↦ Some Int v ; Cons w rest2 ↦ None Int }
   }
 
 fn rpnEval (ops : List RpnOp) : Option Int =
-  match rpnEvalList (Nil Int) ops { None ⇒ None Int ; Some stack ⇒ top stack }
+  match rpnEvalList (Nil Int) ops { None ↦ None Int ; Some stack ↦ top stack }
 
 -- ── Oracle ───────────────────────────────────────────────────────────────────
 --
@@ -97,14 +97,14 @@ const exprUnderflow : List RpnOp =
 
 const finalCheck : String =
   match rpnEval exprOk {
-    Some fourteen ⇒ match eq_int fourteen (14 : Int) {
-      True ⇒ match rpnEval exprUnderflow {
-        None ⇒ "PASS" ;
-        Some n ⇒ "FAIL"
+    Some fourteen ↦ match eq_int fourteen (14 : Int) {
+      True ↦ match rpnEval exprUnderflow {
+        None ↦ "PASS" ;
+        Some n ↦ "FAIL"
       } ;
-      False ⇒ "FAIL"
+      False ↦ "FAIL"
     } ;
-    None ⇒ "FAIL"
+    None ↦ "FAIL"
   }
 
 proc main : IO Unit visits [Console] = print_line finalCheck

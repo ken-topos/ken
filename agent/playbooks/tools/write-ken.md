@@ -38,7 +38,7 @@ The rule:
    fails here — there is nothing collapsed to `Top` for it to introduce.
 
 ```ken example
-fn bool_and (a : Bool) (b : Bool) : Bool = match a { True ⇒ b ; False ⇒ False }
+fn bool_and (a : Bool) (b : Bool) : Bool = match a { True ↦ b ; False ↦ False }
 
 -- Both endpoints reduce to the SAME nullary constructor (`True`) => tt.
 const collapsed : Equal Bool (bool_and True True) True = tt

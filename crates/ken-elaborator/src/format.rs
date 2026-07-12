@@ -78,8 +78,6 @@ pub fn canonical_unicode(src: &str) -> String {
             Some(("↦", 3))
         } else if rest.starts_with("->") {
             Some(("→", 2))
-        } else if rest.starts_with("=>") {
-            Some(("⇒", 2))
         } else if rest.starts_with("===") {
             Some(("≡", 3))
         } else if rest.starts_with("<=") {

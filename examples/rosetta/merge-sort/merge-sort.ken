@@ -20,8 +20,8 @@
 
 fn listLength (a : Type) (xs : List a) : Nat =
   match xs {
-    Nil ⇒ Zero ;
-    Cons x xs2 ⇒ Suc (listLength a xs2)
+    Nil ↦ Zero ;
+    Cons x xs2 ↦ Suc (listLength a xs2)
   }
 
 -- Splits `xs` into two roughly-equal halves by alternating elements
@@ -30,9 +30,9 @@ fn listLength (a : Type) (xs : List a) : Nat =
 -- sub-term.
 fn splitAlt (a : Type) (xs : List a) : Prod (List a) (List a) =
   match xs {
-    Nil ⇒ MkProd (List a) (List a) (Nil a) (Nil a) ;
-    Cons x xs2 ⇒ match splitAlt a xs2 {
-      MkProd rest1 rest2 ⇒ MkProd (List a) (List a) (Cons a x rest2) rest1
+    Nil ↦ MkProd (List a) (List a) (Nil a) (Nil a) ;
+    Cons x xs2 ↦ match splitAlt a xs2 {
+      MkProd rest1 rest2 ↦ MkProd (List a) (List a) (Cons a x rest2) rest1
     }
   }
 
@@ -43,25 +43,25 @@ fn splitAlt (a : Type) (xs : List a) : Prod (List a) (List a) =
 -- one literal strict-subterm argument).
 fn merge (a : Type) (leqf : a → a → Bool) (xs : List a) (ys : List a) : List a =
   match xs {
-    Nil ⇒ ys ;
-    Cons x xs2 ⇒ match ys {
-      Nil ⇒ xs ;
-      Cons y ys2 ⇒ match leqf x y {
-        True  ⇒ Cons a x (merge a leqf xs2 ys) ;
-        False ⇒ Cons a y (merge a leqf xs ys2)
+    Nil ↦ ys ;
+    Cons x xs2 ↦ match ys {
+      Nil ↦ xs ;
+      Cons y ys2 ↦ match leqf x y {
+        True  ↦ Cons a x (merge a leqf xs2 ys) ;
+        False ↦ Cons a y (merge a leqf xs ys2)
       }
     }
   }
 
 fn mergeSortFueled (a : Type) (leqf : a → a → Bool) (fuel : Nat) (xs : List a) : List a =
   match fuel {
-    Zero ⇒ xs ;
-    Suc f ⇒ match xs {
-      Nil ⇒ Nil a ;
-      Cons x xs2 ⇒ match xs2 {
-        Nil ⇒ xs ;
-        Cons y xs3 ⇒ match splitAlt a xs {
-          MkProd left right ⇒
+    Zero ↦ xs ;
+    Suc f ↦ match xs {
+      Nil ↦ Nil a ;
+      Cons x xs2 ↦ match xs2 {
+        Nil ↦ xs ;
+        Cons y xs3 ↦ match splitAlt a xs {
+          MkProd left right ↦
             merge a leqf (mergeSortFueled a leqf f left) (mergeSortFueled a leqf f right)
         }
       }
@@ -93,8 +93,8 @@ const sortedResult : String = list_char_to_string (mergeSort Char leqChar scramb
 
 const finalCheck : String =
   match eq sortedResult "abcdef" {
-    True ⇒ "PASS" ;
-    False ⇒ "FAIL"
+    True ↦ "PASS" ;
+    False ↦ "FAIL"
   }
 
 proc main : IO Unit visits [Console] = print_line finalCheck
