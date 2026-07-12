@@ -14,6 +14,37 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
+> ### ⏭ 2026-07-12 ~18:0x — ADR 0014 FULLY SETTLED; N1 CLOSED; N2 FRAMED (pending 1 Architect scope-confirm)
+>
+> **State.** `origin/main @ 9750726e` — ADR 0014 has **no open forks** (PKG-1..4
+> folded + MRES-4c/4d/4e + package abstraction all landed). **N1 CLOSED** (Lane A
+> `6e751130` + Lane B `8f179ce4`; Language/CV/QA retros in). Remaining = build:
+> **N2 → N3 → N4 → N5**.
+>
+> **N2 (in-repo loader) is the active frontier.** Frame **drafted** at
+> `docs/program/wp/n2-in-repo-loader.md` (NOT yet published). Key scoping
+> decision I made: **N2 = the PURE cross-file name-loader spine only** (MRES-1/2/
+> 3a — path↔file bijection, lazy discovery from import edges, cycle=hard-error,
+> per-run `ElabEnv` cache, plural-ready root list w/ one root). Instances stay
+> **ambient (MRES-4A), untouched**. **All** of {source-vs-compiled package
+> detection, instance-manifest, catalog package-file enrichment, `admits`/
+> `program`/`package` grammar, admission gate} moves to **N4** — they need the
+> `package`/`admits` grammar N4 introduces and are not expressible at N2 time.
+> **✅ Architect CONFIRMED the N2/N4 split exactly** (`evt_2506m0052hmen`) — he
+> owned the reshape sequencing bug; pkg-detection/manifest/catalog-file-enrichment
+> all move to N4. Added his 2 clarifiers to the frame (no soundness gap at N2 —
+> ambient-with-coherence MRES-4A is the sound baseline, ADR 0008 checks unchanged;
+> no package files exist in-tree at N2, nothing to detect). He also folded a
+> correction into ADR 0014 @ `architect/work aac8f317` (doc-only, does NOT gate
+> N2 kickoff) — publish over current head when convenient.
+>
+> **NOW EXECUTING:** publish N2 frame doc-only (`--target wp/n2-in-repo-loader`,
+> NEVER main) → **Handoff-Gate-compact the enclave** (spec-leader / spec-author /
+> conformance-validator — GPT seats, post-compact rouse) → kick **N2 Lane A**
+> (enclave spec §3.2 loader semantics + golden; merges first) → then Lane B
+> (Language build). Also publish ADR correction `aac8f317`. Honesty-gate every
+> publish; keep tracker current.
+>
 > ### ✅ 4b ISSUE RESOLVED — PACKAGE ABSTRACTION (operator ruled C) — 2026-07-12 ~16:2x
 >
 > **Operator ruled option (C) + refined it into a PACKAGE ABSTRACTION** parallel
@@ -197,7 +228,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > | WP | MRES | Deps | Size | Round | State |
 > |----|------|------|------|-------|-------|
 > | **N1** fail-closed dup-def | 5/7/8 | none | S | 1 | **✅ MERGED — Lane A @ 6e751130 (PR #559) + Lane B @ 8f179ce4 (PR #562, CI green). N1 CLOSED pending Language retro. `data X=X` now rejected; rosetta closures fixture migrated.** |
-> | **N2** in-repo loader (spine) | 1/2/3a | — | M | 2 | queued |
+> | **N2** in-repo loader (spine) | 1/2/3a | — | M | 2 | **FRAMED (pure name-loader spine; pkg-detection→N4); frame `docs/program/wp/n2-in-repo-loader.md`; gated on 1 Architect scope-confirm before enclave kickoff** |
 > | **N3** import-exclusion + clash-err | 6 | N2 | M | 2 f-f | queued |
 > | **N4** program abstraction / `admits` | 4/4a/b/c | N2 | M/L | 3 | queued |
 > | **N5** re-export `pub use` | 9 | N2 | S | 4 | queued (may defer form) |
