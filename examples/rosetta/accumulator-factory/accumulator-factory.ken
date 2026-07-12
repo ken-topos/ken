@@ -63,7 +63,7 @@ const ten   : Nat = addNat five five
 -- Two independently-driven "calls" against the SAME hidden accumulator,
 -- discriminating: each returns the NEW running total (2, then 5), and the
 -- state persists/accumulates across calls (not just constant per-call).
-const program : ITree Op Resp Bool =
+const prog : ITree Op Resp Bool =
   bind Op Resp Nat Bool
     (addTo two)
     (λr1.
@@ -72,7 +72,7 @@ const program : ITree Op Resp Bool =
         (λr2. Ret Op Resp Bool (and_bool (eq_nat r1 two) (eq_nat r2 five))))
 
 const finalResult : ITree Eff RespEff (Pair Bool Nat) =
-  run_state Nat Eff RespEff Bool Zero program
+  run_state Nat Eff RespEff Bool Zero prog
 
 -- Observing `finalResult`: match-compiler W-style IH-slot support landed
 -- (`dependent-match-wstyle`) -- `match` on `ITree` (any instantiation, incl.
