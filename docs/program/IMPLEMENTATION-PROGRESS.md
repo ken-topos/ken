@@ -26,8 +26,25 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >   `71613710` onto current main `6de39e0a` — disjoint from PR-A, clean; 16 files
 >   11 spec+4 conf+1 guide, +115/−99; honesty gate clean, no crates/kernel/Cargo/
 >   TCB). doc-only. **Retros requested → closes.** #22.
-> - **catalog membership-convention rollout** → **Foundation** (KICKED
->   `evt_c676trrjk3a1`, base current main, branch `wp/catalog-membership-rollout`).
+> - **catalog membership-convention rollout** → **Foundation** (branch
+>   `wp/catalog-membership-rollout`). PR-A ✅ `6de39e0a` · PR-B ✅ `8130f237`
+>   (EffectfulClasses 8/169). **PR-C `Map` (final tier) ✅ KICKED @ ~07:00 UTC**
+>   (`evt_6swcxpa7dzjxe`, thread thr_3mnt59c84z9fa): Foundation ring
+>   Handoff-Gate-compacted (all 3 verified "Context compacted" @ 8130f237) →
+>   kicked @foundation-leader (`agt_37reqsbs5b000`) + send-keys rouse, base
+>   **current `origin/main`** (`8130f237`), frame
+>   `docs/program/wp/catalog-membership-rollout.md`: Map's ~339 lemmas judgment
+>   pass — **overwhelmingly collection-interaction laws that STAY lemma**; attach
+>   only single-applied-owner map laws; fidelity rename+keyword only;
+>   whole-harness sweep (Map name consumers incl. tests); Architect-terminal
+>   review. **PR-C fully gated @ `24dc0b9a`** (17/338 attach: order_equiv/
+>   cat4_bool_or/bool_and/leq_nat pure algebraic+order laws; 321 interaction laws
+>   stay lemma; QA APPROVE + Architect-terminal APPROVE `evt_6wk9e45h3ykfw`,
+>   reverse-norm byte-identical, fn 81/const 1/Ω 4 unchanged; 2 files Map.ken.md
+>   + map_build_acceptance.rs, 53+/53−). Honesty gate CLEAN (ancestry/scope/
+>   trust-grep/WP-token/decl-head all pass). **⏭ RESUME ACTION: publish via CI
+>   (touches test file → NOT doc-only) → on merge, rollout WP #25 CLOSES on the
+>   Foundation ring's retros → then #26 glyph housecleaning.**
 >   Frame `docs/program/wp/catalog-membership-rollout.md`. **PR-A (Tier A):**
 >   EmptyDec/Transport/Sums/LawfulFunctors/Parsing/Collections + finish
 >   LawfulClasses → then PR-B EffectfulClasses → PR-C Map. Judgment pass
