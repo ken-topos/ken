@@ -5,7 +5,7 @@
 > (the catalog's "view" unit). It **inherits `55`'s lawful-class template
 > unchanged** (`55 §3.1`/`§3.2`/`§4`/`§5.2`): laws are `Ω` propositions **proved
 > over inductive carriers, zero `Axiom`, zero `trusted_base()` delta**, by the
-> two-line induction+`cong` grammar with **per-branch `tt`-vs-`Refl`** endpoint
+> two-line induction+`cong` grammar with **per-branch `Proved`-vs-`Refl`** endpoint
 > discrimination. **CAT-2-independent** — collection laws are value-level, no
 > `Monad` needed. **Kernel-untouched, outer-ring.** Three design forks are
 > resolved here (Architect, `main@9fe9617`): **A** `Perm` = count/multiset-
@@ -30,17 +30,17 @@ re-litigated:
    is a recursive `view : Equal …` that `match`es the carrier, closes the base
    directly, and lifts the self-call **IH** under the constructor with `cong`
    (`catalog/packages/transport`, `53 §2`).
-3. **Per-branch `tt`-vs-`Refl`**, never uniform (`55 §3.2`): a branch closes
-   with `tt` when both endpoints reduce to the **same fully-collapsing
+3. **Per-branch `Proved`-vs-`Refl`**, never uniform (`55 §3.2`): a branch closes
+   with `Proved` when both endpoints reduce to the **same fully-collapsing
    constructor head** — a **nullary** ctor, or one whose components all collapse
    — which goes to `Top` (K7), so the goal is no longer `Eq`-shaped; and with
    `Refl` when they reduce to a **neutral**, *including a non-nullary head with
-   a neutral component* (it stays `Eq`-shaped, and `tt : Top` would be ill-typed
+   a neutral component* (it stays `Eq`-shaped, and `Proved : Top` would be ill-typed
    there). The three
    landed list proofs exhibit all three cases and are the working template:
    `list_left_unit → Refl` (definitional, neutral `x`), `list_assoc`'s `Nil`
    base `→ Refl` (neutral `list_append a ys zs`), `list_right_unit`'s `Nil` base
-   `→ tt` (constructor `Nil a`).
+   `→ Proved` (constructor `Nil a`).
 4. **Reuse, don't re-derive, the append monoid** (`§2.4`): CAT-1's proved
    `list_assoc`/`list_left_unit`/`list_right_unit` are generic in the element
    type and cited, not re-proved.
@@ -247,14 +247,14 @@ Bool`:
 - **Non-permuting "sort" (a dedup) fails `Perm`.** For `xs = [True, True,
   False]`, the honest `sort` preserves `count True = 2` and its `Perm` proof
   discharges by induction (the per-branch endpoints — base `count _ Nil = Zero`
-  on both sides → `tt`, inductive steps → `Refl`/`cong` — are pinned at build
-  with CV, `§1 pt 3`, since `sort`/`count` are red-until-built); a dedup drops
+  on both sides → `Proved`, inductive steps → `Refl`/`cong` — are pinned at
+  build with CV, `§1 pt 3`, since `sort`/`count` are red-until-built); a dedup drops
   the count to `1`, so the goal is `Equal Nat 2 1`, uninhabited → **rejected at
   `perm`**.
 - **Non-ordering "sort" (identity on a descending list) fails `is_sorted`.** A
   descending pair leaves `IsTrue (le h g)` at `IsTrue False`, which is
   uninhabited → **rejected at `is_sorted`**; the honest sort reorders so the pair
-  reduces to `IsTrue True = Top`, closed by `tt` (constructor-headed, `§1 pt
+  reduces to `IsTrue True = Top`, closed by `Proved` (constructor-headed, `§1 pt
   3`).
 
 A masked postulate (closing a sort law with `Axiom`) is a non-empty
@@ -357,13 +357,14 @@ grammar:
   Equal (Pair Bool Bool) (set (set s b) c) (set s c)
 ```
 
-All three close **definitionally** — and all three are `Refl`, **none `tt`**,
+All three close **definitionally** — and all three are `Refl`, **none `Proved`**,
 precisely because the `Pair` head is **non-nullary with a neutral component**
 (`§1 pt 3`): `get-set` computes by Σ-β (`pair_fst (mk_pair b _) ⇝ b`) to the
 neutral `b` on both sides → `Refl`; `set-set` computes by Σ-β to the *identical*
 term `mk_pair c (pair_snd s)` on both sides → `Refl` (the `mk_pair` head does
-**not** collapse to `Top` — its component `pair_snd s` is neutral — so `tt : Top`
-would be ill-typed); `set-get` holds by **definitional Σ-η** (`mk_pair (pair_fst
+**not** collapse to `Top` — its component `pair_snd s` is neutral — so
+`Proved : Top` would be ill-typed); `set-get` holds by **definitional Σ-η**
+(`mk_pair (pair_fst
 s) (pair_snd s) ≡ s`, `13 §6`), so the goal reduces to `Equal _ s s` → `Refl` —
 no `match` on the Σ-pair. No `DecEq`/`Ord` instance is needed (the lens laws are
 structural over

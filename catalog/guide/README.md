@@ -23,7 +23,7 @@ into it (`06 §"Retro discipline"`).
   `.ken.md` format itself. Task-first ("how do I write X"), distinct from
   the spec's exhaustive grammar.
 - **[Proof techniques](proof-techniques.ken.md)** — how to actually
-  discharge a law in Ken: choosing `tt` vs. `Refl` at a proof's terminal
+  discharge a law in Ken: choosing `Proved` vs. `Refl` at a proof's terminal
   step, structuring a case-split so a hypothesis stays usable, decidable
   equality via the `sound`/`complete` pattern, why `funext` is definitional,
   and the non-termination hazards a proof author needs to see coming.

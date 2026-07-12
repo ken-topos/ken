@@ -735,7 +735,7 @@ face (soundness pin 2).** `char_at` / `string_to_list_char` construct
 `(c, canonical_proof)` where the `isScalar c` witness is **reduced** from the
 `String`'s UTF-8 validity invariant — a valid `String` yields only scalars, so
 `inRangeBool c` reduces to `true` and the proof is the canonical inhabitant
-`tt : Top`. The witness is **computed**, never `declare_postulate` / `Axiom` /
+`Proved : Top`. The witness is **computed**, never `declare_postulate` / `Axiom` /
 `sorry` / hand-fed: an extraction path that *asserts* the scalar proof instead
 of reducing it is the **trusted-not-proved hole** this pin exists to catch (the
 static-vs-runtime-face discipline — grep the producer for obligation discharge,

@@ -32,7 +32,7 @@ verbatim:
    discharges by **direct induction on the carrier**. **One canonical field per
    law**, no point-free duplicate.
 4. **Instances land over inductive carriers** (`List`/`Option`) so every law is
-   **proved** by induction + `cong` (`55 §3.1`) with the `tt`-vs-`Refl`
+   **proved** by induction + `cong` (`55 §3.1`) with the `Proved`-vs-`Refl`
    discrimination (`55 §3.2`) — **zero `Axiom`, zero delta**. A postulate on an
    inductive carrier is a **defect** (`51 §5`), never an honest delta.
 
@@ -160,7 +160,7 @@ not fire.
 - **`List` applicative — cartesian** (`§4.4` / Fork D): `pure a x = Cons a x
   (Nil a)`; `ap` is the cartesian product-of-effects (`concat_map`-shaped),
   forced by coherence with `Monad List` (`§4`). Every law by induction + `cong`
-  (`55 §3.1`), `tt`-vs-`Refl` per endpoint (`55 §3.2`).
+  (`55 §3.1`), `Proved`-vs-`Refl` per endpoint (`55 §3.2`).
 - **`Option` applicative:** `pure = Some`; `ap (Some g) (Some x) = Some (g x)`,
   else `None`. Laws by finite case-split.
 
@@ -247,10 +247,10 @@ parametric-instance-head gap**, still open with Steward. A *general* surface
   `Monad`, so it cannot be the wired `applicative` field. Laws by induction —
   `bind_lid` closes via the inductive `list_right_unit` lemma at neutral `k a`
   (**not** definitional here, unlike `ITree`/`Option`), `bind_rid`/`bind_asc`
-  bases at `Nil` are constructor-headed → `tt` (`55 §3.2`).
+  bases at `Nil` are constructor-headed → `Proved` (`55 §3.2`).
 - **`Option` monad:** `bind (Some x) k = k x`, `bind None k = None`;
   `bind_lid` neutral `k x` → `Refl`; `bind_rid` both branches constructor-headed
-  → `tt`; `bind_asc` `None` → `tt`, `Some x` neutral → `Refl`.
+  → `Proved`; `bind_asc` `None` → `Proved`, `Some x` neutral → `Refl`.
 
 ## 5. D3 — `Traversable f` (wires `Functor f` + `Foldable f`; **SURF-1/SURF-2-gated**)
 

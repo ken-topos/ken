@@ -3,7 +3,8 @@
 > Status: **K2 elaborated; K2c series-2 completes the three obs-reduction
 > seams** (§3.2 inductive index rewrite, §4.1 non-constant-motive `J`, §5.1
 > full quotient `respect`); **K5 completes the observational fragment** —
-> `Top`-intro (`tt`) and `Bottom`-elim (`absurd`) as direct prelude
+> `Top`-intro (kernel-internal `tt`) and `Bottom`-elim (`absurd`) as direct
+> prelude
 > rules (§1.4). Normative for the interface, computation rules,
 > and algorithmic reduction behavior. This is the machinery `15-identity.md`
 > reuses: the strict proposition universe Omega, observational equality `Eq`
@@ -153,12 +154,15 @@ already-declared Omega constants.
 
 ```
   ──────────────────  (Top-Intro)
-  Gamma |- tt : Top
+  Gamma |- Proved : Top
 ```
 
-`tt : Top` is a prelude constant (a new symbol, not a widened admission of
-an existing former). Combined with Ω-PI (§1.2) — which makes any two proofs
-of `Top` definitionally equal — `tt` is the *unique* inhabitant of `Top` up
+`Proved : Top` is a prelude constant (a new symbol, not a widened admission of
+an existing former). `Proved` is the normative surface spelling; it elaborates
+to the kernel's unchanged internal `tt` constant (`tt_id`). Surface source and
+examples must therefore write `Proved`, while kernel-mechanism narration may
+name `tt` explicitly. Combined with Ω-PI (§1.2) — which makes any two proofs
+of `Top` definitionally equal — `Proved` is the *unique* inhabitant of `Top` up
 to definitional equality, so `Top` is a genuine singleton. No elimination
 rule is needed or provided: a proof of `Top` carries no information (Ω-PI),
 so nothing can be learned by casing on it.
@@ -192,10 +196,11 @@ equality reduces to the conjunction of the argument equalities — which for a
 **nullary** constructor is the empty conjunction, i.e. `Top` (e.g.
 `Eq Bool true true ⇝ Top`) — and a *distinct-constructor* equality reduces
 to `Bottom` (e.g. `Eq Bool true false ⇝ Bottom`). `Top`-intro and
-`Bottom`-elim are precisely what *close* those two outcomes: `tt` proves the
-trivially-true equality, and `absurd` discharges the impossible one from a
-contradictory hypothesis. This is the two-branch shape of a decidable-order
-law such as `Ord.antisym` (the equal branch closes by `tt`; the
+`Bottom`-elim are precisely what *close* those two outcomes: the
+kernel-internal `tt` constant proves the trivially-true equality, and `absurd`
+discharges the impossible one from a contradictory hypothesis. This is the
+two-branch shape of a decidable-order
+law such as `Ord.antisym` (the equal branch closes by `Proved`; the
 contradictory branch closes by `absurd`), and it is why a *complete*
 proof-carrying instance over a decidable carrier needs this fragment (see
 `../50-stdlib/51-lawful-classes.md` §6) — `Eq`-motive elimination (`14 §3`)

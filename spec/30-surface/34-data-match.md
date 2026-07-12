@@ -375,7 +375,7 @@ surface — it only makes an already-trusted eliminator reachable from `.ken`.
 
 **Surface syntax and typing rule (the pin).** `J` is written applied to three
 arguments, `J motive base eq`, and is elaborated in **infer mode** (like the
-kernel eliminators, unlike the checked-mode `Refl`/`absurd`/`tt` sugar whose
+kernel eliminators, unlike the checked-mode `Refl`/`absurd`/`Proved` sugar whose
 motive comes from the goal): the equality's type `A` and endpoints `a`, `b` are
 recovered from `eq`'s inferred type, and the result type is synthesized. The
 rule is verbatim the kernel's `J`-formation (`../10-kernel/15 §4`):
@@ -463,7 +463,7 @@ target:
 for the kernel's computing `Eq` (`../50-stdlib/53 §1`), so branch refinement is
 ordinary substitution into the equality operands followed by the existing
 `Eq`/`Top`/`Bottom` reductions (`../10-kernel/16 §1.4`, §2). A branch may close
-with `tt`, `Refl`, `J`, or a library combinator only if that term checks against
+with `Proved`, `Refl`, `J`, or a library combinator only if that term checks against
 the branch-specialized proof target. In particular, proof irrelevance does **not
 erase the branch obligation**: it equates proofs only after both proofs have
 already been checked at the same proposition (`../10-kernel/16 §1.2`).
