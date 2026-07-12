@@ -27,8 +27,8 @@ accept↔cycle-reject pair for Lane B.
 
 Grounding (landed `§`-bodies + landed code, content-reconciled — not the
 plan): `33 §3`
-(`module`/`import M`/`import M as N`/`import M (foo, Bar)`; the kernel sees a
-single flattened `Σ`), `33 §4` (visibility: module-private by default +
+(`module`/`import M`/`import M as N`/`import M (foo, Bar as Baz)`; the kernel
+sees a single flattened `Σ`), `33 §4` (visibility: module-private by default +
 `pub`; abstract export = opaque interface), `11 §4` (the append-only acyclic
 flat `Σ`; the opaque constant `c : A` that introduces abstract interfaces),
 ES1 `minimality.md` (the `trusted_base()`-delta invariant ES3 must not
@@ -151,36 +151,95 @@ rules**, and the `Σ`/`trusted_base()` identity against the **landed** kernel.
   not a hand-fed visibility flag. Confirms the settled **private-by-default**
   default (`33 §4`, `OQ-syntax` resolved).
 
-### surface/modules/local-shadows-imported-lexically
-- spec: `33 §3.3` (local-over-imported shadowing, lexical, innermost wins)
-- given: a client that selectively imports `M.foo` with `import M (foo)` **and**
-  binds a **local** `def foo : Nat := 0` in the same module, then a bare
-  reference to `foo`
-- expect: the bare `foo` resolves to the **local** binding (innermost wins,
-  lexical), **not** an ambiguity error — the local **shadows** the imported
-  name
-- why: AC3, shadowing is **lexical and never an error** (`33 §3.3`).
-  **Discriminating:** with a local present, `foo` resolves to that local even
-  though the selective import made `M.foo` available under the same bare name.
-  A resolver that treated local-vs-imported shadowing as an error — or let the
-  import shadow the local — fails. Pins the innermost-wins rule at the surface,
-  never reaching the kernel.
+### surface/modules/top-level-local-import-clash-rejected
+- spec: `33 §3.3` (module-level local/import clash, fail-closed)
+- given: `M` exports distinct `foo` and `keep`; one client imports `M.foo`
+  unqualified with `import M (foo)` and also declares a top-level `foo`. Run
+  both declaration orders. In one arm, never reference either `foo` after
+  declaring them.
+- expect: both arms reject at the surface with the specific
+  **`AmbiguousReference`** diagnostic for `foo`, identifying the distinct
+  current-module `foo` and `M.foo` sources. The latent, never-referenced arm
+  rejects at the same binding-time gate. Neither arm reaches the kernel.
+- why: N3 AC2, the module-level reversal. The two declaration orders and the
+  unused arm prevent a use-site-only ambiguity check or silent last-writer/local
+  precedence from passing. **RED UNTIL N3 LANE B:** current `bind_import`
+  silently keeps the local binding instead of raising the clash.
 
-### surface/modules/three-import-forms-resolve-to-one-binding
-- spec: `33 §3.2` (the three import forms)
-- given: `module M { pub def foo : Nat := 0 }` and three clients — `import M`
+### surface/modules/import-de-selection-leaves-local-sole-binding
+- spec: `33 §3.2`/`§3.3` (positive selection; omission resolves a clash)
+- given: `M` exports distinct `foo` and `keep`; the client declares a top-level
+  `foo`, then selects only `keep` with `import M (keep)`
+- expect: **accepted**. Bare `foo` resolves to the client's local `GlobalId`,
+  `keep` resolves to `M.keep`, and `M.foo` is not introduced unqualified.
+- why: N3 AC2, the accept side of the name-only clash flip. Relative to the
+  reject fixture, the imported `foo` is omitted; a resolver that imports the
+  whole module despite the positive list still clashes or resolves `foo` to the
+  wrong target.
+
+### surface/modules/per-name-rename-resolves-distinct-targets
+- spec: `33 §3.2`/`§3.3` (per-name rename resolves a clash)
+- given: the same `M` exports distinct `foo` and `keep`; the client declares
+  its own top-level `foo` and writes `import M (foo as bar)`, then references
+  both bare names
+- expect: **accepted**. Bare `foo` resolves to the local declaration's
+  `GlobalId`; bare `bar` resolves to the distinct `GlobalId` of `M.foo`. The
+  import creates no new declaration and leaves the two target IDs unequal.
+- why: N3 AC2, a structural target discriminator. A parser that confuses the
+  inner `as` with module aliasing, or a resolver that binds both spellings to
+  one target, cannot satisfy both target assertions. **RED UNTIL N3 LANE B.**
+
+### surface/modules/lexical-binder-still-shadows-imported
+- spec: `33 §3.3` (narrower lexical scope, innermost wins)
+- given: a client selectively imports `M.foo` with `import M (foo)` and defines
+  `fn pick (foo : Nat) : Nat = foo`
+- expect: **accepted**. The `foo` in `pick`'s body resolves to the parameter
+  (the innermost local/de-Bruijn binding), not the imported `M.foo` `GlobalId`;
+  no `AmbiguousReference` is raised.
+- why: N3 AC2, the negative boundary of the reversal. This differs from the
+  module-level reject by moving only the competing binding into a narrower term
+  scope. A resolver that over-applies the new clash rule into lexical binders
+  rejects and fails this case.
+
+### surface/modules/prelude-clash-rejected-rename-local-resolves
+- spec: `33 §3.3`/`§4` (prelude is an unshadowable primitive floor)
+- given: paired clients: (a) declare `def Bool = Nat`; (b) instead declare
+  `def LocalBool = Bool`, leaving the registered prelude `Bool`
+  untouched
+- expect: (a) rejects at the surface with **`AmbiguousReference`** for `Bool`,
+  identifying the local and prelude sources; (b) accepts, with `LocalBool` and
+  the prelude `Bool` resolving to distinct `GlobalId`s. There is no prelude
+  exclusion input or positive opt-out arm.
+- why: N3 AC2. Renaming only the local changes reject to accept while the
+  prelude environment is fixed. A warn-and-allow policy, silent local win, or
+  resolver that aliases `LocalBool` to prelude `Bool` fails. **RED UNTIL N3 LANE
+  B.**
+
+### surface/modules/per-name-rename-parses-hiding-is-syntax-error
+- spec: `32` import EBNF, `33 §3.2` (selection item rename; no `hiding` form)
+- given: parse `import M (foo as bar)` and, as the controlled negative, parse
+  `import M hiding (foo)` against the same exported-name fixture
+- expect: the first reaches import resolution as a selective per-name rename;
+  the second rejects specifically with **`ParseError`** at `hiding`, before
+  module loading or name resolution. It is not `UnboundName`,
+  `AmbiguousReference`, or a later elaboration error.
+- why: N3 AC2 pins both grammar orientations. Treating `as` only as a
+  module-level alias rejects the positive arm; admitting any exclusion
+  production accepts or advances the negative arm. **RED UNTIL N3 LANE B.**
+
+### surface/modules/import-spellings-resolve-to-one-binding
+- spec: `33 §3.2` (three import forms plus selective per-name rename)
+- given: `module M { pub def foo : Nat := 0 }` and four clients — `import M`
   (uses `M.foo`), `import M as N` (uses `N.foo`), `import M (foo)` (uses
-  `foo`)
-- expect: all three **resolve to the same underlying binding** `M`'s `foo` (the
-  same core `GlobalId` in the flattened `Σ`); the alias and selective forms
-  are **surface** re-namings of one declaration
-- why: AC3, the **accept anchor** — the three import forms are surface
-  resolution sugar over one binding. **Discriminating** (the accept side of
-  §A/§C's rejects): all three reach the **identical** `Σ` binding, so a
-  resolver that produced **distinct** bindings (duplicating the declaration
-  per import form) fails — reinforces AC1 (import is re-naming, not
-  re-declaration). Drive the **real** resolution, not a hand-constructed
-  `M.foo → GlobalId` map.
+  `foo`), and `import M (foo as bar)` (uses `bar`)
+- expect: all four spellings **resolve to the same underlying binding** `M`'s
+  `foo` (the same core `GlobalId` in the flattened `Σ`); alias, selection, and
+  per-name rename are surface names for one declaration
+- why: AC3 plus N3 AC2, the accept anchor. A resolver that duplicates the
+  declaration per spelling perturbs the flat `Σ`; one that mistakes per-name
+  rename for module aliasing resolves the fourth arm differently. Drive the
+  real resolver, not a hand-constructed `M.foo → GlobalId` map. The fourth arm
+  is **RED UNTIL N3 LANE B**; the retained three arms remain live.
 
 ## D. In-repo cross-file loader (N2; RED UNTIL LANE B)
 
@@ -273,14 +332,21 @@ fixture's payload as `A → B → A`.
   `client-match-hidden-ctor-rejected-at-surface` (soundness).
 - **AC3** (visibility + resolution surface-only):
   `private-name-access-rejected-at-surface` (soundness),
-  `local-shadows-imported-lexically`,
-  `three-import-forms-resolve-to-one-binding`.
+  `import-spellings-resolve-to-one-binding`.
 - **AC4** (visibility default settled): witnessed by
   `private-name-access-rejected-at-surface` (private-by-default); the OQ
   resolution itself is `/spec §33 §4` + `90-open-decisions.md`.
 - **N2** (cross-file path resolution + cycle hard-error + plural-ready roots):
   `cross-file-import-resolves-through-single-root-list` and
   `import-cycle-rejected-naming-closed-path`.
+- **N3** (module clash error + explicit resolution, lexical boundary, prelude
+  floor, and grammar): `top-level-local-import-clash-rejected`,
+  `import-de-selection-leaves-local-sole-binding`,
+  `per-name-rename-resolves-distinct-targets`,
+  `lexical-binder-still-shadows-imported`,
+  `prelude-clash-rejected-rename-local-resolves`,
+  `per-name-rename-parses-hiding-is-syntax-error`, and the renamed arm of
+  `import-spellings-resolve-to-one-binding`.
 
 ## Cross-case consistency sweep
 
@@ -297,10 +363,22 @@ fixture's payload as `A → B → A`.
   that **never reaches the kernel** — never a `TypeMismatch` or an
   admitted-then-caught kernel state.
 - **Import is re-naming, not re-declaration.**
-  `three-import-forms-resolve-to-one-binding` and
+  `import-spellings-resolve-to-one-binding` and
   `module-elaborates-to-identical-flat-sigma` agree: every import form
   resolves to **one** underlying `GlobalId`; a form that re-declared per
   import would perturb the flat `Σ` (contradicting AC1).
+- **Module clashes and lexical shadowing are disjoint gates.** A top-level
+  local plus unqualified import rejects at binding time, including when unused;
+  moving only that local into a function parameter accepts and resolves the
+  body structurally to the innermost binder. Neither verdict can be implemented
+  by a blanket "locals win" or blanket "same spelling errors" rule.
+- **Both explicit module-clash resolutions leave one target per bare name.**
+  De-selection leaves local `foo` as the sole bare binding. Per-name rename
+  leaves local `foo` and imported `bar` as two names for two distinct target
+  IDs. Both agree with import-as-renaming and the flat-`Σ` invariant.
+- **Prelude remains present in both prelude arms.** The reject arm conflicts
+  with the fixed prelude `Bool`; the accept arm changes only the local spelling.
+  No import list, `hiding` form, or prelude opt-out participates.
 - **The N2 pair differs only by one import edge.** The same one-entry root
   list, `A` source, `B.value` declaration, strict bijection, and qualified use
   appear in both arms. With no `B → A` edge, `B.value` resolves and accepts;
@@ -321,8 +399,10 @@ fixture's payload as `A → B → A`.
   round (`63` supply-chain). N2 resolves only in-repo units under its supplied
   roots. `program` / `package` / `admits`, instance manifests, package-kind
   detection, and instance visibility are N4 and are not asserted here.
-- **Local/import clash and shadowing changes** are N3. The N2 pair uses only a
-  qualified `B.value`, so it neither changes nor re-pins `§3.3` precedence.
+- **The N3 clash/rename suite does not re-pin the loader.** Its fixtures use
+  loaded module interfaces but assert only binding-time diagnostics and target
+  identities. The N2 pair remains the sole home for root/path traversal and
+  cycle behavior.
 - **Multi-root precedence** is deferred. The N2 accept case proves only that a
   plural root input with exactly one populated entry resolves; it does not
   choose how two roots compete.
@@ -336,3 +416,11 @@ the cycle arm rejects specifically at `ImportCycle` with `A → B → A`. The
 existing `Σ` / `trusted_base()` identity (AC1), abstract-export identity (AC2),
 and visibility diagnostics (AC3) remain unchanged. No hand-constructed export
 map satisfies the new pair.
+
+## Build-forward (N3 Lane B)
+
+This N3 addition is conformance-only. Lane B adds the per-name rename parser
+arm and replaces `bind_import`'s silent local-wins behavior with the specific
+binding-time clash error, including latent clashes and the fixed prelude floor.
+It must not change narrower lexical resolution. No N3 case reaches the kernel,
+adds a declaration to `Σ`, or changes `trusted_base()`.

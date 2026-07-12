@@ -103,6 +103,11 @@ into scope. Three forms:
 - **`import M (foo, Bar)`** — selective: exactly `foo`, `Bar`, brought
   **unqualified**; nothing else of `M`.
 
+A selective item is either a name or a per-name rename. Thus `import M (foo,
+Bar as Baz)` brings `foo` unqualified and brings `M.Bar` unqualified under the
+name `Baz`; it does not also bind `Bar`. The per-name `as Baz` is inside the
+selection list and is distinct from the module alias in `import M as N`.
+
 For in-repo compilation units, dotted module paths and source-file paths obey a
 total, role-blind bijection under a catalog root. A path with `N` components
 names the unique leaf source file reached through `N - 1` directories: for
@@ -134,22 +139,37 @@ ambient under the existing coherence rules (MRES-4A). Instance manifests,
 package-kind detection, and the `admits` / `program` /
 `package` boundary are deferred to N4; the content-addressed package manager
 remains a later round. Multi-root precedence is likewise deferred. The
-local/import shadowing rules in §3.3 are unchanged by this loader.
+module-level clash and narrower lexical-shadowing rules are specified in §3.3;
+the loader does not alter either rule.
 
 ### 3.3 Name resolution (surface-only; never reaches the kernel)
 
 Resolution is a **surface / elaboration** pass; a name still unresolved after it
 is a **surface error** (`24`) — it never reaches the kernel:
 
-- **Qualified / aliased / selective** references are **unambiguous by
-  construction**: `M.foo`, `N.foo`, and a selectively-imported `foo` each name
-  exactly one declaration.
-- **Local over imported.** A name bound in the current module (or a narrower
-  scope) **shadows** an imported one, resolved lexically (innermost wins) —
-  never an error.
-- Every failure — unresolved name, out-of-scope private name (`§4`) — is a
-  **surface diagnostic**; the flattened `Σ` the kernel receives contains only
-  resolved, in-scope references.
+- **Qualified / aliased / selective import targets** each identify exactly one
+  declaration before collision checking: `M.foo`, `N.foo`, and a selectively
+  imported or renamed name retain the imported declaration's identity.
+- **Top-level local/import clash.** If one unqualified name is bound both by a
+  top-level local definition and by an import, resolution raises the surface
+  error **`AmbiguousReference`**. Silent local-wins is not permitted. The check
+  is order-independent and fail-closed: it runs whether or not any expression
+  references the clashing name. The source must leave the imported name out of
+  the selective list or rename it per-name at the import site, so that only one
+  declaration retains the original unqualified name.
+- **Narrower lexical shadowing.** A `λ`, `let`, parameter, or pattern binder in
+  a narrower lexical scope still shadows an outer or imported name. Resolution
+  is lexical (innermost wins) and is never a module-level clash error; this
+  term-language rule is orthogonal to the preceding top-level rule.
+- **Prelude floor.** Prelude names are always-present unqualified bindings and
+  cannot be shadowed by top-level local definitions. Such a collision raises
+  **`AmbiguousReference`** and is resolved by renaming the local definition.
+  There is no form that excludes or renames a prelude binding; keeping this
+  floor deliberately small bounds its collision surface.
+- Every failure — unresolved name, **`AmbiguousReference`** from a top-level
+  clash, or an out-of-scope private name (`§4`) — is a **surface diagnostic**;
+  the flattened `Σ` the kernel receives contains only resolved, in-scope
+  references.
 
 ## 4. Visibility and abstract export
 
