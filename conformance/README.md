@@ -221,13 +221,14 @@ claim with no conformance case is a claim no one can rely on
   surface diagnostics that **never reach the kernel**. N3 pins explicit
   resolution by positive de-selection or per-name rename, keeps narrower
   lexical binder shadowing innermost-wins, and rejects `hiding` at parse time.
-  Package manager / cross-package imports are **out**. N2 adds the in-repo
-  cross-file loader
-  golden: an import resolves another leaf file through the plural root API with
+  N2 adds the in-repo cross-file loader golden: an import resolves another leaf
+  file through the plural root API with
   exactly one root (red until N2 Lane B), while adding only a back-edge flips
   the same fixture to the specific `ImportCycle` diagnostic naming
-  `A → B → A`. Package/admission/instance behavior and multi-root precedence
-  remain out of scope.
+  `A → B → A`. N4 adds source-world anonymous `program`/`package` boundaries,
+  explicit `admits`, the direct-use-versus-transitive-coherence discriminator,
+  self-admission, and defining-package provenance. Compiled manifests,
+  re-export-carried instance surfaces, and multi-root precedence remain out.
 - `runtime/seed-runtime.md` — dedup + O(1) equality; `Int` past 2⁵³ exact;
   `unknown` propagation.
 - `runtime/capacity/seed-capacity.md` — X2 store hardening (`44`): dedup-aware
