@@ -28,10 +28,16 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > C(atomic capstone, strict gate)`. **Blast-radius insight:** only the capstone
 > C needs the catalog freeze; **B1–B4 run in parallel with N3/N4/N5** (inner-ring,
 > catalog read-only). Task #38.
-> **NEXT (this burst):** publish backbone + review doc-only → route **CST-vs-AST
-> architecture fork to Architect** (operator-review-before-merge) → release **P0
-> separator reconciliation** mini-WP (enclave/grammar) → then **S** canonical-form
-> spec clause.
+> **DONE this burst:** backbone + review published doc-only (PR #574 →
+> `172e5f36`); **CST-vs-AST fork routed to Architect** (`evt_20fh7xg0wehs2`,
+> operator-review-before-merge). **P0 frame authored + grounded** —
+> `docs/program/wp/kenfmt-p0-separator-reconciliation.md`. **★ P0 shrank on
+> grounding:** parser (`parser.rs:737/766`) + corpus already use SEMICOLONS; only
+> the EBNF is stale (comma). P0 = **spec-only** EBNF fix (comma→`;` for
+> record/class/instance/law field-decl blocks), no parser/corpus change. Frame
+> ready; **HOLDING publish + enclave kickoff for operator go/hold** (asked:
+> release P0 now, or hold for CST sign-off; Steward leans go-now — P0 ⟂ CST).
+> **THEN:** **S** canonical-form spec clause (`31 §1a/b/c`).
 >
 > **All merged prior burst:** **N2 CLOSED** (in-repo loader LIVE — Lane A
 > `fbc4d3e1` + Lane B `575f43d2`, CI green). **ADR 0015 DONE in spec/conformance**
