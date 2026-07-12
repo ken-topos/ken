@@ -29,11 +29,13 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >   flips WP S token-kind golden GREEN; no layout (B3). Single build lane,
 >   Architect-terminal. Publishing doc-only → **Handoff-Gate Language → kick B2**
 >   (ring free, B1 retros in). N3 Lane B queues behind B2.
-> - **N4 → ENCLAVE — frame MERGED** (`origin/main @ fcc0dca6`, PR #581). Enclave
->   Handoff-Gate LAUNCHED (bg, compacting). **NEXT: verify enclave drops → kick
->   N4 Lane A** (spec §33/§32 program/admits grammar + admission gate + golden;
->   buildable-now core, compiled-manifest/MRES-4d/pkg-mgr DEFERRED). Parallel to
->   the Language kenfmt track.
+> - **N4 Lane A → ENCLAVE — RELEASED** (`evt_3gb5zjq75x388`). Frame merged
+>   (`fcc0dca6`, PR #581). Enclave Handoff-Gate DONE (all 3 compacted @ fcc0dca6,
+>   WIDE-verified; N3 spec squash leftover auto-preserved). Lane A kickoff posted
+>   + spec-leader roused (spec §32/§33 program/admits grammar + admission gate +
+>   two-set + self-admission + provenance + CV golden; buildable-now core,
+>   compiled-manifest/MRES-4d/pkg-mgr DEFERRED; Architect-terminal). **NEXT:
+>   await Lane A SHA → doc-only publish → Lane B (Language).**
 > - **N3 Lane A → ENCLAVE — GATED, PUBLISHING.** Candidate `8204e727` (linear
 >   `ba514aac → 27e56a79 spec → e31f3259 conf → 8204e727 prelude-carrier fix`);
 >   CV combined APPROVE + **Architect-terminal APPROVE** (merge-Decision vote,
