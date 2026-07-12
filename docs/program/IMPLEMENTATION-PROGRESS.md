@@ -39,13 +39,19 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > + HELD** (`kenfmt-p0-separator-reconciliation.md`): parser (`parser.rs:737/766`)
 > + corpus already SEMICOLONS; only EBNF stale (comma) → P0 = spec-only EBNF fix;
 > **operator held P0 to bundle with S** (2026-07-12).
-> **NEXT:** frame **S — canonical-form spec clause `31 §1a/b/c`** (transcribe the
-> review's 12 rule sections; resolve S-owned open points: braces-now, lambda
-> Unicode+dot, literate ignore/reject narrow-exemption, type-app preserve-as-
-> parsed); **bundle P0 into the S release**. Then release S+P0 to enclave
-> (Handoff-Gate) → B1 releases to Language after S lands. B2/B3/B4/C follow.
-> Sequencing: B-series runs parallel with N3/N4/N5; only capstone C needs the
-> catalog freeze.
+> **S FRAMED** — `docs/program/wp/kenfmt-s-canonical-form-spec.md` (bundles P0).
+> Key grounding: `spec/30-surface/31-lexical.md §1a/b/c` ALREADY mandate the
+> formatter + spec the token/glyph half; **S extends §1 with canonical LAYOUT**
+> (review §§1,3–12), makes token-kind canon normative (closes the §1b `ℓ`-overload
+> open note), specs `.ken.md` + the narrow ignore/reject fence exemption, resolves
+> braces-now / lambda-Unicode+dot / type-app-preserve, folds P0's EBNF fix, + CV
+> golden for the 8 gates. Spec+conformance only. **B1 note bumped Accepted**
+> (architect/work `5a430c32`) — ready for doc-only publish so B2–B4 inherit.
+> **HOLDING at operator checkpoint:** publish the doc batch (S+P0 frames + B1 note
+> + tracker) and **release S+P0 to the enclave** (Handoff-Gate → kick) — or let the
+> operator review the S frame first. On steward/work (unpublished): P0 frame, S
+> frame, tracker, (B1 note pending publish). Then B1→Language after S lands;
+> B2/B3/B4/C follow; only capstone C needs the catalog freeze.
 >
 > **All merged prior burst:** **N2 CLOSED** (in-repo loader LIVE — Lane A
 > `fbc4d3e1` + Lane B `575f43d2`, CI green). **ADR 0015 DONE in spec/conformance**
