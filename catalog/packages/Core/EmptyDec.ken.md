@@ -61,7 +61,7 @@ data Dec (P : Omega) : Type0 =
   | No (P -> Empty)
 
 fn decide (P : Omega) (d : Dec P) : Bool =
-  match d { Yes p ⇒ True ; No f ⇒ False }
+  match d { Yes p ↦ True ; No f ↦ False }
 ```
 
 What this entry *does* author, as real surface code.
@@ -98,19 +98,19 @@ class DecEq a {
 }
 
 fn bool_eq (a : Bool) (b : Bool) : Bool =
-  match a { True ⇒ b ; False ⇒ match b { True ⇒ False ; False ⇒ True } }
+  match a { True ↦ b ; False ↦ match b { True ↦ False ; False ↦ True } }
 
 instance DecEq Bool {
   eq = bool_eq ;
   sound =
     λx. match x {
-      True  ⇒ λy. match y { True ⇒ λp. Proved ; False ⇒ λp. absurd p } ;
-      False ⇒ λy. match y { True ⇒ λp. absurd p ; False ⇒ λp. Proved }
+      True  ↦ λy. match y { True ↦ λp. Proved ; False ↦ λp. absurd p } ;
+      False ↦ λy. match y { True ↦ λp. absurd p ; False ↦ λp. Proved }
     } ;
   complete =
     λx. match x {
-      True  ⇒ λy. match y { True ⇒ λp. Proved ; False ⇒ λp. absurd p } ;
-      False ⇒ λy. match y { True ⇒ λp. absurd p ; False ⇒ λp. Proved }
+      True  ↦ λy. match y { True ↦ λp. Proved ; False ↦ λp. absurd p } ;
+      False ↦ λy. match y { True ↦ λp. absurd p ; False ↦ λp. Proved }
     }
 }
 ```
@@ -143,8 +143,8 @@ discharges it into `Empty` directly; this bridge is `Ω → Type`, not
 ```ken
 fn dec_eq_decides (a : Type) (d : DecEq a) (x : a) (y : a) : Dec (Equal a x y) =
   match (d.eq x y) eqn: h {
-    True ⇒ Yes (Equal a x y) (d.sound x y h) ;
-    False ⇒
+    True ↦ Yes (Equal a x y) (d.sound x y h) ;
+    False ↦
       No (Equal a x y)
          (λpxy. absurd (trans Bool False (d.eq x y) True
                               (sym Bool (d.eq x y) False h)

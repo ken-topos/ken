@@ -109,8 +109,8 @@ pub fn register_conversions(elab: &mut ElabEnv) -> Result<(), ElabError> {
         let int_to_n_src = format!(
             "fn intTo{name} (n : Int) : Option {name} = \
              match (and_bool (leq_int {min} n) (leq_int n {max})) {{ \
-               True => Some {name} (int_to_{snake}_raw n) ; \
-               False => None {name} \
+               True |-> Some {name} (int_to_{snake}_raw n) ; \
+               False |-> None {name} \
              }}",
             name = spec.name,
             snake = spec.snake,
@@ -159,11 +159,11 @@ pub fn register_conversions(elab: &mut ElabEnv) -> Result<(), ElabError> {
             let src = format!(
                 "fn saturating{op}{name} (a : {name}) (b : {name}) : {name} = \
                  match (leq_int {sum} {max}) {{ \
-                   True => match (leq_int {min} {sum}) {{ \
-                     True => int_to_{snake}_raw {sum} ; \
-                     False => int_to_{snake}_raw {min} \
+                   True |-> match (leq_int {min} {sum}) {{ \
+                     True |-> int_to_{snake}_raw {sum} ; \
+                     False |-> int_to_{snake}_raw {min} \
                    }} ; \
-                   False => int_to_{snake}_raw {max} \
+                   False |-> int_to_{snake}_raw {max} \
                  }}",
                 op = op_label,
                 name = spec.name,

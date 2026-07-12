@@ -89,7 +89,7 @@ fn run(src: &str) -> (Duration, EvalVal, ElabEnv) {
 #[test]
 fn single_self_reference_stays_linear_at_depth_40() {
     let src = format!(
-        "fn single (n : Nat) : Nat = match n {{ Zero => Zero ; Suc m => Suc (single m) }}\nconst main : Nat = single ({})\n",
+        "fn single (n : Nat) : Nat = match n {{ Zero |-> Zero ; Suc m |-> Suc (single m) }}\nconst main : Nat = single ({})\n",
         nat_lit(40)
     );
     let (dt, v, env) = run(&src);
@@ -111,42 +111,42 @@ fn natgcd_plus_nattodecimal_stays_fast() {
 data OrdResult = Lt | Eq | Gt
 
 fn list_append (a : Type) (xs : List a) (ys : List a) : List a =
-  match xs { Nil => ys ; Cons x xs2 => Cons a x (list_append a xs2 ys) }
+  match xs { Nil |-> ys ; Cons x xs2 |-> Cons a x (list_append a xs2 ys) }
 
 fn concat (a : String) (b : String) : String =
   list_char_to_string (list_append Char (string_to_list_char a) (string_to_list_char b))
 
 fn natAdd (a : Nat) (b : Nat) : Nat =
-  match a { Zero => b ; Suc m => Suc (natAdd m b) }
+  match a { Zero |-> b ; Suc m |-> Suc (natAdd m b) }
 
 fn natSub (a : Nat) (b : Nat) : Nat =
   match b {
-    Zero  => a ;
-    Suc n => match a {
-               Zero  => Zero ;
-               Suc m => natSub m n
+    Zero  |-> a ;
+    Suc n |-> match a {
+               Zero  |-> Zero ;
+               Suc m |-> natSub m n
              }
   }
 
 fn natCmpZero (b : Nat) : OrdResult =
-  match b { Zero => Eq ; Suc n => Lt }
+  match b { Zero |-> Eq ; Suc n |-> Lt }
 
 fn natCmp (a : Nat) (b : Nat) : OrdResult =
   match a {
-    Zero  => natCmpZero b ;
-    Suc m => match b { Zero => Gt ; Suc n => natCmp m n }
+    Zero  |-> natCmpZero b ;
+    Suc m |-> match b { Zero |-> Gt ; Suc n |-> natCmp m n }
   }
 
 fn natToInt (n : Nat) : Int =
-  match n { Zero => (0 : Int) ; Suc m => (1 : Int) + natToInt m }
+  match n { Zero |-> (0 : Int) ; Suc m |-> (1 : Int) + natToInt m }
 
 fn natGcdFueled (fuel : Nat) (a : Nat) (b : Nat) : Nat =
   match fuel {
-    Zero  => a ;
-    Suc f => match natCmp a b {
-               Eq => a ;
-               Gt => natGcdFueled f (natSub a b) b ;
-               Lt => natGcdFueled f a (natSub b a)
+    Zero  |-> a ;
+    Suc f |-> match natCmp a b {
+               Eq |-> a ;
+               Gt |-> natGcdFueled f (natSub a b) b ;
+               Lt |-> natGcdFueled f a (natSub b a)
              }
   }
 
@@ -168,29 +168,29 @@ const eleven : Nat = Suc ten
 const twelve : Nat = Suc eleven
 
 fn sub10 (n : Nat) : Option Nat =
-  match n { Zero => None Nat ; Suc n1 =>
-  match n1 { Zero => None Nat ; Suc n2 =>
-  match n2 { Zero => None Nat ; Suc n3 =>
-  match n3 { Zero => None Nat ; Suc n4 =>
-  match n4 { Zero => None Nat ; Suc n5 =>
-  match n5 { Zero => None Nat ; Suc n6 =>
-  match n6 { Zero => None Nat ; Suc n7 =>
-  match n7 { Zero => None Nat ; Suc n8 =>
-  match n8 { Zero => None Nat ; Suc n9 =>
-  match n9 { Zero => None Nat ; Suc n10 => Some Nat n10 } } } } } } } } } }
+  match n { Zero |-> None Nat ; Suc n1 |->
+  match n1 { Zero |-> None Nat ; Suc n2 |->
+  match n2 { Zero |-> None Nat ; Suc n3 |->
+  match n3 { Zero |-> None Nat ; Suc n4 |->
+  match n4 { Zero |-> None Nat ; Suc n5 |->
+  match n5 { Zero |-> None Nat ; Suc n6 |->
+  match n6 { Zero |-> None Nat ; Suc n7 |->
+  match n7 { Zero |-> None Nat ; Suc n8 |->
+  match n8 { Zero |-> None Nat ; Suc n9 |->
+  match n9 { Zero |-> None Nat ; Suc n10 |-> Some Nat n10 } } } } } } } } } }
 
 fn mod10Fueled (fuel : Nat) (n : Nat) : Nat =
   match fuel {
-    Zero => n ;
-    Suc f => match sub10 n { None => n ; Some n2 => mod10Fueled f n2 }
+    Zero |-> n ;
+    Suc f |-> match sub10 n { None |-> n ; Some n2 |-> mod10Fueled f n2 }
   }
 
 fn mod10 (n : Nat) : Nat = mod10Fueled n n
 
 fn div10Fueled (fuel : Nat) (n : Nat) (q : Nat) : Nat =
   match fuel {
-    Zero => q ;
-    Suc f => match sub10 n { None => q ; Some n2 => div10Fueled f n2 (Suc q) }
+    Zero |-> q ;
+    Suc f |-> match sub10 n { None |-> q ; Some n2 |-> div10Fueled f n2 (Suc q) }
   }
 
 fn div10 (n : Nat) : Nat = div10Fueled n n Zero
@@ -200,15 +200,15 @@ fn digitChar (d : Nat) : String =
 
 fn natToDecimalFueled (fuel : Nat) (n : Nat) : String =
   match fuel {
-    Zero => digitChar n ;
-    Suc f => match div10 n {
-      Zero  => digitChar (mod10 n) ;
-      Suc q => concat (natToDecimalFueled f (Suc q)) (digitChar (mod10 n))
+    Zero |-> digitChar n ;
+    Suc f |-> match div10 n {
+      Zero  |-> digitChar (mod10 n) ;
+      Suc q |-> concat (natToDecimalFueled f (Suc q)) (digitChar (mod10 n))
     }
   }
 
 fn natToDecimal (n : Nat) : String =
-  match n { Zero => "0" ; Suc m => natToDecimalFueled (Suc m) (Suc m) }
+  match n { Zero |-> "0" ; Suc m |-> natToDecimalFueled (Suc m) (Suc m) }
 
 const main : String = natToDecimal (natGcd twelve eight)
 "#;

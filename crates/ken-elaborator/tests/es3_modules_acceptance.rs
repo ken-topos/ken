@@ -113,7 +113,7 @@ fn top_level_pub_data_is_not_abstract_exported() {
     // same compilation unit — the exact capability the defect silently
     // destroyed.
     env.elaborate_decl("const mk : T = MkT").expect("MkT must be constructible");
-    env.elaborate_decl("fn unwrap (t : T) : Int = match t { MkT => 0 }")
+    env.elaborate_decl("fn unwrap (t : T) : Int = match t { MkT |-> 0 }")
         .expect("MkT must be matchable");
 }
 
@@ -127,7 +127,7 @@ fn client_match_hidden_ctor_rejected_at_surface() {
     env.elaborate_file("module M { pub data T = MkT }").expect("module M elaborates");
 
     let result = env.elaborate_decl(
-        "fn bad (t : M.T) : Int = match t { MkT => 0 }",
+        "fn bad (t : M.T) : Int = match t { MkT |-> 0 }",
     );
     assert!(result.is_err(), "AC2: matching a hidden constructor must be rejected");
     // Surface, not kernel: never a KernelRejected/TypeMismatch — the ctor

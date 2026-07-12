@@ -3,8 +3,8 @@
 //! Recognises the token subset for G1 (V0), V1 spec-annotation keywords,
 //! L1 numeric literals (integer, float, decimal with `d`-suffix, float32 with
 //! `f32`-suffix), infix arithmetic operators `+`, `+%`, `*`, `==`,
-//! L2 sum-type/pattern-match keywords (`data`, `match`, `def`, `=>`
-//! fat-arrow), and L7 `foreign` declaration tokens (`38 §2.1`, `(oracle)`
+//! L2 sum-type/pattern-match keywords (`data`, `match`, `def`, `=>`/`|->`
+//! arm separators), and L7 `foreign` declaration tokens (`38 §2.1`, `(oracle)`
 //! keyword spellings). `type` is reserved (SURF-def-refinement; `33 §1`)
 //! and no longer a declaration keyword. Whitespace and `-- …` line
 //! comments are skipped.
@@ -89,7 +89,7 @@ pub enum Token {
     Meet,        // `⊓`
     Times,       // `><` / `×`
     // L2 punctuation
-    FatArrow, // `=>` — match arm separator
+    MapsTo, // `=>` / `⇒` / `|->` / `↦` — match arm separator
     // L1 numeric literal tokens
     IntLit(i128),         // integer literal too large for u32
     FloatLit(f64),        // decimal-point float: `3.14`, `1e-9`
@@ -205,6 +205,11 @@ impl<'s> Lexer<'s> {
             }
             '|' => {
                 self.advance();
+                if self.src[self.pos..].starts_with("->") {
+                    self.advance();
+                    self.advance();
+                    return Ok((Token::MapsTo, Span::new(start, self.pos)));
+                }
                 return Ok((Token::Pipe, Span::new(start, self.pos)));
             }
             ';' => {
@@ -231,7 +236,7 @@ impl<'s> Lexer<'s> {
                 }
                 if self.cur() == Some('>') {
                     self.advance();
-                    return Ok((Token::FatArrow, Span::new(start, self.pos)));
+                    return Ok((Token::MapsTo, Span::new(start, self.pos)));
                 }
                 return Ok((Token::Eq, Span::new(start, self.pos)));
             }
@@ -257,7 +262,11 @@ impl<'s> Lexer<'s> {
             }
             '⇒' => {
                 self.advance();
-                return Ok((Token::FatArrow, Span::new(start, self.pos)));
+                return Ok((Token::MapsTo, Span::new(start, self.pos)));
+            }
+            '↦' => {
+                self.advance();
+                return Ok((Token::MapsTo, Span::new(start, self.pos)));
             }
             '≡' => {
                 self.advance();

@@ -76,9 +76,9 @@ fn surf1_d2_recursive_proc_group_with_visits_reaches_checker() {
 
     env.elaborate_file(
         "proc surf1_even_proc (n : Nat) : Bool visits [Console] = \
-             match n { Zero => True ; Suc m => surf1_odd_proc m }\n\
+             match n { Zero |-> True ; Suc m |-> surf1_odd_proc m }\n\
          proc surf1_odd_proc (n : Nat) : Bool visits [Console] = \
-             match n { Zero => False ; Suc m => surf1_even_proc m }",
+             match n { Zero |-> False ; Suc m |-> surf1_even_proc m }",
     )
     .expect("mutually recursive proc group with visits must not be screened out");
 

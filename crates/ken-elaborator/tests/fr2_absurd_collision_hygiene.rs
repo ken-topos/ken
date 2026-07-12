@@ -38,7 +38,7 @@ fn declaring_absurd_is_a_hard_error_not_a_silent_shadow() {
     let mut env = ElabEnv::new().expect("base env");
     expect_collision_error(
         &mut env,
-        "fn absurd (C : Type) (e : Bool) : C = match e { True => e ; False => e }",
+        "fn absurd (C : Type) (e : Bool) : C = match e { True |-> e ; False |-> e }",
         "absurd",
     );
 }

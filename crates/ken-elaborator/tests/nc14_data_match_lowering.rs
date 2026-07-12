@@ -122,7 +122,7 @@ fn assert_runtime_and_interpreter_bool_agree(package_name: &str, target_name: &s
 #[test]
 fn option_match_payload_binding_lowers_and_matches_interpreter() {
     let source = "const target : Bool = \
-        match Some Bool True { None => False ; Some x => x }";
+        match Some Bool True { None |-> False ; Some x |-> x }";
 
     assert_runtime_and_interpreter_bool_agree("nc14_option_pkg", "target", source);
 }
@@ -130,7 +130,7 @@ fn option_match_payload_binding_lowers_and_matches_interpreter() {
 #[test]
 fn result_match_payload_binding_lowers_and_matches_interpreter() {
     let source = "const target : Bool = \
-        match Ok Unit Bool True { Err e => False ; Ok x => x }";
+        match Ok Unit Bool True { Err e |-> False ; Ok x |-> x }";
 
     assert_runtime_and_interpreter_bool_agree("nc14_result_pkg", "target", source);
 }
@@ -139,7 +139,7 @@ fn result_match_payload_binding_lowers_and_matches_interpreter() {
 fn user_data_two_payload_binders_preserve_de_bruijn_order() {
     let source = "data PairBool = PairBoolMk Bool Bool\n\
         const target : Bool = \
-        match PairBoolMk True False { PairBoolMk x y => x }";
+        match PairBoolMk True False { PairBoolMk x y |-> x }";
 
     assert_runtime_and_interpreter_bool_agree("nc14_pair_pkg", "target", source);
 }

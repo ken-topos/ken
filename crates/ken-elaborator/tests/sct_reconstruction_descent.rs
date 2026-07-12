@@ -78,10 +78,10 @@ fn shape_b_ackermann_accepts() {
     env.elaborate_decl(
         "fn ack (m : Nat) (n : Nat) : Nat = \
          match m { \
-           Zero => Suc n ; \
-           Suc m2 => match n { \
-             Zero => ack m2 (Suc Zero) ; \
-             Suc n2 => ack m2 (ack (Suc m2) n2) \
+           Zero |-> Suc n ; \
+           Suc m2 |-> match n { \
+             Zero |-> ack m2 (Suc Zero) ; \
+             Suc n2 |-> ack m2 (ack (Suc m2) n2) \
            } \
          }",
     )
@@ -96,10 +96,10 @@ fn shape_b_ackermann_accepts_and_evaluates_correctly() {
     env.elaborate_decl(
         "fn ack (m : Nat) (n : Nat) : Nat = \
          match m { \
-           Zero => Suc n ; \
-           Suc m2 => match n { \
-             Zero => ack m2 (Suc Zero) ; \
-             Suc n2 => ack m2 (ack (Suc m2) n2) \
+           Zero |-> Suc n ; \
+           Suc m2 |-> match n { \
+             Zero |-> ack m2 (Suc Zero) ; \
+             Suc n2 |-> ack m2 (ack (Suc m2) n2) \
            } \
          }",
     )
@@ -126,10 +126,10 @@ fn shape_b_second_lexicographic_shape_accepts() {
     env.elaborate_decl(
         "fn walkDown (m : Nat) (n : Nat) : Nat = \
          match m { \
-           Zero => n ; \
-           Suc m2 => match n { \
-             Zero => Zero ; \
-             Suc n2 => walkDown (Suc m2) n2 \
+           Zero |-> n ; \
+           Suc m2 |-> match n { \
+             Zero |-> Zero ; \
+             Suc n2 |-> walkDown (Suc m2) n2 \
            } \
          }",
     )
@@ -146,10 +146,10 @@ fn shape_b_second_lexicographic_shape_evaluates_correctly() {
     env.elaborate_decl(
         "fn walkDown (m : Nat) (n : Nat) : Nat = \
          match m { \
-           Zero => n ; \
-           Suc m2 => match n { \
-             Zero => Zero ; \
-             Suc n2 => walkDown (Suc m2) n2 \
+           Zero |-> n ; \
+           Suc m2 |-> match n { \
+             Zero |-> Zero ; \
+             Suc n2 |-> walkDown (Suc m2) n2 \
            } \
          }",
     )
@@ -178,7 +178,7 @@ fn shape_b_bad_ack_still_rejected() {
     let mut env = fresh_env();
     let res = env.elaborate_decl(
         "fn badAck (m : Nat) (n : Nat) : Nat = \
-         match m { Zero => n ; Suc m2 => badAck (Suc m2) n }",
+         match m { Zero |-> n ; Suc m2 |-> badAck (Suc m2) n }",
     );
     assert!(
         res.is_err(),
@@ -197,7 +197,7 @@ fn shape_b_bad_ack2_still_rejected() {
     let mut env = fresh_env();
     let res = env.elaborate_decl(
         "fn badAck2 (m : Nat) (n : Nat) : Nat = \
-         match m { Zero => n ; Suc m2 => badAck2 (Suc (Suc m2)) n }",
+         match m { Zero |-> n ; Suc m2 |-> badAck2 (Suc (Suc m2)) n }",
     );
     assert!(
         res.is_err(),
@@ -219,9 +219,9 @@ fn control_shape_a_nested_split_still_accepts() {
     env.elaborate_decl(
         "fn countR (t : Tree) : Nat = \
          match t { \
-           Leaf => Zero ; \
-           Node (Node ll lc lr) c r => countR r ; \
-           Node Leaf c r => countR r \
+           Leaf |-> Zero ; \
+           Node (Node ll lc lr) c r |-> countR r ; \
+           Node Leaf c r |-> countR r \
          }",
     )
     .expect("shape (a)'s nested-split repro must still be accepted (AC4 monotonicity)");
@@ -237,9 +237,9 @@ fn control_shape_a_near_miss_still_rejected() {
     let res = env.elaborate_decl(
         "fn bad (t : Tree) : Nat = \
          match t { \
-           Leaf => Zero ; \
-           Node (Node ll lc lr) c r => bad t ; \
-           Node Leaf c r => bad r \
+           Leaf |-> Zero ; \
+           Node (Node ll lc lr) c r |-> bad t ; \
+           Node Leaf c r |-> bad r \
          }",
     );
     assert!(res.is_err(), "shape (a)'s near-miss must stay rejected");

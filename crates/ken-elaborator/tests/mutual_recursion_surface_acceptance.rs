@@ -24,8 +24,8 @@ fn fresh_env() -> ElabEnv {
 }
 
 const IS_EVEN_ODD: &str = "\
-    fn isEven (n : Nat) : Bool = match n { Zero => True ; Suc m => isOdd m }\n\
-    fn isOdd (n : Nat) : Bool = match n { Zero => False ; Suc m => isEven m }";
+    fn isEven (n : Nat) : Bool = match n { Zero |-> True ; Suc m |-> isOdd m }\n\
+    fn isOdd (n : Nat) : Bool = match n { Zero |-> False ; Suc m |-> isEven m }";
 
 #[test]
 fn is_even_is_odd_mutual_group_elaborates_as_one_group() {
@@ -78,7 +78,7 @@ fn single_recursion_still_works_unaffected_by_the_grouping_pass() {
     let mut env = fresh_env();
     env.elaborate_decl(
         "fn natAdd (a : Nat) (b : Nat) : Nat = \
-         match a { Zero => b ; Suc m => Suc (natAdd m b) }",
+         match a { Zero |-> b ; Suc m |-> Suc (natAdd m b) }",
     )
     .expect("ordinary single self-recursion must still elaborate");
 }

@@ -251,7 +251,7 @@ fn legacy_simple_data_still_elaborates() {
 
     elab_ok(
         &mut env,
-        "let answer : Int = match SomeNumber 5 { SomeNumber x => x ; NoNumber => 0 }",
+        "let answer : Int = match SomeNumber 5 { SomeNumber x |-> x ; NoNumber |-> 0 }",
     );
 }
 
@@ -271,7 +271,7 @@ fn indexed_impossible_constructor_may_be_omitted_from_non_empty_vector_match() {
         &mut env,
         r#"
         fn vectorHead (A : Type) (n : Nat) (v : Vector A (Suc n)) : A =
-          match v { ConsVector m x xs => x }
+          match v { ConsVector m x xs |-> x }
         "#,
     );
 
@@ -321,7 +321,7 @@ fn concrete_non_empty_vector_index_omits_empty_constructor() {
         &mut env,
         r#"
         fn vectorHeadZero (A : Type) (v : Vector A (Suc Zero)) : A =
-          match v { ConsVector m x xs => x }
+          match v { ConsVector m x xs |-> x }
         "#,
     );
 }
@@ -343,7 +343,7 @@ fn dependent_index_telescope_lifts_prior_index_in_motive_premise() {
         const depValue : DepIndex Zero IsZeroZero = DepMk
 
         fn depHead (p : IsZero Zero) (x : DepIndex Zero p) : Nat =
-          match x { DepMk => Zero }
+          match x { DepMk |-> Zero }
         "#,
     );
 }
@@ -356,7 +356,7 @@ fn indexed_head_rejects_empty_vector_application() {
         &mut env,
         r#"
         fn vectorHead (A : Type) (n : Nat) (v : Vector A (Suc n)) : A =
-          match v { ConsVector m x xs => x }
+          match v { ConsVector m x xs |-> x }
         "#,
     );
 
@@ -379,7 +379,7 @@ fn type_possible_indexed_constructor_is_still_required() {
         &mut env,
         r#"
         fn badVectorHead (A : Type) (n : Nat) (v : Vector A n) : A =
-          match v { ConsVector m x xs => x }
+          match v { ConsVector m x xs |-> x }
         "#,
     );
     assert!(

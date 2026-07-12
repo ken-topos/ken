@@ -47,8 +47,8 @@ fn goal_closing_over_pre_scrutinee_type_param_narrows_correctly() {
     let id = env
         .elaborate_decl(
             "fn sameHead (a : Type) (v : a) (xs : List a) : Equal a v v -> Prop = \
-             match xs { Nil => \\h. Equal a v v ; \
-                        Cons b bs => \\h. Equal a v v }",
+             match xs { Nil |-> \\h. Equal a v v ; \
+                        Cons b bs |-> \\h. Equal a v v }",
         )
         .expect(
             "sameHead (goal closing over a pre-scrutinee generic type param) \

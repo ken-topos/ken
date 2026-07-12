@@ -37,15 +37,15 @@ fn ac2_tree_size_uses_both_ihs_and_computes_right_value() {
     // native-Int-add ordering subtlety.
     env.elaborate_decl(
         "fn natAdd (a : Nat) (b : Nat) : Nat = \
-         match a { Zero => b ; Suc m => Suc (natAdd m b) }",
+         match a { Zero |-> b ; Suc m |-> Suc (natAdd m b) }",
     )
     .expect("natAdd should declare");
 
     env.elaborate_decl(
         "fn size (t : Tree) : Nat = \
          match t { \
-           Leaf => Zero ; \
-           Node l c r => Suc (natAdd (size l) (size r)) \
+           Leaf |-> Zero ; \
+           Node l c r |-> Suc (natAdd (size l) (size r)) \
          }",
     )
     .expect("size should elaborate over a >=2-recursive-field ctor (AC2)");
@@ -100,7 +100,7 @@ fn ac3_discriminating_pair_accepts_valid_rejects_ill_typed_sibling() {
     env_ok
         .elaborate_decl(
             "fn depth (t : Tree) : Nat = \
-             match t { Leaf => Zero ; Node l c r => Suc Zero }",
+             match t { Leaf |-> Zero ; Node l c r |-> Suc Zero }",
         )
         .expect("valid >=2-rec-field match must accept (AC3, positive half)");
 
@@ -110,7 +110,7 @@ fn ac3_discriminating_pair_accepts_valid_rejects_ill_typed_sibling() {
     env_bad.elaborate_decl(TREE_DECL).expect("Tree should declare");
     let res = env_bad.elaborate_decl(
         "fn badDepth (t : Tree) : Nat = \
-         match t { Leaf => Zero ; Node l c r => 99 }",
+         match t { Leaf |-> Zero ; Node l c r |-> 99 }",
     );
     assert!(
         res.is_err(),
@@ -128,7 +128,7 @@ fn ac4_no_regression_0_and_1_recursive_field_types() {
         .expect("Color should declare");
     env.elaborate_decl(
         "fn isRed (c : Color) : Nat = \
-         match c { Red => Suc Zero ; Green => Zero ; Blue => Zero }",
+         match c { Red |-> Suc Zero ; Green |-> Zero ; Blue |-> Zero }",
     )
     .expect("0-recursive-field match must still elaborate (AC4)");
 
@@ -138,7 +138,7 @@ fn ac4_no_regression_0_and_1_recursive_field_types() {
         .expect("NatList should declare");
     env2.elaborate_decl(
         "fn natListLen (xs : NatList) : Nat = \
-         match xs { NNil => Zero ; NCons h t => Suc (natListLen t) }",
+         match xs { NNil |-> Zero ; NCons h t |-> Suc (natListLen t) }",
     )
     .expect("single-recursive-field match must still elaborate (AC4)");
 
@@ -149,7 +149,7 @@ fn ac4_no_regression_0_and_1_recursive_field_types() {
         .expect("Snoc should declare");
     env3.elaborate_decl(
         "fn snocLen (s : Snoc) : Nat = \
-         match s { SLeaf c => Suc Zero ; SNode t c => Suc (snocLen t) }",
+         match s { SLeaf c |-> Suc Zero ; SNode t c |-> Suc (snocLen t) }",
     )
     .expect("1-rec+1-other match must still elaborate (AC4)");
 }
@@ -163,14 +163,14 @@ fn ac4_three_recursive_fields_also_elaborates() {
         .expect("Tri should declare");
     env.elaborate_decl(
         "fn natAdd (a : Nat) (b : Nat) : Nat = \
-         match a { Zero => b ; Suc m => Suc (natAdd m b) }",
+         match a { Zero |-> b ; Suc m |-> Suc (natAdd m b) }",
     )
     .expect("natAdd should declare");
     env.elaborate_decl(
         "fn triSize (t : Tri) : Nat = \
          match t { \
-           TLeaf => Zero ; \
-           TNode a b c => Suc (natAdd (natAdd (triSize a) (triSize b)) (triSize c)) \
+           TLeaf |-> Zero ; \
+           TNode a b c |-> Suc (natAdd (natAdd (triSize a) (triSize b)) (triSize c)) \
          }",
     )
     .expect("3-recursive-field match must elaborate using all 3 IHs");

@@ -19,7 +19,7 @@ fn ken_bin() -> PathBuf {
 
 const FIXTURE: &str = r#"
 fn list_append (a : Type) (xs : List a) (ys : List a) : List a =
-  match xs { Nil => ys ; Cons x xs2 => Cons a x (list_append a xs2 ys) }
+  match xs { Nil |-> ys ; Cons x xs2 |-> Cons a x (list_append a xs2 ys) }
 
 fn shout (s : String) : String =
   list_char_to_string (list_append Char (string_to_list_char s) (string_to_list_char "!"))

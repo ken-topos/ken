@@ -135,7 +135,7 @@ fn stuck_match_over_abstract_key_transports_via_hand_written_motive() {
     // `catalog/packages/Core/LawfulClasses.ken`.
     let ids = env
         .elaborate_file(
-            "fn stuck_of (k : Bool) : Bool = match k { True => True ; False => False }\n\
+            "fn stuck_of (k : Bool) : Bool = match k { True |-> True ; False |-> False }\n\
              lemma stuck_transport (k : Bool) (q : Equal Bool True k) \
                : Equal Bool (stuck_of k) True = \
                J (\\b' _. Equal Bool (stuck_of b') True) Proved q",
@@ -161,7 +161,7 @@ fn stuck_match_transports_via_package_sym() {
     // exercises from the package rather than hand-inlining it).
     let ids = env
         .elaborate_file(
-            "fn stuck_of2 (k : Bool) : Bool = match k { True => True ; False => False }\n\
+            "fn stuck_of2 (k : Bool) : Bool = match k { True |-> True ; False |-> False }\n\
              lemma stuck_transport2 (k : Bool) (q : Equal Bool k True) \
                : Equal Bool (stuck_of2 k) True = \
                J (\\b' _. Equal Bool (stuck_of2 b') True) Proved (sym Bool k True q)",

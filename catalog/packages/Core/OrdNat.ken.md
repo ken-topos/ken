@@ -45,26 +45,26 @@ self-reference.
 ```ken
 fn leq_nat (m : Nat) (n : Nat) : Bool =
   match m {
-    Zero ⇒ True ;
-    Suc m2 ⇒ match n { Zero ⇒ False ; Suc n2 ⇒ leq_nat m2 n2 }
+    Zero ↦ True ;
+    Suc m2 ↦ match n { Zero ↦ False ; Suc n2 ↦ leq_nat m2 n2 }
   }
 
 proof refl for leq_nat (x : Nat) : Equal Bool (leq_nat x x) True =
-  match x { Zero ⇒ Proved ; Suc x2 ⇒ leq_nat::refl x2 }
+  match x { Zero ↦ Proved ; Suc x2 ↦ leq_nat::refl x2 }
 
 proof trans for leq_nat
   (x : Nat)
   : (y : Nat) -> (z : Nat) -> Equal Bool (leq_nat x y) True ->
     Equal Bool (leq_nat y z) True -> Equal Bool (leq_nat x z) True =
   match x {
-    Zero ⇒ λy.λz.λp.λq. Proved ;
-    Suc x2 ⇒
+    Zero ↦ λy.λz.λp.λq. Proved ;
+    Suc x2 ↦
       λy. match y {
-        Zero ⇒ λz.λp.λq. absurd p ;
-        Suc y2 ⇒
+        Zero ↦ λz.λp.λq. absurd p ;
+        Suc y2 ↦
           λz. match z {
-            Zero ⇒ λp.λq. absurd q ;
-            Suc z2 ⇒ λp.λq. leq_nat::trans x2 y2 z2 p q
+            Zero ↦ λp.λq. absurd q ;
+            Suc z2 ↦ λp.λq. leq_nat::trans x2 y2 z2 p q
           }
       }
   }
@@ -74,15 +74,15 @@ proof antisym for leq_nat
   : (y : Nat) -> Equal Bool (leq_nat x y) True ->
     Equal Bool (leq_nat y x) True -> Equal Nat x y =
   match x {
-    Zero ⇒
+    Zero ↦
       λy. match y {
-        Zero ⇒ λp.λq. Proved ;
-        Suc y2 ⇒ λp.λq. absurd q
+        Zero ↦ λp.λq. Proved ;
+        Suc y2 ↦ λp.λq. absurd q
       } ;
-    Suc x2 ⇒
+    Suc x2 ↦
       λy. match y {
-        Zero ⇒ λp.λq. absurd p ;
-        Suc y2 ⇒ λp.λq. cong Nat Nat x2 y2 Suc (leq_nat::antisym x2 y2 p q)
+        Zero ↦ λp.λq. absurd p ;
+        Suc y2 ↦ λp.λq. cong Nat Nat x2 y2 Suc (leq_nat::antisym x2 y2 p q)
       }
   }
 ```
@@ -107,20 +107,20 @@ irrelevant propositions; `const` and `fn` compute data.
 fn total_leq_nat (x : Nat) (y : Nat)
   : Or (Equal Bool (leq_nat x y) True) (Equal Bool (leq_nat y x) True) =
   match x {
-    Zero ⇒
+    Zero ↦
       Inl (Equal Bool (leq_nat Zero y) True)
           (Equal Bool (leq_nat y Zero) True) Proved ;
-    Suc x2 ⇒
+    Suc x2 ↦
       match y {
-        Zero ⇒
+        Zero ↦
           Inr (Equal Bool (leq_nat (Suc x2) Zero) True)
               (Equal Bool (leq_nat Zero (Suc x2)) True) Proved ;
-        Suc y2 ⇒
+        Suc y2 ↦
           match total_leq_nat x2 y2 {
-            Inl h ⇒
+            Inl h ↦
               Inl (Equal Bool (leq_nat (Suc x2) (Suc y2)) True)
                   (Equal Bool (leq_nat (Suc y2) (Suc x2)) True) h ;
-            Inr h ⇒
+            Inr h ↦
               Inr (Equal Bool (leq_nat (Suc x2) (Suc y2)) True)
                   (Equal Bool (leq_nat (Suc y2) (Suc x2)) True) h
           }
@@ -144,10 +144,10 @@ proof eq_true_of_or for bool_or
   (h : Or (Equal Bool p True) (Equal Bool q True))
   : IsTrue (bool_or p q) =
   match h {
-    Inl hp ⇒
+    Inl hp ↦
       trans Bool (bool_or p q) (bool_or True q) True
             (cong Bool Bool p True (λv. bool_or v q) hp) Proved ;
-    Inr hq ⇒ match p { True ⇒ Proved ; False ⇒ hq }
+    Inr hq ↦ match p { True ↦ Proved ; False ↦ hq }
   }
 
 instance Ord Nat {
@@ -168,26 +168,26 @@ data OrdResult = Lt | Eq | Gt
 
 fn min (m : Nat) (n : Nat) : Nat =
   match m {
-    Zero ⇒ Zero ;
-    Suc m2 ⇒ match n { Zero ⇒ Zero ; Suc n2 ⇒ Suc (min m2 n2) }
+    Zero ↦ Zero ;
+    Suc m2 ↦ match n { Zero ↦ Zero ; Suc n2 ↦ Suc (min m2 n2) }
   }
 
 fn max (m : Nat) (n : Nat) : Nat =
   match m {
-    Zero ⇒ n ;
-    Suc m2 ⇒ match n { Zero ⇒ m ; Suc n2 ⇒ Suc (max m2 n2) }
+    Zero ↦ n ;
+    Suc m2 ↦ match n { Zero ↦ m ; Suc n2 ↦ Suc (max m2 n2) }
   }
 
 fn sub (a : Nat) (b : Nat) : Nat =
   match b {
-    Zero ⇒ a ;
-    Suc n ⇒ match a { Zero ⇒ Zero ; Suc m ⇒ sub m n }
+    Zero ↦ a ;
+    Suc n ↦ match a { Zero ↦ Zero ; Suc m ↦ sub m n }
   }
 
 fn compare (a : Nat) (b : Nat) : OrdResult =
   match leq_nat a b {
-    True ⇒ match leq_nat b a { True ⇒ Eq ; False ⇒ Lt } ;
-    False ⇒ Gt
+    True ↦ match leq_nat b a { True ↦ Eq ; False ↦ Lt } ;
+    False ↦ Gt
   }
 ```
 

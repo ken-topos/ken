@@ -112,8 +112,8 @@ lemma list_assoc (a : Type) (xs : List a) (ys : List a) (zs : List a)
   : Equal (List a) (list_append a (list_append a xs ys) zs)
                    (list_append a xs (list_append a ys zs)) =
   match xs {
-    Nil ⇒ Refl ;
-    Cons h t ⇒
+    Nil ↦ Refl ;
+    Cons h t ↦
       cong (List a) (List a)
         (list_append a (list_append a t ys) zs)
         (list_append a t (list_append a ys zs))
@@ -124,8 +124,8 @@ lemma list_assoc (a : Type) (xs : List a) (ys : List a) (zs : List a)
 lemma list_right_unit (a : Type) (xs : List a)
   : Equal (List a) (list_append a xs (Nil a)) xs =
   match xs {
-    Nil ⇒ Proved ;
-    Cons h t ⇒
+    Nil ↦ Proved ;
+    Cons h t ↦
       cong (List a) (List a)
         (list_append a t (Nil a))
         t
@@ -164,18 +164,18 @@ literal equal to itself → `Top` → `Proved`.
 
 ```ken
 fn bool_and (p : Bool) (q : Bool) : Bool =
-  match p { True ⇒ q ; False ⇒ False }
+  match p { True ↦ q ; False ↦ False }
 
 lemma band_assoc (x : Bool) (y : Bool) (z : Bool)
   : Equal Bool (bool_and (bool_and x y) z) (bool_and x (bool_and y z)) =
   match x {
-    True ⇒ match y {
-      True  ⇒ match z { True ⇒ Proved ; False ⇒ Proved } ;
-      False ⇒ match z { True ⇒ Proved ; False ⇒ Proved }
+    True ↦ match y {
+      True  ↦ match z { True ↦ Proved ; False ↦ Proved } ;
+      False ↦ match z { True ↦ Proved ; False ↦ Proved }
     } ;
-    False ⇒ match y {
-      True  ⇒ match z { True ⇒ Proved ; False ⇒ Proved } ;
-      False ⇒ match z { True ⇒ Proved ; False ⇒ Proved }
+    False ↦ match y {
+      True  ↦ match z { True ↦ Proved ; False ↦ Proved } ;
+      False ↦ match z { True ↦ Proved ; False ↦ Proved }
     }
   }
 
@@ -183,7 +183,7 @@ lemma band_left_unit (x : Bool) : Equal Bool (bool_and True x) x =
   Refl
 
 lemma band_right_unit (x : Bool) : Equal Bool (bool_and x True) x =
-  match x { True ⇒ Proved ; False ⇒ Proved }
+  match x { True ↦ Proved ; False ↦ Proved }
 
 instance Semigroup Bool {
   op    = bool_and ;
@@ -227,15 +227,15 @@ class Functor (f : Type → Type) {
 
 fn list_map (a : Type) (b : Type) (g : a → b) (xs : List a) : List b =
   match xs {
-    Nil ⇒ Nil b ;
-    Cons h t ⇒ Cons b (g h) (list_map a b g t)
+    Nil ↦ Nil b ;
+    Cons h t ↦ Cons b (g h) (list_map a b g t)
   }
 
 lemma list_functor_id (a : Type) (xs : List a)
   : Equal (List a) (list_map a a (idf a) xs) xs =
   match xs {
-    Nil ⇒ Proved ;
-    Cons h t ⇒
+    Nil ↦ Proved ;
+    Cons h t ↦
       cong (List a) (List a)
         (list_map a a (idf a) t)
         t
@@ -249,8 +249,8 @@ lemma list_functor_fusion (a : Type) (b : Type) (c : Type)
       (list_map a c (comp a b c g h) xs)
       (list_map b c g (list_map a b h xs)) =
   match xs {
-    Nil ⇒ Proved ;
-    Cons x rest ⇒
+    Nil ↦ Proved ;
+    Cons x rest ↦
       cong (List c) (List c)
         (list_map a c (comp a b c g h) rest)
         (list_map b c g (list_map a b h rest))
@@ -260,15 +260,15 @@ lemma list_functor_fusion (a : Type) (b : Type) (c : Type)
 
 fn option_map (a : Type) (b : Type) (g : a → b) (x : Option a) : Option b =
   match x {
-    None ⇒ None b ;
-    Some v ⇒ Some b (g v)
+    None ↦ None b ;
+    Some v ↦ Some b (g v)
   }
 
 lemma option_functor_id (a : Type) (x : Option a)
   : Equal (Option a) (option_map a a (idf a) x) x =
   match x {
-    None ⇒ Proved ;
-    Some v ⇒ Refl
+    None ↦ Proved ;
+    Some v ↦ Refl
   }
 
 lemma option_functor_fusion (a : Type) (b : Type) (c : Type)
@@ -276,7 +276,7 @@ lemma option_functor_fusion (a : Type) (b : Type) (c : Type)
   : Equal (Option c)
       (option_map a c (comp a b c g h) x)
       (option_map b c g (option_map a b h x)) =
-  match x { None ⇒ Proved ; Some v ⇒ Refl }
+  match x { None ↦ Proved ; Some v ↦ Refl }
 
 instance Functor List {
   map        = list_map ;
@@ -323,15 +323,15 @@ class Foldable (f : Type → Type) {
 
 fn list_foldr (a : Type) (b : Type) (k : a → b → b) (z : b) (xs : List a) : b =
   match xs {
-    Nil ⇒ z ;
-    Cons h t ⇒ k h (list_foldr a b k z t)
+    Nil ↦ z ;
+    Cons h t ↦ k h (list_foldr a b k z t)
   }
 
 fn list_fold_map (a : Type) (m : Type) (mon : Monoid m) (g : a → m)
   (xs : List a) : m =
   match xs {
-    Nil ⇒ mon.mempty ;
-    Cons h t ⇒ (mon.op) (g h) (list_fold_map a m mon g t)
+    Nil ↦ mon.mempty ;
+    Cons h t ↦ (mon.op) (g h) (list_fold_map a m mon g t)
   }
 
 fn list_to_list (a : Type) (xs : List a) : List a = xs
@@ -339,8 +339,8 @@ fn list_to_list (a : Type) (xs : List a) : List a = xs
 lemma list_foldr_to_list (a : Type) (xs : List a)
   : Equal (List a) (list_foldr a (List a) (Cons a) (Nil a) xs) (list_to_list a xs) =
   match xs {
-    Nil ⇒ Proved ;
-    Cons h t ⇒
+    Nil ↦ Proved ;
+    Cons h t ↦
       cong (List a) (List a)
         (list_foldr a (List a) (Cons a) (Nil a) t)
         (list_to_list a t)
@@ -354,8 +354,8 @@ lemma list_fold_map_coherence (a : Type) (m : Type) (mon : Monoid m)
       (list_fold_map a m mon g xs)
       (list_foldr a m (fold_map_step a m mon g) (monoid_mempty m mon) xs) =
   match xs {
-    Nil ⇒ Refl ;
-    Cons h t ⇒
+    Nil ↦ Refl ;
+    Cons h t ↦
       cong m m
         (list_fold_map a m mon g t)
         (list_foldr a m (fold_map_step a m mon g) (monoid_mempty m mon) t)
@@ -365,15 +365,15 @@ lemma list_fold_map_coherence (a : Type) (m : Type) (mon : Monoid m)
 
 fn option_foldr (a : Type) (b : Type) (k : a → b → b) (z : b) (x : Option a) : b =
   match x {
-    None ⇒ z ;
-    Some v ⇒ k v z
+    None ↦ z ;
+    Some v ↦ k v z
   }
 
 fn option_fold_map (a : Type) (m : Type) (mon : Monoid m) (g : a → m)
   (x : Option a) : m =
   match x {
-    None ⇒ mon.mempty ;
-    Some v ⇒ (mon.op) (g v) (mon.mempty)
+    None ↦ mon.mempty ;
+    Some v ↦ (mon.op) (g v) (mon.mempty)
   }
 
 fn option_to_list (a : Type) (x : Option a) : List a =
@@ -388,7 +388,7 @@ lemma option_fold_map_coherence (a : Type) (m : Type) (mon : Monoid m)
   : Equal m
       (option_fold_map a m mon g x)
       (option_foldr a m (fold_map_step a m mon g) (monoid_mempty m mon) x) =
-  match x { None ⇒ Refl ; Some v ⇒ Refl }
+  match x { None ↦ Refl ; Some v ↦ Refl }
 
 instance Foldable List {
   foldr             = list_foldr ;

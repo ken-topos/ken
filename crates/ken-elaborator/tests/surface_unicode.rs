@@ -23,9 +23,9 @@ fn transparent_debug(src: &str) -> (String, String) {
 #[test]
 fn surf1_d3_unicode_and_ascii_lex_to_same_tokens() {
     let ascii = "fn surf1_u (A : Type) (x : A) : A -> A = \\y . y\n\
-                 fn surf1_m (b : Bool) : Bool = match b { True => False ; False => True }";
+                 fn surf1_m (b : Bool) : Bool = match b { True |-> False ; False |-> True }";
     let unicode = "fn surf1_u (A : Type) (x : A) : A → A = λy . y\n\
-                   fn surf1_m (b : Bool) : Bool = match b { True ⇒ False ; False ⇒ True }";
+                   fn surf1_m (b : Bool) : Bool = match b { True ↦ False ; False ↦ True }";
 
     assert_eq!(token_kinds(ascii), token_kinds(unicode));
     assert_eq!(token_kinds("Omega Sigma Pi forall exists not level l === <= >= /= /\\ \\/ <: ><"),

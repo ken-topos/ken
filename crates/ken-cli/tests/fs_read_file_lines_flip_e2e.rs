@@ -47,38 +47,38 @@ fn isNewline (c : Char) : Bool = eq_int (charToInt c) 10
 
 fn consFirst (c : Char) (acc : List (List Char)) : List (List Char) =
   match acc {{
-    Nil           => Cons (List Char) (Cons Char c (Nil Char)) (Nil (List Char)) ;
-    Cons seg rest => Cons (List Char) (Cons Char c seg) rest
+    Nil           |-> Cons (List Char) (Cons Char c (Nil Char)) (Nil (List Char)) ;
+    Cons seg rest |-> Cons (List Char) (Cons Char c seg) rest
   }}
 
 fn splitNL (xs : List Char) : List (List Char) =
   match xs {{
-    Nil       => Cons (List Char) (Nil Char) (Nil (List Char)) ;
-    Cons c cs =>
+    Nil       |-> Cons (List Char) (Nil Char) (Nil (List Char)) ;
+    Cons c cs |->
       match isNewline c {{
-        True  => Cons (List Char) (Nil Char) (splitNL cs) ;
-        False => consFirst c (splitNL cs)
+        True  |-> Cons (List Char) (Nil Char) (splitNL cs) ;
+        False |-> consFirst c (splitNL cs)
       }}
   }}
 
 fn dropTrailingEmpty (segs : List (List Char)) : List (List Char) =
   match segs {{
-    Nil => Nil (List Char) ;
-    Cons seg rest =>
+    Nil |-> Nil (List Char) ;
+    Cons seg rest |->
       match rest {{
-        Nil =>
+        Nil |->
           match seg {{
-            Nil      => Nil (List Char) ;
-            Cons _ _ => Cons (List Char) seg (Nil (List Char))
+            Nil      |-> Nil (List Char) ;
+            Cons _ _ |-> Cons (List Char) seg (Nil (List Char))
           }} ;
-        Cons _ _ => Cons (List Char) seg (dropTrailingEmpty rest)
+        Cons _ _ |-> Cons (List Char) seg (dropTrailingEmpty rest)
       }}
   }}
 
 fn mapListCharToString (segs : List (List Char)) : List String =
   match segs {{
-    Nil           => Nil String ;
-    Cons seg rest => Cons String (list_char_to_string seg) (mapListCharToString rest)
+    Nil           |-> Nil String ;
+    Cons seg rest |-> Cons String (list_char_to_string seg) (mapListCharToString rest)
   }}
 
 fn lines (s : String) : List String =
@@ -91,11 +91,11 @@ const Compose (r : Type) : Type =
 
 proc printLines (xs : List String) : Compose (Result IOError Unit) visits [Console] =
   match xs {{
-    Nil =>
+    Nil |->
       Ret (Coproduct (FSOp {auth}) ConsoleOp)
           (resp_coproduct (FSOp {auth}) ConsoleOp (fs_resp {auth}) console_resp)
           (Result IOError Unit) (Ok IOError Unit MkUnit) ;
-    Cons x xs' =>
+    Cons x xs' |->
       bind (Coproduct (FSOp {auth}) ConsoleOp)
            (resp_coproduct (FSOp {auth}) ConsoleOp (fs_resp {auth}) console_resp)
            Unit (Result IOError Unit)
@@ -111,10 +111,10 @@ proc main (cap : Cap {auth}) : Compose (Result IOError Unit) visits [FS, Console
       (read_bytes {auth} cap (bytes_encode "{path}")))
     (\r .
       match r {{
-        Err e    => Ret (Coproduct (FSOp {auth}) ConsoleOp)
+        Err e    |-> Ret (Coproduct (FSOp {auth}) ConsoleOp)
                         (resp_coproduct (FSOp {auth}) ConsoleOp (fs_resp {auth}) console_resp)
                         (Result IOError Unit) (Err IOError Unit e) ;
-        Ok bytes => printLines (lines (bytes_decode bytes))
+        Ok bytes |-> printLines (lines (bytes_decode bytes))
       }})
 "#,
         auth = auth,

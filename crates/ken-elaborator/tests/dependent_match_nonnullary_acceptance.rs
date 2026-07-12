@@ -46,8 +46,8 @@ fn ac1_list_hypothesis_threading_elaborates_and_narrows_structurally() {
     let mut env = mk_env();
     env.elaborate_decl(
         "fn allTrue (xs : List Bool) : Prop = \
-         match xs { Nil => Equal Bool True True ; \
-                    Cons b bs => And (Equal Bool b True) (allTrue bs) }",
+         match xs { Nil |-> Equal Bool True True ; \
+                    Cons b bs |-> And (Equal Bool b True) (allTrue bs) }",
     )
     .expect("allTrue elaborates");
 
@@ -58,8 +58,8 @@ fn ac1_list_hypothesis_threading_elaborates_and_narrows_structurally() {
     let id = env
         .elaborate_decl(
             "fn tailGoal (xs : List Bool) : allTrue xs -> Prop = \
-             match xs { Nil => \\h. Equal Bool True True ; \
-                        Cons b bs => \\h. allTrue bs }",
+             match xs { Nil |-> \\h. Equal Bool True True ; \
+                        Cons b bs |-> \\h. allTrue bs }",
         )
         .expect("tailGoal (non-nullary dependent match, AC1) elaborates and kernel-checks");
 
@@ -130,8 +130,8 @@ fn ac1_tree_two_recursive_fields_elaborates_and_narrows_structurally() {
     // A Tree-shaped predicate (structural, no `leq` — orthogonal to Gap A).
     env.elaborate_decl(
         "fn allPos (t : Tree Nat) : Prop = \
-         match t { Leaf => Equal Bool True True ; \
-                   Node l k r => And (Equal Bool True True) (And (allPos l) (allPos r)) }",
+         match t { Leaf |-> Equal Bool True True ; \
+                   Node l k r |-> And (Equal Bool True True) (And (allPos l) (allPos r)) }",
     )
     .expect("allPos (Tree, two recursive fields) elaborates");
 
@@ -141,8 +141,8 @@ fn ac1_tree_two_recursive_fields_elaborates_and_narrows_structurally() {
     let id = env
         .elaborate_decl(
             "fn leftGoal (t : Tree Nat) : allPos t -> Prop = \
-             match t { Leaf => \\h. Equal Bool True True ; \
-                       Node l k r => \\h. allPos l }",
+             match t { Leaf |-> \\h. Equal Bool True True ; \
+                       Node l k r |-> \\h. allPos l }",
         )
         .expect("leftGoal (Tree, non-nullary dependent match, AC1) elaborates and kernel-checks");
 
@@ -206,8 +206,8 @@ fn ac2_mis_narrowed_cons_arm_stays_kernel_rejected() {
     let mut env = mk_env();
     env.elaborate_decl(
         "fn allTrue (xs : List Bool) : Prop = \
-         match xs { Nil => Equal Bool True True ; \
-                    Cons b bs => And (Equal Bool b True) (allTrue bs) }",
+         match xs { Nil |-> Equal Bool True True ; \
+                    Cons b bs |-> And (Equal Bool b True) (allTrue bs) }",
     )
     .expect("allTrue elaborates");
 
@@ -218,8 +218,8 @@ fn ac2_mis_narrowed_cons_arm_stays_kernel_rejected() {
     // if the narrowing (and the kernel's own re-check of it) is real.
     let err = env.elaborate_decl(
         "fn badTailGoal (xs : List Bool) : allTrue xs -> allTrue xs = \
-         match xs { Nil => \\h. h ; \
-                    Cons b bs => \\h. allTrue bs }",
+         match xs { Nil |-> \\h. h ; \
+                    Cons b bs |-> \\h. allTrue bs }",
     );
     assert!(
         err.is_err(),
@@ -249,8 +249,8 @@ fn ac2b_tree_dual_recursive_descent_passes_sct() {
     let id = env
         .elaborate_decl(
             "fn allPosRec (t : Tree Nat) : Prop = \
-             match t { Leaf => Equal Bool True True ; \
-                       Node l k r => And (allPosRec l) (allPosRec r) }",
+             match t { Leaf |-> Equal Bool True True ; \
+                       Node l k r |-> And (allPosRec l) (allPosRec r) }",
         )
         .expect(
             "allPosRec must elaborate — a self-recursive Tree predicate through \

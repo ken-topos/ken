@@ -107,10 +107,10 @@ analysis — no recursion, since `Option` has no recursive structure:
 fn option_pure (a : Type) (x : a) : Option a = Some a x
 
 fn option_ap (a : Type) (b : Type) (mf : Option (a -> b)) (mx : Option a) : Option b =
-  match mf { None ⇒ None b ; Some g ⇒ match mx { None ⇒ None b ; Some x ⇒ Some b (g x) } }
+  match mf { None ↦ None b ; Some g ↦ match mx { None ↦ None b ; Some x ↦ Some b (g x) } }
 
 fn option_bind (a : Type) (b : Type) (m : Option a) (k : a -> Option b) : Option b =
-  match m { None ⇒ None b ; Some x ⇒ k x }
+  match m { None ↦ None b ; Some x ↦ k x }
 ```
 
 For an ABSTRACT type parameter, a `Some a x` endpoint (`x` itself
@@ -126,7 +126,7 @@ lemma option_ap_id_none (a : Type) : Equal (Option a) (option_ap a a (option_pur
 lemma option_ap_id_some (a : Type) (x : a) : Equal (Option a) (option_ap a a (option_pure (a -> a) (idf a)) (Some a x)) (Some a x) = Refl
 
 lemma option_ap_id (a : Type) (v : Option a) : Equal (Option a) (option_ap a a (option_pure (a -> a) (idf a)) v) v =
-  match v { None ⇒ option_ap_id_none a ; Some x ⇒ option_ap_id_some a x }
+  match v { None ↦ option_ap_id_none a ; Some x ↦ option_ap_id_some a x }
 
 lemma option_ap_hom (a : Type) (b : Type) (g : a -> b) (x : a) : Equal (Option b) (option_ap a b (option_pure (a -> b) g) (option_pure a x)) (option_pure b (g x)) = Refl
 
@@ -138,7 +138,7 @@ lemma option_ap_ich_some (a : Type) (b : Type) (g : a -> b) (y : a) :
 
 lemma option_ap_ich (a : Type) (b : Type) (u : Option (a -> b)) (y : a) :
   Equal (Option b) (option_ap a b u (option_pure a y)) (option_ap (a -> b) b (option_pure ((a -> b) -> b) (apply_to a b y)) u) =
-  match u { None ⇒ option_ap_ich_none a b y ; Some g ⇒ option_ap_ich_some a b g y }
+  match u { None ↦ option_ap_ich_none a b y ; Some g ↦ option_ap_ich_some a b g y }
 
 lemma option_ap_cmp_none_u (a : Type) (b : Type) (c : Type) (v : Option (a -> b)) (w : Option a) :
   Equal (Option c)
@@ -165,12 +165,12 @@ lemma option_ap_cmp (a : Type) (b : Type) (c : Type) (u : Option (b -> c)) (v : 
     (option_ap a c (option_ap (a -> b) (a -> c) (option_ap (b -> c) ((a -> b) -> (a -> c)) (option_pure ((b -> c) -> (a -> b) -> (a -> c)) (compose a b c)) u) v) w)
     (option_ap b c u (option_ap a b v w)) =
   match u {
-    None ⇒ option_ap_cmp_none_u a b c v w ;
-    Some g ⇒ match v {
-      None ⇒ option_ap_cmp_some_u_none_v a b c g w ;
-      Some h ⇒ match w {
-        None ⇒ option_ap_cmp_some_u_some_v_none_w a b c g h ;
-        Some x ⇒ option_ap_cmp_all_some a b c g h x
+    None ↦ option_ap_cmp_none_u a b c v w ;
+    Some g ↦ match v {
+      None ↦ option_ap_cmp_some_u_none_v a b c g w ;
+      Some h ↦ match w {
+        None ↦ option_ap_cmp_some_u_some_v_none_w a b c g h ;
+        Some x ↦ option_ap_cmp_all_some a b c g h x
       }
     }
   }
@@ -183,7 +183,7 @@ lemma option_map_coh_some (a : Type) (b : Type) (g : a -> b) (v : a) :
 
 lemma option_map_coh (a : Type) (b : Type) (g : a -> b) (x : Option a) :
   Equal (Option b) (functor_map_of Option Functor_instance_Option a b g x) (option_ap a b (option_pure (a -> b) g) x) =
-  match x { None ⇒ option_map_coh_none a b g ; Some v ⇒ option_map_coh_some a b g v }
+  match x { None ↦ option_map_coh_none a b g ; Some v ↦ option_map_coh_some a b g v }
 
 instance Applicative Option {
   functor = Functor_instance_Option ;
@@ -214,7 +214,7 @@ lemma option_bind_rid_some (a : Type) (x : a) :
   Equal (Option a) (option_bind a a (Some a x) (applicative_pure_of Option Applicative_instance_Option a)) (Some a x) = Refl
 
 lemma option_bind_rid (a : Type) (m : Option a) : Equal (Option a) (option_bind a a m (applicative_pure_of Option Applicative_instance_Option a)) m =
-  match m { None ⇒ option_bind_rid_none a ; Some x ⇒ option_bind_rid_some a x }
+  match m { None ↦ option_bind_rid_none a ; Some x ↦ option_bind_rid_some a x }
 
 lemma option_bind_asc_none (a : Type) (b : Type) (c : Type) (k : a -> Option b) (h : b -> Option c) :
   Equal (Option c) (option_bind b c (option_bind a b (None a) k) h) (option_bind a c (None a) (compose_kleisli Option option_bind a b c k h)) = Proved
@@ -224,7 +224,7 @@ lemma option_bind_asc_some (a : Type) (b : Type) (c : Type) (x : a) (k : a -> Op
 
 lemma option_bind_asc (a : Type) (b : Type) (c : Type) (m : Option a) (k : a -> Option b) (h : b -> Option c) :
   Equal (Option c) (option_bind b c (option_bind a b m k) h) (option_bind a c m (compose_kleisli Option option_bind a b c k h)) =
-  match m { None ⇒ option_bind_asc_none a b c k h ; Some x ⇒ option_bind_asc_some a b c x k h }
+  match m { None ↦ option_bind_asc_none a b c k h ; Some x ↦ option_bind_asc_some a b c x k h }
 
 instance Monad Option {
   applicative = Applicative_instance_Option ;
@@ -244,7 +244,7 @@ instance Monad Option {
 
 ```ken
 fn concat_map (a : Type) (b : Type) (f : a -> List b) (xs : List a) : List b =
-  match xs { Nil ⇒ Nil b ; Cons h t ⇒ list_append b (f h) (concat_map a b f t) }
+  match xs { Nil ↦ Nil b ; Cons h t ↦ list_append b (f h) (concat_map a b f t) }
 
 fn list_pure (a : Type) (x : a) : List a = Cons a x (Nil a)
 
@@ -268,15 +268,15 @@ lemma list_bind_lid (a : Type) (b : Type) (x : a) (k : a -> List b) :
 
 lemma list_bind_rid (a : Type) (m : List a) : Equal (List a) (list_bind a a m (list_pure a)) m =
   match m {
-    Nil ⇒ Proved ;
-    Cons h t ⇒ cong (List a) (List a) (list_bind a a t (list_pure a)) t (Cons a h) (list_bind_rid a t)
+    Nil ↦ Proved ;
+    Cons h t ↦ cong (List a) (List a) (list_bind a a t (list_pure a)) t (Cons a h) (list_bind_rid a t)
   }
 
 lemma concat_map_append_distrib (a : Type) (b : Type) (f : a -> List b) (xs : List a) (ys : List a) :
   Equal (List b) (concat_map a b f (list_append a xs ys)) (list_append b (concat_map a b f xs) (concat_map a b f ys)) =
   match xs {
-    Nil ⇒ Refl ;
-    Cons h t ⇒
+    Nil ↦ Refl ;
+    Cons h t ↦
       trans (List b)
         (list_append b (f h) (concat_map a b f (list_append a t ys)))
         (list_append b (f h) (list_append b (concat_map a b f t) (concat_map a b f ys)))
@@ -288,8 +288,8 @@ lemma concat_map_append_distrib (a : Type) (b : Type) (f : a -> List b) (xs : Li
 lemma list_bind_asc (a : Type) (b : Type) (c : Type) (m : List a) (k : a -> List b) (h : b -> List c) :
   Equal (List c) (list_bind b c (list_bind a b m k) h) (list_bind a c m (compose_kleisli List list_bind a b c k h)) =
   match m {
-    Nil ⇒ Proved ;
-    Cons h0 t ⇒
+    Nil ↦ Proved ;
+    Cons h0 t ↦
       trans (List c)
         (concat_map b c h (list_append b (k h0) (concat_map a b k t)))
         (list_append c (concat_map b c h (k h0)) (concat_map b c h (concat_map a b k t)))
@@ -335,8 +335,8 @@ fn list_ap_inner (a : Type) (b : Type) (y : a) (g : a -> b) : List b = list_map 
 lemma list_ap_ich_general (a : Type) (b : Type) (u : List (a -> b)) (y : a) :
   Equal (List b) (concat_map (a -> b) b (list_ap_inner a b y) u) (list_map (a -> b) b (apply_to a b y) u) =
   match u {
-    Nil ⇒ Proved ;
-    Cons g0 t ⇒
+    Nil ↦ Proved ;
+    Cons g0 t ↦
       cong (List b) (List b)
         (concat_map (a -> b) b (list_ap_inner a b y) t)
         (list_map (a -> b) b (apply_to a b y) t)
@@ -370,8 +370,8 @@ lemma list_ap_pure_left (a : Type) (b : Type) (g : a -> b) (xs : List a) :
 lemma list_map_append_distrib (a : Type) (b : Type) (g : a -> b) (xs : List a) (ys : List a) :
   Equal (List b) (list_map a b g (list_append a xs ys)) (list_append b (list_map a b g xs) (list_map a b g ys)) =
   match xs {
-    Nil ⇒ Refl ;
-    Cons h t ⇒ cong (List b) (List b) (list_map a b g (list_append a t ys)) (list_append b (list_map a b g t) (list_map a b g ys)) (Cons b (g h)) (list_map_append_distrib a b g t ys)
+    Nil ↦ Refl ;
+    Cons h t ↦ cong (List b) (List b) (list_map a b g (list_append a t ys)) (list_append b (list_map a b g t) (list_map a b g ys)) (Cons b (g h)) (list_map_append_distrib a b g t ys)
   }
 
 fn compose_f_g (a : Type) (b : Type) (c : Type) (f : b -> List c) (g : a -> b) (x : a) : List c = f (g x)
@@ -379,8 +379,8 @@ fn compose_f_g (a : Type) (b : Type) (c : Type) (f : b -> List c) (g : a -> b) (
 lemma concat_map_map_fusion (a : Type) (b : Type) (c : Type) (f : b -> List c) (g : a -> b) (xs : List a) :
   Equal (List c) (concat_map b c f (list_map a b g xs)) (concat_map a c (compose_f_g a b c f g) xs) =
   match xs {
-    Nil ⇒ Proved ;
-    Cons h t ⇒ cong (List c) (List c) (concat_map b c f (list_map a b g t)) (concat_map a c (compose_f_g a b c f g) t) (list_append c (f (g h))) (concat_map_map_fusion a b c f g t)
+    Nil ↦ Proved ;
+    Cons h t ↦ cong (List c) (List c) (concat_map b c f (list_map a b g t)) (concat_map a c (compose_f_g a b c f g) t) (list_append c (f (g h))) (concat_map_map_fusion a b c f g t)
   }
 
 fn map_after (a : Type) (b : Type) (c : Type) (g : b -> c) (f : a -> List b) (x : a) : List c = list_map b c g (f x)
@@ -388,8 +388,8 @@ fn map_after (a : Type) (b : Type) (c : Type) (g : b -> c) (f : a -> List b) (x 
 lemma list_map_concat_map_fusion (a : Type) (b : Type) (c : Type) (g : b -> c) (f : a -> List b) (xs : List a) :
   Equal (List c) (list_map b c g (concat_map a b f xs)) (concat_map a c (map_after a b c g f) xs) =
   match xs {
-    Nil ⇒ Proved ;
-    Cons h t ⇒
+    Nil ↦ Proved ;
+    Cons h t ↦
       trans (List c)
         (list_map b c g (list_append b (f h) (concat_map a b f t)))
         (list_append c (list_map b c g (f h)) (list_map b c g (concat_map a b f t)))
@@ -401,8 +401,8 @@ lemma list_map_concat_map_fusion (a : Type) (b : Type) (c : Type) (g : b -> c) (
 lemma concat_map_pointwise_eq (a : Type) (b : Type) (f : a -> List b) (g : a -> List b) (pf : (x : a) -> Equal (List b) (f x) (g x)) (xs : List a) :
   Equal (List b) (concat_map a b f xs) (concat_map a b g xs) =
   match xs {
-    Nil ⇒ Proved ;
-    Cons h t ⇒
+    Nil ↦ Proved ;
+    Cons h t ↦
       trans (List b)
         (list_append b (f h) (concat_map a b f t))
         (list_append b (g h) (concat_map a b f t))
@@ -451,8 +451,8 @@ fn ap_then_bind (a : Type) (b : Type) (c : Type) (v : List (a -> b)) (w : List a
 lemma pf_probe (a : Type) (b : Type) (c : Type) (v : List (a -> b)) (w : List a) (g1 : b -> c) :
   Equal (List c) (ap_comp_h1 a b c v w g1) (ap_then_bind a b c v w g1) =
   match v {
-    Nil ⇒ Proved ;
-    Cons h0 t ⇒
+    Nil ↦ Proved ;
+    Cons h0 t ↦
       trans (List c)
         (list_append c (list_map a c (compose a b c g1 h0) w) (ap_comp_h1 a b c t w g1))
         (list_append c (list_map b c g1 (list_map a b h0 w)) (ap_then_bind a b c t w g1))
@@ -744,8 +744,8 @@ recursive traversal of the tail:
 ```ken
 fn list_traverse (g : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (t : a -> g b) (xs : List a) : g (List b) =
   match xs {
-    Nil ⇒ apg.pure (List b) (Nil b) ;
-    Cons h u ⇒ apg.ap (List b) (List b) (apg.functor.map b (List b -> List b) (Cons b) (t h)) (list_traverse g apg a b t u)
+    Nil ↦ apg.pure (List b) (Nil b) ;
+    Cons h u ↦ apg.ap (List b) (List b) (apg.functor.map b (List b -> List b) (Cons b) (t h)) (list_traverse g apg a b t u)
   }
 
 instance Traversable List {
@@ -761,8 +761,8 @@ instance Traversable List {
 ```ken
 fn option_traverse (g : Type -> Type) (apg : Applicative g) (a : Type) (b : Type) (t : a -> g b) (mx : Option a) : g (Option b) =
   match mx {
-    None ⇒ apg.pure (Option b) (None b) ;
-    Some x ⇒ apg.ap b (Option b) (apg.pure (b -> Option b) (Some b)) (t x)
+    None ↦ apg.pure (Option b) (None b) ;
+    Some x ↦ apg.ap b (Option b) (apg.pure (b -> Option b) (Some b)) (t x)
   }
 
 instance Traversable Option {
@@ -793,20 +793,20 @@ data Identity a = MkIdentity a
 fn identity_pure (a : Type) (x : a) : Identity a = MkIdentity a x
 
 fn identity_map (a : Type) (b : Type) (f : a -> b) (x : Identity a) : Identity b =
-  match x { MkIdentity v ⇒ MkIdentity b (f v) }
+  match x { MkIdentity v ↦ MkIdentity b (f v) }
 
 fn identity_ap (a : Type) (b : Type) (mf : Identity (a -> b)) (mx : Identity a) : Identity b =
-  match mf { MkIdentity f ⇒ match mx { MkIdentity x ⇒ MkIdentity b (f x) } }
+  match mf { MkIdentity f ↦ match mx { MkIdentity x ↦ MkIdentity b (f x) } }
 
 lemma identity_id_law (a : Type) (x : Identity a) : Equal (Identity a) (identity_map a a (idf a) x) x =
-  match x { MkIdentity v ⇒ Refl }
+  match x { MkIdentity v ↦ Refl }
 
 lemma identity_fusion_law (a : Type) (b : Type) (c : Type) (g : b -> c) (h : a -> b) (x : Identity a) :
   Equal (Identity c) (identity_map a c (comp a b c g h) x) (identity_map b c g (identity_map a b h x)) =
-  match x { MkIdentity v ⇒ Refl }
+  match x { MkIdentity v ↦ Refl }
 
 lemma identity_ap_id (a : Type) (v : Identity a) : Equal (Identity a) (identity_ap a a (identity_pure (a -> a) (idf a)) v) v =
-  match v { MkIdentity x ⇒ Refl }
+  match v { MkIdentity x ↦ Refl }
 
 lemma identity_ap_hom (a : Type) (b : Type) (g : a -> b) (x : a) :
   Equal (Identity b) (identity_ap a b (identity_pure (a -> b) g) (identity_pure a x)) (identity_pure b (g x)) =
@@ -814,17 +814,17 @@ lemma identity_ap_hom (a : Type) (b : Type) (g : a -> b) (x : a) :
 
 lemma identity_ap_ich (a : Type) (b : Type) (u : Identity (a -> b)) (y : a) :
   Equal (Identity b) (identity_ap a b u (identity_pure a y)) (identity_ap (a -> b) b (identity_pure ((a -> b) -> b) (apply_to a b y)) u) =
-  match u { MkIdentity f ⇒ Refl }
+  match u { MkIdentity f ↦ Refl }
 
 lemma identity_ap_cmp (a : Type) (b : Type) (c : Type) (u : Identity (b -> c)) (v : Identity (a -> b)) (w : Identity a) :
   Equal (Identity c)
     (identity_ap a c (identity_ap (a -> b) (a -> c) (identity_ap (b -> c) ((a -> b) -> (a -> c)) (identity_pure ((b -> c) -> (a -> b) -> (a -> c)) (compose a b c)) u) v) w)
     (identity_ap b c u (identity_ap a b v w)) =
-  match u { MkIdentity g ⇒ match v { MkIdentity h ⇒ match w { MkIdentity x ⇒ Refl } } }
+  match u { MkIdentity g ↦ match v { MkIdentity h ↦ match w { MkIdentity x ↦ Refl } } }
 
 lemma identity_map_coh (a : Type) (b : Type) (g : a -> b) (x : Identity a) :
   Equal (Identity b) (identity_map a b g x) (identity_ap a b (identity_pure (a -> b) g) x) =
-  match x { MkIdentity v ⇒ Refl }
+  match x { MkIdentity v ↦ Refl }
 
 instance Functor Identity {
   map = identity_map ;
@@ -852,8 +852,8 @@ case is a two-arm case-split, no induction):
 lemma list_traverse_identity_law (a : Type) (xs : List a) :
   Equal (Identity (List a)) (list_traverse Identity Applicative_instance_Identity a a (identity_pure a) xs) (identity_pure (List a) xs) =
   match xs {
-    Nil ⇒ Proved ;
-    Cons h u ⇒ cong (Identity (List a)) (Identity (List a))
+    Nil ↦ Proved ;
+    Cons h u ↦ cong (Identity (List a)) (Identity (List a))
       (list_traverse Identity Applicative_instance_Identity a a (identity_pure a) u)
       (identity_pure (List a) u)
       (identity_map (List a) (List a) (Cons a h))
@@ -863,8 +863,8 @@ lemma list_traverse_identity_law (a : Type) (xs : List a) :
 lemma option_traverse_identity_law (a : Type) (mx : Option a) :
   Equal (Identity (Option a)) (option_traverse Identity Applicative_instance_Identity a a (identity_pure a) mx) (identity_pure (Option a) mx) =
   match mx {
-    None ⇒ Proved ;
-    Some x ⇒ Refl
+    None ↦ Proved ;
+    Some x ↦ Refl
   }
 ```
 
@@ -942,8 +942,8 @@ lemma list_traverse_naturality (g : Type -> Type) (h : Type -> Type) (apg : Appl
   (a : Type) (b : Type) (t : a -> g b) (xs : List a) :
   Equal (h (List b)) (eta_map (List b) (list_traverse g apg a b t xs)) (list_traverse h aph a b (list_traverse_nat_action g h eta_map a b t) xs) =
   match xs {
-    Nil ⇒ eta_pure (List b) (Nil b) ;
-    Cons hd u ⇒
+    Nil ↦ eta_pure (List b) (Nil b) ;
+    Cons hd u ↦
       trans (h (List b))
         (eta_map (List b) (list_traverse g apg a b t (Cons a hd u)))
         (aph.ap (List b) (List b) (eta_map (List b -> List b) (apg.functor.map b (List b -> List b) (Cons b) (t hd))) (eta_map (List b) (list_traverse g apg a b t u)))
@@ -974,8 +974,8 @@ lemma option_traverse_naturality (g : Type -> Type) (h : Type -> Type) (apg : Ap
   (a : Type) (b : Type) (t : a -> g b) (mx : Option a) :
   Equal (h (Option b)) (eta_map (Option b) (option_traverse g apg a b t mx)) (option_traverse h aph a b (option_traverse_nat_action g h eta_map a b t) mx) =
   match mx {
-    None ⇒ eta_pure (Option b) (None b) ;
-    Some x ⇒
+    None ↦ eta_pure (Option b) (None b) ;
+    Some x ↦
       trans (h (Option b))
         (eta_map (Option b) (option_traverse g apg a b t (Some a x)))
         (aph.ap b (Option b) (eta_map (b -> Option b) (apg.pure (b -> Option b) (Some b))) (eta_map b (t x)))
@@ -2259,8 +2259,8 @@ definitionally, no extra step:
 ```ken
 fn option_traverse_composed (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) (mx : Option a) : Compose g h (Option c) =
   match mx {
-    None ⇒ compose_pure g h apg aph (Option c) (None c) ;
-    Some x ⇒ compose_ap g h apg aph c (Option c) (compose_pure g h apg aph (c -> Option c) (Some c)) (cmp_traverse_action g h apg a b c t1 t2 x)
+    None ↦ compose_pure g h apg aph (Option c) (None c) ;
+    Some x ↦ compose_ap g h apg aph c (Option c) (compose_pure g h apg aph (c -> Option c) (Some c)) (cmp_traverse_action g h apg a b c t1 t2 x)
   }
 
 fn option_traverse_composed_rhs (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) (mx : Option a) : Compose g h (Option c) =
@@ -2440,8 +2440,8 @@ lemma option_traverse_composition (g : Type -> Type) (h : Type -> Type) (apg : A
     (option_traverse_composed g h apg aph a b c t1 t2 mx)
     (option_traverse_composed_rhs g h apg aph a b c t1 t2 mx) =
   match mx {
-    None ⇒ option_traverse_composition_none g h apg aph a b c t1 t2 ;
-    Some x ⇒ option_traverse_composition_some g h apg aph a b c t1 t2 x
+    None ↦ option_traverse_composition_none g h apg aph a b c t1 t2 ;
+    Some x ↦ option_traverse_composition_some g h apg aph a b c t1 t2 x
   }
 ```
 
@@ -2461,8 +2461,8 @@ operations never are):
 ```ken
 fn list_traverse_composed (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) (xs : List a) : Compose g h (List c) =
   match xs {
-    Nil ⇒ compose_pure g h apg aph (List c) (Nil c) ;
-    Cons hd u ⇒ compose_ap g h apg aph (List c) (List c) (compose_map g h apg aph c (List c -> List c) (Cons c) (cmp_traverse_action g h apg a b c t1 t2 hd)) (list_traverse_composed g h apg aph a b c t1 t2 u)
+    Nil ↦ compose_pure g h apg aph (List c) (Nil c) ;
+    Cons hd u ↦ compose_ap g h apg aph (List c) (List c) (compose_map g h apg aph c (List c -> List c) (Cons c) (cmp_traverse_action g h apg a b c t1 t2 hd)) (list_traverse_composed g h apg aph a b c t1 t2 u)
   }
 
 fn list_traverse_composed_rhs (g : Type -> Type) (h : Type -> Type) (apg : Applicative g) (aph : Applicative h) (a : Type) (b : Type) (c : Type) (t1 : a -> g b) (t2 : b -> h c) (xs : List a) : Compose g h (List c) =
@@ -2725,8 +2725,8 @@ lemma list_traverse_composition (g : Type -> Type) (h : Type -> Type) (apg : App
     (list_traverse_composed g h apg aph a b c t1 t2 xs)
     (list_traverse_composed_rhs g h apg aph a b c t1 t2 xs) =
   match xs {
-    Nil ⇒ list_traverse_composition_nil g h apg aph a b c t1 t2 ;
-    Cons hd u ⇒ list_traverse_composition_cons g h apg aph a b c t1 t2 hd u (list_traverse_composition g h apg aph a b c t1 t2 u)
+    Nil ↦ list_traverse_composition_nil g h apg aph a b c t1 t2 ;
+    Cons hd u ↦ list_traverse_composition_cons g h apg aph a b c t1 t2 hd u (list_traverse_composition g h apg aph a b c t1 t2 u)
   }
 ```
 

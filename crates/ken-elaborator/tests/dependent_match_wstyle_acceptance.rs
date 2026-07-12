@@ -52,8 +52,8 @@ fn peel_lams(t: &Term, n: usize) -> &Term {
 /// regression that reintroduces the blanket rejection re-fails this test
 /// with the SAME message, not silently.
 const WTREE_GOAL_SRC: &str = "fn goalK (t : WTree) : allK t -> Prop = \
-     match t { Leaf => \\h. Equal Bool True True ; \
-               Node b k => \\h. Equal Bool True True }";
+     match t { Leaf |-> \\h. Equal Bool True True ; \
+               Node b k |-> \\h. Equal Bool True True }";
 
 #[test]
 fn ac1_wtree_wstyle_match_elaborates_with_pi_shaped_ih_domain() {
@@ -63,8 +63,8 @@ fn ac1_wtree_wstyle_match_elaborates_with_pi_shaped_ih_domain() {
 
     env.elaborate_decl(
         "fn allK (t : WTree) : Prop = \
-         match t { Leaf => Equal Bool True True ; \
-                   Node b k => Equal Bool True True }",
+         match t { Leaf |-> Equal Bool True True ; \
+                   Node b k |-> Equal Bool True True }",
     )
     .expect("allK (non-dependent W-style match) elaborates");
 
@@ -143,8 +143,8 @@ fn ac2_ill_typed_wstyle_arm_stays_kernel_rejected() {
         .expect("WTree data decl elaborates");
     env.elaborate_decl(
         "fn allK (t : WTree) : Prop = \
-         match t { Leaf => Equal Bool True True ; \
-                   Node b k => Equal Bool True True }",
+         match t { Leaf |-> Equal Bool True True ; \
+                   Node b k |-> Equal Bool True True }",
     )
     .expect("allK elaborates");
     env.elaborate_decl(WTREE_GOAL_SRC).expect("goalK elaborates (setup)");
@@ -157,8 +157,8 @@ fn ac2_ill_typed_wstyle_arm_stays_kernel_rejected() {
     // `Prop`) is demanded — a plain sort mismatch that must still fail.
     let err = env.elaborate_decl(
         "fn badGoalK (t : WTree) : allK t -> allK t = \
-         match t { Leaf => \\h. h ; \
-                   Node b k => \\h. b }",
+         match t { Leaf |-> \\h. h ; \
+                   Node b k |-> \\h. b }",
     );
     assert!(
         matches!(err, Err(ken_elaborator::ElabError::KernelRejected { .. }) | Err(_)),
@@ -181,7 +181,7 @@ fn ac1b_itree_vis_dependent_branch_domain_elaborates() {
     let id = env
         .elaborate_decl(
             "fn unwrapRet (r : ITree (StateOp Nat) (resp_state Nat) Nat) : Nat = \
-             match r { Ret v => v ; Vis op k => Zero }",
+             match r { Ret v |-> v ; Vis op k |-> Zero }",
         )
         .expect(
             "match on ITree (Vis op k, k's domain `resp_state Nat op` depending on \
@@ -207,14 +207,14 @@ fn ac1c_outer_wstyle_inner_direct_cross_slot_elaborates() {
 
     env.elaborate_decl(
         "fn allT (t : T) : Prop = \
-         match t { C k r => Equal Bool True True }",
+         match t { C k r |-> Equal Bool True True }",
     )
     .expect("allT (non-dependent, both recursive fields) elaborates");
 
     let id = env
         .elaborate_decl(
             "fn goalT (t : T) : allT t -> Prop = \
-             match t { C k r => \\h. Equal Bool True True }",
+             match t { C k r |-> \\h. Equal Bool True True }",
         )
         .expect(
             "goalT (cross-slot: outer W-style ih_k, inner direct ih_r) must \

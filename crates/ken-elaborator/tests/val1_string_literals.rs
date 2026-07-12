@@ -195,7 +195,7 @@ fn fizzbuzz_classification_elaborates() {
     env.elaborate_decl("data IsZero = Zero_ | NonZero_").expect("IsZero");
     env.elaborate_decl(
         "fn isZero (n : Nat) : IsZero = \
-         match n { Zero => Zero_ ; Suc m => NonZero_ }",
+         match n { Zero |-> Zero_ ; Suc m |-> NonZero_ }",
     )
     .expect("isZero");
 
@@ -203,17 +203,17 @@ fn fizzbuzz_classification_elaborates() {
     env.elaborate_decl("data Mod3 = Zero3 | One3 | Two3").expect("Mod3");
     env.elaborate_decl(
         "fn incMod3 (x : Mod3) : Mod3 = \
-         match x { Zero3 => One3 ; One3 => Two3 ; Two3 => Zero3 }",
+         match x { Zero3 |-> One3 ; One3 |-> Two3 ; Two3 |-> Zero3 }",
     )
     .expect("incMod3");
     env.elaborate_decl(
         "fn isZeroMod3 (x : Mod3) : IsZero = \
-         match x { Zero3 => Zero_ ; One3 => NonZero_ ; Two3 => NonZero_ }",
+         match x { Zero3 |-> Zero_ ; One3 |-> NonZero_ ; Two3 |-> NonZero_ }",
     )
     .expect("isZeroMod3");
     env.elaborate_decl(
         "fn mod3Step (n : Nat) (acc : Mod3) : Mod3 = \
-         match n { Zero => acc ; Suc m => mod3Step m (incMod3 acc) }",
+         match n { Zero |-> acc ; Suc m |-> mod3Step m (incMod3 acc) }",
     )
     .expect("mod3Step");
     env.elaborate_decl("fn mod3 (n : Nat) : Mod3 = mod3Step n Zero3").expect("mod3");
@@ -222,18 +222,18 @@ fn fizzbuzz_classification_elaborates() {
     env.elaborate_decl("data Mod5 = Zero5 | One5 | Two5 | Three5 | Four5").expect("Mod5");
     env.elaborate_decl(
         "fn incMod5 (x : Mod5) : Mod5 = match x { \
-         Zero5 => One5 ; One5 => Two5 ; Two5 => Three5 ; Three5 => Four5 ; Four5 => Zero5 }",
+         Zero5 |-> One5 ; One5 |-> Two5 ; Two5 |-> Three5 ; Three5 |-> Four5 ; Four5 |-> Zero5 }",
     )
     .expect("incMod5");
     env.elaborate_decl(
         "fn isZeroMod5 (x : Mod5) : IsZero = match x { \
-         Zero5 => Zero_ ; One5 => NonZero_ ; Two5 => NonZero_ ; \
-         Three5 => NonZero_ ; Four5 => NonZero_ }",
+         Zero5 |-> Zero_ ; One5 |-> NonZero_ ; Two5 |-> NonZero_ ; \
+         Three5 |-> NonZero_ ; Four5 |-> NonZero_ }",
     )
     .expect("isZeroMod5");
     env.elaborate_decl(
         "fn mod5Step (n : Nat) (acc : Mod5) : Mod5 = \
-         match n { Zero => acc ; Suc m => mod5Step m (incMod5 acc) }",
+         match n { Zero |-> acc ; Suc m |-> mod5Step m (incMod5 acc) }",
     )
     .expect("mod5Step");
     env.elaborate_decl("fn mod5 (n : Nat) : Mod5 = mod5Step n Zero5").expect("mod5");
@@ -242,10 +242,10 @@ fn fizzbuzz_classification_elaborates() {
     env.elaborate_decl(
         "fn classify (n : Nat) : FizzTag = \
          match isZeroMod3 (mod3 n) { \
-           Zero_ => match isZeroMod5 (mod5 n) { \
-             Zero_ => IsFizzBuzz ; NonZero_ => IsFizz } ; \
-           NonZero_ => match isZeroMod5 (mod5 n) { \
-             Zero_ => IsBuzz ; NonZero_ => Plain } }",
+           Zero_ |-> match isZeroMod5 (mod5 n) { \
+             Zero_ |-> IsFizzBuzz ; NonZero_ |-> IsFizz } ; \
+           NonZero_ |-> match isZeroMod5 (mod5 n) { \
+             Zero_ |-> IsBuzz ; NonZero_ |-> Plain } }",
     )
     .expect("classify");
 }
@@ -260,17 +260,17 @@ fn fibonacci_iterative_elaborates() {
     let mut env = ElabEnv::new().expect("base env");
     env.elaborate_decl(
         "fn natAdd (a : Nat) (b : Nat) : Nat = \
-         match a { Zero => b ; Suc m => Suc (natAdd m b) }",
+         match a { Zero |-> b ; Suc m |-> Suc (natAdd m b) }",
     )
     .expect("natAdd");
     env.elaborate_decl(
         "fn natToInt (n : Nat) : Int = \
-         match n { Zero => (0 : Int) ; Suc m => (1 : Int) + natToInt m }",
+         match n { Zero |-> (0 : Int) ; Suc m |-> (1 : Int) + natToInt m }",
     )
     .expect("natToInt");
     env.elaborate_decl(
         "fn fibStep (n : Nat) (a : Nat) (b : Nat) : Nat = \
-         match n { Zero => a ; Suc m => fibStep m b (natAdd a b) }",
+         match n { Zero |-> a ; Suc m |-> fibStep m b (natAdd a b) }",
     )
     .expect("fibStep");
     env.elaborate_decl("fn fib (n : Nat) : Nat = fibStep n Zero (Suc Zero)")
@@ -303,7 +303,7 @@ fn is_even_nested_pattern_elaborates_and_reduces() {
     env.elaborate_decl("data BoolL = TrueL | FalseL").expect("BoolL");
     env.elaborate_decl(
         "fn isEven (n : Nat) : BoolL = \
-         match n { Zero => TrueL ; Suc Zero => FalseL ; Suc (Suc m) => isEven m }",
+         match n { Zero |-> TrueL ; Suc Zero |-> FalseL ; Suc (Suc m) |-> isEven m }",
     )
     .expect("isEven");
     for (name, pred) in [("one", "Zero"), ("two", "one"), ("three", "two"), ("four", "three")] {
@@ -320,12 +320,12 @@ fn gcd_views_elaborate() {
     let mut env = ElabEnv::new().expect("base env");
     env.elaborate_decl(
         "fn natAdd (a : Nat) (b : Nat) : Nat = \
-         match a { Zero => b ; Suc m => Suc (natAdd m b) }",
+         match a { Zero |-> b ; Suc m |-> Suc (natAdd m b) }",
     )
     .expect("natAdd");
     env.elaborate_decl(
         "fn natSub (a : Nat) (b : Nat) : Nat = \
-         match b { Zero => a ; Suc n => match a { Zero => Zero ; Suc m => natSub m n } }",
+         match b { Zero |-> a ; Suc n |-> match a { Zero |-> Zero ; Suc m |-> natSub m n } }",
     )
     .expect("natSub");
     // ES2 retired the prelude's `OrdResult` (bloat — no primitive signature
@@ -334,22 +334,22 @@ fn gcd_views_elaborate() {
     env.elaborate_decl("data OrdResult = Lt | Eq | Gt").expect("OrdResult");
     env.elaborate_decl(
         "fn natCmpZero (b : Nat) : OrdResult = \
-         match b { Zero => Eq ; Suc n => Lt }",
+         match b { Zero |-> Eq ; Suc n |-> Lt }",
     )
     .expect("natCmpZero");
     env.elaborate_decl(
         "fn natCmp (a : Nat) (b : Nat) : OrdResult = \
-         match a { Zero => natCmpZero b ; Suc m => match b { Zero => Gt ; Suc n => natCmp m n } }",
+         match a { Zero |-> natCmpZero b ; Suc m |-> match b { Zero |-> Gt ; Suc n |-> natCmp m n } }",
     )
     .expect("natCmp");
     env.elaborate_decl(
         "fn natGcdFueled (fuel : Nat) (a : Nat) (b : Nat) : Nat = \
          match fuel { \
-           Zero => a ; \
-           Suc f => match natCmp a b { \
-             Eq => a ; \
-             Gt => natGcdFueled f (natSub a b) b ; \
-             Lt => natGcdFueled f a (natSub b a) } }",
+           Zero |-> a ; \
+           Suc f |-> match natCmp a b { \
+             Eq |-> a ; \
+             Gt |-> natGcdFueled f (natSub a b) b ; \
+             Lt |-> natGcdFueled f a (natSub b a) } }",
     )
     .expect("natGcdFueled");
     env.elaborate_decl(
@@ -379,10 +379,10 @@ fn ackermann_sct_gap_closed() {
     let result = env.elaborate_decl(
         "fn ack (m : Nat) (n : Nat) : Nat = \
          match m { \
-           Zero => Suc n ; \
-           Suc p => match n { \
-             Zero => ack p (Suc Zero) ; \
-             Suc q => ack p (ack (Suc p) q) } }",
+           Zero |-> Suc n ; \
+           Suc p |-> match n { \
+             Zero |-> ack p (Suc Zero) ; \
+             Suc q |-> ack p (ack (Suc p) q) } }",
     );
     assert!(
         result.is_ok(),
