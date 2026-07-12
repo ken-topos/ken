@@ -29,7 +29,7 @@ fn all_five_combinators_and_their_laws_are_real_globals() {
     for name in [
         "reverse",
         "reverse_snoc",
-        "reverse_involutive",
+        "reverse::involutive",
         "reverse_length",
         "zip",
         "zip_length",
@@ -75,7 +75,7 @@ fn trusted_base_delta_is_empty_across_the_file() {
 
 // AC8 discriminator 1: `reverse` really is involutive — a non-involutive
 // witness (identity, i.e. "not reversing at all") must be rejected when
-// asked to stand in for `reverse_involutive`'s proof.
+// asked to stand in for `reverse::involutive`'s proof.
 #[test]
 fn ac8_non_involutive_witness_rejected_for_reverse_involutive() {
     let mut env = base_env();
@@ -88,7 +88,7 @@ fn ac8_non_involutive_witness_rejected_for_reverse_involutive() {
     // statement — which does NOT structurally collapse for abstract `xs`
     // — must be rejected, not silently accepted.
     match r {
-        Ok(_) => panic!("a bare `Proved` cannot discharge reverse_involutive for an ABSTRACT xs — must be rejected"),
+        Ok(_) => panic!("a bare `Proved` cannot discharge reverse::involutive for an ABSTRACT xs — must be rejected"),
         Err(e) => {
             let msg = format!("{:?}", e);
             assert!(

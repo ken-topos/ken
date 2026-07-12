@@ -14,6 +14,39 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
+> ### IN FLIGHT — 2 WPs kicked in parallel (operator away ~until 08:00–09:00 UTC) — 2026-07-12
+>
+> origin/main @ `27e62fd1`. Match-arm glyph migration ✅ COMPLETE+CLOSED. Both
+> operator-approved; enclave + Foundation Handoff-Gate-compacted (verified) + kicked:
+> - **`tt`→`Proved` errata** → **Spec enclave** (KICKED `evt_7f1rxg99d59ff`, base
+>   current main). Frame `docs/program/wp/tt-proved-errata.md`. Lane A spec-author
+>   (~70 surface `tt`→`Proved` + normative clause; PRESERVE kernel-id `tt`
+>   narration — discrimination is the whole game), Lane B CV (conformance fixtures
+>   incl. `sound-ord-proved.ken` → green). **NEXT: drive Architect review → honesty
+>   gate → merge (doc/fixture, likely doc-only).** #22.
+> - **catalog membership-convention rollout** → **Foundation** (KICKED
+>   `evt_c676trrjk3a1`, base current main, branch `wp/catalog-membership-rollout`).
+>   Frame `docs/program/wp/catalog-membership-rollout.md`. **PR-A (Tier A):**
+>   EmptyDec/Transport/Sums/LawfulFunctors/Parsing/Collections + finish
+>   LawfulClasses → then PR-B EffectfulClasses → PR-C Map. Judgment pass
+>   (interaction laws STAY lemma); showcases = Librarian discretion; fidelity =
+>   rename+keyword only. **SCOPE AMENDMENT (`evt_qhhsh8vpnaz`):** PR-A's rename of
+>   a Tier-A law (`LawfulFunctors::…right_unit`) retired the flat `list_right_unit`
+>   that `EffectfulClasses` (PR-B pkg) cited → red workspace. Ruled: PR-A MAY make
+>   the **reference-only** cross-package citation fix + a **whole-catalog+test-tree
+>   retired-name consumer sweep** (workspace green at handoff); NO compat alias, NO
+>   PR-B judgment pass on EffectfulClasses decls. Pilot's carry, now cross-package
+>   ([[exported-name-migration-needs-whole-harness-consumer-inventory]]).
+>   **PR-A MERGING @ `38bd9bb2`** (base `27e62fd1`; 15 files 8 catalog+7 test,
+>   +260/−260): 74/74 Tier-A flat lemmas → `proof … for S`/`S::name`; retained
+>   lemmas genuinely interior/interaction; EffectfulClasses citation-only
+>   companion (9 refs, no decl change); consumer sweep clean. QA APPROVE + Architect
+>   -terminal APPROVE (`evt_71q0mt6f8ydkh`, audited 74/74 + byte-identical
+>   fn/const/Ω/↦). Honesty gate clean. **NEXT: PR-B EffectfulClasses, PR-C Map.** #25.
+> - **Then (queued):** #26 glyph-consistency housecleaning (light, AFTER rollout —
+>   catalog collision-avoid). Parked for operator return: #8 namespacing,
+>   `ken-formatter-canonical` WP. #27 List/Int packages (after pedagogical rework).
+>
 > ### match-arm separator `⇒`→`↦` (ASCII `|->`) — ✅ COMPLETE + CLOSED — 2026-07-12
 >
 > **Operator-decided, Architect-ruled (`evt_5m0aq3ddrxb7s`), operator said "go".**

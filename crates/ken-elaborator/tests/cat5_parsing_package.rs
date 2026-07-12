@@ -163,10 +163,10 @@ fn cat5_d1_source_span_package_elaborates_zero_delta() {
     for name in [
         "source_id",
         "source_bytes",
-        "source_utf8",
+        "source_bytes::utf8",
         "source_length",
         "source_length_unit",
-        "source_length_unit_valid",
+        "source_length_unit::valid",
         "source_length_valid",
         "SourceLength",
         "UnitByteLength",
@@ -178,8 +178,8 @@ fn cat5_d1_source_span_package_elaborates_zero_delta() {
         "span_end",
         "nat_leq_bool",
         "LessEqNat",
-        "less_eq_nat_refl",
-        "less_eq_nat_zero_left",
+        "LessEqNat::refl",
+        "LessEqNat::zero_left",
         "ValidSpan",
         "valid_zero_width_span",
         "located_source",
@@ -414,8 +414,8 @@ fn cat5_d1_valid_half_open_bounds_and_zero_width_offsets_check() {
           and_intro
             (LessEqNat (span_start (zero_width_span_at_start s)) (span_end (zero_width_span_at_start s)))
             (LessEqNat (span_end (zero_width_span_at_start s)) (source_length s))
-            (less_eq_nat_refl Zero)
-            (less_eq_nat_zero_left (source_length s))
+            (LessEqNat::refl Zero)
+            (LessEqNat::zero_left (source_length s))
 
         fn zero_width_span_at_offset (offset : Nat) : Span = MkSpan offset offset
 
@@ -424,7 +424,7 @@ fn cat5_d1_valid_half_open_bounds_and_zero_width_offsets_check() {
           \h. valid_zero_width_span s offset h
 
         lemma source_utf8_projects (s : Source) : IsUtf8 (source_bytes s) =
-          source_utf8 s
+          source_bytes::utf8 s
 
         lemma source_length_valid_projects (s : Source)
           : SourceLength (source_length_unit s) (source_bytes s) (source_length s) =
@@ -474,7 +474,7 @@ fn cat5_d1_concrete_nonempty_source_constructs_and_projects() {
         const projected_bytes : Bytes = source_bytes sample_source
         const projected_length : Nat = source_length sample_source
         lemma projected_utf8 : IsUtf8 (source_bytes sample_source) =
-          source_utf8 sample_source
+          source_bytes::utf8 sample_source
         lemma projected_length_valid
           : SourceLength (source_length_unit sample_source) (source_bytes sample_source) (source_length sample_source) =
           source_length_valid sample_source
@@ -484,8 +484,8 @@ fn cat5_d1_concrete_nonempty_source_constructs_and_projects() {
           and_intro
             (LessEqNat (span_start full_source_span) (span_end full_source_span))
             (LessEqNat (span_end full_source_span) (source_length sample_source))
-            (less_eq_nat_zero_left (source_length sample_source))
-            (less_eq_nat_refl (source_length sample_source))
+            (LessEqNat::zero_left (source_length sample_source))
+            (LessEqNat::refl (source_length sample_source))
         "#,
     )
     .expect("a concrete non-empty Source must construct and project with real length evidence");
@@ -814,7 +814,7 @@ fn cat5_d2_failure_with_invalid_span_rejected_by_law() {
                     (LessEqNat (span_start (MkSpan (Suc (Suc Zero)) (Suc Zero))) (span_end (MkSpan (Suc (Suc Zero)) (Suc Zero))))
                     (LessEqNat (span_end (MkSpan (Suc (Suc Zero)) (Suc Zero))) (source_length s))
                     Proved
-                    (less_eq_nat_zero_left (source_length s)))
+                    (LessEqNat::zero_left (source_length s)))
             "#,
         )
         .expect_err("failure validity must reject invalid error spans");
@@ -912,7 +912,7 @@ fn cat5_d3_bool_parser_printer_formatter_roundtrip_on_source_bytes() {
         const printed_bool_expr_source : Source = Source_instance_PrintedBoolExprSource
 
         const parse_printed_bool_expr : ParseResult (Syntax BoolExpr) =
-          parse_bool_expr printed_bool_expr_source Zero (less_eq_nat_zero_left (source_length printed_bool_expr_source))
+          parse_bool_expr printed_bool_expr_source Zero (LessEqNat::zero_left (source_length printed_bool_expr_source))
 
         const parse_printed_bool_expr_erases : Bool =
           match parse_printed_bool_expr {{
@@ -980,7 +980,7 @@ fn cat5_d3_bool_parser_printer_formatter_roundtrip_on_source_bytes() {
         const infix_bool_expr_source : Source = Source_instance_InfixBoolExprSource
 
         const parse_infix_bool_expr : ParseResult (Syntax BoolExpr) =
-          parse_bool_expr infix_bool_expr_source Zero (less_eq_nat_zero_left (source_length infix_bool_expr_source))
+          parse_bool_expr infix_bool_expr_source Zero (LessEqNat::zero_left (source_length infix_bool_expr_source))
         "#,
     ))
     .expect("D3 Boolean parser/printer/formatter producer path must elaborate");

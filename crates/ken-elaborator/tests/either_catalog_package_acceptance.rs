@@ -34,16 +34,16 @@ fn either_and_combinators_are_real_globals() {
         "Left",
         "Right",
         "either",
-        "either_left",
-        "either_right",
+        "either::left",
+        "either::right",
         "map_left",
-        "map_left_left",
-        "map_left_right",
+        "map_left::left",
+        "map_left::right",
         "map_right",
-        "map_right_left",
-        "map_right_right",
+        "map_right::left",
+        "map_right::right",
         "swap",
-        "swap_involutive",
+        "swap::involutive",
     ] {
         assert!(
             env.globals.contains_key(name),
@@ -89,10 +89,10 @@ fn ac8_either_does_not_swap_branches() {
     let mut env = base_env();
     let r = env.elaborate_decl(
         "fn bad_either_swapped (a : Type) (b : Type) (c : Type) (f : a -> c) (g : b -> c) (v : b) : \
-           Equal c (either a b c f g (Right a b v)) (f v) = either_left a b c f g v",
+           Equal c (either a b c f g (Right a b v)) (f v) = either::left a b c f g v",
     );
     match r {
-        Ok(_) => panic!("either_left proves the Left-branch equation (f v); reusing it for a Right-branch goal must be rejected"),
+        Ok(_) => panic!("either::left proves the Left-branch equation (f v); reusing it for a Right-branch goal must be rejected"),
         Err(e) => {
             let msg = format!("{:?}", e);
             assert!(
@@ -106,7 +106,7 @@ fn ac8_either_does_not_swap_branches() {
 
 // AC8 discriminator 2: `swap` is genuinely involutive, not the identity —
 // a `swap` that just returns its argument unchanged must be rejected when
-// asked to stand in for `swap_involutive`'s witness against a REAL swap.
+// asked to stand in for `swap::involutive`'s witness against a REAL swap.
 #[test]
 fn ac8_non_involutive_swap_witness_rejected() {
     let mut env = base_env();
@@ -128,17 +128,17 @@ fn ac8_non_involutive_swap_witness_rejected() {
 }
 
 // AC8 discriminator 3: `map_left` does not touch the `Right` payload —
-// reusing `map_left_right`'s "untouched" proof to claim `g` was applied
+// reusing `map_left::right`'s "untouched" proof to claim `g` was applied
 // must be rejected.
 #[test]
 fn ac8_mapleft_leaves_right_untouched() {
     let mut env = base_env();
     let r = env.elaborate_decl(
         "fn bad_mapLeft_touches_right (a : Type) (c : Type) (f : a -> c) (v : a) : \
-           Equal (Either c a) (map_left a a c f (Right a a v)) (Right c a (f v)) = map_left_right a a c f v",
+           Equal (Either c a) (map_left a a c f (Right a a v)) (Right c a (f v)) = map_left::right a a c f v",
     );
     match r {
-        Ok(_) => panic!("map_left_right proves Right v is left UNTOUCHED (Right c b v, not Right c b (f v)) — reusing it for a f-applied RHS must be rejected"),
+        Ok(_) => panic!("map_left::right proves Right v is left UNTOUCHED (Right c b v, not Right c b (f v)) — reusing it for a f-applied RHS must be rejected"),
         Err(e) => {
             let msg = format!("{:?}", e);
             assert!(
@@ -156,11 +156,11 @@ fn ac8_mapleft_leaves_right_untouched() {
 fn swap_involutive_concrete_examples() {
     let mut env = base_env();
     env.elaborate_decl(
-        "lemma swapInvolutiveLeftExample : Equal (Either Nat Nat) (swap Nat Nat (swap Nat Nat (Left Nat Nat Zero))) (Left Nat Nat Zero) = swap_involutive Nat Nat (Left Nat Nat Zero)",
+        "lemma swapInvolutiveLeftExample : Equal (Either Nat Nat) (swap Nat Nat (swap Nat Nat (Left Nat Nat Zero))) (Left Nat Nat Zero) = swap::involutive Nat Nat (Left Nat Nat Zero)",
     )
     .expect("swap(swap(Left 0)) = Left 0");
     env.elaborate_decl(
-        "lemma swapInvolutiveRightExample : Equal (Either Nat Nat) (swap Nat Nat (swap Nat Nat (Right Nat Nat Zero))) (Right Nat Nat Zero) = swap_involutive Nat Nat (Right Nat Nat Zero)",
+        "lemma swapInvolutiveRightExample : Equal (Either Nat Nat) (swap Nat Nat (swap Nat Nat (Right Nat Nat Zero))) (Right Nat Nat Zero) = swap::involutive Nat Nat (Right Nat Nat Zero)",
     )
     .expect("swap(swap(Right 0)) = Right 0");
 }
