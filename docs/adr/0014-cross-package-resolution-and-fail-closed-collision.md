@@ -1,10 +1,10 @@
 # ADR 0014 — Cross-package module resolution (F3b) and fail-closed single-namespace collision
 
-- **Status:** Accepted (design), with an open operator sub-round on the
-  **`package` abstraction** (PKG-1..4). Fork review complete 2026-07-12 (incl.
-  MRES-4a/b/c and the keyword `admits`); the operator then extended MRES-4 to a
-  `package` abstraction parallel to `program` (2026-07-12) — folded below, with
-  PKG-1..4 Open. Round 1 (MRES-5/7/8) is settled and building; see Consequences.
+- **Status:** Accepted (design). Fork review complete 2026-07-12 (incl.
+  MRES-4a/b/c/d/e and the keyword `admits`); the operator extended MRES-4 to a
+  `package` abstraction parallel to `program` (2026-07-12), and the `package`
+  sub-round **PKG-1..4 is now resolved** (2026-07-12) — all folded below.
+  Round 1 (MRES-5/7/8) is settled and building; see Consequences.
 - **Date:** 2026-07-12 (framed); 2026-07-12 (operator review folded).
 - **Deciders:** the operator (fork review 2026-07-12); framed by the Architect.
 - **Relates to:** ADR 0008 (typeclass/instance coherence), ADR 0011
@@ -18,7 +18,7 @@
 | MRES-1, MRES-2 | **Accepted** + multi-catalog forward-compat added (plural-ready roots) |
 | MRES-3 | **Accepted (a) strict** |
 | MRES-4 | **Accepted (A) ambient-with-coherence**, refined into the **program abstraction** — keyword **`admits`**; admitted-package boundary; scaling validated (O(instances), not O(pkg²)); provenance **required**. Sub-forks Accepted: 4a separable-but-co-locatable, 4b only-multi-package, 4c direct-explicit + transitive-auto with the compiled-package instance-manifest invariant (source==compiled), 4d re-export-carries-instance-surface (admits keys on the explicit root, not the coherence closure), 4e anonymous `program`/`package` headers (identity is the path, no name token) |
-| MRES-4 **`package` extension** | **Accepted (operator, design)** — admission is a reusable boundary hosted by `package` too; **compiled package** (has package abstraction, self-admits, carries the manifest) vs **source package** (composed by-source) = the surface of 4c's compiled-vs-source seam; rides **N4** (grammar+gate) + **N2** (loader+catalog files), not its own WP. **PKG-1..4 Open** for the operator round |
+| MRES-4 **`package` extension** | **Accepted (operator, design)** — admission is a reusable boundary hosted by `package` too; **compiled package** (has package abstraction, self-admits, carries the manifest) vs **source package** (composed by-source) = the surface of 4c's compiled-vs-source seam; rides **N4** (grammar+gate) + **N2** (loader+catalog files), not its own WP. **PKG-1..4 Accepted (2026-07-12):** explicit source-set list; single `admits` over either delivery form (source\|compiled), instance-channel only; trust-internal + re-check cross-boundary; test-scoped admission deferred |
 | MRES-5, MRES-7, MRES-8 | **Accepted** — the fail-closed duplicate-definition slice (round-1 candidate) |
 | MRES-6 | **Operator OVERRODE** the recommendation — local/import name clash is now an **error**, with **explicit import-exclusion language**; reverses §3.3's local-over-imported shadowing |
 | MRES-9 | **Accepted** — defer the form, fix the canonical-identity invariant now |
@@ -482,38 +482,69 @@ concern — ADR 0004 / `63` — not a kernel change.)
 
 **New sub-forks for the operator round (surfaced per the request):**
 
-##### PKG-1 — Package source-set binding & nested boundary — **OPEN**
+##### PKG-1 — Package source-set binding & nested boundary — **ACCEPTED**
 - **Fork.** Is a package's source set all modules under its path (implicit, per
   the MRES-3a bijection) or an explicit list in the package file? Does the
   subtree stop at a nested package file (nested packages = their own units)?
-- **Recommendation.** **Implicit** (all modules under the path — no taxonomy
-  duplication), **stopping at any nested package boundary**. Confirm.
+- **Status: ACCEPTED (operator, 2026-07-12) — explicit list** (reverses my
+  implicit-under-path recommendation). The package file enumerates its member
+  modules explicitly. Explicit membership needs no subtree walk, so the
+  nested-boundary question dissolves — a package lists exactly its own modules,
+  a nested package lists its own, and they never overlap by construction. The
+  package's identity/root stays path-inferred (MRES-4e / MRES-2b); only its
+  *membership* is now explicit. Every importable package therefore has a package
+  file (consistent with PKG-2's admit target).
 
-##### PKG-2 — `admits` (compiled) vs source-inclusion — **OPEN**
-- **Fork.** `admits` targets *compiled* packages (they have manifests).
-  Including a *source* package is a different relation (composition into the
-  parent graph). Implicit (a dep dir without a package file is auto-source-
-  composed) or a distinct surface form (an `includes` clause)?
-- **Recommendation.** Keep the two relations distinct in the model; lean
-  **implicit source-inclusion** for round one, defer a distinct surface form
-  unless a real need appears. Confirm whether to surface the distinction now.
+##### PKG-2 — `admits` targets a package in either delivery form — **ACCEPTED**
+- **Fork (as originally framed).** `admits` naturally targets a *compiled*
+  package (it has a manifest to admit); is bringing in a package **delivered as
+  source** a *different* relation (composition into the parent graph) —
+  implicit, or a distinct `includes` surface form?
+- **Status: ACCEPTED (operator, 2026-07-12) — one `admits` relation, delivery
+  form invisible to the author.** `admits Q` targets Q whether Q's code arrives
+  **pre-compiled** (instances enter via its manifest) or **from source** (its
+  modules join the parent's compile graph); the author never states which —
+  the loader detects the form and yields the same instance environment either
+  way. This is the surface realization of MRES-4c source==compiled: because
+  coherence is canonical (orphan-ban → one canonical instance per
+  `(class, head)`), re-elaborating Q from source lands on the same canonical
+  instances Q's compiled manifest commits, so the two forms are observationally
+  equal and must look identical — one relation. **`admits` is purely the
+  instance-coherence channel** (operator): ordinary `pub` names stay on
+  `import`. This **retires the separate `includes` / source-inclusion surface
+  form** — the two channels are exactly `import` (names) and `admits`
+  (instances, either delivery form).
+- **The soundness hinge (delivery form ⟂ admits boundary).** Note the word
+  *source* runs in two senses: a package's **delivery form**
+  (rebuilt-from-source vs a pre-built manifest) is distinct from a
+  boundary-*less* **"source package"** (a package file with no `admits` section
+  — the extension's term). For "same behavior whether the import was source or
+  compiled" to hold, a package that declares its **own** `admits` boundary is
+  governed by that boundary in **both** delivery forms: its manifest is
+  generated from its own admits, and rebuilding it from source re-resolves
+  against those **same own admits**, never the parent's. Only a boundary-less
+  package resolves in the parent's admission env. Admitting Q therefore never
+  flattens Q's own transitive deps into the parent's direct-use set (MRES-4c/4d
+  two-set distinction) — it respects Q's boundary.
 
-##### PKG-3 — Manifest trust vs re-validation — **OPEN (confirm)**
+##### PKG-3 — Manifest trust vs re-validation — **ACCEPTED**
 - **Fork.** Does a parent trust an admitted compiled package's manifest for the
   package's internal resolution, or re-validate it?
-- **Recommendation.** **Trust for internal commitments** (checked at the
-  package's own compile time), **re-check only cross-boundary coherence**; the
-  kernel re-checks all instance *values* regardless (no new TCB). Couples to
-  supply-chain attestation (signed manifests, ADR 0004 / `63`) — confirm the
-  posture, especially for third-party/vendor compiled packages.
+- **Status: ACCEPTED (operator, 2026-07-12) — trust-internal + re-check
+  cross-boundary.** A parent trusts an admitted compiled package's manifest for
+  that package's *internal* commitments (checked at the package's own compile
+  time) and re-checks only *cross-boundary* coherence; the kernel re-checks all
+  instance *values* regardless, so there is **no new TCB**. The third-party /
+  vendor posture couples to supply-chain attestation (signed manifests, ADR 0004
+  / `63`) — a package-manager-round concern, not a language-round one.
 
-##### PKG-4 — Test-scoped admission — **OPEN (deferrable)**
+##### PKG-4 — Test-scoped admission — **ACCEPTED (deferred)**
 - **Fork.** A package self-admits its deps → testable in isolation. Do test
   units need **test-only** instance-deps (a test-scoped `admits`), or do tests
   get their own `program`?
-- **Recommendation.** **Defer.** The package's own `admits` already makes it
-  testable; a test-scoped admits section or a test `program` can be added later
-  if a real case needs it.
+- **Status: ACCEPTED (operator, 2026-07-12) — defer.** The package's own
+  `admits` already makes it testable; a test-scoped admits section or a test
+  `program` can be added later if a real case needs it.
 
 ### MRES-5 — Fail-closed: is a duplicate top-level name an error?
 - **Fork.** Is a second top-level *definition* of the same single-namespace

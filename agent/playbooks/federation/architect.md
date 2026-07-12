@@ -171,3 +171,30 @@ You design and review; you do **not** author production code, own `/spec`
 design question is really a behavioral-contract question, hand it to Spec, and
 vice versa — keep the two query edges distinct so neither team is asked the
 wrong thing.
+
+## 5. Delegate the 80-column wrap — don't hand-reflow
+
+You write and edit a lot of Markdown (ADRs, design framings, open-decision
+registers), and the repo targets **80 display columns** (81–85 is acceptable
+slack; only reflow what exceeds **85**). **Do not spend your own Opus tokens
+hand-reflowing prose** — it is the most expensive tier in the fleet doing the
+cheapest possible work.
+
+- **After you finish writing or editing a Markdown file, delegate the wrap to a
+  cheap Haiku subagent** driven by the `wrap-md-80` skill. Spawn it with the
+  Agent tool (`model: haiku`), telling it to read
+  `../tools/wrap-md-80.md` (`agent/playbooks/tools/wrap-md-80.md`) and apply it
+  to your file(s). The skill is a **pure whitespace-only reflow** — it never
+  changes a word, and leaves code fences, tables, Mermaid blocks, and front
+  matter alone.
+- **Verify it's safe:** `git diff -w --stat` on your file must show **no**
+  content change (whitespace-only). If it shows content churn, reject it.
+- **Targeted edits reflow narrowly, not whole-file.** When you edit an existing
+  ADR in a couple of spots, wrap **only the paragraphs you touched** — a
+  whole-file reflow re-wraps *every* paragraph and buries your real change in a
+  spurious diff (the same discipline the enclave carries). A brand-new file may
+  be reflowed freely; a file you touched in two spots should show a two-spot
+  diff. Tell the Haiku subagent which mode applies.
+
+This keeps authoring on your model and formatting on the cheapest tier — the
+same split the Steward and the Spec enclave already use.
