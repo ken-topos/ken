@@ -16,11 +16,11 @@
 //! `T` had been declared as a hand-written opaque constant.
 //!
 //! Pipeline per compilation unit (one `elaborate_*` call's `Vec<Decl>`):
-//! rename (qualify decl-level names) → `resolve_decl` (unchanged, purely
-//! lexical) → rewrite (qualify free `RCon`/pattern-ctor references via the
-//! active import scope) → `elaborate_rdecl_v1` (unchanged).
+//! rename (qualify decl-level names) → `resolve_decl` (lexical resolution plus
+//! unit-local collision admission) → rewrite (qualify free `RCon`/pattern-ctor
+//! references via the active import scope) → `elaborate_rdecl_v1` (unchanged).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::ast::{CtorDecl, Decl, ExplicitDataCtor, ImportKind};
 use crate::error::{ElabError, Span};
@@ -825,6 +825,34 @@ fn elaborate_checked(
     Ok(result)
 }
 
+fn resolve_scoped_decl(
+    decl: &Decl,
+    scope: &Scope,
+    exports: &HashMap<String, HashMap<String, String>>,
+    unit_definitions: &mut HashSet<String>,
+) -> Result<RDecl, ElabError> {
+    let attached_name = if let Decl::AttachedProofDecl {
+        subject,
+        proof_name,
+        span,
+        ..
+    } = decl
+    {
+        Some(format!(
+            "{}::{proof_name}",
+            resolve_ref(scope, exports, subject, span)?
+        ))
+    } else {
+        None
+    };
+    let rdecl = resolve::resolve_decl_in_unit(
+        decl,
+        unit_definitions,
+        attached_name.as_deref(),
+    )?;
+    rewrite_rdecl(scope, exports, rdecl)
+}
+
 /// Expand and elaborate a compilation unit's raw decls (one `elaborate_*`
 /// call's `Vec<Decl>`) at nesting `prefix` ("" at the file root), threading
 /// `scope` (built fresh for a `module { … }` block; the persisted root
@@ -835,6 +863,7 @@ fn expand_scope(
     decls: &[Decl],
     prefix: &str,
     scope: &mut Scope,
+    unit_definitions: &mut HashSet<String>,
 ) -> Result<(Vec<crate::elab::ElabResult>, HashMap<String, String>), ElabError> {
     // Pre-pass: collect this scope's own local declared names FIRST, so
     // they unconditionally shadow any import processed below regardless of
@@ -872,8 +901,13 @@ fn expand_scope(
             } => {
                 let child_prefix = qualify(prefix, name);
                 let mut child_scope = Scope::default();
-                let (child_ids, child_exports) =
-                    expand_scope(elab, inner, &child_prefix, &mut child_scope)?;
+                let (child_ids, child_exports) = expand_scope(
+                    elab,
+                    inner,
+                    &child_prefix,
+                    &mut child_scope,
+                    unit_definitions,
+                )?;
                 ids.extend(child_ids);
                 elab.module_state
                     .exports
@@ -905,8 +939,12 @@ fn expand_scope(
                 for d in run {
                     let inner = d.unwrap_pub();
                     let renamed = qualify_decl_name(inner, prefix);
-                    let rdecl = resolve::resolve_decl(&renamed)?;
-                    let rdecl = rewrite_rdecl(scope, &elab.module_state.exports, rdecl)?;
+                    let rdecl = resolve_scoped_decl(
+                        &renamed,
+                        scope,
+                        &elab.module_state.exports,
+                        unit_definitions,
+                    )?;
                     bare_names.push(rdecl.name.clone());
                     rdecls.push(rdecl);
                 }
@@ -1100,6 +1138,12 @@ fn expand_scope(
                         // unconstructible and unmatchable, by every
                         // observer, kernel included.
                         let qualified = qualify(prefix, name);
+                        resolve::check_no_definition_collision(
+                            &qualified,
+                            &qualified,
+                            span,
+                            Some(unit_definitions),
+                        )?;
                         let ty = ken_kernel::Term::ty(ken_kernel::Level::Zero);
                         let id = ken_kernel::declare_postulate(&mut elab.env, vec![], ty).map_err(
                             |e| ElabError::KernelRejected {
@@ -1148,8 +1192,12 @@ fn expand_scope(
                         }
                     }
                     let renamed = qualify_decl_name(inner, prefix);
-                    let rdecl = resolve::resolve_decl(&renamed)?;
-                    let rdecl = rewrite_rdecl(scope, &elab.module_state.exports, rdecl)?;
+                    let rdecl = resolve_scoped_decl(
+                        &renamed,
+                        scope,
+                        &elab.module_state.exports,
+                        unit_definitions,
+                    )?;
                     let result = elaborate_checked(elab, &rdecl)?;
                     if is_pub {
                         if let Decl::AttachedProofDecl {
@@ -1173,7 +1221,12 @@ fn expand_scope(
                 } else {
                     // Not module-qualifiable (class/instance/law/foreign/
                     // temporal/prove) — elaborate unchanged, unqualified.
-                    let rdecl = resolve::resolve_decl(inner)?;
+                    let rdecl = resolve_scoped_decl(
+                        inner,
+                        scope,
+                        &elab.module_state.exports,
+                        unit_definitions,
+                    )?;
                     let result = elaborate_checked(elab, &rdecl)?;
                     ids.push(result);
                 }
@@ -1267,7 +1320,9 @@ pub fn expand_and_elaborate(
     decls: &[Decl],
 ) -> Result<Vec<crate::elab::ElabResult>, ElabError> {
     let mut scope = elab.module_state.root_scope.clone();
-    let (results, _root_exports) = expand_scope(elab, decls, "", &mut scope)?;
+    let mut unit_definitions = HashSet::new();
+    let (results, _root_exports) =
+        expand_scope(elab, decls, "", &mut scope, &mut unit_definitions)?;
     elab.module_state.root_scope = scope;
     Ok(results)
 }
