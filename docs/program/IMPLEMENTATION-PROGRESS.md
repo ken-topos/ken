@@ -14,6 +14,46 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
+> ### proof-vocab-completion — MERGED @ `97c31b3f` (PR #531, CI green) — 2026-07-12
+>
+> **MERGED `origin/main @ 97c31b3f`** (PR #531, CI passed): `fn`⊥Ω partition gate +
+> `tt`→`Proved` surface rename + `Top` + 679-site catalog migration. **Absorbs +
+> closes #21 (fn⊥lemma partition) and completes #19.** Frame was `76d74621` (PR
+> #529); code `8c65aaed`.
+> - **Landed:** symmetric `ensure_not_omega_type` on annotated/inferred/mutual
+>   `fn`/`const` paths (inferred computational admitted, inferred Ω fail-closed);
+>   surface `Proved`+`Top` over kernel `tt_id`/`top_id` (kernel ids untouched),
+>   surface `tt` removed, Rust prop-intro emits `Proved`. Migration 520 TSV + 159
+>   drift = 679 sites → `lemma`; 13 `_ind` collapses; 9 bounded `Top`; catalog `tt`
+>   grep = 0. `pair_compare_eq` cone fixed by keeping Type-valued `Or`-producers
+>   computational (Architect `evt_4eantd6r4s8hh`, Π-into-Ω impredicative).
+> - **Gates:** QA `evt_2t179v5yjpv8q` + Architect `evt_4mkjwwtpr6kh5` + CV
+>   `evt_6yspgfbr70znj`; decision `dec_y3svzskyybpm` resolved APPROVE by
+>   language-leader. **Steward honesty gate PASSED @ `8c65aaed`** (clean scope;
+>   every `= Axiom` a `const`→`lemma` keyword flip, no net-new trust surface;
+>   published `8c65aaed` exactly, chain-of-custody preserved).
+> - **RETROS: pending** — chase the Language ring's proof-vocab-completion retros
+>   before closing the WP.
+> - **TWO REQUIRED fast-follows still open** (CV `evt_6yspgfbr70znj`; the
+>   `tt`→`Proved` rename strands two corpora this WP didn't touch — both doc/fixture
+>   fidelity, neither CI-blocking since the CI `conformance` job is the WP-F2 stub):
+>   1. **Spec erratum — Steward to sequence → spec enclave (Handoff-Gate compact
+>      first).** 70 `tt` refs in `spec/` (`16-observational`, `54/55/56`, `34/39`
+>      sugar) now spell a removed surface term. **NEXT ACTION.**
+>   2. **Conformance reconcile — CV-owned.** 143 `tt` refs incl. latently-broken
+>      `conformance/challenge/C6-lawful-ord-vs-stub/sound-ord-proved.ken` +
+>      `seed-k5-omega-fragment`. CV picks up on merge.
+>
+> ### Fleet infra — Codex memory enabled (operator, 2026-07-12)
+>
+> Operator directed enabling Codex's memory feature for all Codex seats
+> (`[features] memories = true`). Set in the live `~/.codex/config.toml` **and** the
+> template `.devcontainer/post-create.sh` (survives rebuild; single global config,
+> all seats share it). **Takes effect at each seat's next restart** (read at codex
+> startup, not on `/compact`). **Supplemental** to the canonical `agent/memory/`
+> corpus (CLAUDE.md). All implementer seats are now gpt-5.6-sol (operator, fleet-wide);
+> the "keep your turn active through completion" Codex handoff phrasing still applies.
+
 > ### proof-vocabulary A/B/C — MERGED + CLOSED (#19) — 2026-07-11
 >
 > **MERGED `origin/main @ c755837f`** (PR #528, CI green) — combined publication:
