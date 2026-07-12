@@ -76,9 +76,22 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > (generalize `resolve_decl` guard; no loader/import dep; cleanly separable).
 > **MRES-6 = FAST-FOLLOW (round 2, rides loader)** — couples to import system.
 > Program abstraction builds with loader round; needs 4a/b/c settled first.
-> **⏭ RESUME: publishing updated ADR `968530ce` → main now (doc-only) → then
-> surface MRES-4a/b/c to operator for quick round. Round-1 (MRES-5/7/8)
-> kickable whenever. Absorbs #8.**
+> **↳ ADR FOLD PUBLISHED @ `origin/main 7fc800fc`** (ADR 0014 Status: Partially
+> Accepted; byte-identical to Architect `968530ce`; + tracker sync).
+> ⚠️ **Publisher incident + clean recovery (2026-07-12):** I invoked
+> `scripted-pr-automerge.sh --target main` — but `--target` is the HEAD branch it
+> *pushes* (`--base main` is hardcoded), so it force-pushed my **stale local
+> `main`** (d26270e2) over origin/main (f24519f5), regressing main's tip (dropped
+> #28/#29/#30/ADRs-0011-0014 from the tip; object store intact). Recovered by pure
+> fast-forward: `git update-ref refs/heads/main 7fc800fc` (= f24519f5 + fold; main
+> checked out in root worktree so `branch -f` refused) → re-ran `--target main` →
+> `d26270e2..7fc800fc` ff (no `+`) restored everything + landed the fold in one
+> move. Root worktree reset --hard to 7fc800fc, moot.toml preserved. Lesson saved
+> (publisher `--target` = candidate branch, NEVER `main`). No data lost.
+> **⏭ RESUME: ADR published; SURFACE MRES-4a/b/c to operator for the quick round
+> (Architect recs: 4a separable-but-co-locatable; 4b only-multi-package; 4c
+> explicit-only-in-checked-artifact — 4c genuinely open, couples to pkg-mgr).
+> Round-1 (fail-closed MRES-5/7/8) kickable whenever operator clears. Absorbs #8.**
 
 
 > ### ✅ BOTH AWAY-WINDOW WPs CLOSED — FLEET QUIESCENT — 2026-07-12 ~07:26 UTC
