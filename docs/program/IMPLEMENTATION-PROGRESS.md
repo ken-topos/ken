@@ -18,12 +18,14 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >
 > origin/main @ `27e62fd1`. Match-arm glyph migration ✅ COMPLETE+CLOSED. Both
 > operator-approved; enclave + Foundation Handoff-Gate-compacted (verified) + kicked:
-> - **`tt`→`Proved` errata** → **Spec enclave** (KICKED `evt_7f1rxg99d59ff`, base
->   current main). Frame `docs/program/wp/tt-proved-errata.md`. Lane A spec-author
->   (~70 surface `tt`→`Proved` + normative clause; PRESERVE kernel-id `tt`
->   narration — discrimination is the whole game), Lane B CV (conformance fixtures
->   incl. `sound-ord-proved.ken` → green). **NEXT: drive Architect review → honesty
->   gate → merge (doc/fixture, likely doc-only).** #22.
+> - **`tt`→`Proved` errata** → **Spec enclave**. Lane A (spec-author) 61 surface
+>   `tt`→`Proved` + normative §16 boundary clause; Lane B (CV) 4 conformance
+>   fixtures incl. `sound-ord-proved.ken` (real regression: fixed→exit 0,
+>   `Proved`→`tt` control RED). SURF-1 fold (`fn reflTwo`→`lemma`, Ω-purity-forced)
+>   ratified. Architect + Spec + CV all APPROVE. **MERGING @ `f07cc125`** (rebased
+>   `71613710` onto current main `6de39e0a` — disjoint from PR-A, clean; 16 files
+>   11 spec+4 conf+1 guide, +115/−99; honesty gate clean, no crates/kernel/Cargo/
+>   TCB). doc-only. Closes on retros. #22.
 > - **catalog membership-convention rollout** → **Foundation** (KICKED
 >   `evt_c676trrjk3a1`, base current main, branch `wp/catalog-membership-rollout`).
 >   Frame `docs/program/wp/catalog-membership-rollout.md`. **PR-A (Tier A):**
@@ -42,7 +44,9 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >   lemmas genuinely interior/interaction; EffectfulClasses citation-only
 >   companion (9 refs, no decl change); consumer sweep clean. QA APPROVE + Architect
 >   -terminal APPROVE (`evt_71q0mt6f8ydkh`, audited 74/74 + byte-identical
->   fn/const/Ω/↦). Honesty gate clean. **NEXT: PR-B EffectfulClasses, PR-C Map.** #25.
+>   fn/const/Ω/↦). **PR-A MERGED @ `6de39e0a`** (PR #543, CI green). **NOW: PR-B
+>   EffectfulClasses (Foundation Handoff-Gate compacting; base `6de39e0a`), then
+>   PR-C Map.** #25.
 > - **Then (queued):** #26 glyph-consistency housecleaning (light, AFTER rollout —
 >   catalog collision-avoid). Parked for operator return: #8 namespacing,
 >   `ken-formatter-canonical` WP. #27 List/Int packages (after pedagogical rework).
