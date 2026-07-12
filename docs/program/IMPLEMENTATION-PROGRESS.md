@@ -25,15 +25,14 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >   literal-locked oracle. **★ UNBLOCKS B2/B3/B4.**
 > - **B2 → LANGUAGE — RELEASED** (`evt_7a2tcvy28a1ny`). Frame merged (PR #582).
 >   Language Handoff-Gate DONE (all 3 compacted @ 05726850, WIDE-verified). B2
->   - **★ B2 → GATED, PUBLISHING (code).** Candidate `29c1bfe4` (QA APPROVED
->     `evt_6qwtv1f33qymq` + **Architect-terminal APPROVE** `evt_5c20rnb88652c`).
->     Family-A token-kind canon (11 operator/symbol digraphs by kind); Family-C
->     over-fire eliminated STRUCTURALLY (output replays source span, so an ident
->     `l`/`level`/`not` prints own bytes); Family-B words verbatim RED-UNTIL BL3/D4.
->     Honesty-gated clean (4 files crates/ken-elaborator, +247/−118; diff --check
->     clean; zero trusted_base delta). Rebasing onto main `66b879ea` (N4 doc-only,
->     no overlap) → CI-polled publish. **NEXT: confirm CI-green merge → B2 retros →
->     Handoff-Gate Language ring → kick N4 Lane B, then N3 Lane B.**
+>   - **★ B2 → CLOSED ✅** (`origin/main @ 8945e887`, PR #588, code, CI-green; QA +
+>     Architect-terminal APPROVE on `29c1bfe4`; all 3 Language retros IN
+>     leader/impl/qa). `canonicalize_tokens` LIVE — Family-A token-kind canon (11
+>     operator/symbol digraphs); Family-C over-fire eliminated STRUCTURALLY (output
+>     replays source span); Family-B words verbatim RED-UNTIL BL3/D4 (task #40).
+>     Zero trusted_base delta. **Unblocks B3** (doc algebra + printers — needs
+>     framing). **NEXT: Handoff-Gate Language ring → kick N4 Lane B, then N3 Lane
+>     B.**
 >   Replaces raw-byte `canonical_unicode`
 >   (format.rs:36) with token-kind dispatch over B1's stream; fixes `l`/`level`→
 >   `ℓ` over-fire; flips WP S token-kind golden GREEN; no layout (B3). Single
@@ -98,6 +97,15 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >       compose-not-replace); O(total) source-closure coherence; intra-pkg §5.5
 >       overlap; NO manifest/registry/lockfile code. **QUEUES BEHIND B2** on the
 >       Language ring — Handoff-Gate + kick once B2 closes + retros in.
+>     - **★ N4 Lane B → ACTIVE** (`evt_4sw2pxfvx6b6v`). Language ring Handoff-Gate
+>       DONE (all 3 compacted @ 8945e887, WIDE-verified; home worktrees 0-ahead).
+>       Kickoff posted + language-leader roused (Working). Build: parser anon
+>       headers + admits; admission gate at instance_search (O(1) direct-use,
+>       UnadmittedInstance, compose-not-replace orphan/overlap); self-admission;
+>       O(total) source-closure coherence; intra-pkg §5.5 overlap; NO manifest
+>       code. MRES-4f: both-package collision NOT built. Architect-terminal.
+>       **NEXT: await candidate SHA → honesty-gate + CI-polled publish. Then N3
+>       Lane B (queued, same ring).**
 > - **N3 Lane A → ENCLAVE — GATED, PUBLISHING.** Candidate `8204e727` (linear
 >   `ba514aac → 27e56a79 spec → e31f3259 conf → 8204e727 prelude-carrier fix`);
 >   CV combined APPROVE + **Architect-terminal APPROVE** (merge-Decision vote,
@@ -126,6 +134,19 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > C(atomic capstone, strict gate)`. **Blast-radius insight:** only the capstone
 > C needs the catalog freeze; **B1–B4 run in parallel with N3/N4/N5** (inner-ring,
 > catalog read-only). Task #38.
+> **★ B3 FRAMED (Architect ruling `evt_5sg6s53n63w67`, note
+> `kenfmt-b3-doc-algebra-and-layout.md`, frame `wp/kenfmt-b3-doc-algebra-layout.md`;
+> publishing doc-only).** Wadler/Leijen `Doc` (NOT Prettier-fill); `group` = binary
+> deterministic fit → one canonical layout; axes already ruled in §1d (B3 builds,
+> doesn't re-decide); comments = hard-line-bearing nodes (group with attached
+> comment can't flatten); **NO spec sub-lane** (§1d is the home) but a **CV
+> conformance companion** = per-axis both-orientation oracles extending
+> seed-canonical-format.md. Gate TRANSITIONS: not byte-round-trip (B1) but
+> **parse-preservation + idempotence + 88-col width**, whole-catalog read-only
+> (reformat = capstone C). Parens = highest-risk (only token-content change →
+> parse-preservation + elab backstop). Owner Language (build) + CV (oracles);
+> Architect-terminal. Task #41. **Queues on Language behind N4 Lane B + N3 Lane B**
+> — or CV can start the oracle companion now (enclave, parallel). B4/.ken.md next.
 > **DONE this burst:** backbone + review published doc-only (PR #574 →
 > `172e5f36`). **B1 architecture DECIDED + operator-signed-off:** Architect ruled
 > **(2) AST + token/trivia stream + deterministic attachment** (overriding the
