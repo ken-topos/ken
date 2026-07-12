@@ -14,7 +14,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### match-arm separator `⇒`→`↦` (ASCII `|->`) — KICKING (operator go) — 2026-07-12
+> ### match-arm separator `⇒`→`↦` (ASCII `|->`) — ✅ COMPLETE + CLOSED — 2026-07-12
 >
 > **Operator-decided, Architect-ruled (`evt_5m0aq3ddrxb7s`), operator said "go".**
 > Match-arm separator changes `⇒`(`=>`) → **`↦`** (ASCII **`|->`**); the
