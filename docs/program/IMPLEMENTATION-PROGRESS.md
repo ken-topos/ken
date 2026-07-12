@@ -28,10 +28,30 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > C(atomic capstone, strict gate)`. **Blast-radius insight:** only the capstone
 > C needs the catalog freeze; **B1–B4 run in parallel with N3/N4/N5** (inner-ring,
 > catalog read-only). Task #38.
-> **NEXT (this burst):** publish backbone + review doc-only → route **CST-vs-AST
-> architecture fork to Architect** (operator-review-before-merge) → release **P0
-> separator reconciliation** mini-WP (enclave/grammar) → then **S** canonical-form
-> spec clause.
+> **DONE this burst:** backbone + review published doc-only (PR #574 →
+> `172e5f36`). **B1 architecture DECIDED + operator-signed-off:** Architect ruled
+> **(2) AST + token/trivia stream + deterministic attachment** (overriding the
+> review's CST lean); operator approved (2026-07-12). Durable note
+> `docs/program/kenfmt-b1-source-representation.md` (architect/work `daa85c12` →
+> Accepted; Architect to bump status + hand SHA for doc-only publish). B1
+> contract = the note's 4 items (gapless trivia stream / total comment-attachment
+> / typed-views=AST / lossless-layer-as-interface). **P0 frame authored + grounded
+> + HELD** (`kenfmt-p0-separator-reconciliation.md`): parser (`parser.rs:737/766`)
+> + corpus already SEMICOLONS; only EBNF stale (comma) → P0 = spec-only EBNF fix;
+> **operator held P0 to bundle with S** (2026-07-12).
+> **S FRAMED** — `docs/program/wp/kenfmt-s-canonical-form-spec.md` (bundles P0).
+> Key grounding: `spec/30-surface/31-lexical.md §1a/b/c` ALREADY mandate the
+> formatter + spec the token/glyph half; **S extends §1 with canonical LAYOUT**
+> (review §§1,3–12), makes token-kind canon normative (closes the §1b `ℓ`-overload
+> open note), specs `.ken.md` + the narrow ignore/reject fence exemption, resolves
+> braces-now / lambda-Unicode+dot / type-app-preserve, folds P0's EBNF fix, + CV
+> golden for the 8 gates. Spec+conformance only. **B1 note bumped Accepted**
+> (architect/work `5a430c32`) — ready for doc-only publish so B2–B4 inherit.
+> **HOLDING at operator checkpoint:** publish the doc batch (S+P0 frames + B1 note
+> + tracker) and **release S+P0 to the enclave** (Handoff-Gate → kick) — or let the
+> operator review the S frame first. On steward/work (unpublished): P0 frame, S
+> frame, tracker, (B1 note pending publish). Then B1→Language after S lands;
+> B2/B3/B4/C follow; only capstone C needs the catalog freeze.
 >
 > **All merged prior burst:** **N2 CLOSED** (in-repo loader LIVE — Lane A
 > `fbc4d3e1` + Lane B `575f43d2`, CI green). **ADR 0015 DONE in spec/conformance**
