@@ -63,7 +63,18 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > names pkg by path, program never imported); identity = path, the header's
 > PRESENCE not name is the signal; a `package` name would be a divergent 2nd
 > source of truth. Grammar `program App`→bare `program`. Rides N4 grammar; zero
-> TCB.** ⏭ PKG-1..4 STILL the open operator round (unchanged).
+> TCB.** **↳ PKG-1..4 RESOLVED + folded (`344150c8`; operator ruled): PKG-1
+> explicit source-set list (REVERSES Architect implicit rec — each pkg lists its
+> own modules, identity still path-inferred, membership explicit → every
+> importable pkg has a package file); PKG-2 ONE `admits` relation over either
+> delivery form (source|compiled), instance-channel only; PKG-3 trust-internal +
+> re-check cross-boundary (kernel re-checks values → no new TCB); PKG-4 defer
+> test-scoped admission. **ADR 0014 NOW HAS NO OPEN FORKS — full F3b/`admits`
+> design SETTLED.** Remaining = build (N2/N3/N4 + post-loader MRES-9 + pkg-mgr
+> manifest round). ⏭ N2 (loader) UNBLOCKED — becomes the active frontier; frame it
+> (in-repo loader + source/compiled-pkg detection + package-file source-set +
+> catalog package-file enrichment) → re-arm watchdog → Handoff-Gate Language →
+> kick N2 Lane A (enclave) then Lane B (build).
 >
 > ### ⚠️ OPEN DESIGN ISSUE — 4b vs library-with-deps testing — 2026-07-12 ~16:0x
 > _(SUPERSEDED by the resolution above — kept for the reasoning trail.)_
