@@ -20,7 +20,7 @@
 | MRES-4 | **Accepted (A) ambient-with-coherence**, refined into the **program abstraction** — keyword **`admits`**; admitted-package boundary; scaling validated (O(instances), not O(pkg²)); provenance **required**. Sub-forks Accepted: 4a separable-but-co-locatable, 4b only-multi-package, 4c direct-explicit + transitive-auto with the compiled-package instance-manifest invariant (source==compiled), 4d re-export-carries-instance-surface (admits keys on the explicit root, not the coherence closure), 4e anonymous `program`/`package` headers (identity is the path, no name token) |
 | MRES-4 **`package` extension** | **Accepted (operator, design)** — admission is a reusable boundary hosted by `package` too; **compiled package** (has package abstraction, self-admits, carries the manifest) vs **source package** (composed by-source) = the surface of 4c's compiled-vs-source seam; rides **N4** (grammar+gate+detection+manifest+catalog files); **N2** is the grammar-independent name-loader spine only. Not its own WP. **PKG-1..4 Accepted (2026-07-12):** explicit source-set list; single `admits` over either delivery form (source\|compiled), instance-channel only; trust-internal + re-check cross-boundary; test-scoped admission deferred |
 | MRES-5, MRES-7, MRES-8 | **Accepted** — the fail-closed duplicate-definition slice (round-1 candidate) |
-| MRES-6 | **Operator OVERRODE** the recommendation — local/import name clash is now an **error**, with **explicit import-exclusion language**; reverses §3.3's local-over-imported shadowing |
+| MRES-6 | **Operator OVERRODE** the recommendation — local/import name clash is now an **error**, resolved by positive selection + per-name **rename** (`hiding` **retired as moot** per ADR 0015); a prelude clash resolves by renaming the local (prelude = unshadowable primitive floor — MRES-10 / operator opt-A); reverses §3.3's local-over-imported shadowing |
 | MRES-9 | **Accepted** — defer the form, fix the canonical-identity invariant now |
 | MRES-10 | **Accepted (precedence order)**; the prelude-shadow warn-and-allow softening is **overridden** — folds under MRES-6's explicit-not-implicit discipline |
 
@@ -571,15 +571,16 @@ below).**
 - **Status: ACCEPTED (a)** — duplicate top-level definition in one unit is a
   hard error. Round-1 candidate (with MRES-7/8).
 
-### MRES-6 — Local/import name clash: error + explicit import-exclusion
+### MRES-6 — Local/import name clash: error + explicit resolution (select/rename)
 - **Fork.** When a top-level **local definition** and an **imported** name
   collide, is it silent local-wins (my original rec (a)) or an error?
 - **Status: OPERATOR OVERRODE (a) — it is an ERROR.** The operator ruled that
   implicit shadowing is unacceptable for agents and humans alike: a local
   definition and an imported definition with the same name is a **clash error**,
-  and Ken must provide **explicit import-specification language to
-  exclude/block** a conflicting name so that any surviving name is intentional.
-  **This reverses §3.3's "Local over imported … never an error."**
+  and Ken must provide **explicit import-specification language** so that any
+  surviving name is intentional (positive selection + per-name rename — see the
+  ADR-0015 reconciliation below). **This reverses §3.3's "Local over
+  imported … never an error."**
 - **Design (mine, to hand the enclave).**
   - **Error-on-clash rule.** A name bound both by a top-level local definition
     **and** by an import is an `AmbiguousReference`/clash error **unless** the
@@ -592,21 +593,33 @@ below).**
     an outer/imported name (innermost wins); that is the term language, not a
     module-name clash. §3.3's "narrower scope, innermost wins" survives for
     lexical binders; only its *module-level local-over-import* clause reverses.
-  - **Import-exclusion grammar** (the Haskell-`hiding` / Agda-`using`/`hiding`
-    family; extends §3.2's forms — spelling deferred to the enclave):
-    - `import M hiding (foo, Bar)` — all of `M` except `foo`, `Bar` (negative).
-    - `import M (foo, Bar)` — positive selection already exists (§3.2).
+  - **Clash-resolution grammar (reconciled with ADR 0015, 2026-07-12).** ADR
+    0015 removes `use M` — Ken's only bring-all-unqualified form — so the
+    negative `import M hiding (…)` form is **retired as moot**: with no
+    bring-all baseline to subtract from, `hiding` has nothing to exclude. The
+    surviving resolutions:
+    - `import M (foo, Bar)` — positive selection (already exists, §3.2).
+      **Exclusion is now the default**: a name you do not list is not brought,
+      which subsumes what `hiding` did for imports.
     - Per-name rename `import M (foo as myFoo)` — resolves a clash by renaming
       (new form; `import M as N` today aliases the *module*, not a name).
   - **Reconcile §3.3.** The "Local over imported" bullet changes to: *a name
-    bound both locally and by an import is a **clash error**; resolve it by
-    positively selecting, `hiding`, or renaming — silent local-win is not
-    permitted.* (Normative §3.3 edit — the enclave elaborates it; I flag the
-    clause change.)
+    bound both locally and by an import is a **clash error**; resolve it by not
+    selecting the name or by renaming — silent local-win is not permitted.*
+    (Normative §3.3 edit — the enclave elaborates it; I flag the clause change.)
+  - **Prelude clash (operator, 2026-07-12 — option A; reconciles MRES-10).** The
+    prelude is the one always-present, unqualified baseline (§30-taxonomy §4);
+    it is never `import`ed, so a prelude name can be neither un-selected nor
+    renamed at an import site. **Resolution: prelude names are the primitive
+    floor — not shadowable. A local definition clashing with a prelude name is a
+    clash error resolved by renaming the local definition; there is no
+    prelude-exclusion form.** This makes `hiding` *fully* moot (no
+    prelude-scoped survivor).
 - **Round placement.** MRES-6 **couples to the import system** (the clash
   detection lives in the import-binding path — today `bind_import` silently
-  refuses to touch a `locals` name, `modules.rs:75-77` — and the `hiding`/rename
-  grammar is new). It is therefore **heavier than the minimal MRES-5/7/8 slice**
+  refuses to touch a `locals` name, `modules.rs:75-77` — and the per-name
+  rename grammar is new). It is therefore **heavier than the minimal MRES-5/7/8
+  slice**
   and rides the loader/import round, **not** round one (see Consequences).
 
 ### MRES-7 — class/ctor cross-namespace collision (`class Eq` vs ctor `Eq`)
@@ -663,16 +676,19 @@ below).**
   prelude**; user-shadows-prelude either (a) allowed with a warning or
   (b) allowed silently or (c) error.
 - **Status: ACCEPTED (precedence order); warn-and-allow OVERRIDDEN.** The total
-  precedence **local > selective/qualified import > open import > prelude** is
-  accepted for *resolution of legitimately-distinct layered names*. But the
+  precedence **local > selective/qualified import > prelude** is accepted for
+  *resolution of legitimately-distinct layered names* (the "open import" tier is
+  removed with `use M`, ADR 0015). But the
   operator overrode the "allow prelude-shadow with a warning" softening:
   **prelude-shadow is governed by the same explicit-not-implicit discipline as
   MRES-6** — a genuine *clash* (same name, different declaration) against the
-  prelude is an **error**, resolved by explicit exclusion (`hiding` the prelude
-  name), never warn-and-allow. Note the coupling this creates: error-on-prelude-
-  clash is ergonomic **only if the prelude is deliberately small** (the clash
-  surface is bounded) — which reinforces the small-prelude / small-auditable
-  direction. Recorded as a design constraint on the prelude.
+  prelude is an **error**, resolved by **renaming the local definition** —
+  prelude names are the primitive floor, not shadowable, with **no
+  prelude-exclusion form** (operator, 2026-07-12 — option A; reconciled with ADR
+  0015's `hiding` retirement), never warn-and-allow. Note the coupling: an
+  error-on-prelude-clash is ergonomic **only if the prelude is deliberately
+  small** (the clash surface is bounded) — which reinforces the small-prelude /
+  small-auditable direction. Recorded as a design constraint on the prelude.
 
 ## Consequences
 
@@ -685,7 +701,7 @@ below).**
     near-shovel-ready, exactly the operator's requested early slice.
   - **MRES-6 (local/import clash + import-exclusion) is a FAST-FOLLOW, not round
     1.** It couples to the import system (clash detection in the import-binding
-    path + new `hiding`/rename grammar), heavier than the minimal slice, and it
+    path + new per-name rename grammar), heavier than the minimal slice, and it
     *matters* most once cross-file imports exist — so it rides the loader round
     (MRES-1/2/3), naturally alongside where imports become load-bearing.
   - **Round 2 — loader** (MRES-1/2/3, plural-ready roots) **+ MRES-6**.

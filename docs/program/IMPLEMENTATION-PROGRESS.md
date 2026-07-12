@@ -14,6 +14,36 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
+> ### ⏭ 2026-07-12 ~19:2x — LIVE STATE (read this first)
+>
+> **`origin/main @ 9f12f3b5`.** **N2 CLOSED** (loader live @ 575f43d2; pending
+> Language N2 retro — chase). ADR 0014 fully settled. ADR 0015 published
+> (`3a5cd323`). WP reconciliation published (`9f12f3b5`: N3 drops `hiding`, N5
+> naming note).
+>
+> **In flight (3):**
+> 1. **ADR 0015 spec lane — KICKED** (`evt_6tavqrkq6frwn`), enclave compacted +
+>    roused, re-orienting. Single lane (spec+conf, no build); frame
+>    `docs/program/wp/adr0015-remove-use-open.md`. Awaiting their SHA → honesty-gate
+>    → publish doc-only.
+> 2. **✅ Prelude carve-out RULED — operator chose (A)** (`evt_61ymxdwpehdr2`).
+>    Prelude names = primitive floor, **not shadowable**; local-vs-prelude clash =
+>    clash error resolved by **renaming your own def**; **no opt-out grammar** →
+>    `hiding` FULLY moot. **✅ Architect folded MRES-6/MRES-10** (`ed491922`) +
+>    **Steward PUBLISHING doc-only now** (candidate `a71872d2`; ADR retires
+>    `hiding`, keeps select+rename, pins prelude-unshadowable under A). **N3 frame
+>    will pin: prelude names unshadowable, clash→rename-local, no prelude-exclusion
+>    form.** N5 `pub use` naming agreed.
+>    ⚠ NOTE: a `git reset --hard origin/main` on steward/work discarded 3 local
+>    tracker commits; recovered from reflog `6aa0e2b3`. Don't reset steward/work
+>    while it holds unpushed tracker state ahead of main.
+> 3. **Language N2 retro** — chase to close N2 fully.
+>
+> **Next frontier after ADR 0015 + N2 retro:** **N3** (import-exclusion MRES-6,
+> loader now live) — reduced scope (§3.3 clash-reversal + rename, no `hiding`).
+> Frame it, Handoff-Gate enclave, kick. Then N4 (program/admits), N5 (re-export).
+> Watchdog `a8bc0c76`.
+>
 > ### 🆕 2026-07-12 ~19:0x — ADR 0015 (remove `use M` open-import) — operator-directed
 >
 > Architect `evt_vz4v4n7vd4ry`: operator ruled **remove the wildcard open-import
