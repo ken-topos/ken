@@ -18,11 +18,11 @@ decl ::=
   | "fn"    ident binder* (":" type)? contract* constraint_clause? "=" expr  -- pure function
   | "proc"  ident binder* (":" type)? effects? contract* constraint_clause? "=" expr  -- effectful / imperative
   | "def" ConId tyvar* "=" type  -- definition: alias / refinement ("type" reserved)
-  | "record" ConId tyvar* "{" field ("," field)* "}" derive?  -- product
+  | "record" ConId tyvar* "{" field (";" field)* "}" derive?  -- product
   | "data" ConId tyvar* "=" simple_ctor ("|" simple_ctor)* derive?  -- simple sum sugar
   | "data" ConId data_param* ":" data_family data_block derive?  -- inductive family
-  | "class" ConId binder* "{" class_field ("," class_field)* "}"  -- typeclass (33 §5, ADR 0008)
-  | "instance" ConId atype* constraint_clause? "{" field_assign ("," field_assign)* "}"  -- instance (33 §5, §5.4)
+  | "class" ConId binder* "{" class_field (";" class_field)* "}"  -- typeclass (33 §5, ADR 0008)
+  | "instance" ConId atype* constraint_clause? "{" field_assign (";" field_assign)* "}"  -- instance (33 §5, §5.4)
   | "prop" ConId tyvar* binder* ":" type prop_block?  -- proposition family / claim shape
   | "lemma" ident binder* ":" type "=" expr  -- standalone checked proof theorem
   | "proof" ident "for" path binder* ":" type "=" expr  -- attached proof theorem
@@ -229,7 +229,7 @@ Spec forms (`../20-verification/21-spec-syntax.md`) are grammar too:
 
 ```
 spec_decl ::= "prove" ident ":" type
-            | "law" ConId "(" tyvar ")" "{" field ("," field)* "}"
+            | "law" ConId "(" tyvar ")" "{" field (";" field)* "}"
 contract is part of `fn`/`proc` (§1); refinements `{x:A|φ}` are types (§2).
 ```
 

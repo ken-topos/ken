@@ -59,6 +59,7 @@ digraph where one is unambiguous, else the spelled-out name.
 | Glyph | ASCII | Role |
 |---|---|---|
 | `→` | `->` | function type / arrow |
+| `↦` | `|->` | match-arm separator |
 | `λ` | `\` | anonymous function (named is `fn`/`proc`) |
 | `∀` | `forall` | universal quantifier (propositions) |
 | `∃` | `exists` | existential quantifier |
@@ -70,14 +71,15 @@ digraph where one is unambiguous, else the spelled-out name.
 | `∈` | `in` | membership |
 | `⊑` `⊔` `⊓` | `<:` `\/` `/\` | IFC lattice flows-to / join / meet (`../60-security/61`) ‡ |
 | `×` | `><` | product type |
-| `ℓ` | `level` / `l` | universe level / label (context-disambiguated) ‡ |
+| `ℓ` | `level` / `l` | universe level / label (token-kind-disambiguated) ‡ |
 
 † Equality notation is the load-bearing fine choice: `≡` propositional vs. `==`
 boolean `DecEq` (`33 §5`) must stay distinct (Lean/Agda convention); `=` is
 **binding only**. The exact ASCII for `≡` (`===` vs. a named form) is a team
-call. ‡ The lattice-op ASCII (`⊑`/`⊔`/`⊓`) and the `ℓ` overload (level vs.
-label) are the other genuinely-contested cells — flagged for the team, not fixed
-here.
+call. ‡ The lattice-op ASCII (`⊑`/`⊔`/`⊓`) remains a team call. The former
+`ℓ` overload is resolved by §1d: only a parsed level-or-label notation token
+prints as `ℓ`; an identifier token whose stored spelling is `l` or `level`
+remains that identifier.
 
 ## 1c. BL3 — the canonical Unicode surface is lexer *and* formatter (SURF-1 D3)
 
@@ -115,6 +117,191 @@ convert ASCII digraphs to canonical Unicode — landed together with the `view �
 const`/`fn`/`proc` migration (D4) as one workspace-green unit. A Unicode-surface
 `.ken` and its ASCII twin **elaborate identically** (acceptance 7), because they
 lex to the same tokens.
+
+## 1d. Canonical form and layout
+
+The mandated formatter emits one deterministic canonical form. Its soft width
+is **88 Unicode display columns**: a breakable syntactic group stays flat if it
+fits and otherwise takes its prescribed broken form. Only an indivisible
+identifier or literal, or a verbatim region, may exceed that width. This is a
+deterministic fit decision, not formatting latitude. There is no configuration,
+formatter-disable directive, or other escape hatch.
+
+### Token-kind canonicalization and protected source
+
+Canonical notation is chosen from the **parsed token kind**, never by replacing
+raw source text. Accepted ASCII and Unicode aliases denote the same notation
+token, and the formatter prints that token's blessed §1b glyph. Identifier and
+keyword tokens print their stored spelling. In particular, identifiers named
+`l` or `level`, keywords such as `in`, and identifiers or prose containing
+`not` are never rewritten because their bytes resemble a notation alias. The
+lexer rejects unblessed confusable identifier characters rather than repairing
+them into a different binding.
+
+The formatter preserves the source lexeme of every literal, including numeric
+base, digit separators, suffixes, delimiters, and escapes. It does not rewrite
+inside strings, raw or multiline strings, characters, bytes, comments, doc
+comments, temporal-formula text, foreign symbol or library names, or any other
+verbatim payload. Comment text is unchanged except for the physical-text rule
+that removes trailing horizontal whitespace. Literal normalization is not part
+of formatting.
+
+Formatting is not refactoring. It must not reorder declarations, imports,
+constraints, effect rows, constructors, fields, or instances; rename or
+recase identifiers; regroup binders; switch declaration kinds or proof
+spellings; desugar terms; add or remove types, arguments, constraints, or
+annotations; or introduce helpers. It must not change `Equal` into Boolean
+`==`, or conversely. Source order and every choice not designated canonical
+below are preserved.
+
+### Physical text and spacing
+
+Canonical indentation is exactly two ASCII spaces per syntactic level; tabs are
+forbidden. Output uses LF line endings, has no trailing whitespace, ends every
+`.ken` file and every Ken fence body with one newline, and places one blank line
+between top-level declarations. It inserts no blank lines between siblings in
+one arm, field, constructor, or declaration block. Around an attached comment,
+at most one intentionally separating blank line is preserved; otherwise the
+formatter owns vertical whitespace.
+
+There is one space on each side of infix operators, binding `=`, type `:`, the
+match arrow, `as`, guard `if`, and row-tail `|`. There is no space just inside
+parentheses, brackets, or record/refinement braces. A comma has one following
+space and no preceding space. A semicolon has no preceding space and separates
+sibling arms, fields, or assignments; it is omitted after the last sibling.
+Projection `.`, qualified-path `.`, and attached-proof `::` have no surrounding
+spaces. Sibling arrows, colons, equals signs, and bodies are **never** vertically
+aligned; indentation alone expresses structure.
+
+### Declarations, types, and applications
+
+A declaration may remain flat only when its entire header and simple body fit.
+A block body, including a compound `match`, lambda, `let`, or `if`, begins on
+the following line. When a header breaks, the formatter:
+
+1. keeps the declaration keyword, name, and attached subject on the first line;
+2. puts each source binder group on its own line, indented one level;
+3. puts the result type on a line beginning with `:`;
+4. puts `visits`, each `requires`, each `ensures`, and a broken `where` clause
+   on separate lines in grammar order;
+5. keeps `=` at the end of the final signature or clause line; and
+6. indents the body one level.
+
+The formatter neither combines adjacent binder groups nor splits a grouped
+binder. A short arrow chain remains flat. In a broken arrow or dependent-pair
+chain, each domain occupies one line and each continuation line begins with the
+arrow or pair constructor. Long `Equal`, `And`, and other type-constructor
+applications break only at argument boundaries. Parentheses follow precedence
+and the mandatory clarity cases: an arrow type used as an application argument,
+an ascription used as a subexpression, and a lower-precedence infix operand
+whose grouping would otherwise be unclear are parenthesized; the canonical form
+carries exactly the precedence-required and mandatory-clarity parentheses
+above; any other parenthesis is removed.
+
+A flat application stays on one line if it fits. Otherwise its head remains on
+the first line and each syntactic argument occupies one continuation line,
+indented one level. Compound arguments nest relative to their enclosing syntax,
+not a coincidental visual column. A projection or attached-proof selector stays
+with its head when possible; arguments to the selected term break instead.
+
+### Lambdas and branching expressions
+
+The canonical lambda prefix is `λ`, followed by its binders and `.`; ASCII
+lambda spellings are input-only aliases. Immediately nested lambdas may be
+coalesced into one binder sequence only when the parsed term is identical and
+no comment intervenes. A lambda remains flat when its body is simple and the
+whole expression fits; otherwise its body begins on the next line, indented one
+level.
+
+A `let` with a compound value or body has this structure:
+
+```ken ignore
+let x : A =
+  value
+in
+  body
+```
+
+An `if` that does not fit, or that has a compound branch, has this structure:
+
+```ken ignore
+if condition then
+  true_branch
+else
+  false_branch
+```
+
+The formatter never converts among `if`, `match`, lambda, and `let`, and never
+eta-reduces or introduces or removes a binding.
+
+The canonical empty eliminator is `match e {}`. A single-arm match may remain
+flat only when its pattern and body are atomic, it has no guard or `eqn:`
+modifier, and the whole expression fits. Every match with at least two arms is
+multiline, with one arm per line. A compound or broken arm body begins on the
+next line, indented one level past the arm. A nested match is always compound.
+All but the last arm end in `;`, and match arrows are never aligned.
+
+### Declaration blocks
+
+A short sum containing only nullary constructors may remain flat. Otherwise a
+sum is multiline with one constructor per line and a leading `|` on every
+continuation constructor. An explicit dependent family always uses a multiline
+`where { ... }` block with one constructor signature per line.
+
+Every nonempty `record`, `class`, `instance`, `law`, `space`, `policy`, and
+`module` block is multiline with one field, assignment, or declaration per
+line. Empty blocks use `{}`. Field names and types are not aligned; a long field
+type breaks by the type and application rules above. Constructor, field,
+assignment, and declaration order is preserved. Canonical blocks use
+**explicit braces**; the layout-vs.-braces language question in §6 may be
+revisited only by a separate language decision and migration.
+
+### Effects, contracts, refinements, and foreign declarations
+
+Closed rows print as `[FS, Console]`, open rows as `[FS, Console | e]`, and the
+empty row as `[]`; row order is preserved. A broken `visits` clause occupies its
+own signature line. Every `requires` and `ensures` clause occupies its own line
+and remains in source order; the formatter neither conjoins nor reorders them.
+Refinements use `{x : A | φ}` spacing. `result` and `old` payloads are formatted
+as ordinary parsed expressions.
+
+A broken `foreign` declaration prints its Ken type and effect signature before
+its `symbol`, `library`, and `pure` body. Foreign strings are verbatim. A
+temporal or other specified verbatim body may be indented as a whole with its
+containing construct, but its internal bytes are unchanged.
+
+### Comments
+
+Every comment is retained. A doc comment stays attached to the following
+declaration. A leading comment remains immediately above the node it precedes,
+at that node's indentation. An end-of-line comment remains inline only when the
+code, two separating spaces, and comment fit within 88 columns; otherwise it is
+placed immediately above the node it annotates. A comment between tokens forces
+the surrounding group to break and is never moved across a syntactic boundary.
+
+### Literate `.ken.md` source
+
+The formatter recognizes exactly four fenced roles: `ken`, `ken ignore`,
+`ken reject`, and `ken example`. A canonical opener is at column zero, uses
+exactly three backticks followed immediately by `ken`, and, when present, one
+ASCII space before the role word. A canonical closer is exactly three backticks
+at column zero. Recognized fence bodies are formatted in place; adjacent fences
+are not joined, declarations are not moved between fences, and roles are not
+changed. Every byte of Markdown outside recognized fence bodies and their fence
+markers remains identical.
+
+Parseable bodies in all four roles receive the full canonical form. The only
+layout exemption is an intentionally incomplete `ken ignore` body or an
+intentionally syntax-erroring `ken reject` body that cannot be parsed. Such a
+body receives token-kind-aware canonicalization only, over the tokens that can
+be recognized without guessing structure; its layout and protected regions
+remain unchanged. No other fence or source region is exempt.
+
+### Preserved open spelling
+
+Type application by juxtaposition and bracketed type application are the same
+construct but remain under `OQ-syntax`. The formatter preserves the form that
+was parsed and does not force one spelling until that decision is settled.
 
 ## 2. Tokens
 
