@@ -217,10 +217,12 @@ claim with no conformance case is a claim no one can rely on
   existing opaque constant (byte-identical kernel rep; a client `match` on a
   hidden constructor is a **surface** name error). Visibility is
   **private-by-default + `pub`** (settled), resolution is **surface-only** — the
-  private-name-access, `use`-open-ambiguity (must-qualify unless same decl), and
-  local-over-imported shadowing (lexical, never an error) rejects are all
-  surface diagnostics that **never reach the kernel**. Package manager /
-  cross-package imports are **out**. N2 adds the in-repo cross-file loader
+  private-name-access and N3 module-level local/import or prelude clashes are
+  surface diagnostics that **never reach the kernel**. N3 pins explicit
+  resolution by positive de-selection or per-name rename, keeps narrower
+  lexical binder shadowing innermost-wins, and rejects `hiding` at parse time.
+  Package manager / cross-package imports are **out**. N2 adds the in-repo
+  cross-file loader
   golden: an import resolves another leaf file through the plural root API with
   exactly one root (red until N2 Lane B), while adding only a back-edge flips
   the same fixture to the specific `ImportCycle` diagnostic naming
