@@ -14,7 +14,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⏭ 2026-07-12 ~21:xx — LIVE STATE (read this first) · `origin/main @ a3690cb8`
+> ### ⏭ 2026-07-12 ~22:xx — LIVE STATE (read this first) · `origin/main @ 5fb84954`
 >
 > **★ TWO PARALLEL RELEASES (operator "resume").**
 > - **B1 → LANGUAGE — CLOSED ✅** (`origin/main @ 9df1f465`, PR #580, code,
@@ -52,17 +52,27 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >     concrete grammar → package-manager round; no minted keyword); buildable-now
 >     admission runs over the source graph / path-implicit membership (N2 MRES-3a).
 >     Frame reconciled to slot PKG-1 into the deferred bucket.
->   - **★ BLOCKED on Architect ADR fork (`evt_pfdtkh2j43xm`):** CV PROVED the
->     "cross-package coherence collision → both-package error" golden case is
->     **structurally impossible in the source world** (N2 import-cycle + §5.3
->     orphan locality + disjoint PKG-1 membership → any two-package `instance C T`
->     collision trips `ImportCycle` before both register). Forks: **A** stage
->     collision/provenance to the compiled-manifest package-manager round + remove
->     from N4 source AC (CV rec); B new cycle mechanism; C change orphan
->     semantics. **Steward WP-owner view: A** — consistent with N4's
->     already-deferred compiled-manifest boundary. Routed to Architect for the
->     ADR-boundary confirm; enclave proceeds on the settled admission/two-set/
->     provenance/PKG-3 clauses (`4ea38061`) meanwhile.
+>   - **★ ADR fork RULED — MRES-4f (Architect, `evt_6x6gxkh1fr5y4`):** CV PROVED
+>     the "cross-package coherence collision → both-package error" golden case is
+>     **structurally impossible in the source world**; Architect ruled **(A)** and
+>     **generalized the proof into a stated theorem MRES-4f** (ADR 0014, folded on
+>     architect/work `48929530` — **Steward publishing doc-only**). Theorem: under
+>     §5.3 orphan locality + N2 acyclic-import + disjoint PKG-1 membership, **at
+>     most one package can legally define a given `(class, head)` in any single
+>     source import graph** (any two-package attempt forces `mC→mT→mC`, trips
+>     `ImportCycle`); generalizes beyond identical heads. Source-world coherence is
+>     thus **by construction** — stronger than a runtime check. Genuine
+>     cross-package collision is a **compiled/admit-world** phenomenon → staged to
+>     the package-manager round (alongside PKG-3). **N4 Lane B disposition:**
+>     remove the cross-package-provenance overlap fixture; KEEP intra-package
+>     overlap (§5.5 still exercised) + two-set discriminator + self-admission +
+>     anonymous headers + admitted-orphan; recommended positive
+>     coherence-by-construction case (two-package same-head → `ImportCycle`).
+>     **Enclave repairing golden NOW** (spec-leader dispatched both amendments:
+>     spec on top of `4ea38061`, conformance on top of `85e35e2b`) → re-spun
+>     combined `wp/n4-program-admits` SHA → Architect-terminal (MRES-4/4a–4f +
+>     PKG-1..4). **NEXT: publish MRES-4f ADR doc-only; await re-spun+approved Lane
+>     A SHA → doc-only publish → Lane B (Language).**
 > - **N3 Lane A → ENCLAVE — GATED, PUBLISHING.** Candidate `8204e727` (linear
 >   `ba514aac → 27e56a79 spec → e31f3259 conf → 8204e727 prelude-carrier fix`);
 >   CV combined APPROVE + **Architect-terminal APPROVE** (merge-Decision vote,
