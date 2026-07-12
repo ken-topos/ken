@@ -1,8 +1,9 @@
 # ADR 0014 — Cross-package module resolution (F3b) and fail-closed single-namespace collision
 
-- **Status:** Partially Accepted — operator fork review complete 2026-07-12
-  (concurred forks Accepted; MRES-4 and MRES-6 refined into new design; three
-  new sub-forks MRES-4a/b/c are Open pending a quick operator round).
+- **Status:** Accepted (design) — operator fork review complete 2026-07-12,
+  incl. the MRES-4a/b/c sub-round and the surface keyword (`admits`). The design
+  and open-decisions register are settled; spec-normative elaboration and build
+  scoping follow (round 1 = MRES-5/7/8; see Consequences).
 - **Date:** 2026-07-12 (framed); 2026-07-12 (operator review folded).
 - **Deciders:** the operator (fork review 2026-07-12); framed by the Architect.
 - **Relates to:** ADR 0008 (typeclass/instance coherence), ADR 0011
@@ -15,7 +16,7 @@
 |---|---|
 | MRES-1, MRES-2 | **Accepted** + multi-catalog forward-compat added (plural-ready roots) |
 | MRES-3 | **Accepted (a) strict** |
-| MRES-4 | **Accepted (A) ambient-with-coherence**, refined into the **program abstraction** (blessed-package boundary); scaling validated; provenance diagnostics now **required**; opens new sub-forks **MRES-4a/b/c (Open)** |
+| MRES-4 | **Accepted (A) ambient-with-coherence**, refined into the **program abstraction** — keyword **`admits`** (operator-chosen); admitted-package boundary; scaling validated (O(instances), not O(pkg²)); provenance **required**. Sub-forks **all Accepted**: 4a separable-but-co-locatable, 4b only-multi-package, 4c direct-explicit + transitive-auto with a compiled-package instance-manifest invariant (source==compiled) |
 | MRES-5, MRES-7, MRES-8 | **Accepted** — the fail-closed duplicate-definition slice (round-1 candidate) |
 | MRES-6 | **Operator OVERRODE** the recommendation — local/import name clash is now an **error**, with **explicit import-exclusion language**; reverses §3.3's local-over-imported shadowing |
 | MRES-9 | **Accepted** — defer the form, fix the canonical-identity invariant now |
@@ -223,11 +224,11 @@ boundary over which "program-wide" is meaningful. Define one, and use it to
 dissolve the ambient-vs-explicit tension.
 
 - **The `program` file.** A distinguished source file declares a `program` and
-  **explicitly lists the packages whose instances are blessed** for use across
-  the program's other compilation units. Within the blessed set, instance
+  **explicitly lists the packages whose instances are admitted** for use across
+  the program's other compilation units. Within the admitted set, instance
   resolution is **ambient** (canonical, program-wide-stable per ADR 0008 — now
   "program" is a defined boundary). Using or importing an instance from a
-  package **not** blessed at the program level is a **hard error**.
+  package **not** admitted at the program level is a **hard error**.
 - **Why this is the honest resolution.** Ambient *resolution* (the soundness
   property — one canonical dict per `(class, head)`) operates **inside** an
   **explicitly declared** boundary. Explicit-over-implicit is honored where it
@@ -235,23 +236,23 @@ dissolve the ambient-vs-explicit tension.
   play, the load-bearing implicit channel) — while resolution stays canonical
   *inside*, preserving ADR 0008's soundness. It is neither Haskell's
   unrestricted ambient transport nor Scala's per-use import-gating.
-- **Shape (design; spelling deferred to the enclave).** A `program` header plus
-  a `blesses` list of package paths (reusing the MRES-2 dotted addressing):
-  `program App` / `blesses Core.LawfulClasses, Data.Collections.Map, …`. The
-  **blessing check** is a new elaborator gate: when `instance_search` resolves
-  an instance, verify its defining package ∈ the program's blessed set;
-  unblessed ⇒ `UnblessedInstance` error. It composes with (does not replace) the
-  existing orphan + overlap checks.
+- **Shape (keyword `admits` — operator-chosen 2026-07-12; grammar to the
+  enclave).** A `program` header plus an `admits` list of package paths (reusing
+  the MRES-2 dotted addressing): `program App` / `admits Core.LawfulClasses,
+  Data.Collections.Map, …`. The **admission check** is a new elaborator gate:
+  when `instance_search` resolves an instance, verify its defining package ∈ the
+  program's admitted set; unadmitted ⇒ `UnadmittedInstance` error. It composes
+  with (does not replace) the existing orphan + overlap checks.
 - **Relation to the rest.** (a) *Loader/dependency:* declaring a dependency
-  makes a package's `pub` names importable; **blessing is a separate, explicit
+  makes a package's `pub` names importable; **admission is a separate, explicit
   opt-in** that additionally admits its instances into ambient resolution — the
   ordinary-name channel stays the normal import system, the load-bearing
   instance channel is explicit. (b) *Package manager:* the manager
-  resolves/content-addresses the dependency graph; the blessed set is the
+  resolves/content-addresses the dependency graph; the admitted set is the
   language-level projection "which of those provide ambient instances", and the
-  manager can generate or validate the list. (c) *Multi-catalog:* blessed
+  manager can generate or validate the list. (c) *Multi-catalog:* admitted
   packages are addressed by path, so an org- or vendor-catalog package is
-  blessed identically — multi-catalog is accommodated for free.
+  admitted identically — multi-catalog is accommodated for free.
 
 **Scaling — validated against the code (the operator's decision-blocker).**
 Confirmed, not asserted:
@@ -264,52 +265,72 @@ Confirmed, not asserted:
   head-module — "discoverable from those two modules alone." Detecting a
   competing instance is an **O(1) key-collision test per instance**
   (`instances.contains_key(&instance_key)`, the overlap check `elab.rs:4266`),
-  so across the blessed set the coherence pass is **O(total instances
-  declared)**, never a pairwise O(packages²) comparison. The blessing check adds
-  one O(1) set-membership test per resolved instance. This directly retires the
-  quadratic-scaling fear.
+  so across the admitted set the coherence pass is **O(total instances
+  declared)**, never a pairwise O(packages²) comparison. The admission check
+  adds one O(1) set-membership test per resolved instance. This directly retires
+  the quadratic-scaling fear.
 - **Provenance diagnostics are a REQUIRED deliverable** (not optional): on
-  resolution, report the blessed package an instance came from; on an
-  `UnblessedInstance` error, name the unblessed package + the instance; on a
+  resolution, report the admitted package an instance came from; on an
+  `UnadmittedInstance` error, name the unadmitted package + the instance; on a
   coherence collision, name both defining packages.
 
-**New sub-forks the program abstraction opens — Open, for a quick operator
-round (surfaced per the operator's instruction):**
+**Sub-forks the program abstraction opened — all resolved in the operator's
+2026-07-12 sub-round:**
 
-##### MRES-4a — Is the `program` file also the entry point? — **OPEN**
+##### MRES-4a — Is the `program` file also the entry point? — **ACCEPTED**
 - **Fork.** Does `program App` also designate the runtime entry (`main`), or is
   entry a separate declaration?
-- **Recommendation.** **Separable but co-locatable.** Blessing is an
-  *elaboration-time instance-boundary* concern; an entry point is a *runtime*
-  concern. Keep them distinct declarations that a program file may both host.
-  Confirm.
+- **Status: ACCEPTED (operator, 2026-07-12) — separable but co-locatable.**
+  Admission is an *elaboration-time instance-boundary* concern; an entry point
+  is a *runtime* concern. They are distinct declarations that a `program` file
+  may both host.
 
-##### MRES-4b — Program file required only for multi-package builds? — **OPEN**
+##### MRES-4b — Program file required only for multi-package? — **ACCEPTED**
 - **Fork.** Must every build have a program file, or only builds spanning ≥2
   instance-providing packages?
-- **Recommendation.** **Only multi-package.** A single package implicitly
-  **self-blesses** (its own instances are always in play), so single-package /
-  catalog-dev stays zero-ceremony; the program file becomes required exactly
-  when ≥2 packages contribute instances across unit boundaries — which is
-  precisely when "whose instances are blessed" is a real question. Confirm.
+- **Status: ACCEPTED (operator, 2026-07-12) — only multi-package.** A single
+  package implicitly **self-admits** (its own instances are always in play), so
+  single-package / catalog-dev stays zero-ceremony; the `program` file becomes
+  required exactly when ≥2 packages contribute instances across unit boundaries
+  — precisely when "whose instances are admitted" is a real question.
 
-##### MRES-4c — Does blessing cascade transitively? — **OPEN**
-- **Fork.** Blessing package `P` — does it bless the instances of `P`'s
-  transitive dependencies, or must each instance-providing package be listed?
-  (Genuinely open; couples to the package manager.)
-- **Options.** (i) **Explicit-only** (no cascade) — every instance-providing
-  package, including transitive, is named; maximally explicit but verbose and
-  brittle. (ii) **Transitive cascade** — blessing `P` blesses its deps'
-  instances; less verbose but re-introduces the implicitness the whole
-  abstraction fights.
-- **Recommendation.** **Explicit-only in the *checked artifact* (i), with
-  tooling-assisted authoring.** The source-of-truth blessed set stays an
-  explicit list (honoring explicit-over-implicit and keeping the check local);
-  the future package manager provides a "bless the transitive closure of my
-  direct deps" convenience that **expands to the explicit list**. Honest
-  resolution: explicit where it is checked, ergonomic where it is written.
-  Flagged as genuinely open — it couples to the package-manager round; confirm
-  the direction.
+##### MRES-4c — Transitive admission & source==compiled — **ACCEPTED**
+- **Fork.** Admitting package `P` — does the program also get `P`'s *own*
+  instance dependencies (deps-of-deps), or must every instance-providing package
+  be listed explicitly?
+- **The governing constraint (operator).** A **source** import of `P` puts `P`'s
+  units in the program's compilation graph, so `P`'s internal use of `Q.Bar`
+  must resolve → `Q`'s instances must be in the program's ambient environment. A
+  **compiled** import of `P` adds nothing to the graph — `P`'s use of `Q` is
+  already resolved and baked into `P`'s artifact. **Least-surprise requires both
+  to yield the same instance environment.** So `Q`'s instances (the ones `P`
+  uses) must be present **either way, without the author listing `Q`** — which
+  means **transitive instance-flow is semantically forced**; requiring an
+  explicit list of every transitive provider would break the source==compiled
+  equivalence (compiled `P` never required listing `Q`).
+- **Status: ACCEPTED (operator) — direct-explicit + transitive-auto.**
+  This reverses my original framing's lean (I had leaned explicit-only for the
+  transitive set; the least-surprise argument defeats it — recorded honestly).
+  The resolved model:
+  1. **The program explicitly names its DIRECT instance dependencies** (the
+     packages whose instances its *own* units resolve against) — explicit where
+     the program itself reaches for an instance.
+  2. **Transitive instances flow automatically** — a direct dependency's own
+     committed instance-uses are part of the program's coherent environment,
+     identical whether that dependency is imported as source or compiled. The
+     author does **not** list them.
+  3. **The coherence check spans the full transitive closure** — one canonical
+     instance per `(class, head)` across the program's own admits *and* every
+     transitive use; a conflict is a hard error. Still **O(total instances)**,
+     orphan-ban-bounded — the closure does not reintroduce quadratic cost.
+  4. **The source==compiled invariant forces a compiled-package instance
+     manifest** — a compiled artifact must record the canonical instances it
+     commits to, so a compiled import feeds the coherence check *identically* to
+     a source import's compilation. Today everything is source (the in-repo
+     loader, MRES-1, is source-based); the manifest is a **forward-compat
+     requirement on the package-manager round** (the compiled-vs-source import
+     seam the operator flagged), same pattern as the multi-catalog constraint.
+     Recorded now; built with the package manager.
 
 ### MRES-5 — Fail-closed: is a duplicate top-level name an error?
 - **Fork.** Is a second top-level *definition* of the same single-namespace
