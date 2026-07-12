@@ -10,8 +10,10 @@
 ```
 unit   ::= module_hdr? import* decl*
 module_hdr ::= "module" ConId "{"  -- or a file-level implicit module
-import ::= "import" ModPath ("as" ConId)? ("(" name ("," name)* ")")?
-        |  "use" ModPath  -- bring names into scope unqualified
+import ::= "import" ModPath ("as" ConId)?
+                          ("(" import_item ("," import_item)* ")")?
+import_item ::= name | name "as" rename
+rename ::= name
 
 decl ::=
     "const" ident binder* (":" type)? contract* constraint_clause? "=" expr  -- pure value (36 §1.6)
