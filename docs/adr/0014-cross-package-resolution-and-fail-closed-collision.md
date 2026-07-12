@@ -402,6 +402,65 @@ Confirmed, not asserted:
   a compiled package (MRES-4 extension). Documentary intent is served by an
   ordinary comment, which cannot drift into a competing identity.
 
+##### MRES-4f — Cross-package collision impossible in source — **ACCEPTED**
+- **Fork.** The required provenance deliverable "on a coherence collision, name
+  **both** defining packages" (MRES-4 scaling note) presumes a reachable
+  two-defining-package overlap. Building the N4 source-world conformance fixture
+  for it, the Conformance Validator **proved it is structurally
+  unconstructible** in a source world. The fork: (A) stage the cross-package
+  collision/provenance case to the compiled-manifest package-manager round and
+  drop it from the N4 Lane-B **source** AC; (B) add a signature/interface-cycle
+  mechanism distinct from N2's import cycles so the two owner-modules can name
+  each other without a cycle; or (C) weaken orphan / package-ownership
+  semantics.
+- **Status: ACCEPTED — (A), elevated to a stated theorem** (Architect ruling,
+  2026-07-12). The impossibility is a **feature**, not a gap: it is coherence
+  *by construction*.
+- **The theorem (CV's proof, verified and generalized).** Under the orphan
+  check (§5.3 — an `instance C T` is legal only in the module that **owns** its
+  class `C` or its head constructor `T`) plus N2's hard acyclic-import rule plus
+  disjoint PKG-1 package membership, **at most one package can legally define a
+  given `(class, head)` instance in any single source import graph.** Two
+  distinct defining packages would have to be exactly `{owner(C), owner(T)}`
+  with `owner(C) != owner(T)`; the instance in `owner(C)` must name `T` (edge
+  `mC -> mT`) and the instance in `owner(T)` must name `C` (edge `mT -> mC`), so
+  the two owner-modules are mutually reachable — a cycle N2 rejects with
+  `ImportCycle` before both register (transitive re-export paths do not escape
+  it, since any module exposing `C` is rooted at `mC`). Same-module collapses to
+  one package; omitting an edge yields `UnboundName`. This **generalizes beyond
+  identical heads** to any pair overlapping on `(class, head-constructor)` (e.g.
+  `instance Show (List a)` vs `instance Show (List Int)`): both are pinned to
+  the same two legal loci `{owner(Show), owner(List)}`, so cross-package
+  placement forces the same cycle.
+- **The boundary (A).** Genuine cross-package collision is a **compiled /
+  admit-world** phenomenon — two independently-compiled package manifests
+  combined at admit time, with no shared acyclic import graph to bind them (or a
+  manifest that violates the source-world preconditions: a smuggled orphan,
+  version skew, an adversarial manifest). It is therefore **defense-in-depth at
+  the admit boundary**, owned by the package-manager / supply-chain round
+  (consistent with PKG-3 already deferring cross-boundary re-check and
+  signed/attested validation there). The "name both defining packages"
+  diagnostic (MRES-4 scaling note) stands as that round's deliverable, not N4's.
+- **Consequences for N4 Lane B (source).** **Remove** the
+  cross-package-provenance overlap fixture from the source AC. **Keep**
+  everything source-constructible: **intra-package** overlap (two `instance C T`
+  in one package, so §5.5 rejects the second canonical instance — the overlap
+  gate is still exercised, just not with cross-package provenance), the two-set
+  `UnadmittedInstance` discriminator, self-admission, anonymous headers, and
+  admitted-orphan (admission is not the orphan gate). **Recommended:** replace
+  the removed fixture with a *positive* coherence-by-construction case — the
+  two-package same-head attempt rejects at `ImportCycle` (per the proof),
+  documenting that the source world catches the overlap attempt upstream and the
+  genuine collision is deferred.
+- **Why not (B)/(C).** Both **weaken a load-bearing invariant to manufacture a
+  hazard the invariant exists to prevent.** (B)'s signature-cycle mechanism
+  reopens the two-definer possibility that acyclicity closes — it would *create*
+  the incoherence, not test for it. (C)'s orphan relaxation readmits orphan
+  instances, the exact incoherence §5.3 forbids. Testing a gate by dismantling
+  the guarantee that makes it unnecessary is backwards; the correct move is to
+  record the guarantee and site the residual check where its precondition can
+  actually fail (the untrusted compiled-manifest boundary).
+
 #### MRES-4 extension — the `package` abstraction (operator, 2026-07-12)
 
 **The gap it closes.** Under the admission model, `import Q` exposes Q's `pub`
