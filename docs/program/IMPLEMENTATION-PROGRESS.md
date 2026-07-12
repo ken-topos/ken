@@ -22,10 +22,10 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >   `tt`→`Proved` + normative §16 boundary clause; Lane B (CV) 4 conformance
 >   fixtures incl. `sound-ord-proved.ken` (real regression: fixed→exit 0,
 >   `Proved`→`tt` control RED). SURF-1 fold (`fn reflTwo`→`lemma`, Ω-purity-forced)
->   ratified. Architect + Spec + CV all APPROVE. **MERGING @ `f07cc125`** (rebased
+>   ratified. Architect + Spec + CV all APPROVE. **MERGED @ `7f3bb85f`** (PR #544; rebased
 >   `71613710` onto current main `6de39e0a` — disjoint from PR-A, clean; 16 files
 >   11 spec+4 conf+1 guide, +115/−99; honesty gate clean, no crates/kernel/Cargo/
->   TCB). doc-only. Closes on retros. #22.
+>   TCB). doc-only. **Retros requested → closes.** #22.
 > - **catalog membership-convention rollout** → **Foundation** (KICKED
 >   `evt_c676trrjk3a1`, base current main, branch `wp/catalog-membership-rollout`).
 >   Frame `docs/program/wp/catalog-membership-rollout.md`. **PR-A (Tier A):**
@@ -44,9 +44,10 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >   lemmas genuinely interior/interaction; EffectfulClasses citation-only
 >   companion (9 refs, no decl change); consumer sweep clean. QA APPROVE + Architect
 >   -terminal APPROVE (`evt_71q0mt6f8ydkh`, audited 74/74 + byte-identical
->   fn/const/Ω/↦). **PR-A MERGED @ `6de39e0a`** (PR #543, CI green). **NOW: PR-B
->   EffectfulClasses (Foundation Handoff-Gate compacting; base `6de39e0a`), then
->   PR-C Map.** #25.
+>   fn/const/Ω/↦). **PR-A MERGED @ `6de39e0a`** (PR #543, CI green). PR-A MERGED. **PR-B EffectfulClasses MERGING @ `b5544afb`** (8/169 attach —
+>   161 interaction laws stay lemma; QA+Architect-terminal APPROVE
+>   `evt_6ffxgjy1h4wae`, reverse-norm byte-identical; ds7/ds8 coupled asserts
+>   updated; 3 files +26/−26). **NEXT: PR-C Map (final tier).** #25.
 > - **Then (queued):** #26 glyph-consistency housecleaning (light, AFTER rollout —
 >   catalog collision-avoid). Parked for operator return: #8 namespacing,
 >   `ken-formatter-canonical` WP. #27 List/Int packages (after pedagogical rework).
