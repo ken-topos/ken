@@ -30,6 +30,14 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >   `ℓ` over-fire; flips WP S token-kind golden GREEN; no layout (B3). Single
 >   build lane, Architect-terminal. **NEXT: await candidate SHA → honesty-gate +
 >   CI-polled publish. Unblocks B3.** N3 Lane B queues behind B2.
+>   - **Notation-layer ruling (Architect, `evt_tb7t8hk609j`; note
+>     `kenfmt-b2-notation-canonicalization-layers.md`):** B2 ships **Family A**
+>     (operator/symbol digraphs, already distinct tokens) by token kind now;
+>     **Family B** (notation WORDS `forall`/`∀` etc.) is GATED on a new **BL3/D4
+>     lexer WP (task #40, Language)** — NOT a B2 parser overlay; Family-B golden
+>     cases stay RED-UNTIL that lexer lands. **Family C** (`l`/`level`→`ℓ`)
+>     protected, B2 never touches. Frame reconciled (AC6 scoped). Note publishing
+>     doc-only.
 > - **N4 Lane A → ENCLAVE — RELEASED** (`evt_3gb5zjq75x388`). Frame merged
 >   (`fcc0dca6`, PR #581). Enclave Handoff-Gate DONE (all 3 compacted @ fcc0dca6,
 >   WIDE-verified; N3 spec squash leftover auto-preserved). Lane A kickoff posted
@@ -44,6 +52,17 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >     concrete grammar → package-manager round; no minted keyword); buildable-now
 >     admission runs over the source graph / path-implicit membership (N2 MRES-3a).
 >     Frame reconciled to slot PKG-1 into the deferred bucket.
+>   - **★ BLOCKED on Architect ADR fork (`evt_pfdtkh2j43xm`):** CV PROVED the
+>     "cross-package coherence collision → both-package error" golden case is
+>     **structurally impossible in the source world** (N2 import-cycle + §5.3
+>     orphan locality + disjoint PKG-1 membership → any two-package `instance C T`
+>     collision trips `ImportCycle` before both register). Forks: **A** stage
+>     collision/provenance to the compiled-manifest package-manager round + remove
+>     from N4 source AC (CV rec); B new cycle mechanism; C change orphan
+>     semantics. **Steward WP-owner view: A** — consistent with N4's
+>     already-deferred compiled-manifest boundary. Routed to Architect for the
+>     ADR-boundary confirm; enclave proceeds on the settled admission/two-set/
+>     provenance/PKG-3 clauses (`4ea38061`) meanwhile.
 > - **N3 Lane A → ENCLAVE — GATED, PUBLISHING.** Candidate `8204e727` (linear
 >   `ba514aac → 27e56a79 spec → e31f3259 conf → 8204e727 prelude-carrier fix`);
 >   CV combined APPROVE + **Architect-terminal APPROVE** (merge-Decision vote,

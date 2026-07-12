@@ -21,11 +21,28 @@ B1's layout so the output still round-trips.
 ## Fixed inputs — SETTLED (WP S normative), do NOT reopen
 
 - **Canonicalize by parsed token KIND, never raw text** (WP S §1d, line ~130).
-  Operator/notation token kinds map to the blessed glyph (`->`→`→`, `\`→`λ`,
-  `Omega`→`Ω`, …, the §1b table); **identifier and keyword tokens print their
-  stored spelling** unchanged. In particular `l`, `level`, `in`, `not` as
-  **identifier** tokens are **never** rewritten by byte resemblance — only a
-  genuine level/notation token kind prints `ℓ`.
+  Operator/notation token kinds map to the blessed glyph (`->`→`→`, `\`→`λ`, …,
+  the §1b table); **identifier and keyword tokens print their stored spelling**
+  unchanged. In particular `l`, `level`, `in`, `not` as **identifier** tokens are
+  **never** rewritten by byte resemblance.
+- **★ Notation-layer scope — three families (Architect ruling, Accepted;
+  `docs/program/kenfmt-b2-notation-canonicalization-layers.md`).** The locked
+  "by token kind" AC is correct but **presupposes §1c BL3**: a word only
+  canonicalizes if it lexes to a distinct token. So B2's shippable scope splits:
+  - **Family A — operator/symbol digraphs already distinct today** (`->`/`→`,
+    `|->`/`↦`, `\`/`λ`, `<=`/`≤`, `>=`/`≥`, `/=`/`≠`, `===`/`≡`, `><`/`×`,
+    `<:`/`⊑`, `/\`, `\/`): these lex to distinct **operator** tokens now — **B2
+    canonicalizes these by token kind. THIS is B2's build scope.**
+  - **Family B — reserved notation *words*** (`forall`/`∀`, `exists`/`∃`,
+    `Sigma`/`Σ`, `Pi`/`Π`, `Omega`/`Ω`): lex as ordinary `Ident`/`ConId` today.
+    Word→glyph is **GATED on a separate BL3/D4 lexer WP** (Language) that makes
+    them lex to notation tokens — **NOT a B2 parser role-overlay** (wrong layer,
+    subsume-don't-proliferate). Once the lexer emits the notation token, B2's
+    existing glyph rule covers Family B for free. **B2 leaves Family-B words
+    untouched** (a left-alone `forall` is deterministic + idempotent).
+  - **Family C — genuinely contextual, protected** (`l`/`level`→`ℓ`, `in`→`∈`,
+    `not`→`¬`): §1d rules these **never rewritten**. B2 never touches them; no
+    role machinery.
 - **Protected source is verbatim** (WP S §1d). String / raw-string / char /
   bytes literals (base, separators, suffixes, delimiters, escapes), comments and
   doc-comments, temporal-formula text, and foreign symbol/library names preserve
@@ -75,11 +92,15 @@ B1's layout so the output still round-trips.
 - **AC5 — raw-byte path retired.** The `canonical_unicode` raw-byte scanner no
   longer drives canonicalization (reused glyph table only); no caller reaches a
   raw-text substitution path.
-- **AC6 — WP S token-kind golden flips GREEN.** The WP S conformance golden's
-  token-kind / `ℓ`-disambiguation / protected-payload cases that were
-  RED-UNTIL-BUILT for B2 now pass (identify them in
+- **AC6 — WP S token-kind golden: Family-A cases flip GREEN.** The WP S
+  conformance golden's **Family-A** operator-digraph / `ℓ`-disambiguation
+  (identifier-protected) / protected-payload cases that were RED-UNTIL-BUILT for
+  B2 now pass (identify them in
   `conformance/surface/formatting/seed-canonical-format.md`); the ambiguity-suite
   arms for `l`-ident-vs-level and aliases-inside-literals are green.
+  **Family-B word→glyph cases (`forall`→`∀`, etc.) stay RED-UNTIL the BL3/D4
+  lexer WP lands** — B2 does not flip them (the lexer precondition is unmet). Mark
+  that dependency in the golden, don't fake the pass.
 - **AC7 — build.** `scripts/ken-cargo test -p ken-elaborator` green **and** the
   literal `cargo build --workspace --locked && cargo test --workspace --locked`
   green. `git diff --check` clean; scope = `crates/ken-elaborator` (+ tests)
