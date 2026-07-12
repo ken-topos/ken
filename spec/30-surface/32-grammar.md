@@ -153,15 +153,25 @@ expr ::=
   | "match" expr ("eqn:" ident)? ("," expr)* "{" arm+ "}"  -- pattern match (34); single-scrutinee eqn: modifier (34 §3.6)
   | expr "." ident | expr ".1" | expr ".2"  -- field / projection
   | path "::" ident  -- canonical attached-proof path
-  | "(" "proof" ident "for" path ")"  -- attached-proof selector expression
+  | proof_ref  -- attached-proof selector atom
   | "(" expr ("," expr)* ")"  -- tuple / pair / grouping
   | "{" field_assign ("," field_assign)* "}"  -- record literal
   | "temporal" "{" expr "}"  -- temporal obligation → Temporal data (72) [OQ-syntax]
   | literal | ident | ConId | "(" operator ")"
   | "(" expr ":" type ")"  -- type ascription
 arm  ::= pattern ("if" expr)? ("↦" | "|->") expr  -- guard optional
+proof_ref ::= "proof" ident "for" path
 field_assign ::= ident "=" expr | ident  -- punning allowed
 ```
+
+`proof_ref` is a primary expression atom and therefore binds more tightly than
+application or any infix operator. Its subject is exactly one `path`; subsequent
+expressions are arguments to the selector result. Thus `proof p for s a b`
+parses as `((proof p for s) a) b`, and `f proof p for s` parses as
+`f (proof p for s)`. The bare atom and its grouped form `(proof p for s)`
+produce the identical `Expr::EAttachedProofRef { subject, proof_name }` and
+desugar to the same `subject::ident` global, where `ident` is stored as
+`proof_name`; parentheses are optional grouping.
 
 Several decided constructs need **no special expression syntax** — they are
 ordinary terms over stdlib/library values (spelling still `OQ-syntax`):

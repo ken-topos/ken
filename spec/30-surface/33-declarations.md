@@ -539,10 +539,24 @@ proof appends for list_append
 ```
 
 The canonical path is `subject::proof_name` - for example
-`Collections.List.list_append::appends`. The selector syntax
-`(proof appends for list_append)` resolves to that same proof term. Subject
-resolution runs first; attached lookup runs only after the subject is
-resolved. A bare `appends` never resolves to the attached proof.
+`Collections.List.list_append::appends`. The equivalent selector atom is:
+
+```
+proof_ref ::= "proof" ident "for" path
+```
+
+A `proof_ref` is a primary expression atom. Its subject is exactly one `path`,
+so application binds outside the selector: `proof p for s a b` parses as
+`((proof p for s) a) b`. The bare form `proof appends for list_append` and the
+grouped form `(proof appends for list_append)` produce the identical
+`Expr::EAttachedProofRef { subject, proof_name }` expression and desugar to the
+same `subject::ident` global, where `ident` is the proof name. Parentheses are
+optional grouping, not part of the selector atom.
+
+Subject resolution runs first; attached lookup runs only after the subject is
+resolved. A bare `appends` never resolves to the attached proof. This
+expression-position atom does not change the declaration-position `proof`
+head described above.
 
 An attached `proof p for s` is well-formed iff the subject `s` **occurs
 applied** somewhere in the proof's claim type φ — in a hypothesis or the
