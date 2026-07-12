@@ -25,7 +25,16 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >   literal-locked oracle. **★ UNBLOCKS B2/B3/B4.**
 > - **B2 → LANGUAGE — RELEASED** (`evt_7a2tcvy28a1ny`). Frame merged (PR #582).
 >   Language Handoff-Gate DONE (all 3 compacted @ 05726850, WIDE-verified). B2
->   kickoff posted + language-leader roused. Replaces raw-byte `canonical_unicode`
+>   - **★ B2 → GATED, PUBLISHING (code).** Candidate `29c1bfe4` (QA APPROVED
+>     `evt_6qwtv1f33qymq` + **Architect-terminal APPROVE** `evt_5c20rnb88652c`).
+>     Family-A token-kind canon (11 operator/symbol digraphs by kind); Family-C
+>     over-fire eliminated STRUCTURALLY (output replays source span, so an ident
+>     `l`/`level`/`not` prints own bytes); Family-B words verbatim RED-UNTIL BL3/D4.
+>     Honesty-gated clean (4 files crates/ken-elaborator, +247/−118; diff --check
+>     clean; zero trusted_base delta). Rebasing onto main `66b879ea` (N4 doc-only,
+>     no overlap) → CI-polled publish. **NEXT: confirm CI-green merge → B2 retros →
+>     Handoff-Gate Language ring → kick N4 Lane B, then N3 Lane B.**
+>   Replaces raw-byte `canonical_unicode`
 >   (format.rs:36) with token-kind dispatch over B1's stream; fixes `l`/`level`→
 >   `ℓ` over-fire; flips WP S token-kind golden GREEN; no layout (B3). Single
 >   build lane, Architect-terminal. **NEXT: await candidate SHA → honesty-gate +
@@ -79,13 +88,16 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >     sentence + orphan-fixture imports. **NEXT: publish frame; await enclave
 >     re-spin + final CV vote → Architect-terminal → doc-only publish Lane A → Lane
 >     B (Language).**
->     - **★ N4 Lane A → MERGING** (`590c6610`): CV FINAL APPROVE + **Architect-
->       terminal APPROVE** (`evt_5b6q3j7f9f1yf`). Honesty-gated clean (FF; 4 files
->       §32/§33 + conf README/seed-modules, +425/−20; diff --check clean; zero TCB;
->       doc-only). MRES-4f reconciled across frame/spec/golden. Publishing doc-only.
->       **NEXT: confirm merge → drive Lane A retros → release N4 Lane B (Language
->       build: parser anon headers + admits, admission gate at instance_search,
->       O(total) source-closure coherence, intra-pkg overlap; NO manifest code).**
+>     - **★ N4 Lane A → CLOSED ✅** (`origin/main @ 66b879ea`, PR #587, doc-only;
+>       CV FINAL + Architect-terminal APPROVE on `590c6610`; enclave triple retros
+>       + coordination retro IN, `evt_3fn2c22m3bkde`). `program`/`package` + `admits`
+>       admission gate NORMATIVE; MRES-4f reconciled across ADR/frame/spec/golden
+>       (source coherence by construction; both-package collision → pkg-mgr round).
+>       **N4 Lane B (Language build) READY** — parser anon headers + admits;
+>       admission gate at `instance_search` (O(1) direct-use, `UnadmittedInstance`,
+>       compose-not-replace); O(total) source-closure coherence; intra-pkg §5.5
+>       overlap; NO manifest/registry/lockfile code. **QUEUES BEHIND B2** on the
+>       Language ring — Handoff-Gate + kick once B2 closes + retros in.
 > - **N3 Lane A → ENCLAVE — GATED, PUBLISHING.** Candidate `8204e727` (linear
 >   `ba514aac → 27e56a79 spec → e31f3259 conf → 8204e727 prelude-carrier fix`);
 >   CV combined APPROVE + **Architect-terminal APPROVE** (merge-Decision vote,
