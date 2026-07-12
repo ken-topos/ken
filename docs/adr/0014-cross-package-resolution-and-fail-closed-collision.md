@@ -17,7 +17,7 @@
 |---|---|
 | MRES-1, MRES-2 | **Accepted** + multi-catalog forward-compat added (plural-ready roots) |
 | MRES-3 | **Accepted (a) strict** |
-| MRES-4 | **Accepted (A) ambient-with-coherence**, refined into the **program abstraction** — keyword **`admits`**; admitted-package boundary; scaling validated (O(instances), not O(pkg²)); provenance **required**. Sub-forks Accepted: 4a separable-but-co-locatable, 4b only-multi-package, 4c direct-explicit + transitive-auto with the compiled-package instance-manifest invariant (source==compiled), 4d re-export-carries-instance-surface (admits keys on the explicit root, not the coherence closure) |
+| MRES-4 | **Accepted (A) ambient-with-coherence**, refined into the **program abstraction** — keyword **`admits`**; admitted-package boundary; scaling validated (O(instances), not O(pkg²)); provenance **required**. Sub-forks Accepted: 4a separable-but-co-locatable, 4b only-multi-package, 4c direct-explicit + transitive-auto with the compiled-package instance-manifest invariant (source==compiled), 4d re-export-carries-instance-surface (admits keys on the explicit root, not the coherence closure), 4e anonymous `program`/`package` headers (identity is the path, no name token) |
 | MRES-4 **`package` extension** | **Accepted (operator, design)** — admission is a reusable boundary hosted by `package` too; **compiled package** (has package abstraction, self-admits, carries the manifest) vs **source package** (composed by-source) = the surface of 4c's compiled-vs-source seam; rides **N4** (grammar+gate) + **N2** (loader+catalog files), not its own WP. **PKG-1..4 Open** for the operator round |
 | MRES-5, MRES-7, MRES-8 | **Accepted** — the fail-closed duplicate-definition slice (round-1 candidate) |
 | MRES-6 | **Operator OVERRODE** the recommendation — local/import name clash is now an **error**, with **explicit import-exclusion language**; reverses §3.3's local-over-imported shadowing |
@@ -239,9 +239,10 @@ dissolve the ambient-vs-explicit tension.
   *inside*, preserving ADR 0008's soundness. It is neither Haskell's
   unrestricted ambient transport nor Scala's per-use import-gating.
 - **Shape (keyword `admits` — operator-chosen 2026-07-12; grammar to the
-  enclave).** A `program` header plus an `admits` list of package paths (reusing
-  the MRES-2 dotted addressing): `program App` / `admits Core.LawfulClasses,
-  Data.Collections.Map, …`. The **admission check** is a new elaborator gate:
+  enclave).** A bare `program` header (no name — MRES-4e) plus an `admits` list
+  of package paths (reusing the MRES-2 dotted addressing): `program` / `admits
+  Core.LawfulClasses, Data.Collections.Map, …`. The **admission check** is a new
+  elaborator gate:
   when `instance_search` resolves an instance, verify its defining package ∈ the
   program's admitted set; unadmitted ⇒ `UnadmittedInstance` error. It composes
   with (does not replace) the existing orphan + overlap checks. The "admitted
@@ -283,8 +284,8 @@ Confirmed, not asserted:
 2026-07-12 sub-round:**
 
 ##### MRES-4a — Is the `program` file also the entry point? — **ACCEPTED**
-- **Fork.** Does `program App` also designate the runtime entry (`main`), or is
-  entry a separate declaration?
+- **Fork.** Does a `program` file also designate the runtime entry (`main`), or
+  is entry a separate declaration?
 - **Status: ACCEPTED (operator, 2026-07-12) — separable but co-locatable.**
   Admission is an *elaboration-time instance-boundary* concern; an entry point
   is a *runtime* concern. They are distinct declarations that a `program` file
@@ -382,6 +383,25 @@ Confirmed, not asserted:
   public topology through which a transitive type can leak. MRES-4d is the rule
   for when it does; recorded now so the later form is cheap and drift-free.
 
+##### MRES-4e — The `program` and `package` headers take no name — **ACCEPTED**
+- **Fork.** Do the `program` / `package` headers carry a name
+  (`program App`, `package Foo`)?
+- **Status: ACCEPTED (operator, 2026-07-12) — anonymous headers, no name
+  token.** A header name has **no referent anywhere in the system**: `admits`
+  addresses packages by **path** (MRES-2 dotted addressing), not by header name;
+  the runtime entry is a *separate* declaration (MRES-4a), not the program name;
+  provenance/diagnostics name the *package* by path; and a program is never
+  imported. So a name is a purely documentary label that duplicates the
+  file/path — and for a `package`, whose identity **is** its path-inferred root
+  (MRES-2b), a header name is worse than redundant: it is a second, potentially
+  *divergent* source of truth for the package's identity. Both headers are
+  therefore bare markers — `program` (optionally hosting the entry declaration,
+  MRES-4a) and `package` — each carrying only its `admits` section. The file's
+  path is the single source of truth for identity; the header's *presence* (not
+  its name) is the signal — a `package` header's presence is what makes the file
+  a compiled package (MRES-4 extension). Documentary intent is served by an
+  ordinary comment, which cannot drift into a competing identity.
+
 #### MRES-4 extension — the `package` abstraction (operator, 2026-07-12)
 
 **The gap it closes.** Under the admission model, `import Q` exposes Q's `pub`
@@ -395,7 +415,8 @@ library-with-dependencies case.
 *boundary* a `package` hosts too.** The same `admits` mechanism (grammar +
 semantics + admission gate + closure coherence) gets a second host:
 
-- **A `package` file** — single-file, parallel to the `program` file — carries a
+- **A `package` file** — single-file, parallel to the `program` file,
+  **nameless** (its identity is its path-inferred root, MRES-4e) — hosts a
   package abstraction with its own `admits` section (reusing the `program`
   `admits` grammar/semantics). Path-inferred at the package root (MRES-2b); it
   binds the package's source set (the modules under its path, per the strict

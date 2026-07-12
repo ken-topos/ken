@@ -57,7 +57,13 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > re-export carries the instance surface — re-exporting a name (MRES-9) admits its
 > instances into an admitting consumer's direct-use set; non-re-exported
 > transitive stays coherence-only. Rides N4/N3; can't arise until MRES-9 lands.
-> Zero TCB delta. ⏭ PKG-1..4 STILL the open operator round (unchanged).
+> Zero TCB delta. **↳ MRES-4e folded (`cb340d2c`; operator ruled + Architect
+> concurred): `program`/`package` headers are ANONYMOUS bare markers (no name) —
+> a name has no referent (admits addresses by path, entry is separate, provenance
+> names pkg by path, program never imported); identity = path, the header's
+> PRESENCE not name is the signal; a `package` name would be a divergent 2nd
+> source of truth. Grammar `program App`→bare `program`. Rides N4 grammar; zero
+> TCB.** ⏭ PKG-1..4 STILL the open operator round (unchanged).
 >
 > ### ⚠️ OPEN DESIGN ISSUE — 4b vs library-with-deps testing — 2026-07-12 ~16:0x
 > _(SUPERSEDED by the resolution above — kept for the reasoning trail.)_
