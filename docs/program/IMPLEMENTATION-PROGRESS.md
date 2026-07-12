@@ -107,6 +107,23 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > for the parked canonical-formatter WP.
 >
 > ### IN FLIGHT — #28 attached-proof reference style (`::`→selector) — 2026-07-12
+
+> **↻ #28 RE-KICKED IN BARE FORM — 2026-07-12 ~13:4x UTC.** #29 parser landed
+> (`69570b26`) → bare `proof name for subject` now parses/elaborates. Frame
+> reframed for bare form (retired greedy-absorb rule; bare for simple refs,
+> grouping parens optional/dense-applied-only per operator's `total` model),
+> published doc-only → **main @ `710cd2be`**. Foundation Handoff-Gate-compacted @
+> `710cd2be` (all 3 verified "Context compacted"). **RE-KICKED @ `evt_6vm1j79wmzzwc`**
+> → @foundation-leader, base `710cd2be`, **fresh branch
+> `wp/attached-proof-selector-style-bare`** (parked `29094048` evidence branch left
+> intact). Task = strip grouping parens off the 168-site `29094048` inventory →
+> bare; keep parens only for dense-applied readability. Parse/elaborate risk RETIRED
+> (#29 crate tests proved bare/applied/recursive/decl-vs-expr). Coupled CAT1
+> assertion (3 `list_append::…` strings) needs bare spelling too (Steward-authorized
+> sync). LIGHT, Architect-terminal. Roused foundation-leader. **⏭ RESUME ACTION:
+> await #28 bare SHA → honesty-gate (catalog + authorized CAT1 coupled-assertion
+> sync, NO impl/spec/kernel) → publish → on merge #28 CLOSES. Then fleet has: F3b
+> design-framing (Architect, #31), #30 CV golden tail, #27 List/Int queued.**
 >
 > **Operator style ruling: catalog CODE should reference attached proofs via the
 > readable `(proof name for subject)` selector, NOT the desugared `subject::name`
