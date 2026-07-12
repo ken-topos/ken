@@ -27,8 +27,8 @@ accept↔cycle-reject pair for Lane B.
 
 Grounding (landed `§`-bodies + landed code, content-reconciled — not the
 plan): `33 §3`
-(`module`/`import M`/`import M as N`/`import M (foo, Bar)`/`use M`; the kernel
-sees a single flattened `Σ`), `33 §4` (visibility: module-private by default +
+(`module`/`import M`/`import M as N`/`import M (foo, Bar)`; the kernel sees a
+single flattened `Σ`), `33 §4` (visibility: module-private by default +
 `pub`; abstract export = opaque interface), `11 §4` (the append-only acyclic
 flat `Σ`; the opaque constant `c : A` that introduces abstract interfaces),
 ES1 `minimality.md` (the `trusted_base()`-delta invariant ES3 must not
@@ -151,49 +151,32 @@ rules**, and the `Σ`/`trusted_base()` identity against the **landed** kernel.
   not a hand-fed visibility flag. Confirms the settled **private-by-default**
   default (`33 §4`, `OQ-syntax` resolved).
 
-### surface/modules/use-open-ambiguity-rejected-naming-both
-- spec: `33 §3.3` (open ambiguity — must-qualify unless same decl)
-- given: two modules `M` and `N` each exporting a **different** `foo`
-  declaration, a client with **both** `use M` and `use N` (unqualified opens),
-  then a bare reference to **`foo`**
-- expect: **rejected** per the stated ambiguity rule — an
-  **ambiguous-reference surface error naming both `M.foo` and `N.foo`** (not
-  implementation-defined, not a silent pick); the qualified `M.foo` / `N.foo`
-  **resolve** unambiguously. **Exception (`§3.3`):** if both opens resolved to
-  the **same** declaration it is **not** ambiguous
-- why: AC3, `use`-open ambiguity is **well-defined**, not
-  implementation-defined. **Discriminating:** the bare `foo` **errors naming
-  both** sources (the stated rule), while the qualified forms resolve — a
-  resolver that silently picked one (or errored without naming both) fails.
-  Pins the ambiguity disposition at the **surface**, per the rule, never
-  reaching the kernel.
-
 ### surface/modules/local-shadows-imported-lexically
 - spec: `33 §3.3` (local-over-imported shadowing, lexical, innermost wins)
-- given: a client that `use M` (importing `M.foo`) **and** binds a **local**
-  `def foo : Nat := 0` in the same module, then a bare reference to `foo`
+- given: a client that selectively imports `M.foo` with `import M (foo)` **and**
+  binds a **local** `def foo : Nat := 0` in the same module, then a bare
+  reference to `foo`
 - expect: the bare `foo` resolves to the **local** binding (innermost wins,
   lexical), **not** an ambiguity error — the local **shadows** the imported
   name
 - why: AC3, shadowing is **lexical and never an error** (`33 §3.3`).
-  **Discriminating against the ambiguity case:** with a local present, `foo`
-  is **unambiguous** (local wins); the open-ambiguity error fires **only**
-  when two *imports* collide with **no** local. A resolver that treated
-  local-vs-imported shadowing as an ambiguity error — or let the import shadow
-  the local — fails. Pins the innermost-wins rule at the surface, never
-  reaching the kernel.
+  **Discriminating:** with a local present, `foo` resolves to that local even
+  though the selective import made `M.foo` available under the same bare name.
+  A resolver that treated local-vs-imported shadowing as an error — or let the
+  import shadow the local — fails. Pins the innermost-wins rule at the surface,
+  never reaching the kernel.
 
-### surface/modules/four-import-forms-resolve-to-one-binding
-- spec: `33 §3.2` (the four import forms)
-- given: `module M { pub def foo : Nat := 0 }` and four clients — `import M`
+### surface/modules/three-import-forms-resolve-to-one-binding
+- spec: `33 §3.2` (the three import forms)
+- given: `module M { pub def foo : Nat := 0 }` and three clients — `import M`
   (uses `M.foo`), `import M as N` (uses `N.foo`), `import M (foo)` (uses
-  `foo`), `use M` (uses `foo`)
-- expect: all four **resolve to the same underlying binding** `M`'s `foo` (the
-  same core `GlobalId` in the flattened `Σ`); the alias/selective/open forms
+  `foo`)
+- expect: all three **resolve to the same underlying binding** `M`'s `foo` (the
+  same core `GlobalId` in the flattened `Σ`); the alias and selective forms
   are **surface** re-namings of one declaration
-- why: AC3, the **accept anchor** — the four import forms are surface
+- why: AC3, the **accept anchor** — the three import forms are surface
   resolution sugar over one binding. **Discriminating** (the accept side of
-  §A/§C's rejects): all four reach the **identical** `Σ` binding, so a
+  §A/§C's rejects): all three reach the **identical** `Σ` binding, so a
   resolver that produced **distinct** bindings (duplicating the declaration
   per import form) fails — reinforces AC1 (import is re-naming, not
   re-declaration). Drive the **real** resolution, not a hand-constructed
@@ -290,9 +273,8 @@ fixture's payload as `A → B → A`.
   `client-match-hidden-ctor-rejected-at-surface` (soundness).
 - **AC3** (visibility + resolution surface-only):
   `private-name-access-rejected-at-surface` (soundness),
-  `use-open-ambiguity-rejected-naming-both`,
   `local-shadows-imported-lexically`,
-  `four-import-forms-resolve-to-one-binding`.
+  `three-import-forms-resolve-to-one-binding`.
 - **AC4** (visibility default settled): witnessed by
   `private-name-access-rejected-at-surface` (private-by-default); the OQ
   resolution itself is `/spec §33 §4` + `90-open-decisions.md`.
@@ -310,12 +292,12 @@ fixture's payload as `A → B → A`.
   "abstract" flag, or a **kernel** (not surface) visibility error would
   contradict this class.
 - **Rejects are surface name-resolution, not kernel type errors.**
-  `client-match-on-hidden-constructor-…`, `private-name-access-…`, and
-  `use-open-ambiguity-…` are one class: the failure is an **unresolved / not-
-  exported / ambiguous** *surface* diagnostic that **never reaches the
-  kernel** — never a `TypeMismatch` or an admitted-then-caught kernel state.
+  `client-match-on-hidden-constructor-…` and `private-name-access-…` are one
+  class: the failure is an **unresolved / not-exported** *surface* diagnostic
+  that **never reaches the kernel** — never a `TypeMismatch` or an
+  admitted-then-caught kernel state.
 - **Import is re-naming, not re-declaration.**
-  `four-import-forms-resolve-to-one-binding` and
+  `three-import-forms-resolve-to-one-binding` and
   `module-elaborates-to-identical-flat-sigma` agree: every import form
   resolves to **one** underlying `GlobalId`; a form that re-declared per
   import would perturb the flat `Σ` (contradicting AC1).

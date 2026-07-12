@@ -96,14 +96,12 @@ qualified names, exactly as if written flat.
 ### 3.2 Importing
 
 Within a module, an `import` brings another module's **exported** names (`§4`)
-into scope. Four forms:
+into scope. Three forms:
 
 - **`import M`** — qualified: `M`'s exports are accessible as `M.foo`, `M.Bar`.
 - **`import M as N`** — aliased: the same, under `N.foo` (`M` itself unbound).
 - **`import M (foo, Bar)`** — selective: exactly `foo`, `Bar`, brought
   **unqualified**; nothing else of `M`.
-- **`use M`** — open: **all** of `M`'s exports, unqualified. Use sparingly (it
-  maximizes the ambiguity surface, `§3.3`).
 
 For in-repo compilation units, dotted module paths and source-file paths obey a
 total, role-blind bijection under a catalog root. A path with `N` components
@@ -149,14 +147,9 @@ is a **surface error** (`24`) — it never reaches the kernel:
 - **Local over imported.** A name bound in the current module (or a narrower
   scope) **shadows** an imported one, resolved lexically (innermost wins) —
   never an error.
-- **Open ambiguity.** If two `use`-opened modules export the **same**
-  unqualified name binding **different** declarations, an unqualified reference
-  to it is an **ambiguity error**: the programmer must qualify (`M.foo`). If
-  both opens resolve to the **same** declaration (a re-export), it is **not**
-  ambiguous. A qualified or selective import always disambiguates.
-- Every failure — unresolved name, ambiguous open, out-of-scope private name
-  (`§4`) — is a **surface diagnostic**; the flattened `Σ` the kernel receives
-  contains only resolved, in-scope references.
+- Every failure — unresolved name, out-of-scope private name (`§4`) — is a
+  **surface diagnostic**; the flattened `Σ` the kernel receives contains only
+  resolved, in-scope references.
 
 ## 4. Visibility and abstract export
 
