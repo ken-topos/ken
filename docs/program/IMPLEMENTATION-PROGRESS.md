@@ -32,8 +32,10 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >   language-leader. **Steward honesty gate PASSED @ `8c65aaed`** (clean scope;
 >   every `= Axiom` a `const`→`lemma` keyword flip, no net-new trust surface;
 >   published `8c65aaed` exactly, chain-of-custody preserved).
-> - **RETROS: pending** — chase the Language ring's proof-vocab-completion retros
->   before closing the WP.
+> - **RETROS IN → WP CLOSED.** Language ring (impl+QA+leader coord, `evt_377aqdkqqghvm`)
+>   and enclave retros posted; common carry = a versioned source-SHA inventory
+>   contract with explicit branch-drift + inclusion/exclusion classes. Enclave
+>   quiescent, ready for next kickoff.
 > - **TWO REQUIRED fast-follows still open** (CV `evt_6yspgfbr70znj`; the
 >   `tt`→`Proved` rename strands two corpora this WP didn't touch — both doc/fixture
 >   fidelity, neither CI-blocking since the CI `conformance` job is the WP-F2 stub):
