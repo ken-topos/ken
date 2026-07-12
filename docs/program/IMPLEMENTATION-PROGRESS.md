@@ -46,8 +46,18 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > catalog pkg gets a package file = the catalog-enrichment). **FOUR new operator
 > forks PKG-1..4** (Architect recs): PKG-1 source-set implicit; PKG-2 source-
 > inclusion implicit-round-1; PKG-3 manifest trust-with-cross-check (flag vendor/
-> attestation); PKG-4 test-scoped admission DEFER. ⏭ publish ADR → route PKG-1..4
-> operator round → Architect folds → reshape N2/N4 acceptance.
+> attestation); PKG-4 test-scoped admission DEFER. Pkg-abstraction PUBLISHED @
+> `origin/main e07a3883` (PR #561).
+> **↳ MRES-4c two-set + MRES-4d folded (`architect/work 71113065`; operator asked
+> directly + concurred) — publishing over main.** 4c: `admits` governs TWO sets —
+> coherence set = full transitive closure (mandatory/total) vs direct-use set =
+> explicit `admits` root (+ re-exports); the gate keys on the EXPLICIT root, so a
+> transitively-present instance a unit dispatches makes its pkg a direct dep that
+> must be listed (`UnadmittedInstance` = reject; keeps `admits` auditable). 4d:
+> re-export carries the instance surface — re-exporting a name (MRES-9) admits its
+> instances into an admitting consumer's direct-use set; non-re-exported
+> transitive stays coherence-only. Rides N4/N3; can't arise until MRES-9 lands.
+> Zero TCB delta. ⏭ PKG-1..4 STILL the open operator round (unchanged).
 >
 > ### ⚠️ OPEN DESIGN ISSUE — 4b vs library-with-deps testing — 2026-07-12 ~16:0x
 > _(SUPERSEDED by the resolution above — kept for the reasoning trail.)_
@@ -169,7 +179,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >
 > | WP | MRES | Deps | Size | Round | State |
 > |----|------|------|------|-------|-------|
-> | **N1** fail-closed dup-def | 5/7/8 | none | S | 1 | **▶ Lane A MERGED; Lane B CI-red FIXED @ `b25d11bc` (rosetta closures stale local `map` migrated to catalog; elaborator byte-identical to approved; QA+Architect re-APPROVE; literal `--workspace --locked` green); honesty clean; PUBLISHING (CI poll)** |
+> | **N1** fail-closed dup-def | 5/7/8 | none | S | 1 | **✅ MERGED — Lane A @ 6e751130 (PR #559) + Lane B @ 8f179ce4 (PR #562, CI green). N1 CLOSED pending Language retro. `data X=X` now rejected; rosetta closures fixture migrated.** |
 > | **N2** in-repo loader (spine) | 1/2/3a | — | M | 2 | queued |
 > | **N3** import-exclusion + clash-err | 6 | N2 | M | 2 f-f | queued |
 > | **N4** program abstraction / `admits` | 4/4a/b/c | N2 | M/L | 3 | queued |
@@ -181,13 +191,15 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > first; N2 is the spine N3/N4 need; N5 last. Enclave serializes spec lanes; loader
 > gates N3/N4 → practical cadence round-by-round.
 >
-> **⏭ RESUME (N1): frame `docs/program/wp/n1-fail-closed-dup-def.md` (2-lane).
-> Enclave Handoff-Gate-compacting (spec-leader/spec-author/CV — latter two are
-> gpt-5.6-sol GPT seats, need post-compact rouse). On verified drops → kick N1
-> Lane A (spec rule §33 + golden: dup-def reject, class/ctor reject, arity-gated
-> Eq/J accept = reject/accept flip) to spec-leader. Lane A merges → publish → kick
-> N1 Lane B (generalize `resolve_decl` `check_no_reserved_sugar_collision` over
-> globals, preserve arity-gated exclusion) to Language. Absorbs #8.**
+> **⏭ RESUME (program): N1 ✅ CLOSED (Lane A 6e751130 + Lane B 8f179ce4; Language
+> retro pending as a mention). FLEET IDLE — watchdog `35da1b60` STOOD DOWN.
+> N2/N3/N4/N5 are ALL gated on the operator's PKG-1..4 ruling (the package
+> abstraction reshaped N2 to distinguish source vs compiled packages), so do NOT
+> frame/kick N2 until PKG-1..4 land + Architect folds them. On operator PKG-1..4:
+> route to Architect to fold → publish updated ADR → frame N2 (in-repo loader +
+> source/compiled-package detection + catalog package-file enrichment) → re-arm
+> watchdog + Handoff-Gate the Language ring → kick N2 Lane A (enclave spec) then
+> Lane B (build). Retro-close N1 when the Language retro mention lands.**
 
 
 > ### ✅ BOTH AWAY-WINDOW WPs CLOSED — FLEET QUIESCENT — 2026-07-12 ~07:26 UTC

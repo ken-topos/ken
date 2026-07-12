@@ -17,7 +17,7 @@
 |---|---|
 | MRES-1, MRES-2 | **Accepted** + multi-catalog forward-compat added (plural-ready roots) |
 | MRES-3 | **Accepted (a) strict** |
-| MRES-4 | **Accepted (A) ambient-with-coherence**, refined into the **program abstraction** — keyword **`admits`**; admitted-package boundary; scaling validated (O(instances), not O(pkg²)); provenance **required**. Sub-forks Accepted: 4a separable-but-co-locatable, 4b only-multi-package, 4c direct-explicit + transitive-auto with the compiled-package instance-manifest invariant (source==compiled) |
+| MRES-4 | **Accepted (A) ambient-with-coherence**, refined into the **program abstraction** — keyword **`admits`**; admitted-package boundary; scaling validated (O(instances), not O(pkg²)); provenance **required**. Sub-forks Accepted: 4a separable-but-co-locatable, 4b only-multi-package, 4c direct-explicit + transitive-auto with the compiled-package instance-manifest invariant (source==compiled), 4d re-export-carries-instance-surface (admits keys on the explicit root, not the coherence closure) |
 | MRES-4 **`package` extension** | **Accepted (operator, design)** — admission is a reusable boundary hosted by `package` too; **compiled package** (has package abstraction, self-admits, carries the manifest) vs **source package** (composed by-source) = the surface of 4c's compiled-vs-source seam; rides **N4** (grammar+gate) + **N2** (loader+catalog files), not its own WP. **PKG-1..4 Open** for the operator round |
 | MRES-5, MRES-7, MRES-8 | **Accepted** — the fail-closed duplicate-definition slice (round-1 candidate) |
 | MRES-6 | **Operator OVERRODE** the recommendation — local/import name clash is now an **error**, with **explicit import-exclusion language**; reverses §3.3's local-over-imported shadowing |
@@ -244,7 +244,10 @@ dissolve the ambient-vs-explicit tension.
   Data.Collections.Map, …`. The **admission check** is a new elaborator gate:
   when `instance_search` resolves an instance, verify its defining package ∈ the
   program's admitted set; unadmitted ⇒ `UnadmittedInstance` error. It composes
-  with (does not replace) the existing orphan + overlap checks.
+  with (does not replace) the existing orphan + overlap checks. The "admitted
+  set" here is the **explicit** `admits` root plus re-exports carried in
+  (MRES-4d) — **not** the transitive coherence closure, which is larger and
+  total (see MRES-4c's two-set distinction).
 - **Relation to the rest.** (a) *Loader/dependency:* declaring a dependency
   makes a package's `pub` names importable; **admission is a separate, explicit
   opt-in** that additionally admits its instances into ambient resolution — the
@@ -337,6 +340,47 @@ Confirmed, not asserted:
      requirement on the package-manager round** (the compiled-vs-source import
      seam the operator flagged), same pattern as the multi-catalog constraint.
      Recorded now; built with the package manager.
+- **What `admits` restricts — the two-set distinction (operator question,
+  2026-07-12).** The transitive closure is admitted **for coherence** by
+  necessity (point 3, total and un-filterable — a coherence map with holes is an
+  undetected second-canonical, and MRES-6 import-exclusion cannot reach it: that
+  tool excludes *names*, coherence is instance-level and total). But the
+  **admission gate keys on the explicit `admits` root, not the closure.** An
+  instance one of the program's *own* units dispatches must have its defining
+  package in the explicit list (point 1) — even when that package is already
+  present transitively for coherence. So `admits` governs two differently-sized
+  sets: the **coherence set** = the full transitive closure (mandatory, no
+  filter); the **direct-use set** = the explicit `admits` root (plus re-exports,
+  MRES-4d). Transitive presence for coherence does **not** grant a unit the
+  right to dispatch — reaching for a transitively-present instance makes its
+  package a *direct* dependency that must be listed, and `UnadmittedInstance`
+  names it.
+  This is exactly what keeps `admits` an auditable boundary rather than
+  pure-ambient with extra syntax, and it is safe: `UnadmittedInstance` is a
+  *reject* (completeness), never an admittance of anything ill-typed, and
+  coherence stays total either way.
+
+##### MRES-4d — Re-export carries the instance surface — **ACCEPTED**
+- **Fork.** When package `P`'s public API surfaces a type from a transitive
+  dependency `Q`, and a consumer's own unit dispatches `Q`'s instance on a value
+  that reached it through `P`, must the consumer admit `Q` directly, or does
+  `P`'s re-export (MRES-9) carry `Q`'s instance surface into the consumer's
+  admitted set?
+- **Status: ACCEPTED (operator, 2026-07-12) — re-export carries the instance
+  surface.** `P` **re-exporting** a name (MRES-9) also admits the instances that
+  name's public surface commits to: admitting `P` admits the instances `P`
+  *chose to expose*, and the consumer does not separately list `Q` for them. An
+  instance `P` did **not** re-export stays coherence-only — a consumer unit that
+  dispatches it makes `Q` a direct dependency and must admit `Q`
+  (`UnadmittedInstance`). This gives `P`'s author control of its public
+  **instance** surface through the same lever that controls its public **name**
+  surface — re-export — applied consistently, and couples MRES-9 to the
+  admission gate (a re-exported instance surface is part of `P`'s admitted
+  contribution). It is a round-N4/N3 detail, not a new mechanism.
+- **Timing.** Until the re-export form lands (MRES-9 defers the `pub use` form
+  to a post-loader round), this corner cannot arise — no package yet has a
+  public topology through which a transitive type can leak. MRES-4d is the rule
+  for when it does; recorded now so the later form is cheap and drift-free.
 
 #### MRES-4 extension — the `package` abstraction (operator, 2026-07-12)
 
@@ -541,7 +585,10 @@ concern — ADR 0004 / `63` — not a kernel change.)
   diagnostics (survey P5). Designing the invariant now keeps the later form
   cheap and prevents API-drift.
 - **Status: ACCEPTED** — defer the `pub use` form to a post-loader round; the
-  canonical-identity invariant is recorded now.
+  canonical-identity invariant is recorded now. **Instance-surface semantics:**
+  when built, re-export also carries the re-exported name's **instance** surface
+  into an admitting consumer's direct-use set (MRES-4d) — the same lever governs
+  public names and public instances.
 
 ### MRES-10 — Cross-package + prelude shadowing precedence
 - **Fork.** §3.3 specs intra-unit local-over-imported; cross-package + prelude
