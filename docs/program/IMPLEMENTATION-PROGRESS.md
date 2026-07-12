@@ -47,11 +47,27 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > braces-now / lambda-Unicode+dot / type-app-preserve, folds P0's EBNF fix, + CV
 > golden for the 8 gates. Spec+conformance only. **B1 note bumped Accepted**
 > (architect/work `5a430c32`) — ready for doc-only publish so B2–B4 inherit.
-> **HOLDING at operator checkpoint:** publish the doc batch (S+P0 frames + B1 note
-> + tracker) and **release S+P0 to the enclave** (Handoff-Gate → kick) — or let the
-> operator review the S frame first. On steward/work (unpublished): P0 frame, S
-> frame, tracker, (B1 note pending publish). Then B1→Language after S lands;
-> B2/B3/B4/C follow; only capstone C needs the catalog freeze.
+> **★ WP S — Architect-terminal APPROVE pending ONE doc-only fold.** Enclave ran
+> fast (kickoff 20:27 → terminal 20:41): spec-author `afac6495` (§31/§32), CV
+> golden `fab18643` (8 gates, 17 cases red-until-built), CV independent APPROVE,
+> spec-leader combined `54c023ce` (linear `320e24ec→afac6495→54c023ce`, 4 md files
+> +521/−8), Architect-terminal **APPROVE** — with **one required fold**: §1d
+> redundant-parens rule said parens "need not be preserved" (permission → two
+> printers diverge; invisible to gates since parse-preservation is modulo-parens).
+> Ruling **removed** (gofmt-analog, parse-preserving). **FOLD LANDED + verified:**
+> re-spun `d1d36a5d` (ancestry `320e24ec→afac6495→10c5565a spec-fold→1c732faf→
+> d1d36a5d oracle-pin`); Steward-confirmed the `54c023ce→d1d36a5d` delta is
+> EXACTLY the §1d wording mandate + one oracle case (`redundant-grouping-parens-
+> are-removed`, pins BOTH orientations, red-until-built), +15/−2, nothing else.
+> Architect pre-authorized Steward confirm → **PUBLISHING doc-only** → **B1
+> (Accepted, AST+trivia) releases to Language.** S terminal-clean otherwise
+> (token-kind closure, protected payloads, no-refactor, braces/λ/type-app, P0
+> four-only `;`, 8 gates red-until-built).
+>
+> **QUEUED behind S** (enclave serializes spec): **N3** (import-exclusion, reduced
+> opt-A scope) spec lane. Also **task #37** (retire `use` keyword — Language). N4
+> (program/admits), N5 (re-export, non-`use` spelling). kenfmt build B1–B4 runs
+> parallel to module builds; only capstone C needs the catalog freeze.
 >
 > **All merged prior burst:** **N2 CLOSED** (in-repo loader LIVE — Lane A
 > `fbc4d3e1` + Lane B `575f43d2`, CI green). **ADR 0015 DONE in spec/conformance**
