@@ -30,20 +30,36 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > detection, instance-manifest, catalog package-file enrichment, `admits`/
 > `program`/`package` grammar, admission gate} moves to **N4** — they need the
 > `package`/`admits` grammar N4 introduces and are not expressible at N2 time.
-> **✅ Architect CONFIRMED the N2/N4 split exactly** (`evt_2506m0052hmen`) — he
-> owned the reshape sequencing bug; pkg-detection/manifest/catalog-file-enrichment
-> all move to N4. Added his 2 clarifiers to the frame (no soundness gap at N2 —
-> ambient-with-coherence MRES-4A is the sound baseline, ADR 0008 checks unchanged;
-> no package files exist in-tree at N2, nothing to detect). He also folded a
-> correction into ADR 0014 @ `architect/work aac8f317` (doc-only, does NOT gate
-> N2 kickoff) — publish over current head when convenient.
+> **✅ N2 Lane A KICKED — enclave working (`evt_34bhdzd2dg4cp`).** Done this pass:
+> (1) Architect confirmed the N2/N4 split exactly (`evt_2506m0052hmen`, owned his
+> sequencing bug); (2) N2 frame published doc-only → `origin/main 677acf4e` (PR
+> #566); (3) ADR N2/N4 correction published doc-only → `origin/main 855a0983` (PR
+> #567, Steward-credited); (4) **Handoff-Gate-compacted the enclave** (spec-leader/
+> spec-author/CV all "• Context compacted" verified); (5) posted N2 Lane A kickoff
+> + roused all three GPT seats — all three now "Working."
 >
-> **NOW EXECUTING:** publish N2 frame doc-only (`--target wp/n2-in-repo-loader`,
-> NEVER main) → **Handoff-Gate-compact the enclave** (spec-leader / spec-author /
-> conformance-validator — GPT seats, post-compact rouse) → kick **N2 Lane A**
-> (enclave spec §3.2 loader semantics + golden; merges first) → then Lane B
-> (Language build). Also publish ADR correction `aac8f317`. Honesty-gate every
-> publish; keep tracker current.
+> **N2 Lane A assembled + Architect-APPROVED** @ `wp/n2-in-repo-loader 8f6edfe4`
+> (`855a0983 → 5531a5e1(spec) → 8f6edfe4(+conformance)`; 3 md files +159/−34;
+> diff --check clean; conformance byte-identical to CV `0f27a125`). Architect
+> `evt_4c94v9y9wgbve`: APPROVE + **1 non-blocking should-fix** — pin `A` as the
+> entry unit so the cycle payload edge-order (`A → B → A`) is deterministic (else
+> a Lane-B loader elaborating B-first reports `B → A → B` and spuriously fails the
+> golden). He handed fold-now-vs-carry to spec-leader; leans fold-now.
+>
+> **✅ Entry-unit fold DONE** — final Lane A candidate `wp/n2-in-repo-loader-final
+> @ 5f829b0c` (chain `855a0983 → 5531a5e1 → 8f6edfe4 → b4682161(spec fold +3/-2)
+> → 5f829b0c(conformance fold +4-line hunk)`). Fold matches Architect's
+> pre-blessed wording exactly. **Honesty gate PASSED:** origin/main ancestor ✓;
+> scope = 3 md (spec §33 + conformance seed + README, +164/−34) ✓; diff --check
+> clean ✓; zero crates/kernel/prelude/Cargo/lock ✓; no WP-tokens ✓ (the 2
+> `trusted_base()`/`Σ` grep hits are benign conformance-README prose).
+>
+> **⏭ PUBLISHING Lane A doc-only now** (tracker bundled). On merge: verify
+> origin/main → **Handoff-Gate-compact the Language ring** (language-leader
+> language-implementer language-qa) → kick **N2 Lane B** (loader build on
+> `ElabEnv`; AC = cross-file resolves + cycle rejected w/ specific `ImportCycle`
+> variant + literal `cargo build/test --workspace --locked` green). `main @
+> 855a0983`. Watchdog `c0415693`.
 >
 > ### ✅ 4b ISSUE RESOLVED — PACKAGE ABSTRACTION (operator ruled C) — 2026-07-12 ~16:2x
 >
