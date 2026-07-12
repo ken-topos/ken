@@ -133,7 +133,7 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >
 > | WP | MRES | Deps | Size | Round | State |
 > |----|------|------|------|-------|-------|
-> | **N1** fail-closed dup-def | 5/7/8 | none | S | 1 | **▶ Lane A MERGING; Lane B → Language next** |
+> | **N1** fail-closed dup-def | 5/7/8 | none | S | 1 | **▶ Lane A MERGED; Lane B `f6856034` ALL GATES (QA+Architect APPROVE); honesty-gate clean; PUBLISHING (CI poll)** |
 > | **N2** in-repo loader (spine) | 1/2/3a | — | M | 2 | queued |
 > | **N3** import-exclusion + clash-err | 6 | N2 | M | 2 f-f | queued |
 > | **N4** program abstraction / `admits` | 4/4a/b/c | N2 | M/L | 3 | queued |
