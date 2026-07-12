@@ -98,17 +98,17 @@ tail IH under `Cons a h` with `cong`. Right unit is proved by induction on
 the list: base (`Nil`) both sides reduce to the CONSTRUCTOR `Nil a`, which
 observationally collapses to `Top` (the same nullary constructor) — so
 the goal is no longer `Eq`-shaped and `Refl` does not apply; it is
-`Top`-introduced by `tt` (the exact `tt`-vs-`Refl` discrimination
-constructor-headed endpoints give `Top` and `tt`, while neutral endpoints
+`Top`-introduced by `Proved` (the exact `Proved`-vs-`Refl` discrimination
+constructor-headed endpoints give `Top` and `Proved`, while neutral endpoints
 remain stuck `Eq` goals and use `Refl`; step
 (`Cons h t`) is `cong` under `Cons a h` on the tail IH.
 
 ```ken
-fn list_left_unit (a : Type) (xs : List a)
+lemma list_left_unit (a : Type) (xs : List a)
   : Equal (List a) (list_append a (Nil a) xs) xs =
   Refl
 
-fn list_assoc (a : Type) (xs : List a) (ys : List a) (zs : List a)
+lemma list_assoc (a : Type) (xs : List a) (ys : List a) (zs : List a)
   : Equal (List a) (list_append a (list_append a xs ys) zs)
                    (list_append a xs (list_append a ys zs)) =
   match xs {
@@ -121,10 +121,10 @@ fn list_assoc (a : Type) (xs : List a) (ys : List a) (zs : List a)
         (list_assoc a t ys zs)
   }
 
-fn list_right_unit (a : Type) (xs : List a)
+lemma list_right_unit (a : Type) (xs : List a)
   : Equal (List a) (list_append a xs (Nil a)) xs =
   match xs {
-    Nil ⇒ tt ;
+    Nil ⇒ Proved ;
     Cons h t ⇒
       cong (List a) (List a)
         (list_append a t (Nil a))
@@ -150,40 +150,40 @@ instance Monoid (List a) {
 ### 4.2 The `Bool` conjunction monoid — the finite carrier
 
 Complements the `List` monoid's inductive style with the FINITE case-split
-style: no induction / no IH, every branch closes by `tt` or `Refl` directly.
+style: no induction / no IH, every branch closes by `Proved` or `Refl` directly.
 `bool_and` is a transparent match-based definition rather than a primitive.
 It reduces on each concrete constructor, which lets the laws compute directly
 even when an argument is initially symbolic.
 
 Associativity is a full 2×2×2 case-split; each concrete branch reduces both
-sides to the same literal, collapsing to `Top` → `tt`. Left unit is
+sides to the same literal, collapsing to `Top` → `Proved`. Left unit is
 DEFINITIONAL: `bool_and True x` reduces to `x` (first match arm), goal
 `Equal Bool x x` neutral → `Refl`. Right unit needs the case-split
 (`bool_and x True` is stuck on symbolic `x`): each branch reduces to a
-literal equal to itself → `Top` → `tt`.
+literal equal to itself → `Top` → `Proved`.
 
 ```ken
 fn bool_and (p : Bool) (q : Bool) : Bool =
   match p { True ⇒ q ; False ⇒ False }
 
-fn band_assoc (x : Bool) (y : Bool) (z : Bool)
+lemma band_assoc (x : Bool) (y : Bool) (z : Bool)
   : Equal Bool (bool_and (bool_and x y) z) (bool_and x (bool_and y z)) =
   match x {
     True ⇒ match y {
-      True  ⇒ match z { True ⇒ tt ; False ⇒ tt } ;
-      False ⇒ match z { True ⇒ tt ; False ⇒ tt }
+      True  ⇒ match z { True ⇒ Proved ; False ⇒ Proved } ;
+      False ⇒ match z { True ⇒ Proved ; False ⇒ Proved }
     } ;
     False ⇒ match y {
-      True  ⇒ match z { True ⇒ tt ; False ⇒ tt } ;
-      False ⇒ match z { True ⇒ tt ; False ⇒ tt }
+      True  ⇒ match z { True ⇒ Proved ; False ⇒ Proved } ;
+      False ⇒ match z { True ⇒ Proved ; False ⇒ Proved }
     }
   }
 
-fn band_left_unit (x : Bool) : Equal Bool (bool_and True x) x =
+lemma band_left_unit (x : Bool) : Equal Bool (bool_and True x) x =
   Refl
 
-fn band_right_unit (x : Bool) : Equal Bool (bool_and x True) x =
-  match x { True ⇒ tt ; False ⇒ tt }
+lemma band_right_unit (x : Bool) : Equal Bool (bool_and x True) x =
+  match x { True ⇒ Proved ; False ⇒ Proved }
 
 instance Semigroup Bool {
   op    = bool_and ;
@@ -205,7 +205,7 @@ instance Monoid Bool {
 Its laws use a pointwise form: identity and fusion both quantify over
 `(x : f a)`. `List`'s instance is proved by induction and `cong`; `Option`'s
 instance closes by finite case split and definitional equality. `None`
-collapses to `Top` and uses `tt`, while `Some v` remains an `Eq`-shaped goal
+collapses to `Top` and uses `Proved`, while `Some v` remains an `Eq`-shaped goal
 and uses `Refl`.
 
 ```ken
@@ -231,10 +231,10 @@ fn list_map (a : Type) (b : Type) (g : a → b) (xs : List a) : List b =
     Cons h t ⇒ Cons b (g h) (list_map a b g t)
   }
 
-fn list_functor_id (a : Type) (xs : List a)
+lemma list_functor_id (a : Type) (xs : List a)
   : Equal (List a) (list_map a a (idf a) xs) xs =
   match xs {
-    Nil ⇒ tt ;
+    Nil ⇒ Proved ;
     Cons h t ⇒
       cong (List a) (List a)
         (list_map a a (idf a) t)
@@ -243,13 +243,13 @@ fn list_functor_id (a : Type) (xs : List a)
         (list_functor_id a t)
   }
 
-fn list_functor_fusion (a : Type) (b : Type) (c : Type)
+lemma list_functor_fusion (a : Type) (b : Type) (c : Type)
   (g : b → c) (h : a → b) (xs : List a)
   : Equal (List c)
       (list_map a c (comp a b c g h) xs)
       (list_map b c g (list_map a b h xs)) =
   match xs {
-    Nil ⇒ tt ;
+    Nil ⇒ Proved ;
     Cons x rest ⇒
       cong (List c) (List c)
         (list_map a c (comp a b c g h) rest)
@@ -264,19 +264,19 @@ fn option_map (a : Type) (b : Type) (g : a → b) (x : Option a) : Option b =
     Some v ⇒ Some b (g v)
   }
 
-fn option_functor_id (a : Type) (x : Option a)
+lemma option_functor_id (a : Type) (x : Option a)
   : Equal (Option a) (option_map a a (idf a) x) x =
   match x {
-    None ⇒ tt ;
+    None ⇒ Proved ;
     Some v ⇒ Refl
   }
 
-fn option_functor_fusion (a : Type) (b : Type) (c : Type)
+lemma option_functor_fusion (a : Type) (b : Type) (c : Type)
   (g : b → c) (h : a → b) (x : Option a)
   : Equal (Option c)
       (option_map a c (comp a b c g h) x)
       (option_map b c g (option_map a b h x)) =
-  match x { None ⇒ tt ; Some v ⇒ Refl }
+  match x { None ⇒ Proved ; Some v ⇒ Refl }
 
 instance Functor List {
   map        = list_map ;
@@ -336,10 +336,10 @@ fn list_fold_map (a : Type) (m : Type) (mon : Monoid m) (g : a → m)
 
 fn list_to_list (a : Type) (xs : List a) : List a = xs
 
-fn list_foldr_to_list (a : Type) (xs : List a)
+lemma list_foldr_to_list (a : Type) (xs : List a)
   : Equal (List a) (list_foldr a (List a) (Cons a) (Nil a) xs) (list_to_list a xs) =
   match xs {
-    Nil ⇒ tt ;
+    Nil ⇒ Proved ;
     Cons h t ⇒
       cong (List a) (List a)
         (list_foldr a (List a) (Cons a) (Nil a) t)
@@ -348,7 +348,7 @@ fn list_foldr_to_list (a : Type) (xs : List a)
         (list_foldr_to_list a t)
   }
 
-fn list_fold_map_coherence (a : Type) (m : Type) (mon : Monoid m)
+lemma list_fold_map_coherence (a : Type) (m : Type) (mon : Monoid m)
   (g : a → m) (xs : List a)
   : Equal m
       (list_fold_map a m mon g xs)
@@ -379,11 +379,11 @@ fn option_fold_map (a : Type) (m : Type) (mon : Monoid m) (g : a → m)
 fn option_to_list (a : Type) (x : Option a) : List a =
   option_foldr a (List a) (Cons a) (Nil a) x
 
-fn option_foldr_to_list (a : Type) (x : Option a)
+lemma option_foldr_to_list (a : Type) (x : Option a)
   : Equal (List a) (option_foldr a (List a) (Cons a) (Nil a) x) (option_to_list a x) =
   Refl
 
-fn option_fold_map_coherence (a : Type) (m : Type) (mon : Monoid m)
+lemma option_fold_map_coherence (a : Type) (m : Type) (mon : Monoid m)
   (g : a → m) (x : Option a)
   : Equal m
       (option_fold_map a m mon g x)
@@ -453,14 +453,14 @@ external reference implementation.
 
 3. **Derivation path.** All four classes are record declarations built from
    `Equal`, `Omega`, and record machinery. Every instance reduces through
-   ordinary induction or finite case splitting, closing with `tt`, `Refl`,
+   ordinary induction or finite case splitting, closing with `Proved`, `Refl`,
    or `cong`; no `Axiom` is needed.
 4. **`trusted_base()` delta.** **Zero.** Every instance in this package —
    `List`, `Bool`, and `Option` alike — is a real, kernel-checked proof; no
    law field is postulated anywhere.
 5. **Proof families.** `List` instances: structural induction + `cong`
    lifting the tail IH under the head constructor (`§4.1`, `§4.3`, `§4.4`).
-   `Bool` instances: full finite case-split, every branch closing by `tt` or
+   `Bool` instances: full finite case-split, every branch closing by `Proved` or
    `Refl` directly, no IH (`§4.2`). `Option` instances: single-level
    case-split / definitional equality (`§4.3`, `§4.4`).
 6. **Consumers.** `Functor`, `Foldable`, and `Monoid`-using packages build on

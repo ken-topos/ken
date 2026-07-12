@@ -13,7 +13,7 @@
 //! instances are COMPLETE zero-delta lawful instances, no `Axiom` anywhere.
 //! `refl`/`trans`/`total` use K4's Ω-motive `Elim` (`check_match_dependent`)
 //! alone; `antisym`/`sound`/`complete`/`sym`/`trans` additionally need K5's
-//! `tt`/`absurd` (Top-intro/Bottom-elim) AND K7 (`eq_at_inductive`
+//! `Proved`/`absurd` (Top-intro/Bottom-elim) AND K7 (`eq_at_inductive`
 //! operand-whnf) — their branches conclude or hypothesize an
 //! OPERATION-WRAPPED `Equal a x y` (`IsTrue (leq x y)`/`IsTrue (eq x y)`
 //! etc.), a redex that only observationally collapses to `Top`/`Bottom`
@@ -40,7 +40,7 @@
 //! hypothesis-reuse-without-case-split TECHNIQUE was the wrong tool,
 //! independent of K6's fate. The fix: the SAME full case-split
 //! `antisym`/`sound`/`complete` already use — each of the 4 (`sym`)/8
-//! (`trans`) branches independently closes with `tt`/`absurd` once `x`/`y`
+//! (`trans`) branches independently closes with `Proved`/`absurd` once `x`/`y`
 //! are concrete, never exercising any swap-congruence. K6 itself stays
 //! grounded-and-parked as a genuine but currently CUSTOMERLESS
 //! kernel-completeness gap — no proof obligation in this codebase needs a
@@ -253,7 +253,7 @@ fn ord_bool_provable_laws_are_real_proofs_not_postulates() {
     let total_val = field_value(&env.env, &body, 4);
 
     assert!(!is_opaque_const(&env.env, &leq_val), "leq must not be a postulate");
-    // K7 (`eq_at_inductive` operand-whnf, landed) + K5 (`tt`/`absurd`)
+    // K7 (`eq_at_inductive` operand-whnf, landed) + K5 (`Proved`/`absurd`)
     // together close every law field, including `antisym` — the discriminating
     // `law-fields-real-proofs-not-postulates` flip: every field here is a
     // REAL kernel-checked proof (empty delta), not a postulate.
@@ -296,7 +296,7 @@ fn eq_bool_is_a_complete_zero_delta_instance() {
     let trans_val = field_value(&env.env, &body, 3);
     assert!(!is_opaque_const(&env.env, &eq_val), "eq must not be a postulate");
     // `sym`/`trans`: the full case-split (`antisym`-style) closes both with
-    // `tt`/`absurd` alone — a swap-congruence K6 fix was never actually
+    // `Proved`/`absurd` alone — a swap-congruence K6 fix was never actually
     // exercisable here (Architect-ruled `evt_78ntsfnyjdtq6`: positional
     // congruence can't equate `bool_eq x y`/`bool_eq y x` for FREE x/y
     // either — only the unsound cross-wise arm could, which stays a hard
@@ -329,7 +329,7 @@ fn dec_eq_bool_sound_complete_are_real_proofs_not_postulates() {
     let sound_val = field_value(&env.env, &body, 1);
     let complete_val = field_value(&env.env, &body, 2);
     assert!(!is_opaque_const(&env.env, &eq_val), "eq must not be a postulate");
-    // K7 (`eq_at_inductive` operand-whnf, landed) + K5 (`tt`/`absurd`)
+    // K7 (`eq_at_inductive` operand-whnf, landed) + K5 (`Proved`/`absurd`)
     // together close both fields — the discriminating
     // `law-fields-real-proofs-not-postulates` flip.
     for (name, v) in [("sound", &sound_val), ("complete", &complete_val)] {

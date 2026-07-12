@@ -112,10 +112,10 @@ fn ac8_non_involutive_swap_witness_rejected() {
     let mut env = base_env();
     let r = env.elaborate_decl(
         "fn bad_id_either (a : Type) (b : Type) (x : Either a b) : Either a b = x\n\
-         fn badSwapInvolutive (a : Type) (b : Type) (x : Either a b) : Equal (Either a b) (bad_id_either a b x) x = tt",
+         fn badSwapInvolutive (a : Type) (b : Type) (x : Either a b) : Equal (Either a b) (bad_id_either a b x) x = Proved",
     );
     match r {
-        Ok(_) => panic!("a bare `tt` cannot discharge an identity-vs-abstract-x equality — must be rejected"),
+        Ok(_) => panic!("a bare `Proved` cannot discharge an identity-vs-abstract-x equality — must be rejected"),
         Err(e) => {
             let msg = format!("{:?}", e);
             assert!(
@@ -156,11 +156,11 @@ fn ac8_mapleft_leaves_right_untouched() {
 fn swap_involutive_concrete_examples() {
     let mut env = base_env();
     env.elaborate_decl(
-        "const swapInvolutiveLeftExample : Equal (Either Nat Nat) (swap Nat Nat (swap Nat Nat (Left Nat Nat Zero))) (Left Nat Nat Zero) = swap_involutive Nat Nat (Left Nat Nat Zero)",
+        "lemma swapInvolutiveLeftExample : Equal (Either Nat Nat) (swap Nat Nat (swap Nat Nat (Left Nat Nat Zero))) (Left Nat Nat Zero) = swap_involutive Nat Nat (Left Nat Nat Zero)",
     )
     .expect("swap(swap(Left 0)) = Left 0");
     env.elaborate_decl(
-        "const swapInvolutiveRightExample : Equal (Either Nat Nat) (swap Nat Nat (swap Nat Nat (Right Nat Nat Zero))) (Right Nat Nat Zero) = swap_involutive Nat Nat (Right Nat Nat Zero)",
+        "lemma swapInvolutiveRightExample : Equal (Either Nat Nat) (swap Nat Nat (swap Nat Nat (Right Nat Nat Zero))) (Right Nat Nat Zero) = swap_involutive Nat Nat (Right Nat Nat Zero)",
     )
     .expect("swap(swap(Right 0)) = Right 0");
 }

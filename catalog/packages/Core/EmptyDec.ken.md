@@ -104,13 +104,13 @@ instance DecEq Bool {
   eq = bool_eq ;
   sound =
     λx. match x {
-      True  ⇒ λy. match y { True ⇒ λp. tt ; False ⇒ λp. absurd p } ;
-      False ⇒ λy. match y { True ⇒ λp. absurd p ; False ⇒ λp. tt }
+      True  ⇒ λy. match y { True ⇒ λp. Proved ; False ⇒ λp. absurd p } ;
+      False ⇒ λy. match y { True ⇒ λp. absurd p ; False ⇒ λp. Proved }
     } ;
   complete =
     λx. match x {
-      True  ⇒ λy. match y { True ⇒ λp. tt ; False ⇒ λp. absurd p } ;
-      False ⇒ λy. match y { True ⇒ λp. absurd p ; False ⇒ λp. tt }
+      True  ⇒ λy. match y { True ⇒ λp. Proved ; False ⇒ λp. absurd p } ;
+      False ⇒ λy. match y { True ⇒ λp. absurd p ; False ⇒ λp. Proved }
     }
 }
 ```
@@ -123,10 +123,10 @@ and its branch constructor, so the equation can be used as a proof directly.
 uses for `cong`) for the No-branch contradiction below:
 
 ```ken
-fn sym (ty : Type) (x : ty) (y : ty) (p : Equal ty x y) : Equal ty y x =
+lemma sym (ty : Type) (x : ty) (y : ty) (p : Equal ty x y) : Equal ty y x =
   J (λy' _. Equal ty y' x) Refl p
 
-fn trans (ty : Type) (x : ty) (y : ty) (z : ty)
+lemma trans (ty : Type) (x : ty) (y : ty) (z : ty)
          (p : Equal ty x y) (q : Equal ty y z) : Equal ty x z =
   J (λz' _. Equal ty x z') p q
 ```
@@ -177,7 +177,7 @@ const true_is_not_false_tag : Bool = decide (Equal Bool True False) true_is_not_
 or refutation in hand — no `DecEq` needed:
 
 ```ken example
-const any_proof_decides : Dec (Equal Bool True True) = yes (Equal Bool True True) tt
+const any_proof_decides : Dec (Equal Bool True True) = yes (Equal Bool True True) Proved
 
 fn refute_true_false (p : Equal Bool True False) : Empty = absurd p
 
@@ -201,15 +201,15 @@ over the concrete `DecEq Bool` instance from `§3` (the guide's `§7` named-
 proof-claims form):
 
 ```ken example
-lemma decide_yes_is_true : Equal Bool (decide (Equal Bool True True) true_is_true) True = tt
+lemma decide_yes_is_true : Equal Bool (decide (Equal Bool True True) true_is_true) True = Proved
 
-lemma decide_no_is_false : Equal Bool (decide (Equal Bool True False) true_is_not_false) False = tt
+lemma decide_no_is_false : Equal Bool (decide (Equal Bool True False) true_is_not_false) False = Proved
 ```
 
-Both close with `tt`: `decide`/`true_is_true`/`true_is_not_false` are all closed,
+Both close with `Proved`: `decide`/`true_is_true`/`true_is_not_false` are all closed,
 fully-applied terms, so both sides reduce to the same nullary `Bool`
-constructor and the equality collapses to `Top` before `tt` is even checked
-(the guide's `§1` `tt`-vs-`Refl` discriminator) — not `Refl`, since neither
+constructor and the equality collapses to `Top` before `Proved` is even checked
+(the guide's `§1` `Proved`-vs-`Refl` discriminator) — not `Refl`, since neither
 side is stuck.
 
 ## 5. Design notes

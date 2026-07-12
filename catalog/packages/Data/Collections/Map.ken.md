@@ -79,8 +79,8 @@ subtree is above it, and both subtrees are themselves `Ordered`,
 recursively.
 
 Two base laws close the Definition: `ordered_empty` (`Ordered empty`)
-unfolds to `Equal Bool True True`, which collapses to `Top`
-and closes with `tt` — the same non-inductive shape as
+unfolds to `Top`
+and closes with `Proved` — the same non-inductive shape as
 `lookup_empty_is_none` (`lookup key empty = None`, `52 §5.2` law 1), also
 immediate since `empty = Leaf`. Neither needs induction or a comparison.
 
@@ -165,24 +165,24 @@ fn set_to_list (a : Type) (s : Tree a Unit) : List a =
 
 fn all_keys (k : Type) (v : Type) (p : k → Prop) (m : Tree k v) : Prop =
   match m {
-    Leaf ⇒ Equal Bool True True ;
+    Leaf ⇒ Top ;
     Node l key val r ⇒ And (p key) (And (all_keys k v p l) (all_keys k v p r))
   }
 
 fn Ordered (k : Type) (v : Type) (leq : k → k → Bool) (m : Tree k v) : Prop =
   match m {
-    Leaf ⇒ Equal Bool True True ;
+    Leaf ⇒ Top ;
     Node l key val r ⇒
       And (all_keys k v (λk2. Equal Bool (leq k2 key) True) l)
       (And (all_keys k v (λk2. Equal Bool (leq key k2) True) r)
       (And (Ordered k v leq l) (Ordered k v leq r)))
   }
 
-fn ordered_empty (k : Type) (v : Type) (leq : k → k → Bool) :
-  Ordered k v leq (empty k v) = tt
+lemma ordered_empty (k : Type) (v : Type) (leq : k → k → Bool) :
+  Ordered k v leq (empty k v) = Proved
 
-fn lookup_empty_is_none (k : Type) (v : Type) (leq : k → k → Bool) (key : k) :
-  Equal (Option v) (lookup k v leq key (empty k v)) (None v) = tt
+lemma lookup_empty_is_none (k : Type) (v : Type) (leq : k → k → Bool) (key : k) :
+  Equal (Option v) (lookup k v leq key (empty k v)) (None v) = Proved
 ```
 
 ## 3. Using it
@@ -241,8 +241,8 @@ entry's key satisfies `p`", mirrored structurally over `List (Pair k v)`.
 ```ken
 fn bool_dichotomy (b : Bool) : Or (Equal Bool b True) (Equal Bool b False) =
   match b {
-    True  ⇒ Inl (Equal Bool True True) (Equal Bool True False) tt ;
-    False ⇒ Inr (Equal Bool False True) (Equal Bool False False) tt
+    True  ⇒ Inl (Equal Bool True True) (Equal Bool True False) Proved ;
+    False ⇒ Inr (Equal Bool False True) (Equal Bool False False) Proved
   }
 
 fn assoc (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (xs : List (Pair k v)) : Option v =
@@ -261,7 +261,7 @@ fn assoc (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (xs : List (Pa
 
 fn all_in_list (k : Type) (v : Type) (p : k → Prop) (xs : List (Pair k v)) : Prop =
   match xs {
-    Nil ⇒ Equal Bool True True ;
+    Nil ⇒ Top ;
     Cons e xs2 ⇒ And (p (pair_fst k v e)) (all_in_list k v p xs2)
   }
 ```
@@ -298,7 +298,7 @@ each of `Ordered`'s four conjuncts out of a `Node` witness once, each as
 its own top-level `fn`, so that source-text chain appears exactly once
 instead of being duplicated at every use site — keeping the assembled
 `to_list_ordered` term small enough to elaborate. `to_list_ordered` itself
-is the final assembly: at `Leaf` the goal is `tt` directly; at a `Node`,
+is the final assembly: at `Leaf` the goal is `Proved` directly; at a `Node`,
 `is_sorted_append` combines the right subtree's own induction (prefixed
 with its own head bound, established via `cons_sorted_head`) against the
 left subtree's induction and its all-in-list bound.
@@ -314,7 +314,7 @@ fn le_above (k : Type) (v : Type) (leq : k → k → Bool) (bound : k) (k2 : k) 
 fn le_below (k : Type) (v : Type) (leq : k → k → Bool) (bound : k) (k2 : k) : Prop =
   Equal Bool (leq k2 bound) True
 
-fn all_in_list_append_intro
+lemma all_in_list_append_intro
   (k : Type) (v : Type) (p : k → Prop) (xs : List (Pair k v)) (ys : List (Pair k v))
   (hys : all_in_list k v p ys)
   : all_in_list k v p xs → all_in_list k v p (list_append (Pair k v) xs ys) =
@@ -328,7 +328,7 @@ fn all_in_list_append_intro
              (and_snd (p (pair_fst k v e)) (all_in_list k v p xs2) hxs))
   }
 
-fn all_keys_to_all_in_list
+lemma all_keys_to_all_in_list
   (k : Type) (v : Type) (p : k → Prop) (m : Tree k v)
   : all_keys k v p m → all_in_list k v p (to_list k v m) =
   match m {
@@ -347,56 +347,56 @@ fn all_keys_to_all_in_list
 
 fn head_bound_goal_p (k : Type) (v : Type) (leq : k → k → Bool) (bound : Pair k v) (xs : List (Pair k v)) : Prop =
   match xs {
-    Nil ⇒ Equal Bool True True ;
+    Nil ⇒ Top ;
     Cons y r ⇒ Equal Bool (pair_leq k v leq bound y) True
   }
 
-fn all_in_list_to_head_bound
+lemma all_in_list_to_head_bound
   (k : Type) (v : Type) (leq : k → k → Bool) (bound : k) (bval : v) (xs : List (Pair k v))
   : all_in_list k v (le_above k v leq bound) xs →
     head_bound_goal_p k v leq (mk_pair k v bound bval) xs =
   match xs {
-    Nil ⇒ λh. tt ;
+    Nil ⇒ λh. Proved ;
     Cons e xs2 ⇒
       λh.
         and_fst (Equal Bool (leq bound (pair_fst k v e)) True) (all_in_list k v (le_above k v leq bound) xs2) h
   }
 
-fn cons_sorted_head
+lemma cons_sorted_head
   (k : Type) (v : Type) (leq : k → k → Bool) (m : Pair k v) (ys : List (Pair k v))
   : is_sorted (Pair k v) (pair_leq k v leq) ys →
     head_bound_goal_p k v leq m ys → is_sorted (Pair k v) (pair_leq k v leq) (Cons (Pair k v) m ys) =
   match ys {
-    Nil ⇒ λhys. λhb. tt ;
+    Nil ⇒ λhys. λhb. Proved ;
     Cons y r ⇒
       λhys. λhb.
         and_intro (Equal Bool (pair_leq k v leq m y) True) (is_sorted (Pair k v) (pair_leq k v leq) (Cons (Pair k v) y r))
           hb hys
   }
 
-fn sorted_tail
+lemma sorted_tail
   (k : Type) (v : Type) (leq : k → k → Bool) (e : Pair k v) (xs2 : List (Pair k v))
   : is_sorted (Pair k v) (pair_leq k v leq) (Cons (Pair k v) e xs2) →
     is_sorted (Pair k v) (pair_leq k v leq) xs2 =
   match xs2 {
-    Nil ⇒ λhCons. tt ;
+    Nil ⇒ λhCons. Proved ;
     Cons y r ⇒
       λhCons.
         and_snd (Equal Bool (pair_leq k v leq e y) True) (is_sorted (Pair k v) (pair_leq k v leq) (Cons (Pair k v) y r)) hCons
   }
 
-fn sorted_tail_head_bound
+lemma sorted_tail_head_bound
   (k : Type) (v : Type) (leq : k → k → Bool) (e : Pair k v) (xs2 : List (Pair k v))
   : is_sorted (Pair k v) (pair_leq k v leq) (Cons (Pair k v) e xs2) →
     head_bound_goal_p k v leq e xs2 =
   match xs2 {
-    Nil ⇒ λhCons. tt ;
+    Nil ⇒ λhCons. Proved ;
     Cons y r ⇒
       λhCons.
         and_fst (Equal Bool (pair_leq k v leq e y) True) (is_sorted (Pair k v) (pair_leq k v leq) (Cons (Pair k v) y r)) hCons
   }
 
-fn append_head_bound
+lemma append_head_bound
   (k : Type) (v : Type) (leq : k → k → Bool) (e : Pair k v) (xs2 : List (Pair k v)) (m : Pair k v) (ys : List (Pair k v))
   (eLeqM : Equal Bool (pair_leq k v leq e m) True)
   : head_bound_goal_p k v leq e xs2 →
@@ -406,7 +406,7 @@ fn append_head_bound
     Cons e2 xs3 ⇒ λxs2HeadBound. xs2HeadBound
   }
 
-fn is_sorted_append
+lemma is_sorted_append
   (k : Type) (v : Type) (leq : k → k → Bool)
   (xs : List (Pair k v)) (m : Pair k v) (ys : List (Pair k v))
   (hcons : is_sorted (Pair k v) (pair_leq k v leq) (Cons (Pair k v) m ys))
@@ -430,7 +430,7 @@ fn is_sorted_append
              (sorted_tail_head_bound k v leq e xs2 hxs))
   }
 
-fn ord_below_l
+lemma ord_below_l
   (k : Type) (v : Type) (leq : k → k → Bool) (l : Tree k v) (key : k) (val : v) (r : Tree k v)
   (h : Ordered k v leq (Node k v l key val r))
   : all_keys k v (le_below k v leq key) l =
@@ -438,7 +438,7 @@ fn ord_below_l
          (And (all_keys k v (le_above k v leq key) r) (And (Ordered k v leq l) (Ordered k v leq r)))
     h
 
-fn ord_above_r
+lemma ord_above_r
   (k : Type) (v : Type) (leq : k → k → Bool) (l : Tree k v) (key : k) (val : v) (r : Tree k v)
   (h : Ordered k v leq (Node k v l key val r))
   : all_keys k v (le_above k v leq key) r =
@@ -447,7 +447,7 @@ fn ord_above_r
             (And (all_keys k v (le_above k v leq key) r) (And (Ordered k v leq l) (Ordered k v leq r)))
       h)
 
-fn ord_l
+lemma ord_l
   (k : Type) (v : Type) (leq : k → k → Bool) (l : Tree k v) (key : k) (val : v) (r : Tree k v)
   (h : Ordered k v leq (Node k v l key val r))
   : Ordered k v leq l =
@@ -457,7 +457,7 @@ fn ord_l
               (And (all_keys k v (le_above k v leq key) r) (And (Ordered k v leq l) (Ordered k v leq r)))
         h))
 
-fn ord_r
+lemma ord_r
   (k : Type) (v : Type) (leq : k → k → Bool) (l : Tree k v) (key : k) (val : v) (r : Tree k v)
   (h : Ordered k v leq (Node k v l key val r))
   : Ordered k v leq r =
@@ -467,11 +467,11 @@ fn ord_r
               (And (all_keys k v (le_above k v leq key) r) (And (Ordered k v leq l) (Ordered k v leq r)))
         h))
 
-fn to_list_ordered
+lemma to_list_ordered
   (k : Type) (v : Type) (leq : k → k → Bool) (m : Tree k v)
   : Ordered k v leq m → is_sorted (Pair k v) (pair_leq k v leq) (to_list k v m) =
   match m {
-    Leaf ⇒ λh. tt ;
+    Leaf ⇒ λh. Proved ;
     Node l key val r ⇒
       λh.
         is_sorted_append k v leq (to_list k v l) (mk_pair k v key val) (to_list k v r)
@@ -548,7 +548,7 @@ fn insert_step
     False ⇒ Node k v l k2 v2 (insert k v leq key val r)
   }
 
-fn mk_inner_false_eq
+lemma mk_inner_false_eq
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (val : v)
   (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (q2 : Equal Bool (leq k2 key) False)
@@ -556,7 +556,7 @@ fn mk_inner_false_eq
                       (insert_step_inner k v leq key val l k2 v2 r False) =
   cong Bool (Tree k v) (leq k2 key) False (insert_step_inner k v leq key val l k2 v2 r) q2
 
-fn mk_inner_true_eq
+lemma mk_inner_true_eq
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (val : v)
   (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (q2 : Equal Bool (leq k2 key) True)
@@ -564,7 +564,7 @@ fn mk_inner_true_eq
                       (insert_step_inner k v leq key val l k2 v2 r True) =
   cong Bool (Tree k v) (leq k2 key) True (insert_step_inner k v leq key val l k2 v2 r) q2
 
-fn mk_step_true_eq
+lemma mk_step_true_eq
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (val : v)
   (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (q1 : Equal Bool (leq key k2) True)
@@ -572,7 +572,7 @@ fn mk_step_true_eq
                       (insert_step k v leq key val l k2 v2 r True) =
   cong Bool (Tree k v) (leq key k2) True (insert_step k v leq key val l k2 v2 r) q1
 
-fn mk_step_false_eq
+lemma mk_step_false_eq
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (val : v)
   (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (q1 : Equal Bool (leq key k2) False)
@@ -580,19 +580,19 @@ fn mk_step_false_eq
                       (insert_step k v leq key val l k2 v2 r False) =
   cong Bool (Tree k v) (leq key k2) False (insert_step k v leq key val l k2 v2 r) q1
 
-fn mk_final_bridge
+lemma mk_final_bridge
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (val : v)
   (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   : Equal (Tree k v) (insert k v leq key val (Node k v l k2 v2 r))
                       (insert_step k v leq key val l k2 v2 r (leq key k2)) = Refl
 
-fn mk_step_true_reduces
+lemma mk_step_true_reduces
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (val : v)
   (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   : Equal (Tree k v) (insert_step k v leq key val l k2 v2 r True)
                       (insert_step_inner k v leq key val l k2 v2 r (leq k2 key)) = Refl
 
-fn step_a_combined1
+lemma step_a_combined1
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (val : v)
   (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (q1 : Equal Bool (leq key k2) True)
@@ -603,7 +603,7 @@ fn step_a_combined1
                     (insert_step_inner k v leq key val l k2 v2 r (leq k2 key))
     (mk_step_true_eq k v leq key val l k2 v2 r q1) (mk_step_true_reduces k v leq key val l k2 v2 r)
 
-fn step_b_combined2
+lemma step_b_combined2
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (val : v)
   (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (q1 : Equal Bool (leq key k2) True)
@@ -614,7 +614,7 @@ fn step_b_combined2
                     (insert_step_inner k v leq key val l k2 v2 r (leq k2 key))
     (mk_final_bridge k v leq key val l k2 v2 r) (step_a_combined1 k v leq key val l k2 v2 r q1)
 
-fn step_c_combined3
+lemma step_c_combined3
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (val : v)
   (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (q1 : Equal Bool (leq key k2) True) (q2 : Equal Bool (leq k2 key) False)
@@ -625,7 +625,7 @@ fn step_c_combined3
                     (insert_step_inner k v leq key val l k2 v2 r False)
     (step_b_combined2 k v leq key val l k2 v2 r q1) (mk_inner_false_eq k v leq key val l k2 v2 r q2)
 
-fn step_e_combined_overwrite
+lemma step_e_combined_overwrite
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (val : v)
   (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (q1 : Equal Bool (leq key k2) True) (q2 : Equal Bool (leq k2 key) True)
@@ -636,7 +636,7 @@ fn step_e_combined_overwrite
                     (insert_step_inner k v leq key val l k2 v2 r True)
     (step_b_combined2 k v leq key val l k2 v2 r q1) (mk_inner_true_eq k v leq key val l k2 v2 r q2)
 
-fn insert_case_transport_overwrite
+lemma insert_case_transport_overwrite
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (val : v)
   (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (goal : Tree k v → Prop)
@@ -648,7 +648,7 @@ fn insert_case_transport_overwrite
                      (insert_step_inner k v leq key val l k2 v2 r True)
        (step_e_combined_overwrite k v leq key val l k2 v2 r q1 q2))
 
-fn insert_case_transport_into_l
+lemma insert_case_transport_into_l
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (val : v)
   (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (goal : Tree k v → Prop)
@@ -660,7 +660,7 @@ fn insert_case_transport_into_l
                      (insert_step_inner k v leq key val l k2 v2 r False)
        (step_c_combined3 k v leq key val l k2 v2 r q1 q2))
 
-fn step_d_combined2
+lemma step_d_combined2
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (val : v)
   (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (q1 : Equal Bool (leq key k2) False)
@@ -671,7 +671,7 @@ fn step_d_combined2
                     (insert_step k v leq key val l k2 v2 r False)
     (mk_final_bridge k v leq key val l k2 v2 r) (mk_step_false_eq k v leq key val l k2 v2 r q1)
 
-fn insert_case_transport_into_r
+lemma insert_case_transport_into_r
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (val : v)
   (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (goal : Tree k v → Prop)
@@ -683,14 +683,14 @@ fn insert_case_transport_into_r
                      (insert_step k v leq key val l k2 v2 r False)
        (step_d_combined2 k v leq key val l k2 v2 r q1))
 
-fn all_keys_trans_below
+lemma all_keys_trans_below
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (a : k) (b : k) (m : Tree k v)
   (hab : Equal Bool (leq a b) True)
   : all_keys k v (le_below k v leq a) m → all_keys k v (le_below k v leq b) m =
   match m {
-    Leaf ⇒ λh. tt ;
+    Leaf ⇒ λh. Proved ;
     Node l key val r ⇒
       λh.
         and_intro (Equal Bool (leq key b) True) (And (all_keys k v (le_below k v leq b) l) (all_keys k v (le_below k v leq b) r))
@@ -704,14 +704,14 @@ fn all_keys_trans_below
                         (and_snd (Equal Bool (leq key a) True) (And (all_keys k v (le_below k v leq a) l) (all_keys k v (le_below k v leq a) r)) h))))
   }
 
-fn all_keys_trans_above
+lemma all_keys_trans_above
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (a : k) (b : k) (m : Tree k v)
   (hba : Equal Bool (leq b a) True)
   : all_keys k v (le_above k v leq a) m → all_keys k v (le_above k v leq b) m =
   match m {
-    Leaf ⇒ λh. tt ;
+    Leaf ⇒ λh. Proved ;
     Node l key val r ⇒
       λh.
         and_intro (Equal Bool (leq b key) True) (And (all_keys k v (le_above k v leq b) l) (all_keys k v (le_above k v leq b) r))
@@ -725,7 +725,7 @@ fn all_keys_trans_above
                         (and_snd (Equal Bool (leq a key) True) (And (all_keys k v (le_above k v leq a) l) (all_keys k v (le_above k v leq a) r)) h))))
   }
 
-fn insert_step_inner_preserves_all_keys
+lemma insert_step_inner_preserves_all_keys
   (k : Type) (v : Type) (leq : k → k → Bool) (p : k → Prop)
   (key : k) (val : v) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (insL : all_keys k v p (insert k v leq key val l))
@@ -737,7 +737,7 @@ fn insert_step_inner_preserves_all_keys
     False ⇒ and_intro (p k2) (And (all_keys k v p (insert k v leq key val l)) (all_keys k v p r)) hk2 (and_intro (all_keys k v p (insert k v leq key val l)) (all_keys k v p r) insL hr)
   }
 
-fn insert_step_preserves_all_keys
+lemma insert_step_preserves_all_keys
   (k : Type) (v : Type) (leq : k → k → Bool) (p : k → Prop)
   (key : k) (val : v) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (insL : all_keys k v p (insert k v leq key val l))
@@ -750,7 +750,7 @@ fn insert_step_preserves_all_keys
     False ⇒ and_intro (p k2) (And (all_keys k v p l) (all_keys k v p (insert k v leq key val r))) hk2 (and_intro (all_keys k v p l) (all_keys k v p (insert k v leq key val r)) hl insR)
   }
 
-fn insert_preserves_all_keys_node
+lemma insert_preserves_all_keys_node
   (k : Type) (v : Type) (leq : k → k → Bool) (p : k → Prop)
   (key : k) (val : v) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (insL : all_keys k v p (insert k v leq key val l))
@@ -759,14 +759,14 @@ fn insert_preserves_all_keys_node
   : all_keys k v p (insert k v leq key val (Node k v l k2 v2 r)) =
   insert_step_preserves_all_keys k v leq p key val l k2 v2 r insL insR hl hr hkey hk2 (leq key k2)
 
-fn insert_preserves_all_keys
+lemma insert_preserves_all_keys
   (k : Type) (v : Type) (leq : k → k → Bool) (p : k → Prop)
   (key : k) (val : v) (m : Tree k v)
   : all_keys k v p m → p key → all_keys k v p (insert k v leq key val m) =
   match m {
     Leaf ⇒ λh. λhkey.
       and_intro (p key) (And (all_keys k v p (Leaf k v)) (all_keys k v p (Leaf k v))) hkey
-        (and_intro (all_keys k v p (Leaf k v)) (all_keys k v p (Leaf k v)) tt tt) ;
+        (and_intro (all_keys k v p (Leaf k v)) (all_keys k v p (Leaf k v)) Proved Proved) ;
     Node l k2 v2 r ⇒ λh. λhkey.
       insert_preserves_all_keys_node k v leq p key val l k2 v2 r
         (insert_preserves_all_keys k v leq p key val l
@@ -779,7 +779,7 @@ fn insert_preserves_all_keys
         (and_fst (p k2) (And (all_keys k v p l) (all_keys k v p r)) h)
   }
 
-fn derive_from_false_core
+lemma derive_from_false_core
   (k : Type) (leq : k → k → Bool) (a : k) (b : k)
   (qFalse : Equal Bool (leq a b) False)
   (o : Or (Equal Bool (leq a b) True) (Equal Bool (leq b a) True))
@@ -789,14 +789,14 @@ fn derive_from_false_core
     Inr hB ⇒ hB
   }
 
-fn derive_from_false
+lemma derive_from_false
   (k : Type) (leq : k → k → Bool) (a : k) (b : k)
   (qFalse : Equal Bool (leq a b) False)
   (total : (x : k) → (y : k) → Or (Equal Bool (leq x y) True) (Equal Bool (leq y x) True))
   : Equal Bool (leq b a) True =
   derive_from_false_core k leq a b qFalse (total a b)
 
-fn ow_witness_below
+lemma ow_witness_below
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (key : k) (val : v) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
@@ -806,7 +806,7 @@ fn ow_witness_below
   all_keys_trans_below k v leq transLeq k2 key l q2
     (and_fst (all_keys k v (le_below k v leq k2) l) (And (all_keys k v (le_above k v leq k2) r) (And (Ordered k v leq l) (Ordered k v leq r))) h)
 
-fn ow_witness_above
+lemma ow_witness_above
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (key : k) (val : v) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
@@ -817,7 +817,7 @@ fn ow_witness_above
     (and_fst (all_keys k v (le_above k v leq k2) r) (And (Ordered k v leq l) (Ordered k v leq r))
        (and_snd (all_keys k v (le_below k v leq k2) l) (And (all_keys k v (le_above k v leq k2) r) (And (Ordered k v leq l) (Ordered k v leq r))) h))
 
-fn ow_witness_ordered_l
+lemma ow_witness_ordered_l
   (k : Type) (v : Type) (leq : k → k → Bool)
   (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (h : Ordered k v leq (Node k v l k2 v2 r))
@@ -826,7 +826,7 @@ fn ow_witness_ordered_l
      (and_snd (all_keys k v (le_above k v leq k2) r) (And (Ordered k v leq l) (Ordered k v leq r))
         (and_snd (all_keys k v (le_below k v leq k2) l) (And (all_keys k v (le_above k v leq k2) r) (And (Ordered k v leq l) (Ordered k v leq r))) h))
 
-fn ow_witness_ordered_r
+lemma ow_witness_ordered_r
   (k : Type) (v : Type) (leq : k → k → Bool)
   (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (h : Ordered k v leq (Node k v l k2 v2 r))
@@ -835,7 +835,7 @@ fn ow_witness_ordered_r
      (and_snd (all_keys k v (le_above k v leq k2) r) (And (Ordered k v leq l) (Ordered k v leq r))
         (and_snd (all_keys k v (le_below k v leq k2) l) (And (all_keys k v (le_above k v leq k2) r) (And (Ordered k v leq l) (Ordered k v leq r))) h))
 
-fn preserves_ordered_overwrite_witness
+lemma preserves_ordered_overwrite_witness
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (key : k) (val : v) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
@@ -850,7 +850,7 @@ fn preserves_ordered_overwrite_witness
           (ow_witness_ordered_l k v leq l k2 v2 r h)
           (ow_witness_ordered_r k v leq l k2 v2 r h)))
 
-fn get_ordered_l
+lemma get_ordered_l
   (k : Type) (v : Type) (leq : k → k → Bool)
   (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (h : Ordered k v leq (Node k v l k2 v2 r))
@@ -859,7 +859,7 @@ fn get_ordered_l
     (and_snd (all_keys k v (le_above k v leq k2) r) (And (Ordered k v leq l) (Ordered k v leq r))
        (and_snd (all_keys k v (le_below k v leq k2) l) (And (all_keys k v (le_above k v leq k2) r) (And (Ordered k v leq l) (Ordered k v leq r))) h))
 
-fn get_ordered_r
+lemma get_ordered_r
   (k : Type) (v : Type) (leq : k → k → Bool)
   (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (h : Ordered k v leq (Node k v l k2 v2 r))
@@ -868,14 +868,14 @@ fn get_ordered_r
     (and_snd (all_keys k v (le_above k v leq k2) r) (And (Ordered k v leq l) (Ordered k v leq r))
        (and_snd (all_keys k v (le_below k v leq k2) l) (And (all_keys k v (le_above k v leq k2) r) (And (Ordered k v leq l) (Ordered k v leq r))) h))
 
-fn get_below_l
+lemma get_below_l
   (k : Type) (v : Type) (leq : k → k → Bool)
   (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (h : Ordered k v leq (Node k v l k2 v2 r))
   : all_keys k v (le_below k v leq k2) l =
   and_fst (all_keys k v (le_below k v leq k2) l) (And (all_keys k v (le_above k v leq k2) r) (And (Ordered k v leq l) (Ordered k v leq r))) h
 
-fn get_above_r
+lemma get_above_r
   (k : Type) (v : Type) (leq : k → k → Bool)
   (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (h : Ordered k v leq (Node k v l k2 v2 r))
@@ -883,7 +883,7 @@ fn get_above_r
   and_fst (all_keys k v (le_above k v leq k2) r) (And (Ordered k v leq l) (Ordered k v leq r))
     (and_snd (all_keys k v (le_below k v leq k2) l) (And (all_keys k v (le_above k v leq k2) r) (And (Ordered k v leq l) (Ordered k v leq r))) h)
 
-fn preserves_ordered_into_l_witness
+lemma preserves_ordered_into_l_witness
   (k : Type) (v : Type) (leq : k → k → Bool)
   (key : k) (val : v) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (h : Ordered k v leq (Node k v l k2 v2 r))
@@ -899,7 +899,7 @@ fn preserves_ordered_into_l_witness
           insL
           (get_ordered_r k v leq l k2 v2 r h)))
 
-fn preserves_ordered_into_r_witness
+lemma preserves_ordered_into_r_witness
   (k : Type) (v : Type) (leq : k → k → Bool)
   (key : k) (val : v) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (h : Ordered k v leq (Node k v l k2 v2 r))
@@ -915,7 +915,7 @@ fn preserves_ordered_into_r_witness
           (get_ordered_l k v leq l k2 v2 r h)
           insR))
 
-fn dispatch_on_q2
+lemma dispatch_on_q2
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (total : (x : k) → (y : k) → Or (Equal Bool (leq x y) True) (Equal Bool (leq y x) True))
@@ -936,7 +936,7 @@ fn dispatch_on_q2
            (insert_preserves_all_keys k v leq (le_below k v leq k2) key val l (get_below_l k v leq l k2 v2 r h) q1))
   }
 
-fn dispatch_on_q1
+lemma dispatch_on_q1
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (total : (x : k) → (y : k) → Or (Equal Bool (leq x y) True) (Equal Bool (leq y x) True))
@@ -955,7 +955,7 @@ fn dispatch_on_q1
               (derive_from_false k leq key k2 q1' total)))
   }
 
-fn insert_case_transport_dispatch
+lemma insert_case_transport_dispatch
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (total : (x : k) → (y : k) → Or (Equal Bool (leq x y) True) (Equal Bool (leq y x) True))
@@ -966,7 +966,7 @@ fn insert_case_transport_dispatch
   : Ordered k v leq (insert k v leq key val (Node k v l k2 v2 r)) =
   dispatch_on_q1 k v leq transLeq total key val l k2 v2 r h insL insR (bool_dichotomy (leq key k2))
 
-fn preserves_ordered
+lemma preserves_ordered
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (total : (x : k) → (y : k) → Or (Equal Bool (leq x y) True) (Equal Bool (leq y x) True))
@@ -976,8 +976,8 @@ fn preserves_ordered
     Leaf ⇒ λh.
       and_intro (all_keys k v (le_below k v leq key) (Leaf k v))
                (And (all_keys k v (le_above k v leq key) (Leaf k v)) (And (Ordered k v leq (Leaf k v)) (Ordered k v leq (Leaf k v))))
-        tt (and_intro (all_keys k v (le_above k v leq key) (Leaf k v)) (And (Ordered k v leq (Leaf k v)) (Ordered k v leq (Leaf k v)))
-             tt (and_intro (Ordered k v leq (Leaf k v)) (Ordered k v leq (Leaf k v)) tt tt)) ;
+        Proved (and_intro (all_keys k v (le_above k v leq key) (Leaf k v)) (And (Ordered k v leq (Leaf k v)) (Ordered k v leq (Leaf k v)))
+             Proved (and_intro (Ordered k v leq (Leaf k v)) (Ordered k v leq (Leaf k v)) Proved Proved)) ;
     Node l k2 v2 r ⇒
       λh.
         insert_case_transport_dispatch k v leq transLeq total key val l k2 v2 r h
@@ -1030,19 +1030,19 @@ fn lookup_step
     False ⇒ lookup k v leq key r
   }
 
-fn lookup_final_bridge
+lemma lookup_final_bridge
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k)
   (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   : Equal (Option v) (lookup k v leq key (Node k v l k2 v2 r))
                       (lookup_step k v leq key l k2 v2 r (leq key k2)) = Refl
 
-fn lookup_step_true_reduces
+lemma lookup_step_true_reduces
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k)
   (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   : Equal (Option v) (lookup_step k v leq key l k2 v2 r True)
                       (lookup_step_inner k v leq key l k2 v2 r (leq k2 key)) = Refl
 
-fn lookup_mk_step_true_eq
+lemma lookup_mk_step_true_eq
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k)
   (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (q1 : Equal Bool (leq key k2) True)
@@ -1050,7 +1050,7 @@ fn lookup_mk_step_true_eq
                       (lookup_step k v leq key l k2 v2 r True) =
   cong Bool (Option v) (leq key k2) True (lookup_step k v leq key l k2 v2 r) q1
 
-fn lookup_mk_step_false_eq
+lemma lookup_mk_step_false_eq
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k)
   (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (q1 : Equal Bool (leq key k2) False)
@@ -1058,7 +1058,7 @@ fn lookup_mk_step_false_eq
                       (lookup_step k v leq key l k2 v2 r False) =
   cong Bool (Option v) (leq key k2) False (lookup_step k v leq key l k2 v2 r) q1
 
-fn lookup_mk_inner_false_eq
+lemma lookup_mk_inner_false_eq
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k)
   (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (q2 : Equal Bool (leq k2 key) False)
@@ -1066,7 +1066,7 @@ fn lookup_mk_inner_false_eq
                       (lookup_step_inner k v leq key l k2 v2 r False) =
   cong Bool (Option v) (leq k2 key) False (lookup_step_inner k v leq key l k2 v2 r) q2
 
-fn lookup_mk_inner_true_eq
+lemma lookup_mk_inner_true_eq
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k)
   (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (q2 : Equal Bool (leq k2 key) True)
@@ -1074,7 +1074,7 @@ fn lookup_mk_inner_true_eq
                       (lookup_step_inner k v leq key l k2 v2 r True) =
   cong Bool (Option v) (leq k2 key) True (lookup_step_inner k v leq key l k2 v2 r) q2
 
-fn lookup_into_l_bridge_step1
+lemma lookup_into_l_bridge_step1
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k)
   (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (q1 : Equal Bool (leq key k2) True)
@@ -1089,7 +1089,7 @@ fn lookup_into_l_bridge_step1
                        (lookup_step_inner k v leq key l k2 v2 r (leq k2 key))
        (lookup_mk_step_true_eq k v leq key l k2 v2 r q1) (lookup_step_true_reduces k v leq key l k2 v2 r))
 
-fn lookup_into_l_bridge
+lemma lookup_into_l_bridge
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k)
   (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (q1 : Equal Bool (leq key k2) True) (q2 : Equal Bool (leq k2 key) False)
@@ -1101,7 +1101,7 @@ fn lookup_into_l_bridge
     (lookup_into_l_bridge_step1 k v leq key l k2 v2 r q1)
     (lookup_mk_inner_false_eq k v leq key l k2 v2 r q2)
 
-fn lookup_into_r_bridge
+lemma lookup_into_r_bridge
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k)
   (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (q1 : Equal Bool (leq key k2) False)
@@ -1113,7 +1113,7 @@ fn lookup_into_r_bridge
     (lookup_final_bridge k v leq key l k2 v2 r)
     (lookup_mk_step_false_eq k v leq key l k2 v2 r q1)
 
-fn lookup_overwrite_result
+lemma lookup_overwrite_result
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (val : v)
   (l : Tree k v) (r : Tree k v)
   (q : Equal Bool (leq key key) True)
@@ -1131,7 +1131,7 @@ fn lookup_overwrite_result
           (lookup_mk_step_true_eq k v leq key l key val r q) (lookup_step_true_reduces k v leq key l key val r)))
     (lookup_mk_inner_true_eq k v leq key l key val r q)
 
-fn lookup_found_dispatch_q2
+lemma lookup_found_dispatch_q2
   (k : Type) (v : Type) (leq : k → k → Bool)
   (reflLeq : (x : k) → Equal Bool (leq x x) True)
   (key : k) (val : v) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
@@ -1152,7 +1152,7 @@ fn lookup_found_dispatch_q2
           insL)
   }
 
-fn lookup_found_dispatch_q1
+lemma lookup_found_dispatch_q1
   (k : Type) (v : Type) (leq : k → k → Bool)
   (reflLeq : (x : k) → Equal Bool (leq x x) True)
   (key : k) (val : v) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
@@ -1171,7 +1171,7 @@ fn lookup_found_dispatch_q1
           insR)
   }
 
-fn lookup_found_dispatch
+lemma lookup_found_dispatch
   (k : Type) (v : Type) (leq : k → k → Bool)
   (reflLeq : (x : k) → Equal Bool (leq x x) True)
   (key : k) (val : v) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
@@ -1180,7 +1180,7 @@ fn lookup_found_dispatch
   : Equal (Option v) (lookup k v leq key (insert k v leq key val (Node k v l k2 v2 r))) (Some v val) =
   lookup_found_dispatch_q1 k v leq reflLeq key val l k2 v2 r insL insR (bool_dichotomy (leq key k2))
 
-fn lookup_found_after_insert
+lemma lookup_found_after_insert
   (k : Type) (v : Type) (leq : k → k → Bool)
   (reflLeq : (x : k) → Equal Bool (leq x x) True)
   (key : k) (val : v) (m : Tree k v)
@@ -1238,7 +1238,7 @@ node, by the same `bool_value_eq_from_biimpl` technique.
 Confirmed on the fixed kernel: builds clean, well under a second.
 
 ```ken
-fn bool_value_eq_from_biimpl
+lemma bool_value_eq_from_biimpl
   (b1 : Bool) (b2 : Bool)
   (hAB : Equal Bool b1 True → Equal Bool b2 True)
   (hBA : Equal Bool b2 True → Equal Bool b1 True)
@@ -1254,7 +1254,7 @@ fn bool_value_eq_from_biimpl
       }
   }
 
-fn lookup_overwrite_agrees_outer
+lemma lookup_overwrite_agrees_outer
   (k : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (key : k) (key' : k) (k2 : k)
@@ -1266,7 +1266,7 @@ fn lookup_overwrite_agrees_outer
     (bool_dichotomy (leq key' key))
     (bool_dichotomy (leq key' k2))
 
-fn lookup_overwrite_agrees_inner
+lemma lookup_overwrite_agrees_inner
   (k : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (key : k) (key' : k) (k2 : k)
@@ -1278,7 +1278,7 @@ fn lookup_overwrite_agrees_inner
     (bool_dichotomy (leq key key'))
     (bool_dichotomy (leq k2 key'))
 
-fn lookup_overwrite_both_false
+lemma lookup_overwrite_both_false
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (key' : k) (val : v)
   (k2 : k) (v2 : v) (l : Tree k v) (r : Tree k v)
   (hKey : Equal Bool (leq key' key) False) (hK2 : Equal Bool (leq key' k2) False)
@@ -1291,7 +1291,7 @@ fn lookup_overwrite_both_false
     (sym (Option v) (lookup k v leq key' (Node k v l k2 v2 r)) (lookup k v leq key' r)
        (lookup_into_r_bridge k v leq key' l k2 v2 r hK2))
 
-fn lookup_overwrite_both_inner_false
+lemma lookup_overwrite_both_inner_false
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (key' : k) (val : v)
   (k2 : k) (v2 : v) (l : Tree k v) (r : Tree k v)
   (hOuterKey : Equal Bool (leq key' key) True) (hInnerKey : Equal Bool (leq key key') False)
@@ -1305,7 +1305,7 @@ fn lookup_overwrite_both_inner_false
     (sym (Option v) (lookup k v leq key' (Node k v l k2 v2 r)) (lookup k v leq key' l)
        (lookup_into_l_bridge k v leq key' l k2 v2 r hOuterK2 hInnerK2))
 
-fn lookup_overwrite_contradiction
+lemma lookup_overwrite_contradiction
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (key' : k) (val : v)
   (k2 : k) (v2 : v) (l : Tree k v) (r : Tree k v)
   (hdist : And (Equal Bool (leq key key') True) (Equal Bool (leq key' key) True) → Bottom)
@@ -1314,7 +1314,7 @@ fn lookup_overwrite_contradiction
                       (lookup k v leq key' (Node k v l k2 v2 r)) =
   absurd (hdist (and_intro (Equal Bool (leq key key') True) (Equal Bool (leq key' key) True) hInnerKey hOuterKey))
 
-fn lookup_overwrite_inner_dispatch
+lemma lookup_overwrite_inner_dispatch
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (key' : k) (val : v)
   (k2 : k) (v2 : v) (l : Tree k v) (r : Tree k v)
   (hdist : And (Equal Bool (leq key key') True) (Equal Bool (leq key' key) True) → Bottom)
@@ -1330,7 +1330,7 @@ fn lookup_overwrite_inner_dispatch
         (trans Bool (leq k2 key') (leq key key') False (sym Bool (leq key key') (leq k2 key') innerAgree) hInnerFalse)
   }
 
-fn lookup_overwrite_outer_dispatch
+lemma lookup_overwrite_outer_dispatch
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (key : k) (key' : k) (val : v) (k2 : k) (v2 : v) (l : Tree k v) (r : Tree k v)
@@ -1352,7 +1352,7 @@ fn lookup_overwrite_outer_dispatch
         (trans Bool (leq key' k2) (leq key' key) False (sym Bool (leq key' key) (leq key' k2) outerAgree) hOuterFalse)
   }
 
-fn lookup_overwrite_locality_witness
+lemma lookup_overwrite_locality_witness
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (key : k) (key' : k) (val : v) (k2 : k) (v2 : v) (l : Tree k v) (r : Tree k v)
@@ -1365,7 +1365,7 @@ fn lookup_overwrite_locality_witness
     (lookup_overwrite_agrees_inner k leq transLeq key key' k2 q1 q2)
     (bool_dichotomy (leq key' key))
 
-fn lookup_stop_result
+lemma lookup_stop_result
   (k : Type) (v : Type) (leq : k → k → Bool) (key' : k)
   (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (hOuter : Equal Bool (leq key' k2) True) (hInner : Equal Bool (leq k2 key') True)
@@ -1386,7 +1386,7 @@ fn lookup_stop_result
 fn order_equiv (k : Type) (leq : k → k → Bool) (a : k) (b : k) : Prop =
   And (Equal Bool (leq a b) True) (Equal Bool (leq b a) True)
 
-fn lookup_order_equiv_outer_agree
+lemma lookup_order_equiv_outer_agree
   (k : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (key : k) (key' : k) (k2 : k)
@@ -1398,7 +1398,7 @@ fn lookup_order_equiv_outer_agree
     (bool_dichotomy (leq key k2))
     (bool_dichotomy (leq key' k2))
 
-fn lookup_order_equiv_inner_agree
+lemma lookup_order_equiv_inner_agree
   (k : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (key : k) (key' : k) (k2 : k)
@@ -1410,7 +1410,7 @@ fn lookup_order_equiv_inner_agree
     (bool_dichotomy (leq k2 key))
     (bool_dichotomy (leq k2 key'))
 
-fn lookup_order_equiv_both_false
+lemma lookup_order_equiv_both_false
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (key' : k)
   (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (ihR : Equal (Option v) (lookup k v leq key r) (lookup k v leq key' r))
@@ -1428,7 +1428,7 @@ fn lookup_order_equiv_both_false
       (sym (Option v) (lookup k v leq key' (Node k v l k2 v2 r)) (lookup k v leq key' r)
          (lookup_into_r_bridge k v leq key' l k2 v2 r hOuter')))
 
-fn lookup_order_equiv_both_inner_false
+lemma lookup_order_equiv_both_inner_false
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (key' : k)
   (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (ihL : Equal (Option v) (lookup k v leq key l) (lookup k v leq key' l))
@@ -1447,7 +1447,7 @@ fn lookup_order_equiv_both_inner_false
       (sym (Option v) (lookup k v leq key' (Node k v l k2 v2 r)) (lookup k v leq key' l)
          (lookup_into_l_bridge k v leq key' l k2 v2 r hOuter' hInner')))
 
-fn lookup_order_equiv_both_stop
+lemma lookup_order_equiv_both_stop
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (key' : k)
   (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (hOuter : Equal Bool (leq key k2) True) (hInner : Equal Bool (leq k2 key) True)
@@ -1461,7 +1461,7 @@ fn lookup_order_equiv_both_stop
     (sym (Option v) (lookup k v leq key' (Node k v l k2 v2 r)) (Some v v2)
        (lookup_stop_result k v leq key' l k2 v2 r hOuter' hInner'))
 
-fn lookup_order_equiv_inner_dispatch
+lemma lookup_order_equiv_inner_dispatch
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (key : k) (key' : k) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
@@ -1484,7 +1484,7 @@ fn lookup_order_equiv_inner_dispatch
         (trans Bool (leq k2 key') (leq k2 key) False (sym Bool (leq k2 key) (leq k2 key') innerAgree) hInnerFalse)
   }
 
-fn lookup_order_equiv_node_dispatch
+lemma lookup_order_equiv_node_dispatch
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (key : k) (key' : k) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
@@ -1503,14 +1503,14 @@ fn lookup_order_equiv_node_dispatch
         (trans Bool (leq key' k2) (leq key k2) False (sym Bool (leq key k2) (leq key' k2) outerAgree) hOuterFalse)
   }
 
-fn lookup_order_equiv_agree
+lemma lookup_order_equiv_agree
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (key : k) (key' : k) (m : Tree k v)
   : order_equiv k leq key key' →
     Equal (Option v) (lookup k v leq key m) (lookup k v leq key' m) =
   match m {
-    Leaf ⇒ λheq. tt ;
+    Leaf ⇒ λheq. Proved ;
     Node l k2 v2 r ⇒
       λheq.
         lookup_order_equiv_node_dispatch k v leq transLeq key key' l k2 v2 r heq
@@ -1521,7 +1521,7 @@ fn lookup_order_equiv_agree
           (bool_dichotomy (leq key k2))
   }
 
-fn member_order_equiv_agree
+lemma member_order_equiv_agree
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (key : k) (key' : k) (m : Tree k v)
@@ -1532,7 +1532,7 @@ fn member_order_equiv_agree
       (λo. match o { None ⇒ False ; Some x ⇒ True })
       (lookup_order_equiv_agree k v leq transLeq key key' m heq)
 
-fn set_member_order_equiv_agree
+lemma set_member_order_equiv_agree
   (k : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (key : k) (key' : k) (s : Tree k Unit)
@@ -1540,7 +1540,7 @@ fn set_member_order_equiv_agree
     Equal Bool (set_member k leq key s) (set_member k leq key' s) =
   member_order_equiv_agree k Unit leq transLeq key key' s
 
-fn lookup_into_l_inner_dispatch
+lemma lookup_into_l_inner_dispatch
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (key' : k) (val : v)
   (k2 : k) (v2 : v) (l : Tree k v) (r : Tree k v)
   (ih : Equal (Option v) (lookup k v leq key' (insert k v leq key val l)) (lookup k v leq key' l))
@@ -1566,7 +1566,7 @@ fn lookup_into_l_inner_dispatch
              (lookup_into_l_bridge k v leq key' l k2 v2 r hOuter hInnerFalse)))
   }
 
-fn lookup_into_l_dispatch
+lemma lookup_into_l_dispatch
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (key' : k) (val : v)
   (k2 : k) (v2 : v) (l : Tree k v) (r : Tree k v)
   (ih : Equal (Option v) (lookup k v leq key' (insert k v leq key val l)) (lookup k v leq key' l))
@@ -1584,7 +1584,7 @@ fn lookup_into_l_dispatch
            (lookup_into_r_bridge k v leq key' l k2 v2 r hOuterFalse))
   }
 
-fn lookup_into_l_locality_witness
+lemma lookup_into_l_locality_witness
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (key' : k) (val : v)
   (k2 : k) (v2 : v) (l : Tree k v) (r : Tree k v)
   (ih : Equal (Option v) (lookup k v leq key' (insert k v leq key val l)) (lookup k v leq key' l))
@@ -1592,7 +1592,7 @@ fn lookup_into_l_locality_witness
                       (lookup k v leq key' (Node k v l k2 v2 r)) =
   lookup_into_l_dispatch k v leq key key' val k2 v2 l r ih (bool_dichotomy (leq key' k2))
 
-fn lookup_into_r_inner_dispatch
+lemma lookup_into_r_inner_dispatch
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (key' : k) (val : v)
   (k2 : k) (v2 : v) (l : Tree k v) (r : Tree k v)
   (ih : Equal (Option v) (lookup k v leq key' (insert k v leq key val r)) (lookup k v leq key' r))
@@ -1614,7 +1614,7 @@ fn lookup_into_r_inner_dispatch
            (lookup_into_l_bridge k v leq key' l k2 v2 r hOuter hInnerFalse))
   }
 
-fn lookup_into_r_dispatch
+lemma lookup_into_r_dispatch
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (key' : k) (val : v)
   (k2 : k) (v2 : v) (l : Tree k v) (r : Tree k v)
   (ih : Equal (Option v) (lookup k v leq key' (insert k v leq key val r)) (lookup k v leq key' r))
@@ -1636,7 +1636,7 @@ fn lookup_into_r_dispatch
              (lookup_into_r_bridge k v leq key' l k2 v2 r hOuterFalse)))
   }
 
-fn lookup_into_r_locality_witness
+lemma lookup_into_r_locality_witness
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (key' : k) (val : v)
   (k2 : k) (v2 : v) (l : Tree k v) (r : Tree k v)
   (ih : Equal (Option v) (lookup k v leq key' (insert k v leq key val r)) (lookup k v leq key' r))
@@ -1644,7 +1644,7 @@ fn lookup_into_r_locality_witness
                       (lookup k v leq key' (Node k v l k2 v2 r)) =
   lookup_into_r_dispatch k v leq key key' val k2 v2 l r ih (bool_dichotomy (leq key' k2))
 
-fn lookup_leaf_locality_dispatch_inner
+lemma lookup_leaf_locality_dispatch_inner
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (key' : k) (val : v)
   (hdist : And (Equal Bool (leq key key') True) (Equal Bool (leq key' key) True) → Bottom)
   (hOuter : Equal Bool (leq key' key) True)
@@ -1657,7 +1657,7 @@ fn lookup_leaf_locality_dispatch_inner
       lookup_into_l_bridge k v leq key' (Leaf k v) key val (Leaf k v) hOuter hInnerFalse
   }
 
-fn lookup_leaf_locality_dispatch
+lemma lookup_leaf_locality_dispatch
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (key' : k) (val : v)
   (hdist : And (Equal Bool (leq key key') True) (Equal Bool (leq key' key) True) → Bottom)
   (oOuter : Or (Equal Bool (leq key' key) True) (Equal Bool (leq key' key) False))
@@ -1667,13 +1667,13 @@ fn lookup_leaf_locality_dispatch
     Inr hOuterFalse ⇒ lookup_into_r_bridge k v leq key' (Leaf k v) key val (Leaf k v) hOuterFalse
   }
 
-fn lookup_leaf_locality_witness
+lemma lookup_leaf_locality_witness
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (key' : k) (val : v)
   (hdist : And (Equal Bool (leq key key') True) (Equal Bool (leq key' key) True) → Bottom)
   : Equal (Option v) (lookup k v leq key' (Node k v (Leaf k v) key val (Leaf k v))) (None v) =
   lookup_leaf_locality_dispatch k v leq key key' val hdist (bool_dichotomy (leq key' key))
 
-fn lookup_locality_q2_dispatch
+lemma lookup_locality_q2_dispatch
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (key : k) (key' : k) (val : v) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
@@ -1693,7 +1693,7 @@ fn lookup_locality_q2_dispatch
         (lookup_into_l_locality_witness k v leq key key' val k2 v2 l r insL)
   }
 
-fn lookup_locality_node_dispatch
+lemma lookup_locality_node_dispatch
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (key : k) (key' : k) (val : v) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
@@ -1710,7 +1710,7 @@ fn lookup_locality_node_dispatch
         (lookup_into_r_locality_witness k v leq key key' val k2 v2 l r insR)
   }
 
-fn lookup_locality
+lemma lookup_locality
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (key : k) (key' : k) (val : v) (m : Tree k v)
@@ -1725,7 +1725,7 @@ fn lookup_locality
         (bool_dichotomy (leq key k2))
   }
 
-fn insert_lookup_hit
+lemma insert_lookup_hit
   (k : Type) (v : Type) (leq : k → k → Bool)
   (reflLeq : (x : k) → Equal Bool (leq x x) True)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
@@ -1789,7 +1789,7 @@ unique order-equivalent entry, so no `Equal key k2` step is needed.
 fn not_order_equiv_to_key (k : Type) (leq : k → k → Bool) (key : k) (k2 : k) : Prop =
   Not (order_equiv k leq key k2)
 
-fn not_order_equiv_from_left_false
+lemma not_order_equiv_from_left_false
   (k : Type) (leq : k → k → Bool) (a : k) (b : k)
   (hfalse : Equal Bool (leq a b) False)
   : not_order_equiv_to_key k leq a b =
@@ -1799,7 +1799,7 @@ fn not_order_equiv_from_left_false
         (and_fst (Equal Bool (leq a b) True) (Equal Bool (leq b a) True) heq))
       hfalse)
 
-fn not_order_equiv_from_right_false
+lemma not_order_equiv_from_right_false
   (k : Type) (leq : k → k → Bool) (a : k) (b : k)
   (hfalse : Equal Bool (leq b a) False)
   : not_order_equiv_to_key k leq a b =
@@ -1811,15 +1811,15 @@ fn not_order_equiv_from_right_false
 
 fn NoDup (k : Type) (v : Type) (leq : k → k → Bool) (xs : List (Pair k v)) : Prop =
   match xs {
-    Nil ⇒ Equal Bool True True ;
+    Nil ⇒ Top ;
     Cons e xs2 ⇒ And (all_in_list k v (not_order_equiv_to_key k leq (pair_fst k v e)) xs2) (NoDup k v leq xs2)
   }
 
 fn Distinct (k : Type) (v : Type) (leq : k → k → Bool) (m : Tree k v) : Prop =
   NoDup k v leq (to_list k v m)
 
-fn distinct_empty (k : Type) (v : Type) (leq : k → k → Bool) :
-  Distinct k v leq (empty k v) = tt
+lemma distinct_empty (k : Type) (v : Type) (leq : k → k → Bool) :
+  Distinct k v leq (empty k v) = Proved
 
 fn assoc_step_inner
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k)
@@ -1837,13 +1837,13 @@ fn assoc_step
     False ⇒ assoc k v leq key xs2
   }
 
-fn assoc_final_bridge
+lemma assoc_final_bridge
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k)
   (e : Pair k v) (xs2 : List (Pair k v))
   : Equal (Option v) (assoc k v leq key (Cons (Pair k v) e xs2))
                       (assoc_step k v leq key e xs2 (leq key (pair_fst k v e))) = Refl
 
-fn assoc_mk_step_true_eq
+lemma assoc_mk_step_true_eq
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k)
   (e : Pair k v) (xs2 : List (Pair k v))
   (q1 : Equal Bool (leq key (pair_fst k v e)) True)
@@ -1851,7 +1851,7 @@ fn assoc_mk_step_true_eq
                       (assoc_step k v leq key e xs2 True) =
   cong Bool (Option v) (leq key (pair_fst k v e)) True (assoc_step k v leq key e xs2) q1
 
-fn assoc_mk_step_false_eq
+lemma assoc_mk_step_false_eq
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k)
   (e : Pair k v) (xs2 : List (Pair k v))
   (q1 : Equal Bool (leq key (pair_fst k v e)) False)
@@ -1859,7 +1859,7 @@ fn assoc_mk_step_false_eq
                       (assoc_step k v leq key e xs2 False) =
   cong Bool (Option v) (leq key (pair_fst k v e)) False (assoc_step k v leq key e xs2) q1
 
-fn assoc_mk_inner_false_eq
+lemma assoc_mk_inner_false_eq
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k)
   (e : Pair k v) (xs2 : List (Pair k v))
   (q2 : Equal Bool (leq (pair_fst k v e) key) False)
@@ -1867,13 +1867,13 @@ fn assoc_mk_inner_false_eq
                       (assoc_step_inner k v leq key e xs2 False) =
   cong Bool (Option v) (leq (pair_fst k v e) key) False (assoc_step_inner k v leq key e xs2) q2
 
-fn assoc_step_true_reduces
+lemma assoc_step_true_reduces
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k)
   (e : Pair k v) (xs2 : List (Pair k v))
   : Equal (Option v) (assoc_step k v leq key e xs2 True)
                       (assoc_step_inner k v leq key e xs2 (leq (pair_fst k v e) key)) = Refl
 
-fn assoc_skip_head_bridge
+lemma assoc_skip_head_bridge
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k)
   (e : Pair k v) (xs2 : List (Pair k v))
   (q1 : Equal Bool (leq key (pair_fst k v e)) True) (q2 : Equal Bool (leq (pair_fst k v e) key) False)
@@ -1891,7 +1891,7 @@ fn assoc_skip_head_bridge
         (assoc_mk_step_true_eq k v leq key e xs2 q1) (assoc_step_true_reduces k v leq key e xs2)))
     (assoc_mk_inner_false_eq k v leq key e xs2 q2)
 
-fn assoc_skip_head_bridge_false
+lemma assoc_skip_head_bridge_false
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k)
   (e : Pair k v) (xs2 : List (Pair k v))
   (q1 : Equal Bool (leq key (pair_fst k v e)) False)
@@ -1902,7 +1902,7 @@ fn assoc_skip_head_bridge_false
     (assoc_final_bridge k v leq key e xs2)
     (assoc_mk_step_false_eq k v leq key e xs2 q1)
 
-fn assoc_skip_prefix_inner
+lemma assoc_skip_prefix_inner
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k)
   (e : Pair k v) (xs2 : List (Pair k v)) (ys : List (Pair k v))
   (hnot : Not (order_equiv k leq key (pair_fst k v e)))
@@ -1921,7 +1921,7 @@ fn assoc_skip_prefix_inner
         ihTail
   }
 
-fn assoc_skip_prefix_dispatch
+lemma assoc_skip_prefix_dispatch
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k)
   (e : Pair k v) (xs2 : List (Pair k v)) (ys : List (Pair k v))
   (hnot : Not (order_equiv k leq key (pair_fst k v e)))
@@ -1939,7 +1939,7 @@ fn assoc_skip_prefix_dispatch
         ihTail
   }
 
-fn assoc_skip_prefix
+lemma assoc_skip_prefix
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k)
   (xs : List (Pair k v)) (ys : List (Pair k v))
   : all_in_list k v (not_order_equiv_to_key k leq key) xs →
@@ -1955,14 +1955,14 @@ fn assoc_skip_prefix
           (bool_dichotomy (leq key (pair_fst k v e)))
   }
 
-fn order_equiv_sym
+lemma order_equiv_sym
   (k : Type) (leq : k → k → Bool) (a : k) (b : k) (h : order_equiv k leq a b)
   : order_equiv k leq b a =
   and_intro (Equal Bool (leq b a) True) (Equal Bool (leq a b) True)
     (and_snd (Equal Bool (leq a b) True) (Equal Bool (leq b a) True) h)
     (and_fst (Equal Bool (leq a b) True) (Equal Bool (leq b a) True) h)
 
-fn order_equiv_trans
+lemma order_equiv_trans
   (k : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (a : k) (b : k) (c : k)
@@ -1976,13 +1976,13 @@ fn order_equiv_trans
       (and_snd (Equal Bool (leq b c) True) (Equal Bool (leq c b) True) hbc)
       (and_snd (Equal Bool (leq a b) True) (Equal Bool (leq b a) True) hab))
 
-fn not_order_equiv_swap
+lemma not_order_equiv_swap
   (k : Type) (leq : k → k → Bool) (a : k) (b : k)
   (hnot : Not (order_equiv k leq a b))
   : Not (order_equiv k leq b a) =
   λh. hnot (order_equiv_sym k leq b a h)
 
-fn all_in_list_append_elim_right
+lemma all_in_list_append_elim_right
   (k : Type) (v : Type) (p : k → Prop) (xs : List (Pair k v)) (ys : List (Pair k v))
   : all_in_list k v p (list_append (Pair k v) xs ys) → all_in_list k v p ys =
   match xs {
@@ -1993,7 +1993,7 @@ fn all_in_list_append_elim_right
           (and_snd (p (pair_fst k v e)) (all_in_list k v p (list_append (Pair k v) xs2 ys)) h)
   }
 
-fn no_dup_append_head_excl_head_fact
+lemma no_dup_append_head_excl_head_fact
   (k : Type) (v : Type) (leq : k → k → Bool)
   (e2 : Pair k v) (e : Pair k v) (xs2 : List (Pair k v)) (ys : List (Pair k v))
   (h : And (all_in_list k v (not_order_equiv_to_key k leq (pair_fst k v e2)) (list_append (Pair k v) xs2 (Cons (Pair k v) e ys)))
@@ -2007,7 +2007,7 @@ fn no_dup_append_head_excl_head_fact
                   (NoDup k v leq (list_append (Pair k v) xs2 (Cons (Pair k v) e ys)))
              h)))
 
-fn no_dup_append_head_excl_cons_arm
+lemma no_dup_append_head_excl_cons_arm
   (k : Type) (v : Type) (leq : k → k → Bool)
   (e2 : Pair k v) (e : Pair k v) (xs2 : List (Pair k v)) (ys : List (Pair k v))
   (h : And (all_in_list k v (not_order_equiv_to_key k leq (pair_fst k v e2)) (list_append (Pair k v) xs2 (Cons (Pair k v) e ys)))
@@ -2023,18 +2023,18 @@ fn no_dup_append_head_excl_cons_arm
                  (NoDup k v leq (list_append (Pair k v) xs2 (Cons (Pair k v) e ys)))
             h))
 
-fn no_dup_append_head_excl
+lemma no_dup_append_head_excl
   (k : Type) (v : Type) (leq : k → k → Bool)
   (xs : List (Pair k v)) (e : Pair k v) (ys : List (Pair k v))
   : NoDup k v leq (list_append (Pair k v) xs (Cons (Pair k v) e ys)) →
     all_in_list k v (not_order_equiv_to_key k leq (pair_fst k v e)) xs =
   match xs {
-    Nil ⇒ λh. tt ;
+    Nil ⇒ λh. Proved ;
     Cons e2 xs2 ⇒
       λh. no_dup_append_head_excl_cons_arm k v leq e2 e xs2 ys h (no_dup_append_head_excl k v leq xs2 e ys)
   }
 
-fn assoc_no_match_inner_dispatch
+lemma assoc_no_match_inner_dispatch
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k)
   (e : Pair k v) (xs2 : List (Pair k v))
   (hnot : Not (order_equiv k leq key (pair_fst k v e)))
@@ -2053,7 +2053,7 @@ fn assoc_no_match_inner_dispatch
         ihTail
   }
 
-fn assoc_no_match_dispatch
+lemma assoc_no_match_dispatch
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k)
   (e : Pair k v) (xs2 : List (Pair k v))
   (hnot : Not (order_equiv k leq key (pair_fst k v e)))
@@ -2070,11 +2070,11 @@ fn assoc_no_match_dispatch
         ihTail
   }
 
-fn assoc_no_match_is_none
+lemma assoc_no_match_is_none
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (xs : List (Pair k v))
   : all_in_list k v (not_order_equiv_to_key k leq key) xs → Equal (Option v) (assoc k v leq key xs) (None v) =
   match xs {
-    Nil ⇒ λhskip. tt ;
+    Nil ⇒ λhskip. Proved ;
     Cons e xs2 ⇒
       λhskip.
         assoc_no_match_dispatch k v leq key e xs2
@@ -2084,7 +2084,7 @@ fn assoc_no_match_is_none
           (bool_dichotomy (leq key (pair_fst k v e)))
   }
 
-fn assoc_mk_inner_true_eq
+lemma assoc_mk_inner_true_eq
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k)
   (e : Pair k v) (xs2 : List (Pair k v))
   (q2 : Equal Bool (leq (pair_fst k v e) key) True)
@@ -2092,7 +2092,7 @@ fn assoc_mk_inner_true_eq
                       (assoc_step_inner k v leq key e xs2 True) =
   cong Bool (Option v) (leq (pair_fst k v e) key) True (assoc_step_inner k v leq key e xs2) q2
 
-fn assoc_skip_head_stop_bridge
+lemma assoc_skip_head_stop_bridge
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k)
   (e : Pair k v) (xs2 : List (Pair k v))
   (q1 : Equal Bool (leq key (pair_fst k v e)) True) (q2 : Equal Bool (leq (pair_fst k v e) key) True)
@@ -2110,7 +2110,7 @@ fn assoc_skip_head_stop_bridge
         (assoc_mk_step_true_eq k v leq key e xs2 q1) (assoc_step_true_reduces k v leq key e xs2)))
     (assoc_mk_inner_true_eq k v leq key e xs2 q2)
 
-fn assoc_prefix_wins_inner_dispatch
+lemma assoc_prefix_wins_inner_dispatch
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k)
   (e : Pair k v) (xs2 : List (Pair k v)) (ys : List (Pair k v))
   (ihTail : Equal (Option v) (assoc k v leq key (list_append (Pair k v) xs2 ys)) (assoc k v leq key xs2))
@@ -2139,7 +2139,7 @@ fn assoc_prefix_wins_inner_dispatch
              (assoc_skip_head_bridge k v leq key e xs2 hOuter hInnerFalse)))
   }
 
-fn assoc_prefix_wins_dispatch
+lemma assoc_prefix_wins_dispatch
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k)
   (e : Pair k v) (xs2 : List (Pair k v)) (ys : List (Pair k v))
   (ihTail : Equal (Option v) (assoc k v leq key (list_append (Pair k v) xs2 ys)) (assoc k v leq key xs2))
@@ -2162,7 +2162,7 @@ fn assoc_prefix_wins_dispatch
              (assoc_skip_head_bridge_false k v leq key e xs2 hOuterFalse)))
   }
 
-fn assoc_prefix_wins
+lemma assoc_prefix_wins
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k)
   (xs : List (Pair k v)) (ys : List (Pair k v))
   : all_in_list k v (not_order_equiv_to_key k leq key) ys →
@@ -2173,7 +2173,7 @@ fn assoc_prefix_wins
       λhskip. assoc_prefix_wins_dispatch k v leq key e xs2 ys (assoc_prefix_wins k v leq key xs2 ys hskip) (bool_dichotomy (leq key (pair_fst k v e)))
   }
 
-fn assoc_none_implies_no_match_inner
+lemma assoc_none_implies_no_match_inner
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k)
   (e : Pair k v) (xs2 : List (Pair k v))
   (hAssoc : Equal (Option v) (assoc k v leq key (Cons (Pair k v) e xs2)) (None v))
@@ -2209,7 +2209,7 @@ fn assoc_none_implies_no_match_inner
             hAssoc))
   }
 
-fn assoc_none_implies_no_match_dispatch
+lemma assoc_none_implies_no_match_dispatch
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k)
   (e : Pair k v) (xs2 : List (Pair k v))
   (hAssoc : Equal (Option v) (assoc k v leq key (Cons (Pair k v) e xs2)) (None v))
@@ -2236,19 +2236,19 @@ fn assoc_none_implies_no_match_dispatch
             hAssoc))
   }
 
-fn assoc_none_implies_no_match
+lemma assoc_none_implies_no_match
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (xs : List (Pair k v))
   : Equal (Option v) (assoc k v leq key xs) (None v) →
     all_in_list k v (not_order_equiv_to_key k leq key) xs =
   match xs {
-    Nil ⇒ λhAssoc. tt ;
+    Nil ⇒ λhAssoc. Proved ;
     Cons e xs2 ⇒
       λhAssoc.
         assoc_none_implies_no_match_dispatch k v leq key e xs2 hAssoc
           (bool_dichotomy (leq key (pair_fst k v e)))
   }
 
-fn not_match_from_bound_below
+lemma not_match_from_bound_below
   (k : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (key : k) (k2 : k) (hFalse : Equal Bool (leq key k2) False)
@@ -2259,13 +2259,13 @@ fn not_match_from_bound_below
               (sym Bool (leq key k2) True (transLeq key ekey k2 (and_fst (Equal Bool (leq key ekey) True) (Equal Bool (leq ekey key) True) horderEq) hBound))
               hFalse)
 
-fn all_in_list_map_not_match_below
+lemma all_in_list_map_not_match_below
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (key : k) (k2 : k) (hFalse : Equal Bool (leq key k2) False) (xs : List (Pair k v))
   : all_in_list k v (le_below k v leq k2) xs → all_in_list k v (not_order_equiv_to_key k leq key) xs =
   match xs {
-    Nil ⇒ λh. tt ;
+    Nil ⇒ λh. Proved ;
     Cons e xs2 ⇒
       λh.
         and_intro (not_order_equiv_to_key k leq key (pair_fst k v e))
@@ -2276,7 +2276,7 @@ fn all_in_list_map_not_match_below
              (and_snd (Equal Bool (leq (pair_fst k v e) k2) True) (all_in_list k v (le_below k v leq k2) xs2) h))
   }
 
-fn not_match_from_bound_above
+lemma not_match_from_bound_above
   (k : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (key : k) (k2 : k) (hFalse : Equal Bool (leq k2 key) False)
@@ -2287,13 +2287,13 @@ fn not_match_from_bound_above
               (sym Bool (leq k2 key) True (transLeq k2 ekey key hBound (and_snd (Equal Bool (leq key ekey) True) (Equal Bool (leq ekey key) True) horderEq)))
               hFalse)
 
-fn all_in_list_map_not_match_above
+lemma all_in_list_map_not_match_above
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (key : k) (k2 : k) (hFalse : Equal Bool (leq k2 key) False) (xs : List (Pair k v))
   : all_in_list k v (le_above k v leq k2) xs → all_in_list k v (not_order_equiv_to_key k leq key) xs =
   match xs {
-    Nil ⇒ λh. tt ;
+    Nil ⇒ λh. Proved ;
     Cons e xs2 ⇒
       λh.
         and_intro (not_order_equiv_to_key k leq key (pair_fst k v e))
@@ -2304,11 +2304,11 @@ fn all_in_list_map_not_match_above
              (and_snd (Equal Bool (leq k2 (pair_fst k v e)) True) (all_in_list k v (le_above k v leq k2) xs2) h))
   }
 
-fn all_in_list_append_elim_left
+lemma all_in_list_append_elim_left
   (k : Type) (v : Type) (p : k → Prop) (xs : List (Pair k v)) (ys : List (Pair k v))
   : all_in_list k v p (list_append (Pair k v) xs ys) → all_in_list k v p xs =
   match xs {
-    Nil ⇒ λh. tt ;
+    Nil ⇒ λh. Proved ;
     Cons e xs2 ⇒
       λh.
         and_intro (p (pair_fst k v e)) (all_in_list k v p xs2)
@@ -2317,11 +2317,11 @@ fn all_in_list_append_elim_left
              (and_snd (p (pair_fst k v e)) (all_in_list k v p (list_append (Pair k v) xs2 ys)) h))
   }
 
-fn no_dup_append_left
+lemma no_dup_append_left
   (k : Type) (v : Type) (leq : k → k → Bool) (xs : List (Pair k v)) (ys : List (Pair k v))
   : NoDup k v leq (list_append (Pair k v) xs ys) → NoDup k v leq xs =
   match xs {
-    Nil ⇒ λh. tt ;
+    Nil ⇒ λh. Proved ;
     Cons e xs2 ⇒
       λh.
         and_intro (all_in_list k v (not_order_equiv_to_key k leq (pair_fst k v e)) xs2)
@@ -2336,7 +2336,7 @@ fn no_dup_append_left
                 h))
   }
 
-fn no_dup_append_right
+lemma no_dup_append_right
   (k : Type) (v : Type) (leq : k → k → Bool) (xs : List (Pair k v)) (ys : List (Pair k v))
   : NoDup k v leq (list_append (Pair k v) xs ys) → NoDup k v leq ys =
   match xs {
@@ -2349,7 +2349,7 @@ fn no_dup_append_right
              h)
   }
 
-fn lookup_stop_bridge
+lemma lookup_stop_bridge
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k)
   (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (q1 : Equal Bool (leq key k2) True) (q2 : Equal Bool (leq k2 key) True)
@@ -2367,7 +2367,7 @@ fn lookup_stop_bridge
         (lookup_mk_step_true_eq k v leq key l k2 v2 r q1) (lookup_step_true_reduces k v leq key l k2 v2 r)))
     (lookup_mk_inner_true_eq k v leq key l k2 v2 r q2)
 
-fn not_match_transfer_via_equiv
+lemma not_match_transfer_via_equiv
   (k : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (key : k) (k2 : k) (q1 : Equal Bool (leq key k2) True) (q2 : Equal Bool (leq k2 key) True)
@@ -2378,14 +2378,14 @@ fn not_match_transfer_via_equiv
             (transLeq k2 key ekey q2 (and_fst (Equal Bool (leq key ekey) True) (Equal Bool (leq ekey key) True) horderEq))
             (transLeq ekey key k2 (and_snd (Equal Bool (leq key ekey) True) (Equal Bool (leq ekey key) True) horderEq) q1))
 
-fn all_in_list_map_not_match_transfer
+lemma all_in_list_map_not_match_transfer
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (key : k) (k2 : k) (q1 : Equal Bool (leq key k2) True) (q2 : Equal Bool (leq k2 key) True)
   (xs : List (Pair k v))
   : all_in_list k v (not_order_equiv_to_key k leq k2) xs → all_in_list k v (not_order_equiv_to_key k leq key) xs =
   match xs {
-    Nil ⇒ λh. tt ;
+    Nil ⇒ λh. Proved ;
     Cons e xs2 ⇒
       λh.
         and_intro (not_order_equiv_to_key k leq key (pair_fst k v e))
@@ -2396,7 +2396,7 @@ fn all_in_list_map_not_match_transfer
              (and_snd (not_order_equiv_to_key k leq k2 (pair_fst k v e)) (all_in_list k v (not_order_equiv_to_key k leq k2) xs2) h))
   }
 
-fn law5_node_q2_dispatch
+lemma law5_node_q2_dispatch
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (key : k) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
@@ -2440,7 +2440,7 @@ fn law5_node_q2_dispatch
                (lookup_into_l_bridge k v leq key l k2 v2 r q1 q2'))))
   }
 
-fn law5_node_dispatch
+lemma law5_node_dispatch
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (key : k) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
@@ -2471,14 +2471,14 @@ fn law5_node_dispatch
                (lookup_into_r_bridge k v leq key l k2 v2 r q1'))))
   }
 
-fn law5_distinct_l
+lemma law5_distinct_l
   (k : Type) (v : Type) (leq : k → k → Bool)
   (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (hd : Distinct k v leq (Node k v l k2 v2 r))
   : Distinct k v leq l =
   no_dup_append_left k v leq (to_list k v l) (Cons (Pair k v) (mk_pair k v k2 v2) (to_list k v r)) hd
 
-fn law5_distinct_r
+lemma law5_distinct_r
   (k : Type) (v : Type) (leq : k → k → Bool)
   (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (hd : Distinct k v leq (Node k v l k2 v2 r))
@@ -2486,13 +2486,13 @@ fn law5_distinct_r
   and_snd (all_in_list k v (not_order_equiv_to_key k leq k2) (to_list k v r)) (Distinct k v leq r)
     (no_dup_append_right k v leq (to_list k v l) (Cons (Pair k v) (mk_pair k v k2 v2) (to_list k v r)) hd)
 
-fn lookup_assoc_agree
+lemma lookup_assoc_agree
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (key : k) (m : Tree k v)
   : Ordered k v leq m → Distinct k v leq m → Equal (Option v) (lookup k v leq key m) (assoc k v leq key (to_list k v m)) =
   match m {
-    Leaf ⇒ λh. λhd. tt ;
+    Leaf ⇒ λh. λhd. Proved ;
     Node l k2 v2 r ⇒
       λh. λhd.
         law5_node_dispatch k v leq transLeq key l k2 v2 r h hd
@@ -2534,49 +2534,49 @@ fn bool_not (b : Bool) : Bool =
 fn cat4_bool_or (a : Bool) (b : Bool) : Bool =
   match a { True ⇒ True ; False ⇒ b }
 
-fn cat4_bool_or_comm (a : Bool) (b : Bool) : Equal Bool (cat4_bool_or a b) (cat4_bool_or b a) =
+lemma cat4_bool_or_comm (a : Bool) (b : Bool) : Equal Bool (cat4_bool_or a b) (cat4_bool_or b a) =
   match a {
-    True ⇒ match b { True ⇒ tt ; False ⇒ tt } ;
-    False ⇒ match b { True ⇒ tt ; False ⇒ tt }
+    True ⇒ match b { True ⇒ Proved ; False ⇒ Proved } ;
+    False ⇒ match b { True ⇒ Proved ; False ⇒ Proved }
   }
 
-fn cat4_bool_or_assoc (a : Bool) (b : Bool) (c : Bool)
+lemma cat4_bool_or_assoc (a : Bool) (b : Bool) (c : Bool)
   : Equal Bool (cat4_bool_or (cat4_bool_or a b) c) (cat4_bool_or a (cat4_bool_or b c)) =
   match a {
-    True ⇒ match b { True ⇒ match c { True ⇒ tt ; False ⇒ tt } ; False ⇒ match c { True ⇒ tt ; False ⇒ tt } } ;
-    False ⇒ match b { True ⇒ match c { True ⇒ tt ; False ⇒ tt } ; False ⇒ match c { True ⇒ tt ; False ⇒ tt } }
+    True ⇒ match b { True ⇒ match c { True ⇒ Proved ; False ⇒ Proved } ; False ⇒ match c { True ⇒ Proved ; False ⇒ Proved } } ;
+    False ⇒ match b { True ⇒ match c { True ⇒ Proved ; False ⇒ Proved } ; False ⇒ match c { True ⇒ Proved ; False ⇒ Proved } }
   }
 
-fn cat4_bool_or_idempotent (a : Bool) : Equal Bool (cat4_bool_or a a) a =
-  match a { True ⇒ tt ; False ⇒ tt }
+lemma cat4_bool_or_idempotent (a : Bool) : Equal Bool (cat4_bool_or a a) a =
+  match a { True ⇒ Proved ; False ⇒ Proved }
 
-fn cat4_bool_or_left_identity (a : Bool) : Equal Bool (cat4_bool_or False a) a =
+lemma cat4_bool_or_left_identity (a : Bool) : Equal Bool (cat4_bool_or False a) a =
   Refl
 
-fn cat4_bool_or_right_identity (a : Bool) : Equal Bool (cat4_bool_or a False) a =
-  match a { True ⇒ tt ; False ⇒ tt }
+lemma cat4_bool_or_right_identity (a : Bool) : Equal Bool (cat4_bool_or a False) a =
+  match a { True ⇒ Proved ; False ⇒ Proved }
 
-fn bool_and_comm (a : Bool) (b : Bool) : Equal Bool (bool_and a b) (bool_and b a) =
+lemma bool_and_comm (a : Bool) (b : Bool) : Equal Bool (bool_and a b) (bool_and b a) =
   match a {
-    True ⇒ match b { True ⇒ tt ; False ⇒ tt } ;
-    False ⇒ match b { True ⇒ tt ; False ⇒ tt }
+    True ⇒ match b { True ⇒ Proved ; False ⇒ Proved } ;
+    False ⇒ match b { True ⇒ Proved ; False ⇒ Proved }
   }
 
-fn bool_and_assoc (a : Bool) (b : Bool) (c : Bool)
+lemma bool_and_assoc (a : Bool) (b : Bool) (c : Bool)
   : Equal Bool (bool_and (bool_and a b) c) (bool_and a (bool_and b c)) =
   match a {
-    True ⇒ match b { True ⇒ match c { True ⇒ tt ; False ⇒ tt } ; False ⇒ match c { True ⇒ tt ; False ⇒ tt } } ;
-    False ⇒ match b { True ⇒ match c { True ⇒ tt ; False ⇒ tt } ; False ⇒ match c { True ⇒ tt ; False ⇒ tt } }
+    True ⇒ match b { True ⇒ match c { True ⇒ Proved ; False ⇒ Proved } ; False ⇒ match c { True ⇒ Proved ; False ⇒ Proved } } ;
+    False ⇒ match b { True ⇒ match c { True ⇒ Proved ; False ⇒ Proved } ; False ⇒ match c { True ⇒ Proved ; False ⇒ Proved } }
   }
 
-fn bool_and_idempotent (a : Bool) : Equal Bool (bool_and a a) a =
-  match a { True ⇒ tt ; False ⇒ tt }
+lemma bool_and_idempotent (a : Bool) : Equal Bool (bool_and a a) a =
+  match a { True ⇒ Proved ; False ⇒ Proved }
 
-fn bool_and_left_identity (a : Bool) : Equal Bool (bool_and True a) a =
+lemma bool_and_left_identity (a : Bool) : Equal Bool (bool_and True a) a =
   Refl
 
-fn bool_and_right_identity (a : Bool) : Equal Bool (bool_and a True) a =
-  match a { True ⇒ tt ; False ⇒ tt }
+lemma bool_and_right_identity (a : Bool) : Equal Bool (bool_and a True) a =
+  match a { True ⇒ Proved ; False ⇒ Proved }
 
 fn leq_nat (m : Nat) (n : Nat) : Bool =
   match m {
@@ -2584,14 +2584,14 @@ fn leq_nat (m : Nat) (n : Nat) : Bool =
     Suc m2 ⇒ match n { Zero ⇒ False ; Suc n2 ⇒ leq_nat m2 n2 }
   }
 
-fn refl_leq_nat (x : Nat) : Equal Bool (leq_nat x x) True =
-  match x { Zero ⇒ tt ; Suc x2 ⇒ refl_leq_nat x2 }
+lemma refl_leq_nat (x : Nat) : Equal Bool (leq_nat x x) True =
+  match x { Zero ⇒ Proved ; Suc x2 ⇒ refl_leq_nat x2 }
 
-fn trans_leq_nat
+lemma trans_leq_nat
   (x : Nat)
   : (y : Nat) → (z : Nat) → Equal Bool (leq_nat x y) True → Equal Bool (leq_nat y z) True → Equal Bool (leq_nat x z) True =
   match x {
-    Zero ⇒ λy.λz.λp.λq. tt ;
+    Zero ⇒ λy.λz.λp.λq. Proved ;
     Suc x2 ⇒
       λy. match y {
         Zero ⇒ λz.λp.λq. absurd p ;
@@ -2603,13 +2603,13 @@ fn trans_leq_nat
       }
   }
 
-fn antisym_leq_nat
+lemma antisym_leq_nat
   (x : Nat)
   : (y : Nat) → Equal Bool (leq_nat x y) True → Equal Bool (leq_nat y x) True → Equal Nat x y =
   match x {
     Zero ⇒
       λy. match y {
-        Zero ⇒ λp.λq. tt ;
+        Zero ⇒ λp.λq. Proved ;
         Suc y2 ⇒ λp.λq. absurd q
       } ;
     Suc x2 ⇒
@@ -2621,10 +2621,10 @@ fn antisym_leq_nat
 
 fn total_leq_nat (x : Nat) (y : Nat) : Or (Equal Bool (leq_nat x y) True) (Equal Bool (leq_nat y x) True) =
   match x {
-    Zero ⇒ Inl (Equal Bool (leq_nat Zero y) True) (Equal Bool (leq_nat y Zero) True) tt ;
+    Zero ⇒ Inl (Equal Bool (leq_nat Zero y) True) (Equal Bool (leq_nat y Zero) True) Proved ;
     Suc x2 ⇒
       match y {
-        Zero ⇒ Inr (Equal Bool (leq_nat (Suc x2) Zero) True) (Equal Bool (leq_nat Zero (Suc x2)) True) tt ;
+        Zero ⇒ Inr (Equal Bool (leq_nat (Suc x2) Zero) True) (Equal Bool (leq_nat Zero (Suc x2)) True) Proved ;
         Suc y2 ⇒
           match total_leq_nat x2 y2 {
             Inl h ⇒ Inl (Equal Bool (leq_nat (Suc x2) (Suc y2)) True) (Equal Bool (leq_nat (Suc y2) (Suc x2)) True) h ;
@@ -2636,7 +2636,7 @@ fn total_leq_nat (x : Nat) (y : Nat) : Or (Equal Bool (leq_nat x y) True) (Equal
 fn order_equiv_key (k : Type) (leq : k → k → Bool) (a : k) (b : k) : Bool =
   bool_and (leq a b) (leq b a)
 
-fn bool_and_true_intro
+lemma bool_and_true_intro
   (a : Bool) (b : Bool)
   (ha : Equal Bool a True) (hb : Equal Bool b True)
   : Equal Bool (bool_and a b) True =
@@ -2644,7 +2644,7 @@ fn bool_and_true_intro
     (cong Bool Bool a True (λx. bool_and x b) ha)
     hb
 
-fn order_equiv_key_true_from_order_equiv
+lemma order_equiv_key_true_from_order_equiv
   (k : Type) (leq : k → k → Bool) (a : k) (b : k)
   : order_equiv k leq a b → Equal Bool (order_equiv_key k leq a b) True =
   λh.
@@ -2652,7 +2652,7 @@ fn order_equiv_key_true_from_order_equiv
       (and_fst (Equal Bool (leq a b) True) (Equal Bool (leq b a) True) h)
       (and_snd (Equal Bool (leq a b) True) (Equal Bool (leq b a) True) h)
 
-fn order_equiv_from_order_equiv_key_true_inner
+lemma order_equiv_from_order_equiv_key_true_inner
   (k : Type) (leq : k → k → Bool) (a : k) (b : k)
   (q1 : Equal Bool (leq a b) True)
   (o2 : Or (Equal Bool (leq b a) True) (Equal Bool (leq b a) False))
@@ -2683,7 +2683,7 @@ fn order_equiv_from_order_equiv_key_true_inner
               q2False)))
   }
 
-fn order_equiv_from_order_equiv_key_true_dispatch
+lemma order_equiv_from_order_equiv_key_true_dispatch
   (k : Type) (leq : k → k → Bool) (a : k) (b : k)
   (o1 : Or (Equal Bool (leq a b) True) (Equal Bool (leq a b) False))
   : Equal Bool (order_equiv_key k leq a b) True → order_equiv k leq a b =
@@ -2705,15 +2705,15 @@ fn order_equiv_from_order_equiv_key_true_dispatch
               False
               (λleft. bool_and left (leq b a))
               q1False)
-            tt))
+            Proved))
   }
 
-fn order_equiv_from_order_equiv_key_true
+lemma order_equiv_from_order_equiv_key_true
   (k : Type) (leq : k → k → Bool) (a : k) (b : k)
   : Equal Bool (order_equiv_key k leq a b) True → order_equiv k leq a b =
   order_equiv_from_order_equiv_key_true_dispatch k leq a b (bool_dichotomy (leq a b))
 
-fn order_equiv_key_false_to_not
+lemma order_equiv_key_false_to_not
   (k : Type) (leq : k → k → Bool) (a : k) (b : k)
   (hfalse : Equal Bool (order_equiv_key k leq a b) False)
   : not_order_equiv_to_key k leq a b =
@@ -2764,14 +2764,14 @@ fn delete_from_list_acc_step
     False ⇒ delete_from_list_acc k v leq key xs2 (insert k v leq (pair_fst k v e) (pair_snd k v e) acc)
   }
 
-fn delete_from_list_acc_final_bridge
+lemma delete_from_list_acc_final_bridge
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k)
   (e : Pair k v) (xs2 : List (Pair k v)) (acc : Tree k v)
   : Equal (Tree k v)
       (delete_from_list_acc k v leq key (Cons (Pair k v) e xs2) acc)
       (delete_from_list_acc_step k v leq key e xs2 acc (order_equiv_key k leq key (pair_fst k v e))) = Refl
 
-fn delete_from_list_acc_step_true_eq
+lemma delete_from_list_acc_step_true_eq
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k)
   (e : Pair k v) (xs2 : List (Pair k v)) (acc : Tree k v)
   (q : Equal Bool (order_equiv_key k leq key (pair_fst k v e)) True)
@@ -2780,7 +2780,7 @@ fn delete_from_list_acc_step_true_eq
       (delete_from_list_acc_step k v leq key e xs2 acc True) =
   cong Bool (Tree k v) (order_equiv_key k leq key (pair_fst k v e)) True (delete_from_list_acc_step k v leq key e xs2 acc) q
 
-fn delete_from_list_acc_step_false_eq
+lemma delete_from_list_acc_step_false_eq
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k)
   (e : Pair k v) (xs2 : List (Pair k v)) (acc : Tree k v)
   (q : Equal Bool (order_equiv_key k leq key (pair_fst k v e)) False)
@@ -2789,21 +2789,21 @@ fn delete_from_list_acc_step_false_eq
       (delete_from_list_acc_step k v leq key e xs2 acc False) =
   cong Bool (Tree k v) (order_equiv_key k leq key (pair_fst k v e)) False (delete_from_list_acc_step k v leq key e xs2 acc) q
 
-fn delete_from_list_acc_step_true_reduces
+lemma delete_from_list_acc_step_true_reduces
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k)
   (e : Pair k v) (xs2 : List (Pair k v)) (acc : Tree k v)
   : Equal (Tree k v)
       (delete_from_list_acc_step k v leq key e xs2 acc True)
       (delete_from_list_acc k v leq key xs2 acc) = Refl
 
-fn delete_from_list_acc_step_false_reduces
+lemma delete_from_list_acc_step_false_reduces
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k)
   (e : Pair k v) (xs2 : List (Pair k v)) (acc : Tree k v)
   : Equal (Tree k v)
       (delete_from_list_acc_step k v leq key e xs2 acc False)
       (delete_from_list_acc k v leq key xs2 (insert k v leq (pair_fst k v e) (pair_snd k v e) acc)) = Refl
 
-fn delete_from_list_acc_true_bridge
+lemma delete_from_list_acc_true_bridge
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k)
   (e : Pair k v) (xs2 : List (Pair k v)) (acc : Tree k v)
   (q : Equal Bool (order_equiv_key k leq key (pair_fst k v e)) True)
@@ -2822,7 +2822,7 @@ fn delete_from_list_acc_true_bridge
       (delete_from_list_acc_step_true_eq k v leq key e xs2 acc q)
       (delete_from_list_acc_step_true_reduces k v leq key e xs2 acc))
 
-fn delete_from_list_acc_false_bridge
+lemma delete_from_list_acc_false_bridge
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k)
   (e : Pair k v) (xs2 : List (Pair k v)) (acc : Tree k v)
   (q : Equal Bool (order_equiv_key k leq key (pair_fst k v e)) False)
@@ -2847,7 +2847,7 @@ fn delete_from_list (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (xs
 fn delete (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (m : Tree k v) : Tree k v =
   delete_from_list k v leq key (to_list k v m)
 
-fn delete_from_list_acc_lookup_none_dispatch
+lemma delete_from_list_acc_lookup_none_dispatch
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (key : k) (e : Pair k v) (xs2 : List (Pair k v)) (acc : Tree k v)
@@ -2883,7 +2883,7 @@ fn delete_from_list_acc_lookup_none_dispatch
           (delete_from_list_acc_false_bridge k v leq key e xs2 acc q))
   }
 
-fn delete_from_list_acc_lookup_none
+lemma delete_from_list_acc_lookup_none
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (key : k) (xs : List (Pair k v)) (acc : Tree k v)
@@ -2897,7 +2897,7 @@ fn delete_from_list_acc_lookup_none
           (bool_dichotomy (order_equiv_key k leq key (pair_fst k v e)))
   }
 
-fn delete_from_list_acc_lookup_locality_dispatch
+lemma delete_from_list_acc_lookup_locality_dispatch
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (deleted : k) (query : k) (e : Pair k v) (xs2 : List (Pair k v)) (acc : Tree k v)
@@ -2953,7 +2953,7 @@ fn delete_from_list_acc_lookup_locality_dispatch
                 (all_in_list k v (not_order_equiv_to_key k leq query) xs2) hskip))))
   }
 
-fn delete_from_list_acc_lookup_locality
+lemma delete_from_list_acc_lookup_locality
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (deleted : k) (query : k) (xs : List (Pair k v)) (acc : Tree k v)
@@ -2969,7 +2969,7 @@ fn delete_from_list_acc_lookup_locality
           (bool_dichotomy (order_equiv_key k leq deleted (pair_fst k v e)))
   }
 
-fn delete_lookup_none_law
+lemma delete_lookup_none_law
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (key : k) (m : Tree k v)
@@ -2977,7 +2977,7 @@ fn delete_lookup_none_law
   delete_from_list_acc_lookup_none k v leq transLeq key (to_list k v m) (Leaf k v)
     (lookup_empty_is_none k v leq key)
 
-fn not_order_equiv_from_deleted_match
+lemma not_order_equiv_from_deleted_match
   (k : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (deleted : k) (query : k) (entryKey : k)
@@ -2990,7 +2990,7 @@ fn not_order_equiv_from_deleted_match
         (order_equiv_from_order_equiv_key_true k leq deleted entryKey hDeletedEntry)
         (order_equiv_sym k leq query entryKey hQueryEntry))
 
-fn delete_from_list_acc_lookup_other_assoc_deleted_hit_absurd
+lemma delete_from_list_acc_lookup_other_assoc_deleted_hit_absurd
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (deleted : k) (query : k) (e : Pair k v) (xs2 : List (Pair k v)) (acc : Tree k v)
@@ -3008,7 +3008,7 @@ fn delete_from_list_acc_lookup_other_assoc_deleted_hit_absurd
         (and_intro (Equal Bool (leq (pair_fst k v e) query) True)
           (Equal Bool (leq query (pair_fst k v e)) True) q2 q1)))
 
-fn delete_from_list_acc_lookup_other_assoc_hit_survivor
+lemma delete_from_list_acc_lookup_other_assoc_hit_survivor
   (k : Type) (v : Type) (leq : k → k → Bool)
   (reflLeq : (x : k) → Equal Bool (leq x x) True)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
@@ -3056,7 +3056,7 @@ fn delete_from_list_acc_lookup_other_assoc_hit_survivor
           (Some v (pair_snd k v e))
           (assoc_skip_head_stop_bridge k v leq query e xs2 q1 q2))))
 
-fn delete_from_list_acc_lookup_other_assoc_hit
+lemma delete_from_list_acc_lookup_other_assoc_hit
   (k : Type) (v : Type) (leq : k → k → Bool)
   (reflLeq : (x : k) → Equal Bool (leq x x) True)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
@@ -3079,7 +3079,7 @@ fn delete_from_list_acc_lookup_other_assoc_hit
         h qDeletedFalse q1 q2
   }
 
-fn delete_from_list_acc_lookup_other_assoc_miss
+lemma delete_from_list_acc_lookup_other_assoc_miss
   (k : Type) (v : Type) (leq : k → k → Bool)
   (reflLeq : (x : k) → Equal Bool (leq x x) True)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
@@ -3150,7 +3150,7 @@ fn delete_from_list_acc_lookup_other_assoc_miss
             assocSkip))
   }
 
-fn delete_from_list_acc_lookup_other_assoc_inner
+lemma delete_from_list_acc_lookup_other_assoc_inner
   (k : Type) (v : Type) (leq : k → k → Bool)
   (reflLeq : (x : k) → Equal Bool (leq x x) True)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
@@ -3179,7 +3179,7 @@ fn delete_from_list_acc_lookup_other_assoc_inner
         (bool_dichotomy (order_equiv_key k leq deleted (pair_fst k v e)))
   }
 
-fn delete_from_list_acc_lookup_other_assoc_dispatch
+lemma delete_from_list_acc_lookup_other_assoc_dispatch
   (k : Type) (v : Type) (leq : k → k → Bool)
   (reflLeq : (x : k) → Equal Bool (leq x x) True)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
@@ -3207,7 +3207,7 @@ fn delete_from_list_acc_lookup_other_assoc_dispatch
         (bool_dichotomy (order_equiv_key k leq deleted (pair_fst k v e)))
   }
 
-fn delete_from_list_acc_lookup_other_assoc
+lemma delete_from_list_acc_lookup_other_assoc
   (k : Type) (v : Type) (leq : k → k → Bool)
   (reflLeq : (x : k) → Equal Bool (leq x x) True)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
@@ -3227,7 +3227,7 @@ fn delete_from_list_acc_lookup_other_assoc
           (bool_dichotomy (leq query (pair_fst k v e)))
   }
 
-fn delete_lookup_other_key_law
+lemma delete_lookup_other_key_law
   (k : Type) (v : Type) (leq : k → k → Bool)
   (reflLeq : (x : k) → Equal Bool (leq x x) True)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
@@ -3255,7 +3255,7 @@ folding `insert` over a list preserves `Ordered`; `delete_preserves_ordered`
 composes this with the filter-then-rebuild shape of `delete` itself.
 
 ```ken
-fn from_list_acc_preserves_ordered
+lemma from_list_acc_preserves_ordered
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (total : (x : k) → (y : k) → Or (Equal Bool (leq x y) True) (Equal Bool (leq y x) True))
@@ -3270,7 +3270,7 @@ fn from_list_acc_preserves_ordered
           (preserves_ordered k v leq transLeq total (pair_fst k v p) (pair_snd k v p) acc h)
   }
 
-fn from_list_preserves_ordered
+lemma from_list_preserves_ordered
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (total : (x : k) → (y : k) → Or (Equal Bool (leq x y) True) (Equal Bool (leq y x) True))
@@ -3278,7 +3278,7 @@ fn from_list_preserves_ordered
   : Ordered k v leq (from_list k v leq xs) =
   from_list_acc_preserves_ordered k v leq transLeq total xs (Leaf k v) (ordered_empty k v leq)
 
-fn delete_from_list_acc_preserves_ordered_dispatch
+lemma delete_from_list_acc_preserves_ordered_dispatch
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (total : (x : k) → (y : k) → Or (Equal Bool (leq x y) True) (Equal Bool (leq y x) True))
@@ -3306,7 +3306,7 @@ fn delete_from_list_acc_preserves_ordered_dispatch
           (delete_from_list_acc_false_bridge k v leq key e xs2 acc q))
   }
 
-fn delete_from_list_acc_preserves_ordered
+lemma delete_from_list_acc_preserves_ordered
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (total : (x : k) → (y : k) → Or (Equal Bool (leq x y) True) (Equal Bool (leq y x) True))
@@ -3320,7 +3320,7 @@ fn delete_from_list_acc_preserves_ordered
           (bool_dichotomy (order_equiv_key k leq key (pair_fst k v e)))
   }
 
-fn delete_from_list_preserves_ordered
+lemma delete_from_list_preserves_ordered
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (total : (x : k) → (y : k) → Or (Equal Bool (leq x y) True) (Equal Bool (leq y x) True))
@@ -3328,7 +3328,7 @@ fn delete_from_list_preserves_ordered
   : Ordered k v leq (delete_from_list k v leq key xs) =
   delete_from_list_acc_preserves_ordered k v leq transLeq total key xs (Leaf k v) (ordered_empty k v leq)
 
-fn delete_preserves_ordered
+lemma delete_preserves_ordered
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (total : (x : k) → (y : k) → Or (Equal Bool (leq x y) True) (Equal Bool (leq y x) True))
@@ -3372,7 +3372,7 @@ fn insert_with (k : Type) (v : Type) (leq : k → k → Bool) (f : v → v → v
 fn insert_with_fold_step (k : Type) (v : Type) (leq : k → k → Bool) (f : v → v → v) (key : k) (val : v) (acc : Tree k v) : Tree k v =
   insert_with k v leq f key val acc
 
-fn insert_with_fold_step_reduces
+lemma insert_with_fold_step_reduces
   (k : Type) (v : Type) (leq : k → k → Bool) (f : v → v → v) (key : k) (val : v) (acc : Tree k v)
   : Equal (Tree k v)
       (insert_with_fold_step k v leq f key val acc)
@@ -3388,7 +3388,7 @@ fn union_from_list_acc
         (insert_with_fold_step k v leq f (pair_fst k v e) (pair_snd k v e) acc)
   }
 
-fn union_from_list_acc_cons_bridge
+lemma union_from_list_acc_cons_bridge
   (k : Type) (v : Type) (leq : k → k → Bool) (f : v → v → v)
   (e : Pair k v) (xs2 : List (Pair k v)) (acc : Tree k v)
   : Equal (Tree k v)
@@ -3407,14 +3407,14 @@ fn union_lookup_table (v : Type) (f : v → v → v) (left : Option v) (right : 
 
 fn unit_combine (x : Unit) (y : Unit) : Unit = MkUnit
 
-fn union_lookup_table_member
+lemma union_lookup_table_member
   (left : Option Unit) (right : Option Unit)
   : Equal Bool
       (option_is_some Unit (union_lookup_table Unit unit_combine left right))
       (cat4_bool_or (option_is_some Unit left) (option_is_some Unit right)) =
   match left {
-    None ⇒ match right { None ⇒ tt ; Some y ⇒ tt } ;
-    Some x ⇒ match right { None ⇒ tt ; Some y ⇒ tt }
+    None ⇒ match right { None ⇒ Proved ; Some y ⇒ Proved } ;
+    Some x ⇒ match right { None ⇒ Proved ; Some y ⇒ Proved }
   }
 
 fn intersection_lookup_table (v : Type) (left : Option v) (keep : Bool) (prior : Option v) : Option v =
@@ -3429,15 +3429,15 @@ fn difference_lookup_table (v : Type) (left : Option v) (reject : Bool) (prior :
     Some x ⇒ match reject { True ⇒ prior ; False ⇒ Some v x }
   }
 
-const difference_lookup_table_false_none_none
+lemma difference_lookup_table_false_none_none
   (v : Type)
-  : Equal (Option v) (difference_lookup_table v (None v) False (None v)) (None v) = tt
+  : Equal (Option v) (difference_lookup_table v (None v) False (None v)) (None v) = Proved
 
-fn difference_lookup_table_false_none_some
+lemma difference_lookup_table_false_none_some
   (v : Type) (x : v)
   : Equal (Option v) (difference_lookup_table v (Some v x) False (None v)) (Some v x) = Refl
 
-fn difference_lookup_table_false_none
+lemma difference_lookup_table_false_none
   (v : Type) (left : Option v)
   : Equal (Option v) (difference_lookup_table v left False (None v)) left =
   match left {
@@ -3452,7 +3452,7 @@ fn difference_lookup_expected
     False ⇒ lookup k v leq key a
   }
 
-fn difference_lookup_expected_true
+lemma difference_lookup_expected_true
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (a : Tree k v) (b : Tree k v)
   (q : Equal Bool (member k v leq key b) True)
   : Equal (Option v) (difference_lookup_expected k v leq key a b) (None v) =
@@ -3462,7 +3462,7 @@ fn difference_lookup_expected_true
     (λm. match m { True ⇒ None v ; False ⇒ lookup k v leq key a })
     q
 
-fn difference_lookup_expected_false
+lemma difference_lookup_expected_false
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (a : Tree k v) (b : Tree k v)
   (q : Equal Bool (member k v leq key b) False)
   : Equal (Option v) (difference_lookup_expected k v leq key a b) (lookup k v leq key a) =
@@ -3479,17 +3479,17 @@ fn difference_lookup_expected_member_option
     False ⇒ left
   }
 
-fn difference_lookup_expected_member_table
+lemma difference_lookup_expected_member_table
   (left : Option Unit) (reject : Bool)
   : Equal Bool
       (option_is_some Unit (difference_lookup_expected_member_option left reject))
       (bool_and (option_is_some Unit left) (bool_not reject)) =
   match reject {
-    True ⇒ match left { None ⇒ tt ; Some x ⇒ tt } ;
-    False ⇒ match left { None ⇒ tt ; Some x ⇒ tt }
+    True ⇒ match left { None ⇒ Proved ; Some x ⇒ Proved } ;
+    False ⇒ match left { None ⇒ Proved ; Some x ⇒ Proved }
   }
 
-fn difference_lookup_expected_member
+lemma difference_lookup_expected_member
   (k : Type) (leq : k → k → Bool) (key : k) (s : Tree k Unit) (t : Tree k Unit)
   : Equal Bool
       (option_is_some Unit (difference_lookup_expected k Unit leq key s t))
@@ -3509,13 +3509,13 @@ fn insert_with_lookup_result_for
   (f : v → v → v) (key : k) (val : v) (m : Tree k v) : Option v =
   insert_with_lookup_result v f val (lookup k v leq key m)
 
-fn all_keys_map_not_match_below
+lemma all_keys_map_not_match_below
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (key : k) (k2 : k) (hFalse : Equal Bool (leq key k2) False) (m : Tree k v)
   : all_keys k v (le_below k v leq k2) m → all_keys k v (not_order_equiv_to_key k leq key) m =
   match m {
-    Leaf ⇒ λh. tt ;
+    Leaf ⇒ λh. Proved ;
     Node l ekey eval r ⇒
       λh.
         and_intro (not_order_equiv_to_key k leq key ekey)
@@ -3541,13 +3541,13 @@ fn all_keys_map_not_match_below
                              (all_keys k v (le_below k v leq k2) r)) h))))
   }
 
-fn all_keys_map_not_match_above
+lemma all_keys_map_not_match_above
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (key : k) (k2 : k) (hFalse : Equal Bool (leq k2 key) False) (m : Tree k v)
   : all_keys k v (le_above k v leq k2) m → all_keys k v (not_order_equiv_to_key k leq key) m =
   match m {
-    Leaf ⇒ λh. tt ;
+    Leaf ⇒ λh. Proved ;
     Node l ekey eval r ⇒
       λh.
         and_intro (not_order_equiv_to_key k leq key ekey)
@@ -3595,14 +3595,14 @@ fn intersection_from_list_acc_step
     False ⇒ intersection_from_list_acc k v leq xs2 keep acc
   }
 
-fn intersection_from_list_acc_final_bridge
+lemma intersection_from_list_acc_final_bridge
   (k : Type) (v : Type) (leq : k → k → Bool)
   (e : Pair k v) (xs2 : List (Pair k v)) (keep : Tree k v) (acc : Tree k v)
   : Equal (Tree k v)
       (intersection_from_list_acc k v leq (Cons (Pair k v) e xs2) keep acc)
       (intersection_from_list_acc_step k v leq e xs2 keep acc (member k v leq (pair_fst k v e) keep)) = Refl
 
-fn intersection_from_list_acc_step_true_eq
+lemma intersection_from_list_acc_step_true_eq
   (k : Type) (v : Type) (leq : k → k → Bool)
   (e : Pair k v) (xs2 : List (Pair k v)) (keep : Tree k v) (acc : Tree k v)
   (q : Equal Bool (member k v leq (pair_fst k v e) keep) True)
@@ -3612,7 +3612,7 @@ fn intersection_from_list_acc_step_true_eq
   cong Bool (Tree k v) (member k v leq (pair_fst k v e) keep) True
     (intersection_from_list_acc_step k v leq e xs2 keep acc) q
 
-fn intersection_from_list_acc_step_false_eq
+lemma intersection_from_list_acc_step_false_eq
   (k : Type) (v : Type) (leq : k → k → Bool)
   (e : Pair k v) (xs2 : List (Pair k v)) (keep : Tree k v) (acc : Tree k v)
   (q : Equal Bool (member k v leq (pair_fst k v e) keep) False)
@@ -3622,7 +3622,7 @@ fn intersection_from_list_acc_step_false_eq
   cong Bool (Tree k v) (member k v leq (pair_fst k v e) keep) False
     (intersection_from_list_acc_step k v leq e xs2 keep acc) q
 
-fn intersection_from_list_acc_step_true_reduces
+lemma intersection_from_list_acc_step_true_reduces
   (k : Type) (v : Type) (leq : k → k → Bool)
   (e : Pair k v) (xs2 : List (Pair k v)) (keep : Tree k v) (acc : Tree k v)
   : Equal (Tree k v)
@@ -3630,14 +3630,14 @@ fn intersection_from_list_acc_step_true_reduces
       (intersection_from_list_acc k v leq xs2 keep
         (insert k v leq (pair_fst k v e) (pair_snd k v e) acc)) = Refl
 
-fn intersection_from_list_acc_step_false_reduces
+lemma intersection_from_list_acc_step_false_reduces
   (k : Type) (v : Type) (leq : k → k → Bool)
   (e : Pair k v) (xs2 : List (Pair k v)) (keep : Tree k v) (acc : Tree k v)
   : Equal (Tree k v)
       (intersection_from_list_acc_step k v leq e xs2 keep acc False)
       (intersection_from_list_acc k v leq xs2 keep acc) = Refl
 
-fn intersection_from_list_acc_true_bridge
+lemma intersection_from_list_acc_true_bridge
   (k : Type) (v : Type) (leq : k → k → Bool)
   (e : Pair k v) (xs2 : List (Pair k v)) (keep : Tree k v) (acc : Tree k v)
   (q : Equal Bool (member k v leq (pair_fst k v e) keep) True)
@@ -3659,7 +3659,7 @@ fn intersection_from_list_acc_true_bridge
       (intersection_from_list_acc_step_true_eq k v leq e xs2 keep acc q)
       (intersection_from_list_acc_step_true_reduces k v leq e xs2 keep acc))
 
-fn intersection_from_list_acc_false_bridge
+lemma intersection_from_list_acc_false_bridge
   (k : Type) (v : Type) (leq : k → k → Bool)
   (e : Pair k v) (xs2 : List (Pair k v)) (keep : Tree k v) (acc : Tree k v)
   (q : Equal Bool (member k v leq (pair_fst k v e) keep) False)
@@ -3703,14 +3703,14 @@ fn difference_from_list_acc_step
       (insert k v leq (pair_fst k v e) (pair_snd k v e) acc)
   }
 
-fn difference_from_list_acc_final_bridge
+lemma difference_from_list_acc_final_bridge
   (k : Type) (v : Type) (leq : k → k → Bool)
   (e : Pair k v) (xs2 : List (Pair k v)) (reject : Tree k v) (acc : Tree k v)
   : Equal (Tree k v)
       (difference_from_list_acc k v leq (Cons (Pair k v) e xs2) reject acc)
       (difference_from_list_acc_step k v leq e xs2 reject acc (member k v leq (pair_fst k v e) reject)) = Refl
 
-fn difference_from_list_acc_step_true_eq
+lemma difference_from_list_acc_step_true_eq
   (k : Type) (v : Type) (leq : k → k → Bool)
   (e : Pair k v) (xs2 : List (Pair k v)) (reject : Tree k v) (acc : Tree k v)
   (q : Equal Bool (member k v leq (pair_fst k v e) reject) True)
@@ -3720,7 +3720,7 @@ fn difference_from_list_acc_step_true_eq
   cong Bool (Tree k v) (member k v leq (pair_fst k v e) reject) True
     (difference_from_list_acc_step k v leq e xs2 reject acc) q
 
-fn difference_from_list_acc_step_false_eq
+lemma difference_from_list_acc_step_false_eq
   (k : Type) (v : Type) (leq : k → k → Bool)
   (e : Pair k v) (xs2 : List (Pair k v)) (reject : Tree k v) (acc : Tree k v)
   (q : Equal Bool (member k v leq (pair_fst k v e) reject) False)
@@ -3730,14 +3730,14 @@ fn difference_from_list_acc_step_false_eq
   cong Bool (Tree k v) (member k v leq (pair_fst k v e) reject) False
     (difference_from_list_acc_step k v leq e xs2 reject acc) q
 
-fn difference_from_list_acc_step_true_reduces
+lemma difference_from_list_acc_step_true_reduces
   (k : Type) (v : Type) (leq : k → k → Bool)
   (e : Pair k v) (xs2 : List (Pair k v)) (reject : Tree k v) (acc : Tree k v)
   : Equal (Tree k v)
       (difference_from_list_acc_step k v leq e xs2 reject acc True)
       (difference_from_list_acc k v leq xs2 reject acc) = Refl
 
-fn difference_from_list_acc_step_false_reduces
+lemma difference_from_list_acc_step_false_reduces
   (k : Type) (v : Type) (leq : k → k → Bool)
   (e : Pair k v) (xs2 : List (Pair k v)) (reject : Tree k v) (acc : Tree k v)
   : Equal (Tree k v)
@@ -3745,7 +3745,7 @@ fn difference_from_list_acc_step_false_reduces
       (difference_from_list_acc k v leq xs2 reject
         (insert k v leq (pair_fst k v e) (pair_snd k v e) acc)) = Refl
 
-fn difference_from_list_acc_true_bridge
+lemma difference_from_list_acc_true_bridge
   (k : Type) (v : Type) (leq : k → k → Bool)
   (e : Pair k v) (xs2 : List (Pair k v)) (reject : Tree k v) (acc : Tree k v)
   (q : Equal Bool (member k v leq (pair_fst k v e) reject) True)
@@ -3764,7 +3764,7 @@ fn difference_from_list_acc_true_bridge
       (difference_from_list_acc_step_true_eq k v leq e xs2 reject acc q)
       (difference_from_list_acc_step_true_reduces k v leq e xs2 reject acc))
 
-fn difference_from_list_acc_false_bridge
+lemma difference_from_list_acc_false_bridge
   (k : Type) (v : Type) (leq : k → k → Bool)
   (e : Pair k v) (xs2 : List (Pair k v)) (reject : Tree k v) (acc : Tree k v)
   (q : Equal Bool (member k v leq (pair_fst k v e) reject) False)
@@ -3805,7 +3805,7 @@ bridges, and the same two-level `Or`-elimination dispatch, adapted for
 fn insert_fold_step (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (val : v) (acc : Tree k v) : Tree k v =
   insert k v leq key val acc
 
-fn fold_insert_preserves_ordered
+lemma fold_insert_preserves_ordered
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (total : (x : k) → (y : k) → Or (Equal Bool (leq x y) True) (Equal Bool (leq y x) True))
@@ -3838,7 +3838,7 @@ fn insert_with_step
     False ⇒ Node k v l k2 v2 (insert_with k v leq f key val r)
   }
 
-fn insert_with_inner_false_eq
+lemma insert_with_inner_false_eq
   (k : Type) (v : Type) (leq : k → k → Bool) (f : v → v → v) (key : k) (val : v)
   (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (q2 : Equal Bool (leq k2 key) False)
@@ -3846,7 +3846,7 @@ fn insert_with_inner_false_eq
                       (insert_with_step_inner k v leq f key val l k2 v2 r False) =
   cong Bool (Tree k v) (leq k2 key) False (insert_with_step_inner k v leq f key val l k2 v2 r) q2
 
-fn insert_with_inner_true_eq
+lemma insert_with_inner_true_eq
   (k : Type) (v : Type) (leq : k → k → Bool) (f : v → v → v) (key : k) (val : v)
   (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (q2 : Equal Bool (leq k2 key) True)
@@ -3854,7 +3854,7 @@ fn insert_with_inner_true_eq
                       (insert_with_step_inner k v leq f key val l k2 v2 r True) =
   cong Bool (Tree k v) (leq k2 key) True (insert_with_step_inner k v leq f key val l k2 v2 r) q2
 
-fn insert_with_step_true_eq
+lemma insert_with_step_true_eq
   (k : Type) (v : Type) (leq : k → k → Bool) (f : v → v → v) (key : k) (val : v)
   (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (q1 : Equal Bool (leq key k2) True)
@@ -3862,7 +3862,7 @@ fn insert_with_step_true_eq
                       (insert_with_step k v leq f key val l k2 v2 r True) =
   cong Bool (Tree k v) (leq key k2) True (insert_with_step k v leq f key val l k2 v2 r) q1
 
-fn insert_with_step_false_eq
+lemma insert_with_step_false_eq
   (k : Type) (v : Type) (leq : k → k → Bool) (f : v → v → v) (key : k) (val : v)
   (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (q1 : Equal Bool (leq key k2) False)
@@ -3870,19 +3870,19 @@ fn insert_with_step_false_eq
                       (insert_with_step k v leq f key val l k2 v2 r False) =
   cong Bool (Tree k v) (leq key k2) False (insert_with_step k v leq f key val l k2 v2 r) q1
 
-fn insert_with_final_bridge
+lemma insert_with_final_bridge
   (k : Type) (v : Type) (leq : k → k → Bool) (f : v → v → v) (key : k) (val : v)
   (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   : Equal (Tree k v) (insert_with k v leq f key val (Node k v l k2 v2 r))
                       (insert_with_step k v leq f key val l k2 v2 r (leq key k2)) = Refl
 
-fn insert_with_step_true_reduces
+lemma insert_with_step_true_reduces
   (k : Type) (v : Type) (leq : k → k → Bool) (f : v → v → v) (key : k) (val : v)
   (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   : Equal (Tree k v) (insert_with_step k v leq f key val l k2 v2 r True)
                       (insert_with_step_inner k v leq f key val l k2 v2 r (leq k2 key)) = Refl
 
-fn insert_with_step_a
+lemma insert_with_step_a
   (k : Type) (v : Type) (leq : k → k → Bool) (f : v → v → v) (key : k) (val : v)
   (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (q1 : Equal Bool (leq key k2) True)
@@ -3894,7 +3894,7 @@ fn insert_with_step_a
     (insert_with_step_true_eq k v leq f key val l k2 v2 r q1)
     (insert_with_step_true_reduces k v leq f key val l k2 v2 r)
 
-fn insert_with_step_b
+lemma insert_with_step_b
   (k : Type) (v : Type) (leq : k → k → Bool) (f : v → v → v) (key : k) (val : v)
   (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (q1 : Equal Bool (leq key k2) True)
@@ -3906,7 +3906,7 @@ fn insert_with_step_b
     (insert_with_final_bridge k v leq f key val l k2 v2 r)
     (insert_with_step_a k v leq f key val l k2 v2 r q1)
 
-fn insert_with_step_c
+lemma insert_with_step_c
   (k : Type) (v : Type) (leq : k → k → Bool) (f : v → v → v) (key : k) (val : v)
   (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (q1 : Equal Bool (leq key k2) True) (q2 : Equal Bool (leq k2 key) False)
@@ -3918,7 +3918,7 @@ fn insert_with_step_c
     (insert_with_step_b k v leq f key val l k2 v2 r q1)
     (insert_with_inner_false_eq k v leq f key val l k2 v2 r q2)
 
-fn insert_with_step_overwrite
+lemma insert_with_step_overwrite
   (k : Type) (v : Type) (leq : k → k → Bool) (f : v → v → v) (key : k) (val : v)
   (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (q1 : Equal Bool (leq key k2) True) (q2 : Equal Bool (leq k2 key) True)
@@ -3930,7 +3930,7 @@ fn insert_with_step_overwrite
     (insert_with_step_b k v leq f key val l k2 v2 r q1)
     (insert_with_inner_true_eq k v leq f key val l k2 v2 r q2)
 
-fn insert_with_transport_overwrite
+lemma insert_with_transport_overwrite
   (k : Type) (v : Type) (leq : k → k → Bool) (f : v → v → v) (key : k) (val : v)
   (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (goal : Tree k v → Prop)
@@ -3942,7 +3942,7 @@ fn insert_with_transport_overwrite
                      (insert_with_step_inner k v leq f key val l k2 v2 r True)
        (insert_with_step_overwrite k v leq f key val l k2 v2 r q1 q2))
 
-fn insert_with_transport_into_l
+lemma insert_with_transport_into_l
   (k : Type) (v : Type) (leq : k → k → Bool) (f : v → v → v) (key : k) (val : v)
   (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (goal : Tree k v → Prop)
@@ -3954,7 +3954,7 @@ fn insert_with_transport_into_l
                      (insert_with_step_inner k v leq f key val l k2 v2 r False)
        (insert_with_step_c k v leq f key val l k2 v2 r q1 q2))
 
-fn insert_with_step_d
+lemma insert_with_step_d
   (k : Type) (v : Type) (leq : k → k → Bool) (f : v → v → v) (key : k) (val : v)
   (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (q1 : Equal Bool (leq key k2) False)
@@ -3966,7 +3966,7 @@ fn insert_with_step_d
     (insert_with_final_bridge k v leq f key val l k2 v2 r)
     (insert_with_step_false_eq k v leq f key val l k2 v2 r q1)
 
-fn insert_with_transport_into_r
+lemma insert_with_transport_into_r
   (k : Type) (v : Type) (leq : k → k → Bool) (f : v → v → v) (key : k) (val : v)
   (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (goal : Tree k v → Prop)
@@ -3978,7 +3978,7 @@ fn insert_with_transport_into_r
                      (insert_with_step k v leq f key val l k2 v2 r False)
        (insert_with_step_d k v leq f key val l k2 v2 r q1))
 
-fn replace_left_ordered_witness
+lemma replace_left_ordered_witness
   (k : Type) (v : Type) (leq : k → k → Bool)
   (newL : Tree k v) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (h : Ordered k v leq (Node k v l k2 v2 r))
@@ -3994,7 +3994,7 @@ fn replace_left_ordered_witness
           ordNewL
           (get_ordered_r k v leq l k2 v2 r h)))
 
-fn replace_right_ordered_witness
+lemma replace_right_ordered_witness
   (k : Type) (v : Type) (leq : k → k → Bool)
   (newR : Tree k v) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (h : Ordered k v leq (Node k v l k2 v2 r))
@@ -4010,7 +4010,7 @@ fn replace_right_ordered_witness
           (get_ordered_l k v leq l k2 v2 r h)
           ordNewR))
 
-fn insert_with_step_inner_preserves_all_keys
+lemma insert_with_step_inner_preserves_all_keys
   (k : Type) (v : Type) (leq : k → k → Bool) (p : k → Prop)
   (f : v → v → v) (key : k) (val : v) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (insL : all_keys k v p (insert_with k v leq f key val l))
@@ -4022,7 +4022,7 @@ fn insert_with_step_inner_preserves_all_keys
     False ⇒ and_intro (p k2) (And (all_keys k v p (insert_with k v leq f key val l)) (all_keys k v p r)) hk2 (and_intro (all_keys k v p (insert_with k v leq f key val l)) (all_keys k v p r) insL hr)
   }
 
-fn insert_with_step_preserves_all_keys
+lemma insert_with_step_preserves_all_keys
   (k : Type) (v : Type) (leq : k → k → Bool) (p : k → Prop)
   (f : v → v → v) (key : k) (val : v) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (insL : all_keys k v p (insert_with k v leq f key val l))
@@ -4035,7 +4035,7 @@ fn insert_with_step_preserves_all_keys
 	    False ⇒ and_intro (p k2) (And (all_keys k v p l) (all_keys k v p (insert_with k v leq f key val r))) hk2 (and_intro (all_keys k v p l) (all_keys k v p (insert_with k v leq f key val r)) hl insR)
 	  }
 
-fn insert_with_preserves_all_keys_node
+lemma insert_with_preserves_all_keys_node
   (k : Type) (v : Type) (leq : k → k → Bool) (p : k → Prop)
   (f : v → v → v) (key : k) (val : v) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (insL : all_keys k v p (insert_with k v leq f key val l))
@@ -4044,14 +4044,14 @@ fn insert_with_preserves_all_keys_node
   : all_keys k v p (insert_with k v leq f key val (Node k v l k2 v2 r)) =
   insert_with_step_preserves_all_keys k v leq p f key val l k2 v2 r insL insR hl hr hkey hk2 (leq key k2)
 
-fn insert_with_preserves_all_keys
+lemma insert_with_preserves_all_keys
   (k : Type) (v : Type) (leq : k → k → Bool) (p : k → Prop)
   (f : v → v → v) (key : k) (val : v) (m : Tree k v)
   : all_keys k v p m → p key → all_keys k v p (insert_with k v leq f key val m) =
   match m {
 	    Leaf ⇒ λh. λhkey.
 	      and_intro (p key) (And (all_keys k v p (Leaf k v)) (all_keys k v p (Leaf k v))) hkey
-	        (and_intro (all_keys k v p (Leaf k v)) (all_keys k v p (Leaf k v)) tt tt) ;
+	        (and_intro (all_keys k v p (Leaf k v)) (all_keys k v p (Leaf k v)) Proved Proved) ;
 	    Node l k2 v2 r ⇒ λh. λhkey.
 	      insert_with_preserves_all_keys_node k v leq p f key val l k2 v2 r
 	        (insert_with_preserves_all_keys k v leq p f key val l
@@ -4064,7 +4064,7 @@ fn insert_with_preserves_all_keys
         (and_fst (p k2) (And (all_keys k v p l) (all_keys k v p r)) h)
   }
 
-fn insert_with_dispatch_on_q2
+lemma insert_with_dispatch_on_q2
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (total : (x : k) → (y : k) → Or (Equal Bool (leq x y) True) (Equal Bool (leq y x) True))
@@ -4085,7 +4085,7 @@ fn insert_with_dispatch_on_q2
            (insert_with_preserves_all_keys k v leq (le_below k v leq k2) f key val l (get_below_l k v leq l k2 v2 r h) q1))
   }
 
-fn insert_with_dispatch_on_q1
+lemma insert_with_dispatch_on_q1
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (total : (x : k) → (y : k) → Or (Equal Bool (leq x y) True) (Equal Bool (leq y x) True))
@@ -4104,7 +4104,7 @@ fn insert_with_dispatch_on_q1
               (derive_from_false k leq key k2 q1' total)))
   }
 
-fn insert_with_preserves_ordered
+lemma insert_with_preserves_ordered
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (total : (x : k) → (y : k) → Or (Equal Bool (leq x y) True) (Equal Bool (leq y x) True))
@@ -4114,8 +4114,8 @@ fn insert_with_preserves_ordered
     Leaf ⇒ λh.
       and_intro (all_keys k v (le_below k v leq key) (Leaf k v))
                (And (all_keys k v (le_above k v leq key) (Leaf k v)) (And (Ordered k v leq (Leaf k v)) (Ordered k v leq (Leaf k v))))
-        tt (and_intro (all_keys k v (le_above k v leq key) (Leaf k v)) (And (Ordered k v leq (Leaf k v)) (Ordered k v leq (Leaf k v)))
-             tt (and_intro (Ordered k v leq (Leaf k v)) (Ordered k v leq (Leaf k v)) tt tt)) ;
+        Proved (and_intro (all_keys k v (le_above k v leq key) (Leaf k v)) (And (Ordered k v leq (Leaf k v)) (Ordered k v leq (Leaf k v)))
+             Proved (and_intro (Ordered k v leq (Leaf k v)) (Ordered k v leq (Leaf k v)) Proved Proved)) ;
     Node l k2 v2 r ⇒
       λh.
         insert_with_dispatch_on_q1 k v leq transLeq total f key val l k2 v2 r h
@@ -4140,7 +4140,7 @@ disturb `lookup` at any other key (the `insert_with` analogue of Law 3,
 to the fold step `union`/`from_list` reuse.
 
 ```ken
-fn insert_with_lookup_overwrite_witness
+lemma insert_with_lookup_overwrite_witness
   (k : Type) (v : Type) (leq : k → k → Bool)
   (reflLeq : (x : k) → Equal Bool (leq x x) True)
   (f : v → v → v) (key : k) (val : v) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
@@ -4162,7 +4162,7 @@ fn insert_with_lookup_overwrite_witness
         (insert_with_lookup_result v f val)
         (lookup_stop_bridge k v leq key l k2 v2 r q1 q2)))
 
-fn insert_with_lookup_into_l_witness
+lemma insert_with_lookup_into_l_witness
   (k : Type) (v : Type) (leq : k → k → Bool)
   (f : v → v → v) (key : k) (val : v) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (ihL : Equal (Option v)
@@ -4191,7 +4191,7 @@ fn insert_with_lookup_into_l_witness
           (lookup k v leq key l)
           (lookup_into_l_bridge k v leq key l k2 v2 r q1 q2))))
 
-fn insert_with_lookup_into_r_witness
+lemma insert_with_lookup_into_r_witness
   (k : Type) (v : Type) (leq : k → k → Bool)
   (f : v → v → v) (key : k) (val : v) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (ihR : Equal (Option v)
@@ -4220,7 +4220,7 @@ fn insert_with_lookup_into_r_witness
           (lookup k v leq key r)
           (lookup_into_r_bridge k v leq key l k2 v2 r q1))))
 
-fn insert_with_lookup_dispatch_q2
+lemma insert_with_lookup_dispatch_q2
   (k : Type) (v : Type) (leq : k → k → Bool)
   (reflLeq : (x : k) → Equal Bool (leq x x) True)
   (f : v → v → v) (key : k) (val : v) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
@@ -4247,7 +4247,7 @@ fn insert_with_lookup_dispatch_q2
         (insert_with_lookup_into_l_witness k v leq f key val l k2 v2 r ihL q1 q2')
   }
 
-fn insert_with_lookup_dispatch_q1
+lemma insert_with_lookup_dispatch_q1
   (k : Type) (v : Type) (leq : k → k → Bool)
   (reflLeq : (x : k) → Equal Bool (leq x x) True)
   (f : v → v → v) (key : k) (val : v) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
@@ -4271,7 +4271,7 @@ fn insert_with_lookup_dispatch_q1
         (insert_with_lookup_into_r_witness k v leq f key val l k2 v2 r ihR q1')
   }
 
-fn insert_with_lookup_characterization
+lemma insert_with_lookup_characterization
   (k : Type) (v : Type) (leq : k → k → Bool)
   (reflLeq : (x : k) → Equal Bool (leq x x) True)
   (f : v → v → v) (key : k) (val : v) (m : Tree k v)
@@ -4287,7 +4287,7 @@ fn insert_with_lookup_characterization
         (bool_dichotomy (leq key k2))
   }
 
-fn lookup_replace_l_inner_dispatch
+lemma lookup_replace_l_inner_dispatch
   (k : Type) (v : Type) (leq : k → k → Bool)
   (key' : k) (newL : Tree k v) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (ih : Equal (Option v) (lookup k v leq key' newL) (lookup k v leq key' l))
@@ -4313,7 +4313,7 @@ fn lookup_replace_l_inner_dispatch
              (lookup_into_l_bridge k v leq key' l k2 v2 r hOuter hInnerFalse)))
   }
 
-fn lookup_replace_l_dispatch
+lemma lookup_replace_l_dispatch
   (k : Type) (v : Type) (leq : k → k → Bool)
   (key' : k) (newL : Tree k v) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (ih : Equal (Option v) (lookup k v leq key' newL) (lookup k v leq key' l))
@@ -4331,7 +4331,7 @@ fn lookup_replace_l_dispatch
            (lookup_into_r_bridge k v leq key' l k2 v2 r hOuterFalse))
   }
 
-fn lookup_replace_l_witness
+lemma lookup_replace_l_witness
   (k : Type) (v : Type) (leq : k → k → Bool)
   (key' : k) (newL : Tree k v) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (ih : Equal (Option v) (lookup k v leq key' newL) (lookup k v leq key' l))
@@ -4339,7 +4339,7 @@ fn lookup_replace_l_witness
                       (lookup k v leq key' (Node k v l k2 v2 r)) =
   lookup_replace_l_dispatch k v leq key' newL l k2 v2 r ih (bool_dichotomy (leq key' k2))
 
-fn lookup_replace_r_inner_dispatch
+lemma lookup_replace_r_inner_dispatch
   (k : Type) (v : Type) (leq : k → k → Bool)
   (key' : k) (newR : Tree k v) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (ih : Equal (Option v) (lookup k v leq key' newR) (lookup k v leq key' r))
@@ -4361,7 +4361,7 @@ fn lookup_replace_r_inner_dispatch
            (lookup_into_l_bridge k v leq key' l k2 v2 r hOuter hInnerFalse))
   }
 
-fn lookup_replace_r_dispatch
+lemma lookup_replace_r_dispatch
   (k : Type) (v : Type) (leq : k → k → Bool)
   (key' : k) (newR : Tree k v) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (ih : Equal (Option v) (lookup k v leq key' newR) (lookup k v leq key' r))
@@ -4383,7 +4383,7 @@ fn lookup_replace_r_dispatch
              (lookup_into_r_bridge k v leq key' l k2 v2 r hOuterFalse)))
   }
 
-fn lookup_replace_r_witness
+lemma lookup_replace_r_witness
   (k : Type) (v : Type) (leq : k → k → Bool)
   (key' : k) (newR : Tree k v) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v)
   (ih : Equal (Option v) (lookup k v leq key' newR) (lookup k v leq key' r))
@@ -4391,7 +4391,7 @@ fn lookup_replace_r_witness
                       (lookup k v leq key' (Node k v l k2 v2 r)) =
   lookup_replace_r_dispatch k v leq key' newR l k2 v2 r ih (bool_dichotomy (leq key' k2))
 
-fn insert_with_lookup_locality_q2_dispatch
+lemma insert_with_lookup_locality_q2_dispatch
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (key : k) (key' : k) (val : v) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v) (f : v → v → v)
@@ -4415,7 +4415,7 @@ fn insert_with_lookup_locality_q2_dispatch
         (lookup_replace_l_witness k v leq key' (insert_with k v leq f key val l) l k2 v2 r ihL)
   }
 
-fn insert_with_lookup_locality_node_dispatch
+lemma insert_with_lookup_locality_node_dispatch
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (key : k) (key' : k) (val : v) (l : Tree k v) (k2 : k) (v2 : v) (r : Tree k v) (f : v → v → v)
@@ -4434,7 +4434,7 @@ fn insert_with_lookup_locality_node_dispatch
         (lookup_replace_r_witness k v leq key' (insert_with k v leq f key val r) l k2 v2 r ihR)
   }
 
-fn insert_with_lookup_locality
+lemma insert_with_lookup_locality
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (f : v → v → v) (key : k) (key' : k) (val : v) (m : Tree k v)
@@ -4449,7 +4449,7 @@ fn insert_with_lookup_locality
         (bool_dichotomy (leq key k2))
   }
 
-fn insert_with_fold_step_lookup_locality
+lemma insert_with_fold_step_lookup_locality
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (f : v → v → v) (inserted : k) (key : k) (val : v) (acc : Tree k v)
@@ -4464,7 +4464,7 @@ fn insert_with_fold_step_lookup_locality
       (insert_with k v leq f inserted val acc)
       (insert_with_fold_step_reduces k v leq f inserted val acc))
 
-fn insert_with_fold_step_lookup_hit
+lemma insert_with_fold_step_lookup_hit
   (k : Type) (v : Type) (leq : k → k → Bool)
   (reflLeq : (x : k) → Equal Bool (leq x x) True)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
@@ -4514,7 +4514,7 @@ needed to state the `Set`-level laws in §4.7.11 in terms of `member` while
 proving them via `lookup`.
 
 ```ken
-fn union_from_list_acc_lookup_assoc_hit
+lemma union_from_list_acc_lookup_assoc_hit
   (k : Type) (v : Type) (leq : k → k → Bool)
   (reflLeq : (x : k) → Equal Bool (leq x x) True)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
@@ -4600,7 +4600,7 @@ fn union_from_list_acc_lookup_assoc_hit
               (λleft. union_lookup_table v f left (lookup k v leq query acc))
               (assoc_skip_head_stop_bridge k v leq query e xs2 q1 q2))))))
 
-fn union_from_list_acc_lookup_assoc_miss
+lemma union_from_list_acc_lookup_assoc_miss
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (f : v → v → v) (query : k) (e : Pair k v) (xs2 : List (Pair k v)) (acc : Tree k v)
@@ -4662,7 +4662,7 @@ fn union_from_list_acc_lookup_assoc_miss
             (λleft. union_lookup_table v f left (lookup k v leq query acc))
             assocSkip))))
 
-fn union_from_list_acc_lookup_assoc_inner
+lemma union_from_list_acc_lookup_assoc_inner
   (k : Type) (v : Type) (leq : k → k → Bool)
   (reflLeq : (x : k) → Equal Bool (leq x x) True)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
@@ -4696,7 +4696,7 @@ fn union_from_list_acc_lookup_assoc_inner
         ih
   }
 
-fn union_from_list_acc_lookup_assoc_dispatch
+lemma union_from_list_acc_lookup_assoc_dispatch
   (k : Type) (v : Type) (leq : k → k → Bool)
   (reflLeq : (x : k) → Equal Bool (leq x x) True)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
@@ -4725,7 +4725,7 @@ fn union_from_list_acc_lookup_assoc_dispatch
         ih
   }
 
-fn union_from_list_acc_lookup_assoc
+lemma union_from_list_acc_lookup_assoc
   (k : Type) (v : Type) (leq : k → k → Bool)
   (reflLeq : (x : k) → Equal Bool (leq x x) True)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
@@ -4747,7 +4747,7 @@ fn union_from_list_acc_lookup_assoc
           (bool_dichotomy (leq query (pair_fst k v e)))
   }
 
-fn union_lookup_characterization
+lemma union_lookup_characterization
   (k : Type) (v : Type) (leq : k → k → Bool)
   (reflLeq : (x : k) → Equal Bool (leq x x) True)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
@@ -4771,7 +4771,7 @@ fn union_lookup_characterization
           (assoc k v leq key (to_list k v a))
           (lookup_assoc_agree k v leq transLeq key a hord hdist)))
 
-fn union_lookup_both_none_law
+lemma union_lookup_both_none_law
   (k : Type) (v : Type) (leq : k → k → Bool)
   (reflLeq : (x : k) → Equal Bool (leq x x) True)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
@@ -4797,7 +4797,7 @@ fn union_lookup_both_none_law
           ha)
         hb)
 
-fn union_lookup_left_only_law
+lemma union_lookup_left_only_law
   (k : Type) (v : Type) (leq : k → k → Bool)
   (reflLeq : (x : k) → Equal Bool (leq x x) True)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
@@ -4827,7 +4827,7 @@ fn union_lookup_left_only_law
           (λright. union_lookup_table v f (Some v x) right)
           hb))
 
-fn union_lookup_right_only_law
+lemma union_lookup_right_only_law
   (k : Type) (v : Type) (leq : k → k → Bool)
   (reflLeq : (x : k) → Equal Bool (leq x x) True)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
@@ -4853,7 +4853,7 @@ fn union_lookup_right_only_law
           ha)
         hb)
 
-fn union_lookup_both_some_law
+lemma union_lookup_both_some_law
   (k : Type) (v : Type) (leq : k → k → Bool)
   (reflLeq : (x : k) → Equal Bool (leq x x) True)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
@@ -4883,7 +4883,7 @@ fn union_lookup_both_some_law
           (λright. union_lookup_table v f (Some v x) right)
           hb))
 
-fn member_from_lookup_none
+lemma member_from_lookup_none
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (m : Tree k v)
   (h : Equal (Option v) (lookup k v leq key m) (None v))
   : Equal Bool (member k v leq key m) False =
@@ -4893,7 +4893,7 @@ fn member_from_lookup_none
     (λo. match o { None ⇒ False ; Some x ⇒ True })
     h
 
-fn member_from_lookup_some
+lemma member_from_lookup_some
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (m : Tree k v) (val : v)
   (h : Equal (Option v) (lookup k v leq key m) (Some v val))
   : Equal Bool (member k v leq key m) True =
@@ -4903,18 +4903,18 @@ fn member_from_lookup_some
     (option_is_some v)
     h
 
-fn lookup_none_from_member_false_hit
+lemma lookup_none_from_member_false_hit
   (v : Type) (val : v)
   (h : Equal Bool True False)
   : Equal (Option v) (Some v val) (None v) =
   absurd h
 
-fn lookup_none_from_member_false
+lemma lookup_none_from_member_false
   (k : Type) (v : Type) (leq : k → k → Bool) (key : k) (m : Tree k v)
   : Equal Bool (member k v leq key m) False →
     Equal (Option v) (lookup k v leq key m) (None v) =
   match m {
-    Leaf ⇒ λh. tt ;
+    Leaf ⇒ λh. Proved ;
     Node l k2 v2 r ⇒
       match leq key k2 {
         True ⇒
@@ -4926,17 +4926,17 @@ fn lookup_none_from_member_false
       }
   }
 
-fn lookup_unit_some_from_member_true_leaf
+lemma lookup_unit_some_from_member_true_leaf
   (h : Equal Bool False True)
   : Equal (Option Unit) (None Unit) (Some Unit MkUnit) =
   absurd h
 
-fn lookup_unit_some_from_member_true_hit
+lemma lookup_unit_some_from_member_true_hit
   (val : Unit) (h : Equal Bool True True)
   : Equal (Option Unit) (Some Unit val) (Some Unit MkUnit) =
-  match val { MkUnit ⇒ tt }
+  match val { MkUnit ⇒ Proved }
 
-fn lookup_unit_some_from_member_true
+lemma lookup_unit_some_from_member_true
   (k : Type) (leq : k → k → Bool) (key : k) (m : Tree k Unit)
   : Equal Bool (member k Unit leq key m) True →
     Equal (Option Unit) (lookup k Unit leq key m) (Some Unit MkUnit) =
@@ -4953,7 +4953,7 @@ fn lookup_unit_some_from_member_true
       }
   }
 
-fn not_order_equiv_from_member_true_false
+lemma not_order_equiv_from_member_true_false
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (inserted : k) (query : k) (keep : Tree k v)
@@ -4970,7 +4970,7 @@ fn not_order_equiv_from_member_true_false
         (member_order_equiv_agree k v leq transLeq inserted query keep heq)
         hQuery))
 
-fn not_order_equiv_from_member_false_true
+lemma not_order_equiv_from_member_false_true
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (inserted : k) (query : k) (reject : Tree k v)
@@ -5000,7 +5000,7 @@ same locality/hit/miss dispatch pattern as `union`'s characterization
 filter-by-lookup shape.
 
 ```ken
-fn intersection_from_list_acc_lookup_none_dispatch
+lemma intersection_from_list_acc_lookup_none_dispatch
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (key : k) (e : Pair k v) (xs2 : List (Pair k v)) (keep : Tree k v) (acc : Tree k v)
@@ -5048,7 +5048,7 @@ fn intersection_from_list_acc_lookup_none_dispatch
         (intersection_from_list_acc_lookup_none k v leq transLeq key xs2 keep acc hKeep hAcc)
   }
 
-fn intersection_from_list_acc_lookup_none
+lemma intersection_from_list_acc_lookup_none
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (key : k) (xs : List (Pair k v)) (keep : Tree k v) (acc : Tree k v)
@@ -5063,7 +5063,7 @@ fn intersection_from_list_acc_lookup_none
           (bool_dichotomy (member k v leq (pair_fst k v e) keep))
   }
 
-fn intersection_lookup_characterization
+lemma intersection_lookup_characterization
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (key : k) (a : Tree k v) (b : Tree k v)
@@ -5074,7 +5074,7 @@ fn intersection_lookup_characterization
       (member_from_lookup_none k v leq key b hb)
       (lookup_empty_is_none k v leq key)
 
-fn intersection_from_list_acc_lookup_locality_dispatch
+lemma intersection_from_list_acc_lookup_locality_dispatch
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (key : k) (e : Pair k v) (xs2 : List (Pair k v)) (keep : Tree k v) (acc : Tree k v)
@@ -5131,7 +5131,7 @@ fn intersection_from_list_acc_lookup_locality_dispatch
             (all_in_list k v (not_order_equiv_to_key k leq key) xs2) hskip))
   }
 
-fn intersection_from_list_acc_lookup_locality
+lemma intersection_from_list_acc_lookup_locality
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (key : k) (xs : List (Pair k v)) (keep : Tree k v) (acc : Tree k v)
@@ -5147,7 +5147,7 @@ fn intersection_from_list_acc_lookup_locality
           (bool_dichotomy (member k v leq (pair_fst k v e) keep))
   }
 
-fn intersection_from_list_acc_lookup_some_hit
+lemma intersection_from_list_acc_lookup_some_hit
   (k : Type) (v : Type) (leq : k → k → Bool)
   (reflLeq : (x : k) → Equal Bool (leq x x) True)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
@@ -5209,7 +5209,7 @@ fn intersection_from_list_acc_lookup_some_hit
             (assoc_skip_head_stop_bridge k v leq key e xs2 q1 q2))
           hAssoc)))
 
-fn intersection_from_list_acc_lookup_some_miss_dispatch
+lemma intersection_from_list_acc_lookup_some_miss_dispatch
   (k : Type) (v : Type) (leq : k → k → Bool)
   (reflLeq : (x : k) → Equal Bool (leq x x) True)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
@@ -5253,7 +5253,7 @@ fn intersection_from_list_acc_lookup_some_miss_dispatch
           hTail hAssocTail hMember)
   }
 
-fn intersection_from_list_acc_lookup_some_inner
+lemma intersection_from_list_acc_lookup_some_inner
   (k : Type) (v : Type) (leq : k → k → Bool)
   (reflLeq : (x : k) → Equal Bool (leq x x) True)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
@@ -5287,7 +5287,7 @@ fn intersection_from_list_acc_lookup_some_inner
         (bool_dichotomy (member k v leq (pair_fst k v e) keep))
   }
 
-fn intersection_from_list_acc_lookup_some_dispatch
+lemma intersection_from_list_acc_lookup_some_dispatch
   (k : Type) (v : Type) (leq : k → k → Bool)
   (reflLeq : (x : k) → Equal Bool (leq x x) True)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
@@ -5321,7 +5321,7 @@ fn intersection_from_list_acc_lookup_some_dispatch
         (bool_dichotomy (member k v leq (pair_fst k v e) keep))
   }
 
-fn intersection_from_list_acc_lookup_some
+lemma intersection_from_list_acc_lookup_some
   (k : Type) (v : Type) (leq : k → k → Bool)
   (reflLeq : (x : k) → Equal Bool (leq x x) True)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
@@ -5340,7 +5340,7 @@ fn intersection_from_list_acc_lookup_some
           (bool_dichotomy (leq key (pair_fst k v e)))
   }
 
-fn intersection_lookup_some_law
+lemma intersection_lookup_some_law
   (k : Type) (v : Type) (leq : k → k → Bool)
   (reflLeq : (x : k) → Equal Bool (leq x x) True)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
@@ -5363,7 +5363,7 @@ fn intersection_lookup_some_law
         ha)
       hmem
 
-fn intersection_lookup_left_none_law
+lemma intersection_lookup_left_none_law
   (k : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (key : k) (a : Tree k Unit) (b : Tree k Unit)
@@ -5400,7 +5400,7 @@ two input trees, the same three-way structure `intersection`'s
 characterization uses.
 
 ```ken
-fn difference_from_list_acc_lookup_locality_dispatch
+lemma difference_from_list_acc_lookup_locality_dispatch
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (key : k) (e : Pair k v) (xs2 : List (Pair k v)) (reject : Tree k v) (acc : Tree k v)
@@ -5457,7 +5457,7 @@ fn difference_from_list_acc_lookup_locality_dispatch
                 (all_in_list k v (not_order_equiv_to_key k leq key) xs2) hskip))))
   }
 
-fn difference_from_list_acc_lookup_locality
+lemma difference_from_list_acc_lookup_locality
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (key : k) (xs : List (Pair k v)) (reject : Tree k v) (acc : Tree k v)
@@ -5473,7 +5473,7 @@ fn difference_from_list_acc_lookup_locality
           (bool_dichotomy (member k v leq (pair_fst k v e) reject))
   }
 
-fn difference_from_list_acc_lookup_none_dispatch
+lemma difference_from_list_acc_lookup_none_dispatch
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (key : k) (e : Pair k v) (xs2 : List (Pair k v)) (reject : Tree k v) (acc : Tree k v)
@@ -5521,7 +5521,7 @@ fn difference_from_list_acc_lookup_none_dispatch
             hAcc))
   }
 
-fn difference_from_list_acc_lookup_none
+lemma difference_from_list_acc_lookup_none
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (key : k) (xs : List (Pair k v)) (reject : Tree k v) (acc : Tree k v)
@@ -5536,7 +5536,7 @@ fn difference_from_list_acc_lookup_none
           (bool_dichotomy (member k v leq (pair_fst k v e) reject))
   }
 
-fn difference_from_list_acc_lookup_keep_hit
+lemma difference_from_list_acc_lookup_keep_hit
   (k : Type) (v : Type) (leq : k → k → Bool)
   (reflLeq : (x : k) → Equal Bool (leq x x) True)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
@@ -5596,7 +5596,7 @@ fn difference_from_list_acc_lookup_keep_hit
             (λleft. difference_lookup_table v left False (lookup k v leq key acc))
             (assoc_skip_head_stop_bridge k v leq key e xs2 q1 q2)))))
 
-fn difference_from_list_acc_lookup_keep_miss_dispatch
+lemma difference_from_list_acc_lookup_keep_miss_dispatch
   (k : Type) (v : Type) (leq : k → k → Bool)
   (reflLeq : (x : k) → Equal Bool (leq x x) True)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
@@ -5677,7 +5677,7 @@ fn difference_from_list_acc_lookup_keep_miss_dispatch
                 assocSkip))))
   }
 
-fn difference_from_list_acc_lookup_keep_inner
+lemma difference_from_list_acc_lookup_keep_inner
   (k : Type) (v : Type) (leq : k → k → Bool)
   (reflLeq : (x : k) → Equal Bool (leq x x) True)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
@@ -5703,7 +5703,7 @@ fn difference_from_list_acc_lookup_keep_inner
         (bool_dichotomy (member k v leq (pair_fst k v e) reject))
   }
 
-fn difference_from_list_acc_lookup_keep_dispatch
+lemma difference_from_list_acc_lookup_keep_dispatch
   (k : Type) (v : Type) (leq : k → k → Bool)
   (reflLeq : (x : k) → Equal Bool (leq x x) True)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
@@ -5729,7 +5729,7 @@ fn difference_from_list_acc_lookup_keep_dispatch
         (bool_dichotomy (member k v leq (pair_fst k v e) reject))
   }
 
-fn difference_from_list_acc_lookup_keep
+lemma difference_from_list_acc_lookup_keep
   (k : Type) (v : Type) (leq : k → k → Bool)
   (reflLeq : (x : k) → Equal Bool (leq x x) True)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
@@ -5747,7 +5747,7 @@ fn difference_from_list_acc_lookup_keep
           (bool_dichotomy (leq key (pair_fst k v e)))
   }
 
-fn difference_lookup_characterization_reject
+lemma difference_lookup_characterization_reject
   (k : Type) (v : Type) (leq : k → k → Bool)
   (reflLeq : (x : k) → Equal Bool (leq x x) True)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
@@ -5767,7 +5767,7 @@ fn difference_lookup_characterization_reject
       (None v)
       (difference_lookup_expected_true k v leq key a b qReject))
 
-fn difference_lookup_characterization_keep
+lemma difference_lookup_characterization_keep
   (k : Type) (v : Type) (leq : k → k → Bool)
   (reflLeq : (x : k) → Equal Bool (leq x x) True)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
@@ -5809,7 +5809,7 @@ fn difference_lookup_characterization_keep
           (lookup k v leq key a)
           (difference_lookup_expected_false k v leq key a b qKeep))))
 
-fn difference_lookup_characterization_dispatch
+lemma difference_lookup_characterization_dispatch
   (k : Type) (v : Type) (leq : k → k → Bool)
   (reflLeq : (x : k) → Equal Bool (leq x x) True)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
@@ -5823,7 +5823,7 @@ fn difference_lookup_characterization_dispatch
     Inr qKeep ⇒ difference_lookup_characterization_keep k v leq reflLeq transLeq key a b hord hdist qKeep
   }
 
-fn difference_lookup_characterization
+lemma difference_lookup_characterization
   (k : Type) (v : Type) (leq : k → k → Bool)
   (reflLeq : (x : k) → Equal Bool (leq x x) True)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
@@ -5846,7 +5846,7 @@ with their own filter-then-rebuild construction, closing the
 Ordered-preservation obligation for every Layer-2 combinator.
 
 ```ken
-fn insert_with_fold_step_preserves_ordered
+lemma insert_with_fold_step_preserves_ordered
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (total : (x : k) → (y : k) → Or (Equal Bool (leq x y) True) (Equal Bool (leq y x) True))
@@ -5860,7 +5860,7 @@ fn insert_with_fold_step_preserves_ordered
         (insert_with k v leq f key val acc)
         (insert_with_fold_step_reduces k v leq f key val acc))
 
-fn fold_insert_with_preserves_ordered
+lemma fold_insert_with_preserves_ordered
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (total : (x : k) → (y : k) → Or (Equal Bool (leq x y) True) (Equal Bool (leq y x) True))
@@ -5877,7 +5877,7 @@ fn fold_insert_with_preserves_ordered
             (fold_insert_with_preserves_ordered k v leq transLeq total f l acc h))
   }
 
-fn union_from_list_acc_preserves_ordered
+lemma union_from_list_acc_preserves_ordered
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (total : (x : k) → (y : k) → Or (Equal Bool (leq x y) True) (Equal Bool (leq y x) True))
@@ -5893,7 +5893,7 @@ fn union_from_list_acc_preserves_ordered
             (pair_fst k v e) (pair_snd k v e) acc h)
   }
 
-fn union_preserves_ordered
+lemma union_preserves_ordered
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (total : (x : k) → (y : k) → Or (Equal Bool (leq x y) True) (Equal Bool (leq y x) True))
@@ -5901,7 +5901,7 @@ fn union_preserves_ordered
   : Ordered k v leq b → Ordered k v leq (union k v leq f a b) =
   union_from_list_acc_preserves_ordered k v leq transLeq total f (to_list k v a) b
 
-fn intersection_from_list_acc_preserves_ordered_dispatch
+lemma intersection_from_list_acc_preserves_ordered_dispatch
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (total : (x : k) → (y : k) → Or (Equal Bool (leq x y) True) (Equal Bool (leq y x) True))
@@ -5930,7 +5930,7 @@ fn intersection_from_list_acc_preserves_ordered_dispatch
           (intersection_from_list_acc_false_bridge k v leq e xs2 keep acc q))
   }
 
-fn intersection_from_list_acc_preserves_ordered
+lemma intersection_from_list_acc_preserves_ordered
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (total : (x : k) → (y : k) → Or (Equal Bool (leq x y) True) (Equal Bool (leq y x) True))
@@ -5944,7 +5944,7 @@ fn intersection_from_list_acc_preserves_ordered
           (bool_dichotomy (member k v leq (pair_fst k v e) keep))
   }
 
-fn intersection_preserves_ordered
+lemma intersection_preserves_ordered
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (total : (x : k) → (y : k) → Or (Equal Bool (leq x y) True) (Equal Bool (leq y x) True))
@@ -5952,7 +5952,7 @@ fn intersection_preserves_ordered
   : Ordered k v leq (intersection k v leq a b) =
   intersection_from_list_acc_preserves_ordered k v leq transLeq total (to_list k v a) b (empty k v) (ordered_empty k v leq)
 
-fn difference_from_list_acc_preserves_ordered_dispatch
+lemma difference_from_list_acc_preserves_ordered_dispatch
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (total : (x : k) → (y : k) → Or (Equal Bool (leq x y) True) (Equal Bool (leq y x) True))
@@ -5981,7 +5981,7 @@ fn difference_from_list_acc_preserves_ordered_dispatch
           (difference_from_list_acc_false_bridge k v leq e xs2 reject acc q))
   }
 
-fn difference_from_list_acc_preserves_ordered
+lemma difference_from_list_acc_preserves_ordered
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (total : (x : k) → (y : k) → Or (Equal Bool (leq x y) True) (Equal Bool (leq y x) True))
@@ -5995,7 +5995,7 @@ fn difference_from_list_acc_preserves_ordered
           (bool_dichotomy (member k v leq (pair_fst k v e) reject))
   }
 
-fn difference_preserves_ordered
+lemma difference_preserves_ordered
   (k : Type) (v : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (total : (x : k) → (y : k) → Or (Equal Bool (leq x y) True) (Equal Bool (leq y x) True))
@@ -6030,7 +6030,7 @@ fn set_intersection (k : Type) (leq : k → k → Bool) (s : Tree k Unit) (t : T
 fn set_difference (k : Type) (leq : k → k → Bool) (s : Tree k Unit) (t : Tree k Unit) : Tree k Unit =
   difference k Unit leq s t
 
-fn set_union_member_law
+lemma set_union_member_law
   (k : Type) (leq : k → k → Bool)
   (reflLeq : (x : k) → Equal Bool (leq x x) True)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
@@ -6056,7 +6056,7 @@ fn set_union_member_law
         (union_lookup_characterization k Unit leq reflLeq transLeq unit_combine x s t hord hdist))
       (union_lookup_table_member (lookup k Unit leq x s) (lookup k Unit leq x t))
 
-fn set_intersection_member_left_false_rhs
+lemma set_intersection_member_left_false_rhs
   (k : Type) (leq : k → k → Bool) (x : k) (s : Tree k Unit) (t : Tree k Unit)
   (hLeft : Equal Bool (set_member k leq x s) False)
   : Equal Bool (bool_and (set_member k leq x s) (set_member k leq x t)) False =
@@ -6069,9 +6069,9 @@ fn set_intersection_member_left_false_rhs
       False
       (λleft. bool_and left (set_member k leq x t))
       hLeft)
-    tt
+    Proved
 
-fn set_intersection_member_right_false_rhs
+lemma set_intersection_member_right_false_rhs
   (k : Type) (leq : k → k → Bool) (x : k) (s : Tree k Unit) (t : Tree k Unit)
   (hLeft : Equal Bool (set_member k leq x s) True)
   (hRight : Equal Bool (set_member k leq x t) False)
@@ -6094,9 +6094,9 @@ fn set_intersection_member_right_false_rhs
         False
         (λright. bool_and True right)
         hRight)
-      tt)
+      Proved)
 
-fn set_intersection_member_both_true_rhs
+lemma set_intersection_member_both_true_rhs
   (k : Type) (leq : k → k → Bool) (x : k) (s : Tree k Unit) (t : Tree k Unit)
   (hLeft : Equal Bool (set_member k leq x s) True)
   (hRight : Equal Bool (set_member k leq x t) True)
@@ -6119,9 +6119,9 @@ fn set_intersection_member_both_true_rhs
         True
         (λright. bool_and True right)
         hRight)
-      tt)
+      Proved)
 
-fn set_intersection_member_left_false_case
+lemma set_intersection_member_left_false_case
   (k : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (x : k) (s : Tree k Unit) (t : Tree k Unit)
@@ -6141,7 +6141,7 @@ fn set_intersection_member_left_false_case
       False
       (set_intersection_member_left_false_rhs k leq x s t hLeft))
 
-fn set_intersection_member_right_false_case
+lemma set_intersection_member_right_false_case
   (k : Type) (leq : k → k → Bool)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
   (x : k) (s : Tree k Unit) (t : Tree k Unit)
@@ -6162,7 +6162,7 @@ fn set_intersection_member_right_false_case
       False
       (set_intersection_member_right_false_rhs k leq x s t hLeft hRight))
 
-fn set_intersection_member_both_true_case
+lemma set_intersection_member_both_true_case
   (k : Type) (leq : k → k → Bool)
   (reflLeq : (x : k) → Equal Bool (leq x x) True)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
@@ -6186,7 +6186,7 @@ fn set_intersection_member_both_true_case
       True
       (set_intersection_member_both_true_rhs k leq x s t hLeft hRight))
 
-fn set_intersection_member_right_dispatch
+lemma set_intersection_member_right_dispatch
   (k : Type) (leq : k → k → Bool)
   (reflLeq : (x : k) → Equal Bool (leq x x) True)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
@@ -6202,7 +6202,7 @@ fn set_intersection_member_right_dispatch
     Inr hRight ⇒ set_intersection_member_right_false_case k leq transLeq x s t hLeft hRight
   }
 
-fn set_intersection_member_dispatch
+lemma set_intersection_member_dispatch
   (k : Type) (leq : k → k → Bool)
   (reflLeq : (x : k) → Equal Bool (leq x x) True)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
@@ -6218,7 +6218,7 @@ fn set_intersection_member_dispatch
     Inr hLeft ⇒ set_intersection_member_left_false_case k leq transLeq x s t hord hdist hLeft
   }
 
-fn set_intersection_member_law
+lemma set_intersection_member_law
   (k : Type) (leq : k → k → Bool)
   (reflLeq : (x : k) → Equal Bool (leq x x) True)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
@@ -6231,7 +6231,7 @@ fn set_intersection_member_law
     set_intersection_member_dispatch k leq reflLeq transLeq x s t hord hdist
       (bool_dichotomy (set_member k leq x s))
 
-fn set_difference_member_law
+lemma set_difference_member_law
   (k : Type) (leq : k → k → Bool)
   (reflLeq : (x : k) → Equal Bool (leq x x) True)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
@@ -6252,13 +6252,13 @@ fn set_difference_member_law
         (difference_lookup_characterization k Unit leq reflLeq transLeq x s t hord hdist))
       (difference_lookup_expected_member k leq x s t)
 
-fn set_member_empty_false
+lemma set_member_empty_false
   (k : Type) (leq : k → k → Bool) (x : k)
   : Equal Bool (set_member k leq x (empty k Unit)) False =
   member_from_lookup_none k Unit leq x (empty k Unit)
     (lookup_empty_is_none k Unit leq x)
 
-fn set_union_comm_law
+lemma set_union_comm_law
   (k : Type) (leq : k → k → Bool)
   (reflLeq : (x : k) → Equal Bool (leq x x) True)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
@@ -6284,7 +6284,7 @@ fn set_union_comm_law
           (cat4_bool_or (set_member k leq x t) (set_member k leq x s))
           (set_union_member_law k leq reflLeq transLeq x t s hordT hdistT)))
 
-fn set_union_assoc_law
+lemma set_union_assoc_law
   (k : Type) (leq : k → k → Bool)
   (reflLeq : (x : k) → Equal Bool (leq x x) True)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
@@ -6332,7 +6332,7 @@ fn set_union_assoc_law
               (cat4_bool_or (set_member k leq x a) (set_member k leq x (set_union k leq b c)))
               (set_union_member_law k leq reflLeq transLeq x a (set_union k leq b c) hordA hdistA)))))
 
-fn set_union_idempotent_law
+lemma set_union_idempotent_law
   (k : Type) (leq : k → k → Bool)
   (reflLeq : (x : k) → Equal Bool (leq x x) True)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
@@ -6349,7 +6349,7 @@ fn set_union_idempotent_law
       (set_union_member_law k leq reflLeq transLeq x s s hord hdist)
       (cat4_bool_or_idempotent (set_member k leq x s))
 
-fn set_union_identity_law
+lemma set_union_identity_law
   (k : Type) (leq : k → k → Bool)
   (reflLeq : (x : k) → Equal Bool (leq x x) True)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
@@ -6395,7 +6395,7 @@ fn set_union_identity_law
             (set_member_empty_false k leq x))
           (cat4_bool_or_right_identity (set_member k leq x s))))
 
-fn set_intersection_comm_law
+lemma set_intersection_comm_law
   (k : Type) (leq : k → k → Bool)
   (reflLeq : (x : k) → Equal Bool (leq x x) True)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
@@ -6421,7 +6421,7 @@ fn set_intersection_comm_law
           (bool_and (set_member k leq x t) (set_member k leq x s))
           (set_intersection_member_law k leq reflLeq transLeq x t s hordT hdistT)))
 
-fn set_intersection_assoc_law
+lemma set_intersection_assoc_law
   (k : Type) (leq : k → k → Bool)
   (reflLeq : (x : k) → Equal Bool (leq x x) True)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
@@ -6469,7 +6469,7 @@ fn set_intersection_assoc_law
               (bool_and (set_member k leq x a) (set_member k leq x (set_intersection k leq b c)))
               (set_intersection_member_law k leq reflLeq transLeq x a (set_intersection k leq b c) hordA hdistA)))))
 
-fn set_intersection_idempotent_law
+lemma set_intersection_idempotent_law
   (k : Type) (leq : k → k → Bool)
   (reflLeq : (x : k) → Equal Bool (leq x x) True)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
@@ -6486,7 +6486,7 @@ fn set_intersection_idempotent_law
       (set_intersection_member_law k leq reflLeq transLeq x s s hord hdist)
       (bool_and_idempotent (set_member k leq x s))
 
-fn set_intersection_identity_law
+lemma set_intersection_identity_law
   (k : Type) (leq : k → k → Bool)
   (reflLeq : (x : k) → Equal Bool (leq x x) True)
   (transLeq : (x : k) → (y : k) → (z : k) → Equal Bool (leq x y) True → Equal Bool (leq y z) True → Equal Bool (leq x z) True)
@@ -6525,12 +6525,12 @@ fn pair_vals (k : Type) (v : Type) (xs : List (Pair k v)) : List v =
     Cons p xs2 ⇒ Cons v (pair_snd k v p) (pair_vals k v xs2)
   }
 
-fn pair_keys_preserves_sorted_cons
+lemma pair_keys_preserves_sorted_cons
   (k : Type) (v : Type) (leq : k → k → Bool) (e : Pair k v) (xs2 : List (Pair k v))
   : is_sorted (Pair k v) (pair_leq k v leq) (Cons (Pair k v) e xs2) →
     is_sorted k leq (pair_keys k v (Cons (Pair k v) e xs2)) =
   match xs2 {
-    Nil ⇒ λh. tt ;
+    Nil ⇒ λh. Proved ;
     Cons e2 xs3 ⇒
       λh.
         and_intro (Equal Bool (leq (pair_fst k v e) (pair_fst k v e2)) True)
@@ -6544,11 +6544,11 @@ fn pair_keys_preserves_sorted_cons
                     h))
   }
 
-fn pair_keys_preserves_sorted
+lemma pair_keys_preserves_sorted
   (k : Type) (v : Type) (leq : k → k → Bool) (xs : List (Pair k v))
   : is_sorted (Pair k v) (pair_leq k v leq) xs → is_sorted k leq (pair_keys k v xs) =
   match xs {
-    Nil ⇒ λh. tt ;
+    Nil ⇒ λh. Proved ;
     Cons e xs2 ⇒
       pair_keys_preserves_sorted_cons k v leq e xs2
   }
@@ -6559,15 +6559,15 @@ fn keys (k : Type) (v : Type) (m : Tree k v) : List k =
 fn values (k : Type) (v : Type) (m : Tree k v) : List v =
   pair_vals k v (to_list k v m)
 
-fn keys_project_to_list (k : Type) (v : Type) (m : Tree k v)
+lemma keys_project_to_list (k : Type) (v : Type) (m : Tree k v)
   : Equal (List k) (keys k v m) (pair_keys k v (to_list k v m)) =
   Refl
 
-fn values_project_to_list (k : Type) (v : Type) (m : Tree k v)
+lemma values_project_to_list (k : Type) (v : Type) (m : Tree k v)
   : Equal (List v) (values k v m) (pair_vals k v (to_list k v m)) =
   Refl
 
-fn keys_values_projection_coherence (k : Type) (v : Type) (m : Tree k v)
+lemma keys_values_projection_coherence (k : Type) (v : Type) (m : Tree k v)
   : And
       (Equal (List k) (keys k v m) (pair_keys k v (to_list k v m)))
       (Equal (List v) (values k v m) (pair_vals k v (to_list k v m))) =
@@ -6577,7 +6577,7 @@ fn keys_values_projection_coherence (k : Type) (v : Type) (m : Tree k v)
     (keys_project_to_list k v m)
     (values_project_to_list k v m)
 
-fn keys_ascending
+lemma keys_ascending
   (k : Type) (v : Type) (leq : k → k → Bool) (m : Tree k v)
   : Ordered k v leq m → is_sorted k leq (keys k v m) =
   λh. pair_keys_preserves_sorted k v leq (to_list k v m) (to_list_ordered k v leq m h)

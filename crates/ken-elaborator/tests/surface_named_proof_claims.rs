@@ -54,7 +54,7 @@ fn local_prop_intro_resolves_through_the_family_name() {
         prop HasProof (a : Type) : Omega where {
           intro : HasProof a
         }
-        const consume (a : Type) : HasProof a = HasProof.intro a
+        lemma consume (a : Type) : HasProof a = HasProof.intro a
         "#,
     );
 
@@ -68,7 +68,7 @@ fn standalone_lemma_is_checked_in_ordinary_namespace() {
     let env = elaborate_ok(
         r#"
         lemma int_self (x : Int) : Equal Int x x = Refl
-        fn consume (x : Int) : Equal Int x x = int_self x
+        lemma consume (x : Int) : Equal Int x x = int_self x
         "#,
     );
 
@@ -82,8 +82,8 @@ fn attached_proof_canonical_path_and_selector_both_resolve() {
         r#"
         fn id (x : Int) : Int = x
         proof id_self for id (x : Int) : Equal Int (id x) x = Refl
-        fn consume_path (x : Int) : Equal Int (id x) x = id::id_self x
-        fn consume_selector (x : Int) : Equal Int (id x) x =
+        lemma consume_path (x : Int) : Equal Int (id x) x = id::id_self x
+        lemma consume_selector (x : Int) : Equal Int (id x) x =
           (proof id_self for id) x
         "#,
     );
@@ -101,7 +101,7 @@ fn bare_attached_proof_name_is_not_in_ordinary_namespace() {
         r#"
         fn id (x : Int) : Int = x
         proof id_self for id (x : Int) : Equal Int (id x) x = Refl
-        fn bad (x : Int) : Equal Int (id x) x = id_self x
+        lemma bad (x : Int) : Equal Int (id x) x = id_self x
         "#,
     );
 
@@ -210,7 +210,7 @@ fn module_selective_import_exposes_canonical_attached_proof_only() {
           pub proof id_self for id (x : Int) : Equal Int (id x) x = Refl
         }
         import M (id)
-        fn consume (x : Int) : Equal Int (id x) x = id::id_self x
+        lemma consume (x : Int) : Equal Int (id x) x = id::id_self x
         "#,
     );
 
@@ -229,7 +229,7 @@ fn module_selective_import_exposes_prop_intro_without_bare_intro() {
           }
         }
         import M (HasProof)
-        const consume (a : Type) : HasProof a = HasProof.intro a
+        lemma consume (a : Type) : HasProof a = HasProof.intro a
         "#,
     );
 
@@ -248,7 +248,7 @@ fn qualified_module_import_exposes_prop_intro_through_family_path() {
           }
         }
         import M
-        const consume (a : Type) : M.HasProof a = M.HasProof.intro a
+        lemma consume (a : Type) : M.HasProof a = M.HasProof.intro a
         "#,
     );
 

@@ -19,14 +19,14 @@ use num_bigint::BigInt;
 /// elaborates directly to `Term::IntLit` (structural check on the ACTUAL
 /// declaration body `elab_num_lit_infer` produced, not a hand-built term),
 /// and referencing it twice in an `Equal Int` goal reduces to `Top` and
-/// accepts `tt` end to end from real surface syntax.
+/// accepts `Proved` end to end from real surface syntax.
 ///
 /// (The literal itself is written in EXPRESSION position — `= 5` — and
 /// referenced by name in the type position, `Equal Int five five`, rather
 /// than written directly as `Equal Int 5 5`: the surface type-annotation
 /// grammar doesn't accept a bare numeric-literal argument today — confirmed
-/// pre-existing and orthogonal to this WP, `const b : Equal Bool True True`
-/// parses fine, `const a : Equal Int 5 5` doesn't, `Equal Int x x` with a
+/// pre-existing and orthogonal to this WP, `lemma b : Equal Bool True True`
+/// parses fine, `lemma a : Equal Int 5 5` doesn't, `Equal Int x x` with a
 /// variable does. DS-6c is emission/wiring only, not a parser change, so
 /// this works within the existing grammar rather than extending it.)
 #[test]
@@ -48,8 +48,8 @@ fn real_int_literal_elaborates_to_intlit_and_tt_checks_end_to_end() {
     );
 
     let id = env
-        .elaborate_decl("const int_5_eq_5 : Equal Int five five = tt")
-        .expect("tt must check against the reduced Top goal");
+        .elaborate_decl("lemma int_5_eq_5 : Equal Int five five = Proved")
+        .expect("Proved must check against the reduced Top goal");
     let (_, ty) = env.env.const_type(id).expect("declared type must be recorded");
     let ctx = Context::new();
     let reduced = whnf(&env.env, &ctx, &ty);
@@ -61,7 +61,7 @@ fn real_int_literal_elaborates_to_intlit_and_tt_checks_end_to_end() {
 }
 
 /// AC1 — surface reachability, negative arm: `Equal Int 5 6` reduces to
-/// `Bottom`, and BOTH `tt` and `Refl` are rejected against it — specific
+/// `Bottom`, and BOTH `Proved` and `Refl` are rejected against it — specific
 /// `TypeMismatch`, not bare `is_err()` (per the Architect's correction:
 /// `Bottom` has no valid introduction form at all, so `Refl` doesn't fail
 /// via `BadEliminator` here — the whnf'd goal isn't even `Eq`-shaped by the
@@ -73,8 +73,8 @@ fn real_distinct_int_literals_reduce_to_bottom_and_reject_tt_and_refl() {
     env.elaborate_decl("const six : Int = 6").expect("six");
 
     let err_tt = env
-        .elaborate_decl("const int_5_eq_6_tt : Equal Int five six = tt")
-        .expect_err("tt must not prove Equal Int five six");
+        .elaborate_decl("lemma int_5_eq_6_tt : Equal Int five six = Proved")
+        .expect_err("Proved must not prove Equal Int five six");
     assert!(
         matches!(
             &err_tt,
@@ -88,16 +88,16 @@ fn real_distinct_int_literals_reduce_to_bottom_and_reject_tt_and_refl() {
     );
 
     // `Refl`'s rejection is a DIFFERENT (but equally specific) ElabError
-    // variant than `tt`'s: the elaborator's own surface handling of `Refl`
+    // variant than `Proved`'s: the elaborator's own surface handling of `Refl`
     // must inspect the expected type's shape to infer `Refl`'s witness
     // BEFORE ever dispatching into the kernel, so it short-circuits with
     // its own `ElabError::TypeMismatch{reason: "Refl expects an
     // `Eq`-shaped goal"}` diagnostic rather than reaching
-    // `KernelRejected(KernelError::TypeMismatch)` the way `tt` does.
+    // `KernelRejected(KernelError::TypeMismatch)` the way `Proved` does.
     // Asserting the SPECIFIC variant each path actually produces, not
     // assuming both funnel through the same one.
     let err_refl = env
-        .elaborate_decl("const int_5_eq_6_refl : Equal Int five six = Refl")
+        .elaborate_decl("lemma int_5_eq_6_refl : Equal Int five six = Refl")
         .expect_err("Refl must not prove Equal Int five six");
     assert!(
         matches!(&err_refl, ken_elaborator::ElabError::TypeMismatch { .. }),
@@ -128,7 +128,7 @@ fn real_distinct_int_literals_reduce_to_bottom_and_reject_tt_and_refl() {
     );
 }
 
-/// Confirms the `Refl`-vs-`tt` asymmetry above is genuinely a NARROWING to
+/// Confirms the `Refl`-vs-`Proved` asymmetry above is genuinely a NARROWING to
 /// the correct rejection shape, not an over-broad pre-check that would also
 /// wrongly reject `Refl` on a legitimately `Eq`-shaped goal. `Refl`'s
 /// surface-level shape check only fires when the whnf'd expected type has
@@ -138,7 +138,7 @@ fn real_distinct_int_literals_reduce_to_bottom_and_reject_tt_and_refl() {
 #[test]
 fn refl_still_accepted_on_a_genuinely_abstract_eq_shaped_goal() {
     let mut env = ElabEnv::new().expect("base env");
-    env.elaborate_decl("fn int_refl_abstract (x : Int) : Equal Int x x = Refl")
+    env.elaborate_decl("lemma int_refl_abstract (x : Int) : Equal Int x x = Refl")
         .expect("Refl must still check against a genuinely abstract (unreduced) Eq Int x x goal");
 }
 

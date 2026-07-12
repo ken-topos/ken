@@ -59,7 +59,7 @@ function. The motive lands in `Omega` (proof-irrelevant), relying on `J`'s
 unconstrained codomain sort (`34 §3.4`).
 
 ```ken
-fn cong (ty : Type) (ty2 : Type) (x : ty) (y : ty) (f : ty → ty2)
+lemma cong (ty : Type) (ty2 : Type) (x : ty) (y : ty) (f : ty → ty2)
           (p : Eq ty x y) : Eq ty2 (f x) (f y) =
   J (λy' _. Eq ty2 (f x) (f y')) Refl p
 ```
@@ -77,14 +77,14 @@ fn cast (ty : Type) (ty2 : Type) (e : Eq Type ty ty2) (t : ty) : ty2 =
 `sym` flips the direction of a propositional equality.
 
 ```ken
-fn sym (ty : Type) (x : ty) (y : ty) (p : Eq ty x y) : Eq ty y x =
+lemma sym (ty : Type) (x : ty) (y : ty) (p : Eq ty x y) : Eq ty y x =
   J (λy' _. Eq ty y' x) Refl p
 ```
 
 `trans` composes two propositional equalities.
 
 ```ken
-fn trans (ty : Type) (x : ty) (y : ty) (z : ty)
+lemma trans (ty : Type) (x : ty) (y : ty) (z : ty)
            (p : Eq ty x y) (q : Eq ty y z) : Eq ty x z =
   J (λz' _. Eq ty x z') p q
 ```
@@ -106,14 +106,14 @@ example before transporting a stuck `match`:
 ```ken example
 fn stuck_of (k : Bool) : Bool = match k { True => True ; False => False }
 
-fn stuck_transport (k : Bool) (q : Equal Bool k True)
+lemma stuck_transport (k : Bool) (q : Equal Bool k True)
   : Equal Bool (stuck_of k) True =
-  J (λb' _. Equal Bool (stuck_of b') True) tt (sym Bool k True q)
+  J (λb' _. Equal Bool (stuck_of b') True) Proved (sym Bool k True q)
 ```
 
-The base case above is `tt` (Top-introduction), not `Refl`: once `k`
+The base case above is `Proved` (Top-introduction), not `Refl`: once `k`
 substitutes to `True` the operand reduces and `Equal Bool (stuck_of True)
-True` observationally collapses to `Top`, so `tt` inhabits the result.
+True` observationally collapses to `Top`, so `Proved` inhabits the result.
 
 ## 4. Laws  proofs
 
@@ -126,7 +126,7 @@ by chaining two real hypotheses through both, over an abstract carrier
 reduction shortcut):
 
 ```ken example
-fn sym_trans_compose (ty : Type) (a : ty) (b : ty) (c : ty)
+lemma sym_trans_compose (ty : Type) (a : ty) (b : ty) (c : ty)
   (p : Eq ty a b) (q : Eq ty c b) : Eq ty a c =
   trans ty a b c p (sym ty c b q)
 ```

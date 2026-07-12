@@ -452,19 +452,19 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         .map_err(|e| ElabError::Internal(format!("prelude Prop failed: {}", e)))?;
     elab.globals.insert("Prop".to_string(), prop_id);
 
-    // `tt : Top` — the kernel's prelude `Top`-introduction constant (K5,
+    // `Proved : Top` — the kernel's prelude `Top`-introduction constant (K5,
     // `16 §1.3`), already unconditionally declared by `GlobalEnv::new()`.
     // Surfaced here so a structure-class law proof can close a goal that
     // whnf's to `Top` (K7: an operation-wrapped `IsTrue`/`Equal` goal, the
     // same slot `Refl` occupied before the operand-whnf completeness fix,
-    // `51 §6`). Ordinary global reference — `tt` infers to `Top`, so it
+    // `51 §6`). Ordinary global reference — `Proved` infers to `Top`, so it
     // needs no dedicated check-mode arm; the `check()` fallback (infer,
     // then unify against `expected`) handles it like any other constant.
-    elab.globals.insert("tt".to_string(), elab.env.tt_id());
+    elab.globals.insert("Proved".to_string(), elab.env.tt_id());
 
     // `Bottom : Ω₀` — the kernel's prelude falsity proposition (K5, `16
     // §1.3`), already unconditionally declared by `GlobalEnv::new()`, same
-    // status as `tt`/`Top` above. Surfaced here (not previously nameable —
+    // status as `Proved`/`Top` above. Surfaced here (not previously nameable —
     // only the checked-mode `absurd h` sugar could reach it) so a law's TYPE
     // ANNOTATION can spell an order-distinctness negation `P -> Bottom`
     // directly (`map-verified-laws`' `distinct key key' := And (...) (...)
@@ -473,6 +473,10 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     // signature *name* the type. Zero trusted_base delta: same existing
     // prelude constant, no new declaration.
     elab.globals.insert("Bottom".to_string(), elab.env.bottom_id());
+
+    // `Top : Ω₀` — surface the kernel's existing truth proposition alongside
+    // `Bottom`. Its sole inhabitant is the surface spelling `Proved` above.
+    elab.globals.insert("Top".to_string(), elab.env.top_id());
 
     // `Not : Ω → Ω` (`¬A := A → Bottom`) — the surface has no EXPRESSION-
     // position `->` (only a `view`'s TYPE-annotation position parses the
@@ -561,7 +565,7 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     elab.globals.insert("pair_snd".to_string(), snd_id);
 
     // `Decimal`/`Char` DEMOTE→derived (`18a §5.6`/`§5.9`, Phase-2 tranche #2).
-    // Must run here: after `Equal`/`And`/`Prop`/`tt` (needed by `IsTrue`),
+    // Must run here: after `Equal`/`And`/`Prop`/`Proved` (needed by `IsTrue`),
     // before the L3a String-ops registration below (needs `Char` in
     // `elab.globals`).
     let decimal_char_env = crate::decimal_char::register_decimal_char(elab)
@@ -581,16 +585,15 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
     // `is_sorted leq (x::y::r) = IsTrue (leq x y) ∧ is_sorted leq (y::r)`, with
     // `IsTrue (leq x y) := Eq Bool (leq x y) True` (the `Equal`/kernel-`Eq`
     // alias already landed by ES2) and `∧` the already-demoted `And`. `⊤` is
-    // spelled `Equal Bool True True` (reflexively true, no dedicated Ω-truth
-    // constant exists in this prelude).
+    // spelled `Top`, surfaced above from the kernel's existing truth constant.
     let list_a = |a: Term| Term::app(Term::indformer(list_id, vec![]), a);
     let _ = &list_a; // still used below for Perm's raw-term construction
     elab.elaborate_decl(
         "fn is_sorted (a : Type) (leq : a -> a -> Bool) (xs : List a) : Prop = \
          match xs { \
-           Nil => Equal Bool True True ; \
+           Nil => Top ; \
            Cons x xs2 => match xs2 { \
-             Nil => Equal Bool True True ; \
+             Nil => Top ; \
              Cons y r => And (Equal Bool (leq x y) True) (is_sorted a leq xs2) \
            } \
          }",

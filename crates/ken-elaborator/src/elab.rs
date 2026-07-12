@@ -521,7 +521,7 @@ fn check(cx: &mut ElabCtx, expr: &RExpr, expected: &Term, _span: &Span) -> Resul
         // eliminator's explicit motive. Surface sugar only: `absurd` is a
         // bare lowercase identifier the resolver emits as an `RCon` on scope
         // miss. Checked (not inferred) so the motive comes from the goal,
-        // mirroring `Refl`/`Axiom`/`tt`.
+        // mirroring `Refl`/`Axiom`/`Proved`.
         //
         // **Reserved-sugar identifiers (FR-2, `docs/program/wp/
         // ds-1-findings-remediation.md`, Architect-corrected).** The five
@@ -2327,7 +2327,7 @@ fn infer_arrow(
 
 /// `J motive base eq` — elaborates directly to the kernel's existing
 /// `Term::J` (`34 §3.4`; kernel target `check.rs::infer_j`, already in
-/// `trusted_base()`). Unlike `Refl`/`absurd`/`tt` (checked-mode, the motive
+/// `trusted_base()`). Unlike `Refl`/`absurd`/`Proved` (checked-mode, the motive
 /// comes from the ascribed goal), `J`'s motive is USER-WRITTEN and cannot be
 /// `infer`'d as a bare lambda (`RExpr::RLam` has no domain annotation — see
 /// the unconditional error in `infer`'s own `RLam` arm above). So the motive
@@ -3640,6 +3640,20 @@ pub fn elaborate_rdecl_v1_with_effect_rows(
     effect_rows: &HashMap<String, crate::effects::RowType>,
     rdecl: &RDecl,
 ) -> Result<ElabResult, ElabError> {
+    if matches!(
+        rdecl.kind,
+        RDeclKind::View {
+            keyword: DefKeyword::Fn | DefKeyword::Const,
+            ..
+        }
+    ) {
+        if let Some(ty) = &rdecl.ty {
+            let mut cx = ElabCtx::new(env, globals, num_values, numeric_env);
+            let ty = elab_type(&mut cx, ty)?;
+            let ty_core = cx.metas.zonk_term(&ty);
+            ensure_not_omega_type(cx.env, &Context::new(), &ty_core, &rdecl.span)?;
+        }
+    }
     match &rdecl.kind {
         RDeclKind::View { constraints, .. } => {
             let effect_row_type = check_view_visits_row(rdecl)?;
@@ -4698,6 +4712,17 @@ fn elaborate_v0(
             obligations,
         )
     };
+    if rdecl.ty.is_none()
+        && matches!(
+            rdecl.kind,
+            RDeclKind::View {
+                keyword: DefKeyword::Fn | DefKeyword::Const,
+                ..
+            }
+        )
+    {
+        ensure_not_omega_type(env, &Context::new(), &ty_core, &rdecl.span)?;
+    }
     let id =
         declare_def(env, vec![], ty_core, body_core).map_err(|e| ElabError::KernelRejected {
             error: e,
@@ -4874,6 +4899,10 @@ pub fn elaborate_mutual_group(
     let proof_validation = (|| -> Result<(), ElabError> {
         for ((rdecl, ty_core), id) in members.iter().zip(&ty_cores).zip(&ids) {
             match &rdecl.kind {
+                RDeclKind::View {
+                    keyword: DefKeyword::Fn | DefKeyword::Const,
+                    ..
+                } => ensure_not_omega_type(env, &Context::new(), ty_core, &rdecl.span)?,
                 RDeclKind::Lemma => ensure_omega_type(env, &Context::new(), ty_core, &rdecl.span)?,
                 RDeclKind::AttachedProof { subject, .. } => {
                     ensure_omega_type(env, &Context::new(), ty_core, &rdecl.span)?;
@@ -5444,6 +5473,35 @@ fn ensure_omega_type(
     }
 }
 
+/// `fn` and `const` are computational definitions. Their result type must
+/// classify at `Type`, leaving Ω-valued definitions to `lemma` and `proof`.
+fn ensure_not_omega_type(
+    env: &GlobalEnv,
+    ctx: &Context,
+    ty: &Term,
+    span: &Span,
+) -> Result<(), ElabError> {
+    let sort = kernel_infer(env, ctx, ty).map_err(|e| ElabError::KernelRejected {
+        error: e,
+        span: span.clone(),
+    })?;
+    match whnf(env, ctx, &sort) {
+        Term::Type(_) => Ok(()),
+        Term::Omega(_) => Err(ElabError::TypeMismatch {
+            span: span.clone(),
+            reason: "`fn`/`const` compute; use `lemma`/`proof` for an Ω-valued definition"
+                .to_string(),
+        }),
+        other => Err(ElabError::TypeMismatch {
+            span: span.clone(),
+            reason: format!(
+                "`fn`/`const` result must classify at Type, found {:?}",
+                other
+            ),
+        }),
+    }
+}
+
 fn validate_attached_subject_occurs_applied(
     env: &GlobalEnv,
     globals: &HashMap<String, GlobalId>,
@@ -5518,7 +5576,7 @@ fn top_intro_body(prop_ty: &RType, span: &Span) -> Result<RExpr, ElabError> {
             let body = top_intro_body(cod, span)?;
             Ok(RExpr::RLam(name.clone(), Box::new(body), span.clone()))
         }
-        _ => Ok(RExpr::RCon("tt".to_string(), span.clone())),
+        _ => Ok(RExpr::RCon("Proved".to_string(), span.clone())),
     }
 }
 
