@@ -32,8 +32,13 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > removal:**
 > - **`match-arm-glyph-lang` (Language)** — PR1: additive lexer/parser/formatter
 >   (accept `↦`/`|->` AND `⇒`/`=>`) + fence-aware scripted sweep of
->   catalog/prelude/test Ken-source sites. **KICKING now.** PR2 (removal of
->   `⇒`/`=>`) is Steward-gated on PR1 + the spec lane.
+>   catalog/prelude/test Ken-source sites. **PR1 GATED + MERGING** @ `b4ddba04`
+>   (base `b8601557`): QA APPROVE (315/315 green, 58-file attribution clean) +
+>   Architect SURFACE/FIDELITY APPROVE (`evt_3tnmwqvzsra9z` — FatArrow→MapsTo,
+>   4-spelling lexer, formatter `|->`-before-`->`, AST unchanged, no
+>   arrow/prose/Rust corruption); honesty gate clean (zero trust/spec/conf/Cargo
+>   delta). Publishing (CI-poll). PR2 (removal of `⇒`/`=>`) is Steward-gated on
+>   PR1 + the spec lane.
 > - **`match-arm-glyph-spec` (Spec enclave: spec-author grammar + CV conformance
 >   fixtures)** — starts AFTER lang-PR1 merges (needs additive lexer). ~38 sites.
 > - **Steward gates** lang-PR2 (removal) on lang-PR1 + spec-lane merged →
