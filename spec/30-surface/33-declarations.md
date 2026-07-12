@@ -105,12 +105,37 @@ into scope. Four forms:
 - **`use M`** — open: **all** of `M`'s exports, unqualified. Use sparingly (it
   maximizes the ambiguity surface, `§3.3`).
 
-**Cross-package imports are out of scope here.** The manifest / lockfile /
-registry mechanism that resolves imports **across** packages (content-addressed,
-pinned dependencies) is the **package manager**, deferred as **`F3b`**
-(operator-deferred, 2026-07-01; it couples to the supply-chain, `63`). ES3
-specifies **in-repo compilation units only**; a cross-package `import` is a
-forward reference to `F3b`, not part of this normative surface.
+For in-repo compilation units, dotted module paths and source-file paths obey a
+total, role-blind bijection under a catalog root. A path with `N` components
+names the unique leaf source file reached through `N - 1` directories: for
+example, `import Data.Collections.Map` resolves exactly one of
+`Data/Collections/Map.ken` and its `.ken.md` form. A path component is treated
+only as a module component; resolution does not depend on whether declarations
+in the file are values, types, constructors, classes, or any other role. A path
+position is a leaf or a directory, never both. This is the catalog taxonomy
+WP's pinned path/import identity and strict leaf-file rule (ADR 0014,
+MRES-2/MRES-3(a strict)).
+
+Resolution takes a **list of catalog roots**. This round populates that list
+with exactly one in-repo root; resolution and precedence among multiple roots
+remain deferred to the package-manager round (MRES-1(a)/MRES-2). The plural form
+is nevertheless the normative resolver input, so adding roots changes the
+input data rather than the module-path contract.
+
+The loader discovers compilation units lazily, following `import` edges from
+units already being compiled; it does not scan a catalog tree eagerly. Each
+unit is loaded and elaborated at most once in a compilation run, and later
+imports reuse the per-run cached result. An import edge to a unit already on
+the active import chain is the hard surface error **`ImportCycle`**. The
+diagnostic names the closed cycle in edge order, for example
+`A → B → A`; cycles are not accepted as recursive module groups (MRES-2).
+
+This in-repo loader does not change instance visibility: instances remain
+ambient under the existing coherence rules (MRES-4A). Instance manifests,
+package-kind detection, and the `admits` / `program` /
+`package` boundary are deferred to N4; the content-addressed package manager
+remains a later round. Multi-root precedence is likewise deferred. The
+local/import shadowing rules in §3.3 are unchanged by this loader.
 
 ### 3.3 Name resolution (surface-only; never reaches the kernel)
 
