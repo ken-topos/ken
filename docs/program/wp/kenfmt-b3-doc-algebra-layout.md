@@ -151,6 +151,16 @@ discipline's home (semantic-preservation + idempotence alone cannot prove a
 ways). Steward sequences this alongside the Language build; the build's AC6
 depends on it.
 
+**★ Guardrail (Architect, `evt_3zqy1w3sdd2tf`) — the oracle's expected outputs
+must be INDEPENDENTLY DERIVED FROM `§1d`, never lifted from the B3 printer's
+actual emission.** Co-authoring golden + printer at the same seam makes it
+tempting to pin "canonical" to whatever the printer happens to emit — which
+collapses the both-orientation gate into a **green-vs-green tautology** and lets
+a printer bug **ratify itself**. Each axis case states the canonical form **from
+the spec rule first**, then asserts the printer matches it — never the reverse.
+That is what keeps the companion a genuine check rather than a mirror of the
+build.
+
 ## Review
 
 **Architect-terminal** (he owns the kenfmt B-series contracts and authored this
