@@ -134,9 +134,45 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > **Sequence: Lane A enclave spec production (doc-only) FIRST → Lane B Language
 > parser atom + conformance fixtures (Architect-terminal) → merge #29 → re-kick #28
 > bare-form catalog rewrite (168-site `29094048` inventory re-run without parens).**
-> **⏭ RESUME ACTION: publish #29 frame doc-only → Handoff-Gate enclave (spec-leader
-> + spec-author + CV; quiescent, retros in per orientation) → kick Lane A spec
-> production. Watchdog stays live (fleet NOT quiescent — #29 launching).**
+> **↳ #29 LANE A KICKED — 2026-07-12 ~13:0x UTC.** Frame published doc-only
+> (PR #550, **main @ `aef79a71`**). Enclave Handoff-Gate-compacted @ `4435216c`
+> (spec-leader + spec-author + CV all verified: "Context compacted" / ctx 0%).
+> **Lane A KICKED @ `evt_11yg8yvm7j826`** → @spec-leader (`agt_37reqwresqc00`),
+> base `aef79a71`, branch `wp/bare-proof-selector-atom-spec`, doc-only spec
+> §8.2/§33 `proof_ref` atom production (transcribe Architect's locked grammar;
+> CV Spec-vote + reviews for fidelity; @architect reviews production). Roused
+> spec-leader via send-keys. Lane A conformance fixtures DEFERRED to Lane B (can't
+> be green pre-parser).
+>
+> **↳ LANE A GATE-COMPLETE — candidate `8e1faef9` — 2026-07-12 ~13:1x UTC.**
+> `wp/bare-proof-selector-atom-spec @ 8e1faef92d84315e4b38af5c7f7fb46102d20ea5`,
+> one commit on `aef79a71`. Enclave gated: spec-leader Spec-vote + CV both APPROVE
+> (`evt_2t9rnrad87f79`). **Steward honesty gate CLEAN**: doc-only, spec/ only (2
+> files `32-grammar.md`+`33-declarations.md`, +29/−5), zero trust-surface, no WP
+> tokens, `diff --check` clean, descends from main; content faithfully transcribes
+> the locked grammar (`proof_ref` atom, app-boundary, identical EAttachedProofRef
+> desugar, decl-vs-expr note). **Architect fidelity gate PINGED
+> (`evt_7yd7ddpv9kp73`) — publish HELD on his APPROVE** (named Lane A gate).
+> **RESUME ACTION: on Architect APPROVE, publish `8e1faef9` doc-only (fresh
+> wp/pr-publish branch off main + tracker sync), then kick Lane B (Language parser
+> build: `parser.rs` KwProof atom arm in parse_atom_expr = ~1965 LParen block body
+> minus parens; CV conformance fixtures bare/applied/recursive/decl-vs-expr green;
+> Architect-terminal) from merged spec base, then merge #29, then re-kick #28
+> bare-form catalog rewrite (168-site `29094048` inventory WITHOUT parens).
+> Watchdog live.**
+>
+> **↳ PARKED — #8 namespacing briefed to operator (2026-07-12 ~13:0x).** Operator
+> asked for a review of #8 vs the Librarian's `local/research/namespacing-survey.md`
+> + Ken's current impl. Briefed: Ken = **flat global namespace**, silent
+> last-writer-wins shadow (`class Eq` shadows ctor `Eq`; `modules.rs:8-10`,
+> `resolve.rs:355`); module/`import`/`use`/`pub` surface specified+parsed but
+> cross-file resolution deferred (F3b); `.`=module-qual, `::`=attached-proof
+> selector (migrating), neither is a qualified-ctor path. Options: A (Haskell sep
+> namespaces — cautionary, types-are-terms), B (type-qual ctor `OrdResult.Eq` —
+> report-principled, `.`-overload design cost), C (alias discipline — status quo,
+> in use). **Recommended: Path 1 fail-closed on silent shadow NOW (report #9),
+> independent of B/C; direction tilts B; cross-package is really an F3b job.**
+> Awaiting operator direction — no WP framed yet.
 >
 > **↳ SURFACED FORMATTER BUG (for parked `ken-formatter-canonical` WP):**
 > `format.rs::canonical_unicode`'s `canonical_ident` maps `l`/`level`→`ℓ` on ANY
