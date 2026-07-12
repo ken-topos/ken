@@ -25,6 +25,7 @@ pub mod format;
 pub mod foreign;
 pub mod ifc;
 pub mod literate;
+pub mod lossless;
 pub mod trace;
 pub mod protocol;
 pub mod error;

@@ -17,12 +17,16 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > ### ⏭ 2026-07-12 ~21:xx — LIVE STATE (read this first) · `origin/main @ a3690cb8`
 >
 > **★ TWO PARALLEL RELEASES (operator "resume").**
-> - **B1 → LANGUAGE — RELEASED** (`evt_2nsfqnte48kht`). Language ring
->   Handoff-Gate DONE (all 3 compacted @ a3690cb8, WIDE-verified), B1 kickoff
->   posted + language-leader roused. Frame `docs/program/wp/kenfmt-b1-lossless-
->   layer.md`; architecture Accepted (AST+trivia, 4-item contract);
->   Architect-terminal reviews; QA runs literal locked CI. **NEXT: await
->   candidate SHA → honesty-gate + CI-polled publish (code, not doc-only).**
+> - **B1 → LANGUAGE — GATED, PUBLISHING (code, CI-polled).** Candidate
+>   `dd433b32` (crates-only, +802/−0: `lib.rs` +1, new `lossless.rs`, new
+>   `tests/kenfmt_b1_lossless.rs`). QA APPROVE (literal `cargo test --workspace
+>   --locked` green, 3/3 focused) + **Architect-terminal APPROVE** (merge-Decision
+>   `evt_407ddt9dfttdf`: all 4 contract items faithful — gapless partition, total
+>   deterministic attachment, typed-views=AST/no-2nd-parser, `FormattableSource`
+>   interface seam). Honesty-gated clean (no overlap with N3 Lane A; sole grep hit
+>   = `CARGO_MANIFEST_DIR` harness root, benign). Rebasing onto `4a3f0472` +
+>   tracker → non-doc publish (CI-polled, stop on red). **NEXT: confirm CI-green
+>   merge → B1 retros → this UNBLOCKS B2/B3/B4.**
 > - **N3 Lane A → ENCLAVE — GATED, PUBLISHING.** Candidate `8204e727` (linear
 >   `ba514aac → 27e56a79 spec → e31f3259 conf → 8204e727 prelude-carrier fix`);
 >   CV combined APPROVE + **Architect-terminal APPROVE** (merge-Decision vote,
