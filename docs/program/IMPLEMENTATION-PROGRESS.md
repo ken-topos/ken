@@ -20,17 +20,30 @@ against it*. Run until complete, blocked, or instructed (§2b).
 > `tt`→`Proved` + surface `Top` + one-pass 520-site Ω-`fn`→`lemma` catalog
 > migration. Absorbs the old `fn-lemma-partition` (task #21) + the `_ind` collapse.
 > **Owner Language, single atomic branch** `wp/proof-vocab-completion`.
-> - **Implementer (now gpt-5.6-sol, operator-upgraded) Working**, committed at
->   **`fb64c9cc`** ("complete proof vocabulary migration"), rebased on `76d74621`;
->   catalog + focused gate paths green; finishing legacy `ken-elaborator`
->   **test-fixture** `fn`→`lemma` migration until the full suite is green.
+> - **Implementer (gpt-5.6-sol) DONE — `merge_ready` posted `evt_7zp1st58a3b3b`
+>   (2026-07-12T00:17)**: branch `wp/proof-vocab-completion @ 8c65aaed`, rebased on
+>   `origin/main @ 9a153c88`, released (back on `language-implementer/work`).
+>   Symmetric `fn`/`const` Ω-result gate (annotated+inferred+mutual paths, exact
+>   diagnostic; inferred computational still admitted, inferred Ω fail-closed);
+>   surfaced `Proved`+`Top`, removed surface `tt` (kernel id preserved), Rust
+>   prop-intro emission → `Proved`. Migration: **520/520** TSV + **159** current-tree
+>   drift helpers = 679 sites, all gate-proven lemmas; 13 `_ind` collapses; 9 bounded
+>   `Top` sites; catalog `tt` grep = 0. Isolation of the `pair_compare_eq` cone
+>   defect: over-broad sweep had mis-migrated Type-valued `Or` producers
+>   (`bool_dichotomy`/`total_leq_nat`) — restored as computational, migrated only
+>   their Ω consumers. **No `ken-kernel/**`/Cargo/lockfile/TCB delta**;
+>   `git diff --check` clean. 41 focused targets green; post-rebase 17-target rerun
+>   green (`proof_vocabulary` 6/6, `map_build_acceptance` 24/24, DS7/8, CAT5/3, …).
+> - **NOW: QA (terra) Working** — independently verifying counts/partition, exact
+>   diagnostic on annotated+inferred, the 9 `Top` sites, prop-intro emission,
+>   no-kernel/Cargo scope. Leader parked awaiting QA verdict.
 > - **Blocker resolved:** `pair_compare_eq` — Architect ruled (`evt_4eantd6r4s8hh`)
 >   the partition holds, no exception, no gate change (Π-into-Ω is impredicative,
 >   `sort_pi`); it was a migration-execution artifact. Frame guardrail stands.
-> - **NEXT:** when the full suite is green, implementer rebases + hands the SHA to
->   the leader → QA → Architect surface/fidelity + conformance (spec-author now
->   gpt-5.6-sol, Opus Architect+CV backstop). Then Steward honesty gate + publisher
->   (non-doc → CI; atomic migrate-then-enforce). Watch for the git_request.
+> - **NEXT:** QA green → leader routes to Architect surface/fidelity + soundness →
+>   enclave conformance (spec-author gpt-5.6-sol, Opus Architect+CV backstop) →
+>   Steward honesty gate @ `8c65aaed` + publisher (non-doc → CI; atomic
+>   migrate-then-enforce). Watch for the leader's git_request to me.
 > - Practice: codified "keep the turn active through completion" for Codex seats
 >   (`9a153c88`, playbooks); #20 corrected (codex tmux delivery works; real gap =
 >   platform `reply_to` event_id, moot-owned).
