@@ -265,6 +265,18 @@ accepting both arms is insufficient.
 - why: catches a pretty-printer that preserves tokens yet changes the parse at
   a line break or precedence boundary.
 
+### surface/formatting/redundant-grouping-parens-are-removed (property)
+
+- spec: `31 §1d` (parentheses follow precedence and mandatory clarity)
+- given: the redundant grouping `(a + b)` beside the precedence-required
+  `(a + b) * c` and an arrow type used as an application argument
+- expect: **RED-UNTIL-BUILT (B3/C)** — the first prints as `a + b`; the second
+  retains `(a + b) * c`; and the arrow-type argument retains its mandatory
+  clarity parentheses. All three outputs reparse to their original ASTs.
+- why: pins both orientations of canonical grouping. Preserving every source
+  parenthesis fails the first arm; stripping every parenthesis fails a required
+  or mandatory-clarity arm.
+
 ### surface/formatting/four-fence-roles-and-narrow-exemption (ambiguity)
 
 - spec: `31 §1d` (the four literate roles and narrow exemption), WP S gate 8
