@@ -18,7 +18,7 @@
 | MRES-1, MRES-2 | **Accepted** + multi-catalog forward-compat added (plural-ready roots) |
 | MRES-3 | **Accepted (a) strict** |
 | MRES-4 | **Accepted (A) ambient-with-coherence**, refined into the **program abstraction** — keyword **`admits`**; admitted-package boundary; scaling validated (O(instances), not O(pkg²)); provenance **required**. Sub-forks Accepted: 4a separable-but-co-locatable, 4b only-multi-package, 4c direct-explicit + transitive-auto with the compiled-package instance-manifest invariant (source==compiled), 4d re-export-carries-instance-surface (admits keys on the explicit root, not the coherence closure), 4e anonymous `program`/`package` headers (identity is the path, no name token) |
-| MRES-4 **`package` extension** | **Accepted (operator, design)** — admission is a reusable boundary hosted by `package` too; **compiled package** (has package abstraction, self-admits, carries the manifest) vs **source package** (composed by-source) = the surface of 4c's compiled-vs-source seam; rides **N4** (grammar+gate) + **N2** (loader+catalog files), not its own WP. **PKG-1..4 Accepted (2026-07-12):** explicit source-set list; single `admits` over either delivery form (source\|compiled), instance-channel only; trust-internal + re-check cross-boundary; test-scoped admission deferred |
+| MRES-4 **`package` extension** | **Accepted (operator, design)** — admission is a reusable boundary hosted by `package` too; **compiled package** (has package abstraction, self-admits, carries the manifest) vs **source package** (composed by-source) = the surface of 4c's compiled-vs-source seam; rides **N4** (grammar+gate+detection+manifest+catalog files); **N2** is the grammar-independent name-loader spine only. Not its own WP. **PKG-1..4 Accepted (2026-07-12):** explicit source-set list; single `admits` over either delivery form (source\|compiled), instance-channel only; trust-internal + re-check cross-boundary; test-scoped admission deferred |
 | MRES-5, MRES-7, MRES-8 | **Accepted** — the fail-closed duplicate-definition slice (round-1 candidate) |
 | MRES-6 | **Operator OVERRODE** the recommendation — local/import name clash is now an **error**, with **explicit import-exclusion language**; reverses §3.3's local-over-imported shadowing |
 | MRES-9 | **Accepted** — defer the form, fix the canonical-identity invariant now |
@@ -464,21 +464,34 @@ compile-time guarantee; the parent re-checks only *cross-boundary* coherence.
 **Zero `trusted_base()` delta.** (A signed/attested manifest is a supply-chain
 concern — ADR 0004 / `63` — not a kernel change.)
 
-**Work-program reshape (my guidance).**
-- **N4 (admission gate):** the gate is **parameterized by the enclosing
-  boundary** — evaluated with the `program`'s admits at program scope and a
-  `package`'s admits at package scope. Same mechanism, per-boundary. The
-  `package` grammar + gate **ride N4** alongside the program abstraction
-  (identical `admits` machinery) — **not a separate WP**; a third WP would
-  fragment one mechanism.
-- **N2 (loader):** must **distinguish source vs compiled packages** — detect the
-  package file, build a compiled package against its `admits` to a manifest,
-  compose a source package by-source into the parent graph. The catalog
-  enrichment (**each importable catalog package gets a package file**) rides N2.
-  The in-repo loader may use an in-memory manifest; the **content-addressed
-  persisted manifest** is the package-manager round (where MRES-4c placed it).
-- Net: the package abstraction is **distributed across N4 (surface + gate) and
-  N2 (loader + catalog files)**, not its own WP.
+**Work-program reshape (my guidance; N2/N4 split corrected 2026-07-12 — note
+below).**
+- **N2 (cross-file name-loader spine) — grammar-independent.** MRES-1/2/3a only:
+  the total path↔file bijection, lazy unit discovery along `import` edges, cycle
+  = hard error, a per-run cache on `ElabEnv`, and a **plural-ready** root list
+  (one root populated for the in-repo case). Instances stay **ambient (MRES-4A),
+  untouched** — a cross-file `import M` that today yields `UnboundName` now
+  resolves to the in-repo unit; the coherence checks (orphan ban + overlap, ADR
+  0008) already run and are unchanged. **No package files, no admission gate, no
+  manifest** exist at this round — none are expressible before the N4 grammar.
+- **N4 (boundary + instance channel) — everything grammar-dependent.** The
+  `program`/`package`/`admits` grammar; the admission gate **parameterized by
+  the enclosing boundary** (program-scope vs package-scope admits — same
+  mechanism);
+  **source-vs-compiled package detection**; the (in-memory, in-repo)
+  **instance-manifest** built against a package's `admits`; and the **catalog
+  package-file enrichment** (each importable catalog package gets a package
+  file). These ride N4 **together** — one mechanism; a separate WP would
+  fragment it. The content-addressed *persisted* manifest is the package-manager
+  round (where MRES-4c placed it).
+- **Correction note (Steward, 2026-07-12).** My initial reshape placed
+  package-file detection, the manifest, and catalog package-file enrichment on
+  N2. They depend on the `package`/`admits` grammar, which rides N4 and is
+  sequenced *after* N2, so they are **not expressible at N2 time** — they move
+  to N4. N2 is the pure name-loader spine that N4 later composes the boundary
+  over.
+- Net: the package abstraction lives on **N4** (surface + gate + detection +
+  manifest + catalog files); **N2** is the grammar-independent loader spine.
 
 **New sub-forks for the operator round (surfaced per the request):**
 
