@@ -194,8 +194,9 @@ arrow or pair constructor. Long `Equal`, `And`, and other type-constructor
 applications break only at argument boundaries. Parentheses follow precedence
 and the mandatory clarity cases: an arrow type used as an application argument,
 an ascription used as a subexpression, and a lower-precedence infix operand
-whose grouping would otherwise be unclear are parenthesized; arbitrary
-redundant parentheses need not be preserved.
+whose grouping would otherwise be unclear are parenthesized; the canonical form
+carries exactly the precedence-required and mandatory-clarity parentheses
+above; any other parenthesis is removed.
 
 A flat application stays on one line if it fits. Otherwise its head remains on
 the first line and each syntactic argument occupies one continuation line,
