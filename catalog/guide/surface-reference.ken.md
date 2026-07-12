@@ -304,7 +304,7 @@ Below, `triv`'s conclusion reapplies `Trivial` to exactly its own parameters
 through the family name, `Family.introName`:
 
 ```ken example
-prop Trivial (a : Type) (x : a) : Omega where {
+prop Trivial (a : Type) (x : a) : Ω where {
   triv : Trivial a x
 }
 
@@ -319,7 +319,7 @@ order — so this rejects with `"prop intro 'nil' is outside the v0
 Omega-clean seed shape"`, not a generic syntax error:
 
 ```ken reject
-prop AppendsTo (a : Type) (xs : List a) (ys : List a) (zs : List a) : Omega
+prop AppendsTo (a : Type) (xs : List a) (ys : List a) (zs : List a) : Ω
   where {
     nil : AppendsTo a (Nil a) ys ys
   }

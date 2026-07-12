@@ -30,12 +30,64 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >   rationale + old→canonical manifest + reverse-normalization + whole-workspace
 >   consumer sweep) as a required acceptance artifact.
 >
-> **Fleet quiescent → watchdog cron CANCELLED** (standing operator rule
-> [[cancel-watchdog-cron-when-fleet-quiescent]]). **NEXT (ready, pending operator
-> go on return):** #26 glyph-consistency housecleaning (operator-approved: light,
-> no retro/enclave — now unblocked since rollout merged; open axis = canonical
-> glyph direction). PARKED for operator return: #8 namespacing,
-> `ken-formatter-canonical`. #27 List/Int (queued, not urgent).
+> **Fleet went quiescent → watchdog cron cancelled → operator returned + gave
+> canonical direction ("unicode canonical, ascii accepted") + "kick #26" → new
+> watchdog cron re-established (`61bf14ff`).**
+>
+> ### IN FLIGHT — #26 glyph-consistency housecleaning — 2026-07-12 ~07:4x UTC
+>
+> **Operator-approved (light: no retro, no enclave); canonical direction ruled
+> (unicode canonical, ascii accepted).** Frame
+> `docs/program/wp/glyph-consistency-housecleaning.md` (on main @ `d26270e2`,
+> PR #547). **KICKED @ `evt_fzyjfk45t6wg`** (thread thr_3mnt59c84z9fa) →
+> @foundation-leader (`agt_37reqsbs5b000`), Foundation Handoff-Gate-compacted
+> (all 3 verified @ d26270e2) + roused, base `origin/main d26270e2`, branch
+> `wp/glyph-consistency-housecleaning`. **Mechanism:** fence-scoped ascii→unicode
+> per `format.rs::canonical_unicode` (the language's own normalizer; preserves
+> strings + `--` comments). **★ Load-bearing guard: FENCE-SCOPED ONLY** — apply
+> only inside ` ```ken ` fences (never prose — would corrupt "not"→¬, "l"→ℓ);
+> pure `.ken` examples get whole-file transform. Scope = catalog packages +
+> guide + examples/rosetta + tooling sample; NOT spec/conformance/crates/prelude.
+> Completeness proof = full workspace build green + catalog nets green + idempotent
+> + reverse-diff glyph-only. Review = Architect-terminal LIGHT surface/fidelity →
+> Steward honesty-gate + publish.
+> **SCOPE AMENDMENT (`evt_6hpmdvkzjk7n0`, 11:48):** foundation-implementer hit a
+> coupled exact-source test assertion — `cat5_parsing_package.rs:283`
+> (`cat5_d2_parser_result_surface_is_total_and_located`) pins the Parsing fence's
+> ascii type sig (`... -> ParseResult a`); canonicalizing the source to `→` makes
+> the pinned literal stale. Ruled: the frame's "no `crates/**`" forbids the
+> language *implementation* (format.rs/lexer/kernel/prelude), NOT a coupled test
+> assertion embedding catalog source. **APPROVED assertion-literal migration in
+> this branch** (glyph-axis analog of PR-B/C's ds7/ds8 coupled-assertion sweep):
+> assertion literals only, reverse-normalizable, no test-logic/impl change, don't
+> weaken the normalization; whole-harness sweep crates/**/tests for every
+> ascii-glyph-pinning exact-source assertion; full workspace green = completeness
+> proof.
+> **ARCHITECT FINDING + OPERATOR RULING (`evt_4wcgvg56z0305` → `evt_2s3s87y6prb01`,
+> 12:06):** candidate `d1b2437c` passed QA but Architect terminal-review found
+> `canonical_unicode` also mass-renames the variable `l`/`level`→`ℓ` (universe-
+> level glyph) on EVERY occurrence — 813 sites (~51% of diff), ordinary tree/list
+> vars + λ-binders, incl. the tell `fn cap_level_reusing_int (ℓ : Int) : Int = ℓ`.
+> Green (α-equiv) but muddles the `ℓ = universe level` convention across the
+> pedagogical catalog — beyond glyph-consistency intent. **Operator ruled: EXCLUDE
+> `l`/`level`→`ℓ`, ship operator/symbol glyphs only** (~865 lines). Re-run from
+> base `d26270e2` with the two ident-mappings suppressed in the throwaway runner
+> (NOT a `format.rs` edit); output must have ZERO `ℓ` in catalog; CAT5 assertion
+> sync + everything else stays. QA + Architect re-clear → new SHA. **⏭ RESUME
+> ACTION: await #26 RE-RUN SHA handoff → honesty-gate (catalog fences + coupled
+> `crates/**/tests` CAT5 assertion delta, NO impl/spec/kernel, zero `ℓ`) + publish
+> → on merge, fleet quiescent → cancel watchdog.**
+>
+> **↳ SURFACED FORMATTER BUG (for parked `ken-formatter-canonical` WP):**
+> `format.rs::canonical_unicode`'s `canonical_ident` maps `l`/`level`→`ℓ` on ANY
+> token, not just universe-level position — an over-fire. Proper long-term fix
+> (fire only in level position) is a formatter refinement to fold into the
+> canonical-formatter design when the operator opens it. Don't lose this.
+> PARKED for operator: #8 namespacing (**INPUT READY: Librarian namespacing
+> survey `local/research/namespacing-survey.md`, 672 lines — operator-requested
+> 2026-07-12; feeds the #8 flat class/ctor-collision design decision**),
+> `ken-formatter-canonical`. #27 List/Int
+> (queued, not urgent).
 >
 > ### [historical] IN FLIGHT — 2 WPs kicked in parallel — 2026-07-12
 >
