@@ -56,11 +56,11 @@ Conceptually, the standard declarations have this shape:
 ```ken ignore
 data Empty : Type0 =
 
-data Dec (P : Omega) : Type0 =
+data Dec (P : Ω) : Type0 =
   Yes P
-  | No (P -> Empty)
+  | No (P → Empty)
 
-fn decide (P : Omega) (d : Dec P) : Bool =
+fn decide (P : Ω) (d : Dec P) : Bool =
   match d { Yes p ↦ True ; No f ↦ False }
 ```
 
@@ -82,8 +82,8 @@ better at call sites and mirrors `yes`/`no` on the referenced Lean/Agda
 `Decidable`/`Dec`:
 
 ```ken
-fn yes (prp : Omega) (p : prp) : Dec prp = Yes prp p
-fn no (prp : Omega) (f : prp -> Empty) : Dec prp = No prp f
+fn yes (prp : Ω) (p : prp) : Dec prp = Yes prp p
+fn no (prp : Ω) (f : prp → Empty) : Dec prp = No prp f
 ```
 
 `DecEq` is stated here so the entry is self-contained. `dec_eq_decides`
@@ -92,9 +92,9 @@ instance in scope:
 
 ```ken
 class DecEq a {
-  eq       : a -> a -> Bool ;
-  sound    : (x : a) -> (y : a) -> IsTrue (eq x y) -> Equal a x y ;
-  complete : (x : a) -> (y : a) -> Equal a x y -> IsTrue (eq x y)
+  eq       : a → a → Bool ;
+  sound    : (x : a) → (y : a) → IsTrue (eq x y) → Equal a x y ;
+  complete : (x : a) → (y : a) → Equal a x y → IsTrue (eq x y)
 }
 
 fn bool_eq (a : Bool) (b : Bool) : Bool =

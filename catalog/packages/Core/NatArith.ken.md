@@ -15,22 +15,22 @@ operation's `S::name` namespace for recursive and cross-law references.
 ```ken
 fn add (a : Nat) (b : Nat) : Nat =
   match b {
-    Zero |-> a ;
-    Suc b2 |-> Suc (add a b2)
+    Zero ↦ a ;
+    Suc b2 ↦ Suc (add a b2)
   }
 
 fn mul (a : Nat) (b : Nat) : Nat =
   match b {
-    Zero |-> Zero ;
-    Suc b2 |-> add (mul a b2) a
+    Zero ↦ Zero ;
+    Suc b2 ↦ add (mul a b2) a
   }
 
 proof zero_r for add (a : Nat) : Equal Nat (add a Zero) a = Refl
 
 proof zero_l for add (a : Nat) : Equal Nat (add Zero a) a =
   match a {
-    Zero |-> Proved ;
-    Suc a2 |-> cong Nat Nat (add Zero a2) a2 Suc (add::zero_l a2)
+    Zero ↦ Proved ;
+    Suc a2 ↦ cong Nat Nat (add Zero a2) a2 Suc (add::zero_l a2)
   }
 
 proof suc_r for add (a : Nat) (b : Nat)
@@ -39,16 +39,16 @@ proof suc_r for add (a : Nat) (b : Nat)
 proof suc_l for add (a : Nat) (b : Nat)
   : Equal Nat (add (Suc a) b) (Suc (add a b)) =
   match b {
-    Zero |-> Refl ;
-    Suc b2 |->
+    Zero ↦ Refl ;
+    Suc b2 ↦
       cong Nat Nat (add (Suc a) b2) (Suc (add a b2)) Suc (add::suc_l a b2)
   }
 
 proof assoc for add (a : Nat) (b : Nat) (c : Nat)
   : Equal Nat (add a (add b c)) (add (add a b) c) =
   match c {
-    Zero |-> Refl ;
-    Suc c2 |->
+    Zero ↦ Refl ;
+    Suc c2 ↦
       cong Nat Nat
         (add a (add b c2))
         (add (add a b) c2)
@@ -58,8 +58,8 @@ proof assoc for add (a : Nat) (b : Nat) (c : Nat)
 
 proof comm for add (a : Nat) (b : Nat) : Equal Nat (add a b) (add b a) =
   match b {
-    Zero |-> sym Nat (add Zero a) a (add::zero_l a) ;
-    Suc b2 |->
+    Zero ↦ sym Nat (add Zero a) a (add::zero_l a) ;
+    Suc b2 ↦
       trans Nat
         (add a (Suc b2))
         (Suc (add b2 a))
@@ -75,8 +75,8 @@ proof zero_r for mul (a : Nat) : Equal Nat (mul a Zero) Zero = Proved
 
 proof zero_l for mul (a : Nat) : Equal Nat (mul Zero a) Zero =
   match a {
-    Zero |-> Proved ;
-    Suc a2 |-> mul::zero_l a2
+    Zero ↦ Proved ;
+    Suc a2 ↦ mul::zero_l a2
   }
 
 proof suc_r for mul (a : Nat) (b : Nat)
@@ -85,8 +85,8 @@ proof suc_r for mul (a : Nat) (b : Nat)
 proof suc_l for mul (a : Nat) (b : Nat)
   : Equal Nat (mul (Suc a) b) (add (mul a b) b) =
   match b {
-    Zero |-> Proved ;
-    Suc b2 |->
+    Zero ↦ Proved ;
+    Suc b2 ↦
       cong Nat Nat
         (add (mul (Suc a) b2) a)
         (add (add (mul a b2) a) b2)
@@ -124,8 +124,8 @@ proof one_r for mul (a : Nat) : Equal Nat (mul a (Suc Zero)) a = add::zero_l a
 
 proof one_l for mul (a : Nat) : Equal Nat (mul (Suc Zero) a) a =
   match a {
-    Zero |-> Proved ;
-    Suc a2 |->
+    Zero ↦ Proved ;
+    Suc a2 ↦
       trans Nat
         (mul (Suc Zero) (Suc a2))
         (add a2 (Suc Zero))
@@ -140,8 +140,8 @@ proof one_l for mul (a : Nat) : Equal Nat (mul (Suc Zero) a) a =
 
 proof comm for mul (a : Nat) (b : Nat) : Equal Nat (mul a b) (mul b a) =
   match b {
-    Zero |-> sym Nat (mul Zero a) Zero (mul::zero_l a) ;
-    Suc b2 |->
+    Zero ↦ sym Nat (mul Zero a) Zero (mul::zero_l a) ;
+    Suc b2 ↦
       trans Nat
         (mul a (Suc b2))
         (add (mul b2 a) a)
@@ -160,8 +160,8 @@ proof comm for mul (a : Nat) (b : Nat) : Equal Nat (mul a b) (mul b a) =
 lemma mul_add_distrib_r (a : Nat) (b : Nat) (c : Nat)
   : Equal Nat (mul a (add b c)) (add (mul a b) (mul a c)) =
   match c {
-    Zero |-> Refl ;
-    Suc c2 |->
+    Zero ↦ Refl ;
+    Suc c2 ↦
       trans Nat
         (add (mul a (add b c2)) a)
         (add (add (mul a b) (mul a c2)) a)
@@ -207,8 +207,8 @@ lemma mul_add_distrib_l (a : Nat) (b : Nat) (c : Nat)
 proof assoc for mul (a : Nat) (b : Nat) (c : Nat)
   : Equal Nat (mul a (mul b c)) (mul (mul a b) c) =
   match c {
-    Zero |-> Proved ;
-    Suc c2 |->
+    Zero ↦ Proved ;
+    Suc c2 ↦
       trans Nat
         (mul a (mul b (Suc c2)))
         (add (mul a (mul b c2)) (mul a b))

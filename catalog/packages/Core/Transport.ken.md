@@ -104,7 +104,7 @@ does not itself declare:
 example before transporting a stuck `match`:
 
 ```ken example
-fn stuck_of (k : Bool) : Bool = match k { True |-> True ; False |-> False }
+fn stuck_of (k : Bool) : Bool = match k { True ↦ True ; False ↦ False }
 
 proof transport for stuck_of (k : Bool) (q : Equal Bool k True)
   : Equal Bool (stuck_of k) True =

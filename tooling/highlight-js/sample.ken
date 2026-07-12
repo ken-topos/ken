@@ -63,18 +63,18 @@ const five : PosInt = 5
 -- ── class / instance, lambda + Unicode operators ────────────────────────
 
 class Eq a {
-  eq   : a -> a -> Bool ;
-  refl : (x : a) -> IsTrue (eq x x)
+  eq   : a → a → Bool ;
+  refl : (x : a) → IsTrue (eq x x)
 }
 
 instance Eq Bool {
-  eq = \x. \y. match x { True ↦ y ; False ↦ match y { True ↦ False ; False ↦ True } } ;
+  eq = λx. λy. match x { True ↦ y ; False ↦ match y { True ↦ False ; False ↦ True } } ;
   refl = λx. tt
 }
 
 -- ── named proof claims: prop / lemma / proof ──────────────────────────────
 
-prop Trivial (a : Type) (x : a) : Omega where {
+prop Trivial (a : Type) (x : a) : Ω where {
   triv : Trivial a x
 }
 
@@ -86,14 +86,14 @@ lemma trivialAny (a : Type) (x : a) : Trivial a x = Trivial.triv a x
 
 -- ── requires / ensures / prove / law / old / space, foreign, temporal ───
 
-foreign sqrt_f64 : Float -> Float = symbol "sqrt" library "libm" pure
+foreign sqrt_f64 : Float → Float = symbol "sqrt" library "libm" pure
 
 fn incrChecked (n : Nat)
   requires Trivial Nat n
   ensures  old n = n
   : Nat = Suc n
 
-temporal law addComm : (a : Nat) -> (b : Nat) -> Equal Nat (a + b) (b + a)
+temporal law addComm : (a : Nat) → (b : Nat) → Equal Nat (a + b) (b + a)
 
 -- `space` (a stateful region, `36-effects.md §4`) -- illustrative only:
 -- `mut`/`becomes` are grammar-sketch tokens (`32-grammar.md`, `[OQ-syntax]`),
@@ -105,7 +105,7 @@ space Counter {
 -- ── operator-heavy line: arithmetic, comparisons, logic ──────────────────
 
 fn operatorSoup (a : Int) (b : Int) : Bool =
-  ((a <= b) ∧ (a /= b)) ∨ ((a >= b) ⊑ (a >< b)) ⊔ (a ⊓ b) ∈ Omega
+  ((a ≤ b) ∧ (a ≠ b)) ∨ ((a ≥ b) ⊑ (a × b)) ⊔ (a ⊓ b) ∈ Ω
 
 -- `Ω` is a single-codepoint Unicode alias the lexer folds directly to the
 -- ConId `Omega` -- interchangeable with spelling it out, same as real

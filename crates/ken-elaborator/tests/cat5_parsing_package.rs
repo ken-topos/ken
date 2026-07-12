@@ -283,8 +283,8 @@ fn cat5_d2_parser_result_surface_is_total_and_located() {
     assert!(
         PARSING_KEN_MD.contains("const Parser (a : Type) : Type =")
             && PARSING_KEN_MD
-                .contains("(s : Source) -> (start : Nat) -> LessEqNat start (source_length s)")
-            && PARSING_KEN_MD.contains("-> ParseResult a"),
+                .contains("(s : Source) → (start : Nat) → LessEqNat start (source_length s)")
+            && PARSING_KEN_MD.contains("→ ParseResult a"),
         "Parser must be total over well-formed source/start inputs"
     );
     assert!(
