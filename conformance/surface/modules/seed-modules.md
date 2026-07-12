@@ -9,17 +9,21 @@ elaboration-time only** device that **elaborates away** to the kernel's
 constant "is how axioms, FFI signatures, and **abstract interfaces** are
 represented"). **Zero new kernel feature, zero `trusted_base()` delta** — the
 ES1 minimality invariant (surface built-in set ≡ `trusted_base()` delta,
-`../taxonomy/minimality.md`) carries verbatim. The **package manager /
-cross-package imports are OUT** (F3b, operator-deferred); ES3 is in-repo
-compilation units only.
+`../taxonomy/minimality.md`) carries verbatim. N2 extends this same surface
+substrate with an **in-repo cross-file loader**. The package manager and
+cross-package imports remain out of scope.
 
-This is a **design-discipline** seed: the module **import-resolution**
-producer is the **ES3-build** ring's target (Team Language, a separate
-follow-on); the **kernel mechanisms it rides — the flat `Σ`, the opaque
-constant, `trusted_base()` — are landed**. So the cases pin the **design
-discriminants** (elaborates-away, abstract-export-is-opaque,
-surface-only-rejection) against the landed kernel + the stated resolution
-rules; the build re-verifies against the real elaborator.
+**Build state — RED UNTIL N2 LANE B.** The cross-file accept arm in §D states
+the N2 Lane-B target and currently fails because no loader follows an import
+path to another file. The cycle arm pins the fail-closed behavior Lane B must
+establish once that loader exists. Both are specification/conformance cases in
+this Lane-A seed; neither claims the current elaborator implements N2.
+
+The original ES3 module resolver and the kernel mechanisms it rides — the flat
+`Σ`, opaque constants, and `trusted_base()` — are landed. N2 adds the missing
+file-discovery producer without changing those mechanisms. The cases therefore
+retain the ES3 design discriminants and add a controlled cross-file
+accept↔cycle-reject pair for Lane B.
 
 Grounding (landed `§`-bodies + landed code, content-reconciled — not the
 plan): `33 §3`
@@ -28,7 +32,8 @@ sees a single flattened `Σ`), `33 §4` (visibility: module-private by default +
 `pub`; abstract export = opaque interface), `11 §4` (the append-only acyclic
 flat `Σ`; the opaque constant `c : A` that introduces abstract interfaces),
 ES1 `minimality.md` (the `trusted_base()`-delta invariant ES3 must not
-perturb).
+perturb), ADR 0014 MRES-1/MRES-2/MRES-3a, and the total role-blind dotted-path
+↔ leaf-file bijection in `docs/program/07-catalog-style-guide.md §13`.
 
 ## Reading these cases — the ES3 disciplines
 
@@ -194,6 +199,88 @@ rules**, and the `Σ`/`trusted_base()` identity against the **landed** kernel.
   re-declaration). Drive the **real** resolution, not a hand-constructed
   `M.foo → GlobalId` map.
 
+## D. In-repo cross-file loader (N2; RED UNTIL LANE B)
+
+These two cases are one controlled experiment. The root list, `A` unit, and
+exported declaration in `B` are fixed. The reject arm changes only `B` by
+adding the back-edge `import A`. Thus the observable flips from acceptance to
+the named cycle rejection solely on the acyclic-versus-cyclic import-graph
+axis; an implementation that never loads either file cannot make both arms
+pass.
+
+The harness supplies the resolver a **list of roots** containing exactly one
+entry, `roots = [<fixture-root>]`. The spelling of the future Rust entry point
+is not pinned here; its semantic input is pinned as the plural root list. Under
+the strict, role-blind bijection, `A` and `B` name the unique leaf files
+`<fixture-root>/A.ken.md` and `<fixture-root>/B.ken.md`. No in-file module
+header or declaration-kind exception participates in resolution.
+
+The harness designates `A` as the entry unit to elaborate in both arms. The
+closed cycle is named in import-edge order rooted at that entry, fixing this
+fixture's payload as `A → B → A`.
+
+### surface/modules/cross-file-import-resolves-through-single-root-list
+
+- spec: `33 §3.2` (N2 in-repo loader), ADR 0014 MRES-1/MRES-2/MRES-3a,
+  `docs/program/07-catalog-style-guide.md §13` (total path↔file bijection)
+- fixture: the resolver receives `roots = [<fixture-root>]`, with exactly these
+  files:
+
+  `<fixture-root>/A.ken.md`:
+
+  ```ken
+  import B
+
+  const answer : Bool = B.value
+  ```
+
+  `<fixture-root>/B.ken.md`:
+
+  ```ken
+  pub const value : Bool = True
+  ```
+
+- expect: **accepted**. Loading `A` follows its `import B` edge lazily, maps
+  `B` to the unique `B.ken.md` leaf under the sole populated entry of the
+  plural root list, and resolves `B.value` to that file's exported `value`.
+  Each unit is loaded and elaborated once in this run. **RED UNTIL N2 LANE B:**
+  before the loader lands, the same fixture fails with `UnboundName` for `B`
+  rather than reaching the exported declaration.
+- why: this drives the real cross-file producer: the consumer does not declare
+  or pre-load `B.value`, and the harness does not hand-feed an export map.
+  A singleton-only API, an eager whole-tree scan, a declaration-role-dependent
+  path rule, or a resolver that stops at `UnboundName` fails at least one pinned
+  observation. The case exercises the plural API with one root without
+  specifying multi-root precedence.
+
+### surface/modules/import-cycle-rejected-naming-closed-path
+
+- spec: `33 §3.2` (cycle = hard surface error), ADR 0014 MRES-2
+- fixture: keep the preceding root list and `A.ken.md` byte-identical. Keep
+  `B`'s exported declaration byte-identical and add only the back-edge:
+
+  `<fixture-root>/B.ken.md`:
+
+  ```ken
+  import A
+
+  pub const value : Bool = True
+  ```
+
+- expect: **rejected at the surface** with the specific `ImportCycle`
+  diagnostic kind and the closed cycle payload **`A → B → A`**. **RED UNTIL
+  N2 LANE B at diagnostic granularity:** a loaderless `UnboundName`, a warning,
+  silent SCC acceptance, or a bare `is_err` does not satisfy the case. The
+  diagnostic must arise from the active import-stack cycle gate before either
+  unit is admitted to the flattened `Σ`.
+- why: this is an absence/rejection assertion with an exact gate. The active
+  load of `A` requests `B`; the active load of `B` requests `A`, so the second
+  `A` closes the named cycle. If Lane B had the precise target bug — accepting
+  import SCCs or omitting the active-stack check — this arm would not reject at
+  that gate. The acyclic arm above disconfirms coincidental `UnboundName` or
+  fixture-syntax rejection: identical `A`, root input, and `B.value` accept
+  when the sole back-edge is absent.
+
 ## Coverage map (AC → cases)
 
 - **AC1** (modules add zero to the TCB):
@@ -209,6 +296,9 @@ rules**, and the `Σ`/`trusted_base()` identity against the **landed** kernel.
 - **AC4** (visibility default settled): witnessed by
   `private-name-access-rejected-at-surface` (private-by-default); the OQ
   resolution itself is `/spec §33 §4` + `90-open-decisions.md`.
+- **N2** (cross-file path resolution + cycle hard-error + plural-ready roots):
+  `cross-file-import-resolves-through-single-root-list` and
+  `import-cycle-rejected-naming-closed-path`.
 
 ## Cross-case consistency sweep
 
@@ -229,6 +319,11 @@ rules**, and the `Σ`/`trusted_base()` identity against the **landed** kernel.
   `module-elaborates-to-identical-flat-sigma` agree: every import form
   resolves to **one** underlying `GlobalId`; a form that re-declared per
   import would perturb the flat `Σ` (contradicting AC1).
+- **The N2 pair differs only by one import edge.** The same one-entry root
+  list, `A` source, `B.value` declaration, strict bijection, and qualified use
+  appear in both arms. With no `B → A` edge, `B.value` resolves and accepts;
+  with that sole edge, the active stack closes `A → B → A` and the specific
+  cycle gate rejects. No other case in this seed changes that verdict.
 
 ## Subsumed / not-duplicated (one home per property)
 
@@ -240,17 +335,22 @@ rules**, and the `Σ`/`trusted_base()` identity against the **landed** kernel.
   **kernel's** (`11 §4`; `../taxonomy/minimality.md` for the delta). ES3
   observes abstract export **as** the opaque constant and modules **as**
   transparent over the flat `Σ`; the mechanisms are the kernel's home.
-- **The package manager / cross-package imports / registry** are **F3b** (`63`
-  supply-chain, operator-deferred) — explicitly **out**; ES3 is in-repo units.
+- **The package manager / cross-package imports / registry** remain a later
+  round (`63` supply-chain). N2 resolves only in-repo units under its supplied
+  roots. `program` / `package` / `admits`, instance manifests, package-kind
+  detection, and instance visibility are N4 and are not asserted here.
+- **Local/import clash and shadowing changes** are N3. The N2 pair uses only a
+  qualified `B.value`, so it neither changes nor re-pins `§3.3` precedence.
+- **Multi-root precedence** is deferred. The N2 accept case proves only that a
+  plural root input with exactly one populated entry resolves; it does not
+  choose how two roots compete.
 
-## Build-forward (the ES3-build ring)
+## Build-forward (N2 Lane B)
 
-This is **spec + conformance only** (no crate). The **ES3-build** ring (Team
-Language, separate frame) implements the module elaborator; its producer-grep
-gate is the **real import-resolution + the flattening to `Σ`**: the
-`Σ`/`trusted_base()`-identity (AC1) and the abstract-export-byte-identity
-(AC2) must be checked against the **real** elaborator output (module program →
-flat `Σ`) + the **landed** kernel — **not** a hand-constructed namespaced
-binding (`conformance-hand-feeds-the-deliverable`). The visibility/ambiguity
-rejects (AC3) drive the real resolver's surface diagnostics. Flagged forward;
-the seed pins the design discriminants here.
+This Lane A is **spec + conformance only** (no crate). N2 Lane B implements the
+in-repo loader. Its producer gate is the real import-edge traversal from the
+plural root input: the accept arm flips from `UnboundName` to acceptance, and
+the cycle arm rejects specifically at `ImportCycle` with `A → B → A`. The
+existing `Σ` / `trusted_base()` identity (AC1), abstract-export identity (AC2),
+and visibility diagnostics (AC3) remain unchanged. No hand-constructed export
+map satisfies the new pair.

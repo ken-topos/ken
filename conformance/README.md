@@ -212,8 +212,12 @@ claim with no conformance case is a claim no one can rely on
   private-name-access, `use`-open-ambiguity (must-qualify unless same decl), and
   local-over-imported shadowing (lexical, never an error) rejects are all
   surface diagnostics that **never reach the kernel**. Package manager /
-  cross-package imports are **out** (F3b, deferred). Design-discipline seed: the
-  import-resolution producer is the ES3-build ring's.
+  cross-package imports are **out**. N2 adds the in-repo cross-file loader
+  golden: an import resolves another leaf file through the plural root API with
+  exactly one root (red until N2 Lane B), while adding only a back-edge flips
+  the same fixture to the specific `ImportCycle` diagnostic naming
+  `A → B → A`. Package/admission/instance behavior and multi-root precedence
+  remain out of scope.
 - `runtime/seed-runtime.md` — dedup + O(1) equality; `Int` past 2⁵³ exact;
   `unknown` propagation.
 - `runtime/capacity/seed-capacity.md` — X2 store hardening (`44`): dedup-aware
