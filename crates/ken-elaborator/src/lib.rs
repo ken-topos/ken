@@ -181,6 +181,7 @@ impl ElabEnv {
         // Lc typeclass env: pre-declare RecordNil + record_nil_val (`33 §5`).
         elab.class_env =
             elab::init_class_env(&mut elab.env, &mut elab.globals)?;
+        elab.module_state.install_prelude_floor();
         Ok(elab)
     }
 

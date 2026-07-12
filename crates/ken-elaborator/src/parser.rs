@@ -908,7 +908,8 @@ impl Parser {
         })
     }
 
-    /// `import M.N` | `import M.N as O` | `import M.N (foo, Bar)` (`33 §3.2`).
+    /// `import M.N` | `import M.N as O` |
+    /// `import M.N (foo, Bar as Baz)` (`33 §3.2`).
     fn parse_import_decl(&mut self, start: usize) -> Result<Decl, ElabError> {
         self.advance(); // consume 'import'
         let (module, _) = self.parse_dotted_module_path()?;
@@ -920,10 +921,16 @@ impl Parser {
             }
             Token::LParen => {
                 self.advance();
-                let mut names = Vec::new();
+                let mut items = Vec::new();
                 loop {
                     let (n, _) = self.expect_ident()?;
-                    names.push(n);
+                    let rename = if matches!(self.peek(), Token::Ident(s) if s == "as") {
+                        self.advance();
+                        Some(self.expect_ident()?.0)
+                    } else {
+                        None
+                    };
+                    items.push(crate::ast::ImportItem { name: n, rename });
                     if matches!(self.peek(), Token::Comma) {
                         self.advance();
                         continue;
@@ -931,7 +938,7 @@ impl Parser {
                     break;
                 }
                 self.expect(&Token::RParen)?;
-                crate::ast::ImportKind::Selective(names)
+                crate::ast::ImportKind::Selective(items)
             }
             _ => crate::ast::ImportKind::Qualified,
         };

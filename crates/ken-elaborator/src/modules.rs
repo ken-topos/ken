@@ -53,11 +53,23 @@ pub struct ModuleState {
     loaded_units: HashMap<String, Vec<ken_kernel::GlobalId>>,
     /// Units currently being discovered/elaborated, in entry-rooted edge order.
     active_imports: Vec<String>,
+    /// The unshadowable prelude floor (`30-taxonomy §4`, `33 §3.3`).
+    prelude_names: HashSet<String>,
 }
 
 impl ModuleState {
     pub(crate) fn loaded_unit_count(&self) -> usize {
         self.loaded_units.len()
+    }
+
+    pub(crate) fn install_prelude_floor(&mut self) {
+        // `30-taxonomy §4` derives this exact closed set from the built-in
+        // primitive signatures. Other definitions constructed in prelude.rs
+        // are package-level conveniences, not unshadowable prelude members.
+        self.prelude_names = ["Bool", "Char", "List"]
+            .into_iter()
+            .map(str::to_string)
+            .collect();
     }
 }
 
@@ -68,16 +80,13 @@ enum Binding {
 }
 
 /// Per-scope bare-name resolution: import bindings (qualified/aliased/
-/// selective/open) plus this scope's own local declarations, which always
-/// take precedence regardless of import order (`33 §3.3`, local-over-
-/// imported).
+/// selective/open) plus this scope's own local declarations. A top-level
+/// local/import collision is fail-closed regardless of source order (`33
+/// §3.3`); narrower lexical binders remain innermost-wins.
 #[derive(Default, Clone)]
 struct Scope {
     bindings: HashMap<String, Binding>,
-    /// Bare names bound by a LOCAL declaration in this scope — these are
-    /// permanently immune to import-driven ambiguity (`bind_import` on a
-    /// local name is a no-op): local always wins, regardless of import
-    /// order (`33 §3.3`).
+    /// Bare names bound by a top-level LOCAL declaration in this scope.
     locals: std::collections::HashSet<String>,
     /// Alias prefixes from `import M as N` — `N` resolves to `M` when used
     /// as a qualifying prefix (`N.foo`).
@@ -85,9 +94,17 @@ struct Scope {
 }
 
 impl Scope {
-    fn bind_import(&mut self, bare: &str, qualified: &str) {
+    fn bind_import(&mut self, bare: &str, qualified: &str, span: &Span) -> Result<(), ElabError> {
         if self.locals.contains(bare) {
-            return;
+            let local = match self.bindings.get(bare) {
+                Some(Binding::One(local)) => local.clone(),
+                _ => bare.to_string(),
+            };
+            return Err(ElabError::AmbiguousReference {
+                name: bare.to_string(),
+                sources: vec![local, qualified.to_string()],
+                span: span.clone(),
+            });
         }
         match self.bindings.get(bare) {
             None => {
@@ -111,14 +128,31 @@ impl Scope {
                     .insert(bare.to_string(), Binding::Ambiguous(v));
             }
         }
+        Ok(())
     }
 
-    /// A local declaration always wins outright, discarding any prior
-    /// import binding (ambiguous or not) — `33 §3.3`.
-    fn bind_local(&mut self, bare: &str, qualified: &str) {
+    /// Bind a top-level local, rejecting any import installed by an earlier
+    /// elaboration call. Same-file locals are pre-collected before imports, so
+    /// `bind_import` supplies the symmetric arm.
+    fn bind_local(&mut self, bare: &str, qualified: &str, span: &Span) -> Result<(), ElabError> {
+        if let Some(binding) = self.bindings.get(bare) {
+            if !self.locals.contains(bare) {
+                let mut sources = match binding {
+                    Binding::One(source) => vec![source.clone()],
+                    Binding::Ambiguous(sources) => sources.clone(),
+                };
+                sources.push(qualified.to_string());
+                return Err(ElabError::AmbiguousReference {
+                    name: bare.to_string(),
+                    sources,
+                    span: span.clone(),
+                });
+            }
+        }
         self.locals.insert(bare.to_string());
         self.bindings
             .insert(bare.to_string(), Binding::One(qualified.to_string()));
+        Ok(())
     }
 }
 
@@ -239,17 +273,19 @@ fn apply_import(
             scope.prefixes.insert(alias.clone(), module.to_string());
         }
         ImportKind::Selective(names) => {
-            for n in names {
-                let q = pubmap.get(n).ok_or_else(|| ElabError::UnboundName {
-                    name: format!("{}.{}", module, n),
-                    span: span.clone(),
-                })?;
-                scope.bind_import(n, q);
+            for item in names {
+                let q = pubmap
+                    .get(&item.name)
+                    .ok_or_else(|| ElabError::UnboundName {
+                        name: format!("{}.{}", module, item.name),
+                        span: span.clone(),
+                    })?;
+                scope.bind_import(item.rename.as_deref().unwrap_or(&item.name), q, span)?;
             }
         }
         ImportKind::Open => {
             for (n, q) in pubmap.iter() {
-                scope.bind_import(n, q);
+                scope.bind_import(n, q, span)?;
             }
         }
     }
@@ -1105,9 +1141,9 @@ fn expand_scope(
     unit_definitions: &mut HashSet<String>,
     allow_boundary: bool,
 ) -> Result<(Vec<crate::elab::ElabResult>, HashMap<String, String>), ElabError> {
-    // Pre-pass: collect this scope's own local declared names FIRST, so
-    // they unconditionally shadow any import processed below regardless of
-    // textual order (`33 §3.3`, local-over-imported).
+    // Pre-pass: collect this scope's own local declared names FIRST. Imports
+    // below therefore detect a local/import clash independently of textual
+    // order, even when the clashing name is never referenced.
     for decl in decls {
         let inner = decl.unwrap_pub();
         if is_qualifiable(inner) {
@@ -1115,7 +1151,15 @@ fn expand_scope(
                 continue;
             }
             let bare = inner.name().to_string();
-            scope.bind_local(&bare, &qualify(prefix, &bare));
+            let qualified = qualify(prefix, &bare);
+            if elab.module_state.prelude_names.contains(&bare) && !scope.locals.contains(&bare) {
+                return Err(ElabError::AmbiguousReference {
+                    name: bare.clone(),
+                    sources: vec![format!("<prelude>.{bare}"), qualified],
+                    span: inner.span().clone(),
+                });
+            }
+            scope.bind_local(&bare, &qualified, inner.span())?;
         }
     }
 

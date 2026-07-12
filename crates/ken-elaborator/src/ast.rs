@@ -349,10 +349,20 @@ pub enum ImportKind {
     Qualified,
     /// `import M as N` — aliased: exports accessible as `N.foo`.
     Aliased(String),
-    /// `import M (foo, Bar)` — selective: exactly these names, unqualified.
-    Selective(Vec<String>),
+    /// `import M (foo, Bar as Baz)` — selective: exactly these names,
+    /// optionally renamed at the import site, unqualified.
+    Selective(Vec<ImportItem>),
     /// `use M` — open: all of `M`'s exports, unqualified.
     Open,
+}
+
+/// One selective-import item (`33 §3.2`). `rename` is the unqualified name
+/// installed in the importing scope; the declaration identity remains
+/// `module.name`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ImportItem {
+    pub name: String,
+    pub rename: Option<String>,
 }
 
 /// The two hosts of the N4 instance-admission boundary.
