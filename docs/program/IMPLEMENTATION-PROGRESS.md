@@ -97,15 +97,21 @@ against it*. Run until complete, blocked, or instructed (§2b).
 >       compose-not-replace); O(total) source-closure coherence; intra-pkg §5.5
 >       overlap; NO manifest/registry/lockfile code. **QUEUES BEHIND B2** on the
 >       Language ring — Handoff-Gate + kick once B2 closes + retros in.
->     - **★ N4 Lane B → ACTIVE** (`evt_4sw2pxfvx6b6v`). Language ring Handoff-Gate
->       DONE (all 3 compacted @ 8945e887, WIDE-verified; home worktrees 0-ahead).
->       Kickoff posted + language-leader roused (Working). Build: parser anon
->       headers + admits; admission gate at instance_search (O(1) direct-use,
->       UnadmittedInstance, compose-not-replace orphan/overlap); self-admission;
->       O(total) source-closure coherence; intra-pkg §5.5 overlap; NO manifest
->       code. MRES-4f: both-package collision NOT built. Architect-terminal.
->       **NEXT: await candidate SHA → honesty-gate + CI-polled publish. Then N3
->       Lane B (queued, same ring).**
+>     - **★ N4 Lane B → APPROVED-ON-MERITS, HELD on keyword-migration fold.**
+>       QA APPROVED + Architect-terminal APPROVED the mechanism on `f05a3a10`
+>       (12 files, +661/−31; two-set select-then-gate sound; self-admission fixed
+>       after a QA-caught AC3 defect; MRES-4f ImportCycle preserved). **HELD:**
+>       N4 reserves `program`/`package`/`admits` as keywords → `examples/rosetta/
+>       accumulator-factory/accumulator-factory.ken` used `program` as a const
+>       identifier (lines 66/75) → unparseable after merge; latent because rosetta
+>       .ken isn't wired into workspace CI (missed-source-root trap). Steward
+>       full fence-aware sweep (all .ken/.ken.md, all 3 kws): that ONE file is the
+>       only code collision; package/admits zero. **FOLD decision** → folded
+>       candidate `94aa5dcd` = `f05a3a10` + rosetta `program→prog` (66/75), 13
+>       files. Architect **re-confirmed `94aa5dcd`**; honesty-gated clean (FF; 12
+>       crate + 1 rosetta file; diff --check clean; zero TCB). **PUBLISHING code
+>       CI-polled.** NEXT: confirm merge → retros → N3 Lane B. Enclave carry: add "reserve kw → sweep every
+>       .ken/.ken.md fence" to N4 spec build-forward (ADR-0015 pattern).**
 > - **N3 Lane A → ENCLAVE — GATED, PUBLISHING.** Candidate `8204e727` (linear
 >   `ba514aac → 27e56a79 spec → e31f3259 conf → 8204e727 prelude-carrier fix`);
 >   CV combined APPROVE + **Architect-terminal APPROVE** (merge-Decision vote,
