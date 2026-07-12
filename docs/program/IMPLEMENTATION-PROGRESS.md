@@ -14,38 +14,42 @@ against it*. Run until complete, blocked, or instructed (§2b).
 
 ## Last updated / next action
 
-> ### ⏭ 2026-07-12 ~19:4x — LIVE STATE (read this first) · `origin/main @ 5674cb88`
+> ### ⏭ 2026-07-12 ~20:xx — LIVE STATE (read this first) · `origin/main @ 5674cb88`
 >
-> **★ POST-COMPACT: operator wants to discuss `kenfmt`** (a Ken analog of gofmt /
-> Python black — a canonical auto-formatter) after this compaction. That is the
-> FIRST thing to engage on resume (operator-driven — they'll raise it). The N3
-> frontier below is the autonomous fallback if the operator is idle. Steward
-> self-compacted here per operator instruction at a clean seam (all merged,
-> nothing mid-flight).
+> **★ ACTIVE = kenfmt work program (operator-driven).** Operator wants Ken's
+> gofmt/black. Designed from `local/kenfmt-readability-review.md` (promoted →
+> `docs/program/kenfmt-canonical-form-review.md`). **Operator rulings LOCKED
+> (2026-07-12):** (1) **88-col code / 80-col prose**; (2) **NO escape hatch**;
+> (3) it's a **work program, not one WP**; (4) **separator mini-WP first**;
+> (5) **CST-vs-AST fork via Architect, operator reviews before merge.** Backbone
+> authored: **`docs/program/wp/kenfmt-work-program.md`** — decomposition
+> `P0(separator) → S(spec 31 §1a/b/c) → B1(lossless CST) → B2(token-kind canon,
+> replaces canonical_unicode) → B3(doc algebra+printers) → B4(.ken.md splicing) →
+> C(atomic capstone, strict gate)`. **Blast-radius insight:** only the capstone
+> C needs the catalog freeze; **B1–B4 run in parallel with N3/N4/N5** (inner-ring,
+> catalog read-only). Task #38.
+> **NEXT (this burst):** publish backbone + review doc-only → route **CST-vs-AST
+> architecture fork to Architect** (operator-review-before-merge) → release **P0
+> separator reconciliation** mini-WP (enclave/grammar) → then **S** canonical-form
+> spec clause.
 >
-> **All merged this burst:** **N2 CLOSED** (in-repo loader LIVE — Lane A
+> **All merged prior burst:** **N2 CLOSED** (in-repo loader LIVE — Lane A
 > `fbc4d3e1` + Lane B `575f43d2`, CI green). **ADR 0015 DONE in spec/conformance**
 > — `use M` open-import removed (ADR `3a5cd323`, spec/conf `5674cb88`, sweep
 > EMPTY). **MRES-6/MRES-10 reconciled** (`86e0ef34`): `hiding` retired,
 > prelude-unshadowable under operator opt-(A). ADR 0014 fully settled.
 >
-> **PENDING (event-driven):**
-> 1. **✅ N2 FULLY CLOSED** — Language ring retros in (`evt_5w74mahghmf6s`: leader/
->    QA/implementer). Task #33 done.
-> 2. **NEW WP to queue — ADR 0015 build fast-follow (task #37):** retire the `use` keyword
->    from grammar/lexer (`KwUse`/parser) — a small **Language** build WP
->    (explicitly deferred by the 0015 spec WP). Frame + kick after N2 retro.
->
-> **NEXT FRONTIER — N3 (import-exclusion, MRES-6) — now FRAMABLE** (both prereqs
-> landed: ADR 0015 spec removal + MRES-6 fold). **Reduced scope (operator opt-A,
-> Architect-confirmed):** §3.3 local-vs-import clash reversal (→ clash error) +
-> per-name **rename** `import M (foo as bar)`; positive de-selection is the
-> default exclusion; **NO `hiding`**; **prelude names unshadowable** (local-vs-
-> prelude clash → rename the local, no prelude-exclusion form); ordinary lexical
-> binder shadowing untouched. Frame `docs/program/wp/n3-import-exclusion.md` →
-> publish doc-only → Handoff-Gate enclave → kick N3 Lane A (enclave spec+golden) →
-> Lane B (Language build). Then N4 (program/admits), N5 (re-export, pick non-`use`
-> spelling). Watchdog `7102f5d7` (refresh on resume).
+> **QUEUED (parallel-able with kenfmt build):**
+> - **ADR 0015 build fast-follow (task #37):** retire the `use` keyword from
+>   grammar/lexer (`KwUse`/parser) — small **Language** WP (deferred by 0015 spec).
+> - **N3 (import-exclusion, MRES-6) — FRAMABLE** (both prereqs landed). Reduced
+>   scope (operator opt-A, Architect-confirmed): §3.3 local-vs-import clash
+>   reversal (→ clash error) + per-name **rename** `import M (foo as bar)`;
+>   positive de-selection is default exclusion; **NO `hiding`**; **prelude names
+>   unshadowable**; lexical binder shadowing untouched. Frame
+>   `docs/program/wp/n3-import-exclusion.md` → publish → Handoff-Gate enclave →
+>   kick Lane A (spec+golden) → Lane B (Language). Then N4 (program/admits),
+>   N5 (re-export, non-`use` spelling).
 >
 > ⚠ LESSON: `git reset --hard origin/main` on steward/work discards local tracker
 > commits ahead of main — recovered once via reflog `6aa0e2b3`. Before resetting
